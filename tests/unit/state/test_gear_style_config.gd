@@ -17,6 +17,9 @@ func test_default_decodes_to_the_kit_look() -> void:
 	assert_eq(config.stick_model, StickModelRegistry.STICK_STEALTH,
 			"the stick defaults to the house model")
 	assert_eq(config.helmet_face, GearModelRegistry.FACE_NONE, "the face defaults bare")
+	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHORT, "hair defaults short")
+	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE, "and no facial hair")
+	assert_eq(config.hair_color, 0, "in the first palette colour")
 
 
 func test_every_legal_pick_round_trips() -> void:
@@ -34,14 +37,44 @@ func test_every_legal_pick_round_trips() -> void:
 						assert_eq(back.helmet_face, face)
 
 
+func test_every_hair_pick_round_trips_beside_the_gear() -> void:
+	for hair: int in HairStyleRegistry.hair_count():
+		for facial: int in HairStyleRegistry.facial_count():
+			for color: int in HairStyleRegistry.color_count():
+				var config := GearStyleConfig.new(GearModelRegistry.SKATE_RETRO,
+						GearModelRegistry.GLOVE_PRO, 3, StickModelRegistry.count() - 1,
+						GearModelRegistry.FACE_CAGE, hair, facial, color)
+				var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
+				assert_eq(back.hair_style, hair)
+				assert_eq(back.facial_hair, facial)
+				assert_eq(back.hair_color, color)
+				assert_eq(back.helmet_face, GearModelRegistry.FACE_CAGE,
+						"the hair fields leave the gear fields alone")
+				assert_eq(back.stick_model, StickModelRegistry.count() - 1)
+
+
+# A code saved before the hair fields existed has zeros above the face field,
+# and has to come back as the stock look rather than as anything a player chose.
+func test_a_pre_hair_code_decodes_to_the_stock_hair() -> void:
+	var old_code: int = GearModelRegistry.FACE_VISOR << 20 | GearStyleConfig.DEFAULT_CODE
+	var config: GearStyleConfig = GearStyleConfig.from_code(old_code)
+	assert_eq(config.helmet_face, GearModelRegistry.FACE_VISOR)
+	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHORT)
+	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE)
+	assert_eq(config.hair_color, 0)
+
+
 func test_garbage_codes_coerce_to_legal_looks() -> void:
-	for code: int in [-1, -999, 1 << 20, 0x7FFFFFFF]:
+	for code: int in [-1, -999, 1 << 20, 0x7FFFFFFF, 0x7FFFFFFFFF]:
 		var config: GearStyleConfig = GearStyleConfig.from_code(code)
 		assert_true(GearModelRegistry.is_valid_skate(config.skate_model), "skate model legal")
 		assert_true(GearModelRegistry.is_valid_glove(config.glove_model), "glove model legal")
 		assert_true(TapeColorRegistry.is_valid(config.lace_color), "lace color legal")
 		assert_true(StickModelRegistry.is_valid(config.stick_model), "stick model legal")
 		assert_true(GearModelRegistry.is_valid_face(config.helmet_face), "face option legal")
+		assert_true(HairStyleRegistry.is_valid_hair(config.hair_style), "hair style legal")
+		assert_true(HairStyleRegistry.is_valid_facial(config.facial_hair), "facial hair legal")
+		assert_true(HairStyleRegistry.is_valid_color(config.hair_color), "hair colour legal")
 		# And the coerced look re-packs stably (idempotent coercion).
 		var code2: int = config.to_code()
 		assert_eq(GearStyleConfig.from_code(code2).to_code(), code2)

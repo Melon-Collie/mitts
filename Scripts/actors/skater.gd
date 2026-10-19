@@ -1457,21 +1457,19 @@ func set_tape_config(config: StickTapeConfig) -> void:
 		_uniform.refresh_tape()
 
 
-# Installs a new gear look (models, laces, face gear) and repaints the
+# Installs a new gear look (models, laces, face gear, hair) and repaints the
 # affected parts. Same live-cosmetic contract as set_tape_config.
 func set_gear_style(config: GearStyleConfig) -> void:
 	if config == null:
 		return
 	gear_style = config
-	_arms.apply_face_gear()
+	_arms.apply_head_pieces()
 	if _uniform != null:
 		_uniform.refresh_gear_style()
 
 
-# The face piece's render node, for the uniform coordinator's paint and ghost
-# fade. Null while the pick is bare.
-func face_gear_mesh() -> MeshInstance3D:
-	return _arms.face_gear_mesh()
+func head_piece(piece: SkaterArmRig.HeadPiece) -> MeshInstance3D:
+	return _arms.head_piece(piece)
 
 
 # The uniform pass installs a fresh shaft ShaderMaterial (uniform apply,

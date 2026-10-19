@@ -13,8 +13,8 @@ func test_the_face_stays_inside_the_face_gear() -> void:
 	assert_gt(verts.size(), 0, "the face has geometry")
 	var worst: float = 0.0
 	for v: Vector3 in verts:
-		# Helmet-local: the head ball sits _HEAD_FORWARD_M ahead of the helmet centre.
-		var r: float = (v + Vector3(0.0, 0.0, -SkaterMeshBuilder._HEAD_FORWARD_M)).length()
+		# Helmet-local: the head ball sits HEAD_FORWARD_M ahead of the helmet centre.
+		var r: float = (v + Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)).length()
 		worst = maxf(worst, r)
 	assert_lt(worst, gear_r - 0.001,
 			"the face reaches %.4f m from the helmet centre; the face gear is at %.3f"

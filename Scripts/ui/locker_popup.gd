@@ -2,7 +2,8 @@ class_name LockerPopup
 extends Control
 
 # The locker: every equipment pick a player owns, in one modal, around a live
-# mannequin wearing all of them — a kit rather than a parts bin.
+# mannequin wearing all of them — a kit rather than a parts bin. The figure
+# also wears the player's pending skin and hair, which the host screen edits.
 #
 # Rows are grouped by the piece they dress, and the group you are working in is
 # the group the camera is looking at: land on a SKATES row and the case dollies

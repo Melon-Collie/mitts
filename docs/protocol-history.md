@@ -345,3 +345,10 @@ here whenever you bump, in the same format.
 #      of any downed snapshot (knockdown or dive) is now a friction-only slide
 #      (SkaterMovementRules.slide_forward) on the render and the rewind alike,
 #      in place of integrate_forward on its last intent. Replay FORMAT_VERSION 16.
+# v76: hair — the packed GearStyleConfig code grows three fields (bits 25–39):
+#      a HairStyleRegistry hair style, facial-hair style and hair colour, worn
+#      under the helmet. Same payload shape (still one int, now past 32 bits),
+#      but a v75 peer masks the fields off and renders every player with the
+#      stock haircut, so mixed builds must be refused. The replay format is
+#      unchanged: the header already carries the whole code, and an older file
+#      decodes to the stock look.

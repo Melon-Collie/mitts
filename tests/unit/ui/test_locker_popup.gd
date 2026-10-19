@@ -4,8 +4,8 @@ extends GutTest
 # it proves the pickers are wired to the catalogues and that a pick reaches the
 # figure. What is pinned here: every dropdown lists its whole catalogue with the
 # player's current picks selected, a pick repaints the piece that wears it, Done
-# hands back a gear code carrying all five fields, and the camera follows the
-# group a row belongs to.
+# hands back a gear code carrying every field, and the camera follows the group
+# a row belongs to.
 
 # A synthetic kit shaped like TeamColorRegistry.get_colors' output, with every
 # slot distinguishable so a zone landing on the wrong one is visible.
@@ -181,6 +181,31 @@ func test_face_gear_dresses_the_helmet() -> void:
 	assert_eq(piece.mesh, SkaterMeshBuilder.shared_face_gear(GearModelRegistry.FACE_CAGE))
 	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_NONE)
 	assert_null(piece.mesh, "bare leaves the helmet open")
+
+
+# The locker does not edit the hair, but the figure wears whatever the player
+# screen has pending, brows included, and hands it back untouched.
+func test_the_figure_wears_the_pending_hair() -> void:
+	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
+			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_LONG,
+			HairStyleRegistry.FACIAL_STUBBLE, 6))
+	var scalp: MeshInstance3D = _mannequin().get("_scalp") as MeshInstance3D
+	var facial: MeshInstance3D = _mannequin().get("_facial_hair") as MeshInstance3D
+	var brows: MeshInstance3D = _mannequin().get("_brows") as MeshInstance3D
+	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_LONG))
+	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_STUBBLE))
+	assert_lt((facial.material_override as StandardMaterial3D).albedo_color.a, 1.0,
+			"stubble previews translucent")
+	assert_eq((brows.material_override as StandardMaterial3D).albedo_color,
+			HairStyleRegistry.color_for(6), "the brows take the hair colour")
+	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_CAGE)
+	watch_signals(_popup)
+	_popup.call("_done")
+	var gear := GearStyleConfig.from_code(get_signal_parameters(_popup, "locker_edited")[5])
+	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG, "the hair rides through")
+	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_STUBBLE)
+	assert_eq(gear.hair_color, 6)
 
 
 # The stick is the piece the old gear workbench never showed. Pin that a curve

@@ -4,8 +4,8 @@ extends Node3D
 # The locker's display figure: a full kit-dressed skater assembled from the
 # rink's own shared part meshes, standing on the case floor with the picked
 # stick in both hands. Every piece the locker edits is worn HERE — skates on
-# the feet, gloves gripping the shaft, face gear in the helmet — so a pick is
-# judged in the place it will actually be seen.
+# the feet, gloves gripping the shaft, face gear and hair on the head — so a
+# pick is judged in the place it will actually be seen.
 #
 # Built from the individual part meshes rather than the skinned rig. That costs
 # nothing in fidelity: `shared_torso()` and the skinned mesh's torso surface are
@@ -147,6 +147,9 @@ var _rig: Node3D = null
 var _torso: MeshInstance3D = null
 var _helmet: MeshInstance3D = null
 var _face: MeshInstance3D = null
+var _scalp: MeshInstance3D = null
+var _facial_hair: MeshInstance3D = null
+var _brows: MeshInstance3D = null
 var _shoulders: Array[MeshInstance3D] = []
 var _pelvis: MeshInstance3D = null
 var _thighs: Array[MeshInstance3D] = []
@@ -203,10 +206,18 @@ func _build() -> void:
 	# Helmet assembly carries the shell and the head/neck skin as two surfaces,
 	# so the head rides the helmet's scale exactly as it rides its bone.
 	_helmet = _part(SkaterMeshBuilder.shared_helmet_assembly())
-	# The face piece rides the HELMET, so it is a child at identity rather than
-	# a sibling sharing its transform — that is what riding the bone means.
+	# The face piece and the hair ride the HELMET, so they are children at
+	# identity rather than siblings sharing its transform — that is what riding
+	# the bone means.
 	_face = MeshInstance3D.new()
 	_helmet.add_child(_face)
+	_scalp = MeshInstance3D.new()
+	_helmet.add_child(_scalp)
+	_facial_hair = MeshInstance3D.new()
+	_helmet.add_child(_facial_hair)
+	_brows = MeshInstance3D.new()
+	_brows.mesh = SkaterHairMesh.shared_brows()
+	_helmet.add_child(_brows)
 
 	for i: int in 2:
 		_shoulders.append(_part(SkaterMeshBuilder.shared_shoulder_cap()))
@@ -678,6 +689,12 @@ func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
 	# material, and a null mesh for bare.
 	_face.mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	_face.material_override = SkaterMeshBuilder.make_face_gear_material(gear.helmet_face)
+	_scalp.mesh = SkaterHairMesh.shared_hair(gear.hair_style)
+	_scalp.material_override = SkaterHairMesh.make_material(gear.hair_color, false)
+	_facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
+	_facial_hair.material_override = SkaterHairMesh.make_material(gear.hair_color,
+			SkaterHairMesh.is_translucent(gear.facial_hair))
+	_brows.material_override = SkaterHairMesh.make_material(gear.hair_color, false)
 
 
 func _paint_stick(gear: GearStyleConfig, tape: StickTapeConfig,

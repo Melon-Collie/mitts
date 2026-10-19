@@ -146,12 +146,17 @@ const _HELMET_EAR_DIP_POWER: float = 6.0
 # hiding the head entirely. High, the closure is an interior liner you only
 # glimpse near the rim.
 const _HELMET_LINER_APEX_FRAC: float = 0.5
+const _HELMET_LON: int = 10
 const HEAD_RADIUS: float = 0.135
+# The head ball's facet grid (_build_ball's lon × lat). SkaterFaceMesh and
+# SkaterHairMesh lay their pieces on these same facets.
+const HEAD_LON: int = 10
+const HEAD_LAT: int = 5
 # The head sits this far forward of the helmet center (real faces do) so the
 # face shows near-flush in the brow opening instead of recessed 2 cm behind
 # the rim. Capped by clearance: forward offset + HEAD_RADIUS must stay under
 # _HELMET_RADIUS or the face pokes through the shell at the front equator.
-const _HEAD_FORWARD_M: float = 0.015
+const HEAD_FORWARD_M: float = 0.015
 
 # A loose sleeve's radius at its full-width end; Skater, the cap and the lobby
 # figures read it. The elbow pad only fills the bend, just proud of it.
@@ -287,7 +292,7 @@ const _LACE_COLOR := Color(0.88, 0.88, 0.86)
 # are helmet-local (helmet origin y 0.65, torso top 0.47): the top hides
 # inside the head ball, the bottom flares into the traps where it sinks
 # into the torso.
-const _NECK_PROFILE: Array[Vector2] = [
+const NECK_PROFILE: Array[Vector2] = [
 	Vector2(-0.095, 0.064),
 	Vector2(-0.155, 0.070),
 	Vector2(-0.190, 0.092),  # trapezius flare into the collar
@@ -535,7 +540,7 @@ static func _build_helmet_assembly() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.append_from(_shared("head", _build_head), 0,
-			Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -_HEAD_FORWARD_M)))
+			Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, -HEAD_FORWARD_M)))
 	st.append_from(SkaterFaceMesh.untinted(_shared("neck", _build_neck)), 0, Transform3D.IDENTITY)
 	st.commit(m)
 	m.surface_set_material(HELMET_SURF_SKIN, _make_skin_mat())
@@ -830,13 +835,14 @@ static func _build_torso() -> ArrayMesh:
 			_TORSO_REAR_SWAY, TAU * TORSO_U_PHASE)
 
 
-# Head ball at HEAD_RADIUS, sitting _HEAD_FORWARD_M ahead of the helmet center,
+# Head ball at HEAD_RADIUS, sitting HEAD_FORWARD_M ahead of the helmet center,
 # with its face (SkaterFaceMesh) — every vertex carries the tint the skin
 # material multiplies, white but for the face's darker features.
 static func _build_head() -> ArrayMesh:
 	var st := SurfaceTool.new()
-	st.append_from(SkaterFaceMesh.untinted(_build_ball(HEAD_RADIUS, 10, 5, 1.0)), 0, Transform3D.IDENTITY)
-	st.append_from(SkaterFaceMesh.build(HEAD_RADIUS, 10, 5), 0, Transform3D.IDENTITY)
+	st.append_from(SkaterFaceMesh.untinted(_build_ball(HEAD_RADIUS, HEAD_LON, HEAD_LAT, 1.0)),
+			0, Transform3D.IDENTITY)
+	st.append_from(SkaterFaceMesh.build(HEAD_RADIUS, HEAD_LON, HEAD_LAT), 0, Transform3D.IDENTITY)
 	return st.commit()
 
 
@@ -927,7 +933,7 @@ static func _build_helmet() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
-	var lon: int = 10
+	var lon: int = _HELMET_LON
 	var lat: int = 4
 	var rings: Array[PackedVector3Array] = []
 	for j in lat + 1:
@@ -935,12 +941,7 @@ static func _build_helmet() -> ArrayMesh:
 		ring.resize(lon + 1)
 		for k in lon + 1:
 			var theta: float = TAU * float(k) / float(lon)
-			var t: float = clampf((cos(theta) - _HELMET_DROP_START_C)
-					/ (1.0 - _HELMET_DROP_START_C), 0.0, 1.0)
-			var cut_v: float = lerpf(_HELMET_FRONT_CUT, _HELMET_BACK_CUT,
-					t * t * (3.0 - 2.0 * t)) \
-					+ _HELMET_EAR_DIP * pow(absf(sin(theta)), _HELMET_EAR_DIP_POWER)
-			var v: float = cut_v * float(j) / float(lat)
+			var v: float = _helmet_cut_v(theta) * float(j) / float(lat)
 			var y: float = _HELMET_RADIUS * cos(PI * v)
 			var ring_r: float = _HELMET_RADIUS * sin(PI * v)
 			ring[k] = Vector3(sin(theta) * ring_r, y, cos(theta) * ring_r)
@@ -956,6 +957,25 @@ static func _build_helmet() -> ArrayMesh:
 	_cap(st, rings[lat], apex, Vector2(0.5, 0.9), false, 0.05)
 	st.generate_normals()
 	return st.commit()
+
+
+# The rim's latitude fraction at azimuth θ (helmet-local, θ = 0 the back).
+static func _helmet_cut_v(theta: float) -> float:
+	var t: float = clampf((cos(theta) - _HELMET_DROP_START_C)
+			/ (1.0 - _HELMET_DROP_START_C), 0.0, 1.0)
+	return lerpf(_HELMET_FRONT_CUT, _HELMET_BACK_CUT, t * t * (3.0 - 2.0 * t)) \
+			+ _HELMET_EAR_DIP * pow(absf(sin(theta)), _HELMET_EAR_DIP_POWER)
+
+
+# Helmet-local height of the shell's lower edge at azimuth θ, as built: the rim
+# is a chord between the sampled azimuths, so its height between two samples is
+# their lerp, not the profile's.
+static func helmet_rim_y(theta: float) -> float:
+	var step: float = TAU / float(_HELMET_LON)
+	var f: float = fposmod(theta, TAU) / step
+	var k: float = floorf(f)
+	return lerpf(_HELMET_RADIUS * cos(PI * _helmet_cut_v(k * step)),
+			_HELMET_RADIUS * cos(PI * _helmet_cut_v((k + 1.0) * step)), f - k)
 
 
 # ── Helmet face gear ─────────────────────────────────────────────────────────
@@ -1095,7 +1115,7 @@ static func _sphere_point(radius: float, v: float, theta: float) -> Vector3:
 
 
 static func _build_neck() -> ArrayMesh:
-	return _build_lathe(_NECK_PROFILE, 8, 1.0, 1.0)
+	return _build_lathe(NECK_PROFILE, 8, 1.0, 1.0)
 
 
 # Default-tone skin material — Skater.set_skin_tone repaints the albedo to

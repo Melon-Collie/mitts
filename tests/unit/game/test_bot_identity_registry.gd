@@ -214,6 +214,18 @@ func test_normalize_coerces_out_of_range_cosmetics() -> void:
 	assert_true(GearModelRegistry.is_valid_face(gear.helmet_face), "face option coerces legal")
 
 
+# A negative pin packed raw would sign-extend across every field above it.
+func test_a_forged_pin_does_not_bleed_into_its_neighbours() -> void:
+	var norm: Dictionary = BotIdentityRegistry.normalize_entry({"name": "Forged",
+			"skate_model": -3, "helmet_face": GearModelRegistry.FACE_CAGE,
+			"hair_style": HairStyleRegistry.HAIR_LONG, "facial_hair": -1, "hair_color": 6})
+	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
+	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE, "the face pin survives")
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG, "the hair pin survives")
+	assert_eq(gear.hair_color, 6, "the colour pin survives")
+	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_NONE, "the forged one coerces")
+
+
 func test_normalize_omits_unpinned_cosmetic_groups() -> void:
 	# No pins → no codes, which is how spawn_bot knows to derive the fallback.
 	var norm: Dictionary = BotIdentityRegistry.normalize_entry({"name": "Plain"})
@@ -224,6 +236,52 @@ func test_normalize_omits_unpinned_cosmetic_groups() -> void:
 			{"name": "Half", "stick_model": 1})
 	assert_false(half.has("tape_code"))
 	assert_true(half.has("gear_style_code"))
+
+
+# Hair shares the gear code but is its own group: dressing a card in a visor
+# must not also give it the stock haircut, or every curated bot looks alike.
+func test_gear_pins_leave_the_hair_to_the_name_hash() -> void:
+	var norm: Dictionary = BotIdentityRegistry.normalize_entry(
+			{"name": "Visor Guy", "helmet_face": GearModelRegistry.FACE_VISOR})
+	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
+	var rolled: GearStyleConfig = GearStyleConfig.from_code(
+			BotIdentityRegistry.fallback_gear_style_code("Visor Guy"))
+	assert_eq(gear.helmet_face, GearModelRegistry.FACE_VISOR, "the pinned face holds")
+	assert_eq(gear.hair_style, rolled.hair_style, "the hair is the name's own roll")
+	assert_eq(gear.facial_hair, rolled.facial_hair)
+	assert_eq(gear.hair_color, rolled.hair_color)
+
+
+func test_hair_pins_claim_the_hair_group_and_coerce() -> void:
+	var norm: Dictionary = BotIdentityRegistry.normalize_entry({"name": "Mullet",
+			"hair_style": HairStyleRegistry.HAIR_LONG, "hair_color": 99})
+	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG)
+	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_NONE,
+			"an unpinned field of a pinned group sits at the stock default")
+	assert_true(HairStyleRegistry.is_valid_color(gear.hair_color), "a forged colour coerces")
+	# The gear group was not pinned, so it is the name's roll, not stock.
+	var rolled: GearStyleConfig = GearStyleConfig.from_code(
+			BotIdentityRegistry.fallback_gear_style_code("Mullet"))
+	assert_eq(gear.skate_model, rolled.skate_model)
+	assert_eq(gear.helmet_face, rolled.helmet_face)
+
+
+# Generic names share a prefix, which is the case a slice of the plain name hash
+# gets wrong; every style has to be reachable from the fallback.
+func test_fallback_hair_reaches_every_style() -> void:
+	var hair: Dictionary = {}
+	var facial: Dictionary = {}
+	var colors: Dictionary = {}
+	for i: int in 200:
+		var gear: GearStyleConfig = GearStyleConfig.from_code(
+				BotIdentityRegistry.fallback_gear_style_code("Bot %d" % i))
+		hair[gear.hair_style] = true
+		facial[gear.facial_hair] = true
+		colors[gear.hair_color] = true
+	assert_eq(hair.size(), HairStyleRegistry.hair_count(), "every hair style is rolled")
+	assert_eq(facial.size(), HairStyleRegistry.facial_count(), "every facial style is rolled")
+	assert_gt(colors.size(), 4, "the colours vary")
 
 
 func test_fallback_looks_are_stable_legal_and_varied() -> void:

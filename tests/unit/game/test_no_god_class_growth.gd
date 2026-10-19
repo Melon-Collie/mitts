@@ -79,7 +79,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/puck_controller.gd": 1589,
 	"res://Scripts/actors/hockey_rink.gd": 1469,
 	"res://Scripts/game/player_prefs.gd": 1409,
-	"res://Scripts/actors/skater_mesh_builder.gd": 1462,
+	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
+	# its top edge under the shell — the one source of the rim profile.
+	"res://Scripts/actors/skater_mesh_builder.gd": 1482,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
@@ -92,10 +94,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
 	"res://Scripts/controllers/remote_controller.gd": 822,
-	"res://Scripts/ui/player_settings_popup.gd": 863,
+	# +65: the hair rows (style, beard, colour) beside the skin, and the
+	# option/swatch row builders the skin and hair share.
+	"res://Scripts/ui/player_settings_popup.gd": 908,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 816,
-	"res://Scripts/ui/locker_popup.gd": 822,
+	"res://Scripts/ui/locker_popup.gd": 823,
 	"res://Scripts/ui/hud.gd": 822,
 }
 
@@ -114,7 +118,8 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/actors/puck.gd": 43,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
-	"res://Scripts/actors/skater_mesh_builder.gd": 30,
+	# +1: helmet_rim_y (see the size entry).
+	"res://Scripts/actors/skater_mesh_builder.gd": 31,
 	"res://Scripts/controllers/puck_controller.gd": 29,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,

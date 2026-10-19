@@ -5,10 +5,12 @@ extends RefCounted
 # chin, laid on the ball's own front facets in its frame (head centre at the
 # origin, face toward −Z). Everything is skin-painted; the darker features are
 # vertex tints the skin material multiplies under the player's skin tone, so the
-# face costs no surface of its own.
+# face costs no surface of its own. The brows' tint is the stand-in for figures
+# that wear no hair: a skater's are covered by build_brows, painted in its hair
+# colour.
 #
 # The face gear rides 0.157 m (cage) to 0.158 m (shields) from the helmet centre,
-# which is _HEAD_FORWARD_M behind this origin, so nothing here may stand more than
+# which is HEAD_FORWARD_M behind this origin, so nothing here may stand more than
 # about a centimetre proud of the facets — test_skater_face_mesh.gd holds it.
 
 const EYE_TINT := Color(0.12, 0.10, 0.10)
@@ -49,6 +51,53 @@ static func build(radius: float, lon: int, lat: int) -> ArrayMesh:
 	return st.commit()
 
 
+# The two brows alone, raised a decal's lift off the ledges `build` lays, so a
+# piece painted apart from the skin can cover them.
+static func build_brows(radius: float, lon: int, lat: int) -> ArrayMesh:
+	var face := SkaterFaceMesh.new()
+	face._radius = radius
+	face._lon = lon
+	face._lat = lat
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	for side: float in [-1.0, 1.0]:
+		face._brow(st, side, _DECAL_LIFT_M, Color.WHITE)
+	st.generate_normals()
+	return st.commit()
+
+
+# How far the face's features stand off the ball at (x, y), head-local — what
+# anything laid over the face has to clear. Only the chin reaches below the
+# nose, which is all a covering needs: a wedge that peaks across its middle
+# columns and falls to nothing at its sides, top and bottom.
+static func relief(x: float, y: float) -> float:
+	var hw: float = _CHIN[3]
+	var across: float = clampf((hw - absf(x)) / (hw * 0.3), 0.0, 1.0)
+	var down: float = 0.0
+	if y <= _CHIN[0] and y >= _CHIN[1]:
+		down = (_CHIN[0] - y) / (_CHIN[0] - _CHIN[1])
+	elif y < _CHIN[1] and y >= _CHIN[2]:
+		down = (y - _CHIN[2]) / (_CHIN[1] - _CHIN[2])
+	return _CHIN[4] * down * across
+
+
+# Where relief() bends, head-local: its x's (both sides) and its y's. A covering
+# sampled on these lines follows the chin instead of faceting across it.
+static func relief_xs() -> PackedFloat32Array:
+	var hw: float = _CHIN[3]
+	return PackedFloat32Array([-hw, -hw * 0.7, hw * 0.7, hw])
+
+
+static func relief_ys() -> PackedFloat32Array:
+	return PackedFloat32Array([_CHIN[0], _CHIN[1], _CHIN[2]])
+
+
+# The mouth's extent on the face, head-local (x, y), for a covering to leave bare.
+static func mouth_rect() -> Rect2:
+	return Rect2(-_MOUTH.y, _MOUTH.x - _MOUTH.z, _MOUTH.y * 2.0, _MOUTH.z * 2.0)
+
+
 # `src` with every vertex tinted white — pure skin — so it merges with the face
 # into one surface that carries a tint throughout.
 static func untinted(src: ArrayMesh) -> ArrayMesh:
@@ -65,7 +114,7 @@ static func untinted(src: ArrayMesh) -> ArrayMesh:
 func _emit(st: SurfaceTool) -> void:
 	for side: float in [-1.0, 1.0]:
 		_patch(st, Vector2(side * _EYE.x, _EYE.y), Vector2(_EYE.z, _EYE.w), EYE_TINT)
-		_brow(st, side)
+		_brow(st, side, 0.0, BROW_TINT)
 		_patch(st, Vector2(side * _MOUTH.y * 0.5, _MOUTH.x),
 				Vector2(_MOUTH.y * 0.5, _MOUTH.z), MOUTH_TINT)
 	_nose(st)
@@ -84,23 +133,24 @@ func _patch(st: SurfaceTool, c: Vector2, half: Vector2, tint: Color) -> void:
 
 
 # A ledge over each eye: its face stands proud, its underside reads in shadow.
-func _brow(st: SurfaceTool, side: float) -> void:
+# `raise` stands the whole ledge further off the head.
+func _brow(st: SurfaceTool, side: float, raise: float, tint: Color) -> void:
 	var x0: float = side * _BROW[0]
 	var x1: float = side * _BROW[1]
 	var y0: float = _BROW[2]
 	var y1: float = _BROW[3]
-	var lift: float = _BROW[4]
-	var top_in: Vector3 = _proud(x0, y1, 0.0)
-	var top_out: Vector3 = _proud(x1, y1, 0.0)
+	var lift: float = _BROW[4] + raise
+	var top_in: Vector3 = _proud(x0, y1, raise)
+	var top_out: Vector3 = _proud(x1, y1, raise)
 	var face_in: Vector3 = _proud(x0, y0, lift)
 	var face_out: Vector3 = _proud(x1, y0, lift)
-	var root_in: Vector3 = _proud(x0, y0 - 0.004, -0.001)
-	var root_out: Vector3 = _proud(x1, y0 - 0.004, -0.001)
+	var root_in: Vector3 = _proud(x0, y0 - 0.004, raise - 0.001)
+	var root_out: Vector3 = _proud(x1, y0 - 0.004, raise - 0.001)
 	var out: Vector3 = _out(side * 0.035, (y0 + y1) * 0.5)
-	_tri(st, top_in, top_out, face_out, out, BROW_TINT)
-	_tri(st, top_in, face_out, face_in, out, BROW_TINT)
-	_tri(st, face_in, face_out, root_out, Vector3.DOWN + out, BROW_TINT)
-	_tri(st, face_in, root_out, root_in, Vector3.DOWN + out, BROW_TINT)
+	_tri(st, top_in, top_out, face_out, out, tint)
+	_tri(st, top_in, face_out, face_in, out, tint)
+	_tri(st, face_in, face_out, root_out, Vector3.DOWN + out, tint)
+	_tri(st, face_in, root_out, root_in, Vector3.DOWN + out, tint)
 
 
 # A wedge down the centre column: the bridge rises from flush to the tip, two
