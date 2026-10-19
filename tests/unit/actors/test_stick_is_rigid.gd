@@ -45,7 +45,7 @@ func _make_controller(with_puck: bool) -> SkaterController:
 	var c := SkaterController.new()
 	add_child_autofree(c)
 	c.setup(skater, puck, gs)
-	c.apply_attributes(PlayerAttributes.all_average())
+	c.apply_attributes(PlayerAttributes.neutral())
 	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	if with_puck:
 		puck.set_carrier(skater)
