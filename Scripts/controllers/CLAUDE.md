@@ -513,10 +513,11 @@ landmark rather than a tuning number.
 `SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`. `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
-**Attributes, one line each.** Skating splits three ways: top speed rides height
-and the skate profile, first-step burst rides weight, and agility rides both, so
-a small player can be explosive and shifty without owning the top gear, and a
-heavy build feels it in the TURN rather than being glued to the ice. No build
+**Attributes, one line each.** Skating splits three ways: top speed rides the
+skate profile alone (size never buys it), first-step burst and agility ride
+height and weight, so a small player is explosive and shifty without owning the
+top gear, and a heavy build feels it in the TURN rather than being glued to the
+ice. No build
 tracks the cursor more precisely ("your hands are you"). The blade caps derive
 from lever geometry instead: the long lever sweeps but cannot cut back, the
 short lever is the scalpel. Shot power means "what a charge buys you, and how

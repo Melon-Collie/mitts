@@ -48,9 +48,9 @@ term scales them.
 
 | dial | scales | accessor(s) |
 |---|---|---|
-| Height | top-speed baseline (a hump that peaks at 6'1") | `speed_mult` → `top_speed_mult` |
+| Height | first-step burst (favors small builds: a shorter leg cycles faster) | `accel_mult` |
 | | agility baseline (favors small builds) | `agility_mult` |
-| | charged-shot ceiling (favors big builds), slapper wind-up as 2 − power | `shot_power_mult` (wrister), `slapper_power_mult`, `shot_charge_mult` |
+| | charged-shot ceiling (favors big builds), and slapper wind-up WITH it (the long lever loads slower) | `shot_power_mult` (wrister), `slapper_power_mult`, `shot_charge_mult` |
 | | skeleton, arm length and ROM, hand heights (mesh-native 5'10" = 1.0) | `height_mult` |
 | | stick cut to the body (~0.65× the height deviation) | `stick_len_mult` |
 | | helmet (a mild table of its own; heads are near-constant) | `head_bulk_mult` |
@@ -58,16 +58,20 @@ term scales them.
 | | first-step burst (favors lean builds) | `accel_mult` |
 | | agility bite (F = mv²/r: heavy turns wide and stops long) | `agility_mult` |
 | Both | girth = sqrt(mass/height): every lateral body part and the hitbox radius | `girth_mult` |
+| | glide: air drag over mass with area ∝ sqrt(mass·height) is 1 / girth, so a heavy-for-his-height body coasts | `glide_drag_mult` |
 
-Two deliberate exemptions. **Edge glide** reads only the height part of agility
-(`agility_glide_mult`), so a heavy build still coasts like its mass says it
-should. **Top speed** stays weight-free.
+**Size never buys top speed.** If it did, every build would be the tallest one.
+Top speed is the skate profile's alone: `speed_mult` is the profile's lean,
+and `top_speed_mult` counts it twice, once raw and once through its position in
+the 20–25 mph burst band. Every body skates the same ~22.4 mph on balanced
+skates. `carry_speed_mult` rises with the same band position and is the whole
+cost of carrying at speed. Drag never sets top speed either: the thrust against
+drag equilibrium (~15.6 m/s) sits well past the cap, so glide shapes only the
+coast and the approach to it.
 
-`top_speed_mult` counts the speed lean twice: once raw, and once through its
-position in the 20–25 mph burst band. Body-only builds sit in a tight ~22 mph
-middle band, and the skate profile reaches either end of it.
-`carry_speed_mult` rises with the same band position and is the whole cost of
-carrying at speed.
+So size trades things with no single right answer. Small and lean wins the
+first step, the corner and the quicker wind-up. Big and heavy wins reach, shot
+power, every contact and the coast.
 
 ## The gear slots
 

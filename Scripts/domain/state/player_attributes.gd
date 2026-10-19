@@ -98,17 +98,19 @@ const LENGTH_STANDARD: int = 1
 const LENGTH_LONG: int = 2       # +reach / tip speed / contest momentum, +inertia
 
 # ── Height tables (rows at ANCHOR_INCHES) ─────────────────────────────────────
-# The body plane is deliberately narrow — height alone moves a multiplier by a
-# few percent; the gear leans re-widen the spread.
+# Height trades the long frame (reach, shot power) against the short one
+# (burst, turns, a quicker wind-up). Top speed is NOT a height lever: if size
+# bought speed, every build would be the tallest one. It is the skates' alone.
 
-# Top speed peaks at the neutral height.
-const _SPEED_H: Array[float] = [0.9875, 0.995, 1.000, 0.995, 0.988]
+# First-step burst: a shorter leg cycles its stride faster. Linear at 1.2% an
+# inch about the neutral height.
+const _ACCEL_H: Array[float] = [1.072, 1.036, 1.000, 0.964, 0.916]
 
 # Turn rate / brake / facing / lateral grip. Small-favored.
 const _AGILITY_H: Array[float] = [1.065, 1.020, 1.000, 0.960, 0.920]
 
 # Charged-shot ceiling. Big-favored — the leverage a long frame loads into a
-# shot.
+# shot — and the slapper wind-up with it: the long lever takes longer to load.
 const _SHOT_H: Array[float] = [0.880, 0.940, 1.000, 1.050, 1.103]
 
 # Mesh Y-scale, arm length, hand heights. Mesh-native 5'10" (row 1) is 1.0,
@@ -141,8 +143,8 @@ const _PROFILE_GLIDE_LEAN: Array[float] = [1.03, 1.00, 0.96]    # drag mult: low
 
 # STICK FLEX — a stiff shaft pays off only when a big swing bends it; a whippy
 # one bends under less. So stiff is the slapshot stick: a bigger slapper that
-# needs a longer wind-up to load (the charge lean goes WITH the power lean,
-# unlike height's 2 − power coupling — a lateral slot trades, never stacks).
+# needs a longer wind-up to load (the charge lean goes WITH the power lean, as
+# height's does — a lateral slot trades, never stacks).
 # Whippy is the wrist-shot stick: the shaft carries more of a wrister the torso
 # can't load (wrister_unloaded_share 0.70 / 0.60 / 0.50 at the controller's 0.6
 # base). The wrister ceiling is flex-free, so the two break even on a fully
@@ -175,17 +177,17 @@ const _CURVE_RECEPTION_LEAN: Array[float] = [1.07, 1.00, 0.93]
 
 # ── Frame tables (rows lean→heavy at frame_t 0/.25/.5/.75/1) ──────────────────
 # First-step burst. Lean = quicker; heavy trades it for momentum, which the
-# collision math already carries through mass.
+# collision math carries through mass and the glide through girth. Multiplies
+# the height baseline.
 const _ACCEL_F: Array[float] = [1.080, 1.040, 1.000, 0.980, 0.970]
 
 # F = mv²/r: at fixed leg strength more mass is a wider arc and a longer stop —
 # the counterweight that makes weight a seesaw rather than a free mass buy.
-# Multiplies the height baseline; not applied to edge glide.
+# Multiplies the height baseline.
 const _AGILITY_F: Array[float] = [1.030, 1.015, 1.000, 0.980, 0.960]
 
 # ── Top speed / carry ─────────────────────────────────────────────────────────
-# The normalization span is wider than the body plane's own speed range, so a
-# body-only build sits mid-band and the skate profile reaches either end.
+# The normalization span the skate profile's speed lean sits in.
 const _SPEED_MULT_MIN: float = 0.955
 const _SPEED_MULT_MAX: float = 1.060
 # Burst-band ceilings across the span — the NHL EDGE 20–25 mph band.
@@ -298,10 +300,10 @@ static func inches_label(inches: int) -> String:
 
 
 # ── Body: skating and shooting ────────────────────────────────────────────────
-# Height baseline × the skate profile's lean. Not applied directly — it is the
-# input top_speed_mult and carry_speed_mult are read off.
+# The skate profile's top-speed lean — body-free by design. Not applied
+# directly; top_speed_mult and carry_speed_mult are read off it.
 func speed_mult() -> float:
-	return _h(_SPEED_H, height) * _PROFILE_SPEED_LEAN[profile]
+	return _PROFILE_SPEED_LEAN[profile]
 
 
 # max_speed multiplier. The speed lean counts twice: once raw, and again
@@ -323,15 +325,16 @@ func agility_mult() -> float:
 	return _h(_AGILITY_H, height) * _f(_AGILITY_F) * _PROFILE_AGILITY_LEAN[profile]
 
 
-# Edge-glide drag: the inverse of the HEIGHT-ONLY agility term. The frame term
-# stays out so a heavy build coasts like its mass says it should; the profile
-# lean applies, since blade contact length is the glide surface.
-func agility_glide_mult() -> float:
-	return (2.0 - _h(_AGILITY_H, height)) * _PROFILE_GLIDE_LEAN[profile]
+# Glide drag (the velocity-proportional term): drag over mass, with frontal
+# area ∝ sqrt(mass·height), is sqrt(height/mass) — exactly 1 / girth. So a
+# heavy-for-his-height body coasts and a tall lean one scrubs speed. The profile
+# lean applies too, since blade contact length is the glide surface.
+func glide_drag_mult() -> float:
+	return _PROFILE_GLIDE_LEAN[profile] / girth_mult()
 
 
 func accel_mult() -> float:
-	return _f(_ACCEL_F) * _PROFILE_ACCEL_LEAN[profile]
+	return _h(_ACCEL_H, height) * _f(_ACCEL_F) * _PROFILE_ACCEL_LEAN[profile]
 
 
 # Linear in displayed weight — see NEUTRAL_WEIGHT_LBS.
@@ -355,10 +358,11 @@ func wrister_unloaded_mult() -> float:
 	return _FLEX_UNLOADED_LEAN[flex]
 
 
-# Slapper wind-up time. The height part is 2 − power (a big frame's harder shot
-# also threatens sooner); the flex part goes WITH power, so the slot trades.
+# Slapper wind-up time, WITH power on both axes: the big frame's harder shot
+# takes longer to load, and so does the stiff stick's. Small builds get the
+# quicker release.
 func shot_charge_mult() -> float:
-	return (2.0 - _h(_SHOT_H, height)) * _FLEX_CHARGE_LEAN[flex]
+	return _h(_SHOT_H, height) * _FLEX_CHARGE_LEAN[flex]
 
 
 # ── Body: geometry ────────────────────────────────────────────────────────────

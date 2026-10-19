@@ -1309,10 +1309,9 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# lean/small one. The facing/stop terms above are the feel of quickness; this is
 	# the arc itself.
 	lateral_grip                = _base_lateral_grip                * m_agility
-	# friction_drag is velocity-proportional drag, scaled inversely with the
-	# height-only agility term (see agility_glide_mult): less momentum leaks
-	# through the blades during a cut.
-	friction_drag               = _base_friction_drag               * attrs.agility_glide_mult()
+	# friction_drag is the velocity-proportional (air) drag: girth-scaled, so
+	# a heavy body coasts (see glide_drag_mult).
+	friction_drag               = _base_friction_drag               * attrs.glide_drag_mult()
 	# A computed value, not a base × mult.
 	puck_carry_speed_multiplier = attrs.carry_speed_mult()
 	# The blade caps derive from LEVER GEOMETRY below, after the reach/stick
