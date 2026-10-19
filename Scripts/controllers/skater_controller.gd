@@ -1634,14 +1634,19 @@ func _adopt_stick_check(state: SkaterNetworkState) -> void:
 func _advance_cross_check(input: InputState, delta: float) -> void:
 	var free: bool = not has_puck and not skater.is_knocked_down \
 			and skater.pin_role == BoardPinRules.Role.NONE
+	var to_cursor := Vector2(input.mouse_world_pos.x - skater.global_position.x,
+			input.mouse_world_pos.z - skater.global_position.z)
 	_cross_check.advance(input.hit_pressed,
-			free and _sm.get_state() == State.SKATING_WITHOUT_PUCK, not free, delta)
+			free and _sm.get_state() == State.SKATING_WITHOUT_PUCK, not free,
+			CrossCheckRules.aim_dir(skater.get_facing(), to_cursor,
+					deg_to_rad(upper_body_max_twist_deg)), delta)
 	_stamp_cross_check()
 
 
 func _stamp_cross_check() -> void:
 	skater.cross_check_phase = _cross_check.phase
 	skater.cross_check_elapsed = _cross_check.elapsed
+	skater.cross_check_aim = _cross_check.aim
 
 
 func _process_input(input: InputState, delta: float) -> void:
@@ -2112,6 +2117,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.stick_check_elapsed = _stick_check.elapsed
 	state.cross_check_phase = _cross_check.phase
 	state.cross_check_elapsed = _cross_check.elapsed
+	state.cross_check_aim = _cross_check.aim
 	state.stick_tied = skater.stick_tied
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength

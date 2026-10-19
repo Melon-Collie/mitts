@@ -1,10 +1,11 @@
 class_name AICrossCheckRead
 extends RefCounted
 
-# When a bot's cross-check is worth its stick, read from what the bot can see.
-# The push is the one the host would land (CrossCheckRules.victim_dv — the same
-# function, so a change to the model moves the prediction with it) on the man as
-# he stands now: his facing, posture, stagger and intent. Moving him is worth it:
+# When a bot's cross-check is worth its stick, and where to aim it, read from
+# what the bot can see. The push is the one the host would land
+# (CrossCheckRules.victim_dv — the same function, so a change to the model moves
+# the prediction with it) on the man as he stands now: his facing, posture,
+# stagger and intent. Moving him is worth it:
 # - at our net, when he hides the release from our goalie (the goalie's own
 #   silhouette and sightline, GoalieBehaviorRules.ScreenConfig) and would not
 #   once moved;
@@ -17,6 +18,11 @@ extends RefCounted
 const PUSHED_REACTION_S: float = AICarrySpace.EVADE_REACTION_S
 # The shover's stick is out of play from the press until it is back.
 const STICK_OUT_S: float = CrossCheckRules.PUSH_S + CrossCheckRules.RECOVER_S
+# A shove is tried along the way that matters and turned off it by 30° and 60°
+# either side (aim_turn): a push along a man's blades moves him furthest and one
+# across them least, so the best aim trades the two and the tries sample it.
+const AIM_TRIES: int = 5
+const _AIM_TURN_STEP_RAD: float = PI / 6.0
 
 static var _league: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_config()
 static var _check_cfg := BodyCheckRules.Config.new()
@@ -35,6 +41,21 @@ static func predicted_dv(shover_weight: float, shover_thrust: float,
 	return CrossCheckRules.victim_dv(shover_weight, shover_thrust,
 			man_caps.weight if man_caps != null else 1.0, push_dir, man.facing, edge,
 			man.move_intent, drive)
+
+
+# The `i`th try's turn off the want (rad): 0, then +-30°, then +-60°.
+static func aim_turn(i: int) -> float:
+	return floorf((i + 1) * 0.5) * _AIM_TURN_STEP_RAD * (1.0 if i % 2 == 1 else -1.0)
+
+
+# Off the goalie's sightline to the puck the shortest way (unit XZ): square
+# across it, toward the side `man_pos` already stands on.
+static func off_sightline_dir(man_pos: Vector3, goalie_pos: Vector3,
+		puck_pos: Vector3) -> Vector2:
+	var line := Vector2(puck_pos.x - goalie_pos.x, puck_pos.z - goalie_pos.z).normalized()
+	var off := Vector2(man_pos.x - goalie_pos.x, man_pos.z - goalie_pos.z)
+	var side: Vector2 = line.orthogonal()
+	return side if side.dot(off) >= 0.0 else -side
 
 
 static func man_thrust(man_caps: AISkaterCaps) -> float:

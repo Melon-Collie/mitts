@@ -97,6 +97,11 @@ func shape_trunk(p: GaitPose) -> void:
 	if _commit_blend > 0.001:
 		p.trunk_pitch += -deg_to_rad(_controller.hit_commit_lean_deg) * _commit_blend
 		p.drop += _controller.hit_commit_crouch_m * _commit_blend
-	# A cross-check goes straight out in front of the chest (CrossCheckRules.in_reach).
+	# A cross-check goes straight out in front of the chest, which the pose turns
+	# to its aim (CrossCheckRules.aim_dir); the chest's turn is replicated where
+	# the aim is not.
 	if _shove_env > 0.0:
-		p.trunk_pitch += -deg_to_rad(_controller.check_drive_lean_deg) * _shove_env
+		var shove_mag: float = deg_to_rad(_controller.check_drive_lean_deg) * _shove_env
+		var chest: float = _skater.get_upper_body_rotation()
+		p.trunk_pitch += -shove_mag * cos(chest)
+		p.trunk_roll += shove_mag * sin(chest)

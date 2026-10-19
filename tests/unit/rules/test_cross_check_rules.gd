@@ -74,8 +74,42 @@ func test_reach_is_an_arms_length_in_front_of_the_chest() -> void:
 	assert_false(CrossCheckRules.in_reach(Vector3.ZERO, FACING_PLUS_X, r, far, r), "out of reach")
 	assert_false(CrossCheckRules.in_reach(Vector3.ZERO, -FACING_PLUS_X, r, near, r),
 			"behind him")
-	assert_false(CrossCheckRules.in_reach(Vector3.ZERO, FACING_PLUS_X.rotated(deg_to_rad(60.0)), r, near, r),
-			"off his shoulder, outside the cone")
+
+
+func test_the_shaft_reaches_between_the_hands_wherever_it_points() -> void:
+	var r: float = 0.35
+	var ahead: float = 2.0 * r + 0.2
+	var edge: float = CrossCheckRules.HALF_SPAN_M + r
+	assert_true(CrossCheckRules.in_reach(Vector3.ZERO, FACING_PLUS_X, r,
+			Vector3(ahead, 0.0, edge - 0.02), r), "on the shaft, off the chest's centre")
+	assert_false(CrossCheckRules.in_reach(Vector3.ZERO, FACING_PLUS_X, r,
+			Vector3(ahead, 0.0, edge + 0.02), r), "past the hands")
+	var aim: Vector2 = FACING_PLUS_X.rotated(deg_to_rad(50.0))
+	var on_aim := Vector3(aim.x, 0.0, aim.y) * ahead
+	assert_true(CrossCheckRules.in_reach(Vector3.ZERO, aim, r, on_aim, r),
+			"the shaft turned with the chest reaches where it points")
+	assert_false(CrossCheckRules.in_reach(Vector3.ZERO, FACING_PLUS_X, r, on_aim, r),
+			"and not the chest's square-on line")
+
+
+func test_the_hands_span_is_the_poses_grip() -> void:
+	assert_almost_eq(CrossCheckRules.HALF_SPAN_M,
+			CrossCheckRules.GRIP_FRACTION * GameRules.DEFAULT_STICK_LENGTH_M * 0.5, 1e-6)
+
+
+# ── aim ──────────────────────────────────────────────────────────────────────
+
+func test_the_aim_follows_the_cursor_as_far_as_the_chest_turns() -> void:
+	var twist: float = deg_to_rad(67.0)
+	var toward := Vector2(1.0, 1.0)
+	var aim: Vector2 = CrossCheckRules.aim_dir(FACING_PLUS_X, toward, twist)
+	assert_almost_eq(aim.angle_to(toward.normalized()), 0.0, 1e-5, "inside the turn: the cursor")
+	assert_almost_eq(aim.length(), 1.0, 1e-5)
+	var behind: Vector2 = CrossCheckRules.aim_dir(FACING_PLUS_X, Vector2(-1.0, 0.1), twist)
+	assert_almost_eq(absf(FACING_PLUS_X.angle_to(behind)), twist, 1e-5,
+			"past it: as far round as the chest goes")
+	assert_eq(CrossCheckRules.aim_dir(FACING_PLUS_X, Vector2(0.01, 0.02), twist), FACING_PLUS_X,
+			"a cursor on the skater names no bearing")
 
 
 # ── the push ─────────────────────────────────────────────────────────────────
@@ -131,8 +165,8 @@ func test_no_legal_pair_of_builds_knocks_down_on_a_standstill_shove() -> void:
 	var least_mass: float = INF
 	for h: int in range(PlayerAttributes.HEIGHT_MIN, PlayerAttributes.HEIGHT_MAX + 1):
 		for w: int in range(PlayerAttributes.weight_min(h), PlayerAttributes.weight_max(h) + 1):
-			for profile: int in [PlayerAttributes.PROFILE_AGILITY, PlayerAttributes.PROFILE_BALANCED,
-					PlayerAttributes.PROFILE_POWER]:
+			for profile: int in [PlayerAttributes.PROFILE_SHIFTY,
+					PlayerAttributes.PROFILE_STABILITY, PlayerAttributes.PROFILE_POWER]:
 				var a := PlayerAttributes.new(h, w, profile)
 				most_force = maxf(most_force, a.mass_mult() * THRUST * a.accel_mult())
 				least_mass = minf(least_mass, a.mass_mult())

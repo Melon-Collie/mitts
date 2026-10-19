@@ -288,11 +288,15 @@ intent) and how far it moves a man who pushes back once he has read it. At our
 net he shoves the man he covers when that man hides the release from our goalie
 by the goalie's own body test and would not once moved; anywhere, he shoves the
 man in reach who beats him to a loose puck when the push and the stagger it
-lands turn the race, his own stick out through the push charged to him. A push
-across a man's blades meets his edges (doubled if he is loaded low), so most
-shoves across a set screener do nothing, and the bot does not throw them. It rides
-`check_aggression` (zero on Easy). A screener in their end answers it: with a
-defender in reach who could throw one, he loads up (the stance), the
+lands turn the race, his own stick out through the push charged to him. The
+push goes where it is aimed, and he aims it as a human would, on the cursor: off
+the sightline the shortest way, or away from the puck, and turned off that by
+30° and 60° either side (`aim_turn`). A push across a man's blades meets his
+edges (doubled if he is loaded low) and one along them moves him furthest, so
+the best aim trades the two and the tries sample it. When no try clears the
+screen, he does not throw it. It rides `check_aggression` (zero on Easy). A
+screener in their end answers it: with a defender who could reach him at any aim
+the defender can turn to, he loads up (the stance), the
 `protects_the_puck` gate.
 
 ### The three facts a station reads, and the one that stays unread

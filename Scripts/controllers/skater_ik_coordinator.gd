@@ -736,7 +736,7 @@ func address_stick_horiz() -> float:
 func _grip_fraction() -> float:
 	var grip: float = lerpf(_controller.bottom_hand_grip_fraction,
 			_controller.faceoff_center_grip_fraction, _address_blend())
-	return lerpf(grip, _SHOVE_GRIP_FRACTION, CrossCheckRules.pose_weight(
+	return lerpf(grip, CrossCheckRules.GRIP_FRACTION, CrossCheckRules.pose_weight(
 			_skater.cross_check_phase, _skater.cross_check_elapsed))
 
 
@@ -795,7 +795,6 @@ const _SHOVE_HAND_DROP_M: float = 0.20   # under the shoulder marker: chest heig
 const _SHOVE_HAND_Z: float = -0.35       # in front of the chest as the push starts
 const _SHOVE_PUNCH_M: float = 0.25       # the arms' extension at full push
 const _SHOVE_BEARING_Z: float = -0.15    # the shaft a touch ahead of square across
-const _SHOVE_GRIP_FRACTION: float = 0.40  # hands ~0.5 m apart on a league stick
 
 
 func _cross_check_hand_pose(hand_local: Vector3, blade_local: Vector3,

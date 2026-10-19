@@ -2,12 +2,12 @@ class_name CrossCheckTracker
 extends RefCounted
 
 # Host-only owner of every cross-check landing: a shover in the push
-# (CrossCheckRules EXTEND) with an opponent inside his reach and in front of his
-# chest shoves the nearest one, once per throw — at present time here, or
-# through a client's lag-comp claim (CrossCheckClaimResolver → try_land), the
-# first valid one winning. The victim answers the push himself
-# (SkaterController.take_cross_check); `landed` carries what got through to the
-# feedback broadcast.
+# (CrossCheckRules EXTEND) with an opponent's body on his shaft shoves the
+# nearest one along the aim the throw was pressed with, once per throw — at
+# present time here, or through a client's lag-comp claim
+# (CrossCheckClaimResolver → try_land), the first valid one winning. The victim
+# answers the push himself (SkaterController.take_cross_check); `landed` carries
+# what got through to the feedback broadcast.
 #
 # Nobody in a board pin, ghosted or down shoves or is shoved. Goalies are not in
 # the registry's skaters, so they are never a target.
@@ -77,7 +77,7 @@ func _nearest_in_reach(shover: Skater) -> Skater:
 	var best_d: float = INF
 	for victim: Skater in _registry.skaters():
 		if not _shovable(shover, victim) or not CrossCheckRules.in_reach(shover.global_position,
-				shover.get_facing(), shover.collision_radius(), victim.global_position,
+				shover.cross_check_aim, shover.collision_radius(), victim.global_position,
 				victim.collision_radius()):
 			continue
 		var d: float = shover.global_position.distance_squared_to(victim.global_position)
@@ -88,15 +88,13 @@ func _nearest_in_reach(shover: Skater) -> Skater:
 
 
 func _land(shover: Skater, victim: Skater) -> void:
-	var d := Vector2(victim.global_position.x - shover.global_position.x,
-			victim.global_position.z - shover.global_position.z)
-	if d.length_squared() < 1e-8 or not _controller_of.is_valid():
+	if not _controller_of.is_valid():
 		return
 	var shover_ctrl: SkaterController = _controller_of.call(shover) as SkaterController
 	var victim_ctrl: SkaterController = _controller_of.call(victim) as SkaterController
 	if shover_ctrl == null or victim_ctrl == null:
 		return
 	_landed[shover] = true
-	var dir: Vector2 = d.normalized()
+	var dir: Vector2 = shover.cross_check_aim
 	var dv: float = victim_ctrl.take_cross_check(shover.weight, shover_ctrl.thrust, dir)
 	landed.emit(shover, victim, dv, Vector3(dir.x, 0.0, dir.y))

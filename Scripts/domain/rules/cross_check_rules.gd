@@ -11,7 +11,8 @@ extends RefCounted
 # The push is a stride delivered through the arms: the force runs through the
 # shover's skates, so it is what his stride pushes for PUSH_S, and the victim
 # answers it with his edges (across his blades) and his own stride (pushing back
-# into it). See victim_dv.
+# into it). See victim_dv. The shover aims it: the shaft goes square across the
+# chest he turns to the cursor, and pushes along its own normal (aim_dir).
 
 enum Phase { IDLE, EXTEND, RECOVER, REARM }
 
@@ -25,8 +26,13 @@ const RECOVER_S: float = 0.20
 const REARM_S: float = 0.40
 # Body edge to body edge: an arm's extension with the shaft in both hands.
 const REACH_M: float = 0.55
-# In front of the chest, where the shaft is: cos 50°.
-const CONE_COS: float = 0.6428
+# The bottom hand's place down the shaft in the pose, as a share of the stick.
+const GRIP_FRACTION: float = 0.40
+# The shaft between the hands is what pushes: half its span either side of the
+# chest, on a league stick.
+const HALF_SPAN_M: float = GRIP_FRACTION * GameRules.DEFAULT_STICK_LENGTH_M * 0.5
+# A cursor nearer the shover than this names no bearing; the hips' facing stands.
+const _AIM_DEADZONE_M: float = 0.1
 
 # The pose is fully on a third of the way out, so the shaft is across the chest
 # before the push lands, and comes off over the last third of the way back.
@@ -90,17 +96,25 @@ static func pose_weight(phase: int, elapsed: float) -> float:
 	return clampf(extension(phase, elapsed) * _POSE_IN, 0.0, 1.0)
 
 
-# Whether a victim is inside the shover's reach and in front of his chest.
-# Facings are unit XZ (Skater.get_facing), the axis the skater strides along.
-static func in_reach(shover_pos: Vector3, shover_facing: Vector2, shover_radius: float,
+# The push's direction (unit XZ): the cursor's bearing from the shover
+# (`to_cursor`), as far round from his hips (`facing`, unit) as his chest turns,
+# `max_twist_rad`. The shaft is square across the chest, so it pushes along this.
+static func aim_dir(facing: Vector2, to_cursor: Vector2, max_twist_rad: float) -> Vector2:
+	if to_cursor.length_squared() < _AIM_DEADZONE_M * _AIM_DEADZONE_M:
+		return facing
+	return facing.rotated(clampf(facing.angle_to(to_cursor), -max_twist_rad, max_twist_rad))
+
+
+# Whether a victim's body meets the shaft pushed out along `aim` (aim_dir): ahead
+# of the chest, no further than the arms reach, and across the shaft between the
+# hands.
+static func in_reach(shover_pos: Vector3, aim: Vector2, shover_radius: float,
 		victim_pos: Vector3, victim_radius: float) -> bool:
 	var d := Vector2(victim_pos.x - shover_pos.x, victim_pos.z - shover_pos.z)
-	var dist: float = d.length()
-	if dist < 1e-4:
+	var ahead: float = aim.dot(d)
+	if ahead <= 0.0 or ahead - shover_radius - victim_radius > REACH_M:
 		return false
-	if dist - shover_radius - victim_radius > REACH_M:
-		return false
-	return shover_facing.dot(d / dist) >= CONE_COS
+	return absf(aim.cross(d)) <= HALF_SPAN_M + victim_radius
 
 
 # The victim's edge resistance (m/s²) to a push square across his blades: the
@@ -126,10 +140,10 @@ static func drive_accel(cfg: SkaterMovementRules.MovementConfig, posture: int,
 	return thrust
 
 
-# The victim's Δv (m/s, along `push_dir`, unit XZ) from a shove: the shover's
-# stride over PUSH_S on the victim's mass, less what his edges hold across his
-# blades (|sin θ| of the push against his facing) and what his own stride pushes
-# back into it. Never negative: a set man is not moved, nor pulled.
+# The victim's Δv (m/s, along `push_dir`, the shover's aim) from a shove: the
+# shover's stride over PUSH_S on the victim's mass, less what his edges hold
+# across his blades (|sin θ| of the push against his facing) and what his own
+# stride pushes back into it. Never negative: a set man is not moved, nor pulled.
 static func victim_dv(shover_mass: float, shover_thrust: float, victim_mass: float,
 		push_dir: Vector2, victim_facing: Vector2, victim_edge_accel: float,
 		victim_intent: Vector2, victim_drive_accel: float) -> float:

@@ -75,12 +75,14 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +50: the cross-check — its phase stepped from the Ctrl press and adopted on
 	# reconcile, and the victim's answer to it (take_cross_check).
 	# +3: the stagger reads how hard a hit landed, apart from the knockdown.
-	"res://Scripts/controllers/skater_controller.gd": 3577,
+	# +6: the press latches the cursor's aim, as far round as the chest turns.
+	"res://Scripts/controllers/skater_controller.gd": 3583,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	# +11: the physicality plan — a locked pin pair's flat contact, the
 	# cross-check's phase fields (read by puck play and the pose), and the
 	# body_check_received signal carrying the stagger strength.
-	"res://Scripts/actors/skater.gd": 2810,
+	# +2: the aim the cross-check was thrown at.
+	"res://Scripts/actors/skater.gd": 2812,
 	# +33: the cross-check claim and its landed broadcast (two RPC pairs).
 	"res://Scripts/networking/network_manager.gd": 2899,
 	"res://Scripts/game/tutorial_manager.gd": 2067,

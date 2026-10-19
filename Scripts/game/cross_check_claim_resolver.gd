@@ -3,8 +3,8 @@ extends RefCounted
 
 # Host-only resolver for client-initiated cross-check claims with lag
 # compensation, plus the client-side send. The claimant, in the push
-# (CrossCheckRules EXTEND), had an opponent inside his reach and in front of his
-# chest as he saw him.
+# (CrossCheckRules EXTEND), had an opponent's body on his shaft as he saw him,
+# the shaft pushed out along the aim his throw latched.
 #
 # Flow:
 #   maybe_send_claim()  [client, every tick]
@@ -16,7 +16,8 @@ extends RefCounted
 #     → rewind the target to remote_view_time(host_ts, interp_delay), forward-
 #       predicted as the client rendered him (LagCompRewind.forward_predict_
 #       skater); reject a ghost
-#     → reject unless CrossCheckRules.in_reach on those two bodies
+#     → reject unless CrossCheckRules.in_reach on those two bodies, along the
+#       claimant's aim at self_view_time (the host latched it off the same press)
 #     → CrossCheckTracker.try_land, which re-checks the present (idempotent with
 #       the host's own present-time landing: one per throw)
 #
@@ -60,7 +61,7 @@ func maybe_send_claim() -> void:
 		if rec.skater == null or rec.skater == me or rec.skater.is_ghost \
 				or _registry.team_id_by_skater.get(rec.skater, -1) == my_team:
 			continue
-		if not CrossCheckRules.in_reach(me.global_position, me.get_facing(),
+		if not CrossCheckRules.in_reach(me.global_position, me.cross_check_aim,
 				me.collision_radius(), rec.skater.global_position, rec.skater.collision_radius()):
 			continue
 		var d: float = me.global_position.distance_squared_to(rec.skater.global_position)
@@ -120,7 +121,7 @@ func receive_claim(peer_id: int, host_timestamp: float, interp_delay_ms: float,
 			target.controller as SkaterController, interp_delay_ms, input_lead_ms,
 			_fp_result):
 		victim_pos = _fp_result.position
-	if not CrossCheckRules.in_reach(shover_pos, shover_snap.facing,
+	if not CrossCheckRules.in_reach(shover_pos, shover_snap.cross_check_aim,
 			record.skater.collision_radius(), victim_pos, target.skater.collision_radius()):
 		return
 	tracker.try_land(record.skater, target.skater)

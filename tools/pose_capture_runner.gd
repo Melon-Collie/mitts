@@ -245,6 +245,11 @@ const POSES: Array = [
 		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
 		[12, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
 	]},
+	# Thrown at a cursor 50° off the hips: the chest and the shaft turn to it.
+	{"name": "cross_check_aimed", "puck": false, "cam": Vector3(0.6, 2.4, 2.6), "steps": [
+		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
+		[12, {"shove": true, "aim": Vector3(2.3, 0.0, 1.93)}],
+	]},
 	# ── Dive ────────────────────────────────────────────────────────────────
 	# Stance + block out of a skate: down and sliding on, laid out across the
 	# line of travel toward the cursor, stick along the ice. Mid-slide.

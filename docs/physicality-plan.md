@@ -160,7 +160,7 @@ resist   = PUSH_S × ( turn_accel × lateral_grip × posture_grip × stagger_gri
 Δv       = max(0, Δv_free − resist)  along d
 ```
 
-- `d` is the shove direction: the centre axis, shover → victim. `θ` is the angle
+- `d` is the shove direction: the shover's aim (*Aimed*, below). `θ` is the angle
   between `d` and the victim's blades (his facing, `rotation.y` — the axis the
   movement model strides along).
 - **Weight matters both ways, from mass alone.** Heavy on light shoves harder;
@@ -217,9 +217,10 @@ back:
   is out for `EXTEND + RECOVER` for nothing.
 - **A shove breaks a tie the shover is in.** Both hands are on the shaft. It ends
   like any tie end, with both players on the stick-check cooldown.
-- **Reach:** the victim's body edge within `REACH_M` (0.55 m, arm extension) of
-  the shover's, inside `±CONE_DEG` (50°) of his facing. One landing per press,
-  on the nearest eligible opponent. Goalies are never targets.
+- **Reach:** the victim's body meets the shaft: his body edge within `REACH_M`
+  (0.55 m, arm extension) of the shover's along the aim, and across it no
+  further than the hands' half-span plus his radius. One landing per press, on
+  the nearest eligible opponent. Goalies are never targets.
 
 ### Netcode
 
@@ -302,6 +303,36 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
   Δv and direction) and `ReplayEventReplayer` plays its burst and thud at the same
   hardness as live (`SkaterVFX.shove_intensity`). Unknown kinds were already
   skipped, so the file format is unchanged.
+
+### Aimed (decided after Phase C)
+
+The cross-check goes where it is aimed, so a defender beside a screener can push
+him sideways off the goalie's eyes rather than only straight away.
+
+- **The shaft pushes along its own normal.** It is a bar square across the
+  chest, so it pushes square out from the chest wherever on it the man sits,
+  not along the line between the two centres. The chest turns to the cursor on
+  the press, as far as it twists off the hips (`upper_body_max_twist_deg`, 67°):
+  `CrossCheckRules.aim_dir`. That aim is both the push direction and the axis of
+  the reach.
+- **The reach is the bar's footprint**, not a cone: `REACH_M` deep along the aim,
+  and across it the shaft between the hands (`HALF_SPAN_M`, from the pose's own
+  `GRIP_FRACTION` on a league stick) plus his radius.
+- **The aim is latched on the press** (`SkaterCrossCheck.aim`) and held for the
+  throw, so where the cursor goes after doesn't steer it. Host and predicting
+  client latch it off the same input.
+- **No wire change.** The host lands every shove from its own latched aim, and
+  the claim rewind reads it off the host-only snapshot field
+  (`SkaterNetworkState.cross_check_aim`). Remotes see the aim as the chest's
+  turn, which already rides the wire in the upper-body rotation; the leg
+  drive's lean follows the chest.
+- **Bots aim.** A coverer tries the push square across the goalie's sightline
+  (`AICrossCheckRead.off_sightline_dir`) and turned 30° and 60° either side,
+  because a push along a man's blades moves him furthest and one across them
+  least. He presses the first aim that clears the screen. On a loose puck he
+  tries away from it the same way. The press carries the aim on the cursor, as
+  a human's does. A screener's set reads whether a defender could reach him at
+  any aim the defender can turn to.
 
 ## Phase C — bots cross-check
 
@@ -405,9 +436,7 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 2. **`PUSH_S` and the edge term** are first guesses. If the edges make a
    sideways shove worthless, the playtest says so; the knob is `PUSH_S`, not a
    curve.
-3. **Should a cross-check aim** (lean the direction toward the cursor, to push a
-   man sideways out of a lane) or always go straight down the centre axis? v1 is
-   the centre axis.
+3. ~~**Should a cross-check aim?**~~ Yes (decided with the user): see *Aimed*.
 
 ## Starting values
 
@@ -417,5 +446,5 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 | `RECOVER_S` | 0.20 s | the stick back down; the cost of a whiff |
 | `REARM_S` | 0.40 s | ~0.7 s press to press |
 | `REACH_M` | 0.55 m | arm extension, body edge to body edge |
-| `CONE_DEG` | 50° | in front of the chest, where the shaft is |
+| `GRIP_FRACTION` | 0.40 | the pose's bottom hand down the shaft; its half-span (0.26 m on a league stick) is the shaft's reach across |
 | `PIN_ESCAPE_OFFSET_M` | 0.5 m (unchanged) | held by `tests/slow/game/test_pin_escape_race.gd` |

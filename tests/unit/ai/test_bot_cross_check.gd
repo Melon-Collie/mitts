@@ -1,9 +1,9 @@
 extends GutTest
 
 # The bots' cross-check (SkaterAgentStateMachine.apply_cross_check): a coverer
-# shoves the man he covers off our goalie's sightline when the push would clear
-# it; a bot shoves the man who beats it to a loose puck when the push turns the
-# race; a screener loads up against a defender who could shove him. Never while
+# shoves the man he covers off our goalie's sightline when an aim would clear it,
+# and aims it there on the cursor; a bot shoves the man who beats it to a loose
+# puck when the push turns the race; a screener loads up against a defender who could shove him. Never while
 # the stick is busy, from a rearming throw, as a carrier, or on the beginner tier.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
@@ -60,6 +60,21 @@ func test_a_coverer_shoves_a_screen_off_the_sightline() -> void:
 	sm.apply_cross_check(input, _screen_snap())
 	assert_true(input.hit_pressed)
 	assert_false(input.hit_held, "a tap, not the commit")
+
+
+func test_the_shove_is_aimed_off_the_sightline_not_along_the_line_to_him() -> void:
+	var s: WorldSnapshot = _screen_snap()
+	# Goal-side of him on the diagonal: straight at him runs partly up the sightline.
+	var me: SkaterNetworkState = s.skater_states[SELF_ID]
+	me.position = Vector3(-0.45, 0.85, _goal_z - 2.6)
+	me.facing = Vector2(0.65, -0.4).normalized()
+	var input := InputState.new()
+	sm.apply_cross_check(input, s)
+	assert_true(input.hit_pressed)
+	var aim := Vector2(input.mouse_world_pos.x - me.position.x,
+			input.mouse_world_pos.z - me.position.z).normalized()
+	assert_almost_eq(aim.angle_to(Vector2(1.0, 0.0)), 0.0, 1e-3,
+			"square across the sightline, the way he already stands off it")
 
 
 func test_no_shove_that_leaves_him_screening() -> void:
