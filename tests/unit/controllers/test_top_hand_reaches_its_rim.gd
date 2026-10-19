@@ -118,14 +118,13 @@ func test_the_full_reach_stays_inside_the_hosts_reach_clamp() -> void:
 						deg, reach, allowed])
 
 
-func test_a_released_bottom_hand_rests_out_beside_its_hip() -> void:
+func test_a_released_bottom_hand_tucks_ahead_of_the_body() -> void:
 	var c: SkaterController = _make_controller()
 	_reach(c, -150.0)
 	var sk: Skater = c.skater
 	var bh: Vector3 = sk.bottom_hand.position
 	var shoulder: Vector3 = sk.visible_shoulder(sk.bottom_shoulder.position)
-	var side: float = signf(sk.bottom_shoulder.position.x)
-	assert_gt((bh.x - shoulder.x) * side, 0.1, "out on its own side of the body")
-	assert_lt(bh.y, shoulder.y - 0.2, "down at the hip, not up at the chest")
+	assert_lt(bh.z, shoulder.z - 0.15, "ahead of the body, not hanging at its side")
+	assert_lt(bh.y, shoulder.y - 0.2, "down at the belly, not up at the chest")
 	var arm: float = sk.upper_arm_length + sk.forearm_length
 	assert_lt(bh.distance_to(shoulder), arm * 0.9, "on a bent elbow, not hung straight")

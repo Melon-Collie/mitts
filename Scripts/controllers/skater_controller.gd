@@ -379,8 +379,8 @@ var bh_release_angle_band_deg: float = 15.0
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
 var bh_reach_release_band_m: float = 0.08
 # Where the hand rests once it has let go, from its shoulder in arm lengths (x
-# out on its own side, y up, z back): out beside the hip, away from the reach.
-var bh_free_hand_rest_arm: Vector3 = Vector3(0.4, -0.5, 0.05)
+# out on its own side, y up, z back): tucked ahead of the belly, elbow bent.
+var bh_free_hand_rest_arm: Vector3 = Vector3(0.2, -0.52, -0.35)
 
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
 var upper_body_twist_ratio: float = 0.8
