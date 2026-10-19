@@ -52,12 +52,12 @@ func _picture(attrs: PlayerAttributes) -> Vector2:
 
 func test_skates_do_not_change_the_picture() -> void:
 	var power: Vector2 = _picture(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_POWER))
-	var agility: Vector2 = _picture(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_AGILITY))
+	var shifty: Vector2 = _picture(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_SHIFTY))
 	assert_ne(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_POWER).top_speed_mult(),
-			PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_AGILITY).top_speed_mult(),
+			PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_SHIFTY).top_speed_mult(),
 			"the two builds really do skate at different top speeds")
-	assert_almost_eq(power.x, agility.x, 1e-6, "same stride at the same speed")
-	assert_almost_eq(power.y, agility.y, 1e-6, "same posture lean at the same speed")
+	assert_almost_eq(power.x, shifty.x, 1e-6, "same stride at the same speed")
+	assert_almost_eq(power.y, shifty.y, 1e-6, "same posture lean at the same speed")
 
 
 func test_longer_legs_stride_easier_at_the_same_speed() -> void:

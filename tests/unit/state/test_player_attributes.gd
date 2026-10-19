@@ -360,27 +360,49 @@ func test_stick_length_lean() -> void:
 	assert_true(PlayerAttributes.new(73, 201).equals(PlayerAttributes.neutral()))
 
 
-# ── Skate profile: top-end ↔ burst ───────────────────────────────────────────
-func test_profile_is_a_topend_burst_seesaw() -> void:
-	var rocker := PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_AGILITY, 1, 1, 1)
-	var flat := PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_POWER, 1, 1, 1)
-	assert_gt(flat.speed_mult(), rocker.speed_mult(), "power owns the top end")
-	assert_gt(rocker.accel_mult(), flat.accel_mult(), "agility owns the first step")
-	assert_gt(rocker.agility_mult(), flat.agility_mult(), "agility owns the corner")
-	assert_lt(flat.glide_drag_mult(), rocker.glide_drag_mult(),
-			"the long flat coasts, the rocker scrubs")
-	# Top speed is the skates' alone.
-	assert_gt(flat.top_speed_mult(), rocker.top_speed_mult())
+# ── Skate profile: shifty / stability / power ───────────────────────────────────────────
+func test_stability_is_the_base_skate() -> void:
+	# Stability is the default and the league base: every profile lean is 1.0.
+	var a := PlayerAttributes.neutral()
+	assert_eq(a.profile, PlayerAttributes.PROFILE_STABILITY)
+	for lean: float in [a.speed_mult(), a.crossover_mult(), a.backward_mult(),
+			a.stance_grip_mult(), a.sidestep_mult()]:
+		assert_almost_eq(lean, 1.0, 1e-6)
+
+
+func test_each_profile_wins_one_ice_and_pays_another() -> void:
+	var shifty := PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_SHIFTY, 1, 1, 1)
+	var stable := PlayerAttributes.neutral()
+	var power := PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_POWER, 1, 1, 1)
+	# Shifty owns tight space.
+	for other: PlayerAttributes in [stable, power]:
+		assert_gt(shifty.agility_mult(), other.agility_mult(), "shifty owns the corner")
+		assert_gt(shifty.accel_mult(), other.accel_mult(), "shifty owns the first step")
+		assert_gt(shifty.stance_grip_mult(), other.stance_grip_mult(), "shifty owns the stance")
+		assert_gt(shifty.sidestep_mult(), other.sidestep_mult(), "shifty owns the side-step")
+	# Stability owns skating backward.
+	for other: PlayerAttributes in [shifty, power]:
+		assert_gt(stable.backward_mult(), other.backward_mult(), "stability owns backward")
+	# Power owns open ice.
+	for other: PlayerAttributes in [shifty, stable]:
+		assert_gt(power.top_speed_mult(), other.top_speed_mult(), "power owns the top end")
+		assert_lt(power.glide_drag_mult(), other.glide_drag_mult(), "power owns the coast")
+		assert_gt(power.crossover_mult(), other.crossover_mult(), "power owns the crossover")
+	# …and each pays where another wins.
+	assert_lt(shifty.top_speed_mult(), stable.top_speed_mult(), "shifty pays the top end")
+	assert_lt(stable.crossover_mult(), shifty.crossover_mult(), "stability pays the crossover")
+	assert_lt(power.agility_mult(), stable.agility_mult(), "power pays the corner")
+	assert_lt(power.backward_mult(), shifty.backward_mult(), "power pays backward")
 
 
 func test_stacked_agility_corners_budgeted() -> void:
-	# Body × gear extremes, pinned at the extended range: the involuntary body
-	# corners are ~0.88/~1.10, and the self-chosen extremes (heavy tank on power
-	# skates / small build on rockers) push one gear lean outside them.
+	# Body × gear extremes: the involuntary body corners are ~0.88/~1.10, and the
+	# self-chosen extremes (heavy tank on power skates / small build on shifty
+	# ones) push one gear lean outside them.
 	var worst := PlayerAttributes.new(80, 264, PlayerAttributes.PROFILE_POWER, 1, 1, 1)
-	var best := PlayerAttributes.new(67, 160, PlayerAttributes.PROFILE_AGILITY, 1, 1, 1)
-	assert_between(worst.agility_mult(), 0.83, 0.85, "worst stacked corner")
-	assert_between(best.agility_mult(), 1.14, 1.16, "best stacked corner")
+	var best := PlayerAttributes.new(67, 160, PlayerAttributes.PROFILE_SHIFTY, 1, 1, 1)
+	assert_between(worst.agility_mult(), 0.82, 0.84, "worst stacked corner")
+	assert_between(best.agility_mult(), 1.15, 1.17, "best stacked corner")
 
 
 # ── Flex + curve: the shot gear slots ────────────────────────────────────────

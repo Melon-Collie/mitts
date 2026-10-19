@@ -26,9 +26,10 @@ var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # skate profile is part of agility_mult). Turn radius at speed rides this.
 var lateral_grip: float = 1.0
 var puck_carry_speed_multiplier: float = 0.92  # pre-apply default; per-build value is PlayerAttributes.carry_speed_mult
-var backward_thrust_multiplier: float = 0.80
-var crossover_thrust_multiplier: float = 0.90
-var backward_max_speed_multiplier: float = 0.80
+# The Stability skate's (the default profile); the others lean them.
+var backward_thrust_multiplier: float = 0.90
+var crossover_thrust_multiplier: float = 0.84
+var backward_max_speed_multiplier: float = 0.90
 # Ceiling on the velocity fed to the gait during the faceoff / intro skate-in
 # (see begin_approach / apply_approach). The glide always completes in a fixed
 # duration, so a far start implies a high velocity — clamp it here so the stride
@@ -1194,6 +1195,11 @@ const _ROM_FOREHAND_OF_ARM: float = 0.5625
 # overview and how to add new scalings.
 var _attr_base_captured: bool = false
 var _base_thrust:                       float = 0.0
+var _base_crossover_thrust_multiplier:  float = 0.0
+var _base_backward_thrust_multiplier:   float = 0.0
+var _base_backward_max_speed_multiplier: float = 0.0
+var _base_stance_grip_mult:             float = 0.0
+var _base_stance_shuffle_mult:          float = 0.0
 var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
 var _base_facing_drag_speed_braking:    float = 0.0
@@ -1300,6 +1306,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	var m_agility: float = attrs.agility_mult()
 	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
+	crossover_thrust_multiplier = _base_crossover_thrust_multiplier * attrs.crossover_mult()
+	backward_thrust_multiplier = _base_backward_thrust_multiplier * attrs.backward_mult()
+	backward_max_speed_multiplier = _base_backward_max_speed_multiplier * attrs.backward_mult()
+	stance_grip_mult = _base_stance_grip_mult * attrs.stance_grip_mult()
+	stance_shuffle_mult = _base_stance_shuffle_mult * attrs.sidestep_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
 	stop_decel                  = _base_stop_decel                  * m_agility
@@ -1434,6 +1445,11 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 
 func _capture_attribute_bases() -> void:
 	_base_thrust                       = thrust
+	_base_crossover_thrust_multiplier  = crossover_thrust_multiplier
+	_base_backward_thrust_multiplier   = backward_thrust_multiplier
+	_base_backward_max_speed_multiplier = backward_max_speed_multiplier
+	_base_stance_grip_mult             = stance_grip_mult
+	_base_stance_shuffle_mult          = stance_shuffle_mult
 	_base_max_speed                    = max_speed
 	_base_facing_drag_speed            = facing_drag_speed
 	_base_facing_drag_speed_braking    = facing_drag_speed_braking

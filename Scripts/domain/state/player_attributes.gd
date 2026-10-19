@@ -3,7 +3,7 @@ extends RefCounted
 
 # A skater's build: two continuous body dials (HEIGHT in inches, WEIGHT in
 # pounds) plus four discrete gear slots (skate profile, blade curve, stick flex,
-# stick length — 0/1/2, 1 = balanced). Every axis is lateral, so validation only
+# stick length — 0/1/2, 1 = the default). Every axis is lateral, so validation only
 # coerces into range and never rejects. Neutral is 6'1" / 201 lbs / all-balanced,
 # where every multiplier is 1.0 and the build plays the controller's defaults.
 #
@@ -68,13 +68,15 @@ const MIN_PLAYABLE_LBS: int = 162
 const NEUTRAL_WEIGHT_LBS: float = 201.0
 
 # ── Gear slots ───────────────────────────────────────────────────────────────
-# Every slot is 0/1/2 with 1 = the balanced option. Discrete and chunky by
+# Every slot is 0/1/2 with 1 = the default option. Discrete and chunky by
 # design — never sliders.
 const GEAR_BALANCED: int = 1
 
-const PROFILE_AGILITY: int = 0   # +accel / first step / cornering, −top speed
-const PROFILE_BALANCED: int = 1
-const PROFILE_POWER: int = 2     # +top speed / glide, −agility
+# Skate profile: three skates, no plain one. Stability is the default and the
+# league base, so its leans are all 1.0.
+const PROFILE_SHIFTY: int = 0     # tight space: edges, first step, the stance
+const PROFILE_STABILITY: int = 1  # backward: the gap-control skate
+const PROFILE_POWER: int = 2      # open ice: top end, glide, crossovers
 
 const CURVE_CLOSED: int = 0      # flattest ladder, best backhand
 const CURVE_BALANCED: int = 1
@@ -130,16 +132,28 @@ const _LENGTH_LEAN: Array[float] = [0.960, 1.000, 1.040]  # SHORT / STANDARD / L
 const _HEAD_BULK: Array[float] = [0.935, 0.98, 1.00, 1.03, 1.07]
 
 # ── Gear leans (indexed by the slot, 0/1/2) ───────────────────────────────────
-# SKATE PROFILE — top end vs burst. POWER (long flat grind) = +top speed and
-# glide, −agility; AGILITY (rockered) = +first step and cornering, −top speed.
-# The speed lean re-widens the top-speed band the body plane compresses
-# (~20.5–24 mph across profiles). Stacked with the body, agility runs ~0.84
-# (6'8" heavy power) to ~1.15 (5'7" lean agility) — a chosen extreme past the
-# body-only ~0.88 / ~1.10.
-const _PROFILE_SPEED_LEAN: Array[float] = [0.96, 1.00, 1.04]    # agility / balanced / power
-const _PROFILE_AGILITY_LEAN: Array[float] = [1.05, 1.00, 0.95]
-const _PROFILE_ACCEL_LEAN: Array[float] = [1.04, 1.00, 0.98]
+# SKATE PROFILE — where a skater's skating lives. Each wins one kind of ice and
+# pays in another, about the Stability base:
+#   SHIFTY     tight space: agility (turn, stop, grip), first step, the Shift
+#              stance's grip and side-step. Pays the top end and the coast.
+#   STABILITY  backward: thrust and top speed skating backward (gap control).
+#              Pays the crossover push across its facing.
+#   POWER      open ice: top speed, glide, and the crossover push across its
+#              facing (building speed wide with the shoulders squared to the
+#              play). Pays the corners, the stance, and backward skating.
+# Top speed is the profiles' alone (~21.5–23.3 mph). Stacked with the body,
+# agility runs ~0.83 (6'8" heavy power) to ~1.16 (5'7" lean shifty).
+const _PROFILE_SPEED_LEAN: Array[float] = [0.96, 1.00, 1.04]    # shifty / stability / power
+const _PROFILE_AGILITY_LEAN: Array[float] = [1.06, 1.00, 0.94]
+const _PROFILE_ACCEL_LEAN: Array[float] = [1.04, 1.00, 1.00]
 const _PROFILE_GLIDE_LEAN: Array[float] = [1.03, 1.00, 0.96]    # drag mult: lower = coasts better
+# On the controller's Stability base (crossover 0.84, backward 0.90, stance
+# grip 2.0, side-step 1.2): shifty 0.90 / 0.80 / 2.4 / 1.4, power 1.00 / 0.74 /
+# 1.8 / 1.1.
+const _PROFILE_CROSSOVER_LEAN: Array[float] = [1.07, 1.00, 1.19]
+const _PROFILE_BACKWARD_LEAN: Array[float] = [0.89, 1.00, 0.82]
+const _PROFILE_STANCE_GRIP_LEAN: Array[float] = [1.20, 1.00, 0.90]
+const _PROFILE_SIDESTEP_LEAN: Array[float] = [1.17, 1.00, 0.92]
 
 # STICK FLEX — a stiff shaft pays off only when a big swing bends it; a whippy
 # one bends under less. So stiff is the slapshot stick: a bigger slapper that
@@ -335,6 +349,24 @@ func glide_drag_mult() -> float:
 
 func accel_mult() -> float:
 	return _h(_ACCEL_H, height) * _f(_ACCEL_F) * _PROFILE_ACCEL_LEAN[profile]
+
+
+# The skate profile's leans on the push across the facing (crossover strides),
+# on backward thrust and top speed, and on the Shift stance's grip and side-step.
+func crossover_mult() -> float:
+	return _PROFILE_CROSSOVER_LEAN[profile]
+
+
+func backward_mult() -> float:
+	return _PROFILE_BACKWARD_LEAN[profile]
+
+
+func stance_grip_mult() -> float:
+	return _PROFILE_STANCE_GRIP_LEAN[profile]
+
+
+func sidestep_mult() -> float:
+	return _PROFILE_SIDESTEP_LEAN[profile]
 
 
 # Linear in displayed weight — see NEUTRAL_WEIGHT_LBS.

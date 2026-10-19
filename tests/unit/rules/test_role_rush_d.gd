@@ -605,19 +605,32 @@ func test_a_step_up_on_a_stalled_carrier_may_attack() -> void:
 # ── Turn and skate ───────────────────────────────────────────────────────────
 
 # A rush D `depth` m goal-side of a carrier coming straight at our net at
-# `pace`, facing the play and backpedalling at `self_speed`.
-func _retreat(depth: float, pace: float, self_speed: float) -> RoleDecision:
+# `pace`, facing the play and backpedalling at `self_speed`, on `profile`
+# skates (the backward stride is the profile's).
+func _retreat(depth: float, pace: float, self_speed: float,
+		profile: int = PlayerAttributes.PROFILE_POWER) -> RoleDecision:
 	var carrier := Vector3(0.0, 0.0, 0.0)
 	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, depth),
 			[[10, 1, carrier, Vector3(0.0, 0.0, pace)]], 10)
 	ctx.snapshot.skater_states[1].facing = Vector2(0.0, -1.0)
 	ctx.self_velocity = Vector3(0.0, 0.0, self_speed)
+	var caps := AISkaterCaps.new()
+	var lean: float = PlayerAttributes.new(73, 201, profile).backward_mult()
+	caps.movement.backward_thrust_multiplier *= lean
+	caps.movement.backward_max_speed_multiplier *= lean
+	ctx.caps_by_peer[ctx.peer_id] = caps
 	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.RUSH_D1)
 
 
 func test_backpedalling_into_a_race_he_loses_he_turns_and_skates() -> void:
-	assert_true(_retreat(6.0, 9.0, 7.5).face_travel,
-			"at his backward top speed against 9 m/s with 6 m to give: turn and skate")
+	assert_true(_retreat(6.0, 9.0, 7.4).face_travel,
+			"at his power-skate backward top speed against 9 m/s with 6 m to give: turn and skate")
+
+
+func test_on_stability_skates_he_can_backpedal_the_same_rush() -> void:
+	# The gap-control skate: his backward top speed matches a 9 m/s rush.
+	assert_false(_retreat(6.0, 9.0, 9.0, PlayerAttributes.PROFILE_STABILITY).face_travel,
+			"stability skates hold the gap facing the play")
 
 
 func test_a_route_mostly_across_the_ice_stays_square_to_the_man() -> void:

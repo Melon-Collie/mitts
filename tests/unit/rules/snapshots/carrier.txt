@@ -68,6 +68,6 @@ beat his man down the wing at 8.5 m/s: pick	CARRY to (2.0, -23.8)
 wing entry in stride, defender on the inside lane: carry anchor	(7.8, -18.5)
 sharp-angle corner, keeper sealing, defender boxing out: pick	CARRY to (11.9, -24.6)
 behind their cage, empty rink: carry anchor	(1.5, -27.5)
-splittable gap up the middle, open man wide: carry anchor	(0.0, -14.5)
+splittable gap up the middle, open man wide: carry anchor	(0.0, -14.2)
 checker dead on the carry line: seam degrees off the carry	150.0000
 checker 2 m off the carry line: seam degrees off the carry	30.0000
