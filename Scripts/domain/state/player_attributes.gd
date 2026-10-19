@@ -80,9 +80,9 @@ const CURVE_CLOSED: int = 0      # flattest ladder, best backhand
 const CURVE_BALANCED: int = 1
 const CURVE_OPEN: int = 2        # steepest ladder, worst backhand
 
-const FLEX_LOW: int = 0          # whippy: −power ceiling, shortest slapper wind-up
+const FLEX_LOW: int = 0          # whippy: the wrist-shot stick — more shot without body load
 const FLEX_MEDIUM: int = 1
-const FLEX_HIGH: int = 2         # stiff: +power ceiling, longest slapper wind-up
+const FLEX_HIGH: int = 2         # stiff: the slapshot stick — bigger slapper, longer wind-up
 
 # The retail stiffness ladder — the flex numbers sticks actually ship in.
 const FLEX_LADDER: Array[int] = [65, 75, 85, 100, 110]
@@ -139,11 +139,20 @@ const _PROFILE_AGILITY_LEAN: Array[float] = [1.05, 1.00, 0.95]
 const _PROFILE_ACCEL_LEAN: Array[float] = [1.04, 1.00, 0.98]
 const _PROFILE_GLIDE_LEAN: Array[float] = [1.03, 1.00, 0.96]    # drag mult: lower = coasts better
 
-# STICK FLEX — stiff loads a bigger shot but pays a longer slapper wind-up. The
-# charge lean goes WITH the power lean (unlike height's 2 − power coupling): a
-# lateral slot must trade, never stack.
-const _FLEX_SHOT_LEAN: Array[float] = [0.94, 1.00, 1.06]    # whippy / medium / stiff
-const _FLEX_CHARGE_LEAN: Array[float] = [0.92, 1.00, 1.10]  # wind-up time, with power
+# STICK FLEX — a stiff shaft pays off only when a big swing bends it; a whippy
+# one bends under less. So stiff is the slapshot stick: a bigger slapper that
+# needs a longer wind-up to load (the charge lean goes WITH the power lean,
+# unlike height's 2 − power coupling — a lateral slot trades, never stacks).
+# Whippy is the wrist-shot stick: the shaft carries more of a wrister the torso
+# can't load (wrister_unloaded_share 0.70 / 0.60 / 0.50 at the controller's 0.6
+# base). The wrister ceiling is flex-free, so the two break even on a fully
+# loaded wrister.
+const _FLEX_SLAP_LEAN: Array[float] = [0.94, 1.00, 1.06]    # whippy / medium / stiff
+const _FLEX_CHARGE_LEAN: Array[float] = [0.92, 1.00, 1.10]  # slapper wind-up time
+const _FLEX_UNLOADED_LEAN: Array[float] = [7.0 / 6.0, 1.00, 5.0 / 6.0]
+# How far the shaft visibly bows under the same shot — cosmetic, and
+# exaggerated past the stiffness ratio so the stick reads from the game camera.
+const _FLEX_BEND_LEAN: Array[float] = [1.40, 1.00, 0.65]
 
 # BLADE CURVE — M88 / M92 / M28, modelled on the P88 / P92 / P28 patterns. Each
 # loft level is a set launch angle from the pattern's ladder, steeper on the
@@ -156,7 +165,8 @@ const _CURVE_LOFT_MID_DEG: Array[float] = [6.9, 8.2, 10.0]
 const _CURVE_LOFT_HIGH_DEG: Array[float] = [8.9, 11.0, 13.6]
 # The rest of the trade, about the M92: the M88's flatter face has the best
 # backhand (0.75 base × 1.08 stays under forehand parity), stays square through
-# a slapper's heel contact, and cradles harder feeds; the M28 pays all three.
+# a slapper's heel contact (slapper power only), and cradles harder feeds; the
+# M28 pays all three.
 # The reception lean scales the deflect ceiling, never pickup_max_speed, so soft
 # passes settle on every blade.
 const _CURVE_BACKHAND_LEAN: Array[float] = [1.08, 1.00, 0.90]
@@ -329,9 +339,20 @@ func mass_mult() -> float:
 	return float(weight) / NEUTRAL_WEIGHT_LBS
 
 
-# Charged-shot ceiling: height baseline × flex lean (stiff loads more).
+# Charged-wrister ceiling — the height baseline. Slappers read slapper_power_mult.
 func shot_power_mult() -> float:
-	return _h(_SHOT_H, height) * _FLEX_SHOT_LEAN[flex]
+	return _h(_SHOT_H, height)
+
+
+# Slapper ceiling: the height baseline × the flex and blade-curve leans.
+func slapper_power_mult() -> float:
+	return shot_power_mult() * _FLEX_SLAP_LEAN[flex] * _CURVE_SLAP_LEAN[curve]
+
+
+# Scales wrister_unloaded_share — the share of a wrister the shaft carries with
+# no torso load behind it.
+func wrister_unloaded_mult() -> float:
+	return _FLEX_UNLOADED_LEAN[flex]
 
 
 # Slapper wind-up time. The height part is 2 − power (a big frame's harder shot
@@ -367,11 +388,6 @@ func curve_backhand_mult() -> float:
 	return _CURVE_BACKHAND_LEAN[curve]
 
 
-# Slapper power only; wristers stay flex-only.
-func curve_slap_mult() -> float:
-	return _CURVE_SLAP_LEAN[curve]
-
-
 # Scales the deflect ceiling + squared-up bonus a receiver's blade can soak —
 # the blade shape's force limit, read at the reception decision sites.
 func reception_ceiling_mult() -> float:
@@ -390,6 +406,11 @@ func curve_loft_tan_mid() -> float:
 
 func curve_loft_tan_high() -> float:
 	return tan(deg_to_rad(_CURVE_LOFT_HIGH_DEG[curve]))
+
+
+# Cosmetic shaft bow, so the pick reads on the ice.
+func stick_bend_mult() -> float:
+	return _FLEX_BEND_LEAN[flex]
 
 
 # The stick's real stiffness number, for display only. Weight picks the matched

@@ -50,7 +50,7 @@ term scales them.
 |---|---|---|
 | Height | top-speed baseline (a hump that peaks at 6'1") | `speed_mult` → `top_speed_mult` |
 | | agility baseline (favors small builds) | `agility_mult` |
-| | charged-shot ceiling (favors big builds), slapper wind-up as 2 − power | `shot_power_mult`, `shot_charge_mult` |
+| | charged-shot ceiling (favors big builds), slapper wind-up as 2 − power | `shot_power_mult` (wrister), `slapper_power_mult`, `shot_charge_mult` |
 | | skeleton, arm length and ROM, hand heights (mesh-native 5'10" = 1.0) | `height_mult` |
 | | stick cut to the body (~0.65× the height deviation) | `stick_len_mult` |
 | | helmet (a mild table of its own; heads are near-constant) | `head_bulk_mult` |
@@ -75,7 +75,7 @@ carrying at speed.
 |---|---|---|
 | Skate profile | agility / balanced / power | power: +top speed and glide, −agility (lateral grip included); agility: the reverse plus first step. Stacked with the body, agility runs ~0.84–1.15. |
 | Blade curve | M88 / M92 / M28 | the loft **angle ladder** (each level a set launch angle, steeper on the M28; design of record `docs/elevation-rework-plan.md`), backhand (1.08 / 1.00 / 0.90, never past parity), slapper power (±3%), reception ceiling (±7%, never `pickup_max_speed`). `Skater.apply_blade_pattern` renders the pick. |
-| Stick flex | whippy / medium / stiff | charged-shot ceiling (±6%) **and** slapper wind-up, both in the same direction: a lateral slot trades, it never stacks. `flex_number()` shows the stick's real retail stiffness, fitted to weight. It is display-only. |
+| Stick flex | whippy / medium / stiff | stiff is the **slapshot stick**: slapper ceiling (±6%) **and** slapper wind-up, both in the same direction (a lateral slot trades, it never stacks). Whippy is the **wrist-shot stick**: `wrister_unloaded_share` 0.70 / 0.60 / 0.50, the share of a wrister the shaft carries with no torso load. The wrister ceiling is flex-free, so they break even on a fully loaded wrister. The shaft's visible bow scales with the pick (`stick_bend_mult`, cosmetic). `flex_number()` shows the stick's real retail stiffness, fitted to weight; it is display-only. |
 | Stick length | short / standard / long | ±4% on the height's cut. Feeds reach, poke and claim range, the blade-cap lever and the stick mesh. |
 
 ## Bots read the same body

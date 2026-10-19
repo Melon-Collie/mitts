@@ -218,6 +218,17 @@ static func release_wrister(
 #
 # shot_direction: when non-zero, used as the shot direction directly (locked
 # at press time); falls back to blade→mouse when zero (backwards compat).
+# 0..1 of the slapper's power band for a wind-up of `charge_time`. Front-loaded
+# (sqrt of the charge fraction): most of a slapshot's speed comes from the
+# downswing bending the shaft, so a short backswing already carries most of it
+# and the tall one adds the last of it. The wind-up pose eases by the same sqrt,
+# so the coil on screen is the power that comes off the blade.
+static func slapper_power_t(charge_time: float, cfg: SlapperConfig) -> float:
+	if cfg.max_slapper_charge_time <= 0.0:
+		return 1.0
+	return sqrt(clampf(charge_time / cfg.max_slapper_charge_time, 0.0, 1.0))
+
+
 static func release_slapper(
 		blade_world_pos: Vector3,
 		mouse_world_pos: Vector3,
@@ -233,8 +244,8 @@ static func release_slapper(
 		var blade_xz := Vector3(blade_world_pos.x, 0.0, blade_world_pos.z)
 		var target := Vector3(mouse_world_pos.x, 0.0, mouse_world_pos.z)
 		shot_dir = (target - blade_xz).normalized()
-	var charge_t: float = clampf(charge_time / cfg.max_slapper_charge_time, 0.0, 1.0)
-	var power: float = lerpf(cfg.min_slapper_power, cfg.max_slapper_power, charge_t)
+	var power: float = lerpf(cfg.min_slapper_power, cfg.max_slapper_power,
+			slapper_power_t(charge_time, cfg))
 
 	var y: float = shot_loft_y(elevation_level,
 			cfg.loft_tan_low, cfg.loft_tan_mid, cfg.loft_tan_high)

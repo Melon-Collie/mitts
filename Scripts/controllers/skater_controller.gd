@@ -651,7 +651,8 @@ var max_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var backhand_power_coefficient: float = 0.75
 # ── Wrister load (WristerLoad): what the torso can put into a human's shot ──
 # Release cap: max_wrister_power × lerp(this, 1, load). With no turn behind it,
-# the arms, wrists and stick flex still carry a real snap.
+# the arms, wrists and stick flex still carry a real snap. Per-build: the flex
+# pick scales it (PlayerAttributes.wrister_unloaded_mult).
 var wrister_unloaded_share: float = 0.6
 var wrister_full_load_arc_deg: float = 45.0
 var wrister_home_reach_deg: float = 120.0
@@ -1196,6 +1197,10 @@ var _base_max_wrister_power:            float = 0.0
 var _base_min_slapper_power:            float = 0.0
 var _base_max_slapper_power:            float = 0.0
 var _base_max_slapper_charge_time:      float = 0.0
+var _base_wrister_unloaded_share:       float = 0.0
+var _base_skater_stick_flex_max_m:      float = 0.0
+var _base_skater_stick_flex_slap_m:     float = 0.0
+var _base_skater_stick_flex_windup_m:   float = 0.0
 var _base_max_blade_speed:              float = 0.0
 var _base_max_blade_accel:              float = 0.0
 var _base_stick_length:                 float = 0.0
@@ -1318,16 +1323,20 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# (PuckController contact scan + the lag-comp pickup resolver) scale the
 	# puck's league deflect thresholds by the RECEIVER's blade shape.
 	skater.reception_ceiling_mult = attrs.reception_ceiling_mult()
-	# Shot power scales the CHARGED-shot ceiling (wrister max + both slapper
+	# Shot power scales the CHARGED-shot ceilings (wrister max + both slapper
 	# pools), never min_wrister_power (the soft-touch floor) or quick_pass_power
 	# (also the pass speed) — every build's touch and passes are the same.
-	var m_shot_ceil: float = attrs.shot_power_mult()
-	max_wrister_power = _base_max_wrister_power * m_shot_ceil
-	# Slapper carries the curve's contact lean on top of the flex/height
-	# ceiling — the one shot where the pattern shape meets the ice.
-	min_slapper_power = _base_min_slapper_power * m_shot_ceil * attrs.curve_slap_mult()
-	max_slapper_power = _base_max_slapper_power * m_shot_ceil * attrs.curve_slap_mult()
-	max_slapper_charge_time     = _base_max_slapper_charge_time     * attrs.shot_charge_mult()
+	max_wrister_power = _base_max_wrister_power * attrs.shot_power_mult()
+	wrister_unloaded_share = _base_wrister_unloaded_share * attrs.wrister_unloaded_mult()
+	var m_slap: float = attrs.slapper_power_mult()
+	min_slapper_power = _base_min_slapper_power * m_slap
+	max_slapper_power = _base_max_slapper_power * m_slap
+	max_slapper_charge_time = _base_max_slapper_charge_time * attrs.shot_charge_mult()
+	# The flex pick's visual tell: how far the shaft bows on every shot.
+	var m_bend: float = attrs.stick_bend_mult()
+	skater.stick_flex_max_m = _base_skater_stick_flex_max_m * m_bend
+	skater.stick_flex_slap_m = _base_skater_stick_flex_slap_m * m_bend
+	skater.stick_flex_windup_m = _base_skater_stick_flex_windup_m * m_bend
 	# Mass is the whole physical system: delivery and brace emerge from the
 	# collision resolver's reduced-mass math, so no check term scales here.
 	skater.weight = _base_skater_weight * attrs.mass_mult()
@@ -1429,6 +1438,10 @@ func _capture_attribute_bases() -> void:
 	_base_min_slapper_power            = min_slapper_power
 	_base_max_slapper_power            = max_slapper_power
 	_base_max_slapper_charge_time      = max_slapper_charge_time
+	_base_wrister_unloaded_share       = wrister_unloaded_share
+	_base_skater_stick_flex_max_m      = skater.stick_flex_max_m
+	_base_skater_stick_flex_slap_m     = skater.stick_flex_slap_m
+	_base_skater_stick_flex_windup_m   = skater.stick_flex_windup_m
 	_base_max_blade_speed              = max_blade_speed
 	_base_max_blade_accel              = max_blade_accel
 	_base_backhand_power_coefficient   = backhand_power_coefficient

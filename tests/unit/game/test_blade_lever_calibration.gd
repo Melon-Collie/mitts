@@ -170,16 +170,26 @@ func test_ladder_is_the_loft_lever_per_curve() -> void:
 				"under the guard at rung %d" % i)
 
 
-func test_flex_leans_ceiling_and_windup_together() -> void:
-	# Stiff = bigger wrister/slapper ceiling AND a longer slapper charge (the
-	# lateral seesaw); whippy the mirror.
+func test_flex_reaches_the_controller() -> void:
+	# Stiff = bigger slapper AND a longer slapper charge; whippy = more of an
+	# unloaded wrister and a visibly bendier shaft. The wrister ceiling holds.
 	var c := _make_controller()
 	c.apply_attributes(PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_LOW, 1))
-	var whippy_power: float = c.max_wrister_power
+	var whippy_slap: float = c.max_slapper_power
 	var whippy_charge: float = c.max_slapper_charge_time
+	var whippy_wrister: float = c.max_wrister_power
+	var whippy_unloaded: float = c.wrister_unloaded_share
+	var whippy_bow: float = c.skater.stick_flex_slap_m
 	c.apply_attributes(PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_HIGH, 1))
-	assert_gt(c.max_wrister_power, whippy_power, "stiff shoots harder")
+	assert_gt(c.max_slapper_power, whippy_slap, "stiff slaps harder")
 	assert_gt(c.max_slapper_charge_time, whippy_charge, "stiff loads slower")
+	assert_almost_eq(c.max_wrister_power, whippy_wrister, 0.0001, "same wrister ceiling")
+	assert_lt(c.wrister_unloaded_share, whippy_unloaded, "whippy carries the unloaded wrister")
+	assert_lt(c.skater.stick_flex_slap_m, whippy_bow, "the stiff shaft bows less")
+	# Re-applying the neutral build restores every base — nothing compounds.
+	c.apply_attributes(PlayerAttributes.neutral())
+	assert_almost_eq(c.wrister_unloaded_share, 0.6, 0.0001)
+	assert_almost_eq(c.skater.stick_flex_slap_m, 0.10, 0.0001)
 
 
 func test_curve_leans_backhand_within_parity() -> void:

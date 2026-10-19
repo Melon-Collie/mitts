@@ -550,11 +550,12 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 # The min sits BELOW the quick-shot/pass
 # speed on purpose: a slow deliberate sweep is a soft touch pass, softer than
 # the fixed snap pass.
-# The maxes are the NEUTRAL-BUILD anchors (6'1", medium flex), calibrated so the
-# build spread of PlayerAttributes.shot_power_mult (height × flex, ~±17%) tops
-# out at an elite NHL release:
-#   wrister 33 m/s ≈ 74 mph  (~38.6 ≈ 86 mph strongest, ~27.3 ≈ 61 mph weakest)
-#   slapper 40 m/s ≈ 89 mph  (~46.8 ≈ 105 mph / ~33.1 ≈ 74 mph)
+# The maxes are the NEUTRAL-BUILD anchors (6'1", medium flex, M92), calibrated
+# so the build spread tops out at an elite NHL release — the wrister by height
+# alone (PlayerAttributes.shot_power_mult), the slapper by height × flex × curve
+# (slapper_power_mult):
+#   wrister 33 m/s ≈ 74 mph  (~36.4 ≈ 81 mph strongest, ~29.0 ≈ 65 mph weakest)
+#   slapper 40 m/s ≈ 89 mph  (~48.2 ≈ 108 mph / ~32.1 ≈ 72 mph)
 # Reception already gates hard shots (above deflect_min_speed ~22 m/s
 # receiver-relative needs a squared blade), so most of the wrister band is
 # catch-with-care territory.

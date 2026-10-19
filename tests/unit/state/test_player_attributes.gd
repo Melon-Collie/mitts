@@ -381,14 +381,26 @@ func test_stacked_agility_corners_budgeted() -> void:
 
 
 # ── Flex + curve: the shot gear slots ────────────────────────────────────────
-func test_flex_is_a_power_release_seesaw() -> void:
-	# Stiff loads a bigger shot but pays a slower load — the charge lean goes
-	# WITH the power lean (a lateral trade), unlike the height coupling where
-	# a harder shot also threatens sooner.
+func test_flex_is_slapper_stick_vs_wrister_stick() -> void:
+	# Stiff: a bigger slapper that needs a longer wind-up (the charge lean goes
+	# WITH the power lean, unlike the height coupling). Whippy: more of a
+	# wrister without body load. The wrister ceiling is flex-free.
 	var whippy := PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_LOW, 1)
 	var stiff := PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_HIGH, 1)
-	assert_lt(whippy.shot_power_mult(), stiff.shot_power_mult(), "stiff shoots harder")
+	assert_lt(whippy.slapper_power_mult(), stiff.slapper_power_mult(), "stiff slaps harder")
 	assert_lt(whippy.shot_charge_mult(), stiff.shot_charge_mult(), "stiff loads slower")
+	assert_almost_eq(whippy.shot_power_mult(), stiff.shot_power_mult(), 0.0001,
+			"same wrister ceiling")
+	assert_gt(whippy.wrister_unloaded_mult(), stiff.wrister_unloaded_mult(),
+			"whippy carries more of an unloaded wrister")
+	assert_almost_eq(0.6 * whippy.wrister_unloaded_mult(), 0.70, 0.0001)
+	assert_almost_eq(0.6 * stiff.wrister_unloaded_mult(), 0.50, 0.0001)
+	# So whippy never loses a wrister: ahead on a partial load, level on a full one.
+	for load: float in [0.0, 0.5, 1.0]:
+		var w: float = WristerLoad.power_share(load, false, 0.6 * whippy.wrister_unloaded_mult(), 1.0)
+		var s: float = WristerLoad.power_share(load, false, 0.6 * stiff.wrister_unloaded_mult(), 1.0)
+		assert_gte(w, s, "whippy wrister at load %.1f" % load)
+	assert_gt(whippy.stick_bend_mult(), stiff.stick_bend_mult(), "whippy visibly bows more")
 	# Height keeps its inherited inverse coupling underneath.
 	var tall := PlayerAttributes.new(79, 235)
 	assert_lt(tall.shot_charge_mult(), 1.0, "big frame still threatens sooner at medium flex")
@@ -439,10 +451,10 @@ func test_flex_number_never_reaches_the_gameplay_leans() -> void:
 	var light_stiff := PlayerAttributes.new(68, 168, 1, 1, PlayerAttributes.FLEX_HIGH, 1)
 	var heavy_whippy := PlayerAttributes.new(78, 245, 1, 1, PlayerAttributes.FLEX_LOW, 1)
 	assert_eq(light_stiff.flex_number(), heavy_whippy.flex_number(), "same nominal stick")
-	assert_gt(light_stiff.shot_power_mult(), PlayerAttributes.new(68, 168).shot_power_mult(),
-			"the stiff pick shoots harder than its own medium")
-	assert_lt(heavy_whippy.shot_power_mult(), PlayerAttributes.new(78, 245).shot_power_mult(),
-			"the whippy pick shoots softer than its own — same 85 on the sticker")
+	assert_gt(light_stiff.slapper_power_mult(), PlayerAttributes.new(68, 168).slapper_power_mult(),
+			"the stiff pick slaps harder than its own medium")
+	assert_lt(heavy_whippy.slapper_power_mult(), PlayerAttributes.new(78, 245).slapper_power_mult(),
+			"the whippy pick slaps softer than its own — same 85 on the sticker")
 
 
 func test_curve_trades_loft_ladder_for_backhand() -> void:
@@ -472,9 +484,9 @@ func test_curve_slap_and_reception_lean_with_the_pattern() -> void:
 	var m88 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1)
 	var m92 := PlayerAttributes.neutral()
 	var m28 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1)
-	assert_gt(m88.curve_slap_mult(), 1.0, "M88 is the slapper blade")
-	assert_almost_eq(m92.curve_slap_mult(), 1.0, 0.0001, "M92 slap-neutral")
-	assert_lt(m28.curve_slap_mult(), 1.0, "the toe hook pays the point shot")
+	assert_gt(m88.slapper_power_mult(), 1.0, "M88 is the slapper blade")
+	assert_almost_eq(m92.slapper_power_mult(), 1.0, 0.0001, "M92 slap-neutral")
+	assert_lt(m28.slapper_power_mult(), 1.0, "the toe hook pays the point shot")
 	assert_gt(m88.reception_ceiling_mult(), 1.0, "M88 catches the hardest feeds")
 	assert_almost_eq(m92.reception_ceiling_mult(), 1.0, 0.0001, "M92 reception-neutral")
 	assert_lt(m28.reception_ceiling_mult(), 1.0, "hard feeds bounce off the toe hook")

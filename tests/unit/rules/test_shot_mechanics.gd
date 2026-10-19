@@ -283,6 +283,27 @@ func test_slapper_power_scales_with_charge_time() -> void:
 	assert_gt(long_result.power, short_result.power)
 	assert_almost_eq(long_result.power, cfg.max_slapper_power, 0.01)
 
+
+func test_slapper_power_is_front_loaded() -> void:
+	# A short backswing carries most of a slapshot: the curve is concave, ends
+	# pinned to the band, and a 0.3 s neutral wind-up already matches a full
+	# neutral wrister.
+	var cfg := _slapper_cfg()
+	cfg.max_slapper_charge_time = 0.7
+	assert_almost_eq(ShotMechanics.slapper_power_t(0.0, cfg), 0.0, 0.0001)
+	assert_almost_eq(ShotMechanics.slapper_power_t(0.7, cfg), 1.0, 0.0001)
+	assert_almost_eq(ShotMechanics.slapper_power_t(2.0, cfg), 1.0, 0.0001, "overcharge clamps")
+	var quarter: float = ShotMechanics.slapper_power_t(0.175, cfg)
+	var half: float = ShotMechanics.slapper_power_t(0.35, cfg)
+	assert_gt(quarter, 0.25, "front-loaded: a quarter wind-up is more than a quarter of the band")
+	assert_gt(half - quarter, ShotMechanics.slapper_power_t(0.525, cfg) - half,
+			"each extra slice of wind-up buys less")
+	var min_p: float = GameRules.DEFAULT_SLAPPER_POWER_MIN_M_S
+	var max_p: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
+	assert_gte(lerpf(min_p, max_p, ShotMechanics.slapper_power_t(0.3, cfg)),
+			GameRules.DEFAULT_WRISTER_POWER_MAX_M_S - 0.1,
+			"a 0.3 s slapper matches a full wrister")
+
 func test_slapper_loft() -> void:
 	var cfg := _slapper_cfg()
 	var flat: ShotMechanics.ShotResult = ShotMechanics.release_slapper(
@@ -370,13 +391,13 @@ func test_flattest_ladder_never_sails() -> void:
 	# DRIFT DETECTOR, not a requirement — same standing as the table-level
 	# check above (elevation doc §1.2). Its value is the WIRING, not the
 	# property: it drives a real release and carries the M88's own +3% slapper
-	# lean (curve_slap_mult), which a bare-40 m/s fixture omitted. That
+	# lean (slapper_power_mult), which a bare-40 m/s fixture omitted. That
 	# omission once hid the property being false at neutral build, so whatever
 	# a future ladder asserts here, it must keep the per-gear multiplier.
 	var m88 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1)
 	var cfg := _slapper_cfg()
 	cfg.max_slapper_power = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S \
-			* m88.curve_slap_mult()
+			* m88.slapper_power_mult()
 	cfg.loft_tan_low = m88.curve_loft_tan_low()
 	var r: ShotMechanics.ShotResult = ShotMechanics.release_slapper(
 			Vector3.ZERO, Vector3(0, 0, 10), 1, 1.0, cfg, Vector3(0, 0, 1))
