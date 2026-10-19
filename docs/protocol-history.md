@@ -358,3 +358,9 @@ here whenever you bump, in the same format.
 #      unused arg. A v76 peer drops the deadline and never settles, so its
 #      inputs would act where the host's replay of them is locked; mixed
 #      builds must be refused. Replay format unchanged.
+# v78: the cross-check (docs/physicality-plan.md, Phase B), thrown by a chord
+#      already on the input record (hit_held with stick_check_pressed), so the
+#      input stays 24 B. The skater block grows a byte (58 -> 59 B):
+#      cross_check u8, phase in bits 0-1 and ticks elapsed in bits 2-7. Two new
+#      RPCs (receive_cross_check_claim, notify_cross_check) shift the rpc
+#      ordering. Replay FORMAT_VERSION 17.

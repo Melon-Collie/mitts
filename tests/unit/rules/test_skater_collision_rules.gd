@@ -181,3 +181,19 @@ func test_coincident_centers_no_nan() -> void:
 	assert_true(out.sep_a.is_finite() and out.sep_b.is_finite(),
 		"coincident centers must resolve to a finite deterministic push, not NaN")
 	assert_false(is_nan(out.sep_a.x))
+
+
+# ── a flat contact (a locked pin pair) ────────────────────────────────────────
+
+func test_a_given_axis_separates_and_pushes_along_it_only() -> void:
+	var out := _res()
+	# Offset 0.6 along z, 0.9 apart along the x axis given → overlap 0.1 along x.
+	SkaterCollisionRules.resolve(out,
+		Vector3.ZERO, Vector3(2.0, 0.0, 0.0), 80.0, R,
+		Vector3(0.9, 0.0, 0.6), Vector3.ZERO, 80.0, R,
+		1.0, Vector3(1.0, 0.0, 0.0))
+	assert_true(out.overlapping, "touching flat, though the centres are 1.08 apart")
+	assert_almost_eq(out.sep_b.x, 0.05, 0.0001)
+	assert_eq(out.sep_b.z, 0.0, "no squeeze along the contact")
+	assert_eq(out.dvel_b.z, 0.0)
+	assert_gt(out.dvel_b.x, 0.0)

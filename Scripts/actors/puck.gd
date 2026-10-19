@@ -617,6 +617,14 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 	var strip_impulse: float = BodyCheckRules.puck_strip_impulse(
 			impact_force, checker.weight, checker_transfer,
 			victim.weight, victim.body_check_brace_resistance, victim.hit_committed)
+	# Crushed square into the boards he takes the whole hit, as his stagger does.
+	strip_impulse = BoardPinRules.backstop_hit_strength(strip_impulse,
+			impact_force / maxf(checker.weight, 0.001),
+			checker_transfer * (victim.body_check_brace_resistance if victim.hit_committed else 1.0),
+			Vector2(hit_direction.x, hit_direction.z),
+			BoardPinRules.wall_normal(victim.global_position, victim.collision_radius(),
+					BoardPinRules.BACKSTOP_MARGIN_M),
+			checker.weight, victim.weight)
 	if strip_impulse < hit_pickup_cooldown_threshold:
 		return
 	# Hard hits temporarily deny the victim a pickup, even if they weren't carrying.

@@ -45,7 +45,7 @@ func _make_controller() -> SkaterController:
 	var controller := SkaterController.new()
 	add_child_autofree(controller)
 	controller.setup(skater, puck, gs)
-	controller.apply_attributes(PlayerAttributes.all_average())
+	controller.apply_attributes(PlayerAttributes.neutral())
 	# Standing on the ice as in a game: the claim clamp's lean allowance is read
 	# off the body's height.
 	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
