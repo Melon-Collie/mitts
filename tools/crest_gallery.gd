@@ -11,7 +11,7 @@ extends SceneTree
 
 const _CELL: float = 160.0
 const _CREST_R: float = 62.0
-const _LABEL_W: float = 150.0
+const _LABEL_W: float = 210.0
 const _HEADER_H: float = 44.0
 const _BG: Color = Color(0.13, 0.14, 0.17)
 const _INK: Color = Color(0.93, 0.94, 0.96)
@@ -73,6 +73,6 @@ func _draw_sheet() -> void:
 						Transform2D(0.0, Vector2.ONE * _CREST_R, 0.0, at), preset, kit)
 				if col == 0:
 					c.draw_string(font, Vector2(12.0, y + _CELL * 0.5 + 8.0), "%s %s"
-							% [TeamCrest.STYLE_NAMES[style].to_upper(),
+							% [TeamCrest.STYLE_NAMES[style].replace("_", " ").to_upper(),
 							"HOME" if side == 0 else "AWAY"],
 							HORIZONTAL_ALIGNMENT_LEFT, -1, 18, _INK)

@@ -8,9 +8,10 @@ extends RefCounted
 # highlights, cleft, pith), ACCENT (leaves, stems, rind, the coconut's hollow)
 # and MARK (seeds, calyx).
 
-enum Style { FLAT, ROUNDEL, SHIELD, NATURAL, OUTLINED }
+enum Style { FLAT, ROUNDEL, SHIELD, NATURAL, OUTLINED, OUTLINED_DARK }
 
-const STYLE_NAMES: PackedStringArray = ["flat", "roundel", "shield", "natural", "outlined"]
+const STYLE_NAMES: PackedStringArray = [
+	"flat", "roundel", "shield", "natural", "outlined", "outlined_dark"]
 
 const BODY: int = 0
 const DETAIL: int = 1
@@ -53,7 +54,7 @@ static func draw(canvas: CanvasItem, fruit: String, style: int, xform: Transform
 	var colors: Array = _palette(fruit, style, preset, kit)
 	canvas.draw_set_transform_matrix(xform)
 	var fruit_xform: Transform2D = xform
-	if style == Style.OUTLINED:
+	if style == Style.OUTLINED or style == Style.OUTLINED_DARK:
 		_grow = OUTLINE_WIDTH
 		_grow_color = colors[4]
 		_draw_fruit(canvas, fruit, colors)
@@ -91,6 +92,12 @@ static func _palette(fruit: String, style: int, preset: Dictionary, kit: Diction
 		# The keyline is the light, which the away jersey is based on: it rims
 		# the fruit on the home sweater and vanishes into the away one.
 		return [natural[BODY], natural[DETAIL], natural[ACCENT], natural[MARK], light, light]
+	if style == Style.OUTLINED_DARK:
+		# The team's darker color: it rims the fruit on the away sweater, and on
+		# the home one too unless the home sweater is that color.
+		var dark: Color = (primary if primary.get_luminance() < secondary.get_luminance()
+				else secondary)
+		return [natural[BODY], natural[DETAIL], natural[ACCENT], natural[MARK], dark, dark]
 	# The ring is the secondary, which neither jersey is based on, so the badge
 	# stands off both kits; the field is whichever base the fruit reads on.
 	var body: Color = natural[BODY]
