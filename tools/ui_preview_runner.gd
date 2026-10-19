@@ -29,7 +29,6 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_play", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_play_pressed"},
 	{"name": "side_player", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_player_card_pressed"},
 	{"name": "side_locker", "stage": _STAGE_FREE_PLAY, "open": "_open_locker"},
-	{"name": "side_locker_hair", "stage": _STAGE_FREE_PLAY, "open": "_open_locker_hair"},
 	{"name": "side_career", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_career_pressed"},
 	{"name": "side_tutorials", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tutorial_pressed"},
 	{"name": "side_drills", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_drills_pressed"},
@@ -297,20 +296,3 @@ func _open_locker() -> void:
 	var popup: PlayerSettingsPopup = _find(get_tree().current_scene, PlayerSettingsPopup) \
 			as PlayerSettingsPopup
 	_invoke(popup, "_open_locker")
-
-
-# The locker turned to the hair, wearing the longest cut and a full beard so the
-# case shows what the hair rows do. Picked through the rows' own controls.
-func _open_locker_hair() -> void:
-	_open_locker()
-	var locker: LockerPopup = _find(get_tree().current_scene, LockerPopup) as LockerPopup
-	if locker == null:
-		_fail("no locker to dress")
-		return
-	var hair: OptionButton = locker.get("_hair_btn") as OptionButton
-	var facial: OptionButton = locker.get("_facial_btn") as OptionButton
-	hair.select(HairStyleRegistry.HAIR_FLOW)
-	hair.item_selected.emit(HairStyleRegistry.HAIR_FLOW)
-	facial.select(HairStyleRegistry.FACIAL_BEARD)
-	facial.item_selected.emit(HairStyleRegistry.FACIAL_BEARD)
-	hair.focus_entered.emit()

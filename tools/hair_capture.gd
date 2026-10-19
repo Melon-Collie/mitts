@@ -106,6 +106,8 @@ func _place(at: Vector3, hair: int, facial: int) -> void:
 
 	_add_piece(head, SkaterHairMesh.shared_hair(hair),
 			SkaterHairMesh.make_material(_hair_color, false))
+	_add_piece(head, SkaterHairMesh.shared_brows(),
+			SkaterHairMesh.make_material(_hair_color, false))
 	_add_piece(head, SkaterHairMesh.shared_facial_hair(facial),
 			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_translucent(facial)))
 	_add_piece(head, SkaterMeshBuilder.shared_face_gear(_face),

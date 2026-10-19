@@ -33,6 +33,8 @@ func test_a_pick_rides_the_helmet_bone() -> void:
 	assert_eq(attach.bone_idx, SkaterMeshBuilder.UpperBone.HELMET, "on the helmet bone")
 	assert_eq(_mat(SkaterArmRig.HeadPiece.SCALP).albedo_color, HairStyleRegistry.color_for(2),
 			"painted the picked colour")
+	assert_eq(_mat(SkaterArmRig.HeadPiece.BROWS).albedo_color, HairStyleRegistry.color_for(2),
+			"and so are the brows")
 
 
 func test_a_bare_pick_draws_nothing() -> void:
@@ -40,6 +42,8 @@ func test_a_bare_pick_draws_nothing() -> void:
 	_skater.set_gear_style(_look(HairStyleRegistry.HAIR_BALD, HairStyleRegistry.FACIAL_NONE, 0))
 	assert_null(_skater.head_piece(SkaterArmRig.HeadPiece.SCALP).mesh, "bald")
 	assert_null(_skater.head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR).mesh, "clean-shaven")
+	assert_not_null(_skater.head_piece(SkaterArmRig.HeadPiece.BROWS).mesh,
+			"a bald head keeps its brows")
 
 
 func test_the_ghost_fade_reaches_the_hair_and_gives_it_back() -> void:

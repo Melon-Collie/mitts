@@ -94,11 +94,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
 	"res://Scripts/controllers/remote_controller.gd": 822,
-	"res://Scripts/ui/player_settings_popup.gd": 843,
+	# +65: the hair rows (style, beard, colour) beside the skin, and the
+	# option/swatch row builders the skin and hair share.
+	"res://Scripts/ui/player_settings_popup.gd": 908,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 816,
-	# +40: the HAIR section — style, facial hair and colour rows, their handlers.
-	"res://Scripts/ui/locker_popup.gd": 862,
+	"res://Scripts/ui/locker_popup.gd": 823,
 	"res://Scripts/ui/hud.gd": 822,
 }
 

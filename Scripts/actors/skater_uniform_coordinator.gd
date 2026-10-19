@@ -577,6 +577,8 @@ func _repaint_head_pieces() -> void:
 			SkaterHairMesh.make_material(gear.hair_color, false))
 	_paint_head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR, SkaterHairMesh.make_material(
 			gear.hair_color, SkaterHairMesh.is_translucent(gear.facial_hair)))
+	_paint_head_piece(SkaterArmRig.HeadPiece.BROWS,
+			SkaterHairMesh.make_material(gear.hair_color, false))
 
 
 func _paint_head_piece(piece: SkaterArmRig.HeadPiece, mat: StandardMaterial3D) -> void:

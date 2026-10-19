@@ -539,11 +539,12 @@ func repose_bone(bone: int) -> void:
 
 
 # ── Head pieces ──────────────────────────────────────────────────────────────
-# The face gear and the hair: per-player meshes riding the HELMET bone, so they
-# take its head turn and its head-bulk scale. Kept off the skinned mesh because
-# the helmet assembly is shared by every skater; a null mesh is a bare head.
+# The face gear, the hair and the brows: per-player meshes riding the HELMET
+# bone, so they take its head turn and its head-bulk scale. Kept off the skinned
+# mesh because the helmet assembly is shared by every skater; a null mesh is a
+# bare head.
 
-enum HeadPiece { FACE_GEAR, SCALP, FACIAL_HAIR }
+enum HeadPiece { FACE_GEAR, SCALP, FACIAL_HAIR, BROWS }
 
 
 func apply_head_pieces() -> void:
@@ -564,6 +565,7 @@ func apply_head_pieces() -> void:
 	_head_pieces[HeadPiece.FACE_GEAR].mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	_head_pieces[HeadPiece.SCALP].mesh = SkaterHairMesh.shared_hair(gear.hair_style)
 	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
+	_head_pieces[HeadPiece.BROWS].mesh = SkaterHairMesh.shared_brows()
 
 
 # One head piece's render node, for the uniform coordinator's paint and ghost

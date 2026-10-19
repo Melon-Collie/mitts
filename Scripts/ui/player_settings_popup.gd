@@ -2,9 +2,9 @@ class_name PlayerSettingsPopup
 extends Control
 
 # The player screen — who you are, one column: name, number, handedness,
-# preferred position, skin tone, height, weight, the LockerPopup launcher (every
-# equipment pick — stick, skates, gloves, helmet — and the hair, around a
-# mannequin wearing all of them), and the team pick last.
+# preferred position, skin tone, hair, beard and hair colour, height, weight, the
+# LockerPopup launcher (every equipment pick — stick, skates, gloves, helmet —
+# around a mannequin wearing all of them), and the team pick last.
 #
 # One build per player, no presets — edits land directly on PlayerPrefs' flat
 # fields. Opened from the main menu only (the lobby has no build editor).
@@ -43,6 +43,9 @@ var _left_btn: Button = null
 var _right_btn: Button = null
 var _color_dropdown: PaletteDropdown = null
 var _skin_buttons: Array[Button] = []
+var _hair_btn: OptionButton = null
+var _facial_btn: OptionButton = null
+var _hair_color_buttons: Array[Button] = []
 var _position_btn: OptionButton = null
 var _height_slider: HSlider = null
 var _height_value_label: Label = null
@@ -73,7 +76,8 @@ var _pending_curve: int = PlayerAttributes.GEAR_BALANCED
 var _pending_flex: int = PlayerAttributes.GEAR_BALANCED
 var _pending_length: int = PlayerAttributes.GEAR_BALANCED
 var _pending_tape: int = StickTapeConfig.DEFAULT_CODE
-# Packed GearStyleConfig code — the locker edits every field of it.
+# Packed GearStyleConfig code. The hair fields are edited here, beside the skin;
+# the locker edits the rest and hands the hair back untouched.
 var _pending_gear: int = GearStyleConfig.DEFAULT_CODE
 var _name_valid: bool = true
 var _number_valid: bool = true
@@ -183,6 +187,7 @@ func _build() -> void:
 	_build_handedness_section(col)
 	_build_position_section(col)
 	_build_skin_section(col)
+	_build_hair_section(col)
 	_build_height_section(col)
 	_build_weight_section(col)
 	_build_locker_row(col)
@@ -471,31 +476,64 @@ func _select_position(position: int) -> void:
 	_update_apply_state()
 
 
-# One toggle swatch per palette tone; the picked one wears a white ring.
-# Selection is exclusive-managed by _select_skin (set_pressed_no_signal on
-# the rest) so a swatch can never be un-picked into "no skin".
 func _build_skin_section(vbox: VBoxContainer) -> void:
+	_skin_buttons = _swatch_row(vbox, tr(&"PLAYER_SKIN_LABEL"), SkinToneRegistry.TONES,
+			_select_skin)
+
+
+# Style, beard and one colour for both (and the brows) — who you are, so they
+# sit with the skin rather than in the locker.
+func _build_hair_section(vbox: VBoxContainer) -> void:
+	_hair_btn = _option_row(vbox, tr(&"PLAYER_HAIR_LABEL"), HairStyleRegistry.HAIR_NAME_KEYS,
+			func(index: int) -> void: _edit_hair(index, -1, -1))
+	_facial_btn = _option_row(vbox, tr(&"PLAYER_BEARD_LABEL"),
+			HairStyleRegistry.FACIAL_NAME_KEYS,
+			func(index: int) -> void: _edit_hair(-1, index, -1))
+	_hair_color_buttons = _swatch_row(vbox, tr(&"PLAYER_HAIR_COLOR_LABEL"),
+			HairStyleRegistry.COLORS, func(index: int) -> void: _edit_hair(-1, -1, index))
+
+
+func _option_row(vbox: VBoxContainer, label_text: String, keys: Array[StringName],
+		on_pick: Callable) -> OptionButton:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	row.add_theme_constant_override("separation", 12)
 	vbox.add_child(row)
+	row.add_child(_make_identity_label(label_text))
+	var btn := OptionButton.new()
+	btn.custom_minimum_size = Vector2(_FIELD_W, 48)
+	btn.add_theme_font_size_override("font_size", 16)
+	for i: int in keys.size():
+		btn.add_item(tr(keys[i]), i)
+	SoundManager.wire_button(btn)
+	btn.item_selected.connect(on_pick)
+	row.add_child(btn)
+	return btn
 
-	row.add_child(_make_identity_label(tr(&"PLAYER_SKIN_LABEL")))
 
-	# The swatch strip fills the shared field width — each swatch takes an
-	# equal share of it rather than a fixed size.
+# One toggle swatch per palette colour, filling the shared field width; the
+# picked one wears a white ring. Selection is exclusive-managed by the caller's
+# `on_pick` (set_pressed_no_signal on the rest) so a swatch can never be
+# un-picked into "none".
+func _swatch_row(vbox: VBoxContainer, label_text: String, colors: Array[Color],
+		on_pick: Callable) -> Array[Button]:
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_BEGIN
+	row.add_theme_constant_override("separation", 12)
+	vbox.add_child(row)
+	row.add_child(_make_identity_label(label_text))
 	var swatches := HBoxContainer.new()
 	swatches.add_theme_constant_override("separation", 6)
 	swatches.custom_minimum_size = Vector2(_FIELD_W, 0)
 	row.add_child(swatches)
-	_skin_buttons.clear()
-	for i: int in SkinToneRegistry.TONES.size():
+	var buttons: Array[Button] = []
+	for i: int in colors.size():
 		var btn := Button.new()
 		btn.toggle_mode = true
 		btn.custom_minimum_size = Vector2(0, 48)
 		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 		var plain := StyleBoxFlat.new()
-		plain.bg_color = SkinToneRegistry.TONES[i]
+		plain.bg_color = colors[i]
 		plain.set_corner_radius_all(6)
 		var ringed := plain.duplicate() as StyleBoxFlat
 		ringed.border_color = Color.WHITE
@@ -505,10 +543,33 @@ func _build_skin_section(vbox: VBoxContainer) -> void:
 		btn.add_theme_stylebox_override("pressed", ringed)
 		btn.add_theme_stylebox_override("hover_pressed", ringed)
 		SoundManager.wire_button(btn)
-		var index: int = i
-		btn.pressed.connect(func() -> void: _select_skin(index))
+		btn.pressed.connect(on_pick.bind(i))
 		swatches.add_child(btn)
-		_skin_buttons.append(btn)
+		buttons.append(btn)
+	return buttons
+
+
+# Writes the hair fields given (−1 keeps a field) into the pending gear code and
+# re-syncs the three controls to it.
+func _edit_hair(style: int, facial: int, color: int) -> void:
+	var gear := GearStyleConfig.from_code(_pending_gear)
+	if style >= 0:
+		gear.hair_style = style
+	if facial >= 0:
+		gear.facial_hair = facial
+	if color >= 0:
+		gear.hair_color = color
+	_pending_gear = GearStyleConfig.from_code(gear.to_code()).to_code()
+	_show_hair()
+	_update_apply_state()
+
+
+func _show_hair() -> void:
+	var gear := GearStyleConfig.from_code(_pending_gear)
+	_hair_btn.select(gear.hair_style)
+	_facial_btn.select(gear.facial_hair)
+	for i: int in _hair_color_buttons.size():
+		_hair_color_buttons[i].set_pressed_no_signal(i == gear.hair_color)
 
 
 func _select_skin(index: int) -> void:
@@ -649,14 +710,17 @@ func _pending_team_colors() -> Dictionary:
 # Whether the equipment the player would get on Apply differs from what the
 # rink is showing — pending locker edits are otherwise invisible behind the
 # button. Everything the locker owns counts: the stick gear and blade profile,
-# the tape, and every field of the gear code.
+# the tape, and the gear code's equipment fields — not its hair, which is edited
+# in plain sight on this screen.
 func _is_locker_dirty() -> bool:
 	return _pending_profile != int(_snapshot.get("profile", 0)) \
 			or _pending_curve != int(_snapshot.get("curve", 0)) \
 			or _pending_flex != int(_snapshot.get("flex", 0)) \
 			or _pending_length != int(_snapshot.get("length", 0)) \
 			or _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE)) \
-			or _pending_gear != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
+			or GearStyleConfig.from_code(_pending_gear).equipment_code() != GearStyleConfig \
+					.from_code(int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))) \
+					.equipment_code()
 
 
 func _is_build_dirty() -> bool:
@@ -767,6 +831,7 @@ func _restore_from_snapshot() -> void:
 	_pending_length = int(_snapshot.get("length", PlayerAttributes.GEAR_BALANCED))
 	_pending_tape = int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE))
 	_pending_gear = int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
+	_show_hair()
 	_name_field.text = _pending_name
 	_number_field.text = str(_pending_number)
 	_left_btn.button_pressed = _pending_is_left

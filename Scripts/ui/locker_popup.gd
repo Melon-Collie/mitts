@@ -1,9 +1,9 @@
 class_name LockerPopup
 extends Control
 
-# The locker: every equipment pick a player owns, and the hair under the
-# helmet, in one modal around a live mannequin wearing all of them — a kit
-# rather than a parts bin.
+# The locker: every equipment pick a player owns, in one modal, around a live
+# mannequin wearing all of them — a kit rather than a parts bin. The figure
+# also wears the player's pending skin and hair, which the host screen edits.
 #
 # Rows are grouped by the piece they dress, and the group you are working in is
 # the group the camera is looking at: land on a SKATES row and the case dollies
@@ -14,8 +14,8 @@ extends Control
 #
 # Rows whose pick changes gameplay (stick gear, blade profile) carry the gold
 # asterisk the legend explains and lock during an online match — attributes
-# replicate at join time. Models, tape, laces, face gear and hair are cosmetic
-# and never lock.
+# replicate at join time. Models, tape, laces and face gear are cosmetic and
+# never lock.
 #
 # A sub-editor, not a committer: opened by PlayerSettingsPopup over its own
 # modal, it edits pending values and hands them back through `locker_edited` on
@@ -119,9 +119,6 @@ var _skate_btn: OptionButton = null
 var _lace_dd: SwatchDropdown = null
 var _glove_btn: OptionButton = null
 var _face_btn: OptionButton = null
-var _hair_btn: OptionButton = null
-var _facial_btn: OptionButton = null
-var _hair_color_dd: SwatchDropdown = null
 var _lock_label: Label = null
 
 # Display case.
@@ -272,7 +269,7 @@ func _build() -> void:
 	vbox.add_child(title)
 
 	# Case on the left, the rows it dresses on the right — two columns so the
-	# fifteen rows stay beside the figure instead of running past the bottom of
+	# twelve rows stay beside the figure instead of running past the bottom of
 	# a portrait case.
 	var main := HBoxContainer.new()
 	main.alignment = BoxContainer.ALIGNMENT_CENTER
@@ -461,24 +458,6 @@ func _build_gear_column(row: HBoxContainer) -> void:
 		_face_btn.add_item(tr(GearModelRegistry.FACE_NAME_KEYS[i]), i)
 	_add_row(col, tr(&"GEAR_FACE_LABEL"), _face_btn, false, "",
 			LockerMannequin.Focus.HELMET)
-
-	# The hair shows at the nape and under the rim, so its rows turn the head
-	# away; a beard is on the face, which the helmet shot already presents.
-	col.add_child(_section_header(tr(&"LOCKER_SEC_HAIR")))
-	var hair: int = LockerMannequin.Focus.HAIR
-	_hair_btn = _option_button(HairStyleRegistry.HAIR_NAME_KEYS, "", _on_hair_style_selected)
-	_add_row(col, tr(&"HAIR_STYLE_LABEL"), _hair_btn, false, "", hair)
-	_facial_btn = _option_button(HairStyleRegistry.FACIAL_NAME_KEYS, "",
-			_on_facial_hair_selected)
-	_add_row(col, tr(&"FACIAL_HAIR_LABEL"), _facial_btn, false, "",
-			LockerMannequin.Focus.HELMET)
-	_hair_color_dd = SwatchDropdown.new(Vector2(_FIELD_W, 36))
-	_hair_color_dd.selected.connect(_on_hair_color_selected)
-	var hair_names: Array[String] = []
-	for key: StringName in HairStyleRegistry.COLOR_NAME_KEYS:
-		hair_names.append(tr(key))
-	_hair_color_dd.set_palette(HairStyleRegistry.COLORS, hair_names)
-	_add_row(col, tr(&"HAIR_COLOR_LABEL"), _hair_color_dd, false, "", hair)
 
 
 func _column(row: HBoxContainer) -> VBoxContainer:
@@ -749,21 +728,6 @@ func _on_face_option_selected(index: int) -> void:
 	_redress()
 
 
-func _on_hair_style_selected(index: int) -> void:
-	_gear.hair_style = index
-	_redress()
-
-
-func _on_facial_hair_selected(index: int) -> void:
-	_gear.facial_hair = index
-	_redress()
-
-
-func _on_hair_color_selected(index: int) -> void:
-	_gear.hair_color = index
-	_redress()
-
-
 # ── Rendering ────────────────────────────────────────────────────────────────
 
 # Re-dress the mannequin from the current picks. The stick gear rides the
@@ -792,9 +756,6 @@ func _refresh() -> void:
 	_profile_btn.select(clampi(_profile, 0, _PROFILE_KEYS.size() - 1))
 	_stick_model_btn.select(clampi(_gear.stick_model, 0, StickModelRegistry.count() - 1))
 	_face_btn.select(_gear.helmet_face)
-	_hair_btn.select(_gear.hair_style)
-	_facial_btn.select(_gear.facial_hair)
-	_hair_color_dd.set_selected(_gear.hair_color)
 	for btn: OptionButton in [_length_btn, _curve_btn, _flex_btn, _profile_btn]:
 		btn.disabled = _gear_locked
 	_lock_label.visible = _gear_locked

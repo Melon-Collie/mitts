@@ -22,7 +22,7 @@ func _scalps() -> Array[ArrayMesh]:
 
 
 func _facials() -> Array[ArrayMesh]:
-	var out: Array[ArrayMesh] = []
+	var out: Array[ArrayMesh] = [SkaterHairMesh.shared_brows()]
 	for style: int in HairStyleRegistry.facial_count():
 		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
 		if mesh != null:
@@ -116,6 +116,32 @@ func test_visible_hair_stands_off_the_head() -> void:
 			if absf(v.x) < 0.01 and v.y < -0.105 and v.y > -0.118:
 				reach = maxf(reach, v.z - _CENTRE.z)
 		assert_gt(reach, head_far, "style %d covers the nape" % style)
+
+
+# The hair-coloured brows have to cover the face's own skin-tinted ones: over
+# every tinted brow vertex there is one of theirs, a hair further out.
+func test_the_brows_cover_the_faces_own() -> void:
+	var face: ArrayMesh = SkaterFaceMesh.build(SkaterMeshBuilder.HEAD_RADIUS,
+			SkaterMeshBuilder.HEAD_LON, SkaterMeshBuilder.HEAD_LAT)
+	var face_verts: PackedVector3Array = _verts(face)
+	var tints: PackedColorArray = face.surface_get_arrays(0)[Mesh.ARRAY_COLOR]
+	var over: PackedVector3Array = _verts(SkaterHairMesh.shared_brows())
+	var tinted: int = 0
+	for i: int in face_verts.size():
+		if absf(tints[i].r - SkaterFaceMesh.BROW_TINT.r) > 0.01:
+			continue
+		tinted += 1
+		var p: Vector3 = face_verts[i] + _CENTRE   # head-local → helmet-local
+		var nearest: float = 1.0
+		var nearest_v := Vector3.ZERO
+		for v: Vector3 in over:
+			if v.distance_to(p) < nearest:
+				nearest = v.distance_to(p)
+				nearest_v = v
+		assert_lt(nearest, 0.003, "a hair-coloured brow lies over tinted vertex %d" % i)
+		assert_gt((nearest_v - _CENTRE).length(), (p - _CENTRE).length(),
+				"and stands off it")
+	assert_gt(tinted, 0, "the face has tinted brows to cover")
 
 
 func test_stubble_is_translucent_and_hair_is_not() -> void:

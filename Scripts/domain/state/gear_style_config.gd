@@ -15,9 +15,9 @@ extends RefCounted
 # GearModelRegistry FACE_* option (bare / visor / cage / fishbowl) — a fixed
 # look, like the stick. The hair rides the same code rather than one of its own
 # because it goes everywhere the face gear goes — join, spawn, replay header,
-# the bot card — and is picked in the same place. Cosmetic only — nothing
-# gameplay reads it. Every field is picked in the locker; all painted by
-# SkaterUniformCoordinator.
+# the bot card. Cosmetic only — nothing gameplay reads it. The equipment fields
+# are picked in the locker, the hair on the player screen beside the skin; all
+# painted by SkaterUniformCoordinator.
 #
 # Travels the wire as one packed int (to_code/from_code) appended to the join
 # and spawn payloads, like the tape code. from_code clamps every field, so a
@@ -87,6 +87,12 @@ func to_code() -> int:
 			| (stick_model << _STICK_SHIFT) | (helmet_face << _FACE_SHIFT) \
 			| (hair_style << _HAIR_SHIFT) | (facial_hair << _FACIAL_SHIFT) \
 			| (hair_color << _HAIR_COLOR_SHIFT)
+
+
+# The code with the hair fields at their defaults — what the locker owns.
+func equipment_code() -> int:
+	return GearStyleConfig.new(skate_model, glove_model, lace_color, stick_model,
+			helmet_face).to_code()
 
 
 static func from_code(code: int) -> GearStyleConfig:

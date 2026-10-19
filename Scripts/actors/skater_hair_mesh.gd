@@ -1,9 +1,10 @@
 class_name SkaterHairMesh
 extends RefCounted
 
-# Hair and facial hair: thin shells laid over the head ball's own facets (and
-# the neck below it), in the helmet's frame so they ride the HELMET bone like
-# the face gear. One shell per HairStyleRegistry style, built once and shared.
+# Hair, facial hair and brows: thin shells laid over the head ball's own facets
+# (and the neck below it), in the helmet's frame so they ride the HELMET bone
+# like the face gear. One shell per HairStyleRegistry style, built once and
+# shared; all three wear the one hair colour.
 #
 # A shell is sampled on a grid of (azimuth, height) and stood off the surface
 # under it by a lift. The azimuth samples include every facet column edge, so a
@@ -111,6 +112,17 @@ static func shared_hair(style: int) -> ArrayMesh:
 					func() -> ArrayMesh: return _build_scalp(_FLOW, _FLOW_FLARE_M))
 		_:
 			return null
+
+
+# The brows in hair colour, over the face's own skin-tinted ones. Every skater
+# wears them, bald or not.
+static func shared_brows() -> ArrayMesh:
+	return _shared("brows", func() -> ArrayMesh:
+		var st := _begin()
+		st.append_from(SkaterFaceMesh.build_brows(SkaterMeshBuilder.HEAD_RADIUS,
+				_COLUMNS, _ROWS), 0, Transform3D(Basis.IDENTITY,
+				Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)))
+		return st.commit())
 
 
 # The facial shell for one FACIAL_* style — null for clean-shaven.
