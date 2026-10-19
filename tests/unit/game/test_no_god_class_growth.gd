@@ -69,7 +69,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the down flags in one place, a diver's stick dead from the get-up.
 	"res://Scripts/controllers/skater_controller.gd": 3471,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
-	"res://Scripts/actors/skater.gd": 2797,
+	"res://Scripts/actors/skater.gd": 2800,
 	"res://Scripts/networking/network_manager.gd": 2866,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
 	"res://Scripts/controllers/skater_ik_coordinator.gd": 950,
@@ -108,7 +108,7 @@ const _API_SLACK: int = 3
 
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/networking/network_manager.gd": 208,
-	"res://Scripts/actors/skater.gd": 145,
+	"res://Scripts/actors/skater.gd": 146,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 37,
 	"res://Scripts/networking/network_telemetry.gd": 54,

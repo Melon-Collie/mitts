@@ -892,6 +892,9 @@ func _process(delta: float) -> void:
 	# it once per replayed input. Stick flex is time/state-driven, so it runs
 	# every frame regardless (own shader-write guard).
 	#
+	# The bow runs first: a bow that moved re-poses the knob and the bottom glove,
+	# which ride it.
+	var flexed: bool = _stick.update_flex(delta)
 	# render_pose_update's pose is time-driven, so physics interpolation draws it
 	# a tick late. Do NOT opt these nodes out to win that back — an opted-out
 	# child renders against the body's post-tick position while the body renders
@@ -910,14 +913,13 @@ func _process(delta: float) -> void:
 			_spine.update()
 		_arms.update_hem(delta, _on_camera)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
-				or _blade_tilt_dirty):
+				or _blade_tilt_dirty or flexed):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
 			update_bottom_arm_mesh()
 		if _on_camera or not seen:
 			_anim_lod.consumed()
-	_stick.update_flex(delta)
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
 	# transforms per skater that nothing reads back, aligned with the pose drawn.
 	if not CosmeticFreeze.hud:
@@ -2533,6 +2535,12 @@ func set_leg_surface_material(surface: int, mat: Material) -> void:
 func update_arm_mesh() -> void:
 	_spine.update()
 	_arms.update_top_arm()
+
+
+# Where the drawn shaft has bowed away from its straight line near `point`
+# (upper-body space) — the offset a hand on the stick rides.
+func stick_bow_offset(point: Vector3) -> Vector3:
+	return _stick.bow_offset(point)
 
 
 func update_bottom_arm_mesh() -> void:
