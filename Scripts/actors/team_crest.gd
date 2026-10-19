@@ -74,14 +74,12 @@ static func _palette(fruit: String, style: int, preset: Dictionary, kit: Diction
 			return [ink, cut, ink, cut, ink, cut]
 		Style.ROUNDEL, Style.SHIELD:
 			return [light, primary, secondary, primary, secondary, primary]
+	# The ring is the secondary, which neither jersey is based on, so the badge
+	# stands off both kits; the field is whichever base the fruit reads on.
 	var natural: Array = _NATURAL.get(fruit, _NATURAL.cherry)
 	var body: Color = natural[BODY]
-	var field: Color = light
-	for candidate: Color in [primary, secondary]:
-		if _contrast(candidate, body) > _contrast(field, body):
-			field = candidate
-	var ring: Color = primary if field != primary else secondary
-	return [body, natural[DETAIL], natural[ACCENT], natural[MARK], ring, field]
+	var field: Color = primary if _contrast(primary, body) > _contrast(light, body) else light
+	return [body, natural[DETAIL], natural[ACCENT], natural[MARK], secondary, field]
 
 
 static func _contrast(a: Color, b: Color) -> float:
