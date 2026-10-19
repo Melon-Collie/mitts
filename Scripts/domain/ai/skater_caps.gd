@@ -39,9 +39,10 @@ var stick_reach: float = GameRules.DEFAULT_STICK_LENGTH_M
 # authoritative blade claims (pickup / poke / stick-lift), pinning the claimed
 # blade to within this reach of the server-authoritative body; and where a lane
 # read lets a defender hold the stick he is reaching with (AIPuckLane
-# ._blade_block). Default = league stick + blade + baseline backhand ROM reach.
+# ._blade_block). Default = league stick + blade + the neutral build's forward
+# ROM reach, the arm's longest (SkaterController.rom_forward_reach_max).
 const LEAGUE_MAX_BLADE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M \
-		+ GameRules.DEFAULT_BLADE_LENGTH_M + 0.46
+		+ GameRules.DEFAULT_BLADE_LENGTH_M + 0.51
 var max_blade_reach: float = LEAGUE_MAX_BLADE_REACH_M
 # The furthest the balance lean can carry the shoulders off the body, metres
 # (Skater.max_lean_shift). The claim reach bound adds it; the bots' own reach

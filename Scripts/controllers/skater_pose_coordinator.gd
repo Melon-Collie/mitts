@@ -479,10 +479,15 @@ func apply_upper_body(delta: float) -> void:
 		if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
 			target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
 					_controller.wrister_coil)
+		# Measured against the rim in the hand's own direction, so the lean commits
+		# at full reach whichever way the arm is extending.
+		var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 		target_lean = compute_upper_body_lean_target(
 				Vector2(_skater.top_hand.position.x, _skater.top_hand.position.z),
 				Vector2(_skater.shoulder.position.x, _skater.shoulder.position.z),
-				_controller.rom_backhand_reach_max,
+				TopHandIK.rim_reach(atan2(hand_vec.x, -hand_vec.y) * rim_side_sign,
+						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,
+						_controller.rom_backhand_reach_max),
 				_controller.upper_body_lean_max_deg,
 				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
 

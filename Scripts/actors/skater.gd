@@ -67,7 +67,7 @@ var shoulder_offset: float = 0.22
 # shoulder rather than a point 5 cm below it. Vertical drop from shoulder to
 # hand at rest = shoulder_height − hand_rest_y (mesh-native 0.40 − (−0.10) =
 # 0.50 m; both scale with build height in apply_attributes, so the drop is
-# 0.50 m × height_mult). That drop is subtracted inside the derived backhand ROM
+# 0.50 m × height_mult). That drop is subtracted inside the derived ROM
 # (SkaterController.apply_attributes: reach = sqrt(arm_eff² − drop²)), so the
 # hand can never be placed beyond the arm's length — raising this shrinks
 # flat-footed reach; the directional reach lean (SkaterPoseCoordinator) buys

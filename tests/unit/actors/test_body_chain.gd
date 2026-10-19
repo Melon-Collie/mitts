@@ -102,8 +102,9 @@ func test_past_the_spine_s_range_the_hips_come_round() -> void:
 
 # The symptom the chain exists to fix, measured the way it was found: skate
 # forward at speed and sweep the cursor across the body. The head has to stay
-# over the pelvis across the line of travel; what is left is the reach lean
-# toward the hand. Measured before the chain: ±0.18 m.
+# over the pelvis across the line of travel. Measured before the chain: ±0.18 m.
+# The reach lean is held out: it tips the torso toward the hand on purpose
+# (test_top_hand_reaches_its_rim.gd), and it is the chain being measured here.
 func _live_controller() -> SkaterController:
 	var state := StubGameState.new()
 	add_child_autofree(state)
@@ -144,6 +145,7 @@ func _skate_up_the_ice(c: SkaterController, input: InputState) -> void:
 
 func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
 	var c: SkaterController = _live_controller()
+	c.upper_body_lean_max_deg = 0.0
 	var skater: Skater = c.skater
 	var input := InputState.new()
 	input.delta = DT
@@ -160,7 +162,7 @@ func test_sweeping_the_cursor_at_speed_keeps_the_head_over_the_pelvis() -> void:
 			worst = maxf(worst, absf(_head_across_travel(skater)))
 	assert_gt(Vector2(skater.velocity.x, skater.velocity.z).length(), 7.0,
 			"the sweep has to happen at speed to mean anything")
-	assert_lt(worst, 0.08,
+	assert_lt(worst, 0.04,
 			"the head drifted %.2f m across the line of travel off the pelvis" % worst)
 
 
@@ -204,9 +206,12 @@ func test_a_held_turn_leans_and_steering_taps_do_not() -> void:
 
 # The neck takes back part of the trunk's lean, so the head reads the lean but
 # the eyes stay nearer level than the shoulders. Measured as roll across the line
-# of travel: the forward fold is posture, which the neck leaves alone.
+# of travel: the forward fold is posture, which the neck leaves alone. The reach
+# lean is held out — it is not the neck's to take back, and a fold toward the
+# hand of a body facing off its travel reads as roll across it.
 func test_the_head_leans_less_than_the_trunk() -> void:
 	var c: SkaterController = _live_controller()
+	c.upper_body_lean_max_deg = 0.0
 	var input := InputState.new()
 	input.delta = DT
 	_skate_up_the_ice(c, input)

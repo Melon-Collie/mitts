@@ -290,20 +290,18 @@ var hand_rest_y: float = -0.10
 var hand_y_max: float = 0.30
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
-# Forehand cross-body reach is anatomically limited; backhand same-side reach
-# allows full arm extension, supporting one-handed backhand plays.
-# Note: the upper body twists toward the blade (upper_body_twist_ratio = 1.0),
-# which effectively reduces how far the hand must reach in upper-body-local space
-# — these values assume that twist is active.
+# The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
+# limited across the body, full extension out to the backhand side. These
+# assume the upper body's twist toward the blade, which shortens the reach
+# the hand needs in upper-body-local space.
 var rom_forehand_angle_max_deg: float = 90.0
 var rom_backhand_angle_max_deg: float = 90.0
-# Reach caps are DERIVED in apply_attributes — forehand from the anatomical
-# cross-body ratio, backhand from the arm chain (sqrt(arm_eff² − drop²), the
-# farthest a rest-height hand can sit without out-reaching the arm). These
-# defaults just mirror the baseline-size derivation for any skater that has
-# not had attributes applied yet.
+# Reach caps are DERIVED in apply_attributes from the arm (see
+# _ROM_FOREHAND_OF_ARM). These defaults just mirror the baseline-size
+# derivation for any skater that has not had attributes applied yet.
+var rom_forward_reach_max: float = 0.51
 var rom_forehand_reach_max: float = 0.39
-var rom_backhand_reach_max: float = 0.46
+var rom_backhand_reach_max: float = 0.42
 # Fraction of full arm extension the backhand ROM rim uses. 1.0 solves the
 # reach with a ramrod-straight arm; slightly under keeps a hint of elbow bend
 # at max extension so the rim pose stays organic.
@@ -360,7 +358,7 @@ var nudge_velocity_retain: float = 0.85
 # ── Bottom-Hand IK Tuning ─────────────────────────────────────────────────────
 # The bottom hand is purely reactive: each tick it targets a point a short way
 # down the stick shaft (from the top hand toward the blade). It releases toward
-# a shoulder rest only when the blade's world angle exceeds the upper body's
+# a free-hand rest only when the blade's world angle exceeds the upper body's
 # rotation limit — ensuring the hand stays connected during any normal swing.
 # Never influences blade placement. See domain/rules/bottom_hand_ik.gd.
 # Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
@@ -371,7 +369,7 @@ var bottom_hand_grip_fraction: float = 0.25
 # the grip fraction, then adds this). 0.0 = grip sits exactly on the shaft.
 var bh_hand_y: float = 0.0
 # Blade world angle (from skater forward, toward backhand) at which the bottom
-# hand starts releasing toward the shoulder rest. Match upper_body_max_twist_deg
+# hand starts releasing toward its rest. Match upper_body_max_twist_deg
 # so the hand releases exactly when the body can no longer rotate to follow.
 var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
@@ -380,6 +378,9 @@ var bh_release_angle_band_deg: float = 15.0
 # before that hand has fully let go of the stick (m). The hand slides up the
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
 var bh_reach_release_band_m: float = 0.08
+# Where the hand rests once it has let go, from its shoulder in arm lengths (x
+# out on its own side, y up, z back): out beside the hip, away from the reach.
+var bh_free_hand_rest_arm: Vector3 = Vector3(0.4, -0.5, 0.05)
 
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
 var upper_body_twist_ratio: float = 0.8
@@ -395,11 +396,11 @@ var upper_body_follow_damping: float = 18.0     # damping (near-critical — a c
 # Reach lean — the torso tips TOWARD the blade's reach direction (pitch +
 # roll, see SkaterPoseCoordinator.compute_upper_body_lean_target). Because
 # the blade IK solves in the leaned frame, this lean genuinely extends world
-# reach at the ROM rim (~sin(lean) × shoulder height of shoulder travel plus
-# the longer stick footprint from the dropped hands) — the honest way a real
-# player buys reach. engage_power > 1 keeps the torso quiet through mid-ROM
-# stickhandling and commits the lean near full extension.
-var upper_body_lean_max_deg: float = 18.0
+# reach at the ROM rim. It buys little (measured: 18° adds ~3 cm over 8°; the
+# arm buys the rest), and the cursor sits past the rim most of the time, so
+# this is mostly how far the skater visibly lunges at it. engage_power > 1
+# keeps the torso quiet mid-ROM and commits the lean near full extension.
+var upper_body_lean_max_deg: float = 8.0
 var upper_body_lean_engage_power: float = 1.6
 var upper_body_lean_return_speed: float = 8.0
 
@@ -1191,13 +1192,12 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 
 # Reach ROM is derived from arm length, not an independent tunable. The
 # forehand side is shoulder-joint-limited (about 56% of arm length — the top
-# hand can't cross the body very far), a simple anatomical ratio. The
-# backhand side is arm-EXTENSION-limited and solved from the chain geometry
-# in apply_attributes: the hand rides at hand_rest_y (a fixed drop below the
-# shoulder), so the farthest it can sit is sqrt(arm_eff² − drop²) with
-# arm_eff = arm × rom_arm_extension. Deriving it this way guarantees no
-# reachable pose out-reaches the arm (the forearm never draws stretched) and
-# gives tall players disproportionately more reach than short ones — long
+# hand can't cross the body very far). The backhand side and straight ahead
+# are arm-EXTENSION-limited: the hand rides at hand_rest_y, a fixed drop below
+# the shoulder, so it sits at most sqrt(reach² − drop²) out — reach being
+# arm × rom_arm_extension to the side, plus Skater.shoulder_reach_m ahead,
+# where the shoulder blade protracts (the girdle give the arm rig roots with,
+# so the drawn arm spans it). No reachable pose out-reaches the arm, and long
 # arms matter most at full extension, which is the realistic shape.
 const _ROM_FOREHAND_OF_ARM: float = 0.5625
 
@@ -1263,7 +1263,7 @@ func build_ai_caps() -> AISkaterCaps:
 	# off the same scaled geometry the body uses, so the host's client-blade
 	# anti-cheat clamp bounds against this build's real reach, not the league
 	# default. See AISkaterCaps.max_blade_reach / the claim resolvers.
-	caps.max_blade_reach = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M + rom_backhand_reach_max
+	caps.max_blade_reach = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M + rom_forward_reach_max
 	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
@@ -1432,6 +1432,9 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	var arm_eff: float = arm_total * rom_arm_extension
 	var reach_drop: float = skater.shoulder_height - hand_rest_y
 	rom_backhand_reach_max    = sqrt(maxf(arm_eff * arm_eff - reach_drop * reach_drop, 0.0))
+	var arm_protracted: float = arm_eff + skater.shoulder_reach_m
+	rom_forward_reach_max     = sqrt(maxf(
+			arm_protracted * arm_protracted - reach_drop * reach_drop, 0.0))
 	# The wrister travel gate's full-stroke reference scales with the blade's
 	# actual sweep radius (stick + arm-driven ROM, both just rescaled above), so
 	# "a full stroke" is the same fraction of each build's own reachable arc —
@@ -2988,11 +2991,8 @@ func _update_wrister_charge(input: InputState) -> void:
 	# frame — pixel motion captures the player's mouse drag intent
 	# independent of camera lag, body rotation, or skater locomotion.
 	var intent_pos := Vector3(input.mouse_screen_pos.x, 0.0, input.mouse_screen_pos.y)
-	# Magnitude signal: the ROM-clamped blade TARGET (closed-form project_blade,
-	# computed in apply_blade_from_mouse this tick), skater translation subtracted.
-	# Reading the target rather than the speed-capped smoothed blade keeps charge
-	# gated by reachable space (a cursor past the reach limit pins the target →
-	# zero delta) while staying deterministic, so host and client agree on charge.
+	# The ROM-clamped blade TARGET (apply_blade_from_mouse, this tick), for the
+	# release prediction below — the same blade _release_wrister reads.
 	var blade_world: Vector3 = _ik.last_target_blade_world
 	# The stroke's bearing is the SHOT LINE — origin→cursor, the vector the shot
 	# fires along (_wrister_aim_dir) — measured about the pinned origin rather
@@ -3007,9 +3007,9 @@ func _update_wrister_charge(input: InputState) -> void:
 	var swing_bearing: Vector3 = input.mouse_world_pos - swing_anchor
 	swing_bearing.y = 0.0
 	# The stroke-travel accumulator's per-tick step is bounded by the on-axis
-	# blade-speed budget × delta: the target is a closed-form ROM clamp (not
-	# the speed-capped smoothed blade), so a forged/teleporting cursor could
-	# otherwise bank a whole arc of travel in one tick.
+	# blade-speed budget × delta: the swing bearing follows the raw cursor, so
+	# a forged/teleporting cursor could otherwise bank a whole arc of travel in
+	# one tick.
 	_aiming.tick_wrister_charge(
 			intent_pos, swing_bearing,
 			max_charge_direction_variance,

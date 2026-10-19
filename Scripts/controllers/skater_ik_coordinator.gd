@@ -42,13 +42,11 @@ var _blade_dangle_vel: Vector3 = Vector3.ZERO
 # is applied RELATIVE to the skater (step 2 of apply_blade_from_mouse).
 var _prev_skater_pos: Vector3 = Vector3.ZERO
 
-# World-XZ ROM-clamped blade TARGET for this tick — the closed-form
-# TopHandIK.project_blade result, captured BEFORE the speed-cap smoothing below.
-# Wrister charge (SkaterController._update_wrister_charge) and the tap-direction
-# release read this rather than the smoothed/capped blade: it stays gated by
-# reachable space (cursor past the reach limit pins the target → zero travel →
-# no charge) while being a deterministic closed-form clamp of (mouse, body, ROM),
-# so host and client agree on charge without replaying the stateful smoother. y = 0.
+# World-XZ ROM-clamped blade TARGET for this tick, captured BEFORE the
+# speed-cap smoothing below. The releases (SkaterController._release_wrister,
+# _fire_quick_pass) read this rather than the smoothed/capped blade: it is a
+# function of (mouse, body pose, ROM) alone, so host and client agree on it
+# without replaying the stateful smoother. y = 0.
 var last_target_blade_world: Vector3 = Vector3.ZERO
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
@@ -210,21 +208,15 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 		var mouse_local: Vector3 = _skater.upper_body_to_local(mouse_world)
 		var target_blade_xz := Vector2(mouse_local.x, mouse_local.z)
 		target_blade_xz = _apply_carry_offset(target_blade_xz)
-		# Closed-form ROM projection — no iteration, no hand work. Only the blade
-		# position is needed to cap against; the capped result is re-solved at full
-		# precision (hand + lean blade_y) below. Uses rest blade_y for the projection:
-		# the sub-cm lean refinement the iterative solve adds is irrelevant to a point
-		# that's about to be capped and re-solved.
+		# Projected at the lean-corrected blade height the solve below lands on, not
+		# the upright one: a frame leaned toward the blade lifts its local blade_y by
+		# ~sin(lean) × reach (15 cm at 7°), which lengthens the stick's horizontal
+		# span. A target projected upright sits that much inside the rim, and the
+		# solve then draws the hand in to land on it — the lean buys no reach and
+		# the arm never extends.
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
-		var target_blade_local: Vector3
-		if _native_top != null:
-			_ik_config(blade_y_local(), target_reach)
-			target_blade_local = _native_top.project_blade(
-					shoulder, target_blade_xz, blade_side_sign)
-		else:
-			target_blade_local = TopHandIK.project_blade(
-					shoulder, target_blade_xz, blade_side_sign,
-					_ik_config(blade_y_local(), target_reach))
+		var target_blade_local: Vector3 = _solve_top_hand(
+				target_blade_xz, blade_side_sign, target_reach).blade
 		target_blade_world = _skater.upper_body_to_global(target_blade_local)
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
@@ -478,9 +470,7 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 	# does (TopHandIK clamps to its ROM first), so no ray is cast.
 	var clear: float = minf(GameRules.distance_to_rink_inner(origin),
 			NetGeometry.distance_to_near_net(origin, _controller.net_blade_half_thickness))
-	if clear > _controller.stick_length \
-			+ maxf(_controller.rom_forehand_reach_max, _controller.rom_backhand_reach_max) \
-			+ _OPEN_ICE_MARGIN_M:
+	if clear > _controller.stick_length + _controller.rom_forward_reach_max + _OPEN_ICE_MARGIN_M:
 		return INF
 	var aim_local := Vector3(
 			target_blade_xz.x - _skater.shoulder.position.x,
@@ -573,8 +563,8 @@ func update_bottom_hand() -> void:
 	var blade_local: Vector3 = _skater.get_blade_position()
 	var hand_local: Vector3 = _skater.get_top_hand_position()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
-	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
-			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	var arm: float = _skater.upper_arm_length + _skater.forearm_length
+	var reach: float = arm * _skater.arm_working_extension + _skater.shoulder_reach_m
 	var held: Vector2 = BottomHandIK.reachable_grip(
 			shoulder, hand_local, blade_local, _grip_fraction(), reach)
 	var grip: float = held.x
@@ -586,15 +576,17 @@ func update_bottom_hand() -> void:
 	var grip_y: float = lerpf(hand_local.y, blade_local.y, grip) + _controller.bh_hand_y
 	var cfg: BottomHandIK.Config = _bottom_hand_ik_config()
 	cfg.hand_y = grip_y
+	var rest_arm: Vector3 = _controller.bh_free_hand_rest_arm
+	var rest: Vector3 = shoulder + Vector3(
+			rest_arm.x * signf(_skater.bottom_shoulder.position.x), rest_arm.y, rest_arm.z) * arm
 	var bh: Vector3
 	if _native_bottom != null:
 		_native_bottom.hand_y = grip_y
-		bh = _native_bottom.solve(shoulder, grip_target_xz, cfg.backhand_angle)
+		bh = _native_bottom.solve(rest, grip_target_xz, cfg.backhand_angle)
 	else:
-		bh = BottomHandIK.solve(shoulder, grip_target_xz, cfg)
+		bh = BottomHandIK.solve(rest, grip_target_xz, cfg)
 	if held.y > 0.0:
-		bh = bh.lerp(Vector3(shoulder.x, grip_y, shoulder.z), smoothstep(
-				0.0, _controller.bh_reach_release_band_m, held.y))
+		bh = bh.lerp(rest, smoothstep(0.0, _controller.bh_reach_release_band_m, held.y))
 	# Off the stick, the hand hangs where the arm can put it.
 	var span: Vector3 = bh - shoulder
 	if span.length() > reach:
@@ -842,8 +834,8 @@ func blade_y_local() -> float:
 # default YXZ Euler order — lands the blade at world Y = blade_height.
 # Solving world_y = ub.y + (x*sin(r) + y*cos(r))*cos(p) - z*sin(p) for y gives:
 #   y = (blade_y_local() + z*sin(p) - x*sin(r)*cos(p)) / (cos(p)*cos(r))
-# A small-angle approximation (drop the cos divisors) drifts ~2cm at max reach
-# with full reach lean (15° forward pitch); the exact form is used here so the
+# A small-angle approximation (drop the cos divisors) drifts ~3 cm at max reach
+# with full reach lean (18° forward pitch); the exact form is used here so the
 # IK can consume the correct blade_y up front and produce a hand consistent
 # with stick_length, instead of post-IK overriding blade.y and stretching the
 # visible stick mesh.
@@ -889,9 +881,11 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 		_cached_top_cfg.hand_y_max = _controller.hand_y_max
 		_cached_top_cfg.rom_forehand_angle_max = deg_to_rad(_controller.rom_forehand_angle_max_deg)
 		_cached_top_cfg.rom_backhand_angle_max = deg_to_rad(_controller.rom_backhand_angle_max_deg)
+		_cached_top_cfg.rom_forward_reach_max = _controller.rom_forward_reach_max
 		_cached_top_cfg.rom_forehand_reach_max = _controller.rom_forehand_reach_max
 		_cached_top_cfg.rom_backhand_reach_max = _controller.rom_backhand_reach_max
 		if _native_top != null:
+			_native_top.rom_forward_reach_max = _cached_top_cfg.rom_forward_reach_max
 			_native_top.hand_rest_y = _cached_top_cfg.hand_rest_y
 			_native_top.hand_y_max = _cached_top_cfg.hand_y_max
 			_native_top.rom_forehand_angle_max = _cached_top_cfg.rom_forehand_angle_max

@@ -86,8 +86,9 @@ under `UpperBody`, a leg skeleton under `LowerBody`) could not:
   (Godot's YXZ), so its forward lean tips sideways whenever the shoulders turn
   toward the stick. The spine folds about the hips' axis first and twists on
   top of the fold. Measured skating at 9 m/s with the cursor swept across the
-  body: the head drifted ±0.18 m across the line of travel off the pelvis
-  before, ±0.05 m after — what is left is the reach lean.
+  body, reach lean held out: the head drifted ±0.18 m across the line of travel
+  off the pelvis before, ±0.02 m after. The reach lean tips it toward the hand
+  on top of that, by design.
 - **The twist has a joint limit** (`SkaterSpineRig.TWIST_LIMIT`, 55°). The
   shoulders always point where gameplay put them, so the arms reach their
   hands; past the limit the hips come round instead.
