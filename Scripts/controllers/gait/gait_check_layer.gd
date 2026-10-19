@@ -1,12 +1,14 @@
 class_name GaitCheckLayer
 extends GaitLayer
 
-# Both halves of a body check. The commit: holding Hit loads the skater up —
-# lean forward into it and sink a touch — off the replicated hit_committed. The
-# drive: the hitter's shoulder finishing through the contact, started off the
-# host-authoritative body_check_landed broadcast (and the replay event
-# dispatcher), so every machine plays the identical drive the same frame as the
-# burst and the thud.
+# Both halves of a body check, and the cross-check. The commit: holding Hit loads
+# the skater up — lean forward into it and sink a touch — off the replicated
+# hit_committed. The drive: the hitter's shoulder finishing through the contact,
+# started off the host-authoritative body_check_landed broadcast (and the replay
+# event dispatcher), so every machine plays the identical drive the same frame as
+# the burst and the thud. The cross-check is pushed the same way, legs under it
+# and trunk into it, for as long as the arms are out (the replicated phase,
+# CrossCheckRules.extension), thrown or whiffed alike.
 #
 # The gait owns no shoulder channel here, and must not grow one: the trunk
 # texture is symmetric, so a roll raises the trailing shoulder by exactly what
@@ -19,6 +21,7 @@ var _drive_t: float = -1.0              # seconds into the drive; <0 = idle
 var _drive_intensity: float = 0.0       # 0..1 VFX hit hardness
 var _drive_env: float = 0.0
 var _commit_blend: float = 0.0
+var _shove_env: float = 0.0
 
 
 func stages() -> int:
@@ -31,10 +34,12 @@ func reset() -> void:
 	_drive_intensity = 0.0
 	_drive_env = 0.0
 	_commit_blend = 0.0
+	_shove_env = 0.0
 
 
 func is_quiet() -> bool:
-	return not _skater.hit_committed and _drive_t < 0.0
+	return not _skater.hit_committed and _drive_t < 0.0 \
+			and _skater.cross_check_phase == CrossCheckRules.Phase.IDLE
 
 
 # During sustained contact or a quick follow-up hit inside an active drive the
@@ -65,17 +70,18 @@ func advance(delta: float) -> bool:
 			_drive_env = sin(PI * pow(du, 0.35)) * _drive_intensity
 	_commit_blend = move_toward(_commit_blend, 1.0 if _skater.hit_committed else 0.0,
 			_controller.hit_commit_pose_speed * delta)
-	return _drive_env > 0.0 or _commit_blend > 0.001
+	_shove_env = CrossCheckRules.extension(_skater.cross_check_phase, _skater.cross_check_elapsed)
+	return _drive_env > 0.0 or _commit_blend > 0.001 or _shove_env > 0.0
 
 
-# A landed check plants through the finish.
+# A landed check plants through the finish, as a push does through its push.
 func stride_hold() -> float:
-	return _drive_env * _controller.shot_stride_fade
+	return maxf(_drive_env, _shove_env) * _controller.shot_stride_fade
 
 
 # The drive is delivered with the LEGS — the finishing base under the shoulder.
 func stance_floor() -> float:
-	return _controller.check_drive_stance * _drive_env
+	return _controller.check_drive_stance * maxf(_drive_env, _shove_env)
 
 
 func shape_trunk(p: GaitPose) -> void:
@@ -91,3 +97,6 @@ func shape_trunk(p: GaitPose) -> void:
 	if _commit_blend > 0.001:
 		p.trunk_pitch += -deg_to_rad(_controller.hit_commit_lean_deg) * _commit_blend
 		p.drop += _controller.hit_commit_crouch_m * _commit_blend
+	# A cross-check goes straight out in front of the chest (CrossCheckRules.in_reach).
+	if _shove_env > 0.0:
+		p.trunk_pitch += -deg_to_rad(_controller.check_drive_lean_deg) * _shove_env

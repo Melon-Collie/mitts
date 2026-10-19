@@ -246,7 +246,17 @@ static func check_sound_pitch_scale(force: float) -> float:
 	return lerpf(_CHECK_PITCH_LIGHT, _CHECK_PITCH_HEAVY, check_sound_intensity(force))
 
 
-# `intensity` is the shove's 0..1 hardness (BodyCheckRules.intensity of the Δv).
+static var _shove_cfg := BodyCheckRules.Config.new()
+
+
+# A landed cross-check's 0..1 hardness: the stagger ladder's read of the Δv it
+# landed, so a shove the victim held reads 0. The live broadcast and the replay
+# both read it.
+static func shove_intensity(dv: float) -> float:
+	return BodyCheckRules.intensity(dv, _shove_cfg)
+
+
+# `intensity` is the shove's 0..1 hardness (shove_intensity).
 static func shove_volume_db(intensity: float) -> float:
 	return lerpf(_SHOVE_VOL_MIN_DB, _SHOVE_VOL_MAX_DB, clampf(intensity, 0.0, 1.0))
 

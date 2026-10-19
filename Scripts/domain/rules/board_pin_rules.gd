@@ -100,14 +100,19 @@ static func locked_gap(victim_pos: Vector3, victim_radius: float, pinner_pos: Ve
 			- victim_radius - pinner_radius
 
 
-# The hit strength the stagger and knockdown read: the victim's open-ice Δv, or,
-# driven square into the boards, the whole closing speed the transfer carried —
-# the wall stops him, so none of it goes into his recoil.
+# How hard a hit landed, for the stagger and the puck strip: the victim's
+# open-ice Δv, or, driven square into the boards, the attacker's whole delivered
+# impulse (closing × transfer × his mass) on the victim's mass alone — the wall
+# stops him, so none of it goes into his recoil and none is shared with it. The
+# knockdown does not read this: being knocked off his feet is being moved, and
+# the wall is what stops the moving.
 static func backstop_hit_strength(open_ice_dv: float, closing_speed: float,
-		transfer: float, hit_dir: Vector2, wall_out: Vector2) -> float:
+		transfer: float, hit_dir: Vector2, wall_out: Vector2, attacker_mass: float,
+		victim_mass: float) -> float:
 	if wall_out == Vector2.ZERO or hit_dir.dot(wall_out) < BACKSTOP_MIN_INTO_WALL:
 		return open_ice_dv
-	return maxf(open_ice_dv, closing_speed * transfer)
+	return maxf(open_ice_dv,
+			closing_speed * transfer * attacker_mass / maxf(victim_mass, 0.001))
 
 
 static func pin_strength(defender_mass: float, victim_mass: float) -> float:

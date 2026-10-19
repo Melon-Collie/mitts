@@ -194,7 +194,7 @@ func test_a_slow_drive_at_a_man_on_the_wall_reaches_for_the_pin() -> void:
 
 func test_a_drive_that_would_knock_him_down_stays_a_check() -> void:
 	var input: InputState = _checking()
-	sm.apply_board_play(input, _reach_snap(4.0, 0.1))
+	sm.apply_board_play(input, _reach_snap(6.0, 0.1))
 	assert_true(input.hit_held)
 	assert_false(input.stick_check_held)
 

@@ -54,7 +54,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	# +57: the cross-check — its tracker and resolver wired, the claim deferred,
 	# and the landed shove's burst, thud and knockback lead on every machine.
-	"res://Scripts/game/game_manager.gd": 5845,
+	# +3: the landed cross-check recorded as a replay event.
+	"res://Scripts/game/game_manager.gd": 5848,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable
@@ -72,10 +73,12 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# the down flags in one place, a diver's stick dead from the get-up.
 	# +50: the cross-check — its phase stepped from the Ctrl press and adopted on
 	# reconcile, and the victim's answer to it (take_cross_check).
-	"res://Scripts/controllers/skater_controller.gd": 3647,
+	# +3: the stagger reads how hard a hit landed, apart from the knockdown.
+	"res://Scripts/controllers/skater_controller.gd": 3650,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	# +5: cross_check_phase / cross_check_elapsed, read by puck play and the pose.
-	"res://Scripts/actors/skater.gd": 2802,
+	# +1: the body_check_received signal carries the stagger strength too.
+	"res://Scripts/actors/skater.gd": 2803,
 	# +33: the cross-check claim and its landed broadcast (two RPC pairs).
 	"res://Scripts/networking/network_manager.gd": 2899,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
@@ -94,7 +97,8 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
 	"res://Scripts/ui/lobby_manager.gd": 1247,
-	"res://Scripts/actors/puck.gd": 1102,
+	# +8: the strip reads the wall-backed hit when the boards are behind the carrier.
+	"res://Scripts/actors/puck.gd": 1110,
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1131,
 	"res://Scripts/ui/network_debug_overlay.gd": 956,

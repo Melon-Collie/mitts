@@ -25,16 +25,29 @@ func test_the_pinner_finds_the_wall_a_body_off_it() -> void:
 			BoardPinRules.Role.PINNED), Vector2.ZERO, "the victim's wall is the one he is against")
 
 
-func test_a_hit_square_into_the_boards_lands_its_whole_closing_speed() -> void:
+func test_a_hit_square_into_the_boards_lands_the_attackers_whole_impulse() -> void:
 	var out := Vector2(1.0, 0.0)
-	assert_eq(BoardPinRules.backstop_hit_strength(2.0, 6.0, 0.8, Vector2(1.0, 0.0), out),
-			6.0 * 0.8, "square in: the wall takes the recoil")
-	assert_eq(BoardPinRules.backstop_hit_strength(2.0, 6.0, 0.8, Vector2(0.0, 1.0), out),
+	var into := Vector2(1.0, 0.0)
+	assert_almost_eq(BoardPinRules.backstop_hit_strength(2.0, 6.0, 0.8, into, out, 1.0, 1.0),
+			6.0 * 0.8, 1e-6, "square in, equal mass: the wall takes the recoil")
+	assert_eq(BoardPinRules.backstop_hit_strength(2.0, 6.0, 0.8, Vector2(0.0, 1.0), out, 1.0, 1.0),
 			2.0, "along the wall: open-ice")
-	assert_eq(BoardPinRules.backstop_hit_strength(2.0, 6.0, 0.8, Vector2(1.0, 0.0), Vector2.ZERO),
+	assert_eq(BoardPinRules.backstop_hit_strength(2.0, 6.0, 0.8, into, Vector2.ZERO, 1.0, 1.0),
 			2.0, "no wall: open-ice")
-	assert_eq(BoardPinRules.backstop_hit_strength(5.0, 6.0, 0.8, Vector2(1.0, 0.0), out),
+	assert_eq(BoardPinRules.backstop_hit_strength(5.0, 6.0, 0.8, into, out, 1.0, 1.0),
 			5.0, "never weaker than the open-ice hit")
+
+
+func test_on_the_boards_weight_matters_both_ways() -> void:
+	var out := Vector2(1.0, 0.0)
+	var into := Vector2(1.0, 0.0)
+	var even: float = BoardPinRules.backstop_hit_strength(0.0, 4.0, 0.65, into, out, 1.0, 1.0)
+	assert_gt(BoardPinRules.backstop_hit_strength(0.0, 4.0, 0.65, into, out, 1.28, 1.0), even,
+			"a heavier checker")
+	assert_gt(BoardPinRules.backstop_hit_strength(0.0, 4.0, 0.65, into, out, 1.0, 0.79), even,
+			"a lighter victim")
+	assert_lt(BoardPinRules.backstop_hit_strength(0.0, 4.0, 0.65, into, out, 0.79, 1.28), even,
+			"light on heavy")
 
 
 func test_a_pin_needs_a_reaching_drive_into_the_wall() -> void:

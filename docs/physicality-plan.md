@@ -293,10 +293,15 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
   the hand pose and the twist). The grip widens to 0.40 of the stick so the
   hands straddle the chest. Rendered as `cross_check_mid` / `cross_check_full`
   in `tools/pose_capture_runner.gd`.
-- **Not built yet: the leg drive.** The legs skate whatever the gait was doing;
-  a `GaitLayer` for the push is a follow-up once the pose has been seen in play.
-- **Not built: the replay event.** A goal replay shows the push (the phase is in
-  the frames) but not its burst and thud.
+- **The leg drive** (follow-up) rides `GaitCheckLayer`, the layer that already
+  delivers a check with the legs: while the arms are out the stride plants, the
+  base widens and the trunk leans into the push, on the check drive's own
+  tunables. The trunk's inertia filter mutes the lean over a push this short
+  (about 2° six ticks in), so it reads as a push, not a lunge.
+- **The replay event** (follow-up): the host records a `cross_check` event (the
+  Δv and direction) and `ReplayEventReplayer` plays its burst and thud at the same
+  hardness as live (`SkaterVFX.shove_intensity`). Unknown kinds were already
+  skipped, so the file format is unchanged.
 
 ## Phase C — bots cross-check
 
@@ -374,19 +379,24 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 - The tutorial: the pin moves from the body-check step to the stick-lift step,
   the cross-check joins the body-check step; `locale/translations.csv` rows (A, B).
 
-## Not in this plan
+## Follow-ups from the same investigation (built)
 
-From the same investigation, separate decisions:
-
-- **Board hits are mass-blind.** `BoardPinRules.backstop_hit_strength` scores a
-  hit into the wall as `closing × transfer`, so every weight pairing lands the
-  same. The grounded form is `closing × transfer × m_a / m_v` (the wall takes
-  the recoil, the victim takes the attacker's impulse); at equal mass it is
-  today's number.
-- **The board knockdown bar is low** (2.77 m/s closing, unbraced), which caps
-  how hard a check can be and still turn into a pin.
-- **An uncommitted head-on at full speed** (20 m/s closing) passes the knockdown
-  line, against the "never knocks down" comment on `hit_passive_transfer_mult`.
+- **Board hits count weight.** `BoardPinRules.backstop_hit_strength` scores a hit
+  into the wall as the attacker's whole delivered impulse on the victim's mass:
+  `closing × transfer × m_a / m_v` (the wall takes the recoil, the victim takes
+  the attacker's impulse). At equal mass it is the old number.
+- **Knockdown reads the body's own Δv, on the boards too** (decided with the
+  user). The stagger and the puck strip read the wall-backed strength above; the
+  knockdown reads only how far his body was driven, because the wall stops the
+  moving. `Skater.body_check_received` now carries both (the impulse for the
+  knockdown and the recoil, `stagger_strength` for the stagger). A committed
+  check into the boards knocks down from the open-ice bar (about 5.5 m/s closing
+  at equal mass, not 2.77), so a hard check rattles and strips him and F can
+  pin him after. The bots' pin reach compares the collision's own
+  `victim_kick` with the knockdown line accordingly.
+- **The uncommitted head-on** knocks down only with both near top speed
+  (about 18.5 m/s closing at equal mass): that is the physics, and the comment
+  on `hit_passive_transfer_mult` now says so rather than "never".
 
 ## Open questions
 

@@ -276,7 +276,6 @@ var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
 var _cross_checks: CrossCheckTracker = null
-var _cross_check_feel := BodyCheckRules.Config.new()
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -3225,13 +3224,17 @@ func _on_cross_check_thrown(_shover: Skater, victim: Skater, dv: float, push_dir
 	var victim_peer_id: int = _registry.resolve_peer_id(victim)
 	NetworkManager.send_cross_check_to_all(victim_peer_id, dv, push_dir)
 	_on_cross_check_landed(victim_peer_id, dv, push_dir)
+	_record_replay_audio_event("cross_check", victim.global_position, dv, {
+		"victim_peer_id": victim_peer_id,
+		"push_dir": [push_dir.x, push_dir.y, push_dir.z],
+	})
 
 
 # The shove's burst, thud and knockback lead, at the hardness of the stagger it
 # lands (a shove the victim held lands none).
 func _on_cross_check_landed(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
 	var rec: PlayerRecord = _registry.get_record(victim_peer_id) if _registry != null else null
-	var t: float = BodyCheckRules.intensity(dv, _cross_check_feel)
+	var t: float = SkaterVFX.shove_intensity(dv)
 	if rec == null or rec.skater == null or t <= 0.0:
 		return
 	var vfx: SkaterVFX = rec.skater.get_node_or_null("VFX") as SkaterVFX

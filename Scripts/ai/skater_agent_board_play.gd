@@ -92,8 +92,9 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 
 
 # The dispatch is driving a check: when its man is against the boards in front of
-# us, about to be touched, unbraced, and the hit will not knock him down
-# (BoardPinRules.backstop_hit_strength against the knockdown line), reach for the
+# us, about to be touched, unbraced, and the hit will not knock him down (the
+# collision's own victim_kick against the knockdown line — the boards add to the
+# stagger, not the knockdown), reach for the
 # pin instead where one is worth holding. The stick goes out on the button, so the
 # commit lets go: the check and the pin are two buttons.
 func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
@@ -119,7 +120,10 @@ func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwor
 			continue
 		var closing: float = maxf(Vector2(me.velocity.x - man.velocity.x,
 				me.velocity.z - man.velocity.z).dot(to_man / dist), 0.0)
-		if closing * transfer >= _check_cfg.knockdown_impulse \
+		var man_caps: AISkaterCaps = _caps_by_peer.get(pid)
+		if SkaterCollisionRules.victim_kick(closing, caps.weight if caps != null else 1.0,
+				man_caps.weight if man_caps != null else 1.0, transfer) \
+				>= _check_cfg.knockdown_impulse \
 				or not _pin_worth_holding(snapshot, me, pid, own_goal_dir):
 			return
 		input.hit_held = false

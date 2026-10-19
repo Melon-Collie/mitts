@@ -237,7 +237,7 @@ const POSES: Array = [
 	# The Ctrl press at a standstill: the shaft level across the chest, punched
 	# out. Mid-push, then at full extension, aimed and framed from the front like
 	# the commit (a skater at rest faces +Z).
-	{"name": "cross_check_mid", "puck": false, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
+	{"name": "cross_check_mid", "puck": false, "readout": true, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
 		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
 		[6, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
 	]},

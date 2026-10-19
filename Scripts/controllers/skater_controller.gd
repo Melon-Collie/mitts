@@ -1536,8 +1536,11 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 # Reconcile snaps stagger_timer to the server value and re-derives the decay, so
 # a misprediction self-heals in one reconcile. Remote bodies on a client still
 # defer to the snapshot (early return).
-func _on_body_check_received(impulse: Vector3) -> void:
+# `stagger_strength` (m/s) is how hard it landed (Skater.body_check_received);
+# omitted, the impulse's own magnitude.
+func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -> void:
 	var impulse_magnitude: float = impulse.length()
+	var stagger_from: float = maxf(impulse_magnitude, stagger_strength)
 	# Capture the recoil direction (body frame) so the torso reels the way the
 	# hit shoved it — see SkaterPoseCoordinator._apply_lean. Set on every
 	# machine that resolves the hit; a client-rendered remote's is overwritten by
@@ -1554,12 +1557,12 @@ func _on_body_check_received(impulse: Vector3) -> void:
 	if not _is_host:
 		if skater.is_local_skater:
 			stagger_timer = maxf(stagger_timer,
-					BodyCheckRules.stagger_seconds_from_impulse(impulse_magnitude, cfg))
+					BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg))
 			_set_knockdown_from_impulse(knockdown_add, impulse)
 		return
 	_set_knockdown_from_impulse(knockdown_add, impulse)
 	stagger_timer = maxf(stagger_timer,
-			BodyCheckRules.stagger_seconds_from_impulse(impulse_magnitude, cfg))
+			BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg))
 
 
 # Host-only (CrossCheckTracker): a cross-check landing on this skater along
@@ -1581,7 +1584,7 @@ func take_cross_check(shover_weight: float, shover_thrust: float, push_dir: Vect
 		return 0.0
 	var impulse := Vector3(push_dir.x, 0.0, push_dir.y) * dv
 	skater.velocity += impulse
-	skater.body_check_received.emit(impulse)
+	skater.body_check_received.emit(impulse, dv)
 	return dv
 
 
