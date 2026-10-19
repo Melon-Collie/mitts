@@ -1,10 +1,10 @@
 class_name HairStyleRegistry
 extends RefCounted
 
-# Hair, facial hair and hair colour: three fixed-look lists, picked in the
-# locker beside the helmet's face gear. Indices ride the packed GearStyleConfig
+# Hair, facial hair and hair colour: three fixed-look lists, picked on the
+# player screen beside the skin. Indices ride the packed GearStyleConfig
 # code, so like every wire table here rows are APPEND-ONLY and index 0 is what
-# an untouched player wears — short dark-brown hair, clean-shaven. Cosmetic
+# an untouched player wears — short dark-brown hair, no facial hair. Cosmetic
 # only: nothing gameplay reads them.
 #
 # The helmet covers the crown, so a style is really a statement about what
@@ -48,8 +48,9 @@ const COLOR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_COLOR_WHITE",
 ]
 
-# Index-aligned with COLOR_NAME_KEYS. Black is lifted off true black so the
-# faceted shading still reads under the rink's light.
+# Index-aligned with COLOR_NAME_KEYS; it colours the hair, beard and brows.
+# Black is lifted off true black so the faceted shading still reads under the
+# rink's light.
 const COLORS: Array[Color] = [
 	Color(0.20, 0.13, 0.09),
 	Color(0.07, 0.06, 0.06),

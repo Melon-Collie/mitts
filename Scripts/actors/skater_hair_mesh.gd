@@ -7,21 +7,31 @@ extends RefCounted
 # shared; all three wear the one hair colour.
 #
 # A shell is sampled on a grid of (azimuth, height) and stood off the surface
-# under it by a lift. The azimuth samples include every facet column edge, so a
-# shell never spans a ridge between columns and sinks behind it; the lift tapers
+# under it by a lift. The grid has a column on every facet column edge and a row
+# on every ring the head and neck crease at, so no quad spans a ridge and sinks
+# behind it — the skin would show through as a row of teeth. The lift tapers
 # toward the edges so a hairline meets the skin instead of ending in a step.
 #
 # Scalp hair only has to exist where the helmet does not cover it, but its top
 # edge must never show: above the rim the lift goes negative and the shell sinks
 # into the head, so the edge is hidden by the head and the shell together.
-# Facial hair sits under the face gear, so its lift is bounded the same way the
-# face's features are (test_skater_hair_mesh.gd holds both).
+# Facial hair is one sheet per style with the mouth cut out of it, so a
+# translucent style never doubles up; it sits under the face gear, so its lift
+# is bounded the same way the face's features are, and it rises over the chin
+# rather than letting the chin through (test_skater_hair_mesh.gd holds all
+# three).
 
 # Azimuth: θ = 0 is +Z (the back), increasing toward +X, as _build_ball and
 # _build_helmet sample it. Facial keys are measured from dead front instead.
 const _COLUMNS: int = SkaterMeshBuilder.HEAD_LON
 const _ROWS: int = SkaterMeshBuilder.HEAD_LAT
-const _SUBCOLUMNS: int = 3
+# Largest azimuth (rad) and height (m) step between grid lines.
+const _MAX_TH_STEP: float = TAU / float(SkaterMeshBuilder.HEAD_LON) / 3.0
+const _FACIAL_ROW_M: float = 0.006
+# The scalp's rows instead run parallel to its top edge, which follows the
+# helmet rim: its lift sinks under the skin within a row or two of that edge,
+# and rows crossing the rim's slope would step that line over the ear.
+const _SCALP_ROWS: int = 14
 
 # How far above the helmet rim the scalp shell carries on before it is fully
 # sunk, and how deep it sinks. The rim hides everything above it.
@@ -65,32 +75,39 @@ const _FLOW_FLARE_M: float = 0.028
 const _FLOW_FLARE_TOP_Y: float = -0.11
 const _FLOW_FLARE_BOTTOM_Y: float = -0.175
 
-# Facial patches, keyed by azimuth from dead front (degrees, mirrored):
-# (φ, top height, bottom height, lift). The mouth (about ±9° at y −0.055 to
-# −0.062) stays bare.
+# Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
+# (φ, top height, bottom height, lift). The last key's φ is where the sheet
+# ends. Every style leaves the mouth bare (SkaterFaceMesh.mouth_rect, plus
+# _MOUTH_MARGIN_M).
 const _MUSTACHE: Array[Vector4] = [
-	Vector4(0.0, -0.036, -0.052, 0.006),
-	Vector4(8.0, -0.037, -0.053, 0.006),
+	Vector4(0.0, -0.036, -0.0545, 0.006),
+	Vector4(8.0, -0.037, -0.0545, 0.006),
 	Vector4(13.0, -0.041, -0.057, 0.005),
 ]
-# Chin and the strips either side of the mouth that join it to the mustache.
-const _CHIN: Array[Vector4] = [
-	Vector4(0.0, -0.064, -0.114, 0.011),
-	Vector4(11.0, -0.064, -0.110, 0.009),
-	Vector4(14.0, -0.040, -0.106, 0.0085),
-	Vector4(19.0, -0.038, -0.098, 0.0075),
+# Mustache, the strips beside the mouth, and the chin under it.
+const _GOATEE: Array[Vector4] = [
+	Vector4(0.0, -0.036, -0.114, 0.011),
+	Vector4(8.0, -0.037, -0.112, 0.010),
+	Vector4(13.0, -0.040, -0.108, 0.009),
+	Vector4(19.0, -0.042, -0.098, 0.007),
 ]
-# Chin, jaw and cheeks up to the sideburn.
-const _JAW: Array[Vector4] = [
-	Vector4(0.0, -0.064, -0.122, 0.012),
-	Vector4(10.0, -0.064, -0.120, 0.011),
-	Vector4(14.0, -0.040, -0.118, 0.010),
+# Mustache, chin, jaw and cheeks up to the sideburn.
+const _BEARD: Array[Vector4] = [
+	Vector4(0.0, -0.036, -0.122, 0.012),
+	Vector4(10.0, -0.037, -0.120, 0.011),
+	Vector4(14.0, -0.038, -0.118, 0.010),
 	Vector4(24.0, -0.030, -0.114, 0.009),
 	Vector4(40.0, -0.018, -0.104, 0.008),
 	Vector4(52.0, -0.008, -0.090, 0.006),
 	Vector4(56.0, -0.004, -0.084, 0.005),
 ]
-# Stubble is the beard's footprint at a near-flush lift, drawn translucent.
+# A full sheet is thinner over the lip than at the chin.
+const _UPPER_LIFT_SHARE: float = 0.55
+const _MOUTH_MARGIN_M: float = 0.0015
+# How far round the mouth's edge a sheet tapers down to the skin.
+const _MOUTH_TAPER_M: float = 0.006
+# Stubble is the beard's footprint at a near-flush lift, drawn translucent. Any
+# sheet stands at least this far over the face's own features.
 const _STUBBLE_LIFT_M: float = 0.0022
 const STUBBLE_ALPHA: float = 0.42
 
@@ -125,21 +142,21 @@ static func shared_brows() -> ArrayMesh:
 		return st.commit())
 
 
-# The facial shell for one FACIAL_* style — null for clean-shaven.
+# The facial shell for one FACIAL_* style — null for none.
 static func shared_facial_hair(style: int) -> ArrayMesh:
 	match style:
 		HairStyleRegistry.FACIAL_STUBBLE:
 			return _shared("facial_stubble", func() -> ArrayMesh:
-				return _build_facial([_MUSTACHE, _JAW], _STUBBLE_LIFT_M))
+				return _build_facial(_BEARD, _STUBBLE_LIFT_M))
 		HairStyleRegistry.FACIAL_MUSTACHE:
 			return _shared("facial_mustache", func() -> ArrayMesh:
-				return _build_facial([_MUSTACHE], -1.0))
+				return _build_facial(_MUSTACHE, -1.0))
 		HairStyleRegistry.FACIAL_GOATEE:
 			return _shared("facial_goatee", func() -> ArrayMesh:
-				return _build_facial([_MUSTACHE, _CHIN], -1.0))
+				return _build_facial(_GOATEE, -1.0))
 		HairStyleRegistry.FACIAL_BEARD:
 			return _shared("facial_beard", func() -> ArrayMesh:
-				return _build_facial([_MUSTACHE, _JAW], -1.0))
+				return _build_facial(_BEARD, -1.0))
 		_:
 			return null
 
@@ -147,12 +164,13 @@ static func shared_facial_hair(style: int) -> ArrayMesh:
 # Hair is open sheets seen from both sides (under the flow, behind a sideburn),
 # so it renders two-sided. Stubble is a shadow on the skin rather than a
 # volume, so it is translucent by design — like the face gear, a ghost fade
-# has to rebuild it from here rather than restore alpha 1.
+# has to rebuild it from here rather than restore alpha 1 — and one-sided, or
+# its own far side doubles it wherever the sheet turns away.
 static func make_material(color_index: int, translucent: bool) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = HairStyleRegistry.color_for(color_index)
 	mat.roughness = _HAIR_ROUGHNESS
-	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.cull_mode = BaseMaterial3D.CULL_BACK if translucent else BaseMaterial3D.CULL_DISABLED
 	if translucent:
 		mat.albedo_color.a = STUBBLE_ALPHA
 		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -176,7 +194,7 @@ static func _build_scalp(keys: Array[Vector3], flare: float) -> ArrayMesh:
 	var reach: float = deg_to_rad(keys[keys.size() - 1].x)
 	var span := func(theta: float, rim: float) -> Vector2:
 		return Vector2(rim + _RIM_OVERLAP_M, _scalp_key(keys, absf(_wrap_pi(theta))).x)
-	var lift := func(theta: float, t: float, y: float, rim: float) -> float:
+	var lift := func(theta: float, t: float, y: float, rim: float, _at: Vector3) -> float:
 		var a: float = absf(_wrap_pi(theta))
 		var side: float = _ramp(a, reach, reach * (1.0 - _EDGE_TAPER * 0.5))
 		var edge: float = minf(_ramp(t, 1.0, 1.0 - _EDGE_TAPER), side)
@@ -185,27 +203,41 @@ static func _build_scalp(keys: Array[Vector3], flare: float) -> ArrayMesh:
 				+ flare * side * _ramp(y, _FLOW_FLARE_TOP_Y, _FLOW_FLARE_BOTTOM_Y)
 		return lerpf(-_SINK_M, full, _ramp(y, rim + _RIM_OVERLAP_M, rim))
 	var st := _begin()
-	_emit_shell(st, -reach, reach, 12, span, lift)
+	_emit_shell(st, -reach, reach, 0.0, span, lift, PackedFloat32Array(),
+			PackedFloat32Array(), Rect2(), _SCALP_ROWS)
 	return _commit(st)
 
 
-# `flat_lift` >= 0 replaces every patch's own lift, untapered (stubble).
-static func _build_facial(patches: Array, flat_lift: float) -> ArrayMesh:
-	var st := _begin()
-	for patch: Array[Vector4] in patches:
-		var reach: float = deg_to_rad(patch[patch.size() - 1].x)
-		var span := func(theta: float, _rim: float) -> Vector2:
-			var k: Vector4 = _facial_key(patch, absf(_wrap_pi(theta - PI)))
-			return Vector2(k.y, k.z)
-		var lift := func(theta: float, t: float, _y: float, _rim: float) -> float:
-			if flat_lift >= 0.0:
-				return flat_lift
+# `flat_lift` >= 0 replaces the outline's own lift, untapered (stubble).
+static func _build_facial(outline: Array[Vector4], flat_lift: float) -> ArrayMesh:
+	var reach: float = deg_to_rad(outline[outline.size() - 1].x)
+	var mouth: Rect2 = SkaterFaceMesh.mouth_rect().grow(_MOUTH_MARGIN_M)
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
+	var span := func(theta: float, _rim: float) -> Vector2:
+		var k: Vector4 = _facial_key(outline, absf(_wrap_pi(theta - PI)))
+		return Vector2(k.y, k.z)
+	var lift := func(theta: float, t: float, _y: float, _rim: float, at: Vector3) -> float:
+		var face := Vector2(at.x - centre.x, at.y - centre.y)
+		var own: float = flat_lift
+		if flat_lift < 0.0:
 			var a: float = absf(_wrap_pi(theta - PI))
 			var edge: float = minf(minf(_ramp(t, 0.0, _EDGE_TAPER),
 					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)),
 					_ramp(a, reach, reach * (1.0 - _EDGE_TAPER)))
-			return lerpf(_EDGE_LIFT_M, _facial_key(patch, a).w, edge)
-		_emit_shell(st, PI - reach, PI + reach, 10, span, lift)
+			edge = minf(edge, _ramp(_rect_distance(mouth, face), 0.0, _MOUTH_TAPER_M))
+			own = lerpf(_EDGE_LIFT_M, _facial_key(outline, a).w
+					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge)
+		return maxf(own, SkaterFaceMesh.relief(face.x, face.y) + _STUBBLE_LIFT_M)
+	# Grid lines on the mouth's edges cut its hole clean; on the chin's, the
+	# sheet follows the relief it rises over.
+	var cut_th: PackedFloat32Array = _azimuths_for_x(
+			PackedFloat32Array([mouth.position.x, mouth.end.x]), mouth.get_center().y)
+	var chin_ys: PackedFloat32Array = SkaterFaceMesh.relief_ys()
+	cut_th.append_array(_azimuths_for_x(SkaterFaceMesh.relief_xs(), chin_ys[1]))
+	var cut_y := PackedFloat32Array([mouth.position.y, mouth.end.y])
+	cut_y.append_array(chin_ys)
+	var st := _begin()
+	_emit_shell(st, PI - reach, PI + reach, _FACIAL_ROW_M, span, lift, cut_th, cut_y, mouth)
 	return _commit(st)
 
 
@@ -221,45 +253,151 @@ static func _commit(st: SurfaceTool) -> ArrayMesh:
 	return st.commit()
 
 
-# Samples the shell between azimuths th0 < th1 on `rows` height steps.
-# `span(θ, rim)` gives the (top, bottom) heights at θ; `lift(θ, t, y, rim)` the
-# stand-off at height fraction t (0 top, 1 bottom) and height y. `rim` is the
-# helmet rim's height over the strip.
-static func _emit_shell(st: SurfaceTool, th0: float, th1: float, rows: int,
-		span: Callable, lift: Callable) -> void:
-	var cols: Array[Vector2] = _azimuth_samples(th0, th1)
-	var grid: Array[PackedVector3Array] = []
+# Samples the shell between azimuths th0 < th1. `span(θ, rim)` gives the
+# (top, bottom) heights at θ; `lift(θ, t, y, rim, at)` the stand-off at height
+# fraction t (0 top, 1 bottom), height y and unlifted surface point `at`.
+# `rim` is the helmet rim's height over the strip. The rows are one set of
+# heights shared by every strip, clamped into each strip's own span, so a
+# crease's row lines up across them — unless `even_rows` > 0, which spaces that
+# many rows evenly down each strip's own span instead. `cut_th` and `cut_y` add
+# grid lines, and quads whose surface centre falls in `hole` (head-local x, y)
+# are left out.
+static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
+		span: Callable, lift: Callable, cut_th := PackedFloat32Array(),
+		cut_y := PackedFloat32Array(), hole := Rect2(), even_rows: int = 0) -> void:
+	var cols: Array[Vector2] = _azimuth_samples(th0, th1, cut_th)
+	var thetas := PackedFloat32Array()
+	var rims := PackedFloat32Array()
+	var spans: Array[Vector2] = []
+	var y_hi: float = -INF
+	var y_lo: float = INF
 	for c: Vector2 in cols:
 		var theta: float = _sample_azimuth(c)
 		var rim: float = SkaterMeshBuilder.helmet_rim_y(_helmet_azimuth(c))
 		var range_y: Vector2 = span.call(theta, rim)
+		thetas.append(theta)
+		rims.append(rim)
+		spans.append(range_y)
+		y_hi = maxf(y_hi, range_y.x)
+		y_lo = minf(y_lo, range_y.y)
+	var heights := PackedFloat32Array()
+	if even_rows > 0:
+		for i: int in even_rows + 1:
+			heights.append(float(i) / float(even_rows))
+	else:
+		heights = _row_heights(y_hi, y_lo, row_m, cut_y)
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
+	var grid: Array[PackedVector3Array] = []
+	var bare: Array[PackedVector3Array] = []
+	for k: int in cols.size():
 		var strip := PackedVector3Array()
-		for i: int in rows + 1:
-			var t: float = float(i) / float(rows)
-			var y: float = lerpf(range_y.x, range_y.y, t)
-			strip.append(_point(c, y, lift.call(theta, t, y, rim)))
+		var under := PackedVector3Array()
+		var top: float = spans[k].x
+		var bottom: float = spans[k].y
+		for h: float in heights:
+			var y: float = lerpf(top, bottom, h) if even_rows > 0 else clampf(h, bottom, top)
+			var t: float = (top - y) / maxf(top - bottom, 1e-6)
+			var at: Vector3 = _point(cols[k], y, 0.0)
+			under.append(at)
+			strip.append(_point(cols[k], y, lift.call(thetas[k], t, y, rims[k], at)))
 		grid.append(strip)
+		bare.append(under)
 	for k: int in grid.size() - 1:
-		for i: int in rows:
+		for i: int in heights.size() - 1:
+			if hole.has_area():
+				var mid: Vector3 = (bare[k][i] + bare[k + 1][i + 1]) * 0.5 - centre
+				if hole.has_point(Vector2(mid.x, mid.y)):
+					continue
 			_quad(st, grid[k][i], grid[k + 1][i], grid[k + 1][i + 1], grid[k][i + 1])
 
 
-# (column, fraction across it) samples from th0 to th1: every column edge in
-# between, _SUBCOLUMNS steps inside each column, and the two ends exactly.
-static func _azimuth_samples(th0: float, th1: float) -> Array[Vector2]:
-	var step: float = TAU / float(_COLUMNS)
-	var out: Array[Vector2] = []
-	var k: float = floorf(th0 / step)
-	while k * step < th1:
-		var a: float = maxf(th0 - k * step, 0.0)
-		var b: float = minf(th1 - k * step, step)
-		var u0: float = _u_for(a, step)
-		var u1: float = _u_for(b, step)
-		var first: int = 0 if out.is_empty() else 1
-		for i: int in range(first, _SUBCOLUMNS + 1):
-			out.append(Vector2(k, lerpf(u0, u1, float(i) / float(_SUBCOLUMNS))))
-		k += 1.0
+# Shared row heights from y_hi down to y_lo: every crease of the head ball's
+# rings and the neck's stations in that range, every cut, and evenly spaced
+# fill between them no further apart than row_m.
+static func _row_heights(y_hi: float, y_lo: float, row_m: float,
+		cut_y: PackedFloat32Array) -> PackedFloat32Array:
+	var marks := PackedFloat32Array([y_hi, y_lo])
+	var r: float = SkaterMeshBuilder.HEAD_RADIUS
+	for j: int in range(1, _ROWS):
+		marks.append(r * cos(PI * float(j) / float(_ROWS)))
+	for station: Vector2 in SkaterMeshBuilder.NECK_PROFILE:
+		marks.append(station.x)
+	marks.append_array(cut_y)
+	var inside := PackedFloat32Array()
+	for m: float in marks:
+		if m <= y_hi and m >= y_lo:
+			inside.append(m)
+	inside.sort()
+	inside.reverse()
+	var out := PackedFloat32Array()
+	for i: int in inside.size() - 1:
+		var gap: float = inside[i] - inside[i + 1]
+		if gap < 1e-5:
+			continue
+		var n: int = maxi(ceili(gap / row_m), 1)
+		for s: int in n:
+			out.append(lerpf(inside[i], inside[i + 1], float(s) / float(n)))
+	out.append(y_lo)
 	return out
+
+
+# (column, fraction across it) samples from th0 to th1: the two ends, every
+# column edge and cut between them, and evenly spaced fill no further apart
+# than _MAX_TH_STEP.
+static func _azimuth_samples(th0: float, th1: float,
+		cut_th: PackedFloat32Array) -> Array[Vector2]:
+	var step: float = TAU / float(_COLUMNS)
+	var marks := PackedFloat32Array([th0, th1])
+	var k: float = ceilf(th0 / step)
+	while k * step < th1:
+		marks.append(k * step)
+		k += 1.0
+	for cut: float in cut_th:
+		if cut > th0 and cut < th1:
+			marks.append(cut)
+	marks.sort()
+	var thetas := PackedFloat32Array()
+	for i: int in marks.size() - 1:
+		var gap: float = marks[i + 1] - marks[i]
+		if gap < 1e-6:
+			continue
+		var n: int = maxi(ceili(gap / _MAX_TH_STEP), 1)
+		for s: int in n:
+			thetas.append(lerpf(marks[i], marks[i + 1], float(s) / float(n)))
+	thetas.append(th1)
+	var out: Array[Vector2] = []
+	for i: int in thetas.size():
+		var col: float = floorf(thetas[i] / step)
+		# A sample on a column edge belongs to the column it ends, except the first.
+		if i > 0 and is_equal_approx(thetas[i], col * step):
+			col -= 1.0
+		out.append(Vector2(col, _u_for(thetas[i] - col * step, step)))
+	return out
+
+
+# The azimuths (head-local, about the head's centre) at which the facets reach
+# each lateral offset in `xs` at height y, near the front.
+static func _azimuths_for_x(xs: PackedFloat32Array, y: float) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	for x: float in xs:
+		var lo: float = PI - 1.2
+		var hi: float = PI + 1.2
+		for i: int in 40:
+			var mid: float = (lo + hi) * 0.5
+			var c: Vector2 = _azimuth_samples(mid, mid + 1e-4, PackedFloat32Array())[0]
+			if _point(c, y, 0.0).x < x:
+				hi = mid
+			else:
+				lo = mid
+		out.append((lo + hi) * 0.5)
+	return out
+
+
+# Distance from p to the rectangle, 0 inside it.
+static func _rect_distance(rect: Rect2, p: Vector2) -> float:
+	var d := Vector2(maxf(maxf(rect.position.x - p.x, p.x - rect.end.x), 0.0),
+			maxf(maxf(rect.position.y - p.y, p.y - rect.end.y), 0.0))
+	return d.length()
 
 
 # Fraction along a column's chord at which the azimuth reaches `phi` from the
@@ -343,8 +481,12 @@ static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector
 
 
 # Godot's front faces are clockwise: the normal is (c − a) × (b − a).
+# Rows clamped into a strip's span collapse at its edges; their slivers go.
 static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, out: Vector3) -> void:
-	if (c - a).cross(b - a).dot(out) < 0.0:
+	var n: Vector3 = (c - a).cross(b - a)
+	if n.length_squared() < 1e-14:
+		return
+	if n.dot(out) < 0.0:
 		var t: Vector3 = b
 		b = c
 		c = t

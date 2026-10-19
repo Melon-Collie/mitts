@@ -41,7 +41,7 @@ func test_a_bare_pick_draws_nothing() -> void:
 	_skater.set_gear_style(_look(HairStyleRegistry.HAIR_MEDIUM, HairStyleRegistry.FACIAL_GOATEE, 0))
 	_skater.set_gear_style(_look(HairStyleRegistry.HAIR_BALD, HairStyleRegistry.FACIAL_NONE, 0))
 	assert_null(_skater.head_piece(SkaterArmRig.HeadPiece.SCALP).mesh, "bald")
-	assert_null(_skater.head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR).mesh, "clean-shaven")
+	assert_null(_skater.head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR).mesh, "no facial hair")
 	assert_not_null(_skater.head_piece(SkaterArmRig.HeadPiece.BROWS).mesh,
 			"a bald head keeps its brows")
 

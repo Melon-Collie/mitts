@@ -41,7 +41,7 @@ func test_every_style_but_the_bare_ones_has_geometry() -> void:
 	for style: int in HairStyleRegistry.facial_count():
 		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
 		if style == HairStyleRegistry.FACIAL_NONE:
-			assert_null(mesh, "clean-shaven grows nothing")
+			assert_null(mesh, "no facial hair grows nothing")
 		else:
 			assert_not_null(mesh, "facial style %d has a shell" % style)
 	assert_null(SkaterHairMesh.shared_hair(99), "a forged index renders bald")
@@ -142,6 +142,89 @@ func test_the_brows_cover_the_faces_own() -> void:
 		assert_gt((nearest_v - _CENTRE).length(), (p - _CENTRE).length(),
 				"and stands off it")
 	assert_gt(tinted, 0, "the face has tinted brows to cover")
+
+
+func _tris(mesh: ArrayMesh, offset: Vector3) -> PackedVector3Array:
+	var arrays: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var out := PackedVector3Array()
+	if arrays[Mesh.ARRAY_INDEX] == null:
+		for v: Vector3 in verts:
+			out.append(v + offset)
+	else:
+		for i: int in arrays[Mesh.ARRAY_INDEX]:
+			out.append(verts[i] + offset)
+	return out
+
+
+# The ray from the head's centre that meets its sphere at height y.
+func _toward(theta: float, y: float) -> Vector3:
+	var r: float = SkaterMeshBuilder.HEAD_RADIUS
+	var across: float = sqrt(r * r - y * y)
+	return Vector3(sin(theta) * across, y, cos(theta) * across).normalized()
+
+
+# Farthest hit along the ray from the head's centre, or 0 for a miss.
+func _reach(tris: PackedVector3Array, dir: Vector3) -> float:
+	var best: float = 0.0
+	for i: int in range(0, tris.size(), 3):
+		var hit: Variant = Geometry3D.ray_intersects_triangle(_CENTRE, dir,
+				tris[i], tris[i + 1], tris[i + 2])
+		if hit != null:
+			best = maxf(best, ((hit as Vector3) - _CENTRE).length())
+	return best
+
+
+# Wherever a sheet shows, the skin under it must not: along every ray from the
+# head's centre that meets the sheet, the sheet is farther out than the head and
+# the face's features. A grid row that spans a facet crease cuts into the ridge
+# and fails this as a row of teeth; a chin the beard does not rise over fails it
+# as a bare patch.
+func test_no_skin_shows_through_the_facial_hair() -> void:
+	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head_ball(), _CENTRE)
+	for style: int in HairStyleRegistry.facial_count():
+		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
+		if mesh == null:
+			continue
+		var sheet: PackedVector3Array = _tris(mesh, Vector3.ZERO)
+		var hits: int = 0
+		for i: int in 24:
+			for j: int in 12:
+				var theta: float = PI + deg_to_rad(lerpf(-58.0, 58.0, float(i) / 23.0))
+				var y: float = lerpf(-0.002, -0.125, float(j) / 11.0)
+				var dir: Vector3 = _toward(theta, y)
+				var hair: float = _reach(sheet, dir)
+				if hair == 0.0:
+					continue
+				hits += 1
+				assert_gt(hair, _reach(skin, dir),
+						"facial style %d clears the skin at θ %.2f, y %.3f" % [style, theta, y])
+		assert_gt(hits, 4, "facial style %d was sampled" % style)
+
+
+func test_no_skin_shows_through_the_scalp_below_the_rim() -> void:
+	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head_ball(), _CENTRE)
+	for style: int in HairStyleRegistry.hair_count():
+		var mesh: ArrayMesh = SkaterHairMesh.shared_hair(style)
+		if mesh == null:
+			continue
+		var sheet: PackedVector3Array = _tris(mesh, Vector3.ZERO)
+		var hits: int = 0
+		for i: int in 24:
+			for j: int in 8:
+				var theta: float = deg_to_rad(lerpf(-120.0, 120.0, float(i) / 23.0))
+				var y: float = lerpf(-0.04, -0.12, float(j) / 7.0)
+				if y > SkaterMeshBuilder.helmet_rim_y(theta) - 0.004:
+					continue
+				var dir: Vector3 = _toward(theta, y)
+				var hair: float = _reach(sheet, dir)
+				var head: float = _reach(skin, dir)
+				if hair == 0.0 or head == 0.0:
+					continue
+				hits += 1
+				assert_gt(hair, head,
+						"hair style %d clears the skin at θ %.2f, y %.3f" % [style, theta, y])
+		assert_gt(hits, 10, "hair style %d was sampled" % style)
 
 
 func test_stubble_is_translucent_and_hair_is_not() -> void:

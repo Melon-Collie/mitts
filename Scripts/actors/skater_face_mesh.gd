@@ -67,6 +67,37 @@ static func build_brows(radius: float, lon: int, lat: int) -> ArrayMesh:
 	return st.commit()
 
 
+# How far the face's features stand off the ball at (x, y), head-local — what
+# anything laid over the face has to clear. Only the chin reaches below the
+# nose, which is all a covering needs: a wedge that peaks across its middle
+# columns and falls to nothing at its sides, top and bottom.
+static func relief(x: float, y: float) -> float:
+	var hw: float = _CHIN[3]
+	var across: float = clampf((hw - absf(x)) / (hw * 0.3), 0.0, 1.0)
+	var down: float = 0.0
+	if y <= _CHIN[0] and y >= _CHIN[1]:
+		down = (_CHIN[0] - y) / (_CHIN[0] - _CHIN[1])
+	elif y < _CHIN[1] and y >= _CHIN[2]:
+		down = (y - _CHIN[2]) / (_CHIN[1] - _CHIN[2])
+	return _CHIN[4] * down * across
+
+
+# Where relief() bends, head-local: its x's (both sides) and its y's. A covering
+# sampled on these lines follows the chin instead of faceting across it.
+static func relief_xs() -> PackedFloat32Array:
+	var hw: float = _CHIN[3]
+	return PackedFloat32Array([-hw, -hw * 0.7, hw * 0.7, hw])
+
+
+static func relief_ys() -> PackedFloat32Array:
+	return PackedFloat32Array([_CHIN[0], _CHIN[1], _CHIN[2]])
+
+
+# The mouth's extent on the face, head-local (x, y), for a covering to leave bare.
+static func mouth_rect() -> Rect2:
+	return Rect2(-_MOUTH.y, _MOUTH.x - _MOUTH.z, _MOUTH.y * 2.0, _MOUTH.z * 2.0)
+
+
 # `src` with every vertex tinted white — pure skin — so it merges with the face
 # into one surface that carries a tint throughout.
 static func untinted(src: ArrayMesh) -> ArrayMesh:

@@ -18,7 +18,7 @@ func test_default_decodes_to_the_kit_look() -> void:
 			"the stick defaults to the house model")
 	assert_eq(config.helmet_face, GearModelRegistry.FACE_NONE, "the face defaults bare")
 	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHORT, "hair defaults short")
-	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE, "and clean-shaven")
+	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE, "and no facial hair")
 	assert_eq(config.hair_color, 0, "in the first palette colour")
 
 
