@@ -1121,9 +1121,11 @@ func _load() -> void:
 			gear_style_code = GearStyleConfig.migrate_colors(stored_gear).to_code()
 		skin_tone = SkinToneRegistry.clamp_index(int(cfg.get_value(
 				"player", "skin_tone", SkinToneRegistry.DEFAULT_INDEX)))
-		var attr_ver: int = int(cfg.get_value("player", "attr_scale_version", 1))
-		if attr_ver >= 5:
-			# Native v4 body+gear model — the constructor coerces every axis.
+		# Only the v5 body+gear build loads; an older save keeps the neutral build
+		# (and everything else it stored). The constructor coerces every axis, so
+		# a hand-edited cfg can't field an out-of-band body offline or as host
+		# (NetworkManager's join gate only coerces REMOTE peers).
+		if int(cfg.get_value("player", "attr_scale_version", 1)) >= 5:
 			set_player_attributes(PlayerAttributes.new(
 					int(cfg.get_value("player", "attr_height", PlayerAttributes.HEIGHT_MEDIUM)),
 					int(cfg.get_value("player", "attr_weight", 0)),
@@ -1131,55 +1133,6 @@ func _load() -> void:
 					int(cfg.get_value("player", "attr_curve",   PlayerAttributes.GEAR_BALANCED)),
 					int(cfg.get_value("player", "attr_flex",    PlayerAttributes.GEAR_BALANCED)),
 					int(cfg.get_value("player", "attr_length",  PlayerAttributes.GEAR_BALANCED))))
-		elif attr_ver == 4:
-			# v4-era save: height + three tiers. Deterministic map onto body+gear
-			# (PlayerAttributes.migrate_tiers — Checking→frame, Skating→profile, …).
-			set_player_attributes(PlayerAttributes.migrate_tiers(
-					int(cfg.get_value("player", "attr_height", PlayerAttributes.HEIGHT_MEDIUM)),
-					int(cfg.get_value("player", "attr_skating",  2)),
-					int(cfg.get_value("player", "attr_skill",    2)),
-					int(cfg.get_value("player", "attr_checking", 2))))
-		else:
-			# Any pre-v4 save is on the legacy six-attribute scale (or an even older
-			# 1..3 / four-attribute one). Rebuild a v3 six-attribute build via the old
-			# migration chain, then map it to the body+gear model with migrate_legacy.
-			var sp: int
-			var ag: int
-			var ha: int
-			var sz: int
-			var ph: int
-			var sh: int
-			if attr_ver >= 3:
-				sp = _clamp_1to5(int(cfg.get_value("player", "attr_speed",    3)))
-				ag = _clamp_1to5(int(cfg.get_value("player", "attr_agility",  3)))
-				ha = _clamp_1to5(int(cfg.get_value("player", "attr_hands",    3)))
-				sz = _clamp_1to5(int(cfg.get_value("player", "attr_size",     3)))
-				ph = _clamp_1to5(int(cfg.get_value("player", "attr_physical", 3)))
-				sh = _clamp_1to5(int(cfg.get_value("player", "attr_shot",     3)))
-			else:
-				# v1 (1..3) / v2 (1..5, Skill-renamed) four-attribute saves: rebuild the
-				# Speed/Agility/Size/Skill intermediate, seeding Hands/Physical at medium
-				# and using Skill for Shot, matching the old four→six split.
-				var sk: int
-				if attr_ver >= 2:
-					sp = _clamp_1to5(int(cfg.get_value("player", "attr_speed",   3)))
-					ag = _clamp_1to5(int(cfg.get_value("player", "attr_agility", 3)))
-					sz = _clamp_1to5(int(cfg.get_value("player", "attr_size",    3)))
-					sk = _clamp_1to5(int(cfg.get_value("player", "attr_skill",   3)))
-				else:
-					sp = _migrate_legacy_level(int(cfg.get_value("player", "attr_speed",    2)))
-					ag = _migrate_legacy_level(int(cfg.get_value("player", "attr_agility",  2)))
-					sz = _migrate_legacy_level(int(cfg.get_value("player", "attr_size",     2)))
-					sk = _migrate_legacy_level(int(cfg.get_value("player", "attr_strength", 2)))
-				ha = 3
-				ph = 3
-				sh = sk
-			set_player_attributes(PlayerAttributes.migrate_legacy(sp, ag, ha, sz, ph, sh))
-		# One choke point: whichever branch ran above, the flat build re-coerces
-		# before anything reads it. A preset-era save is covered too — its flat
-		# attr_*/stick_tape keys always mirrored the active preset, so loading
-		# just the flat fields IS the presets→single-build migration.
-		_enforce_attr_legal()
 		master_volume = clampf(cfg.get_value("audio", "master_volume", 0.5), 0.0, 1.0)
 		sfx_volume = clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)
 		ui_volume = clampf(cfg.get_value("audio", "ui_volume", 1.0), 0.0, 1.0)
@@ -1351,26 +1304,6 @@ func set_player_attributes(attrs: PlayerAttributes) -> void:
 	attr_curve   = attrs.curve
 	attr_flex    = attrs.flex
 	attr_length  = attrs.length
-
-
-func _clamp_1to5(v: int) -> int:
-	return clampi(v, 1, 5)
-
-
-# Remaps a legacy 1..3 attribute level onto the 1..5 scale (medium 2 → 3). Used
-# only by the pre-v2 prefs migration to reconstruct the six-attribute
-# intermediate that migrate_legacy then maps to the height/tier model.
-func _migrate_legacy_level(old: int) -> int:
-	return _clamp_1to5(2 * clampi(old, 1, 3) - 1)
-
-
-# Re-coerce the loaded/migrated flat build through the constructor (weight into
-# the height's BMI band, gear into 0..2). A hand-edited / corrupt cfg could
-# carry out-of-band values, which unchecked would let an offline or HOSTING
-# player field them (the joiner gate in NetworkManager only coerces REMOTE
-# peers).
-func _enforce_attr_legal() -> void:
-	set_player_attributes(get_player_attributes())
 
 
 func is_tutorial_complete(id: String) -> bool:

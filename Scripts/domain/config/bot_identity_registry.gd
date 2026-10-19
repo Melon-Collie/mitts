@@ -20,10 +20,8 @@ class_name BotIdentityRegistry
 # (weight into the height's BMI band), so a typo neither crashes the game nor
 # fields an impossible frame. A super-bot is unrepresentable by construction.
 #
-# JSON schema (attributes v4, body + gear). Height may be a raw inches value
-# (67..80 = 5'7"..6'8") or a legacy 1..5 step (mapped onto the frozen v3
-# heights, which still top out at 6'7" so migrated bots keep their body);
-# weight is lbs inside the height's band (omit for the height's neutral frame);
+# JSON schema (attributes v4, body + gear). Height is inches (67..80 =
+# 5'7"..6'8"); weight is lbs inside the height's band (omit for the height's neutral frame);
 # gear slots are 0/1/2 with 1 = balanced (profile: 0 agility / 2 power;
 # curve: 0 closed / 2 open; flex: 0 whippy / 2 stiff; length: 0 short / 2 long):
 #   {
@@ -52,10 +50,7 @@ class_name BotIdentityRegistry
 # the packed gear code but are separate groups: a card that dresses its bot in
 # a visor still gets a rolled haircut.
 #
-# Fields are optional; missing values default to the neutral build. A tier-era
-# file (skating/skill/checking) migrates via PlayerAttributes.migrate_tiers and
-# the oldest six-attribute files (speed/agility/hands/size/physical/shot) via
-# migrate_legacy, so old user:// rosters keep working.
+# Fields are optional; missing values default to the neutral build.
 #
 # A well-formed file with zero entries is valid — the caller treats an empty
 # pool as "use the built-in deterministic defaults".
@@ -219,9 +214,8 @@ static func loaded_path() -> String:
 
 
 # Turns one raw JSON entry into a canonical identity dict: routes the
-# attribute keys through PlayerAttributes.from_dict (which handles native v4
-# body+gear keys, tier-era keys via migrate_tiers, and legacy six-attribute
-# keys via migrate_legacy) and takes the COERCED values back — out-of-range
+# attribute keys through PlayerAttributes.from_dict and takes the COERCED
+# values back — out-of-range
 # height/weight/gear lands on the nearest legal body rather than being
 # rejected. Extracted from _try_load_from so the rule is unit-testable
 # without touching the filesystem.

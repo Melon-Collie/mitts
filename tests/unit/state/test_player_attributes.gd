@@ -146,8 +146,8 @@ func test_implausible_bodies_unrepresentable() -> void:
 
 
 func test_zero_weight_coerces_to_neutral_frame() -> void:
-	# A pre-v5 save / defaulted wire arg (weight 0) lands on the height's
-	# neutral frame, keeping legacy identities' silhouettes.
+	# A defaulted wire arg or roster card (weight 0) lands on the height's
+	# neutral frame.
 	assert_eq(_body(H_MIN, 0).weight, 169)   # 5'7"
 	assert_eq(_body(H_MED, 0).weight, 201)
 	assert_eq(_body(H_MAX, 0).weight, 241)   # 6'8"
@@ -217,12 +217,6 @@ func test_extended_range_preserves_the_old_heights() -> void:
 	assert_eq(_body(67, 174).weight, 174)
 	assert_eq(PlayerAttributes.weight_max(80), 264)   # Rempe 6'8"/261 fits
 	assert_eq(_body(80, 261).weight, 261)
-
-
-func test_legacy_1to5_height_maps_to_anchor_inches() -> void:
-	assert_eq(PlayerAttributes.new(1).height, 68)
-	assert_eq(PlayerAttributes.new(3).height, 73)
-	assert_eq(PlayerAttributes.new(5).height, 79)
 
 
 # ── Weight: accel fork, linear mass ───────────────────────
@@ -347,7 +341,7 @@ func test_equals_includes_gear() -> void:
 	assert_true(a.equals(PlayerAttributes.new(H_MED, 201)))
 
 
-# ── Serialization & migration ─────────────────────────────────────────────────
+# ── Serialization ─────────────────────────────────────────────────────────────
 func test_dict_round_trip() -> void:
 	var a := PlayerAttributes.new(76, 228, 2, 0, 1, 2)
 	var b := PlayerAttributes.from_dict(a.to_dict())
@@ -356,57 +350,13 @@ func test_dict_round_trip() -> void:
 	assert_eq(b.profile, 2)
 
 
-func test_from_dict_tier_era_migrates() -> void:
-	# A v4 tier dict (Pohl's old card: 6'7", weak Skating, strong Checking) →
-	# heavy frame + long stick, height carried.
-	var a := PlayerAttributes.from_dict(
-			{"height": 5, "skating": 1, "skill": 2, "checking": 3})
-	assert_eq(a.height, 79)
-	assert_eq(a.weight, PlayerAttributes.weight_for_frame_t(79, 0.75),
-			"strong Checking → SOLID frame")
-	assert_eq(a.length, PlayerAttributes.LENGTH_LONG)
-
-
 func test_from_dict_name_only_is_neutral() -> void:
-	# No attribute keys at all → the height's neutral frame, never the legacy
-	# migration's default shape.
+	# No attribute keys at all → the height's neutral frame.
 	var a := PlayerAttributes.from_dict({"name": "Bot 1"})
 	assert_true(a.equals(PlayerAttributes.all_average()))
 	var tall := PlayerAttributes.from_dict({"height": 79})
 	assert_eq(tall.weight, 235)
 	assert_eq(tall.profile, PlayerAttributes.GEAR_BALANCED)
-
-
-func test_migrate_tiers_mapping() -> void:
-	# Strong Skating below 6'1" → agility profile; at/above → power profile.
-	assert_eq(PlayerAttributes.migrate_tiers(68, 3, 2, 1).profile, PlayerAttributes.PROFILE_AGILITY)
-	assert_eq(PlayerAttributes.migrate_tiers(76, 3, 2, 1).profile, PlayerAttributes.PROFILE_POWER)
-	# Weak Checking → LIGHT frame.
-	assert_eq(PlayerAttributes.migrate_tiers(73, 3, 2, 1).weight,
-			PlayerAttributes.weight_for_frame_t(73, 0.25))
-	# Strong Skill small → short stick (dangler); big → open curve (bomber).
-	assert_eq(PlayerAttributes.migrate_tiers(68, 2, 3, 1).length, PlayerAttributes.LENGTH_SHORT)
-	assert_eq(PlayerAttributes.migrate_tiers(79, 1, 3, 2).curve, PlayerAttributes.CURVE_OPEN)
-	# All-average tiers → the height's neutral build.
-	assert_true(PlayerAttributes.migrate_tiers(73, 2, 2, 2)
-			.equals(PlayerAttributes.all_average()))
-
-
-func test_legacy_six_attr_migration_enforcer() -> void:
-	# A legacy size-5 / physical-5 enforcer → tall, heavy frame, long stick.
-	var a := PlayerAttributes.migrate_legacy(2, 1, 2, 5, 5, 4)
-	# The legacy 1..5 step table is FROZEN at the v3 heights, so size 5 stays
-	# 6'7" — a migrated save must not gain an inch because the range grew.
-	assert_eq(a.height, 79)
-	assert_true(a.weight > PlayerAttributes.weight_neutral(H_MAX), "checking-strong → heavier")
-	assert_eq(a.length, PlayerAttributes.LENGTH_LONG)
-
-
-func test_legacy_six_attr_migration_dangler() -> void:
-	# A small agility-5 / hands-5 dangler → short, light frame.
-	var a := PlayerAttributes.migrate_legacy(2, 5, 5, 2, 2, 2)
-	assert_eq(a.height, 70)  # size 2 -> 5'10"
-	assert_true(a.weight < PlayerAttributes.weight_neutral(70), "checking-weak → leaner")
 
 
 # ── Visual tells ──────────────────────────────────────────────────────────────

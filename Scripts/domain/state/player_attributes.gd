@@ -24,9 +24,8 @@ extends RefCounted
 #   3. Multiply a captured base in SkaterController.apply_attributes /
 #      SkaterAppearanceCoordinator.apply.
 #
-# Persistence: PlayerPrefs (attr_scale_version 5; older saves migrate via
-# migrate_tiers / migrate_legacy), BotIdentityRegistry (bot picks),
-# NetworkManager peer table (6 ints replicated at join).
+# Persistence: PlayerPrefs (attr_scale_version 5), BotIdentityRegistry (bot
+# picks), NetworkManager peer table (6 ints replicated at join).
 
 # Height is stored in INCHES and is a free CONTINUOUS dial: every inch from
 # 5'7" (67) to 6'8" (80) is playable. Tables are authored at 5 anchor heights
@@ -50,12 +49,6 @@ const HEIGHT_MAX: int = 80     # 6'8"
 # the bottom-row halvings, carried to 4 places precisely so 5'8" and 5'9" stay
 # bit-exact.
 const ANCHOR_INCHES: Array[int] = [67, 70, 73, 76, 80]  # 5'7"..6'8"
-
-# The legacy 1..5 height STEP mapping is frozen at the v3 height set, which
-# ran 5'8"–6'7". It deliberately does NOT track ANCHOR_INCHES: a saved tier-era
-# build should keep the body it had, not gain or lose an inch because the range
-# was extended later.
-const LEGACY_HEIGHT_STEPS: Array[int] = [68, 70, 73, 76, 79]
 
 # ── Weight band (BMI interval + absolute floor — see plan doc §3.2) ───────────
 # One authored band generates the per-height pounds range: lbs = BMI·in²/703.
@@ -389,8 +382,8 @@ static func weight_neutral(inches: int) -> int:
 
 
 # Clamp a pounds value into the height's band. Zero/negative means "no stored
-# weight" (a pre-v5 save or a defaulted wire arg) and coerces to the height's
-# neutral frame, so legacy identities keep their silhouette.
+# weight" (a defaulted wire arg or a roster card that omits it) and coerces to
+# the height's neutral frame.
 static func coerce_weight(inches: int, lbs: int) -> int:
 	if lbs <= 0:
 		return weight_neutral(inches)
@@ -597,91 +590,16 @@ func to_dict() -> Dictionary:
 	}
 
 
-# Rebuilds from a dict. Native v5 keys win; a v4 three-tier dict
-# (height/skating/skill/checking) migrates via migrate_tiers; the oldest
-# six-attribute dicts (speed/agility/hands/size/physical/shot, or the earlier
-# skill/strength variants) migrate via migrate_legacy. Missing native keys
-# default to neutral.
+# Rebuilds from a dict; missing keys default to neutral (weight to the height's
+# neutral frame), and the constructor coerces every axis.
 static func from_dict(d: Dictionary) -> PlayerAttributes:
-	if d.has("weight") or d.has("profile"):
-		return PlayerAttributes.new(
-				int(d.get("height", HEIGHT_MEDIUM)),
-				int(d.get("weight", 0)),
-				int(d.get("profile", GEAR_BALANCED)),
-				int(d.get("curve", GEAR_BALANCED)),
-				int(d.get("flex", GEAR_BALANCED)),
-				int(d.get("length", GEAR_BALANCED)))
-	if d.has("skating") or d.has("checking"):
-		return migrate_tiers(
-				int(d.get("height", HEIGHT_MEDIUM)),
-				int(d.get("skating", 2)), int(d.get("skill", 2)),
-				int(d.get("checking", 2)))
-	if d.has("speed") or d.has("agility") or d.has("size") or d.has("physical") \
-			or d.has("shot") or d.has("strength"):
-		# Legacy six-attribute (or four-attribute) dict.
-		var legacy_skill: int = int(d.get("skill", d.get("strength", 3)))
-		return migrate_legacy(
-				int(d.get("speed", 3)), int(d.get("agility", 3)),
-				int(d.get("hands", legacy_skill)), int(d.get("size", 3)),
-				int(d.get("physical", 3)), int(d.get("shot", legacy_skill)))
-	# No attribute keys at all (a name-only or height-only entry): neutral
-	# frame at the given height — never the legacy migration's default shape.
-	return PlayerAttributes.new(int(d.get("height", HEIGHT_MEDIUM)))
-
-
-# Maps a v4 height + three-tier build (tiers 1=weak/2=average/3=strong) onto
-# the body+gear model. Deterministic and documented (plan doc §9):
-#   height   — carries over (coerce_height accepts 1..5 steps or inches).
-#   weight   — frame anchor by the Checking tier: weak→LIGHT, avg→MEDIUM,
-#              strong→SOLID (the physical identity lives in mass now).
-#   profile  — strong Skating leans the skate profile the way height leaned
-#              the tier: POWER at/above 6'1", AGILITY below.
-#   curve    — strong Skill on a big frame was the bomber → OPEN.
-#   length   — strong Checking ran the defenseman's stick → LONG; strong
-#              Skill on a small frame was the dangler → SHORT.
-#   flex     — always MEDIUM (no tier expressed release speed).
-# The result is a starting build, not a promise: every slot is re-pickable in
-# the locker.
-static func migrate_tiers(p_height: int, skating: int, skill: int,
-		checking: int) -> PlayerAttributes:
-	var h: int = coerce_height(p_height)
-	var frame: float = 0.5
-	if checking >= 3:
-		frame = 0.75
-	elif checking <= 1:
-		frame = 0.25
-	var p_profile: int = GEAR_BALANCED
-	if skating >= 3:
-		p_profile = PROFILE_POWER if h >= HEIGHT_MEDIUM else PROFILE_AGILITY
-	var p_curve: int = CURVE_OPEN if skill >= 3 and h >= HEIGHT_MEDIUM else GEAR_BALANCED
-	var p_length: int = GEAR_BALANCED
-	if checking >= 3:
-		p_length = LENGTH_LONG
-	elif skill >= 3 and h < HEIGHT_MEDIUM:
-		p_length = LENGTH_SHORT
-	return PlayerAttributes.new(h, weight_for_frame_t(h, frame),
-			p_profile, p_curve, GEAR_BALANCED, p_length)
-
-
-# Maps a legacy 1..5 six-attribute build to the body+gear model, through the
-# same tier composite the v3→v4 migration used (Skating←speed+agility,
-# Skill←hands+shot, Checking←physical; highest→strong, lowest→weak, stable
-# ties by that order), then migrate_tiers. Height comes from the old Size axis.
-static func migrate_legacy(speed: int, agility: int, hands: int, size: int,
-		physical: int, shot: int) -> PlayerAttributes:
-	var scores: Array = [
-		{"idx": 0, "score": speed + agility},   # Skating
-		{"idx": 1, "score": hands + shot},      # Skill
-		{"idx": 2, "score": physical * 2},      # Checking
-	]
-	scores.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
-		if a["score"] != b["score"]:
-			return a["score"] > b["score"]
-		return a["idx"] < b["idx"])
-	var tiers: Array[int] = [2, 2, 2]
-	tiers[scores[0]["idx"]] = 3
-	tiers[scores[2]["idx"]] = 1
-	return migrate_tiers(coerce_height(size), tiers[0], tiers[1], tiers[2])
+	return PlayerAttributes.new(
+			int(d.get("height", HEIGHT_MEDIUM)),
+			int(d.get("weight", 0)),
+			int(d.get("profile", GEAR_BALANCED)),
+			int(d.get("curve", GEAR_BALANCED)),
+			int(d.get("flex", GEAR_BALANCED)),
+			int(d.get("length", GEAR_BALANCED)))
 
 
 func equals(other: PlayerAttributes) -> bool:
@@ -721,12 +639,7 @@ func _f(table: Array[float]) -> float:
 	return lerpf(table[lo], table[lo + 1], pos - float(lo))
 
 
-# Accept a legacy 1..5 step (maps onto LEGACY_HEIGHT_STEPS, frozen at the v3
-# heights so a migrated build keeps its body) OR a raw inches value. No real
-# hockey height falls in 6..67, so the split is unambiguous.
 static func coerce_height(v: int) -> int:
-	if v <= LEGACY_HEIGHT_STEPS.size():
-		return LEGACY_HEIGHT_STEPS[clampi(v, 1, LEGACY_HEIGHT_STEPS.size()) - 1]
 	return clampi(v, HEIGHT_MIN, HEIGHT_MAX)
 
 

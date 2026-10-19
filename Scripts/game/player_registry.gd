@@ -239,8 +239,7 @@ func spawn_bot(
 		record.player_name = identity.get("name", "Bot %d" % (bot_id + 1))
 		record.jersey_number = identity.get("number", 80 + bot_id)
 		# Identity dicts are normalized by BotIdentityRegistry to the native
-		# height/weight/gear keys; from_dict also migrates tier-era and legacy
-		# six-attribute roster on the fly.
+		# height/weight/gear keys.
 		record.attributes = PlayerAttributes.from_dict(identity)
 	# Skin: the roster may pin one ("skin"); otherwise a stable tone from the
 	# bot's name hash, so the roster shows variety and each bot keeps their
