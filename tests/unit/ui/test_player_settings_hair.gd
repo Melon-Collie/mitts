@@ -36,12 +36,12 @@ func test_the_rows_list_every_style_and_colour() -> void:
 
 
 func test_a_pick_lands_in_the_pending_gear_and_nowhere_else() -> void:
-	(_popup.get("_hair_btn") as OptionButton).item_selected.emit(HairStyleRegistry.HAIR_FLOW)
+	(_popup.get("_hair_btn") as OptionButton).item_selected.emit(HairStyleRegistry.HAIR_LONG)
 	(_popup.get("_facial_btn") as OptionButton).item_selected.emit(
 			HairStyleRegistry.FACIAL_GOATEE)
 	((_popup.get("_hair_color_buttons") as Array)[5] as Button).pressed.emit()
 	var gear: GearStyleConfig = _pending()
-	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_FLOW)
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG)
 	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_GOATEE)
 	assert_eq(gear.hair_color, 5)
 	assert_eq(gear.skate_model, GearModelRegistry.SKATE_RETRO, "the equipment is untouched")

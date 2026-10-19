@@ -9,17 +9,17 @@ extends RefCounted
 #
 # The helmet covers the crown, so a style is really a statement about what
 # shows under its rim: a short cut is a nape and sideburns, medium covers the
-# ears and the top of the neck, the flow spills out over the collar.
+# ears and the top of the neck, long hair spills out over the collar.
 
 const HAIR_SHORT: int = 0
 const HAIR_MEDIUM: int = 1
-const HAIR_FLOW: int = 2
+const HAIR_LONG: int = 2
 const HAIR_BALD: int = 3
 
 const HAIR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_STYLE_SHORT",
 	&"HAIR_STYLE_MEDIUM",
-	&"HAIR_STYLE_FLOW",
+	&"HAIR_STYLE_LONG",
 	&"HAIR_STYLE_BALD",
 ]
 

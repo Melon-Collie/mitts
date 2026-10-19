@@ -63,17 +63,17 @@ const _MEDIUM: Array[Vector3] = [
 	Vector3(108.0, -0.062, 0.005),
 	Vector3(125.0, -0.040, 0.003),
 ]
-# The flow hangs past the helmet over the collar and kicks out at the ends.
-const _FLOW: Array[Vector3] = [
+# Long hair hangs past the helmet over the collar and kicks out at the ends.
+const _LONG: Array[Vector3] = [
 	Vector3(0.0, -0.175, 0.010),
 	Vector3(50.0, -0.168, 0.010),
 	Vector3(85.0, -0.135, 0.009),
 	Vector3(105.0, -0.080, 0.006),
 	Vector3(125.0, -0.045, 0.003),
 ]
-const _FLOW_FLARE_M: float = 0.028
-const _FLOW_FLARE_TOP_Y: float = -0.11
-const _FLOW_FLARE_BOTTOM_Y: float = -0.175
+const _LONG_FLARE_M: float = 0.028
+const _LONG_FLARE_TOP_Y: float = -0.11
+const _LONG_FLARE_BOTTOM_Y: float = -0.175
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -124,9 +124,9 @@ static func shared_hair(style: int) -> ArrayMesh:
 			return _shared("hair_short", func() -> ArrayMesh: return _build_scalp(_SHORT, 0.0))
 		HairStyleRegistry.HAIR_MEDIUM:
 			return _shared("hair_medium", func() -> ArrayMesh: return _build_scalp(_MEDIUM, 0.0))
-		HairStyleRegistry.HAIR_FLOW:
-			return _shared("hair_flow",
-					func() -> ArrayMesh: return _build_scalp(_FLOW, _FLOW_FLARE_M))
+		HairStyleRegistry.HAIR_LONG:
+			return _shared("hair_long",
+					func() -> ArrayMesh: return _build_scalp(_LONG, _LONG_FLARE_M))
 		_:
 			return null
 
@@ -161,7 +161,7 @@ static func shared_facial_hair(style: int) -> ArrayMesh:
 			return null
 
 
-# Hair is open sheets seen from both sides (under the flow, behind a sideburn),
+# Hair is open sheets seen from both sides (under long hair, behind a sideburn),
 # so it renders two-sided. Stubble is a shadow on the skin rather than a
 # volume, so it is translucent by design — like the face gear, a ghost fade
 # has to rebuild it from here rather than restore alpha 1 — and one-sided, or
@@ -198,9 +198,9 @@ static func _build_scalp(keys: Array[Vector3], flare: float) -> ArrayMesh:
 		var a: float = absf(_wrap_pi(theta))
 		var side: float = _ramp(a, reach, reach * (1.0 - _EDGE_TAPER * 0.5))
 		var edge: float = minf(_ramp(t, 1.0, 1.0 - _EDGE_TAPER), side)
-		# The flare is the flow's kick, so the bottom edge keeps it.
+		# The flare is long hair's kick, so the bottom edge keeps it.
 		var full: float = lerpf(_EDGE_LIFT_M, _scalp_key(keys, a).y, edge) \
-				+ flare * side * _ramp(y, _FLOW_FLARE_TOP_Y, _FLOW_FLARE_BOTTOM_Y)
+				+ flare * side * _ramp(y, _LONG_FLARE_TOP_Y, _LONG_FLARE_BOTTOM_Y)
 		return lerpf(-_SINK_M, full, _ramp(y, rim + _RIM_OVERLAP_M, rim))
 	var st := _begin()
 	_emit_shell(st, -reach, reach, 0.0, span, lift, PackedFloat32Array(),

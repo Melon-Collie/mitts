@@ -218,10 +218,10 @@ func test_normalize_coerces_out_of_range_cosmetics() -> void:
 func test_a_forged_pin_does_not_bleed_into_its_neighbours() -> void:
 	var norm: Dictionary = BotIdentityRegistry.normalize_entry({"name": "Forged",
 			"skate_model": -3, "helmet_face": GearModelRegistry.FACE_CAGE,
-			"hair_style": HairStyleRegistry.HAIR_FLOW, "facial_hair": -1, "hair_color": 6})
+			"hair_style": HairStyleRegistry.HAIR_LONG, "facial_hair": -1, "hair_color": 6})
 	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE, "the face pin survives")
-	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_FLOW, "the hair pin survives")
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG, "the hair pin survives")
 	assert_eq(gear.hair_color, 6, "the colour pin survives")
 	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_NONE, "the forged one coerces")
 
@@ -254,9 +254,9 @@ func test_gear_pins_leave_the_hair_to_the_name_hash() -> void:
 
 func test_hair_pins_claim_the_hair_group_and_coerce() -> void:
 	var norm: Dictionary = BotIdentityRegistry.normalize_entry({"name": "Mullet",
-			"hair_style": HairStyleRegistry.HAIR_FLOW, "hair_color": 99})
+			"hair_style": HairStyleRegistry.HAIR_LONG, "hair_color": 99})
 	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
-	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_FLOW)
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG)
 	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_NONE,
 			"an unpinned field of a pinned group sits at the stock default")
 	assert_true(HairStyleRegistry.is_valid_color(gear.hair_color), "a forged colour coerces")

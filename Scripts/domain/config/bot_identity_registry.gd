@@ -43,7 +43,7 @@ class_name BotIdentityRegistry
 #     "helmet_face" (GearModelRegistry FACE_*: 0 bare / 1 visor / 2 cage /
 #     3 fishbowl);
 #   hair     — "hair_style" (HairStyleRegistry HAIR_*: 0 short / 1 medium /
-#     2 flow / 3 bald), "facial_hair" (FACIAL_*: 0 none / 1 stubble /
+#     2 long / 3 bald), "facial_hair" (FACIAL_*: 0 none / 1 stubble /
 #     2 mustache / 3 goatee / 4 full beard), "hair_color" (COLORS index).
 # Pinning ANY field of a group claims the whole group (unpinned fields sit at
 # the stock defaults); a card that pins no field of a group draws a stable
@@ -113,11 +113,11 @@ const _FB_FACE: Array[int] = [GearModelRegistry.FACE_VISOR, GearModelRegistry.FA
 		GearModelRegistry.FACE_NONE, GearModelRegistry.FACE_VISOR,
 		GearModelRegistry.FACE_CAGE, GearModelRegistry.FACE_VISOR,
 		GearModelRegistry.FACE_FISHBOWL, GearModelRegistry.FACE_NONE]
-# Short and medium cuts dominate, with the odd flow and shaved head. Beards run
+# Short and medium cuts dominate, with the odd long cut and shaved head. Beards run
 # common, as they do in a dressing room; colours lean dark, so a hash rarely
 # lands on a combination that reads as a costume.
 const _FB_HAIR: Array[int] = [HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MEDIUM,
-		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_FLOW,
+		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_LONG,
 		HairStyleRegistry.HAIR_MEDIUM, HairStyleRegistry.HAIR_SHORT,
 		HairStyleRegistry.HAIR_BALD, HairStyleRegistry.HAIR_MEDIUM]
 const _FB_FACIAL: Array[int] = [HairStyleRegistry.FACIAL_NONE, HairStyleRegistry.FACIAL_STUBBLE,

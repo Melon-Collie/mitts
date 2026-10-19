@@ -187,12 +187,12 @@ func test_face_gear_dresses_the_helmet() -> void:
 # screen has pending, brows included, and hands it back untouched.
 func test_the_figure_wears_the_pending_hair() -> void:
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
-			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_FLOW,
+			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_LONG,
 			HairStyleRegistry.FACIAL_STUBBLE, 6))
 	var scalp: MeshInstance3D = _mannequin().get("_scalp") as MeshInstance3D
 	var facial: MeshInstance3D = _mannequin().get("_facial_hair") as MeshInstance3D
 	var brows: MeshInstance3D = _mannequin().get("_brows") as MeshInstance3D
-	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_FLOW))
+	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_LONG))
 	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_STUBBLE))
 	assert_lt((facial.material_override as StandardMaterial3D).albedo_color.a, 1.0,
 			"stubble previews translucent")
@@ -203,7 +203,7 @@ func test_the_figure_wears_the_pending_hair() -> void:
 	_popup.call("_done")
 	var gear := GearStyleConfig.from_code(get_signal_parameters(_popup, "locker_edited")[5])
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
-	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_FLOW, "the hair rides through")
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG, "the hair rides through")
 	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_STUBBLE)
 	assert_eq(gear.hair_color, 6)
 

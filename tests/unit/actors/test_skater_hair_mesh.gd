@@ -110,7 +110,7 @@ func test_visible_hair_stands_off_the_head() -> void:
 		if v.z > 0.05 and v.y < -0.105:
 			head_far = maxf(head_far, v.z)
 	for style: int in [HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MEDIUM,
-			HairStyleRegistry.HAIR_FLOW]:
+			HairStyleRegistry.HAIR_LONG]:
 		var reach: float = 0.0
 		for v: Vector3 in _verts(SkaterHairMesh.shared_hair(style)):
 			if absf(v.x) < 0.01 and v.y < -0.105 and v.y > -0.118:
