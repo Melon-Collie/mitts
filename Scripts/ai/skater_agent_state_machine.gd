@@ -730,8 +730,8 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_role_ctx.self_wrister_unloaded_share = caps.wrister_unloaded_share
 	_role_ctx.self_wrister_load = caps.wrister_load
 	_role_ctx.self_facing_rules = caps.facing_rules
-	# The cursor slews at the bot's real blade speed, so "aimed" in pre-aim means
-	# the blade is actually there.
+	_role_ctx.self_carry_facing_rules = caps.carry_facing_rules
+	# The cursor slews at the bot's real blade speed: "aimed" means the blade is there.
 	_apply_aim_slew(caps.blade_speed, caps.blade_span)
 
 

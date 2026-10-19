@@ -21,12 +21,14 @@ class StubGameState extends Node:
 
 var _skater: Skater = null
 var _controller: SkaterController = null
+var _puck: Puck = null
 
 
 func before_each() -> void:
 	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	add_child_autofree(puck)
 	puck.global_position = Vector3(40.0, 0.0, 40.0)
+	_puck = puck
 	_skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
 	add_child_autofree(_skater)
 	_skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
@@ -150,6 +152,35 @@ func test_a_lefty_reaches_round_the_forehand_then_pivots_onto_the_backhand() -> 
 	assert_eq(cursor_side, -FacingRules.forehand_sign(true), "and the cursor comes out on the backhand")
 
 
+# A carrier's blade stops on the backhand at the angle the bottom hand lets go,
+# so its hips pivot there; an empty stick reaches on round to the full edge.
+func test_a_carrier_pivots_where_its_blade_stops_on_the_backhand() -> void:
+	var stop: float = _controller.bh_release_angle_deg
+	var past := AHEAD.rotated(Vector3.UP, deg_to_rad(-(stop + 10.0)))
+	_skate(AHEAD, 6.0, AHEAD, 30, Vector2(0.0, -1.0))
+	_skate(AHEAD, 6.0, past, 120)
+	assert_lt(_facing_off(AHEAD), 3.0, "an empty stick reaches; the hips stay on the line")
+	_puck.set_carrier(_skater)
+	_controller.on_puck_picked_up_network()
+	var inside := AHEAD.rotated(Vector3.UP, deg_to_rad(-(stop - 10.0)))
+	_skate(AHEAD, 6.0, inside, 120)
+	assert_lt(_facing_off(AHEAD), 3.0, "inside the stop the carrier's hips stay on the line")
+	_skate(AHEAD, 6.0, past, 120)
+	assert_lt(_facing_off(BEHIND), 5.0, "past the stop they pivot onto the backward line")
+	var cursor_side: float = signf(_skater.get_facing().angle_to(Vector2(past.x, past.z)))
+	assert_eq(cursor_side, FacingRules.forehand_sign(true), "and the puck comes out on the forehand")
+	_skate(AHEAD, 6.0, past, 120)
+	assert_lt(_facing_off(BEHIND), 5.0, "far inside the forehand edge, it does not flip back")
+
+
+func test_a_standing_carrier_still_turns_to_its_backhand() -> void:
+	_puck.set_carrier(_skater)
+	_controller.on_puck_picked_up_network()
+	var right := AHEAD.rotated(Vector3.UP, deg_to_rad(-90.0))
+	_skate(AHEAD, 0.0, right, 240)
+	assert_lt(_facing_off(right), 5.0, "the freeze is the empty stick's wedge, not the carry stop")
+
+
 func test_skating_backward_keeps_the_hips_on_the_line() -> void:
 	_controller._pose.facing = Vector2(BEHIND.x, BEHIND.z)
 	_skater.set_facing(Vector2(BEHIND.x, BEHIND.z))
@@ -163,6 +194,10 @@ func test_the_reach_edges_are_the_rigs() -> void:
 			deg_to_rad(c.rom_forehand_angle_max_deg + c.upper_body_max_twist_deg), 0.000001)
 	assert_almost_eq(c.facing_rules.backhand_edge_rad,
 			deg_to_rad(c.rom_backhand_angle_max_deg + c.upper_body_max_twist_deg), 0.000001)
+	assert_almost_eq(c.carry_facing_rules.forehand_edge_rad, c.facing_rules.forehand_edge_rad,
+			0.000001)
+	assert_almost_eq(c.carry_facing_rules.backhand_edge_rad, deg_to_rad(c.bh_release_angle_deg),
+			0.000001, "a carrier's blade stops on the backhand where the bottom hand lets go")
 	# The top hand's shoulder is on the backhand side, so the forehand is the other.
 	for lefty: bool in [true, false]:
 		_skater.is_left_handed = lefty

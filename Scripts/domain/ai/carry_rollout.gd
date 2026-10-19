@@ -181,7 +181,7 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 						else SkaterMovementRules.Posture.UPRIGHT)
 		v.y = 0.0
 		var between_arcs: bool = absf(p.z) <= GameRules.CORNER_CENTER_Z
-		f = _face(f, cur, v, p, braking, stance, drag * dt, caps,
+		f = _face(f, cur, v, p, braking, stance, drag * dt, caps, has_puck,
 				has_puck and not (between_arcs and absf(p.x) <= shield_x))
 		p += v * dt
 		if absf(p.z) <= GameRules.CORNER_CENTER_Z and absf(p.x) <= contain_x:
@@ -211,14 +211,16 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 
 
 # SkaterPoseCoordinator.apply_facing for a cursor held along `cur`: the facing
-# rule's target (turned along the boards for a carrier on them), frozen while a
-# standing body's cursor sits in the unreachable wedge behind him, a chord lerp
-# toward it otherwise (turned by angle, on the cursor's side, through a turn round).
+# rule's target (a carrier's pivoting at its carry stop, turned along the boards
+# for one on them), frozen while a standing body's cursor sits in the unreachable
+# wedge behind him, a chord lerp toward it otherwise (turned by angle, on the
+# cursor's side, through a turn round).
 func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, stance: bool,
-		step: float, caps: AISkaterCaps, shield: bool) -> Vector2:
+		step: float, caps: AISkaterCaps, has_puck: bool, shield: bool) -> Vector2:
 	var rules: FacingRules.Config = caps.facing_rules
 	var lefty: bool = caps.is_left_handed
-	FacingRules.solve(_facing_out, f, cur, Vector2(v.x, v.z), braking, stance, lefty, rules)
+	FacingRules.solve(_facing_out, f, cur, Vector2(v.x, v.z), braking, stance, lefty,
+			caps.carry_facing_rules if has_puck else rules)
 	var behind: bool = absf(f.angle_to(cur)) >= FacingRules.reach_edge(rules, f, cur, lefty)
 	var turns_round: bool = _facing_out.free_to_turn_round
 	if behind and not turns_round:

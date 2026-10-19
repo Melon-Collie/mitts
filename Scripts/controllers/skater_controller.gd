@@ -211,9 +211,10 @@ var knockdown_sprawl_splay_deg: float = 18.0
 # Good range: 1.0 (very lazy) – 3.0 (snappy).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
-# Where a skating skater's body heads (FacingRules); its tunables are the
-# config's defaults, but for the reach edges setup() derives from the ROM below.
+# Where a skating skater's body heads (FacingRules); setup() derives the reach
+# edges from the ROM below, a carrier's backhand edge from its carry stop.
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
+var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 # Facing RECOVERY rate during the shot follow-through. The coil freezes facing at
 # the wind-up cursor position (it must — the coil is the torso twisting relative
 # to the planted lower body), so at release the body is squared to where the aim
@@ -291,14 +292,10 @@ var hand_y_max: float = 0.30
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
-# limited across the body, full extension out to the backhand side. These
-# assume the upper body's twist toward the blade, which shortens the reach
-# the hand needs in upper-body-local space.
+# limited across the body, full extension out to the backhand side.
 var rom_forehand_angle_max_deg: float = 90.0
 var rom_backhand_angle_max_deg: float = 90.0
-# Reach caps are DERIVED in apply_attributes from the arm (see
-# _ROM_FOREHAND_OF_ARM). These defaults just mirror the baseline-size
-# derivation for any skater that has not had attributes applied yet.
+# Reach caps are DERIVED in apply_attributes (see _ROM_FOREHAND_OF_ARM).
 var rom_forward_reach_max: float = 0.51
 var rom_forehand_reach_max: float = 0.39
 var rom_backhand_reach_max: float = 0.42
@@ -1154,6 +1151,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	process_physics_priority = -1  # Run before Skater's integration step
 	facing_rules.forehand_edge_rad = deg_to_rad(rom_forehand_angle_max_deg + upper_body_max_twist_deg)
 	facing_rules.backhand_edge_rad = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
+	carry_facing_rules.forehand_edge_rad = facing_rules.forehand_edge_rad
+	carry_facing_rules.backhand_edge_rad = deg_to_rad(bh_release_angle_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
 	if game_state.has_method("is_movement_locked"):
@@ -1271,6 +1270,7 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.backhand_power_coefficient = backhand_power_coefficient
 	caps.wrister_load = _wrister_load_config()
 	caps.facing_rules = facing_rules
+	caps.carry_facing_rules = carry_facing_rules
 	if skater != null:
 		caps.is_left_handed = skater.is_left_handed
 	caps.wrister_unloaded_share = wrister_unloaded_share

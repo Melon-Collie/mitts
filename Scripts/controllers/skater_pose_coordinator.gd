@@ -255,9 +255,13 @@ func apply_facing(input: InputState, delta: float) -> void:
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			var lefty: bool = _skater.is_left_handed
 			var rules: FacingRules.Config = _controller.facing_rules
+			# A carrier's hips pivot where its blade stops on the backhand
+			# (carry_facing_rules); the standing freeze keeps the empty stick's
+			# edge, or a standing carrier would stop turning to a cursor beside him.
 			FacingRules.solve(_facing_rule, facing, cursor_dir,
 					Vector2(_skater.velocity.x, _skater.velocity.z), input.brake,
-					_controller.stance_active, lefty, rules)
+					_controller.stance_active, lefty,
+					_controller.carry_facing_rules if _controller.has_puck else rules)
 			var facing_target: Vector2 = _facing_rule.target
 			var mouse_body_angle: float = facing.angle_to(cursor_dir)
 			var behind_gate: bool = absf(mouse_body_angle) \

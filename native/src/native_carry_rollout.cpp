@@ -86,6 +86,20 @@ String NativeCarryRollout::configure(Object *caps) {
 		MITTS_FACING_TUNABLES(X)
 #undef X
 	}
+	const Variant carry_rules = caps->get(StringName("carry_facing_rules"));
+	if (carry_rules.get_type() != Variant::OBJECT) {
+		missing += "carry_facing_rules ";
+	} else {
+		Object *cr = (Object *)carry_rules;
+		const Variant fore = cr->get(StringName("forehand_edge_rad"));
+		const Variant back = cr->get(StringName("backhand_edge_rad"));
+		if (fore.get_type() == Variant::NIL || back.get_type() == Variant::NIL) {
+			missing += "carry_facing_rules.edges ";
+		} else {
+			carry_forehand_edge_rad = (double)fore;
+			carry_backhand_edge_rad = (double)back;
+		}
+	}
 #define X(name)                                                    \
 	{                                                              \
 		const Variant v = caps->get(StringName(#name));            \
@@ -192,18 +206,22 @@ bool NativeCarryRollout::stance_cuts_onto(const Vector2 &dir, const Vector3 &v,
 }
 
 // FacingRules.reach_edge.
-double NativeCarryRollout::reach_edge(const Vector2 &facing, const Vector2 &dir) const {
+double NativeCarryRollout::reach_edge(const Vector2 &facing, const Vector2 &dir,
+		double forehand_edge, double backhand_edge) const {
 	const double forehand_sign = is_left_handed ? -1.0 : 1.0;
 	if (signd(facing.angle_to(dir)) == forehand_sign) {
-		return facing_cfg.forehand_edge_rad;
+		return forehand_edge;
 	}
-	return facing_cfg.backhand_edge_rad;
+	return backhand_edge;
 }
 
 // AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
-		const Vector3 &p, bool braking, bool stance, double step, bool shield) const {
+		const Vector3 &p, bool braking, bool stance, double step, bool has_puck,
+		bool shield) const {
+	const double fore = facing_cfg.forehand_edge_rad;
+	const double back = facing_cfg.backhand_edge_rad;
 	Vector2 target = cur;
 	const Vector2 velocity(v.x, v.z);
 	const double speed = velocity.length();
@@ -211,7 +229,10 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 	if (!braking && speed >= 0.001) {
 		const Vector2 travel = velocity / (real_t)speed;
 		Vector2 line = f.dot(travel) >= 0.0 ? travel : -travel;
-		if (Math::abs((double)line.angle_to(cur)) > reach_edge(line, cur)) {
+		const double pivot = has_puck
+				? reach_edge(line, cur, carry_forehand_edge_rad, carry_backhand_edge_rad)
+				: reach_edge(line, cur, fore, back);
+		if (Math::abs((double)line.angle_to(cur)) > pivot) {
 			line = -line;
 		}
 		const bool on_line = Math::abs((double)f.angle_to(line))
@@ -227,7 +248,7 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			target = cur.slerp(line, (real_t)share);
 		}
 	}
-	const bool behind = Math::abs((double)f.angle_to(cur)) >= reach_edge(f, cur);
+	const bool behind = Math::abs((double)f.angle_to(cur)) >= reach_edge(f, cur, fore, back);
 	if (behind && !turns_round) {
 		return f;
 	}
@@ -257,7 +278,7 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			}
 		}
 	}
-	if (turns_round && (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target))) {
+	if (turns_round && (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target, fore, back))) {
 		// FacingRules.turn_round_angle.
 		double turn = f.angle_to(target);
 		if (turn * (double)f.angle_to(cur) < 0.0) {
@@ -290,7 +311,7 @@ void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor
 				braking, dt, stance ? POSTURE_STANCE : POSTURE_UPRIGHT, move_cfg.thrust, 1.0);
 		v.y = 0.0;
 		const bool between_arcs = Math::abs((double)p.z) <= corner_center_z;
-		f = face(f, cursor, v, p, braking, stance, drag * dt,
+		f = face(f, cursor, v, p, braking, stance, drag * dt, has_puck,
 				has_puck && !(between_arcs && Math::abs((double)p.x) <= shield_x));
 		p += v * (real_t)dt;
 		const bool on_sample = (i + 1) % ticks_per_sample == 0;

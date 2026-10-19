@@ -122,29 +122,38 @@ func test_reaching_to_the_side_leans_by_the_side_cap() -> void:
 # skeleton folds before it twists, so its shoulder sits off the frame's marker
 # (SkaterSpineRig.shoulder_in_frame). The hand is solved from where the arm is
 # drawn; solved from the marker, the drawn arm here stretched to 1.03 of itself.
+# A carrier pivots past its backhand stop, so it reaches just inside it.
 func test_a_skating_backhand_reach_never_outreaches_the_drawn_arm() -> void:
-	var c: SkaterController = _make_controller()
-	var sk: Skater = c.skater
-	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
-	c.puck.set_carrier(sk)
-	c.on_puck_picked_up_network()
-	var arm: float = sk.upper_arm_length + sk.forearm_length
-	var worst: float = 0.0
-	var input := InputState.new()
-	for i: int in 160:
-		input.delta = DT
-		input.move_vector = Vector2.ZERO if i < 40 else Vector2(0.0, 1.0)
-		var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if i < 40 else Vector3(-3.5, 0.0, 0.8)
-		input.mouse_world_pos = sk.global_position + aim
-		input.mouse_world_pos.y = 0.0
-		c._process_input(input, DT)
-		sk._physics_process(DT)
-		sk._process(DT)
-		var hand: Vector3 = sk.top_hand.position
-		var root: Vector3 = sk._arms.arm_root(sk.shoulder.position, hand)
-		worst = maxf(worst, root.distance_to(sk.upper_body.transform * hand) / arm)
-	assert_gt(-sk.trunk_fold(), deg_to_rad(5.0), "skating folds the trunk, or this means nothing")
-	assert_lt(worst, 1.0, "the drawn arm spans %.3f of its length" % worst)
+	for carrying: bool in [false, true]:
+		var c: SkaterController = _make_controller()
+		var sk: Skater = c.skater
+		sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+		var deg: float = 77.0
+		if carrying:
+			c.puck.set_carrier(sk)
+			c.on_puck_picked_up_network()
+			deg = c.bh_release_angle_deg - 5.0
+		var a: float = deg_to_rad(deg)
+		var arm: float = sk.upper_arm_length + sk.forearm_length
+		var worst: float = 0.0
+		var input := InputState.new()
+		for i: int in 160:
+			input.delta = DT
+			input.move_vector = Vector2.ZERO if i < 40 else Vector2(0.0, 1.0)
+			var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if i < 40 \
+					else Vector3(-sin(a), 0.0, cos(a)) * 3.6
+			input.mouse_world_pos = sk.global_position + aim
+			input.mouse_world_pos.y = 0.0
+			c._process_input(input, DT)
+			sk._physics_process(DT)
+			sk._process(DT)
+			var hand: Vector3 = sk.top_hand.position
+			var root: Vector3 = sk._arms.arm_root(sk.shoulder.position, hand)
+			worst = maxf(worst, root.distance_to(sk.upper_body.transform * hand) / arm)
+		var what: String = "carrying" if carrying else "empty stick"
+		assert_gt(-sk.trunk_fold(), deg_to_rad(5.0),
+				"%s: skating folds the trunk, or this means nothing" % what)
+		assert_lt(worst, 1.0, "%s: the drawn arm spans %.3f of its length" % [what, worst])
 
 
 # The copy of the rig's build order the hand solve uses, held against the rig.

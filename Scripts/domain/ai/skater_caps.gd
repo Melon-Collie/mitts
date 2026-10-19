@@ -81,6 +81,9 @@ var backhand_power_coefficient: float = 0.75
 # rules its body fires it with.
 var wrister_load: WristerLoad.Config = WristerLoad.Config.new()
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
+# The pivot a carrier's hips make (SkaterController.carry_facing_rules): its
+# blade stops at the backhand angle, so its backhand edge is that angle.
+var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 var wrister_unloaded_share: float = 0.6
 # Which side the forehand is on, for the facing rule's per-side reach edges.
 var is_left_handed: bool = true

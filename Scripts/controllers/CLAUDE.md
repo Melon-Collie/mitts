@@ -774,6 +774,14 @@ answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
 and is what the limit is measured to keep on the shaft.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
 
+Because the blade stops there, a skating carrier's hips pivot there too: its
+`FacingRules` config (`carry_facing_rules`, also the bots' `AISkaterCaps` copy)
+has the backhand stop as its backhand edge, so sweeping the puck round the
+backhand turns the skater onto the other line with it on the forehand, about
+113° off the new line and far inside its edge. The standing freeze keeps the
+empty stick's wedge, or a standing carrier could not turn to a cursor beside
+it. `test_facing_follows_travel.gd` holds both.
+
 **A pose the trunk texture cannot express does not belong in the gait.** The
 texture is one pitch and one roll for the whole shell, so it is symmetric by
 construction: any "drop a shoulder" written as roll raises the other shoulder by
