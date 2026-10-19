@@ -17,12 +17,8 @@ extends RefCounted
 
 signal player_added(record: PlayerRecord)
 # Fires before the record is freed so subscribers can read every field
-# (peer_id, team, colors). Companion to player_added; the player_joined /
-# player_left signals carry only the name and the team's UI palette
-# (TeamColorRegistry.get_ui_colors) for the HUD toast path.
+# (peer_id, team, colors). Companion to player_added.
 signal player_removed(record: PlayerRecord)
-signal player_joined(name: String, team_colors: Dictionary)
-signal player_left(name: String, team_colors: Dictionary)
 
 var _players: Dictionary[int, PlayerRecord] = {}
 # Hot-path lookup tables that mirror `_players[peer_id]` fields,
@@ -192,8 +188,6 @@ func spawn(
 		_spawn_wireup.call(record)
 	_rebuild_skaters_cache()
 	player_added.emit(record)
-	if not is_local:
-		player_joined.emit(record.display_name(), TeamColorRegistry.get_ui_colors(team.color_slot, team.team_id))
 	return record
 
 
@@ -303,7 +297,6 @@ func spawn_bot(
 		_spawn_wireup.call(record)
 	_rebuild_skaters_cache()
 	player_added.emit(record)
-	player_joined.emit(record.display_name(), TeamColorRegistry.get_ui_colors(team.color_slot, team.team_id))
 	return record
 
 
@@ -314,7 +307,6 @@ func remove(peer_id: int) -> PlayerRecord:
 	if not _players.has(peer_id):
 		return null
 	var record: PlayerRecord = _players[peer_id]
-	player_left.emit(record.display_name(), TeamColorRegistry.get_ui_colors(record.team.color_slot, record.team.team_id))
 	player_removed.emit(record)
 	_players.erase(peer_id)
 	team_id_by_peer.erase(peer_id)
