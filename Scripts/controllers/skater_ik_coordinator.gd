@@ -50,6 +50,9 @@ var _prev_skater_pos: Vector3 = Vector3.ZERO
 # no charge) while being a deterministic closed-form clamp of (mouse, body, ROM),
 # so host and client agree on charge without replaying the stateful smoother. y = 0.
 var last_target_blade_world: Vector3 = Vector3.ZERO
+# The settle's held reach target, in the skater root's frame (hold_seat).
+var _held_seat_local: Vector3 = Vector3.ZERO
+var _seat_held: bool = false
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
@@ -158,7 +161,8 @@ func seed_blade_smoothing(world_pos: Vector3) -> void:
 # ── Blade From Mouse (Top-Hand IK) ────────────────────────────────────────────
 # Input is treated as a desired blade position. The top hand is solved as a
 # consequence, clamped to an asymmetric ROM. See domain/rules/top_hand_ik.gd.
-func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = false) -> void:
+func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = false,
+		hold_seat: bool = false) -> void:
 	var mouse_world: Vector3 = input.mouse_world_pos
 	mouse_world.y = 0.0
 
@@ -181,8 +185,21 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# current blade → the speed-cap/translation bookkeeping below runs with a
 	# ~zero step, keeping _smoothed_blade coherent so resuming normal tracking
 	# after the shot doesn't pop.
+	# SEAT (hold_seat, the settle lock): hold the reach TARGET where it was when the
+	# hold began, in the skater's own frame — so it turns with the body's facing
+	# but not with the torso's twist. The freeze above re-reads the SOLVED blade,
+	# and in tight the hand solve lands the blade past its target, so re-reading
+	# it walks the blade out along the aim line tick after tick; a held target is
+	# a fixed point.
 	var target_blade_world: Vector3
-	if hold_blade:
+	if hold_seat and not _seat_held:
+		_held_seat_local = _skater.global_transform.affine_inverse() * last_target_blade_world
+	_seat_held = hold_seat
+	if hold_seat:
+		target_blade_world = _skater.global_transform * _held_seat_local
+		target_blade_world.y = 0.0
+		last_target_blade_world = target_blade_world
+	elif hold_blade:
 		target_blade_world = _skater.upper_body_to_global(_skater.get_blade_position())
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world

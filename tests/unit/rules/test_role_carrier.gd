@@ -335,10 +335,11 @@ func _close_outlet_ctx() -> RoleContext:
 			[11, 1, Vector3(-4, 0, -2)]])
 
 
-func test_close_pass_is_a_crisp_charged_wrister() -> void:
-	# Every pass is a paced wrister. A short feed to a close open teammate fires
-	# at the MAGNET pace (closing speed in the receiver's frame): crisp enough to keep its hang time short, still catchable
-	# when the receiver squares up. The PASS_TO_ME ping commits the feed — any
+func test_close_pass_fires_at_the_pace_it_was_priced_at() -> void:
+	# Every pass is a paced wrister, fired at the pace the search priced it at
+	# (AIPuckLane.PASS_PACE_FRACS): what is priced is what is fired. A close feed
+	# to an open teammate goes soft — the full pace's settle costs him more than
+	# the softer flight does. The PASS_TO_ME ping commits the feed — any
 	# remotely reasonable order wins (docs/gameplay-design.md, smart ping); whether
 	# it wins unasked is the snapshot's row.
 	var self_pos: Vector3 = _CLOSE_PASSER
@@ -348,13 +349,12 @@ func test_close_pass_is_a_crisp_charged_wrister() -> void:
 	var c: AIRoleCarrier = _decided(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "the pinged feed is committed")
 	assert_eq(c.pass_target_peer_id, 2)
-	assert_gt(c.pass_target_speed, AIPuckLane.PASS_SPEED_M_S,
-			"a close feed fires crisp — above quick-pass pace")
-	# Backs out of the target arrival at this distance (friction-compensated).
+	assert_lt(c._pass.best_pace_frac, 1.0, "a close open feed goes soft")
 	assert_almost_eq(c.pass_target_speed,
 			AIPuckLane.pass_launch_speed(self_pos.distance_to(outlet),
-					GameRules.DEFAULT_WRISTER_POWER_MAX_M_S), 0.1,
-			"fires at the friction-compensated magnet pace")
+					GameRules.DEFAULT_WRISTER_POWER_MAX_M_S,
+					ctx.pass_speed_scale * c._pass.best_pace_frac), 0.1,
+			"fires at the friction-compensated pace it was priced at")
 
 
 # ─── keeping or moving the puck under pressure ──────────────────────────────
@@ -904,6 +904,15 @@ func test_staggered_carrier_holds_instead_of_firing() -> void:
 	ctx.self_stagger_timer = 0.5
 	assert_eq(_decided(ctx).intended_action, AIRoleCarrier.INTENT_CARRY,
 			"staggered carrier holds instead of committing the fire")
+
+
+func test_settling_carrier_holds_instead_of_firing() -> void:
+	# A carrier still settling a hard catch can't release (the settle lock would
+	# only queue the press), so the same breakout holds until the settle ends.
+	var ctx: RoleContext = _strong_outlet_ctx()
+	ctx.self_settle_s = 0.2
+	assert_eq(_decided(ctx).intended_action, AIRoleCarrier.INTENT_CARRY,
+			"settling carrier holds instead of committing the fire")
 
 
 # ─── settle doubt: a fresh carrier's bar for giving the puck up ──────────────
@@ -2596,3 +2605,27 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 			AIShotOdds.Stance.DOWN, "still down for a shot before he could stand up")
 	assert_eq(c._field.keeper_stance_at(AIGoalieModel.GOALIE_RECOVERY_S),
 			AIShotOdds.Stance.UPRIGHT, "after it, his rise is his call: priced upright")
+
+
+# ─── pass pace: a hard feed leaves the receiver settling ─────────────────────
+
+# The same open feed, short and long. Short, the softer pace's flight costs less
+# than the full pace's settle, so it goes soft; long, a softer pace would outrun
+# the lead horizon and is not priced, so it goes at full pace.
+func _feed_ctx(mate: Vector3) -> RoleContext:
+	return _make_ctx(Vector3(0, 0, 10), [
+			[1, TEAM_ID, Vector3(0, 0, 10)],
+			[2, TEAM_ID, mate],
+			[3, 1, Vector3(-12, 0, 24)]])
+
+
+func test_a_short_feed_goes_soft() -> void:
+	var c := _decided(_feed_ctx(Vector3(5, 0, 9)))
+	assert_eq(c._pass.best_peer, 2, "the feed is priced")
+	assert_lt(c._pass.best_pace_frac, 1.0, "softer than full pace")
+
+
+func test_a_long_feed_goes_at_full_pace() -> void:
+	var c := _decided(_feed_ctx(Vector3(14, 0, 2)))
+	assert_eq(c._pass.best_peer, 2, "the feed is priced")
+	assert_eq(c._pass.best_pace_frac, 1.0)
