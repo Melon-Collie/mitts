@@ -149,8 +149,7 @@ func _ready() -> void:
 	NetworkManager.peer_disconnected.connect(_votes.on_peer_disconnected)
 	GameManager.shots_on_goal_changed.connect(_scorebug.set_shots)
 	GameManager.stats_updated.connect(_stat_feed.poll)
-	GameManager.player_joined.connect(func(n: String, c: Color) -> void: _toast_stack.push_pair(n, tr(&"TOAST_PLAYER_JOINED"), c))
-	GameManager.player_left.connect(func(n: String, c: Color) -> void: _toast_stack.push_pair(n, tr(&"TOAST_PLAYER_LEFT"), c))
+	GameManager.roster_announced.connect(func(n: String, key: StringName, c: Dictionary) -> void: _toast_stack.push_pair(n, tr(key), c))
 	GameManager.puck_out_of_play.connect(_on_puck_out_of_play)
 	GameManager.icing_called.connect(_on_icing_called)
 	GameManager.icing_race_changed.connect(_icing_race.on_icing_race_changed)
@@ -811,6 +810,6 @@ func _on_local_player_hit(magnitude: float) -> void:
 	var strength := clampf(magnitude / 12.0, 0.2, 0.55)
 	_flash_overlay.vignette_pulse(strength)
 
-func _on_stat_feed_event(subject: String, detail: String, color: Color) -> void:
+func _on_stat_feed_event(subject: String, detail: String, team_colors: Dictionary) -> void:
 	if _toast_stack != null:
-		_toast_stack.push_pair(subject, detail, color)
+		_toast_stack.push_pair(subject, detail, team_colors)

@@ -178,6 +178,9 @@ GHOST_TEAMMATE_OFFSIDE_INSTRUCTION,Hold the puck outside the zone until they tag
 GHOST_CREASE_INSTRUCTION,Clear out of the goal crease to rejoin the play,Sal del área de portería para volver al juego
 TOAST_PLAYER_JOINED,joined,se unió
 TOAST_PLAYER_LEFT,left,salió
+TOAST_PLAYER_SWITCHED_TEAMS,switched teams,cambió de equipo
+TOAST_PLAYER_NOW_PLAYING,took the ice,salió a la pista
+TOAST_PLAYER_SPECTATING,moved to spectators,pasó a espectador
 TOAST_PUCK_OUT_OF_PLAY,PUCK OUT OF PLAY,DISCO FUERA DE JUEGO
 TOAST_ICING,ICING,DESPEJE PROHIBIDO
 ICING_RACE_TITLE,ICING?,¿DESPEJE PROHIBIDO?

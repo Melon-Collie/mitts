@@ -27,8 +27,7 @@ signal period_synced(new_period: int)
 signal clock_updated(time_remaining: float)
 signal game_over()
 signal game_reset()
-signal player_joined(player_name: String, team_color: Color)
-signal player_left(player_name: String, team_color: Color)
+signal roster_announced(player_name: String, detail_key: StringName, team_colors: Dictionary)
 signal stats_updated
 signal shots_on_goal_changed(sog_0: int, sog_1: int)
 signal team_colors_ready(home_primary: Color, home_secondary: Color, away_primary: Color, away_secondary: Color)
@@ -293,6 +292,7 @@ var _cross_check_claim: CrossCheckClaimResolver = null
 var _hit_claim: HitClaimResolver = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
+var _roster_announcer: RosterAnnouncer = null
 var _telemetry: NetworkTelemetry = null
 # Last phase pushed to telemetry.current_phase — dirty-checks the per-frame push so
 # the GamePhase.Phase.keys() name lookup only runs on an actual transition.
@@ -1397,7 +1397,7 @@ func sync_existing_players(player_data: Array) -> void:
 func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		jersey_color: Color, helmet_color: Color, pants_color: Color,
 		is_left_handed: bool, player_name: String, jersey_number: int = 10,
-		attributes: PlayerAttributes = null) -> void:
+		attributes: PlayerAttributes = null, from_spectator: bool = false) -> void:
 	if peer_id == NetworkManager.local_peer_id():
 		return
 	if _state_machine == null:
@@ -1405,7 +1405,7 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		# on_slot_assigned flushes once _spawn_world has run.
 		_pending_remote_spawns.append([peer_id, team_slot, team_id,
 				jersey_color, helmet_color, pants_color,
-				is_left_handed, player_name, jersey_number, attributes])
+				is_left_handed, player_name, jersey_number, attributes, from_spectator])
 		return
 	# Idempotency guard. The game-start fan-out routes each peer through a single
 	# channel (see _push_lobby_assignments_to_clients), so this should not fire
@@ -1417,12 +1417,14 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 		return
 	var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_slot, team_id)
 	_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
+	if from_spectator: _spectator_peers[peer_id] = true
 	_registry.spawn(peer_id, team_slot, teams[team_id],
 			jersey_color, helmet_color, pants_color,
 			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 			colors.secondary, colors.text, colors.text_outline,
 			is_left_handed, player_name, false, jersey_number,
 			attributes if attributes != null else PlayerAttributes.neutral())
+	_spectator_peers.erase(peer_id)
 
 
 # ── World Spawn ───────────────────────────────────────────────────────────────
@@ -1575,8 +1577,8 @@ func _wire_subsystems() -> void:
 		# hold-and-release play it out (no stoppage — same philosophy as the
 		# offside ghost standing in for the offside whistle).
 		gc.puck_covered.connect(_on_goalie_covered_puck)
-	_registry.player_joined.connect(player_joined.emit)
-	_registry.player_left.connect(player_left.emit)
+	_roster_announcer = RosterAnnouncer.new(_registry.player_added, _registry.player_removed, is_spectator_peer)
+	_roster_announcer.announced.connect(roster_announced.emit)
 	_registry.player_added.connect(_on_registry_player_added)
 	# Replay file roster events — fire whenever the registry changes after
 	# the writer is open. The initial roster is captured in the file header
@@ -2415,8 +2417,8 @@ func get_game_id() -> String:
 	return _game_id
 
 
-# Host-only accurate. Clients only know their own spectator status (via
-# is_local_spectator), so callers iterating peer IDs should be host-gated.
+# Host-only accurate. Clients hold only the peers they saw demoted, so callers
+# iterating peer IDs should be host-gated.
 func is_spectator_peer(peer_id: int) -> bool:
 	return _spectator_peers.has(peer_id)
 
@@ -2453,8 +2455,9 @@ func _on_spectator_demoted_received(peer_id: int) -> void:
 		# Stop input batches before the controller is queue_freed — the Callable
 		# would otherwise reference a dead object.
 		NetworkManager.set_input_batch_provider(Callable())
-	_despawn_skater_for_peer(peer_id)
+	# Marked before the despawn so RosterAnnouncer reads it as spectating, not leaving.
 	_spectator_peers[peer_id] = true
+	_despawn_skater_for_peer(peer_id)
 	if is_local_demote:
 		_become_local_spectator()
 
@@ -2484,7 +2487,6 @@ func _promote_spectator_to_player(peer_id: int, new_team_id: int, new_slot: int)
 		return
 	if _state_machine.count_players_on_team(new_team_id) >= _state_machine.team_size:
 		return
-	_spectator_peers.erase(peer_id)
 	var is_local: bool = peer_id == NetworkManager.local_peer_id()
 	if is_local and _is_local_spectator:
 		# Host promoting itself: tear down the spectator camera before the
@@ -2494,7 +2496,9 @@ func _promote_spectator_to_player(peer_id: int, new_team_id: int, new_slot: int)
 			NetworkManager.get_peer_handedness(peer_id),
 			NetworkManager.get_peer_name(peer_id),
 			NetworkManager.get_peer_number(peer_id),
-			is_local)
+			is_local, true, true)
+	# Cleared after the spawn so RosterAnnouncer reads it as a return, not a join.
+	_spectator_peers.erase(peer_id)
 
 
 func _teardown_spectator_camera() -> void:
@@ -2836,7 +2840,7 @@ func _on_replay_player_left_event(record: PlayerRecord) -> void:
 # the caller — this helper owns only the shared shape.
 func _spawn_player_and_broadcast(peer_id: int, team_id: int, team_slot: int,
 		is_left: bool, p_name: String, p_number: int, is_local: bool,
-		broadcast: bool = true) -> Dictionary:
+		broadcast: bool = true, from_spectator: bool = false) -> Dictionary:
 	var team: Team = teams[team_id]
 	var colors: Dictionary = TeamColorRegistry.get_colors(team.color_slot, team_id)
 	var attrs: PlayerAttributes = NetworkManager.get_peer_attributes(peer_id)
@@ -2846,7 +2850,7 @@ func _spawn_player_and_broadcast(peer_id: int, team_id: int, team_slot: int,
 				colors.jersey, colors.helmet, colors.pants)
 	if broadcast:
 		NetworkManager.send_spawn_remote_skater(peer_id, team_slot, team_id,
-				colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number, attrs)
+				colors.jersey, colors.helmet, colors.pants, is_left, p_name, p_number, attrs, from_spectator)
 	_registry.spawn(peer_id, team_slot, team,
 			colors.jersey, colors.helmet, colors.pants,
 			colors.jersey_stripe, colors.gloves, colors.pants_stripe,
@@ -4197,6 +4201,7 @@ func _on_slot_swap_confirmed(peer_id: int, old_team_id: int, old_slot: int,
 	# direction) when the local player is the one who swapped.
 	if _registry != null:
 		var record: PlayerRecord = _registry.get_record(peer_id)
+		_roster_announcer.on_swap_confirmed(record, old_team_id)
 		if record != null and record.is_local:
 			var local_ctrl: LocalController = record.controller as LocalController
 			if local_ctrl != null:

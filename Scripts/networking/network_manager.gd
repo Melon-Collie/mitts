@@ -58,7 +58,7 @@ signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
-signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes)
+signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes, from_spectator: bool)
 signal existing_players_synced(player_data: Array)
 signal local_puck_pickup_confirmed(settle_until_ms: int)  # settle lock deadline, 0 = none
 signal local_puck_stolen(forced_lift_s: float)
@@ -1990,14 +1990,14 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_colo
 		attr_length: int = PlayerAttributes.GEAR_BALANCED,
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		skin_tone: int = SkinToneRegistry.DEFAULT_INDEX,
-		gear_style_code: int = GearStyleConfig.DEFAULT_CODE) -> void:
+		gear_style_code: int = GearStyleConfig.DEFAULT_CODE, from_spectator: bool = false) -> void:
 	var attrs := PlayerAttributes.new(attr_height, attr_weight,
 			attr_profile, attr_curve, attr_flex, attr_length)
 	_peer_attributes[peer_id] = attrs
 	_peer_tape_codes[peer_id] = StickTapeConfig.from_code(tape_code).to_code()
 	_peer_skin_tones[peer_id] = SkinToneRegistry.clamp_index(skin_tone)
 	_peer_gear_styles[peer_id] = GearStyleConfig.from_code(gear_style_code).to_code()
-	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number, attrs)
+	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number, attrs, from_spectator)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -2250,7 +2250,7 @@ func confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
 func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	assign_player_slot.rpc_id(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color)
 
-func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int = 10, attributes: PlayerAttributes = null) -> void:
+func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int = 10, attributes: PlayerAttributes = null, from_spectator: bool = false) -> void:
 	# Offline mode: no peers to broadcast to, and rpc() with no
 	# multiplayer peer pushes an error. Bot spawn still happens locally
 	# via _registry.spawn_bot in the caller; this RPC is purely the
@@ -2261,7 +2261,7 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number,
 			attrs.height, attrs.weight, attrs.profile, attrs.curve, attrs.flex, attrs.length,
 			get_peer_tape_code(peer_id), get_peer_skin_tone(peer_id),
-			get_peer_gear_style(peer_id))
+			get_peer_gear_style(peer_id), from_spectator)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)

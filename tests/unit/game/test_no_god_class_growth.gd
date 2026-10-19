@@ -55,7 +55,9 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +61: the cross-check — its tracker and resolver wired, the claim deferred,
 	# the landed shove's burst, thud and knockback lead on every machine, and its
 	# replay event; the pin ticked before the tie.
-	"res://Scripts/game/game_manager.gd": 5854,
+	# +5: the spectator set is marked before a demotion's despawn and around a
+	# promotion's spawn, which RosterAnnouncer reads to label the move.
+	"res://Scripts/game/game_manager.gd": 5859,
 	# +17: the threat tracker's jitter filter moved onto the puck offset, which
 	# needs a second filter state and its priming. The design prose went to
 	# Scripts/controllers/CLAUDE.md rather than inline, and the tunable

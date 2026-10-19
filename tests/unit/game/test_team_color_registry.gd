@@ -5,6 +5,7 @@ extends GutTest
 #
 #   Home (team_id 0): primary body, secondary stripe, light lettering.
 #   Away (team_id 1): light body, primary stripe, primary lettering.
+#   A preset's optional ui_ink replaces the lettering on both sides.
 
 const _HOME_SLOT: int = TeamColorRegistry.DEFAULT_HOME_SLOT
 
@@ -42,6 +43,38 @@ func test_light_mirrors_away_jersey_base() -> void:
 		assert_true(preset.has("light"), "slot %d carries a light color" % slot)
 		assert_eq(preset.light, preset.away.jersey.base,
 			"slot %d light matches away jersey base" % slot)
+
+
+func test_ui_ink_letters_both_sides() -> void:
+	var inked: Array[int] = []
+	for slot: int in TeamColorRegistry.get_all_slots():
+		var ink: Variant = TeamColorRegistry.get_preset(slot).ui_ink
+		if ink == null:
+			continue
+		inked.append(slot)
+		for team_id: int in 2:
+			assert_eq(TeamColorRegistry.get_ui_colors(slot, team_id).text, ink,
+					"%s side %d letters in its ink" % [TeamColorRegistry.get_preset_name(slot), team_id])
+	assert_false(inked.is_empty(), "the bundled file inks at least one team")
+
+
+# WCAG 2 contrast floor for large/bold text: the HUD's team lettering is a 16px
+# display face, read in a glance at the screen corner.
+const _MIN_UI_TEXT_CONTRAST: float = 3.0
+
+func test_every_preset_ui_lettering_contrasts_with_its_body() -> void:
+	for slot: int in TeamColorRegistry.get_all_slots():
+		for team_id: int in 2:
+			var ui: Dictionary = TeamColorRegistry.get_ui_colors(slot, team_id)
+			var ratio: float = _contrast(ui.text, ui.base)
+			assert_gte(ratio, _MIN_UI_TEXT_CONTRAST, "%s side %d lettering contrast %.2f"
+					% [TeamColorRegistry.get_preset_name(slot), team_id, ratio])
+
+
+func _contrast(a: Color, b: Color) -> float:
+	var la: float = a.srgb_to_linear().get_luminance()
+	var lb: float = b.srgb_to_linear().get_luminance()
+	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)
 
 
 func test_unknown_slot_still_returns_valid_ui_colors() -> void:
