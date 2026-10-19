@@ -990,6 +990,7 @@ var _shot_pose: SkaterShotPoseCoordinator = SkaterShotPoseCoordinator.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
+var _settle: SkaterSettleGate = SkaterSettleGate.new()
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -1615,6 +1616,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	_elevation_level = input.elevation_level
 	skater.elevation_level = _elevation_level
 	_current_aim_world = input.mouse_world_pos
+	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
 	# Deliberate-deflect intent (see Skater.deflect_intent). Holding the deflect
 	# button (Q) without the puck commits to redirecting a loose puck off the
@@ -1638,7 +1640,8 @@ func _process_input(input: InputState, delta: float) -> void:
 	# soft self-pass (nutmeg setup). Edge-triggered and gated to plain carry so
 	# it never fires mid-charge; the is_replaying guard inside keeps it from
 	# re-emitting during reconcile (same discipline as _do_release).
-	if input.stick_lift_pressed and has_puck and _sm.get_state() == State.SKATING_WITH_PUCK:
+	if (input.stick_lift_pressed or _settle.unqueued == SkaterSettleGate.Press.NUDGE) \
+			and not _settle.settling and has_puck and _sm.get_state() == State.SKATING_WITH_PUCK:
 		_nudge()
 
 	var tick_start_velocity: Vector3 = skater.velocity
@@ -2044,6 +2047,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.velocity = skater.velocity
 	state.blade_position = skater.get_blade_position()
 	state.blade_contact_world = skater.get_blade_contact_global()
+	state.settle_left_s = _settle.time_left(NetworkManager.estimated_input_stamp_time()) \
+			if has_puck else 0.0
 	state.top_hand_position = skater.get_top_hand_position()
 	state.upper_body_rotation_y = skater.get_upper_body_rotation()
 	state.facing = skater.get_facing()
@@ -2341,8 +2346,10 @@ func _nudge() -> void:
 	nudge_requested.emit(skater_vel * nudge_velocity_retain + push)
 
 # ── Puck Signals ──────────────────────────────────────────────────────────────
-func on_puck_picked_up_network() -> void:
+# `settle_until_ms`: the catch's settle deadline (settle_deadline_ms), 0 = clean.
+func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
 	has_puck = true
+	_settle.arm(settle_until_ms)
 	if _sm.get_state() == State.ONE_TIMER_RETENTION:
 		# The feed landed during the committed hold — the swing caught it. Pin it
 		# to the slapper spot (same setup as the wind-up entry, or the puck snaps
@@ -2384,6 +2391,7 @@ func on_puck_released_network() -> void:
 	if not has_puck:
 		return
 	has_puck = false
+	_settle.clear()
 	if _sm.get_state() == State.ONE_TIMER_RETENTION:
 		# Poked/lifted off the blade mid-hold. The swing is already committed, so
 		# don't snap out of it — let the hold run down and whiff through the full
@@ -2407,6 +2415,7 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.hit_committed = false
 	_stick_check.reset()
 	skater.stick_check_phase = _stick_check.phase
+	_settle.clear()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
 	skater.set_balance_tilt(Vector2.ZERO)
@@ -2608,8 +2617,27 @@ func _reset_to_skating_state() -> void:
 	skater.current_shot_state = _sm.get_state() as int
 
 # ── State Machine ─────────────────────────────────────────────────────────────
+# The settle lock (SkaterSettleGate): a plain carry inside the deadline holds the
+# blade at its seat and dispatches nothing; the first input past it dispatches
+# the queued press as its own.
 func _apply_state(input: InputState, delta: float) -> void:
+	if _settle.settling:
+		_ik.apply_blade_from_mouse(input, delta, false, true)
+		return
+	var press: SkaterSettleGate.Press = _settle.unqueued
+	if press == SkaterSettleGate.Press.NONE or press == SkaterSettleGate.Press.NUDGE \
+			or not has_puck or _sm.get_state() != State.SKATING_WITH_PUCK:
+		_sm.dispatch(skater, input, delta, has_puck, _game_state.is_movement_locked())
+		return
+	var was: bool = SkaterSettleGate.set_edge(input, press, true)
 	_sm.dispatch(skater, input, delta, has_puck, _game_state.is_movement_locked())
+	SkaterSettleGate.set_edge(input, press, was)
+
+
+# Host: this carrier's settle deadline for a catch settling `settle_s`, armed by
+# the on_puck_picked_up_network that follows (SkaterSettleGate.deadline_ms).
+func settle_deadline_ms(settle_s: float) -> int:
+	return _settle.deadline_ms(settle_s, one_timer_window_lag_grace())
 
 # ── State Helpers ─────────────────────────────────────────────────────────────
 func _transition_to_skating() -> void:

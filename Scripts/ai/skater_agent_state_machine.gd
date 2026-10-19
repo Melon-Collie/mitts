@@ -1277,6 +1277,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.self_forehand_perp_sign = _handedness_perp_sign
 	_holds.configure_from(ctx)
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
+	ctx.self_settle_s = self_state.settle_left_s if self_state != null else 0.0
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
 	ctx.pass_speed_scale = _pass_speed_scale
 	ctx.check_aggression = _check_aggression

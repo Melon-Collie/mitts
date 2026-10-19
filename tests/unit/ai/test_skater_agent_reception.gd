@@ -46,9 +46,14 @@ func test_incoming_pass_fires_for_a_fast_pass_heading_at_us() -> void:
 
 func test_incoming_pass_ignores_slow_carried_or_away_pucks() -> void:
 	# Too slow to be a pass.
+	var slow: float = SkaterAgentReception.RECEIVE_TRIGGER_PUCK_SPEED_M_S - 1.0
 	assert_false(rec.incoming_pass(
-			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -10), -1), Vector3.ZERO),
+			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -slow), -1), Vector3.ZERO),
 			"a slow loose puck isn't a pass to receive")
+	# The softest feed a bot fires still is one.
+	assert_true(rec.incoming_pass(_pass_snap(Vector3(0, 0, 10),
+			Vector3(0, 0, -GameRules.DEFAULT_WRISTER_POWER_MIN_M_S), -1), Vector3.ZERO),
+			"a soft feed is a pass to receive")
 	# Carried — not loose.
 	assert_false(rec.incoming_pass(
 			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -21), OPP_ID), Vector3.ZERO),

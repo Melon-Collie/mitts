@@ -508,9 +508,11 @@ landmark rather than a tuning number.
 
 ## SkaterController
 
-`SkaterController` delegates to five `RefCounted` collaborators —
+`SkaterController` delegates to seven `RefCounted` collaborators —
 `SkaterAimingBehavior`, `SkaterIKCoordinator`, `SkaterPoseCoordinator`,
-`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`. `GameManager` calls
+`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`, `SkaterStickCheck`,
+and `SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
+contract is in `Scripts/networking/CLAUDE.md`). `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
 **Attributes, one line each.** Skating splits three ways: top speed rides the

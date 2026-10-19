@@ -1946,12 +1946,10 @@ func _on_phase_changed_period_buzzer(p: GamePhase.Phase) -> void:
 		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER)
 
 
-func _on_local_pickup_sound() -> void:
+func _on_local_pickup_sound(_settle_until_ms: int) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null and record.skater != null:
-		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position, 0.0, 0.05)
-		if NetworkManager.is_host:
-			_record_replay_audio_event("puck_pickup", record.skater.global_position, 0.0)
+		_play_pickup_sound(record.skater)
 
 
 func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
@@ -1959,9 +1957,16 @@ func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
 		return
 	var record: PlayerRecord = _registry.get_record(new_carrier_peer_id)
 	if record != null and record.skater != null:
-		SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, record.skater.global_position, 0.0, 0.05)
-		if NetworkManager.is_host:
-			_record_replay_audio_event("puck_pickup", record.skater.global_position, 0.0)
+		_play_pickup_sound(record.skater)
+
+
+# Louder the harder the catch: the puck's arrival speed in the carrier's frame.
+func _play_pickup_sound(carrier: Skater) -> void:
+	var speed: float = puck_controller.arrival_speed_for(carrier) if puck_controller != null else 0.0
+	SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, carrier.global_position,
+			SoundManager.reception_volume_db(speed), 0.05)
+	if NetworkManager.is_host:
+		_record_replay_audio_event("puck_pickup", carrier.global_position, speed)
 
 
 # Host-only: shadow a transient audio/VFX event into the in-memory recorder
@@ -3068,7 +3073,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 	return _registry.resolve_peer_id(skater) if _registry != null else -1
 
 
-func _on_server_puck_picked_up_by(peer_id: int) -> void:
+func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
 	# clear_for_grant, not clear(): if a different peer's claim was pending,
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
@@ -3093,9 +3098,10 @@ func _on_server_puck_picked_up_by(peer_id: int) -> void:
 		_turnover_tracker.on_carrier_gained(peer_id, was_faceoff)
 	if _possession_tracker != null:
 		_possession_tracker.on_pickup(peer_id)
-	record.controller.on_puck_picked_up_network()
+	var settle_until_ms: int = record.controller.settle_deadline_ms(settle_s)
+	record.controller.on_puck_picked_up_network(settle_until_ms)
 	if not record.is_local:
-		NetworkManager.send_puck_picked_up(peer_id)
+		NetworkManager.send_puck_picked_up(peer_id, settle_until_ms)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
 	# NHL delayed-offside: pickup by an offending-team attacker whistles the
 	# play dead. Consume immediately so the faceoff fires before the next
@@ -3910,11 +3916,11 @@ func on_carrier_puck_dropped() -> void:
 		puck_controller.notify_local_puck_dropped()
 
 
-func on_local_player_picked_up_puck() -> void:
+func on_local_player_picked_up_puck(settle_until_ms: int = 0) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null:
-		record.controller.on_puck_picked_up_network()
-		puck_controller.notify_local_pickup(record.skater)
+		record.controller.on_puck_picked_up_network(settle_until_ms)
+		puck_controller.notify_local_pickup(record.skater, settle_until_ms)
 
 
 func on_local_player_puck_stolen(forced_lift_s: float = 0.0) -> void:
