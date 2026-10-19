@@ -212,9 +212,10 @@ var knockdown_sprawl_splay_deg: float = 18.0
 # Good range: 1.0 (very lazy) – 3.0 (snappy).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
-# Where a skating skater's body heads (FacingRules); its tunables are the
-# config's defaults, but for the reach edges setup() derives from the ROM below.
+# Where a skating skater's body heads (FacingRules); setup() derives the reach
+# edges from the ROM below, a carrier's backhand edge from its carry stop.
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
+var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 # Facing RECOVERY rate during the shot follow-through. The coil freezes facing at
 # the wind-up cursor position (it must — the coil is the torso twisting relative
 # to the planted lower body), so at release the body is squared to where the aim
@@ -291,20 +292,14 @@ var hand_rest_y: float = -0.10
 var hand_y_max: float = 0.30
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
-# Forehand cross-body reach is anatomically limited; backhand same-side reach
-# allows full arm extension, supporting one-handed backhand plays.
-# Note: the upper body twists toward the blade (upper_body_twist_ratio = 1.0),
-# which effectively reduces how far the hand must reach in upper-body-local space
-# — these values assume that twist is active.
+# The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
+# limited across the body, full extension out to the backhand side.
 var rom_forehand_angle_max_deg: float = 90.0
 var rom_backhand_angle_max_deg: float = 90.0
-# Reach caps are DERIVED in apply_attributes — forehand from the anatomical
-# cross-body ratio, backhand from the arm chain (sqrt(arm_eff² − drop²), the
-# farthest a rest-height hand can sit without out-reaching the arm). These
-# defaults just mirror the baseline-size derivation for any skater that has
-# not had attributes applied yet.
+# Reach caps are DERIVED in apply_attributes (see _ROM_FOREHAND_OF_ARM).
+var rom_forward_reach_max: float = 0.51
 var rom_forehand_reach_max: float = 0.39
-var rom_backhand_reach_max: float = 0.46
+var rom_backhand_reach_max: float = 0.42
 # Fraction of full arm extension the backhand ROM rim uses. 1.0 solves the
 # reach with a ramrod-straight arm; slightly under keeps a hint of elbow bend
 # at max extension so the rim pose stays organic.
@@ -360,7 +355,7 @@ var nudge_velocity_retain: float = 0.85
 # ── Bottom-Hand IK Tuning ─────────────────────────────────────────────────────
 # The bottom hand is purely reactive: each tick it targets a point a short way
 # down the stick shaft (from the top hand toward the blade). It releases toward
-# a shoulder rest only when the blade's world angle exceeds the upper body's
+# a free-hand rest only when the blade's world angle exceeds the upper body's
 # rotation limit — ensuring the hand stays connected during any normal swing.
 # Never influences blade placement. See domain/rules/bottom_hand_ik.gd.
 # Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
@@ -371,7 +366,7 @@ var bottom_hand_grip_fraction: float = 0.25
 # the grip fraction, then adds this). 0.0 = grip sits exactly on the shaft.
 var bh_hand_y: float = 0.0
 # Blade world angle (from skater forward, toward backhand) at which the bottom
-# hand starts releasing toward the shoulder rest. Match upper_body_max_twist_deg
+# hand starts releasing toward its rest. Match upper_body_max_twist_deg
 # so the hand releases exactly when the body can no longer rotate to follow.
 var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
@@ -380,6 +375,8 @@ var bh_release_angle_band_deg: float = 15.0
 # before that hand has fully let go of the stick (m). The hand slides up the
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
 var bh_reach_release_band_m: float = 0.08
+# A let-go hand's rest off its shoulder, arm lengths (x out, y up, z back).
+var bh_free_hand_rest_arm: Vector3 = Vector3(0.2, -0.52, -0.35)
 
 # ── Upper Body Tuning ─────────────────────────────────────────────────────────
 var upper_body_twist_ratio: float = 0.8
@@ -392,14 +389,14 @@ var upper_body_return_speed: float = 6.0
 var upper_body_follow_gain: float = 0.4        # how far the shoulders overshoot the whip
 var upper_body_follow_stiffness: float = 110.0  # spring constant (higher = quicker catch-up)
 var upper_body_follow_damping: float = 18.0     # damping (near-critical — a clean settle)
-# Reach lean — the torso tips TOWARD the blade's reach direction (pitch +
-# roll, see SkaterPoseCoordinator.compute_upper_body_lean_target). Because
-# the blade IK solves in the leaned frame, this lean genuinely extends world
-# reach at the ROM rim (~sin(lean) × shoulder height of shoulder travel plus
-# the longer stick footprint from the dropped hands) — the honest way a real
-# player buys reach. engage_power > 1 keeps the torso quiet through mid-ROM
-# stickhandling and commits the lean near full extension.
-var upper_body_lean_max_deg: float = 18.0
+# Reach lean — the torso tips TOWARD the blade (SkaterPoseCoordinator
+# .compute_upper_body_lean_target), to the side cap out either side and the
+# forward cap straight ahead (_reach_lean_max_deg). It extends reach at the rim
+# by only a few cm (the blade IK solves in the leaned frame); mostly it is how
+# far the skater visibly lunges. engage_power > 1 keeps the torso quiet mid-ROM
+# and commits the lean near full extension.
+var upper_body_lean_max_deg: float = 15.0
+var upper_body_lean_forward_max_deg: float = 25.0
 var upper_body_lean_engage_power: float = 1.6
 var upper_body_lean_return_speed: float = 8.0
 
@@ -1141,6 +1138,8 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	process_physics_priority = -1  # Run before Skater's integration step
 	facing_rules.forehand_edge_rad = deg_to_rad(rom_forehand_angle_max_deg + upper_body_max_twist_deg)
 	facing_rules.backhand_edge_rad = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
+	carry_facing_rules.forehand_edge_rad = facing_rules.forehand_edge_rad
+	carry_facing_rules.backhand_edge_rad = deg_to_rad(bh_release_angle_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
 	if game_state.has_method("is_movement_locked"):
@@ -1177,13 +1176,12 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 
 # Reach ROM is derived from arm length, not an independent tunable. The
 # forehand side is shoulder-joint-limited (about 56% of arm length — the top
-# hand can't cross the body very far), a simple anatomical ratio. The
-# backhand side is arm-EXTENSION-limited and solved from the chain geometry
-# in apply_attributes: the hand rides at hand_rest_y (a fixed drop below the
-# shoulder), so the farthest it can sit is sqrt(arm_eff² − drop²) with
-# arm_eff = arm × rom_arm_extension. Deriving it this way guarantees no
-# reachable pose out-reaches the arm (the forearm never draws stretched) and
-# gives tall players disproportionately more reach than short ones — long
+# hand can't cross the body very far). The backhand side and straight ahead
+# are arm-EXTENSION-limited: the hand rides at hand_rest_y, a fixed drop below
+# the shoulder, so it sits at most sqrt(reach² − drop²) out — reach being
+# arm × rom_arm_extension to the side, plus Skater.shoulder_reach_m ahead,
+# where the shoulder blade protracts (the girdle give the arm rig roots with,
+# so the drawn arm spans it). No reachable pose out-reaches the arm, and long
 # arms matter most at full extension, which is the realistic shape.
 const _ROM_FOREHAND_OF_ARM: float = 0.5625
 
@@ -1248,11 +1246,12 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.max_accel = thrust
 	caps.blade_span = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M
 	caps.stick_reach = stick_length
-	# Fully-extended body→blade reach (arm ROM displacement + stick + blade). Read
-	# off the same scaled geometry the body uses, so the host's client-blade
-	# anti-cheat clamp bounds against this build's real reach, not the league
-	# default. See AISkaterCaps.max_blade_reach / the claim resolvers.
-	caps.max_blade_reach = stick_length + GameRules.DEFAULT_BLADE_LENGTH_M + rom_backhand_reach_max
+	# This build's real full reach (AISkaterCaps.max_blade_reach, the claim clamp).
+	caps.max_blade_reach = TopHandIK.full_reach(skater.shoulder.position,
+			deg_to_rad(velocity_lean_forward_max_deg + upper_body_lean_forward_max_deg),
+			GameRules.FACEOFF_SPAWN_HEIGHT + skater.upper_body.position.y,
+			skater.shoulder.position.y - hand_rest_y, rom_forward_reach_max, stick_length,
+			blade_height, skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
 	caps.max_lean_shift = skater.max_lean_shift()
 	caps.wrister_shot_speed = max_wrister_power
 	caps.blade_speed = max_blade_speed
@@ -1260,6 +1259,7 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.backhand_power_coefficient = backhand_power_coefficient
 	caps.wrister_load = _wrister_load_config()
 	caps.facing_rules = facing_rules
+	caps.carry_facing_rules = carry_facing_rules
 	if skater != null:
 		caps.is_left_handed = skater.is_left_handed
 	caps.wrister_unloaded_share = wrister_unloaded_share
@@ -1406,6 +1406,9 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	var arm_eff: float = arm_total * rom_arm_extension
 	var reach_drop: float = skater.shoulder_height - hand_rest_y
 	rom_backhand_reach_max    = sqrt(maxf(arm_eff * arm_eff - reach_drop * reach_drop, 0.0))
+	var arm_protracted: float = arm_eff + skater.shoulder_reach_m
+	rom_forward_reach_max     = sqrt(maxf(
+			arm_protracted * arm_protracted - reach_drop * reach_drop, 0.0))
 	# The blade's sweep radius: stick + arm-driven ROM, both just rescaled above.
 	var sweep_radius: float = stick_length + rom_forehand_reach_max
 	# Blade caps derive from this LEVER (constitution: geometry, never a

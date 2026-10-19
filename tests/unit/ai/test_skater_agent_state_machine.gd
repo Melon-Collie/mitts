@@ -536,20 +536,13 @@ func test_body_face_snaps_cursor_straight_at_an_in_cone_target() -> void:
 			"…pointing straight at the in-cone target, no slew")
 
 
-func test_body_face_clamps_a_behind_target_to_the_reach_cone() -> void:
-	# A target in the back wedge (directly behind) would freeze the pose IK gate if
-	# the cursor snapped there. Instead it's clamped to the cone edge on one side,
-	# so facing can rotate toward it and walk around. Facing +Z, target behind (−Z).
+func test_body_face_points_straight_at_a_target_behind() -> void:
+	# A standing body turns round to a cursor behind it, so the cursor goes there.
 	sm._current_self_pos = Vector3.ZERO
 	sm._current_self_state = _self_state(Vector2(0, 1))
 	sm._mouse_pos_initialized = false
-	var r: Vector3 = sm._step_mouse_face(Vector3(0, 0, -5))
-	var off_angle: float = absf(Vector2(0, 1).angle_to(Vector2(r.x, r.z)))
-	assert_lt(off_angle, sm._self_reach_cone_half_angle + 1e-4,
-			"clamped inside the reachable cone — the gate never freezes")
-	assert_almost_eq(off_angle,
-			sm._self_reach_cone_half_angle - Agent.FACE_GATE_MARGIN_RAD, 1e-4,
-			"…parked right at the cone edge, so the body turns as far as it can")
+	var r: Vector3 = sm._step_mouse_face(Vector3(0.3, 0, -5))
+	assert_almost_eq(Vector2(r.x, r.z).angle(), Vector2(0.3, -5).angle(), 1e-4)
 
 
 # ── Slice 3: shot wind-up geometry ───────────────────────────────────────────

@@ -28,8 +28,7 @@ const _PSI_RATE_EASE: float = 10.0
 
 # Low-pass rate of the ψ every POSE-side consumer reads (the hemisphere fade
 # and the whole pivot read). Raw ψ carries high-frequency content the pose must
-# not: per-tick velocity-direction noise, and the facing tracker's
-# freeze/unfreeze stutter at its unreachable-wedge gate — and the pivot
+# not: per-tick velocity-direction noise — and the pivot
 # consumes ψ multiplicatively (authority × phase × anchors), so every wiggle
 # hits the hips three ways. One angle-aware filter upstream quiets all of them;
 # the rate detector keeps reading raw ψ.

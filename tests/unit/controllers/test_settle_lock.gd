@@ -89,10 +89,14 @@ func test_presses_inside_the_settle_do_nothing() -> void:
 func test_the_blade_holds_its_seat_while_settling() -> void:
 	# Held in the skater's own frame: the body still turns to face the cursor and
 	# the seat turns with it (a few cm of lag while the turn starts), but the
-	# blade stops reaching for the cursor. Height is the carry's own hop.
+	# blade stops reaching for the cursor. Height is the carry's own hop. The seat
+	# is the carry's, a tick in: the catch itself moves the blade beside the puck
+	# and in to where both hands hold the stick. The lag grows with how far out
+	# the blade sits (here ~1.45 m, through a 46° turn); chasing is ~0.8 m.
+	_tick()
 	var seat: Vector3 = _blade_in_body()
-	_tick(20, Vector3(-1.2, 0.0, -0.4))
-	assert_lt(_flat(_blade_in_body() - seat), 0.08,
+	_tick(19, Vector3(-1.2, 0.0, -0.4))
+	assert_lt(_flat(_blade_in_body() - seat), 0.10,
 			"the blade does not chase the cursor while settling")
 	_tick_to_deadline()
 	_tick(12, Vector3(-1.2, 0.0, -0.4))

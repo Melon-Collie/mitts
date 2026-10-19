@@ -62,6 +62,23 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 
 
+# Where a shoulder marker sits on the trunk update() builds, in UpperBody's
+# frame, with the hips yawed `hip_yaw` off the facing. UpperBody (Euler YXZ)
+# twists before it pitches and the trunk folds before it twists, so a trunk both
+# folded and twisted carries its shoulders off the frame's markers — 5 cm at a
+# skating fold and full twist — and the arms are drawn from the trunk's. The
+# balance lean is left out (the frame's shift matches the shoulders' midpoint),
+# as is the crouch's drop (a translation the frame's lean shift does not see).
+static func shoulder_in_frame(marker: Vector3, trunk: Vector3, hip_yaw: float,
+		fold: float) -> Vector3:
+	if absf(fold) < 0.00001:
+		return marker
+	var twist: float = clampf(angle_difference(hip_yaw, trunk.y), -TWIST_LIMIT, TWIST_LIMIT)
+	var built: Basis = Basis(Vector3.UP, trunk.y - twist) * Basis(Vector3.RIGHT, fold) \
+			* Basis(Vector3.UP, twist) * Basis.from_euler(Vector3(trunk.x - fold, 0.0, trunk.z))
+	return Basis.from_euler(trunk).inverse() * (built * marker)
+
+
 func build(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 	update()

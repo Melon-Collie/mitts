@@ -39,6 +39,11 @@ func _random_caps() -> AISkaterCaps:
 	caps.facing_rules = FacingRules.Config.new()
 	caps.facing_rules.forehand_edge_rad = deg_to_rad(_rng.randf_range(130.0, 170.0))
 	caps.facing_rules.backhand_edge_rad = deg_to_rad(_rng.randf_range(130.0, 170.0))
+	caps.carry_facing_rules = FacingRules.Config.new()
+	caps.carry_facing_rules.forehand_edge_rad = caps.facing_rules.forehand_edge_rad
+	caps.carry_facing_rules.backhand_edge_rad = deg_to_rad(_rng.randf_range(50.0, 90.0))
+	caps.facing_rules.pivot_commit_rad = deg_to_rad(_rng.randf_range(0.0, 8.0))
+	caps.carry_facing_rules.pivot_commit_rad = caps.facing_rules.pivot_commit_rad
 	caps.is_left_handed = _rng.randf() < 0.5
 	return caps
 
