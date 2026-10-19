@@ -1,12 +1,17 @@
 # Stick settling — the range between a clean catch and a deflect
 
-Status: **Phase 1 built, awaiting playtest.** Phase 2 (bots pass softer) is
-agreed and not started. The near-miss bobble is Phase 3, to be discussed after
-Phase 1 is playtested.
+Status: **Phases 1 and 2 built, awaiting playtest.** The near-miss bobble is
+Phase 3, to be discussed after playtesting.
 
-As built, Phase 1 differs from the design below in one place: the settle's held
-blade holds its reach *target* in the skater's frame (`hold_seat`), not the
-wrister freeze's re-read of the solved blade, which walks outward in tight.
+As built, two things differ from the design below:
+- Phase 1: the settle's held blade holds its reach *target* in the skater's
+  frame (`hold_seat`), not the wrister freeze's re-read of the solved blade,
+  which walks outward in tight.
+- Phase 2: a softer pace is only priced where its flight fits inside
+  `PASS_LEAD_MAX_S` (raising the horizon would move the reception side, which
+  shares it), so soft feeds are the short ones and long feeds stay at full pace.
+  The settle is priced at the any-angle ceiling: in the duel harness's reception
+  sweep, bot catches arrive with a mean blade alignment of 0.2–0.4.
 
 ## Decisions banked
 

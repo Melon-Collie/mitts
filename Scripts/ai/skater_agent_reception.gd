@@ -10,9 +10,11 @@ extends RefCounted
 
 # Pass-receive setup: stand to the SIDE of a fast puck's path so the blade face
 # is square to the incoming line, maximizing PuckReceptionRules' alignment bonus
-# (up to +8 m/s head-on). The trigger is the deflect threshold: anything slower
-# is collectable at any angle.
-const RECEIVE_TRIGGER_PUCK_SPEED_M_S: float = 14.0
+# (up to +8 m/s head-on), which lifts the catch ceiling and shortens the settle.
+# The trigger is what reads as a pass at all: under the softest feed a bot
+# fires (pass_launch_speed floors the arrival at the min wrister, 10 m/s), less
+# a margin for the pace it sheds on the way.
+const RECEIVE_TRIGGER_PUCK_SPEED_M_S: float = 9.0
 # Farther than this off the puck's line, the pass isn't ours; sized generously to
 # cover any pass that would realistically end up at this bot.
 const RECEIVE_TRIGGER_LATERAL_M: float = 5.0

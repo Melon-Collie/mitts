@@ -238,6 +238,7 @@ var _phase_shoot_score: float = -1.0
 var _phase_best_pass_peer: int = -1
 var _phase_best_pass_score: float = -1.0
 var _phase_best_pass_saucer: bool = false
+var _phase_best_pass_frac: float = 1.0
 # The winning pass's rim launch bearing, ZERO when it is a straight feed.
 var _phase_best_pass_rim_dir: Vector3 = Vector3.ZERO
 # The winning pass's rim pace, carried to the release with its bearing.
@@ -593,6 +594,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_best_pass_saucer = _pass.best_is_saucer
 	_phase_best_pass_rim_dir = _pass.best_rim_dir
 	_phase_best_pass_rim_pace = _pass.best_rim_pace
+	_phase_best_pass_frac = _pass.best_pace_frac
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, and the
@@ -738,10 +740,9 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			# what its load can carry.
 			var receiver: SkaterNetworkState = ctx.snapshot.skater_states.get(best_pass_peer)
 			if receiver != null:
-				# Receiver-relative launch: the puck lands on the tape at the magnet
-				# CLOSING speed in the receiver's frame — harder onto a streaking
-				# receiver, softer to one curling back. Distance and direction from
-				# the PUCK (the real release point).
+				# Receiver-relative launch at the pace the search priced: harder onto
+				# a streaking receiver, softer to one curling back. Distance and
+				# direction from the PUCK (the real release point).
 				var to_receiver: Vector3 = receiver.position - puck_now
 				to_receiver.y = 0.0
 				var pass_dir: Vector3 = to_receiver.normalized()
@@ -749,7 +750,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 						puck_now.distance_to(receiver.position),
 						_field.pass_launch_cap(ctx, pass_dir,
 								ctx.snapshot.skater_states[ctx.peer_id].facing),
-						ctx.pass_speed_scale, receiver.velocity, pass_dir)
+						ctx.pass_speed_scale * _phase_best_pass_frac, receiver.velocity, pass_dir)
 			else:
 				pass_target_speed = AIPuckLane.PASS_SPEED_M_S * ctx.pass_speed_scale
 			# A saucer's launch is capped at the receivability bound for the

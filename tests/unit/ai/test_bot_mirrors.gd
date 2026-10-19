@@ -44,6 +44,14 @@ func test_the_puck_thresholds_the_bots_price() -> void:
 	puck.free()
 
 
+func test_the_settle_a_feed_is_priced_at_is_the_pucks() -> void:
+	var puck: Puck = PuckScript.new()
+	assert_eq(AIPuckLane.RECEIVE_ANY_ANGLE_CEILING_M_S, puck.deflect_min_speed)
+	assert_eq(AIPuckLane.SETTLE_CLEAN_LOAD, puck.settle_clean_load)
+	assert_eq(AIPuckLane.SETTLE_MAX_S, puck.settle_max_s)
+	puck.free()
+
+
 func test_the_harness_catches_as_the_puck_does() -> void:
 	var puck: Puck = PuckScript.new()
 	assert_eq(DuelHarness.PICKUP_MAX_REL_SPEED, puck.pickup_max_speed)
