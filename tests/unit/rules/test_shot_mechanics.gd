@@ -235,81 +235,13 @@ func test_wrister_speed_for_power_t_clamps() -> void:
 	assert_almost_eq(ShotMechanics.wrister_speed_for_power_t(1.5, cfg),
 			cfg.full_sweep_speed, 0.001, "over-1 target clamps to the full-speed reference")
 
-# ── Wrister: travel-gated ceiling ─────────────────────────────────────────────
-# The top of the band must be EARNED with blade travel: cursor speed alone (a
-# twitch, a wiggle, a cranked sensitivity) caps at the flick-pass floor. The
-# gate is a cap — it can only lower the speed-derived t, never raise it — so
-# everything below the floor (the touch-pass precision band) is bit-identical
-# to the ungated model.
-
-func _gated_cfg() -> ShotMechanics.WristerConfig:
+func test_wrister_full_sweep_maxes_power() -> void:
 	var cfg := _wrister_cfg()
-	cfg.full_stroke_travel = 1.0
-	cfg.travel_cap_floor = 0.4
-	return cfg
-
-func test_travel_cap_disabled_when_full_travel_unset() -> void:
-	# full_stroke_travel <= 0 disables the gate — cap is 1.0 for any travel.
-	assert_almost_eq(ShotMechanics.wrister_travel_cap_t(0.0, _wrister_cfg()),
-		1.0, 0.001, "unset gate never caps")
-
-func test_travel_cap_zero_travel_floors_at_flick_pass_tier() -> void:
-	assert_almost_eq(ShotMechanics.wrister_travel_cap_t(0.0, _gated_cfg()),
-		0.4, 0.001, "zero travel earns the flick-pass floor, not zero")
-
-func test_travel_cap_full_travel_unlocks_ceiling() -> void:
-	assert_almost_eq(ShotMechanics.wrister_travel_cap_t(1.0, _gated_cfg()),
-		1.0, 0.001, "a full stroke unlocks the whole band")
-	assert_almost_eq(ShotMechanics.wrister_travel_cap_t(2.5, _gated_cfg()),
-		1.0, 0.001, "over-travel clamps at 1")
-
-func test_travel_cap_scales_between_floor_and_full() -> void:
-	assert_almost_eq(ShotMechanics.wrister_travel_cap_t(0.7, _gated_cfg()),
-		0.7, 0.001, "partial stroke earns a proportional ceiling")
-
-func test_wrister_twitch_full_speed_no_travel_caps_at_floor() -> void:
-	# THE exploit case: max cursor speed with no blade travel (wiggle / jerk /
-	# cranked Shot Power Sensitivity) releases at the flick-pass tier, not max.
-	var cfg := _gated_cfg()
-	var r: ShotMechanics.ShotResult = ShotMechanics.release_wrister(
-		Vector3.ZERO, Vector3(10, 0, 0), Vector3(0.5, 0, 0),
-		false, 0, cfg, Vector3(1, 0, 0), false, FULL_SWEEP, 0.0)
-	var floor_power: float = lerpf(cfg.min_wrister_power, cfg.max_wrister_power,
-			cfg.travel_cap_floor)
-	assert_almost_eq(r.power, floor_power, 0.01,
-		"speed without travel caps at the flick-pass tier")
-
-func test_wrister_full_sweep_with_full_travel_maxes_power() -> void:
-	# The honest rip: full speed AND a real swept stroke — untouched by the gate.
-	var cfg := _gated_cfg()
-	var r: ShotMechanics.ShotResult = ShotMechanics.release_wrister(
-		Vector3.ZERO, Vector3(10, 0, 0), Vector3(0.5, 0, 0),
-		false, 0, cfg, Vector3(1, 0, 0), false, FULL_SWEEP, 1.2)
-	assert_almost_eq(r.power, cfg.max_wrister_power, 0.01,
-		"an earned stroke keeps the full ceiling")
-
-func test_wrister_soft_sweep_below_floor_untouched_by_gate() -> void:
-	# The mastered touch pass: a slow sweep's speed-derived t sits under the
-	# floor, so gated and ungated release identically even at zero travel.
-	var slow_sweep: float = 1.0
-	var gated: ShotMechanics.ShotResult = ShotMechanics.release_wrister(
-		Vector3.ZERO, Vector3(10, 0, 0), Vector3(0.5, 0, 0),
-		false, 0, _gated_cfg(), Vector3(1, 0, 0), false, slow_sweep, 0.0)
-	var ungated: ShotMechanics.ShotResult = ShotMechanics.release_wrister(
-		Vector3.ZERO, Vector3(10, 0, 0), Vector3(0.5, 0, 0),
-		false, 0, _wrister_cfg(), Vector3(1, 0, 0), false, slow_sweep)
-	assert_almost_eq(gated.power, ungated.power, 0.001,
-		"the soft band is bit-identical to the ungated model")
-
-func test_wrister_default_travel_bypasses_gate() -> void:
-	# Callers that pass no stroke_travel (bots via INF, quick shots) keep the
-	# full ceiling even on a gated config.
-	var cfg := _gated_cfg()
 	var r: ShotMechanics.ShotResult = ShotMechanics.release_wrister(
 		Vector3.ZERO, Vector3(10, 0, 0), Vector3(0.5, 0, 0),
 		false, 0, cfg, Vector3(1, 0, 0), false, FULL_SWEEP)
 	assert_almost_eq(r.power, cfg.max_wrister_power, 0.01,
-		"default (INF) stroke_travel means no gate")
+		"a full-speed sweep releases at the ceiling")
 
 # ── Slapper ──────────────────────────────────────────────────────────────────
 
@@ -350,6 +282,27 @@ func test_slapper_power_scales_with_charge_time() -> void:
 		Vector3.ZERO, Vector3(10, 0, 0), 0, 1.0, cfg)
 	assert_gt(long_result.power, short_result.power)
 	assert_almost_eq(long_result.power, cfg.max_slapper_power, 0.01)
+
+
+func test_slapper_power_is_front_loaded() -> void:
+	# A short backswing carries most of a slapshot: the curve is concave, ends
+	# pinned to the band, and a 0.3 s neutral wind-up already matches a full
+	# neutral wrister.
+	var cfg := _slapper_cfg()
+	cfg.max_slapper_charge_time = 0.7
+	assert_almost_eq(ShotMechanics.slapper_power_t(0.0, cfg), 0.0, 0.0001)
+	assert_almost_eq(ShotMechanics.slapper_power_t(0.7, cfg), 1.0, 0.0001)
+	assert_almost_eq(ShotMechanics.slapper_power_t(2.0, cfg), 1.0, 0.0001, "overcharge clamps")
+	var quarter: float = ShotMechanics.slapper_power_t(0.175, cfg)
+	var half: float = ShotMechanics.slapper_power_t(0.35, cfg)
+	assert_gt(quarter, 0.25, "front-loaded: a quarter wind-up is more than a quarter of the band")
+	assert_gt(half - quarter, ShotMechanics.slapper_power_t(0.525, cfg) - half,
+			"each extra slice of wind-up buys less")
+	var min_p: float = GameRules.DEFAULT_SLAPPER_POWER_MIN_M_S
+	var max_p: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
+	assert_gte(lerpf(min_p, max_p, ShotMechanics.slapper_power_t(0.3, cfg)),
+			GameRules.DEFAULT_WRISTER_POWER_MAX_M_S - 0.1,
+			"a 0.3 s slapper matches a full wrister")
 
 func test_slapper_loft() -> void:
 	var cfg := _slapper_cfg()
@@ -438,13 +391,13 @@ func test_flattest_ladder_never_sails() -> void:
 	# DRIFT DETECTOR, not a requirement — same standing as the table-level
 	# check above (elevation doc §1.2). Its value is the WIRING, not the
 	# property: it drives a real release and carries the M88's own +3% slapper
-	# lean (curve_slap_mult), which a bare-40 m/s fixture omitted. That
+	# lean (slapper_power_mult), which a bare-40 m/s fixture omitted. That
 	# omission once hid the property being false at neutral build, so whatever
 	# a future ladder asserts here, it must keep the per-gear multiplier.
 	var m88 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1)
 	var cfg := _slapper_cfg()
 	cfg.max_slapper_power = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S \
-			* m88.curve_slap_mult()
+			* m88.slapper_power_mult()
 	cfg.loft_tan_low = m88.curve_loft_tan_low()
 	var r: ShotMechanics.ShotResult = ShotMechanics.release_slapper(
 			Vector3.ZERO, Vector3(0, 0, 10), 1, 1.0, cfg, Vector3(0, 0, 1))
@@ -686,7 +639,7 @@ func _assert_menu_at_home(attrs: PlayerAttributes, home: float, gear: String) ->
 
 func test_every_gear_delivers_the_full_menu_at_its_home_range() -> void:
 	_assert_menu_at_home(_m88(), _HOME_M88, "M88")
-	_assert_menu_at_home(PlayerAttributes.all_average(), _HOME_M92, "M92")
+	_assert_menu_at_home(PlayerAttributes.neutral(), _HOME_M92, "M92")
 	_assert_menu_at_home(_m28(), _HOME_M28, "M28")
 
 
@@ -696,7 +649,7 @@ func test_gears_own_different_zones() -> void:
 	# M28's home the closed blade is still down at pad height on its top rung.
 	var h88: float = _arrive(_HOME_M28, _FULL_PACE, _m88().curve_loft_tan_high())
 	var h92: float = _arrive(_HOME_M28, _FULL_PACE,
-			PlayerAttributes.all_average().curve_loft_tan_high())
+			PlayerAttributes.neutral().curve_loft_tan_high())
 	var h28: float = _arrive(_HOME_M28, _FULL_PACE, _m28().curve_loft_tan_high())
 	assert_lt(h88, h92, "the range blade sits lowest in tight")
 	assert_lt(h92, h28, "the close blade sits highest in tight")
@@ -749,7 +702,7 @@ func test_no_low_rung_sails_on_any_gear_at_any_pace() -> void:
 	# invariant did we break." Do not treat it as a ceiling on LOW.
 	var max_slap: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 	for attrs: PlayerAttributes in [
-			_m88(), PlayerAttributes.all_average(), _m28()]:
+			_m88(), PlayerAttributes.neutral(), _m28()]:
 		var t: float = attrs.curve_loft_tan_low()
 		var sin_a: float = t / sqrt(1.0 + t * t)
 		assert_lt(pow(max_slap * sin_a, 2.0) / (2.0 * 9.8), GameRules.NET_HEIGHT,

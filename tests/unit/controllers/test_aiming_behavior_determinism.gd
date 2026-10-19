@@ -22,27 +22,20 @@ const SMOOTHING: float = 14.0
 func test_wrister_charge_deterministic_from_neutral_start() -> void:
 	var a := SkaterAimingBehavior.new()
 	var b := SkaterAimingBehavior.new()
-	a.reset_wrister(Vector3.ZERO, Vector3.ZERO)
-	b.reset_wrister(Vector3.ZERO, Vector3.ZERO)
-	# Identical synthetic cursor+blade sweep — both track together (active
-	# drag), with a small direction reversal mid-sweep to exercise variance.
+	a.reset_wrister(Vector3.ZERO)
+	b.reset_wrister(Vector3.ZERO)
+	# Identical synthetic cursor sweep, with a small reversal mid-sweep.
 	var sweep: Array[Vector3] = [
 		Vector3(0.1, 0.0, 0.0), Vector3(0.2, 0.0, 0.05), Vector3(0.3, 0.0, 0.1),
 		Vector3(0.4, 0.0, 0.12), Vector3(0.35, 0.0, 0.15), Vector3(0.45, 0.0, 0.18), Vector3(0.55, 0.0, 0.2),
 	]
 	for p: Vector3 in sweep:
-		a.tick_wrister_charge(p, p, 35.0, DT, SMOOTHING)
-		b.tick_wrister_charge(p, p, 35.0, DT, SMOOTHING)
+		a.tick_wrister_charge(p, DT, SMOOTHING)
+		b.tick_wrister_charge(p, DT, SMOOTHING)
 	assert_eq(a.cursor_speed_ema, b.cursor_speed_ema,
 			"cursor_speed_ema (the power signal) must be deterministic from identical inputs")
-	assert_eq(a.stroke_travel, b.stroke_travel,
-			"stroke_travel (the power-ceiling gate) must be deterministic from identical inputs")
-	assert_eq(a.prev_blade_dir, b.prev_blade_dir,
-			"prev_blade_dir must match")
 	assert_eq(a.prev_intent_pos, b.prev_intent_pos,
 			"prev_intent_pos must match")
-	assert_eq(a.prev_swing_bearing, b.prev_swing_bearing,
-			"prev_swing_bearing must match")
 
 
 func test_wrister_charge_deterministic_from_mid_charge_start() -> void:
@@ -52,26 +45,17 @@ func test_wrister_charge_deterministic_from_mid_charge_start() -> void:
 	var a := SkaterAimingBehavior.new()
 	var b := SkaterAimingBehavior.new()
 	a.cursor_speed_ema = 700.0
-	a.stroke_travel = 0.4
-	a.prev_blade_dir = Vector3(0.6, 0.0, 0.8)
 	a.prev_intent_pos = Vector3(0.3, 0.0, 0.2)
-	a.prev_swing_bearing = Vector3(0.3, 0.0, 0.2)
 	b.cursor_speed_ema = 700.0
-	b.stroke_travel = 0.4
-	b.prev_blade_dir = Vector3(0.6, 0.0, 0.8)
 	b.prev_intent_pos = Vector3(0.3, 0.0, 0.2)
-	b.prev_swing_bearing = Vector3(0.3, 0.0, 0.2)
 	var sweep: Array[Vector3] = [
 		Vector3(0.35, 0.0, 0.22), Vector3(0.4, 0.0, 0.25), Vector3(0.45, 0.0, 0.28), Vector3(0.5, 0.0, 0.32),
 	]
 	for p: Vector3 in sweep:
-		a.tick_wrister_charge(p, p, 35.0, DT, SMOOTHING)
-		b.tick_wrister_charge(p, p, 35.0, DT, SMOOTHING)
+		a.tick_wrister_charge(p, DT, SMOOTHING)
+		b.tick_wrister_charge(p, DT, SMOOTHING)
 	assert_eq(a.cursor_speed_ema, b.cursor_speed_ema)
-	assert_eq(a.stroke_travel, b.stroke_travel)
-	assert_eq(a.prev_blade_dir, b.prev_blade_dir)
 	assert_eq(a.prev_intent_pos, b.prev_intent_pos)
-	assert_eq(a.prev_swing_bearing, b.prev_swing_bearing)
 
 
 # ── Slapper charge — timer accumulation is pure delta sum ────────────────────
@@ -144,12 +128,12 @@ func test_one_timer_window_stops_at_zero() -> void:
 func test_wrister_charge_differs_for_different_sequences() -> void:
 	var a := SkaterAimingBehavior.new()
 	var b := SkaterAimingBehavior.new()
-	a.reset_wrister(Vector3.ZERO, Vector3.ZERO)
-	b.reset_wrister(Vector3.ZERO, Vector3.ZERO)
+	a.reset_wrister(Vector3.ZERO)
+	b.reset_wrister(Vector3.ZERO)
 	# Faster per-tick cursor travel → higher cursor_speed_ema (more power).
-	a.tick_wrister_charge(Vector3(10.0, 0, 0), Vector3(10.0, 0, 0), 35.0, DT, SMOOTHING)
-	a.tick_wrister_charge(Vector3(20.0, 0, 0), Vector3(20.0, 0, 0), 35.0, DT, SMOOTHING)
-	b.tick_wrister_charge(Vector3(1.0, 0, 0), Vector3(1.0, 0, 0), 35.0, DT, SMOOTHING)
-	b.tick_wrister_charge(Vector3(2.0, 0, 0), Vector3(2.0, 0, 0), 35.0, DT, SMOOTHING)
+	a.tick_wrister_charge(Vector3(10.0, 0, 0), DT, SMOOTHING)
+	a.tick_wrister_charge(Vector3(20.0, 0, 0), DT, SMOOTHING)
+	b.tick_wrister_charge(Vector3(1.0, 0, 0), DT, SMOOTHING)
+	b.tick_wrister_charge(Vector3(2.0, 0, 0), DT, SMOOTHING)
 	assert_ne(a.cursor_speed_ema, b.cursor_speed_ema,
 			"different sweep speeds must produce different power")

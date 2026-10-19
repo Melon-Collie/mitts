@@ -1367,7 +1367,7 @@ func sync_existing_players(player_data: Array) -> void:
 			attrs = PlayerAttributes.new(int(entry[9]), int(entry[10]), int(entry[11]),
 					int(entry[12]), int(entry[13]), int(entry[14]))
 		else:
-			attrs = PlayerAttributes.all_average()
+			attrs = PlayerAttributes.neutral()
 		var tape_code: int = int(entry[15]) if entry.size() > 15 else StickTapeConfig.DEFAULT_CODE
 		NetworkManager.set_peer_tape_code(peer_id, tape_code)
 		var skin_tone: int = int(entry[16]) if entry.size() > 16 else SkinToneRegistry.DEFAULT_INDEX
@@ -1416,7 +1416,7 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int,
 			colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 			colors.secondary, colors.text, colors.text_outline,
 			is_left_handed, player_name, false, jersey_number,
-			attributes if attributes != null else PlayerAttributes.all_average())
+			attributes if attributes != null else PlayerAttributes.neutral())
 
 
 # ── World Spawn ───────────────────────────────────────────────────────────────
@@ -5297,7 +5297,7 @@ func _collect_existing_player_data() -> Array[Array]:
 	var existing: Array[Array] = []
 	for peer_id: int in _registry.all():
 		var r: PlayerRecord = _registry.get_record(peer_id)
-		var attrs: PlayerAttributes = r.attributes if r.attributes != null else PlayerAttributes.all_average()
+		var attrs: PlayerAttributes = r.attributes if r.attributes != null else PlayerAttributes.neutral()
 		existing.append([peer_id, r.team_slot, r.team.team_id,
 				r.jersey_color, r.helmet_color, r.pants_color,
 				r.is_left_handed, r.player_name, r.jersey_number,

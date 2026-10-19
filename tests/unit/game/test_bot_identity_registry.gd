@@ -106,27 +106,6 @@ func test_normalize_coerces_out_of_band_body() -> void:
 			"underweight clamps to the band floor")
 
 
-func test_normalize_migrates_tier_era_entry() -> void:
-	# A tier-era roster (height step + skating/skill/checking) migrates through
-	# PlayerAttributes.migrate_tiers: strong Checking → heavier frame + long stick.
-	var norm: Dictionary = BotIdentityRegistry.normalize_entry({
-			"name": "OldPohl", "height": 5, "skating": 1, "skill": 2, "checking": 3})
-	assert_eq(int(norm.height), 79, "legacy 1..5 step → inches")
-	assert_eq(int(norm.weight), PlayerAttributes.weight_for_frame_t(79, 0.75))
-	assert_eq(int(norm.length), PlayerAttributes.LENGTH_LONG)
-
-
-func test_normalize_migrates_legacy_six_attribute_entry() -> void:
-	# The oldest six-attribute shape still loads: a size-5 / physical-5
-	# enforcer becomes tall + heavy.
-	var norm: Dictionary = BotIdentityRegistry.normalize_entry({
-			"name": "Legacy", "speed": 2, "agility": 1, "hands": 2, "size": 5,
-			"physical": 5, "shot": 4})
-	assert_eq(int(norm.height), 79, "legacy size → height")
-	assert_gt(int(norm.weight), PlayerAttributes.weight_neutral(79),
-			"physical-heavy legacy build → heavier than neutral")
-
-
 func test_normalize_defaults_missing_attributes_to_neutral() -> void:
 	# A name-only entry (the "rename your bots" shape) loads as the neutral build.
 	var norm: Dictionary = BotIdentityRegistry.normalize_entry({"name": "NameOnly"})

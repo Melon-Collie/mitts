@@ -9,7 +9,7 @@ extends Node
 # screen cursor (GamepadAimRules, an absolute "skill stick" anchored on the
 # skater's on-screen position) that is stored into the SAME
 # InputState.mouse_screen_pos / mouse_world_pos the mouse feeds. Everything below
-# the gatherer — blade IK, the wrister charge tracker, its travel gate, smart-ping
+# the gatherer — blade IK, the wrister aim origin, smart-ping
 # targeting — reads those two fields, so it runs byte-identically for pad and
 # mouse with no controller branch in the sim. The pad's buttons/triggers are read
 # directly here (contained behind the pref) and mapped onto the existing input
@@ -294,9 +294,9 @@ func gather() -> InputState:
 		state.hit_held = _pad_held("hit")
 		# COMMITTED WRISTER: aim comes from the cursor position (parked in the stick
 		# direction in _update_pad_cursor → origin→cursor is the shot line), power from
-		# RT's travel (latched in _accumulate_gamepad_edges) — no flick, no drag timing,
-		# no travel gate. Keep commit true one frame into the release so the shot (fired
-		# on RT-up) reads the held power.
+		# RT's travel (latched in _accumulate_gamepad_edges) — no flick, no drag timing.
+		# Keep commit true one frame into the release so the shot (fired on RT-up)
+		# reads the held power.
 		state.commit_wrister_power = state.shoot_held or _prev_gather_rt
 		state.bot_wrister_power_t = _committed_wrister_power
 		_prev_gather_rt = state.shoot_held

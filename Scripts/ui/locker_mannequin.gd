@@ -328,22 +328,16 @@ static func _lift(y: float, m_height: float) -> float:
 func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 		is_left_handed: bool) -> void:
 	var m_height: float = attrs.height_mult()
-	var m_torso: float = attrs.torso_bulk_mult()
-	var m_shoulder: float = attrs.shoulder_bulk_mult()
+	var m_girth: float = attrs.girth_mult()
 	var m_head: float = attrs.head_bulk_mult()
-	var m_thigh: float = attrs.thigh_mult()
-	var m_calf: float = attrs.calf_mult()
-	var m_upper_arm: float = attrs.upper_arm_bulk_mult()
-	var m_forearm: float = attrs.forearm_bulk_mult()
 
 	_torso.transform = Transform3D(
-			Basis.from_scale(Vector3(m_torso, m_height, m_torso)),
+			Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
 			Vector3(0.0, _lift(_TORSO_Y, m_height), 0.0))
 	# The pelvis profile is authored in UpperBody's own space, whose origin is
-	# the rig's y 0 — so it needs no station of its own, only the same bulk the
-	# torso takes.
+	# the rig's y 0 — so it needs no station of its own.
 	_pelvis.transform = Transform3D(
-			Basis.from_scale(Vector3(m_torso, m_height, m_torso)),
+			Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
 			Vector3(0.0, _lift(0.0, m_height), 0.0))
 	# The helmet takes its own mild multiplier on all three axes and never
 	# stretches with height: adult heads are near-constant across statures, and
@@ -353,30 +347,27 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 			Vector3(0.0, _lift(_HELMET_Y, m_height), 0.0))
 
 	var shoulder_y: float = _lift(_SHOULDER_Y, m_height)
-	# Deltoid caps ride TORSO bulk laterally — the pad sits on the chest wall,
-	# so it is the torso's width that pushes it out, while its own bulk
-	# multiplier keeps the ball reading Physical.
-	var shoulder_x: float = _SHOULDER_X * m_torso
+	# Deltoid caps ride girth laterally — the pad sits on the chest wall, so
+	# the torso's width pushes it out.
+	var shoulder_x: float = _SHOULDER_X * m_girth
 	var boot_y: float = _lift(_LEG_Y + _BOOT_DY, m_height)
 	for i: int in 2:
 		var side: float = -1.0 if i == 0 else 1.0
 		_shoulders[i].transform = Transform3D(
-				Basis.from_scale(Vector3(m_shoulder, m_height, m_shoulder)),
+				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
 				Vector3(side * shoulder_x, shoulder_y, 0.0))
 
-		# Thigh and knee are one bulk group in the appearance rig, so they read
-		# as one leg however the build's dials move.
-		var leg_x: float = side * _LEG_X * m_torso
-		var leg_bulk := Basis.from_scale(Vector3(m_thigh, m_height, m_thigh))
+		var leg_x: float = side * _LEG_X * m_girth
+		var leg_bulk := Basis.from_scale(Vector3(m_girth, m_height, m_girth))
 		_thighs[i].transform = Transform3D(leg_bulk,
 				Vector3(leg_x, _lift(_LEG_Y + _THIGH_DY, m_height), 0.0))
 		_knees[i].transform = Transform3D(leg_bulk,
 				Vector3(leg_x, _lift(_LEG_Y + _KNEE_DY, m_height), 0.0))
 		_socks[i].transform = Transform3D(
-				Basis.from_scale(Vector3(m_calf, m_height, m_calf)),
+				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
 				Vector3(leg_x, _lift(_LEG_Y + _SOCK_DY, m_height), 0.0))
 		_collars[i].transform = Transform3D(
-				Basis.from_scale(Vector3(m_calf, m_height, m_calf)),
+				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
 				Vector3(leg_x, _lift(_LEG_Y + _COLLAR_DY, m_height), 0.0))
 		# The boot itself never scales — a big frame gets a longer leg, not a
 		# longer foot — but its seat rides the lengthened shin like the rig's.
@@ -384,7 +375,7 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 				Vector3(leg_x, boot_y, _BOOT_DZ))
 
 	_pose_stick(attrs, tape)
-	_pose_arms(is_left_handed, shoulder_x, shoulder_y, m_upper_arm, m_forearm, m_height)
+	_pose_arms(is_left_handed, shoulder_x, shoulder_y, m_girth, m_height)
 
 	# Anchors so far are rig-local (the stick and arm passes wrote theirs the
 	# same way); the two body framings join them here.
@@ -496,7 +487,7 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig) -> void:
 # hand outside its arm's reach. Sliding each grip to where its arm can hold it
 # is what keeps both arms the rig's own length.
 func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
-		m_upper_arm: float, m_forearm: float, m_height: float) -> void:
+		m_girth: float, m_height: float) -> void:
 	var top_side: float = 1.0 if is_left_handed else -1.0
 	var upper: float = _UPPER_ARM_M * m_height
 	var fore: float = _FOREARM_M * m_height
@@ -512,14 +503,14 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		grips[i] = hand
 		var pole := Vector3(_ARM_POLE.x * side, _ARM_POLE.y, _ARM_POLE.z)
 		var elbow: Vector3 = _solve_elbow(shoulder, hand, pole, upper, fore)
-		_seat_bone(_upper_arms[i], shoulder, elbow, _ARM_RADIUS * m_upper_arm)
-		_seat_bone(_forearms[i], elbow, hand, _ARM_RADIUS * m_forearm)
+		_seat_bone(_upper_arms[i], shoulder, elbow, _ARM_RADIUS * m_girth)
+		_seat_bone(_forearms[i], elbow, hand, _ARM_RADIUS * m_girth)
 		# The pad's point out of the bend, as the live rig poses it.
 		var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
 		var along: Vector3 = (hand - shoulder).normalized()
 		var pad := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
 		_elbows[i].transform = Transform3D(
-				pad.scaled_local(Vector3.ONE * _ELBOW_RADIUS * m_upper_arm), elbow)
+				pad.scaled_local(Vector3.ONE * _ELBOW_RADIUS * m_girth), elbow)
 		# The fist's local +Y runs back toward the elbow — the live rig's
 		# convention, so the block's faces track the forearm. Both this and the
 		# cuff scale their basis COLUMNS: Basis.scaled() would scale in the

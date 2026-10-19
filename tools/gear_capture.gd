@@ -177,10 +177,10 @@ func _build_skate(holder: Node3D, model: int) -> void:
 	laces.material_override = _mat(_LACE_COLOR, 0.9)
 	holder.add_child(laces)
 
-	var attrs := PlayerAttributes.all_average()
+	var attrs := PlayerAttributes.neutral()
 	var collar := MeshInstance3D.new()
 	collar.mesh = SkaterMeshBuilder.shared_skate_collar()
-	collar.scale = Vector3(attrs.calf_mult(), attrs.height_mult(), attrs.calf_mult())
+	collar.scale = Vector3(attrs.girth_mult(), attrs.height_mult(), attrs.girth_mult())
 	collar.position = skate_at + Vector3(0.10, 0.04 * attrs.height_mult(), 0.0)
 	collar.material_override = _mat(_skate_zone(model, GearModelRegistry.SKATE_COLLAR), 0.42)
 	holder.add_child(collar)
