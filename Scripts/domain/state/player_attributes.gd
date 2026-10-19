@@ -141,9 +141,9 @@ const CURVE_CLOSED: int = 0      # hardest to elevate, best backhand
 const CURVE_BALANCED: int = 1
 const CURVE_OPEN: int = 2        # easier elevation (FLAT/LOW), quick release, worst backhand
 
-const FLEX_LOW: int = 0          # whippy: −power ceiling, shortest runway/wind-up
+const FLEX_LOW: int = 0          # whippy: −power ceiling, shortest slapper wind-up
 const FLEX_MEDIUM: int = 1
-const FLEX_HIGH: int = 2         # stiff: +power ceiling, longest runway/wind-up
+const FLEX_HIGH: int = 2         # stiff: +power ceiling, longest slapper wind-up
 
 # The retail stiffness ladder — the flex numbers sticks actually ship in. The
 # workbench shows the build's real number (see flex_number); the gameplay leans
@@ -213,14 +213,13 @@ const _PROFILE_ACCEL_LEAN: Array[float] = [1.04, 1.00, 0.98]
 const _PROFILE_GLIDE_LEAN: Array[float] = [1.03, 1.00, 0.96]    # drag mult: lower = coasts better
 
 # STICK FLEX — power ↔ release, a true seesaw: stiff loads a bigger shot but
-# pays a slower load (longer slapper wind-up AND longer wrister runway);
-# whippy is the snap release at a softer ceiling. NOTE the charge lean goes
+# pays a longer slapper wind-up; whippy is the quicker load at a softer
+# ceiling. NOTE the charge lean goes
 # WITH the power lean, deliberately breaking from the height coupling
 # (2 − power, where a harder shooter also threatens sooner): a lateral slot
 # must trade, never stack. Real-hockey sign convention: high flex number = stiffer.
 const _FLEX_SHOT_LEAN: Array[float] = [0.94, 1.00, 1.06]    # whippy / medium / stiff
 const _FLEX_CHARGE_LEAN: Array[float] = [0.92, 1.00, 1.10]  # wind-up time, with power
-const _FLEX_RUNWAY_LEAN: Array[float] = [0.90, 1.00, 1.12]  # wrister full-stroke travel
 
 # BLADE CURVE — three house patterns modeled on hockey's most-played real
 # blades: M88 (closed slot — the P88-like mid curve), M92 (balanced — the
@@ -273,8 +272,7 @@ const _FLEX_RUNWAY_LEAN: Array[float] = [0.90, 1.00, 1.12]  # wrister full-strok
 #         hardest feeds (+7% reception ceiling — the flat blade cradles).
 #   M28 — the in-tight blade: the open toe is its whole (large) upside;
 #         it pays the deepest backhand penalty, −3% slapper, and hard feeds
-#         bounce off (−7% reception). Its stored quick-release runway lean
-#         goes live when the wrister travel gate unfreezes.
+#         bounce off (−7% reception).
 # Backhand relief approaches but never reaches forehand parity
 # (0.75 base × 1.08 = 0.81). Reception lean scales the deflect ceiling +
 # alignment bonus at the decision sites (PuckReceptionRules callers) — never
@@ -283,7 +281,6 @@ const _FLEX_RUNWAY_LEAN: Array[float] = [0.90, 1.00, 1.12]  # wrister full-strok
 const _CURVE_LOFT_LOW_DEG: Array[float] = [5.0, 5.5, 6.4]      # M88 / M92 / M28
 const _CURVE_LOFT_MID_DEG: Array[float] = [6.9, 8.2, 10.0]
 const _CURVE_LOFT_HIGH_DEG: Array[float] = [8.9, 11.0, 13.6]
-const _CURVE_RUNWAY_LEAN: Array[float] = [1.00, 1.00, 0.90]
 const _CURVE_BACKHAND_LEAN: Array[float] = [1.08, 1.00, 0.90]
 const _CURVE_SLAP_LEAN: Array[float] = [1.03, 1.00, 0.97]
 const _CURVE_RECEPTION_LEAN: Array[float] = [1.07, 1.00, 0.93]
@@ -513,14 +510,6 @@ func height_mult() -> float:    return _h(_HEIGHT, height)
 func stick_len_mult() -> float: return _h(_STICK_LEN, height) * _LENGTH_LEAN[length]
 
 # ── Gear-lean accessors (flex + curve) ───────────────────────────────────────
-# Wrister runway: fraction of the full-stroke travel this loadout needs for a
-# max-power release ("max power with less real estate consumed"). Flex and
-# curve stack; the floor across the stacked extremes (0.90 × 0.90 = 0.81) is
-# the runway-floor constraint — a max-power release must still emit a
-# readable wind-up tell (pinned by the calibration test).
-func wrister_runway_mult() -> float:
-	return _FLEX_RUNWAY_LEAN[flex] * _CURVE_RUNWAY_LEAN[curve]
-
 # Backhand coefficient lean — the one place backhand varies (technique is the
 # human; hands_backhand_mult stays 1.0 by constitution — this is the BLADE's
 # shape, not the player's skill).

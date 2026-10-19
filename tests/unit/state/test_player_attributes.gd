@@ -474,8 +474,6 @@ func test_flex_is_a_power_release_seesaw() -> void:
 	var stiff := PlayerAttributes.new(73, 201, 1, 1, PlayerAttributes.FLEX_HIGH, 1)
 	assert_lt(whippy.shot_power_mult(), stiff.shot_power_mult(), "stiff shoots harder")
 	assert_lt(whippy.shot_charge_mult(), stiff.shot_charge_mult(), "stiff loads slower")
-	assert_lt(whippy.wrister_runway_mult(), stiff.wrister_runway_mult(),
-			"whippy needs less runway for max power")
 	# Height keeps its inherited inverse coupling underneath.
 	var tall := PlayerAttributes.new(79, 235)
 	assert_lt(tall.shot_charge_mult(), 1.0, "big frame still threatens sooner at medium flex")
@@ -532,7 +530,7 @@ func test_flex_number_never_reaches_the_gameplay_leans() -> void:
 			"the whippy pick shoots softer than its own — same 85 on the sticker")
 
 
-func test_curve_trades_loft_ladder_and_release_for_backhand() -> void:
+func test_curve_trades_loft_ladder_for_backhand() -> void:
 	var m88 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1)
 	var m92 := PlayerAttributes.all_average()
 	var m28 := PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_OPEN, 1, 1)
@@ -546,7 +544,6 @@ func test_curve_trades_loft_ladder_and_release_for_backhand() -> void:
 	assert_lt(m88.curve_loft_tan_mid(), m28.curve_loft_tan_mid())
 	assert_lt(m28.curve_loft_tan_high(), ShotMechanics.MAX_LOFT_RATIO,
 			"the whole ladder sits under the universal guard")
-	assert_lt(m28.wrister_runway_mult(), 1.0, "M28 is the quick release (banked)")
 	assert_gt(m88.curve_backhand_mult(), m28.curve_backhand_mult())
 	# Backhand relief approaches but never reaches forehand parity: the
 	# controller's 0.75 base coefficient stays below 1.0 under the M88.
@@ -570,13 +567,3 @@ func test_curve_slap_and_reception_lean_with_the_pattern() -> void:
 	# most of the league ceiling (soft/medium passes are unaffected entirely —
 	# pickup_max_speed never scales with curve).
 	assert_gt(m28.reception_ceiling_mult(), 0.85, "reception lean stays gentle")
-
-
-func test_stacked_runway_floor() -> void:
-	# The runway-floor constraint: the fastest-release loadout (whippy + open)
-	# still consumes ≥75% of the neutral runway — a max-power release always
-	# emits a readable wind-up tell inside the goalie's calibrated read band.
-	var quickest := PlayerAttributes.new(73, 201, 1,
-			PlayerAttributes.CURVE_OPEN, PlayerAttributes.FLEX_LOW, 1)
-	assert_gte(quickest.wrister_runway_mult(), 0.75, "runway floor holds")
-	assert_almost_eq(PlayerAttributes.all_average().wrister_runway_mult(), 1.0, 0.0001)

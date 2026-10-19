@@ -182,18 +182,6 @@ func test_flex_leans_ceiling_and_windup_together() -> void:
 	assert_gt(c.max_slapper_charge_time, whippy_charge, "stiff loads slower")
 
 
-func test_quick_release_loadout_compresses_runway_within_floor() -> void:
-	# Whippy + open is the fastest release in the game: less blade travel for
-	# max power, but never below the floor (the readable-tell guarantee).
-	var c := _make_controller()
-	c.apply_attributes(PlayerAttributes.all_average())
-	var neutral_runway: float = c.wrister_full_stroke_travel
-	c.apply_attributes(PlayerAttributes.new(73, 201, 1,
-			PlayerAttributes.CURVE_OPEN, PlayerAttributes.FLEX_LOW, 1))
-	assert_lt(c.wrister_full_stroke_travel, neutral_runway, "quick gear compresses runway")
-	assert_gte(c.wrister_full_stroke_travel, neutral_runway * 0.75, "runway floor holds")
-
-
 func test_curve_leans_backhand_within_parity() -> void:
 	var c := _make_controller()
 	c.apply_attributes(PlayerAttributes.new(73, 201, 1, PlayerAttributes.CURVE_CLOSED, 1, 1))

@@ -538,19 +538,16 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
 	var pre_slapper_charge_timer: float = _aiming.slapper_charge_timer
 	# Same shape of problem as the slapper timer: tick_wrister_charge evolves the
-	# stroke travel and the cursor-speed EMA inside _update_wrister_charge during
-	# replay, so without save/restore each reconcile re-runs the unconfirmed
-	# window's stroke and perturbs the live power signal. Save the live values and
+	# cursor-speed EMA inside _update_wrister_charge during replay, so without
+	# save/restore each reconcile re-runs the unconfirmed window's stroke and
+	# perturbs the live power signal. Save the live values and
 	# restore after replay; live tick state is the truth, replay's pass through
 	# the same inputs is discarded.
 	var pre_charge_cursor_speed: float = _aiming.cursor_speed_ema
-	var pre_charge_stroke_travel: float = _aiming.stroke_travel
 	var pre_charge_prev_intent_pos: Vector3 = _aiming.prev_intent_pos
-	var pre_charge_prev_swing_bearing: Vector3 = _aiming.prev_swing_bearing
-	var pre_charge_prev_blade_dir: Vector3 = _aiming.prev_blade_dir
 	# Pinned at stroke start; set once on the WRISTER_AIM entry edge. Restored so a
 	# replay that re-crosses that edge can't re-anchor the live origin (or the
-	# skater-position reference its locomotion compensation measures from).
+	# skater-position reference the wrister load measures from).
 	var pre_charge_origin_world: Vector3 = _aiming.wrister_origin_world
 	var pre_charge_origin_skater_pos: Vector3 = _aiming.wrister_origin_skater_pos
 	# shot_charge is re-derived from the (restored) charge timers / swing state on
@@ -674,10 +671,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
 	_aiming.cursor_speed_ema = pre_charge_cursor_speed
-	_aiming.stroke_travel = pre_charge_stroke_travel
 	_aiming.prev_intent_pos = pre_charge_prev_intent_pos
-	_aiming.prev_swing_bearing = pre_charge_prev_swing_bearing
-	_aiming.prev_blade_dir = pre_charge_prev_blade_dir
 	_aiming.wrister_origin_world = pre_charge_origin_world
 	_aiming.wrister_origin_skater_pos = pre_charge_origin_skater_pos
 	skater.shot_charge = pre_shot_charge

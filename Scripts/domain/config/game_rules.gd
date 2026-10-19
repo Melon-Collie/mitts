@@ -546,8 +546,8 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 # Wrister/slapper/quick-shot puck release speeds. The puck consumes
 # `direction × power` directly as linear velocity (see Puck.release),
 # so "power" IS m/s. Min and max bracket the wrister power model
-# (ShotMechanics.wrister_power_t — pure cursor speed, feel-curve shaped, with
-# the blade-travel-gated ceiling). The min sits BELOW the quick-shot/pass
+# (ShotMechanics.wrister_power_t — pure cursor speed, feel-curve shaped).
+# The min sits BELOW the quick-shot/pass
 # speed on purpose: a slow deliberate sweep is a soft touch pass, softer than
 # the fixed snap pass.
 # The maxes are the NEUTRAL-BUILD anchors (6'1", medium flex), calibrated so the
