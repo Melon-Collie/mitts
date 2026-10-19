@@ -49,7 +49,8 @@ const _GENERATED_DIR: String = "res://Scripts/domain/ai/generated/"
 const _SIZE_SLACK: int = 40
 
 const _SIZE_ALLOWANCE: Dictionary[String, int] = {
-	"res://Scripts/ai/skater_agent_state_machine.gd": 3694,
+	# +11: the cross-check collaborator held and applied (apply_cross_check).
+	"res://Scripts/ai/skater_agent_state_machine.gd": 3705,
 	# +6: tutorial_place_puck, the tutorial's seam onto the scripted park below.
 	# +57: the cross-check — its tracker and resolver wired, the claim deferred,
 	# and the landed shove's burst, thud and knockback lead on every machine.

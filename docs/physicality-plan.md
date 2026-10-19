@@ -1,6 +1,6 @@
 # Physicality — the pin on the stick button, and the cross-check
 
-Status: **Phases A and B built**, playtest pending; C is design. Amends
+Status: **all three phases built**, playtest pending. Amends
 `docs/defensive-play-plan.md` (the pin revision, v74) and adds a new verb. Three
 phases, each its own PR and playtest.
 
@@ -318,6 +318,27 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
   predicted slide wins the race to it (`_team_arrival_s`).
 - **Tier knob:** `check_aggression` gates it, as it gates the check and the pin.
   Easy never shoves.
+
+### As built
+
+- `AICrossCheckRead` (domain) and `SkaterAgentCrossCheck` (the last post-dispatch
+  pass, after the stick lift, board play and shot block, so a stick or a body
+  they took throws nothing). Bots press only from an idle phase and never hold
+  on: a tap, not the commit.
+- **How far a shove moves him** is the drift over the read-and-redirect delay
+  (`AICarrySpace.EVADE_REACTION_S`) plus the stop his own stride makes against
+  it, at the thrust the shove's stagger leaves him. A neutral shove along the
+  blades moves a man about 0.23 m, so a net-front shove only pays against a
+  screen near the edge of the goalie's sightline, or a man turned so the push
+  runs along his blades.
+- **The race counts the stagger.** The arrival clock sheds a sideways kick in a
+  few hundredths of a second; what turns a race is the stride the stagger
+  leaves him, so his post-shove arrival runs on `staggered_thrust`.
+- **No tip term.** The goalie only counts a net-front stick as a tip threat when
+  no defender can get to it, so a man our coverer is already on is not one; the
+  screen is the cost a shove buys back.
+- **The screener's set rides `protects_the_puck`** (answering a physical threat
+  to what we hold), not `check_aggression`.
 
 ## Wire summary
 

@@ -28,7 +28,7 @@ Doctrine: [How the brain hands out work](../../ai/CLAUDE.md#how-the-brain-hands-
 | 6 | role module | `role_behaviors/*.gd:decide` (§3) | as 5 | `RoleContext` | `RoleDecision`: `target_position`, `target_velocity`, `retreat_floor_*`, `advance_cap_m_s`, `face_travel`, `aim_world_pos`/`has_aim_override`, `lift_blade`, `is_one_timer_ready`, `commit_check`, `engaged_peer_id`, `pressures_puck`, `locked_man_pid`, `arrive_at_speed`, `held_forward_stand` |
 | 6c | carrier | `carrier.gd:AIRoleCarrier.decide` from `_state_carry` | compete ~30 Hz (≈10 Hz open ice), sliced across 2 dispatches (§4) | `RoleContext` | `intended_action` + per-intent public fields |
 | 7 | state handler | `_state_off_puck` / `_state_chase_puck` / `_state_carry` / `_state_*_pressed` (§5) | as 4 | decision / carrier mirrors | `move_vector` (steering), `mouse_world_pos` (cursor), buttons, `elevation_level`, `bot_*_aim_dir`, `bot_wrister_power_t` |
-| 8 | post-dispatch passes | `skater_agent.gd:tick` → `apply_stick_lift_input`, `apply_board_play`, `apply_shot_block` | every agent tick, decided or not | snapshot, own collaborator state | may overwrite `stick_check_*`, `move_vector`, `hit_held`, `block_held`, `stance_held`, `mouse_world_pos` |
+| 8 | post-dispatch passes | `skater_agent.gd:tick` → `apply_stick_lift_input`, `apply_board_play`, `apply_shot_block`, `apply_cross_check` | every agent tick, decided or not | snapshot, own collaborator state | may overwrite `stick_check_*`, `move_vector`, `hit_held`, `hit_pressed`, `block_held`, `stance_held`, `mouse_world_pos` |
 | 9 | apply | `ai_controller.gd:apply_decision` → `skater_controller.gd:_process_input` | main, frames the worker is idle | `_pending_input` | the body, exactly as a human's input |
 
 Outside the agent: faceoff draw / skate-in (`ai_controller.gd:begin_tick`, `_center_draw_target`), tutorial puppeting (`set_scripted_mode`, `script_*`).
@@ -176,6 +176,9 @@ Functions in `skater_agent_state_machine.gd` unless named.
 | stick-check button | `skater_agent_stick_play.gd:apply_button` | every tick | lift / tie holds | `test_bot_stick_lift.gd` |
 | reach for a pin | `skater_agent_board_play.gd:_reach_for_pin` (stick button instead of the check) | dispatch holding `hit_held`, unbraced man on the wall within `PIN_REACH_S` of contact, the hit short of `knockdown_impulse`, `_pin_worth_holding` | `check_aggression` | `test_bot_board_play.gd` |
 | hold a pin / pinned slide | `skater_agent_board_play.gd:apply`, `_pin_worth_holding`, `_last_back`, `_team_arrival_s`, `_pinner_mirror` (matches the man's lagged slide speed, closes the offset), `_pinned_slide` | pin role ≠ NONE | `check_aggression`, `PIN_LAG_BUDGET_S` | `test_bot_board_play.gd`; *slow* `test_board_play.gd` |
+| cross-check a screen | `skater_agent_cross_check.gd:_clears_a_screen` → `cross_check_read.gd:predicted_dv` (= the host's `CrossCheckRules.victim_dv`), `displacement_m`, `clears_screen` (`hides_release` = the goalie's `screen_peek_offset` body test) | the covered man (`locked_man_pid`) in our end, in reach, hiding the release from our goalie; stick free, phase idle | `check_aggression` | `test_bot_cross_check.gd`, `test_cross_check_read.gd` |
+| cross-check a race | `skater_agent_cross_check.gd:_turns_a_race` → `arrival.gd:time_to_arrive` on his shoved body and `staggered_thrust`, `takes_the_race` (our stick out `STICK_OUT_S`) | loose puck, opponent in reach who beats us to it | `check_aggression` | `test_bot_cross_check.gd`, `test_cross_check_read.gd` |
+| screener sets against a shove | `skater_agent_cross_check.gd:_set_against_a_shove` (holds the stance) | in their end hiding the release from their goalie, an opponent in reach with his cross-check idle | `protects_the_puck` | `test_bot_cross_check.gd` |
 | carrier vs square checker | `skater_agent_board_play.gd:_answer_pin_threat` → `pin_threat_read.gd:answer` | carrying at the wall, a checker with his stick out (`StickCheckRules.is_stick_busy`) ≤ `PIN_THREAT_RANGE_M` | `protects_the_puck` | `test_pin_threat_read.gd`, `test_bot_board_play.gd` |
 | shot block / 2-on-1 dive | `skater_agent_shot_block.gd:apply`, `_shot_coming`, `_dive_point`; `shot_block_read.gd` | opponent windup in our end on my line / numbers ≠ EVEN | `blocks_shots`; never while CARRY | `test_bot_shot_block.gd`, `test_shot_block_read.gd` |
 | body check commit | `defensive_verbs.gd:evaluate_body_check` → `body_check.gd:evaluate`; SM holds `hit_held` | PRESSURE (support behind only) / TRACK_PUCK | `check_aggression`, own weight/transfer | `test_body_check.gd`, `test_role_pressure.gd` |
@@ -234,7 +237,7 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 
 ## 8. Adding a bot feature — checklist
 
-Ratchet first: `skater_agent_state_machine.gd` (4255), `action_scoring.gd` (2026 / 36 public), `carry_space.gd` (1065) and `carrier.gd` (1031) sit at their `test_no_god_class_growth.gd` caps — any growth there is an extraction or a deliberate bump.
+Ratchet first: `skater_agent_state_machine.gd` (3705), `action_scoring.gd` (2026 / 36 public), `carry_space.gd` (1065) and `carrier.gd` (1031) sit at their `test_no_god_class_growth.gd` caps — any growth there is an extraction or a deliberate bump.
 
 **New carrier action**
 1. Model it in a leaf or one evaluator (`action_scoring.gd` / `carry_space.gd`), never both directions (`test_scoring_split_stays_acyclic.gd`); calibration test in `test_ai_action_scoring.gd`.
