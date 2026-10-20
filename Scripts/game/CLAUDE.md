@@ -41,6 +41,20 @@ movement-locked tick fills the file with duplicate static frames. Recording is
 one-way I/O and adjudicates nothing, which is why it can live outside the
 orchestrator that sits next to it.
 
+## Replays are posed on the render clock
+
+The replay drivers sample a clip at render time and pose the live actors in
+`_process`. Two things follow, and `ReplayLiveSimHold` plus each driver's loop
+hold them:
+
+- **The posed actors stop interpolating** for the replay. An interpolated node
+  is drawn between its pose at the last tick and the one just set, so a pose
+  written at render rate is drawn a fraction of a frame late, and the fraction
+  changes from frame to frame with where the frame falls between ticks.
+- **A held frame is posed every frame too.** `Skater._physics_process` keeps
+  integrating the replayed velocity whatever drives the skater, so a frame the
+  driver stops writing (an outro hold, the gap between reel clips) slides.
+
 ## Bot AI decides on a worker thread
 
 `AICoordinator` runs `TeamBrain.tick` → `build_view` → `decide()` on a persistent

@@ -1,15 +1,14 @@
 class_name GoalReplayDriver
 extends Node
 
-# Drives in-game goal replay on the HOST by:
+# Drives the in-game goal replay, on every peer from its own recorder, by:
 #   1. Extracting the last CLIP_DURATION seconds from ReplayRecorder on goal.
-#   2. Freezing live host physics (puck) so authoritative simulation
-#      doesn't fight the replay positions.
+#   2. Parking the live sim (ReplayLiveSimHold: the puck sim, goalie AI, and
+#      interpolation on every posed actor) so it doesn't fight the replay.
 #   3. Decoding each recorded packet into typed actor states (via the codec's
 #      side-effect-free decode_for_replay) and applying them directly to the
-#      Skater / Puck nodes.
-#   4. Freezing goalie AI and applying recorded GoalieNetworkState (position,
-#      rotation, state_enum, five_hole_openness) so poses reflect what happened.
+#      Skater / Puck / Goalie nodes, sampled at render time, so poses reflect
+#      what happened.
 #
 # Bypasses WorldStateCodec.decode_world_state because that path mutates the
 # host's GameStateMachine — replaying a packet would slam phase / score / clock
@@ -22,7 +21,8 @@ extends Node
 # the immediate teardown. replay_finishing marks where the replay itself ends —
 # the outgoing wipe is not part of it (the GIF export closes its clip there).
 #
-# Owned by GameManager (host only). start() / stop() called from there.
+# Owned by GameManager; PhaseCoordinator.start_goal_replay starts it on every
+# peer.
 #
 # Testing: integration-only. This drives LIVE scene actors (Skater / Puck /
 # Goalie nodes) via the actor-driven ReplayPlaybackEngine, so there is no
@@ -155,7 +155,7 @@ func start(recorder: ReplayRecorder,
 	while _next_event_idx < _events.size() and _events[_next_event_idx].host_ts < _clip_start_ts:
 		_next_event_idx += 1
 
-	_sim_hold.grab(_puck, _goalie_controllers)
+	_sim_hold.grab(_puck, _goalie_controllers, registry.skaters())
 
 	_defending_goal_z = defending_goal_z
 	_goal_center = Vector3(0.0, 0.0, defending_goal_z)
@@ -251,7 +251,7 @@ func _on_stinger_covered() -> void:
 			_stage = Stage.PLAYING
 			# Pose the clip's first frame before the cam seeds on the puck, or it
 			# would snap to the puck still sitting in the net.
-			_advance(0.0)
+			_pose(0.0)
 			_hard_cam.snap_to_position()
 			_hard_cam.make_current()
 		Stage.WIPE_OUT:
@@ -263,9 +263,12 @@ func _process(delta: float) -> void:
 		Stage.PLAYING:
 			_advance(delta)
 		Stage.OUTRO:
+			_pose(0.0)
 			_outro_elapsed += delta
 			if _outro_elapsed >= OUTRO_HOLD:
 				finish()
+		Stage.WIPE_OUT:
+			_pose(0.0)
 
 
 func _advance(delta: float) -> void:
@@ -276,7 +279,13 @@ func _advance(delta: float) -> void:
 		_virtual_clock = _clip_end_ts
 		_stage = Stage.OUTRO
 		_outro_elapsed = 0.0
+	_pose(_virtual_clock - prev_clock)
 
+
+# Poses the world at the virtual clock. The held goal frame is re-posed every
+# frame too: the skaters' own tick keeps integrating their replayed velocity,
+# and a frame that is not re-posed slides with it.
+func _pose(sim_delta: float) -> void:
 	NetworkManager.set_replay_clock(_virtual_clock)
 
 	if not _cursor.seek(_frames, _timestamps, _virtual_clock):
@@ -286,8 +295,7 @@ func _advance(delta: float) -> void:
 	# skater leg gait — keeps cadence with the on-screen motion during slow-mo.
 	ReplayPlaybackEngine.apply_interpolated_snapshot(
 			_cursor.from_snap(), _cursor.to_snap(), _cursor.alpha(), _cursor.bracket_dt(),
-			_virtual_clock - prev_clock,
-			_registry.all(), _puck, _goalie_controllers)
+			sim_delta, _registry.all(), _puck, _goalie_controllers)
 	_dispatch_due_events()
 	var snap: Dictionary = _cursor.to_snap()
 	if not is_same(snap, _last_fed_snap):

@@ -148,18 +148,42 @@ func test_outlet_into_an_odd_man_rush_is_one_play() -> void:
 			touch - 7.0 - GoalReplayRules.PRE_PICKUP_BUFFER, 0.0001)
 
 
-func test_a_slow_regroup_is_not_the_play() -> void:
+func test_a_slow_regroup_shows_only_the_pass_out_of_it() -> void:
 	# Defencemen swapping the puck at their own blue line, then a long pass.
 	var touch: float = GOAL_TS - 0.4
 	var events := _events([
 		_pickup(touch - 9.0, -18.0),
+		_ev("shot", touch - 5.4),
 		_pickup(touch - 5.0, -16.0),
 		_pickup(touch - 1.2, 18.0),
 		_ev("shot", touch),
 	])
-	# The 3.8 s link from -16 to 18 is a rush and stays; the 4 s regroup before it does not.
+	# The 3.8 s link from -16 to 18 is a rush and stays whole; the rush already
+	# fills the story, so the regroup before it shows only its outlet.
 	assert_almost_eq(_start(events, touch),
-			touch - 5.0 - GoalReplayRules.PRE_PICKUP_BUFFER, 0.0001)
+			touch - 5.4 - GoalReplayRules.SLOW_CARRY_TAIL, 0.0001)
+
+
+func test_a_single_pass_shows_the_passers_handling() -> void:
+	# A forward works the puck along the half-wall, then feeds the slot.
+	var touch: float = GOAL_TS - 0.3
+	var events := _events([
+		_pickup(touch - 8.0, 12.0),
+		_ev("shot", touch - 1.5),
+		_pickup(touch - 1.0, 19.0),
+		_ev("shot", touch),
+	])
+	assert_almost_eq(_start(events, touch), touch - GoalReplayRules.STORY_SPAN, 0.0001)
+
+
+func test_a_one_timer_off_a_long_carry_shows_the_feed_and_its_setup() -> void:
+	var touch: float = GOAL_TS - 0.3
+	var events := _events([
+		_pickup(touch - 9.0, 12.0),
+		_ev("shot", touch - 0.6),
+		_ev("shot", touch),
+	])
+	assert_almost_eq(_start(events, touch), touch - GoalReplayRules.STORY_SPAN, 0.0001)
 
 
 func test_a_turnover_starts_the_play() -> void:
@@ -195,11 +219,60 @@ func test_coast_to_coast_shows_the_whole_carry() -> void:
 			touch - 5.5 - GoalReplayRules.PRE_PICKUP_BUFFER, 0.0001)
 
 
-func test_a_slow_lone_carry_floors_at_the_long_carry_window() -> void:
+func test_a_lone_carry_that_fits_the_story_is_shown_whole() -> void:
 	var touch: float = GOAL_TS - 0.5
 	var events := _events([_pickup(touch - 5.0, 12.0), _ev("shot", touch)])
 	assert_almost_eq(_start(events, touch, 18.0),
-			touch - GoalReplayRules.MIN_PRE_TOUCH_LONG_CARRY, 0.0001)
+			touch - 5.0 - GoalReplayRules.PRE_PICKUP_BUFFER, 0.0001)
+
+
+func test_a_long_lone_carry_shows_its_handling_back_to_the_story_span() -> void:
+	# Dangling in the zone, a self-tap past a defender, then the finish.
+	var touch: float = GOAL_TS - 0.5
+	var events := _events([
+		_pickup(touch - 11.0, 14.0),
+		_ev("nudge", touch - 3.0),
+		_pickup(touch - 2.6, 17.0),
+		_ev("shot", touch),
+	])
+	assert_almost_eq(_start(events, touch, 18.0), touch - GoalReplayRules.STORY_SPAN, 0.0001)
+
+
+func test_the_handling_never_reaches_back_past_a_turnover() -> void:
+	var touch: float = GOAL_TS - 0.3
+	var events := _events([
+		_pickup(touch - 9.0, 14.0, 1),
+		_pickup(touch - 4.5, 14.0),
+		_ev("shot", touch),
+	])
+	assert_almost_eq(_start(events, touch, 18.0),
+			touch - 4.5 - GoalReplayRules.PRE_PICKUP_BUFFER, 0.0001)
+
+
+func test_a_check_while_the_scorer_still_carries_does_not_cut_the_carry() -> void:
+	var touch: float = GOAL_TS - 0.3
+	var events := _events([
+		_pickup(touch - 5.0, 14.0),
+		_ev("body_check", touch - 2.0),
+		_ev("shot", touch),
+	])
+	assert_almost_eq(_start(events, touch, 18.0),
+			touch - 5.0 - GoalReplayRules.PRE_PICKUP_BUFFER, 0.0001)
+
+
+func test_a_slow_possession_is_shown_back_to_its_release_at_least() -> void:
+	# A cycle that already fills the story still shows the feed that started it.
+	var touch: float = GOAL_TS
+	var events := _events([
+		_pickup(touch - 9.5, 14.0),
+		_ev("shot", touch - 6.0),
+		_pickup(touch - 5.5, 16.0),
+		_pickup(touch - 3.6, 17.0),
+		_pickup(touch - 1.8, 18.0),
+		_ev("shot", touch),
+	])
+	assert_almost_eq(_start(events, touch),
+			touch - 6.0 - GoalReplayRules.SLOW_CARRY_TAIL, 0.0001)
 
 
 func test_scramble_after_the_possession_cuts_to_the_last_contest() -> void:
