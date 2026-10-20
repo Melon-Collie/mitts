@@ -28,14 +28,18 @@ class NativeTopHandIK : public godot::RefCounted {
 	double hand_y_max = 0.0;
 	double rom_forehand_angle_max = 0.0;
 	double rom_backhand_angle_max = 0.0;
+	double rom_forward_reach_max = 0.0;
 	double rom_forehand_reach_max = 0.0;
 	double rom_backhand_reach_max = 0.0;
 	double max_blade_reach = INFINITY;
+	// TopHandIK.REGIME_BAND_M.
+	static constexpr double REGIME_BAND_M = 0.08;
 
 	godot::Vector3 hand;
 	godot::Vector3 blade;
 
 	godot::Vector2 clamp_aim_to_rom(const godot::Vector2 &aim_dir, double blade_side_sign) const;
+	double rim_reach(double angle_to_forehand) const;
 	static double stick_horiz_for(double stick_length, double hand_y, double blade_y);
 
 protected:
@@ -66,6 +70,20 @@ public:
 			double p_stick_length,
 			double p_hand_y_max);
 
+	// TopHandIK.two_hand_reach, from the instance's config (max_blade_reach the
+	// cap it bisects under, restored after). Leaves hand/blade overwritten.
+	double two_hand_reach(
+			const godot::Vector3 &shoulder,
+			const godot::Vector2 &desired_blade_xz,
+			double blade_side_sign,
+			const godot::Vector3 &bottom_shoulder,
+			double grip,
+			double bottom_reach,
+			double spacing);
+	// BottomHandIK.reachable_grip: (fraction, overshoot).
+	static godot::Vector2 reachable_grip(const godot::Vector3 &shoulder, const godot::Vector3 &top,
+			const godot::Vector3 &blade, double grip, double reach, double spacing);
+
 	godot::Vector3 get_hand() const { return hand; }
 	godot::Vector3 get_blade() const { return blade; }
 
@@ -81,6 +99,8 @@ public:
 	double get_rom_forehand_angle_max() const { return rom_forehand_angle_max; }
 	void set_rom_backhand_angle_max(double v) { rom_backhand_angle_max = v; }
 	double get_rom_backhand_angle_max() const { return rom_backhand_angle_max; }
+	void set_rom_forward_reach_max(double v) { rom_forward_reach_max = v; }
+	double get_rom_forward_reach_max() const { return rom_forward_reach_max; }
 	void set_rom_forehand_reach_max(double v) { rom_forehand_reach_max = v; }
 	double get_rom_forehand_reach_max() const { return rom_forehand_reach_max; }
 	void set_rom_backhand_reach_max(double v) { rom_backhand_reach_max = v; }

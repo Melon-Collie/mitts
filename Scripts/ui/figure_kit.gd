@@ -86,7 +86,7 @@ func build(rig: Node3D, viewport_host: Node) -> void:
 		collars.append(_part(SkaterMeshBuilder.shared_skate_assembly()))
 		boots.append(_part(SkaterMeshBuilder.shared_boot_assembly()))
 		upper_arms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
-		forearms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
+		forearms.append(_part(SkaterMeshBuilder.shared_forearm_bone()))
 		elbows.append(_part(SkaterMeshBuilder.shared_elbow_pad()))
 		hands.append(_part(SkaterMeshBuilder.shared_glove_fist()))
 		cuffs.append(_part(SkaterMeshBuilder.shared_cuff()))

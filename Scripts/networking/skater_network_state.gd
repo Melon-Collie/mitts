@@ -26,6 +26,14 @@ var blade_up: bool = false
 # and the local reconcile adopts it before replay.
 var stick_check_phase: int = 0
 var stick_check_elapsed: float = 0.0
+# The cross-check phase (CrossCheckRules.Phase) and seconds into it, on the same
+# rail: remotes pose the push from it, its resolver checks the claimant was
+# pushing, and the local reconcile adopts it before replay.
+var cross_check_phase: int = 0
+var cross_check_elapsed: float = 0.0
+# The aim the throw was pressed with (CrossCheckRules.aim_dir), for the host's
+# claim rewind. host-only, not serialized.
+var cross_check_aim: Vector2 = Vector2.ZERO
 # Skater.stick_tied: host-authoritative, applied every broadcast like is_ghost.
 var stick_tied: bool = false
 # Board pin (BoardPinTracker): the role (BoardPinRules.Role) and the pinner's
@@ -100,6 +108,9 @@ var blade_contact_world: Vector3 = Vector3.ZERO  # host-only, not serialized
 # resolution. The wire `top_hand_position` is upper-body-local, so it can't be
 # used for host-side world-space geometry.
 var top_hand_world: Vector3 = Vector3.ZERO  # host-only, not serialized
+# Seconds of the catch's settle lock left (SkaterSettleGate), for the host's
+# bots. host-only, not serialized — a client's own lock rides the pickup grant.
+var settle_left_s: float = 0.0
 
 func to_array() -> Array:
 	return [
@@ -135,6 +146,8 @@ func to_array() -> Array:
 		pin_role,
 		pin_strength,
 		diving,
+		cross_check_phase,
+		cross_check_elapsed,
 	]
 
 # The stick-play, pin and dive fields, which are discrete: a reader between two
@@ -148,6 +161,9 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
 	diving = s.diving
+	cross_check_phase = s.cross_check_phase
+	cross_check_elapsed = s.cross_check_elapsed
+	cross_check_aim = s.cross_check_aim
 
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -183,9 +199,13 @@ func copy_from(s: SkaterNetworkState) -> void:
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
 	diving = s.diving
+	cross_check_phase = s.cross_check_phase
+	cross_check_elapsed = s.cross_check_elapsed
+	cross_check_aim = s.cross_check_aim
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
+	settle_left_s = s.settle_left_s
 
 static func from_array(data: Array) -> SkaterNetworkState:
 	var state := SkaterNetworkState.new()
@@ -236,4 +256,7 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.pin_strength = data[30]
 	if data.size() > 31:
 		state.diving = data[31]
+	if data.size() > 33:
+		state.cross_check_phase = data[32]
+		state.cross_check_elapsed = data[33]
 	return state

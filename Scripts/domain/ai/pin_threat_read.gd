@@ -1,7 +1,7 @@
 class_name AIPinThreatRead
 extends RefCounted
 
-# A carrier on the boards with a committed checker coming square: get out of his
+# A carrier on the boards with a checker coming square, stick out for the pin: get out of his
 # line before he arrives, and brace only when that can't be done — bracing costs
 # the stride and the edges, so it is the last resort, as coached. Read off the
 # bot's perceived snapshot, so a drive is seen late by the tier's delay: a fast

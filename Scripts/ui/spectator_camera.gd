@@ -5,7 +5,7 @@ extends Camera3D
 # viewing. Sits at the press-box position outside the long-side boards and
 # slides along the rail with the puck the way real NHL hard cams do (booth_z
 # tracks the puck's z; can be disabled via rail_track for parked custom
-# presets like GoalReplayDriver's inside-net cam). Pans/tilts to track the
+# presets like GoalReplayDriver's net cam). Pans/tilts to track the
 # puck with a small velocity lead so the rotation anticipates the play instead
 # of chasing it. Subtle perlin-style noise on yaw/pitch + position gives the
 # gentle drift of a wire-rigged broadcast camera. Telephoto FOV (compared to
@@ -53,7 +53,7 @@ extends Camera3D
 
 # Rail tracking — slide along the long axis with the puck like a real NHL
 # hard cam. Set false by callers that want a parked camera (e.g.
-# GoalReplayDriver's inside-net preset). rail_strength < 1 keeps the rail
+# GoalReplayDriver's net cam). rail_strength < 1 keeps the rail
 # behind the puck so the play stays framed instead of dead-center.
 @export var rail_track: bool = true
 @export var rail_strength: float = 0.65
@@ -126,7 +126,7 @@ func snap_to_position() -> void:
 # Re-aim this camera at a different preset (position, FOV, lead time). Caller
 # is responsible for snap_to_position() + make_current() afterward to actually
 # execute the cut. Disables rail tracking since custom presets (e.g.
-# GoalReplayDriver's inside-net cam) want a parked camera, not a hard-cam
+# GoalReplayDriver's net cam) want a parked camera, not a hard-cam
 # that slides.
 func set_booth(pos: Vector3, new_fov: float, new_lead_time: float) -> void:
 	booth_x = pos.x
@@ -162,7 +162,7 @@ func _process(delta: float) -> void:
 	# Constant-frame-width zoom (see class doc): re-derive the FOV from the
 	# smoothed target's distance so close play widens the shot instead of
 	# cropping it. Smoothness comes from the target smoothing itself. Parked
-	# custom presets (rail_track off, e.g. the inside-net cam) keep their
+	# custom presets (rail_track off, e.g. the net cam) keep their
 	# set_booth FOV.
 	var booth_pos: Vector3 = Vector3(booth_x, booth_y, booth_z)
 	var target_dist: float = booth_pos.distance_to(_smoothed_target)

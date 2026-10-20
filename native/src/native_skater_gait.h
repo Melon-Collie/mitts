@@ -38,11 +38,11 @@ namespace mitts {
 	X(crossover_land_fwd_m) X(crossover_lift_m) X(crossover_out_m) X(crossover_pass_m) \
 	X(crossover_phase_per_turn) X(crossover_side_m) X(crossover_under_m) \
 	X(dig_in_cadence_rate) X(dig_in_chop) X(dig_in_fade_speed) X(dig_in_intensity) \
-	X(dig_in_stance) X(glide_hold_skew) X(glide_inside_tuck_deg) X(glide_stance) \
+	X(dig_in_stance) X(gait_full_speed) X(glide_hold_skew) X(glide_inside_tuck_deg) X(glide_stance) \
 	X(glide_sway_deg) X(glide_sway_hz) X(hip_align_max_deg) X(hip_align_speed) \
 	X(hockey_stop_lead_m) X(hockey_stop_max_yaw_deg) X(hockey_stop_min_speed) \
 	X(hockey_stop_spread_m) X(hockey_stop_stagger_m) X(hockey_stop_stance) \
-	X(lateral_grip) X(locomotion_blend_speed) X(max_speed) X(pivot_band_hi_deg) \
+	X(locomotion_blend_speed) X(pivot_band_hi_deg) \
 	X(pivot_band_lo_deg) X(pivot_blend_speed) X(pivot_commit_time) \
 	X(pivot_depth_ramp_deg) X(pivot_min_speed) X(pivot_mohawk_deg) X(pivot_rate_min) \
 	X(pivot_stance) X(pivot_step_begin) X(pivot_yaw_speed) X(reversal_lead_m) \
@@ -57,7 +57,7 @@ namespace mitts {
 	X(stride_push_out_m) X(stride_rock_m) X(stride_sit_max_deg) X(stride_skew) \
 	X(stride_sway_deg) X(stride_toe_out_deg) X(tight_turn_lead_m) X(tight_turn_stance) \
 	X(turn_accel) X(vee_push_speed) X(vee_toe_max_deg) X(weight_shift_deg) X(weight_spring_damping) \
-	X(weight_spring_stiffness)
+	X(weight_spring_stiffness) X(move_deadzone)
 
 class NativeSkaterGait : public godot::RefCounted {
 	GDCLASS(NativeSkaterGait, godot::RefCounted)
@@ -148,11 +148,17 @@ private:
 	bool stepping = false;
 	godot::Vector2 last_travel = godot::Vector2(0.0, 1.0);
 	godot::Vector2 step_dir = godot::Vector2(1.0, 0.0);
+	double step_side = 1.0;
 	double step_travel = 0.0;
 	double step_hold = 0.0;
 	double cross_signed = 0.0;
 	double carve_signed = 0.0;
 	double tight_signed = 0.0;
+	// SkaterLocomotion._rates, by its Eased.
+	enum Eased { E_STRIDE, E_CROSS, E_CARVE, E_BACK, E_SHUFFLE, E_SKID, E_TIGHT, E_STOP,
+		E_EFFORT, E_LOADED, E_INTENSITY, E_COUNT };
+	double rates[E_COUNT] = {};
+	double ease(double x, int eased, double target, double rate, double dt);
 	godot::Vector3 prev_velocity;
 	bool have_prev_velocity = false;
 	double fd_time = 0.0;
@@ -204,7 +210,7 @@ private:
 	void stop_path(double w, const godot::Vector2 &along, const godot::Vector2 &turned);
 	void skid_path(double w, const godot::Vector2 &along);
 	void ccut_path(double w, double a, double s, double s_opp, double cs, double cs_opp);
-	void shuffle_path(double w, const godot::Vector2 &dir);
+	void shuffle_path(double w, const godot::Vector2 &dir, double side);
 	void sense_step(const godot::Vector2 &facing, const godot::Vector2 &intent, bool brake, double delta);
 	double engaged() const;
 	void stance_of(double s);

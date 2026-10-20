@@ -21,14 +21,15 @@ namespace mitts {
 // run on the AI worker thread.
 //
 // The skater's tunables load by property name from an AISkaterCaps
-// (configure): its movement config, its facing rules, and the body fields below.
+// (configure): its movement config, its facing rules (and a carrier's edges),
+// and the body fields below.
 
 #define MITTS_FACING_TUNABLES(X) \
 	X(engage_min_speed) X(engage_full_speed) X(hold_min_speed) X(hold_full_speed) \
-	X(forehand_edge_rad) X(backhand_edge_rad) X(stance_square_max_speed)
+	X(forehand_edge_rad) X(backhand_edge_rad) X(stance_square_max_speed) X(pivot_commit_rad)
 
 #define MITTS_ROLLOUT_BODY_TUNABLES(X) \
-	X(facing_drag_speed) X(facing_drag_speed_braking) X(body_radius) \
+	X(facing_drag_speed) X(facing_drag_speed_braking) X(facing_turn_accel_max) X(body_radius) \
 	X(board_shield_probe) X(board_shield_max_rad)
 
 class NativeCarryRollout : public godot::RefCounted {
@@ -43,6 +44,9 @@ class NativeCarryRollout : public godot::RefCounted {
 		MITTS_FACING_TUNABLES(X)
 #undef X
 	} facing_cfg;
+	// A carrier's pivot edges (AISkaterCaps.carry_facing_rules).
+	double carry_forehand_edge_rad = 0.0;
+	double carry_backhand_edge_rad = 0.0;
 	struct Body {
 #define X(name) double name = 0.0;
 		MITTS_ROLLOUT_BODY_TUNABLES(X)
@@ -79,20 +83,24 @@ class NativeCarryRollout : public godot::RefCounted {
 	godot::PackedVector3Array end_pos;
 	godot::PackedVector3Array end_vel;
 	godot::PackedVector2Array end_facing;
+	godot::PackedFloat64Array end_turn_rate;
 	godot::PackedVector3Array samples;
 	int64_t touched_mask = 0;
 
 	godot::Vector2 clamp_to_rink_inner(const godot::Vector2 &world_xz, double margin) const;
 	godot::Vector2 push_out_of_net(const godot::Vector2 &world_xz, double radius) const;
-	double reach_edge(const godot::Vector2 &facing, const godot::Vector2 &dir) const;
+	double reach_edge(const godot::Vector2 &facing, const godot::Vector2 &dir,
+			double forehand_edge, double backhand_edge) const;
+	double line_share(const godot::Vector2 &f, const godot::Vector2 &line,
+			const godot::Vector2 &cur, double speed, bool stance) const;
 	godot::Vector2 face(const godot::Vector2 &f, const godot::Vector2 &cur,
 			const godot::Vector3 &v, const godot::Vector3 &p, bool braking, bool stance,
-			double step, bool shield) const;
+			double step, bool has_puck, bool shield) const;
 	bool stance_cuts_onto(const godot::Vector2 &dir, const godot::Vector3 &v,
 			double upright_lateral_accel, bool was_holding) const;
 	void roll(int m, const godot::Vector2 &stick, const godot::Vector2 &cursor, bool braking,
 			const godot::Vector3 &pos, const godot::Vector3 &vel, const godot::Vector2 &facing,
-			bool has_puck, int64_t step_ticks);
+			double turn_rate, bool has_puck, int64_t step_ticks);
 
 protected:
 	static void _bind_methods();
@@ -113,11 +121,12 @@ public:
 	// for both paths).
 	void roll_all(const godot::Vector3 &pos, const godot::Vector3 &vel,
 			const godot::Vector2 &facing, const godot::Vector2 &toward, bool has_puck,
-			int64_t step_ticks);
+			int64_t step_ticks, double turn_rate);
 
 	godot::PackedVector3Array get_end_pos() const { return end_pos; }
 	godot::PackedVector3Array get_end_vel() const { return end_vel; }
 	godot::PackedVector2Array get_end_facing() const { return end_facing; }
+	godot::PackedFloat64Array get_end_turn_rate() const { return end_turn_rate; }
 	godot::PackedVector3Array get_samples() const { return samples; }
 	int64_t get_touched_mask() const { return touched_mask; }
 };

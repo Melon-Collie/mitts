@@ -120,7 +120,7 @@ func test_an_unseen_skater_skips_the_rig_and_catches_up_when_seen() -> void:
 	_frame(c, input, Vector2(0.0, -1.0), false)
 	assert_true(c.skater.on_camera(), "in frame")
 	assert_ne(body.get_bone_pose(UpperBone.TOP_FOREARM), arm_before, "the arm is rebuilt")
-	var hand: Vector3 = c.skater.upper_body.transform * c.skater.top_hand.position
+	var hand: Vector3 = c.skater.upper_body.transform * c.skater.drawn_top_hand()
 	var elbow: Vector3 = body.get_bone_pose(UpperBone.TOP_ELBOW).origin
 	assert_lt(absf(elbow.distance_to(hand) - c.skater.forearm_length), 0.01,
 			"and the forearm spans elbow to hand again")

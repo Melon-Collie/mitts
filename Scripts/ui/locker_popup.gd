@@ -29,7 +29,7 @@ signal locker_edited(profile: int, curve: int, flex: int, length: int,
 const _LENGTH_TOOLTIP: String = "Cut relative to your height.\nShort = snappier blade, finest close control, less reach.\nLong = more reach & sweep, slower to cut back."
 const _CURVE_TOOLTIP: String = "Blade pattern.\nM88 mid curve = best backhand & slappers, catches the hardest passes, flattest face.\nM92 mid-toe = the no-weakness all-rounder.\nM28 toe hook = easiest lift in tight; weakest backhand & slappers, hard passes bounce off."
 const _FLEX_TOOLTIP: String = "Shaft stiffness, cut to your weight — the same number is a plank on a light build and a noodle on a heavy one.\nWhippy = fastest release, softer shot ceiling.\nStiff = biggest shot, slower to load."
-const _PROFILE_TOOLTIP: String = "Blade grind.\nAgility = quicker first step & tighter cornering, lower top speed.\nPower = higher top speed & better glide, wider turns."
+const _PROFILE_TOOLTIP: String = "Where your skating lives.\nShifty = tight edges, quick first step, grippier stance; lower top speed.\nStability = strongest skating backward, for gap control; weaker crossovers.\nPower = top speed, glide & crossovers skating wide; wider turns, weaker backward."
 
 # Dropdown option tables: display order + the wire value each row maps to.
 const _LENGTH_KEYS: Array[StringName] = [
@@ -39,7 +39,7 @@ const _CURVE_KEYS: Array[StringName] = [
 const _FLEX_KEYS: Array[StringName] = [
 	&"STICK_FLEX_WHIPPY", &"STICK_FLEX_MEDIUM", &"STICK_FLEX_STIFF"]
 const _PROFILE_KEYS: Array[StringName] = [
-	&"GEAR_PROFILE_AGILITY", &"GEAR_PROFILE_BALANCED", &"GEAR_PROFILE_POWER"]
+	&"GEAR_PROFILE_SHIFTY", &"GEAR_PROFILE_STABILITY", &"GEAR_PROFILE_POWER"]
 const _SPAN_OPTIONS: Array[int] = [
 	StickTapeConfig.Span.FULL,
 	StickTapeConfig.Span.HEEL_TO_MID,

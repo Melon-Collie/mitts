@@ -54,8 +54,8 @@ The rigs took the *state* and the *code*, not the call sites: `set_leg_swing`,
 `upper_surface_material`, `begin_draw_tracking` and the rest stay on `Skater` as
 one-line delegates, because the controllers, the gait, the uniform pass and the
 ice VFX all address a skater and should not have to know which rig answers.
-That is the same shape `_hud` and `_uniform` already had. So the size ratchet
-moved a long way and the API ratchet did not — the entanglement the split was
+That is the same shape `_hud` and `_uniform` already had. So the line count
+moved a long way and the public API did not — the entanglement the split was
 measured against is shared *fields*, and there are now none.
 
 ## One skeleton, one chain
@@ -86,11 +86,22 @@ under `UpperBody`, a leg skeleton under `LowerBody`) could not:
   (Godot's YXZ), so its forward lean tips sideways whenever the shoulders turn
   toward the stick. The spine folds about the hips' axis first and twists on
   top of the fold. Measured skating at 9 m/s with the cursor swept across the
-  body: the head drifted ±0.18 m across the line of travel off the pelvis
-  before, ±0.05 m after — what is left is the reach lean.
+  body, reach lean held out: the head drifted ±0.18 m across the line of travel
+  off the pelvis before, ±0.02 m after. The reach lean tips it toward the hand
+  on top of that, by design.
 - **The twist has a joint limit** (`SkaterSpineRig.TWIST_LIMIT`, 55°). The
   shoulders always point where gameplay put them, so the arms reach their
   hands; past the limit the hips come round instead.
+
+The order has a price: a trunk both folded and twisted — a skating fold and a
+backhand reach — carries its shoulders off `UpperBody`'s markers, 5 cm at full
+twist. The arms are drawn from the trunk's, so the top hand is solved from
+there too (`SkaterIKCoordinator.arm_shoulder`, through
+`SkaterSpineRig.shoulder_in_frame`, which `test_top_hand_reaches_its_rim.gd`
+holds against the rig). Solved from the marker, the hand reached past the arm
+drawn to it. That copy reads tick state only — the hips are taken square to the
+facing, because their yaw carries the render-rate gait and the blade is
+gameplay.
 
 **The body leans toward its acceleration** (`BalanceRules`): atan(|a|/g),
 eased softly into a 20° cap, through a critically damped spring solved
@@ -189,8 +200,12 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Six rules the rigs sit inside, all easy to break from in here:
+Seven rules the rigs sit inside, all easy to break from in here:
 
+- **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
+  marker: the marker plus a render-only offset (the stride's pump), so the arm,
+  the stick and the blade's dressing pivot about a blade that has not moved.
+  The rebuild gate compares the drawn hand, or the pump would never redraw.
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
   to a tick of travel from the body on screen. A node placed that way must also

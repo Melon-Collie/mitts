@@ -53,6 +53,15 @@ const PICKUP_RADIUS: float = 0.5
 const PICKUP_MAX_REL_SPEED: float = 8.0
 const DEFLECT_MIN_REL_SPEED: float = 22.0
 const RECEIVE_ALIGNMENT_BONUS: float = 8.0
+# Past its bobble line (PuckReceptionRules.bobble_load_at, at Puck's defaults) a
+# catch bobbles: the puck leaves the face at the exit speed in the receiver's
+# frame, and he waits out the full settle before regathering. The blade runs
+# body→blade (no hands); test_bot_mirrors.gd holds these to Puck.
+const BOBBLE_LOAD: float = 0.67
+const BOBBLE_EDGE_SHARE: float = 0.4
+const BOBBLE_EXIT_MIN_M_S: float = 0.6
+const BOBBLE_EXIT_MAX_M_S: float = 2.0
+const BOBBLE_GRACE_TICKS: int = 48   # Puck.settle_max_s 0.40 s at 120 Hz
 # A releaser can't re-catch its own release while the puck departs its blade
 # (production has a post-shot pickup cooldown on the controller).
 const RELEASE_GRACE_TICKS: int = 36
@@ -157,11 +166,14 @@ var _airborne_keep: float = LANDING_SPEED_KEEP
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
 var _facing_cfg: FacingRules.Config
+var _carry_facing_cfg := FacingRules.Config.new()
 var _facing_rule := FacingRules.Result.new()
 # Rolling puck positions for the puppets' reaction-delayed read.
 var _puck_history: Array[Vector3] = []
 # peer_id -> tick until which that peer can't re-catch its own release.
 var _release_grace: Dictionary = {}
+# Catches that bobbled this run.
+var bobbles: int = 0
 # Per-team incumbent for the snapshot's chase election (hysteresis feed).
 var _prev_chase_by_team: Dictionary = {}
 # Loose-puck board bounce restitution (the harness's coarse boards — flight
@@ -190,6 +202,9 @@ func _init() -> void:
 	var ctrl := SkaterController.new()
 	move_cfg = ctrl.get_movement_config()
 	_facing_cfg = ctrl.facing_rules
+	# As SkaterController.setup derives the carry edge, which needs a body.
+	_carry_facing_cfg.forehand_edge_rad = _facing_cfg.forehand_edge_rad
+	_carry_facing_cfg.backhand_edge_rad = deg_to_rad(ctrl.bh_release_angle_deg)
 	ctrl.free()
 	move_cfg.puck_carry_speed_multiplier = 0.86
 
@@ -363,15 +378,24 @@ func step() -> void:
 		var to_mouse := Vector2(s.input.mouse_world_pos.x - s.pos.x,
 				s.input.mouse_world_pos.z - s.pos.z)
 		if to_mouse.length() > move_cfg.move_deadzone:
-			# The game's own facing rule (FacingRules), so a bot here faces where
-			# it would in a match: its skating line once skating, its cursor otherwise.
-			FacingRules.solve(_facing_rule, s.facing, to_mouse.normalized(),
-					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held,
-					s.agent._is_left_handed, _facing_cfg)
-			if _facing_rule.pivoting:
-				s.facing = s.facing.slerp(_facing_rule.target, minf(FACING_DRAG * DT, 1.0))
+			# The game's own facing rule (FacingRules) and step
+			# (SkaterPoseCoordinator.apply_facing), so a bot here faces where it
+			# would in a match: its skating line once skating, its cursor otherwise,
+			# turned round by angle to anything behind it.
+			var cursor_dir: Vector2 = to_mouse.normalized()
+			var lefty: bool = s.agent._is_left_handed
+			FacingRules.solve(_facing_rule, s.facing, cursor_dir,
+					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held, lefty,
+					_carry_facing_cfg if carrier_id == s.peer_id else _facing_cfg)
+			var target: Vector2 = _facing_rule.target
+			if absf(s.facing.angle_to(cursor_dir)) >= FacingRules.reach_edge(
+					_facing_cfg, s.facing, cursor_dir, lefty) \
+					or absf(s.facing.angle_to(target)) >= FacingRules.reach_edge(
+							_facing_cfg, s.facing, target, lefty):
+				s.facing = s.facing.rotated(FacingRules.turn_round_angle(s.facing, target,
+						cursor_dir) * minf(FACING_DRAG * DT, 1.0))
 			else:
-				s.facing = s.facing.lerp(_facing_rule.target, FACING_DRAG * DT).normalized()
+				s.facing = s.facing.lerp(target, FACING_DRAG * DT).normalized()
 		var rot_y: float = atan2(-s.facing.x, -s.facing.y)
 		s.vel = SkaterMovementRules.apply_movement(
 				s.vel, s.input.move_vector, rot_y, carrier_id == s.peer_id,
@@ -469,6 +493,22 @@ func step() -> void:
 				continue
 			if PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
+				var catch_load: float = PuckReceptionRules.reception_load(
+						Vector3(puck_vel.x, 0.0, puck_vel.z), Vector3(s.vel.x, 0.0, s.vel.z),
+						face, DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
+				var axis: Vector3 = PuckReceptionRules.blade_axis(s.blade, s.pos,
+						Vector3(s.facing.x, 0.0, s.facing.y))
+				var bobble_at: float = PuckReceptionRules.bobble_load_at(
+						PuckReceptionRules.blade_contact_offset(puck_pos, rel, s.blade, axis,
+								GameRules.DEFAULT_BLADE_LENGTH_M * 0.5),
+						BOBBLE_LOAD, BOBBLE_EDGE_SHARE)
+				if catch_load >= bobble_at:
+					puck_vel = Vector3(s.vel.x, 0.0, s.vel.z) + face \
+							* PuckReceptionRules.bobble_exit_speed(catch_load, bobble_at,
+									BOBBLE_EXIT_MIN_M_S, BOBBLE_EXIT_MAX_M_S)
+					_release_grace[s.peer_id] = ticks + BOBBLE_GRACE_TICKS
+					bobbles += 1
+					break
 				carrier_id = s.peer_id
 				puck_pos = s.blade
 				puck_vel = s.vel

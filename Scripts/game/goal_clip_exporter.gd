@@ -55,6 +55,7 @@ func _ready() -> void:
 func setup(goal_driver: GoalReplayDriver, reel_driver: PostGameReplayDriver) -> void:
 	if goal_driver != null:
 		goal_driver.replay_started.connect(_on_goal_replay_started)
+		goal_driver.replay_finishing.connect(_close_segment)
 		goal_driver.replay_stopped.connect(_close_segment)
 	if reel_driver != null:
 		# The reel has no per-clip "ended" edge — clip_started IS the boundary,

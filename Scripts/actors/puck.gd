@@ -20,19 +20,25 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var nudge_cooldown: float = 0.30  # short re-grab denial after a self nudge tap
 @export var ice_height: float = 0.0175  # = GameRules.PUCK_COLLISION_HALF_HEIGHT; disc bottom rests on y=0
 @export var pickup_max_speed: float = 8.0
-# RELATIVE puck-speed threshold for catch-vs-deflect: the puck's speed in the
-# RECEIVER'S frame (puck velocity − skater velocity), so a stretch pass to a
-# streaking receiver arrives soft while charging into the same pass steepens
-# it, and retreating with a hard shot cushions it under the ceiling. Calibrated
-# to real reception, not backwards from game pass speeds (rationale + force
-# math on PuckReceptionRules.should_receive): 22 ≈ 49 mph closing catches at
-# ANY blade angle — every pass-shaped launch (snap 14, AI arrival target 21.5,
-# soft-sweep wristers) catches for a static or retreating receiver, and only
-# sprinting head-on INTO a hard feed pushes past it. The alignment bonus
-# extends the ceiling to 30 m/s (~67 mph closing) for a perfectly squared
-# blade — reaching into the shot bands (wrister max 33 base / slapper 40),
-# which otherwise always deflect.
+# Catch ceiling in the RECEIVER'S frame (puck velocity − skater velocity): 22 ≈
+# 49 mph closing catches at any blade angle, and alignment_receive_bonus lifts
+# it to 30 for a squared blade. Calibrated to real reception, not to game pass
+# speeds — force math on PuckReceptionRules.should_receive.
 @export var deflect_min_speed: float = 22.0
+# A catch whose reception load is above settle_clean_load leaves the receiver
+# settling — no on-puck action — for up to settle_max_s at the ceiling. 0.30 is
+# clean to ~12 m/s on a poorly angled blade (docs/stick-settling-plan.md).
+var settle_clean_load: float = 0.30
+var settle_max_s: float = 0.40
+# Past bobble_load (less bobble_edge_share of it at the toe or heel —
+# PuckReceptionRules.bobble_load_at) the catch fails softly instead: the puck
+# leaves the blade at bobble_exit_min..max m/s in the receiver's frame. 0.67 is
+# ~18 m/s on a poorly angled blade at the middle, ~14 at the toe — the spread
+# of the NHL failed-reception means (docs/stick-settling-plan.md).
+var bobble_load: float = 0.67
+var bobble_edge_share: float = 0.4
+var bobble_exit_min: float = 0.6
+var bobble_exit_max: float = 2.0
 @export var alignment_receive_bonus: float = 8.0
 # Passive-blade deflection via a normal/tangential decomposition (see
 # PuckCollisionRules.deflect_velocity). The component INTO the blade face rebounds
@@ -62,10 +68,7 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 # (apex ∝ pace²), so a hard tip sails over the net; a fixed launch speed gives a
 # CONSISTENT apex regardless of pace, and the redirect keeps its horizontal pace
 # minus what's carved into the lift (energy-conserving, like a lofted shot).
-#
-# The four loft levels double as DEFLECT MODES — the level names the
-# direction outright (FLAT flat, LOW/MID up, HIGH down) and the blade's lift
-# height plays the matching plane. See PuckCollisionRules.deflect_loft_speed.
+# The loft level picks which one (PuckCollisionRules.deflect_loft_speed).
 @export var deflect_up_loft_speed: float = 3.8     # tip up and in (apex ≈ 0.74 m)
 @export var deflect_down_loft_speed: float = 3.5   # drive an airborne puck down to the ice
 # A deflect whose resulting speed lands below this reads as a BOBBLE — the blade
@@ -517,7 +520,7 @@ func apply_blade_deflect(skater: Skater) -> void:
 	# lift there — a smothered puck shouldn't pop off the ice.
 	var loft_vy: float = PuckCollisionRules.deflect_loft_speed(
 			skater.elevation_level,
-			deflect_up_loft_speed, deflect_down_loft_speed)
+			deflect_up_loft_speed, deflect_down_loft_speed, is_airborne())
 	var horiz_speed: float = new_vel.length()
 	if not is_zero_approx(loft_vy) and horiz_speed > 0.001:
 		# loft_y gives the Y/XZ ratio that yields launch speed |loft_vy| at this
@@ -529,6 +532,27 @@ func apply_blade_deflect(skater: Skater) -> void:
 	linear_velocity = new_vel
 	var is_bobble: bool = new_vel.length() < bobble_speed_threshold
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
+	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
+# A catch the hands nearly held (PuckReceptionRules.bobble_load_at): the face
+# takes the impact as a deflect does, in the RECEIVER'S frame, and the puck
+# leaves at what the hands didn't soak, flat on the ice and moving with him, so
+# it dies by his stick. The impact blew his hands open as a ceiling catch does,
+# so he can't play it again for the full settle_max_s — never a shorter wait
+# than holding the catch would have cost him. Anyone else can.
+func apply_reception_bobble(skater: Skater, catch_load: float, bobble_at: float) -> void:
+	var rel: Vector3 = linear_velocity - skater.velocity
+	var out: Vector3 = PuckCollisionRules.deflect_velocity(
+			rel, skater.get_blade_face_normal(rel),
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+	out.y = 0.0
+	if out.length() < 0.001:
+		out = skater.get_blade_face_normal(rel)
+	out = out.normalized() * PuckReceptionRules.bobble_exit_speed(
+			catch_load, bobble_at, bobble_exit_min, bobble_exit_max)
+	linear_velocity = Vector3(skater.velocity.x, 0.0, skater.velocity.z) + out
+	_set_cooldown(skater, settle_max_s)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
 # A tied blade's touch: the same deflect off the face, laid flat and cut to
@@ -590,6 +614,14 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 	var strip_impulse: float = BodyCheckRules.puck_strip_impulse(
 			impact_force, checker.weight, checker_transfer,
 			victim.weight, victim.body_check_brace_resistance, victim.hit_committed)
+	# Crushed square into the boards he takes the whole hit, as his stagger does.
+	strip_impulse = BoardPinRules.backstop_hit_strength(strip_impulse,
+			impact_force / maxf(checker.weight, 0.001),
+			checker_transfer * (victim.body_check_brace_resistance if victim.hit_committed else 1.0),
+			Vector2(hit_direction.x, hit_direction.z),
+			BoardPinRules.wall_normal(victim.global_position, victim.collision_radius(),
+					BoardPinRules.BACKSTOP_MARGIN_M),
+			checker.weight, victim.weight)
 	if strip_impulse < hit_pickup_cooldown_threshold:
 		return
 	# Hard hits temporarily deny the victim a pickup, even if they weren't carrying.

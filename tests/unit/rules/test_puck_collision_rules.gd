@@ -136,31 +136,24 @@ func test_zero_velocity_yields_zero() -> void:
 const _UP: float = 3.8
 const _DOWN: float = 3.5
 
-func _loft(level: int) -> float:
-	return PuckCollisionRules.deflect_loft_speed(level, _UP, _DOWN)
+func _loft(level: int, airborne: bool) -> float:
+	return PuckCollisionRules.deflect_loft_speed(level, _UP, _DOWN, airborne)
 
-# The four loft levels are DEFLECT MODES (docs/elevation-rework-plan.md v3
-# §3): the level names the redirect's vertical sign outright — FLAT flat,
-# LOW/MID up, HIGH down — and the blade's LIFT HEIGHT plays the matching
-# plane (ice / ice / low air / high air), which is where the old geometry
-# test's anti-cheese properties now live: a saucer apexes under the MID
-# pivot, so an air mode still only ever meets genuinely high pucks.
+# The loft level names the redirect's vertical sign as it does a shot's height:
+# FLAT/LOW down, MID/HIGH up, whatever height the puck is met at.
 
-func test_flat_mode_never_lofts() -> void:
-	assert_almost_eq(_loft(ShotMechanics.ELEVATION_FLAT), 0.0, 0.001,
-		"FLAT redirects along the ice")
+func test_low_levels_tip_an_airborne_puck_down() -> void:
+	for level: int in [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW]:
+		assert_almost_eq(_loft(level, true), -_DOWN, 0.001, "level %d knocks it down" % level)
 
-func test_low_mode_tips_the_ground_puck_up() -> void:
-	assert_almost_eq(_loft(ShotMechanics.ELEVATION_LOW), _UP, 0.001,
-		"LOW is the money tip — ground puck up")
+func test_a_down_tip_on_the_ice_stays_flat() -> void:
+	for level: int in [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW]:
+		assert_almost_eq(_loft(level, false), 0.0, 0.001, "no down to go on the ice")
 
-func test_mid_mode_tips_the_air_puck_up() -> void:
-	assert_almost_eq(_loft(ShotMechanics.ELEVATION_MID), _UP, 0.001,
-		"MID roofs the rising shot — air puck up")
-
-func test_high_mode_bats_the_air_puck_down() -> void:
-	assert_almost_eq(_loft(ShotMechanics.ELEVATION_HIGH), -_DOWN, 0.001,
-		"HIGH is the knockdown — air puck down")
+func test_high_levels_tip_up_on_the_ice_and_in_the_air() -> void:
+	for level: int in [ShotMechanics.ELEVATION_MID, ShotMechanics.ELEVATION_HIGH]:
+		assert_almost_eq(_loft(level, false), _UP, 0.001, "level %d lifts a ground puck" % level)
+		assert_almost_eq(_loft(level, true), _UP, 0.001, "level %d roofs an air puck" % level)
 
 # ── body_block_velocity ──────────────────────────────────────────────────────
 

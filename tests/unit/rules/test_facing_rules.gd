@@ -116,17 +116,24 @@ func test_the_stance_squares_only_when_slow() -> void:
 	assert_almost_eq(_off(AHEAD), 0.0, 0.01, "at speed the stance just crouches")
 
 
-func test_only_a_standing_skater_is_held_off_a_target_behind() -> void:
-	_solve(BEHIND, AHEAD.rotated(deg_to_rad(30.0)), AHEAD * 1.0)
-	assert_true(_out.free_to_turn_round, "a slow skate below the engage band still turns")
-	_solve(AHEAD, BEHIND, AHEAD * 6.0, true)
-	assert_true(_out.free_to_turn_round, "so does a stop")
-	_solve(AHEAD, BEHIND, AHEAD * 2.0, false, true)
-	assert_true(_out.free_to_turn_round, "and the stance when slow")
-	_solve(AHEAD, BEHIND, AHEAD * 0.3)
-	assert_false(_out.free_to_turn_round, "nearly stopped is standing")
-	_solve(AHEAD, BEHIND, Vector2.ZERO)
-	assert_false(_out.free_to_turn_round)
+# A cursor held on the edge flips the pivot on float noise, and each flip swung
+# the hips toward the other line and back: they sat between the two.
+func test_a_pivot_under_way_carries_through() -> void:
+	_cfg.backhand_edge_rad = deg_to_rad(67.0)
+	var cursor: Vector2 = _right_of_ahead(65.0)
+	_solve(AHEAD, cursor, AHEAD * 6.0)
+	assert_false(_out.pivoting, "on the line, 2° inside the edge holds it")
+	_solve(_right_of_ahead(15.0), cursor, AHEAD * 6.0)
+	assert_true(_out.pivoting, "hips already turning toward the cursor carry on round")
+	_solve(_left_of_ahead(15.0), cursor, AHEAD * 6.0)
+	assert_false(_out.pivoting, "hips turned the other way are no pivot under way")
+
+
+func test_taking_the_line_up_is_not_a_pivot_under_way() -> void:
+	_cfg.backhand_edge_rad = deg_to_rad(67.0)
+	var cursor: Vector2 = _right_of_ahead(62.0)
+	_solve(cursor, cursor, AHEAD * 1.8)
+	assert_false(_out.pivoting, "squared to the cursor in the engage band, the line still wins")
 
 
 func test_turning_round_goes_the_cursors_way() -> void:
@@ -145,3 +152,30 @@ func test_turning_round_to_a_cursor_dead_behind_keeps_the_lean() -> void:
 	var facing := BEHIND.rotated(deg_to_rad(5.0))
 	var turn: float = FacingRules.turn_round_angle(facing, AHEAD, AHEAD)
 	assert_almost_eq(turn, facing.angle_to(AHEAD), 0.0001)
+
+
+# ── turn_rate ─────────────────────────────────────────────────────────────────
+
+const _ACCEL: float = 300.0
+const _DT: float = 1.0 / 120.0
+
+
+func test_a_turn_winds_up_at_the_limit() -> void:
+	var rate: float = 0.0
+	for i: int in 3:
+		rate = FacingRules.turn_rate(rate, 15.0, _ACCEL, _DT)
+		assert_almost_eq(rate, _ACCEL * _DT * (i + 1), 1e-5, "tick %d" % i)
+
+
+func test_a_turn_gives_its_rate_up_at_once() -> void:
+	assert_eq(FacingRules.turn_rate(15.0, 2.0, _ACCEL, _DT), 2.0)
+	assert_eq(FacingRules.turn_rate(-15.0, 0.0, _ACCEL, _DT), 0.0)
+
+
+# Reversing is giving the rate up, then winding up the other way from rest.
+func test_a_reversal_winds_up_from_rest() -> void:
+	assert_almost_eq(FacingRules.turn_rate(10.0, -10.0, _ACCEL, _DT), -_ACCEL * _DT, 1e-5)
+
+
+func test_a_small_change_passes_through() -> void:
+	assert_eq(FacingRules.turn_rate(1.0, 2.0, _ACCEL, _DT), 2.0)

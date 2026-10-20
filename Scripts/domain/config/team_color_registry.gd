@@ -118,13 +118,19 @@ static func get_colors(slot: int, team_id: int) -> Dictionary:
 #   Home (team_id 0): primary body, secondary stripe, light lettering.
 #   Away (team_id 1): light body, primary stripe, primary lettering.
 #
+# A preset with a `ui_ink` letters both sides in it instead — for a primary
+# too light to read against white and too dark for white to read on it.
+#
 # Returns { base, stripe, text } as Colors.
 static func get_ui_colors(slot: int, team_id: int) -> Dictionary:
 	var preset: Dictionary = get_preset(slot)
 	var light: Color = preset.get("light", _UI_WHITE)
+	var ink: Variant = preset.get("ui_ink")
 	if team_id == 0:
-		return {"base": preset.primary, "stripe": preset.secondary, "text": light}
-	return {"base": light, "stripe": preset.primary, "text": preset.primary}
+		return {"base": preset.primary, "stripe": preset.secondary,
+				"text": light if ink == null else ink}
+	return {"base": light, "stripe": preset.primary,
+			"text": preset.primary if ink == null else ink}
 
 
 # Stripe colors for score surfaces (scorebug + box-score period summary): each
@@ -176,6 +182,7 @@ static func _try_load_from(path: String) -> bool:
 			"primary":   _parse_color(entry.get("primary",   "#FFFFFF")),
 			"secondary": _parse_color(entry.get("secondary", "#FFFFFF")),
 			"light":     _parse_color(entry.get("light",     "#F2F4F7")),
+			"ui_ink":    _parse_optional_color(entry.get("ui_ink", null)),
 			"home":      _parse_kit(entry.get("home", {})),
 			"away":      _parse_kit(entry.get("away", {})),
 		})
@@ -271,8 +278,9 @@ static func _parse_color(hex: Variant) -> Color:
 	return Color.WHITE
 
 
-# yoke, collar and arms.elbow are optional — null falls back: the collar to the
-# yoke, the yoke to the jersey body, the elbow to the sleeve under it.
+# yoke, collar, arms.elbow and ui_ink are optional — null falls back: the collar
+# to the yoke, the yoke to the jersey body, the elbow to the sleeve under it,
+# the ink to the side's usual lettering.
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null

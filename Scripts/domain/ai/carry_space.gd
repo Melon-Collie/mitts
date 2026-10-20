@@ -118,19 +118,30 @@ static func reach_clearance(
 		var sdz: float = puck_point.z - opponents[i].z
 		if sdx * sdx + sdz * sdz >= need * need:
 			continue
+		var v_along_carry: float = 0.0
+		var stride_accel: float = accel
 		if gated:
 			# ESCAPE-SPEED gate (opt-in, `carry_speed > 0`): a defender chasing
 			# near the carrier's pace along `carry_dir` (world XZ as Vector2(x,z))
 			# is committed to keeping up — only his surplus accel can redirect
 			# onto the puck. Momentum progress (v0 below) is untouched: a faster
 			# chaser still runs the carry down; a pace-matched one holds the gap.
-			var v_along_carry: float = opponent_vels[i].x * carry_dir.x \
+			v_along_carry = opponent_vels[i].x * carry_dir.x \
 					+ opponent_vels[i].z * carry_dir.y
 			accel *= clampf(1.0 - maxf(v_along_carry, 0.0) / carry_speed, 0.0, 1.0)
 		var clear: float = _reach_clearance_one(
 				puck_point.x, puck_point.z, time, w,
 				opponents[i].x, opponents[i].z,
 				opponent_vels[i].x, opponent_vels[i].z, accel, stick, vmax, grip)
+		if v_along_carry > 0.0 and w < time:
+			# A man skating WITH the carry can also just stop: the carry is coming
+			# to him, so braking commits him to no spot and starts at his read,
+			# not when the commit window opens. The pace he still carries then
+			# gates his stride as above. (A chaser behind only loses ground by it,
+			# so the min leaves him be.)
+			clear = minf(clear, _stopped_clearance(puck_point.x, puck_point.z, time, w,
+					opponents[i].x, opponents[i].z, opponent_vels[i].x, opponent_vels[i].z,
+					stride_accel, stick, vmax, grip, v_along_carry / carry_speed))
 		if clear < worst:
 			worst = clear
 			if worst < abort_below:
@@ -149,8 +160,36 @@ static func _reach_clearance_one(point_x: float, point_z: float, time: float,
 		lateral_grip: float = 1.0) -> float:
 	var tau: float = maxf(0.0, minf(time, w) - EVADE_REACTION_S)
 	var coast: float = time - tau
-	var px: float = ox + vx * coast
-	var pz: float = oz + vz * coast
+	return _committed_clearance(point_x, point_z, tau, ox + vx * coast, oz + vz * coast,
+			vx, vz, accel, stick, vmax, lateral_grip)
+
+
+# _reach_clearance_one for a defender who brakes his run from his read instead of
+# coasting until the commit window opens, then plays the point from where the
+# brake left him. `pace_share` is his pace along the carry over the carry's, and
+# what is left of it when he commits gates his stride (the escape gate).
+static func _stopped_clearance(point_x: float, point_z: float, time: float,
+		w: float, ox: float, oz: float, vx: float, vz: float,
+		accel: float, stick: float, vmax: float, lateral_grip: float,
+		pace_share: float) -> float:
+	var tau: float = maxf(0.0, minf(time, w) - EVADE_REACTION_S)
+	var read: float = minf(time - tau, EVADE_REACTION_S)
+	var speed: float = sqrt(vx * vx + vz * vz)
+	var brake: float = AIArrival.REVERSAL_BRAKE_DECEL_M_S2
+	var t_b: float = minf(speed / brake, time - tau - read)
+	var slide: float = speed * t_b - 0.5 * brake * t_b * t_b
+	var left: float = (speed - brake * t_b) / speed
+	return _committed_clearance(point_x, point_z, tau,
+			ox + vx * read + vx / speed * slide, oz + vz * read + vz / speed * slide,
+			vx * left, vz * left, accel * clampf(1.0 - pace_share * left, 0.0, 1.0),
+			stick, vmax, lateral_grip)
+
+
+# Clearance of the point from a defender at (px, pz) moving (vx, vz) as his
+# commit window of `tau` opens.
+static func _committed_clearance(point_x: float, point_z: float, tau: float,
+		px: float, pz: float, vx: float, vz: float,
+		accel: float, stick: float, vmax: float, lateral_grip: float) -> float:
 	var dx: float = point_x - px
 	var dz: float = point_z - pz
 	var dist: float = sqrt(dx * dx + dz * dz)

@@ -146,3 +146,26 @@ func test_goal_flash_uses_scoring_team_color() -> void:
 	jumbo._on_goal_scored(team, "Testy McTestface", "", "")
 	assert_eq(jumbo._goal_color, away)
 	assert_eq(jumbo._goal_scorer_lbl.text, "Testy McTestface")
+
+
+func test_goal_replay_shows_the_board_as_it_was_then_restores_live() -> void:
+	var jumbo: Jumbotron = _make()
+	jumbo._on_score_changed(2, 1)
+	jumbo._on_clock_updated(80.0)
+	jumbo._on_phase_changed(GamePhase.Phase.GOAL_SCORED)
+	assert_eq(jumbo.current_mode(), JumbotronRules.Mode.LIVE, "no GOAL page during the replay")
+	jumbo._on_goal_replay_frame({
+		"score0": 1, "score1": 1, "phase": GamePhase.Phase.PLAYING,
+		"period": 2, "time_remaining": 86.0,
+	}, 0)
+	assert_eq(jumbo._live_score_home.text, "1", "pre-goal score while the play re-runs")
+	assert_eq(jumbo._live_clock.text, "1:26")
+	jumbo._on_goal_replay_frame({
+		"score0": 2, "score1": 1, "phase": GamePhase.Phase.GOAL_CELEBRATION,
+		"period": 2, "time_remaining": 80.0,
+	}, -1)
+	assert_eq(jumbo.current_mode(), JumbotronRules.Mode.GOAL, "lights as the replayed puck goes in")
+	jumbo._on_goal_replay_stopped()
+	assert_eq(jumbo.current_mode(), JumbotronRules.Mode.LIVE)
+	assert_eq(jumbo._live_score_home.text, "2")
+	assert_eq(jumbo._live_clock.text, "1:20")

@@ -58,9 +58,9 @@ signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
-signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes)
+signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes, from_spectator: bool)
 signal existing_players_synced(player_data: Array)
-signal local_puck_pickup_confirmed
+signal local_puck_pickup_confirmed(settle_until_ms: int)  # settle lock deadline, 0 = none
 signal local_puck_stolen(forced_lift_s: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
@@ -107,15 +107,16 @@ signal pickup_claim_rejected_received
 signal poke_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, expected_carrier_peer_id: int, blade_curr: Vector3, blade_prev: Vector3)
 signal stick_lift_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, expected_carrier_peer_id: int, blade_curr: Vector3)
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float)
-signal board_hit_received(position: Vector3)
-signal goal_body_hit_received(position: Vector3)
-signal post_hit_received(position: Vector3)
-signal goalie_hit_received(position: Vector3)
-signal deflection_received(position: Vector3)
-signal body_block_received(position: Vector3)
-signal puck_strip_received(position: Vector3)
+signal board_hit_received(position: Vector3, speed: float)
+signal goal_body_hit_received(position: Vector3, speed: float)
+signal post_hit_received(position: Vector3, speed: float)
+signal goalie_hit_received(position: Vector3, speed: float)
+signal deflection_received(position: Vector3, speed: float)
+signal body_block_received(position: Vector3, speed: float)
+signal puck_strip_received(position: Vector3, speed: float)
 signal stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int, blade_curr: Vector3)
-signal stick_lift_received(position: Vector3)
+signal cross_check_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int)
+signal stick_lift_received(position: Vector3, speed: float)
 # Distinct from stick_lift_received on purpose: a nudge (self-tap) is its own
 # gameplay event, so it carries its own cue and can be re-sounded independently
 # later without disturbing the opponent stick-lift strip.
@@ -127,6 +128,7 @@ signal shot_sound_received(position: Vector3, is_slapper: bool, power: float)
 # relying on each client's non-authoritative local collision detection.
 # `force` is the VFX-scale impact force.
 signal body_check_landed(hitter_peer_id: int, victim_peer_id: int, force: float, hit_dir: Vector3)
+signal cross_check_landed(victim_peer_id: int, dv: float, push_dir: Vector3)
 # Smart ping (context-sensitive team message). Fired on every peer (host
 # self-emits) with the sender's resolved ping; GameManager filters display to
 # the sender's team and — host-only — routes the bot directive. `ping_type`
@@ -1713,6 +1715,25 @@ func receive_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, inpu
 		return
 	stick_tie_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr)
 
+func send_cross_check_claim(host_timestamp: float, interp_delay_ms: float, target_peer_id: int) -> void:
+	NetworkSimManager.send(
+		func(ts: float, idms: float, ilms: float, tpid: int) -> void:
+			receive_cross_check_claim.rpc_id(1, ts, idms, ilms, tpid),
+		[host_timestamp, interp_delay_ms, get_input_lead_ms(), target_peer_id], true)
+
+@rpc("any_peer", "reliable")
+func receive_cross_check_claim(host_timestamp: float, interp_delay_ms: float, input_lead_ms: float,
+		target_peer_id: int) -> void:
+	if not is_host:
+		return
+	var peer_id: int = multiplayer.get_remote_sender_id()
+	if not _rate_ok(peer_id, _CLAIM_RATE_CAP_PER_S, _claim_rate_window_start, _claim_rate_count):
+		return
+	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
+		NetworkTelemetry.record_claim_stamp_reject()
+		return
+	cross_check_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id)
+
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
 	NetworkSimManager.send(
 		func(vpid: int, ts: float, idms: float, ilms: float) -> void:
@@ -1969,14 +1990,14 @@ func spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_colo
 		attr_length: int = PlayerAttributes.GEAR_BALANCED,
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		skin_tone: int = SkinToneRegistry.DEFAULT_INDEX,
-		gear_style_code: int = GearStyleConfig.DEFAULT_CODE) -> void:
+		gear_style_code: int = GearStyleConfig.DEFAULT_CODE, from_spectator: bool = false) -> void:
 	var attrs := PlayerAttributes.new(attr_height, attr_weight,
 			attr_profile, attr_curve, attr_flex, attr_length)
 	_peer_attributes[peer_id] = attrs
 	_peer_tape_codes[peer_id] = StickTapeConfig.from_code(tape_code).to_code()
 	_peer_skin_tones[peer_id] = SkinToneRegistry.clamp_index(skin_tone)
 	_peer_gear_styles[peer_id] = GearStyleConfig.from_code(gear_style_code).to_code()
-	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number, attrs)
+	remote_skater_spawn_requested.emit(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number, attrs, from_spectator)
 
 @rpc("authority", "reliable")
 func sync_existing_players(player_data: Array) -> void:
@@ -1986,23 +2007,23 @@ func sync_existing_players(player_data: Array) -> void:
 		return
 	existing_players_synced.emit(player_data)
 
-func send_puck_picked_up(peer_id: int) -> void:
+func send_puck_picked_up(peer_id: int, settle_until_ms: int = 0) -> void:
 	# AI bots have no ENet connection — rpc_id would fail. Bots are driven
 	# directly by the host's AIController, so no client-side notification
 	# is needed.
 	if not is_real_peer(peer_id):
 		return
 	var seq: int = _event_log.record(
-			SnapshotEventLog.EventType.PICKED_UP, peer_id, 0, local_time())
-	notify_puck_picked_up.rpc_id(peer_id, seq)
+			SnapshotEventLog.EventType.PICKED_UP, peer_id, settle_until_ms, local_time())
+	notify_puck_picked_up.rpc_id(peer_id, seq, settle_until_ms)
 
 @rpc("authority", "reliable")
-func notify_puck_picked_up(event_seq: int) -> void:
+func notify_puck_picked_up(event_seq: int, settle_until_ms: int) -> void:
 	NetworkSimManager.send(
-		func(seq: int) -> void:
+		func(seq: int, ms: int) -> void:
 			if _event_log.try_apply_reliable(seq):
-				local_puck_pickup_confirmed.emit(),
-		[event_seq], true)
+				local_puck_pickup_confirmed.emit(ms),
+		[event_seq, settle_until_ms], true)
 
 func send_ghost_state_to_all(peer_id: int, is_ghost: bool) -> void:
 	for remote_id: int in connected_peer_ids():
@@ -2088,7 +2109,7 @@ func _dispatch_snapshot_event(type: int, arg: int) -> void:
 		SnapshotEventLog.EventType.CARRIER_CHANGED:
 			remote_carrier_changed.emit(arg)
 		SnapshotEventLog.EventType.PICKED_UP:
-			local_puck_pickup_confirmed.emit()
+			local_puck_pickup_confirmed.emit(arg)
 		SnapshotEventLog.EventType.STOLEN:
 			local_puck_stolen.emit(arg / 1000.0)
 		SnapshotEventLog.EventType.DROPPED:
@@ -2229,7 +2250,7 @@ func confirm_slot_swap(peer_id: int, old_team_id: int, old_slot: int,
 func send_slot_assignment(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color) -> void:
 	assign_player_slot.rpc_id(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color)
 
-func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int = 10, attributes: PlayerAttributes = null) -> void:
+func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int = 10, attributes: PlayerAttributes = null, from_spectator: bool = false) -> void:
 	# Offline mode: no peers to broadcast to, and rpc() with no
 	# multiplayer peer pushes an error. Bot spawn still happens locally
 	# via _registry.spawn_bot in the caller; this RPC is purely the
@@ -2240,7 +2261,7 @@ func send_spawn_remote_skater(peer_id: int, team_slot: int, team_id: int, jersey
 	spawn_remote_skater.rpc(peer_id, team_slot, team_id, jersey_color, helmet_color, pants_color, is_left_handed, player_name, jersey_number,
 			attrs.height, attrs.weight, attrs.profile, attrs.curve, attrs.flex, attrs.length,
 			get_peer_tape_code(peer_id), get_peer_skin_tone(peer_id),
-			get_peer_gear_style(peer_id))
+			get_peer_gear_style(peer_id), from_spectator)
 
 func send_sync_existing_players(peer_id: int, player_data: Array) -> void:
 	sync_existing_players.rpc_id(peer_id, player_data)
@@ -2688,61 +2709,61 @@ func set_input_batch_provider(provider: Callable) -> void:
 # (edge-latched per contact) and tiny, so reliable delivery costs nothing
 # measurable, and a cue arriving one retransmit late still beats one that never
 # arrives.
-func send_board_hit_to_all(position: Vector3) -> void:
+func send_board_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_board_hit.rpc_id(peer_id, position)
+		notify_board_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_board_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: board_hit_received.emit(pos), [position], true)
+func notify_board_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: board_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_goal_body_hit_to_all(position: Vector3) -> void:
+func send_goal_body_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_goal_body_hit.rpc_id(peer_id, position)
+		notify_goal_body_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_goal_body_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: goal_body_hit_received.emit(pos), [position], true)
+func notify_goal_body_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: goal_body_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_post_hit_to_all(position: Vector3) -> void:
+func send_post_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_post_hit.rpc_id(peer_id, position)
+		notify_post_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_post_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: post_hit_received.emit(pos), [position], true)
+func notify_post_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: post_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_goalie_hit_to_all(position: Vector3) -> void:
+func send_goalie_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_goalie_hit.rpc_id(peer_id, position)
+		notify_goalie_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_goalie_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: goalie_hit_received.emit(pos), [position], true)
+func notify_goalie_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: goalie_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_deflection_to_all(position: Vector3) -> void:
+func send_deflection_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_deflection.rpc_id(peer_id, position)
+		notify_deflection.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_deflection(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: deflection_received.emit(pos), [position], true)
+func notify_deflection(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: deflection_received.emit(pos, spd), [position, speed], true)
 
-func send_body_block_to_all(position: Vector3) -> void:
+func send_body_block_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_body_block.rpc_id(peer_id, position)
+		notify_body_block.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_body_block(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: body_block_received.emit(pos), [position], true)
+func notify_body_block(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: body_block_received.emit(pos, spd), [position, speed], true)
 
-func send_puck_strip_to_all(position: Vector3) -> void:
+func send_puck_strip_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_puck_strip.rpc_id(peer_id, position)
+		notify_puck_strip.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_puck_strip(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: puck_strip_received.emit(pos), [position], true)
+func notify_puck_strip(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: puck_strip_received.emit(pos, spd), [position, speed], true)
 
 func send_body_check_to_all(hitter_peer_id: int, victim_peer_id: int,
 		force: float, hit_dir: Vector3) -> void:
@@ -2760,13 +2781,25 @@ func notify_body_check(hitter_peer_id: int, victim_peer_id: int,
 				body_check_landed.emit(hid, vid, f, d),
 			[hitter_peer_id, victim_peer_id, force, hit_dir], true)
 
-func send_stick_lift_to_all(position: Vector3) -> void:
+func send_cross_check_to_all(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_stick_lift.rpc_id(peer_id, position)
+		notify_cross_check.rpc_id(peer_id, victim_peer_id, dv, push_dir)
+
+# The landed shove's feedback (burst, thud, knockback lead) on every machine; the
+# push itself reaches the victim through the snapshot.
+@rpc("authority", "reliable")
+func notify_cross_check(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
+	NetworkSimManager.send(
+			func(vid: int, v: float, d: Vector3) -> void: cross_check_landed.emit(vid, v, d),
+			[victim_peer_id, dv, push_dir], true)
+
+func send_stick_lift_to_all(position: Vector3, speed: float) -> void:
+	for peer_id: int in connected_peer_ids():
+		notify_stick_lift.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_stick_lift(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: stick_lift_received.emit(pos), [position], true)
+func notify_stick_lift(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: stick_lift_received.emit(pos, spd), [position, speed], true)
 
 # Nudge (self-tap) cue. Host-authoritative, like the shot cue: the nudger already
 # played it locally the instant they tapped, so the host excludes them and every

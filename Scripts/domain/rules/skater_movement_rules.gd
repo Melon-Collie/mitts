@@ -51,6 +51,7 @@ class MovementConfig:
 	var stance_stride_mult: float = 1.0          # along-travel stride scale
 	var stance_max_speed_mult: float = 1.0       # where the stance's stride stops adding
 	var stance_shuffle_mult: float = 1.0         # sideways free push below GRIP_MIN_SPEED
+	var shuffle_speed: float = 0.0               # the shuffle's pace (Space + stick), m/s
 	# Posture.COMMIT — loaded on a shoulder for a check, off the edges.
 	var commit_grip_mult: float = 1.0
 	var commit_stride_mult: float = 1.0
@@ -63,6 +64,15 @@ const GRIP_MIN_SPEED: float = 0.5
 # stick held straight back skids straight instead of picking a side by the
 # sign of a rounding error.
 const SKID_TURN_TAPER: float = PI * 0.25
+# At or below this ground speed (m/s), the brake held with a stick is the
+# shuffle: step-together toward the stick at shuffle_speed, any direction. Above
+# it the brake is the hockey stop and the stick is ignored, and a stop held
+# through slows into the shuffle the stick asks for.
+const SHUFFLE_MAX_SPEED: float = 2.0
+
+
+static func is_shuffle(speed: float, brake: bool, has_input: bool) -> bool:
+	return brake and has_input and speed <= SHUFFLE_MAX_SPEED
 
 
 # A league-average body's config, before any attributes apply: SkaterController's
@@ -80,15 +90,16 @@ static func league_config() -> MovementConfig:
 	cfg.turn_accel = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 	cfg.max_turn_rate = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 	cfg.puck_carry_speed_multiplier = 0.92
-	cfg.backward_thrust_multiplier = 0.80
-	cfg.crossover_thrust_multiplier = 0.90
-	cfg.backward_max_speed_multiplier = 0.80
+	cfg.backward_thrust_multiplier = 0.90
+	cfg.crossover_thrust_multiplier = 0.84
+	cfg.backward_max_speed_multiplier = 0.90
 	cfg.lateral_grip = 1.0
 	cfg.stance_grip_mult = 2.0
 	cfg.stance_scrape = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 	cfg.stance_stride_mult = 0.6
 	cfg.stance_max_speed_mult = 0.85
 	cfg.stance_shuffle_mult = 1.2
+	cfg.shuffle_speed = 1.2
 	cfg.commit_grip_mult = 0.6
 	cfg.commit_stride_mult = 0.5
 	return cfg
@@ -132,6 +143,14 @@ static func apply_movement(
 
 	var horiz := Vector2(velocity.x, velocity.z)
 	var speed: float = horiz.length()
+	if is_shuffle(speed, brake, has_input):
+		# The shuffle changes the body's velocity on the edges a stop digs, at the
+		# stop's own rate, so a stop slowing into it carries straight on.
+		var pace: float = cfg.shuffle_speed * minf(move_input.length(), 1.0)
+		horiz = horiz.move_toward(move_input.normalized() * pace, cfg.stop_decel * delta)
+		velocity.x = horiz.x
+		velocity.z = horiz.y
+		return velocity
 	if speed <= GRIP_MIN_SPEED:
 		if brake:
 			horiz = horiz.move_toward(Vector2.ZERO, cfg.stop_decel * delta)
@@ -191,9 +210,9 @@ static func apply_movement(
 	return velocity
 
 
-# cos 45°: a push from rest at least this far ahead of facing is a start, never
-# a shuffle step — a skater pushes off forward (W+D included). Read by the
-# input's tap (ShuffleStepShaper) and the gait's step (SkaterLocomotion).
+# cos 45°: a push from rest at least this far ahead of facing starts on a
+# stride, not a step-together (SkaterLocomotion), and a stick this near the
+# travel when a stop goes on is held off it (ShuffleStepShaper).
 const SHUFFLE_AHEAD_COS: float = 0.707
 
 

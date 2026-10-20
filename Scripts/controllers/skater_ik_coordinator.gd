@@ -18,6 +18,8 @@ const State = SkaterStateMachine.State
 # How far past the blade's whole reach the boards and the near net must be for
 # the reach limit to cast no ray, metres: float room on the limit it skips.
 const _OPEN_ICE_MARGIN_M: float = 0.05
+# Seconds the stride's pump takes to hand the drawn hand to a shot and back.
+const PUMP_HANDOFF_S: float = 0.15
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -42,24 +44,39 @@ var _blade_dangle_vel: Vector3 = Vector3.ZERO
 # is applied RELATIVE to the skater (step 2 of apply_blade_from_mouse).
 var _prev_skater_pos: Vector3 = Vector3.ZERO
 
-# World-XZ ROM-clamped blade TARGET for this tick — the closed-form
-# TopHandIK.project_blade result, captured BEFORE the speed-cap smoothing below.
-# Wrister charge (SkaterController._update_wrister_charge) and the tap-direction
-# release read this rather than the smoothed/capped blade: it stays gated by
-# reachable space (cursor past the reach limit pins the target → zero travel →
-# no charge) while being a deterministic closed-form clamp of (mouse, body, ROM),
-# so host and client agree on charge without replaying the stateful smoother. y = 0.
+# World-XZ ROM-clamped blade TARGET for this tick, captured BEFORE the
+# speed-cap smoothing below. The releases (SkaterController._release_wrister,
+# _fire_quick_pass) read this rather than the smoothed/capped blade: it is a
+# function of (mouse, body pose, ROM) alone, so host and client agree on it
+# without replaying the stateful smoother. y = 0.
 var last_target_blade_world: Vector3 = Vector3.ZERO
+# The settle's held reach target, in the skater root's frame (hold_seat).
+var _held_seat_local: Vector3 = Vector3.ZERO
+var _seat_held: bool = false
+# Whether the stick has the puck to reach for (ReachPurposeRules), from the tick's
+# target solve: the blade rests in at two hands, and the trunk stays out of the
+# reach lean, as it falls.
+var reach_purpose: float = 1.0
+var _purpose_rim: float = -1.0
+# The bottom hand's eased release off the shaft, 0 held to 1 at rest, and its rate.
+var _bh_release: float = 0.0
+var _bh_release_vel: float = 0.0
+# A pose that takes the free hand off the stick (the celebration's fist pump):
+# where, and by how much.
+var _held_free_hand := Vector3.ZERO
+var _held_free_weight: float = 0.0
+var _pump_hold: float = 1.0
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
 # SkaterController.apply_attributes — so they're built once and invalidated
-# from there. Per-tick fields (blade_y, hand_y, backhand_angle) are written
+# from there. Per-tick fields (blade_y, backhand_angle) are written
 # into the cached instance each use. Building fresh configs per solve was the
 # hottest allocation site in the game (~7 RefCounted/Dictionary allocs per
 # skater per physics tick across the 3-pass loop).
 var _cached_top_cfg: TopHandIK.Config = null
 var _cached_bottom_cfg: BottomHandIK.Config = null
+var _two_hand_scratch := TopHandIK.Result.new()
 var _ik_result := TopHandIK.Result.new()
 var _net_result := NetBladeCollision.Result.new()
 # See resolve_blade_against_net.
@@ -70,7 +87,6 @@ var _rigid_result := TopHandIK.Result.new()
 # properties sync inside the cached-config builders — the same rebuild moment —
 # so invalidate_configs() covers both representations.
 var _native_top: RefCounted = null
-var _native_bottom: RefCounted = null
 # Native blade-dangle smoother (null = extension absent, GDScript fallback).
 # In native mode it OWNS the cross-tick smoothing state (_prev_skater_pos,
 # _blade_dangle_vel, the init flag) — only _smoothed_blade_world is mirrored
@@ -87,16 +103,14 @@ func setup(skater: Skater, controller: SkaterController,
 	if ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
-		# solve_on_ice is the newest thing ADDED to an existing kernel, so a binary
-		# predating it still registers the class and passes that check. Fall back
-		# to GDScript, which is slower and correct, rather than call a method the
-		# binary does not have.
-		if not _native_top.has_method(&"solve_on_ice"):
-			push_warning("NativeTopHandIK predates solve_on_ice — "
+		# two_hand_reach is the newest thing ADDED to an existing kernel, so a
+		# binary predating it still registers the class and passes that check. Fall
+		# back to GDScript, which is slower and correct, rather than call a method
+		# the binary does not have.
+		if not _native_top.has_method(&"two_hand_reach"):
+			push_warning("NativeTopHandIK predates two_hand_reach — "
 					+ "using the GDScript solver. Rebuild native/ (bash native/build.sh).")
 			_native_top = null
-		else:
-			_native_bottom = ClassDB.instantiate(&"NativeBottomHandIK")
 	if ClassDB.class_exists(&"NativeBladeDangle"):
 		_native_dangle = ClassDB.instantiate(&"NativeBladeDangle")
 		_sync_dangle_config()
@@ -107,6 +121,7 @@ func setup(skater: Skater, controller: SkaterController,
 func invalidate_configs() -> void:
 	_cached_top_cfg = null
 	_cached_bottom_cfg = null
+	_purpose_rim = -1.0
 	_sync_dangle_config()
 
 # The dangle tunables are plain controller @exports (not part of the cached IK
@@ -158,7 +173,8 @@ func seed_blade_smoothing(world_pos: Vector3) -> void:
 # ── Blade From Mouse (Top-Hand IK) ────────────────────────────────────────────
 # Input is treated as a desired blade position. The top hand is solved as a
 # consequence, clamped to an asymmetric ROM. See domain/rules/top_hand_ik.gd.
-func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = false) -> void:
+func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = false,
+		hold_seat: bool = false) -> void:
 	var mouse_world: Vector3 = input.mouse_world_pos
 	mouse_world.y = 0.0
 
@@ -181,13 +197,26 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# current blade → the speed-cap/translation bookkeeping below runs with a
 	# ~zero step, keeping _smoothed_blade coherent so resuming normal tracking
 	# after the shot doesn't pop.
+	# SEAT (hold_seat, the settle lock): hold the reach TARGET where it was when the
+	# hold began, in the skater's own frame — so it turns with the body's facing
+	# but not with the torso's twist. The freeze above re-reads the SOLVED blade,
+	# and in tight the hand solve lands the blade past its target, so re-reading
+	# it walks the blade out along the aim line tick after tick; a held target is
+	# a fixed point.
 	var target_blade_world: Vector3
-	if hold_blade:
+	if hold_seat and not _seat_held:
+		_held_seat_local = _skater.global_transform.affine_inverse() * last_target_blade_world
+	_seat_held = hold_seat
+	if hold_seat:
+		target_blade_world = _skater.global_transform * _held_seat_local
+		target_blade_world.y = 0.0
+		last_target_blade_world = target_blade_world
+	elif hold_blade:
 		target_blade_world = _skater.upper_body_to_global(_skater.get_blade_position())
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
 	else:
-		var shoulder: Vector3 = address_shoulder(_skater.shoulder.position)
+		var shoulder: Vector3 = arm_shoulder()
 		var shoulder_world: Vector3 = _skater.upper_body_to_global(shoulder)
 		shoulder_world.y = 0.0
 		if (mouse_world - shoulder_world).length() < 0.01:
@@ -210,21 +239,19 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 		var mouse_local: Vector3 = _skater.upper_body_to_local(mouse_world)
 		var target_blade_xz := Vector2(mouse_local.x, mouse_local.z)
 		target_blade_xz = _apply_carry_offset(target_blade_xz)
-		# Closed-form ROM projection — no iteration, no hand work. Only the blade
-		# position is needed to cap against; the capped result is re-solved at full
-		# precision (hand + lean blade_y) below. Uses rest blade_y for the projection:
-		# the sub-cm lean refinement the iterative solve adds is irrelevant to a point
-		# that's about to be capped and re-solved.
+		# Projected by the solve that places the hand, so the target sits on the rim
+		# the hand reaches (Scripts/controllers/CLAUDE.md, "The top hand is solved
+		# where the arm is").
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
-		var target_blade_local: Vector3
-		if _native_top != null:
-			_ik_config(blade_y_local(), target_reach)
-			target_blade_local = _native_top.project_blade(
-					shoulder, target_blade_xz, blade_side_sign)
-		else:
-			target_blade_local = TopHandIK.project_blade(
-					shoulder, target_blade_xz, blade_side_sign,
-					_ik_config(blade_y_local(), target_reach))
+		reach_purpose = _reach_purpose(skater_pos)
+		var target_blade_local: Vector3 = _solve_top_hand(
+				target_blade_xz, blade_side_sign, target_reach, true).blade
+		if _controller.has_puck:
+			# The backhand stop is an angle about the hips, and the solve slides the
+			# blade along the shoulder's aim line off it: stopped again from where
+			# it landed, it holds the stop.
+			target_blade_local = _solve_top_hand(Vector2(target_blade_local.x,
+					target_blade_local.z), blade_side_sign, target_reach, true).blade
 		target_blade_world = _skater.upper_body_to_global(target_blade_local)
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
@@ -338,7 +365,11 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# 3. Solve the hand (and lean-corrected blade_y) for the CAPPED blade. The
 	#    smoothed blade is already within ROM (it stepped from one in-ROM point
 	#    toward another), so this resolves the matching hand/stick pose at the
-	#    capped position rather than the raw target.
+	#    capped position rather than the raw target. The reach limits step 1 laid
+	#    on the target (the carry's two hands, the rest without purpose) are not
+	#    laid again: the blade comes in to them at the speed cap, where clamping
+	#    the capped blade snapped it there in a tick (a pickup at the rim moved
+	#    the hands half a metre).
 	var capped_blade_local: Vector3 = _skater.upper_body_to_local(_smoothed_blade_world)
 	var capped_blade_xz := Vector2(capped_blade_local.x, capped_blade_local.z)
 	# Commit stance: ease the blade OFF the cursor toward a body-local "loaded"
@@ -358,8 +389,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# boards, which is exactly what the clamp below then has to undo.
 	var ik: TopHandIK.Result = _solve_top_hand(
 			capped_blade_xz, blade_side_sign,
-			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(
-					_skater.shoulder.position)))
+			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(arm_shoulder())))
 	var hand_local: Vector3 = ik.hand
 	var blade_local: Vector3 = ik.blade
 	if commit_t > 0.0:
@@ -367,6 +397,14 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 				hand_local, blade_local, blade_side_sign, commit_t)
 		hand_local = posed.hand
 		blade_local = posed.blade
+	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
+			_skater.cross_check_elapsed)
+	if shove_w > 0.0:
+		var shoved: TopHandIK.Result = _cross_check_hand_pose(hand_local, blade_local,
+				blade_side_sign, CrossCheckRules.extension(_skater.cross_check_phase,
+						_skater.cross_check_elapsed), shove_w)
+		hand_local = shoved.hand
+		blade_local = shoved.blade
 
 	# Carry transit lift: while carrying, raise the blade over the puck during
 	# a pushing-face flip. One sin-envelope hop per flip (Skater
@@ -438,12 +476,14 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	# Skipped when nothing moved: the reconstruction is an exact inverse of the
 	# solve there, so it would only redo work.
 	if wall_clamped != intended_blade:
-		hand_local = TopHandIK.hand_for_clamped_blade(
-				_skater.shoulder.position,
-				Vector2(wall_clamped.x, wall_clamped.z),
-				wall_clamped.y,
+		var tilt: Basis = _level_tilt()
+		var clamped_level: Vector3 = tilt * wall_clamped
+		hand_local = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
+				tilt * arm_shoulder(),
+				Vector2(clamped_level.x, clamped_level.z),
+				clamped_level.y,
 				blade_side_sign,
-				_ik_config(blade_y_local()))
+				_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
 		# The rebuild bounds the ARM but leaves stick length free, so a clamp that
 		# puts the blade past arm + stick has nowhere to put the difference except
 		# the shaft — which is a stretched stick, the one thing a rigid object
@@ -478,14 +518,11 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 	# does (TopHandIK clamps to its ROM first), so no ray is cast.
 	var clear: float = minf(GameRules.distance_to_rink_inner(origin),
 			NetGeometry.distance_to_near_net(origin, _controller.net_blade_half_thickness))
-	if clear > _controller.stick_length \
-			+ maxf(_controller.rom_forehand_reach_max, _controller.rom_backhand_reach_max) \
-			+ _OPEN_ICE_MARGIN_M:
+	if clear > _controller.stick_length + _controller.rom_forward_reach_max + _OPEN_ICE_MARGIN_M:
 		return INF
+	var shoulder: Vector3 = arm_shoulder()
 	var aim_local := Vector3(
-			target_blade_xz.x - _skater.shoulder.position.x,
-			0.0,
-			target_blade_xz.y - _skater.shoulder.position.z)
+			target_blade_xz.x - shoulder.x, 0.0, target_blade_xz.y - shoulder.z)
 	if aim_local.length_squared() < 0.000001:
 		return INF
 	var aim_world: Vector3 = _skater.upper_body.global_transform.basis * aim_local
@@ -524,37 +561,152 @@ func _apply_carry_offset(desired_blade_xz: Vector2) -> Vector2:
 				* _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
 	return desired_blade_xz
 
-# Iterative IK to land the blade on world-space ice while preserving stick
-# length, ROM-clamped to the asymmetric envelope. The lean correction depends on
-# blade_local_z (forward extension), which depends on stick_horiz_at_rest, which
-# depends on blade_y, which is what we're solving for — a fixed-point in two
-# variables. Three passes bring the residual world-Y error below ~3mm at max
-# reach + max lean. Using the SOLVED blade XZ from each pass (not the raw target)
-# converges to the right answer even when the target is past ROM. Writes into and
-# returns the shared _ik_result — callers must consume it before the next solve.
+# The top-hand solve, in the arm's level frame (UpperBody's yaw without its pitch
+# and roll; Scripts/controllers/CLAUDE.md, "The top hand is solved where the arm
+# is"), where the ice is flat at blade_y_local(). `desired_blade_xz` is
+# UpperBody-local, a point on the ice; the result is too. Writes into and returns
+# the shared _ik_result — callers must consume it before the next solve.
+# `limits`: lay the reach the body would hold the blade at (the carry's two
+# hands, the rest the purpose eases it from) over the arm's own.
 func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
-		max_blade_reach: float = INF) -> TopHandIK.Result:
-	var blade_y: float = blade_y_local()
-	var shoulder: Vector3 = address_shoulder(_skater.shoulder.position)
+		max_blade_reach: float = INF, limits: bool = false) -> TopHandIK.Result:
+	if limits and _controller.has_puck:
+		desired_blade_xz = _carry_backhand_stop(desired_blade_xz, blade_side_sign)
+	var tilt: Basis = _level_tilt()
+	var shoulder: Vector3 = tilt * arm_shoulder()
+	var hang_y: float = (tilt * _trunk_shoulder()).y
+	var target: Vector3 = tilt * Vector3(desired_blade_xz.x,
+			blade_y_lean_corrected(desired_blade_xz.x, desired_blade_xz.y), desired_blade_xz.y)
+	var cfg: TopHandIK.Config = _level_config(hang_y, blade_y_local(), max_blade_reach)
+	if limits and _controller.has_puck:
+		max_blade_reach = minf(max_blade_reach, _two_hand_reach(
+				tilt, shoulder, Vector2(target.x, target.z), blade_side_sign, cfg))
+		cfg.max_blade_reach = max_blade_reach
+	elif limits and reach_purpose < 1.0:
+		max_blade_reach = _rest_reach(tilt, shoulder, Vector2(target.x, target.z),
+				blade_side_sign, cfg)
+		cfg.max_blade_reach = max_blade_reach
 	var ik: TopHandIK.Result = _ik_result
 	if _native_top != null:
-		if _cached_top_cfg == null:
-			_ik_config(blade_y, max_blade_reach)
-		var lean: Vector3 = _skater.upper_body.rotation
-		_native_top.solve_on_ice(shoulder, desired_blade_xz, blade_side_sign, blade_y,
-				lean.x, lean.z, max_blade_reach, solve_stick_length(), _address_hand_ceiling())
+		_native_top.hand_rest_y = cfg.hand_rest_y
+		_native_top.solve_on_ice(shoulder, Vector2(target.x, target.z), blade_side_sign,
+				cfg.blade_y, 0.0, 0.0, max_blade_reach, cfg.stick_length, cfg.hand_y_max)
 		ik.hand = _native_top.get_hand()
 		ik.blade = _native_top.get_blade()
-		return ik
-	for i in 3:
-		TopHandIK.solve(
-				shoulder,
-				desired_blade_xz,
-				blade_side_sign,
-				_ik_config(blade_y, max_blade_reach),
-				ik)
-		blade_y = blade_y_lean_corrected(ik.blade.x, ik.blade.z)
+	else:
+		TopHandIK.solve(shoulder, Vector2(target.x, target.z), blade_side_sign, cfg, ik)
+	var untilt: Basis = tilt.transposed()
+	ik.hand = untilt * ik.hand
+	ik.blade = untilt * ik.blade
 	return ik
+
+
+# ── Carrying with both hands (Scripts/controllers/CLAUDE.md) ─────────────────
+# How far along the aim a carrier's blade can go with the bottom hand still on
+# the shaft (TopHandIK.two_hand_reach), in the solve's level frame.
+func _two_hand_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
+		blade_side_sign: float, cfg: TopHandIK.Config) -> float:
+	var bottom: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
+			_skater.bottom_shoulder.position, _skater.upper_body.rotation, 0.0,
+			_skater.trunk_fold())
+	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
+			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	if _native_top != null:
+		_native_top.hand_rest_y = cfg.hand_rest_y
+		_native_top.blade_y = cfg.blade_y
+		_native_top.max_blade_reach = cfg.max_blade_reach
+		_native_top.stick_length = cfg.stick_length
+		_native_top.hand_y_max = cfg.hand_y_max
+		return _native_top.two_hand_reach(shoulder, target_xz, blade_side_sign,
+				bottom, _grip_fraction(), reach, _glove_spacing())
+	return TopHandIK.two_hand_reach(shoulder, target_xz, blade_side_sign, cfg,
+			bottom, _grip_fraction(), reach, _glove_spacing(), _two_hand_scratch)
+
+
+# With nothing to reach for the blade rests where both hands hold the stick, and
+# reaches out along the aim to the arm's rim as the purpose comes on. The arm's
+# own answer is the scratch solve two_hand_reach starts from.
+func _rest_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
+		blade_side_sign: float, cfg: TopHandIK.Config) -> float:
+	var held: float = _two_hand_reach(tilt, shoulder, target_xz, blade_side_sign, cfg)
+	if held == INF:
+		return cfg.max_blade_reach
+	var arm_blade: Vector3
+	if _native_top != null:
+		_native_top.solve(shoulder, target_xz, blade_side_sign)
+		arm_blade = _native_top.get_blade()
+	else:
+		TopHandIK.solve(shoulder, target_xz, blade_side_sign, cfg, _two_hand_scratch)
+		arm_blade = _two_hand_scratch.blade
+	var arm: float = Vector2(arm_blade.x - shoulder.x, arm_blade.z - shoulder.z).length()
+	return lerpf(held, arm, reach_purpose)
+
+
+func _reach_purpose(skater_pos: Vector3) -> float:
+	var puck: Puck = _controller.puck
+	if puck == null or _controller.has_puck:
+		return 1.0
+	if _purpose_rim < 0.0:
+		_purpose_rim = full_blade_reach()
+	var at: Vector3 = puck.global_position
+	var vel: Vector3 = puck.linear_velocity
+	return ReachPurposeRules.purpose(Vector2(skater_pos.x, skater_pos.z), _purpose_rim,
+			Vector2(at.x, at.z), Vector2(vel.x, vel.z), _controller.reach_purpose_lookahead_s,
+			_controller.reach_purpose_near_m, _controller.reach_purpose_far_m)
+
+
+# This build's farthest blade off its body origin (TopHandIK.full_reach): the
+# host's claim clamp, the bots' max_blade_reach and the rim the purpose measures
+# a puck against.
+func full_blade_reach() -> float:
+	var c: SkaterController = _controller
+	return TopHandIK.full_reach(_skater.shoulder.position,
+			deg_to_rad(c.velocity_lean_forward_max_deg + c.upper_body_lean_forward_max_deg),
+			GameRules.FACEOFF_SPAWN_HEIGHT + _skater.upper_body.position.y,
+			_skater.shoulder.position.y - c.hand_rest_y, c.rom_forward_reach_max, c.stick_length,
+			c.blade_height, _skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
+
+
+# How far down the shaft the bottom hand must hold to clear the top glove: the
+# drawn fist's width across its knuckle roll, so the gloves meet and never
+# overlap.
+func _glove_spacing() -> float:
+	return _skater.arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND) \
+			* SkaterMeshBuilder.GLOVE_FIST_SPAN
+
+
+# The backhand angle past which the bottom hand lets go (bh_release_angle_deg,
+# off the body as _bh_backhand_angle measures it): a carrier's blade stops on it.
+func _carry_backhand_stop(target_xz: Vector2, blade_side_sign: float) -> Vector2:
+	var on_ice: Vector3 = _skater.upper_body_to_global(Vector3(target_xz.x,
+			blade_y_lean_corrected(target_xz.x, target_xz.y), target_xz.y))
+	var body: Basis = _skater.global_transform.basis
+	var rel: Vector3 = body.inverse() * (on_ice - _skater.global_position)
+	var r: float = Vector2(rel.x, rel.z).length()
+	var limit: float = deg_to_rad(_controller.bh_release_angle_deg)
+	if r < 0.01 or atan2(rel.x, -rel.z) * -blade_side_sign <= limit:
+		return target_xz
+	var a: float = limit * -blade_side_sign
+	var stopped: Vector3 = _skater.upper_body_to_local(_skater.global_position
+			+ body * Vector3(sin(a) * r, rel.y, -cos(a) * r))
+	return Vector2(stopped.x, stopped.z)
+
+
+# UpperBody's pitch and roll: level-frame = _level_tilt() * UpperBody-local.
+func _level_tilt() -> Basis:
+	var lean: Vector3 = _skater.upper_body.rotation
+	return Basis.from_euler(Vector3(lean.x, 0.0, lean.z))
+
+
+# The solve's config with the hand heights (authored as drops below the shoulder
+# marker) hung below `hang_y`: the trunk's shoulder in the level frame, not the
+# address-folded one the faceoff's hand heights were never authored against.
+func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> TopHandIK.Config:
+	var cfg: TopHandIK.Config = _ik_config(blade_y, max_blade_reach)
+	var marker_y: float = _skater.shoulder.position.y
+	cfg.hand_rest_y = hang_y - (marker_y - _controller.hand_rest_y)
+	cfg.hand_y_max = hang_y - (marker_y - cfg.hand_y_max)
+	return cfg
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
 # Recompute the bottom hand pose from the current top_hand + blade positions.
@@ -569,14 +721,21 @@ func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 # the arm hangs from on the visible trunk — in a hard turn the balance lean puts
 # that up to ~0.14 m from the marker — so the drawn arm is never shorter than
 # the span it bridges.
-func update_bottom_hand() -> void:
+#
+# Letting go and taking hold again take time: the release the geometry asks for
+# is eased by a critically damped spring at render rate (`delta`; below 0 it
+# lands at once, for the paths with no clock), since a blade dangling at speed
+# crosses the release bands in a tick or two and the hand jumped ~0.4 m between
+# shaft and rest. A let-go hand swings with the stride.
+func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.get_blade_position()
-	var hand_local: Vector3 = _skater.get_top_hand_position()
+	_skater.set_hand_pump(_stride_pump(delta))
+	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
-	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
-			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	var arm: float = _skater.upper_arm_length + _skater.forearm_length
+	var reach: float = arm * _skater.arm_working_extension + _skater.shoulder_reach_m
 	var held: Vector2 = BottomHandIK.reachable_grip(
-			shoulder, hand_local, blade_local, _grip_fraction(), reach)
+			shoulder, hand_local, blade_local, _grip_fraction(), reach, _glove_spacing())
 	var grip: float = held.x
 	var grip_target_xz := Vector2(
 			lerpf(hand_local.x, blade_local.x, grip),
@@ -585,21 +744,75 @@ func update_bottom_hand() -> void:
 	# of pitch lean or reach. bh_hand_y offsets for fine-tuning.
 	var grip_y: float = lerpf(hand_local.y, blade_local.y, grip) + _controller.bh_hand_y
 	var cfg: BottomHandIK.Config = _bottom_hand_ik_config()
-	cfg.hand_y = grip_y
-	var bh: Vector3
-	if _native_bottom != null:
-		_native_bottom.hand_y = grip_y
-		bh = _native_bottom.solve(shoulder, grip_target_xz, cfg.backhand_angle)
-	else:
-		bh = BottomHandIK.solve(shoulder, grip_target_xz, cfg)
+	var release: float = BottomHandIK.release_weight(cfg)
 	if held.y > 0.0:
-		bh = bh.lerp(Vector3(shoulder.x, grip_y, shoulder.z), smoothstep(
-				0.0, _controller.bh_reach_release_band_m, held.y))
+		release = 1.0 - (1.0 - release) \
+				* (1.0 - smoothstep(0.0, _controller.bh_reach_release_band_m, held.y))
+	if delta < 0.0:
+		_bh_release = release
+		_bh_release_vel = 0.0
+	elif delta > 0.0:
+		var eased: Vector4 = BalanceRules.spring_step(Vector2(_bh_release, 0.0),
+				Vector2(_bh_release_vel, 0.0), Vector2(release, 0.0),
+				_controller.bh_release_omega, delta)
+		_bh_release = clampf(eased.x, 0.0, 1.0)
+		_bh_release_vel = eased.z if _bh_release == eased.x else 0.0
+	var side: float = signf(_skater.bottom_shoulder.position.x)
+	var rest_arm: Vector3 = _controller.bh_free_hand_rest_arm + _free_hand_swing(side)
+	var rest: Vector3 = shoulder + Vector3(rest_arm.x * side, rest_arm.y, rest_arm.z) * arm
+	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest, _bh_release)
+	if _held_free_weight > 0.0:
+		bh = bh.lerp(_held_free_hand, _held_free_weight)
 	# Off the stick, the hand hangs where the arm can put it.
 	var span: Vector3 = bh - shoulder
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
+
+# Takes the free hand to `pos` (upper-body local) by `weight`; 0 hands it back.
+func hold_free_hand(pos: Vector3, weight: float) -> void:
+	_held_free_hand = pos
+	_held_free_weight = weight
+
+
+# The let-go hand's swing off its rest, arm lengths (x out, y up, z back): it
+# comes forward and across as the leg on its own side pushes out, the way a
+# skater's free arm balances the stroke, by how hard the legs are stroking.
+func _free_hand_swing(side: float) -> Vector3:
+	if _skating == null:
+		return Vector3.ZERO
+	var drive: float = clampf(_skating.push_strength, 0.0, 1.0)
+	return _controller.bh_free_hand_swing_arm * (side * sin(_skating.stride_phase) * drive)
+
+# Both hands on the stick, the stroke pumps them across the body with the
+# stride, the stick pivoting about its blade: drawn only (Skater.drawn_top_hand),
+# so the blade and the hand every claim reads stay where the tick put them.
+# While the tracked IK has the stick, handing over to the shots and the block,
+# which pose their own, across PUMP_HANDOFF_S.
+func _stride_pump(delta: float) -> Vector3:
+	if _skating == null:
+		return Vector3.ZERO
+	var state := _controller.get_shot_state() as State
+	var tracked: bool = SkaterPoseBridge.owner_of(state) == SkaterPoseBridge.Owner.TRACKED
+	if delta < 0.0:
+		_pump_hold = 1.0 if tracked else 0.0
+	else:
+		_pump_hold = move_toward(_pump_hold, 1.0 if tracked else 0.0, delta / PUMP_HANDOFF_S)
+	var drive: float = clampf(_skating.push_strength, 0.0, 1.0) * (1.0 - _bh_release) \
+			* smoothstep(0.0, 1.0, _pump_hold)
+	return _controller.stride_hand_pump_m * (sin(_skating.stride_phase) * drive)
+
+# ── The shoulder the top hand works from ───────────────────────────────────────
+# Where the top arm is drawn from — the trunk's shoulder, then the faceoff
+# address's fold — from tick state alone (Scripts/controllers/CLAUDE.md).
+func arm_shoulder() -> Vector3:
+	return address_shoulder(_trunk_shoulder())
+
+
+func _trunk_shoulder() -> Vector3:
+	return SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position,
+			_skater.upper_body.rotation, 0.0, _skater.trunk_fold())
+
 
 # ── The centre's faceoff address ──────────────────────────────────────────────
 # What the hand solves owe a centre set over the dot. Why each exists, and what
@@ -658,8 +871,10 @@ func address_stick_horiz() -> float:
 # How far down the shaft the bottom hand holds: the short lever a draw is won
 # with, walked down over the countdown rather than jumped to.
 func _grip_fraction() -> float:
-	return lerpf(_controller.bottom_hand_grip_fraction,
+	var grip: float = lerpf(_controller.bottom_hand_grip_fraction,
 			_controller.faceoff_center_grip_fraction, _address_blend())
+	return lerpf(grip, CrossCheckRules.GRIP_FRACTION, CrossCheckRules.pose_weight(
+			_skater.cross_check_phase, _skater.cross_check_elapsed))
 
 
 func _address_blend() -> float:
@@ -705,6 +920,35 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 	return _rigid_result
 
 
+# The cross-check holds the shaft level across the chest in both hands and
+# punches it out: the top hand at chest height on its own shoulder's side (away
+# from the blade), driven forward over the push, and the blade a stick's length
+# off it across the body to the blade side (the bottom hand rides the shaft
+# between them, update_bottom_hand, gripped wide enough that the two hands
+# straddle the chest, each on its own shoulder's side). Posed hand-first like
+# the commit, over whatever the commit or the cursor put there, by `weight`
+# (CrossCheckRules.pose_weight); `extension` drives the punch.
+const _SHOVE_HAND_X: float = 0.25        # off the chest's centre, away from the blade
+const _SHOVE_HAND_DROP_M: float = 0.20   # under the shoulder marker: chest height
+const _SHOVE_HAND_Z: float = -0.35       # in front of the chest as the push starts
+const _SHOVE_PUNCH_M: float = 0.25       # the arms' extension at full push
+const _SHOVE_BEARING_Z: float = -0.15    # the shaft a touch ahead of square across
+
+
+func _cross_check_hand_pose(hand_local: Vector3, blade_local: Vector3,
+		blade_side_sign: float, extension: float, weight: float) -> TopHandIK.Result:
+	var posed_hand := Vector3(-_SHOVE_HAND_X * blade_side_sign,
+			_skater.shoulder.position.y - _SHOVE_HAND_DROP_M,
+			_SHOVE_HAND_Z - _SHOVE_PUNCH_M * extension)
+	var across: Vector2 = Vector2(blade_side_sign, _SHOVE_BEARING_Z).normalized()
+	var stick: float = solve_stick_length()
+	var posed_blade := Vector3(posed_hand.x + across.x * stick, posed_hand.y,
+			posed_hand.z + across.y * stick)
+	_rigid_result.hand = hand_local.lerp(posed_hand, weight)
+	_rigid_result.blade = blade_local.lerp(posed_blade, weight)
+	return _rigid_result
+
+
 # Rigid-stick correction for a POSED hand/blade pair — this skater's shoulder and
 # cached config wrapped around the pure rule (TopHandIK.enforce_rigid_stick).
 # Shared with SkaterShotPoseCoordinator, which runs every pose it authors through
@@ -717,7 +961,7 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 func rigid_stick(hand_local: Vector3, blade_local: Vector3,
 		blade_side_sign: float) -> TopHandIK.Result:
 	TopHandIK.enforce_rigid_stick(
-			_skater.shoulder.position, hand_local, blade_local, blade_side_sign,
+			arm_shoulder(), hand_local, blade_local, blade_side_sign,
 			_ik_config(blade_local.y), _rigid_result)
 	return _rigid_result
 
@@ -823,13 +1067,9 @@ func _clamp_blade_butterfly_box(blade_world: Vector3, gpos: Vector3, rot_y: floa
 func blade_y_local() -> float:
 	# Add the eased stick-lift offset so a lifted blade (and the hand/stick the
 	# IK solves from it) rises off the ice. blend is 0 in all shot/carry states
-	# (blade_up is gated off then), so this is a no-op except during a lift.
-	# The lift TARGET follows the deflect mode: MID plays the low air, every
-	# other lifted state (HIGH deflect, a stick lift, forced pop) the high plane.
-	var lift_target: float = _controller.blade_lift_height_mid if _skater.elevation_level == ShotMechanics.ELEVATION_MID \
-			and not StickCheckRules.uses_lift_height(_skater.stick_check_phase, _skater.stick_tied) \
-			else _controller.blade_lift_height
-	var lift: float = _skater.get_blade_lift_blend() * lift_target
+	# (blade_up is gated off then), so this is a no-op except during a lift. A
+	# deflect's blend stops at its share of the full height (Skater.deflect_lift_share).
+	var lift: float = _skater.get_blade_lift_blend() * _controller.blade_lift_height
 	# Plus the commit-stance stick raise: a body-check commit pulls the stick off
 	# the ice as a readable tell. Gameplay-inert (the blade is already withdrawn
 	# from puck play while committed), so this is a pure cosmetic overlay; 0 except
@@ -842,8 +1082,8 @@ func blade_y_local() -> float:
 # default YXZ Euler order — lands the blade at world Y = blade_height.
 # Solving world_y = ub.y + (x*sin(r) + y*cos(r))*cos(p) - z*sin(p) for y gives:
 #   y = (blade_y_local() + z*sin(p) - x*sin(r)*cos(p)) / (cos(p)*cos(r))
-# A small-angle approximation (drop the cos divisors) drifts ~2cm at max reach
-# with full reach lean (15° forward pitch); the exact form is used here so the
+# A small-angle approximation (drop the cos divisors) drifts ~3 cm at max reach
+# with full reach lean (18° forward pitch); the exact form is used here so the
 # IK can consume the correct blade_y up front and produce a hand consistent
 # with stick_length, instead of post-IK overriding blade.y and stretching the
 # visible stick mesh.
@@ -889,9 +1129,11 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 		_cached_top_cfg.hand_y_max = _controller.hand_y_max
 		_cached_top_cfg.rom_forehand_angle_max = deg_to_rad(_controller.rom_forehand_angle_max_deg)
 		_cached_top_cfg.rom_backhand_angle_max = deg_to_rad(_controller.rom_backhand_angle_max_deg)
+		_cached_top_cfg.rom_forward_reach_max = _controller.rom_forward_reach_max
 		_cached_top_cfg.rom_forehand_reach_max = _controller.rom_forehand_reach_max
 		_cached_top_cfg.rom_backhand_reach_max = _controller.rom_backhand_reach_max
 		if _native_top != null:
+			_native_top.rom_forward_reach_max = _cached_top_cfg.rom_forward_reach_max
 			_native_top.hand_rest_y = _cached_top_cfg.hand_rest_y
 			_native_top.hand_y_max = _cached_top_cfg.hand_y_max
 			_native_top.rom_forehand_angle_max = _cached_top_cfg.rom_forehand_angle_max
@@ -903,6 +1145,7 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	# one would silently constrain an unrelated later solve this tick, and the
 	# choked stick_length below is a property of this instant's grip.
 	_cached_top_cfg.blade_y = blade_y
+	_cached_top_cfg.hand_rest_y = _controller.hand_rest_y
 	_cached_top_cfg.max_blade_reach = max_blade_reach
 	_cached_top_cfg.stick_length = solve_stick_length()
 	_cached_top_cfg.hand_y_max = _address_hand_ceiling()
@@ -916,12 +1159,8 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 func _bottom_hand_ik_config() -> BottomHandIK.Config:
 	if _cached_bottom_cfg == null:
 		_cached_bottom_cfg = BottomHandIK.Config.new()
-		_cached_bottom_cfg.hand_y = _controller.bh_hand_y
 		_cached_bottom_cfg.release_angle_max = deg_to_rad(_controller.bh_release_angle_deg)
 		_cached_bottom_cfg.release_angle_band = deg_to_rad(_controller.bh_release_angle_band_deg)
-		if _native_bottom != null:
-			_native_bottom.release_angle_max = _cached_bottom_cfg.release_angle_max
-			_native_bottom.release_angle_band = _cached_bottom_cfg.release_angle_band
 	_cached_bottom_cfg.backhand_angle = _bh_backhand_angle()
 	return _cached_bottom_cfg
 

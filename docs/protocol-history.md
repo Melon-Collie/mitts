@@ -352,10 +352,31 @@ here whenever you bump, in the same format.
 #      stock haircut, so mixed builds must be refused. The replay format is
 #      unchanged: the header already carries the whole code, and an older file
 #      decodes to the stock look.
-# v77: the lobby roster carries each seated player's look, so the lobby's bench
+# v77: stick settling — notify_puck_picked_up gains settle_until_ms (the
+#      catch's settle-lock deadline, host time in ms, 0 = none), and the
+#      snapshot event block's PICKED_UP record carries it in its previously
+#      unused arg. A v76 peer drops the deadline and never settles, so its
+#      inputs would act where the host's replay of them is locked; mixed
+#      builds must be refused. Replay format unchanged.
+# v78: the cross-check (docs/physicality-plan.md, Phase B), thrown by a chord
+#      already on the input record (hit_held with stick_check_pressed), so the
+#      input stays 24 B. The skater block grows a byte (58 -> 59 B):
+#      cross_check u8, phase in bits 0-1 and ticks elapsed in bits 2-7. Two new
+#      RPCs (receive_cross_check_claim, notify_cross_check) shift the rpc
+#      ordering. Replay FORMAT_VERSION 17.
+# v79: spawn_remote_skater carries from_spectator, so a client marks a promoted
+#      spectator before the spawn and every peer announces the same roster move.
+#      An RPC signature change, so mixed builds must be refused.
+# v80: the eight puck-contact cue RPCs (notify_board_hit, notify_goal_body_hit,
+#      notify_post_hit, notify_goalie_hit, notify_deflection, notify_body_block,
+#      notify_puck_strip, notify_stick_lift) carry the speed the host measured at
+#      the contact, which sets the cue's volume. A client used to read its own
+#      puck.linear_velocity, which prediction never writes. RPC signature change;
+#      mixed builds must be refused. Replay format unchanged.
+# v81: the lobby roster carries each seated player's look, so the lobby's bench
 #      figures are the players. Every sync_lobby_roster / notify_return_to_lobby
 #      entry grows four fields after is_ready (PlayerLook.cosmetics_to_wire):
 #      the build as PlayerAttributes.to_dict, skin tone, tape code and gear
-#      style code, all from the host's join-time copy. A v76 peer reads the
+#      style code, all from the host's join-time copy. A v80 peer reads the
 #      first seven fields and seats every human on its bench in a default look,
 #      so mixed builds must be refused. The replay format is unchanged.

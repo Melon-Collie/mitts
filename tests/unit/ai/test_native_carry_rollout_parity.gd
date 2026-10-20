@@ -33,12 +33,18 @@ func _random_caps() -> AISkaterCaps:
 	cfg.puck_carry_speed_multiplier = _rng.randf_range(0.8, 1.0)
 	caps.facing_drag_speed = _rng.randf_range(3.0, 8.0)
 	caps.facing_drag_speed_braking = _rng.randf_range(6.0, 14.0)
+	caps.facing_turn_accel_max = _rng.randf_range(150.0, 450.0)
 	caps.body_radius = _rng.randf_range(0.3, 0.42)
 	caps.board_shield_probe = _rng.randf_range(0.8, 1.4)
 	caps.board_shield_max_rad = deg_to_rad(_rng.randf_range(30.0, 70.0))
 	caps.facing_rules = FacingRules.Config.new()
 	caps.facing_rules.forehand_edge_rad = deg_to_rad(_rng.randf_range(130.0, 170.0))
 	caps.facing_rules.backhand_edge_rad = deg_to_rad(_rng.randf_range(130.0, 170.0))
+	caps.carry_facing_rules = FacingRules.Config.new()
+	caps.carry_facing_rules.forehand_edge_rad = caps.facing_rules.forehand_edge_rad
+	caps.carry_facing_rules.backhand_edge_rad = deg_to_rad(_rng.randf_range(50.0, 90.0))
+	caps.facing_rules.pivot_commit_rad = deg_to_rad(_rng.randf_range(0.0, 8.0))
+	caps.carry_facing_rules.pivot_commit_rad = caps.facing_rules.pivot_commit_rad
 	caps.is_left_handed = _rng.randf() < 0.5
 	return caps
 
@@ -95,8 +101,9 @@ func test_every_move_rolls_as_the_gdscript_does() -> void:
 		var st: int = steps[_rng.randi_range(0, steps.size() - 1)]
 		reference.step_ticks = st
 		ported.step_ticks = st
-		reference.roll_all(pos, vel3, facing, toward, caps, has_puck)
-		ported.roll_all(pos, vel3, facing, toward, caps, has_puck)
+		var turn_rate: float = _rng.randf_range(-20.0, 20.0) if _rng.randf() < 0.5 else 0.0
+		reference.roll_all(pos, vel3, facing, toward, caps, has_puck, turn_rate)
+		ported.roll_all(pos, vel3, facing, toward, caps, has_puck, turn_rate)
 		assert_not_null(ported._native, "the kernel loaded these caps")
 		for m: int in AICarryRollout.MOVE_COUNT:
 			var label: String = "iter %d, %s from %s, step %d" % [
@@ -108,6 +115,8 @@ func test_every_move_rolls_as_the_gdscript_does() -> void:
 			assert_lt(dp, TOLERANCE, "%s: end position" % label)
 			assert_lt(dv, TOLERANCE, "%s: end velocity" % label)
 			assert_lt(df, TOLERANCE, "%s: end facing" % label)
+			assert_almost_eq(reference.end_turn_rate[m], ported.end_turn_rate[m], TOLERANCE,
+					"%s: end turn rate" % label)
 			assert_eq(reference.touched_boundary[m], ported.touched_boundary[m],
 					"%s: met the boards" % label)
 			for k: int in AICarryRollout.SAMPLES:

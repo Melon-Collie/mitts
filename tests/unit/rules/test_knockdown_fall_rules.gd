@@ -166,6 +166,17 @@ func test_zero_drop_stands_straight() -> void:
 	assert_almost_eq(b.y, 0.0, 0.0001, "no drop, no knee fold")
 
 
+# A drop arriving from zero folds the legs in rather than popping them to the
+# smallest fold that raises a boot at all.
+func test_a_drop_from_zero_folds_in_continuously() -> void:
+	const STEP_M: float = 0.001
+	var last: Vector2 = KnockdownFallRules.buckle_angles(0.0, _LEGS)
+	for i: int in range(1, 300):
+		var b: Vector2 = KnockdownFallRules.buckle_angles(i * STEP_M, _LEGS)
+		assert_lt(absf(b.x - last.x), 0.02, "drop %.3f m: the hip moves on" % (i * STEP_M))
+		last = b
+
+
 # ── sprawl_into ───────────────────────────────────────────────────────────────
 
 func _sprawl(elapsed: float, speed: float, dir: Vector2) -> KnockdownFallRules.SprawlPose:

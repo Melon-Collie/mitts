@@ -23,6 +23,7 @@ const State = SkaterStateMachine.State
 # The legs are planted: the stride stops while the block holds them.
 var planted: bool = false
 var _blend: float = 0.0
+var _blend_rate: float = 0.0
 
 
 func stages() -> int:
@@ -32,18 +33,22 @@ func stages() -> int:
 func reset() -> void:
 	planted = false
 	_blend = 0.0
+	_blend_rate = 0.0
 
 
 func is_quiet() -> bool:
 	return _skater.current_shot_state != State.SHOT_BLOCKING
 
 
-# Fast into the committed plant, eased back out on release so the knee drop
-# doesn't pop back to a stride.
+# Fast into the committed plant, eased back out on release, both on a spring
+# (EaseRules), so the knee drop starts and ends from rest.
 func advance(delta: float) -> bool:
 	planted = _skater.current_shot_state == State.SHOT_BLOCKING
-	_blend = lerpf(_blend, 1.0 if planted else 0.0,
-			minf(_controller.block_pose_blend_speed * delta, 1.0))
+	var target: float = 1.0 if planted else 0.0
+	var omega: float = _controller.block_pose_blend_speed * EaseRules.OMEGA_PER_RATE
+	var x: float = _blend
+	_blend = clampf(EaseRules.critical_x(x, _blend_rate, target, omega, delta), 0.0, 1.0)
+	_blend_rate = EaseRules.critical_v(x, _blend_rate, target, omega, delta)
 	return _blend > 0.001
 
 

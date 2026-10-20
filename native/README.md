@@ -1,7 +1,7 @@
 # mitts_native — GDExtension hot-path kernels
 
 C++ ports of per-tick math kernels, registered as `Native*` classes
-(`NativeTopHandIK`, `NativeBottomHandIK`, `NativeSkaterMovement`,
+(`NativeTopHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
 `NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
@@ -115,8 +115,8 @@ without a built binary, loses performance, never correctness — CI builds it):
   `LagCompRewind.forward_predict_skater` (host claim rewind) — both through
   the SAME per-skater instance (`SkaterController.native_movement()`), which
   is what keeps render == rewind.
-- **Blade IK** — `SkaterIKCoordinator` (`project_blade`, `update_bottom_hand`,
-  and `_solve_top_hand`'s three passes onto the leaned ice as one
+- **Blade IK** — `SkaterIKCoordinator` (`project_blade`, and
+  `_solve_top_hand`'s three passes onto the leaned ice as one
   `solve_on_ice` call, its per-tick config in the arguments rather than set
   property by property each pass); the rest of the config syncs inside the
   cached-config builders, so `invalidate_configs()` covers both

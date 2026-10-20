@@ -5,8 +5,8 @@ class_name GameRules
 
 # ── Game Flow Timings ─────────────────────────────────────────────────────────
 const GOAL_PAUSE_DURATION: float        = 2.0  # fallback for GOAL_SCORED auto-advance if replay never starts
-const GOAL_CELEBRATION_DURATION: float  = 1.5  # post-goal beat: movement allowed, puck pickup-locked,
-												# banner + VFX play; auto-advances to GOAL_SCORED (replay)
+const GOAL_CELEBRATION_DURATION: float  = 2.5  # post-goal beat: movement allowed, puck pickup-locked,
+												# banner + VFX + crowd roar play; auto-advances to GOAL_SCORED (replay)
 const FACEOFF_PREP_DURATION: float = 2.0   # visible "2 → 1 → DROP!" countdown before puck unlocks
 # Extra hold on the OPENING faceoff of a match (game start + rematch): camera
 # sweep, full-screen matchup rosters, crowd buzz. Longer than the period-start
@@ -380,6 +380,8 @@ const PUCK_START_POS: Vector3 = Vector3(0, 0.0175, 0)
 # goal mouth to the whole disc rather than to a point.
 const PUCK_COLLISION_RADIUS: float = 0.065
 const PUCK_COLLISION_HALF_HEIGHT: float = 0.0175
+# A skater's blade face, heel height; the blade's contact point sits at its middle.
+const BLADE_FACE_HEIGHT_M: float = 0.06
 # Widest |x| a puck's CENTER can cross the goal line at without clipping the
 # post: post centerline (NET_HALF_WIDTH) minus the pipe radius minus the puck's
 # own radius. Pure physical derivation — any aim beyond this line is a

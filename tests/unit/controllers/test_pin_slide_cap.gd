@@ -61,7 +61,7 @@ func test_a_pinned_skater_slides_no_faster_than_his_cap() -> void:
 	assert_gt(slide, cap * 0.9, "and does slide")
 
 
-func test_a_pinned_skater_cannot_commit_or_take_the_stance() -> void:
+func test_neither_side_of_a_pin_commits_and_the_pinned_one_takes_no_stance() -> void:
 	var c: SkaterController = _make_controller()
 	c.skater.pin_role = BoardPinRules.Role.PINNED
 	var input := InputState.new()
@@ -72,4 +72,5 @@ func test_a_pinned_skater_cannot_commit_or_take_the_stance() -> void:
 	assert_false(c.stance_active)
 	c.skater.pin_role = BoardPinRules.Role.PINNER
 	c._apply_movement(input, DT)
-	assert_true(c.skater.hit_committed, "the pinner keeps the commit that holds the pin")
+	assert_false(c.skater.hit_committed, "the pin is held on the stick button")
+	assert_true(c.stance_active, "the pinner may still load up")

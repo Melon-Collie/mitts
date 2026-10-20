@@ -508,15 +508,18 @@ landmark rather than a tuning number.
 
 ## SkaterController
 
-`SkaterController` delegates to five `RefCounted` collaborators —
+`SkaterController` delegates to seven `RefCounted` collaborators —
 `SkaterAimingBehavior`, `SkaterIKCoordinator`, `SkaterPoseCoordinator`,
-`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`. `GameManager` calls
+`SkaterShotPoseCoordinator`, `SkaterSkatingCoordinator`, `SkaterStickCheck`,
+and `SkaterSettleGate` (the settle lock a hard catch leaves; its deadline
+contract is in `Scripts/networking/CLAUDE.md`). `GameManager` calls
 methods on the controller and never pokes collaborator internals.
 
-**Attributes, one line each.** Skating splits three ways: top speed rides height
-and the skate profile, first-step burst rides weight, and agility rides both, so
-a small player can be explosive and shifty without owning the top gear, and a
-heavy build feels it in the TURN rather than being glued to the ice. No build
+**Attributes, one line each.** Skating splits three ways: top speed rides the
+skate profile alone (size never buys it), first-step burst and agility ride
+height and weight, so a small player is explosive and shifty without owning the
+top gear, and a heavy build feels it in the TURN rather than being glued to the
+ice. No build
 tracks the cursor more precisely ("your hands are you"). The blade caps derive
 from lever geometry instead: the long lever sweeps but cannot cut back, the
 short lever is the scalpel. Shot power means "what a charge buys you, and how
@@ -565,7 +568,10 @@ the measured turn — all derived from replicated state). Two quantities decide
 it: whether the skater is **driving** (the stick's component along travel,
 which is what the physics thrusts by; against travel it is a skid) and how much
 of the edge's grip the travel's curve is **using** (centripetal acceleration
-over `turn_accel · lateral_grip`). Driving straight is a stride, driving
+over the league's `turn_accel`, not the build's own grip, so the same curve at
+the same speed reads the same on every build). How hard the legs stride is the
+speed over the BODY's full pace (`gait_full_speed` × leg length), never the
+build's top speed: the picture comes from height and weight, not from stats. Driving straight is a stride, driving
 through a turn a crossover, coasting straight a glide, coasting round a turn a
 carve. A stick held straight across travel turns the skater with no thrust, so
 it is carved, never crossed over. Each state owns its legs outright while it
@@ -604,6 +610,16 @@ Things the split alone would get wrong, handled where noted:
   over while the skater is still gaining speed. `test_gait_step_events.gd`
   holds the shape.
 - **The glide is the remainder.**
+- **The weights ease on springs, not lags** (`EaseRules`, critically damped,
+  ω = `OMEGA_PER_RATE` × the blend speed): the mix, effort, the loaded stance
+  and the stroke's intensity, and the stance layer's blend. A lag answers a
+  change of state at full rate on its first frame, and every leg target is a
+  blend of those weights, so the body stepped in a corner on every change of
+  state: the crouch dropped at ~4 m/s from rest the tick a stop began. The
+  shuffle keeps its lag: its step is laid from the base closed, where a quick
+  onset costs nothing and a slow one lets the planted skate slide
+  (`test_shuffle_steps.gd`). `tests/instruments/actors/test_body_smoothness.gd`
+  measures the per-frame jerk of every bone through each transition.
 
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
 places each ankle from the stroke's joints on the stance, lays on the states
@@ -620,10 +636,24 @@ back of them, turned square across it), the skid (`_skid_path`, a snowplow),
 backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
 (`_shuffle_path`, step-together in any direction: a side-stepping blade cannot
 glide, so each skate holds its place on the ice while the hips pass over it,
-and the cycle is laid over the ground so one tap is one cycle; an unbraked push
-from rest to the side or back latches a step in `_sense_step` — once braked (a
-tap's settle) it holds to rest, unbraked it is one step and then the stroke's,
-`test_shuffle_steps.gd`). The glide is the stance with a joint-space
+and the cycle is laid over the ground, one `shuffle_step_distance` a cycle;
+`_sense_step` steps for as long as the shuffle itself is held (the brake with a
+stick, slow: `SkaterMovementRules.is_shuffle`) and, let go, holds the step
+through its settle to rest, while an unbraked push from rest to the side or back
+is one step and then the stroke's, `test_shuffle_steps.gd`).
+
+**The shuffle is a chord, and nothing about it is on the wire.** The movement
+model reads the brake and the stick it already has: at or below
+`SHUFFLE_MAX_SPEED` the brake with a stick drives the body toward the stick at
+`shuffle_speed` (on the stop's own edges, at `stop_decel`, so a stop slows
+straight into it), and above it the brake is the stop and the stick is ignored.
+The local input is shaped before it is recorded (`ShuffleStepShaper`): a shuffle
+let go of holds its stick until the step-together closes and brakes to rest
+there, and a stick already driving along the travel when the brake goes on at
+speed is held off, so W held through a stop stops. Bots never shuffle: their
+brake keeps steering in the stick, so `AIController.apply_decision` drops it
+under the brake below the gate (`AIBotMechanics.braked_stick`), and
+`AICarryRollout` prices a BRAKE as that stop. The glide is the stance with a joint-space
 edge sway and, out of a turn, a light inside knee; as it comes still it stands on
 the ice like the authored states (`SkaterLocomotion.on_ice`, `1 − glide × speed`)
 on soft knees (`rest_stance`), so a standing skater's lean settles over two
@@ -697,6 +727,28 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
+### A change of who poses the stick is eased, not cut
+
+The tracked IK, the slapper's wind-up, the follow-throughs and the shot block
+each place the hand and blade from their own geometry, and none starts where the
+last left off — a change of owner moved the stick up to 1.8 m in a tick.
+`SkaterPoseBridge` runs after the tick's last write: on a change of owner it
+holds the stick last drawn and eases the new owner's pose in from it (0.15 s;
+0.05 s into a follow-through, which is the shot's own whip). It advances on live
+ticks only — reconcile treats the live tick as the truth, and a bridge advanced
+through a replay would play its ease twice — and its effect rides the hand and
+blade the wire already carries. The same rule shapes the rest of the
+hand-offs: a whip's attack never takes less than `WHIP_ATTACK_MIN_S`, the
+celebration's stick and fist pump ease in and out over `CELEBRATION_EASE_S`,
+and the slapper and block take their pose from the lean and twist they find
+rather than zeroing them first.
+
+**The stride's hand pump is drawn, never posed.** Both hands on, the stroke
+swings the top hand across the body (`SkaterIKCoordinator._stride_pump`), the
+stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
+which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
+every claim reads never takes it.
+
 ### The gait's numeric core is native
 
 Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the
@@ -733,6 +785,70 @@ So a held pose authors the **hand** — where the player actually holds the stic
 Authoring both ends over-constrains a rigid stick, and `enforce_rigid_stick`
 only shortens an over-long span; an under-long pair draws a visibly short stick.
 `test_commit_grip_choke.gd` holds all of it, including the fold direction.
+
+### The top hand is solved where the arm is
+
+The tracked path's ROM (`TopHandIK`) is a disc about the shoulder with the hand
+a fixed drop below it, and `SkaterIKCoordinator._solve_top_hand` solves it
+where the drawn arm actually is. Three things decide "where", each found as a
+hand the drawn arm could not reach or barely extended toward:
+
+- **The shoulder is the trunk's** (`arm_shoulder`). The skeleton folds the
+  trunk before it twists (`Scripts/actors/CLAUDE.md`, *One skeleton, one
+  chain*) and `UpperBody` twists first, so a skating fold with a backhand twist
+  carries the drawn shoulder ~5 cm off the frame's marker, and a hand solved
+  off the marker stretched the arm to 1.03 of itself.
+  `SkaterSpineRig.shoulder_in_frame` copies the rig's order from tick state
+  alone, because the blade it places is gameplay: the hips are taken square to
+  the facing (their yaw carries the render-rate gait); where it matters the
+  twist is pinned at the spine's limit anyway.
+- **The frame is level** (`_level_tilt`): `UpperBody`'s yaw without its pitch
+  and roll. A shoulder flexes the arm forward as the trunk leans; solved in the
+  leaned frame the disc tipped with the chest, and reaching ahead at a 36°
+  skating lean the fully extended arm hung 82° below horizontal. Level, it
+  reaches out at the upright angle (~46°) and the lean buys reach by carrying
+  the shoulder forward and down. The hand heights hang off the trunk's shoulder
+  before the faceoff address folds it (`_level_config`).
+- **The cursor's target is projected by that same solve.** Projected at the
+  upright blade height while the solve ran at the leaned one, the target sat
+  inside the rim and the hand was drawn back to it: 0.24 m of a 0.39 m rim in
+  every direction.
+
+The reach lean measures the hand the same way, and the host's claim clamp
+bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
+
+**A carrier keeps both hands on the stick.** An empty stick reaches one-handed
+to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
+both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer
+hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
+way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
+which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck
+magnetises to the blade, so a one-handed carry was reach no defender could
+answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
+and is what the limit is measured to keep on the shaft. They are laid on the
+cursor's TARGET, not on the blade the speed cap draws, so a pickup at the rim
+brings the stick in at the dangle's pace instead of in one tick.
+`test_top_hand_reaches_its_rim.gd` holds all of it.
+
+"Hold the shaft" means a glove's width below the top hand
+(`SkaterIKCoordinator._glove_spacing`, the drawn fist's width), never on it.
+The bottom arm only just reaches the top hand once the stick is held out, so
+never let that floor go to zero: the grip slides up until one fist is drawn
+inside the other, and the reach it buys a carrier (out to ~1.85 m) is reach
+no two hands have. With it the stick comes in until both hands fit (a carry
+reaches ~1.3 m ahead, ~0.95 m wide), and an empty stick past that lets the
+bottom hand go. `test_gloves_never_stack.gd` measures the drawn fists.
+
+Because the blade stops there, a skating carrier's hips pivot there too: its
+`FacingRules` config (`carry_facing_rules`, also the bots' `AISkaterCaps` copy)
+has the backhand stop as its backhand edge, so sweeping the puck round the
+backhand turns the skater onto the other line with it on the forehand, about
+113° off the new line and far inside its edge. A pivot under way commits
+(`FacingRules.Config.pivot_commit_rad`): the hips' turn toward the cursor, past
+where the line would hold them, eases the edge a few degrees, or a cursor held
+on the stop flips the pivot on noise and the hips sit between the lines. Capped,
+because a body still turning onto the line from a cursor squared beside it
+reads the same way. `test_facing_follows_travel.gd` holds all of it.
 
 **A pose the trunk texture cannot express does not belong in the gait.** The
 texture is one pitch and one roll for the whole shell, so it is symmetric by

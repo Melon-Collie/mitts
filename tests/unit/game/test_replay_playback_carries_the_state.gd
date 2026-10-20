@@ -14,6 +14,7 @@ const _NOT_PLAYED_BACK: Dictionary = {
 	"host_timestamp": "host-only, not serialized",
 	"blade_contact_world": "host-only, not serialized",
 	"top_hand_world": "host-only, not serialized",
+	"settle_left_s": "host-only, not serialized",
 }
 
 

@@ -38,11 +38,9 @@ const _ORTHO_MARGIN_M: float = 0.44
 const _GLOVE_ROW_Y: float = 0.42
 const _FACE_ROW_Y: float = 0.84
 const _LABEL_DROP_M: float = 0.055
-# Glove display sizes — larger than the workbench's, so a glove reads at about
-# the scale of the skate under it (the live rig sizes the fist off the hand
-# sphere; nothing here is a placement input).
+# Glove display scale — larger than the live rig's GLOVE_FIST_RADIUS_M, so a
+# glove reads at about the scale of the skate under it; the cuff scales with it.
 const _FIST_SCALE: float = 0.105
-const _CUFF_RADIUS: float = 0.080
 # Yaw applied to every piece for the second shot — the same three-quarter
 # angle on each, rather than moving the camera (which ortho would not honor).
 const _THREE_QUARTER_DEG: float = 40.0
@@ -194,15 +192,17 @@ func _build_skate(holder: Node3D, model: int) -> void:
 
 
 # One glove under `holder`: the fist stands fingers-down (station order runs
-# wrist → fingers along −Y) with the cuff ring at the wrist above it, the same
-# arrangement the workbench turntable uses. The fist is a multi-surface piece
-# (back of the hand / fingers), so it paints per surface.
+# wrist → fingers along −Y) with the cuff over its wrist, the live rig's
+# assembly blown up by one factor so the cuff keeps its place and proportion.
+# The fist is a multi-surface piece (back of the hand / fingers), so it paints
+# per surface.
 func _build_glove(holder: Node3D, model: int) -> void:
+	var k: float = _FIST_SCALE / SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
+	var center: float = _FIST_SCALE + 0.001  # fingertips (y −1) on the floor
 	var fist := MeshInstance3D.new()
 	fist.mesh = SkaterMeshBuilder.shared_glove_fist()
 	fist.transform = Transform3D(
-			Basis.from_scale(Vector3.ONE * _FIST_SCALE),
-			Vector3(0.0, 0.95 * _FIST_SCALE + 0.001, 0.0))
+			Basis.from_scale(Vector3.ONE * _FIST_SCALE), Vector3(0.0, center, 0.0))
 	fist.set_surface_override_material(SkaterMeshBuilder.FIST_PART_BACK,
 			_mat(_glove_zone(model, GearModelRegistry.GLOVE_BODY), 0.9))
 	fist.set_surface_override_material(SkaterMeshBuilder.FIST_PART_FINGERS,
@@ -211,9 +211,9 @@ func _build_glove(holder: Node3D, model: int) -> void:
 
 	var cuff := MeshInstance3D.new()
 	cuff.mesh = SkaterMeshBuilder.shared_cuff()
-	cuff.transform = Transform3D(
-			Basis.from_scale(Vector3(_CUFF_RADIUS, 1.0, _CUFF_RADIUS)),
-			Vector3(0.0, 1.9 * _FIST_SCALE + SkaterMeshBuilder.CUFF_HEIGHT_M * 0.4, 0.0))
+	var cuff_r: float = SkaterMeshBuilder.GLOVE_CUFF_RADIUS_M * k
+	cuff.transform = Transform3D(Basis.from_scale(Vector3(cuff_r, k, cuff_r)),
+			Vector3(0.0, center + SkaterMeshBuilder.GLOVE_CUFF_BACK_M * k, 0.0))
 	cuff.material_override = _mat(_glove_zone(model, GearModelRegistry.GLOVE_CUFF), 0.9)
 	holder.add_child(cuff)
 

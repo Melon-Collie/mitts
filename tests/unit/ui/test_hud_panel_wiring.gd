@@ -77,6 +77,13 @@ func test_icing_race_reaches_its_banner() -> void:
 	assert_false(banner.is_showing(), "a race ended by the whistle hands over to the toast")
 
 
+func test_roster_announcements_reach_the_toast_stack() -> void:
+	GameManager.roster_announced.emit("JONES", &"TOAST_PLAYER_SWITCHED_TEAMS",
+			TeamColorRegistry.get_ui_colors(0, 1))
+	assert_eq((_panel(&"_toast_stack") as ToastStack).get_child_count(), 1,
+			"a roster announcement raises one toast")
+
+
 func test_rematch_votes_reach_the_tally() -> void:
 	NetworkManager.rematch_voters_changed.emit(2)
 	NetworkManager.rematch_vote_changed.emit(7, RematchVoteRules.Choice.REMATCH)

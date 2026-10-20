@@ -18,7 +18,7 @@ A build is **body + gear**, six ints:
   height-independent "how heavy for my frame" quantity the frame tables index
   by. It is piecewise about the neutral, because the band is asymmetric.
 - **Four gear slots**: skate profile, blade curve, stick flex, stick length.
-  Each is 0/1/2, with 1 = balanced.
+  Each is 0/1/2, with 1 = the default (balanced, or Stability for the skates).
 
 **Every axis is lateral.** There is no power budget and no legality check.
 Validation only coerces (`coerce_height`, `coerce_weight`, the gear clamp), so a
@@ -48,9 +48,9 @@ term scales them.
 
 | dial | scales | accessor(s) |
 |---|---|---|
-| Height | top-speed baseline (a hump that peaks at 6'1") | `speed_mult` → `top_speed_mult` |
+| Height | first-step burst (favors small builds: a shorter leg cycles faster) | `accel_mult` |
 | | agility baseline (favors small builds) | `agility_mult` |
-| | charged-shot ceiling (favors big builds), slapper wind-up as 2 − power | `shot_power_mult` (wrister), `slapper_power_mult`, `shot_charge_mult` |
+| | charged-shot ceiling (favors big builds), and slapper wind-up WITH it (the long lever loads slower) | `shot_power_mult` (wrister), `slapper_power_mult`, `shot_charge_mult` |
 | | skeleton, arm length and ROM, hand heights (mesh-native 5'10" = 1.0) | `height_mult` |
 | | stick cut to the body (~0.65× the height deviation) | `stick_len_mult` |
 | | helmet (a mild table of its own; heads are near-constant) | `head_bulk_mult` |
@@ -58,22 +58,26 @@ term scales them.
 | | first-step burst (favors lean builds) | `accel_mult` |
 | | agility bite (F = mv²/r: heavy turns wide and stops long) | `agility_mult` |
 | Both | girth = sqrt(mass/height): every lateral body part and the hitbox radius | `girth_mult` |
+| | glide: air drag over mass with area ∝ sqrt(mass·height) is 1 / girth, so a heavy-for-his-height body coasts | `glide_drag_mult` |
 
-Two deliberate exemptions. **Edge glide** reads only the height part of agility
-(`agility_glide_mult`), so a heavy build still coasts like its mass says it
-should. **Top speed** stays weight-free.
+**Size never buys top speed.** If it did, every build would be the tallest one.
+Top speed is the skate profile's alone: `speed_mult` is the profile's lean,
+and `top_speed_mult` counts it twice, once raw and once through its position in
+the 20–25 mph burst band. Every body skates the same ~22.4 mph on Stability
+skates. `carry_speed_mult` rises with the same band position and is the whole
+cost of carrying at speed. Drag never sets top speed either: the thrust against
+drag equilibrium (~15.6 m/s) sits well past the cap, so glide shapes only the
+coast and the approach to it.
 
-`top_speed_mult` counts the speed lean twice: once raw, and once through its
-position in the 20–25 mph burst band. Body-only builds sit in a tight ~22 mph
-middle band, and the skate profile reaches either end of it.
-`carry_speed_mult` rises with the same band position and is the whole cost of
-carrying at speed.
+So size trades things with no single right answer. Small and lean wins the
+first step, the corner and the quicker wind-up. Big and heavy wins reach, shot
+power, every contact and the coast.
 
 ## The gear slots
 
 | slot | options | what it leans |
 |---|---|---|
-| Skate profile | agility / balanced / power | power: +top speed and glide, −agility (lateral grip included); agility: the reverse plus first step. Stacked with the body, agility runs ~0.84–1.15. |
+| Skate profile | shifty / **stability** (default) / power | three skates, no plain one; each wins one kind of ice. **Shifty**: agility (turn, stop, lateral grip), first step, the Shift stance's grip and side-step; pays top speed and the coast. **Stability**: backward thrust and top speed (gap control); pays the crossover push across its facing. Its leans are all 1.0, since the controller's defaults *are* Stability. **Power**: top speed, glide, and the crossover push across its facing (speed built skating wide, shoulders to the play); pays the corners, the stance, and backward skating. Stacked with the body, agility runs ~0.83–1.16. |
 | Blade curve | M88 / M92 / M28 | the loft **angle ladder** (each level a set launch angle, steeper on the M28; design of record `docs/elevation-rework-plan.md`), backhand (1.08 / 1.00 / 0.90, never past parity), slapper power (±3%), reception ceiling (±7%, never `pickup_max_speed`). `Skater.apply_blade_pattern` renders the pick. |
 | Stick flex | whippy / medium / stiff | stiff is the **slapshot stick**: slapper ceiling (±6%) **and** slapper wind-up, both in the same direction (a lateral slot trades, it never stacks). Whippy is the **wrist-shot stick**: `wrister_unloaded_share` 0.70 / 0.60 / 0.50, the share of a wrister the shaft carries with no torso load. The wrister ceiling is flex-free, so they break even on a fully loaded wrister. The shaft's visible bow scales with the pick (`stick_bend_mult`, cosmetic). `flex_number()` shows the stick's real retail stiffness, fitted to weight; it is display-only. |
 | Stick length | short / standard / long | ±4% on the height's cut. Feeds reach, poke and claim range, the blade-cap lever and the stick mesh. |

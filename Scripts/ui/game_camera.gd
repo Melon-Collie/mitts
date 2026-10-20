@@ -118,14 +118,14 @@ const _KICK_DAMPING: float = 17.0             # < 2·sqrt(stiffness) ≈ 28.3 �
 
 # ── Goal hero-cam push-in ─────────────────────────────────────────────────────
 # On a goal the camera dives toward the net that was scored on for the live
-# GOAL_CELEBRATION beat — a punch-in that sells the moment before the host's
-# slow-mo replay cuts to its behind-the-net angle a beat later. Local + cosmetic:
+# GOAL_CELEBRATION beat — a punch-in that sells the moment before the replay's
+# wipe sweeps in a beat later. Local + cosmetic:
 # it only rebiases the framing this camera already computes (center pulled toward
 # the net, height pushed in), reusing the existing tilt / look-at math, so shake
 # and the impact kick still layer on top for the pop. Runs on every peer
 # (goal_scored is emitted locally everywhere) and is superseded when the replay
 # camera goes current.
-const _GOAL_CINE_DURATION: float = 1.4     # < GOAL_CELEBRATION_DURATION (1.5) so it's easing out as the replay cuts
+const _GOAL_CINE_DURATION: float = GameRules.GOAL_CELEBRATION_DURATION - 0.1  # easing out as the replay wipes in
 const _GOAL_CINE_RISE: float = 0.4         # ease in/out time for the push (seconds)
 const _GOAL_CINE_SCORER_BIAS: float = 0.8  # how hard to center on the scorer (they're the subject)
 const _GOAL_CINE_NET_BIAS: float = 0.5     # fallback pull toward the net when the scorer can't be resolved

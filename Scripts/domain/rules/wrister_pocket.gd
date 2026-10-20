@@ -54,6 +54,10 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 		var pocket: Vector2 = aim_dir.rotated(offset)
 		FacingRules.solve(facing_scratch, facing, pocket, velocity, false, false,
 				is_left_handed, facing_cfg)
+		# Past the carry's backhand stop the blade cannot hold the puck on this
+		# line: the hips pivot onto the other one, and the shot is not this one.
+		if facing_scratch.pivoting:
+			continue
 		var body_yaw: float = _yaw(facing_scratch.target)
 		WristerLoad.solve_load(load_scratch, _bearing(_yaw(pocket), body_yaw, stick_sign),
 				_bearing(aim_yaw, body_yaw, stick_sign), load_cfg)
