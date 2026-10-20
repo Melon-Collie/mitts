@@ -583,12 +583,10 @@ var _blade_elevation_blend: float = 0.0
 # Set when an elevation blend step changes the blade tilt, consumed by the
 # render-rate rig pass in _process. See _update_blade_elevation.
 var _blade_tilt_dirty: bool = false
-# True when the blade is lifted off the ice — own raised deflect (Q held at MID
-# or HIGH loft, not carrying) or a forced pop from an opponent hooking under
-# this stick. A stick lift raises the blade through stick_check_phase. Set each
-# tick by the controller; read host-side by PuckController's interaction gate
-# and replicated so remotes/AI can read it. A lifted blade only meets airborne
-# pucks (to tip them); it clears grounded pucks and sticks.
+# True when the blade is lifted off the ice — a deflect's read of an airborne puck
+# (deflect_lift_share) or a forced pop from an opponent hooking under this stick
+# (a stick lift raises it through stick_check_phase). Set each tick by the
+# controller, replicated; a lifted blade pokes nothing and clears grounded sticks.
 var blade_up: bool = false
 # The stick-lift phase (StickCheckRules.Phase), stamped each tick by the
 # controller and replicated. Its raised phases lift the blade like blade_up, but
@@ -622,17 +620,14 @@ var pin_strength: float = 0.0
 var is_diving: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
-# Deliberate-deflect intent: true while a human player holds the shoot button
-# (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
-# Set each tick by the controller (see SkaterController._wants_deflect); read
-# host-side by PuckController's loose-puck interaction gate, which routes blade
-# contact into a deflect off the blade face instead of corralling the puck. A
-# transient per-tick flag, recomputed from replayed inputs during reconcile, so
-# it needs no replication or snapshot. AI bots never set it (they reuse the held
-# shoot button off-puck for wrister one-timers).
+# Deliberate-deflect intent: a human holding the deflect button (stick_lift, Q)
+# WITHOUT the puck — "redirect this, don't catch it." Set each tick by the
+# controller (SkaterController._wants_deflect) and read host-side by PuckController's
+# loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
 var deflect_intent: bool = false
-# Eased 0→1 toward blade_up; drives the IK blade-lift offset (see
-# SkaterIKCoordinator.blade_y_local). Mirrors _blade_elevation_blend.
+# Share of blade_lift_height a deflect's press read the puck at (DeflectReachRules).
+var deflect_lift_share: float = 0.0
+# Eased toward the lift share; drives SkaterIKCoordinator.blade_y_local's lift.
 var _blade_lift_blend: float = 0.0
 # Eased 0→1 toward an EMPTY-HANDED body-check commit (the "delivering" state).
 # Drives a cosmetic stick raise in SkaterIKCoordinator.blade_y_local so a committed
@@ -1547,6 +1542,9 @@ const _BLADE_LIFT_BLEND_SPEED: float = 12.0
 # A lift's drop comes down inside StickCheckRules.DROP_S, so the blade is back
 # at puck height while the victim's is still forced up.
 const _BLADE_DROP_BLEND_SPEED: float = 24.0
+# Ice to a full lift for a deflect's blade — a hand carrying a stick half a metre
+# to a target — so a late press is a blade still on its way.
+const _DEFLECT_FULL_RISE_S: float = 0.3
 # Ease rate for the commit-stance stick raise (units/sec). A touch slower than the
 # blade lift so the stick "loads up" into the check rather than snapping.
 const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
@@ -1556,15 +1554,17 @@ const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
 const _CHECK_LEAD_SPEED: float = 5.0
 
 
-# Eases _blade_lift_blend toward blade_up each tick. The IK reads the blend via
-# get_blade_lift_blend() to raise the blade target toward blade_lift_height, so
-# the whole stick rises off the ice instead of snapping. Called from
-# _physics_process.
+# Eases _blade_lift_blend toward the lift share (1 for a full lift, a deflect's
+# own share); one channel for every lift, so a deflect handed to a lift never steps.
 func _update_blade_lift(delta: float) -> void:
 	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase, stick_tied) \
 			else 0.0
 	var speed: float = _BLADE_DROP_BLEND_SPEED \
 			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
+	if deflect_intent and not is_forced_lift_active() \
+			and not StickCheckRules.uses_lift_height(stick_check_phase, stick_tied):
+		target = deflect_lift_share
+		speed = 1.0 / _DEFLECT_FULL_RISE_S
 	_blade_lift_blend = move_toward(_blade_lift_blend, target, speed * delta)
 
 

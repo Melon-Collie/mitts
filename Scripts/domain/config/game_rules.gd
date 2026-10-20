@@ -380,6 +380,8 @@ const PUCK_START_POS: Vector3 = Vector3(0, 0.0175, 0)
 # goal mouth to the whole disc rather than to a point.
 const PUCK_COLLISION_RADIUS: float = 0.065
 const PUCK_COLLISION_HALF_HEIGHT: float = 0.0175
+# A skater's blade face, heel height; the blade's contact point sits at its middle.
+const BLADE_FACE_HEIGHT_M: float = 0.06
 # Widest |x| a puck's CENTER can cross the goal line at without clipping the
 # post: post centerline (NET_HALF_WIDTH) minus the pipe radius minus the puck's
 # own radius. Pure physical derivation — any aim beyond this line is a

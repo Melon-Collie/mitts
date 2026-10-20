@@ -364,3 +364,12 @@ here whenever you bump, in the same format.
 #      cross_check u8, phase in bits 0-1 and ticks elapsed in bits 2-7. Two new
 #      RPCs (receive_cross_check_claim, notify_cross_check) shift the rpc
 #      ordering. Replay FORMAT_VERSION 17.
+# v79: spawn_remote_skater carries from_spectator, so a client marks a promoted
+#      spectator before the spawn and every peer announces the same roster move.
+#      An RPC signature change, so mixed builds must be refused.
+# v80: the eight puck-contact cue RPCs (notify_board_hit, notify_goal_body_hit,
+#      notify_post_hit, notify_goalie_hit, notify_deflection, notify_body_block,
+#      notify_puck_strip, notify_stick_lift) carry the speed the host measured at
+#      the contact, which sets the cue's volume. A client used to read its own
+#      puck.linear_velocity, which prediction never writes. RPC signature change;
+#      mixed builds must be refused. Replay format unchanged.

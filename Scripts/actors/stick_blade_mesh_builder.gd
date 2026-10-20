@@ -37,7 +37,7 @@ extends RefCounted
 
 class Params:
 	var length: float = 0.30           # heel→toe, matches Skater.blade_length
-	var height: float = 0.06           # blade face height at the heel
+	var height: float = GameRules.BLADE_FACE_HEIGHT_M  # blade face height at the heel
 	var height_toe_frac: float = 0.86  # …tapering to this fraction at the toe
 	var thickness_heel: float = 0.026  # cross-section thickness at the heel
 	var thickness_toe: float = 0.016   # …tapering to this at the toe

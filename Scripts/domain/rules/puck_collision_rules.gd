@@ -103,30 +103,19 @@ static func deflect_velocity_3d(
 # ShotMechanics.loft_y by Puck.apply_blade_deflect). Positive lifts, negative
 # drives the puck down, zero keeps it flat.
 #
-# The LEVEL names the deflection intent outright — the four loft levels double
-# as DEFLECT MODES (docs/elevation-rework-plan.md v3 §3), and the blade's lift
-# height follows the level so each mode plays its own plane:
-#   FLAT — blade on the ice: a ground puck stays on the ground (redirect
-#          along the ice; "down" is meaningless there).
-#   LOW  — blade on the ice: a ground puck deflects UP — the money tip.
-#   MID  — blade lifted to the low air (~0.35 m pivot): an airborne puck
-#          deflects UP — roof the rising shot.
-#   HIGH — blade lifted high (~0.52 m pivot, reaching ~1.05 m): an airborne
-#          puck bats DOWN — the high-feed knockdown at the net mouth.
-# The sign is the player's stated intent, never puck-vs-blade geometry at the
-# contact, so two identical contacts cannot flip outcome on a centimetre of
-# height. Anti-cheese is preserved by the PIVOT
-# heights, not a gate: a saucer pass apexes ~0.21–0.26 m — under the MID
-# pivot — so camping an air mode still only ever meets genuinely high pucks.
+# The loft level names the direction, as it does for a shot: FLAT and LOW tip
+# DOWN, MID and HIGH tip UP. A puck already on the ice has no down to go, so a
+# down tip there stays flat. The sign is the player's stated intent, never
+# puck-vs-blade geometry at the contact, so two identical contacts cannot flip
+# outcome on a centimetre of height.
 static func deflect_loft_speed(
 		elevation_level: int,
 		up_speed: float,
-		down_speed: float) -> float:
-	if elevation_level <= ShotMechanics.ELEVATION_FLAT:
-		return 0.0
-	if elevation_level == ShotMechanics.ELEVATION_HIGH:
-		return -down_speed
-	return up_speed
+		down_speed: float,
+		puck_airborne: bool) -> float:
+	if elevation_level >= ShotMechanics.ELEVATION_MID:
+		return up_speed
+	return -down_speed if puck_airborne else 0.0
 
 # Analytic board-containment rescue: the velocity for a puck the engine let
 # slip past the inner board boundary (trimesh facet-seam escape — the wall
