@@ -589,6 +589,28 @@ func test_follow_through_aim_ignores_degenerate_cursor() -> void:
 	assert_almost_eq(aim.z, -1.0, 0.0001, "degenerate cursor holds shot line")
 
 
+# ── Follow-through length ─────────────────────────────────────────────────────
+
+func test_follow_through_time_spans_the_band() -> void:
+	assert_almost_eq(ShotMechanics.follow_through_time(0.0, 0.22, 0.7), 0.22, 0.0001,
+			"the softest release finishes in the minimum")
+	assert_almost_eq(ShotMechanics.follow_through_time(1.0, 0.22, 0.7), 0.7, 0.0001,
+			"the hardest release finishes in the maximum")
+
+func test_a_harder_shot_never_finishes_sooner() -> void:
+	var prev: float = ShotMechanics.follow_through_time(0.0, 0.22, 0.7)
+	for i: int in range(1, 11):
+		var now: float = ShotMechanics.follow_through_time(i / 10.0, 0.22, 0.7)
+		assert_gt(now, prev, "power_t %.1f finishes longer than the one below it" % (i / 10.0))
+		prev = now
+
+func test_follow_through_time_clamps_out_of_band_power() -> void:
+	assert_almost_eq(ShotMechanics.follow_through_time(1.3, 0.5, 1.0), 1.0, 0.0001,
+			"a bonus past the band holds at the maximum")
+	assert_almost_eq(ShotMechanics.follow_through_time(-0.2, 0.5, 1.0), 0.5, 0.0001,
+			"never under the minimum")
+
+
 # ── Per-gear ladders: the posture vocabulary ─────────────────────────────────
 # The level names the SHOT, the gear names the RANGE. Each level targets a
 # goalie-posture landmark (absolute heights off the ice — GoalieAnatomy's pad,

@@ -327,6 +327,13 @@ static func follow_through_aim(
 	var ang: float = lerp_angle(atan2(sd.x, -sd.z), atan2(cd.x, -cd.z), rt)
 	return Vector3(sin(ang), 0.0, -cos(ang))
 
+# Seconds a finish runs after a release at `power_t` (0..1 of the shot's power
+# band): the harder the shot, the higher and further the stick swings through,
+# and the longer it takes to come back down to the ice.
+static func follow_through_time(power_t: float, min_s: float, max_s: float) -> float:
+	return lerpf(min_s, max_s, clampf(power_t, 0.0, 1.0))
+
+
 # Follow-through blade-extension direction in the upper-body LOCAL frame, for a
 # shot along `axis_world` (world XZ). The frozen-wrister whip builds the stick
 # outward FROM THE SHOULDER along this local direction, so the blade drives along

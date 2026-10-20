@@ -272,9 +272,9 @@ func apply_facing(input: InputState, delta: float) -> void:
 					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
 			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
 			# Re-square hard through the follow-through: the coil left facing stale
-			# at the wind-up cursor, and a lazy drag can't catch up in ~0.22 s, so
-			# the blade handoff snaps to the wrong side (ROM-clamped to the stale
-			# facing) before reaching the cursor. See follow_through_facing_recover_speed.
+			# at the wind-up cursor, and a lazy drag can't catch up in a soft
+			# wrister's finish, so the blade handoff snaps to the wrong side
+			# (ROM-clamped to the stale facing) before reaching the cursor. See follow_through_facing_recover_speed.
 			if s == State.FOLLOW_THROUGH:
 				drag = maxf(drag, _controller.follow_through_facing_recover_speed)
 			# Board shield: a carrier working the wall squares up ALONG it and
@@ -423,8 +423,9 @@ func apply_upper_body(delta: float) -> void:
 	if charge_state == State.FOLLOW_THROUGH:
 		# Rotate the shoulders THROUGH the shot: the torso squares to the shot
 		# line and uncoils past it (opposite sign to the wind-up coil — the back
-		# shoulder comes through), riding the same asymmetric arc as the blade so
-		# the body snaps through the release and settles out of the finish. The
+		# shoulder comes through) on the blade's envelope, so the body snaps
+		# through the release, holds the finish and relaxes out of it — a
+		# slapper's shoulders come through over its downswing. The
 		# trunk also drives forward over the front foot. Both targets decay to
 		# the neutral aim pose by the end of the timer, handing the generic
 		# blade-tracking branch a torso it can pick up without a pop. Whiffed
@@ -435,8 +436,10 @@ func apply_upper_body(delta: float) -> void:
 		if dir_world.length_squared() > 0.0001:
 			var total: float = maxf(_sm.follow_through_duration_total, 0.001)
 			var t: float = clampf(1.0 - _sm.follow_through_timer / total, 0.0, 1.0)
-			var env: float = sin(PI * pow(t, _controller.follow_through_arc_skew)) \
-					* _sm.follow_through_power
+			var attack_s: float = _controller.slapper_downswing_time \
+					if _sm.follow_through_is_slapper else _controller.whip_attack_time
+			var env: float = SkaterShotPoseCoordinator.finish_envelope(t, total, attack_s,
+					_controller.wrister_whip_release_frac) * _sm.follow_through_power
 			# Ease the finish aim from the shot line back to the live cursor over
 			# the tail (follow_through_return_frac), so the shoulders end squared
 			# to where the mouse now is and the generic tracker picks the torso up
@@ -460,7 +463,7 @@ func apply_upper_body(delta: float) -> void:
 				if _controller.last_release_hand == "BH":
 					through = -through
 				# The overshoot discharges WITH the release: driven off env, since a
-				# lerp can't catch its ~40 ms bell. The unwind is rate-limited rather
+				# lerp can't catch its ~40 ms attack. The unwind is rate-limited rather
 				# than snapped, because the coil can sit well off the shot line.
 				upper_body_angle = rotate_toward(upper_body_angle, ft_aim + through,
 						deg_to_rad(_controller.wrister_release_unwind_speed_deg) * delta)
