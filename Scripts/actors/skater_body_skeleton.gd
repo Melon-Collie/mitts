@@ -8,15 +8,26 @@ const UpperBone = SkaterMeshBuilder.UpperBone
 # skin binds through LEG_BONE_OFFSET), and four bones carry no vertices: HIPS,
 # the frame the legs hang from; WAIST, the pelvis the shorts ride, turned part of
 # the way toward the shoulders; SPINE, the trunk frame the shell hangs from; and
-# NECK, which levels the head on it (SkaterSpineRig poses all four). HEM, under
-# the torso, carries the jersey's loose lower half (SkaterJerseyHem).
+# NECK, which levels the head on it (SkaterSpineRig poses all four). TAIL, on the
+# waist, is the torso as the hips hold it, for the share of the jersey's lower
+# half they carry (SkaterJerseyHem). After those, the jersey's tail below the
+# belt: two bones per torso facet column, the segment from the belt to the bend
+# and the one from the bend to the hem, each a root SkaterHemFlaps poses in
+# skeleton space.
 const LEG_BONE_OFFSET: int = SkaterMeshBuilder.UPPER_BONE_COUNT
 const HIPS_BONE: int = SkaterMeshBuilder.UPPER_BONE_COUNT + SkaterMeshBuilder.LEG_BONE_COUNT
 const WAIST_BONE: int = HIPS_BONE + 1
 const SPINE_BONE: int = WAIST_BONE + 1
 const NECK_BONE: int = SPINE_BONE + 1
-const HEM_BONE: int = NECK_BONE + 1
-const BODY_BONE_COUNT: int = HEM_BONE + 1
+const TAIL_BONE: int = NECK_BONE + 1
+const COLUMN_BONE_BASE: int = TAIL_BONE + 1
+const BODY_BONE_COUNT: int = COLUMN_BONE_BASE + 2 * SkaterMeshBuilder.TORSO_SIDES
+
+
+# A tail column's segment bone: `joint` 0 from the belt to the bend, 1 on to
+# the hem.
+static func column_bone(column: int, joint: int) -> int:
+	return COLUMN_BONE_BASE + column * 2 + joint
 
 
 static func upper_bone_parent(bone: int) -> int:
@@ -43,11 +54,14 @@ static func new_body_skeleton() -> Skeleton3D:
 	skeleton.add_bone("Waist")
 	skeleton.add_bone("Spine")
 	skeleton.add_bone("Neck")
-	skeleton.add_bone("Hem")
+	skeleton.add_bone("Tail")
+	for column: int in SkaterMeshBuilder.TORSO_SIDES:
+		skeleton.add_bone("Tail%d" % column)
+		skeleton.add_bone("Hem%d" % column)
 	skeleton.set_bone_parent(WAIST_BONE, HIPS_BONE)
 	skeleton.set_bone_parent(SPINE_BONE, WAIST_BONE)
 	skeleton.set_bone_parent(NECK_BONE, SPINE_BONE)
-	skeleton.set_bone_parent(HEM_BONE, UpperBone.TORSO)
+	skeleton.set_bone_parent(TAIL_BONE, WAIST_BONE)
 	for bone: int in SkaterMeshBuilder.UPPER_BONE_COUNT:
 		skeleton.set_bone_parent(bone, upper_bone_parent(bone))
 	for bone: int in SkaterMeshBuilder.LEG_BONE_COUNT:

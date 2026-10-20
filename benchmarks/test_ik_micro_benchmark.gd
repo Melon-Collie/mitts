@@ -17,6 +17,7 @@ extends GutTest
 # Goes pending when the extension isn't built.
 
 const REPS: int = 50000
+const _SKATER_SCENE: String = "res://Scenes/Skater.tscn"
 
 # Game-default config (mirrors tests/unit/rules/test_top_hand_ik.gd baselines).
 const STICK_LENGTH: float = 1.50
@@ -128,7 +129,7 @@ func test_arm_rig_gdscript_vs_native() -> void:
 		pending("native extension not built — see native/README.md")
 		return
 	_results.clear()
-	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	var sk: Skater = load(_SKATER_SCENE).instantiate() as Skater
 	add_child_autofree(sk)
 	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	sk.set_process(false)
@@ -150,3 +151,38 @@ func test_arm_rig_gdscript_vs_native() -> void:
 	_print_results()
 	gut.p("  arm rebuild speedup: %.1fx" % (_results[0]["us"] / _results[1]["us"]))
 	assert_true(_results.size() == 2, "benchmark produced rows")
+
+
+# The jersey tail's drape on a live rig (SkaterHemFlaps.step), a thigh lifted
+# into the hem so the collisions run: one frame's step, with its 20 bone writes
+# — each of which the next step's reads pay to re-solve the skeleton for, as a
+# frame does once — and without them (the solver and its reads alone).
+func test_hem_flaps_gdscript_vs_native() -> void:
+	if not ClassDB.class_exists(&"NativeHemFlaps"):
+		pending("native extension not built — see native/README.md")
+		return
+	_results.clear()
+	var sk: Skater = load(_SKATER_SCENE).instantiate() as Skater
+	add_child_autofree(sk)
+	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	sk.set_process(false)
+	sk.set_physics_process(false)
+	var rig: Skeleton3D = sk.mesh_root.get_node("BodyRig") as Skeleton3D
+	var leg: int = SkaterBodySkeleton.LEG_BONE_OFFSET + SkaterMeshBuilder.LegBone.LEG_L
+	rig.set_bone_pose(leg, Transform3D(Basis(Vector3.RIGHT, -1.1), rig.get_bone_pose(leg).origin))
+	var flaps: SkaterHemFlaps = sk._arms._hem
+	var g := Vector3(0.0, -9.8, 0.0)
+	var reps: int = REPS / 25
+	for native: bool in [false, true]:
+		flaps.native_enabled = native
+		for write: bool in [true, false]:
+			var t0: int = Time.get_ticks_usec()
+			for _i: int in reps:
+				flaps.step(1.0 / 60.0, g, write)
+			_results.append({"label": "hem flaps %s%s" % ["native" if native else "GDScript",
+					" + bone writes" if write else ""],
+					"us": float(Time.get_ticks_usec() - t0) / reps})
+	_print_results()
+	gut.p("  hem flaps speedup: %.1fx with writes, %.1fx without"
+			% [_results[0]["us"] / _results[2]["us"], _results[1]["us"] / _results[3]["us"]])
+	assert_true(_results.size() == 4, "benchmark produced rows")

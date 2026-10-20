@@ -4,6 +4,7 @@
 #include "native_blade_dangle.h"
 #include "native_carry_rollout.h"
 #include "native_gif_encoder.h"
+#include "native_hem_flaps.h"
 #include "native_leg_chain.h"
 #include "native_puck_step.h"
 #include "native_shot_odds.h"
@@ -31,6 +32,7 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<mitts::NativeLegChain>();
 	ClassDB::register_class<mitts::NativeCarryRollout>();
 	ClassDB::register_class<mitts::NativeShotOdds>();
+	ClassDB::register_class<mitts::NativeHemFlaps>();
 	ClassDB::register_class<mitts::NativeGifEncoder>();
 }
 
