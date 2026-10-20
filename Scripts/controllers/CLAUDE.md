@@ -738,7 +738,7 @@ holds the stick last drawn and eases the new owner's pose in from it (0.15 s;
 ticks only — reconcile treats the live tick as the truth, and a bridge advanced
 through a replay would play its ease twice — and its effect rides the hand and
 blade the wire already carries. The same rule shapes the rest of the
-hand-offs: a whip's attack never takes less than `WHIP_ATTACK_MIN_S`, the
+hand-offs: a whip's attack takes `whip_attack_time` however long its finish, the
 celebration's stick and fist pump ease in and out over `CELEBRATION_EASE_S`,
 and the slapper and block take their pose from the lean and twist they find
 rather than zeroing them first.

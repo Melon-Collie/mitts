@@ -85,8 +85,8 @@ func test_backhand_wind_up_opens_the_hips_the_other_way() -> void:
 
 
 func test_release_kicks_back_leg_and_transfers_weight() -> void:
-	# Charge fully, then release: the real release zeroes the charge as the
-	# state flips, so the kick power must come from the latched smoothed load.
+	# Charge fully, then release with no charge on the wire: the kick power must
+	# still come from the latched smoothed load.
 	_skater.current_shot_state = State.WRISTER_AIM
 	_skater.shot_charge = 1.0
 	_tick(180)
@@ -98,7 +98,7 @@ func test_release_kicks_back_leg_and_transfers_weight() -> void:
 	var split_r_knee: float = 0.0
 	var split_r_roll: float = 0.0
 	var min_hip_yaw: float = INF
-	for _i: int in 60:  # 0.5 s = wrister_kick_time
+	for _i: int in 60:  # 0.5 s, past a zero-charge wrister's finish
 		_coord.apply(DT)
 		var split: float = _skater.leg_bone_euler(_LEG_R).x - _skater.leg_bone_euler(_LEG_L).x
 		min_hip_yaw = minf(min_hip_yaw, _coord.shot_hip_yaw)
@@ -164,7 +164,7 @@ func test_slapper_release_kicks_through_contact() -> void:
 	var split_l_knee: float = 0.0
 	var split_r_knee: float = 0.0
 	var min_hip_yaw: float = INF
-	for _i: int in 80:  # 0.67 s — spans slapper_kick_time
+	for _i: int in 80:  # 0.67 s, past a zero-charge slapper's finish
 		_coord.apply(DT)
 		var split: float = _skater.leg_bone_euler(_LEG_R).x - _skater.leg_bone_euler(_LEG_L).x
 		min_hip_yaw = minf(min_hip_yaw, _coord.shot_hip_yaw)
@@ -195,6 +195,44 @@ func test_short_wind_up_slap_still_commits() -> void:
 		max_split = maxf(max_split, _skater.leg_bone_euler(_LEG_R).x - _skater.leg_bone_euler(_LEG_L).x)
 	assert_gt(max_split, 0.2,
 			"a short-wind slap should still commit the body (split %.3f rad)" % max_split)
+
+
+# Ticks until the release kick is over, after a flip into FOLLOW_THROUGH from
+# `from` with `charge` on the wire.
+func _kick_ticks(from: State, charge: float) -> int:
+	_skater.current_shot_state = from
+	_skater.shot_charge = charge
+	_tick(30)
+	_skater.current_shot_state = State.FOLLOW_THROUGH
+	var ticks: int = 0
+	_coord.apply(DT)
+	while _coord._shot._kick_t >= 0.0 and ticks < 600:
+		ticks += 1
+		_coord.apply(DT)
+	return ticks + 1
+
+
+func test_the_kick_lasts_as_long_as_the_finish() -> void:
+	assert_almost_eq(_kick_ticks(State.WRISTER_AIM, 1.0) * DT,
+			_controller.wrister_follow_through_time(1.0), DT,
+			"a hard wrister's legs come down with its stick")
+	assert_almost_eq(_kick_ticks(State.SLAPPER_CHARGE_WITH_PUCK, 0.5) * DT,
+			_controller.slapper_follow_through_time(0.5), DT,
+			"a half wind-up's legs come down with its stick")
+	assert_almost_eq(_kick_ticks(State.SKATING_WITH_PUCK, 0.0) * DT,
+			_controller.quick_pass_follow_through_duration, DT,
+			"a pass's legs come down with its flick")
+
+
+func test_a_harder_shot_holds_the_kick_longer() -> void:
+	var soft_end: float = _controller.wrister_follow_through_time(0.0)
+	_skater.current_shot_state = State.WRISTER_AIM
+	_skater.shot_charge = 1.0
+	_tick(30)
+	_skater.current_shot_state = State.FOLLOW_THROUGH
+	_tick(roundi(soft_end / DT) + 1)
+	assert_almost_eq(_coord._shot._kick_env, 1.0, 0.001,
+			"where a soft wrister's legs are back down, a hard one's still hold the full kick")
 
 
 func test_block_drops_to_one_knee() -> void:

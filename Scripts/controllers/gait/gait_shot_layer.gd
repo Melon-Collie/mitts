@@ -8,14 +8,13 @@ extends GaitLayer
 # release kick's power (floored by the min pop so an uncharged snap still reads
 # and a short-wind slap still commits), with the kick's amplitude set picked by
 # which charge it came from — a quick-shot pass (no charge state at all) rides
-# the wrister set, the same split the stick flex uses. The kick rides the shared
-# asymmetric arc (fast weight transfer through the release, slow settle) on its
-# own cosmetic timer: remotes see the state flip, not the state machine's
-# follow-through timer.
+# the wrister set, the same split the stick flex uses. The kick is the finish's
+# own envelope (SkaterShotPoseCoordinator.finish_envelope) over the finish's
+# own length, re-derived from the replicated shot_charge: remotes see the state
+# flip, not the state machine's follow-through timer, and the legs still drive
+# with the stick, hold the finish with it and come down with it.
 
 const State = SkaterStateMachine.State
-# Seconds the release kick takes to come on: five ticks.
-const KICK_ATTACK_S: float = 0.04
 
 # Radians of lower-body rotation.y, republished by the coordinator for the pose
 # coordinator's yaw sum.
@@ -25,6 +24,8 @@ var _wrister_load: float = 0.0      # smoothed 0..1 drag-charge engagement
 var _wrister_hip: float = 0.0       # smoothed hip share of the wrister's torso wind-up
 var _slap_load: float = 0.0         # smoothed 0..1 wind-up engagement
 var _kick_t: float = -1.0           # seconds into the release kick; <0 = idle
+var _kick_total: float = 0.0        # seconds the kick runs: the finish's length
+var _kick_attack: float = 0.0       # seconds the kick takes to come on
 var _kick_power: float = 0.0        # load latched at release (min-pop floored)
 var _kick_is_slap: bool = false
 var _kick_env: float = 0.0
@@ -41,6 +42,8 @@ func reset() -> void:
 	_wrister_hip = 0.0
 	_slap_load = 0.0
 	_kick_t = -1.0
+	_kick_total = 0.0
+	_kick_attack = 0.0
 	_kick_power = 0.0
 	_kick_is_slap = false
 	_kick_env = 0.0
@@ -67,6 +70,7 @@ func advance(delta: float) -> bool:
 		if state == State.FOLLOW_THROUGH:
 			_kick_t = 0.0
 			_kick_is_slap = _is_slap_charge(_prev_state)
+			_size_kick(_skater.shot_charge)
 			if _kick_is_slap:
 				_kick_power = maxf(_slap_load, _controller.slapper_kick_min_power)
 			else:
@@ -97,16 +101,12 @@ func advance(delta: float) -> bool:
 	_kick_env = 0.0
 	if _kick_t >= 0.0:
 		_kick_t += delta
-		var kick_total: float = _controller.slapper_kick_time if _kick_is_slap \
-				else _controller.wrister_kick_time
-		var kt: float = _kick_t / maxf(kick_total, 0.001)
+		var kt: float = _kick_t / maxf(_kick_total, 0.001)
 		if kt >= 1.0:
 			_kick_t = -1.0
 		else:
-			# The arc's skew rises steeply from its first instant; the attack takes
-			# the edge off it, so the weight transfer starts rather than appears.
-			_kick_env = sin(PI * pow(kt, _controller.follow_through_arc_skew)) * _kick_power \
-					* smoothstep(0.0, KICK_ATTACK_S, _kick_t)
+			_kick_env = SkaterShotPoseCoordinator.finish_envelope(kt, _kick_total,
+					_kick_attack, _controller.wrister_whip_release_frac) * _kick_power
 	# Hips coil with the load (stick-side hip pulls back, riding the torso coil)
 	# and uncoil THROUGH the release — the stick-side hip drives forward past
 	# square, mirroring the follow-through's torso `through` term. Positive
@@ -119,6 +119,23 @@ func advance(delta: float) -> bool:
 			+ stick_side * deg_to_rad(kick_hip_yaw_deg) * _kick_env
 	return _wrister_load > 0.001 or absf(_wrister_hip) > 0.001 or _slap_load > 0.001 \
 			or _kick_env > 0.0
+
+
+# The finish this kick belongs to, sized as the shooter's controller sized it: a
+# slap swing drives through over its downswing, a wrister or a pass snaps. A
+# pass is the release with no charge behind it — read off the charge rather
+# than the aim state, since a flicked wrister can be in and out of its aim
+# between two frames.
+func _size_kick(charge: float) -> void:
+	if _kick_is_slap:
+		_kick_total = _controller.slapper_follow_through_time(charge)
+		_kick_attack = _controller.slapper_downswing_time
+		return
+	_kick_attack = _controller.whip_attack_time
+	if charge <= 0.0 and _prev_state != State.WRISTER_AIM:
+		_kick_total = _controller.quick_pass_follow_through_duration
+	else:
+		_kick_total = _controller.wrister_follow_through_time(charge)
 
 
 # Shooting is a glide: the feet set through the load and drive through the

@@ -120,8 +120,6 @@ func apply_block_blade_position() -> void:
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
 
-# The shortest a whip may take to snap out to full extension, seconds: five ticks.
-const WHIP_ATTACK_MIN_S: float = 0.04
 # Seconds the celebration's raised stick eases in and back out over.
 const CELEBRATION_EASE_S: float = 0.25
 
@@ -178,9 +176,8 @@ func apply_celebration_pose(t: float, elapsed: float, left: float) -> void:
 # (wrister_follow_through_reach) is what makes the finish read as the player
 # reaching THROUGH the shot rather than the blade bobbing up and down over the
 # release spot — a genuine continuation, not a canned pump. Reach and heights
-# ride the shared asymmetric arc — fast rise through the release, slow settle —
-# scaled by follow_through_power so a full-charge wrister finishes extended and
-# high while a snap pass barely flicks. The blade stays a rigid stick_length
+# ride finish_envelope, scaled by follow_through_power so a full-charge wrister
+# finishes extended and high while a snap pass barely flicks. The blade stays a rigid stick_length
 # from the top hand (the horizontal reach re-solves as the blade climbs), so
 # the finish reads as the stick swinging up about the hands rather than the
 # shaft stretching.
@@ -205,13 +202,9 @@ func apply_wrister_follow_through() -> void:
 # and the reach rides an attack-hold-release envelope, so the blade SNAPS to the
 # extended finish, HOLDS it, then relaxes — the explosive discharge, committed.
 func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
-	# Attack-hold-release (NOT a symmetric bell): SNAP to full extension within
-	# attack_frac, HOLD the finish through the middle, relax over the last
-	# release_frac. A bell eased the blade out and pulled it straight back — timid,
-	# never committed, read as delayed. The torso keeps its own bell env.
-	var attack: float = _whip_attack(t, _sm.follow_through_duration_total)
-	var release_start: float = 1.0 - clampf(_controller.wrister_whip_release_frac, 0.0, 1.0)
-	var env: float = attack * (1.0 - smoothstep(release_start, 1.0, t)) * _sm.follow_through_power
+	var env: float = finish_envelope(t, _sm.follow_through_duration_total,
+			_controller.whip_attack_time, _controller.wrister_whip_release_frac) \
+			* _sm.follow_through_power
 	var axis: Vector3 = aim_world
 	if axis.length_squared() < 0.0001:
 		axis = -_skater.global_transform.basis.z  # whiff: skate-forward, never radial
@@ -238,8 +231,8 @@ func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
 	_place_finish(hand_pos, blade_pos, blade_side_sign)
 
 # ── Slapper Follow-Through ────────────────────────────────────────────────────
-# A real swing in two phases. Downswing (the first slapper_follow_through_
-# contact_frac of the timer): the blade falls from wherever the wind-up
+# A real swing in two phases. Downswing (the first slapper_downswing_time of
+# the timer): the blade falls from wherever the wind-up
 # actually left it — re-derived from the charge timer so an early release
 # starts from the half-coiled pose instead of popping to full wind-up — down to
 # the contact point, accelerating like a swing under gravity, hands riding down
@@ -269,7 +262,7 @@ func apply_slapper_follow_through() -> void:
 	var hand_pos := Vector3(
 			_skater.shoulder.position.x, _controller.hand_rest_y, _skater.shoulder.position.z)
 	var blade_pos: Vector3
-	var cf: float = clampf(_controller.slapper_follow_through_contact_frac, 0.05, 0.9)
+	var cf: float = clampf(_controller.slapper_downswing_time / total, 0.05, 0.9)
 	if t < cf:
 		# Downswing: quadratic ease-in — the blade accelerates into the ice.
 		var u: float = t / cf
@@ -300,17 +293,12 @@ func apply_slapper_follow_through() -> void:
 					- _controller.slapper_wind_up_hand_forward * wind_up_eased)
 		hand_pos = wind_hand.lerp(hand_pos, u)
 	else:
-		# Finish: out along the shot line and up into the high finish, then
-		# settle. Shares the wrister's asymmetric arc so both shots snap
-		# through contact and relax out of the pose.
+		# Finish: out along the shot line and up into the high finish, held,
+		# then settled — the wrister's envelope over what is left of the timer.
 		var v: float = (t - cf) / (1.0 - cf)
-		# Attack-hold-release like the wrister whip: the finish SNAPS out along the
-		# shot line and HOLDS the high finish, then relaxes — committed, not a timid
-		# bell that eases out and straight back. (The downswing above is the
-		# slapper's own wind-up-to-contact; only the finish arc borrows the whip.)
-		var attack: float = _whip_attack(v, total * (1.0 - cf))
-		var release_start: float = 1.0 - clampf(_controller.wrister_whip_release_frac, 0.0, 1.0)
-		var env: float = attack * (1.0 - smoothstep(release_start, 1.0, v)) * _sm.follow_through_power
+		var env: float = finish_envelope(v, total * (1.0 - cf),
+				_controller.whip_attack_time, _controller.wrister_whip_release_frac) \
+				* _sm.follow_through_power
 		var reach: float = env * _controller.slapper_follow_through_arc_dist
 		blade_pos = contact + dir_local * reach
 		blade_pos.y = _ik.blade_y_lean_corrected(blade_pos.x, blade_pos.z) \
@@ -322,13 +310,16 @@ func apply_slapper_follow_through() -> void:
 	_place_finish(hand_pos, blade_pos, blade_side_sign)
 
 
-# The whip's snap to full extension, 0..1 at `t` through a finish `span` seconds
-# long: wrister_whip_attack_frac of it, but never under WHIP_ATTACK_MIN_S — a
-# fraction of a short finish is a tick or two, and a stick that crosses a metre
-# between frames reads as a teleport, not a whip.
-func _whip_attack(t: float, span: float) -> float:
-	var attack_s: float = maxf(_controller.wrister_whip_attack_frac * span, WHIP_ATTACK_MIN_S)
-	return clampf(t * span / attack_s, 0.0, 1.0)
+# Attack-hold-release, 0..1 at `t` (0..1 through a finish `span` seconds long):
+# SNAPS up over `attack_s` seconds, HOLDS, then relaxes over the last
+# `release_frac` of the span. Never a symmetric bell: it eases the stick out and
+# straight back, never commits to the finish, and reads as delayed. The attack
+# is seconds, not a share, so a longer finish holds longer rather than snapping
+# slower, and eased at both ends, so the motion starts rather than appears.
+static func finish_envelope(t: float, span: float, attack_s: float, release_frac: float) -> float:
+	var attack: float = smoothstep(0.0, maxf(attack_s, 0.001), t * span)
+	var release_start: float = 1.0 - clampf(release_frac, 0.0, 1.0)
+	return attack * (1.0 - smoothstep(release_start, 1.0, t))
 
 
 # ── The finish, shared ────────────────────────────────────────────────────────
