@@ -1,7 +1,8 @@
 extends GutTest
 
-# The shuffle, measured on the live rig: one tap from a standstill is one
-# step-together (ShuffleStepShaper, SkaterLocomotion._shuffle_path). Each skate lifts once —
+# The shuffle, measured on the live rig: Space and a key pressed quickly from a
+# standstill is one step-together (ShuffleStepShaper, SkaterLocomotion
+# ._shuffle_path). Each skate lifts once —
 # the leading one out, the trailing one in after it — and a blade pointed along
 # the facing cannot glide across the travel, so whichever skate is down holds
 # its place on the ice while the body moves over it. What slip is left (about a
@@ -58,12 +59,12 @@ func before_each() -> void:
 func _step(stick: Vector2) -> void:
 	var input := InputState.new()
 	input.move_vector = stick
-	input.brake = false
+	input.brake = true
 	input.mouse_world_pos = _skater.global_position + Vector3(0.0, 0.0, -6.0)
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
-	_shaper.shape(input, _skater.global_position, _skater.velocity, _skater.get_facing(),
-			_controller.shuffle_step_distance, _controller.stop_decel)
+	_shaper.shape(input, _skater.velocity, _controller.shuffle_step_distance,
+			_controller.stop_decel)
 	_controller._process_input(input, DT)
 	_skater.global_position += _skater.velocity * DT
 	_skater._process(DT)
@@ -77,7 +78,7 @@ func _boot(left: bool) -> Vector3:
 
 # One press toward `stick`: how many times each boot lifts, how fast a boot on
 # the ice slides over it against the body's own speed, and how far the body went.
-func _press(stick: Vector2) -> void:
+func _press(stick: Vector2, press_ticks: int = PRESS_TICKS) -> void:
 	for _i: int in SETTLE_TICKS:
 		_step(Vector2.ZERO)
 	var start: Vector3 = _skater.global_position
@@ -88,8 +89,8 @@ func _press(stick: Vector2) -> void:
 	var lifts: Array[int] = [0, 0]
 	var slid: float = 0.0
 	var carried: float = 0.0
-	for i: int in PRESS_TICKS + AFTER_TICKS:
-		_step(stick if i < PRESS_TICKS else Vector2.ZERO)
+	for i: int in press_ticks + AFTER_TICKS:
+		_step(stick if i < press_ticks else Vector2.ZERO)
 		var body_move: float = _skater.velocity.length() * DT
 		for k: int in 2:
 			var local: Vector3 = _boot(k == 0)
@@ -111,8 +112,10 @@ func _press(stick: Vector2) -> void:
 	var slip: float = slid / maxf(carried, 0.001)
 	gut.p("step %s: moved %.3f m, lifts L%d R%d, planted skates slide at %.0f%% of the body"
 			% [stick, moved.length(), lifts[0], lifts[1], slip * 100.0])
-	assert_almost_eq(moved.length(), _controller.shuffle_step_distance, 0.02, "one step's distance")
-	assert_eq(lifts, [1, 1] as Array[int], "each skate steps once")
+	var steps: int = maxi(roundi(moved.length() / _controller.shuffle_step_distance), 1)
+	assert_almost_eq(moved.length(), steps * _controller.shuffle_step_distance, 0.02,
+			"whole steps' distance")
+	assert_eq(lifts, [steps, steps] as Array[int], "each skate steps once a step")
 	assert_lt(slip, 0.25, "the skate on the ice holds it")
 
 
@@ -126,3 +129,10 @@ func test_a_press_to_the_other_side_is_one_step_together() -> void:
 
 func test_a_press_back_is_one_step_together() -> void:
 	_press(Vector2(0.0, 1.0))
+
+
+# Held, the shuffle keeps stepping, any way, and closes its step when let go.
+func test_a_held_shuffle_keeps_stepping() -> void:
+	for stick: Vector2 in [Vector2(1.0, 0.0), Vector2(0.0, -1.0)]:
+		before_each()
+		_press(stick, 100)

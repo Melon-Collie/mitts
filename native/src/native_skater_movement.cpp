@@ -10,6 +10,8 @@ namespace mitts {
 // SkaterMovementRules.GRIP_MIN_SPEED / SKID_TURN_TAPER.
 static constexpr double GRIP_MIN_SPEED = 0.5;
 static constexpr double SKID_TURN_TAPER = Math_PI * 0.25;
+// SkaterMovementRules.SHUFFLE_MAX_SPEED.
+static constexpr double SHUFFLE_MAX_SPEED = 2.0;
 
 String load_movement_tunables(Object *movement_config, MovementTunables &cfg) {
 	ERR_FAIL_NULL_V(movement_config, String("null config"));
@@ -83,6 +85,13 @@ Vector3 movement_step(const MovementTunables &cfg,
 
 	Vector2 horiz(velocity.x, velocity.z);
 	double speed = horiz.length();
+	if (brake && has_input && speed <= SHUFFLE_MAX_SPEED) {
+		const double pace = cfg.shuffle_speed * MIN((double)move_input.length(), 1.0);
+		horiz = horiz.move_toward(move_input.normalized() * (real_t)pace, (real_t)(cfg.stop_decel * delta));
+		velocity.x = horiz.x;
+		velocity.z = horiz.y;
+		return velocity;
+	}
 	if (speed <= GRIP_MIN_SPEED) {
 		if (brake) {
 			horiz = horiz.move_toward(Vector2(), (real_t)(cfg.stop_decel * delta));

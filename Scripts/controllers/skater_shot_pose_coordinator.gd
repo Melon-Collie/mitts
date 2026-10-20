@@ -120,20 +120,26 @@ func apply_block_blade_position() -> void:
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
 
+# The shortest a whip may take to snap out to full extension, seconds: five ticks.
+const WHIP_ATTACK_MIN_S: float = 0.04
+# Seconds the celebration's raised stick eases in and back out over.
+const CELEBRATION_EASE_S: float = 0.25
+
 # ── Goal Celebration Pose ─────────────────────────────────────────────────────
 # Cosmetic raised-stick celebration for the scorer: top hand punches up with
 # the stick held overhead (blade above the hand, tilted so the shaft never
 # goes dead vertical — the stick/blade look_at needs a horizontal component),
 # off hand pumps up on the free side. t runs [0,1] across the celebration
-# window; a fast smoothstep ramp raises the arms, then the pose holds with a
-# gentle bob (no ease-out — the faceoff teleport's pose reset ends it).
-# Applied AFTER the tick's normal hand/blade placement, so it simply wins;
-# runs only on the scorer's own machine and rides the hand/blade wire state
-# to everyone else like every other pose.
-func apply_celebration_pose(t: float) -> void:
+# window; the pose eases in from the stick the tick placed over its first
+# CELEBRATION_EASE_S and back out to it over its last, holding a gentle bob
+# between. Applied AFTER the tick's normal hand/blade placement, which it
+# blends from; runs only on the scorer's own machine and rides the hand/blade
+# wire state to everyone else like every other pose. `elapsed` and `left` are
+# seconds into and remaining of the window.
+func apply_celebration_pose(t: float, elapsed: float, left: float) -> void:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var ramp: float = clampf(t / 0.2, 0.0, 1.0)
-	ramp = ramp * ramp * (3.0 - 2.0 * ramp)
+	var ramp: float = smoothstep(0.0, CELEBRATION_EASE_S, elapsed) \
+			* smoothstep(0.0, CELEBRATION_EASE_S, left)
 	var bob: float = sin(t * TAU * 1.5) * 0.03 * ramp
 	var hand_pos := Vector3(
 			_skater.shoulder.position.x,
@@ -148,18 +154,20 @@ func apply_celebration_pose(t: float) -> void:
 	# the hand, so the correction is inert until a board clamp actually moves the
 	# blade — and then it slides the hand rather than redrawing the arm from
 	# scratch, which is what keeps the stick overhead where the celebration wants it.
+	hand_pos = _skater.get_top_hand_position().lerp(hand_pos, ramp)
+	blade_pos = _skater.get_blade_position().lerp(blade_pos, ramp)
 	var rigid: TopHandIK.Result = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	hand_pos = rigid.hand
 	blade_pos = _skater.clamp_blade_to_walls(rigid.blade)
 	rigid = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
-	# Off hand: fist pump on the free side (normally it rides the shaft —
-	# this override runs after update_bottom_hand, so it wins the tick).
-	_skater.set_bottom_hand_position(Vector3(
+	# Off hand: a fist pump on the free side, taken from the shaft by the same
+	# ramp (SkaterIKCoordinator.update_bottom_hand).
+	_ik.hold_free_hand(Vector3(
 			_skater.bottom_shoulder.position.x,
-			lerpf(0.0, _controller.celebration_hand_y, ramp) + bob * 1.4,
-			_skater.bottom_shoulder.position.z - 0.12))
+			_controller.celebration_hand_y + bob * 1.4,
+			_skater.bottom_shoulder.position.z - 0.12), ramp)
 
 
 # ── Wrister Follow-Through ────────────────────────────────────────────────────
@@ -201,7 +209,7 @@ func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
 	# attack_frac, HOLD the finish through the middle, relax over the last
 	# release_frac. A bell eased the blade out and pulled it straight back — timid,
 	# never committed, read as delayed. The torso keeps its own bell env.
-	var attack: float = clampf(t / maxf(_controller.wrister_whip_attack_frac, 0.0001), 0.0, 1.0)
+	var attack: float = _whip_attack(t, _sm.follow_through_duration_total)
 	var release_start: float = 1.0 - clampf(_controller.wrister_whip_release_frac, 0.0, 1.0)
 	var env: float = attack * (1.0 - smoothstep(release_start, 1.0, t)) * _sm.follow_through_power
 	var axis: Vector3 = aim_world
@@ -300,7 +308,7 @@ func apply_slapper_follow_through() -> void:
 		# shot line and HOLDS the high finish, then relaxes — committed, not a timid
 		# bell that eases out and straight back. (The downswing above is the
 		# slapper's own wind-up-to-contact; only the finish arc borrows the whip.)
-		var attack: float = clampf(v / maxf(_controller.wrister_whip_attack_frac, 0.0001), 0.0, 1.0)
+		var attack: float = _whip_attack(v, total * (1.0 - cf))
 		var release_start: float = 1.0 - clampf(_controller.wrister_whip_release_frac, 0.0, 1.0)
 		var env: float = attack * (1.0 - smoothstep(release_start, 1.0, v)) * _sm.follow_through_power
 		var reach: float = env * _controller.slapper_follow_through_arc_dist
@@ -312,6 +320,15 @@ func apply_slapper_follow_through() -> void:
 		hand_pos.x += dir_local.x * hand_follow
 		hand_pos.z += dir_local.z * hand_follow
 	_place_finish(hand_pos, blade_pos, blade_side_sign)
+
+
+# The whip's snap to full extension, 0..1 at `t` through a finish `span` seconds
+# long: wrister_whip_attack_frac of it, but never under WHIP_ATTACK_MIN_S — a
+# fraction of a short finish is a tick or two, and a stick that crosses a metre
+# between frames reads as a teleport, not a whip.
+func _whip_attack(t: float, span: float) -> float:
+	var attack_s: float = maxf(_controller.wrister_whip_attack_frac * span, WHIP_ATTACK_MIN_S)
+	return clampf(t * span / attack_s, 0.0, 1.0)
 
 
 # ── The finish, shared ────────────────────────────────────────────────────────

@@ -1,36 +1,28 @@
 class_name BottomHandIK
 
-# Pure bottom-hand inverse kinematics. Places the bottom hand on the grip target
-# unless the blade has swung past the backhand angle the upper body can track.
+# Pure bottom-hand rules: how far the blade's swing to the backhand lets the hand
+# off the stick (release_weight), and where on the shaft it can hold
+# (reachable_grip). SkaterIKCoordinator.update_bottom_hand composes them.
 #
-# Release behaviour — driven by blade world angle toward the backhand side:
-#   Within release_angle_max        → hand exactly on the grip target (on the stick).
-#   release_angle_max → +band       → smoothstep blend toward the free hand's rest.
-#   Beyond release_angle_max + band → hand at rest (one-handed look).
+# The release is driven by the blade's angle toward the backhand side:
+#   Within release_angle_max        → on the stick.
+#   release_angle_max → +band       → smoothstep toward the free hand's rest.
+#   Beyond release_angle_max + band → at rest (one-handed look).
 #
-# This ties the release directly to the upper body rotation limit rather than arm
-# reach distance, so the hand never gives up during a normal swing — only when the
-# blade is genuinely past what the body can rotate to follow.
-#
-# Returns: Vector3 hand position in upper-body-local space.
+# This ties the release to the upper body's rotation limit rather than the arm's
+# reach, so the hand never gives up during a normal swing — only when the blade is
+# genuinely past what the body can rotate to follow.
 
 class Config:
-	var hand_y: float = 0.0              # local Y of the grip target
 	var backhand_angle: float = 0.0      # current blade angle toward backhand (rad, >=0)
 	var release_angle_max: float = 0.0   # angle at which blending begins (radians)
 	var release_angle_band: float = 0.0  # blend band width past release_angle_max (rad)
 
-static func solve(
-		rest: Vector3,
-		grip_target_xz: Vector2,
-		cfg: Config) -> Vector3:
-	var target := Vector3(grip_target_xz.x, cfg.hand_y, grip_target_xz.y)
 
-	var backhand_angle: float = cfg.backhand_angle
-	var release_max: float = cfg.release_angle_max
-	var release_band: float = cfg.release_angle_band
-	var t: float = smoothstep(release_max, release_max + release_band, backhand_angle)
-	return target.lerp(rest, t)
+# How far the angle has let the hand go, 0 (on the stick) to 1 (at rest).
+static func release_weight(cfg: Config) -> float:
+	return smoothstep(cfg.release_angle_max, cfg.release_angle_max + cfg.release_angle_band,
+			cfg.backhand_angle)
 
 
 # Where on the shaft the bottom hand can hold, as a fraction from the top hand

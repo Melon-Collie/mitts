@@ -124,6 +124,16 @@ func test_the_ready_stance_is_off_while_the_skate_in_is_still_running() -> void:
 	assert_true(c.is_faceoff_ready(), "set at the dot, the stance arms")
 
 
+# A remote skater's skate-in runs on the host; on a client he is a body on the
+# wire, with no approach of his own, still coming in at speed.
+func test_a_body_still_skating_in_is_not_set() -> void:
+	var c: SkaterController = _controller(true)
+	c.skater.velocity = Vector3(0.0, 0.0, -6.0)
+	assert_false(c.is_faceoff_ready(), "still covering ground: skating, not set")
+	c.skater.velocity = Vector3(0.0, 0.0, -0.2)
+	assert_true(c.is_faceoff_ready(), "glided in onto the dot: set")
+
+
 # The skate-in yaws the hips onto the line it travels (hip_align_max_deg is 50°),
 # and the countdown path is the only publisher of that channel once the glide
 # hands back. A path that skips it leaves the legs pointed down the walk-in for

@@ -519,6 +519,44 @@ func test_brake_is_a_stop_whatever_the_stick_says() -> void:
 			assert_almost_eq(v.z, 0.0, 1e-6, "the brake never turns — " + ctx)
 
 
+# ── Brake with a stick, slow: the shuffle ────────────────────────────────────
+
+func test_the_brake_with_a_stick_slow_shuffles_toward_it() -> void:
+	var cfg := _clean_cfg()
+	cfg.shuffle_speed = 1.2
+	for stick: Vector2 in [Vector2(1, 0), Vector2(0, 1), Vector2(-1, -1).normalized()]:
+		var v := Vector3.ZERO
+		for _i: int in 120:
+			v = SkaterMovementRules.apply_movement(v, stick, 0.0, false, true, DT, cfg)
+		assert_almost_eq(_speed(v), cfg.shuffle_speed, 1e-4, "stick %s: its pace" % stick)
+		assert_almost_eq(Vector2(v.x, v.z).normalized().dot(stick), 1.0, 1e-4,
+				"stick %s: its way" % stick)
+
+
+# The shuffle changes velocity at the stop's own rate, so a stop slowing through
+# the gate carries straight on rather than easing off.
+func test_a_stop_slows_into_the_shuffle_at_the_stop_s_rate() -> void:
+	var cfg := _clean_cfg()
+	cfg.shuffle_speed = 1.2
+	var stick := Vector2(0, 1)
+	var above := Vector3(SkaterMovementRules.SHUFFLE_MAX_SPEED + 0.05, 0, 0)
+	var below := Vector3(SkaterMovementRules.SHUFFLE_MAX_SPEED - 0.05, 0, 0)
+	var a: Vector3 = SkaterMovementRules.apply_movement(above, stick, 0.0, false, true, DT, cfg)
+	var b: Vector3 = SkaterMovementRules.apply_movement(below, stick, 0.0, false, true, DT, cfg)
+	assert_almost_eq((a - above).length(), cfg.stop_decel * DT, 1e-4, "above: the stop")
+	assert_almost_eq((b - below).length(), cfg.stop_decel * DT, 1e-4, "below: the same rate")
+	assert_almost_eq(a.z, 0.0, 1e-6, "above the gate the stick is ignored")
+	assert_gt(b.z, 0.0, "below it the stick is the shuffle's")
+
+
+func test_is_shuffle_needs_the_brake_a_stick_and_a_slow_body() -> void:
+	var gate: float = SkaterMovementRules.SHUFFLE_MAX_SPEED
+	assert_true(SkaterMovementRules.is_shuffle(gate, true, true))
+	assert_false(SkaterMovementRules.is_shuffle(gate + 0.01, true, true))
+	assert_false(SkaterMovementRules.is_shuffle(0.0, false, true))
+	assert_false(SkaterMovementRules.is_shuffle(0.0, true, false))
+
+
 # ── Backward skating ─────────────────────────────────────────────────────────
 
 func test_backward_top_speed_is_capped() -> void:

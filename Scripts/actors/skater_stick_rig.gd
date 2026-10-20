@@ -93,7 +93,7 @@ func notify_material_rebuilt() -> void:
 func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	var stick_mesh: MeshInstance3D = _skater.stick_mesh
 	var upper_body: Node3D = _skater.upper_body
-	var stick_origin: Vector3 = _skater.top_hand.position
+	var stick_origin: Vector3 = _skater.drawn_top_hand()
 	var to_tip: Vector3 = _hosel_tip_upper_body(blade_mesh) - stick_origin
 	if to_tip.length_squared() < 0.0001:
 		return

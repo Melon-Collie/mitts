@@ -116,3 +116,17 @@ static func turn_round_angle(facing: Vector2, target: Vector2, cursor_dir: Vecto
 	if turn * facing.angle_to(cursor_dir) < 0.0:
 		turn -= signf(turn) * TAU
 	return turn
+
+
+# The body's turn rate after this tick (rad/s, either sense), from last tick's
+# and the rate the facing rule asks for: a turn takes up its rate at most
+# `max_accel` (rad/s²), and gives it up at once. A body has to be wound into a
+# pivot but not out of one, so the turn never overshoots the target the rule
+# eases toward — and a stale rate (a reconcile adopting a tick a snap turned)
+# only removes the limit for a tick.
+static func turn_rate(prev_rate: float, wanted_rate: float, max_accel: float,
+		delta: float) -> float:
+	var from: float = prev_rate if prev_rate * wanted_rate > 0.0 else 0.0
+	if absf(wanted_rate) <= absf(from):
+		return wanted_rate
+	return move_toward(from, wanted_rate, max_accel * delta)
