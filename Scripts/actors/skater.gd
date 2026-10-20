@@ -1037,20 +1037,27 @@ func _resolve_player_collisions() -> void:
 	if others == null:
 		return
 	var my_radius: float = collision_radius()
+	var my_pos: Vector3 = global_position
+	var pinned: bool = pin_role != BoardPinRules.Role.NONE
 	for other: Skater in others:
 		if other == null or other == self or other.is_ghost:
 			continue
 		# Center-to-center axis on XZ, n pointing self -> other (the hit direction).
 		# Fallback for coincident centers matches SkaterCollisionRules so the emit
 		# direction and the resolved geometry agree.
-		# A locked pin pair touches flat, along the boards' normal instead.
-		var d: Vector3 = other.global_position - global_position
+		# A locked pin pair touches flat, along the boards' normal instead; only a
+		# pair with both roles set can be one.
+		var other_pos: Vector3 = other.global_position
+		var other_radius: float = other.collision_radius()
+		var d: Vector3 = other_pos - my_pos
 		d.y = 0.0
-		var axis: Vector3 = BoardPinRules.locked_contact_axis(global_position, pin_role,
-				my_radius, other.global_position, other.pin_role, other.collision_radius())
+		var axis: Vector3 = Vector3.ZERO
+		if pinned and other.pin_role != BoardPinRules.Role.NONE:
+			axis = BoardPinRules.locked_contact_axis(my_pos, pin_role, my_radius,
+					other_pos, other.pin_role, other_radius)
 		var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
 		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
-		if dist >= my_radius + other.collision_radius():
+		if dist >= my_radius + other_radius:
 			continue
 		var n: Vector3 = axis
 		if axis == Vector3.ZERO:
@@ -1083,16 +1090,17 @@ func _resolve_player_collisions() -> void:
 				* (1.0 if delivering else hit_passive_transfer_mult)
 		var brace: float = other.body_check_brace_resistance if other.hit_committed else 1.0
 		SkaterCollisionRules.resolve(_collision_result,
-				global_position, velocity, weight, my_radius,
-				other.global_position, other.velocity, other.weight, other.collision_radius(),
+				my_pos, velocity, weight, my_radius,
+				other_pos, other.velocity, other.weight, other_radius,
 				atk_transfer * brace, axis)
 		if not _collision_result.overlapping:
 			continue
 		# Self (attacker): separation + inelastic decel / drive-through, applied
 		# unconditionally (this machine simulates self wherever the resolver runs).
 		# Recorded for reconcile replay via the body_check_delta capture in
-		# _physics_process (velocity - vel_after_slide).
+		# _physics_process (velocity - vel_pre_body_check).
 		global_position += _collision_result.sep_a
+		my_pos = global_position
 		velocity += _collision_result.dvel_a
 		# Victim side only when this machine authoritatively owns `other` (host owns
 		# all; a client owns only its local predicted skater) — same gate as the old
@@ -1184,6 +1192,9 @@ func clamp_body_to_net() -> void:
 	_touched_boundary = true
 
 
+const _GOALIE_REACH_SLACK_M: float = 0.01
+
+
 # Holds the skater clear of every goalie's footprint so you can't walk through the
 # goalie. Mirrors clamp_body_to_net: push the XZ out of the goalie footprint — a
 # cylinder while standing/RVH, an oriented box in the butterfly (the leg pads
@@ -1201,9 +1212,18 @@ func clamp_body_to_goalies() -> void:
 		return
 	var radius: float = collision_radius()
 	var xz := Vector2(global_position.x, global_position.z)
+	# Farther than either footprint reaches (the cylinder, or the box's corner),
+	# the push-out returns the body untouched; the slack covers the box's rotation
+	# rounding.
+	var reach: float = maxf(GameRules.GOALIE_BLOCK_RADIUS + radius,
+			Vector2(GameRules.GOALIE_BUTTERFLY_HALF_X + radius,
+			GameRules.GOALIE_BUTTERFLY_HALF_Z + radius).length()) + _GOALIE_REACH_SLACK_M
+	var reach_sq: float = reach * reach
 	for data: Dictionary in goalie_data:
 		var gpos: Vector3 = data["position"]
 		var gpos_xz := Vector2(gpos.x, gpos.z)
+		if xz.distance_squared_to(gpos_xz) > reach_sq:
+			continue
 		var pushed: Vector2 = GameRules.push_out_of_goalie(
 				xz, gpos_xz, data["rotation_y"], data["is_butterfly"],
 				GameRules.GOALIE_BLOCK_RADIUS + radius,

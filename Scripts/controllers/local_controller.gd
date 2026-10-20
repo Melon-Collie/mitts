@@ -834,23 +834,28 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 	if skater.is_ghost:
 		return
 	var others: Array = _historical_others_provider.call(skater, host_ts)
+	var my_radius: float = skater.collision_radius()
+	var pinned: bool = skater.pin_role != BoardPinRules.Role.NONE
 	for rec: Dictionary in others:
 		var other: Skater = rec["skater"]
 		if other == null or rec["ghost"]:
 			continue
 		var opos: Vector3 = rec["position"]
-		var ovel: Vector3 = rec["velocity"]
-		var ohit: bool = rec["hit"]   # the other's replicated hit-commit (brace / delivery)
-		var d: Vector3 = opos - skater.global_position
+		var other_radius: float = other.collision_radius()
+		var my_pos: Vector3 = skater.global_position
+		var d: Vector3 = opos - my_pos
 		d.y = 0.0
 		# The live resolver's flat contact for a locked pin pair (Skater).
-		var axis: Vector3 = BoardPinRules.locked_contact_axis(skater.global_position,
-				skater.pin_role, skater.collision_radius(), opos, other.pin_role,
-				other.collision_radius())
+		var axis: Vector3 = Vector3.ZERO
+		if pinned and other.pin_role != BoardPinRules.Role.NONE:
+			axis = BoardPinRules.locked_contact_axis(my_pos, skater.pin_role, my_radius,
+					opos, other.pin_role, other_radius)
 		var dist: float = d.length() if axis == Vector3.ZERO else d.dot(axis)
 		# Exactly the resolver's own no-overlap test, so a skip changes nothing.
-		if dist >= skater.collision_radius() + other.collision_radius():
+		if dist >= my_radius + other_radius:
 			continue
+		var ovel: Vector3 = rec["velocity"]
+		var ohit: bool = rec["hit"]   # the other's replicated hit-commit (brace / delivery)
 		var n: Vector3 = axis
 		if axis == Vector3.ZERO:
 			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
@@ -870,8 +875,8 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 					* (1.0 if local_hit_held else skater.hit_passive_transfer_mult) \
 					* (other.body_check_brace_resistance if ohit else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
-					skater.global_position, skater.velocity, skater.weight, skater.collision_radius(),
-					opos, ovel, other.weight, other.collision_radius(), transfer, axis)
+					my_pos, skater.velocity, skater.weight, my_radius,
+					opos, ovel, other.weight, other_radius, transfer, axis)
 			skater.velocity += _replay_collision_result.dvel_a
 			skater.global_position += _replay_collision_result.sep_a
 		else:
@@ -882,8 +887,8 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 					* (1.0 if ohit else other.hit_passive_transfer_mult) \
 					* (skater.body_check_brace_resistance if local_hit_held else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
-					opos, ovel, other.weight, other.collision_radius(),
-					skater.global_position, skater.velocity, skater.weight, skater.collision_radius(),
+					opos, ovel, other.weight, other_radius,
+					my_pos, skater.velocity, skater.weight, my_radius,
 					transfer, -axis)
 			skater.velocity += _replay_collision_result.dvel_b
 			skater.global_position += _replay_collision_result.sep_b
