@@ -25,12 +25,13 @@ static func solve(
 		grip_target_xz: Vector2,
 		cfg: Config) -> Vector3:
 	var target := Vector3(grip_target_xz.x, cfg.hand_y, grip_target_xz.y)
+	return target.lerp(rest, release_weight(cfg))
 
-	var backhand_angle: float = cfg.backhand_angle
-	var release_max: float = cfg.release_angle_max
-	var release_band: float = cfg.release_angle_band
-	var t: float = smoothstep(release_max, release_max + release_band, backhand_angle)
-	return target.lerp(rest, t)
+
+# How far the angle has let the hand go, 0 (on the stick) to 1 (at rest).
+static func release_weight(cfg: Config) -> float:
+	return smoothstep(cfg.release_angle_max, cfg.release_angle_max + cfg.release_angle_band,
+			cfg.backhand_angle)
 
 
 # Where on the shaft the bottom hand can hold, as a fraction from the top hand

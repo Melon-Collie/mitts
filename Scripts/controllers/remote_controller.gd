@@ -162,7 +162,7 @@ func _render_pose_update(delta: float) -> void:
 	if _is_host:
 		_pose.apply_head_tracking_aim(_current_aim_world, delta)
 	if _celebration_timer <= 0.0:
-		_ik.update_bottom_hand()
+		_ik.update_bottom_hand(delta)
 
 
 static func _input_ts_less(a: InputState, b: InputState) -> bool:

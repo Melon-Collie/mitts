@@ -35,6 +35,8 @@ static constexpr double GRIP_MIN_SPEED = 0.5;
 static constexpr double INTENT_MIN_SQ = 0.0025;
 // SkaterLocomotion._STEP_REST_SPEED.
 static constexpr double STEP_REST_SPEED = 0.05;
+// SkaterLocomotion._SKID_LEAD_FULL_SPEED.
+static constexpr double SKID_LEAD_FULL_SPEED = 1.5;
 // SkaterMovementRules.SHUFFLE_AHEAD_COS.
 static constexpr double SHUFFLE_AHEAD_COS = 0.707;
 static constexpr double DRIVE_FULL = 0.5;
@@ -48,6 +50,9 @@ static inline double deg_to_rad(double d) {
 static inline double sgn(double v) {
 	return v > 0.0 ? 1.0 : (v < 0.0 ? -1.0 : 0.0);
 }
+
+// EaseRules.OMEGA_PER_RATE.
+static constexpr double EASE_OMEGA_PER_RATE = 1.7;
 
 static inline double lerpd(double a, double b, double t) {
 	return a + (b - a) * t;
@@ -293,6 +298,9 @@ void NativeSkaterGait::reset() {
 	cross_signed = 0.0;
 	carve_signed = 0.0;
 	tight_signed = 0.0;
+	for (int i = 0; i < E_COUNT; i++) {
+		rates[i] = 0.0;
+	}
 	stride_phase = 0.0;
 	intensity = 0.0;
 	effort = 0.0;
@@ -349,11 +357,11 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 	ground_speed = Vector2(vel.x, vel.z).length();
 	speed_t = clampd(ground_speed / maxd(c.gait_full_speed * leg_scale, 0.001), 0.0, 1.0);
 	sample_velocity(delta, vel);
-	effort = lerpd(effort, fd_effort_target, c.stride_effort_speed * delta);
+	effort = ease(effort, E_EFFORT, fd_effort_target, c.stride_effort_speed, delta);
 	turn_rate = lerpd(turn_rate, fd_turn, c.carve_engage_speed * delta);
 	turning = clampd(ground_speed * turn_rate / maxd(c.turn_accel, 0.001), -1.0, 1.0);
-	loaded = lerpd(loaded, (stance_active && !planted) ? 1.0 : 0.0,
-			c.locomotion_blend_speed * delta);
+	loaded = ease(loaded, E_LOADED, (stance_active && !planted) ? 1.0 : 0.0,
+			c.locomotion_blend_speed, delta);
 
 	// LocomotionRules.classify
 	const Vector3 col_z = basis.get_column(2);
@@ -456,7 +464,8 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 		target_intensity = maxd(speed_t, maxd(c.dig_in_intensity * start * (mix.stride + mix.backward),
 				c.shuffle_intensity * mix.shuffle));
 	}
-	intensity = lerpd(intensity, target_intensity * (1.0 - hold), c.stride_intensity_speed * delta);
+	intensity = maxd(ease(intensity, E_INTENSITY, target_intensity * (1.0 - hold),
+			c.stride_intensity_speed, delta), 0.0);
 
 	push_scale = clampd(1.0 + effort * c.stride_push_gain, c.stride_glide_floor, c.stride_push_ceiling) * (1.0 + loaded * c.stance_stride_gain);
 	cruise_gear = speed_t * (1.0 - clampd(effort, 0.0, 1.0));
@@ -666,7 +675,7 @@ void NativeSkaterGait::skid_path(double w, const Vector2 &along) {
 	const Config &c = cfg;
 	const Vector2 t = along.length_squared() > 1e-6 ? along.normalized() : Vector2(0.0, -1.0);
 	const double spread = c.reversal_spread_m;
-	const double lead = c.reversal_lead_m;
+	const double lead = c.reversal_lead_m * smoothstep01(ground_speed / SKID_LEAD_FULL_SPEED);
 	l_dx += w * (t.x * lead - spread);
 	r_dx += w * (t.x * lead + spread);
 	l_dz += w * t.y * lead;
@@ -780,22 +789,33 @@ void NativeSkaterGait::stance_of(double s) {
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover);
 }
 
+// SkaterLocomotion._ease: EaseRules.critical_x / critical_v.
+double NativeSkaterGait::ease(double x, int eased, double target, double rate, double dt) {
+	const double omega = rate * EASE_OMEGA_PER_RATE;
+	const double v = rates[eased];
+	const double d = x - target;
+	const double c = v + d * omega;
+	const double e = std::exp(-omega * dt);
+	rates[eased] = (v - c * omega * dt) * e;
+	return target + (d + c * dt) * e;
+}
+
 void NativeSkaterGait::ease_mix(double delta) {
 	const Config &c = cfg;
-	const double k = mind(c.locomotion_blend_speed * delta, 1.0);
-	const double kc = mind(c.crossover_commit_speed * delta, 1.0);
-	mix.stride = lerpd(mix.stride, target.stride, k);
-	cross_signed = lerpd(cross_signed, target.crossover * target.side, kc);
+	const double k = c.locomotion_blend_speed;
+	mix.stride = maxd(ease(mix.stride, E_STRIDE, target.stride, k, delta), 0.0);
+	cross_signed = ease(cross_signed, E_CROSS, target.crossover * target.side,
+			c.crossover_commit_speed, delta);
 	mix.crossover = std::abs(cross_signed);
 	const double uncommitted = maxd(target.crossover - mix.crossover, 0.0);
-	carve_signed = lerpd(carve_signed, (target.carve + uncommitted) * target.side, k);
+	carve_signed = ease(carve_signed, E_CARVE, (target.carve + uncommitted) * target.side, k, delta);
 	mix.carve = std::abs(carve_signed);
-	mix.backward = lerpd(mix.backward, target.backward, k);
+	mix.backward = maxd(ease(mix.backward, E_BACK, target.backward, k, delta), 0.0);
 	mix.shuffle = lerpd(mix.shuffle, target.shuffle, mind(c.shuffle_blend_speed * delta, 1.0));
-	mix.skid = lerpd(mix.skid, target.skid, k);
-	tight_signed = lerpd(tight_signed, target.tight * target.side, k);
+	mix.skid = maxd(ease(mix.skid, E_SKID, target.skid, k, delta), 0.0);
+	tight_signed = ease(tight_signed, E_TIGHT, target.tight * target.side, k, delta);
 	mix.tight = std::abs(tight_signed);
-	mix.stop = lerpd(mix.stop, target.stop, k);
+	mix.stop = maxd(ease(mix.stop, E_STOP, target.stop, k, delta), 0.0);
 	double held = mix.stride + mix.crossover + mix.carve + mix.backward + mix.shuffle + mix.skid + mix.tight + mix.stop;
 	if (held > 1.0) {
 		const double scale = 1.0 / held;
@@ -810,6 +830,9 @@ void NativeSkaterGait::ease_mix(double delta) {
 		mix.tight *= scale;
 		tight_signed *= scale;
 		mix.stop *= scale;
+		for (int i = 0; i < E_EFFORT; i++) {
+			rates[i] *= scale;
+		}
 		held = 1.0;
 	}
 	mix.glide = 1.0 - held;

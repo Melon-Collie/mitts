@@ -120,6 +120,34 @@ func test_top_hand_solve_matches_native() -> void:
 	pass_test("%d solve fuzz cases within %f" % [FUZZ_ITERATIONS, TOLERANCE])
 
 
+func test_two_hand_reach_matches_native() -> void:
+	if _native_missing():
+		return
+	var scratch := TopHandIK.Result.new()
+	for i: int in FUZZ_ITERATIONS:
+		var cfg: TopHandIK.Config = _random_top_cfg()
+		var native: RefCounted = _native_top_from(cfg)
+		var shoulder: Vector3 = _random_shoulder()
+		var target: Vector2 = _random_target()
+		var sign_val: float = -1.0 if _rng.randf() < 0.5 else 1.0
+		var bottom: Vector3 = shoulder + Vector3(_rng.randf_range(0.2, 0.5) * sign_val,
+				_rng.randf_range(-0.05, 0.05), _rng.randf_range(-0.1, 0.1))
+		var grip: float = _rng.randf_range(0.1, 0.4)
+		var reach: float = _rng.randf_range(0.4, 0.8)
+		var spacing: float = _rng.randf_range(0.0, 0.12)
+		var gd: float = TopHandIK.two_hand_reach(shoulder, target, sign_val, cfg,
+				bottom, grip, reach, spacing, scratch)
+		var cpp: float = native.two_hand_reach(shoulder, target, sign_val,
+				bottom, grip, reach, spacing)
+		if gd == INF and cpp == INF:
+			continue
+		if absf(gd - cpp) > TOLERANCE:
+			fail_test("two_hand_reach diverged at iter %d: gd=%f cpp=%f target=%s sign=%.0f" % [
+					i, gd, cpp, target, sign_val])
+			return
+	pass_test("%d two_hand_reach fuzz cases within %f" % [FUZZ_ITERATIONS, TOLERANCE])
+
+
 func test_bottom_hand_solve_matches_native() -> void:
 	if _native_missing():
 		return

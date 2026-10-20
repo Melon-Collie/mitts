@@ -373,6 +373,10 @@ func apply_upper_body(delta: float) -> void:
 			var coil: float = -blade_side_sign * deg_to_rad(_controller.slapper_wind_up_twist_deg) * wind_up_eased
 			upper_body_angle = lerp_angle(upper_body_angle, aim_target + coil, _controller.slapper_wind_up_lerp_speed * delta)
 			_skater.set_upper_body_rotation(upper_body_angle)
+			# Glued to the tracked angle, as through the follow-through: the exit
+			# keeps the pose, so skating must find the spring settled on it.
+			_twist_follow = upper_body_angle
+			_twist_follow_vel = 0.0
 		# The wind-up's hands are authored, not reached for, so there is no reach
 		# lean; the posture under the coil — the
 		# skating lean, a stagger's reel — carries on as in every other state.
@@ -515,7 +519,8 @@ func apply_upper_body(delta: float) -> void:
 						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,
 						_controller.rom_backhand_reach_max),
 				_reach_lean_max_deg(hand_vec),
-				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
+				_controller.upper_body_lean_engage_power) \
+				* (1.0 - _address_share()) * _controller.reach_purpose()
 
 	upper_body_angle = lerp_angle(upper_body_angle, target_angle, _controller.upper_body_return_speed * delta)
 	upper_body_lean = lerpf(upper_body_lean, target_lean.x, _controller.upper_body_lean_return_speed * delta)
@@ -570,8 +575,9 @@ func update_angular_velocities(delta: float) -> void:
 	_prev_upper_body_angle = frame_yaw
 
 # ── Pose Resets ───────────────────────────────────────────────────────────────
-# Used by SkaterController._transition_to_skating and _enter_slapper_charge.
-# Clears smoothed pose state so the next tick starts from a neutral torso/lean.
+# Used by the commits that square the body (_enter_slapper_charge,
+# _enter_shot_block) and by the teleports. Clears smoothed pose state so the
+# next tick starts from a neutral torso/lean.
 func reset_lean_and_lag() -> void:
 	upper_body_angle = 0.0
 	upper_body_lean = 0.0

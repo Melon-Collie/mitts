@@ -153,6 +153,11 @@ private:
 	double cross_signed = 0.0;
 	double carve_signed = 0.0;
 	double tight_signed = 0.0;
+	// SkaterLocomotion._rates, by its Eased.
+	enum Eased { E_STRIDE, E_CROSS, E_CARVE, E_BACK, E_SKID, E_TIGHT, E_STOP,
+		E_EFFORT, E_LOADED, E_INTENSITY, E_COUNT };
+	double rates[E_COUNT] = {};
+	double ease(double x, int eased, double target, double rate, double dt);
 	godot::Vector3 prev_velocity;
 	bool have_prev_velocity = false;
 	double fd_time = 0.0;

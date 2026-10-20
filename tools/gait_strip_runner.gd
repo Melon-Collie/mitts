@@ -29,6 +29,9 @@ const BUILD_WEIGHT_LB: int = 201
 # cover one.
 const SCENARIOS: Array[Dictionary] = [
 	{"name": "stride", "warm": 240, "step": 12},
+	# The same stride with a loose puck kept 2 m up-ice: the stick reaches for it
+	# one-handed and the free arm swings with the stroke.
+	{"name": "reach", "warm": 240, "step": 12},
 	# From a standstill, the stick held up-ice from the first tick: the start's
 	# chop lengthening into the stride over its first second.
 	{"name": "start", "warm": 1, "step": 15},
@@ -204,6 +207,9 @@ func _steer(input: InputState) -> void:
 	match String(_scenarios[_index]["name"]):
 		"stance":
 			input.stance_held = true
+		"reach":
+			_puck.global_position = _skater.global_position + Vector3(travel.x, 0.0, travel.y) * 2.0
+			_puck.global_position.y = 0.0
 		"turn45":
 			if turning:
 				move = (travel + right).normalized()

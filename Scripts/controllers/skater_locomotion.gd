@@ -24,6 +24,9 @@ const _FD_WINDOW_MAX: float = 0.1
 const _STEP_INTENT_MIN_SQ: float = 0.0025
 # Below this ground speed (m/s) a step of the shuffle has come to rest.
 const _STEP_REST_SPEED: float = 0.05
+# The ground speed (m/s) a reversal's skates lead along travel in full: the sit
+# back against the momentum, gone with it, or it swaps ends as travel reverses.
+const _SKID_LEAD_FULL_SPEED: float = 1.5
 
 var _skater: Skater = null
 var _controller: SkaterController = null
@@ -118,6 +121,9 @@ var _hold: float = 0.0
 var _cross_signed: float = 0.0
 var _carve_signed: float = 0.0
 var _tight_signed: float = 0.0
+# The rate of each eased blend (EaseRules), by Eased.
+enum Eased { STRIDE, CROSS, CARVE, BACK, SKID, TIGHT, STOP, EFFORT, LOADED, INTENSITY, COUNT }
+var _rates := PackedFloat64Array()
 var _prev_velocity: Vector3 = Vector3.ZERO
 var _have_prev_velocity: bool = false
 var _fd_time: float = 0.0
@@ -134,6 +140,7 @@ var _start: float = 0.0
 func setup(skater: Skater, controller: SkaterController) -> void:
 	_skater = skater
 	_controller = controller
+	_rates.resize(Eased.COUNT)
 
 
 func reset() -> void:
@@ -142,6 +149,8 @@ func reset() -> void:
 	_cross_signed = 0.0
 	_carve_signed = 0.0
 	_tight_signed = 0.0
+	_rates.resize(Eased.COUNT)
+	_rates.fill(0.0)
 	stride_phase = 0.0
 	intensity = 0.0
 	effort = 0.0
@@ -172,12 +181,12 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	_ground_speed = Vector2(vel.x, vel.z).length()
 	_speed_t = clampf(_ground_speed / maxf(c.gait_full_speed * leg_scale, 0.001), 0.0, 1.0)
 	_sample_velocity(delta, vel)
-	effort = lerpf(effort, _fd_effort_target, c.stride_effort_speed * delta)
+	effort = _ease(effort, Eased.EFFORT, _fd_effort_target, c.stride_effort_speed, delta)
 	turn_rate = lerpf(turn_rate, _fd_turn, c.carve_engage_speed * delta)
 	turning = clampf(_ground_speed * turn_rate
 			/ maxf(c.turn_accel, 0.001), -1.0, 1.0)
-	loaded = lerpf(loaded, 1.0 if (c.stance_active and not planted) else 0.0,
-			c.locomotion_blend_speed * delta)
+	loaded = _ease(loaded, Eased.LOADED, 1.0 if (c.stance_active and not planted) else 0.0,
+			c.locomotion_blend_speed, delta)
 
 	var basis: Basis = _skater.global_transform.basis
 	var facing := Vector2(-basis.z.x, -basis.z.z)
@@ -219,7 +228,8 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	if _target.stride + _target.crossover + _target.backward + _target.shuffle > 0.01:
 		target_intensity = maxf(_speed_t, maxf(c.dig_in_intensity * _start * (mix.stride + mix.backward),
 				c.shuffle_intensity * mix.shuffle))
-	intensity = lerpf(intensity, target_intensity * (1.0 - hold), c.stride_intensity_speed * delta)
+	intensity = maxf(_ease(intensity, Eased.INTENSITY, target_intensity * (1.0 - hold),
+			c.stride_intensity_speed, delta), 0.0)
 
 	push_scale = clampf(1.0 + effort * c.stride_push_gain, c.stride_glide_floor, c.stride_push_ceiling) \
 			* (1.0 + loaded * c.stance_stride_gain)
@@ -508,7 +518,7 @@ func _skid_path(w: float, along: Vector2) -> void:
 	var c: SkaterController = _controller
 	var t: Vector2 = along.normalized() if along.length_squared() > 1e-6 else Vector2(0.0, -1.0)
 	var spread: float = c.reversal_spread_m
-	var lead: float = c.reversal_lead_m
+	var lead: float = c.reversal_lead_m * smoothstep(0.0, _SKID_LEAD_FULL_SPEED, _ground_speed)
 	l_dx += w * (t.x * lead - spread)
 	r_dx += w * (t.x * lead + spread)
 	l_dz += w * t.y * lead
@@ -682,28 +692,32 @@ func _stance(s: float) -> void:
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover)
 
 
+# Every weight but the shuffle's eases on a spring (EaseRules), so a state
+# coming on or going off moves the legs from rest rather than in a corner; the
+# blend speeds are the first-order rates the springs stand in for.
 func _ease_mix(delta: float) -> void:
 	var c: SkaterController = _controller
-	var k: float = minf(c.locomotion_blend_speed * delta, 1.0)
+	var k: float = c.locomotion_blend_speed
+	mix.stride = maxf(_ease(mix.stride, Eased.STRIDE, _target.stride, k, delta), 0.0)
 	# Crossovers come on slower than anything else, and signed: a quick steering
 	# correction rides the edges, corrections alternating sides cancel, and only
 	# a turn held to one side long enough is skated with crossovers.
-	var kc: float = minf(c.crossover_commit_speed * delta, 1.0)
-	mix.stride = lerpf(mix.stride, _target.stride, k)
-	_cross_signed = lerpf(_cross_signed, _target.crossover * _target.side, kc)
+	_cross_signed = _ease(_cross_signed, Eased.CROSS, _target.crossover * _target.side,
+			c.crossover_commit_speed, delta)
 	mix.crossover = absf(_cross_signed)
 	# What the turn has not yet committed to crossovers is skated on the edges.
 	var uncommitted: float = maxf(_target.crossover - mix.crossover, 0.0)
-	_carve_signed = lerpf(_carve_signed, (_target.carve + uncommitted) * _target.side, k)
+	_carve_signed = _ease(_carve_signed, Eased.CARVE, (_target.carve + uncommitted) * _target.side,
+			k, delta)
 	mix.carve = absf(_carve_signed)
-	mix.backward = lerpf(mix.backward, _target.backward, k)
+	mix.backward = maxf(_ease(mix.backward, Eased.BACK, _target.backward, k, delta), 0.0)
 	# A step of the shuffle is short, and its cycle is laid from its first
-	# centimetre: it comes on quicker than anything else.
+	# centimetre from the base closed: it comes on quickest, on the lag.
 	mix.shuffle = lerpf(mix.shuffle, _target.shuffle, minf(c.shuffle_blend_speed * delta, 1.0))
-	mix.skid = lerpf(mix.skid, _target.skid, k)
-	_tight_signed = lerpf(_tight_signed, _target.tight * _target.side, k)
+	mix.skid = maxf(_ease(mix.skid, Eased.SKID, _target.skid, k, delta), 0.0)
+	_tight_signed = _ease(_tight_signed, Eased.TIGHT, _target.tight * _target.side, k, delta)
 	mix.tight = absf(_tight_signed)
-	mix.stop = lerpf(mix.stop, _target.stop, k)
+	mix.stop = maxf(_ease(mix.stop, Eased.STOP, _target.stop, k, delta), 0.0)
 	var held: float = mix.stride + mix.crossover + mix.carve + mix.backward + mix.shuffle \
 			+ mix.skid + mix.tight + mix.stop
 	if held > 1.0:
@@ -719,12 +733,22 @@ func _ease_mix(delta: float) -> void:
 		mix.tight *= scale
 		_tight_signed *= scale
 		mix.stop *= scale
+		for i: int in Eased.EFFORT:
+			_rates[i] *= scale
 		held = 1.0
 	# The glide is what is left: the crossfade's remainder.
 	mix.glide = 1.0 - held
 	if _target.tight > 0.0 or _target.shuffle > 0.0 or _target.carve > 0.0 \
 			or _target.crossover > 0.0:
 		mix.side = _target.side
+
+
+# One blend's spring step toward `target`, for a first-order `rate` (1/s).
+func _ease(x: float, eased: Eased, target: float, rate: float, dt: float) -> float:
+	var omega: float = rate * EaseRules.OMEGA_PER_RATE
+	var v: float = _rates[eased]
+	_rates[eased] = EaseRules.critical_v(x, v, target, omega, dt)
+	return EaseRules.critical_x(x, v, target, omega, dt)
 
 
 func _sample_velocity(delta: float, vel: Vector3) -> void:

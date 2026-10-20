@@ -78,7 +78,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# reconcile, and the victim's answer to it (take_cross_check).
 	# +3: the stagger reads how hard a hit landed, apart from the knockdown.
 	# +6: the press latches the cursor's aim, as far round as the chest turns.
-	"res://Scripts/controllers/skater_controller.gd": 3583,
+	"res://Scripts/controllers/skater_controller.gd": 3595,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	# +11: the physicality plan — a locked pin pair's flat contact, the
 	# cross-check's phase fields (read by puck play and the pose), and the
@@ -94,7 +94,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +39: the cross-check pose — the shaft across the chest, the wide grip.
 	# +8: _glove_spacing, the shaft the top glove takes up, which the drawn
 	# bottom grip and the carry's two-handed reach both keep clear of.
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 1059,
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 1151,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
@@ -145,7 +145,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	# +1: knockdown_drop_m, which the gait's crumple and the sprawl's buckle share.
 	# +1: knockdown_getup_left, the get-up clock the gait and the torso fold read.
 	# +1: take_cross_check, the victim's answer the host's CrossCheckTracker calls.
-	"res://Scripts/controllers/skater_controller.gd": 44,
+	"res://Scripts/controllers/skater_controller.gd": 45,
 	"res://Scripts/actors/puck.gd": 44,
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,

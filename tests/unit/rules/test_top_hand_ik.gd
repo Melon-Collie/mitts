@@ -95,7 +95,32 @@ func test_far_target_on_stick_sphere_hits_target_exactly() -> void:
 	var result: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _cfg())
 	assert_almost_eq(result.blade.x, target.x, 0.001, "blade X == target X")
 	assert_almost_eq(result.blade.z, target.y, 0.001, "blade Z == target Z")
-	assert_almost_eq(result.hand.y, HAND_REST_Y, 0.001, "hand at rest Y at boundary")
+	assert_almost_eq(result.hand.distance_to(result.blade), STICK_LENGTH, 0.001,
+			"the stick stays rigid inside the regime band")
+	var past := Vector2(shoulder.x, shoulder.z - STICK_HORIZ_AT_REST - TopHandIK.REGIME_BAND_M)
+	assert_almost_eq(TopHandIK.solve(shoulder, past, -1.0, _cfg()).hand.y, HAND_REST_Y, 0.001,
+			"hand at rest Y past the band")
+
+
+# The hand's path across the regime change has no corner: its step per step of
+# the blade changes smoothly, where the two regimes alone turned it from rising
+# to reaching out between one blade position and the next.
+func test_the_hand_path_has_no_corner_at_the_regime_change() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var step: float = 0.002
+	var prev: Vector3 = Vector3.INF
+	var prev_step: Vector3 = Vector3.INF
+	for i: int in 200:
+		var d: float = STICK_HORIZ_AT_REST - 0.2 + step * i
+		var hand: Vector3 = TopHandIK.solve(shoulder, Vector2(shoulder.x, shoulder.z - d),
+				-1.0, _cfg()).hand
+		if prev != Vector3.INF:
+			var this_step: Vector3 = hand - prev
+			if prev_step != Vector3.INF:
+				assert_lt((this_step - prev_step).length(), step * 0.1,
+						"the hand's path turns a corner at %.3f m" % d)
+			prev_step = this_step
+		prev = hand
 
 func test_far_target_slightly_past_stick_reachable_by_small_hand_extension() -> void:
 	# Backhand side, just past stick_horiz_at_rest but within backhand ROM.

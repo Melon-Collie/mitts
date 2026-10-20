@@ -610,6 +610,16 @@ Things the split alone would get wrong, handled where noted:
   over while the skater is still gaining speed. `test_gait_step_events.gd`
   holds the shape.
 - **The glide is the remainder.**
+- **The weights ease on springs, not lags** (`EaseRules`, critically damped,
+  ω = `OMEGA_PER_RATE` × the blend speed): the mix, effort, the loaded stance
+  and the stroke's intensity, and the stance layer's blend. A lag answers a
+  change of state at full rate on its first frame, and every leg target is a
+  blend of those weights, so the body stepped in a corner on every change of
+  state: the crouch dropped at ~4 m/s from rest the tick a stop began. The
+  shuffle keeps its lag: its step is laid from the base closed, where a quick
+  onset costs nothing and a slow one lets the planted skate slide
+  (`test_shuffle_steps.gd`). `tests/instruments/actors/test_body_smoothness.gd`
+  measures the per-frame jerk of every bone through each transition.
 
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
 places each ankle from the stroke's joints on the stance, lays on the states
@@ -772,13 +782,16 @@ The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
 
 **A carrier keeps both hands on the stick.** An empty stick reaches one-handed
-to the rim; with the puck the blade stops where the bottom hand could no longer
+to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
+both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer
 hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
 way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
 which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck
 magnetises to the blade, so a one-handed carry was reach no defender could
 answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
-and is what the limit is measured to keep on the shaft.
+and is what the limit is measured to keep on the shaft. They are laid on the
+cursor's TARGET, not on the blade the speed cap draws, so a pickup at the rim
+brings the stick in at the dangle's pace instead of in one tick.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
 
 "Hold the shaft" means a glove's width below the top hand
