@@ -51,6 +51,7 @@ var _rake: ArenaBowlRake
 # from m/s to UV/s.
 var _ribbon_vp: SubViewport = null
 var _ribbon_material: StandardMaterial3D = null
+var _ribbon_board: MeshInstance3D = null
 var _ribbon_span_m: float = 0.0
 var _banner_vp: SubViewport = null
 var _banner_material: StandardMaterial3D = null
@@ -60,6 +61,14 @@ func _init(spec: ArenaBowlSpec, path: ArenaBowlPath, rake: ArenaBowlRake) -> voi
 	_spec = spec
 	_path = path
 	_rake = rake
+
+
+# Hide or show the built ribbon board. Returns whether there is one.
+func show_ribbon(shown: bool) -> bool:
+	if not is_instance_valid(_ribbon_board):
+		return false
+	_ribbon_board.visible = shown
+	return true
 
 
 # Advance the ribbon's scroll by `delta` at `speed` metres of board per second.
@@ -139,6 +148,7 @@ func add_ribbon_board(root: Node3D) -> void:
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	root.add_child(mi)
 
+	_ribbon_board = mi
 	_ribbon_material = mat
 	# One repeat spans this much wall, which converts the scroll speed from
 	# metres per second into UV per second.

@@ -291,6 +291,7 @@ var _excite_tween: Tween = null
 var _house_lights: ArenaHouseLights = null
 var _reflection: ArenaReflection = null
 var _render_targets_freed: bool = false
+var _ads_shown: bool = true
 # Set while set_crowd_rows writes both row counts, so the two setters don't
 # each trigger a rebuild of their own.
 var _suspend_rebuild: bool = false
@@ -428,6 +429,14 @@ func set_crowd_rows(lower: int, upper: int) -> void:
 	_request_rebuild()
 
 
+# The player's Arena Ads option. Hides the built ribbon board rather than
+# flipping ribbon_enabled, whose setter rebuilds the whole bowl.
+func set_ads_shown(shown: bool) -> void:
+	_ads_shown = shown
+	if _signage != null:
+		_show_ribbon()
+
+
 # Seat-surface center of a team's bench, in ArenaStands-local space. The lobby
 # backdrop uses this to seat roster dummies.
 func bench_seat_center(team_id: int) -> Vector3:
@@ -532,12 +541,18 @@ func _rebuild() -> void:
 	_rinkside.build_staff(self)
 	if ribbon_enabled:
 		_signage.add_ribbon_board(self)
-		# Editor previews hold still: a @tool node redrawing every frame for a
-		# scrolling sign is churn the editor does not need.
-		set_process(not Engine.is_editor_hint())
+		_show_ribbon()
 	if banners_enabled:
 		_signage.add_rafter_banners(self)
 	_fit_reflection()
+
+
+# Scrolls only a board that is built and showing. Editor previews hold still: a
+# @tool node redrawing every frame for a scrolling sign is churn the editor does
+# not need.
+func _show_ribbon() -> void:
+	var built: bool = _signage.show_ribbon(_ads_shown)
+	set_process(built and _ads_shown and not Engine.is_editor_hint())
 
 
 func _fit_reflection() -> void:

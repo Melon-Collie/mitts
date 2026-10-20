@@ -254,6 +254,7 @@ COL_TOTAL,T,T
 CONTROLS_STICK_LIFT,Stick Lift / Tie,Levantar / trabar palo
 TOAST_PUCK_FROZEN,PUCK FROZEN ON THE BOARDS,DISCO CONGELADO EN LA BANDA
 OPTIONS_PLAYER_SHADOWS,Player Shadows,Sombras de jugadores
+OPTIONS_ARENA_ADS,Arena Ads,Publicidad en la pista
 OPTIONS_ANIMATION_DETAIL,Animation Detail,Detalle de animación
 OPTIONS_DETAIL_LOW,Low,Bajo
 OPTIONS_DETAIL_BALANCED,Balanced,Equilibrado
