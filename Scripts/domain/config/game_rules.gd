@@ -5,8 +5,8 @@ class_name GameRules
 
 # ── Game Flow Timings ─────────────────────────────────────────────────────────
 const GOAL_PAUSE_DURATION: float        = 2.0  # fallback for GOAL_SCORED auto-advance if replay never starts
-const GOAL_CELEBRATION_DURATION: float  = 1.5  # post-goal beat: movement allowed, puck pickup-locked,
-												# banner + VFX play; auto-advances to GOAL_SCORED (replay)
+const GOAL_CELEBRATION_DURATION: float  = 2.5  # post-goal beat: movement allowed, puck pickup-locked,
+												# banner + VFX + crowd roar play; auto-advances to GOAL_SCORED (replay)
 const FACEOFF_PREP_DURATION: float = 2.0   # visible "2 → 1 → DROP!" countdown before puck unlocks
 # Extra hold on the OPENING faceoff of a match (game start + rematch): camera
 # sweep, full-screen matchup rosters, crowd buzz. Longer than the period-start

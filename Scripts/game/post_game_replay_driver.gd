@@ -8,7 +8,7 @@ extends Node
 # + re-fired audio, this plays a PLAYLIST at normal speed on a single broadcast
 # ("hard") cam with no audio — an ambient highlight reel, not a money shot.
 #
-# Source is GoalReplayStore, filled clip-by-clip during the game (the ~9 s
+# Source is GoalReplayStore, filled clip-by-clip during the game (the ~18 s
 # recorder ring can't hold a whole game). Two configurations, one engine:
 #   - Post-game reel (defaults): loops the whole match's goals forever behind
 #     the final-score screen. Purely cosmetic, each peer loops its OWN store —

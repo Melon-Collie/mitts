@@ -35,9 +35,16 @@ var _energy: float = 0.0
 var _pressure: float = 0.0
 # -1 until GameManager announces one — no phase means no live play to read.
 var _phase: int = -1
+# While a goal replay plays, the bed rides the replayed puck: the puck node is
+# posed by the replay, and the carrier comes from the recorded frame.
+var _replaying: bool = false
+var _replay_carrier_team: int = -1
 
 const _CHEER_POOL_SIZE: int = 3
 const _ARENA_BUS: StringName = &"Arena"
+# The goal's cheer and horn fade under the replay's incoming wipe: the replay
+# re-runs the play before the goal, and the crowd sounds the way it did then.
+const _REPLAY_FADE_S: float = 0.4
 
 var _ambient_player: AudioStreamPlayer = null
 var _cheer_pool: Array[AudioStreamPlayer] = []
@@ -69,6 +76,12 @@ func _ready() -> void:
 			gm.goal_scored.connect(_on_goal_scored)
 		if gm.has_signal("phase_changed"):
 			gm.phase_changed.connect(_on_phase_changed)
+		if gm.has_signal("replay_started"):
+			gm.replay_started.connect(_on_goal_replay_started)
+		if gm.has_signal("goal_replay_frame_changed"):
+			gm.goal_replay_frame_changed.connect(_on_goal_replay_frame)
+		if gm.has_signal("replay_stopped"):
+			gm.replay_stopped.connect(_on_goal_replay_stopped)
 		# Whistle stoppages — a small crowd murmur so the dead-play beat has life.
 		for sig: String in ["icing_called", "offside_called", "puck_out_of_play"]:
 			if gm.has_signal(sig):
@@ -85,6 +98,27 @@ func _on_phase_changed(new_phase: int) -> void:
 		_cheer()
 
 
+func _on_goal_replay_started() -> void:
+	for p: AudioStreamPlayer in _cheer_pool:
+		if p.playing:
+			var fade: Tween = create_tween()
+			fade.tween_property(p, "volume_db", -60.0, _REPLAY_FADE_S)
+			fade.tween_callback(p.stop)
+	SoundManager.fade_out_crowd(_REPLAY_FADE_S)
+	# The goal duck would otherwise own the bed for its whole recovery.
+	if _tween != null and _tween.is_valid():
+		_tween.kill()
+
+
+func _on_goal_replay_frame(_game_state: Dictionary, carrier_team: int) -> void:
+	_replaying = true
+	_replay_carrier_team = carrier_team
+
+
+func _on_goal_replay_stopped() -> void:
+	_replaying = false
+
+
 # Cosmetic, and sharing no spatial relationship with anything drawn, so it runs
 # at render rate rather than on the tick.
 func _process(delta: float) -> void:
@@ -97,12 +131,14 @@ func _advance_energy(delta: float) -> void:
 	var live: bool = false
 	var sustained: bool = false
 	var chance: float = 0.0
-	if _phase == GamePhase.Phase.PLAYING:
+	if _phase == GamePhase.Phase.PLAYING or _replaying:
 		var puck: Puck = GameManager.get_puck()
 		if is_instance_valid(puck):
 			live = true
-			var carrier: Skater = GameManager.get_puck_carrier()
-			var carrier_team: int = carrier.get_team_id() if carrier != null else -1
+			var carrier_team: int = _replay_carrier_team
+			if not _replaying:
+				var carrier: Skater = GameManager.get_puck_carrier()
+				carrier_team = carrier.get_team_id() if carrier != null else -1
 			var pos: Vector3 = puck.global_position
 			sustained = CrowdEnergyRules.is_sustaining_pressure(pos.z, carrier_team)
 			chance = CrowdEnergyRules.chance(pos.x, pos.z, carrier_team)

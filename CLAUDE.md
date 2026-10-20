@@ -157,13 +157,12 @@ engine-specific analyzer warnings (`SHADOWED_VARIABLE_BASE_CLASS`, `INT_AS_ENUM`
 narrowing) — those stay editor-only, so a clean gdlint run isn't proof the editor
 is warning-free.
 
-**Two ratchets gate file shape** (`test_no_god_class_growth.gd`): 800 lines a
-file, 25 public functions a class. Files already past those lines are
-grandfathered in a table at the size they were, so they cannot grow. A ratchet
-firing is a prompt to split — but bumping the number is allowed when the growth
-is right, since the point is that growth is deliberate and visible in the diff.
-A file that *shrinks* well below its entry must have the entry tightened, or the
-win gets re-spent quietly.
+**Two limits gate file shape** (`test_no_god_class_growth.gd`): 800 lines a
+file, 25 public functions a class. Files already past them are named in a list,
+without a number, and may grow or shrink freely — the guard is against a *new*
+file crossing a limit. That firing is a prompt to split; adding the file to the
+list is allowed when the size is right, so say why in the commit. A listed file
+that drops under its limit has graduated and leaves the list.
 
 **If you spot a bug or code smell while working on something else, flag it.**
 Don't silently fix it (out of scope), don't silently ignore it (it'll rot), don't
