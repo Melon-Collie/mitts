@@ -71,9 +71,8 @@ var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
 var wordmark: String = ""
-# A chest crest instead of the wordmark when `crest_fruit` is set.
-var crest_fruit: String = ""
-var crest_style: int = TeamCrest.Style.OUTLINED
+# A chest crest instead of the wordmark when `crest_id` (a CrestFruits id) is set.
+var crest_id: String = ""
 var crest_preset: Dictionary = {}
 
 
@@ -90,9 +89,9 @@ func _draw() -> void:
 
 	draw_back_lettering(self, player_name, jersey_number, text_color, float(BACK_CENTER_X),
 			PX_PER_M, float(YOKE_BOTTOM_PX) / PX_PER_M.y)
-	if not crest_fruit.is_empty():
+	if not crest_id.is_empty():
 		var r: Vector2 = PX_PER_M * CREST_RADIUS_M
-		TeamCrest.draw(self, crest_fruit, crest_style, Transform2D(Vector2(r.x, 0.0),
+		TeamCrest.draw(self, crest_id, Transform2D(Vector2(r.x, 0.0),
 				Vector2(0.0, r.y), Vector2(FRONT_CENTER_X, CREST_CENTER_DROP_M * PX_PER_M.y)),
 				crest_preset)
 	elif not wordmark.is_empty():
