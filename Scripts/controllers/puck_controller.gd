@@ -744,9 +744,7 @@ func _check_interactions() -> void:
 						or skater.pin_role != BoardPinRules.Role.NONE:
 					continue
 				# Reach gate — grounded blade ↔ grounded puck, lifted ↔ airborne, so a
-				# saucer flies over a grounded blade. A committed deflect skips it (its
-				# blade rises to the puck, Skater.deflect_lift_share) unless tied — a
-				# tied stick plays the air — or popped up.
+				# saucer flies over a grounded blade; a deflect rises to the puck instead.
 				var deflect_reach: bool = skater.deflect_intent and not skater.stick_tied \
 						and not skater.is_forced_lift_active()
 				if not deflect_reach and not PuckReceptionRules.blade_can_interact(
@@ -754,8 +752,10 @@ func _check_interactions() -> void:
 					continue
 				var blade_curr: Vector3 = skater.get_blade_contact_global()
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
-				if not PuckInteractionRules.check_pickup(_prev_puck_pos, puck_curr,
-						blade_prev, blade_curr, PICKUP_RADIUS):
+				if not (PuckInteractionRules.check_deflect(_prev_puck_pos, puck_curr,
+						blade_prev, blade_curr, PICKUP_RADIUS, DeflectReachRules.VERTICAL_REACH_M)
+						if deflect_reach else PuckInteractionRules.check_pickup(_prev_puck_pos,
+						puck_curr, blade_prev, blade_curr, PICKUP_RADIUS)):
 					continue
 				# A diver's stick knocks the puck away; he catches nothing from the ice.
 				if skater.dive_laid_out:

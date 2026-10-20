@@ -11,6 +11,10 @@ const TRACK_RADIUS_M: float = 1.5
 # a tenth of a second (Skater._BLADE_LIFT_BLEND_SPEED), so this is time to read
 # the puck, not time to get there.
 const TRACK_HORIZON_S: float = 0.5
+# How far off the blade's contact point, up or down, the deflect still meets the
+# puck: where the face and the disc overlap in height, nothing more.
+const VERTICAL_REACH_M: float = GameRules.BLADE_FACE_HEIGHT_M * 0.5 \
+		+ GameRules.PUCK_COLLISION_HALF_HEIGHT
 
 
 # Height (m) above `rest_y` the puck's centre will sit at its closest approach to

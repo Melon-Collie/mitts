@@ -353,3 +353,40 @@ func test_sweep_separation_reports_a_gross_miss_at_its_true_scale() -> void:
 	assert_almost_eq(graze, 0.4, 0.0001)
 	assert_almost_eq(gross, 3.0, 0.0001)
 	assert_gt(gross / graze, 5.0, "the two failure kinds are orders apart, not both just 'false'")
+
+
+# ── check_deflect — reaches across the ice, not up or down ───────────────────
+
+const _DEFLECT_REACH: float = 0.5
+const _UP: float = DeflectReachRules.VERTICAL_REACH_M
+
+
+func _deflects(puck_y: float, blade_y: float, across: float = 0.0) -> bool:
+	return PuckInteractionRules.check_deflect(
+			Vector3(1.0, puck_y, across), Vector3(-1.0, puck_y, across),
+			Vector3(0.0, blade_y, 0.0), Vector3(0.0, blade_y, 0.0), _DEFLECT_REACH, _UP)
+
+
+func test_deflect_meets_a_puck_level_with_the_face() -> void:
+	assert_true(_deflects(0.30, 0.30))
+	assert_true(_deflects(0.30 + _UP - 0.005, 0.30), "anywhere the face and the disc overlap")
+
+
+func test_deflect_misses_a_puck_over_or_under_the_face() -> void:
+	assert_false(_deflects(0.30 + _UP + 0.005, 0.30), "over the blade")
+	assert_false(_deflects(0.30 - _UP - 0.005, 0.30), "under it")
+	assert_true(PuckInteractionRules.check_pickup(
+			Vector3(1.0, 0.40, 0.0), Vector3(-1.0, 0.40, 0.0),
+			Vector3(0.0, 0.30, 0.0), Vector3(0.0, 0.30, 0.0), _DEFLECT_REACH),
+			"the control: a receiver's reach is a sphere that would take it")
+
+
+func test_deflect_still_reaches_across() -> void:
+	assert_true(_deflects(0.30, 0.30, _DEFLECT_REACH - 0.01))
+	assert_false(_deflects(0.30, 0.30, _DEFLECT_REACH + 0.01))
+
+
+func test_deflect_vertical_reach_is_the_drawn_face() -> void:
+	var p := StickBladeMeshBuilder.Params.new()
+	assert_almost_eq(DeflectReachRules.VERTICAL_REACH_M,
+			p.height * 0.5 + GameRules.PUCK_COLLISION_HALF_HEIGHT, 1e-6)

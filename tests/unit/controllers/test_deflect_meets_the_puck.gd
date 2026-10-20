@@ -128,3 +128,9 @@ func test_mid_tips_an_air_puck_up() -> void:
 func test_low_knocks_an_air_puck_down() -> void:
 	_tip(ShotMechanics.ELEVATION_LOW)
 	assert_lt(_vel.y, 0.0)
+
+
+func test_a_puck_over_the_full_lift_goes_past() -> void:
+	_launch(1.0)
+	_tick(true, ShotMechanics.ELEVATION_MID, 40, true)
+	assert_almost_eq(_vel.x, -SPEED, 0.01, "a blade at full lift cannot reach up to it")
