@@ -90,11 +90,42 @@ func test_a_full_tuck_is_inside_the_pants() -> void:
 
 
 # The pants' top is where a tuck goes in, so it is the ring the belt line
-# reaches up to: above the jersey's belt ring, under the ring that bunches.
+# reaches up to: above the jersey's belt ring, under the ring that goes in under
+# a tuck's pad — and the pad, stood up, is over that ring and under the bunch.
 func test_the_waistband_is_at_the_belt_line() -> void:
 	var top: float = SkaterMeshBuilder._PELVIS_PROFILE[0].x - _torso_origin_y
 	assert_gt(top, SkaterJerseyHem.BELT_Y_M)
-	assert_lt(top, SkaterJerseyHem.BLOUSE_Y_M)
+	assert_lt(top, SkaterJerseyHem.PAD_Y_M)
+	var pad: float = top + SkaterJerseyHem.PAD_RISE_M
+	assert_gt(pad, SkaterJerseyHem.PAD_Y_M)
+	assert_lt(pad, SkaterJerseyHem.BUNCH_Y_M)
+
+
+# Under a full tuck the jersey goes in under the stood-up pad: its ring at the
+# pad's height sits inside the pad there, rear sway included, and the ring
+# above it stands out past the pad's rim.
+func test_a_full_tuck_goes_in_under_the_pad() -> void:
+	var tuck: int = GearModelRegistry.TUCK_FULL
+	var pants: PackedVector3Array = SkaterMeshBuilder.shared_pelvis(tuck).surface_get_arrays(
+			0)[Mesh.ARRAY_VERTEX]
+	var pad_top: float = -INF
+	for v: Vector3 in pants:
+		pad_top = maxf(pad_top, v.y)
+	assert_almost_eq(pad_top, SkaterMeshBuilder._PELVIS_PROFILE[0].x + SkaterJerseyHem.PAD_RISE_M,
+			1e-5, "the pad stands the waistband up")
+	var pad_r: float = SkaterMeshBuilder._PELVIS_PROFILE[0].y + SkaterJerseyHem.PAD_FLARE_M
+	var torso: PackedVector3Array = _verts(tuck)
+	var rest: PackedVector3Array = _verts(GearModelRegistry.TUCK_NONE)
+	var under: int = 0
+	for i: int in torso.size():
+		if absf(rest[i].y - SkaterJerseyHem.PAD_Y_M) > 1e-5:
+			continue
+		var p: Vector3 = torso[i]
+		var reach: float = pow(p.x / (pad_r * SkaterMeshBuilder._TORSO_X_SCALE), 2.0) + pow(
+				(p.z - SkaterMeshBuilder._PELVIS_REAR_SWAY[0]) / (pad_r * SkaterMeshBuilder._TORSO_Z_SCALE), 2.0)
+		assert_lt(reach, 1.0, "the ring under the pad is inside its rim, at %s" % p)
+		under += 1
+	assert_gt(under, 0)
 
 
 # A corner tuck tucks its own hip's front: there the hem is lifted to the belt,

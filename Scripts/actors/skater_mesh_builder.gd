@@ -33,8 +33,8 @@ const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the caps seat into it
 	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
 	Vector2(0.000, 0.212),   # barely in at the waist
-	Vector2(-0.070, 0.214),
-	Vector2(-0.125, 0.218),  # bunches over a tuck (SkaterJerseyHem.BLOUSE_Y_M)
+	Vector2(-0.070, 0.214),  # bunches over a tuck's pad (SkaterJerseyHem.BUNCH_Y_M)
+	Vector2(-0.125, 0.218),  # goes in under a tuck's pad (SkaterJerseyHem.PAD_Y_M)
 	Vector2(-0.150, 0.219),  # the pants' waistband line (SkaterJerseyHem.BELT_Y_M)
 	Vector2(-0.210, 0.232),  # from here the tail hangs over the pants, flaring
 	Vector2(-0.280, 0.263),  # out round the thigh domes' widest
@@ -759,7 +759,7 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 		# Out of anatomical order — see the UpperSurface doc block.
 		_append_skinned_surface(m, fist, UpperBone.TOP_HAND, FIST_PART_FINGERS)
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_FINGERS)
-		_append_skinned_surface(m, _shared("pelvis", _build_pelvis), UpperBone.PELVIS)
+		_append_skinned_surface(m, shared_pelvis(tuck), UpperBone.PELVIS)
 		return m)
 
 
@@ -934,9 +934,18 @@ static func shared_knob() -> ArrayMesh:
 
 # Torso scales and facet count, so the seat continues the same silhouette it
 # emerges from rather than reading as a separate object under the jersey.
-static func _build_pelvis() -> ArrayMesh:
+static func _build_pelvis(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+	var deform := Callable()
+	if tuck != GearModelRegistry.TUCK_NONE:
+		var top: float = _PELVIS_PROFILE[0].x
+		deform = func(ring: PackedVector3Array, y: float, radius: float,
+				z_off: float) -> PackedVector3Array:
+			if y < top - 1e-5:
+				return ring
+			return SkaterJerseyHem.pad_ring(ring, y, radius, z_off, tuck,
+					_TORSO_X_SCALE, _TORSO_Z_SCALE)
 	return _build_lathe(_PELVIS_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_PELVIS_REAR_SWAY)
+			_PELVIS_REAR_SWAY, 0.0, deform)
 
 
 static func _build_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
@@ -974,8 +983,11 @@ static func shared_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
 	return _shared("torso_tuck_%d" % tuck, _build_torso.bind(tuck))
 
 
-static func shared_pelvis() -> ArrayMesh:
-	return _shared("pelvis", _build_pelvis)
+# The pants as a GearModelRegistry TUCK_* option stands their pad up.
+static func shared_pelvis(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+	if tuck == GearModelRegistry.TUCK_NONE or not GearModelRegistry.is_valid_tuck(tuck):
+		return _shared("pelvis", _build_pelvis)
+	return _shared("pelvis_tuck_%d" % tuck, _build_pelvis.bind(tuck))
 
 
 static func shared_head_ball() -> ArrayMesh:

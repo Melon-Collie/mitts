@@ -90,9 +90,20 @@ func _worst_clip(tuck: int, colliding: bool = true) -> float:
 			probe.update(rig)
 			var points: PackedVector3Array = flaps.hem_points()
 			for i: int in points.size():
-				if flaps.tuck_share[floori(float(i) / SkaterHemFlaps.POINTS_PER_COLUMN)] == 0.0:
+				if _loose(flaps, i):
 					worst = maxf(worst, probe.depth(points[i]))
 	return worst
+
+
+# Whether hem_points' sample `i` is loose cloth: its column untucked, and for a
+# sample toward the next column (the last two), that one too — a facet with a
+# tucked edge runs into the pants by design.
+func _loose(flaps: SkaterHemFlaps, i: int) -> bool:
+	var k: int = floori(float(i) / SkaterHemFlaps.POINTS_PER_COLUMN)
+	if flaps.tuck_share[k] > 0.0:
+		return false
+	return i % SkaterHemFlaps.POINTS_PER_COLUMN < 4 \
+			or flaps.tuck_share[(k + 1) % flaps.columns] == 0.0
 
 
 func test_the_loose_tail_never_goes_inside_the_legs() -> void:

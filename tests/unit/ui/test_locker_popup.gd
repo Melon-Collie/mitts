@@ -217,9 +217,13 @@ func test_a_tuck_pick_drapes_the_figure_and_rides_the_code() -> void:
 			"every tuck is offered")
 	assert_eq(_btn("_tuck_btn").selected, GearModelRegistry.TUCK_NONE)
 	var torso: MeshInstance3D = _mannequin().get("_torso") as MeshInstance3D
+	var pelvis: MeshInstance3D = _mannequin().get("_pelvis") as MeshInstance3D
 	var paint: Material = torso.get_surface_override_material(0)
+	var loose: Mesh = torso.mesh
 	_btn("_tuck_btn").item_selected.emit(GearModelRegistry.TUCK_RIGHT)
-	assert_eq(torso.mesh, SkaterMeshBuilder.shared_torso(GearModelRegistry.TUCK_RIGHT))
+	assert_ne(torso.mesh, loose, "the sweater re-drapes")
+	assert_eq(pelvis.mesh, SkaterMeshBuilder.shared_pelvis(GearModelRegistry.TUCK_RIGHT),
+			"and the pants stand their pad up")
 	assert_eq(torso.get_surface_override_material(0), paint, "the sweater keeps its paint")
 	watch_signals(_popup)
 	_popup.call("_done")

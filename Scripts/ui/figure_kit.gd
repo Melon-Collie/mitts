@@ -59,6 +59,11 @@ var shoulder_viewport: SubViewport = null
 var shoulder_decal: ShoulderDecal = null
 
 var _rig: Node3D = null
+# The figure's pose, as drape() last had it, and the tuck the torso was last
+# draped for — the drape is baked, not stepped, so it is rebuilt only when
+# either moves.
+var _drape_pose: Array[Transform3D] = []
+var _draped_tuck: int = -1
 
 
 # Every part under `rig`; the decal viewports under `viewport_host`.
@@ -104,8 +109,18 @@ func build(rig: Node3D, viewport_host: Node) -> void:
 	_build_stick()
 
 
+# Where the posed figure's torso, pants and legs are (each leg as its frame at
+# the hip, scaled by its bulk), for the jersey's tail to drape over; the next
+# dress() bakes it.
+func drape(torso_xf: Transform3D, pelvis_xf: Transform3D, legs: Array[Transform3D]) -> void:
+	var pose: Array[Transform3D] = [torso_xf, pelvis_xf, legs[0], legs[1]]
+	if pose != _drape_pose:
+		_drape_pose = pose
+		_draped_tuck = -1
+
+
 # Paints every part. After the pose: the shaft's grip wrap is laid along the
-# length the pose gave it.
+# length the pose gave it, and the jersey drapes over the legs it gave.
 func dress(colors: Dictionary, gear: GearStyleConfig, tape: StickTapeConfig,
 		skin_tone: int, player_name: String, jersey_number: int) -> void:
 	_paint_body(colors, skin_tone, player_name, jersey_number)
@@ -210,8 +225,16 @@ func _paint_body(colors: Dictionary, skin_tone: int, player_name: String,
 # The four gear picks, painted onto the pieces that wear them. A model paints
 # every zone of its piece at once, against this kit's colors.
 func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
-	# The tuck is the torso's shape; its one surface keeps the sweater's paint.
-	torso.mesh = SkaterMeshBuilder.shared_torso(gear.jersey_tuck)
+	# The tuck is the torso's shape and the pants' pad; the torso's one surface
+	# keeps the sweater's paint.
+	pelvis.mesh = SkaterMeshBuilder.shared_pelvis(gear.jersey_tuck)
+	if _drape_pose.is_empty():
+		torso.mesh = SkaterMeshBuilder.shared_torso(gear.jersey_tuck)
+	elif gear.jersey_tuck != _draped_tuck:
+		var legs: Array[Transform3D] = [_drape_pose[2], _drape_pose[3]]
+		torso.mesh = SkaterHemFlaps.baked_torso(gear.jersey_tuck, _drape_pose[0],
+				_drape_pose[1], legs)
+		_draped_tuck = gear.jersey_tuck
 	var team: Color = colors.primary
 	var accent: Color = colors.secondary
 	var light: Color = colors.light

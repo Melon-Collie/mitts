@@ -12,9 +12,10 @@ extends RefCounted
 #
 # A tuck (GearModelRegistry.TUCK_*) pulls the tail in under the pants'
 # waistband wherever it is tucked — a front corner, or all the way round — and
-# the flaps hold it there; the ring above it bunches out over the belt. In
-# between, the tail is lifted part of the way, which is the diagonal drape from
-# a tucked corner round to the loose back.
+# the flaps hold it there. There the pants' padded top stands up proud of the
+# jersey (pad_ring), the ring at its height goes in under it, and the ring
+# above that bunches out over it. In between, the tail is lifted part of the
+# way, which is the diagonal drape from a tucked corner round to the loose back.
 #
 # The one place in the skater rig where a vertex has more than one bone.
 # Everywhere else a pose write is exactly the node transform it replaced; here
@@ -22,11 +23,13 @@ extends RefCounted
 # else agrees with.
 
 # Torso-local heights: where the tail starts to leave the chest, the ring that
-# bunches over a tuck, the waistband line the tuck goes in at (just under the
-# pants' top, SkaterMeshBuilder._PELVIS_PROFILE[0]), and the hem itself (the
-# torso lathe's last station). The lathe has a ring at each of the last three.
+# bunches over a tuck's pad, the ring that goes in under the pad, the waistband
+# line the tuck goes in at (just under the pants' top,
+# SkaterMeshBuilder._PELVIS_PROFILE[0]), and the hem itself (the torso lathe's
+# last station). The lathe has a ring at each of the last four.
 const PIVOT_Y_M: float = -0.06
-const BLOUSE_Y_M: float = -0.125
+const BUNCH_Y_M: float = -0.07
+const PAD_Y_M: float = -0.125
 const BELT_Y_M: float = -0.15
 const HEM_Y_M: float = -0.350
 
@@ -34,12 +37,17 @@ const HEM_Y_M: float = -0.350
 # front.
 const CARRY_BACK: float = 0.3
 
-# Profile radii (before the lathe's x/z scale) of a tucked ring: the belt ring
-# just inside the pants' rim, the tail below it well inside the pants, and what
-# a full tuck's fabric adds to the ring that bunches over the belt.
+# Profile radii (before the lathe's x/z scale) of a tucked ring: the ring under
+# the pad, the belt ring just inside the pants' rim, the tail below it well
+# inside the pants, and what a full tuck's fabric adds to the ring that bunches
+# over the pad.
+const UNDER_PAD_RADIUS_M: float = 0.192
 const BELT_IN_RADIUS_M: float = 0.176
 const TUCKED_RADIUS_M: float = 0.165
 const BLOUSE_M: float = 0.012
+# How far a full tuck's pad stands the pants' top ring up, and flares it out.
+const PAD_RISE_M: float = 0.035
+const PAD_FLARE_M: float = 0.022
 # Share of the tail's length below the belt that a tuck keeps — the rest is
 # taken up inside the pants — and where the tucked tail centres: on the pants'
 # own rear sway there, which is less than the hanging jersey's.
@@ -47,9 +55,9 @@ const TUCKED_LENGTH_SHARE: float = 0.5
 const TUCKED_REAR_SWAY_M: float = 0.010
 
 # A corner tuck, by azimuth on the lathe (0 at the +Z back, toward +X, the
-# wearer's right): centred on the front of that hip, fully in within INNER of
-# it, loose past OUTER.
-const CORNER_AZIMUTH_RAD: float = deg_to_rad(144.0)
+# wearer's right): centred on the front of that hip, toward its side, fully in
+# within INNER of it, loose past OUTER.
+const CORNER_AZIMUTH_RAD: float = deg_to_rad(124.0)
 const CORNER_INNER_RAD: float = deg_to_rad(20.0)
 const CORNER_OUTER_RAD: float = deg_to_rad(70.0)
 
@@ -96,7 +104,7 @@ static func _smooth(t: float) -> float:
 # last repeating the first — at profile radius `radius` scaled by `xs` / `zs`.
 static func tuck_ring(ring: PackedVector3Array, y: float, radius: float, z_off: float,
 		tuck: int, phase: float, xs: float, zs: float) -> PackedVector3Array:
-	if tuck == GearModelRegistry.TUCK_NONE or y > BLOUSE_Y_M + 1e-5:
+	if tuck == GearModelRegistry.TUCK_NONE or y > BUNCH_Y_M + 1e-5:
 		return ring
 	var sides: int = ring.size() - 1
 	var out := PackedVector3Array(ring)
@@ -106,14 +114,34 @@ static func tuck_ring(ring: PackedVector3Array, y: float, radius: float, z_off: 
 		var r: float = radius
 		var ty: float = y
 		var tz: float = z_off
-		if y > BELT_Y_M + 1e-5:
+		if y > PAD_Y_M + 1e-5:
 			r += BLOUSE_M * t
+		elif y > BELT_Y_M + 1e-5:
+			r = lerpf(radius, UNDER_PAD_RADIUS_M, t)
+			tz = lerpf(z_off, TUCKED_REAR_SWAY_M, t)
 		else:
 			var inside: float = BELT_IN_RADIUS_M if y > BELT_Y_M - 1e-5 else TUCKED_RADIUS_M
 			r = lerpf(radius, inside, t)
 			ty = lerpf(y, BELT_Y_M + (y - BELT_Y_M) * TUCKED_LENGTH_SHARE, t)
 			tz = lerpf(z_off, TUCKED_REAR_SWAY_M, t)
 		out[k] = Vector3(sin(theta) * r * xs, ty, tz + cos(theta) * r * zs)
+	return out
+
+
+# The pants' top ring (waist-space height `y`, profile radius `radius`, `sides`
+# + 1 points from azimuth 0, behind the axis by `z_off`) as `tuck` stands its
+# pad up: raised and flared as far as each point is tucked.
+static func pad_ring(ring: PackedVector3Array, y: float, radius: float, z_off: float,
+		tuck: int, xs: float, zs: float) -> PackedVector3Array:
+	if tuck == GearModelRegistry.TUCK_NONE:
+		return ring
+	var sides: int = ring.size() - 1
+	var out := PackedVector3Array(ring)
+	for k: int in ring.size():
+		var theta: float = TAU * float(k) / float(sides)
+		var t: float = tuck_share(tuck, theta)
+		var r: float = radius + PAD_FLARE_M * t
+		out[k] = Vector3(sin(theta) * r * xs, y + PAD_RISE_M * t, z_off + cos(theta) * r * zs)
 	return out
 
 
@@ -156,7 +184,7 @@ static func append_torso(target: ArrayMesh, rest: ArrayMesh, posed: ArrayMesh, t
 			var azimuth: float = TAU * float(column) / float(sides) + phase
 			c = carry(azimuth)
 			t = tuck_share(tuck, azimuth)
-		t *= clampf((BLOUSE_Y_M - verts[i].y) / (BLOUSE_Y_M - BELT_Y_M), 0.0, 1.0)
+		t *= clampf((BUNCH_Y_M - verts[i].y) / (BUNCH_Y_M - PAD_Y_M), 0.0, 1.0)
 		var hips: float = h * lerpf(c, 1.0, t)
 		bones[i * 4] = torso_bind
 		bones[i * 4 + 1] = tail_bind

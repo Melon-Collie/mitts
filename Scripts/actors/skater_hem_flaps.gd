@@ -214,6 +214,51 @@ func set_state(state: PackedVector3Array, last_dt: float) -> void:
 	_started = true
 
 
+# Steps a still figure's drape is settled for: long past its swing's settling.
+const SETTLE_STEPS: int = 90
+
+
+# The torso as a figure that is not a skinned rig wears it (FigureKit — the
+# locker's mannequin, the lobby's bench): the tail settled hanging over the
+# figure's own pants and legs, and baked into the torso's own frame. `torso`,
+# `pelvis` and each leg's frame at its hip (as SkaterBodySkeleton's LEG bone
+# carries it, scaled by the leg's bulk) are the figure's parts in one upright
+# space.
+static func baked_torso(tuck: int, torso: Transform3D, pelvis: Transform3D,
+		legs: Array[Transform3D]) -> ArrayMesh:
+	var skeleton: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
+	var leg_bones: Array[int] = [SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.LEG_R]
+	skeleton.set_bone_pose(SkaterMeshBuilder.UpperBone.TORSO, torso)
+	skeleton.set_bone_pose(SkaterBodySkeleton.TAIL_BONE, torso)
+	skeleton.set_bone_pose(SkaterMeshBuilder.UpperBone.PELVIS, pelvis)
+	for i: int in 2:
+		skeleton.set_bone_pose(SkaterBodySkeleton.LEG_BONE_OFFSET + leg_bones[i], legs[i])
+	var flaps := SkaterHemFlaps.new()
+	flaps.setup(null, skeleton, tuck)
+	for i: int in SETTLE_STEPS:
+		flaps.step(1.0 / 60.0, Vector3(0.0, -flaps.gravity_m_s2, 0.0), i == SETTLE_STEPS - 1)
+	var arrays: Array = SkaterMeshBuilder.shared_torso(tuck).surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var bones: PackedInt32Array = SkaterMeshBuilder.shared_upper_skin_mesh(tuck) \
+			.surface_get_arrays(SkaterMeshBuilder.UpperSurface.TORSO)[Mesh.ARRAY_BONES]
+	var to_torso: Transform3D = torso.affine_inverse()
+	for v: int in verts.size():
+		var bind: int = bones[v * 4] - SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE
+		if bind < 0:
+			continue
+		var moved: Transform3D = to_torso * skeleton.get_bone_pose(
+				SkaterBodySkeleton.COLUMN_BONE_BASE + bind)
+		verts[v] = moved * verts[v]
+		normals[v] = (moved.basis * normals[v]).normalized()
+	skeleton.free()
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	var mesh := ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	return mesh
+
+
 # The skater's acceleration, skeleton space: what the balance lean leans toward
 # (BalanceRules — atan(|a| / g)), so it is read back off the lean.
 func _acceleration() -> Vector3:

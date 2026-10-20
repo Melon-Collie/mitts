@@ -8,9 +8,10 @@ extends Node3D
 # — so a pick is judged in the place it will actually be seen.
 #
 # Built from the individual part meshes rather than the skinned rig. That costs
-# nothing in fidelity: `shared_torso(tuck)` is the geometry the skinned mesh's
-# torso surface is posed as, so the silhouette at rest is identical while the
-# pose stays plain node transforms — no Skeleton3D, no bone poses, no gait.
+# nothing in fidelity: the parts are the skinned mesh's own geometry, so the
+# silhouette is identical while the pose stays plain node transforms — no
+# Skeleton3D, no bone poses, no gait. The jersey's tail, the one part the rig
+# drapes, is draped once per pose and baked (FigureKit.drape).
 #
 # Frame: the rest positions below are Scenes/Skater.tscn's, in MeshRoot-local
 # coordinates, so the figure is laid out in the rig's own numbers and faces −Z
@@ -308,6 +309,7 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	var thigh_swing := Basis(Vector3.RIGHT, PI * 0.5) if seated else Basis.IDENTITY
 	var below_knee := Vector3(0.0, hip_y - knee_y, knee_y - hip_y) if seated else Vector3.ZERO
 	var boot_y: float = _lift(_LEG_Y + _BOOT_DY, m_height) + below_knee.y
+	var legs: Array[Transform3D] = []
 	for i: int in 2:
 		var side: float = -1.0 if i == 0 else 1.0
 		_shoulders[i].transform = Transform3D(
@@ -317,6 +319,7 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 		var leg_x: float = side * _LEG_X * m_girth
 		var leg_bulk := Basis.from_scale(Vector3(m_girth, m_height, m_girth))
 		var hip := Vector3(leg_x, hip_y, 0.0)
+		legs.append(Transform3D(thigh_swing * leg_bulk, hip))
 		_thighs[i].transform = Transform3D(thigh_swing * leg_bulk, hip + thigh_swing
 				* Vector3(0.0, _lift(_LEG_Y + _THIGH_DY, m_height) - hip_y, 0.0))
 		_knees[i].transform = Transform3D(leg_bulk,
@@ -331,6 +334,8 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 		# longer foot — but its seat rides the lengthened shin like the rig's.
 		_boots[i].transform = Transform3D(_BOOT_ROT,
 				Vector3(leg_x, boot_y, _BOOT_DZ + below_knee.z))
+
+	_kit.drape(_torso.transform, _pelvis.transform, legs)
 
 	# The heel stands on whatever the skates do: the ice, or the bench floor
 	# in front of the knees.
