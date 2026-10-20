@@ -203,11 +203,10 @@ func spawn(
 # indicator, since real peers and bots are both positive.
 #
 # Mirrors spawn() above but skips the human-player surface (handedness pref,
-# jersey number from preferences, ready state). When `identity` is non-empty,
-# its name / number / handedness are used; otherwise bots fall back to
-# deterministic defaults: alternating handedness by slot, jersey numbers
-# 80+slot, name "Bot N". Stripe / glove / sock palette is generated the same
-# way as for humans via TeamColorRegistry so the visual matches.
+# jersey number from preferences, ready state): the bot's look comes from its
+# identity card through PlayerLook.for_bot. Stripe / glove / sock palette is
+# generated the same way as for humans via TeamColorRegistry so the visual
+# matches.
 func spawn_bot(
 		bot_id: int,
 		team_slot: int,
@@ -229,33 +228,17 @@ func spawn_bot(
 	record.secondary_color     = colors.get("secondary", colors.pants)
 	record.text_color          = colors.text
 	record.text_outline_color  = colors.text_outline
-	if identity.is_empty():
-		record.is_left_handed = (team_slot % 2 == 1)
-		record.player_name = "Bot %d" % (bot_id + 1)
-		record.jersey_number = 80 + bot_id
-		record.attributes = PlayerAttributes.neutral()
-	else:
-		record.is_left_handed = identity.get("is_left_handed", team_slot % 2 == 1)
-		record.player_name = identity.get("name", "Bot %d" % (bot_id + 1))
-		record.jersey_number = identity.get("number", 80 + bot_id)
-		# Identity dicts are normalized by BotIdentityRegistry to the native
-		# height/weight/gear keys.
-		record.attributes = PlayerAttributes.from_dict(identity)
-	# Skin: the roster may pin one ("skin"); otherwise a stable tone from the
-	# bot's name hash, so the roster shows variety and each bot keeps their
-	# look across sessions. Host-resolved — clients receive the final index
-	# through the spawn broadcast (GameManager seeds the peer map).
-	record.skin_tone = SkinToneRegistry.clamp_index(int(identity.get("skin",
-			record.player_name.hash() % SkinToneRegistry.TONES.size())))
-	# Tape job and gear/stick styling follow the same contract as skin: the
-	# card may pin packed codes ("tape_code" / "gear_style_code", authored via
-	# BotIdentityRegistry.normalize_entry); without a pin a stable look derives
-	# from the name, so hand-rolled user rosters still show variety. The
-	# from_code round-trip coerces a forged identity dict onto a legal look.
-	record.tape_code = StickTapeConfig.from_code(int(identity.get("tape_code",
-			BotIdentityRegistry.fallback_tape_code(record.player_name)))).to_code()
-	record.gear_style_code = GearStyleConfig.from_code(int(identity.get("gear_style_code",
-			BotIdentityRegistry.fallback_gear_style_code(record.player_name)))).to_code()
+	# Host-resolved — clients receive the final look through the spawn
+	# broadcast (GameManager seeds the peer map). The lobby's bench draws the
+	# same look from the same card.
+	var look: PlayerLook = PlayerLook.for_bot(identity, bot_id, team_slot)
+	record.is_left_handed = look.is_left_handed
+	record.player_name = look.player_name
+	record.jersey_number = look.jersey_number
+	record.attributes = look.attributes
+	record.skin_tone = look.skin_tone
+	record.tape_code = look.tape_code
+	record.gear_style_code = look.gear_style_code
 	var faceoff_pos: Vector3 = PlayerRules.faceoff_position(team.team_id, team_slot)
 
 	var puck: Puck = _puck_getter.call() as Puck

@@ -81,10 +81,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/game/player_prefs.gd": 1342,
 	# +20: helmet_rim_y, the rim's height as built, which the hair reads to hide
 	# its top edge under the shell — the one source of the rim profile.
-	"res://Scripts/actors/skater_mesh_builder.gd": 1482,
+	"res://Scripts/actors/skater_mesh_builder.gd": 1478,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 1304,
 	"res://Scripts/ui/career_stats_screen.gd": 1271,
-	"res://Scripts/ui/lobby_manager.gd": 1247,
+	"res://Scripts/ui/lobby_manager.gd": 1234,
 	"res://Scripts/actors/puck.gd": 1102,
 	"res://Scripts/ui/side_menu.gd": 995,
 	"res://Scripts/controllers/goalie_body_config_builder.gd": 1131,
@@ -119,7 +119,7 @@ const _API_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/domain/state/game_state_machine.gd": 39,
 	"res://Scripts/domain/rules/goalie_behavior_rules.gd": 36,
 	# +1: helmet_rim_y (see the size entry).
-	"res://Scripts/actors/skater_mesh_builder.gd": 31,
+	"res://Scripts/actors/skater_mesh_builder.gd": 30,
 	"res://Scripts/controllers/puck_controller.gd": 29,
 	"res://Scripts/game/shot_on_goal_tracker.gd": 26,
 	"res://Scripts/actors/goalie.gd": 26,

@@ -95,8 +95,9 @@ radius) into `AISkaterCaps`, so the AI never disagrees with the body.
 - **Bots** carry curated cards in `data/bot_identities.json`, read through
   `PlayerAttributes.from_dict`, which takes only the native keys.
 - **Online**, the build locks at join: six ints through `request_join` /
-  `spawn_remote_skater`, coerced by the host. In free play a pick re-applies
-  immediately.
+  `spawn_remote_skater`, coerced by the host. The lobby roster relays the
+  same join-time build (in a `PlayerLook`) so the bench figures are drawn at
+  it. In free play a pick re-applies immediately.
 
 ## Rules for changing it
 

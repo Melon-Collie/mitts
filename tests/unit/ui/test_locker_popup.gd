@@ -672,13 +672,10 @@ func test_the_sweater_is_painted_by_the_rink_decals() -> void:
 			PlayerAttributes.GEAR_BALANCED), StickTapeConfig.DEFAULT_CODE,
 			GearStyleConfig.new().to_code(), false, colors,
 			SkinToneRegistry.DEFAULT_INDEX, false, "Smith", 27)
-	var decal: JerseyDecal = _mannequin().get("_jersey_decal") as JerseyDecal
-	assert_eq(decal.player_name, "Smith")
-	assert_eq(decal.jersey_number, 27)
-	assert_eq(decal.crest_fruit, TeamCrest.fruit_for(colors.preset))
-	var shoulder: ShoulderDecal = _mannequin().get("_shoulder_decal") as ShoulderDecal
-	assert_eq(shoulder.jersey_number, 27)
-	var torso: MeshInstance3D = _mannequin().get("_torso") as MeshInstance3D
-	var viewport: SubViewport = _mannequin().get("_jersey_viewport") as SubViewport
-	assert_eq((torso.get_surface_override_material(0) as StandardMaterial3D).albedo_texture,
-			viewport.get_texture(), "the torso wears the decal's texture")
+	var kit: FigureKit = _mannequin().get("_kit") as FigureKit
+	assert_eq(kit.jersey_decal.player_name, "Smith")
+	assert_eq(kit.jersey_decal.jersey_number, 27)
+	assert_eq(kit.jersey_decal.crest_fruit, TeamCrest.fruit_for(colors.preset))
+	assert_eq(kit.shoulder_decal.jersey_number, 27)
+	assert_eq((kit.torso.get_surface_override_material(0) as StandardMaterial3D).albedo_texture,
+			kit.jersey_viewport.get_texture(), "the torso wears the decal's texture")
