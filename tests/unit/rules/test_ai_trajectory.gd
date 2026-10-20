@@ -611,3 +611,44 @@ func test_skater_approximations_are_unchanged() -> void:
 			Vector3(8.0, 0.0, 0.0), 60, 1.0 / 60.0)
 	assert_almost_eq(end.x, GameRules.INNER_HALF_WIDTH, 1e-3,
 			"a skater prediction still stops with its centre on the boundary")
+
+
+# The open-ice walk skips the board branch, so it must land where _step's walk
+# does, bit for bit, wherever it is taken; and a walk that meets the boards must
+# never be taken there.
+func test_the_open_ice_walk_is_the_board_aware_walk() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 6321
+	var open_walks: int = 0
+	for i: int in 3000:
+		var pos := Vector3(rng.randf_range(-13.0, 13.0), rng.randf_range(0.0, 0.1),
+				rng.randf_range(-30.0, 30.0))
+		var vel := Vector3(rng.randf_range(-30.0, 30.0), 0.0, rng.randf_range(-30.0, 30.0))
+		var steps: int = rng.randi_range(1, 40)
+		var dt: float = rng.randf_range(0.005, 0.1)
+		var puck: bool = rng.randf() < 0.5
+		var decel: float = GameRules.PUCK_ICE_DECEL_M_S2 if puck else 0.0
+		var cor: float = GameRules.PUCK_BOARD_COR_SCALE if puck else 0.0
+		var friction: float = GameRules.PUCK_BOARD_FRICTION if puck else 0.0
+		var margin: float = GameRules.PUCK_COLLISION_RADIUS if puck else 0.0
+		var cap: float = rng.randf_range(4.0, 12.0) if rng.randf() < 0.3 else 0.0
+		var accel := Vector3.ZERO
+		if rng.randf() < 0.2:
+			accel = Vector3(rng.randf_range(-5.0, 5.0), 0.0, rng.randf_range(-5.0, 5.0))
+		if AITrajectory._stays_off_boards(pos, vel, steps, dt, accel, margin):
+			open_walks += 1
+		var want: Array[Vector3] = []
+		var p: Vector3 = pos
+		var v: Vector3 = vel
+		for s: int in steps:
+			var stepped: Transform3D = AITrajectory._step(p, v, dt, decel, cor, accel, cap,
+					friction, margin)
+			p = stepped.origin
+			v = stepped.basis.x
+			want.append(p)
+		var got: Array[Vector3] = AITrajectory.predict(pos, vel, steps, dt, decel, cor, accel,
+				cap, friction, margin)
+		assert_eq(got, want, "predict, case %d" % i)
+		assert_eq(AITrajectory.predict_final(pos, vel, steps, dt, decel, cor, accel, cap,
+				friction, margin), p, "predict_final, case %d" % i)
+	assert_gt(open_walks, 600, "the fuzz takes the open-ice walk")

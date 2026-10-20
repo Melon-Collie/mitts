@@ -27,6 +27,15 @@ static func predict(pos: Vector3, vel: Vector3,
 	var out: Array[Vector3] = []
 	var p: Vector3 = pos
 	var v: Vector3 = vel
+	if _stays_off_boards(pos, vel, steps, dt, accel, board_margin):
+		for i: int in range(steps):
+			if max_speed_m_s > 0.0:
+				v = _capped(v, max_speed_m_s)
+			p += v * dt
+			if decel_m_s2 > 0.0:
+				v = _iced(v, decel_m_s2, dt)
+			out.append(p)
+		return out
 	for i: int in range(steps):
 		var stepped: Transform3D = _step(
 				p, v, dt, decel_m_s2, board_cor_scale, accel, max_speed_m_s, board_friction,
@@ -51,6 +60,14 @@ static func predict_final(pos: Vector3, vel: Vector3,
 		board_margin: float = 0.0) -> Vector3:
 	var p: Vector3 = pos
 	var v: Vector3 = vel
+	if _stays_off_boards(pos, vel, steps, dt, accel, board_margin):
+		for i: int in range(steps):
+			if max_speed_m_s > 0.0:
+				v = _capped(v, max_speed_m_s)
+			p += v * dt
+			if decel_m_s2 > 0.0:
+				v = _iced(v, decel_m_s2, dt)
+		return p
 	for i: int in range(steps):
 		var stepped: Transform3D = _step(
 				p, v, dt, decel_m_s2, board_cor_scale, accel, max_speed_m_s, board_friction,
@@ -72,14 +89,8 @@ static func _step(p: Vector3, v: Vector3, dt: float,
 	# 0.5·a·dt² per step, negligible over the pass / chase windows this serves.
 	if accel != Vector3.ZERO:
 		v += accel * dt
-	# Top-speed cap; 0 = uncapped. Only ever reduces an over-cap speed, so a cap
-	# ≥ the body's current speed never slows it (see AIPassLead).
 	if max_speed_m_s > 0.0:
-		var v_cap_mag: float = sqrt(v.x * v.x + v.z * v.z)
-		if v_cap_mag > max_speed_m_s:
-			var cap_scale: float = max_speed_m_s / v_cap_mag
-			v.x *= cap_scale
-			v.z *= cap_scale
+		v = _capped(v, max_speed_m_s)
 	p += v * dt
 
 	# Board interaction. With a bounce factor, REFLECT velocity off the boards
@@ -116,20 +127,60 @@ static func _step(p: Vector3, v: Vector3, dt: float,
 				v.z = v_xz.y
 	p = Vector3(clamped_xz.x, p.y, clamped_xz.y)
 
-	# Coulomb friction, clamped at zero so a slow puck stops rather than reversing.
 	if decel_m_s2 > 0.0:
-		var v_xz_mag: float = sqrt(v.x * v.x + v.z * v.z)
-		if v_xz_mag > 0.001:
-			var decel_amount: float = decel_m_s2 * dt
-			if v_xz_mag <= decel_amount:
-				v.x = 0.0
-				v.z = 0.0
-			else:
-				var scale: float = (v_xz_mag - decel_amount) / v_xz_mag
-				v.x *= scale
-				v.z *= scale
+		v = _iced(v, decel_m_s2, dt)
 
 	return Transform3D(Basis(v, Vector3.ZERO, Vector3.ZERO), p)
+
+
+# Top-speed cap; 0 = uncapped. Only ever reduces an over-cap speed, so a cap
+# ≥ the body's current speed never slows it (see AIPassLead).
+static func _capped(v: Vector3, max_speed_m_s: float) -> Vector3:
+	var v_cap_mag: float = sqrt(v.x * v.x + v.z * v.z)
+	if v_cap_mag > max_speed_m_s:
+		var cap_scale: float = max_speed_m_s / v_cap_mag
+		v.x *= cap_scale
+		v.z *= cap_scale
+	return v
+
+
+# Coulomb friction, clamped at zero so a slow puck stops rather than reversing.
+static func _iced(v: Vector3, decel_m_s2: float, dt: float) -> Vector3:
+	var v_xz_mag: float = sqrt(v.x * v.x + v.z * v.z)
+	if v_xz_mag > 0.001:
+		var decel_amount: float = decel_m_s2 * dt
+		if v_xz_mag <= decel_amount:
+			v.x = 0.0
+			v.z = 0.0
+		else:
+			var scale: float = (v_xz_mag - decel_amount) / v_xz_mag
+			v.x *= scale
+			v.z *= scale
+	return v
+
+
+# Clearance the open-ice walk keeps from the inset boards: far above the drift
+# float32 steps accumulate off the exact segment, so a walk cleared by it never
+# reaches the clamp.
+const _OFF_BOARDS_SLACK_M: float = 0.01
+
+
+# Whether a walk can be stepped without the board branch, which is then _step
+# exactly: the clamp returns an interior point unchanged. With no control
+# acceleration the cap and the friction only ever scale the velocity, never turn
+# it, so every step lies on the segment from `pos` to `pos + vel·T`. The inset
+# rink is convex, so both ends inside it puts the whole walk inside.
+static func _stays_off_boards(pos: Vector3, vel: Vector3, steps: int, dt: float,
+		accel: Vector3, board_margin: float) -> bool:
+	if accel != Vector3.ZERO:
+		return false
+	var inset: float = board_margin + _OFF_BOARDS_SLACK_M
+	var start := Vector2(pos.x, pos.z)
+	if GameRules.clamp_to_rink_inner(start, inset) != start:
+		return false
+	var span: float = dt * float(steps)
+	var end := Vector2(pos.x + vel.x * span, pos.z + vel.z * span)
+	return GameRules.clamp_to_rink_inner(end, inset) == end
 
 
 # Position at a single lead time. Steps default to 6 — granular enough that the
