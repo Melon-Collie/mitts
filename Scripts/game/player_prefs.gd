@@ -277,7 +277,8 @@ var gi_mode: int = GI_MODE_OFF
 var shadow_quality: int = SHADOW_QUALITY_HIGH
 var crowd_density: int = CROWD_DENSITY_HIGH
 var ice_scratches_enabled: bool = true
-# The sponsor panels on the dasher boards and the logos under the ice.
+# The sponsor panels on the dasher boards, the logos under the ice, and the
+# ribbon board in the stands.
 var arena_ads_enabled: bool = true
 var puck_shadow_enabled: bool = true
 # CPU knobs, applied in apply_video: see SkaterShadowProxy and SkaterAnimationLod.
@@ -886,6 +887,8 @@ func apply_video() -> void:
 	var stands := scene.find_child("ArenaStands", true, false) as Node3D
 	if stands != null:
 		stands.visible = (crowd_density != CROWD_DENSITY_OFF)
+		if stands is ArenaStands:
+			(stands as ArenaStands).set_ads_shown(arena_ads_enabled)
 		if crowd_density != CROWD_DENSITY_OFF and stands.has_method("set_crowd_rows"):
 			if crowd_density == CROWD_DENSITY_HIGH:
 				stands.call("set_crowd_rows",

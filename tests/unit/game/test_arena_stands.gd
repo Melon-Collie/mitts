@@ -264,3 +264,27 @@ func test_terrace_mesh_is_flat_through_the_bench_cutout() -> void:
 			outside += 1
 	assert_gt(inside, 0, "the cutout's tread band should exist in the mesh")
 	assert_gt(outside, 0, "the same band outside the cutout should still step up")
+
+
+func test_hiding_ads_hides_the_ribbon_and_stops_its_scroll() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	var ribbon := stands.find_child("RibbonBoard", false, false) as MeshInstance3D
+	stands.set_ads_shown(false)
+	assert_same(stands.find_child("RibbonBoard", false, false), ribbon,
+			"the switch must not rebuild the bowl")
+	assert_false(ribbon.visible)
+	assert_false(stands.is_processing(), "a hidden board has nothing to scroll")
+	stands.set_ads_shown(true)
+	assert_true(ribbon.visible)
+	assert_true(stands.is_processing())
+
+
+func test_a_build_with_ads_off_hides_the_ribbon() -> void:
+	var stands: ArenaStands = ArenaStands.new()
+	stands.set_crowd_rows(3, 2)
+	stands.set_ads_shown(false)
+	add_child_autofree(stands)
+	var ribbon := stands.find_child("RibbonBoard", false, false) as MeshInstance3D
+	assert_not_null(ribbon, "the board is still built, only hidden")
+	assert_false(ribbon.visible)
+	assert_false(stands.is_processing())
