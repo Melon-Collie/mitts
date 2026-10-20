@@ -76,10 +76,6 @@ const _OUT_ENV: String = "KIT_PREVIEW_OUT"
 const _TEAMS_ENV: String = "KIT_PREVIEW_TEAMS"
 const _NAME_ENV: String = "KIT_PREVIEW_NAME"
 const _NUMBER_ENV: String = "KIT_PREVIEW_NUMBER"
-# The chest: "crest" for the team's crest, anything else for the wordmark; the
-# crest's design where it has several (a CrestFruits.VARIANT_NAMES entry).
-const _FRONT_ENV: String = "KIT_PREVIEW_FRONT"
-const _CREST_VARIANT_ENV: String = "KIT_PREVIEW_CREST_VARIANT"
 const _DEFAULT_NAME: String = "Player"
 const _DEFAULT_NUMBER: int = 19
 const _USER_JSON: String = "user://team_colors.json"
@@ -148,11 +144,7 @@ func _render() -> void:
 		_preset = TeamColorRegistry.get_preset(slot)
 		for side: int in 2:
 			var kit: Dictionary = _kit(side)
-			_jersey_decals[side].wordmark = String(_preset.name)
-			_jersey_decals[side].crest_id = (CrestFruits.resolve(String(_preset.name).to_lower(),
-					OS.get_environment(_CREST_VARIANT_ENV))
-					if OS.get_environment(_FRONT_ENV) == "crest" else "")
-			_jersey_decals[side].crest_preset = _preset
+			_jersey_decals[side].update_crest(TeamCrest.fruit_for(_preset), _preset)
 			_jersey_decals[side].update_jersey(kit.jersey.base,
 					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
 					kit.jersey.stripes, _player_name, _number, kit.text.color)

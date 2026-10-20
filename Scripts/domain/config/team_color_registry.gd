@@ -104,6 +104,9 @@ static func get_colors(slot: int, team_id: int) -> Dictionary:
 		"text":           kit.text.color,
 		"text_outline":   kit.text.outline,
 		"uniform":        kit,
+		# The whole team, both kits: the chest crest takes its colors from all of
+		# them, so it is the same crest home and away.
+		"preset":         preset,
 	}
 
 

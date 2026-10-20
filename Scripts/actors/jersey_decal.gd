@@ -50,18 +50,10 @@ const NUMBER_GAP_M: float = 0.012
 const NUMBER_EM_M: float = 0.25
 const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
 
-# The chest wordmark, half a turn from the back. It rises left to right and
-# shrinks from WORDMARK_MAX_EM_M until its horizontal extent fits
-# WORDMARK_SPAN_M — about the chest's flat width, so long names stay off the sides.
+# The chest crest (TeamCrest), half a turn from the back: 28 cm across, about a
+# real sweater's, with its top at the yoke line.
 const FRONT_CENTER_X: int = BACK_CENTER_X + IMG_W / 2
-const WORDMARK_ANGLE_RAD: float = -0.28
-const WORDMARK_MAX_EM_M: float = 0.13
-const WORDMARK_SPAN_M: float = 0.40
-const WORDMARK_CENTER_DROP_M: float = 0.21
 const CREST_RADIUS_M: float = 0.14
-const CREST_CENTER_DROP_M: float = 0.2
-# Cap height over em, for the glyph box's vertical half.
-const _CAP_HEIGHT_EM: float = 0.7
 
 var jersey_color: Color = Color.WHITE
 var yoke_color: Color = Color.WHITE
@@ -70,9 +62,8 @@ var stripes: Array[Dictionary] = []       # [{pos, width, color}]
 var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
-var wordmark: String = ""
-# A chest crest instead of the wordmark when `crest_id` (a CrestFruits id) is set.
-var crest_id: String = ""
+# The team's fruit (TeamCrest.fruit_for), or "" for a plain chest.
+var crest_fruit: String = ""
 var crest_preset: Dictionary = {}
 
 
@@ -87,38 +78,23 @@ func _draw() -> void:
 		if band.y > band.x:
 			draw_rect(Rect2(0, band.x, IMG_W, band.y - band.x), stripe.color, true)
 
+	var yoke_bottom_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y
 	draw_back_lettering(self, player_name, jersey_number, text_color, float(BACK_CENTER_X),
-			PX_PER_M, float(YOKE_BOTTOM_PX) / PX_PER_M.y)
-	if not crest_id.is_empty():
-		var r: Vector2 = PX_PER_M * CREST_RADIUS_M
-		TeamCrest.draw(self, crest_id, Transform2D(Vector2(r.x, 0.0),
-				Vector2(0.0, r.y), Vector2(FRONT_CENTER_X, CREST_CENTER_DROP_M * PX_PER_M.y)),
-				crest_preset)
-	elif not wordmark.is_empty():
-		_draw_wordmark(self, wordmark.to_upper(), text_color)
+			PX_PER_M, yoke_bottom_m)
+	if not crest_fruit.is_empty():
+		draw_chest_crest(self, crest_fruit, crest_preset, float(FRONT_CENTER_X), PX_PER_M,
+				yoke_bottom_m)
 
 
-# Set in metres (at the vertical texel density), rotated there, then stretched to
-# the horizontal one — so the slant, like the letters, is the shape it has on the body.
-static func _draw_wordmark(canvas: CanvasItem, s: String, color: Color) -> void:
-	var ref_size: int = roundi(WORDMARK_MAX_EM_M * PX_PER_M.y)
-	var width_m: float = FONT.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1,
-			ref_size).x / PX_PER_M.y
-	var cos_a: float = absf(cos(WORDMARK_ANGLE_RAD))
-	var sin_a: float = absf(sin(WORDMARK_ANGLE_RAD))
-	var extent_m: float = width_m * cos_a + WORDMARK_MAX_EM_M * _CAP_HEIGHT_EM * sin_a
-	var em_m: float = WORDMARK_MAX_EM_M * minf(1.0, WORDMARK_SPAN_M / extent_m)
-	var size: int = roundi(em_m * PX_PER_M.y)
-	var width: float = FONT.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
-	var stretch: float = PX_PER_M.x / PX_PER_M.y
-	var rot := Transform2D(WORDMARK_ANGLE_RAD, Vector2.ZERO)
-	var xform := Transform2D(Vector2(stretch * rot.x.x, rot.x.y),
-			Vector2(stretch * rot.y.x, rot.y.y),
-			Vector2(FRONT_CENTER_X, WORDMARK_CENTER_DROP_M * PX_PER_M.y))
-	canvas.draw_set_transform_matrix(xform)
-	canvas.draw_string(FONT, Vector2(-width * 0.5, size * _CAP_HEIGHT_EM * 0.5), s,
-			HORIZONTAL_ALIGNMENT_LEFT, -1, size, color)
-	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
+# A chest's crest, centred on `center_x` px with its unit circle's top at the
+# yoke line (`yoke_bottom_m` down from the top), drawn in metres through
+# `px_per_m` so it lands round on a texture whose texels are not square. The
+# goalie's chest draws through this too.
+static func draw_chest_crest(canvas: CanvasItem, fruit: String, preset: Dictionary,
+		center_x: float, px_per_m: Vector2, yoke_bottom_m: float) -> void:
+	var r: Vector2 = px_per_m * CREST_RADIUS_M
+	TeamCrest.draw(canvas, fruit, Transform2D(Vector2(r.x, 0.0), Vector2(0.0, r.y),
+			Vector2(center_x, (yoke_bottom_m + CREST_RADIUS_M) * px_per_m.y)), preset)
 
 
 # A back's name and number, laid out in metres down from the top of the back
@@ -171,4 +147,10 @@ func update_jersey(
 	player_name = p_name
 	jersey_number = p_number
 	text_color = t_color
+	queue_redraw()
+
+
+func update_crest(fruit: String, preset: Dictionary) -> void:
+	crest_fruit = fruit
+	crest_preset = preset
 	queue_redraw()

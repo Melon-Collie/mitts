@@ -13,15 +13,21 @@ const KEYLINE_WIDTH: float = 0.045
 const REUSE_MARGIN: float = 0.1
 
 
-# The crest for drawing `id` (a CrestFruits id), centred on `xform`'s origin with
-# the unit circle mapped through it, colored from `preset`.
-static func draw(canvas: CanvasItem, id: String, xform: Transform2D,
+# The team's fruit — its name, when CrestFruits draws one — or "" for no crest.
+static func fruit_for(preset: Dictionary) -> String:
+	var fruit: String = String(preset.get("name", "")).to_lower()
+	return fruit if CrestFruits.has(fruit) else ""
+
+
+# The crest for `fruit`, centred on `xform`'s origin with the unit circle mapped
+# through it, colored from `preset`.
+static func draw(canvas: CanvasItem, fruit: String, xform: Transform2D,
 		preset: Dictionary) -> void:
-	var colors: Array = team_colors(id, preset)
+	var colors: Array = team_colors(fruit, preset)
 	canvas.draw_set_transform_matrix(xform)
-	CrestFruits.draw(canvas, id, colors, KEYLINE_WIDTH * 2.0, preset.light)
-	CrestFruits.draw(canvas, id, colors, KEYLINE_WIDTH, dark_color(preset))
-	CrestFruits.draw(canvas, id, colors)
+	CrestFruits.draw(canvas, fruit, colors, KEYLINE_WIDTH * 2.0, preset.light)
+	CrestFruits.draw(canvas, fruit, colors, KEYLINE_WIDTH, dark_color(preset))
+	CrestFruits.draw(canvas, fruit, colors)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -32,12 +38,12 @@ static func dark_color(preset: Dictionary) -> Color:
 	return primary if primary.get_luminance() < secondary.get_luminance() else secondary
 
 
-# Drawing `id`'s parts, each snapped to the nearest color anywhere in the
-# team's palette or kits. A color the drawing asks for twice snaps once.
-static func team_colors(id: String, preset: Dictionary) -> Array:
+# `fruit`'s parts, each snapped to the nearest color anywhere in the team's
+# palette or kits. A color the drawing asks for twice snaps once.
+static func team_colors(fruit: String, preset: Dictionary) -> Array:
 	var pool: Array[Color] = []
 	_collect_colors(preset, pool)
-	var wanted: Array = CrestFruits.wanted_colors(id)
+	var wanted: Array = CrestFruits.wanted_colors(fruit)
 	var out: Array = []
 	for i: int in wanted.size():
 		var want: Color = wanted[i]

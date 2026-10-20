@@ -10,7 +10,7 @@ extends RefCounted
 #
 # Painting paths:
 #   - Torso  → SubViewport + JerseyDecal (base + collar + yoke + stripe array
-#     + name/number text). One viewport per skater.
+#     + name/number text + the team's chest crest). One viewport per skater.
 #   - Shoulders → shared SubViewport + ShoulderDecal (the yoke over the top,
 #     the shoulder color below, its own text color/outline).
 #   - Forearm / upper arm / socks → ImageTexture with horizontal bands stacked
@@ -171,6 +171,9 @@ func apply_uniform(colors: Dictionary) -> void:
 	_jersey_yoke_color = UniformPaint.yoke_color(uniform.jersey)
 	_jersey_collar_color = UniformPaint.collar_color(uniform.jersey)
 	_jersey_stripes = uniform.jersey.stripes
+	if _jersey_decal != null:
+		var preset: Dictionary = colors.get("preset", {})
+		_jersey_decal.update_crest(TeamCrest.fruit_for(preset), preset)
 	_rebuild_jersey_texture()
 
 	# Shoulder caps (decal repaint with shoulder-specific color + text).
