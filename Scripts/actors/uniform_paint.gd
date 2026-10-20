@@ -55,12 +55,33 @@ static func collar_color(jersey: Dictionary) -> Color:
 
 
 # The jersey's stripes with the yoke band first, over the torso side down to the
-# shoulder line — for h_stripes painters; JerseyDecal paints the same band.
+# shoulder line — for h_stripes painters; JerseyDecal paints the same bands.
 static func jersey_stripes(jersey: Dictionary) -> Array:
 	var frac: float = SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION
 	var out: Array = [{"pos": frac * 0.5, "width": frac, "color": yoke_color(jersey)}]
-	out.append_array(jersey.stripes)
+	for stripe: Dictionary in jersey.stripes:
+		out.append(jersey_side_stripe(stripe))
 	return out
+
+
+# The side height the kits' jersey stripe fractions are authored against. A band
+# in its lower half is a hem band and keeps its place above the hem; one in the
+# upper half keeps its place under the collar — so a sweater of another length
+# moves each band with the edge it trims, at the same width.
+const JERSEY_STRIPE_DESIGN_HEIGHT_M: float = 0.55
+
+
+# A kit jersey stripe {pos, width, color} as fractions of the torso side it
+# paints on.
+static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
+	var side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
+	var pos: float = float(stripe.pos)
+	var centre_m: float = pos * JERSEY_STRIPE_DESIGN_HEIGHT_M
+	if pos > 0.5:
+		centre_m += side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M
+	return {"pos": centre_m / side_m,
+			"width": float(stripe.width) * JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m,
+			"color": stripe.color}
 
 
 # A shoulder cap without its number: the yoke over its top, the cap's own color

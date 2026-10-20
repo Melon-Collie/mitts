@@ -33,6 +33,7 @@ LOCKER_SEC_STICK,STICK,PALO
 LOCKER_SEC_SKATES,SKATES,PATINES
 LOCKER_SEC_GLOVES,GLOVES,GUANTES
 LOCKER_SEC_HELMET,HELMET,CASCO
+LOCKER_SEC_JERSEY,JERSEY,CAMISETA
 LOCKER_CASE_HINT_MOUSE,Drag to turn · up and down to zoom,Arrastra para girar · arriba y abajo para acercar
 LOCKER_CASE_HINT_PAD,Right Stick to turn · up and down to zoom,Stick derecho para girar · arriba y abajo para acercar
 LOCKER_LOCKED_NOTE,Stick gear and blade profile are locked during online play — looks can still change.,El equipo del palo y el perfil de la cuchilla están bloqueados en partidas en línea — el aspecto aún puede cambiar.
@@ -111,6 +112,11 @@ GEAR_FACE_NONE,None,Ninguna
 GEAR_FACE_VISOR,Visor,Visera
 GEAR_FACE_CAGE,Cage,Rejilla
 GEAR_FACE_FISHBOWL,Fishbowl,Burbuja
+GEAR_TUCK_LABEL,Tuck,Metida
+GEAR_TUCK_NONE,Untucked,Por fuera
+GEAR_TUCK_LEFT,Left corner,Esquina izquierda
+GEAR_TUCK_RIGHT,Right corner,Esquina derecha
+GEAR_TUCK_FULL,Full tuck,Por dentro
 PLAYER_HAIR_LABEL,Hair:,Pelo:
 PLAYER_BEARD_LABEL,Beard:,Barba:
 PLAYER_HAIR_COLOR_LABEL,Color:,Color:

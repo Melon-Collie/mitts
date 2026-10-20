@@ -92,8 +92,10 @@ static func shared_mesh() -> ArrayMesh:
 		out[Mesh.ARRAY_BONES] = PackedInt32Array()
 		out[Mesh.ARRAY_WEIGHTS] = PackedFloat32Array()
 		out[Mesh.ARRAY_INDEX] = PackedInt32Array()
-		_append_mesh(out, SkaterMeshBuilder.shared_upper_skin_mesh(), 0,
-				SkaterMeshBuilder.UPPER_HEM_BIND, SkaterBodySkeleton.HEM_BONE)
+		_append_mesh(out, SkaterMeshBuilder.shared_upper_skin_mesh(), 0, {
+				SkaterMeshBuilder.UPPER_HEM_BIND: SkaterBodySkeleton.HEM_BONE,
+				SkaterMeshBuilder.UPPER_TAIL_BIND: SkaterBodySkeleton.TAIL_BONE,
+				SkaterMeshBuilder.UPPER_TAIL_HEM_BIND: SkaterBodySkeleton.TAIL_HEM_BONE})
 		_append_mesh(out, SkaterMeshBuilder.shared_leg_skin_mesh(),
 				SkaterBodySkeleton.LEG_BONE_OFFSET)
 		_merged = ArrayMesh.new()
@@ -110,10 +112,10 @@ static func shared_skin() -> Skin:
 
 
 # `bone_offset` turns a rig skin's bind index into the body skeleton's bone
-# index (the rig skins bind index i to bone offset + i), except `extra_bind`,
-# which binds to `extra_bone` (the upper skin's hem).
+# index (the rig skins bind index i to bone offset + i), except the binds in
+# `extra`, which name their own bones (the upper skin's jersey tail).
 static func _append_mesh(out: Array, src: ArrayMesh, bone_offset: int,
-		extra_bind: int = -1, extra_bone: int = -1) -> void:
+		extra: Dictionary = {}) -> void:
 	var verts: PackedVector3Array = out[Mesh.ARRAY_VERTEX]
 	var normals: PackedVector3Array = out[Mesh.ARRAY_NORMAL]
 	var bones: PackedInt32Array = out[Mesh.ARRAY_BONES]
@@ -127,8 +129,7 @@ static func _append_mesh(out: Array, src: ArrayMesh, bone_offset: int,
 		normals.append_array(arrays[Mesh.ARRAY_NORMAL] as PackedVector3Array)
 		var src_bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
 		for i: int in src_bones.size():
-			src_bones[i] = extra_bone if src_bones[i] == extra_bind \
-					else src_bones[i] + bone_offset
+			src_bones[i] = int(extra.get(src_bones[i], src_bones[i] + bone_offset))
 		bones.append_array(src_bones)
 		weights.append_array(arrays[Mesh.ARRAY_WEIGHTS] as PackedFloat32Array)
 		var src_indices: PackedInt32Array = arrays[Mesh.ARRAY_INDEX] \

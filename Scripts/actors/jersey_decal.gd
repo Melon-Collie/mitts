@@ -9,8 +9,8 @@ extends Node2D
 # of the skater (paired with the torso material's uv1_offset.x = UV_OFFSET_X).
 #
 # Stripes follow the v2 schema convention: each stripe has pos∈[0,1] (band
-# center) and width∈[0,1] (band height as a fraction of the visible torso
-# UV region). Stripes paint in array order; later overpaints earlier, so
+# center) and width∈[0,1] (band height), fractions of the side height the kits
+# are authored against (UniformPaint.jersey_side_stripe). Stripes paint in array order; later overpaints earlier, so
 # stacked stripes sharing pos with shrinking widths produce concentric
 # centered bands.
 
@@ -37,7 +37,7 @@ const TOP_CAP_RECT: Rect2 = Rect2(UV_OFFSET_X * IMG_W, SIDE_V_MAX_PX, IMG_W / 2,
 # height down SIDE_V_MAX_PX, so its texels are not square; lettering is sized
 # in metres and drawn through PX_PER_M so it lands undistorted.
 # test_lettering_scale.gd measures both against the mesh.
-const BACK_HEIGHT_M: float = 0.55
+const BACK_HEIGHT_M: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
 const BACK_GIRTH_M: float = 1.32
 const PX_PER_M: Vector2 = Vector2(IMG_W / BACK_GIRTH_M, SIDE_V_MAX_PX / BACK_HEIGHT_M)
 
@@ -110,12 +110,12 @@ static func draw_back_lettering(canvas: CanvasItem, p_name: String, number: int,
 			name_top_m + NAME_EM_M + NUMBER_GAP_M, center_x, px_per_m, color)
 
 
-# Converts a v2 stripe {pos, width} over a region of height region_px into
-# [y_start, y_end] pixel coords, clamped to the region. width is the band's
-# total height as a fraction of the region; pos is the center.
+# Converts a kit stripe {pos, width} into [y_start, y_end] pixel coords on the
+# side, which is `region_px` tall, clamped to it.
 static func _stripe_band(stripe: Dictionary, region_px: int) -> Vector2i:
-	var center: float = float(stripe.pos) * float(region_px)
-	var half: float   = float(stripe.width) * float(region_px) * 0.5
+	var side: Dictionary = UniformPaint.jersey_side_stripe(stripe)
+	var center: float = float(side.pos) * float(region_px)
+	var half: float   = float(side.width) * float(region_px) * 0.5
 	var y0: int = clampi(int(round(center - half)), 0, region_px)
 	var y1: int = clampi(int(round(center + half)), 0, region_px)
 	return Vector2i(y0, y1)

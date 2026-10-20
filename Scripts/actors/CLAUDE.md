@@ -13,7 +13,7 @@ delegates to.
 | holder | class | what it owns |
 |---|---|---|
 | `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
-| `_arms` | `SkaterArmRig` | the upper bones: torso, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the head pieces (face gear, hair and brows, on one bone attachment) |
+| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the gear meshes (the tuck's upper mesh; face gear, hair and brows on one bone attachment) |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
@@ -72,10 +72,14 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
   WAIST  half the trunk's twist — the pelvis (shorts) rides it
     SPINE  the fold about the hips, then the rest of the twist, then the
            reach lean, less the lean the trunk hands back; torso and caps
-      HEM    under the torso: the jersey's loose lower half, swung on a lag of
-             the balance lean (SkaterJerseyHem) — the one blended-weight
-             surface in the rig
+      HEM    under the torso: the share of the jersey's tail the chest
+             carries, swung on a lag of the balance lean
       NECK   takes back part of the trunk's lean; the helmet
+    TAIL   the torso's placement hung from the waist: the share of the
+           jersey's tail the hips carry, and a tuck, held still
+      TAIL_HEM  under TAIL: the hips' share, swung as HEM is
+           (the tail is the one blended-weight surface in the rig —
+           SkaterJerseyHem)
 arms     roots, solved from the spine's shoulders to the gameplay hands
 ```
 
@@ -126,12 +130,19 @@ tells a steering correction from a turn, and gives the lean its weight: a held
 arc arrives in ~1 s, side-to-side steering shows as a few degrees.
 `test_lean_pivots_at_the_skates.gd`, `test_balance_rules.gd`.
 
-The shorts and the jersey are both rigid shells, so the twist between them
-shows as a seam wherever it happens. Half of it goes on the waist and half
-on the spine, and the pelvis profile above the hem is narrow enough to stay
-inside the jersey at the resulting angle.
-`tests/unit/actors/test_body_chain.gd` holds the chain and
-`test_pelvis_fills_the_seat.gd` the seat.
+The shorts are a rigid shell, so the twist between them and the chest shows
+somewhere. Half of it goes on the waist and half on the spine, and the
+pants' waistband is narrow enough to stay inside the loose jersey at the
+resulting angle. The jersey's tail takes the rest as cloth would: it hangs
+over the pants and blends from the chest onto the hips — wholly at the front,
+where the thighs push it, and only `CARRY_BACK` of it at the back, which rides
+up with the chest over the seat — so a fold or a twist bends the sweater
+rather than driving its hem through the pants. A tuck (the gear style's
+`jersey_tuck`) is which shared upper mesh the skater wears: the tucked tail is
+pulled inside the waistband and held on TAIL, which no swing moves.
+`tests/unit/actors/test_body_chain.gd` holds the chain,
+`test_pelvis_fills_the_seat.gd` the seat and `test_jersey_tuck.gd` the tail
+against the pants.
 
 ## The blades stand on the ice
 

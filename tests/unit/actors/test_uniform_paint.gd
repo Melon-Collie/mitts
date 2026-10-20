@@ -130,7 +130,24 @@ func test_the_jersey_stripes_paint_over_the_yoke() -> void:
 	var stripes: Array = UniformPaint.jersey_stripes(jersey)
 	assert_eq(stripes.size(), 2)
 	assert_eq(stripes[0].color, Color.BLUE, "the yoke goes down first")
-	assert_eq(stripes[1], hem, "so an authored stripe is never painted under it")
+	assert_eq(stripes[1], UniformPaint.jersey_side_stripe(hem),
+			"so an authored stripe is never painted under it")
+
+
+# Kits author stripe fractions against a 0.55 m sweater; on a sweater of any
+# length a hem band stays as far above the hem, a collar band as far under the
+# collar, and both as wide, in metres.
+func test_jersey_stripes_keep_their_place_on_the_edge_they_trim() -> void:
+	var design: float = UniformPaint.JERSEY_STRIPE_DESIGN_HEIGHT_M
+	var side: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
+	var hem: Dictionary = UniformPaint.jersey_side_stripe(
+			{"pos": 0.9, "width": 0.1, "color": Color.GREEN})
+	assert_almost_eq((1.0 - hem.pos) * side, 0.1 * design, 1e-6, "as far above the hem")
+	assert_almost_eq(hem.width * side, 0.1 * design, 1e-6, "as wide")
+	var collar: Dictionary = UniformPaint.jersey_side_stripe(
+			{"pos": 0.07, "width": 0.02, "color": Color.GREEN})
+	assert_almost_eq(collar.pos * side, 0.07 * design, 1e-6, "as far under the collar")
+	assert_almost_eq(collar.width * side, 0.02 * design, 1e-6, "as wide")
 
 
 # The yoke crosses the shoulder cap at one V; the cap's own color is below it.

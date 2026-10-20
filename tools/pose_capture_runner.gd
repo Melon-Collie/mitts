@@ -80,7 +80,7 @@ const CAM_HAND_FOV: float = 22.0
 # cam), cam_ahead (metres down the travel line), cam_hand ("top" / "bottom":
 # cam is then an offset from that hand, looked at through a narrow lens),
 # game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
-# check before the first tick). "readout": true also prints the pose's speed
+# check before the first tick), tuck (a GearModelRegistry TUCK_* option worn). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -258,6 +258,34 @@ const POSES: Array = [
 		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
 		[12, {"shove": true, "aim": Vector3(2.3, 0.0, 1.93)}],
 	]},
+	# ── Jersey ──────────────────────────────────────────────────────────────
+	# The sweater over the pants: loose, each corner (one from its own front
+	# three-quarter, one head-on, where the hem's slope off it reads), all the
+	# way in, and a corner from behind, where the back must still hang loose. Then the drape under
+	# the two things that move it most — the stance's fold, side-on, where the
+	# front must bunch over the pants rather than sink into them, and a stride.
+	# A skater at rest faces +Z, so the wearer's right is world −X.
+	{"name": "jersey_loose", "puck": false, "cam": Vector3(0.0, 0.2, 2.0),
+		"cam_aim": Vector3(0.0, -0.1, 0.0), "steps": [[40, {"aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_tuck_left", "puck": false, "tuck": GearModelRegistry.TUCK_LEFT,
+		"cam": Vector3(1.2, 0.2, 1.6), "cam_aim": Vector3(0.0, -0.1, 0.0),
+		"steps": [[40, {"aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_tuck_full", "puck": false, "tuck": GearModelRegistry.TUCK_FULL,
+		"cam": Vector3(0.0, 0.2, 2.0), "cam_aim": Vector3(0.0, -0.1, 0.0),
+		"steps": [[40, {"aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_tuck_right", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"cam": Vector3(0.0, 0.2, 2.0), "cam_aim": Vector3(0.0, -0.1, 0.0),
+		"steps": [[40, {"aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_tuck_right_rear", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"cam": Vector3(-1.2, 0.2, -1.6), "cam_aim": Vector3(0.0, -0.1, 0.0),
+		"steps": [[40, {"aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_fold_loose", "puck": false, "cam": Vector3(2.6, 0.1, 0.4),
+		"steps": [[40, {"stance": true, "aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_fold_tucked", "puck": false, "tuck": GearModelRegistry.TUCK_RIGHT,
+		"cam": Vector3(2.6, 0.1, 0.4),
+		"steps": [[40, {"stance": true, "aim": Vector3(0.0, 0.0, 3.0)}]]},
+	{"name": "jersey_stride_loose", "puck": false, "cam": Vector3(2.6, 0.1, 0.0),
+		"steps": [[64, {"move": Vector2(0.0, -1.0), "aim": Vector3(0.0, 0.0, -3.0)}]]},
 	# ── Dive ────────────────────────────────────────────────────────────────
 	# Stance + block out of a skate: down and sliding on, laid out across the
 	# line of travel toward the cursor, stick along the ice. Mid-slide.
@@ -468,6 +496,10 @@ func _build_actor() -> void:
 	_skater.set_physics_process(false)
 
 	var attrs := PlayerAttributes.new(BUILD_HEIGHT_IN, BUILD_WEIGHT_LB, 1, 1, 1, 1)
+	var gear := GearStyleConfig.new()
+	gear.jersey_tuck = int((_poses[_pose_index] as Dictionary).get("tuck",
+			GearModelRegistry.TUCK_NONE))
+	_skater.set_gear_style(gear)
 	# Blueberry's home kit, deliberately: these tiles are read for where one
 	# piece of the body ends and the next begins, and that needs a jersey, a
 	# pair of pants and a stripe on them that are all told apart at 384 px.

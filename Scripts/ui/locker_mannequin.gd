@@ -8,10 +8,9 @@ extends Node3D
 # — so a pick is judged in the place it will actually be seen.
 #
 # Built from the individual part meshes rather than the skinned rig. That costs
-# nothing in fidelity: `shared_torso()` and the skinned mesh's torso surface are
-# the same cached `_shared("torso", ...)` geometry, so the silhouette is
-# identical while the pose stays plain node transforms — no Skeleton3D, no bone
-# poses, no gait.
+# nothing in fidelity: `shared_torso(tuck)` is the geometry the skinned mesh's
+# torso surface is posed as, so the silhouette at rest is identical while the
+# pose stays plain node transforms — no Skeleton3D, no bone poses, no gait.
 #
 # Frame: the rest positions below are Scenes/Skater.tscn's, in MeshRoot-local
 # coordinates, so the figure is laid out in the rig's own numbers and faces −Z

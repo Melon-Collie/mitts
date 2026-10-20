@@ -60,7 +60,7 @@ const RES_JSON_PATH:  String = "res://data/bot_identities.json"
 
 const _TAPE_KEYS: Array[String] = ["tape_blade", "tape_span", "tape_knob", "knob_style"]
 const _GEAR_KEYS: Array[String] = ["skate_model", "glove_model", "lace_color",
-		"stick_model", "helmet_face"]
+		"stick_model", "helmet_face", "jersey_tuck"]
 const _HAIR_KEYS: Array[String] = ["hair_style", "facial_hair", "hair_color"]
 
 # TapeColorRegistry indices the fallback tables reach for by name (same local-
@@ -122,6 +122,13 @@ const _FB_FACIAL: Array[int] = [HairStyleRegistry.FACIAL_NONE, HairStyleRegistry
 # HairStyleRegistry.COLORS indices: dark brown, black, brown, light brown,
 # blonde, red. Grey and white are left to curated veterans.
 const _FB_HAIR_COLOR: Array[int] = [0, 1, 2, 0, 3, 1, 4, 0, 2, 5, 0, 1]
+# Most of a bench wears the sweater loose; the odd skater tucks a front corner,
+# the forehand-side tuck a few stars made famous, or the whole tail.
+const _FB_TUCK: Array[int] = [GearModelRegistry.TUCK_NONE, GearModelRegistry.TUCK_NONE,
+		GearModelRegistry.TUCK_NONE, GearModelRegistry.TUCK_RIGHT,
+		GearModelRegistry.TUCK_NONE, GearModelRegistry.TUCK_NONE,
+		GearModelRegistry.TUCK_LEFT, GearModelRegistry.TUCK_NONE,
+		GearModelRegistry.TUCK_NONE, GearModelRegistry.TUCK_FULL]
 
 static var _identities: Array[Dictionary] = []
 static var _loaded: bool = false
@@ -261,13 +268,14 @@ static func normalize_entry(entry: Dictionary) -> Dictionary:
 					int(entry.get("lace_color", GearStyleConfig.LACE_DEFAULT_INDEX)),
 					int(entry.get("stick_model", 0)),
 					int(entry.get("helmet_face", GearModelRegistry.FACE_NONE)),
-					gear.hair_style, gear.facial_hair, gear.hair_color)
+					gear.hair_style, gear.facial_hair, gear.hair_color,
+					int(entry.get("jersey_tuck", GearModelRegistry.TUCK_NONE)))
 		if pins_hair:
 			gear = GearStyleConfig.new(gear.skate_model, gear.glove_model, gear.lace_color,
 					gear.stick_model, gear.helmet_face,
 					int(entry.get("hair_style", HairStyleRegistry.HAIR_SHORT)),
 					int(entry.get("facial_hair", HairStyleRegistry.FACIAL_NONE)),
-					int(entry.get("hair_color", 0)))
+					int(entry.get("hair_color", 0)), gear.jersey_tuck)
 		out["gear_style_code"] = gear.to_code()
 	return out
 
@@ -292,14 +300,15 @@ static func fallback_tape_code(bot_name: String) -> int:
 
 
 # Gear/stick/hair counterpart of fallback_tape_code; hash slices are disjoint
-# from the tape ones so the two looks vary independently. The face and the hair
-# draw from DERIVED hashes rather than yet-higher slices: String.hash is
+# from the tape ones so the two looks vary independently. The face, the hair and
+# the tuck draw from DERIVED hashes rather than yet-higher slices: String.hash is
 # djb2-style, so names sharing a prefix ("Bot 1".."Bot 12") only vary the low
 # ~25 bits and a bit-26 slice would deal every generic bot the same face.
 static func fallback_gear_style_code(bot_name: String) -> int:
 	var h: int = bot_name.hash()
 	var hf: int = ("%s/face" % bot_name).hash()
 	var hh: int = ("%s/hair" % bot_name).hash()
+	var ht: int = ("%s/tuck" % bot_name).hash()
 	return GearStyleConfig.new(
 			_FB_SKATE[(h >> 14) % _FB_SKATE.size()],
 			_FB_GLOVE[(h >> 17) % _FB_GLOVE.size()],
@@ -308,4 +317,5 @@ static func fallback_gear_style_code(bot_name: String) -> int:
 			_FB_FACE[(hf >> 2) % _FB_FACE.size()],
 			_FB_HAIR[(hh >> 2) % _FB_HAIR.size()],
 			_FB_FACIAL[(hh >> 6) % _FB_FACIAL.size()],
-			_FB_HAIR_COLOR[(hh >> 10) % _FB_HAIR_COLOR.size()]).to_code()
+			_FB_HAIR_COLOR[(hh >> 10) % _FB_HAIR_COLOR.size()],
+			_FB_TUCK[(ht >> 2) % _FB_TUCK.size()]).to_code()

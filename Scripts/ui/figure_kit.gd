@@ -5,8 +5,8 @@ extends RefCounted
 # parts are the rink's own shared part meshes (SkaterMeshBuilder) and the stick
 # assembly as the workbench builds it; the dressing is the sweater through the
 # rink's own decals (stripes, collar, yoke, crest, name and numbers), the kit,
-# the four gear picks, the hair and the stick's paint and tape. It builds and it
-# dresses; the figure holding it poses the parts — the locker stands it holding
+# the four gear picks, the jersey's tuck, the hair and the stick's paint and
+# tape. It builds and it dresses; the figure holding it poses the parts — the locker stands it holding
 # its stick, the lobby seats it on the bench.
 
 const KNOB_HEIGHT_M: float = 0.05
@@ -19,8 +19,8 @@ const _HELMET_ROUGH: float = 0.28
 const _STEEL_ROUGH: float = 0.25
 
 var torso: MeshInstance3D = null
-# The seat under the jersey hem — on a figure that never folds, simply the body
-# between hem and thighs.
+# The pants from the waistband down — the seat under the jersey's hem, and on a
+# tucked figure the waistband the jersey goes into.
 var pelvis: MeshInstance3D = null
 # Shell and head/neck skin as two surfaces, so the head rides the helmet's scale
 # exactly as it rides its bone. Face gear and hair are its children at identity.
@@ -210,6 +210,8 @@ func _paint_body(colors: Dictionary, skin_tone: int, player_name: String,
 # The four gear picks, painted onto the pieces that wear them. A model paints
 # every zone of its piece at once, against this kit's colors.
 func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
+	# The tuck is the torso's shape; its one surface keeps the sweater's paint.
+	torso.mesh = SkaterMeshBuilder.shared_torso(gear.jersey_tuck)
 	var team: Color = colors.primary
 	var accent: Color = colors.secondary
 	var light: Color = colors.light

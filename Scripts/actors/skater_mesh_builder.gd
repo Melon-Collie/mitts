@@ -32,42 +32,44 @@ const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.255, 0.185),   # trapezius slope over the shoulder pads
 	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the caps seat into it
 	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
-	Vector2(0.000, 0.212),   # barely tucked at the waist
-	Vector2(-0.150, 0.216),
-	Vector2(-0.230, 0.220),
-	Vector2(-0.275, 0.223),  # hem, at the primitive envelope's width
+	Vector2(0.000, 0.212),   # barely in at the waist
+	Vector2(-0.070, 0.214),
+	Vector2(-0.125, 0.218),  # bunches over a tuck (SkaterJerseyHem.BLOUSE_Y_M)
+	Vector2(-0.150, 0.219),  # the pants' waistband line (SkaterJerseyHem.BELT_Y_M)
+	Vector2(-0.210, 0.232),  # from here the tail hangs over the pants, flaring
+	Vector2(-0.280, 0.263),  # out round the thigh domes' widest
+	Vector2(-0.350, 0.278),  # hem, just under the hip pivots (SkaterJerseyHem.HEM_Y_M)
 ]
 # The yoke paints the torso side from the collar down to the shoulder line
 # (station 2), as a fraction of the side's height; the collar ring is the top cap.
+const TORSO_SIDE_HEIGHT_M: float = _TORSO_PROFILE[0].x - _TORSO_PROFILE[10].x
 const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2].x) \
-		/ (_TORSO_PROFILE[0].x - _TORSO_PROFILE[7].x)
+		/ TORSO_SIDE_HEIGHT_M
 # Rear (+Z is the back) shift per _TORSO_PROFILE ring — the hockey-butt sway:
 # the seat builds through the lower back and peaks at the hem that drapes
 # over it, while the chest rings stay centered so the belly keeps its line.
-const _TORSO_REAR_SWAY: Array[float] = [0.0, 0.0, 0.0, 0.0, 0.006, 0.018, 0.028, 0.032]
+const _TORSO_REAR_SWAY: Array[float] = [
+	0.0, 0.0, 0.0, 0.0, 0.006, 0.012, 0.018, 0.020, 0.026, 0.032, 0.036]
 # The pelvis, in the waist's space (y 0 is the trunk's fold pivot, the hip
-# pivots sit at −0.13). It is the seat the torso does NOT carry: the trunk texture
-# rotates the torso bone about that pivot, so at any fold worth seeing the
-# jersey hem swings up and away and leaves the body open from behind — a flat
-# bottom cap tipped into view over the bare space between the thighs. A real
-# pelvis does not fold with the spine, so this one does not fold with the torso
-# (SkaterArmRig.repose_bone leaves it out of the texture) and fills the seat at
-# every angle.
+# pivots sit at −0.13): the pants from the waistband down, and the seat the
+# torso does NOT carry. A real pelvis does not fold with the spine, so this one
+# does not fold with the torso (SkaterArmRig.repose_bone leaves it out of the
+# texture) and fills the seat at every angle.
 #
-# Above the hem it hides UNDER the jersey even with the trunk twisted on it:
-# both lathes are wider than deep, so the tucked rings are narrow enough that
-# their wide axis fits the jersey's deep one, and the seat flares below the hem.
+# Under a loose jersey it hides entirely, even with the trunk twisted on it: both
+# lathes are wider than deep, so the waistband is narrow enough that its wide
+# axis fits the jersey's deep one. A tuck goes in at its top ring.
 const _PELVIS_PROFILE: Array[Vector2] = [
-	Vector2(0.100, 0.150),   # waist, tucked up inside the hem
-	Vector2(0.020, 0.160),
-	Vector2(-0.070, 0.166),  # just above the hem
-	Vector2(-0.120, 0.200),  # the seat
+	Vector2(0.050, 0.186),   # the waistband, just over the jersey's belt line
+	Vector2(0.000, 0.190),
+	Vector2(-0.060, 0.196),
+	Vector2(-0.120, 0.205),  # the seat
 	Vector2(-0.170, 0.190),
 	Vector2(-0.215, 0.152),  # the leg line
 	Vector2(-0.260, 0.100),  # buried in the thighs
 ]
-# Hockey-butt sway, peaked at the seat and kept small under the hem.
-const _PELVIS_REAR_SWAY: Array[float] = [0.004, 0.010, 0.014, 0.028, 0.024, 0.012, 0.0]
+# Hockey-butt sway, peaked at the seat.
+const _PELVIS_REAR_SWAY: Array[float] = [0.006, 0.010, 0.016, 0.028, 0.024, 0.012, 0.0]
 
 # The thigh, with the hip joint on top of it. The upper four stations are a
 # DOME centred on the hip pivot (_HIP_PIVOT_IN_THIGH above the part's origin,
@@ -647,7 +649,7 @@ static func _along_z(src: ArrayMesh) -> ArrayMesh:
 # a subtree and pushes a global to the RenderingServer).
 #
 # Four properties make a pose write mean a plain local transform, and all four
-# have to hold: every vertex is weighted 1.0 to a single bone (the jersey's hem is
+# have to hold: every vertex is weighted 1.0 to a single bone (the jersey's tail is
 # the one exception — SkaterJerseyHem), the bone rests
 # are identity, the skin binds are identity, and each part's geometry is left in
 # its own local space. A skinned vertex is then exactly `bone_pose * v`.
@@ -674,8 +676,10 @@ enum UpperBone {
 	PELVIS,
 }
 const UPPER_BONE_COUNT: int = 15
-# The upper skin's bind for SkaterBodySkeleton.HEM_BONE, after the parts' own.
+# The upper skin's binds for the jersey tail's two bones, after the parts' own.
 const UPPER_HEM_BIND: int = UPPER_BONE_COUNT
+const UPPER_TAIL_BIND: int = UPPER_BONE_COUNT + 1
+const UPPER_TAIL_HEM_BIND: int = UPPER_BONE_COUNT + 2
 
 # Surfaces. One per bone for the first thirteen; the helmet is the exception,
 # carrying the shell and the head/neck skin as two surfaces of one bone (they
@@ -717,8 +721,12 @@ const UPPER_BONE_NODE: Array[String] = [
 ]
 
 
-static func shared_upper_skin_mesh() -> ArrayMesh:
-	return _shared("upper_skin", func() -> ArrayMesh:
+# One per GearModelRegistry TUCK_* option, alike but for the torso surface's
+# drape, so a skater's tuck is which shared mesh it wears.
+static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+	if not GearModelRegistry.is_valid_tuck(tuck):
+		tuck = GearModelRegistry.TUCK_NONE
+	return _shared("upper_skin_%d" % tuck, func() -> ArrayMesh:
 		var m := ArrayMesh.new()
 		var bone: ArrayMesh = shared_arm_bone_z()
 		var forearm: ArrayMesh = _forearm_bone_z()
@@ -739,8 +747,9 @@ static func shared_upper_skin_mesh() -> ArrayMesh:
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_BACK)
 		_append_skinned_surface(m, cuff, UpperBone.TOP_CUFF)
 		_append_skinned_surface(m, cuff, UpperBone.BOTTOM_CUFF)
-		SkaterJerseyHem.append_torso(m, _shared("torso", _build_torso), UpperBone.TORSO,
-				UPPER_HEM_BIND)
+		SkaterJerseyHem.append_torso(m, shared_torso(), shared_torso(tuck), tuck,
+				TAU * TORSO_U_PHASE, UpperBone.TORSO, UPPER_HEM_BIND, UPPER_TAIL_BIND,
+				UPPER_TAIL_HEM_BIND)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SHELL)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SKIN)
 		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_L)
@@ -760,6 +769,8 @@ static func shared_upper_skin() -> Skin:
 		for i: int in UPPER_BONE_COUNT:
 			_upper_skin.add_bind(i, Transform3D.IDENTITY)
 		_upper_skin.add_bind(SkaterBodySkeleton.HEM_BONE, Transform3D.IDENTITY)
+		_upper_skin.add_bind(SkaterBodySkeleton.TAIL_BONE, Transform3D.IDENTITY)
+		_upper_skin.add_bind(SkaterBodySkeleton.TAIL_HEM_BONE, Transform3D.IDENTITY)
 	return _upper_skin
 
 
@@ -873,9 +884,16 @@ static func _build_pelvis() -> ArrayMesh:
 			_PELVIS_REAR_SWAY)
 
 
-static func _build_torso() -> ArrayMesh:
+static func _build_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+	var phase: float = TAU * TORSO_U_PHASE
+	var deform := Callable()
+	if tuck != GearModelRegistry.TUCK_NONE:
+		deform = func(ring: PackedVector3Array, y: float, radius: float,
+				z_off: float) -> PackedVector3Array:
+			return SkaterJerseyHem.tuck_ring(ring, y, radius, z_off, tuck, phase,
+					_TORSO_X_SCALE, _TORSO_Z_SCALE)
 	return _build_lathe(_TORSO_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_REAR_SWAY, TAU * TORSO_U_PHASE)
+			_TORSO_REAR_SWAY, phase, deform)
 
 
 # Head ball at HEAD_RADIUS, sitting HEAD_FORWARD_M ahead of the helmet center,
@@ -893,8 +911,12 @@ static func _build_head() -> ArrayMesh:
 # Shared part accessors for out-of-game figures (the lobby's bench dummies, the
 # locker mannequin) so every rendered player body — live or furniture — wears
 # the same faceted set from the same cache.
-static func shared_torso() -> ArrayMesh:
-	return _shared("torso", _build_torso)
+# The torso as a GearModelRegistry TUCK_* option drapes it, vertex for vertex
+# the loose one with its tail moved.
+static func shared_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+	if tuck == GearModelRegistry.TUCK_NONE or not GearModelRegistry.is_valid_tuck(tuck):
+		return _shared("torso", _build_torso)
+	return _shared("torso_tuck_%d" % tuck, _build_torso.bind(tuck))
 
 
 static func shared_pelvis() -> ArrayMesh:
@@ -1217,9 +1239,13 @@ static func _build_skate() -> ArrayMesh:
 # Faceted solid of revolution over (y, radius) stations, with the cylinder UV
 # convention from the class doc block. Both end caps are emitted — the torso's
 # top cap is where the jersey yoke paints.
+# `ring_deform`, when given, takes each ring as built (with its rest height,
+# profile radius and rear shift) and returns where its points go instead; the
+# UVs stay the rest ring's.
 static func _build_lathe(profile: Array[Vector2], sides: int,
 		x_scale: float, z_scale: float,
-		z_offsets: Array[float] = [], phase: float = 0.0) -> ArrayMesh:
+		z_offsets: Array[float] = [], phase: float = 0.0,
+		ring_deform: Callable = Callable()) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
@@ -1239,6 +1265,8 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 		if z_off != 0.0:
 			for k in ring.size():
 				ring[k].z += z_off
+		if ring_deform.is_valid():
+			ring = ring_deform.call(ring, s.x, s.y, z_off)
 		rings.append(ring)
 		vs.append(0.5 * (y_top - s.x) / span)
 	for i in profile.size() - 1:
@@ -1254,7 +1282,13 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 	var bot_off: float = z_offsets[profile.size() - 1] \
 			if z_offsets.size() >= profile.size() else 0.0
 	_cap(st, rings[0], Vector3(0.0, y_top, top_off), Vector2(0.25, 0.75), true)
-	_cap(st, rings[rings.size() - 1], Vector3(0.0, y_bot, bot_off), Vector2(0.75, 0.75), false)
+	var bot_centre := Vector3(0.0, y_bot, bot_off)
+	if ring_deform.is_valid():
+		var last: PackedVector3Array = rings[rings.size() - 1]
+		bot_centre = Vector3.ZERO
+		for k in sides:
+			bot_centre += last[k] / float(sides)
+	_cap(st, rings[rings.size() - 1], bot_centre, Vector2(0.75, 0.75), false)
 	st.generate_normals()
 	return st.commit()
 

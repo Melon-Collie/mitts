@@ -14,8 +14,8 @@ extends Control
 #
 # Rows whose pick changes gameplay (stick gear, blade profile) carry the gold
 # asterisk the legend explains and lock during an online match — attributes
-# replicate at join time. Models, tape, laces and face gear are cosmetic and
-# never lock.
+# replicate at join time. Models, tape, laces, face gear and the jersey's tuck
+# are cosmetic and never lock.
 #
 # A sub-editor, not a committer: opened by PlayerSettingsPopup over its own
 # modal, it edits pending values and hands them back through `locker_edited` on
@@ -119,6 +119,7 @@ var _skate_btn: OptionButton = null
 var _lace_dd: SwatchDropdown = null
 var _glove_btn: OptionButton = null
 var _face_btn: OptionButton = null
+var _tuck_btn: OptionButton = null
 var _lock_label: Label = null
 
 # Display case.
@@ -459,6 +460,13 @@ func _build_gear_column(row: HBoxContainer) -> void:
 	_add_row(col, tr(&"GEAR_FACE_LABEL"), _face_btn, false, "",
 			LockerMannequin.Focus.HELMET)
 
+	col.add_child(_section_header(tr(&"LOCKER_SEC_JERSEY")))
+	_tuck_btn = _bare_option_button(_on_tuck_option_selected)
+	for i: int in GearModelRegistry.tuck_count():
+		_tuck_btn.add_item(tr(GearModelRegistry.TUCK_NAME_KEYS[i]), i)
+	_add_row(col, tr(&"GEAR_TUCK_LABEL"), _tuck_btn, false, "",
+			LockerMannequin.Focus.FULL)
+
 
 func _column(row: HBoxContainer) -> VBoxContainer:
 	var col := VBoxContainer.new()
@@ -729,6 +737,11 @@ func _on_face_option_selected(index: int) -> void:
 	_redress()
 
 
+func _on_tuck_option_selected(index: int) -> void:
+	_gear.jersey_tuck = index
+	_redress()
+
+
 # ── Rendering ────────────────────────────────────────────────────────────────
 
 # Re-dress the mannequin from the current picks. The stick gear rides the
@@ -757,6 +770,7 @@ func _refresh() -> void:
 	_profile_btn.select(clampi(_profile, 0, _PROFILE_KEYS.size() - 1))
 	_stick_model_btn.select(clampi(_gear.stick_model, 0, StickModelRegistry.count() - 1))
 	_face_btn.select(_gear.helmet_face)
+	_tuck_btn.select(_gear.jersey_tuck)
 	for btn: OptionButton in [_length_btn, _curve_btn, _flex_btn, _profile_btn]:
 		btn.disabled = _gear_locked
 	_lock_label.visible = _gear_locked

@@ -209,6 +209,24 @@ func test_the_figure_wears_the_pending_hair() -> void:
 	assert_eq(gear.hair_color, 6)
 
 
+# The tuck is the torso's shape: a pick re-drapes the figure's sweater (and keeps
+# its paint), and Done hands it back in the gear code.
+func test_a_tuck_pick_drapes_the_figure_and_rides_the_code() -> void:
+	_open()
+	assert_eq(_btn("_tuck_btn").item_count, GearModelRegistry.tuck_count(),
+			"every tuck is offered")
+	assert_eq(_btn("_tuck_btn").selected, GearModelRegistry.TUCK_NONE)
+	var torso: MeshInstance3D = _mannequin().get("_torso") as MeshInstance3D
+	var paint: Material = torso.get_surface_override_material(0)
+	_btn("_tuck_btn").item_selected.emit(GearModelRegistry.TUCK_RIGHT)
+	assert_eq(torso.mesh, SkaterMeshBuilder.shared_torso(GearModelRegistry.TUCK_RIGHT))
+	assert_eq(torso.get_surface_override_material(0), paint, "the sweater keeps its paint")
+	watch_signals(_popup)
+	_popup.call("_done")
+	var gear := GearStyleConfig.from_code(get_signal_parameters(_popup, "locker_edited")[5])
+	assert_eq(gear.jersey_tuck, GearModelRegistry.TUCK_RIGHT)
+
+
 # The stick is the piece the old gear workbench never showed. Pin that a curve
 # pick rebuilds the blade and a length pick moves the butt — the two stick gear
 # rows with geometry behind them.

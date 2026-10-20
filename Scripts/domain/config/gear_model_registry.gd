@@ -2,8 +2,8 @@ class_name GearModelRegistry
 extends RefCounted
 
 # The catalogue of skate and glove MODELS — the equipment a player picks in the
-# locker — plus the helmet FACE options (visor / cage / fishbowl; see
-# their own section below). A model is not a color pick: it is a fixed design
+# locker — plus the helmet FACE options (visor / cage / fishbowl) and the
+# jersey TUCK options (see their own sections below). A model is not a color pick: it is a fixed design
 # that paints every zone of the piece at once, the way buying a real pair
 # decides the boot, the ankle cuff and the accent band together.
 #
@@ -200,6 +200,32 @@ static func face_color(option: int) -> Color:
 
 static func face_roughness(option: int) -> float:
 	return _FACE_ROUGHNESS[option] if is_valid_face(option) else 0.0
+
+
+# ── Jersey tuck ──────────────────────────────────────────────────────────────
+# How the sweater's tail is worn: loose over the pants (the stock look), the
+# front corner on one side pushed into them, or tucked all the way round. Sides
+# are the wearer's own. Same wire rules as the face options. Cosmetic only.
+
+const TUCK_NONE: int = 0
+const TUCK_LEFT: int = 1
+const TUCK_RIGHT: int = 2
+const TUCK_FULL: int = 3
+
+const TUCK_NAME_KEYS: Array[StringName] = [
+	&"GEAR_TUCK_NONE",
+	&"GEAR_TUCK_LEFT",
+	&"GEAR_TUCK_RIGHT",
+	&"GEAR_TUCK_FULL",
+]
+
+
+static func tuck_count() -> int:
+	return TUCK_NAME_KEYS.size()
+
+
+static func is_valid_tuck(option: int) -> bool:
+	return option >= 0 and option < TUCK_NAME_KEYS.size()
 
 
 static func skate_count() -> int:
