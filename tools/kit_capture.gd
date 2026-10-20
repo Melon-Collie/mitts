@@ -152,7 +152,6 @@ func _render() -> void:
 					if crest_style >= 0 else "")
 			_jersey_decals[side].crest_style = maxi(crest_style, 0)
 			_jersey_decals[side].crest_preset = _preset
-			_jersey_decals[side].crest_kit = kit
 			_jersey_decals[side].update_jersey(kit.jersey.base,
 					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
 					kit.jersey.stripes, _player_name, _number, kit.text.color)

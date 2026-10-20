@@ -73,9 +73,8 @@ var text_color: Color = Color.BLACK
 var wordmark: String = ""
 # A chest crest instead of the wordmark when `crest_fruit` is set.
 var crest_fruit: String = ""
-var crest_style: int = TeamCrest.Style.FLAT
+var crest_style: int = TeamCrest.Style.OUTLINED
 var crest_preset: Dictionary = {}
-var crest_kit: Dictionary = {}
 
 
 func _draw() -> void:
@@ -95,7 +94,7 @@ func _draw() -> void:
 		var r: Vector2 = PX_PER_M * CREST_RADIUS_M
 		TeamCrest.draw(self, crest_fruit, crest_style, Transform2D(Vector2(r.x, 0.0),
 				Vector2(0.0, r.y), Vector2(FRONT_CENTER_X, CREST_CENTER_DROP_M * PX_PER_M.y)),
-				crest_preset, crest_kit)
+				crest_preset)
 	elif not wordmark.is_empty():
 		_draw_wordmark(self, wordmark.to_upper(), text_color)
 

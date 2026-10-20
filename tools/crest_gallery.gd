@@ -70,7 +70,7 @@ func _draw_sheet() -> void:
 				c.draw_rect(Rect2(x + 2.0, y + 2.0, _CELL - 4.0, _CELL - 4.0), kit.jersey.base)
 				var at := Vector2(x + _CELL * 0.5, y + _CELL * 0.5)
 				TeamCrest.draw(c, String(preset.name).to_lower(), style,
-						Transform2D(0.0, Vector2.ONE * _CREST_R, 0.0, at), preset, kit)
+						Transform2D(0.0, Vector2.ONE * _CREST_R, 0.0, at), preset)
 				if col == 0:
 					c.draw_string(font, Vector2(12.0, y + _CELL * 0.5 + 8.0), "%s %s"
 							% [TeamCrest.STYLE_NAMES[style].replace("_", " ").to_upper(),
