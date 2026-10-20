@@ -1592,9 +1592,9 @@ func _wants_deflect(input: InputState) -> bool:
 func _deflect_lift_share() -> float:
 	if puck == null:
 		return 0.0
-	_sample_deflect_puck_view(_deflect_puck_view)
-	var lift: float = DeflectReachRules.lift_to_meet(_deflect_puck_view.position,
-			_deflect_puck_view.velocity, skater.get_blade_contact_global(), puck.ice_height)
+	_sample_live_puck_view(_live_puck_view)
+	var lift: float = DeflectReachRules.lift_to_meet(_live_puck_view.position,
+			_live_puck_view.velocity, skater.get_blade_contact_global(), puck.ice_height)
 	if lift <= GameRules.PUCK_AIRBORNE_HEIGHT_M:
 		return 0.0
 	return minf(lift / blade_lift_height, 1.0)
@@ -3095,7 +3095,7 @@ class PuckView extends RefCounted:
 	var velocity: Vector3 = Vector3.ZERO
 
 var _one_timer_puck_view := PuckView.new()
-var _deflect_puck_view := PuckView.new()
+var _live_puck_view := PuckView.new()
 
 
 # Live puck: for a local player and for a bot, the sim and the puck view share
@@ -3104,13 +3104,11 @@ var _deflect_puck_view := PuckView.new()
 # the puck they aimed at, and judging the swing against the host's live puck
 # would slide their timing window by that lead.
 func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
-	out.position = puck.global_position
-	out.velocity = puck.linear_velocity
+	_sample_live_puck_view(out)
 
 
-# The puck a deflecting blade rises to meet: the host's live one decides the tip;
-# a client draws its own blade against the rendered one (LocalController).
-func _sample_deflect_puck_view(out: PuckView) -> void:
+# The puck as this machine sees it now; a client's is LocalController's override.
+func _sample_live_puck_view(out: PuckView) -> void:
 	out.position = puck.global_position
 	out.velocity = puck.linear_velocity
 
@@ -3215,12 +3213,14 @@ func one_timer_contact_back_time() -> float:
 # else) asks this — the release path asks one_timer_connects directly with its
 # own view of the puck.
 func one_timer_would_connect() -> bool:
+	var view: PuckView = _live_puck_view
+	_sample_live_puck_view(view)
 	var zone_world: Vector3 = skater.get_slapper_zone_global_position()
 	return ShotReleaseRules.one_timer_connects(
 			Vector2(zone_world.x, zone_world.z), slapper_zone_radius,
-			Vector2(puck.global_position.x, puck.global_position.z),
-			Vector2(puck.linear_velocity.x, puck.linear_velocity.z),
-			puck.is_airborne(),
+			Vector2(view.position.x, view.position.z),
+			Vector2(view.velocity.x, view.velocity.z),
+			view.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M,
 			one_timer_contact_back_time(), one_timer_leniency_time)
 
 

@@ -360,7 +360,7 @@ func _physics_process(delta: float) -> void:
 # post-catch when the pickup notify lands, but the rendered timeline trails
 # the newest snapshot by the interpolation delay, so at that moment it still
 # shows the pre-catch flight — which is also exactly what the player saw the
-# puck doing, and the flight the local deflect blade rises to meet. Client-only
+# puck doing, and the flight the local one-timer and deflect judge. Client-only
 # (the host reads the live analytic velocity).
 var _loose_vel_prev_pos: Vector3 = Vector3.INF
 var rendered_loose_velocity: Vector3 = Vector3.ZERO
