@@ -1,8 +1,7 @@
 extends GutTest
 
-# Parity fuzz: the C++ GDExtension IK solvers (NativeTopHandIK /
-# NativeBottomHandIK, native/src/) against their GDScript references
-# (TopHandIK / BottomHandIK). Seeded RNG, wide config/input ranges covering
+# Parity fuzz: the C++ GDExtension IK solver (NativeTopHandIK, native/src/)
+# against its GDScript reference (TopHandIK). Seeded RNG, wide config/input ranges covering
 # both regimes, ROM clamps, and the hand_y_max overshoot path.
 #
 # When the extension isn't built (fresh clone, CI without a native build),
@@ -146,32 +145,6 @@ func test_two_hand_reach_matches_native() -> void:
 					i, gd, cpp, target, sign_val])
 			return
 	pass_test("%d two_hand_reach fuzz cases within %f" % [FUZZ_ITERATIONS, TOLERANCE])
-
-
-func test_bottom_hand_solve_matches_native() -> void:
-	if _native_missing():
-		return
-	var native: RefCounted = ClassDB.instantiate(&"NativeBottomHandIK")
-	for i: int in FUZZ_ITERATIONS:
-		var cfg := BottomHandIK.Config.new()
-		cfg.hand_y = _rng.randf_range(-0.6, 0.2)
-		cfg.backhand_angle = _rng.randf_range(0.0, PI)
-		cfg.release_angle_max = _rng.randf_range(0.2, 2.0)
-		cfg.release_angle_band = _rng.randf_range(0.01, 1.0)
-		var rest: Vector3 = _random_shoulder() + Vector3(0.0, _rng.randf_range(-0.6, 0.2), 0.0)
-		var grip := Vector2(_rng.randf_range(-1.5, 1.5), _rng.randf_range(-1.5, 1.5))
-
-		var gd: Vector3 = BottomHandIK.solve(rest, grip, cfg)
-		native.hand_y = cfg.hand_y
-		native.release_angle_max = cfg.release_angle_max
-		native.release_angle_band = cfg.release_angle_band
-		var cpp: Vector3 = native.solve(rest, grip, cfg.backhand_angle)
-		var err: float = gd.distance_to(cpp)
-		if err > TOLERANCE:
-			fail_test("bottom-hand diverged at iter %d: gd=%s cpp=%s err=%f angle=%f" % [
-					i, gd, cpp, err, cfg.backhand_angle])
-			return
-	pass_test("%d bottom-hand fuzz cases within %f" % [FUZZ_ITERATIONS, TOLERANCE])
 
 
 class StubGameState extends Node:

@@ -14,6 +14,8 @@ extends GaitLayer
 # follow-through timer.
 
 const State = SkaterStateMachine.State
+# Seconds the release kick takes to come on: five ticks.
+const KICK_ATTACK_S: float = 0.04
 
 # Radians of lower-body rotation.y, republished by the coordinator for the pose
 # coordinator's yaw sum.
@@ -101,7 +103,10 @@ func advance(delta: float) -> bool:
 		if kt >= 1.0:
 			_kick_t = -1.0
 		else:
-			_kick_env = sin(PI * pow(kt, _controller.follow_through_arc_skew)) * _kick_power
+			# The arc's skew rises steeply from its first instant; the attack takes
+			# the edge off it, so the weight transfer starts rather than appears.
+			_kick_env = sin(PI * pow(kt, _controller.follow_through_arc_skew)) * _kick_power \
+					* smoothstep(0.0, KICK_ATTACK_S, _kick_t)
 	# Hips coil with the load (stick-side hip pulls back, riding the torso coil)
 	# and uncoil THROUGH the release — the stick-side hip drives forward past
 	# square, mirroring the follow-through's torso `through` term. Positive

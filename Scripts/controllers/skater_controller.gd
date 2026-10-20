@@ -215,6 +215,9 @@ var knockdown_sprawl_splay_deg: float = 18.0
 # Good range: 1.0 (very lazy) – 3.0 (snappy).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
+# How fast the body winds up a turn, rad/s²: a pivot's rate in ~50 ms, an aim
+# flick's in two or three ticks (FacingRules.turn_rate).
+var facing_turn_accel_max: float = 300.0
 # Where a skating skater's body heads (FacingRules); setup() derives the reach
 # edges from the ROM below, a carrier's backhand edge from its carry stop.
 var facing_rules: FacingRules.Config = FacingRules.Config.new()
@@ -384,6 +387,9 @@ var bh_free_hand_rest_arm: Vector3 = Vector3(0.2, -0.52, -0.35)
 # at the front of the swing: in toward the body, a little up, forward. The back
 # of the swing mirrors it.
 var bh_free_hand_swing_arm: Vector3 = Vector3(-0.12, 0.06, -0.28)
+# Both hands on, the drawn top hand's pump across the body at full stride
+# (SkaterIKCoordinator._stride_pump), metres in the upper body's frame.
+var stride_hand_pump_m: Vector3 = Vector3(0.035, 0.01, 0.0)
 # How quickly the bottom hand lets go and takes hold (rad/s, critically damped):
 # about a third of a second either way.
 var bh_release_omega: float = 15.0
@@ -1004,6 +1010,7 @@ var _elevation_level: int = 0
 var _aiming: SkaterAimingBehavior = SkaterAimingBehavior.new()
 var _pose: SkaterPoseCoordinator = SkaterPoseCoordinator.new()
 var _shot_pose: SkaterShotPoseCoordinator = SkaterShotPoseCoordinator.new()
+var _pose_bridge := SkaterPoseBridge.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
@@ -1302,6 +1309,7 @@ func build_ai_caps() -> AISkaterCaps:
 	caps.movement = _build_movement_config()
 	caps.facing_drag_speed = facing_drag_speed
 	caps.facing_drag_speed_braking = facing_drag_speed_braking
+	caps.facing_turn_accel_max = facing_turn_accel_max
 	caps.board_shield_probe = board_shield_probe
 	caps.board_shield_max_rad = deg_to_rad(board_shield_max_deg)
 	if skater != null:
@@ -1778,17 +1786,18 @@ func _process_input(input: InputState, delta: float) -> void:
 		# through reconcile replay) so it stays deterministic and never freezes for
 		# an off-screen scorer.
 		tick_celebration(delta)
-		# Goal celebration: the scorer raises the stick. Overrides the hand/
-		# blade pose the tick just placed — cosmetic-only (pickup is locked
-		# through GOAL_CELEBRATION), real ticks only, and gated to plain skating
-		# so a whiffed shot's follow-through isn't fought over. The render off-hand
-		# IK yields while this is active (see _render_pose_update) so the fist pump
-		# isn't clobbered a frame later.
-		if _celebration_timer > 0.0:
-			var cel_state: SkaterStateMachine.State = _sm.get_state()
-			if cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
-					or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
-				_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total)
+		# Goal celebration: the scorer raises the stick, over the hand/blade pose
+		# the tick just placed — cosmetic-only (pickup is locked through
+		# GOAL_CELEBRATION), real ticks only, and gated to plain skating so a
+		# whiffed shot's follow-through isn't fought over.
+		var cel_state: SkaterStateMachine.State = _sm.get_state()
+		if _celebration_timer > 0.0 and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
+				or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
+			_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total,
+					_celebration_total - _celebration_timer, _celebration_timer)
+		else:
+			_ik.hold_free_hand(Vector3.ZERO, 0.0)
+		_pose_bridge.settle(skater, _sm.get_state(), delta)
 	# Replay too: down with block held, nothing re-solves the stick, so the next
 	# tick's twist follows the one this leaves (Scripts/networking/CLAUDE.md).
 	_apply_down_pose()
@@ -1810,10 +1819,7 @@ func _render_pose_update(delta: float) -> void:
 	if not skater.on_camera():
 		return
 	_pose.apply_head_tracking_aim(_current_aim_world, delta)
-	# During a goal celebration the physics tick places the off-hand fist pump
-	# (apply_celebration_pose); yield so the base grip IK doesn't clobber it.
-	if _celebration_timer <= 0.0:
-		_ik.update_bottom_hand(delta)
+	_ik.update_bottom_hand(delta)
 
 
 # Render-rate knockdown fall: tip the whole cosmetic rig about the skates in the
@@ -2796,16 +2802,6 @@ func _enter_shot_block() -> void:
 		return
 	_sm.set_state(State.SHOT_BLOCKING)
 	skater.set_block_stance(true)
-	# Square the upper body and clear lean/lag so the choreographed block pose
-	# (authored in upper-body-local space) points straight along the snapped
-	# facing instead of inheriting residual twist from the prior state. The
-	# torso pipeline's block branch holds the yaw square for the duration and
-	# eases only the tip onto the down knee in from this cleared baseline.
-	_pose.reset_lean_and_lag()
-	skater.set_upper_body_rotation(0.0)
-	skater.set_upper_body_lean(0.0)
-	skater.set_lower_body_lean(0.0)
-	skater.set_lower_body_lag(0.0)
 	# Snap facing toward puck on entry — locked for duration of stance
 	var to_puck: Vector3 = puck.global_position - skater.global_position
 	to_puck.y = 0.0
@@ -2822,20 +2818,6 @@ func _enter_slapper_charge(input: InputState) -> void:
 		input.mouse_world_pos.z - skater.global_position.z)
 	_pose.facing = to_mouse.normalized() if to_mouse.length() > move_deadzone else _pose.facing
 	skater.set_facing(_pose.facing)
-	# Square the stance BEFORE locking the aim. The slapper holds a squared upper
-	# body (zero twist/lean), so the locked direction must be measured from THAT
-	# pose. Measuring first (as it did) built the blade world point through the
-	# residual skating twist/lean that's zeroed one line later — aiming from a
-	# pose that lasts zero frames, and worse, twist/lean are only loosely synced
-	# (both re-snap only at reconcile), so client and host
-	# baked different transient poses into the lock and diverged. From the squared
-	# stance the lock depends only on facing + body position + the fixed blade
-	# offset, which both machines agree on.
-	_pose.reset_lean_and_lag()
-	skater.set_upper_body_rotation(0.0)
-	skater.set_upper_body_lean(0.0)
-	skater.set_lower_body_lean(0.0)
-	skater.set_lower_body_lag(0.0)
 	# Lock aim direction from the squared blade-side release point → mouse. BOTS
 	# commit the direction instead (input.bot_slapper_aim_dir): the blade point
 	# below is a shoulder-anchored, attribute-scaled, facing-rotated offset roughly
@@ -2846,7 +2828,7 @@ func _enter_slapper_charge(input: InputState) -> void:
 		skater.shoulder.position.x + blade_side_sign * slapper_blade_x,
 		_ik.blade_y_local(),
 		skater.shoulder.position.z + slapper_blade_z)
-	var blade_world: Vector3 = skater.upper_body_to_global(blade_local)
+	var blade_world: Vector3 = _squared_upper_body_to_global(blade_local)
 	var aim_dir: Vector3 = ShotMechanics.slapper_aim_dir(
 		input.bot_slapper_aim_dir, input.mouse_world_pos, blade_world)
 	var to_mouse_from_blade := Vector2(aim_dir.x, aim_dir.z)
@@ -2870,6 +2852,22 @@ func _enter_slapper_charge(input: InputState) -> void:
 	if show_one_timer_indicator:
 		skater.set_slapshot_arrow(true, slapper_zone_offset_x, slapper_zone_offset_z, slapper_zone_radius)
 		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
+
+
+# Where an upper-body-local point lies with the torso squared to the facing (no
+# twist, no lean). The slapper locks its aim from there: the torso coils into
+# the wind-up from wherever it is, but a lock measured through the live twist
+# and lean would bake a transient pose that client and host hold only loosely
+# in sync into the shot.
+func _squared_upper_body_to_global(local: Vector3) -> Vector3:
+	var rot: Vector3 = skater.upper_body.rotation
+	var fold: float = skater.trunk_fold()
+	skater.set_upper_body_rotation(0.0)
+	skater.set_upper_body_lean(0.0)
+	var world: Vector3 = skater.upper_body_to_global(local)
+	skater.set_upper_body_rotation(rot.y)
+	skater.set_upper_body_lean(rot.x, rot.z, fold)
+	return world
 
 
 func _wrister_aim_dir(input: InputState) -> Vector3:

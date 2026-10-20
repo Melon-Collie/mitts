@@ -1,7 +1,7 @@
 extends GutTest
 
 # ── IK GDScript-vs-native micro-benchmark (report-only; NOT in the default
-# suite) ─ Times the top/bottom-hand IK solvers and the arm rig in their
+# suite) ─ Times the top-hand IK solver and the arm rig in their
 # GDScript reference form against the C++ GDExtension ports (native/src/),
 # including the boundary-crossing cost of the native calls (solve + get_hand +
 # get_blade is three crossings — the honest per-tick price, not just the math).
@@ -118,41 +118,6 @@ func test_top_hand_gdscript_vs_native() -> void:
 	var native_us: float = _results[1]["us"]
 	gut.p("  top-hand solve speedup: %.1fx" % (gd_us / native_us))
 	assert_true(_results.size() == 4, "benchmark produced rows")
-
-
-func test_bottom_hand_gdscript_vs_native() -> void:
-	if not ClassDB.class_exists(&"NativeBottomHandIK"):
-		pending("native extension not built — see native/README.md")
-		return
-	_results.clear()
-	var cfg := BottomHandIK.Config.new()
-	cfg.hand_y = -0.35
-	cfg.release_angle_max = 1.2
-	cfg.release_angle_band = 0.4
-	var native: RefCounted = ClassDB.instantiate(&"NativeBottomHandIK")
-	native.hand_y = cfg.hand_y
-	native.release_angle_max = cfg.release_angle_max
-	native.release_angle_band = cfg.release_angle_band
-
-	var shoulder := Vector3(0.22, 0.0, 0.0)
-	var grips: PackedVector2Array = _targets()
-
-	var t0: int = Time.get_ticks_usec()
-	for i: int in REPS:
-		cfg.backhand_angle = float(i & 7) * 0.3
-		var _h: Vector3 = BottomHandIK.solve(shoulder, grips[i & 7], cfg)
-	_report("bottom-hand GDScript", Time.get_ticks_usec() - t0)
-
-	t0 = Time.get_ticks_usec()
-	for i: int in REPS:
-		var _h: Vector3 = native.solve(shoulder, grips[i & 7], float(i & 7) * 0.3)
-	_report("bottom-hand native (1 crossing)", Time.get_ticks_usec() - t0)
-
-	_print_results()
-	var gd_us: float = _results[0]["us"]
-	var native_us: float = _results[1]["us"]
-	gut.p("  bottom-hand solve speedup: %.1fx" % (gd_us / native_us))
-	assert_true(_results.size() == 2, "benchmark produced rows")
 
 
 # The whole arm rebuild on a live rig (SkaterArmRig._update_arm): the textured

@@ -4,7 +4,8 @@ extends RefCounted
 # The carrier's near moves, skated: each of a fixed set of stick inputs held for
 # HORIZON_S from the carrier's real velocity and facing, through the movement
 # physics every skater runs (SkaterMovementRules.apply_movement), the facing the
-# pose coordinator turns him through (FacingRules at his own drag), and the
+# pose coordinator turns him through (FacingRules at his own drag, wound up at
+# his turn rate's limit), and the
 # body's rink and net clamps. What a move is priced on is where that leaves him.
 #
 # Moves are relative to `toward`, the direction of the carry's destination. A
@@ -66,6 +67,8 @@ var brake: Array[bool] = []
 var end_pos := PackedVector3Array()
 var end_vel := PackedVector3Array()
 var end_facing := PackedVector2Array()
+# The rate each move's facing ends turning at (rad/s, FacingRules.turn_rate's).
+var end_turn_rate := PackedFloat64Array()
 # The path met the boards or the cage and was held off them, as the body is.
 var touched_boundary: Array[bool] = []
 # MOVE_COUNT × SAMPLES positions, row-major by move.
@@ -84,31 +87,38 @@ func _init() -> void:
 	end_pos.resize(MOVE_COUNT)
 	end_vel.resize(MOVE_COUNT)
 	end_facing.resize(MOVE_COUNT)
+	end_turn_rate.resize(MOVE_COUNT)
 	touched_boundary.resize(MOVE_COUNT)
 	samples.resize(MOVE_COUNT * SAMPLES)
 	if native_factory.is_valid():
 		_native = native_factory.call()
+		# A binary built before the facing's turn rate rolls without it.
+		if not _native.has_method(&"get_end_turn_rate"):
+			_native = null
 
 
 # Rolls every move. `toward` is world XZ; it need not be normalised but must not
-# be zero. `facing` is the body's facing (world XZ, unit).
+# be zero. `facing` is the body's facing (world XZ, unit), `turn_rate` the rate
+# it is turning at (rad/s, Vector2.angle_to's sense: the wire's
+# facing_angular_velocity, a bearing's, negated).
 func roll_all(pos: Vector3, vel: Vector3, facing: Vector2, toward: Vector2,
-		caps: AISkaterCaps, has_puck: bool = true) -> void:
+		caps: AISkaterCaps, has_puck: bool = true, turn_rate: float = 0.0) -> void:
 	var t: Vector2 = toward.normalized()
 	for m: int in MOVE_COUNT:
 		_set_move(m, t)
 	if _native != null and _native_loaded(caps):
-		_native.roll_all(pos, vel, facing, t, has_puck, step_ticks)
+		_native.roll_all(pos, vel, facing, t, has_puck, step_ticks, turn_rate)
 		end_pos = _native.get_end_pos()
 		end_vel = _native.get_end_vel()
 		end_facing = _native.get_end_facing()
+		end_turn_rate = _native.get_end_turn_rate()
 		samples = _native.get_samples()
 		var touched: int = _native.get_touched_mask()
 		for m: int in MOVE_COUNT:
 			touched_boundary[m] = (touched >> m) & 1 == 1
 		return
 	for m: int in MOVE_COUNT:
-		_roll(m, pos, vel, facing, caps, has_puck)
+		_roll(m, pos, vel, facing, turn_rate, caps, has_puck)
 
 
 # Whether the kernel holds `caps`, loading them if not. A caps it cannot load
@@ -156,8 +166,8 @@ func _set_move(m: int, t: Vector2) -> void:
 # Between the corner arcs only the side boards bound the ice, and the cages sit
 # past the goal lines, so a body there further from the side boards than its
 # radius (the shield's probe, for the shield) skips each exactly.
-func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCaps,
-		has_puck: bool) -> void:
+func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, turn_rate: float,
+		caps: AISkaterCaps, has_puck: bool) -> void:
 	var cfg: SkaterMovementRules.MovementConfig = caps.movement
 	var braking: bool = brake[m]
 	# Skated as the bot skates it (AIBotMechanics.braked_stick): a brake is a
@@ -173,6 +183,7 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 	var p: Vector3 = pos
 	var v: Vector3 = vel
 	var f: Vector2 = facing
+	var rate: float = turn_rate
 	var touched: bool = false
 	var stance: bool = false
 	for i: int in range(step_ticks - 1, TICKS, step_ticks):
@@ -183,8 +194,10 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 						else SkaterMovementRules.Posture.UPRIGHT)
 		v.y = 0.0
 		var between_arcs: bool = absf(p.z) <= GameRules.CORNER_CENTER_Z
-		f = _face(f, cur, v, p, braking, stance, drag * dt, caps, has_puck,
+		var turned: Vector2 = _face(f, cur, v, p, braking, stance, drag * dt, caps, has_puck,
 				has_puck and not (between_arcs and absf(p.x) <= shield_x))
+		rate = FacingRules.turn_rate(rate, f.angle_to(turned) / dt, caps.facing_turn_accel_max, dt)
+		f = f.rotated(rate * dt)
 		p += v * dt
 		if absf(p.z) <= GameRules.CORNER_CENTER_Z and absf(p.x) <= contain_x:
 			if (i + 1) % _TICKS_PER_SAMPLE == 0:
@@ -209,13 +222,14 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCa
 	end_pos[m] = p
 	end_vel[m] = v
 	end_facing[m] = f
+	end_turn_rate[m] = rate
 	touched_boundary[m] = touched
 
 
 # SkaterPoseCoordinator.apply_facing for a cursor held along `cur`: the facing
 # rule's target (a carrier's pivoting at its carry stop, turned along the boards
 # for one on them), a chord lerp toward it, or turned by angle on the cursor's
-# side through a turn round.
+# side through a turn round — where the turn asks to be, before its wind-up.
 func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, stance: bool,
 		step: float, caps: AISkaterCaps, has_puck: bool, shield: bool) -> Vector2:
 	var rules: FacingRules.Config = caps.facing_rules

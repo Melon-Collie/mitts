@@ -52,6 +52,7 @@ func _place(pos: Vector3, vel: Vector3, facing: Vector2) -> void:
 	_skater.global_position = pos
 	_skater.velocity = vel
 	_controller._pose.facing = facing
+	_controller._pose.facing_turn_rate = 0.0
 	_skater.set_facing(facing)
 
 

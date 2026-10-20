@@ -727,6 +727,28 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
+### A change of who poses the stick is eased, not cut
+
+The tracked IK, the slapper's wind-up, the follow-throughs and the shot block
+each place the hand and blade from their own geometry, and none starts where the
+last left off — a change of owner moved the stick up to 1.8 m in a tick.
+`SkaterPoseBridge` runs after the tick's last write: on a change of owner it
+holds the stick last drawn and eases the new owner's pose in from it (0.15 s;
+0.05 s into a follow-through, which is the shot's own whip). It advances on live
+ticks only — reconcile treats the live tick as the truth, and a bridge advanced
+through a replay would play its ease twice — and its effect rides the hand and
+blade the wire already carries. The same rule shapes the rest of the
+hand-offs: a whip's attack never takes less than `WHIP_ATTACK_MIN_S`, the
+celebration's stick and fist pump ease in and out over `CELEBRATION_EASE_S`,
+and the slapper and block take their pose from the lean and twist they find
+rather than zeroing them first.
+
+**The stride's hand pump is drawn, never posed.** Both hands on, the stroke
+swings the top hand across the body (`SkaterIKCoordinator._stride_pump`), the
+stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
+which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
+every claim reads never takes it.
+
 ### The gait's numeric core is native
 
 Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the

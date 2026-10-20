@@ -117,6 +117,8 @@ var movement: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_co
 # The pose coordinator's facing lerp rates, per second (Agility-scaled).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
+# How fast it winds a turn up, rad/s² (FacingRules.turn_rate).
+var facing_turn_accel_max: float = 300.0
 # The body's contact disc (girth-scaled): how close to the boards and the cage its
 # centre can get.
 var body_radius: float = 0.35

@@ -7,7 +7,7 @@ class_name NativeKernels
 # (network_debug_overlay), so every pasted capture states its own engine.
 
 const KERNEL_CLASSES: Array[StringName] = [
-	&"NativeTopHandIK", &"NativeBottomHandIK",
+	&"NativeTopHandIK",
 	&"NativeSkaterMovement", &"NativePuckStep", &"NativeBladeDangle",
 	&"NativeArmRig", &"NativeSkaterGait", &"NativeLegChain", &"NativeCarryRollout",
 	&"NativeShotOdds",

@@ -826,7 +826,7 @@ void NativeSkaterGait::ease_mix(double delta) {
 	carve_signed = ease(carve_signed, E_CARVE, (target.carve + uncommitted) * target.side, k, delta);
 	mix.carve = std::abs(carve_signed);
 	mix.backward = maxd(ease(mix.backward, E_BACK, target.backward, k, delta), 0.0);
-	mix.shuffle = lerpd(mix.shuffle, target.shuffle, mind(c.shuffle_blend_speed * delta, 1.0));
+	mix.shuffle = maxd(ease(mix.shuffle, E_SHUFFLE, target.shuffle, c.shuffle_blend_speed, delta), 0.0);
 	mix.skid = maxd(ease(mix.skid, E_SKID, target.skid, k, delta), 0.0);
 	tight_signed = ease(tight_signed, E_TIGHT, target.tight * target.side, k, delta);
 	mix.tight = std::abs(tight_signed);

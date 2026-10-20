@@ -18,6 +18,8 @@ const State = SkaterStateMachine.State
 # How far past the blade's whole reach the boards and the near net must be for
 # the reach limit to cast no ray, metres: float room on the limit it skips.
 const _OPEN_ICE_MARGIN_M: float = 0.05
+# Seconds the stride's pump takes to hand the drawn hand to a shot and back.
+const PUMP_HANDOFF_S: float = 0.15
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -59,6 +61,11 @@ var _purpose_rim: float = -1.0
 # The bottom hand's eased release off the shaft, 0 held to 1 at rest, and its rate.
 var _bh_release: float = 0.0
 var _bh_release_vel: float = 0.0
+# A pose that takes the free hand off the stick (the celebration's fist pump):
+# where, and by how much.
+var _held_free_hand := Vector3.ZERO
+var _held_free_weight: float = 0.0
+var _pump_hold: float = 1.0
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
@@ -722,7 +729,8 @@ func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> Top
 # shaft and rest. A let-go hand swings with the stride.
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.get_blade_position()
-	var hand_local: Vector3 = _skater.get_top_hand_position()
+	_skater.set_hand_pump(_stride_pump(delta))
+	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
 	var reach: float = arm * _skater.arm_working_extension + _skater.shoulder_reach_m
@@ -753,11 +761,19 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	var rest_arm: Vector3 = _controller.bh_free_hand_rest_arm + _free_hand_swing(side)
 	var rest: Vector3 = shoulder + Vector3(rest_arm.x * side, rest_arm.y, rest_arm.z) * arm
 	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest, _bh_release)
+	if _held_free_weight > 0.0:
+		bh = bh.lerp(_held_free_hand, _held_free_weight)
 	# Off the stick, the hand hangs where the arm can put it.
 	var span: Vector3 = bh - shoulder
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
+
+# Takes the free hand to `pos` (upper-body local) by `weight`; 0 hands it back.
+func hold_free_hand(pos: Vector3, weight: float) -> void:
+	_held_free_hand = pos
+	_held_free_weight = weight
+
 
 # The let-go hand's swing off its rest, arm lengths (x out, y up, z back): it
 # comes forward and across as the leg on its own side pushes out, the way a
@@ -767,6 +783,24 @@ func _free_hand_swing(side: float) -> Vector3:
 		return Vector3.ZERO
 	var drive: float = clampf(_skating.push_strength, 0.0, 1.0)
 	return _controller.bh_free_hand_swing_arm * (side * sin(_skating.stride_phase) * drive)
+
+# Both hands on the stick, the stroke pumps them across the body with the
+# stride, the stick pivoting about its blade: drawn only (Skater.drawn_top_hand),
+# so the blade and the hand every claim reads stay where the tick put them.
+# While the tracked IK has the stick, handing over to the shots and the block,
+# which pose their own, across PUMP_HANDOFF_S.
+func _stride_pump(delta: float) -> Vector3:
+	if _skating == null:
+		return Vector3.ZERO
+	var state := _controller.get_shot_state() as State
+	var tracked: bool = SkaterPoseBridge.owner_of(state) == SkaterPoseBridge.Owner.TRACKED
+	if delta < 0.0:
+		_pump_hold = 1.0 if tracked else 0.0
+	else:
+		_pump_hold = move_toward(_pump_hold, 1.0 if tracked else 0.0, delta / PUMP_HANDOFF_S)
+	var drive: float = clampf(_skating.push_strength, 0.0, 1.0) * (1.0 - _bh_release) \
+			* smoothstep(0.0, 1.0, _pump_hold)
+	return _controller.stride_hand_pump_m * (sin(_skating.stride_phase) * drive)
 
 # ── The shoulder the top hand works from ───────────────────────────────────────
 # Where the top arm is drawn from — the trunk's shoulder, then the faceoff

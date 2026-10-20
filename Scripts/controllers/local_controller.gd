@@ -592,6 +592,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.
 	_pose.facing = server_state.facing
+	_pose.facing_turn_rate = -server_state.facing_angular_velocity
 	skater.set_facing(_pose.facing)
 	_sync_dive_layout()
 	_pose.lower_body_lag = 0.0

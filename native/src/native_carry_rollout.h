@@ -29,7 +29,7 @@ namespace mitts {
 	X(forehand_edge_rad) X(backhand_edge_rad) X(stance_square_max_speed) X(pivot_commit_rad)
 
 #define MITTS_ROLLOUT_BODY_TUNABLES(X) \
-	X(facing_drag_speed) X(facing_drag_speed_braking) X(body_radius) \
+	X(facing_drag_speed) X(facing_drag_speed_braking) X(facing_turn_accel_max) X(body_radius) \
 	X(board_shield_probe) X(board_shield_max_rad)
 
 class NativeCarryRollout : public godot::RefCounted {
@@ -83,6 +83,7 @@ class NativeCarryRollout : public godot::RefCounted {
 	godot::PackedVector3Array end_pos;
 	godot::PackedVector3Array end_vel;
 	godot::PackedVector2Array end_facing;
+	godot::PackedFloat64Array end_turn_rate;
 	godot::PackedVector3Array samples;
 	int64_t touched_mask = 0;
 
@@ -99,7 +100,7 @@ class NativeCarryRollout : public godot::RefCounted {
 			double upright_lateral_accel, bool was_holding) const;
 	void roll(int m, const godot::Vector2 &stick, const godot::Vector2 &cursor, bool braking,
 			const godot::Vector3 &pos, const godot::Vector3 &vel, const godot::Vector2 &facing,
-			bool has_puck, int64_t step_ticks);
+			double turn_rate, bool has_puck, int64_t step_ticks);
 
 protected:
 	static void _bind_methods();
@@ -120,11 +121,12 @@ public:
 	// for both paths).
 	void roll_all(const godot::Vector3 &pos, const godot::Vector3 &vel,
 			const godot::Vector2 &facing, const godot::Vector2 &toward, bool has_puck,
-			int64_t step_ticks);
+			int64_t step_ticks, double turn_rate);
 
 	godot::PackedVector3Array get_end_pos() const { return end_pos; }
 	godot::PackedVector3Array get_end_vel() const { return end_vel; }
 	godot::PackedVector2Array get_end_facing() const { return end_facing; }
+	godot::PackedFloat64Array get_end_turn_rate() const { return end_turn_rate; }
 	godot::PackedVector3Array get_samples() const { return samples; }
 	int64_t get_touched_mask() const { return touched_mask; }
 };

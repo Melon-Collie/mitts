@@ -279,7 +279,7 @@ func test_with_nothing_to_reach_for_the_stick_rests_in_both_hands() -> void:
 	var c: SkaterController = _make_controller()
 	_reach(c, 0.0, false)
 	var sk: Skater = c.skater
-	var hand: Vector3 = sk.top_hand.position
+	var hand: Vector3 = sk.drawn_top_hand()
 	var shaft: Vector3 = sk.get_blade_position() - hand
 	var bh: Vector3 = sk.bottom_hand.position
 	var t: float = clampf((bh - hand).dot(shaft) / shaft.length_squared(), 0.0, 1.0)
@@ -330,7 +330,8 @@ func test_a_carrier_keeps_both_hands_on_the_stick() -> void:
 			var c: SkaterController = _make_controller()
 			_carry(c, deg, skate)
 			var sk: Skater = c.skater
-			var hand: Vector3 = sk.top_hand.position
+			# The shaft as drawn, which the stride's pump pivots about the blade.
+			var hand: Vector3 = sk.drawn_top_hand()
 			var shaft: Vector3 = sk.get_blade_position() - hand
 			var bh: Vector3 = sk.bottom_hand.position
 			var t: float = clampf((bh - hand).dot(shaft) / shaft.length_squared(), 0.0, 1.0)

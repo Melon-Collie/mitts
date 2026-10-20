@@ -126,7 +126,7 @@ var _cross_signed: float = 0.0
 var _carve_signed: float = 0.0
 var _tight_signed: float = 0.0
 # The rate of each eased blend (EaseRules), by Eased.
-enum Eased { STRIDE, CROSS, CARVE, BACK, SKID, TIGHT, STOP, EFFORT, LOADED, INTENSITY, COUNT }
+enum Eased { STRIDE, CROSS, CARVE, BACK, SHUFFLE, SKID, TIGHT, STOP, EFFORT, LOADED, INTENSITY, COUNT }
 var _rates := PackedFloat64Array()
 var _prev_velocity: Vector3 = Vector3.ZERO
 var _have_prev_velocity: bool = false
@@ -691,9 +691,9 @@ func _stance(s: float) -> void:
 	bob = c.stride_bob_m * intensity * (1.0 - s * s) * (mix.stride + mix.backward + mix.crossover)
 
 
-# Every weight but the shuffle's eases on a spring (EaseRules), so a state
-# coming on or going off moves the legs from rest rather than in a corner; the
-# blend speeds are the first-order rates the springs stand in for.
+# Every weight eases on a spring (EaseRules), so a state coming on or going off
+# moves the legs from rest rather than in a corner; the blend speeds are the
+# first-order rates the springs stand in for.
 func _ease_mix(delta: float) -> void:
 	var c: SkaterController = _controller
 	var k: float = c.locomotion_blend_speed
@@ -711,8 +711,8 @@ func _ease_mix(delta: float) -> void:
 	mix.carve = absf(_carve_signed)
 	mix.backward = maxf(_ease(mix.backward, Eased.BACK, _target.backward, k, delta), 0.0)
 	# A step of the shuffle is short, and its cycle is laid from its first
-	# centimetre from the base closed: it comes on quickest, on the lag.
-	mix.shuffle = lerpf(mix.shuffle, _target.shuffle, minf(c.shuffle_blend_speed * delta, 1.0))
+	# centimetre from the base closed: it comes on quickest.
+	mix.shuffle = maxf(_ease(mix.shuffle, Eased.SHUFFLE, _target.shuffle, c.shuffle_blend_speed, delta), 0.0)
 	mix.skid = maxf(_ease(mix.skid, Eased.SKID, _target.skid, k, delta), 0.0)
 	_tight_signed = _ease(_tight_signed, Eased.TIGHT, _target.tight * _target.side, k, delta)
 	mix.tight = absf(_tight_signed)

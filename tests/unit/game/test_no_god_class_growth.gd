@@ -84,7 +84,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# cross-check's phase fields (read by puck play and the pose), and the
 	# body_check_received signal carrying the stagger strength.
 	# +2: the aim the cross-check was thrown at.
-	"res://Scripts/actors/skater.gd": 2812,
+	"res://Scripts/actors/skater.gd": 2823,
 	# +33: the cross-check claim and its landed broadcast (two RPC pairs).
 	"res://Scripts/networking/network_manager.gd": 2899,
 	"res://Scripts/game/tutorial_manager.gd": 2067,
@@ -94,7 +94,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# +39: the cross-check pose — the shaft across the chest, the wide grip.
 	# +8: _glove_spacing, the shaft the top glove takes up, which the drawn
 	# bottom grip and the carry's two-handed reach both keep clear of.
-	"res://Scripts/controllers/skater_ik_coordinator.gd": 1151,
+	"res://Scripts/controllers/skater_ik_coordinator.gd": 1185,
 	# +21: apply_scripted_grant / stage_scripted — the tutorial's teleports
 	# restart the swept interaction tests where the puck lands instead of
 	# sweeping the jump. +6: the pinch hop composed onto the contest exit.
@@ -138,7 +138,7 @@ const _API_SLACK: int = 3
 const _API_ALLOWANCE: Dictionary[String, int] = {
 	# +4: send/receive_cross_check_claim, send_cross_check_to_all, notify_cross_check.
 	"res://Scripts/networking/network_manager.gd": 212,
-	"res://Scripts/actors/skater.gd": 146,
+	"res://Scripts/actors/skater.gd": 148,
 	"res://Scripts/game/game_manager.gd": 63,
 	"res://Scripts/domain/state/player_attributes.gd": 41,
 	"res://Scripts/networking/network_telemetry.gd": 54,
