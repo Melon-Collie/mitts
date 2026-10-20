@@ -243,6 +243,22 @@ func _apply_lean() -> void:
 			upper_body_lean_roll + recoil_roll, velocity_lean_x)
 	_skater.set_lower_body_lean(velocity_lean_x * _controller.lower_body_pitch_follow)
 
+# Through a finish the hips square to the shot line and come back to the cursor
+# over the same tail as the torso and blade (ShotMechanics.follow_through_aim),
+# so they hold the finish with them rather than chase the live cursor.
+func _finish_facing_dir(cursor_dir: Vector2) -> Vector2:
+	var dir_world: Vector3 = _sm.shot_dir
+	if dir_world.length_squared() <= 0.0001 and _sm.follow_through_is_slapper:
+		dir_world = Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
+	var total: float = maxf(_sm.follow_through_duration_total, 0.001)
+	var t: float = clampf(1.0 - _sm.follow_through_timer / total, 0.0, 1.0)
+	var aim: Vector3 = ShotMechanics.follow_through_aim(dir_world,
+			Vector3(cursor_dir.x, 0.0, cursor_dir.y), t, _controller.follow_through_return_frac)
+	if aim.length_squared() < 0.0001:
+		return cursor_dir
+	return Vector2(aim.x, aim.z)
+
+
 func apply_facing(input: InputState, delta: float) -> void:
 	var s: SkaterStateMachine.State = _sm.get_state()
 	# A downed body doesn't steer: facing freezes while the knockdown timer runs
@@ -260,6 +276,8 @@ func apply_facing(input: InputState, delta: float) -> void:
 		)
 		if to_mouse.length() > _controller.move_deadzone:
 			var cursor_dir: Vector2 = to_mouse.normalized()
+			if s == State.FOLLOW_THROUGH:
+				cursor_dir = _finish_facing_dir(cursor_dir)
 			var lefty: bool = _skater.is_left_handed
 			var rules: FacingRules.Config = _controller.facing_rules
 			# A carrier's hips pivot where its blade stops on the backhand.
@@ -272,9 +290,10 @@ func apply_facing(input: InputState, delta: float) -> void:
 					>= FacingRules.reach_edge(rules, facing, cursor_dir, lefty)
 			var drag: float = _controller.facing_drag_speed_braking if input.brake else _controller.facing_drag_speed
 			# Re-square hard through the follow-through: the coil left facing stale
-			# at the wind-up cursor, and a lazy drag can't catch up in a soft
-			# wrister's finish, so the blade handoff snaps to the wrong side
-			# (ROM-clamped to the stale facing) before reaching the cursor. See follow_through_facing_recover_speed.
+			# at the wind-up cursor, and a lazy drag can't square it to the shot
+			# line in a soft wrister's finish, so the blade handoff snaps to the
+			# wrong side (ROM-clamped to the stale facing) before reaching the
+			# cursor. See follow_through_facing_recover_speed.
 			if s == State.FOLLOW_THROUGH:
 				drag = maxf(drag, _controller.follow_through_facing_recover_speed)
 			# Board shield: a carrier working the wall squares up ALONG it and

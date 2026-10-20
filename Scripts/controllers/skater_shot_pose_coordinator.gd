@@ -315,9 +315,9 @@ func apply_slapper_follow_through() -> void:
 # `release_frac` of the span. Never a symmetric bell: it eases the stick out and
 # straight back, never commits to the finish, and reads as delayed. The attack
 # is seconds, not a share, so a longer finish holds longer rather than snapping
-# slower.
+# slower, and eased at both ends, so the motion starts rather than appears.
 static func finish_envelope(t: float, span: float, attack_s: float, release_frac: float) -> float:
-	var attack: float = clampf(t * span / maxf(attack_s, 0.001), 0.0, 1.0)
+	var attack: float = smoothstep(0.0, maxf(attack_s, 0.001), t * span)
 	var release_start: float = 1.0 - clampf(release_frac, 0.0, 1.0)
 	return attack * (1.0 - smoothstep(release_start, 1.0, t))
 

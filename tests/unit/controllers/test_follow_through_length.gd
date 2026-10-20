@@ -13,6 +13,8 @@ class StubGameState extends Node:
 
 
 var _controller: SkaterController = null
+var _skater: Skater = null
+var _input := InputState.new()
 
 
 func before_each() -> void:
@@ -21,6 +23,7 @@ func before_each() -> void:
 	puck.global_position = Vector3(20.0, 0.0, 20.0)
 	var skater: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
 	add_child_autofree(skater)
+	_skater = skater
 	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 10.0)
 	skater.set_process(false)
 	skater.set_physics_process(false)
@@ -59,20 +62,25 @@ func test_a_longer_finish_holds_longer() -> void:
 
 
 func test_the_slapper_finish_grows_with_the_wind_up() -> void:
-	var aiming: SkaterAimingBehavior = _controller._aiming
-	aiming.slapper_charge_timer = 0.0
-	var none: float = _controller.slapper_follow_through_time()
-	assert_almost_eq(none, _controller.slapper_follow_through_time_min, 0.0001,
+	var prev: float = _controller.slapper_follow_through_time(0.0)
+	assert_almost_eq(prev, _controller.slapper_follow_through_time_min, 0.0001,
 			"no wind-up finishes in the minimum")
-	var prev: float = none
-	var full_s: float = _controller._slapper_config().max_slapper_charge_time
 	for i: int in range(1, 5):
-		aiming.slapper_charge_timer = full_s * i / 4.0
-		var now: float = _controller.slapper_follow_through_time()
+		var now: float = _controller.slapper_follow_through_time(i / 4.0)
 		assert_gt(now, prev, "a taller wind-up finishes longer")
 		prev = now
 	assert_almost_eq(prev, _controller.slapper_follow_through_time_max, 0.0001,
 			"a full wind-up finishes in the maximum")
+
+
+# The shooter's finish and every machine's legs read the same charge.
+func test_the_slapper_finish_is_published_as_its_charge() -> void:
+	var full_s: float = _controller._slapper_config().max_slapper_charge_time
+	_controller._aiming.slapper_charge_timer = full_s * 0.3
+	var finish_s: float = _controller._slapper_finish_time()
+	assert_almost_eq(_skater.shot_charge, 0.3, 0.0001, "the wind-up goes out as shot_charge")
+	assert_almost_eq(finish_s, _controller.slapper_follow_through_time(0.3), 0.0001,
+			"and the finish is the one a remote re-derives from it")
 
 
 # The one-timer's hold is the blade coming down onto the puck, so the puck leaves
@@ -80,3 +88,37 @@ func test_the_slapper_finish_grows_with_the_wind_up() -> void:
 func test_the_one_timer_hold_is_the_downswing() -> void:
 	assert_almost_eq(_controller.one_timer_retention_time, _controller.slapper_downswing_time,
 			0.0001, "retention and the finish's downswing are the same beat")
+
+
+# Standing still, cursor dead ahead (-Z): `ticks` more ticks of the controller.
+func _stand(ticks: int) -> Vector2:
+	var dt: float = 1.0 / 120.0
+	for i: int in ticks:
+		_input.delta = dt
+		_input.host_timestamp += dt
+		_input.move_vector = Vector2.ZERO
+		_input.mouse_world_pos = _skater.global_position + Vector3(0.0, 0.0, -3.0)
+		_controller._process_input(_input, dt)
+		_skater._physics_process(dt)
+	return _skater.get_facing()
+
+
+func test_the_hips_hold_the_shot_line_through_the_finish() -> void:
+	var total: float = _controller.wrister_follow_through_time_max
+	var sm: SkaterStateMachine = _controller._sm
+	sm.set_state(SkaterStateMachine.State.FOLLOW_THROUGH)
+	sm.follow_through_is_slapper = false
+	sm.shot_dir = Vector3(1.0, 0.0, 0.0)  # 90° off the cursor
+	sm.follow_through_timer = total
+	sm.follow_through_duration_total = total
+	var half: int = roundi(total * 0.5 * 120.0)
+	var held: Vector2 = _stand(half)
+	assert_lt(absf(held.angle_to(Vector2(1.0, 0.0))), deg_to_rad(15.0),
+			"mid-finish the hips face the shot line, not the cursor (%.0f° off it)"
+			% rad_to_deg(absf(held.angle_to(Vector2(1.0, 0.0)))))
+	# The tail eases them back; a tenth of a second past the handoff they are home.
+	var back: Vector2 = _stand(half + 12)
+	assert_eq(sm.get_state(), SkaterStateMachine.State.SKATING_WITHOUT_PUCK, "the finish is over")
+	assert_lt(absf(back.angle_to(Vector2(0.0, -1.0))), deg_to_rad(15.0),
+			"and the hips are back on the cursor (%.0f° off it)"
+			% rad_to_deg(absf(back.angle_to(Vector2(0.0, -1.0)))))

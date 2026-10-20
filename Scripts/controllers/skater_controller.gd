@@ -228,9 +228,10 @@ var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 # STARTED, not the cursor. Left at the normal drag, facing can't re-square in a
 # soft wrister's short follow-through, so when blade-tracking resumes the target
 # is ROM-clamped to the stale facing and the stick swings to the wrong side
-# before catching the cursor. Recover hard through the follow-through so the
-# body is re-squared by the handoff and the blade tracks straight from the
-# finish to the cursor.
+# before catching the cursor. Recover hard through the follow-through, toward
+# the finish's own aim (the shot line, eased back to the cursor over its tail),
+# so the hips hold the finish with the torso and are squared to the cursor by
+# the handoff.
 var follow_through_facing_recover_speed: float = 18.0
 
 # ── Blade / Stick / Top-Hand IK Tuning ────────────────────────────────────────
@@ -815,9 +816,6 @@ var slapper_downswing_time: float = 0.11
 # .finish_envelope). Five ticks: shorter and a stick crossing a metre between
 # frames reads as a teleport, not a whip.
 var whip_attack_time: float = 0.04
-# The leg kick's arc, sin(PI · t^arc_skew): 1.0 is a symmetric up-down arc, <1
-# peaks earlier so the weight transfer snaps with the release and settles slowly.
-var follow_through_arc_skew: float = 0.4
 # Last fraction of the wrister/quick/slapper FT spent easing the finish aim (torso
 # twist + blade) from the shot line back to the LIVE cursor, so the pose ends
 # where the mouse actually is and hands off to blade-tracking without re-rotating
@@ -855,14 +853,14 @@ var slapper_follow_through_hand_follow: float = 0.4  # fraction of blade travel 
 # commits (higher min power — the swing is full-body even off a short
 # wind-up). Driven entirely from the replicated fields (current_shot_state +
 # shot_charge), so local, bot, and remote skaters play the identical animation
-# with zero new network state (same contract as the stick flex). First-pass
-# numbers — tune in the editor.
+# with zero new network state (same contract as the stick flex). The kick
+# runs over the finish itself — its length and its envelope — so the legs drive,
+# hold and come down with the stick.
 var wrister_load_stance: float = 0.55          # crouch floor at full charge (fraction of stance_hip_deg)
 var wrister_load_lean_deg: float = 5.0         # shared leg roll: weight over the stick-side back leg
 var wrister_load_split_deg: float = 8.0        # foot stagger: stick-side foot drops back
 var wrister_load_hip_share: float = 0.85      # share of the torso's wrist-shot wind-up the hips turn with
 var wrister_load_blend_speed: float = 6.0      # how fast the load pose tracks the charge (both shots)
-var wrister_kick_time: float = 0.5             # seconds of weight transfer/kick after release
 var wrister_kick_min_power: float = 0.35       # amplitude floor so snaps and passes still read
 var wrister_kick_back_deg: float = 26.0        # back (stick-side) leg drives into extension behind
 var wrister_kick_knee_extend_deg: float = 30.0 # back knee straightens through the kick
@@ -873,7 +871,6 @@ var slapper_load_stance: float = 0.75          # the wind-up sits DEEP — the p
 var slapper_load_lean_deg: float = 7.0         # harder weight-back than the wrister load
 var slapper_load_split_deg: float = 11.0       # wider shooting base for the full swing
 var slapper_load_hip_coil_deg: float = 16.0    # hips coil under the wound-up torso
-var slapper_kick_time: float = 0.6             # spans downswing + contact + finish
 var slapper_kick_min_power: float = 0.6        # a slap swing commits the body even off a short wind-up
 var slapper_kick_back_deg: float = 34.0        # full back-leg extension through the finish
 var slapper_kick_knee_extend_deg: float = 38.0 # back knee straightens hard
@@ -2924,6 +2921,7 @@ func _release_wrister(input: InputState) -> void:
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
 		_sm.shot_dir = result.direction
 		_do_release(result.direction, result.power)
+		skater.shot_charge = _wrister_charge_of(result.power)
 
 	_sm.follow_through_is_slapper = false
 	# Finish size follows the released POWER (pre-backhand — the body swing is the
@@ -2935,8 +2933,7 @@ func _release_wrister(input: InputState) -> void:
 			_wrister_sweep_speed(input), _wrister_config())
 	release_power_t = minf(release_power_t, wrister_load.load)
 	_sm.follow_through_power = lerpf(wrister_follow_through_min_power, 1.0, release_power_t)
-	var finish_s: float = ShotMechanics.follow_through_time(release_power_t,
-			wrister_follow_through_time_min, wrister_follow_through_time_max)
+	var finish_s: float = wrister_follow_through_time(skater.shot_charge)
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
@@ -3015,7 +3012,7 @@ func _release_slapper(input: InputState) -> void:
 	# A slap swing is always full-bodied: power sets how long the finish takes to
 	# come back down, never how big it is.
 	_sm.follow_through_power = 1.0
-	var finish_s: float = slapper_follow_through_time()
+	var finish_s: float = _slapper_finish_time()
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
@@ -3024,12 +3021,27 @@ func _release_slapper(input: InputState) -> void:
 	# _transition_to_skating still hides everything at the end as a safety net.
 	_hide_slapshot_hud()
 
-# Seconds the slapper finish runs for the wind-up built so far, whether the
-# swing connects or not.
-func slapper_follow_through_time() -> float:
+# Seconds a finish runs for a release whose shot_charge is `charge`. Read off
+# the replicated shot_charge, so every machine's legs (GaitShotLayer) end with
+# the stick the shooter swings. A wrister's charge is its released speed over
+# the band, a slapper's the wind-up fraction.
+func wrister_follow_through_time(charge: float) -> float:
+	return ShotMechanics.follow_through_time(charge,
+			wrister_follow_through_time_min, wrister_follow_through_time_max)
+
+
+func slapper_follow_through_time(charge: float) -> float:
+	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
 	return ShotMechanics.follow_through_time(
-			ShotMechanics.slapper_power_t(_aiming.slapper_charge_timer, _slapper_config()),
+			ShotMechanics.slapper_power_t(charge * cfg.max_slapper_charge_time, cfg),
 			slapper_follow_through_time_min, slapper_follow_through_time_max)
+
+
+# The slapper's finish, whether the swing connects or not: publishes the wind-up
+# it left with as shot_charge, then sizes the finish from that.
+func _slapper_finish_time() -> float:
+	skater.shot_charge = minf(_aiming.slapper_charge_timer / max_slapper_charge_time, 1.0)
+	return slapper_follow_through_time(skater.shot_charge)
 
 
 func _hide_slapshot_hud() -> void:
@@ -3078,8 +3090,14 @@ func _update_wrister_charge(input: InputState) -> void:
 	# shot that would come out this tick. This is the honest readout the goalie
 	# leans on and what the stick-flex pose keys off (the flex is the only
 	# visual charge feedback — there is no charge ring).
+	skater.shot_charge = _wrister_charge_of(pred.power)
+
+
+# A wrister's speed as shot_charge publishes it: over the min→max band.
+func _wrister_charge_of(power: float) -> float:
 	var power_span: float = maxf(max_wrister_power - min_wrister_power, 0.001)
-	skater.shot_charge = clampf((pred.power - min_wrister_power) / power_span, 0.0, 1.0)
+	return clampf((power - min_wrister_power) / power_span, 0.0, 1.0)
+
 
 func _update_slapper_charge(delta: float) -> void:
 	_aiming.tick_slapper(delta)
@@ -3173,7 +3191,7 @@ func _release_retained_one_timer(input: InputState) -> Dictionary:
 	return {
 		fired = fired,
 		direction = _sm.shot_dir,
-		follow_through_duration = slapper_follow_through_time(),
+		follow_through_duration = _slapper_finish_time(),
 	}
 
 
@@ -3198,7 +3216,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 		# the HUD now, exactly like a connected release.
 		_sm.follow_through_power = 1.0
 		_hide_slapshot_hud()
-		return {fired = false, follow_through_duration = slapper_follow_through_time()}
+		return {fired = false, follow_through_duration = _slapper_finish_time()}
 	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
@@ -3215,7 +3233,7 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	# returned duration into follow_through_duration_total; power is set here.
 	_sm.follow_through_power = 1.0
 	_hide_slapshot_hud()
-	return {fired = true, direction = result.direction, follow_through_duration = slapper_follow_through_time()}
+	return {fired = true, direction = result.direction, follow_through_duration = _slapper_finish_time()}
 
 func _apply_block_movement(_input: InputState, delta: float) -> void:
 	# Committed stance: no directional thrust. Whatever momentum you carried in
