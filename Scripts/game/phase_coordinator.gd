@@ -70,9 +70,11 @@ var _scene_tree: SceneTree = null
 var _force_record_goal_frame: Callable = Callable()
 
 # Captured at goal time on every peer (host via on_goal_scored_into, client via
-# on_goal_received) so the driver knows which end to park the inside-net cam
-# behind when GOAL_CELEBRATION transitions to GOAL_SCORED and the replay starts.
+# on_goal_received) so the driver knows which end to park the net cam behind,
+# and whose colors its wipe wears, when GOAL_CELEBRATION transitions to
+# GOAL_SCORED and the replay starts.
 var _pending_defending_goal_z: float = 0.0
+var _pending_scoring_team: Team = null
 
 # True on the side that places skaters (host + each client for its own), so
 # on_period_break_entered can branch between "drive every controller" and
@@ -395,6 +397,7 @@ func on_goal_scored_into(defending_team: Team) -> void:
 	var puck: Puck = _get_puck()
 	if puck != null:
 		puck.pickup_locked = true
+	_pending_scoring_team = _teams[scoring_team_id]
 	if defending_team.defended_goal != null:
 		_pending_defending_goal_z = defending_team.defended_goal.goal_line_z()
 		if defending_team.defended_goal.vfx != null:
@@ -505,6 +508,7 @@ func on_goal_received(
 	if puck != null:
 		puck.pickup_locked = true
 	goal_scored.emit(_teams[scoring_team_id], scorer_name, assist1_name, assist2_name)
+	_pending_scoring_team = _teams[scoring_team_id]
 	var defended_goal: HockeyGoal = _teams[1 - scoring_team_id].defended_goal
 	if defended_goal != null:
 		_pending_defending_goal_z = defended_goal.goal_line_z()
@@ -680,9 +684,16 @@ func start_goal_replay() -> void:
 	# Arm the post-goal staged skate-in: the replay's camera cut will hide the
 	# jump to a staging point near the dot so the ensuing faceoff is a short skate.
 	_staged_faceoff_pending = true
+	var primary: Color = Color.BLACK
+	var secondary: Color = Color.WHITE
+	if _pending_scoring_team != null:
+		var colors: Dictionary = TeamColorRegistry.get_colors(
+				_pending_scoring_team.color_slot, _pending_scoring_team.team_id)
+		primary = colors.primary
+		secondary = colors.secondary
 	_goal_replay_driver.start(_recorder, _codec, _registry,
 			_puck_getter.call() as Puck, _goalie_controllers_getter.call(),
-			_pending_defending_goal_z)
+			_pending_defending_goal_z, primary, secondary)
 
 
 # Host-only: advance state machine once the cinematic finishes naturally.

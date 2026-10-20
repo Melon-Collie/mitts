@@ -2056,7 +2056,7 @@ func _drain_replay_event_queue() -> void:
 			_replay_file.record_event(ts, JSON.stringify(event).to_utf8_buffer())
 		# Mirror the event onto every client / spectator so their recorders see
 		# the same timeline. Required for the goal-replay cinematic to use the
-		# same shot anchor + adaptive clip start everywhere.
+		# same scoring-touch anchor + adaptive clip start everywhere.
 		NetworkManager.notify_replay_event_to_all(ts, event)
 		_replay_evt_kinds[i] = ""
 		_replay_evt_extra[i] = _EMPTY_EXTRA
@@ -2065,7 +2065,7 @@ func _drain_replay_event_queue() -> void:
 
 # Client / spectator side: host broadcast each event it recorded; we mirror
 # it into our local recorder so our goal-replay clip carries the same
-# timeline (shot anchor, pickup chain, audio cues). Same gates the host
+# timeline (scoring touch, pickup chain, audio cues). Same gates the host
 # applies to its own recording — skip while a cinematic is already playing.
 func _on_replay_event_received(host_ts: float, event: Dictionary) -> void:
 	if _recorder == null:
@@ -2086,8 +2086,8 @@ func _on_replay_event_received(host_ts: float, event: Dictionary) -> void:
 # freezes for the replay), so this edge is what drives the client's own
 # GoalReplayDriver. On `true` we kick off the local cinematic — the recorder
 # already holds the clip and on_goal_received has set the defending-goal Z for
-# the inside-net cam. On `false` we tear it down so the client's replay ends
-# in lockstep with the host (which only resumes broadcasting / advances to
+# the net cam. On `false` we end it behind its outgoing wipe so the client's
+# replay ends in lockstep with the host (which only resumes broadcasting / advances to
 # FACEOFF_PREP after its own cinematic finishes), instead of overrunning into
 # the live faceoff data on its independent outro timer.
 func _on_remote_replay_mode_changed(active: bool) -> void:
@@ -2106,7 +2106,7 @@ func _on_remote_replay_mode_changed(active: bool) -> void:
 			_phase_coord.start_goal_replay()
 	else:
 		if _goal_replay_driver != null:
-			_goal_replay_driver.stop()
+			_goal_replay_driver.finish()
 		if _intermission_replay_driver != null:
 			_intermission_replay_driver.stop()
 
@@ -2592,13 +2592,13 @@ func _is_skip_window_open() -> bool:
 	return is_period_break()
 
 
-# The unanimity action for whichever window is open. Stopping a driver runs
-# its normal end flow (goal replay → post-goal advance via PhaseCoordinator;
-# intermission reel → finish_period_break via reel_stopped); a reel-less
-# break has no driver, so the break is finished directly.
+# The unanimity action for whichever window is open. Ending a driver runs
+# its normal end flow (goal replay → outgoing wipe → post-goal advance via
+# PhaseCoordinator; intermission reel → finish_period_break via reel_stopped);
+# a reel-less break has no driver, so the break is finished directly.
 func _end_skip_window() -> void:
 	if _goal_replay_driver != null and _goal_replay_driver.is_active():
-		_goal_replay_driver.stop()
+		_goal_replay_driver.finish()
 		return
 	if _intermission_replay_driver != null and _intermission_replay_driver.is_active():
 		_intermission_replay_driver.stop()
@@ -2609,16 +2609,16 @@ func _end_skip_window() -> void:
 
 
 # Client-side handler for the host's tally broadcast. Forwards to HUD via the
-# local signal; on unanimity, also stops the local driver so every peer leaves
-# the cinematic at the same wall-clock moment. stop() no-ops on whichever
-# driver isn't running.
+# local signal; on unanimity, also ends the local driver so every peer leaves
+# the cinematic at the same wall-clock moment. finish() / stop() no-op on
+# whichever driver isn't running.
 func _on_remote_skip_replay_vote(current: int, total: int) -> void:
 	if NetworkManager.is_host:
 		return  # host emits locally in _register_skip_vote
 	skip_replay_vote_updated.emit(current, total)
 	if total > 0 and current >= total:
 		if _goal_replay_driver != null:
-			_goal_replay_driver.stop()
+			_goal_replay_driver.finish()
 		if _intermission_replay_driver != null:
 			_intermission_replay_driver.stop()
 
