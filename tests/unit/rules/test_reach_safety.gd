@@ -131,6 +131,32 @@ func test_jockey_cannot_strip_a_careful_carrier() -> void:
 			"the pacer is safer to carry against than the same man standing still")
 
 
+# An 8 m/s carry along +X for a second, a man `gap` ahead of it skating `pace`
+# along it.
+func _carry_at(start: Vector3, pace: float, apply_escape: bool = true) -> float:
+	var opps: Array[Vector3] = [start]
+	var vels: Array[Vector3] = [Vector3(pace, 0, 0)]
+	return AICarrySpace.carry_safety(Vector3.ZERO, Vector3(8.0, 0, 0), 1.0, opps, vels,
+			[], apply_escape)
+
+
+func test_a_man_retreating_in_the_lane_can_stop_on_the_carry() -> void:
+	# The carry is coming to him, so braking commits him to no spot: he stops from
+	# his read rather than coasting to the commit window. Backing off at the
+	# carrier's own pace, he is as much a wall as a man standing there.
+	for gap: float in [3.0, 5.0]:
+		for pace: float in [0.0, 4.0, 8.0]:
+			assert_eq(_carry_at(Vector3(gap, 0, 0.2), pace), 0.0,
+					"%.0f m ahead backing off at %.0f m/s" % [gap, pace])
+
+
+func test_stopping_spares_a_chaser_his_escape_gate() -> void:
+	# Braking only loses him ground on a carry running away from him, so a chaser
+	# pacing it keeps the gate's credit.
+	var behind := Vector3(-2.0, 0, 0.2)
+	assert_gt(_carry_at(behind, 8.0), _carry_at(behind, 8.0, false))
+
+
 func test_handling_threads_a_tighter_seam() -> void:
 	# In a tight spot (stationary wall), a better handler holds the puck further
 	# off his body and finds room a plodder can't. Skill expression, grounded in

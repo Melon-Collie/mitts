@@ -144,10 +144,16 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick, in the low cycle
-# (measured 1.12, pinned at the ~0.28 margin the scripted fixtures use). Most of
+# (measured 1.24, pinned at the ~0.28 margin the scripted fixtures use). Most of
 # it is the weak point, whom the D sag off; the man in the puck owner's area
-# stays coverable while he is on the puck (TeamBrain's eligibility).
-const UNCOVERED_CEILING: float = 1.4
+# stays coverable while he is on the puck (TeamBrain's eligibility). A loose
+# puck counts every attacker as a man to cover, so the bot attack's own feeds
+# move this (183 of its 480 D-zone ticks loose); the coverage itself is the
+# phase with an attacker on the puck, pinned on its own below.
+const UNCOVERED_CEILING: float = 1.52
+# The same count over the low cycle's ticks with an attacker on the puck
+# (measured 0.94), at the same margin.
+const UNCOVERED_CARRIED_CEILING: float = 1.22
 # The scripted crossing cutter (measured 1.00), pinned at the same ~0.28 margin.
 # It is the weak-side point, a man the shot model prices at nothing: with the
 # cutter low in the strong D's area, the weak winger sags onto him. The cutter
@@ -173,6 +179,8 @@ class Result:
 	var covered_sum: int = 0
 	var in_zone_sum: int = 0
 	var uncovered_sum: int = 0
+	var carried_ticks: int = 0
+	var uncovered_carried_sum: int = 0
 	var open_danger_sum: float = 0.0
 	var open_danger_worst: float = 0.0
 	# Unattended ticks by attacker peer id.
@@ -232,6 +240,8 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 		# them. The carrier is excluded from both — the area that owns the puck is
 		# pressuring him, not covering a man.
 		var carrier_pid: int = snap.puck_state.carrier_peer_id
+		if carrier_pid != -1:
+			r.carried_ticks += 1
 		var worst: float = 0.0
 		for opp: int in snap.skater_states:
 			if duel.team_map.get(opp, -1) == 1 or opp == carrier_pid:
@@ -242,6 +252,8 @@ func _run(attackers: Array, defenders: Array, carrier: int) -> Result:
 			if covered.has(opp):
 				continue
 			r.uncovered_sum += 1
+			if carrier_pid != -1:
+				r.uncovered_carried_sum += 1
 			r.uncovered_by_man[opp] = int(r.uncovered_by_man.get(opp, 0)) + 1
 			worst = maxf(worst, AIActionScoring.score_shoot_value(
 					snap.skater_states[opp].position, our_net, our_net, no_defenders))
@@ -290,6 +302,9 @@ func test_a_low_cycle_is_covered() -> void:
 		1)
 	_report("low cycle", r)
 	_assert_shape("low cycle", r)
+	assert_lt(r.uncovered_carried_sum / float(maxi(r.carried_ticks, 1)),
+			UNCOVERED_CARRIED_CEILING,
+			"low cycle: attackers go unattended while an attacker has the puck")
 
 
 func test_a_point_shot_setup_is_covered() -> void:

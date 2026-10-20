@@ -83,6 +83,40 @@ func test_the_pocket_beside_the_hip_is_not_listed_twice() -> void:
 	assert_eq(_h.count, 3)
 
 
+func _carry_holds() -> AIShotHolds:
+	var h := AIShotHolds.new()
+	h.facing_cfg = FacingRules.Config.new()
+	h.facing_cfg.backhand_edge_rad = deg_to_rad(67.0)
+	return h
+
+
+func test_a_skating_carrier_lists_no_hold_past_its_backhand_stop() -> void:
+	# A cursor past the carry's backhand stop pivots the hips onto the other line
+	# (FacingRules), so a hold there would be priced on a body that is turning
+	# round to skate backward.
+	var h: AIShotHolds = _carry_holds()
+	var fr := FacingRules.Result.new()
+	for deg: int in range(-150, 151, 30):
+		var aim: Vector2 = AHEAD.rotated(deg_to_rad(deg))
+		h.solve_shot(aim, RIGHT * 0.9, AHEAD * 8.0, AHEAD)
+		for k: int in range(1, h.count):
+			FacingRules.solve(fr, AHEAD, h.offset[k].normalized(), AHEAD * 8.0, false, false,
+					h.is_left_handed, h.facing_cfg)
+			assert_false(fr.pivoting, "aim %d°, hold %d" % [deg, k])
+
+
+func test_standing_still_keeps_the_reach_to_either_side() -> void:
+	# No line to pivot off: the body turns to the cursor, so both side reaches stay.
+	var h: AIShotHolds = _carry_holds()
+	h.solve_shot(AHEAD, AHEAD * 0.9, Vector2.ZERO, AHEAD)
+	var left_side: bool = false
+	var right_side: bool = false
+	for k: int in range(1, h.count):
+		left_side = left_side or h.offset[k].x < -0.5
+		right_side = right_side or h.offset[k].x > 0.5
+	assert_true(left_side and right_side)
+
+
 func test_a_pass_the_puck_can_carry_is_fired_from_where_it_is() -> void:
 	_h.solve_pass(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD, 0.9)
 	assert_eq(_h.pass_offset, RIGHT * 0.9)

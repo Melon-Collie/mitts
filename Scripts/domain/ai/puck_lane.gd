@@ -426,10 +426,11 @@ static func _lane_brake_block(
 # it: the ballistic read at his closest approach, or the guided interceptor's
 # planted point when that blocks harder. Returns (block, lane arc-coord of the
 # pick), so lane_clear's probability and lane_loss_point's place come from one
-# read of the same defender.
+# read of the same defender, closing from `read_delay` (< 0: already reading).
 static func _accurate_block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, px: float, pz: float,
-		vx: float, vz: float, stick_reach: float, close_speed: float) -> Vector2:
+		vx: float, vz: float, stick_reach: float, close_speed: float,
+		read_delay: float = LANE_REACTION_DELAY_S) -> Vector2:
 	var pvx: float = dirx * eff_speed
 	var pvz: float = dirz * eff_speed
 	var block: float = 0.0
@@ -440,12 +441,12 @@ static func _accurate_block(fx: float, fz: float, dirx: float, dirz: float,
 	if t_raw <= line_len / eff_speed:
 		var t: float = maxf(t_raw, 0.0)
 		block = lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
-				stick_reach, close_speed)
+				stick_reach, close_speed, read_delay)
 		u = eff_speed * t
 	# Guided-interceptor floor: he can brake and clog a reachable crossing
 	# instead of coasting through it (only ADDS block).
 	var brake: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
-			px, pz, stick_reach, close_speed)
+			px, pz, stick_reach, close_speed, read_delay)
 	if brake.x > block:
 		return brake
 	return Vector2(block, u)
@@ -596,10 +597,10 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	return clampf(1.0 - max_block, 0.0, 1.0)
 
 
-# Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: the
-# default lane_clear model, except inside the over window (see the saucer
-# doc-block) a defender's reach is his BODY radius. Before and after it a
-# stick intercepts with full grounded reach.
+# Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: in the air
+# (the over window, see the saucer doc-block) a defender blocks with his BODY
+# radius, on the release with his stick, and from the touch-down on the rest of
+# the lane is the accurate flat lane_clear's. Every defender must be beaten.
 static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = []) -> float:
@@ -610,54 +611,60 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 		return 1.0  # degenerate (overlapping endpoints)
 	var line_len: float = sqrt(line_len_sq)
 	var speed: float = maxf(puck_speed_m_s, 1.0)
-	var seg_time: float = line_len / speed
 	var inv_len: float = 1.0 / line_len
-	var pvx: float = dx * inv_len * speed
-	var pvz: float = dz * inv_len * speed
+	var dirx: float = dx * inv_len
+	var dirz: float = dz * inv_len
+	var pvx: float = dirx * speed
+	var pvz: float = dirz * speed
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
-	# Over window: y(t) = vy·t − ½·g·t² above the blade plane between the
-	# two roots.
+	# Over window: y(t) = vy·t − ½·g·t² above the blade plane between its roots.
 	var vy: float = GameRules.DEFAULT_LOFT_VY_LOW_M_S
 	var root: float = sqrt(maxf(0.0,
 			vy * vy - 2.0 * GameRules.GRAVITY_M_S2 * GameRules.PUCK_AIRBORNE_HEIGHT_M))
 	var t_over: float = (vy - root) / GameRules.GRAVITY_M_S2
 	var t_down: float = (vy + root) / GameRules.GRAVITY_M_S2
-	var max_block: float = 0.0
+	# From the touch-down on it is a flat pass on the ice for the rest of the lane.
+	var flown: float = speed * t_down
+	var landed_len: float = line_len - flown
+	var land_x: float = from.x + dirx * flown
+	var land_z: float = from.z + dirz * flown
+	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
+			if landed_len > 0.01 else speed
+	var survival: float = 1.0
 	for i: int in opponents.size():
 		var p: Vector3 = opponents[i]
-		var vx: float = 0.0
-		var vz: float = 0.0
-		if i < vel_count:
-			vx = opponent_vels[i].x
-			vz = opponent_vels[i].z
+		var v: Vector3 = opponent_vels[i] if i < vel_count else Vector3.ZERO
+		var stick_reach: float = LANE_DEFENDER_REACH_M
+		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
+		if has_caps:
+			var caps: AISkaterCaps = opponent_caps[i]
+			if caps != null:
+				stick_reach = caps.stick_reach
+				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
 		var t_raw: float = _lane_closest_approach_t(
-				from.x, from.z, pvx, pvz, p.x, p.z, vx, vz)
-		if t_raw > seg_time:
-			continue  # trailing the play — never closest in flight
-		var t: float = maxf(t_raw, 0.0)
-		var block: float
-		if t >= t_over and t <= t_down:
-			# Above the blade plane — only the defender's body can block it.
+				from.x, from.z, pvx, pvz, p.x, p.z, v.x, v.z)
+		var block: float = 0.0
+		if t_raw >= t_over and t_raw <= t_down:
+			# It flies over him: only his body blocks it in the air.
 			var miss: float = _lane_miss_at(
-					from.x, from.z, pvx, pvz, t, p.x, p.z, vx, vz)
+					from.x, from.z, pvx, pvz, t_raw, p.x, p.z, v.x, v.z)
 			block = clampf(
 					(LANE_DEFENDER_BODY_RADIUS_M - miss) / LANE_DEFENDER_BODY_RADIUS_M,
 					0.0, 1.0)
-		else:
-			# On/near the ice — full stick reach + closing at his real caps.
-			var stick_reach: float = LANE_DEFENDER_REACH_M
-			var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
-			if has_caps:
-				var caps: AISkaterCaps = opponent_caps[i]
-				if caps != null:
-					stick_reach = caps.stick_reach
-					close_speed = LANE_LATERAL_FRACTION * caps.max_speed
-			block = lane_block_at(
-					from.x, from.z, pvx, pvz, t, p.x, p.z, vx, vz, stick_reach, close_speed)
-		if block > max_block:
-			max_block = block
-	return clampf(1.0 - max_block, 0.0, 1.0)
+		elif t_raw < t_over:   # still on the blade: a stick stuffs the flip
+			block = lane_block_at(from.x, from.z, pvx, pvz, maxf(t_raw, 0.0),
+					p.x, p.z, v.x, v.z, stick_reach, close_speed)
+		# Landed, it is the accurate flat lane from where he is then, read that far
+		# on: the man it flew over still plays it sliding off behind him.
+		if landed_len > 0.01:
+			block = maxf(block, _accurate_block(land_x, land_z, dirx, dirz,
+					landed_len, landed_speed, p.x + v.x * t_down, p.z + v.z * t_down,
+					v.x, v.z, stick_reach, close_speed, LANE_REACTION_DELAY_S - t_down).x)
+		survival *= 1.0 - block
+		if survival <= 0.0:
+			return 0.0
+	return clampf(survival, 0.0, 1.0)
 
 
 # Interceptor point for a fired-puck lane under lane_clear's ACCURATE model:

@@ -64,6 +64,22 @@ func test_right_handed_mirrors() -> void:
 	assert_lt(_off(RIGHT), 46.0, "a righty's pocket is out on the right")
 
 
+func test_a_skating_carrier_never_pockets_past_its_backhand_stop() -> void:
+	# With the puck the blade stops on the backhand (SkaterController's
+	# bh_release_angle_deg), and a cursor past it pivots the hips onto the other
+	# line instead: a pocket there is a turn round, not a hold.
+	var carry := FacingRules.Config.new()
+	carry.backhand_edge_rad = deg_to_rad(67.0)
+	var fr := FacingRules.Result.new()
+	for deg: int in range(-180, 180, 15):
+		var aim: Vector2 = AHEAD.rotated(deg_to_rad(deg))
+		for left: bool in [LEFTY, RIGHTY]:
+			WristerPocket.solve(_out, aim, AHEAD * 8.0, AHEAD, left, _load_cfg, carry,
+					UNLOADED, BACKHAND, _facing, _load)
+			FacingRules.solve(fr, AHEAD, _out.dir, AHEAD * 8.0, false, false, left, carry)
+			assert_false(fr.pivoting, "aim %d°, %s" % [deg, "lefty" if left else "righty"])
+
+
 func test_no_aim_leaves_everything_alone() -> void:
 	_solve(Vector2.ZERO, AHEAD * 6.0, LEFTY)
 	assert_almost_eq(_out.power_share, 1.0, 0.001)
@@ -108,6 +124,8 @@ func test_the_bearing_path_matches_the_local_frame_solve() -> void:
 		for offset: float in WristerPocket._CANDIDATES:
 			var pocket: Vector2 = aim.rotated(offset)
 			FacingRules.solve(fr, facing, pocket, vel, false, false, left, _facing_cfg)
+			if fr.pivoting:
+				continue
 			var s: float = _ref_share(pocket, aim, fr.target, left, lr)
 			if s > best:
 				second = best

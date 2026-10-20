@@ -11,7 +11,8 @@ extends RefCounted
 # Holds (solve_shot), index 0 the puck where it is: the best-loaded pocket
 # (WristerPocket), and a reach out to either side of the shot line, which moves
 # the whole tangent-cone geometry around a goalie in tight (the pull-across, the
-# backhand tuck) at whatever pace the load leaves there. A pull costs its real
+# backhand tuck) at whatever pace the load leaves there. A skating carrier lists
+# no hold past his backhand stop (FacingRules pivoting). A pull costs its real
 # time (pull_time, _fill_pulled). A pulled hold sits at the handling reach; the
 # load reads its bearing, not its distance. All vectors are world XZ, offsets
 # off the body.
@@ -122,6 +123,8 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 			continue
 		FacingRules.solve(_facing, facing, dir, velocity, false, false, is_left_handed,
 				facing_cfg)
+		if _facing.pivoting:
+			continue
 		_fill_pulled(count, dir, aim, _facing.target, facing, velocity)
 		count += 1
 
@@ -144,6 +147,8 @@ func solve_arrival(aim: Vector2, velocity: Vector2, facing: Vector2, at: Vector3
 	var dir: Vector2 = aim.normalized().rotated(side * PI * 0.5)
 	FacingRules.solve(_facing, facing, dir, velocity, false, false, is_left_handed,
 				facing_cfg)
+	if _facing.pivoting:
+		return
 	var other: Vector2 = dir * handle_reach
 	var other_share: float = share_at(other, aim, _facing.target)
 	var other_keep: float = _dwell_keep(at, other, t, opponents, opponent_vels, opponent_caps)

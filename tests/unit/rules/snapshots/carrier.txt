@@ -4,7 +4,7 @@ walled off at speed, outlet up the wall: intent	PASS
 walled off at speed, outlet up the wall: pass value	0.0391
 impeded by a defender ahead, open mate wide: intent	PASS
 ahead man, clear path: drive-in credit	0.2837
-ahead man, defender in his path: drive-in credit	0.0000
+ahead man, defender in his path: drive-in credit	-0.0265
 ahead man, defender in his path: intent	CARRY
 stick 1.6 m ahead on the presented puck: protect gain	0.6198
 stick 1.6 m ahead on the presented puck: offset behind the body	0.6235
@@ -21,7 +21,7 @@ wide in the zone, open man at the far-post backdoor: pick	PASS to 2
 our end, middle clogged, winger ahead with a clear path: pick	PASS to 2
 central in the zone, open mate wide at a poor angle: intent	CARRY
 neutral ice, straight lane clogged, close outlet up-ice: pick	PASS to 2
-8 m feed past a mid-lane stick: variant	SAUCER
+8 m feed past a mid-lane stick: variant	FLAT
 pinged ahead man 9 m out behind a mid-lane stick: variant	SAUCER
 board pincer closing, open outlet across: pick	PASS to 2
 light pressure, only a covered mate behind: intent	CARRY

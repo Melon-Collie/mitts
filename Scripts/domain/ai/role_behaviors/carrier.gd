@@ -709,8 +709,8 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var new_intent: int
 	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
 	# where the other sees: the raw carry is one beat ahead and cannot see the
-	# entry a carrier skates into by beating his man; the drive-in sees that but is
-	# benefit-only, so it cannot say a carry is doomed. In our own zone the
+	# entry a carrier skates into by beating his man; the drive-in sees that but
+	# is one straight line, blind to the carry's other routes. In our own zone the
 	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane,
 	# and would keep a doomed carrier from moving the puck in front of his own net.
 	var in_own_zone: bool = AIActionScoring.in_offensive_zone(
