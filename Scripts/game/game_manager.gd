@@ -1821,22 +1821,22 @@ func _wire_sound_signals() -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.board_contact_sound(puck.get_puck_position()), puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
 			puck.fire_board_impact_vfx(spd)
-			NetworkManager.send_board_hit_to_all(puck.get_puck_position())
+			NetworkManager.send_board_hit_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_boards", puck.get_puck_position(), spd))
 		puck.puck_hit_goal_body.connect(func() -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, puck.get_puck_position(), _puck_speed_volume(spd), 0.06)
-			NetworkManager.send_goal_body_hit_to_all(puck.get_puck_position())
+			NetworkManager.send_goal_body_hit_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_goal_body", puck.get_puck_position(), spd))
 		puck.puck_touched_loose.connect(func(_s: Skater) -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, puck.get_puck_position(), _puck_speed_volume(spd), 0.06, _deflection_pitch(spd))
-			NetworkManager.send_deflection_to_all(puck.get_puck_position())
+			NetworkManager.send_deflection_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_deflection", puck.get_puck_position(), spd))
 		puck.puck_body_blocked.connect(func(_s: Skater) -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, puck.get_puck_position(), _puck_speed_volume(spd), 0.07)
-			NetworkManager.send_body_block_to_all(puck.get_puck_position())
+			NetworkManager.send_body_block_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_body_block", puck.get_puck_position(), spd))
 		puck_controller.puck_stripped_from.connect(func(_pid: int, _stripper: int) -> void:
 			var spd: float = puck.linear_velocity.length()
@@ -1845,11 +1845,11 @@ func _wire_sound_signals() -> void:
 				# Distinct stick-lift cue instead of the generic puck-strip thud.
 				SoundManager.play_world(SoundManager.Sound.STICK_LIFT, pos, _puck_speed_volume(spd), 0.06)
 				puck.fire_stick_lift_vfx()
-				NetworkManager.send_stick_lift_to_all(pos)
+				NetworkManager.send_stick_lift_to_all(pos, spd)
 				_record_replay_audio_event("stick_lift", pos, spd)
 			else:
 				SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(spd), 0.06)
-				NetworkManager.send_puck_strip_to_all(pos)
+				NetworkManager.send_puck_strip_to_all(pos, spd)
 				_record_replay_audio_event("puck_strip", pos, spd))
 	else:
 		# Client-side predicted contact cues: the loose-puck prediction detects
@@ -1883,7 +1883,7 @@ func _wire_sound_signals() -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, puck.get_puck_position(), _puck_speed_volume(spd) + _PAD_SAVE_VOLUME_BUMP_DB, 0.05)
 			_local_goalie_cue_at = NetworkManager.local_time()
 			if NetworkManager.is_host:
-				NetworkManager.send_goalie_hit_to_all(puck.get_puck_position())
+				NetworkManager.send_goalie_hit_to_all(puck.get_puck_position(), spd)
 				_record_replay_audio_event("puck_goalie", puck.get_puck_position(), spd))
 	puck.puck_touched_post.connect(
 		func() -> void:
@@ -1892,7 +1892,7 @@ func _wire_sound_signals() -> void:
 			puck.fire_post_ping_vfx(spd)
 			_local_post_cue_at = NetworkManager.local_time()
 			if NetworkManager.is_host:
-				NetworkManager.send_post_hit_to_all(puck.get_puck_position())
+				NetworkManager.send_post_hit_to_all(puck.get_puck_position(), spd)
 				_record_replay_audio_event("puck_post", puck.get_puck_position(), spd))
 
 	# Persistent connections: NetworkManager autoload + GameManager self-signals
@@ -1906,45 +1906,42 @@ func _wire_sound_signals() -> void:
 		func(_tid: int, _s0: int, _s1: int, _sn: String, _a1: String, _a2: String) -> void:
 			SoundManager.play_crowd(SoundManager.Sound.GOAL_HORN))
 	NetworkManager.board_hit_received.connect(
-		func(pos: Vector3) -> void:
+		func(pos: Vector3, spd: float) -> void:
 			if _cue_is_echo(_local_boards_cue_at):
 				return
-			var spd: float = puck.linear_velocity.length() if puck != null else 0.0
 			SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
 			if puck != null:
 				puck.fire_board_impact_vfx(spd))
 	NetworkManager.goal_body_hit_received.connect(
-		func(pos: Vector3) -> void:
+		func(pos: Vector3, spd: float) -> void:
 			if _cue_is_echo(_local_net_cue_at):
 				return
-			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06))
+			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, _puck_speed_volume(spd), 0.06))
 	NetworkManager.post_hit_received.connect(
-		func(pos: Vector3) -> void:
+		func(pos: Vector3, spd: float) -> void:
 			if _cue_is_echo(_local_post_cue_at):
 				return
-			var spd: float = puck.linear_velocity.length() if puck != null else 0.0
 			SoundManager.play_world(SoundManager.Sound.PUCK_POST, pos, _puck_speed_volume(spd) + _POST_SAVE_VOLUME_BUMP_DB, 0.04, _post_pitch(spd))
 			if puck != null:
 				puck.fire_post_ping_vfx(spd))
 	NetworkManager.goalie_hit_received.connect(
-		func(pos: Vector3) -> void:
+		func(pos: Vector3, spd: float) -> void:
 			if _cue_is_echo(_local_goalie_cue_at):
 				return
-			SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0) + _PAD_SAVE_VOLUME_BUMP_DB, 0.05))
+			SoundManager.play_world(SoundManager.Sound.PUCK_GOALIE, pos, _puck_speed_volume(spd) + _PAD_SAVE_VOLUME_BUMP_DB, 0.05))
 	NetworkManager.deflection_received.connect(
-		func(pos: Vector3) -> void:
-			var spd: float = puck.linear_velocity.length() if puck != null else 0.0
+		func(pos: Vector3, spd: float) -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, pos, _puck_speed_volume(spd), 0.06, _deflection_pitch(spd)))
 	NetworkManager.body_block_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.07))
+		func(pos: Vector3, spd: float) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, pos, _puck_speed_volume(spd), 0.07))
 	NetworkManager.puck_strip_received.connect(
-		func(pos: Vector3) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06))
+		func(pos: Vector3, spd: float) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(spd), 0.06))
 	NetworkManager.body_check_landed.connect(_on_body_check_landed)
 	NetworkManager.cross_check_landed.connect(_on_cross_check_landed)
 	NetworkManager.smart_ping_received.connect(_on_smart_ping_received)
 	NetworkManager.stick_lift_received.connect(
-		func(pos: Vector3) -> void:
-			SoundManager.play_world(SoundManager.Sound.STICK_LIFT, pos, _puck_speed_volume(puck.linear_velocity.length() if puck != null else 0.0), 0.06)
+		func(pos: Vector3, spd: float) -> void:
+			SoundManager.play_world(SoundManager.Sound.STICK_LIFT, pos, _puck_speed_volume(spd), 0.06)
 			if puck != null:
 				puck.fire_stick_lift_vfx())
 	NetworkManager.nudge_received.connect(func(pos: Vector3) -> void: _play_nudge_cue(pos))

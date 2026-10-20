@@ -107,16 +107,16 @@ signal pickup_claim_rejected_received
 signal poke_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, expected_carrier_peer_id: int, blade_curr: Vector3, blade_prev: Vector3)
 signal stick_lift_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, expected_carrier_peer_id: int, blade_curr: Vector3)
 signal hit_claim_received(hitter_peer_id: int, victim_peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float)
-signal board_hit_received(position: Vector3)
-signal goal_body_hit_received(position: Vector3)
-signal post_hit_received(position: Vector3)
-signal goalie_hit_received(position: Vector3)
-signal deflection_received(position: Vector3)
-signal body_block_received(position: Vector3)
-signal puck_strip_received(position: Vector3)
+signal board_hit_received(position: Vector3, speed: float)
+signal goal_body_hit_received(position: Vector3, speed: float)
+signal post_hit_received(position: Vector3, speed: float)
+signal goalie_hit_received(position: Vector3, speed: float)
+signal deflection_received(position: Vector3, speed: float)
+signal body_block_received(position: Vector3, speed: float)
+signal puck_strip_received(position: Vector3, speed: float)
 signal stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int, blade_curr: Vector3)
 signal cross_check_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int)
-signal stick_lift_received(position: Vector3)
+signal stick_lift_received(position: Vector3, speed: float)
 # Distinct from stick_lift_received on purpose: a nudge (self-tap) is its own
 # gameplay event, so it carries its own cue and can be re-sounded independently
 # later without disturbing the opponent stick-lift strip.
@@ -2709,61 +2709,61 @@ func set_input_batch_provider(provider: Callable) -> void:
 # (edge-latched per contact) and tiny, so reliable delivery costs nothing
 # measurable, and a cue arriving one retransmit late still beats one that never
 # arrives.
-func send_board_hit_to_all(position: Vector3) -> void:
+func send_board_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_board_hit.rpc_id(peer_id, position)
+		notify_board_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_board_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: board_hit_received.emit(pos), [position], true)
+func notify_board_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: board_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_goal_body_hit_to_all(position: Vector3) -> void:
+func send_goal_body_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_goal_body_hit.rpc_id(peer_id, position)
+		notify_goal_body_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_goal_body_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: goal_body_hit_received.emit(pos), [position], true)
+func notify_goal_body_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: goal_body_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_post_hit_to_all(position: Vector3) -> void:
+func send_post_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_post_hit.rpc_id(peer_id, position)
+		notify_post_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_post_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: post_hit_received.emit(pos), [position], true)
+func notify_post_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: post_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_goalie_hit_to_all(position: Vector3) -> void:
+func send_goalie_hit_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_goalie_hit.rpc_id(peer_id, position)
+		notify_goalie_hit.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_goalie_hit(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: goalie_hit_received.emit(pos), [position], true)
+func notify_goalie_hit(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: goalie_hit_received.emit(pos, spd), [position, speed], true)
 
-func send_deflection_to_all(position: Vector3) -> void:
+func send_deflection_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_deflection.rpc_id(peer_id, position)
+		notify_deflection.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_deflection(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: deflection_received.emit(pos), [position], true)
+func notify_deflection(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: deflection_received.emit(pos, spd), [position, speed], true)
 
-func send_body_block_to_all(position: Vector3) -> void:
+func send_body_block_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_body_block.rpc_id(peer_id, position)
+		notify_body_block.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_body_block(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: body_block_received.emit(pos), [position], true)
+func notify_body_block(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: body_block_received.emit(pos, spd), [position, speed], true)
 
-func send_puck_strip_to_all(position: Vector3) -> void:
+func send_puck_strip_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_puck_strip.rpc_id(peer_id, position)
+		notify_puck_strip.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_puck_strip(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: puck_strip_received.emit(pos), [position], true)
+func notify_puck_strip(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: puck_strip_received.emit(pos, spd), [position, speed], true)
 
 func send_body_check_to_all(hitter_peer_id: int, victim_peer_id: int,
 		force: float, hit_dir: Vector3) -> void:
@@ -2793,13 +2793,13 @@ func notify_cross_check(victim_peer_id: int, dv: float, push_dir: Vector3) -> vo
 			func(vid: int, v: float, d: Vector3) -> void: cross_check_landed.emit(vid, v, d),
 			[victim_peer_id, dv, push_dir], true)
 
-func send_stick_lift_to_all(position: Vector3) -> void:
+func send_stick_lift_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():
-		notify_stick_lift.rpc_id(peer_id, position)
+		notify_stick_lift.rpc_id(peer_id, position, speed)
 
 @rpc("authority", "reliable")
-func notify_stick_lift(position: Vector3) -> void:
-	NetworkSimManager.send(func(pos: Vector3) -> void: stick_lift_received.emit(pos), [position], true)
+func notify_stick_lift(position: Vector3, speed: float) -> void:
+	NetworkSimManager.send(func(pos: Vector3, spd: float) -> void: stick_lift_received.emit(pos, spd), [position, speed], true)
 
 # Nudge (self-tap) cue. Host-authoritative, like the shot cue: the nudger already
 # played it locally the instant they tapped, so the host excludes them and every
