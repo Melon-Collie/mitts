@@ -144,16 +144,16 @@ const ZONE_SLOTS: Array[int] = [
 ]
 
 # Attackers in the zone that no defender has, per tick, in the low cycle
-# (measured 1.44, pinned at the ~0.28 margin the scripted fixtures use). Most of
+# (measured 1.24, pinned at the ~0.28 margin the scripted fixtures use). Most of
 # it is the weak point, whom the D sag off; the man in the puck owner's area
 # stays coverable while he is on the puck (TeamBrain's eligibility). A loose
 # puck counts every attacker as a man to cover, so the bot attack's own feeds
-# move this (75 of its 340 D-zone ticks loose); the coverage itself is the
+# move this (183 of its 480 D-zone ticks loose); the coverage itself is the
 # phase with an attacker on the puck, pinned on its own below.
-const UNCOVERED_CEILING: float = 1.72
+const UNCOVERED_CEILING: float = 1.52
 # The same count over the low cycle's ticks with an attacker on the puck
-# (measured 1.06), at the same margin.
-const UNCOVERED_CARRIED_CEILING: float = 1.34
+# (measured 0.94), at the same margin.
+const UNCOVERED_CARRIED_CEILING: float = 1.22
 # The scripted crossing cutter (measured 1.00), pinned at the same ~0.28 margin.
 # It is the weak-side point, a man the shot model prices at nothing: with the
 # cutter low in the strong D's area, the weak winger sags onto him. The cutter
