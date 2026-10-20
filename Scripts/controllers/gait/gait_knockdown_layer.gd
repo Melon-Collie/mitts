@@ -25,6 +25,8 @@ const KNEE_PAD_M: float = 0.09
 const STEP_SHIN_DEG: float = -30.0
 const STEP_CLEAR_M: float = 0.08  # the stepping foot's lift at mid-swing
 const GETUP_LEAN_DEG: float = 22.0
+# The down pose's share under which the ice stops holding the blend's skates up.
+const HOLD_FADE: float = 0.3
 
 # SkaterController.knockdown_pose_weight: the sprawl's buckle is solved from the
 # same share of the drop, so the two must not be computed apart.
@@ -88,16 +90,20 @@ func override(p: GaitPose) -> void:
 	p.drop = lerpf(p.drop, lerpf(_controller.knockdown_drop_m(), kneel_drop, up), weight)
 	# Standing up off the knee, the ice holds both skates up: a thigh whose foot
 	# pivot the blend would put below its standing height comes forward instead.
-	if up > 0.0:
+	# Lying, the tipped body's legs are the sprawl's to rest on the ice, so the
+	# hold comes in with the rise; and the live pose the blend hands back to is
+	# the seat's to stand, so it lets go again before this layer does.
+	var hold: float = up * smoothstep(0.0, HOLD_FADE, weight)
+	if hold > 0.0:
 		var hip_h: float = p.leg_length() + SkaterMeshBuilder.BLADE_ICE_Z - p.drop
 		var floor_h: float = SkaterMeshBuilder.BLADE_ICE_Z * up
 		var shin_l: float = -p.l_knee - p.l_pitch
 		var shin_r: float = -p.r_knee - p.r_pitch
 		if _foot_height(p, hip_h, p.l_pitch, shin_l) < floor_h:
-			p.l_pitch = _thigh_for(p, hip_h, shin_l, floor_h)
+			p.l_pitch = lerpf(p.l_pitch, _thigh_for(p, hip_h, shin_l, floor_h), hold)
 			p.l_knee = -(p.l_pitch + shin_l)
 		if _foot_height(p, hip_h, p.r_pitch, shin_r) < floor_h:
-			p.r_pitch = _thigh_for(p, hip_h, shin_r, floor_h)
+			p.r_pitch = lerpf(p.r_pitch, _thigh_for(p, hip_h, shin_r, floor_h), hold)
 			p.r_knee = -(p.r_pitch + shin_r)
 	# The planted skate's ankle gives its fold back so the blade lies flat; a
 	# kneeling skate rests on its toe, as the block's does.

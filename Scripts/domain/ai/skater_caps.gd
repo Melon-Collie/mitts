@@ -41,7 +41,7 @@ var stick_reach: float = GameRules.DEFAULT_STICK_LENGTH_M
 # blade to within this reach of the server-authoritative body; and where a lane
 # read lets a defender hold the stick he is reaching with (AIPuckLane
 # ._blade_block). Default = the neutral build's (test_top_hand_reaches_its_rim).
-const LEAGUE_MAX_BLADE_REACH_M: float = 2.43
+const LEAGUE_MAX_BLADE_REACH_M: float = 2.33
 var max_blade_reach: float = LEAGUE_MAX_BLADE_REACH_M
 # The furthest the balance lean can carry the shoulders off the body, metres
 # (Skater.max_lean_shift). The claim reach bound adds it; the bots' own reach
@@ -117,6 +117,8 @@ var movement: SkaterMovementRules.MovementConfig = SkaterMovementRules.league_co
 # The pose coordinator's facing lerp rates, per second (Agility-scaled).
 var facing_drag_speed: float = 5.0
 var facing_drag_speed_braking: float = 10.0
+# How fast it winds a turn up, rad/s² (FacingRules.turn_rate).
+var facing_turn_accel_max: float = 300.0
 # The body's contact disc (girth-scaled): how close to the boards and the cage its
 # centre can get.
 var body_radius: float = 0.35

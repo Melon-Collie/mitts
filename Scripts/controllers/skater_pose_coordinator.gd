@@ -28,6 +28,7 @@ var upper_body_lean_roll: float = 0.0
 var velocity_lean_x: float = 0.0
 var lower_body_lag: float = 0.0
 var head_angle: float = 0.0
+var _head_rate: float = 0.0
 # Upper-body twist follow-through (secondary motion): a damped spring trails the
 # tracked twist so the shoulders whip through a fast cut and settle, instead of
 # tracking rigidly. Converges to the tracked angle at steady state (adds nothing
@@ -41,6 +42,9 @@ var facing_angular_velocity: float = 0.0
 var upper_body_angular_velocity: float = 0.0
 var _prev_facing_angle: float = 0.0
 var _prev_upper_body_angle: float = 0.0
+# The rate apply_facing turned the body at last tick (rad/s, Vector2.angle_to's
+# sense — the wire's bearing rate negated): FacingRules.turn_rate's state.
+var facing_turn_rate: float = 0.0
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -209,7 +213,8 @@ func _apply_lean() -> void:
 	# as a plank. It rides the SAME recoil direction (fall the way you were hit)
 	# and the same replicated timer, layered on top of the stagger recoil, and
 	# lets go as he comes up onto his knees.
-	var lie: float = KnockdownFallRules.lie_share(_controller.knockdown_getup_left())
+	var kd_t: float = _controller.knockdown_getup_left()
+	var lie: float = KnockdownFallRules.lie_share(kd_t)
 	var mag: float = deg_to_rad(_controller.stagger_recoil_deg) * recoil_t
 	if lie > 0.0:
 		mag += _controller.knockdown_fold_rad() * lie
@@ -217,6 +222,14 @@ func _apply_lean() -> void:
 		var d: Vector2 = _controller.stagger_recoil_dir
 		recoil_pitch = mag * d.y
 		recoil_roll = -mag * d.x
+	# Standing up off the knee, the trunk takes up the forward stagger he finds
+	# his legs in (knockdown_getup_stagger_seconds), so that stagger starts from
+	# the lean it already has.
+	if kd_t > 0.0:
+		recoil_pitch -= deg_to_rad(_controller.stagger_recoil_deg) \
+				* (1.0 - KnockdownFallRules.stand_hold(kd_t)) \
+				* _controller.knockdown_getup_stagger_seconds \
+				/ maxf(_controller.stagger_max_seconds, 0.001)
 	# The gait's per-stride trunk texture is deliberately NOT folded in here: the
 	# blade markers hang under upper_body, so anything added to its rotation moves
 	# the blade's WORLD position (pickup / poke geometry, which must match across
@@ -276,22 +289,39 @@ func apply_facing(input: InputState, delta: float) -> void:
 								Vector2(_skater.global_position.x, _skater.global_position.z),
 								_controller.board_shield_probe),
 						deg_to_rad(_controller.board_shield_max_deg))
+			var turned: Vector2
 			if behind or absf(facing.angle_to(facing_target)) \
 					>= FacingRules.reach_edge(rules, facing, facing_target, lefty):
 				# Turning round to a cursor or a target behind, standing or moving: a
 				# chord lerp toward a near-opposed vector barely moves, so turn by angle.
-				facing = facing.rotated(FacingRules.turn_round_angle(
+				turned = facing.rotated(FacingRules.turn_round_angle(
 						facing, facing_target, cursor_dir) * minf(drag * delta, 1.0))
 			else:
-				facing = facing.lerp(facing_target, drag * delta).normalized()
+				turned = facing.lerp(facing_target, drag * delta).normalized()
+			_turn_toward(turned, delta)
+		else:
+			facing_turn_rate = 0.0
 		_skater.set_facing(facing)
 		var turn_delta: float = angle_difference(prev_angle, _skater.rotation.y)
 		lower_body_lag = clampf(
 			lower_body_lag - turn_delta,
 			-deg_to_rad(_controller.lower_body_lag_max_deg),
 			deg_to_rad(_controller.lower_body_lag_max_deg))
+	else:
+		facing_turn_rate = 0.0
 
 	apply_lower_body_yaw(delta)
+
+
+# Turns facing toward where the rule put it this tick, at the rate the body can
+# wind up to.
+func _turn_toward(turned: Vector2, delta: float) -> void:
+	if delta <= 0.0:
+		facing = turned
+		return
+	facing_turn_rate = FacingRules.turn_rate(facing_turn_rate, facing.angle_to(turned) / delta,
+			_controller.facing_turn_accel_max, delta)
+	facing = facing.rotated(facing_turn_rate * delta)
 
 # Where facing heads this tick (FacingRules); a caller-owned scratch.
 var _facing_rule: FacingRules.Result = FacingRules.Result.new()
@@ -340,15 +370,19 @@ func apply_upper_body(delta: float) -> void:
 	if _sm.get_state() == State.SHOT_BLOCKING:
 		# Chest tips forward AND onto the down knee — the weight sits over the
 		# kneeling leg, off the one extended along the ice (the gait solves that
-		# drop). Entry zeroed the lean so this eases in from square; the yaw
-		# stays locked at the snapped facing (the block faces the shooter
-		# dead-on). The block blade pose solves its ice height through
+		# drop) — and the shoulders square to the snapped facing (the block faces
+		# the shooter dead-on), both eased from whatever pose the block began in.
+		# The block blade pose solves its ice height through
 		# blade_y_lean_corrected, so the stick stays flat on the ice under the
 		# pitching torso.
 		var block_ease: float = minf(_controller.block_pose_blend_speed * delta, 1.0)
 		upper_body_lean = lerpf(upper_body_lean,
 				-deg_to_rad(_controller.block_trunk_pitch_deg), block_ease)
 		upper_body_lean_roll = lerpf(upper_body_lean_roll, _block_trunk_roll(), block_ease)
+		upper_body_angle = lerp_angle(upper_body_angle, 0.0, block_ease)
+		_twist_follow = upper_body_angle
+		_twist_follow_vel = 0.0
+		_skater.set_upper_body_rotation(upper_body_angle)
 		_apply_lean()
 		return
 
@@ -373,6 +407,10 @@ func apply_upper_body(delta: float) -> void:
 			var coil: float = -blade_side_sign * deg_to_rad(_controller.slapper_wind_up_twist_deg) * wind_up_eased
 			upper_body_angle = lerp_angle(upper_body_angle, aim_target + coil, _controller.slapper_wind_up_lerp_speed * delta)
 			_skater.set_upper_body_rotation(upper_body_angle)
+			# Glued to the tracked angle, as through the follow-through: the exit
+			# keeps the pose, so skating must find the spring settled on it.
+			_twist_follow = upper_body_angle
+			_twist_follow_vel = 0.0
 		# The wind-up's hands are authored, not reached for, so there is no reach
 		# lean; the posture under the coil — the
 		# skating lean, a stagger's reel — carries on as in every other state.
@@ -515,7 +553,8 @@ func apply_upper_body(delta: float) -> void:
 						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,
 						_controller.rom_backhand_reach_max),
 				_reach_lean_max_deg(hand_vec),
-				_controller.upper_body_lean_engage_power) * (1.0 - _address_share())
+				_controller.upper_body_lean_engage_power) \
+				* (1.0 - _address_share()) * _controller.reach_purpose()
 
 	upper_body_angle = lerp_angle(upper_body_angle, target_angle, _controller.upper_body_return_speed * delta)
 	upper_body_lean = lerpf(upper_body_lean, target_lean.x, _controller.upper_body_lean_return_speed * delta)
@@ -543,7 +582,7 @@ func apply_head_tracking(input: InputState, delta: float) -> void:
 func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
 	var target_angle: float = 0.0
 	# A downed head lolls to neutral instead of tracking the cursor across the
-	# ice (the existing lerp carries it there and back smoothly).
+	# ice (the spring carries it there and back smoothly).
 	if _controller.knockdown_timer <= 0.0:
 		var mouse_local: Vector3 = _skater.upper_body_to_local(aim_world)
 		mouse_local.y = 0.0
@@ -552,7 +591,11 @@ func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
 				atan2(mouse_local.x, -mouse_local.z),
 				-deg_to_rad(_controller.head_track_max_deg),
 				deg_to_rad(_controller.head_track_max_deg))
-	head_angle = lerpf(head_angle, target_angle, _controller.head_track_speed * delta)
+	# On a spring rather than a lag, so the head starts after the cursor from rest.
+	var omega: float = _controller.head_track_speed * EaseRules.OMEGA_PER_RATE
+	var was: float = head_angle
+	head_angle = EaseRules.critical_x(was, _head_rate, target_angle, omega, delta)
+	_head_rate = EaseRules.critical_v(was, _head_rate, target_angle, omega, delta)
 	_skater.set_head_angle(head_angle)
 
 # ── Angular Velocity Bookkeeping ──────────────────────────────────────────────
@@ -570,13 +613,14 @@ func update_angular_velocities(delta: float) -> void:
 	_prev_upper_body_angle = frame_yaw
 
 # ── Pose Resets ───────────────────────────────────────────────────────────────
-# Used by SkaterController._transition_to_skating and _enter_slapper_charge.
-# Clears smoothed pose state so the next tick starts from a neutral torso/lean.
+# Used by the teleports and the spawn. Clears smoothed pose state so the next
+# tick starts from a neutral torso/lean.
 func reset_lean_and_lag() -> void:
 	upper_body_angle = 0.0
 	upper_body_lean = 0.0
 	upper_body_lean_roll = 0.0
 	velocity_lean_x = 0.0
 	lower_body_lag = 0.0
+	facing_turn_rate = 0.0
 	_twist_follow = 0.0
 	_twist_follow_vel = 0.0

@@ -10,6 +10,7 @@ extends GaitLayer
 # them.
 
 var _blend: float = 0.0
+var _blend_rate: float = 0.0
 
 
 func stages() -> int:
@@ -18,15 +19,21 @@ func stages() -> int:
 
 func reset() -> void:
 	_blend = 0.0
+	_blend_rate = 0.0
 
 
 func is_quiet() -> bool:
 	return not _controller.stance_active
 
 
+# Eased on a spring (EaseRules), so the crouch and the base go in and out from
+# rest rather than at full rate on the frame the button changes.
 func advance(delta: float) -> bool:
-	_blend = lerpf(_blend, 1.0 if _controller.stance_active else 0.0,
-			_controller.locomotion_blend_speed * delta)
+	var target: float = 1.0 if _controller.stance_active else 0.0
+	var omega: float = _controller.locomotion_blend_speed * EaseRules.OMEGA_PER_RATE
+	var x: float = _blend
+	_blend = maxf(EaseRules.critical_x(x, _blend_rate, target, omega, delta), 0.0)
+	_blend_rate = EaseRules.critical_v(x, _blend_rate, target, omega, delta)
 	return _blend > 0.001
 
 

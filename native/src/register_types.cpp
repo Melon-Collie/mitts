@@ -3,7 +3,6 @@
 #include "native_arm_rig.h"
 #include "native_blade_dangle.h"
 #include "native_carry_rollout.h"
-#include "native_bottom_hand_ik.h"
 #include "native_gif_encoder.h"
 #include "native_leg_chain.h"
 #include "native_puck_step.h"
@@ -24,7 +23,6 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 	ClassDB::register_class<mitts::NativeTopHandIK>();
-	ClassDB::register_class<mitts::NativeBottomHandIK>();
 	ClassDB::register_class<mitts::NativeSkaterMovement>();
 	ClassDB::register_class<mitts::NativePuckStep>();
 	ClassDB::register_class<mitts::NativeBladeDangle>();

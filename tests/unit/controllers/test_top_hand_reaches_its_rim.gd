@@ -20,6 +20,8 @@ const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const DT: float = 1.0 / 120.0
 const TICKS: int = 120
 const CURSOR_M: float = 3.5
+# Where the loose puck lies along the cursor's line: inside every build's reach.
+const PUCK_M: float = 2.0
 
 
 class GameStateStub:
@@ -54,7 +56,9 @@ func _make_controller() -> SkaterController:
 
 # Holds the cursor CURSOR_M out at `deg` off the facing (positive toward the
 # forehand) with the body pinned facing +Z, so the reach and not a turn answers.
-func _reach(c: SkaterController, deg: float) -> void:
+# A loose puck lies on the cursor's line within reach unless `purpose` is false:
+# something to reach for (SkaterIKCoordinator.reach_purpose).
+func _reach(c: SkaterController, deg: float, purpose: bool = true) -> void:
 	var sk: Skater = c.skater
 	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	var forward := Vector3(0.0, 0.0, 1.0)
@@ -69,6 +73,9 @@ func _reach(c: SkaterController, deg: float) -> void:
 		input.delta = DT
 		input.mouse_world_pos = sk.global_position + dir * CURSOR_M
 		input.mouse_world_pos.y = 0.0
+		if purpose:
+			c.puck.global_position = sk.global_position + dir * PUCK_M
+			c.puck.global_position.y = 0.0
 		c._process_input(input, DT)
 		sk._physics_process(DT)
 		# The render pass poses the bottom hand.
@@ -266,6 +273,25 @@ func test_a_released_bottom_hand_tucks_ahead_of_the_body() -> void:
 	assert_lt(bh.distance_to(shoulder), arm * 0.9, "on a bent elbow, not hung straight")
 
 
+# With nothing to reach for, a far cursor rests the blade where both hands hold
+# the stick and the trunk keeps its posture.
+func test_with_nothing_to_reach_for_the_stick_rests_in_both_hands() -> void:
+	var c: SkaterController = _make_controller()
+	_reach(c, 0.0, false)
+	var sk: Skater = c.skater
+	var hand: Vector3 = sk.drawn_top_hand()
+	var shaft: Vector3 = sk.get_blade_position() - hand
+	var bh: Vector3 = sk.bottom_hand.position
+	var t: float = clampf((bh - hand).dot(shaft) / shaft.length_squared(), 0.0, 1.0)
+	assert_lt(bh.distance_to(hand + shaft * t), 0.02, "the bottom hand holds the shaft")
+	assert_almost_eq(sk.upper_body.rotation.x, 0.0, deg_to_rad(0.5), "no reach lean")
+	var reaching: SkaterController = _make_controller()
+	_reach(reaching, 0.0)
+	assert_gt(reaching.skater.get_blade_contact_global().distance_to(reaching.skater.global_position),
+			sk.get_blade_contact_global().distance_to(sk.global_position) + 0.1,
+			"the same cursor reaches out once there is a puck to reach for")
+
+
 func test_the_league_default_reach_is_the_neutral_builds() -> void:
 	var c: SkaterController = _make_controller()
 	assert_almost_eq(c.build_ai_caps().max_blade_reach, AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M, 0.01,
@@ -304,7 +330,8 @@ func test_a_carrier_keeps_both_hands_on_the_stick() -> void:
 			var c: SkaterController = _make_controller()
 			_carry(c, deg, skate)
 			var sk: Skater = c.skater
-			var hand: Vector3 = sk.top_hand.position
+			# The shaft as drawn, which the stride's pump pivots about the blade.
+			var hand: Vector3 = sk.drawn_top_hand()
 			var shaft: Vector3 = sk.get_blade_position() - hand
 			var bh: Vector3 = sk.bottom_hand.position
 			var t: float = clampf((bh - hand).dot(shaft) / shaft.length_squared(), 0.0, 1.0)

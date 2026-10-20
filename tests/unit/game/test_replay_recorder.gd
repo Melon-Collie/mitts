@@ -128,3 +128,17 @@ func test_event_buffer_wraps_and_returns_newest() -> void:
 			float(n - 20) * 0.01, float(n) * 0.01)
 	assert_eq(events.size(), 20)
 	assert_eq(events[events.size() - 1].event.idx, n - 1)
+
+
+func test_ring_holds_a_whole_goal_clip() -> void:
+	var seconds: float = float(ReplayRecorder.MEMORY_SIZE) / float(Constants.STATE_RATE)
+	assert_gt(seconds, GoalReplayDriver.CLIP_DURATION,
+			"the ring must cover the goal replay's extraction window at the broadcast rate")
+
+
+func test_recording_runs_a_short_tail_past_the_goal() -> void:
+	assert_false(_recorder.past_goal_tail(50.0), "no goal marked yet")
+	_recorder.mark_goal(10.0)
+	assert_eq(_recorder.goal_ts(), 10.0)
+	assert_false(_recorder.past_goal_tail(10.0 + GoalReplayRules.POST_GOAL_TAIL * 0.5))
+	assert_true(_recorder.past_goal_tail(10.0 + GoalReplayRules.POST_GOAL_TAIL + 0.01))

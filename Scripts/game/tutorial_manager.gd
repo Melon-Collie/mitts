@@ -522,14 +522,14 @@ func _step_def_for(step_id: int) -> TutorialStep:
 			return _step(
 				"Deflect",
 				_pick(
-					"Your teammate's going to feed you — don't catch it. Tap {elevation_up} to raise your loft to LOW, hold {stick_lift}, and angle the blade with your cursor to tip the pass as it arrives.",
-					"Your teammate's going to feed you — don't catch it. Tap {elevation_up} to raise your loft to LOW, hold {stick_lift}, and angle the blade with the right stick to tip the pass as it arrives."),
-				"Holding {stick_lift} means redirect, don't receive. At LOW loft the tip flicks the puck UP — that's the deflection goal.")
+					"Your teammate's going to feed you — don't catch it. Tap {elevation_up} twice to raise your loft to MID, hold {stick_lift}, and angle the blade with your cursor to tip the pass as it arrives.",
+					"Your teammate's going to feed you — don't catch it. Tap {elevation_up} twice to raise your loft to MID, hold {stick_lift}, and angle the blade with the right stick to tip the pass as it arrives."),
+				"Holding {stick_lift} means redirect, don't receive. At MID or HIGH loft the tip flicks the puck UP — that's the deflection goal.")
 		STEP_BLADE_LIFT:
 			return _step(
 				"Blade Lift",
-				"Now play the air. Tap {elevation_up} twice more to take your loft from LOW up to HIGH, hold {stick_lift} to raise your blade off the ice, and bat your teammate's lob down out of the air.",
-				"The raised blade only plays airborne pucks — a grounded pass slides right under it. HIGH knocks the puck DOWN to the ice.")
+				"Now play the air. Tap {elevation_down} to drop your loft to LOW, then press and hold {stick_lift} once your teammate's lob is on its way — your blade rises to meet it. Bat it down out of the air.",
+				"Pressing {stick_lift} reads the puck and takes the blade to its height, but it takes a moment — press too early and it stays down, too late and it's still on its way. FLAT or LOW knocks the puck DOWN.")
 		STEP_DROP_PUCK:
 			return _step(
 				"Drop the Puck",
@@ -1274,7 +1274,7 @@ func _feed_watch_tick(delta: float) -> void:
 			STEP_DEFLECT:
 				_hud.set_alert(_fmt("You caught that one — hold {stick_lift} before it arrives to deflect instead."))
 			STEP_BLADE_LIFT:
-				_hud.set_alert(_fmt("It got under your blade. Keep loft on HIGH and {stick_lift} held — meet the lob in the air."))
+				_hud.set_alert(_fmt("You caught that one — press {stick_lift} once the lob is in the air, and your blade rises to meet it."))
 			STEP_SHOT_BLOCK:
 				_hud.set_alert(_fmt("You caught that one — hold {block} before the shot arrives so it hits your body, not your stick."))
 		_restage_feed_on_bot()
@@ -1555,14 +1555,10 @@ func _expected_elevation() -> int:
 				2: return ShotMechanics.ELEVATION_MID
 				3: return ShotMechanics.ELEVATION_HIGH
 				_: return ShotMechanics.ELEVATION_FLAT
-		STEP_DEFLECT, STEP_SAUCER_PASS:
+		STEP_DEFLECT:
+			return ShotMechanics.ELEVATION_MID
+		STEP_SAUCER_PASS, STEP_BLADE_LIFT:
 			return ShotMechanics.ELEVATION_LOW
-		STEP_BLADE_LIFT:
-			# The blade lift rides the fully-raised blade, which needs HIGH loft
-			# (MID lifts only to the low-air pivot; SkaterController: blade_up
-			# requires elevation >= MID). Without HIGH the hold-{stick_lift} has
-			# no reach and no tell — so the step tracks loft like the others.
-			return ShotMechanics.ELEVATION_HIGH
 	return _ELEV_ANY
 
 

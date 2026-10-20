@@ -237,7 +237,7 @@ Hand-picked by design ([Evaluators model perception, never feel](CLAUDE.md#evalu
 
 ## 8. Adding a bot feature — checklist
 
-Ratchet first: `skater_agent_state_machine.gd` (3680) and `carrier.gd` (842) sit at their `test_no_god_class_growth.gd` caps, and `puck_lane.gd` is a few lines under the 800 limit — any growth there is an extraction or a deliberate bump.
+Size first: `skater_agent_state_machine.gd` and `carrier.gd` are already past `test_no_god_class_growth.gd`'s 800-line limit, so prefer extracting a collaborator to growing them; a new file must stay under it, and `puck_lane.gd` sits a few lines below it.
 
 **New carrier action**
 1. Model it in a leaf or one evaluator (`action_scoring.gd` / `carry_space.gd`), never both directions (`test_scoring_split_stays_acyclic.gd`); calibration test in `test_ai_action_scoring.gd`.

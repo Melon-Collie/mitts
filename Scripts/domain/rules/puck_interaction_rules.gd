@@ -17,6 +17,27 @@ static func check_pickup(
 	return _swept_reach(puck_prev, puck_curr, blade_prev, blade_curr, radius)
 
 
+# A committed deflect's contact: the closest approach ACROSS the ice within
+# `radius`, and the face and the disc overlapping in height there — the blade
+# rises to the puck (DeflectReachRules), so it reaches out but not up or down.
+static func check_deflect(
+		puck_prev: Vector3, puck_curr: Vector3,
+		blade_prev: Vector3, blade_curr: Vector3,
+		radius: float, vertical_reach: float) -> bool:
+	var st: Vector2 = _segment_segment_params(
+			Vector3(puck_prev.x, 0.0, puck_prev.z), Vector3(puck_curr.x, 0.0, puck_curr.z),
+			Vector3(blade_prev.x, 0.0, blade_prev.z), Vector3(blade_curr.x, 0.0, blade_curr.z))
+	var puck_at: Vector3 = puck_prev.lerp(puck_curr, st.x)
+	var blade_at: Vector3 = blade_prev.lerp(blade_curr, st.y)
+	if absf(puck_at.y - blade_at.y) > vertical_reach:
+		return false
+	var dx: float = puck_at.x - blade_at.x
+	var dz: float = puck_at.z - blade_at.z
+	if dx * dx + dz * dz > radius * radius:
+		return false
+	return not net_between(blade_at, puck_at)
+
+
 static func check_poke(
 		puck_prev: Vector3, puck_curr: Vector3,
 		blade_prev: Vector3, blade_curr: Vector3,

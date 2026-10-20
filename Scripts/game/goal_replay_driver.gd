@@ -15,38 +15,36 @@ extends Node
 # host's GameStateMachine — replaying a packet would slam phase / score / clock
 # back to whatever was captured before the goal.
 #
+# A ReplayStinger wipe hides both camera cuts: live → replay at the start, and
+# replay → live (where the post-goal faceoff staging teleports everyone) at the
+# end. The world freezes the instant the replay starts, so the wipe sweeps in
+# over a held frame. finish() runs the outgoing wipe and then stop(); stop() is
+# the immediate teardown. replay_finishing marks where the replay itself ends —
+# the outgoing wipe is not part of it (the GIF export closes its clip there).
+#
 # Owned by GameManager (host only). start() / stop() called from there.
 #
 # Testing: integration-only. This drives LIVE scene actors (Skater / Puck /
 # Goalie nodes) via the actor-driven ReplayPlaybackEngine, so there is no
 # headless unit test; the pieces it composes are covered instead
-# (test_world_state_codec, test_replay_recorder, test_goal_replay_store).
+# (test_goal_replay_rules, test_world_state_codec, test_replay_recorder,
+# test_goal_replay_store).
 
-const CLIP_DURATION: float = 8.0  # seconds of history to replay
+# Seconds of history extracted: the longest play GoalReplayRules keeps
+# (MAX_PRE_TOUCH), room for the scoring touch to sit before the goal, and the
+# post-goal tail.
+const CLIP_DURATION: float = 12.0
+const OUTRO_HOLD: float = 0.25    # real seconds on the goal frame before the outgoing wipe
 
-@export var playback_speed: float = 1.0
-@export var slowmo_window: float = 0.75  # fallback offset before clip end (used when no shot event present)
-@export var slowmo_speed: float = 0.4    # playback multiplier during slow-motion window
-@export var outro_duration: float = 0.25 # extra hold at clip end before stopping
-@export var pre_shot_lead: float = 0.0   # offset before shot release where slow-mo + cut fire. 0 = on release.
-
-# Adaptive clip-start tuning. Walks "puck_pickup" events backward from the shot
-# to find the scoring possession's start. Within a tight gap, chained pickups
-# (assists / tic-tac-toe) extend the clip naturally. When the only pickup is a
-# single long carry, we use a fixed pre-shot floor instead of showing the whole
-# carry. On top of that, a scrappy net-front goal — a scramble of jams, rebounds,
-# and stick battles — is cut to its LAST decisive contest (hit / stickcheck /
-# strip / tip) rather than replaying the whole pile-up. See
-# _compute_trimmed_clip_start_ts() for the algorithm.
-@export var pickup_chain_gap: float = 2.0    # max gap between consecutive pickups still in the chain
-@export var pre_pickup_buffer: float = 0.5   # extra time shown before the earliest chained pickup
-@export var pre_contest_buffer: float = 0.75 # extra time shown before the last hit/stickcheck/tip when it cuts the clip
-@export var min_pre_shot: float = 1.5        # floor when chain captures pickups (or no pickup found)
-@export var min_pre_shot_long_carry: float = 3.0  # floor when a pickup exists but the chain didn't capture it
-@export var max_pre_shot: float = 6.5        # ceiling on how far before the shot we'll trim back to
+enum Stage { IDLE, WIPE_IN, PLAYING, OUTRO, WIPE_OUT }
 
 signal replay_started
+signal replay_finishing
 signal replay_stopped
+# Once per recorded frame the replay steps onto: the game state the arena showed
+# at that instant (clock, score, phase) and the team carrying the puck (-1 loose),
+# so the board and the crowd can play the moment as it was.
+signal replay_frame_changed(game_state: Dictionary, carrier_team: int)
 
 var _codec: WorldStateCodec = null
 var _registry: PlayerRegistry = null
@@ -58,36 +56,33 @@ var _frames: Array[PackedByteArray] = []
 var _timestamps: Array[float] = []
 var _clip_start_ts: float = 0.0
 var _clip_end_ts: float = 0.0
+var _goal_ts: float = 0.0
+var _slowmo_start_ts: float = 0.0
 var _virtual_clock: float = 0.0
-var _active: bool = false
+var _stage: Stage = Stage.IDLE
+var _outro_elapsed: float = 0.0
 
 # Which recorded frames bracket the virtual clock, decoded once per bracket.
 var _cursor := ReplayFrameCursor.new()
+var _last_fed_snap: Dictionary = {}
 
 var _sim_hold := ReplayLiveSimHold.new()
 
-var _outro_elapsed: float = -1.0  # >= 0 while holding the final frame
-# Two replay cameras: hard cam (broadcast main, current at clip start) and
-# inside-net cam (parked behind the defending goal). At slow-mo entry the
-# driver cuts to the inside-net cam for the climactic frame. The driver
-# tracks _saved_prev_camera itself so we can drive make_current() on either
-# cam directly without fighting SpectatorCamera's single-cam activate flow.
+var _stinger: ReplayStinger = null
+var _stinger_primary: Color = Color.BLACK
+var _stinger_secondary: Color = Color.WHITE
+
+# Hard cam (broadcast main, current from the incoming wipe) and the net cam
+# behind the defending goal, cut to once slow motion is on and the puck is
+# within GoalReplayRules.NET_CAM_CUT_RANGE. The driver owns make_current() for
+# both and restores _saved_prev_camera itself.
 var _hard_cam: SpectatorCamera = null
-var _inside_net_cam: SpectatorCamera = null
+var _net_cam: SpectatorCamera = null
 var _saved_prev_camera: Camera3D = null
-var _has_cut_to_inside_net: bool = false
-# Z position of the defending goal — drives the inside-net cam placement.
-# Defaults to 0 (no cut) so the replay still works if the caller didn't supply
-# a defending goal (e.g. a future debug-trigger path).
+var _has_cut_to_net_cam: bool = false
+# Goal-line z of the defending goal; 0 means no goal was supplied and no net cam.
 var _defending_goal_z: float = 0.0
-# Shot release timestamp + position, pulled from the clip's recorded events on
-# start(). Drives both slow-mo entry timing (so the wind-up + release land in
-# slo-mo regardless of where in the clip the shot happened) and the behind-net
-# cam's lateral offset (mirror the shooter so the trajectory crosses frame
-# diagonally). _shot_event_ts < 0 means no shot event was found — fall back
-# to the slowmo_window-from-clip-end timing.
-var _shot_event_ts: float = -1.0
-var _shot_release_pos: Vector3 = Vector3.ZERO
+var _goal_center: Vector3 = Vector3.ZERO
 
 # Audio + body-check VFX events extracted from the recorder, ordered by
 # host_ts. We walk these in lockstep with the virtual clock so the cinematic
@@ -97,13 +92,22 @@ var _events: Array[Dictionary] = []
 var _next_event_idx: int = 0
 
 
+func _ready() -> void:
+	_stinger = ReplayStinger.new()
+	add_child(_stinger)
+	_stinger.covered.connect(_on_stinger_covered)
+
+
 func start(recorder: ReplayRecorder,
 		codec: WorldStateCodec,
 		registry: PlayerRegistry,
 		puck: Puck,
 		goalie_controllers: Array,
-		defending_goal_z: float = 0.0) -> void:
-	if _active:
+		defending_goal_z: float = 0.0,
+		stinger_primary: Color = Color.BLACK,
+		stinger_secondary: Color = Color.WHITE,
+		scoring_team: int = -1) -> void:
+	if _stage != Stage.IDLE:
 		stop()
 
 	var clip: Dictionary = recorder.extract_clip(CLIP_DURATION)
@@ -125,80 +129,77 @@ func start(recorder: ReplayRecorder,
 	_timestamps = timestamps
 	_clip_start_ts = timestamps[0]
 	_clip_end_ts = timestamps[timestamps.size() - 1]
-	_virtual_clock = _clip_start_ts
 	_cursor.bind(codec)
 	_cursor.reset()
-	_outro_elapsed = -1.0
-	_active = true
-	# Pull recorded events for the clip window and reset the walker so the
-	# first _process tick fires anything queued at the start of the clip.
+	_last_fed_snap = {}
 	_events = recorder.extract_events(_clip_start_ts, _clip_end_ts)
+
+	# The clip runs a short tail past the goal frame; the scoring touch is the
+	# scoring team's last contact before it. The trim and the slow motion hang
+	# off those two.
+	_goal_ts = recorder.goal_ts()
+	if _goal_ts < _clip_start_ts or _goal_ts > _clip_end_ts:
+		_goal_ts = _clip_end_ts
+	var touch_idx: int = GoalReplayRules.scoring_touch_index(_events, _goal_ts, scoring_team)
+	var touch_ts: float = float(_events[touch_idx].host_ts) if touch_idx >= 0 else -1.0
+	var touch_pos := Vector3(0.0, 0.0, defending_goal_z)
+	if touch_idx >= 0:
+		var pos: Array = _events[touch_idx].event.pos
+		touch_pos = Vector3(pos[0], pos[1], pos[2])
+	var anchor_ts: float = touch_ts if touch_ts >= 0.0 else _goal_ts
+	_clip_start_ts = maxf(_clip_start_ts, GoalReplayRules.clip_start_ts(
+			_events, anchor_ts, touch_pos.z, signf(defending_goal_z), scoring_team))
+	_slowmo_start_ts = GoalReplayRules.slowmo_start_ts(touch_ts, _goal_ts)
+	_virtual_clock = _clip_start_ts
 	_next_event_idx = 0
-
-	# Scan for the last "shot" event in the clip — that's the goal shot.
-	# Both regular shots and one-timers record under the same kind. We use the
-	# event's recorded puck-position as the shooter's release position; it's
-	# captured at release time in GameManager._record_replay_audio_event.
-	_shot_event_ts = -1.0
-	_shot_release_pos = Vector3.ZERO
-	for entry: Dictionary in _events:
-		var ev: Dictionary = entry.event
-		if ev.has("kind") and ev.kind == "shot":
-			_shot_event_ts = entry.host_ts
-			var p: Array = ev.pos
-			_shot_release_pos = Vector3(p[0], p[1], p[2])
-
-	# Trim the clip start to "the play that scored." Walks puck_pickup events
-	# backward from the shot, extending through consecutive pickups within
-	# pickup_chain_gap (assist chain), and falls back to a fixed long-carry
-	# floor when there's only one pickup well before the shot.
-	var trimmed_start: float = _compute_trimmed_clip_start_ts()
-	if trimmed_start > _clip_start_ts:
-		_clip_start_ts = trimmed_start
-		_virtual_clock = trimmed_start
-		while _next_event_idx < _events.size() and _events[_next_event_idx].host_ts < trimmed_start:
-			_next_event_idx += 1
+	while _next_event_idx < _events.size() and _events[_next_event_idx].host_ts < _clip_start_ts:
+		_next_event_idx += 1
 
 	_sim_hold.grab(_puck, _goalie_controllers)
 
 	_defending_goal_z = defending_goal_z
-	_has_cut_to_inside_net = false
+	_goal_center = Vector3(0.0, 0.0, defending_goal_z)
+	_has_cut_to_net_cam = false
 	_saved_prev_camera = get_viewport().get_camera_3d()
 
-	var puck_pos_getter: Callable = func() -> Vector3: return _puck.global_position
 	_hard_cam = SpectatorCamera.new()
 	add_child(_hard_cam)
-	_hard_cam.setup(puck_pos_getter)
-	_hard_cam.snap_to_position()
-	_hard_cam.make_current()
+	_hard_cam.setup(func() -> Vector3: return _puck.global_position)
 
-	# Behind-the-net cam parked past the end boards, elevated, with a lateral
-	# offset based on the shot release. The X-mirror places the camera on the
-	# opposite side from the shooter so the trajectory crosses the camera's
-	# line of sight diagonally instead of head-on — angles the look-direction
-	# toward the shooter, per the user's reference. Skipped if no defending
-	# goal was provided.
 	if _defending_goal_z != 0.0:
-		_inside_net_cam = SpectatorCamera.new()
-		add_child(_inside_net_cam)
-		_inside_net_cam.setup(puck_pos_getter)
-		var z_sign: float = signf(_defending_goal_z)
-		var lateral: float = 0.0
-		if _shot_event_ts >= 0.0:
-			lateral = clampf(-_shot_release_pos.x * 0.5, -3.5, 3.5)
-		var booth: Vector3 = Vector3(lateral, 3.0, _defending_goal_z + z_sign * 4.5)
-		_inside_net_cam.set_booth(booth, 55.0, 0.15)
-		_inside_net_cam.snap_to_position()
+		_net_cam = SpectatorCamera.new()
+		add_child(_net_cam)
+		var goal_z: float = _defending_goal_z
+		_net_cam.setup(func() -> Vector3:
+			return GoalReplayRules.net_cam_look_target(_puck.global_position, goal_z))
+		_net_cam.set_booth(GoalReplayRules.net_cam_position(goal_z, touch_pos.x), 55.0, 0.15)
+
+	_stinger_primary = stinger_primary
+	_stinger_secondary = stinger_secondary
+	_stage = Stage.WIPE_IN
+	_stinger.play(_stinger_primary, _stinger_secondary)
 
 	NetworkManager.start_replay_mode(_clip_start_ts)
 	replay_started.emit()
 
 
+# Ends the replay behind the outgoing wipe. A replay still under its incoming
+# wipe has shown nothing yet, so it stops at once and that wipe plays out over
+# the live view.
+func finish() -> void:
+	match _stage:
+		Stage.PLAYING, Stage.OUTRO:
+			_stage = Stage.WIPE_OUT
+			_stinger.play(_stinger_primary, _stinger_secondary)
+			replay_finishing.emit()
+		Stage.WIPE_IN:
+			stop()
+
+
 func stop() -> void:
-	if not _active:
+	if _stage == Stage.IDLE:
 		return
-	_active = false
-	_outro_elapsed = -1.0
+	_stage = Stage.IDLE
 
 	if _saved_prev_camera != null and is_instance_valid(_saved_prev_camera):
 		_saved_prev_camera.make_current()
@@ -206,16 +207,17 @@ func stop() -> void:
 	if _hard_cam != null:
 		_hard_cam.queue_free()
 		_hard_cam = null
-	if _inside_net_cam != null:
-		_inside_net_cam.queue_free()
-		_inside_net_cam = null
-	_has_cut_to_inside_net = false
+	if _net_cam != null:
+		_net_cam.queue_free()
+		_net_cam = null
+	_has_cut_to_net_cam = false
 
 	NetworkManager.stop_replay_mode()
 	_sim_hold.release()
 	_frames = []
 	_timestamps = []
 	_cursor.reset()
+	_last_fed_snap = {}
 	_events = []
 	_next_event_idx = 0
 	_codec = null
@@ -227,13 +229,13 @@ func stop() -> void:
 
 
 func is_active() -> bool:
-	return _active
+	return _stage != Stage.IDLE
 
 
 # Snapshot of the clip currently being replayed, for GoalReplayStore to keep a
-# copy that outlives the ~9 s recorder ring. start_ts is the TRIMMED start (the
+# copy that outlives the ~18 s recorder ring. start_ts is the TRIMMED start (the
 # play that scored) so the post-game loop begins where the live cinematic did,
-# not at the raw 8 s clip head. Valid between replay_started and replay_stopped.
+# not at the raw clip head. Valid between replay_started and replay_stopped.
 func get_active_clip() -> Dictionary:
 	return {
 		"frames": _frames,
@@ -243,37 +245,37 @@ func get_active_clip() -> Dictionary:
 	}
 
 
-func _process(delta: float) -> void:
-	if not _active:
-		return
-
-	# Outro: hold the final frame for outro_duration real seconds then stop.
-	if _outro_elapsed >= 0.0:
-		_outro_elapsed += delta
-		if _outro_elapsed >= outro_duration:
+func _on_stinger_covered() -> void:
+	match _stage:
+		Stage.WIPE_IN:
+			_stage = Stage.PLAYING
+			# Pose the clip's first frame before the cam seeds on the puck, or it
+			# would snap to the puck still sitting in the net.
+			_advance(0.0)
+			_hard_cam.snap_to_position()
+			_hard_cam.make_current()
+		Stage.WIPE_OUT:
 			stop()
-		return
 
-	# Anchor slow-mo to shot release if we have one — pre_shot_lead seconds of
-	# wind-up plus the release land in slow-mo. Fall back to clip-end offset
-	# for clips with no shot event (deflection-style goals, etc.).
-	var slowmo_trigger_ts: float = _shot_event_ts - pre_shot_lead \
-			if _shot_event_ts >= 0.0 else _clip_end_ts - slowmo_window
-	var in_slowmo: bool = _virtual_clock >= slowmo_trigger_ts
-	var speed: float = slowmo_speed if in_slowmo else playback_speed
+
+func _process(delta: float) -> void:
+	match _stage:
+		Stage.PLAYING:
+			_advance(delta)
+		Stage.OUTRO:
+			_outro_elapsed += delta
+			if _outro_elapsed >= OUTRO_HOLD:
+				finish()
+
+
+func _advance(delta: float) -> void:
+	var speed: float = GoalReplayRules.playback_speed(_virtual_clock, _slowmo_start_ts)
 	var prev_clock: float = _virtual_clock
 	_virtual_clock += delta * speed
 	if _virtual_clock >= _clip_end_ts:
 		_virtual_clock = _clip_end_ts
+		_stage = Stage.OUTRO
 		_outro_elapsed = 0.0
-
-	# Cut to the inside-net cam at slow-mo entry — the broadcast money shot.
-	# Single one-way cut per clip; we don't cut back to the hard cam during
-	# the outro hold (the climax frame stays on screen until stop()).
-	if in_slowmo and not _has_cut_to_inside_net and _inside_net_cam != null:
-		_inside_net_cam.snap_to_position()
-		_inside_net_cam.make_current()
-		_has_cut_to_inside_net = true
 
 	NetworkManager.set_replay_clock(_virtual_clock)
 
@@ -287,6 +289,21 @@ func _process(delta: float) -> void:
 			_virtual_clock - prev_clock,
 			_registry.all(), _puck, _goalie_controllers)
 	_dispatch_due_events()
+	var snap: Dictionary = _cursor.to_snap()
+	if not is_same(snap, _last_fed_snap):
+		_last_fed_snap = snap
+		var gs: Variant = snap.get("game_state")
+		if gs is Dictionary:
+			replay_frame_changed.emit(gs,
+					_registry.resolve_team_id_for_peer(int(snap.get("carrier_peer_id", -1))))
+
+	# One-way cut to the net cam for the finish; it holds through the outro.
+	if not _has_cut_to_net_cam and _net_cam != null \
+			and _virtual_clock >= _slowmo_start_ts \
+			and _puck.global_position.distance_to(_goal_center) <= GoalReplayRules.NET_CAM_CUT_RANGE:
+		_net_cam.snap_to_position()
+		_net_cam.make_current()
+		_has_cut_to_net_cam = true
 
 
 # Walk events whose timestamps have passed the virtual clock and fire each
@@ -297,78 +314,3 @@ func _dispatch_due_events() -> void:
 			and _events[_next_event_idx].host_ts <= _virtual_clock:
 		ReplayEventReplayer.dispatch(_events[_next_event_idx].event, _registry)
 		_next_event_idx += 1
-
-
-# Finds where the scoring play started. Two anchors, whichever sits closer to
-# the shot wins (so a late scramble touch shortens the clip rather than the
-# possession chain dragging it back through a whole pile-up):
-#   - the pickup-chain possession start (assists / tic-tac-toe / long carry —
-#     see _pickup_chain_start_ts), and
-#   - the last decisive CONTEST before the shot (hit / stickcheck / strip / tip
-#     — see _last_contest_event_ts). A jammy net-front goal chains a pile of
-#     pickups back through the scramble; cutting to its final contest instead
-#     shows "the last hit/stickcheck/tip and the goal," not the whole pile-up.
-# Result is clamped to (shot_ts - max_pre_shot, shot_ts - min_pre_shot), so the
-# clip is never shorter than min_pre_shot even when the contest was point-blank.
-func _compute_trimmed_clip_start_ts() -> float:
-	if _shot_event_ts < 0.0:
-		return _clip_start_ts  # no shot event — keep the full clip
-	var play_start: float = _pickup_chain_start_ts()
-	var contest_ts: float = _last_contest_event_ts()
-	if contest_ts >= 0.0:
-		play_start = maxf(play_start, contest_ts - pre_contest_buffer)
-	return clampf(play_start, _shot_event_ts - max_pre_shot, _shot_event_ts - min_pre_shot)
-
-
-# The pickup-chain possession start. Three cases:
-#   - Chain of pickups within pickup_chain_gap: extends through them (assists,
-#     tic-tac-toe). Starts pre_pickup_buffer before the earliest chain pickup.
-#   - Single pickup well before the shot (long single carry): floor to
-#     min_pre_shot_long_carry — show only the last few seconds, not the whole carry.
-#   - No pickups at all (faceoff scramble, weird scenarios): use the standard
-#     min_pre_shot floor.
-func _pickup_chain_start_ts() -> float:
-	var play_start: float = _shot_event_ts
-	var prev_ts: float = _shot_event_ts
-	var has_any_pickup: bool = false
-	# _events is sorted ascending by host_ts — walk back from the end.
-	for i: int in range(_events.size() - 1, -1, -1):
-		var entry: Dictionary = _events[i]
-		var ev: Dictionary = entry.event
-		if not (ev.has("kind") and ev.kind == "puck_pickup"):
-			continue
-		var ts: float = entry.host_ts
-		if ts >= _shot_event_ts:
-			continue
-		has_any_pickup = true
-		if prev_ts - ts > pickup_chain_gap:
-			break
-		play_start = ts
-		prev_ts = ts
-	if play_start == _shot_event_ts:
-		# No chain captured. Long-carry floor if a pickup exists somewhere
-		# earlier in the clip; otherwise standard floor.
-		var floor_seconds: float = min_pre_shot_long_carry if has_any_pickup else min_pre_shot
-		return _shot_event_ts - clampf(floor_seconds, min_pre_shot, max_pre_shot)
-	return play_start - pre_pickup_buffer
-
-
-# Timestamp of the last "contest" event strictly before the shot — a body check
-# (hit), stick lift (stickcheck), poke strip, or deflection (tip). These mark
-# the decisive touches of a net-front scramble. Returns -1.0 when the scoring
-# play had none (a clean rush), so the pickup chain alone drives the clip start.
-func _last_contest_event_ts() -> float:
-	for i: int in range(_events.size() - 1, -1, -1):
-		var entry: Dictionary = _events[i]
-		var ev: Dictionary = entry.event
-		if not ev.has("kind"):
-			continue
-		var kind: String = ev.kind
-		if kind != "body_check" and kind != "stick_lift" \
-				and kind != "puck_strip" and kind != "puck_deflection":
-			continue
-		var ts: float = entry.host_ts
-		if ts >= _shot_event_ts:
-			continue
-		return ts
-	return -1.0

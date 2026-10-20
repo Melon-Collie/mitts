@@ -472,7 +472,8 @@ var predicted_shot_velocity: Vector3 = Vector3.ZERO
 
 # ── Cosmetic Rig Dirty-Flag ──────────────────────────────────────────────────
 # The stick/arm/cuff/sphere rebuild in update_stick_mesh / update_arm_mesh /
-# update_bottom_arm_mesh is a pure function of five marker LOCAL positions — the
+# update_bottom_arm_mesh is a pure function of five marker LOCAL positions (the
+# top hand as drawn, pump included) — the
 # to_global → IK solve → to_local round-trip cancels the body transform, so the
 # resulting bone local transforms depend only on these markers (and handedness,
 # which re-runs _position_hand_markers on flip). A settled skater (idle, or a
@@ -486,6 +487,8 @@ var _rig_last_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_hand: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_check_lead: float = NAN
+# The drawn top hand's render-only offset off its marker (drawn_top_hand).
+var _hand_pump := Vector3.ZERO
 # Render-rate cosmetic pose hook. The controller registers a Callable(delta)
 # that runs the purely-cosmetic pose passes — the leg gait, head tracking, and
 # off-hand IK — which used to run in the physics tick (120 Hz × every skater,
@@ -580,12 +583,10 @@ var _blade_elevation_blend: float = 0.0
 # Set when an elevation blend step changes the blade tilt, consumed by the
 # render-rate rig pass in _process. See _update_blade_elevation.
 var _blade_tilt_dirty: bool = false
-# True when the blade is lifted off the ice — own raised deflect (Q held at MID
-# or HIGH loft, not carrying) or a forced pop from an opponent hooking under
-# this stick. A stick lift raises the blade through stick_check_phase. Set each
-# tick by the controller; read host-side by PuckController's interaction gate
-# and replicated so remotes/AI can read it. A lifted blade only meets airborne
-# pucks (to tip them); it clears grounded pucks and sticks.
+# True when the blade is lifted off the ice — a deflect's read of an airborne puck
+# (deflect_lift_share) or a forced pop from an opponent hooking under this stick
+# (a stick lift raises it through stick_check_phase). Set each tick by the
+# controller, replicated; a lifted blade pokes nothing and clears grounded sticks.
 var blade_up: bool = false
 # The stick-lift phase (StickCheckRules.Phase), stamped each tick by the
 # controller and replicated. Its raised phases lift the blade like blade_up, but
@@ -619,17 +620,14 @@ var pin_strength: float = 0.0
 var is_diving: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
-# Deliberate-deflect intent: true while a human player holds the shoot button
-# (LMB) WITHOUT carrying the puck — a committed "redirect this, don't catch it."
-# Set each tick by the controller (see SkaterController._wants_deflect); read
-# host-side by PuckController's loose-puck interaction gate, which routes blade
-# contact into a deflect off the blade face instead of corralling the puck. A
-# transient per-tick flag, recomputed from replayed inputs during reconcile, so
-# it needs no replication or snapshot. AI bots never set it (they reuse the held
-# shoot button off-puck for wrister one-timers).
+# Deliberate-deflect intent: a human holding the deflect button (stick_lift, Q)
+# WITHOUT the puck — "redirect this, don't catch it." Set each tick by the
+# controller (SkaterController._wants_deflect) and read host-side by PuckController's
+# loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
 var deflect_intent: bool = false
-# Eased 0→1 toward blade_up; drives the IK blade-lift offset (see
-# SkaterIKCoordinator.blade_y_local). Mirrors _blade_elevation_blend.
+# Share of blade_lift_height a deflect's press read the puck at (DeflectReachRules).
+var deflect_lift_share: float = 0.0
+# Eased toward the lift share; drives SkaterIKCoordinator.blade_y_local's lift.
 var _blade_lift_blend: float = 0.0
 # Eased 0→1 toward an EMPTY-HANDED body-check commit (the "delivering" state).
 # Drives a cosmetic stick raise in SkaterIKCoordinator.blade_y_local so a committed
@@ -933,14 +931,14 @@ func _process(delta: float) -> void:
 # Markers are guaranteed non-null by the time _process runs (created in _ready /
 # setup), matching the unguarded access the rig functions already rely on.
 func _rig_pose_changed() -> bool:
-	if top_hand.position == _rig_last_top_hand \
+	if drawn_top_hand() == _rig_last_top_hand \
 			and blade.position == _rig_last_blade \
 			and shoulder.position == _rig_last_shoulder \
 			and bottom_shoulder.position == _rig_last_bottom_shoulder \
 			and bottom_hand.position == _rig_last_bottom_hand \
 			and _check_lead == _rig_last_check_lead:
 		return false
-	_rig_last_top_hand = top_hand.position
+	_rig_last_top_hand = drawn_top_hand()
 	_rig_last_blade = blade.position
 	_rig_last_shoulder = shoulder.position
 	_rig_last_bottom_shoulder = bottom_shoulder.position
@@ -1360,7 +1358,7 @@ func _apply_blade_tilt() -> void:
 			+ _tie_draw_local()
 	# In the marker's frame: the hand, world up, and the ice's height.
 	var marker: Transform3D = blade.transform
-	var hand: Vector3 = marker.affine_inverse() * top_hand.position
+	var hand: Vector3 = marker.affine_inverse() * drawn_top_hand()
 	var marker_global: Transform3D = blade.global_transform if blade.is_inside_tree() \
 			else marker
 	var up: Vector3 = (marker_global.basis.inverse() * Vector3.UP).normalized()
@@ -1544,6 +1542,9 @@ const _BLADE_LIFT_BLEND_SPEED: float = 12.0
 # A lift's drop comes down inside StickCheckRules.DROP_S, so the blade is back
 # at puck height while the victim's is still forced up.
 const _BLADE_DROP_BLEND_SPEED: float = 24.0
+# Ice to a full lift for a deflect's blade — a hand carrying a stick half a metre
+# to a target — so a late press is a blade still on its way.
+const _DEFLECT_FULL_RISE_S: float = 0.3
 # Ease rate for the commit-stance stick raise (units/sec). A touch slower than the
 # blade lift so the stick "loads up" into the check rather than snapping.
 const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
@@ -1553,15 +1554,17 @@ const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
 const _CHECK_LEAD_SPEED: float = 5.0
 
 
-# Eases _blade_lift_blend toward blade_up each tick. The IK reads the blend via
-# get_blade_lift_blend() to raise the blade target toward blade_lift_height, so
-# the whole stick rises off the ice instead of snapping. Called from
-# _physics_process.
+# Eases _blade_lift_blend toward the lift share (1 for a full lift, a deflect's
+# own share); one channel for every lift, so a deflect handed to a lift never steps.
 func _update_blade_lift(delta: float) -> void:
 	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase, stick_tied) \
 			else 0.0
 	var speed: float = _BLADE_DROP_BLEND_SPEED \
 			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
+	if deflect_intent and not is_forced_lift_active() \
+			and not StickCheckRules.uses_lift_height(stick_check_phase, stick_tied):
+		target = deflect_lift_share
+		speed = 1.0 / _DEFLECT_FULL_RISE_S
 	_blade_lift_blend = move_toward(_blade_lift_blend, target, speed * delta)
 
 
@@ -2357,6 +2360,17 @@ func set_top_hand_position(pos: Vector3) -> void:
 
 func get_top_hand_position() -> Vector3:
 	return top_hand.position
+
+
+# Where the arm and the stick are drawn to: the marker plus a render-only offset
+# (the stride's pump, SkaterIKCoordinator), which the marker every claim reads
+# never takes.
+func drawn_top_hand() -> Vector3:
+	return top_hand.position + _hand_pump
+
+
+func set_hand_pump(offset: Vector3) -> void:
+	_hand_pump = offset
 
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────

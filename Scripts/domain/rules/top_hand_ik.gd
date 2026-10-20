@@ -66,6 +66,11 @@ class Result:
 
 # two_hand_reach's bisection: 2.5 m of reach to under a centimetre.
 const _TWO_HAND_BISECTIONS: int = 9
+# Half-width of the band about stick_horiz_at_rest over which the hand hands from
+# rising over the shoulder (CLOSE) to reaching out at rest height (FAR). Without
+# it the hand's path turns a corner there: a blade swept across the body at
+# speed kinked the hand from vertical travel to horizontal in one tick.
+const REGIME_BAND_M: float = 0.08
 
 # Projects a desired blade target onto the reachable blade region (the ROM
 # envelope), in upper-body-local space. This is the closed-form clamp — no
@@ -166,15 +171,34 @@ static func solve(
 	var from_shoulder: Vector2 = Vector2(blade.x, blade.z) - shoulder_xz
 	var d: float = from_shoulder.length()
 	var stick_horiz_at_rest: float = _stick_horiz_for(cfg.stick_length, cfg.hand_rest_y, cfg.blade_y)
-	if d >= stick_horiz_at_rest:
-		var dir: Vector2 = from_shoulder / d if d > 0.0001 else Vector2(0.0, -1.0)
-		var hand_xz: Vector2 = shoulder_xz + dir * (d - stick_horiz_at_rest)
-		out.hand = Vector3(hand_xz.x, cfg.hand_rest_y, hand_xz.y)
-	else:
-		var drop_sq: float = cfg.stick_length * cfg.stick_length - d * d
-		var hand_y: float = cfg.blade_y + sqrt(maxf(drop_sq, 0.0))
-		out.hand = Vector3(shoulder_xz.x, hand_y, shoulder_xz.y)
+	var reach: float = hand_reach(d, stick_horiz_at_rest)
+	var dir: Vector2 = from_shoulder / d if d > 0.0001 else Vector2(0.0, -1.0)
+	var hand_xz: Vector2 = shoulder_xz + dir * reach
+	out.hand = Vector3(hand_xz.x, _hand_y_on_stick(d - reach, cfg.stick_length,
+			cfg.hand_rest_y, cfg.blade_y, stick_horiz_at_rest), hand_xz.y)
 	return out
+
+
+# How far out from the shoulder the hand sits for a blade `d` off it: none in
+# close, the reach past the resting stick (`d − rest_horiz`) beyond, and a
+# quadratic across REGIME_BAND_M between them, so the hand's path has no corner.
+static func hand_reach(d: float, rest_horiz: float) -> float:
+	var x: float = d - rest_horiz
+	if x >= REGIME_BAND_M:
+		return x
+	if x <= -REGIME_BAND_M:
+		return 0.0
+	return (x + REGIME_BAND_M) * (x + REGIME_BAND_M) / (4.0 * REGIME_BAND_M)
+
+
+# The hand's height on a rigid stick spanning `horiz` across the ice, exactly
+# the rest height where the stick lies at rest (beyond the band, where `horiz`
+# is rest_horiz itself).
+static func _hand_y_on_stick(horiz: float, stick_length: float, rest_y: float,
+		blade_y: float, rest_horiz: float) -> float:
+	if horiz >= rest_horiz:
+		return rest_y
+	return blade_y + sqrt(maxf(stick_length * stick_length - horiz * horiz, 0.0))
 
 # Reconstruct the top hand for a blade position that is AUTHORITATIVE — one an
 # obstacle clamp (boards, net, goalie body) has already decided and that the
@@ -208,7 +232,8 @@ static func hand_for_clamped_blade(
 	var from_shoulder: Vector2 = blade_xz - shoulder_xz
 	var d: float = from_shoulder.length()
 	var stick_horiz_at_rest: float = _stick_horiz_for(cfg.stick_length, cfg.hand_rest_y, blade_y)
-	if d < stick_horiz_at_rest:
+	var reach: float = hand_reach(d, stick_horiz_at_rest)
+	if reach <= 0.0:
 		# CLOSE: hands come in over the shoulder and rise, tilting the stick
 		# toward vertical. hand_y_max bounds the choke-up; past it the stick
 		# simply reads shorter than it is.
@@ -219,10 +244,10 @@ static func hand_for_clamped_blade(
 	var angle_to_forehand: float = clampf(
 			atan2(dir.x, -dir.y) * blade_side_sign,
 			-cfg.rom_backhand_angle_max, cfg.rom_forehand_angle_max)
-	var reach: float = minf(
-			d - stick_horiz_at_rest, max_reach_for_angle(angle_to_forehand, cfg))
-	var hand_xz: Vector2 = shoulder_xz + dir * reach
-	return Vector3(hand_xz.x, cfg.hand_rest_y, hand_xz.y)
+	var held: float = minf(reach, max_reach_for_angle(angle_to_forehand, cfg))
+	var hand_xz: Vector2 = shoulder_xz + dir * held
+	return Vector3(hand_xz.x, minf(_hand_y_on_stick(d - reach, cfg.stick_length,
+			cfg.hand_rest_y, blade_y, stick_horiz_at_rest), cfg.hand_y_max), hand_xz.y)
 
 # Enforce the one thing in the chain that has no give: the stick's LENGTH. Takes
 # a pose whose hand and blade have drifted more than a stick apart — an authored

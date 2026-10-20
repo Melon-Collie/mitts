@@ -6,6 +6,13 @@ extends SkaterController
 func shot_power_sensitivity() -> float:
 	return PlayerPrefs.shot_power_sensitivity
 
+# A client's puck node carries no velocity (PuckController drives only its
+# position), so the one-timer and the deflect judge the rendered flight.
+func _sample_live_puck_view(out: SkaterController.PuckView) -> void:
+	super(out)
+	if not _is_host and GameManager.puck_controller != null:
+		out.velocity = GameManager.puck_controller.rendered_loose_velocity
+
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # Carries the victim knockback impulse (its length is the hit magnitude, its
@@ -243,8 +250,7 @@ func _physics_process(delta: float) -> void:
 	if NetworkManager.is_clock_ready():
 		gathered.host_timestamp = NetworkManager.estimated_input_stamp_time()
 	var input: InputState = gathered
-	_shuffle_steps.shape(input, skater.global_position, skater.velocity, skater.get_facing(),
-			shuffle_step_distance, stop_decel)
+	_shuffle_steps.shape(input, skater.velocity, shuffle_step_distance, stop_decel)
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:
@@ -593,6 +599,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Snap facing for replay accuracy — facing drives the direction of travel,
 	# so the replay must start from the server's facing to reproduce the trajectory.
 	_pose.facing = server_state.facing
+	_pose.facing_turn_rate = -server_state.facing_angular_velocity
 	skater.set_facing(_pose.facing)
 	_sync_dive_layout()
 	_pose.lower_body_lag = 0.0

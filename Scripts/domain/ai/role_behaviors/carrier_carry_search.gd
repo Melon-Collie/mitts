@@ -223,7 +223,8 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 		toward = Vector2(0.0, -ctx.own_goal_dir)
 	var self_state: SkaterNetworkState = ctx.snapshot.skater_states.get(ctx.peer_id)
 	var facing: Vector2 = self_state.facing if self_state != null else toward.normalized()
-	rollout.roll_all(self_pos, ctx.self_velocity, facing, toward, caps)
+	rollout.roll_all(self_pos, ctx.self_velocity, facing, toward, caps, true,
+			-self_state.facing_angular_velocity if self_state != null else 0.0)
 	_beam_prune_bound = stand_total
 	for m: int in AICarryRollout.MOVE_COUNT:
 		_score_move(ctx, m, our_goalie, behind_net, caps, dest_arrival)
@@ -417,7 +418,8 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	var toward := Vector2(aim.x - start.x, aim.z - start.z)
 	if toward.length_squared() < 0.0001:
 		toward = Vector2(0.0, -ctx.own_goal_dir)
-	_rollout2.roll_all(start, rollout.end_vel[m1], rollout.end_facing[m1], toward, caps)
+	_rollout2.roll_all(start, rollout.end_vel[m1], rollout.end_facing[m1], toward, caps, true,
+			rollout.end_turn_rate[m1])
 	_field.project_opponents(t1, _scratch_opponents_ply2)
 	var dest_arrival: float = 0.0
 	var dest_i: int = _dest.kinds.find(destination_kind)

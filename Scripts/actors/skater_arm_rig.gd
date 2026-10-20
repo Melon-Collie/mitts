@@ -169,7 +169,7 @@ func build(skeleton: Skeleton3D) -> void:
 # ── Arm pose ─────────────────────────────────────────────────────────────────
 
 func update_top_arm() -> void:
-	_update_arm(0, _skater.shoulder.position, _skater.top_hand.position,
+	_update_arm(0, _skater.shoulder.position, _skater.drawn_top_hand(),
 			1.0 if _skater.is_left_handed else -1.0,
 			SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.TOP_FOREARM,
