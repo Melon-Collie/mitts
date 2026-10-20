@@ -47,7 +47,6 @@ var stance_grip_mult: float = 2.0
 var stance_scrape: float = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var stance_stride_mult: float = 0.6
 var stance_max_speed_mult: float = 0.85
-var stance_shuffle_mult: float = 1.2
 # ── Hit-Button (Body-Check Commit) Tuning ─────────────────────────────────────
 # The hit button (Ctrl / input.hit_held) commits a check: it delivers the full
 # body-check transfer (see Skater.hit_passive_transfer_mult for the uncommitted
@@ -1215,7 +1214,6 @@ var _base_crossover_thrust_multiplier:  float = 0.0
 var _base_backward_thrust_multiplier:   float = 0.0
 var _base_backward_max_speed_multiplier: float = 0.0
 var _base_stance_grip_mult:             float = 0.0
-var _base_stance_shuffle_mult:          float = 0.0
 var _base_shuffle_speed:                float = 0.0
 var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
@@ -1326,7 +1324,6 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	backward_thrust_multiplier = _base_backward_thrust_multiplier * attrs.backward_mult()
 	backward_max_speed_multiplier = _base_backward_max_speed_multiplier * attrs.backward_mult()
 	stance_grip_mult = _base_stance_grip_mult * attrs.stance_grip_mult()
-	stance_shuffle_mult = _base_stance_shuffle_mult * attrs.sidestep_mult()
 	shuffle_speed = _base_shuffle_speed * attrs.sidestep_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
@@ -1469,7 +1466,6 @@ func _capture_attribute_bases() -> void:
 	_base_backward_thrust_multiplier   = backward_thrust_multiplier
 	_base_backward_max_speed_multiplier = backward_max_speed_multiplier
 	_base_stance_grip_mult             = stance_grip_mult
-	_base_stance_shuffle_mult          = stance_shuffle_mult
 	_base_shuffle_speed                = shuffle_speed
 	_base_max_speed                    = max_speed
 	_base_facing_drag_speed            = facing_drag_speed
@@ -3445,7 +3441,6 @@ func _build_movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_scrape = stance_scrape
 	cfg.stance_stride_mult = stance_stride_mult
 	cfg.stance_max_speed_mult = stance_max_speed_mult
-	cfg.stance_shuffle_mult = stance_shuffle_mult
 	cfg.shuffle_speed = shuffle_speed
 	cfg.commit_grip_mult = commit_grip_mult
 	cfg.commit_stride_mult = commit_stride_mult

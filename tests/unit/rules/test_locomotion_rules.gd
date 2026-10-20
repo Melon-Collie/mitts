@@ -126,7 +126,7 @@ func test_travel_behind_the_facing_is_backward_skating() -> void:
 func test_from_a_standstill_the_stick_against_the_body_decides() -> void:
 	assert_almost_eq(_classify(Vector2.ZERO, UP_ICE).stride, 1.0, 1e-5, "a start")
 	var m := _classify(Vector2.ZERO, RIGHT)
-	assert_almost_eq(m.shuffle, 1.0, 1e-5, "a side-step")
-	assert_eq(m.side, 1.0)
+	assert_almost_eq(m.stride, 1.0, 1e-5, "a push to the side is a start")
+	assert_eq(m.shuffle, 0.0, "the shuffle is the brake's alone")
 	assert_almost_eq(_classify(Vector2.ZERO, -UP_ICE).backward, 1.0, 1e-5, "a backward push")
 	assert_almost_eq(_classify(Vector2.ZERO, Vector2.ZERO).glide, 1.0, 1e-5, "standing")

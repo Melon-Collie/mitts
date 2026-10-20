@@ -46,7 +46,6 @@ func _random_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_scrape = _rng.randf_range(0.0, 0.8)
 	cfg.stance_stride_mult = _rng.randf_range(0.3, 1.0)
 	cfg.stance_max_speed_mult = _rng.randf_range(0.6, 1.0)
-	cfg.stance_shuffle_mult = _rng.randf_range(0.8, 1.6)
 	cfg.commit_grip_mult = _rng.randf_range(0.3, 1.0)
 	cfg.commit_stride_mult = _rng.randf_range(0.3, 1.0)
 	return cfg
