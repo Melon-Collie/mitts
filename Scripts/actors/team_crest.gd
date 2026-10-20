@@ -7,12 +7,15 @@ extends RefCounted
 # set, so the same drawing lands on a jersey texture (stretched to its texel
 # aspect) or a flat preview.
 
-enum Style { OUTLINED, OUTLINED_DARK }
+enum Style { OUTLINED, OUTLINED_DARK, OUTLINED_DOUBLE }
 
-const STYLE_NAMES: PackedStringArray = ["outlined", "outlined_dark"]
+const STYLE_NAMES: PackedStringArray = ["outlined", "outlined_dark", "outlined_double"]
 
 # The keyline, in unit-space units (about 8 mm on a 28 cm crest).
 const OUTLINE_WIDTH: float = 0.06
+# OUTLINED_DOUBLE's two keylines, dark against the fruit and light outside it
+# (about 6 mm each).
+const DOUBLE_LINE_WIDTH: float = 0.045
 # A part keeps a color an earlier part already took unless an untaken team color
 # is within this much of as close (OKLab distance): two parts snapping to one
 # color merge, which is better than a far-off color that no longer reads.
@@ -47,20 +50,31 @@ static func draw(canvas: CanvasItem, fruit: String, style: int, xform: Transform
 		preset: Dictionary) -> void:
 	var colors: Array = team_colors(fruit, preset)
 	canvas.draw_set_transform_matrix(xform)
-	_grow = OUTLINE_WIDTH
-	_grow_color = keyline_color(style, preset)
-	_draw_fruit(canvas, fruit, colors)
-	_grow = 0.0
+	# Keylines outermost first, each a silhouette pass the next one covers.
+	match style:
+		Style.OUTLINED:
+			_silhouette(canvas, fruit, colors, OUTLINE_WIDTH, preset.light)
+		Style.OUTLINED_DARK:
+			_silhouette(canvas, fruit, colors, OUTLINE_WIDTH, dark_color(preset))
+		Style.OUTLINED_DOUBLE:
+			_silhouette(canvas, fruit, colors, DOUBLE_LINE_WIDTH * 2.0, preset.light)
+			_silhouette(canvas, fruit, colors, DOUBLE_LINE_WIDTH, dark_color(preset))
 	_draw_fruit(canvas, fruit, colors)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
-# OUTLINED: the light, which the away sweater is based on — it rims the fruit at
-# home and vanishes on the road. OUTLINED_DARK: the darker of primary and
-# secondary, which rims it on the road and at home unless that is the home color.
-static func keyline_color(style: int, preset: Dictionary) -> Color:
-	if style == Style.OUTLINED:
-		return preset.light
+static func _silhouette(canvas: CanvasItem, fruit: String, colors: Array, grow: float,
+		color: Color) -> void:
+	_grow = grow
+	_grow_color = color
+	_draw_fruit(canvas, fruit, colors)
+	_grow = 0.0
+
+
+# The light is what the away sweater is based on: alone, it rims the fruit at
+# home and vanishes on the road. The dark — the darker of primary and secondary —
+# rims it on the road, and at home unless that is the home color.
+static func dark_color(preset: Dictionary) -> Color:
 	var primary: Color = preset.primary
 	var secondary: Color = preset.secondary
 	return primary if primary.get_luminance() < secondary.get_luminance() else secondary
