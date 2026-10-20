@@ -111,13 +111,11 @@ var trunk_roll: float = 0.0
 
 var _stop_latched: bool = false
 # A step of the shuffle is under way (`_sense_step`). `_step_dir` is its
-# direction in the hips' frame, (right, forward); `_step_travel` the ground it
-# has covered, metres.
+# direction in the hips' frame, (right, forward).
 var _stepping: bool = false
 var _last_travel := Vector2(0.0, 1.0)
 var _step_dir := Vector2(1.0, 0.0)
 var _step_side: float = 1.0
-var _step_travel: float = 0.0
 var _hold: float = 0.0
 # The turning states' weights with their side as the sign: eased as one number,
 # so a turn that changes side has to pass through zero on the way, and the legs
@@ -198,7 +196,7 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	_hold = hold
 	LocomotionRules.classify(Vector2(vel.x, vel.z), _skater.move_intent,
 			_skater.brake_intent, c.stance_active, facing, turning, _target)
-	_sense_step(facing, delta)
+	_sense_step(facing)
 	# A brake below the stop's speed floor is no skid, and a turn below the carve
 	# floor is steps, not crossovers.
 	if _ground_speed < c.hockey_stop_min_speed:
@@ -608,34 +606,25 @@ func _shuffle_path(w: float, dir: Vector2, side: float) -> void:
 
 
 # Starts, holds and ends a step of the shuffle, from the base closed (the
-# cycle's start). The shuffle itself (the brake with a stick, slow) steps for as
-# long as it is held, and once let go its settle holds the step through its own
-# slowing to rest. An unbraked push from rest to the side or back is a start
-# whose first stroke is one step-together, handing over at the base closed.
-func _sense_step(facing: Vector2, delta: float) -> void:
+# cycle's start). Only the shuffle itself (the brake with a stick, slow) starts
+# one; it steps for as long as it is held, and once let go its settle holds the
+# step through its own slowing to rest. Let go of the brake, the step ends there
+# and the stick is skated.
+func _sense_step(facing: Vector2) -> void:
 	var c: SkaterController = _controller
 	var intent: Vector2 = _skater.move_intent
 	var has_input: bool = intent.length_squared() > _STEP_INTENT_MIN_SQ
 	var braked: bool = _skater.brake_intent
-	# The shuffle itself (Space + stick): stepping for as long as it is held.
 	var chord: bool = SkaterMovementRules.is_shuffle(_ground_speed, braked,
 			intent.length() > c.move_deadzone)
 	if _stepping:
-		_step_travel += _ground_speed * delta
-		var holds: bool = chord
-		if not chord:
-			holds = _ground_speed > _STEP_REST_SPEED if braked \
-					else (has_input and _step_travel < c.shuffle_step_distance)
-		if not holds:
+		if not chord and not (braked and _ground_speed > _STEP_REST_SPEED):
 			_stepping = false
 			return
 	else:
-		if not chord and (braked or not has_input
-				or _ground_speed > SkaterMovementRules.GRIP_MIN_SPEED
-				or intent.normalized().dot(facing) >= SkaterMovementRules.SHUFFLE_AHEAD_COS):
+		if not chord:
 			return
 		_stepping = true
-		_step_travel = 0.0
 		stride_phase = 0.0
 		_step_side = 0.0
 	if has_input:

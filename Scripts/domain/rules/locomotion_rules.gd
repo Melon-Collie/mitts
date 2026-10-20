@@ -39,7 +39,7 @@ class Mix extends RefCounted:
 	var stop: float = 0.0
 	# +1 toward the traveller's right (CarveRules' sign): the inside of the
 	# crossover, the carve and the tight turn — the way the travel is curving —
-	# and, from the stick, the shuffle's direction and the stop's.
+	# and, from the stick, the stop's.
 	var side: float = 1.0
 
 	func clear() -> void:
@@ -76,15 +76,12 @@ static func classify(velocity: Vector2, intent: Vector2, brake: bool, stance: bo
 		if not has_input:
 			out.glide = 1.0
 			return
-		# Free push from a standstill: a start, a side-step or a backward push,
-		# by where the stick points against the body.
-		var dir: Vector2 = intent.normalized()
-		var ahead: float = facing.dot(dir)
-		var across: float = facing.cross(dir)
-		out.stride = maxf(ahead, 0.0) ** 2
+		# Free push from a standstill: a start or a backward push, by where the
+		# stick points against the body. A push to the side is a start too —
+		# the shuffle is the brake's alone (SkaterMovementRules.is_shuffle).
+		var ahead: float = facing.dot(intent.normalized())
 		out.backward = maxf(-ahead, 0.0) ** 2
-		out.shuffle = across * across
-		out.side = signf(across) if across != 0.0 else 1.0
+		out.stride = 1.0 - out.backward
 		return
 	var travel: Vector2 = velocity / speed
 	if brake:

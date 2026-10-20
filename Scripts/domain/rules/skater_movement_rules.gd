@@ -210,9 +210,8 @@ static func apply_movement(
 	return velocity
 
 
-# cos 45°: a push from rest at least this far ahead of facing starts on a
-# stride, not a step-together (SkaterLocomotion), and a stick this near the
-# travel when a stop goes on is held off it (ShuffleStepShaper).
+# cos 45°: a stick this near the travel when a stop goes on is held off it
+# (ShuffleStepShaper).
 const SHUFFLE_AHEAD_COS: float = 0.707
 
 

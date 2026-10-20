@@ -637,10 +637,10 @@ backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
 (`_shuffle_path`, step-together in any direction: a side-stepping blade cannot
 glide, so each skate holds its place on the ice while the hips pass over it,
 and the cycle is laid over the ground, one `shuffle_step_distance` a cycle;
-`_sense_step` steps for as long as the shuffle itself is held (the brake with a
-stick, slow: `SkaterMovementRules.is_shuffle`) and, let go, holds the step
-through its settle to rest, while an unbraked push from rest to the side or back
-is one step and then the stroke's, `test_shuffle_steps.gd`).
+`_sense_step` steps only for the shuffle itself (the brake with a stick, slow:
+`SkaterMovementRules.is_shuffle`) and, let go, holds the step through its
+settle to rest; an unbraked push from rest, any way, is a start and never a
+step, `test_shuffle_steps.gd`).
 
 **The shuffle is a chord, and nothing about it is on the wire.** The movement
 model reads the brake and the stick it already has: at or below

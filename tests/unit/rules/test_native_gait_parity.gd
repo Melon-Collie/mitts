@@ -280,10 +280,10 @@ func _assert_skated(fields: Array[String]) -> void:
 		assert_gt(_seen.get(field, 0.0), 0.5, "the fuzz skated %s" % field)
 
 
-# The shuffle's step, both ways it starts: a push from rest to the side or back
-# that skates on (one step, then the stroke), a tap — pushed, then braked to
-# rest — and the brake held with the stick, which starts none; in every
-# direction, with the rest between.
+# The shuffle's step: the brake held with the stick, which steps, against an
+# unbraked push from rest that skates on and a tap — pushed, then braked to
+# rest — neither of which starts one; in every direction, with the rest
+# between.
 func test_shuffle_parity() -> void:
 	if _native_missing():
 		return

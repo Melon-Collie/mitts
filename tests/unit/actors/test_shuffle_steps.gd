@@ -56,10 +56,10 @@ func before_each() -> void:
 	_shaper = ShuffleStepShaper.new()
 
 
-func _step(stick: Vector2) -> void:
+func _step(stick: Vector2, brake: bool = true) -> void:
 	var input := InputState.new()
 	input.move_vector = stick
-	input.brake = true
+	input.brake = brake
 	input.mouse_world_pos = _skater.global_position + Vector3(0.0, 0.0, -6.0)
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
@@ -136,3 +136,18 @@ func test_a_held_shuffle_keeps_stepping() -> void:
 	for stick: Vector2 in [Vector2(1.0, 0.0), Vector2(0.0, -1.0)]:
 		before_each()
 		_press(stick, 100)
+
+
+# Without the brake a push from rest is skated, never stepped: the shuffle is
+# Space's alone.
+func test_an_unbraked_push_never_shuffles() -> void:
+	for stick: Vector2 in [Vector2(1.0, 0.0), Vector2(-1.0, 0.0), Vector2(0.0, 1.0)]:
+		before_each()
+		for _i: int in SETTLE_TICKS:
+			_step(Vector2.ZERO, false)
+		var most: float = 0.0
+		for _i: int in 60:
+			_step(stick, false)
+			most = maxf(most, _controller._skating.locomotion_mix().shuffle)
+		gut.p("push %s unbraked: shuffle weight peaked at %.3f" % [stick, most])
+		assert_lt(most, 0.01, "a push %s without the brake is no shuffle" % stick)
