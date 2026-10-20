@@ -18,7 +18,8 @@ const MAX_CLIPS: int = 24
 # Each entry: { frames: Array[PackedByteArray], timestamps: Array[float],
 #               start_ts: float, end_ts: float,
 #               period: int, scoring_team_id: int,
-#               scorer_name: String, assist1_name: String, assist2_name: String }.
+#               scorer_name: String, assist1_name: String, assist2_name: String,
+#               stinger_primary: Color, stinger_secondary: Color }.
 # start_ts is the trimmed clip start (the play that scored), not necessarily
 # timestamps[0]. The meta tail (period + goal credit) is stamped by
 # GameManager at capture time so the intermission reel can pick one period's
@@ -45,6 +46,8 @@ func add(clip: Dictionary) -> void:
 		"scorer_name": String(clip.get("scorer_name", "")),
 		"assist1_name": String(clip.get("assist1_name", "")),
 		"assist2_name": String(clip.get("assist2_name", "")),
+		"stinger_primary": clip.get("stinger_primary", Color.BLACK) as Color,
+		"stinger_secondary": clip.get("stinger_secondary", Color.WHITE) as Color,
 	})
 	if _clips.size() > MAX_CLIPS:
 		_clips.pop_front()

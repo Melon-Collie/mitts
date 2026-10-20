@@ -35,6 +35,7 @@ signal availability_changed(available: bool)
 signal export_finished(path: String, ok: bool)
 
 var _capture: ClipFrameCapture = null
+var _goal_driver: GoalReplayDriver = null
 var _exporter: GifExporter = null
 var _state: State = State.IDLE
 # Scorer of the segment currently being captured, for the filename.
@@ -53,6 +54,7 @@ func _ready() -> void:
 
 
 func setup(goal_driver: GoalReplayDriver, reel_driver: PostGameReplayDriver) -> void:
+	_goal_driver = goal_driver
 	if goal_driver != null:
 		goal_driver.replay_started.connect(_on_goal_replay_started)
 		goal_driver.replay_finishing.connect(_close_segment)
@@ -92,21 +94,23 @@ func _on_goal_replay_started() -> void:
 	var label: String = ""
 	if _goal_label_provider.is_valid():
 		label = String(_goal_label_provider.call())
-	_open_segment(label)
+	_open_segment(label, _goal_driver.get_active_clip())
 
 
 func _on_reel_clip_started(clip: Dictionary) -> void:
 	_close_segment()
-	_open_segment(String(clip.get("scorer_name", "")))
+	_open_segment(String(clip.get("scorer_name", "")), clip)
 
 
-func _open_segment(label: String) -> void:
+# `clip` carries the stinger colors the segment's intro wipe is painted in.
+func _open_segment(label: String, clip: Dictionary) -> void:
 	# Without the extension there is no encode to feed, so don't pay the
 	# capture cost either.
 	if _capture == null or not GifExporter.is_available():
 		return
 	_segment_label = label
-	_capture.start()
+	_capture.start(clip.get("stinger_primary", Color.BLACK) as Color,
+			clip.get("stinger_secondary", Color.WHITE) as Color)
 	availability_changed.emit(true)
 
 

@@ -87,6 +87,18 @@ func test_goal_meta_defaults_when_absent() -> void:
 	var stored: Dictionary = _store.clips()[0]
 	assert_eq(int(stored.scoring_team_id), -1)
 	assert_eq(String(stored.scorer_name), "")
+	assert_eq(stored.stinger_primary, Color.BLACK)
+	assert_eq(stored.stinger_secondary, Color.WHITE)
+
+
+func test_keeps_the_stinger_colors_for_the_clip_intro() -> void:
+	var clip: Dictionary = _clip(2)
+	clip.stinger_primary = Color.ORANGE
+	clip.stinger_secondary = Color.NAVY_BLUE
+	_store.add(clip)
+	var stored: Dictionary = _store.clips()[0]
+	assert_eq(stored.stinger_primary, Color.ORANGE)
+	assert_eq(stored.stinger_secondary, Color.NAVY_BLUE)
 
 
 func test_stored_frames_survive_source_mutation() -> void:

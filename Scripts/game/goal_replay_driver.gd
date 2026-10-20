@@ -242,6 +242,8 @@ func get_active_clip() -> Dictionary:
 		"timestamps": _timestamps,
 		"start_ts": _clip_start_ts,
 		"end_ts": _clip_end_ts,
+		"stinger_primary": _stinger_primary,
+		"stinger_secondary": _stinger_secondary,
 	}
 
 

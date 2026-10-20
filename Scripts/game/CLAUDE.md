@@ -43,9 +43,10 @@ orchestrator that sits next to it.
 
 ## Replays are posed on the render clock
 
-The replay drivers sample a clip at render time and pose the live actors in
-`_process`. Two things follow, and `ReplayLiveSimHold` plus each driver's loop
-hold them:
+The replay drivers sample a clip at render time and pose the actors in
+`_process`. Two things follow. For the live actors `ReplayLiveSimHold` and each
+driver's loop hold them; the file viewer parks its own actors as it spawns them
+(`ReplayViewer._draw_as_posed`, skater physics off, the puck on replay hold).
 
 - **The posed actors stop interpolating** for the replay. An interpolated node
   is drawn between its pose at the last tick and the one just set, so a pose

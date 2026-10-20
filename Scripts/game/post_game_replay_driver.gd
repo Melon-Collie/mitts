@@ -149,9 +149,10 @@ func _begin_clip(idx: int) -> void:
 	_clip_end_ts = float(clip.end_ts)
 	_cursor.reset()
 	_gap_elapsed = -1.0
-	NetworkManager.set_replay_clock(_virtual_clock)
 	# Re-anchor the cam so the puck teleporting to the next clip's start doesn't
-	# whip the broadcast framing across the ice.
+	# whip the broadcast framing across the ice — on the new clip's first frame,
+	# or it would seed on the puck where the last clip left it.
+	_pose(0.0)
 	if _cam != null:
 		_cam.snap_to_position()
 	clip_started.emit(clip)
@@ -178,9 +179,8 @@ func _process(delta: float) -> void:
 		# Between clips: hold the final frame briefly, then roll to the next.
 		_gap_elapsed += delta
 		if _gap_elapsed >= inter_clip_gap:
-			_advance_clip()
-			if not _active:
-				return
+			_advance_clip()  # poses the next clip's first frame itself
+			return
 	else:
 		var prev_clock: float = _virtual_clock
 		_virtual_clock += delta * playback_speed
@@ -188,12 +188,14 @@ func _process(delta: float) -> void:
 			_virtual_clock = _clip_end_ts
 			_gap_elapsed = 0.0
 		sim_delta = _virtual_clock - prev_clock
+	_pose(sim_delta)
 
+
+# Poses the world at the virtual clock. The held final frame is re-posed every
+# frame too: the skaters' own tick keeps integrating their replayed velocity,
+# and a frame that is not re-posed slides with it.
+func _pose(sim_delta: float) -> void:
 	NetworkManager.set_replay_clock(_virtual_clock)
-
-	# The held final frame is re-posed every frame too: the skaters' own tick
-	# keeps integrating their replayed velocity, and a frame that is not re-posed
-	# slides with it.
 	if not _cursor.seek(_frames, _timestamps, _virtual_clock):
 		return
 	ReplayPlaybackEngine.apply_interpolated_snapshot(

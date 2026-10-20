@@ -23,6 +23,11 @@ extends Node
 # presses save partway through and expects the entire goal, so there is no
 # version of this that starts on the press.
 #
+# Every segment opens on the Mitts wipe. The live one is a CanvasLayer on the
+# main viewport, which the mirror never sees, so the mirror carries its own:
+# for the goal cinematic it plays in step with the one on screen, and for a
+# reel clip it is the GIF's intro alone.
+#
 # Framing caveat: the mirror keeps the live camera's vertical FOV, so on a
 # display that isn't 16:9 the GIF shows a different horizontal extent than the
 # player saw. Vertical framing — where the cinematic's composition lives — is
@@ -30,14 +35,14 @@ extends Node
 
 const CAPTURE_SIZE: Vector2i = Vector2i(480, 270)
 const CAPTURE_FPS: int = 20
-# 10 s at CAPTURE_FPS, ~78 MB of RGB8. The goal cinematic runs ~7 s of
-# wall-clock (slow-mo stretches the tail past the clip's sim duration) and the
-# reel's clips less; this is the backstop that bounds memory if a driver is
-# left running, not an expected limit.
-const MAX_FRAMES: int = 200
+# 15 s at CAPTURE_FPS, ~117 MB of RGB8: the longest goal cinematic, which
+# test_clip_frame_capture.gd holds it to. A typical one is ~10 s. Past the cap
+# the segment stops growing, so it also bounds a driver left running.
+const MAX_FRAMES: int = 300
 
 var _viewport: SubViewport = null
 var _camera: Camera3D = null
+var _stinger: ReplayStinger = null
 var _frames: Array[Image] = []
 var _capturing: bool = false
 var _accum: float = 0.0
@@ -74,6 +79,9 @@ func _ready() -> void:
 	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_viewport.add_child(_camera)
 
+	_stinger = ReplayStinger.new()
+	_viewport.add_child(_stinger)
+
 	set_process(false)
 
 
@@ -89,10 +97,13 @@ func fps() -> int:
 	return CAPTURE_FPS
 
 
-# Begins a fresh capture segment, dropping anything previously buffered.
-func start() -> void:
+# Begins a fresh capture segment on the wipe in the scoring team's colors,
+# dropping anything previously buffered.
+func start(wipe_primary: Color, wipe_secondary: Color) -> void:
+	_stinger.play(wipe_primary, wipe_secondary)
 	_frames.clear()
-	_accum = 0.0
+	# Due at once, so the first frame catches the wipe's leading edge.
+	_accum = 1.0 / float(CAPTURE_FPS)
 	_pending_read = false
 	_capturing = true
 	# The mirror can frame skaters the live camera does not.
