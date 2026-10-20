@@ -686,14 +686,16 @@ func start_goal_replay() -> void:
 	_staged_faceoff_pending = true
 	var primary: Color = Color.BLACK
 	var secondary: Color = Color.WHITE
+	var scoring_team_id: int = -1
 	if _pending_scoring_team != null:
+		scoring_team_id = _pending_scoring_team.team_id
 		var colors: Dictionary = TeamColorRegistry.get_colors(
 				_pending_scoring_team.color_slot, _pending_scoring_team.team_id)
 		primary = colors.primary
 		secondary = colors.secondary
 	_goal_replay_driver.start(_recorder, _codec, _registry,
 			_puck_getter.call() as Puck, _goalie_controllers_getter.call(),
-			_pending_defending_goal_z, primary, secondary)
+			_pending_defending_goal_z, primary, secondary, scoring_team_id)
 
 
 # Host-only: advance state machine once the cinematic finishes naturally.

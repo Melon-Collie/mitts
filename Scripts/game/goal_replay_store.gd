@@ -2,7 +2,7 @@ class_name GoalReplayStore
 extends RefCounted
 
 # Persistent per-game list of goal clips, one per goal scored. The live
-# GoalReplayDriver extracts + trims a clip from the ~9 s ReplayRecorder ring
+# GoalReplayDriver extracts + trims a clip from the ~18 s ReplayRecorder ring
 # buffer on every goal; that ring only holds the last few seconds, so by
 # game-over it no longer contains earlier goals. This store shadows a copy of
 # each trimmed clip as it plays so PostGameReplayDriver can loop through ALL of

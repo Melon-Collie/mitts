@@ -11,9 +11,9 @@ extends RefCounted
 # because the live signals that drive sounds (puck.puck_hit_boards et al.)
 # don't fire while physics is frozen.
 
-# ~9 s at the 120 Hz broadcast rate (covers the 8 s clip + 0.5 s post-goal
-# window). Sized in FRAMES, so it has to be re-derived whenever the broadcast
-# rate changes — an undersized ring truncates a goal replay silently.
+# 18 s at the Constants.STATE_RATE broadcast. Sized in FRAMES, so it must cover
+# GoalReplayDriver.CLIP_DURATION at that rate — an undersized ring truncates a
+# goal replay silently; test_replay_recorder.gd holds the two together.
 const MEMORY_SIZE: int = 1080
 const EVENT_MEMORY_SIZE: int = 720  # bursty (shots, body checks, deflections); size for headroom
 
@@ -26,6 +26,10 @@ var _events: Array[Dictionary] = []
 var _event_timestamps: Array[float] = []
 var _event_ptr: int = 0
 var _event_count: int = 0
+
+# Timestamp of the latest goal-moment frame; < 0 before the first goal. The clip
+# runs GoalReplayRules.POST_GOAL_TAIL past it.
+var _goal_ts: float = -1.0
 
 
 func setup() -> void:
@@ -50,6 +54,18 @@ func record_frame(data: PackedByteArray, host_ts: float) -> void:
 	_timestamps[_ptr] = host_ts
 	_ptr = (_ptr + 1) % MEMORY_SIZE
 	_count = mini(_count + 1, MEMORY_SIZE)
+
+
+func mark_goal(ts: float) -> void:
+	_goal_ts = ts
+
+
+func goal_ts() -> float:
+	return _goal_ts
+
+
+func past_goal_tail(ts: float) -> bool:
+	return _goal_ts >= 0.0 and ts > _goal_ts + GoalReplayRules.POST_GOAL_TAIL
 
 
 func record_event(host_ts: float, event: Dictionary) -> void:

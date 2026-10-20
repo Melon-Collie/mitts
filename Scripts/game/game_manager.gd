@@ -68,6 +68,7 @@ signal period_break_started(duration: float)
 signal period_intro_started(period: int, duration: float)
 signal replay_started
 signal replay_stopped
+signal goal_replay_frame_changed(game_state: Dictionary, carrier_team: int)
 # Goal-clip GIF export (GoalClipExporter). state is a GoalClipExporter.State —
 # the HUD reads it to swap its prompt between "save", "saving", and gone.
 # finished carries the written path, or "" when the export failed.
@@ -1602,9 +1603,10 @@ func _wire_subsystems() -> void:
 	_goal_replay_driver = GoalReplayDriver.new()
 	add_child(_goal_replay_driver)
 	# Shadow each goal's clip as its live cinematic starts so the post-game
-	# highlight loop has all of them (the recorder ring only holds ~9 s).
+	# highlight loop has all of them (the recorder ring only holds ~18 s).
 	_goal_replay_store = GoalReplayStore.new()
 	_goal_replay_driver.replay_started.connect(_on_goal_replay_started_capture)
+	_goal_replay_driver.replay_frame_changed.connect(goal_replay_frame_changed.emit)
 	_post_game_replay_driver = PostGameReplayDriver.new()
 	add_child(_post_game_replay_driver)
 	# Intermission reel: loops the ended period's clips for the fixed break
@@ -1747,6 +1749,7 @@ func _wire_subsystems() -> void:
 		var ts: float = NetworkManager.local_time() if NetworkManager.is_host \
 				else NetworkManager.estimated_host_time()
 		_recorder.record_frame(goal_frame, ts)
+		_recorder.mark_goal(ts)
 		# Also enqueue to the .mreplay file so the puck-in-net moment lands
 		# in the recording deterministically — see ReplayFileRecorder
 		# .force_frame for what the throttled path would capture instead.
@@ -1828,17 +1831,19 @@ func _wire_sound_signals() -> void:
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, puck.get_puck_position(), _puck_speed_volume(spd), 0.06)
 			NetworkManager.send_goal_body_hit_to_all(puck.get_puck_position())
 			_record_replay_audio_event("puck_goal_body", puck.get_puck_position(), spd))
-		puck.puck_touched_loose.connect(func(_s: Skater) -> void:
+		puck.puck_touched_loose.connect(func(s: Skater) -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_DEFLECTION, puck.get_puck_position(), _puck_speed_volume(spd), 0.06, _deflection_pitch(spd))
 			NetworkManager.send_deflection_to_all(puck.get_puck_position())
-			_record_replay_audio_event("puck_deflection", puck.get_puck_position(), spd))
-		puck.puck_body_blocked.connect(func(_s: Skater) -> void:
+			_record_replay_audio_event("puck_deflection", puck.get_puck_position(), spd,
+					{"team": s.get_team_id()}))
+		puck.puck_body_blocked.connect(func(s: Skater) -> void:
 			var spd: float = puck.linear_velocity.length()
 			SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, puck.get_puck_position(), _puck_speed_volume(spd), 0.07)
 			NetworkManager.send_body_block_to_all(puck.get_puck_position())
-			_record_replay_audio_event("puck_body_block", puck.get_puck_position(), spd))
-		puck_controller.puck_stripped_from.connect(func(_pid: int, _stripper: int) -> void:
+			_record_replay_audio_event("puck_body_block", puck.get_puck_position(), spd,
+					{"team": s.get_team_id()}))
+		puck_controller.puck_stripped_from.connect(func(_pid: int, stripper: int) -> void:
 			var spd: float = puck.linear_velocity.length()
 			var pos: Vector3 = puck.get_puck_position()
 			if puck_controller.stick_lift_forced_seconds() > 0.0:
@@ -1850,7 +1855,7 @@ func _wire_sound_signals() -> void:
 			else:
 				SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(spd), 0.06)
 				NetworkManager.send_puck_strip_to_all(pos)
-				_record_replay_audio_event("puck_strip", pos, spd))
+				_record_replay_audio_event("puck_strip", pos, spd, {"team": _registry.resolve_team_id_for_peer(stripper)}))
 	else:
 		# Client-side predicted contact cues: the loose-puck prediction detects
 		# post / net / board / goalie contacts analytically, so these fire the
@@ -1986,7 +1991,8 @@ func _play_pickup_sound(carrier: Skater) -> void:
 	SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, carrier.global_position,
 			SoundManager.reception_volume_db(speed), 0.05)
 	if NetworkManager.is_host:
-		_record_replay_audio_event("puck_pickup", carrier.global_position, speed)
+		_record_replay_audio_event("puck_pickup", carrier.global_position, speed,
+				{"team": carrier.get_team_id()})
 
 
 # Host-only: shadow a transient audio/VFX event into the in-memory recorder
@@ -2008,7 +2014,7 @@ func _record_replay_audio_event(kind: String, position: Vector3, speed: float,
 	# actively playing — the cinematic is the consumer, not the producer.
 	# Same gate for GOAL_CELEBRATION: those events belong to live gameplay,
 	# not the clip (which ends at the goal-moment frame).
-	if NetworkManager.is_replay_mode() or _is_celebration_phase():
+	if NetworkManager.is_replay_mode() or _recorder_closed(NetworkManager.local_time()):
 		return
 	# Nothing consumes events (no recorder, no file, no clients to mirror to):
 	# skip queueing entirely. Ordered so a live match (recorder always present)
@@ -2070,7 +2076,7 @@ func _drain_replay_event_queue() -> void:
 func _on_replay_event_received(host_ts: float, event: Dictionary) -> void:
 	if _recorder == null:
 		return
-	if NetworkManager.is_replay_mode() or _is_celebration_phase():
+	if NetworkManager.is_replay_mode() or _recorder_closed(host_ts):
 		return
 	_recorder.record_event(host_ts, event)
 	# Persist into the client's own .mreplay file too — the writer isn't
@@ -2352,13 +2358,12 @@ func _on_intermission_reel_stopped() -> void:
 		_phase_coord.handle_phase_entered()
 
 
-# Recorder-recording gate. During GOAL_CELEBRATION we skip writing to the
-# recorder (both frames and events) so the clip ends cleanly at the puck-
-# in-net moment captured via PhaseCoordinator._capture_goal_moment_frame.
-# The celebration itself is live gameplay; its frames don't belong in the
-# replay clip.
-func _is_celebration_phase() -> bool:
-	return is_in_goal_celebration()
+# Recorder-recording gate. The goal clip runs GoalReplayRules.POST_GOAL_TAIL
+# past the goal-moment frame (PhaseCoordinator._capture_goal_moment_frame) so
+# the replay's slow motion lands on the puck in the net; the rest of
+# GOAL_CELEBRATION is live play that doesn't belong in the clip.
+func _recorder_closed(ts: float) -> bool:
+	return is_in_goal_celebration() and _recorder != null and _recorder.past_goal_tail(ts)
 
 
 # Public phase query for controllers (the AIController uses this to drop
@@ -3442,7 +3447,8 @@ func _on_puck_release_requested(direction: Vector3, power: float, is_slapper: bo
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
 	SoundManager.play_world(sound, puck.get_puck_position(), SoundManager.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
-		_record_replay_audio_event("shot", puck.get_puck_position(), power, {"is_slapper": is_slapper})
+		_record_replay_audio_event("shot", puck.get_puck_position(), power,
+				{"is_slapper": is_slapper, "team": _registry.resolve_team_id(puck.get_carrier())})
 	if NetworkManager.is_host:
 		# Host-local (or bot) shot: every client needs the cue. No shooter to
 		# exclude — the host already played it locally above.
@@ -3470,9 +3476,10 @@ func _on_nudge_requested(velocity: Vector3) -> void:
 	# player's client, or on the host for a host-local player / bot).
 	_play_nudge_cue(puck.get_puck_position())
 	if NetworkManager.is_host:
+		var team: int = _registry.resolve_team_id(puck.get_carrier())
 		puck.nudge(velocity)
 		var pos: Vector3 = puck.get_puck_position()
-		_record_replay_audio_event("nudge", pos, velocity.length())
+		_record_replay_audio_event("nudge", pos, velocity.length(), {"team": team})
 		# Fan the cue to the clients — this host/bot already played it locally.
 		NetworkManager.send_nudge_to_all(pos)
 	else:
@@ -3501,7 +3508,8 @@ func _on_remote_derived_nudge(velocity: Vector3, nudger_peer_id: int) -> void:
 	# The host plays the remote player's nudge, and every OTHER client hears it —
 	# the nudger already played it locally the instant they tapped.
 	_play_nudge_cue(pos)
-	_record_replay_audio_event("nudge", pos, velocity.length())
+	_record_replay_audio_event("nudge", pos, velocity.length(),
+			{"team": record.skater.get_team_id()})
 	NetworkManager.send_nudge_to_all(pos, nudger_peer_id)
 
 
@@ -3522,7 +3530,8 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 	# the start of the play instead of the moment of release.
 	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, puck.get_puck_position(), SoundManager.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
-		_record_replay_audio_event("shot", puck.get_puck_position(), power, {"is_slapper": true})
+		_record_replay_audio_event("shot", puck.get_puck_position(), power,
+				{"is_slapper": true, "team": skater.get_team_id()})
 	if not NetworkManager.is_host:
 		# Client path: seed local puck prediction only. The host fires the
 		# authoritative one-timer off this client's input-stream release
@@ -3587,7 +3596,8 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 					* (1.0 + record.controller.one_timer_center_power_bonus))
 	var shot_pos: Vector3 = puck.get_puck_position()
 	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, shot_pos, SoundManager.shot_volume_db(power), 0.04)
-	_record_replay_audio_event("shot", shot_pos, power, {"is_slapper": true})
+	_record_replay_audio_event("shot", shot_pos, power,
+			{"is_slapper": true, "team": skater.get_team_id()})
 	# Fan the cue out to the other clients (the shooter already played it locally).
 	NetworkManager.send_shot_to_all(shot_pos, true, power, shooter_peer_id)
 	# Same interp-delay approximation _on_remote_derived_release uses — the
@@ -3708,7 +3718,8 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
 	SoundManager.play_world(sound, shot_pos, SoundManager.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
-		_record_replay_audio_event("shot", shot_pos, power, {"is_slapper": is_slapper})
+		_record_replay_audio_event("shot", shot_pos, power,
+				{"is_slapper": is_slapper, "team": _registry.resolve_team_id_for_peer(shooter_peer_id)})
 		# Fan the cue out to the other clients (the shooter already played it
 		# locally the instant they released).
 		NetworkManager.send_shot_to_all(shot_pos, is_slapper, power, shooter_peer_id)
@@ -4065,7 +4076,7 @@ func _on_world_state_received(data: PackedByteArray) -> void:
 	# (NetworkManager.is_replay_mode is mirrored to clients) so we don't
 	# overwrite the live pre-goal frames with frozen mid-replay state.
 	if _recorder != null and not NetworkManager.is_replay_mode() \
-			and not _is_celebration_phase():
+			and not _recorder_closed(host_ts):
 		_recorder.record_frame(data, host_ts)
 	# Tee the broadcast into the local .mreplay file (throttled to
 	# REPLAY_FILE_RATE). Use the host_ts encoded in the packet so timestamps align
@@ -5395,9 +5406,9 @@ func get_world_state() -> PackedByteArray:
 		return state
 	var ts: float = NetworkManager.local_time()
 	# In-memory recorder feeds GoalReplayDriver; gated by is_replay_mode and by
-	# GOAL_CELEBRATION (see _is_celebration_phase).
+	# GOAL_CELEBRATION past the goal's tail (see _recorder_closed).
 	if _recorder != null and not NetworkManager.is_replay_mode() \
-			and not _is_celebration_phase():
+			and not _recorder_closed(ts):
 		_recorder.record_frame(state, ts)
 	# The file recorder throttles to REPLAY_FILE_RATE and skips dead-puck phase
 	# ticks past the first one (see ReplayFileRecorder.should_record).

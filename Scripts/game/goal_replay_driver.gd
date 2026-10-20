@@ -19,7 +19,8 @@ extends Node
 # replay → live (where the post-goal faceoff staging teleports everyone) at the
 # end. The world freezes the instant the replay starts, so the wipe sweeps in
 # over a held frame. finish() runs the outgoing wipe and then stop(); stop() is
-# the immediate teardown.
+# the immediate teardown. replay_finishing marks where the replay itself ends —
+# the outgoing wipe is not part of it (the GIF export closes its clip there).
 #
 # Owned by GameManager (host only). start() / stop() called from there.
 #
@@ -29,13 +30,21 @@ extends Node
 # (test_goal_replay_rules, test_world_state_codec, test_replay_recorder,
 # test_goal_replay_store).
 
-const CLIP_DURATION: float = 8.0  # seconds of history to replay
+# Seconds of history extracted: the longest play GoalReplayRules keeps
+# (MAX_PRE_TOUCH), room for the scoring touch to sit before the goal, and the
+# post-goal tail.
+const CLIP_DURATION: float = 12.0
 const OUTRO_HOLD: float = 0.25    # real seconds on the goal frame before the outgoing wipe
 
 enum Stage { IDLE, WIPE_IN, PLAYING, OUTRO, WIPE_OUT }
 
 signal replay_started
+signal replay_finishing
 signal replay_stopped
+# Once per recorded frame the replay steps onto: the game state the arena showed
+# at that instant (clock, score, phase) and the team carrying the puck (-1 loose),
+# so the board and the crowd can play the moment as it was.
+signal replay_frame_changed(game_state: Dictionary, carrier_team: int)
 
 var _codec: WorldStateCodec = null
 var _registry: PlayerRegistry = null
@@ -47,6 +56,7 @@ var _frames: Array[PackedByteArray] = []
 var _timestamps: Array[float] = []
 var _clip_start_ts: float = 0.0
 var _clip_end_ts: float = 0.0
+var _goal_ts: float = 0.0
 var _slowmo_start_ts: float = 0.0
 var _virtual_clock: float = 0.0
 var _stage: Stage = Stage.IDLE
@@ -54,6 +64,7 @@ var _outro_elapsed: float = 0.0
 
 # Which recorded frames bracket the virtual clock, decoded once per bracket.
 var _cursor := ReplayFrameCursor.new()
+var _last_fed_snap: Dictionary = {}
 
 var _sim_hold := ReplayLiveSimHold.new()
 
@@ -94,7 +105,8 @@ func start(recorder: ReplayRecorder,
 		goalie_controllers: Array,
 		defending_goal_z: float = 0.0,
 		stinger_primary: Color = Color.BLACK,
-		stinger_secondary: Color = Color.WHITE) -> void:
+		stinger_secondary: Color = Color.WHITE,
+		scoring_team: int = -1) -> void:
 	if _stage != Stage.IDLE:
 		stop()
 
@@ -119,19 +131,25 @@ func start(recorder: ReplayRecorder,
 	_clip_end_ts = timestamps[timestamps.size() - 1]
 	_cursor.bind(codec)
 	_cursor.reset()
+	_last_fed_snap = {}
 	_events = recorder.extract_events(_clip_start_ts, _clip_end_ts)
 
-	# The clip ends on the goal frame; the scoring touch is the last skater
-	# contact before it. Both the trim and the slow motion hang off those two.
-	var touch_idx: int = GoalReplayRules.scoring_touch_index(_events, _clip_end_ts)
+	# The clip runs a short tail past the goal frame; the scoring touch is the
+	# scoring team's last contact before it. The trim and the slow motion hang
+	# off those two.
+	_goal_ts = recorder.goal_ts()
+	if _goal_ts < _clip_start_ts or _goal_ts > _clip_end_ts:
+		_goal_ts = _clip_end_ts
+	var touch_idx: int = GoalReplayRules.scoring_touch_index(_events, _goal_ts, scoring_team)
 	var touch_ts: float = float(_events[touch_idx].host_ts) if touch_idx >= 0 else -1.0
-	var touch_x: float = 0.0
+	var touch_pos := Vector3(0.0, 0.0, defending_goal_z)
 	if touch_idx >= 0:
-		var touch_pos: Array = _events[touch_idx].event.pos
-		touch_x = touch_pos[0]
-	var anchor_ts: float = touch_ts if touch_ts >= 0.0 else _clip_end_ts
-	_clip_start_ts = maxf(_clip_start_ts, GoalReplayRules.clip_start_ts(_events, anchor_ts))
-	_slowmo_start_ts = GoalReplayRules.slowmo_start_ts(touch_ts, _clip_end_ts)
+		var pos: Array = _events[touch_idx].event.pos
+		touch_pos = Vector3(pos[0], pos[1], pos[2])
+	var anchor_ts: float = touch_ts if touch_ts >= 0.0 else _goal_ts
+	_clip_start_ts = maxf(_clip_start_ts, GoalReplayRules.clip_start_ts(
+			_events, anchor_ts, touch_pos.z, signf(defending_goal_z), scoring_team))
+	_slowmo_start_ts = GoalReplayRules.slowmo_start_ts(touch_ts, _goal_ts)
 	_virtual_clock = _clip_start_ts
 	_next_event_idx = 0
 	while _next_event_idx < _events.size() and _events[_next_event_idx].host_ts < _clip_start_ts:
@@ -154,7 +172,7 @@ func start(recorder: ReplayRecorder,
 		var goal_z: float = _defending_goal_z
 		_net_cam.setup(func() -> Vector3:
 			return GoalReplayRules.net_cam_look_target(_puck.global_position, goal_z))
-		_net_cam.set_booth(GoalReplayRules.net_cam_position(goal_z, touch_x), 55.0, 0.15)
+		_net_cam.set_booth(GoalReplayRules.net_cam_position(goal_z, touch_pos.x), 55.0, 0.15)
 
 	_stinger_primary = stinger_primary
 	_stinger_secondary = stinger_secondary
@@ -173,6 +191,7 @@ func finish() -> void:
 		Stage.PLAYING, Stage.OUTRO:
 			_stage = Stage.WIPE_OUT
 			_stinger.play(_stinger_primary, _stinger_secondary)
+			replay_finishing.emit()
 		Stage.WIPE_IN:
 			stop()
 
@@ -198,6 +217,7 @@ func stop() -> void:
 	_frames = []
 	_timestamps = []
 	_cursor.reset()
+	_last_fed_snap = {}
 	_events = []
 	_next_event_idx = 0
 	_codec = null
@@ -213,9 +233,9 @@ func is_active() -> bool:
 
 
 # Snapshot of the clip currently being replayed, for GoalReplayStore to keep a
-# copy that outlives the ~9 s recorder ring. start_ts is the TRIMMED start (the
+# copy that outlives the ~18 s recorder ring. start_ts is the TRIMMED start (the
 # play that scored) so the post-game loop begins where the live cinematic did,
-# not at the raw 8 s clip head. Valid between replay_started and replay_stopped.
+# not at the raw clip head. Valid between replay_started and replay_stopped.
 func get_active_clip() -> Dictionary:
 	return {
 		"frames": _frames,
@@ -269,6 +289,13 @@ func _advance(delta: float) -> void:
 			_virtual_clock - prev_clock,
 			_registry.all(), _puck, _goalie_controllers)
 	_dispatch_due_events()
+	var snap: Dictionary = _cursor.to_snap()
+	if not is_same(snap, _last_fed_snap):
+		_last_fed_snap = snap
+		var gs: Variant = snap.get("game_state")
+		if gs is Dictionary:
+			replay_frame_changed.emit(gs,
+					_registry.resolve_team_id_for_peer(int(snap.get("carrier_peer_id", -1))))
 
 	# One-way cut to the net cam for the finish; it holds through the outro.
 	if not _has_cut_to_net_cam and _net_cam != null \

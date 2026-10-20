@@ -60,6 +60,15 @@ var _clock_str: String = "0:00"
 var _period_str: String = "1ST"
 var _goal_scorer: String = ""
 var _goal_color: Color = Color.WHITE
+# While a goal replay plays, the board shows the recorded game state — the
+# clock, score and page it showed at that instant of the play — over the live
+# one, which keeps updating underneath and comes back when the replay ends.
+var _replaying: bool = false
+var _replay_phase: int = GamePhase.Phase.PLAYING
+var _replay_score_home: int = 0
+var _replay_score_away: int = 0
+var _replay_clock_str: String = ""
+var _replay_period_str: String = ""
 
 var _viewport: SubViewport = null
 var _band_mat: StandardMaterial3D = null
@@ -103,6 +112,10 @@ func _ready() -> void:
 		gm.goal_scored.connect(_on_goal_scored)
 	if gm.has_signal("phase_changed"):
 		gm.phase_changed.connect(_on_phase_changed)
+	if gm.has_signal("goal_replay_frame_changed"):
+		gm.goal_replay_frame_changed.connect(_on_goal_replay_frame)
+	if gm.has_signal("replay_stopped"):
+		gm.replay_stopped.connect(_on_goal_replay_stopped)
 
 
 # Release the screen SubViewport and its ViewportTexture bindings explicitly,
@@ -157,8 +170,8 @@ func set_team_colors(home_primary: Color, _home_secondary: Color,
 
 
 func current_mode() -> JumbotronRules.Mode:
-	return JumbotronRules.screen_mode(
-			_phase, _attract_locked or not _has_game_context)
+	return JumbotronRules.screen_mode(_replay_phase if _replaying else _phase,
+			_attract_locked or not _has_game_context)
 
 
 # ── Replay feed ──────────────────────────────────────────────────────────────
@@ -258,6 +271,34 @@ func _on_phase_changed(new_phase: GamePhase.Phase) -> void:
 	_refresh()
 
 
+# Fed once per recorded frame the goal replay steps onto; change-detected so it
+# redraws once per displayed second like the live clock.
+func _on_goal_replay_frame(gs: Dictionary, _carrier_team: int) -> void:
+	var phase: int = int(gs.get("phase", _phase))
+	var score0: int = int(gs.get("score0", _score_home))
+	var score1: int = int(gs.get("score1", _score_away))
+	var clock_txt: String = JumbotronRules.clock_text(float(gs.get("time_remaining", 0.0)))
+	var period_txt: String = JumbotronRules.period_text(int(gs.get("period", 1)))
+	if _replaying and phase == _replay_phase and score0 == _replay_score_home \
+			and score1 == _replay_score_away and clock_txt == _replay_clock_str \
+			and period_txt == _replay_period_str:
+		return
+	_replaying = true
+	_replay_phase = phase
+	_replay_score_home = score0
+	_replay_score_away = score1
+	_replay_clock_str = clock_txt
+	_replay_period_str = period_txt
+	_refresh()
+
+
+func _on_goal_replay_stopped() -> void:
+	if not _replaying:
+		return
+	_replaying = false
+	_refresh()
+
+
 # ── Screen refresh ───────────────────────────────────────────────────────────
 
 # Re-select the page, push the current strings/colors into its labels, and
@@ -273,14 +314,17 @@ func _refresh() -> void:
 	# Push every page's dynamic content — plain property writes, and only the
 	# visible page gets rendered. Order-proof against how game signals arrive
 	# (goal info lands before or after the phase flip depending on emitter).
-	var score_line: String = "%d - %d" % [_score_home, _score_away]
-	_live_score_home.text = str(_score_home)
-	_live_score_away.text = str(_score_away)
-	_live_clock.text = _clock_str
-	_live_period.text = _period_str
+	var home: int = _replay_score_home if _replaying else _score_home
+	var away: int = _replay_score_away if _replaying else _score_away
+	var period: String = _replay_period_str if _replaying else _period_str
+	var score_line: String = "%d - %d" % [home, away]
+	_live_score_home.text = str(home)
+	_live_score_away.text = str(away)
+	_live_clock.text = _replay_clock_str if _replaying else _clock_str
+	_live_period.text = period
 	_goal_bg.color = _goal_color.darkened(0.25)
 	_goal_scorer_lbl.text = _goal_scorer
-	_break_title.text = "END OF %s" % _period_str
+	_break_title.text = "END OF %s" % period
 	_break_score.text = score_line
 	_final_score.text = score_line
 
