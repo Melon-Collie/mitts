@@ -70,7 +70,7 @@ var _pump_hold: float = 1.0
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
 # SkaterController.apply_attributes — so they're built once and invalidated
-# from there. Per-tick fields (blade_y, hand_y, backhand_angle) are written
+# from there. Per-tick fields (blade_y, backhand_angle) are written
 # into the cached instance each use. Building fresh configs per solve was the
 # hottest allocation site in the game (~7 RefCounted/Dictionary allocs per
 # skater per physics tick across the 3-pass loop).
@@ -1163,7 +1163,6 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 func _bottom_hand_ik_config() -> BottomHandIK.Config:
 	if _cached_bottom_cfg == null:
 		_cached_bottom_cfg = BottomHandIK.Config.new()
-		_cached_bottom_cfg.hand_y = _controller.bh_hand_y
 		_cached_bottom_cfg.release_angle_max = deg_to_rad(_controller.bh_release_angle_deg)
 		_cached_bottom_cfg.release_angle_band = deg_to_rad(_controller.bh_release_angle_band_deg)
 	_cached_bottom_cfg.backhand_angle = _bh_backhand_angle()
