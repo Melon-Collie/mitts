@@ -108,13 +108,24 @@ static func fold_at(tilt: float, curl: float, cfg: Config) -> float:
 # sinks the body by the drop. Returned as (hip pitch, knee fold) in the
 # set_leg_swing conventions: positive pitch flexes the thigh forward,
 # knee = −(hip + shin-from-vertical).
+#
+# A small fold first swings the boot DOWN (the rise starts at −legs.z·α), so the
+# smallest fold that raises it at all is already 2·atan(legs.z / (thigh + shin)),
+# ~15°: no fold answers a drop near zero. The solve is eased in over
+# BUCKLE_ONSET_M instead, so a drop arriving from zero (the fall's entry, the
+# lie handing over to the kneel) folds the legs rather than popping them, at a
+# boot error under that onset while it does.
+const BUCKLE_ONSET_M: float = 0.05
+
+
 static func buckle_angles(drop: float, legs: Vector3) -> Vector2:
 	if drop <= 0.0:
 		return Vector2.ZERO
 	# K·cos α + F·sin α = K − drop, as R·cos(α − ψ).
 	var k: float = maxf(legs.x + legs.y, 0.001)
 	var r: float = sqrt(k * k + legs.z * legs.z)
-	var a: float = atan2(legs.z, k) + acos(clampf((k - drop) / r, -1.0, 1.0))
+	var a: float = (atan2(legs.z, k) + acos(clampf((k - drop) / r, -1.0, 1.0))) \
+			* _ease(drop / BUCKLE_ONSET_M)
 	return Vector2(a, -2.0 * a)
 
 

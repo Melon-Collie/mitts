@@ -10,7 +10,7 @@ const _REBINDABLE_ACTIONS: Array = [
 	{"action": "move_left",      "label": "Move Left"},
 	{"action": "move_right",     "label": "Move Right"},
 	{"action": "stance",         "label": "Stance"},
-	{"action": "brake",          "label": "Brake"},
+	{"action": "brake",          "label": "Brake / Shuffle"},
 	{"action": "shoot",          "label": "Shoot"},
 	{"action": "quick_pass",     "label": "Quick Pass"},
 	{"action": "slapshot",       "label": "Slapshot"},
@@ -27,7 +27,7 @@ const _REBINDABLE_ACTIONS: Array = [
 # Mirrors PlayerPrefs.PAD_REBINDABLE_ACTIONS with display labels.
 const _PAD_REBINDABLE: Array = [
 	{"action": "block",          "label": "Block"},
-	{"action": "brake",          "label": "Brake"},
+	{"action": "brake",          "label": "Brake / Shuffle"},
 	{"action": "hit",            "label": "Hit"},
 	{"action": "stick_lift",     "label": "Deflect"},
 	{"action": "stick_check",    "label": "CONTROLS_STICK_LIFT"},

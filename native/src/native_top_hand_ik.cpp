@@ -70,15 +70,22 @@ void NativeTopHandIK::solve(
 	const Vector2 from_shoulder = Vector2(blade.x, blade.z) - shoulder_xz;
 	const double d = from_shoulder.length();
 	const double stick_horiz_at_rest = stick_horiz_for(stick_length, hand_rest_y, blade_y);
-	if (d >= stick_horiz_at_rest) {
-		const Vector2 dir = d > 0.0001 ? from_shoulder / (real_t)d : Vector2(0.0, -1.0);
-		const Vector2 hand_xz = shoulder_xz + dir * (real_t)(d - stick_horiz_at_rest);
-		hand = Vector3(hand_xz.x, hand_rest_y, hand_xz.y);
-	} else {
-		const double drop_sq = stick_length * stick_length - d * d;
-		const double hand_y = blade_y + Math::sqrt(MAX(drop_sq, 0.0));
-		hand = Vector3(shoulder_xz.x, hand_y, shoulder_xz.y);
+	// TopHandIK.hand_reach: the regime change rounded across REGIME_BAND_M.
+	const double x = d - stick_horiz_at_rest;
+	double reach = x;
+	if (x <= -REGIME_BAND_M) {
+		reach = 0.0;
+	} else if (x < REGIME_BAND_M) {
+		reach = (x + REGIME_BAND_M) * (x + REGIME_BAND_M) / (4.0 * REGIME_BAND_M);
 	}
+	const Vector2 dir = d > 0.0001 ? from_shoulder / (real_t)d : Vector2(0.0, -1.0);
+	const Vector2 hand_xz = shoulder_xz + dir * (real_t)reach;
+	const double horiz = d - reach;
+	double hand_y = hand_rest_y;
+	if (horiz < stick_horiz_at_rest) {
+		hand_y = blade_y + Math::sqrt(MAX(stick_length * stick_length - horiz * horiz, 0.0));
+	}
+	hand = Vector3(hand_xz.x, hand_y, hand_xz.y);
 }
 
 void NativeTopHandIK::solve_on_ice(
@@ -137,6 +144,62 @@ double NativeTopHandIK::rim_reach(double angle_to_forehand) const {
 	return denom > 0.000001 ? rom_forward_reach_max * side / denom : 0.0;
 }
 
+// TopHandIK._TWO_HAND_BISECTIONS.
+static constexpr int TWO_HAND_BISECTIONS = 9;
+
+Vector2 NativeTopHandIK::reachable_grip(const Vector3 &shoulder, const Vector3 &top,
+		const Vector3 &blade, double grip, double reach, double spacing) {
+	const Vector3 u = blade - top;
+	const Vector3 w = top - shoulder;
+	const double a = u.length_squared();
+	if (a < 0.000001) {
+		return Vector2(grip, MAX((double)w.length() - reach, 0.0));
+	}
+	const double floor_g = MIN(spacing / Math::sqrt(a), 1.0);
+	const double b = u.dot(w);
+	const double c = (double)w.length_squared() - reach * reach;
+	const double disc = b * b - a * c;
+	if (disc >= 0.0) {
+		const double root = Math::sqrt(disc);
+		const double lo = MAX((-b - root) / a, floor_g);
+		const double hi = MIN((-b + root) / a, 1.0);
+		if (lo <= hi) {
+			return Vector2(CLAMP(grip, lo, hi), 0.0);
+		}
+	}
+	const double nearest = CLAMP(-b / a, floor_g, 1.0);
+	return Vector2(nearest, MAX((double)(w + u * (real_t)nearest).length() - reach, 0.0));
+}
+
+double NativeTopHandIK::two_hand_reach(
+		const Vector3 &shoulder,
+		const Vector2 &desired_blade_xz,
+		double blade_side_sign,
+		const Vector3 &bottom_shoulder,
+		double grip,
+		double bottom_reach,
+		double spacing) {
+	solve(shoulder, desired_blade_xz, blade_side_sign);
+	if (reachable_grip(bottom_shoulder, hand, blade, grip, bottom_reach, spacing).y <= 0.0) {
+		return INFINITY;
+	}
+	const double cap = max_blade_reach;
+	double lo = 0.0;
+	double hi = Vector2(blade.x - shoulder.x, blade.z - shoulder.z).length();
+	for (int i = 0; i < TWO_HAND_BISECTIONS; i++) {
+		const double mid = (lo + hi) * 0.5;
+		max_blade_reach = mid;
+		solve(shoulder, desired_blade_xz, blade_side_sign);
+		if (reachable_grip(bottom_shoulder, hand, blade, grip, bottom_reach, spacing).y <= 0.0) {
+			lo = mid;
+		} else {
+			hi = mid;
+		}
+	}
+	max_blade_reach = cap;
+	return lo;
+}
+
 double NativeTopHandIK::stick_horiz_for(double stick_length, double hand_y, double blade_y) {
 	const double drop = hand_y - blade_y;
 	const double sq = stick_length * stick_length - drop * drop;
@@ -151,6 +214,9 @@ void NativeTopHandIK::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("solve_on_ice", "shoulder", "desired_blade_xz", "blade_side_sign",
 								 "blade_y_base", "pitch", "roll", "max_blade_reach", "stick_length", "hand_y_max"),
 			&NativeTopHandIK::solve_on_ice);
+	ClassDB::bind_method(D_METHOD("two_hand_reach", "shoulder", "desired_blade_xz", "blade_side_sign",
+								 "bottom_shoulder", "grip", "bottom_reach", "spacing"),
+			&NativeTopHandIK::two_hand_reach);
 	ClassDB::bind_method(D_METHOD("get_hand"), &NativeTopHandIK::get_hand);
 	ClassDB::bind_method(D_METHOD("get_blade"), &NativeTopHandIK::get_blade);
 

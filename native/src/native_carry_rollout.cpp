@@ -48,6 +48,7 @@ void NativeCarryRollout::set_moves(double p_soft_turn_rad, double p_hard_turn_ra
 	end_pos.resize(MOVE_COUNT);
 	end_vel.resize(MOVE_COUNT);
 	end_facing.resize(MOVE_COUNT);
+	end_turn_rate.resize(MOVE_COUNT);
 	samples.resize(MOVE_COUNT * samples_per_move);
 }
 
@@ -228,6 +229,18 @@ double NativeCarryRollout::line_share(const Vector2 &f, const Vector2 &line, con
 	return share;
 }
 
+// FacingRules.turn_rate: a turn takes up its rate at most `max_accel`, and gives
+// it up at once.
+static double turn_rate_step(double prev_rate, double wanted_rate, double max_accel,
+		double delta) {
+	const double from = prev_rate * wanted_rate > 0.0 ? prev_rate : 0.0;
+	if (Math::abs(wanted_rate) <= Math::abs(from)) {
+		return wanted_rate;
+	}
+	const double reach = max_accel * delta;
+	return wanted_rate > from ? MIN(from + reach, wanted_rate) : MAX(from - reach, wanted_rate);
+}
+
 // AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
@@ -296,8 +309,8 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 
 // AICarryRollout._roll.
 void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor, bool braking,
-		const Vector3 &pos, const Vector3 &vel, const Vector2 &facing, bool has_puck,
-		int64_t step_ticks) {
+		const Vector3 &pos, const Vector3 &vel, const Vector2 &facing, double turn_rate,
+		bool has_puck, int64_t step_ticks) {
 	const double drag = braking ? body.facing_drag_speed_braking : body.facing_drag_speed;
 	const double radius = body.body_radius;
 	const double dt = tick_dt * (double)step_ticks;
@@ -308,16 +321,22 @@ void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor
 	Vector3 p = pos;
 	Vector3 v = vel;
 	Vector2 f = facing;
+	double rate = turn_rate;
 	bool touched = false;
 	bool stance = false;
 	for (int64_t i = step_ticks - 1; i < ticks; i += step_ticks) {
 		stance = !braking && stance_cuts_onto(stick, v, upright, stance);
-		v = movement_step(move_cfg, v, stick, Math::atan2((double)-f.x, (double)-f.y), has_puck,
+		// AICarryRollout._roll: a brake is skated as a stop, its stick dropped.
+		v = movement_step(move_cfg, v, braking ? Vector2() : stick,
+				Math::atan2((double)-f.x, (double)-f.y), has_puck,
 				braking, dt, stance ? POSTURE_STANCE : POSTURE_UPRIGHT, move_cfg.thrust, 1.0);
 		v.y = 0.0;
 		const bool between_arcs = Math::abs((double)p.z) <= corner_center_z;
-		f = face(f, cursor, v, p, braking, stance, drag * dt, has_puck,
+		const Vector2 turned = face(f, cursor, v, p, braking, stance, drag * dt, has_puck,
 				has_puck && !(between_arcs && Math::abs((double)p.x) <= shield_x));
+		rate = turn_rate_step(rate, (double)f.angle_to(turned) / dt,
+				body.facing_turn_accel_max, dt);
+		f = f.rotated((real_t)(rate * dt));
 		p += v * (real_t)dt;
 		const bool on_sample = (i + 1) % ticks_per_sample == 0;
 		if (Math::abs((double)p.z) <= corner_center_z && Math::abs((double)p.x) <= contain_x) {
@@ -348,6 +367,7 @@ void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor
 	end_pos.set(m, p);
 	end_vel.set(m, v);
 	end_facing.set(m, f);
+	end_turn_rate.set(m, rate);
 	if (touched) {
 		touched_mask |= (int64_t)1 << m;
 	}
@@ -355,7 +375,7 @@ void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor
 
 // AICarryRollout.roll_all with _set_move.
 void NativeCarryRollout::roll_all(const Vector3 &pos, const Vector3 &vel, const Vector2 &facing,
-		const Vector2 &toward, bool has_puck, int64_t step_ticks) {
+		const Vector2 &toward, bool has_puck, int64_t step_ticks, double turn_rate) {
 	touched_mask = 0;
 	const int64_t st = MAX(step_ticks, (int64_t)1);
 	for (int m = 0; m < MOVE_COUNT; m++) {
@@ -384,7 +404,7 @@ void NativeCarryRollout::roll_all(const Vector3 &pos, const Vector3 &vel, const 
 				break;
 		}
 		const Vector2 cursor = (m == BRAKE || m == CUT_BACK) ? toward : stick;
-		roll(m, stick, cursor, braking, pos, vel, facing, has_puck, st);
+		roll(m, stick, cursor, braking, pos, vel, facing, turn_rate, has_puck, st);
 	}
 }
 
@@ -401,11 +421,12 @@ void NativeCarryRollout::_bind_methods() {
 			&NativeCarryRollout::set_stance);
 	ClassDB::bind_method(D_METHOD("configure", "caps"), &NativeCarryRollout::configure);
 	ClassDB::bind_method(D_METHOD("roll_all", "pos", "vel", "facing", "toward", "has_puck",
-			"step_ticks"),
+			"step_ticks", "turn_rate"),
 			&NativeCarryRollout::roll_all);
 	ClassDB::bind_method(D_METHOD("get_end_pos"), &NativeCarryRollout::get_end_pos);
 	ClassDB::bind_method(D_METHOD("get_end_vel"), &NativeCarryRollout::get_end_vel);
 	ClassDB::bind_method(D_METHOD("get_end_facing"), &NativeCarryRollout::get_end_facing);
+	ClassDB::bind_method(D_METHOD("get_end_turn_rate"), &NativeCarryRollout::get_end_turn_rate);
 	ClassDB::bind_method(D_METHOD("get_samples"), &NativeCarryRollout::get_samples);
 	ClassDB::bind_method(D_METHOD("get_touched_mask"), &NativeCarryRollout::get_touched_mask);
 }

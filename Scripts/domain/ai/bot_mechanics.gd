@@ -4,7 +4,7 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # League-default execution constants a bot's body runs on: the evaluators price
 # them and SkaterAgentStateMachine executes them, so they live below both. A leaf
-# (GameRules and the physics tick only).
+# (GameRules, the physics tick and the movement rules only).
 
 # CARRY blade aim distance (m forward in goal direction) — the cursor ring the
 # carry dangle, the pre-aim targets, and the arc-step all live on. 1.3 m is ~80%
@@ -73,3 +73,12 @@ const CARRY_BLADE_WALL_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 # How far the league chest turns off the hips (SkaterController
 # .upper_body_max_twist_deg): the most a bot can aim a cross-check off its facing.
 const UPPER_BODY_MAX_TWIST_RAD: float = 67.0 * PI / 180.0
+
+
+# The stick a bot's input skates. A bot's brake means stop, while its stick still
+# names where it is steering; slow, under the brake, that stick would make the
+# stop a shuffle (SkaterMovementRules.is_shuffle), which no bot decides on.
+static func braked_stick(stick: Vector2, brake: bool, velocity: Vector3) -> Vector2:
+	if brake and Vector2(velocity.x, velocity.z).length() <= SkaterMovementRules.SHUFFLE_MAX_SPEED:
+		return Vector2.ZERO
+	return stick

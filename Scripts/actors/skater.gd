@@ -472,7 +472,8 @@ var predicted_shot_velocity: Vector3 = Vector3.ZERO
 
 # ── Cosmetic Rig Dirty-Flag ──────────────────────────────────────────────────
 # The stick/arm/cuff/sphere rebuild in update_stick_mesh / update_arm_mesh /
-# update_bottom_arm_mesh is a pure function of five marker LOCAL positions — the
+# update_bottom_arm_mesh is a pure function of five marker LOCAL positions (the
+# top hand as drawn, pump included) — the
 # to_global → IK solve → to_local round-trip cancels the body transform, so the
 # resulting bone local transforms depend only on these markers (and handedness,
 # which re-runs _position_hand_markers on flip). A settled skater (idle, or a
@@ -486,6 +487,8 @@ var _rig_last_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_hand: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_check_lead: float = NAN
+# The drawn top hand's render-only offset off its marker (drawn_top_hand).
+var _hand_pump := Vector3.ZERO
 # Render-rate cosmetic pose hook. The controller registers a Callable(delta)
 # that runs the purely-cosmetic pose passes — the leg gait, head tracking, and
 # off-hand IK — which used to run in the physics tick (120 Hz × every skater,
@@ -933,14 +936,14 @@ func _process(delta: float) -> void:
 # Markers are guaranteed non-null by the time _process runs (created in _ready /
 # setup), matching the unguarded access the rig functions already rely on.
 func _rig_pose_changed() -> bool:
-	if top_hand.position == _rig_last_top_hand \
+	if drawn_top_hand() == _rig_last_top_hand \
 			and blade.position == _rig_last_blade \
 			and shoulder.position == _rig_last_shoulder \
 			and bottom_shoulder.position == _rig_last_bottom_shoulder \
 			and bottom_hand.position == _rig_last_bottom_hand \
 			and _check_lead == _rig_last_check_lead:
 		return false
-	_rig_last_top_hand = top_hand.position
+	_rig_last_top_hand = drawn_top_hand()
 	_rig_last_blade = blade.position
 	_rig_last_shoulder = shoulder.position
 	_rig_last_bottom_shoulder = bottom_shoulder.position
@@ -1360,7 +1363,7 @@ func _apply_blade_tilt() -> void:
 			+ _tie_draw_local()
 	# In the marker's frame: the hand, world up, and the ice's height.
 	var marker: Transform3D = blade.transform
-	var hand: Vector3 = marker.affine_inverse() * top_hand.position
+	var hand: Vector3 = marker.affine_inverse() * drawn_top_hand()
 	var marker_global: Transform3D = blade.global_transform if blade.is_inside_tree() \
 			else marker
 	var up: Vector3 = (marker_global.basis.inverse() * Vector3.UP).normalized()
@@ -2357,6 +2360,17 @@ func set_top_hand_position(pos: Vector3) -> void:
 
 func get_top_hand_position() -> Vector3:
 	return top_hand.position
+
+
+# Where the arm and the stick are drawn to: the marker plus a render-only offset
+# (the stride's pump, SkaterIKCoordinator), which the marker every claim reads
+# never takes.
+func drawn_top_hand() -> Vector3:
+	return top_hand.position + _hand_pump
+
+
+func set_hand_pump(offset: Vector3) -> void:
+	_hand_pump = offset
 
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
