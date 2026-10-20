@@ -46,17 +46,6 @@ const ENGAGEMENT_PROXIMITY_M: float = 2.0        # blade-on-puck range
 # ramp at (see _lead_intercept). Set to the real value via apply_capabilities.
 var _chase_max_accel: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 
-# Local fallback for the per-peer acceleration read when the snapshot lacks the
-# host's shared cache (unit tests); must match AIAccelerationTracker.SMOOTH_ALPHA /
-# CLAMP_M_S2. IIR low-pass on the frame-over-frame velocity diff: half-life
-# ln(0.5)/ln(1 − ALPHA) ≈ 3 ticks (~26 ms at 120 Hz), enough to ignore single-tick
-# spikes while reacting well inside a 400-600 ms pass window.
-const ACCEL_SMOOTH_ALPHA: float = 0.2
-# Caps a pathological spike (teleport on respawn) above a striding turn's
-# centripetal accel (SkaterController.turn_accel × grip), so a hard turn still
-# reads in full.
-const ACCEL_CLAMP_M_S2: float = 14.0
-
 # Above this speed a loose puck is a live pass / stripped puck rather than one to
 # skate onto: the chase aims the blade along its flight line instead of at a fixed
 # intercept point. See Scripts/ai/CLAUDE.md → Reception doctrine.
@@ -3541,7 +3530,9 @@ func _is_closest_teammate_to_puck_at(snapshot: WorldSnapshot, self_pos: Vector3)
 	return true
 
 
-# Frame-over-frame velocity diff per peer, low-passed into
+# Local fallback for the per-peer acceleration read when the snapshot lacks the
+# host's shared AIAccelerationTracker cache (unit tests), on the tracker's own
+# filter constants. Frame-over-frame velocity diff per peer, low-passed into
 # _accel_by_peer. Stale peers (left the snapshot — disconnect, swap)
 # get pruned so the dict size stays bounded. First-sight peers seed
 # prev_velocity from the current value and contribute zero accel so
@@ -3560,10 +3551,10 @@ func _update_acceleration_cache(snapshot: WorldSnapshot, delta: float) -> void:
 		var raw_a: Vector3 = (curr_v - prev_v) * inv_delta
 		raw_a.y = 0.0
 		var smoothed: Vector3 = _accel_by_peer.get(peer_id, Vector3.ZERO)
-		smoothed = smoothed.lerp(raw_a, ACCEL_SMOOTH_ALPHA)
+		smoothed = smoothed.lerp(raw_a, AIAccelerationTracker.SMOOTH_ALPHA)
 		var mag: float = sqrt(smoothed.x * smoothed.x + smoothed.z * smoothed.z)
-		if mag > ACCEL_CLAMP_M_S2:
-			var scale: float = ACCEL_CLAMP_M_S2 / mag
+		if mag > AIAccelerationTracker.CLAMP_M_S2:
+			var scale: float = AIAccelerationTracker.CLAMP_M_S2 / mag
 			smoothed.x *= scale
 			smoothed.z *= scale
 		_accel_by_peer[peer_id] = smoothed

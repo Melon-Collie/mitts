@@ -109,7 +109,7 @@ func test_weak_stays_goal_side_of_carrier() -> void:
 	var ctx := _make_ctx(self_pos, 100, skaters, 1.0)
 	var d: RoleDecision = AIRoleBreakout.decide(ctx, false)
 	assert_gte(d.target_position.z,
-			carrier_z - AIRoleBreakout.GOAL_SIDE_TOLERANCE_M - 0.001,
+			carrier_z - AIRoleSupport.GOAL_SIDE_TOLERANCE_M - 0.001,
 			"weak valve stays goal-side of (no further up-ice than) the carrier")
 
 

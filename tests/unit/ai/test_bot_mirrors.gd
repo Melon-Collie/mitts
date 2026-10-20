@@ -1,13 +1,15 @@
 extends GutTest
 
 # Constants the bot code copies from somewhere else it cannot read: the
-# controller's slapper zone, blade speed and pickup radius and the puck's deflect
-# threshold (scene nodes the domain must not reach), the duel harness's copy of
-# the puck's catch, and the pairs two bot modules keep equal so their reads
-# agree. Each was a "must match" comment; this is the check.
+# controller's slapper zone, blade speed and pickup radius, the puck's deflect
+# threshold and rest height, and the skater's body radius (scene nodes the
+# domain must not reach), the duel harness's copy of the puck's catch, and the
+# pairs two bot modules keep equal so their reads agree. Each was a "must
+# match" comment; this is the check.
 
 const SkaterControllerScript := preload("res://Scripts/controllers/skater_controller.gd")
 const PuckScript := preload("res://Scripts/actors/puck.gd")
+const SkaterScript := preload("res://Scripts/actors/skater.gd")
 const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
 
 
@@ -85,3 +87,29 @@ func test_a_lane_reads_the_stick_the_body_holds() -> void:
 	assert_eq(AISkaterCaps.LEAGUE_BLADE_SPEED_M_S, ctrl.max_blade_speed,
 			"a defender's hands traverse at the league blade speed")
 	ctrl.free()
+
+
+func test_a_grounded_puck_rests_where_the_puck_does() -> void:
+	var puck: Puck = PuckScript.new()
+	assert_eq(AITrajectory.PUCK_REST_HEIGHT_M, puck.ice_height,
+			"a puck at rest must read as grounded, not airborne")
+	# Vector3 holds 32-bit floats.
+	assert_almost_eq(AITrajectory.PUCK_REST_HEIGHT_M, GameRules.PUCK_START_POS.y, 1e-7)
+	puck.free()
+
+
+func test_a_strip_connects_at_the_pickup_radius() -> void:
+	assert_eq(AICarrySpace.POKE_CONTACT_RADIUS_M, PuckController.PICKUP_RADIUS,
+			"the safety maps are measured around the blade's puck-contact radius")
+	assert_eq(DuelHarness.PICKUP_RADIUS, PuckController.PICKUP_RADIUS)
+
+
+func test_a_saucer_clears_the_body_a_skater_has() -> void:
+	var skater: Skater = SkaterScript.new()
+	assert_eq(AIPuckLane.LANE_DEFENDER_BODY_RADIUS_M, skater.body_collision_radius,
+			"over a saucer a defender reaches with his body alone")
+	skater.free()
+
+
+func test_the_wheel_exits_at_the_top_of_the_low_battle_ice() -> void:
+	assert_eq(AICarrierDestinations.WHEEL_EXIT_UP_ICE_M, AIZoneCoverage.LOW_ZONE_DEPTH_M)

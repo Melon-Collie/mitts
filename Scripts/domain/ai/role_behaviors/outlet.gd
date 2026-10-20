@@ -18,20 +18,10 @@ const BLUE_LINE_BUFFER_M: float = 2.5
 # land against the wall.
 const WEAK_SIDE_INSET_M: float = 2.0
 
-# Floor on the lane term, so dead lanes still rank candidates: on a stretch pass
-# one defender's reach can blanket the whole ring. Same value as
-# AIRoleBreakout.BLOCKED_LANE_FLOOR.
-const BLOCKED_LANE_FLOOR: float = 0.15
-
 # ── In-stride rush entry ─────────────────────────────────────────────────────
 # On a rush the staging depth is PACED to the carrier, so the OUTLET reaches the
 # line as he crosses, moving — parked at the line it would start from zero
 # exactly when the entry happens.
-
-# Carrier up-ice speed band (m/s) mapped to the rush blend: below LO a set play,
-# at/above HI a full rush. Same band as AIRoleFinisher's.
-const RUSH_SPEED_LO_M_S: float = 2.5
-const RUSH_SPEED_HI_M_S: float = 6.5
 
 # How far ahead of the carrier's depth the OUTLET stages at full rush.
 const RUSH_ENTRY_LEAD_M: float = 4.0
@@ -61,8 +51,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	AIRoleReads.collect_teammates_excluding_self(ctx, teammate_positions)
 
 	var rush: float = clampf(
-			(AIRoleReads.carrier_closing_speed(ctx) - RUSH_SPEED_LO_M_S)
-					/ (RUSH_SPEED_HI_M_S - RUSH_SPEED_LO_M_S),
+			(AIRoleReads.carrier_closing_speed(ctx) - AIRoleFinisher.RUSH_SPEED_LO_M_S)
+					/ (AIRoleFinisher.RUSH_SPEED_HI_M_S - AIRoleFinisher.RUSH_SPEED_LO_M_S),
 			0.0, 1.0)
 	var rushing: bool = rush > ARRIVE_AT_SPEED_RUSH
 	d.arrive_at_speed = rushing
@@ -104,7 +94,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
 		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
 				ctx.self_velocity)
-		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * held \
+		var score: float = maxf(lane, AIRoleBreakout.BLOCKED_LANE_FLOOR) * held \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score

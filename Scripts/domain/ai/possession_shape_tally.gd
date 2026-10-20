@@ -26,7 +26,7 @@ extends RefCounted
 # 240 calls/second path.
 
 const TEAM_COUNT: int = 2
-const STATE_COUNT: int = 7   # AIPossessionState.State member count
+const STATE_COUNT: int = 7   # AIPossessionState.State's size (test_possession_shape_tally.gd)
 
 # Seconds accumulated, team-major (team * STATE_COUNT + state).
 var _seconds: PackedFloat64Array = PackedFloat64Array()

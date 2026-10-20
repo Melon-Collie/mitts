@@ -37,7 +37,8 @@ static var goalie_puck_play_go_margin_s: float = 0.9
 # body, so a keeper pinned out at challenge depth appears to GROW as the
 # shooter approaches and the doorstep reads as a covered net.
 #
-# Values mirror GoalieController's field defaults (cited per field); the two
+# Values mirror GoalieController's field defaults (cited per field;
+# test_ai_goalie_model_mirrors.gd holds them); the two
 # tier-varied depths ride set_goalie_profile.
 static var _depth_cfg_planning: GoalieDepthSolver.Constraints = _build_planning_depth_cfg()
 # The tier's challenge ceiling, held separately because the reused Constraints has
