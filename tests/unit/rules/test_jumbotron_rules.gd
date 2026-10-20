@@ -17,7 +17,7 @@ func test_phase_mode_table() -> void:
 		GamePhase.Phase.FACEOFF_PREP: JumbotronRules.Mode.LIVE,
 		GamePhase.Phase.FACEOFF: JumbotronRules.Mode.LIVE,
 		GamePhase.Phase.GOAL_CELEBRATION: JumbotronRules.Mode.GOAL,
-		GamePhase.Phase.GOAL_SCORED: JumbotronRules.Mode.GOAL,
+		GamePhase.Phase.GOAL_SCORED: JumbotronRules.Mode.LIVE,
 		GamePhase.Phase.END_OF_PERIOD: JumbotronRules.Mode.BREAK,
 		GamePhase.Phase.GAME_OVER: JumbotronRules.Mode.FINAL,
 	}

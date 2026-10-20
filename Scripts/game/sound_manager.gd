@@ -325,6 +325,16 @@ func play_crowd(sound: Sound, volume_db: float = 0.0, pitch_variance: float = 0.
 			return
 
 
+# Fades out whatever the arena pool is still playing (the goal horn, when the
+# goal replay takes the screen) and frees the voices.
+func fade_out_crowd(seconds: float) -> void:
+	for p: AudioStreamPlayer in _pool_crowd:
+		if p.playing:
+			var fade: Tween = create_tween()
+			fade.tween_property(p, "volume_db", -60.0, seconds)
+			fade.tween_callback(p.stop)
+
+
 # A full pool steals the voice furthest into its clip rather than dropping the
 # new cue: in a scramble the fresh contact is the one the player is watching,
 # and the oldest voice is mostly tail by then.

@@ -318,7 +318,8 @@ func _apply_game_state(score0: int, score1: int, new_phase: GamePhase.Phase,
 #     skaters:         Dictionary[int, SkaterNetworkState],   # peer_id → state
 #     puck:            PuckNetworkState (or null on malformed input),
 #     carrier_peer_id: int,                                   # -1 if no carrier
-#     goalies:         Array[GoalieNetworkState]              # team index order
+#     goalies:         Array[GoalieNetworkState],             # team index order
+#     game_state:      { score0, score1, phase, period, time_remaining }
 #   }
 # Or {} if the packet is too small to decode.
 func decode_for_replay(data: PackedByteArray) -> Dictionary:

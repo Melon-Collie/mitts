@@ -10,9 +10,9 @@ enum Mode { ATTRACT, LIVE, GOAL, BREAK, FINAL }
 
 # `attract` = the board has no live game to show (the lobby backdrop pins
 # this on, and a freshly built board stays attract until the first game
-# signal arrives). Otherwise the phase decides: the GOAL screen spans the
-# celebration AND the replay that follows it (spectator cams cut around
-# during GOAL_SCORED, exactly when a real board holds the goal graphic).
+# signal arrives). Otherwise the phase decides. The GOAL screen is the live
+# celebration only: GOAL_SCORED is the replay, which shows the board as it was
+# during the play it re-runs.
 static func screen_mode(phase: int, attract: bool) -> Mode:
 	if attract:
 		return Mode.ATTRACT
@@ -21,7 +21,7 @@ static func screen_mode(phase: int, attract: bool) -> Mode:
 			return Mode.FINAL
 		GamePhase.Phase.END_OF_PERIOD:
 			return Mode.BREAK
-		GamePhase.Phase.GOAL_CELEBRATION, GamePhase.Phase.GOAL_SCORED:
+		GamePhase.Phase.GOAL_CELEBRATION:
 			return Mode.GOAL
 		_:
 			return Mode.LIVE
