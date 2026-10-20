@@ -75,6 +75,9 @@ signal goal_replay_frame_changed(game_state: Dictionary, carrier_team: int)
 signal goal_clip_state_changed(state: GoalClipExporter.State)
 signal goal_clip_available_changed(available: bool)
 signal goal_clip_export_finished(path: String, ok: bool)
+# Whether the post-game screen can start a goal save changed (can_save_goal_gif):
+# an export began or ended, or a stored goal finished airing.
+signal goal_gif_saving_changed
 # Between-period intermission presentation. started raises the band (score +
 # countdown) on every peer INTERMISSION_SETTLE into the break — with the
 # ended period's goals looping behind it when there are any; clip_started
@@ -1621,19 +1624,23 @@ func _wire_subsystems() -> void:
 	_intermission_replay_driver.reel_stopped.connect(_on_intermission_reel_stopped)
 	_intermission_replay_driver.reel_stopped.connect(_on_local_replay_stopped)
 
-	# Goal-clip GIF export. Built once and re-pointed at each match's drivers;
-	# the intermission reel is deliberately NOT wired — its clips are the same
-	# goals the post-game reel offers at leisure, and the break is a fixed
-	# window nobody should be spending on file management.
+	# Goal-clip GIF export. Built once and re-pointed at each match's live
+	# cinematic; after the match the post-game screen saves stored goals through
+	# it (save_goal_gif). Neither reel is wired — the break is a fixed window
+	# nobody should be spending on file management.
 	if _goal_clip_exporter == null:
 		_goal_clip_exporter = GoalClipExporter.new()
 		add_child(_goal_clip_exporter)
 		_goal_clip_exporter.state_changed.connect(goal_clip_state_changed.emit)
 		_goal_clip_exporter.availability_changed.connect(goal_clip_available_changed.emit)
 		_goal_clip_exporter.export_finished.connect(goal_clip_export_finished.emit)
+		_goal_clip_exporter.stored_replay_finished.connect(_start_post_game_replay)
+		_goal_clip_exporter.stored_replay_finished.connect(goal_gif_saving_changed.emit)
+		_goal_clip_exporter.state_changed.connect(
+				func(_state: GoalClipExporter.State) -> void: goal_gif_saving_changed.emit())
 		_goal_clip_exporter.set_goal_label_provider(
 				func() -> String: return String(_pending_clip_meta.get("scorer_name", "")))
-	_goal_clip_exporter.setup(_goal_replay_driver, _post_game_replay_driver)
+	_goal_clip_exporter.setup(_goal_replay_driver)
 
 	_codec = WorldStateCodec.new()
 	_codec.setup(_registry, _state_machine,
@@ -2180,6 +2187,37 @@ func _stop_post_game_replay() -> void:
 		_post_game_replay_timer = null
 	if _post_game_replay_driver != null:
 		_post_game_replay_driver.stop()
+	# A goal airing for its GIF holds the same actors the reel does.
+	if _goal_clip_exporter != null:
+		_goal_clip_exporter.cancel_stored()
+
+
+# The goals the post-game screen offers to save, in scoring order. Read-only
+# GoalReplayStore entries (period, scoring_team_id, scorer_name, assists).
+func saved_goal_clips() -> Array[Dictionary]:
+	if _goal_replay_store == null:
+		return []
+	return _goal_replay_store.clips()
+
+
+func can_save_goal_gif() -> bool:
+	return _goal_clip_exporter != null and _goal_clip_exporter.can_save_stored() \
+			and _goal_replay_store != null and not _goal_replay_store.is_empty()
+
+
+# Post-game "save this goal": the highlight reel steps aside while the goal airs
+# again as its cinematic and is captured; the reel resumes when it ends
+# (GoalClipExporter.stored_replay_finished).
+func save_goal_gif(index: int) -> void:
+	if not can_save_goal_gif() or _codec == null or puck == null or _registry == null:
+		return
+	var clips: Array[Dictionary] = _goal_replay_store.clips()
+	if index < 0 or index >= clips.size():
+		return
+	_stop_post_game_replay()
+	if not _goal_clip_exporter.save_stored_goal(
+			clips[index], _codec, _registry, puck, goalie_controllers):
+		_start_post_game_replay()
 
 
 # ── Intermission (between-period break presentation) ─────────────────────────

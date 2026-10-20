@@ -224,6 +224,12 @@ GAME_OVER_EXIT,Exit Game,Salir del juego
 GAME_OVER_UNVOTE,Unvote,Quitar voto
 GAME_OVER_VOTE_TALLY,%d / %d voted,%d / %d han votado
 GAME_OVER_VOTE_TALLY_LOBBY,%d / %d voted · returning to lobby,%d / %d han votado · volviendo a la sala
+GAME_OVER_SAVE_GOAL,Save Goal GIF,Guardar GIF de gol
+GOAL_PICKER_TITLE,SAVE A GOAL,GUARDAR UN GOL
+GOAL_PICKER_HINT,The goal replays behind this screen while its GIF saves.,El gol se repite detrás de esta pantalla mientras se guarda su GIF.
+GOAL_PICKER_ROW,%s · %s,%s · %s
+GOAL_PICKER_ROW_ASSISTS,%s · %s  (ASST: %s),%s · %s  (ASIST.: %s)
+GOAL_PICKER_CLOSE,Close,Cerrar
 HINT_TAB_BOX_SCORE,TAB · BOX SCORE,TAB · ESTADÍSTICAS
 INTERMISSION_GOAL_TAG,GOAL,GOL
 INTERMISSION_ASSIST_LINE,ASST: %s,ASIST.: %s

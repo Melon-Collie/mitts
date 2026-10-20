@@ -19,14 +19,13 @@ extends Node
 # exists on the following frame (the same beat tools/pose_capture_runner.gd
 # works on).
 #
-# Capture necessarily runs speculatively for the WHOLE clip — the player
-# presses save partway through and expects the entire goal, so there is no
-# version of this that starts on the press.
+# During the live cinematic capture runs speculatively for the WHOLE clip — the
+# player presses save partway through and expects the entire goal, so there is
+# no version of this that starts on the press (GoalClipExporter).
 #
-# Every segment opens on the Mitts wipe. The live one is a CanvasLayer on the
-# main viewport, which the mirror never sees, so the mirror carries its own:
-# for the goal cinematic it plays in step with the one on screen, and for a
-# reel clip it is the GIF's intro alone.
+# Every segment opens on the Mitts wipe. The one on screen is a CanvasLayer on
+# the main viewport, which the mirror never sees, so the mirror carries its own
+# and plays it in step.
 #
 # Framing caveat: the mirror keeps the live camera's vertical FOV, so on a
 # display that isn't 16:9 the GIF shows a different horizontal extent than the

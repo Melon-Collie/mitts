@@ -52,8 +52,13 @@ var _puck: Puck = null
 var _goalies: Array[Goalie] = []
 var _goalie_controllers: Array[GoalieController] = []
 
+# The live cinematic mirrors replay mode to clients; a stored goal replayed for
+# one peer's GIF export (GoalClipExporter) stays local.
+var use_shared_replay_mode: bool = true
+
 var _frames: Array[PackedByteArray] = []
 var _timestamps: Array[float] = []
+var _scoring_team: int = -1
 var _clip_start_ts: float = 0.0
 var _clip_end_ts: float = 0.0
 var _goal_ts: float = 0.0
@@ -107,14 +112,35 @@ func start(recorder: ReplayRecorder,
 		stinger_primary: Color = Color.BLACK,
 		stinger_secondary: Color = Color.WHITE,
 		scoring_team: int = -1) -> void:
+	var clip: Dictionary = recorder.extract_clip(CLIP_DURATION)
+	var timestamps: Array[float] = clip.timestamps
+	if timestamps.size() >= 2:
+		clip.events = recorder.extract_events(timestamps[0], timestamps[timestamps.size() - 1])
+	clip.goal_ts = recorder.goal_ts()
+	clip.defending_goal_z = defending_goal_z
+	clip.scoring_team_id = scoring_team
+	clip.stinger_primary = stinger_primary
+	clip.stinger_secondary = stinger_secondary
+	replay_clip(clip, codec, registry, puck, goalie_controllers)
+
+
+# Plays a clip as the goal cinematic: one start() just extracted, or one
+# GoalReplayStore kept from get_active_clip(). The trim and the slow motion are
+# re-derived from its events, so a stored goal replays exactly as it aired.
+func replay_clip(clip: Dictionary,
+		codec: WorldStateCodec,
+		registry: PlayerRegistry,
+		puck: Puck,
+		goalie_controllers: Array) -> void:
 	if _stage != Stage.IDLE:
 		stop()
 
-	var clip: Dictionary = recorder.extract_clip(CLIP_DURATION)
 	var frames: Array[PackedByteArray] = clip.frames
 	var timestamps: Array[float] = clip.timestamps
 	if frames.size() < 2:
 		return
+	var defending_goal_z: float = float(clip.get("defending_goal_z", 0.0))
+	_scoring_team = int(clip.get("scoring_team_id", -1))
 
 	_codec = codec
 	_registry = registry
@@ -132,15 +158,18 @@ func start(recorder: ReplayRecorder,
 	_cursor.bind(codec)
 	_cursor.reset()
 	_last_fed_snap = {}
-	_events = recorder.extract_events(_clip_start_ts, _clip_end_ts)
+	# A copy: _events is this replay's, and a stored clip's list must survive it.
+	var events: Array[Dictionary] = []
+	events.assign(clip.get("events", []))
+	_events = events
 
 	# The clip runs a short tail past the goal frame; the scoring touch is the
 	# scoring team's last contact before it. The trim and the slow motion hang
 	# off those two.
-	_goal_ts = recorder.goal_ts()
+	_goal_ts = float(clip.get("goal_ts", -1.0))
 	if _goal_ts < _clip_start_ts or _goal_ts > _clip_end_ts:
 		_goal_ts = _clip_end_ts
-	var touch_idx: int = GoalReplayRules.scoring_touch_index(_events, _goal_ts, scoring_team)
+	var touch_idx: int = GoalReplayRules.scoring_touch_index(_events, _goal_ts, _scoring_team)
 	var touch_ts: float = float(_events[touch_idx].host_ts) if touch_idx >= 0 else -1.0
 	var touch_pos := Vector3(0.0, 0.0, defending_goal_z)
 	if touch_idx >= 0:
@@ -148,7 +177,7 @@ func start(recorder: ReplayRecorder,
 		touch_pos = Vector3(pos[0], pos[1], pos[2])
 	var anchor_ts: float = touch_ts if touch_ts >= 0.0 else _goal_ts
 	_clip_start_ts = maxf(_clip_start_ts, GoalReplayRules.clip_start_ts(
-			_events, anchor_ts, touch_pos.z, signf(defending_goal_z), scoring_team))
+			_events, anchor_ts, touch_pos.z, signf(defending_goal_z), _scoring_team))
 	_slowmo_start_ts = GoalReplayRules.slowmo_start_ts(touch_ts, _goal_ts)
 	_virtual_clock = _clip_start_ts
 	_next_event_idx = 0
@@ -174,12 +203,15 @@ func start(recorder: ReplayRecorder,
 			return GoalReplayRules.net_cam_look_target(_puck.global_position, goal_z))
 		_net_cam.set_booth(GoalReplayRules.net_cam_position(goal_z, touch_pos.x), 55.0, 0.15)
 
-	_stinger_primary = stinger_primary
-	_stinger_secondary = stinger_secondary
+	_stinger_primary = clip.get("stinger_primary", Color.BLACK) as Color
+	_stinger_secondary = clip.get("stinger_secondary", Color.WHITE) as Color
 	_stage = Stage.WIPE_IN
 	_stinger.play(_stinger_primary, _stinger_secondary)
 
-	NetworkManager.start_replay_mode(_clip_start_ts)
+	if use_shared_replay_mode:
+		NetworkManager.start_replay_mode(_clip_start_ts)
+	else:
+		NetworkManager.set_replay_mode_local(true, _clip_start_ts)
 	replay_started.emit()
 
 
@@ -212,7 +244,10 @@ func stop() -> void:
 		_net_cam = null
 	_has_cut_to_net_cam = false
 
-	NetworkManager.stop_replay_mode()
+	if use_shared_replay_mode:
+		NetworkManager.stop_replay_mode()
+	else:
+		NetworkManager.set_replay_mode_local(false)
 	_sim_hold.release()
 	_frames = []
 	_timestamps = []
@@ -235,13 +270,18 @@ func is_active() -> bool:
 # Snapshot of the clip currently being replayed, for GoalReplayStore to keep a
 # copy that outlives the ~18 s recorder ring. start_ts is the TRIMMED start (the
 # play that scored) so the post-game loop begins where the live cinematic did,
-# not at the raw clip head. Valid between replay_started and replay_stopped.
+# not at the raw clip head; the rest is what replay_clip() reads to air it
+# again. Valid between replay_started and replay_stopped.
 func get_active_clip() -> Dictionary:
 	return {
 		"frames": _frames,
 		"timestamps": _timestamps,
 		"start_ts": _clip_start_ts,
 		"end_ts": _clip_end_ts,
+		"events": _events,
+		"goal_ts": _goal_ts,
+		"defending_goal_z": _defending_goal_z,
+		"scoring_team_id": _scoring_team,
 		"stinger_primary": _stinger_primary,
 		"stinger_secondary": _stinger_secondary,
 	}

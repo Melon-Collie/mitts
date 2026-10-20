@@ -19,11 +19,14 @@ const MAX_CLIPS: int = 24
 #               start_ts: float, end_ts: float,
 #               period: int, scoring_team_id: int,
 #               scorer_name: String, assist1_name: String, assist2_name: String,
-#               stinger_primary: Color, stinger_secondary: Color }.
+#               stinger_primary: Color, stinger_secondary: Color,
+#               events: Array[Dictionary], goal_ts: float, defending_goal_z: float }.
 # start_ts is the trimmed clip start (the play that scored), not necessarily
 # timestamps[0]. The meta tail (period + goal credit) is stamped by
 # GameManager at capture time so the intermission reel can pick one period's
-# clips and caption each with its scorer.
+# clips and caption each with its scorer. The events, goal moment and defended
+# goal are what GoalReplayDriver.replay_clip needs to air the goal again, which
+# is how the post-game screen saves one as a GIF.
 var _clips: Array[Dictionary] = []
 
 
@@ -33,6 +36,8 @@ func add(clip: Dictionary) -> void:
 	# A clip needs at least two frames to interpolate a bracket.
 	if frames.size() < 2 or timestamps.size() < 2:
 		return
+	var events: Array[Dictionary] = []
+	events.assign(clip.get("events", []))
 	# Duplicate the arrays so a later GoalReplayDriver.stop() (which rebinds its
 	# own _frames/_timestamps) can never disturb what we hold. Shallow copy —
 	# the PackedByteArray elements are never mutated after recording.
@@ -48,6 +53,9 @@ func add(clip: Dictionary) -> void:
 		"assist2_name": String(clip.get("assist2_name", "")),
 		"stinger_primary": clip.get("stinger_primary", Color.BLACK) as Color,
 		"stinger_secondary": clip.get("stinger_secondary", Color.WHITE) as Color,
+		"events": events,
+		"goal_ts": float(clip.get("goal_ts", -1.0)),
+		"defending_goal_z": float(clip.get("defending_goal_z", 0.0)),
 	})
 	if _clips.size() > MAX_CLIPS:
 		_clips.pop_front()
