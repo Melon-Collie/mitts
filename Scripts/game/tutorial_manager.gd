@@ -528,8 +528,8 @@ func _step_def_for(step_id: int) -> TutorialStep:
 		STEP_BLADE_LIFT:
 			return _step(
 				"Blade Lift",
-				"Now play the air. Tap {elevation_down} to drop your loft to LOW, hold {stick_lift}, and your blade rises to meet your teammate's lob — bat it down out of the air.",
-				"Holding {stick_lift} brings the blade to the puck's height on its own. FLAT or LOW knocks the puck DOWN to the ice.")
+				"Now play the air. Tap {elevation_down} to drop your loft to LOW, then press and hold {stick_lift} once your teammate's lob is on its way — your blade rises to meet it. Bat it down out of the air.",
+				"Pressing {stick_lift} reads the puck and takes the blade to its height, but it takes a moment — press too early and it stays down, too late and it's still on its way. FLAT or LOW knocks the puck DOWN.")
 		STEP_DROP_PUCK:
 			return _step(
 				"Drop the Puck",
@@ -1274,7 +1274,7 @@ func _feed_watch_tick(delta: float) -> void:
 			STEP_DEFLECT:
 				_hud.set_alert(_fmt("You caught that one — hold {stick_lift} before it arrives to deflect instead."))
 			STEP_BLADE_LIFT:
-				_hud.set_alert(_fmt("You caught that one — hold {stick_lift} before it arrives, and your blade rises to meet the lob."))
+				_hud.set_alert(_fmt("You caught that one — press {stick_lift} once the lob is in the air, and your blade rises to meet it."))
 			STEP_SHOT_BLOCK:
 				_hud.set_alert(_fmt("You caught that one — hold {block} before the shot arrives so it hits your body, not your stick."))
 		_restage_feed_on_bot()

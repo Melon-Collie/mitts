@@ -580,12 +580,10 @@ var _blade_elevation_blend: float = 0.0
 # Set when an elevation blend step changes the blade tilt, consumed by the
 # render-rate rig pass in _process. See _update_blade_elevation.
 var _blade_tilt_dirty: bool = false
-# True when the blade is lifted off the ice — a deflect rising to meet an
-# airborne puck (deflect_lift_share) or a forced pop from an opponent hooking
-# under this stick. A stick lift raises the blade through stick_check_phase. Set
-# each tick by the controller; read host-side by PuckController's interaction
-# gate and replicated so remotes/AI can read it. A lifted blade pokes nothing
-# and clears grounded sticks.
+# True when the blade is lifted off the ice — a deflect's read of an airborne puck
+# (deflect_lift_share) or a forced pop from an opponent hooking under this stick
+# (a stick lift raises it through stick_check_phase). Set each tick by the
+# controller, replicated; a lifted blade pokes nothing and clears grounded sticks.
 var blade_up: bool = false
 # The stick-lift phase (StickCheckRules.Phase), stamped each tick by the
 # controller and replicated. Its raised phases lift the blade like blade_up, but
@@ -619,16 +617,13 @@ var pin_strength: float = 0.0
 var is_diving: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
-# Deliberate-deflect intent: true while a human player holds the deflect button
-# (stick_lift, Q) WITHOUT carrying the puck — a committed "redirect this, don't
-# catch it." Set each tick by the controller (see SkaterController._wants_deflect);
-# read host-side by PuckController's loose-puck interaction gate, which routes
-# blade contact into a deflect off the blade face instead of corralling the puck.
-# A transient per-tick flag, recomputed from replayed inputs during reconcile, so
-# it needs no replication or snapshot. AI bots never set it.
+# Deliberate-deflect intent: a human holding the deflect button (stick_lift, Q)
+# WITHOUT the puck — "redirect this, don't catch it." Set each tick by the
+# controller (SkaterController._wants_deflect) and read host-side by PuckController's
+# loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
 var deflect_intent: bool = false
-# The share of blade_lift_height a deflect raises the blade to: the height it will
-# meet the puck at (DeflectReachRules). Set each tick by the controller.
+# The share of blade_lift_height a deflect raises the blade to: the height the
+# puck coming at the press will be met at (DeflectReachRules), read at the press.
 var deflect_lift_share: float = 0.0
 # Eased toward the lift share; drives SkaterIKCoordinator.blade_y_local's lift.
 var _blade_lift_blend: float = 0.0
@@ -1545,6 +1540,9 @@ const _BLADE_LIFT_BLEND_SPEED: float = 12.0
 # A lift's drop comes down inside StickCheckRules.DROP_S, so the blade is back
 # at puck height while the victim's is still forced up.
 const _BLADE_DROP_BLEND_SPEED: float = 24.0
+# Ice to a full lift for a deflect's blade — a hand carrying a stick half a metre
+# to a target — so a late press is a blade still on its way.
+const _DEFLECT_FULL_RISE_S: float = 0.3
 # Ease rate for the commit-stance stick raise (units/sec). A touch slower than the
 # blade lift so the stick "loads up" into the check rather than snapping.
 const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
@@ -1560,11 +1558,12 @@ const _CHECK_LEAD_SPEED: float = 5.0
 func _update_blade_lift(delta: float) -> void:
 	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase, stick_tied) \
 			else 0.0
+	var speed: float = _BLADE_DROP_BLEND_SPEED \
+			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
 	if deflect_intent and not is_forced_lift_active() \
 			and not StickCheckRules.uses_lift_height(stick_check_phase, stick_tied):
 		target = deflect_lift_share
-	var speed: float = _BLADE_DROP_BLEND_SPEED \
-			if stick_check_phase == StickCheckRules.Phase.DROP else _BLADE_LIFT_BLEND_SPEED
+		speed = 1.0 / _DEFLECT_FULL_RISE_S
 	_blade_lift_blend = move_toward(_blade_lift_blend, target, speed * delta)
 
 

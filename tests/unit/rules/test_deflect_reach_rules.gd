@@ -41,9 +41,9 @@ func test_a_line_wide_of_the_stick_is_not_tracked() -> void:
 func test_a_puck_still_far_off_in_time_is_not_tracked_yet() -> void:
 	var speed: float = 20.0
 	var far := Vector3(0.0, 0.6, speed * (DeflectReachRules.TRACK_HORIZON_S + 0.05))
-	assert_eq(_lift(far, Vector3(0.0, 3.0, -speed)), 0.0)
+	assert_eq(_lift(far, Vector3(0.0, 5.0, -speed)), 0.0)
 	var near := Vector3(0.0, 0.6, speed * (DeflectReachRules.TRACK_HORIZON_S - 0.05))
-	assert_gt(_lift(near, Vector3(0.0, 3.0, -speed)), 0.0)
+	assert_gt(_lift(near, Vector3(0.0, 5.0, -speed)), 0.0)
 
 
 func test_a_puck_moving_away_is_read_where_it_is() -> void:

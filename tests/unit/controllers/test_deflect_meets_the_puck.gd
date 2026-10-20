@@ -1,9 +1,10 @@
 extends GutTest
 
-# Holding deflect brings the blade to the puck's height through the real
-# controller (SkaterController → Skater's lift blend → the IK), and the host's
-# contact test (PuckController._check_interactions) tips it at that height in the
-# direction the loft level names.
+# Pressing deflect reads the incoming puck and brings the blade to its height,
+# in DeflectReachRules' time, through the real controller (SkaterController →
+# Skater's lift blend → the IK); the host's contact test
+# (PuckController._check_interactions) tips it there in the direction the loft
+# level names. Held from before a release, the blade does not follow.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -74,49 +75,80 @@ func _tick(deflect: bool, level: int, ticks: int, fly: bool = false) -> void:
 			_vel = _puck.linear_velocity
 
 
-# A puck flying across the blade's line from 4 m out, crossing at `height`.
-func _launch(height: float, airborne: bool = true) -> void:
+# A puck flying across the blade's line from `dist` m out, crossing at `height`.
+func _launch(height: float, dist: float = 4.0, airborne: bool = true) -> void:
 	var blade: Vector3 = _c.skater.get_blade_contact_global()
-	var t: float = 4.0 / SPEED
+	var t: float = dist / SPEED
 	var y0: float = height + 0.5 * GameRules.GRAVITY_M_S2 * t * t if airborne else _puck.ice_height
-	_puck.global_position = Vector3(blade.x + 4.0, y0, blade.z)
+	_puck.global_position = Vector3(blade.x + dist, y0, blade.z)
 	_vel = Vector3(-SPEED, 0.0, 0.0)
 	_puck.linear_velocity = _vel
 
 
-func test_the_blade_rises_to_where_the_puck_will_be() -> void:
+func _blade_y() -> float:
+	return _c.skater.get_blade_contact_global().y
+
+
+func test_the_press_takes_the_blade_to_where_the_puck_will_be() -> void:
 	_launch(0.4)
-	_tick(true, ShotMechanics.ELEVATION_MID, 12)
+	_tick(true, ShotMechanics.ELEVATION_MID, 1)
 	assert_true(_c.skater.blade_up)
-	assert_almost_eq(_c.skater.get_blade_contact_global().y, 0.4, 0.02,
+	assert_lt(_blade_y(), 0.1, "it does not get there at once")
+	_tick(true, ShotMechanics.ELEVATION_MID, 40)
+	assert_almost_eq(_blade_y(), 0.4, 0.02,
 			"the blade waits at the puck's crossing height, not where it is now")
 
 
-func test_the_rise_stops_at_a_full_lift() -> void:
+func test_a_full_rise_takes_its_time() -> void:
 	_launch(1.0)
-	_tick(true, ShotMechanics.ELEVATION_MID, 12)
-	assert_almost_eq(_c.skater.get_blade_contact_global().y,
-			_c.blade_height + _c.blade_lift_height, 0.01)
+	_tick(true, ShotMechanics.ELEVATION_MID, int(0.15 / DT))
+	var top: float = _c.blade_height + _c.blade_lift_height
+	assert_lt(_blade_y(), top - 0.15, "half way through the rise it is half way up")
+	_tick(true, ShotMechanics.ELEVATION_MID, int(0.2 / DT))
+	assert_almost_eq(_blade_y(), top, 0.01, "and it stops at a full lift")
+
+
+func test_a_press_held_from_before_the_release_does_not_follow() -> void:
+	_tick(true, ShotMechanics.ELEVATION_LOW, 5)
+	_launch(0.3, 8.0)
+	_tick(true, ShotMechanics.ELEVATION_LOW, 60, true)
+	assert_almost_eq(_blade_y(), _c.blade_height, 0.01, "the blade stayed on the ice")
+	assert_almost_eq(_vel.x, -SPEED, 0.01, "and the puck went over it")
+
+
+func test_pressing_again_reads_again() -> void:
+	_tick(true, ShotMechanics.ELEVATION_LOW, 5)
+	_launch(0.3, 8.0)
+	_tick(false, ShotMechanics.ELEVATION_LOW, 1)
+	_tip(ShotMechanics.ELEVATION_LOW, 0.3, 8.0, false)
+	assert_lt(_vel.y, 0.0, "re-pressed after the release, it knocks the puck down")
+
+
+func test_a_late_press_is_a_blade_still_on_its_way() -> void:
+	_launch(0.4, 1.5)
+	_tick(true, ShotMechanics.ELEVATION_MID, 40, true)
+	assert_almost_eq(_vel.x, -SPEED, 0.01, "the puck beat the blade up")
 
 
 func test_a_puck_on_the_ice_keeps_the_blade_down() -> void:
-	_launch(0.0, false)
-	_tick(true, ShotMechanics.ELEVATION_MID, 12)
+	_launch(0.0, 4.0, false)
+	_tick(true, ShotMechanics.ELEVATION_MID, 40)
 	assert_false(_c.skater.blade_up)
-	assert_almost_eq(_c.skater.get_blade_contact_global().y, _c.blade_height, 0.01)
+	assert_almost_eq(_blade_y(), _c.blade_height, 0.01)
 
 
 func test_letting_go_brings_the_blade_back_to_the_ice() -> void:
 	_launch(0.6)
-	_tick(true, ShotMechanics.ELEVATION_MID, 12)
+	_tick(true, ShotMechanics.ELEVATION_MID, 40)
 	_tick(false, ShotMechanics.ELEVATION_MID, 30)
 	assert_false(_c.skater.blade_up)
-	assert_almost_eq(_c.skater.get_blade_contact_global().y, _c.blade_height, 0.01)
+	assert_almost_eq(_blade_y(), _c.blade_height, 0.01)
 
 
-func _tip(level: int) -> void:
-	_launch(0.6)
-	_tick(true, level, 40, true)
+func _tip(level: int, height: float = 0.3, dist: float = 8.0, launch: bool = true) -> void:
+	if launch:
+		_launch(height, dist)
+	_tick(true, level, 80, true)
 	assert_gt(_vel.x, -SPEED + 1.0, "the blade met the puck in the air")
 
 
@@ -131,6 +163,6 @@ func test_low_knocks_an_air_puck_down() -> void:
 
 
 func test_a_puck_over_the_full_lift_goes_past() -> void:
-	_launch(1.0)
-	_tick(true, ShotMechanics.ELEVATION_MID, 40, true)
+	_launch(1.0, 8.0)
+	_tick(true, ShotMechanics.ELEVATION_MID, 80, true)
 	assert_almost_eq(_vel.x, -SPEED, 0.01, "a blade at full lift cannot reach up to it")

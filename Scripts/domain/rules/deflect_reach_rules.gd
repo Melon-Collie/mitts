@@ -1,16 +1,15 @@
 class_name DeflectReachRules
 
 # How high a committed deflect's blade rises: the puck's height where its path
-# passes nearest the blade, so the player holds the button and the stick goes to
+# passes nearest the blade, read when the button is pressed, so the stick goes to
 # meet the puck instead of the player pre-picking an ice or air plane.
 
 # A line passing further than this off the blade is not coming to this stick: a
 # blade reaches about this far across while the puck is in flight.
 const TRACK_RADIUS_M: float = 1.5
-# The blade rises for a puck arriving within this long. A full rise takes under
-# a tenth of a second (Skater._BLADE_LIFT_BLEND_SPEED), so this is time to read
-# the puck, not time to get there.
-const TRACK_HORIZON_S: float = 0.5
+# How early a press can read a puck: one arriving within this long. A point shot
+# from the blue line arrives in under a second.
+const TRACK_HORIZON_S: float = 1.0
 # How far off the blade's contact point, up or down, the deflect still meets the
 # puck: where the face and the disc overlap in height, nothing more.
 const VERTICAL_REACH_M: float = GameRules.BLADE_FACE_HEIGHT_M * 0.5 \

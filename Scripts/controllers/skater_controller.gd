@@ -1588,7 +1588,7 @@ func _wants_deflect(input: InputState) -> bool:
 	return input.stick_lift_held and not has_puck
 
 
-# The deflect blade's rise: on the ice for a puck met on the ice, at most a full lift.
+# The deflect blade's target: on the ice for a puck met on the ice, at most a full lift.
 func _deflect_lift_share() -> float:
 	if puck == null:
 		return 0.0
@@ -1667,14 +1667,16 @@ func _process_input(input: InputState, delta: float) -> void:
 	_current_aim_world = input.mouse_world_pos
 	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
-	# Deliberate-deflect intent (see Skater.deflect_intent). Holding the deflect
-	# button (Q) without the puck commits to redirecting a loose puck off the
-	# blade rather than corralling it; carrying means Q is the nudge tap instead,
-	# so it's gated on NOT having the puck. The host reads this in
-	# PuckController._check_interactions for every skater it simulates, and the
-	# loft level signs the redirect (FLAT/LOW down, MID/HIGH up).
-	skater.deflect_intent = _wants_deflect(input)
-	skater.deflect_lift_share = _deflect_lift_share() if skater.deflect_intent else 0.0
+	# Deliberate-deflect intent (see Skater.deflect_intent): Q without the puck
+	# redirects a loose puck instead of corralling it (carrying, Q is the nudge).
+	# The host reads it in PuckController._check_interactions; the loft level signs
+	# the redirect. The PRESS reads the incoming puck, once: held from before a
+	# release, the blade stays put, so meeting a puck means reacting to it. Live
+	# only — replay must not re-read.
+	var deflecting: bool = _wants_deflect(input)
+	if not is_replaying and (not deflecting or not skater.deflect_intent):
+		skater.deflect_lift_share = _deflect_lift_share() if deflecting else 0.0
+	skater.deflect_intent = deflecting
 
 	# The deflecting blade rises to the puck it is about to meet. A forced lift (an
 	# opponent hooked under your stick) overrides regardless of possession.
