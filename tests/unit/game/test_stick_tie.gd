@@ -197,6 +197,16 @@ func test_a_stoppage_unties_everyone() -> void:
 	assert_false(_defender.stick_tied)
 
 
+# The goal replay stamps its recorded frames onto the live actors, so it can end
+# on a tie the tracker has already broken (or never held).
+func test_a_stoppage_unties_a_tie_the_tracker_does_not_hold() -> void:
+	_defender.stick_tied = true
+	_receiver.stick_tied = true
+	_ties.tick(false)
+	assert_false(_receiver.stick_tied)
+	assert_false(_defender.stick_tied)
+
+
 # Sustained escape is a contest at equal speed: the separation covers the gap a
 # pull opens while the other player's answer is in flight both ways.
 func test_the_separation_covers_the_network_lag() -> void:
