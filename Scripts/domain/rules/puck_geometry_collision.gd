@@ -60,21 +60,10 @@ static func reflect_off_pipe(vel: Vector3, normal: Vector3) -> Vector3:
 	return vel - (1.0 + e) * vn * n
 
 
-# reflect_3d off the netting: the into-mesh channel rebounds at NET_RESTITUTION and
-# the along-mesh channel (vertical included) sheds NET_FRICTION × the normal
-# impulse, never past zero.
+# The netting's response to every twine face.
 static func reflect_off_twine(vel: Vector3, normal: Vector3) -> Vector3:
-	var n: Vector3 = normal.normalized()
-	var vn: float = vel.dot(n)
-	if vn >= 0.0:
-		return vel
-	var v_tan: Vector3 = vel - vn * n
-	var t_speed: float = v_tan.length()
-	var keep: float = 0.0
-	if t_speed > 1e-6:
-		var drop: float = -NET_FRICTION * (1.0 + NET_RESTITUTION) * vn
-		keep = maxf(t_speed - drop, 0.0) / t_speed
-	return v_tan * keep - NET_RESTITUTION * vn * n
+	return PuckCollisionRules.reflect_with_friction(
+			vel, normal, NET_RESTITUTION, NET_FRICTION)
 
 
 # Resolve a puck against the two goal posts at whichever end it's near. On contact, eject the
