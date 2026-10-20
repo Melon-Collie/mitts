@@ -11,12 +11,10 @@ class_name AccuracyDrillRules
 #   - the four corners and the five-hole come straight from the tutorial's
 #     calibrated sets (_LOW_TARGETS / _HIGH_TARGETS) — the drill's frozen
 #     open-stance goalie leaves exactly those holes open;
-#   - the two SIDE targets are placed so one notch of loft reaches them: LOW's
-#     fixed vertical launch (SkaterController.loft_vertical_speed_low) peaks at
-#     vy²/2g ≈ 0.25 m, so with the drill's hit tolerance a 0.50 m-high centre
-#     is hittable by a saucer crossing near its apex — while a flat shot along
-#     the ice stays out of range. (A HIGH shot passing through on its arc
-#     works too; the calibration only guarantees LOW is enough.)
+#   - the two SIDE targets sit 0.50 m up, out of a flat shot's reach. They were
+#     placed for a fixed vertical launch that now drives only quick passes;
+#     shots launch at each loft rung's set angle (ShotMechanics), and which
+#     rungs reach them from the drill's spot is unverified (#598).
 
 # Hit tolerance (m) around a target's centre — matched to the bullseye's drawn
 # outer radius (TutorialTargets._BANDS) and the Shooting tutorial's own

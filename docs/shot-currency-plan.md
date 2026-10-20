@@ -180,12 +180,11 @@ deleted; with no keeper replicated the bot shoots flat at the middle.
   calibrated odds: `SHOT_MIN_VALUE` 0.05 / `PASS_MIN_VALUE` 0.02 (giveaway),
   the 0.5 "more likely than not" net-front and lane-play bars (a feed in the
   house reads ~0.95-1.0, a perimeter one ~0-0.1), and the 0.30 reception gate.
-- Known gaps: keeper depth is not a feature and a keeper stranded past the post
-  reads as his most-beaten measured cell rather than an empty net (#787); one
-  field for every goalie tier (#786); odds priced at the league blade loft
-  (#788); a position the carrier reaches is priced in the keeper's live stance
-  only for a shot before he could stand up (`AIGoalieModel.GOALIE_RECOVERY_S`),
-  upright after it — when he chooses to rise is not modelled (#792).
+- Known gaps: one field for every goalie tier (#786); odds priced at the
+  league blade loft (#788); a position the carrier reaches is priced in the
+  keeper's live stance only for a shot before he could stand up
+  (`AIGoalieModel.GOALIE_RECOVERY_S`), upright after it — when he chooses to
+  rise is not modelled.
 
 ### Step 4 — one currency over the whole ice (done for the carrier)
 
