@@ -107,8 +107,8 @@ static func blade_held_up(blade_up: bool, phase: int, tied: bool) -> bool:
 
 
 # From the press until the blade is back down, and for as long as it is tied: the
-# blade rides the lift's own height, not the deflect mode's, so the stick never
-# steps between the two.
+# blade rides the lift's own height, not the deflect's rise to the puck, so the
+# stick never steps between the two.
 static func uses_lift_height(phase: int, tied: bool) -> bool:
 	return tied or (phase != Phase.IDLE and phase != Phase.REARM)
 

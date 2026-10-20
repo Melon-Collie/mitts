@@ -233,31 +233,14 @@ var follow_through_facing_recover_speed: float = 18.0
 # scene. This also means crouching (block stance) doesn't pull the blade
 # through the ice — the local Y compensates automatically.
 var blade_height: float = 0.03
-# World-space height the blade rises to when lifted (a raised deflect, a stick
-# lift, or a forced pop from an opponent's lift). A lifted blade clears grounded
-# pucks and sticks — it only meets airborne pucks, to tip them. Eased in via
-# Skater._blade_lift_blend and consumed by SkaterIKCoordinator.blade_y_local().
-#
-# LOAD-BEARING, and pinned between two hard walls — it is the pivot that decides
-# up-tip vs. knock-down (PuckCollisionRules.deflect_loft_speed), and it sets how
-# high a lifted blade can reach. Contact point = blade_height + this.
-#   FLOOR (~0.30): must clear a LOW saucer's apex (~0.26 m, fixed — loft is a
-#     fixed launch speed). Drop below it and camping HIGH starts ROOFING saucer
-#     passes instead of swatting them.
-#   CEILING (0.5675): contact point − PuckController.PICKUP_RADIUS must stay at
-#     or below the airborne threshold (GameRules.PUCK_AIRBORNE_HEIGHT_M + a
-#     resting puck's centre = 0.0675). Above that, pucks between the threshold
-#     and the lifted blade's downward reach are touchable by NEITHER plane — a
-#     dead zone where saucers become untouchable.
-# 0.52 (contact point 0.55) sits at the top of that range, which is where the
-# tips that matter live: a HIGH feed arriving at a net-front player sits at
-# 0.9–1.1 m, and the reach ceiling only gets there at the top of the band.
+# World-space height of a full lift (a stick lift, a tie, a forced pop) and the
+# top of a deflect's rise (Skater.deflect_lift_share), eased by
+# Skater._blade_lift_blend. Contact point = blade_height + this.
+# CEILING 0.5675: a fully lifted blade plays only airborne pucks, so contact point
+# − PuckController.PICKUP_RADIUS must stay at or below the airborne threshold
+# (0.0675 above the ice), or some pucks are touchable by neither plane. 0.52 sits
+# at the top, so a deflect reaches a net-front feed arriving at 0.9–1.1 m.
 var blade_lift_height: float = 0.52
-# Lifted-blade pivot for the MID deflect mode (air-up tip): the low-air plane,
-# under the HIGH pivot above and above a saucer's apex (~0.21–0.26 m) so
-# camping MID still can't cheese saucer passes. See the deflect-mode table in
-# PuckCollisionRules.deflect_loft_speed.
-var blade_lift_height_mid: float = 0.35
 # Fixed, rigid shaft length (hand to blade heel). Baseline 1.30 m ≈ adult
 # senior stick shaft (butt-to-heel). The blade mesh extends forward from the
 # heel; see Skater.blade_length. Total hand-to-toe is stick_length + blade_length.
@@ -1605,6 +1588,18 @@ func _wants_deflect(input: InputState) -> bool:
 	return input.stick_lift_held and not has_puck
 
 
+# The deflect blade's rise: on the ice for a puck met on the ice, at most a full lift.
+func _deflect_lift_share() -> float:
+	if puck == null:
+		return 0.0
+	_sample_deflect_puck_view(_deflect_puck_view)
+	var lift: float = DeflectReachRules.lift_to_meet(_deflect_puck_view.position,
+			_deflect_puck_view.velocity, skater.get_blade_contact_global(), puck.ice_height)
+	if lift <= GameRules.PUCK_AIRBORNE_HEIGHT_M:
+		return 0.0
+	return minf(lift / blade_lift_height, 1.0)
+
+
 # A lift starts only from plain puckless skating: a puck on the blade, a shot, a
 # block or a check owns the stick. Any of those arriving mid-lift ends it, as does
 # an opponent's lift, a tie, or being pinned; a pinner's stick stays in its hold.
@@ -1677,18 +1672,13 @@ func _process_input(input: InputState, delta: float) -> void:
 	# blade rather than corralling it; carrying means Q is the nudge tap instead,
 	# so it's gated on NOT having the puck. The host reads this in
 	# PuckController._check_interactions for every skater it simulates, and the
-	# loft level shapes the redirect (grounded / up / down).
+	# loft level signs the redirect (FLAT/LOW down, MID/HIGH up).
 	skater.deflect_intent = _wants_deflect(input)
+	skater.deflect_lift_share = _deflect_lift_share() if skater.deflect_intent else 0.0
 
-	# Blade lift (off the ice) is a CONSEQUENCE of deflecting at an AIR loft: MID
-	# rides the low-air pivot, HIGH the high one, so the raised blade reaches
-	# airborne pucks; it never lifts a stick, which is the stick-check button's
-	# (_advance_stick_check). FLAT/LOW deflects keep the blade grounded so they can
-	# still meet pucks on the ice (a LOW deflect tips a grounded shot UP). A forced
-	# lift (an opponent hooked under your stick) overrides regardless of possession
-	# and is what dislodges a carried puck.
-	skater.blade_up = (skater.deflect_intent and _elevation_level >= ShotMechanics.ELEVATION_MID) \
-			or skater.is_forced_lift_active()
+	# The deflecting blade rises to the puck it is about to meet. A forced lift (an
+	# opponent hooked under your stick) overrides regardless of possession.
+	skater.blade_up = skater.deflect_lift_share > 0.0 or skater.is_forced_lift_active()
 
 	# Nudge: a deflect-button TAP while carrying pushes the puck off the blade as a
 	# soft self-pass (nutmeg setup). Edge-triggered and gated to plain carry so
@@ -3103,6 +3093,7 @@ class PuckView extends RefCounted:
 	var velocity: Vector3 = Vector3.ZERO
 
 var _one_timer_puck_view := PuckView.new()
+var _deflect_puck_view := PuckView.new()
 
 
 # Live puck: for a local player and for a bot, the sim and the puck view share
@@ -3111,6 +3102,13 @@ var _one_timer_puck_view := PuckView.new()
 # the puck they aimed at, and judging the swing against the host's live puck
 # would slide their timing window by that lead.
 func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
+	out.position = puck.global_position
+	out.velocity = puck.linear_velocity
+
+
+# The puck a deflecting blade rises to meet: the host's live one decides the tip;
+# a client draws its own blade against the rendered one (LocalController).
+func _sample_deflect_puck_view(out: PuckView) -> void:
 	out.position = puck.global_position
 	out.velocity = puck.linear_velocity
 

@@ -6,6 +6,13 @@ extends SkaterController
 func shot_power_sensitivity() -> float:
 	return PlayerPrefs.shot_power_sensitivity
 
+# A client's puck node carries no velocity (PuckController drives only its
+# position), so the deflect blade rises to meet the rendered flight.
+func _sample_deflect_puck_view(out: SkaterController.PuckView) -> void:
+	super(out)
+	if not _is_host and GameManager.puck_controller != null:
+		out.velocity = GameManager.puck_controller.rendered_loose_velocity
+
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # Carries the victim knockback impulse (its length is the hit magnitude, its

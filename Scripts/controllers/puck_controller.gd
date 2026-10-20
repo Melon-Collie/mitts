@@ -360,9 +360,10 @@ func _physics_process(delta: float) -> void:
 # post-catch when the pickup notify lands, but the rendered timeline trails
 # the newest snapshot by the interpolation delay, so at that moment it still
 # shows the pre-catch flight — which is also exactly what the player saw the
-# puck doing. Client-only (the host reads the live analytic velocity).
+# puck doing, and the flight the local deflect blade rises to meet. Client-only
+# (the host reads the live analytic velocity).
 var _loose_vel_prev_pos: Vector3 = Vector3.INF
-var _rendered_loose_velocity: Vector3 = Vector3.ZERO
+var rendered_loose_velocity: Vector3 = Vector3.ZERO
 # Host: who caught last and the receiver-relative speed it arrived at (sound).
 var _granted_arrival_skater: Skater = null
 var _granted_arrival_speed: float = 0.0
@@ -371,7 +372,7 @@ var _granted_arrival_speed: float = 0.0
 func _track_loose_velocity(delta: float) -> void:
 	var pos: Vector3 = puck.get_puck_position()
 	if _loose_vel_prev_pos.is_finite() and delta > 0.0:
-		_rendered_loose_velocity = (pos - _loose_vel_prev_pos) / delta
+		rendered_loose_velocity = (pos - _loose_vel_prev_pos) / delta
 	_loose_vel_prev_pos = pos
 
 # ── Lag Compensation ─────────────────────────────────────────────────────────
@@ -405,8 +406,8 @@ func _cushion_from_rendered(skater: Skater, hold_s: float) -> void:
 	# The host cushioned the catch at its grant, and tracks no rendered flight.
 	if NetworkManager.is_host:
 		return
-	var relative_vel: Vector3 = _rendered_loose_velocity - skater.velocity
-	var catch_load: float = PuckReceptionRules.reception_load(_rendered_loose_velocity,
+	var relative_vel: Vector3 = rendered_loose_velocity - skater.velocity
+	var catch_load: float = PuckReceptionRules.reception_load(rendered_loose_velocity,
 			skater.velocity, skater.get_blade_face_normal(relative_vel),
 			puck.deflect_min_speed * skater.reception_ceiling_mult,
 			puck.alignment_receive_bonus * skater.reception_ceiling_mult)
@@ -423,7 +424,7 @@ func arrival_speed_for(carrier: Skater) -> float:
 		return 0.0
 	if NetworkManager.is_host:
 		return _granted_arrival_speed if carrier == _granted_arrival_skater else 0.0
-	return (_rendered_loose_velocity - carrier.velocity).length()
+	return (rendered_loose_velocity - carrier.velocity).length()
 
 
 # Host-only scripted teleports (tutorial staging). Each restarts next tick's
@@ -742,15 +743,14 @@ func _check_interactions() -> void:
 						or CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 						or skater.pin_role != BoardPinRules.Role.NONE:
 					continue
-				# Reach gate — grounded blade ↔ grounded puck, lifted blade ↔
-				# airborne puck. blade_up already encodes the deflect level's plane
-				# (grounded at FLAT/LOW, lifted only at HIGH), so a committed deflect
-				# and a passive receiver share this one gate: FLAT/LOW play the ice
-				# (a saucer flies over), HIGH plays the air. The loft level changes
-				# the redirect DIRECTION, not which plane it reaches.
-				# A tied stick is held off the ice, so it plays the air like a raised one.
-				if not PuckReceptionRules.blade_can_interact(skater.blade_up or skater.stick_tied,
-						puck_airborne):
+				# Reach gate — grounded blade ↔ grounded puck, lifted ↔ airborne, so a
+				# saucer flies over a grounded blade. A committed deflect skips it (its
+				# blade rises to the puck, Skater.deflect_lift_share) unless tied — a
+				# tied stick plays the air — or popped up.
+				var deflect_reach: bool = skater.deflect_intent and not skater.stick_tied \
+						and not skater.is_forced_lift_active()
+				if not deflect_reach and not PuckReceptionRules.blade_can_interact(
+						skater.blade_up or skater.stick_tied, puck_airborne):
 					continue
 				var blade_curr: Vector3 = skater.get_blade_contact_global()
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
@@ -1087,7 +1087,7 @@ func _pin_puck_to_carrier(carrier: Skater, delta: float) -> void:
 	# a later direct carrier→carrier handoff (attach notifies land BEFORE the
 	# first pinned tick, so the genuine catch has already read it by now).
 	_loose_vel_prev_pos = Vector3.INF
-	_rendered_loose_velocity = Vector3.ZERO
+	rendered_loose_velocity = Vector3.ZERO
 	# Smooth puck toward the carrier's carry target each tick. Shared by the local
 	# carry and the remote-carrier pin. The lerp damps rapid blade movements so the
 	# puck feels weighty during stickhandling rather than teleporting instantly to

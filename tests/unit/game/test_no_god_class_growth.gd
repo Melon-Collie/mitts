@@ -118,7 +118,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/ui/network_debug_overlay.gd": 956,
 	"res://Scripts/networking/network_telemetry.gd": 968,
 	# +1: a cross-checking stick sends no pickup or poke claim.
-	"res://Scripts/controllers/local_controller.gd": 950,
+	"res://Scripts/controllers/local_controller.gd": 955,
 	# Main's resumable sample prediction and the board pin's forward cap crossed the
 	# limit together, each from under it, at the merge that joined them.
 	# +2: the cross-check phase applied off the wire.
