@@ -625,8 +625,7 @@ var dive_layout: Vector2 = Vector2(0.0, -1.0)
 # controller (SkaterController._wants_deflect) and read host-side by PuckController's
 # loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
 var deflect_intent: bool = false
-# The share of blade_lift_height a deflect raises the blade to: the height the
-# puck coming at the press will be met at (DeflectReachRules), read at the press.
+# Share of blade_lift_height a deflect's press read the puck at (DeflectReachRules).
 var deflect_lift_share: float = 0.0
 # Eased toward the lift share; drives SkaterIKCoordinator.blade_y_local's lift.
 var _blade_lift_blend: float = 0.0
@@ -1555,9 +1554,8 @@ const _COMMIT_LIFT_BLEND_SPEED: float = 9.0
 const _CHECK_LEAD_SPEED: float = 5.0
 
 
-# Eases _blade_lift_blend toward the lift share each tick — 1 for a full lift, a
-# deflect's own share — so the stick rises instead of snapping, and one channel
-# for every lift means a deflect handed to a lift never steps.
+# Eases _blade_lift_blend toward the lift share (1 for a full lift, a deflect's
+# own share); one channel for every lift, so a deflect handed to a lift never steps.
 func _update_blade_lift(delta: float) -> void:
 	var target: float = 1.0 if StickCheckRules.blade_held_up(blade_up, stick_check_phase, stick_tied) \
 			else 0.0
