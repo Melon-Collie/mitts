@@ -1106,6 +1106,9 @@ var _approach_v0: Vector3 = Vector3.ZERO
 # Below this planar speed a skate-in is treated as a snap-from-rest start (reset
 # gait + square up to the path); at or above it, momentum is preserved.
 const _APPROACH_CARRY_MIN: float = 0.3
+# Planar speed (m/s) under which a skater in the prep has glided in and takes
+# his stance: about a walking pace, the tail of the skate-in's ease onto the dot.
+const FACEOFF_SET_MAX_SPEED: float = 1.0
 # Reused so the per-tick skate-in render doesn't allocate an InputState.
 var _approach_input: InputState = InputState.new()
 
@@ -1114,9 +1117,12 @@ var _approach_input: InputState = InputState.new()
 # stance crouch and staggers the feet (see faceoff_stance / faceoff_split_deg).
 # A live skate-in is excluded: a player still covering ground is skating, and a
 # staggered ready stance over a running stride is not a stance, it is a limp.
+# Read off the body as well as the approach: a remote skater's glide runs on the
+# host, so here he is only a body on the wire coming in at speed.
 func is_faceoff_ready() -> bool:
 	return _game_state_has_faceoff_prep and _game_state.is_faceoff_prep() \
-			and not _approach_active
+			and not _approach_active \
+			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
 func start_celebration(duration: float) -> void:
