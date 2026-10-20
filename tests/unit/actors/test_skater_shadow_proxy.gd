@@ -49,8 +49,11 @@ func test_the_proxy_is_the_figure_bone_for_bone() -> void:
 	var verts: PackedVector3Array = merged[Mesh.ARRAY_VERTEX]
 	var bones: PackedInt32Array = merged[Mesh.ARRAY_BONES]
 	var at: int = 0
+	# The upper skin's binds name their bones (the tail's are past the parts');
+	# the leg skin's are offset by LEG_BONE_OFFSET.
+	var upper_skin: Skin = SkaterMeshBuilder.shared_upper_skin()
 	var sources: Array = [
-		[SkaterMeshBuilder.shared_upper_skin_mesh(), 0],
+		[SkaterMeshBuilder.shared_upper_skin_mesh(), -1],
 		[SkaterMeshBuilder.shared_leg_skin_mesh(), SkaterBodySkeleton.LEG_BONE_OFFSET],
 	]
 	for source: Array in sources:
@@ -61,7 +64,9 @@ func test_the_proxy_is_the_figure_bone_for_bone() -> void:
 			var src_verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 			var src_bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
 			for i: int in src_verts.size():
-				if verts[at + i] != src_verts[i] or bones[(at + i) * 4] != src_bones[i * 4] + offset:
+				var bone: int = upper_skin.get_bind_bone(src_bones[i * 4]) if offset < 0 \
+						else src_bones[i * 4] + offset
+				if verts[at + i] != src_verts[i] or bones[(at + i) * 4] != bone:
 					fail_test("vertex %d of a surface diverged from its source" % i)
 					return
 			at += src_verts.size()

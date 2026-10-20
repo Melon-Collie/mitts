@@ -92,10 +92,11 @@ static func shared_mesh() -> ArrayMesh:
 		out[Mesh.ARRAY_BONES] = PackedInt32Array()
 		out[Mesh.ARRAY_WEIGHTS] = PackedFloat32Array()
 		out[Mesh.ARRAY_INDEX] = PackedInt32Array()
-		_append_mesh(out, SkaterMeshBuilder.shared_upper_skin_mesh(), 0, {
-				SkaterMeshBuilder.UPPER_HEM_BIND: SkaterBodySkeleton.HEM_BONE,
-				SkaterMeshBuilder.UPPER_TAIL_BIND: SkaterBodySkeleton.TAIL_BONE,
-				SkaterMeshBuilder.UPPER_TAIL_HEM_BIND: SkaterBodySkeleton.TAIL_HEM_BONE})
+		var tail: Dictionary = {SkaterMeshBuilder.UPPER_TAIL_BIND: SkaterBodySkeleton.TAIL_BONE}
+		for bind: int in 2 * SkaterMeshBuilder.TORSO_SIDES:
+			tail[SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE + bind] = \
+					SkaterBodySkeleton.COLUMN_BONE_BASE + bind
+		_append_mesh(out, SkaterMeshBuilder.shared_upper_skin_mesh(), 0, tail)
 		_append_mesh(out, SkaterMeshBuilder.shared_leg_skin_mesh(),
 				SkaterBodySkeleton.LEG_BONE_OFFSET)
 		_merged = ArrayMesh.new()

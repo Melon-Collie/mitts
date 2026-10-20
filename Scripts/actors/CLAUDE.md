@@ -13,7 +13,7 @@ delegates to.
 | holder | class | what it owns |
 |---|---|---|
 | `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
-| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail, pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the gear meshes (the tuck's upper mesh; face gear, hair and brows on one bone attachment) |
+| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the gear meshes (the tuck's upper mesh; face gear, hair and brows on one bone attachment) |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
@@ -72,14 +72,12 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
   WAIST  half the trunk's twist — the pelvis (shorts) rides it
     SPINE  the fold about the hips, then the rest of the twist, then the
            reach lean, less the lean the trunk hands back; torso and caps
-      HEM    under the torso: the share of the jersey's tail the chest
-             carries, swung on a lag of the balance lean
       NECK   takes back part of the trunk's lean; the helmet
     TAIL   the torso's placement hung from the waist: the share of the
-           jersey's tail the hips carry, and a tuck, held still
-      TAIL_HEM  under TAIL: the hips' share, swung as HEM is
-           (the tail is the one blended-weight surface in the rig —
-           SkaterJerseyHem)
+           jersey's tail the hips carry
+tail     roots, one pair per torso facet: the jersey's tail below the belt,
+         draped by SkaterHemFlaps (with the jersey's carry above, the one
+         blended-weight surface in the rig — SkaterJerseyHem)
 arms     roots, solved from the spine's shoulders to the gameplay hands
 ```
 
@@ -139,24 +137,22 @@ where the thighs push it, and only `CARRY_BACK` of it at the back, which rides
 up with the chest over the seat — so a fold or a twist bends the sweater
 rather than driving its hem through the pants. A tuck (the gear style's
 `jersey_tuck`) is which shared upper mesh the skater wears: the tucked tail is
-pulled inside the waistband and held on TAIL, which no swing moves.
+pulled inside the waistband, and the flaps hold it there.
 `tests/unit/actors/test_body_chain.gd` holds the chain,
 `test_pelvis_fills_the_seat.gd` the seat and `test_jersey_tuck.gd` the tail
 against the pants.
 
-**The tail's drape is a prototype switch** (`HemSimMode`, `-- --hem-sim=`;
-`Skater.hem_sim_mode` per skater). SWAY, the default, swings the tail whole on
-the hem bones, and it clips: a thigh lifted in a stride or a crouch pokes
-through it. The other three replace the tail from the belt ring down, each
-facet column hung from its belt point (`SkaterHemSim`): FLAPS is our own ring
-of two-segment flaps colliding with the thighs and pants (`SkaterHemFlaps`,
-`SkaterHemColliders`), SPRINGS Godot's `SpringBoneSimulator3D` on per-column
-chains, SOFT_BODY a `SoftBody3D` band pinned at the belt. The column bones come
-after the body's own (`SkaterBodySkeleton.column_bone`), and only a skater
-built with that mode has them. `.claude/hooks/render-hem.sh` skates all four
-side by side and prints how far each tail went inside the thighs and pants;
-`test_hem_sims.gd` holds that each builds, and that the flaps clear a raised
-thigh.
+**The tail below the belt is cloth** (`SkaterHemFlaps`): a ring of
+two-segment flaps, one per torso facet, hung from the belt ring where the
+weights above put it, swung by gravity less the skater's own acceleration,
+held to its drape and its neighbours, and pushed out of the thighs and pants
+(`SkaterHemColliders`, from the leg bones' live poses and the pants' lathe). A
+rigid tail cannot do this: a thigh lifted in a stride or a crouch pokes
+straight through one. It steps every frame and writes its 20 bones when drawn;
+it runs in C++ where the extension is built (`NativeHemFlaps`), and
+`test_native_hem_flaps_parity.gd` holds the two together.
+`test_hem_flaps.gd` holds the drape and `tests/slow/actors/test_hem_stays_out_of_the_legs.gd` the
+tail against the legs across a skated run.
 
 ## The blades stand on the ice
 

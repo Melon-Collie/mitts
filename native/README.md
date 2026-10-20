@@ -3,7 +3,7 @@
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
-`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`). The
+`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
 `Scripts/controllers/` and `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
@@ -184,6 +184,16 @@ without a built binary, loses performance, never correctness — CI builds it):
   through float as the GDScript's packed arrays do, so the two agree to the bit.
   38 → 5 µs a read; the carrier's carry search 26–28% faster in the zone.
   `tests/unit/ai/test_native_shot_odds_parity.gd`.
+
+- **Jersey tail** — `SkaterHemFlaps.step` (render rate, every skater, every
+  frame): the drape below the belt — the belt anchors, the verlet step, the
+  relaxation (segment lengths, the ring's spacing) and the push out of the
+  thighs and pants (`SkaterHemColliders`) — in one call that reads its bones
+  off the skeleton and **writes the 20 flap bones itself**, as `NativeArmRig`
+  does. Its drape, shares, the pants' lathe and the tunables load in
+  `configure` (`SkaterHemFlaps.configure_native`, re-run on a tuck change).
+  280 → 10 µs a frame with the writes, a thigh in the hem.
+  `tests/unit/rules/test_native_hem_flaps_parity.gd`.
 
 The parity suites force the GDScript path on their reference objects (e.g.
 nulling `_skating._native`) — a parity test must never compare the native

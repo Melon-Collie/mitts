@@ -114,9 +114,6 @@ var tape_config: StickTapeConfig = StickTapeConfig.new()
 # before the uniform is applied, resolved against the kit by the uniform
 # coordinator. Never null.
 var gear_style: GearStyleConfig = GearStyleConfig.new()
-# Which model moves the jersey's tail below the belt (HemSimMode), read once when
-# the rig is built.
-var hem_sim_mode: int = HemSimMode.default_mode
 var wall_squeeze_threshold: float = 0.3
 # When the puck is lost on the boards (blade squeezed past the threshold above),
 # it squirts ALONG the boards in the carrier's travel direction. This blends a
@@ -848,7 +845,7 @@ func _ready() -> void:
 	# One skeleton for the whole figure, handed to each rig that poses part of
 	# it. A sibling of UpperBody and LowerBody at identity, so skeleton space is
 	# the space both gameplay frames are positioned in.
-	var body: Skeleton3D = SkaterBodySkeleton.new_body_skeleton(hem_sim_mode)
+	var body: Skeleton3D = SkaterBodySkeleton.new_body_skeleton()
 	mesh_root.add_child(body)
 
 	_legs = SkaterLegRig.new()
