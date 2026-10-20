@@ -50,7 +50,6 @@ class MovementConfig:
 	var stance_scrape: float = 0.0
 	var stance_stride_mult: float = 1.0          # along-travel stride scale
 	var stance_max_speed_mult: float = 1.0       # where the stance's stride stops adding
-	var stance_shuffle_mult: float = 1.0         # sideways free push below GRIP_MIN_SPEED
 	var shuffle_speed: float = 0.0               # the shuffle's pace (Space + stick), m/s
 	# Posture.COMMIT — loaded on a shoulder for a check, off the edges.
 	var commit_grip_mult: float = 1.0
@@ -98,7 +97,6 @@ static func league_config() -> MovementConfig:
 	cfg.stance_scrape = 3.0 / GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 	cfg.stance_stride_mult = 0.6
 	cfg.stance_max_speed_mult = 0.85
-	cfg.stance_shuffle_mult = 1.2
 	cfg.shuffle_speed = 1.2
 	cfg.commit_grip_mult = 0.6
 	cfg.commit_stride_mult = 0.5
@@ -156,11 +154,7 @@ static func apply_movement(
 			horiz = horiz.move_toward(Vector2.ZERO, cfg.stop_decel * delta)
 		else:
 			if has_input:
-				var push_mult: float = stride_mult
-				if posture == Posture.STANCE:
-					var across: float = facing_dir.cross(move_input.normalized())
-					push_mult = lerpf(cfg.stance_stride_mult, cfg.stance_shuffle_mult, across * across)
-				horiz += move_input * (cfg.thrust * push_mult * thrust_scale * delta)
+				horiz += move_input * (cfg.thrust * stride_mult * thrust_scale * delta)
 			horiz = horiz.move_toward(Vector2.ZERO,
 					(cfg.friction + cfg.friction_drag * horiz.length()) * delta)
 		velocity.x = horiz.x

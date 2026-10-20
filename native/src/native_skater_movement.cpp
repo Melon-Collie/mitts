@@ -97,12 +97,7 @@ Vector3 movement_step(const MovementTunables &cfg,
 			horiz = horiz.move_toward(Vector2(), (real_t)(cfg.stop_decel * delta));
 		} else {
 			if (has_input) {
-				double push_mult = stride_mult;
-				if (posture == POSTURE_STANCE) {
-					const double across = (double)facing_dir.cross(move_input.normalized());
-					push_mult = Math::lerp(cfg.stance_stride_mult, cfg.stance_shuffle_mult, across * across);
-				}
-				horiz += move_input * (real_t)(thrust * push_mult * thrust_scale * delta);
+				horiz += move_input * (real_t)(thrust * stride_mult * thrust_scale * delta);
 			}
 			horiz = horiz.move_toward(Vector2(),
 					(real_t)((cfg.friction + cfg.friction_drag * (double)horiz.length()) * delta));
