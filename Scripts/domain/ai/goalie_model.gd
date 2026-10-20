@@ -37,7 +37,8 @@ static var goalie_puck_play_go_margin_s: float = 0.9
 # body, so a keeper pinned out at challenge depth appears to GROW as the
 # shooter approaches and the doorstep reads as a covered net.
 #
-# Values mirror GoalieController's field defaults (cited per field); the two
+# Values mirror GoalieController's field defaults (cited per field;
+# test_ai_goalie_model_mirrors.gd holds them); the two
 # tier-varied depths ride set_goalie_profile.
 static var _depth_cfg_planning: GoalieDepthSolver.Constraints = _build_planning_depth_cfg()
 # The tier's challenge ceiling, held separately because the reused Constraints has
@@ -203,8 +204,7 @@ const GOALIE_HOME_M: float = 3.0
 const GOALIE_SHADOW_HALF_M: float = 0.3
 
 # goalie_unsettled() settle reference: how long (s) the goalie must sit stopped
-# at his target before the model treats him as fully re-set. The unsettled
-# fraction delays his read (UNSETTLE_READ_PENALTY_S).
+# at his target before the model treats him as fully re-set.
 const GOALIE_SETTLE_REF_S: float = 0.20
 
 # How long (s) a goalie down in his stance takes to stand back up
@@ -243,7 +243,7 @@ static func in_post_seal_zone(shooter: Vector3, attacking_goal: Vector3) -> bool
 # Predicted post-seal x-sign for a shot from `shooter`: the side (relative to goal
 # center) a keeper would seal, or 0.0 for the common in-front look where no seal
 # applies. Only the IN-FRONT sharp angle is sealed here (VH — tall); a release
-# behind the goal line is already zeroed by score_shoot's forward guard, so it
+# behind the goal line is already zeroed by score_shoot_value's forward guard, so it
 # needs no seal. Pure float, allocation-free — safe on the per-candidate path.
 #
 # Two triggers, both grounded in the live keeper:
@@ -388,8 +388,8 @@ static func predict_goalie_pos(
 #   0 = set and square (already at its arc-match target, no forced motion)
 #   1 = still sliding (positionally behind) or only just arrived — reading late
 # Same react-then-push kinematics as predict_goalie_pos, so the predicted
-# position and this motion estimate agree. score_shoot delays the goalie's read
-# by this fraction of UNSETTLE_READ_PENALTY_S.
+# position and this motion estimate agree. The carry search prices the keeper
+# moving across at this fraction of his lateral speed on the release.
 static func goalie_unsettled(
 		goalie_now: Vector3,
 		attacking_goal: Vector3,

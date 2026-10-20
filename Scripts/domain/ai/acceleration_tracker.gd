@@ -9,10 +9,13 @@ extends RefCounted
 
 # Low-pass on the raw per-frame velocity diff. The raw diff is noisy at
 # 120 Hz (a one-tick velocity blip reads as a huge accel); the lerp
-# folds it toward the running estimate.
+# folds it toward the running estimate: a half-life of ln(0.5)/ln(1 − ALPHA)
+# ≈ 3 ticks, well inside a 400-600 ms pass window.
 const SMOOTH_ALPHA: float = 0.2
 # Ceiling on the smoothed magnitude so a collision / reconcile snap can't
-# register as a multi-hundred-m/s² spike that poisons receiver lead.
+# register as a multi-hundred-m/s² spike that poisons receiver lead. It sits
+# above a striding turn's centripetal accel (turn_accel × grip), so a hard turn
+# still reads in full.
 const CLAMP_M_S2: float = 14.0
 
 # Heading turn rate (rad/s): the passer's read of how committed a receiver is

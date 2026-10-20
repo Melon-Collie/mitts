@@ -576,8 +576,8 @@ const DEFAULT_QUICK_PASS_POWER_M_S: float = 14.0
 # ANGLES per level, from the blade curve's per-gear ladder
 # (PlayerAttributes._CURVE_LOFT_*_DEG); these are the M92 (league-neutral)
 # rungs as tan(angle) — the defaults everywhere a build isn't known (AI
-# league-average reads, unwired configs). Arrival height is emergent from
-# angle × charge × range; missing high is a real outcome.
+# league-average reads, unwired configs; test_player_attributes.gd holds them).
+# Arrival height is emergent from angle × charge × range; missing high is real.
 const DEFAULT_LOFT_TAN_LOW: float = 0.0963   # tan 5.5°  — over the butterfly pad
 const DEFAULT_LOFT_TAN_MID: float = 0.1441   # tan 8.2°  — the armpit
 const DEFAULT_LOFT_TAN_HIGH: float = 0.1944  # tan 11°   — upstairs

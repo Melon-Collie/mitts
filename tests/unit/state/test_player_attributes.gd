@@ -502,6 +502,15 @@ func test_curve_trades_loft_ladder_for_backhand() -> void:
 	assert_lt(0.75 * m88.curve_backhand_mult(), 1.0, "no full-parity backhand")
 
 
+# GameRules' league-default loft tangents are the M92 rungs written as tan();
+# a retune of either side has to move the other.
+func test_league_default_loft_is_the_neutral_curve_ladder() -> void:
+	var m92 := PlayerAttributes.neutral()
+	assert_almost_eq(GameRules.DEFAULT_LOFT_TAN_LOW, m92.curve_loft_tan_low(), 1e-4)
+	assert_almost_eq(GameRules.DEFAULT_LOFT_TAN_MID, m92.curve_loft_tan_mid(), 1e-4)
+	assert_almost_eq(GameRules.DEFAULT_LOFT_TAN_HIGH, m92.curve_loft_tan_high(), 1e-4)
+
+
 func test_curve_slap_and_reception_lean_with_the_pattern() -> void:
 	# The other half of the M88↔M28 seesaw: the flatter pattern sweeps a
 	# squarer slapper contact and cradles a harder feed; the toe hook pays

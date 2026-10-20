@@ -99,6 +99,12 @@ func test_every_state_has_a_name() -> void:
 				% state)
 
 
+# A state added to the enum and not counted is silently dropped by every
+# range check in the tally.
+func test_the_tally_counts_every_possession_state() -> void:
+	assert_eq(AIPossessionShapeTally.STATE_COUNT, AIPossessionState.State.size())
+
+
 # ── Transitions ──────────────────────────────────────────────────────────────
 
 func test_the_first_sample_is_an_entry_but_not_a_transition() -> void:
