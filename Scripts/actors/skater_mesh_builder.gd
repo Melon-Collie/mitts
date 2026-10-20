@@ -58,8 +58,10 @@ const _TORSO_REAR_SWAY: Array[float] = [
 #
 # Under a loose jersey it hides entirely, even with the trunk twisted on it: both
 # lathes are wider than deep, so the waistband is narrow enough that its wide
-# axis fits the jersey's deep one. A tuck goes in at its top ring.
+# axis fits the jersey's deep one. A tuck goes in at the waistband, and stands
+# the waistband and its lip up into the pad (SkaterJerseyHem.pad_ring).
 const _PELVIS_PROFILE: Array[Vector2] = [
+	Vector2(0.056, 0.184),   # the lip, turned in off the waistband's top
 	Vector2(0.050, 0.186),   # the waistband, just over the jersey's belt line
 	Vector2(0.000, 0.190),
 	Vector2(-0.060, 0.196),
@@ -69,7 +71,7 @@ const _PELVIS_PROFILE: Array[Vector2] = [
 	Vector2(-0.260, 0.100),  # buried in the thighs
 ]
 # Hockey-butt sway, peaked at the seat.
-const _PELVIS_REAR_SWAY: Array[float] = [0.006, 0.010, 0.016, 0.028, 0.024, 0.012, 0.0]
+const _PELVIS_REAR_SWAY: Array[float] = [0.006, 0.006, 0.010, 0.016, 0.028, 0.024, 0.012, 0.0]
 
 # The thigh, with the hip joint on top of it. The upper four stations are a
 # DOME centred on the hip pivot (_HIP_PIVOT_IN_THIGH above the part's origin,
@@ -937,13 +939,17 @@ static func shared_knob() -> ArrayMesh:
 static func _build_pelvis(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
 	var deform := Callable()
 	if tuck != GearModelRegistry.TUCK_NONE:
-		var top: float = _PELVIS_PROFILE[0].x
+		var lip: float = _PELVIS_PROFILE[0].x
+		var waistband: float = _PELVIS_PROFILE[1].x
 		deform = func(ring: PackedVector3Array, y: float, radius: float,
 				z_off: float) -> PackedVector3Array:
-			if y < top - 1e-5:
+			if y < waistband - 1e-5:
 				return ring
+			var is_lip: bool = y > lip - 1e-5
 			return SkaterJerseyHem.pad_ring(ring, y, radius, z_off, tuck,
-					_TORSO_X_SCALE, _TORSO_Z_SCALE)
+					_TORSO_X_SCALE, _TORSO_Z_SCALE,
+					SkaterJerseyHem.PAD_RISE_M * (1.0 if is_lip else SkaterJerseyHem.PAD_BULGE_SHARE),
+					0.0 if is_lip else SkaterJerseyHem.PAD_FLARE_M)
 	return _build_lathe(_PELVIS_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
 			_PELVIS_REAR_SWAY, 0.0, deform)
 
@@ -1348,13 +1354,17 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 	var top_off: float = z_offsets[0] if z_offsets.size() > 0 else 0.0
 	var bot_off: float = z_offsets[profile.size() - 1] \
 			if z_offsets.size() >= profile.size() else 0.0
-	_cap(st, rings[0], Vector3(0.0, y_top, top_off), Vector2(0.25, 0.75), true)
+	var top_centre := Vector3(0.0, y_top, top_off)
 	var bot_centre := Vector3(0.0, y_bot, bot_off)
 	if ring_deform.is_valid():
+		var first: PackedVector3Array = rings[0]
 		var last: PackedVector3Array = rings[rings.size() - 1]
+		top_centre = Vector3.ZERO
 		bot_centre = Vector3.ZERO
 		for k in sides:
+			top_centre += first[k] / float(sides)
 			bot_centre += last[k] / float(sides)
+	_cap(st, rings[0], top_centre, Vector2(0.25, 0.75), true)
 	_cap(st, rings[rings.size() - 1], bot_centre, Vector2(0.75, 0.75), false)
 	st.generate_normals()
 	return st.commit()

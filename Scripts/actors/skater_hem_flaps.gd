@@ -55,7 +55,8 @@ var max_step_s: float = 1.0 / 30.0
 
 var columns: int = SkaterMeshBuilder.TORSO_SIDES
 var rest: Array[PackedVector3Array] = []
-# Per column: how much of the belt point the hips carry, and how tucked it is.
+# Per column: how much of the belt point the hips carry, and whether it is
+# tucked in (held at its rest inside the pants; a lifted column hangs free).
 var hips_share := PackedFloat32Array()
 var tuck_share := PackedFloat32Array()
 # Set false to run the GDScript reference where the port is built.
@@ -97,8 +98,9 @@ func set_tuck(tuck: int) -> void:
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	for k: int in columns:
 		var azimuth: float = TAU * float(k) / float(columns) + phase
-		tuck_share[k] = SkaterJerseyHem.tuck_share(tuck, azimuth)
-		hips_share[k] = lerpf(SkaterJerseyHem.carry(azimuth), 1.0, tuck_share[k])
+		tuck_share[k] = SkaterJerseyHem.tucked_in(tuck, azimuth)
+		hips_share[k] = lerpf(SkaterJerseyHem.carry(azimuth), 1.0,
+				SkaterJerseyHem.tuck_share(tuck, azimuth))
 	_started = false
 	configure_native()
 

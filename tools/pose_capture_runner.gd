@@ -261,7 +261,7 @@ const POSES: Array = [
 	# ── Jersey ──────────────────────────────────────────────────────────────
 	# The sweater over the pants: loose, each corner (one from its own front
 	# three-quarter, one head-on, where the hem's slope off it reads), all the
-	# way in, and a corner from behind, where the back must still hang loose. Then the drape under
+	# way in, and a corner from behind, where its lifted hem must show. Then the drape under
 	# the two things that move it most — the stance's fold, side-on, where the
 	# front must bunch over the pants rather than sink into them, and a stride.
 	# A skater at rest faces +Z, so the wearer's right is world −X.

@@ -4,7 +4,7 @@ extends GutTest
 # lathes built apart (SkaterMeshBuilder's torso and pelvis profiles) in two
 # frames (the torso's, raised by the scene's torso origin, and the waist's),
 # whose agreement nothing else states: loose, the tail covers the hips; tucked,
-# it is inside the pants; and a corner tuck is that corner's and no other.
+# it is inside the pants; and a corner tuck is that hip's and no other.
 
 const _SCENE: String = "res://Scenes/Skater.tscn"
 
@@ -102,8 +102,9 @@ func test_the_waistband_is_at_the_belt_line() -> void:
 
 
 # Under a full tuck the jersey goes in under the stood-up pad: its ring at the
-# pad's height sits inside the pad there, rear sway included, and the ring
-# above it stands out past the pad's rim.
+# pad's height sits inside the pad there, rear sway included, and the pad's lip
+# turns in against the jersey — inside its facets at the lip's height, so there
+# is no opening between them to see down into.
 func test_a_full_tuck_goes_in_under_the_pad() -> void:
 	var tuck: int = GearModelRegistry.TUCK_FULL
 	var pants: PackedVector3Array = SkaterMeshBuilder.shared_pelvis(tuck).surface_get_arrays(
@@ -113,7 +114,7 @@ func test_a_full_tuck_goes_in_under_the_pad() -> void:
 		pad_top = maxf(pad_top, v.y)
 	assert_almost_eq(pad_top, SkaterMeshBuilder._PELVIS_PROFILE[0].x + SkaterJerseyHem.PAD_RISE_M,
 			1e-5, "the pad stands the waistband up")
-	var pad_r: float = SkaterMeshBuilder._PELVIS_PROFILE[0].y + SkaterJerseyHem.PAD_FLARE_M
+	var pad_r: float = SkaterMeshBuilder._PELVIS_PROFILE[1].y + SkaterJerseyHem.PAD_FLARE_M
 	var torso: PackedVector3Array = _verts(tuck)
 	var rest: PackedVector3Array = _verts(GearModelRegistry.TUCK_NONE)
 	var under: int = 0
@@ -126,12 +127,29 @@ func test_a_full_tuck_goes_in_under_the_pad() -> void:
 		assert_lt(reach, 1.0, "the ring under the pad is inside its rim, at %s" % p)
 		under += 1
 	assert_gt(under, 0)
+	var lip_y: float = pad_top - _torso_origin_y
+	var bunch_r: float = _ring(SkaterMeshBuilder._TORSO_PROFILE, SkaterMeshBuilder._TORSO_REAR_SWAY,
+			SkaterJerseyHem.BUNCH_Y_M).x + SkaterJerseyHem.BLOUSE_M
+	var jersey_r: float = lerpf(SkaterJerseyHem.UNDER_PAD_RADIUS_M, bunch_r,
+			(lip_y - SkaterJerseyHem.PAD_Y_M) / (SkaterJerseyHem.BUNCH_Y_M - SkaterJerseyHem.PAD_Y_M))
+	var facet: float = jersey_r * cos(PI / float(SkaterMeshBuilder.TORSO_SIDES))
+	var lips: int = 0
+	for v: Vector3 in pants:
+		if absf(v.y - pad_top) > 1e-5 or Vector2(v.x, v.z).length() < 0.05:
+			continue
+		var reach: float = pow(v.x / (facet * SkaterMeshBuilder._TORSO_X_SCALE), 2.0) + pow(
+				(v.z - SkaterJerseyHem.TUCKED_REAR_SWAY_M) / (facet * SkaterMeshBuilder._TORSO_Z_SCALE), 2.0)
+		assert_lt(reach, 1.0, "the pad's lip is in against the jersey, at %s" % v)
+		lips += 1
+	assert_gt(lips, 0)
 
 
-# A corner tuck tucks its own hip's front: there the hem is lifted to the belt,
-# the far front and the whole back still hang to the hem. The wearer's right is
-# +X and the front is −Z, the lathe's own frame.
-func test_a_corner_tuck_is_its_own_front_corner() -> void:
+# A corner tuck is its own hip's: the side of that hip goes in under the belt,
+# the hem beside it is lifted outside the pants — round onto the back, where it
+# shows from behind — and the far side hangs to the hem. No column is half in:
+# each is tucked in, or outside at its own radius. The wearer's right is +X and
+# the front is −Z, the lathe's own frame.
+func test_a_corner_tuck_is_its_own_hip() -> void:
 	var rest: PackedVector3Array = _verts(GearModelRegistry.TUCK_NONE)
 	var sway: float = SkaterMeshBuilder._TORSO_REAR_SWAY[SkaterMeshBuilder._TORSO_REAR_SWAY.size() - 1]
 	var tucked_hem: float = SkaterJerseyHem.BELT_Y_M \
@@ -139,20 +157,56 @@ func test_a_corner_tuck_is_its_own_front_corner() -> void:
 	for tuck: int in [GearModelRegistry.TUCK_RIGHT, GearModelRegistry.TUCK_LEFT]:
 		var verts: PackedVector3Array = _verts(tuck)
 		var side: float = 1.0 if tuck == GearModelRegistry.TUCK_RIGHT else -1.0
-		var tucked: int = 0
+		var tucked_side: int = 0
+		var lifted_back: int = 0
 		for i: int in rest.size():
 			if absf(rest[i].y - SkaterJerseyHem.HEM_Y_M) > 1e-5 or absf(rest[i].x) < 1e-4:
 				continue
-			var x: float = rest[i].x * side
-			var z: float = rest[i].z - sway
-			if x > 0.1 and z < -0.05:
-				assert_gt(verts[i].y, lerpf(SkaterJerseyHem.HEM_Y_M, tucked_hem, 0.75),
-						"the tucked corner's hem is lifted to the belt")
-				tucked += 1
-			elif z > 0.05 or x < -0.15:
-				assert_almost_eq(verts[i], rest[i], Vector3.ONE * 1e-5,
-						"the back and the far side hang loose")
-		assert_gt(tucked, 0, "tuck %d tucks some of its corner" % tuck)
+			var azimuth: float = atan2(rest[i].x / SkaterMeshBuilder._TORSO_X_SCALE,
+					(rest[i].z - sway) / SkaterMeshBuilder._TORSO_Z_SCALE)
+			var flat := Vector2(verts[i].x, verts[i].z)
+			if SkaterJerseyHem.tucked_in(tuck, azimuth) == 1.0:
+				assert_almost_eq(verts[i].y, tucked_hem, 1e-5, "a tucked column is taken up")
+				if absf(absf(azimuth) - PI * 0.5) < PI / 5.0:
+					tucked_side += 1
+			elif SkaterJerseyHem.tuck_share(tuck, azimuth) > 0.0:
+				assert_gt(verts[i].y, rest[i].y + 0.02, "beside the corner the hem is lifted")
+				assert_almost_eq(flat, Vector2(rest[i].x, rest[i].z), Vector2.ONE * 1e-5,
+						"outside the pants, where it hangs loose")
+				if rest[i].z - sway > 0.05:
+					lifted_back += 1
+			else:
+				assert_almost_eq(verts[i], rest[i], Vector3.ONE * 1e-5, "the rest hangs loose")
+			if rest[i].x * side < 0.0:
+				assert_almost_eq(verts[i], rest[i], Vector3.ONE * 1e-5, "the far side hangs loose")
+		assert_gt(tucked_side, 0, "tuck %d tucks its hip's side in" % tuck)
+		assert_gt(lifted_back, 0, "tuck %d lifts the hem round onto the back" % tuck)
+
+
+# The pad stands up only over jersey tucked in on both sides of it, so beside
+# a corner tuck it never pushes out under the tail still hanging outside.
+func test_the_pad_stands_up_only_where_the_jersey_is_in() -> void:
+	var loose: PackedVector3Array = SkaterMeshBuilder.shared_pelvis().surface_get_arrays(
+			0)[Mesh.ARRAY_VERTEX]
+	var half: float = PI / float(SkaterMeshBuilder.TORSO_SIDES)
+	var top: float = SkaterMeshBuilder._PELVIS_PROFILE[0].x
+	for tuck: int in [GearModelRegistry.TUCK_RIGHT, GearModelRegistry.TUCK_LEFT]:
+		var pants: PackedVector3Array = SkaterMeshBuilder.shared_pelvis(tuck).surface_get_arrays(
+				0)[Mesh.ARRAY_VERTEX]
+		var raised: int = 0
+		for i: int in pants.size():
+			if absf(loose[i].y - top) > 1e-5 or Vector2(loose[i].x, loose[i].z).length() < 0.05:
+				continue
+			var azimuth: float = atan2(loose[i].x / SkaterMeshBuilder._TORSO_X_SCALE,
+					(loose[i].z - SkaterMeshBuilder._PELVIS_REAR_SWAY[0]) / SkaterMeshBuilder._TORSO_Z_SCALE)
+			var both_in: bool = SkaterJerseyHem.tucked_in(tuck, azimuth - half) == 1.0 \
+					and SkaterJerseyHem.tucked_in(tuck, azimuth + half) == 1.0
+			if both_in:
+				assert_gt(pants[i].y, loose[i].y + 0.01)
+				raised += 1
+			else:
+				assert_almost_eq(pants[i], loose[i], Vector3.ONE * 1e-5)
+		assert_gt(raised, 0, "tuck %d stands some of its pad up" % tuck)
 
 
 # The two corners are one tuck worn on either side.
