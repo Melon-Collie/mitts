@@ -51,7 +51,8 @@ func _make_native() -> RefCounted:
 			GameRules.NET_TOP_DEPTH,
 			GameRules.PUCK_COLLISION_HALF_HEIGHT,
 			PuckGeometryCollision.POST_COR_SCALE,
-			PuckGeometryCollision.NET_RESTITUTION)
+			PuckGeometryCollision.NET_RESTITUTION,
+			PuckGeometryCollision.NET_FRICTION)
 	native.set_restitution_curve(
 			PuckRestitution.COR_SLOW, PuckRestitution.SLOW_SPEED_M_S,
 			PuckRestitution.COR_FAST, PuckRestitution.FAST_SPEED_M_S)
