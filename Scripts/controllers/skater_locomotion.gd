@@ -24,6 +24,9 @@ const _FD_WINDOW_MAX: float = 0.1
 const _STEP_INTENT_MIN_SQ: float = 0.0025
 # Below this ground speed (m/s) a step of the shuffle has come to rest.
 const _STEP_REST_SPEED: float = 0.05
+# The step direction's sideways share past which the leading skate changes
+# sides: a step ahead or back keeps its leg, where a sign flips it on noise.
+const _STEP_SIDE_SWAP: float = 0.25
 # The ground speed (m/s) a reversal's skates lead along travel in full: the sit
 # back against the momentum, gone with it, or it swaps ends as travel reverses.
 const _SKID_LEAD_FULL_SPEED: float = 1.5
@@ -113,6 +116,7 @@ var _stop_latched: bool = false
 var _stepping: bool = false
 var _last_travel := Vector2(0.0, 1.0)
 var _step_dir := Vector2(1.0, 0.0)
+var _step_side: float = 1.0
 var _step_travel: float = 0.0
 var _hold: float = 0.0
 # The turning states' weights with their side as the sign: eased as one number,
@@ -161,6 +165,7 @@ func reset() -> void:
 	_stop_yaw_full = 0.0
 	_stop_latched = false
 	_stepping = false
+	_step_side = 1.0
 	_last_travel = Vector2(0.0, 1.0)
 	_have_prev_velocity = false
 	_fd_time = 0.0
@@ -301,7 +306,8 @@ func strokes(delta: float, travel: Vector2) -> void:
 
 	w = mix.shuffle
 	if w > 0.001:
-		_shuffle_path(w, _step_dir if _stepping else Vector2(mix.side, 0.0))
+		_shuffle_path(w, _step_dir if _stepping else Vector2(mix.side, 0.0),
+				_step_side if _stepping else mix.side)
 
 	# Glide: both blades down, a lazy edge-to-edge sway far below stride cadence,
 	# and coming out of a turn the inside knee tucks light — weight on the
@@ -561,21 +567,22 @@ func _ccut_path(w: float, a: float, s: float, s_opp: float, cs: float, cs_opp: f
 # travel and it cannot glide: each skate spends half the cycle planted, sliding
 # back under the moving hips, and half lifted, stepping past them. The cycle is
 # laid over the ground (`shuffle_step_distance` a cycle), so the planted skate
-# holds the ice at any speed and one press of the shuffle (ShuffleStepShaper) is
-# one cycle: from the skates under the hips, the leading one steps out and the
-# trailing one in after it, back under the hips. The base opens a whole step
+# holds the ice at any speed and a shuffle let go of closes its cycle
+# (ShuffleStepShaper): from the skates under the hips, the leading one steps out
+# and the trailing one in after it, back under the hips. The base opens a whole step
 # wide between, which is what the shuffle's deep sit (shuffle_stance) is for.
-func _shuffle_path(w: float, dir: Vector2) -> void:
+# `side` is the leading skate's (+1 right).
+func _shuffle_path(w: float, dir: Vector2, side: float) -> void:
 	var c: SkaterController = _controller
 	var step: float = c.shuffle_step_distance / (4.0 * leg_scale) * (1.0 - _hold)
 	var lift: float = c.shuffle_lift_m * (1.0 - _hold)
 	var q: float = stride_phase / TAU
 	var q_lead: float = fmod(q + 0.5, 1.0)
-	var lead: float = w * step * (_step_sweep(q_lead) + 1.0)
-	var trail: float = w * step * (_step_sweep(q) - 1.0)
-	var lead_lift: float = w * lift * _step_lift(q_lead)
-	var trail_lift: float = w * lift * _step_lift(q)
-	if dir.x >= 0.0:
+	var lead: float = w * step * (ShuffleStepRules.sweep(q_lead) + 1.0)
+	var trail: float = w * step * (ShuffleStepRules.sweep(q) - 1.0)
+	var lead_lift: float = w * lift * ShuffleStepRules.lift(q_lead)
+	var trail_lift: float = w * lift * ShuffleStepRules.lift(q)
+	if side >= 0.0:
 		r_dx += dir.x * lead
 		r_dz -= dir.y * lead
 		r_dy += lead_lift
@@ -600,55 +607,47 @@ func _shuffle_path(w: float, dir: Vector2) -> void:
 	push_reach = maxf(push_reach, w * 2.0 * step)
 
 
-# Starts, holds and ends a step of the shuffle. A step starts on an unbraked
-# push from rest to the side or back (the tap and the start alike,
-# ShuffleStepShaper), from the base closed (the cycle's start). Once the brake
-# is on (a tap's settle) it holds through its own slowing and ends at rest;
-# pushing on without it, it is one step and then the stroke's — a held start
-# skates its first step-together and hands over at the base closed again.
+# Starts, holds and ends a step of the shuffle, from the base closed (the
+# cycle's start). The shuffle itself (the brake with a stick, slow) steps for as
+# long as it is held, and once let go its settle holds the step through its own
+# slowing to rest. An unbraked push from rest to the side or back is a start
+# whose first stroke is one step-together, handing over at the base closed.
 func _sense_step(facing: Vector2, delta: float) -> void:
 	var c: SkaterController = _controller
 	var intent: Vector2 = _skater.move_intent
 	var has_input: bool = intent.length_squared() > _STEP_INTENT_MIN_SQ
 	var braked: bool = _skater.brake_intent
+	# The shuffle itself (Space + stick): stepping for as long as it is held.
+	var chord: bool = SkaterMovementRules.is_shuffle(_ground_speed, braked,
+			intent.length() > c.move_deadzone)
 	if _stepping:
 		_step_travel += _ground_speed * delta
-		var holds: bool = _ground_speed > _STEP_REST_SPEED if braked \
-				else (has_input and _step_travel < c.shuffle_step_distance)
+		var holds: bool = chord
+		if not chord:
+			holds = _ground_speed > _STEP_REST_SPEED if braked \
+					else (has_input and _step_travel < c.shuffle_step_distance)
 		if not holds:
 			_stepping = false
 			return
 	else:
-		if braked or not has_input or _ground_speed > SkaterMovementRules.GRIP_MIN_SPEED \
-				or intent.normalized().dot(facing) >= SkaterMovementRules.SHUFFLE_AHEAD_COS:
+		if not chord and (braked or not has_input
+				or _ground_speed > SkaterMovementRules.GRIP_MIN_SPEED
+				or intent.normalized().dot(facing) >= SkaterMovementRules.SHUFFLE_AHEAD_COS):
 			return
 		_stepping = true
 		_step_travel = 0.0
 		stride_phase = 0.0
+		_step_side = 0.0
 	if has_input:
 		var right := Vector2(-facing.y, facing.x)
 		_step_dir = Vector2(intent.dot(right), intent.dot(facing)).normalized()
+		if _step_side == 0.0 or absf(_step_dir.x) > _STEP_SIDE_SWAP:
+			_step_side = 1.0 if _step_dir.x >= 0.0 else -1.0
+	elif _step_side == 0.0:
+		_step_side = 1.0
 	_target.clear()
 	_target.shuffle = 1.0
-	_target.side = 1.0 if _step_dir.x >= 0.0 else -1.0
-
-
-# A side-stepping skate across its hip over one cycle `q` (0..1), toward the
-# travel positive: planted for the first half, sweeping back at a constant rate
-# from +1 to −1; lifted for the second, stepping back out. The step is the cubic
-# that leaves and lands at the planted sweep's own rate, so the skate comes off
-# and onto the ice at rest on it.
-static func _step_sweep(q: float) -> float:
-	if q < 0.5:
-		return 1.0 - 4.0 * q
-	var u: float = 2.0 * q - 1.0
-	return ((-8.0 * u + 12.0) * u - 2.0) * u - 1.0
-
-
-static func _step_lift(q: float) -> float:
-	if q < 0.5:
-		return 0.0
-	return sin(PI * (2.0 * q - 1.0))
+	_target.side = _step_side
 
 
 # How hard the stroking states push, for the push sounds: the stroke's amplitude

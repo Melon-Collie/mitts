@@ -159,8 +159,10 @@ func _set_move(m: int, t: Vector2) -> void:
 func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, caps: AISkaterCaps,
 		has_puck: bool) -> void:
 	var cfg: SkaterMovementRules.MovementConfig = caps.movement
-	var move: Vector2 = stick[m]
 	var braking: bool = brake[m]
+	# Skated as the bot skates it (AIBotMechanics.braked_stick): a brake is a
+	# stop, its stick dropped, never a shuffle.
+	var move: Vector2 = Vector2.ZERO if braking else stick[m]
 	var cur: Vector2 = cursor[m]
 	var drag: float = caps.facing_drag_speed_braking if braking else caps.facing_drag_speed
 	var radius: float = caps.body_radius

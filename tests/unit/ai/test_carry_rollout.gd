@@ -62,8 +62,9 @@ func _skate_live(move: int, upright_lateral_accel: float) -> void:
 	var stance: bool = false
 	for _i: int in AICarryRollout.TICKS:
 		var input := InputState.new()
-		input.move_vector = _roll.stick[move]
 		input.brake = _roll.brake[move]
+		input.move_vector = AIBotMechanics.braked_stick(_roll.stick[move], input.brake,
+				_skater.velocity)
 		stance = not input.brake and AISteering.stance_cuts_onto(input.move_vector,
 				Vector2(_skater.velocity.x, _skater.velocity.z), upright_lateral_accel,
 				AICarryRollout.STANCE_TURN_WINDOW_S, stance)

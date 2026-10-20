@@ -57,7 +57,7 @@ namespace mitts {
 	X(stride_push_out_m) X(stride_rock_m) X(stride_sit_max_deg) X(stride_skew) \
 	X(stride_sway_deg) X(stride_toe_out_deg) X(tight_turn_lead_m) X(tight_turn_stance) \
 	X(turn_accel) X(vee_push_speed) X(vee_toe_max_deg) X(weight_shift_deg) X(weight_spring_damping) \
-	X(weight_spring_stiffness)
+	X(weight_spring_stiffness) X(move_deadzone)
 
 class NativeSkaterGait : public godot::RefCounted {
 	GDCLASS(NativeSkaterGait, godot::RefCounted)
@@ -148,6 +148,7 @@ private:
 	bool stepping = false;
 	godot::Vector2 last_travel = godot::Vector2(0.0, 1.0);
 	godot::Vector2 step_dir = godot::Vector2(1.0, 0.0);
+	double step_side = 1.0;
 	double step_travel = 0.0;
 	double step_hold = 0.0;
 	double cross_signed = 0.0;
@@ -209,7 +210,7 @@ private:
 	void stop_path(double w, const godot::Vector2 &along, const godot::Vector2 &turned);
 	void skid_path(double w, const godot::Vector2 &along);
 	void ccut_path(double w, double a, double s, double s_opp, double cs, double cs_opp);
-	void shuffle_path(double w, const godot::Vector2 &dir);
+	void shuffle_path(double w, const godot::Vector2 &dir, double side);
 	void sense_step(const godot::Vector2 &facing, const godot::Vector2 &intent, bool brake, double delta);
 	double engaged() const;
 	void stance_of(double s);

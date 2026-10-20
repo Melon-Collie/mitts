@@ -19,7 +19,10 @@ var max_speed: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 var move_deadzone: float = 0.1
 var stop_decel: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 var reverse_skid_fraction: float = GameRules.DEFAULT_SKATER_REVERSE_SKID_FRACTION
-var shuffle_step_distance: float = 0.4  # m a press steps (ShuffleStepShaper), one step-together
+# The shuffle (Space + stick, SkaterMovementRules.is_shuffle): its pace, m/s,
+# and the ground one step-together covers, m.
+var shuffle_speed: float = 1.2
+var shuffle_step_distance: float = 0.4
 var turn_accel: float = GameRules.DEFAULT_SKATER_TURN_ACCEL_M_S2
 var max_turn_rate: float = GameRules.DEFAULT_SKATER_MAX_TURN_RATE_RAD_S
 # Edge grip; per-build value = base × agility_mult in apply_attributes (the
@@ -1217,6 +1220,7 @@ var _base_backward_thrust_multiplier:   float = 0.0
 var _base_backward_max_speed_multiplier: float = 0.0
 var _base_stance_grip_mult:             float = 0.0
 var _base_stance_shuffle_mult:          float = 0.0
+var _base_shuffle_speed:                float = 0.0
 var _base_max_speed:                    float = 0.0
 var _base_facing_drag_speed:            float = 0.0
 var _base_facing_drag_speed_braking:    float = 0.0
@@ -1326,6 +1330,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	backward_max_speed_multiplier = _base_backward_max_speed_multiplier * attrs.backward_mult()
 	stance_grip_mult = _base_stance_grip_mult * attrs.stance_grip_mult()
 	stance_shuffle_mult = _base_stance_shuffle_mult * attrs.sidestep_mult()
+	shuffle_speed = _base_shuffle_speed * attrs.sidestep_mult()
 	facing_drag_speed           = _base_facing_drag_speed           * m_agility
 	facing_drag_speed_braking   = _base_facing_drag_speed_braking   * m_agility
 	stop_decel                  = _base_stop_decel                  * m_agility
@@ -1468,6 +1473,7 @@ func _capture_attribute_bases() -> void:
 	_base_backward_max_speed_multiplier = backward_max_speed_multiplier
 	_base_stance_grip_mult             = stance_grip_mult
 	_base_stance_shuffle_mult          = stance_shuffle_mult
+	_base_shuffle_speed                = shuffle_speed
 	_base_max_speed                    = max_speed
 	_base_facing_drag_speed            = facing_drag_speed
 	_base_facing_drag_speed_braking    = facing_drag_speed_braking
@@ -3436,6 +3442,7 @@ func _build_movement_config() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_stride_mult = stance_stride_mult
 	cfg.stance_max_speed_mult = stance_max_speed_mult
 	cfg.stance_shuffle_mult = stance_shuffle_mult
+	cfg.shuffle_speed = shuffle_speed
 	cfg.commit_grip_mult = commit_grip_mult
 	cfg.commit_stride_mult = commit_stride_mult
 	return cfg

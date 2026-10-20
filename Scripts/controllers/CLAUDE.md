@@ -636,10 +636,24 @@ back of them, turned square across it), the skid (`_skid_path`, a snowplow),
 backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
 (`_shuffle_path`, step-together in any direction: a side-stepping blade cannot
 glide, so each skate holds its place on the ice while the hips pass over it,
-and the cycle is laid over the ground so one tap is one cycle; an unbraked push
-from rest to the side or back latches a step in `_sense_step` — once braked (a
-tap's settle) it holds to rest, unbraked it is one step and then the stroke's,
-`test_shuffle_steps.gd`). The glide is the stance with a joint-space
+and the cycle is laid over the ground, one `shuffle_step_distance` a cycle;
+`_sense_step` steps for as long as the shuffle itself is held (the brake with a
+stick, slow: `SkaterMovementRules.is_shuffle`) and, let go, holds the step
+through its settle to rest, while an unbraked push from rest to the side or back
+is one step and then the stroke's, `test_shuffle_steps.gd`).
+
+**The shuffle is a chord, and nothing about it is on the wire.** The movement
+model reads the brake and the stick it already has: at or below
+`SHUFFLE_MAX_SPEED` the brake with a stick drives the body toward the stick at
+`shuffle_speed` (on the stop's own edges, at `stop_decel`, so a stop slows
+straight into it), and above it the brake is the stop and the stick is ignored.
+The local input is shaped before it is recorded (`ShuffleStepShaper`): a shuffle
+let go of holds its stick until the step-together closes and brakes to rest
+there, and a stick already driving along the travel when the brake goes on at
+speed is held off, so W held through a stop stops. Bots never shuffle: their
+brake keeps steering in the stick, so `AIController.apply_decision` drops it
+under the brake below the gate (`AIBotMechanics.braked_stick`), and
+`AICarryRollout` prices a BRAKE as that stop. The glide is the stance with a joint-space
 edge sway and, out of a turn, a light inside knee; as it comes still it stands on
 the ice like the authored states (`SkaterLocomotion.on_ice`, `1 − glide × speed`)
 on soft knees (`rest_stance`), so a standing skater's lean settles over two

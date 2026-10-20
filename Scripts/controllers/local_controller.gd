@@ -243,8 +243,7 @@ func _physics_process(delta: float) -> void:
 	if NetworkManager.is_clock_ready():
 		gathered.host_timestamp = NetworkManager.estimated_input_stamp_time()
 	var input: InputState = gathered
-	_shuffle_steps.shape(input, skater.global_position, skater.velocity, skater.get_facing(),
-			shuffle_step_distance, stop_decel)
+	_shuffle_steps.shape(input, skater.velocity, shuffle_step_distance, stop_decel)
 	_current_input = input
 	_input_history.append(_current_input)
 	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:

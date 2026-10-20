@@ -312,7 +312,9 @@ void NativeCarryRollout::roll(int m, const Vector2 &stick, const Vector2 &cursor
 	bool stance = false;
 	for (int64_t i = step_ticks - 1; i < ticks; i += step_ticks) {
 		stance = !braking && stance_cuts_onto(stick, v, upright, stance);
-		v = movement_step(move_cfg, v, stick, Math::atan2((double)-f.x, (double)-f.y), has_puck,
+		// AICarryRollout._roll: a brake is skated as a stop, its stick dropped.
+		v = movement_step(move_cfg, v, braking ? Vector2() : stick,
+				Math::atan2((double)-f.x, (double)-f.y), has_puck,
 				braking, dt, stance ? POSTURE_STANCE : POSTURE_UPRIGHT, move_cfg.thrust, 1.0);
 		v.y = 0.0;
 		const bool between_arcs = Math::abs((double)p.z) <= corner_center_z;

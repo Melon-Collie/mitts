@@ -78,7 +78,7 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	# reconcile, and the victim's answer to it (take_cross_check).
 	# +3: the stagger reads how hard a hit landed, apart from the knockdown.
 	# +6: the press latches the cursor's aim, as far round as the chest turns.
-	"res://Scripts/controllers/skater_controller.gd": 3595,
+	"res://Scripts/controllers/skater_controller.gd": 3602,
 	# +1: dive_laid_out, the diver's stick and low block until the get-up.
 	# +11: the physicality plan — a locked pin pair's flat contact, the
 	# cross-check's phase fields (read by puck play and the pose), and the

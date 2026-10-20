@@ -49,9 +49,10 @@ const SCENARIOS: Array[Dictionary] = [
 	{"name": "stop", "warm": 200, "step": 6},
 	# The stick held back with the cursor up-ice: skating backward, C-cuts.
 	{"name": "back", "warm": 240, "step": 12},
-	# D tapped once from a standstill with the cursor up-ice: one shuffle step.
+	# Space + D tapped once from a standstill with the cursor up-ice: one
+	# shuffle step, closed after the key lets go.
 	{"name": "shuffle", "warm": 2, "step": 7},
-	# D held from a standstill: the first step-together, handing to the stroke.
+	# Space + D held from a standstill: the shuffle, step after step.
 	{"name": "sidehold", "warm": 2, "step": 6},
 	# A push to the side and the brake: standing while the lean settles, both
 	# blades on the ice.
@@ -241,9 +242,11 @@ func _steer(input: InputState) -> void:
 		"shuffle":
 			move = Vector2(1.0, 0.0) if _tick < 6 else Vector2.ZERO
 			aim = up_ice
+			input.brake = true
 		"sidehold":
 			move = Vector2(1.0, 0.0)
 			aim = up_ice
+			input.brake = true
 		"sidestop":
 			move = Vector2(1.0, 0.0) if _tick < 20 else Vector2.ZERO
 			aim = up_ice
@@ -258,8 +261,8 @@ func _steer(input: InputState) -> void:
 				aim = Vector2(1.0, 0.0)
 	input.move_vector = move
 	if String(_scenarios[_index]["name"]) in ["shuffle", "sidehold", "sidestop"]:
-		_shuffle_steps.shape(input, _skater.global_position, _skater.velocity,
-				_skater.get_facing(), _controller.shuffle_step_distance, _controller.stop_decel)
+		_shuffle_steps.shape(input, _skater.velocity, _controller.shuffle_step_distance,
+				_controller.stop_decel)
 	input.mouse_world_pos = _skater.global_position + Vector3(aim.x, 0.0, aim.y) * 4.0
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
