@@ -95,6 +95,7 @@ func _snapshot() -> Dictionary:
 		"shadow_quality": PlayerPrefs.shadow_quality,
 		"crowd_density": PlayerPrefs.crowd_density,
 		"ice_scratches_enabled": PlayerPrefs.ice_scratches_enabled,
+		"arena_ads_enabled": PlayerPrefs.arena_ads_enabled,
 		"puck_shadow_enabled": PlayerPrefs.puck_shadow_enabled,
 		"player_shadows_enabled": PlayerPrefs.player_shadows_enabled,
 		"animation_detail": PlayerPrefs.animation_detail,
@@ -280,6 +281,7 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.shadow_quality = c.shadow_quality
 	PlayerPrefs.crowd_density = c.crowd_density
 	PlayerPrefs.ice_scratches_enabled = c.ice_scratches_enabled
+	PlayerPrefs.arena_ads_enabled = c.arena_ads_enabled
 	PlayerPrefs.puck_shadow_enabled = c.puck_shadow_enabled
 	PlayerPrefs.player_shadows_enabled = c.player_shadows_enabled
 	PlayerPrefs.animation_detail = c.animation_detail
@@ -386,6 +388,7 @@ func _defaults() -> Dictionary:
 		"shadow_quality": PlayerPrefs.SHADOW_QUALITY_HIGH,
 		"crowd_density": PlayerPrefs.CROWD_DENSITY_HIGH,
 		"ice_scratches_enabled": true,
+		"arena_ads_enabled": true,
 		"puck_shadow_enabled": true,
 		"player_shadows_enabled": true,
 		"animation_detail": SkaterAnimationLod.DETAIL_BALANCED,

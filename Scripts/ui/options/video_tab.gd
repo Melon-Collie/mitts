@@ -22,6 +22,7 @@ var _gi_mode_btn: OptionButton = null
 var _shadow_quality_btn: OptionButton = null
 var _crowd_density_btn: OptionButton = null
 var _ice_scratches_check: CheckButton = null
+var _arena_ads_check: CheckButton = null
 var _puck_shadow_check: CheckButton = null
 var _player_shadows_check: CheckButton = null
 var _animation_detail_btn: OptionButton = null
@@ -115,6 +116,12 @@ func _build_content() -> void:
 	_color_grade_btn.selected = PlayerPrefs.color_grade_preset
 	_color_grade_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("Color Grade", _color_grade_btn))
+
+	_arena_ads_check = CheckButton.new()
+	_arena_ads_check.set_pressed_no_signal(PlayerPrefs.arena_ads_enabled)
+	SoundManager.wire_button(_arena_ads_check)
+	_arena_ads_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
+	add_child(_field_row(tr("OPTIONS_ARENA_ADS"), _arena_ads_check))
 
 	add_child(_section_spacer())
 	add_child(_section_header("Performance"))
@@ -371,6 +378,7 @@ func read_controls() -> Dictionary:
 		"shadow_quality": _shadow_quality_btn.selected,
 		"crowd_density": _crowd_density_btn.selected,
 		"ice_scratches_enabled": _ice_scratches_check.button_pressed,
+		"arena_ads_enabled": _arena_ads_check.button_pressed,
 		"puck_shadow_enabled": _puck_shadow_check.button_pressed,
 		"player_shadows_enabled": _player_shadows_check.button_pressed,
 		"animation_detail": _animation_detail_btn.selected,
@@ -397,6 +405,7 @@ func apply_values(v: Dictionary) -> void:
 	_shadow_quality_btn.selected = v.shadow_quality
 	_crowd_density_btn.selected = v.crowd_density
 	_ice_scratches_check.set_pressed_no_signal(v.ice_scratches_enabled)
+	_arena_ads_check.set_pressed_no_signal(v.arena_ads_enabled)
 	_puck_shadow_check.set_pressed_no_signal(v.puck_shadow_enabled)
 	_player_shadows_check.set_pressed_no_signal(v.player_shadows_enabled)
 	_animation_detail_btn.selected = v.animation_detail

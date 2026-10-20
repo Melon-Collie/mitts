@@ -243,6 +243,8 @@ var _ice_material: ShaderMaterial = null
 var _board_ad_vp: SubViewport = null
 var _ice_ad_vp: SubViewport = null
 var _board_ad_material: StandardMaterial3D = null
+var _board_ads: MeshInstance3D = null
+var _ads_shown: bool = true
 var _render_targets_freed: bool = false
 
 func _ready() -> void:
@@ -928,8 +930,21 @@ func _add_board_ads(band: ArrayMesh) -> void:
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mat.render_priority = 1
 	mi.material_override = mat
+	mi.visible = _ads_shown
 	_board_ad_material = mat
+	_board_ads = mi
 	add_child(mi)
+
+
+# The player's Arena Ads option. Hides what was built rather than flipping the
+# *_ads_enabled exports: their setters rebuild, and a rebuild replaces the
+# scratch map _ready wired to period_synced.
+func set_ads_shown(shown: bool) -> void:
+	_ads_shown = shown
+	if is_instance_valid(_board_ads):
+		_board_ads.visible = shown
+	if _ice_material != null and is_instance_valid(_ice_ad_vp):
+		_ice_material.set_shader_parameter("ads_enabled", shown)
 
 
 # ── Gates ────────────────────────────────────────────────────────────────────
@@ -1159,7 +1174,7 @@ func _add_ice_ads(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter("ads_world", slot_world)
 	mat.set_shader_parameter("ads_atlas", slot_atlas)
 	mat.set_shader_parameter("ads_count", slots.size())
-	mat.set_shader_parameter("ads_enabled", true)
+	mat.set_shader_parameter("ads_enabled", _ads_shown)
 
 
 func _make_glass_material() -> ShaderMaterial:

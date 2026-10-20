@@ -277,6 +277,8 @@ var gi_mode: int = GI_MODE_OFF
 var shadow_quality: int = SHADOW_QUALITY_HIGH
 var crowd_density: int = CROWD_DENSITY_HIGH
 var ice_scratches_enabled: bool = true
+# The sponsor panels on the dasher boards and the logos under the ice.
+var arena_ads_enabled: bool = true
 var puck_shadow_enabled: bool = true
 # CPU knobs, applied in apply_video: see SkaterShadowProxy and SkaterAnimationLod.
 var player_shadows_enabled: bool = true
@@ -552,6 +554,7 @@ func save() -> void:
 	cfg.set_value("video", "shadow_quality", shadow_quality)
 	cfg.set_value("video", "crowd_density", crowd_density)
 	cfg.set_value("video", "ice_scratches_enabled", ice_scratches_enabled)
+	cfg.set_value("video", "arena_ads_enabled", arena_ads_enabled)
 	cfg.set_value("video", "puck_shadow_enabled", puck_shadow_enabled)
 	cfg.set_value("video", "player_shadows_enabled", player_shadows_enabled)
 	cfg.set_value("video", "animation_detail", animation_detail)
@@ -893,6 +896,9 @@ func apply_video() -> void:
 	var scratch := scene.find_child("IceScratchMap", true, false)
 	if scratch != null and scratch.has_method("set_enabled"):
 		scratch.call("set_enabled", ice_scratches_enabled)
+	var rink := scene.find_child("Rink", true, false) as HockeyRink
+	if rink != null:
+		rink.set_ads_shown(arena_ads_enabled)
 
 # Enables shadow casting on a subset of the arena's ceiling spotlights per the
 # shadow_quality level. The lights are matched by name ("SpotLight3D*", which
@@ -1154,6 +1160,7 @@ func _load() -> void:
 		shadow_quality = clamp(cfg.get_value("video", "shadow_quality", SHADOW_QUALITY_HIGH), 0, SHADOW_QUALITY_LABELS.size() - 1)
 		crowd_density = clamp(cfg.get_value("video", "crowd_density", CROWD_DENSITY_HIGH), 0, CROWD_DENSITY_LABELS.size() - 1)
 		ice_scratches_enabled = cfg.get_value("video", "ice_scratches_enabled", true)
+		arena_ads_enabled = cfg.get_value("video", "arena_ads_enabled", true)
 		puck_shadow_enabled = cfg.get_value("video", "puck_shadow_enabled", true)
 		player_shadows_enabled = cfg.get_value("video", "player_shadows_enabled", true)
 		animation_detail = clampi(int(cfg.get_value("video", "animation_detail",
