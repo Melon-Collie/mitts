@@ -4,7 +4,7 @@ walled off at speed, outlet up the wall: intent	PASS
 walled off at speed, outlet up the wall: pass value	0.0391
 impeded by a defender ahead, open mate wide: intent	PASS
 ahead man, clear path: drive-in credit	0.2837
-ahead man, defender in his path: drive-in credit	0.0000
+ahead man, defender in his path: drive-in credit	-0.0265
 ahead man, defender in his path: intent	CARRY
 stick 1.6 m ahead on the presented puck: protect gain	0.6198
 stick 1.6 m ahead on the presented puck: offset behind the body	0.6235

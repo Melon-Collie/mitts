@@ -281,6 +281,18 @@ func test_a_defender_in_the_drive_path_strips_the_receivers_drive_in() -> void:
 			"a defender in the drive path strips the credit")
 
 
+func test_a_drive_into_a_defender_in_our_half_pays_the_turnover() -> void:
+	# The drive is priced in the carry's currency: a strip is the opponent's
+	# possession where it happens. Straight into a man just outside our blue line,
+	# what the drive can earn is far less than what losing it there costs.
+	var self_pos := Vector3(0.0, 0.0, 9.0)
+	var ctx: RoleContext = _set_keeper(_make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos], [11, 1, Vector3(0.0, 0.0, 6.5)]]))
+	var c: AIRoleCarrier = _decided(ctx)
+	assert_lt(c._field.receiver_drive_in_value(ctx, self_pos, null, Vector3.ZERO,
+			Vector3.INF, 0.0, true), 0.0)
+
+
 func test_pass_is_devalued_when_the_receiver_is_blanketed() -> void:
 	# A teammate with a clean passing LANE but a defender skating stride-for-stride
 	# beside him — off the lane (lane_clear never sees it) and off his forward-to-
@@ -937,7 +949,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
 const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.0)  # deep below the dot
-const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 1.5)   # …and still drifting into the corner
+const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
 func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:

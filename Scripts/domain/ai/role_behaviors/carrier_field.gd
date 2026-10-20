@@ -410,7 +410,8 @@ func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # The value of a man DRIVING IN from `receiver_spot`: the value he reaches by
 # carrying toward the net, up to RECEIVER_DRIVE_MAX_M and only as far as the path
 # stays clear (carry_strip_point). Value = value_at(reached) × keep × decay(time
-# to reach it), on the same reach/clearance machinery as the carrier's own carry,
+# to reach it) − the turnover where it is stripped, on the same reach/clearance
+# machinery and loss pricing as the carrier's own carry,
 # so both sides of a pass are valued alike. One straight drive, no search.
 # Serves pass receivers, the carrier's own floor, and the entry continuation.
 #
@@ -460,11 +461,12 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
 			opps, opponent_vels, opponent_caps, true)
-	if keep <= 0.0:
-		return 0.0
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
 			opps, opponent_vels, opponent_caps, true, true)
+	if keep <= 0.0:
+		drive_in_reached = reached
+		return -_drive_loss_cost(ctx, reached, 1.0, own_hands)
 	var t: float = reach_time if reached == target \
 			else AIArrival.time_to_arrive(
 					receiver_spot, reached, receiver_vel, recv_speed, recv_accel)
@@ -481,7 +483,17 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	var advanced: float = value_at(ctx, reached, regime_from, _drive_buf, Vector3.INF,
 			0.0, hold_keep)
 	drive_in_reached = reached
-	return advanced * keep * AIActionScoring.delay_discount(t + wait)
+	return advanced * keep * AIActionScoring.delay_discount(t + wait) \
+			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
+
+
+# A drive lost at `at` with probability `lost`, as a carry candidate's strip is
+# priced: the carrier's own recovery starts there, a receiver's passer stays put.
+func _drive_loss_cost(ctx: RoleContext, at: Vector3, lost: float, own_hands: bool) -> float:
+	if lost <= 0.0:
+		return 0.0
+	return turnover_cost(at, lost) + counter_exposure_cost(ctx, at, lost,
+			at if own_hands else ctx.self_pos, AIRoleReads.resolve_our_goalie_pos(ctx))
 
 
 # The pass-option cache's spot value for the receiver standing at `pos` (0.0 when
