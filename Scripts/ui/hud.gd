@@ -23,6 +23,7 @@ var _votes: HudRematchVotes = HudRematchVotes.new()
 
 var _game_over_popup: GameOverPopup = null
 var _post_game_analytics: PostGameAnalytics = null
+var _goal_gif_picker: GoalGifPicker = null
 var _intermission_overlay: IntermissionOverlay = null
 var _matchup_overlay: MatchupIntroOverlay = null
 var _pause_menu: PauseMenu = null
@@ -93,6 +94,11 @@ func _ready() -> void:
 	# walled off from its buttons and handed back when the reader closes.
 	_post_game_analytics.set_focus_background(_game_over_popup.focus_root())
 	add_child(_post_game_analytics)
+	_goal_gif_picker = GoalGifPicker.new()
+	_goal_gif_picker.set_focus_background(_game_over_popup.focus_root())
+	_goal_gif_picker.goal_picked.connect(_on_goal_gif_picked)
+	add_child(_goal_gif_picker)
+	_game_over_popup.save_goal_pressed.connect(_on_game_over_save_goal)
 	_intermission_overlay = IntermissionOverlay.new()
 	add_child(_intermission_overlay)
 	_matchup_overlay = MatchupIntroOverlay.new()
@@ -172,6 +178,7 @@ func _ready() -> void:
 	GameManager.goal_clip_available_changed.connect(_prompts.set_clip_available)
 	GameManager.goal_clip_state_changed.connect(_prompts.set_clip_state)
 	GameManager.goal_clip_export_finished.connect(_on_goal_clip_export_finished)
+	GameManager.goal_gif_saving_changed.connect(_refresh_goal_saving)
 	# Prompts follow the active device: rebuild the persistent on-screen hints when
 	# the mouse↔pad handoff flips (auto-disconnected when this HUD frees).
 	InputDeviceTracker.device_changed.connect(_on_device_changed)
@@ -710,6 +717,7 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
 			result_text, result_color,
 			star_names, star_lines, star_stripes)
+	_refresh_goal_saving()
 
 # Compact stat line for a star row. Scorers show goals/assists (plus the GWG
 # tag — the clutch credit the selection weighted); a star who earned it on
@@ -753,6 +761,8 @@ func _on_game_reset() -> void:
 	_game_over_popup.hide_popup()
 	if _post_game_analytics != null:
 		_post_game_analytics.close()
+	if _goal_gif_picker != null:
+		_goal_gif_picker.close()
 	if _pause_menu != null:
 		_pause_menu.close()
 	if _side_menu != null:
@@ -790,6 +800,22 @@ func _on_game_over_free_play() -> void:
 func _on_game_over_analytics() -> void:
 	if _post_game_analytics != null:
 		_post_game_analytics.present()
+
+
+# Lists the match's goals to save as GIFs, over the game-over screen.
+func _on_game_over_save_goal() -> void:
+	_goal_gif_picker.present(GameManager.saved_goal_clips(), GameManager.can_save_goal_gif())
+
+
+func _on_goal_gif_picked(index: int) -> void:
+	_goal_gif_picker.close()
+	GameManager.save_goal_gif(index)
+
+
+func _refresh_goal_saving() -> void:
+	_game_over_popup.set_goal_saving(
+			GifExporter.is_available() and not GameManager.saved_goal_clips().is_empty(),
+			GameManager.can_save_goal_gif())
 
 
 func _on_game_over_exit() -> void:

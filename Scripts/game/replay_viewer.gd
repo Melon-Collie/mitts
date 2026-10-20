@@ -100,9 +100,12 @@ func _spawn_actors_from_header(header: Dictionary) -> void:
 	var puck_result: Dictionary = _spawner.spawn_puck_with_controller(false)
 	_puck = puck_result.puck
 	_puck_controller = puck_result.controller
-	# PuckController would otherwise run client-side prediction every tick;
-	# with it off, nothing moves the Node3D puck between FileReplayDriver writes.
+	# PuckController would otherwise run client-side prediction every tick, and
+	# the puck's own drive would pull a paused puck in the air down onto the
+	# ice; with both parked, nothing moves it between FileReplayDriver writes.
 	_puck_controller.set_physics_process(false)
+	_puck.set_replay_hold(true)
+	_draw_as_posed(_puck)
 
 	var goalie_result: Dictionary = _spawner.spawn_goalie_pair(_puck, false)
 	# Order must match GameManager._spawn_goalies —
@@ -115,6 +118,7 @@ func _spawn_actors_from_header(header: Dictionary) -> void:
 	_goalie_controllers[1].team_id = 0
 	for gc: GoalieController in _goalie_controllers:
 		gc.set_physics_process(false)
+		_draw_as_posed(gc.goalie)
 
 	# Replay headers carry int slot indices, but JSON.parse_string decodes
 	# every number as float — so accept both. Legacy fruit-name strings in
@@ -182,6 +186,7 @@ func _spawn_skater_from_roster(entry: Dictionary) -> void:
 	# velocity until unpause snaps it back. Disable physics processing entirely;
 	# apply_replay_state covers all visual updates (position, blade, IK) itself.
 	skater.set_physics_process(false)
+	_draw_as_posed(skater)
 	# Latch off the flat-on-ice slot rings, name labels, and
 	# slapper indicators — they're designed for the local player's top-down
 	# gameplay camera and look wrong (or misleading, in the top-down POV cam)
@@ -233,6 +238,13 @@ func _spawn_skater_from_roster(entry: Dictionary) -> void:
 # written into the header has none of them and decodes to the stock kit, and a
 # hand-edited file can't produce an out-of-range pick — from_code / clamp_index
 # land it on a legal look, exactly as the join wire does.
+# FileReplayDriver poses the actors at render time, so they draw that pose as
+# set rather than interpolating it toward their last tick's (Scripts/game/
+# CLAUDE.md, "Replays are posed on the render clock").
+static func _draw_as_posed(actor: Node3D) -> void:
+	actor.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+
+
 static func cosmetics_from_entry(entry: Dictionary) -> Dictionary:
 	return {
 		"tape": StickTapeConfig.from_code(

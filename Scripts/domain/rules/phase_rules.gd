@@ -14,9 +14,11 @@ static func is_dead_puck_phase(phase: GamePhase.Phase) -> bool:
 		or phase == GamePhase.Phase.END_OF_PERIOD
 		or phase == GamePhase.Phase.GAME_OVER)
 
-# Convenience: same as is_dead_puck_phase for the given phase.
+# Dead-puck phases, less GOAL_SCORED: its replay parks the world itself once
+# the incoming wipe covers the screen (GoalReplayDriver), and until then the
+# players skate on under the band as through the celebration before it.
 static func is_movement_locked(phase: GamePhase.Phase) -> bool:
-	return is_dead_puck_phase(phase)
+	return is_dead_puck_phase(phase) and phase != GamePhase.Phase.GOAL_SCORED
 
 # Phases during which a loose puck cannot be picked up. Superset of
 # is_dead_puck_phase that adds GOAL_CELEBRATION (movement allowed, but the

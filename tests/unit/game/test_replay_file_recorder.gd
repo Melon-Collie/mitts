@@ -41,10 +41,10 @@ func test_a_recording_that_predates_the_state_machine_takes_everything() -> void
 
 
 func test_only_the_first_frame_of_a_movement_locked_phase_is_kept() -> void:
-	# GOAL_SCORED's transition frame is the puck-in-net moment; the ticks after
-	# it are duplicate static state. Keeping them all was the file-size problem
-	# and keeping none of them lost the goal.
-	var locked: int = GamePhase.Phase.GOAL_SCORED
+	# GAME_OVER's transition frame is the final horn; the ticks after it are
+	# duplicate static state. Keeping them all was the file-size problem and
+	# keeping none of them lost the moment.
+	var locked: int = GamePhase.Phase.GAME_OVER
 	assert_true(PhaseRules.is_movement_locked(locked), "premise of this test")
 	assert_true(ReplayFileRecorder.phase_admits(locked, GamePhase.Phase.PLAYING),
 			"the transition frame into a locked phase is a keyframe")

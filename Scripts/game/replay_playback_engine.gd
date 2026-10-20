@@ -12,8 +12,8 @@ extends RefCounted
 
 # Skaters: Hermite position (velocity as tangent), Hermite angle for facing
 # and upper_body_rotation, linear lerp for blade/hand (local-space, no
-# derivative). Puck: Hermite position with velocity zeroed so the frozen
-# RigidBody doesn't drift between render frames — except while CARRIED, where
+# derivative). Puck: Hermite position with velocity zeroed, since the parked
+# puck is posed rather than simulated — except while CARRIED, where
 # the puck pins to the carrier's just-applied blade (see _pin_carried_puck)
 # because independently-interpolated puck and blade paths visibly jitter
 # against each other. Goalies: position / rotation

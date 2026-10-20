@@ -87,6 +87,32 @@ func test_goal_meta_defaults_when_absent() -> void:
 	var stored: Dictionary = _store.clips()[0]
 	assert_eq(int(stored.scoring_team_id), -1)
 	assert_eq(String(stored.scorer_name), "")
+	assert_eq(stored.stinger_primary, Color.BLACK)
+	assert_eq(stored.stinger_secondary, Color.WHITE)
+
+
+func test_keeps_the_stinger_colors_for_the_clip_intro() -> void:
+	var clip: Dictionary = _clip(2)
+	clip.stinger_primary = Color.ORANGE
+	clip.stinger_secondary = Color.NAVY_BLUE
+	_store.add(clip)
+	var stored: Dictionary = _store.clips()[0]
+	assert_eq(stored.stinger_primary, Color.ORANGE)
+	assert_eq(stored.stinger_secondary, Color.NAVY_BLUE)
+
+
+func test_keeps_what_the_cinematic_needs_to_air_the_goal_again() -> void:
+	var clip: Dictionary = _clip(3)
+	var events: Array[Dictionary] = [{"event": {"kind": "shot"}, "host_ts": 0.01}]
+	clip.events = events
+	clip.goal_ts = 0.02
+	clip.defending_goal_z = 25.0
+	_store.add(clip)
+	events.clear()
+	var stored: Dictionary = _store.clips()[0]
+	assert_eq((stored.events as Array).size(), 1, "a copy, not the replay's own list")
+	assert_eq(float(stored.goal_ts), 0.02)
+	assert_eq(float(stored.defending_goal_z), 25.0)
 
 
 func test_stored_frames_survive_source_mutation() -> void:

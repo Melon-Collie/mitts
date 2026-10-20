@@ -87,7 +87,7 @@ func start(clips: Array[Dictionary]) -> void:
 
 	_clips = clips
 	_active = true
-	_sim_hold.grab(_puck, _goalie_controllers)
+	_sim_hold.grab(_puck, _goalie_controllers, _registry.skaters())
 
 	# Single broadcast hard cam, following the puck along the rail. activate()
 	# saves the current camera and restores it in deactivate() on stop().
@@ -149,9 +149,10 @@ func _begin_clip(idx: int) -> void:
 	_clip_end_ts = float(clip.end_ts)
 	_cursor.reset()
 	_gap_elapsed = -1.0
-	NetworkManager.set_replay_clock(_virtual_clock)
 	# Re-anchor the cam so the puck teleporting to the next clip's start doesn't
-	# whip the broadcast framing across the ice.
+	# whip the broadcast framing across the ice — on the new clip's first frame,
+	# or it would seed on the puck where the last clip left it.
+	_pose(0.0)
 	if _cam != null:
 		_cam.snap_to_position()
 	clip_started.emit(clip)
@@ -173,24 +174,30 @@ func _process(delta: float) -> void:
 	if not _active:
 		return
 
-	# Between clips: hold the final frame briefly, then roll to the next.
+	var sim_delta: float = 0.0
 	if _gap_elapsed >= 0.0:
+		# Between clips: hold the final frame briefly, then roll to the next.
 		_gap_elapsed += delta
 		if _gap_elapsed >= inter_clip_gap:
-			_advance_clip()
-		return
+			_advance_clip()  # poses the next clip's first frame itself
+			return
+	else:
+		var prev_clock: float = _virtual_clock
+		_virtual_clock += delta * playback_speed
+		if _virtual_clock >= _clip_end_ts:
+			_virtual_clock = _clip_end_ts
+			_gap_elapsed = 0.0
+		sim_delta = _virtual_clock - prev_clock
+	_pose(sim_delta)
 
-	var prev_clock: float = _virtual_clock
-	_virtual_clock += delta * playback_speed
-	if _virtual_clock >= _clip_end_ts:
-		_virtual_clock = _clip_end_ts
-		_gap_elapsed = 0.0
 
+# Poses the world at the virtual clock. The held final frame is re-posed every
+# frame too: the skaters' own tick keeps integrating their replayed velocity,
+# and a frame that is not re-posed slides with it.
+func _pose(sim_delta: float) -> void:
 	NetworkManager.set_replay_clock(_virtual_clock)
-
 	if not _cursor.seek(_frames, _timestamps, _virtual_clock):
 		return
 	ReplayPlaybackEngine.apply_interpolated_snapshot(
 			_cursor.from_snap(), _cursor.to_snap(), _cursor.alpha(), _cursor.bracket_dt(),
-			_virtual_clock - prev_clock,
-			_registry.all(), _puck, _goalie_controllers)
+			sim_delta, _registry.all(), _puck, _goalie_controllers)

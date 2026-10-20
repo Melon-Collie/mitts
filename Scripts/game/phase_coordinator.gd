@@ -184,7 +184,8 @@ func handle_phase_entered() -> void:
 				puck.pickup_locked = false
 		GamePhase.Phase.GOAL_SCORED:
 			# State machine has auto-advanced from GOAL_CELEBRATION → GOAL_SCORED
-			# (host-only transition; clients hit start_goal_replay via WS).
+			# (host-only transition; clients start theirs off the WS phase byte,
+			# GameManager._on_remote_phase_changed).
 			# This is where the replay cinematic actually kicks in.
 			start_goal_replay()
 		GamePhase.Phase.END_OF_PERIOD:
