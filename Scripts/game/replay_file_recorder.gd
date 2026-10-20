@@ -145,12 +145,9 @@ static func phase_admits(phase: int, last_phase: int) -> bool:
 	if phase == GamePhase.Phase.FACEOFF_PREP:
 		return true
 	if PhaseRules.is_movement_locked(phase):
-		# Capture only the first frame of each movement-locked phase. Goal:
-		# the puck-in-net moment on GOAL_SCORED entry — without this, the
-		# last recorded frame before the gap is the previous PLAYING tick,
-		# which usually shows the puck still approaching the net rather
-		# than inside it. Subsequent ticks at 5 Hz are duplicate static
-		# state and add nothing.
+		# Capture only the first frame of each movement-locked phase — the
+		# moment it began, e.g. the final horn on GAME_OVER entry. Subsequent
+		# ticks at 5 Hz are duplicate static state and add nothing.
 		return phase != last_phase
 	return true
 

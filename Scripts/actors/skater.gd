@@ -1484,13 +1484,13 @@ func set_tape_config(config: StickTapeConfig) -> void:
 		_uniform.refresh_tape()
 
 
-# Installs a new gear look (models, laces, face gear, hair) and repaints the
+# Installs a new gear look (models, laces, face gear, hair, tuck) and repaints the
 # affected parts. Same live-cosmetic contract as set_tape_config.
 func set_gear_style(config: GearStyleConfig) -> void:
 	if config == null:
 		return
 	gear_style = config
-	_arms.apply_head_pieces()
+	_arms.apply_gear_meshes()
 	if _uniform != null:
 		_uniform.refresh_gear_style()
 

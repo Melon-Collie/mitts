@@ -50,8 +50,11 @@ class PartSpec:
 # the real dimension), so their bounds are the nominal unit envelopes.
 func _parts() -> Array[PartSpec]:
 	return [
+		# The jersey's tail outgrows the torso primitive on purpose: it hangs over
+		# the pants and flares out round the thigh domes, the hips' own width,
+		# and still sits well inside the body's 0.35 m collision disc.
 		PartSpec.new("torso", SkaterMeshBuilder._build_torso(),
-				Vector3(0.47, 0.55, 0.44), true),
+				Vector3(0.59, 0.625, 0.48), true),
 		PartSpec.new("helmet", SkaterMeshBuilder._build_helmet(),
 				Vector3(0.31, 0.31, 0.31), false),
 		PartSpec.new("head", SkaterMeshBuilder._build_ball(
@@ -266,7 +269,8 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 # three. Blended weights would make a bone pose an approximation of the node
 # transform it stands in for, and the pose diff would start reporting drift with
 # no obvious cause. Cheap to check here, invisible in a render. The torso is the
-# one deliberate blend (its hem rides a second bone) and has its own test below.
+# one deliberate blend (its tail rides the jersey's own bones) and has its own
+# test below.
 func test_skinned_rigs_are_rigidly_weighted() -> void:
 	var rigs: Array = [
 		["upper", SkaterMeshBuilder.shared_upper_skin_mesh(),
@@ -307,27 +311,38 @@ func test_skinned_rigs_are_rigidly_weighted() -> void:
 					"%s surface %d must be weight 1.0 on that bone alone" % [label, surface])
 
 
-# The torso is rigid on its own bone down to where the hem hangs free, then
-# blends onto the hem bone, all of it by the hem's bottom ring — and nothing
-# else touches any third bone.
-func test_the_torso_hem_alone_blends() -> void:
-	var arrays: Array = SkaterMeshBuilder.shared_upper_skin_mesh().surface_get_arrays(
-			SkaterMeshBuilder.UpperSurface.TORSO)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
-	var hem_seen: bool = false
-	for v: int in verts.size():
-		assert_eq(bones[v * 4], SkaterMeshBuilder.UpperBone.TORSO)
-		assert_almost_eq(weights[v * 4] + weights[v * 4 + 1], 1.0, 1e-4,
-				"torso and hem share the whole vertex")
-		if weights[v * 4 + 1] > 0.0:
-			assert_eq(bones[v * 4 + 1], SkaterMeshBuilder.UPPER_HEM_BIND)
-		if verts[v].y >= SkaterJerseyHem.PIVOT_Y_M:
-			assert_almost_eq(weights[v * 4], 1.0, 1e-4, "above the pivot the jersey is rigid")
-		if verts[v].y <= SkaterJerseyHem.HEM_Y_M + 1e-4:
-			assert_almost_eq(weights[v * 4 + 1], 1.0, 1e-4, "the hem rides the hem bone")
-			hem_seen = true
-	assert_true(hem_seen, "the hem ring was found")
-	assert_eq(SkaterMeshBuilder.shared_upper_skin().get_bind_bone(
-			SkaterMeshBuilder.UPPER_HEM_BIND), SkaterBodySkeleton.HEM_BONE)
+# The torso is rigid on its own bone down to where the tail hangs free, then
+# blends onto TAIL, every vertex's weights summing to one; from the belt ring
+# down each vertex rides one flap bone, the one of its facet column and segment.
+func test_only_the_jersey_tail_blends() -> void:
+	var rest_arrays: Array = SkaterMeshBuilder.shared_torso().surface_get_arrays(0)
+	var rest: PackedVector3Array = rest_arrays[Mesh.ARRAY_VERTEX]
+	var bend_y: float = SkaterMeshBuilder._TORSO_PROFILE[SkaterMeshBuilder.TORSO_BEND_STATION].x
+	for tuck: int in GearModelRegistry.tuck_count():
+		var arrays: Array = SkaterMeshBuilder.shared_upper_skin_mesh(tuck).surface_get_arrays(
+				SkaterMeshBuilder.UpperSurface.TORSO)
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+		assert_eq((arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size(), rest.size(),
+				"tuck %d drapes the loose torso vertex for vertex" % tuck)
+		var flapped: int = 0
+		for v: int in rest.size():
+			assert_almost_eq(weights[v * 4] + weights[v * 4 + 1] + weights[v * 4 + 2]
+					+ weights[v * 4 + 3], 1.0, 1e-4, "the weights share the whole vertex")
+			if rest[v].y >= SkaterJerseyHem.PIVOT_Y_M:
+				assert_eq(bones[v * 4], SkaterMeshBuilder.UpperBone.TORSO)
+				assert_almost_eq(weights[v * 4], 1.0, 1e-4, "above the pivot the jersey is rigid")
+			elif bones[v * 4] >= SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE:
+				assert_lt(rest[v].y, SkaterJerseyHem.BELT_Y_M + 1e-4, "flaps start at the belt")
+				assert_almost_eq(weights[v * 4], 1.0, 1e-4, "on one flap bone")
+				var segment: int = (bones[v * 4] - SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE) % 2
+				assert_eq(segment, 1 if rest[v].y <= bend_y + 1e-4 else 0,
+						"the lower segment from the bend down")
+				flapped += 1
+			else:
+				assert_eq(bones[v * 4 + 1], SkaterMeshBuilder.UPPER_TAIL_BIND)
+		assert_gt(flapped, 0, "the tail below the belt rides the flaps")
+	var skin: Skin = SkaterMeshBuilder.shared_upper_skin()
+	assert_eq(skin.get_bind_bone(SkaterMeshBuilder.UPPER_TAIL_BIND), SkaterBodySkeleton.TAIL_BONE)
+	assert_eq(skin.get_bind_bone(SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE + 3),
+			SkaterBodySkeleton.column_bone(1, 1))

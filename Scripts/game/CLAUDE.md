@@ -41,6 +41,35 @@ movement-locked tick fills the file with duplicate static frames. Recording is
 one-way I/O and adjudicates nothing, which is why it can live outside the
 orchestrator that sits next to it.
 
+## Replays are posed on the render clock
+
+The replay drivers sample a clip at render time and pose the actors in
+`_process`. Two things follow. For the live actors `ReplayLiveSimHold` and each
+driver's loop hold them; the file viewer parks its own actors as it spawns them
+(`ReplayViewer._draw_as_posed`, skater physics off, the puck on replay hold).
+
+- **The posed actors stop interpolating** for the replay. An interpolated node
+  is drawn between its pose at the last tick and the one just set, so a pose
+  written at render rate is drawn a fraction of a frame late, and the fraction
+  changes from frame to frame with where the frame falls between ticks.
+- **A held frame is posed every frame too.** `Skater._physics_process` keeps
+  integrating the replayed velocity whatever drives the skater, so a frame the
+  driver stops writing (an outro hold, the gap between reel clips) slides.
+
+## The goal cinematic takes the world over at full cover
+
+The incoming wipe sweeps over live play, never a frozen frame:
+`GoalReplayDriver` starts the stinger on entering GOAL_SCORED but parks the
+sim, enters replay mode and cuts to its cameras only once the band covers the
+screen (`_take_over`). Until then the host keeps simulating and broadcasting,
+which is what lets the GOAL_SCORED phase byte reach clients, and a client
+starts its own cinematic off that byte (`GameManager._on_remote_phase_changed`)
+— a one-way trip behind the host, over its own still-moving world. The host's
+`notify_replay_mode(true)` arrives at its full cover and is then a no-op; it
+starts the client's cinematic only when every packet carrying the byte was
+lost. `stop()` mirrors the stop to clients even from under the incoming wipe,
+since a client may already be running one.
+
 ## Bot AI decides on a worker thread
 
 `AICoordinator` runs `TeamBrain.tick` → `build_view` → `decide()` on a persistent

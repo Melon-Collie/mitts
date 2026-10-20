@@ -19,9 +19,9 @@ const BOUNDS: Dictionary = {
 	"forward → backward pivot (cursor flipped)":
 		[23.0, 31.0, 13.0, 46.0, 52.0, 49.0],
 	"backward → forward (move reversed)":
-		[12.0, 8.0, 8.0, 8.0, 8.0, 8.0],
+		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"forward → backward (move reversed)":
-		[30.0, 8.0, 8.0, 8.0, 10.0, 8.0],
+		[12.0, 8.0, 8.0, 8.0, 10.0, 8.0],
 	"stance on/off while skating":
 		[15.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 	"stop and restart":

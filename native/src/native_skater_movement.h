@@ -33,7 +33,7 @@ inline constexpr int64_t POSTURE_COMMIT = 2;
 	X(backward_thrust_multiplier) X(crossover_thrust_multiplier) \
 	X(backward_max_speed_multiplier) X(lateral_grip) \
 	X(stance_grip_mult) X(stance_scrape) X(stance_stride_mult) \
-	X(stance_max_speed_mult) X(stance_shuffle_mult) X(shuffle_speed) \
+	X(stance_max_speed_mult) X(shuffle_speed) \
 	X(commit_grip_mult) X(commit_stride_mult)
 
 struct MovementTunables {

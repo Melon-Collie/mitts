@@ -12,24 +12,31 @@ class_name GoalReplayRules
 const _SCORING_TOUCH_KINDS: Array[String] = [
 	"shot", "nudge", "puck_deflection", "puck_body_block", "puck_strip", "puck_pickup",
 ]
-# The decisive touches of a net-front scramble: when one follows the play's last
-# pickup, the clip opens on the last of them instead of the whole pile-up.
+# The puck leaving a carrier's stick: his pass, shot or tap ahead.
+const _RELEASE_KINDS: Array[String] = ["shot", "nudge"]
+# ...or anything else that leaves it loose after a pickup.
+const _LOOSE_KINDS: Array[String] = ["shot", "nudge", "puck_strip", "stick_lift"]
+# The decisive touches of a net-front scramble: when one follows the puck going
+# loose after the play's last pickup, the clip opens on the last of them instead
+# of the whole pile-up.
 const _CONTEST_KINDS: Array[String] = [
 	"body_check", "stick_lift", "puck_strip", "puck_deflection",
 ]
 
 # Clip start (seconds, game time). The clip walks back through the scoring
-# team's possession, one pickup at a time, keeping a pickup only while the link
-# from it is worth watching: a quick pass (tic-tac-toe, a cycle) or a rush that
-# carried the puck up ice (an outlet into a 2-on-1, coast to coast). A turnover
-# or a slow regroup ends the play.
+# team's possession, one pickup at a time. A quick link (tic-tac-toe, a cycle)
+# or a rush that carried the puck up ice (an outlet into a 2-on-1, coast to
+# coast) is the play and is shown whole. From the first slow possession — a
+# carrier working the puck, the passer setting up the feed — the clip shows the
+# team's handling back to STORY_SPAN before the touch. A turnover ends the play.
 const QUICK_LINK: float = 2.0             # a pass or short carry this fast is always the play
 const RUSH_LINK_MAX: float = 6.0          # a link up to this long is the play if it was a rush...
 const RUSH_ADVANCE: float = 15.0          # ...gaining this many metres toward the net (≈ a zone)
+const STORY_SPAN: float = 6.0             # a slow possession's handling is shown back to this before the touch...
+const SLOW_CARRY_TAIL: float = 1.0        # ...and never less than this before it let the puck go
 const PRE_PICKUP_BUFFER: float = 0.5      # shown before the play's first pickup
 const PRE_CONTEST_BUFFER: float = 0.75    # shown before the last contest when it cuts the clip
 const MIN_PRE_TOUCH: float = 1.5          # floor when nothing before the touch is the play
-const MIN_PRE_TOUCH_LONG_CARRY: float = 3.0  # floor for a slow carry that isn't the play
 const MAX_PRE_TOUCH: float = 10.0
 
 # Slow motion (seconds, game time). The budget is what keeps a bouncer from
@@ -80,46 +87,62 @@ static func scoring_touch_index(events: Array[Dictionary], goal_ts: float,
 # touch, or the goal when there is none) and where that was. The play is
 # `team`'s possession (-1: whoever made the last pickup). attack_sign is the
 # sign of the scored-on goal's z — the direction a rush gains ground; 0 counts
-# only quick links. A contest after the play's last pickup (a net-front
-# scramble) opens the clip on that contest instead. Clamped to
+# only quick links. A contest after the puck went loose off the play's last
+# pickup (a net-front scramble) opens the clip on that contest instead; a check
+# while the scorer still carries it does not. Clamped to
 # [anchor - MAX_PRE_TOUCH, anchor - MIN_PRE_TOUCH].
 static func clip_start_ts(events: Array[Dictionary], anchor_ts: float,
 		anchor_z: float, attack_sign: float, team: int) -> float:
 	var play_start: float = anchor_ts - MIN_PRE_TOUCH
+	# The possession being walked: the touch that ended it, and when the puck
+	# left its stick (unknown until its release is passed, walking back).
 	var link_ts: float = anchor_ts
 	var link_z: float = anchor_z
+	var release_ts: float = anchor_ts
 	var chain_team: int = team if team >= 0 else -2  # -2: take the last pickup's team
-	var first_pickup_ts: float = -1.0
 	var last_pickup_ts: float = -1.0
-	var saw_pickup: bool = false
+	# Past the first slow link the clip shows the team's handling back to here.
+	var filling: bool = false
+	var fill_to: float = 0.0
 	for i: int in range(events.size() - 1, -1, -1):
 		var entry: Dictionary = events[i]
 		var ts: float = entry.host_ts
-		if ts >= anchor_ts or not _is_kind_named(entry, "puck_pickup"):
+		if ts >= anchor_ts:
 			continue
-		saw_pickup = true
 		var ev: Dictionary = entry.event
-		var pickup_team: int = int(ev.get("team", -1))
+		var ev_team: int = int(ev.get("team", -1))
+		if release_ts < 0.0 and ev_team == chain_team and _is_kind(entry, _RELEASE_KINDS):
+			release_ts = ts
+			continue
+		if not _is_kind_named(entry, "puck_pickup"):
+			continue
 		if chain_team == -2:
-			chain_team = pickup_team
-		elif pickup_team != chain_team:
+			chain_team = ev_team
+		elif ev_team != chain_team:
 			break
-		var pos: Array = ev.pos
-		var z: float = pos[2]
-		if not _link_is_the_play(link_ts - ts, (link_z - z) * attack_sign):
-			break
-		first_pickup_ts = ts
 		if last_pickup_ts < 0.0:
 			last_pickup_ts = ts
+		var pos: Array = ev.pos
+		var z: float = pos[2]
+		var pickup_shown: float = ts - PRE_PICKUP_BUFFER
+		if not filling and not _link_is_the_play(link_ts - ts, (link_z - z) * attack_sign):
+			var released: float = release_ts if release_ts >= 0.0 else link_ts
+			fill_to = minf(released - SLOW_CARRY_TAIL, anchor_ts - STORY_SPAN)
+			filling = true
+		if filling:
+			play_start = maxf(pickup_shown, fill_to)
+			if pickup_shown <= fill_to:
+				break
+			continue
+		play_start = pickup_shown
 		link_ts = ts
 		link_z = z
-	if first_pickup_ts >= 0.0:
-		play_start = first_pickup_ts - PRE_PICKUP_BUFFER
-	elif saw_pickup:
-		play_start = anchor_ts - MIN_PRE_TOUCH_LONG_CARRY
-	var contest_ts: float = _last_event_before(events, anchor_ts, _CONTEST_KINDS)
-	if contest_ts > last_pickup_ts:
-		play_start = maxf(play_start, contest_ts - PRE_CONTEST_BUFFER)
+		release_ts = -1.0
+	if last_pickup_ts >= 0.0:
+		var loose_ts: float = _first_event_between(events, last_pickup_ts, anchor_ts, _LOOSE_KINDS)
+		var contest_ts: float = _last_event_before(events, anchor_ts, _CONTEST_KINDS)
+		if loose_ts >= 0.0 and contest_ts >= loose_ts:
+			play_start = maxf(play_start, contest_ts - PRE_CONTEST_BUFFER)
 	return clampf(play_start, anchor_ts - MAX_PRE_TOUCH, anchor_ts - MIN_PRE_TOUCH)
 
 
@@ -172,6 +195,19 @@ static func _last_event_before(events: Array[Dictionary], anchor_ts: float,
 		var entry: Dictionary = events[i]
 		var ts: float = entry.host_ts
 		if ts < anchor_ts and _is_kind(entry, kinds):
+			return ts
+	return -1.0
+
+
+# Timestamp of the first event of one of `kinds` strictly between after_ts and
+# before_ts, or -1.0 when there is none.
+static func _first_event_between(events: Array[Dictionary], after_ts: float,
+		before_ts: float, kinds: Array[String]) -> float:
+	for entry: Dictionary in events:
+		var ts: float = entry.host_ts
+		if ts >= before_ts:
+			break
+		if ts > after_ts and _is_kind(entry, kinds):
 			return ts
 	return -1.0
 

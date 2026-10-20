@@ -18,6 +18,7 @@ signal lobby_vote_toggled
 signal free_play_pressed
 signal exit_pressed
 signal analytics_pressed
+signal save_goal_pressed
 
 const _GOLD := MenuStyle.GOLD
 const _WHITE := MenuStyle.BROADCAST_CREAM
@@ -56,6 +57,7 @@ var _star_rows: Array[Control] = []
 var _star_name_labels: Array[Label] = []
 var _star_line_labels: Array[Label] = []
 var _star_stripe_styles: Array[StyleBoxFlat] = []
+var _save_goal_btn: Button = null
 var _rematch_btn: Button = null
 var _lobby_btn: Button = null
 var _vote_label: Label = null
@@ -228,6 +230,13 @@ func _build_bottom_block(root: Control) -> void:
 	analytics_btn.pressed.connect(func() -> void: analytics_pressed.emit())
 	actions.add_child(analytics_btn)
 
+	# Another view of the game just played, so it sits beside Analytics. Hidden
+	# until set_goal_saving says there is a goal to save.
+	_save_goal_btn = _action_button(tr(&"GAME_OVER_SAVE_GOAL"))
+	_save_goal_btn.pressed.connect(func() -> void: save_goal_pressed.emit())
+	_save_goal_btn.visible = false
+	actions.add_child(_save_goal_btn)
+
 	_rematch_btn = _action_button(tr(&"GAME_OVER_REMATCH"))
 	_rematch_btn.pressed.connect(func() -> void: rematch_toggled.emit())
 	actions.add_child(_rematch_btn)
@@ -340,6 +349,13 @@ func set_spectator(is_spec: bool) -> void:
 	_rematch_btn.visible = not is_spec
 	_lobby_btn.visible = not is_spec
 	_vote_label.visible = not is_spec
+
+
+# Shown when the match has a goal to save and GIF export is built in; disabled
+# while a save is under way.
+func set_goal_saving(available: bool, can_save: bool) -> void:
+	_save_goal_btn.visible = available
+	_save_goal_btn.disabled = not can_save
 
 
 func hide_popup() -> void:

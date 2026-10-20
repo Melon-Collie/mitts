@@ -114,8 +114,9 @@ low stance. Three things change, all in `apply_movement`:
    `max_speed · stance_max_speed_mult`. Over-cap speed is preserved, as it is
    everywhere in the model (the stride stops adding, nothing clamps down), so
    dropping into the stance at full speed and cutting carries no penalty for
-   *entering* it. Below `GRIP_MIN_SPEED` the free push sideways is scaled by
-   `stance_shuffle_mult` (net-front shuffles, a defender mirroring).
+   *entering* it. Below `GRIP_MIN_SPEED` the free push is scaled by
+   `stance_stride_mult` whichever way it points; side-stepping is the shuffle
+   (Space + a key), not the stance.
 
 Releasing Shift to stand up and stride is therefore a change of pace: shake in
 the stance, come out of it to accelerate. Letting go is part of the skill.
@@ -245,7 +246,6 @@ Feel tunables, hand-picked as starting points — tune on ice, not here.
 | `stance_scrape` | 0.33 | calibration anchor, §2.2 |
 | `stance_stride_mult` | 0.6 | |
 | `stance_max_speed_mult` | 0.85 | ~8.5 m/s neutral |
-| `stance_shuffle_mult` | 1.2 | below `GRIP_MIN_SPEED` only |
 | `commit_grip_mult` | 0.6 | |
 | `commit_stride_mult` | 0.5 | |
 | `stagger_max_grip_penalty` | 0.4 | |

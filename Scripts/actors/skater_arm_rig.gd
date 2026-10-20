@@ -1,10 +1,11 @@
 class_name SkaterArmRig
 extends RefCounted
 
-# The upper half of the body skeleton: torso, pelvis, helmet, the two deltoid
-# caps, and both arms posed by IK from the hand markers.
+# The upper half of the body skeleton: torso, the jersey's tail (TAIL, and its
+# flaps below the belt, SkaterHemFlaps), pelvis, helmet, the two deltoid caps,
+# and both arms posed by IK from the hand markers.
 #
-# The shell parts hang from SPINE and the pelvis from HIPS, and are posed in
+# The shell parts hang from SPINE and the pelvis from WAIST, and are posed in
 # their parent's frame exactly as they used to be in UpperBody's (see
 # SkaterMeshBuilder.UpperBone). The arms are root bones posed in skeleton space —
 # MeshRoot's, the space the UpperBody frame the hands hang under is placed in —
@@ -81,9 +82,9 @@ var _trunk_texture_roll: float = 0.0
 # The texture moved the shoulders the arms root on since the mesh pass last
 # asked (take_retextured).
 var _retextured: bool = false
-# The jersey hem's lag, and whether the bone is drawn anywhere but at rest.
-var _hem := SkaterJerseyHem.new()
-var _hem_shown: bool = false
+# The jersey tail's drape below the belt, and the tuck it was draped for.
+var _hem := SkaterHemFlaps.new()
+var _hem_tuck: int = -1
 
 
 func setup(skater: Skater) -> void:
@@ -113,7 +114,6 @@ func build(skeleton: Skeleton3D) -> void:
 			_native_arms[arm].bind(skeleton, upper_body, bones)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "UpperMesh"
-	_mesh.mesh = SkaterMeshBuilder.shared_upper_skin_mesh()
 	_mesh.skin = SkaterMeshBuilder.shared_upper_skin()
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
@@ -162,8 +162,8 @@ func build(skeleton: Skeleton3D) -> void:
 	set_cuff_radius(SkaterMeshBuilder.UpperBone.BOTTOM_CUFF, cuff_radius)
 
 	# The gear style may have landed before the rig (spawn order is
-	# registry-driven); now that the helmet bone exists, dress it.
-	apply_head_pieces()
+	# registry-driven); now that the mesh and the helmet bone exist, dress them.
+	apply_gear_meshes()
 
 
 # ── Arm pose ─────────────────────────────────────────────────────────────────
@@ -484,21 +484,10 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_R)
 
 
-# Swings the jersey hem on the balance lean. The lag steps every frame, so a
-# skater the camera picks up mid-swing is mid-swing; the bone is written only when
-# drawn, and once more on settling so the hem comes back to rest.
+# Drapes the jersey's tail. It steps every frame, so a skater the camera picks
+# up mid-swing is mid-swing; its bones are written only when drawn.
 func update_hem(delta: float, on_camera: bool) -> void:
-	var tilt: Vector2 = _skater.balance_tilt()
-	var local: Vector3 = _skater.upper_body.global_basis.orthonormalized().inverse() \
-			* Vector3(tilt.x, 0.0, tilt.y)
-	var moving: bool = _hem.advance(delta, Vector2(local.x, local.z))
-	if on_camera and (moving or _hem_shown):
-		_skeleton.set_bone_pose(SkaterBodySkeleton.HEM_BONE, _hem.pose())
-		_hem_shown = moving
-
-
-func hem_swing() -> Vector2:
-	return _hem.swing()
+	_hem.update(delta, on_camera)
 
 
 # The head's lerp toward its aim never lands exactly, so it would re-pose the
@@ -529,6 +518,10 @@ func repose_bone(bone: int) -> void:
 		_sync_cap(side_i)
 		origin += _check_load_offset(signf(origin.x)) + _girdle[side_i]
 	var pose := Transform3D(_basis[bone].scaled_local(_scale[bone]), origin)
+	# The jersey's tail is the torso as the hips hold it: the same placement, hung
+	# from the waist, so it takes neither the spine's fold nor the texture.
+	if bone == SkaterMeshBuilder.UpperBone.TORSO:
+		_skeleton.set_bone_pose(SkaterBodySkeleton.TAIL_BONE, pose)
 	# The trunk texture rotates the upper-body SHELL about the trunk pivot (the
 	# shell is posed in the spine's frame, so a zero-origin premultiply is that
 	# pivot). Arm bones are excluded — they follow the hands; the helmet takes
@@ -542,16 +535,17 @@ func repose_bone(bone: int) -> void:
 	_skeleton.set_bone_pose(bone, pose)
 
 
-# ── Head pieces ──────────────────────────────────────────────────────────────
-# The face gear, the hair and the brows: per-player meshes riding the HELMET
-# bone, so they take its head turn and its head-bulk scale. Kept off the skinned
-# mesh because the helmet assembly is shared by every skater; a null mesh is a
-# bare head.
+# ── Gear meshes ──────────────────────────────────────────────────────────────
+# The gear style's shapes: the upper mesh for the jersey's tuck, and the head
+# pieces — the face gear, the hair and the brows, per-player meshes riding the
+# HELMET bone, so they take its head turn and its head-bulk scale. Kept off the
+# skinned mesh because the helmet assembly is shared by every skater; a null
+# mesh is a bare head.
 
 enum HeadPiece { FACE_GEAR, SCALP, FACIAL_HAIR, BROWS }
 
 
-func apply_head_pieces() -> void:
+func apply_gear_meshes() -> void:
 	if _skeleton == null:
 		return
 	if _head_attach == null:
@@ -566,6 +560,13 @@ func apply_head_pieces() -> void:
 			_head_attach.add_child(piece)
 			_head_pieces.append(piece)
 	var gear: GearStyleConfig = _skater.gear_style
+	# Every tuck's mesh has the same surfaces, so the paint's overrides carry over.
+	_mesh.mesh = SkaterMeshBuilder.shared_upper_skin_mesh(gear.jersey_tuck)
+	if _hem_tuck < 0:
+		_hem.setup(_skater, _skeleton, gear.jersey_tuck)
+	elif gear.jersey_tuck != _hem_tuck:
+		_hem.set_tuck(gear.jersey_tuck)
+	_hem_tuck = gear.jersey_tuck
 	_head_pieces[HeadPiece.FACE_GEAR].mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	_head_pieces[HeadPiece.SCALP].mesh = SkaterHairMesh.shared_hair(gear.hair_style)
 	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)

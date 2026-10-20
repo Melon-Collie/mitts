@@ -89,7 +89,6 @@ func _stance_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_scrape = 1.0 / 3.0
 	cfg.stance_stride_mult = 0.6
 	cfg.stance_max_speed_mult = 0.85
-	cfg.stance_shuffle_mult = 1.2
 	cfg.commit_grip_mult = 0.6
 	cfg.commit_stride_mult = 0.5
 	return cfg
@@ -175,15 +174,16 @@ func test_a_stance_cut_ends_in_a_glide_not_a_stop() -> void:
 	assert_gt(_speed(v), 5.0, "and still skating")
 
 
-func test_the_stance_shuffles_harder_sideways() -> void:
+func test_the_stance_pushes_from_a_standstill_at_its_stride_scale_any_way() -> void:
 	var cfg := _stance_cfg()
-	var upright: Vector3 = SkaterMovementRules.apply_movement(
-		Vector3.ZERO, Vector2(1, 0), 0.0, false, false, DT, cfg)
-	var stance: Vector3 = SkaterMovementRules.apply_movement(
-		Vector3.ZERO, Vector2(1, 0), 0.0, false, false, DT, cfg,
-		SkaterMovementRules.Posture.STANCE)
-	assert_almost_eq(stance.x, upright.x * cfg.stance_shuffle_mult, 1e-5,
-		"a pure side-step from a standstill pushes at the shuffle scale")
+	for stick: Vector2 in [Vector2(1, 0), Vector2(0, -1), Vector2(-0.7071, 0.7071)]:
+		var upright: Vector3 = SkaterMovementRules.apply_movement(
+			Vector3.ZERO, stick, 0.0, false, false, DT, cfg)
+		var stance: Vector3 = SkaterMovementRules.apply_movement(
+			Vector3.ZERO, stick, 0.0, false, false, DT, cfg,
+			SkaterMovementRules.Posture.STANCE)
+		assert_almost_eq(_speed(stance), _speed(upright) * cfg.stance_stride_mult, 1e-5,
+			"a push %s from a standstill" % stick)
 
 
 func test_a_committed_check_loses_grip_and_stride() -> void:

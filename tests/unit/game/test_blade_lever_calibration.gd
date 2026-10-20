@@ -179,13 +179,13 @@ func test_skate_profile_reaches_the_controller() -> void:
 	assert_almost_eq(c.backward_thrust_multiplier, 0.74, 0.01, "power backward")
 	c.apply_attributes(PlayerAttributes.new(73, 201, PlayerAttributes.PROFILE_SHIFTY))
 	assert_almost_eq(c.stance_grip_mult, 2.4, 0.01, "shifty stance grip")
-	assert_almost_eq(c.stance_shuffle_mult, 1.4, 0.01, "shifty side-step")
+	assert_almost_eq(c.shuffle_speed, 1.4, 0.01, "shifty shuffle")
 	c.apply_attributes(PlayerAttributes.neutral())
 	assert_almost_eq(c.crossover_thrust_multiplier, 0.84, 1e-6)
 	assert_almost_eq(c.backward_thrust_multiplier, 0.90, 1e-6)
 	assert_almost_eq(c.backward_max_speed_multiplier, 0.90, 1e-6)
 	assert_almost_eq(c.stance_grip_mult, 2.0, 1e-6)
-	assert_almost_eq(c.stance_shuffle_mult, 1.2, 1e-6)
+	assert_almost_eq(c.shuffle_speed, 1.2, 1e-6)
 	var move: SkaterMovementRules.MovementConfig = c.build_ai_caps().movement
 	assert_almost_eq(move.backward_thrust_multiplier, 0.90, 1e-6, "the bots read the build")
 

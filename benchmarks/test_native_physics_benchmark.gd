@@ -63,7 +63,6 @@ func _movement_cfg() -> SkaterMovementRules.MovementConfig:
 	cfg.stance_scrape = 1.0 / 3.0
 	cfg.stance_stride_mult = 0.6
 	cfg.stance_max_speed_mult = 0.85
-	cfg.stance_shuffle_mult = 1.2
 	cfg.commit_grip_mult = 0.6
 	cfg.commit_stride_mult = 0.5
 	return cfg

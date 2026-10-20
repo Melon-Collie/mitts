@@ -54,6 +54,9 @@ const SCENARIOS: Array[Dictionary] = [
 	{"name": "shuffle", "warm": 2, "step": 7},
 	# Space + D held from a standstill: the shuffle, step after step.
 	{"name": "sidehold", "warm": 2, "step": 6},
+	# D held from a standstill with the cursor up-ice and no Space: a start
+	# toward the key, never a shuffle step.
+	{"name": "sidepush", "warm": 2, "step": 8},
 	# A push to the side and the brake: standing while the lean settles, both
 	# blades on the ice.
 	{"name": "sidestop", "warm": 40, "step": 15},
@@ -247,6 +250,9 @@ func _steer(input: InputState) -> void:
 			move = Vector2(1.0, 0.0)
 			aim = up_ice
 			input.brake = true
+		"sidepush":
+			move = Vector2(1.0, 0.0)
+			aim = up_ice
 		"sidestop":
 			move = Vector2(1.0, 0.0) if _tick < 20 else Vector2.ZERO
 			aim = up_ice

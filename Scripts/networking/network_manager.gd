@@ -159,11 +159,10 @@ signal skip_replay_vote_updated(current: int, total: int)
 # behind-net cam's lateral offset, and the audio cue dispatch during playback.
 signal replay_event_received(host_ts: float, event: Dictionary)
 
-# Host entered (true) or left (false) the goal-replay cinematic. Mirrored to
-# clients via notify_replay_mode so they can start / stop their own local
-# GoalReplayDriver in lockstep with the host. The world-state phase never
-# carries GOAL_SCORED to clients (the host stops broadcasting the instant it
-# enters replay mode), so this flag edge is the client's trigger.
+# Host's goal-replay cinematic took the world over (true) or ended (false).
+# Mirrored to clients via notify_replay_mode: the false edge ends their own
+# GoalReplayDriver in lockstep with the host's, and the true edge starts it
+# only when the GOAL_SCORED phase byte that normally does was lost.
 signal replay_mode_changed(active: bool)
 
 # Local player edited their identity (name / jersey number / handedness)
@@ -1757,8 +1756,9 @@ func start_replay_mode(initial_ts: float) -> void:
 	_replay_mode = true
 	_replay_clock = initial_ts
 	# Mirror the flag onto every connected client so their recorder + .mreplay
-	# writer gate identically, and so they start their own GoalReplayDriver in
-	# lockstep (see GameManager._on_remote_replay_mode_changed). The host stops
+	# writer gate identically, and so a client whose GoalReplayDriver never saw
+	# the GOAL_SCORED phase byte starts one (see GameManager.
+	# _on_remote_replay_mode_changed). The host stops
 	# broadcasting world state for the duration of the cinematic
 	# (GameManager._physics_process bails while is_replay_mode), so clients
 	# receive no frames during replay — each peer drives its own clip locally.
@@ -1798,9 +1798,9 @@ func notify_replay_mode(active: bool) -> void:
 	_replay_mode = active
 	if not active:
 		_replay_clock = 0.0
-	# Drive the client's local cinematic off this edge. The host's GOAL_SCORED
-	# phase never reaches clients via world state, so this is where their
-	# GoalReplayDriver starts (active) and is torn down (inactive).
+	# The client's local cinematic ends off this edge (inactive), and starts off
+	# it (active) when the GOAL_SCORED phase byte that normally starts it was
+	# lost.
 	replay_mode_changed.emit(active)
 
 

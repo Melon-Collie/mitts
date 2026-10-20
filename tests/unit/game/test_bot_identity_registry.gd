@@ -336,6 +336,34 @@ func test_fallback_faces_lean_visor() -> void:
 					int(counts.get(option, 0)), "visor outnumbers option %d" % option)
 
 
+# Most of a bench wears the sweater loose; every tuck is still reachable.
+func test_fallback_tucks_lean_loose() -> void:
+	var counts: Dictionary = {}
+	for i: int in 200:
+		var gear: GearStyleConfig = GearStyleConfig.from_code(
+				BotIdentityRegistry.fallback_gear_style_code("Bot %d" % i))
+		counts[gear.jersey_tuck] = int(counts.get(gear.jersey_tuck, 0)) + 1
+	for option: int in GearModelRegistry.tuck_count():
+		assert_gt(int(counts.get(option, 0)), 0,
+				"the fallback table reaches tuck option %d" % option)
+	assert_gt(int(counts.get(GearModelRegistry.TUCK_NONE, 0)), 100,
+			"most bots wear the jersey loose")
+
+
+func test_a_tuck_pin_holds_beside_the_rolled_hair() -> void:
+	var norm: Dictionary = BotIdentityRegistry.normalize_entry(
+			{"name": "Tucker", "jersey_tuck": GearModelRegistry.TUCK_RIGHT})
+	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
+	assert_eq(gear.jersey_tuck, GearModelRegistry.TUCK_RIGHT)
+	var hair_only: GearStyleConfig = GearStyleConfig.from_code(int(BotIdentityRegistry
+			.normalize_entry({"name": "Tucker", "hair_style": HairStyleRegistry.HAIR_LONG})
+			.gear_style_code))
+	var rolled: GearStyleConfig = GearStyleConfig.from_code(
+			BotIdentityRegistry.fallback_gear_style_code("Tucker"))
+	assert_eq(hair_only.jersey_tuck, rolled.jersey_tuck,
+			"pinning the hair leaves the tuck to the name's roll")
+
+
 func test_pick_for_slot_falls_back_when_position_pool_exhausted() -> void:
 	# Consume every LD identity; the next LD pick must still return someone.
 	var used: Array[String] = []

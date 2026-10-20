@@ -20,6 +20,7 @@ func test_default_decodes_to_the_kit_look() -> void:
 	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHORT, "hair defaults short")
 	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE, "and no facial hair")
 	assert_eq(config.hair_color, 0, "in the first palette colour")
+	assert_eq(config.jersey_tuck, GearModelRegistry.TUCK_NONE, "the jersey defaults loose")
 
 
 func test_every_legal_pick_round_trips() -> void:
@@ -64,6 +65,29 @@ func test_a_pre_hair_code_decodes_to_the_stock_hair() -> void:
 	assert_eq(config.hair_color, 0)
 
 
+func test_every_tuck_round_trips_and_belongs_to_the_locker() -> void:
+	for tuck: int in GearModelRegistry.tuck_count():
+		var config := GearStyleConfig.new(GearModelRegistry.SKATE_PRO,
+				GearModelRegistry.GLOVE_PRO, 3, 1, GearModelRegistry.FACE_VISOR,
+				HairStyleRegistry.hair_count() - 1, 1, HairStyleRegistry.color_count() - 1, tuck)
+		var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
+		assert_eq(back.jersey_tuck, tuck)
+		assert_eq(back.hair_color, HairStyleRegistry.color_count() - 1,
+				"the tuck field leaves the hair fields alone")
+		assert_eq(GearStyleConfig.from_code(config.equipment_code()).jersey_tuck, tuck,
+				"the locker owns the tuck, so the equipment code carries it")
+
+
+# Every code saved before the tuck existed has zeros above the hair colour, and
+# those players wore the jersey loose.
+func test_a_pre_tuck_code_decodes_loose() -> void:
+	var old_code: int = GearStyleConfig.new(GearModelRegistry.SKATE_RETRO, 0,
+			GearStyleConfig.LACE_DEFAULT_INDEX, 0, GearModelRegistry.FACE_CAGE,
+			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE,
+			HairStyleRegistry.color_count() - 1).to_code()
+	assert_eq(GearStyleConfig.from_code(old_code).jersey_tuck, GearModelRegistry.TUCK_NONE)
+
+
 func test_garbage_codes_coerce_to_legal_looks() -> void:
 	for code: int in [-1, -999, 1 << 20, 0x7FFFFFFF, 0x7FFFFFFFFF]:
 		var config: GearStyleConfig = GearStyleConfig.from_code(code)
@@ -75,6 +99,7 @@ func test_garbage_codes_coerce_to_legal_looks() -> void:
 		assert_true(HairStyleRegistry.is_valid_hair(config.hair_style), "hair style legal")
 		assert_true(HairStyleRegistry.is_valid_facial(config.facial_hair), "facial hair legal")
 		assert_true(HairStyleRegistry.is_valid_color(config.hair_color), "hair colour legal")
+		assert_true(GearModelRegistry.is_valid_tuck(config.jersey_tuck), "tuck option legal")
 		# And the coerced look re-packs stably (idempotent coercion).
 		var code2: int = config.to_code()
 		assert_eq(GearStyleConfig.from_code(code2).to_code(), code2)

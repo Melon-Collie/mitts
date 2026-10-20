@@ -37,8 +37,7 @@ static constexpr double INTENT_MIN_SQ = 0.0025;
 static constexpr double STEP_REST_SPEED = 0.05;
 // SkaterLocomotion._SKID_LEAD_FULL_SPEED.
 static constexpr double SKID_LEAD_FULL_SPEED = 1.5;
-// SkaterMovementRules.SHUFFLE_AHEAD_COS / SHUFFLE_MAX_SPEED.
-static constexpr double SHUFFLE_AHEAD_COS = 0.707;
+// SkaterMovementRules.SHUFFLE_MAX_SPEED.
 static constexpr double SHUFFLE_MAX_SPEED = 2.0;
 // SkaterLocomotion._STEP_SIDE_SWAP.
 static constexpr double STEP_SIDE_SWAP = 0.25;
@@ -381,15 +380,9 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 				out.glide = 1.0;
 				break;
 			}
-			const Vector2 dir = intent.normalized();
-			const double ahead = facing.dot(dir);
-			const double across = facing.cross(dir);
-			const double a = maxd(ahead, 0.0);
-			const double b = maxd(-ahead, 0.0);
-			out.stride = a * a;
+			const double b = maxd(-(double)facing.dot(intent.normalized()), 0.0);
 			out.backward = b * b;
-			out.shuffle = across * across;
-			out.side = across != 0.0 ? sgn(across) : 1.0;
+			out.stride = 1.0 - out.backward;
 			break;
 		}
 		const Vector2 travel = velocity2 / (real_t)speed;
@@ -434,7 +427,7 @@ void NativeSkaterGait::sense(double delta, const Vector3 &vel, const Vector2 &in
 		}
 	} while (false);
 	step_hold = hold;
-	sense_step(facing, intent, brake, delta);
+	sense_step(facing, intent, brake);
 	if (ground_speed < c.hockey_stop_min_speed) {
 		target.glide += target.stop;
 		target.stop = 0.0;
@@ -751,30 +744,21 @@ void NativeSkaterGait::shuffle_path(double w, const Vector2 &dir, double side) {
 }
 
 // SkaterLocomotion._sense_step
-void NativeSkaterGait::sense_step(const Vector2 &facing, const Vector2 &intent, bool brake, double delta) {
+void NativeSkaterGait::sense_step(const Vector2 &facing, const Vector2 &intent, bool brake) {
 	const Config &c = cfg;
 	const bool has_input = intent.length_squared() > INTENT_MIN_SQ;
 	const bool chord = brake && (double)intent.length() > c.move_deadzone
 			&& ground_speed <= SHUFFLE_MAX_SPEED;
 	if (stepping) {
-		step_travel += ground_speed * delta;
-		bool holds = chord;
-		if (!chord) {
-			holds = brake
-					? ground_speed > STEP_REST_SPEED
-					: (has_input && step_travel < c.shuffle_step_distance);
-		}
-		if (!holds) {
+		if (!chord && !(brake && ground_speed > STEP_REST_SPEED)) {
 			stepping = false;
 			return;
 		}
 	} else {
-		if (!chord && (brake || !has_input || ground_speed > GRIP_MIN_SPEED
-				|| (double)intent.normalized().dot(facing) >= SHUFFLE_AHEAD_COS)) {
+		if (!chord) {
 			return;
 		}
 		stepping = true;
-		step_travel = 0.0;
 		stride_phase = 0.0;
 		step_side = 0.0;
 	}
