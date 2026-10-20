@@ -29,10 +29,9 @@ single-purpose PR can just be prose. What belongs here:
 ## Ratchets
 
 <!--
-Only if `test_no_god_class_growth.gd` entries moved. Give the before/after
-numbers and say why this growth is right — a bump with no justification is the
-thing the ratchet exists to catch. A file that shrank well below its entry gets
-the entry tightened; say that here too, or the win is re-spent quietly.
+Only if a `test_no_god_class_growth.gd` list or a locale-seam ratchet entry
+changed. A file newly added to a size or API list needs a reason it has to be
+that big; a graduated file leaving one is worth a line.
 -->
 
 ## Verification

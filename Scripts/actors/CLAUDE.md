@@ -54,8 +54,8 @@ The rigs took the *state* and the *code*, not the call sites: `set_leg_swing`,
 `upper_surface_material`, `begin_draw_tracking` and the rest stay on `Skater` as
 one-line delegates, because the controllers, the gait, the uniform pass and the
 ice VFX all address a skater and should not have to know which rig answers.
-That is the same shape `_hud` and `_uniform` already had. So the size ratchet
-moved a long way and the API ratchet did not — the entanglement the split was
+That is the same shape `_hud` and `_uniform` already had. So the line count
+moved a long way and the public API did not — the entanglement the split was
 measured against is shared *fields*, and there are now none.
 
 ## One skeleton, one chain
