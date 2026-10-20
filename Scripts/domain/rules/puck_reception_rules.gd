@@ -150,16 +150,6 @@ static func bobble_load_at(contact_offset: float, bobble_load: float,
 	return bobble_load * (1.0 - edge_share * contact_offset * contact_offset)
 
 
-# Pure: the speed a bobbled catch leaves the blade at, in the receiver's frame:
-# what the hands didn't soak, from `exit_min` just over the bobble line to
-# `exit_max` at the catch ceiling — slow enough to die by his stick.
-static func bobble_exit_speed(catch_load: float, bobble_at: float,
-		exit_min: float, exit_max: float) -> float:
-	var over: float = 1.0 if bobble_at >= 1.0 \
-			else clampf((catch_load - bobble_at) / (1.0 - bobble_at), 0.0, 1.0)
-	return lerpf(exit_min, exit_max, over)
-
-
 # Pure on-ice/off-ice gate: a blade only interacts with pucks on its own
 # vertical plane. A lifted blade (off the ice) handles airborne pucks; a
 # grounded blade handles grounded pucks. This is what lets a saucer pass fly

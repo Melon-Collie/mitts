@@ -74,8 +74,11 @@ func test_the_harness_catches_as_the_puck_does() -> void:
 	assert_eq(DuelHarness.RECEIVE_ALIGNMENT_BONUS, puck.alignment_receive_bonus)
 	assert_eq(DuelHarness.BOBBLE_LOAD, puck.bobble_load)
 	assert_eq(DuelHarness.BOBBLE_EDGE_SHARE, puck.bobble_edge_share)
-	assert_eq(DuelHarness.BOBBLE_EXIT_MIN_M_S, puck.bobble_exit_min)
-	assert_eq(DuelHarness.BOBBLE_EXIT_MAX_M_S, puck.bobble_exit_max)
+	assert_eq(DuelHarness.DEFLECT_NORMAL_RESTITUTION, puck.deflect_normal_restitution)
+	assert_eq(DuelHarness.DEFLECT_NORMAL_RESTITUTION_MIN, puck.deflect_normal_restitution_min)
+	assert_eq(DuelHarness.DEFLECT_SPEED_REF, puck.deflect_speed_ref)
+	assert_eq(DuelHarness.BOBBLE_TANGENTIAL_RETAIN, puck.bobble_tangential_retain)
+	assert_eq(DuelHarness.BOBBLE_PACE_RETAIN, puck.bobble_pace_retain)
 	assert_eq(DuelHarness.BOBBLE_GRACE_TICKS, roundi(puck.settle_max_s * Constants.PHYSICS_TICK))
 	puck.free()
 

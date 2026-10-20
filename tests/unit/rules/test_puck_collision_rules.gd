@@ -371,3 +371,42 @@ func test_pinch_is_symmetric_in_the_contestants() -> void:
 func test_pinch_coincident_blades_do_not_lift() -> void:
 	assert_eq(PuckCollisionRules.pinch_lift_speed(Vector3(-9, 0, 0),
 		Vector3(9, 0, 0), Vector3.ZERO, Vector3.ZERO, 5.0, 0.2, 1.6), 0.0)
+
+
+# ── squeeze_lift_speed ───────────────────────────────────────────────────────
+
+func test_squeeze_lifts_only_past_its_threshold_and_caps() -> void:
+	assert_eq(PuckCollisionRules.squeeze_lift_speed(5.0, 6.0, 0.15, 1.9), 0.0)
+	assert_almost_eq(PuckCollisionRules.squeeze_lift_speed(14.0, 6.0, 0.15, 1.9), 1.2, 0.0001)
+	assert_eq(PuckCollisionRules.squeeze_lift_speed(40.0, 6.0, 0.15, 1.9), 1.9)
+
+
+# ── bobble_velocity ──────────────────────────────────────────────────────────
+# Puck defaults: restitution 0.6 → 0.15 by 30 m/s, a tip keeps 0.85 of the
+# glance; a bobble keeps 0.35 of it and 0.45 of the whole.
+
+func _bobble(rel: Vector3) -> Vector3:
+	return PuckCollisionRules.bobble_velocity(rel, Vector3(0, 0, 1), 0.6, 0.15, 30.0, 0.35, 0.45)
+
+func _tip(rel: Vector3) -> Vector3:
+	return PuckCollisionRules.deflect_velocity(rel, Vector3(0, 0, 1), 0.6, 0.15, 0.85, 30.0)
+
+func test_a_square_bobble_comes_straight_back_off_the_face() -> void:
+	var out: Vector3 = _bobble(Vector3(0, 0, -20))
+	assert_almost_eq(out.x, 0.0, 0.0001)
+	assert_almost_eq(out.z, 20.0 * 0.3 * 0.45, 0.0001, "e(20) = 0.3 of the 20 m/s, 0.45 let through")
+
+func test_a_glancing_bobble_leans_to_the_normal_where_a_tip_runs_along_the_blade() -> void:
+	var rel := Vector3(-18, 0, -18).normalized() * 18.0
+	var bobble: Vector3 = _bobble(rel)
+	var tip: Vector3 = _tip(rel)
+	var face := Vector3(0, 0, 1)
+	assert_gt(bobble.normalized().dot(face), tip.normalized().dot(face),
+			"the cupped face grips the glance")
+	assert_gt(bobble.normalized().dot(face), cos(deg_to_rad(50.0)))
+
+func test_a_bobble_is_loose_but_far_slower_than_a_tip() -> void:
+	for rel: Vector3 in [Vector3(0, 0, -22), Vector3(-9, 0, -14), Vector3(-14, 0, -8)]:
+		var speed: float = _bobble(rel).length()
+		assert_between(speed, 2.0, 3.2, "%s: ~2.5 m/s off him" % rel)
+		assert_lt(speed, _tip(rel).length() * 0.5)

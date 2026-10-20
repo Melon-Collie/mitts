@@ -65,6 +65,23 @@ static func deflect_velocity(
 		e = lerpf(normal_restitution, normal_restitution_min, hard)
 	return v_tangent * tangential_retain - v_normal * e
 
+# A catch the hands nearly held, in the receiver's frame (`relative_velocity`,
+# puck − receiver): the face takes it as a deflect does, but a blade reaching to
+# receive is cupped over the puck, so it grips the glance — `tangential_retain`
+# well under a tip's — and the hands soak `pace_retain` of what is left. The
+# puck leaves along the face's normal more than along the blade, slow but not
+# dead. Horizontal; the caller adds the receiver's velocity and any hop.
+static func bobble_velocity(
+		relative_velocity: Vector3,
+		face_normal: Vector3,
+		normal_restitution: float,
+		normal_restitution_min: float,
+		speed_ref: float,
+		tangential_retain: float,
+		pace_retain: float) -> Vector3:
+	return deflect_velocity(relative_velocity, face_normal, normal_restitution,
+			normal_restitution_min, tangential_retain, speed_ref) * pace_retain
+
 # The same decomposition in 3D, for a surface whose normal can point anywhere —
 # a goalie's pad, blocker, chest or paddle (GoalieSaveRules.rebound_velocity).
 # `deflect_velocity` is horizontal-only because a blade's lift is a separate,
@@ -252,5 +269,13 @@ static func pinch_lift_speed(
 	var along := Vector3(blade_a_pos.x - blade_b_pos.x, 0.0, blade_a_pos.z - blade_b_pos.z)
 	if along.length_squared() < 0.000001:
 		return 0.0
-	var closing: float = (blade_b_vel - blade_a_vel).dot(along.normalized())
+	return squeeze_lift_speed((blade_b_vel - blade_a_vel).dot(along.normalized()),
+			threshold, gain, max_speed)
+
+
+# Upward launch speed (m/s) for a puck squeezed against a blade at `closing` m/s
+# — by a second blade (pinch_lift_speed) or by the ice under a hard pass driven
+# into the face (a reception bobble). Only what exceeds `threshold` lifts.
+static func squeeze_lift_speed(closing: float, threshold: float, gain: float,
+		max_speed: float) -> float:
 	return clampf((closing - threshold) * gain, 0.0, max_speed)
