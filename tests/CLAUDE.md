@@ -101,10 +101,14 @@ guard is against a new file crossing a limit. When it fires:
 ## Netcode harnesses
 
 Three deterministic netcode simulations under `tests/harness/`. None is a
-physics harness — nothing in any of them skates. (The fourth file there,
-`pin_race_harness.gd`, is not netcode: it ticks two real `SkaterController`s and
-a `BoardPinTracker` against the boards for the pin's escape race, read by
-`tests/slow/game/test_pin_escape_race.gd` and the instrument beside it.) They exist because every netcode defect found so far has lived in the
+physics harness — nothing in any of them skates. (Two other files there are not
+netcode: `pin_race_harness.gd` ticks two real `SkaterController`s and a
+`BoardPinTracker` against the boards for the pin's escape race, read by
+`tests/slow/game/test_pin_escape_race.gd` and the instrument beside it; and
+`body_jerk_harness.gd` skates the real controller through scripted transitions
+and measures every drawn bone's per-frame jerk, for the body-smoothness
+instrument and the `test_body_stays_smooth.gd` gate, which share its one
+scenario list.) The netcode three exist because every netcode defect found so far has lived in the
 plumbing (clocks, queues, buffers, ordering), and every one was found by reading
 code or post-hoc telemetry rather than by a failing test.
 

@@ -49,6 +49,9 @@ const _PLANT_WALK_STEPS: int = 7
 # above the stroke's own knee speeds (the stride's thigh peaks near 2 rad/s), so
 # it binds only on those jumps.
 const _PLANT_RATE_RAD_S: float = 8.0
+# How much higher than the lowest corner of a downed skate another may sit and
+# still share in where its leg swings to the ice (_soft_low).
+const _REST_SOFT_M: float = 0.02
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
@@ -244,6 +247,14 @@ func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 		weight: float) -> void:
 	if weight <= 0.001:
 		return
+	_sprawl(pose, weight)
+	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.FOOT_L,
+			SkaterMeshBuilder.LegBone.SKATE_L)
+	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_R, SkaterMeshBuilder.LegBone.FOOT_R,
+			SkaterMeshBuilder.LegBone.SKATE_R)
+
+
+func _sprawl(pose: KnockdownFallRules.SprawlPose, weight: float) -> void:
 	_sprawled = true
 	var base_l: Vector3 = _shin_base_euler[0]
 	var base_r: Vector3 = _shin_base_euler[1]
@@ -262,10 +273,6 @@ func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 	_pose_foot(SkaterMeshBuilder.LegBone.FOOT_R, leg_r, knee_r, base_r,
 			lerpf(_ankle_r, 1.0, weight), _level_r)
 	_ankles_posed = true
-	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.FOOT_L,
-			SkaterMeshBuilder.LegBone.SKATE_L)
-	_rest_on_ice(SkaterMeshBuilder.LegBone.LEG_R, SkaterMeshBuilder.LegBone.FOOT_R,
-			SkaterMeshBuilder.LegBone.SKATE_R)
 
 
 # The ice holds a downed leg up. Tipping the body puts the skates wherever the
@@ -277,25 +284,31 @@ func apply_knockdown_overlay(pose: KnockdownFallRules.SprawlPose,
 # because the swing can hand the lowest point to another corner of the skate.
 # Works in MeshRoot's parent frame, the skater's own, where the ice is flat at
 # −global_position.y.
+#
+# The swing's plane is through a soft lowest point (_soft_low), not the lowest
+# corner itself: a skate lying near flat hands that corner between toe and heel,
+# and a plane that turned with it would jump the leg. Each pass is a Newton step
+# raising the lowest corner itself.
 func _rest_on_ice(leg: int, foot: int, skate: int) -> void:
 	var to_body: Transform3D = _skater.mesh_root.transform * _skeleton.transform
 	var ice: float = -_skater.global_position.y
-	for _pass: int in 4:
+	for _pass: int in 6:
 		var hip: Vector3 = to_body * _skeleton.get_bone_global_pose(_OFFSET + leg).origin
 		var low: Vector3 = _lowest_corner(to_body, foot, skate)
 		var sink: float = ice - low.y
 		if sink <= 0.0:
 			return
 		var r: Vector3 = low - hip
-		var r_h := Vector2(r.x, r.z)
-		var reach: float = r.length()
-		if r_h.length() < 0.01 or reach < 0.01:
+		var soft: Vector3 = _soft_low(to_body, foot, skate, low.y) - hip
+		var plane: Vector3 = soft if Vector2(soft.x, soft.z).length() >= 0.01 else r
+		if Vector2(plane.x, plane.z).length() < 0.01:
 			return
-		# Swing r in the vertical plane through it until it is `sink` higher:
-		# its height is reach·sin(φ + β), β its current elevation.
-		var beta: float = atan2(r.y, r_h.length())
-		var phi: float = asin(clampf((r.y + sink) / reach, -1.0, 1.0)) - beta
-		var axis_body: Vector3 = r.cross(Vector3.UP).normalized()
+		var axis_body: Vector3 = plane.cross(Vector3.UP).normalized()
+		# How fast the swing raises the lowest corner, per radian.
+		var lift: float = axis_body.cross(r).y
+		if lift < 0.005:
+			return
+		var phi: float = minf(sink / lift, PI / 4.0)
 		var axis: Vector3 = (to_body.basis * _skeleton.get_bone_global_pose(
 				_skeleton.get_bone_parent(_OFFSET + leg)).basis).inverse() * axis_body
 		var pose: Transform3D = _skeleton.get_bone_pose(_OFFSET + leg)
@@ -318,6 +331,23 @@ func _lowest_corner(to_body: Transform3D, foot: int, skate: int) -> Vector3:
 			if p.y < lowest.y:
 				lowest = p
 	return lowest
+
+
+# Those corners averaged, each weighted by how near the lowest (`low_y`) it is:
+# the lowest corner when one is clearly lowest, and between two as they trade.
+func _soft_low(to_body: Transform3D, foot: int, skate: int, low_y: float) -> Vector3:
+	var sum := Vector3.ZERO
+	var total: float = 0.0
+	for i: int in 2:
+		var part: Transform3D = to_body * _skeleton.get_bone_global_pose(
+				_OFFSET + (foot if i == 0 else skate))
+		var box: AABB = _skate_boxes[i]
+		for corner: int in 8:
+			var p: Vector3 = part * box.get_endpoint(corner)
+			var w: float = exp((low_y - p.y) / _REST_SOFT_M)
+			sum += p * w
+			total += w
+	return sum / total
 
 
 func _pose_pivot(bone: int, euler: Vector3) -> void:

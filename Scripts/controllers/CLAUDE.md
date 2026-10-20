@@ -610,6 +610,16 @@ Things the split alone would get wrong, handled where noted:
   over while the skater is still gaining speed. `test_gait_step_events.gd`
   holds the shape.
 - **The glide is the remainder.**
+- **The weights ease on springs, not lags** (`EaseRules`, critically damped,
+  ω = `OMEGA_PER_RATE` × the blend speed): the mix, effort, the loaded stance
+  and the stroke's intensity, and the stance layer's blend. A lag answers a
+  change of state at full rate on its first frame, and every leg target is a
+  blend of those weights, so the body stepped in a corner on every change of
+  state: the crouch dropped at ~4 m/s from rest the tick a stop began. The
+  shuffle keeps its lag: its step is laid from the base closed, where a quick
+  onset costs nothing and a slow one lets the planted skate slide
+  (`test_shuffle_steps.gd`). `tests/instruments/actors/test_body_smoothness.gd`
+  measures the per-frame jerk of every bone through each transition.
 
 The legs are solved from where the ankles go (`LegIK`): `GaitPose.seed_legs`
 places each ankle from the stroke's joints on the stance, lays on the states
@@ -626,10 +636,24 @@ back of them, turned square across it), the skid (`_skid_path`, a snowplow),
 backward C-cuts (`_ccut_path`, out and ahead and back in) and the side-step
 (`_shuffle_path`, step-together in any direction: a side-stepping blade cannot
 glide, so each skate holds its place on the ice while the hips pass over it,
-and the cycle is laid over the ground so one tap is one cycle; an unbraked push
-from rest to the side or back latches a step in `_sense_step` — once braked (a
-tap's settle) it holds to rest, unbraked it is one step and then the stroke's,
-`test_shuffle_steps.gd`). The glide is the stance with a joint-space
+and the cycle is laid over the ground, one `shuffle_step_distance` a cycle;
+`_sense_step` steps for as long as the shuffle itself is held (the brake with a
+stick, slow: `SkaterMovementRules.is_shuffle`) and, let go, holds the step
+through its settle to rest, while an unbraked push from rest to the side or back
+is one step and then the stroke's, `test_shuffle_steps.gd`).
+
+**The shuffle is a chord, and nothing about it is on the wire.** The movement
+model reads the brake and the stick it already has: at or below
+`SHUFFLE_MAX_SPEED` the brake with a stick drives the body toward the stick at
+`shuffle_speed` (on the stop's own edges, at `stop_decel`, so a stop slows
+straight into it), and above it the brake is the stop and the stick is ignored.
+The local input is shaped before it is recorded (`ShuffleStepShaper`): a shuffle
+let go of holds its stick until the step-together closes and brakes to rest
+there, and a stick already driving along the travel when the brake goes on at
+speed is held off, so W held through a stop stops. Bots never shuffle: their
+brake keeps steering in the stick, so `AIController.apply_decision` drops it
+under the brake below the gate (`AIBotMechanics.braked_stick`), and
+`AICarryRollout` prices a BRAKE as that stop. The glide is the stance with a joint-space
 edge sway and, out of a turn, a light inside knee; as it comes still it stands on
 the ice like the authored states (`SkaterLocomotion.on_ice`, `1 − glide × speed`)
 on soft knees (`rest_stance`), so a standing skater's lean settles over two
@@ -703,6 +727,28 @@ celebration's raised stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
+### A change of who poses the stick is eased, not cut
+
+The tracked IK, the slapper's wind-up, the follow-throughs and the shot block
+each place the hand and blade from their own geometry, and none starts where the
+last left off — a change of owner moved the stick up to 1.8 m in a tick.
+`SkaterPoseBridge` runs after the tick's last write: on a change of owner it
+holds the stick last drawn and eases the new owner's pose in from it (0.15 s;
+0.05 s into a follow-through, which is the shot's own whip). It advances on live
+ticks only — reconcile treats the live tick as the truth, and a bridge advanced
+through a replay would play its ease twice — and its effect rides the hand and
+blade the wire already carries. The same rule shapes the rest of the
+hand-offs: a whip's attack never takes less than `WHIP_ATTACK_MIN_S`, the
+celebration's stick and fist pump ease in and out over `CELEBRATION_EASE_S`,
+and the slapper and block take their pose from the lean and twist they find
+rather than zeroing them first.
+
+**The stride's hand pump is drawn, never posed.** Both hands on, the stroke
+swings the top hand across the body (`SkaterIKCoordinator._stride_pump`), the
+stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
+which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
+every claim reads never takes it.
+
 ### The gait's numeric core is native
 
 Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the
@@ -772,13 +818,16 @@ The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
 
 **A carrier keeps both hands on the stick.** An empty stick reaches one-handed
-to the rim; with the puck the blade stops where the bottom hand could no longer
+to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
+both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer
 hold the shaft (`TopHandIK.two_hand_reach`, from the bottom shoulder read the
 way `arm_shoulder` reads the top one) and, on the backhand, at the angle past
 which it lets go (`bh_release_angle_deg`, `_carry_backhand_stop`) — the puck
 magnetises to the blade, so a one-handed carry was reach no defender could
 answer. Both are tick state; the drawn bottom hand reads the render-rate trunk
-and is what the limit is measured to keep on the shaft.
+and is what the limit is measured to keep on the shaft. They are laid on the
+cursor's TARGET, not on the blade the speed cap draws, so a pickup at the rim
+brings the stick in at the dangle's pace instead of in one tick.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
 
 "Hold the shaft" means a glove's width below the top hand

@@ -54,7 +54,6 @@ func before_all() -> void:
 	# port against itself.
 	_ref._ik._native_dangle = null
 	_ref._ik._native_top = null
-	_ref._ik._native_bottom = null
 
 
 func after_all() -> void:

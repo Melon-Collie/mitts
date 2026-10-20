@@ -152,3 +152,30 @@ func test_turning_round_to_a_cursor_dead_behind_keeps_the_lean() -> void:
 	var facing := BEHIND.rotated(deg_to_rad(5.0))
 	var turn: float = FacingRules.turn_round_angle(facing, AHEAD, AHEAD)
 	assert_almost_eq(turn, facing.angle_to(AHEAD), 0.0001)
+
+
+# ── turn_rate ─────────────────────────────────────────────────────────────────
+
+const _ACCEL: float = 300.0
+const _DT: float = 1.0 / 120.0
+
+
+func test_a_turn_winds_up_at_the_limit() -> void:
+	var rate: float = 0.0
+	for i: int in 3:
+		rate = FacingRules.turn_rate(rate, 15.0, _ACCEL, _DT)
+		assert_almost_eq(rate, _ACCEL * _DT * (i + 1), 1e-5, "tick %d" % i)
+
+
+func test_a_turn_gives_its_rate_up_at_once() -> void:
+	assert_eq(FacingRules.turn_rate(15.0, 2.0, _ACCEL, _DT), 2.0)
+	assert_eq(FacingRules.turn_rate(-15.0, 0.0, _ACCEL, _DT), 0.0)
+
+
+# Reversing is giving the rate up, then winding up the other way from rest.
+func test_a_reversal_winds_up_from_rest() -> void:
+	assert_almost_eq(FacingRules.turn_rate(10.0, -10.0, _ACCEL, _DT), -_ACCEL * _DT, 1e-5)
+
+
+func test_a_small_change_passes_through() -> void:
+	assert_eq(FacingRules.turn_rate(1.0, 2.0, _ACCEL, _DT), 2.0)
