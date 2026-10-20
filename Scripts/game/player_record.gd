@@ -55,3 +55,15 @@ func _init(p_peer_id: int, p_team_slot: int, p_is_local: bool, p_team: Team) -> 
 
 func display_name() -> String:
 	return player_name if not player_name.is_empty() else "P%d" % (team_slot + 1)
+
+
+func look() -> PlayerLook:
+	var out := PlayerLook.new()
+	out.player_name = player_name
+	out.jersey_number = jersey_number
+	out.is_left_handed = is_left_handed
+	out.attributes = attributes
+	out.skin_tone = skin_tone
+	out.tape_code = tape_code
+	out.gear_style_code = gear_style_code
+	return out

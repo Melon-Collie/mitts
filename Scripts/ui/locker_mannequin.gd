@@ -1,22 +1,23 @@
 class_name LockerMannequin
 extends Node3D
 
-# The locker's display figure: a full kit-dressed skater assembled from the
-# rink's own shared part meshes, standing on the case floor with the picked
-# stick in both hands. Every piece the locker edits is worn HERE — skates on
-# the feet, gloves gripping the shaft, face gear and hair on the head — so a
-# pick is judged in the place it will actually be seen.
+# A full kit-dressed skater (FigureKit) holding the picked stick in both hands:
+# the locker's display figure, standing on the case floor, and — `seated` — a
+# player on the lobby's bench. Every piece the locker edits is worn HERE —
+# skates on the feet, gloves gripping the shaft, face gear and hair on the head
+# — so a pick is judged in the place it will actually be seen.
 #
 # Built from the individual part meshes rather than the skinned rig. That costs
 # nothing in fidelity: `shared_torso()` and the skinned mesh's torso surface are
 # the same cached `_shared("torso", ...)` geometry, so the silhouette is
 # identical while the pose stays plain node transforms — no Skeleton3D, no bone
-# poses, no gait. The lobby's bench dummies are assembled the same way.
+# poses, no gait.
 #
 # Frame: the rest positions below are Scenes/Skater.tscn's, in MeshRoot-local
 # coordinates, so the figure is laid out in the rig's own numbers and faces −Z
 # like the rig does. `_rig` is then seated so the blade contact lands on THIS
-# node's origin — y = 0 is the ice, whatever the build's height.
+# node's origin — y = 0 is the ice, whatever the build's height. Seated, the
+# underside of the thighs lands there instead: y = 0 is the bench.
 #
 # Body dials scale the rig about that ice plane, mirroring
 # SkaterAppearanceCoordinator's rule: every Y offset rides the height
@@ -97,6 +98,9 @@ const _HEEL_OUT_M: float = 0.14
 const _HEEL_FWD_M: float = -0.67
 # The heel rides this far above the sole (the stick workbench's disc seat).
 const _HEEL_LIFT_M: float = 0.042
+# Seated, the blade rests on the bench floor this far ahead of the knees, the
+# shaft standing up between them.
+const _SEATED_HEEL_FWD_M: float = -0.22
 # Where the grips WANT to sit — the top hand just under the knob, the bottom
 # hand high on the shaft. Both are only hints: the arm pass slides each one
 # along the shaft until its own shoulder can actually reach it. They sit high
@@ -108,8 +112,6 @@ const _BOTTOM_HAND_FRAC: float = 0.70
 const _GRIP_MIN_S_M: float = 0.25
 const _GRIP_END_MARGIN_M: float = 0.06
 const _HOSEL_LEN_M: float = 0.085
-const _SHAFT_CROSS := Vector2(0.04, 0.05)
-const _KNOB_HEIGHT_M: float = 0.05
 
 # ── Camera framings, indexed by Focus ────────────────────────────────────────
 # The yaw the figure turns to present the piece (mirrored by shooting side, so
@@ -136,12 +138,6 @@ const _FOCUS_EXTENT: Array[Vector2] = [
 	Vector2(0.19, 0.19),   # HELMET
 ]
 
-# Surface finishes, matching the rink's (SkaterUniformCoordinator).
-const _CLOTH_ROUGH: float = 0.9
-const _LEATHER_ROUGH: float = 0.42
-const _HELMET_ROUGH: float = 0.28
-const _STEEL_ROUGH: float = 0.25
-
 var _rig: Node3D = null
 var _torso: MeshInstance3D = null
 var _helmet: MeshInstance3D = null
@@ -166,10 +162,15 @@ var _cuffs: Array[MeshInstance3D] = []
 
 var _stick_root: Node3D = null
 var _shaft: MeshInstance3D = null
-var _shaft_mat: ShaderMaterial = null
 var _blade: MeshInstance3D = null
 var _tape_mesh: MeshInstance3D = null
 var _knob: MeshInstance3D = null
+
+# The parts above are the kit's, aliased for the pose; the kit builds and dresses
+# them.
+var _kit := FigureKit.new()
+var _player_name: String = ""
+var _jersey_number: int = 0
 
 # Focus anchors, in THIS node's space — recomputed by every apply() because the
 # pieces move with the build's height and the picked stick length.
@@ -186,6 +187,9 @@ var _shaft_len: float = 1.0
 # lefty. The top hand is always on the other side — see Skater._position_hand_markers.
 var _blade_side: float = 1.0
 
+# Set before the first apply(): sit on a bench rather than stand on the ice.
+var seated: bool = false
+
 
 func _ready() -> void:
 	_build()
@@ -196,86 +200,30 @@ func _ready() -> void:
 func _build() -> void:
 	_rig = Node3D.new()
 	add_child(_rig)
-
-	_torso = _part(SkaterMeshBuilder.shared_torso())
-	# The seat under the jersey hem. Static on the rig (the trunk texture folds
-	# the chest above it), and on a mannequin that never folds it is simply the
-	# body between hem and thighs.
-	_pelvis = _part(SkaterMeshBuilder.shared_pelvis())
-	# Helmet assembly carries the shell and the head/neck skin as two surfaces,
-	# so the head rides the helmet's scale exactly as it rides its bone.
-	_helmet = _part(SkaterMeshBuilder.shared_helmet_assembly())
-	# The face piece and the hair ride the HELMET, so they are children at
-	# identity rather than siblings sharing its transform — that is what riding
-	# the bone means.
-	_face = MeshInstance3D.new()
-	_helmet.add_child(_face)
-	_scalp = MeshInstance3D.new()
-	_helmet.add_child(_scalp)
-	_facial_hair = MeshInstance3D.new()
-	_helmet.add_child(_facial_hair)
-	_brows = MeshInstance3D.new()
-	_brows.mesh = SkaterHairMesh.shared_brows()
-	_helmet.add_child(_brows)
-
-	for i: int in 2:
-		_shoulders.append(_part(SkaterMeshBuilder.shared_shoulder_cap()))
-		# The thigh carries the hip joint's own dome; the knee ball closes the
-		# other end, where the thigh would otherwise stop short of the sock.
-		_thighs.append(_part(SkaterMeshBuilder.shared_thigh()))
-		_knees.append(_part(SkaterMeshBuilder.shared_knee_ball()))
-		_socks.append(_part(SkaterMeshBuilder.shared_sock()))
-		# Collar assembly = the ankle cuff plus its accent stripe; boot assembly
-		# = quarter, toe cap, holder, steel runner and laces. Between them they
-		# carry every zone a skate model paints, in one node each.
-		_collars.append(_part(SkaterMeshBuilder.shared_skate_assembly()))
-		_boots.append(_part(SkaterMeshBuilder.shared_boot_assembly()))
-		_upper_arms.append(_part(SkaterMeshBuilder.shared_arm_bone()))
-		_forearms.append(_part(SkaterMeshBuilder.shared_forearm_bone()))
-		_elbows.append(_part(SkaterMeshBuilder.shared_elbow_pad()))
-		_hands.append(_part(SkaterMeshBuilder.shared_glove_fist()))
-		_cuffs.append(_part(SkaterMeshBuilder.shared_cuff()))
-
-	_build_stick()
-
-
-func _part(mesh: Mesh) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	_rig.add_child(mi)
-	return mi
-
-
-# The stick, assembled in its own frame exactly as the workbench built it:
-# heel at the origin with the shaft climbing along the lie axis, so placing the
-# whole sub-tree is one transform on `_stick_root`.
-func _build_stick() -> void:
-	_stick_root = Node3D.new()
-	_rig.add_child(_stick_root)
-
-	_shaft = MeshInstance3D.new()
-	var shaft_box := BoxMesh.new()
-	shaft_box.size = Vector3(_SHAFT_CROSS.x, _SHAFT_CROSS.y, 1.0)
-	_shaft.mesh = shaft_box
-	_shaft_mat = StickStyle.make_shaft_material()
-	_shaft.material_override = _shaft_mat
-	_stick_root.add_child(_shaft)
-
-	_blade = MeshInstance3D.new()
-	_blade.material_override = StickStyle.make_blade_material()
-	_stick_root.add_child(_blade)
-
-	_tape_mesh = MeshInstance3D.new()
-	_blade.add_child(_tape_mesh)
-
-	_knob = MeshInstance3D.new()
-	var knob_cyl := CylinderMesh.new()
-	knob_cyl.top_radius = 0.035
-	knob_cyl.bottom_radius = 0.03
-	knob_cyl.height = _KNOB_HEIGHT_M
-	knob_cyl.radial_segments = 12
-	_knob.mesh = knob_cyl
-	_stick_root.add_child(_knob)
+	_kit.build(_rig, self)
+	_torso = _kit.torso
+	_pelvis = _kit.pelvis
+	_helmet = _kit.helmet
+	_face = _kit.face
+	_scalp = _kit.scalp
+	_facial_hair = _kit.facial_hair
+	_brows = _kit.brows
+	_shoulders = _kit.shoulders
+	_thighs = _kit.thighs
+	_knees = _kit.knees
+	_socks = _kit.socks
+	_collars = _kit.collars
+	_boots = _kit.boots
+	_upper_arms = _kit.upper_arms
+	_forearms = _kit.forearms
+	_elbows = _kit.elbows
+	_hands = _kit.hands
+	_cuffs = _kit.cuffs
+	_stick_root = _kit.stick_root
+	_shaft = _kit.shaft
+	_blade = _kit.blade
+	_tape_mesh = _kit.tape_mesh
+	_knob = _kit.knob
 
 
 # ── Host API ─────────────────────────────────────────────────────────────────
@@ -289,9 +237,13 @@ func apply(attrs: PlayerAttributes, gear: GearStyleConfig, tape: StickTapeConfig
 		team_colors: Dictionary, skin_tone: int, is_left_handed: bool) -> void:
 	_blade_side = -1.0 if is_left_handed else 1.0
 	_pose(attrs, tape, is_left_handed)
-	_paint_body(team_colors, skin_tone)
-	_paint_gear(gear, team_colors)
-	_paint_stick(gear, tape, team_colors)
+	_kit.dress(team_colors, gear, tape, skin_tone, _player_name, _jersey_number)
+
+
+# The name and number the sweater is lettered with. Painted by the next apply().
+func set_jersey_info(player_name: String, jersey_number: int) -> void:
+	_player_name = player_name
+	_jersey_number = jersey_number
 
 
 # Where the camera looks for one framing, in this node's space.
@@ -349,7 +301,14 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# Deltoid caps ride girth laterally — the pad sits on the chest wall, so
 	# the torso's width pushes it out.
 	var shoulder_x: float = _SHOULDER_X * m_girth
-	var boot_y: float = _lift(_LEG_Y + _BOOT_DY, m_height)
+	# Seated, the thigh swings forward about the hip to lie flat, and the leg
+	# below the knee hangs from where the knee then is: every part below it
+	# moves by the knee's own move.
+	var hip_y: float = _lift(_LEG_Y, m_height)
+	var knee_y: float = _lift(_LEG_Y + _KNEE_DY, m_height)
+	var thigh_swing := Basis(Vector3.RIGHT, PI * 0.5) if seated else Basis.IDENTITY
+	var below_knee := Vector3(0.0, hip_y - knee_y, knee_y - hip_y) if seated else Vector3.ZERO
+	var boot_y: float = _lift(_LEG_Y + _BOOT_DY, m_height) + below_knee.y
 	for i: int in 2:
 		var side: float = -1.0 if i == 0 else 1.0
 		_shoulders[i].transform = Transform3D(
@@ -358,22 +317,28 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 
 		var leg_x: float = side * _LEG_X * m_girth
 		var leg_bulk := Basis.from_scale(Vector3(m_girth, m_height, m_girth))
-		_thighs[i].transform = Transform3D(leg_bulk,
-				Vector3(leg_x, _lift(_LEG_Y + _THIGH_DY, m_height), 0.0))
+		var hip := Vector3(leg_x, hip_y, 0.0)
+		_thighs[i].transform = Transform3D(thigh_swing * leg_bulk, hip + thigh_swing
+				* Vector3(0.0, _lift(_LEG_Y + _THIGH_DY, m_height) - hip_y, 0.0))
 		_knees[i].transform = Transform3D(leg_bulk,
-				Vector3(leg_x, _lift(_LEG_Y + _KNEE_DY, m_height), 0.0))
+				Vector3(leg_x, knee_y, 0.0) + below_knee)
 		_socks[i].transform = Transform3D(
 				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-				Vector3(leg_x, _lift(_LEG_Y + _SOCK_DY, m_height), 0.0))
+				Vector3(leg_x, _lift(_LEG_Y + _SOCK_DY, m_height), 0.0) + below_knee)
 		_collars[i].transform = Transform3D(
 				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-				Vector3(leg_x, _lift(_LEG_Y + _COLLAR_DY, m_height), 0.0))
+				Vector3(leg_x, _lift(_LEG_Y + _COLLAR_DY, m_height), 0.0) + below_knee)
 		# The boot itself never scales — a big frame gets a longer leg, not a
 		# longer foot — but its seat rides the lengthened shin like the rig's.
 		_boots[i].transform = Transform3D(_BOOT_ROT,
-				Vector3(leg_x, boot_y, _BOOT_DZ))
+				Vector3(leg_x, boot_y, _BOOT_DZ + below_knee.z))
 
-	_pose_stick(attrs, tape)
+	# The heel stands on whatever the skates do: the ice, or the bench floor
+	# in front of the knees.
+	var floor_y: float = boot_y - _BLADE_ICE_M if seated else _ICE_Y
+	var heel_fwd: float = below_knee.z + _SEATED_HEEL_FWD_M if seated else _HEEL_FWD_M
+	_pose_stick(attrs, tape, Vector3(_blade_side * _HEEL_OUT_M, floor_y + _HEEL_LIFT_M,
+			heel_fwd))
 	_pose_arms(is_left_handed, shoulder_x, shoulder_y, m_girth, m_height)
 
 	# Anchors so far are rig-local (the stick and arm passes wrote theirs the
@@ -396,7 +361,10 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# The boot is the one unscaled part, so its contact does not follow the
 	# height scaling on its own — deriving the seat here is what keeps every
 	# build standing ON the case floor rather than sunk into it or hovering.
+	# Seated, what rests on the origin is the underside of the thighs.
 	var contact_y: float = boot_y - _BLADE_ICE_M
+	if seated:
+		contact_y = (_thighs[0].transform * _thighs[0].get_aabb()).position.y
 	_rig.position.y = -contact_y
 	# Publish the anchors in THIS node's space, so a caller framing a piece does
 	# not have to know how the rig was seated.
@@ -406,7 +374,7 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 
 # The stick, then the grips derived from it. Placing the assembly first is what
 # lets the hands sit ON the shaft instead of near it.
-func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig) -> void:
+func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3) -> void:
 	var curve: int = attrs.curve
 	var p := StickBladeMeshBuilder.Params.new()
 	p.length = GameRules.DEFAULT_BLADE_LENGTH_M
@@ -444,12 +412,10 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig) -> void:
 	# onto the shaft line, taper toward the blade, capping the butt slightly proud.
 	_knob.transform = Transform3D(
 			Basis.looking_at(axis, Vector3.UP) * Basis(Vector3.RIGHT, PI * 0.5),
-			axis * (stick_len - _KNOB_HEIGHT_M * 0.5 + 0.01))
-	_shaft_mat.set_shader_parameter(&"shaft_len_m", stick_len)
+			axis * (stick_len - FigureKit.KNOB_HEIGHT_M * 0.5 + 0.01))
 
-	# Seat the assembly: heel on the ice out to the shooting side, yawed so the
+	# Seat the assembly: heel on the floor out to the shooting side, yawed so the
 	# shaft leans back across the body rather than straight out in front.
-	var heel := Vector3(_blade_side * _HEEL_OUT_M, _ICE_Y + _HEEL_LIFT_M, _HEEL_FWD_M)
 	var yaw: float = deg_to_rad(-_blade_side * _STICK_YAW_DEG)
 	_stick_root.transform = Transform3D(Basis(Vector3.UP, yaw), heel)
 
@@ -464,7 +430,7 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig) -> void:
 	var blade_len: float = GameRules.DEFAULT_BLADE_LENGTH_M
 	_anchors[Focus.BLADE] = heel \
 			+ _stick_root.basis * Vector3(0.0, 0.0, -blade_len * 0.5)
-	_anchors[Focus.GRIP] = heel + _shaft_up * (stick_len - _KNOB_HEIGHT_M)
+	_anchors[Focus.GRIP] = heel + _shaft_up * (stick_len - FigureKit.KNOB_HEIGHT_M)
 	_anchors[Focus.STICK] = (_anchors[Focus.BLADE] + _anchors[Focus.GRIP]) * 0.5
 	# What the whole-stick shot has to contain. Measuring it rather than fixing
 	# it is what keeps a LONG cut on a tall build from hanging out of frame:
@@ -590,150 +556,3 @@ static func _basis_along(y_axis: Vector3) -> Basis:
 			else Vector3.RIGHT
 	var x_axis: Vector3 = ref.cross(y_axis).normalized()
 	return Basis(x_axis, y_axis, x_axis.cross(y_axis))
-
-
-# ── Paint ────────────────────────────────────────────────────────────────────
-
-# The kit, not flat team colors: striped jersey with the collar on the torso's
-# top cap and the yoke over the shoulders, the shoulder pads' own color under
-# it, striped socks, solid pants. Stripe
-# textures come from the coordinator the rink paints with, so the bands land
-# where the in-game skater's do.
-func _paint_body(colors: Dictionary, skin_tone: int) -> void:
-	var uniform: Dictionary = colors.uniform
-	var jersey: Dictionary = uniform.jersey
-	var socks: Dictionary = uniform.socks
-
-	_paint_texture(_torso, 0, UniformPaint.h_stripes(jersey.base,
-			UniformPaint.jersey_stripes(jersey), UniformPaint.collar_color(jersey)), _CLOTH_ROUGH)
-	_paint(_pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
-	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
-	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SKIN,
-			SkinToneRegistry.color_for(skin_tone), _CLOTH_ROUGH)
-
-	var sock_tex: ImageTexture = null
-	if not socks.stripes.is_empty():
-		sock_tex = UniformPaint.h_stripes(
-				socks.base, socks.stripes)
-	var sleeve: Color = uniform.arms.upper.base
-	# One-color sleeves here, so an unnamed elbow is the sleeve too.
-	var elbow: Color = uniform.arms.elbow if uniform.arms.get("elbow") is Color else sleeve
-	var cap_tex: ImageTexture = UniformPaint.shoulder_cap(jersey, uniform.shoulders.color)
-	for i: int in 2:
-		_paint_texture(_shoulders[i], 0, cap_tex, _CLOTH_ROUGH)
-		# The knee takes the pants BASE solid — the rink paints it apart from
-		# the thigh, whose side stripe would ring a ball.
-		_paint(_thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
-		_paint(_knees[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
-		if sock_tex != null:
-			_paint_texture(_socks[i], 0, sock_tex, _CLOTH_ROUGH)
-		else:
-			_paint(_socks[i], 0, socks.base, _CLOTH_ROUGH)
-		_paint(_upper_arms[i], 0, sleeve, _CLOTH_ROUGH)
-		_paint(_forearms[i], 0, sleeve, _CLOTH_ROUGH)
-		_paint(_elbows[i], 0, elbow, _CLOTH_ROUGH)
-
-
-# The four gear picks, painted onto the pieces that wear them. A model paints
-# every zone of its piece at once, so what stands in the case is the design you
-# are buying on the kit you are buying it for.
-func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
-	var team: Color = colors.primary
-	var accent: Color = colors.secondary
-	var light: Color = colors.light
-	var quarter: Color = GearModelRegistry.skate_color(
-			gear.skate_model, GearModelRegistry.SKATE_QUARTER, team, accent, light)
-	var toe: Color = GearModelRegistry.skate_color(
-			gear.skate_model, GearModelRegistry.SKATE_TOE, team, accent, light)
-	var holder: Color = GearModelRegistry.skate_color(
-			gear.skate_model, GearModelRegistry.SKATE_HOLDER, team, accent, light)
-	var collar: Color = GearModelRegistry.skate_color(
-			gear.skate_model, GearModelRegistry.SKATE_COLLAR, team, accent, light)
-	var stripe: Color = GearModelRegistry.skate_color(
-			gear.skate_model, GearModelRegistry.SKATE_STRIPE, team, accent, light)
-	var lace: Color = TapeColorRegistry.resolve(gear.lace_color, team)
-
-	var glove_kit: Color = colors.gloves
-	var glove_accent: Color = colors.glove_accent
-	var body: Color = GearModelRegistry.glove_color(
-			gear.glove_model, GearModelRegistry.GLOVE_BODY, glove_kit, glove_accent, light)
-	var fingers: Color = GearModelRegistry.glove_color(
-			gear.glove_model, GearModelRegistry.GLOVE_FINGERS, glove_kit, glove_accent, light)
-	var cuff: Color = GearModelRegistry.glove_color(
-			gear.glove_model, GearModelRegistry.GLOVE_CUFF, glove_kit, glove_accent, light)
-
-	for i: int in 2:
-		_paint(_boots[i], SkaterMeshBuilder.BOOT_SURF_SHELL, quarter, _LEATHER_ROUGH)
-		_paint(_boots[i], SkaterMeshBuilder.BOOT_SURF_TOE, toe, _LEATHER_ROUGH)
-		_paint(_boots[i], SkaterMeshBuilder.BOOT_SURF_HOLDER, holder, _LEATHER_ROUGH)
-		# The steel runner is never a model zone — it is a few millimetres of
-		# silhouette under the holder's rail, not a design surface.
-		_paint(_boots[i], SkaterMeshBuilder.BOOT_SURF_RUNNER,
-				SkaterMeshBuilder.BLADE_STEEL_COLOR, _STEEL_ROUGH)
-		_paint(_boots[i], SkaterMeshBuilder.BOOT_SURF_LACES, lace, _CLOTH_ROUGH)
-		_paint(_collars[i], SkaterMeshBuilder.SKATE_SURF_COLLAR, collar, _LEATHER_ROUGH)
-		_paint(_collars[i], SkaterMeshBuilder.SKATE_SURF_STRIPE, stripe, _LEATHER_ROUGH)
-		_paint(_hands[i], SkaterMeshBuilder.FIST_PART_BACK, body, UniformPaint.ROUGH_GLOVE)
-		_paint(_hands[i], SkaterMeshBuilder.FIST_PART_FINGERS, fingers, UniformPaint.ROUGH_GLOVE)
-		_paint(_cuffs[i], 0, cuff, UniformPaint.ROUGH_GLOVE)
-
-	# Face gear is a fixed look with no kit zones — the rink's own mesh and
-	# material, and a null mesh for bare.
-	_face.mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
-	_face.material_override = SkaterMeshBuilder.make_face_gear_material(gear.helmet_face)
-	_scalp.mesh = SkaterHairMesh.shared_hair(gear.hair_style)
-	_scalp.material_override = SkaterHairMesh.make_material(gear.hair_color, false)
-	_facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
-	_facial_hair.material_override = SkaterHairMesh.make_material(gear.hair_color,
-			SkaterHairMesh.is_translucent(gear.facial_hair))
-	_brows.material_override = SkaterHairMesh.make_material(gear.hair_color, false)
-
-
-func _paint_stick(gear: GearStyleConfig, tape: StickTapeConfig,
-		colors: Dictionary) -> void:
-	var accent: Color = colors.primary
-	# Fresh materials from the same factories the rink uses, so the mannequin's
-	# stick IS the in-game stick. The shaft material comes back with default
-	# uniforms, so the pose's shaft length has to be re-sent after it.
-	_shaft_mat = StickStyle.make_shaft_material(gear.stick_model)
-	_shaft.material_override = _shaft_mat
-	_blade.material_override = StickStyle.make_blade_material(gear.stick_model)
-
-	var knob_color: Color = TapeColorRegistry.resolve(tape.knob_color, accent)
-	_shaft_mat.set_shader_parameter(&"grip_mode", tape.knob_style)
-	_shaft_mat.set_shader_parameter(&"grip_color", knob_color)
-	_shaft_mat.set_shader_parameter(&"shaft_len_m",
-			_shaft.transform.basis.get_scale().z)
-	_tape_mesh.material_override = _flat(
-			TapeColorRegistry.resolve(tape.blade_color, accent), _CLOTH_ROUGH)
-	_knob.material_override = _flat(knob_color, _CLOTH_ROUGH)
-
-
-# Per-instance paint for one surface. Goes through surface_override so the
-# shared default's finish (the steel, the laces, the body rim) is duplicated
-# rather than discarded — the merged assemblies must never take a
-# material_override, which would flatten every one of their surfaces into one.
-func _paint(mi: MeshInstance3D, surface: int, color: Color, roughness: float) -> void:
-	var mat: StandardMaterial3D = SkaterMeshBuilder.surface_override(mi, surface)
-	mat.albedo_color = color
-	mat.albedo_texture = null
-	mat.roughness = roughness
-	BodyRim.apply(mat)
-
-
-func _paint_texture(mi: MeshInstance3D, surface: int, tex: Texture2D,
-		roughness: float) -> void:
-	var mat: StandardMaterial3D = SkaterMeshBuilder.surface_override(mi, surface)
-	mat.albedo_color = Color.WHITE
-	mat.albedo_texture = tex
-	mat.roughness = roughness
-	BodyRim.apply(mat)
-
-
-# Plain material for the stick's non-body pieces (tape, knob) — no body rim:
-# they are equipment in the hand, not skin or cloth on the silhouette.
-static func _flat(color: Color, roughness: float) -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mat.roughness = roughness
-	return mat

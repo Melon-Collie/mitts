@@ -44,7 +44,7 @@ extends GutTest
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
-const LIMIT_S: float = 12.0
+const LIMIT_S: float = AIBreakoutEpisodeTracker.LIMIT_S
 const STEP_S: float = 0.1
 const WARMUP_S: float = 1.2
 const JITTERS: int = 5
@@ -238,7 +238,8 @@ func _run_trial(scenario: String, mirror: float, jitter: int,
 		# A dump launches near the blue line — an "exit" only counts after
 		# the puck has actually been established inside our zone.
 		if not entered_zone:
-			entered_zone = duel.puck_pos.z > GameRules.BLUE_LINE_Z + 2.0
+			entered_zone = duel.puck_pos.z > GameRules.BLUE_LINE_Z \
+					+ AIBreakoutEpisodeTracker.ESTABLISH_DEPTH_M
 		if entered_zone and duel.puck_pos.z < GameRules.BLUE_LINE_Z:
 			# Clean = our carrier skates it out, OR our controlled PASS is
 			# in flight across the line (a breakout feed is a controlled

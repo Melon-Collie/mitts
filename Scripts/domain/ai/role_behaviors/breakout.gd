@@ -39,10 +39,6 @@ const WALL_LANE_BAND_M: float = 3.0
 # freeze.
 const BLOCKED_LANE_FLOOR: float = 0.15
 
-# How far up-ice of the carrier WEAK may sit (roughly even). Same value as
-# AIRoleSupport.GOAL_SIDE_TOLERANCE_M.
-const GOAL_SIDE_TOLERANCE_M: float = 1.5
-
 
 # `is_strong` selects the strong-side-wall outlet (true) vs the
 # weak-side reverse valve (false).
@@ -80,7 +76,7 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
 		# No offside filter: no candidate here reaches the opp blue line.
-		if not is_strong and not _is_goal_side_of_carrier(
+		if not is_strong and not AIRoleSupport.is_goal_side_of_carrier(
 				c, carrier_pos, ctx.own_goal_dir):
 			continue
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
@@ -134,10 +130,3 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 static func _weak_search_center(carrier_pos: Vector3, side_x: float) -> Vector3:
 	var wall_x: float = side_x * (GameRules.RINK_HALF_WIDTH - WALL_INSET_M)
 	return Vector3(wall_x, 0.0, carrier_pos.z)
-
-
-# True when `c` is no further up-ice than the carrier, within
-# GOAL_SIDE_TOLERANCE_M.
-static func _is_goal_side_of_carrier(c: Vector3, carrier_pos: Vector3,
-		own_goal_dir: float) -> bool:
-	return own_goal_dir * c.z >= own_goal_dir * carrier_pos.z - GOAL_SIDE_TOLERANCE_M

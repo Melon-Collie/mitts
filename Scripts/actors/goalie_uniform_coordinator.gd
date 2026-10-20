@@ -25,7 +25,7 @@ const _JERSEY_SHADER: Shader = preload("res://Assets/Shaders/goalie_jersey.gdsha
 # shader's normalized height (0 = collar, 1 = bottom). 0.72 lands just above
 # the mesh's hip-crest station (body-local y −0.16) so the color split rides
 # the silhouette split.
-const _PANTS_START_NORM_Y: float = 0.72
+const PANTS_START_NORM_Y: float = 0.72
 
 # The shoulder floater (Goalie.FLOATER_SEMI_AXES on the shared joint ball),
 # measured by test_lettering_scale.gd like the skater's cap: its equator's
@@ -40,6 +40,8 @@ var _goalie: Goalie
 var _jersey_mat: ShaderMaterial
 var _text_viewport: SubViewport
 var _text_decal: GoalieTextDecal
+var _crest_viewport: SubViewport
+var _crest_decal: GoalieCrestDecal
 var _shoulder_viewport: SubViewport
 var _shoulder_decal: ShoulderDecal
 
@@ -110,7 +112,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	# kit's pants (the mesh's hip flare marks the same line in silhouette;
 	# see GoalieMeshBuilder._BODY_STATIONS).
 	_jersey_mat.set_shader_parameter("pants_color", uniform.pants.base)
-	_jersey_mat.set_shader_parameter("pants_start", _PANTS_START_NORM_Y)
+	_jersey_mat.set_shader_parameter("pants_start", PANTS_START_NORM_Y)
 
 	# Stick — the house design's goalie colorway (#586): all-white composite,
 	# shaft through blade, the real-world goalie norm. The white tape knob is
@@ -123,6 +125,9 @@ func apply_uniform(colors: Dictionary) -> void:
 	_goalie.stick_shaft_mesh.material_override = stick_mat
 	_goalie.stick_blade_mesh.material_override = stick_mat
 
+	var preset: Dictionary = colors.get("preset", {})
+	_crest_decal.update_crest(TeamCrest.fruit_for(preset), preset)
+	_crest_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_rebuild_text_decal()
 
 
@@ -156,12 +161,27 @@ func _create_jersey_material() -> void:
 	_text_viewport.add_child(_text_decal)
 
 	_jersey_mat.set_shader_parameter("text_decal", _text_viewport.get_texture())
+
+	_crest_viewport = SubViewport.new()
+	_crest_viewport.name = "GoalieCrestViewport"
+	_crest_viewport.size = Vector2i(GoalieTextDecal.IMG_W, GoalieTextDecal.IMG_H)
+	_crest_viewport.transparent_bg = true
+	_crest_viewport.disable_3d = true
+	_crest_viewport.handle_input_locally = false
+	_crest_viewport.gui_disable_input = true
+	_crest_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_goalie.add_child(_crest_viewport)
+
+	_crest_decal = GoalieCrestDecal.new()
+	_crest_decal.name = "GoalieCrestDecal"
+	_crest_viewport.add_child(_crest_decal)
+
+	_jersey_mat.set_shader_parameter("crest_decal", _crest_viewport.get_texture())
 	_goalie.body_mesh.material_override = _jersey_mat
 
 
-# Shared SubViewport + ShoulderDecal for both shoulder spheres. Sphere U=0 is
-# at +Z, so per-shoulder uv1_offset.x rotates the wrap a quarter turn each way
-# to face the number outward: glove side (-X) gets -0.25, blocker side (+X) +0.25.
+# Shared SubViewport + ShoulderDecal for both shoulder spheres, each turned to
+# face the number outward: the glove side is -X, the blocker side +X.
 func _create_shoulder_viewport() -> void:
 	_shoulder_decal = ShoulderDecal.new()
 	_shoulder_decal.name = "GoalieShoulderDecal"
@@ -179,18 +199,8 @@ func _create_shoulder_viewport() -> void:
 	_shoulder_viewport.add_child(_shoulder_decal)
 
 	var tex: ViewportTexture = _shoulder_viewport.get_texture()
-	var mat_glove := StandardMaterial3D.new()
-	mat_glove.albedo_texture = tex
-	mat_glove.roughness = UniformPaint.ROUGH_CLOTH
-	mat_glove.uv1_offset = Vector3(-0.25, 0.0, 0.0)
-	BodyRim.apply(mat_glove)
-	_goalie.glove_shoulder_sphere.material_override = mat_glove
-	var mat_blocker := StandardMaterial3D.new()
-	mat_blocker.albedo_texture = tex
-	mat_blocker.roughness = UniformPaint.ROUGH_CLOTH
-	mat_blocker.uv1_offset = Vector3(0.25, 0.0, 0.0)
-	BodyRim.apply(mat_blocker)
-	_goalie.blocker_shoulder_sphere.material_override = mat_blocker
+	_goalie.glove_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, -1.0)
+	_goalie.blocker_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, 1.0)
 
 
 func _rebuild_shoulder_texture() -> void:

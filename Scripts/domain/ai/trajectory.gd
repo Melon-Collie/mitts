@@ -276,9 +276,9 @@ static func step_puck(pos: Vector3, vel: Vector3, dt: float) -> Transform3D:
 # (AICarrierPassSearch.PASS_LEAD_MAX_S), so the two halves of a pass agree on how much
 # of the receiver's motion is real.
 #
-# Results land in statics (single-threaded AI tick, same convention as
-# AIGoalieModel.resolve_feed_keeper): one solve serves the stance, the timing
-# gate and the blade aim, with no per-call allocation on a per-tick path.
+# Results land in statics (single-threaded AI tick): one solve serves the
+# stance, the timing gate and the blade aim, with no per-call allocation on a
+# per-tick path.
 static var gate_point: Vector3 = Vector3.INF   # where the puck meets the reach
 static var gate_velocity: Vector3 = Vector3.ZERO   # its travel there (post-carom)
 static var gate_time_s: float = 0.0            # when it gets there

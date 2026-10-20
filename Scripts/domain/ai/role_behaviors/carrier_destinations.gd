@@ -43,7 +43,7 @@ const WALKOUT_FRONT_M: float = 0.7
 # The wheel (5v5 — breakout plan §B): from behind our own goal line, around the
 # BACK of the cage and out the far half-wall, the escape when the retriever has a
 # step on the chaser. Exit depth = the top of the low battle ice
-# (AIZoneCoverage.LOW_ZONE_DEPTH_M's value).
+# (AIZoneCoverage.LOW_ZONE_DEPTH_M's value, held by test_bot_mirrors.gd).
 const WHEEL_EXIT_UP_ICE_M: float = 8.0
 # A destination this close is where the carrier already is: standing still is
 # that plan, and it is always in the compete. The slot is exempt: the drive at

@@ -175,10 +175,10 @@ static func tip_ev(
 			opponent_caps)
 
 
-# ── The SEAM's composed counterpart ──────────────────────────────────────────
-# score_shoot's structure with AIShotValue supplying the shot's odds against
-# today's goalie instead of the hole geometry. Same guards and defender terms:
-# the lane and the release contest are facts about DEFENDERS, not the goalie.
+# ── The shot, priced on the field ────────────────────────────────────────────
+# AIShotValue supplies the shot's odds against today's goalie; the lane and the
+# release contest are facts about DEFENDERS, not the goalie, so they are priced
+# here.
 #
 # The keeper is at `keeper_pos` moving across at `keeper_vel_x` in `stance`, an
 # AIShotOdds.Stance, facing `keeper_yaw` (AIShotValue.now); `keeper_pos` INF
@@ -528,7 +528,7 @@ static func counter_rush_cost_at(
 					/ maxf(self_max_speed, 0.001) + setup_margin <= t_counter:
 		_scratch_counter_cover.append(cover_anchor)
 
-	# score_shoot directly, not a possession read: the counter point IS a shot
+	# score_shoot_value directly, not a possession read: the counter point IS a shot
 	# location (the slot), and the covered-vs-open signal this term exists to
 	# read is the covering set's block on that shot.
 	#

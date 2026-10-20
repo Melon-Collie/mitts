@@ -426,8 +426,8 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		# rewind (`LagCompRewind.forward_predict_skater`) use.
 		#
 		# Never freeze at the newest sample here (except past
-		# _SAMPLE_PREDICT_MAX_S): the live step collides against a ~host-present
-		# body, so a frozen replay re-resolves the same contact against one
+		# _SAMPLE_PREDICT_MAX_S): the live step collides against a body rendered
+		# at host-present + input lead, so a frozen replay re-resolves the same contact against one
 		# `one_way + broadcast_interval/2` older and can flip overlap, the aggressor
 		# gate, and the contact normal against both the screen AND the host.
 		var newest: SkaterNetworkState = bracket.to_state

@@ -112,6 +112,34 @@ func test_the_bots_seal_the_post_where_the_goalie_does() -> void:
 			_export_default("rvh_early_angle"), 1e-4, "the seal angle must be the goalie's own")
 
 
+# The planner predicts the keeper's depth through the live GoalieDepthSolver and
+# rush backflow, so only the constants it feeds them can drift.
+func test_the_bots_predict_depth_from_the_goalies_own_chart() -> void:
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
+	assert_almost_eq(AIGoalieModel.GOALIE_RESTING_DEPTH_M, _export_default("depth_conservative"),
+			1e-6, "resting depth before the play enters the zone")
+	assert_almost_eq(AIGoalieModel.GOALIE_CHALLENGE_STANDOFF_M,
+			_export_default("challenge_standoff"), 1e-6, "the gap he keeps while challenging")
+	assert_almost_eq(AIGoalieModel.GOALIE_DEPTH_MAX_SPEED_M_S, _export_default("depth_max_speed"),
+			1e-6, "his skating speed in and out of the crease")
+	assert_almost_eq(AIGoalieModel._depth_cfg_planning.floor_radius,
+			_export_default("depth_defensive"), 1e-6, "the deepest he plays")
+
+
+func test_the_bots_back_him_in_on_the_goalies_own_rush_read() -> void:
+	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
+	var rush: GoalieBehaviorRules.RushRetreatConfig = AIGoalieModel._rush_cfg_planning
+	assert_almost_eq(AIGoalieModel.GOALIE_RUSH_MIN_CLOSING_M_S,
+			_export_default("rush_min_closing_speed"), 1e-6,
+			"a carrier slower than this does not back him in")
+	assert_almost_eq(rush.engage_distance, _export_default("rush_engage_distance"), 1e-6)
+	assert_almost_eq(rush.mid_distance, _export_default("rush_mid_distance"), 1e-6)
+	assert_almost_eq(rush.arrive_distance, _export_default("rush_arrive_distance"), 1e-6)
+	assert_almost_eq(rush.depth_arrive, _export_default("rush_arrive_depth"), 1e-6)
+	assert_almost_eq(rush.depth_engage, _export_default("depth_aggressive"), 1e-6)
+	assert_almost_eq(rush.depth_mid, _export_default("depth_base"), 1e-6)
+
+
 func test_the_export_parser_still_reads_the_controller() -> void:
 	assert_gt(_export_default("reaction_delay"), 0.0, "parsed a real reaction delay")
 	assert_gt(_export_default("glove_react_max_speed"), 0.0, "parsed a real glove speed")

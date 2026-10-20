@@ -92,7 +92,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
-		if not _is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
+		if not is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
 			continue
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
 		var pass_value: float = AIActionScoring.score_pass_value(
@@ -126,7 +126,7 @@ static func _hold_or_restore_numbers(ctx: RoleContext, d: RoleDecision,
 
 # True when `c` is no further toward the opp net than the carrier, within
 # GOAL_SIDE_TOLERANCE_M (own_goal_dir * z grows toward our net).
-static func _is_goal_side_of_carrier(c: Vector3, carrier_pos: Vector3,
+static func is_goal_side_of_carrier(c: Vector3, carrier_pos: Vector3,
 		own_goal_dir: float) -> bool:
 	return own_goal_dir * c.z >= own_goal_dir * carrier_pos.z - GOAL_SIDE_TOLERANCE_M
 

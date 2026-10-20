@@ -42,13 +42,13 @@ const TEAM_COUNT: int = 2
 enum Outcome { CLEAN_EXIT, CLEAR_EXIT, COUGH_UP, TIMEOUT, STOPPAGE }
 const OUTCOME_COUNT: int = 5
 
-# Depth past the blue line before an episode arms. Must match the harness's
-# `BLUE_LINE_Z + 2.0` establishment test; with the exit measured at the line
+# Depth past the blue line before an episode arms, and the breakout harness's
+# establishment test (it reads this); with the exit measured at the line
 # itself this is also the hysteresis band that stops a puck sitting on the line
 # from opening and closing episodes every tick.
 const ESTABLISH_DEPTH_M: float = 2.0
 
-# Bottled-in ceiling. Must match the harness's LIMIT_S so the TIMEOUT buckets
+# Bottled-in ceiling, shared with the breakout harness so the TIMEOUT buckets
 # mean the same thing.
 const LIMIT_S: float = 12.0
 

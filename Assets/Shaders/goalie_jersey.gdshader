@@ -4,7 +4,8 @@ shader_type spatial;
 // painted: the jersey base, the yoke over the top of the shoulders and down
 // every side to the skater's shoulder-line depth, the collar ringing the neck
 // on the top face, the jersey stripes over the jersey (collar to the pants
-// line), the pants band below, and the name and number decal on the back.
+// line), the pants band below, the name and number decal on the back, and the
+// team's crest decal on the front.
 // Heights use object-space VERTEX.y, so bands run level on every face.
 //
 // Stripe pos/width follow the v2 jersey schema: 0 = collar, 1 = the jersey's
@@ -31,6 +32,8 @@ uniform float stripe_positions[MAX_STRIPES];
 uniform float stripe_widths[MAX_STRIPES];
 // Transparent-background viewport with name + number drawn centred.
 uniform sampler2D text_decal : hint_default_transparent, filter_linear_mipmap;
+// Transparent-background viewport with the chest crest, in text_decal's frame.
+uniform sampler2D crest_decal : hint_default_transparent, filter_linear_mipmap;
 // The body solid is torso THROUGH hips: below pants_start (normalised
 // height, 0 = top) the band paints as the kit's pants instead of jersey.
 uniform vec4 pants_color : source_color = vec4(0.1, 0.1, 0.1, 1.0);
@@ -79,6 +82,13 @@ void fragment() {
 		float face_u = (v_obj.x + HALF_W) / (HALF_W * 2.0);
 		vec4 decal = texture(text_decal, vec2(face_u, norm_y));
 		col = mix(col, decal.rgb, decal.a);
+	}
+	// The crest on the front (-Z) face. A viewer in front (on -Z, looking +Z)
+	// sees object +X on their LEFT, so here U must DECREASE with x.
+	if (v_obj_normal.z < -0.9) {
+		float face_u = (HALF_W - v_obj.x) / (HALF_W * 2.0);
+		vec4 crest = texture(crest_decal, vec2(face_u, norm_y));
+		col = mix(col, crest.rgb, crest.a);
 	}
 
 	ALBEDO = col;

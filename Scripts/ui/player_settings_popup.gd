@@ -251,7 +251,8 @@ func _open_locker() -> void:
 	# for.
 	_locker_popup.set_focus_scope(self, _locker_edit_btn)
 	_locker_popup.open(_pending_attributes(), _pending_tape, _pending_gear,
-			_build_locked, _pending_team_colors(), _pending_skin, _pending_is_left)
+			_build_locked, _pending_team_colors(), _pending_skin, _pending_is_left,
+			_pending_name, _pending_number)
 
 
 func _on_locker_edited(profile: int, curve: int, flex: int, length: int,
