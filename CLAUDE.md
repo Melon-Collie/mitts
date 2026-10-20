@@ -134,6 +134,12 @@ stripe textures, so it is the check for a kit edit. It loads through
 `TeamColorRegistry`, so a `user://team_colors.json` shadows the bundled file
 here as it does in the game, and the run says which one won.
 
+**To compare the jersey hem sims, race them.** `.claude/hooks/render-hem.sh`
+skates every `HemSimMode` through one scripted run in the engine's own loop (a
+fixed 60 fps, so a soft body's physics steps) and writes a sheet per view to
+`user://hem_compare/`, plus a table of how far each tail clipped into the thighs
+and pants (`tools/hem_compare_runner.gd`).
+
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the pad still sit on the arm,
 does the mirrored side land where the near side does — measure it in a test

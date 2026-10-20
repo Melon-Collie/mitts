@@ -70,6 +70,20 @@ var _v: Vector2 = Vector2.ZERO
 const _REST_EPS: float = 1e-8
 
 
+# How the torso surface carries the tail below the belt, by HemSimMode: swung
+# whole on the hem bones, ridden by per-column bones, or cut away for a soft
+# body to stand in for (collapsed onto the belt ring, so its faces have no area).
+const TAIL_SWUNG: int = 0
+const TAIL_COLUMNS: int = 1
+const TAIL_CUT: int = 2
+
+
+static func tail_kind(hem_sim: int) -> int:
+	if HemSimMode.uses_columns(hem_sim):
+		return TAIL_COLUMNS
+	return TAIL_CUT if hem_sim == HemSimMode.SOFT_BODY else TAIL_SWUNG
+
+
 # How much of a torso vertex at rest height `y` hangs below the chest.
 static func hang(y: float) -> float:
 	return _smooth((PIVOT_Y_M - y) / (PIVOT_Y_M - BELT_Y_M))
@@ -137,9 +151,18 @@ static func tuck_ring(ring: PackedVector3Array, y: float, radius: float, z_off: 
 # tucked), but for the tucked share, held still on TAIL.
 # Azimuths come off the UVs, which no tuck moves: a side vertex's U is its
 # angle, a bottom-cap vertex's offset from the cap's UV centre is.
+#
+# A `tail` other than TAIL_SWUNG re-carries everything from the belt ring down:
+# TAIL_COLUMNS puts each vertex rigidly on its facet column's bone — the upper
+# segment above `bend_y`, the lower from it down (`column_bind_base` + 2·column
+# + segment) — and TAIL_CUT collapses it onto `belt_ring`'s point for its column.
+# Of the `sides` columns, the bottom cap's centre belongs to none and keeps its
+# weights.
 static func append_torso(target: ArrayMesh, rest: ArrayMesh, posed: ArrayMesh, tuck: int,
 		phase: float, torso_bind: int, hem_bind: int, tail_bind: int,
-		tail_hem_bind: int) -> void:
+		tail_hem_bind: int, tail: int = TAIL_SWUNG, sides: int = 10,
+		column_bind_base: int = 0, belt_ring: PackedVector3Array = PackedVector3Array(),
+		bend_y: float = 0.0) -> void:
 	var rest_arrays: Array = rest.surface_get_arrays(0)
 	var verts: PackedVector3Array = rest_arrays[Mesh.ARRAY_VERTEX]
 	var uvs: PackedVector2Array = rest_arrays[Mesh.ARRAY_TEX_UV]
@@ -173,9 +196,40 @@ static func append_torso(target: ArrayMesh, rest: ArrayMesh, posed: ArrayMesh, t
 		weights[i * 4 + 2] = hips * t
 		weights[i * 4 + 3] = hips * (1.0 - t)
 	var arrays: Array = posed.surface_get_arrays(0)
+	if tail != TAIL_SWUNG:
+		var posed_verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var belt_centre := Vector3.ZERO
+		for k: int in sides:
+			belt_centre += belt_ring[k] / float(sides) if tail == TAIL_CUT else Vector3.ZERO
+		for i: int in verts.size():
+			if verts[i].y > BELT_Y_M + 1e-5:
+				continue
+			var column: int = _column(uvs[i], sides)
+			if tail == TAIL_CUT:
+				posed_verts[i] = belt_centre if column < 0 else belt_ring[column]
+				continue
+			if column < 0:
+				continue
+			var lower: int = 1 if verts[i].y <= bend_y + 1e-5 else 0
+			for j: int in 4:
+				bones[i * 4 + j] = column_bind_base + column * 2 + lower if j == 0 else 0
+				weights[i * 4 + j] = 1.0 if j == 0 else 0.0
+		arrays[Mesh.ARRAY_VERTEX] = posed_verts
 	arrays[Mesh.ARRAY_BONES] = bones
 	arrays[Mesh.ARRAY_WEIGHTS] = weights
 	target.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+
+# The facet column a torso vertex sits on, off its UV (the side's U, or a bottom
+# cap vertex's angle about the cap's UV centre); -1 for the top cap and the
+# bottom cap's centre.
+static func _column(uv: Vector2, sides: int) -> int:
+	if uv.y <= UniformPaint.CYLINDER_SIDE_V_FRACTION + 1e-4:
+		return posmod(roundi(uv.x * sides), sides)
+	var off: Vector2 = uv - _BOTTOM_CAP_UV
+	if uv.x < 0.5 or off.length() < 1e-4:
+		return -1
+	return posmod(roundi(atan2(off.x, off.y) / TAU * sides), sides)
 
 
 # The lathe's bottom-cap UV centre (SkaterMeshBuilder._build_lathe).

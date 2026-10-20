@@ -85,6 +85,10 @@ var _retextured: bool = false
 # The jersey hem's lag, and whether the bone is drawn anywhere but at rest.
 var _hem := SkaterJerseyHem.new()
 var _hem_shown: bool = false
+# The tail's drape below the belt under a draping hem sim (HemSimMode); null
+# under SWAY, where the hem bones swing it whole.
+var _hem_sim: SkaterHemSim = null
+var _hem_tuck: int = -1
 
 
 func setup(skater: Skater) -> void:
@@ -160,6 +164,16 @@ func build(skeleton: Skeleton3D) -> void:
 	var cuff_radius: float = _skater.arm_mesh_thickness * 0.6
 	set_cuff_radius(SkaterMeshBuilder.UpperBone.TOP_CUFF, cuff_radius)
 	set_cuff_radius(SkaterMeshBuilder.UpperBone.BOTTOM_CUFF, cuff_radius)
+
+	match _skater.hem_sim_mode:
+		HemSimMode.FLAPS:
+			_hem_sim = SkaterHemFlaps.new()
+		HemSimMode.SPRINGS:
+			_hem_sim = SkaterHemSprings.new()
+		HemSimMode.SOFT_BODY:
+			var cloth := SkaterHemSoftBody.new()
+			cloth.set_paint_source(_mesh)
+			_hem_sim = cloth
 
 	# The gear style may have landed before the rig (spawn order is
 	# registry-driven); now that the mesh and the helmet bone exist, dress them.
@@ -489,6 +503,9 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 # mid-swing is mid-swing; the bones are written only when drawn, and once more on
 # settling so the hem comes back to rest.
 func update_hem(delta: float, on_camera: bool) -> void:
+	if _hem_sim != null:
+		_hem_sim.update(delta, on_camera)
+		return
 	var tilt: Vector2 = _skater.balance_tilt()
 	var local: Vector3 = _skater.upper_body.global_basis.orthonormalized().inverse() \
 			* Vector3(tilt.x, 0.0, tilt.y)
@@ -502,6 +519,7 @@ func update_hem(delta: float, on_camera: bool) -> void:
 
 func hem_swing() -> Vector2:
 	return _hem.swing()
+
 
 
 # The head's lerp toward its aim never lands exactly, so it would re-pose the
@@ -575,7 +593,15 @@ func apply_gear_meshes() -> void:
 			_head_pieces.append(piece)
 	var gear: GearStyleConfig = _skater.gear_style
 	# Every tuck's mesh has the same surfaces, so the paint's overrides carry over.
-	_mesh.mesh = SkaterMeshBuilder.shared_upper_skin_mesh(gear.jersey_tuck)
+	var hem_sim: int = _skater.hem_sim_mode
+	_mesh.mesh = SkaterMeshBuilder.shared_upper_skin_mesh(gear.jersey_tuck, hem_sim)
+	_mesh.skin = SkaterMeshBuilder.shared_hem_skin(hem_sim, gear.jersey_tuck)
+	if _hem_sim != null and gear.jersey_tuck != _hem_tuck:
+		if _hem_tuck < 0:
+			_hem_sim.setup(_skater, _skeleton, gear.jersey_tuck)
+		else:
+			_hem_sim.set_tuck(gear.jersey_tuck)
+	_hem_tuck = gear.jersey_tuck
 	_head_pieces[HeadPiece.FACE_GEAR].mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	_head_pieces[HeadPiece.SCALP].mesh = SkaterHairMesh.shared_hair(gear.hair_style)
 	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)

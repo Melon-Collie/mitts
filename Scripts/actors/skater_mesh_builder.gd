@@ -113,6 +113,7 @@ const _TORSO_X_SCALE: float = 1.05
 const _TORSO_Z_SCALE: float = 0.88
 
 const _TORSO_SIDES: int = 10
+const TORSO_SIDES: int = _TORSO_SIDES
 # Half a facet: the torso's rings turn so a flat face, not an edge, is under the
 # name and number. U still starts at vertex 0; the material's offset adds it.
 const TORSO_U_PHASE: float = 0.5 / _TORSO_SIDES
@@ -680,6 +681,10 @@ const UPPER_BONE_COUNT: int = 15
 const UPPER_HEM_BIND: int = UPPER_BONE_COUNT
 const UPPER_TAIL_BIND: int = UPPER_BONE_COUNT + 1
 const UPPER_TAIL_HEM_BIND: int = UPPER_BONE_COUNT + 2
+# Under a column hem sim (HemSimMode.uses_columns), the tail's own binds: two
+# per torso facet column — the segment from the belt to the bend, then the one
+# from the bend to the hem.
+const UPPER_COLUMN_BIND_BASE: int = UPPER_BONE_COUNT + 3
 
 # Surfaces. One per bone for the first thirteen; the helmet is the exception,
 # carrying the shell and the head/neck skin as two surfaces of one bone (they
@@ -722,11 +727,17 @@ const UPPER_BONE_NODE: Array[String] = [
 
 
 # One per GearModelRegistry TUCK_* option, alike but for the torso surface's
-# drape, so a skater's tuck is which shared mesh it wears.
-static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+# drape, so a skater's tuck is which shared mesh it wears — and per the way its
+# hem sim moves the tail below the belt (HemSimMode): swung whole, by column
+# bones, or cut away for a soft body to stand in for.
+static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE,
+		hem_sim: int = HemSimMode.SWAY) -> ArrayMesh:
 	if not GearModelRegistry.is_valid_tuck(tuck):
 		tuck = GearModelRegistry.TUCK_NONE
-	return _shared("upper_skin_%d" % tuck, func() -> ArrayMesh:
+	var tail: int = SkaterJerseyHem.tail_kind(hem_sim)
+	var key: String = "upper_skin_%d" % tuck if tail == SkaterJerseyHem.TAIL_SWUNG \
+			else "upper_skin_%d_%d" % [tuck, tail]
+	return _shared(key, func() -> ArrayMesh:
 		var m := ArrayMesh.new()
 		var bone: ArrayMesh = shared_arm_bone_z()
 		var forearm: ArrayMesh = _forearm_bone_z()
@@ -749,7 +760,9 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 		_append_skinned_surface(m, cuff, UpperBone.BOTTOM_CUFF)
 		SkaterJerseyHem.append_torso(m, shared_torso(), shared_torso(tuck), tuck,
 				TAU * TORSO_U_PHASE, UpperBone.TORSO, UPPER_HEM_BIND, UPPER_TAIL_BIND,
-				UPPER_TAIL_HEM_BIND)
+				UPPER_TAIL_HEM_BIND, tail, _TORSO_SIDES, UPPER_COLUMN_BIND_BASE,
+				torso_ring(TORSO_BELT_STATION, tuck),
+				_TORSO_PROFILE[TORSO_BEND_STATION].x)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SHELL)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SKIN)
 		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_L)
@@ -765,16 +778,89 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 # skater: Godot builds a per-instance SkinReference from one Skin resource.
 static func shared_upper_skin() -> Skin:
 	if _upper_skin == null:
-		_upper_skin = Skin.new()
-		for i: int in UPPER_BONE_COUNT:
-			_upper_skin.add_bind(i, Transform3D.IDENTITY)
-		_upper_skin.add_bind(SkaterBodySkeleton.HEM_BONE, Transform3D.IDENTITY)
-		_upper_skin.add_bind(SkaterBodySkeleton.TAIL_BONE, Transform3D.IDENTITY)
-		_upper_skin.add_bind(SkaterBodySkeleton.TAIL_HEM_BONE, Transform3D.IDENTITY)
+		_upper_skin = _body_skin()
 	return _upper_skin
 
 
+static func _body_skin() -> Skin:
+	var skin := Skin.new()
+	for i: int in UPPER_BONE_COUNT:
+		skin.add_bind(i, Transform3D.IDENTITY)
+	skin.add_bind(SkaterBodySkeleton.HEM_BONE, Transform3D.IDENTITY)
+	skin.add_bind(SkaterBodySkeleton.TAIL_BONE, Transform3D.IDENTITY)
+	skin.add_bind(SkaterBodySkeleton.TAIL_HEM_BONE, Transform3D.IDENTITY)
+	return skin
+
+
 static var _upper_skin: Skin = null
+
+
+# The upper skin under a hem sim: the body's binds, then a column sim's two per
+# column. A flap segment is a root bone posed in skeleton space, so it binds at
+# identity; a spring chain's joints have real rests (SkaterHemSprings) — the
+# tucked ring's points, hung from TAIL — so each binds at its rest's inverse.
+static func shared_hem_skin(hem_sim: int, tuck: int) -> Skin:
+	if not HemSimMode.uses_columns(hem_sim):
+		return shared_upper_skin()
+	var key: String = "%d_%d" % [hem_sim, tuck]
+	if _hem_skins.has(key):
+		return _hem_skins[key]
+	var skin: Skin = _body_skin()
+	var belt: PackedVector3Array = torso_ring(TORSO_BELT_STATION, tuck)
+	var bend: PackedVector3Array = torso_ring(TORSO_BEND_STATION, tuck)
+	for column: int in _TORSO_SIDES:
+		for joint: int in 2:
+			var bind := Transform3D.IDENTITY
+			if hem_sim == HemSimMode.SPRINGS:
+				bind = Transform3D(Basis.IDENTITY, -(belt[column] if joint == 0 else bend[column]))
+			skin.add_bind(SkaterBodySkeleton.column_bone(hem_sim, column, joint), bind)
+	_hem_skins[key] = skin
+	return skin
+
+
+static var _hem_skins: Dictionary = {}
+
+
+# ── The jersey tail's sim seams ──────────────────────────────────────────────
+# Stations of _TORSO_PROFILE a hem sim hangs the tail by: the belt it hangs
+# from, the bend between its two segments, and the hem.
+const TORSO_BELT_STATION: int = 7
+const TORSO_BEND_STATION: int = 9
+const TORSO_HEM_STATION: int = 10
+
+
+# One torso ring as the lathe builds it (sides + 1 points, the last repeating
+# the first), torso-local, draped as `tuck` drapes it.
+static func torso_ring(station: int, tuck: int) -> PackedVector3Array:
+	var s: Vector2 = _TORSO_PROFILE[station]
+	var phase: float = TAU * TORSO_U_PHASE
+	var z_off: float = _TORSO_REAR_SWAY[station]
+	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE, _TORSO_Z_SCALE,
+			_TORSO_SIDES, phase)
+	for k: int in ring.size():
+		ring[k].z += z_off
+	return SkaterJerseyHem.tuck_ring(ring, s.x, s.y, z_off, tuck, phase,
+			_TORSO_X_SCALE, _TORSO_Z_SCALE)
+
+
+# The pants at waist-space height `y`: (radius, rear sway), radius < 0 outside
+# their span. Their lathe is wider than deep by PELVIS_XZ_SCALE.
+static func pelvis_ring(y: float) -> Vector2:
+	for i: int in _PELVIS_PROFILE.size() - 1:
+		var hi: Vector2 = _PELVIS_PROFILE[i]
+		var lo: Vector2 = _PELVIS_PROFILE[i + 1]
+		if y <= hi.x and y >= lo.x:
+			var t: float = (hi.x - y) / maxf(hi.x - lo.x, 1e-6)
+			return Vector2(lerpf(hi.y, lo.y, t),
+					lerpf(_PELVIS_REAR_SWAY[i], _PELVIS_REAR_SWAY[i + 1], t))
+	return Vector2(-1.0, 0.0)
+
+
+const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# The thigh as a capsule in its LEG bone's frame: from the hip pivot, whose dome
+# is the capsule's top, down to where the breezers turn in at the leg hem.
+const THIGH_CAPSULE_LENGTH_M: float = 0.26
+const THIGH_CAPSULE_RADIUS_M: float = 0.152
 
 
 # Copies a single-surface mesh into `target` verbatim, adding the bone/weight

@@ -144,6 +144,20 @@ pulled inside the waistband and held on TAIL, which no swing moves.
 `test_pelvis_fills_the_seat.gd` the seat and `test_jersey_tuck.gd` the tail
 against the pants.
 
+**The tail's drape is a prototype switch** (`HemSimMode`, `-- --hem-sim=`;
+`Skater.hem_sim_mode` per skater). SWAY, the default, swings the tail whole on
+the hem bones, and it clips: a thigh lifted in a stride or a crouch pokes
+through it. The other three replace the tail from the belt ring down, each
+facet column hung from its belt point (`SkaterHemSim`): FLAPS is our own ring
+of two-segment flaps colliding with the thighs and pants (`SkaterHemFlaps`,
+`SkaterHemColliders`), SPRINGS Godot's `SpringBoneSimulator3D` on per-column
+chains, SOFT_BODY a `SoftBody3D` band pinned at the belt. The column bones come
+after the body's own (`SkaterBodySkeleton.column_bone`), and only a skater
+built with that mode has them. `.claude/hooks/render-hem.sh` skates all four
+side by side and prints how far each tail went inside the thighs and pants;
+`test_hem_sims.gd` holds that each builds, and that the flaps clear a raised
+thigh.
+
 ## The blades stand on the ice
 
 Most of the gait still poses joints rather than feet, and its crouch pays for
