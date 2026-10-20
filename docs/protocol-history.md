@@ -373,3 +373,10 @@ here whenever you bump, in the same format.
 #      the contact, which sets the cue's volume. A client used to read its own
 #      puck.linear_velocity, which prediction never writes. RPC signature change;
 #      mixed builds must be refused. Replay format unchanged.
+# v81: the lobby roster carries each seated player's look, so the lobby's bench
+#      figures are the players. Every sync_lobby_roster / notify_return_to_lobby
+#      entry grows four fields after is_ready (PlayerLook.cosmetics_to_wire):
+#      the build as PlayerAttributes.to_dict, skin tone, tape code and gear
+#      style code, all from the host's join-time copy. A v80 peer reads the
+#      first seven fields and seats every human on its bench in a default look,
+#      so mixed builds must be refused. The replay format is unchanged.

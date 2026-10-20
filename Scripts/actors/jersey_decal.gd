@@ -50,6 +50,11 @@ const NUMBER_GAP_M: float = 0.012
 const NUMBER_EM_M: float = 0.25
 const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
 
+# The chest crest (TeamCrest), half a turn from the back: 28 cm across, about a
+# real sweater's, with its top at the yoke line.
+const FRONT_CENTER_X: int = BACK_CENTER_X + IMG_W / 2
+const CREST_RADIUS_M: float = 0.14
+
 var jersey_color: Color = Color.WHITE
 var yoke_color: Color = Color.WHITE
 var collar_color: Color = Color.WHITE
@@ -57,6 +62,9 @@ var stripes: Array[Dictionary] = []       # [{pos, width, color}]
 var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
+# The team's fruit (TeamCrest.fruit_for), or "" for a plain chest.
+var crest_fruit: String = ""
+var crest_preset: Dictionary = {}
 
 
 func _draw() -> void:
@@ -70,8 +78,23 @@ func _draw() -> void:
 		if band.y > band.x:
 			draw_rect(Rect2(0, band.x, IMG_W, band.y - band.x), stripe.color, true)
 
+	var yoke_bottom_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y
 	draw_back_lettering(self, player_name, jersey_number, text_color, float(BACK_CENTER_X),
-			PX_PER_M, float(YOKE_BOTTOM_PX) / PX_PER_M.y)
+			PX_PER_M, yoke_bottom_m)
+	if not crest_fruit.is_empty():
+		draw_chest_crest(self, crest_fruit, crest_preset, float(FRONT_CENTER_X), PX_PER_M,
+				yoke_bottom_m)
+
+
+# A chest's crest, centred on `center_x` px with its unit circle's top at the
+# yoke line (`yoke_bottom_m` down from the top), drawn in metres through
+# `px_per_m` so it lands round on a texture whose texels are not square. The
+# goalie's chest draws through this too.
+static func draw_chest_crest(canvas: CanvasItem, fruit: String, preset: Dictionary,
+		center_x: float, px_per_m: Vector2, yoke_bottom_m: float) -> void:
+	var r: Vector2 = px_per_m * CREST_RADIUS_M
+	TeamCrest.draw(canvas, fruit, Transform2D(Vector2(r.x, 0.0), Vector2(0.0, r.y),
+			Vector2(center_x, (yoke_bottom_m + CREST_RADIUS_M) * px_per_m.y)), preset)
 
 
 # A back's name and number, laid out in metres down from the top of the back
@@ -124,4 +147,22 @@ func update_jersey(
 	player_name = p_name
 	jersey_number = p_number
 	text_color = t_color
+	queue_redraw()
+
+
+# The torso's material over a JerseyDecal viewport's texture. The torso lathe
+# starts U=0 at +Z, turned by its half-facet phase, and runs CCW; UV_OFFSET_X
+# lands the decal's back-centre column on the skater's back.
+static func torso_material(tex: Texture2D) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.roughness = UniformPaint.ROUGH_CLOTH
+	mat.uv1_offset = Vector3(UV_OFFSET_X, 0.0, 0.0)
+	BodyRim.apply(mat)
+	return mat
+
+
+func update_crest(fruit: String, preset: Dictionary) -> void:
+	crest_fruit = fruit
+	crest_preset = preset
 	queue_redraw()

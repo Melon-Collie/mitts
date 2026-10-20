@@ -901,10 +901,6 @@ static func shared_pelvis() -> ArrayMesh:
 	return _shared("pelvis", _build_pelvis)
 
 
-static func shared_helmet_shell() -> ArrayMesh:
-	return _shared("helmet", _build_helmet)
-
-
 static func shared_head_ball() -> ArrayMesh:
 	return _shared("head", _build_head)
 

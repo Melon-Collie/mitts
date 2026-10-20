@@ -144,6 +144,7 @@ func _render() -> void:
 		_preset = TeamColorRegistry.get_preset(slot)
 		for side: int in 2:
 			var kit: Dictionary = _kit(side)
+			_jersey_decals[side].update_crest(TeamCrest.fruit_for(_preset), _preset)
 			_jersey_decals[side].update_jersey(kit.jersey.base,
 					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
 					kit.jersey.stripes, _player_name, _number, kit.text.color)

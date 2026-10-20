@@ -5060,7 +5060,7 @@ func _build_lobby_roster_array() -> Array:
 			continue
 		var team_id: int = r.team.team_id if r.team != null else 0
 		result.append([peer_id, team_id, r.team_slot, r.player_name,
-				r.is_left_handed, r.jersey_number])
+				r.is_left_handed, r.jersey_number, false] + r.look().cosmetics_to_wire())
 	# Spectators aren't in _registry, so without this they'd come back to the
 	# lobby as orphan peers — no slot, no name, no jersey number — and the
 	# host's identity lookup would default everything to "Player" / 10. Append
