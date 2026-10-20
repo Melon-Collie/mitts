@@ -82,28 +82,21 @@ changes, never hand-edited; the test's error and concordance bounds are ratchets
 
 ## Ratchets
 
-`test_no_god_class_growth.gd` is not an assertion about behavior — it is a
-one-way gate on the *shape* of `Scripts/`: 800 lines a file, 25 public functions
-a class. Files already over those lines when it went in are grandfathered in a
-table, pinned at the size they were.
+`test_ui_uses_the_locale_seam.gd` is a ratchet: untranslated string literals
+per file under `Scripts/ui/`, with the migrated live-match surfaces pinned at
+zero and the menu files pinned at what they had. Its table is the backlog
+written down, un-growable rather than invisible.
 
-When it fires it is saying one of three things, and only the first is about the
-code you just wrote:
+`test_no_god_class_growth.gd` is deliberately *not* one. It gates the shape of
+`Scripts/` — 800 lines a file, 25 public functions a class — but the files
+already over a limit are listed without a number and may change size freely.
+Do not pin per-file numbers back onto it: they get bumped on most commits and
+conflict on every parallel merge without stopping the listed files growing. The
+guard is against a new file crossing a limit. When it fires:
 
-- **grew past its allowance** — split it, or bump the number. Bumping is allowed
-  and is not cheating; the ratchet exists to make growth deliberate and visible
-  in the diff, not impossible. Say why in the commit.
-- **shrank well below its allowance** — you won something. Tighten the entry so
-  the space cannot be re-spent quietly. This is the click that makes it a
-  ratchet rather than a cap.
-- **is now under the limit** — the file graduated; delete its entry.
-
-The same shape suits any "this must not get worse" property.
-`test_ui_uses_the_locale_seam.gd` is the second one: untranslated string
-literals per file under `Scripts/ui/`, with the migrated live-match surfaces
-pinned at zero and the menu files pinned at what they had. What makes the shape
-work is that the grandfather table is the backlog written down: un-growable
-rather than invisible.
+- **over the limit and unlisted** — split it, or add it to the list and say why
+  in the commit.
+- **listed and now under the limit** — the file graduated; delete its entry.
 
 ## Netcode harnesses
 
