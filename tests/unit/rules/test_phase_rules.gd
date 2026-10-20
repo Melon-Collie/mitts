@@ -1,7 +1,7 @@
 extends GutTest
 
 # PhaseRules — pure static functions classifying game phases. Dead-puck phases
-# are ones where player movement should be frozen (score pause, faceoff prep).
+# are ones nobody can play the puck in; most of them freeze movement too.
 
 func test_playing_is_not_dead_puck() -> void:
 	assert_false(PhaseRules.is_dead_puck_phase(GamePhase.Phase.PLAYING))
@@ -22,14 +22,12 @@ func test_game_over_is_dead_puck() -> void:
 	assert_true(PhaseRules.is_dead_puck_phase(GamePhase.Phase.GAME_OVER))
 
 func test_goal_celebration_is_not_dead_puck() -> void:
-	# Celebration is the post-goal beat where players still skate around — only
-	# the GOAL_SCORED replay phase that follows is movement-locked.
+	# Celebration is the post-goal beat where players still skate around.
 	assert_false(PhaseRules.is_dead_puck_phase(GamePhase.Phase.GOAL_CELEBRATION))
 
-func test_movement_locked_matches_dead_puck() -> void:
+func test_movement_locked_matches_dead_puck_but_for_goal_scored() -> void:
 	for phase in [
 		GamePhase.Phase.PLAYING,
-		GamePhase.Phase.GOAL_SCORED,
 		GamePhase.Phase.FACEOFF_PREP,
 		GamePhase.Phase.FACEOFF,
 		GamePhase.Phase.END_OF_PERIOD,
@@ -40,6 +38,12 @@ func test_movement_locked_matches_dead_puck() -> void:
 			PhaseRules.is_movement_locked(phase),
 			PhaseRules.is_dead_puck_phase(phase),
 			"is_movement_locked should match is_dead_puck_phase for phase %d" % phase)
+
+
+func test_goal_scored_skates_on_under_the_replays_incoming_wipe() -> void:
+	# The replay parks the world itself at full cover; a lock here would stop
+	# every skater dead in sight of the band.
+	assert_false(PhaseRules.is_movement_locked(GamePhase.Phase.GOAL_SCORED))
 
 # ── is_puck_pickup_locked_phase ─────────────────────────────────────────────
 # Superset of is_dead_puck_phase that adds GOAL_CELEBRATION. The puck sits in

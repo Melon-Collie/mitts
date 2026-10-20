@@ -56,6 +56,20 @@ driver's loop hold them; the file viewer parks its own actors as it spawns them
   integrating the replayed velocity whatever drives the skater, so a frame the
   driver stops writing (an outro hold, the gap between reel clips) slides.
 
+## The goal cinematic takes the world over at full cover
+
+The incoming wipe sweeps over live play, never a frozen frame:
+`GoalReplayDriver` starts the stinger on entering GOAL_SCORED but parks the
+sim, enters replay mode and cuts to its cameras only once the band covers the
+screen (`_take_over`). Until then the host keeps simulating and broadcasting,
+which is what lets the GOAL_SCORED phase byte reach clients, and a client
+starts its own cinematic off that byte (`GameManager._on_remote_phase_changed`)
+— a one-way trip behind the host, over its own still-moving world. The host's
+`notify_replay_mode(true)` arrives at its full cover and is then a no-op; it
+starts the client's cinematic only when every packet carrying the byte was
+lost. `stop()` mirrors the stop to clients even from under the incoming wipe,
+since a client may already be running one.
+
 ## Bot AI decides on a worker thread
 
 `AICoordinator` runs `TeamBrain.tick` → `build_view` → `decide()` on a persistent

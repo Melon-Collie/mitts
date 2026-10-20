@@ -1634,6 +1634,7 @@ func _wire_subsystems() -> void:
 		_goal_clip_exporter.state_changed.connect(goal_clip_state_changed.emit)
 		_goal_clip_exporter.availability_changed.connect(goal_clip_available_changed.emit)
 		_goal_clip_exporter.export_finished.connect(goal_clip_export_finished.emit)
+		_goal_clip_exporter.stored_replay_taking_over.connect(_stop_post_game_reel)
 		_goal_clip_exporter.stored_replay_finished.connect(_start_post_game_replay)
 		_goal_clip_exporter.stored_replay_finished.connect(goal_gif_saving_changed.emit)
 		_goal_clip_exporter.state_changed.connect(
@@ -2090,13 +2091,13 @@ func _on_replay_event_received(host_ts: float, event: Dictionary) -> void:
 		_replay_file.record_event(host_ts, JSON.stringify(event).to_utf8_buffer())
 
 
-# Client / spectator side: the host mirrors its replay-mode flag here when it
-# enters (true) / leaves (false) the goal cinematic. The host's GOAL_SCORED
-# phase never arrives via world state (it stops broadcasting the instant it
-# freezes for the replay), so this edge is what drives the client's own
-# GoalReplayDriver. On `true` we kick off the local cinematic — the recorder
-# already holds the clip and on_goal_received has set the defending-goal Z for
-# the net cam. On `false` we end it behind its outgoing wipe so the client's
+# Client / spectator side: the host mirrors its replay-mode flag here when its
+# cinematic takes the world over (true, at its wipe's full cover) and when it
+# leaves (false). The client's own GoalReplayDriver normally started already,
+# off the GOAL_SCORED phase byte (_on_remote_phase_changed), so `true` starts it
+# only when that byte was lost — the recorder already holds the clip and
+# on_goal_received has set the defending-goal Z for the net cam. On `false` we
+# end it behind its outgoing wipe so the client's
 # replay ends in lockstep with the host (which only resumes broadcasting / advances to
 # FACEOFF_PREP after its own cinematic finishes), instead of overrunning into
 # the live faceoff data on its independent outro timer.
@@ -2112,7 +2113,7 @@ func _on_remote_replay_mode_changed(active: bool) -> void:
 		if _state_machine != null \
 				and _state_machine.current_phase == GamePhase.Phase.END_OF_PERIOD:
 			_start_client_intermission_replay()
-		else:
+		elif _goal_replay_driver != null and not _goal_replay_driver.is_active():
 			_phase_coord.start_goal_replay()
 	else:
 		if _goal_replay_driver != null:
@@ -2181,15 +2182,19 @@ func _start_post_game_replay() -> void:
 
 
 func _stop_post_game_replay() -> void:
+	_stop_post_game_reel()
+	# A goal airing for its GIF holds the same actors the reel does.
+	if _goal_clip_exporter != null:
+		_goal_clip_exporter.cancel_stored()
+
+
+func _stop_post_game_reel() -> void:
 	if _post_game_replay_timer != null:
 		if _post_game_replay_timer.timeout.is_connected(_start_post_game_replay):
 			_post_game_replay_timer.timeout.disconnect(_start_post_game_replay)
 		_post_game_replay_timer = null
 	if _post_game_replay_driver != null:
 		_post_game_replay_driver.stop()
-	# A goal airing for its GIF holds the same actors the reel does.
-	if _goal_clip_exporter != null:
-		_goal_clip_exporter.cancel_stored()
 
 
 # The goals the post-game screen offers to save, in scoring order. Read-only
@@ -2205,19 +2210,18 @@ func can_save_goal_gif() -> bool:
 			and _goal_replay_store != null and not _goal_replay_store.is_empty()
 
 
-# Post-game "save this goal": the highlight reel steps aside while the goal airs
-# again as its cinematic and is captured; the reel resumes when it ends
-# (GoalClipExporter.stored_replay_finished).
+# Post-game "save this goal": the goal airs again as its cinematic and is
+# captured. The highlight reel plays on under the incoming wipe, steps aside at
+# full cover (GoalClipExporter.stored_replay_taking_over), and resumes when the
+# goal has aired (stored_replay_finished).
 func save_goal_gif(index: int) -> void:
 	if not can_save_goal_gif() or _codec == null or puck == null or _registry == null:
 		return
 	var clips: Array[Dictionary] = _goal_replay_store.clips()
 	if index < 0 or index >= clips.size():
 		return
-	_stop_post_game_replay()
-	if not _goal_clip_exporter.save_stored_goal(
-			clips[index], _codec, _registry, puck, goalie_controllers):
-		_start_post_game_replay()
+	_goal_clip_exporter.save_stored_goal(
+			clips[index], _codec, _registry, puck, goalie_controllers)
 
 
 # ── Intermission (between-period break presentation) ─────────────────────────
@@ -4133,12 +4137,13 @@ func _on_remote_phase_changed(new_phase: GamePhase.Phase) -> void:
 	if new_phase == GamePhase.Phase.END_OF_PERIOD and _phase_coord != null:
 		_phase_coord.on_period_break_entered()
 	phase_changed.emit(new_phase)
-	# Note: the client's goal-replay cinematic is NOT triggered here. The host
-	# enters GOAL_SCORED and replay mode in the same frame, gating off its own
-	# world-state broadcasts before any packet carries GOAL_SCORED — so this
-	# handler never observes that phase. The client trigger lives in
-	# _on_remote_replay_mode_changed, driven by the reliable notify_replay_mode
-	# RPC the host sends when its cinematic starts.
+	# The host starts its cinematic on entering GOAL_SCORED and keeps simulating
+	# and broadcasting under the incoming wipe, so the phase byte lands here a
+	# one-way trip later and the client's wipe sweeps over live play in step
+	# with the host's. The reliable notify_replay_mode edge starts it instead
+	# when every packet carrying the byte was lost.
+	if new_phase == GamePhase.Phase.GOAL_SCORED and _phase_coord != null:
+		_phase_coord.start_goal_replay()
 
 
 func _on_clock_updated_externally(t: float) -> void:

@@ -39,6 +39,9 @@ signal export_finished(path: String, ok: bool)
 ## A stored goal finished airing for its export (not when one is cancelled), so
 ## whatever it displaced can resume.
 signal stored_replay_finished
+## A stored goal's incoming wipe covers the screen and its replay is about to
+## pose the actors, so whatever it played over (the post-game reel) lets go.
+signal stored_replay_taking_over
 
 var _capture: ClipFrameCapture = null
 var _exporter: GifExporter = null
@@ -62,6 +65,7 @@ func _ready() -> void:
 	_stored_driver = GoalReplayDriver.new()
 	_stored_driver.use_shared_replay_mode = false
 	add_child(_stored_driver)
+	_stored_driver.taking_over.connect(stored_replay_taking_over.emit)
 	_stored_driver.replay_finishing.connect(_close_segment)
 	_stored_driver.replay_stopped.connect(_on_stored_replay_stopped)
 
@@ -105,8 +109,8 @@ func can_save_stored() -> bool:
 
 
 # Airs `clip` (a GoalReplayStore entry) as the goal cinematic on the live
-# actors and saves it. The caller must have parked whatever else poses them.
-# False when nothing started.
+# actors and saves it. Whatever else poses them keeps going under the incoming
+# wipe and must let go on stored_replay_taking_over. False when nothing started.
 func save_stored_goal(clip: Dictionary, codec: WorldStateCodec, registry: PlayerRegistry,
 		puck: Puck, goalie_controllers: Array) -> bool:
 	if not can_save_stored():

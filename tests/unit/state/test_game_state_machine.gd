@@ -156,17 +156,18 @@ func test_tick_during_playing_returns_false() -> void:
 # ── Movement locking ─────────────────────────────────────────────────────────
 
 func test_movement_unlocked_during_goal_celebration() -> void:
-	# The post-goal celebration beat keeps movement live so players can react;
-	# only the GOAL_SCORED replay phase that follows is movement-locked.
+	# The post-goal celebration beat keeps movement live so players can react.
 	sm.on_goal_scored(1)
 	assert_eq(sm.current_phase, GamePhase.Phase.GOAL_CELEBRATION)
 	assert_false(sm.is_movement_locked(), "celebration beat allows movement")
 
-func test_movement_locked_during_goal_scored_replay() -> void:
+func test_movement_stays_live_into_goal_scored() -> void:
+	# The replay parks the world itself once its incoming wipe covers the
+	# screen; until then play carries on under the band.
 	sm.on_goal_scored(1)                                  # → GOAL_CELEBRATION
 	sm.tick(GameRules.GOAL_CELEBRATION_DURATION + 0.01)  # → GOAL_SCORED
 	assert_eq(sm.current_phase, GamePhase.Phase.GOAL_SCORED)
-	assert_true(sm.is_movement_locked())
+	assert_false(sm.is_movement_locked())
 
 func test_movement_unlocked_during_faceoff() -> void:
 	sm.begin_faceoff_prep()

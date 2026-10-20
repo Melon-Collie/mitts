@@ -16,10 +16,12 @@ extends Node
 #
 # A ReplayStinger wipe hides both camera cuts: live → replay at the start, and
 # replay → live (where the post-goal faceoff staging teleports everyone) at the
-# end. The world freezes the instant the replay starts, so the wipe sweeps in
-# over a held frame. finish() runs the outgoing wipe and then stop(); stop() is
-# the immediate teardown. replay_finishing marks where the replay itself ends —
-# the outgoing wipe is not part of it (the GIF export closes its clip there).
+# end. The incoming wipe sweeps over live play: the replay takes the world over
+# (parks the sim, enters replay mode, cuts to its cameras) only once the band
+# covers the screen, so nothing freezes in sight. finish() runs the outgoing
+# wipe and then stop(); stop() is the immediate teardown. replay_finishing marks
+# where the replay itself ends — the outgoing wipe is not part of it (the GIF
+# export closes its clip there).
 #
 # Owned by GameManager; PhaseCoordinator.start_goal_replay starts it on every
 # peer.
@@ -40,6 +42,9 @@ enum Stage { IDLE, WIPE_IN, PLAYING, OUTRO, WIPE_OUT }
 
 signal replay_started
 signal replay_finishing
+# The incoming wipe covers the screen and the replay is about to pose the
+# actors: whatever else was driving them (the post-game reel) lets go now.
+signal taking_over
 signal replay_stopped
 # Once per recorded frame the replay steps onto: the game state the arena showed
 # at that instant (clock, score, phase) and the team carrying the puck (-1 loose),
@@ -85,6 +90,10 @@ var _hard_cam: SpectatorCamera = null
 var _net_cam: SpectatorCamera = null
 var _saved_prev_camera: Camera3D = null
 var _has_cut_to_net_cam: bool = false
+var _net_cam_position: Vector3 = Vector3.ZERO
+# The replay parked the world and entered replay mode (at full cover); before
+# that, live play is still running under the incoming wipe.
+var _took_over: bool = false
 # Goal-line z of the defending goal; 0 means no goal was supplied and no net cam.
 var _defending_goal_z: float = 0.0
 var _goal_center: Vector3 = Vector3.ZERO
@@ -175,6 +184,7 @@ func replay_clip(clip: Dictionary,
 	if touch_idx >= 0:
 		var pos: Array = _events[touch_idx].event.pos
 		touch_pos = Vector3(pos[0], pos[1], pos[2])
+	_net_cam_position = GoalReplayRules.net_cam_position(defending_goal_z, touch_pos.x)
 	var anchor_ts: float = touch_ts if touch_ts >= 0.0 else _goal_ts
 	_clip_start_ts = maxf(_clip_start_ts, GoalReplayRules.clip_start_ts(
 			_events, anchor_ts, touch_pos.z, signf(defending_goal_z), _scoring_team))
@@ -184,11 +194,28 @@ func replay_clip(clip: Dictionary,
 	while _next_event_idx < _events.size() and _events[_next_event_idx].host_ts < _clip_start_ts:
 		_next_event_idx += 1
 
-	_sim_hold.grab(_puck, _goalie_controllers, registry.skaters())
-
 	_defending_goal_z = defending_goal_z
 	_goal_center = Vector3(0.0, 0.0, defending_goal_z)
 	_has_cut_to_net_cam = false
+	_took_over = false
+
+	_stinger_primary = clip.get("stinger_primary", Color.BLACK) as Color
+	_stinger_secondary = clip.get("stinger_secondary", Color.WHITE) as Color
+	_stage = Stage.WIPE_IN
+	_stinger.play(_stinger_primary, _stinger_secondary)
+	replay_started.emit()
+
+
+# At full cover: park the live world, enter replay mode and stand up the
+# cameras. Live play ran on under the band until now.
+func _take_over() -> void:
+	taking_over.emit()
+	_took_over = true
+	_sim_hold.grab(_puck, _goalie_controllers, _registry.skaters())
+	if use_shared_replay_mode:
+		NetworkManager.start_replay_mode(_clip_start_ts)
+	else:
+		NetworkManager.set_replay_mode_local(true, _clip_start_ts)
 	_saved_prev_camera = get_viewport().get_camera_3d()
 
 	_hard_cam = SpectatorCamera.new()
@@ -201,18 +228,7 @@ func replay_clip(clip: Dictionary,
 		var goal_z: float = _defending_goal_z
 		_net_cam.setup(func() -> Vector3:
 			return GoalReplayRules.net_cam_look_target(_puck.global_position, goal_z))
-		_net_cam.set_booth(GoalReplayRules.net_cam_position(goal_z, touch_pos.x), 55.0, 0.15)
-
-	_stinger_primary = clip.get("stinger_primary", Color.BLACK) as Color
-	_stinger_secondary = clip.get("stinger_secondary", Color.WHITE) as Color
-	_stage = Stage.WIPE_IN
-	_stinger.play(_stinger_primary, _stinger_secondary)
-
-	if use_shared_replay_mode:
-		NetworkManager.start_replay_mode(_clip_start_ts)
-	else:
-		NetworkManager.set_replay_mode_local(true, _clip_start_ts)
-	replay_started.emit()
+		_net_cam.set_booth(_net_cam_position, 55.0, 0.15)
 
 
 # Ends the replay behind the outgoing wipe. A replay still under its incoming
@@ -244,11 +260,17 @@ func stop() -> void:
 		_net_cam = null
 	_has_cut_to_net_cam = false
 
+	# The host mirrors the stop even from under the incoming wipe: a client may
+	# already have started its own replay off the GOAL_SCORED phase byte. A
+	# local replay that never took over leaves replay mode to its owner (the
+	# post-game reel still running under the band).
 	if use_shared_replay_mode:
 		NetworkManager.stop_replay_mode()
-	else:
+	elif _took_over:
 		NetworkManager.set_replay_mode_local(false)
-	_sim_hold.release()
+	if _took_over:
+		_sim_hold.release()
+	_took_over = false
 	_frames = []
 	_timestamps = []
 	_cursor.reset()
@@ -291,6 +313,7 @@ func _on_stinger_covered() -> void:
 	match _stage:
 		Stage.WIPE_IN:
 			_stage = Stage.PLAYING
+			_take_over()
 			# Pose the clip's first frame before the cam seeds on the puck, or it
 			# would snap to the puck still sitting in the net.
 			_pose(0.0)
