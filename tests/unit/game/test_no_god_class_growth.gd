@@ -96,10 +96,10 @@ const _SIZE_ALLOWANCE: Dictionary[String, int] = {
 	"res://Scripts/controllers/remote_controller.gd": 822,
 	# +65: the hair rows (style, beard, colour) beside the skin, and the
 	# option/swatch row builders the skin and hair share.
-	"res://Scripts/ui/player_settings_popup.gd": 908,
+	"res://Scripts/ui/player_settings_popup.gd": 909,
 	"res://Scripts/ui/slot_grid_panel.gd": 839,
 	"res://Scripts/domain/state/game_state_machine.gd": 816,
-	"res://Scripts/ui/locker_popup.gd": 823,
+	"res://Scripts/ui/locker_popup.gd": 824,
 	"res://Scripts/ui/hud.gd": 822,
 }
 

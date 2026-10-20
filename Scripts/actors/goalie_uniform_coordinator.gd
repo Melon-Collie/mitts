@@ -180,9 +180,8 @@ func _create_jersey_material() -> void:
 	_goalie.body_mesh.material_override = _jersey_mat
 
 
-# Shared SubViewport + ShoulderDecal for both shoulder spheres. Sphere U=0 is
-# at +Z, so per-shoulder uv1_offset.x rotates the wrap a quarter turn each way
-# to face the number outward: glove side (-X) gets -0.25, blocker side (+X) +0.25.
+# Shared SubViewport + ShoulderDecal for both shoulder spheres, each turned to
+# face the number outward: the glove side is -X, the blocker side +X.
 func _create_shoulder_viewport() -> void:
 	_shoulder_decal = ShoulderDecal.new()
 	_shoulder_decal.name = "GoalieShoulderDecal"
@@ -200,18 +199,8 @@ func _create_shoulder_viewport() -> void:
 	_shoulder_viewport.add_child(_shoulder_decal)
 
 	var tex: ViewportTexture = _shoulder_viewport.get_texture()
-	var mat_glove := StandardMaterial3D.new()
-	mat_glove.albedo_texture = tex
-	mat_glove.roughness = UniformPaint.ROUGH_CLOTH
-	mat_glove.uv1_offset = Vector3(-0.25, 0.0, 0.0)
-	BodyRim.apply(mat_glove)
-	_goalie.glove_shoulder_sphere.material_override = mat_glove
-	var mat_blocker := StandardMaterial3D.new()
-	mat_blocker.albedo_texture = tex
-	mat_blocker.roughness = UniformPaint.ROUGH_CLOTH
-	mat_blocker.uv1_offset = Vector3(0.25, 0.0, 0.0)
-	BodyRim.apply(mat_blocker)
-	_goalie.blocker_shoulder_sphere.material_override = mat_blocker
+	_goalie.glove_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, -1.0)
+	_goalie.blocker_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, 1.0)
 
 
 func _rebuild_shoulder_texture() -> void:

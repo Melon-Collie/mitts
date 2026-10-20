@@ -62,6 +62,18 @@ func _draw() -> void:
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
+# A shoulder part's material over a ShoulderDecal viewport's texture, for the
+# part on `side` (-1 the -X shoulder, +1 the +X one). The part's U=0 is at +Z, so
+# a quarter turn each way faces the number (at U 0.5) outward.
+static func part_material(tex: Texture2D, side: float) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.roughness = UniformPaint.ROUGH_CLOTH
+	mat.uv1_offset = Vector3(0.25 * side, 0.0, 0.0)
+	BodyRim.apply(mat)
+	return mat
+
+
 func update_shoulder(s_color: Color, s_yoke: Color, p_number: int, t_color: Color) -> void:
 	shoulder_color = s_color
 	yoke_color = s_yoke

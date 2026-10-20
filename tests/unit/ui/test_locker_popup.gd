@@ -40,9 +40,10 @@ func _colors() -> Dictionary:
 		"gloves": _KIT_GLOVES,
 		"glove_accent": _GLOVE_ACCENT,
 		"helmet": Color(0.2, 0.2, 0.2),
+		"text": _LIGHT,
 		"uniform": {
 			"helmet": Color(0.2, 0.2, 0.2),
-			"shoulders": {"color": _PRIMARY},
+			"shoulders": {"color": _PRIMARY, "text": _LIGHT},
 			"jersey": {"base": _PRIMARY, "stripes": stripes, "yoke": _SECONDARY},
 			"arms": {"upper": {"base": _PRIMARY, "stripes": bare}},
 			"gloves": _KIT_GLOVES,
@@ -659,3 +660,25 @@ func test_each_model_item_carries_its_own_zones_as_a_swatch() -> void:
 			var delta: float = maxf(maxf(absf(swatch.r - want.r),
 					absf(swatch.g - want.g)), absf(swatch.b - want.b))
 			assert_lt(delta, 1.5 / 255.0, "skate model %d band %d" % [model, zone])
+
+
+# The case shows the sweater the ice does: the rink's own decals paint it, with
+# the pending name, number and the team's crest.
+func test_the_sweater_is_painted_by_the_rink_decals() -> void:
+	var colors: Dictionary = TeamColorRegistry.get_colors(0, 0)
+	_popup.open(PlayerAttributes.new(PlayerAttributes.HEIGHT_MEDIUM,
+			int(PlayerAttributes.NEUTRAL_WEIGHT_LBS), PlayerAttributes.GEAR_BALANCED,
+			PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
+			PlayerAttributes.GEAR_BALANCED), StickTapeConfig.DEFAULT_CODE,
+			GearStyleConfig.new().to_code(), false, colors,
+			SkinToneRegistry.DEFAULT_INDEX, false, "Smith", 27)
+	var decal: JerseyDecal = _mannequin().get("_jersey_decal") as JerseyDecal
+	assert_eq(decal.player_name, "Smith")
+	assert_eq(decal.jersey_number, 27)
+	assert_eq(decal.crest_fruit, TeamCrest.fruit_for(colors.preset))
+	var shoulder: ShoulderDecal = _mannequin().get("_shoulder_decal") as ShoulderDecal
+	assert_eq(shoulder.jersey_number, 27)
+	var torso: MeshInstance3D = _mannequin().get("_torso") as MeshInstance3D
+	var viewport: SubViewport = _mannequin().get("_jersey_viewport") as SubViewport
+	assert_eq((torso.get_surface_override_material(0) as StandardMaterial3D).albedo_texture,
+			viewport.get_texture(), "the torso wears the decal's texture")

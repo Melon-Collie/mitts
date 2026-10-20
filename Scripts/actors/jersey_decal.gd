@@ -150,6 +150,18 @@ func update_jersey(
 	queue_redraw()
 
 
+# The torso's material over a JerseyDecal viewport's texture. The torso lathe
+# starts U=0 at +Z, turned by its half-facet phase, and runs CCW; UV_OFFSET_X
+# lands the decal's back-centre column on the skater's back.
+static func torso_material(tex: Texture2D) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.roughness = UniformPaint.ROUGH_CLOTH
+	mat.uv1_offset = Vector3(UV_OFFSET_X, 0.0, 0.0)
+	BodyRim.apply(mat)
+	return mat
+
+
 func update_crest(fruit: String, preset: Dictionary) -> void:
 	crest_fruit = fruit
 	crest_preset = preset

@@ -561,7 +561,7 @@ func set_focus_scope(background: Control, restore: Control) -> void:
 # attribute lock — cosmetics stay live under it.
 func open(attrs: PlayerAttributes, tape_code: int, gear_code: int,
 		gear_locked: bool, team_colors: Dictionary, skin_tone: int,
-		is_left_handed: bool) -> void:
+		is_left_handed: bool, player_name: String = "", jersey_number: int = 0) -> void:
 	_attrs = attrs
 	_profile = attrs.profile
 	_curve = attrs.curve
@@ -573,6 +573,7 @@ func open(attrs: PlayerAttributes, tape_code: int, gear_code: int,
 	_team_colors = team_colors
 	_skin_tone = SkinToneRegistry.clamp_index(skin_tone)
 	_is_left_handed = is_left_handed
+	_mannequin.set_jersey_info(player_name, jersey_number)
 	_refresh()
 	_redress()
 	# Open on the wide shot, already settled there rather than swinging in.

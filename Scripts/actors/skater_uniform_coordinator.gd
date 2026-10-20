@@ -105,20 +105,12 @@ func _create_jersey_viewport() -> void:
 	_jersey_decal.name = "JerseyDecal"
 	_jersey_viewport.add_child(_jersey_decal)
 
-	var mat := StandardMaterial3D.new()
-	mat.albedo_texture = _jersey_viewport.get_texture()
-	mat.roughness = UniformPaint.ROUGH_CLOTH
-	# Rotates the wrap so the texture's back-center (JerseyDecal.BACK_CENTER_X)
-	# lands at the skater's +Z (back). The lathe starts U=0 at +Z, turned by
-	# its half-facet phase, and increases CCW.
-	mat.uv1_offset = Vector3(JerseyDecal.UV_OFFSET_X, 0.0, 0.0)
-	BodyRim.apply(mat)
-	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.TORSO, mat)
+	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.TORSO,
+			JerseyDecal.torso_material(_jersey_viewport.get_texture()))
 
 
-# Shared SubViewport + ShoulderDecal for both shoulder spheres. Sphere U=0 is
-# at +Z, so per-shoulder uv1_offset.x rotates the wrap a quarter turn each
-# way to face the number outward (-X on left, +X on right).
+# Shared SubViewport + ShoulderDecal for both shoulder spheres, each turned to
+# face the number outward (ShoulderDecal.part_material).
 func _create_shoulder_viewport() -> void:
 	_shoulder_decal = ShoulderDecal.new()
 	_shoulder_decal.name = "ShoulderDecal"
@@ -134,18 +126,10 @@ func _create_shoulder_viewport() -> void:
 	_shoulder_viewport.add_child(_shoulder_decal)
 
 	var tex: ViewportTexture = _shoulder_viewport.get_texture()
-	var mat_l := StandardMaterial3D.new()
-	mat_l.albedo_texture = tex
-	mat_l.roughness = UniformPaint.ROUGH_CLOTH
-	mat_l.uv1_offset = Vector3(-0.25, 0.0, 0.0)
-	BodyRim.apply(mat_l)
-	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.SHOULDER_L, mat_l)
-	var mat_r := StandardMaterial3D.new()
-	mat_r.albedo_texture = tex
-	mat_r.roughness = UniformPaint.ROUGH_CLOTH
-	mat_r.uv1_offset = Vector3(0.25, 0.0, 0.0)
-	BodyRim.apply(mat_r)
-	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.SHOULDER_R, mat_r)
+	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.SHOULDER_L,
+			ShoulderDecal.part_material(tex, -1.0))
+	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.SHOULDER_R,
+			ShoulderDecal.part_material(tex, 1.0))
 
 
 # Applies the full v2 colors dict (TeamColorRegistry.get_colors output) to

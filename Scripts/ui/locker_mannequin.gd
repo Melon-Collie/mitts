@@ -159,6 +159,14 @@ var _collars: Array[MeshInstance3D] = []
 var _boots: Array[MeshInstance3D] = []
 # Arms are indexed TOP hand first, then BOTTOM — the grip order on the shaft,
 # not left/right, because that is what the pose is built from.
+# The sweater is painted by the rink's own decals, so the case shows the crest,
+# name and numbers exactly as the ice does.
+var _jersey_viewport: SubViewport = null
+var _jersey_decal: JerseyDecal = null
+var _shoulder_viewport: SubViewport = null
+var _shoulder_decal: ShoulderDecal = null
+var _player_name: String = ""
+var _jersey_number: int = 0
 var _upper_arms: Array[MeshInstance3D] = []
 var _forearms: Array[MeshInstance3D] = []
 var _elbows: Array[MeshInstance3D] = []
@@ -237,7 +245,31 @@ func _build() -> void:
 		_hands.append(_part(SkaterMeshBuilder.shared_glove_fist()))
 		_cuffs.append(_part(SkaterMeshBuilder.shared_cuff()))
 
+	_jersey_decal = JerseyDecal.new()
+	_jersey_viewport = _decal_viewport(_jersey_decal,
+			Vector2i(JerseyDecal.IMG_W, JerseyDecal.IMG_H))
+	_torso.set_surface_override_material(0,
+			JerseyDecal.torso_material(_jersey_viewport.get_texture()))
+	_shoulder_decal = ShoulderDecal.new()
+	_shoulder_viewport = _decal_viewport(_shoulder_decal, _shoulder_decal.size)
+	for i: int in 2:
+		_shoulders[i].set_surface_override_material(0, ShoulderDecal.part_material(
+				_shoulder_viewport.get_texture(), -1.0 if i == 0 else 1.0))
+
 	_build_stick()
+
+
+func _decal_viewport(decal: Node2D, size: Vector2i) -> SubViewport:
+	var vp := SubViewport.new()
+	vp.size = size
+	vp.transparent_bg = false
+	vp.disable_3d = true
+	vp.handle_input_locally = false
+	vp.gui_disable_input = true
+	vp.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(vp)
+	vp.add_child(decal)
+	return vp
 
 
 func _part(mesh: Mesh) -> MeshInstance3D:
@@ -293,6 +325,12 @@ func apply(attrs: PlayerAttributes, gear: GearStyleConfig, tape: StickTapeConfig
 	_paint_body(team_colors, skin_tone)
 	_paint_gear(gear, team_colors)
 	_paint_stick(gear, tape, team_colors)
+
+
+# The name and number the sweater is lettered with. Painted by the next apply().
+func set_jersey_info(player_name: String, jersey_number: int) -> void:
+	_player_name = player_name
+	_jersey_number = jersey_number
 
 
 # Where the camera looks for one framing, in this node's space.
@@ -593,18 +631,24 @@ static func _basis_along(y_axis: Vector3) -> Basis:
 
 # ── Paint ────────────────────────────────────────────────────────────────────
 
-# The kit, not flat team colors: striped jersey with the collar on the torso's
-# top cap and the yoke over the shoulders, the shoulder pads' own color under
-# it, striped socks, solid pants. Stripe
-# textures come from the coordinator the rink paints with, so the bands land
-# where the in-game skater's do.
+# The kit, not flat team colors: the sweater through the rink's own decals
+# (stripes, collar, yoke, crest, name and numbers), striped socks, solid pants.
+# Sock stripes come from the painter the rink uses, so the bands land where the
+# in-game skater's do.
 func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 	var uniform: Dictionary = colors.uniform
 	var jersey: Dictionary = uniform.jersey
 	var socks: Dictionary = uniform.socks
 
-	_paint_texture(_torso, 0, UniformPaint.h_stripes(jersey.base,
-			UniformPaint.jersey_stripes(jersey), UniformPaint.collar_color(jersey)), _CLOTH_ROUGH)
+	var preset: Dictionary = colors.get("preset", {})
+	_jersey_decal.update_crest(TeamCrest.fruit_for(preset), preset)
+	_jersey_decal.update_jersey(jersey.base, UniformPaint.yoke_color(jersey),
+			UniformPaint.collar_color(jersey), jersey.stripes, _player_name, _jersey_number,
+			colors.text)
+	_jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_shoulder_decal.update_shoulder(uniform.shoulders.color, UniformPaint.yoke_color(jersey),
+			_jersey_number, uniform.shoulders.text)
+	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_paint(_pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
 	_paint(_helmet, SkaterMeshBuilder.HELMET_SURF_SKIN,
@@ -617,9 +661,7 @@ func _paint_body(colors: Dictionary, skin_tone: int) -> void:
 	var sleeve: Color = uniform.arms.upper.base
 	# One-color sleeves here, so an unnamed elbow is the sleeve too.
 	var elbow: Color = uniform.arms.elbow if uniform.arms.get("elbow") is Color else sleeve
-	var cap_tex: ImageTexture = UniformPaint.shoulder_cap(jersey, uniform.shoulders.color)
 	for i: int in 2:
-		_paint_texture(_shoulders[i], 0, cap_tex, _CLOTH_ROUGH)
 		# The knee takes the pants BASE solid — the rink paints it apart from
 		# the thigh, whose side stripe would ring a ball.
 		_paint(_thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
