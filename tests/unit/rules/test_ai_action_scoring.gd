@@ -1004,18 +1004,29 @@ func test_lane_clear_saucer_blocked_after_touch_down() -> void:
 
 
 func test_lane_clear_saucer_soft_flip_lands_earlier() -> void:
-	# The airborne carry scales with launch speed: a defender ~8.5 m out is
-	# still under the crisp flip (in the air at charge pace) but past the
-	# SOFT flip's touch-down — the soft flip has landed and gets blocked.
-	# This is the physical trade the close-quarters saucer makes: softer
-	# pace buys a receivable landing, at the cost of clearing less lane.
+	# The airborne carry scales with launch speed: the crisp flip clears a
+	# defender 5 m out and lands far enough past him that the puck runs away
+	# from his stick; the SOFT flip lands beside him and he plays it. This is
+	# the physical trade the close-quarters saucer makes: softer pace buys a
+	# receivable landing, at the cost of clearing less lane.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 12.0)
-	var mid_stick: Array[Vector3] = [Vector3(0.5, 0.0, 8.5)]
+	var mid_stick: Array[Vector3] = [Vector3(0.5, 0.0, 5.0)]
 	var crisp: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, AIPuckLane.PASS_CHARGE_SPEED_M_S)
 	var soft: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, 12.0)
-	assert_almost_eq(crisp, 1.0, 0.0001, "crisp flip is still airborne over the 8.5 m defender")
-	assert_lt(soft, crisp, "the soft flip has landed by 8.5 m — the defender blocks it")
+	assert_almost_eq(crisp, 1.0, 0.0001, "the crisp flip lands well past the 5 m defender")
+	assert_lt(soft, crisp, "the soft flip lands beside him — he blocks it")
+
+
+func test_lane_clear_saucer_the_man_it_flew_over_plays_the_landing() -> void:
+	# Over him the puck is out of his stick's reach, but it lands a metre past
+	# him: on the ice it is a flat pass sliding off his blade, and he plays it.
+	var from := Vector3(0.0, 0.0, 0.0)
+	var to := Vector3(0.0, 0.0, 14.0)
+	var landing: float = AIPuckLane.saucer_airborne_distance_m(AIPuckLane.PASS_CHARGE_SPEED_M_S)
+	var under: Array[Vector3] = [Vector3(0.5, 0.0, landing - 1.0)]
+	assert_lt(AIPuckLane.lane_clear_saucer(from, to, under, AIPuckLane.PASS_CHARGE_SPEED_M_S),
+			0.5)
 
 
 func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:

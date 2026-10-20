@@ -646,6 +646,10 @@ reaches back into what remains.
   **momentum-projected** position. So a hard charger's reach rides downrange to
   where you *were* (beat him by letting him overshoot), while a jockeying
   defender's disk stays on you and a stick on the puck stays a strip threat.
+  A man skating WITH a carry can also just stop from his read: the carry comes
+  to him, so stopping commits him to no spot, and a defender backing off in
+  front of a carrier is a wall he skates into, not a gap that holds
+  (`AICarrySpace._stopped_clearance`; a chaser behind only loses ground by it).
   - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
     all") prices the carrier's current safety. Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its
@@ -690,8 +694,10 @@ reaches back into what remains.
   past him are his. Only a pick his body can hold the stick at counts
   (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
   model under the LOW loft's flight: during the over window a defender's reach
-  collapses to their body radius (sticks fly under it), with full stick reach on
-  either side of it. The flip must land with runway before the tape
+  collapses to their body radius (sticks fly under it), a stick stuffs it on the
+  release, and from the touch-down on the rest of the lane is the accurate flat
+  read, so the man it flew over still plays it sliding off behind him. A flip
+  only clears a stick when it lands out of his reach. The flip must land with runway before the tape
   (`saucer_max_launch_speed`), so the carrier scores each receiver flat and
   saucered and lets EV decide (`carrier_pass_search.gd:_pass_variant_ev`, the saucer paying
   `SAUCER_EXTRA_MISS_PROB`); below ~6.5 m no legal saucer exists. **Receiver

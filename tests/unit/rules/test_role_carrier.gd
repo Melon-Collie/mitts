@@ -1801,7 +1801,7 @@ func _pinged_saucer_ctx() -> RoleContext:
 	var ctx := _make_ctx(_SAUCER_PASSER, [
 			[1, TEAM_ID, _SAUCER_PASSER],
 			[2, TEAM_ID, _SAUCER_RECEIVER],
-			[3, 1, Vector3(3.7, 0.0, 0.5)],
+			[3, 1, Vector3(3.7, 0.0, 2.5)],
 			[4, 1, Vector3(1.5, 0.0, 7.0)],
 			[5, 1, Vector3(4.5, 0.0, 6.5)]])
 	ctx.ping_pass_target_peer = 2
