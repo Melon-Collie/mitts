@@ -54,12 +54,16 @@ func partner_of(skater: Skater) -> Skater:
 	return _partner.get(skater, null)
 
 
-# A stoppage: every tie lets go, with no cooldown (play restarts anyway).
+# A stoppage: every tie lets go, with no cooldown (play restarts anyway). Sweeps
+# every skater, not only the pairs held here: the goal replay stamps its recorded
+# stick_tied onto the live actors, and a tie it revives is one _partner never saw.
 func clear() -> void:
-	for skater: Skater in _partner:
+	_partner.clear()
+	if _registry == null:
+		return
+	for skater: Skater in _registry.skaters():
 		if is_instance_valid(skater):
 			skater.stick_tied = false
-	_partner.clear()
 
 
 func _can_initiate(skater: Skater) -> bool:

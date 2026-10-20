@@ -174,6 +174,18 @@ func test_a_release_or_a_stoppage_lets_go() -> void:
 	assert_eq(_victim.pin_role, Role.PINNED, "a stoppage leaves no immunity")
 
 
+# The goal replay stamps its recorded frames onto the live actors, so it can end
+# on a lock the tracker has already ended (or never held).
+func test_a_stoppage_lets_go_of_a_lock_the_tracker_does_not_hold() -> void:
+	_pinner.pin_role = Role.PINNER
+	_victim.pin_role = Role.PINNED
+	_victim.pin_strength = 0.5
+	_pins.tick(false)
+	assert_eq(_pinner.pin_role, Role.NONE)
+	assert_eq(_victim.pin_role, Role.NONE)
+	assert_eq(_victim.pin_strength, 0.0)
+
+
 func test_a_pinned_carrier_loses_the_puck_at_his_feet() -> void:
 	var puck: Puck = PUCK_SCENE.instantiate() as Puck
 	add_child_autofree(puck)

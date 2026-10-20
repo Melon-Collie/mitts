@@ -61,12 +61,18 @@ func release(skater: Skater) -> void:
 			return
 
 
-# A stoppage: every lock lets go, with no immunity (play restarts anyway).
+# A stoppage: every lock lets go, with no immunity (play restarts anyway). Sweeps
+# every skater, not only the locks held here: the goal replay stamps its recorded
+# pin_role onto the live actors, and a lock it revives is one this never saw.
 func clear() -> void:
-	for pinner: Skater in _victim_by_pinner:
-		_unlock(pinner, _victim_by_pinner[pinner])
 	_victim_by_pinner.clear()
 	_started_at.clear()
+	if _registry == null:
+		return
+	for skater: Skater in _registry.skaters():
+		if is_instance_valid(skater):
+			skater.pin_role = BoardPinRules.Role.NONE
+			skater.pin_strength = 0.0
 
 
 func victim_of(pinner: Skater) -> Skater:
