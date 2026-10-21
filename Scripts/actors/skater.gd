@@ -26,10 +26,8 @@ const _BLADE_ELEVATED_EXTRA_LOFT_DEG: float = 16.0   # axial twist (handedness-s
 # which moves the toe again — a little, since the heel moves far less than the
 # shaft is long. Two passes leave it within a millimetre.
 const _TOE_ICE_PASSES: int = 2
-# The drawn puck's thickness (PuckMeshBuilder), and the furthest the carry seat
-# slides the blade to meet it: a few centimetres of dressing, never a jump to a
-# puck pinned somewhere else.
-const _PUCK_HEIGHT_M: float = 0.035
+# The furthest the carry seat slides the blade to meet the puck: a few
+# centimetres of dressing, never a jump to a puck pinned somewhere else.
 const _SEAT_MAX_SLIDE_M: float = 0.15
 const _BLADE_ELEVATION_BLEND_SPEED: float = 6.0      # blend units/sec (full swing in ~0.17 s)
 # How fast a tied blade's drawn slide (StickTieDraw) eases on and off.
@@ -134,6 +132,10 @@ var wall_pin_inward_bias: float = 0.25
 # face. Pure cosmetic — IK math, pickup distance, shot release all use the
 # centered blade contact.
 var carry_blade_offset: float = 0.07
+# The drawn puck (PuckMeshBuilder), which the carry seat rests the blade
+# against.
+var drawn_puck_radius: float = GameRules.PUCK_COLLISION_RADIUS
+var drawn_puck_height: float = GameRules.PUCK_COLLISION_HALF_HEIGHT * 2.0
 # How fast the rendered carry factor lerps toward the discrete ±1 side.
 # Higher = snappier flip, lower = visible swing through center. ~12/s ≈ 80 ms
 # to traverse 95% of the transition.
@@ -1505,20 +1507,20 @@ func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 	var rise: float = (rot * Vector3(0.0, 0.0, -blade_length)).dot(up)
 	var lo: float = 0.0
 	var hi: float = 1.0
-	if rise < -_PUCK_HEIGHT_M:
-		lo = 1.0 + _PUCK_HEIGHT_M / rise
-	elif rise > _PUCK_HEIGHT_M:
-		hi = _PUCK_HEIGHT_M / rise
-	var edge: float = GameRules.PUCK_COLLISION_RADIUS / blade_length
+	if rise < -drawn_puck_height:
+		lo = 1.0 + drawn_puck_height / rise
+	elif rise > drawn_puck_height:
+		hi = drawn_puck_height / rise
+	var edge: float = drawn_puck_radius / blade_length
 	var u: float = clampf((lo + hi) * 0.5, edge, 1.0 - edge)
 	var bend: float = p.curve_sign * p.curve_depth * pow(u, p.curve_power)
-	var seat: Vector3 = heel + rot * (sole + Vector3(bend, _PUCK_HEIGHT_M * 0.5, -u * blade_length))
+	var seat: Vector3 = heel + rot * (sole + Vector3(bend, drawn_puck_height * 0.5, -u * blade_length))
 	var along: Vector3 = rot * Vector3(0.0, 0.0, -1.0)
 	along = (along - up * along.dot(up)).normalized()
 	var across: Vector3 = along.cross(up)
 	var to_puck: Vector3 = marker_global.affine_inverse() * get_carry_target_global() - seat
 	to_puck -= up * to_puck.dot(up)
-	var touching: float = GameRules.PUCK_COLLISION_RADIUS \
+	var touching: float = drawn_puck_radius \
 			+ lerpf(p.thickness_heel, p.thickness_toe, u) * 0.5
 	var slide: Vector3 = to_puck + across * (signf(_address_factor) * touching)
 	# The blade hangs off the shaft's line from the hand, so a heel moved across
