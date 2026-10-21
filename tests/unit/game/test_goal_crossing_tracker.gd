@@ -149,7 +149,7 @@ func test_a_puck_pulled_through_the_mouth_onto_a_stick_in_the_net_scores() -> vo
 
 
 func test_carried_puck_is_sampled_at_its_pin() -> void:
-	_puck.global_position = Vector3(5.0, 0.0175, 5.0)
+	_puck.global_position = Vector3(5.0, GameRules.PUCK_COLLISION_HALF_HEIGHT, 5.0)
 	_puck.set_carrier(_c.skater)
 	_tracker.advance(_puck)
 	assert_true(_tracker.advance(_puck))

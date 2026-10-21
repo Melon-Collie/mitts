@@ -14,11 +14,13 @@ func test_puck_is_outward_wound_inside_its_envelope() -> void:
 		vol += verts[i].dot(verts[i + 1].cross(verts[i + 2])) / 6.0
 	assert_lt(vol, -1e-7,
 			"puck should be a closed outward-wound solid (negative signed volume)")
-	# Envelope of the replaced CylinderMesh: r 0.065 × h 0.035.
+	# Envelope of the replaced CylinderMesh: the collision disc.
 	var size: Vector3 = mesh.get_aabb().size
-	assert_lt(size.x, 0.135, "puck should stay inside the cylinder's diameter")
-	assert_lt(size.z, 0.135, "puck should stay inside the cylinder's diameter")
-	assert_almost_eq(size.y, 0.035, 0.001, "puck should keep the regulation height")
+	var diameter: float = GameRules.PUCK_COLLISION_RADIUS * 2.0
+	assert_lte(size.x, diameter + 0.0001, "puck should stay inside the cylinder's diameter")
+	assert_lte(size.z, diameter + 0.0001, "puck should stay inside the cylinder's diameter")
+	assert_almost_eq(size.y, GameRules.PUCK_COLLISION_HALF_HEIGHT * 2.0, 0.001,
+			"puck should keep the regulation height")
 	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
 	for uv: Vector2 in uvs:
 		assert_between(uv.x, 0.0, 1.0, "puck U inside [0, 1]")

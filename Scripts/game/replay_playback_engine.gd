@@ -79,7 +79,7 @@ static func apply_interpolated_snapshot(
 		interp.elevation_level = ts.elevation_level
 		interp.shot_charge = lerpf(fs.shot_charge, ts.shot_charge, t)
 		interp.stance_active = ts.stance_active
-		interp.wrister_address_side = ts.wrister_address_side
+		interp.blade_side = ts.blade_side
 		interp.recoil_dir = ts.recoil_dir
 		interp.stagger_timer = lerpf(fs.stagger_timer, ts.stagger_timer, t)
 		interp.knockdown_timer = lerpf(fs.knockdown_timer, ts.knockdown_timer, t)

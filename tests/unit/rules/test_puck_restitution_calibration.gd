@@ -77,7 +77,8 @@ func test_the_boards_return_what_the_kickplate_patent_asks() -> void:
 func test_the_post_rebounds_like_a_rigid_wall() -> void:
 	var r: float = GameRules.PUCK_COLLISION_RADIUS
 	for v: float in [5.0, 15.0, 25.0, 35.0]:
-		var pos := Vector3(GameRules.NET_HALF_WIDTH, 0.0175, GameRules.GOAL_LINE_Z - 0.09)
+		var pos := Vector3(GameRules.NET_HALF_WIDTH, GameRules.PUCK_COLLISION_HALF_HEIGHT,
+				GameRules.GOAL_LINE_Z - (GameRules.NET_POST_RADIUS + r - 0.005))
 		var res := PuckGeometryCollision.Result.new()
 		assert_true(PuckGeometryCollision.resolve_posts(pos, Vector3(0.0, 0.0, v), r, res))
 		assert_almost_eq(res.velocity.z, -v * PuckRestitution.rigid_wall(v), 0.001,

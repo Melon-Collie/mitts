@@ -222,8 +222,8 @@ func _make_trail_sub_emitter() -> GPUParticles3D:
 	# Flat disk lying on the ice. CylinderMesh with negligible height gives a
 	# circular scrape mark; cull_mode disabled so it's visible from above.
 	var disk := CylinderMesh.new()
-	disk.top_radius = 0.055
-	disk.bottom_radius = 0.055
+	disk.top_radius = GameRules.PUCK_COLLISION_RADIUS * 0.85
+	disk.bottom_radius = GameRules.PUCK_COLLISION_RADIUS * 0.85
 	disk.height = 0.003
 	disk.radial_segments = 10
 	disk.rings = 1

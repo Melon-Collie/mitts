@@ -172,7 +172,8 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 # ── Arm pose ─────────────────────────────────────────────────────────────────
 
 func update_top_arm() -> void:
-	_update_arm(0, _skater.shoulder.position, _skater.drawn_top_hand(),
+	var hand: Vector3 = _skater.drawn_top_hand()
+	_update_arm(0, _skater.shoulder.position, hand, _skater.stick_grip_axis(hand),
 			1.0 if _skater.is_left_handed else -1.0,
 			SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.TOP_FOREARM,
@@ -185,8 +186,9 @@ func update_top_arm() -> void:
 # gameplay stick, the hand goes where the bent shaft actually is.
 func update_bottom_arm() -> void:
 	var hand: Vector3 = _skater.bottom_hand.position
+	var grip: Vector3 = _skater.stick_grip_axis(hand)
 	hand += _skater.stick_bow_offset(hand)
-	_update_arm(1, _skater.bottom_shoulder.position, hand,
+	_update_arm(1, _skater.bottom_shoulder.position, hand, grip,
 			-1.0 if _skater.is_left_handed else 1.0,
 			SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
@@ -195,10 +197,13 @@ func update_bottom_arm() -> void:
 			SkaterMeshBuilder.UpperBone.BOTTOM_HAND)
 
 
-func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, pole_sign: float,
-		upper: int, forearm: int, cuff: int, elbow_bone: int, glove: int) -> void:
+# `grip_local` is the shaft's direction at this hand (upper-body space), ZERO for
+# a hand off the stick.
+func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_local: Vector3,
+		pole_sign: float, upper: int, forearm: int, cuff: int, elbow_bone: int,
+		glove: int) -> void:
 	if native_enabled and not _native_arms.is_empty() \
-			and _native_update_arm(arm, marker_local, hand_local, pole_sign):
+			and _native_update_arm(arm, marker_local, hand_local, grip_local, pole_sign):
 		return
 	var side_i: int = 0 if marker_local.x < 0.0 else 1
 	_sync_cap(side_i)
@@ -218,7 +223,7 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, pole_sign
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
-	_pose_glove(glove, elbow_s, hand_s)
+	_pose_glove(glove, elbow_s, hand_s, _skater.upper_body.transform.basis * grip_local)
 	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
 			spine.affine_inverse() * elbow_s)
 
@@ -226,14 +231,14 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, pole_sign
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
 # degenerate span, which the GDScript path's held poses answer instead.
 func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
-		pole_sign: float) -> bool:
+		grip_local: Vector3, pole_sign: float) -> bool:
 	var side_i: int = 0 if marker_local.x < 0.0 else 1
 	if _native_dirty or _native_side[arm] != side_i:
 		_configure_native()
 	var pole: Vector3 = _skater.arm_pole_local
 	pole.x *= pole_sign
 	var arm_len: float = _skater.upper_arm_length + _skater.forearm_length
-	if not _native_arms[arm].pose(marker_local, hand_local, _trunk_texture, pole,
+	if not _native_arms[arm].pose(marker_local, hand_local, grip_local, _trunk_texture, pole,
 			Vector4(_skater.upper_arm_length, _skater.forearm_length,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
@@ -259,7 +264,8 @@ func _configure_native() -> void:
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
 				_SHOULDER_CAP_REST_POLE, _SHOULDER_CAP_FOLLOW, cap, _pos[cap], _scale[cap],
-				Transform3D(_basis[cap], _girdle[side_i]))
+				Transform3D(_basis[cap], _girdle[side_i]),
+				deg_to_rad(_skater.wrist_break_max_deg))
 
 
 # Brings the rig's own view of one cap (_basis, _girdle) up to the native that
@@ -374,10 +380,10 @@ func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(_thickness[part]), elbow))
 
 
-# Positions the gloved fist at the hand and aligns its long (local Y) axis with
-# the forearm so the beveled cube's faces track the arm — same rotation
-# composition as the cuff.
-func _pose_glove(part: int, elbow: Vector3, hand: Vector3) -> void:
+# Positions the gloved fist at the hand. Its long (local Y) axis runs wrist →
+# fingers and its knuckle roll across local X; `grip` is the shaft through the
+# fist (skeleton space), ZERO off the stick.
+func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var dir: Vector3 = hand - elbow
 	if dir.length_squared() < 0.0001:
@@ -385,9 +391,37 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3) -> void:
 		held.origin = hand
 		_skeleton.set_bone_pose(part, held)
 		return
-	dir = dir.normalized()
-	var basis := Basis.looking_at(dir, up_for_look_at(dir)) * Basis(Vector3.RIGHT, PI * 0.5)
+	var basis: Basis = glove_basis(dir.normalized(), grip, deg_to_rad(_skater.wrist_break_max_deg))
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
+
+
+# The fist on a forearm pointing `forearm_dir`. Off the stick it lines up with
+# the forearm, rolled from world up like the cuff. On it, the knuckle roll lies
+# along the shaft and the hand turns toward square across it, bending at the
+# wrist by up to `max_bend` radians: the wrist breaks as the stick swings
+# against the forearm.
+static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
+	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
+			* Basis(Vector3.RIGHT, PI * 0.5)
+	if grip == Vector3.ZERO:
+		return straight
+	var across: float = forearm_dir.dot(grip)
+	var square: Vector3 = forearm_dir - grip * across
+	if square.length_squared() < 0.0001:
+		return straight
+	square = square.normalized()
+	var hand_axis: Vector3 = forearm_dir
+	var hinge: Vector3 = forearm_dir.cross(square)
+	if hinge.length_squared() > 1e-8:
+		hand_axis = forearm_dir.rotated(hinge.normalized(),
+				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
+	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
+	if knuckles.length_squared() < 0.0001:
+		return straight
+	knuckles = knuckles.normalized()
+	if knuckles.dot(straight.x) < 0.0:
+		knuckles = -knuckles
+	return Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis))
 
 
 # Glove cuff ring: its forward end sits at the hand and it extends back toward
@@ -500,14 +534,25 @@ func update_hem(delta: float, on_camera: bool) -> void:
 const HEAD_ANGLE_EPS_RAD: float = 0.0001
 
 var _head_angle_written: float = INF
+var _head_nod_written: float = INF
+# A nod tips the head and neck about the collar, this far under the helmet
+# bone's origin (m) — where SkaterMeshBuilder.NECK_PROFILE sinks into the torso
+# — so the neck stays in it rather than the head turning about its own middle;
+# the shift that puts it there.
+const _NOD_PIVOT_DROP_M: float = 0.17
+var _head_nod_shift: Vector3 = Vector3.ZERO
 
 
-func set_head_angle(angle: float) -> void:
-	if absf(angle - _head_angle_written) < HEAD_ANGLE_EPS_RAD:
+func set_head_angle(angle: float, nod: float = 0.0) -> void:
+	if absf(angle - _head_angle_written) < HEAD_ANGLE_EPS_RAD \
+			and absf(nod - _head_nod_written) < HEAD_ANGLE_EPS_RAD:
 		return
 	_head_angle_written = angle
+	_head_nod_written = nod
+	_head_nod_shift = Basis(Vector3.UP, angle) * Vector3(0.0,
+			_NOD_PIVOT_DROP_M * (cos(nod) - 1.0), -_NOD_PIVOT_DROP_M * sin(nod))
 	_basis[SkaterMeshBuilder.UpperBone.HELMET] = Basis.from_euler(
-			Vector3(_helmet_base_euler.x, angle, _helmet_base_euler.z))
+			Vector3(_helmet_base_euler.x - nod, angle, _helmet_base_euler.z))
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
 
 
@@ -520,6 +565,8 @@ func repose_bone(bone: int) -> void:
 		var side_i: int = 0 if bone == SkaterMeshBuilder.UpperBone.SHOULDER_L else 1
 		_sync_cap(side_i)
 		origin += _check_load_offset(signf(origin.x)) + _girdle[side_i]
+	if bone == SkaterMeshBuilder.UpperBone.HELMET:
+		origin += _head_nod_shift
 	var pose := Transform3D(_basis[bone].scaled_local(_scale[bone]), origin)
 	# The jersey's tail is the torso as the hips hold it: the same placement, hung
 	# from the waist, so it takes neither the spine's fold nor the texture.

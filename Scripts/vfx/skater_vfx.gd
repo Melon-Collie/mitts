@@ -117,6 +117,12 @@ func _ready() -> void:
 	_body_check_burst = _make_body_check_emitter()
 	add_child(_body_check_burst)
 
+	var skater: Skater = get_parent() as Skater
+	if skater != null:
+		var spray := BladeSprayVFX.new()
+		add_child(spray)
+		spray.watch(skater)
+
 	_prev_pos = global_position
 
 func _process(delta: float) -> void:

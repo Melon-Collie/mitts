@@ -184,7 +184,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 
 	# The carry-side state this pipeline reads (get_carry_forehand_factor, via
-	# _apply_carry_offset below) is advanced in Skater._update_carry_contact —
+	# _blade_target_for below) is advanced in Skater._update_carry_contact —
 	# on the physics tick, for every peer — not here: the push model keys it
 	# off blade motion, which remote skaters have and this pipeline does not run
 	# for them.
@@ -238,7 +238,7 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 		#    rather than being spent dragging the intent through unreachable space.
 		var mouse_local: Vector3 = _skater.upper_body_to_local(mouse_world)
 		var target_blade_xz := Vector2(mouse_local.x, mouse_local.z)
-		target_blade_xz = _apply_carry_offset(target_blade_xz)
+		target_blade_xz = _blade_target_for(target_blade_xz)
 		# Projected by the solve that places the hand, so the target sits on the rim
 		# the hand reaches (Scripts/controllers/CLAUDE.md, "The top hand is solved
 		# where the arm is").
@@ -541,25 +541,25 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 					origin, unit, _controller.blade_height,
 					_controller.net_blade_half_thickness))
 
-# While carrying, offset the IK target perpendicular to the shoulder→target
-# direction so the blade marker (and therefore the visible blade + stick
-# attachment) sits on the forehand or backhand side of the cursor. The puck
-# pins to Skater.get_carry_target_global() (contact − same offset), which lands
-# at the cursor — visually: cursor = puck, blade beside it. No-op when not
-# carrying.
-func _apply_carry_offset(desired_blade_xz: Vector2) -> Vector2:
-	if not _controller.has_puck:
-		return desired_blade_xz
-	var to_target: Vector2 = desired_blade_xz - Vector2(
+# The solve places the Blade marker, the heel, but the blade plays the puck at
+# mid-blade (Skater.get_blade_contact_global, where a carried puck pins and every
+# claim measures), so the target steps half a blade back along the shoulder's aim
+# line: the cursor names the contact. While carrying it also steps across, so
+# the blade sits on the forehand or backhand side of the cursor and the puck,
+# pinned the same offset back (Skater.get_carry_target_global), lands on it.
+func _blade_target_for(cursor_xz: Vector2) -> Vector2:
+	var to_target: Vector2 = cursor_xz - Vector2(
 			_skater.shoulder.position.x, _skater.shoulder.position.z)
-	if to_target.length() > 0.001:
-		var stick_dir: Vector2 = to_target.normalized()
+	if to_target.length() <= 0.001:
+		return cursor_xz
+	var stick_dir: Vector2 = to_target.normalized()
+	var target: Vector2 = cursor_xz - stick_dir * (_skater.blade_length * 0.5)
+	if _controller.has_puck:
 		# 90° rotation in XZ: (X, Z) → (−Z, X). Sign matched in
 		# Skater.get_carry_target_global so subtraction inverts cleanly.
-		var face_normal_xz := Vector2(-stick_dir.y, stick_dir.x)
-		desired_blade_xz += face_normal_xz \
+		target += Vector2(-stick_dir.y, stick_dir.x) \
 				* _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
-	return desired_blade_xz
+	return target
 
 # The top-hand solve, in the arm's level frame (UpperBody's yaw without its pitch
 # and roll; Scripts/controllers/CLAUDE.md, "The top hand is solved where the arm

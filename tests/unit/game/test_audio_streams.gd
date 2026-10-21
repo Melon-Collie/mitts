@@ -88,12 +88,15 @@ func test_the_mix_keeps_its_order() -> void:
 	for contact: int in contacts:
 		for shot: int in [S.SHOT_SLAPPER, S.SHOT_WRISTER]:
 			assert_gt(mix[shot], mix[contact], "shots over puck contacts")
-		for quiet: int in [S.PUCK_PICKUP, S.SKATE_BRAKE, S.STICK_TAP, S.GOALIE_PAD_DROP, S.GOALIE_PAD_SLIDE,
+		for quiet: int in [S.PUCK_PICKUP, S.SKATE_BRAKE, S.STICK_TAP, S.STICK_DRAG,
+				S.STICK_RELEASE, S.GOALIE_PAD_DROP, S.GOALIE_PAD_SLIDE,
 				S.SKATE_PUSH, S.SKATE_SCRAPE, S.SKATE_CARVE, S.SKATE_GLIDE, S.SKATE_DIG, S.SKATE_TOUCH]:
 			assert_gt(mix[contact], mix[quiet], "puck contacts over the quieter body and stick sounds")
 	assert_gt(mix[S.SKATE_CARVE], mix[S.SKATE_GLIDE], "the glide is a bed under the edges")
 	assert_gt(mix[S.SKATE_PUSH], mix[S.SKATE_TOUCH], "a step lands softer than it pushes")
 	assert_gt(mix[S.SKATE_DIG], mix[S.SKATE_PUSH], "a start digs harder than a stride pushes")
+	assert_gt(mix[S.STICK_TAP], mix[S.STICK_DRAG], "the puck striking the blade over the toe's scrape")
+	assert_gt(mix[S.STICK_DRAG], mix[S.STICK_RELEASE], "the blade leaving the puck is the lightest")
 	for sound: int in S.values():
 		if sound != S.UI_HOVER and sound != S.UI_CLICK:
 			assert_gt(mix[sound], mix[S.UI_CLICK], "menus sit under everything in play")

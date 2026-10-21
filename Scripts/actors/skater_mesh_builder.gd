@@ -190,10 +190,11 @@ const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
 const _KNEE_RADIUS: float = 0.095
 
 # Gloved fist, swept along local Y from the wrist (+Y, toward the elbow) to the
-# curled fingertips; SkaterArmRig._pose_glove aligns that axis with the forearm.
-# UNIT-scale (stations are y, half_w, half_d multiples of hand_sphere_radius).
-# Its roll about the forearm comes from world up, not the stick, so the section
-# stays near-square: no face of it can be the back of the hand or carry a thumb.
+# curled fingertips, its knuckle roll across local X; SkaterArmRig.glove_basis
+# aims it. UNIT-scale (stations are y, half_w, half_d multiples of
+# hand_sphere_radius). A fist off the stick takes its roll from world up, so the
+# section stays near-square: no face of it can be the back of the hand or carry
+# a thumb.
 const _GLOVE_FINGER_STATION: int = 3
 # The fist's width across the knuckle roll, in hand radii.
 const GLOVE_FIST_SPAN: float = 2.2

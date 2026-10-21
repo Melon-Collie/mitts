@@ -187,7 +187,7 @@ line; the replicated torso coil is a scaled+clamped encoding that can't be
 inverted without the shooter's controller tunables), so the host's committed
 side rides the movement-intent byte's spare bit 7 — validity implicit in
 `shot_state == WRISTER_AIM`. `RemoteController` pushes it via
-`set_wrister_address_side`, and the skater's address pass adopts it through
+`Skater.apply_wire_blade_side`, and the skater's address pass adopts it through
 the same crossing/hop detection as the derived path, so a spectated
 shooter's blade re-addresses exactly as the shooter sees it. This makes the
 address a real defensive tell: every peer — goalie, bots, and human
@@ -217,9 +217,8 @@ zero gameplay surface:
   re-address landings alike.
 
 The full one-sided contact model (puck coasting between touches, catches
-where geometry says, the pokeable free window) remains the v2 if this
-reads too safe — it renegotiates the pin's letter and needs its own
-design pass.
+where geometry says, the pokeable free window) would renegotiate the pin, and
+the pin is sacred. §7e draws its look on the blade mesh instead.
 
 ## 7d. Playtest rework: the pin never carries a seat
 
@@ -235,6 +234,90 @@ only in the wrister wind-up, as a mesh slide seating the frozen puck
 heel→toe per the level (`_aim_seat_offset_u`, eased in/out of WRISTER_AIM).
 That is where the read matters — a committed shooter — and where the goalie
 pre-arm will consume it.
+
+## 7e. The release (implemented)
+
+Keyed off velocity alone, a hard dangle pushed the puck the whole width of
+every sweep and flipped faces at the turnarounds, where the puck is slowest:
+the blade never let go of it. A face can only push the puck away from itself,
+so contact is really keyed off FORCE — and a sweep's force is at its ends,
+not its middle. `CarryStrokeState` reads that from the puck's filtered
+velocity and its rate of change; a peer drawing someone else's carry takes the
+side off the wire (v82) rather than differentiating an interpolated pin:
+
+- **Push**: the puck gaining speed off the trailing face.
+- **Release**: a push that peaked above `carry_release_speed`, has lost
+  `carry_release_drop` of it, and is slowing fast enough to stop within
+  `carry_release_stop_s`: the puck is turning round. The blade goes over the
+  puck to the far face while it runs free. A sweep one way that only eases
+  off — a hand's uneven pace round the body — never stops, so it keeps its
+  face and the next surge is the same push (without the stop term it cost
+  8–11 face changes in 3 s).
+- **Catch**: the puck coming at the leading face while slowing; its turn is
+  the throw, which is the next push. Speeding up toward the leading face by
+  `carry_repush_margin` is a second push the same way, which sends the blade
+  back to trail it.
+- A stroke under the release speed keeps the plain flip, so slow carries and
+  pull-acrosses are unchanged.
+- **A wobble is not a stroke.** A hand on a mouse is never still, and the
+  blade's inertia turns a cursor that moves on alternate ticks (60 fps against
+  the 120 Hz tick) into a speed that dips on them. Keyed off raw speed, either
+  one cost 4–7 face changes a stroke. So the speed is read through a
+  `carry_stroke_smoothing_s` filter, a release waits for a real drop rather
+  than a pause, a repush needs `carry_repush_margin`, and no face changes
+  until the puck has gone `carry_flip_distance` the new way. All in seconds,
+  metres and shares, so it reads the same at any frame rate.
+
+The release hop lands as the free puck stops — its speed at the release over
+the rate it has been slowing since the peak (`CarryStrokeState.stop_in_s`) —
+so the far face is there to catch it however late the release was read; it
+drives the side factor itself, holding
+the old face for `carry_release_lead_frac` while the puck runs off it and
+crossing at the top of the hop, so the blade never passes through the puck.
+Through the hop the mesh stands off the puck by `carry_free_gap` (as hard as
+the stroke), and the landing closes it — the catch. The stroke is read off
+the pin's velocity, not the blade marker's, which carries the face flip's own
+travel. Mesh-only like everything else here: the marker keeps
+`carry_blade_offset` and the pin stays at the cursor.
+`test_carry_stroke_state.gd`, `test_dangle_lets_the_puck_go.gd`.
+
+**Replicated (v82).** A client drawing someone else's carry must not decide
+the side: the wire's blade was placed with the host's side, and the client's
+pin subtracts its own, so wherever the two differ the pin moves up to twice
+`carry_blade_offset`, which reads as a stroke and flips again — measured at
+about two face changes a stroke on a wobbly sweep, the remote's puck up to
+15 cm off the host's. So the host's carry side rides the blade-side bit (the
+wrister address's, valid by state) and the client takes it
+(`Skater.apply_wire_blade_side`); it still reads the stroke
+(`CarryStrokeState.observe`) to tell whether a flip it was told of was a
+release, and sizes that hop the same way. A side not restaged within a tick
+lapses, so the local skater decides its own again after a goal replay.
+`test_remote_carry_follows_the_host.gd`.
+
+## 7f. Playtest: the puck on the cursor, the blade on the puck (implemented)
+
+Two offsets survived §7d. The solve places the Blade marker, which is the
+heel, on the cursor's target, but the puck pins to mid-blade, so a carried puck
+sat half a blade (15 cm) out along the stick from the cursor: pulled in to the
+feet it stopped short, "caught, not going all the way back". The target now
+steps half a blade back along the shoulder's aim line
+(`SkaterIKCoordinator._blade_target_for`), which puts mid-blade, and the puck,
+on the cursor; at the rim the heel clamps where it did, so reach is unchanged.
+The empty stick does the same, so a pickup, a poke and a reception are aimed
+with the spot the puck is then carried on.
+
+And the drawn blade only met the puck for a square, flat blade. Pulled in, the
+shaft steepens, the toe stands on the ice with the heel up to 17 cm off it, and
+the toe drag rolls the wrists; the puck, at mid-blade, sat under blade that was
+in the air, up to 5 cm off its face. The mesh now has a **carry seat**
+(`Skater._seat_on_puck`): the part of the blade within a puck's height of the
+ice is found from the dressed pose, and the blade slides so the middle of that
+part rests against the puck's rim, every other mesh slide laid on from there.
+Flat, that is mid-blade, as before; in tight the toe holds the puck, which is
+the toe drag the table in §3 describes. A heel slid across re-aims the blade at
+the hand, so the slide across is divided by the lever the seat has on the heel.
+Faded by the side factor through a face change, off under the slapshot pin.
+`test_carry_blade_rests_on_puck.gd` holds both.
 
 ## 8. What this buys
 

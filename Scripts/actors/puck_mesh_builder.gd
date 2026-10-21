@@ -2,17 +2,17 @@ class_name PuckMeshBuilder
 extends SkaterMeshBuilder
 
 # Beveled low-poly puck replacing the smooth CylinderMesh
-# (Assets/puck_mesh.tres, r 0.065 × h 0.035): same envelope, 12 flat-shaded
+# (Assets/puck_mesh.tres, r 0.0381 × h 0.0254): same envelope, 12 flat-shaded
 # sides, with a real puck's edge chamfer so the disc catches highlights on
 # its rims instead of reading as a featureless dark ellipse from the game
 # camera. Cosmetic only — puck physics is analytic
 # (GameRules.PUCK_COLLISION_RADIUS); nothing reads this mesh.
 
 const _PUCK_PROFILE: Array[Vector2] = [
-	Vector2(0.0175, 0.058),   # top face rim
-	Vector2(0.0114, 0.065),   # chamfer → full radius
-	Vector2(-0.0114, 0.065),
-	Vector2(-0.0175, 0.058),  # bottom chamfer
+	Vector2(0.0127, 0.034),   # top face rim
+	Vector2(0.0083, 0.0381),  # chamfer → full radius
+	Vector2(-0.0083, 0.0381),
+	Vector2(-0.0127, 0.034),  # bottom chamfer
 ]
 
 

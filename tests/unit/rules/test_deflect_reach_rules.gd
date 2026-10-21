@@ -2,7 +2,7 @@ extends GutTest
 
 # DeflectReachRules — how high a committed deflect's blade rises to meet the puck.
 
-const REST: float = 0.0175
+const REST: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const BLADE := Vector3(0.0, 0.03, 0.0)
 
 

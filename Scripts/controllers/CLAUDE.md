@@ -850,6 +850,19 @@ on the stop flips the pivot on noise and the hips sit between the lines. Capped,
 because a body still turning onto the line from a cursor squared beside it
 reads the same way. `test_facing_follows_travel.gd` holds all of it.
 
+On the forehand the stop is the two-hand reach, ~145° off facing on every
+build, short of the 157° pivot edge. Hips held on the line through a sweep round
+the forehand park the puck at the stop until the pivot whips it on (~840°/s of
+hips): a release and a repush, two taps. So the carrier's hips yield: past
+`carry_forehand_yield_deg` (110°) round the forehand,
+`FacingRules.yield_on_forehand` turns where the body heads this tick on toward
+the cursor until it is back there. It is laid on the turn, after the rule's
+target and its drag (never on the target, which may lie the other way of the
+facing), so it only ever turns the hips toward the puck, and the turn's wind-up
+still bounds it. Yielding well inside the stop is what spreads the turn over
+the sweep. The pose coordinator, `AICarryRollout._face`, the native rollout and
+the duel harness all lay it on. `test_carry_hips_yield.gd` holds it.
+
 **A pose the trunk texture cannot express does not belong in the gait.** The
 texture is one pitch and one roll for the whole shell, so it is symmetric by
 construction: any "drop a shoulder" written as roll raises the other shoulder by

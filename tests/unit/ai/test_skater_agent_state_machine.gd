@@ -1744,7 +1744,8 @@ func test_front_reach_across_the_body_walks_around_the_front() -> void:
 	for _i: int in 120:
 		var r: Vector3 = sm._step_mouse_front(target)
 		assert_gte(Vector2(r.x, r.z).length(), BladeRoute.CLEAR_M - 0.001, "never through the body")
-		assert_lte(r.distance_to(prev), step_max + 1e-5, "at the slew")
+		# Vector2 is float32, and the route's tangent is a square root near the circle.
+		assert_lte(r.distance_to(prev), step_max + 1e-4, "at the slew")
 		went_front = went_front or r.z < -BladeRoute.CLEAR_M + 0.01
 		prev = r
 	assert_true(went_front, "round the side he faces")

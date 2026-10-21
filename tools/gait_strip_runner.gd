@@ -69,7 +69,14 @@ const SCENARIOS: Array[Dictionary] = [
 	# Checked hard from the left while skating up-ice, from the start of the
 	# get-up (HIT_GETUP_AT ticks after the hit).
 	{"name": "hitup", "warm": TURN_AT + HIT_GETUP_AT, "step": 13},
+	# Standing with the puck, the cursor swept DANGLE_HALF_WIDTH either side at
+	# DANGLE_HZ: one stroke's release, hop and catch, seen from overhead first
+	# (the gameplay camera's angle), then ahead and beside.
+	{"name": "dangle", "warm": 150, "step": 4},
 ]
+# The dangle scenario's sweep: ~4.4 m/s across the middle, a hard dangle.
+const DANGLE_HZ: float = 2.0
+const DANGLE_HALF_WIDTH: float = 0.35
 
 
 class StubGameState extends Node:
@@ -190,6 +197,10 @@ func _build_actor() -> void:
 	add_child(_controller)
 	_controller.setup(_skater, _puck, _state)
 	_controller.apply_attributes(attrs)
+	if _dangling():
+		_puck.visible = true
+		_puck.set_carrier(_skater)
+		_controller.on_puck_picked_up_network()
 	# Facing up-ice, as a spawn leaves it. From the default facing the cursor
 	# ahead sits in the wedge behind the body that freezes facing, and the
 	# skater would skate the whole strip backward.
@@ -238,6 +249,10 @@ func _steer(input: InputState) -> void:
 				move = Vector2.ZERO
 				input.brake = true
 	var aim: Vector2 = travel
+	if _dangling():
+		move = Vector2.ZERO
+		var x: float = DANGLE_HALF_WIDTH * sin(TAU * DANGLE_HZ * maxf(_tick - 30, 0) * DT)
+		input.mouse_world_pos = _skater.global_position + Vector3(x, 0.0, -1.2)
 	match String(_scenarios[_index]["name"]):
 		"back":
 			move = -up_ice
@@ -269,7 +284,8 @@ func _steer(input: InputState) -> void:
 	if String(_scenarios[_index]["name"]) in ["shuffle", "sidehold", "sidestop"]:
 		_shuffle_steps.shape(input, _skater.velocity, _controller.shuffle_step_distance,
 				_controller.stop_decel)
-	input.mouse_world_pos = _skater.global_position + Vector3(aim.x, 0.0, aim.y) * 4.0
+	if not _dangling():
+		input.mouse_world_pos = _skater.global_position + Vector3(aim.x, 0.0, aim.y) * 4.0
 	input.mouse_world_pos.y = 0.0
 	input.delta = DT
 	input.host_timestamp += DT
@@ -282,7 +298,13 @@ func _skate(ticks: int) -> void:
 		_controller._process_input(input, DT)
 		_skater._physics_process(DT)
 		_skater._process(DT)
+		if _dangling():
+			_puck.global_position = _skater.get_carry_target_global()
 		_tick += 1
+
+
+func _dangling() -> bool:
+	return String(_scenarios[_index]["name"]) == "dangle"
 
 
 func _place_camera(view: int) -> void:
@@ -290,7 +312,13 @@ func _place_camera(view: int) -> void:
 	var travel: Vector3 = v.normalized() if v.length() > 0.5 else Vector3(0.0, 0.0, -1.0)
 	var aim: Vector3 = _skater.global_position + Vector3(0.0, -0.35, 0.0)
 	var offset: Vector3
+	if _dangling():
+		aim = _skater.global_position + Vector3(0.0, -0.9, -1.0)
+		if view == 0:
+			view = -1
 	match view:
+		-1:
+			offset = -travel * 0.6 + Vector3(0.0, 2.0, 0.0)
 		0:
 			offset = -travel * 3.6 + Vector3(0.0, 0.4, 0.0)
 		1:
@@ -308,6 +336,10 @@ func _report() -> void:
 			_frame, _tick, v.length(), rad_to_deg(atan2(v.x, -v.y)), m.glide, m.stride,
 			m.crossover, m.carve, m.backward, m.shuffle, m.skid, m.tight, m.stop,
 			rad_to_deg(_skater.balance_tilt().length())])
+	if _dangling():
+		print("      carry side %+.2f hop %.2f gap %.2f %s" % [_skater.get_carry_forehand_factor(),
+				_skater.get_carry_transit_factor(), _skater._free_gap_blend,
+				"release" if _skater._release_hop else ""])
 
 
 # One capture is three rendered frames, one per view. get_texture() returns the

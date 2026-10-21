@@ -44,9 +44,10 @@ class NativeCarryRollout : public godot::RefCounted {
 		MITTS_FACING_TUNABLES(X)
 #undef X
 	} facing_cfg;
-	// A carrier's pivot edges (AISkaterCaps.carry_facing_rules).
+	// A carrier's pivot edges and forehand yield (AISkaterCaps.carry_facing_rules).
 	double carry_forehand_edge_rad = 0.0;
 	double carry_backhand_edge_rad = 0.0;
+	double carry_forehand_yield_rad = 0.0;
 	struct Body {
 #define X(name) double name = 0.0;
 		MITTS_ROLLOUT_BODY_TUNABLES(X)

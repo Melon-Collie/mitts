@@ -5,7 +5,7 @@ extends GutTest
 # needs: max speed and max height. These tests pin those clamps and the delegation.
 
 const DT: float = 1.0 / 120.0
-const ICE: float = 0.0175
+const ICE: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const MAX_SPEED: float = 60.0
 const MAX_HEIGHT: float = 2.0
 
@@ -50,7 +50,7 @@ func test_grounded_puck_stays_grounded() -> void:
 
 # ── step_frame_substep — the SHARED Phase-3 step (host drive == client predict) ──
 
-const R: float = 0.065  # ~GameRules.PUCK_COLLISION_RADIUS
+const R: float = GameRules.PUCK_COLLISION_RADIUS
 
 
 func _tick_scratch() -> Array:

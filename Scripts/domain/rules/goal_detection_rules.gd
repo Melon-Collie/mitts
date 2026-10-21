@@ -7,10 +7,10 @@ class_name GoalDetectionRules
 # Why the sensor leaked
 # ---------------------
 # An Area3D fires on collision-SHAPE overlap (any part of the puck touching) and
-# is a solid VOLUME enterable from ANY face. The puck's collision radius (0.065 m)
+# is a solid VOLUME enterable from ANY face. The puck's collision radius
 # is large relative to the goal mouth, so:
-#   * A puck hugging the inside face of a post sits at |x| ~ 0.82 m — exactly the
-#     old sensor's x-overlap boundary — so any forward drift read as a goal
+#   * A puck hugging the inside face of a post sat exactly on the old sensor's
+#     x-overlap boundary — so any forward drift read as a goal
 #     ("weird stuff around the post").
 #   * A puck entering the sensor box from a SIDE or BACK face (a scramble beside
 #     the net, a puck squirting in from the side netting) tripped the same
@@ -31,7 +31,7 @@ class_name GoalDetectionRules
 # geometry (POST_HALF_WIDTH, NET_HEIGHT); `post_radius` and the puck extents
 # tighten them to the whole-disc clear opening inside `point_in_mouth`. The puck
 # is angular-locked flat, so its horizontal reach (puck_radius) differs from its
-# vertical reach (puck_half_height) — 0.065 vs 0.0175. `net_depth` is the
+# vertical reach (puck_half_height). `net_depth` is the
 # goal-line-to-back-frame depth (BASE_DEPTH), bounding the cavity fallback below.
 static func crossed_into_net(
 		prev_center: Vector3,

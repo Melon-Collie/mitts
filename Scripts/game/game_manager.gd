@@ -309,6 +309,7 @@ var _telemetry: NetworkTelemetry = null
 var _last_telemetry_phase_id: int = -1
 var _debug_overlay: NetworkDebugOverlay = null
 var _shape_overlay: ShapeDebugOverlay = null
+var _stick_overlay: StickDebugOverlay = null
 # Shape-occupancy debug tally (F6 overlay). Host-only — it samples the
 # team brains, which only exist where the bots are simulated. Public so the
 # overlay can read it without a setter chain.
@@ -1828,6 +1829,8 @@ func _wire_subsystems() -> void:
 	if OS.is_debug_build():
 		_shape_overlay = ShapeDebugOverlay.new()
 		add_child(_shape_overlay)
+		_stick_overlay = StickDebugOverlay.new()
+		add_child(_stick_overlay)
 
 	var _home_c := TeamColorRegistry.get_colors(teams[0].color_slot, 0)
 	var _away_c := TeamColorRegistry.get_colors(teams[1].color_slot, 1)
@@ -4810,6 +4813,9 @@ func on_scene_exit() -> void:
 	if _debug_overlay:
 		_debug_overlay.queue_free()
 		_debug_overlay = null
+	if _stick_overlay:
+		_stick_overlay.queue_free()
+		_stick_overlay = null
 	# Mid-game exits (quit to free play, host lost, host ended, kicked) still
 	# ship a network-quality row — the sessions that end badly are the most
 	# diagnostic ones, and the game-over-only path never saw them. No-op when

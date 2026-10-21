@@ -361,6 +361,11 @@ var bh_hand_y: float = 0.0
 var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
 var bh_release_angle_band_deg: float = 15.0
+# How far round the forehand a carrier's cursor goes before the hips yield to it
+# (FacingRules.yield_on_forehand). The two-hand reach stops the blade at ~145°
+# on every build; yielding from well inside that spreads the hips' turn over the
+# sweep (test_carry_hips_yield.gd).
+var carry_forehand_yield_deg: float = 110.0
 # How far beyond the bottom arm's reach the nearest point of the shaft may lie
 # before that hand has fully let go of the stick (m). The hand slides up the
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
@@ -707,6 +712,14 @@ var loft_vertical_speed_high: float = GameRules.DEFAULT_LOFT_VY_HIGH_M_S
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 var head_track_speed: float = 12.0
 var head_track_max_deg: float = 60.0
+# A carrier glances down at the puck (degrees of nod) as the hands work it
+# (the puck's speed off the body over the band, m/s) and as it comes in tight
+# (its distance over the band, m), less as the skater picks up speed: eyes up
+# on open ice.
+var head_puck_nod_deg: float = 28.0
+var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
+var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
+var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
 var slapper_wind_up_height: float = 1.0
@@ -1157,6 +1170,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	facing_rules.backhand_edge_rad = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
 	carry_facing_rules.forehand_edge_rad = facing_rules.forehand_edge_rad
 	carry_facing_rules.backhand_edge_rad = deg_to_rad(bh_release_angle_deg)
+	carry_facing_rules.forehand_yield_rad = deg_to_rad(carry_forehand_yield_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
 	if game_state.has_method("is_movement_locked"):
@@ -2147,10 +2161,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	# is upper-body-local and can't be used for host-side world geometry.
 	state.top_hand_world = skater.upper_body_to_global(skater.get_top_hand_position())
 	state.shot_state = _sm.get_state() as int
-	# Meaningful only while shot_state == WRISTER_AIM (one bit on the wire, no
-	# validity flag): the unseeded 0 maps to forehand, matching the address
-	# pass's own forehand seed on the first aim tick.
-	state.wrister_address_side = 1 if skater.get_wrister_address_side() >= 0 else -1
+	# One bit, read by the shot_state it rides with (no validity flag).
+	state.blade_side = skater.wire_blade_side(state.shot_state)
 	# The normalized 0..1 charge (skater.shot_charge covers the wrister's
 	# predicted release power AND slapper wind-up), in the u8 codec range.
 	# Consumed on the receive side by the cosmetic pose layers (stick flex,
@@ -2240,10 +2252,9 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# LIVE actors, so without these stamps the fields freeze at whatever the
 	# live tick last wrote and the replayed shot plays with the wrong stick.
 	skater.current_shot_state = state.shot_state
-	# The recorded wrister address, gated on the aim state like the live remote
-	# apply — the wire bit is garbage outside it.
-	if state.shot_state == SkaterStateMachine.State.WRISTER_AIM:
-		skater.set_wrister_address_side(state.wrister_address_side)
+	# The recorded blade side (the wrister address, or the carry side), applied
+	# by state like the live remote apply — the wire bit is garbage outside them.
+	skater.apply_wire_blade_side(state.blade_side)
 	skater.shot_charge = state.shot_charge
 	skater.elevation_level = state.elevation_level
 	# Skid VFX (SkaterVFX trail marks + spray) keys off is_braking — stamp it
@@ -2785,9 +2796,12 @@ func faceoff_center_distance() -> float:
 	# Plus the fold's own carry: the address hangs the arms off a shoulder swung
 	# that far out over the dot (SkaterIKCoordinator.address_shoulder), and the
 	# span below is measured from the hand, so the body has to stand back by it
-	# or the stick comes up short of the reach it was sized for.
+	# or the stick comes up short of the reach it was sized for. The span ends at
+	# the heel, and the cursor names mid-blade (SkaterIKCoordinator
+	# ._blade_target_for), so the dot is half a blade further on.
 	return _ik.address_carry() \
-			+ _ik.address_stick_horiz() * faceoff_center_reach_fraction
+			+ _ik.address_stick_horiz() * faceoff_center_reach_fraction \
+			+ skater.blade_length * 0.5
 
 
 func _enter_shot_block() -> void:

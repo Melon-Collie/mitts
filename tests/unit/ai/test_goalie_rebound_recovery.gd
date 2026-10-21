@@ -42,7 +42,7 @@ func before_each() -> void:
 func _upright_after(man: Vector3, man_speed_at_puck: float, seconds: float) -> float:
 	var spot := Vector3(0.0, 0.0, GOAL_Z + 8.0)
 	_h.settle_ready(spot)
-	assert_eq(_h.fire_at(spot, Vector3(0.45, 0.0, GOAL_Z), ShotMechanics.ELEVATION_FLAT,
+	assert_eq(_h.fire_at(spot, Vector3(0.55, 0.0, GOAL_Z), ShotMechanics.ELEVATION_FLAT,
 			26.0, 0.0), Harness.SAVE, "precondition: the pad takes the shot")
 	assert_false(_ctrl._sm.is_upright(), "precondition: the save put him down")
 	var pos: Vector3 = Vector3(_h.last_contact_pos.x, 0.0, _h.last_contact_pos.z)
@@ -88,7 +88,7 @@ func _rose_after_pickup(state: int, hold_s: float) -> bool:
 	_rose_mid_poke = false
 	var spot := Vector3(0.0, 0.0, GOAL_Z + 8.0)
 	_h.settle_ready(spot)
-	_h.fire_at(spot, Vector3(0.45, 0.0, GOAL_Z), ShotMechanics.ELEVATION_FLAT, 26.0, 0.0)
+	_h.fire_at(spot, Vector3(0.55, 0.0, GOAL_Z), ShotMechanics.ELEVATION_FLAT, 26.0, 0.0)
 	assert_false(_ctrl._sm.is_upright(), "precondition: the save put him down")
 	var pos: Vector3 = Vector3(_h.last_contact_pos.x, 0.0, _h.last_contact_pos.z)
 	var vel: Vector3 = Vector3(1.5, 0.0, 3.0).normalized() * 3.0

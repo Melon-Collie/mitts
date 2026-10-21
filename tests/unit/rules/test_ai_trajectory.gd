@@ -552,7 +552,7 @@ const _PR: float = GameRules.PUCK_COLLISION_RADIUS
 
 
 func test_a_puck_driven_into_the_side_boards_rests_a_radius_short() -> void:
-	var p := Vector3(GameRules.INNER_HALF_WIDTH - 0.5, 0.0175, 0.0)
+	var p := Vector3(GameRules.INNER_HALF_WIDTH - 0.5, GameRules.PUCK_COLLISION_HALF_HEIGHT, 0.0)
 	var v := Vector3(6.0, 0.0, 0.0)
 	for i: int in 200:
 		var stepped: Transform3D = AITrajectory.step_puck(p, v, 1.0 / 120.0)
@@ -568,7 +568,7 @@ func test_the_puck_never_overlaps_the_boards_anywhere_on_the_boundary() -> void:
 		var rad: float = deg_to_rad(float(deg))
 		var dir := Vector3(cos(rad), 0.0, sin(rad))
 		var p: Vector3 = dir * 2.0
-		p.y = 0.0175
+		p.y = GameRules.PUCK_COLLISION_HALF_HEIGHT
 		var v: Vector3 = dir * 14.0
 		for i: int in 300:
 			var stepped: Transform3D = AITrajectory.step_puck(p, v, 1.0 / 120.0)
@@ -595,7 +595,7 @@ func test_the_bots_predict_the_same_boundary_the_puck_uses() -> void:
 	# predict_puck must not model a puck that slides a radius deeper than the real
 	# one — the rim reads it plans against would be wrong by that much per contact.
 	var traj: Array[Vector3] = AITrajectory.predict_puck(
-			Vector3(GameRules.INNER_HALF_WIDTH - 0.5, 0.0175, 0.0),
+			Vector3(GameRules.INNER_HALF_WIDTH - 0.5, GameRules.PUCK_COLLISION_HALF_HEIGHT, 0.0),
 			Vector3(9.0, 0.0, 2.0), 90, 1.0 / 60.0)
 	for point: Vector3 in traj:
 		var xz := Vector2(point.x, point.z)

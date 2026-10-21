@@ -4,7 +4,7 @@ extends GutTest
 # normal (axis-aligned and rotated boxes), the radius (grazing) contribution, and the
 # already-overlapping case.
 
-const R: float = 0.065  # ~PUCK_COLLISION_RADIUS
+const R: float = 0.065  # a fixture radius; the cases are laid out around it
 
 
 func _unit_box(pos: Vector3, basis: Basis = Basis.IDENTITY) -> Transform3D:

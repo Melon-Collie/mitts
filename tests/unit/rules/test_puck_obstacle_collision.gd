@@ -162,7 +162,7 @@ func test_a_puck_resting_inside_the_box_is_ejected() -> void:
 # either half that lets a flat shot through fails here.
 
 const DT: float = 1.0 / 120.0
-const ICE: float = 0.0175
+const ICE: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const MAX_SPEED: float = 38.0
 const MAX_HEIGHT: float = 3.0
 const DRILL_WALL: Vector3 = Vector3(1.8, 0.12, 0.08)  # the drills' own board

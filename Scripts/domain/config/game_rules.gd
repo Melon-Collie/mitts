@@ -373,13 +373,13 @@ static func _push_out_of_goalie_box(world_xz: Vector2, gpos: Vector2, rot_y: flo
 # ── Puck ──────────────────────────────────────────────────────────────────────
 # Rest height = the disc's half-height, so its bottom face sits on the ice plane
 # (y = 0).
-const PUCK_START_POS: Vector3 = Vector3(0, 0.0175, 0)
+const PUCK_START_POS: Vector3 = Vector3(0, PUCK_COLLISION_HALF_HEIGHT, 0)
 # Disc extents, mirroring Assets/puck_mesh.tres (pinned by
 # test_goalie_scene_mirrors). Horizontal reach is the radius and vertical reach
 # the half-height — the two differ, and GoalDetectionRules needs both to size the
-# goal mouth to the whole disc rather than to a point.
-const PUCK_COLLISION_RADIUS: float = 0.065
-const PUCK_COLLISION_HALF_HEIGHT: float = 0.0175
+# goal mouth to the whole disc rather than to a point. Regulation: 3 × 1 in.
+const PUCK_COLLISION_RADIUS: float = 0.0381
+const PUCK_COLLISION_HALF_HEIGHT: float = 0.0127
 # A skater's blade face, heel height; the blade's contact point sits at its middle.
 const BLADE_FACE_HEIGHT_M: float = 0.06
 # Widest |x| a puck's CENTER can cross the goal line at without clipping the

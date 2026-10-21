@@ -78,12 +78,16 @@ var stance_active: bool = false
 # full-vs-passive delivery correctly on a client (the host knows all locally).
 # Bit 6 of the intent byte (no block growth).
 var hit_committed: bool = false
-# Which side of the still puck the frozen blade addresses during a wrister aim
-# (face-normal sign, ±1) — the re-address tell, so render-only clients show the
-# shooter's blade on the side the shot will push from. Meaningful ONLY while
-# shot_state == WRISTER_AIM (validity is implicit in the state, so the wire
-# spends one bit); garbage otherwise, and consumers must gate on the state.
-var wrister_address_side: int = 1
+# Which side of the puck the blade is on (±1, Skater.wire_blade_side), read by
+# state: in WRISTER_AIM the face of the still puck the frozen blade addresses
+# (face-normal sign) — the re-address tell, so render-only clients show the
+# shooter's blade on the side the shot will push from; in SKATING_WITH_PUCK the
+# carry side (forehand-normalized) — the host's, which places its puck, so a
+# client draws the blade and puck where the host has them rather than deciding
+# the side again off a blade placed with the host's. Garbage in any other state
+# (validity is implicit in it, so the wire spends one bit); consumers go
+# through Skater.apply_wire_blade_side, which gates on it.
+var blade_side: int = 1
 # The balance lean (world XZ, radians) and its spring rate. LOAD-BEARING: the
 # lean translates the UpperBody frame the wire's blade_position and
 # top_hand_position are local to, so a receiver that placed the frame from any
@@ -134,7 +138,7 @@ func to_array() -> Array:
 		stance_active,
 		knockdown_timer,
 		hit_committed,
-		wrister_address_side,
+		blade_side,
 		balance_tilt,
 		balance_tilt_vel,
 		torso_lean,
@@ -187,7 +191,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	brake_intent = s.brake_intent
 	stance_active = s.stance_active
 	hit_committed = s.hit_committed
-	wrister_address_side = s.wrister_address_side
+	blade_side = s.blade_side
 	balance_tilt = s.balance_tilt
 	balance_tilt_vel = s.balance_tilt_vel
 	torso_lean = s.torso_lean
@@ -237,7 +241,7 @@ static func from_array(data: Array) -> SkaterNetworkState:
 	if data.size() > 19:
 		state.hit_committed = data[19]
 	if data.size() > 20:
-		state.wrister_address_side = data[20]
+		state.blade_side = data[20]
 	if data.size() > 22:
 		state.balance_tilt = data[21]
 		state.balance_tilt_vel = data[22]

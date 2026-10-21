@@ -5,7 +5,7 @@ extends GutTest
 # XZ circle-vs-circle. These pin the hit test, the restitution reflection, the flush eject,
 # the pass-through cases (open mouth, far from goal), and vertical-channel preservation.
 
-const R: float = 0.065  # PUCK_COLLISION_RADIUS
+const R: float = 0.065  # a fixture radius; the cases are laid out around it
 
 
 func _post_x() -> float:

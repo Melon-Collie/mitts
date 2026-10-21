@@ -174,6 +174,19 @@ func bow_offset(point: Vector3) -> Vector3:
 	return xf.basis.x.normalized() * (_flex_sent * bow_profile(u))
 
 
+# The drawn shaft's butt→tip direction (upper-body space) at a hand holding it —
+# `point` within a grip of its line, as bow_offset reads one — else ZERO.
+func grip_axis(point: Vector3) -> Vector3:
+	if _shaft_len <= 0.0:
+		return Vector3.ZERO
+	var xf: Transform3D = _skater.stick_mesh.transform
+	var along: Vector3 = -xf.basis.z.normalized()
+	var rel: Vector3 = point - xf.origin
+	if (rel - along * rel.dot(along)).length_squared() > _GRIP_HOLD_RADIUS_M * _GRIP_HOLD_RADIUS_M:
+		return Vector3.ZERO
+	return along
+
+
 # Which way "toward the target" points on the shaft's ONE available bow axis,
 # as a signed −1..+1 factor. `shaft_dir` is the butt→tip direction in upper-body
 # space, exactly as update_mesh aims the mesh with it.
@@ -333,6 +346,9 @@ func update_flex(delta: float) -> bool:
 			# ease matches the torso coil's front-loaded snap.
 			target = -sqrt(clampf(_skater.shot_charge, 0.0, 1.0)) \
 					* _skater.stick_flex_windup_m * axis
+		elif state == SkaterStateMachine.State.SKATING_WITH_PUCK:
+			# A stroke loads the shaft across its face, the axis it bows on.
+			target = _skater.carry_bow_m()
 		_flex = lerpf(_flex, target,
 				minf(_skater.stick_flex_load_speed * delta, 1.0))
 		display = _flex

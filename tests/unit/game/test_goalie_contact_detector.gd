@@ -5,7 +5,7 @@ extends GutTest
 # global_transform resolves, then fires swept segments and checks the nearest-contact pick,
 # the part, the outward normal, and the clean-miss.
 
-const R: float = 0.065
+const R: float = GameRules.PUCK_COLLISION_RADIUS
 
 
 func _goalie_with_box(pos: Vector3, half: Vector3) -> Node3D:
