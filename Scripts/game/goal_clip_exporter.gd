@@ -42,6 +42,10 @@ signal stored_replay_finished
 ## A stored goal's incoming wipe covers the screen and its replay is about to
 ## pose the actors, so whatever it played over (the post-game reel) lets go.
 signal stored_replay_taking_over
+## The stored goal's replay_frame_changed and its every stop (finished or
+## cancelled), so the arena board can show the goal's recorded clock and score.
+signal stored_replay_frame_changed(game_state: Dictionary, carrier_team: int)
+signal stored_replay_stopped
 
 var _capture: ClipFrameCapture = null
 var _exporter: GifExporter = null
@@ -66,6 +70,7 @@ func _ready() -> void:
 	_stored_driver.use_shared_replay_mode = false
 	add_child(_stored_driver)
 	_stored_driver.taking_over.connect(stored_replay_taking_over.emit)
+	_stored_driver.replay_frame_changed.connect(stored_replay_frame_changed.emit)
 	_stored_driver.replay_finishing.connect(_close_segment)
 	_stored_driver.replay_stopped.connect(_on_stored_replay_stopped)
 
@@ -144,8 +149,11 @@ func _on_goal_replay_started() -> void:
 	_open_segment(label, _goal_driver.get_active_clip())
 
 
+# Stopped before finished: finished resumes the post-game reel, whose first
+# frame must not be cleared by this goal's stop.
 func _on_stored_replay_stopped() -> void:
 	_close_segment()
+	stored_replay_stopped.emit()
 	if not _cancelling_stored:
 		stored_replay_finished.emit()
 
