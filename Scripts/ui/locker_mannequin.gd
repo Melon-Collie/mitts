@@ -2,10 +2,10 @@ class_name LockerMannequin
 extends Node3D
 
 # A full kit-dressed skater (FigureKit) holding the picked stick in both hands:
-# the locker's display figure, standing on the case floor, and — `seated` — a
-# player on the lobby's bench. Every piece the locker edits is worn HERE —
-# skates on the feet, gloves gripping the shaft, face gear and hair on the head
-# — so a pick is judged in the place it will actually be seen.
+# the player screen's display figure, standing in its case (PlayerCase), and —
+# `seated` — a player on the lobby's bench. Every piece the player screen edits
+# is worn HERE — skates on the feet, gloves gripping the shaft, face gear and
+# hair on the head — so a pick is judged in the place it will actually be seen.
 #
 # Built from the individual part meshes rather than the skinned rig. That costs
 # nothing in fidelity: the parts are the skinned mesh's own geometry, so the
@@ -30,7 +30,7 @@ extends Node3D
 # bow that leaves the hands behind reads as broken rather than as flex. The
 # FLEX row carries the fitted stiffness number instead.
 
-# The camera framings the locker dollies between, plus the wide shot nothing is
+# The camera framings the player screen's case dollies between, plus the wide shot nothing is
 # focused. The stick takes THREE of them because one shot cannot serve its eight
 # rows: it is nearly as long as the player is tall, so a framing that contains
 # all of it is barely a zoom at all. LENGTH and FLEX want the whole stick, CURVE

@@ -1,6 +1,6 @@
 extends GutTest
 
-# The locker's mannequin and the lobby's bench figures are not the skinned rig,
+# The player screen's mannequin and the lobby's bench figures are not the skinned rig,
 # so their jersey tail is draped once per pose and baked (FigureKit.drape,
 # SkaterHemFlaps.baked_torso). Standing and seated — thighs flat through where
 # the jersey's front hangs — no vertex of the tail's cloth is inside a thigh, as

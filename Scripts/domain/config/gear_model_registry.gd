@@ -1,8 +1,8 @@
 class_name GearModelRegistry
 extends RefCounted
 
-# The catalogue of skate and glove MODELS — the equipment a player picks in the
-# locker — plus the helmet FACE options (visor / cage / fishbowl) and the
+# The catalogue of skate and glove MODELS — the equipment a player picks on the
+# player screen — plus the helmet FACE options (visor / cage / fishbowl) and the
 # jersey TUCK options (see their own sections below). A model is not a color pick: it is a fixed design
 # that paints every zone of the piece at once, the way buying a real pair
 # decides the boot, the ankle cuff and the accent band together.
