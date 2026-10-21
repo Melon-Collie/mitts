@@ -143,6 +143,22 @@ const READY_SKATE_Z_M: float = -0.06
 const READY_GLOVE := Vector2(-GoalieAnatomy.READY_GLOVE_X_M, GoalieAnatomy.READY_GLOVE_Y_M)
 const READY_BLOCKER_Z_M: float = -0.35
 
+# The low ready: the crouch sat deeper for a shooter in tight. The skates
+# stand well inside READY's, toes turned out, the knees rolled in until the pad
+# tops meet — a rigid pad rolled further crosses its partner — which narrows the
+# five-hole to a slit over the blade; the stick stays where READY holds it, its
+# blade still across the ice. It gives up width at the posts for that, and the
+# hips, head and glove come down with the sit.
+const LOW_READY_DROP_M: float = 0.14
+const LOW_READY_SKATE_NARROWING_M: float = 0.12
+const LOW_READY_PAD_ROLL_DEG: float = 16.0
+const LOW_READY_PAD_PITCH_DEG: float = 28.0
+const LOW_READY_PAD_TOE_OUT_DEG: float = 25.0
+const LOW_READY_BODY_POS := Vector3(READY_BODY_POS.x, READY_BODY_POS.y - LOW_READY_DROP_M,
+		READY_BODY_POS.z)
+const LOW_READY_HEAD_POS := Vector3(READY_HEAD_POS.x, READY_HEAD_POS.y - LOW_READY_DROP_M,
+		READY_HEAD_POS.z)
+
 # The half-butterfly body: one knee on the ice, the other leg in the ready
 # crouch, so the hips sit between the two stances' — the butterfly trunk raised
 # by half the drop from the ready stance — and lean over the down knee.
@@ -281,6 +297,13 @@ func build(inputs: Inputs) -> GoalieBodyConfig:
 			_apply_sweep_anim(c, inputs)
 			_apply_prelean(c, inputs)
 			_apply_shot_hand_reaction(c, inputs)
+		GoalieStateMachine.State.LOW_READY:
+			_set_low_ready_pose(c, inputs)
+			_apply_blade_intent_for_upright_state(c, inputs)
+			_apply_lunge(c, inputs)
+			_apply_sweep_anim(c, inputs)
+			_apply_prelean(c, inputs)
+			_apply_shot_hand_reaction(c, inputs)
 		GoalieStateMachine.State.BUTTERFLY, GoalieStateMachine.State.COILING:
 			# COILING shares the butterfly pose — pads on the ice, body
 			# squared up. The body rotation is driven separately by the
@@ -368,6 +391,7 @@ static func resting_body_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_BODY_Y_M, 0.0)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_BODY_Y_M, -0.02)
+		GoalieStateMachine.State.LOW_READY:                       return LOW_READY_BODY_POS
 	return Vector3(0.0, 1.22, 0.0)
 
 # From the state alone, like the resting heights, so the network pose agrees.
@@ -393,6 +417,7 @@ static func resting_head_position_for_state(state: int) -> Vector3:
 		GoalieStateMachine.State.CATCHING_DOWN:                   return Vector3(0.0, DOWN_HEAD_Y_M, -0.06)
 		GoalieStateMachine.State.HALF_BUTTERFLY_LEFT:             return Vector3(-HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
 		GoalieStateMachine.State.HALF_BUTTERFLY_RIGHT:            return Vector3( HALF_BODY_SHIFT_M, HALF_HEAD_Y_M, -0.12)
+		GoalieStateMachine.State.LOW_READY:                       return LOW_READY_HEAD_POS
 	return Vector3(0.0, 1.79, -0.04)
 
 
@@ -451,12 +476,66 @@ func _set_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
 		c.glove_pos.y += 0.06
 		c.blocker_pos.y += 0.06
 
+func _set_low_ready_pose(c: GoalieBodyConfig, inputs: Inputs) -> void:
+	_set_low_ready_leg(c, -1.0, inputs.five_hole_openness)
+	_set_low_ready_leg(c, 1.0, inputs.five_hole_openness)
+	c.body_pos      = LOW_READY_BODY_POS
+	c.body_rot      = Vector3(READY_BODY_PITCH_DEG, 0.0, 0.0)
+	c.head_pos      = LOW_READY_HEAD_POS
+	c.head_rot      = Vector3.ZERO
+	c.blocker_pos   = Vector3(GoalieStickRules.READY_WRIST_X_M, GoalieStickRules.upright_wrist_y(), READY_BLOCKER_Z_M)
+	c.blocker_rot   = Vector3(0.0, 0.0, STICK_ROLL)
+	c.glove_pos     = Vector3(READY_GLOVE.x, READY_GLOVE.y - LOW_READY_DROP_M, 0.0)
+	c.glove_pos.z   = _hand_depth(c, -1.0, c.glove_pos.x, c.glove_pos.y, BEND_READY_DEG)
+	c.glove_rot     = Vector3.ZERO
+	if inputs.reading_pinned_windup:
+		c.glove_pos.y += 0.06
+		c.blocker_pos.y += 0.06
+
+
+# The butterfly's drop from the low ready, as a share of the drop from READY:
+# the hips have less of the way to the butterfly left to fall, and a drop that
+# accelerates evenly takes the square root of the distance.
+static func low_ready_drop_share() -> float:
+	return sqrt((LOW_READY_BODY_POS.y - DOWN_BODY_Y_M) / (READY_BODY_POS.y - DOWN_BODY_Y_M))
+
+
 # One leg of the ready crouch (`side` goalie-local ±1), resting on the ice.
 func _set_ready_leg(c: GoalieBodyConfig, side: float, five_hole: float) -> void:
-	var rot := Vector3(-READY_PAD_PITCH_DEG, -side * pad_toe_out_standing,
-			side * READY_PAD_ROLL_DEG)
-	var lean: float = GoalieAnatomy.PAD_BOX_HEIGHT_M * 0.5 * sin(deg_to_rad(READY_PAD_PITCH_DEG))
-	var pos := Vector3(side * (READY_PAD_X_M + five_hole),
+	_place_crouch_leg(c, side, _crouch_pad_rot(side, READY_PAD_ROLL_DEG, READY_PAD_PITCH_DEG),
+			READY_PAD_X_M + five_hole, READY_PAD_PITCH_DEG)
+
+
+# One leg of the low ready, placed by its skate's inner edge: a pad rolled
+# about its centre swings its skate out as far as its knee comes in, and the
+# gap low down is the one this stance exists to close.
+func _set_low_ready_leg(c: GoalieBodyConfig, side: float, five_hole: float) -> void:
+	var ready_rot: Vector3 = _crouch_pad_rot(side, READY_PAD_ROLL_DEG, READY_PAD_PITCH_DEG)
+	var rot := Vector3(-LOW_READY_PAD_PITCH_DEG, -side * LOW_READY_PAD_TOE_OUT_DEG,
+			side * LOW_READY_PAD_ROLL_DEG)
+	var skate_x: float = READY_PAD_X_M + _inner_skate_offset(ready_rot, side) \
+			- LOW_READY_SKATE_NARROWING_M
+	_place_crouch_leg(c, side, rot, skate_x - _inner_skate_offset(rot, side) + five_hole,
+			LOW_READY_PAD_PITCH_DEG)
+
+
+func _crouch_pad_rot(side: float, roll_deg: float, pitch_deg: float) -> Vector3:
+	return Vector3(-pitch_deg, -side * pad_toe_out_standing, side * roll_deg)
+
+
+# Outward distance (negative = inward) from a pad's centre to the inner edge of
+# its skate, for the pad turned by `rot_deg` on `side`.
+static func _inner_skate_offset(rot_deg: Vector3, side: float) -> float:
+	var corner: Vector3 = Basis.from_euler(rot_deg * (PI / 180.0)) * Vector3(
+			-side * GoalieAnatomy.PAD_BOX_WIDTH_M * 0.5, -GoalieAnatomy.PAD_BOX_HEIGHT_M * 0.5, 0.0)
+	return side * corner.x
+
+
+# A crouch leg's pad at `centre_x` out from the midline, its skate under the hips.
+func _place_crouch_leg(c: GoalieBodyConfig, side: float, rot: Vector3, centre_x: float,
+		pitch_deg: float) -> void:
+	var lean: float = GoalieAnatomy.PAD_BOX_HEIGHT_M * 0.5 * sin(deg_to_rad(pitch_deg))
+	var pos := Vector3(side * centre_x,
 			GoalieAnatomy.pad_center_y_on_ice(rot), READY_SKATE_Z_M - lean)
 	if side < 0.0:
 		c.left_pad_pos = pos

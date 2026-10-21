@@ -388,3 +388,8 @@ here whenever you bump, in the same format.
 #      builds must be refused. Replay FORMAT_VERSION 18: a v17 replay's carry
 #      frames hold +1 in the bit, which would pin every replayed carry to one
 #      side.
+# v83: the goalie block's state_enum gains LOW_READY (16), the ready crouch sat
+#      deeper for a shooter in tight. Same layout; a v82 peer has no state 16,
+#      so it rests the trunk and head at the standing height over crouched pads
+#      and leaves the screen peek's lean off, so mixed builds must be refused.
+#      Replay format unchanged: older replays never hold the value.

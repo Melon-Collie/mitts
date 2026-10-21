@@ -1,9 +1,10 @@
 extends GutTest
 
 # ── HOW WIDE IS THE FIVE-HOLE, REALLY? ───────────────────────────────────────
-# The exhaustive sweep steps aim in 7 cm increments, and the standing five-hole
-# clearance is about 7 cm (a ~0.20 m slot less the 0.13 m puck). So the sweep can
-# step straight over the window and report it closed — which is what it did
+# The exhaustive sweep steps aim in 7 cm increments, and the five-hole
+# clearance was about 7 cm when this was written (a ~0.20 m slot less the 0.13 m
+# puck it had then). So the sweep can step straight over the window and report
+# it closed — which is what it did
 # (FLAT 0 goals, LOW 1 from the dot line) while a human reports beating him
 # five-hole cold, rarely but repeatably.
 #
@@ -21,6 +22,13 @@ extends GutTest
 #                    the edge of the span, so the true window is wider)
 #             LOW    window -0.15 .. -0.01 m   (15 cm — the FIVE-HOLE, just
 #                    blocker-side of centre)
+#
+# ── AGAIN WITH THE 3 IN PUCK (2026-10) ───────────────────────────────────────
+#   READY      COLD  LOW   window -0.15 .. +0.15 m (31 cm), dead centre
+#   LOW_READY  COLD  LOW   window -0.02 .. +0.02 m (5 cm) — he is low here,
+#                          4.7 m from the shooter (test_goalie_in_close_five_hole)
+#              HELD  FLAT  window -0.40 .. -0.35 m (6 cm, blocker-side low)
+#              everything else shut.
 #
 # Both windows were independently reported from real play before this ran
 # ("glove side low, and hard through his 5 hole"), which is the first external

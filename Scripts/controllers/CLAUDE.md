@@ -444,6 +444,39 @@ the down pad measures flat through the replicated pads, and the up leg keeps a
 standing leg's drop and the arm's reach.
 `test_goalie_half_butterfly.gd` holds it.
 
+**In tight he sits in the LOW READY, because there the stance is the save.**
+READY's pads are an A-frame: the five-hole runs from the blade top (~0.14 m) to
+the trunk (~0.5 m), and a lifted shot through it from inside ~5 m arrives
+(~0.1 s) before any drop lands. `_release_beats_the_drop` is the race: a puck
+an opponent can shoot, at the league's hardest wrister, reaches him inside his
+drop from READY (~6.6 m at Hard). Inside it his skates come in, toes out, knees
+rolled together, and the hips, head and glove sit 0.14 m lower. Three things
+follow from the pose rather than being bolted on:
+
+- **The five-hole is a window, not a wall** — a slit a few cm wide over the blade.
+- **The drop is shorter** (`low_ready_drop_share`, the hips' remaining fall),
+  latched into the slide at the drop so the drop he started is the one he gets.
+- **The push is slower** (`low_ready_push_share`), and every race that prices
+  his upright push reads it (`_push_share`, `_sync_push_cfgs`), or the
+  planner believes in a goalie quicker than the one skating.
+
+It gives up the low corners. Three things are easy to get wrong, all measured:
+
+- **The pad tops may meet but never cross.** A rigid pad rolled further draws an
+  X, and closing the five-hole that way measured better than any legal pose.
+  Rolled about its centre a pad also swings its skate out; the leg is placed by
+  its skate's inner edge. Toe-out narrows the slit (the pads are deep, so their
+  back edges swing in), squaring them widens it.
+- **The stick stays where READY holds it.** The paddle stands at the blade's
+  heel, so a paddle brought across into the slit carries the blade off the ice
+  in the middle: FLAT shots in close went from 0 to 14 in 31.
+- **The stance never changes while he reads a shot**, either way: rising opens
+  the five-hole under the puck, and dropping into it mid-flight moves the pads
+  the read was made against (24 goals in 300 from 9 m).
+
+`test_goalie_low_ready.gd` holds all of it;
+`instruments/ai/test_goalie_in_close_five_hole.gd` measures it.
+
 **`elevated_threshold` forks the LEGS, not the hands.** Under it he drops, and
 flat the pads are 0.28 m tall, so a corner shot at 0.3-0.6 m clears them wide
 of the trunk. The hands take every shot read over the flat pad top, after the

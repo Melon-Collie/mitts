@@ -94,6 +94,44 @@ func setup(goalie: Node, puck: Node, ctrl: GoalieController, shooter: Skater) ->
 	_ctrl.setup(_goalie, _puck, _goal_z, true)
 
 
+# ── THE FIVE-HOLE AS THE PUCK SEES IT ────────────────────────────────────────
+# Whether a puck travelling straight at him along his local -z, centred at
+# goalie-local (x, y), touches any part where it stands now: each box inflated
+# by the puck's radius and sampled through its depth. Settle him first.
+func puck_meets_him_at(x: float, y: float) -> bool:
+	var goalie := _goalie as Goalie
+	var inv_g: Transform3D = goalie.global_transform.affine_inverse()
+	var shapes: Array[CollisionShape3D] = goalie.get_collision_parts()
+	var halves: PackedVector3Array = goalie.get_collision_part_half_extents()
+	var r := Vector3(RADIUS, RADIUS, RADIUS)
+	for i: int in shapes.size():
+		if shapes[i].disabled or halves[i].x < 0.0:
+			continue
+		var inv: Transform3D = (inv_g * shapes[i].global_transform).affine_inverse()
+		var h: Vector3 = halves[i] + r
+		var z: float = -0.8
+		while z <= 0.8:
+			var q: Vector3 = inv * Vector3(x, y, z)
+			if absf(q.x) <= h.x and absf(q.y) <= h.y and absf(q.z) <= h.z:
+				return true
+			z += 0.01
+	return false
+
+
+# The widest clear run a puck's centre passes through within `span_m` of his
+# middle at height `y` (goalie-local), in 1 cm steps: the five-hole at that
+# height, 0 when it is shut.
+func five_hole_width_at(y: float, span_m: float = 0.30) -> float:
+	var best: int = 0
+	var run: int = 0
+	var x: float = -span_m
+	while x <= span_m + 0.0001:
+		run = 0 if puck_meets_him_at(x, y) else run + 1
+		best = maxi(best, run)
+		x += 0.01
+	return float(best) * 0.01
+
+
 # THE REPLICATED GOALIE READ the shot model is fed in gameplay — the same fields
 # carrier.gd assembles into its _shot_env_* (post seal, stance family, five-hole
 # gap, hand/pad pose). Instruments MUST score through this rather than leaning on

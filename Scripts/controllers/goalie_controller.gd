@@ -767,11 +767,17 @@ var max_reaction_duration: float = 1.0
 # ── Ready stance ──────────────────────────────────────────────────────────────
 # Distinct half-down stance triggered when the play is in the goalie's
 # defensive half AND the puck is loose or carried by an opponent. Crouched,
-# weight forward, gloves more active — closer to butterfly so the drop is
-# faster, and gives the player visual signal that the goalie is engaged. The
-# goalie returns to READY (not STANDING) after butterfly recovery while the
-# threat persists, so they aren't bouncing all the way upright between drops.
+# weight forward, gloves more active — a visual signal that the goalie is
+# engaged. The goalie returns to READY (not STANDING) after butterfly recovery
+# while the threat persists, so they aren't bouncing all the way upright
+# between drops.
 var ready_zone_distance: float = 25.0  # m — puck perp distance threshold to enter READY
+# The low ready's upright push, as a share of READY's: knees in on loaded inside
+# edges push worse, so a pass or a deke in tight beats him more while he is low.
+var low_ready_push_share: float = 0.8
+# Metres past the race's own boundary a shooter backs out before he rises out
+# of the low ready, so one hovering on it does not flip the stance every tick.
+var low_ready_exit_deadband_m: float = 0.5
 
 # Lateral deadband for the RVH_LEFT ↔ RVH_RIGHT swap. The puck has to
 # cross the goalie's centerline by at least this much before the post
@@ -1431,8 +1437,6 @@ func _build_rule_configs() -> void:
 	_arc_cfg.post_integration_angle_deg = rvh_early_angle
 	_zone_cfg.rvh_early_angle = rvh_early_angle
 	_beaten_wide_cfg = GoalieBehaviorRules.BeatenWideConfig.new()
-	_beaten_wide_cfg.goalie_lateral_speed = t_push_speed
-	_beaten_wide_cfg.goalie_lateral_accel = lateral_accel
 	_beaten_wide_cfg.reach_half_width = pad_local_offset
 	_beaten_wide_cfg.min_lateral_speed = beaten_wide_min_lateral_speed
 	_beaten_wide_cfg.max_threat_distance = beaten_wide_max_threat_distance
@@ -1440,9 +1444,8 @@ func _build_rule_configs() -> void:
 	_backdoor_cfg.pass_speed = backdoor_assumed_pass_speed
 	_backdoor_cfg.release_time = backdoor_release_time
 	_backdoor_cfg.react_delay = cross_crease_react_delay
-	_backdoor_cfg.goalie_lateral_speed = t_push_speed
-	_backdoor_cfg.goalie_lateral_accel = lateral_accel
 	_backdoor_cfg.max_shooter_distance = backdoor_max_shooter_distance
+	_sync_push_cfgs()
 	_sweep_lane_cfg = GoalieBehaviorRules.SweepLaneConfig.new()
 	# Physical lane parameters shared with the bot AI's lane model: blade reach,
 	# a competitive read delay, and lateral close pace at ~half top speed.
@@ -1776,8 +1779,7 @@ func _drop_waits_on_a_stick(ttg: float) -> bool:
 	if not GoaliePassRead.find_reception(puck.global_position, _loose_puck_velocity(),
 			_view.opponents, GameRules.DEFAULT_STICK_LENGTH_M, ttg, _drop_reception):
 		return false
-	return GoaliePassRead.can_wait_out(ttg, _drop_reception.pass_time,
-			butterfly_drop_speed)
+	return GoaliePassRead.can_wait_out(ttg, _drop_reception.pass_time, _drop_time())
 
 
 # A low shot he has READ ONTO A PAD FACE is a stand-up save. Standing, the pads
@@ -1889,16 +1891,19 @@ func _puck_past_save_plane() -> bool:
 #   STANDING ↔ READY         ─ READY when puck is in goalie's half AND not
 #                              carried by own team. STANDING otherwise (own
 #                              offense, or play is in opposing half).
-#   STANDING/READY → BUTTERFLY ─ the block-or-react decision, or a confirmed
-#                                beaten-wide verdict. Close-range non-shooting
-#                                threats are answered by stick + poke check.
-#   STANDING/READY → RVH_*   ─ puck enters defensive zone (behind goal / sharp angle)
+#   READY ↔ LOW_READY        ─ LOW_READY while a shot from the puck would beat
+#                              his drop from READY (_release_beats_the_drop);
+#                              never changed while he reads a shot.
+#   upright → BUTTERFLY      ─ the block-or-react decision, or a confirmed
+#                              beaten-wide verdict. Close-range non-shooting
+#                              threats are answered by stick + poke check.
+#   upright → RVH_*          ─ puck enters defensive zone (behind goal / sharp angle)
 #   BUTTERFLY → RECOVERING   ─ min hold elapsed && puck not pressing && not sliding
 #   BUTTERFLY ↛ RVH directly ─ must recover first (vulnerable window — exactly
 #                              what makes wraparounds and quick cross-creasers work)
-#   RECOVERING → READY/STAND ─ recovery_duration elapsed; back into READY if
-#                              the threat persists, else fully STANDING.
-#   RVH_* → READY/STANDING   ─ puck leaves defensive zone; same READY check.
+#   RECOVERING → on his feet ─ recovery_duration elapsed; into whichever of
+#                              STANDING / READY / LOW_READY the play asks for.
+#   RVH_* → on his feet      ─ puck leaves defensive zone; same check.
 #                              Never while a shot released from the seal is in
 #                              flight (_holding_seal_for_shot).
 func _update_state(delta: float) -> void:
@@ -1919,7 +1924,7 @@ func _update_state(delta: float) -> void:
 	# so its local +X is global -X; multiplying by -_direction_sign corrects for that.
 	var puck_local_x: float = (_tracked_threat_position.x - _goal_center_x) * -_direction_sign
 	match _sm.current:
-		State.STANDING, State.READY:
+		State.STANDING, State.READY, State.LOW_READY:
 			# Post integration is for a puck POSSESSED at a sharp angle / behind the
 			# net, not one IN FLIGHT from there — hence `not reacting`, which stops a
 			# sharp-angle shot from flipping to a post stance and clearing its own
@@ -1963,12 +1968,14 @@ func _update_state(delta: float) -> void:
 				# beaten laterally where only the seal answers, took the branch above.
 				_enter_butterfly(true)
 			else:
-				# Toggle STANDING ↔ READY based on threat conditions.
-				var should_be_ready: bool = _is_ready_situation()
-				if _sm.current == State.STANDING and should_be_ready:
-					_sm.transition_to(State.READY)
-				elif _sm.current == State.READY and not should_be_ready:
-					_sm.transition_to(State.STANDING)
+				# Never into or out of the low ready under a shot: it moves the
+				# pads the read was made against, rising opens the five-hole it
+				# held shut, and a released puck has no shooter left for the
+				# race to see.
+				var stance: State = _ready_stance()
+				if not _reaction.reacting \
+						or (stance != State.LOW_READY and _sm.current != State.LOW_READY):
+					_sm.transition_to(stance)
 		State.BUTTERFLY, State.COILING, State.SLIDING:
 			# All three down states share the butterfly hold/drop animation.
 			# tick_butterfly drains drop_progress, hold_timer, event_lockout.
@@ -2017,7 +2024,7 @@ func _update_state(delta: float) -> void:
 		State.RECOVERING:
 			_sm.recovery_timer += delta
 			if _sm.recovery_timer >= _recovery_needed:
-				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
+				_sm.transition_to(_ready_stance())
 				_sm.recovery_timer = 0.0
 		State.RVH_LEFT:
 			if _holding_seal_for_shot():
@@ -2025,7 +2032,7 @@ func _update_state(delta: float) -> void:
 			elif _should_play_rim():
 				_enter_puck_play()
 			elif not _is_puck_in_defensive_zone() or _pass_read_live():
-				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
+				_sm.transition_to(_ready_stance())
 			elif _puck_front_of_goal_m() > post_stance_swap_deadband_m:
 				# Puck walked out in front — flip to VH for the shot threat.
 				_sm.transition_to(State.VH_LEFT)
@@ -2037,7 +2044,7 @@ func _update_state(delta: float) -> void:
 			elif _should_play_rim():
 				_enter_puck_play()
 			elif not _is_puck_in_defensive_zone() or _pass_read_live():
-				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
+				_sm.transition_to(_ready_stance())
 			elif _puck_front_of_goal_m() > post_stance_swap_deadband_m:
 				_sm.transition_to(State.VH_RIGHT)
 			elif puck_local_x < -rvh_swap_deadband_m:
@@ -2046,7 +2053,7 @@ func _update_state(delta: float) -> void:
 			if _holding_seal_for_shot():
 				pass
 			elif not _is_puck_in_defensive_zone() or _pass_read_live():
-				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
+				_sm.transition_to(_ready_stance())
 			elif _puck_front_of_goal_m() < -post_stance_swap_deadband_m:
 				# Puck carried behind the goal line — back to the RVH ice seal.
 				_sm.transition_to(State.RVH_LEFT)
@@ -2056,7 +2063,7 @@ func _update_state(delta: float) -> void:
 			if _holding_seal_for_shot():
 				pass
 			elif not _is_puck_in_defensive_zone() or _pass_read_live():
-				_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
+				_sm.transition_to(_ready_stance())
 			elif _puck_front_of_goal_m() < -post_stance_swap_deadband_m:
 				_sm.transition_to(State.RVH_RIGHT)
 			elif puck_local_x < -rvh_swap_deadband_m:
@@ -2078,6 +2085,57 @@ func _holding_seal_for_shot() -> bool:
 			_universal_shot_cfg, _scratch_seal_shot).is_shot:
 		_seal_shot_live = false
 	return _seal_shot_live
+
+# The stance he stands in on his feet: STANDING with the play away, READY with
+# it in his half, LOW_READY once a shot from where the puck is would beat his
+# drop from READY.
+func _ready_stance() -> State:
+	if not _is_ready_situation():
+		return State.STANDING
+	return State.LOW_READY if _release_beats_the_drop() else State.READY
+
+
+# The low ready's race: a puck someone can shoot, released at the league's
+# hardest wrister, reaches him before his drop from READY would close the
+# five-hole. Inside it no read or drop answers a shot through his legs, so only
+# the stance he is already in can.
+func _release_beats_the_drop() -> bool:
+	if not _opposing_shooter_near_puck(GameRules.DEFAULT_STICK_LENGTH_M):
+		return false
+	if (puck.global_position.z - goalie.global_position.z) * _direction_sign <= 0.0:
+		return false
+	var dist: float = Vector2(puck.global_position.x - goalie.global_position.x,
+			puck.global_position.z - goalie.global_position.z).length()
+	var margin: float = low_ready_exit_deadband_m if _sm.current == State.LOW_READY else 0.0
+	return GoalieBehaviorRules.release_beats_the_drop(dist,
+			GameRules.DEFAULT_WRISTER_POWER_MAX_M_S, butterfly_drop_speed, margin)
+
+
+# The butterfly's drop from the stance he is in.
+func _drop_time() -> float:
+	return _drop_time_from(_sm.current)
+
+
+func _drop_time_from(stance: State) -> float:
+	if stance == State.LOW_READY:
+		return butterfly_drop_speed * GoalieBodyConfigBuilder.low_ready_drop_share()
+	return butterfly_drop_speed
+
+
+# His upright push in the stance he is in, as a share of the full one.
+func _push_share() -> float:
+	return low_ready_push_share if _sm.current == State.LOW_READY else 1.0
+
+
+# The races that price his push off a config read it from here, so they price
+# the push of the stance he is in.
+func _sync_push_cfgs() -> void:
+	var share: float = _push_share()
+	_beaten_wide_cfg.goalie_lateral_speed = t_push_speed * share
+	_beaten_wide_cfg.goalie_lateral_accel = lateral_accel * share
+	_backdoor_cfg.goalie_lateral_speed = t_push_speed * share
+	_backdoor_cfg.goalie_lateral_accel = lateral_accel * share
+
 
 # True when the puck is in the goalie's defensive half AND not controlled by
 # the goalie's own team (loose or carried by an opponent). Drives the
@@ -2223,7 +2281,7 @@ func _build_save_situation(staying_down: bool = false) -> GoalieSaveSelection.Si
 		sight_vel = launch_to_goalie.normalized() * GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 	s.sight_delay = _screen_delay(sight_vel)
 	s.reaction_delay = reaction_delay
-	s.drop_time = butterfly_drop_speed
+	s.drop_time = _drop_time()
 	# READ, not advance — `_advance_beaten_wide` owns the clock and runs once a
 	# tick. Building the situation must stay free of side effects: it is built
 	# from three different callers per tick, and when it moved the confirmation
@@ -2866,7 +2924,7 @@ func _tick_puck_play(delta: float) -> void:
 		# if the puck is still back there.
 		_current_depth = GoalieBehaviorRules.threat_distance_to_goal(
 				goalie.global_position, _goal_line_z, _goal_center_x)
-		_sm.transition_to(State.READY if _is_ready_situation() else State.STANDING)
+		_sm.transition_to(_ready_stance())
 
 
 # The smother failed (puck whacked away / picked up before the glove landed)
@@ -2962,9 +3020,10 @@ func _enter_butterfly(blocking: bool = false) -> void:
 # `_sm.transition_to` and only the host runs the goalie state machine (clients
 # render the interpolated host pose and set `_sm.current` directly).
 # Snap-back-to-depth bookkeeping is unit-sensitive: `_current_depth` carries
-# different units per state (radius in STANDING/READY/RECOVERING; perpendicular
+# different units per state (radius on his feet, is_on_his_feet; perpendicular
 # depth in BUTTERFLY/RVH) and the wrong unit on entry teleports the goalie.
 func _on_sm_transitioned(prev: State, new_state: State) -> void:
+	_sync_push_cfgs()
 	match new_state:
 		State.BUTTERFLY, State.HALF_BUTTERFLY_LEFT, State.HALF_BUTTERFLY_RIGHT:
 			# Fresh butterfly entry resets timers + snaps depth. Returning
@@ -2972,6 +3031,7 @@ func _on_sm_transitioned(prev: State, new_state: State) -> void:
 			# preserves accumulated hold time, drop progress, and the depth
 			# the slide ended at.
 			if prev != State.SLIDING and prev != State.COILING:
+				_slide.butterfly_drop_speed = _drop_time_from(prev)
 				_slide.enter_fresh_butterfly()
 				# Standing/Ready stored radius; butterfly holds perpendicular
 				# depth, so snap to the goalie's actual world perp depth.
@@ -3178,7 +3238,7 @@ func _threat_is_in_zone(threat_dist: float) -> bool:
 # deficit curve here.
 func _lateral_tracking_cap(threat_dist: float) -> float:
 	return GoalieBehaviorRules.lateral_tracking_cap(
-			threat_dist, _threat_lateral_speed_x(), t_push_speed)
+			threat_dist, _threat_lateral_speed_x(), t_push_speed * _push_share())
 
 
 # The threat's lateral rate, signed. Read from the CARRIER's body for a carried
@@ -3330,7 +3390,7 @@ func _update_position(delta: float) -> void:
 	# stored back. Next frame's _update_depth keeps lerping radius toward the
 	# chart target without oscillation.
 	match _sm.current:
-		State.STANDING, State.READY, State.RECOVERING:
+		State.STANDING, State.READY, State.RECOVERING, State.LOW_READY:
 			var pair: Vector2 = _move_along_arc(delta)
 			_current_x = pair.x
 			# The arc's perpendicular depth collapses toward the goal line at
@@ -3531,25 +3591,22 @@ func _move_along_arc(delta: float) -> Vector2:
 					target_xz.x = lerpf(target_xz.x, shot_x_at_depth, shade_t)
 	_target_x = target_xz.x
 	var delta_2d: float = current.distance_to(target_xz)
-	var move_speed: float
+	var t_push: bool = cross_crease_push or delta_2d > lateral_threshold
+	var push_share: float = _push_share()
+	var move_speed: float = (t_push_speed if t_push else shuffle_speed) * push_share
+	var accel: float = lateral_accel * push_share
 	var five_hole_target: float
-	if cross_crease_push:
-		move_speed = t_push_speed
+	if t_push:
 		five_hole_target = five_hole_t_push_max
 	elif delta_2d < 0.01:
-		move_speed = shuffle_speed
 		five_hole_target = five_hole_base
-	elif delta_2d > lateral_threshold:
-		move_speed = t_push_speed
-		five_hole_target = five_hole_t_push_max
 	else:
-		move_speed = shuffle_speed
 		five_hole_target = five_hole_shuffle_max
 	# Ramp the effective speed toward the desired so a push isn't instant — the
 	# goalie accelerates onto its edge. The cross-crease drive ramps the same way
 	# (a real push-off builds speed), which is part of why it loses the race to a
 	# hard pass.
-	_move_speed_current = move_toward(_move_speed_current, move_speed, lateral_accel * delta)
+	_move_speed_current = move_toward(_move_speed_current, move_speed, accel * delta)
 	# Brake on the lead edge so he stops ON his spot rather than dead at it — but
 	# against the spot's own motion, so tracking a moving threat carries no lag.
 	var target_closing: float = 0.0
@@ -3558,9 +3615,9 @@ func _move_along_arc(delta: float) -> Vector2:
 				(target_xz - current) / delta_2d) / delta)
 	_prev_arc_target_xz = target_xz
 	var stop_cap: float = target_closing \
-			+ GoaliePushRules.braking_speed_cap(delta_2d, lateral_accel)
+			+ GoaliePushRules.braking_speed_cap(delta_2d, accel)
 	_arc_braking = stop_cap < _move_speed_current
-	_arc_t_push = move_speed == t_push_speed
+	_arc_t_push = t_push
 	_move_speed_current = minf(_move_speed_current, stop_cap)
 	var effective_speed: float = _move_speed_current
 	var step: float = effective_speed * delta
@@ -3574,7 +3631,7 @@ func _move_along_arc(delta: float) -> Vector2:
 	return new_xz
 
 # Arc target (x, z) at the current radius — the challenge-angle position for
-# STANDING/READY/RECOVERING tracing. BUTTERFLY uses compute_slide_destination
+# tracing on his feet (is_on_his_feet). BUTTERFLY uses compute_slide_destination
 # with butterfly_radius instead.
 func _arc_target_xz() -> Vector2:
 	return GoalieBehaviorRules.target_arc_position(
@@ -4027,7 +4084,7 @@ func _update_body_parts(delta: float) -> void:
 	_pose_inputs.puck_play_stride_intensity = _puck_play.stride_intensity
 	var yaw: float = goalie.get_goalie_rotation_y()
 	_footwork.advance(delta, _velocity_x * cos(yaw) - _velocity_z * sin(yaw),
-			_arc_t_push, _arc_braking, shuffle_speed)
+			_arc_t_push, _arc_braking, shuffle_speed * _push_share())
 	_pose_inputs.footwork = _footwork
 	_pose_inputs.eye_offset_local_x = _eye_offset_x * cos(yaw)
 	_set_pad_toe_out_inputs()
@@ -4042,7 +4099,7 @@ func _update_body_parts(delta: float) -> void:
 		# remaining tweaks. BUTTERFLY / COILING / SLIDING share the same
 		# logic — they're all butterfly form, just at different motion
 		# phases.
-		var drop_lerp: float = 3.0 / maxf(butterfly_drop_speed, 0.001)
+		var drop_lerp: float = 3.0 / maxf(_slide.butterfly_drop_speed, 0.001)
 		lerp_t = drop_lerp * delta if _slide.drop_progress < 1.0 else reaction_lerp_speed * delta
 	elif _reaction.reacting:
 		lerp_t = reaction_lerp_speed * delta
@@ -4267,7 +4324,8 @@ func _commit_cross_crease_response() -> void:
 			and GoalieBehaviorRules.cross_crease_race_lost(
 					_cross_crease_target_x, puck.global_position.x,
 					_loose_puck_velocity().x, _current_x, pad_local_offset,
-					backdoor_release_time, t_push_speed, lateral_accel)
+					backdoor_release_time, t_push_speed * _push_share(),
+					lateral_accel * _push_share())
 	# Pads-first answers the one-timer; a receiver who must catch it first is
 	# beaten to the spot on the feet.
 	if race_lost and _pass_reception.found and not _receiver_loaded():
@@ -4365,12 +4423,12 @@ func _respond_to_pass_read() -> bool:
 			+ _pass_reception.point.distance_to(goalie.global_position) \
 			/ GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 	s.reaction_delay = reaction_delay
-	s.drop_time = butterfly_drop_speed
+	s.drop_time = _drop_time()
 	var will_block: bool = GoalieSaveSelection.answer_fraction(s) <= 0.0
 	if not will_block:
 		var needed: float = absf(square_x - _current_x) - pad_local_offset
-		if needed <= 0.0 or needed <= GoaliePushRules.set_reach(
-				t_push_speed, lateral_accel, _pass_reception.time + backdoor_release_time):
+		if needed <= 0.0 or needed <= GoaliePushRules.set_reach(t_push_speed * _push_share(),
+				lateral_accel * _push_share(), _pass_reception.time + backdoor_release_time):
 			return true
 	_enter_butterfly()
 	_commit_slide_to(_slide.clamp_lateral_target(square_x, _goal_center_x,

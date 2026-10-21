@@ -1302,3 +1302,12 @@ static func five_hole_gap_m(is_down: bool, openness: float) -> float:
 	if is_down:
 		return 2.0 * op
 	return 2.0 * (STANDING_PAD_CENTER_X_M + op) - PAD_BOX_WIDTH_M
+
+
+# Whether a shot released `shooter_distance_m` from him at `shot_speed_m_s`
+# reaches him before a drop taking `drop_time_s` lands, with `margin_m` of
+# extra range (the low ready's exit deadband). Inside it no drop closes the
+# five-hole in time, and the stance he is standing in is the save.
+static func release_beats_the_drop(shooter_distance_m: float, shot_speed_m_s: float,
+		drop_time_s: float, margin_m: float = 0.0) -> bool:
+	return shooter_distance_m < shot_speed_m_s * drop_time_s + margin_m

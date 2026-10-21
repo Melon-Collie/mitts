@@ -167,6 +167,11 @@ const _STANCE_SHOTS: Array = [
 	["catching_down", GoalieStateMachine.State.CATCHING_DOWN],
 	["back", GoalieStateMachine.State.READY, Vector3(0.0, 1.1, 2.6), Vector3(0.0, 0.85, 0.0)],
 	["high_back", GoalieStateMachine.State.READY, Vector3(0.6, 2.4, 1.9), Vector3(0.0, 0.8, 0.0)],
+	# The ready crouch and the low ready from a shooter in the slot, then beside.
+	["ready_front", GoalieStateMachine.State.READY, Vector3(0.0, 0.9, -3.0), Vector3(0.0, 0.6, 0.0)],
+	["low_ready_front", GoalieStateMachine.State.LOW_READY, Vector3(0.0, 0.9, -3.0), Vector3(0.0, 0.6, 0.0)],
+	["low_ready", GoalieStateMachine.State.LOW_READY],
+	["low_ready_side", GoalieStateMachine.State.LOW_READY, Vector3(-2.8, 0.8, 0.0), Vector3(0.0, 0.6, 0.0)],
 ]
 var _stance_index: int = 0
 

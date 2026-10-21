@@ -30,10 +30,12 @@ extends RefCounted
 # HALF_BUTTERFLY_* is one pad down (the goalie-local side named) and the other
 # leg still loaded on its skate: the reach of a flat pad on one side, with a leg
 # left to push and rise on.
+# LOW_READY is the ready crouch sat deeper for a shooter in tight: knees in over
+# the five-hole, a shorter drop, a slower push (Scripts/controllers/CLAUDE.md).
 enum State {
 	STANDING, BUTTERFLY, RECOVERING, RVH_LEFT, RVH_RIGHT, READY, SLIDING, COILING,
 	VH_LEFT, VH_RIGHT, COVERING, PLAYING_PUCK, CATCHING, CATCHING_DOWN,
-	HALF_BUTTERFLY_LEFT, HALF_BUTTERFLY_RIGHT,
+	HALF_BUTTERFLY_LEFT, HALF_BUTTERFLY_RIGHT, LOW_READY,
 }
 
 signal transitioned(prev: State, new: State)
@@ -77,14 +79,15 @@ static func pads_on_ice(state: State) -> int:
 # Stances posed on his feet in the ready family — the ones with footwork, whose
 # head rides the trunk's lean (RECOVERING is posed as READY).
 static func is_on_his_feet(state: int) -> bool:
-	return state == State.STANDING or state == State.READY or state == State.RECOVERING
+	return state == State.STANDING or state == State.READY or state == State.RECOVERING \
+			or state == State.LOW_READY
 
 
-# Upright = goalie can drop to butterfly / engage RVH from this state. Both
-# STANDING and READY qualify; RECOVERING does not (it's the vulnerable
+# Upright = goalie can drop to butterfly / engage RVH from this state. STANDING
+# and both ready crouches qualify; RECOVERING does not (it's the vulnerable
 # stand-up window).
 func is_upright() -> bool:
-	return current == State.STANDING or current == State.READY
+	return current == State.STANDING or current == State.READY or current == State.LOW_READY
 
 func is_rvh() -> bool:
 	return current == State.RVH_LEFT or current == State.RVH_RIGHT
