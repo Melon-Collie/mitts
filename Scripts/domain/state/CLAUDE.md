@@ -91,9 +91,11 @@ radius) into `AISkaterCaps`, so the AI never disagrees with the body.
 
 ## Where builds come from
 
-- **Players** pick one build on the player screen (`player_settings_popup.gd`:
-  height and weight sliders; height moves preserve `frame_t`) and its locker
-  (`locker_popup.gd`: the gear rows). There are no presets.
+- **Players** pick one build on the player screen (`player_settings_popup.gd`):
+  height and weight sliders under BODY (a height move preserves `frame_t`), the
+  stick slots under STICK and the skate profile under SKATES, each starred as a
+  gameplay pick. Its stat panel reads `BuildReadout`, which turns these
+  accessors into ratios against the neutral build. There are no presets.
 - **Prefs** (`player_prefs.gd`) store the six ints under `attr_scale_version`
   5. An older save loads the neutral build.
 - **Bots** carry curated cards in `data/bot_identities.json`, read through

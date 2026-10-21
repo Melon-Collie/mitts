@@ -53,9 +53,7 @@ const _OVERSIZED: Array[String] = [
 	"res://Scripts/ui/career_stats_screen.gd",
 	"res://Scripts/ui/hud.gd",
 	"res://Scripts/ui/lobby_manager.gd",
-	"res://Scripts/ui/locker_popup.gd",
 	"res://Scripts/ui/network_debug_overlay.gd",
-	"res://Scripts/ui/player_settings_popup.gd",
 	"res://Scripts/ui/side_menu.gd",
 	"res://Scripts/ui/slot_grid_panel.gd",
 ]

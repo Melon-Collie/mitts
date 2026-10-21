@@ -4,8 +4,8 @@ extends RefCounted
 # Turns a StickModelRegistry colorway into the stick's surface materials:
 # shaft paint + bands + wordmark on the flex shader, blade weave on the
 # carbon shader. Every consumer (the skater's stick, the ghost swap, the
-# workbench preview) builds through these two factories, so a model pick is
-# one index handed in here. Geometry (pattern, tape) stays with its own
+# display figures' FigureKit) builds through these two factories, so a model
+# pick is one index handed in here. Geometry (pattern, tape) stays with its own
 # systems; the catalogue itself — which colorways exist — is the registry's.
 #
 # Shaft: base paint with the MITTS wordmark on both wide faces (mirrored so

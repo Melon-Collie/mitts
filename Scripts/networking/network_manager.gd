@@ -1374,16 +1374,16 @@ func set_peer_attributes(peer_id: int, attrs: PlayerAttributes) -> void:
 	if attrs != null:
 		_peer_attributes[peer_id] = attrs
 
-# True only during an active online match. Used by the player-settings popup
-# to gate mid-match attribute edits: offline / free-play / lobby allows the
-# pick to apply live; online play locks attributes at join time so all peers
-# simulate the same numbers without a runtime attribute-change RPC.
+# True only during an active online match. Attributes lock at join time there,
+# so all peers simulate the same numbers without a runtime attribute-change
+# RPC; GameManager's local_attributes_changed handler checks this before
+# re-applying a build.
 func is_in_online_match() -> bool:
 	return game_initiated and not is_offline_mode
 
 # Single entry point for in-session attribute edits, mirroring
-# apply_local_identity. Offline / free-play only — the picker UI is
-# responsible for gating its Apply button via is_in_online_match().
+# apply_local_identity. The player screen opens from the free-play side menu
+# only; GameManager's handler is the online gate.
 func apply_local_attributes(attrs: PlayerAttributes) -> void:
 	if attrs == null:
 		return

@@ -46,8 +46,7 @@ const _DEBUG_SURFACES: Array[String] = [
 	"res://Scripts/ui/shape_debug_overlay.gd",
 ]
 
-# The backlog, written down and un-growable. Issue #607 covers the build
-# screen; the rest of the menu surface is unclaimed.
+# The backlog, written down and un-growable; the menu surface is unclaimed.
 const _GRANDFATHERED: Dictionary[String, int] = {
 	"res://Scripts/ui/boot.gd": 7,
 	"res://Scripts/ui/bug_report_dialog.gd": 10,
@@ -62,7 +61,6 @@ const _GRANDFATHERED: Dictionary[String, int] = {
 	"res://Scripts/ui/lobby_arena_backdrop.gd": 1,
 	"res://Scripts/ui/lobby_manager.gd": 33,
 	"res://Scripts/ui/lobby_settings_panel.gd": 11,
-	"res://Scripts/ui/locker_popup.gd": 4,
 	"res://Scripts/ui/menu_style.gd": 4,
 	"res://Scripts/ui/options/accessibility_tab.gd": 20,
 	"res://Scripts/ui/options/audio_tab.gd": 7,
@@ -76,7 +74,6 @@ const _GRANDFATHERED: Dictionary[String, int] = {
 	"res://Scripts/ui/penalty_drill_hud.gd": 8,
 	"res://Scripts/ui/ping_marker.gd": 3,
 	"res://Scripts/ui/play_popup.gd": 12,
-	"res://Scripts/ui/player_settings_popup.gd": 21,
 	"res://Scripts/ui/post_game_analytics.gd": 18,
 	"res://Scripts/ui/replay_viewer_hud.gd": 13,
 	"res://Scripts/ui/shot_accuracy_hud.gd": 9,
