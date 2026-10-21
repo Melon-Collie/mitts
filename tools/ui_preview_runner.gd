@@ -20,6 +20,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "options_gameplay", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 0},
 	{"name": "options_camera", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 1},
 	{"name": "options_video", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 2},
+	{"name": "options_video_performance", "stage": _STAGE_BOOT, "open": "_open_video_performance"},
 	{"name": "options_audio", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 3},
 	{"name": "options_controls", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 4},
 	{"name": "options_accessibility", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 5},
@@ -271,6 +272,26 @@ func _open_boot_options(tab: int) -> void:
 		_fail("Boot has no OptionsPanel")
 		return
 	panel.call("_activate_tab", tab)
+
+
+# The Video tab scrolled to its Performance section, where the cost notes are.
+func _open_video_performance() -> void:
+	_open_boot_options(2)
+	await _settle(2, 0.0)
+	var tab: OptionsVideoTab = _find(_boot(), OptionsVideoTab) as OptionsVideoTab
+	var scroll: ScrollContainer = null
+	var up: Node = tab
+	while up != null and scroll == null:
+		scroll = up as ScrollContainer
+		up = up.get_parent()
+	if scroll == null:
+		_fail("the Video tab is not in a ScrollContainer")
+		return
+	for child: Node in tab.get_children():
+		if child is Label and (child as Label).text == "PERFORMANCE":
+			scroll.scroll_vertical = int((child as Label).position.y)
+			return
+	_fail("the Video tab has no PERFORMANCE section")
 
 
 func _open_side_menu(handler: String) -> void:

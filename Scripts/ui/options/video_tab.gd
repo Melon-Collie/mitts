@@ -5,6 +5,19 @@ extends OptionsTab
 # Owns the resolution/monitor population logic, the upscaling/AA compatibility
 # gating, and resync_display_from_prefs() (called by the parent's revert dialog).
 
+# How much a setting costs, as its note under the row tells the player. Read
+# from tools/graphics_cost.gd's table (docs/performance-findings.md → *What each
+# Video setting costs*), not guessed. PROCESSOR is a setting that costs the CPU
+# rather than the graphics card.
+enum Impact { NONE, LOW, MEDIUM, HIGH, PROCESSOR }
+const _IMPACT_KEYS: Array[String] = [
+	"OPTIONS_IMPACT_NONE", "OPTIONS_IMPACT_LOW", "OPTIONS_IMPACT_MEDIUM", "OPTIONS_IMPACT_HIGH",
+	"OPTIONS_IMPACT_PROCESSOR",
+]
+const _IMPACT_COLORS: Array[Color] = [
+	MenuStyle.TEXT_MUTED, MenuStyle.TEAL, MenuStyle.GOLD, MenuStyle.DANGER, MenuStyle.TEXT_BODY,
+]
+
 var _res_row: HBoxContainer = null
 var _res_label: Label = null   # dimmed in fullscreen modes (resolution disabled)
 var _window_mode_btn: OptionButton = null
@@ -79,6 +92,7 @@ func _build_content() -> void:
 	_vsync_btn.selected = PlayerPrefs.vsync_mode
 	_vsync_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("VSync", _vsync_btn))
+	add_child(_impact_note(Impact.NONE, "OPTIONS_VIDEO_NOTE_VSYNC"))
 
 	_fps_btn = OptionButton.new()
 	_fps_btn.custom_minimum_size = Vector2(140, 40)
@@ -107,6 +121,7 @@ func _build_content() -> void:
 	var gamma_val := _value_label("%.2f" % PlayerPrefs.gamma)
 	_gamma_slider.value_changed.connect(func(v: float) -> void: gamma_val.text = "%.2f" % v)
 	add_child(_slider_row("Gamma", _gamma_slider, gamma_val))
+	add_child(_impact_note(Impact.NONE, "OPTIONS_VIDEO_NOTE_GAMMA"))
 
 	_color_grade_btn = OptionButton.new()
 	_color_grade_btn.custom_minimum_size = Vector2(220, 40)
@@ -116,15 +131,18 @@ func _build_content() -> void:
 	_color_grade_btn.selected = PlayerPrefs.color_grade_preset
 	_color_grade_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("Color Grade", _color_grade_btn))
+	add_child(_impact_note(Impact.NONE, "OPTIONS_VIDEO_NOTE_COLOR_GRADE"))
 
 	_arena_ads_check = CheckButton.new()
 	_arena_ads_check.set_pressed_no_signal(PlayerPrefs.arena_ads_enabled)
 	SoundManager.wire_button(_arena_ads_check)
 	_arena_ads_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row(tr("OPTIONS_ARENA_ADS"), _arena_ads_check))
+	add_child(_impact_note(Impact.NONE, "OPTIONS_VIDEO_NOTE_ARENA_ADS"))
 
 	add_child(_section_spacer())
 	add_child(_section_header("Performance"))
+	add_child(_section_note(tr("OPTIONS_VIDEO_PERFORMANCE_INTRO")))
 
 	_render_scale_slider = HSlider.new()
 	_render_scale_slider.min_value = PlayerPrefs.RENDER_SCALE_MIN
@@ -136,6 +154,7 @@ func _build_content() -> void:
 	_render_scale_slider.value_changed.connect(
 		func(v: float) -> void: rs_val.text = "%d%%" % roundi(v * 100.0))
 	add_child(_slider_row("Render Scale", _render_scale_slider, rs_val))
+	add_child(_impact_note(Impact.HIGH, "OPTIONS_VIDEO_NOTE_RENDER_SCALE"))
 
 	_scaling_3d_btn = OptionButton.new()
 	_scaling_3d_btn.custom_minimum_size = Vector2(180, 40)
@@ -145,6 +164,7 @@ func _build_content() -> void:
 	_scaling_3d_btn.selected = PlayerPrefs.scaling_3d_mode
 	_scaling_3d_btn.item_selected.connect(_on_scaling_3d_selected)
 	add_child(_field_row("Upscaling", _scaling_3d_btn))
+	add_child(_impact_note(Impact.MEDIUM, "OPTIONS_VIDEO_NOTE_UPSCALING"))
 	_update_upscaling_enabled()
 
 	_aa_btn = OptionButton.new()
@@ -155,6 +175,7 @@ func _build_content() -> void:
 	_aa_btn.selected = PlayerPrefs.anti_aliasing_mode
 	_aa_btn.item_selected.connect(_on_aa_selected)
 	add_child(_field_row("Anti-Aliasing", _aa_btn))
+	add_child(_impact_note(Impact.HIGH, "OPTIONS_VIDEO_NOTE_ANTI_ALIASING"))
 	_update_aa_compatibility()
 
 	_gi_mode_btn = OptionButton.new()
@@ -165,6 +186,7 @@ func _build_content() -> void:
 	_gi_mode_btn.selected = PlayerPrefs.gi_mode
 	_gi_mode_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("Global Illumination", _gi_mode_btn))
+	add_child(_impact_note(Impact.HIGH, "OPTIONS_VIDEO_NOTE_GI"))
 
 	_shadow_quality_btn = OptionButton.new()
 	_shadow_quality_btn.custom_minimum_size = Vector2(180, 40)
@@ -174,6 +196,7 @@ func _build_content() -> void:
 	_shadow_quality_btn.selected = PlayerPrefs.shadow_quality
 	_shadow_quality_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("Shadow Quality", _shadow_quality_btn))
+	add_child(_impact_note(Impact.HIGH, "OPTIONS_VIDEO_NOTE_SHADOWS"))
 
 	_crowd_density_btn = OptionButton.new()
 	_crowd_density_btn.custom_minimum_size = Vector2(180, 40)
@@ -183,24 +206,28 @@ func _build_content() -> void:
 	_crowd_density_btn.selected = PlayerPrefs.crowd_density
 	_crowd_density_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("Crowd Density", _crowd_density_btn))
+	add_child(_impact_note(Impact.MEDIUM, "OPTIONS_VIDEO_NOTE_CROWD"))
 
 	_ice_scratches_check = CheckButton.new()
 	_ice_scratches_check.set_pressed_no_signal(PlayerPrefs.ice_scratches_enabled)
 	SoundManager.wire_button(_ice_scratches_check)
 	_ice_scratches_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Ice Scratches", _ice_scratches_check))
+	add_child(_impact_note(Impact.LOW, "OPTIONS_VIDEO_NOTE_ICE_SCRATCHES"))
 
 	_puck_shadow_check = CheckButton.new()
 	_puck_shadow_check.set_pressed_no_signal(PlayerPrefs.puck_shadow_enabled)
 	SoundManager.wire_button(_puck_shadow_check)
 	_puck_shadow_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Puck Shadow", _puck_shadow_check))
+	add_child(_impact_note(Impact.LOW, "OPTIONS_VIDEO_NOTE_PUCK_SHADOW"))
 
 	_player_shadows_check = CheckButton.new()
 	_player_shadows_check.set_pressed_no_signal(PlayerPrefs.player_shadows_enabled)
 	SoundManager.wire_button(_player_shadows_check)
 	_player_shadows_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row(tr("OPTIONS_PLAYER_SHADOWS"), _player_shadows_check))
+	add_child(_impact_note(Impact.LOW, "OPTIONS_VIDEO_NOTE_PLAYER_SHADOWS"))
 
 	_animation_detail_btn = OptionButton.new()
 	_animation_detail_btn.custom_minimum_size = Vector2(180, 40)
@@ -210,26 +237,60 @@ func _build_content() -> void:
 	_animation_detail_btn.selected = PlayerPrefs.animation_detail
 	_animation_detail_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row(tr("OPTIONS_ANIMATION_DETAIL"), _animation_detail_btn))
+	add_child(_impact_note(Impact.PROCESSOR, "OPTIONS_VIDEO_NOTE_ANIMATION_DETAIL"))
 
-	# Atmosphere passes, heaviest first. Fog and reflections are the GPU-costly
-	# ones; ambient occlusion is cheap. All default on (the intended arena look).
+	# Atmosphere passes, heaviest first.
 	_fog_check = CheckButton.new()
 	_fog_check.set_pressed_no_signal(PlayerPrefs.volumetric_fog_enabled)
 	SoundManager.wire_button(_fog_check)
 	_fog_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Volumetric Fog", _fog_check))
+	add_child(_impact_note(Impact.HIGH, "OPTIONS_VIDEO_NOTE_FOG"))
 
 	_reflections_check = CheckButton.new()
 	_reflections_check.set_pressed_no_signal(PlayerPrefs.reflections_enabled)
 	SoundManager.wire_button(_reflections_check)
 	_reflections_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Reflections", _reflections_check))
+	add_child(_impact_note(Impact.HIGH, "OPTIONS_VIDEO_NOTE_REFLECTIONS"))
 
 	_ao_check = CheckButton.new()
 	_ao_check.set_pressed_no_signal(PlayerPrefs.ambient_occlusion_enabled)
 	SoundManager.wire_button(_ao_check)
 	_ao_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
 	add_child(_field_row("Ambient Occlusion", _ao_check))
+	add_child(_impact_note(Impact.MEDIUM, "OPTIONS_VIDEO_NOTE_AMBIENT_OCCLUSION"))
+
+
+# What the row above costs and what it does: a colored impact tag leading the
+# explanation, indented to the control column like _row_note.
+func _impact_note(impact: Impact, note_key: String) -> MarginContainer:
+	var margin := MarginContainer.new()
+	margin.add_theme_constant_override("margin_left", _LABEL_COL_WIDTH + _ROW_SEPARATION)
+	margin.set_meta(&"impact", impact)
+	var note := RichTextLabel.new()
+	note.fit_content = true
+	note.scroll_active = false
+	note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	note.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	note.add_theme_font_size_override("normal_font_size", _NOTE_FONT_SIZE)
+	note.add_theme_color_override("default_color", _DIM)
+	note.push_color(_IMPACT_COLORS[impact])
+	note.add_text(tr(_IMPACT_KEYS[impact]).to_upper())
+	note.pop()
+	note.add_text("  " + tr(note_key))
+	margin.add_child(note)
+	return margin
+
+
+# A note on the whole section, under its header and unindented.
+func _section_note(text: String) -> Label:
+	var l := Label.new()
+	l.text = text
+	l.add_theme_font_size_override("font_size", _NOTE_FONT_SIZE)
+	l.add_theme_color_override("font_color", _DIM)
+	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	return l
 
 # --- Display handlers --------------------------------------------------------
 
