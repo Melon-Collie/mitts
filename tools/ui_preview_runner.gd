@@ -38,6 +38,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_options", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_options_pressed"},
 	{"name": "side_exit", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_exit_pressed"},
 	{"name": "hud_free_play", "stage": _STAGE_FREE_PLAY, "open": "_close_side_menu"},
+	{"name": "post_game_analytics", "stage": _STAGE_FREE_PLAY, "open": "_open_post_game_analytics"},
 	{"name": "hud_tutorial", "stage": _STAGE_TUTORIAL, "open": "_open_nothing"},
 	{"name": "lobby", "stage": _STAGE_LOBBY, "open": "_open_nothing"},
 	{"name": "hud_match", "stage": _STAGE_MATCH, "open": "_open_nothing"},
@@ -225,7 +226,10 @@ func _overlay_open() -> bool:
 			return options != null and options.visible
 		_STAGE_FREE_PLAY:
 			var side: SideMenu = _find(get_tree().current_scene, SideMenu) as SideMenu
-			return side != null and side.visible
+			var analytics: PostGameAnalytics = _find(get_tree().current_scene,
+					PostGameAnalytics) as PostGameAnalytics
+			return (side != null and side.visible) \
+					or (analytics != null and analytics.visible)
 	return false
 
 
@@ -302,3 +306,37 @@ func _open_player_region(region: int) -> void:
 		_fail("the side menu has no PlayerSettingsPopup")
 		return
 	popup.call("_show_region", region)
+
+
+# A past game's analytics, as the career screen opens a local replay: a fixed
+# made-up game, so the picture changes only when the screen does.
+func _open_post_game_analytics() -> void:
+	_close_side_menu()
+	var screen: PostGameAnalytics = _find(get_tree().current_scene, PostGameAnalytics) \
+			as PostGameAnalytics
+	if screen == null:
+		_fail("free play has no PostGameAnalytics")
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 7
+	var events: Array[ShotEvent] = []
+	for i: int in 46:
+		var team: int = 0 if rng.randf() < 0.55 else 1
+		var goal_z: float = -GameRules.GOAL_LINE_Z if team == 0 else GameRules.GOAL_LINE_Z
+		var along: float = rng.randf_range(1.5, GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z)
+		var pos := Vector3(rng.randf_range(-9.0, 9.0), 0.0, goal_z - signf(goal_z) * along)
+		var xg: float = clampf(0.7 * exp(-pos.distance_to(Vector3(0.0, 0.0, goal_z)) / 4.5),
+				0.02, 0.6)
+		var roll: float = rng.randf()
+		var outcome: int = ShotEvent.Outcome.GOAL if roll < xg * 0.9 \
+				else ShotEvent.Outcome.SAVED if roll < 0.55 \
+				else ShotEvent.Outcome.MISSED if roll < 0.8 else ShotEvent.Outcome.BLOCKED
+		events.append(ShotEvent.make(-1, team, pos, xg, outcome, ShotEvent.ShotType.SHOT,
+				outcome <= ShotEvent.Outcome.SAVED, 1 + i % 3, rng.randf_range(0.0, 300.0)))
+	var box: Array = [
+		{"team_id": 0, "hits": 9, "takeaways": 6, "giveaways": 5,
+				"faceoff_wins": 11, "faceoff_losses": 8},
+		{"team_id": 1, "hits": 13, "takeaways": 3, "giveaways": 8,
+				"faceoff_wins": 8, "faceoff_losses": 11},
+	]
+	screen.present_history(events, -1, -1, "preview game", [], box)

@@ -85,18 +85,3 @@ static func logit_for_shot(x: float, z: float, team_id: int,
 
 static func sigmoid(logit: float) -> float:
 	return 1.0 / (1.0 + exp(-logit))
-
-
-# Convenience for a stored event.
-static func for_event(e: ShotEvent) -> float:
-	return for_shot(e.x, e.z, e.team_id, e.shot_type)
-
-
-# Summed baseline xG over a team's UNBLOCKED attempts — the Fenwick convention
-# the geometric xGF counter also uses, so the two totals compare like for like.
-static func team_total(events: Array[ShotEvent], team_id: int) -> float:
-	var total: float = 0.0
-	for e: ShotEvent in events:
-		if e.team_id == team_id and e.outcome != ShotEvent.Outcome.BLOCKED:
-			total += for_event(e)
-	return total

@@ -1,15 +1,14 @@
 class_name PostGameAnalytics
 extends CanvasLayer
 
-# Post-game analytics screen (analytics plan §7.1) — the three views, all reading
-# the SAME per-game data the sim recorded, so a number and its dot on the map can
+# Post-game analytics screen (analytics plan §7.1) — the views, all reading the
+# SAME per-game data the sim recorded, so a number and its dot on the map can
 # never disagree:
 #   1. Team shot map — every attempt plotted at its release point, dot size = xG,
 #      goals ringed. Position + team colour is the differential read.
-#   2. Tale of the tape — head-to-head bars, the advanced rows (Corsi / Fenwick /
-#      xG) tagged as the ones no other hockey game shows.
-#   3. Expected-goals share — the home team's running share of all chance
-#      quality created, against an even-game midline, goals marked.
+#   2. Tale of the tape — head-to-head bars for the broadcast box: goals, shots,
+#      faceoffs, hits, blocks, takeaways, giveaways.
+#   3. Advanced — the same bars for Corsi, Fenwick and xG.
 #
 # Data is entirely LOCAL: GameManager.get_shot_events() (the host's buffer, or a
 # client's pushed copy) plus the broadcast PlayerStats counters. No Supabase, no
@@ -35,8 +34,8 @@ const _BLUE_LINE: float = GameRules.BLUE_LINE_Z
 
 var _root: Control = null
 var _map: RinkMap = null
-var _share: XGShareChart = null
-var _tape: VBoxContainer = null
+var _tape: GridContainer = null
+var _advanced: VBoxContainer = null
 var _subtitle: Label = null
 var _close_btn: Button = null
 # Controller focus scope: the screen underneath (game-over popup / career
@@ -142,36 +141,38 @@ func _build_map_legend() -> Control:
 	return row
 
 
+# The broadcast box two rows abreast, the advanced rows beside it in a panel of
+# their own.
 func _build_lower_row() -> Control:
 	var row := HBoxContainer.new()
 	row.add_theme_constant_override("separation", 12)
-	row.custom_minimum_size = Vector2(0, 210)
 
-	var tape_panel := _panel()
-	tape_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	tape_panel.size_flags_stretch_ratio = 1.0
-	var tape_col := VBoxContainer.new()
-	tape_col.add_theme_constant_override("separation", 6)
-	tape_panel.add_child(tape_col)
-	tape_col.add_child(_section_title("TALE OF THE TAPE", ""))
-	_tape = VBoxContainer.new()
-	_tape.add_theme_constant_override("separation", 8)
+	var tape_col := _lower_panel(row, tr(&"TAPE_TITLE"), _CREAM, 2.0)
+	_tape = GridContainer.new()
+	_tape.columns = 2
+	_tape.add_theme_constant_override("h_separation", 28)
+	_tape.add_theme_constant_override("v_separation", 10)
 	tape_col.add_child(_tape)
-	row.add_child(tape_panel)
 
-	var share_panel := _panel()
-	share_panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	share_panel.size_flags_stretch_ratio = 1.15
-	var share_col := VBoxContainer.new()
-	share_col.add_theme_constant_override("separation", 6)
-	share_panel.add_child(share_col)
-	share_col.add_child(_section_title("EXPECTED-GOALS SHARE",
-			"share of chance quality · ● = goal"))
-	_share = XGShareChart.new()
-	_share.size_flags_vertical = Control.SIZE_EXPAND_FILL
-	share_col.add_child(_share)
-	row.add_child(share_panel)
+	# Gold: these are the rows no broadcast carries.
+	var adv_col := _lower_panel(row, tr(&"TAPE_ADVANCED"), _GOLD, 1.0)
+	_advanced = VBoxContainer.new()
+	_advanced.add_theme_constant_override("separation", 10)
+	adv_col.add_child(_advanced)
 	return row
+
+
+func _lower_panel(row: HBoxContainer, title: String, title_color: Color,
+		stretch: float) -> VBoxContainer:
+	var panel := _panel()
+	panel.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	panel.size_flags_stretch_ratio = stretch
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 8)
+	panel.add_child(col)
+	col.add_child(_section_title(title.to_upper(), "", title_color))
+	row.add_child(panel)
+	return col
 
 
 func _build_footer() -> Control:
@@ -231,48 +232,35 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # Live match just played: everything comes from GameManager.
 func _refresh() -> void:
-	_render(GameManager.get_shot_events(), _team_totals(), _resolve_team_colors(),
-			GameManager.get_period_duration(), GameManager.get_num_periods(), "")
+	_render(GameManager.get_shot_events(), _team_totals(), _resolve_team_colors(), "")
 
 
 # A PAST game, from stored shot events (Supabase rows or a .mreplay footer).
 # Nothing about the old match is in memory, so the tape is derived from the
-# events themselves — which is self-consistent, since the map and flow read the
-# same list — except the score, which comes from the authoritative record.
+# events themselves — which is self-consistent, since the map reads the same
+# list — except the score, which comes from the authoritative record.
 # `home_goals`/`away_goals` may be -1 when unknown, in which case goals are
-# counted from the events too.
+# counted from the events too. `box_score` is the .mreplay footer's per-player
+# list; without one the rows only a box score can fill are left off.
 func present_history(events: Array[ShotEvent], home_goals: int, away_goals: int,
-		label: String, colors: Array[Color] = []) -> void:
-	var totals: Array[Dictionary] = _totals_from_events(events)
+		label: String, colors: Array[Color] = [], box_score: Array = []) -> void:
+	var totals: Array[Dictionary] = history_totals(events, box_score)
 	if home_goals >= 0:
 		totals[0]["goals"] = home_goals
 	if away_goals >= 0:
 		totals[1]["goals"] = away_goals
-	# Clock counts DOWN from the period length, so the longest remaining time seen
-	# is a sound lower bound on it — enough to place events on the flow's axis
-	# without the match config being available.
-	var period_s: float = 1.0
-	var periods: int = 1
-	for e: ShotEvent in events:
-		period_s = maxf(period_s, e.clock_s)
-		periods = maxi(periods, e.period)
 	# The match's real palette when the caller could recover it (the .mreplay
 	# header records both colour slots); the neutral defaults otherwise — never
 	# the CURRENT session's colours, which would paint an old game in a palette
 	# it was never played in.
-	_render(events, totals, colors if colors.size() == 2 else _team_colors,
-			period_s, periods, label)
+	_render(events, totals, colors if colors.size() == 2 else _team_colors, label)
 	_show()
 
 
 func _render(events: Array[ShotEvent], totals: Array[Dictionary],
-		colors: Array[Color], period_s: float, periods: int, label: String) -> void:
+		colors: Array[Color], label: String) -> void:
 	_team_colors = colors
-	totals[0]["xg_base"] = XGBaseline.team_total(events, 0)
-	totals[1]["xg_base"] = XGBaseline.team_total(events, 1)
-
 	_map.configure(events, _team_colors)
-	_share.configure(events, _team_colors, period_s, periods)
 	_build_tape_rows(totals)
 
 	var attempts: int = int(totals[0]["corsi"]) + int(totals[1]["corsi"])
@@ -281,19 +269,25 @@ func _render(events: Array[ShotEvent], totals: Array[Dictionary],
 	_subtitle.text = "%d shot attempts · %s" % [attempts, suffix]
 
 
-# Per-team aggregates derived purely from a shot list — the historical
-# counterpart to _team_totals (which sums the live broadcast counters). Same
-# conventions: Corsi counts every attempt, Fenwick excludes blocks, and xG
-# accrues only on unblocked shots.
-func _totals_from_events(events: Array[ShotEvent]) -> Array[Dictionary]:
-	var out: Array[Dictionary] = [
-		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0},
-		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0},
-	]
+# One team's tape aggregates, zeroed. `box` marks the counters only a box score
+# carries (hits, faceoffs, takeaways, giveaways); a past game without one leaves
+# it false and those rows off.
+static func _empty_totals() -> Dictionary:
+	return {"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "blocks": 0,
+			"box": false, "hits": 0, "faceoff_wins": 0, "takeaways": 0, "giveaways": 0}
+
+
+# Per-team aggregates for a past game: the shot list's, plus the box score's
+# counters when there is one. Same conventions as the live counters: Corsi counts
+# every attempt, Fenwick excludes blocks, xG accrues only on unblocked shots, and
+# a blocked attempt is a block for the team that DEFENDED it.
+static func history_totals(events: Array[ShotEvent], box_score: Array) -> Array[Dictionary]:
+	var out: Array[Dictionary] = [_empty_totals(), _empty_totals()]
 	for e: ShotEvent in events:
 		var t: int = clampi(e.team_id, 0, 1)
 		out[t]["corsi"] = int(out[t]["corsi"]) + 1
 		if e.outcome == ShotEvent.Outcome.BLOCKED:
+			out[1 - t]["blocks"] = int(out[1 - t]["blocks"]) + 1
 			continue
 		out[t]["fenwick"] = int(out[t]["fenwick"]) + 1
 		out[t]["xg"] = float(out[t]["xg"]) + e.xg
@@ -301,17 +295,27 @@ func _totals_from_events(events: Array[ShotEvent]) -> Array[Dictionary]:
 			out[t]["goals"] = int(out[t]["goals"]) + 1
 		if e.outcome == ShotEvent.Outcome.GOAL or e.outcome == ShotEvent.Outcome.SAVED:
 			out[t]["sog"] = int(out[t]["sog"]) + 1
+	for entry: Variant in box_score:
+		if not entry is Dictionary:
+			continue
+		var p: Dictionary = entry as Dictionary
+		var t: int = clampi(int(p.get("team_id", 0)), 0, 1)
+		out[t]["box"] = true
+		out[t]["hits"] = int(out[t]["hits"]) + int(p.get("hits", 0))
+		out[t]["faceoff_wins"] = int(out[t]["faceoff_wins"]) + int(p.get("faceoff_wins", 0))
+		out[t]["takeaways"] = int(out[t]["takeaways"]) + int(p.get("takeaways", 0))
+		out[t]["giveaways"] = int(out[t]["giveaways"]) + int(p.get("giveaways", 0))
 	return out
 
 
 # Per-team aggregates, summed from the broadcast PlayerStats counters — the same
 # numbers the scoreboard and career screen show, so the tape can't drift from
-# them. (The map/flow read the event list; both derive from the same shots.)
+# them. (The map reads the event list; both derive from the same shots.)
 func _team_totals() -> Array[Dictionary]:
-	var out: Array[Dictionary] = [
-		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0, "icings": 0},
-		{"goals": 0, "sog": 0, "corsi": 0, "fenwick": 0, "xg": 0.0, "xg_base": 0.0, "icings": 0},
-	]
+	var out: Array[Dictionary] = [_empty_totals(), _empty_totals()]
+	for t: int in 2:
+		out[t]["box"] = true
+		out[t]["icings"] = 0
 	var players: Dictionary[int, PlayerRecord] = GameManager.get_players()
 	for peer_id: int in players:
 		var rec: PlayerRecord = players[peer_id]
@@ -320,90 +324,94 @@ func _team_totals() -> Array[Dictionary]:
 		var t: int = rec.team.team_id
 		if t < 0 or t > 1:
 			continue
-		out[t]["goals"] = int(out[t]["goals"]) + rec.stats.goals
-		out[t]["corsi"] = int(out[t]["corsi"]) + rec.stats.shot_attempts
+		var s: PlayerStats = rec.stats
+		out[t]["goals"] = int(out[t]["goals"]) + s.goals
+		out[t]["corsi"] = int(out[t]["corsi"]) + s.shot_attempts
 		out[t]["fenwick"] = int(out[t]["fenwick"]) \
-				+ (rec.stats.shot_attempts - rec.stats.shot_attempts_blocked)
-		out[t]["xg"] = float(out[t]["xg"]) + rec.stats.xg_for
-		out[t]["icings"] = int(out[t]["icings"]) + rec.stats.icings
+				+ (s.shot_attempts - s.shot_attempts_blocked)
+		out[t]["xg"] = float(out[t]["xg"]) + s.xg_for
+		out[t]["blocks"] = int(out[t]["blocks"]) + s.shots_blocked
+		out[t]["hits"] = int(out[t]["hits"]) + s.hits
+		out[t]["faceoff_wins"] = int(out[t]["faceoff_wins"]) + s.faceoff_wins
+		out[t]["takeaways"] = int(out[t]["takeaways"]) + s.takeaways
+		out[t]["giveaways"] = int(out[t]["giveaways"]) + s.giveaways
+		out[t]["icings"] = int(out[t]["icings"]) + s.icings
 	for t: int in 2:
 		out[t]["sog"] = GameManager.get_team_shots(t)
 	return out
 
 
 func _build_tape_rows(totals: Array[Dictionary]) -> void:
-	for child: Node in _tape.get_children():
-		child.queue_free()
-	_add_tape_row("Goals", float(totals[0]["goals"]), float(totals[1]["goals"]),
-			"%d", false)
-	_add_tape_row("Shots on goal", float(totals[0]["sog"]), float(totals[1]["sog"]),
-			"%d", false)
-	_add_tape_row("Shot attempts (Corsi)", float(totals[0]["corsi"]),
-			float(totals[1]["corsi"]), "%d", true)
-	_add_tape_row("Fenwick", float(totals[0]["fenwick"]), float(totals[1]["fenwick"]),
-			"%d", true)
-	_add_tape_row("Expected goals", float(totals[0]["xg"]), float(totals[1]["xg"]),
-			"%.2f", true)
-	# The location-only cross-check (XGBaseline). Shown alongside the goalie-aware
-	# number while the two are being reconciled: the geometric model matches this
-	# closely against a SET goalie but runs several times hot once the goalie has
-	# been pulled off his line, because it prices the open net without pricing how
-	# hard the shot is to finish. Seeing both makes that gap visible per game.
-	_add_tape_row("xG (location model)", float(totals[0]["xg_base"]),
-			float(totals[1]["xg_base"]), "%.2f", true)
-	# Live game only (a past game's shot list has no icings), and only where
-	# icing is called.
-	if totals[0].has("icings") and GameManager.get_rule_set() == GameRules.RuleSet.NHL:
-		_add_tape_row(tr(&"TAPE_ICINGS"), float(totals[0]["icings"]),
-				float(totals[1]["icings"]), "%d", false)
+	for box: Container in [_tape, _advanced]:
+		for child: Node in box.get_children():
+			child.queue_free()
+	var home: Dictionary = totals[0]
+	var away: Dictionary = totals[1]
+	var has_box: bool = bool(home["box"]) or bool(away["box"])
+	_add_count_row(_tape, &"TAPE_GOALS", home["goals"], away["goals"])
+	_add_count_row(_tape, &"TAPE_SHOTS_ON_GOAL", home["sog"], away["sog"])
+	# Each draw is one team's win, so the two teams' wins are every draw taken.
+	var draws: int = int(home["faceoff_wins"]) + int(away["faceoff_wins"])
+	if has_box and draws > 0:
+		var home_pct: int = roundi(100.0 * float(home["faceoff_wins"]) / float(draws))
+		_add_tape_row(_tape, tr(&"TAPE_FACEOFF_PCT"), home_pct, 100 - home_pct, "%d%%")
+	if has_box:
+		_add_count_row(_tape, &"TAPE_HITS", home["hits"], away["hits"])
+	_add_count_row(_tape, &"TAPE_BLOCKED_SHOTS", home["blocks"], away["blocks"])
+	if has_box:
+		_add_count_row(_tape, &"TAPE_TAKEAWAYS", home["takeaways"], away["takeaways"])
+		_add_count_row(_tape, &"TAPE_GIVEAWAYS", home["giveaways"], away["giveaways"], false)
+	# Live game only (no stored record carries icings), and only where icing is
+	# called.
+	if home.has("icings") and GameManager.get_rule_set() == GameRules.RuleSet.NHL:
+		_add_count_row(_tape, &"TAPE_ICINGS", home["icings"], away["icings"], false)
+
+	_add_count_row(_advanced, &"TAPE_CORSI", home["corsi"], away["corsi"])
+	_add_count_row(_advanced, &"TAPE_FENWICK", home["fenwick"], away["fenwick"])
+	_add_tape_row(_advanced, tr(&"TAPE_XG"), float(home["xg"]), float(away["xg"]), "%.2f")
 
 
-# One head-to-head row: centred label (advanced rows carry a small tag), the two
-# values, and a proportional two-segment bar. The leading side's value takes its
-# team colour; the trailing value stays neutral ink.
-func _add_tape_row(label_text: String, home: float, away: float,
-		fmt: String, advanced: bool) -> void:
+func _add_count_row(into: Container, key: StringName, home: int, away: int,
+		higher_is_better: bool = true) -> void:
+	_add_tape_row(into, tr(key), home, away, "%d", higher_is_better)
+
+
+# One head-to-head row: the two values either side of a centred label, over a
+# proportional two-segment bar. The side ahead (fewer, where `higher_is_better`
+# is false) takes its team colour; the other stays neutral ink.
+func _add_tape_row(into: Container, label_text: String, home: float, away: float,
+		fmt: String, higher_is_better: bool = true) -> void:
 	var row := VBoxContainer.new()
-	row.add_theme_constant_override("separation", 3)
+	row.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_theme_constant_override("separation", 2)
 
 	var head := HBoxContainer.new()
-	head.alignment = BoxContainer.ALIGNMENT_CENTER
-	head.add_theme_constant_override("separation", 6)
+	head.add_theme_constant_override("separation", 10)
+	var home_leads: bool = home >= away if higher_is_better else home <= away
+	var home_lbl := _lbl(fmt % home, 16, _team_colors[0] if home_leads else _DIM)
+	home_lbl.custom_minimum_size = Vector2(56, 0)
+	head.add_child(home_lbl)
 	var lbl := _lbl(label_text.to_upper(), 11, _MUTED)
 	lbl.add_theme_font_override("font", MenuStyle.UI_FONT)
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	lbl.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	lbl.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	head.add_child(lbl)
-	if advanced:
-		var tag := _lbl("ADVANCED", 9, _GOLD)
-		tag.add_theme_font_override("font", MenuStyle.UI_FONT)
-		tag.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-		head.add_child(tag)
+	var away_lbl := _lbl(fmt % away, 16, _team_colors[1] if not home_leads else _DIM)
+	away_lbl.custom_minimum_size = Vector2(56, 0)
+	away_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	head.add_child(away_lbl)
 	row.add_child(head)
-
-	var body := HBoxContainer.new()
-	body.add_theme_constant_override("separation", 10)
-
-	var home_leads: bool = home >= away
-	var home_lbl := _lbl(fmt % home, 17, _team_colors[0] if home_leads else _DIM)
-	home_lbl.custom_minimum_size = Vector2(56, 0)
-	home_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	body.add_child(home_lbl)
 
 	var bar := HBoxContainer.new()
 	bar.add_theme_constant_override("separation", 2)
-	bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	bar.custom_minimum_size = Vector2(0, 9)
+	bar.custom_minimum_size = Vector2(0, 5)
 	var total: float = maxf(home + away, 0.0001)
 	bar.add_child(_bar_segment(_team_colors[0], maxf(home / total, 0.02), home_leads))
 	bar.add_child(_bar_segment(_team_colors[1], maxf(away / total, 0.02), not home_leads))
-	body.add_child(bar)
+	row.add_child(bar)
 
-	var away_lbl := _lbl(fmt % away, 17, _team_colors[1] if not home_leads else _DIM)
-	away_lbl.custom_minimum_size = Vector2(56, 0)
-	away_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	body.add_child(away_lbl)
-
-	row.add_child(body)
-	_tape.add_child(row)
+	into.add_child(row)
 
 
 func _bar_segment(color: Color, ratio: float, leading: bool) -> Control:
@@ -447,9 +455,9 @@ func _panel() -> PanelContainer:
 	return p
 
 
-func _section_title(title: String, note: String) -> Control:
+func _section_title(title: String, note: String, color: Color = _CREAM) -> Control:
 	var row := HBoxContainer.new()
-	var t := _lbl(title, 13, _CREAM)
+	var t := _lbl(title, 13, color)
 	t.add_theme_font_override("font", MenuStyle.UI_FONT)
 	row.add_child(t)
 	var spacer := Control.new()
@@ -600,129 +608,3 @@ class LegendDot extends Control:
 				draw_arc(c, r, 0.0, TAU, 20, col, 1.4)
 			_:
 				draw_circle(c, r * 0.85, Color(col.r, col.g, col.b, 0.34))
-
-
-# ── Expected-goals share ─────────────────────────────────────────────────────
-# One quantity, not two: the home team's running share of all the chance quality
-# created (XGShare). The midline is an even game, the band fills toward whoever
-# is ahead, and the curve's distance from centre IS how lopsided the game has
-# been — no arithmetic in the reader's head. Plotting each team's running xG
-# total instead would make that lopsidedness the GAP between two lines, which is
-# something you measure rather than see; the absolute totals are the tape's xG
-# row.
-
-class XGShareChart extends Control:
-	const _GRID := Color(0.165, 0.175, 0.22, 1.0)
-	const _AXIS := Color(0.28, 0.30, 0.36, 1.0)
-	const _LABEL := MenuStyle.TEXT_MUTED
-	const _LINE := MenuStyle.BROADCAST_CREAM
-	const _FILL_ALPHA: float = 0.30
-
-	var _events: Array[ShotEvent] = []
-	var _colors: Array[Color] = [Color.ORANGE, Color.SKY_BLUE]
-	var _period_s: float = 300.0
-	var _periods: int = 3
-
-	func configure(events: Array[ShotEvent], colors: Array[Color],
-			period_s: float, periods: int) -> void:
-		_events = events
-		_colors = colors
-		_period_s = maxf(period_s, 1.0)
-		_periods = maxi(periods, 1)
-		queue_redraw()
-
-	func _draw() -> void:
-		var w: float = size.x
-		var h: float = size.y
-		if w <= 8.0 or h <= 8.0:
-			return
-		var ml: float = 30.0
-		var mr: float = 46.0   # room for the final-share callout
-		var mt: float = 10.0
-		var mb: float = 16.0
-		var total_s: float = maxf(float(_periods) * _period_s, 1.0)
-		var font: Font = MenuStyle.UI_FONT
-
-		var px := func(t: float) -> float:
-			return ml + (w - ml - mr) * clampf(t / total_s, 0.0, 1.0)
-		# share 1.0 (all home) at the top, 0.0 (all away) at the bottom.
-		var py := func(v: float) -> float:
-			return h - mb - (h - mt - mb) * clampf(v, 0.0, 1.0)
-		var mid: float = py.call(XGShare.EVEN)
-
-		# Gridlines at the quarters. 50% is the axis — the whole chart is read
-		# against it — so it gets the brighter stroke and the only label with a
-		# sign attached.
-		for frac: float in [0.25, 0.75]:
-			var y: float = py.call(frac)
-			draw_line(Vector2(ml, y), Vector2(w - mr, y), _GRID, 1.0)
-		for p: int in range(1, _periods):
-			var x: float = px.call(float(p) * _period_s)
-			draw_line(Vector2(x, mt), Vector2(x, h - mb), _GRID, 1.0)
-
-		var data: Dictionary = XGShare.series(_events, _period_s)
-		var ts: PackedFloat32Array = data["t"]
-		var shares: PackedFloat32Array = data["share"]
-		var goals: PackedInt32Array = data["goal_team"]
-
-		# Step fill: the share only moves AT a shot, so each segment is a flat
-		# hold from one event to the next, drawn as a band between the midline and
-		# the held value in the leading team's colour. Drawn before the line so the
-		# line reads on top of it.
-		var prev_x: float = px.call(0.0)
-		var prev_share: float = XGShare.EVEN
-		for i: int in ts.size() + 1:
-			var seg_end: float = px.call(ts[i] if i < ts.size() else total_s)
-			if seg_end > prev_x and not is_equal_approx(prev_share, XGShare.EVEN):
-				var y: float = py.call(prev_share)
-				var col: Color = _colors[0] if prev_share > XGShare.EVEN else _colors[1]
-				draw_rect(Rect2(prev_x, minf(y, mid), seg_end - prev_x, absf(mid - y)),
-						Color(col.r, col.g, col.b, _FILL_ALPHA), true)
-			if i < ts.size():
-				prev_x = seg_end
-				prev_share = shares[i]
-
-		# The step line itself, in cream: the fill already carries team identity,
-		# so the line only has to carry the value.
-		var line := PackedVector2Array()
-		line.append(Vector2(px.call(0.0), mid))
-		var run_share: float = XGShare.EVEN
-		for i: int in ts.size():
-			var x: float = px.call(ts[i])
-			line.append(Vector2(x, py.call(run_share)))   # hold…
-			line.append(Vector2(x, py.call(shares[i])))   # …then step
-			run_share = shares[i]
-		line.append(Vector2(px.call(total_s), py.call(run_share)))
-		if line.size() >= 2:
-			draw_polyline(line, _LINE, 1.8, true)
-
-		draw_line(Vector2(ml, mid), Vector2(w - mr, mid), _AXIS, 1.0)
-
-		# Goals, at the share the game stood at when they went in.
-		for i: int in ts.size():
-			if goals[i] < 0:
-				continue
-			var at := Vector2(px.call(ts[i]), py.call(shares[i]))
-			draw_circle(at, 3.6, _colors[goals[i]])
-			draw_arc(at, 3.6, 0.0, TAU, 18, Color(1, 1, 1, 0.9), 1.2)
-
-		if font == null:
-			return
-		# Axis labels. The top and bottom are named for the SIDE they belong to,
-		# not just "100%" — without that the reader has to remember which way is up.
-		draw_string(font, Vector2(2.0, py.call(1.0) + 8.0), "HOME",
-				HORIZONTAL_ALIGNMENT_LEFT, ml - 4.0, 9, _colors[0])
-		draw_string(font, Vector2(2.0, mid + 3.5), "50%",
-				HORIZONTAL_ALIGNMENT_LEFT, ml - 4.0, 9, _LABEL)
-		draw_string(font, Vector2(2.0, py.call(0.0) - 2.0), "AWAY",
-				HORIZONTAL_ALIGNMENT_LEFT, ml - 4.0, 9, _colors[1])
-
-		# Final share, called out where the curve ends — the number the whole
-		# chart is building toward. Shown for whichever side won it, so it reads
-		# as a statement rather than as a home-relative figure.
-		var final_share: float = run_share
-		var lead: int = 0 if final_share >= XGShare.EVEN else 1
-		var lead_pct: float = final_share if lead == 0 else 1.0 - final_share
-		draw_string(font, Vector2(w - mr + 4.0, py.call(final_share) + 4.0),
-				"%d%%" % roundi(lead_pct * 100.0),
-				HORIZONTAL_ALIGNMENT_LEFT, mr - 6.0, 13, _colors[lead])
