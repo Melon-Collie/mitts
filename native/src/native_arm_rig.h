@@ -43,6 +43,8 @@ class NativeArmRig : public godot::RefCounted {
 	godot::Vector3 thick_glove;
 	godot::Vector3 cap_rest_pole;
 	double cap_follow = 0.6;
+	// Skater.wrist_break_max_deg, in radians.
+	double wrist_break_max = 0.0;
 	// The cap bone's scene rest (SkaterArmRig._pos / _scale).
 	godot::Vector3 cap_pos;
 	godot::Vector3 cap_scale = godot::Vector3(1, 1, 1);
@@ -65,14 +67,16 @@ public:
 			const godot::Vector3 &p_thick_cuff, const godot::Vector3 &p_thick_elbow,
 			const godot::Vector3 &p_thick_glove, const godot::Vector3 &p_cap_rest_pole,
 			double p_cap_follow, int32_t p_cap_bone, const godot::Vector3 &p_cap_pos,
-			const godot::Vector3 &p_cap_scale, const godot::Transform3D &p_cap_state);
+			const godot::Vector3 &p_cap_scale, const godot::Transform3D &p_cap_state,
+			double p_wrist_break_max);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
-	// frame; `pole` the arm's elbow pole mirrored onto its side, untucked.
+	// frame; `grip` the shaft's direction at the hand in that frame, zero off
+	// the stick; `pole` the arm's elbow pole mirrored onto its side, untucked.
 	// `lengths` is (upper arm, forearm, working length, girdle slack), `load`
 	// (check lead, shoulder half-width, cuff back of the hand).
 	bool pose(const godot::Vector3 &marker, const godot::Vector3 &hand,
-			const godot::Basis &trunk_texture, const godot::Vector3 &pole,
+			const godot::Vector3 &grip, const godot::Basis &trunk_texture, const godot::Vector3 &pole,
 			const godot::Vector4 &lengths, const godot::Vector3 &load);
 
 	// (cap basis, girdle give) as one Transform3D, so the rig syncs in one read.

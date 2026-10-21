@@ -3,8 +3,8 @@ extends GutTest
 # Parity fuzz: the C++ arm solve (NativeArmRig, native/src/) against its
 # GDScript reference (SkaterArmRig._update_arm). Seeded RNG over the live rig:
 # hands in and out of reach (the girdle's give and the IK clamp), trunk
-# texture, a twisted and leaned trunk, the balance lean, a check load, and
-# per-build arm lengths and part thicknesses. Every arm bone, both deltoid caps
+# texture, a twisted and leaned trunk, the balance lean, a check load,
+# per-build arm lengths and part thicknesses, and gloves on and off the shaft. Every arm bone, both deltoid caps
 # and the girdle offsets must agree, and again once a trunk-texture change has
 # reposed the caps from the rig's read-back of the native's cap state.
 #
@@ -66,6 +66,7 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 	var worst: float = 0.0
 	var worst_case: int = -1
 	var native_ran: int = 0
+	var gripped: int = 0
 	for i: int in CASES:
 		sk.upper_arm_length = _rng.randf_range(0.28, 0.38)
 		sk.forearm_length = _rng.randf_range(0.28, 0.38)
@@ -80,9 +81,16 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 		var texture := Vector2(_rng.randf_range(-0.3, 0.3), _rng.randf_range(-0.3, 0.3))
 		var after := Vector2(_rng.randf_range(-0.3, 0.3), _rng.randf_range(-0.3, 0.3))
 		sk._check_lead = _rng.randf_range(-1.0, 1.0) if _rng.randf() < 0.3 else 0.0
-		# Hands from in tight to well past the arm (the girdle and the IK clamp).
+		# Hands from in tight to well past the arm (the girdle and the IK clamp),
+		# the bottom one on the shaft half the time.
 		sk.set_top_hand_position(top + _v(0.9))
 		sk.set_bottom_hand_position(bottom + _v(0.9))
+		sk.update_stick_mesh()
+		if _rng.randf() < 0.5:
+			sk.set_bottom_hand_position(sk.drawn_top_hand().lerp(sk.blade.position,
+					_rng.randf_range(0.1, 0.6)))
+		if sk.stick_grip_axis(sk.bottom_hand.position) != Vector3.ZERO:
+			gripped += 1
 		sk.set_trunk_texture(texture.x, texture.y)
 		sk._spine.update()
 		rig.native_enabled = false
@@ -102,7 +110,7 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 		native.append_array(_poses(sk))
 		var err: float = _worst(reference, native)
 		if rig._native_update_arm(0, sk.shoulder.position, sk.top_hand.position,
-				1.0 if sk.is_left_handed else -1.0):
+				sk.stick_grip_axis(sk.drawn_top_hand()), 1.0 if sk.is_left_handed else -1.0):
 			native_ran += 1
 		if err > worst:
 			worst = err
@@ -110,3 +118,5 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 	gut.p("arm rig: %d cases, worst |Δ| %s at case %d" % [CASES, String.num_scientific(worst), worst_case])
 	assert_lt(worst, TOLERANCE, "the native arm solve stayed within tolerance")
 	assert_gt(float(native_ran), CASES * 0.95, "and it ran, rather than falling back (%d/%d)" % [native_ran, CASES])
+	assert_between(gripped, int(CASES * 0.3), int(CASES * 0.7),
+			"both glove paths ran: the bottom hand on the shaft in %d/%d" % [gripped, CASES])

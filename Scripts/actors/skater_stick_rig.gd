@@ -173,6 +173,19 @@ func bow_offset(point: Vector3) -> Vector3:
 	return xf.basis.x.normalized() * (_flex_sent * bow_profile(u))
 
 
+# The drawn shaft's butt→tip direction (upper-body space) at a hand holding it —
+# `point` within a grip of its line, as bow_offset reads one — else ZERO.
+func grip_axis(point: Vector3) -> Vector3:
+	if _shaft_len <= 0.0:
+		return Vector3.ZERO
+	var xf: Transform3D = _skater.stick_mesh.transform
+	var along: Vector3 = -xf.basis.z.normalized()
+	var rel: Vector3 = point - xf.origin
+	if (rel - along * rel.dot(along)).length_squared() > _GRIP_HOLD_RADIUS_M * _GRIP_HOLD_RADIUS_M:
+		return Vector3.ZERO
+	return along
+
+
 # Which way "toward the target" points on the shaft's ONE available bow axis,
 # as a signed −1..+1 factor. `shaft_dir` is the butt→tip direction in upper-body
 # space, exactly as update_mesh aims the mesh with it.

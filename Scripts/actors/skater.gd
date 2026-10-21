@@ -170,6 +170,28 @@ var carry_gesture_ease: float = 8.0
 # but hangs before landing, which is the readable gap between blade touches —
 # release off the toe, a beat of air, the heel catch on the far face.
 var carry_transit_hop_time: float = 0.24
+# ── The release (CarryStrokeState) ────────────────────────────────────────────
+# A stroke that peaks above carry_release_speed (m/s, carrier frame) and then
+# stops gaining speed for carry_release_hold_s is spent: the puck runs on alone
+# and the blade hops over it to catch on the far face. Slower strokes keep the
+# plain flip above. A puck coming at the leading face that speeds up again by
+# carry_repush_margin is being pushed, and sends the blade back to trail it.
+var carry_release_speed: float = 1.8
+var carry_release_hold_s: float = 0.03
+var carry_repush_margin: float = 0.6
+# A release hop takes this share of the time since the last release, so a fast
+# dangle lands each hop before its next release, within [min, carry_transit_hop_time].
+var carry_release_hop_share: float = 0.5
+var carry_release_hop_min_s: float = 0.08
+# Share of a release hop the blade stays on the old face while the puck runs
+# off it, and the same share at the end on the far face before landing, so the
+# blade crosses the puck at the top of the hop.
+var carry_release_lead_frac: float = 0.25
+# Ice the blade mesh leaves between itself and the free puck (m, past
+# carry_blade_offset) at a full-speed release, opened and closed at
+# carry_free_gap_ease per second; closing it after the landing is the catch.
+var carry_free_gap: float = 0.06
+var carry_free_gap_ease: float = 18.0
 # ── Catch/release blade geometry (mesh-only, like the wrister address) ────────
 # The visible blade slides along its own heel→toe axis so each stroke reads as
 # real contact prosody: a hard push rolls the puck out toward the TOE (the toe
@@ -256,6 +278,10 @@ var hand_sphere_radius: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 # Gap along the forearm between the fist's center and the cuff's wrist end.
 var cuff_wrist_offset: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
 		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
+# A glove on the shaft turns its fist square across it, bending the wrist off
+# the forearm by up to this much — inside the wrist's ~20° radial and ~30° ulnar
+# deviation, the plane a stick held across the palm bends it in.
+var wrist_break_max_deg: float = 25.0
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
@@ -731,7 +757,21 @@ var _heel_cradle: float = 0.0
 # Remaining phase (1→0) of the current transit hop; see
 # get_carry_transit_factor.
 var _transit_hop: float = 0.0
+var _hop_time: float = carry_transit_hop_time
 var _hop_stroke_speed: float = 0.0
+# The release: the stroke memory, the carried puck's last position (its
+# velocity is the stroke), and the hop that carries the blade over a free puck —
+# the side factor it starts from, while it drives that factor (_release_hop),
+# and the time since the previous release, which sizes it.
+var _stroke := CarryStrokeState.new()
+var _pin_prev: Vector3 = Vector3.ZERO
+var _pin_prev_valid: bool = false
+var _release_hop: bool = false
+var _release_from: float = 0.0
+var _since_release: float = 1.0
+# Eased 0→1 share of carry_free_gap the blade mesh stands off the puck.
+var _free_gap_blend: float = 0.0
+var _free_gap_target: float = 0.0
 # Eased catch/release blade-geometry blends (0→1), advanced by
 # _update_carry_contact: stroke-speed toe ride and the heel-first catch
 # transient fired when a hop lands. Both feed the mesh seat slide in
@@ -1359,6 +1399,7 @@ func _apply_blade_tilt() -> void:
 	#   (set_blade_position aims marker −Z along the shaft, so +X is its 90°
 	#   Y-rotation, the same axis get_carry_target_global offsets the pin
 	#   along). Zero outside an aim (_address_factor pins to the live factor).
+	#   On top of it, the stand-off from a free puck after a release.
 	#   Z — seat along the blade's own heel→toe axis (the mesh extends
 	#   toe-ward along −Z, so a heel-ward +Z shift seats the puck nearer the
 	#   toe): a hard stroke rides the puck out to the toe, a landing hop
@@ -1368,8 +1409,10 @@ func _apply_blade_tilt() -> void:
 	# The reception cushion is the one full-vector slide on top of both axes:
 	# the blade gives along the caught puck's own arrival line (captured
 	# blade-local, so the give rides the wrists as the body keeps turning).
+	var factor: float = get_carry_forehand_factor()
 	var heel: Vector3 = Vector3(
-			(_address_factor - get_carry_forehand_factor()) * carry_blade_offset,
+			(_address_factor - factor) * carry_blade_offset
+					+ factor * _free_gap_blend * carry_free_gap,
 			0.0,
 			(_stroke_toe_blend * carry_stroke_toe_u
 					- _catch_heel_blend * carry_catch_heel_u
@@ -2015,10 +2058,10 @@ func get_wrister_address_side() -> int:
 # toe-drag / heel-cradle grammar, because no blade face points back at the
 # carrier: pulling requires hooking the toe over the puck.
 #
-# Keyed off blade_world_velocity − velocity, both derived on every peer from
-# the replicated pose, so this runs identically for local, AI, and remote
-# skaters (called from _physics_process, not the IK pipeline) and remote views
-# read the same strokes with no wire field. The velocity is one tick stale
+# Keyed off the carried puck's velocity less the body's, both derived on every
+# peer from the replicated pose, so this runs identically for local, AI, and
+# remote skaters (called from _physics_process, not the IK pipeline) and remote
+# views read the same strokes with no wire field. The velocity is one tick stale
 # relative to the pose being placed this tick — invisible under the gesture
 # ease. Live-only, never replayed: pure cosmetic smoothing memory, absorbed
 # across reconcile snaps like every other blend here.
@@ -2028,7 +2071,18 @@ func _update_carry_contact(delta: float) -> void:
 	var stroke_toe_target: float = 0.0
 	if not SkaterStateMachine.state_has_puck(current_shot_state):
 		_carry_side = 0
+		_stroke.reset()
+		_pin_prev_valid = false
+		_release_hop = false
+		_free_gap_target = 0.0
 	else:
+		# The puck's own motion, read off the pin before this tick moves the side
+		# factor (the pin is the cursor whatever the factor; the blade marker
+		# carries the face flip's own travel on top of it).
+		var pin: Vector3 = _carry_target_raw()
+		var pin_velocity: Vector3 = (pin - _pin_prev) / delta if _pin_prev_valid else velocity
+		_pin_prev = pin
+		_pin_prev_valid = true
 		var stick: Vector3 = get_blade_contact_global() - top_hand.global_position
 		stick.y = 0.0
 		if stick.length_squared() > 0.000001:
@@ -2036,7 +2090,7 @@ func _update_carry_contact(delta: float) -> void:
 			# Same axes get_carry_target_global offsets along, so the stroke
 			# read and the rendered offset can never disagree on direction.
 			var face_normal := Vector3(-stick.z, 0.0, stick.x)
-			var v_rel: Vector3 = blade_world_velocity - velocity
+			var v_rel: Vector3 = pin_velocity - velocity
 			var v_perp: float = v_rel.dot(face_normal)
 			var v_in: float = -v_rel.dot(stick)
 			# Two handedness signs, matching the pair the old position key used:
@@ -2051,17 +2105,27 @@ func _update_carry_contact(delta: float) -> void:
 				# First carry tick: no stroke yet — cradle on the body side the
 				# puck was picked up on (forehand if exactly centered).
 				_carry_side = -1 if body_x_norm < 0.0 else 1
-			else:
+				_stroke.reset()
+			elif current_shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK:
+				# Only a live carry strokes: a wind-up holds the blade on the
+				# puck, and a side flipped under a frozen blade moves the pin.
 				var sign_now: int = _carry_side * factor_hs
-				var sign_new: int = CarryContactRules.stroke_side(
-						sign_now, v_perp, carry_flip_speed)
-				if sign_new != sign_now:
-					_carry_side = sign_new * factor_hs
-					# One hop per flip; a flip during a live hop rides it out,
-					# so a fast dangle bounces per stroke instead of hovering.
-					if _transit_hop <= 0.0:
-						_transit_hop = 1.0
-						_hop_stroke_speed = absf(v_perp)
+				var event: int = _stroke.step(sign_now, v_perp, delta, carry_flip_speed,
+						carry_release_speed, carry_release_hold_s, carry_repush_margin)
+				if event != CarryStrokeState.Event.NONE:
+					_carry_side = -sign_now * factor_hs
+					if event == CarryStrokeState.Event.RELEASE:
+						_begin_release_hop(absf(v_perp))
+					else:
+						_release_hop = false
+						_free_gap_target = 0.0
+						# One hop per flip; a flip during a live hop rides it
+						# out, so a fast dangle bounces per stroke instead of
+						# hovering.
+						if _transit_hop <= 0.0:
+							_start_hop(carry_transit_hop_time, absf(v_perp))
+			else:
+				_stroke.reset()
 			var pull: float = CarryContactRules.pull_gesture(
 					v_in, carry_pull_ramp_min, carry_pull_ramp_max)
 			var forehand_w: float = CarryContactRules.forehand_weight(
@@ -2074,16 +2138,27 @@ func _update_carry_contact(delta: float) -> void:
 			# mid-stroke, every release leaves off the toe by construction.
 			stroke_toe_target = CarryContactRules.pull_gesture(
 					absf(v_perp), carry_flip_speed, carry_stroke_full_speed)
-	_carry_side_smoothed = lerpf(
-			_carry_side_smoothed, float(_carry_side), carry_side_lerp_speed * delta)
+	_since_release = minf(_since_release + delta, 1.0)
 	var hop_was_live: bool = _transit_hop > 0.0
-	_transit_hop = maxf(_transit_hop - delta / carry_transit_hop_time, 0.0)
+	_transit_hop = maxf(_transit_hop - delta / _hop_time, 0.0)
 	if hop_was_live and _transit_hop <= 0.0 \
 			and SkaterStateMachine.state_has_puck(current_shot_state):
 		# The hop just landed on the far face: the catch. Heel-first, rolling
-		# back to the carry seat as the blend decays.
+		# back to the carry seat as the blend decays, and the stand-off a
+		# release left closes onto the puck.
 		_catch_heel_blend = 1.0
+		_free_gap_target = 0.0
 		carry_caught.emit(_hop_stroke_speed)
+	if _release_hop and _transit_hop > 0.0:
+		var cross: float = smoothstep(carry_release_lead_frac,
+				1.0 - carry_release_lead_frac, 1.0 - _transit_hop)
+		_carry_side_smoothed = lerpf(_release_from, float(_carry_side), cross)
+	else:
+		_release_hop = false
+		_carry_side_smoothed = lerpf(
+				_carry_side_smoothed, float(_carry_side), carry_side_lerp_speed * delta)
+	var new_gap: float = move_toward(
+			_free_gap_blend, _free_gap_target, carry_free_gap_ease * delta)
 	var new_drag: float = move_toward(_toe_drag_gesture, drag_target, carry_gesture_ease * delta)
 	var new_cradle: float = move_toward(_heel_cradle, cradle_target, carry_gesture_ease * delta)
 	var new_stroke: float = move_toward(
@@ -2097,7 +2172,8 @@ func _update_carry_contact(delta: float) -> void:
 			_aim_seat_blend, aim_seat_target, carry_gesture_ease * delta)
 	if new_drag != _toe_drag_gesture or new_cradle != _heel_cradle \
 			or new_stroke != _stroke_toe_blend or new_catch != _catch_heel_blend \
-			or new_give != _reception_give_blend or new_aim_seat != _aim_seat_blend:
+			or new_give != _reception_give_blend or new_aim_seat != _aim_seat_blend \
+			or new_gap != _free_gap_blend:
 		# The gesture factors tilt/slide the blade mesh without moving any
 		# marker, so the render-rate rig pass can't see the change — same
 		# escape as _update_blade_elevation.
@@ -2108,7 +2184,28 @@ func _update_carry_contact(delta: float) -> void:
 	_catch_heel_blend = new_catch
 	_reception_give_blend = new_give
 	_aim_seat_blend = new_aim_seat
+	_free_gap_blend = new_gap
 	_update_wrister_address(delta)
+
+
+func _start_hop(hop_time: float, stroke_speed: float) -> void:
+	_transit_hop = 1.0
+	_hop_time = hop_time
+	_hop_stroke_speed = stroke_speed
+
+
+# The blade leaves a spent push and goes over the free puck to the far face
+# (CarryStrokeState): a hop sized to the dangle's tempo that drives the side
+# factor itself, crossing at its top, with the mesh standing off the puck by a
+# gap as hard as the stroke until it lands.
+func _begin_release_hop(stroke_speed: float) -> void:
+	_release_from = _carry_side_smoothed
+	_release_hop = true
+	_start_hop(clampf(carry_release_hop_share * _since_release, carry_release_hop_min_s,
+			carry_transit_hop_time), stroke_speed)
+	_since_release = 0.0
+	_free_gap_target = CarryContactRules.pull_gesture(
+			stroke_speed, carry_flip_speed, carry_stroke_full_speed)
 
 
 # The attach-instant cushion: the puck's arrival knocks the blade back along its
@@ -2202,8 +2299,7 @@ func _update_wrister_address(delta: float) -> void:
 	if reference != 0 and _wrister_address_side != 0 \
 			and _wrister_address_side != reference:
 		if _transit_hop <= 0.0:
-			_transit_hop = 1.0
-			_hop_stroke_speed = carry_flip_speed
+			_start_hop(carry_transit_hop_time, carry_flip_speed)
 	var new_addr: float = _address_factor
 	if _wrister_address_side != 0:
 		new_addr = move_toward(
@@ -2359,6 +2455,7 @@ func reseed_blade_history() -> void:
 	_prev_blade_contact = get_blade_contact_global()
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
 	blade_world_velocity = Vector3.ZERO
+	_pin_prev_valid = false
 
 
 # Horizontal unit vector perpendicular to the stick shaft, picking the face
@@ -2584,6 +2681,10 @@ func update_arm_mesh() -> void:
 # (upper-body space) — the offset a hand on the stick rides.
 func stick_bow_offset(point: Vector3) -> Vector3:
 	return _stick.bow_offset(point)
+
+
+func stick_grip_axis(point: Vector3) -> Vector3:
+	return _stick.grip_axis(point)
 
 
 func update_bottom_arm_mesh() -> void:

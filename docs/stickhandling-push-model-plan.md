@@ -217,9 +217,8 @@ zero gameplay surface:
   re-address landings alike.
 
 The full one-sided contact model (puck coasting between touches, catches
-where geometry says, the pokeable free window) remains the v2 if this
-reads too safe — it renegotiates the pin's letter and needs its own
-design pass.
+where geometry says, the pokeable free window) would renegotiate the pin, and
+the pin is sacred. §7e draws its look on the blade mesh instead.
 
 ## 7d. Playtest rework: the pin never carries a seat
 
@@ -235,6 +234,37 @@ only in the wrister wind-up, as a mesh slide seating the frozen puck
 heel→toe per the level (`_aim_seat_offset_u`, eased in/out of WRISTER_AIM).
 That is where the read matters — a committed shooter — and where the goalie
 pre-arm will consume it.
+
+## 7e. The release (implemented)
+
+Keyed off velocity alone, a hard dangle pushed the puck the whole width of
+every sweep and flipped faces at the turnarounds, where the puck is slowest:
+the blade never let go of it. A face can only push the puck away from itself,
+so contact is really keyed off FORCE — and a sweep's force is at its ends,
+not its middle. `CarryStrokeState` reads that from velocity alone, so it is
+robust to interpolated remotes (no differentiated acceleration):
+
+- **Push**: the puck gaining speed off the trailing face.
+- **Release**: a push that peaked above `carry_release_speed` and has not
+  gained speed for `carry_release_hold_s`. The blade goes over the puck to
+  the far face while it runs free.
+- **Catch**: the puck coming at the leading face while slowing; its turn is
+  the throw, which is the next push. Speeding up toward the leading face by
+  `carry_repush_margin` is a second push the same way, which sends the blade
+  back to trail it.
+- A stroke under the release speed keeps the plain flip, so slow carries and
+  pull-acrosses are unchanged.
+
+The release hop is sized to the dangle's tempo (`carry_release_hop_share` of
+the time since the last release) and drives the side factor itself, holding
+the old face for `carry_release_lead_frac` while the puck runs off it and
+crossing at the top of the hop, so the blade never passes through the puck.
+Through the hop the mesh stands off the puck by `carry_free_gap` (as hard as
+the stroke), and the landing closes it — the catch. The stroke is read off
+the pin's velocity, not the blade marker's, which carries the face flip's own
+travel. Mesh-only like everything else here: the marker keeps
+`carry_blade_offset` and the pin stays at the cursor.
+`test_carry_stroke_state.gd`, `test_dangle_lets_the_puck_go.gd`.
 
 ## 8. What this buys
 
