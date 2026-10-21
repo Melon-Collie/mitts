@@ -198,7 +198,11 @@ func test_the_reach_edges_are_the_rigs() -> void:
 			0.000001)
 	assert_almost_eq(c.carry_facing_rules.backhand_edge_rad, deg_to_rad(c.bh_release_angle_deg),
 			0.000001, "a carrier's blade stops on the backhand where the bottom hand lets go")
-	# Only the edges differ: the native rollout reads the rest off facing_rules.
+	assert_almost_eq(c.carry_facing_rules.forehand_yield_rad,
+			deg_to_rad(c.carry_forehand_yield_deg), 0.000001)
+	assert_eq(c.facing_rules.forehand_yield_rad, INF, "an empty stick reaches round to the edge")
+	# Only the edges and the yield differ: the native rollout reads the rest off
+	# facing_rules.
 	for knob: String in ["engage_min_speed", "engage_full_speed", "hold_min_speed",
 			"hold_full_speed", "stance_square_max_speed", "pivot_commit_rad"]:
 		assert_eq(c.carry_facing_rules.get(knob), c.facing_rules.get(knob), knob)

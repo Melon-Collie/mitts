@@ -229,7 +229,8 @@ func _roll(m: int, pos: Vector3, vel: Vector3, facing: Vector2, turn_rate: float
 # SkaterPoseCoordinator.apply_facing for a cursor held along `cur`: the facing
 # rule's target (a carrier's pivoting at its carry stop, turned along the boards
 # for one on them), a chord lerp toward it, or turned by angle on the cursor's
-# side through a turn round — where the turn asks to be, before its wind-up.
+# side through a turn round, a carrier's yielding to a cursor round its forehand
+# — where the turn asks to be, before its wind-up.
 func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, stance: bool,
 		step: float, caps: AISkaterCaps, has_puck: bool, shield: bool) -> Vector2:
 	var rules: FacingRules.Config = caps.facing_rules
@@ -241,6 +242,11 @@ func _face(f: Vector2, cur: Vector2, v: Vector3, p: Vector3, braking: bool, stan
 	if shield:
 		target = BoardPlayRules.board_shield_facing(target, BoardPlayRules.board_proximity(
 				Vector2(p.x, p.z), caps.board_shield_probe), caps.board_shield_max_rad)
+	var turned: Vector2
 	if behind or absf(f.angle_to(target)) >= FacingRules.reach_edge(rules, f, target, lefty):
-		return f.rotated(FacingRules.turn_round_angle(f, target, cur) * minf(step, 1.0))
-	return f.lerp(target, step).normalized()
+		turned = f.rotated(FacingRules.turn_round_angle(f, target, cur) * minf(step, 1.0))
+	else:
+		turned = f.lerp(target, step).normalized()
+	if has_puck:
+		turned = FacingRules.yield_on_forehand(turned, cur, lefty, caps.carry_facing_rules)
+	return turned

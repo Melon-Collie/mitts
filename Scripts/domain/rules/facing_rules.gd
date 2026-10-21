@@ -41,6 +41,10 @@ class Config:
 	# eases the reach edge: a pivot under way carries through. Capped small, or a
 	# body still turning onto the line from a cursor near the edge reads as one.
 	var pivot_commit_rad: float = deg_to_rad(4.0)
+	# How far off the body's facing a cursor on the forehand may go before the
+	# hips yield to it (yield_on_forehand); INF for an empty stick, which reaches
+	# round to the edge.
+	var forehand_yield_rad: float = INF
 
 
 # Caller-owned result, filled each call.
@@ -75,6 +79,20 @@ static func solve(out: Result, facing: Vector2, cursor_dir: Vector2, velocity: V
 		return
 	out.pivoting = pivoting
 	out.target = cursor_dir.slerp(line, share)
+
+
+# Where the body heads this tick, `turned`, turned on toward a cursor further
+# than forehand_yield_rad round the forehand until it is no further: a carrier's
+# hips yield to the puck going round, so the blade never reaches the stop the
+# two-hand reach puts just short of the pivot, and the pivot is left little of
+# the turn to throw the puck with. Never turns the body away from the cursor.
+static func yield_on_forehand(turned: Vector2, cursor_dir: Vector2, is_left_handed: bool,
+		cfg: Config) -> Vector2:
+	var fore: float = forehand_sign(is_left_handed)
+	var past: float = turned.angle_to(cursor_dir) * fore - cfg.forehand_yield_rad
+	if past <= 0.0:
+		return turned
+	return turned.rotated(past * fore)
 
 
 # How much of the target is `line` rather than the cursor: the hold band once

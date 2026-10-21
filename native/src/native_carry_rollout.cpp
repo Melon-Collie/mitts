@@ -94,11 +94,14 @@ String NativeCarryRollout::configure(Object *caps) {
 		Object *cr = (Object *)carry_rules;
 		const Variant fore = cr->get(StringName("forehand_edge_rad"));
 		const Variant back = cr->get(StringName("backhand_edge_rad"));
-		if (fore.get_type() == Variant::NIL || back.get_type() == Variant::NIL) {
+		const Variant yield = cr->get(StringName("forehand_yield_rad"));
+		if (fore.get_type() == Variant::NIL || back.get_type() == Variant::NIL
+				|| yield.get_type() == Variant::NIL) {
 			missing += "carry_facing_rules.edges ";
 		} else {
 			carry_forehand_edge_rad = (double)fore;
 			carry_backhand_edge_rad = (double)back;
+			carry_forehand_yield_rad = (double)yield;
 		}
 	}
 #define X(name)                                                    \
@@ -241,7 +244,8 @@ static double turn_rate_step(double prev_rate, double wanted_rate, double max_ac
 	return wanted_rate > from ? MIN(from + reach, wanted_rate) : MAX(from - reach, wanted_rate);
 }
 
-// AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle and
+// AICarryRollout._face over FacingRules.solve / reach_edge / turn_round_angle /
+// yield_on_forehand and
 // BoardPlayRules.board_proximity / board_shield_facing.
 Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vector3 &v,
 		const Vector3 &p, bool braking, bool stance, double step, bool has_puck,
@@ -296,15 +300,26 @@ Vector2 NativeCarryRollout::face(const Vector2 &f, const Vector2 &cur, const Vec
 			}
 		}
 	}
+	Vector2 turned;
 	if (behind || Math::abs((double)f.angle_to(target)) >= reach_edge(f, target, fore, back)) {
 		// FacingRules.turn_round_angle.
 		double turn = f.angle_to(target);
 		if (turn * (double)f.angle_to(cur) < 0.0) {
 			turn -= signd(turn) * Math_TAU;
 		}
-		return f.rotated((real_t)(turn * MIN(step, 1.0)));
+		turned = f.rotated((real_t)(turn * MIN(step, 1.0)));
+	} else {
+		turned = f.lerp(target, (real_t)step).normalized();
 	}
-	return f.lerp(target, (real_t)step).normalized();
+	if (has_puck) {
+		// FacingRules.yield_on_forehand.
+		const double fore_sign = is_left_handed ? -1.0 : 1.0;
+		const double past = (double)turned.angle_to(cur) * fore_sign - carry_forehand_yield_rad;
+		if (past > 0.0) {
+			turned = turned.rotated((real_t)(past * fore_sign));
+		}
+	}
+	return turned;
 }
 
 // AICarryRollout._roll.

@@ -205,6 +205,7 @@ func _init() -> void:
 	# As SkaterController.setup derives the carry edge, which needs a body.
 	_carry_facing_cfg.forehand_edge_rad = _facing_cfg.forehand_edge_rad
 	_carry_facing_cfg.backhand_edge_rad = deg_to_rad(ctrl.bh_release_angle_deg)
+	_carry_facing_cfg.forehand_yield_rad = deg_to_rad(ctrl.carry_forehand_yield_deg)
 	ctrl.free()
 	move_cfg.puck_carry_speed_multiplier = 0.86
 
@@ -381,7 +382,8 @@ func step() -> void:
 			# The game's own facing rule (FacingRules) and step
 			# (SkaterPoseCoordinator.apply_facing), so a bot here faces where it
 			# would in a match: its skating line once skating, its cursor otherwise,
-			# turned round by angle to anything behind it.
+			# turned round by angle to anything behind it, a carrier's yielding to a
+			# cursor round its forehand.
 			var cursor_dir: Vector2 = to_mouse.normalized()
 			var lefty: bool = s.agent._is_left_handed
 			FacingRules.solve(_facing_rule, s.facing, cursor_dir,
@@ -396,6 +398,9 @@ func step() -> void:
 						cursor_dir) * minf(FACING_DRAG * DT, 1.0))
 			else:
 				s.facing = s.facing.lerp(target, FACING_DRAG * DT).normalized()
+			if carrier_id == s.peer_id:
+				s.facing = FacingRules.yield_on_forehand(s.facing, cursor_dir, lefty,
+						_carry_facing_cfg)
 		var rot_y: float = atan2(-s.facing.x, -s.facing.y)
 		s.vel = SkaterMovementRules.apply_movement(
 				s.vel, s.input.move_vector, rot_y, carrier_id == s.peer_id,

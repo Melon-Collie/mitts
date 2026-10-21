@@ -179,3 +179,32 @@ func test_a_reversal_winds_up_from_rest() -> void:
 
 func test_a_small_change_passes_through() -> void:
 	assert_eq(FacingRules.turn_rate(1.0, 2.0, _ACCEL, _DT), 2.0)
+
+
+# A carrier's hips yield to a cursor going round the forehand, just far enough
+# to keep it at forehand_yield_rad.
+func test_the_hips_yield_to_a_cursor_round_the_forehand() -> void:
+	_cfg.forehand_yield_rad = deg_to_rad(110.0)
+	var inside: Vector2 = FacingRules.yield_on_forehand(AHEAD, _left_of_ahead(100.0), true, _cfg)
+	assert_eq(inside, AHEAD, "inside it the body heads where the rule put it")
+	var yielded: Vector2 = FacingRules.yield_on_forehand(AHEAD, _left_of_ahead(130.0), true, _cfg)
+	assert_almost_eq(rad_to_deg(yielded.angle_to(_left_of_ahead(130.0))), -110.0, 0.01,
+			"past it, turned toward the cursor until it sits there")
+	assert_eq(FacingRules.yield_on_forehand(AHEAD, _right_of_ahead(130.0), true, _cfg), AHEAD,
+			"a lefty's backhand does not yield")
+	yielded = FacingRules.yield_on_forehand(AHEAD, _right_of_ahead(130.0), false, _cfg)
+	assert_almost_eq(rad_to_deg(yielded.angle_to(_right_of_ahead(130.0))), 110.0, 0.01,
+			"a righty's forehand is the right")
+
+
+func test_the_yield_never_turns_the_body_away_from_the_cursor() -> void:
+	_cfg.forehand_yield_rad = deg_to_rad(110.0)
+	var cursor: Vector2 = _left_of_ahead(170.0)
+	# Heading back toward a line the cursor has gone far round from.
+	var turned: Vector2 = _left_of_ahead(30.0)
+	var yielded: Vector2 = FacingRules.yield_on_forehand(turned, cursor, true, _cfg)
+	assert_gt(absf(turned.angle_to(cursor)), absf(yielded.angle_to(cursor)), "turned on toward it")
+
+
+func test_an_empty_stick_never_yields() -> void:
+	assert_eq(FacingRules.yield_on_forehand(AHEAD, _left_of_ahead(150.0), true, _cfg), AHEAD)

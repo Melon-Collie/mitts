@@ -361,6 +361,11 @@ var bh_hand_y: float = 0.0
 var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
 var bh_release_angle_band_deg: float = 15.0
+# How far round the forehand a carrier's cursor goes before the hips yield to it
+# (FacingRules.yield_on_forehand). The two-hand reach stops the blade at ~145°
+# on every build; yielding from well inside that spreads the hips' turn over the
+# sweep (test_carry_hips_yield.gd).
+var carry_forehand_yield_deg: float = 110.0
 # How far beyond the bottom arm's reach the nearest point of the shaft may lie
 # before that hand has fully let go of the stick (m). The hand slides up the
 # shaft first (BottomHandIK.reachable_grip); this band is the letting go.
@@ -1157,6 +1162,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	facing_rules.backhand_edge_rad = deg_to_rad(rom_backhand_angle_max_deg + upper_body_max_twist_deg)
 	carry_facing_rules.forehand_edge_rad = facing_rules.forehand_edge_rad
 	carry_facing_rules.backhand_edge_rad = deg_to_rad(bh_release_angle_deg)
+	carry_facing_rules.forehand_yield_rad = deg_to_rad(carry_forehand_yield_deg)
 	skater.body_checked_player.connect(_on_body_checked_player)
 	skater.body_check_received.connect(_on_body_check_received)
 	if game_state.has_method("is_movement_locked"):
