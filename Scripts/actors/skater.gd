@@ -183,6 +183,9 @@ var carry_transit_hop_time: float = 0.24
 # carry_repush_margin is being pushed, and sends the blade back to trail it.
 var carry_release_speed: float = 1.8
 var carry_release_drop: float = 0.2
+# ...and lets go only once the puck, at the rate it is slowing, would stop
+# within this (s): a turnaround, not a sweep that eases off and pushes on.
+var carry_release_stop_s: float = 0.12
 var carry_repush_margin: float = 1.2
 # What a stroke is, as against a hand's wobble: the speed is read through a
 # filter of carry_stroke_smoothing_s, and no face changes until the puck has
@@ -2229,7 +2232,8 @@ func _update_carry_contact(delta: float) -> void:
 				if wire_side == 0:
 					event = _stroke.step(sign_now, v_perp, delta,
 							carry_stroke_smoothing_s, carry_flip_speed, carry_flip_distance,
-							carry_release_speed, carry_release_drop, carry_repush_margin)
+							carry_release_speed, carry_release_drop, carry_release_stop_s,
+							carry_repush_margin)
 				else:
 					# The host's side. Deciding it here off a blade the wire
 					# placed with the host's side subtracts the wrong offset

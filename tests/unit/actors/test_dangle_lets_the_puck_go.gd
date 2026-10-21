@@ -197,3 +197,32 @@ func test_a_face_change_says_why() -> void:
 	assert_gt(causes.size(), 2)
 	assert_eq(causes.count(CarryStrokeState.Cause.RETURN), causes.size(),
 			"a slow sweep's are the puck coming back")
+
+
+# The cursor swung round the body at a hand's uneven pace (±50% at 1.5 Hz, with
+# a 2 cm tremor), either way round: the puck never comes back at the blade, so
+# the face holds.
+func test_an_uneven_sweep_round_the_body_keeps_its_face() -> void:
+	for way: float in [1.0, -1.0]:
+		var c: SkaterController = _make_carrier()
+		var sk: Skater = c.skater
+		var changes: Array[int] = [0]
+		sk.carry_face_changed.connect(
+				func(_cause: int, _speed: float, _travel_m: float) -> void: changes[0] += 1)
+		var input := InputState.new()
+		for t: int in 90 + int(3.0 / DT):
+			var s: float = maxf(t - 90, 0) * DT
+			var ang: float = way * deg_to_rad(200.0) \
+					* (s - 0.5 / (TAU * 1.5) * cos(TAU * 1.5 * s))
+			input.delta = DT
+			input.host_timestamp += DT
+			input.mouse_world_pos = sk.global_position + Vector3(sin(ang), 0.0, -cos(ang)) \
+					* (1.1 + 0.02 * sin(TAU * 9.0 * s + 1.3))
+			input.mouse_world_pos.y = 0.0
+			if t == 90:
+				changes[0] = 0
+			c._process_input(input, DT)
+			sk._physics_process(DT)
+			sk._process(DT)
+		assert_lt(changes[0], 2, "one push round, eased and renewed, %s" % (
+				"clockwise" if way > 0.0 else "anticlockwise"))

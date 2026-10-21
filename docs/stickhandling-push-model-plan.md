@@ -241,13 +241,18 @@ Keyed off velocity alone, a hard dangle pushed the puck the whole width of
 every sweep and flipped faces at the turnarounds, where the puck is slowest:
 the blade never let go of it. A face can only push the puck away from itself,
 so contact is really keyed off FORCE — and a sweep's force is at its ends,
-not its middle. `CarryStrokeState` reads that from velocity alone, so it is
-robust to interpolated remotes (no differentiated acceleration):
+not its middle. `CarryStrokeState` reads that from the puck's filtered
+velocity and its rate of change; a peer drawing someone else's carry takes the
+side off the wire (v82) rather than differentiating an interpolated pin:
 
 - **Push**: the puck gaining speed off the trailing face.
-- **Release**: a push that peaked above `carry_release_speed` and has lost
-  `carry_release_drop` of it. The blade goes over the puck to the far face
-  while it runs free.
+- **Release**: a push that peaked above `carry_release_speed`, has lost
+  `carry_release_drop` of it, and is slowing fast enough to stop within
+  `carry_release_stop_s`: the puck is turning round. The blade goes over the
+  puck to the far face while it runs free. A sweep one way that only eases
+  off — a hand's uneven pace round the body — never stops, so it keeps its
+  face and the next surge is the same push (without the stop term it cost
+  8–11 face changes in 3 s).
 - **Catch**: the puck coming at the leading face while slowing; its turn is
   the throw, which is the next push. Speeding up toward the leading face by
   `carry_repush_margin` is a second push the same way, which sends the blade

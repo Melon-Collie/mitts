@@ -9,6 +9,7 @@ const FLIP: float = 0.6
 const FLIP_DISTANCE: float = 0.04
 const RELEASE: float = 1.8
 const DROP: float = 0.2
+const STOP_S: float = 0.12
 const REPUSH: float = 1.2
 const SMOOTHING: float = 0.04
 const DT: float = 1.0 / 120.0
@@ -22,7 +23,7 @@ func before_each() -> void:
 
 # Unfiltered unless `smoothing` is given, so the rules read exact speeds.
 func _step(side: int, v_perp: float, smoothing: float = 0.0) -> int:
-	return _state.step(side, v_perp, DT, smoothing, FLIP, FLIP_DISTANCE, RELEASE, DROP, REPUSH)
+	return _state.step(side, v_perp, DT, smoothing, FLIP, FLIP_DISTANCE, RELEASE, DROP, STOP_S, REPUSH)
 
 
 # Steps a lateral velocity profile, applying every flip, and returns each event
@@ -188,3 +189,20 @@ func _release_from_plus_one() -> void:
 	var events: Array = _run(1, [-1.0, -2.0, -3.0, -2.5, -1.9] as Array[float])
 	assert_eq(events.size(), 1)
 	assert_eq(events[0][1], CarryStrokeState.Event.RELEASE)
+
+
+# A sweep one way that eases off and pushes on — the hand speeding up and
+# slowing through a circle round the body — never comes back at the blade, so
+# the blade keeps its face behind it.
+func test_an_uneven_sweep_one_way_keeps_its_face() -> void:
+	for spec: Array in [[0.5, 1.5, 0.0], [0.4, 1.0, 0.015], [0.3, 2.0, 0.015]]:
+		var profile: Array[float] = []
+		var hz: float = spec[1]
+		for i: int in int(3.0 / DT):
+			var t: float = i * DT
+			var v: float = -3.85 * (1.0 + spec[0] * sin(TAU * hz * t)) \
+					- spec[2] * TAU * 9.0 * cos(TAU * 9.0 * t + 1.3)
+			profile.append(v)
+		var events: Array = _run(1, profile, SMOOTHING)
+		assert_eq(events.size(), 0,
+				"speed ±%d%% at %.1f Hz: one push, eased and renewed" % [spec[0] * 100.0, hz])

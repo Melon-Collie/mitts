@@ -6,8 +6,11 @@ extends RefCounted
 #
 # A face can only push the puck away from itself, so a stroke is contact for as
 # long as the puck is gaining speed off the blade. Once a hard stroke has lost
-# `release_drop` of its peak speed the push is spent: the puck runs on by
-# itself, and the blade goes over it to the far face to meet it — the RELEASE.
+# `release_drop` of its peak speed the push is spent, and once the puck is
+# slowing fast enough to stop within `release_stop_s` it is turning: the puck
+# runs on by itself, and the blade goes over it to the far face to meet it —
+# the RELEASE. A sweep that only slows, one way, keeps its face: the puck is not
+# coming back, so the blade waits behind it for the next push.
 # That face catches the puck as it slows and throws it back, which is the next
 # push. A stroke that never reaches `release_speed` is a slow push held on one
 # face, and flips only once the puck comes back at the blade faster than
@@ -50,8 +53,10 @@ var last_speed: float = 0.0
 var last_travel_m: float = 0.0
 var release_peak: float = 0.0
 var stop_in_s: float = 0.0
-# The filtered lateral speed, and whether it has a first sample.
+# The filtered lateral speed and its rate of change, and whether they have a
+# first sample.
 var _v: float = 0.0
+var _dv: float = 0.0
 var _v_valid: bool = false
 # Fastest the puck has run off the blade in the current push, and how long ago.
 var _push_peak: float = 0.0
@@ -69,6 +74,7 @@ func reset() -> void:
 	release_peak = 0.0
 	stop_in_s = 0.0
 	_v = 0.0
+	_dv = 0.0
 	_v_valid = false
 	_push_peak = 0.0
 	_push_peak_age = 0.0
@@ -80,7 +86,7 @@ func reset() -> void:
 # `v_perp` is the puck's velocity along +face_normal relative to the carrier,
 # m/s. Any event other than NONE means the blade changes to −side.
 func step(side: int, v_perp: float, delta: float, smoothing_s: float, flip_speed: float,
-		flip_distance: float, release_speed: float, release_drop: float,
+		flip_distance: float, release_speed: float, release_drop: float, release_stop_s: float,
 		repush_margin: float) -> int:
 	_filter(v_perp, delta, smoothing_s)
 	var toward_blade: float = _v * float(side)
@@ -111,8 +117,10 @@ func step(side: int, v_perp: float, delta: float, smoothing_s: float, flip_speed
 		_push_peak_age = 0.0
 		return Event.NONE
 	_push_peak_age += delta
+	# How fast the push is dying: the puck slows by this, m/s².
+	var slowing: float = _dv * float(side)
 	if _push_peak >= release_speed and away <= _push_peak * (1.0 - release_drop) \
-			and away >= flip_speed:
+			and away >= flip_speed and away <= slowing * release_stop_s:
 		_release(away, smoothing_s)
 		_note(Cause.RELEASE, away, 0.0)
 		return Event.RELEASE
@@ -149,11 +157,15 @@ func toward(side: int) -> float:
 
 
 func _filter(v_perp: float, delta: float, smoothing_s: float) -> void:
-	if not _v_valid or smoothing_s <= 0.0:
+	if not _v_valid or smoothing_s <= 0.0 or delta <= 0.0:
+		_dv = (v_perp - _v) / delta if _v_valid and delta > 0.0 else 0.0
 		_v = v_perp
 		_v_valid = true
-	else:
-		_v += (v_perp - _v) * (1.0 - exp(-delta / smoothing_s))
+		return
+	var k: float = 1.0 - exp(-delta / smoothing_s)
+	var was: float = _v
+	_v += (v_perp - _v) * k
+	_dv += ((_v - was) / delta - _dv) * k
 
 
 func _release(away: float, smoothing_s: float) -> void:
