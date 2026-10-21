@@ -8,7 +8,7 @@ class_name AIShotFieldData
 # out, the 21-field read before the feed, the 21-field read at decision
 # (shot_odds_stager.gd read_fields), then FLAT / LOW / HIGH outcomes.
 
-const FINGERPRINT: String = "0f63ebf5ff4aab88f7bd6379e297d78b"
+const FINGERPRINT: String = "f4ab8bc6d31d8d99a359bce2f608f3f8"
 const SPOT_X: Array[float] = [-8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0]
 const SPOT_FWD: Array[float] = [0.6, 1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0]
 const AIM_POINTS: int = 24
