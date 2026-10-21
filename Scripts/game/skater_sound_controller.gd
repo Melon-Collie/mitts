@@ -26,6 +26,14 @@ const _LEVEL_EPSILON_DB: float = 0.1
 const _PITCH_EPSILON: float = 0.002
 # Where the softest stickhandling tap bottoms out.
 const _TAP_FLOOR_DB: float = -12.0
+# A toe drag scrapes once as it digs in, the drag this far on (Skater
+# .get_toe_drag_factor) with the puck coming in at least this fast (m/s), and
+# re-arms once it eases back under the low mark.
+const _DRAG_ON: float = 0.5
+const _DRAG_OFF: float = 0.25
+const _DRAG_MIN_SPEED: float = 0.8
+# Where along the blade the release flicks and the drag scrapes, heel 0 to toe 1.
+const _TOE_U: float = 0.9
 # A push's level follows the stroke's strength (Skater.skate_pushed), full at
 # this — a flat-out stride — and no quieter than the floor; a hard drive past it
 # holds at full. A start's dig is measured the same way.
@@ -66,6 +74,7 @@ var _slot: int = -1
 var _brake_player: AudioStreamPlayer3D = null
 var _loops: Array[AudioStreamPlayer3D] = []
 var _bite_armed: bool = true
+var _drag_armed: bool = true
 # One per skate for its steps — the push, the start's dig, the landing — so a
 # step never cuts off the other foot's tail.
 var _foot_players: Array[AudioStreamPlayer3D] = []
@@ -80,6 +89,7 @@ func setup(skater: Skater, controller: SkaterController) -> void:
 		_loops.append(_make_player(path))
 	_foot_players = [_make_player(""), _make_player("")]
 	skater.carry_caught.connect(_on_carry_caught)
+	skater.carry_face_changed.connect(_on_carry_face_changed)
 	skater.skate_pushed.connect(_on_skate_pushed)
 	skater.skate_touched.connect(_on_skate_touched)
 
@@ -152,6 +162,30 @@ func _on_carry_caught(stroke_speed: float) -> void:
 			tap_volume_db(stroke_speed, _skater.carry_stroke_full_speed), 0.06)
 
 
+# The blade leaving a spent push to go over the puck: a flick off the toe, as
+# hard as the puck was going when it let go.
+func _on_carry_face_changed(cause: int, speed: float, _travel_m: float) -> void:
+	if cause != CarryStrokeState.Cause.RELEASE:
+		return
+	SoundManager.play_world(SoundManager.Sound.STICK_RELEASE, _skater.drawn_blade_point(_TOE_U),
+			tap_volume_db(speed, _skater.carry_stroke_full_speed) + _own_db(), 0.08)
+
+
+# Once per toe drag, as it digs in.
+func _update_drag() -> void:
+	var drag: float = _skater.get_toe_drag_factor() \
+			if _skater.current_shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK else 0.0
+	if drag < _DRAG_OFF:
+		_drag_armed = true
+		return
+	var speed: float = _skater.carry_hands_velocity.length()
+	if not _drag_armed or drag < _DRAG_ON or speed < _DRAG_MIN_SPEED:
+		return
+	_drag_armed = false
+	SoundManager.play_world(SoundManager.Sound.STICK_DRAG, _skater.drawn_blade_point(_TOE_U),
+			tap_volume_db(speed, _skater.carry_stroke_full_speed) + _own_db(), 0.08)
+
+
 # A start's first pushes are digs, short and hard, while the dig outweighs the
 # stroke; then the stride's own push.
 func _on_skate_pushed(left: bool, strength: float, dig: float) -> void:
@@ -218,6 +252,7 @@ func _process(_delta: float) -> void:
 	var listener_db: float = _listener_db()
 	var own_db: float = _own_db()
 	_update_bite(heard.x, speed)
+	_update_drag()
 	_hold_loop(Loop.SCRAPE, scrape_volume_db(Vector2(heard.x, heard.y), speed), 0.0, listener_db)
 	_hold_loop(Loop.GLIDE, glide_volume_db(speed, heard.x), own_db, listener_db)
 	if _hold_loop(Loop.CARVE, carve_volume_db(heard.z, speed), own_db, listener_db):
