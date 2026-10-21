@@ -174,3 +174,26 @@ func test_a_still_hand_never_changes_face() -> void:
 func test_a_tight_dangle_still_changes_face() -> void:
 	var changes: int = _face_changes(_dangle(_make_carrier(), 0.06, 3.0, 3.0, 0.0, 2))
 	assert_gt(changes, 14, "a hand's-width dangle at 3 Hz flips its face nearly every stroke")
+
+
+# Each face change says why (StickDebugOverlay logs it): a hard dangle's are
+# releases, a slow sweep's the puck coming back at the blade.
+func test_a_face_change_says_why() -> void:
+	var causes: Array[int] = []
+	var hard: SkaterController = _make_carrier()
+	hard.skater.carry_face_changed.connect(
+			func(cause: int, _speed: float, _travel_m: float) -> void: causes.append(cause))
+	var hard_samples: Array[Sample] = _dangle(hard, 0.35, 2.0, 2.0)
+	var changes: int = _face_changes(hard_samples)
+	assert_eq(causes.size(), changes, "one signal a face change")
+	assert_gt(causes.count(CarryStrokeState.Cause.RELEASE), causes.size() - 2,
+			"a hard dangle's are releases, past the first stroke from rest")
+	causes.clear()
+	var slow: SkaterController = _make_carrier()
+	slow.skater.carry_face_changed.connect(
+			func(cause: int, _speed: float, _travel_m: float) -> void: causes.append(cause))
+	# ~1.3 m/s across the middle: strokes under the release speed.
+	_dangle(slow, 0.35, 0.6, 3.4)
+	assert_gt(causes.size(), 2)
+	assert_eq(causes.count(CarryStrokeState.Cause.RETURN), causes.size(),
+			"a slow sweep's are the puck coming back")

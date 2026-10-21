@@ -44,6 +44,7 @@ const _CATALOGUE: String = "res://locale/translations.csv"
 const _DEBUG_SURFACES: Array[String] = [
 	"res://Scripts/ui/network_debug_overlay.gd",
 	"res://Scripts/ui/shape_debug_overlay.gd",
+	"res://Scripts/ui/stick_debug_overlay.gd",
 ]
 
 # The backlog, written down and un-growable. Issue #607 covers the build

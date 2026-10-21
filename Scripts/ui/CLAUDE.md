@@ -188,7 +188,8 @@ player.
 
 ## Debug surfaces are exempt from the locale seam
 
-`NetworkDebugOverlay` (F3/F4) and `ShapeDebugOverlay` (F6) deliberately do not
+`NetworkDebugOverlay` (F3/F4), `ShapeDebugOverlay` (F6) and `StickDebugOverlay`
+(F9/F10) deliberately do not
 route their strings through `tr()`, and are built in code with no `.tscn`. They
 are developer instrumentation, not user-facing UI — do not "fix" them into the
 translation catalogue.

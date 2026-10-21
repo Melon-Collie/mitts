@@ -451,6 +451,9 @@ signal post_move_integrated()
 # A carry hop landed: the blade face caught the puck on its new side. Cosmetic,
 # on every peer; `stroke_speed` (m/s) is the push that started the hop.
 signal carry_caught(stroke_speed: float)
+# A carried puck's blade changed face: CarryStrokeState.Cause, the puck's speed
+# then and how far it had come (StickDebugOverlay logs them).
+signal carry_face_changed(cause: int, speed: float, travel_m: float)
 # A skate's push began or a lifted one landed (SkaterSkatingCoordinator, from the
 # gait; cosmetic, every peer, never in replay): SkaterLocomotion.push_strength,
 # dig_strength, and the landing skate's highest lift, m.
@@ -2013,6 +2016,13 @@ func get_blade_contact_global() -> Vector3:
 # lefties and righties — without this flip, a righty's puck rendered on
 # the opposite face of the blade from a lefty's, even though both were
 # "on forehand" per _carry_side.
+# The carried puck's filtered lateral speed toward the blade's face (m/s;
+# negative = moving off it) — the speed the face is decided on.
+func carry_stroke_toward_blade() -> float:
+	var factor_hs: int = 1 if is_left_handed else -1
+	return _stroke.toward(_carry_side * factor_hs)
+
+
 func get_carry_forehand_factor() -> float:
 	var handedness_sign: float = 1.0 if is_left_handed else -1.0
 	return _carry_side_smoothed * handedness_sign
@@ -2163,6 +2173,8 @@ func _update_carry_contact(delta: float) -> void:
 								carry_flip_speed, carry_release_speed)
 				if event != CarryStrokeState.Event.NONE:
 					_carry_side = -sign_now * factor_hs
+					carry_face_changed.emit(_stroke.last_cause, _stroke.last_speed,
+							_stroke.last_travel_m)
 					if event == CarryStrokeState.Event.RELEASE:
 						_begin_release_hop(_stroke.release_peak)
 					else:

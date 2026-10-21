@@ -70,6 +70,8 @@ func test_a_hard_stroke_is_released_once_it_has_lost_its_drop() -> void:
 	assert_eq(profile[events[0][0]], -2.3, "released at the first speed past the drop")
 	assert_eq(_state.release_peak, 3.0, "as hard as its peak")
 	assert_true(_state.catching, "the far face is now catching")
+	assert_eq(_state.last_cause, CarryStrokeState.Cause.RELEASE)
+	assert_almost_eq(_state.last_speed, 2.3, 0.0001, "noted at the speed it let go at")
 
 
 func test_a_pause_in_a_stroke_is_not_its_end() -> void:
@@ -84,6 +86,9 @@ func test_a_slow_stroke_holds_its_face_until_it_comes_back() -> void:
 	assert_eq(back[0][1], CarryStrokeState.Event.FLIP)
 	assert_eq(back[0][0], int(ceil(FLIP_DISTANCE / (1.0 * DT))) - 1,
 			"once the puck has come the flip distance")
+	assert_eq(_state.last_cause, CarryStrokeState.Cause.RETURN, "noted as the puck coming back")
+	assert_almost_eq(_state.last_speed, 1.0, 0.0001)
+	assert_gte(_state.last_travel_m, FLIP_DISTANCE)
 
 
 func test_a_quick_twitch_back_does_not_flip() -> void:
@@ -116,6 +121,7 @@ func test_speeding_up_toward_the_leading_face_repushes() -> void:
 	assert_eq(events.size(), 1, "pushed again the same way")
 	assert_eq(events[0][1], CarryStrokeState.Event.FLIP)
 	assert_gt(events[0][0], 2, "only once it has come the flip distance past the margin")
+	assert_eq(_state.last_cause, CarryStrokeState.Cause.REPUSH, "noted as a second push")
 
 
 func test_a_wobble_in_a_repush_is_not_one() -> void:
@@ -170,6 +176,12 @@ func test_reset_forgets_the_push() -> void:
 	assert_eq(_step(1, -1.5), CarryStrokeState.Event.NONE)
 	assert_eq(_step(1, -0.9), CarryStrokeState.Event.NONE,
 			"a reset peak is rebuilt, here under the release speed")
+
+
+func test_a_side_told_from_outside_is_noted_as_told() -> void:
+	_state.observe(1, -0.2, DT, 0.0)
+	assert_eq(_state.wire_flip(1, 0.0, FLIP, RELEASE), CarryStrokeState.Event.FLIP)
+	assert_eq(_state.last_cause, CarryStrokeState.Cause.TOLD)
 
 
 func _release_from_plus_one() -> void:

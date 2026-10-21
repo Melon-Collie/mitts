@@ -37,8 +37,17 @@ extends RefCounted
 # flip it was told of was.
 
 enum Event { NONE, FLIP, RELEASE }
+# Why the last face change happened, for StickDebugOverlay: a slow stroke's
+# puck coming back at the blade, a second push the way a release sent it, a
+# release, or a side told from outside.
+enum Cause { NONE, RETURN, REPUSH, RELEASE, TOLD }
 
 var catching: bool = false
+# The last face change: its cause, the puck's speed then (m/s, toward the blade
+# for a flip, off it for a release) and how far it had come for a flip (m).
+var last_cause: Cause = Cause.NONE
+var last_speed: float = 0.0
+var last_travel_m: float = 0.0
 var release_peak: float = 0.0
 var stop_in_s: float = 0.0
 # The filtered lateral speed, and whether it has a first sample.
@@ -87,14 +96,14 @@ func step(side: int, v_perp: float, delta: float, smoothing_s: float, flip_speed
 				_since_min_m += toward_blade * delta
 			if toward_blade >= flip_speed and toward_blade > _catch_min + repush_margin \
 					and _since_min_m >= flip_distance:
-				return _flip()
+				return _flip(Cause.REPUSH, toward_blade, _since_min_m)
 			return Event.NONE
 	var away: float = -toward_blade
 	if away <= 0.0:
 		_push_peak = 0.0
 		_toward_m += toward_blade * delta
 		if toward_blade >= flip_speed and _toward_m >= flip_distance:
-			return _flip()
+			return _flip(Cause.RETURN, toward_blade, _toward_m)
 		return Event.NONE
 	_toward_m = 0.0
 	if away > _push_peak:
@@ -105,6 +114,7 @@ func step(side: int, v_perp: float, delta: float, smoothing_s: float, flip_speed
 	if _push_peak >= release_speed and away <= _push_peak * (1.0 - release_drop) \
 			and away >= flip_speed:
 		_release(away, smoothing_s)
+		_note(Cause.RELEASE, away, 0.0)
 		return Event.RELEASE
 	return Event.NONE
 
@@ -128,8 +138,14 @@ func wire_flip(side: int, smoothing_s: float, flip_speed: float, release_speed: 
 	if _push_peak >= release_speed and away < _push_peak and away >= flip_speed:
 		_release(away, smoothing_s)
 		_push_peak = 0.0
+		_note(Cause.TOLD, away, 0.0)
 		return Event.RELEASE
-	return _flip()
+	return _flip(Cause.TOLD, -away, 0.0)
+
+
+# The filtered lateral speed toward the blade at `side` (m/s; negative = off it).
+func toward(side: int) -> float:
+	return _v * float(side)
 
 
 func _filter(v_perp: float, delta: float, smoothing_s: float) -> void:
@@ -150,8 +166,15 @@ func _release(away: float, smoothing_s: float) -> void:
 	_since_min_m = 0.0
 
 
-func _flip() -> int:
+func _flip(cause: Cause, speed: float, travel_m: float) -> int:
+	_note(cause, speed, travel_m)
 	catching = false
 	_push_peak = 0.0
 	_toward_m = 0.0
 	return Event.FLIP
+
+
+func _note(cause: Cause, speed: float, travel_m: float) -> void:
+	last_cause = cause
+	last_speed = speed
+	last_travel_m = travel_m
