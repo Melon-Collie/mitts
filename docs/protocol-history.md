@@ -380,3 +380,11 @@ here whenever you bump, in the same format.
 #      style code, all from the host's join-time copy. A v80 peer reads the
 #      first seven fields and seats every human on its bench in a default look,
 #      so mixed builds must be refused. The replay format is unchanged.
+# v82: the skater block's blade-side bit (intent bit 7, v56's wrister address)
+#      also carries the carry side during SKATING_WITH_PUCK, so a client draws
+#      a remote carrier's blade and puck on the host's side instead of deciding
+#      the side again (Skater.apply_wire_blade_side). Same layout; a v81 peer
+#      reads the bit only in WRISTER_AIM and decides the side itself, so mixed
+#      builds must be refused. Replay FORMAT_VERSION 18: a v17 replay's carry
+#      frames hold +1 in the bit, which would pin every replayed carry to one
+#      side.

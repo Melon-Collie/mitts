@@ -84,6 +84,46 @@ func test_every_recorded_field_reaches_the_controller() -> void:
 # Carried is half of it: the replayed skater must address the side the shooter
 # did, backhand included.
 func test_a_replayed_wrister_addresses_the_recorded_side() -> void:
+	var controller: SkaterController = _replayed_skater()
+	var skater: Skater = controller.skater
+	for side: int in [-1, 1]:
+		var state := SkaterNetworkState.new()
+		state.position = skater.global_position
+		state.facing = Vector2(0.0, -1.0)
+		state.shot_state = SkaterStateMachine.State.WRISTER_AIM
+		state.blade_side = side
+		state.blade_position = Vector3(0.3, -0.85, -1.0)
+		state.top_hand_position = Vector3(0.2, -0.1, -0.2)
+		controller.apply_replay_state(state, 1.0 / 60.0)
+		skater._physics_process(1.0 / 120.0)
+		assert_eq(skater.get_wrister_address_side(), side,
+				"the replay addresses the recorded side (%d)" % side)
+
+
+# And a replayed carry keeps the side the carrier had, so its puck is pinned
+# where it was; a live carry decides it again once the replay lets go.
+func test_a_replayed_carry_keeps_the_recorded_side() -> void:
+	var controller: SkaterController = _replayed_skater()
+	var skater: Skater = controller.skater
+	for side: int in [-1, 1, -1]:
+		var state := SkaterNetworkState.new()
+		state.position = skater.global_position
+		state.facing = Vector2(0.0, -1.0)
+		state.shot_state = SkaterStateMachine.State.SKATING_WITH_PUCK
+		state.blade_side = side
+		state.blade_position = Vector3(0.3, -0.85, -1.0)
+		state.top_hand_position = Vector3(0.2, -0.1, -0.2)
+		controller.apply_replay_state(state, 1.0 / 60.0)
+		skater._physics_process(1.0 / 120.0)
+		assert_eq(skater.wire_blade_side(state.shot_state), side, "the replay carries on the recorded side (%d)" % side)
+	for _i: int in 3:
+		skater._physics_process(1.0 / 120.0)
+	assert_eq(skater._wire_carry_age, Skater._WIRE_SIDE_LAPSE_TICKS,
+			"with no recorded side coming, the skater decides it again")
+
+
+# A live skater and its controller, both still, for apply_replay_state to drive.
+func _replayed_skater() -> SkaterController:
 	var puck: Puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	add_child_autofree(puck)
 	var skater: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
@@ -98,15 +138,4 @@ func test_a_replayed_wrister_addresses_the_recorded_side() -> void:
 	controller.setup(skater, puck, game_state)
 	controller.set_process(false)
 	controller.set_physics_process(false)
-	for side: int in [-1, 1]:
-		var state := SkaterNetworkState.new()
-		state.position = skater.global_position
-		state.facing = Vector2(0.0, -1.0)
-		state.shot_state = SkaterStateMachine.State.WRISTER_AIM
-		state.wrister_address_side = side
-		state.blade_position = Vector3(0.3, -0.85, -1.0)
-		state.top_hand_position = Vector3(0.2, -0.1, -0.2)
-		controller.apply_replay_state(state, 1.0 / 60.0)
-		skater._physics_process(1.0 / 120.0)
-		assert_eq(skater.get_wrister_address_side(), side,
-				"the replay addresses the recorded side (%d)" % side)
+	return controller

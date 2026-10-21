@@ -31,7 +31,10 @@ extends RefCounted
 # early; the speed over the slowing so far would put it twice as late.
 #
 # `side` is a face-normal sign: +1 = the blade on the +face_normal side of the
-# puck. The caller owns it; step() reports a flip and the caller applies it.
+# puck. The caller owns it; step() reports a flip and the caller applies it. A
+# peer told the side instead (a client drawing someone else's carry, off the
+# wire) reads the same stroke through observe() and asks wire_flip() what a
+# flip it was told of was.
 
 enum Event { NONE, FLIP, RELEASE }
 
@@ -70,11 +73,7 @@ func reset() -> void:
 func step(side: int, v_perp: float, delta: float, smoothing_s: float, flip_speed: float,
 		flip_distance: float, release_speed: float, release_drop: float,
 		repush_margin: float) -> int:
-	if not _v_valid or smoothing_s <= 0.0:
-		_v = v_perp
-		_v_valid = true
-	else:
-		_v += (v_perp - _v) * (1.0 - exp(-delta / smoothing_s))
+	_filter(v_perp, delta, smoothing_s)
 	var toward_blade: float = _v * float(side)
 	if catching:
 		if toward_blade <= 0.0:
@@ -105,15 +104,50 @@ func step(side: int, v_perp: float, delta: float, smoothing_s: float, flip_speed
 	_push_peak_age += delta
 	if _push_peak >= release_speed and away <= _push_peak * (1.0 - release_drop) \
 			and away >= flip_speed:
-		catching = true
-		release_peak = _push_peak
-		# Less the filter's own lag: it reads the puck about smoothing_s late.
-		stop_in_s = maxf(_push_peak_age * (sqrt(_push_peak / (_push_peak - away)) - 1.0)
-				- maxf(smoothing_s, 0.0), 0.0)
-		_catch_min = away
-		_since_min_m = 0.0
+		_release(away, smoothing_s)
 		return Event.RELEASE
 	return Event.NONE
+
+
+# The stroke read of step() without its decisions, for a peer told the side.
+func observe(side: int, v_perp: float, delta: float, smoothing_s: float) -> void:
+	_filter(v_perp, delta, smoothing_s)
+	var away: float = -_v * float(side)
+	if away > _push_peak:
+		_push_peak = away
+		_push_peak_age = 0.0
+	else:
+		_push_peak_age += delta
+
+
+# The blade was flipped off `side` from outside: a RELEASE if it left a stroke
+# that peaked at `release_speed` and is spending it, which sets release_peak and
+# stop_in_s as step() does, else a FLIP.
+func wire_flip(side: int, smoothing_s: float, flip_speed: float, release_speed: float) -> int:
+	var away: float = -_v * float(side)
+	if _push_peak >= release_speed and away < _push_peak and away >= flip_speed:
+		_release(away, smoothing_s)
+		_push_peak = 0.0
+		return Event.RELEASE
+	return _flip()
+
+
+func _filter(v_perp: float, delta: float, smoothing_s: float) -> void:
+	if not _v_valid or smoothing_s <= 0.0:
+		_v = v_perp
+		_v_valid = true
+	else:
+		_v += (v_perp - _v) * (1.0 - exp(-delta / smoothing_s))
+
+
+func _release(away: float, smoothing_s: float) -> void:
+	catching = true
+	release_peak = _push_peak
+	# Less the filter's own lag: it reads the puck about smoothing_s late.
+	stop_in_s = maxf(_push_peak_age * (sqrt(_push_peak / (_push_peak - away)) - 1.0)
+			- maxf(smoothing_s, 0.0), 0.0)
+	_catch_min = away
+	_since_min_m = 0.0
 
 
 func _flip() -> int:

@@ -583,7 +583,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.brake_intent = newest.brake_intent
 		interpolated.hit_committed = newest.hit_committed
 		interpolated.stance_active = newest.stance_active
-		interpolated.wrister_address_side = newest.wrister_address_side
+		interpolated.blade_side = newest.blade_side
 		interpolated.balance_tilt = newest.balance_tilt
 		interpolated.balance_tilt_vel = newest.balance_tilt_vel
 		interpolated.torso_lean = newest.torso_lean
@@ -623,7 +623,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.brake_intent = to_state.brake_intent
 		interpolated.hit_committed = to_state.hit_committed
 		interpolated.stance_active = to_state.stance_active
-		interpolated.wrister_address_side = to_state.wrister_address_side
+		interpolated.blade_side = to_state.blade_side
 		interpolated.balance_tilt = from_state.balance_tilt.lerp(to_state.balance_tilt, t)
 		interpolated.balance_tilt_vel = from_state.balance_tilt_vel.lerp(to_state.balance_tilt_vel, t)
 		interpolated.torso_lean = from_state.torso_lean.lerp(to_state.torso_lean, t)
@@ -791,12 +791,11 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.stick_tied = state.stick_tied
 	_adopt_pin(state)
 	skater.current_shot_state = state.shot_state
-	# Wrister address, gated on the aim state — the wire bit is garbage
-	# otherwise. The skater's address pass adopts it so a spectated shooter's
-	# frozen blade re-addresses the same side the shooter sees (Skater
-	# .set_wrister_address_side).
-	if state.shot_state == SkaterStateMachine.State.WRISTER_AIM:
-		skater.set_wrister_address_side(state.wrister_address_side)
+	# The blade side, applied by state (the wire bit is garbage outside a wrister
+	# aim or a carry): a spectated shooter's frozen blade re-addresses the side
+	# the shooter sees, and a carrier's blade and puck sit on the host's side
+	# (Skater.apply_wire_blade_side).
+	skater.apply_wire_blade_side(state.blade_side)
 	# Charge drives the stick-flex load bow (Skater._update_stick_flex reads it in
 	# WRISTER_AIM every rendered frame), so a remote wrister bows at the shooter's
 	# real charge rather than at zero.

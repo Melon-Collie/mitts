@@ -29,6 +29,8 @@ const _TOE_ICE_PASSES: int = 2
 const _BLADE_ELEVATION_BLEND_SPEED: float = 6.0      # blend units/sec (full swing in ~0.17 s)
 # How fast a tied blade's drawn slide (StickTieDraw) eases on and off.
 const _TIE_DRAW_EASE_M_S: float = 2.0
+# Ticks a staged wire carry side stays the side (see _wire_carry_age).
+const _WIRE_SIDE_LAPSE_TICKS: int = 2
 # Toe-drag read. The shaft only steepens past its lie in TopHandIK's CLOSE
 # regime (the hand rising to shorten the stick's horizontal run) — in the FAR
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
@@ -772,6 +774,12 @@ var _release_from: float = 0.0
 # Eased 0→1 share of carry_free_gap the blade mesh stands off the puck.
 var _free_gap_blend: float = 0.0
 var _free_gap_target: float = 0.0
+# The carry side as the host decided it, staged off the wire for a skater this
+# peer only draws (apply_wire_blade_side), and the ticks since it was staged: a
+# side staged within the last tick is the side; an older one has lapsed, and
+# this peer decides it again (the local skater once a goal replay ends).
+var _wire_carry_side: int = 0
+var _wire_carry_age: int = _WIRE_SIDE_LAPSE_TICKS
 # Eased catch/release blade-geometry blends (0→1), advanced by
 # _update_carry_contact: stroke-speed toe ride and the heel-first catch
 # transient fired when a hop lands. Both feed the mesh seat slide in
@@ -2034,7 +2042,7 @@ func set_wrister_address(aim_dir: Vector3) -> void:
 
 
 # The replicated form of the push, for client-rendered remotes: the committed
-# side arrives off the wire (SkaterNetworkState.wrister_address_side, computed
+# side arrives off the wire (SkaterNetworkState.blade_side, computed
 # by the host running this same model) instead of being derived from an aim
 # line the client doesn't have. Stages the side; _update_wrister_address
 # adopts it, so the hop-on-crossing detection lives in one place for both
@@ -2052,6 +2060,30 @@ func get_wrister_address_side() -> int:
 	return _wrister_address_side
 
 
+# Which side of the puck the blade is on, for the wire's one bit
+# (SkaterNetworkState.blade_side) beside `shot_state`: the wrister address
+# during an aim (unseeded maps to forehand, as the address pass seeds), the
+# carry side during a carry (forehand-normalized, as _carry_side), +1 otherwise.
+func wire_blade_side(shot_state: int) -> int:
+	match shot_state:
+		SkaterStateMachine.State.WRISTER_AIM:
+			return 1 if _wrister_address_side >= 0 else -1
+		SkaterStateMachine.State.SKATING_WITH_PUCK:
+			return 1 if _carry_side >= 0 else -1
+	return 1
+
+
+# The wire's blade side applied by state, current_shot_state set first. A carry
+# side is staged for _update_carry_contact, which takes it over deciding one.
+func apply_wire_blade_side(side: int) -> void:
+	match current_shot_state:
+		SkaterStateMachine.State.WRISTER_AIM:
+			set_wrister_address_side(side)
+		SkaterStateMachine.State.SKATING_WITH_PUCK:
+			_wire_carry_side = side
+			_wire_carry_age = 0
+
+
 # The stickhandling push model (docs/stickhandling-push-model-plan.md): the
 # blade renders on the side of the puck it is PUSHING from — the side opposite
 # the puck's motion in the carrier's frame — and an inward pull plays the
@@ -2059,13 +2091,16 @@ func get_wrister_address_side() -> int:
 # carrier: pulling requires hooking the toe over the puck.
 #
 # Keyed off the carried puck's velocity less the body's, both derived on every
-# peer from the replicated pose, so this runs identically for local, AI, and
-# remote skaters (called from _physics_process, not the IK pipeline) and remote
-# views read the same strokes with no wire field. The velocity is one tick stale
-# relative to the pose being placed this tick — invisible under the gesture
-# ease. Live-only, never replayed: pure cosmetic smoothing memory, absorbed
-# across reconcile snaps like every other blend here.
+# peer from the replicated pose, so this runs for local, AI, and remote skaters
+# alike (called from _physics_process, not the IK pipeline). Which face the
+# blade is on is the one thing a peer only drawing the skater takes off the wire
+# instead (apply_wire_blade_side). The velocity is one tick stale relative to
+# the pose being placed this tick — invisible under the gesture ease. Live-only,
+# never replayed: pure cosmetic smoothing memory, absorbed across reconcile
+# snaps like every other blend here.
 func _update_carry_contact(delta: float) -> void:
+	_wire_carry_age = mini(_wire_carry_age + 1, _WIRE_SIDE_LAPSE_TICKS)
+	var wire_side: int = _wire_carry_side if _wire_carry_age < _WIRE_SIDE_LAPSE_TICKS else 0
 	var drag_target: float = 0.0
 	var cradle_target: float = 0.0
 	var stroke_toe_target: float = 0.0
@@ -2105,14 +2140,27 @@ func _update_carry_contact(delta: float) -> void:
 				# First carry tick: no stroke yet — cradle on the body side the
 				# puck was picked up on (forehand if exactly centered).
 				_carry_side = -1 if body_x_norm < 0.0 else 1
+				if wire_side != 0:
+					_carry_side = wire_side
 				_stroke.reset()
 			elif current_shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK:
 				# Only a live carry strokes: a wind-up holds the blade on the
 				# puck, and a side flipped under a frozen blade moves the pin.
 				var sign_now: int = _carry_side * factor_hs
-				var event: int = _stroke.step(sign_now, v_perp, delta,
-						carry_stroke_smoothing_s, carry_flip_speed, carry_flip_distance,
-						carry_release_speed, carry_release_drop, carry_repush_margin)
+				var event: int = CarryStrokeState.Event.NONE
+				if wire_side == 0:
+					event = _stroke.step(sign_now, v_perp, delta,
+							carry_stroke_smoothing_s, carry_flip_speed, carry_flip_distance,
+							carry_release_speed, carry_release_drop, carry_repush_margin)
+				else:
+					# The host's side. Deciding it here off a blade the wire
+					# placed with the host's side subtracts the wrong offset
+					# whenever the two differ, which reads as a stroke and
+					# flips again.
+					_stroke.observe(sign_now, v_perp, delta, carry_stroke_smoothing_s)
+					if wire_side != _carry_side:
+						event = _stroke.wire_flip(sign_now, carry_stroke_smoothing_s,
+								carry_flip_speed, carry_release_speed)
 				if event != CarryStrokeState.Event.NONE:
 					_carry_side = -sign_now * factor_hs
 					if event == CarryStrokeState.Event.RELEASE:

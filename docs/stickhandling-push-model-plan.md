@@ -187,7 +187,7 @@ line; the replicated torso coil is a scaled+clamped encoding that can't be
 inverted without the shooter's controller tunables), so the host's committed
 side rides the movement-intent byte's spare bit 7 — validity implicit in
 `shot_state == WRISTER_AIM`. `RemoteController` pushes it via
-`set_wrister_address_side`, and the skater's address pass adopts it through
+`Skater.apply_wire_blade_side`, and the skater's address pass adopts it through
 the same crossing/hop detection as the derived path, so a spectated
 shooter's blade re-addresses exactly as the shooter sees it. This makes the
 address a real defensive tell: every peer — goalie, bots, and human
@@ -275,6 +275,19 @@ the pin's velocity, not the blade marker's, which carries the face flip's own
 travel. Mesh-only like everything else here: the marker keeps
 `carry_blade_offset` and the pin stays at the cursor.
 `test_carry_stroke_state.gd`, `test_dangle_lets_the_puck_go.gd`.
+
+**Replicated (v82).** A client drawing someone else's carry must not decide
+the side: the wire's blade was placed with the host's side, and the client's
+pin subtracts its own, so wherever the two differ the pin moves up to twice
+`carry_blade_offset`, which reads as a stroke and flips again — measured at
+about two face changes a stroke on a wobbly sweep, the remote's puck up to
+15 cm off the host's. So the host's carry side rides the blade-side bit (the
+wrister address's, valid by state) and the client takes it
+(`Skater.apply_wire_blade_side`); it still reads the stroke
+(`CarryStrokeState.observe`) to tell whether a flip it was told of was a
+release, and sizes that hop the same way. A side not restaged within a tick
+lapses, so the local skater decides its own again after a goal replay.
+`test_remote_carry_follows_the_host.gd`.
 
 ## 8. What this buys
 

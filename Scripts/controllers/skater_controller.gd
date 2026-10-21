@@ -2147,10 +2147,8 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	# is upper-body-local and can't be used for host-side world geometry.
 	state.top_hand_world = skater.upper_body_to_global(skater.get_top_hand_position())
 	state.shot_state = _sm.get_state() as int
-	# Meaningful only while shot_state == WRISTER_AIM (one bit on the wire, no
-	# validity flag): the unseeded 0 maps to forehand, matching the address
-	# pass's own forehand seed on the first aim tick.
-	state.wrister_address_side = 1 if skater.get_wrister_address_side() >= 0 else -1
+	# One bit, read by the shot_state it rides with (no validity flag).
+	state.blade_side = skater.wire_blade_side(state.shot_state)
 	# The normalized 0..1 charge (skater.shot_charge covers the wrister's
 	# predicted release power AND slapper wind-up), in the u8 codec range.
 	# Consumed on the receive side by the cosmetic pose layers (stick flex,
@@ -2240,10 +2238,9 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# LIVE actors, so without these stamps the fields freeze at whatever the
 	# live tick last wrote and the replayed shot plays with the wrong stick.
 	skater.current_shot_state = state.shot_state
-	# The recorded wrister address, gated on the aim state like the live remote
-	# apply — the wire bit is garbage outside it.
-	if state.shot_state == SkaterStateMachine.State.WRISTER_AIM:
-		skater.set_wrister_address_side(state.wrister_address_side)
+	# The recorded blade side (the wrister address, or the carry side), applied
+	# by state like the live remote apply — the wire bit is garbage outside them.
+	skater.apply_wire_blade_side(state.blade_side)
 	skater.shot_charge = state.shot_charge
 	skater.elevation_level = state.elevation_level
 	# Skid VFX (SkaterVFX trail marks + spray) keys off is_braking — stamp it

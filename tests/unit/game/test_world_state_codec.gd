@@ -248,7 +248,7 @@ func test_skater_move_intent_round_trips_all_octants() -> void:
 		s.brake_intent = (oct % 2 == 0)
 		s.stance_active = (oct % 3 == 0)
 		s.hit_committed = (oct % 2 == 1)  # v28 bit [6]; interleaved so it can't alias brake/stance
-		s.wrister_address_side = 1 if oct % 3 == 1 else -1  # v56 bit [7]
+		s.blade_side = 1 if oct % 3 == 1 else -1  # v56 bit [7]
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_almost_eq(dec.move_intent.x, s.move_intent.x, 0.001, "octant %d x" % oct)
@@ -256,7 +256,7 @@ func test_skater_move_intent_round_trips_all_octants() -> void:
 		assert_eq(dec.brake_intent, s.brake_intent, "octant %d brake" % oct)
 		assert_eq(dec.stance_active, s.stance_active, "octant %d stance" % oct)
 		assert_eq(dec.hit_committed, s.hit_committed, "octant %d hit-commit" % oct)
-		assert_eq(dec.wrister_address_side, s.wrister_address_side,
+		assert_eq(dec.blade_side, s.blade_side,
 				"octant %d wrister address" % oct)
 
 
@@ -304,14 +304,14 @@ func test_skater_balance_lean_round_trips() -> void:
 		var s := SkaterNetworkState.new()
 		s.balance_tilt = tilt
 		s.balance_tilt_vel = Vector2(-tilt.y, tilt.x) * 9.0
-		s.wrister_address_side = -1  # the byte before it, so an offset slip shows
+		s.blade_side = -1  # the byte before it, so an offset slip shows
 		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
 				WorldStateCodec._encode_skater_quantized(s))
 		assert_almost_eq(dec.balance_tilt.x, tilt.x, 1e-4, "lean x %s" % tilt)
 		assert_almost_eq(dec.balance_tilt.y, tilt.y, 1e-4, "lean z %s" % tilt)
 		assert_almost_eq(dec.balance_tilt_vel.x, s.balance_tilt_vel.x, 1e-3, "rate x %s" % tilt)
 		assert_almost_eq(dec.balance_tilt_vel.y, s.balance_tilt_vel.y, 1e-3, "rate z %s" % tilt)
-		assert_eq(dec.wrister_address_side, -1, "the intent byte is untouched")
+		assert_eq(dec.blade_side, -1, "the intent byte is untouched")
 
 
 # The torso's tilt is the rest of the frame the wire's blade is local to.
