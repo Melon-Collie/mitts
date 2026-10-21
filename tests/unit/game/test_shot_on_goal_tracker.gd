@@ -435,9 +435,9 @@ func test_deflection_then_established_pickup_breaks_chain() -> void:
 	assert_eq(scorer.stats.assists, 0)
 
 
-func test_credit_assists_stops_at_scorers_own_prior_touch() -> void:
+func test_scorers_own_prior_touch_earns_no_assist() -> void:
 	# Sequence: scorer carries, teammate carries, scorer carries again and scores.
-	# The scorer's earlier touch should stop the assist chain — no self-assist.
+	# The scorer's earlier touch is passed over — no self-assist.
 	var scorer := _add_player(10, 0, "Scorer")
 	var _teammate := _add_player(11, 0, "Teammate")
 	tracker.on_pickup(10)   # scorer first touch
@@ -449,19 +449,21 @@ func test_credit_assists_stops_at_scorers_own_prior_touch() -> void:
 	assert_eq(scorer.stats.assists, 0, "scorer must not credit themselves an assist")
 
 
-func test_give_and_go_ends_the_chain_at_the_scorers_first_touch() -> void:
+func test_give_and_go_credits_the_return_pass_and_the_feed_before_it() -> void:
 	# Starter feeds the scorer, the scorer gives and goes, the return pass is
-	# buried. Only the return passer assists: the scorer's first touch ends it.
+	# buried. The return passer gets the primary, the starter the secondary.
 	var starter := _add_player(12, 0, "Starter")
-	_add_player(10, 0, "Scorer")
-	_add_player(11, 0, "Returner")
+	var scorer := _add_player(10, 0, "Scorer")
+	var returner := _add_player(11, 0, "Returner")
 	tracker.on_pickup(12)
 	tracker.on_pickup(10)
 	tracker.on_pickup(11)
 	tracker.on_pickup(10)
 	var assists: Array[String] = tracker.credit_assists(10)
-	assert_eq(assists, ["Returner"] as Array[String])
-	assert_eq(starter.stats.assists, 0)
+	assert_eq(assists, ["Returner", "Starter"] as Array[String])
+	assert_eq(returner.stats.assists, 1)
+	assert_eq(starter.stats.assists, 1)
+	assert_eq(scorer.stats.assists, 0)
 
 
 func test_shooter_reclaiming_a_carom_off_a_defender_keeps_the_feeders_assist() -> void:

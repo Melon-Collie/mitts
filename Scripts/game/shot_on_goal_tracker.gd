@@ -416,9 +416,8 @@ func on_goal_confirmed(scorer_peer_id: int, origin: Vector3 = Vector3.ZERO) -> v
 #
 # The walk starts at the newest entry, not at the scorer's: on a goal off a
 # defender the front entry is that defender, and the scorer (find_scorer_on_team)
-# sits behind it. The scorer's own entries are skipped until a teammate has been
-# credited — a shot that caroms off a defender back to the shooter is still one
-# possession — and after that one ends the chain (a give-and-go's return pass).
+# sits behind it. The scorer's own entries neither assist nor end the chain, so a
+# give-and-go credits the return pass and the feed before it.
 func credit_assists(scorer_peer_id: int) -> Array[String]:
 	var names: Array[String] = []
 	var credited: Array[int] = []
@@ -428,8 +427,6 @@ func credit_assists(scorer_peer_id: int) -> Array[String]:
 	for i: int in _recent_carriers.size():
 		var pid: int = _recent_carriers[i]
 		if pid == scorer_peer_id:
-			if not credited.is_empty():
-				break
 			continue
 		var record: PlayerRecord = _registry.get_record(pid)
 		if record == null:
