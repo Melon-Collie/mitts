@@ -69,6 +69,12 @@ signal period_intro_started(period: int, duration: float)
 signal replay_started
 signal replay_stopped
 signal goal_replay_frame_changed(game_state: Dictionary, carrier_team: int)
+# The same frame feed from every other airing of a stored goal — the
+# intermission and post-game reels and a goal re-aired for its GIF — and the
+# end of each. Separate from the goal cinematic's pair because only the board
+# follows these; the reels play no crowd.
+signal highlight_frame_changed(game_state: Dictionary, carrier_team: int)
+signal highlight_stopped
 # Goal-clip GIF export (GoalClipExporter). state is a GoalClipExporter.State —
 # the HUD reads it to swap its prompt between "save", "saving", and gone.
 # finished carries the written path, or "" when the export failed.
@@ -1612,6 +1618,8 @@ func _wire_subsystems() -> void:
 	_goal_replay_driver.replay_frame_changed.connect(goal_replay_frame_changed.emit)
 	_post_game_replay_driver = PostGameReplayDriver.new()
 	add_child(_post_game_replay_driver)
+	_post_game_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
+	_post_game_replay_driver.reel_stopped.connect(highlight_stopped.emit)
 	# Intermission reel: loops the ended period's clips for the fixed break
 	# window (the host's INTERMISSION_DURATION timer ends it), replay mode
 	# mirrored so every peer's reel brackets together. Its start/stop also
@@ -1623,6 +1631,8 @@ func _wire_subsystems() -> void:
 	_intermission_replay_driver.clip_started.connect(_on_intermission_clip_started)
 	_intermission_replay_driver.reel_stopped.connect(_on_intermission_reel_stopped)
 	_intermission_replay_driver.reel_stopped.connect(_on_local_replay_stopped)
+	_intermission_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
+	_intermission_replay_driver.reel_stopped.connect(highlight_stopped.emit)
 
 	# Goal-clip GIF export. Built once and re-pointed at each match's live
 	# cinematic; after the match the post-game screen saves stored goals through
@@ -1637,6 +1647,8 @@ func _wire_subsystems() -> void:
 		_goal_clip_exporter.stored_replay_taking_over.connect(_stop_post_game_reel)
 		_goal_clip_exporter.stored_replay_finished.connect(_start_post_game_replay)
 		_goal_clip_exporter.stored_replay_finished.connect(goal_gif_saving_changed.emit)
+		_goal_clip_exporter.stored_replay_frame_changed.connect(highlight_frame_changed.emit)
+		_goal_clip_exporter.stored_replay_stopped.connect(highlight_stopped.emit)
 		_goal_clip_exporter.state_changed.connect(
 				func(_state: GoalClipExporter.State) -> void: goal_gif_saving_changed.emit())
 		_goal_clip_exporter.set_goal_label_provider(

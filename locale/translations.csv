@@ -27,17 +27,8 @@ TUTORIAL_CONTINUE_CTA,Continue → %s: %s,Continuar → %s: %s
 DRILL_PENALTY_SHOTS,Penalty Shots,Penaltis
 DRILL_SHOT_ACCURACY,Shot Accuracy,Precisión de Tiro
 DRILL_PASSING,Passing,Pases
-LOCKER_EDIT_BUTTON,Locker,Vestuario
-LOCKER_TITLE,Locker,Vestuario
-LOCKER_SEC_STICK,STICK,PALO
-LOCKER_SEC_SKATES,SKATES,PATINES
-LOCKER_SEC_GLOVES,GLOVES,GUANTES
-LOCKER_SEC_HELMET,HELMET,CASCO
-LOCKER_SEC_JERSEY,JERSEY,CAMISETA
-LOCKER_CASE_HINT_MOUSE,Drag to turn · up and down to zoom,Arrastra para girar · arriba y abajo para acercar
-LOCKER_CASE_HINT_PAD,Right Stick to turn · up and down to zoom,Stick derecho para girar · arriba y abajo para acercar
-LOCKER_LOCKED_NOTE,Stick gear and blade profile are locked during online play — looks can still change.,El equipo del palo y el perfil de la cuchilla están bloqueados en partidas en línea — el aspecto aún puede cambiar.
-EDITOR_DONE,Done,Hecho
+PLAYER_CASE_HINT_MOUSE,Drag to turn · up and down to zoom,Arrastra para girar · arriba y abajo para acercar
+PLAYER_CASE_HINT_PAD,Right Stick to turn · up and down to zoom,Stick derecho para girar · arriba y abajo para acercar
 EDITOR_CANCEL,Cancel,Cancelar
 STICK_GEAR_LENGTH,Length,Largo
 STICK_GEAR_CURVE,Curve,Curva
@@ -86,8 +77,8 @@ STICK_MODEL_SPLIT,Split,Dividido
 STICK_MODEL_WHITEOUT,Whiteout,Todo blanco
 STICK_MODEL_WOODIE,Woodie,Madera
 EDIT_PENDING_NOTE,Unapplied changes,Cambios sin aplicar
-PLAYER_SKIN_LABEL,Skin:,Piel:
-PLAYER_POSITION_LABEL,Position:,Posición:
+PLAYER_SKIN_LABEL,Skin,Piel
+PLAYER_POSITION_LABEL,Position,Posición
 POSITION_LW,Left Wing,Ala izquierda
 POSITION_C,Center,Centro
 POSITION_RW,Right Wing,Ala derecha
@@ -107,7 +98,6 @@ GEAR_MODEL_PRO,Pro,Pro
 GEAR_MODEL_CONTRAST,Contrast,Contraste
 GEAR_MODEL_VINTAGE,Vintage,Clásico
 GEAR_MODEL_TRICOLOR,Tri-Color,Tricolor
-GEAR_FACE_LABEL,Face,Careta
 GEAR_FACE_NONE,None,Ninguna
 GEAR_FACE_VISOR,Visor,Visera
 GEAR_FACE_CAGE,Cage,Rejilla
@@ -117,9 +107,9 @@ GEAR_TUCK_NONE,Untucked,Por fuera
 GEAR_TUCK_LEFT,Left corner,Esquina izquierda
 GEAR_TUCK_RIGHT,Right corner,Esquina derecha
 GEAR_TUCK_FULL,Full tuck,Por dentro
-PLAYER_HAIR_LABEL,Hair:,Pelo:
-PLAYER_BEARD_LABEL,Beard:,Barba:
-PLAYER_HAIR_COLOR_LABEL,Color:,Color:
+PLAYER_HAIR_LABEL,Hair,Pelo
+PLAYER_BEARD_LABEL,Beard,Barba
+PLAYER_HAIR_COLOR_LABEL,Hair color,Color de pelo
 HAIR_STYLE_SHORT,Short,Corto
 HAIR_STYLE_MEDIUM,Medium,Medio
 HAIR_STYLE_LONG,Long,Largo
@@ -137,6 +127,70 @@ HAIR_COLOR_BLONDE,Blonde,Rubio
 HAIR_COLOR_RED,Red,Pelirrojo
 HAIR_COLOR_GREY,Grey,Canoso
 HAIR_COLOR_WHITE,White,Blanco
+PLAYER_TITLE,Player,Jugador
+PLAYER_REGION_YOU,YOU,TÚ
+PLAYER_REGION_BODY,BODY,CUERPO
+PLAYER_REGION_HEAD,HEAD,CABEZA
+PLAYER_REGION_STICK,STICK,PALO
+PLAYER_REGION_SKATES,SKATES,PATINES
+PLAYER_NAME_LABEL,Name,Nombre
+PLAYER_NAME_PLACEHOLDER,Player,Jugador
+PLAYER_NAME_ALNUM,Letters and numbers only,Solo letras y números
+PLAYER_NAME_NOT_ALLOWED,Name not allowed,Nombre no permitido
+PLAYER_NUMBER_LABEL,Number,Número
+PLAYER_NUMBER_DIGITS,Numbers only,Solo números
+PLAYER_SHOOTS_LABEL,Shoots,Tira
+PLAYER_SHOOTS_LEFT,Left,Zurdo
+PLAYER_SHOOTS_RIGHT,Right,Diestro
+PLAYER_POSITION_HINT,Where a lobby seats you. In 3v3 LW and LD take the left side — RW and RD the right.,Dónde te sienta el lobby. En 3v3 AI y DI van a la izquierda — AD y DD a la derecha.
+PLAYER_TEAM_LABEL,Team,Equipo
+PLAYER_HEIGHT_LABEL,Height,Altura
+PLAYER_HEIGHT_HINT,Smaller: quicker first step and turns — bigger: more reach and a harder shot,Más bajo: primer paso y giros más rápidos — más alto: más alcance y un tiro más fuerte
+PLAYER_WEIGHT_LABEL,Weight,Peso
+PLAYER_WEIGHT_VALUE,%d lbs,%d lb
+PLAYER_WEIGHT_HINT,%s · %d–%d lbs at this height,%s · %d–%d lb a esta altura
+FRAME_LEAN,Lean frame,Complexión delgada
+FRAME_LIGHT,Light frame,Complexión ligera
+FRAME_MEDIUM,Medium frame,Complexión media
+FRAME_SOLID,Solid frame,Complexión sólida
+FRAME_HEAVY,Heavy frame,Complexión pesada
+PLAYER_GLOVES_LABEL,Gloves,Guantes
+PLAYER_HELMET_LABEL,Helmet,Casco
+PLAYER_APPLY,Apply,Aplicar
+HINT_PROFILE_SHIFTY,Tight edges · quick first step · grippy stance — lower top speed,Cantos cerrados · primer paso rápido · postura firme — menos velocidad punta
+HINT_PROFILE_STABILITY,Strongest skating backward for gap control — weaker crossovers,El mejor patinaje hacia atrás para cerrar espacios — cruces más débiles
+HINT_PROFILE_POWER,Top speed · glide · crossovers skating wide — wider turns and weaker backward,Velocidad punta · deslizamiento · cruces abiertos — giros más amplios y peor hacia atrás
+HINT_LENGTH_SHORT,Snappier blade and the finest close control — less reach,Pala más ágil y el mejor control corto — menos alcance
+HINT_LENGTH_STANDARD,Cut to your height,Cortado a tu altura
+HINT_LENGTH_LONG,More reach and sweep — slower to cut back,Más alcance y barrido — más lento al recortar
+HINT_CURVE_M88,Best backhand and slapshots · catches the hardest passes — flattest lift,El mejor revés y tiro de golpe · recibe los pases más fuertes — la elevación más plana
+HINT_CURVE_M92,The all-rounder with no weakness,La polivalente sin puntos débiles
+HINT_CURVE_M28,Easiest lift in tight — weakest backhand and slapshots · hard passes bounce off,La elevación más fácil en corto — el revés y el tiro de golpe más débiles · los pases fuertes rebotan
+HINT_FLEX_WHIPPY,Fastest release · more wrist shot without a full load — softer slapshot,Salida más rápida · más tiro de muñeca sin carga completa — tiro de golpe más suave
+HINT_FLEX_MEDIUM,Balanced between the two,Equilibrado entre ambos
+HINT_FLEX_STIFF,Biggest slapshot — slower to load,El tiro de golpe más fuerte — más lento al cargar
+STAT_PANEL_TITLE,VS. THE NEUTRAL BUILD,FRENTE AL FÍSICO NEUTRO
+STAT_GROUP_SKATING,SKATING,PATINAJE
+STAT_GROUP_BODY,BODY,CUERPO
+STAT_GROUP_SHOT,SHOT,TIRO
+STAT_TOP_SPEED,Top speed,Velocidad punta
+STAT_FIRST_STEP,First step,Primer paso
+STAT_AGILITY,Turns & stops,Giros y frenadas
+STAT_CROSSOVER,Crossovers,Cruces
+STAT_BACKWARD,Backward,Hacia atrás
+STAT_COAST,Coast,Inercia
+STAT_MASS,Weight in contact,Peso en el choque
+STAT_REACH,Stick reach,Alcance del palo
+STAT_WRIST_SHOT,Wrist shot,Tiro de muñeca
+STAT_SLAPSHOT,Slapshot,Tiro de golpe
+STAT_SLAPPER_RELEASE,Slapshot release,Rapidez del tiro de golpe
+STAT_BACKHAND,Backhand,Revés
+STAT_PASS_CATCH,Hard-pass catch,Recepción de pases fuertes
+STAT_NOTE_YOU,Your whole build at a glance.,Tu físico entero de un vistazo.
+STAT_NOTE_BODY,Lit rows are what height and weight change.,Las filas iluminadas son lo que cambian la altura y el peso.
+STAT_NOTE_HEAD,Nothing on the head changes play.,Nada en la cabeza cambia el juego.
+STAT_NOTE_STICK,Lit rows are what the stick changes.,Las filas iluminadas son lo que cambia el palo.
+STAT_NOTE_SKATES,Lit rows are what the skates change.,Las filas iluminadas son lo que cambian los patines.
 CLIP_SAVE_PROMPT,%s SAVE GIF,%s GUARDAR GIF
 CLIP_SAVING,SAVING GIF…,GUARDANDO GIF…
 CLIP_SAVED,Goal clip saved,Clip guardado

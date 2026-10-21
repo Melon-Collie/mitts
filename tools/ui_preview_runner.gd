@@ -29,7 +29,10 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_menu", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": ""},
 	{"name": "side_play", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_play_pressed"},
 	{"name": "side_player", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_player_card_pressed"},
-	{"name": "side_locker", "stage": _STAGE_FREE_PLAY, "open": "_open_locker"},
+	{"name": "side_player_body", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.BODY},
+	{"name": "side_player_head", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.HEAD},
+	{"name": "side_player_stick", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.STICK},
+	{"name": "side_player_skates", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.SKATES},
 	{"name": "side_career", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_career_pressed"},
 	{"name": "side_tutorials", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tutorial_pressed"},
 	{"name": "side_drills", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_drills_pressed"},
@@ -57,8 +60,8 @@ const _MATCH_PLAY_SEC: float = 6.0
 # software rasterizer's ~1 fps the default 8 would take minutes of wall clock.
 const _MATCH_STEPS_PER_FRAME: int = 60
 const _MATCH_START_TIMEOUT_FRAMES: int = 600
-# Deepest overlay stack a shot opens (locker over player settings over the side
-# menu), plus slack.
+# Deepest overlay stack a shot opens (player settings over the side menu), plus
+# slack.
 const _MAX_DISMISS_PRESSES: int = 6
 
 var _out_dir: String = ""
@@ -312,8 +315,11 @@ func _close_side_menu() -> void:
 	side.close()
 
 
-func _open_locker() -> void:
+func _open_player_region(region: int) -> void:
 	_open_side_menu("_on_player_card_pressed")
 	var popup: PlayerSettingsPopup = _find(get_tree().current_scene, PlayerSettingsPopup) \
 			as PlayerSettingsPopup
-	_invoke(popup, "_open_locker")
+	if popup == null:
+		_fail("the side menu has no PlayerSettingsPopup")
+		return
+	popup.call("_show_region", region)

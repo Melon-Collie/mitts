@@ -122,7 +122,8 @@ func test_every_zone_paints_a_slot_of_the_kit() -> void:
 
 
 # Two designs that painted every zone the same would be one design wearing two
-# names, and the workbench would look broken rather than sparse.
+# names, and the model rows on the player screen would look broken rather than
+# sparse.
 func test_no_two_models_are_the_same_design() -> void:
 	var seen: Array[String] = []
 	for model: int in GearModelRegistry.skate_count():

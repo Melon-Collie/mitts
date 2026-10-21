@@ -1,11 +1,11 @@
 extends GutTest
 
-# The locker builds its rows and its mannequin in code, so nothing but running
-# it proves the pickers are wired to the catalogues and that a pick reaches the
-# figure. What is pinned here: every dropdown lists its whole catalogue with the
-# player's current picks selected, a pick repaints the piece that wears it, Done
-# hands back a gear code carrying every field, and the camera follows the group
-# a row belongs to.
+# The player screen's display case: the mannequin it dresses and the camera that
+# frames it. What is pinned here: a pick repaints the piece that wears it on
+# both sides, the figure's geometry holds at every build (hands on the shaft,
+# legs joined, feet on the ice), every framing contains its subject, and the
+# turn/zoom controls behave. The rows that ask for those framings are pinned in
+# test_player_settings_popup.gd.
 
 # A synthetic kit shaped like TeamColorRegistry.get_colors' output, with every
 # slot distinguishable so a zone landing on the wrong one is visible.
@@ -16,13 +16,12 @@ const _KIT_GLOVES := Color(0.75, 0.15, 0.15)
 # Whichever team color the glove body is not — see TeamColorRegistry.
 const _GLOVE_ACCENT := Color(0.20, 0.70, 0.35)
 
-var _popup: LockerPopup = null
+var _case: PlayerCase = null
 
 
 func before_each() -> void:
-	_popup = LockerPopup.new()
-	add_child_autofree(_popup)
-	_popup.set_focus_scope(null, null)
+	_case = PlayerCase.new()
+	add_child_autofree(_case)
 
 
 # Shaped like TeamColorRegistry.get_colors' output, typed arrays included —
@@ -56,20 +55,20 @@ func _colors() -> Dictionary:
 func _open(gear: GearStyleConfig = GearStyleConfig.new(),
 		tape_code: int = StickTapeConfig.DEFAULT_CODE,
 		attrs: PlayerAttributes = null) -> void:
-	var build: PlayerAttributes = attrs if attrs != null else PlayerAttributes.new(
-			PlayerAttributes.HEIGHT_MEDIUM, int(PlayerAttributes.NEUTRAL_WEIGHT_LBS),
-			PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
-			PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED)
-	_popup.open(build, tape_code, gear.to_code(), false, _colors(),
+	var build: PlayerAttributes = attrs if attrs != null else PlayerAttributes.neutral()
+	_case.dress(build, gear, StickTapeConfig.from_code(tape_code), _colors(),
 			SkinToneRegistry.DEFAULT_INDEX, false)
+	_case.settle(LockerMannequin.Focus.FULL)
 
 
-func _btn(name: String) -> OptionButton:
-	return _popup.get(name) as OptionButton
+# The neutral build with its stick cut and pattern swapped.
+func _stick(length: int, curve: int = PlayerAttributes.GEAR_BALANCED) -> PlayerAttributes:
+	return PlayerAttributes.new(PlayerAttributes.HEIGHT_MEDIUM, 0,
+			PlayerAttributes.GEAR_BALANCED, curve, PlayerAttributes.GEAR_BALANCED, length)
 
 
 func _mannequin() -> LockerMannequin:
-	return _popup.get("_mannequin") as LockerMannequin
+	return _case.get("_mannequin") as LockerMannequin
 
 
 # One MeshInstance3D out of the mannequin's paired part arrays.
@@ -82,35 +81,6 @@ func _surface_color(mi: MeshInstance3D, surface: int) -> Color:
 	return (mi.get_surface_override_material(surface) as StandardMaterial3D).albedo_color
 
 
-func test_every_dropdown_lists_its_catalogue_with_the_current_picks_selected() -> void:
-	_open(GearStyleConfig.new(GearModelRegistry.SKATE_RETRO,
-			GearModelRegistry.GLOVE_CONTRAST, GearStyleConfig.LACE_DEFAULT_INDEX,
-			StickModelRegistry.count() - 1, GearModelRegistry.FACE_VISOR))
-	assert_eq(_btn("_skate_btn").item_count, GearModelRegistry.skate_count(),
-			"every skate model is offered")
-	assert_eq(_btn("_glove_btn").item_count, GearModelRegistry.glove_count(),
-			"every glove model is offered")
-	assert_eq(_btn("_stick_model_btn").item_count, StickModelRegistry.count(),
-			"every stick colorway is offered")
-	assert_eq(_btn("_face_btn").item_count, GearModelRegistry.face_count(),
-			"every face option is offered")
-	assert_eq(_btn("_skate_btn").selected, GearModelRegistry.SKATE_RETRO)
-	assert_eq(_btn("_glove_btn").selected, GearModelRegistry.GLOVE_CONTRAST)
-	assert_eq(_btn("_stick_model_btn").selected, StickModelRegistry.count() - 1)
-	assert_eq(_btn("_face_btn").selected, GearModelRegistry.FACE_VISOR)
-
-
-# Re-opening must re-list rather than append — the gear items are rebuilt per
-# open because a model's TEAM zones resolve against the kit being worn.
-func test_reopening_does_not_stack_items() -> void:
-	_open()
-	_open(GearStyleConfig.new(GearModelRegistry.SKATE_WHITEOUT,
-			GearModelRegistry.GLOVE_PRO))
-	assert_eq(_btn("_skate_btn").item_count, GearModelRegistry.skate_count())
-	assert_eq(_btn("_skate_btn").selected, GearModelRegistry.SKATE_WHITEOUT)
-	assert_eq(_btn("_glove_btn").selected, GearModelRegistry.GLOVE_PRO)
-
-
 func test_a_pick_repaints_the_mannequin() -> void:
 	_open(GearStyleConfig.new(GearModelRegistry.SKATE_BLACKOUT,
 			GearModelRegistry.GLOVE_TEAM))
@@ -119,10 +89,9 @@ func test_a_pick_repaints_the_mannequin() -> void:
 	assert_eq(_surface_color(_part("_cuffs"), 0), _KIT_GLOVES,
 			"the stock glove cuff wears the kit")
 
-	# Whiteout's boot is light; Pro's cuff is light. Selecting must reach both,
+	# Whiteout's boot is light; Pro's cuff is light. A re-dress must reach both,
 	# and "light" is the TEAM's white — cream here, not a fixed one.
-	_btn("_skate_btn").item_selected.emit(GearModelRegistry.SKATE_WHITEOUT)
-	_btn("_glove_btn").item_selected.emit(GearModelRegistry.GLOVE_PRO)
+	_open(GearStyleConfig.new(GearModelRegistry.SKATE_WHITEOUT, GearModelRegistry.GLOVE_PRO))
 	assert_eq(_surface_color(_part("_boots"), SkaterMeshBuilder.BOOT_SURF_SHELL),
 			_LIGHT, "the picked boot repaints in the team's own white")
 	assert_eq(_surface_color(_part("_cuffs"), 0), _LIGHT,
@@ -132,9 +101,7 @@ func test_a_pick_repaints_the_mannequin() -> void:
 # Both feet and both hands wear the pick — a loop that painted only index 0
 # would leave the figure in mismatched gear and nothing else would catch it.
 func test_a_pick_reaches_both_sides() -> void:
-	_open()
-	_btn("_skate_btn").item_selected.emit(GearModelRegistry.SKATE_WHITEOUT)
-	_btn("_glove_btn").item_selected.emit(GearModelRegistry.GLOVE_PRO)
+	_open(GearStyleConfig.new(GearModelRegistry.SKATE_WHITEOUT, GearModelRegistry.GLOVE_PRO))
 	for i: int in 2:
 		assert_eq(_surface_color(_part("_boots", i), SkaterMeshBuilder.BOOT_SURF_SHELL),
 				_LIGHT, "boot %d" % i)
@@ -160,7 +127,7 @@ func test_split_pieces_paint_apart() -> void:
 			_KIT_GLOVES, "Two-Tone's fingers keep the kit")
 	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_HOLDER),
 			_LIGHT, "the holder is the team's white")
-	_btn("_skate_btn").item_selected.emit(GearModelRegistry.SKATE_PRO)
+	_open(GearStyleConfig.new(GearModelRegistry.SKATE_PRO, GearModelRegistry.GLOVE_TWO_TONE))
 	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_TOE),
 			_LIGHT, "Pro's toe cap is the team's white")
 	# The steel runner is never a zone, whatever the model says — and it must
@@ -171,21 +138,23 @@ func test_split_pieces_paint_apart() -> void:
 			SkaterMeshBuilder.BLADE_STEEL_COLOR, "the runner stays steel")
 
 
+func _face(option: int) -> GearStyleConfig:
+	return GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0, option)
+
+
 func test_face_gear_dresses_the_helmet() -> void:
-	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
-			GearModelRegistry.FACE_VISOR))
+	_open(_face(GearModelRegistry.FACE_VISOR))
 	var piece: MeshInstance3D = _mannequin().get("_face") as MeshInstance3D
 	assert_not_null(piece.mesh, "the picked visor is in the helmet")
 	var mat: StandardMaterial3D = piece.material_override as StandardMaterial3D
 	assert_lt(mat.albedo_color.a, 1.0, "the visor preview is translucent")
-	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_CAGE)
+	_open(_face(GearModelRegistry.FACE_CAGE))
 	assert_eq(piece.mesh, SkaterMeshBuilder.shared_face_gear(GearModelRegistry.FACE_CAGE))
-	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_NONE)
+	_open(_face(GearModelRegistry.FACE_NONE))
 	assert_null(piece.mesh, "bare leaves the helmet open")
 
 
-# The locker does not edit the hair, but the figure wears whatever the player
-# screen has pending, brows included, and hands it back untouched.
+# The figure wears the pending hair, brows included.
 func test_the_figure_wears_the_pending_hair() -> void:
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
 			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_LONG,
@@ -199,53 +168,41 @@ func test_the_figure_wears_the_pending_hair() -> void:
 			"stubble previews translucent")
 	assert_eq((brows.material_override as StandardMaterial3D).albedo_color,
 			HairStyleRegistry.color_for(6), "the brows take the hair colour")
-	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_CAGE)
-	watch_signals(_popup)
-	_popup.call("_done")
-	var gear := GearStyleConfig.from_code(get_signal_parameters(_popup, "locker_edited")[5])
-	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
-	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG, "the hair rides through")
-	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_STUBBLE)
-	assert_eq(gear.hair_color, 6)
 
 
-# The tuck is the torso's shape: a pick re-drapes the figure's sweater (and keeps
-# its paint), and Done hands it back in the gear code.
-func test_a_tuck_pick_drapes_the_figure_and_rides_the_code() -> void:
+# The tuck is the torso's shape: a pick re-drapes the figure's sweater and keeps
+# its paint.
+func test_a_tuck_pick_drapes_the_figure() -> void:
 	_open()
-	assert_eq(_btn("_tuck_btn").item_count, GearModelRegistry.tuck_count(),
-			"every tuck is offered")
-	assert_eq(_btn("_tuck_btn").selected, GearModelRegistry.TUCK_NONE)
 	var torso: MeshInstance3D = _mannequin().get("_torso") as MeshInstance3D
 	var pelvis: MeshInstance3D = _mannequin().get("_pelvis") as MeshInstance3D
 	var paint: Material = torso.get_surface_override_material(0)
 	var loose: Mesh = torso.mesh
-	_btn("_tuck_btn").item_selected.emit(GearModelRegistry.TUCK_RIGHT)
+	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0, 0,
+			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
+			GearModelRegistry.TUCK_RIGHT))
 	assert_ne(torso.mesh, loose, "the sweater re-drapes")
 	assert_eq(pelvis.mesh, SkaterMeshBuilder.shared_pelvis(GearModelRegistry.TUCK_RIGHT),
 			"and the pants stand their pad up")
 	assert_eq(torso.get_surface_override_material(0), paint, "the sweater keeps its paint")
-	watch_signals(_popup)
-	_popup.call("_done")
-	var gear := GearStyleConfig.from_code(get_signal_parameters(_popup, "locker_edited")[5])
-	assert_eq(gear.jersey_tuck, GearModelRegistry.TUCK_RIGHT)
 
 
-# The stick is the piece the old gear workbench never showed. Pin that a curve
-# pick rebuilds the blade and a length pick moves the butt — the two stick gear
-# rows with geometry behind them.
+# A curve pick rebuilds the blade and a length pick moves the butt — the two
+# stick gear rows with geometry behind them.
 func test_stick_gear_reaches_the_blade_and_the_shaft() -> void:
 	_open()
 	var blade: MeshInstance3D = _mannequin().get("_blade") as MeshInstance3D
 	var shaft: MeshInstance3D = _mannequin().get("_shaft") as MeshInstance3D
 	var flat_mesh: Mesh = blade.mesh
-	_btn("_curve_btn").item_selected.emit(2)   # M28 toe hook
+	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE,
+			_stick(PlayerAttributes.GEAR_BALANCED, 2))   # M28 toe hook
 	assert_ne(blade.mesh, flat_mesh, "a curve pick rebuilds the blade")
 
+	_open()
 	var standard_len: float = shaft.transform.basis.get_scale().z
-	_btn("_length_btn").item_selected.emit(0)  # Short
+	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(0))  # Short
 	var short_len: float = shaft.transform.basis.get_scale().z
-	_btn("_length_btn").item_selected.emit(2)  # Long
+	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(2))  # Long
 	assert_lt(short_len, standard_len, "a short cut shortens the shaft")
 	assert_lt(standard_len, shaft.transform.basis.get_scale().z,
 			"a long cut outreaches standard")
@@ -255,11 +212,10 @@ func test_stick_gear_reaches_the_blade_and_the_shaft() -> void:
 # behind at the old grip is exactly the failure the mannequin replaced the
 # free-floating turntable to avoid.
 func test_the_hands_stay_on_the_shaft_when_the_stick_is_recut() -> void:
-	_open()
+	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(0))
 	var top: MeshInstance3D = _part("_hands", 0)
-	_btn("_length_btn").item_selected.emit(0)
 	var short_grip: Vector3 = top.position
-	_btn("_length_btn").item_selected.emit(2)
+	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(2))
 	assert_lt(short_grip.y, top.position.y,
 			"a longer stick raises the top hand's grip")
 
@@ -278,8 +234,7 @@ func _grip_offset(hand: MeshInstance3D) -> float:
 # hands sit at very different distances from their shoulders.
 func test_both_arms_are_the_same_length() -> void:
 	for length: int in 3:
-		_open()
-		_btn("_length_btn").item_selected.emit(length)
+		_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(length))
 		var spans: Array[float] = []
 		for i: int in 2:
 			var upper: float = _part("_upper_arms", i).transform.basis.y.length()
@@ -405,53 +360,6 @@ func test_height_reaches_the_figure() -> void:
 			"a tall build carries its head higher")
 
 
-# Landing on a row aims the case at the group that row dresses. Without this
-# the locker is just a taller workbench.
-func test_a_row_aims_the_case_at_its_own_group() -> void:
-	_open()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.FULL,
-			"it opens on the wide shot")
-	_btn("_skate_btn").focus_entered.emit()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.SKATES)
-	_btn("_glove_btn").focus_entered.emit()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.GLOVES)
-	_btn("_face_btn").focus_entered.emit()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.HELMET)
-	_btn("_length_btn").focus_entered.emit()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.STICK)
-
-
-# Hovering has to aim it too, and the pointer lands on the CONTROL, not on the
-# container behind it — wiring only the row leaves a mouse player's case stuck.
-func test_hovering_a_control_aims_the_case() -> void:
-	_open()
-	_btn("_skate_btn").mouse_entered.emit()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.SKATES)
-	_btn("_flex_btn").mouse_entered.emit()
-	assert_eq(_popup.get("_focus"), LockerMannequin.Focus.STICK)
-
-
-# The stick takes three shots because one cannot serve its eight rows. Each row
-# has to ask for the shot its own pick actually shows up in.
-func test_the_stick_rows_ask_for_the_shot_that_shows_their_pick() -> void:
-	_open()
-	for name: String in ["_length_btn", "_flex_btn", "_stick_model_btn"]:
-		_popup.call("_set_focus", LockerMannequin.Focus.FULL)
-		_btn(name).mouse_entered.emit()
-		assert_eq(_popup.get("_focus"), LockerMannequin.Focus.STICK,
-				"%s frames the whole stick" % name)
-	for name: String in ["_curve_btn", "_span_btn"]:
-		_popup.call("_set_focus", LockerMannequin.Focus.FULL)
-		_btn(name).mouse_entered.emit()
-		assert_eq(_popup.get("_focus"), LockerMannequin.Focus.BLADE,
-				"%s frames the blade" % name)
-	for name: String in ["_style_btn"]:
-		_popup.call("_set_focus", LockerMannequin.Focus.FULL)
-		_btn(name).mouse_entered.emit()
-		assert_eq(_popup.get("_focus"), LockerMannequin.Focus.GRIP,
-				"%s frames the butt end" % name)
-
-
 # Every framing has to actually CONTAIN its subject, at every build — a whole-
 # stick shot that crops a long cut on a tall player is the bug this replaced.
 func test_the_whole_stick_shot_contains_the_whole_stick() -> void:
@@ -484,27 +392,27 @@ func test_the_whole_stick_shot_contains_the_whole_stick() -> void:
 # back.
 func test_dragging_up_and_down_zooms() -> void:
 	_open()
-	var wide: float = _popup.call("_framed_distance")
-	_popup.call("_zoom_by", -0.25)
-	var closer: float = _popup.call("_framed_distance")
+	var wide: float = _case.call("_framed_distance")
+	_case.call("_zoom_by", -0.25)
+	var closer: float = _case.call("_framed_distance")
 	assert_lt(closer, wide, "dragging up pulls the camera in")
-	_popup.call("_zoom_by", 0.5)
-	assert_gt(_popup.call("_framed_distance"), closer, "dragging down pushes it out")
+	_case.call("_zoom_by", 0.5)
+	assert_gt(_case.call("_framed_distance"), closer, "dragging down pushes it out")
 
 	# Wind it hard against each stop, then reverse ONE step: the distance has to
 	# move straight away. A held pad stick can hit these stops in a second, so
 	# this is the pad's failure mode as much as the mouse's.
 	for i: int in 40:
-		_popup.call("_zoom_by", -0.5)
-	var pinned_near: float = _popup.call("_framed_distance")
-	_popup.call("_zoom_by", 0.2)
-	assert_gt(_popup.call("_framed_distance"), pinned_near,
+		_case.call("_zoom_by", -0.5)
+	var pinned_near: float = _case.call("_framed_distance")
+	_case.call("_zoom_by", 0.2)
+	assert_gt(_case.call("_framed_distance"), pinned_near,
 			"the near stop does not wind up")
 	for i: int in 40:
-		_popup.call("_zoom_by", 0.5)
-	var pinned_far: float = _popup.call("_framed_distance")
-	_popup.call("_zoom_by", -0.2)
-	assert_lt(_popup.call("_framed_distance"), pinned_far,
+		_case.call("_zoom_by", 0.5)
+	var pinned_far: float = _case.call("_framed_distance")
+	_case.call("_zoom_by", -0.2)
+	assert_lt(_case.call("_framed_distance"), pinned_far,
 			"the far stop does not wind up")
 
 
@@ -515,86 +423,26 @@ func test_the_pad_stick_turns_and_zooms_the_same_way_the_drag_does() -> void:
 	_open()
 	# With no pad connected under GUT, the read must leave the case alone rather
 	# than reading axes off a device that isn't there.
-	var before_yaw: float = _popup.get("_target_yaw")
-	_popup.call("_read_pad_look", 0.016)   # no pad connected under GUT
-	assert_eq(_popup.get("_target_yaw"), before_yaw,
+	var before_yaw: float = _case.get("_target_yaw")
+	_case.call("_read_pad_look", 0.016)   # no pad connected under GUT
+	assert_eq(_case.get("_target_yaw"), before_yaw,
 			"no pad connected means the case is left alone")
-	assert_false(_popup.get("_pad_looking"), "and the idle turn keeps running")
+	assert_false(_case.get("_pad_looking"), "and the idle turn keeps running")
 
 	# The zoom path both devices share: negative pulls in on either.
-	var wide: float = _popup.call("_framed_distance")
-	_popup.call("_zoom_by", -0.3)
-	assert_lt(_popup.call("_framed_distance"), wide,
+	var wide: float = _case.call("_framed_distance")
+	_case.call("_zoom_by", -0.3)
+	assert_lt(_case.call("_framed_distance"), wide,
 			"negative exponent pulls in, whichever device sent it")
-
-
-# The swatch rows are the ones a pad player would silently lose: SwatchDropdown
-# is a FOCUS_NONE wrapper whose inner button takes the focus, so watching the
-# wrapper connects a signal that never fires and those three rows alone would
-# never re-frame the case.
-func test_the_swatch_rows_reframe_the_case_too() -> void:
-	_open()
-	var rows: Dictionary = {
-		"_blade_color_dd": LockerMannequin.Focus.BLADE,
-		"_knob_color_dd": LockerMannequin.Focus.GRIP,
-		"_lace_dd": LockerMannequin.Focus.SKATES,
-	}
-	for name: String in rows:
-		var dd: SwatchDropdown = _popup.get(name) as SwatchDropdown
-		assert_eq(dd.focus_mode, Control.FOCUS_NONE,
-				"%s is still a wrapper — if this changed, so did the wiring" % name)
-		_popup.call("_set_focus", LockerMannequin.Focus.FULL)
-		dd.focus_target().focus_entered.emit()
-		assert_eq(_popup.get("_focus"), rows[name], "%s aims the case" % name)
-		_popup.call("_set_focus", LockerMannequin.Focus.FULL)
-		dd.focus_target().mouse_entered.emit()
-		assert_eq(_popup.get("_focus"), rows[name], "%s aims it on hover too" % name)
-
-
-# Every row a pad walks has to be reachable at all — a control the focus search
-# skips is a pick a controller player simply cannot make.
-func test_every_row_control_is_pad_reachable() -> void:
-	_open()
-	for name: String in ["_length_btn", "_curve_btn", "_flex_btn",
-			"_stick_model_btn", "_span_btn", "_style_btn", "_profile_btn",
-			"_skate_btn", "_glove_btn", "_face_btn"]:
-		assert_ne(_btn(name).focus_mode, Control.FOCUS_NONE,
-				"%s can be focused" % name)
-	for name: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
-		var dd: SwatchDropdown = _popup.get(name) as SwatchDropdown
-		assert_ne(dd.focus_target().focus_mode, Control.FOCUS_NONE,
-				"%s can be focused" % name)
-
-
-# The locker is a CHILD of the player screen it covers, and open() walls that
-# screen off — the wall must not take the locker down with it (a walled locker
-# is a dead dialog for the pad), and closing must lift the wall so focus can
-# return to the launcher.
-func test_opening_over_its_own_parent_keeps_the_rows_focusable() -> void:
-	var form := Control.new()
-	add_child_autofree(form)
-	var launcher := Button.new()
-	form.add_child(launcher)
-	_popup.get_parent().remove_child(_popup)
-	form.add_child(_popup)
-	_popup.set_focus_scope(form, launcher)
-	_open()
-	assert_eq(_btn("_length_btn").get_focus_mode_with_override(), Control.FOCUS_ALL,
-			"the locker's rows stay focusable inside its own wall")
-	assert_eq(launcher.get_focus_mode_with_override(), Control.FOCUS_NONE,
-			"the launcher behind the scrim is walled off")
-	_popup.call("_cancel")
-	assert_eq(launcher.get_focus_mode_with_override(), Control.FOCUS_ALL,
-			"closing lifts the wall so focus can return to the launcher")
 
 
 # The hint has to name the device that is actually driving, and follow a swap.
 func test_the_case_hint_names_the_driving_device() -> void:
 	_open()
-	var hint: Label = _popup.get("_case_hint") as Label
+	var hint: Label = _case.get("_hint") as Label
 	assert_false(hint.text.is_empty(), "the case says how to turn it")
 	assert_eq(hint.text, ControllerGlyphs.prompt(
-			tr(&"LOCKER_CASE_HINT_MOUSE"), tr(&"LOCKER_CASE_HINT_PAD")),
+			tr(&"PLAYER_CASE_HINT_MOUSE"), tr(&"PLAYER_CASE_HINT_PAD")),
 			"and names whichever device is active")
 
 
@@ -602,10 +450,10 @@ func test_the_case_hint_names_the_driving_device() -> void:
 # left behind.
 func test_changing_focus_clears_the_hand_zoom() -> void:
 	_open()
-	_popup.call("_zoom_by", -80.0)
-	assert_lt(_popup.get("_zoom"), 1.0)
-	_btn("_face_btn").mouse_entered.emit()
-	assert_almost_eq(_popup.get("_zoom"), 1.0, 0.0001,
+	_case.call("_zoom_by", -80.0)
+	assert_lt(_case.get("_zoom"), 1.0)
+	_case.frame(LockerMannequin.Focus.HELMET)
+	assert_almost_eq(_case.get("_zoom"), 1.0, 0.0001,
 			"the new framing starts framed")
 
 
@@ -625,75 +473,13 @@ func test_each_framing_looks_somewhere_different() -> void:
 		seen.append(anchor)
 
 
-func test_done_hands_back_every_pick() -> void:
-	_open()
-	_btn("_skate_btn").item_selected.emit(GearModelRegistry.SKATE_PRO)
-	_btn("_glove_btn").item_selected.emit(GearModelRegistry.GLOVE_VINTAGE)
-	_btn("_face_btn").item_selected.emit(GearModelRegistry.FACE_CAGE)
-	_btn("_stick_model_btn").item_selected.emit(StickModelRegistry.count() - 1)
-	_btn("_curve_btn").item_selected.emit(2)
-	_btn("_profile_btn").item_selected.emit(2)   # Power grind
-	watch_signals(_popup)
-	_popup.call("_done")
-	assert_signal_emitted(_popup, "locker_edited")
-	var params: Array = get_signal_parameters(_popup, "locker_edited")
-	assert_eq(params[0], 2, "profile")
-	assert_eq(params[1], 2, "curve")
-	var gear := GearStyleConfig.from_code(params[5])
-	assert_eq(gear.skate_model, GearModelRegistry.SKATE_PRO)
-	assert_eq(gear.glove_model, GearModelRegistry.GLOVE_VINTAGE)
-	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
-	assert_eq(gear.stick_model, StickModelRegistry.count() - 1)
-
-
-# The lock is the online-match attribute freeze: gameplay rows go dead, every
-# cosmetic row stays live.
-func test_the_lock_freezes_gameplay_rows_only() -> void:
-	_popup.open(PlayerAttributes.new(PlayerAttributes.HEIGHT_MEDIUM,
-			int(PlayerAttributes.NEUTRAL_WEIGHT_LBS), PlayerAttributes.GEAR_BALANCED,
-			PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
-			PlayerAttributes.GEAR_BALANCED), StickTapeConfig.DEFAULT_CODE,
-			GearStyleConfig.new().to_code(), true, _colors(),
-			SkinToneRegistry.DEFAULT_INDEX, false)
-	for name: String in ["_length_btn", "_curve_btn", "_flex_btn", "_profile_btn"]:
-		assert_true(_btn(name).disabled, "%s locks" % name)
-	for name: String in ["_skate_btn", "_glove_btn", "_face_btn", "_stick_model_btn",
-			"_span_btn", "_style_btn"]:
-		assert_false(_btn(name).disabled, "%s stays live" % name)
-	# A locked row that still moved its pick would commit a frozen attribute.
-	_btn("_curve_btn").item_selected.emit(2)
-	assert_eq(_popup.get("_curve"), PlayerAttributes.GEAR_BALANCED,
-			"a locked pick is refused")
-
-
-# Each item's swatch strip shows that model's own zones against the pending kit.
-func test_each_model_item_carries_its_own_zones_as_a_swatch() -> void:
-	_open()
-	for model: int in GearModelRegistry.skate_count():
-		var img: Image = _btn("_skate_btn").get_item_icon(model).get_image()
-		# One band per zone, sampled at each band's center.
-		var band: int = img.get_width() / GearModelRegistry.SKATE_ZONE_COUNT
-		for zone: int in GearModelRegistry.SKATE_ZONE_COUNT:
-			var swatch: Color = img.get_pixel(
-					zone * band + band / 2, img.get_height() / 2)
-			var want: Color = GearModelRegistry.skate_color(model, zone,
-					_PRIMARY, _SECONDARY, _LIGHT)
-			# The strip is RGBA8 — allow the one-step float→byte quantisation.
-			var delta: float = maxf(maxf(absf(swatch.r - want.r),
-					absf(swatch.g - want.g)), absf(swatch.b - want.b))
-			assert_lt(delta, 1.5 / 255.0, "skate model %d band %d" % [model, zone])
-
-
 # The case shows the sweater the ice does: the rink's own decals paint it, with
 # the pending name, number and the team's crest.
 func test_the_sweater_is_painted_by_the_rink_decals() -> void:
 	var colors: Dictionary = TeamColorRegistry.get_colors(0, 0)
-	_popup.open(PlayerAttributes.new(PlayerAttributes.HEIGHT_MEDIUM,
-			int(PlayerAttributes.NEUTRAL_WEIGHT_LBS), PlayerAttributes.GEAR_BALANCED,
-			PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
-			PlayerAttributes.GEAR_BALANCED), StickTapeConfig.DEFAULT_CODE,
-			GearStyleConfig.new().to_code(), false, colors,
-			SkinToneRegistry.DEFAULT_INDEX, false, "Smith", 27)
+	_case.set_jersey_info("Smith", 27)
+	_case.dress(PlayerAttributes.neutral(), GearStyleConfig.new(), StickTapeConfig.new(),
+			colors, SkinToneRegistry.DEFAULT_INDEX, false)
 	var kit: FigureKit = _mannequin().get("_kit") as FigureKit
 	assert_eq(kit.jersey_decal.player_name, "Smith")
 	assert_eq(kit.jersey_decal.jersey_number, 27)

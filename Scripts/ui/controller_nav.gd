@@ -122,8 +122,8 @@ static func set_list_focusable(items: Array, on: bool = true) -> void:
 # holds it, so one call both clears the stale ring and walls off navigation.
 # The scrim already blocks the mouse, so nothing behind loses clickability.
 #
-# A modal that lives INSIDE the background subtree (the locker is a Control
-# child of the player screen it covers, unlike the CanvasLayer dialogs, which
+# A modal that lives INSIDE the background subtree (the on-screen keyboard is a
+# Control child of the player screen it covers, unlike the CanvasLayer dialogs, which
 # sit outside the Control focus chain) would be walled off with it — the grab
 # below then hits the FOCUS_NONE override and the popup opens dead to the pad.
 # An explicit ENABLED on the modal's root out-ranks the ancestor's DISABLED, so

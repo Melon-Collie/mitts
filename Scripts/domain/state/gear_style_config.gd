@@ -14,11 +14,10 @@ extends RefCounted
 # for. The lace pick stays an index into the shared TapeColorRegistry palette,
 # because laces are chosen apart from the skate. The face pick is a
 # GearModelRegistry FACE_* option (bare / visor / cage / fishbowl) — a fixed
-# look, like the stick. The tuck is a GearModelRegistry TUCK_* option, picked
-# in the locker beside the equipment it is worn with. The hair rides the same code rather than one of its own
-# because it goes everywhere the face gear goes — join, spawn, replay header,
-# the bot card. Cosmetic only — nothing gameplay reads it. The equipment fields
-# are picked in the locker, the hair on the player screen beside the skin; all
+# look, like the stick. The tuck is a GearModelRegistry TUCK_* option. The hair
+# rides the same code rather than one of its own because it goes everywhere the
+# face gear goes — join, spawn, replay header, the bot card. Cosmetic only —
+# nothing gameplay reads it. Every field is picked on the player screen and
 # painted by SkaterUniformCoordinator.
 #
 # Travels the wire as one packed int (to_code/from_code) appended to the join
@@ -94,13 +93,6 @@ func to_code() -> int:
 			| (stick_model << _STICK_SHIFT) | (helmet_face << _FACE_SHIFT) \
 			| (hair_style << _HAIR_SHIFT) | (facial_hair << _FACIAL_SHIFT) \
 			| (hair_color << _HAIR_COLOR_SHIFT) | (jersey_tuck << _TUCK_SHIFT)
-
-
-# The code with the hair fields at their defaults — what the locker owns.
-func equipment_code() -> int:
-	return GearStyleConfig.new(skate_model, glove_model, lace_color, stick_model,
-			helmet_face, HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
-			jersey_tuck).to_code()
 
 
 static func from_code(code: int) -> GearStyleConfig:
