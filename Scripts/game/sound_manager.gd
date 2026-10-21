@@ -85,9 +85,9 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.SKATE_CARVE:      "res://Sounds/skate_carve.wav",
 	Sound.SKATE_DIG:        "res://Sounds/skate_dig_%02d.wav",
 	Sound.SKATE_TOUCH:      "res://Sounds/skate_touch_%02d.wav",
-	# Placeholders on the tap's and the dig's takes, pitched up (_BASE_PITCH),
-	# until their own recordings land.
-	Sound.STICK_RELEASE:    "res://Sounds/stick_tap_%02d.wav",
+	Sound.STICK_RELEASE:    "res://Sounds/stick_release.wav",
+	# A placeholder on the dig's takes, pitched up (_BASE_PITCH), until its own
+	# recording lands.
 	Sound.STICK_DRAG:       "res://Sounds/skate_dig_%02d.wav",
 }
 
@@ -99,7 +99,6 @@ const _TAKE_COUNTS: Dictionary = {
 	Sound.SKATE_PUSH: 6,
 	Sound.SKATE_DIG: 4,
 	Sound.SKATE_TOUCH: 4,
-	Sound.STICK_RELEASE: 15,
 	Sound.STICK_DRAG: 4,
 }
 
@@ -159,7 +158,7 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 	Sound.SKATE_PUSH:      4.9,
 	Sound.SKATE_DIG:       3.8,
 	Sound.SKATE_TOUCH:    12.8,
-	Sound.STICK_RELEASE:  10.0,
+	Sound.STICK_RELEASE:   9.9,
 	Sound.STICK_DRAG:      3.8,
 }
 
@@ -167,7 +166,6 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 # a body is a softer, heavier stop than a goalie pad.
 const _BASE_PITCH: Dictionary = {
 	Sound.PUCK_BODY_BLOCK: 0.85,
-	Sound.STICK_RELEASE: 1.6,
 	Sound.STICK_DRAG: 1.4,
 }
 
