@@ -249,8 +249,7 @@ func test_the_address_puts_the_blade_on_the_dot() -> void:
 	var centre: SkaterController = _controller(true)
 	var dot: float = centre.faceoff_center_distance()
 	_run_prep(centre, Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 4.0), SETTLE_TICKS, dot)
-	var blade: Vector3 = centre.skater.upper_body_to_global(
-			centre.skater.get_blade_position())
+	var blade: Vector3 = centre.skater.get_blade_contact_global()
 	assert_almost_eq(blade.z - centre.skater.global_position.z, -dot, 0.10,
 			"the centre's blade must address the dot he was placed for")
 

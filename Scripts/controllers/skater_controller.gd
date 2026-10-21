@@ -2788,9 +2788,12 @@ func faceoff_center_distance() -> float:
 	# Plus the fold's own carry: the address hangs the arms off a shoulder swung
 	# that far out over the dot (SkaterIKCoordinator.address_shoulder), and the
 	# span below is measured from the hand, so the body has to stand back by it
-	# or the stick comes up short of the reach it was sized for.
+	# or the stick comes up short of the reach it was sized for. The span ends at
+	# the heel, and the cursor names mid-blade (SkaterIKCoordinator
+	# ._blade_target_for), so the dot is half a blade further on.
 	return _ik.address_carry() \
-			+ _ik.address_stick_horiz() * faceoff_center_reach_fraction
+			+ _ik.address_stick_horiz() * faceoff_center_reach_fraction \
+			+ skater.blade_length * 0.5
 
 
 func _enter_shot_block() -> void:

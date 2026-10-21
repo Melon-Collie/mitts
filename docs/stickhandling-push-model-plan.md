@@ -299,10 +299,12 @@ lapses, so the local skater decides its own again after a goal replay.
 Two offsets survived §7d. The solve places the Blade marker, which is the
 heel, on the cursor's target, but the puck pins to mid-blade, so a carried puck
 sat half a blade (15 cm) out along the stick from the cursor: pulled in to the
-feet it stopped short, "caught, not going all the way back". The carry target
-now steps half a blade back along the shoulder's aim line
-(`SkaterIKCoordinator._apply_carry_offset`), which puts mid-blade, and the puck,
+feet it stopped short, "caught, not going all the way back". The target now
+steps half a blade back along the shoulder's aim line
+(`SkaterIKCoordinator._blade_target_for`), which puts mid-blade, and the puck,
 on the cursor; at the rim the heel clamps where it did, so reach is unchanged.
+The empty stick does the same, so a pickup, a poke and a reception are aimed
+with the spot the puck is then carried on.
 
 And the drawn blade only met the puck for a square, flat blade. Pulled in, the
 shaft steepens, the toe stands on the ice with the heel up to 17 cm off it, and
