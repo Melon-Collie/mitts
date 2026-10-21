@@ -134,6 +134,15 @@ stripe textures, so it is the check for a kit edit. It loads through
 `TeamColorRegistry`, so a `user://team_colors.json` shadows the bundled file
 here as it does in the game, and the run says which one won.
 
+**To see what a Video setting COSTS, measure it.** `.claude/hooks/measure-graphics.sh
+[settings]` plays a 5v5 against bots on Forward+, changes one Video setting at a
+time from the defaults, and writes a markdown table of GPU time, frame time and
+draw calls to `.preview/graphics_cost.md` (`tools/graphics_cost_runner.gd`; table
+and caveats in `docs/performance-findings.md` → *What each Video setting costs*).
+Run it on a machine with a graphics card for real times; here it runs on software
+Vulkan, where draw calls are exact and times only rank the settings. The impact
+tiers in Options → Video come from it.
+
 A render answers *how it reads*; it does not answer *whether two placements
 agree*. When the question is the second one — does the pad still sit on the arm,
 does the mirrored side land where the near side does — measure it in a test
