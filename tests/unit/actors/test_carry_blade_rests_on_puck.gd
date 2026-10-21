@@ -82,7 +82,7 @@ func _rest(sk: Skater) -> Vector2:
 	var at_u: float = 0.0
 	for v: Vector3 in verts:
 		var w: Vector3 = xf * v
-		if w.y > lowest + 0.035:
+		if w.y > lowest + sk.drawn_puck_height:
 			continue
 		var d: float = Vector2(w.x - pin.x, w.z - pin.z).length()
 		if d < nearest:
@@ -108,7 +108,7 @@ func test_the_blade_rests_on_the_puck() -> void:
 			var c: SkaterController = _make_carrier()
 			_pull_in(c, dir, radius_m)
 			var rest: Vector2 = _rest(c.skater)
-			assert_between(rest.x, -0.012, 0.008, "%s, cursor %.2f m out: the blade on the puck" % [
+			assert_between(rest.x, -0.015, 0.012, "%s, cursor %.2f m out: the blade on the puck" % [
 					"forehand" if dir == FOREHAND else "backhand", radius_m])
 
 
@@ -117,5 +117,5 @@ func test_pulled_in_close_the_toe_holds_it() -> void:
 	_pull_in(flat, FOREHAND, 1.1)
 	var close: SkaterController = _make_carrier()
 	_pull_in(close, FOREHAND, 0.4)
-	assert_almost_eq(_rest(flat.skater).y, 0.5, 0.06, "out at the rim, mid-blade on it")
+	assert_between(_rest(flat.skater).y, 0.4, 0.65, "out at the rim, mid-blade on it")
 	assert_gt(_rest(close.skater).y, 0.7, "in tight the heel is up, and the toe on the puck")

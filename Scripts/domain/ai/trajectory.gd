@@ -389,7 +389,7 @@ static func solve_reception_gate(puck_pos: Vector3, puck_vel: Vector3,
 # Puck rest height on the ice — disc bottom on y=0, cylinder half-height above (matches
 # Puck.ice_height / GameRules.PUCK_START_POS.y). A puck at this height with no vertical
 # speed is grounded; anything higher or moving vertically is airborne (ballistic).
-const PUCK_REST_HEIGHT_M: float = 0.0175
+const PUCK_REST_HEIGHT_M: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 # A puck this far above rest, OR with |vy| above this, integrates ballistically. Small
 # enough that any real loft (launch vy ≥ ~2 m/s) is airborne and a pinned-to-ice puck
 # (vy == 0) is grounded; large enough to ignore float noise on a resting puck.

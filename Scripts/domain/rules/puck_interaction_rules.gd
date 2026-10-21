@@ -49,7 +49,10 @@ static func check_poke(
 # positions rather than swept ones (the client's claim gates). The same test the
 # swept checks apply, so a client never claims what the host refuses.
 static func net_between(blade: Vector3, puck: Vector3) -> bool:
-	return NetGeometry.path_blocked(blade, puck, GameRules.NET_BLADE_MESH_GIVE)
+	# The blade has to reach the puck's rim, not its centre: a puck resting against
+	# the outside of the twine sits a radius off it, which is inside the mesh's band.
+	var rim: Vector3 = puck + (blade - puck).limit_length(GameRules.PUCK_COLLISION_RADIUS)
+	return NetGeometry.path_blocked(blade, rim, GameRules.NET_BLADE_MESH_GIVE)
 
 
 static func _swept_reach(

@@ -11,7 +11,7 @@ extends GutTest
 
 var controller: PuckController
 
-const ICE_Y: float = 0.0175
+const ICE_Y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const GOAL_Z: float = GameRules.GOAL_LINE_Z
 
 

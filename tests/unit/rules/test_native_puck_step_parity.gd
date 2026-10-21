@@ -18,6 +18,7 @@ extends GutTest
 
 const TOLERANCE: float = 0.001
 const SEED: int = 0x5055434B  # "PUCK"
+const ICE: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 
 var _rng := RandomNumberGenerator.new()
 
@@ -49,7 +50,7 @@ func _make_native() -> RefCounted:
 			GameRules.NET_BACK_HALF_WIDTH, GameRules.NET_HEIGHT,
 			GameRules.NET_CROWN_HALF_WIDTH, GameRules.NET_MOUTH_CORNER_RADIUS,
 			GameRules.NET_TOP_DEPTH,
-			GameRules.PUCK_COLLISION_HALF_HEIGHT,
+			ICE,
 			PuckGeometryCollision.POST_COR_SCALE,
 			PuckGeometryCollision.NET_RESTITUTION,
 			PuckGeometryCollision.NET_FRICTION)
@@ -87,13 +88,13 @@ func _random_state() -> Array:
 		var end_sign: float = 1.0 if _rng.randf() < 0.5 else -1.0
 		pos = Vector3(
 				_rng.randf_range(-2.5, 2.5),
-				0.0175 if _rng.randf() < 0.5 else _rng.randf_range(0.0175, 2.0),
+				ICE if _rng.randf() < 0.5 else _rng.randf_range(ICE, 2.0),
 				end_sign * _rng.randf_range(GameRules.GOAL_LINE_Z - 2.0,
 						GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + 0.5))
 	else:
 		pos = Vector3(
 				_rng.randf_range(-12.8, 12.8),
-				0.0175 if _rng.randf() < 0.7 else _rng.randf_range(0.0175, 2.5),
+				ICE if _rng.randf() < 0.7 else _rng.randf_range(ICE, 2.5),
 				_rng.randf_range(-29.8, 29.8))
 	var speed: float = _rng.randf_range(0.0, 38.0)
 	var dir: float = _rng.randf_range(-PI, PI)
@@ -135,10 +136,10 @@ func test_step_frame_substep_matches_native() -> void:
 		out.touched_post = false
 		out.touched_net = false
 		PuckAuthorityRules.step_frame_substep(pos, vel, sub_dt,
-				GameRules.PUCK_COLLISION_RADIUS, 38.0, 0.0175, 3.0, scratch, out)
+				GameRules.PUCK_COLLISION_RADIUS, 38.0, ICE, 3.0, scratch, out)
 		native.clear_touched()
 		native.step_frame_substep(pos, vel, sub_dt,
-				GameRules.PUCK_COLLISION_RADIUS, 38.0, 0.0175, 3.0)
+				GameRules.PUCK_COLLISION_RADIUS, 38.0, ICE, 3.0)
 
 		var pos_err: float = out.position.distance_to(native.get_position())
 		var vel_err: float = out.velocity.distance_to(native.get_velocity())
@@ -176,12 +177,12 @@ func test_step_tick_rollouts_match_native() -> void:
 			var gv: Vector3 = vel
 			for s: int in n:
 				PuckAuthorityRules.step_frame_substep(gp, gv, sub_dt,
-						GameRules.PUCK_COLLISION_RADIUS, 38.0, 0.0175, 3.0, scratch, out)
+						GameRules.PUCK_COLLISION_RADIUS, 38.0, ICE, 3.0, scratch, out)
 				gp = out.position
 				gv = out.velocity
 
 			native.clear_touched()
-			native.step_tick(pos, vel, dt, GameRules.PUCK_COLLISION_RADIUS, 38.0, 0.0175, 3.0)
+			native.step_tick(pos, vel, dt, GameRules.PUCK_COLLISION_RADIUS, 38.0, ICE, 3.0)
 
 			var pos_err: float = gp.distance_to(native.get_position())
 			var vel_err: float = gv.distance_to(native.get_velocity())

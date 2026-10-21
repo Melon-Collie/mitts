@@ -100,7 +100,7 @@ func test_both_beside_the_net_is_unaffected() -> void:
 
 func test_both_behind_the_net_is_unaffected() -> void:
 	var back: float = G + GameRules.NET_DEPTH
-	assert_true(_picks(Vector3(0.0, 0.03, back + 0.5), Vector3(0.2, 0.0175, back + 0.15)),
+	assert_true(_picks(Vector3(0.0, 0.03, back + 0.5), Vector3(0.2, GameRules.PUCK_COLLISION_HALF_HEIGHT, back + 0.15)),
 			"behind the back twine, same side")
 
 
@@ -113,7 +113,7 @@ func test_puck_against_the_outside_of_the_twine_is_reachable_from_outside() -> v
 
 
 func test_open_ice_is_unaffected() -> void:
-	assert_true(_picks(Vector3(0.0, 0.03, 0.0), Vector3(0.3, 0.0175, 0.1)))
+	assert_true(_picks(Vector3(0.0, 0.03, 0.0), Vector3(0.3, GameRules.PUCK_COLLISION_HALF_HEIGHT, 0.1)))
 	assert_false(NetGeometry.path_blocked(Vector3(-5.0, 0.0, G), Vector3(5.0, 0.0, G - 3.0), BAND),
 			"a path that never comes near the cage")
 
@@ -129,4 +129,4 @@ func test_over_the_crossbar_is_not_the_net() -> void:
 func test_net_between_matches_the_swept_check() -> void:
 	assert_true(PuckInteractionRules.net_between(BLADE_IN_CAGE_SIDE, PUCK_BESIDE_POST))
 	assert_false(PuckInteractionRules.net_between(
-			Vector3(0.3, 0.03, G + 0.2), Vector3(0.3, 0.0175, G - 0.2)))
+			Vector3(0.3, 0.03, G + 0.2), Vector3(0.3, GameRules.PUCK_COLLISION_HALF_HEIGHT, G - 0.2)))

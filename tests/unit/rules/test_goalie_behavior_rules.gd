@@ -1251,7 +1251,7 @@ func test_puck_on_pad_shelf_reads_as_resting() -> void:
 func test_puck_on_the_ice_is_the_sweeps_job() -> void:
 	# On-ice pucks stay with the crease sweep — below min_height is not a rest.
 	assert_false(GoalieBehaviorRules.puck_resting_on_goalie(
-			Vector3(0.3, 0.0175, 24.0), 0.0, Vector3(0.0, 0.0, 24.0),
+			Vector3(0.3, GameRules.PUCK_COLLISION_HALF_HEIGHT, 24.0), 0.0, Vector3(0.0, 0.0, 24.0),
 			0.12, 0.6, 0.7, 4.0))
 
 func test_puck_above_the_shelf_envelope_is_not_pinnable() -> void:

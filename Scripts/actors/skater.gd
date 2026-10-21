@@ -131,7 +131,7 @@ var wall_pin_inward_bias: float = 0.25
 # the visible blade renders just to one side of the puck on the appropriate
 # face. Pure cosmetic — IK math, pickup distance, shot release all use the
 # centered blade contact.
-var carry_blade_offset: float = 0.07
+var carry_blade_offset: float = GameRules.PUCK_COLLISION_RADIUS + 0.005
 # The drawn puck (PuckMeshBuilder), which the carry seat rests the blade
 # against.
 var drawn_puck_radius: float = GameRules.PUCK_COLLISION_RADIUS

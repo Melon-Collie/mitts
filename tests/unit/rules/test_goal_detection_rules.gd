@@ -7,15 +7,15 @@ extends GutTest
 # Bounds passed by HockeyGoal (post inner face / under crossbar):
 #   half_width  = POST_HALF_WIDTH - POST_RADIUS = 0.915 - 0.030 = 0.885
 #   net_height  = NET_HEIGHT      - POST_RADIUS = 1.220 - 0.030 = 1.190
-# Puck extents:  radius 0.065, half-height 0.0175. So the effective center bounds
+# Fixture puck:  radius 0.065, half-height 0.0175. So the effective center bounds
 # are |x| <= 0.820, y <= 1.1725, and "fully across" = center >= 0.065 past the line.
 
 const GOAL_Z: float = GameRules.GOAL_LINE_Z          # 26.65
 const HALF_W: float = 0.915   # POST_HALF_WIDTH (post centerline)
 const NET_H: float = 1.220    # NET_HEIGHT (crossbar centerline)
 const POST_R: float = 0.030   # POST_RADIUS
-const R: float = 0.065        # GameRules.PUCK_COLLISION_RADIUS
-const HH: float = 0.0175      # GameRules.PUCK_COLLISION_HALF_HEIGHT
+const R: float = 0.065
+const HH: float = 0.0175
 const DEPTH: float = 1.016    # BASE_DEPTH (goal line to back frame)
 const ICE_Y: float = 0.0175
 # Effective whole-disc mouth after post + puck insets: |x| <= 0.820, y <= 1.1725.
