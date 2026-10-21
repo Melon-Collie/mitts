@@ -245,18 +245,28 @@ not its middle. `CarryStrokeState` reads that from velocity alone, so it is
 robust to interpolated remotes (no differentiated acceleration):
 
 - **Push**: the puck gaining speed off the trailing face.
-- **Release**: a push that peaked above `carry_release_speed` and has not
-  gained speed for `carry_release_hold_s`. The blade goes over the puck to
-  the far face while it runs free.
+- **Release**: a push that peaked above `carry_release_speed` and has lost
+  `carry_release_drop` of it. The blade goes over the puck to the far face
+  while it runs free.
 - **Catch**: the puck coming at the leading face while slowing; its turn is
   the throw, which is the next push. Speeding up toward the leading face by
   `carry_repush_margin` is a second push the same way, which sends the blade
   back to trail it.
 - A stroke under the release speed keeps the plain flip, so slow carries and
   pull-acrosses are unchanged.
+- **A wobble is not a stroke.** A hand on a mouse is never still, and the
+  blade's inertia turns a cursor that moves on alternate ticks (60 fps against
+  the 120 Hz tick) into a speed that dips on them. Keyed off raw speed, either
+  one cost 4–7 face changes a stroke. So the speed is read through a
+  `carry_stroke_smoothing_s` filter, a release waits for a real drop rather
+  than a pause, a repush needs `carry_repush_margin`, and no face changes
+  until the puck has gone `carry_flip_distance` the new way. All in seconds,
+  metres and shares, so it reads the same at any frame rate.
 
-The release hop is sized to the dangle's tempo (`carry_release_hop_share` of
-the time since the last release) and drives the side factor itself, holding
+The release hop lands as the free puck stops — its speed at the release over
+the rate it has been slowing since the peak (`CarryStrokeState.stop_in_s`) —
+so the far face is there to catch it however late the release was read; it
+drives the side factor itself, holding
 the old face for `carry_release_lead_frac` while the puck runs off it and
 crossing at the top of the hop, so the blade never passes through the puck.
 Through the hop the mesh stands off the puck by `carry_free_gap` (as hard as

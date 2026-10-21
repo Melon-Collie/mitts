@@ -143,11 +143,9 @@ var carry_transit_lift: float = 0.10
 # read identically across the lobby with no wire field.
 #
 # Lateral stroke speed (m/s in the carrier's frame) that flips the pushing
-# face. Below it the blade cradles on its current side; the threshold doubles
-# as the flip hysteresis, since re-flipping takes a genuine opposite stroke
-# back above the same bar. Sized well above interpolation noise and well
-# under a deliberate dangle stroke.
-var carry_flip_speed: float = 0.8
+# face. Below it the blade cradles on its current side. Under a deliberate
+# dangle stroke; the wobble it once had to sit above is carry_flip_distance's.
+var carry_flip_speed: float = 0.6
 # Inward-pull speed band (m/s toward the body) over which the pull grammar
 # ramps 0→1. The floor keeps a slow reposition a plain cradle; the ceiling
 # lands full grammar at a committed pull, still far under the dangle
@@ -172,16 +170,20 @@ var carry_gesture_ease: float = 8.0
 var carry_transit_hop_time: float = 0.24
 # ── The release (CarryStrokeState) ────────────────────────────────────────────
 # A stroke that peaks above carry_release_speed (m/s, carrier frame) and then
-# stops gaining speed for carry_release_hold_s is spent: the puck runs on alone
-# and the blade hops over it to catch on the far face. Slower strokes keep the
-# plain flip above. A puck coming at the leading face that speeds up again by
+# loses carry_release_drop of it is spent: the puck runs on alone and the blade
+# hops over it to catch on the far face. Slower strokes keep the plain flip
+# above. A puck coming at the leading face that speeds up again by
 # carry_repush_margin is being pushed, and sends the blade back to trail it.
 var carry_release_speed: float = 1.8
-var carry_release_hold_s: float = 0.03
-var carry_repush_margin: float = 0.6
-# A release hop takes this share of the time since the last release, so a fast
-# dangle lands each hop before its next release, within [min, carry_transit_hop_time].
-var carry_release_hop_share: float = 0.5
+var carry_release_drop: float = 0.2
+var carry_repush_margin: float = 1.2
+# What a stroke is, as against a hand's wobble: the speed is read through a
+# filter of carry_stroke_smoothing_s, and no face changes until the puck has
+# gone carry_flip_distance (m) the new way.
+var carry_stroke_smoothing_s: float = 0.04
+var carry_flip_distance: float = 0.04
+# A release hop lands as the free puck stops (CarryStrokeState.stop_in_s), the
+# far face there to catch it, within [min, carry_transit_hop_time].
 var carry_release_hop_min_s: float = 0.08
 # Share of a release hop the blade stays on the old face while the puck runs
 # off it, and the same share at the end on the far face before landing, so the
@@ -761,14 +763,12 @@ var _hop_time: float = carry_transit_hop_time
 var _hop_stroke_speed: float = 0.0
 # The release: the stroke memory, the carried puck's last position (its
 # velocity is the stroke), and the hop that carries the blade over a free puck —
-# the side factor it starts from, while it drives that factor (_release_hop),
-# and the time since the previous release, which sizes it.
+# the side factor it starts from, and while it drives that factor (_release_hop).
 var _stroke := CarryStrokeState.new()
 var _pin_prev: Vector3 = Vector3.ZERO
 var _pin_prev_valid: bool = false
 var _release_hop: bool = false
 var _release_from: float = 0.0
-var _since_release: float = 1.0
 # Eased 0→1 share of carry_free_gap the blade mesh stands off the puck.
 var _free_gap_blend: float = 0.0
 var _free_gap_target: float = 0.0
@@ -2110,12 +2110,13 @@ func _update_carry_contact(delta: float) -> void:
 				# Only a live carry strokes: a wind-up holds the blade on the
 				# puck, and a side flipped under a frozen blade moves the pin.
 				var sign_now: int = _carry_side * factor_hs
-				var event: int = _stroke.step(sign_now, v_perp, delta, carry_flip_speed,
-						carry_release_speed, carry_release_hold_s, carry_repush_margin)
+				var event: int = _stroke.step(sign_now, v_perp, delta,
+						carry_stroke_smoothing_s, carry_flip_speed, carry_flip_distance,
+						carry_release_speed, carry_release_drop, carry_repush_margin)
 				if event != CarryStrokeState.Event.NONE:
 					_carry_side = -sign_now * factor_hs
 					if event == CarryStrokeState.Event.RELEASE:
-						_begin_release_hop(absf(v_perp))
+						_begin_release_hop(_stroke.release_peak)
 					else:
 						_release_hop = false
 						_free_gap_target = 0.0
@@ -2138,7 +2139,6 @@ func _update_carry_contact(delta: float) -> void:
 			# mid-stroke, every release leaves off the toe by construction.
 			stroke_toe_target = CarryContactRules.pull_gesture(
 					absf(v_perp), carry_flip_speed, carry_stroke_full_speed)
-	_since_release = minf(_since_release + delta, 1.0)
 	var hop_was_live: bool = _transit_hop > 0.0
 	_transit_hop = maxf(_transit_hop - delta / _hop_time, 0.0)
 	if hop_was_live and _transit_hop <= 0.0 \
@@ -2195,15 +2195,14 @@ func _start_hop(hop_time: float, stroke_speed: float) -> void:
 
 
 # The blade leaves a spent push and goes over the free puck to the far face
-# (CarryStrokeState): a hop sized to the dangle's tempo that drives the side
+# (CarryStrokeState): a hop landing as the puck stops that drives the side
 # factor itself, crossing at its top, with the mesh standing off the puck by a
 # gap as hard as the stroke until it lands.
 func _begin_release_hop(stroke_speed: float) -> void:
 	_release_from = _carry_side_smoothed
 	_release_hop = true
-	_start_hop(clampf(carry_release_hop_share * _since_release, carry_release_hop_min_s,
-			carry_transit_hop_time), stroke_speed)
-	_since_release = 0.0
+	_start_hop(clampf(_stroke.stop_in_s, carry_release_hop_min_s, carry_transit_hop_time),
+			stroke_speed)
 	_free_gap_target = CarryContactRules.pull_gesture(
 			stroke_speed, carry_flip_speed, carry_stroke_full_speed)
 
