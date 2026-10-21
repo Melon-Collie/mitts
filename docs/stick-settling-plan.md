@@ -302,7 +302,7 @@ hands let `bobble_pace_retain` (0.45) of the result through
 (`PuckCollisionRules.bobble_velocity`): ~2.5 m/s relative to him, mostly off
 the face's normal, hopping by its into-face speed (`bobble_lift_*`). He is locked out of it for `settle_max_s`; anyone else
 can take it. All three host verdict paths run it. Bots price it as the
-receiver's expected hold (`AIPuckLane.reception_hold_s`: the settle by the odds
+receiver's expected hold (`AIFeedReception.reception_hold_s`: the settle by the odds
 of a catch, the lockout by the odds of a bobble, from the measured split of
 middle and edge contacts) in the reception read and the time discount, and the
 duel harness mirrors it.

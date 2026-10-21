@@ -1464,13 +1464,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 				var give_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 				if give_state != null:
 					sv = give_state.velocity
-				# GIVE WITH THE PUCK: above the ceiling, brake and let the feed
-				# come to the parked blade.
-				var rel_x: float = pv.x - sv.x
-				var rel_z: float = pv.z - sv.z
-				give_brake = rel_x * rel_x + rel_z * rel_z \
-						> SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S \
-								* SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S
+				give_brake = SkaterAgentReception.gives_with(pv, sv)
 	# Pass-receive setup, unless Mode B already set aim+steer; false falls through
 	# to the default chase.
 	if recv == _RECV_NONE and not _pass_receive_aim_and_steer(input, snapshot, self_pos):

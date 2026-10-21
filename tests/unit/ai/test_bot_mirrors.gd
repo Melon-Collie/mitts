@@ -52,18 +52,24 @@ func test_the_puck_thresholds_the_bots_price() -> void:
 			"a tip is priced only above the pace a blade deflects at")
 	# Every clean bot feed arrives at PASS_TARGET_CLOSING_M_S; only a hotter
 	# arrival, still short of a deflection, makes the receiver give with it.
-	assert_gt(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S, AIPuckLane.PASS_TARGET_CLOSING_M_S)
-	assert_lt(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S, puck.deflect_min_speed)
+	assert_almost_eq(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S,
+			sqrt(puck.bobble_load) * puck.deflect_min_speed, 0.05,
+			"a receiver gives from the bobble line at the blade's middle")
 	puck.free()
 
 
 func test_the_settle_a_feed_is_priced_at_is_the_pucks() -> void:
 	var puck: Puck = PuckScript.new()
-	assert_eq(AIPuckLane.RECEIVE_ANY_ANGLE_CEILING_M_S, puck.deflect_min_speed)
-	assert_eq(AIPuckLane.SETTLE_CLEAN_LOAD, puck.settle_clean_load)
-	assert_eq(AIPuckLane.SETTLE_MAX_S, puck.settle_max_s)
-	assert_eq(AIPuckLane.BOBBLE_LOAD, puck.bobble_load)
-	assert_eq(AIPuckLane.BOBBLE_EDGE_SHARE, puck.bobble_edge_share)
+	assert_eq(AIFeedReception.RECEIVE_ANY_ANGLE_CEILING_M_S, puck.deflect_min_speed)
+	assert_eq(AIFeedReception.SETTLE_CLEAN_LOAD, puck.settle_clean_load)
+	assert_eq(AIFeedReception.SETTLE_MAX_S, puck.settle_max_s)
+	assert_eq(AIFeedReception.BOBBLE_LOAD, puck.bobble_load)
+	assert_eq(AIFeedReception.BOBBLE_EDGE_SHARE, puck.bobble_edge_share)
+	assert_eq(AIFeedReception.DEFLECT_NORMAL_RESTITUTION, puck.deflect_normal_restitution)
+	assert_eq(AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN, puck.deflect_normal_restitution_min)
+	assert_eq(AIFeedReception.DEFLECT_SPEED_REF_M_S, puck.deflect_speed_ref)
+	assert_eq(AIFeedReception.BOBBLE_TANGENTIAL_RETAIN, puck.bobble_tangential_retain)
+	assert_eq(AIFeedReception.BOBBLE_PACE_RETAIN, puck.bobble_pace_retain)
 	puck.free()
 
 
@@ -74,11 +80,6 @@ func test_the_harness_catches_as_the_puck_does() -> void:
 	assert_eq(DuelHarness.RECEIVE_ALIGNMENT_BONUS, puck.alignment_receive_bonus)
 	assert_eq(DuelHarness.BOBBLE_LOAD, puck.bobble_load)
 	assert_eq(DuelHarness.BOBBLE_EDGE_SHARE, puck.bobble_edge_share)
-	assert_eq(DuelHarness.DEFLECT_NORMAL_RESTITUTION, puck.deflect_normal_restitution)
-	assert_eq(DuelHarness.DEFLECT_NORMAL_RESTITUTION_MIN, puck.deflect_normal_restitution_min)
-	assert_eq(DuelHarness.DEFLECT_SPEED_REF, puck.deflect_speed_ref)
-	assert_eq(DuelHarness.BOBBLE_TANGENTIAL_RETAIN, puck.bobble_tangential_retain)
-	assert_eq(DuelHarness.BOBBLE_PACE_RETAIN, puck.bobble_pace_retain)
 	assert_eq(DuelHarness.BOBBLE_GRACE_TICKS, roundi(puck.settle_max_s * Constants.PHYSICS_TICK))
 	puck.free()
 
