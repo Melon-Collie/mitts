@@ -289,6 +289,29 @@ release, and sizes that hop the same way. A side not restaged within a tick
 lapses, so the local skater decides its own again after a goal replay.
 `test_remote_carry_follows_the_host.gd`.
 
+## 7f. Playtest: the puck on the cursor, the blade on the puck (implemented)
+
+Two offsets survived §7d. The solve places the Blade marker, which is the
+heel, on the cursor's target, but the puck pins to mid-blade, so a carried puck
+sat half a blade (15 cm) out along the stick from the cursor: pulled in to the
+feet it stopped short, "caught, not going all the way back". The carry target
+now steps half a blade back along the shoulder's aim line
+(`SkaterIKCoordinator._apply_carry_offset`), which puts mid-blade, and the puck,
+on the cursor; at the rim the heel clamps where it did, so reach is unchanged.
+
+And the drawn blade only met the puck for a square, flat blade. Pulled in, the
+shaft steepens, the toe stands on the ice with the heel up to 17 cm off it, and
+the toe drag rolls the wrists; the puck, at mid-blade, sat under blade that was
+in the air, up to 5 cm off its face. The mesh now has a **carry seat**
+(`Skater._seat_on_puck`): the part of the blade within a puck's height of the
+ice is found from the dressed pose, and the blade slides so the middle of that
+part rests against the puck's rim, every other mesh slide laid on from there.
+Flat, that is mid-blade, as before; in tight the toe holds the puck, which is
+the toe drag the table in §3 describes. A heel slid across re-aims the blade at
+the hand, so the slide across is divided by the lever the seat has on the heel.
+Faded by the side factor through a face change, off under the slapshot pin.
+`test_carry_blade_rests_on_puck.gd` holds both.
+
 ## 8. What this buys
 
 The blade side telegraphs the next stroke — a defender watching the carrier

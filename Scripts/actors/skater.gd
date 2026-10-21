@@ -26,6 +26,11 @@ const _BLADE_ELEVATED_EXTRA_LOFT_DEG: float = 16.0   # axial twist (handedness-s
 # which moves the toe again — a little, since the heel moves far less than the
 # shaft is long. Two passes leave it within a millimetre.
 const _TOE_ICE_PASSES: int = 2
+# The drawn puck's thickness (PuckMeshBuilder), and the furthest the carry seat
+# slides the blade to meet it: a few centimetres of dressing, never a jump to a
+# puck pinned somewhere else.
+const _PUCK_HEIGHT_M: float = 0.035
+const _SEAT_MAX_SLIDE_M: float = 0.15
 const _BLADE_ELEVATION_BLEND_SPEED: float = 6.0      # blend units/sec (full swing in ~0.17 s)
 # How fast a tied blade's drawn slide (StickTieDraw) eases on and off.
 const _TIE_DRAW_EASE_M_S: float = 2.0
@@ -396,6 +401,8 @@ var body_block_height: float = 0.7
 # runs at render rate, so the node lookup is resolved once in
 # _rebuild_blade_mesh rather than per frame.
 var _blade_mesh_instance: MeshInstance3D = null
+# The params it was built from, read by the carry seat (_seat_on_puck).
+var _blade_params: StickBladeMeshBuilder.Params = null
 # Where a tied blade is drawn toward its partner's (StickTieDraw, world XZ): a
 # mesh-only slide like the address and reception slides, eased so a break lets
 # the blade back rather than popping it.
@@ -1420,10 +1427,12 @@ func _apply_blade_tilt() -> void:
 	# The reception cushion is the one full-vector slide on top of both axes:
 	# the blade gives along the caught puck's own arrival line (captured
 	# blade-local, so the give rides the wrists as the body keeps turning).
+	# All of them slide from the carry seat (_seat_on_puck), where the blade
+	# as dressed rests against the puck.
 	var factor: float = get_carry_forehand_factor()
+	var address_x: float = (_address_factor - factor) * carry_blade_offset
 	var heel: Vector3 = Vector3(
-			(_address_factor - factor) * carry_blade_offset
-					+ factor * _free_gap_blend * carry_free_gap,
+			address_x + factor * _free_gap_blend * carry_free_gap,
 			0.0,
 			(_stroke_toe_blend * carry_stroke_toe_u
 					- _catch_heel_blend * carry_catch_heel_u
@@ -1436,16 +1445,75 @@ func _apply_blade_tilt() -> void:
 	var marker_global: Transform3D = blade.global_transform if blade.is_inside_tree() \
 			else marker
 	var up: Vector3 = (marker_global.basis.inverse() * Vector3.UP).normalized()
+	heel += _seat_on_puck(Vector3(address_x, 0.0, 0.0), hand, twist, marker_global, up)
 	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
+	heel = _toe_on_ice(heel, rot, hand, twist, marker_global.origin.y, up)
+	rot = _rigid_blade_basis(hand - heel, twist)
+	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
+	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
+
+
+# Where the toe would go through the ice, the heel rises until the toe is on it:
+# the blade stands on its toe rather than bending at the joint.
+func _toe_on_ice(heel: Vector3, rot: Basis, hand: Vector3, twist: float, marker_y: float,
+		up: Vector3) -> Vector3:
 	for _i: int in _TOE_ICE_PASSES:
-		var toe_height: float = marker_global.origin.y \
-				+ (heel + rot * Vector3(0.0, 0.0, -blade_length)).dot(up)
+		var toe_height: float = marker_y + (heel + rot * Vector3(0.0, 0.0, -blade_length)).dot(up)
 		if toe_height >= 0.0:
 			break
 		heel -= up * toe_height
 		rot = _rigid_blade_basis(hand - heel, twist)
-	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
-	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
+	return heel
+
+
+# The horizontal slide (blade-marker frame) that rests the carry blade, as
+# dressed from `rest_heel`, against the puck: the part of it on the ice meets
+# the puck's rim. The pin sits half a blade out from the marker and the carry
+# offset beside it, which is where a flat, square blade touches; the shaft's
+# pitch, a toe stood on the ice and the wrist roll all move the face from
+# there, and a heel up off the ice leaves only the toe to hold the puck. Faded
+# by the side factor, so a face change slides through it. Mesh only, like
+# every slide here: the puck stays on the cursor.
+func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
+		marker_global: Transform3D, up: Vector3) -> Vector3:
+	var weight: float = absf(_address_factor)
+	if weight <= 0.0 or _blade_params == null or _slapshot_pin_active \
+			or not SkaterStateMachine.state_has_puck(current_shot_state):
+		return Vector3.ZERO
+	var p: StickBladeMeshBuilder.Params = _blade_params
+	var rot: Basis = _rigid_blade_basis(hand - rest_heel, twist)
+	var heel: Vector3 = _toe_on_ice(rest_heel, rot, hand, twist, marker_global.origin.y, up)
+	rot = _rigid_blade_basis(hand - heel, twist)
+	# The sole's rise heel→toe, and the span of it within a puck's height of the
+	# lowest point: the part of the blade the puck can lean on.
+	var sole: Vector3 = Vector3(0.0, -p.height * 0.5, 0.0)
+	var rise: float = (rot * Vector3(0.0, 0.0, -blade_length)).dot(up)
+	var lo: float = 0.0
+	var hi: float = 1.0
+	if rise < -_PUCK_HEIGHT_M:
+		lo = 1.0 + _PUCK_HEIGHT_M / rise
+	elif rise > _PUCK_HEIGHT_M:
+		hi = _PUCK_HEIGHT_M / rise
+	var edge: float = GameRules.PUCK_COLLISION_RADIUS / blade_length
+	var u: float = clampf((lo + hi) * 0.5, edge, 1.0 - edge)
+	var bend: float = p.curve_sign * p.curve_depth * pow(u, p.curve_power)
+	var seat: Vector3 = heel + rot * (sole + Vector3(bend, _PUCK_HEIGHT_M * 0.5, -u * blade_length))
+	var along: Vector3 = rot * Vector3(0.0, 0.0, -1.0)
+	along = (along - up * along.dot(up)).normalized()
+	var across: Vector3 = along.cross(up)
+	var to_puck: Vector3 = marker_global.affine_inverse() * get_carry_target_global() - seat
+	to_puck -= up * to_puck.dot(up)
+	var touching: float = GameRules.PUCK_COLLISION_RADIUS \
+			+ lerpf(p.thickness_heel, p.thickness_toe, u) * 0.5
+	var slide: Vector3 = to_puck + across * (signf(_address_factor) * touching)
+	# The blade hangs off the shaft's line from the hand, so a heel moved across
+	# swings the seat further out by the lever the seat has on it.
+	var to_seat: Vector3 = seat - heel
+	var to_hand: Vector3 = hand - heel
+	var lever: float = 1.0 + (to_seat - up * to_seat.dot(up)).length() \
+			/ maxf((to_hand - up * to_hand.dot(up)).length(), 0.05)
+	slide -= across * (slide.dot(across) * (1.0 - 1.0 / lever))
+	return slide.limit_length(_SEAT_MAX_SLIDE_M) * weight
 
 
 # The blade's orientation with its hosel laid along `to_hand` (heel → top hand,
@@ -1486,8 +1554,8 @@ func _rebuild_blade_mesh() -> void:
 	if blade_mesh == null:
 		return
 	var curve_sign: float = 1.0 if is_left_handed else -1.0
-	blade_mesh.mesh = StickBladeMeshBuilder.build(
-			blade_mesh_params(0.0, 0.0, 1.0, blade_hosel_length))
+	_blade_params = blade_mesh_params(0.0, 0.0, 1.0, blade_hosel_length)
+	blade_mesh.mesh = StickBladeMeshBuilder.build(_blade_params)
 	blade_mesh.position = Vector3.ZERO
 	_blade_mesh_instance = blade_mesh
 	_blade_mesh_curve_sign = curve_sign

@@ -543,10 +543,11 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 
 # While carrying, offset the IK target perpendicular to the shoulder→target
 # direction so the blade marker (and therefore the visible blade + stick
-# attachment) sits on the forehand or backhand side of the cursor. The puck
-# pins to Skater.get_carry_target_global() (contact − same offset), which lands
-# at the cursor — visually: cursor = puck, blade beside it. No-op when not
-# carrying.
+# attachment) sits on the forehand or backhand side of the cursor, and half a
+# blade back along it, since the solve places the marker at the heel and the
+# puck pins to mid-blade (Skater.get_carry_target_global: contact − the same
+# side offset). So the puck lands on the cursor, the blade beside it. No-op when
+# not carrying.
 func _apply_carry_offset(desired_blade_xz: Vector2) -> Vector2:
 	if not _controller.has_puck:
 		return desired_blade_xz
@@ -558,7 +559,8 @@ func _apply_carry_offset(desired_blade_xz: Vector2) -> Vector2:
 		# Skater.get_carry_target_global so subtraction inverts cleanly.
 		var face_normal_xz := Vector2(-stick_dir.y, stick_dir.x)
 		desired_blade_xz += face_normal_xz \
-				* _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
+				* _skater.get_carry_forehand_factor() * _skater.carry_blade_offset \
+				- stick_dir * (_skater.blade_length * 0.5)
 	return desired_blade_xz
 
 # The top-hand solve, in the arm's level frame (UpperBody's yaw without its pitch
