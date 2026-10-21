@@ -271,8 +271,8 @@ const _BOOT_STATIONS: Array[Vector4] = [
 # A MID gray: the holder is a paintable zone, so a near-white runner under a
 # white holder would lose the skate's bottom edge entirely. Dark enough to
 # separate from GearModelRegistry.WHITE, bright enough to read against a black
-# boot. Public so the workbench preview and the capture tool dress their runners
-# from this one constant rather than a copy.
+# boot. Public so the display figures (FigureKit) and the gear capture tool
+# dress their runners from this one constant rather than a copy.
 const BLADE_STEEL_COLOR := Color(0.62, 0.66, 0.70)
 # On-skates stance lift: the scene's part layout is tuned as STANDING height,
 # so the skate stack raises both body roots (applied in Skater._ready before
@@ -596,8 +596,8 @@ static func _build_boot_assembly() -> ArrayMesh:
 	_append_surface(m, blade, Transform3D.IDENTITY, BLADE_PART_RUNNER)
 	_append_surface(m, shared_laces())
 	# Defaults for the merged surfaces, standing in for the material_override
-	# their child nodes used to carry — so an unpainted rig (workbench preview,
-	# a spawn before the uniform pass) still shows steel and white laces rather
+	# their child nodes used to carry — so an unpainted rig (a spawn before the
+	# uniform pass) still shows steel and white laces rather
 	# than untextured white. Surface 0 is left null on purpose: _swap_instance
 	# carries the scene primitive's material onto it, exactly as before.
 	var steel := StandardMaterial3D.new()

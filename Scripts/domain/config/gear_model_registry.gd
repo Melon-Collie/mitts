@@ -52,8 +52,8 @@ extends RefCounted
 
 enum Paint { BLACK, LIGHT, TEAM, ACCENT }
 
-# Zone order within a model row — also the left-to-right order the workbench
-# draws a model's swatch strip in, outermost piece first.
+# Zone order within a model row — also the left-to-right order the player
+# screen's model rows draw a swatch strip in, outermost piece first.
 const SKATE_QUARTER: int = 0
 const SKATE_TOE: int = 1
 const SKATE_COLLAR: int = 2

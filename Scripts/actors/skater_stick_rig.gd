@@ -28,7 +28,8 @@ const _SHAFT_TIP_OVERRUN_M: float = 0.03
 # fist — a real grip holds the shaft just below the knob, not on top of it.
 # Sized so the whole knob clears the fist (~7 cm half-width at the knuckle roll)
 # with a finger's width of wrapped shaft showing between fist and knob.
-# Public: the workbench preview extends its shaft to match.
+# Public: the display mannequin and the stick capture tool extend their shafts
+# to match.
 const SHAFT_BUTT_EXTEND_M: float = 0.13
 # The knob's cap sits slightly proud of the shaft's butt end (wrapped tape).
 const _KNOB_PROUD_M: float = 0.01

@@ -25,10 +25,9 @@ extends Node3D
 # helmet scales uniformly by its own mild table rather than stretching with
 # height.
 #
-# The stick hangs at rest — no flex pulse. The workbench's spinning stick could
-# bow because nothing held it; here both fists are pinned to the shaft, and a
-# bow that leaves the hands behind reads as broken rather than as flex. The
-# FLEX row carries the fitted stiffness number instead.
+# The stick hangs at rest — no flex pulse. Both fists are pinned to the shaft,
+# and a bow that leaves the hands behind reads as broken rather than as flex.
+# The FLEX row carries the fitted stiffness number instead.
 
 # The camera framings the player screen's case dollies between, plus the wide shot nothing is
 # focused. The stick takes THREE of them because one shot cannot serve its eight
@@ -96,7 +95,8 @@ const _STICK_YAW_DEG: float = 30.0
 # stance, not a limb length.
 const _HEEL_OUT_M: float = 0.14
 const _HEEL_FWD_M: float = -0.67
-# The heel rides this far above the sole (the stick workbench's disc seat).
+# The heel point rides this far above the floor, which rests the blade —
+# tilted with the shaft's lie — with its sole just clear of it (~7 mm).
 const _HEEL_LIFT_M: float = 0.042
 # Seated, the blade rests on the bench floor this far ahead of the knees, the
 # shaft standing up between them.
