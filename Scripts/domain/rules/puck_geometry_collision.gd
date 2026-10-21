@@ -35,22 +35,8 @@ class Result:
 	var velocity: Vector3 = Vector3.ZERO
 
 
-# General 3D reflection: rebound the INTO-surface velocity component with `restitution`,
-# keep the tangential. `normal` points away from the surface (toward the puck); only an
-# approaching puck (v·n < 0) is reflected — a separating one is returned unchanged, so
-# re-testing a puck already ejected off a surface never re-reflects it. Used for the
-# crossbar (a YZ-plane bounce) and top net panel (a Y bounce), where the horizontal-only
-# deflect_velocity can't carry the vertical rebound.
-static func reflect_3d(vel: Vector3, normal: Vector3, restitution: float) -> Vector3:
-	var n: Vector3 = normal.normalized()
-	var vn: float = vel.dot(n)
-	if vn >= 0.0:
-		return vel
-	return vel - (1.0 + restitution) * vn * n
-
-
-# reflect_3d off the goal iron: restitution is the rigid-wall COR at this impact's
-# normal speed.
+# The goal iron: the into-pipe channel rebounds at the rigid-wall COR for this
+# impact's normal speed, and the slide along the pipe is kept.
 static func reflect_off_pipe(vel: Vector3, normal: Vector3) -> Vector3:
 	var n: Vector3 = normal.normalized()
 	var vn: float = vel.dot(n)

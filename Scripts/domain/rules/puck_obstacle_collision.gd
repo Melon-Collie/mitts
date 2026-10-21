@@ -20,6 +20,9 @@ class_name PuckObstacleCollision
 # practice barrier, not iron — a flat shot into it should drop and sit shootable
 # rather than rocket back at the shooter.
 const BOARD_RESTITUTION: float = 0.35
+# Coulomb coefficient of the puck's rubber on the board's vinyl cover: a puck
+# cutting across the board loses its slide along it instead of skating the face.
+const BOARD_FRICTION: float = 0.5
 
 
 # One oriented box. `transform` is the world transform of the box CENTRE (matching
@@ -29,6 +32,7 @@ class Obstacle:
 	var transform: Transform3D = Transform3D.IDENTITY
 	var half_extents: Vector3 = Vector3.ZERO
 	var restitution: float = BOARD_RESTITUTION
+	var friction: float = BOARD_FRICTION
 
 
 class Result:
@@ -58,6 +62,7 @@ static func resolve(prev: Vector3, pos: Vector3, vel: Vector3, puck_radius: floa
 	var best_normal: Vector3 = Vector3.ZERO
 	var best_depth: float = 0.0
 	var best_restitution: float = BOARD_RESTITUTION
+	var best_friction: float = BOARD_FRICTION
 	for obstacle: Obstacle in obstacles:
 		if obstacle == null:
 			continue
@@ -71,9 +76,10 @@ static func resolve(prev: Vector3, pos: Vector3, vel: Vector3, puck_radius: floa
 		best_normal = scratch.normal
 		best_depth = scratch.depth
 		best_restitution = obstacle.restitution
+		best_friction = obstacle.friction
 	if best_toi == INF:
 		return false
-	# A separating puck is left alone — the same guard reflect_3d applies. Without
+	# A separating puck is left alone — the same guard the reflection applies. Without
 	# it, a puck resting against the board re-reflects every sub-step and buzzes
 	# along the face instead of sitting still.
 	if vel.dot(best_normal) >= 0.0:
@@ -88,5 +94,6 @@ static func resolve(prev: Vector3, pos: Vector3, vel: Vector3, puck_radius: floa
 	# face — adding a further puck_radius would double-count.
 	result.hit = true
 	result.position = best_point + best_normal * best_depth
-	result.velocity = PuckGeometryCollision.reflect_3d(vel, best_normal, best_restitution)
+	result.velocity = PuckCollisionRules.reflect_with_friction(
+			vel, best_normal, best_restitution, best_friction)
 	return true

@@ -76,14 +76,24 @@ func test_the_rebound_loses_speed() -> void:
 			"the normal component should scale by BOARD_RESTITUTION")
 
 
-func test_an_angled_shot_keeps_its_tangential_travel() -> void:
-	# Reflection, not absorption: a puck cutting across the board carries its
-	# along-the-face motion through the bounce.
+func test_an_angled_shot_loses_its_slide_along_the_board() -> void:
+	# The board grips: a hard hit at an angle sheds BOARD_FRICTION × the normal
+	# impulse off its along-the-face travel, here all of it.
 	var vel := Vector3(12.0, 0.0, 30.0)
 	assert_true(PuckObstacleCollision.resolve(Vector3(-0.4, RADIUS, -1.0),
 			Vector3(0.0, RADIUS, 0.2), vel, RADIUS, _board(), _scratch, _result))
-	assert_almost_eq(_result.velocity.x, 12.0, 0.001, "tangential x should survive the bounce")
+	assert_almost_eq(_result.velocity.x, 0.0, 0.001, "the slide along the face is gone")
 	assert_lt(_result.velocity.z, 0.0, "normal z should reverse")
+
+
+func test_a_glancing_puck_keeps_most_of_its_travel() -> void:
+	# Brushing the board: a small normal impulse, so little of the slide is lost.
+	var vel := Vector3(20.0, 0.0, 2.0)
+	assert_true(PuckObstacleCollision.resolve(Vector3(-0.4, RADIUS, -0.3),
+			Vector3(-0.2, RADIUS, -0.1), vel, RADIUS, _board(), _scratch, _result))
+	var expected: float = 20.0 - PuckObstacleCollision.BOARD_FRICTION \
+			* (1.0 + PuckObstacleCollision.BOARD_RESTITUTION) * 2.0
+	assert_almost_eq(_result.velocity.x, expected, 0.001, "Coulomb drop off the slide")
 
 
 func test_a_yawed_board_deflects_across_its_face() -> void:
