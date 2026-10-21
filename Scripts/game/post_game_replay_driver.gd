@@ -42,6 +42,9 @@ signal clip_started(clip: Dictionary)
 # Fired at the end of every stop(): natural playlist completion (loop = false),
 # skip-vote unanimity, and external teardown all funnel here.
 signal reel_stopped
+# Same contract as GoalReplayDriver.replay_frame_changed: once per recorded
+# frame stepped onto, so the arena board shows the clip's clock and score.
+signal replay_frame_changed(game_state: Dictionary, carrier_team: int)
 
 var _codec: WorldStateCodec = null
 var _registry: PlayerRegistry = null
@@ -61,6 +64,7 @@ var _gap_elapsed: float = -1.0  # >= 0 while holding the final frame between cli
 
 # Which recorded frames bracket the virtual clock, decoded once per bracket.
 var _cursor := ReplayFrameCursor.new()
+var _last_fed_snap: Dictionary = {}
 
 var _cam: SpectatorCamera = null
 var _sim_hold := ReplayLiveSimHold.new()
@@ -132,6 +136,7 @@ func stop() -> void:
 	_frames = []
 	_timestamps = []
 	_cursor.reset()
+	_last_fed_snap = {}
 	_gap_elapsed = -1.0
 	reel_stopped.emit()
 
@@ -201,3 +206,10 @@ func _pose(sim_delta: float) -> void:
 	ReplayPlaybackEngine.apply_interpolated_snapshot(
 			_cursor.from_snap(), _cursor.to_snap(), _cursor.alpha(), _cursor.bracket_dt(),
 			sim_delta, _registry.all(), _puck, _goalie_controllers)
+	var snap: Dictionary = _cursor.to_snap()
+	if not is_same(snap, _last_fed_snap):
+		_last_fed_snap = snap
+		var gs: Variant = snap.get("game_state")
+		if gs is Dictionary:
+			replay_frame_changed.emit(gs,
+					_registry.resolve_team_id_for_peer(int(snap.get("carrier_peer_id", -1))))
