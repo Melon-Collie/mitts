@@ -54,13 +54,12 @@ const PICKUP_MAX_REL_SPEED: float = 8.0
 const DEFLECT_MIN_REL_SPEED: float = 22.0
 const RECEIVE_ALIGNMENT_BONUS: float = 8.0
 # Past its bobble line (PuckReceptionRules.bobble_load_at, at Puck's defaults) a
-# catch bobbles: the puck leaves the face at the exit speed in the receiver's
-# frame, and he waits out the full settle before regathering. The blade runs
-# body→blade (no hands); test_bot_mirrors.gd holds these to Puck.
+# catch bobbles: the puck leaves the face on PuckCollisionRules.bobble_velocity
+# at AIPuckLane's mirror of Puck's exit, in the receiver's frame (flat — the hop
+# is not modeled), and he waits out the full settle before regathering. The
+# blade runs body→blade (no hands); test_bot_mirrors.gd holds these to Puck.
 const BOBBLE_LOAD: float = 0.67
 const BOBBLE_EDGE_SHARE: float = 0.4
-const BOBBLE_EXIT_MIN_M_S: float = 0.6
-const BOBBLE_EXIT_MAX_M_S: float = 2.0
 const BOBBLE_GRACE_TICKS: int = 48   # Puck.settle_max_s 0.40 s at 120 Hz
 # A releaser can't re-catch its own release while the puck departs its blade
 # (production has a post-shot pickup cooldown on the controller).
@@ -503,9 +502,11 @@ func step() -> void:
 								GameRules.DEFAULT_BLADE_LENGTH_M * 0.5),
 						BOBBLE_LOAD, BOBBLE_EDGE_SHARE)
 				if catch_load >= bobble_at:
-					puck_vel = Vector3(s.vel.x, 0.0, s.vel.z) + face \
-							* PuckReceptionRules.bobble_exit_speed(catch_load, bobble_at,
-									BOBBLE_EXIT_MIN_M_S, BOBBLE_EXIT_MAX_M_S)
+					puck_vel = Vector3(s.vel.x, 0.0, s.vel.z) + PuckCollisionRules.bobble_velocity(
+							rel, face, AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
+							AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN,
+							AIFeedReception.DEFLECT_SPEED_REF_M_S, AIFeedReception.BOBBLE_TANGENTIAL_RETAIN,
+							AIFeedReception.BOBBLE_PACE_RETAIN)
 					_release_grace[s.peer_id] = ticks + BOBBLE_GRACE_TICKS
 					bobbles += 1
 					break

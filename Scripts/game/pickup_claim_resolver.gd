@@ -382,7 +382,7 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 			blade_curr, top_hand)
 	if catch_load >= bobble_at:
 		NetworkTelemetry.record_pickup_claim_deflect()
-		pc.apply_lag_comp_bobble(record.skater, catch_load, bobble_at)
+		pc.apply_lag_comp_bobble(record.skater)
 		NetworkManager.send_pickup_claim_nack(peer_id)
 		return
 	if _pending_peer_id != -1:

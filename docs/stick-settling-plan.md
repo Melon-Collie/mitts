@@ -296,11 +296,13 @@ path within ~11.5° of the blade's own line comes in end-on, at the edge. The
 contact point at pickup is useless for this: the sweep registers at the rim of
 the 0.5 m pickup radius, twice the blade's length across.
 
-The face takes the impact as a deflect does, in the receiver's frame, and the
-puck leaves at `bobble_exit_min`..`max` (0.6–2.0 m/s) relative to him, flat,
-so it dies by his stick. He is locked out of it for `settle_max_s`; anyone else
+The face takes the impact as a deflect does, in the receiver's frame, but the
+cupped face keeps only `bobble_tangential_retain` (0.35) of the glance and the
+hands let `bobble_pace_retain` (0.45) of the result through
+(`PuckCollisionRules.bobble_velocity`): ~2.5 m/s relative to him, mostly off
+the face's normal, hopping by its into-face speed (`bobble_lift_*`). He is locked out of it for `settle_max_s`; anyone else
 can take it. All three host verdict paths run it. Bots price it as the
-receiver's expected hold (`AIPuckLane.reception_hold_s`: the settle by the odds
+receiver's expected hold (`AIFeedReception.reception_hold_s`: the settle by the odds
 of a catch, the lockout by the odds of a bobble, from the measured split of
 middle and edge contacts) in the reception read and the time discount, and the
 duel harness mirrors it.
