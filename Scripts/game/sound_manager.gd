@@ -86,9 +86,7 @@ const _SOUND_PATHS: Dictionary = {
 	Sound.SKATE_DIG:        "res://Sounds/skate_dig_%02d.wav",
 	Sound.SKATE_TOUCH:      "res://Sounds/skate_touch_%02d.wav",
 	Sound.STICK_RELEASE:    "res://Sounds/stick_release.wav",
-	# A placeholder on the dig's takes, pitched up (_BASE_PITCH), until its own
-	# recording lands.
-	Sound.STICK_DRAG:       "res://Sounds/skate_dig_%02d.wav",
+	Sound.STICK_DRAG:       "res://Sounds/stick_drag.wav",
 }
 
 # Cues recorded as several takes: the path above is a pattern numbered from 1,
@@ -99,7 +97,6 @@ const _TAKE_COUNTS: Dictionary = {
 	Sound.SKATE_PUSH: 6,
 	Sound.SKATE_DIG: 4,
 	Sound.SKATE_TOUCH: 4,
-	Sound.STICK_DRAG: 4,
 }
 
 # Every file above is mastered to one reference loudness
@@ -159,14 +156,13 @@ const _UNDER_REFERENCE_DB: Dictionary = {
 	Sound.SKATE_DIG:       3.8,
 	Sound.SKATE_TOUCH:    12.8,
 	Sound.STICK_RELEASE:   9.9,
-	Sound.STICK_DRAG:      3.8,
+	Sound.STICK_DRAG:      4.4,
 }
 
 # A cue reusing another's recording, pitched to read as a different target:
 # a body is a softer, heavier stop than a goalie pad.
 const _BASE_PITCH: Dictionary = {
 	Sound.PUCK_BODY_BLOCK: 0.85,
-	Sound.STICK_DRAG: 1.4,
 }
 
 const _UI_POOL_SIZE: int = 4
