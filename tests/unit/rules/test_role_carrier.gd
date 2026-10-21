@@ -369,6 +369,37 @@ func test_close_pass_fires_at_the_pace_it_was_priced_at() -> void:
 			"fires at the friction-compensated pace it was priced at")
 
 
+const _FEED_PASSER := Vector3(-4, 0, 6)
+const _FEED_RECEIVER := Vector3(-4, 0, -6)     # 12 m up-ice
+
+
+# The bobble odds of the feed the search picked, at the pace it fires.
+func _picked_feed_bobble_prob(defender: Vector3) -> float:
+	var ctx: RoleContext = _make_ctx(_FEED_PASSER, [
+			[1, TEAM_ID, _FEED_PASSER],
+			[2, TEAM_ID, _FEED_RECEIVER],
+			[11, 1, defender]])
+	var c: AIRoleCarrier = _decided(ctx)
+	assert_eq(c._pass.best_peer, 2, "the feed is still worth pricing")
+	var speed: float = AIPuckLane.pass_launch_speed(_FEED_PASSER.distance_to(_FEED_RECEIVER),
+			GameRules.DEFAULT_WRISTER_POWER_MAX_M_S, ctx.pass_speed_scale * c._pass.best_pace_frac)
+	return AIFeedReception.receiver_bobble_prob(
+			AIFeedReception.arrival_closing_speed(_FEED_PASSER, _FEED_RECEIVER, speed, Vector3.ZERO))
+
+
+# A bobble is a loose puck its receiver must win back after his lockout
+# (AIFeedReception.bobble_regather_s), so a defender who can race him to it makes
+# the feed go at a pace he catches.
+func test_a_defender_off_the_receiver_softens_a_feed_off_full_pace() -> void:
+	assert_lt(_picked_feed_bobble_prob(Vector3(-7, 0, -9)), 1.0,
+			"full pace bobbles every time, into a defender's reach")
+
+
+func test_a_defender_behind_the_receiver_softens_a_feed_to_a_sure_catch() -> void:
+	assert_eq(_picked_feed_bobble_prob(Vector3(-4, 0, -13)), 0.0,
+			"a man 7 m behind still wins the race to a bobble")
+
+
 # ─── keeping or moving the puck under pressure ──────────────────────────────
 # What the carrier picks at these is calibration: the snapshot's rows.
 
@@ -2622,8 +2653,8 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 # ─── pass pace: a hard feed leaves the receiver settling ─────────────────────
 
 # The same open feed, short and long. Short, the softer pace's flight costs less
-# than the full pace's settle, so it goes soft; long, a softer pace would outrun
-# the lead horizon and is not priced, so it goes at full pace.
+# than the full pace's settle, so it goes soft; long (~28 m), a softer pace would
+# outrun the lead horizon and is not priced, so it goes at full pace.
 func _feed_ctx(mate: Vector3) -> RoleContext:
 	return _make_ctx(Vector3(0, 0, 10), [
 			[1, TEAM_ID, Vector3(0, 0, 10)],
@@ -2638,6 +2669,6 @@ func test_a_short_feed_goes_soft() -> void:
 
 
 func test_a_long_feed_goes_at_full_pace() -> void:
-	var c := _decided(_feed_ctx(Vector3(14, 0, 2)))
+	var c := _decided(_feed_ctx(Vector3(10, 0, -16)))
 	assert_eq(c._pass.best_peer, 2, "the feed is priced")
 	assert_eq(c._pass.best_pace_frac, 1.0)

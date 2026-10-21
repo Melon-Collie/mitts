@@ -1,8 +1,8 @@
 class_name GearModelRegistry
 extends RefCounted
 
-# The catalogue of skate and glove MODELS — the equipment a player picks in the
-# locker — plus the helmet FACE options (visor / cage / fishbowl) and the
+# The catalogue of skate and glove MODELS — the equipment a player picks on the
+# player screen — plus the helmet FACE options (visor / cage / fishbowl) and the
 # jersey TUCK options (see their own sections below). A model is not a color pick: it is a fixed design
 # that paints every zone of the piece at once, the way buying a real pair
 # decides the boot, the ankle cuff and the accent band together.
@@ -52,8 +52,8 @@ extends RefCounted
 
 enum Paint { BLACK, LIGHT, TEAM, ACCENT }
 
-# Zone order within a model row — also the left-to-right order the workbench
-# draws a model's swatch strip in, outermost piece first.
+# Zone order within a model row — also the left-to-right order the player
+# screen's model rows draw a swatch strip in, outermost piece first.
 const SKATE_QUARTER: int = 0
 const SKATE_TOE: int = 1
 const SKATE_COLLAR: int = 2

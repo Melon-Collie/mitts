@@ -189,9 +189,13 @@ blocker's board and hand — each group never moves relative to itself AND alrea
 shared one material, so each collapsed to one node, one mesh and one draw call.
 All four `goalie_capture.gd` angles came back with zero changed pixels.
 
-The only route to a goalie skeleton is making its collision analytic the way
-skater-vs-skater already is. That is a gameplay change with its own risk, and a
-separate piece of work.
+The only route to a goalie skeleton that replaces the nodes is making its
+collision analytic the way skater-vs-skater already is. That is a gameplay change
+with its own risk, and a separate piece of work.
+
+A skeleton that ADDS to the nodes was later built for a different cost: draw
+calls, not node writes. `GoalieBodyRig` keeps every part node and copies their
+transforms into one skinned mesh per frame (`docs/body-draw-calls-plan.md`).
 
 ## What it cost, measured after the fact
 

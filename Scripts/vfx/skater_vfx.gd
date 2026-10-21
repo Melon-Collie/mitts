@@ -313,6 +313,7 @@ func _blade_trail_visibility_aabb() -> AABB:
 
 func _make_blade_trail_emitter(index: int) -> GPUParticles3D:
 	var e := GPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = "BladeTrailEmitter%d" % index
 	e.amount = 1
 	e.lifetime = 3600.0
@@ -349,6 +350,7 @@ void process() {
 
 func _make_blade_trail_sub_emitter(sub_name: String) -> GPUParticles3D:
 	var e := GPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = sub_name
 	e.amount = BLADE_TRAIL_AMOUNT
 	e.lifetime = BLADE_TRAIL_LIFETIME
@@ -426,6 +428,7 @@ func _emit_accel_spray(skater: Skater, flat_vel: Vector3,
 
 func _make_accel_spray_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.amount = 45
 	e.lifetime = 0.28
@@ -446,6 +449,7 @@ func _make_accel_spray_emitter() -> CPUParticles3D:
 
 func _make_stop_spray_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.amount = 150
 	e.lifetime = 0.35
@@ -465,6 +469,7 @@ func _make_stop_spray_emitter() -> CPUParticles3D:
 
 func _make_speed_lines_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.amount = 8
 	e.lifetime = 0.12
@@ -484,6 +489,7 @@ func _make_speed_lines_emitter() -> CPUParticles3D:
 
 func _make_body_check_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.amount = 20
 	e.lifetime = 0.4

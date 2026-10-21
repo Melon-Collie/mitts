@@ -116,6 +116,12 @@ func test_goalie_tick_costs() -> void:
 		_ctrl._view.invalidate()
 		_ctrl._update_state(delta))
 
+	# Render rate, not the tick: what drawing the parts as one skinned mesh
+	# (GoalieBodyRig) costs the main thread per goalie per frame — the price of
+	# its draw-call saving.
+	var rig: GoalieBodyRig = _goalie.get_node("BodyRig") as GoalieBodyRig
+	_bench("body rig pose (per FRAME)", func() -> void: rig.update())
+
 	assert_true(_results.size() > 0, "goalie benchmark produced results")
 
 

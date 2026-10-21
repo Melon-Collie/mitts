@@ -60,9 +60,10 @@ var _clock_str: String = "0:00"
 var _period_str: String = "1ST"
 var _goal_scorer: String = ""
 var _goal_color: Color = Color.WHITE
-# While a goal replay plays, the board shows the recorded game state — the
-# clock, score and page it showed at that instant of the play — over the live
-# one, which keeps updating underneath and comes back when the replay ends.
+# While a goal airs again — its cinematic, or a highlight reel after it — the
+# board shows the recorded game state (the clock, score and page it showed at
+# that instant of the play) over the live one, which keeps updating underneath
+# and comes back when the replay ends.
 var _replaying: bool = false
 var _replay_phase: int = GamePhase.Phase.PLAYING
 var _replay_score_home: int = 0
@@ -112,10 +113,12 @@ func _ready() -> void:
 		gm.goal_scored.connect(_on_goal_scored)
 	if gm.has_signal("phase_changed"):
 		gm.phase_changed.connect(_on_phase_changed)
-	if gm.has_signal("goal_replay_frame_changed"):
-		gm.goal_replay_frame_changed.connect(_on_goal_replay_frame)
-	if gm.has_signal("replay_stopped"):
-		gm.replay_stopped.connect(_on_goal_replay_stopped)
+	for frame_sig: String in ["goal_replay_frame_changed", "highlight_frame_changed"]:
+		if gm.has_signal(frame_sig):
+			gm.connect(frame_sig, _on_replay_frame)
+	for stop_sig: String in ["replay_stopped", "highlight_stopped"]:
+		if gm.has_signal(stop_sig):
+			gm.connect(stop_sig, _on_replay_stopped)
 
 
 # Release the screen SubViewport and its ViewportTexture bindings explicitly,
@@ -271,9 +274,9 @@ func _on_phase_changed(new_phase: GamePhase.Phase) -> void:
 	_refresh()
 
 
-# Fed once per recorded frame the goal replay steps onto; change-detected so it
+# Fed once per recorded frame a replay steps onto; change-detected so it
 # redraws once per displayed second like the live clock.
-func _on_goal_replay_frame(gs: Dictionary, _carrier_team: int) -> void:
+func _on_replay_frame(gs: Dictionary, _carrier_team: int) -> void:
 	var phase: int = int(gs.get("phase", _phase))
 	var score0: int = int(gs.get("score0", _score_home))
 	var score1: int = int(gs.get("score1", _score_away))
@@ -292,7 +295,7 @@ func _on_goal_replay_frame(gs: Dictionary, _carrier_team: int) -> void:
 	_refresh()
 
 
-func _on_goal_replay_stopped() -> void:
+func _on_replay_stopped() -> void:
 	if not _replaying:
 		return
 	_replaying = false

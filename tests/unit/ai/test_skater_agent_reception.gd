@@ -1,8 +1,8 @@
 extends GutTest
 
 # SkaterAgentReception's reads against fabricated WorldSnapshots: which fast
-# loose puck is a pass to this bot, where its blade parks for one, and the wall
-# kill. The stance itself (read_pass driving the steering) is held through the
+# loose puck is a pass to this bot, where its blade parks for one, the wall
+# kill, and when it gives with the feed. The stance itself (read_pass driving the steering) is held through the
 # state machine in test_skater_agent_state_machine.gd.
 
 # peer 1 = self (team 0), peer 2 = teammate (team 0), peers 11/12 = team 1.
@@ -224,3 +224,14 @@ func test_board_normal_points_into_the_rink() -> void:
 			Vector2(GameRules.INNER_HALF_WIDTH - 0.4, 3.0))
 	assert_almost_eq(board.y, 0.4, 0.01, "gap to the wall")
 	assert_almost_eq(board.x, -1.0, 0.01, "normal points back toward centre ice")
+
+
+# ── Give with the puck ───────────────────────────────────────────────────────
+
+func test_a_receiver_gives_when_his_own_skating_would_bobble_the_feed() -> void:
+	assert_true(SkaterAgentReception.gives_with(Vector3(16, 0, 0), Vector3(-3, 0, 0)),
+			"16 m/s met at 19: stopping brings it back under the bobble line")
+	assert_false(SkaterAgentReception.gives_with(Vector3(16, 0, 0), Vector3.ZERO),
+			"standing, it arrives under the line")
+	assert_false(SkaterAgentReception.gives_with(Vector3(20, 0, 0), Vector3(0, 0, -6)),
+			"a feed past the line on its own bobbles however he skates: in stride")

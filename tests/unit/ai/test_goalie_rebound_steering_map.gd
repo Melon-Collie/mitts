@@ -82,7 +82,7 @@ func test_report_where_each_surface_aims() -> void:
 				# Bearing of the rebound for a puck arriving straight down -Z.
 				var inc := Vector3(0.0, 0.0, -25.0)
 				var out: Vector3 = PuckCollisionRules.deflect_velocity_3d(
-						inc, best, 0.55, 0.8)
+						inc, best, 0.55, 0.5)
 				gut.p("   %-22s n=(%5.2f,%5.2f,%5.2f) -> bearing %+6.1f deg, %+5.1f up"
 						% [cs.name, best.x, best.y, best.z,
 						rad_to_deg(atan2(out.x, out.z)), rad_to_deg(asin(

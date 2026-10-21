@@ -145,8 +145,9 @@ prices is the path the cursor walks.
 squareness plus the puck's speed *in the receiver's frame*, so squaring on the
 line is what collects it and stopping is a wait rather than a technique. Bots
 receive in stride by default and brake only when arriving early enough to carry
-the blade past the meet, or when their own closing speed would stack over the
-catch ceiling.
+the blade past the meet, or when their own skating is what carries a feed past
+the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
+its own bobbles however they skate.
 
 Against the boards the read inverts: the blade goes ON the glass and the body
 stands rink-side, because a blade out on the puck's line leaves exactly the gap a

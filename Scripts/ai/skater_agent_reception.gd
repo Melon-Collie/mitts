@@ -36,11 +36,12 @@ const RECEIVE_PATH_STEPS: int = 20
 # A reception gate within this of the boards is played as a wall kill (blade on
 # the glass, body rink-side); outside it the ordinary side-stand runs.
 const WALL_KILL_BAND_M: float = 1.0
-# "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed: above
-# it the receiver brakes to shed its own closing. Between
-# AIPuckLane.PASS_TARGET_CLOSING_M_S (every clean bot feed arrives at it) and
-# Puck.deflect_min_speed (test_bot_mirrors.gd), so only hot arrivals trip it.
-const RECEIVE_GIVE_CEILING_M_S: float = 21.5
+# "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed
+# (gives_with). It is the bobble line at the blade's middle on a poorly angled
+# blade (AIFeedReception.BOBBLE_LOAD of the any-angle ceiling's load,
+# test_bot_mirrors.gd), so a receiver never skates a feed the passer priced as a
+# catch into one that bobbles.
+const RECEIVE_GIVE_CEILING_M_S: float = 18.0
 
 # ── Shot-aware reception (read_shot) ─────────────────────────────────────────
 # When a pass is incoming and a shot from the reception area is on, the bot
@@ -197,12 +198,21 @@ func read_pass(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	pass_overruns = Vector2(drift.x - perp_foot.x, drift.z - perp_foot.z) \
 			.length() > gate_reach(blade_reach)
 	pass_body_anchor = body_anchor
-	# GIVE WITH THE PUCK (RECEIVE_GIVE_CEILING_M_S).
-	pass_give = Vector2(puck_vel.x - self_vel.x, puck_vel.z - self_vel.z) \
-			.length_squared() > RECEIVE_GIVE_CEILING_M_S * RECEIVE_GIVE_CEILING_M_S
+	pass_give = gives_with(puck_vel, self_vel)
 	# PARK the blade at the gate, held in the body's frame (see blade_gate).
 	pass_blade_aim = self_pos + blade_offset
 	return true
+
+
+# GIVE WITH THE PUCK: brake when our own skating is what carries the feed past
+# RECEIVE_GIVE_CEILING_M_S — stopping would bring it back under. A feed already
+# past it on its own bobbles however we skate, so it is taken in stride.
+static func gives_with(puck_vel: Vector3, self_vel: Vector3) -> bool:
+	var ceiling_sq: float = RECEIVE_GIVE_CEILING_M_S * RECEIVE_GIVE_CEILING_M_S
+	var rel_x: float = puck_vel.x - self_vel.x
+	var rel_z: float = puck_vel.z - self_vel.z
+	return rel_x * rel_x + rel_z * rel_z > ceiling_sq \
+			and puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z <= ceiling_sq
 
 
 # The GATE: where the blade waits for an incoming loose puck — the earliest point

@@ -27,17 +27,8 @@ TUTORIAL_CONTINUE_CTA,Continue → %s: %s,Continuar → %s: %s
 DRILL_PENALTY_SHOTS,Penalty Shots,Penaltis
 DRILL_SHOT_ACCURACY,Shot Accuracy,Precisión de Tiro
 DRILL_PASSING,Passing,Pases
-LOCKER_EDIT_BUTTON,Locker,Vestuario
-LOCKER_TITLE,Locker,Vestuario
-LOCKER_SEC_STICK,STICK,PALO
-LOCKER_SEC_SKATES,SKATES,PATINES
-LOCKER_SEC_GLOVES,GLOVES,GUANTES
-LOCKER_SEC_HELMET,HELMET,CASCO
-LOCKER_SEC_JERSEY,JERSEY,CAMISETA
-LOCKER_CASE_HINT_MOUSE,Drag to turn · up and down to zoom,Arrastra para girar · arriba y abajo para acercar
-LOCKER_CASE_HINT_PAD,Right Stick to turn · up and down to zoom,Stick derecho para girar · arriba y abajo para acercar
-LOCKER_LOCKED_NOTE,Stick gear and blade profile are locked during online play — looks can still change.,El equipo del palo y el perfil de la cuchilla están bloqueados en partidas en línea — el aspecto aún puede cambiar.
-EDITOR_DONE,Done,Hecho
+PLAYER_CASE_HINT_MOUSE,Drag to turn · up and down to zoom,Arrastra para girar · arriba y abajo para acercar
+PLAYER_CASE_HINT_PAD,Right Stick to turn · up and down to zoom,Stick derecho para girar · arriba y abajo para acercar
 EDITOR_CANCEL,Cancel,Cancelar
 STICK_GEAR_LENGTH,Length,Largo
 STICK_GEAR_CURVE,Curve,Curva
@@ -86,8 +77,8 @@ STICK_MODEL_SPLIT,Split,Dividido
 STICK_MODEL_WHITEOUT,Whiteout,Todo blanco
 STICK_MODEL_WOODIE,Woodie,Madera
 EDIT_PENDING_NOTE,Unapplied changes,Cambios sin aplicar
-PLAYER_SKIN_LABEL,Skin:,Piel:
-PLAYER_POSITION_LABEL,Position:,Posición:
+PLAYER_SKIN_LABEL,Skin,Piel
+PLAYER_POSITION_LABEL,Position,Posición
 POSITION_LW,Left Wing,Ala izquierda
 POSITION_C,Center,Centro
 POSITION_RW,Right Wing,Ala derecha
@@ -107,7 +98,6 @@ GEAR_MODEL_PRO,Pro,Pro
 GEAR_MODEL_CONTRAST,Contrast,Contraste
 GEAR_MODEL_VINTAGE,Vintage,Clásico
 GEAR_MODEL_TRICOLOR,Tri-Color,Tricolor
-GEAR_FACE_LABEL,Face,Careta
 GEAR_FACE_NONE,None,Ninguna
 GEAR_FACE_VISOR,Visor,Visera
 GEAR_FACE_CAGE,Cage,Rejilla
@@ -117,9 +107,9 @@ GEAR_TUCK_NONE,Untucked,Por fuera
 GEAR_TUCK_LEFT,Left corner,Esquina izquierda
 GEAR_TUCK_RIGHT,Right corner,Esquina derecha
 GEAR_TUCK_FULL,Full tuck,Por dentro
-PLAYER_HAIR_LABEL,Hair:,Pelo:
-PLAYER_BEARD_LABEL,Beard:,Barba:
-PLAYER_HAIR_COLOR_LABEL,Color:,Color:
+PLAYER_HAIR_LABEL,Hair,Pelo
+PLAYER_BEARD_LABEL,Beard,Barba
+PLAYER_HAIR_COLOR_LABEL,Hair color,Color de pelo
 HAIR_STYLE_SHORT,Short,Corto
 HAIR_STYLE_MEDIUM,Medium,Medio
 HAIR_STYLE_LONG,Long,Largo
@@ -137,6 +127,70 @@ HAIR_COLOR_BLONDE,Blonde,Rubio
 HAIR_COLOR_RED,Red,Pelirrojo
 HAIR_COLOR_GREY,Grey,Canoso
 HAIR_COLOR_WHITE,White,Blanco
+PLAYER_TITLE,Player,Jugador
+PLAYER_REGION_YOU,YOU,TÚ
+PLAYER_REGION_BODY,BODY,CUERPO
+PLAYER_REGION_HEAD,HEAD,CABEZA
+PLAYER_REGION_STICK,STICK,PALO
+PLAYER_REGION_SKATES,SKATES,PATINES
+PLAYER_NAME_LABEL,Name,Nombre
+PLAYER_NAME_PLACEHOLDER,Player,Jugador
+PLAYER_NAME_ALNUM,Letters and numbers only,Solo letras y números
+PLAYER_NAME_NOT_ALLOWED,Name not allowed,Nombre no permitido
+PLAYER_NUMBER_LABEL,Number,Número
+PLAYER_NUMBER_DIGITS,Numbers only,Solo números
+PLAYER_SHOOTS_LABEL,Shoots,Tira
+PLAYER_SHOOTS_LEFT,Left,Zurdo
+PLAYER_SHOOTS_RIGHT,Right,Diestro
+PLAYER_POSITION_HINT,Where a lobby seats you. In 3v3 LW and LD take the left side — RW and RD the right.,Dónde te sienta el lobby. En 3v3 AI y DI van a la izquierda — AD y DD a la derecha.
+PLAYER_TEAM_LABEL,Team,Equipo
+PLAYER_HEIGHT_LABEL,Height,Altura
+PLAYER_HEIGHT_HINT,Smaller: quicker first step and turns — bigger: more reach and a harder shot,Más bajo: primer paso y giros más rápidos — más alto: más alcance y un tiro más fuerte
+PLAYER_WEIGHT_LABEL,Weight,Peso
+PLAYER_WEIGHT_VALUE,%d lbs,%d lb
+PLAYER_WEIGHT_HINT,%s · %d–%d lbs at this height,%s · %d–%d lb a esta altura
+FRAME_LEAN,Lean frame,Complexión delgada
+FRAME_LIGHT,Light frame,Complexión ligera
+FRAME_MEDIUM,Medium frame,Complexión media
+FRAME_SOLID,Solid frame,Complexión sólida
+FRAME_HEAVY,Heavy frame,Complexión pesada
+PLAYER_GLOVES_LABEL,Gloves,Guantes
+PLAYER_HELMET_LABEL,Helmet,Casco
+PLAYER_APPLY,Apply,Aplicar
+HINT_PROFILE_SHIFTY,Tight edges · quick first step · grippy stance — lower top speed,Cantos cerrados · primer paso rápido · postura firme — menos velocidad punta
+HINT_PROFILE_STABILITY,Strongest skating backward for gap control — weaker crossovers,El mejor patinaje hacia atrás para cerrar espacios — cruces más débiles
+HINT_PROFILE_POWER,Top speed · glide · crossovers skating wide — wider turns and weaker backward,Velocidad punta · deslizamiento · cruces abiertos — giros más amplios y peor hacia atrás
+HINT_LENGTH_SHORT,Snappier blade and the finest close control — less reach,Pala más ágil y el mejor control corto — menos alcance
+HINT_LENGTH_STANDARD,Cut to your height,Cortado a tu altura
+HINT_LENGTH_LONG,More reach and sweep — slower to cut back,Más alcance y barrido — más lento al recortar
+HINT_CURVE_M88,Best backhand and slapshots · catches the hardest passes — flattest lift,El mejor revés y tiro de golpe · recibe los pases más fuertes — la elevación más plana
+HINT_CURVE_M92,The all-rounder with no weakness,La polivalente sin puntos débiles
+HINT_CURVE_M28,Easiest lift in tight — weakest backhand and slapshots · hard passes bounce off,La elevación más fácil en corto — el revés y el tiro de golpe más débiles · los pases fuertes rebotan
+HINT_FLEX_WHIPPY,Fastest release · more wrist shot without a full load — softer slapshot,Salida más rápida · más tiro de muñeca sin carga completa — tiro de golpe más suave
+HINT_FLEX_MEDIUM,Balanced between the two,Equilibrado entre ambos
+HINT_FLEX_STIFF,Biggest slapshot — slower to load,El tiro de golpe más fuerte — más lento al cargar
+STAT_PANEL_TITLE,VS. THE NEUTRAL BUILD,FRENTE AL FÍSICO NEUTRO
+STAT_GROUP_SKATING,SKATING,PATINAJE
+STAT_GROUP_BODY,BODY,CUERPO
+STAT_GROUP_SHOT,SHOT,TIRO
+STAT_TOP_SPEED,Top speed,Velocidad punta
+STAT_FIRST_STEP,First step,Primer paso
+STAT_AGILITY,Turns & stops,Giros y frenadas
+STAT_CROSSOVER,Crossovers,Cruces
+STAT_BACKWARD,Backward,Hacia atrás
+STAT_COAST,Coast,Inercia
+STAT_MASS,Weight in contact,Peso en el choque
+STAT_REACH,Stick reach,Alcance del palo
+STAT_WRIST_SHOT,Wrist shot,Tiro de muñeca
+STAT_SLAPSHOT,Slapshot,Tiro de golpe
+STAT_SLAPPER_RELEASE,Slapshot release,Rapidez del tiro de golpe
+STAT_BACKHAND,Backhand,Revés
+STAT_PASS_CATCH,Hard-pass catch,Recepción de pases fuertes
+STAT_NOTE_YOU,Your whole build at a glance.,Tu físico entero de un vistazo.
+STAT_NOTE_BODY,Lit rows are what height and weight change.,Las filas iluminadas son lo que cambian la altura y el peso.
+STAT_NOTE_HEAD,Nothing on the head changes play.,Nada en la cabeza cambia el juego.
+STAT_NOTE_STICK,Lit rows are what the stick changes.,Las filas iluminadas son lo que cambia el palo.
+STAT_NOTE_SKATES,Lit rows are what the skates change.,Las filas iluminadas son lo que cambian los patines.
 CLIP_SAVE_PROMPT,%s SAVE GIF,%s GUARDAR GIF
 CLIP_SAVING,SAVING GIF…,GUARDANDO GIF…
 CLIP_SAVED,Goal clip saved,Clip guardado
@@ -195,6 +249,18 @@ ICING_RACE_DEFEND,Reach the faceoff dots first for the whistle,Llega primero a l
 ICING_RACE_WATCH,Race to the end-zone faceoff dots,Carrera a los puntos de saque de la zona
 ICING_WAVED_OFF,ICING WAVED OFF,DESPEJE PROHIBIDO ANULADO
 TAPE_ICINGS,Icings,Despejes prohibidos
+TAPE_TITLE,Tale of the tape,Cara a cara
+TAPE_GOALS,Goals,Goles
+TAPE_SHOTS_ON_GOAL,Shots on goal,Tiros a puerta
+TAPE_FACEOFF_PCT,Faceoff %,% de saques ganados
+TAPE_HITS,Hits,Cargas
+TAPE_BLOCKED_SHOTS,Blocked shots,Tiros bloqueados
+TAPE_TAKEAWAYS,Takeaways,Robos
+TAPE_GIVEAWAYS,Giveaways,Pérdidas
+TAPE_ADVANCED,Advanced,Avanzadas
+TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
+TAPE_FENWICK,Fenwick,Fenwick
+TAPE_XG,Expected goals,Goles esperados
 TOAST_GOALIE_FREEZE,GOALIE FREEZES IT,EL PORTERO LO CONGELA
 SPECTATING,SPECTATING,ESPECTADOR
 REPORT_BUG,Report Bug,Reportar error
@@ -276,6 +342,29 @@ OPTIONS_TEAM_COLORS_FILE,Team colors,Colores de equipo
 OPTIONS_TEAM_COLORS_FILE_NOTE,Makes a copy of the team colors you can edit in any text editor. Changes apply after a restart and only on your computer — other players see their own colors.,Crea una copia de los colores de equipo que puedes editar con cualquier editor de texto. Los cambios se aplican al reiniciar y solo en tu equipo — los demás jugadores ven sus propios colores.
 OPTIONS_BOTS_FILE,Bot roster,Plantilla de bots
 OPTIONS_BOTS_FILE_NOTE,"Edit AI bot names, numbers and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium. Changes apply after a restart.","Edita los nombres, números y atributos de los bots. Como anfitrión, tu plantilla se usa en toda la sala. Las configuraciones que superan el presupuesto de puntos vuelven a nivel medio. Los cambios se aplican al reiniciar."
+OPTIONS_IMPACT_NONE,None,Ninguno
+OPTIONS_IMPACT_LOW,Low,Bajo
+OPTIONS_IMPACT_MEDIUM,Medium,Medio
+OPTIONS_IMPACT_HIGH,High,Alto
+OPTIONS_IMPACT_PROCESSOR,CPU,CPU
+OPTIONS_VIDEO_PERFORMANCE_INTRO,"Low frame rate? Lower the settings rated High first, and hover a rating to see what the setting does. Shadow Quality, Render Scale and Reflections save the most. If lowering them changes nothing, your processor is the limit rather than your graphics card, and the graphics settings will not help much.","¿Pocos FPS? Baja primero los ajustes con impacto «Alto», y pasa el ratón por encima de la valoración para ver qué hace cada ajuste. «Shadow Quality», «Render Scale» y «Reflections» son los que más ahorran. Si bajarlos no cambia nada, el límite es tu procesador y no tu tarjeta gráfica, y los ajustes gráficos no ayudarán mucho."
+OPTIONS_VIDEO_NOTE_VSYNC,Locks the frame rate to your monitor to stop tearing. It costs nothing but adds a little input delay. Disable it to see the most frames your computer can draw.,"Sincroniza los fotogramas con tu monitor para evitar cortes en la imagen. No cuesta rendimiento, pero añade un poco de retraso de entrada. Desactívalo para ver cuántos fotogramas puede dibujar tu equipo."
+OPTIONS_VIDEO_NOTE_GAMMA,How bright the picture is. A color adjustment only.,El brillo de la imagen. Solo es un ajuste de color.
+OPTIONS_VIDEO_NOTE_COLOR_GRADE,The TV-broadcast color look. A color adjustment only.,El aspecto de color de una retransmisión de televisión. Solo es un ajuste de color.
+OPTIONS_VIDEO_NOTE_ARENA_ADS,"Sponsor boards and the logos on the ice. They are painted once when the arena loads, so hiding them saves nothing.","Los paneles de patrocinadores y los logotipos sobre el hielo. Se pintan una sola vez al cargar el pabellón, así que ocultarlos no ahorra nada."
+OPTIONS_VIDEO_NOTE_RENDER_SCALE,"Draws the 3D scene at a fraction of your resolution and scales it up. At 75% it draws about half the pixels, and the picture gets softer.","Dibuja la escena 3D a una fracción de tu resolución y la amplía. Al 75% dibuja más o menos la mitad de los píxeles, y la imagen se ve más suave."
+OPTIONS_VIDEO_NOTE_UPSCALING,"How a Render Scale below 100% is scaled back up. Bilinear is free but blurry, FSR is sharper for a small cost, and FSR2 is the sharpest and costs the most. Does nothing at 100%.","Cómo se amplía una «Render Scale» por debajo del 100%. «Bilinear» no cuesta nada pero se ve borroso, «FSR» es más nítido por un coste pequeño y «FSR2» es el más nítido y el más caro. No hace nada al 100%."
+OPTIONS_VIDEO_NOTE_ANTI_ALIASING,"Smooths jagged edges. MSAA 2x is the balanced default; 4x and 8x cost much more for little visible difference. FXAA is cheap but blurs, and TAA is smooth but can smear in motion.","Suaviza los bordes dentados. «MSAA 2x» es el equilibrio por defecto; «4x» y «8x» cuestan mucho más con poca diferencia visible. «FXAA» es barato pero desenfoca, y «TAA» es suave pero puede dejar estela en movimiento."
+OPTIONS_VIDEO_NOTE_GI,"SDFGI bounces light around the arena for softer, richer lighting. One of the most expensive effects, and off by default.",«SDFGI» hace rebotar la luz por el pabellón para una iluminación más suave y rica. Es uno de los efectos más caros y está desactivado por defecto.
+OPTIONS_VIDEO_NOTE_SHADOWS,"Eight ceiling lights cast shadows, and each one redraws the arena every frame while players move. Medium keeps four and Low keeps two: shadows get lighter, and the ice looks almost the same.","Ocho luces del techo proyectan sombras, y cada una vuelve a dibujar el pabellón en cada fotograma mientras los jugadores se mueven. «Medium» mantiene cuatro y «Low» dos: las sombras se aclaran y el hielo se ve casi igual."
+OPTIONS_VIDEO_NOTE_CROWD,Fans in the stands. Low drops the upper deck and Off hides the stands.,Aficionados en las gradas. «Low» quita la grada superior y «Off» oculta las gradas.
+OPTIONS_VIDEO_NOTE_ICE_SCRATCHES,Skate marks that build up on the ice during a period.,Marcas de patines que se acumulan en el hielo durante un periodo.
+OPTIONS_VIDEO_NOTE_PUCK_SHADOW,"The soft shadow under the puck that shows how high it is in the air. Cheap, and worth keeping for reading shots and passes.",La sombra suave bajo el disco que muestra a qué altura va por el aire. Es barata y vale la pena mantenerla para leer tiros y pases.
+OPTIONS_VIDEO_NOTE_PLAYER_SHADOWS,Shadows under the skaters. Each skater's shadow is one cheap draw per light.,Sombras bajo los patinadores. La sombra de cada patinador es un único dibujo barato por luz.
+OPTIONS_VIDEO_NOTE_ANIMATION_DETAIL,"How often far-away skaters' animation updates. This one uses your processor, not your graphics card: lower it if the game is slow even with low graphics.","Con qué frecuencia se actualiza la animación de los patinadores lejanos. Este ajuste usa tu procesador, no tu tarjeta gráfica: bájalo si el juego va lento incluso con gráficos bajos."
+OPTIONS_VIDEO_NOTE_FOG,"Light shafts and haze under the arena lights. One of the most expensive effects, and off by default.",Haces de luz y bruma bajo los focos del pabellón. Es uno de los efectos más caros y está desactivado por defecto.
+OPTIONS_VIDEO_NOTE_REFLECTIONS,The ice's mirror-like reflections of the players and lights. Off makes the ice look matte.,Los reflejos tipo espejo de los jugadores y las luces sobre el hielo. Desactivarlo hace que el hielo se vea mate.
+OPTIONS_VIDEO_NOTE_AMBIENT_OCCLUSION,"Soft contact shadows where surfaces meet, like skates on the ice and the base of the boards.","Sombras de contacto suaves donde se juntan las superficies, como los patines sobre el hielo y la base de las vallas."
 CUSTOM_FILE_CREATE,Create Editable Copy,Crear copia editable
 CUSTOM_FILE_RECREATE,Start Copy Over,Empezar la copia de nuevo
 CUSTOM_FILE_OPEN_FOLDER,Open Folder,Abrir carpeta

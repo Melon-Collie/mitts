@@ -82,7 +82,8 @@ focuses and what the pointer lands on. Connecting to the wrapper compiles, runs,
 and silently does nothing.
 
 `SwatchDropdown.focus_target()` returns the control that actually receives both.
-Use it wherever a row reacts to being reached (the locker's camera framing).
+Use it wherever a row reacts to being reached (the player screen's camera
+framing).
 `PaletteDropdown` has the same shape and no accessor yet — add one the same way
 if something needs to watch it.
 

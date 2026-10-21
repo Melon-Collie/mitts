@@ -868,6 +868,9 @@ var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
 var _appearance: SkaterAppearanceCoordinator
 var _shadow: SkaterShadowProxy = SkaterShadowProxy.new()
+# The body's one material: a zone per leg and upper surface, painted through the
+# surface seams below (BodyZonePaint).
+var _paint: BodyZonePaint = _new_body_paint()
 var _anim_lod := SkaterAnimationLod.new(fposmod(float(get_instance_id()) * 0.618034, 1.0))
 var _trunk_fold: float = 0.0
 
@@ -920,11 +923,11 @@ func _ready() -> void:
 
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
-	_legs.build(body)
+	_legs.build(body, _paint.material)
 
 	_arms = SkaterArmRig.new()
 	_arms.setup(self)
-	_arms.build(body)
+	_arms.build(body, _paint.material)
 
 	_spine = SkaterSpineRig.new()
 	_spine.setup(self)
@@ -2822,12 +2825,19 @@ func leg_bone_base_position(bone: int) -> Vector3:
 	return _legs.bone_base_position(bone)
 
 
-func leg_surface_material(surface: int) -> StandardMaterial3D:
-	return _legs.surface_material(surface)
+# Unpainted, every zone wears the default its surface ships with (the steel, the
+# laces, the skin's vertex-colour read).
+static func _new_body_paint() -> BodyZonePaint:
+	var paint := BodyZonePaint.new(SkaterMeshBuilder.BODY_ZONE_COUNT)
+	paint.seed_from_mesh(SkaterMeshBuilder.shared_leg_skin_mesh(), 0)
+	paint.seed_from_mesh(SkaterMeshBuilder.shared_upper_skin_mesh(),
+			SkaterMeshBuilder.UPPER_ZONE_BASE)
+	return paint
 
 
-func set_leg_surface_material(surface: int, mat: Material) -> void:
-	_legs.set_surface_material(surface, mat)
+# Paints a leg surface from `mat`, its record in BodyZonePaint.
+func set_leg_surface_material(surface: int, mat: StandardMaterial3D) -> void:
+	_paint.set_zone(surface, mat)
 
 
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
@@ -2857,12 +2867,14 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	_arms.set_trunk_texture(pitch_add, roll_add)
 
 
+# An upper surface's paint record: read it freely, and hand it back through
+# set_upper_surface_material after editing it in place.
 func upper_surface_material(surface: int) -> StandardMaterial3D:
-	return _arms.surface_material(surface)
+	return _paint.zone(SkaterMeshBuilder.UPPER_ZONE_BASE + surface)
 
 
-func set_upper_surface_material(surface: int, mat: Material) -> void:
-	_arms.set_surface_material(surface, mat)
+func set_upper_surface_material(surface: int, mat: StandardMaterial3D) -> void:
+	_paint.set_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + surface, mat)
 
 
 func set_upper_bone_scale(bone: int, part_scale: Vector3) -> void:
@@ -2917,6 +2929,7 @@ func set_ghost(ghost: bool) -> void:
 	if is_ghost == ghost:
 		return
 	is_ghost = ghost
+	_paint.set_ghost(ghost)
 	_uniform.apply_ghost(ghost)
 	_hud.apply_ghost(ghost)
 	_shadow.set_ghost(ghost)
@@ -3036,16 +3049,15 @@ func name_plate_visible() -> bool:
 	return _hud.name_plate_visible()
 
 
-# Repaints the skin to the player's identity tone. Albedo only, preserving the
-# current alpha so a repaint landing mid-ghost doesn't snap the skin opaque.
-# Head and neck are one SURFACE of the helmet mesh (they wear the same material),
-# so there is a single paint target — and it goes through surface_override,
-# because the default lives on the mesh every skater shares.
+# Repaints the skin to the player's identity tone, albedo only: the record keeps
+# the vertex-colour read the face's features need. Head and neck are one surface
+# of the helmet mesh (they wear the same material), so there is a single target.
 func set_skin_tone(index: int) -> void:
 	var skin: Color = SkinToneRegistry.color_for(index)
 	var mat: StandardMaterial3D = upper_surface_material(
 			SkaterMeshBuilder.UpperSurface.HELMET_SKIN)
 	mat.albedo_color = Color(skin.r, skin.g, skin.b, mat.albedo_color.a)
+	set_upper_surface_material(SkaterMeshBuilder.UpperSurface.HELMET_SKIN, mat)
 
 
 # ── HUD (delegate to SkaterHUDCoordinator) ────────────────────────────────────

@@ -23,6 +23,10 @@ class_name PuckGeometryCollision
 # rigid-wall COR (PuckRestitution.rigid_wall at the normal impact speed).
 const POST_COR_SCALE: float = 1.0
 const NET_RESTITUTION: float = 0.05   # net panels — twine absorbs, the puck drops
+# Coulomb coefficient for the along-mesh channel on a twine contact. Well above a
+# flat surface's: the puck presses a pocket into the mesh and its walls stand
+# across the slide. A square-ish hit stops dead; a ~10° graze keeps about 60%.
+const NET_FRICTION: float = 2.0
 
 
 class Result:
@@ -31,22 +35,8 @@ class Result:
 	var velocity: Vector3 = Vector3.ZERO
 
 
-# General 3D reflection: rebound the INTO-surface velocity component with `restitution`,
-# keep the tangential. `normal` points away from the surface (toward the puck); only an
-# approaching puck (v·n < 0) is reflected — a separating one is returned unchanged, so
-# re-testing a puck already ejected off a surface never re-reflects it. Used for the
-# crossbar (a YZ-plane bounce) and top net panel (a Y bounce), where the horizontal-only
-# deflect_velocity can't carry the vertical rebound.
-static func reflect_3d(vel: Vector3, normal: Vector3, restitution: float) -> Vector3:
-	var n: Vector3 = normal.normalized()
-	var vn: float = vel.dot(n)
-	if vn >= 0.0:
-		return vel
-	return vel - (1.0 + restitution) * vn * n
-
-
-# reflect_3d off the goal iron: restitution is the rigid-wall COR at this impact's
-# normal speed.
+# The goal iron: the into-pipe channel rebounds at the rigid-wall COR for this
+# impact's normal speed, and the slide along the pipe is kept.
 static func reflect_off_pipe(vel: Vector3, normal: Vector3) -> Vector3:
 	var n: Vector3 = normal.normalized()
 	var vn: float = vel.dot(n)
@@ -54,6 +44,12 @@ static func reflect_off_pipe(vel: Vector3, normal: Vector3) -> Vector3:
 		return vel
 	var e: float = POST_COR_SCALE * PuckRestitution.rigid_wall(-vn)
 	return vel - (1.0 + e) * vn * n
+
+
+# The netting's response to every twine face.
+static func reflect_off_twine(vel: Vector3, normal: Vector3) -> Vector3:
+	return PuckCollisionRules.reflect_with_friction(
+			vel, normal, NET_RESTITUTION, NET_FRICTION)
 
 
 # Resolve a puck against the two goal posts at whichever end it's near. On contact, eject the
@@ -175,8 +171,7 @@ static func resolve_crossbar_bends(
 
 # Resolve a puck against the TOP NET PANEL — a horizontal mesh plane at y = NET_HEIGHT over
 # the net roof (|x| <= the cavity half-width, |z| in [GOAL_LINE_Z, GOAL_LINE_Z + NET_TOP_DEPTH]).
-# The twine is two-sided; the vertical channel rebounds at NET_RESTITUTION (absorbs), keeping
-# horizontal motion. Reachable in live play by a hard deflection / goalie rebound kicked up
+# The twine is two-sided and responds through reflect_off_twine. Reachable in live play by a hard deflection / goalie rebound kicked up
 # under the roof from inside the cage.
 #
 # The roof runs out to the SIDE twine, not to the narrower crown: the crossbar and
@@ -209,14 +204,14 @@ static func resolve_top_net(prev: Vector3, pos: Vector3, vel: Vector3, result: R
 		if pos.y < GameRules.NET_HEIGHT - hh:
 			return false
 		result.position = Vector3(pos.x, GameRules.NET_HEIGHT - hh, pos.z)
-		result.velocity = reflect_3d(vel, Vector3(0.0, -1.0, 0.0), NET_RESTITUTION)
+		result.velocity = reflect_off_twine(vel, Vector3(0.0, -1.0, 0.0))
 		result.hit = true
 		return true
 	# Resting on / dropping onto the roof from above.
 	if pos.y > GameRules.NET_HEIGHT + hh:
 		return false
 	result.position = Vector3(pos.x, GameRules.NET_HEIGHT + hh, pos.z)
-	result.velocity = reflect_3d(vel, Vector3(0.0, 1.0, 0.0), NET_RESTITUTION)
+	result.velocity = reflect_off_twine(vel, Vector3(0.0, 1.0, 0.0))
 	result.hit = true
 	return true
 
@@ -227,9 +222,9 @@ static func resolve_top_net(prev: Vector3, pos: Vector3, vel: Vector3, result: R
 # a bounce-out) plays the INTERIOR faces — clamped inside the cavity, with the mouth itself
 # open so it can bounce back out. A puck OUTSIDE the netting (a
 # wraparound rounding the cage, a rim pressing the back mesh) plays the EXTERIOR faces and
-# is reflected away — it must never be pulled through the twine into the cavity (the
-# pre-fix one-sided clamp teleported exactly those pucks inside). Rebounds absorb hard
-# (NET_RESTITUTION); the existing NET_STUCK / settle logic drops a dead puck to the ice.
+# is reflected away — it must never be pulled through the twine into the cavity, which is
+# what a one-sided clamp does. Contacts respond through
+# reflect_off_twine; the existing NET_STUCK / settle logic drops a dead puck to the ice.
 # Both a back and a side contact can apply in one interior tick (a shot into the corner).
 static func resolve_net_panels(prev: Vector3, pos: Vector3, vel: Vector3,
 		puck_radius: float, result: Result) -> bool:
@@ -259,13 +254,13 @@ static func resolve_net_panels(prev: Vector3, pos: Vector3, vel: Vector3,
 		var back_limit: float = GameRules.GOAL_LINE_Z + NetGeometry.back_depth_at_height(p.y) - puck_radius
 		if absf(p.z) > back_limit:
 			p.z = end_sign * back_limit
-			v = reflect_3d(v, Vector3(0.0, 0.0, -end_sign), NET_RESTITUTION)
+			v = reflect_off_twine(v, Vector3(0.0, 0.0, -end_sign))
 			hit = true
 		var side_limit: float = NetGeometry.cavity_half_width() - puck_radius
 		if absf(p.x) > side_limit:
 			var x_sign: float = signf(p.x)
 			p.x = x_sign * side_limit
-			v = reflect_3d(v, Vector3(-x_sign, 0.0, 0.0), NET_RESTITUTION)
+			v = reflect_off_twine(v, Vector3(-x_sign, 0.0, 0.0))
 			hit = true
 	else:
 		# EXTERIOR faces (a puck outside the netting). Resolve the face whose plane
@@ -291,7 +286,7 @@ static func resolve_net_panels(prev: Vector3, pos: Vector3, vel: Vector3,
 			# the twine and popped over the crossbar (from where it could drop into the
 			# cavity through the open top), which is worse than the bug being fixed.
 			p += NetGeometry.back_plane_normal(end_sign) * (puck_radius - back_dist)
-			v = reflect_3d(v, Vector3(0.0, 0.0, end_sign), NET_RESTITUTION)
+			v = reflect_off_twine(v, Vector3(0.0, 0.0, end_sign))
 			hit = true
 		else:
 			var side_surface: float = NetGeometry.cavity_half_width()
@@ -299,7 +294,7 @@ static func resolve_net_panels(prev: Vector3, pos: Vector3, vel: Vector3,
 				# Beside the cage, pressing inward: reflect off the exterior side face.
 				var x_sign: float = 1.0 if prev.x >= 0.0 else -1.0
 				p.x = x_sign * (side_surface + puck_radius)
-				v = reflect_3d(v, Vector3(x_sign, 0.0, 0.0), NET_RESTITUTION)
+				v = reflect_off_twine(v, Vector3(x_sign, 0.0, 0.0))
 				hit = true
 	if hit:
 		result.hit = true

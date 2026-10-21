@@ -65,7 +65,7 @@ func test_a_pre_hair_code_decodes_to_the_stock_hair() -> void:
 	assert_eq(config.hair_color, 0)
 
 
-func test_every_tuck_round_trips_and_belongs_to_the_locker() -> void:
+func test_every_tuck_round_trips() -> void:
 	for tuck: int in GearModelRegistry.tuck_count():
 		var config := GearStyleConfig.new(GearModelRegistry.SKATE_PRO,
 				GearModelRegistry.GLOVE_PRO, 3, 1, GearModelRegistry.FACE_VISOR,
@@ -74,8 +74,6 @@ func test_every_tuck_round_trips_and_belongs_to_the_locker() -> void:
 		assert_eq(back.jersey_tuck, tuck)
 		assert_eq(back.hair_color, HairStyleRegistry.color_count() - 1,
 				"the tuck field leaves the hair fields alone")
-		assert_eq(GearStyleConfig.from_code(config.equipment_code()).jersey_tuck, tuck,
-				"the locker owns the tuck, so the equipment code carries it")
 
 
 # Every code saved before the tuck existed has zeros above the hair colour, and

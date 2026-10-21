@@ -25,14 +25,17 @@ var _next_burst: int = 0
 var _scrape: CPUParticles3D = null
 
 
-func watch(skater: Skater) -> void:
-	_skater = skater
+func _ready() -> void:
 	for _i: int in BURST_POOL:
 		var b: CPUParticles3D = _make_emitter(true)
 		add_child(b)
 		_bursts.append(b)
 	_scrape = _make_emitter(false)
 	add_child(_scrape)
+
+
+func watch(skater: Skater) -> void:
+	_skater = skater
 	skater.carry_caught.connect(_on_caught)
 	skater.carry_face_changed.connect(_on_face_changed)
 
@@ -85,6 +88,7 @@ func _aim(e: CPUParticles3D, u: float) -> void:
 
 func _make_emitter(one_shot: bool) -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.one_shot = one_shot
 	e.amount = 14 if one_shot else 10

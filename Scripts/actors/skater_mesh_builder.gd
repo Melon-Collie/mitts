@@ -272,8 +272,8 @@ const _BOOT_STATIONS: Array[Vector4] = [
 # A MID gray: the holder is a paintable zone, so a near-white runner under a
 # white holder would lose the skate's bottom edge entirely. Dark enough to
 # separate from GearModelRegistry.WHITE, bright enough to read against a black
-# boot. Public so the workbench preview and the capture tool dress their runners
-# from this one constant rather than a copy.
+# boot. Public so the display figures (FigureKit) and the gear capture tool
+# dress their runners from this one constant rather than a copy.
 const BLADE_STEEL_COLOR := Color(0.62, 0.66, 0.70)
 # On-skates stance lift: the scene's part layout is tuned as STANDING height,
 # so the skate stack raises both body roots (applied in Skater._ready before
@@ -363,7 +363,7 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 # scale stretches it to the bone length), unit proximal radius (the visual's
 # X/Z scale sets thickness), tapering toward the distal end — look_at points
 # both bones' mesh-top at the proximal joint. Side UVs follow the cylinder
-# convention because _paint_cylinder_h wraps stripe textures on it.
+# convention because the uniform's sleeve stripes wrap on it.
 static func shared_arm_bone() -> ArrayMesh:
 	return _shared("arm_bone", func() -> ArrayMesh:
 		var profile: Array[Vector2] = [Vector2(0.5, 1.0), Vector2(-0.5, _ARM_TAPER)]
@@ -486,6 +486,13 @@ static func shared_leg_skin_mesh() -> ArrayMesh:
 		return m)
 
 
+# The legs as the rig draws them: every LegSurface as one zone of one surface
+# (BodyZoneMesh), painted by the skater's BodyZonePaint. Zone = LegSurface.
+static func shared_leg_body_mesh() -> ArrayMesh:
+	return _shared("leg_body", func() -> ArrayMesh:
+		return BodyZoneMesh.merge(shared_leg_skin_mesh(), 0))
+
+
 static func shared_leg_skin() -> Skin:
 	if _leg_skin == null:
 		_leg_skin = Skin.new()
@@ -597,8 +604,8 @@ static func _build_boot_assembly() -> ArrayMesh:
 	_append_surface(m, blade, Transform3D.IDENTITY, BLADE_PART_RUNNER)
 	_append_surface(m, shared_laces())
 	# Defaults for the merged surfaces, standing in for the material_override
-	# their child nodes used to carry — so an unpainted rig (workbench preview,
-	# a spawn before the uniform pass) still shows steel and white laces rather
+	# their child nodes used to carry — so an unpainted rig (a spawn before the
+	# uniform pass) still shows steel and white laces rather
 	# than untextured white. Surface 0 is left null on purpose: _swap_instance
 	# carries the scene primitive's material onto it, exactly as before.
 	var steel := StandardMaterial3D.new()
@@ -716,6 +723,9 @@ enum UpperSurface {
 	PELVIS,
 }
 const UPPER_SURFACE_COUNT: int = 18
+# The body's paint zones: the leg surfaces, then the upper ones.
+const UPPER_ZONE_BASE: int = LEG_SURFACE_COUNT
+const BODY_ZONE_COUNT: int = LEG_SURFACE_COUNT + UPPER_SURFACE_COUNT
 # Scene node name per bone for the four parts whose placement is authored in
 # Scenes/Skater.tscn rather than derived (the arm parts are placed by IK). Read
 # by SkaterArmRig.build, which then frees them — same deal as LEG_BONE_NODE.
@@ -764,6 +774,15 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_FINGERS)
 		_append_skinned_surface(m, shared_pelvis(tuck), UpperBone.PELVIS)
 		return m)
+
+
+# The upper body as the rig draws it: every UpperSurface as one zone of one
+# surface, zone = UPPER_ZONE_BASE + UpperSurface.
+static func shared_upper_body_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
+	if not GearModelRegistry.is_valid_tuck(tuck):
+		tuck = GearModelRegistry.TUCK_NONE
+	return _shared("upper_body_%d" % tuck, func() -> ArrayMesh:
+		return BodyZoneMesh.merge(shared_upper_skin_mesh(tuck), UPPER_ZONE_BASE))
 
 
 # Identity binds, so the skinned vertex is the bone pose alone (the tail's

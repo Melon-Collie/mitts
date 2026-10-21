@@ -464,12 +464,12 @@ func bobble_load_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vecto
 
 # Lag-comp counterpart for the bobble verdict: idempotent as the deflect's
 # below, and the exit is recomputed from the present puck like every deflect.
-func apply_lag_comp_bobble(skater: Skater, catch_load: float, bobble_at: float) -> void:
+func apply_lag_comp_bobble(skater: Skater) -> void:
 	if not is_instance_valid(skater) or puck.carrier != null or puck.pickup_locked:
 		return
 	if puck.is_on_cooldown(skater):
 		return
-	puck.apply_reception_bobble(skater, catch_load, bobble_at)
+	puck.apply_reception_bobble(skater)
 
 
 # Lag-comp counterpart to apply_lag_comp_pickup for the deflect verdict: the
@@ -793,7 +793,7 @@ func _check_interactions() -> void:
 					var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
 							skater.get_blade_contact_global(), skater.top_hand.global_position)
 					if catch_load >= bobble_at:
-						puck.apply_reception_bobble(skater, catch_load, bobble_at)
+						puck.apply_reception_bobble(skater)
 						break
 					# If a second blade would ALSO corral this same tick (a faceoff
 					# draw or a board scramble), it's a contest - nobody gets it, the

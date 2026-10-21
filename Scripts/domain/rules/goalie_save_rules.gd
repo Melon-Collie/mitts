@@ -39,27 +39,35 @@ enum SavePart { STICK, PAD, BLOCKER, CHEST, GLOVE, MASK }
 # ── Materials ────────────────────────────────────────────────────────────────
 # Two numbers per surface, flat, indexed by SavePart × STRIDE: the fraction of
 # the frozen puck's rigid-wall COR the surface keeps (PuckRestitution.rigid_wall,
-# so the speed falloff is the puck's own measured behaviour), and how much of a
-# glance along the face survives. A fraction above 1.0 would make gear livelier
-# than a steel wall, which no gear is.
+# so the speed falloff is the puck's own measured behaviour), and the Coulomb
+# coefficient of the puck's rubber sliding on its facing
+# (PuckCollisionRules.reflect_with_friction). A fraction above 1.0 would make gear
+# livelier than a steel wall, which no gear is.
 #
-# Nothing has measured puck rebound off goalie gear, so THE ORDERING IS THE
+# Nothing has measured puck rebound off goalie gear, so THE ORDERINGS ARE THE
 # PHYSICAL CLAIM, not the digits. Stiffest to softest: a composite paddle is the
 # hardest thing on him; a blocker is a board behind thin foam; a leg pad is thick
 # foam over a stiff core, built to absorb; a chest protector is foam over a
 # torso that gives; and softest of all is a glove the hand did not close on,
-# which is a floppy leather pocket. Move a row and you are asserting something
-# about the equipment — keep the order.
+# which is a floppy leather pocket. Grippiest to slickest: cloth tape on the
+# blade; the glove's leather; the chest's jersey; the smooth synthetic facings
+# of pads and blocker, slick as a painted shell. Move a row and you are
+# asserting something about the equipment — keep the orders.
+#
+# The stick's grip is load-bearing: its faces lean back to ramp a shot up into
+# him (~20° set, ~45° in the butterfly), and a puck that keeps its slide up them
+# leaves at shot speed over the glass. Holding it on a face tilted α takes
+# friction ≥ tan α / (1 + e).
 const MAT_STRIDE: int = 2
 const MAT_COR_SCALE: int = 0
-const MAT_TANGENTIAL: int = 1
+const MAT_FRICTION: int = 1
 const MATERIALS: Array[float] = [
-	0.90, 0.85,   # STICK   — composite paddle, the stiffest surface on him
-	0.55, 0.80,   # PAD     — thick foam over a stiff core, built to absorb
-	0.80, 0.80,   # BLOCKER — a board behind thin foam
-	0.25, 0.65,   # CHEST   — foam over a torso that gives with the shot
+	0.90, 0.80,   # STICK   — composite paddle under cloth tape
+	0.55, 0.30,   # PAD     — thick foam over a stiff core, built to absorb
+	0.80, 0.30,   # BLOCKER — a board behind thin foam
+	0.25, 0.50,   # CHEST   — foam over a torso that gives with the shot
 	0.20, 0.60,   # GLOVE   — softest of all: a leather pocket he did not close
-	0.80, 0.80,   # MASK    — a hard shell with a little foam and a head behind it
+	0.80, 0.30,   # MASK    — a hard painted shell with a head behind it
 ]
 
 # How fast a trapped puck slides off the chest and onto the ice. NOT a rebound —
@@ -158,11 +166,10 @@ static func trapped_drop_velocity(contact_normal: Vector3) -> Vector3:
 # makes that true, and it degrades exactly to the static case when the part is
 # still, so a fixture that offers no velocity gets today's numbers unchanged.
 #
-# Only the NORMAL component of the surface's motion enters. That is the same
-# frictionless-tangent claim deflect_velocity_3d already makes for the puck's own
-# glance: the face drives the puck along its normal and does not carry it
-# sideways. Adding the tangential part would assert a grip on the puck that
-# nothing here has measured.
+# Only the NORMAL component of the surface's motion enters: friction acts on the
+# puck's slide against a still face, and a face moving along itself does not
+# drag the puck with it. That would be a claim about a moving facing's grip
+# that nothing here has measured.
 #
 # The consequence worth knowing at a call site: a puck at REST against an
 # advancing face leaves at (1 + e) times the face's normal speed rather than
@@ -177,7 +184,7 @@ static func rebound_velocity(
 	return surface_normal_vel + PuckCollisionRules.deflect_velocity_3d(
 			incoming - surface_normal_vel, contact_normal,
 			MATERIALS[base + MAT_COR_SCALE],
-			MATERIALS[base + MAT_TANGENTIAL])
+			MATERIALS[base + MAT_FRICTION])
 
 
 # Is the struck surface one the goalie is actually PRESENTING to the puck?

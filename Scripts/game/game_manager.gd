@@ -69,6 +69,12 @@ signal period_intro_started(period: int, duration: float)
 signal replay_started
 signal replay_stopped
 signal goal_replay_frame_changed(game_state: Dictionary, carrier_team: int)
+# The same frame feed from every other airing of a stored goal — the
+# intermission and post-game reels and a goal re-aired for its GIF — and the
+# end of each. Separate from the goal cinematic's pair because only the board
+# follows these; the reels play no crowd.
+signal highlight_frame_changed(game_state: Dictionary, carrier_team: int)
+signal highlight_stopped
 # Goal-clip GIF export (GoalClipExporter). state is a GoalClipExporter.State —
 # the HUD reads it to swap its prompt between "save", "saving", and gone.
 # finished carries the written path, or "" when the export failed.
@@ -899,8 +905,8 @@ func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
 
 # Host: any transition out of live play (whistle prep, goal, period horn,
 # game over) is a stoppage for stat attribution — resolve a still-pending
-# draw via the last-toucher fallback and clear pending hits + release grace
-# (nothing carries across dead play). The goal path resolved the draw to the
+# draw via the last-toucher fallback and clear the assist chain, pending hits
+# and release grace (nothing carries across dead play). The goal path resolved the draw to the
 # scoring team already (more precise than last-toucher when a defender tips
 # one in), so this finds nothing pending there. Idempotent with the explicit
 # flush in _whistle_and_faceoff.
@@ -910,6 +916,9 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 	if phase == GamePhase.Phase.PLAYING or phase == GamePhase.Phase.FACEOFF:
 		return
 	_flush_pending_faceoff_win()
+	# After the flush: its last-toucher fallback reads the assist chain.
+	if _shot_tracker != null:
+		_shot_tracker.on_play_stopped()
 	if _hit_tracker != null:
 		_hit_tracker.on_play_stopped()
 	if _possession_tracker != null:
@@ -1613,6 +1622,8 @@ func _wire_subsystems() -> void:
 	_goal_replay_driver.replay_frame_changed.connect(goal_replay_frame_changed.emit)
 	_post_game_replay_driver = PostGameReplayDriver.new()
 	add_child(_post_game_replay_driver)
+	_post_game_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
+	_post_game_replay_driver.reel_stopped.connect(highlight_stopped.emit)
 	# Intermission reel: loops the ended period's clips for the fixed break
 	# window (the host's INTERMISSION_DURATION timer ends it), replay mode
 	# mirrored so every peer's reel brackets together. Its start/stop also
@@ -1624,6 +1635,8 @@ func _wire_subsystems() -> void:
 	_intermission_replay_driver.clip_started.connect(_on_intermission_clip_started)
 	_intermission_replay_driver.reel_stopped.connect(_on_intermission_reel_stopped)
 	_intermission_replay_driver.reel_stopped.connect(_on_local_replay_stopped)
+	_intermission_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
+	_intermission_replay_driver.reel_stopped.connect(highlight_stopped.emit)
 
 	# Goal-clip GIF export. Built once and re-pointed at each match's live
 	# cinematic; after the match the post-game screen saves stored goals through
@@ -1638,6 +1651,8 @@ func _wire_subsystems() -> void:
 		_goal_clip_exporter.stored_replay_taking_over.connect(_stop_post_game_reel)
 		_goal_clip_exporter.stored_replay_finished.connect(_start_post_game_replay)
 		_goal_clip_exporter.stored_replay_finished.connect(goal_gif_saving_changed.emit)
+		_goal_clip_exporter.stored_replay_frame_changed.connect(highlight_frame_changed.emit)
+		_goal_clip_exporter.stored_replay_stopped.connect(highlight_stopped.emit)
 		_goal_clip_exporter.state_changed.connect(
 				func(_state: GoalClipExporter.State) -> void: goal_gif_saving_changed.emit())
 		_goal_clip_exporter.set_goal_label_provider(
@@ -2781,8 +2796,8 @@ func _build_replay_footer() -> Dictionary:
 			})
 	footer["players"] = players
 	# Shot log (analytics B1), so a .mreplay is SELF-CONTAINED for the post-game
-	# analytics views — shot map, xG flow, and the advanced half of the tape all
-	# regenerate from this without any backend. That matters most exactly where
+	# analytics views: the shot map and the tape regenerate from this and the box
+	# score above without any backend. That matters most exactly where
 	# the backend isn't available: stat sharing off, Steam signed out, or a game
 	# that simply failed to upload. Host-only, like the Supabase batch.
 	var shot_rows: Array = []
@@ -3405,7 +3420,7 @@ func _on_server_puck_stripped_from(peer_id: int, stripper_peer_id: int) -> void:
 # Host: a defender poke-checked the carrier. Record the poker as the most recent
 # toucher so a puck poked straight off the carrier's stick into the net is
 # credited to the poker (get_last_toucher) rather than resolving to the victim
-# as an own goal. The shot tracker flags it a poke so it never earns an assist.
+# as an own goal. A poke that feeds a teammate earns the poker an assist.
 func _on_server_puck_poke_checked_by(peer_id: int) -> void:
 	if _shot_tracker != null:
 		_shot_tracker.on_poke_check(peer_id)
@@ -3978,7 +3993,7 @@ func _on_shot_events_received(data: Array) -> void:
 
 
 # The game's shot log, whichever role this peer is: the host's live buffer, or a
-# client's pushed copy. The seam the post-game shot map / xG-flow read from.
+# client's pushed copy. The seam the post-game shot map reads from.
 func get_shot_events() -> Array[ShotEvent]:
 	if NetworkManager.is_host and _advanced_stats_tracker != null:
 		return _advanced_stats_tracker.get_shot_events()

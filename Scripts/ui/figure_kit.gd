@@ -2,12 +2,13 @@ class_name FigureKit
 extends RefCounted
 
 # A kit-dressed display figure's parts and the dressing that paints them. The
-# parts are the rink's own shared part meshes (SkaterMeshBuilder) and the stick
-# assembly as the workbench builds it; the dressing is the sweater through the
+# parts are the rink's own shared part meshes (SkaterMeshBuilder) and a stick
+# assembly (shaft, blade, tape, knob); the dressing is the sweater through the
 # rink's own decals (stripes, collar, yoke, crest, name and numbers), the kit,
 # the four gear picks, the jersey's tuck, the hair and the stick's paint and
-# tape. It builds and it dresses; the figure holding it poses the parts — the locker stands it holding
-# its stick, the lobby seats it on the bench.
+# tape. It builds and it dresses; the figure holding it poses the parts — the
+# player screen's case stands it holding its stick, the lobby seats it on the
+# bench.
 
 const KNOB_HEIGHT_M: float = 0.05
 const _SHAFT_CROSS := Vector2(0.04, 0.05)

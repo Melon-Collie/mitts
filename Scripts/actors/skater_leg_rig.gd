@@ -138,8 +138,9 @@ func setup(skater: Skater) -> void:
 # Reading the scene rather than hard-coding the offsets keeps Scenes/Skater.tscn
 # the place leg proportions are authored — the nodes are still what you edit to
 # move a knee, they just stop existing at runtime. Hard-coding them here would
-# fork the numbers into two files that no test compares.
-func build(skeleton: Skeleton3D) -> void:
+# fork the numbers into two files that no test compares. `body_material` is the
+# skater's BodyZonePaint, which the legs' one surface wears.
+func build(skeleton: Skeleton3D, body_material: Material) -> void:
 	var count: int = SkaterMeshBuilder.LEG_BONE_COUNT
 	var lower_body: Node3D = _skater.lower_body
 	_basis.resize(count)
@@ -185,7 +186,8 @@ func build(skeleton: Skeleton3D) -> void:
 			SkaterMeshBuilder.shared_skate_assembly().get_aabb()]
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "LegMesh"
-	_mesh.mesh = SkaterMeshBuilder.shared_leg_skin_mesh()
+	_mesh.mesh = SkaterMeshBuilder.shared_leg_body_mesh()
+	_mesh.set_surface_override_material(0, body_material)
 	_mesh.skin = SkaterMeshBuilder.shared_leg_skin()
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
@@ -732,11 +734,3 @@ func bone_base_scale(bone: int) -> Vector3:
 
 func bone_base_position(bone: int) -> Vector3:
 	return _base_pos[bone]
-
-
-func surface_material(surface: int) -> StandardMaterial3D:
-	return SkaterMeshBuilder.surface_override(_mesh, surface)
-
-
-func set_surface_material(surface: int, mat: Material) -> void:
-	_mesh.set_surface_override_material(surface, mat)

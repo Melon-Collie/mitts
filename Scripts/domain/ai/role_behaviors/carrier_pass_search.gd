@@ -171,8 +171,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			# receiver up for less than the harder one did (read on the straight
 			# line, before the lead solve) — and only if its flight fits the lead
 			# horizon even with him skating flat out at the passer.
-			var hold: float = 0.0 if receiver_is_one_timer else AIPuckLane.reception_hold_s(
-					AIPuckLane.arrival_closing_speed(pass_origin, receiver_state.position,
+			var hold: float = 0.0 if receiver_is_one_timer else AIFeedReception.reception_hold_s(
+					AIFeedReception.arrival_closing_speed(pass_origin, receiver_state.position,
 							speed, receiver_state.velocity))
 			if frac < 1.0 and (hold >= prev_hold
 					or dist > (speed + receiver_top_speed) * PASS_LEAD_MAX_S):
@@ -441,18 +441,18 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 				_field.opponent_blades_release)
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
-	var hold_s: float = 0.0
+	var closing: float = 0.0
 	if not receiver_is_one_timer:
 		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-		hold_s = AIPuckLane.reception_hold_s(AIPuckLane.arrival_closing_speed(
-				pass_origin, receiver, pass_speed, receiver_state.velocity))
+		closing = AIFeedReception.arrival_closing_speed(
+				pass_origin, receiver, pass_speed, receiver_state.velocity)
 	var rotation_time: float = _facing_rotation_time(
 			self_facing_xz, ctx.self_pos, receiver,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
 	return _pass_ev(ctx, receiver, pass_speed, flight_t,
 			receiver_release_t, flight_t + rotation_time, our_goalie,
 			receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
-			Vector3.ZERO, Vector3.INF, hold_s)
+			Vector3.ZERO, Vector3.INF, closing)
 
 
 # Expected value of firing a pass from our current position to
@@ -473,10 +473,12 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # the caller decides), so a cross-seam feed is scored against a keeper caught
 # mid-slide. The receiver shoots at his own build's speed and loft when
 # `receiver_caps` is given, the league default otherwise. A rim passes
-# `rim_dir` and the point its path is lost at (`rim_loss_point`). `hold_s` is
-# how long taking the feed ties the receiver up (AIPuckLane.reception_hold_s,
-# settling the catch or regathering a bobble): his next action waits on it,
-# and the puck sits in the defence's reach for it.
+# `rim_dir` and the point its path is lost at (`rim_loss_point`). `closing` is
+# the feed's speed in the receiver's frame as it reaches him (0 for a one-timer
+# or a rim: no reception to price). By its odds it is caught, and he settles
+# (AIFeedReception.receiver_settle_s) with the puck on his stick for the defence to
+# poke at, or it bobbles, and lies loose until he regathers it
+# (AIFeedReception.bobble_regather_s) — his only if he wins that race.
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
 		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
@@ -486,7 +488,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		useless_below: float = -INF,
 		rim_dir: Vector3 = Vector3.ZERO,
 		rim_loss_point: Vector3 = Vector3.INF,
-		hold_s: float = 0.0) -> float:
+		closing: float = 0.0) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
 	# by up to a stick's reach. The lane and its loss points are the puck's;
@@ -529,29 +531,42 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# the instant value above has already consumed.)
 	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
 			ctx, receiver_spot, receiver_caps, receiver_vel))
-	var time_decay: float = AIActionScoring.delay_discount(delay_s + hold_s)
-	# Reception pressure: the reachable-set clearance at the reception spot when
-	# the puck arrives — defenders momentum-projected from their RELEASE-TIME
-	# spots over the flight, sticks maneuvering over the short reception window.
-	# It prices a defender draped on the receiver's back, who is off both the
-	# lane and the receiver's forward shot cone.
-	var reception_safety: float = AICarrySpace.clearance_to_safety(
-			AICarrySpace.reach_clearance(receiver_spot, flight_t + hold_s,
+	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
+	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
+	# Reception pressure on a catch: the reachable-set clearance at the reception
+	# spot when the puck arrives — defenders momentum-projected from their
+	# RELEASE-TIME spots over the flight, sticks maneuvering over the short
+	# reception window and his settle. It prices a defender draped on the
+	# receiver's back, who is off both the lane and the receiver's forward shot cone.
+	var catch_safety: float = AICarrySpace.clearance_to_safety(
+			AICarrySpace.reach_clearance(receiver_spot, flight_t + settle_s,
 					_field.opponents_release, _field.opponent_vels,
-					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + hold_s))
+					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + settle_s))
+	# A bobble is a loose puck he must win back: the race to the spot, him at his
+	# regather against their first body there from the release.
+	var bobble_won: float = 0.0
+	var bobble_decay: float = 0.0
+	if p_bobble > 0.0:
+		var regather_s: float = AIFeedReception.bobble_regather_s(closing)
+		bobble_won = AIActionScoring.arrival_race(receiver_spot, flight_t + regather_s,
+				_field.opponents_release, _field.opponent_vels)
+		bobble_decay = AIActionScoring.delay_discount(delay_s + regather_s)
+	var reception_kept: float = (1.0 - p_bobble) * catch_safety + p_bobble * bobble_won
 	# Four completion loss modes, mutually exclusive and summing to 1 with the
 	# retained case: poked at the release (1 − release_clean), lane interception
 	# (release_clean × (1 − lane)), execution miss (release_clean × lane × miss),
-	# and a strip on reception (clean lane, no miss, but a stick on the catch).
+	# and lost on reception (clean lane, no miss, but a stick on the catch or a
+	# lost race to the bobble).
 	var clean_lane: float = lane * (1.0 - miss_prob)   # reaches the tape, in flight
-	var completion: float = release_clean * clean_lane * reception_safety
+	var benefit: float = receiver_value * release_clean * clean_lane * (
+			(1.0 - p_bobble) * catch_safety * AIActionScoring.delay_discount(delay_s + settle_s)
+			+ p_bobble * bobble_won * bobble_decay)
 	# CEILING PRUNE (exact): every turnover cost below can only LOWER this EV,
 	# so the benefit is a hard upper bound.
-	if receiver_value * completion * time_decay <= useless_below:
+	if benefit <= useless_below:
 		return 0.0
 	# No separate "escape" bonus for a pressured carrier: the pressure is
 	# already priced by the carry/hold alternatives' own strip cost.
-	var benefit: float = receiver_value * completion * time_decay
 	# Poked at the release: the puck squirts loose at the blade.
 	var cost: float = _field.turnover_cost(origin,
 			1.0 - release_clean)
@@ -565,17 +580,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			release_clean * (1.0 - lane))
 	cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
 			release_clean * lane * miss_prob)
-	# Reception strip: the puck dies AT the receiver, in whatever traffic he was
+	# Lost on reception: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
-			release_clean * clean_lane * (1.0 - reception_safety))
+			release_clean * clean_lane * (1.0 - reception_kept))
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
 	cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
 			self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
-			clean_lane * (1.0 - reception_safety), self_pos, our_goalie)
+			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	return benefit - cost
 
 
@@ -712,10 +727,9 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 		# Breakout receivers carry on reception (no one-timer): flight + wrister
 		# charge and the hold, as the live pass scoring bills a non-ready one.
 		var release_t: float = flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-		var hold_s: float = AIPuckLane.reception_hold_s(
-				AIPuckLane.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel))
 		best = maxf(best, _pass_ev(ctx, spot, pass_speed, flight_t, release_t,
 				flight_t + rotation_time, our_goalie, receiver_caps, -1.0,
 				AIPuckLane.PASS_MISS_BASE_PROB, Vector3.ZERO, best,
-				Vector3.ZERO, Vector3.INF, hold_s))
+				Vector3.ZERO, Vector3.INF,
+				AIFeedReception.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel)))
 	return best

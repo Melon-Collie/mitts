@@ -129,7 +129,8 @@ func test_top_net_absorbs_a_rising_puck() -> void:
 	assert_lt(res.velocity.y, 0.0, "rebounds downward")
 	assert_almost_eq(res.velocity.y, -8.0 * PuckGeometryCollision.NET_RESTITUTION, 0.01,
 			"vertical absorbed at NET_RESTITUTION (0.05)")
-	assert_almost_eq(res.velocity.x, 2.0, 1e-5, "horizontal motion preserved")
+	assert_almost_eq(res.velocity.x, 0.0, 1e-5,
+			"a hard rise into the roof kills the along-mesh slide")
 
 
 func test_top_net_catches_a_fast_riser_that_overshoots_the_plane() -> void:
@@ -202,6 +203,33 @@ func test_back_panel_absorbs_and_reflects_toward_mouth() -> void:
 	assert_almost_eq(res.velocity.z, -8.0 * PuckGeometryCollision.NET_RESTITUTION, 0.01,
 			"absorbed hard at NET_RESTITUTION (0.05)")
 	assert_lte(absf(res.position.z), back_z, "clamped inside the back panel")
+
+
+func test_twine_friction_stops_a_square_angled_hit() -> void:
+	# 45° into the back mesh: the normal impulse exceeds what friction needs to
+	# stop the slide, so the puck dies in the twine instead of skidding along it.
+	var out := PuckGeometryCollision.reflect_off_twine(
+			Vector3(6, 0, 6), Vector3(0, 0, -1))
+	assert_almost_eq(out.x, 0.0, 1e-5, "along-mesh speed gone")
+	assert_almost_eq(out.z, -6.0 * PuckGeometryCollision.NET_RESTITUTION, 1e-5,
+			"normal channel still rebounds at NET_RESTITUTION")
+
+
+func test_twine_friction_scales_with_the_normal_impulse() -> void:
+	# A ~10° graze keeps most of its slide; friction bleeds NET_FRICTION × the
+	# normal impulse (1 + e)·|vn| off the tangential speed, not a flat fraction.
+	var angle: float = deg_to_rad(10.0)
+	var vel := Vector3(10.0 * cos(angle), 0.0, 10.0 * sin(angle))
+	var out := PuckGeometryCollision.reflect_off_twine(vel, Vector3(0, 0, -1))
+	var expected: float = vel.x - PuckGeometryCollision.NET_FRICTION \
+			* (1.0 + PuckGeometryCollision.NET_RESTITUTION) * vel.z
+	assert_almost_eq(out.x, expected, 1e-4, "Coulomb drop off the tangential")
+	assert_gt(out.x, 0.5 * vel.x, "a graze is slowed, not stopped")
+
+
+func test_twine_friction_leaves_a_separating_puck_alone() -> void:
+	var vel := Vector3(5, 1, 3)
+	assert_eq(PuckGeometryCollision.reflect_off_twine(vel, Vector3(0, 0, 1)), vel)
 
 
 func test_side_panel_reflects_toward_center() -> void:

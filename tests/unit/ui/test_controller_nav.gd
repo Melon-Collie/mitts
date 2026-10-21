@@ -61,8 +61,8 @@ func test_open_and_close_modal_toggle_the_wall() -> void:
 	assert_true(_bg_btn.has_focus(), "closing a modal makes the menu reachable again")
 
 
-# A modal can live INSIDE the subtree it walls off (the locker is a Control
-# child of the player screen it covers). The wall must not take the modal down
+# A modal can live INSIDE the subtree it walls off (the on-screen keyboard is a
+# Control child of the player screen it covers). The wall must not take the modal down
 # with it — that leaves the popup with nothing the pad can focus — and the
 # carve-out must not leak focusability to the rest of the background.
 func test_a_modal_inside_the_background_stays_focusable() -> void:

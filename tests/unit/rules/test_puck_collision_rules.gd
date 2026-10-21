@@ -157,21 +157,38 @@ func test_high_levels_tip_up_on_the_ice_and_in_the_air() -> void:
 
 # ── body_block_velocity ──────────────────────────────────────────────────────
 
-func test_body_block_reflects_and_dampens() -> void:
-	var velocity := Vector3(10, 0, 0)
-	var normal := Vector3(-1, 0, 0)
-	var result: Vector3 = PuckCollisionRules.body_block_velocity(velocity, normal, 0.5)
-	assert_lt(result.x, 0.0, "reflected X should flip")
-	assert_almost_eq(result.length(), 5.0, 0.01, "dampen halves speed")
+func test_body_block_square_hit_rebounds_at_the_padding_cor() -> void:
+	var v: Vector3 = PuckCollisionRules.body_block_velocity(
+			Vector3(10, 0, 0), Vector3(-1, 0, 0), 0.4, 0.5)
+	assert_almost_eq(v.x, -10.0 * 0.4 * PuckRestitution.rigid_wall(10.0), 1e-4,
+			"straight back at the padding's share of the rigid-wall COR")
+	assert_almost_eq(v.z, 0.0, 1e-5)
 
-func test_body_block_falls_back_to_normal_when_reflection_zero() -> void:
-	# Zero velocity → reflected is also zero → fallback to contact normal
-	var velocity := Vector3.ZERO
-	var normal := Vector3(0, 0, 1)
-	var result: Vector3 = PuckCollisionRules.body_block_velocity(velocity, normal, 1.0)
-	# result.length() is horiz_vel.length() * dampen = 0 — but direction is normal
-	assert_almost_eq(result.length(), 0.0, 0.01,
-		"no input energy means no output energy; fallback only sets direction")
+
+func test_body_block_glance_keeps_its_pace() -> void:
+	# Brushing a hip: the normal impulse is small, so friction takes little.
+	var v: Vector3 = PuckCollisionRules.body_block_velocity(
+			Vector3(1, 0, 15), Vector3(-1, 0, 0), 0.4, 0.5)
+	assert_gt(v.z, 14.0, "the slide past him survives")
+	assert_lt(v.x, 0.0, "and it is turned off him")
+
+
+func test_body_block_is_horizontal_and_ignores_a_separating_puck() -> void:
+	var v: Vector3 = PuckCollisionRules.body_block_velocity(
+			Vector3(-4, 3, 2), Vector3(-1, 0, 0), 0.4, 0.5)
+	assert_eq(v, Vector3(-4, 0, 2), "already leaving: only the vertical is dropped")
+
+
+func test_friction_stops_a_slide_up_a_face_tilted_back() -> void:
+	# A flat shot into a face leaning 20° back: at friction ≥ tan 20° / (1 + e)
+	# the slide up it is gone and the puck leaves along the normal.
+	var a: float = deg_to_rad(20.0)
+	var n := Vector3(0.0, sin(a), cos(a))
+	var out: Vector3 = PuckCollisionRules.reflect_with_friction(
+			Vector3(0, 0, -30), n, 0.25, 0.5)
+	assert_almost_eq(out.normalized().dot(n), 1.0, 1e-5, "no slide survives")
+	assert_almost_eq(out.length(), 0.25 * 30.0 * cos(a), 1e-4)
+
 
 # ── body_check_strip_velocity ────────────────────────────────────────────────
 
@@ -371,3 +388,42 @@ func test_pinch_is_symmetric_in_the_contestants() -> void:
 func test_pinch_coincident_blades_do_not_lift() -> void:
 	assert_eq(PuckCollisionRules.pinch_lift_speed(Vector3(-9, 0, 0),
 		Vector3(9, 0, 0), Vector3.ZERO, Vector3.ZERO, 5.0, 0.2, 1.6), 0.0)
+
+
+# ── squeeze_lift_speed ───────────────────────────────────────────────────────
+
+func test_squeeze_lifts_only_past_its_threshold_and_caps() -> void:
+	assert_eq(PuckCollisionRules.squeeze_lift_speed(5.0, 6.0, 0.15, 1.9), 0.0)
+	assert_almost_eq(PuckCollisionRules.squeeze_lift_speed(14.0, 6.0, 0.15, 1.9), 1.2, 0.0001)
+	assert_eq(PuckCollisionRules.squeeze_lift_speed(40.0, 6.0, 0.15, 1.9), 1.9)
+
+
+# ── bobble_velocity ──────────────────────────────────────────────────────────
+# Puck defaults: restitution 0.6 → 0.15 by 30 m/s, a tip keeps 0.85 of the
+# glance; a bobble keeps 0.35 of it and 0.45 of the whole.
+
+func _bobble(rel: Vector3) -> Vector3:
+	return PuckCollisionRules.bobble_velocity(rel, Vector3(0, 0, 1), 0.6, 0.15, 30.0, 0.35, 0.45)
+
+func _tip(rel: Vector3) -> Vector3:
+	return PuckCollisionRules.deflect_velocity(rel, Vector3(0, 0, 1), 0.6, 0.15, 0.85, 30.0)
+
+func test_a_square_bobble_comes_straight_back_off_the_face() -> void:
+	var out: Vector3 = _bobble(Vector3(0, 0, -20))
+	assert_almost_eq(out.x, 0.0, 0.0001)
+	assert_almost_eq(out.z, 20.0 * 0.3 * 0.45, 0.0001, "e(20) = 0.3 of the 20 m/s, 0.45 let through")
+
+func test_a_glancing_bobble_leans_to_the_normal_where_a_tip_runs_along_the_blade() -> void:
+	var rel := Vector3(-18, 0, -18).normalized() * 18.0
+	var bobble: Vector3 = _bobble(rel)
+	var tip: Vector3 = _tip(rel)
+	var face := Vector3(0, 0, 1)
+	assert_gt(bobble.normalized().dot(face), tip.normalized().dot(face),
+			"the cupped face grips the glance")
+	assert_gt(bobble.normalized().dot(face), cos(deg_to_rad(50.0)))
+
+func test_a_bobble_is_loose_but_far_slower_than_a_tip() -> void:
+	for rel: Vector3 in [Vector3(0, 0, -22), Vector3(-9, 0, -14), Vector3(-14, 0, -8)]:
+		var speed: float = _bobble(rel).length()
+		assert_between(speed, 2.0, 3.2, "%s: ~2.5 m/s off him" % rel)
+		assert_lt(speed, _tip(rel).length() * 0.5)

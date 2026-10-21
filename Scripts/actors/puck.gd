@@ -31,14 +31,23 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 var settle_clean_load: float = 0.30
 var settle_max_s: float = 0.40
 # Past bobble_load (less bobble_edge_share of it at the toe or heel —
-# PuckReceptionRules.bobble_load_at) the catch fails softly instead: the puck
-# leaves the blade at bobble_exit_min..max m/s in the receiver's frame. 0.67 is
-# ~18 m/s on a poorly angled blade at the middle, ~14 at the toe — the spread
-# of the NHL failed-reception means (docs/stick-settling-plan.md).
+# PuckReceptionRules.bobble_load_at) the catch fails softly instead
+# (apply_reception_bobble). 0.67 is ~18 m/s on a poorly angled blade at the
+# middle, ~14 at the toe — the spread of the NHL failed-reception means
+# (docs/stick-settling-plan.md).
 var bobble_load: float = 0.67
 var bobble_edge_share: float = 0.4
-var bobble_exit_min: float = 0.6
-var bobble_exit_max: float = 2.0
+# A bobble's exit (PuckCollisionRules.bobble_velocity): the cupped face keeps
+# 0.35 of the glance, the hands let 0.45 of the deflect through — ~2.5 m/s off
+# him for any 16–28 m/s pass, a metre clear of his blade when his lockout ends.
+var bobble_tangential_retain: float = 0.35
+var bobble_pace_retain: float = 0.45
+# The hop a hard pass driven into the face pops it with (squeeze_lift_speed on
+# the into-face closing speed): a glancing bobble barely leaves the ice, a
+# square 18 m/s one hops ~16 cm.
+var bobble_lift_threshold: float = 6.0
+var bobble_lift_gain: float = 0.15
+var bobble_lift_max_speed: float = 1.9
 @export var alignment_receive_bonus: float = 8.0
 # Passive-blade deflection via a normal/tangential decomposition (see
 # PuckCollisionRules.deflect_velocity). The component INTO the blade face rebounds
@@ -86,13 +95,13 @@ var bobble_exit_max: float = 2.0
 @export var poke_carrier_vel_blend: float = 0.5
 @export var poke_checker_cooldown: float = 0.1
 # Pinch hop for every stick-on-stick contest — pokes here, contested pickups via
-# PuckController (PuckCollisionRules.pinch_lift_speed). Closing speed in m/s: one
-# blade at max_blade_speed (10) into a still one barely lifts (~5 cm apex, the
-# blade plane); two committed stabs (13+) hit the cap, a ~13 cm hop that is
-# above the blade plane for ~0.25 s.
-var pinch_lift_threshold: float = 5.0
-var pinch_lift_gain: float = 0.2
-var pinch_lift_max_speed: float = 1.6
+# PuckController (PuckCollisionRules.pinch_lift_speed). Closing speed in m/s: a
+# 5 m/s squeeze stays near the ice (~3 cm apex), a committed 8 m/s poke pops it
+# ~14 cm, and one blade at max_blade_speed (10) into a still one hits the cap,
+# a ~25 cm hop that is off the ice for ~0.45 s.
+var pinch_lift_threshold: float = 2.5
+var pinch_lift_gain: float = 0.3
+var pinch_lift_max_speed: float = 2.2
 # Delivered victim-impulse (BodyCheckRules.puck_strip_impulse — the REAL applied
 # knockback |Δv|, via SkaterCollisionRules.victim_kick) needed to knock the puck
 # off the carrier. Deliberately EQUAL to the full-check point on the stagger ladder
@@ -112,10 +121,14 @@ var pinch_lift_max_speed: float = 1.6
 @export var body_check_strip_ref_impulse: float = 3.5    # delivered impulse that fully deadens the strip (puck jarred dead)
 @export var hit_pickup_cooldown: float = 0.6              # seconds victim cannot pick up after a hard hit
 @export var hit_pickup_cooldown_threshold: float = 1.35   # delivered victim-impulse needed to apply hit pickup cooldown (see body_check_strip_threshold)
-@export var body_block_dampen: float = 0.5
-# Puck energy retention on an ACTIVE (shot-block crouch) block — lower than the passive
-# dampen so a committed block kills more of the shot. on_body_block picks between the two.
-@export var body_block_active_dampen: float = 0.35
+# A body block is a contact (PuckCollisionRules.body_block_velocity): the share of
+# the frozen puck's rigid-wall COR a skater's padding keeps, and the puck's grip
+# on his jersey. Between the goalie's chest (0.25) and leg pad (0.55) — padding
+# over a body that gives. A committed shot-block crouch is set to absorb, so it
+# keeps less.
+var body_block_cor_scale: float = 0.40
+var body_block_active_cor_scale: float = 0.25
+var body_block_friction: float = 0.50
 @export var body_block_cooldown: float = 0.1
 # Vertical clamp: PuckAuthorityRules.advance_loose_puck caps the puck's Y at
 # ice_height + max_height and kills any remaining upward velocity. 3 m sits just
@@ -535,22 +548,20 @@ func apply_blade_deflect(skater: Skater) -> void:
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
 # A catch the hands nearly held (PuckReceptionRules.bobble_load_at): the face
-# takes the impact as a deflect does, in the RECEIVER'S frame, and the puck
-# leaves at what the hands didn't soak, flat on the ice and moving with him, so
-# it dies by his stick. The impact blew his hands open as a ceiling catch does,
-# so he can't play it again for the full settle_max_s — never a shorter wait
-# than holding the catch would have cost him. Anyone else can.
-func apply_reception_bobble(skater: Skater, catch_load: float, bobble_at: float) -> void:
+# takes the impact in the RECEIVER'S frame and the puck leaves mostly off its
+# normal, moving with him and hopping by how hard it was driven into the face.
+# The impact blew his hands open as a ceiling catch does, so he can't play it
+# again for the full settle_max_s — never a shorter wait than holding the catch
+# would have cost him. Anyone else can.
+func apply_reception_bobble(skater: Skater) -> void:
 	var rel: Vector3 = linear_velocity - skater.velocity
-	var out: Vector3 = PuckCollisionRules.deflect_velocity(
-			rel, skater.get_blade_face_normal(rel),
-			deflect_normal_restitution, deflect_normal_restitution_min,
-			deflect_tangential_retain, deflect_speed_ref)
-	out.y = 0.0
-	if out.length() < 0.001:
-		out = skater.get_blade_face_normal(rel)
-	out = out.normalized() * PuckReceptionRules.bobble_exit_speed(
-			catch_load, bobble_at, bobble_exit_min, bobble_exit_max)
+	rel.y = 0.0
+	var face: Vector3 = skater.get_blade_face_normal(rel)
+	var out: Vector3 = PuckCollisionRules.bobble_velocity(rel, face,
+			deflect_normal_restitution, deflect_normal_restitution_min, deflect_speed_ref,
+			bobble_tangential_retain, bobble_pace_retain)
+	out.y = PuckCollisionRules.squeeze_lift_speed(-rel.dot(face),
+			bobble_lift_threshold, bobble_lift_gain, bobble_lift_max_speed)
 	linear_velocity = Vector3(skater.velocity.x, 0.0, skater.velocity.z) + out
 	_set_cooldown(skater, settle_max_s)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
@@ -584,12 +595,11 @@ func on_body_block(blocker: Skater, contact_normal: Vector3) -> void:
 	if contact_normal.length() < 0.001:
 		contact_normal = -blocker.global_transform.basis.z
 	contact_normal = Vector3(contact_normal.x, 0.0, contact_normal.z).normalized()
-	# A committed shot-block crouch kills more of the shot than a passive body absorb.
-	var dampen: float = body_block_active_dampen \
+	var cor_scale: float = body_block_active_cor_scale \
 			if blocker.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
-			else body_block_dampen
+			else body_block_cor_scale
 	linear_velocity = PuckCollisionRules.body_block_velocity(
-			linear_velocity, contact_normal, dampen)
+			linear_velocity, contact_normal, cor_scale, body_block_friction)
 	_set_cooldown(blocker, body_block_cooldown)
 	_queue_contact_event(ContactEvent.BODY_BLOCK, blocker)
 

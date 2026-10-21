@@ -291,14 +291,6 @@ func test_the_edge_bobbles_sooner_than_the_middle() -> void:
 			PuckReceptionRules.bobble_load_at(0.3, 0.67, 0.4))
 
 
-func test_a_harder_bobble_leaves_faster_within_its_band() -> void:
-	assert_almost_eq(PuckReceptionRules.bobble_exit_speed(0.67, 0.67, 0.6, 2.0), 0.6, 0.0001)
-	assert_almost_eq(PuckReceptionRules.bobble_exit_speed(1.0, 0.67, 0.6, 2.0), 2.0, 0.0001)
-	var mid_band: float = PuckReceptionRules.bobble_exit_speed(0.835, 0.67, 0.6, 2.0)
-	assert_gt(mid_band, 0.6)
-	assert_lt(mid_band, 2.0)
-
-
 func test_the_blade_axis_is_the_face_normals_perpendicular() -> void:
 	var blade := Vector3(1.2, 0, -0.3)
 	var hand := Vector3(0.2, 0.9, 0.4)

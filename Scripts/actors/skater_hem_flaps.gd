@@ -221,7 +221,7 @@ const SETTLE_STEPS: int = 90
 
 
 # The torso as a figure that is not a skinned rig wears it (FigureKit — the
-# locker's mannequin, the lobby's bench): the tail settled hanging over the
+# player screen's mannequin, the lobby's bench): the tail settled hanging over the
 # figure's own pants and legs, and baked into the torso's own frame. `torso`,
 # `pelvis` and each leg's frame at its hip (as SkaterBodySkeleton's LEG bone
 # carries it, scaled by the leg's bulk) are the figure's parts in one upright

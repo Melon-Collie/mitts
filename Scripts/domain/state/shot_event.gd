@@ -1,6 +1,6 @@
 class_name ShotEvent extends RefCounted
-## One resolved shot attempt (analytics plan B1) — the record behind the shot map,
-## the xG-flow chart, and the career heatmap. Assembled host-side by
+## One resolved shot attempt (analytics plan B1) — the record behind the shot map
+## and the career heatmap. Assembled host-side by
 ## ShotOnGoalTracker when a shot resolves and buffered by AdvancedStatsTracker.
 ## Pure data; RefCounted (allocated a few times per minute at shot resolution, not
 ## a hot path). Position is the release point in rink coordinates; the outcome and
@@ -25,7 +25,7 @@ var outcome: int = Outcome.MISSED
 var shot_type: int = ShotType.SHOT
 var on_net: bool = false
 var period: int = 1
-var clock_s: float = 0.0    # period time remaining at the shot (for the xG-flow x-axis)
+var clock_s: float = 0.0    # period time remaining at the shot
 
 # ── Release CONTEXT (the goalie's situation, sampled at the release tick) ─────
 # Location alone cannot be compared to a public xG model, because a fitted model

@@ -1,22 +1,15 @@
 class_name PlayerSettingsPopup
 extends Control
 
-# The player screen — who you are, one column: name, number, handedness,
-# preferred position, skin tone, hair, beard and hair colour, height, weight, the
-# LockerPopup launcher (every equipment pick — stick, skates, gloves, helmet —
-# around a mannequin wearing all of them), and the team pick last.
+# The player screen: who you are and everything you skate with, one region at a
+# time around a live mannequin — YOU (name, number, hand, seat, team), BODY,
+# HEAD, STICK and SKATES. A region's rows are in the order the piece reads, with
+# a gold asterisk on each pick that changes play; beside them a stat panel shows
+# what the whole build does, with the stats the current region can move lit.
 #
-# One build per player, no presets — edits land directly on PlayerPrefs' flat
-# fields. Opened from the main menu only (the lobby has no build editor).
-#
-# Snapshot-and-commit pattern: edits buffer in _pending_* until Apply is
-# pressed. Cancel / ESC / overlay-click revert. Mirrors OptionsPanel. The locker
-# is a sub-editor — its Done lands in this popup's pending fields; Apply/Cancel
-# here commit or discard it with everything else.
-#
-# During an active online match the BUILD half (height, weight, profile, stick
-# gear) is locked — attributes replicate at join time — while cosmetics (skin,
-# tape, gear models, hair) stay live.
+# Edits land in a PlayerDraft copy; Apply commits what differs from the draft
+# the screen opened with (PlayerDraft.commit), Cancel / Esc / an overlay click
+# drop it.
 
 signal name_changed(new_name: String)
 signal jersey_number_changed(new_number: int)
@@ -24,84 +17,137 @@ signal handedness_changed(is_left: bool)
 signal position_changed(position: int)
 signal preferred_color_changed(color_slot: int)
 
-# Hover tooltips. Headline effects only.
-const _HEIGHT_TOOLTIP: String = "Frame length: reach, stick length, and the speed/agility/shot baselines.\nSmall = shiftier with quicker turns; big = longer reach & harder shot."
-const _WEIGHT_TOOLTIP: String = "Frame mass, bounded by your height.\nLean = quicker first step, sharper turns, easier to move.\nHeavy = harder hits & harder to move, wider turns."
-const _POSITION_TOOLTIP: String = "Preferred position — where a lobby seats you when you join.\nIn 3v3 the wings and D pair up on their side: LW/LD take the left,\nRW/RD the right. A taken seat falls back to the first open one."
-# Dropdown display order (hockey-natural, wings around the C) → position
-# index (PlayerRules.POSITION_NAMES order), with the display keys in lockstep.
+enum Region { YOU, BODY, HEAD, STICK, SKATES }
+
+const _REGION_KEYS: Array[StringName] = [&"PLAYER_REGION_YOU", &"PLAYER_REGION_BODY",
+		&"PLAYER_REGION_HEAD", &"PLAYER_REGION_STICK", &"PLAYER_REGION_SKATES"]
+const _REGION_NOTE_KEYS: Array[StringName] = [&"STAT_NOTE_YOU", &"STAT_NOTE_BODY",
+		&"STAT_NOTE_HEAD", &"STAT_NOTE_STICK", &"STAT_NOTE_SKATES"]
+# The shot the case cuts to on landing in a region.
+const _REGION_FOCUS: Array[int] = [LockerMannequin.Focus.FULL, LockerMannequin.Focus.FULL,
+		LockerMannequin.Focus.HELMET, LockerMannequin.Focus.STICK, LockerMannequin.Focus.SKATES]
+
+# Position buttons in rink order (wings around the C) → PlayerRules.POSITION_NAMES
+# index, with the badge and full-name keys in lockstep.
 const _POSITION_ORDER: Array[int] = [1, 0, 2, 3, 4]
+const _POSITION_BADGE_KEYS: Array[StringName] = [
+	&"POS_BADGE_LW", &"POS_BADGE_C", &"POS_BADGE_RW", &"POS_BADGE_LD", &"POS_BADGE_RD"]
 const _POSITION_KEYS: Array[StringName] = [
 	&"POSITION_LW", &"POSITION_C", &"POSITION_RW", &"POSITION_LD", &"POSITION_RD"]
 
-# Controls — kept as refs so Cancel can restore them from the snapshot.
+const _PROFILE_KEYS: Array[StringName] = [
+	&"GEAR_PROFILE_SHIFTY", &"GEAR_PROFILE_STABILITY", &"GEAR_PROFILE_POWER"]
+const _PROFILE_HINTS: Array[StringName] = [
+	&"HINT_PROFILE_SHIFTY", &"HINT_PROFILE_STABILITY", &"HINT_PROFILE_POWER"]
+const _LENGTH_KEYS: Array[StringName] = [
+	&"STICK_LENGTH_SHORT", &"STICK_LENGTH_STANDARD", &"STICK_LENGTH_LONG"]
+const _LENGTH_HINTS: Array[StringName] = [
+	&"HINT_LENGTH_SHORT", &"HINT_LENGTH_STANDARD", &"HINT_LENGTH_LONG"]
+const _CURVE_KEYS: Array[StringName] = [
+	&"STICK_CURVE_M88", &"STICK_CURVE_M92", &"STICK_CURVE_M28"]
+const _CURVE_HINTS: Array[StringName] = [
+	&"HINT_CURVE_M88", &"HINT_CURVE_M92", &"HINT_CURVE_M28"]
+const _FLEX_KEYS: Array[StringName] = [
+	&"STICK_FLEX_WHIPPY", &"STICK_FLEX_MEDIUM", &"STICK_FLEX_STIFF"]
+const _FLEX_HINTS: Array[StringName] = [
+	&"HINT_FLEX_WHIPPY", &"HINT_FLEX_MEDIUM", &"HINT_FLEX_STIFF"]
+const _FRAME_KEYS: Array[StringName] = [
+	&"FRAME_LEAN", &"FRAME_LIGHT", &"FRAME_MEDIUM", &"FRAME_SOLID", &"FRAME_HEAVY"]
+
+const _SPAN_OPTIONS: Array[int] = [
+	StickTapeConfig.Span.FULL, StickTapeConfig.Span.HEEL_TO_MID,
+	StickTapeConfig.Span.MID_TO_TOE, StickTapeConfig.Span.MID,
+	StickTapeConfig.Span.TOE, StickTapeConfig.Span.NONE,
+]
+const _SPAN_KEYS: Array[StringName] = [
+	&"TAPE_SPAN_FULL", &"TAPE_SPAN_HEEL_TO_MID", &"TAPE_SPAN_MID_TO_TOE",
+	&"TAPE_SPAN_MID", &"TAPE_SPAN_TOE", &"TAPE_SPAN_NONE",
+]
+const _STYLE_OPTIONS: Array[int] = [
+	StickTapeConfig.KnobStyle.KNOB, StickTapeConfig.KnobStyle.CANDY_CANE,
+	StickTapeConfig.KnobStyle.FULL,
+]
+const _STYLE_KEYS: Array[StringName] = [
+	&"TAPE_HANDLE_KNOB", &"TAPE_HANDLE_CANDY", &"TAPE_HANDLE_FULL",
+]
+
+# Tall enough for the stick, the longest region, so switching never resizes the
+# panel.
+const _ROWS_MIN_H: float = 540.0
+
+var _draft: PlayerDraft = PlayerDraft.new()
+var _saved: PlayerDraft = PlayerDraft.new()
+var _region: int = Region.YOU
+var _name_valid: bool = true
+var _number_valid: bool = true
+# Guards _refresh(): assigning the weight slider's bounds can re-clamp its value
+# and emit value_changed (Range.set_min/set_max route through set_value, which
+# set_value_no_signal does not silence), and that reentrant handler would
+# clobber the pending weight with a band-clamped one.
+var _refreshing: bool = false
+# The team the model rows' swatches and the tape palettes were last painted
+# against — they repaint only when it changes.
+var _painted_slot: int = -1
+
+# Chrome.
+var _case: PlayerCase = null
+var _stats: BuildStatPanel = null
+var _pages: Array[VBoxContainer] = []
+var _tab_btns: Array[Button] = []
+var _tab_stars: Array[Label] = []
+var _emphasis: Array[Array] = []
+var _pending_label: Label = null
+var _apply_btn: Button = null
+var _keyboard: ControllerKeyboard = null
+# The region being built, so a starred row can star its tab.
+var _building: int = Region.YOU
+var _tab_gameplay: Array[bool] = [false, false, false, false, false]
+
+# YOU.
 var _name_field: LineEdit = null
 var _name_warning: Label = null
 var _number_field: LineEdit = null
 var _number_warning: Label = null
-var _left_btn: Button = null
-var _right_btn: Button = null
+var _shoots_btns: Array[Button] = []
+var _position_btns: Array[Button] = []
 var _color_dropdown: PaletteDropdown = null
+# BODY.
+var _height_slider: HSlider = null
+var _height_value: Label = null
+var _weight_slider: HSlider = null
+var _weight_value: Label = null
+var _weight_hint: Label = null
 var _skin_buttons: Array[Button] = []
-var _hair_btn: OptionButton = null
+var _glove_btn: OptionButton = null
+var _tuck_btn: OptionButton = null
+# HEAD.
+var _hair_btns: Array[Button] = []
 var _facial_btn: OptionButton = null
 var _hair_color_buttons: Array[Button] = []
-var _position_btn: OptionButton = null
-var _height_slider: HSlider = null
-var _height_value_label: Label = null
-var _weight_slider: HSlider = null
-var _weight_value_label: Label = null
-var _lock_label: Label = null
-var _apply_btn: Button = null
-# The locker, opened over this popup by its launcher button.
-var _locker_popup: LockerPopup = null
-# The launcher itself — the pad's focus returns here when the locker closes.
-var _locker_edit_btn: Button = null
-# Gold "unapplied changes" note under the launcher — pending locker edits are
-# otherwise invisible until Apply.
-var _locker_pending_label: Label = null
+var _face_btns: Array[Button] = []
+# STICK and SKATES — the gear dials are _GearRow records.
+var _gear_rows: Array[_GearRow] = []
+var _flex_row: _GearRow = null
+var _stick_model_btn: OptionButton = null
+var _blade_color_dd: SwatchDropdown = null
+var _span_btn: OptionButton = null
+var _knob_color_dd: SwatchDropdown = null
+var _style_btn: OptionButton = null
+var _skate_btn: OptionButton = null
+var _lace_dd: SwatchDropdown = null
 
-# Pending state — what Apply will commit.
-var _pending_name: String = ""
-var _pending_number: int = 0
-var _pending_is_left: bool = false
-var _pending_position: int = 0
-var _pending_color_slot: int = -1
-var _pending_skin: int = SkinToneRegistry.DEFAULT_INDEX
-# The pending build in canonical order (height in, weight lbs, gear 0/2).
-var _pending_height: int = PlayerAttributes.HEIGHT_MEDIUM
-var _pending_weight: int = int(PlayerAttributes.NEUTRAL_WEIGHT_LBS)
-var _pending_profile: int = PlayerAttributes.GEAR_BALANCED
-var _pending_curve: int = PlayerAttributes.GEAR_BALANCED
-var _pending_flex: int = PlayerAttributes.GEAR_BALANCED
-var _pending_length: int = PlayerAttributes.GEAR_BALANCED
-var _pending_tape: int = StickTapeConfig.DEFAULT_CODE
-# Packed GearStyleConfig code. The hair fields are edited here, beside the skin;
-# the locker edits the rest and hands the hair back untouched.
-var _pending_gear: int = GearStyleConfig.DEFAULT_CODE
-var _name_valid: bool = true
-var _number_valid: bool = true
-# Online matches lock the build (attributes replicate at join); cosmetics stay
-# editable. Latched on open().
-var _build_locked: bool = false
-# Reentrancy guard for _refresh_build(): assigning the weight slider's min/max
-# there can re-clamp its value and emit value_changed (Godot's Range
-# set_min/set_max route through set_value, which is NOT silenced by
-# set_value_no_signal). Left unguarded, that reentrant _on_weight_changed
-# clobbers the pending weight with a band-clamped value.
-var _refreshing: bool = false
-# The in-game on-screen keyboard for controller name entry (works on every
-# platform, unlike Steam's Big-Picture-only OSK). Created in _ready.
-var _keyboard: ControllerKeyboard = null
 
-# Snapshot taken on open(). Cancel restores from this.
-var _snapshot: Dictionary = {}
+# One three-way gear dial: its buttons, the draft field it sets, and the hint
+# naming what each option does.
+class _GearRow:
+	var field: StringName
+	var buttons: Array[Button] = []
+	var hint: Label = null
+	var hint_keys: Array[StringName] = []
 
 
 func _ready() -> void:
 	set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
-	# Controller mode: give toggles/dropdowns a visible focus ring (see the Options
-	# panel). Only defines "focus"; everything else falls through to the project theme.
 	var focus_theme: Theme = MenuStyle.controller_focus_theme()
 	if focus_theme != null:
 		theme = focus_theme
@@ -113,40 +159,76 @@ func _ready() -> void:
 	visible = false
 
 
-# Controller text entry: the number is a D-pad stepper (no keyboard needed), and
-# the name opens the on-screen keyboard on A. Both only when the field is focused
-# in controller mode; handled at _input (ahead of GUI) so ui_left/right don't just
-# move the LineEdit caret. ui_cancel stays in _unhandled_input.
+func open() -> void:
+	_saved = PlayerDraft.from_prefs()
+	_draft = _saved.copy()
+	_painted_slot = -1
+	_sync_text_fields()
+	_refresh()
+	_update_apply_state()
+	_show_region(Region.YOU)
+	_case.settle(LockerMannequin.Focus.FULL)
+	visible = true
+	ControllerNav.focus_first(_pages[_region])  # take focus off the side menu behind
+
+
+# ── Input ────────────────────────────────────────────────────────────────────
+
+# Controller extras, all ahead of the GUI: LB / RB walk the regions; the number
+# is a D-pad stepper; the name opens the on-screen keyboard on A. ui_cancel
+# stays in _unhandled_input.
 func _input(event: InputEvent) -> void:
-	if not visible or not ControllerNav.active():
+	if not visible or _keyboard.visible:
 		return
-	if _number_field != null and _number_field.has_focus():
+	var tab: int = ControllerNav.bumper_tab_delta(event)
+	if tab != 0:
+		_show_region((_region + tab + Region.size()) % Region.size())
+		ControllerNav.focus_first(_pages[_region])
+		get_viewport().set_input_as_handled()
+		return
+	if not ControllerNav.active():
+		return
+	if _number_field.has_focus():
 		if event.is_action_pressed(&"ui_left"):
 			_step_number(-1)
 			get_viewport().set_input_as_handled()
 		elif event.is_action_pressed(&"ui_right"):
 			_step_number(1)
 			get_viewport().set_input_as_handled()
-	elif _name_field != null and _name_field.has_focus() and event.is_action_pressed(&"ui_accept"):
-		# `self` as the background: the key grid covers this form, and focus has to
-		# stay on the grid until it's dismissed.
+	elif _name_field.has_focus() and event.is_action_pressed(&"ui_accept"):
+		# `self` as the background: the key grid covers this form, and focus has
+		# to stay on the grid until it's dismissed.
 		_keyboard.open(_name_field.text, _name_field.max_length, self)
 		get_viewport().set_input_as_handled()
 
 
+func _unhandled_input(event: InputEvent) -> void:
+	if visible and event.is_action_pressed(&"ui_cancel"):
+		_cancel()
+		get_viewport().set_input_as_handled()
+
+
+func _on_overlay_clicked(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.pressed:
+		_cancel()
+
+
 func _step_number(delta: int) -> void:
-	var next: int = clampi(_number_field.text.to_int() + delta, 0, 99)
-	_number_field.text = str(next)
-	_on_number_text_changed(_number_field.text)  # programmatic set doesn't emit text_changed
+	_number_field.text = str(clampi(_number_field.text.to_int() + delta, 0, 99))
+	_on_number_text_changed(_number_field.text)  # a programmatic set doesn't emit
 
 
 func _on_keyboard_submitted(text: String) -> void:
 	_name_field.text = text
-	_on_name_text_changed(text)  # programmatic set doesn't emit text_changed
+	_on_name_text_changed(text)  # a programmatic set doesn't emit
 	ControllerNav.grab_focus(_name_field)
 
 
+# ── Construction ─────────────────────────────────────────────────────────────
+
 func _build() -> void:
+	# Setting a slider's bounds fires its handler before the rows below exist.
+	_refreshing = true
 	var overlay := ColorRect.new()
 	overlay.color = MenuStyle.SCRIM
 	overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
@@ -155,533 +237,122 @@ func _build() -> void:
 	add_child(overlay)
 
 	var panel := PanelContainer.new()
-	panel.add_theme_stylebox_override("panel", MenuStyle.panel())
+	panel.add_theme_stylebox_override("panel", MenuStyle.panel(6, 24))
 	panel.set_anchors_preset(Control.PRESET_CENTER)
 	panel.grow_horizontal = Control.GROW_DIRECTION_BOTH
 	panel.grow_vertical = Control.GROW_DIRECTION_BOTH
 	add_child(panel)
 
 	var vbox := VBoxContainer.new()
-	vbox.alignment = BoxContainer.ALIGNMENT_CENTER
 	vbox.add_theme_constant_override("separation", 16)
 	panel.add_child(vbox)
 
-	_add_close_row(vbox)
+	var header := HBoxContainer.new()
+	header.add_theme_constant_override("separation", 28)
+	vbox.add_child(header)
 
+	var body := HBoxContainer.new()
+	body.add_theme_constant_override("separation", 28)
+	vbox.add_child(body)
+	# The case first: every row's hover hands it a framing.
+	_case = PlayerCase.new()
+	_case.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	body.add_child(_case)
+
+	var rows := VBoxContainer.new()
+	rows.custom_minimum_size = Vector2(0, _ROWS_MIN_H)
+	body.add_child(rows)
+	for r: int in Region.size():
+		var page := VBoxContainer.new()
+		page.add_theme_constant_override("separation", 12)
+		page.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		rows.add_child(page)
+		_pages.append(page)
+		_emphasis.append([])
+	_building = Region.YOU
+	_build_you(_pages[Region.YOU])
+	_building = Region.BODY
+	_build_body(_pages[Region.BODY])
+	_building = Region.HEAD
+	_build_head(_pages[Region.HEAD])
+	_building = Region.STICK
+	_build_stick(_pages[Region.STICK])
+	_building = Region.SKATES
+	_build_skates(_pages[Region.SKATES])
+	var legend := Label.new()
+	legend.text = tr(&"STICK_GAMEPLAY_LEGEND")
+	legend.add_theme_color_override("font_color", MenuStyle.GOLD)
+	legend.add_theme_font_size_override("font_size", 13)
+	rows.add_child(legend)
+
+	_stats = BuildStatPanel.new()
+	_stats.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
+	body.add_child(_stats)
+
+	_build_header(header)
+	_build_footer(vbox)
+	_emphasis[Region.BODY] = BuildReadout.moved_by(
+			[BuildReadout.Dial.HEIGHT, BuildReadout.Dial.WEIGHT])
+	_emphasis[Region.STICK] = BuildReadout.moved_by([BuildReadout.Dial.LENGTH,
+			BuildReadout.Dial.CURVE, BuildReadout.Dial.FLEX])
+	_emphasis[Region.SKATES] = BuildReadout.moved_by([BuildReadout.Dial.PROFILE])
+	_refreshing = false
+
+
+func _build_header(header: HBoxContainer) -> void:
 	var title := Label.new()
-	title.text = "Player"
-	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	title.text = tr(&"PLAYER_TITLE")
 	MenuStyle.apply_heading(title)
-	vbox.add_child(title)
+	header.add_child(title)
 
-	# One column, every row on the shared label gutter. Fixed width (gutter +
-	# separation + field) so the panel doesn't breathe as warnings and pending
-	# notes come and go.
-	var col := VBoxContainer.new()
-	col.add_theme_constant_override("separation", 12)
-	col.custom_minimum_size = Vector2(_IDENTITY_LABEL_W + 12.0 + _FIELD_W, 0)
-	vbox.add_child(col)
+	var tabs := HBoxContainer.new()
+	tabs.add_theme_constant_override("separation", 4)
+	header.add_child(tabs)
+	for r: int in Region.size():
+		var cell := HBoxContainer.new()
+		cell.add_theme_constant_override("separation", 0)
+		tabs.add_child(cell)
+		var btn := Button.new()
+		btn.text = tr(_REGION_KEYS[r])
+		btn.custom_minimum_size = Vector2(0, 44)
+		btn.add_theme_font_size_override("font_size", 18)
+		MenuStyle.apply_focus_ring(btn)
+		SoundManager.wire_button(btn)
+		btn.pressed.connect(_show_region.bind(r))
+		cell.add_child(btn)
+		_tab_btns.append(btn)
+		var star: Label = PlayerRowKit.star()
+		star.visible = false
+		cell.add_child(star)
+		_tab_stars.append(star)
 
-	_build_name_section(col)
-	_build_number_section(col)
-	_build_handedness_section(col)
-	_build_position_section(col)
-	_build_skin_section(col)
-	_build_hair_section(col)
-	_build_height_section(col)
-	_build_weight_section(col)
-	_build_locker_row(col)
-	_build_team_section(col)
-
-	_lock_label = Label.new()
-	_lock_label.text = "Build locked during online play."
-	_lock_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_lock_label.add_theme_color_override("font_color", MenuStyle.TEXT_DIM)
-	_lock_label.add_theme_font_size_override("font_size", 13)
-	_lock_label.visible = false
-	col.add_child(_lock_label)
-
-	_build_action_row(vbox)
-
-	_locker_popup = LockerPopup.new()
-	_locker_popup.locker_edited.connect(_on_locker_edited)
-	add_child(_locker_popup)
-
-
-# The locker launcher — the button names itself, so the gutter stays empty and
-# the button fills the shared field width. Its gold "unapplied changes" note
-# sits beneath (pending locker edits are otherwise invisible until Apply) and
-# reserves its line so the column doesn't jump.
-func _build_locker_row(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-	var gutter := Control.new()
-	gutter.custom_minimum_size = Vector2(_IDENTITY_LABEL_W, 0)
-	row.add_child(gutter)
-
-	var box := VBoxContainer.new()
-	box.add_theme_constant_override("separation", 2)
-	row.add_child(box)
-	_locker_edit_btn = Button.new()
-	_locker_edit_btn.text = tr(&"LOCKER_EDIT_BUTTON")
-	_locker_edit_btn.custom_minimum_size = Vector2(_FIELD_W, 48)
-	_locker_edit_btn.add_theme_font_size_override("font_size", 17)
-	MenuStyle.wire_hover_scale(_locker_edit_btn)
-	SoundManager.wire_button(_locker_edit_btn)
-	_locker_edit_btn.pressed.connect(_open_locker)
-	box.add_child(_locker_edit_btn)
-
-	_locker_pending_label = Label.new()
-	_locker_pending_label.text = tr(&"EDIT_PENDING_NOTE")
-	_locker_pending_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_locker_pending_label.add_theme_color_override("font_color", MenuStyle.GOLD)
-	_locker_pending_label.add_theme_font_size_override("font_size", 12)
-	# Invisible-but-space-reserving so a note appearing doesn't reflow the rows
-	# below (Label has no reserve mode; modulate keeps layout, unlike visible).
-	_locker_pending_label.modulate = Color(1, 1, 1, 0)
-	box.add_child(_locker_pending_label)
-
-
-func _open_locker() -> void:
-	# The whole kit goes over: the mannequin wears the pending sweater, and a
-	# gear model resolves its TEAM / ACCENT / LIGHT zones against that same
-	# pick, so the locker previews the design on the team you are about to play
-	# for.
-	_locker_popup.set_focus_scope(self, _locker_edit_btn)
-	_locker_popup.open(_pending_attributes(), _pending_tape, _pending_gear,
-			_build_locked, _pending_team_colors(), _pending_skin, _pending_is_left,
-			_pending_name, _pending_number)
-
-
-func _on_locker_edited(profile: int, curve: int, flex: int, length: int,
-		tape_code: int, gear_code: int) -> void:
-	if not _build_locked:
-		_pending_profile = profile
-		_pending_curve = curve
-		_pending_flex = flex
-		_pending_length = length
-	_pending_tape = tape_code
-	_pending_gear = GearStyleConfig.from_code(gear_code).to_code()
-	_update_apply_state()
-
-
-func _add_close_row(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
 	var spacer := Control.new()
 	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-	row.add_child(spacer)
+	header.add_child(spacer)
 	var close_btn := MenuStyle.close_button()
 	close_btn.pressed.connect(_cancel)
 	SoundManager.wire_button(close_btn)
-	row.add_child(close_btn)
-	vbox.add_child(row)
+	header.add_child(close_btn)
+	for r: int in Region.size():
+		_tab_stars[r].visible = _tab_gameplay[r]
 
 
-# Rows share a fixed label gutter — labels LEFT-aligned so they all start on
-# the same edge (right-aligned labels left the block's left side ragged and
-# the card read off-center) — and every control region fills the same
-# _FIELD_W (the number field is the one deliberate exception — two digits in
-# a 260px box read wrong), so the card is a clean rectangle: label starts,
-# field left edges, and field right edges each run straight top to bottom.
-# Paired controls (Shoots, the workbench buttons) split the width; the
-# sliders' 60px value label counts inside it.
-const _IDENTITY_LABEL_W: float = 92.0
-const _FIELD_W: float = 260.0
-const _FIELD_VALUE_W: float = 60.0
-const _PAIR_W: float = (_FIELD_W - 12.0) / 2.0
-
-
-func _make_identity_label(text: String, tooltip: String = "") -> Label:
-	var label := Label.new()
-	label.text = text
-	label.custom_minimum_size = Vector2(_IDENTITY_LABEL_W, 0)
-	label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
-	label.add_theme_font_size_override("font_size", 20)
-	label.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
-	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	if not tooltip.is_empty():
-		label.mouse_filter = Control.MOUSE_FILTER_STOP
-		label.tooltip_text = tooltip
-	return label
-
-
-func _build_name_section(vbox: VBoxContainer) -> void:
+func _build_footer(vbox: VBoxContainer) -> void:
 	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
 	row.add_theme_constant_override("separation", 12)
 	vbox.add_child(row)
-
-	row.add_child(_make_identity_label("Name:"))
-
-	_name_field = LineEdit.new()
-	_name_field.placeholder_text = "Player"
-	# 12 fits the skater jersey nameplate at font 28 without clipping at the
-	# back-center seam (jersey_decal.gd centers the name in ~256px of room),
-	# and the lobby slot cards shrink-to-fit anything up to it.
-	_name_field.max_length = 12
-	_name_field.custom_minimum_size = Vector2(_FIELD_W, 48)
-	_name_field.add_theme_font_size_override("font_size", 18)
-	row.add_child(_name_field)
-
-	_name_warning = Label.new()
-	_name_warning.text = "Name not allowed"
-	_name_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_name_warning.add_theme_color_override("font_color", MenuStyle.DANGER)
-	_name_warning.add_theme_font_size_override("font_size", 14)
-	_name_warning.visible = false
-	vbox.add_child(_name_warning)
-
-	_name_field.text_changed.connect(_on_name_text_changed)
-
-
-func _on_name_text_changed(t: String) -> void:
-	var trimmed: String = t.strip_edges()
-	if trimmed.is_empty():
-		_name_warning.visible = false
-		_name_valid = false
-		_pending_name = ""
-		_update_apply_state()
-		return
-	if not NameFilter.is_alphanumeric(trimmed):
-		_name_warning.text = "Letters and numbers only"
-		_name_warning.visible = true
-		_name_valid = false
-		_update_apply_state()
-		return
-	if not NameFilter.is_clean(trimmed):
-		_name_warning.text = "Name not allowed"
-		_name_warning.visible = true
-		_name_valid = false
-		_update_apply_state()
-		return
-	_name_warning.visible = false
-	_name_valid = true
-	_pending_name = trimmed
-	_update_apply_state()
-
-
-func _build_number_section(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-
-	row.add_child(_make_identity_label("Number:"))
-
-	_number_field = LineEdit.new()
-	_number_field.placeholder_text = "10"
-	_number_field.max_length = 2
-	_number_field.custom_minimum_size = Vector2(80, 48)
-	_number_field.add_theme_font_size_override("font_size", 18)
-	row.add_child(_number_field)
-
-	_number_warning = Label.new()
-	_number_warning.text = "Numbers only"
-	_number_warning.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_number_warning.add_theme_color_override("font_color", MenuStyle.DANGER)
-	_number_warning.add_theme_font_size_override("font_size", 14)
-	_number_warning.visible = false
-	vbox.add_child(_number_warning)
-
-	_number_field.text_changed.connect(_on_number_text_changed)
-
-
-func _on_number_text_changed(t: String) -> void:
-	if t.is_empty():
-		_number_warning.visible = false
-		_number_valid = false
-		_update_apply_state()
-		return
-	if not t.is_valid_int():
-		_number_warning.visible = true
-		_number_valid = false
-		_update_apply_state()
-		return
-	_number_warning.visible = false
-	_number_valid = true
-	_pending_number = clamp(t.to_int(), 0, 99)
-	_update_apply_state()
-
-
-func _build_handedness_section(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-
-	row.add_child(_make_identity_label("Shoots:"))
-
-	_left_btn = Button.new()
-	_left_btn.text = "Left"
-	_left_btn.toggle_mode = true
-	_left_btn.custom_minimum_size = Vector2(_PAIR_W, 48)
-	_left_btn.add_theme_font_size_override("font_size", 18)
-	MenuStyle.wire_hover_scale(_left_btn)
-	SoundManager.wire_button(_left_btn)
-	row.add_child(_left_btn)
-
-	_right_btn = Button.new()
-	_right_btn.text = "Right"
-	_right_btn.toggle_mode = true
-	_right_btn.custom_minimum_size = Vector2(_PAIR_W, 48)
-	_right_btn.add_theme_font_size_override("font_size", 18)
-	MenuStyle.wire_hover_scale(_right_btn)
-	SoundManager.wire_button(_right_btn)
-	row.add_child(_right_btn)
-
-	_left_btn.toggled.connect(func(pressed: bool) -> void:
-		if not pressed and not _right_btn.button_pressed:
-			_left_btn.button_pressed = true
-			return
-		_right_btn.button_pressed = not pressed
-		_pending_is_left = pressed
-		_update_apply_state())
-	_right_btn.toggled.connect(func(pressed: bool) -> void:
-		if not pressed and not _left_btn.button_pressed:
-			_right_btn.button_pressed = true
-			return
-		_left_btn.button_pressed = not pressed
-		_pending_is_left = not pressed
-		_update_apply_state())
-
-
-# Position dropdown (LW C RW LD RD in rink order); the pick is only read at
-# lobby seat time, so it never locks.
-func _build_position_section(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-
-	row.add_child(_make_identity_label(tr(&"PLAYER_POSITION_LABEL"), _POSITION_TOOLTIP))
-
-	_position_btn = OptionButton.new()
-	_position_btn.custom_minimum_size = Vector2(_FIELD_W, 48)
-	_position_btn.add_theme_font_size_override("font_size", 16)
-	_position_btn.tooltip_text = _POSITION_TOOLTIP
-	for i: int in _POSITION_KEYS.size():
-		_position_btn.add_item(tr(_POSITION_KEYS[i]), i)
-	SoundManager.wire_button(_position_btn)
-	_position_btn.item_selected.connect(func(index: int) -> void:
-		_pending_position = _POSITION_ORDER[index]
-		_update_apply_state())
-	row.add_child(_position_btn)
-
-
-func _select_position(position: int) -> void:
-	_pending_position = clampi(position, 0, PlayerRules.POSITION_NAMES.size() - 1)
-	if _position_btn != null:
-		_position_btn.select(maxi(_POSITION_ORDER.find(_pending_position), 0))
-	_update_apply_state()
-
-
-func _build_skin_section(vbox: VBoxContainer) -> void:
-	_skin_buttons = _swatch_row(vbox, tr(&"PLAYER_SKIN_LABEL"), SkinToneRegistry.TONES,
-			_select_skin)
-
-
-# Style, beard and one colour for both (and the brows) — who you are, so they
-# sit with the skin rather than in the locker.
-func _build_hair_section(vbox: VBoxContainer) -> void:
-	_hair_btn = _option_row(vbox, tr(&"PLAYER_HAIR_LABEL"), HairStyleRegistry.HAIR_NAME_KEYS,
-			func(index: int) -> void: _edit_hair(index, -1, -1))
-	_facial_btn = _option_row(vbox, tr(&"PLAYER_BEARD_LABEL"),
-			HairStyleRegistry.FACIAL_NAME_KEYS,
-			func(index: int) -> void: _edit_hair(-1, index, -1))
-	_hair_color_buttons = _swatch_row(vbox, tr(&"PLAYER_HAIR_COLOR_LABEL"),
-			HairStyleRegistry.COLORS, func(index: int) -> void: _edit_hair(-1, -1, index))
-
-
-func _option_row(vbox: VBoxContainer, label_text: String, keys: Array[StringName],
-		on_pick: Callable) -> OptionButton:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-	row.add_child(_make_identity_label(label_text))
-	var btn := OptionButton.new()
-	btn.custom_minimum_size = Vector2(_FIELD_W, 48)
-	btn.add_theme_font_size_override("font_size", 16)
-	for i: int in keys.size():
-		btn.add_item(tr(keys[i]), i)
-	SoundManager.wire_button(btn)
-	btn.item_selected.connect(on_pick)
-	row.add_child(btn)
-	return btn
-
-
-# One toggle swatch per palette colour, filling the shared field width; the
-# picked one wears a white ring. Selection is exclusive-managed by the caller's
-# `on_pick` (set_pressed_no_signal on the rest) so a swatch can never be
-# un-picked into "none".
-func _swatch_row(vbox: VBoxContainer, label_text: String, colors: Array[Color],
-		on_pick: Callable) -> Array[Button]:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-	row.add_child(_make_identity_label(label_text))
-	var swatches := HBoxContainer.new()
-	swatches.add_theme_constant_override("separation", 6)
-	swatches.custom_minimum_size = Vector2(_FIELD_W, 0)
-	row.add_child(swatches)
-	var buttons: Array[Button] = []
-	for i: int in colors.size():
-		var btn := Button.new()
-		btn.toggle_mode = true
-		btn.custom_minimum_size = Vector2(0, 48)
-		btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
-		var plain := StyleBoxFlat.new()
-		plain.bg_color = colors[i]
-		plain.set_corner_radius_all(6)
-		var ringed := plain.duplicate() as StyleBoxFlat
-		ringed.border_color = Color.WHITE
-		ringed.set_border_width_all(3)
-		btn.add_theme_stylebox_override("normal", plain)
-		btn.add_theme_stylebox_override("hover", ringed)
-		btn.add_theme_stylebox_override("pressed", ringed)
-		btn.add_theme_stylebox_override("hover_pressed", ringed)
-		SoundManager.wire_button(btn)
-		btn.pressed.connect(on_pick.bind(i))
-		swatches.add_child(btn)
-		buttons.append(btn)
-	return buttons
-
-
-# Writes the hair fields given (−1 keeps a field) into the pending gear code and
-# re-syncs the three controls to it.
-func _edit_hair(style: int, facial: int, color: int) -> void:
-	var gear := GearStyleConfig.from_code(_pending_gear)
-	if style >= 0:
-		gear.hair_style = style
-	if facial >= 0:
-		gear.facial_hair = facial
-	if color >= 0:
-		gear.hair_color = color
-	_pending_gear = GearStyleConfig.from_code(gear.to_code()).to_code()
-	_show_hair()
-	_update_apply_state()
-
-
-func _show_hair() -> void:
-	var gear := GearStyleConfig.from_code(_pending_gear)
-	_hair_btn.select(gear.hair_style)
-	_facial_btn.select(gear.facial_hair)
-	for i: int in _hair_color_buttons.size():
-		_hair_color_buttons[i].set_pressed_no_signal(i == gear.hair_color)
-
-
-func _select_skin(index: int) -> void:
-	_pending_skin = SkinToneRegistry.clamp_index(index)
-	for i: int in _skin_buttons.size():
-		_skin_buttons[i].set_pressed_no_signal(i == _pending_skin)
-	_update_apply_state()
-
-
-func _build_height_section(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-
-	row.add_child(_make_identity_label("Height:", _HEIGHT_TOOLTIP))
-
-	_height_slider = HSlider.new()
-	_height_slider.min_value = PlayerAttributes.HEIGHT_MIN
-	_height_slider.max_value = PlayerAttributes.HEIGHT_MAX
-	_height_slider.step = 1
-	_height_slider.custom_minimum_size = Vector2(_FIELD_W - _FIELD_VALUE_W - 12.0, 36)
-	_height_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_height_slider.set_value_no_signal(PlayerAttributes.HEIGHT_MEDIUM)
-	_height_slider.tooltip_text = _HEIGHT_TOOLTIP
-	_height_slider.value_changed.connect(_on_height_changed)
-	row.add_child(_height_slider)
-
-	_height_value_label = Label.new()
-	_height_value_label.custom_minimum_size = Vector2(_FIELD_VALUE_W, 0)
-	_height_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_height_value_label.add_theme_font_size_override("font_size", 18)
-	_height_value_label.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
-	_height_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(_height_value_label)
-
-
-func _build_weight_section(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-
-	row.add_child(_make_identity_label("Weight:", _WEIGHT_TOOLTIP))
-
-	_weight_slider = HSlider.new()
-	_weight_slider.step = 1
-	_weight_slider.custom_minimum_size = Vector2(_FIELD_W - _FIELD_VALUE_W - 12.0, 36)
-	_weight_slider.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	_weight_slider.tooltip_text = _WEIGHT_TOOLTIP
-	_weight_slider.value_changed.connect(_on_weight_changed)
-	row.add_child(_weight_slider)
-
-	_weight_value_label = Label.new()
-	_weight_value_label.custom_minimum_size = Vector2(_FIELD_VALUE_W, 0)
-	_weight_value_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_weight_value_label.add_theme_font_size_override("font_size", 18)
-	_weight_value_label.add_theme_color_override("font_color", MenuStyle.TEXT_BODY)
-	_weight_value_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	row.add_child(_weight_value_label)
-
-
-func _on_height_changed(value: float) -> void:
-	if _refreshing or _build_locked:
-		return
-	# Preserve the FRAME across the height change: ride frame-t, not raw BMI —
-	# the band's lean half is truncated by the absolute playable-mass floor at
-	# the short heights, so carrying the frame position is what keeps a lean
-	# build lean (and pins a neutral build to neutral) across the whole range.
-	var frame: float = PlayerAttributes.frame_t_for(_pending_height, _pending_weight)
-	_pending_height = int(value)
-	_pending_weight = PlayerAttributes.weight_for_frame_t(_pending_height, frame)
-	_refresh_build()
-	_update_apply_state()
-
-
-func _on_weight_changed(value: float) -> void:
-	if _refreshing or _build_locked:
-		return
-	_pending_weight = PlayerAttributes.coerce_weight(_pending_height, int(value))
-	_refresh_build()
-	_update_apply_state()
-
-
-func _build_team_section(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_BEGIN
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
-
-	row.add_child(_make_identity_label("Team:"))
-
-	var initial_slot: int = PlayerPrefs.preferred_color_slot
-	if initial_slot < 0:
-		initial_slot = TeamColorRegistry.DEFAULT_HOME_SLOT
-	_color_dropdown = PaletteDropdown.new(initial_slot, Vector2(_FIELD_W, 48))
-	row.add_child(_color_dropdown)
-
-	_color_dropdown.selected.connect(func(slot: int) -> void:
-		_pending_color_slot = slot
-		_update_apply_state())
-
-
-func _build_action_row(vbox: VBoxContainer) -> void:
-	var row := HBoxContainer.new()
-	row.alignment = BoxContainer.ALIGNMENT_CENTER
-	row.add_theme_constant_override("separation", 12)
-	vbox.add_child(row)
+	_pending_label = Label.new()
+	_pending_label.text = tr(&"EDIT_PENDING_NOTE")
+	_pending_label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	_pending_label.add_theme_color_override("font_color", MenuStyle.GOLD)
+	_pending_label.add_theme_font_size_override("font_size", 14)
+	row.add_child(_pending_label)
+	var spacer := Control.new()
+	spacer.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	row.add_child(spacer)
 
 	_apply_btn = Button.new()
-	_apply_btn.text = "Apply"
+	_apply_btn.text = tr(&"PLAYER_APPLY")
 	MenuStyle.apply_primary_cta(_apply_btn, 18)
 	_apply_btn.custom_minimum_size = Vector2(140, 44)
 	_apply_btn.pressed.connect(_apply)
@@ -689,221 +360,440 @@ func _build_action_row(vbox: VBoxContainer) -> void:
 	row.add_child(_apply_btn)
 
 	var cancel_btn := Button.new()
-	cancel_btn.text = "Cancel"
+	cancel_btn.text = tr(&"EDITOR_CANCEL")
 	cancel_btn.custom_minimum_size = Vector2(140, 44)
 	cancel_btn.add_theme_font_size_override("font_size", 18)
+	MenuStyle.apply_focus_ring(cancel_btn)
 	cancel_btn.pressed.connect(_cancel)
 	SoundManager.wire_button(cancel_btn)
 	row.add_child(cancel_btn)
 
 
-# The pending build as a coerced PlayerAttributes (what the stick editor
-# previews — its stick gear rides real height, so it needs the body too).
-func _pending_attributes() -> PlayerAttributes:
-	return PlayerAttributes.new(_pending_height, _pending_weight, _pending_profile,
-			_pending_curve, _pending_flex, _pending_length)
+# A row in the region being built. Hovering it, or reaching any control in it,
+# frames `focus` in the case.
+func _row(page: VBoxContainer, label_key: StringName, gameplay: bool,
+		focus: int) -> VBoxContainer:
+	if gameplay:
+		_tab_gameplay[_building] = true
+	return PlayerRowKit.row(page, tr(label_key), gameplay, _case.frame.bind(focus))
 
 
-func _pending_team_colors() -> Dictionary:
-	return TeamColorRegistry.get_colors(maxi(_pending_color_slot, 0), 0)
+func _wire_reach(controls: Array, focus: int) -> void:
+	for c: Control in controls:
+		var target: Control = c
+		if c is SwatchDropdown:
+			target = (c as SwatchDropdown).focus_target()
+		target.focus_entered.connect(_case.frame.bind(focus))
+		target.mouse_entered.connect(_case.frame.bind(focus))
 
 
-# Whether the equipment the player would get on Apply differs from what the
-# rink is showing — pending locker edits are otherwise invisible behind the
-# button. Everything the locker owns counts: the stick gear and blade profile,
-# the tape, and the gear code's equipment fields — not its hair, which is edited
-# in plain sight on this screen.
-func _is_locker_dirty() -> bool:
-	return _pending_profile != int(_snapshot.get("profile", 0)) \
-			or _pending_curve != int(_snapshot.get("curve", 0)) \
-			or _pending_flex != int(_snapshot.get("flex", 0)) \
-			or _pending_length != int(_snapshot.get("length", 0)) \
-			or _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE)) \
-			or GearStyleConfig.from_code(_pending_gear).equipment_code() != GearStyleConfig \
-					.from_code(int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))) \
-					.equipment_code()
+func _build_you(page: VBoxContainer) -> void:
+	var full: int = LockerMannequin.Focus.FULL
+	var name_col: VBoxContainer = _row(page, &"PLAYER_NAME_LABEL", false, full)
+	_name_field = LineEdit.new()
+	_name_field.placeholder_text = tr(&"PLAYER_NAME_PLACEHOLDER")
+	# 12 fits the jersey nameplate at font 28 without clipping at the back seam,
+	# and the lobby slot cards shrink-to-fit anything up to it.
+	_name_field.max_length = 12
+	_name_field.custom_minimum_size = Vector2(PlayerRowKit.FIELD_W, PlayerRowKit.CONTROL_H)
+	_name_field.add_theme_font_size_override("font_size", 18)
+	_name_field.text_changed.connect(_on_name_text_changed)
+	name_col.add_child(_name_field)
+	_name_warning = _warning(name_col)
+
+	var num_col: VBoxContainer = _row(page, &"PLAYER_NUMBER_LABEL", false, full)
+	_number_field = LineEdit.new()
+	_number_field.max_length = 2
+	_number_field.custom_minimum_size = Vector2(80, PlayerRowKit.CONTROL_H)
+	_number_field.size_flags_horizontal = Control.SIZE_SHRINK_BEGIN
+	_number_field.add_theme_font_size_override("font_size", 18)
+	_number_field.text_changed.connect(_on_number_text_changed)
+	num_col.add_child(_number_field)
+	_number_warning = _warning(num_col)
+
+	_shoots_btns = PlayerRowKit.segmented(_row(page, &"PLAYER_SHOOTS_LABEL", true, full),
+			[tr(&"PLAYER_SHOOTS_LEFT"), tr(&"PLAYER_SHOOTS_RIGHT")],
+			func(i: int) -> void:
+				_draft.is_left_handed = i == 0
+				_edited())
+
+	var pos_col: VBoxContainer = _row(page, &"PLAYER_POSITION_LABEL", false, full)
+	var badges: Array[String] = []
+	for key: StringName in _POSITION_BADGE_KEYS:
+		badges.append(tr(key))
+	_position_btns = PlayerRowKit.segmented(pos_col, badges, func(i: int) -> void:
+		_draft.position = _POSITION_ORDER[i]
+		_edited())
+	for i: int in _position_btns.size():
+		_position_btns[i].tooltip_text = tr(_POSITION_KEYS[i])
+	PlayerRowKit.hint(pos_col).text = tr(&"PLAYER_POSITION_HINT")
+
+	var team_col: VBoxContainer = _row(page, &"PLAYER_TEAM_LABEL", false, full)
+	_color_dropdown = PaletteDropdown.new(TeamColorRegistry.DEFAULT_HOME_SLOT,
+			Vector2(PlayerRowKit.FIELD_W, PlayerRowKit.CONTROL_H))
+	_color_dropdown.selected.connect(func(slot: int) -> void:
+		_draft.color_slot = slot
+		_edited())
+	team_col.add_child(_color_dropdown)
 
 
-func _is_build_dirty() -> bool:
-	return _pending_height != int(_snapshot.get("height", 0)) \
-			or _pending_weight != int(_snapshot.get("weight", 0)) \
-			or _pending_profile != int(_snapshot.get("profile", 0)) \
-			or _pending_curve != int(_snapshot.get("curve", 0)) \
-			or _pending_flex != int(_snapshot.get("flex", 0)) \
-			or _pending_length != int(_snapshot.get("length", 0))
+func _warning(parent: Container) -> Label:
+	var w := Label.new()
+	w.add_theme_color_override("font_color", MenuStyle.DANGER)
+	w.add_theme_font_size_override("font_size", 13)
+	w.visible = false
+	parent.add_child(w)
+	return w
 
 
-# Apply is disabled when (a) nothing changed, or (b) any field is invalid.
-func _update_apply_state() -> void:
-	if _apply_btn == null:
+func _build_body(page: VBoxContainer) -> void:
+	var full: int = LockerMannequin.Focus.FULL
+	var h_col: VBoxContainer = _row(page, &"PLAYER_HEIGHT_LABEL", true, full)
+	var h: Array[Control] = PlayerRowKit.slider(h_col, _on_height_changed)
+	_height_slider = h[0] as HSlider
+	_height_slider.min_value = PlayerAttributes.HEIGHT_MIN
+	_height_slider.max_value = PlayerAttributes.HEIGHT_MAX
+	_height_value = h[1] as Label
+	PlayerRowKit.hint(h_col).text = tr(&"PLAYER_HEIGHT_HINT")
+
+	var w_col: VBoxContainer = _row(page, &"PLAYER_WEIGHT_LABEL", true, full)
+	var w: Array[Control] = PlayerRowKit.slider(w_col, _on_weight_changed)
+	_weight_slider = w[0] as HSlider
+	_weight_value = w[1] as Label
+	_weight_hint = PlayerRowKit.hint(w_col)
+	_wire_reach([_height_slider, _weight_slider], full)
+
+	_skin_buttons = PlayerRowKit.swatches(_row(page, &"PLAYER_SKIN_LABEL", false, full),
+			SkinToneRegistry.TONES, [], func(i: int) -> void:
+				_draft.skin = SkinToneRegistry.clamp_index(i)
+				_edited())
+	_wire_reach(_skin_buttons, full)
+
+	var gloves: int = LockerMannequin.Focus.GLOVES
+	_glove_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_GLOVES_LABEL", false, gloves),
+			func(i: int) -> void: _edit_gear(&"glove_model", i))
+	_tuck_btn = PlayerRowKit.option_button(_row(page, &"GEAR_TUCK_LABEL", false, full),
+			func(i: int) -> void: _edit_gear(&"jersey_tuck", i))
+	for i: int in GearModelRegistry.tuck_count():
+		_tuck_btn.add_item(tr(GearModelRegistry.TUCK_NAME_KEYS[i]), i)
+	_wire_reach([_glove_btn], gloves)
+	_wire_reach([_tuck_btn], full)
+
+
+func _build_head(page: VBoxContainer) -> void:
+	var head: int = LockerMannequin.Focus.HELMET
+	var hair_names: Array[String] = []
+	for key: StringName in HairStyleRegistry.HAIR_NAME_KEYS:
+		hair_names.append(tr(key))
+	_hair_btns = PlayerRowKit.segmented(_row(page, &"PLAYER_HAIR_LABEL", false, head),
+			hair_names, func(i: int) -> void: _edit_gear(&"hair_style", i))
+	_facial_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_BEARD_LABEL", false, head),
+			func(i: int) -> void: _edit_gear(&"facial_hair", i))
+	for i: int in HairStyleRegistry.facial_count():
+		_facial_btn.add_item(tr(HairStyleRegistry.FACIAL_NAME_KEYS[i]), i)
+	var color_names: Array[String] = []
+	for key: StringName in HairStyleRegistry.COLOR_NAME_KEYS:
+		color_names.append(tr(key))
+	_hair_color_buttons = PlayerRowKit.swatches(
+			_row(page, &"PLAYER_HAIR_COLOR_LABEL", false, head), HairStyleRegistry.COLORS,
+			color_names, func(i: int) -> void: _edit_gear(&"hair_color", i))
+	var face_names: Array[String] = []
+	for key: StringName in GearModelRegistry.FACE_NAME_KEYS:
+		face_names.append(tr(key))
+	_face_btns = PlayerRowKit.segmented(_row(page, &"PLAYER_HELMET_LABEL", false, head),
+			face_names, func(i: int) -> void: _edit_gear(&"helmet_face", i))
+	var head_controls: Array = [_facial_btn]
+	head_controls.append_array(_hair_btns)
+	head_controls.append_array(_hair_color_buttons)
+	head_controls.append_array(_face_btns)
+	_wire_reach(head_controls, head)
+
+
+func _build_stick(page: VBoxContainer) -> void:
+	# Each row asks for the shot its pick shows up in: cut and stiffness are the
+	# whole stick, the pattern and the tape live on the blade, the knob and the
+	# wrap are up at the butt.
+	var stick: int = LockerMannequin.Focus.STICK
+	var blade: int = LockerMannequin.Focus.BLADE
+	var grip: int = LockerMannequin.Focus.GRIP
+	_gear_row(page, &"STICK_GEAR_LENGTH", &"length", _LENGTH_KEYS, _LENGTH_HINTS, stick)
+	_gear_row(page, &"STICK_GEAR_CURVE", &"curve", _CURVE_KEYS, _CURVE_HINTS, blade)
+	_flex_row = _gear_row(page, &"STICK_GEAR_FLEX", &"flex", _FLEX_KEYS, _FLEX_HINTS, stick)
+
+	# Stick colorways are fixed designs with no kit zones, so their items fill once.
+	_stick_model_btn = PlayerRowKit.option_button(
+			_row(page, &"STICK_MODEL_LABEL", false, stick),
+			func(i: int) -> void: _edit_gear(&"stick_model", i))
+	for model: int in StickModelRegistry.count():
+		_stick_model_btn.add_icon_item(
+				PlayerRowKit.swatch_strip(StickModelRegistry.swatch_colors(model)),
+				tr(StickModelRegistry.NAME_KEYS[model]), model)
+	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
+			func(i: int) -> void: _edit_tape(i, -1, -1, -1))
+	_span_btn = PlayerRowKit.option_button(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
+			func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
+	for i: int in _SPAN_KEYS.size():
+		_span_btn.add_item(tr(_SPAN_KEYS[i]), i)
+	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
+			func(i: int) -> void: _edit_tape(-1, -1, i, -1))
+	_style_btn = PlayerRowKit.option_button(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
+			func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
+	for i: int in _STYLE_KEYS.size():
+		_style_btn.add_item(tr(_STYLE_KEYS[i]), i)
+	_wire_reach([_stick_model_btn], stick)
+	_wire_reach([_blade_color_dd, _span_btn], blade)
+	_wire_reach([_knob_color_dd, _style_btn], grip)
+
+
+func _build_skates(page: VBoxContainer) -> void:
+	var skates: int = LockerMannequin.Focus.SKATES
+	_gear_row(page, &"GEAR_PROFILE_LABEL", &"profile", _PROFILE_KEYS, _PROFILE_HINTS, skates)
+	# Model items are rebuilt with the team: a model's TEAM zones resolve against
+	# the kit the player is about to wear.
+	_skate_btn = PlayerRowKit.option_button(_row(page, &"STICK_MODEL_LABEL", false, skates),
+			func(i: int) -> void: _edit_gear(&"skate_model", i))
+	_lace_dd = _swatch_dropdown(_row(page, &"GEAR_LACES_LABEL", false, skates),
+			func(i: int) -> void: _edit_gear(&"lace_color", i))
+	_wire_reach([_skate_btn, _lace_dd], skates)
+
+
+func _gear_row(page: VBoxContainer, label_key: StringName, field: StringName,
+		option_keys: Array[StringName], hint_keys: Array[StringName], focus: int) -> _GearRow:
+	var col: VBoxContainer = _row(page, label_key, true, focus)
+	var labels: Array[String] = []
+	for key: StringName in option_keys:
+		labels.append(tr(key))
+	var r := _GearRow.new()
+	r.field = field
+	r.hint_keys = hint_keys
+	r.buttons = PlayerRowKit.segmented(col, labels, func(i: int) -> void:
+		_draft.set(field, i)
+		_edited())
+	r.hint = PlayerRowKit.hint(col)
+	_wire_reach(r.buttons, focus)
+	_gear_rows.append(r)
+	return r
+
+
+func _swatch_dropdown(parent: Container, on_pick: Callable) -> SwatchDropdown:
+	var dd := SwatchDropdown.new(Vector2(PlayerRowKit.FIELD_W, PlayerRowKit.CONTROL_H))
+	dd.selected.connect(on_pick)
+	parent.add_child(dd)
+	return dd
+
+
+# ── Editing ──────────────────────────────────────────────────────────────────
+
+func _show_region(r: int) -> void:
+	_region = r
+	for i: int in Region.size():
+		_pages[i].visible = i == r
+		MenuStyle.apply_tab_button(_tab_btns[i], i == r)
+	_case.frame(_REGION_FOCUS[r])
+	var lit: Array[int] = []
+	lit.assign(_emphasis[r])
+	_stats.emphasize(lit, tr(_REGION_NOTE_KEYS[r]))
+
+
+func _edited() -> void:
+	_refresh()
+	_update_apply_state()
+
+
+func _edit_gear(field: StringName, value: int) -> void:
+	var g: GearStyleConfig = _draft.gear()
+	g.set(field, value)
+	_draft.set_gear(g)
+	_edited()
+
+
+# −1 keeps a field.
+func _edit_tape(blade_color: int, span: int, knob_color: int, knob_style: int) -> void:
+	var t: StickTapeConfig = _draft.tape()
+	_draft.set_tape(StickTapeConfig.new(
+			t.blade_color if blade_color < 0 else blade_color,
+			t.span if span < 0 else span,
+			t.knob_color if knob_color < 0 else knob_color,
+			t.knob_style if knob_style < 0 else knob_style))
+	_edited()
+
+
+func _on_height_changed(value: float) -> void:
+	if _refreshing:
 		return
-	var changed: bool = (_pending_name != _snapshot.get("name", "")
-		or _pending_number != _snapshot.get("number", 0)
-		or _pending_is_left != _snapshot.get("is_left", false)
-		or _pending_position != int(_snapshot.get("position", 0))
-		or _pending_color_slot != _snapshot.get("color_slot", -1)
-		or _pending_skin != int(_snapshot.get("skin", SkinToneRegistry.DEFAULT_INDEX))
-		or _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE))
-		or _pending_gear != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
-		or _is_build_dirty())
-	_apply_btn.disabled = not changed or not _name_valid or not _number_valid
-	# The note fades via modulate, not `visible` — it reserves its line so the
-	# rows below never reflow.
-	if _locker_pending_label != null:
-		_locker_pending_label.modulate.a = 1.0 if _is_locker_dirty() else 0.0
+	_draft.set_height(int(value))
+	_edited()
 
 
-func _apply() -> void:
-	if not _name_valid or not _number_valid:
+func _on_weight_changed(value: float) -> void:
+	if _refreshing:
 		return
-	var name_changed_b: bool = _pending_name != _snapshot.get("name", "")
-	var number_changed_b: bool = _pending_number != _snapshot.get("number", 0)
-	var hand_changed_b: bool = _pending_is_left != _snapshot.get("is_left", false)
-	var color_changed_b: bool = _pending_color_slot != _snapshot.get("color_slot", -1)
-	if name_changed_b:
-		PlayerPrefs.player_name = _pending_name
-		name_changed.emit(_pending_name)
-	if number_changed_b:
-		PlayerPrefs.jersey_number = _pending_number
-		jersey_number_changed.emit(_pending_number)
-	if hand_changed_b:
-		PlayerPrefs.is_left_handed = _pending_is_left
-		handedness_changed.emit(_pending_is_left)
-	if name_changed_b or number_changed_b or hand_changed_b:
-		# Single call writes NetworkManager.local_* and emits the
-		# local_identity_changed signal that GameManager listens to so the
-		# live skater updates without a respawn.
-		NetworkManager.apply_local_identity(_pending_name, _pending_number, _pending_is_left)
-	if _pending_position != int(_snapshot.get("position", 0)):
-		PlayerPrefs.preferred_position = _pending_position
-		# Peer-map mirror only — the preference is read at the next lobby
-		# seat, never live. The signal is for menu chrome (the player card).
-		NetworkManager.apply_local_position(_pending_position)
-		position_changed.emit(_pending_position)
-	if _pending_skin != int(_snapshot.get("skin", SkinToneRegistry.DEFAULT_INDEX)):
-		PlayerPrefs.skin_tone = _pending_skin
-		# Writes the peer map and emits local_skin_changed so GameManager
-		# repaints the live skater — same live-cosmetic path as the tape job.
-		NetworkManager.apply_local_skin(_pending_skin)
-	if color_changed_b:
-		# apply_preferred_color writes PlayerPrefs.preferred_color_slot and
-		# emits local_preferred_color_changed so GameManager can re-tint
-		# the home team's actors and re-roll away if the new home collides.
-		NetworkManager.apply_preferred_color(_pending_color_slot)
-		preferred_color_changed.emit(_pending_color_slot)
-	if _is_build_dirty() and not _build_locked:
-		var new_attrs: PlayerAttributes = _pending_attributes()
-		PlayerPrefs.set_player_attributes(new_attrs)
-		# Updates NetworkManager._peer_attributes[1] so the next spawn picks the
-		# new values up, and its local_attributes_changed re-applies the
-		# multipliers to the live local skater (offline / free-play only —
-		# GameManager's handler is the gate).
-		NetworkManager.apply_local_attributes(new_attrs)
-	if _pending_tape != int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE)):
-		PlayerPrefs.stick_tape_code = _pending_tape
-		NetworkManager.apply_local_tape(_pending_tape)
-	if _pending_gear != int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE)):
-		PlayerPrefs.gear_style_code = _pending_gear
-		# Same live-cosmetic path as tape and skin.
-		NetworkManager.apply_local_gear_style(_pending_gear)
-	PlayerPrefs.save()
-	visible = false
+	_draft.set_weight(int(value))
+	_edited()
 
 
-# Cancel restores form controls to snapshot values so re-opening shows the
-# saved state, not the abandoned edits.
-func _cancel() -> void:
-	_restore_from_snapshot()
-	visible = false
+func _on_name_text_changed(t: String) -> void:
+	var trimmed: String = t.strip_edges()
+	_name_valid = false
+	_name_warning.visible = false
+	if trimmed.is_empty():
+		pass
+	elif not NameFilter.is_alphanumeric(trimmed):
+		_name_warning.text = tr(&"PLAYER_NAME_ALNUM")
+		_name_warning.visible = true
+	elif not NameFilter.is_clean(trimmed):
+		_name_warning.text = tr(&"PLAYER_NAME_NOT_ALLOWED")
+		_name_warning.visible = true
+	else:
+		_name_valid = true
+		_draft.player_name = trimmed
+	_edited()
 
 
-func _restore_from_snapshot() -> void:
-	_pending_name = _snapshot.get("name", "")
-	_pending_number = _snapshot.get("number", 0)
-	_pending_is_left = _snapshot.get("is_left", false)
-	_pending_color_slot = _snapshot.get("color_slot", TeamColorRegistry.DEFAULT_HOME_SLOT)
-	_select_position(int(_snapshot.get("position", 0)))
-	_select_skin(int(_snapshot.get("skin", SkinToneRegistry.DEFAULT_INDEX)))
-	_pending_height = int(_snapshot.get("height", PlayerAttributes.HEIGHT_MEDIUM))
-	_pending_weight = int(_snapshot.get("weight", int(PlayerAttributes.NEUTRAL_WEIGHT_LBS)))
-	_pending_profile = int(_snapshot.get("profile", PlayerAttributes.GEAR_BALANCED))
-	_pending_curve = int(_snapshot.get("curve", PlayerAttributes.GEAR_BALANCED))
-	_pending_flex = int(_snapshot.get("flex", PlayerAttributes.GEAR_BALANCED))
-	_pending_length = int(_snapshot.get("length", PlayerAttributes.GEAR_BALANCED))
-	_pending_tape = int(_snapshot.get("tape", StickTapeConfig.DEFAULT_CODE))
-	_pending_gear = int(_snapshot.get("gear", GearStyleConfig.DEFAULT_CODE))
-	_show_hair()
-	_name_field.text = _pending_name
-	_number_field.text = str(_pending_number)
-	_left_btn.button_pressed = _pending_is_left
-	_right_btn.button_pressed = not _pending_is_left
-	if _color_dropdown != null:
-		_color_dropdown.set_selected(_pending_color_slot)
+func _on_number_text_changed(t: String) -> void:
+	_number_valid = not t.is_empty() and t.is_valid_int()
+	_number_warning.text = tr(&"PLAYER_NUMBER_DIGITS")
+	_number_warning.visible = not t.is_empty() and not t.is_valid_int()
+	if _number_valid:
+		_draft.jersey_number = clampi(t.to_int(), 0, 99)
+	_edited()
+
+
+# ── Showing the draft ────────────────────────────────────────────────────────
+
+func _sync_text_fields() -> void:
+	_name_field.text = _draft.player_name
+	_number_field.text = str(_draft.jersey_number)
 	_name_warning.visible = false
 	_number_warning.visible = false
 	_name_valid = true
 	_number_valid = true
-	_refresh_build()
-	_update_apply_state()
 
 
-# Refresh the build controls (sliders + value labels) from the pending build,
-# and apply the online-match lock. The profile row lives in the locker, which
-# reads the pending value fresh on every open.
-func _refresh_build() -> void:
-	if _height_slider == null:
-		return
-	# Guard the whole pass: assigning the weight slider's bounds below can emit
-	# a reentrant value_changed that would clobber the pending weight.
+# Every control but the text fields (resetting those mid-edit would throw the
+# caret) from the draft, then the figure and the stat panel.
+func _refresh() -> void:
 	_refreshing = true
-	_height_slider.set_value_no_signal(_pending_height)
-	_height_slider.editable = not _build_locked
-	_height_value_label.text = PlayerAttributes.inches_label(_pending_height)
-	# Bounds first, then the value — setting a value outside the slider's
-	# current range would clamp it before the new bounds land.
-	_weight_slider.min_value = PlayerAttributes.weight_min(_pending_height)
-	_weight_slider.max_value = PlayerAttributes.weight_max(_pending_height)
-	_weight_slider.set_value_no_signal(_pending_weight)
-	_weight_slider.editable = not _build_locked
-	_weight_value_label.text = "%d lbs" % _pending_weight
-	if _lock_label != null:
-		_lock_label.visible = _build_locked
+	var gear: GearStyleConfig = _draft.gear()
+	var tape: StickTapeConfig = _draft.tape()
+	PlayerRowKit.select(_shoots_btns, 0 if _draft.is_left_handed else 1)
+	PlayerRowKit.select(_position_btns, _POSITION_ORDER.find(_draft.position))
+	_color_dropdown.set_selected(_draft.color_slot)
+
+	_height_slider.set_value_no_signal(_draft.height)
+	_height_value.text = PlayerAttributes.inches_label(_draft.height)
+	# Bounds first, then the value — a value outside the old range would clamp
+	# before the new bounds land.
+	_weight_slider.min_value = PlayerAttributes.weight_min(_draft.height)
+	_weight_slider.max_value = PlayerAttributes.weight_max(_draft.height)
+	_weight_slider.set_value_no_signal(_draft.weight)
+	_weight_value.text = tr(&"PLAYER_WEIGHT_VALUE") % _draft.weight
+	var frame: int = roundi(PlayerAttributes.frame_t_for(_draft.height, _draft.weight) * 4.0)
+	_weight_hint.text = tr(&"PLAYER_WEIGHT_HINT") % [tr(_FRAME_KEYS[frame]),
+			PlayerAttributes.weight_min(_draft.height), PlayerAttributes.weight_max(_draft.height)]
+	PlayerRowKit.select(_skin_buttons, _draft.skin)
+	_tuck_btn.select(gear.jersey_tuck)
+
+	PlayerRowKit.select(_hair_btns, gear.hair_style)
+	_facial_btn.select(gear.facial_hair)
+	PlayerRowKit.select(_hair_color_buttons, gear.hair_color)
+	PlayerRowKit.select(_face_btns, gear.helmet_face)
+
+	for r: _GearRow in _gear_rows:
+		var pick: int = int(_draft.get(r.field))
+		PlayerRowKit.select(r.buttons, pick)
+		r.hint.text = tr(r.hint_keys[pick])
+	# The flex buttons carry the real stiffness number, fitted to the weight — so
+	# "Stiff" on a light frame can read lower than "Whippy" on a heavy one.
+	var flex_labels: Array[String] = []
+	for i: int in _FLEX_KEYS.size():
+		flex_labels.append(tr(&"STICK_FLEX_ITEM")
+				% [tr(_FLEX_KEYS[i]), PlayerAttributes.flex_number_for(_draft.weight, i)])
+	PlayerRowKit.relabel(_flex_row.buttons, flex_labels)
+	_stick_model_btn.select(clampi(gear.stick_model, 0, StickModelRegistry.count() - 1))
+	_span_btn.select(maxi(_SPAN_OPTIONS.find(tape.span), 0))
+	_style_btn.select(maxi(_STYLE_OPTIONS.find(tape.knob_style), 0))
+
+	if _painted_slot != _draft.color_slot:
+		_painted_slot = _draft.color_slot
+		_paint_team_rows()
+	_glove_btn.select(gear.glove_model)
+	_skate_btn.select(gear.skate_model)
+	_blade_color_dd.set_selected(tape.blade_color)
+	_knob_color_dd.set_selected(tape.knob_color)
+	_lace_dd.set_selected(gear.lace_color)
 	_refreshing = false
 
-
-func _on_overlay_clicked(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		_cancel()
-
-
-func open() -> void:
-	var saved_slot: int = PlayerPrefs.preferred_color_slot
-	if saved_slot < 0:
-		saved_slot = TeamColorRegistry.DEFAULT_HOME_SLOT
-	_build_locked = NetworkManager.is_in_online_match()
-	_snapshot = {
-		"name": PlayerPrefs.player_name,
-		"number": PlayerPrefs.jersey_number,
-		"is_left": PlayerPrefs.is_left_handed,
-		"position": clampi(PlayerPrefs.preferred_position, 0,
-				PlayerRules.POSITION_NAMES.size() - 1),
-		"color_slot": saved_slot,
-		"skin": SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone),
-		"height": PlayerPrefs.attr_height,
-		"weight": PlayerPrefs.attr_weight,
-		"profile": PlayerPrefs.attr_profile,
-		"curve": PlayerPrefs.attr_curve,
-		"flex": PlayerPrefs.attr_flex,
-		"length": PlayerPrefs.attr_length,
-		"tape": PlayerPrefs.stick_tape_code,
-		"gear": GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code(),
-	}
-	_restore_from_snapshot()
-	visible = true
-	ControllerNav.focus_first(self)  # controller: take focus off the Side Menu behind
+	var attrs: PlayerAttributes = _draft.attributes()
+	_case.set_jersey_info(_draft.player_name, _draft.jersey_number)
+	_case.dress(attrs, gear, tape, _draft.team_colors(), _draft.skin, _draft.is_left_handed)
+	_stats.show_build(attrs)
 
 
-func _unhandled_input(event: InputEvent) -> void:
-	if visible and event.is_action_pressed(&"ui_cancel"):
-		_cancel()
-		get_viewport().set_input_as_handled()
+# The rows whose swatches resolve against the team: the skate and glove models
+# (their TEAM zones) and the tape palettes (the TEAM chip).
+func _paint_team_rows() -> void:
+	var colors: Dictionary = _draft.team_colors()
+	var team: Color = colors.get("primary", Color.WHITE)
+	var accent: Color = colors.get("secondary", Color.WHITE)
+	var light: Color = colors.get("light", Color.WHITE)
+	var glove_kit: Color = colors.get("gloves", Color.BLACK)
+	var glove_accent: Color = colors.get("glove_accent", Color.WHITE)
+
+	_skate_btn.clear()
+	for model: int in GearModelRegistry.skate_count():
+		var zones: Array[Color] = []
+		for zone: int in GearModelRegistry.SKATE_ZONE_COUNT:
+			zones.append(GearModelRegistry.skate_color(model, zone, team, accent, light))
+		_skate_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
+				tr(GearModelRegistry.SKATE_NAME_KEYS[model]), model)
+	_glove_btn.clear()
+	for model: int in GearModelRegistry.glove_count():
+		var zones: Array[Color] = []
+		for zone: int in GearModelRegistry.GLOVE_ZONE_COUNT:
+			zones.append(GearModelRegistry.glove_color(model, zone,
+					glove_kit, glove_accent, light))
+		_glove_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
+				tr(GearModelRegistry.GLOVE_NAME_KEYS[model]), model)
+
+	var tape_colors: Array[Color] = []
+	var names: Array[String] = []
+	var chips: Array[String] = []
+	for i: int in TapeColorRegistry.count():
+		tape_colors.append(TapeColorRegistry.resolve(i, team))
+		names.append(tr(TapeColorRegistry.NAME_KEYS[i]))
+		# The TEAM chip says so — it tracks the kit rather than being one more
+		# fixed colour.
+		chips.append(tr(&"TAPE_COLOR_TEAM_SHORT") if i == TapeColorRegistry.TEAM_INDEX else "")
+	for dd: SwatchDropdown in [_blade_color_dd, _knob_color_dd, _lace_dd]:
+		dd.set_palette(tape_colors, names, chips)
+
+
+func _update_apply_state() -> void:
+	var changed: bool = _draft.differs(_saved)
+	_apply_btn.disabled = not changed or not _name_valid or not _number_valid
+	# Fades via modulate rather than `visible`, so the footer never reflows.
+	_pending_label.modulate.a = 1.0 if changed else 0.0
+
+
+# ── Commit ───────────────────────────────────────────────────────────────────
+
+func _apply() -> void:
+	if not _name_valid or not _number_valid:
+		return
+	_draft.commit(_saved)
+	if _draft.player_name != _saved.player_name:
+		name_changed.emit(_draft.player_name)
+	if _draft.jersey_number != _saved.jersey_number:
+		jersey_number_changed.emit(_draft.jersey_number)
+	if _draft.is_left_handed != _saved.is_left_handed:
+		handedness_changed.emit(_draft.is_left_handed)
+	if _draft.position != _saved.position:
+		position_changed.emit(_draft.position)
+	if _draft.color_slot != _saved.color_slot:
+		preferred_color_changed.emit(_draft.color_slot)
+	visible = false
+
+
+func _cancel() -> void:
+	visible = false

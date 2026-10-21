@@ -811,6 +811,7 @@ func _summarise_replay(path: String, meta: Dictionary) -> Dictionary:
 		"shots": (footer.get("shot_events", []) as Array).size() \
 				if footer.get("shot_events") != null else 0,
 		"shot_rows": footer.get("shot_events", []),
+		"box_score": footer.get("players", []),
 	}
 
 
@@ -1046,15 +1047,17 @@ func _on_analytics_pressed(summary: Dictionary) -> void:
 		colors.append(c as Color)
 	if String(summary.get("source", "")) == "local":
 		_show_analytics(ShotEvent.decode_list(summary.get("shot_rows", []) as Array),
-				home, away, label, colors)
+				home, away, label, colors, summary.get("box_score", []) as Array)
 		return
+	# No box score for a backend game: career_stats holds humans only, so its team
+	# sums would leave every bot's hits and faceoffs out.
 	_reporter.fetch_shot_events(String(summary.get("game_id", "")),
 			func(rows: Array) -> void:
-				_show_analytics(ShotEvent.decode_rows(rows), home, away, label, colors))
+				_show_analytics(ShotEvent.decode_rows(rows), home, away, label, colors, []))
 
 
 func _show_analytics(events: Array[ShotEvent], home: int, away: int, label: String,
-		colors: Array[Color]) -> void:
+		colors: Array[Color], box_score: Array) -> void:
 	if _analytics == null:
 		# Created lazily and owned here: the career screen is reachable from the
 		# main menu, where no HUD exists to provide one.
@@ -1063,7 +1066,7 @@ func _show_analytics(events: Array[ShotEvent], home: int, away: int, label: Stri
 		# behind it and hand focus back to the Watch row on close.
 		_analytics.set_focus_background(self)
 		add_child(_analytics)
-	_analytics.present_history(events, home, away, label, colors)
+	_analytics.present_history(events, home, away, label, colors, box_score)
 
 
 func _on_watch_pressed(path: String) -> void:

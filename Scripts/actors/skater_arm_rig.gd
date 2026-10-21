@@ -94,8 +94,9 @@ func setup(skater: Skater) -> void:
 # Reads the scene-authored placement of the four shell parts out of the
 # UpperBody subtree, seeds the body skeleton's upper bones from it, then frees
 # those nodes — keeping Scenes/Skater.tscn the place the proportions are
-# authored.
-func build(skeleton: Skeleton3D) -> void:
+# authored. `body_material` is the skater's BodyZonePaint, which the upper body's
+# one surface wears.
+func build(skeleton: Skeleton3D, body_material: Material) -> void:
 	var count: int = SkaterMeshBuilder.UPPER_BONE_COUNT
 	var upper_body: Node3D = _skater.upper_body
 	_basis.resize(count)
@@ -114,6 +115,8 @@ func build(skeleton: Skeleton3D) -> void:
 			_native_arms[arm].bind(skeleton, upper_body, bones)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "UpperMesh"
+	_mesh.mesh = SkaterMeshBuilder.shared_upper_body_mesh()
+	_mesh.set_surface_override_material(0, body_material)
 	_mesh.skin = SkaterMeshBuilder.shared_upper_skin()
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
@@ -607,8 +610,8 @@ func apply_gear_meshes() -> void:
 			_head_attach.add_child(piece)
 			_head_pieces.append(piece)
 	var gear: GearStyleConfig = _skater.gear_style
-	# Every tuck's mesh has the same surfaces, so the paint's overrides carry over.
-	_mesh.mesh = SkaterMeshBuilder.shared_upper_skin_mesh(gear.jersey_tuck)
+	# One surface on every tuck's mesh, so the body material carries over.
+	_mesh.mesh = SkaterMeshBuilder.shared_upper_body_mesh(gear.jersey_tuck)
 	if _hem_tuck < 0:
 		_hem.setup(_skater, _skeleton, gear.jersey_tuck)
 	elif gear.jersey_tuck != _hem_tuck:
@@ -673,14 +676,3 @@ func set_cuff_radius(part: int, radius: float) -> void:
 
 func ball_radius(part: int) -> float:
 	return _thickness[part].x
-
-
-# The per-skater material for one upper-body surface, created from the shared
-# mesh's surface default on first use. Painters and the ghost fade both go
-# through this — material_override would repaint every surface at once.
-func surface_material(surface: int) -> StandardMaterial3D:
-	return SkaterMeshBuilder.surface_override(_mesh, surface)
-
-
-func set_surface_material(surface: int, mat: Material) -> void:
-	_mesh.set_surface_override_material(surface, mat)

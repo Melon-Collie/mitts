@@ -11,8 +11,8 @@ class_name NativePuckStepFactory
 # GDScript step.
 
 
-# Argument count of set_net_geometry once the mouth-corner bends landed.
-const NET_GEOMETRY_ARITY: int = 12
+# Argument count of set_net_geometry once twine friction landed.
+const NET_GEOMETRY_ARITY: int = 13
 # Argument count of set_restitution_curve. A binary without it would read the
 # boards' and iron's COR SCALE (1.0) as a flat restitution — perfectly elastic.
 const RESTITUTION_CURVE_ARITY: int = 4
@@ -30,8 +30,8 @@ static func make_configured() -> RefCounted:
 	if not ClassDB.class_exists(&"NativePuckStep"):
 		return null
 	var native: RefCounted = ClassDB.instantiate(&"NativePuckStep")
-	# Stale-binary guard. set_net_geometry's ARITY grew with the mouth-corner
-	# bends, and a binary predating them still exports the class and the method —
+	# Stale-binary guard. set_net_geometry's ARITY grows with each net
+	# term, and a binary predating one still exports the class and the method —
 	# so the configure call below would fail at runtime rather than degrade. Unlike
 	# NativeTopHandIK's property write (which quietly no-ops), that breaks the puck
 	# outright, so measure the arity directly and fall back to the GDScript step
@@ -64,7 +64,8 @@ static func make_configured() -> RefCounted:
 			GameRules.NET_TOP_DEPTH,
 			GameRules.PUCK_COLLISION_HALF_HEIGHT,
 			PuckGeometryCollision.POST_COR_SCALE,
-			PuckGeometryCollision.NET_RESTITUTION)
+			PuckGeometryCollision.NET_RESTITUTION,
+			PuckGeometryCollision.NET_FRICTION)
 	native.set_restitution_curve(
 			PuckRestitution.COR_SLOW, PuckRestitution.SLOW_SPEED_M_S,
 			PuckRestitution.COR_FAST, PuckRestitution.FAST_SPEED_M_S)

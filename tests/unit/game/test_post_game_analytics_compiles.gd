@@ -1,7 +1,7 @@
 extends GutTest
 
 # Compile guard for the post-game analytics screen. It's built entirely in code
-# (nested RinkMap / XGFlow / LegendDot Controls with _draw overrides) and is only
+# (nested RinkMap / LegendDot Controls with _draw overrides) and is only
 # instantiated by HUD at runtime, so a parse error — a bad type, an inner class
 # reaching for an outer-scope constant, a renamed accessor — would never surface
 # in tests. Preloading forces GDScript to compile it in project context, where

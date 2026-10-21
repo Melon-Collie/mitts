@@ -573,6 +573,9 @@ takes the whole class down and every static call on it from every file at once.
     `time_to_arrive` and the reference speeds it assumes;
   - `net_obstacle.gd` (`AINetObstacle`) — segment tests against the cages and
     our own slot;
+  - `feed_reception.gd` (`AIFeedReception`) — a feed as its receiver takes it:
+    its closing speed in his frame, the settle of a catch, the odds and the
+    regather of a bobble;
   - `puck_lane.gd` (`AIPuckLane`) — whether a fired puck gets through: the lane,
     the saucer, the release contest, the pass's launch speed and its own miss;
   - `bot_mechanics.gd` (`AIBotMechanics`) — the league-default execution
