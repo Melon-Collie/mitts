@@ -214,7 +214,7 @@ The ROM is measured from the shoulder the arm is drawn from (`SkaterIKCoordinato
 
 **Vertical:** Blade Y stays locked at `blade_height`. Hand Y adapts: in the FAR regime (target past rest stick reach) it sits at `hand_rest_y`; in the CLOSE regime (target inside rest stick reach) it rises so `stick_horiz` matches the target distance and the blade lands on the target exactly. The hand hands between the two across `TopHandIK.REGIME_BAND_M` (a quadratic blend of its reach off the shoulder, the height following on the rigid stick), so its path has no corner where they meet. Capped by `hand_y_max` — past that the stick's min horizontal projection causes the blade to overshoot along the aim line.
 
-**Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`, side-mirrored per arm). Both arms are part of the ONE body `Skeleton3D` (`SkaterArmRig.build`), ten bones: upper arm and forearm per arm, elbow ball, gloved fist, and the wrist cuff ring. For those ten, surface index == bone index == `SkaterMeshBuilder.UpperBone`, so painting (`Skater.arm_part_material`), sizing (`set_arm_bone_radius` / `set_arm_ball_radius` / `set_arm_cuff_radius`) and posing (`_pose_arm_bone` / `_pose_arm_ball` / `_pose_arm_glove` / `_pose_arm_cuff`) all key off one number. Bones are flat (no parents) with identity rests and identity skin binds, and every vertex is weighted 1.0 to one bone, so a bone pose IS the local transform the part's node carried — the conversion is exact, not approximate. Radii scale with attribute visual bulk (`SkaterAppearanceCoordinator._apply_arm_thickness`; under attributes v4 all limb bulk rides the weight dial's frame bulk — silhouette = body), and the whole rig fades per-surface in ghost mode.
+**Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`, side-mirrored per arm). Both arms are part of the ONE body `Skeleton3D` (`SkaterArmRig.build`), ten bones: upper arm and forearm per arm, elbow ball, gloved fist, and the wrist cuff ring. For those ten, surface index == bone index == `SkaterMeshBuilder.UpperBone`, so painting (`Skater.set_upper_surface_material`), sizing (`set_arm_bone_radius` / `set_arm_ball_radius` / `set_arm_cuff_radius`) and posing (`_pose_arm_bone` / `_pose_arm_ball` / `_pose_arm_glove` / `_pose_arm_cuff`) all key off one number. Bones are flat (no parents) with identity rests and identity skin binds, and every vertex is weighted 1.0 to one bone, so a bone pose IS the local transform the part's node carried — the conversion is exact, not approximate. Radii scale with attribute visual bulk (`SkaterAppearanceCoordinator._apply_arm_thickness`; under attributes v4 all limb bulk rides the weight dial's frame bulk — silhouette = body), and the whole body fades as one material in ghost mode (`BodyZonePaint.set_ghost`).
 
 One trap this rig has to respect: **Godot skins normals with the bone matrix itself, not its inverse transpose**, so a non-uniform bone scale skews them. The arm bone's `(r, r, length)` is ~4:1, which is why `SkaterMeshBuilder._radial_side_normals` bakes the prism's side normals perpendicular to its axis — a normal with no axial component is invariant under that scale. The fix is only right where the anisotropy is *large*: it trades the taper's true normals for radial ones, and that trade only pays when the correct normal matrix was already flattening them (see the note on that function). The leg parts scale by roughly 1:1, so they keep their true normals and carry a small residual skew instead — measured, bounded, and documented in `docs/skinned-skater-plan.md`.
 
@@ -435,9 +435,12 @@ goalie stick blade is the standing example (`GoalieMeshBuilder._merge_stick`).
 
 `SkaterMeshBuilder` assembles `shared_upper_skin_mesh` (fifteen `UpperBone`s,
 eighteen `UpperSurface`s) and `shared_leg_skin_mesh` (fourteen `LegBone`s,
-twenty `LegSurface`s). Both are cached and shared by the whole roster:
-per-skater colour is a surface override, per-build sizing rides the scale inside
-a bone's pose, and no mesh is ever mutated per instance. Both skin one
+twenty `LegSurface`s). Both are cached and shared by the whole roster, and the
+rigs draw them merged into one surface each (`shared_leg_body_mesh` /
+`shared_upper_body_mesh`, every surface a zone in `UV2.x`): per-skater colour is
+a zone record in the skater's `BodyZonePaint`, one material for the whole body,
+per-build sizing rides the scale inside a bone's pose, and no mesh is ever mutated
+per instance (`docs/body-draw-calls-plan.md`). Both skin one
 `Skeleton3D` (`SkaterBodySkeleton`), the leg mesh binding through
 `LEG_BONE_OFFSET`, with four vertex-less joint bones (hips, waist, spine, neck)
 joining the halves into one chain.
@@ -455,15 +458,18 @@ identity skin binds, and part geometry left in its own local space. Each part
 is posed in its parent bone's frame — the shell under the spine, the pelvis under
 the waist, the legs `Leg` → `Shin` under the hips — and the arms are root bones
 solved in skeleton space. The goalie and the puck still hang meshes on nodes and subclass
-`SkaterMeshBuilder` only for its geometry helpers.
+`SkaterMeshBuilder` only for its geometry helpers; the goalie's are drawn through
+`GoalieBodyRig`, which skins one merged mesh to a bone per part.
 
-**No mesh in the skater rig may take `material_override`.** It overrides every
-surface of a multi-surface mesh at once, which erases the boot's steel runner and
-its gear-coloured laces, or the helmet's head and neck skin, the moment the
-parent is painted. Paint through `SkaterMeshBuilder.surface_override()` and the
-`Skater` surface seams, which duplicate the shared default on first use — the
-default lives on the mesh the whole roster shares, so writing it directly
-repaints every player.
+**Paint the skater body through the `Skater` surface seams, never a material.**
+`set_leg_surface_material` / `set_upper_surface_material` take a
+`StandardMaterial3D` as a zone's RECORD, which `BodyZonePaint` compiles into the
+body material's arrays; editing a record in place does nothing until it is handed
+back. The part meshes outside the rig (the lobby's `FigureKit` dummies) are still
+multi-surface, and there `material_override` overrides every surface at once,
+erasing the boot's steel and laces or the helmet's skin: paint them through
+`SkaterMeshBuilder.surface_override()`, which duplicates the shared default on
+first use — the default lives on the mesh every dummy shares.
 
 ## Confusing Boundaries
 

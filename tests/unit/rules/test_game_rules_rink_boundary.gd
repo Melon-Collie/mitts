@@ -238,6 +238,10 @@ func test_the_rink_distance_bounds_every_ray_and_is_tight() -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 0x52494E4B  # "RINK"
 	var worst_gap: float = 0.0
+	# One assertion for the whole sweep: GUT keeps every assertion's message, and
+	# one per ray (288,000 of them) held ~7.5 GB.
+	var worst_inside: float = -INF
+	var worst_from := Vector2.ZERO
 	for i: int in 400:
 		var p := Vector2(rng.randf_range(-12.8, 12.8), rng.randf_range(-29.8, 29.8))
 		if GameRules.clamp_to_rink_inner(p) != p:
@@ -246,7 +250,11 @@ func test_the_rink_distance_bounds_every_ray_and_is_tight() -> void:
 		var nearest: float = INF
 		for k: int in 720:
 			var t: float = GameRules.ray_to_rink_inner(p, Vector2.from_angle(TAU * k / 720.0))
-			assert_true(t >= d - 0.0001, "a ray from %s exits at %.4f inside the bound %.4f" % [p, t, d])
+			if d - t > worst_inside:
+				worst_inside = d - t
+				worst_from = p
 			nearest = minf(nearest, t)
 		worst_gap = maxf(worst_gap, nearest - d)
+	assert_true(worst_inside <= 0.0001,
+			"a ray from %s exits %.4f m inside the bound" % [worst_from, worst_inside])
 	assert_lt(worst_gap, 0.01, "the bound is the nearest exit (worst gap %.4f m)" % worst_gap)

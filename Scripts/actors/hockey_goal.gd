@@ -51,6 +51,14 @@ const LAMP_BEHIND_BOARDS: float = 0.0
 var defending_team_id: int = -1  # set by GameManager when goals are assigned to teams
 var _net_material: ShaderMaterial = null  # shared across all net panels; GoalVFX tweens its ripple uniform
 
+# The frame and the netting accumulate here while _rebuild runs and are drawn as
+# one mesh per pipe color plus one for the netting: a part per node is a draw
+# call per part in every pass, the eight shadowed arena lights included.
+var _pipe_tools: Dictionary[Color, SurfaceTool] = {}
+var _net_verts := PackedVector3Array()
+var _net_normals := PackedVector3Array()
+var _net_uvs := PackedVector2Array()
+
 
 # The actual world-Z of this goal's goal line. The HockeyGoal *node* sits at
 # scene origin — geometry is built procedurally around `goal_z = facing *
@@ -112,6 +120,7 @@ func _rebuild() -> void:
 	_build_crown(goal_z)
 	_build_back_support(goal_z)
 	_build_net_panels(goal_z)
+	_commit_meshes()
 
 	var goal_vfx := GoalVFX.new()
 	goal_vfx.name = "GoalVFX"
@@ -290,7 +299,7 @@ func _build_back_support(goal_z: float) -> void:
 
 
 # --------------------------------------------------------------------------
-# NET PANELS — four translucent faces approximated as thin rotated boxes.
+# NET PANELS — translucent flat panels, one netting mesh.
 # Mesh only; the puck's carom off them is analytic (PuckGeometryCollision).
 #
 # The side panels take their X from POST_HALF_WIDTH even though the crown is inset
@@ -403,11 +412,12 @@ func _add_cylinder(
 	cyl.top_radius = radius
 	cyl.bottom_radius = radius
 	cyl.radial_segments = PIPE_RADIAL_SEGMENTS
-	var mesh_inst := MeshInstance3D.new()
-	mesh_inst.mesh = cyl
-	mesh_inst.transform = Transform3D(xform, pos)
-	_apply_mat(mesh_inst, color)
-	add_child(mesh_inst)
+	var st: SurfaceTool = _pipe_tools.get(color)
+	if st == null:
+		st = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_pipe_tools[color] = st
+	st.append_from(cyl, 0, Transform3D(xform, pos))
 
 
 # Build a quarter-circle bend. The bend lies in the plane defined by the
@@ -449,18 +459,21 @@ func _project_uv(p: Vector3, anchor: Vector3, u_axis: Vector3, v_axis: Vector3, 
 
 
 # Godot's CylinderMesh default axis is +Y. Build a Basis whose Y axis
-# points along `up_dir`, with any valid perpendicular X/Z.
+# points along `up_dir`, with any valid perpendicular X/Z. It must be
+# right-handed: SurfaceTool.append_from does not flip the winding of a mirrored
+# transform the way a MeshInstance3D does, so a mirrored basis merges the pipe
+# inside out.
 func _basis_from_up(up_dir: Vector3) -> Basis:
 	var up: Vector3 = up_dir.normalized()
 	# Pick a reference axis not parallel to up
 	var ref: Vector3 = Vector3.UP if abs(up.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
 	var x_axis: Vector3 = ref.cross(up).normalized()
-	var z_axis: Vector3 = up.cross(x_axis).normalized()
+	var z_axis: Vector3 = x_axis.cross(up).normalized()
 	return Basis(x_axis, up, z_axis)
 
 
-# Build a triangular net panel (3 corners in world space). For small gap-filler
-# panels where a quad would degenerate. Same flat visual as _add_net_quad.
+# Adds a triangular panel (3 corners in world space) to the netting. For small
+# gap-filler panels where a quad would degenerate. Same flat visual as _add_net_quad.
 func _add_net_tri(a: Vector3, b: Vector3, c: Vector3) -> void:
 	var verts := PackedVector3Array([a, b, c])
 	var normal: Vector3 = (b - a).cross(c - a).normalized()
@@ -472,22 +485,12 @@ func _add_net_tri(a: Vector3, b: Vector3, c: Vector3) -> void:
 	var uv_a: Vector2 = _project_uv(a, a, u_axis, v_axis, uv_scale)
 	var uv_b: Vector2 = _project_uv(b, a, u_axis, v_axis, uv_scale)
 	var uv_c: Vector2 = _project_uv(c, a, u_axis, v_axis, uv_scale)
-	var uvs := PackedVector2Array([uv_a, uv_b, uv_c])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	var array_mesh := ArrayMesh.new()
-	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-
-	var mesh_inst := MeshInstance3D.new()
-	mesh_inst.mesh = array_mesh
-	_apply_mat_net(mesh_inst)
-	add_child(mesh_inst)
+	_net_verts.append_array(verts)
+	_net_normals.append_array(normals)
+	_net_uvs.append_array(PackedVector2Array([uv_a, uv_b, uv_c]))
 
 
-# Build an arbitrary quadrilateral net panel from four corners in world space.
+# Adds an arbitrary quadrilateral panel to the netting, from four corners in world space.
 # Corners must be given in order around the quad (A, B, C, D — either CW or CCW).
 # The mesh is rendered double-sided via the net material's CULL_DISABLED flag.
 # Mesh only: the puck's carom off the panels is analytic (PuckGeometryCollision),
@@ -507,19 +510,9 @@ func _add_net_quad(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	var uv_b: Vector2 = _project_uv(b, a, u_axis, v_axis, uv_scale)
 	var uv_c: Vector2 = _project_uv(c, a, u_axis, v_axis, uv_scale)
 	var uv_d: Vector2 = _project_uv(d, a, u_axis, v_axis, uv_scale)
-	var uvs := PackedVector2Array([uv_a, uv_b, uv_c, uv_a, uv_c, uv_d])
-	var arrays: Array = []
-	arrays.resize(Mesh.ARRAY_MAX)
-	arrays[Mesh.ARRAY_VERTEX] = verts
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	arrays[Mesh.ARRAY_TEX_UV] = uvs
-	var array_mesh := ArrayMesh.new()
-	array_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-
-	var mesh_inst := MeshInstance3D.new()
-	mesh_inst.mesh = array_mesh
-	_apply_mat_net(mesh_inst)
-	add_child(mesh_inst)
+	_net_verts.append_array(verts)
+	_net_normals.append_array(normals)
+	_net_uvs.append_array(PackedVector2Array([uv_a, uv_b, uv_c, uv_a, uv_c, uv_d]))
 
 
 # Host-only swept goal test, driven once per physics tick by GameManager (which
@@ -544,14 +537,30 @@ func check_goal_crossing(prev_center: Vector3, curr_center: Vector3) -> void:
 		goal_scored.emit()
 
 
-func _apply_mat(mesh_inst: MeshInstance3D, color: Color) -> void:
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = color
-	mesh_inst.material_override = mat
+func _commit_meshes() -> void:
+	for color: Color in _pipe_tools:
+		var pipe := MeshInstance3D.new()
+		pipe.mesh = _pipe_tools[color].commit()
+		var mat := StandardMaterial3D.new()
+		mat.albedo_color = color
+		pipe.material_override = mat
+		add_child(pipe)
+	_pipe_tools.clear()
 
-
-func _apply_mat_net(mesh_inst: MeshInstance3D) -> void:
-	mesh_inst.material_override = _net_material
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = _net_verts
+	arrays[Mesh.ARRAY_NORMAL] = _net_normals
+	arrays[Mesh.ARRAY_TEX_UV] = _net_uvs
+	var net_mesh := ArrayMesh.new()
+	net_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+	var net := MeshInstance3D.new()
+	net.mesh = net_mesh
+	net.material_override = _net_material
+	add_child(net)
+	_net_verts = PackedVector3Array()
+	_net_normals = PackedVector3Array()
+	_net_uvs = PackedVector2Array()
 
 
 # One ShaderMaterial shared by every net panel of this goal, so the goal

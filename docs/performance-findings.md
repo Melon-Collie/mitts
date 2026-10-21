@@ -218,3 +218,91 @@ Two traps the sweep hit, both worth remembering:
 `HostCostProbe` carries the same discipline in a smaller form: means and window
 peaks are both over **ticks**, so a per-actor section's peak is the tick's total
 rather than the worst single actor.
+
+## The render side: draw calls and triangles
+
+Everything above is the main thread. The render side was measured later, by
+rendering the 5v5 opening faceoff on Forward+ (software Vulkan, so draw-call and
+triangle **counts**, never timings) and hiding one thing at a time. Counts are a
+property of the scene and transfer to any GPU; whether they bound the frame on a
+given machine is what the F3 digest's `bound_by` answers.
+
+| | draw calls | triangles / frame |
+|---|---|---|
+| as it was | 1,533 | 3.56 M |
+| particles cast no shadow | 1,515 | 1.16 M |
+| + nets merged (54 → 3 meshes a goal) | 1,181 | 1.16 M |
+| + one-material bodies (`docs/body-draw-calls-plan.md`) | 759 | 1.16 M |
+| (the same, eight spot shadows off) | 309 | 0.65 M |
+
+Two things to know before touching this:
+
+- **Every shadowed light re-renders every frame.** Skaters move under all eight
+  shadowed ceiling spots, so each shadow map is dirty every frame and redraws
+  every static caster in its cone (stands, rink, nets, goalies) along with the
+  movers. Hiding the moving casters therefore removes far more than their own
+  draws, and the toggles do not add up to the total.
+- **A particle node casts by default, and a `GPUParticles3D` draws its whole
+  `amount` in every pass**, alive or not. The skaters' 300-instance blade trails
+  were two-thirds of all triangles, through eight shadow maps, for dots on the
+  ice. `test_particles_cast_no_shadow.gd` holds every effect to casting nothing.
+
+What is left is mostly the shadowed spots themselves: ~450 of the 759. The
+Shadow Quality setting already trims them (`PlayerPrefs._apply_shadow_quality`).
+
+## What each Video setting costs
+
+`.claude/hooks/measure-graphics.sh` plays a 5v5 against bots on Forward+ and
+measures each Video setting changed alone from the shipped defaults
+(`tools/graphics_cost_runner.gd` has the list). Only live play is sampled — a goal
+replay's cameras see twice the arena — and each condition sits between two
+measurements of the defaults, its cost the difference from their mean. Run it on
+a machine with a graphics card for the numbers players get; the table below is
+from software Vulkan (lavapipe), 1920×1080, two rotations, where a defaults frame
+took ~500 ms of "GPU" time. That rasteriser is a CPU: it over-weights triangles
+and compute passes against a graphics card, so the ranking is the finding, not
+the milliseconds.
+
+| change from the defaults | GPU ms (mean, range) | of the frame | draw calls | menu tier |
+|---|---|---|---|---|
+| Shadow Quality Medium | −65 (−84..−47) | −13% | 434 | High |
+| Shadow Quality Low | −89 (−90..−89) | −18% | 357 | High |
+| Render Scale 75% | −83 (−98..−67) | −17% | 528 | High |
+| Render Scale 50% | −207 (−213..−200) | −42% | 498 | High |
+| Upscaling FSR at 75% | −90 (−93..−87) | −18% | 570 | Medium |
+| Upscaling FSR2 at 75% | +91 (+66..+117) | +18% | 654 | Medium |
+| Anti-Aliasing Off | +50 (+39..+62) | +10% | 595 | High |
+| Anti-Aliasing FXAA | +4 (−25..+33) | +1% | 492 | High |
+| Anti-Aliasing MSAA 4x | +110 (+27..+193) | +22% | 560 | High |
+| Anti-Aliasing MSAA 8x | +71 (+23..+119) | +14% | 602 | High |
+| Anti-Aliasing TAA | +72 (+14..+131) | +15% | 596 | High |
+| Global Illumination SDFGI | +605 (+538..+672) | +122% | 602 | High |
+| Crowd Density Low | −75 (−90..−61) | −15% | 649 | Medium |
+| Crowd Density Off | −123 (−202..−44) | −25% | 526 | Medium |
+| Volumetric Fog on | +80 (+74..+85) | +16% | 624 | High |
+| Reflections off | −90 (−106..−75) | −18% | 636 | High |
+| Ambient Occlusion off | −49 (−62..−36) | −10% | 660 | Medium |
+| Player Shadows off | 0 (−9..+9) | 0% | 470 | Low |
+| Puck Shadow off | +19 (−6..+43) | noise | 664 | Low |
+| Ice Scratches off | +6 (+1..+12) | noise | 566 | Low |
+| Arena Ads off | +23 (+12..+34) | noise | 556 | None |
+| Animation Detail Low / Full | +21 / +4 | noise | 598 / 596 | Processor |
+| Color Grade None | +9 (+6..+11) | noise | 581 | None |
+
+The tiers in Options → Video (`OptionsVideoTab`: the `Impact` rating at the end
+of each row, whose tooltip explains the setting) follow the table: High for a change worth ~15% of the frame or more,
+Medium for 5–15%, Low for what cannot be told from noise but does real work, None
+for a colour adjustment or a one-off paint. Three calls are judgement and say so:
+
+- **Crowd Density is Medium**, not the High its 15–25% would earn: the stands are
+  instanced figures, cheap on a graphics card, and the software rasteriser's
+  per-triangle cost is what puts them that high here.
+- **Upscaling is Medium**: FSR costs nothing over bilinear, and FSR2's compute
+  pass is the kind of work lavapipe is slowest at.
+- **Animation Detail costs the processor, not the GPU** — the per-skater pose
+  solve (*Where a 5v5 frame goes*) — so it gets its own tag rather than a GPU
+  tier it would never earn.
+
+Two readings are not understood and are not used: turning MSAA 2x **off** reads
+10% slower in both rotations, and MSAA 8x cheaper than 4x. Both are worth a look
+on a real card before trusting any AA number here.

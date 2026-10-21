@@ -15,6 +15,9 @@ func test_goalie_paint_reads_the_baked_tints() -> void:
 	var stack: Array[Node] = [g]
 	while not stack.is_empty():
 		var node: Node = stack.pop_back()
+		# The merged body is drawn from the parts' paint, which is checked here.
+		if node is GoalieBodyRig:
+			continue
 		stack.append_array(node.get_children())
 		var mi: MeshInstance3D = node as MeshInstance3D
 		if mi == null or mi.mesh == null or mi.mesh.get_surface_count() == 0:

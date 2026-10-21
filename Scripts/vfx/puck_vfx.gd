@@ -148,6 +148,7 @@ func _trail_visibility_aabb() -> AABB:
 # the puck's last-recorded world position in CUSTOM.xyz.
 func _make_trail_emitter() -> GPUParticles3D:
 	var e := GPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = "TrailEmitter"
 	e.amount = 1
 	e.lifetime = 3600.0  # effectively permanent; one particle tracks position all game
@@ -188,6 +189,7 @@ void process() {
 # by speed via _trail_mat.color; the ramp handles the age-based alpha fade.
 func _make_trail_sub_emitter() -> GPUParticles3D:
 	var e := GPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = "TrailParticles"
 	e.amount = TRAIL_AMOUNT
 	e.lifetime = TRAIL_LIFETIME
@@ -241,6 +243,7 @@ func _make_trail_sub_emitter() -> GPUParticles3D:
 # are overwritten per fire in fire_board_impact_burst.
 func _make_board_puff_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = "BoardPuff"
 	e.emitting = false
 	e.amount = 16
@@ -264,6 +267,7 @@ func _make_board_puff_emitter() -> CPUParticles3D:
 # stick-lift pop, thrown omni-directionally the way a ricochet reads.
 func _make_post_ping_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = "PostPing"
 	e.emitting = false
 	e.amount = 12
@@ -287,6 +291,7 @@ func _make_post_ping_emitter() -> CPUParticles3D:
 # light gravity so the sparks arc back down. Distinct from the puck-strip trail.
 func _make_stick_lift_emitter() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.name = "StickLiftBurst"
 	e.emitting = false
 	e.amount = 14

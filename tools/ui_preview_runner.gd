@@ -20,6 +20,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "options_gameplay", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 0},
 	{"name": "options_camera", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 1},
 	{"name": "options_video", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 2},
+	{"name": "options_video_performance", "stage": _STAGE_BOOT, "open": "_open_video_performance"},
 	{"name": "options_audio", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 3},
 	{"name": "options_controls", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 4},
 	{"name": "options_accessibility", "stage": _STAGE_BOOT, "open": "_open_boot_options", "arg": 5},
@@ -274,6 +275,39 @@ func _open_boot_options(tab: int) -> void:
 		_fail("Boot has no OptionsPanel")
 		return
 	panel.call("_activate_tab", tab)
+
+
+# The Video tab scrolled to its Performance section, where the cost notes are.
+func _open_video_performance() -> void:
+	_open_boot_options(2)
+	await _settle(2, 0.0)
+	var tab: OptionsVideoTab = _find(_boot(), OptionsVideoTab) as OptionsVideoTab
+	var scroll: ScrollContainer = null
+	var up: Node = tab
+	while up != null and scroll == null:
+		scroll = up as ScrollContainer
+		up = up.get_parent()
+	if scroll == null:
+		_fail("the Video tab is not in a ScrollContainer")
+		return
+	var header: Label = null
+	var rating: Control = null
+	for child: Node in tab.get_children():
+		if child is Label and (child as Label).text == "PERFORMANCE":
+			header = child as Label
+		elif child is HBoxContainer \
+				and ((child as HBoxContainer).get_child(0) as Label).text == "Shadow Quality":
+			rating = (child as HBoxContainer).get_child(child.get_child_count() - 1) as Control
+	if header == null or rating == null or not rating.has_meta(&"impact"):
+		_fail("the Video tab has no PERFORMANCE section with a rated Shadow Quality")
+		return
+	scroll.scroll_vertical = int(header.position.y)
+	await _settle(2, 0.0)
+	# Hovered, so the shot shows a rating's explanation as a player gets it.
+	var hover := InputEventMouseMotion.new()
+	hover.position = rating.get_global_rect().get_center()
+	get_viewport().push_input(hover)
+	await _settle(2, ProjectSettings.get_setting("gui/timers/tooltip_delay_sec", 0.5) + 0.3)
 
 
 func _open_side_menu(handler: String) -> void:
