@@ -507,7 +507,6 @@ func _init_stick_knob() -> void:
 func _make_connector_mesh() -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = GoalieMeshBuilder.shared_connector_tube()
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 
@@ -620,7 +619,6 @@ func _make_arm_bone(radius: float) -> Node3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = SkaterMeshBuilder.shared_arm_bone_z()
 	mi.scale = Vector3(radius, radius, 1.0)
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 
@@ -628,7 +626,6 @@ func _make_sphere_mesh(radius: float) -> MeshInstance3D:
 	var mi := MeshInstance3D.new()
 	mi.mesh = SkaterMeshBuilder.shared_joint_ball()
 	mi.scale = Vector3.ONE * radius
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	return mi
 
 

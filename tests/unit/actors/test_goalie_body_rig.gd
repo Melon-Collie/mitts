@@ -74,6 +74,25 @@ func test_every_vertex_lands_where_its_part_draws_it() -> void:
 	assert_eq(checked.size(), rig.part_count(), "every part has vertices")
 
 
+# The shadow is the whole figure: a limb left out of it leaves the glove and the
+# blocker floating in the shadow, joined to nothing. Only the mask's wire cage,
+# finer than a shadow map resolves, stays out.
+func test_every_part_but_the_cage_casts() -> void:
+	var g: Goalie = _goalie()
+	var rig: GoalieBodyRig = _rig(g)
+	var bones: PackedInt32Array = rig.shadow_mesh().mesh.surface_get_arrays(0)[Mesh.ARRAY_BONES]
+	var casting: Dictionary = {}
+	for i: int in range(0, bones.size(), 4):
+		casting[bones[i]] = true
+	for bone: int in rig.part_count():
+		var part: MeshInstance3D = rig.part(bone)
+		assert_eq(casting.has(bone), part.name != "Cage", "%s casts" % part.name)
+	for limb: Node3D in [g.glove_upper_arm, g.glove_forearm, g.blocker_upper_arm,
+			g.blocker_forearm, g.glove_elbow_sphere, g.blocker_elbow_sphere,
+			g.left_hip_connector, g.right_hip_connector]:
+		assert_eq((limb as MeshInstance3D).layers, 0, "%s is merged" % limb.name)
+
+
 func test_a_repaint_rebuilds_without_drawing_anything_twice() -> void:
 	var g: Goalie = _goalie()
 	var before: int = _rig(g).part_count()
