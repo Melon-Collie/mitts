@@ -330,12 +330,12 @@ OPTIONS_TEAM_COLORS_FILE,Team colors,Colores de equipo
 OPTIONS_TEAM_COLORS_FILE_NOTE,Makes a copy of the team colors you can edit in any text editor. Changes apply after a restart and only on your computer — other players see their own colors.,Crea una copia de los colores de equipo que puedes editar con cualquier editor de texto. Los cambios se aplican al reiniciar y solo en tu equipo — los demás jugadores ven sus propios colores.
 OPTIONS_BOTS_FILE,Bot roster,Plantilla de bots
 OPTIONS_BOTS_FILE_NOTE,"Edit AI bot names, numbers and attributes. As host, your roster is used for the whole lobby. Builds over the point-buy budget reset to medium. Changes apply after a restart.","Edita los nombres, números y atributos de los bots. Como anfitrión, tu plantilla se usa en toda la sala. Las configuraciones que superan el presupuesto de puntos vuelven a nivel medio. Los cambios se aplican al reiniciar."
-OPTIONS_IMPACT_NONE,No cost,Sin coste
-OPTIONS_IMPACT_LOW,Low impact,Impacto bajo
-OPTIONS_IMPACT_MEDIUM,Medium impact,Impacto medio
-OPTIONS_IMPACT_HIGH,High impact,Impacto alto
-OPTIONS_IMPACT_PROCESSOR,Processor,Procesador
-OPTIONS_VIDEO_PERFORMANCE_INTRO,"Low frame rate? Lower the settings marked High impact first. Shadow Quality, Render Scale and Reflections save the most. If lowering them changes nothing, your processor is the limit rather than your graphics card, and the graphics settings will not help much.","¿Pocos FPS? Baja primero los ajustes marcados como impacto alto. «Shadow Quality», «Render Scale» y «Reflections» son los que más ahorran. Si bajarlos no cambia nada, el límite es tu procesador y no tu tarjeta gráfica, y los ajustes gráficos no ayudarán mucho."
+OPTIONS_IMPACT_NONE,None,Ninguno
+OPTIONS_IMPACT_LOW,Low,Bajo
+OPTIONS_IMPACT_MEDIUM,Medium,Medio
+OPTIONS_IMPACT_HIGH,High,Alto
+OPTIONS_IMPACT_PROCESSOR,CPU,CPU
+OPTIONS_VIDEO_PERFORMANCE_INTRO,"Low frame rate? Lower the settings rated High first, and hover a rating to see what the setting does. Shadow Quality, Render Scale and Reflections save the most. If lowering them changes nothing, your processor is the limit rather than your graphics card, and the graphics settings will not help much.","¿Pocos FPS? Baja primero los ajustes con impacto «Alto», y pasa el ratón por encima de la valoración para ver qué hace cada ajuste. «Shadow Quality», «Render Scale» y «Reflections» son los que más ahorran. Si bajarlos no cambia nada, el límite es tu procesador y no tu tarjeta gráfica, y los ajustes gráficos no ayudarán mucho."
 OPTIONS_VIDEO_NOTE_VSYNC,Locks the frame rate to your monitor to stop tearing. It costs nothing but adds a little input delay. Disable it to see the most frames your computer can draw.,"Sincroniza los fotogramas con tu monitor para evitar cortes en la imagen. No cuesta rendimiento, pero añade un poco de retraso de entrada. Desactívalo para ver cuántos fotogramas puede dibujar tu equipo."
 OPTIONS_VIDEO_NOTE_GAMMA,How bright the picture is. A color adjustment only.,El brillo de la imagen. Solo es un ajuste de color.
 OPTIONS_VIDEO_NOTE_COLOR_GRADE,The TV-broadcast color look. A color adjustment only.,El aspecto de color de una retransmisión de televisión. Solo es un ajuste de color.

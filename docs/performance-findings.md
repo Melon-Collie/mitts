@@ -289,8 +289,8 @@ the milliseconds.
 | Animation Detail Low / Full | +21 / +4 | noise | 598 / 596 | Processor |
 | Color Grade None | +9 (+6..+11) | noise | 581 | None |
 
-The tiers in Options → Video (`OptionsVideoTab`, the `Impact` each row's note
-carries) follow the table: High for a change worth ~15% of the frame or more,
+The tiers in Options → Video (`OptionsVideoTab`: the `Impact` rating at the end
+of each row, whose tooltip explains the setting) follow the table: High for a change worth ~15% of the frame or more,
 Medium for 5–15%, Low for what cannot be told from noise but does real work, None
 for a colour adjustment or a one-off paint. Three calls are judgement and say so:
 

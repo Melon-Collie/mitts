@@ -290,11 +290,24 @@ func _open_video_performance() -> void:
 	if scroll == null:
 		_fail("the Video tab is not in a ScrollContainer")
 		return
+	var header: Label = null
+	var rating: Control = null
 	for child: Node in tab.get_children():
 		if child is Label and (child as Label).text == "PERFORMANCE":
-			scroll.scroll_vertical = int((child as Label).position.y)
-			return
-	_fail("the Video tab has no PERFORMANCE section")
+			header = child as Label
+		elif child is HBoxContainer \
+				and ((child as HBoxContainer).get_child(0) as Label).text == "Shadow Quality":
+			rating = (child as HBoxContainer).get_child(child.get_child_count() - 1) as Control
+	if header == null or rating == null or not rating.has_meta(&"impact"):
+		_fail("the Video tab has no PERFORMANCE section with a rated Shadow Quality")
+		return
+	scroll.scroll_vertical = int(header.position.y)
+	await _settle(2, 0.0)
+	# Hovered, so the shot shows a rating's explanation as a player gets it.
+	var hover := InputEventMouseMotion.new()
+	hover.position = rating.get_global_rect().get_center()
+	get_viewport().push_input(hover)
+	await _settle(2, ProjectSettings.get_setting("gui/timers/tooltip_delay_sec", 0.5) + 0.3)
 
 
 func _open_side_menu(handler: String) -> void:
