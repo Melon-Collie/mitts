@@ -71,32 +71,52 @@ static func deflect_velocity(
 # deliberate channel (deflect_loft_speed); a body has no such channel and its
 # faces are tilted, so the vertical has to come out of the contact itself.
 #
-# Identical decomposition otherwise, and for the same reason: ONE contact model
-# means a glance off a pad and a glance off a blade cannot disagree about what a
-# glance is. The normal rebound is `cor_scale` × the frozen puck's rigid-wall COR
-# at the NORMAL impact speed (PuckRestitution.rigid_wall), so a hard shot retains
-# a smaller FRACTION while still rebounding faster in absolute terms — which is
-# why hard shots make dangerous rebounds and soft ones die.
+# The normal rebound is `cor_scale` × the frozen puck's rigid-wall COR at the
+# NORMAL impact speed (PuckRestitution.rigid_wall), so a hard shot retains a
+# smaller FRACTION while still rebounding faster in absolute terms — which is why
+# hard shots make dangerous rebounds and soft ones die. The along-face channel
+# answers to `friction` through reflect_with_friction, so a glance keeps its pace
+# and a hard hit into a face tilted back cannot climb it at shot speed.
 #
 # `normal` points out of the surface, toward the puck. A separating puck is
 # returned unchanged, so re-testing a puck already ejected off a face never
-# re-reflects it. With `retain` 1.0 this is PuckGeometryCollision.reflect_off_pipe
+# re-reflects it. With `friction` 0 this is PuckGeometryCollision.reflect_off_pipe
 # scaled by `cor_scale`.
 static func deflect_velocity_3d(
 		incoming: Vector3,
 		normal: Vector3,
 		cor_scale: float,
-		tangential_retain: float) -> Vector3:
+		friction: float) -> Vector3:
 	if normal.length_squared() < 0.000001:
 		return incoming
+	var vn: float = incoming.dot(normal.normalized())
+	if vn >= 0.0:
+		return incoming
+	return reflect_with_friction(
+			incoming, normal, cor_scale * PuckRestitution.rigid_wall(-vn), friction)
+
+
+# A puck off a face with Coulomb friction: the into-face channel rebounds at
+# `restitution`, and the along-face channel (vertical included) sheds `friction`
+# × the normal impulse (1 + e)·|vn|, never past zero. So a graze keeps nearly all
+# its slide and a square-ish hit loses all of it. `normal` points out of the
+# surface toward the puck; a separating puck is returned unchanged.
+static func reflect_with_friction(
+		incoming: Vector3,
+		normal: Vector3,
+		restitution: float,
+		friction: float) -> Vector3:
 	var n: Vector3 = normal.normalized()
 	var vn: float = incoming.dot(n)
 	if vn >= 0.0:
 		return incoming
-	var e: float = cor_scale * PuckRestitution.rigid_wall(-vn)
-	var v_normal: Vector3 = vn * n            # into the face (vn < 0)
-	var v_tangent: Vector3 = incoming - v_normal
-	return v_tangent * tangential_retain - v_normal * e
+	var v_tan: Vector3 = incoming - vn * n
+	var t_speed: float = v_tan.length()
+	var keep: float = 0.0
+	if t_speed > 1e-6:
+		var drop: float = -friction * (1.0 + restitution) * vn
+		keep = maxf(t_speed - drop, 0.0) / t_speed
+	return v_tan * keep - restitution * vn * n
 
 
 # Signed vertical launch speed for a deflect's redirect (fed to
@@ -146,17 +166,18 @@ static func board_rescue_velocity(
 			velocity.z - (1.0 + restitution) * vn * n.y)
 
 
-# Loose puck bouncing off a skater's body (passive body-block). Reflect +
-# dampen. If the reflection collapses to zero, fall back to the contact normal.
+# Loose puck off a skater's body (the body block), horizontal only: the body is a
+# vertical cylinder and `contact_normal` is horizontal, out of it toward the puck.
+# The same contact as the goalie's gear — `cor_scale` × the frozen puck's
+# rigid-wall COR on the normal channel, `friction` on the slide — so a puck that
+# brushes a hip keeps going and one that meets a chest dies off it.
 static func body_block_velocity(
 		incoming_velocity: Vector3,
 		contact_normal: Vector3,
-		dampen: float) -> Vector3:
+		cor_scale: float,
+		friction: float) -> Vector3:
 	var horiz := Vector3(incoming_velocity.x, 0.0, incoming_velocity.z)
-	var reflected: Vector3 = horiz - 2.0 * horiz.dot(contact_normal) * contact_normal
-	if reflected.length() < 0.001:
-		reflected = contact_normal
-	return reflected.normalized() * horiz.length() * dampen
+	return deflect_velocity_3d(horiz, contact_normal, cor_scale, friction)
 
 # Body-check strip: the puck comes loose along the hit line, but a HARD hit jars it
 # nearly dead at the point of contact rather than launching it downice with the

@@ -112,10 +112,14 @@ var pinch_lift_max_speed: float = 1.6
 @export var body_check_strip_ref_impulse: float = 3.5    # delivered impulse that fully deadens the strip (puck jarred dead)
 @export var hit_pickup_cooldown: float = 0.6              # seconds victim cannot pick up after a hard hit
 @export var hit_pickup_cooldown_threshold: float = 1.35   # delivered victim-impulse needed to apply hit pickup cooldown (see body_check_strip_threshold)
-@export var body_block_dampen: float = 0.5
-# Puck energy retention on an ACTIVE (shot-block crouch) block — lower than the passive
-# dampen so a committed block kills more of the shot. on_body_block picks between the two.
-@export var body_block_active_dampen: float = 0.35
+# A body block is a contact (PuckCollisionRules.body_block_velocity): the share of
+# the frozen puck's rigid-wall COR a skater's padding keeps, and the puck's grip
+# on his jersey. Between the goalie's chest (0.25) and leg pad (0.55) — padding
+# over a body that gives. A committed shot-block crouch is set to absorb, so it
+# keeps less.
+var body_block_cor_scale: float = 0.40
+var body_block_active_cor_scale: float = 0.25
+var body_block_friction: float = 0.50
 @export var body_block_cooldown: float = 0.1
 # Vertical clamp: PuckAuthorityRules.advance_loose_puck caps the puck's Y at
 # ice_height + max_height and kills any remaining upward velocity. 3 m sits just
@@ -584,12 +588,11 @@ func on_body_block(blocker: Skater, contact_normal: Vector3) -> void:
 	if contact_normal.length() < 0.001:
 		contact_normal = -blocker.global_transform.basis.z
 	contact_normal = Vector3(contact_normal.x, 0.0, contact_normal.z).normalized()
-	# A committed shot-block crouch kills more of the shot than a passive body absorb.
-	var dampen: float = body_block_active_dampen \
+	var cor_scale: float = body_block_active_cor_scale \
 			if blocker.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
-			else body_block_dampen
+			else body_block_cor_scale
 	linear_velocity = PuckCollisionRules.body_block_velocity(
-			linear_velocity, contact_normal, dampen)
+			linear_velocity, contact_normal, cor_scale, body_block_friction)
 	_set_cooldown(blocker, body_block_cooldown)
 	_queue_contact_event(ContactEvent.BODY_BLOCK, blocker)
 

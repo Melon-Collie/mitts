@@ -22,12 +22,10 @@ extends GutTest
 #
 # ── WHAT IT MEASURES, AND WHAT IT CANNOT ─────────────────────────────────────
 #   surface | saves | rebound STAYS in the slot
-#   PAD     |   111 |    18  (16%)
-#   STICK   |    64 |     5  (8%)
-#   BLOCKER |    28 |     3  (11%)
-#   CHEST   |     8 |     0  (0%)
-#   GLOVE   |    28 |    28  (100%)
-#   TOTAL   |   239 |    54  (23%)     goals 49/288
+#   PAD     |   156 |     3  (2%)
+#   STICK   |    67 |     0  (0%)
+#   BLOCKER |    23 |     0  (0%)
+#   TOTAL   |   246 |     3  (1%)     goals 42/288
 #
 # ONE SPOT ON THE CENTRE LINE, which bounds every conclusion drawn from it. A
 # square keeper takes a centred puck on the pads and the stick, so the sample is

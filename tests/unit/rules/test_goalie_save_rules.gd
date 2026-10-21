@@ -35,10 +35,10 @@ func test_a_separating_puck_is_left_alone() -> void:
 func test_the_vertical_channel_survives_the_contact() -> void:
 	# The goalie's faces are tilted and his body is tall, so a rebound has to be
 	# able to leave the ice. deflect_velocity (the blade's) is horizontal-only and
-	# would flatten this.
+	# would flatten this. Steeply rising, so the grip does not take all of it.
 	var v: Vector3 = GoalieSaveRules.rebound_velocity(
-			Vector3(0.0, 3.0, -20.0), GoalieSaveRules.SavePart.PAD, SQUARE_N)
-	assert_gt(v.y, 0.0, "a puck rising into the pad keeps rising off it")
+			Vector3(0.0, 12.0, -6.0), GoalieSaveRules.SavePart.PAD, SQUARE_N)
+	assert_gt(v.y, 0.0, "a puck climbing past the pad keeps climbing off it")
 
 
 func test_a_tilted_face_sends_the_puck_where_it_points() -> void:
@@ -48,6 +48,16 @@ func test_a_tilted_face_sends_the_puck_where_it_points() -> void:
 	var v: Vector3 = GoalieSaveRules.rebound_velocity(
 			Vector3(0.0, 0.0, -20.0), GoalieSaveRules.SavePart.PAD, canted)
 	assert_gt(v.x, 0.0, "a pad canted to the corner sends it to that corner")
+
+
+func test_a_flat_shot_does_not_climb_the_set_stick() -> void:
+	# The set stance leans the paddle ~20° back to ramp a shot into his body. The
+	# tape has to hold the slide, or a flat shot leaves up the face at shot speed.
+	var a: float = deg_to_rad(20.0)
+	var n := Vector3(0.0, sin(a), cos(a))
+	var v: Vector3 = GoalieSaveRules.rebound_velocity(
+			Vector3(0.0, 0.0, -37.0), GoalieSaveRules.SavePart.STICK, n)
+	assert_almost_eq(v.normalized().dot(n), 1.0, 1e-5, "leaves along the face normal")
 
 
 func test_an_unknown_part_falls_back_inside_the_table() -> void:
@@ -70,6 +80,18 @@ func test_surfaces_rank_stiffest_to_softest() -> void:
 	assert_gt(blocker, pad)
 	assert_gt(pad, chest)
 	assert_gt(chest, glove, "an unclosed glove is the softest thing on him")
+
+
+func test_surfaces_rank_grippiest_to_slickest() -> void:
+	# Tape, then leather, then a jersey, then the smooth facings and the shell.
+	var mu := func(part: int) -> float:
+		return GoalieSaveRules.MATERIALS[
+				part * GoalieSaveRules.MAT_STRIDE + GoalieSaveRules.MAT_FRICTION]
+	var p := GoalieSaveRules.SavePart
+	assert_gt(mu.call(p.STICK), mu.call(p.GLOVE))
+	assert_gt(mu.call(p.GLOVE), mu.call(p.CHEST))
+	for slick: int in [p.PAD, p.BLOCKER, p.MASK]:
+		assert_gt(mu.call(p.CHEST), mu.call(slick), "part %d is a smooth facing" % slick)
 
 
 func test_the_table_covers_every_save_part() -> void:

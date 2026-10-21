@@ -56,6 +56,7 @@ class NativePuckStep : public godot::RefCounted {
 	double puck_half_height = 0.0;
 	double post_cor_scale = 0.0;
 	double net_restitution = 0.0;
+	double net_friction = 0.0;
 
 	// PuckRestitution.rigid_wall's curve.
 	double cor_slow = 0.0;
@@ -83,8 +84,7 @@ class NativePuckStep : public godot::RefCounted {
 	godot::Vector2 clamp_to_rink_inner(const godot::Vector2 &world_xz, double margin) const;
 	godot::Vector3 deflect_velocity_h(const godot::Vector3 &incoming, const godot::Vector3 &normal,
 			double restitution) const;
-	static godot::Vector3 reflect_3d(const godot::Vector3 &vel, const godot::Vector3 &normal,
-			double restitution);
+	godot::Vector3 reflect_off_twine(const godot::Vector3 &vel, const godot::Vector3 &normal) const;
 	double rigid_wall_cor(double normal_speed) const;
 	godot::Vector3 reflect_off_pipe(const godot::Vector3 &vel, const godot::Vector3 &normal) const;
 	void step_core(godot::Vector3 &p, godot::Vector3 &v, double dt,
@@ -124,7 +124,8 @@ public:
 			double p_net_post_radius, double p_net_depth, double p_net_back_half_width,
 			double p_net_height, double p_net_crown_half_width,
 			double p_net_mouth_corner_radius, double p_net_top_depth,
-			double p_puck_half_height, double p_post_cor_scale, double p_net_restitution);
+			double p_puck_half_height, double p_post_cor_scale, double p_net_restitution,
+			double p_net_friction);
 	void set_restitution_curve(double p_cor_slow, double p_slow_speed,
 			double p_cor_fast, double p_fast_speed);
 	void set_substep_params(double p_range_z, double p_substep_m, int64_t p_max_substeps);

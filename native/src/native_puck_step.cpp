@@ -45,7 +45,8 @@ void NativePuckStep::set_net_geometry(double p_goal_line_z, double p_net_half_wi
 		double p_net_post_radius, double p_net_depth, double p_net_back_half_width,
 		double p_net_height, double p_net_crown_half_width,
 		double p_net_mouth_corner_radius, double p_net_top_depth,
-		double p_puck_half_height, double p_post_cor_scale, double p_net_restitution) {
+		double p_puck_half_height, double p_post_cor_scale, double p_net_restitution,
+		double p_net_friction) {
 	goal_line_z = p_goal_line_z;
 	net_half_width = p_net_half_width;
 	net_post_radius = p_net_post_radius;
@@ -58,6 +59,7 @@ void NativePuckStep::set_net_geometry(double p_goal_line_z, double p_net_half_wi
 	puck_half_height = p_puck_half_height;
 	post_cor_scale = p_post_cor_scale;
 	net_restitution = p_net_restitution;
+	net_friction = p_net_friction;
 }
 
 void NativePuckStep::set_restitution_curve(double p_cor_slow, double p_slow_speed,
@@ -134,15 +136,22 @@ Vector3 NativePuckStep::deflect_velocity_h(const Vector3 &incoming, const Vector
 	return v_tangent - v_normal * (real_t)restitution;
 }
 
-// ── PuckGeometryCollision.reflect_3d ─────────────────────────────────────────
+// ── PuckGeometryCollision.reflect_off_twine ──────────────────────────────────
 
-Vector3 NativePuckStep::reflect_3d(const Vector3 &vel, const Vector3 &normal, double restitution) {
+Vector3 NativePuckStep::reflect_off_twine(const Vector3 &vel, const Vector3 &normal) const {
 	const Vector3 n = normal.normalized();
 	const double vn = vel.dot(n);
 	if (vn >= 0.0) {
 		return vel;
 	}
-	return vel - n * (real_t)((1.0 + restitution) * vn);
+	const Vector3 v_tan = vel - n * (real_t)vn;
+	const double t_speed = v_tan.length();
+	double keep = 0.0;
+	if (t_speed > 1e-6) {
+		const double drop = -net_friction * (1.0 + net_restitution) * vn;
+		keep = MAX(t_speed - drop, 0.0) / t_speed;
+	}
+	return v_tan * (real_t)keep - n * (real_t)(net_restitution * vn);
 }
 
 // ── PuckGeometryCollision.reflect_off_pipe ───────────────────────────────────
@@ -368,14 +377,14 @@ bool NativePuckStep::resolve_top_net(const Vector3 &prev, Vector3 &p, Vector3 &v
 			return false;
 		}
 		p = Vector3(p.x, (real_t)(net_height - hh), p.z);
-		v = reflect_3d(v, Vector3(0.0f, -1.0f, 0.0f), net_restitution);
+		v = reflect_off_twine(v, Vector3(0.0f, -1.0f, 0.0f));
 		return true;
 	}
 	if ((double)p.y > net_height + hh) {
 		return false;
 	}
 	p = Vector3(p.x, (real_t)(net_height + hh), p.z);
-	v = reflect_3d(v, Vector3(0.0f, 1.0f, 0.0f), net_restitution);
+	v = reflect_off_twine(v, Vector3(0.0f, 1.0f, 0.0f));
 	return true;
 }
 
@@ -439,14 +448,14 @@ bool NativePuckStep::resolve_net_panels(const Vector3 &prev, Vector3 &p, Vector3
 		const double back_limit = goal_line_z + back_depth_at_height(p.y) - puck_radius;
 		if (Math::abs((double)p.z) > back_limit) {
 			p.z = (real_t)(end_sign * back_limit);
-			v = reflect_3d(v, Vector3(0.0f, 0.0f, (real_t)-end_sign), net_restitution);
+			v = reflect_off_twine(v, Vector3(0.0f, 0.0f, (real_t)-end_sign));
 			hit = true;
 		}
 		const double side_limit = net_half_width - puck_radius;
 		if (Math::abs((double)p.x) > side_limit) {
 			const double x_sign = sgn(p.x);
 			p.x = (real_t)(x_sign * side_limit);
-			v = reflect_3d(v, Vector3((real_t)-x_sign, 0.0f, 0.0f), net_restitution);
+			v = reflect_off_twine(v, Vector3((real_t)-x_sign, 0.0f, 0.0f));
 			hit = true;
 		}
 	} else {
@@ -454,7 +463,7 @@ bool NativePuckStep::resolve_net_panels(const Vector3 &prev, Vector3 &p, Vector3
 		if (back_plane_distance(prev) >= 0.0 && back_dist < puck_radius &&
 				within_back_panel((double)p.x, puck_radius)) {
 			p += back_plane_normal(end_sign) * (real_t)(puck_radius - back_dist);
-			v = reflect_3d(v, Vector3(0.0f, 0.0f, (real_t)end_sign), net_restitution);
+			v = reflect_off_twine(v, Vector3(0.0f, 0.0f, (real_t)end_sign));
 			hit = true;
 		} else {
 			const double side_surface = net_half_width;
@@ -462,7 +471,7 @@ bool NativePuckStep::resolve_net_panels(const Vector3 &prev, Vector3 &p, Vector3
 					Math::abs((double)p.x) < side_surface + puck_radius) {
 				const double x_sign = (double)prev.x >= 0.0 ? 1.0 : -1.0;
 				p.x = (real_t)(x_sign * (side_surface + puck_radius));
-				v = reflect_3d(v, Vector3((real_t)x_sign, 0.0f, 0.0f), net_restitution);
+				v = reflect_off_twine(v, Vector3((real_t)x_sign, 0.0f, 0.0f));
 				hit = true;
 			}
 		}
@@ -652,7 +661,8 @@ void NativePuckStep::_bind_methods() {
 			"goal_line_z", "net_half_width", "net_post_radius", "net_depth",
 			"net_back_half_width", "net_height", "net_crown_half_width",
 			"net_mouth_corner_radius",
-			"net_top_depth", "puck_half_height", "post_cor_scale", "net_restitution"),
+			"net_top_depth", "puck_half_height", "post_cor_scale", "net_restitution",
+			"net_friction"),
 			&NativePuckStep::set_net_geometry);
 	ClassDB::bind_method(D_METHOD("set_restitution_curve",
 			"cor_slow", "slow_speed", "cor_fast", "fast_speed"),
