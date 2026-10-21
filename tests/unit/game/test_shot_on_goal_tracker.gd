@@ -448,6 +448,90 @@ func test_credit_assists_stops_at_scorers_own_prior_touch() -> void:
 	assert_eq(assists[0], "Teammate")
 	assert_eq(scorer.stats.assists, 0, "scorer must not credit themselves an assist")
 
+
+func test_give_and_go_ends_the_chain_at_the_scorers_first_touch() -> void:
+	# Starter feeds the scorer, the scorer gives and goes, the return pass is
+	# buried. Only the return passer assists: the scorer's first touch ends it.
+	var starter := _add_player(12, 0, "Starter")
+	_add_player(10, 0, "Scorer")
+	_add_player(11, 0, "Returner")
+	tracker.on_pickup(12)
+	tracker.on_pickup(10)
+	tracker.on_pickup(11)
+	tracker.on_pickup(10)
+	var assists: Array[String] = tracker.credit_assists(10)
+	assert_eq(assists, ["Returner"] as Array[String])
+	assert_eq(starter.stats.assists, 0)
+
+
+func test_shooter_reclaiming_a_carom_off_a_defender_keeps_the_feeders_assist() -> void:
+	# The feeder sets up the shooter, the shot caroms off a defender's skate
+	# (a touch, not possession) and the shooter buries his own rebound. The
+	# defender never had the puck, so the feed still assists.
+	var feeder := _add_player(11, 0, "Feeder")
+	_add_player(20, 1, "Defender")
+	var scorer := _add_player(10, 0, "Scorer")
+	tracker.on_pickup(11)
+	tracker.on_pickup(10)
+	tracker.on_shot_started(10)
+	tracker.on_deflection(20)
+	tracker.on_pickup(10)
+	var assists: Array[String] = tracker.credit_assists(10)
+	assert_eq(assists, ["Feeder"] as Array[String])
+	assert_eq(feeder.stats.assists, 1)
+	assert_eq(scorer.stats.assists, 0)
+
+
+func test_goal_in_off_a_defender_credits_the_shooters_feeders() -> void:
+	# A1 → A2 → shooter, whose shot goes in off a defender. The defender is the
+	# last toucher, the goal is the shooter's (find_scorer_on_team), and both
+	# feeds behind him still assist.
+	var a1 := _add_player(11, 0, "A1")
+	var a2 := _add_player(12, 0, "A2")
+	_add_player(20, 1, "Defender")
+	_add_player(10, 0, "Shooter")
+	tracker.on_pickup(11)
+	tracker.on_pickup(12)
+	tracker.on_pickup(10)
+	tracker.on_shot_started(10)
+	tracker.on_deflection(20)
+	assert_eq(tracker.get_last_toucher(), 20)
+	var scorer_id: int = tracker.find_scorer_on_team(0)
+	assert_eq(scorer_id, 10)
+	var assists: Array[String] = tracker.credit_assists(scorer_id)
+	assert_eq(assists, ["A2", "A1"] as Array[String])
+	assert_eq(a1.stats.assists, 1)
+	assert_eq(a2.stats.assists, 1)
+
+
+func test_own_goal_by_an_established_carrier_credits_no_assists() -> void:
+	# The defender held it, then put it in his own net: the last attacker gets
+	# the goal, but the defender's possession broke the chain behind him.
+	var feeder := _add_player(11, 0, "Feeder")
+	_add_player(10, 0, "Attacker")
+	_add_player(20, 1, "Defender")
+	tracker.on_pickup(11)
+	tracker.on_pickup(10)
+	tracker.on_pickup(20)
+	tracker.on_possession_established(20)
+	var scorer_id: int = tracker.find_scorer_on_team(0)
+	assert_eq(scorer_id, 10)
+	assert_eq(tracker.credit_assists(scorer_id).size(), 0)
+	assert_eq(feeder.stats.assists, 0)
+
+
+func test_whistle_ends_the_assist_chain() -> void:
+	# A touch before a stoppage never assists a goal scored after the faceoff.
+	var earlier := _add_player(11, 0, "Earlier")
+	_add_player(10, 0, "Scorer")
+	tracker.on_pickup(11)
+	tracker.on_play_stopped()
+	tracker.on_pickup(10)
+	assert_eq(tracker.credit_assists(10).size(), 0)
+	assert_eq(earlier.stats.assists, 0)
+	assert_eq(tracker.find_scorer_on_team(0), 10)
+
+
 func test_credit_assists_scorer_without_team_returns_empty() -> void:
 	var assists: Array[String] = tracker.credit_assists(999)  # unregistered
 	assert_eq(assists.size(), 0)
@@ -473,9 +557,8 @@ func test_teammate_touching_twice_earns_only_one_assist() -> void:
 
 # ── Poke-check attribution ───────────────────────────────────────────────────
 # A poke-check records the poker as the most recent toucher so a puck poked
-# straight off the carrier's stick into the net is credited to the poker, but
-# the entry is flagged so it never earns an assist (a strip isn't a play that
-# feeds the goal).
+# straight off the carrier's stick into the net is credited to the poker, and
+# a poke that feeds a teammate earns the poker an assist.
 
 func test_poke_check_makes_poker_the_last_toucher() -> void:
 	_add_player(20, 1, "Defender")

@@ -413,16 +413,24 @@ func on_goal_confirmed(scorer_peer_id: int, origin: Vector3 = Vector3.ZERO) -> v
 # earns the assist when no opponent ever controlled it. A poke-check that feeds
 # a teammate counts as such a play: the poker sits in the chain like any other
 # toucher, and the opposing carrier they stripped breaks it a step further back.
+#
+# The walk starts at the newest entry, not at the scorer's: on a goal off a
+# defender the front entry is that defender, and the scorer (find_scorer_on_team)
+# sits behind it. The scorer's own entries are skipped until a teammate has been
+# credited — a shot that caroms off a defender back to the shooter is still one
+# possession — and after that one ends the chain (a give-and-go's return pass).
 func credit_assists(scorer_peer_id: int) -> Array[String]:
 	var names: Array[String] = []
 	var credited: Array[int] = []
 	var scorer_team_id: int = _registry.resolve_team_id_for_peer(scorer_peer_id)
 	if scorer_team_id == -1:
 		return names
-	for i: int in range(1, _recent_carriers.size()):
+	for i: int in _recent_carriers.size():
 		var pid: int = _recent_carriers[i]
 		if pid == scorer_peer_id:
-			break  # scorer's own prior touch ends the chain
+			if not credited.is_empty():
+				break
+			continue
 		var record: PlayerRecord = _registry.get_record(pid)
 		if record == null:
 			continue
@@ -487,6 +495,12 @@ func clear_pending() -> void:
 	_pending_ctx = []
 	_pending_one_timer = false
 	_pending_event = null
+
+
+# A whistle ends the play: no touch before it can assist a goal after it.
+func on_play_stopped() -> void:
+	_recent_carriers.clear()
+	_recent_carrier_possession.clear()
 
 
 # Called on full game reset. Clears carrier history plus pending state, and
