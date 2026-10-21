@@ -450,17 +450,17 @@ the trunk (~0.5 m), and a lifted shot through it from inside ~5 m arrives
 (~0.1 s) before any drop lands. `_release_beats_the_drop` is the race: a puck
 an opponent can shoot, at the league's hardest wrister, reaches him inside his
 drop from READY (~6.6 m at Hard). Inside it his skates come in, toes out, knees
-rolled together, and the hips, head and glove sit 0.14 m lower. Three things
+rolled together, and the hips, head and glove sit 0.14 m lower. Two things
 follow from the pose rather than being bolted on:
 
 - **The five-hole is a window, not a wall** — a slit a few cm wide over the blade.
 - **The drop is shorter** (`low_ready_drop_share`, the hips' remaining fall),
   latched into the slide at the drop so the drop he started is the one he gets.
-- **The push is slower** (`low_ready_push_share`), and every race that prices
-  his upright push reads it (`_push_share`, `_sync_push_cfgs`), or the
-  planner believes in a goalie quicker than the one skating.
 
-It gives up the low corners. Three things are easy to get wrong, all measured:
+It gives up the low corners, and nothing else: it must not slow his push. At
+0.8 of READY's the breakaway cutback opened 7, 6 and 5 aims of 7 at Easy, Normal
+and Hard against 5, 3 and 4 (`test_goalie_breakaway_ladder.gd`), all of it the
+push. Three things are easy to get wrong, all measured:
 
 - **The pad tops may meet but never cross.** A rigid pad rolled further draws an
   X, and closing the five-hole that way measured better than any legal pose.

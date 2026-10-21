@@ -2,9 +2,9 @@ extends GutTest
 
 # ── THE LOW READY ─────────────────────────────────────────────────────────────
 # A shooter in tight, inside the range where a hard release beats his drop from
-# READY, gets the low ready: skates in, knees together, the paddle stood in the
-# five-hole. It shrinks the five-hole to a window over the blade and buys a
-# shorter drop, and pays for both with a slower push. It never changes while he
+# READY, gets the low ready: skates in, toes out, knees together, sat lower. It
+# shrinks the five-hole to a window over the blade and buys a
+# shorter drop, and pays for both at the posts. It never changes while he
 # reads a shot.
 
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
@@ -112,17 +112,6 @@ func test_the_drop_from_low_is_shorter_and_rides_into_the_butterfly() -> void:
 	_settle(SLOT_FAR)
 	_ctrl._enter_butterfly()
 	assert_almost_eq(_ctrl._slide.butterfly_drop_speed, _ctrl.butterfly_drop_speed, 1e-6)
-
-
-func test_every_race_prices_the_low_push() -> void:
-	_settle(IN_TIGHT)
-	var share: float = _ctrl.low_ready_push_share
-	assert_lt(share, 1.0)
-	assert_almost_eq(_ctrl._beaten_wide_cfg.goalie_lateral_speed, _ctrl.t_push_speed * share, 1e-6)
-	assert_almost_eq(_ctrl._backdoor_cfg.goalie_lateral_accel, _ctrl.lateral_accel * share, 1e-6)
-	_settle(SLOT_FAR)
-	assert_almost_eq(_ctrl._beaten_wide_cfg.goalie_lateral_speed, _ctrl.t_push_speed, 1e-6)
-	assert_almost_eq(_ctrl._backdoor_cfg.goalie_lateral_accel, _ctrl.lateral_accel, 1e-6)
 
 
 # A rigid pad rolled past its partner draws the two crossing in an X.
