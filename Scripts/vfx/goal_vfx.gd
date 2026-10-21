@@ -27,6 +27,7 @@ var _lamp_tween: Tween = null
 
 func _ready() -> void:
 	_particles = GPUParticles3D.new()
+	_particles.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_particles.amount = 60
 	_particles.lifetime = 1.5
 	_particles.one_shot = true

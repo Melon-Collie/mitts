@@ -138,6 +138,7 @@ func _emit_slide_spray(root_pos: Vector3, flat_vel: Vector3) -> void:
 
 func _make_pad_burst() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.amount = DROP_BURST_AMOUNT_MAX
 	e.lifetime = 0.35
@@ -156,6 +157,7 @@ func _make_pad_burst() -> CPUParticles3D:
 
 func _make_slide_spray() -> CPUParticles3D:
 	var e := CPUParticles3D.new()
+	e.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	e.emitting = false
 	e.amount = 110
 	e.lifetime = 0.32
