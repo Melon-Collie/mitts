@@ -904,8 +904,8 @@ func _strip_pinned_carrier(victim: Skater, pinner: Skater) -> void:
 
 # Host: any transition out of live play (whistle prep, goal, period horn,
 # game over) is a stoppage for stat attribution — resolve a still-pending
-# draw via the last-toucher fallback and clear pending hits + release grace
-# (nothing carries across dead play). The goal path resolved the draw to the
+# draw via the last-toucher fallback and clear the assist chain, pending hits
+# and release grace (nothing carries across dead play). The goal path resolved the draw to the
 # scoring team already (more precise than last-toucher when a defender tips
 # one in), so this finds nothing pending there. Idempotent with the explicit
 # flush in _whistle_and_faceoff.
@@ -915,6 +915,9 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 	if phase == GamePhase.Phase.PLAYING or phase == GamePhase.Phase.FACEOFF:
 		return
 	_flush_pending_faceoff_win()
+	# After the flush: its last-toucher fallback reads the assist chain.
+	if _shot_tracker != null:
+		_shot_tracker.on_play_stopped()
 	if _hit_tracker != null:
 		_hit_tracker.on_play_stopped()
 	if _possession_tracker != null:
@@ -3414,7 +3417,7 @@ func _on_server_puck_stripped_from(peer_id: int, stripper_peer_id: int) -> void:
 # Host: a defender poke-checked the carrier. Record the poker as the most recent
 # toucher so a puck poked straight off the carrier's stick into the net is
 # credited to the poker (get_last_toucher) rather than resolving to the victim
-# as an own goal. The shot tracker flags it a poke so it never earns an assist.
+# as an own goal. A poke that feeds a teammate earns the poker an assist.
 func _on_server_puck_poke_checked_by(peer_id: int) -> void:
 	if _shot_tracker != null:
 		_shot_tracker.on_poke_check(peer_id)
