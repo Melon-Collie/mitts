@@ -37,6 +37,8 @@ const _FLOATER_NUMBER_CENTER_V: float = 0.58
 
 
 var _goalie: Goalie
+# The parts drawn as one mesh from the paint below; rebuilt after every repaint.
+var _rig: GoalieBodyRig
 var _jersey_mat: ShaderMaterial
 var _text_viewport: SubViewport
 var _text_decal: GoalieTextDecal
@@ -58,6 +60,9 @@ func setup(goalie: Goalie) -> void:
 	_goalie = goalie
 	_create_jersey_material()
 	_create_shoulder_viewport()
+	_rig = GoalieBodyRig.new(goalie)
+	goalie.add_child(_rig)
+	_rig.rebuild()
 
 
 func apply_uniform(colors: Dictionary) -> void:
@@ -129,6 +134,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	_crest_decal.update_crest(TeamCrest.fruit_for(preset), preset)
 	_crest_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_rebuild_text_decal()
+	_rig.rebuild()
 
 
 func apply_jersey_info(p_name: String, number: int) -> void:

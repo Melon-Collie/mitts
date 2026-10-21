@@ -28,6 +28,7 @@ const _COLLABORATORS: Dictionary = {
 	"_appearance": "res://Scripts/actors/skater_appearance_coordinator.gd",
 	"_shadow": "res://Scripts/actors/skater_shadow_proxy.gd",
 	"_anim_lod": "res://Scripts/actors/skater_animation_lod.gd",
+	"_paint": "res://Scripts/actors/body_zone_paint.gd",
 }
 
 
@@ -127,7 +128,7 @@ func test_every_rig_is_built_before_the_passes_that_size_and_paint_it() -> void:
 	# mesh that does not exist yet and fails only in a live match.
 	var ready_src: String = _skater_src().split("func _ready()")[1].split("\nfunc ")[0]
 	var order: Array[String] = []
-	for token: String in ["_legs.build(body)", "_arms.build(body)", "_spine.build(body)",
+	for token: String in ["_legs.build(body", "_arms.build(body", "_spine.build(body)",
 			"_stick.setup(self)",
 			"_uniform = SkaterUniformCoordinator.new()",
 			"_appearance = SkaterAppearanceCoordinator.new()"]:

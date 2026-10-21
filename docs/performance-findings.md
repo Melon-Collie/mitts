@@ -218,3 +218,34 @@ Two traps the sweep hit, both worth remembering:
 `HostCostProbe` carries the same discipline in a smaller form: means and window
 peaks are both over **ticks**, so a per-actor section's peak is the tick's total
 rather than the worst single actor.
+
+## The render side: draw calls and triangles
+
+Everything above is the main thread. The render side was measured later, by
+rendering the 5v5 opening faceoff on Forward+ (software Vulkan, so draw-call and
+triangle **counts**, never timings) and hiding one thing at a time. Counts are a
+property of the scene and transfer to any GPU; whether they bound the frame on a
+given machine is what the F3 digest's `bound_by` answers.
+
+| | draw calls | triangles / frame |
+|---|---|---|
+| as it was | 1,533 | 3.56 M |
+| particles cast no shadow | 1,515 | 1.16 M |
+| + nets merged (54 → 3 meshes a goal) | 1,181 | 1.16 M |
+| + one-material bodies (`docs/body-draw-calls-plan.md`) | 759 | 1.16 M |
+| (the same, eight spot shadows off) | 309 | 0.65 M |
+
+Two things to know before touching this:
+
+- **Every shadowed light re-renders every frame.** Skaters move under all eight
+  shadowed ceiling spots, so each shadow map is dirty every frame and redraws
+  every static caster in its cone (stands, rink, nets, goalies) along with the
+  movers. Hiding the moving casters therefore removes far more than their own
+  draws, and the toggles do not add up to the total.
+- **A particle node casts by default, and a `GPUParticles3D` draws its whole
+  `amount` in every pass**, alive or not. The skaters' 300-instance blade trails
+  were two-thirds of all triangles, through eight shadow maps, for dots on the
+  ice. `test_particles_cast_no_shadow.gd` holds every effect to casting nothing.
+
+What is left is mostly the shadowed spots themselves: ~450 of the 759. The
+Shadow Quality setting already trims them (`PlayerPrefs._apply_shadow_quality`).

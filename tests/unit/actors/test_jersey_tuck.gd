@@ -227,7 +227,7 @@ func _key(v: Vector3) -> Vector3i:
 # ── Worn ─────────────────────────────────────────────────────────────────────
 
 # The tuck is which shared mesh the skater's upper body wears, and changing it
-# keeps the paint, which lives in surface overrides on that mesh's instance.
+# keeps the paint: the body material on its one surface, and the jersey's record.
 func test_a_gear_change_dresses_the_tuck_and_keeps_the_paint() -> void:
 	var skater: Skater = (load(_SCENE) as PackedScene).instantiate() as Skater
 	add_child_autofree(skater)
@@ -235,13 +235,15 @@ func test_a_gear_change_dresses_the_tuck_and_keeps_the_paint() -> void:
 	skater.set_physics_process(false)
 	skater.set_uniform(TeamColorRegistry.get_colors(0, 0))
 	var upper: MeshInstance3D = skater.mesh_root.get_node("BodyRig/UpperMesh") as MeshInstance3D
-	assert_eq(upper.mesh, SkaterMeshBuilder.shared_upper_skin_mesh(GearModelRegistry.TUCK_NONE))
-	var paint: Material = upper.get_surface_override_material(
+	assert_eq(upper.mesh, SkaterMeshBuilder.shared_upper_body_mesh(GearModelRegistry.TUCK_NONE))
+	var body: Material = upper.get_surface_override_material(0)
+	assert_not_null(body)
+	var jersey: StandardMaterial3D = skater.upper_surface_material(
 			SkaterMeshBuilder.UpperSurface.TORSO)
-	assert_not_null(paint)
 	var gear := GearStyleConfig.new()
 	gear.jersey_tuck = GearModelRegistry.TUCK_FULL
 	skater.set_gear_style(gear)
-	assert_eq(upper.mesh, SkaterMeshBuilder.shared_upper_skin_mesh(GearModelRegistry.TUCK_FULL))
-	assert_eq(upper.get_surface_override_material(SkaterMeshBuilder.UpperSurface.TORSO), paint,
+	assert_eq(upper.mesh, SkaterMeshBuilder.shared_upper_body_mesh(GearModelRegistry.TUCK_FULL))
+	assert_eq(upper.get_surface_override_material(0), body, "the body material stays on")
+	assert_eq(skater.upper_surface_material(SkaterMeshBuilder.UpperSurface.TORSO), jersey,
 			"the jersey's paint stays on")
