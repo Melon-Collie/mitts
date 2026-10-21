@@ -156,6 +156,12 @@ func toward(side: int) -> float:
 	return _v * float(side)
 
 
+# The filtered rate the puck's lateral speed changes at, m/s² along +face_normal:
+# the push the blade is putting on it, or the catch taking it.
+func rate() -> float:
+	return _dv
+
+
 func _filter(v_perp: float, delta: float, smoothing_s: float) -> void:
 	if not _v_valid or smoothing_s <= 0.0 or delta <= 0.0:
 		_dv = (v_perp - _v) / delta if _v_valid and delta > 0.0 else 0.0

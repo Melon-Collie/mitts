@@ -531,14 +531,25 @@ func update_hem(delta: float, on_camera: bool) -> void:
 const HEAD_ANGLE_EPS_RAD: float = 0.0001
 
 var _head_angle_written: float = INF
+var _head_nod_written: float = INF
+# A nod tips the head and neck about the collar, this far under the helmet
+# bone's origin (m) — where SkaterMeshBuilder.NECK_PROFILE sinks into the torso
+# — so the neck stays in it rather than the head turning about its own middle;
+# the shift that puts it there.
+const _NOD_PIVOT_DROP_M: float = 0.17
+var _head_nod_shift: Vector3 = Vector3.ZERO
 
 
-func set_head_angle(angle: float) -> void:
-	if absf(angle - _head_angle_written) < HEAD_ANGLE_EPS_RAD:
+func set_head_angle(angle: float, nod: float = 0.0) -> void:
+	if absf(angle - _head_angle_written) < HEAD_ANGLE_EPS_RAD \
+			and absf(nod - _head_nod_written) < HEAD_ANGLE_EPS_RAD:
 		return
 	_head_angle_written = angle
+	_head_nod_written = nod
+	_head_nod_shift = Basis(Vector3.UP, angle) * Vector3(0.0,
+			_NOD_PIVOT_DROP_M * (cos(nod) - 1.0), -_NOD_PIVOT_DROP_M * sin(nod))
 	_basis[SkaterMeshBuilder.UpperBone.HELMET] = Basis.from_euler(
-			Vector3(_helmet_base_euler.x, angle, _helmet_base_euler.z))
+			Vector3(_helmet_base_euler.x - nod, angle, _helmet_base_euler.z))
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
 
 
@@ -551,6 +562,8 @@ func repose_bone(bone: int) -> void:
 		var side_i: int = 0 if bone == SkaterMeshBuilder.UpperBone.SHOULDER_L else 1
 		_sync_cap(side_i)
 		origin += _check_load_offset(signf(origin.x)) + _girdle[side_i]
+	if bone == SkaterMeshBuilder.UpperBone.HELMET:
+		origin += _head_nod_shift
 	var pose := Transform3D(_basis[bone].scaled_local(_scale[bone]), origin)
 	# The jersey's tail is the torso as the hips hold it: the same placement, hung
 	# from the waist, so it takes neither the spine's fold nor the texture.

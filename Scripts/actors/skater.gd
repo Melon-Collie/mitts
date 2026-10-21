@@ -186,6 +186,11 @@ var carry_release_drop: float = 0.2
 # ...and lets go only once the puck, at the rate it is slowing, would stop
 # within this (s): a turnaround, not a sweep that eases off and pushes on.
 var carry_release_stop_s: float = 0.12
+# The shaft bows under a stroke (SkaterStickRig.update_flex): metres of
+# mid-shaft bow per m/s² the blade pushes or catches the puck with, capped. A
+# hard dangle's push is ~40 m/s².
+var carry_bow_m_per_m_s2: float = 0.0013
+var carry_bow_max_m: float = 0.05
 var carry_repush_margin: float = 1.2
 # What a stroke is, as against a hand's wobble: the speed is read through a
 # filter of carry_stroke_smoothing_s, and no face changes until the puck has
@@ -780,6 +785,10 @@ var _hop_stroke_speed: float = 0.0
 # velocity is the stroke), and the hop that carries the blade over a free puck —
 # the side factor it starts from, and while it drives that factor (_release_hop).
 var _stroke := CarryStrokeState.new()
+# How a carried puck moves off the body (m/s, world, horizontal): the hands'
+# work, which the head glances down to (SkaterPoseCoordinator) and the blade
+# throws snow along (BladeSprayVFX).
+var carry_hands_velocity: Vector3 = Vector3.ZERO
 var _pin_prev: Vector3 = Vector3.ZERO
 var _pin_prev_valid: bool = false
 var _release_hop: bool = false
@@ -2103,6 +2112,26 @@ func get_carry_forehand_factor() -> float:
 # while the pushing face flips to the other side. sin over the linear phase
 # peaks mid-hop and lands at zero on both ends, so hops never pop; consumed by
 # the transit-lift block in SkaterIKCoordinator.apply_blade_from_mouse.
+# A point on the drawn blade's sole, world space, `u` of the way heel to toe:
+# where the mesh is, which the carry seat may have slid off the marker.
+func drawn_blade_point(u: float) -> Vector3:
+	if _blade_mesh_instance == null or _blade_params == null:
+		return get_blade_contact_global()
+	return _blade_mesh_instance.global_transform \
+			* Vector3(0.0, -_blade_params.height * 0.5, -u * blade_length)
+
+
+# The shaft's bow under the stroke, along the face normal the stick rig bows on
+# (+ = the way the puck is being driven): the blade's load on the puck, none
+# while it is free of the blade after a release.
+func carry_bow_m() -> float:
+	if current_shot_state != SkaterStateMachine.State.SKATING_WITH_PUCK:
+		return 0.0
+	var bow: float = clampf(_stroke.rate() * carry_bow_m_per_m_s2, -carry_bow_max_m,
+			carry_bow_max_m)
+	return bow * (1.0 - _free_gap_blend) * (1.0 - get_carry_transit_factor())
+
+
 func get_carry_transit_factor() -> float:
 	return sin(PI * _transit_hop)
 
@@ -2207,6 +2236,7 @@ func _update_carry_contact(delta: float) -> void:
 			# read and the rendered offset can never disagree on direction.
 			var face_normal := Vector3(-stick.z, 0.0, stick.x)
 			var v_rel: Vector3 = pin_velocity - velocity
+			carry_hands_velocity = Vector3(v_rel.x, 0.0, v_rel.z)
 			var v_perp: float = v_rel.dot(face_normal)
 			var v_in: float = -v_rel.dot(stick)
 			# Two handedness signs, matching the pair the old position key used:
@@ -2697,10 +2727,10 @@ func _place_mesh_root() -> void:
 	mesh_root.position = global_transform.basis.inverse() * visual_offset + _fall_pivot_shift
 
 
-# Head yaw, onto the helmet bone. The write owns Y only; the rig's captured
-# helmet euler carries the scene's authored X/Z into the composed basis.
-func set_head_angle(angle: float) -> void:
-	_arms.set_head_angle(angle)
+# Head yaw, and the nod down off the scene's authored tilt, onto the helmet bone;
+# the rig's captured helmet euler carries the authored X/Z into the composed basis.
+func set_head_angle(angle: float, nod: float = 0.0) -> void:
+	_arms.set_head_angle(angle, nod)
 
 
 func get_upper_body_rotation() -> float:

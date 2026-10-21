@@ -345,6 +345,9 @@ func update_flex(delta: float) -> bool:
 			# ease matches the torso coil's front-loaded snap.
 			target = -sqrt(clampf(_skater.shot_charge, 0.0, 1.0)) \
 					* _skater.stick_flex_windup_m * axis
+		elif state == SkaterStateMachine.State.SKATING_WITH_PUCK:
+			# A stroke loads the shaft across its face, the axis it bows on.
+			target = _skater.carry_bow_m()
 		_flex = lerpf(_flex, target,
 				minf(_skater.stick_flex_load_speed * delta, 1.0))
 		display = _flex

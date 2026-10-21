@@ -29,6 +29,8 @@ var velocity_lean_x: float = 0.0
 var lower_body_lag: float = 0.0
 var head_angle: float = 0.0
 var _head_rate: float = 0.0
+var head_nod: float = 0.0
+var _head_nod_rate: float = 0.0
 # Upper-body twist follow-through (secondary motion): a damped spring trails the
 # tracked twist so the shoulders whip through a fast cut and settle, instead of
 # tracking rigidly. Converges to the tracked angle at steady state (adds nothing
@@ -622,7 +624,28 @@ func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
 	var was: float = head_angle
 	head_angle = EaseRules.critical_x(was, _head_rate, target_angle, omega, delta)
 	_head_rate = EaseRules.critical_v(was, _head_rate, target_angle, omega, delta)
-	_skater.set_head_angle(head_angle)
+	var nod_target: float = _puck_nod() if _controller.knockdown_timer <= 0.0 else 0.0
+	var nod_was: float = head_nod
+	head_nod = EaseRules.critical_x(nod_was, _head_nod_rate, nod_target, omega * 0.5, delta)
+	_head_nod_rate = EaseRules.critical_v(nod_was, _head_nod_rate, nod_target, omega * 0.5,
+			delta)
+	_skater.set_head_angle(head_angle, head_nod)
+
+
+# How far a carrier's head nods down to the puck: the larger of the hands
+# working it and it coming in tight, eased off by skating speed.
+func _puck_nod() -> float:
+	if not _controller.has_puck:
+		return 0.0
+	var c: SkaterController = _controller
+	var hands: float = smoothstep(c.head_puck_hands_band.x, c.head_puck_hands_band.y,
+			_skater.carry_hands_velocity.length())
+	var to_puck: Vector3 = _skater.get_carry_target_global() - _skater.global_position
+	var close: float = smoothstep(c.head_puck_close_band.x, c.head_puck_close_band.y,
+			Vector2(to_puck.x, to_puck.z).length())
+	var open_ice: float = smoothstep(c.head_puck_skate_band.x, c.head_puck_skate_band.y,
+			Vector2(_skater.velocity.x, _skater.velocity.z).length())
+	return deg_to_rad(c.head_puck_nod_deg) * maxf(hands, close) * (1.0 - open_ice)
 
 # ── Angular Velocity Bookkeeping ──────────────────────────────────────────────
 # Called at the end of _process_input on real (non-replay) frames so the

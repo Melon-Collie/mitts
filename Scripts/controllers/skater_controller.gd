@@ -712,6 +712,14 @@ var loft_vertical_speed_high: float = GameRules.DEFAULT_LOFT_VY_HIGH_M_S
 # ── Head Tracking Tuning ─────────────────────────────────────────────────────
 var head_track_speed: float = 12.0
 var head_track_max_deg: float = 60.0
+# A carrier glances down at the puck (degrees of nod) as the hands work it
+# (the puck's speed off the body over the band, m/s) and as it comes in tight
+# (its distance over the band, m), less as the skater picks up speed: eyes up
+# on open ice.
+var head_puck_nod_deg: float = 28.0
+var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
+var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
+var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
 var slapper_wind_up_height: float = 1.0
