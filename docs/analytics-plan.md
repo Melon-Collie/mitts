@@ -92,9 +92,10 @@ head over the shared hole geometry:
   public-style model (logistic in log-distance + angle + type, solved to NHL
   aggregates): the cross-check we lacked. It brackets from the low side
   (NHL-calibrated, so it under-reads arcade Mitts) while the geometric model
-  brackets from the high side. Shown beside the goalie-aware number on the
-  post-game tape. Pure function of data already on `ShotEvent` — no capture, wire,
-  or schema change.
+  brackets from the high side. A cross-check for the instruments and the crowd's
+  danger read, not a displayed stat: the post-game tape shows only the
+  goalie-aware number, the one the bots price shots with. Pure function of data
+  already on `ShotEvent` — no capture, wire, or schema change.
 - Computed at **release** from the real goalie geometry (`_note_shot_trajectory`
   → the directed goal's defending goalie position), held on the pending shot
   (`note_xg`), and committed at **resolution** on `shot_counted(peer, blocked, xg)`
@@ -447,33 +448,18 @@ disagree.
    engine-native (Godot `_draw()` — boards / lines / creases / faceoff circles are
    cheap vector geometry, no chart lib, confirming §4.2). Team map here; the
    individual map is the career heatmap (§7.2).
-2. **Tale of the tape.** Head-to-head comparison bars (home ↔ away). The advanced
-   rows — xG, Corsi, Fenwick, PDO — are visually tagged as the differentiator.
-   *Which* rows and their order are TBD until the stats exist.
-3. **Expected-goals share.** *(Shipped as a cumulative-xG flow first; replaced
-   2026-07-26.)* The home team's running **share** of all the chance quality
-   created — `home_xg(t) / (home_xg(t) + away_xg(t))` — plotted against a 50%
-   midline, the band filled toward whoever leads, goals marked on the curve.
-   Math is `domain/rules/xg_share.gd` (`XGShare`), chart is `XGShareChart`.
+2. **Tale of the tape.** Head-to-head comparison bars (home ↔ away) for the
+   broadcast box a viewer already knows: goals, shots on goal, faceoff %, hits,
+   blocked shots, takeaways, giveaways, and icings under NHL rules. A past game
+   shows the rows its record can fill: the shot log gives goals, shots and
+   blocks; a local replay's footer box score adds the rest; a backend game has
+   no box score, since `career_stats` holds humans only.
+3. **Advanced.** The same bars for Corsi, Fenwick and xG, in a panel of their
+   own beside the tape, the differentiator kept visibly apart from the box.
 
-   The two-line flow chart it replaces put the answer to "who is winning this
-   game on chances" in the *gap* between two curves, which is something you
-   measure rather than something you see, and it restated a number the tape
-   already gives outright. One curve against a midline makes the lopsidedness
-   the shape itself. Absolute xG totals are unaffected — they're the tape's xG
-   row.
-
-   Cumulative rather than rolling, deliberately: "who deserved to win" is a
-   whole-game claim, so it has to be settled by everything that happened; a
-   rolling window answers the different question of who is pushing right now.
-   The curve is honestly volatile in the opening minutes (one good look really
-   is 100% of the danger so far) and is not damped — the flat lead-in and the
-   event spacing are what show the reader how thin the sample still is.
-
-   **Not a win probability**, though it reads like one. P(win) from a share
-   needs a fit against real outcomes; every finished match already stores its
-   team xG and its result, so that fit is a query rather than a guess whenever
-   we want it. Until then this stays a measurement rather than a claim.
+There is no xG-over-time chart. A cumulative share cannot show momentum, because
+its opening minutes settle the picture, so a momentum view needs a rolling
+measure.
 
 Determinism/networking: the buffer is host-only (§4–5); for an online client to
 render the post-game screen, the host ships the game's shot list at the final horn

@@ -249,6 +249,18 @@ ICING_RACE_DEFEND,Reach the faceoff dots first for the whistle,Llega primero a l
 ICING_RACE_WATCH,Race to the end-zone faceoff dots,Carrera a los puntos de saque de la zona
 ICING_WAVED_OFF,ICING WAVED OFF,DESPEJE PROHIBIDO ANULADO
 TAPE_ICINGS,Icings,Despejes prohibidos
+TAPE_TITLE,Tale of the tape,Cara a cara
+TAPE_GOALS,Goals,Goles
+TAPE_SHOTS_ON_GOAL,Shots on goal,Tiros a puerta
+TAPE_FACEOFF_PCT,Faceoff %,% de saques ganados
+TAPE_HITS,Hits,Cargas
+TAPE_BLOCKED_SHOTS,Blocked shots,Tiros bloqueados
+TAPE_TAKEAWAYS,Takeaways,Robos
+TAPE_GIVEAWAYS,Giveaways,Pérdidas
+TAPE_ADVANCED,Advanced,Avanzadas
+TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
+TAPE_FENWICK,Fenwick,Fenwick
+TAPE_XG,Expected goals,Goles esperados
 TOAST_GOALIE_FREEZE,GOALIE FREEZES IT,EL PORTERO LO CONGELA
 SPECTATING,SPECTATING,ESPECTADOR
 REPORT_BUG,Report Bug,Reportar error

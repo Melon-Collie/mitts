@@ -794,7 +794,7 @@ func _on_game_over_free_play() -> void:
 		await NetworkManager.announce_match_end()
 		GameManager.return_to_free_play())
 
-# Opens the post-game analytics views (shot map / tale of the tape / xG flow)
+# Opens the post-game analytics views (shot map / tale of the tape)
 # over the game-over screen. Reads only local per-game data, so it works
 # identically offline and online.
 func _on_game_over_analytics() -> void:

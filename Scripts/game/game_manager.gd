@@ -2793,8 +2793,8 @@ func _build_replay_footer() -> Dictionary:
 			})
 	footer["players"] = players
 	# Shot log (analytics B1), so a .mreplay is SELF-CONTAINED for the post-game
-	# analytics views — shot map, xG flow, and the advanced half of the tape all
-	# regenerate from this without any backend. That matters most exactly where
+	# analytics views: the shot map and the tape regenerate from this and the box
+	# score above without any backend. That matters most exactly where
 	# the backend isn't available: stat sharing off, Steam signed out, or a game
 	# that simply failed to upload. Host-only, like the Supabase batch.
 	var shot_rows: Array = []
@@ -3990,7 +3990,7 @@ func _on_shot_events_received(data: Array) -> void:
 
 
 # The game's shot log, whichever role this peer is: the host's live buffer, or a
-# client's pushed copy. The seam the post-game shot map / xG-flow read from.
+# client's pushed copy. The seam the post-game shot map reads from.
 func get_shot_events() -> Array[ShotEvent]:
 	if NetworkManager.is_host and _advanced_stats_tracker != null:
 		return _advanced_stats_tracker.get_shot_events()

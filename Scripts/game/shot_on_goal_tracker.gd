@@ -24,7 +24,7 @@ signal shot_attempted(peer_id: int)
 # (credited shooter — tipper on a tip; outcome; release position; xG; type;
 # period/clock). A "shot attempt" is a puck DIRECTED AT THE NET that resolves as
 # on-goal, missed, or blocked — NOT a pass. AdvancedStatsTracker derives the
-# Corsi/Fenwick/xGF counters from it AND buffers it for the shot map / xG-flow /
+# Corsi/Fenwick/xGF counters from it AND buffers it for the shot map /
 # heatmap. Unlike a release, this is the pass-filtered event: passes (off-net, or
 # received by a teammate) never emit it.
 signal shot_resolved(event: ShotEvent)

@@ -9,7 +9,7 @@ class_name AdvancedStatsTracker extends RefCounted
 ##   shot_attempts_blocked++ when the outcome is BLOCKED (→ Fenwick = iCF − blocked);
 ##   xg_for += event.xg for unblocked shots (A2, ixG — blocked shots carry no xG,
 ##            matching the Fenwick convention);
-## and buffers the ShotEvent (B1) for the shot map / xG-flow / career heatmap.
+## and buffers the ShotEvent (B1) for the shot map / career heatmap.
 ##
 ## shot_resolved fires only for genuine shot attempts — a puck directed at the net
 ## that resolves as on-goal, missed, or blocked. ShotOnGoalTracker does the
