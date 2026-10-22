@@ -19,6 +19,7 @@ one the bots shoot at.
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
 | `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey and sleeves |
 | `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
+| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, lofted from the protector's hem over the pants to a loose hem round the hips |
 
 ## One body, solved once, read three ways
 
