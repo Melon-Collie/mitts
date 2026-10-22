@@ -236,12 +236,22 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Seven rules the rigs sit inside, all easy to break from in here:
+Eight rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
   marker: the marker plus a render-only offset (the stride's pump), so the arm,
   the stick and the blade's dressing pivot about a blade that has not moved.
   The rebuild gate compares the drawn hand, or the pump would never redraw.
+- **The rig reads both markers where the engine draws them**
+  (`drawn_top_hand`, `Skater.drawn_blade`): between where the latest tick found
+  them and where it left them, at this frame's interpolation fraction. The blade
+  mesh hangs from the interpolated `Blade` marker, so the shaft, the knob and the
+  arms are posed from the same instant, and those three nodes are opted out of
+  physics interpolation. An interpolated node written at render rate is drawn
+  from the pose the previous FRAME wrote, so below 120 fps, where a frame runs
+  two ticks, it lags a tick behind the marker it should meet.
+  `tests/slow/actors/test_stick_draws_at_one_instant.gd` holds it on the real
+  main loop.
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
   to a tick of travel from the body on screen. A node placed that way must also

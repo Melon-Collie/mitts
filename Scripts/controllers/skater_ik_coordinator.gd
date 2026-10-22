@@ -728,7 +728,7 @@ func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> Top
 # crosses the release bands in a tick or two and the hand jumped ~0.4 m between
 # shaft and rest. A let-go hand swings with the stride.
 func update_bottom_hand(delta: float = -1.0) -> void:
-	var blade_local: Vector3 = _skater.get_blade_position()
+	var blade_local: Vector3 = _skater.drawn_blade().origin
 	_skater.set_hand_pump(_stride_pump(delta))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)

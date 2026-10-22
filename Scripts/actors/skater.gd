@@ -542,6 +542,13 @@ var _rig_last_bottom_hand: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_check_lead: float = NAN
 # The drawn top hand's render-only offset off its marker (drawn_top_hand).
 var _hand_pump := Vector3.ZERO
+# The Blade and TopHand markers as the latest tick that wrote them found them,
+# and that tick (-1: last written off the tick, so there is nothing to draw
+# between). Physics interpolation draws a marker between exactly these and its
+# value now (_drawn_fraction).
+var _blade_at_tick_start: Transform3D = Transform3D.IDENTITY
+var _hand_at_tick_start: Vector3 = Vector3.ZERO
+var _markers_tick: int = -1
 # Render-rate cosmetic pose hook. The controller registers a Callable(delta)
 # that runs the purely-cosmetic pose passes — the leg gait, head tracking, and
 # off-hand IK — which used to run in the physics tick (120 Hz × every skater,
@@ -968,10 +975,11 @@ func _process(delta: float) -> void:
 	# The bow runs first: a bow that moved re-poses the knob and the bottom glove,
 	# which ride it.
 	var flexed: bool = _stick.update_flex(delta)
-	# render_pose_update's pose is time-driven, so physics interpolation draws it
-	# a tick late. Do NOT opt these nodes out to win that back — an opted-out
-	# child renders against the body's post-tick position while the body renders
-	# interpolated, and the stick visibly leaves the hands at speed.
+	# The stick, the knob and the blade mesh are posed from the markers as drawn
+	# this frame (drawn_blade, drawn_top_hand) and are not interpolated again:
+	# an interpolated node is drawn from where the latest tick FOUND it, which for
+	# a node written here is the previous frame's pose, so a frame that ran two
+	# ticks drew them a tick behind the marker the blade hangs from.
 	if is_visible_in_tree():
 		# The mesh is posed when the camera sees him and his animation LOD is
 		# due; any other frame is off camera to the rig, which still runs the
@@ -1011,15 +1019,16 @@ func _process(delta: float) -> void:
 # Markers are guaranteed non-null by the time _process runs (created in _ready /
 # setup), matching the unguarded access the rig functions already rely on.
 func _rig_pose_changed() -> bool:
+	var drawn_blade_at: Vector3 = drawn_blade().origin
 	if drawn_top_hand() == _rig_last_top_hand \
-			and blade.position == _rig_last_blade \
+			and drawn_blade_at == _rig_last_blade \
 			and shoulder.position == _rig_last_shoulder \
 			and bottom_shoulder.position == _rig_last_bottom_shoulder \
 			and bottom_hand.position == _rig_last_bottom_hand \
 			and _check_lead == _rig_last_check_lead:
 		return false
 	_rig_last_top_hand = drawn_top_hand()
-	_rig_last_blade = blade.position
+	_rig_last_blade = drawn_blade_at
 	_rig_last_shoulder = shoulder.position
 	_rig_last_bottom_shoulder = bottom_shoulder.position
 	_rig_last_bottom_hand = bottom_hand.position
@@ -1346,6 +1355,7 @@ func _position_hand_markers() -> void:
 	if shoulder == null or top_hand == null or bottom_shoulder == null or bottom_hand == null:
 		return
 	var top_hand_side_sign: float = 1.0 if is_left_handed else -1.0
+	_note_marker_write()
 	shoulder.position        = Vector3( top_hand_side_sign * shoulder_offset, shoulder_height, 0.0)
 	top_hand.position        = Vector3(shoulder.position.x, 0.0, 0.0)
 	bottom_shoulder.position = Vector3(-top_hand_side_sign * shoulder_offset, shoulder_height, 0.0)
@@ -1461,8 +1471,10 @@ func _apply_blade_tilt() -> void:
 					+ _aim_seat_offset_u()) * blade_length) \
 			+ _reception_give_dir * (_reception_give_blend * reception_give_max) \
 			+ _tie_draw_local()
-	# In the marker's frame: the hand, world up, and the ice's height.
-	var marker: Transform3D = blade.transform
+	# In the marker's frame: the hand, world up, and the ice's height. The hand
+	# is read against the marker as drawn this frame, the puck, up and the ice
+	# against the tick's, which they were placed in.
+	var marker: Transform3D = drawn_blade()
 	var hand: Vector3 = marker.affine_inverse() * drawn_top_hand()
 	var marker_global: Transform3D = blade.global_transform if blade.is_inside_tree() \
 			else marker
@@ -1482,7 +1494,7 @@ func _apply_blade_tilt() -> void:
 # leaves the shaft by however far the marker moved.
 func _hold_blade_mesh() -> void:
 	if _blade_mesh_instance != null and is_instance_valid(_blade_mesh_instance):
-		_blade_mesh_instance.transform = blade.transform.affine_inverse() * _blade_drawn
+		_blade_mesh_instance.transform = drawn_blade().affine_inverse() * _blade_drawn
 
 
 # Where the toe would go through the ice, the heel rises until the toe is on it:
@@ -1589,6 +1601,9 @@ func _rebuild_blade_mesh() -> void:
 	_blade_params = blade_mesh_params(0.0, 0.0, 1.0, blade_hosel_length)
 	blade_mesh.mesh = StickBladeMeshBuilder.build(_blade_params)
 	blade_mesh.position = Vector3.ZERO
+	# Posed against the marker as drawn (drawn_blade), so interpolating it again
+	# would draw it a frame's worth of ticks behind its shaft.
+	blade_mesh.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	_blade_mesh_instance = blade_mesh
 	_blade_mesh_curve_sign = curve_sign
 	var tape: MeshInstance3D = blade_mesh.get_node_or_null("BladeTape") as MeshInstance3D
@@ -2059,6 +2074,7 @@ func _tilt_body_local(tilt: Vector2) -> Basis:
 
 # ── Blade ─────────────────────────────────────────────────────────────────────
 func set_blade_position(pos: Vector3) -> void:
+	_note_marker_write()
 	_blade_contact_dirty = true
 	blade.position = pos
 	var blade_world: Vector3 = upper_body.to_global(pos)
@@ -2653,6 +2669,7 @@ func get_blade_face_normal(reference_velocity: Vector3) -> Vector3:
 
 # ── Top Hand ──────────────────────────────────────────────────────────────────
 func set_top_hand_position(pos: Vector3) -> void:
+	_note_marker_write()
 	top_hand.position = pos
 
 
@@ -2660,11 +2677,51 @@ func get_top_hand_position() -> Vector3:
 	return top_hand.position
 
 
-# Where the arm and the stick are drawn to: the marker plus a render-only offset
+# Where the arm and the stick are drawn to: the marker where physics
+# interpolation draws it this frame (drawn_blade), plus a render-only offset
 # (the stride's pump, SkaterIKCoordinator), which the marker every claim reads
 # never takes.
 func drawn_top_hand() -> Vector3:
-	return top_hand.position + _hand_pump
+	var f: float = _drawn_fraction()
+	if f >= 1.0:
+		return top_hand.position + _hand_pump
+	return _hand_at_tick_start.lerp(top_hand.position, f) + _hand_pump
+
+
+# The Blade marker where physics interpolation draws it this frame, in
+# UpperBody's frame: between where the latest tick found it and where it left
+# it. The arms, the shaft and the blade mesh are drawn from this and the drawn
+# top hand, so they meet each other, the body and the puck at one instant —
+# read at the tick's marker instead, a frame that ran two ticks drew the shaft
+# a tick off the blade hanging from the interpolated marker.
+func drawn_blade() -> Transform3D:
+	var f: float = _drawn_fraction()
+	if f >= 1.0:
+		return blade.transform
+	return _blade_at_tick_start.interpolate_with(blade.transform, f)
+
+
+# How far between the latest tick's start and now the engine draws the markers:
+# 1 (now) inside a tick, and for markers that tick did not move or that were
+# last written off the tick.
+func _drawn_fraction() -> float:
+	if _markers_tick != Engine.get_physics_frames() or Engine.is_in_physics_frame() \
+			or not blade.is_physics_interpolated_and_enabled():
+		return 1.0
+	return Engine.get_physics_interpolation_fraction()
+
+
+# Called before either marker is written: the first write of a tick records
+# both as the tick found them, which is what the engine interpolates from.
+func _note_marker_write() -> void:
+	if not Engine.is_in_physics_frame():
+		_markers_tick = -1
+		return
+	var tick: int = Engine.get_physics_frames()
+	if tick != _markers_tick:
+		_markers_tick = tick
+		_blade_at_tick_start = blade.transform
+		_hand_at_tick_start = top_hand.position
 
 
 func set_hand_pump(offset: Vector3) -> void:

@@ -521,6 +521,8 @@ func _rebuild_stick_knob() -> void:
 	var m := MeshInstance3D.new()
 	m.name = "StickKnob"
 	m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Posed on the shaft, which is drawn uninterpolated (SkaterStickRig.setup).
+	m.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	m.mesh = SkaterMeshBuilder.shared_knob()
 	m.material_override = UniformPaint.solid(color, UniformPaint.ROUGH_CLOTH)
 	_skater.stick_knob_mesh = m
