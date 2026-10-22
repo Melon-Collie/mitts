@@ -207,10 +207,9 @@ static func kick(p: KeeperPose, side: float) -> void:
 
 # Reverse-VH on the post at `side`, compact and sealed to the iron: sat back on
 # the post leg's calf, its pad flat along the goal line from the knee out to
-# the toe hooked on the post; the other leg a butterfly leg, knee down, ready
-# to push. Upright and leaning into the post, the hands in close and the blade
-# on the ice in front of the pads. The brain puts KeeperGear.post_contact on
-# the post.
+# the toe hooked on the post; the other pad standing. Upright and leaning into
+# the post, the hands in close and the blade on the ice in front of the pads.
+# The brain puts KeeperGear.post_contact on the post.
 static func rvh(p: KeeperPose, side: float) -> void:
 	butterfly(p)
 	var post: int = 0 if side < 0.0 else 1
@@ -218,6 +217,14 @@ static func rvh(p: KeeperPose, side: float) -> void:
 	var leg: KeeperPose.Leg = p.legs[post]
 	leg.knee = Vector3(-side * 0.05, shin_y, 0.0)
 	leg.ankle = Vector3(side * 0.42, shin_y, 0.05)
+	# The off-post pad stands: its skate on the ice toward the middle, loaded to
+	# push, the knee up and in, the face square to the shooter.
+	var off: KeeperPose.Leg = p.legs[1 - post]
+	var sx: float = -side
+	_ready_leg(off, sx)
+	off.ankle = Vector3(sx * 0.50, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.12)
+	off.knee_pole = Vector3(sx * 0.4, 1.0, -0.5)
+	off.shin_front = _FORWARD
 	p.pelvis = Vector3(side * 0.12, 0.55, 0.10)
 	p.pelvis_rot = Vector3(-0.10, -side * 0.25, -side * 0.12)
 	p.lumbar_rot = Vector3(-0.08, 0.0, -side * 0.12)
@@ -228,8 +235,10 @@ static func rvh(p: KeeperPose, side: float) -> void:
 		p.glove_hand = Vector3(-0.40, 0.42, -0.10)
 		p.glove_from_chest = false
 		p.glove_fingers = Vector3(0.0, 1.0, 0.0)
-		p.blade_center = Vector3(-0.25, 0.0, -0.28)
+		# The paddle rises in front of the standing blocker-side pad.
+		p.blade_center = Vector3(-0.25, 0.0, -0.38)
 		p.blade_yaw = deg_to_rad(-15.0)
+		p.stick_tilt = deg_to_rad(18.0)
 	else:
 		# In front at the waist, toward the middle.
 		p.glove_hand = Vector3(-0.30, -0.10, -0.38)
