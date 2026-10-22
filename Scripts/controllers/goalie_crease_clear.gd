@@ -206,10 +206,6 @@ func cover_escaped(dist: float, puck_speed: float, puck_height: float) -> bool:
 			or puck_height > cover_escape_height
 
 
-# Run the reach race. Returns REACH_PENDING while the glove is still travelling,
-# REACH_SECURED on the tick it lands with the puck still under it, or REACH_LOST
-# if it landed and the puck had slipped out of the secure radius.
-
 func tick_body_rest(delta: float, puck_pos: Vector3, puck_speed: float,
 		goalie_pos: Vector3) -> bool:
 	if not GoalieBehaviorRules.puck_resting_on_goalie(
@@ -222,6 +218,3 @@ func tick_body_rest(delta: float, puck_pos: Vector3, puck_speed: float,
 		return false
 	body_rest_dwell_timer = 0.0
 	return true
-
-
-# ── Catch-and-hold (glove) ───────────────────────────────────────────────────

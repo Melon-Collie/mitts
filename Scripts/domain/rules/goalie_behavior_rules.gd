@@ -1282,7 +1282,7 @@ static func movement_read_penalty(planar_speed: float, scrambling: bool, cfg: Mo
 # butterfly pads rotated flat with their inner ends at ±openness):
 #   standing family — inner edges sit ±(0.08 + openness) → gap 0.16 + 2·openness
 #     (≈ 0.20 m at the 0.02 resting openness): a REAL slot, ice to pad-top,
-#     guarded only by the stick blade (0.07 m tall) at ice level.
+#     guarded only by the stick blade (0.089 m tall) at ice level.
 #   down family (butterfly / slide / RVH) — the rotated pads seal the ice; the
 #     residual gap is the openness alone (≈ 0 set, up to ~0.36 mid-slide).
 # `openness` is GoalieNetworkState.five_hole_openness; `is_down` is its

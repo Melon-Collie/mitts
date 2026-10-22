@@ -368,7 +368,7 @@ func get_blade_world_position() -> Vector3:
 # visible reason.
 func apply_network_pose(state: GoalieNetworkState) -> void:
 	# Body + head positions are state-dependent (the pose builder hardcodes
-	# different y-heights per state — body 0.40 in butterfly, 1.22 standing
+	# different y-heights per state — body 0.64 in butterfly, 1.22 standing
 	# etc.). The wire format doesn't carry them, so derive from state_enum
 	# via the pose builder's lookup. Without this the chest/head freeze at
 	# the scene-default standing height while the legs animate, which reads

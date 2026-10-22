@@ -51,7 +51,7 @@ var react_hand_y_min: float = 0.50
 var react_hand_y_max: float = 1.55
 # How far above the CHEST ANCHOR (`body_pos.y` of the pose in play) either hand
 # can be raised. This is what makes going down cost something: the butterfly's
-# chest sits at 0.64 against READY's 0.96, so the same arm reaches 0.32 m lower
+# chest sits at 0.64 against READY's 0.98, so the same arm reaches 0.34 m lower
 # from the ice than from the feet. See GoalieController.arm_reach_above_chest.
 var arm_reach_above_chest: float = 0.49
 

@@ -2,9 +2,8 @@ class_name GoalieController
 extends Node
 
 # AI orchestrator. Owns tracking, depth/position/facing math, and the per-tick
-# wiring between the collaborators that hold the mutable state. All tuning
-# exports stay here for editor access; setup() pushes the relevant values into
-# each collaborator.
+# wiring between the collaborators that hold the mutable state. Every tuning
+# var lives here; setup() pushes the relevant values into each collaborator.
 
 # ── Tuning ────────────────────────────────────────────────────────────────────
 var catches_left: bool = true
@@ -804,9 +803,9 @@ var elevated_threshold: float = GoalieAnatomy.butterfly_cover_ceiling()
 var react_hand_y_min: float = 0.50
 var react_hand_y_max: float = 1.55
 # Reach height ABOVE THE CHEST ANCHOR — the posture cost of being down. Each pose
-# authors a `body_pos.y` (READY 0.96, STANDING 1.22, BUTTERFLY 0.64) and the hand
-# ceiling is that plus this, capped by `react_hand_y_max`. READY's 0.96 + 0.49 =
-# 1.45 clears the 1.22 m crossbar, so upright the whole net is in reach and only
+# authors a `body_pos.y` (READY 0.98, STANDING 1.22, BUTTERFLY 0.64) and the hand
+# ceiling is that plus this, capped by `react_hand_y_max`. READY's 0.98 + 0.49 =
+# 1.47 clears the 1.22 m crossbar, so upright the whole net is in reach and only
 # the down postures give anything up. See GoalieBodyConfigBuilder._reachable_hand_y.
 var arm_reach_above_chest: float = 0.49
 # Glove arm reach. The glove (in `_apply_shot_hand_reaction`) moves
@@ -872,8 +871,7 @@ var is_server: bool = false
 var team_id: int = -1
 
 # Alias the state enum so existing internal code reads `State.STANDING` instead
-# of `GoalieStateMachine.State.STANDING`. The numeric values are preserved (see
-# `domain/ai/role_behaviors/carrier.gd` which duplicates them).
+# of `GoalieStateMachine.State.STANDING`.
 const State = GoalieStateMachine.State
 
 # ── Goal Geometry ─────────────────────────────────────────────────────────────
@@ -3574,8 +3572,7 @@ func _move_along_arc(delta: float) -> Vector2:
 	return new_xz
 
 # Arc target (x, z) at the current radius — the challenge-angle position for
-# STANDING/READY/RECOVERING tracing. BUTTERFLY uses compute_slide_destination
-# with butterfly_radius instead.
+# STANDING/READY/RECOVERING tracing.
 func _arc_target_xz() -> Vector2:
 	return GoalieBehaviorRules.target_arc_position(
 			_tracked_threat_position, _goal_line_z, _goal_center_x,
@@ -4553,7 +4550,7 @@ func _seed_read_belief(truth: GoalieBehaviorRules.ShotResult, screen_d: float) -
 
 
 # Advance the belief toward the truth as the puck flies and the goalie actually
-# observes it: fully converged after one `read_lag`. Held while screened. A
+# observes it: fully converged after `read_converge_time`. Held while screened. A
 # trajectory CHANGE mid-flight (a deflection) re-commits him to what he currently
 # believes and restarts the convergence — the whole point of a tip is that it
 # beats the READ, not the reach, so a tip in tight beats him and one from
