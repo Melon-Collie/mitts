@@ -2,8 +2,8 @@ class_name KeeperGearView
 extends Node3D
 
 # The keeper's gear drawn on his skeleton: each piece's mesh placed on its save
-# box (KeeperGearMeshes builds them inside the boxes), painted from the kit by
-# paint slot. One material per slot is shared by every piece that wears it, so
+# box (KeeperGearMeshes builds them inside the boxes), and the break above each
+# knee joining the pad to its thigh rise, painted from the kit by paint slot. One material per slot is shared by every piece that wears it, so
 # a repaint is a handful of colour writes.
 
 const S := KeeperMeshKit.Slot
@@ -20,6 +20,7 @@ const _FIXED: Dictionary = {
 
 var _pieces: Array[MeshInstance3D] = []
 var _materials: Array[StandardMaterial3D] = []
+var _knees: Array[KeeperKneeBreak] = []
 
 
 func _ready() -> void:
@@ -40,6 +41,11 @@ func _ready() -> void:
 			mi.set_surface_override_material(s, _materials[slots[s]])
 		add_child(mi)
 		_pieces.append(mi)
+	for side: int in 2:
+		var knee := KeeperKneeBreak.new(KeeperGear.Part.PAD_G + side,
+				KeeperGear.Part.RISE_G + side, _materials[S.PADS])
+		add_child(knee)
+		_knees.append(knee)
 	apply_colors({
 		"jersey": Color(0.59, 0.09, 0.16), "jersey_stripe": Color(0.91, 0.27, 0.35),
 		"pants": Color(0.59, 0.09, 0.16), "pants_stripe": Color(0.91, 0.27, 0.35),
@@ -68,3 +74,5 @@ func _paint_slot(slot: int, c: Variant) -> void:
 func update(skel: KeeperSkeleton) -> void:
 	for part: int in _pieces.size():
 		_pieces[part].transform = KeeperGear.box(skel, part)
+	for knee: KeeperKneeBreak in _knees:
+		knee.update(skel)

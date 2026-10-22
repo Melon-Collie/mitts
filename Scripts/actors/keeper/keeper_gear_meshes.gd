@@ -11,6 +11,11 @@ const P := KeeperGear.Part
 const _CREASE := Color(0.82, 0.82, 0.84)
 const _DEEP := Color(0.62, 0.62, 0.66)
 
+# The pad's outer roll: how far its section's corners are cut back, of the half
+# width; and how far under the pad's top the knee stack's full section sits.
+const PAD_CUT: float = 0.28
+const PAD_STACK_TOP_M: float = 0.04
+
 static var _cache: Array[ArrayMesh] = []
 
 
@@ -65,14 +70,14 @@ static func _build(part: int) -> ArrayMesh:
 # the skate at the bottom. Two creases run down the face and the breaks above
 # and below the knee cross it.
 static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
-	var cut: float = h.x * 0.28
+	var cut: float = h.x * PAD_CUT
 	var stations: Array[Vector3] = [
 		Vector3(-h.y, 0.78, 0.45),
 		Vector3(-h.y + 0.06, 0.94, 0.80),
 		Vector3(-h.y + 0.14, 1.0, 0.86),
 		Vector3(h.y - 0.20, 1.0, 0.86),
 		Vector3(h.y - 0.17, 0.98, 1.0),
-		Vector3(h.y - 0.04, 1.0, 1.0),
+		Vector3(h.y - PAD_STACK_TOP_M, 1.0, 1.0),
 		Vector3(h.y, 0.88, 0.85),
 	]
 	var rings: Array[PackedVector3Array] = []
@@ -88,9 +93,20 @@ static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
 	k.tint = Color.WHITE
 
 
+# The knee stack's full section, just under the pad's top, in the pad's box
+# frame: where the break above the knee starts (KeeperKneeBreak).
+static func pad_top_ring(h: Vector3) -> PackedVector3Array:
+	return KeeperMeshKit.octagon(h.y - PAD_STACK_TOP_M, h.x, h.z, h.x * PAD_CUT)
+
+
+# The thigh rise's bottom section, in its box frame: where the break ends.
+static func rise_bottom_ring(h: Vector3) -> PackedVector3Array:
+	return KeeperMeshKit.octagon(-h.y, h.x * 0.92, h.z, h.x * 0.2)
+
+
 static func _rise(k: KeeperMeshKit, h: Vector3) -> void:
 	var rings: Array[PackedVector3Array] = [
-		KeeperMeshKit.octagon(-h.y, h.x * 0.92, h.z, h.x * 0.2),
+		rise_bottom_ring(h),
 		KeeperMeshKit.octagon(h.y - 0.05, h.x, h.z, h.x * 0.25),
 		KeeperMeshKit.octagon(h.y, h.x * 0.7, h.z * 0.7, h.x * 0.25),
 	]

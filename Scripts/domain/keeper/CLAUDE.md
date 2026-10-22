@@ -17,6 +17,7 @@ one the bots shoot at.
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones; the boxes drawn for debugging |
+| `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
 
 ## One body, solved once, read three ways
 
@@ -43,7 +44,10 @@ more than they look like:
   rigid stick.
 
 The thigh rise is strapped to the thigh, not the shin, so a butterfly stands it
-up over the knees and closes the five-hole from above.
+up over the knees and closes the five-hole from above. The break between the
+knee stack and the rise is drawn as a loft between their sections wherever the
+pose put them (`KeeperKneeBreak`), so the pad reads as one piece bending at the
+knee; it is not a save surface.
 
 ## Seeing him
 
