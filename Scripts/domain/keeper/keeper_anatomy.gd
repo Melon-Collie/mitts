@@ -53,13 +53,14 @@ const SKATE_HALF_WIDTH_M: float = 0.045
 const PAD_WIDTH_M: float = 0.2794
 const PAD_DEPTH_M: float = 0.20
 # The pad's boot runs down over the skate's toe, below the ankle, to just above
-# the ice; the knee stack stands just past the knee. The thigh rise above it is
-# strapped to the thigh and follows the thigh, so a butterfly stands it up over
-# the knees rather than laying it along the ice.
+# the ice; the knee stack stands just past the knee, and the thigh rise carries
+# the pad on past it along the shin. The rise is stiff: it only bends back onto
+# the thigh at the break above the knee, by at most PAD_BREAK_MAX_RAD.
 const PAD_BELOW_ANKLE_M: float = 0.05
 const PAD_ABOVE_KNEE_M: float = 0.05
 const PAD_LENGTH_M: float = SHIN_M + PAD_BELOW_ANKLE_M + PAD_ABOVE_KNEE_M
-const PAD_THIGH_RISE_M: float = 0.22
+const PAD_THIGH_RISE_M: float = 0.16
+const PAD_BREAK_MAX_RAD: float = deg_to_rad(30.0)
 # The pad's face stands proud of the shin bone by this much: the leg sits in the
 # channel at the back.
 const PAD_FORWARD_OF_SHIN_M: float = 0.05

@@ -3,8 +3,9 @@ extends Node3D
 
 # The keeper's gear drawn on his skeleton: each piece's mesh placed on its save
 # box (KeeperGearMeshes builds them inside the boxes), and the break above each
-# knee joining the pad to its thigh rise, painted from the kit by paint slot. One material per slot is shared by every piece that wears it, so
-# a repaint is a handful of colour writes.
+# knee joining the pad to its thigh rise, painted from the kit by paint slot.
+# One material per slot is shared by every piece that wears it, so a repaint is
+# a handful of colour writes.
 
 const S := KeeperMeshKit.Slot
 

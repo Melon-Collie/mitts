@@ -22,10 +22,11 @@ const _B := KeeperSkeleton.Bone
 
 const _THIGH_HALF_DEPTH: float = 0.10
 
-# Per part: the bone it rides (-1: the stick, placed from the skeleton's stick
-# solve), its centre and half extents in that bone's frame, and its material.
+# Per part: the bone it rides (-1: placed from the skeleton by its own rule — the
+# thigh rises at the break, the stick by its solve), its centre and half extents
+# in that bone's frame, and its material.
 const _BONE: Array[int] = [
-	_B.SHIN_G, _B.SHIN_B, _B.THIGH_G, _B.THIGH_B, _B.FOOT_G, _B.FOOT_B, _B.FOOT_G, _B.FOOT_B,
+	_B.SHIN_G, _B.SHIN_B, -1, -1, _B.FOOT_G, _B.FOOT_B, _B.FOOT_G, _B.FOOT_B,
 	_B.THIGH_G, _B.THIGH_B, _B.PELVIS, _B.CHEST,
 	_B.UPPER_ARM_G, _B.FOREARM_G, _B.UPPER_ARM_B, _B.FOREARM_B,
 	_B.HAND_G, _B.HAND_B, _B.HEAD, -1, -1, -1,
@@ -42,10 +43,13 @@ const _PAD_CENTER := Vector3(0.0,
 		(KeeperAnatomy.PAD_ABOVE_KNEE_M - KeeperAnatomy.SHIN_M - KeeperAnatomy.PAD_BELOW_ANKLE_M) * 0.5,
 		-KeeperAnatomy.PAD_FORWARD_OF_SHIN_M)
 const _PAD_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_LENGTH_M * 0.5, KeeperAnatomy.PAD_DEPTH_M * 0.5)
-# The thigh rise: the pad's top, on the front of the thigh above the knee.
-const _RISE_CENTER := Vector3(0.0, -KeeperAnatomy.THIGH_M + KeeperAnatomy.PAD_THIGH_RISE_M * 0.5,
-		-(_THIGH_HALF_DEPTH + 0.03))
+# The thigh rise: the pad carried on past the knee stack, thinner, its face
+# flush with the pad's.
 const _RISE_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.45, KeeperAnatomy.PAD_THIGH_RISE_M * 0.5, 0.04)
+const _RISE_FACE_Z: float = -KeeperAnatomy.PAD_FORWARD_OF_SHIN_M \
+		- KeeperAnatomy.PAD_DEPTH_M * 0.5 + _RISE_HALF.z
+# The rise starts just under the knee stack's top, so the two overlap.
+const _RISE_ROOT_M: float = KeeperAnatomy.PAD_ABOVE_KNEE_M - 0.01
 # The pad's boot, laced over the front of the skate by the toe bridge.
 const _BOOT_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M + 0.075, -0.13)
 const _BOOT_HALF := Vector3(0.085, 0.05, 0.075)
@@ -84,7 +88,7 @@ const _MASK_CENTER := Vector3(0.0, 0.09, -0.01)
 const _MASK_HALF := Vector3(0.12, 0.15, 0.135)
 
 const _CENTER: Array[Vector3] = [
-	_PAD_CENTER, _PAD_CENTER, _RISE_CENTER, _RISE_CENTER, _BOOT_CENTER, _BOOT_CENTER, _SKATE_CENTER, _SKATE_CENTER,
+	_PAD_CENTER, _PAD_CENTER, Vector3.ZERO, Vector3.ZERO, _BOOT_CENTER, _BOOT_CENTER, _SKATE_CENTER, _SKATE_CENTER,
 	_THIGH_CENTER, _THIGH_CENTER, _PANTS_CENTER, _CHEST_CENTER,
 	_UPPER_ARM_CENTER, _FOREARM_CENTER, _UPPER_ARM_CENTER, _FOREARM_CENTER,
 	_GLOVE_CENTER, _BLOCKER_CENTER, _MASK_CENTER,
@@ -115,7 +119,30 @@ static func box(skel: KeeperSkeleton, part: int) -> Transform3D:
 	if bone >= 0:
 		var b: Transform3D = skel.xf[bone]
 		return Transform3D(b.basis, b * _CENTER[part])
+	if part == Part.RISE_G or part == Part.RISE_B:
+		return _rise_box(skel, part - Part.RISE_G)
 	return _stick_box(skel, part)
+
+
+# The thigh rise rides the shin as the pad's continuation and bends at the break
+# toward the thigh, about the pad's width: as far as the knee has folded, up to
+# the break's limit, and only as far as the shin stands up. Upright, the rise
+# leans back onto the thigh; with the pad flat on the ice it lies flat with it,
+# carrying the pad on toward the middle.
+static func _rise_box(skel: KeeperSkeleton, side: int) -> Transform3D:
+	var shin: Transform3D = skel.xf[KeeperSkeleton.SHIN[side]]
+	var thigh_dir: Vector3 = skel.xf[KeeperSkeleton.THIGH[side]].basis.y
+	var hinge_axis: Vector3 = shin.basis.x.normalized()
+	var shin_dir: Vector3 = shin.basis.y.normalized()
+	var toward: Vector3 = thigh_dir - hinge_axis * thigh_dir.dot(hinge_axis)
+	var fold: float = 0.0
+	if toward.length_squared() > 1e-8:
+		fold = shin_dir.signed_angle_to(toward, hinge_axis)
+	var bend: float = clampf(fold, -KeeperAnatomy.PAD_BREAK_MAX_RAD, KeeperAnatomy.PAD_BREAK_MAX_RAD) \
+			* clampf(shin_dir.y, 0.0, 1.0)
+	var basis: Basis = shin.basis.rotated(hinge_axis, bend)
+	var root: Vector3 = shin * Vector3(0.0, _RISE_ROOT_M, 0.0)
+	return Transform3D(basis, root + basis * Vector3(0.0, _RISE_HALF.y, _RISE_FACE_Z))
 
 
 static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:

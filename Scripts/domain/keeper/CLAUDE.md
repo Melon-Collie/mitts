@@ -43,11 +43,14 @@ more than they look like:
   the paddle from there and the arm reaches it. Placing the hand first fights a
   rigid stick.
 
-The thigh rise is strapped to the thigh, not the shin, so a butterfly stands it
-up over the knees and closes the five-hole from above. The break between the
-knee stack and the rise is drawn as a loft between their sections wherever the
-pose put them (`KeeperKneeBreak`), so the pad reads as one piece bending at the
-knee; it is not a save surface.
+The thigh rise is the pad carried on past the knee, and it is stiff: it rides
+the shin and bends back onto the thigh only at the break above the knee, by at
+most `PAD_BREAK_MAX_RAD` and only as far as the shin stands up. Upright, it
+leans on the thigh; in the butterfly it lies flat on the ice with the pad, and
+the two rises meet under him to close the five-hole. Never hang it on the thigh:
+a butterfly would stand it up off the ice. The break itself is drawn as a loft
+between the knee stack's and the rise's sections (`KeeperKneeBreak`); it is not
+a save surface.
 
 ## Seeing him
 
