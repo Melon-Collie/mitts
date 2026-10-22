@@ -113,20 +113,21 @@ static func _rise(k: KeeperMeshKit, h: Vector3) -> void:
 	k.sweep(S.PADS, rings, Vector3.ZERO)
 
 
-# The pad's boot over the skate, back (+Z, under the pad) to toe: (where as a
-# share of the box's half length, half width as a share of the pad's, top
-# above the boot's bottom in metres). It runs on from the pad's sides, stands
-# over the skate's cowling to past its toe, and closes down in front of it.
+# The pad's toe over the skate, back (+Z, inside the pad's foot) to front:
+# (where as a share of the box's half length, half width as a share of the
+# pad's, top as a share of the box's height above its bottom). It runs on from
+# the pad's sides, stands over the skate's cowling and closes down in front of
+# its toe.
 const _BOOT_STATIONS: Array[Vector3] = [
-	Vector3(1.0, 0.86, 0.156), Vector3(0.0, 0.95, 0.145), Vector3(-0.6, 0.93, 0.125),
-	Vector3(-0.82, 0.86, 0.11), Vector3(-1.0, 0.66, 0.065),
+	Vector3(1.0, 0.86, 1.0), Vector3(0.0, 0.95, 0.92), Vector3(-0.6, 0.93, 0.78),
+	Vector3(-0.82, 0.86, 0.64), Vector3(-1.0, 0.66, 0.38),
 ]
 
 
 static func _boot(k: KeeperMeshKit, h: Vector3) -> void:
 	var rings: Array[PackedVector3Array] = []
 	for st: Vector3 in _BOOT_STATIONS:
-		rings.append(_boot_section(h.z * st.x, h.x * st.y, -h.y, -h.y + st.z))
+		rings.append(_boot_section(h.z * st.x, h.x * st.y, -h.y, -h.y + 2.0 * h.y * st.z))
 	k.sweep(S.PADS, rings, Vector3(0.0, -h.y * 0.4, 0.0))
 
 

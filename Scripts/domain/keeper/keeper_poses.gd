@@ -284,10 +284,9 @@ static func _butterfly_leg(leg: KeeperPose.Leg, sx: float, shin_y: float, knee_z
 	leg.thigh_front = _FORWARD
 	leg.shin_front = _FORWARD
 	leg.foot_mode = KeeperPose.FootMode.ALONG_SHIN
-	# The foot stays square to the shin, toe toward the shooter under the pad's
-	# boot, so the skate lies on its side behind the pad's end rather than
-	# reaching on out toward the post.
-	leg.flex = 0.0
+	# The foot lies in the pad's toe, turned with it, so the skate lies on its
+	# side inside the pad's end rather than reaching on out toward the post.
+	leg.flex = KeeperAnatomy.PAD_TOE_ANGLE_RAD
 
 
 # The ready stance's hands: the glove at its place on the chest and the stick

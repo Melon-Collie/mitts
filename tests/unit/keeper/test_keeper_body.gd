@@ -119,9 +119,12 @@ func test_every_arm_reaches_its_hand() -> void:
 				0.0, 0.002, "%s: the blocker arm reaches the wrist on the fist" % stance[0])
 
 
-# The skate's cowling, toe and instep, stays inside the pad's boot over it: the
-# boot is the pad's, and the skate is what it covers.
-func test_every_skate_stays_inside_its_boot() -> void:
+# The skate never comes up through the pad's toe over it: its cowling, toe and
+# instep, stays under the toe's top, inside its sides and behind its front. It
+# may show beneath it: the toe is the pad's, rigid with it, and where the foot
+# points down under the shin the skate drops out from under it, as a real
+# one's does.
+func test_no_skate_comes_through_its_boot() -> void:
 	for stance: Array in _stances():
 		_solve(stance)
 		for side: int in 2:
@@ -133,8 +136,9 @@ func test_every_skate_stays_inside_its_boot() -> void:
 			for x: float in [-sh.x, sh.x]:
 				for z: float in [-sh.z * 0.9, -sh.z * 0.5]:
 					var local: Vector3 = boot.affine_inverse() * (skate * Vector3(x, cowling_top, z))
-					var out: Vector3 = (local.abs() - bh).max(Vector3.ZERO)
-					assert_lt(out.length(), 0.002, "%s side %d: the skate's toe inside its boot"
+					var through := Vector3(maxf(absf(local.x) - bh.x, 0.0), maxf(local.y - bh.y, 0.0),
+							maxf(-local.z - bh.z, 0.0))
+					assert_lt(through.length(), 0.002, "%s side %d: the skate stays under its boot"
 							% [stance[0], side])
 
 
@@ -319,9 +323,10 @@ func _span_y(part: int) -> Vector2:
 	return Vector2(t.origin.y - e, t.origin.y + e)
 
 
-# Standing straight on his skates the pad runs from its boot, just off the ice
-# over the skate's toe, to the rule's limit above the knee: 45% of the knee to
-# the top of the pelvis.
+# Standing straight on his skates the pad runs to the rule's limit above the
+# knee: 45% of the knee to the top of the pelvis. In his stance, which its toe
+# is built for, it runs down to just off the ice over the skate's toe, its
+# inside corner resting on it.
 func test_the_pad_is_cut_to_the_rule() -> void:
 	KeeperPoses.upright(_pose)
 	_skel.pose(_pose)
@@ -330,8 +335,12 @@ func test_the_pad_is_cut_to_the_rule() -> void:
 		var top: float = _span_y(P.RISE_G + side).y
 		assert_almost_eq(top - knee, 0.45 * KeeperAnatomy.KNEE_TO_PELVIS_TOP_M, 0.002,
 				"pad top above the knee, side %d" % side)
+	KeeperPoses.ready(_pose)
+	_skel.pose(_pose)
+	for side: int in 2:
 		var bottom: float = minf(_span_y(P.PAD_G + side).x, _span_y(P.BOOT_G + side).x)
-		assert_between(bottom, 0.0, 1.5 * IN_TO_M, "the boot rides just off the ice, side %d" % side)
+		assert_between(bottom, -PAD_GIVE_M, 1.5 * IN_TO_M,
+				"in the stance the boot rides just off the ice, side %d" % side)
 
 
 # Down, each rise carries its pad on along the ice past the knee, and the two

@@ -62,13 +62,14 @@ a butterfly would stand it up off the ice. The break itself is drawn as a loft
 between the knee stack's and the rise's sections (`KeeperKneeBreak`); it is not
 a save surface.
 
-The pad's boot, its toe over the skate, is the pad's too, hung from it at the
-boot break (`KeeperGear._boot_box`): the foot pitches −20° to +30° against the
-shin across the stances, so a boot fixed on the shin would sink into the ice or
-lift off it. It lies along the skate, as the toe bridge ties it to, and faces
-halfway between the skate and the pad, which keeps its sides on the pad's and
-a turned-out skate inside it. Never hang it on the foot alone: it reads as the
-skate's, and the cowling comes through it.
+The pad's boot, its toe over the skate, is the pad's: a stiff section of it,
+rigid on the shin (`KeeperGear._boot_box`), built turned up from the pad by
+`KeeperAnatomy.PAD_TOE_ANGLE_RAD`, the ready stance's angle between shin and
+skate, as a real pad is built for its keeper's stance. In the stance it lies
+along the skate just off the ice; in the butterfly the foot is turned into it
+by the same angle (`leg.flex`); where the foot points down under the shin (a
+kick, the RVH's standing leg) the skate shows beneath it, as a real one does.
+It never bends or turns on the pad, and the skate never comes up through it.
 
 ## Seeing him
 

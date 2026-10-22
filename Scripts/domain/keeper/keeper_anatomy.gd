@@ -68,6 +68,10 @@ const PAD_TOP_ABOVE_KNEE_M: float = 0.45 * KNEE_TO_PELVIS_TOP_M
 const PAD_RISE_ROOT_ABOVE_KNEE_M: float = PAD_ABOVE_KNEE_M - 0.01
 const PAD_THIGH_RISE_M: float = PAD_TOP_ABOVE_KNEE_M - PAD_RISE_ROOT_ABOVE_KNEE_M
 const PAD_BREAK_MAX_RAD: float = deg_to_rad(30.0)
+# The pad's toe, its stiff boot over the skate, is built turned up from the
+# pad by the ready stance's angle between shin and skate, as a real pad's is
+# for its keeper's stance: in it the toe lies along the skate.
+const PAD_TOE_ANGLE_RAD: float = deg_to_rad(25.0)
 # The pad's face stands proud of the shin bone by this much: the leg sits in the
 # channel at the back.
 const PAD_FORWARD_OF_SHIN_M: float = 0.05
