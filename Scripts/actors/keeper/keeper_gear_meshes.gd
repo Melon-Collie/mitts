@@ -146,9 +146,21 @@ static func _skate(k: KeeperMeshKit, h: Vector3) -> void:
 	k.tint = Color.WHITE
 
 
+# The pants leg over the thigh guard: a broad, flat-faced panel across the front
+# of the thigh, narrowing a little to the knee, the pants' stripe round it.
 static func _thigh(k: KeeperMeshKit, h: Vector3) -> void:
-	k.tube(S.PANTS, -h.y, h.y, h.x * 0.85, h.x, 8, h.z / h.x)
-	k.tube(S.PANTS_STRIPE, -h.y * 0.15, h.y * 0.15, h.x * 0.94, h.x * 0.97, 8, h.z / h.x, false)
+	var cut: float = h.x * 0.3
+	var rings: Array[PackedVector3Array] = [
+		KeeperMeshKit.octagon(-h.y, h.x * 0.88, h.z * 0.85, cut * 0.88),
+		KeeperMeshKit.octagon(-h.y * 0.15, h.x * 0.97, h.z * 0.97, cut),
+		KeeperMeshKit.octagon(h.y, h.x, h.z, cut),
+	]
+	k.sweep(S.PANTS, rings, Vector3.ZERO)
+	var band: Array[PackedVector3Array] = [
+		KeeperMeshKit.octagon(-h.y * 0.25, h.x * 0.975, h.z * 0.975, cut),
+		KeeperMeshKit.octagon(-h.y * 0.05, h.x * 0.985, h.z * 0.985, cut),
+	]
+	k.sweep(S.PANTS_STRIPE, band, Vector3(0.0, -h.y * 0.15, 0.0), false, false)
 
 
 static func _pants(k: KeeperMeshKit, h: Vector3) -> void:

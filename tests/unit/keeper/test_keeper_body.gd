@@ -128,12 +128,15 @@ func test_the_gear_is_inside_the_rule_book() -> void:
 	assert_lte(KeeperAnatomy.BLADE_HEIGHT_M, 3.5 * IN_TO_M + 1e-4, "blade 3.5 in")
 	assert_lte(KeeperAnatomy.PADDLE_WIDTH_M, 3.5 * IN_TO_M + 1e-4, "paddle 3.5 in")
 	assert_lte(KeeperAnatomy.PADDLE_LENGTH_M, 26.0 * IN_TO_M + 1e-4, "paddle 26 in")
+	assert_lte(KeeperAnatomy.THIGH_PAD_WIDTH_M, 10.0 * IN_TO_M + 1e-4, "thigh guard 10 in")
 	for part: int in KeeperGear.PART_COUNT:
 		var h: Vector3 = KeeperGear.half_extents(part)
 		var key: String = KeeperGear.Part.keys()[part]
 		match part:
 			P.PAD_G, P.PAD_B, P.RISE_G, P.RISE_B:
 				assert_almost_eq(h.x * 2.0, KeeperAnatomy.PAD_WIDTH_M, 1e-6, key)
+			P.THIGH_G, P.THIGH_B:
+				assert_almost_eq(h.x * 2.0, KeeperAnatomy.THIGH_PAD_WIDTH_M, 1e-6, key)
 			P.BLOCKER:
 				assert_almost_eq(h.x * 2.0, KeeperAnatomy.BLOCKER_WIDTH_M, 1e-6, key)
 				assert_almost_eq(h.y * 2.0, KeeperAnatomy.BLOCKER_HEIGHT_M, 1e-6, key)

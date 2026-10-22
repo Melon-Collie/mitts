@@ -20,8 +20,6 @@ const FLOATS_PER_BOX: int = 15
 const _SP := GoalieSaveRules.SavePart
 const _B := KeeperSkeleton.Bone
 
-const _THIGH_HALF_DEPTH: float = 0.10
-
 # Per part: the bone it rides (-1: placed from the skeleton by its own rule — the
 # thigh rises at the break, the stick by its solve), its centre and half extents
 # in that bone's frame, and its material.
@@ -58,7 +56,8 @@ const _SKATE_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M * 0.5 + 0.0
 const _SKATE_HALF := Vector3(KeeperAnatomy.SKATE_HALF_WIDTH_M, KeeperAnatomy.ANKLE_ON_SKATES_M * 0.5 + 0.01,
 		KeeperAnatomy.FOOT_LENGTH_M * 0.5)
 const _THIGH_CENTER := Vector3(0.0, -KeeperAnatomy.THIGH_M * 0.5, 0.0)
-const _THIGH_HALF := Vector3(0.10, KeeperAnatomy.THIGH_M * 0.5, _THIGH_HALF_DEPTH)
+const _THIGH_HALF := Vector3(KeeperAnatomy.THIGH_PAD_WIDTH_M * 0.5, KeeperAnatomy.THIGH_M * 0.5,
+		KeeperAnatomy.THIGH_PAD_DEPTH_M * 0.5)
 const _PANTS_CENTER := Vector3(0.0, 0.05, 0.01)
 const _PANTS_HALF := Vector3(KeeperAnatomy.PANTS_WIDTH_M * 0.5, 0.17, 0.16)
 # The chest protector, floaters to the pants' waistband.

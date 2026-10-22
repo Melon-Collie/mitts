@@ -76,6 +76,10 @@ const PAD_FORWARD_OF_SHIN_M: float = 0.05
 const CHEST_WIDTH_M: float = 0.56
 const CHEST_DEPTH_M: float = 0.28
 const PANTS_WIDTH_M: float = 0.48
+# The pants' thigh guard over the thigh: the rule caps it at 10 in across the
+# front of the leg; front to back it is the thigh plus its padding.
+const THIGH_PAD_WIDTH_M: float = 0.254
+const THIGH_PAD_DEPTH_M: float = 0.24
 const ARM_PAD_WIDTH_M: float = 0.16
 # Catching glove: the rule caps the perimeter at 45 in and the cuff at 8 in.
 const GLOVE_WIDTH_M: float = 0.25
