@@ -8,7 +8,8 @@ extends SceneTree
 # line — plus one of every stance from the front. KEEPER_CAPTURE_STANCES names a
 # comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles;
 # KEEPER_CAPTURE_FOCUS names a KeeperGear part (MASK, BLOCKER...) to look at up
-# close from the same directions.
+# close from the same directions; KEEPER_CAPTURE_TEAM picks the team slot whose kit
+# he wears (KEEPER_CAPTURE_AWAY for its away kit).
 #
 # Needs a real (software) renderer: run it through .claude/hooks/render-keeper.sh,
 # which wraps xvfb-run and the Compatibility backend. Writes .preview/keeper/.
@@ -79,6 +80,9 @@ func _init() -> void:
 	_keeper = Keeper.new()
 	_keeper.show_boxes = OS.get_environment("KEEPER_CAPTURE_BOXES") != "0"
 	root.add_child(_keeper)
+	var team: int = OS.get_environment("KEEPER_CAPTURE_TEAM").to_int()
+	_keeper.apply_uniform(TeamColorRegistry.get_colors(team, 1 if OS.has_environment("KEEPER_CAPTURE_AWAY") else 0))
+	_keeper.apply_jersey_info("Mitts", 31)
 	_views = [
 		["front", Vector3(0.0, 1.0, -4.2)],
 		["side", Vector3(-4.2, 1.0, 0.0)],
@@ -170,9 +174,12 @@ func _on_post(post: float) -> Vector3:
 			POST_Z - c.z)
 
 
-# On a post, a fifth view: a shooter at a sharp angle from that side, 15° off
-# the goal line, the shot the stance is for.
+# A fifth view: up close, his back; on a post, a shooter at a sharp angle from
+# that side, 15° off the goal line, the shot the stance is for.
 func _stance_views(post: float) -> Array:
+	if _focus >= 0:
+		# Up close the back is worth a look: the lettering, the yoke.
+		return _views + [["back", Vector3(0.0, 1.0, 4.2)]]
 	if post == 0.0:
 		return _views
 	var at := Vector3(_keeper.position.x, 0.5, _keeper.position.z + 0.2)

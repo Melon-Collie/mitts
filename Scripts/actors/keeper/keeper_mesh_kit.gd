@@ -10,10 +10,10 @@ extends RefCounted
 # shells come out right whichever order their vertices were listed in.
 
 enum Slot {
-	PADS, JERSEY, JERSEY_STRIPE, PANTS, PANTS_STRIPE, GLOVES, GLOVE_ACCENT,
+	PADS, JERSEY, PANTS, PANTS_STRIPE, GLOVES, GLOVE_ACCENT,
 	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP, SKIN,
 }
-const SLOT_COUNT: int = 15
+const SLOT_COUNT: int = 14
 
 var _tools: Array[SurfaceTool] = []
 var _used: Array[bool] = []
@@ -174,16 +174,6 @@ func ellipsoid(slot: int, center: Vector3, r: Vector3, rings: int = 6, segs: int
 		for i: int in segs:
 			var j: int = (i + 1) % segs
 			quad(slot, loops[k][i], loops[k][j], loops[k + 1][j], loops[k + 1][i], center)
-
-
-# A tube along Y from `y0` to `y1`, radii tapering `r0` → `r1`, scaled `zs` deep.
-func tube(slot: int, y0: float, y1: float, r0: float, r1: float, sides: int = 8,
-		zs: float = 1.0, capped: bool = true) -> void:
-	var rings: Array[PackedVector3Array] = [
-		ellipse(1, Vector3(0.0, y0, 0.0), r0, r0 * zs, sides, PI / float(sides)),
-		ellipse(1, Vector3(0.0, y1, 0.0), r1, r1 * zs, sides, PI / float(sides)),
-	]
-	sweep(slot, rings, Vector3(0.0, (y0 + y1) * 0.5, 0.0), capped, capped)
 
 
 # A flat outline in X-Y, extruded from z0 to z1 (a convex outline).

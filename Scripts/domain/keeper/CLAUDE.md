@@ -16,7 +16,8 @@ one the bots shoot at.
 | `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
-| `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones; the boxes drawn for debugging |
+| `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
+| `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey and sleeves |
 | `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
 
 ## One body, solved once, read three ways
