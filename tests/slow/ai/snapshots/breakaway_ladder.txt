@@ -12,27 +12,27 @@ depth_base 1.30: cutback open of 7	4
 depth_base 1.30: rush lane 0.0 from 5 m, open of 7	1
 depth_base 1.30: rush lane 0.0 from 8 m, open of 7	1
 depth_base 1.30: rush lane 0.0 from 11 m, open of 7	0
-depth_base 1.30: rush lane 2.5 from 5 m, open of 7	2
+depth_base 1.30: rush lane 2.5 from 5 m, open of 7	1
 depth_base 1.30: rush lane 2.5 from 8 m, open of 7	1
 depth_base 1.30: rush lane 2.5 from 11 m, open of 7	1
-depth_base 1.00: cutback open of 7	1
-depth_base 1.00: rush lane 0.0 from 5 m, open of 7	1
+depth_base 1.00: cutback open of 7	0
+depth_base 1.00: rush lane 0.0 from 5 m, open of 7	3
 depth_base 1.00: rush lane 0.0 from 8 m, open of 7	1
 depth_base 1.00: rush lane 0.0 from 11 m, open of 7	0
-depth_base 1.00: rush lane 2.5 from 5 m, open of 7	2
+depth_base 1.00: rush lane 2.5 from 5 m, open of 7	1
 depth_base 1.00: rush lane 2.5 from 8 m, open of 7	1
 depth_base 1.00: rush lane 2.5 from 11 m, open of 7	1
 depth_base 0.80: cutback open of 7	1
 depth_base 0.80: rush lane 0.0 from 5 m, open of 7	3
 depth_base 0.80: rush lane 0.0 from 8 m, open of 7	1
 depth_base 0.80: rush lane 0.0 from 11 m, open of 7	0
-depth_base 0.80: rush lane 2.5 from 5 m, open of 7	3
+depth_base 0.80: rush lane 2.5 from 5 m, open of 7	1
 depth_base 0.80: rush lane 2.5 from 8 m, open of 7	1
 depth_base 0.80: rush lane 2.5 from 11 m, open of 7	1
 depth_base 0.60: cutback open of 7	1
 depth_base 0.60: rush lane 0.0 from 5 m, open of 7	3
 depth_base 0.60: rush lane 0.0 from 8 m, open of 7	1
 depth_base 0.60: rush lane 0.0 from 11 m, open of 7	0
-depth_base 0.60: rush lane 2.5 from 5 m, open of 7	3
+depth_base 0.60: rush lane 2.5 from 5 m, open of 7	2
 depth_base 0.60: rush lane 2.5 from 8 m, open of 7	1
 depth_base 0.60: rush lane 2.5 from 11 m, open of 7	1
