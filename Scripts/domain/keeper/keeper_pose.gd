@@ -28,6 +28,9 @@ class Leg extends RefCounted:
 	var foot_mode: int = FootMode.FLAT
 	var toe: Vector3 = Vector3(0.0, 0.0, -1.0)
 	var flex: float = 0.0
+	# A FLAT foot this far (0 to 1) of the way turned to lie along the shin, by
+	# `flex`: a foot coming off the ice into the butterfly, or back onto it.
+	var along_shin: float = 0.0
 
 	func copy_from(o: Leg) -> void:
 		ankle = o.ankle
@@ -39,6 +42,7 @@ class Leg extends RefCounted:
 		foot_mode = o.foot_mode
 		toe = o.toe
 		flex = o.flex
+		along_shin = o.along_shin
 
 
 var pelvis: Vector3 = Vector3(0.0, KeeperAnatomy.HIP_HEIGHT_M + KeeperAnatomy.SKATE_LIFT_M, 0.0)

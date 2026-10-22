@@ -16,6 +16,7 @@ one the bots shoot at.
 | `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
 | `keeper_seams.gd` | the holes a flat puck fits through in the shape he shows a shot straight on, inside his outline |
 | `keeper_footwork.gd` | his skates moving him, on GoaliePushRules' kinematics at each move's top speed: across his line the T-push (push off the planted trail skate, glide on the lead) and the shuffle (square, in strokes, the trail skate holding its place as he passes over it); in and out the C-cuts (the skates taking turns to carve a C, heel out); the edge stop onto the spot that ends each; and the ready stance they bend |
+| `keeper_drop.gd` | his butterfly drop and rise: how far down he is (a fall down, a push up, from wherever he is), and the pose that far between the ready stance and the butterfly |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -105,7 +106,10 @@ the leg is out, a stroke's skate holding its place and never sliding back, a
 C-cut's skates taking turns with their heels out, the shuffle square, a spot
 on the other axis waiting until he is set, skates on and gear out of the ice
 every tick, nothing jumping a tick, a slower stop showing less, and the ready
-stance once settled.
+stance once settled. `test_keeper_drop.gd` holds the drop and rise: their
+times, the ready stance to the butterfly, the drop a fall, a change of mind
+going from where he is, and every tick out of the ice, on the stick and
+without a jump.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
 the shooter's side, behind and high in front (`tools/keeper_strip.gd`).
 

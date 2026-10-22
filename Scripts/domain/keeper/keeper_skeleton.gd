@@ -142,6 +142,8 @@ func _pose_leg(side: int, hip: Vector3, leg: KeeperPose.Leg) -> void:
 			toe = Vector3.FORWARD
 		var z: Vector3 = -toe.normalized()
 		foot_basis = Basis(Vector3.UP.cross(z), Vector3.UP, z)
+		if leg.along_shin > 0.0:
+			foot_basis = foot_basis.slerp(shin_basis * Basis(Vector3.RIGHT, leg.flex), leg.along_shin)
 	else:
 		foot_basis = shin_basis * Basis(Vector3.RIGHT, leg.flex)
 	xf[FOOT[side]] = Transform3D(foot_basis, ankle)

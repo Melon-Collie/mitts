@@ -1,8 +1,8 @@
 extends SceneTree
 
 # Renders the new keeper's moves as frame strips, so a move can be SEEN a tick
-# at a time: KeeperFootwork stepped through a scripted move along his line and
-# drawn by the Keeper actor every few ticks, from the shooter's side, from
+# at a time: KeeperFootwork stepped through a scripted move (or KeeperDrop
+# down and back up) and drawn by the Keeper actor every few ticks, from the shooter's side, from
 # behind and from high off his glove side in front. One sheet per scenario, a
 # row per view, the frames left to right; a bar over each frame is its phase
 # (PUSH green, GLIDE blue, STOP red, SET grey), and every frame's phase, place
@@ -13,8 +13,8 @@ extends SceneTree
 # .claude/hooks/render-keeper-strip.sh. Writes .preview/keeper/strip_<name>.png.
 #
 # The keeper's line runs along X, he faces −Z, +X is his blocker side, +Z
-# is back toward his net. A move in depth swaps the behind view for one from
-# his glove side.
+# is back toward his net. A move in depth, or down, is seen from his glove side
+# in place of behind.
 
 const DT: float = 1.0 / 120.0
 const FRAME_EVERY: int = 6
@@ -31,7 +31,13 @@ const SCENARIOS: Array = [
 	["shuffle_far", 1.0, KeeperFootwork.Move.SHUFFLE],
 	["c_cut_back", 1.2, KeeperFootwork.Move.C_CUT],
 	["c_cut_forward", -1.2, KeeperFootwork.Move.C_CUT],
+	["drop_and_rise", 0.0, DROP_AND_RISE],
 ]
+# Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
+# a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
+const DROP_AND_RISE: int = -1
+const DROP_FRAME_EVERY: int = 3
+const DROP_HOLD_TICKS: int = 12
 const _PHASE_COLORS: Array[Color] = [
 	Color(0.55, 0.55, 0.58), Color(0.2, 0.8, 0.3), Color(0.25, 0.5, 0.95), Color(0.9, 0.2, 0.2),
 ]
@@ -99,6 +105,8 @@ func _init() -> void:
 
 # Each frame of a move: [pose, where, phase, speed, t].
 func _record(target: float, kind: int) -> Array:
+	if kind == DROP_AND_RISE:
+		return _record_drop()
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
@@ -122,9 +130,36 @@ func _record(target: float, kind: int) -> Array:
 	return out
 
 
+# The drop's frames, as _record's, the phase column standing in for it: PUSH
+# while he drops, GLIDE while he is down, STOP while he rises, SET up.
+func _record_drop() -> Array:
+	var drop := KeeperDrop.new()
+	drop.drop()
+	var out: Array = []
+	var tick: int = 0
+	var held: int = 0
+	var up_frames: int = 0
+	while up_frames < 2:
+		if tick % DROP_FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			drop.pose(p)
+			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
+					KeeperFootwork.Phase.GLIDE, KeeperFootwork.Phase.STOP][drop.state]
+			out.append([p, Vector3.ZERO, phase, drop.down, tick * DT])
+			if drop.state == KeeperDrop.State.UP and tick > 0:
+				up_frames += 1
+		drop.step(DT)
+		tick += 1
+		if drop.state == KeeperDrop.State.DOWN:
+			held += 1
+			if held >= DROP_HOLD_TICKS:
+				drop.rise()
+	return out
+
+
 # view name, camera offset from the middle of the move, look-at offset.
 func _views_for(span: float, depth: bool) -> Array:
-	var back: float = 2.6 + span * 0.9
+	var back: float = 2.6 + maxf(span, 1.0) * 0.9
 	return [
 		["shooter", Vector3(0.0, 1.0, -back), Vector3(0.0, 0.55, 0.0)],
 		["side", Vector3(-back, 1.0, 0.0), Vector3(0.0, 0.55, 0.0)] if depth
@@ -145,7 +180,8 @@ func _process(_delta: float) -> bool:
 		var target: float = float(_scenarios[_scenario_i][1])
 		var kind: int = int(_scenarios[_scenario_i][2])
 		_frames = _record(target, kind)
-		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT)
+		_views = _views_for(absf(target), kind != KeeperFootwork.Move.T_PUSH
+				and kind != KeeperFootwork.Move.SHUFFLE)
 		_shots = []
 		_shot_i = 0
 		_ticks = 0
