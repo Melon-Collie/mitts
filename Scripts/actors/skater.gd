@@ -411,6 +411,9 @@ var body_block_height: float = 0.7
 # runs at render rate, so the node lookup is resolved once in
 # _rebuild_blade_mesh rather than per frame.
 var _blade_mesh_instance: MeshInstance3D = null
+# Where the blade mesh was last drawn, in UpperBody's frame: a frame that skips
+# the mesh pass holds it there (_hold_blade_mesh).
+var _blade_drawn: Transform3D = Transform3D.IDENTITY
 # The params it was built from, read by the carry seat (_seat_on_puck).
 var _blade_params: StickBladeMeshBuilder.Params = null
 # Where a tied blade is drawn toward its partner's (StickTieDraw, world XZ): a
@@ -988,6 +991,8 @@ func _process(delta: float) -> void:
 			update_stick_mesh()
 			update_arm_mesh()
 			update_bottom_arm_mesh()
+		elif not _on_camera:
+			_hold_blade_mesh()
 		if _on_camera or not seen:
 			_anim_lod.consumed()
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
@@ -1468,6 +1473,16 @@ func _apply_blade_tilt() -> void:
 	rot = _rigid_blade_basis(hand - heel, twist)
 	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
 	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
+	_blade_drawn = marker * _blade_mesh_instance.transform
+
+
+# The blade mesh hangs from the Blade marker, which the tick moves whether or
+# not the mesh pass runs; the shaft and arms wait for the next pass. So a frame
+# that skips the pass holds the blade where it was drawn with them, or it
+# leaves the shaft by however far the marker moved.
+func _hold_blade_mesh() -> void:
+	if _blade_mesh_instance != null and is_instance_valid(_blade_mesh_instance):
+		_blade_mesh_instance.transform = blade.transform.affine_inverse() * _blade_drawn
 
 
 # Where the toe would go through the ice, the heel rises until the toe is on it:

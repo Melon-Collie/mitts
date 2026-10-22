@@ -261,6 +261,9 @@ Seven rules the rigs sit inside, all easy to break from in here:
   (`Skater.on_camera`, `SkaterCameraCull`'s sphere against the frustum) skips the leg, trunk and
   sprawl writes, the head, the off hand and the spine/arm/stick rebuild — about
   two thirds of his render pass — and rebuilds on the first frame he is drawn.
+  The blade mesh is the one piece of mesh hung from a gameplay marker, so a
+  skipped frame holds it where it was last drawn (`Skater._hold_blade_mesh`), or
+  the tick carries it off the waiting shaft.
   A frame his animation LOD thins (`SkaterAnimationLod`, far from the camera at
   a lower Animation Detail) is off camera in exactly this sense, so it inherits
   the same guarantee; the plant's ease is then charged the whole span since the
