@@ -20,10 +20,10 @@ const READY_SKATE_HALF_SPACING_M: float = 0.31
 const READY_KNEE_IN_M: float = 0.11
 const READY_PELVIS := Vector3(0.0, 0.86, 0.12)
 const READY_TOE_OUT_RAD: float = 0.25
-# The blade sits a touch to the glove side of centre: the lie carries the grip
-# 35 cm out from the heel, and centred on the five-hole it would hold the
-# blocker out by the post instead of beside the pad.
-const READY_BLADE := Vector3(-0.05, 0.0, -0.40)
+# The blade sits to the glove side of centre: the lie carries the grip 35 cm
+# out from the heel, and centred on the five-hole it would hold the blocker out
+# by the post instead of over the pad's outer edge.
+const READY_BLADE := Vector3(-0.08, 0.0, -0.40)
 # The paddle's tilt back toward him. The lie leans it toward the blocker side
 # on its own; a paddle near upright holds the grip out in front of the pads,
 # where a tilt toward the hip would tuck the blocker behind them.

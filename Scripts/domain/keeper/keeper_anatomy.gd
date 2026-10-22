@@ -92,7 +92,7 @@ const BLOCKER_DEPTH_M: float = 0.05
 const BLOCKER_FACE_OFF_GRIP_M: float = 0.07
 # The board stands upright on the back of the hand, its centre this far above
 # the grip: the stick leaves it low, by the bottom corner.
-const BLOCKER_ABOVE_GRIP_M: float = 0.08
+const BLOCKER_ABOVE_GRIP_M: float = 0.12
 
 # ── Stick (NHL: blade 3.5 in high, 15.5 in long; paddle 3.5 in × 26 in) ─────
 const BLADE_LENGTH_M: float = 0.394
