@@ -722,7 +722,7 @@ var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
-var slapper_wind_up_height: float = 1.44
+var slapper_wind_up_height: float = 1.39
 # (No separate wind-up duration — the pose fills over max_slapper_charge_time,
 # see slapper_wind_up_t(), so the animation IS the charge readout.)
 # Full-charge tell: with no charge ring, the wind-up pose IS the gauge, so
@@ -755,19 +755,20 @@ var max_slapper_charge_time: float = 0.7
 # max charge.
 var slapper_wind_up_twist_deg: float = 30.0
 # The top hand at full wind-up, in upper-body-local space (m): risen from rest
-# to head height, and carried across the chest to over the stick-side shoulder,
-# a little behind it (forward is −Z).
-var slapper_wind_up_hand_up: float = 0.7
-var slapper_wind_up_hand_forward: float = 0.0
-var slapper_wind_up_hand_back: float = 0.2
-var slapper_wind_up_hand_inward: float = 0.45
+# to beside the head, carried across the chest toward the stick-side shoulder,
+# and held out in front of the chest (forward is −Z) — the arms come up the
+# front of the body, never behind the shoulders.
+var slapper_wind_up_hand_up: float = 0.65
+var slapper_wind_up_hand_forward: float = 0.3
+var slapper_wind_up_hand_back: float = 0.0
+var slapper_wind_up_hand_inward: float = 0.4
 # The blade at full wind-up, off the top hand's shoulder in upper-body-local
 # space (m), at slapper_wind_up_height: a stick's length up and out from the
-# hand, so the shaft lies back over the stick-side shoulder at about 40° — the
-# loaded one-timer's backswing rather than a stick stood on end, which reads
-# from above as nothing at all.
-var slapper_wind_up_blade_x: float = 1.33
-var slapper_wind_up_blade_z: float = 0.67
+# hand, so the shaft runs from in front of the chest back over the stick-side
+# shoulder at about 40° — the loaded one-timer's backswing rather than a stick
+# stood on end, which reads from above as nothing at all.
+var slapper_wind_up_blade_x: float = 1.25
+var slapper_wind_up_blade_z: float = 0.23
 # Snappier lerp during the slapshot coil — the default upper_body_return_speed
 # is tuned for gentle aim-tracking and lags a fast coil, which reads as a
 # half-finished wind-up.

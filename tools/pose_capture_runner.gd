@@ -152,6 +152,12 @@ const POSES: Array = [
 		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
 	]},
+	# Facing the chest: side-on, the default (left-handed) shooter's chest faces
+	# −X with the net up −Z. Whether the arms come up in front of the body.
+	{"name": "slapper_coil_chest", "puck": true, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
 	{"name": "slapper_coil_game", "puck": true, "game_cam": true, "steps": [
 		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],

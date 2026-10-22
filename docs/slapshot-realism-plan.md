@@ -17,8 +17,9 @@ As built, Phase 1 differs from the design below:
   own offset stop it short of the spot's tolerance.
 - The wind-up apex and the wide base were set against reference photos of
   Ovechkin's one-timer load and Karlsson's wind-up, and Ovechkin's flatter
-  backswing was chosen because it reads from above: top hand at head height
-  over the back shoulder, the shaft laid back behind it at about 40°, feet spread across the
+  backswing was chosen because it reads from above: both hands up in front of
+  the chest, the top hand beside the head toward the stick-side shoulder, the
+  shaft running back over that shoulder at about 40°, feet spread across the
   line (`slapper_load_width_m`) and barely staggered. The width is given back
   as the kick drives: held through it, both legs reached it dead straight and
   the back leg had nothing left to extend.
