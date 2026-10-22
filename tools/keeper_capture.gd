@@ -13,6 +13,10 @@ extends SceneTree
 # close from the same directions; KEEPER_CAPTURE_TEAM picks the team slot whose kit
 # he wears (KEEPER_CAPTURE_AWAY for its away kit).
 #
+# `-- --baseline` records each sheet as the baseline (user://, per machine, per
+# combination of those settings); a plain run diffs every sheet against it and
+# prints what moved and where, an overlay of the changed pixels beside it.
+#
 # Needs a real (software) renderer: run it through .claude/hooks/render-keeper.sh,
 # which wraps xvfb-run and the Compatibility backend. Writes .preview/keeper/.
 #
@@ -20,6 +24,10 @@ extends SceneTree
 
 const BASE_TILE := Vector2i(360, 450)
 const OUT_DIR: String = "res://.preview/keeper"
+const BASELINE_DIR: String = "user://keeper_capture/baseline"
+# Per-channel 0-255 delta below which two pixels count as equal: software
+# rasterisation is not bit-exact run to run at silhouette edges.
+const DIFF_TOLERANCE: int = 6
 # From the dot line, 20 ft out: both posts and the crossbar in a portrait tile.
 const SHOOTER_FOV_DEG: float = 28.0
 # The goal line, behind the keeper's origin.
@@ -35,6 +43,7 @@ var _frames: int = 0
 var _views: Array = []
 var _stances: Array = []
 var _focus: int = KeeperGear.Part.keys().find(OS.get_environment("KEEPER_CAPTURE_FOCUS"))
+var _record_baseline: bool = OS.get_cmdline_user_args().has("--baseline")
 
 
 func _init() -> void:
@@ -227,3 +236,40 @@ func _save_sheet(imgs: Array[Image], name: String) -> void:
 	var path: String = ProjectSettings.globalize_path("%s/%s.png" % [OUT_DIR, name])
 	sheet.save_png(path)
 	print("[keeper_capture] ", path)
+	_check_baseline(sheet, name)
+
+
+# Records the sheet as the baseline, or diffs it against the one recorded.
+func _check_baseline(sheet: Image, name: String) -> void:
+	var base: String = "%s/%s/%s.png" % [BASELINE_DIR, _settings_key(), name]
+	if _record_baseline:
+		DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(base.get_base_dir()))
+		sheet.save_png(base)
+		return
+	if not FileAccess.file_exists(base):
+		print("[keeper_capture]   %s: no baseline (run with -- --baseline first)" % name)
+		return
+	var report: Dictionary = ImageDiff.compare(Image.load_from_file(base), sheet, DIFF_TOLERANCE)
+	var count: int = report["count"]
+	if count == 0:
+		print("[keeper_capture]   %s: matches the baseline" % name)
+		return
+	if count < 0:
+		print("[keeper_capture]   %s: drawn at another size than its baseline (another set of stances?)"
+				% name)
+		return
+	var box: Rect2i = report["box"]
+	var diff: String = ProjectSettings.globalize_path("%s/%s_diff.png" % [OUT_DIR, name])
+	(report["overlay"] as Image).save_png(diff)
+	print("[keeper_capture]   %s: %d px changed (worst delta %d), box %dx%d at (%d,%d): %s"
+			% [name, count, int(report["worst"]), box.size.x, box.size.y, box.position.x,
+			box.position.y, diff])
+
+
+# The settings a sheet was drawn with, so a baseline is only ever compared with
+# a sheet drawn the same way.
+static func _settings_key() -> String:
+	return "focus-%s_team-%s%s_boxes-%s_scale-%s" % [
+		OS.get_environment("KEEPER_CAPTURE_FOCUS"), OS.get_environment("KEEPER_CAPTURE_TEAM"),
+		"_away" if OS.has_environment("KEEPER_CAPTURE_AWAY") else "",
+		OS.get_environment("KEEPER_CAPTURE_BOXES"), OS.get_environment("KEEPER_CAPTURE_SCALE")]

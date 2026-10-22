@@ -82,7 +82,8 @@ colour, since most kits' socks are their pads' colour.
 
 `.claude/hooks/render-keeper.sh` renders every stance from the front, side,
 three-quarter, the shooter's spot on the dot line and behind, plus the mouth as a
-shot straight on sees him (his body grey, his seams red), to `.preview/keeper/`
+shot straight on sees him (his body grey, his seams red), to `.preview/keeper/`,
+diffed against a baseline recorded with `-- --baseline`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
 (`kick_glove`, `kick_blocker`), and the RVH is drawn against its post

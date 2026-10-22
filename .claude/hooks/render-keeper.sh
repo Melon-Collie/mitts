@@ -1,9 +1,13 @@
 #!/bin/bash
 # Renders the new keeper (Scripts/actors/keeper/) in every taught stance from
-# the front, side and three-quarter, with his save boxes overlaid, and writes
-# one contact sheet per stance plus one of every stance from the front to
+# the front, side, three-quarter, the shooter's spot and behind, with the mouth
+# as a shot straight on sees him, his save boxes overlaid, and writes one
+# contact sheet per stance plus one of every stance from the front to
 # .preview/keeper/. Wraps tools/keeper_capture.gd; KEEPER_CAPTURE_BOXES=0 hides
 # the boxes.
+#
+#   .claude/hooks/render-keeper.sh --baseline   # record the baseline first
+#   .claude/hooks/render-keeper.sh              # render + diff against it
 #
 # Same constraint as render-poses.sh: Godot's --headless draws nothing, so this
 # runs under xvfb-run on the Compatibility renderer and software GL.
