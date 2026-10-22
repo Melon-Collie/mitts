@@ -542,13 +542,16 @@ var _rig_last_bottom_hand: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_check_lead: float = NAN
 # The drawn top hand's render-only offset off its marker (drawn_top_hand).
 var _hand_pump := Vector3.ZERO
-# The Blade and TopHand markers as the latest tick that wrote them found them,
-# and that tick (-1: last written off the tick, so there is nothing to draw
-# between). Physics interpolation draws a marker between exactly these and its
-# value now (_drawn_fraction).
-var _blade_at_tick_start: Transform3D = Transform3D.IDENTITY
-var _hand_at_tick_start: Vector3 = Vector3.ZERO
-var _markers_tick: int = -1
+# The nodes the rig is drawn from, as the latest tick found them, and that tick
+# (-1: nothing to draw between). Physics interpolation draws each between this
+# and its transform now (_drawn_fraction).
+const _DRAWN_BLADE: int = 0
+const _DRAWN_TOP_HAND: int = 1
+const _DRAWN_UPPER_BODY: int = 2
+const _DRAWN_LOWER_BODY: int = 3
+var _drawn_at_tick_start: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY,
+		Transform3D.IDENTITY, Transform3D.IDENTITY]
+var _drawn_tick: int = -1
 # Render-rate cosmetic pose hook. The controller registers a Callable(delta)
 # that runs the purely-cosmetic pose passes — the leg gait, head tracking, and
 # off-hand IK — which used to run in the physics tick (120 Hz × every skater,
@@ -918,6 +921,7 @@ func _ready() -> void:
 		upper_body.add_child(bottom_hand)
 
 	_position_hand_markers()
+	get_tree().physics_frame.connect(_snapshot_tick_start)
 
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
 	_last_finite_position = global_position
@@ -2678,50 +2682,82 @@ func get_top_hand_position() -> Vector3:
 
 
 # Where the arm and the stick are drawn to: the marker where physics
-# interpolation draws it this frame (drawn_blade), plus a render-only offset
+# interpolation draws it this frame (_drawn_fraction), plus a render-only offset
 # (the stride's pump, SkaterIKCoordinator), which the marker every claim reads
 # never takes.
 func drawn_top_hand() -> Vector3:
 	var f: float = _drawn_fraction()
 	if f >= 1.0:
 		return top_hand.position + _hand_pump
-	return _hand_at_tick_start.lerp(top_hand.position, f) + _hand_pump
+	return _drawn_at_tick_start[_DRAWN_TOP_HAND].origin.lerp(top_hand.position, f) + _hand_pump
 
 
 # The Blade marker where physics interpolation draws it this frame, in
-# UpperBody's frame: between where the latest tick found it and where it left
-# it. The arms, the shaft and the blade mesh are drawn from this and the drawn
-# top hand, so they meet each other, the body and the puck at one instant —
-# read at the tick's marker instead, a frame that ran two ticks drew the shaft
-# a tick off the blade hanging from the interpolated marker.
+# UpperBody's frame. The blade mesh hangs from it as drawn, so the shaft and
+# the arms are posed from it too.
 func drawn_blade() -> Transform3D:
+	return _drawn(blade, _DRAWN_BLADE)
+
+
+# UpperBody and LowerBody where physics interpolation draws them this frame, in
+# MeshRoot's frame. The skeleton is their sibling, so the bones are posed in
+# these rather than in the frames the tick left: the stick and the markers hang
+# from UpperBody as drawn, and a glove placed through the tick's UpperBody sat
+# off its shaft by a tick of the trunk's turn.
+func drawn_upper_body() -> Transform3D:
+	return _drawn(upper_body, _DRAWN_UPPER_BODY)
+
+
+func drawn_lower_body() -> Transform3D:
+	return _drawn(lower_body, _DRAWN_LOWER_BODY)
+
+
+# The frames' rotations as drawn, in Node3D.rotation's euler order.
+func drawn_upper_body_rotation() -> Vector3:
+	if _drawn_fraction() >= 1.0:
+		return upper_body.rotation
+	return drawn_upper_body().basis.get_euler()
+
+
+func drawn_lower_body_rotation() -> Vector3:
+	if _drawn_fraction() >= 1.0:
+		return lower_body.rotation
+	return drawn_lower_body().basis.get_euler()
+
+
+func _drawn(node: Node3D, slot: int) -> Transform3D:
 	var f: float = _drawn_fraction()
 	if f >= 1.0:
-		return blade.transform
-	return _blade_at_tick_start.interpolate_with(blade.transform, f)
+		return node.transform
+	return _drawn_at_tick_start[slot].interpolate_with(node.transform, f)
 
 
-# How far between the latest tick's start and now the engine draws the markers:
-# 1 (now) inside a tick, and for markers that tick did not move or that were
-# last written off the tick.
+# How far between the latest tick's start and now the engine draws a node:
+# its transform then, lerped to its transform now (SceneTreeFTI's rule, for
+# whatever wrote it and whenever). 1 (now) inside a tick, before the first
+# tick, and after a marker write off the tick, which only setup and tests make.
 func _drawn_fraction() -> float:
-	if _markers_tick != Engine.get_physics_frames() or Engine.is_in_physics_frame() \
-			or not blade.is_physics_interpolated_and_enabled():
+	if _drawn_tick != Engine.get_physics_frames() or Engine.is_in_physics_frame() \
+			or not is_physics_interpolated_and_enabled():
 		return 1.0
 	return Engine.get_physics_interpolation_fraction()
 
 
-# Called before either marker is written: the first write of a tick records
-# both as the tick found them, which is what the engine interpolates from.
+# On SceneTree.physics_frame, which fires after the engine has taken every
+# node's transform as this tick's start and before any node has processed it.
+func _snapshot_tick_start() -> void:
+	_drawn_tick = Engine.get_physics_frames()
+	_drawn_at_tick_start[_DRAWN_BLADE] = blade.transform
+	_drawn_at_tick_start[_DRAWN_TOP_HAND] = top_hand.transform
+	_drawn_at_tick_start[_DRAWN_UPPER_BODY] = upper_body.transform
+	_drawn_at_tick_start[_DRAWN_LOWER_BODY] = lower_body.transform
+
+
+# The markers move only on the tick in play; a write off it (setup, a test
+# driving the body by hand) leaves nothing to draw between.
 func _note_marker_write() -> void:
 	if not Engine.is_in_physics_frame():
-		_markers_tick = -1
-		return
-	var tick: int = Engine.get_physics_frames()
-	if tick != _markers_tick:
-		_markers_tick = tick
-		_blade_at_tick_start = blade.transform
-		_hand_at_tick_start = top_hand.position
+		_drawn_tick = -1
 
 
 func set_hand_pump(offset: Vector3) -> void:

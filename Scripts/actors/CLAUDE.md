@@ -79,7 +79,8 @@ The whole figure is one `Skeleton3D` (`SkaterBodySkeleton.new_body_skeleton`),
 built by `Skater` and handed to each rig, which poses only its own bones. It
 sits under `MeshRoot` as a sibling of `UpperBody` and `LowerBody`, so skeleton
 space is the space those two gameplay frames are placed in, and the arm IK
-reads the gameplay hands straight into it.
+reads the gameplay hands straight into it, through the frames as drawn (see
+*Cosmetic vs. gameplay* below).
 
 ```
 HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
@@ -242,14 +243,19 @@ Eight rules the rigs sit inside, all easy to break from in here:
   marker: the marker plus a render-only offset (the stride's pump), so the arm,
   the stick and the blade's dressing pivot about a blade that has not moved.
   The rebuild gate compares the drawn hand, or the pump would never redraw.
-- **The rig reads both markers where the engine draws them**
-  (`drawn_top_hand`, `Skater.drawn_blade`): between where the latest tick found
-  them and where it left them, at this frame's interpolation fraction. The blade
-  mesh hangs from the interpolated `Blade` marker, so the shaft, the knob and the
-  arms are posed from the same instant, and those three nodes are opted out of
-  physics interpolation. An interpolated node written at render rate is drawn
-  from the pose the previous FRAME wrote, so below 120 fps, where a frame runs
-  two ticks, it lags a tick behind the marker it should meet.
+- **The rig reads the markers and the frames where the engine draws them**
+  (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
+  `drawn_lower_body`): between where the latest tick found them and where they
+  are now, at this frame's interpolation fraction (the snapshot is taken on
+  `SceneTree.physics_frame`). The blade mesh hangs from the interpolated `Blade`
+  marker, so the shaft, the knob and the arms are posed from the same instant,
+  and those three nodes are opted out of physics interpolation. An interpolated
+  node written at render rate is drawn from the pose the previous FRAME wrote,
+  so below 120 fps, where a frame runs two ticks, it lags a tick behind the
+  marker it should meet. The skeleton is the frames' sibling, so the spine and
+  the arms are built in the frames as drawn too; built in the tick's, a glove
+  sat off its shaft by a tick of the trunk's turn. Tick-side reads (the IK's
+  reach, claims) stay on the markers and frames themselves.
   `tests/slow/actors/test_stick_draws_at_one_instant.gd` holds it on the real
   main loop.
 - **Anything drawn onto the skater at render rate reads
