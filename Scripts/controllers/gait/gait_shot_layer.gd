@@ -155,6 +155,14 @@ func stance_floor() -> float:
 			_controller.slapper_load_stance * _slap_load), kick_stance * _kick_env)
 
 
+# A slapshot is struck side-on, so its base is wide across the shot line rather
+# than staggered along it: the feet spread as the wind-up loads and stay spread
+# through the drive.
+func stance_width() -> float:
+	var kick: float = _kick_env if _kick_is_slap else 0.0
+	return _controller.slapper_load_width_m * maxf(_slap_load, kick)
+
+
 # Load: the shooting base — the stick-side foot staggers back and both legs roll
 # toward it, settling the weight over the back leg while the charge builds (a
 # common roll rides the body over that side's leg). Wrister and slapper loads

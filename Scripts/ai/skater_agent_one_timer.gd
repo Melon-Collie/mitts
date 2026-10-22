@@ -9,25 +9,17 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # enough to press. Reads only: the state machine's ONE_TIMER_PRESSED steers,
 # presses and fires on them.
 
-# How square to the shot line the stance must ALREADY be for the one-timer
-# wind-up to start. Not the blade-reach cone (~132°):
-# SkaterController._enter_slapper_charge SNAPS facing to the aim at the press, so
-# a wide stance whips the body in one tick. A wide stance holds with the cursor on
-# the net while facing rotates in; one that can't square within the state
-# machine's aim-wait backstop bails to a catch. Feel: widen if bots pass up
-# one-timers, tighten if the wind-up reads as a body-whip.
+# How near the slapshot stance (SlapperRules.stance_facing) the hips must ALREADY
+# be for the one-timer wind-up to start. The press turns the hips the rest of the
+# way at the facing rate, and the zone turns with them, so a body pressing far
+# off the stance has its circle somewhere else until it gets there. One that
+# can't open up within the state machine's aim-wait backstop bails to a catch.
 const ONE_TIMER_SQUARE_UP_MAX_RAD: float = deg_to_rad(45.0)
 
 # Cap on the feed-arrival lookahead the one-timer aim reads the goalie at —
 # past this the feed is a long cross-ice saucer and the prediction is noise.
 const ONE_TIMER_FEED_LOOKAHEAD_MAX_S: float = 1.2
 
-# The slapper one-timer pickup ZONE's offset in the skater's local frame (+X =
-# blade side, −Z = in front), SkaterController.slapper_zone_offset_x / _z's
-# (test_bot_mirrors.gd). The wound-up blade is raised, so the ZONE makes the catch: the one-timer
-# settle places THIS point on the feed's live line.
-const BOT_ONE_TIMER_ZONE_OFFSET_X_M: float = 1.0
-const BOT_ONE_TIMER_ZONE_OFFSET_Z_M: float = -0.4
 
 # Release radius (m) around the slapper zone centre for the wound-up one-timer.
 # Inside SkaterController.slapper_zone_radius (test_bot_mirrors.gd) so a clean feed
@@ -43,6 +35,11 @@ var _peer_id: int = -1
 var _team_id: int = -1
 var _team_id_by_peer: Dictionary = {}
 var _is_left_handed: bool = false
+# The body's strike spot (x toward the stick side) and stance opening — the
+# slapper pickup ZONE is centred there, and the wound-up blade is raised, so the
+# ZONE makes the catch: the one-timer settle places it on the feed's live line.
+var _strike_local: Vector2 = AISkaterCaps.new().slapper_strike_local
+var _stance_open_rad: float = PI * 0.5
 
 
 func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
@@ -51,6 +48,12 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
 	_team_id = team_id
 	_team_id_by_peer = team_id_by_peer
 	_is_left_handed = is_left_handed
+
+
+# This body's slapshot stance, off its caps (AISkaterCaps.slapper_strike_local).
+func set_stance(strike_local: Vector2, stance_open_rad: float) -> void:
+	_strike_local = strike_local
+	_stance_open_rad = stance_open_rad
 
 
 # True when the one-timer's committed aim can fire from the current STANCE: the
@@ -67,7 +70,12 @@ func aim_settled(snapshot: WorldSnapshot, self_pos: Vector3, aim: Vector3,
 	if aim_dir.length_squared() < 0.0001:
 		return false
 	var gate: float = minf(ONE_TIMER_SQUARE_UP_MAX_RAD, reach_gate_rad)
-	return absf(self_state.facing.angle_to(aim_dir)) <= gate
+	return absf(self_state.facing.angle_to(stance_facing(aim_dir.normalized()))) <= gate
+
+
+# The hips' facing for a slapshot along the unit `shot_dir` (world XZ).
+func stance_facing(shot_dir: Vector2) -> Vector2:
+	return SlapperRules.stance_facing(shot_dir, _side(), _stance_open_rad)
 
 
 # Remaining feed-flight time: the distance along the puck's live line to my
@@ -91,10 +99,10 @@ static func feed_time_s(snapshot: WorldSnapshot, self_pos: Vector3) -> float:
 
 
 # The LIVE-line body anchor for a one-timer reception: the body spot that puts
-# the slapper pickup ZONE (BOT_ONE_TIMER_ZONE_OFFSET_*) on the incoming feed's
+# the slapper pickup ZONE (the strike spot) on the incoming feed's
 # live line, re-derived every call so the shooter micro-shuffles onto the pass's
 # actual line — one-timer footwork. Body = perp foot of self on the line minus
-# the zone offset in the net-facing frame.
+# the zone offset in the stance set for the net.
 #
 # INF when there is no live inbound feed to settle on: puck held (the REAL
 # carrier), too slow, already past our level, outside the reception band, or a
@@ -141,7 +149,7 @@ func line_anchor(snapshot: WorldSnapshot, self_pos: Vector3,
 
 
 # The bot's slapper pickup-zone CENTRE in world space — self plus the zone offset
-# in the net-facing frame (the mirror of line_anchor: body = perp_foot −
+# in the stance set for the net (the mirror of line_anchor: body = perp_foot −
 # zone_offset, so zone centre = self + zone_offset). The centre-timing bonus is
 # graded by how close the puck is to THIS point at release.
 func zone_center(self_pos: Vector3, attacking_goal: Vector3) -> Vector3:
@@ -170,9 +178,13 @@ func puck_at_zone(snapshot: WorldSnapshot, self_pos: Vector3,
 	return dx * dx + dz * dz <= ONE_TIMER_RELEASE_RADIUS_M * ONE_TIMER_RELEASE_RADIUS_M
 
 
-# The zone offset in the frame facing along the unit `net_dir`, on the blade side.
+# The zone's offset off the body once its hips have set for a shot along the
+# unit `net_dir`.
 func _zone_offset(net_dir: Vector3) -> Vector3:
-	var right := Vector3(-net_dir.z, 0.0, net_dir.x)
-	var side: float = -1.0 if _is_left_handed else 1.0
-	return right * (side * BOT_ONE_TIMER_ZONE_OFFSET_X_M) \
-			- net_dir * BOT_ONE_TIMER_ZONE_OFFSET_Z_M
+	var off: Vector2 = SlapperRules.strike_offset(Vector2(net_dir.x, net_dir.z),
+			Vector2(_strike_local.x * _side(), _strike_local.y), _side(), _stance_open_rad)
+	return Vector3(off.x, 0.0, off.y)
+
+
+func _side() -> float:
+	return -1.0 if _is_left_handed else 1.0

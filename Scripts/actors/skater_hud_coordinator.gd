@@ -513,11 +513,11 @@ func update_slapper_indicator_convergence(ratio: float) -> void:
 			_SLAPPER_RING_MIN_SCALE, 1.0, clampf(ratio, 0.0, 1.0))
 
 
-func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = -1.0) -> void:
+func set_slapshot_arrow(active: bool, center_local: Vector2 = Vector2.ZERO, radius: float = -1.0) -> void:
 	if not active:
 		_slapper_arrow_on = false
 		return
-	_store_slapper_zone(offset_x, offset_z,
+	_store_slapper_zone(center_local,
 			radius if radius > 0.0 else _slapper_zone_radius_cached)
 	_slapper_arrow_on = true
 
@@ -532,11 +532,11 @@ func update_slapshot_arrow_direction(world_dir: Vector3) -> void:
 	_slapper_arrow_angle = atan2(local_dir.x, local_dir.z)
 
 
-func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
+func set_slapper_indicator(active: bool, center_local: Vector2 = Vector2.ZERO, radius: float = 0.5) -> void:
 	if not active:
 		_slapper_indicator_on = false
 		return
-	_store_slapper_zone(offset_x, offset_z, radius)
+	_store_slapper_zone(center_local, radius)
 	_slapper_indicator_on = true
 	update_slapper_indicator_convergence(1.0)
 
@@ -636,9 +636,8 @@ func apply_ghost(ghost: bool) -> void:
 
 # ── Private: zone transform ───────────────────────────────────────────────────
 
-func _store_slapper_zone(offset_x: float, offset_z: float, radius: float) -> void:
-	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	_slapper_offset_local = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+func _store_slapper_zone(center_local: Vector2, radius: float) -> void:
+	_slapper_offset_local = Vector3(center_local.x, 0.0, center_local.y)
 	_slapper_zone_radius_cached = radius
 
 

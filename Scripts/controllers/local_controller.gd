@@ -546,6 +546,14 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# save/restore each reconcile re-ticks the unconfirmed inputs and the timer
 	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
 	var pre_slapper_charge_timer: float = _aiming.slapper_charge_timer
+	# The set-up ends, and pins the puck where it lies, on whichever tick the blade
+	# gets it there; a replay reaching that tick at a different spot must not move
+	# the live pin.
+	var pre_slapper_setup_done: bool = _aiming.slapper_setup_done
+	var pre_slapshot_pin_active: bool = skater.is_slapshot_pinning()
+	var pre_slapshot_pin_local: Vector2 = skater.slapshot_pin_local()
+	var pre_setup_prev_puck: Vector2 = _slapper_setup_prev_puck
+	var pre_setup_still_s: float = _slapper_setup_still_s
 	# Same shape of problem as the slapper timer: tick_wrister_charge evolves the
 	# cursor-speed EMA inside _update_wrister_charge during replay, so without
 	# save/restore each reconcile re-runs the unconfirmed window's stroke and
@@ -683,6 +691,13 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
+	_aiming.slapper_setup_done = pre_slapper_setup_done
+	_slapper_setup_prev_puck = pre_setup_prev_puck
+	_slapper_setup_still_s = pre_setup_still_s
+	if pre_slapshot_pin_active:
+		skater.enter_slapshot_pinning(pre_slapshot_pin_local)
+	else:
+		skater.exit_slapshot_pinning()
 	_aiming.cursor_speed_ema = pre_charge_cursor_speed
 	_aiming.prev_intent_pos = pre_charge_prev_intent_pos
 	_aiming.wrister_origin_world = pre_charge_origin_world

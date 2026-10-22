@@ -1,7 +1,29 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
-Status: **Designed, not built.** Decisions below were agreed in chat; phases are
-ordered so each one can be played on its own.
+Status: **Phase 1 built, awaiting playtest.** Decisions below were agreed in
+chat; phases are ordered so each one can be played on its own.
+
+As built, Phase 1 differs from the design below:
+- The one-timer circle's radius stays `slapper_zone_radius` (0.5 m); only its
+  centre moved onto the strike spot. Deriving the radius from the blade is left
+  for Phase 5, where the contact model lives.
+- A feed caught in the circle is pinned at the strike spot, not where this
+  machine's puck happens to be, so host and client pin the same point.
+- The hips pivot into the stance at a steady `slapper_stance_turn_deg_s` (450°/s,
+  a 90° set-up in a fifth of a second) rather than the facing drag's ease, whose
+  tail made a large turn take over half a second.
+- The set-up also ends once the puck has stopped closing on the spot
+  (`SLAPPER_SETUP_SETTLED_*`): on some builds the blade's reach and the carry's
+  own offset stop it short of the spot's tolerance.
+- The wind-up apex and the wide base were set against reference photos
+  (Ovechkin's one-timer load, Letang's wind-up): top hand over the back
+  shoulder at helmet height, stick laid back behind it, feet spread across the
+  line (`slapper_load_width_m`) and barely staggered.
+- Side-on, a shooter's chest faces the stick side of the shot line, so a feed
+  from the off-stick side arrives behind him (a right shot on the left circle
+  takes it from his right, as Ovechkin does). The bot settle still
+  places its circle on any feed line; Phase 6 should price that, and Phase 5's
+  contact model already makes such a feed cost pace.
 
 ## Decisions banked
 
@@ -10,7 +32,7 @@ ordered so each one can be played on its own.
   speed, and the backswing starts once it is there. Nothing teleports, on the
   press or on a cancel.
 - **The slapshot is taken side-on.** The hips turn so the front shoulder (the
-  bottom hand's) points down the shot line, feet wide, the puck in front of the
+  top hand's, on the off-stick side) points down the shot line, feet wide, the puck in front of the
   body off the front foot. The turn runs at the facing rule's own rate, never a
   one-tick snap.
 - **One strike spot, derived from the body.** The puck's pin during the
@@ -89,7 +111,7 @@ apply_slapper_follow_through`, the zone the one-timer tests against
 
 ### The stance
 
-`stance_facing` turns the hips so the bottom hand's shoulder points down the
+`stance_facing` turns the hips so the top hand's shoulder points down the
 shot line. The angle the hips open to is a tunable (`slapper_stance_open_deg`,
 starting at 90° — coaching's "perpendicular"), to be settled on a render. The
 torso's wind-up twist shrinks to a shoulder coil on top of open hips; the leg

@@ -32,10 +32,13 @@ static func state_has_puck(state: int) -> bool:
 # hold, which keeps the wind-up's pin while the shaft loads. WRISTER_AIM freezes the
 # blade at its body-local pose (SkaterIKCoordinator.apply_blade_from_mouse under
 # hold_blade, which also carries the smoothed blade along with skater
-# translation); SLAPPER_CHARGE_WITH_PUCK pins to a fixed skater-local offset
+# translation); SLAPPER_CHARGE_WITH_PUCK pins to a skater-local spot
 # (Skater.enter_slapshot_pinning). Either way there is NO independent puck motion
 # left: the puck's world velocity IS the carrier's, and a position-derived puck
 # velocity estimate double-counts the body if it's added on top of a carrier lead.
+# The one exception is a carried slapshot's set-up, the first fraction of a
+# second, while the blade is still bringing the puck to the strike spot; the
+# replicated state cannot tell it apart.
 #
 # Distinct from state_has_puck (which includes ordinary carry, where the blade
 # genuinely dangles independently of the body — the motion the puck lead exists
@@ -67,6 +70,7 @@ class Callbacks:
 	var apply_blade_from_mouse: Callable          # (input: InputState, delta: float)
 	var apply_wrister_aim_blade: Callable         # (input: InputState, delta: float) — holds the blade at the shot origin while the torso coils
 	var apply_slapper_blade_position: Callable    # ()
+	var apply_slapper_setup: Callable             # (input: InputState, delta: float) — the blade takes the puck to the strike spot
 	var apply_block_blade_position: Callable      # ()
 	var apply_wrister_follow_through: Callable    # ()
 	var apply_slapper_follow_through: Callable    # ()
@@ -191,6 +195,16 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 	# wind-up back to carry. Block is the shot-block stance and cancels nothing.
 	if input.shoot_pressed:
 		_cancel_slapper_internal()
+		return
+
+	# Set-up: the blade is still taking the puck to the strike spot and the
+	# charge has not started. Letting go before it is set is no shot at all.
+	if not _aiming.slapper_setup_done:
+		if not input.slap_held:
+			_cancel_slapper_internal()
+			return
+		_cb.apply_slapper_setup.call(input, delta)
+		_cb.apply_slapper_velocity_drag.call(delta)
 		return
 
 	# One-timer window: puck arrived mid-charge. Player must release before

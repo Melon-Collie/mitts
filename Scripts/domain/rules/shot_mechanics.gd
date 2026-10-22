@@ -124,23 +124,6 @@ static func wrister_aim_dir(bot_aim_dir: Vector3, mouse_world: Vector3,
 		return bot_aim_dir
 	return Vector3(mouse_world.x - origin_world.x, 0.0, mouse_world.z - origin_world.z)
 
-# The slapper's aim DIRECTION (world XZ, un-normalized — the caller normalizes),
-# measured at the press tick and then LOCKED for the whole wind-up.
-# BOTS commit their direction directly (bot_aim_dir non-ZERO), for the same reason
-# the wrister does and one more: the human lock is measured from the BLADE's world
-# point (a shoulder-anchored, attribute-scaled, facing-rotated offset ~1 m off the
-# body), which a bot has no way to reproduce from the state snapshot. Placing a
-# cursor "the right distance out" to cancel that offset parallel-shifts the locked
-# line by roughly the blade offset — around a net width at one-timer range, and
-# worse than that in tight where the shot vector is shorter than the offset itself.
-# HUMANS aim blade→cursor: the puck fires from the blade toward where you point.
-# See SkaterController._enter_slapper_charge.
-static func slapper_aim_dir(bot_aim_dir: Vector3, mouse_world: Vector3,
-		blade_world: Vector3) -> Vector3:
-	if bot_aim_dir.length_squared() > 0.0001:
-		return bot_aim_dir
-	return Vector3(mouse_world.x - blade_world.x, 0.0, mouse_world.z - blade_world.z)
-
 # Wrister release. HARD BINARY — a quick pass and a charged wrister are two
 # distinct releases, with NO blend between them. Which one fires is decided by the
 # INPUT at the call site (not any threshold in here) and passed in as is_quick_pass:

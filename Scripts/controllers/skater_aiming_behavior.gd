@@ -31,6 +31,10 @@ var wrister_origin_skater_pos: Vector3 = Vector3.ZERO
 
 # ── Slapper charge state ──────────────────────────────────────────────────────
 var slapper_charge_timer: float = 0.0
+# False through a carried slapshot's set-up, while the blade is still taking the
+# puck to the strike spot and the charge has not started. Saved/restored across
+# reconcile with the charge timer.
+var slapper_setup_done: bool = true
 var one_timer_window_timer: float = 0.0
 # Seconds left in the one-timer's committed catch-and-load hold. Counts down in
 # ONE_TIMER_RETENTION only; the shot fires when it reaches zero. Saved/restored
@@ -66,6 +70,7 @@ func tick_wrister_charge(intent_pos: Vector3, delta: float,
 
 func reset_slapper() -> void:
 	slapper_charge_timer = 0.0
+	slapper_setup_done = true
 	one_timer_window_timer = 0.0
 	one_timer_retention_timer = 0.0
 

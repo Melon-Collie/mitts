@@ -175,7 +175,15 @@ func seed_blade_smoothing(world_pos: Vector3) -> void:
 # consequence, clamped to an asymmetric ROM. See domain/rules/top_hand_ik.gd.
 func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = false,
 		hold_seat: bool = false) -> void:
-	var mouse_world: Vector3 = input.mouse_world_pos
+	apply_blade_toward(input.mouse_world_pos, delta, hold_blade, hold_seat)
+
+
+# The tracked blade reaching for `target_world` as it would for a cursor there —
+# the same reach, rim and speed cap — for a reach the player did not point at
+# (a slapshot's set-up taking the puck to the strike spot).
+func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = false,
+		hold_seat: bool = false) -> void:
+	var mouse_world: Vector3 = target_world
 	mouse_world.y = 0.0
 
 	var skater_pos: Vector3 = _skater.global_position

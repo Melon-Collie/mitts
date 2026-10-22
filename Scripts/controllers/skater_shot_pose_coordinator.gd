@@ -38,18 +38,14 @@ func setup(skater: Skater, sm: SkaterStateMachine, aiming: SkaterAimingBehavior,
 
 
 # ── Slapper Charge Pose ───────────────────────────────────────────────────────
-# Slapper has a fixed blade pose offset from the shoulder — separate from
-# the IK flow (this is a charged pre-shot pose, not player-aimed). Hand
-# sits at the shoulder XZ at `hand_rest_y`; blade XZ is offset from the
-# shoulder by slapper_blade_x/z; Y lerps from _ik.blade_y_local() (ice) up to
-# slapper_wind_up_height during the wind-up charge.
+# Authored, not aimed: the blade starts on the ice where the puck is struck
+# (_contact_local) and rises to the wind-up apex out on the stick side
+# (slapper_wind_up_blade_x/z, height slapper_wind_up_height) as the charge
+# fills, while the top hand comes up and across the chest. The pose is the
+# charge gauge, so it fills over the full charge time.
 func apply_slapper_blade_position() -> void:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 	var wind_up_t: float = _controller.slapper_wind_up_t()
-	# Front-loaded ease so the coil snaps into motion — matches the torso coil
-	# in SkaterPoseCoordinator. Spans the full charge time: the pose is the
-	# charge gauge, apex == max charge.
-	var wind_up_eased: float = sqrt(wind_up_t)
 	# Full-charge tell: a small quiver at the apex (see slapper_full_quiver_m).
 	# Phase runs off the charge timer past max — deterministic through reconcile
 	# replay; remotes see it through the replicated hand/blade wire state like
@@ -58,28 +54,10 @@ func apply_slapper_blade_position() -> void:
 	if wind_up_t >= 1.0:
 		quiver = sin(_controller.slapper_overcharge_seconds()
 				* TAU * _controller.slapper_full_quiver_hz) * _controller.slapper_full_quiver_m
-	# Lerp blade XZ from the "ready" position out to the side to the "loaded"
-	# position pulled in and back, so the stick wraps over the back shoulder
-	# once the torso coil completes.
-	var blade_x_offset: float = lerpf(_controller.slapper_blade_x, _controller.slapper_wind_up_blade_x, wind_up_eased)
-	var blade_z_offset: float = lerpf(_controller.slapper_blade_z, _controller.slapper_wind_up_blade_z, wind_up_eased)
-	var blade_x: float = _skater.shoulder.position.x + blade_side_sign * blade_x_offset
-	var blade_z: float = _skater.shoulder.position.z + blade_z_offset
-	var current_blade_y: float = lerpf(
-			_ik.blade_y_lean_corrected(blade_x, blade_z),
-			_controller.slapper_wind_up_height,
-			wind_up_t) + quiver
-	var pos := Vector3(blade_x, current_blade_y, blade_z)
-	# Lift the top hand and push it forward in upper-body-local space. The
-	# forward push (negative local Z) rides the torso coil — for an LHS player
-	# the body rotates CCW so local -Z maps to world upper-left in top-down
-	# view, putting the hand out in front of the rotated body instead of glued
-	# to the back-shoulder marker. hand_back/hand_inward stay opt-in (default 0)
-	# since they fight the coil direction.
-	var hand_pos := Vector3(
-			_skater.shoulder.position.x - blade_side_sign * _controller.slapper_wind_up_hand_inward * wind_up_eased,
-			_controller.hand_rest_y + _controller.slapper_wind_up_hand_up * wind_up_eased + quiver * 0.5,
-			_skater.shoulder.position.z + _controller.slapper_wind_up_hand_back * wind_up_eased - _controller.slapper_wind_up_hand_forward * wind_up_eased)
+	var pos: Vector3 = _wind_up_blade(wind_up_t)
+	pos.y += quiver
+	var hand_pos: Vector3 = _wind_up_hand(wind_up_t)
+	hand_pos.y += quiver * 0.5
 	var rigid: TopHandIK.Result = _ik.rigid_stick(hand_pos, pos, blade_side_sign)
 	hand_pos = rigid.hand
 	pos = _skater.clamp_blade_to_walls(rigid.blade)
@@ -93,6 +71,44 @@ func apply_slapper_blade_position() -> void:
 	rigid = _ik.rigid_stick(hand_pos, pos, blade_side_sign)
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
+
+
+# Where the blade meets the puck, upper-body-local, on the ice: the pinned puck
+# while there is one, else the strike spot. Both are fixed in the hips' frame,
+# so this turns against the shoulders as they coil.
+func _contact_local() -> Vector3:
+	var spot: Vector2 = _skater.slapshot_pin_local() if _skater.is_slapshot_pinning() \
+			else _controller.slapper_strike_local()
+	var local: Vector3 = _skater.upper_body_to_local(_skater.to_global(Vector3(spot.x, 0.0, spot.y)))
+	local.y = _ik.blade_y_lean_corrected(local.x, local.z)
+	return local
+
+
+# The blade `wind_up_t` (0..1) of the way through the backswing: the XZ eases
+# out front-loaded (sqrt, matching the torso coil) and the height climbs with
+# the raw charge, so the swing snaps into motion and creeps to its apex at max.
+func _wind_up_blade(wind_up_t: float) -> Vector3:
+	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
+	var eased: float = sqrt(wind_up_t)
+	var contact: Vector3 = _contact_local()
+	var apex := Vector3(
+			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_wind_up_blade_x,
+			_controller.slapper_wind_up_height,
+			_skater.shoulder.position.z + _controller.slapper_wind_up_blade_z)
+	return Vector3(
+			lerpf(contact.x, apex.x, eased),
+			lerpf(contact.y, apex.y, wind_up_t),
+			lerpf(contact.z, apex.z, eased))
+
+
+func _wind_up_hand(wind_up_t: float) -> Vector3:
+	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
+	var eased: float = sqrt(wind_up_t)
+	return Vector3(
+			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_wind_up_hand_inward * eased,
+			_controller.hand_rest_y + _controller.slapper_wind_up_hand_up * eased,
+			_skater.shoulder.position.z + (_controller.slapper_wind_up_hand_back
+				- _controller.slapper_wind_up_hand_forward) * eased)
 
 # ── Shot-Block Pose ───────────────────────────────────────────────────────────
 # Choreographed "stick down" block: the blade lies flat on the ice extended
@@ -255,43 +271,21 @@ func apply_slapper_follow_through() -> void:
 			dir_world, _skater.upper_body.global_transform.basis)
 	if dir_local.length_squared() < 0.0001:
 		dir_local = Vector3.FORWARD
-	var contact := Vector3(
-			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_blade_x,
-			0.0,
-			_skater.shoulder.position.z + _controller.slapper_blade_z)
+	var contact: Vector3 = _contact_local()
 	var hand_pos := Vector3(
 			_skater.shoulder.position.x, _controller.hand_rest_y, _skater.shoulder.position.z)
 	var blade_pos: Vector3
 	var cf: float = clampf(_controller.slapper_downswing_time / total, 0.05, 0.9)
 	if t < cf:
-		# Downswing: quadratic ease-in — the blade accelerates into the ice.
+		# Downswing: quadratic ease-in — the blade accelerates into the ice from
+		# wherever the wind-up was at release (an early release starts from the
+		# half-coiled pose; the apex quiver is skipped — a ±2 cm start offset is
+		# invisible in the downswing).
 		var u: float = t / cf
 		u *= u
-		# Where the wind-up actually was at release (mirrors
-		# apply_slapper_blade_position: eased XZ/hand, raw-t height; the
-		# apex quiver is skipped — a ±2 cm start offset is invisible in
-		# the downswing).
 		var wind_up_t: float = _controller.slapper_wind_up_t()
-		var wind_up_eased: float = sqrt(wind_up_t)
-		var start_x: float = _skater.shoulder.position.x + blade_side_sign * lerpf(
-				_controller.slapper_blade_x, _controller.slapper_wind_up_blade_x, wind_up_eased)
-		var start_z: float = _skater.shoulder.position.z + lerpf(
-				_controller.slapper_blade_z, _controller.slapper_wind_up_blade_z, wind_up_eased)
-		var start_y: float = lerpf(
-				_ik.blade_y_lean_corrected(start_x, start_z),
-				_controller.slapper_wind_up_height, wind_up_t)
-		blade_pos = Vector3(
-				lerpf(start_x, contact.x, u),
-				lerpf(start_y, _ik.blade_y_lean_corrected(contact.x, contact.z), u),
-				lerpf(start_z, contact.z, u))
-		var wind_hand := Vector3(
-				_skater.shoulder.position.x
-					- blade_side_sign * _controller.slapper_wind_up_hand_inward * wind_up_eased,
-				_controller.hand_rest_y + _controller.slapper_wind_up_hand_up * wind_up_eased,
-				_skater.shoulder.position.z
-					+ _controller.slapper_wind_up_hand_back * wind_up_eased
-					- _controller.slapper_wind_up_hand_forward * wind_up_eased)
-		hand_pos = wind_hand.lerp(hand_pos, u)
+		blade_pos = _wind_up_blade(wind_up_t).lerp(contact, u)
+		hand_pos = _wind_up_hand(wind_up_t).lerp(hand_pos, u)
 	else:
 		# Finish: out along the shot line and up into the high finish, held,
 		# then settled — the wrister's envelope over what is left of the timer.

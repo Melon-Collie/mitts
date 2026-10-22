@@ -87,6 +87,12 @@ var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 var wrister_unloaded_share: float = 0.6
 # Which side the forehand is on, for the facing rule's per-side reach edges.
 var is_left_handed: bool = true
+# The slapshot stance this body sets (SkaterController.slapper_strike_local /
+# slapper_stance_open_deg): where it strikes the puck in its own frame — x
+# toward the stick side, so one value serves either hand — and how far its hips
+# open off the shot line.
+var slapper_strike_local: Vector2 = Vector2(-0.08, -1.07)
+var slapper_stance_open_rad: float = PI * 0.5
 
 # Body-check delivery inputs to SkaterCollisionRules.victim_kick
 # (closing × transfer × m_a / (m_a + m_b)): a heavier player predicts harder

@@ -2552,12 +2552,11 @@ func get_carry_target_global() -> Vector3:
 # cursor. Falls back to get_blade_contact_global() (centered) when not carrying
 # or when the geometry is degenerate.
 #
-# Slapshot wind-up override: while slapshot pinning is active the puck holds at a
-# fixed lateral/forward offset from the player (matched to the one-timer slapper
-# zone) rather than following the blade, which is lifted overhead and pulled back
-# over the shoulder during the coil. That keeps the puck on the ice in front of
-# the skater — so they can coast or brake through the wind-up without leaving it
-# behind — and fires the shot from a sane ice position, not the elevated tip.
+# Slapshot wind-up override: while slapshot pinning is active the puck holds at
+# the skater-local spot it was set at rather than following the blade, which is
+# lifted overhead during the backswing. That keeps the puck on the ice in front
+# of the skater — so they can coast through the wind-up without leaving it
+# behind — and fires the shot from where it lies, not the elevated tip.
 func _carry_target_raw() -> Vector3:
 	if _slapshot_pin_active:
 		var local := Vector3(_slapshot_pin_local.x, 0.0, _slapshot_pin_local.y)
@@ -2577,14 +2576,14 @@ func _carry_target_raw() -> Vector3:
 	return contact - face_normal * get_carry_forehand_factor() * carry_blade_offset
 
 
-# Slapshot pin state — set by SkaterController._enter_slapper_charge when the
-# carrier commits to a slap, cleared in _transition_to_skating. The pin offset
-# is XZ in skater-local space (already includes blade_side_sign).
+# Slapshot pin state — set by SkaterController when the puck is set for the
+# swing (where it lies then), cleared in _transition_to_skating. The pin is
+# (x, z) in skater-local space.
 var _slapshot_pin_active: bool = false
 var _slapshot_pin_local: Vector2 = Vector2.ZERO
 
-func enter_slapshot_pinning(local_offset_x: float, local_offset_z: float) -> void:
-	_slapshot_pin_local = Vector2(local_offset_x, local_offset_z)
+func enter_slapshot_pinning(local: Vector2) -> void:
+	_slapshot_pin_local = local
 	_slapshot_pin_active = true
 
 func exit_slapshot_pinning() -> void:
@@ -2592,6 +2591,10 @@ func exit_slapshot_pinning() -> void:
 
 func is_slapshot_pinning() -> bool:
 	return _slapshot_pin_active
+
+
+func slapshot_pin_local() -> Vector2:
+	return _slapshot_pin_local
 
 
 func get_prev_blade_contact_global() -> Vector3:
@@ -3079,14 +3082,13 @@ func get_body_block_y_range() -> Vector2:
 
 
 # ── Slapper Zone ──────────────────────────────────────────────────────────────
-# Arms the one-timer catch zone: a disc of `radius` centered `offset_x` to the
-# blade side and `offset_z` ahead, in skater-local space. Disarming keeps the last
-# geometry — every caller gates on is_slapper_zone_active() first.
-func set_slapper_zone(active: bool, radius: float = 0.0, offset_x: float = 0.0, offset_z: float = 0.0) -> void:
+# Arms the one-timer catch zone: a disc of `radius` centred on `center_local`, an
+# (x, z) point in skater-local space. Disarming keeps the last geometry — every
+# caller gates on is_slapper_zone_active() first.
+func set_slapper_zone(active: bool, radius: float = 0.0, center_local: Vector2 = Vector2.ZERO) -> void:
 	if active and radius > 0.0:
 		_slapper_zone_radius = radius
-		var blade_side_sign: float = -1.0 if is_left_handed else 1.0
-		_slapper_zone_offset = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+		_slapper_zone_offset = Vector3(center_local.x, 0.0, center_local.y)
 	_slapper_zone_active = active
 
 
@@ -3194,12 +3196,12 @@ func set_world_hud_hidden(hidden: bool) -> void:
 	_hud.set_world_hud_hidden(hidden)
 
 
-func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
-	_hud.set_slapper_indicator(active, offset_x, offset_z, radius)
+func set_slapper_indicator(active: bool, center_local: Vector2 = Vector2.ZERO, radius: float = 0.5) -> void:
+	_hud.set_slapper_indicator(active, center_local, radius)
 
 
-func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = -1.0) -> void:
-	_hud.set_slapshot_arrow(active, offset_x, offset_z, radius)
+func set_slapshot_arrow(active: bool, center_local: Vector2 = Vector2.ZERO, radius: float = -1.0) -> void:
+	_hud.set_slapshot_arrow(active, center_local, radius)
 
 
 func update_slapshot_arrow_direction(world_dir: Vector3) -> void:

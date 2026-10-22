@@ -463,14 +463,13 @@ const ONE_TIMER_ANCHOR_ARRIVE_M: float = 0.6
 # one-timer charge) until the puck reaches the slapper zone, then drops it.
 var _one_timer_press_tick: int = 0
 
-# Whether ONE_TIMER_PRESSED has fired its slap press yet. The controller LOCKS
-# the slapper direction from the mouse at the press tick (_enter_slapper_charge),
-# so the press waits for the aim to settle first (_state_one_timer_pressed).
+# Whether ONE_TIMER_PRESSED has fired its slap press yet. The zone turns with
+# the hips, so the press waits for them to open near the slapshot stance first
+# (_state_one_timer_pressed).
 var _one_timer_slap_down: bool = false
 
-# Backstop on that aim-settle wait: facing_drag covers the worst beyond-cone
-# overshoot (~30°) well inside this, so hitting it means unreadable facing
-# geometry — press anyway rather than eat the whole feed flight un-wound.
+# Backstop on that stance wait: a body that cannot open up inside it bails to a
+# catch rather than wind up with its circle off the feed.
 const ONE_TIMER_AIM_WAIT_MAX_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 5   # ~0.2 s
 
 # Budget backstop for ONE_TIMER_PRESSED. Entry happens at feed RELEASE, so it
@@ -717,6 +716,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_self_facing_turn_rate = caps.facing_turn_rate
 	_self_blade_speed = caps.blade_speed
 	_self_backhand_coefficient = caps.backhand_power_coefficient
+	_one_timer.set_stance(caps.slapper_strike_local, caps.slapper_stance_open_rad)
 	_role_ctx.self_wrister_unloaded_share = caps.wrister_unloaded_share
 	_role_ctx.self_wrister_load = caps.wrister_load
 	_role_ctx.self_facing_rules = caps.facing_rules
@@ -2304,10 +2304,10 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		_apply_steering(input, snapshot, self_pos, line_anchor)
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
-	# Open up to the net through the wait, as a shooter loading a one-timer does:
-	# skating, the hips ride the skating line (FacingRules), and only the stance
-	# squares them to the cursor — so without it the square-up gate below waits
-	# out its backstop and the press-tick snap whips the body round.
+	# Open up through the wait, as a shooter loading a one-timer does: skating,
+	# the hips ride the skating line (FacingRules), and only the stance squares
+	# them to the cursor — so without it the square-up gate below waits out its
+	# backstop.
 	input.stance_held = true
 	# AIM FROM THE RELEASE POINT, NOT THE CURRENT BODY: the slapper direction locks
 	# at the press tick, and the body may still shuffle up to the reception lateral
@@ -2322,16 +2322,22 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 			SkaterAgentOneTimer.feed_time_s(snapshot, self_pos))
 	# COMMIT the direction (input.bot_slapper_aim_dir): release_point → net_hole
 	# plus the committed execution error. Never aim through the cursor: the human
-	# lock measures BLADE→cursor, and the blade sits ~1 m off the body, so no cursor
-	# placement cancels the offset. The cursor points along the same committed line
-	# from the body, which is what the press-tick facing snap wants.
+	# lock measures from the strike spot, off the body, so no cursor placement
+	# cancels the offset. The cursor points the way the stance faces for that
+	# line, so the stance (Shift) opens the hips side-on to it.
 	var shot_vec: Vector3 = net_hole - release_point
 	var clean_aim: Vector3 = _apply_committed_aim_error(self_pos, self_pos + shot_vec)
 	var committed_dir := Vector3(
 			clean_aim.x - self_pos.x, 0.0, clean_aim.z - self_pos.z)
 	if committed_dir.length_squared() > 0.0001:
 		input.bot_slapper_aim_dir = committed_dir.normalized()
-	input.mouse_world_pos = _step_mouse_face(clean_aim)
+		var stance: Vector2 = _one_timer.stance_facing(
+				Vector2(input.bot_slapper_aim_dir.x, input.bot_slapper_aim_dir.z))
+		var reach: float = committed_dir.length()
+		input.mouse_world_pos = _step_mouse_face(
+				self_pos + Vector3(stance.x, 0.0, stance.y) * reach)
+	else:
+		input.mouse_world_pos = _step_mouse_face(clean_aim)
 
 	# The press waits until the stance has squared (SkaterAgentOneTimer.aim_settled):
 	# the cursor is cone-clamped, so pressing early would fire sideways out of the
