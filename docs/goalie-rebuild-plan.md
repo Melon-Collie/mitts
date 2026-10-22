@@ -3,6 +3,13 @@
 Status: **proposal, not agreed.** Open questions for the user are in §7. Nothing
 here is implemented yet.
 
+**Revision 2, from user feedback:**
+- **A new goalie model** is in scope: an articulated body with skates, toe
+  bridges, real pads on real legs, and so on (§3.5).
+- **The bots are not a reliable yardstick right now.** They are mid-change,
+  especially on breakaways. So the scoreboard is **bot-free** (§5, Phase 0), and
+  the bot-vs-goalie numbers below are context only.
+
 This document answers three things:
 
 - why the goalie got worse when the puck went regulation;
@@ -31,6 +38,11 @@ puck.
 | Dot line, cold release, perfect aim | 16 / 288 (July) | **57 / 300** |
 | Shot field, SET cells, aimed-point goal share | 2.1% | **6.1%** |
 | Field's own best pick against a SET keeper (truth table) | 2 / 20 | **15 / 20** |
+
+The bot-vs-goalie row measures the bots as much as the goalie, and the bots are
+changing under it. The scripted rows are the ones to trust: the perfect-aim
+sweeps, and the shot field, whose shooters are staged by
+`shot_odds_stager.gd`, not bot brains.
 
 Two things stand out:
 
@@ -209,7 +221,7 @@ The view is filled once per tick and is plain data:
   shot-motion phase (gliding, loading, releasing);
 - screens.
 
-**Open question (§7 Q2):** whether he keeps reading the shooter's cursor. The
+**Open question (§7 Q1):** whether he keeps reading the shooter's cursor. The
 honest alternative is reading the **blade**:
 
 - a wrist shot's line is constrained by where the blade is and which way it
@@ -278,38 +290,99 @@ line inside its own reach envelope and speed:
 time-to-impact as the budget. There is one decision and no separate block or
 react chain.
 
-### 3.5 The body: one parametric pose solve
+### 3.5 The body: a new goalie model, articulated like a real one
 
-Replace about 15 hand-authored stance tables with one solve. Its inputs:
+Today's goalie has **no legs**:
+- The pads are free-floating boxes, placed per stance from hand-authored tables
+  (about 15 of them).
+- There are no skates, knees, hips or toe bridges.
+- The five-hole is whatever gap two boxes happen to leave.
 
-- stance width;
-- knee bend and hip height;
-- trunk lean;
-- butterfly flare;
-- per-limb hand targets;
-- stick blade target;
-- post contact (which pad, which face).
+That is why his poses read wrong, and why a gap can sit unnoticed between the
+two pucks' widths. **Replace him with an articulated body**, built in code the
+way the skater is (`SkaterBodySkeleton`, `LegIK`, `TwoBoneIK`, `BodyZonePaint`,
+the skate assembly in `SkaterMeshBuilder`). Same low-poly faceted art style.
 
-The pose set I'd teach:
+**Skeleton.** Each joint has the range a goalie actually has:
 
-| Pose | What changes vs today |
+| Joints | Notes |
 |---|---|
-| **Ready stance** | Wider and lower. Pads on their inside edges with the knees in. **Stick blade centred in front of the five-hole**, about 30 cm ahead of the skates. Gloves forward of the body at pad-top height, glove open to the shooter. Chest over the knees. |
-| **Butterfly** | Knees together, so the five-hole is closed by the body rather than by overlapping boxes. Pads flared with toe-out. Torso tall. Hands forward and beside the body. Stick in the five-hole. |
-| **Butterfly extension / pad save** | **New.** One pad pushes out toward the post. This is the low-corner reach the regulation puck is currently scoring through. |
-| **Half-butterfly** | Kept, with the down pad's top sealed against the trunk. |
-| **Kick / skate save** | **New.** A standing low-reach save. |
-| **RVH / VH / overlap** | Overlap is **new**: standing, pad against the post, for a sharp-angle shot threat that is still mobile. All three keep **live hands**. |
-| **Paddle-down** | Promoted from a cosmetic sweep to a real jam and wraparound stance (open question; optional). |
+| pelvis, waist, spine, neck, head | |
+| hip ×2 | flexion, abduction, **internal rotation**: what the butterfly is made of |
+| knee ×2 | |
+| ankle ×2 | |
+| shoulder ×2, elbow ×2, wrist ×2 | |
 
-**Arms collide.** Each forearm and upper arm becomes a box.
+**Gear**, each piece strapped to the bone that carries it, so its placement is
+a consequence of the pose:
 
-A **seam property** holds the body honest:
+| Gear | Bone | What it is |
+|---|---|---|
+| **Skates** | foot | the skater's skate assembly, goalie-cut: lower boot, cowling, long flat blade |
+| **Leg pads** | shin | Thigh rise over the knee, knee stack, landing block on the inside face (what lands on the ice in the butterfly), outer roll, **boot and toe** over the skate |
+| **Toe bridges** | pad toe → skate | The strap that makes the pad rotate with the foot. It is why a butterfly flares the pads, and why the toe seals the post along the ice |
+| **Knee pads / thigh guards** | thigh | what fills the five-hole from above when the knees close |
+| **Pants** | pelvis | |
+| **Chest-and-arm unit** | spine, upper arms, forearms | Shoulder floaters, and **arm sleeves that collide** |
+| **Trapper** | glove wrist | cuff, T-trap and pocket, oriented by the wrist rather than one fixed pitch |
+| **Blocker** | blocker wrist | board and palm |
+| **Stick** | blocker hand, with its own wrist | The stick and the blocker are no longer one rigid assembly: a blocker save no longer lifts the paddle off the ice |
+| **Mask** | head | cage, backplate, neck dangler |
 
-- for every pose, every gap in the straight-on silhouette is either narrower
-  than the puck's diameter or on a list of **intended** windows (the read five-hole while moving, short-side high in RVH);
-- the test fails on any unlisted seam, so the next change of the puck or the
-  pads cannot open a hole silently.
+Sizes come from the NHL equipment rules where they exist:
+- pads 11 in wide, height by leg length;
+- blocker 8 × 15 in;
+- trapper ≤ 45 in perimeter;
+- floater and arm limits.
+
+**Collision hangs off the bones, defined in code.** Each gear piece declares
+one or a few boxes in its bone's frame, for example:
+- pad: thigh rise plus shin-and-boot;
+- skate and toe;
+- forearm sleeve.
+
+`GoalieContactDetector` reads that list. Nothing queries the goalie's physics
+layers today; the detector reads only box extents and transforms, so the scene
+needs no collider nodes. `Goalie.tscn` shrinks to a root, and the colliders are
+code, versioned with the poses that move them.
+
+**Poses are joint configurations.** The pose set, built from that skeleton:
+
+| Pose | What the joints do |
+|---|---|
+| **Ready stance** | Feet wider than the shoulders, knees bent and in, pads on their inside edges. **Stick blade centred in front of the five-hole**, about 30 cm ahead of the skates. Gloves forward at pad-top height, trapper open. Chest over the knees, head over the toes. |
+| **Butterfly** | Knees down and together, hips internally rotated, shins and skates flared out. The toe bridges turn the pads out with them, and the landing blocks lie on the ice. Torso tall, hands forward and beside the body, stick in the five-hole. The five-hole is closed by **knees and thighs**, not by overlapping boxes. |
+| **Butterfly extension** | **New.** One leg pushes out toward the post, pad face down, toe on the ice. This is the low-corner reach the regulation puck is currently scoring through. |
+| **Half-butterfly** | Kept. One knee down, the other leg loaded on its skate. |
+| **Kick / skate save** | **New.** A standing leg's quick extension; the skate and toe stop low shots. |
+| **RVH / VH / overlap** | Overlap is **new**: standing, pad against the post. In all three the post is sealed by the pad toe and skate where they really seal it, and the hands stay live. |
+| **Paddle-down** | Optional: a jam and wraparound stance. |
+| **T-push, shuffle, C-cut, recovery** | Real footwork on real skates. The existing `GoalieFootwork` stroke becomes leg motion instead of a pad offset. |
+
+**The network sends pose parameters, not part transforms.** If the pose is a
+pure function of a small parameter vector (stance, the joint targets the
+planner and reflexes chose, the limb reach targets), then:
+- the wire carries the vector;
+- every client rebuilds the identical body;
+- client colliders equal host colliders by construction.
+
+Today the host and client poses come from separate tables, and they have
+already drifted (§6). This needs a protocol bump; see §7.
+
+**A seam property holds the body honest:**
+- For every pose, every gap in the straight-on silhouette is either narrower
+  than the puck's diameter or on a list of **intended** windows. Examples of
+  intended windows: the five-hole opening during a T-push, short-side high in
+  RVH.
+- The test fails on any unlisted seam. The next change of puck, pad or pose
+  then cannot open a hole silently.
+
+**Seeing it.** A `render-goalie.sh` hook beside `render-poses.sh`:
+- every pose from front, side and above, against a recorded baseline;
+- plus the **coverage view**: the mouth as the puck sees it, uncovered cells
+  painted.
+
+Articulation is the thing a headless test cannot assert.
 
 ### 3.6 Difficulty: honest axes only
 
@@ -329,9 +402,10 @@ A property test asserts the ladder order on the scoreboard (§5, Phase 0).
 
 | Keep | Why |
 |---|---|
-| `GoalieNetworkState` and the wire, unless §7 Q4 says otherwise | Clients, replay, and the bots' perception all read it. New stances append to the enum. |
-| `GoalieSaveRules` (rebounds), `SweptDiscOBB`, `GoalieContactDetector` | The puck side of the save is sound and has a native port. |
-| `GoaliePushRules`, the stick lie and flush roll (`GoalieStickRules`), the two-bone arm IK | Grounded and well tested. |
+| `GoalieNetworkState`'s **accessors** (`is_down`, `post_seal_x_sign`, `hands_read`, `pads_read`) | The bots perceive the goalie through them. The bytes behind them change (§3.5); the questions they answer don't. |
+| `GoalieSaveRules` (rebounds), `SweptDiscOBB`, `GoalieContactDetector` | The puck side of the save is sound and has a native port. The detector's input changes from scene shapes to a box list. |
+| `GoaliePushRules`, the stick lie and flush roll (`GoalieStickRules`), `TwoBoneIK` / `LegIK` | Grounded and well tested. |
+| Skater art infrastructure: skate assembly, `BodyZonePaint`, the faceted mesh toolbox | One art set. |
 | Screen occlusion geometry, pass reception, tip geometry | They become threat-model inputs rather than gates. |
 | `GoaliePuckPlay`'s doctrine and pattern | Already the healthy collaborator. |
 | The **beatability doctrine** (Scripts/controllers/CLAUDE.md) | It becomes the acceptance test: deception pays, the cutback beats the commit, a corner picked outside his reach scores. |
@@ -341,73 +415,98 @@ A property test asserts the ladder order on the scoreboard (§5, Phase 0).
 ## 4. Risks
 
 - **Planner cost.** Evaluating expected goals against for ~20 candidates × ~4
-  hypotheses × 9 projected boxes at 30 Hz is ~22k box projections a second per
-  goalie. That is fine natively and borderline in GDScript. The plan has a
+  hypotheses × ~16 projected boxes at 30 Hz is ~40k box projections a second
+  per goalie. That is fine natively and borderline in GDScript. The plan has a
   native kernel slot (`native/README.md` pattern) and a GDScript reference.
-- **The bots have to follow.** `AIGoalieModel` and the generated shot field
-  model *this* goalie. Every phase that changes him ends in a field
-  regeneration (about 25–35 min on 4 shards), and the bots' pick quality moves
-  with it.
+- **Skeleton cost on the tick.** The skater poses its legs at render rate, but
+  the goalie's gear **is** gameplay geometry. On the host, the bone chain that
+  carries colliders must be solved on the tick. Only the cosmetic remainder
+  (straps, the dangler, the jersey hem) may go to render rate.
+- **The bots shoot at the old goalie.** `AIGoalieModel` and the generated shot
+  field model the current keeper. The field itself is bot-free (its shooters
+  are staged), so it stays a valid measurement. But the bots' play is tuned
+  against it, and the bots are mid-change too. So:
+  - the goalie work does not gate on the bots;
+  - switching the default goalie is the one step that needs a field
+    regeneration and a word with the bot work (§5, Phase 5).
 - **Shot-field churn.** The fingerprint hashes the **full text** of every
   `goalie_*.gd`, so even a comment edit forces a regeneration. That is why the
   stale comments found during this audit are listed in §8 rather than fixed
-  today. During the rebuild, regenerate at phase ends, not per commit.
-- **Test churn.** About 61 test files reach into the controller, about 41 of
-  them into private members. Doctrine tests that pin *how* he does something
-  (`_current_depth` after N ticks) will not survive. Tests that pin *what
-  happens* (the seal holds through a shot; deception pays) should, rewritten
-  against a public tick seam.
-- **Feel.** None of this can be judged headless. Every phase ends with a local
-  playtest.
+  today. New files are needed anyway, so name the new goalie's files outside
+  the fingerprint's `goalie_*` glob (e.g. `Scripts/goalie/`) until it becomes
+  the default. Then the old keeper's field stays current the whole time.
+- **Test churn.** About 61 test files reach into the old controller, about 41
+  of them into private members. They stay green while the old goalie stands,
+  and are retired with him. The new goalie's tests are written against a
+  public seam from the start.
+- **Feel and look.** Neither can be judged headless. The body phase is reviewed
+  from renders, and every later phase ends with a local playtest.
 
 ---
 
 ## 5. Phases
 
+The new goalie is a **separate actor and brain**: `GoalieV2` and its
+collaborators, selected in `ActorSpawner`. The old goalie stays complete,
+playable and the default until the new one beats it on the scoreboard and in
+your playtest. No adapter maps the old brain onto the new body: the two bodies
+share no parts, and an adapter would be thrown away.
+
 Each phase leaves the suite green and the game playable.
 
-**Phase 0: one scoreboard.**
-- One instrument, run in a few minutes, that prints:
-  - the bot-vs-goalie rush conversion per tier;
-  - the dot-line perfect-aim sweep (held and cold);
-  - a SET-cell battery at ~10 spots × FLAT/LOW/HIGH;
-  - the straight-on coverage per stance.
-- A snapshot of those numbers, plus the tier-order property.
-- Targets agreed with the user (§7 Q3).
+**Phase 0: a bot-free scoreboard.**
+- One instrument, run in a few minutes, that drives **either** goalie through
+  one interface against **scripted** shooters only. It reuses
+  `real_goalie_shot_harness` and `human_wraparound_harness` (both scripted, no
+  bot brains). It prints:
+  - **Dot line, slot and wide-angle spots:** perfect-aim sweeps (held wind-up
+    and cold release) × FLAT/LOW/HIGH.
+  - **Scripted plays:**
+    - a lateral drive and shot;
+    - a deke then elevate;
+    - a cross-crease one-timer;
+    - a breakaway cutback and walkaround;
+    - a wraparound;
+    - a rebound put-back.
+  - **Coverage per pose:** straight-on, and from the dot and the wide angle.
+- The old goalie's numbers go in as the baseline snapshot.
+- A tier-order property.
+- Targets agreed with you (§7 Q2).
 
-**Phase 1: the body.**
-- `GoalieBody.pose()` as one parametric solve producing the existing part
-  boxes, plus arm boxes.
-- The coverage function, and the seam property.
-- The new ready stance and butterfly.
-- The existing controller drives it through a thin adapter, so the brain is
-  unchanged.
-- This alone should recover most of the puck regression, and it is
-  independently shippable.
-- **Needs the user** for any new collider nodes in `Goalie.tscn` (§7 Q1).
+**Phase 1: the new body, posed statically.**
+- Skeleton, gear meshes, bone-hung collision boxes, and the pose set (§3.5).
+- `render-goalie.sh` with a recorded baseline, plus the coverage view.
+- The seam property.
+- **Reviewed from renders with you** before any motion is built on it.
 
-**Phase 2: the new brain, beside the old one.**
-- `GoalieBrain` (perception → threat → planner → motor) behind a selector in
-  `ActorSpawner`, with the same public API (§1.3 of the controller map: `setup`,
-  `reset_to_crease`, `fill_state`, `stance()`, …).
-- The scoreboard runs both brains.
-- The old controller is untouched, so it stays a working fallback.
+**Phase 2: the motor.**
+- Real footwork on real skates: stance, shuffle, T-push, C-cuts.
+- The butterfly drop and rise.
+- Slides, post integrations, and the recovery.
+- Limb reaches: glove, blocker, independent stick, pad extension, kick.
+- Timings come from the current grounded numbers (0.20 s drop, 0.35 s rise,
+  the push and edge profile), so the new body moves no faster than the old one
+  until it is meant to.
 
-**Phase 3: saves.**
-- The reflex executor: independent stick, pad extension, kick, live hands in
-  RVH/VH, overlap.
+**Phase 3: the brain.**
+- Perception → threat model → planner → reflex (§3.1–3.4).
+- Puck handling: cover, sweep, catch, behind-net play.
+- Scored on the Phase 0 scoreboard against the old goalie.
 
-**Phase 4: the bots follow.**
-- `AIGoalieModel` reads `GoalieBody` and the coverage function instead of
-  copied constants.
-- Shot field regenerated.
-- #836's pended tests revisited.
+**Phase 4: online.**
+- The pose-parameter wire state (§3.5) and a protocol and replay-format bump.
+- Client rebuild from parameters.
+- Lag compensation.
+- Until this phase the new goalie is selectable **offline only**: free play,
+  practice, and games against bots.
 
-**Phase 5: delete the old controller.**
-- Doctrine tests rewritten against the public seam or deleted with the
-  behaviour they pinned.
-- `Scripts/controllers/CLAUDE.md`'s goalie half rewritten to the new shape.
-
+**Phase 5: the switch.**
+- New goalie becomes the default.
+- Shot field regenerated, and `AIGoalieModel` reads the body and coverage
+  function instead of copied constants. Timed with the bot work, not gating
+  it.
+- Old goalie, its controller and its 60-odd tests deleted.
+- `Scripts/controllers/CLAUDE.md`'s goalie half rewritten.
 ---
 
 ## 6. Things found along the way (flagged, not fixed)
@@ -440,41 +539,55 @@ Each phase leaves the suite green and the game playable.
 
 ## 7. Open questions for the user
 
-1. **How deep does "ground up" go?** Brain only, or brain and body: poses,
-   collider set, arm colliders? New collider *nodes* in `Goalie.tscn` are yours
-   to make in the editor. Alternatively, the arm boxes can be code-defined
-   shapes the contact detector reads, with no scene change.
-2. **The cursor read.** Keep reading the shooter's published aim (stale), or
+Answered:
+- **Scope:** brain and body, with a new articulated model.
+- **The bots:** not a yardstick right now; the scoreboard is scripted.
+
+Still open:
+
+1. **The cursor read.** Keep reading the shooter's published aim (stale), or
    read only what a goalie can see (blade, body, wind-up)?
-3. **Targets.** What should HARD's save percentage be against bot rushes, and
-   overall? NHL is about .905; today's rush number is about .62. Should
-   EASY / NORMAL / HARD sit at fixed gaps?
-4. **The wire.** Is a protocol and replay-format bump acceptable? Old replays
-   would stop loading.
-5. **Side by side or in place?** Phase 2 assumes the new brain lives beside the
-   old one until it wins on the scoreboard and in your playtest. The
-   alternative is replacing in place: faster, but with no fallback.
+2. **Targets.** What should HARD concede on the scripted scoreboard? For
+   example:
+   - the dot-line perfect-aim sweep (the old puck gave 13 of 288 on a held
+     wind-up);
+   - an overall save percentage to aim at (NHL is about .905).
+
+   Should EASY / NORMAL / HARD sit at fixed gaps?
+3. **The wire.** The pose-parameter wire (§3.5) needs a protocol and
+   replay-format bump, so old replays stop loading. Acceptable?
+4. **Offline until Phase 4.** Is it fine for the new goalie to be selectable
+   only offline (free play, practice, games against bots) until its wire state
+   exists?
+5. **The model.**
+   - One goalie build, or attribute-scaled like the skaters (height, weight)?
+   - Pad graphics: today a kit has one `goalie_pads` colour. Do you want
+     painted pad designs (stripes, blocks, team accents) in
+     `data/team_colors.json`, laid flat by `render-kits.sh` like the jerseys?
+   - Anything specific you want the model to have beyond skates, toe bridges,
+     real pads, arm sleeves, and trapper/blocker/mask detail?
 
 ---
 
-## 8. Stale comments to fix during the rebuild
+## 8. Stale comments
 
-Any edit to a goalie file forces a shot-field regeneration (§4), so these ride
-the first phase that touches each file.
+Corrected alongside this plan, since stale documentation is fixed on the spot:
+- the controller header ("tuning exports … for editor access");
+- the READY chest height (0.96 → 0.98) in the controller and the pose builder;
+- the convergence clock (`read_converge_time`, not `read_lag`);
+- the dead `compute_slide_destination` reference;
+- the `carrier.gd` enum-duplication claim;
+- `goalie.gd`'s butterfly body height;
+- the blade height in `goalie_behavior_rules.gd`;
+- `goalie_crease_clear.gd`'s orphaned reach-race doc and empty trailing header;
+- `ARCHITECTURE.md`'s tracking paragraph;
+- the `Scripts/controllers/CLAUDE.md` subsystem map.
 
-| Where | Stale text | Actually |
-|---|---|---|
-| `goalie_controller.gd:4555` | "converged after one `read_lag`" | uses `read_converge_time` |
-| `goalie_controller.gd:3577` | "BUTTERFLY uses compute_slide_destination" | uses `target_arc_position` |
-| `goalie_controller.gd:247` | "outer pad reach 0.88" | 0.84 |
-| `goalie_controller.gd:806`, `goalie_body_config_builder.gd:53` | READY body height "0.96" | 0.98 |
-| `goalie_controller.gd:876` | "carrier.gd duplicates the enum values" | it reads `GoalieNetworkState` |
-| `goalie_controller.gd` header | "tuning `@export`s" | 0 `@export`s remain |
-| `goalie_body_config_builder.gd:399` | "0.52 × 0.72 torso box" | 0.62 |
-| `goalie.gd:371` | "body 0.40 in butterfly" | 0.64 |
-| `goalie_behavior_rules.gd:1285` | blade "0.07 m tall" | 0.089 |
-| `goalie_crease_clear.gd:209` | doc for a reach-race function | the function no longer exists |
+The shot field was regenerated for the fingerprint change.
 
-`Scripts/controllers/CLAUDE.md` (the subsystem map) and `ARCHITECTURE.md:143`
-(the tracking-lag paragraph) are not fingerprinted, and were corrected alongside
-this plan.
+**One left as a flag, because it is not just a comment.**
+`goalie_controller.gd`'s `post_seal_inset = 0.38` is documented as "outer pad
+reach 0.88 − 0.50 body inset". The pad reach is now 0.84, which would make the
+inset 0.34. Either the number or its derivation is stale, and picking one moves
+the post-seal spot. That is a behaviour change for the rebuild to settle, not a
+comment fix.
