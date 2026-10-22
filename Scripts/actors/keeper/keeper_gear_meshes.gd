@@ -259,64 +259,65 @@ static func _blocker(k: KeeperMeshKit, h: Vector3) -> void:
 
 
 # The mask's shell, in the head's frame (origin on the neck's line at chin
-# height, −Z forward), bottom to top: height, half width, front, back. The chin
-# juts ahead of the jaw, the cheeks run back along it to the backplate, the brow
-# stands out over the eyes and the dome closes over the skull.
+# height, −Z forward), bottom to top: height, half width, front, back. A long
+# chin and jaw jut forward under the cage, the cheeks run back to the
+# backplate, the brow stands out over the cage and the dome closes over the
+# skull.
 const _MASK_SECTIONS: Array[Vector4] = [
-	Vector4(-0.035, 0.045, -0.115, -0.060),
-	Vector4(0.000, 0.085, -0.135, -0.010),
-	Vector4(0.045, 0.108, -0.135, 0.060),
-	Vector4(0.075, 0.114, -0.125, 0.090),
-	Vector4(0.110, 0.120, -0.120, 0.115),
+	Vector4(-0.040, 0.035, -0.135, -0.090),
+	Vector4(-0.005, 0.075, -0.150, -0.020),
+	Vector4(0.040, 0.100, -0.152, 0.055),
+	Vector4(0.080, 0.115, -0.148, 0.095),
+	Vector4(0.110, 0.120, -0.125, 0.115),
 	Vector4(0.160, 0.120, -0.120, 0.125),
-	Vector4(0.200, 0.116, -0.135, 0.125),
-	Vector4(0.235, 0.100, -0.115, 0.115),
-	Vector4(0.258, 0.068, -0.075, 0.085),
+	Vector4(0.205, 0.118, -0.138, 0.125),
+	Vector4(0.235, 0.100, -0.120, 0.115),
+	Vector4(0.258, 0.068, -0.080, 0.085),
 	Vector4(KeeperGear.MASK_TOP_M, 0.020, -0.020, 0.030),
 ]
-# The face opening: the shell's front sits back to the face between chin and
-# brow, and the cage spans it.
-const _MASK_FACE := Vector2(0.05, 0.19)
+# The face opening, from the mouth to the brow: the shell's front sits back to
+# the face there and the cage spans it.
+const _MASK_FACE := Vector2(0.095, 0.195)
 const _MASK_FACE_Z: float = -0.095
 const _MASK_SEGMENTS: int = 16
-const _CAGE_EYE_LINE: float = 0.14
+# The cage: straight bars, short and wide, flat across the front and wrapped
+# back to the shell at its sides.
+const _CAGE_HALF_WIDTH: float = 0.088
+const _CAGE_FRONT_Z: float = -0.166
+const _CAGE_FLAT_HALF: float = 0.05
+const _CAGE_ROWS: Array[float] = [0.09, 0.127, 0.163, 0.20]
+const _CAGE_BARS: int = 8
+# How sharply the cage wraps back past its flat front: its edge lands on the
+# shell's cheek, about where the face opening's side is.
+const _CAGE_WRAP: float = 46.0
 
 
 # The mask: a fibreglass shell over the skull and down the jaw, a bar cage
-# bowed out across the face opening, the dangler hanging under the chin.
+# across the face opening, the dangler hanging under the chin.
 static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	var o := Vector3(0.0, -h.y + KeeperGear.MASK_BELOW_CHIN_M, h.z - KeeperGear.MASK_BACK_M)
 	var rings: Array[PackedVector3Array] = []
 	for s: Vector4 in _MASK_SECTIONS:
 		rings.append(_mask_ring(o, s))
 	k.sweep(S.HELMET, rings, o + Vector3(0.0, 0.12, 0.0))
-	var chin: float = _MASK_FACE.x - 0.005
-	var brow: float = _MASK_FACE.y + 0.005
-	var face := PackedVector2Array()
-	for y: float in [chin, _CAGE_EYE_LINE, brow]:
-		face.append(Vector2(_cage_half_width(y), o.y + y))
-	for y: float in [brow, _CAGE_EYE_LINE, chin]:
-		face.append(Vector2(-_cage_half_width(y), o.y + y))
+	var bottom: float = _CAGE_ROWS[0]
+	var top: float = _CAGE_ROWS[_CAGE_ROWS.size() - 1]
+	var face := PackedVector2Array([
+		Vector2(-_CAGE_HALF_WIDTH, o.y + bottom), Vector2(_CAGE_HALF_WIDTH, o.y + bottom),
+		Vector2(_CAGE_HALF_WIDTH, o.y + top), Vector2(-_CAGE_HALF_WIDTH, o.y + top),
+	])
 	k.slab(S.STRAP, face, o.z + _MASK_FACE_Z - 0.007, o.z + _MASK_FACE_Z - 0.004)
-	# A cat-eye cage: close bars over the mouth and chin, a wide opening for
-	# each eye either side of the centre bar. Bars are placed as fractions of
-	# the cage's half width at their height.
-	for f: float in [-0.5, 0.5]:
-		_cage_bar(k, o, Vector2(f, chin), Vector2(f, _CAGE_EYE_LINE))
-	for f: float in [-1.0, 0.0, 1.0]:
-		_cage_bar(k, o, Vector2(f, chin), Vector2(f, brow))
-	for y: float in [chin + 0.005, 0.085, 0.115, _CAGE_EYE_LINE, brow - 0.005]:
-		_cage_bar(k, o, Vector2(-1.0, y), Vector2(1.0, y))
-	k.box(S.CAGE, o + Vector3(0.0, -0.065, -0.098), Vector3(0.034, 0.03, 0.002),
+	for y: float in _CAGE_ROWS:
+		_cage_bar(k, o, Vector2(-_CAGE_HALF_WIDTH, y), Vector2(_CAGE_HALF_WIDTH, y))
+	for i: int in _CAGE_BARS:
+		var x: float = _CAGE_HALF_WIDTH * (2.0 * (float(i) + 0.5) / float(_CAGE_BARS) - 1.0)
+		_cage_bar(k, o, Vector2(x, bottom), Vector2(x, top))
+	# The clips holding the cage's sides to the shell.
+	for side: float in [-1.0, 1.0]:
+		k.box(S.CAGE, o + Vector3(side * (_CAGE_HALF_WIDTH + 0.003), (bottom + top) * 0.5, -0.105),
+				Vector3(0.003, (top - bottom) * 0.5 + 0.004, 0.014))
+	k.box(S.CAGE, o + Vector3(0.0, -0.07, -0.118), Vector3(0.03, 0.02, 0.0015),
 			Basis(Vector3.RIGHT, -0.2))
-
-
-# The cage's half width at a height: narrow at the chin, widest across the
-# eyes, following the jaw's V up to the brow.
-static func _cage_half_width(y: float) -> float:
-	if y < _CAGE_EYE_LINE:
-		return lerpf(0.045, 0.078, clampf((y - _MASK_FACE.x) / (_CAGE_EYE_LINE - _MASK_FACE.x), 0.0, 1.0))
-	return lerpf(0.078, 0.070, clampf((y - _CAGE_EYE_LINE) / (_MASK_FACE.y - _CAGE_EYE_LINE), 0.0, 1.0))
 
 
 # One section of the shell: a squarish loop (a superellipse), front and back
@@ -337,16 +338,16 @@ static func _mask_ring(o: Vector3, s: Vector4) -> PackedVector3Array:
 	return out
 
 
-# A cage bar from `a` to `b` (the fraction of the cage's half width across,
-# height in the head's frame), bowed on the cage's surface: furthest out at the
-# nose, back toward the shell at its edges.
+# A cage bar from `a` to `b` (x and height in the head's frame), on the cage's
+# surface: flat across the front, wrapping back toward the shell past
+# _CAGE_FLAT_HALF.
 static func _cage_bar(k: KeeperMeshKit, o: Vector3, a: Vector2, b: Vector2) -> void:
-	const STEPS: int = 6
+	const STEPS: int = 8
 	var prev := Vector3.ZERO
 	for i: int in STEPS + 1:
 		var q: Vector2 = a.lerp(b, float(i) / float(STEPS))
-		var x: float = q.x * _cage_half_width(q.y)
-		var p: Vector3 = o + Vector3(x, q.y, -0.160 + 7.0 * x * x + 2.5 * (q.y - 0.12) * (q.y - 0.12))
+		var wrap: float = maxf(absf(q.x) - _CAGE_FLAT_HALF, 0.0)
+		var p: Vector3 = o + Vector3(q.x, q.y, _CAGE_FRONT_Z + _CAGE_WRAP * wrap * wrap)
 		if i > 0:
 			k.rod(S.CAGE, prev, p, 0.0035)
 		prev = p
