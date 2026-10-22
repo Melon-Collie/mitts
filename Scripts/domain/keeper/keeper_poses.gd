@@ -23,6 +23,11 @@ const READY_TOE_OUT_RAD: float = 0.25
 # The blade sits to the glove side of centre: the lie carries the grip 35 cm
 # out from the heel, and centred on the five-hole it would hold the blocker out
 # by the post instead of over the pad's outer edge.
+# The glove's place on the body, in the chest's frame, the same up or down: just
+# outside the chest's width with the elbow a little out from the body, held
+# out in front a little above the chest's centre. It moves out from here to
+# make a save; it does not drop when he does.
+const GLOVE_FROM_CHEST := Vector3(-0.40, 0.07, -0.48)
 const READY_BLADE := Vector3(-0.08, 0.0, -0.40)
 # The paddle's tilt back toward him. The lie leans it toward the blocker side
 # on its own; a paddle near upright holds the grip out in front of the pads,
@@ -61,6 +66,7 @@ static func upright(p: KeeperPose) -> void:
 		leg.foot_mode = KeeperPose.FootMode.FLAT
 		leg.toe = _FORWARD
 	p.glove_hand = Vector3(-0.38, 0.95, -0.15)
+	p.glove_from_chest = false
 	p.glove_fingers = Vector3(0.0, -1.0, 0.0)
 	p.glove_palm = Vector3(1.0, 0.0, 0.0)
 	p.blade_center = Vector3(0.10, 0.0, -0.45)
@@ -113,7 +119,8 @@ static func butterfly(p: KeeperPose) -> void:
 	p.neck_rot = Vector3(0.20, 0.0, 0.0)
 	for i: int in 2:
 		_butterfly_leg(p.legs[i], _side_x(i), shin_y, knee_z, BUTTERFLY_FLARE_RAD)
-	p.glove_hand = Vector3(-0.46, 0.75, -0.38)
+	p.glove_hand = GLOVE_FROM_CHEST
+	p.glove_from_chest = true
 	p.blocker_elbow_pole = Vector3(-0.2, -1.0, 0.4)
 	p.glove_fingers = Vector3(-0.25, 1.0, -0.1)
 	p.glove_palm = _FORWARD
@@ -173,6 +180,7 @@ static func rvh(p: KeeperPose, side: float) -> void:
 	p.chest_rot = Vector3(0.0, 0.0, side * 0.12)
 	if side < 0.0:
 		p.glove_hand = Vector3(-0.42, 0.95, -0.15)
+		p.glove_from_chest = false
 
 
 # VH on the post at `side`: the post leg standing with its pad upright against
@@ -241,13 +249,16 @@ static func _butterfly_leg(leg: KeeperPose.Leg, sx: float, shin_y: float, knee_z
 	leg.flex = 0.0
 
 
-# Hands out in front of the body at the pad tops; `drop` lowers them for a
-# keeper whose hips are lower than the stance's.
-static func _ready_hands(p: KeeperPose, drop: float) -> void:
-	p.glove_hand = Vector3(-0.38, 0.93 - drop, -0.50)
+# The ready stance's hands: the glove at its place on the chest and the stick
+# out in front, its paddle tilted `extra_tilt` (radians) further back for a
+# keeper whose hips sit lower than the stance's, which lowers the blocker with
+# them.
+static func _ready_hands(p: KeeperPose, extra_tilt: float) -> void:
+	p.glove_hand = GLOVE_FROM_CHEST
+	p.glove_from_chest = true
 	p.glove_fingers = Vector3(-0.25, 1.0, -0.15)
 	p.glove_palm = _FORWARD
 	p.blade_center = READY_BLADE
 	p.blade_yaw = 0.0
-	p.stick_tilt = READY_STICK_TILT_RAD + drop
+	p.stick_tilt = READY_STICK_TILT_RAD + extra_tilt
 	p.blocker_face = Vector3(0.30, 0.0, -1.0)

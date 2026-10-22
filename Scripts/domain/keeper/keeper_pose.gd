@@ -54,8 +54,11 @@ var head_rot: Vector3 = Vector3.ZERO
 var legs: Array[Leg] = [Leg.new(), Leg.new()]
 
 # The catching hand: where the palm's centre goes, which way the fingers point
-# and which way the pocket opens.
+# and which way the pocket opens. With `glove_from_chest` the position is in
+# the chest's frame, so the hand holds its place on the body as the trunk drops
+# and leans; the fingers and pocket stay in keeper space, open to the shooter.
 var glove_hand: Vector3 = Vector3(-0.35, 1.0, -0.35)
+var glove_from_chest: bool = false
 var glove_fingers: Vector3 = Vector3(-0.2, 1.0, 0.0)
 var glove_palm: Vector3 = Vector3(0.0, 0.0, -1.0)
 # Where each elbow tends to point when the arm is solved.
@@ -83,6 +86,7 @@ func copy_from(o: KeeperPose) -> void:
 	for i: int in 2:
 		legs[i].copy_from(o.legs[i])
 	glove_hand = o.glove_hand
+	glove_from_chest = o.glove_from_chest
 	glove_fingers = o.glove_fingers
 	glove_palm = o.glove_palm
 	glove_elbow_pole = o.glove_elbow_pole

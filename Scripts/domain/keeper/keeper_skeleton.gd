@@ -68,9 +68,10 @@ func pose(p: KeeperPose) -> void:
 	var blocker_shoulder: Vector3 = chest * Vector3(
 			KeeperAnatomy.SHOULDER_HALF_SPACING_M, shoulder_y, 0.0)
 	var fwd: Vector3 = -chest.basis.z
-	_pose_arm(Bone.UPPER_ARM_G, glove_shoulder, p.glove_hand, p.glove_elbow_pole, fwd)
+	var glove_at: Vector3 = chest * p.glove_hand if p.glove_from_chest else p.glove_hand
+	_pose_arm(Bone.UPPER_ARM_G, glove_shoulder, glove_at, p.glove_elbow_pole, fwd)
 	_pose_arm(Bone.UPPER_ARM_B, blocker_shoulder, grip, p.blocker_elbow_pole, fwd)
-	xf[Bone.HAND_G] = Transform3D(_limb_basis(-p.glove_fingers, p.glove_palm), p.glove_hand)
+	xf[Bone.HAND_G] = Transform3D(_limb_basis(-p.glove_fingers, p.glove_palm), glove_at)
 	# The blocker's board stands upright on the back of the hand whatever the
 	# stick's lean, face to the shooter.
 	xf[Bone.HAND_B] = Transform3D(_limb_basis(Vector3.UP, p.blocker_face), grip)

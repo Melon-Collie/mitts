@@ -42,6 +42,11 @@ more than they look like:
   the blocker side), and `stick_tilt` tips it back toward him. The grip is up
   the paddle from there and the arm reaches it. Placing the hand first fights a
   rigid stick.
+- **The glove holds its place on the body.** It is placed in the chest's frame
+  (`KeeperPose.glove_from_chest`, `KeeperPoses.GLOVE_FROM_CHEST`): just outside
+  the chest's width, the elbow a little out, the same spot standing and down,
+  so dropping into the butterfly carries the hand with the trunk instead of
+  letting it fall and open a hole. Saves move it out from there.
 
 The thigh rise is the pad carried on past the knee, and it is stiff: it rides
 the shin and bends back onto the thigh only at the break above the knee, by at
