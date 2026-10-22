@@ -78,3 +78,48 @@ static func recover_time(wind_up_t: float, min_s: float, max_s: float) -> float:
 static func clamp_aim(aim: Vector2, line: Vector2, arc_rad: float) -> Vector2:
 	var off: float = line.angle_to(aim)
 	return line.rotated(clampf(off, -arc_rad, arc_rad))
+
+
+# The blade's restitution off a still puck struck at `power`: the deflect model's
+# (PuckCollisionRules.deflect_velocity) at the swing's own speed B, where
+# B(1 + e) = power. Read once per swing, so a feed's pace never deadens the face
+# that drives it — the deflect model's falloff is a static blade smothering a
+# hard puck, and a slapshot's face is moving.
+static func swing_restitution(power: float, e_soft: float, e_hard: float, speed_ref: float) -> float:
+	if e_hard < 0.0 or speed_ref <= 0.0001:
+		return e_soft
+	var e: float = e_soft
+	# Each pass more than halves the error over the slapper's range, so six
+	# settle it far under anything a shot's speed can show.
+	for _i: int in 6:
+		e = lerpf(e_soft, e_hard, clampf(power / (1.0 + e) / speed_ref, 0.0, 1.0))
+	return e
+
+
+# A slapshot struck off a moving puck. `shot` is what the swing gives a still puck
+# (m/s, world); `feed` is the puck's velocity in the shooter's frame (world XZ).
+# Along the line the blade adds `restitution` × the feed's pace at it, and takes
+# as much off one running away; across it, the face keeps `grip` of the glance,
+# so the shot pulls the way the pass was going. The lift is the blade's loft and
+# is untouched. Never faster than `max_speed`, unless the swing alone already is.
+static func one_timer_contact(shot: Vector3, feed: Vector2, restitution: float,
+		grip: float, max_speed: float) -> Vector3:
+	var h := Vector2(shot.x, shot.z)
+	var speed_h: float = h.length()
+	if speed_h < 0.0001:
+		return shot
+	var d: Vector2 = h / speed_h
+	var u_n: float = feed.dot(d)
+	var u_t: Vector2 = feed - d * u_n
+	var out_h: Vector2 = d * maxf(speed_h - restitution * u_n, 0.0) + u_t * grip
+	var out := Vector3(out_h.x, shot.y, out_h.y)
+	return out.limit_length(maxf(max_speed, shot.length()))
+
+
+# How much of a caught feed's pace the swing still meets, `held_s` after the
+# catch: all of it inside `leniency_s`, none by `window_s`, when the window
+# closes. A one-timer held on the blade becomes a slapshot off a still puck.
+static func feed_transfer(held_s: float, leniency_s: float, window_s: float) -> float:
+	if window_s <= leniency_s:
+		return 1.0 if held_s <= leniency_s else 0.0
+	return clampf(1.0 - (held_s - leniency_s) / (window_s - leniency_s), 0.0, 1.0)

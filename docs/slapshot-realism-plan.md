@@ -1,12 +1,13 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
-Status: **Phases 1–4 built, awaiting playtest.** Decisions below were agreed in
+Status: **Phases 1–5 built, awaiting playtest.** Decisions below were agreed in
 chat; phases are ordered so each one can be played on its own.
 
 As built, Phase 1 differs from the design below:
 - The one-timer circle's radius stays `slapper_zone_radius` (0.5 m); only its
-  centre moved onto the strike spot. Deriving the radius from the blade is left
-  for Phase 5, where the contact model lives.
+  centre moved onto the strike spot. Phase 5 left it there too: the contact
+  model decides the shot off a puck the circle caught, not whether it caught
+  one.
 - A feed caught in the circle is pinned at the strike spot, not where this
   machine's puck happens to be, so host and client pin the same point.
 - The hips pivot into the stance at a steady `slapper_stance_turn_deg_s` (450°/s,
@@ -287,6 +288,21 @@ gets its own native instance the way `_native_block_move` does.
 - The puckless wind-up shuffles; the with-puck charge does not.
 
 ## Phase 5 — the pass's pace feeds the one-timer
+
+As built, this differs from the design below:
+- `e` is the deflect model's restitution at the swing's own speed — a still
+  puck's closing speed, solved with `B(1 + e) = P` (`SlapperRules
+  .swing_restitution`) — and the same `e` serves any feed. Read at the feed's
+  closing speed instead, the deflect model's falloff (a static blade smothering
+  a hard puck) deadened the face more than the feed added, and a pass at the
+  swing came off slower than a still puck.
+- The cap is the puck's `max_speed` unless the swing alone is already past it:
+  the feed never takes pace off a shot it did not slow.
+- The shot's lift is the blade's loft and the contact leaves it alone.
+- The goalie's read of a caught one-timer (`predicted_shot_velocity`) strikes
+  the feed as the release will.
+- The grant's feed is the second argument of every `SnapshotEventLog` record
+  (`arg2`, 13 → 17 B), packed as two s16 cm/s, and v83.
 
 The contact is the blade's, so it uses the blade's contact model: the same
 normal/tangential decomposition `PuckCollisionRules.deflect_velocity` runs for

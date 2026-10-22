@@ -12,8 +12,11 @@ const OTHER_PEER: int = 77
 class Capture:
 	var events: Array = []
 
-	func handle(type: int, arg: int) -> void:
+	var arg2s: Array[int] = []
+
+	func handle(type: int, arg: int, arg2: int) -> void:
 		events.append([type, arg])
+		arg2s.append(arg2)
 
 
 func _make() -> SnapshotEventLog:
@@ -47,6 +50,25 @@ func test_negative_arg_round_trips() -> void:
 	var cap := Capture.new()
 	_make().apply_block(_packet(event_log, 0.0), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events[0][1], -1)
+
+
+func test_the_second_arg_round_trips() -> void:
+	var event_log := _make()
+	var feed := Vector2(-12.34, 5.67)
+	event_log.record(SnapshotEventLog.EventType.PICKED_UP, LOCAL_PEER, 1234, 0.0,
+			SnapshotEventLog.pack_feed(feed))
+	var cap := Capture.new()
+	_make().apply_block(_packet(event_log, 0.0), LOCAL_PEER, cap.handle)
+	assert_eq(cap.events[0], [SnapshotEventLog.EventType.PICKED_UP, 1234])
+	assert_almost_eq(SnapshotEventLog.unpack_feed(cap.arg2s[0]), feed, Vector2.ONE * 0.0001)
+
+
+func test_a_feed_packs_to_the_centimetre_in_every_quadrant() -> void:
+	for v: Vector2 in [Vector2(0.004, -0.004), Vector2(38.0, -38.0), Vector2(-21.456, 17.001),
+			Vector2(-0.01, -0.01), Vector2(500.0, -500.0)]:
+		var back: Vector2 = SnapshotEventLog.unpack_feed(SnapshotEventLog.pack_feed(v))
+		var expect := Vector2(clampf(v.x, -327.68, 327.67), clampf(v.y, -327.68, 327.67))
+		assert_almost_eq(back, expect, Vector2.ONE * 0.0051, "%s" % v)
 
 
 func test_empty_block_is_one_byte_and_dispatches_nothing() -> void:

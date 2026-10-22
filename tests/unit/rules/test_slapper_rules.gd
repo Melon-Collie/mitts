@@ -82,3 +82,70 @@ func test_the_aim_turns_off_the_line_no_further_than_the_arc() -> void:
 	var wide: Vector2 = line.rotated(deg_to_rad(-55.0))
 	assert_almost_eq(line.angle_to(SlapperRules.clamp_aim(wide, line, arc)), -arc, 0.0001,
 			"outside it the aim holds at the edge, on the same side")
+
+
+# ── The contact off a moving puck (Phase 5) ──────────────────────────────────
+
+const E_SOFT: float = 0.6
+const E_HARD: float = 0.15
+const SPEED_REF: float = 30.0
+const MAX_SPEED: float = 38.0
+const GRIP: float = 0.2
+
+
+func _shot(power: float) -> Vector3:
+	return Vector3(0.0, 0.0, -power)
+
+
+func test_the_swing_restitution_is_the_deflect_models_at_the_swing_speed() -> void:
+	for power: float in [20.0, 28.0, 34.0, 40.0]:
+		var e: float = SlapperRules.swing_restitution(power, E_SOFT, E_HARD, SPEED_REF)
+		var swing: float = power / (1.0 + e)
+		var model: float = PuckCollisionRules.deflect_velocity(
+				Vector3(0.0, 0.0, swing), Vector3(0.0, 0.0, -1.0),
+				E_SOFT, E_HARD, 1.0, SPEED_REF).length() / swing
+		assert_almost_eq(e, model, 0.001, "%.0f m/s: a still puck off the swing" % power)
+
+
+func test_a_still_puck_takes_the_swings_power() -> void:
+	var out: Vector3 = SlapperRules.one_timer_contact(_shot(30.0), Vector2.ZERO, 0.25, GRIP, MAX_SPEED)
+	assert_almost_eq(out, _shot(30.0), Vector3.ONE * 0.0001)
+
+
+func test_a_feed_at_the_swing_adds_pace_and_one_from_behind_costs_it() -> void:
+	var at: Vector3 = SlapperRules.one_timer_contact(_shot(30.0), Vector2(0.0, 10.0), 0.25, GRIP, MAX_SPEED)
+	var behind: Vector3 = SlapperRules.one_timer_contact(_shot(30.0), Vector2(0.0, -10.0), 0.25, GRIP, MAX_SPEED)
+	assert_almost_eq(at.length(), 32.5, 0.001, "restitution × the pace at the swing")
+	assert_almost_eq(behind.length(), 27.5, 0.001)
+
+
+func test_the_pull_grows_with_cross_speed_and_is_none_without_grip() -> void:
+	var prev: float = 0.0
+	for cross: float in [3.0, 8.0, 15.0]:
+		var out: Vector3 = SlapperRules.one_timer_contact(_shot(30.0), Vector2(cross, 0.0), 0.25, GRIP, MAX_SPEED)
+		var pull: float = Vector2(0.0, -1.0).angle_to(Vector2(out.x, out.z))
+		assert_gt(pull, prev, "%.0f m/s across pulls further, the pass's way" % cross)
+		prev = pull
+		var none: Vector3 = SlapperRules.one_timer_contact(_shot(30.0), Vector2(cross, 0.0), 0.25, 0.0, MAX_SPEED)
+		assert_almost_eq(none, _shot(30.0), Vector3.ONE * 0.0001)
+
+
+func test_the_lift_is_the_blades() -> void:
+	var lofted := Vector3(0.0, 4.0, -30.0)
+	var out: Vector3 = SlapperRules.one_timer_contact(lofted, Vector2(5.0, 10.0), 0.25, GRIP, MAX_SPEED)
+	assert_almost_eq(out.y, 4.0, 0.0001)
+
+
+func test_a_feed_never_drives_the_shot_past_the_pucks_cap() -> void:
+	var out: Vector3 = SlapperRules.one_timer_contact(_shot(36.0), Vector2(0.0, 30.0), 0.25, GRIP, MAX_SPEED)
+	assert_almost_eq(out.length(), MAX_SPEED, 0.001)
+	var hot: Vector3 = SlapperRules.one_timer_contact(_shot(40.0), Vector2(0.0, 30.0), 0.25, GRIP, MAX_SPEED)
+	assert_almost_eq(hot.length(), 40.0, 0.001, "nor slows one the swing alone made faster")
+
+
+func test_a_caught_feed_is_struck_whole_on_the_beat_and_not_at_all_by_the_window() -> void:
+	assert_almost_eq(SlapperRules.feed_transfer(0.0, 0.08, 0.45), 1.0, 0.0001)
+	assert_almost_eq(SlapperRules.feed_transfer(0.08, 0.08, 0.45), 1.0, 0.0001)
+	assert_almost_eq(SlapperRules.feed_transfer(-0.05, 0.08, 0.45), 1.0, 0.0001, "a host's grace")
+	assert_lt(SlapperRules.feed_transfer(0.3, 0.08, 0.45), SlapperRules.feed_transfer(0.2, 0.08, 0.45))
+	assert_almost_eq(SlapperRules.feed_transfer(0.45, 0.08, 0.45), 0.0, 0.0001)

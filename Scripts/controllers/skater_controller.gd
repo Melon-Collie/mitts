@@ -791,6 +791,9 @@ var one_timer_window_duration: float = 0.45
 # being early or late — never being wide.
 var one_timer_leniency_time: float = 0.08
 var one_timer_center_power_bonus: float = 0.10  # ±10%: edge of zone = −10%, dead centre = +10%
+# How much of a feed's pace across the shot line a squared, driven face keeps
+# (SlapperRules.one_timer_contact); 0 lets a one-timer go where it is aimed.
+var one_timer_feed_grip: float = 0.2
 # Minimum wind-up (seconds of slapper charge) before an arriving puck opens the
 # timed one-timer window. Below it — the "puck was already at the stick when the
 # wind-up began" case — a forced window would open at ~zero power and cancel
@@ -1018,6 +1021,9 @@ var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
 var _cross_check: SkaterCrossCheck = SkaterCrossCheck.new()
 var _settle: SkaterSettleGate = SkaterSettleGate.new()
+# The puck's velocity in this skater's frame at its last catch (world XZ),
+# quantized as the grant carries it.
+var _one_timer_feed: Vector2 = Vector2.ZERO
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
 var is_replaying: bool = false
@@ -2459,9 +2465,12 @@ func _nudge() -> void:
 
 # ── Puck Signals ──────────────────────────────────────────────────────────────
 # `settle_until_ms`: the catch's settle deadline (settle_deadline_ms), 0 = clean.
-func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
+# `feed`: the puck's velocity in this skater's frame at the catch (world XZ),
+# which a caught one-timer strikes.
+func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2.ZERO) -> void:
 	has_puck = true
 	_settle.arm(settle_until_ms)
+	_one_timer_feed = feed
 	if _sm.get_state() == State.ONE_TIMER_RETENTION:
 		# The feed landed during the committed hold — the swing caught it. Pin it
 		# to the strike spot (or the puck snaps up to the raised blade) and let the
@@ -3114,13 +3123,13 @@ func _fire_slapper_shot(input: InputState) -> bool:
 			charge,
 			cfg,
 			locked_dir_3d)
-	# One-timer (puck arrived mid-charge → window armed): apply the SAME graded
-	# centre-timing bonus the leniency-release path uses, so the ±10% is one
-	# mechanic on both release paths — reachable however the shot fires, graded
-	# by how centred the puck is. A one-timer that attaches on the pinned zone
-	# spot is a clean, well-timed catch and earns it; a normal carried slapshot
-	# has no window armed and is untouched.
+	# One-timer (puck arrived mid-charge → window armed): the swing strikes the
+	# feed as it was caught, as much of it as the hold has not taken
+	# (_caught_feed), then the SAME graded centre-timing bonus the leniency path
+	# uses, so both are one mechanic on both release paths. A normal carried
+	# slapshot has no window armed and is untouched.
 	if _aiming.one_timer_window_timer > 0.0:
+		_strike_moving_puck(result, _caught_feed())
 		var zone_world: Vector3 = skater.get_slapper_zone_global_position()
 		var zone_xz := Vector2(zone_world.x, zone_world.z)
 		var puck_xz := Vector2(puck.global_position.x, puck.global_position.z)
@@ -3130,6 +3139,29 @@ func _fire_slapper_shot(input: InputState) -> bool:
 	_sm.shot_dir = result.direction
 	_do_release(result.direction, result.power)
 	return true
+
+
+# The caught feed the swing still meets: the catch's, faded by how long it has
+# sat on the blade. The window timer reads the same on host and client at the
+# same input (the host's lag grace is the head start its catch had), so both
+# fade it alike.
+func _caught_feed() -> Vector2:
+	var held_s: float = one_timer_window_duration - _aiming.one_timer_window_timer
+	return _one_timer_feed * SlapperRules.feed_transfer(
+			held_s, one_timer_leniency_time, one_timer_window_duration)
+
+
+# The one-timer's contact (SlapperRules.one_timer_contact) laid onto `result`, a
+# slapshot as the swing would strike a still puck. `feed`: the puck's velocity in
+# the shooter's frame, world XZ.
+func _strike_moving_puck(result: ShotMechanics.ShotResult, feed: Vector2) -> void:
+	var e: float = SlapperRules.swing_restitution(result.power, puck.deflect_normal_restitution,
+			puck.deflect_normal_restitution_min, puck.deflect_speed_ref)
+	var struck: Vector3 = SlapperRules.one_timer_contact(result.direction * result.power,
+			feed, e, one_timer_feed_grip, puck.max_speed)
+	result.power = struck.length()
+	if result.power > 0.0001:
+		result.direction = struck / result.power
 
 
 func _release_slapper(input: InputState) -> void:
@@ -3245,6 +3277,8 @@ func _update_slapper_charge(delta: float) -> void:
 					skater.global_position, skater.global_position,
 					_elevation_level, _aiming.slapper_charge_timer,
 					_slapper_config(), locked_dir_3d, _slapper_pred_scratch)
+			if _aiming.one_timer_window_timer > 0.0:
+				_strike_moving_puck(pred, _caught_feed())
 			skater.predicted_shot_velocity = pred.direction * pred.power
 	if show_one_timer_indicator:
 		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
@@ -3342,6 +3376,8 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 	var result := ShotMechanics.release_slapper(
 			blade_world, input.mouse_world_pos,
 			_elevation_level, _aiming.slapper_charge_timer, cfg, locked_dir_3d)
+	_strike_moving_puck(result, Vector2(view.velocity.x - skater.velocity.x,
+			view.velocity.z - skater.velocity.z))
 	result.power = ShotReleaseRules.one_timer_power(
 			result.power, one_timer_center_power_bonus, zone_xz, puck_xz, slapper_zone_radius)
 	if not is_replaying:

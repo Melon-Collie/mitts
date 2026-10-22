@@ -921,8 +921,8 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 			skater.global_position += _replay_collision_result.sep_b
 
 
-func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
-	super.on_puck_picked_up_network(settle_until_ms)
+func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2.ZERO) -> void:
+	super.on_puck_picked_up_network(settle_until_ms, feed)
 	_claim_cooldown = 0.0
 	_poke_cooldown = 0.0
 	# Reset claim edge state so a drop-then-regrab (or an immediate poke after
