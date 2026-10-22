@@ -5398,6 +5398,7 @@ func _sample_historical_others(exclude_skater: Skater, host_ts: float) -> Array:
 		entry["position"] = state.position
 		entry["velocity"] = state.velocity
 		entry["hit"] = state.hit_committed
+		entry["puck"] = SkaterStateMachine.state_has_puck(state.shot_state)
 		entry["ghost"] = state.is_ghost
 		_hist_others_scratch.append(entry)
 	return _hist_others_scratch

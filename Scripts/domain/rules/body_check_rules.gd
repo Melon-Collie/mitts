@@ -130,27 +130,24 @@ static func _stagger_frac(stagger_timer: float, cfg: Config) -> float:
 
 # The victim transfer-impulse the puck-strip / pickup-denial decision keys off —
 # the SAME "how hard did it land on the victim" magnitude the stagger uses (the
-# actually-applied |Δv|), so the transfer coefficient, both skaters' mass, and the
+# actually-applied |Δv|), so the contact's transfer, both skaters' mass, and the
 # closing speed all decide whether the puck comes loose. A glancing shove barely
 # jars it; an enforcer strips it clean.
 #
-# Reconstructed from impact_force = attacker_weight × approach (what the
-# body_checked_player signal carries): closing = impact_force / attacker_weight,
+# Reconstructed from impact_force = checker_weight × approach (what the
+# body_checked_player signal carries): closing = impact_force / checker_weight,
 # then the delivery is the collision resolver's OWN function
 # (SkaterCollisionRules.victim_kick — the exact inelastic reduced-mass kick
-# resolve() applies), with the brace folded into the transfer the same way the
-# resolver call site does. Delegating rather than mirroring is the point: a
-# reconstruction of the kick here goes silently stale the moment the resolver
-# changes, while delegation propagates a delivery-model change in the same edit.
+# resolve() applies), at the contact's transfer (contact_transfer, the brace in
+# it). Delegating rather than mirroring is the point: a reconstruction of the
+# kick here goes silently stale the moment the resolver changes, while
+# delegation propagates a delivery-model change in the same edit.
 # test_body_check_rules locks the identity against a live resolve() contact.
 static func puck_strip_impulse(
 		impact_force: float,
-		attacker_weight: float,
-		attacker_transfer: float,
-		victim_weight: float,
-		victim_brace_resistance: float,
-		victim_braced: bool) -> float:
-	var effective_transfer: float = attacker_transfer * (victim_brace_resistance if victim_braced else 1.0)
+		checker_weight: float,
+		transfer: float,
+		victim_weight: float) -> float:
 	return SkaterCollisionRules.victim_kick(
-			impact_force / maxf(attacker_weight, 0.001),
-			attacker_weight, victim_weight, effective_transfer)
+			impact_force / maxf(checker_weight, 0.001),
+			checker_weight, victim_weight, transfer)

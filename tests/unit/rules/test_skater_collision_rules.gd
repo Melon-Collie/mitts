@@ -197,3 +197,42 @@ func test_a_given_axis_separates_and_pushes_along_it_only() -> void:
 	assert_eq(out.sep_b.z, 0.0, "no squeeze along the contact")
 	assert_eq(out.dvel_b.z, 0.0)
 	assert_gt(out.dvel_b.x, 0.0)
+
+
+# ── contact_transfer ──────────────────────────────────────────────────────────
+# The one delivery rule the resolver, the reconcile replay and the strip read.
+
+const T: float = 0.65
+const BRACE: float = 0.4
+const PASSIVE: float = 0.3
+
+
+func _ct(a_committed: bool, a_puck: bool, b_committed: bool, b_puck: bool) -> float:
+	return SkaterCollisionRules.contact_transfer(T, a_committed, a_puck, BRACE,
+			T, b_committed, b_puck, BRACE, PASSIVE)
+
+
+func test_contact_transfer_is_the_same_from_either_side() -> void:
+	for a_c: bool in [false, true]:
+		for a_p: bool in [false, true]:
+			for b_c: bool in [false, true]:
+				for b_p: bool in [false, true]:
+					if a_p and b_p:
+						continue
+					assert_almost_eq(_ct(a_c, a_p, b_c, b_p), _ct(b_c, b_p, a_c, a_p), 1e-6,
+							"A %s/%s, B %s/%s" % [a_c, a_p, b_c, b_p])
+
+
+func test_a_committed_checker_delivers_whoever_is_faster() -> void:
+	assert_almost_eq(_ct(true, false, false, false), T, 1e-6)
+	assert_almost_eq(_ct(false, true, true, false), T, 1e-6, "a carrier skating into a set defender")
+
+
+func test_with_nobody_committed_it_is_the_passive_bump() -> void:
+	assert_almost_eq(_ct(false, false, false, true), T * PASSIVE, 1e-6)
+
+
+func test_a_carrier_holding_ctrl_braces_and_never_delivers() -> void:
+	assert_almost_eq(_ct(true, false, true, true), T * BRACE, 1e-6, "checked, braced")
+	assert_almost_eq(_ct(true, true, false, false), T * PASSIVE * BRACE, 1e-6,
+			"bulldozing while braced lands less than the bump")

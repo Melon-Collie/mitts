@@ -175,7 +175,7 @@ func test_puck_strip_impulse_matches_resolver_knockback() -> void:
 	var impact_force: float = att_weight * out.closing_speed
 	assert_almost_eq(
 			BodyCheckRules.puck_strip_impulse(
-					impact_force, att_weight, transfer, vic_weight, 0.4, false),
+					impact_force, att_weight, transfer, vic_weight),
 			out.dvel_b.length(), 1e-5,
 			"reconstruction must equal the applied knockback magnitude")
 
@@ -183,22 +183,15 @@ func test_puck_strip_impulse_scales_with_transfer() -> void:
 	# Same hit, higher attacker transfer → more likely to strip (monotonic in the
 	# transfer arg; in v4 the transfer is flat across builds, but the resolver term
 	# still moves the strip magnitude).
-	var high: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.65, 1.0, 0.4, false)
-	var low: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.30, 1.0, 0.4, false)
+	var high: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.65, 1.0)
+	var low: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.30, 1.0)
 	assert_gt(high, low, "higher transfer delivers a harder strip impulse")
 
 func test_puck_strip_impulse_scales_inverse_with_victim_mass() -> void:
 	# Same hit, heavier victim → harder to dislodge the puck.
-	var light: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.45, 0.82, 0.4, false)
-	var heavy: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.45, 1.18, 0.4, false)
+	var light: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.45, 0.82)
+	var heavy: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.45, 1.18)
 	assert_gt(light, heavy, "a heavier victim absorbs more of the hit — smaller strip impulse")
-
-func test_puck_strip_impulse_brace_reduces_when_braced() -> void:
-	var braced: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.45, 1.0, 0.4, true)
-	var unbraced: float = BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.45, 1.0, 0.4, false)
-	assert_lt(braced, unbraced, "an actively braced victim protects the puck (brace_resistance < 1)")
-	# Braced value = unbraced × brace_resistance.
-	assert_almost_eq(braced, unbraced * 0.4, 1e-5, "brace scales the delivered impulse by brace_resistance")
 
 func test_puck_strip_impulse_baseline_strip_point_is_reachable() -> void:
 	# Medium build vs medium build (weights 1.0, transfer 0.65, unbraced). The
@@ -208,8 +201,8 @@ func test_puck_strip_impulse_baseline_strip_point_is_reachable() -> void:
 	# (1.35 / (0.65 × 0.5)). This is the drifted-breakpoint fix — a full check/strip
 	# no longer needs ~6 m/s closing.
 	assert_almost_eq(
-			BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.65, 1.0, 0.4, false),
+			BodyCheckRules.puck_strip_impulse(6.0, 1.0, 0.65, 1.0),
 			1.95, 1e-5, "medium-vs-medium at 6 m/s closing over-strips at the 0.65 transfer")
 	assert_almost_eq(
-			BodyCheckRules.puck_strip_impulse(1.35 / 0.325, 1.0, 0.65, 1.0, 0.4, false),
+			BodyCheckRules.puck_strip_impulse(1.35 / 0.325, 1.0, 0.65, 1.0),
 			1.35, 1e-5, "the 1.35 strip threshold lands at ~4.15 m/s closing")

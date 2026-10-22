@@ -394,3 +394,10 @@ here whenever you bump, in the same format.
 #      layout (u8 at 0.01 s); a v82 peer reads a rocked timer as a plain full
 #      stagger and predicts a skater with his stick and legs, so mixed builds
 #      must be refused.
+# v84: the knockdown is the victim's balance (BodyBalanceRules), not a fixed
+#      impulse line, and a contact's transfer and outcomes are both bodies'
+#      (SkaterCollisionRules.contact_transfer, a committed checker delivering
+#      whichever body is faster; each body's own Δv judged; the strip and the
+#      credit the checker's). Same layout; a v83 peer predicts the old
+#      knockdowns and the old one-sided contacts, so mixed builds must be
+#      refused.

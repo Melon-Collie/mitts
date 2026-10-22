@@ -614,6 +614,7 @@ var _ties_sticks: bool = true
 var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
+var _stand_up := SkaterAgentStandUp.new()
 var _cross_check := SkaterAgentCrossCheck.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
@@ -752,6 +753,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_caps_by_peer = caps_by_peer
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_stand_up.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_cross_check.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
@@ -2835,6 +2837,13 @@ func _stick_tie_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 		self_state: SkaterNetworkState) -> Vector3:
 	return _stick_play.tie_yank_aim(snapshot, self_pos, self_state, _ties_sticks, _blade_reach)
+
+
+# Meeting a carrier about to skate into us with the shoulder
+# (SkaterAgentStandUp), every physics tick after dispatch and before the board
+# play, which may turn that check at the wall into a pin.
+func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
+	_stand_up.apply(input, snapshot, _check_aggression)
 
 
 # The boards, every physics tick after dispatch (SkaterAgentBoardPlay).

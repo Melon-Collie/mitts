@@ -155,3 +155,20 @@ func test_in_the_stance_he_rides_the_side_hit() -> void:
 	assert_true(_controller.stance_active)
 	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
 	assert_eq(_controller.knockdown_timer, 0.0)
+
+
+# Committed without the puck, he leans into the hit he lands: a full-speed check
+# on a stationary equal man (3.25 m/s back the way he faces) staggers him.
+func test_a_checker_rides_his_own_full_speed_check() -> void:
+	_tick(_committed())
+	assert_true(_skater.delivers_checks())
+	_controller._on_body_check_received(Vector3(0.0, 0.0, -3.25))
+	assert_false(BodyCheckRules.is_rocked(_controller.stagger_timer,
+			_controller.get_body_check_config()))
+	assert_gt(_controller.stagger_timer, 0.0, "slowed and staggered")
+
+
+func test_uncommitted_the_same_hit_rocks_him() -> void:
+	_controller._on_body_check_received(Vector3(0.0, 0.0, -3.25))
+	assert_true(BodyCheckRules.is_rocked(_controller.stagger_timer,
+			_controller.get_body_check_config()))

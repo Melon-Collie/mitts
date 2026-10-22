@@ -103,3 +103,29 @@ func test_square_and_upright_he_rides_a_full_speed_check() -> void:
 	var top: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	assert_gt(_knockdown_closing(P.UPRIGHT, 0.0, 1.0, 1.0), top)
 	assert_lt(_knockdown_closing(P.UPRIGHT, 90.0, 1.0, 1.0), top)
+
+
+func test_a_checker_leans_into_what_drives_him_back_only() -> void:
+	var back: Vector2 = -FACING * 3.0
+	assert_almost_eq(BodyBalanceRules.leaned_into(back, FACING, _cfg).length(),
+			3.0 * _cfg.checker_front_share, 1e-5)
+	var side := Vector2(3.0, 0.0)
+	assert_eq(BodyBalanceRules.leaned_into(side, FACING, _cfg), side, "across him, all of it")
+	var forward: Vector2 = FACING * 3.0
+	assert_eq(BodyBalanceRules.leaned_into(forward, FACING, _cfg), forward)
+
+
+# The checker's own reading of his hit, square on (docs/hit-outcomes-plan.md,
+# Phase 3): the closing speed, both builds and who leans in.
+func test_the_checkers_table() -> void:
+	var snap := Snapshot.new("res://tests/unit/rules/snapshots/checker_share.txt")
+	var rows: Dictionary = {"full speed on a stationary equal man": [10.0, 1.0, 1.0],
+			"stand-up 8 m/s equal": [8.0, 1.0, 1.0],
+			"light checker into heavy, full speed": [10.0, LIGHT_W, HEAVY_W],
+			"two checkers head-on 16 m/s": [16.0, 1.0, 1.0]}
+	for row: String in rows:
+		var r: Array = rows[row]
+		var kick_on_checker: float = SkaterCollisionRules.victim_kick(r[0], r[2], r[1], TRANSFER)
+		snap.record(row, BodyBalanceRules.leaned_into(-FACING * kick_on_checker, FACING,
+				_cfg).length())
+	snap.verify(self)

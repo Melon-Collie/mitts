@@ -1,6 +1,6 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **Phases 0, 1 and 2 built**, playtest pending. Amends the physicality paragraphs of
+Status: **Phases 0–3 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
 own PR and playtest.
@@ -295,20 +295,20 @@ off his feet at modest pace, below the rocked line when hit from the side.
   gate on the get-up, in the code before this phase too (head, bottom arm and
   stick at 1.74 s); that is its own defect.
 
-## Phase 3 — both bodies take an outcome
+## Phase 3 — both bodies take an outcome (built)
 
 ### Rules
 
-- **Delivery is one function**, used by the resolver, the reconcile replay and
-  the strip (`Skater._resolve_player_collisions`,
-  `LocalController`'s replay contact, `Puck.on_body_check`), which today each
-  carry their own copy:
+- **Delivery is one function**, `SkaterCollisionRules.contact_transfer`,
+  symmetric in the two bodies and read by the resolver
+  (`Skater.contact_transfer_with`), the reconcile replay (whose records now
+  carry each other skater's possession) and the strip (`Puck.on_body_check`,
+  whose own copy disagreed with the resolver's about a braced carrier):
   - **Full transfer** when either body is a committed checker: holding Ctrl
     without the puck. Two committed checkers meeting both deliver.
   - **The passive bump** when neither is.
-  - **The brace** (×`body_check_brace_resistance`) when the other body holds
-    Ctrl and is not delivering, which means a braced carrier. A committed
-    checker never braces against his own hit.
+  - **The brace** (×`body_check_brace_resistance`) for a carrier holding Ctrl,
+    which a puckless man holding it never is: he is the checker.
 - **Both bodies are judged.** The shared impulse kicks each by `J/m`, and each
   takes his own outcome (stagger, rocked, knockdown) from his own Δv against
   his own budget. The aggressor gate stays, because it decides which machine
@@ -330,9 +330,11 @@ off his feet at modest pace, below the rocked line when hit from the side.
 
   The first row sits 0.05 m/s under the rocked line, so it goes in the
   snapshot rather than being asserted as a property.
-- **The strip asks about the carrier**, whoever was faster.
-- **The hit stat credits the committed checker** (`HitRules`, "the attacker is
-  not carrying"), whoever was faster.
+- **The strip and the credit are the committed checker's.** When the body
+  whose resolver ran is the carrier and the other is a committed checker,
+  `body_checked_player` fires from the checker's side naming the carrier, so
+  the strip, the hit credit and the client's hit claim all see the defender
+  check the carrier, whoever was faster.
 
 The stand-up then plays out like this: a set defender holding Ctrl meets a
 carrier skating in at 8 m/s, and both are kicked 2.6 m/s. The carrier,
@@ -355,27 +357,40 @@ Read `Scripts/networking/CLAUDE.md` first. What changes:
   side today.
 - Contact geometry is untouched, so the three reconstructions stay
   identical; only which outcomes are read from them changes. The client's
-  hit claim (`HitClaimResolver`) validates the same delivery function.
-- Protocol bump.
+  hit claim (`HitClaimResolver`) rebuilds the closing speed from the rewound
+  velocities along the hitter's line, which never asked who was faster, so
+  it validates a stand-up unchanged.
+- Protocol v84, for Phases 2 and 3 together.
 
 ### Bots
 
-Defenders stand up at the line: a set, committed defender meeting a carrier is
-now a hit, so the `EVEN_OR_UP` gap step-up commits rather than containing. A
-carrier reads a set defender holding Ctrl in his lane as a hit coming and
-cuts, passes or braces.
+Built: **any defender meets a carrier about to skate into him with the
+shoulder** (`AIStandUpRead.meets`, applied by the new `SkaterAgentStandUp`
+ahead of the board play): Ctrl held inside `MEET_S` (0.15 s) of contact when,
+committed, the contact rocks him. It is not the body-check commit — the
+contact is happening anyway, so no containment is given up and the gap
+roles keep their doctrine — so the `EVEN_OR_UP` stand-up at the line lands
+as a check. Rides `check_aggression` (zero on Easy). At the wall the board
+play may still turn it into a pin.
+
+Not built (tracked with the Phase 2 bot items): a carrier reading a set
+defender holding Ctrl in his lane as a hit coming and cutting, passing or
+bracing.
 
 ### Tests
 
 - `test_contact_aggressor_side.gd` inverts: the stand-up rocks and strips the
   carrier and leaves the defender set; stepping up slower than the carrier
   lands the same hit as stepping up faster at the same closing speed.
-- One delivery function: the resolver, the replay contact and the strip agree
-  on every combination of commit, possession and brace (a table test), which
-  retires the strip's disagreement.
-- The checker's table above as snapshot rows; as properties, the checker's
-  outcome never exceeds what the same Δv does to an uncommitted body, and a
-  lighter checker never reads less than a heavier one on the same man.
+- `test_skater_collision_rules.gd`: `contact_transfer` is the same from
+  either side for every commit and possession pair, a committed checker
+  delivers whoever is faster, a braced carrier never delivers.
+- `test_body_balance_rules.gd`: the checker leans into what drives him back
+  only, and the checker's table above as the snapshot `checker_share.txt`.
+- `test_rocked_hit.gd`: through the controller, a committed checker rides
+  his own full-speed check, and the same hit rocks him uncommitted.
+- `test_stand_up_read.gd`: the bot meets a carrier a beat from contact, not
+  while he can still turn, not for a hit that wouldn't rock him.
 
 ## Phase 4 — feel pass
 

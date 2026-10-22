@@ -1,20 +1,19 @@
 extends GutTest
 
 # Which body a skater contact lands on (Skater._resolve_player_collisions). The
-# pair resolves once, from the body moving toward the other more, and only its
-# partner takes the outcome: the stagger and knockdown (body_check_received) and
-# the strip (body_checked_player names him as the victim). A carrier delivers
-# only the passive bump, and a committed defender on the other side of the
-# contact counts only as braced.
+# pair resolves once, from the body moving toward the other more, but who is
+# faster no longer decides who is hit: the transfer is the contact's
+# (SkaterCollisionRules.contact_transfer, a committed checker delivering it
+# whichever way the bodies are moving), both bodies take their own Δv
+# (body_check_received), and the strip and the credit are the committed
+# checker's (body_checked_player names the carrier as his victim).
 #
-# So the same 8 m/s closing between a committed defender and a carrier lands two
-# different hits depending on who is faster along the line: stepping into a
-# slower carrier knocks him down and strips him, while standing up a faster one
-# barely touches him. docs/hit-outcomes-plan.md Phase 3 changes this; these
-# assertions change with it.
+# So a set defender standing up a carrier skating into him lands the same hit
+# as one stepping into a slower carrier at the same closing speed, and leans
+# into his own share of it (BodyBalanceRules.leaned_into).
 #
 # Real Skater scenes at equal mass, resolved by hand. The carrier skates +x,
-# the defender meets him from +x.
+# the defender meets him from +x facing back down the ice at him.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -25,8 +24,8 @@ var _defender: Skater = null
 var _cfg: BodyCheckRules.Config = BodyCheckRules.Config.new()
 # Per body: the impulses body_check_received delivered to it.
 var _received: Dictionary = {}
-# The victims body_checked_player named — whom the strip is evaluated on.
-var _strip_victims: Array[Skater] = []
+# [checker, victim] for every body_checked_player — whom the strip is asked about.
+var _checks: Array[Array] = []
 
 
 func before_each() -> void:
@@ -41,11 +40,13 @@ func before_each() -> void:
 		s.body_check_received.connect(func(i: Vector3, _strength: float) -> void:
 			bucket.append(i))
 		s.body_checked_player.connect(func(v: Skater, _f: float, _d: Vector3) -> void:
-			_strip_victims.append(v))
+			_checks.append([s, v]))
 	_carrier.current_shot_state = SkaterStateMachine.State.SKATING_WITH_PUCK
 	_defender.current_shot_state = SkaterStateMachine.State.SKATING_WITHOUT_PUCK
 	_defender.hit_committed = true
-	_strip_victims.clear()
+	_defender.set_facing(Vector2(-1.0, 0.0))
+	_carrier.set_facing(Vector2(1.0, 0.0))
+	_checks.clear()
 
 
 func _spawn() -> Skater:
@@ -69,11 +70,19 @@ func _contact(carrier_speed: float) -> void:
 	_defender._resolve_player_collisions()
 
 
-func _largest(s: Skater) -> float:
-	var best: float = 0.0
+func _largest(s: Skater) -> Vector3:
+	var best := Vector3.ZERO
 	for i: Vector3 in _received[s]:
-		best = maxf(best, i.length())
+		if i.length() > best.length():
+			best = i
 	return best
+
+
+func _checked_by_defender() -> bool:
+	for pair: Array in _checks:
+		if pair[0] == _defender and pair[1] == _carrier:
+			return true
+	return false
 
 
 func _carrier_keeps_the_puck() -> bool:
@@ -83,40 +92,46 @@ func _carrier_keeps_the_puck() -> bool:
 	puck.set_process(false)
 	puck._is_server = true
 	puck.set_carrier(_carrier)
-	if _strip_victims.has(_carrier):
+	if _checked_by_defender():
 		puck.on_body_check(_defender, _carrier, _defender.weight * CLOSING_M_S,
 				Vector3(-1.0, 0.0, 0.0))
 	return puck.carrier == _carrier
 
 
-# The control: the defender is the faster body, so he resolves the contact and
-# delivers his full committed transfer.
+# What the defender's own share reads as, leaning into it.
+func _defender_feels() -> float:
+	var dv: Vector3 = _largest(_defender)
+	return BodyBalanceRules.leaned_into(Vector2(dv.x, dv.z), _defender.get_facing(),
+			BodyBalanceRules.Config.new()).length()
+
+
 func test_stepping_into_a_slower_carrier_strips_him() -> void:
 	_contact(1.0)
-	assert_gt(_largest(_carrier), _cfg.ref_impulse, "a full check")
-	assert_true(_strip_victims.has(_carrier))
+	assert_gt(_largest(_carrier).length(), _cfg.ref_impulse, "a full check")
+	assert_true(_checked_by_defender())
 	assert_false(_carrier_keeps_the_puck(), "stripped")
-	assert_lt(_carrier.velocity.x, 1.0, "driven back")
 
 
-# The stand-up: the defender set on his spot, the carrier skating into him. The
-# carrier is the faster body, so he resolves the contact with the passive bump,
-# and the defender's commit only braces him.
-func test_standing_up_a_faster_carrier_barely_touches_him() -> void:
+# The stand-up: the defender set on his spot, the carrier skating into him.
+func test_standing_up_a_faster_carrier_rocks_and_strips_him() -> void:
 	_contact(CLOSING_M_S)
-	assert_eq((_received[_carrier] as Array).size(), 0,
-			"the carrier takes no stagger, no knockdown")
-	assert_false(_strip_victims.has(_carrier), "the strip is never asked about him")
-	assert_true(_carrier_keeps_the_puck())
-	assert_lt(_largest(_defender), _cfg.min_impulse,
-			"the hit is a bump below the stagger floor on either body")
-	assert_gt(_carrier.velocity.x, 0.9 * CLOSING_M_S, "he skates on through")
+	assert_gt(_largest(_carrier).length(), _cfg.ref_impulse, "a full check: rocked")
+	assert_true(_checked_by_defender(), "the strip and the credit are the defender's")
+	assert_false(_carrier_keeps_the_puck())
+	assert_lt(_carrier.velocity.x, CLOSING_M_S - _cfg.ref_impulse,
+			"slowed by a full check, not skating on through")
 
 
-# Stepping up does not help while the carrier is still the faster body: the
-# same closing speed, the same bump.
-func test_stepping_up_slower_than_the_carrier_lands_the_same_bump() -> void:
+func test_the_set_defender_leans_into_his_share() -> void:
+	_contact(CLOSING_M_S)
+	assert_gt(_largest(_defender).length(), _cfg.ref_impulse, "the same impulse lands on him")
+	assert_lt(_defender_feels(), _cfg.ref_impulse, "leaning into it, he is staggered, not rocked")
+
+
+func test_stepping_up_slower_than_the_carrier_lands_the_same_hit() -> void:
 	_contact(5.0)
-	assert_eq((_received[_carrier] as Array).size(), 0)
-	assert_false(_strip_victims.has(_carrier))
-	assert_lt(_largest(_defender), _cfg.min_impulse)
+	var slower_than_him: float = _largest(_carrier).length()
+	before_each()
+	_contact(1.0)
+	assert_almost_eq(slower_than_him, _largest(_carrier).length(), 1e-4,
+			"the closing speed decides it, not who is faster")

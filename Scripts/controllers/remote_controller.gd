@@ -435,6 +435,7 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		_sample_scratch.velocity = newest.velocity
 		_sample_scratch.brake_intent = newest.brake_intent
 		_sample_scratch.hit_committed = newest.hit_committed
+		_sample_scratch.shot_state = newest.shot_state
 		# Ghost gate for the reconcile replay's body-check re-resolution — left
 		# unset the scratch holds the constructor default (false) and replay
 		# resolves contacts against ghosted skaters the host skipped, a reconcile
@@ -450,6 +451,7 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		# Brace at/before host_time — a discrete flag, so take the earlier sample.
 		_sample_scratch.brake_intent = f.brake_intent
 		_sample_scratch.hit_committed = f.hit_committed
+		_sample_scratch.shot_state = f.shot_state
 		# Discrete like brake_intent — the at/before-host_time sample, so a
 		# mid-window ghost transition replays the way the host resolved it.
 		_sample_scratch.is_ghost = f.is_ghost

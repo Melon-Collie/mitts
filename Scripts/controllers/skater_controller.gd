@@ -173,6 +173,7 @@ var balance_ref_dv: float = 2.4            # m/s a square, upright, reference-he
 var balance_along_share: float = 0.5       # share of a hit along his blades that tips him
 var balance_sight_behind: float = 0.6      # his balance with his back to the hitter
 var balance_vulnerable_mult: float = 0.6   # ... mid-shot: a wind-up, a load, a follow-through
+var balance_checker_front_share: float = 0.4  # a committed checker takes his own hit at this
 var knockdown_ref_overshoot: float = 1.7   # past his balance by this, the longest knockdown
 var knockdown_min_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
 var knockdown_max_seconds: float = 1.9     # down time of a maximal hit
@@ -1534,12 +1535,12 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 		return
 	puck.on_body_check(skater, victim, impact_force, hit_direction)
 
-# This skater just absorbed a check (victim-only signal). The host sets the stagger
-# window scaled by hit strength, then broadcasts stagger_timer via
+# This skater just absorbed his side of a contact (either body's). The host sets
+# the stagger window scaled by hit strength, then broadcasts stagger_timer via
 # fill_network_state. `max` so a weaker follow-up never shortens an in-flight
 # stagger.
 #
-# The LOCAL victim also fires this, so it predicts its own stagger off the same
+# The LOCAL skater also fires this, so it predicts its own stagger off the same
 # transfer impulse rather than waiting a round-trip for the host's snapshot.
 # Reconcile snaps stagger_timer to the server value and re-derives the decay, so
 # a misprediction self-heals in one reconcile. Remote bodies on a client still
@@ -1555,10 +1556,17 @@ func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -
 # `full_check`, the rocked band and the knockdown — which reads his balance
 # (BodyBalanceRules) against how far his body was driven, so the boards behind
 # him add to the stagger and not to the fall. A shove is no full check: it
-# staggers him and nothing more.
+# staggers him and nothing more. Committed to a check, he leans into it
+# (BodyBalanceRules.leaned_into), whichever body's resolver landed it.
 func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) -> void:
-	var impulse_magnitude: float = impulse.length()
-	var stagger_from: float = maxf(impulse_magnitude, stagger_strength)
+	var felt: Vector3 = impulse
+	if skater.delivers_checks():
+		var leaned: Vector2 = BodyBalanceRules.leaned_into(Vector2(impulse.x, impulse.z),
+				skater.get_facing(), _balance_config())
+		felt = Vector3(leaned.x, 0.0, leaned.y)
+	var impulse_magnitude: float = felt.length()
+	var felt_share: float = impulse_magnitude / maxf(impulse.length(), 1e-6)
+	var stagger_from: float = maxf(impulse_magnitude, stagger_strength * felt_share)
 	# Capture the recoil direction (body frame) so the torso reels the way the
 	# hit shoved it — see SkaterPoseCoordinator._apply_lean. Set on every
 	# machine that resolves the hit; a client-rendered remote's is overwritten by
@@ -1576,7 +1584,7 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) ->
 	var stagger_add: float = minf(BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg),
 			cfg.max_stagger_seconds)
 	if full_check:
-		var overshoot: float = BodyBalanceRules.overshoot(Vector2(impulse.x, impulse.z),
+		var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
 				skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
 		knockdown_add = BodyCheckRules.knockdown_seconds_from_overshoot(overshoot, cfg)
 		stagger_add = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
@@ -3572,6 +3580,7 @@ func _balance_config() -> BodyBalanceRules.Config:
 		_cached_balance_cfg.along_share = balance_along_share
 		_cached_balance_cfg.sight_behind = balance_sight_behind
 		_cached_balance_cfg.vulnerable_mult = balance_vulnerable_mult
+		_cached_balance_cfg.checker_front_share = balance_checker_front_share
 		_cached_balance_cfg.stance_base_ratio = \
 				(GaitPose.HIP_HALF_WIDTH + stance_width_m) / GaitPose.HIP_HALF_WIDTH
 	return _cached_balance_cfg

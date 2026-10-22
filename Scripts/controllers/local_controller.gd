@@ -65,7 +65,7 @@ var _poke_claim_floor: float = 0.0
 # host authority rather than an impulse captured against live interpolated
 # positions. Never cache a recorded impulse and replay that instead.
 # Provider: func(exclude_skater: Skater, host_ts: float) -> Array of
-# {skater, position, velocity, hit}. Set by GameManager (_sample_historical_others).
+# {skater, position, velocity, hit, puck, ghost}. Set by GameManager (_sample_historical_others).
 var _historical_others_provider: Callable = Callable()
 # Reused across pairs during replay re-resolution — no per-pair allocation.
 var _replay_collision_result: SkaterCollisionRules.Result = SkaterCollisionRules.Result.new()
@@ -855,7 +855,14 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		if dist >= my_radius + other_radius:
 			continue
 		var ovel: Vector3 = rec["velocity"]
-		var ohit: bool = rec["hit"]   # the other's replicated hit-commit (brace / delivery)
+		# The live resolver's transfer, from this tick's commit and possession and
+		# the other's replicated ones.
+		var transfer: float = SkaterCollisionRules.contact_transfer(
+				skater.body_check_transfer, local_hit_committed,
+				SkaterStateMachine.state_has_puck(skater.current_shot_state),
+				skater.body_check_brace_resistance,
+				other.body_check_transfer, rec["hit"], rec["puck"],
+				other.body_check_brace_resistance, skater.hit_passive_transfer_mult)
 		var n: Vector3 = axis
 		if axis == Vector3.ZERO:
 			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
@@ -870,22 +877,12 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 		else:
 			local_is_aggressor = skater.collision_tiebreak_id < other.collision_tiebreak_id
 		if local_is_aggressor:
-			# local delivery (from the replayed input) × the victim's replicated brace.
-			var transfer: float = skater.body_check_transfer \
-					* (1.0 if local_hit_committed else skater.hit_passive_transfer_mult) \
-					* (other.body_check_brace_resistance if ohit else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					my_pos, skater.velocity, skater.weight, my_radius,
 					opos, ovel, other.weight, other_radius, transfer, axis)
 			skater.velocity += _replay_collision_result.dvel_a
 			skater.global_position += _replay_collision_result.sep_a
 		else:
-			# Other is the aggressor, local is the victim: the attacker's
-			# full-vs-passive delivery comes from the replicated hit-commit, the
-			# local brace from the replayed input's hit_held.
-			var transfer: float = other.body_check_transfer \
-					* (1.0 if ohit else other.hit_passive_transfer_mult) \
-					* (skater.body_check_brace_resistance if local_hit_committed else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					opos, ovel, other.weight, other_radius,
 					my_pos, skater.velocity, skater.weight, my_radius,

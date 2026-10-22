@@ -359,12 +359,10 @@ var body_check_brace_resistance: float = 0.4
 # Set by the controller each tick via hit_committed below (re-derived from
 # input.hit_held, so it survives reconcile with no wire cost).
 var hit_passive_transfer_mult: float = 0.3
-# True this tick when the attacker is committing a check (hit button held,
-# locomotion not suppressed). Written by SkaterController._apply_movement from the
-# replicated input.hit_held; read in _resolve_player_collisions to pick between
-# full and passive transfer. Not itself on the wire — the aggressor is always the
-# locally-simulated body wherever the resolver reads it (host sims all, a client
-# its own), and replay re-derives it from input.hit_held.
+# True this tick when this skater has Ctrl committed (hit button held and not
+# refused: locomotion suppressed, pinned, knocked down, rocked). Written by
+# SkaterController._apply_movement from the input; replicated, and written onto a
+# remote from the wire, so contact_transfer reads both bodies' on every machine.
 var hit_committed: bool = false
 
 # Machine-authority flags, injected once at spawn by GameManager._on_player_spawned
@@ -445,14 +443,14 @@ var stick_knob_mesh: MeshInstance3D = null
 
 signal body_checked_player(victim: Skater, impact_force: float, hit_direction: Vector3)
 signal body_check_impulse_applied(impulse: Vector3)
-# Fired ON THE VICTIM with the transfer impulse (m/s, world space) it just
-# absorbed — its magnitude for the knockdown, its direction for the recoil lean —
-# and how hard it landed for the stagger (`stagger_strength`, m/s: the impulse's
-# own magnitude, or more when the boards were behind him, BoardPinRules). Distinct from body_check_impulse_applied (which fires for BOTH roles —
-# the attacker's restitution bounce and the victim's transfer — and feeds the
-# reconcile velocity buffer): this one is victim-only, so the controller can apply
-# the stagger debuff without mistaking a delivered hit's bounce-back for
-# being hit. Host-authoritative consumers gate on is_host; see
+# Fired on each body of a contact, where this machine owns it, with the Δv
+# (m/s, world space) it just absorbed — its magnitude and direction for the
+# knockdown, its direction for the recoil lean — and how hard it landed for the
+# stagger (`stagger_strength`, m/s: the Δv's own magnitude, or more when the
+# boards were behind him, BoardPinRules). There is no bounce to mistake for a
+# hit (the contact is inelastic), and a committed checker's controller leans
+# into his own share (BodyBalanceRules.leaned_into). body_check_impulse_applied
+# is the other body's Δv for its reconcile buffer. See
 # SkaterController._on_body_check_received.
 signal body_check_received(impulse: Vector3, stagger_strength: float)
 # Fired at the END of _physics_process, AFTER integration + collision resolution
@@ -1151,42 +1149,31 @@ func _resolve_player_collisions() -> void:
 			continue
 		if absf(agg_metric) <= 0.0001 and collision_tiebreak_id > other.collision_tiebreak_id:
 			continue
-		# Transfer (0..1) = attacker (self) delivery × hit-button commit gate × victim
-		# brace. The Hit button is BOTH sides of the physical battle: committing (self)
-		# delivers full transfer instead of hit_passive_transfer_mult ("deal more"), and
-		# committing (the victim) braces to cut the delivered impulse ("take less") —
-		# the brace moved off brake onto the same button. Both read the REPLICATED
-		# hit_committed so they evaluate identically on every machine.
-		#
-		# But a puck CARRIER can't DELIVER an offensive check — holding the button
-		# while carrying only BRACES (the victim-brace below still reads hit_committed
-		# regardless of possession), so a carrier bulldozing lands the incidental
-		# passive bump, not a full hit. Derived from the replicated current_shot_state
-		# so it re-evaluates identically on every machine and through reconcile.
-		var delivering: bool = hit_committed \
-				and not SkaterStateMachine.state_has_puck(current_shot_state)
-		var atk_transfer: float = body_check_transfer \
-				* (1.0 if delivering else hit_passive_transfer_mult)
-		var brace: float = other.body_check_brace_resistance if other.hit_committed else 1.0
+		# Transfer from both bodies' replicated commit and possession
+		# (SkaterCollisionRules.contact_transfer), so it is the same whichever
+		# side's resolver runs, on every machine and through reconcile.
+		var transfer: float = contact_transfer_with(other)
 		SkaterCollisionRules.resolve(_collision_result,
 				my_pos, velocity, weight, my_radius,
 				other_pos, other.velocity, other.weight, other_radius,
-				atk_transfer * brace, axis)
+				transfer, axis)
 		if not _collision_result.overlapping:
 			continue
-		# Self (attacker): separation + inelastic decel / drive-through, applied
+		# Self: separation + inelastic decel / drive-through, applied
 		# unconditionally (this machine simulates self wherever the resolver runs).
 		# Recorded for reconcile replay via the body_check_delta capture in
 		# _physics_process (velocity - vel_pre_body_check).
 		global_position += _collision_result.sep_a
 		my_pos = global_position
-		velocity += _collision_result.dvel_a
-		# Victim side only when this machine authoritatively owns `other` (host owns
-		# all; a client owns only its local predicted skater) — same gate as the old
-		# resolver, skipping churn the next host snapshot overwrites. The emit records
-		# the victim's incoming impulse for ITS reconcile replay and drives the stagger
-		# (body_check_received). The knockback magnitude (|dvel_b|) is now the inelastic
-		# reduced-mass impulse, not the old weight-ratio transfer formula.
+		var self_delta: Vector3 = _collision_result.dvel_a
+		velocity += self_delta
+		# Both bodies take their own outcome (body_check_received) where this
+		# machine owns them: the host owns all, a client only its local predicted
+		# skater. The other's emit also records his incoming impulse for HIS
+		# reconcile replay; ours is captured by the body_check_delta above.
+		if (is_host_machine or is_local_skater) and self_delta.length_squared() > 0.0001:
+			body_check_received.emit(self_delta,
+					_backstopped(self, other, self_delta, -n, transfer))
 		if is_host_machine or other.is_local_skater:
 			other.global_position += _collision_result.sep_b
 			var other_vel_before: Vector3 = other.velocity
@@ -1195,23 +1182,46 @@ func _resolve_player_collisions() -> void:
 			if other_delta.length_squared() > 0.0001:
 				other.body_check_impulse_applied.emit(other_delta)
 				other.body_check_received.emit(other_delta,
-						_backstopped(other, other_delta, n, atk_transfer * brace))
-		# Credit / claim path — only on a real (closing) hit, NOT gated by authority
-		# (must fire on the attacker's own machine and the host for lag-comp
-		# validation, Lever A). impact_force keeps the weight × closing convention
-		# BodyCheckRules.puck_strip_impulse reconstructs the strip magnitude from.
+						_backstopped(other, self, other_delta, n, transfer))
+		# Credit / claim / strip — only on a real (closing) hit, NOT gated by
+		# authority (it must fire on the checker's own machine and the host for
+		# lag-comp validation, Lever A). It is the CHECKER's: the committed body
+		# without the puck, so a carrier skating into a set defender is checked
+		# by him. impact_force keeps the checker's weight × closing convention
+		# BodyCheckRules.puck_strip_impulse reconstructs the strip from.
 		if _collision_result.impulse_applied:
-			body_checked_player.emit(other, weight * _collision_result.closing_speed, n)
+			if other.delivers_checks() and not delivers_checks():
+				other.body_checked_player.emit(self,
+						other.weight * _collision_result.closing_speed, -n)
+			else:
+				body_checked_player.emit(other, weight * _collision_result.closing_speed, n)
 
 
-# How hard the hit landed for the victim's stagger: his own Δv, or more when the
-# boards are behind him (BoardPinRules). The knockback itself is untouched.
-func _backstopped(victim: Skater, delta_v: Vector3, n: Vector3, transfer: float) -> float:
+# Ctrl held without the puck: this body delivers a full check (contact_transfer).
+func delivers_checks() -> bool:
+	return hit_committed and not SkaterStateMachine.state_has_puck(current_shot_state)
+
+
+# The transfer a contact between this body and `other` lands at.
+func contact_transfer_with(other: Skater) -> float:
+	return SkaterCollisionRules.contact_transfer(
+			body_check_transfer, hit_committed,
+			SkaterStateMachine.state_has_puck(current_shot_state), body_check_brace_resistance,
+			other.body_check_transfer, other.hit_committed,
+			SkaterStateMachine.state_has_puck(other.current_shot_state),
+			other.body_check_brace_resistance, hit_passive_transfer_mult)
+
+
+# How hard the hit landed on `victim` for his stagger: his own Δv, or more when
+# the boards are behind him (BoardPinRules) — `from` is the body that drove him,
+# along `n` (unit, toward the victim). The knockback itself is untouched.
+func _backstopped(victim: Skater, from: Skater, delta_v: Vector3, n: Vector3,
+		transfer: float) -> float:
 	var wall_out: Vector2 = BoardPinRules.wall_normal(victim.global_position,
 			victim.collision_radius(), BoardPinRules.BACKSTOP_MARGIN_M)
 	return BoardPinRules.backstop_hit_strength(delta_v.length(),
 			_collision_result.closing_speed, transfer, Vector2(n.x, n.z), wall_out,
-			weight, victim.weight)
+			from.weight, victim.weight)
 
 
 # Holds the body inside the rink by projecting its XZ onto the inner board

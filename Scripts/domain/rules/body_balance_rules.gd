@@ -32,6 +32,10 @@ class Config:
 	# hip GaitPose.HIP_HALF_WIDTH off centre. The controller derives it from those
 	# two; test_rocked_hit.gd holds this default to its value.
 	var stance_base_ratio: float = (0.13 + 0.125) / 0.13
+	# A committed checker leans into the contact: the part of his Δv that drives
+	# him back the way he faces counts at this share for his every outcome, so
+	# landing a check slows him without rocking him.
+	var checker_front_share: float = 0.4
 
 
 enum Posture { UPRIGHT, STANCE, VULNERABLE }
@@ -79,3 +83,12 @@ static func overshoot(dv: Vector2, facing: Vector2, posture: Posture,
 		height_mult: float, cfg: Config) -> float:
 	var b: float = budget(dv, facing, posture, height_mult, cfg)
 	return tip_dv(dv, facing, cfg) / maxf(b, 1e-6)
+
+
+# `dv` as a committed checker facing `facing` takes it: the part driving him
+# back the way he faces at checker_front_share, the rest whole.
+static func leaned_into(dv: Vector2, facing: Vector2, cfg: Config) -> Vector2:
+	var along: float = dv.dot(facing)
+	if along >= 0.0:
+		return dv
+	return dv - facing * along * (1.0 - cfg.checker_front_share)

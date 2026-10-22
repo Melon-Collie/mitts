@@ -22,6 +22,7 @@ passed per call, and only its own fields written.
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
 | `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
+| `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
 | `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
 | `SkaterAgentCrossCheck` | the cross-check on a screen or a loose-puck race, and a screener's set against one |
@@ -51,8 +52,10 @@ Adding a behaviour is four steps:
 | any press state | CARRY | the release fires, or the press bails |
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 
-After dispatch, `SkaterAgent.tick` runs four per-tick passes that may overwrite
-the dispatched input: the stick lift, board play (`apply_board_play`), the shot
+After dispatch, `SkaterAgent.tick` runs five per-tick passes that may overwrite
+the dispatched input: the stick lift, the stand-up (`apply_stand_up`, ahead of
+the board play so a check it starts at the wall can become a pin), board play
+(`apply_board_play`), the shot
 block (`SkaterAgentShotBlock`) and the cross-check (`SkaterAgentCrossCheck`, last,
 so a stick or a body the others took throws nothing). The offside brake (`apply_offside_guard`)
 runs after all of them as the last write to the move, so no writer — the rolled

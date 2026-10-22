@@ -268,6 +268,14 @@ stride, so it is never free insurance. Read through the tier's perception delay,
 a fast square drive catches him still thinking he has time, and a slow approach
 gives him time to leave. The `protects_the_puck` cognition gate.
 
+**Any defender meets a carrier skating into him with the shoulder**
+(`AIStandUpRead`, applied by `SkaterAgentStandUp` after dispatch): Ctrl held
+inside `MEET_S` of contact when, committed, the contact rocks him. It is not
+the body-check commit — nothing is chased and no containment is given up,
+because by then the contact is happening anyway; it only makes a carrier who
+skates into a set defender meet a check rather than a bump. It rides
+`check_aggression` (zero on Easy).
+
 **Any defender's extra is the shot block** (`AIShotBlockRead`, applied by
 `SkaterAgentShotBlock` every tick after dispatch). He drops into it when an
 opponent in our end winds up and we stand on the line from the release to our
