@@ -8,7 +8,8 @@ extends SkaterMeshBuilder
 # camera. Cosmetic only — puck physics is analytic
 # (GameRules.PUCK_COLLISION_RADIUS); nothing reads this mesh.
 
-const _PUCK_PROFILE: Array[Vector2] = [
+# (height, radius), top rim down to the bottom chamfer.
+const PROFILE: Array[Vector2] = [
 	Vector2(0.0127, 0.034),   # top face rim
 	Vector2(0.0083, 0.0381),  # chamfer → full radius
 	Vector2(-0.0083, 0.0381),
@@ -21,4 +22,4 @@ static func apply_puck(puck: Node3D) -> void:
 
 
 static func _build_puck() -> ArrayMesh:
-	return _build_lathe(_PUCK_PROFILE, 12, 1.0, 1.0)
+	return _build_lathe(PROFILE, 12, 1.0, 1.0)
