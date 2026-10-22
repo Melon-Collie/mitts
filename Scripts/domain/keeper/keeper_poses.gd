@@ -47,6 +47,10 @@ const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
 # face so the paddle rises in front of it.
 const HALF_BUTTERFLY_BLADE := Vector3(-0.08, 0.0, -0.56)
 const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
+# Low enough that the extended leg lies within 30° of straight, high enough that
+# its knee still lands near enough the middle for the thigh rise to meet the
+# paddle along the ice.
+const EXTENSION_PELVIS_HEIGHT_M: float = 0.38
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
 # The blade sits a few inches ahead of the pads, to the glove side of centre
@@ -147,19 +151,24 @@ static func butterfly(p: KeeperPose) -> void:
 	p.blocker_face = Vector3(0.30, 0.0, -1.0)
 
 
-# The butterfly with one pad pushed out along the ice toward the post on `side`:
-# the leg straightens at the knee and the hip opens, the pad's face still to
-# the shooter and its toe on the ice.
+# The butterfly with one pad driven out along the ice toward the post on `side`:
+# hip, knee and ankle in one line out from the hip, square to the shooter, as
+# straight as the dropped hips let a leg lie on the ice; the other knee stays
+# down under him. The trunk rolls over the push and the neck brings the eyes
+# back toward level.
 static func butterfly_extension(p: KeeperPose, side: float) -> void:
 	butterfly(p)
-	var i: int = 0 if side < 0.0 else 1
-	var leg: KeeperPose.Leg = p.legs[i]
-	var shin_y: float = KeeperAnatomy.PAD_WIDTH_M * 0.5
-	leg.knee = Vector3(side * 0.40, shin_y, -0.02)
-	leg.ankle = Vector3(side * 0.88, shin_y, 0.04)
-	p.pelvis += Vector3(side * 0.10, -0.06, 0.0)
-	p.pelvis_rot.z = -side * 0.18
-	p.chest_rot.z = side * 0.10
+	var leg: KeeperPose.Leg = p.legs[0 if side < 0.0 else 1]
+	p.pelvis.y = EXTENSION_PELVIS_HEIGHT_M
+	var hip := Vector3(side * KeeperAnatomy.HIP_HALF_SPACING_M, KeeperAnatomy.PAD_WIDTH_M * 0.5,
+			p.pelvis.z)
+	var out := Vector3(side, 0.0, 0.0)
+	leg.knee = hip + out * KeeperAnatomy.THIGH_M
+	leg.ankle = leg.knee + out * KeeperAnatomy.SHIN_M
+	p.pelvis_rot.z = -side * 0.12
+	p.lumbar_rot.z = -side * 0.06
+	p.chest_rot.z = -side * 0.04
+	p.neck_rot.z = side * 0.10
 	# The extended leg lies across the paddle's path: the blade goes out ahead.
 	p.blade_center = EXTENSION_BLADE
 

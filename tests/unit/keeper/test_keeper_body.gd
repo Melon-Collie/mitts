@@ -197,6 +197,24 @@ func test_the_butterfly_seals_the_ice() -> void:
 		x += 0.02
 
 
+# Extended, the leg runs out straight and its knee leaves the middle: the rise
+# along the ice must still meet the paddle, or the push opens the five-hole.
+func test_the_extension_seals_the_ice() -> void:
+	var out := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+	for side: float in [-1.0, 1.0]:
+		KeeperPoses.butterfly_extension(_pose, side)
+		_skel.pose(_pose)
+		var x: float = -0.60
+		while x <= 0.90:
+			var hit: int = KeeperGear.nearest(_skel, Vector3(side * x, y, -3.0),
+					Vector3(side * x, y, 1.0), GameRules.PUCK_COLLISION_RADIUS, out, scratch)
+			assert_true(hit >= 0, "extension %+.0f: a puck along the ice at x %.2f meets him"
+					% [side, side * x])
+			x += 0.02
+
+
 func _span_y(part: int) -> Vector2:
 	var t: Transform3D = KeeperGear.box(_skel, part)
 	var h: Vector3 = KeeperGear.half_extents(part)
