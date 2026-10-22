@@ -545,6 +545,9 @@ static func _ensure_extras(goalie: Goalie) -> void:
 		cage.material_override = cage_mat
 		cage.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		head.add_child(cage)
+	var stick: Node3D = goalie.get_node("BlockArm/Stick") as Node3D
+	if stick.get_node_or_null("StickKnob") == null:
+		stick.add_child(_stick_knob())
 	var body: MeshInstance3D = goalie.body_mesh
 	if body == null or body.get_node_or_null("Neck") != null:
 		return
@@ -562,6 +565,23 @@ static func _ensure_extras(goalie: Goalie) -> void:
 	BodyRim.apply(neck_mat)
 	neck.material_override = neck_mat
 	body.add_child(neck)
+
+
+# White tape knob capping the shaft butt — the fixed house look for the goalie
+# stick: goalies tape heavily and white is the norm, so unlike the skater's knob
+# it never tracks a kit color. Shaft top is at Stick-local y = 0.5 (mesh at 0.25,
+# box 0.5 tall); the knob sits proud of it by the same 1 cm as the skater's.
+static func _stick_knob() -> MeshInstance3D:
+	var knob := MeshInstance3D.new()
+	knob.name = "StickKnob"
+	knob.mesh = SkaterMeshBuilder.shared_knob()
+	knob.position = Vector3(0.0, 0.5 - SkaterMeshBuilder.KNOB_HEIGHT_M * 0.5 + 0.01, 0.0)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = Color(0.93, 0.93, 0.90)
+	mat.roughness = 0.9
+	BodyRim.apply(mat)
+	knob.material_override = mat
+	return knob
 
 
 static func _build_mask() -> ArrayMesh:

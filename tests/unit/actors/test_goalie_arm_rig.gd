@@ -36,15 +36,21 @@ func _posed(state: int, blocking: bool = false) -> Goalie:
 	i.direction_sign = 1
 	i.blocking_seal = blocking
 	g.apply_body_config(b.build(i), 1.0)
-	g._update_connectors()
+	_limbs(g).update()
 	return g
+
+
+func _limbs(g: Goalie) -> GoalieLimbRig:
+	return g.get_node("LimbRig") as GoalieLimbRig
 
 
 func _check(g: Goalie, label: String) -> void:
 	var body: Node3D = g.get_node("Body")
 	for side: float in [-1.0, 1.0]:
 		var shoulder: Vector3 = body.position + body.basis * Vector3(0.23 * side, 0.24, 0.0)
-		var elbow: Vector3 = (g.glove_elbow_sphere if side < 0.0 else g.blocker_elbow_sphere).position
+		var limbs: GoalieLimbRig = _limbs(g)
+		var elbow: Vector3 = (limbs.glove_elbow_sphere if side < 0.0 \
+				else limbs.blocker_elbow_sphere).position
 		var hand: Vector3 = (g.get_node("Glove") if side < 0.0 else g.get_node("BlockArm")).position
 		var fwd: float = shoulder.z - elbow.z          # he faces -Z
 		var out: float = (elbow.x - shoulder.x) * side
@@ -53,7 +59,7 @@ func _check(g: Goalie, label: String) -> void:
 		gut.p("%-22s %-7s fwd %+.2f out %+.2f down %+.2f  elbow %3.0f°" % [
 				label, arm, fwd, out, shoulder.y - elbow.y, bend])
 		if fwd < -TOL:
-			assert_gte(out, Goalie._ELBOW_CLEARS_TRUNK_M - TOL,
+			assert_gte(out, GoalieAnatomy.ELBOW_CLEARS_TRUNK_M - TOL,
 					"%s %s: an elbow back past the shoulder is beside the trunk, not in it" % [label, arm])
 		assert_gte(out, -TOL, "%s %s: elbow inside the shoulder" % [label, arm])
 		if side < 0.0 and label in HELD_OUT:

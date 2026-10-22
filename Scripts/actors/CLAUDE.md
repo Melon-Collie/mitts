@@ -38,6 +38,15 @@ must be followed by `rebuild()` (the coordinator's `apply_uniform` does it); a
 part that wears a `ShaderMaterial` (the jersey body) is not merged and draws
 itself. `test_goalie_body_rig.gd` holds it.
 
+The drawn limbs — arms, elbow caps, shoulder floaters, hip connectors — are
+`GoalieLimbRig`'s, built by the coordinator before the body rig merges them and
+posed each frame onto the parts `goalie.gd` moves (`test_goalie_arm_rig.gd`).
+Keep anything that decides no save out of `goalie.gd`: it is hashed into the
+bots' shot-field fingerprint, so any edit there costs a regeneration. What the
+limbs share with a save lives in `GoalieAnatomy` (the upper arm's radius, which
+the blocker's elbow clears the trunk by) or comes off `goalie.gd`
+(`get_blocker_elbow`, the elbow the board was seated from).
+
 ## The seam
 
 Traffic runs **one way**. A collaborator holds `_skater` and READS the node's

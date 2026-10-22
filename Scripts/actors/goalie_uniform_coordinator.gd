@@ -9,8 +9,8 @@ extends RefCounted
 # of a heavily-padded goalie.
 #
 # Follows the SkaterUniformCoordinator pattern: takes a Goalie reference and
-# reads all mesh refs from its public fields, so adding new visual nodes to
-# Goalie doesn't require updating the setup() signature.
+# reads the scene's part meshes from its public fields. The drawn limbs are
+# built here (GoalieLimbRig), before the body rig merges every part.
 #
 # Entry points match the skater coordinator interface:
 #   apply_uniform(colors)           — full v2 colors dict → body shader + all meshes
@@ -27,7 +27,7 @@ const _JERSEY_SHADER: Shader = preload("res://Assets/Shaders/goalie_jersey.gdsha
 # the silhouette split.
 const PANTS_START_NORM_Y: float = 0.72
 
-# The shoulder floater (Goalie.FLOATER_SEMI_AXES on the shared joint ball),
+# The shoulder floater (GoalieLimbRig.FLOATER_SEMI_AXES on the shared joint ball),
 # measured by test_lettering_scale.gd like the skater's cap: its equator's
 # girth and metres of meridian per unit V through the number band.
 const FLOATER_GIRTH_M: float = 0.78
@@ -37,6 +37,7 @@ const _FLOATER_NUMBER_CENTER_V: float = 0.58
 
 
 var _goalie: Goalie
+var _limbs: GoalieLimbRig
 # The parts drawn as one mesh from the paint below; rebuilt after every repaint.
 var _rig: GoalieBodyRig
 var _jersey_mat: ShaderMaterial
@@ -58,6 +59,8 @@ var _jersey_number: int = 0
 
 func setup(goalie: Goalie) -> void:
 	_goalie = goalie
+	_limbs = GoalieLimbRig.new(goalie)
+	goalie.add_child(_limbs)
 	_create_jersey_material()
 	_create_shoulder_viewport()
 	_rig = GoalieBodyRig.new(goalie)
@@ -93,10 +96,10 @@ func apply_uniform(colors: Dictionary) -> void:
 	_goalie.blocker_mesh.material_override = pads_mat.duplicate()
 
 	var arms: Dictionary = uniform.arms
-	_paint_cylinder_h(_goalie.glove_upper_arm, arms.upper)
-	_paint_cylinder_h(_goalie.blocker_upper_arm, arms.upper)
-	_paint_cylinder_h(_goalie.glove_forearm, arms.lower)
-	_paint_cylinder_h(_goalie.blocker_forearm, arms.lower)
+	_paint_cylinder_h(_limbs.glove_upper_arm, arms.upper)
+	_paint_cylinder_h(_limbs.blocker_upper_arm, arms.upper)
+	_paint_cylinder_h(_limbs.glove_forearm, arms.lower)
+	_paint_cylinder_h(_limbs.blocker_forearm, arms.lower)
 
 	_shoulder_color = uniform.shoulders.color
 	_shoulder_text_color = uniform.shoulders.text
@@ -104,14 +107,14 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	var elbow_mat: StandardMaterial3D = UniformPaint.solid(
 			SkaterUniformCoordinator.elbow_color(arms))
-	_goalie.glove_elbow_sphere.material_override = elbow_mat
-	_goalie.blocker_elbow_sphere.material_override = elbow_mat.duplicate()
+	_limbs.glove_elbow_sphere.material_override = elbow_mat
+	_limbs.blocker_elbow_sphere.material_override = elbow_mat.duplicate()
 
 	# Hip connectors — painted like pants (same horizontal stripe pipeline as
 	# the skater's thigh cylinders, minus the per-side uv1_offset since these
 	# connectors are too thin for side-stripe positioning to matter).
-	_paint_mesh_h(_goalie.left_hip_connector, uniform.pants)
-	_paint_mesh_h(_goalie.right_hip_connector, uniform.pants)
+	_paint_mesh_h(_limbs.left_hip_connector, uniform.pants)
+	_paint_mesh_h(_limbs.right_hip_connector, uniform.pants)
 
 	# The body solid is torso THROUGH hips — its lower band paints as the
 	# kit's pants (the mesh's hip flare marks the same line in silhouette;
@@ -205,8 +208,8 @@ func _create_shoulder_viewport() -> void:
 	_shoulder_viewport.add_child(_shoulder_decal)
 
 	var tex: ViewportTexture = _shoulder_viewport.get_texture()
-	_goalie.glove_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, -1.0)
-	_goalie.blocker_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, 1.0)
+	_limbs.glove_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, -1.0)
+	_limbs.blocker_shoulder_sphere.material_override = ShoulderDecal.part_material(tex, 1.0)
 
 
 func _rebuild_shoulder_texture() -> void:
@@ -223,8 +226,8 @@ func _rebuild_shoulder_texture() -> void:
 # crossing is fixed in the body's frame; V runs pole to pole as cos⁻¹ of height.
 static func floater_yoke_v() -> float:
 	var line_y: float = GoalieMeshBuilder.BODY_TOP_Y - GoalieMeshBuilder.YOKE_DEPTH_M
-	var center_y: float = GoalieAnatomy.SHOULDER_OFFSET.y + Goalie.FLOATER_OUTSET.y
-	return acos(clampf((line_y - center_y) / Goalie.FLOATER_SEMI_AXES.y, -1.0, 1.0)) / PI
+	var center_y: float = GoalieAnatomy.SHOULDER_OFFSET.y + GoalieLimbRig.FLOATER_OUTSET.y
+	return acos(clampf((line_y - center_y) / GoalieLimbRig.FLOATER_SEMI_AXES.y, -1.0, 1.0)) / PI
 
 
 # Packs up to _MAX_STRIPES stripe definitions from the v2 stripes array into

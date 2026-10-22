@@ -87,9 +87,10 @@ func test_every_part_but_the_cage_casts() -> void:
 	for bone: int in rig.part_count():
 		var part: MeshInstance3D = rig.part(bone)
 		assert_eq(casting.has(bone), part.name != "Cage", "%s casts" % part.name)
-	for limb: Node3D in [g.glove_upper_arm, g.glove_forearm, g.blocker_upper_arm,
-			g.blocker_forearm, g.glove_elbow_sphere, g.blocker_elbow_sphere,
-			g.left_hip_connector, g.right_hip_connector]:
+	var limbs := g.get_node("LimbRig") as GoalieLimbRig
+	for limb: Node3D in [limbs.glove_upper_arm, limbs.glove_forearm, limbs.blocker_upper_arm,
+			limbs.blocker_forearm, limbs.glove_elbow_sphere, limbs.blocker_elbow_sphere,
+			limbs.left_hip_connector, limbs.right_hip_connector]:
 		assert_eq((limb as MeshInstance3D).layers, 0, "%s is merged" % limb.name)
 
 

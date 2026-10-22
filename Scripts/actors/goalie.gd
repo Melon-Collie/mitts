@@ -32,69 +32,19 @@ extends Node3D
 @onready var blocker_mesh: MeshInstance3D = $BlockArm/Blocker/BlockerPadMesh
 @onready var stick_shaft_mesh: MeshInstance3D = $BlockArm/Stick/StickShaftMesh
 
-# Arm-to-glove segments. 0.76 per side is ~104% wingspan-equivalent on the
-# ~1.92 m frame — same anthropometry target as the skaters. The arms draw to the
-# pose-driven hands; the poses in turn hold the hands at a distance these arms
-# reach at a real bend (GoalieAnatomy.hand_depth_for_bend).
-const _ARM_UPPER_LEN: float = GoalieAnatomy.ARM_UPPER_M
-const _ARM_FOREARM_LEN: float = GoalieAnatomy.ARM_FOREARM_M
-# A chest protector's arms are padded: a thick bicep, an elbow cap, and a
-# forearm pad tapering to the wrist.
-const _UPPER_ARM_RADIUS: float = 0.09
-const _FOREARM_RADIUS: float = 0.075
-const _ELBOW_SPHERE_RADIUS: float = 0.09
-# Shoulder floaters: the broad caps a chest protector carries over each
-# shoulder, set outboard and up of the joint so they stand past the trunk and
-# above the collar, which is the goalie's shoulder line from the top-down
-# camera. Semi-axes in the body's frame; tilt with the trunk.
-const FLOATER_SEMI_AXES := Vector3(0.13, 0.10, 0.125)
-const FLOATER_OUTSET := Vector3(0.02, 0.03, 0.0)
-# The glove forearm ends here, in the Glove's frame, rather than at its origin:
-# behind the trapper's heel, where the cuff opening takes a real forearm, so
-# the arm meets the back of the hand instead of running through its thumb.
-const _GLOVE_CUFF_IN_GLOVE := Vector3(0.0, -0.03, 0.07)
-# How far outboard of the shoulder joint the elbow must be before it may hang
-# back past it: to the trunk's side face, plus the arm's own thickness.
-const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
-		- GoalieAnatomy.SHOULDER_OFFSET.x + _UPPER_ARM_RADIUS
-
 # The pads' eased stance, which apply_body_config lerps toward the config and
 # lays the footwork step over; the nodes carry the sum.
 var _left_pad_eased_pos: Vector3 = Vector3.ZERO
 var _left_pad_eased_rot: Vector3 = Vector3.ZERO
 var _right_pad_eased_pos: Vector3 = Vector3.ZERO
 var _right_pad_eased_rot: Vector3 = Vector3.ZERO
-# The blocker arm's elbow from the last _seat_blocker, goalie-local; the drawn
-# arm reads it so it is the arm the board rides.
+# The blocker arm's elbow from the last _seat_blocker, goalie-local.
 var _blocker_elbow: Vector3 = Vector3.ZERO
 # The board lies over the back of the glove (the smother) instead of standing
 # square to the shooter.
 var _blocker_over_glove: bool = false
 
 var _uniform_coordinator: GoalieUniformCoordinator
-# Dynamic visual nodes — public for GoalieUniformCoordinator access.
-var left_hip_connector: MeshInstance3D = null
-var right_hip_connector: MeshInstance3D = null
-var glove_upper_arm: Node3D = null
-var glove_forearm: Node3D = null
-var blocker_upper_arm: Node3D = null
-var blocker_forearm: Node3D = null
-var glove_shoulder_sphere: MeshInstance3D = null
-var blocker_shoulder_sphere: MeshInstance3D = null
-var glove_elbow_sphere: MeshInstance3D = null
-var blocker_elbow_sphere: MeshInstance3D = null
-
-# Dirty-skip cache for `_update_connectors`. The arm-IK + connector rebuild
-# is value-type-cheap but runs every rendered frame for both goalies; the pose
-# only changes when `apply_body_config` / `apply_network_pose` move a part, and
-# a settled goalie holds its stance for seconds, so we recompute only when one
-# of the body-local part transforms actually changed. Default-mismatched so the
-# first frame always rebuilds.
-var _last_body_xform: Transform3D
-var _last_left_pad_pos: Vector3 = Vector3.INF
-var _last_right_pad_pos: Vector3
-var _last_glove_xform: Transform3D = Transform3D()
-var _last_block_arm_xform: Transform3D = Transform3D()
 
 
 func _ready() -> void:
@@ -119,19 +69,12 @@ func _ready() -> void:
 	# convention — painting is material_override / ShaderMaterial, mesh-free.
 	GoalieMeshBuilder.apply_goalie(self)
 	_seat_blade()
-	_init_stick_knob()
-	_init_connectors()
-	_init_arm_bones()
 	_seat_blocker()
 	_rebase_pads()
 	_setup_uniform_coordinator()
 	var vfx := GoalieVFX.new()
 	vfx.name = "VFX"
 	add_child(vfx)
-
-
-func _process(_delta: float) -> void:
-	_update_connectors()
 
 
 func apply_jersey_info(p_name: String, number: int) -> void:
@@ -310,6 +253,11 @@ static func _gather_collision_parts(node: Node, found: Array[CollisionShape3D]) 
 func get_blocker_position() -> Vector3:
 	return _block_arm.position
 
+# The elbow the board was seated from (goalie-local), so the drawn arm
+# (GoalieLimbRig) is the arm the board rides.
+func get_blocker_elbow() -> Vector3:
+	return _blocker_elbow
+
 # Glove world position — the pin point for a caught puck (catch-and-hold).
 func get_glove_world_position() -> Vector3:
 	return _glove.global_position
@@ -457,59 +405,6 @@ func _setup_uniform_coordinator() -> void:
 	_uniform_coordinator.setup(self)
 
 
-func _init_connectors() -> void:
-	left_hip_connector = _make_connector_mesh()
-	add_child(left_hip_connector)
-	right_hip_connector = _make_connector_mesh()
-	add_child(right_hip_connector)
-
-
-func _init_arm_bones() -> void:
-	glove_upper_arm = _make_arm_bone(_UPPER_ARM_RADIUS)
-	add_child(glove_upper_arm)
-	glove_forearm = _make_arm_bone(_FOREARM_RADIUS)
-	add_child(glove_forearm)
-	blocker_upper_arm = _make_arm_bone(_UPPER_ARM_RADIUS)
-	add_child(blocker_upper_arm)
-	blocker_forearm = _make_arm_bone(_FOREARM_RADIUS)
-	add_child(blocker_forearm)
-	glove_shoulder_sphere = _make_sphere_mesh(1.0)
-	add_child(glove_shoulder_sphere)
-	blocker_shoulder_sphere = _make_sphere_mesh(1.0)
-	add_child(blocker_shoulder_sphere)
-	glove_elbow_sphere = _make_sphere_mesh(_ELBOW_SPHERE_RADIUS)
-	add_child(glove_elbow_sphere)
-	blocker_elbow_sphere = _make_sphere_mesh(_ELBOW_SPHERE_RADIUS)
-	add_child(blocker_elbow_sphere)
-
-
-# White tape knob capping the shaft butt — the fixed house look for the
-# goalie stick. Goalies tape heavily and white is the norm; unlike the
-# skater's knob it never tracks a kit color, so it's created once here
-# (geometry side) while GoalieUniformCoordinator paints the shaft, paddle,
-# and blade. Shaft top is at Stick-local y = 0.5 (mesh at 0.25, box 0.5
-# tall); the knob sits proud of it by the same 1 cm as the skater's.
-func _init_stick_knob() -> void:
-	var knob := MeshInstance3D.new()
-	knob.name = "StickKnob"
-	knob.mesh = SkaterMeshBuilder.shared_knob()
-	knob.position = Vector3(0.0, 0.5 - SkaterMeshBuilder.KNOB_HEIGHT_M * 0.5 + 0.01, 0.0)
-	var mat := StandardMaterial3D.new()
-	mat.albedo_color = Color(0.93, 0.93, 0.90)
-	mat.roughness = 0.9
-	BodyRim.apply(mat)
-	knob.material_override = mat
-	_stick.add_child(knob)
-
-
-# Unit-height shared tube (radius baked at HIP_CONNECTOR_RADIUS); the
-# per-frame stretch lives in _point_connector's basis, not the mesh.
-func _make_connector_mesh() -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = GoalieMeshBuilder.shared_connector_tube()
-	return mi
-
-
 # The blocker is a glove on the arm, not an end point: the hand (BlockArm) is
 # what is posed, the elbow hangs as low as lets the wrist stand the board
 # upright (higher only for a hand held high), and the board stands on the back
@@ -523,8 +418,8 @@ func _seat_blocker() -> void:
 	var shoulder: Vector3 = _body.position + _body.basis * GoalieAnatomy.SHOULDER_OFFSET
 	var grip: Vector3 = _block_arm.position
 	_blocker_elbow = TwoBoneIK.solve_elbow_hanging(shoulder, grip,
-			_ARM_UPPER_LEN, _ARM_FOREARM_LEN, Vector3.FORWARD, Vector3.RIGHT,
-			_ELBOW_CLEARS_TRUNK_M, deg_to_rad(GoalieAnatomy.BLOCKER_WRIST_COCK_MAX_DEG))
+			GoalieAnatomy.ARM_UPPER_M, GoalieAnatomy.ARM_FOREARM_M, Vector3.FORWARD,
+			Vector3.RIGHT, GoalieAnatomy.ELBOW_CLEARS_TRUNK_M, deg_to_rad(GoalieAnatomy.BLOCKER_WRIST_COCK_MAX_DEG))
 	var along: Vector3   # wrist → fingertips
 	var presented: Vector3
 	if _blocker_over_glove:
@@ -561,151 +456,3 @@ static func _cocked_wrist(forearm: Vector3) -> Vector3:
 	hinge = hinge.normalized() if hinge.length_squared() > 1e-8 else Vector3.RIGHT
 	var cock: float = minf(off_vertical, deg_to_rad(GoalieAnatomy.BLOCKER_WRIST_COCK_MAX_DEG))
 	return dir.rotated(hinge, cock)
-
-
-# Two-bone arm IK. shoulder_local / hand_local are in goalie-local space;
-# outward_local is the arm's side (±X), which the elbow may not fold inside of.
-func _update_arm_ik(upper: Node3D, forearm_bone: Node3D,
-		shoulder_local: Vector3, hand_local: Vector3, outward_local: Vector3,
-		elbow_sphere: MeshInstance3D = null) -> void:
-	if upper == null or forearm_bone == null:
-		return
-	var shoulder_w: Vector3 = to_global(shoulder_local)
-	var hand_w: Vector3 = to_global(hand_local)
-	# He faces local -Z.
-	var elbow_w: Vector3 = TwoBoneIK.solve_elbow_hanging(
-			shoulder_w, hand_w, _ARM_UPPER_LEN, _ARM_FOREARM_LEN,
-			global_transform.basis * Vector3.FORWARD, global_transform.basis * outward_local,
-			_ELBOW_CLEARS_TRUNK_M)
-	var elbow_local: Vector3 = to_local(elbow_w)
-	if elbow_sphere != null:
-		elbow_sphere.position = elbow_local
-	_update_arm_bone(upper, shoulder_local, elbow_local)
-	_update_arm_bone(forearm_bone, elbow_local, hand_local)
-
-
-func _update_arm_bone(bone: Node3D, a_local: Vector3, b_local: Vector3) -> void:
-	if bone == null:
-		return
-	var span: Vector3 = b_local - a_local
-	var length: float = span.length()
-	var center: Vector3 = (a_local + b_local) * 0.5
-	if length < 0.0001:
-		bone.position = center
-		return
-	# One local transform write, not position + scale + look_at. look_at costs
-	# six transform operations, two of which resolve the global chain; the prism
-	# is rotationally symmetric so the up vector only has to dodge colinearity.
-	# X/Y carry the arm thickness and stay as the sizing seam left them.
-	var bone_scale: Vector3 = bone.scale
-	bone_scale.z = length
-	bone.transform = Transform3D(
-			Basis.looking_at(span / length, _up_for_look_at(span)).scaled_local(bone_scale),
-			center)
-
-
-static func _up_for_look_at(direction: Vector3) -> Vector3:
-	if absf(direction.normalized().y) > 0.99:
-		return Vector3.FORWARD
-	return Vector3.UP
-
-
-# ONE MeshInstance3D per bone, carrying the prism whose long axis is already local
-# Z (shared_arm_bone_z bakes that rotation into the mesh, so no child node has to
-# apply it). X/Y are the arm THICKNESS; Z is the length _update_arm_bone() rewrites
-# per tick — each writer reads the other's components back rather than overwriting
-# the whole vector. Same rig contract as Skater._resolve_or_create_bone_mesh.
-func _make_arm_bone(radius: float) -> Node3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = SkaterMeshBuilder.shared_arm_bone_z()
-	mi.scale = Vector3(radius, radius, 1.0)
-	return mi
-
-
-func _make_sphere_mesh(radius: float) -> MeshInstance3D:
-	var mi := MeshInstance3D.new()
-	mi.mesh = SkaterMeshBuilder.shared_joint_ball()
-	mi.scale = Vector3.ONE * radius
-	return mi
-
-
-# Bridge each body-part pair with a cylinder that tracks their current positions
-# every frame. All positions are in goalie-local space (direct children of the
-# Goalie root), so no coordinate conversion needed.
-#
-# Value-type-cheap but runs every rendered frame for both goalies. Skip when
-# the goalie is hidden, and when no part moved since the last frame — a settled
-# goalie's `apply_body_config` lerp converges to a fixed pose, so holding a
-# stance skips the arm-IK rebuild entirely. Root translation/yaw doesn't dirty
-# the pose: the arms are children and ride along rigidly, so only the body-local
-# part transforms matter. Nothing here feeds gameplay (colliders are read
-# directly), so a skipped frame is purely cosmetic.
-func _update_connectors() -> void:
-	if not is_visible_in_tree():
-		return
-	if not _connectors_pose_changed():
-		return
-	# Anchor offsets are body-local against the torso box in Goalie.tscn
-	# (half-height 0.36): hips near the box bottom, shoulders a hand's width
-	# below the box top.
-	_point_connector(left_hip_connector,
-		_body.position + _body.basis * Vector3(-0.10, -0.30, 0.0),
-		_left_pad.position)
-	_point_connector(right_hip_connector,
-		_body.position + _body.basis * Vector3(0.10, -0.30, 0.0),
-		_right_pad.position)
-	# Shoulder floaters follow the body pivot each frame, and tilt with it.
-	var glove_shoulder: Vector3 = _body.position + _body.basis * Vector3(
-			-GoalieAnatomy.SHOULDER_OFFSET.x, GoalieAnatomy.SHOULDER_OFFSET.y, 0.0)
-	var blocker_shoulder: Vector3 = _body.position + _body.basis * GoalieAnatomy.SHOULDER_OFFSET
-	var floater_basis: Basis = _body.basis.scaled_local(FLOATER_SEMI_AXES)
-	glove_shoulder_sphere.transform = Transform3D(floater_basis, glove_shoulder
-			+ _body.basis * Vector3(-FLOATER_OUTSET.x, FLOATER_OUTSET.y, FLOATER_OUTSET.z))
-	blocker_shoulder_sphere.transform = Transform3D(floater_basis,
-			blocker_shoulder + _body.basis * FLOATER_OUTSET)
-	# Glove arm: shoulder on body's left side (goalie's catch hand).
-	_update_arm_ik(glove_upper_arm, glove_forearm,
-		glove_shoulder, _glove.position + _glove.basis * _GLOVE_CUFF_IN_GLOVE, Vector3.LEFT,
-		glove_elbow_sphere)
-	# Blocker arm: the elbow _seat_blocker raised and laid the board along.
-	blocker_elbow_sphere.position = _blocker_elbow
-	_update_arm_bone(blocker_upper_arm, blocker_shoulder, _blocker_elbow)
-	_update_arm_bone(blocker_forearm, _blocker_elbow, _block_arm.position)
-
-
-# Returns true (and refreshes the snapshot) when any input to `_update_connectors`
-# moved since the last rebuild. Exact equality is sufficient: a converged lerp
-# produces bit-identical transforms tick over tick, and any real movement trips
-# the compare. Body transform covers both the shoulder pivots (position + basis)
-# and the connector roots in one check.
-func _connectors_pose_changed() -> bool:
-	if _body.transform == _last_body_xform \
-			and _left_pad.position == _last_left_pad_pos \
-			and _right_pad.position == _last_right_pad_pos \
-			and _glove.transform == _last_glove_xform \
-			and _block_arm.transform == _last_block_arm_xform:
-		return false
-	_last_body_xform = _body.transform
-	_last_left_pad_pos = _left_pad.position
-	_last_right_pad_pos = _right_pad.position
-	_last_glove_xform = _glove.transform
-	_last_block_arm_xform = _block_arm.transform
-	return true
-
-
-func _point_connector(mesh: MeshInstance3D, from_pos: Vector3, to_pos: Vector3) -> void:
-	var diff: Vector3 = to_pos - from_pos
-	var length: float = diff.length()
-	if length < 0.02:
-		mesh.visible = false
-		return
-	mesh.visible = true
-	mesh.position = (from_pos + to_pos) * 0.5
-	# Orient the unit tube (Y-axis aligned) to point from from_pos to to_pos.
-	# The stretch to the span's length rides the basis Y column — mesh
-	# mutation would leak through the shared connector mesh to every goalie.
-	var y_axis: Vector3 = diff / length
-	var ref: Vector3 = Vector3.FORWARD if abs(y_axis.dot(Vector3.UP)) < 0.99 else Vector3.RIGHT
-	var x_axis: Vector3 = ref.cross(y_axis).normalized()
-	var z_axis: Vector3 = x_axis.cross(y_axis).normalized()
-	mesh.basis = Basis(x_axis, y_axis * length, z_axis)

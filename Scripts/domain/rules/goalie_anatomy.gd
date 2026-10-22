@@ -218,6 +218,12 @@ static func standing_pad_takes(rel_x: float, y: float, puck_radius: float) -> bo
 const ARM_UPPER_M: float = 0.38
 const ARM_FOREARM_M: float = 0.38
 const SHOULDER_OFFSET := Vector3(0.23, 0.24, 0.0)
+# The padded upper arm's radius: a chest protector's thick bicep.
+const ARM_UPPER_RADIUS_M: float = 0.09
+# How far outboard of the shoulder joint the elbow must be before it may hang
+# back past it: to the trunk's side face, plus the arm's own thickness.
+const ELBOW_CLEARS_TRUNK_M: float = TORSO_BOX_WIDTH_M * 0.5 - SHOULDER_OFFSET.x \
+		+ ARM_UPPER_RADIUS_M
 
 # The blocker is a glove on the arm (Goalie._seat_blocker): the hand is posed,
 # the elbow hangs (TwoBoneIK.solve_elbow_hanging), and the board stands on the

@@ -107,7 +107,7 @@ func _floater_rings() -> Dictionary:
 	for v: float in rings:
 		var ring: Dictionary = rings[v]
 		for u: float in ring:
-			ring[u] = (ring[u] as Vector3) * Goalie.FLOATER_SEMI_AXES
+			ring[u] = (ring[u] as Vector3) * GoalieLimbRig.FLOATER_SEMI_AXES
 	return rings
 
 
@@ -139,7 +139,7 @@ func test_the_floater_yoke_meets_the_body_yoke() -> void:
 			var a: float = (rings[vs[i]][0.0] as Vector3).y
 			var b: float = (rings[vs[i + 1]][0.0] as Vector3).y
 			height = lerpf(a, b, (v - vs[i]) / (vs[i + 1] - vs[i]))
-	var floater_center: float = GoalieAnatomy.SHOULDER_OFFSET.y + Goalie.FLOATER_OUTSET.y
+	var floater_center: float = GoalieAnatomy.SHOULDER_OFFSET.y + GoalieLimbRig.FLOATER_OUTSET.y
 	assert_almost_eq(floater_center + height,
 			GoalieMeshBuilder.BODY_TOP_Y - GoalieMeshBuilder.YOKE_DEPTH_M, 0.01)
 

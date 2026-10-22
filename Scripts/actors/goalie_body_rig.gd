@@ -28,8 +28,8 @@ var _hidden_layers: Dictionary = {}
 func _init(goalie: Node3D) -> void:
 	_goalie = goalie
 	name = "BodyRig"
-	# After Goalie._process, which places the connectors and arm joints this
-	# copies.
+	# After GoalieLimbRig._process, which places the connectors and arm joints
+	# this copies.
 	process_priority = 1
 
 
