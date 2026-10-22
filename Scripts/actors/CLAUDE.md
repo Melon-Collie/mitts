@@ -248,7 +248,7 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Eight rules the rigs sit inside, all easy to break from in here:
+Nine rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
   marker: the marker plus a render-only offset (the stride's pump), so the arm,
@@ -303,6 +303,13 @@ Eight rules the rigs sit inside, all easy to break from in here:
   which writes the arm and cap bones itself). Change `_update_arm`, the part
   posing or the cap's orient-and-repose and the port changes with it, or
   `test_native_arm_rig_parity.gd` fails; see `native/README.md`.
+- **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):
+  the dressed blade is solved from the shaft's bearing, which whips round as
+  the blade crosses over the hands, so through the swing the blade and the
+  shaft's roll (`Skater.shaft_roll_up`) are instead the swing's starting ones
+  turned by the shortest arc from the starting hosel line, in UpperBody's frame.
+  Anchored, not carried frame to frame — a carry drifts by the solid angle its
+  loop encloses. `test_slapper_stance.gd` measures the roll.
 - **The pelvis must not take the fold.** It hangs from the waist, not the
   spine: folding with the torso is what opens the seat in the first place, and
   hanging it off a leg pivot would swing the whole seat with that leg.

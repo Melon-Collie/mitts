@@ -240,14 +240,13 @@ func test_cross_seam_not_one_timed_when_not_squared_up() -> void:
 			"a bot not squared to the net catches the feed instead of firing wonky")
 
 
-func test_one_timer_aborts_when_it_cannot_square_to_the_net() -> void:
-	# The "worried about missing the net" guard: a wind-up that can't square to
-	# the net (net aim beyond the reach cone) must NOT fire wide — past the
-	# aim-wait backstop it bails to catch instead. Camp the finisher on a live
-	# feed but facing back up-ice so the net stays in the back wedge.
+func test_one_timer_aborts_when_it_cannot_set_before_the_feed() -> void:
+	# The "worried about missing the net" guard: a wind-up that can't set in
+	# time — hips square away from the stance, feed a beat from the blade — must
+	# NOT fire wide; it bails to catch instead.
 	var finisher_pos := Vector3(-4.0, 0.0, -21.65)
 	var s: WorldSnapshot = _cycle_snap(finisher_pos)
-	s.puck_state.position = Vector3(2.0, 0.0, -20.0)
+	s.puck_state.position = Vector3(-1.6, 0.0, -20.9)
 	s.puck_state.velocity = Vector3(-18.0, 0.0, -6.0)
 	s.puck_state.carrier_peer_id = -1
 	s.real_puck_carrier_peer_id = -1
@@ -255,10 +254,9 @@ func test_one_timer_aborts_when_it_cannot_square_to_the_net() -> void:
 	var sm: SkaterAgentStateMachine = Agent.new()
 	sm.setup(FINISHER_ID, 0, _brain, _team_map, false)
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	sm._one_timer_press_tick = Agent.ONE_TIMER_AIM_WAIT_MAX_TICKS
 	var input := InputState.new()
 	sm.dispatch(input, s)
-	assert_false(input.slap_pressed, "an unsquarable one-timer is not fired wide")
+	assert_false(input.slap_pressed, "an unsettable one-timer is not fired wide")
 	assert_ne(sm.get_state(), Agent.State.ONE_TIMER_PRESSED,
 			"it aborts the wind-up and drops to catch the feed")
 
@@ -290,13 +288,12 @@ func _x_at_net_plane(origin: Vector3, dir_xz: Vector2, net_z: float) -> float:
 
 
 func test_one_timer_aim_is_locked_from_the_release_point_not_the_body() -> void:
-	# The reported "aim, then move, and it's off target" bug. The slapper
-	# direction locks at the press tick and never re-steers, but the bot enters
+	# The reported "aim, then move, and it's off target" bug. The bot enters
 	# ONE_TIMER_PRESSED up to RECEIVE_TRIGGER_LATERAL_M off the feed line and
-	# shuffles onto it before the puck arrives. The lock must be built from where
-	# the shot will FIRE (the settled slapper zone on the feed line), so the
-	# frozen line stays ON the net despite the body's still-to-travel offset —
-	# not from the current body, which would parallel-shift the shot wide.
+	# moves onto it before the puck arrives. The committed line must be built
+	# from where the shot will FIRE (the settled slapper zone on the feed line),
+	# so it stays ON the net despite the body's still-to-travel offset — not
+	# from the current body, which would parallel-shift the shot wide.
 	var self_pos := Vector3(3.75, 0.0, -22.36)
 	var s: WorldSnapshot = _cycle_snap(self_pos)
 	# A live feed whose perpendicular foot (the spot the bot settles to shoot
@@ -306,21 +303,19 @@ func test_one_timer_aim_is_locked_from_the_release_point_not_the_body() -> void:
 	s.puck_state.velocity = Vector3(-2.0, 0.0, -15.0)  # >14 m/s reception trigger
 	s.puck_state.carrier_peer_id = -1
 	s.real_puck_carrier_peer_id = -1
-	# Squared to the net so the aim settles and the press fires this tick.
-	s.skater_states[FINISHER_ID].facing = Vector2(-0.197, -0.980)
+	# Opened side-on to the net so the stance settles and the press fires this tick.
+	s.skater_states[FINISHER_ID].facing = SlapperRules.stance_facing(
+			Vector2(-0.197, -0.980), 1.0, PI * 0.5)
 	var sm: SkaterAgentStateMachine = Agent.new()
 	sm.setup(FINISHER_ID, 0, _brain, _team_map, false)
 	sm._state = Agent.State.ONE_TIMER_PRESSED
 	var input := InputState.new()
 	sm.dispatch(input, s)
-	assert_true(input.slap_pressed, "the squared one-timer presses this tick")
+	assert_false(input.slap_pressed, "3 m off the line it skates over before winding up")
 
-	# The direction the controller locks — the bot COMMITS it (the cursor can't
-	# express it: the human lock measures blade→cursor and the blade sits ~1 m off
-	# the body). Feeding it through the same helper the controller calls, with a
-	# deliberately absurd cursor/blade pair, pins that the commit wins.
-	var locked: Vector3 = ShotMechanics.slapper_aim_dir(
-			input.bot_slapper_aim_dir, Vector3(30.0, 0.0, 30.0), Vector3.ZERO)
+	# The direction the controller locks, committed every tick from the press on — the bot COMMITS it, and a committed
+	# direction is what SkaterController._enter_slapper_charge locks.
+	var locked: Vector3 = input.bot_slapper_aim_dir
 	var dir := Vector2(locked.x, locked.z).normalized()
 	var release_point: Vector3 = sm._one_timer.zone_center(
 			sm._one_timer.line_anchor(s, self_pos, sm._attacking_goal_pos),
@@ -341,14 +336,15 @@ func test_one_timer_aim_is_locked_from_the_release_point_not_the_body() -> void:
 			"a body-relative lock would parallel-shift the shot wide of the net")
 
 
-# Fixture for the square-up gate: a live cross-seam feed at a camped finisher,
-# with `facing` rotated `off_rad` off the committed shot line. Returns the
-# dispatched [input, state_machine].
-func _dispatch_with_facing_off_line(off_rad: float) -> Array:
+# Fixture for the stance wait: a live cross-seam feed `feed_m` up its line from
+# a camped finisher, with `facing` rotated `off_rad` off the slapshot stance for
+# the committed shot line. Returns the dispatched [input, state_machine].
+func _dispatch_with_facing_off_stance(off_rad: float, feed_m: float = 7.8) -> Array:
 	var self_pos := Vector3(-2.4, 0.0, -22.0)
 	var s: WorldSnapshot = _cycle_snap(self_pos)
-	s.puck_state.position = Vector3(5.0, 0.0, -19.0)
-	s.puck_state.velocity = Vector3(-17.0, 0.0, -6.0)
+	var feed_vel := Vector3(-17.0, 0.0, -6.0)
+	s.puck_state.position = self_pos - feed_vel.normalized() * feed_m
+	s.puck_state.velocity = feed_vel
 	s.puck_state.carrier_peer_id = -1
 	s.real_puck_carrier_peer_id = -1
 	# The committed line is facing-independent (release point on the feed's line →
@@ -361,7 +357,8 @@ func _dispatch_with_facing_off_line(off_rad: float) -> Array:
 	probe.dispatch(probe_input, s)
 	var shot_line := Vector2(
 			probe_input.bot_slapper_aim_dir.x, probe_input.bot_slapper_aim_dir.z)
-	s.skater_states[FINISHER_ID].facing = shot_line.rotated(off_rad)
+	s.skater_states[FINISHER_ID].facing = SlapperRules.stance_facing(
+			shot_line.normalized(), 1.0, PI * 0.5).rotated(off_rad)
 
 	var sm: SkaterAgentStateMachine = Agent.new()
 	sm.setup(FINISHER_ID, 0, _brain, _team_map, false)
@@ -371,37 +368,35 @@ func _dispatch_with_facing_off_line(off_rad: float) -> Array:
 	return [input, sm]
 
 
-func test_one_timer_waits_for_a_squared_stance_before_winding_up() -> void:
-	# _enter_slapper_charge SNAPS facing to the aim at the press tick, so a bot
-	# committing from a wide stance whips its body around in one tick. The gate is
-	# the stance, not the blade cone: 30° off the line presses, 90° holds — and
-	# holding is a WAIT (cursor on the net, facing rotating toward it), not a bail.
-	var squared: Array = _dispatch_with_facing_off_line(deg_to_rad(30.0))
-	assert_true((squared[0] as InputState).slap_pressed,
-			"a stance already inside the square-up angle winds up now")
+func test_one_timer_waits_for_the_pivot_to_fit_the_flight() -> void:
+	# The zone turns with the hips, which pivot into the stance at their own rate
+	# once wound up: 150° off it (a third of a second of pivot) presses against a
+	# feed 0.43 s out, and holds against one 0.25 s out — and holding is a WAIT
+	# (cursor along the stance, facing rotating toward it), not a bail.
+	var far: Array = _dispatch_with_facing_off_stance(deg_to_rad(150.0))
+	assert_true((far[0] as InputState).slap_pressed,
+			"a pivot the flight has time for winds up now")
 
-	var wide: Array = _dispatch_with_facing_off_line(deg_to_rad(90.0))
-	assert_false((wide[0] as InputState).slap_pressed,
-			"a stance 90° off the shot line does not start the wind-up")
-	assert_eq((wide[1] as SkaterAgentStateMachine).get_state(),
+	var near: Array = _dispatch_with_facing_off_stance(deg_to_rad(150.0), 4.5)
+	assert_false((near[0] as InputState).slap_pressed,
+			"one that outlasts the flight does not start the wind-up")
+	assert_eq((near[1] as SkaterAgentStateMachine).get_state(),
 			Agent.State.ONE_TIMER_PRESSED,
 			"…it holds the one-timer and squares up instead of bailing on tick 0")
 
 
-func test_one_timer_commits_the_release_point_line_not_a_cursor_offset() -> void:
-	# The bot's cursor is placed one shot-vector out from the BODY, but the
-	# controller's human lock measures BLADE→cursor, and the blade is a
-	# shoulder-anchored offset ~1 m to the blade side. Reading the cursor would
-	# rotate the locked line by roughly that offset over the shot distance —
-	# around a net width at one-timer range. The commit must carry the exact
-	# release_point → aim_point direction instead.
+func test_one_timer_commits_the_release_point_line() -> void:
+	# The bot's cursor points along its stance, not at the net, so nothing about
+	# the shot can be read off it: the commit carries the exact
+	# release_point → aim_point direction.
 	var self_pos := Vector3(-2.4, 0.0, -22.0)
 	var s: WorldSnapshot = _cycle_snap(self_pos)
 	s.puck_state.position = Vector3(5.0, 0.0, -19.0)
 	s.puck_state.velocity = Vector3(-17.0, 0.0, -6.0)
 	s.puck_state.carrier_peer_id = -1
 	s.real_puck_carrier_peer_id = -1
-	s.skater_states[FINISHER_ID].facing = Vector2(0.0, -1.0)
+	s.skater_states[FINISHER_ID].facing = SlapperRules.stance_facing(
+			Vector2(0.0, -1.0), 1.0, PI * 0.5)
 	var sm: SkaterAgentStateMachine = Agent.new()
 	sm.setup(FINISHER_ID, 0, _brain, _team_map, false)
 	sm._state = Agent.State.ONE_TIMER_PRESSED
@@ -423,16 +418,3 @@ func test_one_timer_commits_the_release_point_line_not_a_cursor_offset() -> void
 	assert_lt(absf(_x_at_net_plane(release_point, committed, net_z)),
 			GameRules.NET_HALF_WIDTH,
 			"the committed line crosses inside the posts from the release point")
-
-	# What reading the CURSOR would have locked: the controller measures from the
-	# blade, which sits roughly SkaterController.slapper_blade_x to the blade side
-	# of the body (right-handed here → +X of facing, ≈ +X of world with the bot
-	# squared to the net). Same cursor, one metre of anchor offset — and it sails
-	# outside the post. That gap IS the bug this commit closes.
-	var blade_world := Vector3(self_pos.x + 1.0, 0.0, self_pos.z - 0.5)
-	var from_cursor := Vector2(
-			input.mouse_world_pos.x - blade_world.x,
-			input.mouse_world_pos.z - blade_world.z).normalized()
-	assert_gt(absf(_x_at_net_plane(release_point, from_cursor, net_z)),
-			GameRules.NET_HALF_WIDTH,
-			"a cursor-derived lock parallel-shifts the one-timer off the net")

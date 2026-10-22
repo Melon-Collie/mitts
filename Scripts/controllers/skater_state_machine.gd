@@ -32,10 +32,13 @@ static func state_has_puck(state: int) -> bool:
 # hold, which keeps the wind-up's pin while the shaft loads. WRISTER_AIM freezes the
 # blade at its body-local pose (SkaterIKCoordinator.apply_blade_from_mouse under
 # hold_blade, which also carries the smoothed blade along with skater
-# translation); SLAPPER_CHARGE_WITH_PUCK pins to a fixed skater-local offset
+# translation); SLAPPER_CHARGE_WITH_PUCK pins to a skater-local spot
 # (Skater.enter_slapshot_pinning). Either way there is NO independent puck motion
 # left: the puck's world velocity IS the carrier's, and a position-derived puck
 # velocity estimate double-counts the body if it's added on top of a carrier lead.
+# The one exception is a carried slapshot's set-up, the first fraction of a
+# second, while the blade is still bringing the puck to the strike spot; the
+# replicated state cannot tell it apart.
 #
 # Distinct from state_has_puck (which includes ordinary carry, where the blade
 # genuinely dangles independently of the body — the motion the puck lead exists
@@ -43,10 +46,10 @@ static func state_has_puck(state: int) -> bool:
 # identically from a replicated shot_state with no live carrier reference.
 #
 # NOTE this says nothing about the carrier's MOBILITY, which differs sharply
-# between the two: the slapper suppresses locomotion and actively drags velocity
-# to zero (a plant), while the wrister suppresses nothing and stays fully
-# steerable. Reads that depend on the shooter being planted must test for that
-# separately — see GoalieController._reading_planted_windup.
+# between the two: the slapper takes no stride or steer and glides on its
+# momentum, while the wrister suppresses nothing and stays fully steerable.
+# Reads that depend on the shooter's mobility must test for that separately —
+# see GoalieController._reading_planted_windup.
 static func state_pins_puck(state: int) -> bool:
 	return state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK \
@@ -67,12 +70,15 @@ class Callbacks:
 	var apply_blade_from_mouse: Callable          # (input: InputState, delta: float)
 	var apply_wrister_aim_blade: Callable         # (input: InputState, delta: float) — holds the blade at the shot origin while the torso coils
 	var apply_slapper_blade_position: Callable    # ()
+	var apply_slapper_setup: Callable             # (input: InputState, delta: float) — the blade takes the puck to the strike spot
+	var update_slapper_aim: Callable              # (input: InputState) — the aim, live until the swing commits
 	var apply_block_blade_position: Callable      # ()
 	var apply_wrister_follow_through: Callable    # ()
 	var apply_slapper_follow_through: Callable    # ()
 	# State entry
 	var enter_shot_block: Callable                # ()
 	var enter_slapper_charge: Callable            # (input: InputState)
+	var cancel_slapper: Callable                  # (input: InputState) — call a slapshot off: the stick comes back down
 	var transition_to_skating: Callable           # ()
 	# Shot releases
 	var release_wrister: Callable                 # (input: InputState)
@@ -87,7 +93,6 @@ class Callbacks:
 	# Per-frame updates that need @export params from SkaterController
 	var update_wrister_charge: Callable           # (input: InputState)
 	var update_slapper_charge: Callable           # (delta: float)
-	var apply_slapper_velocity_drag: Callable     # (delta: float)
 	var apply_block_movement: Callable            # (input: InputState, delta: float)
 
 # ── Owned state (moved from SkaterController) ─────────────────────────────────
@@ -190,7 +195,17 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 	# The OTHER shot button cancels: tap the wrister (LMB) to bail the slapper
 	# wind-up back to carry. Block is the shot-block stance and cancels nothing.
 	if input.shoot_pressed:
-		_cancel_slapper_internal()
+		_cancel_slapper_internal(input)
+		return
+
+	# Set-up: the blade is still taking the puck to the strike spot and the
+	# charge has not started. Letting go before it is set is no shot at all.
+	if not _aiming.slapper_setup_done:
+		if not input.slap_held:
+			_cancel_slapper_internal(input)
+			return
+		_cb.update_slapper_aim.call(input)
+		_cb.apply_slapper_setup.call(input, delta)
 		return
 
 	# One-timer window: puck arrived mid-charge. Player must release before
@@ -199,7 +214,7 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 		_aiming.tick_one_timer_window(delta)
 		if _aiming.one_timer_window_timer <= 0.0:
 			# Window expired — cancel slapper, keep puck in carry state.
-			_cancel_slapper_internal()
+			_cancel_slapper_internal(input)
 			return
 		if not input.slap_held:
 			# A one-timer does not leave on the button edge: the swing commits
@@ -210,9 +225,9 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 			_state = State.ONE_TIMER_RETENTION
 			return
 
+	_cb.update_slapper_aim.call(input)
 	_cb.update_slapper_charge.call(delta)
 	_cb.apply_slapper_blade_position.call()
-	_cb.apply_slapper_velocity_drag.call(delta)
 
 	if not input.slap_held:
 		_cb.release_slapper.call(input)
@@ -222,9 +237,10 @@ func _state_slapper_charge_without_puck(_skater: Skater, input: InputState, delt
 	# The OTHER shot button cancels: tap the wrister (LMB) to bail a one-timer
 	# wind-up back to carry.
 	if input.shoot_pressed:
-		_cancel_slapper_internal()
+		_cancel_slapper_internal(input)
 		return
 
+	_cb.update_slapper_aim.call(input)
 	_cb.update_slapper_charge.call(delta)
 	_cb.apply_slapper_blade_position.call()
 
@@ -241,16 +257,13 @@ func _state_slapper_charge_without_puck(_skater: Skater, input: InputState, delt
 # is read here, not even a cancel — so the ONLY exit is the shot (or its whiff)
 # at the end of the hold. The blade holds its wind-up pose and the shaft loads
 # (Skater._update_stick_flex keys the bow off this state), which is the visible
-# "caught it, now it's loading" read; the plant keeps dragging velocity off so
-# the shooter stays set through the beat.
+# "caught it, now it's loading" read.
 #
 # The range check and every downstream consequence (the lag-comped one-timer
 # claim, the host's authoritative fire, the local prediction seed) run at the END
 # of the hold, unchanged — retention shifts WHEN they run, not what they do.
-func _state_one_timer_retention(_skater: Skater, input: InputState, delta: float, has_puck: bool, _is_movement_locked: bool) -> void:
+func _state_one_timer_retention(_skater: Skater, input: InputState, delta: float, _has_puck: bool, _is_movement_locked: bool) -> void:
 	_cb.apply_slapper_blade_position.call()
-	if has_puck:
-		_cb.apply_slapper_velocity_drag.call(delta)
 	_aiming.tick_one_timer_retention(delta)
 	if _aiming.one_timer_retention_timer > 0.0:
 		return
@@ -306,6 +319,5 @@ func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	_aiming.reset_wrister(intent_pos, origin_world, origin_skater_pos)
 
 
-func _cancel_slapper_internal() -> void:
-	_aiming.slapper_charge_timer = 0.0
-	_cb.transition_to_skating.call()
+func _cancel_slapper_internal(input: InputState) -> void:
+	_cb.cancel_slapper.call(input)

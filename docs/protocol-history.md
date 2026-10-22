@@ -388,3 +388,10 @@ here whenever you bump, in the same format.
 #      builds must be refused. Replay FORMAT_VERSION 18: a v17 replay's carry
 #      frames hold +1 in the bit, which would pin every replayed carry to one
 #      side.
+# v83: the pickup grant carries the feed — the puck's velocity in the
+#      carrier's frame at the catch, two s16 cm/s in one s32
+#      (SnapshotEventLog.pack_feed) — which a caught one-timer strikes.
+#      notify_puck_picked_up gains the argument and every SnapshotEventLog
+#      record grows an s32 arg2 (13 -> 17 B). An RPC signature and packet
+#      layout change, so mixed builds must be refused. Replay format unchanged:
+#      the event block is appended after the recorder's copy.

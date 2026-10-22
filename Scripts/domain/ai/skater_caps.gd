@@ -87,6 +87,25 @@ var carry_facing_rules: FacingRules.Config = FacingRules.Config.new()
 var wrister_unloaded_share: float = 0.6
 # Which side the forehand is on, for the facing rule's per-side reach edges.
 var is_left_handed: bool = true
+# The slapshot stance this body sets (SkaterController.slapper_strike_local /
+# slapper_stance_open_deg): where it strikes the puck in its own frame — x
+# toward the stick side, so one value serves either hand — and how far its hips
+# open off the shot line.
+var slapper_strike_local: Vector2 = Vector2(-0.08, -1.07)
+var slapper_stance_open_rad: float = PI * 0.5
+# The rate the hips pivot into that stance once wound up
+# (SkaterController.slapper_stance_turn_deg_s).
+var slapper_stance_turn_rad_s: float = deg_to_rad(450.0)
+# The slapshot's power band over its charge (SkaterController's
+# min/max_slapper_power, max_slapper_charge_time), and the wind-up a feed must
+# find built for the one-timer window to open (one_timer_min_windup_time).
+var slapper_power_min: float = GameRules.DEFAULT_SLAPPER_POWER_MIN_M_S
+var slapper_power_max: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
+var slapper_max_charge_s: float = 0.7
+var one_timer_min_windup_s: float = 0.15
+# How much of a feed's cross speed the one-timer's face keeps
+# (SkaterController.one_timer_feed_grip).
+var one_timer_feed_grip: float = 0.2
 
 # Body-check delivery inputs to SkaterCollisionRules.victim_kick
 # (closing × transfer × m_a / (m_a + m_b)): a heavier player predicts harder

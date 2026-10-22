@@ -60,7 +60,7 @@ signal world_state_received(data: PackedByteArray)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes, from_spectator: bool)
 signal existing_players_synced(player_data: Array)
-signal local_puck_pickup_confirmed(settle_until_ms: int)  # settle lock deadline, 0 = none
+signal local_puck_pickup_confirmed(settle_until_ms: int, feed_packed: int)  # settle lock deadline (0 = none), the feed (SnapshotEventLog.pack_feed)
 signal local_puck_stolen(forced_lift_s: float)
 signal carrier_puck_dropped
 signal remote_carrier_changed(new_carrier_peer_id: int)
@@ -2007,23 +2007,23 @@ func sync_existing_players(player_data: Array) -> void:
 		return
 	existing_players_synced.emit(player_data)
 
-func send_puck_picked_up(peer_id: int, settle_until_ms: int = 0) -> void:
+func send_puck_picked_up(peer_id: int, settle_until_ms: int = 0, feed_packed: int = 0) -> void:
 	# AI bots have no ENet connection — rpc_id would fail. Bots are driven
 	# directly by the host's AIController, so no client-side notification
 	# is needed.
 	if not is_real_peer(peer_id):
 		return
 	var seq: int = _event_log.record(
-			SnapshotEventLog.EventType.PICKED_UP, peer_id, settle_until_ms, local_time())
-	notify_puck_picked_up.rpc_id(peer_id, seq, settle_until_ms)
+			SnapshotEventLog.EventType.PICKED_UP, peer_id, settle_until_ms, local_time(), feed_packed)
+	notify_puck_picked_up.rpc_id(peer_id, seq, settle_until_ms, feed_packed)
 
 @rpc("authority", "reliable")
-func notify_puck_picked_up(event_seq: int, settle_until_ms: int) -> void:
+func notify_puck_picked_up(event_seq: int, settle_until_ms: int, feed_packed: int) -> void:
 	NetworkSimManager.send(
-		func(seq: int, ms: int) -> void:
+		func(seq: int, ms: int, feed: int) -> void:
 			if _event_log.try_apply_reliable(seq):
-				local_puck_pickup_confirmed.emit(ms),
-		[event_seq, settle_until_ms], true)
+				local_puck_pickup_confirmed.emit(ms, feed),
+		[event_seq, settle_until_ms, feed_packed], true)
 
 func send_ghost_state_to_all(peer_id: int, is_ghost: bool) -> void:
 	for remote_id: int in connected_peer_ids():
@@ -2104,12 +2104,12 @@ func notify_puck_dropped(event_seq: int) -> void:
 # dispatches each fresh, targeted event from a packet's trailing block here.
 # Emits the exact same signals, so the application layer can't tell (and
 # doesn't care) which channel won the race.
-func _dispatch_snapshot_event(type: int, arg: int) -> void:
+func _dispatch_snapshot_event(type: int, arg: int, arg2: int) -> void:
 	match type:
 		SnapshotEventLog.EventType.CARRIER_CHANGED:
 			remote_carrier_changed.emit(arg)
 		SnapshotEventLog.EventType.PICKED_UP:
-			local_puck_pickup_confirmed.emit(arg)
+			local_puck_pickup_confirmed.emit(arg, arg2)
 		SnapshotEventLog.EventType.STOLEN:
 			local_puck_stolen.emit(arg / 1000.0)
 		SnapshotEventLog.EventType.DROPPED:

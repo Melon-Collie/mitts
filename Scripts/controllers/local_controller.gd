@@ -546,6 +546,16 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# save/restore each reconcile re-ticks the unconfirmed inputs and the timer
 	# inflates O(N) per broadcast, popping the blade above slapper_wind_up_height.
 	var pre_slapper_charge_timer: float = _aiming.slapper_charge_timer
+	# The set-up ends, and pins the puck where it lies, on whichever tick the blade
+	# gets it there; a replay reaching that tick at a different spot must not move
+	# the live pin.
+	var pre_slapper_setup_done: bool = _aiming.slapper_setup_done
+	var pre_slapper_stance_line: Vector2 = _aiming.slapper_stance_line
+	var pre_slapshot_pin_active: bool = skater.is_slapshot_pinning()
+	var pre_slapshot_pin_local: Vector2 = skater.slapshot_pin_local()
+	var pre_setup_prev_puck: Vector2 = _slapper_setup_prev_puck
+	var pre_fake_puck_offset: Vector2 = fake_puck_offset
+	var pre_setup_still_s: float = _slapper_setup_still_s
 	# Same shape of problem as the slapper timer: tick_wrister_charge evolves the
 	# cursor-speed EMA inside _update_wrister_charge during replay, so without
 	# save/restore each reconcile re-runs the unconfirmed window's stroke and
@@ -683,6 +693,15 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
+	_aiming.slapper_setup_done = pre_slapper_setup_done
+	_aiming.slapper_stance_line = pre_slapper_stance_line
+	_slapper_setup_prev_puck = pre_setup_prev_puck
+	fake_puck_offset = pre_fake_puck_offset
+	_slapper_setup_still_s = pre_setup_still_s
+	if pre_slapshot_pin_active:
+		skater.enter_slapshot_pinning(pre_slapshot_pin_local)
+	else:
+		skater.exit_slapshot_pinning()
 	_aiming.cursor_speed_ema = pre_charge_cursor_speed
 	_aiming.prev_intent_pos = pre_charge_prev_intent_pos
 	_aiming.wrister_origin_world = pre_charge_origin_world
@@ -735,6 +754,14 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	if apply_server_shot_state \
 			and pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK \
 			and server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
+		apply_server_shot_state = false
+	# A slapshot called off is the client's to have called: through the recovery
+	# that follows (the puck held at its pin, the settle lock running) the host's
+	# lagged wind-up must not re-arm it — the button is already up, so it would
+	# release a zero-charge slapshot. Bounded by the recovery, like the hold above.
+	if apply_server_shot_state and pre_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
+			and skater.is_slapshot_pinning() \
+			and server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK:
 		apply_server_shot_state = false
 	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
@@ -894,8 +921,8 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 			skater.global_position += _replay_collision_result.sep_b
 
 
-func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
-	super.on_puck_picked_up_network(settle_until_ms)
+func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2.ZERO) -> void:
+	super.on_puck_picked_up_network(settle_until_ms, feed)
 	_claim_cooldown = 0.0
 	_poke_cooldown = 0.0
 	# Reset claim edge state so a drop-then-regrab (or an immediate poke after
@@ -911,7 +938,7 @@ func _update_one_timer_indicator() -> void:
 	if state == State.SLAPPER_CHARGE_WITH_PUCK:
 		# One-timer window (puck arrived mid-charge): shrink the reticle ring toward
 		# the release. A plain carry → slapshot charge has no window, so it keeps
-		# only the aim arrow (set in _enter_slapper_charge) and shows no reticle.
+		# only the aim arrow (_update_slapshot_arrow) and shows no reticle.
 		if _aiming.one_timer_window_timer > 0.0:
 			var full_window: float = one_timer_window_duration + one_timer_window_lag_grace()
 			var t: float = clampf(_aiming.one_timer_window_timer / full_window, 0.0, 1.0)
