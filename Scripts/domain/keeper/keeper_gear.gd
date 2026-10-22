@@ -170,6 +170,25 @@ static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:
 	return Transform3D(basis, skel.stick_heel + paddle * along)
 
 
+# Where a post stance meets the post at `side` (−1 the glove side, +1 the
+# blocker side), keeper space: the post's inner face at his gear's outermost
+# reach, on the goal line through that side's ankle — the leg lies along the
+# line and the pad's face stands out in front of it.
+static func post_contact(skel: KeeperSkeleton, side: float) -> Vector3:
+	var ankle: Vector3 = skel.xf[KeeperSkeleton.FOOT[0 if side < 0.0 else 1]].origin
+	return Vector3(_outermost_x(skel, side), 0.0, ankle.z)
+
+
+static func _outermost_x(skel: KeeperSkeleton, side: float) -> float:
+	var reach: float = -INF
+	for part: int in PART_COUNT:
+		var t: Transform3D = box(skel, part)
+		var h: Vector3 = _HALF[part]
+		reach = maxf(reach, side * t.origin.x + absf(t.basis.x.x) * h.x
+				+ absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z)
+	return side * reach
+
+
 # Every part's box into `packed`, in GoalieContactDetector's layout, from
 # `start` boxes in; returns the number written. `to_world` places keeper space
 # in the rink. The array grows only the first time.

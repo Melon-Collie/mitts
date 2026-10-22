@@ -64,10 +64,12 @@ three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
 (`kick_glove`, `kick_blocker`), and a post stance is drawn against its post
-with a fifth view from a sharp angle on that side. `tests/unit/keeper/test_keeper_body.gd` holds
-the proportions, the bones' lengths, the gear on the ice and inside the rule
-book, the rigid stick, the packed layout and the sealed butterfly and
-extension; `test_keeper_coverage.gd` snapshots each stance's coverage straight
-on and from the dot line.
+(`KeeperGear.post_contact` on the post's inner face, on the goal line) with a
+fifth view from a sharp angle on that side. `tests/unit/keeper/
+test_keeper_body.gd` holds the proportions, the bones' lengths, the gear on the
+ice and inside the rule book, the rigid stick, the packed layout, the ice sealed
+in the butterfly, the extension and the kick, and the post sealed in the RVH;
+`test_keeper_coverage.gd` snapshots each stance's coverage straight on and from
+the dot line.
 
 He is authored left-catching; a right-catcher's mirror is not built yet.

@@ -215,6 +215,31 @@ func test_the_kick_seals_the_ice() -> void:
 		_assert_seals_ice("kick %+.0f" % side, side, -0.35, 0.80)
 
 
+# On the post in the RVH, from a sharp angle — a shooter 15° off the goal line
+# on that side — no puck along the ice gets between him and the iron, nor
+# along the line for a metre in from it.
+func test_the_rvh_seals_the_post() -> void:
+	var out := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+	var inner: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS
+	for side: float in [-1.0, 1.0]:
+		KeeperPoses.rvh(_pose, side)
+		_skel.pose(_pose)
+		var post: Vector3 = KeeperGear.post_contact(_skel, side)
+		var shooter := Vector3(post.x + side * (4.5 - inner), y,
+				post.z - 4.5 * tan(deg_to_rad(15.0)))
+		var d: float = 0.0
+		while d <= 1.0:
+			var on_line := Vector3(post.x - side * d, y, post.z)
+			var past: Vector3 = on_line + (on_line - shooter).normalized() * 0.3
+			var hit: int = KeeperGear.nearest(_skel, shooter, past, GameRules.PUCK_COLLISION_RADIUS,
+					out, scratch)
+			assert_true(hit >= 0, "rvh %+.0f: a puck along the ice %.2f m in from the post meets him"
+					% [side, d])
+			d += 0.02
+
+
 # Every puck along the ice from the shooter, `from` to `to` metres across
 # toward `side`, meets him.
 func _assert_seals_ice(stance: String, side: float, from: float, to: float) -> void:

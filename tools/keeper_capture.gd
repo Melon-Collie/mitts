@@ -94,8 +94,10 @@ func _init() -> void:
 				func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, side)])
 		_stances.append(["kick" + tag, func(p: KeeperPose) -> void: KeeperPoses.kick(p, side)])
 		# The post stances are drawn on their post, as the brain will place them.
-		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side), side])
-		_stances.append(["vh" + tag, func(p: KeeperPose) -> void: KeeperPoses.vh(p, side), side])
+		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side),
+				side, true])
+		_stances.append(["vh" + tag, func(p: KeeperPose) -> void: KeeperPoses.vh(p, side),
+				side, true])
 		_stances.append(["overlap" + tag,
 				func(p: KeeperPose) -> void: KeeperPoses.overlap(p, side), side])
 	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")
@@ -123,7 +125,7 @@ func _process(_delta: float) -> bool:
 		(s[1] as Callable).call(_pose)
 		_keeper.apply_pose(_pose)
 		var post: float = _post_side(s)
-		_keeper.position = Vector3(_on_post_x(post), 0.0, 0.0)
+		_keeper.position = _on_post(post, s.size() > 3 and bool(s[3]))
 		_keeper.reset_physics_interpolation()
 		var v: Array = _stance_views(post)[_view_i]
 		_camera.position = v[1]
@@ -147,19 +149,15 @@ static func _post_side(stance: Array) -> float:
 	return float(stance[2]) if stance.size() > 2 else 0.0
 
 
-# The keeper's x that puts his gear's outermost point toward `post` against
-# the post's inner face; 0 off the post.
-func _on_post_x(post: float) -> float:
+# Where the keeper stands for a stance on `post`: KeeperGear.post_contact on the
+# post's inner face, on the goal line when `on_line`; the origin off the post.
+func _on_post(post: float, on_line: bool) -> Vector3:
 	if post == 0.0:
-		return 0.0
+		return Vector3.ZERO
 	_skel.pose(_pose)
-	var reach: float = 0.0
-	for part: int in KeeperGear.PART_COUNT:
-		var t: Transform3D = KeeperGear.box(_skel, part)
-		var h: Vector3 = KeeperGear.half_extents(part)
-		reach = maxf(reach, post * t.origin.x + absf(t.basis.x.x) * h.x
-				+ absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z)
-	return post * (GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - reach)
+	var c: Vector3 = KeeperGear.post_contact(_skel, post)
+	return Vector3(post * (GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS) - c.x, 0.0,
+			POST_Z - c.z if on_line else 0.0)
 
 
 # On a post, a fifth view: a shooter at a sharp angle from that side, 15° off
@@ -167,7 +165,7 @@ func _on_post_x(post: float) -> float:
 func _stance_views(post: float) -> Array:
 	if post == 0.0:
 		return _views
-	var at := Vector3(_keeper.position.x, 0.5, 0.2)
+	var at := Vector3(_keeper.position.x, 0.5, _keeper.position.z + 0.2)
 	return _views + [["sharp", Vector3(post * 4.5, 0.9, POST_Z - 4.5 * tan(deg_to_rad(15.0))), at]]
 
 
