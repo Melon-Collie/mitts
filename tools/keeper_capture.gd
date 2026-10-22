@@ -76,13 +76,18 @@ func _init() -> void:
 		["upright", func(p: KeeperPose) -> void: KeeperPoses.upright(p)],
 		["ready", func(p: KeeperPose) -> void: KeeperPoses.ready(p)],
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p)],
-		["half_butterfly", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, -1.0)],
-		["extension", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, -1.0)],
-		["kick", func(p: KeeperPose) -> void: KeeperPoses.kick(p, 1.0)],
-		["rvh", func(p: KeeperPose) -> void: KeeperPoses.rvh(p, -1.0)],
-		["vh", func(p: KeeperPose) -> void: KeeperPoses.vh(p, -1.0)],
-		["overlap", func(p: KeeperPose) -> void: KeeperPoses.overlap(p, -1.0)],
 	]
+	# The one-sided stances, each named by the side its action is on.
+	for side: float in [-1.0, 1.0]:
+		var tag: String = "_glove" if side < 0.0 else "_blocker"
+		_stances.append(["half_butterfly" + tag,
+				func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, side)])
+		_stances.append(["extension" + tag,
+				func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, side)])
+		_stances.append(["kick" + tag, func(p: KeeperPose) -> void: KeeperPoses.kick(p, side)])
+		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side)])
+		_stances.append(["vh" + tag, func(p: KeeperPose) -> void: KeeperPoses.vh(p, side)])
+		_stances.append(["overlap" + tag, func(p: KeeperPose) -> void: KeeperPoses.overlap(p, side)])
 	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")
 	if not only.is_empty():
 		var keep: PackedStringArray = only.split(",")

@@ -110,9 +110,15 @@ static func half_butterfly(p: KeeperPose, side: float) -> void:
 	p.pelvis_rot = Vector3(-0.17, 0.0, -side * 0.10)
 	p.lumbar_rot = Vector3(-0.10, 0.0, 0.0)
 	_ready_hands(p, 0.0)
-	# The blade sits out ahead of the standing pad's face, so the paddle rises in
-	# front of it rather than through it.
-	p.blade_center = HALF_BUTTERFLY_BLADE
+	if up == 1:
+		# The pad standing on the blocker side: the blade sits out ahead of its
+		# face, so the paddle rises in front of it rather than through it.
+		p.blade_center = HALF_BUTTERFLY_BLADE
+	else:
+		# The blocker side is down: the stick lies as the butterfly's does, the
+		# blade a little further out over a pad whose knee sits nearer the middle.
+		p.blade_center = BUTTERFLY_BLADE + Vector3(0.0, 0.0, -0.08)
+		p.stick_tilt = BUTTERFLY_STICK_TILT_RAD
 
 
 static func butterfly(p: KeeperPose) -> void:
