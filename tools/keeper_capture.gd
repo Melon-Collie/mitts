@@ -96,8 +96,6 @@ func _init() -> void:
 		# The post stances are drawn on their post, as the brain will place them.
 		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side),
 				side, true])
-		_stances.append(["vh" + tag, func(p: KeeperPose) -> void: KeeperPoses.vh(p, side),
-				side, true])
 		_stances.append(["overlap" + tag,
 				func(p: KeeperPose) -> void: KeeperPoses.overlap(p, side), side])
 	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")

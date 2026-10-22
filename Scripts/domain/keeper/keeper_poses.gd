@@ -51,6 +51,7 @@ const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
 # its knee still lands near enough the middle for the thigh rise to meet the
 # paddle along the ice.
 const EXTENSION_PELVIS_HEIGHT_M: float = 0.38
+const RVH_OFF_PAD_RISE_RAD: float = deg_to_rad(30.0)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
 # The blade sits a few inches ahead of the pads, to the glove side of centre
@@ -217,13 +218,15 @@ static func rvh(p: KeeperPose, side: float) -> void:
 	var leg: KeeperPose.Leg = p.legs[post]
 	leg.knee = Vector3(-side * 0.05, shin_y, 0.0)
 	leg.ankle = Vector3(side * 0.42, shin_y, 0.05)
-	# The off-post pad stands: its skate on the ice toward the middle, loaded to
-	# push, the knee up and in, the face square to the shooter.
+	# The off-post pad stands on its skate toward the middle, loaded to push, its
+	# face square to the shooter and laid back RVH_OFF_PAD_RISE_RAD off the ice.
 	var off: KeeperPose.Leg = p.legs[1 - post]
 	var sx: float = -side
 	_ready_leg(off, sx)
-	off.ankle = Vector3(sx * 0.50, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.12)
-	off.knee_pole = Vector3(sx * 0.4, 1.0, -0.5)
+	off.knee_pinned = true
+	off.knee = Vector3(sx * 0.30, KeeperAnatomy.ANKLE_ON_SKATES_M
+			+ KeeperAnatomy.SHIN_M * sin(RVH_OFF_PAD_RISE_RAD), -0.25)
+	off.ankle = Vector3(sx * 0.75, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.20)
 	off.shin_front = _FORWARD
 	p.pelvis = Vector3(side * 0.12, 0.55, 0.10)
 	p.pelvis_rot = Vector3(-0.10, -side * 0.25, -side * 0.12)
@@ -236,30 +239,13 @@ static func rvh(p: KeeperPose, side: float) -> void:
 		p.glove_from_chest = false
 		p.glove_fingers = Vector3(0.0, 1.0, 0.0)
 		# The paddle rises in front of the standing blocker-side pad.
-		p.blade_center = Vector3(-0.25, 0.0, -0.38)
+		p.blade_center = Vector3(-0.28, 0.0, -0.40)
 		p.blade_yaw = deg_to_rad(-15.0)
 		p.stick_tilt = deg_to_rad(18.0)
 	else:
 		# In front at the waist, toward the middle.
 		p.glove_hand = Vector3(-0.30, -0.10, -0.38)
 		p.blade_center = Vector3(-0.15, 0.0, -0.30)
-
-
-# VH on the post at `side`: the post leg standing with its pad upright against
-# the iron, the other pad down flat across the crease.
-static func vh(p: KeeperPose, side: float) -> void:
-	butterfly(p)
-	var post: int = 0 if side < 0.0 else 1
-	var sx: float = _side_x(post)
-	_ready_leg(p.legs[post], sx)
-	var leg: KeeperPose.Leg = p.legs[post]
-	leg.ankle = Vector3(sx * 0.30, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.06)
-	leg.knee_pole = Vector3(-sx * 0.3, 0.0, -1.0)
-	leg.shin_front = Vector3(sx * 0.6, 0.0, -1.0)
-	p.pelvis = Vector3(side * 0.05, 0.72, 0.06)
-	p.pelvis_rot = Vector3(-0.20, 0.0, -side * 0.25)
-	_ready_hands(p, 0.15)
-	p.blade_center = HALF_BUTTERFLY_BLADE
 
 
 # Overlap at the post on `side`: standing in the ready stance with the post
