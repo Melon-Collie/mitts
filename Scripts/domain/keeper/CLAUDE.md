@@ -13,6 +13,7 @@ one the bots shoot at.
 | `keeper_skeleton.gd` | the bones, solved from a pose (legs and arms by two-bone IK, the stick by its lie) |
 | `keeper_gear.gd` | one save box per piece of gear, on its bone; the contact test's packed layout |
 | `keeper_poses.gd` | the taught stances, each written as where the body goes |
+| `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones; the boxes drawn for debugging |
@@ -51,6 +52,7 @@ three-quarter to `.preview/keeper/` (`tools/keeper_capture.gd`), with the save
 boxes overlaid unless `KEEPER_CAPTURE_BOXES=0`. `tests/unit/keeper/
 test_keeper_body.gd` holds the proportions, the bones' lengths, the gear on the
 ice and inside the rule book, the rigid stick, the packed layout and the sealed
-butterfly.
+butterfly; `test_keeper_coverage.gd` snapshots each stance's coverage straight
+on and from the dot line.
 
 He is authored left-catching; a right-catcher's mirror is not built yet.

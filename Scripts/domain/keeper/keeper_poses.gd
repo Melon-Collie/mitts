@@ -100,7 +100,8 @@ static func butterfly(p: KeeperPose) -> void:
 	p.neck_rot = Vector3(0.10, 0.0, 0.0)
 	for i: int in 2:
 		_butterfly_leg(p.legs[i], _side_x(i), shin_y, knee_z, BUTTERFLY_FLARE_RAD)
-	p.glove_hand = Vector3(-0.42, 0.72, -0.30)
+	p.glove_hand = Vector3(-0.44, 0.60, -0.32)
+	p.blocker_elbow_pole = Vector3(-0.2, -1.0, 0.4)
 	p.glove_fingers = Vector3(-0.25, 1.0, -0.1)
 	p.glove_palm = _FORWARD
 	p.blade_center = Vector3(0.0, 0.0, -0.58)
@@ -227,7 +228,7 @@ static func _butterfly_leg(leg: KeeperPose.Leg, sx: float, shin_y: float, knee_z
 # Hands out in front of the body at the pad tops; `drop` lowers them for a
 # keeper whose hips are lower than the stance's.
 static func _ready_hands(p: KeeperPose, drop: float) -> void:
-	p.glove_hand = Vector3(-0.40, 0.92 - drop, -0.42)
+	p.glove_hand = Vector3(-0.40, 0.86 - drop, -0.42)
 	p.glove_fingers = Vector3(-0.25, 1.0, -0.15)
 	p.glove_palm = _FORWARD
 	p.blade_center = READY_BLADE
