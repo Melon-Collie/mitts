@@ -35,12 +35,11 @@ var zone_post_z: float = 2.0
 # below; fast retreats under a genuine rush are owned by the rate-matched rush
 # backflow.
 var depth_speed: float = 4.0
-# Physical ceiling (m/s) on in/out crease movement. A real goalie's telescoping
-# push / backward C-cut runs ~2–2.5 m/s; uncapped, the exponential lerp opens a
-# 1.3 m challenge→crease change at ~5 m/s. The rush backflow's rate-matched
-# retreat deliberately bypasses this cap — it matches the attacker's closing
-# speed, the real constraint on a backflow.
-var depth_max_speed: float = 2.2
+# Physical ceiling (m/s) on in/out crease movement; uncapped, the exponential
+# lerp opens a 1.3 m challenge→crease change at ~5 m/s. The rush backflow's
+# rate-matched retreat deliberately bypasses this cap — it matches the
+# attacker's closing speed, the real constraint on a backflow.
+var depth_max_speed: float = GameRules.DEFAULT_GOALIE_DEPTH_SPEED_M_S
 # Minimum perpendicular depth (m in front of the goal line) the goalie CENTER
 # holds while squared to a shot in front of the net (STANDING / READY /
 # RECOVERING / idle BUTTERFLY). The torso and pads have real Z thickness and

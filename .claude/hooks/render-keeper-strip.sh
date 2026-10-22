@@ -1,7 +1,7 @@
 #!/bin/bash
 # Renders the new keeper's moves (KeeperFootwork) as frame strips: a frame
-# every few ticks from the shooter's side, behind and high in front, one sheet per
-# scenario to .preview/keeper/strip_<name>.png, with each frame's phase, place
+# every few ticks from the shooter's side, behind (beside, for a move in depth)
+# and high in front, one sheet per scenario to .preview/keeper/strip_<name>.png, with each frame's phase, place
 # and speed printed. Wraps tools/keeper_strip.gd.
 #
 #   .claude/hooks/render-keeper-strip.sh               # every scenario

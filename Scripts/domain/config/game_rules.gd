@@ -611,17 +611,17 @@ const DEFAULT_GOALIE_REACTION_DELAY_S: float = 0.13
 # low read, arms need "where in the upper net" placement math first. Mirrors
 # GoalieController.arm_reaction_delay.
 const DEFAULT_GOALIE_ARM_REACTION_DELAY_S: float = 0.18
-# The upright goalie's lateral speeds (GoalieController.t_push_speed and
-# shuffle_speed): a T-push to a spot past lateral_threshold, a shuffle (square,
-# both skates on the ice) inside it. Not tracking_speed, which moves the spot
-# he reads, not his body.
+# The upright goalie's top speeds (GoalieController.t_push_speed, shuffle_speed
+# and depth_max_speed): a T-push to a spot past lateral_threshold, a shuffle
+# (square, both skates on the ice) inside it, and C-cuts in and out (a real
+# backward C-cut runs ~2-2.5 m/s). Not tracking_speed, which moves the spot he
+# reads, not his body.
 const DEFAULT_GOALIE_T_PUSH_SPEED_M_S: float = 3.8
 const DEFAULT_GOALIE_SHUFFLE_SPEED_M_S: float = 2.0
-# How fast a lateral push ramps toward t_push_speed — pushes accelerate onto
-# the edge, they are not instant. Mirrors the Hard/default GoalieController
-# .lateral_accel (the tiered GoalieSkillProfile values ease it downward; the
-# AI predicts against the top-tier keeper like every other goalie constant
-# here). The ramp is the window a hard lateral cut in tight genuinely beats.
+const DEFAULT_GOALIE_DEPTH_SPEED_M_S: float = 2.2
+# How fast a push ramps to its top speed: the Hard/default GoalieController
+# .lateral_accel (GoalieSkillProfile eases it down a tier; the AI predicts
+# against the top tier). The ramp is the window a hard cut in tight beats.
 const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
 # How much harder he stops than he pushes. A planned stop sets the lead skate's
 # edge across the travel with his weight on it — the hardest edge a goalie

@@ -12,7 +12,9 @@ extends SceneTree
 # Needs a real (software) renderer: run it through
 # .claude/hooks/render-keeper-strip.sh. Writes .preview/keeper/strip_<name>.png.
 #
-# The keeper's line runs along X, he faces −Z, +X is his blocker side.
+# The keeper's line runs along X, he faces −Z, +X is his blocker side, +Z
+# is back toward his net. A move in depth swaps the behind view for one from
+# his glove side.
 
 const DT: float = 1.0 / 120.0
 const FRAME_EVERY: int = 6
@@ -27,6 +29,8 @@ const SCENARIOS: Array = [
 	["t_push_glove", -1.0, KeeperFootwork.Move.T_PUSH],
 	["shuffle", 0.3, KeeperFootwork.Move.SHUFFLE],
 	["shuffle_far", 1.0, KeeperFootwork.Move.SHUFFLE],
+	["c_cut_back", 1.2, KeeperFootwork.Move.C_CUT],
+	["c_cut_forward", -1.2, KeeperFootwork.Move.C_CUT],
 ]
 const _PHASE_COLORS: Array[Color] = [
 	Color(0.55, 0.55, 0.58), Color(0.2, 0.8, 0.3), Color(0.25, 0.5, 0.95), Color(0.9, 0.2, 0.2),
@@ -93,13 +97,16 @@ func _init() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 
 
-# Each frame of a move: [pose, x, phase, speed, t].
+# Each frame of a move: [pose, where, phase, speed, t].
 func _record(target: float, kind: int) -> Array:
 	var fw := KeeperFootwork.new()
-	if kind == KeeperFootwork.Move.T_PUSH:
-		fw.push_to(target)
-	else:
-		fw.shuffle_to(target)
+	match kind:
+		KeeperFootwork.Move.T_PUSH:
+			fw.push_to(target)
+		KeeperFootwork.Move.SHUFFLE:
+			fw.shuffle_to(target)
+		KeeperFootwork.Move.C_CUT:
+			fw.c_cut_to(target)
 	var out: Array = []
 	var tick: int = 0
 	var settled: int = -1
@@ -107,7 +114,7 @@ func _record(target: float, kind: int) -> Array:
 		if tick % FRAME_EVERY == 0:
 			var p := KeeperPose.new()
 			fw.pose(p)
-			out.append([p, fw.x, fw.phase, fw.speed, tick * DT])
+			out.append([p, Vector3(fw.x, 0.0, fw.z), fw.phase, fw.speed, tick * DT])
 		fw.step(DT)
 		tick += 1
 		if fw.phase == KeeperFootwork.Phase.SET:
@@ -116,11 +123,12 @@ func _record(target: float, kind: int) -> Array:
 
 
 # view name, camera offset from the middle of the move, look-at offset.
-func _views_for(span: float) -> Array:
+func _views_for(span: float, depth: bool) -> Array:
 	var back: float = 2.6 + span * 0.9
 	return [
 		["shooter", Vector3(0.0, 1.0, -back), Vector3(0.0, 0.55, 0.0)],
-		["behind", Vector3(0.0, 1.0, back), Vector3(0.0, 0.55, 0.0)],
+		["side", Vector3(-back, 1.0, 0.0), Vector3(0.0, 0.55, 0.0)] if depth
+				else ["behind", Vector3(0.0, 1.0, back), Vector3(0.0, 0.55, 0.0)],
 		# High off his glove side in front: the skates' turn and the legs' depth.
 		["high", Vector3(-1.6, 2.2, -back), Vector3(0.0, 0.5, 0.0)],
 	]
@@ -135,23 +143,25 @@ func _process(_delta: float) -> bool:
 		if _scenario_i >= _scenarios.size():
 			return true
 		var target: float = float(_scenarios[_scenario_i][1])
-		_frames = _record(target, int(_scenarios[_scenario_i][2]))
-		_views = _views_for(absf(target))
+		var kind: int = int(_scenarios[_scenario_i][2])
+		_frames = _record(target, kind)
+		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT)
 		_shots = []
 		_shot_i = 0
 		_ticks = 0
 		print("[keeper_strip] %s:" % _scenarios[_scenario_i][0])
 		for f: Array in _frames:
-			print("  t %.3f  %-5s  x %+.3f  v %.2f" % [f[4], KeeperFootwork.Phase.keys()[f[2]], f[1], f[3]])
+			var at: Vector3 = f[1]
+			print("  t %.3f  %-5s  x %+.3f  z %+.3f  v %.2f" % [f[4], KeeperFootwork.Phase.keys()[f[2]],
+					at.x, at.z, f[3]])
 		return false
 	# Four frames a shot: place, two to draw, one to read back.
-	var target: float = float(_scenarios[_scenario_i][1])
-	var mid := Vector3(target * 0.5, 0.0, 0.0)
+	var mid: Vector3 = (_frames[0][1] as Vector3).lerp(_frames[_frames.size() - 1][1] as Vector3, 0.5)
 	var frame: Array = _frames[_shot_i % _frames.size()]
 	var view: Array = _views[_shot_i / _frames.size()]
 	if _ticks % 4 == 1:
 		_keeper.apply_pose(frame[0] as KeeperPose)
-		_keeper.position = Vector3(float(frame[1]), 0.0, 0.0)
+		_keeper.position = frame[1] as Vector3
 		_keeper.reset_physics_interpolation()
 		_camera.position = mid + (view[1] as Vector3)
 		_camera.look_at(mid + (view[2] as Vector3), Vector3.UP)
