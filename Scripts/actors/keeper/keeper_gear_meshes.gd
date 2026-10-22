@@ -8,7 +8,6 @@ extends RefCounted
 
 const S := KeeperMeshKit.Slot
 const P := KeeperGear.Part
-const _CREASE := Color(0.82, 0.82, 0.84)
 const _DEEP := Color(0.62, 0.62, 0.66)
 
 # The pad's outer roll: how far its section's corners are cut back, of the half
@@ -65,10 +64,23 @@ static func _build(part: int) -> ArrayMesh:
 	return k.commit()
 
 
-# The leg pad: a faceted face proud of the leg channel, rolled on its outer
-# edges, the knee stack standing out at the top and the boot slanting back over
-# the skate at the bottom. Two creases run down the face and the breaks above
-# and below the knee cross it.
+# The leg in the pad's channel, in the pad's box frame: the shin's line, a
+# sock's radius round the calf, and how thick the pad's side wings are.
+const _PAD_SHIN_Z: float = KeeperAnatomy.PAD_FORWARD_OF_SHIN_M
+const _SOCK_RADIUS_M: float = 0.045
+const _PAD_WING_M: float = 0.035
+# The sock from the ankle (0) to the knee (1): radius as a share of
+# _SOCK_RADIUS_M, full at the calf.
+const _SOCK_PROFILE: Array[Vector2] = [
+	Vector2(0.0, 0.88), Vector2(0.3, 1.0), Vector2(0.6, 1.12), Vector2(0.85, 1.08), Vector2(1.0, 1.02),
+]
+
+
+# The leg pad: a faceted face proud of the leg, rolled on its outer edges, the
+# knee stack standing out at the top and the face falling back toward the toe
+# at the bottom, and side wings running back from it either side of the leg.
+# The back is the open channel the leg lies in, strapped across. The face is
+# left plain for the pad's paint.
 static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
 	var cut: float = h.x * PAD_CUT
 	var stations: Array[Vector3] = [
@@ -80,17 +92,82 @@ static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
 		Vector3(h.y - PAD_STACK_TOP_M, 1.0, 1.0),
 		Vector3(h.y, 0.88, 0.85),
 	]
-	var rings: Array[PackedVector3Array] = []
+	var face_back: float = _PAD_SHIN_Z - _SOCK_RADIUS_M
+	var face: Array[PackedVector3Array] = []
+	var wings: Array = [[] as Array[PackedVector3Array], [] as Array[PackedVector3Array]]
 	for s: Vector3 in stations:
-		rings.append(KeeperMeshKit.octagon(s.x, h.x * s.y, h.z, cut * s.y, s.z))
-	k.sweep(S.PADS, rings, Vector3.ZERO)
-	k.tint = _CREASE
-	for x: float in [-h.x * 0.40, h.x * 0.40]:
-		k.box(S.PADS, Vector3(x, -0.02, -h.z * 0.86 - 0.002),
-				Vector3(0.004, h.y - 0.17, 0.003))
-	for y: float in [h.y - 0.185, h.y - 0.24]:
-		k.box(S.PADS, Vector3(0.0, y, -h.z * 0.86 - 0.002), Vector3(h.x * 0.92, 0.006, 0.003))
+		var w: float = h.x * s.y
+		face.append(_pad_face_ring(s.x, w, -h.z * s.z, face_back, cut * s.y))
+		for side: int in 2:
+			var sx: float = -1.0 if side == 0 else 1.0
+			(wings[side] as Array[PackedVector3Array]).append(PackedVector3Array([
+				Vector3(sx * (w - _PAD_WING_M), s.x, face_back - 0.01),
+				Vector3(sx * w, s.x, face_back - 0.01),
+				Vector3(sx * w, s.x, h.z - cut * 0.5),
+				Vector3(sx * (w - cut * 0.5), s.x, h.z),
+				Vector3(sx * (w - _PAD_WING_M), s.x, h.z),
+			]))
+	k.sweep(S.PADS, face, Vector3(0.0, 0.0, (face_back - h.z) * 0.5))
+	for side: int in 2:
+		var sx: float = -1.0 if side == 0 else 1.0
+		k.sweep(S.PADS, wings[side], Vector3(sx * (h.x - _PAD_WING_M * 0.5), 0.0, h.z * 0.5))
+	_pad_lining(k, h, stations, face_back)
+	_sock(k, h)
+	# The straps across the channel: at the ankle, the calf and under the knee.
+	for y: float in [-h.y + 0.10, -0.02, h.y - 0.17]:
+		k.box(S.STRAP, Vector3(0.0, y, h.z - 0.006), Vector3(h.x - _PAD_WING_M * 0.5, 0.018, 0.006))
+
+
+# The channel's lining, facing into it: the back of the face and the inside of
+# each wing, shaded so the leg in its sock stands out in a kit whose socks are
+# its pads' colour.
+static func _pad_lining(k: KeeperMeshKit, h: Vector3, stations: Array[Vector3],
+		face_back: float) -> void:
+	k.tint = _DEEP
+	var back: float = face_back + 0.002
+	for i: int in stations.size() - 1:
+		var a: Vector3 = stations[i]
+		var b: Vector3 = stations[i + 1]
+		var ia: float = h.x * a.y - _PAD_WING_M - 0.002
+		var ib: float = h.x * b.y - _PAD_WING_M - 0.002
+		var mid: float = (a.x + b.x) * 0.5
+		k.quad(S.PADS, Vector3(-ia, a.x, back), Vector3(ia, a.x, back), Vector3(ib, b.x, back),
+				Vector3(-ib, b.x, back), Vector3(0.0, mid, back - 0.05))
+		for sx: float in [-1.0, 1.0]:
+			k.quad(S.PADS, Vector3(sx * ia, a.x, back), Vector3(sx * ia, a.x, h.z),
+					Vector3(sx * ib, b.x, h.z), Vector3(sx * ib, b.x, back),
+					Vector3(sx * (ia + 0.05), mid, h.z * 0.5))
 	k.tint = Color.WHITE
+
+
+# A section of the pad's face from `front` back to `back` (z), its front
+# corners cut by `cut`, its back ones by a little.
+static func _pad_face_ring(y: float, hx: float, front: float, back: float,
+		cut: float) -> PackedVector3Array:
+	var b: float = minf(cut, 0.015)
+	return PackedVector3Array([
+		Vector3(-hx + cut, y, front), Vector3(hx - cut, y, front), Vector3(hx, y, front + cut),
+		Vector3(hx, y, back - b), Vector3(hx - b, y, back), Vector3(-hx + b, y, back),
+		Vector3(-hx, y, back - b), Vector3(-hx, y, front + cut),
+	])
+
+
+# The leg down the pad's channel, in the kit's socks, from the ankle in the
+# skate to the knee.
+static func _sock(k: KeeperMeshKit, h: Vector3) -> void:
+	var bottom: float = sock_top_in_pad(h) - KeeperAnatomy.SHIN_M
+	var rings: Array[PackedVector3Array] = []
+	for st: Vector2 in _SOCK_PROFILE:
+		var r: float = _SOCK_RADIUS_M * st.y
+		rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, bottom + KeeperAnatomy.SHIN_M * st.x,
+				_PAD_SHIN_Z), r, r * 0.95, 10, PI / 10.0))
+	k.sweep(S.SOCK, rings, Vector3(0.0, bottom + KeeperAnatomy.SHIN_M * 0.5, _PAD_SHIN_Z))
+
+
+# The sock's top, at the knee, in the pad's box frame: its bands are laid down
+# the shin from here.
+static func sock_top_in_pad(h: Vector3) -> float:
+	return h.y - KeeperAnatomy.PAD_ABOVE_KNEE_M
 
 
 # The knee stack's full section, just under the pad's top, in the pad's box

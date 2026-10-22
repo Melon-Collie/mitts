@@ -39,6 +39,7 @@ var _forearm: ShaderMaterial = null
 # The pants' legs and their shell, each with its stripe down its outer side
 # (the shell on both).
 var _pants_paint: Dictionary = {}
+var _sock: ShaderMaterial = null
 var _front: KeeperJerseyDecal = null
 var _back: KeeperJerseyDecal = null
 var _shoulder: KeeperJerseyDecal = null
@@ -114,6 +115,8 @@ func apply_uniform(colors: Dictionary) -> void:
 	for m: ShaderMaterial in _pants_paint.values():
 		m.set_shader_parameter("base_color", kit.pants.base)
 		_set_stripes(m, kit.pants.stripes)
+	_sock.set_shader_parameter("base_color", kit.socks.base)
+	_set_stripes(_sock, kit.socks.stripes)
 	var preset: Dictionary = colors.get("preset", {})
 	_front.set_crest(TeamCrest.fruit_for(preset), preset)
 	_front_view.render_target_update_mode = SubViewport.UPDATE_ONCE
@@ -152,6 +155,8 @@ func _letter() -> void:
 func _kit_material(part: int, slot: int) -> Material:
 	if slot == S.PANTS:
 		return _pants_paint.get(part)
+	if slot == S.SOCK:
+		return _sock
 	if slot != S.JERSEY:
 		return null
 	match part:
@@ -185,6 +190,12 @@ func _build_jersey_materials() -> void:
 	_upper_arm = _jersey_shader(P.UPPER_ARM_G)
 	_build_shoulder_paint()
 	_build_pants_paint()
+	# The sock's bands run down the shin from its top at the knee, as the
+	# skaters' do down theirs.
+	_sock = _jersey_shader(P.PAD_G)
+	var pad: Vector3 = KeeperGear.half_extents(P.PAD_G)
+	_sock.set_shader_parameter("half_size", Vector2(pad.x, KeeperGearMeshes.sock_top_in_pad(pad)))
+	_sock.set_shader_parameter("height_m", KeeperAnatomy.SHIN_M)
 	_forearm = _jersey_shader(P.FOREARM_G)
 	# The sleeve's bands run from the elbow joint, above which is the pad.
 	var elbow: Vector3 = KeeperGearMeshes.elbow_in_forearm(KeeperGear.half_extents(P.FOREARM_G))

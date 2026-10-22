@@ -71,17 +71,23 @@ by the same angle (`leg.flex`); where the foot points down under the shin (a
 kick, the RVH's standing leg) the skate shows beneath it, as a real one does.
 It never bends or turns on the pad, and the skate never comes up through it.
 
+The pad's back is open, as a real one's is: its face and two side wings run
+back either side of the leg, which lies in the channel between them in the
+kit's socks (painted down the shin as the skaters' are), strapped across at
+the ankle, calf and under the knee. The channel is lined in a shaded pad
+colour, since most kits' socks are their pads' colour.
+
 ## Seeing him
 
 `.claude/hooks/render-keeper.sh` renders every stance from the front, side,
-three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
+three-quarter, the shooter's spot on the dot line and behind to `.preview/keeper/`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
 (`kick_glove`, `kick_blocker`), and the RVH is drawn against its post
-(`KeeperGear.post_contact` on the post's inner face, on the goal line) with a
-fifth view from a sharp angle on that side. `tests/unit/keeper/
+(`KeeperGear.post_contact` on the post's inner face, on the goal line) with one
+more view from a sharp angle on that side. `tests/unit/keeper/
 test_keeper_body.gd` holds the proportions, the bones' lengths, the arms
-reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, the skates inside their boots, the rigid
+reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, no skate through its boot, the rigid
 stick, the packed layout, the ice sealed in the butterfly, the extension and
 the kick, and the post sealed in the RVH; `test_keeper_coverage.gd` snapshots
 each stance's coverage straight on and from the dot line.

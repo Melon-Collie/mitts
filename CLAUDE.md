@@ -111,7 +111,7 @@ proportions and paint across builds — one static pose, five bodies.
 
 **To see the NEW GOALIE, render him.** `.claude/hooks/render-keeper.sh` draws the
 rebuilt keeper (`Scripts/domain/keeper/`) in every taught stance from the
-front, side, three-quarter and the shooter's spot on the dot line, save boxes
+front, side, three-quarter, the shooter's spot on the dot line and behind, save boxes
 overlaid, to `.preview/keeper/` (`tools/keeper_capture.gd`).
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`

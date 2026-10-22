@@ -11,9 +11,9 @@ extends RefCounted
 
 enum Slot {
 	PADS, JERSEY, PANTS, GLOVES, GLOVE_ACCENT,
-	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP, SKIN,
+	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP, SKIN, SOCK,
 }
-const SLOT_COUNT: int = 13
+const SLOT_COUNT: int = 14
 
 var _tools: Array[SurfaceTool] = []
 var _used: Array[bool] = []

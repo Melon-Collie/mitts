@@ -4,8 +4,8 @@ extends SceneTree
 # side and three-quarter, so his body can be SEEN without a game: each stance
 # solved by KeeperSkeleton from KeeperPoses and drawn by the Keeper actor, with
 # the save boxes overlaid (KEEPER_CAPTURE_BOXES=0 hides them). One contact sheet
-# per stance — front, side, three-quarter and the shooter's view from the dot
-# line — plus one of every stance from the front. KEEPER_CAPTURE_STANCES names a
+# per stance — front, side, three-quarter, the shooter's view from the dot line
+# and his back — plus one of every stance from the front. KEEPER_CAPTURE_STANCES names a
 # comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles;
 # KEEPER_CAPTURE_FOCUS names a KeeperGear part (MASK, BLOCKER...) to look at up
 # close from the same directions; KEEPER_CAPTURE_TEAM picks the team slot whose kit
@@ -88,6 +88,7 @@ func _init() -> void:
 		["side", Vector3(-4.2, 1.0, 0.0)],
 		["34", Vector3(-2.9, 1.3, -3.0)],
 		["shooter", Vector3(0.0, 1.4, -(GameRules.GOAL_LINE_Z - GameRules.ICING_FACEOFF_DOT_Z))],
+		["back", Vector3(0.0, 1.0, 4.2)],
 	]
 	_stances = [
 		["upright", func(p: KeeperPose) -> void: KeeperPoses.upright(p)],
@@ -174,13 +175,10 @@ func _on_post(post: float) -> Vector3:
 			POST_Z - c.z)
 
 
-# A fifth view: up close, his back; on a post, a shooter at a sharp angle from
-# that side, 15° off the goal line, the shot the stance is for.
+# On a post, one more view: a shooter at a sharp angle from that side, 15° off
+# the goal line, the shot the stance is for.
 func _stance_views(post: float) -> Array:
-	if _focus >= 0:
-		# Up close the back is worth a look: the lettering, the yoke.
-		return _views + [["back", Vector3(0.0, 1.0, 4.2)]]
-	if post == 0.0:
+	if _focus >= 0 or post == 0.0:
 		return _views
 	var at := Vector3(_keeper.position.x, 0.5, _keeper.position.z + 0.2)
 	return _views + [["sharp", Vector3(post * 4.5, 0.9, POST_Z - 4.5 * tan(deg_to_rad(15.0))), at]]
@@ -191,7 +189,7 @@ func _save_sheet(imgs: Array[Image], name: String) -> void:
 		return
 	var w: int = imgs[0].get_width()
 	var h: int = imgs[0].get_height()
-	var cols: int = mini(imgs.size(), 4 if imgs.size() == 4 else 5)
+	var cols: int = mini(imgs.size(), 6)
 	var rows: int = ceili(float(imgs.size()) / float(cols))
 	var sheet := Image.create(w * cols, h * rows, false, imgs[0].get_format())
 	for i: int in imgs.size():
