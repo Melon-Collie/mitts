@@ -54,6 +54,28 @@ func test_every_seam_is_an_intended_window() -> void:
 					% [stance[0], seam.position.x, seam.end.x, seam.position.y, seam.end.y])
 
 
+# A right-catcher's holes are the left-catcher's reflected: the windows hold
+# for him with x turned over.
+func test_a_right_catcher_has_the_seams_reflected() -> void:
+	var right := KeeperSkeleton.new()
+	right.mirrored = true
+	for stance: Array in _stances():
+		(stance[1] as Callable).call(_pose)
+		_skel.pose(_pose)
+		right.pose(_pose)
+		var left_seams: Array[Rect2] = KeeperSeams.find(_skel)
+		var right_seams: Array[Rect2] = KeeperSeams.find(right)
+		assert_eq(right_seams.size(), left_seams.size(), "%s" % stance[0])
+		for seam: Rect2 in left_seams:
+			var reflected := Rect2(-seam.end.x, seam.position.y, seam.size.x, seam.size.y)
+			var found: bool = false
+			for r: Rect2 in right_seams:
+				found = found or (r.position.distance_to(reflected.position) < 0.015
+						and r.size.distance_to(reflected.size) < 0.015)
+			assert_true(found, "%s: the hole at x %.2f..%.2f reflected"
+					% [stance[0], seam.position.x, seam.end.x])
+
+
 # The stance the windows guard keeps them: a window that shuts is good news,
 # but the five-hole the ready stance opens is the reference that the finder
 # still sees a hole when there is one.

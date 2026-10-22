@@ -51,6 +51,9 @@ uniform vec4 stripe_colors[MAX_STRIPES] : source_color;
 uniform float stripe_positions[MAX_STRIPES];
 uniform float stripe_widths[MAX_STRIPES];
 uniform bool decals = false;
+// A right-catcher's gear is drawn turned over on its own x: the lettering and
+// the crest are read the other way across, so they still read forwards.
+uniform bool flip_decals = false;
 // The decals' frame: U across the box's width, V down its height, the same
 // metres KeeperJerseyDecal lays its pixels out in.
 uniform sampler2D text_decal : hint_default_transparent, filter_linear_mipmap;
@@ -99,10 +102,11 @@ void fragment() {
 		bool collar = length(vec2(v_obj.x, v_obj.z - collar_center_z)) < collar_radius;
 		col = collar ? collar_color.rgb : yoke_color.rgb;
 	}
+	float across = flip_decals ? -1.0 : 1.0;
 	if (shoulder_number && abs(v_obj_normal.x) > 0.5) {
 		// Seen from the face's side, the viewer's right runs toward −Z on the
 		// +X face and +Z on the −X one.
-		vec2 uv = vec2(0.5 - sign(v_obj_normal.x) * v_obj.z / number_width,
+		vec2 uv = vec2(0.5 - across * sign(v_obj_normal.x) * v_obj.z / number_width,
 				0.5 - (v_obj.y - number_band.x) / number_band.y);
 		if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
 			vec4 number = texture(number_decal, uv);
@@ -112,12 +116,14 @@ void fragment() {
 	if (decals) {
 		// The back (+Z) face: a viewer behind sees +X on their right.
 		if (v_obj_normal.z > 0.9) {
-			vec4 text = texture(text_decal, vec2((v_obj.x + half_size.x) / (half_size.x * 2.0), norm_y));
+			vec4 text = texture(text_decal,
+					vec2((across * v_obj.x + half_size.x) / (half_size.x * 2.0), norm_y));
 			col = mix(col, text.rgb, text.a);
 		}
 		// The front (−Z) face: a viewer in front sees +X on their left.
 		if (v_obj_normal.z < -0.9) {
-			vec4 crest = texture(crest_decal, vec2((half_size.x - v_obj.x) / (half_size.x * 2.0), norm_y));
+			vec4 crest = texture(crest_decal,
+					vec2((half_size.x - across * v_obj.x) / (half_size.x * 2.0), norm_y));
 			col = mix(col, crest.rgb, crest.a);
 		}
 	}

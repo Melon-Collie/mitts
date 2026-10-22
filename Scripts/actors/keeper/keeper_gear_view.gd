@@ -40,6 +40,7 @@ var _forearm: ShaderMaterial = null
 # (the shell on both).
 var _pants_paint: Dictionary = {}
 var _sock: ShaderMaterial = null
+var _mirrored: bool = false
 var _front: KeeperJerseyDecal = null
 var _back: KeeperJerseyDecal = null
 var _shoulder: KeeperJerseyDecal = null
@@ -131,11 +132,24 @@ func apply_jersey_info(p_name: String, number: int) -> void:
 
 
 func update(skel: KeeperSkeleton) -> void:
+	if skel.mirrored != _mirrored:
+		_set_mirrored(skel.mirrored)
+	# A right-catcher's bones are the left-catcher's reflected, each box on its
+	# own x too; drawn turned over on that x, each piece is the true mirror of
+	# the left-catcher's, its glove's thumb on the other side.
+	var turn: Basis = Basis.from_scale(Vector3(-1.0, 1.0, 1.0)) if _mirrored else Basis.IDENTITY
 	for part: int in _pieces.size():
-		_pieces[part].transform = KeeperGear.box(skel, part)
+		var box: Transform3D = KeeperGear.box(skel, part)
+		_pieces[part].transform = Transform3D(box.basis * turn, box.origin)
 	for knee: KeeperKneeBreak in _knees:
 		knee.update(skel)
 	_tail.update(skel)
+
+
+func _set_mirrored(mirrored: bool) -> void:
+	_mirrored = mirrored
+	for m: ShaderMaterial in [_jersey, _upper_arm]:
+		m.set_shader_parameter("flip_decals", mirrored)
 
 
 func _paint_slot(slot: int, c: Variant) -> void:

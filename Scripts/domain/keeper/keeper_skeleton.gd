@@ -21,12 +21,18 @@ enum Bone {
 	UPPER_ARM_B, FOREARM_B, HAND_B,
 }
 const BONE_COUNT: int = 17
+const _REFLECT := Transform3D(Basis(Vector3(-1.0, 0.0, 0.0), Vector3.UP, Vector3.BACK), Vector3.ZERO)
 
 const THIGH: Array[int] = [Bone.THIGH_G, Bone.THIGH_B]
 const SHIN: Array[int] = [Bone.SHIN_G, Bone.SHIN_B]
 const FOOT: Array[int] = [Bone.FOOT_G, Bone.FOOT_B]
 
 var xf: Array[Transform3D] = []
+# A right-catcher: the stances are authored left-catching, and his body is
+# theirs reflected across his centre line once solved, the glove on +X. The
+# glove side and the blocker side keep their meaning, so a stance's `side`
+# is his own; `world_side` turns it into keeper space's.
+var mirrored: bool = false
 
 # The stick, rigid: the heel where paddle meets blade, the paddle's direction up
 # from it, the blade's direction along the ice from it, and the blade's face.
@@ -77,6 +83,29 @@ func pose(p: KeeperPose) -> void:
 	xf[Bone.HAND_B] = Transform3D(_limb_basis(Vector3.UP, p.blocker_face), grip)
 	_pose_arm(Bone.UPPER_ARM_B, blocker_shoulder, xf[Bone.HAND_B] * KeeperAnatomy.BLOCKER_WRIST,
 			p.blocker_elbow_pole, fwd)
+	if mirrored:
+		_mirror()
+
+
+# Keeper space's x for a stance's `side` (−1 the glove side, +1 the blocker
+# side).
+func world_side(side: float) -> float:
+	return -side if mirrored else side
+
+
+# Reflects the solved body across x = 0. Each bone frame is reflected on both
+# sides (still a rotation, its own x turned over), so a box on it is the
+# reflected box: boxes are symmetric about their own axes. The drawn gear,
+# which is not, is turned over on its own x where it is drawn (KeeperGearView).
+func _mirror() -> void:
+	for i: int in BONE_COUNT:
+		xf[i] = _REFLECT * xf[i] * _REFLECT
+	var flip := Vector3(-1.0, 1.0, 1.0)
+	stick_heel *= flip
+	stick_paddle_dir *= flip
+	stick_blade_dir *= flip
+	stick_face *= flip
+	grip *= flip
 
 
 # A limb bone's basis: +Y along `up_bone` (toward the parent joint), −Z the

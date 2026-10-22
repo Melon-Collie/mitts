@@ -98,4 +98,12 @@ each stance's coverage straight on and from the dot line, and
 intended windows (the five-holes the ready stance, the half butterflies and
 the kicks open, the ice under the RVH's off pad).
 
-He is authored left-catching; a right-catcher's mirror is not built yet.
+He is authored left-catching. A right-catcher (`KeeperSkeleton.mirrored`) is
+that body reflected across his centre line once solved: each bone frame is
+reflected on both sides, so every save box is the reflected box, and the stick's
+boxes are turned to the same frame. A stance's `side` stays his own (the glove
+side is his right); `KeeperSkeleton.world_side` turns it into keeper space's,
+which is what `KeeperGear.post_contact` takes. The drawn gear, which is not
+symmetric, is turned over on each piece's own x (`KeeperGearView`), and the
+jersey's lettering and crest read the other way across so they still read
+forwards. `KEEPER_CAPTURE_RIGHT=1` renders him.

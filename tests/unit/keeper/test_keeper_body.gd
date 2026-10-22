@@ -158,6 +158,34 @@ func test_every_forearm_goes_into_its_glove_from_the_wrist() -> void:
 		assert_lt(into_blocker.z, 0.5, "%s: the forearm comes into the blocker from behind its board" % stance[0])
 
 
+# A right-catcher is the left-catcher reflected across his centre line: every
+# save box (each on its own reflected frame, its x turned over), the stick he
+# holds and the post he seals in the RVH.
+func test_a_right_catcher_is_the_left_catcher_reflected() -> void:
+	var right := KeeperSkeleton.new()
+	right.mirrored = true
+	var flip := Vector3(-1.0, 1.0, 1.0)
+	for stance: Array in _stances():
+		_solve(stance)
+		right.pose(_pose)
+		for part: int in KeeperGear.PART_COUNT:
+			var l: Transform3D = KeeperGear.box(_skel, part)
+			var r: Transform3D = KeeperGear.box(right, part)
+			var key: String = "%s %s" % [stance[0], KeeperGear.Part.keys()[part]]
+			assert_almost_eq(r.origin, l.origin * flip, Vector3.ONE * 1e-5, key)
+			assert_almost_eq(r.basis.x, -l.basis.x * flip, Vector3.ONE * 1e-5, key + " x")
+			assert_almost_eq(r.basis.y, l.basis.y * flip, Vector3.ONE * 1e-5, key + " y")
+			assert_almost_eq(r.basis.z, l.basis.z * flip, Vector3.ONE * 1e-5, key + " z")
+		assert_almost_eq(right.grip, _skel.grip * flip, Vector3.ONE * 1e-5, "%s grip" % stance[0])
+		assert_almost_eq(right.stick_face, _skel.stick_face * flip, Vector3.ONE * 1e-5,
+				"%s blade face" % stance[0])
+	KeeperPoses.rvh(_pose, -1.0)
+	_skel.pose(_pose)
+	right.pose(_pose)
+	assert_almost_eq(KeeperGear.post_contact(right, right.world_side(-1.0)),
+			KeeperGear.post_contact(_skel, -1.0) * flip, Vector3.ONE * 1e-5, "the glove-side post")
+
+
 func test_the_stick_is_rigid_and_its_blade_lies_flat() -> void:
 	var lie: float = deg_to_rad(KeeperAnatomy.PADDLE_TO_BLADE_DEG)
 	for stance: Array in _stances():

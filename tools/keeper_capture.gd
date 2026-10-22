@@ -11,7 +11,8 @@ extends SceneTree
 # comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles;
 # KEEPER_CAPTURE_FOCUS names a KeeperGear part (MASK, BLOCKER...) to look at up
 # close from the same directions; KEEPER_CAPTURE_TEAM picks the team slot whose kit
-# he wears (KEEPER_CAPTURE_AWAY for its away kit).
+# he wears (KEEPER_CAPTURE_AWAY for its away kit); KEEPER_CAPTURE_RIGHT=1 draws a
+# right-catcher.
 #
 # `-- --baseline` records each sheet as the baseline (user://, per machine, per
 # combination of those settings); a plain run diffs every sheet against it and
@@ -44,6 +45,7 @@ var _views: Array = []
 var _stances: Array = []
 var _focus: int = KeeperGear.Part.keys().find(OS.get_environment("KEEPER_CAPTURE_FOCUS"))
 var _record_baseline: bool = OS.get_cmdline_user_args().has("--baseline")
+var _right: bool = OS.get_environment("KEEPER_CAPTURE_RIGHT") == "1"
 
 
 func _init() -> void:
@@ -90,6 +92,8 @@ func _init() -> void:
 	root.add_child(_camera)
 	_keeper = Keeper.new()
 	_keeper.show_boxes = OS.get_environment("KEEPER_CAPTURE_BOXES") != "0"
+	_keeper.skeleton.mirrored = _right
+	_skel.mirrored = _right
 	root.add_child(_keeper)
 	var team: int = OS.get_environment("KEEPER_CAPTURE_TEAM").to_int()
 	_keeper.apply_uniform(TeamColorRegistry.get_colors(team, 1 if OS.has_environment("KEEPER_CAPTURE_AWAY") else 0))
@@ -141,7 +145,7 @@ func _process(_delta: float) -> bool:
 		var s: Array = _stances[_stance_i]
 		(s[1] as Callable).call(_pose)
 		_keeper.apply_pose(_pose)
-		var post: float = _post_side(s)
+		var post: float = _post_side(s, _skel)
 		_keeper.position = _on_post(post)
 		_keeper.reset_physics_interpolation()
 		var v: Array = _stance_views(post)[_view_i]
@@ -163,7 +167,7 @@ func _process(_delta: float) -> bool:
 		if _view_i == 0:
 			_fronts.append(img)
 		_view_i += 1
-		if _view_i >= _stance_views(_post_side(_stances[_stance_i])).size():
+		if _view_i >= _stance_views(_post_side(_stances[_stance_i], _skel)).size():
 			if _focus < 0:
 				_shots.append(_mouth_tile(img.get_width(), img.get_height(), img.get_format()))
 			_save_sheet(_shots, String(_stances[_stance_i][0]))
@@ -173,8 +177,9 @@ func _process(_delta: float) -> bool:
 	return false
 
 
-static func _post_side(stance: Array) -> float:
-	return float(stance[2]) if stance.size() > 2 else 0.0
+# The post a stance is drawn on, in keeper space.
+static func _post_side(stance: Array, skel: KeeperSkeleton) -> float:
+	return skel.world_side(float(stance[2])) if stance.size() > 2 else 0.0
 
 
 # Where the keeper stands for a stance on `post`: KeeperGear.post_contact on the
@@ -269,7 +274,8 @@ func _check_baseline(sheet: Image, name: String) -> void:
 # The settings a sheet was drawn with, so a baseline is only ever compared with
 # a sheet drawn the same way.
 static func _settings_key() -> String:
-	return "focus-%s_team-%s%s_boxes-%s_scale-%s" % [
+	return "focus-%s_team-%s%s%s_boxes-%s_scale-%s" % [
 		OS.get_environment("KEEPER_CAPTURE_FOCUS"), OS.get_environment("KEEPER_CAPTURE_TEAM"),
 		"_away" if OS.has_environment("KEEPER_CAPTURE_AWAY") else "",
+		"_right" if OS.get_environment("KEEPER_CAPTURE_RIGHT") == "1" else "",
 		OS.get_environment("KEEPER_CAPTURE_BOXES"), OS.get_environment("KEEPER_CAPTURE_SCALE")]

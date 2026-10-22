@@ -199,7 +199,18 @@ static func _rise_box(skel: KeeperSkeleton, side: int) -> Transform3D:
 	return Transform3D(basis, root + basis * Vector3(0.0, _RISE_HALF.y, _RISE_FACE_Z))
 
 
+# The stick's box from its solved lie. A right-catcher's lie is reflected
+# vectors, whose cross turns the other way: his box is turned half round its
+# own y to the reflected frame his bones have, so his drawn stick is the true
+# mirror.
 static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:
+	var box: Transform3D = _stick_box_from_lie(skel, part)
+	if skel.mirrored:
+		box.basis = Basis(-box.basis.x, box.basis.y, -box.basis.z)
+	return box
+
+
+static func _stick_box_from_lie(skel: KeeperSkeleton, part: int) -> Transform3D:
 	var paddle: Vector3 = skel.stick_paddle_dir
 	var blade: Vector3 = skel.stick_blade_dir
 	var h: Vector3 = _HALF[part]
@@ -219,12 +230,15 @@ static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:
 	return Transform3D(basis, skel.stick_heel + paddle * along)
 
 
-# Where a post stance meets the post at `side` (−1 the glove side, +1 the
-# blocker side), keeper space: the post's inner face at his gear's outermost
-# reach, on the goal line through that side's ankle — the leg lies along the
-# line and the pad's face stands out in front of it.
+# Where a post stance meets the post at `side` of keeper space (−1 the −X
+# post; a stance's own side through KeeperSkeleton.world_side): the post's
+# inner face at his gear's outermost reach, on the goal line through that
+# side's ankle — the leg lies along the line and the pad's face stands out in
+# front of it.
 static func post_contact(skel: KeeperSkeleton, side: float) -> Vector3:
-	var ankle: Vector3 = skel.xf[KeeperSkeleton.FOOT[0 if side < 0.0 else 1]].origin
+	var g: Vector3 = skel.xf[KeeperSkeleton.FOOT[0]].origin
+	var b: Vector3 = skel.xf[KeeperSkeleton.FOOT[1]].origin
+	var ankle: Vector3 = g if g.x * side > b.x * side else b
 	return Vector3(_outermost_x(skel, side), 0.0, ankle.z)
 
 
