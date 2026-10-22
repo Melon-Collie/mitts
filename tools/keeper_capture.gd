@@ -6,7 +6,9 @@ extends SceneTree
 # the save boxes overlaid (KEEPER_CAPTURE_BOXES=0 hides them). One contact sheet
 # per stance — front, side, three-quarter and the shooter's view from the dot
 # line — plus one of every stance from the front. KEEPER_CAPTURE_STANCES names a
-# comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles.
+# comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles;
+# KEEPER_CAPTURE_FOCUS names a KeeperGear part (MASK, BLOCKER...) to look at up
+# close from the same directions.
 #
 # Needs a real (software) renderer: run it through .claude/hooks/render-keeper.sh,
 # which wraps xvfb-run and the Compatibility backend. Writes .preview/keeper/.
@@ -19,6 +21,8 @@ const OUT_DIR: String = "res://.preview/keeper"
 const SHOOTER_FOV_DEG: float = 28.0
 # The goal line, behind the keeper's origin.
 const POST_Z: float = 0.35
+# A focused part fills about a third of the tile.
+const FOCUS_DIST_PER_HALF: float = 6.0
 
 var _camera: Camera3D = null
 var _keeper: Keeper = null
@@ -27,6 +31,7 @@ var _skel := KeeperSkeleton.new()
 var _frames: int = 0
 var _views: Array = []
 var _stances: Array = []
+var _focus: int = KeeperGear.Part.keys().find(OS.get_environment("KEEPER_CAPTURE_FOCUS"))
 
 
 func _init() -> void:
@@ -124,9 +129,18 @@ func _process(_delta: float) -> bool:
 		_keeper.position = _on_post(post)
 		_keeper.reset_physics_interpolation()
 		var v: Array = _stance_views(post)[_view_i]
+		var at: Vector3 = v[2] if v.size() > 2 else Vector3(0.0, 0.62, 0.0)
 		_camera.position = v[1]
 		_camera.fov = SHOOTER_FOV_DEG if v[0] == "shooter" else 40.0
-		_camera.look_at(v[2] if v.size() > 2 else Vector3(0.0, 0.62, 0.0), Vector3.UP)
+		if _focus >= 0:
+			_skel.pose(_pose)
+			var part: Vector3 = _keeper.position + KeeperGear.box(_skel, _focus).origin
+			var h: Vector3 = KeeperGear.half_extents(_focus)
+			_camera.position = part + (v[1] - at).normalized() \
+					* FOCUS_DIST_PER_HALF * maxf(h.x, maxf(h.y, h.z))
+			_camera.fov = 40.0
+			at = part
+		_camera.look_at(at, Vector3.UP)
 	elif _frames % 4 == 0:
 		var img: Image = root.get_viewport().get_texture().get_image()
 		_shots.append(img)

@@ -101,6 +101,17 @@ func box(slot: int, center: Vector3, half: Vector3, basis: Basis = Basis.IDENTIT
 		quad(slot, c[f[0]], c[f[1]], c[f[2]], c[f[3]], center)
 
 
+# A square bar of half thickness `r` from `a` to `b`.
+func rod(slot: int, a: Vector3, b: Vector3, r: float) -> void:
+	var d: Vector3 = b - a
+	var y: Vector3 = d.normalized()
+	var x: Vector3 = y.cross(Vector3.FORWARD)
+	if x.length_squared() < 1e-6:
+		x = y.cross(Vector3.UP)
+	x = x.normalized()
+	box(slot, (a + b) * 0.5, Vector3(r, d.length() * 0.5, r), Basis(x, y, x.cross(y)))
+
+
 # A loop of `n` points round an ellipse in the plane square to `axis` (X, Y or
 # Z: 0, 1, 2) at `at` along it, radii `ra` and `rb` on the other two axes in
 # order, starting at angle `phase`.

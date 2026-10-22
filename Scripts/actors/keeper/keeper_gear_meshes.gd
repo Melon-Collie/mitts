@@ -258,16 +258,98 @@ static func _blocker(k: KeeperMeshKit, h: Vector3) -> void:
 			Vector3(0.05, 0.065, 0.045), 4, 8)
 
 
-# The mask: the shell over the skull, the cage across the face, the dangler
-# hanging under the chin.
+# The mask's shell, in the head's frame (origin on the neck's line at chin
+# height, −Z forward), bottom to top: height, half width, front, back. The chin
+# juts ahead of the jaw, the cheeks run back along it to the backplate, the brow
+# stands out over the eyes and the dome closes over the skull.
+const _MASK_SECTIONS: Array[Vector4] = [
+	Vector4(-0.035, 0.045, -0.115, -0.060),
+	Vector4(0.000, 0.085, -0.135, -0.010),
+	Vector4(0.045, 0.108, -0.135, 0.060),
+	Vector4(0.075, 0.114, -0.125, 0.090),
+	Vector4(0.110, 0.120, -0.120, 0.115),
+	Vector4(0.160, 0.120, -0.120, 0.125),
+	Vector4(0.200, 0.116, -0.135, 0.125),
+	Vector4(0.235, 0.100, -0.115, 0.115),
+	Vector4(0.258, 0.068, -0.075, 0.085),
+	Vector4(KeeperGear.MASK_TOP_M, 0.020, -0.020, 0.030),
+]
+# The face opening: the shell's front sits back to the face between chin and
+# brow, and the cage spans it.
+const _MASK_FACE := Vector2(0.05, 0.19)
+const _MASK_FACE_Z: float = -0.095
+const _MASK_SEGMENTS: int = 16
+const _CAGE_EYE_LINE: float = 0.14
+
+
+# The mask: a fibreglass shell over the skull and down the jaw, a bar cage
+# bowed out across the face opening, the dangler hanging under the chin.
 static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
-	k.ellipsoid(S.HELMET, Vector3(0.0, 0.01, 0.005), Vector3(h.x * 0.95, h.y * 0.93, h.z * 0.95), 7, 12)
-	var face_z: float = -h.z * 0.97
-	for x: float in [-0.055, -0.02, 0.02, 0.055]:
-		k.box(S.CAGE, Vector3(x, -0.035, face_z), Vector3(0.0035, 0.055, 0.004))
-	for y: float in [-0.005, -0.045, -0.08]:
-		k.box(S.CAGE, Vector3(0.0, y, face_z), Vector3(0.075, 0.0035, 0.004))
-	k.box(S.STRAP, Vector3(0.0, -h.y + 0.02, -h.z * 0.7), Vector3(0.045, 0.03, 0.006))
+	var o := Vector3(0.0, -h.y + KeeperGear.MASK_BELOW_CHIN_M, h.z - KeeperGear.MASK_BACK_M)
+	var rings: Array[PackedVector3Array] = []
+	for s: Vector4 in _MASK_SECTIONS:
+		rings.append(_mask_ring(o, s))
+	k.sweep(S.HELMET, rings, o + Vector3(0.0, 0.12, 0.0))
+	var chin: float = _MASK_FACE.x - 0.005
+	var brow: float = _MASK_FACE.y + 0.005
+	var face := PackedVector2Array()
+	for y: float in [chin, _CAGE_EYE_LINE, brow]:
+		face.append(Vector2(_cage_half_width(y), o.y + y))
+	for y: float in [brow, _CAGE_EYE_LINE, chin]:
+		face.append(Vector2(-_cage_half_width(y), o.y + y))
+	k.slab(S.STRAP, face, o.z + _MASK_FACE_Z - 0.007, o.z + _MASK_FACE_Z - 0.004)
+	# A cat-eye cage: close bars over the mouth and chin, a wide opening for
+	# each eye either side of the centre bar. Bars are placed as fractions of
+	# the cage's half width at their height.
+	for f: float in [-0.5, 0.5]:
+		_cage_bar(k, o, Vector2(f, chin), Vector2(f, _CAGE_EYE_LINE))
+	for f: float in [-1.0, 0.0, 1.0]:
+		_cage_bar(k, o, Vector2(f, chin), Vector2(f, brow))
+	for y: float in [chin + 0.005, 0.085, 0.115, _CAGE_EYE_LINE, brow - 0.005]:
+		_cage_bar(k, o, Vector2(-1.0, y), Vector2(1.0, y))
+	k.box(S.CAGE, o + Vector3(0.0, -0.065, -0.098), Vector3(0.034, 0.03, 0.002),
+			Basis(Vector3.RIGHT, -0.2))
+
+
+# The cage's half width at a height: narrow at the chin, widest across the
+# eyes, following the jaw's V up to the brow.
+static func _cage_half_width(y: float) -> float:
+	if y < _CAGE_EYE_LINE:
+		return lerpf(0.045, 0.078, clampf((y - _MASK_FACE.x) / (_CAGE_EYE_LINE - _MASK_FACE.x), 0.0, 1.0))
+	return lerpf(0.078, 0.070, clampf((y - _CAGE_EYE_LINE) / (_MASK_FACE.y - _CAGE_EYE_LINE), 0.0, 1.0))
+
+
+# One section of the shell: a squarish loop (a superellipse), front and back
+# reached on the Z axis, its front pushed back to the face inside the opening.
+static func _mask_ring(o: Vector3, s: Vector4) -> PackedVector3Array:
+	var zc: float = (s.z + s.w) * 0.5
+	var rz: float = (s.w - s.z) * 0.5
+	var in_face: bool = s.x > _MASK_FACE.x and s.x < _MASK_FACE.y
+	var out := PackedVector3Array()
+	for i: int in _MASK_SEGMENTS:
+		var t: float = TAU * float(i) / float(_MASK_SEGMENTS)
+		var sx: float = signf(sin(t)) * pow(absf(sin(t)), 0.667)
+		var cz: float = signf(cos(t)) * pow(absf(cos(t)), 0.667)
+		var p := Vector3(sx * s.y, s.x, zc - cz * rz)
+		if in_face and cos(t) > 0.9:
+			p.z = maxf(p.z, _MASK_FACE_Z)
+		out.append(o + p)
+	return out
+
+
+# A cage bar from `a` to `b` (the fraction of the cage's half width across,
+# height in the head's frame), bowed on the cage's surface: furthest out at the
+# nose, back toward the shell at its edges.
+static func _cage_bar(k: KeeperMeshKit, o: Vector3, a: Vector2, b: Vector2) -> void:
+	const STEPS: int = 6
+	var prev := Vector3.ZERO
+	for i: int in STEPS + 1:
+		var q: Vector2 = a.lerp(b, float(i) / float(STEPS))
+		var x: float = q.x * _cage_half_width(q.y)
+		var p: Vector3 = o + Vector3(x, q.y, -0.160 + 7.0 * x * x + 2.5 * (q.y - 0.12) * (q.y - 0.12))
+		if i > 0:
+			k.rod(S.CAGE, prev, p, 0.0035)
+		prev = p
 
 
 static func _blade(k: KeeperMeshKit, h: Vector3) -> void:
