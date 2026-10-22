@@ -205,6 +205,15 @@ var _team_resolver: Callable = Callable()
 func set_team_resolver(resolver: Callable) -> void:
 	_team_resolver = resolver
 
+# The skater this peer draws carrying the puck (null while loose) — the host's
+# carrier, or a client's pin. Only the cosmetic spin reads it; unset, it is
+# `carrier`.
+var _carrier_view: Callable = Callable()
+var _spin: PuckSpinRig = null
+
+func set_carrier_view(view: Callable) -> void:
+	_carrier_view = view
+
 # _init (not _ready) so a bare Puck.new() in tests has a working queue without
 # entering the tree.
 func _init() -> void:
@@ -366,6 +375,7 @@ func _ready() -> void:
 	# Swap the scene's cylinder for the shared beveled low-poly puck
 	# (cosmetic — the puck's physics radius is GameRules', not this mesh's).
 	PuckMeshBuilder.apply_puck(self)
+	_spin = PuckSpinRig.new(get_node_or_null("MeshInstance3D") as Node3D)
 
 	var vfx := PuckVFX.new()
 	vfx.name = "VFX"
@@ -1110,8 +1120,23 @@ func _classify_save_part(part_body: Node3D) -> int:
 
 
 func _physics_process(delta: float) -> void:
-	if not _is_server:
+	if _is_server:
+		_host_tick(delta)
+	_step_spin(delta)
+
+
+# A client's controller places the puck at its own priority, so the spin may
+# read the previous tick's placement; it only needs one per tick.
+func _step_spin(delta: float) -> void:
+	if _spin == null:
 		return
+	var holder: Variant = _carrier_view.call() if _carrier_view.is_valid() else carrier
+	var carrier_pos: Vector3 = (holder as Node3D).global_position if is_instance_valid(holder) else Vector3.INF
+	var pos: Vector3 = global_position
+	_spin.step(delta, pos, is_airborne(), pos.y - ice_height, carrier_pos)
+
+
+func _host_tick(delta: float) -> void:
 	var _t0: int = Time.get_ticks_usec()
 
 	# Tick per-skater cooldowns regardless of carrier state. Keys are int
