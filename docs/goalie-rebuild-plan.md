@@ -221,15 +221,49 @@ The view is filled once per tick and is plain data:
   shot-motion phase (gliding, loading, releasing);
 - screens.
 
-**Open question (§7 Q1):** whether he keeps reading the shooter's cursor. The
-honest alternative is reading the **blade**:
+**Decided: no cursor read. He reads only what a goalie can see.**
 
-- a wrist shot's line is constrained by where the blade is and which way it
-  sweeps;
-- a slapper's line is the wind-up's plane.
+**The rule: if a remote client could not draw it, the goalie cannot read it.**
 
-Those are cues a real goalie reads, and the bots and humans give them away
-equally.
+- **The view may be filled only from the replicated fields that pose a skater
+  on screen:**
+  - `position`, `velocity`, `facing`;
+  - `upper_body_rotation_y` (the coil);
+  - `blade_position`, `top_hand_position`, `blade_side`, `blade_up`;
+  - `shot_state` (a raised slapper is visible);
+  - `torso_lean`;
+  - the puck.
+- **It may never read:**
+  - `predicted_shot_velocity`;
+  - the bots' committed aim (`bot_wrister_aim_dir` and kin);
+  - `shot_charge` as a number.
+
+  A wind-up's size reads only as far as the pose draws it.
+- **A test holds the rule:** the perception class names no field outside the
+  list.
+
+**What that leaves him to read:**
+- **Wrist and snap shots:**
+  - the line the blade can throw along, given where it sits relative to the
+    body;
+  - which way the blade is sweeping;
+  - which way the hips and shoulders open.
+- **Slappers:** the wind-up's plane, from the coil and the facing.
+- **Everything:** after release, the puck itself, through the read delay.
+
+**What follows:**
+- **The aim shade, the cursor prelean and the belief ring buffer have no
+  counterpart.** The goalie's pre-release guess is a distribution over the
+  lines the blade can throw. It narrows as the coil and sweep commit, and
+  collapses onto the puck's real line after release, through the read delay.
+- **Deception becomes a body skill:**
+  - opening the hips one way and pulling across;
+  - changing the blade's angle late.
+
+  This is how it works on real ice. It also applies equally to humans and
+  bots, because both are read through the same drawn pose.
+- **The old goalie keeps its cursor read** until it is retired (§5, Phase 5).
+  The decision applies to the new goalie only.
 
 ### 3.2 Threat model: what might happen, and when
 
@@ -471,7 +505,7 @@ Each phase leaves the suite green and the game playable.
   - **Coverage per pose:** straight-on, and from the dot and the wide angle.
 - The old goalie's numbers go in as the baseline snapshot.
 - A tier-order property.
-- Targets agreed with you (§7 Q2).
+- Targets agreed with you (§7 Q1).
 
 **Phase 1: the new body, posed statically.**
 - Skeleton, gear meshes, bone-hung collision boxes, and the pose set (§3.5).
@@ -542,24 +576,23 @@ Each phase leaves the suite green and the game playable.
 Answered:
 - **Scope:** brain and body, with a new articulated model.
 - **The bots:** not a yardstick right now; the scoreboard is scripted.
+- **The read:** no cursor. He reads only what a goalie can see (§3.1).
 
 Still open:
 
-1. **The cursor read.** Keep reading the shooter's published aim (stale), or
-   read only what a goalie can see (blade, body, wind-up)?
-2. **Targets.** What should HARD concede on the scripted scoreboard? For
+1. **Targets.** What should HARD concede on the scripted scoreboard? For
    example:
    - the dot-line perfect-aim sweep (the old puck gave 13 of 288 on a held
      wind-up);
    - an overall save percentage to aim at (NHL is about .905).
 
    Should EASY / NORMAL / HARD sit at fixed gaps?
-3. **The wire.** The pose-parameter wire (§3.5) needs a protocol and
+2. **The wire.** The pose-parameter wire (§3.5) needs a protocol and
    replay-format bump, so old replays stop loading. Acceptable?
-4. **Offline until Phase 4.** Is it fine for the new goalie to be selectable
+3. **Offline until Phase 4.** Is it fine for the new goalie to be selectable
    only offline (free play, practice, games against bots) until its wire state
    exists?
-5. **The model.**
+4. **The model.**
    - One goalie build, or attribute-scaled like the skaters (height, weight)?
    - Pad graphics: today a kit has one `goalie_pads` colour. Do you want
      painted pad designs (stripes, blocks, team accents) in
