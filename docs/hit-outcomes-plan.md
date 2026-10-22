@@ -147,7 +147,8 @@ usually does.
 - **It reads.** The torso reels the way the hit drove it, up to
   `rocked_recoil_deg` at the top of the band and eased down onto the stagger's
   recoil as he comes out. The skates splay and he sits into them as he catches
-  himself (`GaitStaggerLayer`'s floor stage, on a spring). The stick rises as a
+  himself for as long as he is rocked (`GaitStaggerLayer`'s floor stage, on a
+  spring at `rocked_catch_rate`, a step out in about 0.15 s). The stick rises as a
   lifted one does. Not built: the free hand touching the ice, and the stick
   hand flying off the shaft line.
 - **The cross-check never rocks.** It "staggers him on the check's ladder but

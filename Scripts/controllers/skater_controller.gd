@@ -158,6 +158,7 @@ var rocked_grip_penalty: float = 0.75    # peak edge-grip reduction, rocked
 var rocked_recoil_deg: float = 30.0
 var rocked_splay_m: float = 0.16         # each skate out from under its hip
 var rocked_crouch: float = 1.0           # crouch floor (× stance_hip_deg), under the stance's
+var rocked_catch_rate: float = 15.0      # the catch's ease rate: a step out in ~0.15 s
 # ── Knockdown Tuning ──────────────────────────────────────────────────────────
 # The top of the stagger continuum: a hit whose victim impulse exceeds
 # knockdown_impulse KNOCKS THE VICTIM DOWN — movement locked, no puck interaction,

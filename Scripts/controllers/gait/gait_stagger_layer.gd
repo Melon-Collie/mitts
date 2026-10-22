@@ -11,9 +11,9 @@ extends GaitLayer
 # stumble is supposed to shake, and the filter would blunt exactly the
 # frequencies that sell it.
 #
-# Rocked, he also catches himself: the skates splay and he sits into them, by
-# how deep into the rocked band he is. That part rides a spring (EaseRules) so
-# the legs step out over a few frames instead of in one.
+# Rocked, he also catches himself: the skates splay and he sits into them for as
+# long as he is rocked. That part rides a spring (EaseRules) so the legs step
+# out over a few frames instead of in one, and back in as he comes out of it.
 
 var _catch: float = 0.0
 var _catch_rate: float = 0.0
@@ -33,8 +33,8 @@ func is_quiet() -> bool:
 
 
 func advance(delta: float) -> bool:
-	var target: float = _controller.rocked_share()
-	var omega: float = _controller.locomotion_blend_speed * EaseRules.OMEGA_PER_RATE
+	var target: float = 1.0 if _controller.rocked_share() > 0.0 else 0.0
+	var omega: float = _controller.rocked_catch_rate * EaseRules.OMEGA_PER_RATE
 	var x: float = _catch
 	_catch = maxf(EaseRules.critical_x(x, _catch_rate, target, omega, delta), 0.0)
 	_catch_rate = EaseRules.critical_v(x, _catch_rate, target, omega, delta)
