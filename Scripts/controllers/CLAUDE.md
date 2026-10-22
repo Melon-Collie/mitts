@@ -9,10 +9,10 @@ execute; they never reach up. Goalie *math* is pure and lives in
 
 | File | Owns |
 |---|---|
-| `goalie_controller.gd` | the tick, state transitions, tuning `@export`s |
+| `goalie_controller.gd` | the tick, state transitions, tuning vars, the read belief and its convergence |
 | `goalie_state_machine.gd` | stance transitions |
 | `goalie_body_config_builder.gd` | pose solve into a shared scratch config |
-| `goalie_shot_reaction.gd` | the read pipeline (delays, belief, convergence) |
+| `goalie_shot_reaction.gd` | the read pipeline's delays and freeze (the belief and its convergence are the controller's) |
 | `goalie_puck_play.gd` | behind-net trip decision, geometry, phase |
 | `goalie_crease_clear.gd` | loose-puck sweep / cover |
 | `goalie_slide_behavior.gd` | committed slides and post seals |
