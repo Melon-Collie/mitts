@@ -9,7 +9,8 @@ extends SceneTree
 #                 WARN, raised to ERROR. Read from ProjectSettings, so a warning
 #                 a newer engine adds is gated without editing this file, and
 #                 one the project silences (integer_division) stays silent.
-#   (no args)     load every .gd outside addons/ and dot-directories.
+#   (no args)     load every .gd outside addons/, dot-directories, and any
+#                 directory holding a project.godot or .gdignore.
 
 const _WARNINGS_PREFIX: String = "debug/gdscript/warnings/"
 const _WARN: int = 1
@@ -42,7 +43,13 @@ func _collect(dir: String, out: PackedStringArray) -> void:
 	for sub: String in DirAccess.get_directories_at(dir):
 		if sub.begins_with(".") or sub == "addons":
 			continue
-		_collect(dir.path_join(sub), out)
+		var path: String = dir.path_join(sub)
+		# Skipped as the editor's filesystem scan skips them: a nested project
+		# (godot-cpp's test project) is not ours to compile.
+		if FileAccess.file_exists(path.path_join("project.godot")) \
+				or FileAccess.file_exists(path.path_join(".gdignore")):
+			continue
+		_collect(path, out)
 	for file: String in DirAccess.get_files_at(dir):
 		if file.get_extension() == "gd":
 			out.append(dir.path_join(file))
