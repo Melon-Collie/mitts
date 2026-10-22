@@ -15,6 +15,7 @@ one the bots shoot at.
 | `keeper_poses.gd` | the taught stances, each written as where the body goes |
 | `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
 | `keeper_seams.gd` | the holes a flat puck fits through in the shape he shows a shot straight on, inside his outline |
+| `keeper_footwork.gd` | his skates moving him along his line: the T-push (push off the planted trail skate, glide on the lead, edge stop onto the spot) on GoaliePushRules' kinematics, and the ready stance it bends |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -98,6 +99,12 @@ each stance's coverage straight on and from the dot line, and
 `test_keeper_seams.gd` holds every hole a puck fits through to its stance's
 intended windows (the five-holes the ready stance, the half butterflies, the
 extensions and the kicks open, the ice under the RVH's off pad).
+`test_keeper_footwork.gd` holds the T-push: set on his spot in
+`GoaliePushRules.time_to_set`, the push skate on its plant until the leg is
+out, skates on and gear out of the ice every tick, nothing jumping a tick, and
+the ready stance once settled. `.claude/hooks/render-keeper-strip.sh` draws a
+move a few ticks a frame from the shooter's side, behind and high in front
+(`tools/keeper_strip.gd`).
 
 He is authored left-catching. A right-catcher (`KeeperSkeleton.mirrored`) is
 that body reflected across his centre line once solved: each bone frame is

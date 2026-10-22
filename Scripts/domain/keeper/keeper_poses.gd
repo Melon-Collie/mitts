@@ -283,7 +283,12 @@ static func _ready_leg(leg: KeeperPose.Leg, sx: float) -> void:
 	leg.thigh_front = _FORWARD
 	leg.shin_front = Vector3(-sx * 0.15, 0.0, -1.0)
 	leg.foot_mode = KeeperPose.FootMode.FLAT
-	leg.toe = Vector3(sx * sin(READY_TOE_OUT_RAD), 0.0, -cos(READY_TOE_OUT_RAD))
+	leg.toe = ready_toe(sx)
+
+
+# The ready stance's skate on side `sx` (+1 his blocker side), toed out.
+static func ready_toe(sx: float) -> Vector3:
+	return Vector3(sx * sin(READY_TOE_OUT_RAD), 0.0, -cos(READY_TOE_OUT_RAD))
 
 
 static func _butterfly_leg(leg: KeeperPose.Leg, sx: float, shin_y: float, knee_z: float,
