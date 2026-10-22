@@ -727,6 +727,8 @@ func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> Top
 # lands at once, for the paths with no clock), since a blade dangling at speed
 # crosses the release bands in a tick or two and the hand jumped ~0.4 m between
 # shaft and rest. A let-go hand swings with the stride.
+const BH_GRIP_SLIDE_BAND: float = 0.08
+
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
 	_skater.set_hand_pump(_stride_pump(delta))
@@ -734,8 +736,8 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
 	var reach: float = arm * _skater.arm_working_extension + _skater.shoulder_reach_m
-	var held: Vector2 = BottomHandIK.reachable_grip(
-			shoulder, hand_local, blade_local, _grip_fraction(), reach, _glove_spacing())
+	var held: Vector2 = BottomHandIK.soft_reachable_grip(shoulder, hand_local, blade_local,
+			_grip_fraction(), reach, _glove_spacing(), BH_GRIP_SLIDE_BAND)
 	var grip: float = held.x
 	var grip_target_xz := Vector2(
 			lerpf(hand_local.x, blade_local.x, grip),
