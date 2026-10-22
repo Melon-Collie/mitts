@@ -18,7 +18,12 @@ As built, Phase 1 differs from the design below:
 - The wind-up apex and the wide base were set against reference photos
   (Ovechkin's one-timer load, Letang's wind-up): top hand over the back
   shoulder at helmet height, stick laid back behind it, feet spread across the
-  line (`slapper_load_width_m`) and barely staggered.
+  line (`slapper_load_width_m`) and barely staggered. The width is given back
+  as the kick drives: held through it, both legs reached it dead straight and
+  the back leg had nothing left to extend.
+- `ShotMechanics.slapper_aim_dir` is now unused, but it stays: that file is in
+  the shot field's fingerprint, and deleting it would force a regeneration
+  while the goalie is changing elsewhere.
 - Side-on, a shooter's chest faces the stick side of the shot line, so a feed
   from the off-stick side arrives behind him (a right shot on the left circle
   takes it from his right, as Ovechkin does). The bot settle still

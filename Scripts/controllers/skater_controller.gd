@@ -743,7 +743,7 @@ var slapper_strike_front_m: float = 0.1
 var slapper_stance_turn_deg_s: float = 450.0
 # A carried slapshot's set-up ends once the hips are within this of the stance
 # and the puck within this of the strike spot; the puck is pinned where it is.
-var slapper_setup_facing_tol_deg: float = 10.0
+var slapper_setup_facing_tol_deg: float = 2.0
 var slapper_setup_spot_tol_m: float = 0.15
 var min_slapper_power: float = GameRules.DEFAULT_SLAPPER_POWER_MIN_M_S
 var max_slapper_power: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
@@ -876,7 +876,7 @@ var wrister_kick_hip_yaw_deg: float = 12.0     # hips uncoil through the shot li
 var slapper_load_stance: float = 0.75          # the wind-up sits DEEP — the power position
 var slapper_load_lean_deg: float = 7.0         # harder weight-back than the wrister load
 var slapper_load_split_deg: float = 2.0        # side-on, the feet barely stagger
-var slapper_load_width_m: float = 0.2          # each skate set out from under its hip: the wide side-on base
+var slapper_load_width_m: float = 0.12         # each skate set out from under its hip: the wide side-on base
 var slapper_load_hip_coil_deg: float = 16.0    # hips coil under the wound-up torso
 var slapper_kick_min_power: float = 0.6        # a slap swing commits the body even off a short wind-up
 var slapper_kick_back_deg: float = 34.0        # full back-leg extension through the finish

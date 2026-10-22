@@ -139,15 +139,18 @@ func test_quick_pass_release_still_flicks() -> void:
 
 func test_slapper_wind_up_loads_back_leg() -> void:
 	var rest_body_y: float = _visible_body_y()
+	_tick(30)
+	var rest_width: float = _stance_width()
 	# A full wind-up: the pose fills over the same max_slapper_charge_time as
 	# shot_charge (the wind-up IS the charge gauge), so charge 1.0 is a
 	# complete wind-up.
 	_skater.current_shot_state = State.SLAPPER_CHARGE_WITH_PUCK
 	_skater.shot_charge = 1.0
 	_tick(180)
-	assert_lt(_skater.leg_bone_euler(_LEG_L).x, _skater.leg_bone_euler(_LEG_R).x - 0.08,
-			"stick-side foot should stagger back through the wind-up (l %.3f, r %.3f)"
-			% [_skater.leg_bone_euler(_LEG_L).x, _skater.leg_bone_euler(_LEG_R).x])
+	# Side-on, the base widens across the shot line rather than staggering.
+	assert_gt(_stance_width(), rest_width + _controller.slapper_load_width_m,
+			"the skates should spread into a wide base (%.3f m from %.3f m)"
+			% [_stance_width(), rest_width])
 	assert_lt(_skater.leg_bone_euler(_LEG_L).z, -0.02, "legs should roll the weight to the stick side")
 	assert_gt(_coord.shot_hip_yaw, 0.05, "hips should coil under the wound-up torso")
 	assert_lt(_visible_body_y(), rest_body_y - 0.01,
@@ -363,3 +366,9 @@ func test_block_tips_the_chest_onto_the_down_knee() -> void:
 # frame rather than the frame itself (Skater.body_drop_below_frame).
 func _visible_body_y() -> float:
 	return _skater.upper_body.position.y - _skater.body_drop_below_frame()
+
+
+# Lateral span between the two skates, in the skater's own frame.
+func _stance_width() -> float:
+	var span: Vector3 = _skater.blade_mark_position(true) - _skater.blade_mark_position(false)
+	return absf(_skater.global_transform.basis.inverse().x.dot(span))

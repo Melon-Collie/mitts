@@ -867,12 +867,10 @@ func test_one_timer_settles_onto_the_live_feed_line() -> void:
 
 
 func test_one_timer_press_waits_for_the_aim_to_settle() -> void:
-	# The controller locks the slapper direction from the mouse AT THE PRESS,
-	# so a bot that enters the press state still looking away from the net
-	# (late-ready commit, zone-fallback trigger) must NOT press yet — pressing
-	# immediately locked a watching-the-play aim and the one-timer fired
-	# wherever the bot had been looking. Facing dead away from the net (the
-	# net beyond the reach cone) defers the press; squared up, it fires.
+	# The one-timer zone turns with the hips, so a bot that enters the press
+	# state still turned away from its stance (late-ready commit, zone-fallback
+	# trigger) must NOT press yet. Facing dead away from the net defers the
+	# press; opened side-on to it (SlapperRules.stance_facing), it fires.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
 	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
 	s.skater_states[SELF_ID].facing = Vector2(0, 1)   # facing OUR end — net at back
@@ -881,10 +879,10 @@ func test_one_timer_press_waits_for_the_aim_to_settle() -> void:
 	assert_false(i0.slap_pressed, "no press while the net aim is in the back wedge")
 	assert_false(i0.slap_held, "…and nothing to hold yet")
 	assert_eq(sm.get_state(), Agent.State.ONE_TIMER_PRESSED, "still waiting on the feed")
-	s.skater_states[SELF_ID].facing = Vector2(0, -1)   # squared to the net
+	s.skater_states[SELF_ID].facing = sm._one_timer.stance_facing(Vector2(0, -1))  # side-on to the net
 	var i1 := InputState.new()
 	sm.dispatch(i1, s)
-	assert_true(i1.slap_pressed, "squared up — the press fires with a real net aim")
+	assert_true(i1.slap_pressed, "opened up — the press fires with a real net aim")
 	assert_true(i1.slap_held, "…and the wind-up holds")
 
 

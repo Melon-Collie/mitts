@@ -110,10 +110,11 @@ func test_the_blade_carries_the_puck_to_the_strike_spot_before_the_backswing() -
 			"carried at the blade's speed the whole way (%.3f m/tick)" % worst_step)
 	assert_lt(rad_to_deg(_stance_error()), _controller.slapper_setup_facing_tol_deg + 0.01,
 			"the hips have opened side-on")
-	var pinned: Vector3 = _puck()
+	var pinned: Vector3 = _skater.to_local(_puck())
 	_tick(Vector3(0.0, 0.0, -12.0), true)
-	assert_almost_eq(Vector2(_puck().x, _puck().z).distance_to(Vector2(pinned.x, pinned.z)), 0.0, 0.01,
-			"the pin holds the puck where the set-up left it")
+	var held: Vector3 = _skater.to_local(_puck())
+	assert_almost_eq(Vector2(held.x, held.z).distance_to(Vector2(pinned.x, pinned.z)), 0.0, 0.001,
+			"the pin holds the puck where the set-up left it, in the hips' frame")
 	for i: int in 30:
 		_tick(Vector3(0.0, 0.0, -12.0), true)
 	assert_gt(_controller._aiming.slapper_charge_timer, 0.2, "the backswing is charging")
