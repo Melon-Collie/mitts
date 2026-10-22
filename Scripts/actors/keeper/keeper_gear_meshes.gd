@@ -345,8 +345,16 @@ static func _sleeve(k: KeeperMeshKit, h: Vector3) -> void:
 # The trapper, held open: the palm to −Z, the fingers to −Y, the cuff over the
 # wrist at +Y and the thumb at −X. Outlines are (across, up the glove from the
 # cuff's end) in metres; depths run from the palm's face back.
-const _TRAPPER_CUFF_LENGTH_M: float = 0.085
-const _TRAPPER_CUFF_HALF_WIDTH_M: float = 0.10
+# The cuff round the wrist, from its end up into the catching body: (up the
+# glove, half width, half depth). Rounded and turned in at its end, so the
+# glove runs on into the arm going into it rather than ending square.
+const _TRAPPER_CUFF: Array[Vector3] = [
+	Vector3(0.0, 0.068, 0.034), Vector3(0.012, 0.088, 0.046), Vector3(0.026, 0.097, 0.052),
+	Vector3(0.06, 0.10, 0.054), Vector3(0.10, 0.096, 0.052),
+]
+# How many of the cuff's sections from its end carry the accent band.
+const _TRAPPER_CUFF_BAND: int = 2
+const _TRAPPER_CUFF_ROUNDNESS: float = 2.6
 # The catching body above the cuff: the finger section full on the outer side
 # and rounding over the top, falling to the web between it and the thumb.
 const _TRAPPER_BODY: Array[Vector2] = [
@@ -356,8 +364,8 @@ const _TRAPPER_BODY: Array[Vector2] = [
 ]
 # The cheater: the cuff carried on up the thumb side as a flat panel.
 const _TRAPPER_CHEATER: Array[Vector2] = [
-	Vector2(-0.125, 0.03), Vector2(-0.06, 0.03), Vector2(-0.06, 0.225), Vector2(-0.08, 0.245),
-	Vector2(-0.11, 0.245), Vector2(-0.125, 0.225),
+	Vector2(-0.105, 0.035), Vector2(-0.075, 0.035), Vector2(-0.06, 0.055), Vector2(-0.06, 0.225),
+	Vector2(-0.08, 0.245), Vector2(-0.11, 0.245), Vector2(-0.125, 0.225), Vector2(-0.125, 0.06),
 ]
 # The web between the thumb's top and the finger section, laced in a T.
 const _TRAPPER_WEB: Array[Vector2] = [
@@ -370,11 +378,16 @@ const _TRAPPER_WEB: Array[Vector2] = [
 # catching body with its pocket on the palm, the T-trap laced across the web at
 # the top, and finger rolls down the back.
 static func _trapper(k: KeeperMeshKit, h: Vector3) -> void:
-	var cw: float = _TRAPPER_CUFF_HALF_WIDTH_M
-	var cl: float = _TRAPPER_CUFF_LENGTH_M
-	k.slab(S.GLOVES, _trapper_outline(h, [Vector2(-cw, 0.0), Vector2(cw, 0.0), Vector2(cw, cl),
-			Vector2(-cw, cl)]), -h.z * 0.75, h.z * 0.9)
-	k.box(S.GLOVE_ACCENT, Vector3(0.0, h.y - 0.012, 0.0), Vector3(cw + 0.003, 0.012, h.z * 0.85))
+	var cuff: Array[PackedVector3Array] = []
+	for st: Vector3 in _TRAPPER_CUFF:
+		var ring: PackedVector3Array = KeeperMeshKit.rounded(h.y - st.x, st.y, st.z, st.z, 16,
+				_TRAPPER_CUFF_ROUNDNESS)
+		for i: int in ring.size():
+			ring[i].z += h.z * 0.075
+		cuff.append(ring)
+	var mid: Vector3 = Vector3(0.0, h.y - 0.05, h.z * 0.075)
+	k.sweep(S.GLOVE_ACCENT, cuff.slice(0, _TRAPPER_CUFF_BAND), mid, true, false)
+	k.sweep(S.GLOVES, cuff.slice(_TRAPPER_CUFF_BAND - 1), mid, false, true)
 	k.slab(S.GLOVES, _trapper_outline(h, _TRAPPER_BODY), -h.z * 0.62, h.z)
 	k.slab(S.GLOVES, _trapper_outline(h, _TRAPPER_CHEATER), -h.z, h.z * 0.5)
 	k.slab(S.GLOVE_ACCENT, _trapper_outline(h, _TRAPPER_CHEATER, 0.75), -h.z - 0.003, -h.z)
