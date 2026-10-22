@@ -43,6 +43,10 @@ const BUTTERFLY_RISE_OVERLAP_M: float = 0.06
 const BUTTERFLY_KNEE_HALF_SPACING_M: float = KeeperAnatomy.PAD_TOP_ABOVE_KNEE_M \
 		- BUTTERFLY_RISE_OVERLAP_M * 0.5
 const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
+# With a pad standing on the blocker side, the blade sits out ahead of its
+# face so the paddle rises in front of it.
+const HALF_BUTTERFLY_BLADE := Vector3(-0.08, 0.0, -0.56)
+const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
 # The blade sits a few inches ahead of the pads, to the glove side of centre
@@ -94,14 +98,21 @@ static func half_butterfly(p: KeeperPose, side: float) -> void:
 	var up: int = 1 if side < 0.0 else 0
 	var sx: float = _side_x(up)
 	_ready_leg(p.legs[up], sx)
-	# The loaded leg's skate sits under the hip's side with the knee forward of it.
+	# The loaded leg stands its pad up: knee over the skate, face square to the
+	# shooter, its inner edge closing toward the pad that is down.
 	var leg: KeeperPose.Leg = p.legs[up]
-	leg.ankle = Vector3(sx * 0.40, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.24)
-	leg.knee_pole = Vector3(-sx * 0.2, 0.0, -1.0)
-	p.pelvis = Vector3(-side * 0.04, 0.63, 0.08)
-	p.pelvis_rot = Vector3(-0.18, 0.0, -side * 0.30)
-	p.lumbar_rot = Vector3(-0.08, 0.0, 0.0)
-	_ready_hands(p, 0.12)
+	leg.ankle = Vector3(sx * 0.36, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.16)
+	leg.knee_pole = Vector3(sx * 0.8, 0.0, -1.0)
+	leg.shin_front = _FORWARD
+	# Weight down onto the knee that is down, the shoulders near level and
+	# leaning as far as the butterfly's.
+	p.pelvis = Vector3(side * 0.04, 0.60, 0.08)
+	p.pelvis_rot = Vector3(-0.17, 0.0, -side * 0.10)
+	p.lumbar_rot = Vector3(-0.10, 0.0, 0.0)
+	_ready_hands(p, 0.0)
+	# The blade sits out ahead of the standing pad's face, so the paddle rises in
+	# front of it rather than through it.
+	p.blade_center = HALF_BUTTERFLY_BLADE
 
 
 static func butterfly(p: KeeperPose) -> void:
@@ -143,6 +154,8 @@ static func butterfly_extension(p: KeeperPose, side: float) -> void:
 	p.pelvis += Vector3(side * 0.10, -0.06, 0.0)
 	p.pelvis_rot.z = -side * 0.18
 	p.chest_rot.z = side * 0.10
+	# The extended leg lies across the paddle's path: the blade goes out ahead.
+	p.blade_center = EXTENSION_BLADE
 
 
 # Standing, one leg kicked out along the ice to the side: the skate and the
@@ -181,6 +194,9 @@ static func rvh(p: KeeperPose, side: float) -> void:
 	if side < 0.0:
 		p.glove_hand = Vector3(-0.42, 0.95, -0.15)
 		p.glove_from_chest = false
+	# A standing pad on the blocker side would take the paddle through it.
+	p.blade_center = HALF_BUTTERFLY_BLADE
+	p.stick_tilt = READY_STICK_TILT_RAD
 
 
 # VH on the post at `side`: the post leg standing with its pad upright against
@@ -197,6 +213,7 @@ static func vh(p: KeeperPose, side: float) -> void:
 	p.pelvis = Vector3(side * 0.05, 0.72, 0.06)
 	p.pelvis_rot = Vector3(-0.20, 0.0, -side * 0.25)
 	_ready_hands(p, 0.15)
+	p.blade_center = HALF_BUTTERFLY_BLADE
 
 
 # Overlap at the post on `side`: standing in the ready stance with the post

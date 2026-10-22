@@ -247,3 +247,25 @@ func test_the_butterfly_does_not_span_the_net() -> void:
 				+ absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z)
 	assert_lt(reach, GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS,
 			"his widest gear stops inside the post")
+
+
+# The stick passes in front of the pads, never through them: in every stance
+# no point on the paddle's or the shaft's centre line lies inside a piece of
+# leg gear (a centimetre's give for a stick resting on a face).
+func test_the_stick_never_passes_through_his_legs() -> void:
+	var legs: Array[int] = [P.PAD_G, P.PAD_B, P.RISE_G, P.RISE_B, P.BOOT_G, P.BOOT_B,
+			P.THIGH_G, P.THIGH_B]
+	var give := Vector3(0.01, 0.01, 0.01)
+	var reach: float = KeeperAnatomy.PADDLE_LENGTH_M + KeeperAnatomy.SHAFT_LENGTH_M
+	for stance: Array in _stances():
+		_solve(stance)
+		var along: float = 0.05
+		while along <= reach:
+			var at: Vector3 = _skel.stick_heel + _skel.stick_paddle_dir * along
+			for part: int in legs:
+				var local: Vector3 = KeeperGear.box(_skel, part).affine_inverse() * at
+				var h: Vector3 = KeeperGear.half_extents(part) - give
+				var inside: bool = absf(local.x) < h.x and absf(local.y) < h.y and absf(local.z) < h.z
+				assert_false(inside, "%s: the stick %.2f m up its length is inside %s"
+						% [stance[0], along, KeeperGear.Part.keys()[part]])
+			along += 0.03

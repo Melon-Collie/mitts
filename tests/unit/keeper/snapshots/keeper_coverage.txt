@@ -3,9 +3,9 @@ ready straight_on	0.5782
 ready dot_line_at_b	0.7009
 butterfly straight_on	0.6832
 butterfly dot_line_at_b	0.8236
-half_butterfly straight_on	0.6439
-half_butterfly dot_line_at_b	0.8364
+half_butterfly straight_on	0.6616
+half_butterfly dot_line_at_b	0.8340
 extension straight_on	0.7241
-extension dot_line_at_b	0.8749
+extension dot_line_at_b	0.8797
 overlap straight_on	0.5974
 overlap dot_line_at_b	0.7386
