@@ -75,6 +75,9 @@ func setup(skater: Skater) -> void:
 		shaft = shaft.duplicate() as BoxMesh
 		shaft.subdivide_depth = FLEX_SEGMENTS
 		_skater.stick_mesh.mesh = shaft
+	# Posed from the markers as drawn (Skater.drawn_blade / drawn_top_hand), so
+	# the engine must not interpolate it a second time.
+	_skater.stick_mesh.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
 
 # The uniform pass installs a fresh shaft ShaderMaterial (uniform apply,
@@ -219,13 +222,13 @@ func _solve_flex_axis(shaft_dir: Vector3) -> float:
 
 # The hosel throat's tip in upper-body space: the fixed blade-local tip (the
 # lie axis × hosel length off the heel) carried through the blade mesh's
-# cosmetic tilt and the marker's live orientation.
+# cosmetic tilt and the marker as drawn this frame.
 func _hosel_tip_upper_body(blade_mesh: MeshInstance3D) -> Vector3:
 	var lie: float = deg_to_rad(_skater.blade_lie_deg)
 	var tip_local: Vector3 = Vector3(0.0, sin(lie), cos(lie)) * _skater.blade_hosel_length
 	if blade_mesh != null and is_instance_valid(blade_mesh):
 		tip_local = blade_mesh.transform * tip_local
-	return _skater.blade.transform * tip_local
+	return _skater.drawn_blade() * tip_local
 
 
 # Caps the extended butt end with the knob, its long axis (local Y) aligned to

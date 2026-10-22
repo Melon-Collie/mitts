@@ -160,6 +160,45 @@ func test_thinning_the_animation_does_not_move_the_gameplay_frames() -> void:
 	assert_lt(worst, 1e-5, "UpperBody and the blade sit the same at any detail (worst %f)" % worst)
 
 
+# The blade mesh hangs from the Blade marker, which the tick moves on a thinned
+# frame too; the shaft waits for the next pass, so the blade has to wait with it.
+# Measured on a stick swept side to side, from the first frame the stick is
+# drawn: the hosel tip's distance off the drawn shaft's line.
+func test_a_thinned_frame_keeps_the_blade_on_the_shaft() -> void:
+	var saved: int = SkaterAnimationLod.detail
+	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_LOW
+	_camera.look_at(Vector3.ZERO, Vector3.FORWARD)
+	var c: SkaterController = _rig(Vector3.ZERO)
+	var sk: Skater = c.skater
+	var lie: float = deg_to_rad(sk.blade_lie_deg)
+	var hosel_tip := Vector3(0.0, sin(lie), cos(lie)) * sk.blade_hosel_length
+	var input := InputState.new()
+	var skipped: int = 0
+	var drawn: bool = false
+	var worst: float = 0.0
+	for _f: int in 60:
+		for _t: int in 2:
+			input.delta = DT
+			input.host_timestamp += DT
+			input.mouse_world_pos = sk.global_position \
+					+ Vector3(0.8 * sin(input.host_timestamp * TAU * 1.5), 0.0, -1.4)
+			c._process_input(input, DT)
+			sk._physics_process(DT)
+		sk._process(2.0 * DT)
+		if not sk.on_camera():
+			skipped += 1
+		drawn = drawn or sk.on_camera()
+		if not drawn:
+			continue
+		var tip: Vector3 = sk._blade_mesh_instance.global_transform * hosel_tip
+		var shaft: Transform3D = sk.stick_mesh.global_transform
+		var axis: Vector3 = shaft.basis.z.normalized()
+		var rel: Vector3 = tip - shaft.origin
+		worst = maxf(worst, (rel - axis * rel.dot(axis)).length())
+	SkaterAnimationLod.detail = saved
+	assert_gt(skipped, 20, "the far skater was thinned (%d of 60 frames skipped)" % skipped)
+	assert_lt(worst, 0.001, "the hosel tip stays on the shaft (worst %.4f m off it)" % worst)
+
 
 # A remote body is posed by RemoteController's own render hook, on the host (a
 # client's real inputs) and on a client (an interpolated body) alike. Its off
