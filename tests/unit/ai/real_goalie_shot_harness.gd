@@ -39,6 +39,13 @@ var last_part: int = -1              # SavePart of the contact that ended it, or
 var last_contact_pos: Vector3 = Vector3.INF   # where the save contact happened
 var last_cross: Vector3 = Vector3.INF         # net-plane crossing (x, y) if it got there
 var last_goalie_pos: Vector3 = Vector3.INF    # goalie world pos at the decisive moment
+# Where the puck passed his own plane (goalie-local x, y; INF when it never did)
+# and what he was doing then: his stance, whether he was reading it, how far
+# into a drop. Tells a puck through the five-hole from one wide of the pad.
+var last_pass_local: Vector3 = Vector3.INF
+var last_pass_state: int = -1
+var last_pass_reacting: bool = false
+var last_pass_drop: float = 0.0
 # Puck speed at the moment of goalie contact. This instrument stops at first
 # contact, so a caller ranking saves by how hard they were hit needs it, and
 # without something like it every rebound goal silently reads as a save.
@@ -516,6 +523,8 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 	var pos: Vector3 = shooter
 	pos.y = _puck.ice_height
 	var goal_dir: float = signf(goal.z - shooter.z)   # sign of z travel toward the net
+	last_pass_local = Vector3.INF
+	last_pass_state = -1
 	for _step: int in MAX_STEPS:
 		var prev: Vector3 = pos
 		# The goalie sees the puck's real motion this tick and reacts.
@@ -529,6 +538,7 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 				_puck.max_speed, _puck.ice_height, _puck.max_height, _frame, _tick)
 		pos = _tick.position
 		vel = _tick.velocity
+		_note_pass(prev, pos)
 		# Real goalie collision over this tick's swept segment (posed goalie). The
 		# instrument counts FIRST goalie contact as the outcome: a deaden/catch is
 		# plainly a save, and a live kick (pad/blocker/stick) is the goalie
@@ -557,6 +567,23 @@ func _march(shooter: Vector3, vel_in: Vector3) -> int:
 			last_goalie_pos = _goalie.global_position
 			return _net_verdict(cx, cy)
 	return WIDE
+
+
+# Records the first tick the puck crosses the goalie's own plane (see
+# last_pass_local).
+func _note_pass(prev: Vector3, pos: Vector3) -> void:
+	if last_pass_state >= 0:
+		return
+	var inv: Transform3D = (_goalie as Node3D).global_transform.affine_inverse()
+	var a: Vector3 = inv * prev
+	var b: Vector3 = inv * pos
+	if a.z >= 0.0 or b.z < 0.0:
+		return
+	var f: float = -a.z / (b.z - a.z)
+	last_pass_local = a.lerp(b, f)
+	last_pass_state = _ctrl._sm.current
+	last_pass_reacting = _ctrl._reaction.reacting
+	last_pass_drop = _ctrl._slide.drop_progress
 
 
 # Classify a save surface by node name, mirroring Puck._classify_save_part.

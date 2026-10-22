@@ -72,6 +72,7 @@ var _blocker_elbow: Vector3 = Vector3.ZERO
 var _blocker_over_glove: bool = false
 
 var _uniform_coordinator: GoalieUniformCoordinator
+var _skates: GoalieSkates
 # Dynamic visual nodes — public for GoalieUniformCoordinator access.
 var left_hip_connector: MeshInstance3D = null
 var right_hip_connector: MeshInstance3D = null
@@ -118,12 +119,16 @@ func _ready() -> void:
 	# set (colliders untouched). Before the uniform coordinator only by
 	# convention — painting is material_override / ShaderMaterial, mesh-free.
 	GoalieMeshBuilder.apply_goalie(self)
+	# Before the body rig's first build, which merges the skates' meshes, and
+	# before anything gathers the collision parts.
+	_skates = GoalieSkates.new(_left_pad, _right_pad)
 	_seat_blade()
 	_init_stick_knob()
 	_init_connectors()
 	_init_arm_bones()
 	_seat_blocker()
 	_rebase_pads()
+	_skates.place()
 	_setup_uniform_coordinator()
 	var vfx := GoalieVFX.new()
 	vfx.name = "VFX"
@@ -157,6 +162,7 @@ func apply_body_config(config: GoalieBodyConfig, t: float, glove_max_step: float
 	_right_pad_eased_rot = _lerp_euler_deg(_right_pad_eased_rot, config.right_pad_rot, t)
 	_right_pad.position = _right_pad_eased_pos + config.right_pad_step_pos
 	_right_pad.rotation_degrees = _right_pad_eased_rot + config.right_pad_step_rot
+	_skates.place()
 	_lerp_part(_body,      config.body_pos,      config.body_rot,      t)
 	_lerp_part(_head,      config.head_pos,      config.head_rot,      t)
 	if glove_max_step < 0.0:
@@ -324,6 +330,10 @@ func get_blocker_world_position() -> Vector3:
 # Pose accessors used by goalie_controller.fill_state() to fill the
 # authoritative socket transforms broadcast in the world snapshot. All values
 # returned in goalie-local space; rotations in radians.
+# The pads' toe bridges over the skates (GoalieSkates), painted as the pads.
+func toe_cap_meshes() -> Array[MeshInstance3D]:
+	return _skates.toe_cap_meshes()
+
 func get_left_pad_position() -> Vector3:
 	return _left_pad.position
 
@@ -389,6 +399,7 @@ func apply_network_pose(state: GoalieNetworkState) -> void:
 	_right_pad.position = state.right_pad_offset
 	_right_pad.rotation = Vector3(state.right_pad_pitch, state.right_pad_yaw, state.right_pad_roll)
 	_rebase_pads()
+	_skates.place()
 	_glove.position = state.glove_offset
 	_glove.rotation = Vector3(state.glove_pitch, state.glove_yaw, _glove.rotation.z)
 	_block_arm.position = state.blocker_offset

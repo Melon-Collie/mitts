@@ -143,17 +143,20 @@ const READY_SKATE_Z_M: float = -0.06
 const READY_GLOVE := Vector2(-GoalieAnatomy.READY_GLOVE_X_M, GoalieAnatomy.READY_GLOVE_Y_M)
 const READY_BLOCKER_Z_M: float = -0.35
 
-# The low ready: the crouch sat deeper for a shooter in tight. The skates
-# stand well inside READY's, toes turned out, the knees rolled in until the pad
-# tops meet — a rigid pad rolled further crosses its partner — which narrows the
-# five-hole to a slit over the blade; the stick stays where READY holds it, its
-# blade still across the ice. It gives up width at the posts for that, and the
-# hips, head and glove come down with the sit.
-const LOW_READY_DROP_M: float = 0.14
-const LOW_READY_SKATE_NARROWING_M: float = 0.12
-const LOW_READY_PAD_ROLL_DEG: float = 16.0
-const LOW_READY_PAD_PITCH_DEG: float = 28.0
-const LOW_READY_PAD_TOE_OUT_DEG: float = 25.0
+# The low ready: a wide A sat close to the butterfly, for a shooter in tight.
+# The skates go wide, out beside the knees rather than back under them (shins
+# near upright), and the knees roll in until the pad tops meet: a rigid pad
+# rolled further crosses its partner, so the roll is solved from the rest
+# (low_ready_knee_roll_deg), never set. The hips, head and glove sit low, which
+# is what shortens the drop. Its five-hole is the triangle under the knees with
+# the blade across its base; the skates and toe caps (GoalieSkates) stand at its
+# feet.
+const LOW_READY_DROP_M: float = 0.22
+const LOW_READY_SKATE_INNER_X_M: float = 0.55
+const LOW_READY_PAD_PITCH_DEG: float = 10.0
+const LOW_READY_PAD_TOE_OUT_DEG: float = 12.0
+# low_ready_knee_roll_deg's answer, solved on first use.
+static var _low_ready_knee_roll_deg: float = NAN
 const LOW_READY_BODY_POS := Vector3(READY_BODY_POS.x, READY_BODY_POS.y - LOW_READY_DROP_M,
 		READY_BODY_POS.z)
 const LOW_READY_HEAD_POS := Vector3(READY_HEAD_POS.x, READY_HEAD_POS.y - LOW_READY_DROP_M,
@@ -507,16 +510,44 @@ func _set_ready_leg(c: GoalieBodyConfig, side: float, five_hole: float) -> void:
 
 
 # One leg of the low ready, placed by its skate's inner edge: a pad rolled
-# about its centre swings its skate out as far as its knee comes in, and the
-# gap low down is the one this stance exists to close.
+# about its centre swings its skate in as far as its knee comes out.
 func _set_low_ready_leg(c: GoalieBodyConfig, side: float, five_hole: float) -> void:
-	var ready_rot: Vector3 = _crouch_pad_rot(side, READY_PAD_ROLL_DEG, READY_PAD_PITCH_DEG)
-	var rot := Vector3(-LOW_READY_PAD_PITCH_DEG, -side * LOW_READY_PAD_TOE_OUT_DEG,
-			side * LOW_READY_PAD_ROLL_DEG)
-	var skate_x: float = READY_PAD_X_M + _inner_skate_offset(ready_rot, side) \
-			- LOW_READY_SKATE_NARROWING_M
-	_place_crouch_leg(c, side, rot, skate_x - _inner_skate_offset(rot, side) + five_hole,
+	var rot: Vector3 = _low_ready_pad_rot(side, low_ready_knee_roll_deg())
+	_place_crouch_leg(c, side, rot,
+			LOW_READY_SKATE_INNER_X_M - _inner_skate_offset(rot, side) + five_hole,
 			LOW_READY_PAD_PITCH_DEG)
+
+
+static func _low_ready_pad_rot(side: float, roll_deg: float) -> Vector3:
+	return Vector3(-LOW_READY_PAD_PITCH_DEG, -side * LOW_READY_PAD_TOE_OUT_DEG, side * roll_deg)
+
+
+# The knee roll that brings the low ready's pad tops together over its skates,
+# solved once by bisection on the right pad's inner top edge.
+static func low_ready_knee_roll_deg() -> float:
+	if is_nan(_low_ready_knee_roll_deg):
+		var lo: float = 0.0
+		var hi: float = 89.0
+		for _i: int in 40:
+			var mid: float = (lo + hi) * 0.5
+			if _low_ready_knee_x(mid) > 0.0:
+				lo = mid
+			else:
+				hi = mid
+		_low_ready_knee_roll_deg = (lo + hi) * 0.5
+	return _low_ready_knee_roll_deg
+
+
+
+# Where the right pad's inner top edge stands (goalie-local x) at `roll_deg`.
+static func _low_ready_knee_x(roll_deg: float) -> float:
+	var rot: Vector3 = _low_ready_pad_rot(1.0, roll_deg)
+	var b := Basis.from_euler(rot * (PI / 180.0))
+	var centre_x: float = LOW_READY_SKATE_INNER_X_M - _inner_skate_offset(rot, 1.0)
+	var half := Vector3(GoalieAnatomy.PAD_BOX_WIDTH_M, GoalieAnatomy.PAD_BOX_HEIGHT_M,
+			GoalieAnatomy.PAD_BOX_DEPTH_M) * 0.5
+	return centre_x + minf((b * Vector3(-half.x, half.y, -half.z)).x,
+			(b * Vector3(-half.x, half.y, half.z)).x)
 
 
 func _crouch_pad_rot(side: float, roll_deg: float, pitch_deg: float) -> Vector3:

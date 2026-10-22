@@ -25,10 +25,11 @@ extends GutTest
 #
 # ── AGAIN WITH THE 3 IN PUCK (2026-10) ───────────────────────────────────────
 #   READY      COLD  LOW   window -0.15 .. +0.15 m (31 cm), dead centre
-#   LOW_READY  COLD  LOW   window -0.02 .. +0.02 m (5 cm) — he is low here,
-#                          4.7 m from the shooter (test_goalie_in_close_five_hole)
+#   LOW_READY  (the wide A on skates — he is low here, 4.7 m from the shooter)
+#              COLD  LOW   shut
+#              COLD  FLAT  6 cm at each edge of the span (-0.40 .. -0.35 and
+#                          +0.35 .. +0.40), the open ice under his shins
 #              HELD  FLAT  window -0.40 .. -0.35 m (6 cm, blocker-side low)
-#              everything else shut.
 #
 # Both windows were independently reported from real play before this ran
 # ("glove side low, and hard through his 5 hole"), which is the first external

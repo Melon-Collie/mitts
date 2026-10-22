@@ -2,18 +2,17 @@ extends GutTest
 
 # ── THE LOW READY ─────────────────────────────────────────────────────────────
 # A shooter in tight, inside the range where a hard release beats his drop from
-# READY, gets the low ready: skates in, toes out, knees together, sat lower. It
-# shrinks the five-hole to a window over the blade and buys a
-# shorter drop, and pays for both at the posts. It never changes while he
-# reads a shot.
+# READY, gets the low ready: a wide A, skates out, knees together, sat close to
+# the butterfly. It stands wider at the ice and buys a shorter drop, and pays
+# with the triangle under its knees. It never changes while he reads a shot.
 
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const State := GoalieStateMachine.State
 const IN_TIGHT := Vector3(0.0, 0.0, GOAL_Z + 4.0)
 const SLOT_FAR := Vector3(0.0, 0.0, GOAL_Z + 12.0)
-# Heights a lifted shot from the slot crosses him at, just over the blade.
-const FIVE_HOLE_YS: Array[float] = [0.16, 0.20, 0.24, 0.28]
+# A sliding puck's centre.
+const ICE_Y_M: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 
 var _goalie: Node = null
 var _puck: Node = null
@@ -86,19 +85,29 @@ func test_the_stance_holds_under_a_shot() -> void:
 	assert_false(State.STANDING in _entered, "never up at all under the shot")
 
 
-func test_the_five_hole_is_a_window_not_a_wall() -> void:
+# The A's feet are what stand wide at the ice: past READY's pads on both sides.
+func test_the_a_stands_wider_than_ready_at_the_ice() -> void:
 	_settle(SLOT_FAR)
 	assert_eq(_ctrl._sm.current, State.READY)
-	var ready_area: float = 0.0
-	for y: float in FIVE_HOLE_YS:
-		ready_area += _h.five_hole_width_at(y)
+	var ready_reach: Vector2 = _ice_reach()
 	_settle(IN_TIGHT)
 	assert_eq(_ctrl._sm.current, State.LOW_READY)
-	var low_area: float = 0.0
-	for y: float in FIVE_HOLE_YS:
-		low_area += _h.five_hole_width_at(y)
-	assert_lt(low_area, ready_area * 0.5, "the low ready closes most of READY's five-hole")
-	assert_gt(low_area, 0.0, "and leaves a window over the blade")
+	var low_reach: Vector2 = _ice_reach()
+	assert_gt(low_reach.x, ready_reach.x + 0.1, "glove side")
+	assert_gt(low_reach.y, ready_reach.y + 0.1, "blocker side")
+
+
+# How far out each side (glove, blocker) a sliding puck still meets him.
+func _ice_reach() -> Vector2:
+	var out := Vector2.ZERO
+	var x: float = 0.0
+	while x <= 1.2:
+		if _h.puck_meets_him_at(-x, ICE_Y_M):
+			out.x = x
+		if _h.puck_meets_him_at(x, ICE_Y_M):
+			out.y = x
+		x += 0.01
+	return out
 
 
 func test_the_drop_from_low_is_shorter_and_rides_into_the_butterfly() -> void:

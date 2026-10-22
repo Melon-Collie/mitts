@@ -38,6 +38,18 @@ must be followed by `rebuild()` (the coordinator's `apply_uniform` does it); a
 part that wears a `ShaderMaterial` (the jersey body) is not merged and draws
 itself. `test_goalie_body_rig.gd` holds it.
 
+## The goalie stands on skates, and the ankle keeps them level
+
+`GoalieSkates` builds the skater's boot and blade (`shared_boot_assembly`)
+and the pad's toe bridge (`GoalieToeCapMesh`) in code, under
+each pad's body: that pad's save surface, on its collision layer, with no node
+in `Goalie.tscn` and nothing on the wire. After every pad write it re-places
+them flat on the ice under the pad's foot, turned the way the pad faces, so a
+pad that rolls onto its inside edge lifts off a skate that stays down. Each
+collider is sized from its own mesh's bounds. They exist before the body rig's
+first build (which merges their meshes) and before anything gathers the
+collision parts. `test_goalie_skates.gd` holds it.
+
 ## The seam
 
 Traffic runs **one way**. A collaborator holds `_skater` and READS the node's

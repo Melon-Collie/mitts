@@ -444,32 +444,38 @@ the down pad measures flat through the replicated pads, and the up leg keeps a
 standing leg's drop and the arm's reach.
 `test_goalie_half_butterfly.gd` holds it.
 
-**In tight he sits in the LOW READY, because there the stance is the save.**
-READY's pads are an A-frame: the five-hole runs from the blade top (~0.14 m) to
-the trunk (~0.5 m), and a lifted shot through it from inside ~5 m arrives
-(~0.1 s) before any drop lands. `_release_beats_the_drop` is the race: a puck
-an opponent can shoot, at the league's hardest wrister, reaches him inside his
-drop from READY (~6.6 m at Hard). Inside it his skates come in, toes out, knees
-rolled together, and the hips, head and glove sit 0.14 m lower. Two things
-follow from the pose rather than being bolted on:
+**In tight he sits in the LOW READY, a wide A close to the butterfly.**
+`_release_beats_the_drop` is the race that puts him there: a puck an opponent
+can shoot, at the league's hardest wrister, reaches him inside his drop from
+READY (~6.6 m at Hard). His skates go 0.55 m out, beside the knees rather than
+back under them (shins near upright), the knees roll in until the pad tops
+meet, and the hips, head and glove sit 0.22 m lower. Two things follow from the
+pose rather than being bolted on:
 
-- **The five-hole is a window, not a wall** — a slit a few cm wide over the blade.
-- **The drop is shorter** (`low_ready_drop_share`, the hips' remaining fall),
-  latched into the slide at the drop so the drop he started is the one he gets.
+- **He stands wide at the ice.** The skates and toe caps (`GoalieSkates`) stand
+  at the A's feet, so a puck slid wide meets a boot.
+- **The drop is shorter** (`low_ready_drop_share`, the hips' remaining fall,
+  ×0.59), latched into the slide at the drop so the drop he started is the one
+  he gets.
 
-It gives up the low corners, and nothing else: it must not slow his push. At
-0.8 of READY's the breakaway cutback opened 7, 6 and 5 aims of 7 at Easy, Normal
-and Hard against 5, 3 and 4 (`test_goalie_breakaway_ladder.gd`), all of it the
-push. Three things are easy to get wrong, all measured:
+What it pays is the triangle under the knees: the blade covers its base's
+middle, and between the blade and the toe caps there is open ice. Inside ~5 m
+that is the whole story, because a 70 mph shot reaches him (~0.09 s) inside his
+0.13 s leg read and the drop never starts; the A's short drop pays from about
+6 m out. Measured against the knees-together crouch it replaced, the A
+concedes far more in tight (slot 3 m: 0 → 36 of 300) for the same dot line (44
+of 300 each, skates on both); that trade was taken for the stance's look and
+its quicker drop.
+
+Three things are easy to get wrong:
 
 - **The pad tops may meet but never cross.** A rigid pad rolled further draws an
-  X, and closing the five-hole that way measured better than any legal pose.
-  Rolled about its centre a pad also swings its skate out; the leg is placed by
-  its skate's inner edge. Toe-out narrows the slit (the pads are deep, so their
-  back edges swing in), squaring them widens it.
-- **The stick stays where READY holds it.** The paddle stands at the blade's
-  heel, so a paddle brought across into the slit carries the blade off the ice
-  in the middle: FLAT shots in close went from 0 to 14 in 31.
+  X, and closing the five-hole that way measured better than any legal pose. So
+  the knee roll is solved from the skates' width, the shins' lean and the toes
+  (`low_ready_knee_roll_deg`), and a change to any of them moves it.
+- **It must not slow his push.** At 0.8 of READY's the breakaway cutback opened
+  7, 6 and 5 aims of 7 at Easy, Normal and Hard against 5, 3 and 4
+  (`test_goalie_breakaway_ladder.gd`), all of it the push.
 - **The stance never changes while he reads a shot**, either way: rising opens
   the five-hole under the puck, and dropping into it mid-flight moves the pads
   the read was made against (24 goals in 300 from 9 m).

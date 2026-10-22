@@ -76,7 +76,7 @@ in GDScript. No code runs a ray, shape, or overlap query, and every
 |----------|-------|------|
 | `LAYER_WALLS` | 1 | Tutorial / drill obstacle walls |
 | `LAYER_GOALIE_STICK` | 4 | Goalie stick |
-| `LAYER_GOALIE_BODIES` | 128 | Goalie pads / body / head / glove / blocker |
+| `LAYER_GOALIE_BODIES` | 128 | Goalie pads (with their skates and toe caps) / body / head / glove / blocker |
 
 The **goalie is the only thing left with colliders**, and only because his parts
 *are* the save geometry: `GoalieContactDetector` reads their shapes and
