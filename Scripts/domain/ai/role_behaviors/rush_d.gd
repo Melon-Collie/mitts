@@ -156,10 +156,10 @@ static func depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
 
 # This bot's speed along `dir`'s direction, floored at zero.
 static func _carried_toward(ctx: RoleContext, dir: Vector3) -> float:
-	var len: float = dir.length()
-	if len < 0.001:
+	var dir_len: float = dir.length()
+	if dir_len < 0.001:
 		return 0.0
-	return maxf((ctx.self_velocity.x * dir.x + ctx.self_velocity.z * dir.z) / len, 0.0)
+	return maxf((ctx.self_velocity.x * dir.x + ctx.self_velocity.z * dir.z) / dir_len, 0.0)
 
 
 # How far goal-side of `threat_pos` this bot currently stands, along `dir_net` —

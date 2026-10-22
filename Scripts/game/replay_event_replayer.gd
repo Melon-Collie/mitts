@@ -1,6 +1,8 @@
 class_name ReplayEventReplayer
 extends RefCounted
 
+const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
+
 # Dispatches a recorded transient event (audio + body-check VFX) at replay
 # time. Shared by GoalReplayDriver (in-memory recorder) and FileReplayDriver
 # (.mreplay file events) so both replay paths fire the same sound/VFX with
@@ -52,7 +54,7 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 
 	match kind:
 		"puck_boards":
-			SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, volume_db, 0.05)
+			SoundManager.play_world(SoundManagerScript.board_contact_sound(pos), pos, volume_db, 0.05)
 		"puck_goal_body":
 			SoundManager.play_world(SoundManager.Sound.PUCK_GOAL_BODY, pos, volume_db, 0.06)
 		"puck_deflection":
@@ -73,11 +75,11 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 			SoundManager.play_world(SoundManager.Sound.PUCK_POST, pos, volume_db + _POST_SAVE_VOLUME_BUMP_DB, 0.04, _post_pitch(speed))
 		"puck_pickup":
 			SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, pos,
-					SoundManager.reception_volume_db(speed), 0.05)
+					SoundManagerScript.reception_volume_db(speed), 0.05)
 		"shot":
 			var is_slapper: bool = bool(event.get("is_slapper", false))
 			var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-			SoundManager.play_world(sound, pos, SoundManager.shot_volume_db(speed), 0.04)
+			SoundManager.play_world(sound, pos, SoundManagerScript.shot_volume_db(speed), 0.04)
 		"body_check":
 			# "speed" carries the recorded impact_force; scale sound + burst by it
 			# the same way live play does (SkaterVFX.check_*). The thud is gated to

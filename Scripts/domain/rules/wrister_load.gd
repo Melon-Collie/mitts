@@ -36,7 +36,7 @@ class Config:
 class Result:
 	var is_backhand: bool = false
 	# 0..1, alignment × coil: the share of the full shot this release can carry.
-	var load: float = 1.0
+	var load_share: float = 1.0
 	# The torso yaw off the hips that holds the full wind-up for this shot, in
 	# upper_body_angle's convention (left positive).
 	var wound_yaw: float = 0.0
@@ -48,7 +48,7 @@ static func solve(out: Result, puck_local: Vector3, aim_local: Vector3,
 		is_left_handed: bool, cfg: Config) -> void:
 	if Vector2(aim_local.x, aim_local.z).length_squared() < 0.000001:
 		out.is_backhand = false
-		out.load = 1.0
+		out.load_share = 1.0
 		out.wound_yaw = 0.0
 		return
 	# Left-positive yaw, flipped for a right-handed shooter so the stick side
@@ -68,7 +68,7 @@ static func solve_load(out: Result, puck_bearing: float, aim_bearing: float,
 	# tangent at the puck is the bearing a quarter-turn back.
 	var forehand_alignment: float = -sin(aim_bearing - puck_bearing)
 	out.is_backhand = forehand_alignment < 0.0
-	out.load = alignment_share(absf(forehand_alignment), cfg.full_arc_rad) \
+	out.load_share = alignment_share(absf(forehand_alignment), cfg.full_arc_rad) \
 			* coil_share(puck_bearing, out.is_backhand, cfg)
 
 
@@ -118,7 +118,7 @@ static func _torso_hi(puck_bearing: float, is_backhand: bool, cfg: Config) -> fl
 # The share of max_wrister_power a release can carry: the turn buys the top of
 # the band, while the arms, wrists and stick flex alone still carry
 # `unloaded_share` of it; a backhand pays its coefficient on top.
-static func power_share(load: float, is_backhand: bool, unloaded_share: float,
+static func power_share(load_share: float, is_backhand: bool, unloaded_share: float,
 		backhand_coefficient: float) -> float:
-	var share: float = lerpf(unloaded_share, 1.0, load)
+	var share: float = lerpf(unloaded_share, 1.0, load_share)
 	return share * backhand_coefficient if is_backhand else share

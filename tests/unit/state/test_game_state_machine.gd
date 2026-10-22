@@ -1067,19 +1067,16 @@ func test_swap_into_free_slot_still_works() -> void:
 # ── team_size latch (5v5) ────────────────────────────────────────────────────
 
 func test_apply_config_latches_team_size() -> void:
-	var sm := GameStateMachine.new()
 	sm.apply_config(3, 300.0, true, 120.0, GameRules.RuleSet.NHL, 5)
 	assert_eq(sm.team_size, 5)
 
 func test_team_size_defaults_to_3v3() -> void:
-	var sm := GameStateMachine.new()
 	assert_eq(sm.team_size, GameRules.DEFAULT_TEAM_SIZE)
 	sm.apply_config(3, 300.0, true, 120.0)
 	assert_eq(sm.team_size, GameRules.DEFAULT_TEAM_SIZE,
 			"apply_config without a team size keeps the default")
 
 func test_slot_allocation_fills_five_slots_in_5v5() -> void:
-	var sm := GameStateMachine.new()
 	sm.apply_config(3, 300.0, true, 120.0, GameRules.DEFAULT_RULE_SET, 5)
 	for i: int in 5:
 		sm.register_remote_assigned_player(100 + i, sm._first_available_slot(0), 0)
@@ -1090,14 +1087,12 @@ func test_slot_allocation_fills_five_slots_in_5v5() -> void:
 	assert_eq(used, [0, 1, 2, 3, 4] as Array[int])
 
 func test_slot_allocation_caps_at_three_in_3v3() -> void:
-	var sm := GameStateMachine.new()
 	for i: int in 3:
 		sm.register_remote_assigned_player(100 + i, sm._first_available_slot(0), 0)
 	assert_eq(sm._first_available_slot(0), 3,
 			"overflow returns the occupied count, which the join gate rejects in 3v3")
 
 func test_try_swap_slot_respects_team_size() -> void:
-	var sm := GameStateMachine.new()
 	sm.register_remote_assigned_player(100, 0, 0)
 	assert_true(sm.try_swap_slot(100, 0, 2).size() > 0, "slot 2 is legal in 3v3")
 	sm.register_remote_assigned_player(101, 0, 1)

@@ -154,12 +154,12 @@ func _worst_case_figure(foot: Vector3, girth: float, height: float) -> AABB:
 			Vector3(half * 2.0, height, half * 2.0))
 
 
-func _assert_bounds_hold(grown: AABB, seed: AABB, girth: float, height: float,
+func _assert_bounds_hold(grown: AABB, seed_box: AABB, girth: float, height: float,
 		what: String) -> void:
 	for dx: float in [0.0, 1.0]:
 		for dy: float in [0.0, 1.0]:
 			for dz: float in [0.0, 1.0]:
-				var foot: Vector3 = seed.position + seed.size * Vector3(dx, dy, dz)
+				var foot: Vector3 = seed_box.position + seed_box.size * Vector3(dx, dy, dz)
 				assert_true(grown.encloses(_worst_case_figure(foot, girth, height)),
 						"%s at %v should sit inside the declared bounds" % [what, foot])
 
@@ -168,8 +168,8 @@ func test_crowd_section_bounds_hold_the_tallest_spectator() -> void:
 	var spec: ArenaBowlSpec = _spec()
 	var crowd := ArenaCrowd.new(spec, ArenaBowlPath.new(spec),
 			ArenaBowlRake.new(spec, ArenaBowlPath.new(spec)))
-	var seed := AABB(Vector3(-4.0, 1.0, -3.0), Vector3(8.0, 2.4, 6.0))
-	_assert_bounds_hold(crowd.grow_section_aabb(seed), seed,
+	var seed_box := AABB(Vector3(-4.0, 1.0, -3.0), Vector3(8.0, 2.4, 6.0))
+	_assert_bounds_hold(crowd.grow_section_aabb(seed_box), seed_box,
 			ArenaFigureMesh.CROWD_SCALE_MAX,
 			ArenaFigureMesh.FIGURE_HEIGHT * ArenaFigureMesh.CROWD_SCALE_MAX,
 			"a spectator")
@@ -178,8 +178,8 @@ func test_crowd_section_bounds_hold_the_tallest_spectator() -> void:
 func test_staff_bounds_hold_the_tallest_coach() -> void:
 	# The standing figure is the tall one, so the box is sized off full stature
 	# rather than the seated crowd's sitting height.
-	var seed := AABB(Vector3(-14.1, 1.2, -5.6), Vector3(28.2, 0.06, 11.2))
-	_assert_bounds_hold(_rinkside(_spec()).grow_staff_aabb(seed), seed,
+	var seed_box := AABB(Vector3(-14.1, 1.2, -5.6), Vector3(28.2, 0.06, 11.2))
+	_assert_bounds_hold(_rinkside(_spec()).grow_staff_aabb(seed_box), seed_box,
 			ArenaFigureMesh.girth_scale(ArenaFigureMesh.STANDING_STATURE_MAX),
 			ArenaFigureMesh.STANDING_STATURE_MAX, "a coach")
 
@@ -188,13 +188,13 @@ func test_seat_bounds_hold_the_furniture() -> void:
 	var spec: ArenaBowlSpec = _spec()
 	var seating := ArenaSeating.new(spec, ArenaBowlPath.new(spec),
 			ArenaBowlRake.new(spec, ArenaBowlPath.new(spec)))
-	var seed := AABB(Vector3(-4.0, 1.0, -3.0), Vector3(8.0, 2.4, 6.0))
-	var grown: AABB = seating.grow_seat_aabb(seed)
+	var seed_box := AABB(Vector3(-4.0, 1.0, -3.0), Vector3(8.0, 2.4, 6.0))
+	var grown: AABB = seating.grow_seat_aabb(seed_box)
 	var half: float = Vector2(ArenaSeating.WIDTH,
 			ArenaSeating.BACK_OFFSET + ArenaSeating.BACK_THICKNESS).length() * 0.5
 	for dx: float in [0.0, 1.0]:
 		for dz: float in [0.0, 1.0]:
-			var foot: Vector3 = seed.position + seed.size * Vector3(dx, 1.0, dz)
+			var foot: Vector3 = seed_box.position + seed_box.size * Vector3(dx, 1.0, dz)
 			assert_true(grown.encloses(AABB(foot - Vector3(half, 0.0, half),
 					Vector3(half * 2.0, ArenaSeating.BACK_HEIGHT, half * 2.0))),
 					"a seat at %v should sit inside the declared bounds" % foot)

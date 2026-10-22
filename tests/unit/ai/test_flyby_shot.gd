@@ -127,15 +127,15 @@ func test_flyby_shot_by_tier_and_facing() -> void:
 		gut.p("  [backchecker gap = %.1f m]" % pressure if pressure > 0.0 else "  [unpressured]")
 		for facing_net: bool in [true, false]:
 			var tag: String = "face-NET " if facing_net else "face-VEL "
-			for name: String in ["HARD", "NORMAL", "EASY"]:
-				var p: BotSkillProfile = (BotSkillProfile.hard() if name == "HARD"
-						else BotSkillProfile.normal() if name == "NORMAL"
+			for tier_name: String in ["HARD", "NORMAL", "EASY"]:
+				var p: BotSkillProfile = (BotSkillProfile.hard() if tier_name == "HARD"
+						else BotSkillProfile.normal() if tier_name == "NORMAL"
 						else BotSkillProfile.easy())
 				var r: Dictionary = _run_flyby(start, vel, ticks, p, facing_net, pressure)
 				var cd: Vector3 = r["carry_dest"]
 				var cf: Vector3 = r["carry_from"]
 				gut.p("    %s%-7s shots %d  shoot=%.3f carry=%.3f  carry→(%.1f,%.1f) %.1fm-from-net (from %.1fm)" % [
-						tag, name, r["shots"], r["peak_shoot"], r["peak_carry"],
+						tag, tier_name, r["shots"], r["peak_shoot"], r["peak_carry"],
 						cd.x, cd.z, cd.distance_to(_goal), cf.distance_to(_goal)])
 	# What the probe establishes (see the file header):
 	var free: Dictionary = _run_flyby(start, vel, ticks, BotSkillProfile.hard(), true, 0.0)

@@ -11,24 +11,24 @@ const NINTENDO: int = ControllerGlyphs.Brand.NINTENDO
 
 
 func test_playstation_names() -> void:
-	for name: String in ["Sony DualSense", "PS5 Controller", "PS4 Controller",
+	for pad_name: String in ["Sony DualSense", "PS5 Controller", "PS4 Controller",
 			"DualShock 4", "Sony PlayStation(R) DualShock 4"]:
-		assert_eq(ControllerGlyphs.brand_for_name(name), PLAYSTATION,
-				"'%s' classifies as PlayStation" % name)
+		assert_eq(ControllerGlyphs.brand_for_name(pad_name), PLAYSTATION,
+				"'%s' classifies as PlayStation" % pad_name)
 
 
 func test_nintendo_names() -> void:
-	for name: String in ["Nintendo Switch Pro Controller", "Joy-Con (L)",
+	for pad_name: String in ["Nintendo Switch Pro Controller", "Joy-Con (L)",
 			"Switch Pro Controller"]:
-		assert_eq(ControllerGlyphs.brand_for_name(name), NINTENDO,
-				"'%s' classifies as Nintendo" % name)
+		assert_eq(ControllerGlyphs.brand_for_name(pad_name), NINTENDO,
+				"'%s' classifies as Nintendo" % pad_name)
 
 
 func test_xbox_and_unknown_default_to_xbox() -> void:
-	for name: String in ["Xbox 360 Controller", "Xbox Series Controller",
+	for pad_name: String in ["Xbox 360 Controller", "Xbox Series Controller",
 			"Steam Deck Controller", "Generic X-Box pad", "", "Totally Unknown Pad"]:
-		assert_eq(ControllerGlyphs.brand_for_name(name), XBOX,
-				"'%s' classifies as Xbox (the default)" % name)
+		assert_eq(ControllerGlyphs.brand_for_name(pad_name), XBOX,
+				"'%s' classifies as Xbox (the default)" % pad_name)
 
 
 func test_classification_is_case_insensitive() -> void:

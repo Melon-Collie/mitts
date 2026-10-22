@@ -59,7 +59,7 @@ func _init() -> void:
 
 	# The neutral build's cut, exactly as the rink computes it.
 	_stick_len = GameRules.DEFAULT_STICK_LENGTH_M \
-			* PlayerAttributes.neutral().stick_len_mult() + Skater.SHAFT_BUTT_EXTEND_M
+			* PlayerAttributes.neutral().stick_len_mult() + SkaterStickRig.SHAFT_BUTT_EXTEND_M
 
 	var count: int = StickModelRegistry.count()
 	var span: float = _SPACING_M * float(count - 1)

@@ -196,9 +196,9 @@ func _drop() -> void:
 	_controller.on_puck_released_network()
 
 
-func _add(out: Array[Dictionary], name: String, ticks: int, steer: Callable,
+func _add(out: Array[Dictionary], scenario_name: String, ticks: int, steer: Callable,
 		start_z: float = 0.0, puck_ahead: float = -1.0) -> void:
-	out.append({"name": name, "ticks": ticks, "steer": steer, "start_z": start_z,
+	out.append({"name": scenario_name, "ticks": ticks, "steer": steer, "start_z": start_z,
 			"puck_ahead": puck_ahead})
 
 

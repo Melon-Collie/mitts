@@ -75,7 +75,7 @@ func test_goalie_strip_credits_no_takeaway() -> void:
 
 func test_scramble_touches_credit_nothing() -> void:
 	# Board battle: strip, alternating momentary touches, nobody establishes.
-	var owner := _add_player(10, 0)
+	var owner_player := _add_player(10, 0)
 	var stealer := _add_player(20, 1)
 	_gain_and_establish(10)
 	tracker.note_strip(10, 20)
@@ -85,8 +85,8 @@ func test_scramble_touches_credit_nothing() -> void:
 	tracker.note_strip(10, 20)
 	tracker.on_carrier_gained(20, false)  # ...and again — still no control
 	assert_eq(stealer.stats.takeaways, 0, "no establishment, no takeaway chain")
-	assert_eq(owner.stats.takeaways, 0)
-	assert_eq(owner.stats.giveaways, 0)
+	assert_eq(owner_player.stats.takeaways, 0)
+	assert_eq(owner_player.stats.giveaways, 0)
 
 
 func test_takeaway_candidate_dies_when_recoverer_loses_it() -> void:
@@ -196,7 +196,7 @@ func test_strip_is_consumed_at_establishment() -> void:
 	# The wide strip window must not bleed a stale takeaway onto a later, clean
 	# loss. After the victim's own team re-establishes, a subsequent clean cough
 	# is a giveaway, not a takeaway off the old strip.
-	var owner := _add_player(10, 0)
+	var owner_player := _add_player(10, 0)
 	var teammate := _add_player(11, 0)
 	var opp := _add_player(20, 1)
 	_gain_and_establish(10)
@@ -206,7 +206,7 @@ func test_strip_is_consumed_at_establishment() -> void:
 	assert_true(tracker.on_possession_established(20))
 	assert_eq(opp.stats.takeaways, 0, "the old strip must not linger")
 	assert_eq(teammate.stats.giveaways, 1, "clean loss by the new owner")
-	assert_eq(owner.stats.giveaways, 0)
+	assert_eq(owner_player.stats.giveaways, 0)
 
 
 func test_contested_loose_puck_is_not_a_giveaway() -> void:
@@ -227,14 +227,14 @@ func test_contested_loose_puck_is_not_a_giveaway() -> void:
 func test_clean_interception_after_an_own_retouch_is_still_a_giveaway() -> void:
 	# A carrier who drops and re-grabs their own puck (no opponent touch between)
 	# has not contested anything — a later clean interception is still a giveaway.
-	var owner := _add_player(10, 0)
+	var owner_player := _add_player(10, 0)
 	_add_player(11, 0)
 	_add_player(20, 1)
 	_gain_and_establish(10)
 	tracker.on_carrier_gained(11, false)  # own team re-touches (no opp touch yet)
 	tracker.on_carrier_gained(20, false)  # opponent picks it off cleanly
 	assert_true(tracker.on_possession_established(20))
-	assert_eq(owner.stats.giveaways, 1, "an own re-touch is not a contest")
+	assert_eq(owner_player.stats.giveaways, 1, "an own re-touch is not a contest")
 
 
 func test_no_stats_before_any_established_owner() -> void:
@@ -326,11 +326,11 @@ func test_resolve_without_pending_is_noop() -> void:
 # ── Reset ────────────────────────────────────────────────────────────────────
 
 func test_reset_clears_owner_and_pending_draw() -> void:
-	var owner := _add_player(10, 0)
+	var owner_player := _add_player(10, 0)
 	var stealer := _add_player(20, 1)
 	_gain_and_establish(10)
 	tracker.reset()
 	tracker.on_carrier_gained(20, false)
 	tracker.on_possession_established(20)
-	assert_eq(owner.stats.giveaways, 0, "reset forgot the previous owner")
+	assert_eq(owner_player.stats.giveaways, 0, "reset forgot the previous owner")
 	assert_eq(stealer.stats.takeaways, 0)

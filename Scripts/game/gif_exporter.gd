@@ -129,8 +129,8 @@ func _next_path(label: String) -> String:
 		now.year, now.month, now.day, now.hour, now.minute, now.second,
 	]
 	var slug: String = _slugify(label)
-	var name: String = "%s_%s" % [stamp, slug] if not slug.is_empty() else stamp
-	return CLIP_DIR.path_join("goal_%s%s" % [name, CLIP_EXT])
+	var clip_name: String = "%s_%s" % [stamp, slug] if not slug.is_empty() else stamp
+	return CLIP_DIR.path_join("goal_%s%s" % [clip_name, CLIP_EXT])
 
 
 # Scorer names reach the filename, so strip anything a filesystem would
@@ -153,13 +153,13 @@ static func _purge_oldest(keep: int) -> void:
 	var paths: Array[String] = []
 	var mtime_by_path: Dictionary[String, int] = {}
 	dir.list_dir_begin()
-	var name: String = dir.get_next()
-	while not name.is_empty():
-		if not dir.current_is_dir() and name.ends_with(CLIP_EXT):
-			var path: String = CLIP_DIR.path_join(name)
+	var entry: String = dir.get_next()
+	while not entry.is_empty():
+		if not dir.current_is_dir() and entry.ends_with(CLIP_EXT):
+			var path: String = CLIP_DIR.path_join(entry)
 			paths.append(path)
 			mtime_by_path[path] = FileAccess.get_modified_time(path)
-		name = dir.get_next()
+		entry = dir.get_next()
 	dir.list_dir_end()
 	if paths.size() <= keep:
 		return

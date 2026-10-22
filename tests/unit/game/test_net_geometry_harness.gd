@@ -104,8 +104,8 @@ func test_the_broadcast_interval_costs_prediction_accuracy() -> void:
 	var acc_fast: float = 0.0
 	var acc_real: float = 0.0
 	for k: int in range(8):
-		fast.seed = 991 + k * 7
-		real.seed = 991 + k * 7
+		fast.rng_seed = 991 + k * 7
+		real.rng_seed = 991 + k * 7
 		acc_fast += H.new().run(fast).mean_puck_error_m
 		acc_real += H.new().run(real).mean_puck_error_m
 	assert_gt(acc_real, acc_fast * 1.05,

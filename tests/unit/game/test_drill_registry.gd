@@ -83,15 +83,15 @@ func test_no_manager_redeclares_the_shared_loop_state() -> void:
 		var src: String = FileAccess.get_file_as_string(DrillRegistry.get_manager_path(id))
 		lines_scanned += src.split("\n").size()
 		for line: String in src.split("\n"):
-			for name: String in owned:
+			for field: String in owned:
 				# The trailing separator keeps `_stage` from matching `_stage_wall`.
 				for decl: String in ["var %s", "const %s", "var _%s", "const _%s"]:
-					var head: String = decl % name
+					var head: String = decl % field
 					if not line.begins_with(head):
 						continue
 					var after: String = line.substr(head.length(), 1)
 					if after == ":" or after == " " or after == "=" or after == "":
-						fail_test("drill '%s' re-declares `%s`, which DrillLoop owns — " % [id, name] +
+						fail_test("drill '%s' re-declares `%s`, which DrillLoop owns — " % [id, field] +
 								"the base would then drive a different copy than the drill reads")
 	assert_gt(lines_scanned, 300, "expected to have read the drill managers")
 

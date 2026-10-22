@@ -151,8 +151,8 @@ func _shots() -> Array:
 	var requested: PackedStringArray = OS.get_environment("UNIFORM_STUDY_SHOTS").split(",", false)
 	var out: Array = []
 	for shot: Dictionary in SHOTS:
-		var name: String = shot.name
-		if requested.is_empty() and not _CLOSE_SHOTS.has(name) or requested.has(name):
+		var shot_name: String = shot.name
+		if requested.is_empty() and not _CLOSE_SHOTS.has(shot_name) or requested.has(shot_name):
 			out.append(shot)
 	return out
 
@@ -170,11 +170,11 @@ func _kits() -> Array:
 
 func _pose_names() -> Array[String]:
 	var out: Array[String] = []
-	for name: String in OS.get_environment("UNIFORM_STUDY_POSES").split(",", false):
-		if POSES.has(name.strip_edges()):
-			out.append(name.strip_edges())
+	for pose: String in OS.get_environment("UNIFORM_STUDY_POSES").split(",", false):
+		if POSES.has(pose.strip_edges()):
+			out.append(pose.strip_edges())
 		else:
-			push_warning("[uniform_study] unknown pose '%s'" % name)
+			push_warning("[uniform_study] unknown pose '%s'" % pose)
 	if out.is_empty():
 		out.append("rest")
 	return out

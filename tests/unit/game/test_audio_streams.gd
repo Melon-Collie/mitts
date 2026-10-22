@@ -1,5 +1,7 @@
 extends GutTest
 
+const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
+
 # Import flags and level curves that no player ever reports wrongly: a bed that
 # stops looping just goes quiet, and a cue at the wrong level just sounds flat.
 
@@ -37,25 +39,25 @@ func test_the_crowd_bed_loops() -> void:
 
 
 func test_the_hardest_shot_in_the_league_plays_at_full() -> void:
-	assert_almost_eq(SoundManager.shot_volume_db(GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S), 0.0, 1e-4)
+	assert_almost_eq(SoundManagerScript.shot_volume_db(GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S), 0.0, 1e-4)
 
 
 func test_shot_level_tracks_launch_speed() -> void:
 	# Half the launch speed is half the amplitude.
 	var half: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S * 0.5
-	assert_almost_eq(SoundManager.shot_volume_db(half), -6.02, 0.01)
+	assert_almost_eq(SoundManagerScript.shot_volume_db(half), -6.02, 0.01)
 	var last: float = -INF
 	for power: float in [1.0, 5.0, 10.0, 14.0, 20.0, 33.0, 40.0]:
-		var db: float = SoundManager.shot_volume_db(power)
+		var db: float = SoundManagerScript.shot_volume_db(power)
 		assert_gte(db, last, "no quieter at %.0f m/s than below it" % power)
 		last = db
-	assert_lt(SoundManager.shot_volume_db(GameRules.DEFAULT_WRISTER_POWER_MAX_M_S), 0.0,
+	assert_lt(SoundManagerScript.shot_volume_db(GameRules.DEFAULT_WRISTER_POWER_MAX_M_S), 0.0,
 			"a full wrister leaves the puck slower than a full slapper, so it plays under it")
 
 
 func test_shot_level_is_bounded() -> void:
-	assert_eq(SoundManager.shot_volume_db(0.0), SoundManager._SHOT_VOLUME_FLOOR_DB, "a dead release sits on the floor")
-	assert_eq(SoundManager.shot_volume_db(60.0), 0.0, "one-timer bonus power never boosts past full")
+	assert_eq(SoundManagerScript.shot_volume_db(0.0), SoundManager._SHOT_VOLUME_FLOOR_DB, "a dead release sits on the floor")
+	assert_eq(SoundManagerScript.shot_volume_db(60.0), 0.0, "one-timer bonus power never boosts past full")
 
 
 func test_cues_sharing_a_file_share_its_make_up_gain() -> void:
@@ -105,9 +107,9 @@ func test_the_mix_keeps_its_order() -> void:
 
 func test_a_board_contact_above_the_cap_rail_is_glass() -> void:
 	var top: float = GameRules.BOARD_TOP_HEIGHT
-	assert_eq(SoundManager.board_contact_sound(Vector3(29.0, 0.02, 3.0)), SoundManager.Sound.PUCK_BOARDS, "rimmed along the ice")
-	assert_eq(SoundManager.board_contact_sound(Vector3(29.0, top - 0.05, 3.0)), SoundManager.Sound.PUCK_BOARDS, "just under the rail")
-	assert_eq(SoundManager.board_contact_sound(Vector3(29.0, top + 0.05, 3.0)), SoundManager.Sound.PUCK_GLASS, "just over the rail")
+	assert_eq(SoundManagerScript.board_contact_sound(Vector3(29.0, 0.02, 3.0)), SoundManager.Sound.PUCK_BOARDS, "rimmed along the ice")
+	assert_eq(SoundManagerScript.board_contact_sound(Vector3(29.0, top - 0.05, 3.0)), SoundManager.Sound.PUCK_BOARDS, "just under the rail")
+	assert_eq(SoundManagerScript.board_contact_sound(Vector3(29.0, top + 0.05, 3.0)), SoundManager.Sound.PUCK_GLASS, "just over the rail")
 
 
 func test_every_take_of_a_multi_take_cue_exists() -> void:
