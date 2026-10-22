@@ -14,16 +14,20 @@ const _FORWARD := Vector3(0.0, 0.0, -1.0)
 
 # The taught stance: skates a little wider than the shoulders, toes turned out,
 # knees bent and in so the pads stand on their inside edges, hips back, chest
-# over the knees, hands out in front at the pad tops, the blade a foot ahead of
-# the skates and centred on the five-hole.
+# over the knees, hands out in front, the blade a foot ahead of the skates
+# across the five-hole.
 const READY_SKATE_HALF_SPACING_M: float = 0.31
 const READY_KNEE_IN_M: float = 0.11
 const READY_PELVIS := Vector3(0.0, 0.86, 0.12)
 const READY_TOE_OUT_RAD: float = 0.25
-const READY_BLADE := Vector3(0.0, 0.0, -0.46)
+# The blade sits a touch to the glove side of centre: the lie carries the grip
+# 35 cm out from the heel, and centred on the five-hole it would hold the
+# blocker out by the post instead of beside the pad.
+const READY_BLADE := Vector3(-0.05, 0.0, -0.40)
 # The paddle's tilt back toward him. The lie leans it toward the blocker side
-# on its own; the tilt brings the grip in to the hip.
-const READY_STICK_TILT_RAD: float = deg_to_rad(22.0)
+# on its own; a paddle near upright holds the grip out in front of the pads,
+# where a tilt toward the hip would tuck the blocker behind them.
+const READY_STICK_TILT_RAD: float = deg_to_rad(8.0)
 
 # The butterfly: knees together on the ice, shins flared out behind them with
 # the pads' faces to the shooter, hips over the knees and the trunk tall.
@@ -236,7 +240,7 @@ static func _butterfly_leg(leg: KeeperPose.Leg, sx: float, shin_y: float, knee_z
 # Hands out in front of the body at the pad tops; `drop` lowers them for a
 # keeper whose hips are lower than the stance's.
 static func _ready_hands(p: KeeperPose, drop: float) -> void:
-	p.glove_hand = Vector3(-0.40, 0.86 - drop, -0.42)
+	p.glove_hand = Vector3(-0.38, 0.93 - drop, -0.50)
 	p.glove_fingers = Vector3(-0.25, 1.0, -0.15)
 	p.glove_palm = _FORWARD
 	p.blade_center = READY_BLADE

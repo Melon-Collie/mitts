@@ -108,7 +108,7 @@ func _process(_delta: float) -> bool:
 		_keeper.apply_pose(_pose)
 		var v: Array = _views[_view_i]
 		_camera.position = v[1]
-		_camera.fov = 14.0 if v[0] == "shooter" else 40.0
+		_camera.fov = 17.0 if v[0] == "shooter" else 40.0
 		_camera.look_at(Vector3(0.0, 0.62, 0.0), Vector3.UP)
 	elif _frames % 3 == 0:
 		var img: Image = root.get_viewport().get_texture().get_image()
