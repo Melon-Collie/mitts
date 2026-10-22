@@ -11,6 +11,9 @@ const IN_TO_M: float = 0.0254
 # A pad's foam gives where its edge rests on the ice; nothing else may sink in.
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
+# Wrist to the middle of the palm, where a hand holds a stick: about half of a
+# 6'4" hand (0.108 of stature).
+const GRIP_IN_PALM_M: float = 0.10
 
 var _pose := KeeperPose.new()
 var _skel := KeeperSkeleton.new()
@@ -98,6 +101,23 @@ func test_his_skates_stand_on_the_ice_when_he_is_up() -> void:
 				continue
 			var skate: int = P.SKATE_G if side == 0 else P.SKATE_B
 			assert_almost_eq(_lowest(skate), 0.0, 0.005, "%s skate %d" % [stance[0], side])
+
+
+# The skeleton has no hand bone: each forearm is aimed at its hand and stops at
+# the wrist, so a hand held in reach ends at most a palm past it. Further, the
+# hand is drawn floating off the arm. Standing straight up nobody reaches a
+# stick lying flat on the ice, so the upright reference is not held to it.
+func test_every_arm_reaches_its_hand() -> void:
+	for stance: Array in _stances():
+		if stance[0] == "upright":
+			continue
+		_solve(stance)
+		var glove_wrist: Vector3 = _skel.xf[B.FOREARM_G] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
+		var blocker_wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
+		assert_lte(glove_wrist.distance_to(_skel.xf[B.HAND_G].origin), GRIP_IN_PALM_M,
+				"%s: the glove arm reaches its hand" % stance[0])
+		assert_lte(blocker_wrist.distance_to(_skel.grip), GRIP_IN_PALM_M,
+				"%s: the blocker arm reaches the stick" % stance[0])
 
 
 func test_the_stick_is_rigid_and_its_blade_lies_flat() -> void:
