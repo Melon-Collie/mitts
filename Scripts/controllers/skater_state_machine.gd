@@ -46,10 +46,10 @@ static func state_has_puck(state: int) -> bool:
 # identically from a replicated shot_state with no live carrier reference.
 #
 # NOTE this says nothing about the carrier's MOBILITY, which differs sharply
-# between the two: the slapper suppresses locomotion and actively drags velocity
-# to zero (a plant), while the wrister suppresses nothing and stays fully
-# steerable. Reads that depend on the shooter being planted must test for that
-# separately — see GoalieController._reading_planted_windup.
+# between the two: the slapper takes no stride or steer and glides on its
+# momentum, while the wrister suppresses nothing and stays fully steerable.
+# Reads that depend on the shooter's mobility must test for that separately —
+# see GoalieController._reading_planted_windup.
 static func state_pins_puck(state: int) -> bool:
 	return state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK \
@@ -93,7 +93,6 @@ class Callbacks:
 	# Per-frame updates that need @export params from SkaterController
 	var update_wrister_charge: Callable           # (input: InputState)
 	var update_slapper_charge: Callable           # (delta: float)
-	var apply_slapper_velocity_drag: Callable     # (delta: float)
 	var apply_block_movement: Callable            # (input: InputState, delta: float)
 
 # ── Owned state (moved from SkaterController) ─────────────────────────────────
@@ -207,7 +206,6 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 			return
 		_cb.update_slapper_aim.call(input)
 		_cb.apply_slapper_setup.call(input, delta)
-		_cb.apply_slapper_velocity_drag.call(delta)
 		return
 
 	# One-timer window: puck arrived mid-charge. Player must release before
@@ -230,7 +228,6 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 	_cb.update_slapper_aim.call(input)
 	_cb.update_slapper_charge.call(delta)
 	_cb.apply_slapper_blade_position.call()
-	_cb.apply_slapper_velocity_drag.call(delta)
 
 	if not input.slap_held:
 		_cb.release_slapper.call(input)
@@ -260,16 +257,13 @@ func _state_slapper_charge_without_puck(_skater: Skater, input: InputState, delt
 # is read here, not even a cancel — so the ONLY exit is the shot (or its whiff)
 # at the end of the hold. The blade holds its wind-up pose and the shaft loads
 # (Skater._update_stick_flex keys the bow off this state), which is the visible
-# "caught it, now it's loading" read; the plant keeps dragging velocity off so
-# the shooter stays set through the beat.
+# "caught it, now it's loading" read.
 #
 # The range check and every downstream consequence (the lag-comped one-timer
 # claim, the host's authoritative fire, the local prediction seed) run at the END
 # of the hold, unchanged — retention shifts WHEN they run, not what they do.
-func _state_one_timer_retention(_skater: Skater, input: InputState, delta: float, has_puck: bool, _is_movement_locked: bool) -> void:
+func _state_one_timer_retention(_skater: Skater, input: InputState, delta: float, _has_puck: bool, _is_movement_locked: bool) -> void:
 	_cb.apply_slapper_blade_position.call()
-	if has_puck:
-		_cb.apply_slapper_velocity_drag.call(delta)
 	_aiming.tick_one_timer_retention(delta)
 	if _aiming.one_timer_retention_timer > 0.0:
 		return

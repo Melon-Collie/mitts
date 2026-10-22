@@ -1203,7 +1203,6 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_cb.release_retained_one_timer = _release_retained_one_timer
 	_cb.update_wrister_charge = _update_wrister_charge
 	_cb.update_slapper_charge = _update_slapper_charge
-	_cb.apply_slapper_velocity_drag = _apply_slapper_velocity_drag
 	_cb.apply_block_movement = _apply_block_movement
 	_sm.setup(_cb, _aiming)
 	_pose.setup(skater, _sm, _aiming, self, _skating)
@@ -3263,13 +3262,6 @@ func slapper_wind_up_t() -> float:
 func slapper_overcharge_seconds() -> float:
 	return maxf(_aiming.slapper_charge_timer - max_slapper_charge_time, 0.0)
 
-func _apply_slapper_velocity_drag(delta: float) -> void:
-	var slapper_vel := Vector2(skater.velocity.x, skater.velocity.z)
-	var drag: float = friction + friction_drag * slapper_vel.length()
-	slapper_vel = slapper_vel.move_toward(Vector2.ZERO, drag * delta)
-	skater.velocity.x = slapper_vel.x
-	skater.velocity.z = slapper_vel.y
-
 # The loose puck as the SHOOTER saw it at the instant their swing landed. Filled
 # by sample_shooter_puck_view; one instance per controller, reused.
 class PuckView extends RefCounted:
@@ -3462,9 +3454,10 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		return
 
 	var move_state: SkaterStateMachine.State = _sm.get_state()
-	# Locomotion is suppressed during a planted slap windup / block stance.
-	var locomotion_suppressed: bool = \
-			move_state == State.SLAPPER_CHARGE_WITH_PUCK or move_state == State.SHOT_BLOCKING \
+	# The block stance plants; it skates itself (_apply_block_movement).
+	var locomotion_suppressed: bool = move_state == State.SHOT_BLOCKING
+	var loaded: bool = move_state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or move_state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
 			or move_state == State.ONE_TIMER_RETENTION
 	# The commit wins over the stance: being caught upright is its whole cost.
 	# Mirrored to the skater so the collision resolver reads full-vs-passive
@@ -3472,10 +3465,10 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# Neither side of a pin commits (it is held on the stick button, and nothing
 	# stacks on it); the pinned one, pressed into the glass, has no stance either.
 	var locked: bool = skater.pin_role != BoardPinRules.Role.NONE
-	hit_active = not locomotion_suppressed and input.hit_held and not locked
+	hit_active = not locomotion_suppressed and not loaded and input.hit_held and not locked
 	skater.hit_committed = hit_active
-	stance_active = not locomotion_suppressed and input.stance_held and not hit_active \
-			and skater.pin_role != BoardPinRules.Role.PINNED
+	stance_active = not locomotion_suppressed and not loaded and input.stance_held \
+			and not hit_active and skater.pin_role != BoardPinRules.Role.PINNED
 	# Body-check stagger decays deterministically every tick (including during a
 	# planted charge/block and through reconcile replay), so the penalties ease
 	# back on their own. Decayed before the suppression early-out so a player
@@ -3485,6 +3478,12 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	if locomotion_suppressed:
 		return
 
+	var stick: Vector2 = input.move_vector
+	var brake: bool = input.brake
+	if loaded:
+		_loaded_glide_intent(move_state)
+		stick = skater.move_intent
+		brake = skater.brake_intent
 	var posture: SkaterMovementRules.Posture = SkaterMovementRules.posture_of(
 			stance_active, hit_active)
 	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
@@ -3496,13 +3495,27 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	cfg.thrust = thrust * BodyCheckRules.thrust_mult(stagger_timer, bc)
 	if _native_move != null:
 		skater.velocity = _native_move.apply_movement_staggered(
-				skater.velocity, input.move_vector, skater.rotation.y,
-				has_puck, input.brake, delta, posture, cfg.thrust, grip_scale)
+				skater.velocity, stick, skater.rotation.y,
+				has_puck, brake, delta, posture, cfg.thrust, grip_scale)
 	else:
 		skater.velocity = SkaterMovementRules.apply_movement(
-				skater.velocity, input.move_vector, skater.rotation.y,
-				has_puck, input.brake, delta, cfg, posture, grip_scale)
+				skater.velocity, stick, skater.rotation.y,
+				has_puck, brake, delta, cfg, posture, grip_scale)
 	_apply_pin_slide_cap()
+
+
+# Wound up, the hands are on the stick and the legs cannot stride: a skater
+# glides on whatever momentum the wind-up found. Waiting on a feed with no puck
+# yet he can still stop, and step-together onto the feed's line under
+# SkaterMovementRules.SHUFFLE_MAX_SPEED (the brake with a stick), never skate.
+# Published as the intent so the gait, and every peer's forward prediction,
+# skate what the body does.
+func _loaded_glide_intent(move_state: SkaterStateMachine.State) -> void:
+	var waiting: bool = move_state == State.SLAPPER_CHARGE_WITHOUT_PUCK
+	skater.brake_intent = waiting and skater.brake_intent
+	skater.is_braking = skater.brake_intent
+	if not skater.brake_intent:
+		skater.move_intent = Vector2.ZERO
 
 # Movement configs are cached — _apply_movement runs every physics tick (and
 # once per reconcile-replayed input), and the source exports change only in

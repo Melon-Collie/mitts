@@ -52,7 +52,6 @@ func _make_callbacks() -> SkaterStateMachine.Callbacks:
 	cb.fire_quick_pass = noop_1
 	cb.update_wrister_charge = noop_1
 	cb.update_slapper_charge = func(delta: float) -> void: _aiming.tick_slapper(delta)
-	cb.apply_slapper_velocity_drag = noop_1
 	cb.apply_block_movement = noop_2
 	cb.release_slapper = func(_i: Variant) -> void:
 		_slapper_releases += 1

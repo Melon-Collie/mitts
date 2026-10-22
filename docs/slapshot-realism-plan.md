@@ -1,6 +1,6 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
-Status: **Phases 1–3 built, awaiting playtest.** Decisions below were agreed in
+Status: **Phases 1–4 built, awaiting playtest.** Decisions below were agreed in
 chat; phases are ordered so each one can be played on its own.
 
 As built, Phase 1 differs from the design below:
@@ -255,6 +255,15 @@ saved/restored with the charge fields.
 - Replay reproduces the locked direction.
 
 ## Phase 4 — loaded, you glide
+
+As built, this differs from the design below:
+- No edge-grip cut: with no stick reaching the kernel the edges never turn the
+  skater, so there is nothing for it to cut.
+- The puckless wind-up keeps the brake, so a shooter can stop to set for a feed
+  as well as step-together onto its line.
+- The glide's intent (no stick, and the brake only where it is allowed) is
+  published as the replicated `move_intent` / `brake_intent`, so the gait and
+  every peer's forward prediction skate the glide with no wire change.
 
 In `SLAPPER_CHARGE_WITH_PUCK`, `SLAPPER_CHARGE_WITHOUT_PUCK` and
 `ONE_TIMER_RETENTION`:
