@@ -762,7 +762,16 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	var side: float = signf(_skater.bottom_shoulder.position.x)
 	var rest_arm: Vector3 = _controller.bh_free_hand_rest_arm + _free_hand_swing(side)
 	var rest: Vector3 = shoulder + Vector3(rest_arm.x * side, rest_arm.y, rest_arm.z) * arm
-	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest, _bh_release)
+	# A cross-check is thrown with both hands, and it takes hold on its own pose's
+	# ease: the spring takes longer than the throw to bring back a hand let go
+	# for an empty stick's reach. Held, the spring lets go from the shaft after.
+	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
+			_skater.cross_check_elapsed)
+	if shove_w >= 1.0:
+		_bh_release = 0.0
+		_bh_release_vel = 0.0
+	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest,
+			_bh_release * (1.0 - shove_w))
 	if _held_free_weight > 0.0:
 		bh = bh.lerp(_held_free_hand, _held_free_weight)
 	# Off the stick, the hand hangs where the arm can put it.
