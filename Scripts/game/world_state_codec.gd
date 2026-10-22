@@ -487,12 +487,12 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	b.encode_u8(o, flags); o += 1
 	b.encode_u8(o, clampi(roundi(s.shot_charge * 255.0), 0, 255)); o += 1
 	# Body-check stagger seconds remaining, u8 @ 0.01 s (0..2.55 s covers
-	# stagger_max_seconds 1.0 with headroom). Without it the client victim's
+	# stagger_max_seconds 1.0 plus the rocked band's 0.8 with headroom). Without it the client victim's
 	# predicted stagger is wiped to 0 on the next reconcile — full-thrust replay
 	# vs the host's penalised sim, a reconcile storm for the whole stagger window.
 	b.encode_u8(o, clampi(roundi(s.stagger_timer * 100.0), 0, 255)); o += 1
-	# Body-check knockdown seconds remaining, u8 @ 0.01 s (0..2.55 s covers
-	# knockdown_max_seconds ~1.9 with headroom). Same rail/reason as stagger above:
+	# Body-check knockdown seconds remaining, u8 @ 0.01 s (0..2.55 s covers the
+	# longest window, ~2.3 s of fall, lie and get-up; test_body_check_rules holds it). Same rail/reason as stagger above:
 	# without it the local victim's predicted knockdown is wiped on the next reconcile.
 	b.encode_u8(o, clampi(roundi(s.knockdown_timer * 100.0), 0, 255)); o += 1
 	# Movement-intent byte (v15): bits [0..2] move-direction octant, bit [3]

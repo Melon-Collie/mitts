@@ -125,7 +125,7 @@ func test_the_rules_defaults_are_the_controllers_tuning() -> void:
 	for field: String in ["min_impulse", "ref_impulse", "max_stagger_seconds",
 			"max_thrust_penalty", "max_grip_penalty", "rocked_ref_impulse",
 			"rocked_min_seconds", "rocked_max_seconds", "rocked_grip_penalty",
-			"knockdown_ref_overshoot", "min_knockdown_seconds", "max_knockdown_seconds"]:
+			"knockdown_ref_overshoot", "min_lie_seconds", "max_lie_seconds"]:
 		assert_eq(live.get(field), defaults.get(field), field)
 	var balance: BodyBalanceRules.Config = _controller.get_balance_config()
 	var balance_defaults := BodyBalanceRules.Config.new()
@@ -172,3 +172,20 @@ func test_uncommitted_the_same_hit_rocks_him() -> void:
 	_controller._on_body_check_received(Vector3(0.0, 0.0, -3.25))
 	assert_true(BodyCheckRules.is_rocked(_controller.stagger_timer,
 			_controller.get_body_check_config()))
+
+
+# He is on the ice before the get-up starts: the window is the fall, a lie and
+# the get-up, however softly he goes down.
+func test_the_get_up_waits_for_the_ice() -> void:
+	for dv: float in [1.93, 3.0, 6.0]:
+		before_each()
+		_controller._on_body_check_received(Vector3(dv, 0.0, 0.0))
+		var landing: float = KnockdownFallRules.first_impact_time(dv, _controller._fall_config())
+		assert_gte(_controller.knockdown_timer - _controller.knockdown_getup_seconds,
+				landing + _controller.knockdown_lie_min_seconds - 1e-4, "shoved at %.2f m/s" % dv)
+
+
+func test_the_longest_knockdown_fits_the_wire() -> void:
+	var longest: float = KnockdownFallRules.first_impact_time(0.0, _controller._fall_config()) \
+			+ _controller.knockdown_lie_max_seconds + _controller.knockdown_getup_seconds
+	assert_lt(longest, 2.55, "knockdown_timer travels as a u8 at 0.01 s (WorldStateCodec)")

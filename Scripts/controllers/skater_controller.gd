@@ -164,8 +164,9 @@ var rocked_catch_rate: float = 15.0      # the catch's ease rate: a step out in 
 # feet can't carry off, against what his base, his sight of the hitter, his
 # posture and his height can take) KNOCKS HIM DOWN — movement locked, no puck
 # interaction, the body slides from the hit and bleeds speed via
-# knockdown_friction — for a window growing with how far past it the hit landed
-# (BodyCheckRules.knockdown_seconds_from_overshoot). knockdown_timer rides the
+# knockdown_friction — for the fall to the ice, a lie growing with how far past
+# it the hit landed (BodyCheckRules.lie_seconds_from_overshoot) and the get-up,
+# so the get-up never starts before he is down. knockdown_timer rides the
 # SAME replicated / snapped / decayed rail as stagger_timer. At these values a
 # square, upright man rides any one-sided check below top speed, and a side hit
 # floors him from ~6 m/s closing at equal builds (docs/hit-outcomes-plan.md).
@@ -175,8 +176,8 @@ var balance_sight_behind: float = 0.6      # his balance with his back to the hi
 var balance_vulnerable_mult: float = 0.6   # ... mid-shot: a wind-up, a load, a follow-through
 var balance_checker_front_share: float = 0.4  # a committed checker takes his own hit at this
 var knockdown_ref_overshoot: float = 1.7   # past his balance by this, the longest knockdown
-var knockdown_min_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
-var knockdown_max_seconds: float = 1.9     # down time of a maximal hit
+var knockdown_lie_min_seconds: float = 0.15  # on the ice before the get-up, just past his balance
+var knockdown_lie_max_seconds: float = 0.7   # ... at knockdown_ref_overshoot: ~1.9 s down in all
 var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
 # Knockdown pose (cosmetic): a downed player FALLS — the knees buckle into the
 # collapse crouch that matches the gait's drop, the whole cosmetic rig tips
@@ -1586,7 +1587,11 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) ->
 	if full_check:
 		var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
 				skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
-		knockdown_add = BodyCheckRules.knockdown_seconds_from_overshoot(overshoot, cfg)
+		if overshoot > 1.0:
+			knockdown_add = KnockdownFallRules.first_impact_time(
+					Vector2(impulse.x, impulse.z).length(), _fall_config()) \
+					+ BodyCheckRules.lie_seconds_from_overshoot(overshoot, cfg) \
+					+ knockdown_getup_seconds
 		stagger_add = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
 				knockdown_add > 0.0)
 	_set_knockdown_from_impulse(knockdown_add, impulse)
@@ -3563,8 +3568,8 @@ func _body_check_config() -> BodyCheckRules.Config:
 		_cached_body_check_cfg.rocked_max_seconds = rocked_max_seconds
 		_cached_body_check_cfg.rocked_grip_penalty = rocked_grip_penalty
 		_cached_body_check_cfg.knockdown_ref_overshoot = knockdown_ref_overshoot
-		_cached_body_check_cfg.min_knockdown_seconds = knockdown_min_seconds
-		_cached_body_check_cfg.max_knockdown_seconds = knockdown_max_seconds
+		_cached_body_check_cfg.min_lie_seconds = knockdown_lie_min_seconds
+		_cached_body_check_cfg.max_lie_seconds = knockdown_lie_max_seconds
 	return _cached_body_check_cfg
 
 # Balance config, flat like the body-check config; the build's height enters

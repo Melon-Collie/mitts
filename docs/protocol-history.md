@@ -401,3 +401,8 @@ here whenever you bump, in the same format.
 #      credit the checker's). Same layout; a v83 peer predicts the old
 #      knockdowns and the old one-sided contacts, so mixed builds must be
 #      refused.
+# v85: a knockdown lasts the fall to the ice, a lie and the get-up
+#      (KnockdownFallRules.first_impact_time + BodyCheckRules
+#      .lie_seconds_from_overshoot + the get-up), so knockdown_timer's legal
+#      range grows from 1.9 s to ~2.3 s and every window changes length. Same
+#      layout; a v84 peer predicts the old windows.

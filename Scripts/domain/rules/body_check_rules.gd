@@ -51,11 +51,13 @@ class Config:
 	var rocked_grip_penalty: float = 0.75
 	# Knockdown: a hit that beats his balance (BodyBalanceRules.overshoot over 1)
 	# knocks him off his skates — movement locked, slides and bleeds speed, can't
-	# touch the puck — for a window from min_knockdown_seconds just past his
-	# balance to max_knockdown_seconds at knockdown_ref_overshoot and beyond.
+	# touch the puck. He falls to the ice (KnockdownFallRules.first_impact_time),
+	# lies there from min_lie_seconds just past his balance to max_lie_seconds at
+	# knockdown_ref_overshoot and beyond, then gets up; the caller adds the fall
+	# and the get-up, so the get-up never starts before he is down.
 	var knockdown_ref_overshoot: float = 1.7
-	var min_knockdown_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
-	var max_knockdown_seconds: float = 1.9     # down time of a maximal hit
+	var min_lie_seconds: float = 0.15
+	var max_lie_seconds: float = 0.7
 
 
 # 0..1 hit hardness from the victim impulse magnitude.
@@ -92,17 +94,13 @@ static func rocked_share(stagger_timer: float, cfg: Config) -> float:
 	return clampf((stagger_timer - cfg.max_stagger_seconds) / cfg.rocked_max_seconds, 0.0, 1.0)
 
 
-# Seconds of KNOCKDOWN a hit adds from how far past his balance it landed
-# (BodyBalanceRules.overshoot): 0 at or under 1, then min_knockdown_seconds up to
-# max_knockdown_seconds at knockdown_ref_overshoot (clamped). Like stagger,
-# callers take the max with any in-flight timer so a weaker follow-up can't
-# shorten an existing knockdown.
-static func knockdown_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
-	if overshoot <= 1.0:
-		return 0.0
+# Seconds he lies on the ice from how far past his balance the hit landed
+# (BodyBalanceRules.overshoot, over 1 for a knockdown at all): min_lie_seconds
+# just past it, up to max_lie_seconds at knockdown_ref_overshoot (clamped).
+static func lie_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
 	var span: float = maxf(cfg.knockdown_ref_overshoot - 1.0, 0.001)
 	var t: float = clampf((overshoot - 1.0) / span, 0.0, 1.0)
-	return lerpf(cfg.min_knockdown_seconds, cfg.max_knockdown_seconds, t)
+	return lerpf(cfg.min_lie_seconds, cfg.max_lie_seconds, t)
 
 
 # Thrust multiplier (<= 1.0) for the stagger remaining this tick. The penalty is

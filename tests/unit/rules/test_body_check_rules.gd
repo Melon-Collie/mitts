@@ -20,24 +20,20 @@ func before_each() -> void:
 	_cfg.rocked_max_seconds = 0.8
 	_cfg.rocked_grip_penalty = 0.75
 	_cfg.knockdown_ref_overshoot = 2.0
-	_cfg.min_knockdown_seconds = 0.7
-	_cfg.max_knockdown_seconds = 1.5
+	_cfg.min_lie_seconds = 0.2
+	_cfg.max_lie_seconds = 0.6
 
 
-# ── knockdown_seconds_from_overshoot ──────────────────────────────────────────
+# ── lie_seconds_from_overshoot ────────────────────────────────────────────────
 
-func test_no_knockdown_within_his_balance() -> void:
-	assert_eq(BodyCheckRules.knockdown_seconds_from_overshoot(0.5, _cfg), 0.0)
-	assert_eq(BodyCheckRules.knockdown_seconds_from_overshoot(1.0, _cfg), 0.0, "at his balance he holds")
+func test_just_past_his_balance_he_lies_the_min() -> void:
+	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(1.0001, _cfg), 0.2, 0.001)
 
-func test_just_past_his_balance_is_the_min_down_time() -> void:
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(1.0001, _cfg), 0.7, 0.001)
-
-func test_knockdown_scales_to_max() -> void:
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(1.5, _cfg), 1.1, 0.0001,
-			"halfway to the reference overshoot → halfway down time")
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(2.0, _cfg), 1.5, 0.0001)
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(9.0, _cfg), 1.5, 0.0001,
+func test_the_lie_scales_to_max() -> void:
+	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(1.5, _cfg), 0.4, 0.0001,
+			"halfway to the reference overshoot → halfway lie")
+	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(2.0, _cfg), 0.6, 0.0001)
+	assert_almost_eq(BodyCheckRules.lie_seconds_from_overshoot(9.0, _cfg), 0.6, 0.0001,
 			"above the reference clamps to max")
 
 

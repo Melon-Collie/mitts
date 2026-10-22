@@ -227,10 +227,14 @@ New pure rule class `BodyBalanceRules` (`Scripts/domain/rules/`), two numbers:
     centre of mass scales with (`SkaterController._build_height_mult`, and
     `AISkaterCaps.height_mult` for the bots).
 
-**Knockdown when `tip_dv > budget`**, for a window that grows with how far
-past it landed (`BodyCheckRules.knockdown_seconds_from_overshoot`: the existing
-`min/max_knockdown_seconds` ramp over `tip_dv / budget` from 1 to
-`knockdown_ref_overshoot` 1.7). `knockdown_impulse` and its reference are
+**Knockdown when `tip_dv > budget`.** He is down for the fall to the ice
+(`KnockdownFallRules.first_impact_time`, from the hit's own shove), a lie that
+grows with how far past it landed (`BodyCheckRules.lie_seconds_from_overshoot`:
+0.15 s just past it to 0.7 s at `knockdown_ref_overshoot` 1.7), and the 0.8 s
+get-up, so the get-up never starts before he is on the ice: about 1.5 s for a
+hit just past his balance, 1.9 s for the hardest. (Built first as the old
+`min/max_knockdown_seconds` ramp over the overshoot, 1.1–1.9 s; a 1.1 s window
+started the get-up a quarter-second before he landed.) `knockdown_impulse` and its reference are
 gone. A cross-check is never a full check, so it never reaches it. The board rule stands: the knockdown reads how far his
 body was driven, so a check into the wall rocks and strips him at the
 backstopped strength but leaves him up and pinnable.
@@ -290,10 +294,17 @@ off his feet at modest pace, below the rocked line when hit from the side.
   (`test_knockdown_lies_on_the_ice.gd`, `test_arms_reach_their_hands.gd`, the
   `knockdown_lying_back` pose) hit him at 6, since he now rides 3 on his feet;
   the board-backstop and get-up tests pass unchanged.
-- `body_jerk_harness.gd`'s side knockdown hits at 3.16 m/s, which keeps the
-  1.84 s window it always measured. A shorter knockdown fails the smoothness
-  gate on the get-up, in the code before this phase too (head, bottom arm and
-  stick at 1.74 s); that is its own defect.
+- The smoothness gate (`test_body_stays_smooth.gd`) holds a knockdown just
+  past his balance beside the side knockdown, from t136, once the softest
+  fall has landed. Its get-up pop was two things: the get-up starting before
+  he reached the ice (the window above), and the drawn bottom hand turning a
+  corner where the arm's reach ran out mid-stand, sharper or softer with the
+  stride's phase — a hit a few hundredths of a m/s harder moved it from 12 to
+  28 mm/tick². The drawn grip now eases into that limit
+  (`BottomHandIK.soft_reachable_grip`; the gameplay reach keeps the hard
+  one). What is left: when the fall's second bounce lands on the get-up's
+  first frame, head and stick reach ~13–14 mm/tick² (bounds 13 and 11), over
+  a narrow band of hits.
 
 ## Phase 3 — both bodies take an outcome (built)
 
@@ -456,7 +467,7 @@ snapshot with the commit saying the new numbers are intended.
 |---|---|---|
 | `ref_impulse` (rocked onset) | 1.35 m/s | unchanged: the full check and the strip threshold |
 | `rocked_ref_impulse` | 2.6 m/s | a full-speed committed check at equal builds |
-| `rocked_min_seconds` / `rocked_max_seconds` | 0.5 / 0.8 s | a beat out of the play, well short of a knockdown's 1.1–1.9 s plus get-up |
+| `rocked_min_seconds` / `rocked_max_seconds` | 0.5 / 0.8 s | a beat out of the play, well short of a knockdown's 1.5–1.9 s |
 | `rocked_grip_penalty` | 0.75 | off his edges (grip 0.25 at the top of the band): glides along the hit |
 | `rocked_recoil_deg` | 30° | reads beside the stagger's 13° |
 | `rocked_splay_m` / `rocked_crouch` | 0.16 m / 1.0 | the catch: wider than the stance's base, a lighter sit than its 1.7 |

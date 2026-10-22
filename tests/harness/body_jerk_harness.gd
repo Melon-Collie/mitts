@@ -320,11 +320,17 @@ func _add_play(out: Array[Dictionary]) -> void:
 		inp.move_vector = Vector2(0.0, -1.0)
 		inp.hit_held = i >= 60 and i < 150
 		return _up(2.0), 26.0)
-	# Square across his blades and past his balance by 1.64: down for 1.84 s.
 	_add(out, "knocked down from the side and up again", 420, func(inp: InputState, i: int) -> Vector3:
 		inp.move_vector = Vector2(0.0, -1.0)
 		if i == 60:
-			_controller._on_body_check_received(Vector3(3.16, 0.0, 0.0))
+			_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+		return _up(2.0), 26.0)
+	# Just past his balance from the side: the softest fall and the shortest lie.
+	_add(out, "knocked down just past his balance and up again", 420,
+			func(inp: InputState, i: int) -> Vector3:
+		inp.move_vector = Vector2(0.0, -1.0)
+		if i == 60:
+			_controller._on_body_check_received(Vector3(1.93, 0.0, 0.0))
 		return _up(2.0), 26.0)
 	_add(out, "shot block down and back up, puck ahead", 300, func(inp: InputState, i: int) -> Vector3:
 		inp.block_held = i >= 60 and i < 180
