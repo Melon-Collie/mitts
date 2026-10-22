@@ -41,6 +41,7 @@ What was actually run, with results. Not "tests pass".
 
   bash .claude/hooks/run-gut.sh        full suite — give the counts and exit code
   .claude/hooks/run-lint.sh            gdlint, clean (the pre-commit gate is not proof)
+  .claude/hooks/check-godot-warnings.sh  Godot analyzer warnings, clean
   run-gut.sh -gdir=res://benchmarks    AI perf changes: before/after, per-tick p95/max
   .claude/hooks/render-arena.sh        arena geometry — proportion and placement
   .claude/hooks/render-poses.sh        articulation — diffed against the baseline

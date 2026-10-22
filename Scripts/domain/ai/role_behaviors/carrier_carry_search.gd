@@ -436,14 +436,14 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		if worth <= best:
 			continue
 		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2)
-		var value: float = worth * safety
-		if value <= best:
+		var move_value: float = worth * safety
+		if move_value <= best:
 			continue
 		if safety < 1.0 and _strip_point.is_finite():
-			value -= _field.turnover_cost(_strip_point, 1.0 - safety)
-			value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
+			move_value -= _field.turnover_cost(_strip_point, 1.0 - safety)
+			move_value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
 					_rollout2.end_pos[m], our_goalie)
-		best = maxf(best, value)
+		best = maxf(best, move_value)
 	return best
 
 

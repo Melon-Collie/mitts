@@ -2993,7 +2993,7 @@ func _solve_wrister_load(input: InputState) -> void:
 
 # The most a release can carry once the load is applied.
 func _wrister_load_cap(is_backhand: bool) -> float:
-	return max_wrister_power * WristerLoad.power_share(wrister_load.load, is_backhand,
+	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share, is_backhand,
 			wrister_unloaded_share, backhand_power_coefficient)
 
 func _release_wrister(input: InputState) -> void:
@@ -3029,7 +3029,7 @@ func _release_wrister(input: InputState) -> void:
 	# shot the torso couldn't load finishes small — the finish IS the power readout.
 	var release_power_t: float = ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config())
-	release_power_t = minf(release_power_t, wrister_load.load)
+	release_power_t = minf(release_power_t, wrister_load.load_share)
 	_sm.follow_through_power = lerpf(wrister_follow_through_min_power, 1.0, release_power_t)
 	var finish_s: float = wrister_follow_through_time(skater.shot_charge)
 	_sm.set_state(State.FOLLOW_THROUGH)
@@ -3180,7 +3180,7 @@ func _update_wrister_charge(input: InputState) -> void:
 			_wrister_config(), charge_aim_dir, false,
 			_wrister_sweep_speed(input), _wrister_pred_scratch)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
-	wrister_coil = minf(wrister_load.load, ShotMechanics.wrister_power_t(
+	wrister_coil = minf(wrister_load.load_share, ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config()))
 	skater.predicted_shot_velocity = pred.direction * pred.power
 	# shot_charge carries the release-now SPEED (normalized predicted power over

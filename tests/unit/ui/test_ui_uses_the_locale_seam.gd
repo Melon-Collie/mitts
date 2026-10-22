@@ -171,9 +171,9 @@ func _verdict(found: int, pinned: int) -> String:
 
 func _gd_files(root: String) -> Array[String]:
 	var out: Array[String] = []
-	var pending: Array[String] = [root]
-	while not pending.is_empty():
-		var dir_path: String = pending.pop_back()
+	var to_visit: Array[String] = [root]
+	while not to_visit.is_empty():
+		var dir_path: String = to_visit.pop_back()
 		var dir: DirAccess = DirAccess.open(dir_path)
 		if dir == null:
 			continue
@@ -182,7 +182,7 @@ func _gd_files(root: String) -> Array[String]:
 		while entry != "":
 			var full: String = dir_path.path_join(entry)
 			if dir.current_is_dir():
-				pending.append(full)
+				to_visit.append(full)
 			elif entry.ends_with(".gd"):
 				out.append(full)
 			entry = dir.get_next()

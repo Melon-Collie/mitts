@@ -375,7 +375,7 @@ func test_assist_survives_momentary_opposing_pickup() -> void:
 	# keeps the assist because no opponent ESTABLISHED possession.
 	var passer := _add_player(10, 0, "Passer")
 	_add_player(20, 1, "Defender")
-	var scorer := _add_player(11, 0, "Scorer")
+	_add_player(11, 0, "Scorer")
 	tracker.on_pickup(10)
 	tracker.on_pickup(20)  # scramble attach — never establishes
 	tracker.on_pickup(11)
@@ -390,7 +390,7 @@ func test_assist_survives_opposing_deflection() -> void:
 	# assist chain — only opposing possession does.
 	var passer := _add_player(10, 0, "Passer")
 	_add_player(20, 1, "Defender")
-	var scorer := _add_player(11, 0, "Scorer")
+	_add_player(11, 0, "Scorer")
 	tracker.on_pickup(10)      # passer possesses
 	tracker.on_deflection(20)  # pass deflects off a defender
 	tracker.on_pickup(11)      # scorer corrals it and scores
@@ -404,7 +404,7 @@ func test_two_assists_survive_multiple_opposing_touches() -> void:
 	var a1 := _add_player(10, 0, "A1")
 	var a2 := _add_player(11, 0, "A2")
 	_add_player(20, 1, "Defender")
-	var scorer := _add_player(12, 0, "Scorer")
+	_add_player(12, 0, "Scorer")
 	tracker.on_pickup(10)      # A1 carries
 	tracker.on_deflection(20)  # pass tips off the defender
 	tracker.on_pickup(11)      # A2 carries

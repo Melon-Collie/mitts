@@ -1252,14 +1252,14 @@ func test_positive_shot_scores_above_zero_in_slot() -> void:
 # _best_developing_feed is the value the carrier weighs against firing now —
 # P(keep) × this × decay(held) competes directly in the action max.
 
-func _ctx_with_finisher(fin_pos: Vector3, ready: bool,
+func _ctx_with_finisher(fin_pos: Vector3, finisher_ready: bool,
 		slot: int = AIRoleSlots.Slot.FINISHER) -> RoleContext:
 	# Carrier strong-side in the OZ; a teammate in `slot` staging at fin_pos.
 	var self_pos := Vector3(4, 0, -18)
 	var ctx := _make_ctx(self_pos, [[1, TEAM_ID, self_pos], [2, TEAM_ID, fin_pos]])
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
 	brain.slot_assignments[2] = slot
-	if ready:
+	if finisher_ready:
 		brain.set_one_timer_ready(2, true)
 	ctx.team_brain = brain
 	# A live keeper challenged on the carrier's line: the cross-seam feed's
@@ -1336,7 +1336,6 @@ func test_goalie_motion_blind_reads_the_keeper_as_always_set() -> void:
 	gs.position_x = -2.5                          # ~2.5 m off the square line
 	gs.position_z = OPP_NET_Z + 1.2
 	_place_keeper(ctx, gs)
-	var carrier := AIRoleCarrier.new()
 	assert_gt(AICarrierField.goalie_unsettled_at(ctx, 0.2, self_pos), 0.0,
 			"an off-square keeper on a short release reads unsettled")
 	ctx.reads_goalie_motion = false

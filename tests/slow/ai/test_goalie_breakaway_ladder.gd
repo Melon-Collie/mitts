@@ -181,9 +181,9 @@ func test_breakaway_ladder_snapshot() -> void:
 	var snap := Snapshot.new("res://tests/slow/ai/snapshots/breakaway_ladder.txt")
 	var n: int = AIM_X.size()
 	for tier: int in TIERS:
-		var name: String = GoalieSkillProfile.Difficulty.keys()[tier]
-		snap.record("%s: cutback open of %d" % [name, n], _finish_open(_tier_over(tier)))
-		snap.record("%s: walk round open of %d" % [name, n],
+		var tier_name: String = GoalieSkillProfile.Difficulty.keys()[tier]
+		snap.record("%s: cutback open of %d" % [tier_name, n], _finish_open(_tier_over(tier)))
+		snap.record("%s: walk round open of %d" % [tier_name, n],
 				_finish_open(_tier_over(tier), WALK_ROUND))
 	snap.record("HARD, depth_base %.2f: cutback open of %d" % [LEVER_DEPTH_BASE_M, n],
 			_finish_open({"depth_base_m": LEVER_DEPTH_BASE_M}))

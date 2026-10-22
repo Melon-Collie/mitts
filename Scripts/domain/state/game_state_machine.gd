@@ -225,13 +225,13 @@ func check_icing_for_loose_puck(puck_z: float, player_positions: Dictionary = {}
 	_apply_icing_call(icing.update(puck_z, player_positions, player_velocities, players))
 
 
-func _apply_icing_call(call: InfractionRules.IcingCall) -> void:
-	if call == InfractionRules.IcingCall.NONE:
+func _apply_icing_call(icing_call: InfractionRules.IcingCall) -> void:
+	if icing_call == InfractionRules.IcingCall.NONE:
 		return
-	if call == InfractionRules.IcingCall.ICING and current_phase == GamePhase.Phase.PLAYING:
+	if icing_call == InfractionRules.IcingCall.ICING and current_phase == GamePhase.Phase.PLAYING:
 		pending_faceoff_dot = GameRules.icing_faceoff_dot(icing.pending_team_id, icing.pending_release_x)
 		pending_faceoff_reason = FaceoffReason.ICING
-	icing.end_race(call)
+	icing.end_race(icing_call)
 
 # Host-side: compute ghost state for all players into `result` as
 # {peer_id: should_ghost}. Runs every host tick, so the caller owns the

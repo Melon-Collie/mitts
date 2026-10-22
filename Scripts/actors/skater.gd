@@ -487,7 +487,9 @@ signal carry_face_changed(cause: int, speed: float, travel_m: float)
 # A skate's push began or a lifted one landed (SkaterSkatingCoordinator, from the
 # gait; cosmetic, every peer, never in replay): SkaterLocomotion.push_strength,
 # dig_strength, and the landing skate's highest lift, m.
+@warning_ignore("unused_signal")
 signal skate_pushed(left: bool, strength: float, dig: float)
+@warning_ignore("unused_signal")
 signal skate_touched(left: bool, lift: float)
 # Mirrors SkaterStateMachine.State for the current carrier. Updated each tick
 # by Local/RemoteController so the goalie AI can read shot-state tells (e.g.
@@ -1598,8 +1600,8 @@ func _toe_on_ice(heel: Vector3, rot: Basis, hand: Vector3, twist: float, marker_
 # every slide here: the puck stays on the cursor.
 func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 		marker_global: Transform3D, up: Vector3) -> Vector3:
-	var weight: float = absf(_address_factor)
-	if weight <= 0.0 or _blade_params == null or _slapshot_pin_active \
+	var address_weight: float = absf(_address_factor)
+	if address_weight <= 0.0 or _blade_params == null or _slapshot_pin_active \
 			or not SkaterStateMachine.state_has_puck(current_shot_state):
 		return Vector3.ZERO
 	var p: StickBladeMeshBuilder.Params = _blade_params
@@ -1635,7 +1637,7 @@ func _seat_on_puck(rest_heel: Vector3, hand: Vector3, twist: float,
 	var lever: float = 1.0 + (to_seat - up * to_seat.dot(up)).length() \
 			/ maxf((to_hand - up * to_hand.dot(up)).length(), 0.05)
 	slide -= across * (slide.dot(across) * (1.0 - 1.0 / lever))
-	return slide.limit_length(_SEAT_MAX_SLIDE_M) * weight
+	return slide.limit_length(_SEAT_MAX_SLIDE_M) * address_weight
 
 
 # The blade's orientation with its hosel laid along `to_hand` (heel → top hand,
@@ -1935,8 +1937,8 @@ func set_leg_swing(left_pitch: float, left_roll: float, left_knee: float,
 
 
 func apply_knockdown_leg_overlay(pose: KnockdownFallRules.SprawlPose,
-		weight: float) -> void:
-	_legs.apply_knockdown_overlay(pose, weight)
+		overlay_weight: float) -> void:
+	_legs.apply_knockdown_overlay(pose, overlay_weight)
 
 
 # ── Rendered pose seam (on-ice HUD, ice VFX) ─────────────────────────────────
@@ -2555,13 +2557,13 @@ func _update_wrister_address(delta: float) -> void:
 		aim = aim.normalized()
 		stick = stick.normalized()
 		var face_normal := Vector3(-stick.z, 0.0, stick.x)
-		var seed: int = _wrister_address_side
-		if seed == 0:
+		var seed_side: int = _wrister_address_side
+		if seed_side == 0:
 			# Seed from the entry arrangement so an aim that already trails
 			# the blade re-addresses nothing.
-			seed = -1 if _address_factor < 0.0 else 1
+			seed_side = -1 if _address_factor < 0.0 else 1
 		_wrister_address_side = CarryContactRules.stroke_side(
-				seed, aim.dot(face_normal), wrister_address_commit_dot)
+				seed_side, aim.dot(face_normal), wrister_address_commit_dot)
 	elif _wrister_address_target_side != 0:
 		# Render-only remote: adopt the host's committed side off the wire.
 		_wrister_address_side = _wrister_address_target_side

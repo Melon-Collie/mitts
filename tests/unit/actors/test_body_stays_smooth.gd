@@ -44,14 +44,14 @@ const BOUNDS: Dictionary = {
 func test_the_transitions_stay_smooth() -> void:
 	var gated: int = 0
 	for s: Dictionary in scenarios():
-		var name: String = s["name"]
-		if not BOUNDS.has(name):
+		var scenario_name: String = s["name"]
+		if not BOUNDS.has(scenario_name):
 			continue
 		gated += 1
-		var from_tick: int = KNOCKDOWN_FROM_TICK if name.begins_with("knocked down") else 2
+		var from_tick: int = KNOCKDOWN_FROM_TICK if scenario_name.begins_with("knocked down") else 2
 		var worst: Dictionary = measure(s, false, from_tick)
-		var bounds: Array = BOUNDS[name]
+		var bounds: Array = BOUNDS[scenario_name]
 		for k: int in ORDER.size():
 			assert_lt(float(worst[ORDER[k]]), float(bounds[k]),
-					"%s: %s" % [name, ORDER[k]])
+					"%s: %s" % [scenario_name, ORDER[k]])
 	assert_eq(gated, BOUNDS.size(), "every bounded scenario is still skated")

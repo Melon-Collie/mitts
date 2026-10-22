@@ -33,12 +33,12 @@ func after_each() -> void:
 			_saved_build[2], _saved_build[3], _saved_build[4], _saved_build[5]))
 
 
-func _btn(name: String) -> OptionButton:
-	return _popup.get(name) as OptionButton
+func _btn(field: String) -> OptionButton:
+	return _popup.get(field) as OptionButton
 
 
-func _buttons(name: String) -> Array:
-	return _popup.get(name) as Array
+func _buttons(field: String) -> Array:
+	return _popup.get(field) as Array
 
 
 func _draft() -> PlayerDraft:
@@ -236,16 +236,16 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 		"_knob_color_dd": F.GRIP,
 		"_lace_dd": F.SKATES,
 	}
-	for name: String in rows:
-		var dd: SwatchDropdown = _popup.get(name) as SwatchDropdown
+	for field: String in rows:
+		var dd: SwatchDropdown = _popup.get(field) as SwatchDropdown
 		assert_eq(dd.focus_mode, Control.FOCUS_NONE,
-				"%s is still a wrapper — if this changed, so did the wiring" % name)
+				"%s is still a wrapper — if this changed, so did the wiring" % field)
 		_case().frame(F.FULL)
 		dd.focus_target().focus_entered.emit()
-		assert_eq(_case().get("_focus"), rows[name], "%s aims the case" % name)
+		assert_eq(_case().get("_focus"), rows[field], "%s aims the case" % field)
 		_case().frame(F.FULL)
 		dd.focus_target().mouse_entered.emit()
-		assert_eq(_case().get("_focus"), rows[name], "%s aims it on hover too" % name)
+		assert_eq(_case().get("_focus"), rows[field], "%s aims it on hover too" % field)
 
 
 # A control the focus search skips is a pick a controller player cannot make.
@@ -255,11 +255,11 @@ func test_every_row_control_is_pad_reachable() -> void:
 		_btn("_facial_btn"), _popup.get("_height_slider") as Control,
 		_popup.get("_weight_slider") as Control, _popup.get("_name_field") as Control,
 		_popup.get("_number_field") as Control]
-	for name: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
-		controls.append((_popup.get(name) as SwatchDropdown).focus_target())
-	for name: String in ["_face_btns", "_hair_btns", "_hair_color_buttons", "_skin_buttons",
+	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
+		controls.append((_popup.get(field) as SwatchDropdown).focus_target())
+	for field: String in ["_face_btns", "_hair_btns", "_hair_color_buttons", "_skin_buttons",
 			"_shoots_btns", "_position_btns", "_tab_btns"]:
-		for b: Control in _buttons(name):
+		for b: Control in _buttons(field):
 			controls.append(b)
 	for r: Object in _popup.get("_gear_rows") as Array:
 		for b: Control in r.get("buttons") as Array:

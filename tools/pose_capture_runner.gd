@@ -621,7 +621,7 @@ func _run_pose() -> void:
 					- _controller._aiming.wrister_origin_skater_pos
 			var puck_local: Vector3 = _skater.global_transform.basis.inverse() * pin
 			print("    wrister: load %.2f %s | puck %.0f° off facing | wound %.0f°, torso %.0f°" % [
-					_controller.wrister_load.load,
+					_controller.wrister_load.load_share,
 					"BH" if _controller.wrister_load.is_backhand else "FH",
 					rad_to_deg(atan2(-puck_local.x, -puck_local.z)),
 					rad_to_deg(_controller.wrister_load.wound_yaw),

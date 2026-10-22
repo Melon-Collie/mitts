@@ -80,11 +80,11 @@ static func side_load(lead: float, side_sign: float) -> float:
 
 # Displacement of one shoulder's cap AND its arm root — the two travel together
 # or the pad walks off the arm it grows from (see Skater._textured_shoulder).
-static func load_offset(load: float, side_sign: float,
+static func load_offset(stance_load: float, side_sign: float,
 		half_width: float) -> Vector3:
-	if load <= 0.0:
+	if stance_load <= 0.0:
 		return Vector3.ZERO
-	var reach: float = half_width * minf(load, 1.0)
+	var reach: float = half_width * minf(stance_load, 1.0)
 	return Vector3(
 			-side_sign * LOAD_ACROSS * reach,
 			-LOAD_DOWN * reach,
@@ -92,9 +92,9 @@ static func load_offset(load: float, side_sign: float,
 
 
 # `pole` is already mirrored onto this arm's side; the tuck keeps it there.
-static func tucked_pole(pole: Vector3, load: float) -> Vector3:
-	if load <= 0.0:
+static func tucked_pole(pole: Vector3, stance_load: float) -> Vector3:
+	if stance_load <= 0.0:
 		return pole
 	return pole.lerp(
 			Vector3(signf(pole.x) * TUCK_ELBOW_OUT, pole.y, TUCK_ELBOW_BACK),
-			minf(load, 1.0))
+			minf(stance_load, 1.0))

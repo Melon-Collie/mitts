@@ -1,6 +1,8 @@
 class_name NetTimingHarness
 extends RefCounted
 
+const NetworkManagerScript := preload("res://Scripts/networking/network_manager.gd")
+
 # Deterministic simulation of the INPUT TIMING PIPELINE — the seam every netcode
 # defect found so far has actually lived in.
 #
@@ -57,7 +59,7 @@ class Config:
 	var loss_pct: float = 0.0
 	var duration_s: float = 5.0
 	var stamp_mode: StampMode = StampMode.TICK_DOMAIN
-	var seed: int = 12345
+	var rng_seed: int = 12345
 	var lead_mode: LeadMode = LeadMode.RTT
 
 
@@ -137,7 +139,7 @@ class _Peer:
 			sim_offset = w
 			return
 		sim_ticks += 1
-		sim_offset = NetworkManager.next_sim_offset(sim_offset, sim_ticks, w)
+		sim_offset = NetworkManagerScript.next_sim_offset(sim_offset, sim_ticks, w)
 
 	func sim_now() -> float:
 		if not sim_started:
@@ -150,7 +152,7 @@ var _rng := RandomNumberGenerator.new()
 
 func run(cfg: Config) -> Result:
 	var res := Result.new()
-	_rng.seed = cfg.seed
+	_rng.seed = cfg.rng_seed
 
 	var one_way: float = cfg.rtt_ms / 2000.0
 	# Both peers share a clock ORIGIN because a real client's estimated_host_time()

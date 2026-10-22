@@ -32,7 +32,7 @@ func after_each() -> void:
 	GameManager.shape_tally_armed = _saved_armed
 
 
-func _press(keycode: int) -> void:
+func _press(keycode: Key) -> void:
 	var ev := InputEventKey.new()
 	ev.keycode = keycode
 	ev.pressed = true

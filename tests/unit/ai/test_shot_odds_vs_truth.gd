@@ -174,10 +174,10 @@ func test_the_shot_field_against_the_measured_odds() -> void:
 			pick_sum += _truth_at(c, pick.aim.x, pick.loft)
 	var pick_share: float = pick_sum / maxf(best_sum, 0.0001)
 	gut.p("scenario     field   truth   |err|   (%d cells)" % cells.size())
-	for name: String in by_scenario:
-		var s: Array = by_scenario[name]
+	for scenario: String in by_scenario:
+		var s: Array = by_scenario[scenario]
 		var n: float = float(s[3])
-		gut.p("%-10s  %6.3f  %6.3f  %6.3f" % [name, s[0] / n, s[1] / n, s[2] / n])
+		gut.p("%-10s  %6.3f  %6.3f  %6.3f" % [scenario, s[0] / n, s[1] / n, s[2] / n])
 	gut.p("field: mean |err| %.3f, concordance %.1f%%" % [err, concordance * 100.0])
 	gut.p("firing from the carry, the pick keeps %.0f%% of the best odds"
 			% [100.0 * pick_share])

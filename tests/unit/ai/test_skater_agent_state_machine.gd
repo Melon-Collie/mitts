@@ -676,9 +676,9 @@ func _self_snap(self_pos: Vector3, have_puck: bool) -> WorldSnapshot:
 	var s := WorldSnapshot.new()
 	s.puck_state = PuckNetworkState.new()
 	s.puck_state.position = self_pos
-	var owner: int = SELF_ID if have_puck else -1
-	s.puck_state.carrier_peer_id = owner
-	s.real_puck_carrier_peer_id = owner
+	var owner_id: int = SELF_ID if have_puck else -1
+	s.puck_state.carrier_peer_id = owner_id
+	s.real_puck_carrier_peer_id = owner_id
 	_add_skater(s, SELF_ID, self_pos)
 	return s
 
@@ -1267,17 +1267,17 @@ class _CarrierStub extends AIRoleCarrier:
 
 func _stub_carry(intent: int, anchor: Vector3 = Vector3.ZERO,
 		pass_target: int = -1) -> _CarrierStub:
-	var stub := _CarrierStub.new()
-	stub.next_intent = intent
-	stub.next_anchor = anchor
-	stub.next_pass_target = pass_target
-	sm._carrier = stub
+	var carrier_stub := _CarrierStub.new()
+	carrier_stub.next_intent = intent
+	carrier_stub.next_anchor = anchor
+	carrier_stub.next_pass_target = pass_target
+	sm._carrier = carrier_stub
 	sm._state = Agent.State.CARRY
-	return stub
+	return carrier_stub
 
 
 func test_carry_lost_puck_bails_and_resets_carrier() -> void:
-	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
+	var carrier_stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
 	sm._intended_action = Agent.State.SHOOT_PRESSED  # some stale intent to clear
 	sm._pass_target_peer_id = TEAMMATE_ID
 	var s := _self_snap(Vector3.ZERO, false)  # no puck
@@ -1286,7 +1286,7 @@ func test_carry_lost_puck_bails_and_resets_carrier() -> void:
 	assert_eq(sm.get_state(), sm._post_puck_lost_state(s))
 	assert_eq(sm._intended_action, Agent.State.CARRY, "stale intent cleared on bail")
 	assert_eq(sm._pass_target_peer_id, -1, "pass target cleared on bail")
-	assert_eq(stub.reset_calls, 1, "the carrier is reset when the puck is lost")
+	assert_eq(carrier_stub.reset_calls, 1, "the carrier is reset when the puck is lost")
 
 
 func test_carry_intent_carry_stays_and_steers_to_anchor() -> void:
@@ -1324,7 +1324,7 @@ func test_carry_intent_maps_to_matching_press_state() -> void:
 	}
 	for intent: int in cases:
 		before_each()  # fresh SM per case
-		var stub := _stub_carry(intent, Vector3.ZERO, TEAMMATE_ID)
+		var carrier_stub := _stub_carry(intent, Vector3.ZERO, TEAMMATE_ID)
 		var s := _self_snap(Vector3.ZERO, true)
 		_add_skater(s, TEAMMATE_ID, Vector3(4, 0, 0))
 		# Force the timeout branch on the first pre-aim tick: after tick-0 sets
@@ -1337,16 +1337,16 @@ func test_carry_intent_maps_to_matching_press_state() -> void:
 				landed = sm.get_state()
 				break
 		assert_eq(landed, cases[intent], "intent %d maps to its press state" % intent)
-		assert_eq(stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
+		assert_eq(carrier_stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
 
 
 func test_carry_dump_intent_commits_and_freezes_target() -> void:
 	# INTENT_DUMP maps to PASS_PRESSED (the reused release path) and the dump
 	# target is captured at commit. Force the timeout branch so the commit lands
 	# on the first pre-aim tick, isolating the mapping + freeze from aim geometry.
-	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
-	stub.next_intent = AIRoleCarrier.INTENT_DUMP
-	stub.next_dump_target = Vector3(12, 0, 5)
+	var carrier_stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
+	carrier_stub.next_intent = AIRoleCarrier.INTENT_DUMP
+	carrier_stub.next_dump_target = Vector3(12, 0, 5)
 	sm._intent_max_wait_ticks = 0
 	var s := _self_snap(Vector3.ZERO, true)
 	var landed: int = -1
@@ -1357,13 +1357,13 @@ func test_carry_dump_intent_commits_and_freezes_target() -> void:
 			break
 	assert_eq(landed, Agent.State.PASS_PRESSED, "a dump commits to the PASS_PRESSED release path")
 	assert_eq(sm._dump_target, Vector3(12, 0, 5), "the dump target is frozen at commit")
-	assert_eq(stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
+	assert_eq(carrier_stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
 
 
 func test_carry_holds_intent_against_carrier_flip() -> void:
 	# Hysteresis: once a fire intent is locked and the bot is pre-aiming, a
 	# carrier that flips back to CARRY must NOT cancel the pending shot.
-	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)  # carrier now wants CARRY
+	_stub_carry(AIRoleCarrier.INTENT_CARRY)  # carrier now wants CARRY
 	sm._intended_action = Agent.State.SHOOT_PRESSED       # but we're mid-pre-aim
 	sm._intent_wait_ticks = 0
 	# Priced at full load with the puck still unloaded at the body, so the press
@@ -2035,8 +2035,8 @@ func test_carry_freezes_shot_aim_after_commit() -> void:
 	# freeze, so the bot fires the exact shot that won the compete — not whatever
 	# a later re-eval moved the hole to. Deferring (facing away + frozen cursor)
 	# holds the latch across dispatches without committing to the press state.
-	var stub := _stub_carry(AIRoleCarrier.INTENT_SHOOT)
-	stub.shot_aim_point = Vector3(0, 0, -20)           # the hole the compete won
+	var carrier_stub := _stub_carry(AIRoleCarrier.INTENT_SHOOT)
+	carrier_stub.shot_aim_point = Vector3(0, 0, -20)           # the hole the compete won
 	var s := _self_snap(Vector3.ZERO, true)
 	s.skater_states[SELF_ID].facing = Vector2(0, 1)    # net in the back wedge → defer
 	sm._mouse_max_speed_m_s = 0.0001                   # cursor can't converge this tick
@@ -2046,7 +2046,7 @@ func test_carry_freezes_shot_aim_after_commit() -> void:
 	assert_eq(sm._intended_action, Agent.State.SHOOT_PRESSED, "fire intent latched, deferring")
 	assert_eq(sm._shot_aim_locked, Vector3(0, 0, -20), "the winning hole aim was captured at commit")
 	# The carrier now drags its hole aim elsewhere; the committed shot must not follow.
-	stub.shot_aim_point = Vector3(0, 0, -5)
+	carrier_stub.shot_aim_point = Vector3(0, 0, -5)
 	sm.dispatch(InputState.new(), s)
 	assert_eq(sm.get_state(), Agent.State.CARRY, "still pre-aiming")
 	assert_eq(sm._shot_aim_locked, Vector3(0, 0, -20),

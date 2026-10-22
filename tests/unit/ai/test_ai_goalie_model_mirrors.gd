@@ -30,11 +30,11 @@ func before_all() -> void:
 # `var name: T = <literal>` at column 0 -> the literal, as a float. Accepts an
 # `@export` prefix too: the goalie's tunables are plain fields now (a scene
 # overrode none of them), but the parser should not care which a knob is.
-func _export_default(name: String) -> float:
+func _export_default(export_name: String) -> float:
 	var re := RegEx.create_from_string(
-			"(?m)^(?:@export(?:_[a-z_]+)?(?:\\([^)]*\\))? )?var %s\\s*:\\s*float\\s*=\\s*([^\\n#]+)" % name)
+			"(?m)^(?:@export(?:_[a-z_]+)?(?:\\([^)]*\\))? )?var %s\\s*:\\s*float\\s*=\\s*([^\\n#]+)" % export_name)
 	var m: RegExMatch = re.search(_goalie_src)
-	assert_not_null(m, "no float field named `%s` in goalie_controller.gd" % name)
+	assert_not_null(m, "no float field named `%s` in goalie_controller.gd" % export_name)
 	if m == null:
 		return NAN
 	var expr: String = m.get_string(1).strip_edges()
