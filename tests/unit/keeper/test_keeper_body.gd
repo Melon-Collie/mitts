@@ -11,9 +11,6 @@ const IN_TO_M: float = 0.0254
 # A pad's foam gives where its edge rests on the ice; nothing else may sink in.
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
-# Wrist to the middle of the palm, where a hand holds a stick: about half of a
-# 6'4" hand (0.108 of stature).
-const GRIP_IN_PALM_M: float = 0.10
 
 var _pose := KeeperPose.new()
 var _skel := KeeperSkeleton.new()
@@ -114,12 +111,28 @@ func test_every_arm_reaches_its_hand() -> void:
 		_solve(stance)
 		var glove_wrist: Vector3 = _skel.xf[B.FOREARM_G] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
 		var blocker_wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
-		assert_lte(glove_wrist.distance_to(_skel.xf[B.HAND_G].origin), GRIP_IN_PALM_M,
+		assert_almost_eq(glove_wrist.distance_to(_skel.xf[B.HAND_G].origin), 0.0, 0.002,
 				"%s: the glove arm reaches its hand" % stance[0])
 		# The fist holds the stick, so the forearm must reach the wrist on it: the
 		# glove's cuff has no slack to hide a gap.
 		assert_almost_eq(blocker_wrist.distance_to(_skel.xf[B.HAND_B] * KeeperAnatomy.BLOCKER_WRIST),
 				0.0, 0.002, "%s: the blocker arm reaches the wrist on the fist" % stance[0])
+
+
+# A wrist bends back and to the sides, not through the hand: the forearm goes
+# into the trapper at its cuff or its back, never through its fingers, and into
+# the blocker from behind the board, never through it.
+func test_every_forearm_goes_into_its_glove_from_the_wrist() -> void:
+	for stance: Array in _stances():
+		if stance[0] == "upright":
+			continue
+		_solve(stance)
+		var glove: Basis = _skel.xf[B.HAND_G].basis
+		var into_glove: Vector3 = (glove.inverse() * -_skel.xf[B.FOREARM_G].basis.y).normalized()
+		assert_lt(into_glove.y, 0.5, "%s: the forearm comes into the trapper from its cuff or back" % stance[0])
+		var blocker: Basis = _skel.xf[B.HAND_B].basis
+		var into_blocker: Vector3 = (blocker.inverse() * -_skel.xf[B.FOREARM_B].basis.y).normalized()
+		assert_lt(into_blocker.z, 0.5, "%s: the forearm comes into the blocker from behind its board" % stance[0])
 
 
 func test_the_stick_is_rigid_and_its_blade_lies_flat() -> void:

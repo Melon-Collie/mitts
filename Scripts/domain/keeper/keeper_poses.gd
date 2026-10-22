@@ -234,10 +234,12 @@ static func rvh(p: KeeperPose, side: float) -> void:
 	p.chest_rot = Vector3(0.0, 0.0, -side * 0.08)
 	p.neck_rot = Vector3(0.20, 0.0, side * 0.06)
 	if side < 0.0:
-		# Low by the post, over the pad: the seal between pad and body.
+		# Low by the post, over the pad: the seal between pad and body. The glove is
+		# turned down, palm out, so the forearm reaching down to it goes into its
+		# cuff rather than through its fingers.
 		p.glove_hand = Vector3(-0.40, 0.42, -0.10)
 		p.glove_from_chest = false
-		p.glove_fingers = Vector3(0.0, 1.0, 0.0)
+		p.glove_fingers = Vector3(0.0, -1.0, 0.0)
 		# The paddle rises in front of the standing blocker-side pad.
 		p.blade_center = Vector3(-0.28, 0.0, -0.40)
 		p.blade_yaw = deg_to_rad(-15.0)

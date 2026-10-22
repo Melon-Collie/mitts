@@ -72,7 +72,7 @@ three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
 (`KeeperGear.post_contact` on the post's inner face, on the goal line) with a
 fifth view from a sharp angle on that side. `tests/unit/keeper/
 test_keeper_body.gd` holds the proportions, the bones' lengths, the arms
-reaching their hands, the gear on the ice and inside the rule book, the rigid
+reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, the rigid
 stick, the packed layout, the ice sealed in the butterfly, the extension and
 the kick, and the post sealed in the RVH; `test_keeper_coverage.gd` snapshots
 each stance's coverage straight on and from the dot line.

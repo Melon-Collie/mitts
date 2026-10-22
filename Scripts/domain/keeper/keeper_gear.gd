@@ -94,8 +94,9 @@ const ELBOW_PAD_RADIUS_M: float = FOREARM_PAD_RADIUS_M * 1.04
 const _FOREARM_CENTER := Vector3(0.0, (ELBOW_PAD_RADIUS_M - KeeperAnatomy.FOREARM_M) * 0.5, 0.0)
 const _FOREARM_HALF := Vector3(ELBOW_PAD_RADIUS_M,
 		(KeeperAnatomy.FOREARM_M + ELBOW_PAD_RADIUS_M) * 0.5, ELBOW_PAD_RADIUS_M)
-# The trapper rides the hand from the cuff past the fingertips.
-const _GLOVE_CENTER := Vector3(0.0, -0.06, 0.0)
+# The trapper rides the hand from the cuff past the fingertips, the hand in its
+# back half behind the pocket.
+const _GLOVE_CENTER := Vector3(0.0, -0.06, -0.03)
 const _GLOVE_HALF := Vector3(KeeperAnatomy.GLOVE_WIDTH_M * 0.5, KeeperAnatomy.GLOVE_HEIGHT_M * 0.5,
 		KeeperAnatomy.GLOVE_DEPTH_M * 0.5)
 # The blocker: the board standing on the back of the hand, toward its face,
