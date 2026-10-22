@@ -14,14 +14,14 @@ extends GutTest
 #                       2.5   3.5   4.5   6.1 m
 #   READY     settled     0     0    21    17
 #             drive-in    0    20    17     5
-#   LOW_READY settled     0     7     5     0
+#   LOW_READY settled     0     0     3     3
 #             drive-in    0     3     1     0
 #
 # FLAT scores 0 everywhere in both (the blade). READY's five-hole is a slot 18-28
 # cm wide for the puck's centre from 0.16 to 0.54 m; the low ready's is a slit
 # 6-10 cm wide from 0.16 to ~0.40. READY's 0 settled at 3.5 m is not coverage:
 # that slot is open there too, and the lifted puck clips the blade's top edge
-# 0.6 m out by ~4 mm; the low ready's blade sits 4 cm deeper and it clears.
+# 0.6 m out by ~4 mm.
 # He is low out to 6.1 m from the goalie (7.5 m out) and in READY at 9 m.
 #
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
