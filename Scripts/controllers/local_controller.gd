@@ -639,7 +639,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		# offsets the geometry by ~one tick of travel and mis-phases dvel, which
 		# position-based re-resolution (unlike a recorded impulse) is sensitive to.
 		# sep still lands before the clamps below.
-		_replay_resolve_body_checks(input.host_timestamp, input.hit_held)
+		_replay_resolve_body_checks(input.host_timestamp, skater.hit_committed)
 		# Clamp to the rink boundary after every replay step — the same analytic
 		# projection the live tick applies. Without this, a board interaction that
 		# differed by even one frame between client and host compounds into a
@@ -819,11 +819,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 # instant and the host_ts=T sample instant — and dvel lands on the next tick.
 # Runs the SAME inelastic model + aggressor gate as the live resolver, so
 # aggressor → decel/drive-through, victim → incoming knockback. Deterministic from
-# replicated data + the replayed input (local hit-commit / brace from the input
-# frame). The remote attacker's hit-commit isn't on the wire, so it stays passive
-# here exactly as the live client prediction assumed — the host's real value
-# reconciles on the next ack.
-func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
+# replicated data + the replayed tick: the local commit / brace is the
+# hit_committed this tick's replayed input produced — what the live resolver
+# reads, not the raw button, which a knockdown, a pin, a planted slapper or a
+# rocked hit refuses — and the other's is his replicated one.
+func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> void:
 	if not _historical_others_provider.is_valid():
 		return
 	# Ghost gate — mirrors the live resolver (Skater._resolve_player_collisions):
@@ -872,7 +872,7 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 		if local_is_aggressor:
 			# local delivery (from the replayed input) × the victim's replicated brace.
 			var transfer: float = skater.body_check_transfer \
-					* (1.0 if local_hit_held else skater.hit_passive_transfer_mult) \
+					* (1.0 if local_hit_committed else skater.hit_passive_transfer_mult) \
 					* (other.body_check_brace_resistance if ohit else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					my_pos, skater.velocity, skater.weight, my_radius,
@@ -885,7 +885,7 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 			# local brace from the replayed input's hit_held.
 			var transfer: float = other.body_check_transfer \
 					* (1.0 if ohit else other.hit_passive_transfer_mult) \
-					* (skater.body_check_brace_resistance if local_hit_held else 1.0)
+					* (skater.body_check_brace_resistance if local_hit_committed else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					opos, ovel, other.weight, other_radius,
 					my_pos, skater.velocity, skater.weight, my_radius,
