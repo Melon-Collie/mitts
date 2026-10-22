@@ -71,3 +71,14 @@ func test_the_recovery_grows_with_the_wind_up() -> void:
 	assert_almost_eq(SlapperRules.recover_time(1.0, 0.1, 0.45), 0.45, 0.0001)
 	assert_lt(SlapperRules.recover_time(0.3, 0.1, 0.45), SlapperRules.recover_time(0.7, 0.1, 0.45))
 	assert_almost_eq(SlapperRules.recover_time(2.0, 0.1, 0.45), 0.45, 0.0001, "past the top is the top")
+
+
+func test_the_aim_turns_off_the_line_no_further_than_the_arc() -> void:
+	var line := Vector2(0.0, -1.0)
+	var arc: float = deg_to_rad(20.0)
+	var inside: Vector2 = line.rotated(deg_to_rad(12.0))
+	assert_almost_eq(SlapperRules.clamp_aim(inside, line, arc).angle_to(inside), 0.0, 0.0001,
+			"inside the arc the aim is the aim")
+	var wide: Vector2 = line.rotated(deg_to_rad(-55.0))
+	assert_almost_eq(line.angle_to(SlapperRules.clamp_aim(wide, line, arc)), -arc, 0.0001,
+			"outside it the aim holds at the edge, on the same side")

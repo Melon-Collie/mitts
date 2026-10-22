@@ -1,6 +1,6 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
-Status: **Phases 1 and 2 built, awaiting playtest.** Decisions below were agreed in
+Status: **Phases 1–3 built, awaiting playtest.** Decisions below were agreed in
 chat; phases are ordered so each one can be played on its own.
 
 As built, Phase 1 differs from the design below:
@@ -223,6 +223,12 @@ to arm: the raised blade cannot take a pass until it is back on the ice
   tick the carry takes it back.
 
 ## Phase 3 — live aim
+
+As built, this differs from the design below: with a puck pinned, the aim runs
+from the puck itself rather than the strike spot (the two differ by the set-up's
+tolerance), and a feed caught in the puckless wind-up latches the stance line
+the same way the set-up's end does. Bots needed no change: they already commit
+their direction every tick of the press.
 
 Through the backswing the aim is the strike spot → cursor, clamped by
 `clamp_aim` to ±`slapper_aim_arc_deg` (starting at 20°) about the stance line

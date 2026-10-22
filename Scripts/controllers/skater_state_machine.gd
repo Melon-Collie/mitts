@@ -71,6 +71,7 @@ class Callbacks:
 	var apply_wrister_aim_blade: Callable         # (input: InputState, delta: float) — holds the blade at the shot origin while the torso coils
 	var apply_slapper_blade_position: Callable    # ()
 	var apply_slapper_setup: Callable             # (input: InputState, delta: float) — the blade takes the puck to the strike spot
+	var update_slapper_aim: Callable              # (input: InputState) — the aim, live until the swing commits
 	var apply_block_blade_position: Callable      # ()
 	var apply_wrister_follow_through: Callable    # ()
 	var apply_slapper_follow_through: Callable    # ()
@@ -204,6 +205,7 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 		if not input.slap_held:
 			_cancel_slapper_internal(input)
 			return
+		_cb.update_slapper_aim.call(input)
 		_cb.apply_slapper_setup.call(input, delta)
 		_cb.apply_slapper_velocity_drag.call(delta)
 		return
@@ -225,6 +227,7 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 			_state = State.ONE_TIMER_RETENTION
 			return
 
+	_cb.update_slapper_aim.call(input)
 	_cb.update_slapper_charge.call(delta)
 	_cb.apply_slapper_blade_position.call()
 	_cb.apply_slapper_velocity_drag.call(delta)
@@ -240,6 +243,7 @@ func _state_slapper_charge_without_puck(_skater: Skater, input: InputState, delt
 		_cancel_slapper_internal(input)
 		return
 
+	_cb.update_slapper_aim.call(input)
 	_cb.update_slapper_charge.call(delta)
 	_cb.apply_slapper_blade_position.call()
 

@@ -71,3 +71,10 @@ static func aim_from_strike(skater_xz: Vector2, target_xz: Vector2,
 # way back down does too.
 static func recover_time(wind_up_t: float, min_s: float, max_s: float) -> float:
 	return lerpf(min_s, max_s, clampf(wind_up_t, 0.0, 1.0))
+
+
+# `aim` (unit, world XZ) held within `arc_rad` either side of `line`: how far the
+# shoulders can turn a slapshot off the line the feet set up on.
+static func clamp_aim(aim: Vector2, line: Vector2, arc_rad: float) -> Vector2:
+	var off: float = line.angle_to(aim)
+	return line.rotated(clampf(off, -arc_rad, arc_rad))

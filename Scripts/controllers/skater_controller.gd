@@ -741,6 +741,9 @@ var slapper_strike_front_m: float = 0.1
 # How fast the hips pivot into the stance (deg/s): a 90° set-up in about a
 # fifth of a second.
 var slapper_stance_turn_deg_s: float = 450.0
+# Once the feet have set, how far either side of their line the shoulders can
+# still turn the aim (deg); further needs the feet set again.
+var slapper_aim_arc_deg: float = 20.0
 # A carried slapshot's set-up ends once the hips are within this of the stance
 # and the puck within this of the strike spot; the puck is pinned where it is.
 var slapper_setup_facing_tol_deg: float = 2.0
@@ -1185,6 +1188,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_cb.apply_wrister_aim_blade = _apply_wrister_aim_blade
 	_cb.apply_slapper_blade_position = _shot_pose.apply_slapper_blade_position
 	_cb.apply_slapper_setup = _apply_slapper_setup
+	_cb.update_slapper_aim = _update_slapper_aim
 	_cb.apply_block_blade_position = _shot_pose.apply_block_blade_position
 	_cb.apply_wrister_follow_through = _shot_pose.apply_wrister_follow_through
 	_cb.apply_slapper_follow_through = _shot_pose.apply_slapper_follow_through
@@ -2479,6 +2483,7 @@ func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
 		# so host and client pin the same point.
 		skater.set_slapper_zone(false)
 		skater.enter_slapshot_pinning(slapper_strike_local())
+		_aiming.slapper_stance_line = _sm.locked_slapper_dir
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
 		if _aiming.slapper_charge_timer >= one_timer_min_windup_time:
 			# A genuine one-timer: the wind-up was already built when the feed
@@ -2845,22 +2850,11 @@ func _enter_shot_block() -> void:
 func _enter_slapper_charge(input: InputState) -> void:
 	_aiming.reset_slapper()
 	_sm.shot_dir = Vector3.ZERO
-	# Nothing turns or moves on the press. The aim locks from where the puck will
-	# be struck once the hips have set for it (humans), or as the bot committed
-	# it; the hips then turn to that stance at the facing rule's own rate.
+	# Nothing turns or moves on the press: the aim starts where the cursor is
+	# (_update_slapper_aim) and the hips turn to its stance at their own rate.
 	var strike: Vector2 = slapper_strike_local()
-	var aim := Vector2(input.bot_slapper_aim_dir.x, input.bot_slapper_aim_dir.z)
-	if aim.length_squared() > 0.0001:
-		aim = aim.normalized()
-	else:
-		aim = SlapperRules.aim_from_strike(
-				Vector2(skater.global_position.x, skater.global_position.z),
-				Vector2(input.mouse_world_pos.x, input.mouse_world_pos.z),
-				strike, _blade_side_sign(), deg_to_rad(slapper_stance_open_deg))
-	if aim == Vector2.ZERO:
-		aim = _pose.facing
-	_sm.locked_slapper_dir = aim
-	skater.slapper_aim_dir = Vector3(aim.x, 0.0, aim.y)
+	_sm.locked_slapper_dir = _pose.facing
+	_update_slapper_aim(input)
 	if has_puck:
 		# The set-up: the blade takes the puck to the strike spot before the
 		# backswing starts (_apply_slapper_setup), and pins it where it lies then.
@@ -2928,10 +2922,44 @@ func slapper_strike_local() -> Vector2:
 			horiz, skater.blade_length, slapper_strike_front_m, _blade_side_sign())
 
 
-# The hips' facing for the locked shot line.
+# The hips' facing for the shot line: the line the feet set up on once they
+# have, the live aim until then.
 func slapper_stance_facing() -> Vector2:
-	return SlapperRules.stance_facing(_sm.locked_slapper_dir, _blade_side_sign(),
+	var line: Vector2 = _aiming.slapper_stance_line
+	if line == Vector2.ZERO:
+		line = _sm.locked_slapper_dir
+	return SlapperRules.stance_facing(line, _blade_side_sign(),
 			deg_to_rad(slapper_stance_open_deg))
+
+
+# The slapshot's aim, live until the swing commits (the release, or the
+# one-timer's hold), which fires whatever it was on that tick. Humans aim from
+# where the puck is struck toward the cursor: the pinned puck once there is one,
+# else the strike spot the hips are setting for. Bots commit the direction
+# (InputState.bot_slapper_aim_dir). While the hips are still setting — the
+# set-up, the puckless wind-up — the aim is free and they chase it; once the feet
+# have set, the shoulders turn it at most slapper_aim_arc_deg off their line.
+# Re-derived from each input, so a replay re-aims exactly.
+func _update_slapper_aim(input: InputState) -> void:
+	var aim := Vector2(input.bot_slapper_aim_dir.x, input.bot_slapper_aim_dir.z)
+	if aim.length_squared() <= 0.0001:
+		if skater.is_slapshot_pinning():
+			var pinned: Vector3 = skater.get_carry_target_global()
+			aim = Vector2(input.mouse_world_pos.x - pinned.x, input.mouse_world_pos.z - pinned.z)
+		else:
+			aim = SlapperRules.aim_from_strike(
+					Vector2(skater.global_position.x, skater.global_position.z),
+					Vector2(input.mouse_world_pos.x, input.mouse_world_pos.z),
+					slapper_strike_local(), _blade_side_sign(),
+					deg_to_rad(slapper_stance_open_deg))
+	if aim.length_squared() <= 0.0001:
+		return
+	aim = aim.normalized()
+	if _aiming.slapper_stance_line != Vector2.ZERO:
+		aim = SlapperRules.clamp_aim(aim, _aiming.slapper_stance_line,
+				deg_to_rad(slapper_aim_arc_deg))
+	_sm.locked_slapper_dir = aim
+	skater.slapper_aim_dir = Vector3(aim.x, 0.0, aim.y)
 
 
 # A carried slapshot's set-up tick: the tracked blade reaches for the strike
@@ -2957,6 +2985,7 @@ func _apply_slapper_setup(_input: InputState, delta: float) -> void:
 			or puck_xz.distance_to(strike) <= slapper_setup_spot_tol_m):
 		skater.enter_slapshot_pinning(puck_xz)
 		_aiming.slapper_setup_done = true
+		_aiming.slapper_stance_line = _sm.locked_slapper_dir
 
 
 # A puck held slower than this in the hips' frame (m/s) for this long (s) has
@@ -3206,9 +3235,9 @@ func _update_slapper_charge(delta: float) -> void:
 	# but rests its glove centred and has to travel the full way to a corner on
 	# reaction ("skate up and rip a slapper from the slot"). Runs on the host for
 	# remotes too (RemoteController._drive_from_input simulates their carry); the
-	# slapper direction is LOCKED at press (_sm.locked_slapper_dir, built in
-	# _enter_slapper_charge from the replicated mouse_world_pos), so no screen-space
-	# signal is needed. Gated to the WITH-PUCK windup: a one-timer wind-up has no puck
+	# slapper direction (_sm.locked_slapper_dir) is re-aimed each tick from the
+	# replicated mouse_world_pos, so no screen-space signal is needed, and the
+	# prediction follows the aim as it moves. Gated to the WITH-PUCK windup: a one-timer wind-up has no puck
 	# to lean toward, and the goalie reads only SLAPPER_CHARGE_WITH_PUCK.
 	if has_puck:
 		var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)

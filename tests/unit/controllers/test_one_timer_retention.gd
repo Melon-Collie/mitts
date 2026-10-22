@@ -47,6 +47,7 @@ func _make_callbacks() -> SkaterStateMachine.Callbacks:
 	cb.enter_slapper_charge = noop_1
 	cb.transition_to_skating = noop
 	cb.cancel_slapper = noop_1
+	cb.update_slapper_aim = noop_1
 	cb.release_wrister = noop_1
 	cb.fire_quick_pass = noop_1
 	cb.update_wrister_charge = noop_1

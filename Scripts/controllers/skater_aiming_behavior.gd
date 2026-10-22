@@ -35,6 +35,9 @@ var slapper_charge_timer: float = 0.0
 # puck to the strike spot and the charge has not started. Saved/restored across
 # reconcile with the charge timer.
 var slapper_setup_done: bool = true
+# The shot line a carried slapshot's feet set up on (world XZ, unit), from the
+# set-up's end; ZERO while the aim is free. Saved/restored with the set-up flag.
+var slapper_stance_line: Vector2 = Vector2.ZERO
 var one_timer_window_timer: float = 0.0
 # Seconds left in the one-timer's committed catch-and-load hold. Counts down in
 # ONE_TIMER_RETENTION only; the shot fires when it reaches zero. Saved/restored
@@ -71,6 +74,7 @@ func tick_wrister_charge(intent_pos: Vector3, delta: float,
 func reset_slapper() -> void:
 	slapper_charge_timer = 0.0
 	slapper_setup_done = true
+	slapper_stance_line = Vector2.ZERO
 	one_timer_window_timer = 0.0
 	one_timer_retention_timer = 0.0
 

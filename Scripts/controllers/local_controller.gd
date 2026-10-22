@@ -550,6 +550,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# gets it there; a replay reaching that tick at a different spot must not move
 	# the live pin.
 	var pre_slapper_setup_done: bool = _aiming.slapper_setup_done
+	var pre_slapper_stance_line: Vector2 = _aiming.slapper_stance_line
 	var pre_slapshot_pin_active: bool = skater.is_slapshot_pinning()
 	var pre_slapshot_pin_local: Vector2 = skater.slapshot_pin_local()
 	var pre_setup_prev_puck: Vector2 = _slapper_setup_prev_puck
@@ -693,6 +694,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
 	_aiming.slapper_setup_done = pre_slapper_setup_done
+	_aiming.slapper_stance_line = pre_slapper_stance_line
 	_slapper_setup_prev_puck = pre_setup_prev_puck
 	fake_puck_offset = pre_fake_puck_offset
 	_slapper_setup_still_s = pre_setup_still_s
