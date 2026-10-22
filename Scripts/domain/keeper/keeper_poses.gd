@@ -40,8 +40,11 @@ const BUTTERFLY_KNEE_HALF_SPACING_M: float = KeeperAnatomy.PAD_TOP_ABOVE_KNEE_M 
 const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
-# Down, the hand sits just above the pads, so the paddle lies well back.
-const BUTTERFLY_STICK_TILT_RAD: float = deg_to_rad(50.0)
+# The blade sits a few inches ahead of the pads, to the glove side of centre
+# as in the ready stance, and the paddle stands up from it enough to hold the
+# blocker beside the hip above the pad.
+const BUTTERFLY_BLADE := Vector3(-0.08, 0.0, -0.29)
+const BUTTERFLY_STICK_TILT_RAD: float = deg_to_rad(28.0)
 
 
 static func upright(p: KeeperPose) -> void:
@@ -103,17 +106,18 @@ static func butterfly(p: KeeperPose) -> void:
 	var dy: float = sqrt(maxf(KeeperAnatomy.THIGH_M * KeeperAnatomy.THIGH_M
 			- BUTTERFLY_HIP_BEHIND_KNEE_M * BUTTERFLY_HIP_BEHIND_KNEE_M, 0.0))
 	p.pelvis = Vector3(0.0, shin_y + dy, hip_z)
-	p.pelvis_rot = Vector3(-0.10, 0.0, 0.0)
-	p.lumbar_rot = Vector3(-0.05, 0.0, 0.0)
-	p.chest_rot = Vector3(0.0, 0.0, 0.0)
-	p.neck_rot = Vector3(0.10, 0.0, 0.0)
+	# Tall, but leaning his shoulders on over his knees.
+	p.pelvis_rot = Vector3(-0.17, 0.0, 0.0)
+	p.lumbar_rot = Vector3(-0.10, 0.0, 0.0)
+	p.chest_rot = Vector3(-0.03, 0.0, 0.0)
+	p.neck_rot = Vector3(0.20, 0.0, 0.0)
 	for i: int in 2:
 		_butterfly_leg(p.legs[i], _side_x(i), shin_y, knee_z, BUTTERFLY_FLARE_RAD)
-	p.glove_hand = Vector3(-0.44, 0.60, -0.32)
+	p.glove_hand = Vector3(-0.46, 0.75, -0.38)
 	p.blocker_elbow_pole = Vector3(-0.2, -1.0, 0.4)
 	p.glove_fingers = Vector3(-0.25, 1.0, -0.1)
 	p.glove_palm = _FORWARD
-	p.blade_center = Vector3(0.0, 0.0, -0.58)
+	p.blade_center = BUTTERFLY_BLADE
 	p.blade_yaw = 0.0
 	p.stick_tilt = BUTTERFLY_STICK_TILT_RAD
 	p.blocker_face = Vector3(0.30, 0.0, -1.0)
