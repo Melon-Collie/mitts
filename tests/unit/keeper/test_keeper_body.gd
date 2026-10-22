@@ -119,6 +119,25 @@ func test_every_arm_reaches_its_hand() -> void:
 				0.0, 0.002, "%s: the blocker arm reaches the wrist on the fist" % stance[0])
 
 
+# The skate's cowling, toe and instep, stays inside the pad's boot over it: the
+# boot is the pad's, and the skate is what it covers.
+func test_every_skate_stays_inside_its_boot() -> void:
+	for stance: Array in _stances():
+		_solve(stance)
+		for side: int in 2:
+			var skate: Transform3D = KeeperGear.box(_skel, P.SKATE_G + side)
+			var sh: Vector3 = KeeperGear.half_extents(P.SKATE_G + side)
+			var boot: Transform3D = KeeperGear.box(_skel, P.BOOT_G + side)
+			var bh: Vector3 = KeeperGear.half_extents(P.BOOT_G + side)
+			var cowling_top: float = -sh.y + KeeperAnatomy.SKATE_LIFT_M + KeeperGearMeshes.SKATE_COWLING_TOP_M
+			for x: float in [-sh.x, sh.x]:
+				for z: float in [-sh.z * 0.9, -sh.z * 0.5]:
+					var local: Vector3 = boot.affine_inverse() * (skate * Vector3(x, cowling_top, z))
+					var out: Vector3 = (local.abs() - bh).max(Vector3.ZERO)
+					assert_lt(out.length(), 0.002, "%s side %d: the skate's toe inside its boot"
+							% [stance[0], side])
+
+
 # A wrist bends back and to the sides, not through the hand: the forearm goes
 # into the trapper at its cuff or its back, never through its fingers, and into
 # the blocker from behind the board, never through it.

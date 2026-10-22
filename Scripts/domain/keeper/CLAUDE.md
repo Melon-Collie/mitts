@@ -62,6 +62,14 @@ a butterfly would stand it up off the ice. The break itself is drawn as a loft
 between the knee stack's and the rise's sections (`KeeperKneeBreak`); it is not
 a save surface.
 
+The pad's boot, its toe over the skate, is the pad's too, hung from it at the
+boot break (`KeeperGear._boot_box`): the foot pitches −20° to +30° against the
+shin across the stances, so a boot fixed on the shin would sink into the ice or
+lift off it. It lies along the skate, as the toe bridge ties it to, and faces
+halfway between the skate and the pad, which keeps its sides on the pad's and
+a turned-out skate inside it. Never hang it on the foot alone: it reads as the
+skate's, and the cowling comes through it.
+
 ## Seeing him
 
 `.claude/hooks/render-keeper.sh` renders every stance from the front, side,
@@ -72,7 +80,7 @@ three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
 (`KeeperGear.post_contact` on the post's inner face, on the goal line) with a
 fifth view from a sharp angle on that side. `tests/unit/keeper/
 test_keeper_body.gd` holds the proportions, the bones' lengths, the arms
-reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, the rigid
+reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, the skates inside their boots, the rigid
 stick, the packed layout, the ice sealed in the butterfly, the extension and
 the kick, and the post sealed in the RVH; `test_keeper_coverage.gd` snapshots
 each stance's coverage straight on and from the dot line.

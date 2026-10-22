@@ -21,10 +21,10 @@ const _SP := GoalieSaveRules.SavePart
 const _B := KeeperSkeleton.Bone
 
 # Per part: the bone it rides (-1: placed from the skeleton by its own rule — the
-# thigh rises at the break, the stick by its solve), its centre and half extents
+# thigh rises and the boots at their breaks, the stick by its solve), its centre and half extents
 # in that bone's frame, and its material.
 const _BONE: Array[int] = [
-	_B.SHIN_G, _B.SHIN_B, -1, -1, _B.FOOT_G, _B.FOOT_B, _B.FOOT_G, _B.FOOT_B,
+	_B.SHIN_G, _B.SHIN_B, -1, -1, -1, -1, _B.FOOT_G, _B.FOOT_B,
 	_B.THIGH_G, _B.THIGH_B, _B.PELVIS, _B.CHEST,
 	_B.UPPER_ARM_G, _B.FOREARM_G, _B.UPPER_ARM_B, _B.FOREARM_B,
 	_B.HAND_G, _B.HAND_B, _B.HEAD, -1, -1, -1,
@@ -48,14 +48,19 @@ const _RISE_FACE_Z: float = -KeeperAnatomy.PAD_FORWARD_OF_SHIN_M \
 		- KeeperAnatomy.PAD_DEPTH_M * 0.5 + _RISE_HALF.z
 
 # The pad's boot: the pad's foot, run forward over the skate from under the
-# shin to past the skate's toe, just off the ice, tied down by the toe bridge.
+# shin to past the skate's toe, just off the ice. It is the pad's, as wide as
+# it, and hangs from it at the boot break (`_boot_box`); its frame is the
+# skate's turned to face where the pad faces, centred on the ankle.
 const _BOOT_BACK_M: float = -0.02
-const _BOOT_FRONT_M: float = -(KeeperAnatomy.FOOT_LENGTH_M - KeeperAnatomy.HEEL_BEHIND_ANKLE_M) - 0.02
+# The break gives the toe bridge half the turn between the pad and its skate,
+# which keeps a skate turned out under the pad (a kick's) inside its boot.
+const _BOOT_FOLLOWS_PAD: float = 0.5
+const _BOOT_FRONT_M: float = -(KeeperAnatomy.FOOT_LENGTH_M - KeeperAnatomy.HEEL_BEHIND_ANKLE_M) - 0.04
 const _BOOT_BOTTOM_M: float = -KeeperAnatomy.ANKLE_ON_SKATES_M + 0.015
 const _BOOT_TOP_M: float = 0.03
 const _BOOT_CENTER := Vector3(0.0, (_BOOT_BOTTOM_M + _BOOT_TOP_M) * 0.5,
 		(_BOOT_BACK_M + _BOOT_FRONT_M) * 0.5)
-const _BOOT_HALF := Vector3(0.10, (_BOOT_TOP_M - _BOOT_BOTTOM_M) * 0.5,
+const _BOOT_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, (_BOOT_TOP_M - _BOOT_BOTTOM_M) * 0.5,
 		(_BOOT_BACK_M - _BOOT_FRONT_M) * 0.5)
 # The skate, ice to above the ankle, heel to toe.
 const _SKATE_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M * 0.5 + 0.01,
@@ -160,7 +165,25 @@ static func box(skel: KeeperSkeleton, part: int) -> Transform3D:
 		return Transform3D(b.basis, b * _CENTER[part])
 	if part == Part.RISE_G or part == Part.RISE_B:
 		return _rise_box(skel, part - Part.RISE_G)
+	if part == Part.BOOT_G or part == Part.BOOT_B:
+		return _boot_box(skel, part - Part.BOOT_G)
 	return _stick_box(skel, part)
+
+
+# The boot hangs from the pad at the boot break, which bends it to lie along
+# the skate the toe bridge ties it to: the skate's frame, turned about its own
+# up toward where the pad faces, so the boot carries the pad's sides on down
+# over the skate whichever way the foot is pitched.
+static func _boot_box(skel: KeeperSkeleton, side: int) -> Transform3D:
+	var foot: Transform3D = skel.xf[KeeperSkeleton.FOOT[side]]
+	var up: Vector3 = foot.basis.y.normalized()
+	var face: Vector3 = -skel.xf[KeeperSkeleton.SHIN[side]].basis.z
+	face -= up * face.dot(up)
+	var basis: Basis = foot.basis
+	if face.length_squared() > 1e-8:
+		var z: Vector3 = foot.basis.z.normalized().slerp(-face.normalized(), _BOOT_FOLLOWS_PAD)
+		basis = Basis(up.cross(z), up, z)
+	return Transform3D(basis, foot.origin + basis * _BOOT_CENTER)
 
 
 # The thigh rise rides the shin as the pad's continuation and bends at the break

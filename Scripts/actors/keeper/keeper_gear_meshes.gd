@@ -113,20 +113,21 @@ static func _rise(k: KeeperMeshKit, h: Vector3) -> void:
 	k.sweep(S.PADS, rings, Vector3.ZERO)
 
 
-# The pad's boot over the skate: flat along the ice, tall where it meets the
-# pad and sloping down to the toe, the toe bridge strapped across it.
+# The pad's boot over the skate, back (+Z, under the pad) to toe: (where as a
+# share of the box's half length, half width as a share of the pad's, top
+# above the boot's bottom in metres). It runs on from the pad's sides, stands
+# over the skate's cowling to past its toe, and closes down in front of it.
+const _BOOT_STATIONS: Array[Vector3] = [
+	Vector3(1.0, 0.86, 0.156), Vector3(0.0, 0.95, 0.145), Vector3(-0.6, 0.93, 0.125),
+	Vector3(-0.82, 0.86, 0.11), Vector3(-1.0, 0.66, 0.065),
+]
+
+
 static func _boot(k: KeeperMeshKit, h: Vector3) -> void:
-	var stations: Array[Vector3] = [
-		Vector3(h.z, 0.85, 1.0),
-		Vector3(0.0, 1.0, 0.55),
-		Vector3(-h.z * 0.7, 0.92, -0.15),
-		Vector3(-h.z, 0.72, -0.55),
-	]
 	var rings: Array[PackedVector3Array] = []
-	for st: Vector3 in stations:
-		rings.append(_boot_section(st.x, h.x * st.y, -h.y, h.y * st.z))
+	for st: Vector3 in _BOOT_STATIONS:
+		rings.append(_boot_section(h.z * st.x, h.x * st.y, -h.y, -h.y + st.z))
 	k.sweep(S.PADS, rings, Vector3(0.0, -h.y * 0.4, 0.0))
-	k.box(S.STRAP, Vector3(0.0, -h.y * 0.15, -h.z * 0.25), Vector3(h.x * 1.01, h.y * 0.62, 0.014))
 
 
 # A boot section square to Z at `z`: flat on the bottom, its top shoulders cut.
@@ -136,6 +137,10 @@ static func _boot_section(z: float, w: float, bottom: float, top: float) -> Pack
 		Vector3(-w, bottom, z), Vector3(w, bottom, z), Vector3(w, top - shoulder, z),
 		Vector3(w - shoulder, top, z), Vector3(-w + shoulder, top, z), Vector3(-w, top - shoulder, z),
 	])
+
+
+# How far the skate's cowling stands above its sole: what the pad's boot covers.
+const SKATE_COWLING_TOP_M: float = 0.05
 
 
 # A goalie skate: the steel and its holder under a low plastic cowling, the
@@ -148,7 +153,8 @@ static func _skate(k: KeeperMeshKit, h: Vector3) -> void:
 	var rings: Array[PackedVector3Array] = [
 		KeeperMeshKit.octagon(sole - 0.02, h.x * 0.85, h.z * 0.92, 0.02),
 		KeeperMeshKit.octagon(sole + 0.035, h.x, h.z, 0.025),
-		KeeperMeshKit.octagon(sole + 0.05, h.x * 0.9, h.z * 0.6, 0.025, 1.0, 0.0, h.z * 0.35),
+		KeeperMeshKit.octagon(sole + SKATE_COWLING_TOP_M, h.x * 0.9, h.z * 0.6, 0.025, 1.0, 0.0,
+				h.z * 0.35),
 	]
 	k.sweep(S.SKATE_STEEL, rings, Vector3(0.0, sole, 0.0))
 	k.tint = _DEEP
