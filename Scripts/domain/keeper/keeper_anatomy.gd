@@ -106,12 +106,17 @@ const BLOCKER_WRIST := BLOCKER_FIST_CENTER + Vector3(-0.02, 0.07, 0.03)
 const BLADE_LENGTH_M: float = 0.394
 const BLADE_HEIGHT_M: float = 0.0889
 const BLADE_THICKNESS_M: float = 0.02
+# The paddle's top, measured up the stick from the heel as the rule measures
+# it; the paddle itself rises from above the blade's heel, not from the ice.
 const PADDLE_LENGTH_M: float = 0.66
+const PADDLE_ROOT_ABOVE_HEEL_M: float = 0.045
 const PADDLE_WIDTH_M: float = 0.0889
 const PADDLE_THICKNESS_M: float = 0.025
-# The shaft above the paddle: a senior goalie stick is about 46 in from heel to
-# knob, which runs it on 41 cm past the grip, its knob clear of the blocker.
-const SHAFT_LENGTH_M: float = 0.47
+# A senior goalie stick, heel to the end of the shaft: 59–60 in (goalie sticks
+# run 56–63 in). The shaft is what the paddle leaves of it, a long handle above
+# the blocker hand that it slides up to poke-check or play the puck.
+const STICK_LENGTH_M: float = 60.0 * 0.0254
+const SHAFT_LENGTH_M: float = STICK_LENGTH_M - PADDLE_LENGTH_M
 const SHAFT_WIDTH_M: float = 0.03
 # The blocker hand grips the shaft just above the paddle.
 const GRIP_ALONG_STICK_M: float = PADDLE_LENGTH_M + 0.10

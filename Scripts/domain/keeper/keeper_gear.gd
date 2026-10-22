@@ -107,8 +107,6 @@ const _BLOCKER_CENTER := Vector3(0.0, KeeperAnatomy.BLOCKER_ABOVE_GRIP_M,
 		(_BLOCKER_FRONT_M + _BLOCKER_BACK_M) * 0.5)
 const _BLOCKER_HALF := Vector3(KeeperAnatomy.BLOCKER_WIDTH_M * 0.5, KeeperAnatomy.BLOCKER_HEIGHT_M * 0.5,
 		(_BLOCKER_BACK_M - _BLOCKER_FRONT_M) * 0.5)
-# The paddle rises from the blade's heel, above the ice, not from the ice.
-const _PADDLE_ROOT_M: float = 0.045
 # The mask on the head bone (its origin on the neck's line at chin height): the
 # shell's chin 4.5 cm under the chin, its dome 2 cm over the skull, the cage
 # 17.5 cm ahead of the neck and the backplate 12.5 cm behind it.
@@ -134,7 +132,9 @@ const _HALF: Array[Vector3] = [
 	_UPPER_ARM_HALF, _FOREARM_HALF, _UPPER_ARM_HALF, _FOREARM_HALF,
 	_GLOVE_HALF, _BLOCKER_HALF, _MASK_HALF,
 	Vector3(KeeperAnatomy.BLADE_LENGTH_M * 0.5, KeeperAnatomy.BLADE_HEIGHT_M * 0.5, KeeperAnatomy.BLADE_THICKNESS_M * 0.5),
-	Vector3(KeeperAnatomy.PADDLE_WIDTH_M * 0.5, KeeperAnatomy.PADDLE_LENGTH_M * 0.5, KeeperAnatomy.PADDLE_THICKNESS_M * 0.5),
+	Vector3(KeeperAnatomy.PADDLE_WIDTH_M * 0.5,
+			(KeeperAnatomy.PADDLE_LENGTH_M - KeeperAnatomy.PADDLE_ROOT_ABOVE_HEEL_M) * 0.5,
+			KeeperAnatomy.PADDLE_THICKNESS_M * 0.5),
 	Vector3(KeeperAnatomy.SHAFT_WIDTH_M * 0.5, KeeperAnatomy.SHAFT_LENGTH_M * 0.5, KeeperAnatomy.PADDLE_THICKNESS_M * 0.5),
 ]
 
@@ -198,9 +198,9 @@ static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:
 		return Transform3D(basis, center)
 	var across: Vector3 = (blade - paddle * blade.dot(paddle)).normalized()
 	var basis := Basis(across, paddle, across.cross(paddle))
-	var along: float = _PADDLE_ROOT_M + KeeperAnatomy.PADDLE_LENGTH_M * 0.5
+	var along: float = (KeeperAnatomy.PADDLE_ROOT_ABOVE_HEEL_M + KeeperAnatomy.PADDLE_LENGTH_M) * 0.5
 	if part == Part.SHAFT:
-		along = _PADDLE_ROOT_M + KeeperAnatomy.PADDLE_LENGTH_M + KeeperAnatomy.SHAFT_LENGTH_M * 0.5
+		along = KeeperAnatomy.PADDLE_LENGTH_M + KeeperAnatomy.SHAFT_LENGTH_M * 0.5
 	return Transform3D(basis, skel.stick_heel + paddle * along)
 
 

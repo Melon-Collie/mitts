@@ -173,6 +173,14 @@ func test_the_gear_is_inside_the_rule_book() -> void:
 				assert_almost_eq(h.y * 2.0, KeeperAnatomy.BLOCKER_HEIGHT_M, 1e-6, key)
 			P.BLADE:
 				assert_almost_eq(h.y * 2.0, KeeperAnatomy.BLADE_HEIGHT_M, 1e-6, key)
+			P.PADDLE, P.SHAFT:
+				# Measured up the stick from the heel, as the rule measures.
+				_solve(_stances()[1])
+				var along: float = (KeeperGear.box(_skel, part).origin - _skel.stick_heel) \
+						.dot(_skel.stick_paddle_dir) + h.y
+				var limit: float = KeeperAnatomy.PADDLE_LENGTH_M if part == P.PADDLE \
+						else KeeperAnatomy.STICK_LENGTH_M
+				assert_almost_eq(along, limit, 1e-4, "%s ends where its length says" % key)
 
 
 # The packed rows are what GoalieContactDetector's kernel reads: basis columns,
