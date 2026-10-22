@@ -16,8 +16,8 @@ func _seat(attrs: PlayerAttributes) -> void:
 			SkinToneRegistry.DEFAULT_INDEX, false)
 
 
-func _parts(name: String) -> Array:
-	return _figure.get(name) as Array
+func _parts(part_name: String) -> Array:
+	return _figure.get(part_name) as Array
 
 
 # Bounds of a part in the figure's own frame.

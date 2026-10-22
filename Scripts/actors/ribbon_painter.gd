@@ -52,9 +52,9 @@ func _draw_cell(x0: float, brand: Dictionary) -> void:
 	var tag_w: float = FONT.get_string_size(tag_text, HORIZONTAL_ALIGNMENT_LEFT, -1, tag_size).x
 	var total: float = name_w + TAG_GAP_PX + tag_w
 	if total > available:
-		var scale: float = available / total
-		name_size = maxi(1, int(float(name_size) * scale))
-		tag_size = maxi(1, int(float(tag_size) * scale))
+		var fit: float = available / total
+		name_size = maxi(1, int(float(name_size) * fit))
+		tag_size = maxi(1, int(float(tag_size) * fit))
 		name_w = FONT.get_string_size(name_text, HORIZONTAL_ALIGNMENT_LEFT, -1, name_size).x
 		tag_w = FONT.get_string_size(tag_text, HORIZONTAL_ALIGNMENT_LEFT, -1, tag_size).x
 		total = name_w + TAG_GAP_PX + tag_w

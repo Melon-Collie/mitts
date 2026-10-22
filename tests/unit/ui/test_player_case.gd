@@ -72,8 +72,8 @@ func _mannequin() -> LockerMannequin:
 
 
 # One MeshInstance3D out of the mannequin's paired part arrays.
-func _part(name: String, index: int = 0) -> MeshInstance3D:
-	var parts: Array = _mannequin().get(name) as Array
+func _part(part_name: String, index: int = 0) -> MeshInstance3D:
+	var parts: Array = _mannequin().get(part_name) as Array
 	return parts[index] as MeshInstance3D
 
 
@@ -311,11 +311,11 @@ func test_the_leg_chain_has_no_holes() -> void:
 func test_the_hand_pieces_are_not_sheared() -> void:
 	_open()
 	for i: int in 2:
-		for name: String in ["_hands", "_cuffs"]:
-			var b: Basis = _part(name, i).transform.basis
-			assert_almost_eq(b.x.dot(b.y), 0.0, 0.0001, "%s %d x⊥y" % [name, i])
-			assert_almost_eq(b.y.dot(b.z), 0.0, 0.0001, "%s %d y⊥z" % [name, i])
-			assert_almost_eq(b.z.dot(b.x), 0.0, 0.0001, "%s %d z⊥x" % [name, i])
+		for part_name: String in ["_hands", "_cuffs"]:
+			var b: Basis = _part(part_name, i).transform.basis
+			assert_almost_eq(b.x.dot(b.y), 0.0, 0.0001, "%s %d x⊥y" % [part_name, i])
+			assert_almost_eq(b.y.dot(b.z), 0.0, 0.0001, "%s %d y⊥z" % [part_name, i])
+			assert_almost_eq(b.z.dot(b.x), 0.0, 0.0001, "%s %d z⊥x" % [part_name, i])
 		# The cuff is a unit-radius ring with its real height baked in, so only
 		# its radius may scale — a stretched Y is the artifact itself.
 		var cuff: Basis = _part("_cuffs", i).transform.basis

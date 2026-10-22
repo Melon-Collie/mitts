@@ -3,6 +3,8 @@ class_name SkaterSoundController
 # Node3D chain, so under a plain Node every stride would sound from the origin.
 extends Node3D
 
+const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
+
 # The stop's bite: the blades turned across and dug in, which is the stop's
 # weight passing half, and only when there is speed to shed.
 const _BITE_WEIGHT: float = 0.5
@@ -84,7 +86,7 @@ func setup(skater: Skater, controller: SkaterController) -> void:
 	_skater = skater
 	_controller = controller
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
-	_brake_player.volume_db = SoundManager.level_db(SoundManager.Sound.SKATE_BRAKE)
+	_brake_player.volume_db = SoundManagerScript.level_db(SoundManager.Sound.SKATE_BRAKE)
 	for path: String in _LOOP_PATHS:
 		_loops.append(_make_player(path))
 	_foot_players = [_make_player(""), _make_player("")]
@@ -206,7 +208,7 @@ func _step(left: bool, sound: SoundManager.Sound, level_db: float) -> void:
 	if p.stream == null:
 		return
 	p.global_position = _skater.blade_mark_position(left)
-	p.volume_db = SoundManager.level_db(sound) + level_db + _own_db()
+	p.volume_db = SoundManagerScript.level_db(sound) + level_db + _own_db()
 	p.pitch_scale = randf_range(1.0 - _STEP_PITCH_VARIANCE, 1.0 + _STEP_PITCH_VARIANCE)
 	p.play()
 
@@ -281,7 +283,7 @@ func _hold_loop(loop: Loop, level_db: float, gain_db: float, listener_db: float)
 		if player.playing:
 			player.stop()
 		return false
-	var db: float = SoundManager.level_db(_LOOP_SOUNDS[loop]) + level_db + gain_db
+	var db: float = SoundManagerScript.level_db(_LOOP_SOUNDS[loop]) + level_db + gain_db
 	_heard[entry] = db + listener_db + (_BUDGET_HOLD_DB if player.playing else 0.0)
 	if not within_budget(_heard, entry, _HELD_LOOP_BUDGET):
 		if player.playing:

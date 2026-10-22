@@ -1,8 +1,8 @@
 # gdlint config — tuned to catch real problems (dead code, mistakes, whitespace
 # hygiene), NOT style/architecture opinions that don't match this codebase.
-# Godot's own editor analyzer still owns engine-specific warnings it can't see
-# (SHADOWED_VARIABLE_BASE_CLASS, INT_AS_ENUM, etc.); this is the headless,
-# cross-environment subset. Run via .claude/hooks/run-lint.sh.
+# Godot's own analyzer warnings (SHADOWED_VARIABLE_BASE_CLASS, INT_AS_ENUM, etc.)
+# are invisible to it; .claude/hooks/check-godot-warnings.sh gates those. Run via
+# .claude/hooks/run-lint.sh.
 disable:
   # Style / formatting opinions — this project uses long lines and its own layout.
   - max-line-length

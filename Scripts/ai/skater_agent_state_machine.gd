@@ -248,7 +248,9 @@ func _strategy() -> TeamStrategyView:
 	if _team_brain == null:
 		return null
 	var v: TeamBrainView = _team_brain.get_view()
-	return v if v != null else _team_brain
+	if v != null:
+		return v
+	return _team_brain
 # Live peer -> team_id dict owned by PlayerRegistry. Read via
 # `_team_id_by_peer.get(pid, -1)` in hot loops (lane filters,
 # closest-teammate checks). A dict rather than a Callable — the

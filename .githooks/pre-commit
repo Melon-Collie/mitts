@@ -1,13 +1,19 @@
 #!/bin/bash
-# Block commits that introduce gdlint problems in staged .gd files (honors
-# .gdlintrc). This is the "never commit warnings" gate — it runs for every
+# Block commits that introduce gdlint problems or Godot analyzer warnings in
+# staged .gd files. This is the "never commit warnings" gate — it runs for every
 # committer (you, agents, web sessions), local Godot-editor edits included.
 #
 # Activated via: git config core.hooksPath .githooks  (set locally, and by the
 # SessionStart hook on web). Escape hatch: git commit --no-verify.
 #
-# Note: gdlint is the headless, cross-env subset — it won't catch Godot's
-# engine-only analyzer warnings (SHADOWED_VARIABLE_BASE_CLASS, INT_AS_ENUM).
+# Two passes, because neither sees the other's warnings:
+#   gdlint (gdtoolkit)  — dead code, unused args, whitespace; staged files only.
+#   Godot's analyzer    — SHADOWED_*, STATIC_CALLED_ON_INSTANCE, INT_AS_ENUM,
+#                         NARROWING_CONVERSION; .claude/hooks/check-godot-warnings.sh
+#                         compiles the whole tree (a rename can shadow in a file
+#                         that was not staged), ~20 s. Skipped when Godot is not
+#                         found, or with MITTS_SKIP_GODOT_WARNINGS=1; CI runs it
+#                         on every PR either way.
 set -uo pipefail
 
 mapfile -t staged < <(git diff --cached --name-only --diff-filter=ACM -- '*.gd')
@@ -21,12 +27,28 @@ for c in python python3; do
 done
 if [ -z "$PY" ]; then
   echo "pre-commit: gdtoolkit not found; skipping gdlint (pip install gdtoolkit)." >&2
-  exit 0
-fi
-
-if ! "$PY" -m gdtoolkit.linter "${staged[@]}"; then
+elif ! "$PY" -m gdtoolkit.linter "${staged[@]}"; then
   echo "" >&2
   echo "pre-commit: gdlint found problems in staged .gd files (above)." >&2
   echo "Fix them, or bypass with:  git commit --no-verify" >&2
   exit 1
 fi
+
+[ "${MITTS_SKIP_GODOT_WARNINGS:-}" = "1" ] && exit 0
+if [ -z "${GODOT_BIN:-}" ] && ! command -v godot >/dev/null 2>&1; then
+  echo "pre-commit: Godot not found; skipping the analyzer-warning pass (set GODOT_BIN)." >&2
+  exit 0
+fi
+ROOT="$(git rev-parse --show-toplevel)"
+bash "$ROOT/.claude/hooks/check-godot-warnings.sh"
+case $? in
+  0) exit 0 ;;
+  1)
+    echo "" >&2
+    echo "pre-commit: Godot's analyzer found warnings (above)." >&2
+    echo "Fix them, or bypass with:  git commit --no-verify" >&2
+    exit 1 ;;
+  *)
+    echo "pre-commit: the analyzer-warning pass could not run (above); not blocking." >&2
+    exit 0 ;;
+esac

@@ -214,10 +214,10 @@ func test_the_main_thread_reads_the_field_through_its_own_query() -> void:
 						ok = true
 				assert_true(ok, "%s calls %s on the main thread" % [f, use.get_slice("(", 0)])
 				at = src.find(token, at + 1)
-		var call: int = src.find("expected_goals(")
-		while call >= 0:
+		var call_at: int = src.find("expected_goals(")
+		while call_at >= 0:
 			checked += 1
-			var args: String = src.substr(call, src.find("\n\n", call) - call)
+			var args: String = src.substr(call_at, src.find("\n\n", call_at) - call_at)
 			assert_true(args.contains("_xg_query"), "%s reads xG through its own query" % f)
-			call = src.find("expected_goals(", call + 1)
+			call_at = src.find("expected_goals(", call_at + 1)
 	assert_gt(checked, 0, "the xG call was found")

@@ -144,7 +144,7 @@ class Config:
 	# the prediction span. Delivering every tick instead makes the client look
 	# fresher than it can ever be and understates every error below.
 	var snapshot_every_ticks: int = Constants.PHYSICS_TICK / Constants.STATE_RATE
-	var seed: int = 991
+	var rng_seed: int = 991
 
 
 class Result:
@@ -244,7 +244,7 @@ class _Pending:
 func run(cfg: Config) -> Result:
 	var res := Result.new()
 	var rng := RandomNumberGenerator.new()
-	rng.seed = cfg.seed
+	rng.seed = cfg.rng_seed
 
 	var tick: float = Constants.TICK_DURATION
 	var one_way: float = cfg.rtt_ms / 2000.0

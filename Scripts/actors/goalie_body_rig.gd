@@ -52,20 +52,20 @@ func rebuild() -> void:
 	var zones: Array[StandardMaterial3D] = []
 	var root_inv: Transform3D = _goalie.global_transform.affine_inverse()
 	for bone: int in _parts.size():
-		var part: MeshInstance3D = _parts[bone]
-		add_bone("%d_%s" % [bone, part.name])
+		var mesh_part: MeshInstance3D = _parts[bone]
+		add_bone("%d_%s" % [bone, mesh_part.name])
 		skin.add_bind(bone, Transform3D.IDENTITY)
-		var bake := Transform3D(_stretch((root_inv * part.global_transform).basis), Vector3.ZERO)
+		var bake := Transform3D(_stretch((root_inv * mesh_part.global_transform).basis), Vector3.ZERO)
 		_unbake.append(bake.affine_inverse())
-		for s: int in part.mesh.get_surface_count():
-			var arrays: Array = part.mesh.surface_get_arrays(s)
+		for s: int in mesh_part.mesh.get_surface_count():
+			var arrays: Array = mesh_part.mesh.surface_get_arrays(s)
 			body.add(arrays, zones.size(), bone, bake)
-			if part.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
+			if mesh_part.cast_shadow != GeometryInstance3D.SHADOW_CASTING_SETTING_OFF:
 				casters.add(arrays, zones.size(), bone, bake)
-			var mat: StandardMaterial3D = part.get_active_material(s) as StandardMaterial3D
+			var mat: StandardMaterial3D = mesh_part.get_active_material(s) as StandardMaterial3D
 			zones.append(mat if mat != null else StandardMaterial3D.new())
-		_hidden_layers[part] = part.layers
-		part.layers = 0
+		_hidden_layers[mesh_part] = mesh_part.layers
+		mesh_part.layers = 0
 	_paint = BodyZonePaint.new(zones.size())
 	for z: int in zones.size():
 		_paint.set_zone(z, zones[z])
@@ -84,9 +84,9 @@ func rebuild() -> void:
 func update() -> void:
 	var root_inv: Transform3D = _goalie.get_global_transform_interpolated().affine_inverse()
 	for bone: int in _parts.size():
-		var part: MeshInstance3D = _parts[bone]
-		if part.is_visible_in_tree():
-			set_bone_pose(bone, root_inv * part.get_global_transform_interpolated() * _unbake[bone])
+		var mesh_part: MeshInstance3D = _parts[bone]
+		if mesh_part.is_visible_in_tree():
+			set_bone_pose(bone, root_inv * mesh_part.get_global_transform_interpolated() * _unbake[bone])
 		else:
 			set_bone_pose(bone, Transform3D(Basis.from_scale(Vector3.ZERO), Vector3.ZERO))
 
@@ -139,13 +139,13 @@ static func _mergeable(mi: MeshInstance3D) -> bool:
 # with any mirror in it. Baked into the vertices, it leaves its bone a proper
 # rotation, so skinning — which neither flips winding for a mirror nor corrects
 # normals for a non-uniform scale — draws the part as its node did.
-static func _stretch(basis: Basis) -> Basis:
-	if absf(basis.determinant()) < 1e-9:
+static func _stretch(b: Basis) -> Basis:
+	if absf(b.determinant()) < 1e-9:
 		return Basis.IDENTITY
-	var rot: Basis = basis.orthonormalized()
+	var rot: Basis = b.orthonormalized()
 	if rot.determinant() < 0.0:
 		rot = rot * Basis.from_scale(Vector3(-1.0, 1.0, 1.0))
-	return rot.inverse() * basis
+	return rot.inverse() * b
 
 
 func _replace(old: MeshInstance3D, node_name: String, built: BodyZoneMesh,

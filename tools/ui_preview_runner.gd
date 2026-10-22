@@ -109,8 +109,8 @@ func _select(only: String) -> Array[Dictionary]:
 	for token: String in tokens:
 		var hit: bool = false
 		for shot: Dictionary in _SHOTS:
-			var name: String = shot.name
-			if name == token or name.begins_with(token + "_"):
+			var shot_name: String = shot.name
+			if shot_name == token or shot_name.begins_with(token + "_"):
 				hit = true
 				if not picked.has(shot):
 					picked.append(shot)

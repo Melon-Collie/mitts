@@ -108,3 +108,13 @@ jobs:
           MITTS_REQUIRE_NATIVE: '1'
         run: |
           ./godot/Godot_v4.6.2-stable_linux.x86_64 --headless -s addons/gut/gut_cmdln.gd -gdir=res://tests/${{ matrix.tier }}/ -gexit
+
+      # The analyzer warnings the editor's debugger lists (shadowing, static
+      # calls on an instance, int-as-enum, narrowing) never print in a headless
+      # run, so neither gdlint nor the suite sees them. Once per PR, on the unit
+      # job; !cancelled() so a red suite still reports these too.
+      - name: GDScript warnings
+        if: ${{ !cancelled() && matrix.tier == 'unit' }}
+        env:
+          GODOT_BIN: ./godot/Godot_v4.6.2-stable_linux.x86_64
+        run: bash .claude/hooks/check-godot-warnings.sh
