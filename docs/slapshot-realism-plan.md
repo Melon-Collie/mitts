@@ -1,7 +1,7 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
 Status: **Phases 1–5 and Phase 6's bot side built, awaiting playtest; the shot
-field's one-timer cells are not yet re-measured.** Decisions below were agreed in
+field's one-timer cells wait on the goalie rework (#843).** Decisions below were agreed in
 chat; phases are ordered so each one can be played on its own.
 
 As built, Phase 1 differs from the design below:
@@ -369,7 +369,8 @@ As built, the bot side differs from the design below:
 - Not done: the shot field. It fires every measured one-timer cold at the bot
   wrister's speed, so neither the slapshot's own pace nor the feed's reaches
   it, and the passer's pace choice cannot price the transfer until those cells
-  are re-measured as slapshots struck off the feed.
+  are re-measured as slapshots struck off the feed. Deferred until the goalie
+  rework lands, so it is measured against the goalie that ships (#843).
 
 - `SkaterAgentOneTimer` places the derived strike spot on the feed line, and
   `ONE_TIMER_SQUARE_UP_MAX_RAD` (which exists only because the press snaps the
