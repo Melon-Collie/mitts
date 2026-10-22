@@ -2499,7 +2499,8 @@ func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2
 		# so host and client pin the same point.
 		skater.set_slapper_zone(false)
 		skater.enter_slapshot_pinning(slapper_strike_local())
-		_aiming.slapper_stance_line = _sm.locked_slapper_dir
+		if _aiming.slapper_stance_line == Vector2.ZERO:
+			_aiming.slapper_stance_line = _sm.locked_slapper_dir
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
 		if _aiming.slapper_charge_timer >= one_timer_min_windup_time:
 			# A genuine one-timer: the wind-up was already built when the feed
@@ -2952,9 +2953,10 @@ func slapper_stance_facing() -> Vector2:
 # where the puck is struck toward the cursor: the pinned puck once there is one,
 # else the strike spot the hips are setting for. Bots commit the direction
 # (InputState.bot_slapper_aim_dir). While the hips are still setting — the
-# set-up, the puckless wind-up — the aim is free and they chase it; once the feet
-# have set, the shoulders turn it at most slapper_aim_arc_deg off their line.
-# Re-derived from each input, so a replay re-aims exactly.
+# set-up, the puckless wind-up's first pivot — the aim is free and they chase
+# it; once the feet have set, the shoulders turn it at most slapper_aim_arc_deg
+# off their line, and a bigger change of mind means letting go. Re-derived from
+# each input, so a replay re-aims exactly.
 func _update_slapper_aim(input: InputState) -> void:
 	var aim := Vector2(input.bot_slapper_aim_dir.x, input.bot_slapper_aim_dir.z)
 	if aim.length_squared() <= 0.0001:
@@ -2970,6 +2972,11 @@ func _update_slapper_aim(input: InputState) -> void:
 	if aim.length_squared() <= 0.0001:
 		return
 	aim = aim.normalized()
+	# A one-timer's feet set the first time the hips arrive in the stance; a
+	# carried slapshot's set with the puck (_apply_slapper_setup).
+	if _aiming.slapper_stance_line == Vector2.ZERO \
+			and _sm.get_state() == State.SLAPPER_CHARGE_WITHOUT_PUCK and _hips_set_for_slapper():
+		_aiming.slapper_stance_line = _sm.locked_slapper_dir
 	if _aiming.slapper_stance_line != Vector2.ZERO:
 		aim = SlapperRules.clamp_aim(aim, _aiming.slapper_stance_line,
 				deg_to_rad(slapper_aim_arc_deg))

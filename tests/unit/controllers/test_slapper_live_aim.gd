@@ -2,9 +2,10 @@ extends GutTest
 
 # A slapshot's aim is live until the swing commits (docs/slapshot-realism-plan.md,
 # Phase 3): free while the hips are still setting, which chase it; once the feet
-# have set, the shoulders turn it no more than slapper_aim_arc_deg off their line
-# and the hips hold; and the shot leaves along wherever it was on the release
-# tick. Driven through the real controller and rig.
+# have set — with the puck, or for a one-timer when the hips first arrive — the
+# shoulders turn it no more than slapper_aim_arc_deg off their line and the hips
+# hold; and the shot leaves along wherever it was on the release tick. Driven
+# through the real controller and rig.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -119,16 +120,45 @@ func test_while_the_hips_are_setting_they_chase_the_aim() -> void:
 			"the stance follows the aim before the feet are set")
 
 
-func test_a_puckless_wind_up_keeps_turning_with_the_aim() -> void:
+# Waiting on a feed, the feet set the first time the hips arrive in the stance;
+# from then on the aim turns on the shoulders alone, as a carried slapshot's
+# does, and the hips hold however far the cursor goes.
+func test_a_one_timer_sets_its_feet_once_the_hips_arrive() -> void:
 	_controller.on_puck_released_network()
 	_tick(_here() + Vector2(0.0, -12.0), true, true)
-	for i: int in 30:
+	assert_eq(_controller._aiming.slapper_stance_line, Vector2.ZERO, "not set on the press")
+	var ticks: int = 0
+	while _controller._aiming.slapper_stance_line == Vector2.ZERO and ticks < 120:
 		_tick(_here() + Vector2(0.0, -12.0), true)
-	var first: Vector2 = _controller.slapper_stance_facing()
-	for i: int in 30:
-		_tick(_here() + Vector2(-10.0, -8.0), true)
+		ticks += 1
+	var line: Vector2 = _controller._aiming.slapper_stance_line
+	assert_ne(line, Vector2.ZERO, "the feet set once the hips are round")
+	var stance: Vector2 = _controller.slapper_stance_facing()
+	for i: int in 60:
+		_tick(_here() + line.rotated(PI) * 12.0, true)
 	assert_eq(_skater.current_shot_state, State.SLAPPER_CHARGE_WITHOUT_PUCK)
-	assert_gt(absf(rad_to_deg(first.angle_to(_controller.slapper_stance_facing()))), 20.0,
-			"waiting on a feed, the hips open to wherever the aim goes")
-	assert_almost_eq(_controller._pose.facing.angle_to(_controller.slapper_stance_facing()), 0.0, 0.05,
-			"and get there")
+	assert_almost_eq(absf(rad_to_deg(line.angle_to(_controller._sm.locked_slapper_dir))),
+			_controller.slapper_aim_arc_deg, 0.01, "the aim stops at the shoulders' arc")
+	assert_almost_eq(stance.angle_to(_controller.slapper_stance_facing()), 0.0, 0.0001,
+			"the stance stays set")
+	assert_almost_eq(_controller._pose.facing.angle_to(stance), 0.0, deg_to_rad(1.0),
+			"and the hips with it")
+
+
+# A feed caught after the feet have set keeps the line they set on, so the arc
+# does not move under the shooter at the catch.
+func test_a_caught_feed_keeps_the_line_the_feet_set_on() -> void:
+	_controller.on_puck_released_network()
+	_tick(_here() + Vector2(0.0, -12.0), true, true)
+	for i: int in 120:
+		if _controller._aiming.slapper_stance_line != Vector2.ZERO:
+			break
+		_tick(_here() + Vector2(0.0, -12.0), true)
+	var line: Vector2 = _controller._aiming.slapper_stance_line
+	assert_ne(line, Vector2.ZERO, "the feet set")
+	for i: int in 10:
+		_tick(_here() + line.rotated(deg_to_rad(15.0)) * 12.0, true)
+	_controller.puck.set_carrier(_skater)
+	_controller.on_puck_picked_up_network()
+	assert_eq(_controller._sm.get_state(), State.SLAPPER_CHARGE_WITH_PUCK)
+	assert_almost_eq(_controller._aiming.slapper_stance_line.angle_to(line), 0.0, 0.0001)

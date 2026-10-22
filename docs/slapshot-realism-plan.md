@@ -232,6 +232,12 @@ tolerance), and a feed caught in the puckless wind-up latches the stance line
 the same way the set-up's end does. Bots needed no change: they already commit
 their direction every tick of the press.
 
+The puckless wind-up no longer turns with the aim for as long as it lasts: the
+feet set the first time the hips arrive in the stance, and from then on it is
+clamped like the carried slapshot. Turning freely, a shooter gliding at full
+speed could spin the whole wound-up body round at the stance pivot rate. A feed
+caught after that keeps the line the feet set on.
+
 Through the backswing the aim is the strike spot → cursor, clamped by
 `clamp_aim` to ±`slapper_aim_arc_deg` (starting at 20°) about the stance line
 the set-up settled on. It locks into `locked_slapper_dir` on the release edge,
