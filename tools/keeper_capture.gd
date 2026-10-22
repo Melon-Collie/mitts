@@ -4,8 +4,10 @@ extends SceneTree
 # side and three-quarter, so his body can be SEEN without a game: each stance
 # solved by KeeperSkeleton from KeeperPoses and drawn by the Keeper actor, with
 # the save boxes overlaid (KEEPER_CAPTURE_BOXES=0 hides them). One contact sheet
-# per stance — front, side, three-quarter, the shooter's view from the dot line
-# and his back — plus one of every stance from the front. KEEPER_CAPTURE_STANCES names a
+# per stance — front, side, three-quarter, the shooter's view from the dot line,
+# his back and the mouth as a shot straight on sees it (KeeperSeams: his body
+# grey, where a puck cannot fit pale, its seams red) — plus one of every stance
+# from the front. KEEPER_CAPTURE_STANCES names a
 # comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles;
 # KEEPER_CAPTURE_FOCUS names a KeeperGear part (MASK, BLOCKER...) to look at up
 # close from the same directions; KEEPER_CAPTURE_TEAM picks the team slot whose kit
@@ -153,6 +155,8 @@ func _process(_delta: float) -> bool:
 			_fronts.append(img)
 		_view_i += 1
 		if _view_i >= _stance_views(_post_side(_stances[_stance_i])).size():
+			if _focus < 0:
+				_shots.append(_mouth_tile(img.get_width(), img.get_height(), img.get_format()))
 			_save_sheet(_shots, String(_stances[_stance_i][0]))
 			_shots = []
 			_view_i = 0
@@ -184,12 +188,38 @@ func _stance_views(post: float) -> Array:
 	return _views + [["sharp", Vector3(post * 4.5, 0.9, POST_Z - 4.5 * tan(deg_to_rad(15.0))), at]]
 
 
+const _MOUTH_COLORS: Array[Color] = [
+	Color(0.97, 0.97, 0.98), Color(0.32, 0.34, 0.40), Color(0.78, 0.80, 0.84), Color(0.90, 0.12, 0.12),
+]
+
+
+# The mouth as a shot straight on sees him, cell by cell, fitted to a tile.
+func _mouth_tile(w: int, h: int, format: Image.Format) -> Image:
+	_skel.pose(_pose)
+	var step: float = KeeperSeams.STEP_M
+	var cells: PackedByteArray = KeeperSeams.classify(_skel, step)
+	var nx: int = KeeperSeams.columns(step)
+	var ny: int = KeeperSeams.rows(step)
+	var mouth := Image.create(nx, ny, false, format)
+	# Drawn from the shooter's side, as the front view is: his +X on the left.
+	for j: int in ny:
+		for i: int in nx:
+			mouth.set_pixel(nx - 1 - i, ny - 1 - j, _MOUTH_COLORS[cells[j * nx + i]])
+	var scale: float = minf(float(w) / float(nx), float(h) / float(ny))
+	mouth.resize(int(nx * scale), int(ny * scale), Image.INTERPOLATE_NEAREST)
+	var tile := Image.create(w, h, false, format)
+	tile.fill(Color(0.10, 0.11, 0.14))
+	tile.blit_rect(mouth, Rect2i(Vector2i.ZERO, mouth.get_size()),
+			Vector2i((w - mouth.get_width()) / 2, (h - mouth.get_height()) / 2))
+	return tile
+
+
 func _save_sheet(imgs: Array[Image], name: String) -> void:
 	if imgs.is_empty():
 		return
 	var w: int = imgs[0].get_width()
 	var h: int = imgs[0].get_height()
-	var cols: int = mini(imgs.size(), 6)
+	var cols: int = mini(imgs.size(), 7)
 	var rows: int = ceili(float(imgs.size()) / float(cols))
 	var sheet := Image.create(w * cols, h * rows, false, imgs[0].get_format())
 	for i: int in imgs.size():

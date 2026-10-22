@@ -28,7 +28,9 @@ const READY_TOE_OUT_RAD: float = 0.25
 # out in front a little above the chest's centre. It moves out from here to
 # make a save; it does not drop when he does.
 const GLOVE_FROM_CHEST := Vector3(-0.40, 0.07, -0.48)
-const READY_BLADE := Vector3(-0.08, 0.0, -0.40)
+# Far enough in that the blocker it puts the hand under sits against the hip
+# rather than a puck's width off it.
+const READY_BLADE := Vector3(-0.11, 0.0, -0.40)
 # The paddle's tilt back toward him. The lie leans it toward the blocker side
 # on its own; a paddle near upright holds the grip out in front of the pads,
 # where a tilt toward the hip would tuck the blocker behind them.
@@ -44,20 +46,24 @@ const BUTTERFLY_KNEE_HALF_SPACING_M: float = KeeperAnatomy.PAD_TOP_ABOVE_KNEE_M 
 		- BUTTERFLY_RISE_OVERLAP_M * 0.5
 const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
 # With a pad standing on the blocker side, the blade sits out ahead of its
-# face so the paddle rises in front of it.
-const HALF_BUTTERFLY_BLADE := Vector3(-0.08, 0.0, -0.56)
-const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
-# Low enough that the extended leg lies within 30° of straight, high enough that
-# its knee still lands near enough the middle for the thigh rise to meet the
-# paddle along the ice.
-const EXTENSION_PELVIS_HEIGHT_M: float = 0.38
+# face so the paddle rises in front of it, its heel up to the standing skate
+# along the ice.
+const HALF_BUTTERFLY_BLADE := Vector3(-0.04, 0.0, -0.52)
+# Over toward the pad that stays down, so the blade closes the ice along its
+# toe.
+const EXTENSION_BLADE := Vector3(-0.05, 0.0, -0.45)
+# The hips drop almost to the ice, as a real push-out's do: low enough that the
+# extended thigh comes down onto the blade lying across the five-hole, closing
+# it from above. The extended leg lies near straight along the ice.
+const EXTENSION_PELVIS_HEIGHT_M: float = 0.27
 const RVH_OFF_PAD_RISE_RAD: float = deg_to_rad(30.0)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
 # The blade sits a few inches ahead of the pads, to the glove side of centre
 # as in the ready stance, and the paddle stands up from it enough to hold the
-# blocker beside the hip above the pad.
-const BUTTERFLY_BLADE := Vector3(-0.08, 0.0, -0.29)
+# blocker beside the hip above the pad, against it rather than a puck's width
+# off it.
+const BUTTERFLY_BLADE := Vector3(-0.11, 0.0, -0.29)
 const BUTTERFLY_STICK_TILT_RAD: float = deg_to_rad(28.0)
 
 
@@ -170,8 +176,9 @@ static func butterfly_extension(p: KeeperPose, side: float) -> void:
 	p.lumbar_rot.z = -side * 0.06
 	p.chest_rot.z = -side * 0.04
 	p.neck_rot.z = side * 0.10
-	# The extended leg lies across the paddle's path: the blade goes out ahead.
-	p.blade_center = EXTENSION_BLADE
+	# The extended leg lies across the paddle's path: the blade goes out ahead,
+	# a little further over on the blocker side, where the lie carries it.
+	p.blade_center = EXTENSION_BLADE + Vector3(0.02 if side > 0.0 else 0.0, 0.0, 0.0)
 
 
 # Standing, one leg kicked out along the ice to the side: the skate and the
@@ -195,14 +202,14 @@ static func kick(p: KeeperPose, side: float) -> void:
 		# and the blade goes out ahead of it.
 		p.legs[1].ankle.x = 0.24
 		p.pelvis += Vector3(-0.03, -0.02, 0.0)
-		p.blade_center = READY_BLADE + Vector3(-0.15, 0.0, -0.14)
+		p.blade_center = READY_BLADE + Vector3(-0.12, 0.0, -0.14)
 		p.stick_tilt = READY_STICK_TILT_RAD + deg_to_rad(10.0)
 	else:
 		# The lie carries the grip out past the kick: the hips go with it to keep
 		# it in the blocker arm's reach, over a glove skate drawn in under them.
 		p.legs[0].ankle.x = -0.18
 		p.pelvis += Vector3(0.12, -0.03, 0.0)
-		p.blade_center = READY_BLADE + Vector3(0.19, 0.0, -0.12)
+		p.blade_center = READY_BLADE + Vector3(0.26, 0.0, -0.12)
 		p.stick_tilt = READY_STICK_TILT_RAD + deg_to_rad(12.0)
 
 

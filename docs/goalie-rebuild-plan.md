@@ -576,7 +576,7 @@ and playtests.
 | Phase | State |
 |---|---|
 | 0 — scoreboard | `tests/instruments/ai/test_goalie_scoreboard.gd` (44 s), old goalie's baseline in `tests/instruments/ai/data/goalie_scoreboard.txt`: EASY 71 / NORMAL 63 / HARD 43 goals of 395 scripted shots, tiers in order. Its shooters are puppets that publish the cursor aim; the new goalie needs a shooter that poses a real skater (blade, coil) before Phase 3 |
-| 1 — the body | done, reviewed from renders: `Scripts/domain/keeper/`, `Scripts/actors/keeper/` (see its CLAUDE.md); poses and model signed off. Straight-on coverage, regulation puck (`tests/unit/keeper/snapshots/keeper_coverage.txt`): ready 59%, butterfly 69% (old: 58%, 64%); from the dot line at B depth 70% / 84%. Open: a blocker-side slit beside the body in the butterfly, the right-catcher mirror, the seam property, one merged skinned mesh |
+| 1 — the body | done, reviewed from renders: `Scripts/domain/keeper/`, `Scripts/actors/keeper/` (see its CLAUDE.md); poses and model signed off. Straight-on coverage, regulation puck (`tests/unit/keeper/snapshots/keeper_coverage.txt`): ready 58%, butterfly 68% (old: 58%, 64%); from the dot line at B depth 70% / 82%. The seam property holds every hole a flat puck fits through to its stance's intended windows (`test_keeper_seams.gd`; the renders paint the mouth with them); closing the rest (the blocker-side slit, the extension's five-hole, slits under the toes) traded about a point of straight-on coverage, the blocker now overlapping the hip. Open: the right-catcher mirror, one merged skinned mesh |
 
 ## 6. Things found along the way (flagged, not fixed)
 

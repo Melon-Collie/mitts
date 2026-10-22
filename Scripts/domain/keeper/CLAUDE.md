@@ -14,6 +14,7 @@ one the bots shoot at.
 | `keeper_gear.gd` | one save box per piece of gear, on its bone; the contact test's packed layout |
 | `keeper_poses.gd` | the taught stances, each written as where the body goes |
 | `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
+| `keeper_seams.gd` | the holes a flat puck fits through in the shape he shows a shot straight on, inside his outline |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -80,7 +81,8 @@ colour, since most kits' socks are their pads' colour.
 ## Seeing him
 
 `.claude/hooks/render-keeper.sh` renders every stance from the front, side,
-three-quarter, the shooter's spot on the dot line and behind to `.preview/keeper/`
+three-quarter, the shooter's spot on the dot line and behind, plus the mouth as a
+shot straight on sees him (his body grey, his seams red), to `.preview/keeper/`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
 (`kick_glove`, `kick_blocker`), and the RVH is drawn against its post
@@ -90,6 +92,9 @@ test_keeper_body.gd` holds the proportions, the bones' lengths, the arms
 reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, no skate through its boot, the rigid
 stick, the packed layout, the ice sealed in the butterfly, the extension and
 the kick, and the post sealed in the RVH; `test_keeper_coverage.gd` snapshots
-each stance's coverage straight on and from the dot line.
+each stance's coverage straight on and from the dot line, and
+`test_keeper_seams.gd` holds every hole a puck fits through to its stance's
+intended windows (the five-holes the ready stance, the half butterflies and
+the kicks open, the ice under the RVH's off pad).
 
 He is authored left-catching; a right-catcher's mirror is not built yet.
