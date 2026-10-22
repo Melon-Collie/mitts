@@ -160,15 +160,39 @@ static func _skate(k: KeeperMeshKit, h: Vector3) -> void:
 	k.tint = Color.WHITE
 
 
+# The thigh guard's and the pants' sections, bottom to top: height as a share of
+# the box's half height, half width and half depth as shares of the box's. The
+# jersey's tail drapes against the same shapes (KeeperJerseyTail).
+const THIGH_SECTIONS: Array[Vector3] = [
+	Vector3(-1.0, 0.88, 0.85), Vector3(-0.15, 0.97, 0.97), Vector3(1.0, 1.0, 1.0),
+]
+const PANTS_SECTIONS: Array[Vector3] = [
+	Vector3(-1.0, 1.0, 1.0), Vector3(0.0, 0.98, 0.95), Vector3(1.0, 0.80, 0.62),
+]
+
+
+# A piece's half width and depth at height `y` in its box frame, from its
+# sections; zero outside it.
+static func section_at(sections: Array[Vector3], h: Vector3, y: float) -> Vector2:
+	var t: float = y / h.y
+	if t < sections[0].x or t > sections[sections.size() - 1].x:
+		return Vector2.ZERO
+	for i: int in sections.size() - 1:
+		var a: Vector3 = sections[i]
+		var b: Vector3 = sections[i + 1]
+		if t <= b.x:
+			var f: float = (t - a.x) / (b.x - a.x)
+			return Vector2(h.x * lerpf(a.y, b.y, f), h.z * lerpf(a.z, b.z, f))
+	return Vector2.ZERO
+
+
 # The pants leg over the thigh guard: a broad, flat-faced panel across the front
 # of the thigh, narrowing a little to the knee, the pants' stripe round it.
 static func _thigh(k: KeeperMeshKit, h: Vector3) -> void:
 	var cut: float = h.x * 0.3
-	var rings: Array[PackedVector3Array] = [
-		KeeperMeshKit.octagon(-h.y, h.x * 0.88, h.z * 0.85, cut * 0.88),
-		KeeperMeshKit.octagon(-h.y * 0.15, h.x * 0.97, h.z * 0.97, cut),
-		KeeperMeshKit.octagon(h.y, h.x, h.z, cut),
-	]
+	var rings: Array[PackedVector3Array] = []
+	for st: Vector3 in THIGH_SECTIONS:
+		rings.append(KeeperMeshKit.octagon(h.y * st.x, h.x * st.y, h.z * st.z, cut * minf(st.y, 1.0)))
 	k.sweep(S.PANTS, rings, Vector3.ZERO)
 	var band: Array[PackedVector3Array] = [
 		KeeperMeshKit.octagon(-h.y * 0.25, h.x * 0.975, h.z * 0.975, cut),
@@ -178,11 +202,9 @@ static func _thigh(k: KeeperMeshKit, h: Vector3) -> void:
 
 
 static func _pants(k: KeeperMeshKit, h: Vector3) -> void:
-	var rings: Array[PackedVector3Array] = [
-		KeeperMeshKit.octagon(-h.y, h.x, h.z, h.x * 0.25),
-		KeeperMeshKit.octagon(0.0, h.x * 0.98, h.z * 0.95, h.x * 0.28),
-		KeeperMeshKit.octagon(h.y, h.x * 0.80, h.z * 0.62, h.x * 0.3),
-	]
+	var rings: Array[PackedVector3Array] = []
+	for st: Vector3 in PANTS_SECTIONS:
+		rings.append(KeeperMeshKit.octagon(h.y * st.x, h.x * st.y, h.z * st.z, h.x * 0.28))
 	k.sweep(S.PANTS, rings, Vector3.ZERO)
 	k.tint = _DEEP
 	k.box(S.PANTS, Vector3(0.0, h.y - 0.02, 0.0), Vector3(h.x * 0.87, 0.02, h.z * 0.86))
