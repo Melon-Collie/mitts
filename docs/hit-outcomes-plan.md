@@ -269,7 +269,7 @@ off his feet at modest pace, below the rocked line when hit from the side.
   stance and shot state and his build's height, instead of the knockdown line.
 - **Built:** the commit bar already prices a rocked hit; `test_body_check.gd`
   holds it under what floors a square, upright man.
-- **Not built** (a new decision each, tracked as an issue): the checker
+- **Not built** (a new decision each, #842): the checker
   angling for the side or the vulnerable beat when a knockdown is in reach,
   and an open-ice carrier squaring up or bracing against a check he can't
   avoid.
@@ -373,7 +373,7 @@ roles keep their doctrine — so the `EVEN_OR_UP` stand-up at the line lands
 as a check. Rides `check_aggression` (zero on Easy). At the wall the board
 play may still turn it into a pin.
 
-Not built (tracked with the Phase 2 bot items): a carrier reading a set
+Not built (#842, with the Phase 2 bot items): a carrier reading a set
 defender holding Ctrl in his lane as a hit coming and cutting, passing or
 bracing.
 
