@@ -87,17 +87,25 @@ const _UPPER_ARM_CENTER := Vector3(0.0,
 		(SHOULDER_CAP_ABOVE_JOINT_M - KeeperAnatomy.UPPER_ARM_M) * 0.5, 0.0)
 const _UPPER_ARM_HALF := Vector3(SHOULDER_CAP_RADIUS_M,
 		(KeeperAnatomy.UPPER_ARM_M + SHOULDER_CAP_ABOVE_JOINT_M) * 0.5, SHOULDER_CAP_RADIUS_M)
-const _FOREARM_CENTER := Vector3(0.0, -KeeperAnatomy.FOREARM_M * 0.5, 0.0)
-const _FOREARM_HALF := Vector3(KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47, KeeperAnatomy.FOREARM_M * 0.5,
-		KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47)
+# The forearm's pad and sleeve, from the wrist up through the elbow pad: a
+# ball round the joint, just proud of the sleeves, that fills the bend.
+const FOREARM_PAD_RADIUS_M: float = KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47
+const ELBOW_PAD_RADIUS_M: float = FOREARM_PAD_RADIUS_M * 1.04
+const _FOREARM_CENTER := Vector3(0.0, (ELBOW_PAD_RADIUS_M - KeeperAnatomy.FOREARM_M) * 0.5, 0.0)
+const _FOREARM_HALF := Vector3(ELBOW_PAD_RADIUS_M,
+		(KeeperAnatomy.FOREARM_M + ELBOW_PAD_RADIUS_M) * 0.5, ELBOW_PAD_RADIUS_M)
 # The trapper rides the hand from the cuff past the fingertips.
 const _GLOVE_CENTER := Vector3(0.0, -0.06, 0.0)
 const _GLOVE_HALF := Vector3(KeeperAnatomy.GLOVE_WIDTH_M * 0.5, KeeperAnatomy.GLOVE_HEIGHT_M * 0.5,
 		KeeperAnatomy.GLOVE_DEPTH_M * 0.5)
-# The blocker's board stands on the back of the hand, toward its face.
-const _BLOCKER_CENTER := Vector3(0.0, KeeperAnatomy.BLOCKER_ABOVE_GRIP_M, -KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M)
+# The blocker: the board standing on the back of the hand, toward its face,
+# and the gloved fist behind it on the stick.
+const _BLOCKER_FRONT_M: float = -KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M - KeeperAnatomy.BLOCKER_DEPTH_M * 0.5
+const _BLOCKER_BACK_M: float = KeeperAnatomy.BLOCKER_FIST_CENTER.z + KeeperAnatomy.BLOCKER_FIST_HALF.z
+const _BLOCKER_CENTER := Vector3(0.0, KeeperAnatomy.BLOCKER_ABOVE_GRIP_M,
+		(_BLOCKER_FRONT_M + _BLOCKER_BACK_M) * 0.5)
 const _BLOCKER_HALF := Vector3(KeeperAnatomy.BLOCKER_WIDTH_M * 0.5, KeeperAnatomy.BLOCKER_HEIGHT_M * 0.5,
-		KeeperAnatomy.BLOCKER_DEPTH_M * 0.5)
+		(_BLOCKER_BACK_M - _BLOCKER_FRONT_M) * 0.5)
 # The paddle rises from the blade's heel, above the ice, not from the ice.
 const _PADDLE_ROOT_M: float = 0.045
 # The mask on the head bone (its origin on the neck's line at chin height): the
@@ -136,6 +144,11 @@ static func save_part(part: int) -> int:
 
 static func half_extents(part: int) -> Vector3:
 	return _HALF[part]
+
+
+# Where a part's box sits on its bone: its centre in the bone's frame.
+static func center_on_bone(part: int) -> Vector3:
+	return _CENTER[part]
 
 
 # The part's box in keeper space: basis columns are its axes, origin its centre.

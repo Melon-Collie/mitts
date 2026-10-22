@@ -116,8 +116,10 @@ func test_every_arm_reaches_its_hand() -> void:
 		var blocker_wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
 		assert_lte(glove_wrist.distance_to(_skel.xf[B.HAND_G].origin), GRIP_IN_PALM_M,
 				"%s: the glove arm reaches its hand" % stance[0])
-		assert_lte(blocker_wrist.distance_to(_skel.grip), GRIP_IN_PALM_M,
-				"%s: the blocker arm reaches the stick" % stance[0])
+		# The fist holds the stick, so the forearm must reach the wrist on it: the
+		# glove's cuff has no slack to hide a gap.
+		assert_almost_eq(blocker_wrist.distance_to(_skel.xf[B.HAND_B] * KeeperAnatomy.BLOCKER_WRIST),
+				0.0, 0.002, "%s: the blocker arm reaches the wrist on the fist" % stance[0])
 
 
 func test_the_stick_is_rigid_and_its_blade_lies_flat() -> void:

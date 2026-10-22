@@ -70,11 +70,13 @@ func pose(p: KeeperPose) -> void:
 	var fwd: Vector3 = -chest.basis.z
 	var glove_at: Vector3 = chest * p.glove_hand if p.glove_from_chest else p.glove_hand
 	_pose_arm(Bone.UPPER_ARM_G, glove_shoulder, glove_at, p.glove_elbow_pole, fwd)
-	_pose_arm(Bone.UPPER_ARM_B, blocker_shoulder, grip, p.blocker_elbow_pole, fwd)
 	xf[Bone.HAND_G] = Transform3D(_limb_basis(-p.glove_fingers, p.glove_palm), glove_at)
 	# The blocker's board stands upright on the back of the hand whatever the
-	# stick's lean, face to the shooter.
+	# stick's lean, face to the shooter. The fist holds the stick, so the arm
+	# reaches the wrist on the back of it rather than the stick itself.
 	xf[Bone.HAND_B] = Transform3D(_limb_basis(Vector3.UP, p.blocker_face), grip)
+	_pose_arm(Bone.UPPER_ARM_B, blocker_shoulder, xf[Bone.HAND_B] * KeeperAnatomy.BLOCKER_WRIST,
+			p.blocker_elbow_pole, fwd)
 
 
 # A limb bone's basis: +Y along `up_bone` (toward the parent joint), −Z the

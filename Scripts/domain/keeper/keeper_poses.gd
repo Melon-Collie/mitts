@@ -18,7 +18,7 @@ const _FORWARD := Vector3(0.0, 0.0, -1.0)
 # across the five-hole.
 const READY_SKATE_HALF_SPACING_M: float = 0.31
 const READY_KNEE_IN_M: float = 0.11
-const READY_PELVIS := Vector3(0.0, 0.86, 0.12)
+const READY_PELVIS := Vector3(0.0, 0.83, 0.12)
 const READY_TOE_OUT_RAD: float = 0.25
 # The blade sits to the glove side of centre: the lie carries the grip 35 cm
 # out from the heel, and centred on the five-hole it would hold the blocker out
@@ -88,7 +88,7 @@ static func ready(p: KeeperPose) -> void:
 	_reset_trunk(p)
 	p.pelvis = READY_PELVIS
 	p.pelvis_rot = Vector3(-0.42, 0.0, 0.0)
-	p.lumbar_rot = Vector3(-0.15, 0.0, 0.0)
+	p.lumbar_rot = Vector3(-0.19, 0.0, 0.0)
 	p.chest_rot = Vector3(0.05, 0.0, 0.0)
 	p.neck_rot = Vector3(0.30, 0.0, 0.0)
 	p.head_rot = Vector3(0.12, 0.0, 0.0)
@@ -194,14 +194,14 @@ static func kick(p: KeeperPose, side: float) -> void:
 		# The paddle crosses in front of the blocker pad: that skate stays wide
 		# and the blade goes out ahead of it.
 		p.legs[1].ankle.x = 0.24
-		p.pelvis += Vector3(-0.03, -0.05, 0.0)
+		p.pelvis += Vector3(-0.03, -0.02, 0.0)
 		p.blade_center = READY_BLADE + Vector3(-0.15, 0.0, -0.14)
 		p.stick_tilt = READY_STICK_TILT_RAD + deg_to_rad(10.0)
 	else:
 		# The lie carries the grip out past the kick: the hips go with it to keep
 		# it in the blocker arm's reach, over a glove skate drawn in under them.
 		p.legs[0].ankle.x = -0.18
-		p.pelvis += Vector3(0.12, -0.06, 0.0)
+		p.pelvis += Vector3(0.12, -0.03, 0.0)
 		p.blade_center = READY_BLADE + Vector3(0.19, 0.0, -0.12)
 		p.stick_tilt = READY_STICK_TILT_RAD + deg_to_rad(12.0)
 

@@ -186,9 +186,12 @@ func _build_jersey_materials() -> void:
 	_build_shoulder_paint()
 	_build_pants_paint()
 	_forearm = _jersey_shader(P.FOREARM_G)
-	var f: Vector3 = KeeperGear.half_extents(P.FOREARM_G)
-	_forearm.set_shader_parameter("cap_center", KeeperGearMeshes.ELBOW_CAP_CENTER * f)
-	_forearm.set_shader_parameter("cap_radii", KeeperGearMeshes.ELBOW_CAP_RADII * f)
+	# The sleeve's bands run from the elbow joint, above which is the pad.
+	var elbow: Vector3 = KeeperGearMeshes.elbow_in_forearm(KeeperGear.half_extents(P.FOREARM_G))
+	_forearm.set_shader_parameter("half_size", Vector2(KeeperGear.FOREARM_PAD_RADIUS_M, elbow.y))
+	_forearm.set_shader_parameter("height_m", KeeperAnatomy.FOREARM_M)
+	_forearm.set_shader_parameter("cap_center", elbow)
+	_forearm.set_shader_parameter("cap_radii", Vector3.ONE * KeeperGear.ELBOW_PAD_RADIUS_M)
 
 
 # The shoulder cap over the top of each sleeve: the yoke over its top, the

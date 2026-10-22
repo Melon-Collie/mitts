@@ -42,8 +42,11 @@ more than they look like:
 - **The stick decides the blocker hand.** The blade lies flat, the lie fixes the
   paddle's angle to it in its own plane (which leans the paddle about 27° toward
   the blocker side), and `stick_tilt` tips it back toward him. The grip is up
-  the paddle from there and the arm reaches it. Placing the hand first fights a
-  rigid stick.
+  the paddle from there, the gloved fist holds it, and the arm reaches the
+  wrist on the back of the fist (`KeeperAnatomy.BLOCKER_WRIST`), where the
+  glove's cuff on the forearm meets it. A stance that holds the stick past the
+  arm's reach is wrong, not the arm: the cuff has no slack to hide a gap.
+  Placing the hand first fights a rigid stick.
 - **The glove holds its place on the body.** It is placed in the chest's frame
   (`KeeperPose.glove_from_chest`, `KeeperPoses.GLOVE_FROM_CHEST`): just outside
   the chest's width, the elbow a little out, the same spot standing and down,

@@ -46,9 +46,11 @@ static func _build(part: int) -> ArrayMesh:
 		P.CHEST:
 			_chest(k, h)
 		P.UPPER_ARM_G, P.UPPER_ARM_B:
-			_sleeve(k, h, false)
-		P.FOREARM_G, P.FOREARM_B:
-			_sleeve(k, h, true)
+			_sleeve(k, h)
+		P.FOREARM_G:
+			_forearm(k, h, false)
+		P.FOREARM_B:
+			_forearm(k, h, true)
 		P.GLOVE:
 			_trapper(k, h)
 		P.BLOCKER:
@@ -277,10 +279,17 @@ const SHOULDER_CAP_PROFILE: Array[Vector2] = [
 # the yoke over its top ends, above it.
 const SHOULDER_CAP_BOTTOM_M: float = -0.150
 const SHOULDER_CAP_YOKE_M: float = 0.025
-# The elbow cap behind the forearm's top, as shares of the forearm box's half
-# extents: centre and radii.
-const ELBOW_CAP_CENTER := Vector3(0.0, 0.82, 0.45)
-const ELBOW_CAP_RADII := Vector3(0.7, 0.22, 0.5)
+# The forearm's sleeve from the wrist (−1) to the elbow (+1): (where, radius as
+# a share of the pad's), full at the elbow and narrowing to the wrist.
+const _FOREARM_PROFILE: Array[Vector2] = [
+	Vector2(-1.0, 0.78), Vector2(0.2, 0.86), Vector2(0.75, 0.95), Vector2(1.0, 0.92),
+]
+# The blocker's cuff round the forearm's end, the arm pad going into it: (up the
+# forearm from the wrist, radius as a share of the elbow pad's, which bounds the
+# box), closing onto the sleeve at its open end.
+const _BLOCKER_CUFF: Array[Vector2] = [
+	Vector2(0.0, 0.94), Vector2(0.05, 0.98), Vector2(0.08, 0.86),
+]
 
 
 # The jersey's section `i` up the protector, in the chest box's frame. The
@@ -298,18 +307,36 @@ static func _chest(k: KeeperMeshKit, h: Vector3) -> void:
 	k.sweep(S.JERSEY, rings, Vector3.ZERO)
 
 
-# A sleeve over an arm pad, narrowing down the bone. The upper arm's begins in
-# its shoulder cap over the joint; the forearm's is full at the elbow, its
-# elbow cap standing out behind the joint.
-static func _sleeve(k: KeeperMeshKit, h: Vector3, fore: bool) -> void:
+# The elbow joint in the forearm box's frame: the box runs on above it to hold
+# the elbow pad.
+static func elbow_in_forearm(h: Vector3) -> Vector3:
+	return Vector3(0.0, h.y - KeeperGear.ELBOW_PAD_RADIUS_M, 0.0)
+
+
+# The forearm's sleeve over its pad, the elbow pad round the joint, and on the
+# blocker side the glove's cuff over its end.
+static func _forearm(k: KeeperMeshKit, h: Vector3, cuff: bool) -> void:
+	var elbow: Vector3 = elbow_in_forearm(h)
+	var r: float = KeeperGear.FOREARM_PAD_RADIUS_M
 	var rings: Array[PackedVector3Array] = []
-	if fore:
-		for sh: Vector2 in [Vector2(-1.0, 0.78), Vector2(0.2, 0.86), Vector2(0.75, 0.95), Vector2(1.0, 0.92)]:
-			rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, h.y * sh.x, 0.0), h.x * sh.y,
-					h.z * sh.y, 10, PI / 10.0))
-		k.sweep(S.JERSEY, rings, Vector3.ZERO)
-		k.ellipsoid(S.JERSEY, ELBOW_CAP_CENTER * h, ELBOW_CAP_RADII * h, 4, 8)
+	for st: Vector2 in _FOREARM_PROFILE:
+		var y: float = lerpf(-h.y, elbow.y, (st.x + 1.0) * 0.5)
+		rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, y, 0.0), r * st.y, r * st.y, 10, PI / 10.0))
+	k.sweep(S.JERSEY, rings, Vector3.ZERO)
+	k.ellipsoid(S.JERSEY, elbow, Vector3.ONE * KeeperGear.ELBOW_PAD_RADIUS_M, 8, 10, PI / 10.0)
+	if not cuff:
 		return
+	var band: Array[PackedVector3Array] = []
+	for st: Vector2 in _BLOCKER_CUFF:
+		band.append(KeeperMeshKit.ellipse(1, Vector3(0.0, -h.y + st.x, 0.0), h.x * st.y, h.x * st.y,
+				10, PI / 10.0))
+	k.sweep(S.GLOVES, band, Vector3(0.0, -h.y + 0.04, 0.0))
+
+
+# The upper arm's sleeve over its pad, beginning in its shoulder cap over the
+# joint and narrowing down the bone.
+static func _sleeve(k: KeeperMeshKit, h: Vector3) -> void:
+	var rings: Array[PackedVector3Array] = []
 	var joint: float = h.y - KeeperGear.SHOULDER_CAP_ABOVE_JOINT_M
 	var profile: Array[Vector2] = SHOULDER_CAP_PROFILE.duplicate()
 	profile.append(Vector2(-0.25, 0.078))
@@ -347,19 +374,50 @@ static func _trapper(k: KeeperMeshKit, h: Vector3) -> void:
 	k.box(S.GLOVE_ACCENT, Vector3(0.0, -h.y * 0.62, -h.z * 0.4), Vector3(0.012, h.y * 0.18, h.z * 0.45))
 
 
-# The blocker: the board on the back of the hand, a panel down its face, the
-# fist behind it on the stick.
+# The blocker's top side, the board's top carried back over the fingers, in
+# profile: (behind the board's back, down from its top). Its top face is flat.
+const _BLOCKER_TOP_SIDE: Array[Vector2] = [
+	Vector2(0.0, 0.0), Vector2(0.065, 0.02), Vector2(0.065, 0.085), Vector2(0.0, 0.15),
+]
+# The fist round the grip, bottom to top: (height, width, depth) as shares of
+# BLOCKER_FIST_HALF. A rounded box, as the skaters' gloves are.
+const _BLOCKER_FIST: Array[Vector3] = [
+	Vector3(-1.0, 0.70, 0.70), Vector3(-0.7, 0.96, 0.96), Vector3(0.35, 1.0, 1.0),
+	Vector3(0.8, 0.92, 0.92), Vector3(1.0, 0.62, 0.62),
+]
+
+
+# The blocker: a flat board on the back of the hand, a panel down its face, its
+# top side standing back over the fingers, and the gloved fist under that on
+# the stick.
 static func _blocker(k: KeeperMeshKit, h: Vector3) -> void:
+	var grip: Vector3 = -KeeperGear.center_on_bone(P.BLOCKER)
+	var back: float = -h.z + KeeperAnatomy.BLOCKER_DEPTH_M
 	var cut: float = 0.03
 	var board := PackedVector2Array([
 		Vector2(-h.x + cut, -h.y), Vector2(h.x - cut, -h.y), Vector2(h.x, -h.y + cut),
 		Vector2(h.x, h.y - cut), Vector2(h.x - cut, h.y), Vector2(-h.x + cut, h.y),
 		Vector2(-h.x, h.y - cut), Vector2(-h.x, -h.y + cut),
 	])
-	k.slab(S.GLOVES, board, -h.z, h.z)
+	k.slab(S.GLOVES, board, -h.z, back)
 	k.box(S.GLOVE_ACCENT, Vector3(-h.x * 0.35, 0.0, -h.z - 0.003), Vector3(h.x * 0.22, h.y * 0.88, 0.003))
-	k.ellipsoid(S.GLOVES, Vector3(0.0, -KeeperAnatomy.BLOCKER_ABOVE_GRIP_M, h.z + KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M * 0.6),
-			Vector3(0.05, 0.065, 0.045), 4, 8)
+	var near := PackedVector3Array()
+	var far := PackedVector3Array()
+	for p: Vector2 in _BLOCKER_TOP_SIDE:
+		near.append(Vector3(-h.x + cut, h.y - p.y, back + p.x))
+		far.append(Vector3(h.x - cut, h.y - p.y, back + p.x))
+	var top_side: Array[PackedVector3Array] = [near, far]
+	k.sweep(S.GLOVES, top_side, Vector3(0.0, h.y - 0.07, back + 0.03))
+	var f: Vector3 = grip + KeeperAnatomy.BLOCKER_FIST_CENTER
+	var fh: Vector3 = KeeperAnatomy.BLOCKER_FIST_HALF
+	var fist: Array[PackedVector3Array] = []
+	for st: Vector3 in _BLOCKER_FIST:
+		var ring: PackedVector3Array = KeeperMeshKit.rounded(f.y + fh.y * st.x, fh.x * st.y,
+				fh.z * st.z, fh.z * st.z, 12, PANTS_ROUNDNESS)
+		for i: int in ring.size():
+			ring[i] += Vector3(f.x, 0.0, f.z)
+		fist.append(ring)
+	k.sweep(S.GLOVES, fist, f)
 
 
 # The mask's shell, in the head's frame (origin on the neck's line at chin

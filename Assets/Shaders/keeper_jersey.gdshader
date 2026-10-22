@@ -27,8 +27,9 @@ uniform float yoke_depth = 0.0;
 uniform float collar_radius = 0.0;
 uniform float collar_center_z = 0.0;
 // The cap in cap_color: the shoulder cap over the top of a sleeve, down to
-// cap_until; or the elbow cap's ellipsoid, grown a touch so its faceted
-// surface lies inside the test.
+// cap_until; or the elbow pad's ellipsoid (its faceted surface lies inside it,
+// the test grown only for rounding), so a sleeve leaving it changes colour
+// where it leaves the pad.
 uniform float cap_until = 0.0;
 uniform vec3 cap_center = vec3(0.0, 1e3, 0.0);
 uniform vec3 cap_radii = vec3(0.001);
@@ -87,11 +88,11 @@ void fragment() {
 		}
 	}
 	vec3 cap = vec3(abs(v_obj.x) - cap_center.x, v_obj.y - cap_center.y, v_obj.z - cap_center.z)
-			/ (cap_radii * 1.08);
-	if (dot(cap, cap) < 1.0 || norm_y < cap_until) {
+			/ (cap_radii * 1.01);
+	if (dot(cap, cap) < 1.0 || (cap_until > 0.0 && norm_y < cap_until)) {
 		col = cap_color.rgb;
 	}
-	if (norm_y < yoke_depth) {
+	if (yoke_depth > 0.0 && norm_y < yoke_depth) {
 		col = yoke_color.rgb;
 	}
 	if (v_obj_normal.y > 0.9 && collar_radius > 0.0) {

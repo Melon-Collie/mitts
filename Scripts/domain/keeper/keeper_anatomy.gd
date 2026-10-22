@@ -93,6 +93,14 @@ const BLOCKER_FACE_OFF_GRIP_M: float = 0.07
 # The board stands upright on the back of the hand, its centre this far above
 # the grip: the stick leaves it low, by the bottom corner.
 const BLOCKER_ABOVE_GRIP_M: float = 0.12
+# The gloved fist round the grip, the back of the hand against the board (in
+# the hand's frame: the grip at the origin, −Z the board's face).
+const BLOCKER_FIST_HALF := Vector3(0.055, 0.055, 0.05)
+const BLOCKER_FIST_CENTER := Vector3(0.0, 0.0,
+		BLOCKER_DEPTH_M * 0.5 - BLOCKER_FACE_OFF_GRIP_M + BLOCKER_FIST_HALF.z)
+# The wrist, where the forearm goes into the glove: a palm's length (8 cm) up
+# and back from the stick in the fist, toward the elbow.
+const BLOCKER_WRIST := BLOCKER_FIST_CENTER + Vector3(-0.02, 0.07, 0.03)
 
 # ── Stick (NHL: blade 3.5 in high, 15.5 in long; paddle 3.5 in × 26 in) ─────
 const BLADE_LENGTH_M: float = 0.394
