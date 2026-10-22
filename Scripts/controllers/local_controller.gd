@@ -938,7 +938,7 @@ func _update_one_timer_indicator() -> void:
 	if state == State.SLAPPER_CHARGE_WITH_PUCK:
 		# One-timer window (puck arrived mid-charge): shrink the reticle ring toward
 		# the release. A plain carry → slapshot charge has no window, so it keeps
-		# only the aim arrow (set in _enter_slapper_charge) and shows no reticle.
+		# only the aim arrow (_update_slapshot_arrow) and shows no reticle.
 		if _aiming.one_timer_window_timer > 0.0:
 			var full_window: float = one_timer_window_duration + one_timer_window_lag_grace()
 			var t: float = clampf(_aiming.one_timer_window_timer / full_window, 0.0, 1.0)

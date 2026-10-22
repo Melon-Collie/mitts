@@ -811,6 +811,8 @@ var one_timer_min_windup_time: float = 0.15
 var one_timer_retention_time: float = 0.11
 
 var show_one_timer_indicator: bool = false
+# Whether this slapshot's aim arrow is up yet (_update_slapshot_arrow).
+var _slapshot_arrow_shown: bool = false
 
 # ── Follow Through Tuning ─────────────────────────────────────────────────────
 # Seconds a finish runs, from the softest release of its band to the hardest
@@ -2883,9 +2885,8 @@ func _enter_slapper_charge(input: InputState) -> void:
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
 		if show_one_timer_indicator:
 			skater.set_slapper_indicator(true, strike, slapper_zone_radius)
-	if show_one_timer_indicator:
-		skater.set_slapshot_arrow(true, strike, slapper_zone_radius)
-		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
+	# The aim arrow waits until the shot is set (_update_slapshot_arrow).
+	_slapshot_arrow_shown = false
 
 
 # A slapshot called off — the wrister button pressed, the button let go before
@@ -2993,13 +2994,17 @@ func _apply_slapper_setup(_input: InputState, delta: float) -> void:
 	else:
 		_slapper_setup_still_s = 0.0
 	_slapper_setup_prev_puck = puck_xz
-	var turned: bool = absf(_pose.facing.angle_to(slapper_stance_facing())) \
-			<= deg_to_rad(slapper_setup_facing_tol_deg)
-	if turned and (_slapper_setup_still_s >= SLAPPER_SETUP_SETTLED_S
+	if _hips_set_for_slapper() and (_slapper_setup_still_s >= SLAPPER_SETUP_SETTLED_S
 			or puck_xz.distance_to(strike) <= slapper_setup_spot_tol_m):
 		skater.enter_slapshot_pinning(puck_xz)
 		_aiming.slapper_setup_done = true
 		_aiming.slapper_stance_line = _sm.locked_slapper_dir
+
+
+# The hips have pivoted into the slapshot's stance.
+func _hips_set_for_slapper() -> bool:
+	return absf(_pose.facing.angle_to(slapper_stance_facing())) \
+			<= deg_to_rad(slapper_setup_facing_tol_deg)
 
 
 # A puck held slower than this in the hips' frame (m/s) for this long (s) has
@@ -3209,6 +3214,7 @@ func _slapper_finish_time() -> float:
 
 
 func _hide_slapshot_hud() -> void:
+	_slapshot_arrow_shown = false
 	if not show_one_timer_indicator:
 		return
 	skater.set_slapper_indicator(false)
@@ -3286,8 +3292,26 @@ func _update_slapper_charge(delta: float) -> void:
 			if _aiming.one_timer_window_timer > 0.0:
 				_strike_moving_puck(pred, _caught_feed())
 			skater.predicted_shot_velocity = pred.direction * pred.power
-	if show_one_timer_indicator:
-		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
+	_update_slapshot_arrow()
+
+
+# The aim arrow, once the shot is set to be taken: with the puck, from where
+# the set-up pinned it; without, from the strike spot once the hips have
+# pivoted into the stance. Shown earlier it swung round with the hips and the
+# puck while they were still on their way. Once up it stays until the swing.
+func _update_slapshot_arrow() -> void:
+	if not show_one_timer_indicator:
+		return
+	if not _slapshot_arrow_shown:
+		if has_puck and not skater.is_slapshot_pinning():
+			return
+		if not has_puck and not _hips_set_for_slapper():
+			return
+		_slapshot_arrow_shown = true
+		skater.set_slapshot_arrow(true,
+				skater.slapshot_pin_local() if has_puck else slapper_strike_local(),
+				slapper_zone_radius)
+	skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
 
 # Normalized wind-up progress (0..1) over the FULL charge time. With the charge
 # ring gone the wind-up pose is the charge gauge, so every pose consumer (blade

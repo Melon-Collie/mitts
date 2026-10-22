@@ -120,6 +120,46 @@ func test_the_blade_carries_the_puck_to_the_strike_spot_before_the_backswing() -
 	assert_gt(_controller._aiming.slapper_charge_timer, 0.2, "the backswing is charging")
 
 
+# The aim arrow comes up once the shot is set, from where the puck was pinned:
+# drawn through the set-up it swung round with the hips and the puck.
+func test_the_aim_arrow_waits_for_the_puck_to_be_set() -> void:
+	_controller.show_one_timer_indicator = true
+	_press_from_backhand()
+	var hud: SkaterHUDCoordinator = _skater._hud
+	var shown_early: bool = false
+	var ticks: int = 0
+	while not _controller._aiming.slapper_setup_done and ticks < 240:
+		shown_early = shown_early or hud.slapper_arrow_visible()
+		_tick(Vector3(0.0, 0.0, -12.0), true)
+		ticks += 1
+	assert_false(shown_early, "no arrow while the puck is carried to the strike spot")
+	_tick(Vector3(0.0, 0.0, -12.0), true)
+	assert_true(hud.slapper_arrow_visible(), "the arrow is up once the puck is set")
+	var pin: Vector2 = _skater.slapshot_pin_local()
+	assert_almost_eq(Vector2(hud._slapper_offset_local.x, hud._slapper_offset_local.z), pin,
+			Vector2.ONE * 0.0001, "drawn from where the puck lies")
+
+
+# Without the puck, the arrow comes up once the hips have pivoted into the
+# stance.
+func test_the_one_timer_arrow_waits_for_the_stance() -> void:
+	_controller.show_one_timer_indicator = true
+	_controller.on_puck_released_network()
+	for i: int in 30:
+		_tick(Vector3(-6.0, 0.0, 6.0), false)
+	_tick(Vector3(0.0, 0.0, -12.0), true, true)
+	var hud: SkaterHUDCoordinator = _skater._hud
+	assert_false(hud.slapper_arrow_visible(), "no arrow on the press")
+	var ticks: int = 0
+	while _stance_error() > deg_to_rad(_controller.slapper_setup_facing_tol_deg) and ticks < 120:
+		assert_false(hud.slapper_arrow_visible(), "no arrow while the hips pivot")
+		_tick(Vector3(0.0, 0.0, -12.0), true)
+		ticks += 1
+	assert_gt(ticks, 3, "the hips had a turn to make")
+	_tick(Vector3(0.0, 0.0, -12.0), true)
+	assert_true(hud.slapper_arrow_visible(), "the arrow is up once the stance is set")
+
+
 func test_letting_go_before_the_puck_is_set_shoots_nothing() -> void:
 	_press_from_backhand()
 	_tick(Vector3(0.0, 0.0, -12.0), true)
