@@ -96,8 +96,8 @@ stick, the packed layout, the ice sealed in the butterfly, the extension and
 the kick, and the post sealed in the RVH; `test_keeper_coverage.gd` snapshots
 each stance's coverage straight on and from the dot line, and
 `test_keeper_seams.gd` holds every hole a puck fits through to its stance's
-intended windows (the five-holes the ready stance, the half butterflies and
-the kicks open, the ice under the RVH's off pad).
+intended windows (the five-holes the ready stance, the half butterflies, the
+extensions and the kicks open, the ice under the RVH's off pad).
 
 He is authored left-catching. A right-catcher (`KeeperSkeleton.mirrored`) is
 that body reflected across his centre line once solved: each bone frame is

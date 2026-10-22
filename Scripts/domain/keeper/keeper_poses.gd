@@ -49,13 +49,13 @@ const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
 # face so the paddle rises in front of it, its heel up to the standing skate
 # along the ice.
 const HALF_BUTTERFLY_BLADE := Vector3(-0.04, 0.0, -0.52)
-# Over toward the pad that stays down, so the blade closes the ice along its
-# toe.
-const EXTENSION_BLADE := Vector3(-0.05, 0.0, -0.45)
-# The hips drop almost to the ice, as a real push-out's do: low enough that the
-# extended thigh comes down onto the blade lying across the five-hole, closing
-# it from above. The extended leg lies near straight along the ice.
-const EXTENSION_PELVIS_HEIGHT_M: float = 0.27
+const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
+# Low enough that the extended leg lies within 30° of straight, high enough that
+# its knee still lands near enough the middle for the thigh rise to meet the
+# paddle along the ice. He is still up on the knee that is down, so the
+# extended thigh slopes from the hip to the ice and the five-hole opens above
+# the blade, as a real extension's does.
+const EXTENSION_PELVIS_HEIGHT_M: float = 0.38
 const RVH_OFF_PAD_RISE_RAD: float = deg_to_rad(30.0)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
@@ -176,9 +176,13 @@ static func butterfly_extension(p: KeeperPose, side: float) -> void:
 	p.lumbar_rot.z = -side * 0.06
 	p.chest_rot.z = -side * 0.04
 	p.neck_rot.z = side * 0.10
-	# The extended leg lies across the paddle's path: the blade goes out ahead,
-	# a little further over on the blocker side, where the lie carries it.
-	p.blade_center = EXTENSION_BLADE + Vector3(0.02 if side > 0.0 else 0.0, 0.0, 0.0)
+	# The extended leg lies across the paddle's path: the blade goes out ahead.
+	p.blade_center = EXTENSION_BLADE
+	if side < 0.0:
+		# Out on the glove side, the blade comes in a touch so the blocker sits
+		# against the hip, and the glove drops toward the pad it seals.
+		p.blade_center.x -= 0.03
+		p.glove_hand.y -= 0.03
 
 
 # Standing, one leg kicked out along the ice to the side: the skate and the

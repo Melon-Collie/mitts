@@ -2,7 +2,9 @@ extends GutTest
 
 # Every hole a flat puck fits through in the shape he shows a shot straight on
 # (KeeperSeams) is one of his stance's intended windows: the openings the
-# stance itself makes, which the stick and the play cover. Any other hole fails
+# stance itself makes, which the stick and the play cover (the five-holes of
+# ready, the half butterflies, the extensions and the kicks; the ice under the
+# RVH's off pad). Any other hole fails
 # here, so the next change of puck, pad or pose cannot open one silently.
 #
 # A window is a region of the mouth (x across from its centre, y up from the
@@ -24,8 +26,12 @@ func _stances() -> Array:
 		["half R", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, 1.0), {
 			"between the down pad and the standing one": Rect2(-0.23, 0.06, 0.27, 0.42),
 		}],
-		["extension L", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, -1.0), {}],
-		["extension R", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, 1.0), {}],
+		["extension L", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, -1.0), {
+			"five-hole above the blade": Rect2(-0.26, 0.06, 0.39, 0.19),
+		}],
+		["extension R", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, 1.0), {
+			"five-hole above the blade": Rect2(-0.18, 0.06, 0.33, 0.19),
+		}],
 		["kick L", func(p: KeeperPose) -> void: KeeperPoses.kick(p, -1.0), {
 			"five-hole the kick opens": Rect2(-0.41, 0.06, 0.44, 0.53),
 		}],
