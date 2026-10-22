@@ -65,7 +65,7 @@ func rebuild() -> void:
 			var mat: StandardMaterial3D = mesh_part.get_active_material(s) as StandardMaterial3D
 			zones.append(mat if mat != null else StandardMaterial3D.new())
 		_hidden_layers[mesh_part] = mesh_part.layers
-		mesh_part.layers = 0
+		_set_layers(mesh_part, 0)
 	_paint = BodyZonePaint.new(zones.size())
 	for z: int in zones.size():
 		_paint.set_zone(z, zones[z])
@@ -166,5 +166,21 @@ func _replace(old: MeshInstance3D, node_name: String, built: BodyZoneMesh,
 func _restore_parts() -> void:
 	for p: Variant in _hidden_layers:
 		if is_instance_valid(p):
-			(p as MeshInstance3D).layers = _hidden_layers[p]
+			_set_layers(p as MeshInstance3D, _hidden_layers[p])
 	_hidden_layers.clear()
+
+
+# Forward+ keeps a light paired with every mesh in its reach, drops a pair only
+# while their masks still overlap, and does not unpair on a layer change. Zeroed
+# in place, a lit part stays held by the light after it leaves its reach or is
+# freed ("BUG, indexing did not unpair geometries from light" when the light
+# goes). Hidden on the server across the change, the part is unpaired under its
+# old layers and re-paired under the new.
+static func _set_layers(mi: MeshInstance3D, layers: int) -> void:
+	if not mi.is_inside_tree():
+		mi.layers = layers
+		return
+	var instance: RID = mi.get_instance()
+	RenderingServer.instance_set_visible(instance, false)
+	mi.layers = layers
+	RenderingServer.instance_set_visible(instance, mi.is_visible_in_tree())
