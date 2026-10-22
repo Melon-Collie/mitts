@@ -143,6 +143,21 @@ var stagger_wobble_hz: float = 3.0    # wobble frequency
 # absorbing the check, not just shaking. Direction is the transfer impulse
 # (stagger_recoil_dir, replicated). Applied in SkaterPoseCoordinator._apply_lean.
 var stagger_recoil_deg: float = 13.0  # peak torso recoil lean at full stagger
+# ── Rocked Tuning ─────────────────────────────────────────────────────────────
+# A full check (stagger_ref_impulse and up) rocks its man: the stagger timer
+# runs past stagger_max_seconds, and while it does his stick is off the ice, his
+# stance and commit are gone and his edges deeper gone (BodyCheckRules, the
+# rocked band). Measured in docs/hit-outcomes-plan.md.
+var rocked_ref_impulse: float = 2.6      # m/s: a full-speed committed check at equal builds
+var rocked_min_seconds: float = 0.5      # rocked window at stagger_ref_impulse
+var rocked_max_seconds: float = 0.8      # ... at rocked_ref_impulse and beyond
+var rocked_grip_penalty: float = 0.75    # peak edge-grip reduction, rocked
+# The torso reels this far at the top of the rocked band, eased down onto the
+# stagger's recoil as he comes out of it; the skates splay and he sits into
+# them as he catches himself.
+var rocked_recoil_deg: float = 30.0
+var rocked_splay_m: float = 0.16         # each skate out from under its hip
+var rocked_crouch: float = 1.0           # crouch floor (× stance_hip_deg), under the stance's
 # ── Knockdown Tuning ──────────────────────────────────────────────────────────
 # The top of the stagger continuum: a hit whose victim impulse exceeds
 # knockdown_impulse KNOCKS THE VICTIM DOWN — movement locked, no puck interaction,
@@ -150,11 +165,11 @@ var stagger_recoil_deg: float = 13.0  # peak torso recoil lean at full stagger
 # recovery window scaling with the hit (see BodyCheckRules.knockdown_seconds_from_
 # impulse). knockdown_timer rides the SAME replicated / snapped / decayed rail as
 # stagger_timer. Deliberately kept ABOVE the full-check point (stagger_ref 1.35):
-# a full check staggers + strips; a KNOCKDOWN is the reward for a genuinely SOLID
+# a full check rocks + strips; a KNOCKDOWN is the reward for a genuinely SOLID
 # hit — ~5.5 m/s closing at a medium build (~4.5 for a heavy one), the pace of a
 # committed skate-in on a carrier, up to a maximal ~9.5 m/s head-on
 # collision. It sits just above the AI's commit bar (AIBodyCheck.COMMIT_IMPULSE_M_S
-# 1.6) so a committed bot check lands a hard stagger/strip and, at real closing,
+# 1.6) so a committed bot check rocks and strips and, at real closing,
 # tips into a knockdown. Set knockdown_impulse very high (or 0) to effectively
 # disable knockdowns.
 var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down
@@ -1575,7 +1590,11 @@ func take_cross_check(shover_weight: float, shover_thrust: float, push_dir: Vect
 		return 0.0
 	var impulse := Vector3(push_dir.x, 0.0, push_dir.y) * dv
 	skater.velocity += impulse
+	# A shove staggers him on the check's ladder but never rocks him: that would
+	# take his stick, and a cross-check strips nothing.
+	var ceiling: float = maxf(stagger_timer, bc.max_stagger_seconds)
 	skater.body_check_received.emit(impulse, dv)
+	stagger_timer = minf(stagger_timer, ceiling)
 	return dv
 
 
@@ -1709,6 +1728,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	_elevation_level = input.elevation_level
 	skater.elevation_level = _elevation_level
 	_current_aim_world = input.mouse_world_pos
+	skater.stick_jarred = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
 	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
 	# Deliberate-deflect intent (see Skater.deflect_intent): Q without the puck
@@ -1723,7 +1743,8 @@ func _process_input(input: InputState, delta: float) -> void:
 	skater.deflect_intent = deflecting
 
 	# The deflecting blade rises to the puck it is about to meet. A forced lift (an
-	# opponent hooked under your stick) overrides regardless of possession.
+	# opponent hooked under your stick, or a check that rocked you) overrides
+	# regardless of possession.
 	skater.blade_up = skater.deflect_lift_share > 0.0 or skater.is_forced_lift_active()
 
 	# Nudge: a deflect-button TAP while carrying pushes the puck off the blade as a
@@ -1912,6 +1933,11 @@ func knockdown_elapsed() -> float:
 # get-up envelope in KnockdownFallRules takes.
 func knockdown_getup_left() -> float:
 	return clampf(knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+
+
+# How deep into the rocked band he is, 0..1 (BodyCheckRules.rocked_share).
+func rocked_share() -> float:
+	return BodyCheckRules.rocked_share(stagger_timer, _body_check_config())
 
 
 # How much of the down pose holds over the live one (0..1): ramped in over the
@@ -3354,11 +3380,13 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# transfer. Deterministic from the input, so reconcile replay reproduces both.
 	# Neither side of a pin commits (it is held on the stick button, and nothing
 	# stacks on it); the pinned one, pressed into the glass, has no stance either.
+	# A rocked skater has neither: the hit took his legs out of both.
 	var locked: bool = skater.pin_role != BoardPinRules.Role.NONE
-	hit_active = not locomotion_suppressed and input.hit_held and not locked
+	var rocked: bool = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
+	hit_active = not locomotion_suppressed and input.hit_held and not locked and not rocked
 	skater.hit_committed = hit_active
 	stance_active = not locomotion_suppressed and input.stance_held and not hit_active \
-			and skater.pin_role != BoardPinRules.Role.PINNED
+			and skater.pin_role != BoardPinRules.Role.PINNED and not rocked
 	# Body-check stagger decays deterministically every tick (including during a
 	# planted charge/block and through reconcile replay), so the penalties ease
 	# back on their own. Decayed before the suppression early-out so a player
@@ -3413,7 +3441,7 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 			else:
 				var bc: BodyCheckRules.Config = _body_check_config()
 				_native_move.set_stagger_params(bc.max_stagger_seconds, bc.max_thrust_penalty,
-						bc.max_grip_penalty)
+						bc.max_grip_penalty, bc.rocked_max_seconds, bc.rocked_grip_penalty)
 	return _cached_move_cfg
 
 # The configured native movement kernel for this skater, or null when the
@@ -3506,6 +3534,10 @@ func _body_check_config() -> BodyCheckRules.Config:
 		_cached_body_check_cfg.max_stagger_seconds = stagger_max_seconds
 		_cached_body_check_cfg.max_thrust_penalty = stagger_max_thrust_penalty
 		_cached_body_check_cfg.max_grip_penalty = stagger_max_grip_penalty
+		_cached_body_check_cfg.rocked_ref_impulse = rocked_ref_impulse
+		_cached_body_check_cfg.rocked_min_seconds = rocked_min_seconds
+		_cached_body_check_cfg.rocked_max_seconds = rocked_max_seconds
+		_cached_body_check_cfg.rocked_grip_penalty = rocked_grip_penalty
 		_cached_body_check_cfg.knockdown_impulse = knockdown_impulse
 		_cached_body_check_cfg.knockdown_ref_impulse = knockdown_ref_impulse
 		_cached_body_check_cfg.min_knockdown_seconds = knockdown_min_seconds

@@ -99,7 +99,7 @@ func test_integrate_forward_matches_native() -> void:
 		var native: RefCounted = _native_from(cfg)
 		var body_cfg := BodyCheckRules.Config.new()
 		native.set_stagger_params(body_cfg.max_stagger_seconds, body_cfg.max_thrust_penalty,
-				body_cfg.max_grip_penalty)
+				body_cfg.max_grip_penalty, body_cfg.rocked_max_seconds, body_cfg.rocked_grip_penalty)
 
 		var pos := Vector3(_rng.randf_range(-10.0, 10.0), 0.0, _rng.randf_range(-20.0, 20.0))
 		var vel := Vector3(_rng.randf_range(-8.0, 8.0), 0.0, _rng.randf_range(-8.0, 8.0))
@@ -111,7 +111,7 @@ func test_integrate_forward_matches_native() -> void:
 		var dt: float = 1.0 / 120.0
 		var ticks: int = _rng.randi_range(0, 60)
 		var decay: int = 0 if _rng.randf() < 0.4 else _rng.randi_range(5, 40)
-		var stagger: float = 0.0 if _rng.randf() < 0.5 else _rng.randf_range(0.05, 1.0)
+		var stagger: float = 0.0 if _rng.randf() < 0.5 else _rng.randf_range(0.05, 1.8)
 		var pre_thrust: float = cfg.thrust
 
 		SkaterMovementRules.integrate_forward(pos, vel, input, facing, has_puck,
@@ -141,7 +141,7 @@ func test_integrate_forward_resumes_like_the_reference() -> void:
 		var native: RefCounted = _native_from(cfg)
 		var body_cfg := BodyCheckRules.Config.new()
 		native.set_stagger_params(body_cfg.max_stagger_seconds, body_cfg.max_thrust_penalty,
-				body_cfg.max_grip_penalty)
+				body_cfg.max_grip_penalty, body_cfg.rocked_max_seconds, body_cfg.rocked_grip_penalty)
 		var vel := Vector3(_rng.randf_range(-8.0, 8.0), 0.0, _rng.randf_range(-8.0, 8.0))
 		var input := Vector2(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0))
 		var facing: float = _rng.randf_range(-PI, PI)
@@ -150,7 +150,7 @@ func test_integrate_forward_resumes_like_the_reference() -> void:
 		var ticks: int = _rng.randi_range(2, 30)
 		var split: int = _rng.randi_range(1, ticks - 1)
 		var decay: int = 0 if _rng.randf() < 0.4 else _rng.randi_range(5, 40)
-		var stagger: float = 0.0 if _rng.randf() < 0.5 else _rng.randf_range(0.05, 1.0)
+		var stagger: float = 0.0 if _rng.randf() < 0.5 else _rng.randf_range(0.05, 1.8)
 		var bc: BodyCheckRules.Config = body_cfg if stagger > 0.0 else null
 
 		native.integrate_forward(Vector3.ZERO, vel, input, facing, false, false, posture,

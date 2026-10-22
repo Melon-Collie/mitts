@@ -307,6 +307,14 @@ const POSES: Array = [
 	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 3.0),
 		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
 		"steps": [[100, {}]]},
+	# A full check short of the knockdown line rocks him: the reel, the splayed
+	# catch, the stick jarred up. Hit from the side, seen from behind and from
+	# the side the hit came from.
+	{"name": "rocked_onset", "puck": false, "knockdown": Vector3(1.7, 0.0, 0.0),
+		"steps": [[12, {}]]},
+	{"name": "rocked_mid", "puck": false, "knockdown": Vector3(1.7, 0.0, 0.0),
+		"cam": Vector3(-3.4, 0.0, 0.4), "cam_aim": Vector3(0.0, -0.3, 0.0),
+		"steps": [[40, {}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs

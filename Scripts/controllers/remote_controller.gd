@@ -764,6 +764,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# a checked opponent stumbles on the host and stands rock-steady elsewhere.
 	stagger_timer = state.stagger_timer
 	stagger_recoil_dir = state.recoil_dir
+	skater.stick_jarred = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
 	# Knockdown mirrors stagger onto client-rendered remotes: the controller value
 	# and the skater flag so the down pose and any is_knocked_down read reflect a
 	# checked opponent on every machine, not just the host. The meta sync seeds

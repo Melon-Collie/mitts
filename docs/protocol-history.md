@@ -388,3 +388,9 @@ here whenever you bump, in the same format.
 #      builds must be refused. Replay FORMAT_VERSION 18: a v17 replay's carry
 #      frames hold +1 in the bit, which would pin every replayed carry to one
 #      side.
+# v83: stagger_timer's legal range grows from [0, 1.0] to [0, 1.8] s — a full
+#      check runs it into the rocked band (BodyCheckRules.is_rocked), which
+#      jars the stick off the ice and takes the stance and commit. Same
+#      layout (u8 at 0.01 s); a v82 peer reads a rocked timer as a plain full
+#      stagger and predicts a skater with his stick and legs, so mixed builds
+#      must be refused.

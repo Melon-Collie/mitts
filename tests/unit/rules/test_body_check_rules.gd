@@ -1,10 +1,10 @@
 extends GutTest
 
 # BodyCheckRules — pure stagger math for body checks. The victim impulse
-# magnitude drives a 0..1 intensity that scales the stagger window; the per-tick
-# thrust and grip penalties ease back as the timer decays. These tests pin the
-# normalization, the endpoints, and the coupling between hit strength and
-# recovery-window length.
+# magnitude drives a 0..1 intensity that scales the stagger window, and a full
+# check runs it on into the rocked band; the per-tick thrust and grip penalties
+# ease back as the timer decays. These tests pin the normalization, the
+# endpoints, and the coupling between hit strength and recovery-window length.
 
 var _cfg: BodyCheckRules.Config
 
@@ -15,6 +15,10 @@ func before_each() -> void:
 	_cfg.max_stagger_seconds = 1.0
 	_cfg.max_thrust_penalty = 0.5
 	_cfg.max_grip_penalty = 0.4
+	_cfg.rocked_ref_impulse = 13.0
+	_cfg.rocked_min_seconds = 0.5
+	_cfg.rocked_max_seconds = 0.8
+	_cfg.rocked_grip_penalty = 0.75
 	_cfg.knockdown_impulse = 11.0
 	_cfg.knockdown_ref_impulse = 16.0
 	_cfg.min_knockdown_seconds = 0.7
@@ -75,10 +79,50 @@ func test_no_stagger_for_trivial_bump() -> void:
 
 func test_stagger_scales_with_strength() -> void:
 	var medium: float = BodyCheckRules.stagger_seconds_from_impulse(6.0, _cfg)
-	var hard: float = BodyCheckRules.stagger_seconds_from_impulse(9.0, _cfg)
+	var just_short: float = BodyCheckRules.stagger_seconds_from_impulse(8.999, _cfg)
 	assert_almost_eq(medium, 0.5, 0.0001, "midpoint hit → half window")
-	assert_almost_eq(hard, 1.0, 0.0001, "full hit → full window")
-	assert_gt(hard, medium, "harder hit → longer recovery window")
+	assert_almost_eq(just_short, 1.0, 0.001, "just short of a full check → the full window")
+	assert_gt(just_short, medium, "harder hit → longer recovery window")
+	assert_false(BodyCheckRules.is_rocked(just_short, _cfg), "short of a full check never rocks")
+
+
+# ── the rocked band ───────────────────────────────────────────────────────────
+
+func test_a_full_check_rocks_him_for_the_min_window() -> void:
+	var t: float = BodyCheckRules.stagger_seconds_from_impulse(9.0, _cfg)
+	assert_almost_eq(t, 1.5, 0.0001, "the full stagger plus rocked_min_seconds")
+	assert_true(BodyCheckRules.is_rocked(t, _cfg))
+
+
+func test_the_rocked_window_grows_to_its_max_and_holds() -> void:
+	_cfg.knockdown_impulse = 0.0
+	var mid: float = BodyCheckRules.stagger_seconds_from_impulse(11.0, _cfg)
+	var top: float = BodyCheckRules.stagger_seconds_from_impulse(13.0, _cfg)
+	var past: float = BodyCheckRules.stagger_seconds_from_impulse(40.0, _cfg)
+	assert_almost_eq(mid, 1.65, 0.0001)
+	assert_almost_eq(top, 1.8, 0.0001)
+	assert_almost_eq(past, top, 0.0001, "a ceiling, so the wire's u8 always holds it")
+
+
+func test_he_comes_out_of_it_into_the_full_stagger() -> void:
+	_cfg.knockdown_impulse = 0.0
+	var t: float = BodyCheckRules.stagger_seconds_from_impulse(13.0, _cfg)
+	assert_almost_eq(BodyCheckRules.rocked_share(t, _cfg), 1.0, 0.0001)
+	assert_almost_eq(BodyCheckRules.rocked_share(1.4, _cfg), 0.5, 0.0001)
+	assert_eq(BodyCheckRules.rocked_share(_cfg.max_stagger_seconds, _cfg), 0.0, "out at the floor")
+	assert_false(BodyCheckRules.is_rocked(_cfg.max_stagger_seconds, _cfg))
+
+
+func test_the_rocked_band_fits_the_wire() -> void:
+	var cfg := BodyCheckRules.Config.new()
+	assert_lt(cfg.max_stagger_seconds + cfg.rocked_max_seconds, 2.55,
+			"stagger_timer travels as a u8 at 0.01 s (WorldStateCodec)")
+
+
+func test_a_knockdown_takes_no_rocked_band() -> void:
+	var t: float = BodyCheckRules.stagger_seconds_from_impulse(_cfg.knockdown_impulse, _cfg)
+	assert_almost_eq(t, _cfg.max_stagger_seconds, 0.0001, "the full stagger, as before")
+	assert_false(BodyCheckRules.is_rocked(t, _cfg))
 
 
 # ── thrust_mult ───────────────────────────────────────────────────────────────
@@ -107,10 +151,17 @@ func test_grip_unpenalized_when_not_staggered() -> void:
 	assert_almost_eq(BodyCheckRules.grip_mult(0.0, _cfg), 1.0, 0.0001, "no stagger → full grip")
 
 func test_grip_penalty_follows_the_thrust_shape() -> void:
-	# full window → 1 - 0.4; half window → 1 - 0.2; over-window caps at the peak
+	# full window → 1 - 0.4; half window → 1 - 0.2
 	assert_almost_eq(BodyCheckRules.grip_mult(1.0, _cfg), 0.6, 0.0001, "full stagger → peak grip penalty")
 	assert_almost_eq(BodyCheckRules.grip_mult(0.5, _cfg), 0.8, 0.0001, "decayed stagger → partial penalty")
-	assert_almost_eq(BodyCheckRules.grip_mult(5.0, _cfg), 0.6, 0.0001, "over-window timer caps at peak penalty")
+
+
+func test_rocked_he_is_off_his_edges_and_finds_them_continuously() -> void:
+	assert_almost_eq(BodyCheckRules.grip_mult(1.8, _cfg), 0.25, 0.0001, "the top of the rocked band")
+	assert_almost_eq(BodyCheckRules.grip_mult(5.0, _cfg), 0.25, 0.0001, "an overlong timer caps there")
+	assert_almost_eq(BodyCheckRules.grip_mult(1.0001, _cfg), BodyCheckRules.grip_mult(1.0, _cfg), 0.001,
+			"no step at the floor")
+	assert_lt(BodyCheckRules.grip_mult(1.4, _cfg), BodyCheckRules.grip_mult(1.0, _cfg))
 
 
 # ── puck_strip_impulse ──────────────────────────────────────────────────────────

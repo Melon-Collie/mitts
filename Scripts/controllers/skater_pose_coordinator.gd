@@ -199,7 +199,8 @@ func _block_trunk_roll() -> float:
 # the hips while the trunk folds forward over them.
 func _apply_lean() -> void:
 	# Body-check recoil: while staggered, the torso reels the way the hit shoved
-	# it, easing out as the timer decays (same directional pitch/roll decomposition
+	# it — further while rocked, easing down onto the stagger's reel as he comes
+	# out of it — and out as the timer decays (same directional pitch/roll decomposition
 	# as the reach lean). Runs on every path — local, bot, and remote, off the
 	# replicated timer and direction — since _apply_lean is the single torso
 	# writer both the live pass and apply_wire_lean go through.
@@ -217,7 +218,9 @@ func _apply_lean() -> void:
 	# lets go as he comes up onto his knees.
 	var kd_t: float = _controller.knockdown_getup_left()
 	var lie: float = KnockdownFallRules.lie_share(kd_t)
-	var mag: float = deg_to_rad(_controller.stagger_recoil_deg) * recoil_t
+	var mag: float = deg_to_rad(_controller.stagger_recoil_deg) * recoil_t \
+			+ deg_to_rad(_controller.rocked_recoil_deg - _controller.stagger_recoil_deg) \
+			* _controller.rocked_share()
 	if lie > 0.0:
 		mag += _controller.knockdown_fold_rad() * lie
 	if mag > 0.0:

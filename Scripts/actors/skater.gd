@@ -711,6 +711,10 @@ var _faceoff_address: float = 0.0
 # so a forced lift dislodges a carried puck. Stays 0 on clients (they read the
 # resolved blade_up off the wire).
 var _forced_lift_timer: float = 0.0
+# A check rocked this skater (BodyCheckRules.is_rocked): his stick is off the ice
+# like a forced lift. Set by the controller every tick from the replicated
+# stagger_timer, so it holds on every machine.
+var stick_jarred: bool = false
 # The shared stick-check cooldown (StickCheckRules.STICK_CHECK_COOLDOWN_S):
 # host-side only, like the forced lift; started by a landed lift and a tie ending.
 var _stick_check_cooldown: float = 0.0
@@ -1786,7 +1790,7 @@ func force_blade_lift(duration: float) -> void:
 
 
 func is_forced_lift_active() -> bool:
-	return _forced_lift_timer > 0.0
+	return _forced_lift_timer > 0.0 or stick_jarred
 
 
 # While it runs, this skater's hook lifts nothing and their stick latches no tie.

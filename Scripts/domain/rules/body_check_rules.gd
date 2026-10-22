@@ -17,6 +17,12 @@ class_name BodyCheckRules
 # and the recovery window: a harder hit sets a longer timer, and the per-tick
 # penalties are proportional to the timer that remains, so depth and duration
 # scale together off a single replicated value and ease back as it decays.
+#
+# The timer has two bands. Up to max_stagger_seconds it is the stagger. A full
+# check (ref_impulse and up) ROCKS its man instead: the timer starts above that
+# floor, and while it stays there he is rocked — his stick jarred off the ice,
+# his stance and commit gone, his edges deeper gone — before the full stagger's
+# tail eases out beneath it.
 
 class Config:
 	# Defaults mirror SkaterController's @export tunables (the authoritative
@@ -34,6 +40,15 @@ class Config:
 	# registers on a skater already at speed — the stride is power-limited there
 	# and the glide is long — so a rattled skater is also off his edges.
 	var max_grip_penalty: float = 0.4
+	# The rocked band, above max_stagger_seconds: rocked_min_seconds long at
+	# ref_impulse, rocked_max_seconds at rocked_ref_impulse (a full-speed
+	# committed check at equal builds) and beyond.
+	var rocked_ref_impulse: float = 2.6
+	var rocked_min_seconds: float = 0.5
+	var rocked_max_seconds: float = 0.8
+	# Peak edge-grip reduction at the top of the rocked band: off his edges, he
+	# glides along the hit rather than cutting out of it.
+	var rocked_grip_penalty: float = 0.75
 	# Knockdown: the top of the same intensity continuum. A hit whose victim impulse
 	# exceeds knockdown_impulse doesn't just stagger — it KNOCKS THE VICTIM DOWN
 	# (movement locked, slides + bleeds speed, can't touch the puck) for a recovery
@@ -56,10 +71,30 @@ static func intensity(impulse_mag: float, cfg: Config) -> float:
 	return clampf((impulse_mag - cfg.min_impulse) / (cfg.ref_impulse - cfg.min_impulse), 0.0, 1.0)
 
 
-# Seconds of stagger a fresh hit adds (0 below min_impulse). Callers take the max
-# with any in-flight timer so a weaker follow-up can't shorten an existing stagger.
+# Seconds of stagger a fresh hit adds (0 below min_impulse): up to the stagger's
+# max, and a full check that leaves him on his feet past it into the rocked
+# band. A knockdown takes no rocked band: he is going down, and the timer runs
+# out under the knockdown's own. Callers take the max with any in-flight timer
+# so a weaker follow-up can't shorten an existing stagger.
 static func stagger_seconds_from_impulse(impulse_mag: float, cfg: Config) -> float:
-	return intensity(impulse_mag, cfg) * cfg.max_stagger_seconds
+	var stagger: float = intensity(impulse_mag, cfg) * cfg.max_stagger_seconds
+	if impulse_mag < cfg.ref_impulse or knockdown_seconds_from_impulse(impulse_mag, cfg) > 0.0:
+		return stagger
+	var span: float = maxf(cfg.rocked_ref_impulse - cfg.ref_impulse, 0.001)
+	var t: float = clampf((impulse_mag - cfg.ref_impulse) / span, 0.0, 1.0)
+	return stagger + lerpf(cfg.rocked_min_seconds, cfg.rocked_max_seconds, t)
+
+
+static func is_rocked(stagger_timer: float, cfg: Config) -> bool:
+	return stagger_timer > cfg.max_stagger_seconds
+
+
+# How far into the rocked band the timer sits, 0..1 of rocked_max_seconds: the
+# depth of the rocked grip and pose, easing to 0 as he comes out of it.
+static func rocked_share(stagger_timer: float, cfg: Config) -> float:
+	if cfg.rocked_max_seconds <= 0.0:
+		return 0.0
+	return clampf((stagger_timer - cfg.max_stagger_seconds) / cfg.rocked_max_seconds, 0.0, 1.0)
 
 
 # Seconds of KNOCKDOWN a fresh hit adds: 0 below knockdown_impulse, then ramps
@@ -83,9 +118,12 @@ static func thrust_mult(stagger_timer: float, cfg: Config) -> float:
 
 
 # Edge-grip multiplier (<= 1.0) for the stagger remaining this tick — the same
-# shape as thrust_mult.
+# shape as thrust_mult, deepening on through the rocked band, so it is
+# continuous as he comes out of it. NativeSkaterMovement.integrate_forward
+# carries the same formula.
 static func grip_mult(stagger_timer: float, cfg: Config) -> float:
-	return 1.0 - _stagger_frac(stagger_timer, cfg) * cfg.max_grip_penalty
+	return 1.0 - _stagger_frac(stagger_timer, cfg) * cfg.max_grip_penalty \
+			- rocked_share(stagger_timer, cfg) * (cfg.rocked_grip_penalty - cfg.max_grip_penalty)
 
 
 static func _stagger_frac(stagger_timer: float, cfg: Config) -> float:

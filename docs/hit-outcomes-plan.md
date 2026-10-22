@@ -1,6 +1,6 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **Phase 0 built.** Amends the physicality paragraphs of
+Status: **Phases 0 and 1 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
 own PR and playtest.
@@ -110,7 +110,7 @@ Small, independent, its own PR.
   scheme-2 defaults and leaves a rebound one alone. The tutorial prose names
   binds through `{hit}` / `{stick_lift}`, so it follows on its own.
 
-## Phase 1 — the rocked hit
+## Phase 1 — the rocked hit (built)
 
 A new rung between the stagger and the knockdown: what a hard hit at game pace
 usually does.
@@ -120,55 +120,73 @@ usually does.
 - **Onset:** a hit whose stagger strength reaches `ref_impulse` (1.35 m/s, the
   full check, which is already the puck-strip threshold). For equal builds
   that is about 4.2 m/s closing.
-- **It is the top of the stagger timer.** A rocked hit sets `stagger_timer`
-  above `max_stagger_seconds`, by `rocked_min_seconds` at onset up to
+- **It is the top of the stagger timer** (`BodyCheckRules.is_rocked`,
+  `rocked_share`). A rocked hit sets `stagger_timer` above
+  `max_stagger_seconds`, by `rocked_min_seconds` at onset up to
   `rocked_max_seconds` at `rocked_ref_impulse`. He is rocked while the timer is
   above that floor; the ordinary full-stagger tail eases out below it. One
-  replicated float still encodes everything, so the wire is unchanged
+  replicated float still encodes everything, so the wire layout is unchanged
   (`stagger_timer` is a u8 at 0.01 s, room to 2.55 s).
+- **A knockdown takes no rocked band.** He is going down, and a rocked band
+  running under the fall carried the stagger's recoil onto a body lying on the
+  ice. The knockdown poses render pixel-identical to before. Until Phase 2
+  moves the knockdown line, that caps the rocked band at what a 1.8 m/s hit
+  gives (about 0.61 s); `rocked_ref_impulse` comes into reach with Phase 2.
 - **While rocked:**
   - the puck is stripped (as today at this strength) and pickup is denied
     (`hit_pickup_cooldown`, as today);
-  - the stick is off the ice: the blade plays no puck, pokes nobody, lifts and
-    ties nothing;
-  - the stance and the commit drop and can't be re-entered;
-  - the edges go (`rocked_grip_mult`), so he glides along the hit rather than
-    cutting out of it.
-- **It reads.** The torso reels the way the hit drove it, much further than the
-  stagger's recoil (`rocked_recoil_deg`). The skates splay as he catches
-  himself and the stick hand flies off the shaft line. It lands in
-  `GaitStaggerLayer`, driven off the replicated timer like the stagger, so
-  every machine draws the same stumble. On a hit near the knockdown line the
-  free hand can touch the ice. That's a pose, not a state.
+  - the stick is off the ice: `Skater.stick_jarred`, which the controller sets
+    each tick from the timer, makes `is_forced_lift_active()` true, so every
+    gate an opponent's stick lift closes (pickup, deflect, lift, tie, the
+    raised blade) closes for him too;
+  - the stance and the commit drop and can't be re-entered, so he can't brace
+    either;
+  - the edges go further (`rocked_grip_penalty`), continuously into the
+    stagger's own grip penalty as he comes out of it, so he glides along the
+    hit rather than cutting out of it.
+- **It reads.** The torso reels the way the hit drove it, up to
+  `rocked_recoil_deg` at the top of the band and eased down onto the stagger's
+  recoil as he comes out. The skates splay and he sits into them as he catches
+  himself (`GaitStaggerLayer`'s floor stage, on a spring). The stick rises as a
+  lifted one does. Not built: the free hand touching the ice, and the stick
+  hand flying off the shaft line.
 - **The cross-check never rocks.** It "staggers him on the check's ladder but
-  never knocks him down and strips nothing", and that stays true: its path
-  through `take_cross_check` caps the stagger at the full-stagger floor and
-  never reaches the rocked band or the knockdown.
+  never knocks him down and strips nothing", and that stays true:
+  `take_cross_check` caps what it adds at the full stagger, and a shove on a
+  man already rocked leaves his window alone.
 
 ### Networking
 
 No new wire field. Every rocked effect is a function of `stagger_timer`, which
-is already snapped to the host at replay start and decayed deterministically,
-so prediction and reconcile need no changes. Ship with a protocol bump: the
-simulation changes.
+is already snapped to the host at replay start and decayed deterministically.
+Protocol v83: the field's legal range grows. The native movement kernel
+(`NativeSkaterMovement.integrate_forward`, which remote prediction and the
+host's rewind run) carries the rocked grip too, through `set_stagger_params`'
+two new arguments, and the parity fuzz now covers the rocked band.
+
+The reconcile replay's contact read the raw `input.hit_held` where the live
+resolver reads the controller's `hit_committed`; it now reads the same value
+the live tick produced, which a rocked player holding Ctrl needs and which
+also closes the old cases (knocked down, pinned, mid-slapper).
 
 ### Bots
 
-`AIBodyCheck.COMMIT_IMPULSE_M_S` (1.6) prices a check on "a full stagger and
-strip, just under the knockdown". That bar becomes "rocks him" (`ref_impulse`),
-read from the live config rather than a copied number. A rocked carrier is
-treated as a loose puck by both teams' support (his stick is out).
+No change to the bar: `AIBodyCheck.COMMIT_IMPULSE_M_S` (1.6) was "a full
+stagger and strip with margin", and a full check is now the rocked onset, so
+it already reads "rocks him". `test_body_check.gd` now holds it between the
+rocked onset and the knockdown line. A rocked carrier needs no special read:
+the strip has already put the puck loose.
 
 ### Tests
 
-- `test_body_check_rules.gd`: the timer's bands are ordered and continuous
-  (the stagger rises to its floor, the rocked band starts there); a weaker
-  follow-up never shortens a rocked window.
-- A live two-skater test: a rocked carrier's blade can't take a puck, his
-  stance and commit are refused, his grip is the rocked grip.
-- `test_cross_check_rules.gd`: no cross-check reaches the rocked band.
-- `render-poses.sh`: a rocked pose at onset and mid-window, front and side, in
-  `tools/pose_capture.gd`'s list.
+- `test_body_check_rules.gd`: the bands, their ceiling against the wire,
+  continuity of the grip at the floor, and no rocked band on a knockdown.
+- `test_rocked_hit.gd`: through the real controller, a full check jars the
+  stick and refuses the stance and commit, both come back at the full stagger,
+  a hit short of a full check never rocks, a cross-check never rocks, and the
+  rules' defaults are the controller's tuning.
+- `test_native_movement_parity.gd`: the fuzz's stagger range covers the band.
+- `render-poses.sh --only=rocked`: `rocked_onset` and `rocked_mid`.
 
 ## Phase 2 — the knockdown is balance
 
@@ -409,8 +427,9 @@ snapshot with the commit saying the new numbers are intended.
 | `ref_impulse` (rocked onset) | 1.35 m/s | unchanged: the full check and the strip threshold |
 | `rocked_ref_impulse` | 2.6 m/s | a full-speed committed check at equal builds |
 | `rocked_min_seconds` / `rocked_max_seconds` | 0.5 / 0.8 s | a beat out of the play, well short of a knockdown's 1.1–1.9 s plus get-up |
-| `rocked_grip_mult` | 0.25 | off his edges: glides along the hit |
+| `rocked_grip_penalty` | 0.75 | off his edges (grip 0.25 at the top of the band): glides along the hit |
 | `rocked_recoil_deg` | 30° | reads beside the stagger's 13° |
+| `rocked_splay_m` / `rocked_crouch` | 0.16 m / 1.0 | the catch: wider than the stance's base, a lighter sit than its 1.7 |
 | `balance_ref_dv` | 2.4 m/s | square, upright, equal builds survive any one-sided check below top speed |
 | `along_share` | 0.5 | a hit along the blades is half carried off as travel |
 | `sight_behind` | 0.6 | budget with his back to the hitter, linear in (1 + cos) / 2 |

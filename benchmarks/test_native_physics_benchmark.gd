@@ -76,7 +76,9 @@ func test_movement_gdscript_vs_native() -> void:
 	var cfg: SkaterMovementRules.MovementConfig = _movement_cfg()
 	var native: RefCounted = ClassDB.instantiate(&"NativeSkaterMovement")
 	native.configure(cfg)
-	native.set_stagger_params(1.0, 0.5, 0.4)
+	var bc := BodyCheckRules.Config.new()
+	native.set_stagger_params(bc.max_stagger_seconds, bc.max_thrust_penalty, bc.max_grip_penalty,
+			bc.rocked_max_seconds, bc.rocked_grip_penalty)
 	var result := SkaterMovementRules.ForwardResult.new()
 	var vel := Vector3(3.0, 0.0, -4.0)
 	var input := Vector2(0.4, -0.9)
