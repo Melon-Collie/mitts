@@ -116,6 +116,14 @@ beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
 show a stroke or a state firing at the wrong time.
 
+**To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
+[scenarios]` drives the real `Puck` through the host's analytic drive (a board
+glance, a square hit, a landing, the faceoff drop, a mid-air deflection, a saucer
+off a blade, the saucer tipped) and captures a frame every few ticks from a
+camera following it, printing `PuckSpinRig`'s spin, tilt and tumble per frame
+(`tools/puck_strip_runner.gd`; `--list` prints the names). PNGs go to
+`.preview/puck/`; the full set takes seconds.
+
 **To see a SCREEN, render it.** `.claude/hooks/render-ui.sh [shots]` drives the
 real menus and HUD (title card, each Options tab, the free-play HUD and every
 side-menu overlay, the tutorial HUD, the lobby, a 3v3 against bots a few seconds

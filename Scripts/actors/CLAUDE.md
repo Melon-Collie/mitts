@@ -33,7 +33,7 @@ the puck is drawn at and who this peer draws carrying it
 the mesh's local transform on the tick and nothing else, so it needs no wire
 bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
 relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
-nothing but `Puck` names the rig.
+nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
 
 ## The goalie draws as one mesh, and its parts stay nodes
 
