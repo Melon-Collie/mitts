@@ -174,16 +174,35 @@ static func butterfly_extension(p: KeeperPose, side: float) -> void:
 
 
 # Standing, one leg kicked out along the ice to the side: the skate and the
-# pad's boot take the low corner.
+# pad's boot take the low corner, the stick goes with them.
 static func kick(p: KeeperPose, side: float) -> void:
 	ready(p)
 	var i: int = 0 if side < 0.0 else 1
 	var leg: KeeperPose.Leg = p.legs[i]
-	leg.ankle = Vector3(side * 0.64, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.10)
+	leg.ankle = Vector3(side * 0.56, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.10)
 	leg.knee_pole = Vector3(0.0, 0.3, -1.0)
-	leg.toe = Vector3(side * 0.3, 0.0, -1.0)
-	p.pelvis += Vector3(-side * 0.06, -0.06, 0.0)
-	p.pelvis_rot.z = side * 0.12
+	# The leg turns out from the hip, the foot furthest: the skate's instep
+	# faces the shooter.
+	leg.toe = Vector3(side * sin(deg_to_rad(60.0)), 0.0, -cos(deg_to_rad(60.0)))
+	leg.shin_front = Vector3(side * sin(deg_to_rad(30.0)), 0.0, -cos(deg_to_rad(30.0)))
+	# The support skate comes in under him and takes his weight; the hips stay
+	# near square, the head over the kick. The blade slides with the kick to
+	# meet its pad along the ice.
+	p.pelvis_rot.z = -side * 0.05
+	if side < 0.0:
+		# The paddle crosses in front of the blocker pad: that skate stays wide
+		# and the blade goes out ahead of it.
+		p.legs[1].ankle.x = 0.24
+		p.pelvis += Vector3(-0.03, -0.05, 0.0)
+		p.blade_center = READY_BLADE + Vector3(-0.15, 0.0, -0.14)
+		p.stick_tilt = READY_STICK_TILT_RAD + deg_to_rad(10.0)
+	else:
+		# The lie carries the grip out past the kick: the hips go with it to keep
+		# it in the blocker arm's reach, over a glove skate drawn in under them.
+		p.legs[0].ankle.x = -0.18
+		p.pelvis += Vector3(0.12, -0.06, 0.0)
+		p.blade_center = READY_BLADE + Vector3(0.19, 0.0, -0.12)
+		p.stick_tilt = READY_STICK_TILT_RAD + deg_to_rad(12.0)
 
 
 # Reverse-VH on the post at `side`: the post pad flat along the ice from the

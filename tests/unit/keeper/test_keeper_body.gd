@@ -200,19 +200,33 @@ func test_the_butterfly_seals_the_ice() -> void:
 # Extended, the leg runs out straight and its knee leaves the middle: the rise
 # along the ice must still meet the paddle, or the push opens the five-hole.
 func test_the_extension_seals_the_ice() -> void:
-	var out := SweptDiscOBB.Result.new()
-	var scratch := SweptDiscOBB.Result.new()
-	var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 	for side: float in [-1.0, 1.0]:
 		KeeperPoses.butterfly_extension(_pose, side)
 		_skel.pose(_pose)
-		var x: float = -0.60
-		while x <= 0.90:
-			var hit: int = KeeperGear.nearest(_skel, Vector3(side * x, y, -3.0),
-					Vector3(side * x, y, 1.0), GameRules.PUCK_COLLISION_RADIUS, out, scratch)
-			assert_true(hit >= 0, "extension %+.0f: a puck along the ice at x %.2f meets him"
-					% [side, side * x])
-			x += 0.02
+		_assert_seals_ice("extension %+.0f" % side, side, -0.60, 0.90)
+
+
+# Kicked, the blade meets the kicking pad and the support pad meets the blade:
+# no puck along the ice gets between his skates.
+func test_the_kick_seals_the_ice() -> void:
+	for side: float in [-1.0, 1.0]:
+		KeeperPoses.kick(_pose, side)
+		_skel.pose(_pose)
+		_assert_seals_ice("kick %+.0f" % side, side, -0.35, 0.80)
+
+
+# Every puck along the ice from the shooter, `from` to `to` metres across
+# toward `side`, meets him.
+func _assert_seals_ice(stance: String, side: float, from: float, to: float) -> void:
+	var out := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+	var x: float = from
+	while x <= to:
+		var hit: int = KeeperGear.nearest(_skel, Vector3(side * x, y, -3.0),
+				Vector3(side * x, y, 1.0), GameRules.PUCK_COLLISION_RADIUS, out, scratch)
+		assert_true(hit >= 0, "%s: a puck along the ice at x %.2f meets him" % [stance, side * x])
+		x += 0.02
 
 
 func _span_y(part: int) -> Vector2:
