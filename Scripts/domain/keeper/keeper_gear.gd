@@ -65,18 +65,28 @@ const _SKATE_HALF := Vector3(KeeperAnatomy.SKATE_HALF_WIDTH_M, KeeperAnatomy.ANK
 const _THIGH_CENTER := Vector3(0.0, -KeeperAnatomy.THIGH_M * 0.5, 0.0)
 const _THIGH_HALF := Vector3(KeeperAnatomy.THIGH_PAD_WIDTH_M * 0.5, KeeperAnatomy.THIGH_M * 0.5,
 		KeeperAnatomy.THIGH_PAD_DEPTH_M * 0.5)
-const _PANTS_CENTER := Vector3(0.0, 0.05, 0.01)
-const _PANTS_HALF := Vector3(KeeperAnatomy.PANTS_WIDTH_M * 0.5, 0.17, 0.16)
+# The pants on the pelvis: from below the seat up to the belly, 15 cm over the
+# hip joints, where the jersey's hem and tail hang over them.
+const _PANTS_TOP_M: float = 0.15
+const _PANTS_BOTTOM_M: float = -0.14
+const _PANTS_CENTER := Vector3(0.0, (_PANTS_TOP_M + _PANTS_BOTTOM_M) * 0.5, 0.01)
+const _PANTS_HALF := Vector3(KeeperAnatomy.PANTS_WIDTH_M * 0.5, (_PANTS_TOP_M - _PANTS_BOTTOM_M) * 0.5, 0.16)
 # The chest protector, floaters to the pants' waistband.
 const _CHEST_TOP: float = KeeperAnatomy.SHOULDER_ABOVE_CHEST_M + 0.05
-# The jersey's hem, hanging past the belt over the pants' top.
-const _CHEST_BOTTOM: float = -0.21
-const _CHEST_CENTER := Vector3(0.0, (_CHEST_TOP + _CHEST_BOTTOM) * 0.5, -0.01)
-const _CHEST_HALF := Vector3(KeeperAnatomy.CHEST_WIDTH_M * 0.5, (_CHEST_TOP - _CHEST_BOTTOM) * 0.5,
+# The chest protector ends at the belt, on the chest bone; the jersey's tail
+# hangs on from there over the pants (KeeperJerseyTail), drawn only.
+const CHEST_BOTTOM_M: float = -0.15
+const _CHEST_CENTER := Vector3(0.0, (_CHEST_TOP + CHEST_BOTTOM_M) * 0.5, -0.01)
+const _CHEST_HALF := Vector3(KeeperAnatomy.CHEST_WIDTH_M * 0.5, (_CHEST_TOP - CHEST_BOTTOM_M) * 0.5,
 		KeeperAnatomy.CHEST_DEPTH_M * 0.5)
-const _UPPER_ARM_CENTER := Vector3(0.0, -KeeperAnatomy.UPPER_ARM_M * 0.5, 0.0)
-const _UPPER_ARM_HALF := Vector3(KeeperAnatomy.ARM_PAD_WIDTH_M * 0.5, KeeperAnatomy.UPPER_ARM_M * 0.5,
-		KeeperAnatomy.ARM_PAD_WIDTH_M * 0.5 + 0.005)
+# The upper arm's pad and sleeve, its shoulder cap riding the top of it over the
+# joint and up under the jersey's slope to the neck.
+const SHOULDER_CAP_ABOVE_JOINT_M: float = 0.05
+const SHOULDER_CAP_RADIUS_M: float = 0.10
+const _UPPER_ARM_CENTER := Vector3(0.0,
+		(SHOULDER_CAP_ABOVE_JOINT_M - KeeperAnatomy.UPPER_ARM_M) * 0.5, 0.0)
+const _UPPER_ARM_HALF := Vector3(SHOULDER_CAP_RADIUS_M,
+		(KeeperAnatomy.UPPER_ARM_M + SHOULDER_CAP_ABOVE_JOINT_M) * 0.5, SHOULDER_CAP_RADIUS_M)
 const _FOREARM_CENTER := Vector3(0.0, -KeeperAnatomy.FOREARM_M * 0.5, 0.0)
 const _FOREARM_HALF := Vector3(KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47, KeeperAnatomy.FOREARM_M * 0.5,
 		KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47)

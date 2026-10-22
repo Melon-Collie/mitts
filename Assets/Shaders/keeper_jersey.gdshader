@@ -7,11 +7,17 @@ shader_type spatial;
 // in the kit's shoulder color, the kit's stripe bands, the crest on the front
 // face and the name and number on the back. A sleeve uses the bands alone.
 //
-// Heights are normalised over the piece: 0 = its top, 1 = its bottom.
+// Heights are normalised over the piece: 0 = its top, 1 = its bottom; the
+// bands over height_m, which for the jersey runs on down its tail.
 
 const int MAX_STRIPES = 5;
 
 uniform vec2 half_size = vec2(0.28, 0.26);  // the box's half width and half height
+// The bands run down the whole piece: the jersey's is its protector and its
+// tail. The tail is lofted in keeper space, so it carries its depth below the
+// collar in UV.y instead of a height in a box.
+uniform float height_m = 0.52;
+uniform bool depth_in_uv = false;
 uniform vec4 base_color : source_color = vec4(1.0);
 uniform vec4 yoke_color : source_color = vec4(1.0);
 uniform vec4 collar_color : source_color = vec4(1.0);
@@ -19,10 +25,18 @@ uniform vec4 cap_color : source_color = vec4(1.0);
 uniform float yoke_depth = 0.0;
 uniform float collar_radius = 0.0;
 uniform float collar_center_z = 0.0;
-// The shoulder caps' or the elbow cap's ellipsoid (|x| about cap_center.x),
-// grown a touch so its faceted surface lies inside the test.
+// The cap in cap_color: the shoulder cap over the top of a sleeve, down to
+// cap_until; or the elbow cap's ellipsoid, grown a touch so its faceted
+// surface lies inside the test.
+uniform float cap_until = 0.0;
 uniform vec3 cap_center = vec3(0.0, 1e3, 0.0);
 uniform vec3 cap_radii = vec3(0.001);
+// The shoulder number, on both side faces of a sleeve's cap: the band it is set
+// in (centre height, height) and its width, in object metres.
+uniform bool shoulder_number = false;
+uniform sampler2D number_decal : hint_default_transparent, filter_linear_mipmap;
+uniform vec2 number_band = vec2(0.0, 0.1);
+uniform float number_width = 0.14;
 uniform int stripe_count = 0;
 uniform vec4 stripe_colors[MAX_STRIPES] : source_color;
 uniform float stripe_positions[MAX_STRIPES];
@@ -35,24 +49,27 @@ uniform sampler2D crest_decal : hint_default_transparent, filter_linear_mipmap;
 
 varying vec3 v_obj;
 varying vec3 v_obj_normal;
+varying float v_depth;
 
 void vertex() {
 	v_obj = VERTEX;
 	v_obj_normal = NORMAL;
+	v_depth = depth_in_uv ? UV.y : half_size.y - VERTEX.y;
 }
 
 void fragment() {
-	float norm_y = (half_size.y - v_obj.y) / (half_size.y * 2.0);
+	float norm_y = v_depth / (half_size.y * 2.0);
+	float band_y = v_depth / height_m;
 
 	vec3 col = base_color.rgb;
 	for (int i = 0; i < MAX_STRIPES; i++) {
-		if (i < stripe_count && abs(norm_y - stripe_positions[i]) < stripe_widths[i] * 0.5) {
+		if (i < stripe_count && abs(band_y - stripe_positions[i]) < stripe_widths[i] * 0.5) {
 			col = stripe_colors[i].rgb;
 		}
 	}
 	vec3 cap = vec3(abs(v_obj.x) - cap_center.x, v_obj.y - cap_center.y, v_obj.z - cap_center.z)
 			/ (cap_radii * 1.08);
-	if (dot(cap, cap) < 1.0) {
+	if (dot(cap, cap) < 1.0 || norm_y < cap_until) {
 		col = cap_color.rgb;
 	}
 	if (norm_y < yoke_depth) {
@@ -61,6 +78,16 @@ void fragment() {
 	if (v_obj_normal.y > 0.9 && collar_radius > 0.0) {
 		bool collar = length(vec2(v_obj.x, v_obj.z - collar_center_z)) < collar_radius;
 		col = collar ? collar_color.rgb : yoke_color.rgb;
+	}
+	if (shoulder_number && abs(v_obj_normal.x) > 0.5) {
+		// Seen from the face's side, the viewer's right runs toward −Z on the
+		// +X face and +Z on the −X one.
+		vec2 uv = vec2(0.5 - sign(v_obj_normal.x) * v_obj.z / number_width,
+				0.5 - (v_obj.y - number_band.x) / number_band.y);
+		if (uv.x > 0.0 && uv.x < 1.0 && uv.y > 0.0 && uv.y < 1.0) {
+			vec4 number = texture(number_decal, uv);
+			col = mix(col, number.rgb, number.a);
+		}
 	}
 	if (decals) {
 		// The back (+Z) face: a viewer behind sees +X on their right.

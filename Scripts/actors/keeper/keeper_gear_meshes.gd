@@ -181,7 +181,7 @@ static func _pants(k: KeeperMeshKit, h: Vector3) -> void:
 	var rings: Array[PackedVector3Array] = [
 		KeeperMeshKit.octagon(-h.y, h.x, h.z, h.x * 0.25),
 		KeeperMeshKit.octagon(0.0, h.x * 0.98, h.z * 0.95, h.x * 0.28),
-		KeeperMeshKit.octagon(h.y, h.x * 0.86, h.z * 0.85, h.x * 0.3),
+		KeeperMeshKit.octagon(h.y, h.x * 0.80, h.z * 0.62, h.x * 0.3),
 	]
 	k.sweep(S.PANTS, rings, Vector3.ZERO)
 	k.tint = _DEEP
@@ -195,23 +195,41 @@ static func _pants(k: KeeperMeshKit, h: Vector3) -> void:
 # how far its corners are cut. It hangs straight and loose from the floaters to
 # a hem past the belt, and slopes from the shoulders up to the collar.
 const _CHEST_STATIONS: Array[Vector4] = [
-	Vector4(0.0, 0.90, 0.92, 0.22),
-	Vector4(0.12, 0.88, 0.93, 0.22),
+	Vector4(0.0, 0.90, 1.0, 0.22),
+	Vector4(0.12, 0.89, 0.98, 0.22),
 	Vector4(0.28, 0.91, 0.98, 0.22),
 	Vector4(-0.12, 0.97, 1.0, 0.22),
 	Vector4(-0.065, 0.95, 0.95, 0.35),
 	Vector4(-0.03, 0.55, 0.72, 0.30),
 	Vector4(0.0, 0.32, 0.55, 0.25),
 ]
-# The shoulder caps over each joint, blending into the jersey's sides: centre
-# out from the middle, down from the top, and radii. The jersey's paint finds
-# them by the same numbers.
-const SHOULDER_CAP := Vector2(0.185, 0.08)
-const SHOULDER_CAP_R := Vector3(0.095, 0.075, 0.13)
+# The shoulder cap at the top of the upper arm's sleeve, turning with the arm as
+# the skater's does: (height above the joint, radius). A blunt base tucked
+# under the jersey's slope, the equator carrying the number, and down to the
+# sleeve's own radius.
+const SHOULDER_CAP_PROFILE: Array[Vector2] = [
+	Vector2(KeeperGear.SHOULDER_CAP_ABOVE_JOINT_M, 0.060),
+	Vector2(0.025, 0.088),
+	Vector2(-0.015, KeeperGear.SHOULDER_CAP_RADIUS_M - 0.002),
+	Vector2(-0.060, 0.096),
+	Vector2(-0.105, 0.090),
+	Vector2(-0.150, 0.080),
+]
+# Where the cap's colour gives way to the sleeve's, below the joint, and where
+# the yoke over its top ends, above it.
+const SHOULDER_CAP_BOTTOM_M: float = -0.150
+const SHOULDER_CAP_YOKE_M: float = 0.025
 # The elbow cap behind the forearm's top, as shares of the forearm box's half
 # extents: centre and radii.
 const ELBOW_CAP_CENTER := Vector3(0.0, 0.82, 0.45)
 const ELBOW_CAP_RADII := Vector3(0.7, 0.22, 0.5)
+
+
+# The jersey's bottom section on the protector, in the chest box's frame: where
+# its tail hangs from (KeeperJerseyTail).
+static func jersey_hem_ring(h: Vector3) -> PackedVector3Array:
+	var st: Vector4 = _CHEST_STATIONS[0]
+	return KeeperMeshKit.octagon(-h.y, h.x * st.y, h.z * st.z, h.x * st.w * st.y)
 
 
 static func _chest(k: KeeperMeshKit, h: Vector3) -> void:
@@ -220,25 +238,27 @@ static func _chest(k: KeeperMeshKit, h: Vector3) -> void:
 		var y: float = -h.y + st.x if st.x > 0.0 or st == _CHEST_STATIONS[0] else h.y + st.x
 		rings.append(KeeperMeshKit.octagon(y, h.x * st.y, h.z * st.z, h.x * st.w * st.y))
 	k.sweep(S.JERSEY, rings, Vector3.ZERO)
-	for side: float in [-1.0, 1.0]:
-		k.ellipsoid(S.JERSEY, Vector3(side * SHOULDER_CAP.x, h.y - SHOULDER_CAP.y, 0.0),
-				SHOULDER_CAP_R, 5, 10)
 
 
-# A sleeve over an arm pad: full at the shoulder or the elbow, narrowing down
-# the bone; the forearm's elbow cap stands out behind the joint.
+# A sleeve over an arm pad, narrowing down the bone. The upper arm's begins in
+# its shoulder cap over the joint; the forearm's is full at the elbow, its
+# elbow cap standing out behind the joint.
 static func _sleeve(k: KeeperMeshKit, h: Vector3, fore: bool) -> void:
-	var zs: float = h.z / h.x
-	var shares: Array[Vector2] = [Vector2(-1.0, 0.86), Vector2(0.0, 0.95), Vector2(1.0, 1.0)]
-	if fore:
-		shares = [Vector2(-1.0, 0.80), Vector2(0.2, 0.88), Vector2(0.75, 0.97), Vector2(1.0, 0.92)]
 	var rings: Array[PackedVector3Array] = []
-	for sh: Vector2 in shares:
-		rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, h.y * sh.x, 0.0), h.x * sh.y,
-				h.x * sh.y * zs, 8, PI / 8.0))
-	k.sweep(S.JERSEY, rings, Vector3.ZERO)
 	if fore:
+		for sh: Vector2 in [Vector2(-1.0, 0.78), Vector2(0.2, 0.86), Vector2(0.75, 0.95), Vector2(1.0, 0.92)]:
+			rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, h.y * sh.x, 0.0), h.x * sh.y,
+					h.z * sh.y, 10, PI / 10.0))
+		k.sweep(S.JERSEY, rings, Vector3.ZERO)
 		k.ellipsoid(S.JERSEY, ELBOW_CAP_CENTER * h, ELBOW_CAP_RADII * h, 4, 8)
+		return
+	var joint: float = h.y - KeeperGear.SHOULDER_CAP_ABOVE_JOINT_M
+	var profile: Array[Vector2] = SHOULDER_CAP_PROFILE.duplicate()
+	profile.append(Vector2(-0.25, 0.078))
+	profile.append(Vector2(-h.y - joint, 0.072))
+	for st: Vector2 in profile:
+		rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, joint + st.x, 0.0), st.y, st.y, 10, PI / 10.0))
+	k.sweep(S.JERSEY, rings, Vector3(0.0, joint - 0.1, 0.0))
 
 
 # The trapper: a cuff at the wrist, the catching body widening above it and
