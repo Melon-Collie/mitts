@@ -97,6 +97,7 @@ func test_the_fake_costs_longer_the_higher_the_stick_went() -> void:
 	var long_lock: float = _controller._settle.time_left(_input.host_timestamp)
 	assert_almost_eq(short_lock, SlapperRules.recover_time(low_t,
 			_controller.slapper_recover_min_s, _controller.slapper_recover_max_s), 0.002)
+	assert_almost_eq(high_t, 1.0, 0.001, "wound to the top")
 	assert_almost_eq(long_lock, _controller.slapper_recover_max_s, 0.002, "from the top, the whole recovery")
 	assert_gt(long_lock, short_lock + 0.2)
 
