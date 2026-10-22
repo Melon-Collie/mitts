@@ -54,6 +54,10 @@ uniform bool decals = false;
 // A right-catcher's gear is drawn turned over on its own x: the lettering and
 // the crest are read the other way across, so they still read forwards.
 uniform bool flip_decals = false;
+// Drawn as part of the keeper's one skinned body (KeeperBodyRig): VERTEX has
+// been moved by the skin, so the piece's box-frame place and normal ride in
+// CUSTOM0 and CUSTOM1.
+uniform bool skinned = false;
 // The decals' frame: U across the box's width, V down its height, the same
 // metres KeeperJerseyDecal lays its pixels out in.
 uniform sampler2D text_decal : hint_default_transparent, filter_linear_mipmap;
@@ -64,9 +68,9 @@ varying vec3 v_obj_normal;
 varying float v_depth;
 
 void vertex() {
-	v_obj = VERTEX;
-	v_obj_normal = NORMAL;
-	v_depth = depth_in_uv ? UV.y : half_size.y - VERTEX.y;
+	v_obj = skinned ? CUSTOM0.xyz : VERTEX;
+	v_obj_normal = skinned ? CUSTOM1.xyz : NORMAL;
+	v_depth = depth_in_uv ? UV.y : half_size.y - v_obj.y;
 }
 
 void fragment() {

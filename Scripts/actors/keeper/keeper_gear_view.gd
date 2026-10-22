@@ -1,14 +1,14 @@
 class_name KeeperGearView
 extends Node3D
 
-# The keeper's gear drawn on his skeleton: each piece's mesh placed on its save
-# box (KeeperGearMeshes builds them inside the boxes), and the break above each
-# knee joining the pad to its thigh rise, and the jersey's tail hanging over
-# the pants, painted from the team kit. One
-# material per paint slot is shared by every piece that wears it; the jersey
-# and its sleeves wear keeper_jersey.gdshader instead, which paints the kit's
-# yoke, collar, shoulder caps, stripes, crest and lettering by height, and the
-# kit's pants stripes down the sides of the pants.
+# The keeper's gear drawn on his skeleton: each piece's mesh on its save box
+# (KeeperGearMeshes builds them inside the boxes), all of them one skinned mesh
+# (KeeperBodyRig), and the break above each knee joining the pad to its thigh
+# rise, and the jersey's tail hanging over the pants, painted from the team kit.
+# One material record per paint slot is shared by every piece that wears it;
+# the jersey and its sleeves wear keeper_jersey.gdshader instead, which paints
+# the kit's yoke, collar, shoulder caps, stripes, crest and lettering by height,
+# and the kit's pants stripes down the sides of the pants.
 
 const S := KeeperMeshKit.Slot
 const P := KeeperGear.Part
@@ -28,7 +28,7 @@ const _FIXED: Dictionary = {
 # The collar ring on the jersey's top face, in its box frame.
 const _COLLAR_RADIUS_M: float = 0.085
 
-var _pieces: Array[MeshInstance3D] = []
+var _rig: KeeperBodyRig = null
 var _materials: Array[StandardMaterial3D] = []
 var _knees: Array[KeeperKneeBreak] = []
 var _tail: KeeperJerseyTail = null
@@ -66,16 +66,9 @@ func _ready() -> void:
 	_materials[S.SKIN].roughness = 0.85
 	_materials[S.HELMET].roughness = UniformPaint.ROUGH_HELMET
 	_build_jersey_materials()
-	for part: int in KeeperGear.PART_COUNT:
-		var mi := MeshInstance3D.new()
-		var mesh: ArrayMesh = KeeperGearMeshes.mesh(part)
-		mi.mesh = mesh
-		var slots: PackedInt32Array = KeeperMeshKit.surface_slots(mesh)
-		for s: int in slots.size():
-			var mat: Material = _kit_material(part, slots[s])
-			mi.set_surface_override_material(s, mat if mat != null else _materials[slots[s]])
-		add_child(mi)
-		_pieces.append(mi)
+	_rig = KeeperBodyRig.new()
+	add_child(_rig)
+	_rig.build(_materials, _kit_material, _mirrored)
 	for side: int in 2:
 		var knee := KeeperKneeBreak.new(KeeperGear.Part.PAD_G + side,
 				KeeperGear.Part.RISE_G + side, _materials[S.PADS])
@@ -134,27 +127,27 @@ func apply_jersey_info(p_name: String, number: int) -> void:
 func update(skel: KeeperSkeleton) -> void:
 	if skel.mirrored != _mirrored:
 		_set_mirrored(skel.mirrored)
-	# A right-catcher's bones are the left-catcher's reflected, each box on its
-	# own x too; drawn turned over on that x, each piece is the true mirror of
-	# the left-catcher's, its glove's thumb on the other side.
-	var turn: Basis = Basis.from_scale(Vector3(-1.0, 1.0, 1.0)) if _mirrored else Basis.IDENTITY
-	for part: int in _pieces.size():
-		var box: Transform3D = KeeperGear.box(skel, part)
-		_pieces[part].transform = Transform3D(box.basis * turn, box.origin)
+	_rig.update(skel)
 	for knee: KeeperKneeBreak in _knees:
 		knee.update(skel)
 	_tail.update(skel)
 
 
+# A right-catcher's bones are the left-catcher's reflected, each box on its own
+# x too; his pieces are built turned over on that x, so each is the true mirror
+# of the left-catcher's, its glove's thumb on the other side, and his lettering
+# is read the other way across.
 func _set_mirrored(mirrored: bool) -> void:
 	_mirrored = mirrored
 	for m: ShaderMaterial in [_jersey, _upper_arm]:
 		m.set_shader_parameter("flip_decals", mirrored)
+	_rig.build(_materials, _kit_material, mirrored)
 
 
 func _paint_slot(slot: int, c: Variant) -> void:
 	if c is Color:
 		_materials[slot].albedo_color = c
+		_rig.paint.set_zone(slot, _materials[slot])
 
 
 func _letter() -> void:
