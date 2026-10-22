@@ -1,46 +1,74 @@
 class_name KeeperJerseyTail
 extends MeshInstance3D
 
-# The jersey's tail, untucked: a front panel and a back panel of cloth below the
-# chest protector, open at the sides, each hanging from the protector's hem
-# and resting on what is under it. The top of a panel is the protector's hem
-# wherever the trunk put it; the panel hangs from there row by row, each row
-# its length of cloth below the last and lifted out of the pants and the thigh
-# guards to a cloth's thickness off them, so it runs down over the belly, the
-# seat and, in a deep stance, the tops of the thighs rather than cutting
-# through them. Drawn only: the pants under it are the save.
+# The jersey's tail, untucked: the cloth below the chest protector, all the way
+# round him, hanging from the protector's hem and resting on what is under it.
+# Its top is the protector's hem wherever the trunk put it; it hangs from there
+# row by row, each row its length of cloth below the last and lifted out of the
+# pants and the thigh guards to a cloth's thickness off them, so it runs down
+# over the belly, the hips, the seat and, in a deep stance, the tops of the
+# thighs rather than cutting through them. Drawn only: the pants under it are
+# the save.
 
-# How much cloth each panel hangs below the protector: an untucked goalie
-# jersey covers most of his pants, to the crotch in front and the lower seat
-# behind.
+# How much cloth hangs below the protector in front and behind, eased between
+# round the sides: an untucked goalie jersey covers most of his pants, to the
+# crotch in front and the lower seat behind.
 const FRONT_LENGTH_M: float = 0.18
 const BACK_LENGTH_M: float = 0.20
-# Each panel's half arc round him, from straight ahead or straight behind.
-const PANEL_HALF_ARC_RAD: float = deg_to_rad(68.0)
 # How far the cloth stands off what it lies on.
 const CLOTH_M: float = 0.012
-const _COLUMNS: int = 8
+# Columns along each of the hem's eight edges.
+const _PER_EDGE: int = 6
+const _EDGES: int = 8
+const _COLUMNS: int = _PER_EDGE * _EDGES
 const _ROWS: int = 5
-# The rounded-box sections the cloth is kept outside: a superellipse of this
-# order sits on an octagon's flats and just over its cut corners.
-const _ROUND: float = 4.0
+# A quad's two triangles, its corners taken in order round it: wound to face
+# along the cross of its first two edges, or against it.
+const _WIND_FLAT: PackedInt32Array = [0, 2, 1, 0, 3, 2]
+const _WIND_BACK: PackedInt32Array = [0, 1, 2, 0, 2, 3]
 
-var _top: PackedVector3Array
+# The hem in the chest box's frame, its edges divided into columns, so the tail
+# starts on the protector's own edge; and each edge's facet normal above it.
+var _top := PackedVector3Array()
+var _facet := PackedVector3Array()
+var _seg := PackedFloat32Array()
 var _top_from_collar_m: float
 var _mesh := ImmediateMesh.new()
 var _material: Material = null
 var _pants_h: Vector3
 var _thigh_h: Vector3
-# Per update: the boxes the cloth drapes over, and the panel being built.
+# Per update: the boxes the cloth drapes over, and the cloth being built (the
+# last column repeats the first, closing it round him) with its normals.
 var _pants_xf: Transform3D
 var _thigh_xf: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 var _rows: Array[PackedVector3Array] = []
+var _normals: Array[PackedVector3Array] = []
+var _facet_now := PackedVector3Array()
+# One quad of it as it is emitted: corners, normals, depths below the collar.
+var _qp := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
+var _qn := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
+var _qd := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 
 
 func _init(material: Material) -> void:
 	_material = material
 	var h: Vector3 = KeeperGear.half_extents(KeeperGear.Part.CHEST)
-	_top = KeeperGearMeshes.jersey_hem_ring(h)
+	var hem: PackedVector3Array = KeeperGearMeshes.jersey_section(h, 0)
+	var above: PackedVector3Array = KeeperGearMeshes.jersey_section(h, 1)
+	for e: int in _EDGES:
+		var a: Vector3 = hem[e]
+		var b: Vector3 = hem[(e + 1) % _EDGES]
+		var n: Vector3 = (b - a).cross(above[e] - a).normalized()
+		var mid: Vector3 = (a + b) * 0.5
+		if n.dot(Vector3(mid.x, 0.0, mid.z)) < 0.0:
+			n = -n
+		_facet.append(n)
+		for k: int in _PER_EDGE:
+			var p: Vector3 = a.lerp(b, float(k) / float(_PER_EDGE))
+			_top.append(p)
+			# Front (−Z) to back, eased round the sides.
+			var back: float = 0.5 - 0.5 * cos(atan2(p.x, -p.z))
+			_seg.append(lerpf(FRONT_LENGTH_M, BACK_LENGTH_M, back) / float(_ROWS - 1))
 	_top_from_collar_m = 2.0 * h.y
 	_pants_h = KeeperGear.half_extents(KeeperGear.Part.PANTS)
 	_thigh_h = KeeperGear.half_extents(KeeperGear.Part.THIGH_G)
@@ -48,12 +76,15 @@ func _init(material: Material) -> void:
 		var row := PackedVector3Array()
 		row.resize(_COLUMNS + 1)
 		_rows.append(row)
+		_normals.append(row.duplicate())
+	_facet_now.resize(_EDGES)
 	mesh = _mesh
 	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
 
 # How far the hem hangs below the protector, between the front's and the
-# back's: the jersey's length is the protector's and this.
+# back's: the jersey's length is the protector's and this. The kit's bands are
+# laid at the same share of the way down all round, so they follow the hem.
 static func length_m() -> float:
 	return (FRONT_LENGTH_M + BACK_LENGTH_M) * 0.5
 
@@ -63,53 +94,50 @@ func update(skel: KeeperSkeleton) -> void:
 	_pants_xf = KeeperGear.box(skel, KeeperGear.Part.PANTS)
 	_thigh_xf[0] = KeeperGear.box(skel, KeeperGear.Part.THIGH_G)
 	_thigh_xf[1] = KeeperGear.box(skel, KeeperGear.Part.THIGH_B)
+	for e: int in _EDGES:
+		_facet_now[e] = (chest_box.basis * _facet[e]).normalized()
+	for c: int in _COLUMNS:
+		# The top is the protector's hem itself, so nothing shows where they
+		# meet; the rows below rest on what is under them.
+		_rows[0][c] = chest_box * _top[c]
+		for r: int in range(1, _ROWS):
+			_rows[r][c] = _hang(_rows[r - 1][c], _seg[c])
+	for r: int in _ROWS:
+		_rows[r][_COLUMNS] = _rows[r][0]
+	_smooth_normals(chest_box)
 	_mesh.clear_surfaces()
 	_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _material)
-	for panel: int in 2:
-		var facing: float = 0.0 if panel == 0 else PI
-		var seg: float = (FRONT_LENGTH_M if panel == 0 else BACK_LENGTH_M) / float(_ROWS - 1)
-		for c: int in _COLUMNS + 1:
-			var angle: float = facing + PANEL_HALF_ARC_RAD * (2.0 * float(c) / float(_COLUMNS) - 1.0)
-			var dir := Vector2(sin(angle), -cos(angle))
-			# The top rests on what is under it too: with the hips pitched under
-			# a leaning trunk the protector's hem can sit inside the pants' front.
-			_rows[0][c] = _clear(chest_box * _ring_point(_top, dir))
-			for r: int in range(1, _ROWS):
-				_rows[r][c] = _hang(_rows[r - 1][c], seg)
-		var below: float = length_m()
-		_panel(_top_from_collar_m, _top_from_collar_m + below)
+	_cloth(_top_from_collar_m, _top_from_collar_m + length_m())
 	_mesh.surface_end()
 
 
-# The point where a ray from the ring's centre along `dir` (x, z) leaves the
-# convex ring (in its own frame, all at one height).
-static func _ring_point(ring: PackedVector3Array, dir: Vector2) -> Vector3:
-	var c := Vector3.ZERO
-	for p: Vector3 in ring:
-		c += p
-	c /= float(ring.size())
-	var best: float = INF
-	for i: int in ring.size():
-		var a: Vector3 = ring[i] - c
-		var b: Vector3 = ring[(i + 1) % ring.size()] - c
-		var e := Vector2(b.x - a.x, b.z - a.z)
-		var den: float = dir.x * e.y - dir.y * e.x
-		if absf(den) < 1e-9:
-			continue
-		var t: float = (a.x * e.y - a.z * e.x) / den
-		var s: float = (a.x * dir.y - a.z * dir.x) / den
-		if t > 0.0 and s >= 0.0 and s <= 1.0:
-			best = minf(best, t)
-	return c + Vector3(dir.x, 0.0, dir.y) * best
+# The cloth is shaded smooth, from its neighbours, away from the trunk's axis.
+func _smooth_normals(chest_box: Transform3D) -> void:
+	var axis: Vector3 = chest_box.basis.y.normalized()
+	for r: int in _ROWS:
+		var above: PackedVector3Array = _rows[maxi(r - 1, 0)]
+		var below: PackedVector3Array = _rows[mini(r + 1, _ROWS - 1)]
+		for c: int in _COLUMNS:
+			var p: Vector3 = _rows[r][c]
+			var round_dir: Vector3 = _rows[r][c + 1] - _rows[r][(c + _COLUMNS - 1) % _COLUMNS]
+			var n: Vector3 = round_dir.cross(below[c] - above[c])
+			var out: Vector3 = p - chest_box.origin
+			out -= axis * out.dot(axis)
+			if n.dot(out) < 0.0:
+				n = -n
+			_normals[r][c] = n.normalized()
+		_normals[r][_COLUMNS] = _normals[r][0]
 
 
 # The point on a piece's section at height `y` (its box frame) along `dir`,
 # `off` metres out from its surface.
-static func _on_section(sections: Array[Vector3], h: Vector3, y: float, dir: Vector2,
+static func _on_section(sections: Array[Vector4], h: Vector3, y: float, dir: Vector2,
 		off: float) -> Vector3:
-	var half: Vector2 = KeeperGearMeshes.section_at(sections, h, clampf(y, -h.y, h.y))
-	var r: float = pow(pow(absf(dir.x) / half.x, _ROUND) + pow(absf(dir.y) / half.y, _ROUND),
-			-1.0 / _ROUND)
+	var sec: Vector3 = KeeperGearMeshes.section_at(sections, h, clampf(y, -h.y, h.y))
+	var depth: float = sec.y if dir.y < 0.0 else sec.z
+	var order: float = KeeperGearMeshes.PANTS_ROUNDNESS
+	var r: float = pow(pow(absf(dir.x) / sec.x, order) + pow(absf(dir.y) / depth, order),
+			-1.0 / order)
 	return Vector3(dir.x, y, dir.y) * Vector3(r + off, 1.0, r + off)
 
 
@@ -135,7 +163,7 @@ func _clear(p: Vector3) -> Vector3:
 	return p
 
 
-static func _clear_of(p: Vector3, xf: Transform3D, sections: Array[Vector3],
+static func _clear_of(p: Vector3, xf: Transform3D, sections: Array[Vector4],
 		h: Vector3) -> Vector3:
 	var local: Vector3 = xf.affine_inverse() * p
 	if absf(local.y) > h.y:
@@ -150,33 +178,43 @@ static func _clear_of(p: Vector3, xf: Transform3D, sections: Array[Vector3],
 	return xf * surface
 
 
-# The panel between its rows, both faces, each vertex carrying its depth below
-# the collar in UV.y, which is what the jersey paint bands it by.
-func _panel(top_y: float, hem_y: float) -> void:
+# The cloth between its rows, both faces, each vertex carrying its depth below
+# the collar in UV.y, which is what the jersey paint bands it by. Along its top
+# it takes the protector's facet normals, so the light runs on across the hem.
+func _cloth(top_y: float, hem_y: float) -> void:
 	for r: int in _ROWS - 1:
-		var a: PackedVector3Array = _rows[r]
-		var b: PackedVector3Array = _rows[r + 1]
 		var y0: float = lerpf(top_y, hem_y, float(r) / float(_ROWS - 1))
 		var y1: float = lerpf(top_y, hem_y, float(r + 1) / float(_ROWS - 1))
+		_qd[0] = y0
+		_qd[1] = y0
+		_qd[2] = y1
+		_qd[3] = y1
 		for c: int in _COLUMNS:
-			_quad(a[c], a[c + 1], b[c + 1], b[c], y0, y1)
+			_qp[0] = _rows[r][c]
+			_qp[1] = _rows[r][c + 1]
+			_qp[2] = _rows[r + 1][c + 1]
+			_qp[3] = _rows[r + 1][c]
+			_qn[0] = _normals[r][c] if r > 0 else _facet_now[floori(float(c) / _PER_EDGE)]
+			_qn[1] = _normals[r][c + 1] if r > 0 else _qn[0]
+			_qn[2] = _normals[r + 1][c + 1]
+			_qn[3] = _normals[r + 1][c]
+			_quad()
 
 
-func _quad(p: Vector3, q: Vector3, r: Vector3, s: Vector3, y0: float, y1: float) -> void:
-	var n: Vector3 = (q - p).cross(s - p)
-	if n.length_squared() < 1e-14:
-		n = (r - q).cross(p - q)
-	if n.length_squared() < 1e-14:
+func _quad() -> void:
+	var flat: Vector3 = (_qp[1] - _qp[0]).cross(_qp[3] - _qp[0])
+	if flat.length_squared() < 1e-14:
+		flat = (_qp[2] - _qp[1]).cross(_qp[0] - _qp[1])
+	if flat.length_squared() < 1e-14:
 		return
-	n = n.normalized()
 	# Godot's front faces wind clockwise seen from outside, against the
-	# right-hand cross `n` was taken from.
-	for side: float in [1.0, -1.0]:
-		var face: Vector3 = n * side
-		var tri: Array = [[p, y0], [r, y1], [q, y0], [p, y0], [s, y1], [r, y1]]
-		if side < 0.0:
-			tri = [[p, y0], [q, y0], [r, y1], [p, y0], [r, y1], [s, y1]]
-		for v: Array in tri:
-			_mesh.surface_set_normal(face)
-			_mesh.surface_set_uv(Vector2(0.0, v[1]))
-			_mesh.surface_add_vertex(v[0])
+	# right-hand cross `flat` was taken from. Both faces are drawn, the inner
+	# one with the normals turned in.
+	var flat_out: bool = flat.dot(_qn[0] + _qn[1] + _qn[2] + _qn[3]) > 0.0
+	for side: int in 2:
+		var turn: float = 1.0 if side == 0 else -1.0
+		var order: PackedInt32Array = _WIND_FLAT if (side == 0) == flat_out else _WIND_BACK
+		for i: int in order:
+			_mesh.surface_set_normal(_qn[i] * turn)
+			_mesh.surface_set_uv(Vector2(0.0, _qd[i]))
+			_mesh.surface_add_vertex(_qp[i])

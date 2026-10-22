@@ -7,7 +7,8 @@ extends Node3D
 # the pants, painted from the team kit. One
 # material per paint slot is shared by every piece that wears it; the jersey
 # and its sleeves wear keeper_jersey.gdshader instead, which paints the kit's
-# yoke, collar, shoulder caps, stripes, crest and lettering by height.
+# yoke, collar, shoulder caps, stripes, crest and lettering by height, and the
+# kit's pants stripes down the sides of the pants.
 
 const S := KeeperMeshKit.Slot
 const P := KeeperGear.Part
@@ -35,6 +36,9 @@ var _jersey: ShaderMaterial = null
 var _tail_paint: ShaderMaterial = null
 var _upper_arm: ShaderMaterial = null
 var _forearm: ShaderMaterial = null
+# The pants' legs and their shell, each with its stripe down its outer side
+# (the shell on both).
+var _pants_paint: Dictionary = {}
 var _front: KeeperJerseyDecal = null
 var _back: KeeperJerseyDecal = null
 var _shoulder: KeeperJerseyDecal = null
@@ -66,10 +70,8 @@ func _ready() -> void:
 		mi.mesh = mesh
 		var slots: PackedInt32Array = KeeperMeshKit.surface_slots(mesh)
 		for s: int in slots.size():
-			var mat: Material = _materials[slots[s]]
-			if slots[s] == S.JERSEY:
-				mat = _jersey_material(part)
-			mi.set_surface_override_material(s, mat)
+			var mat: Material = _kit_material(part, slots[s])
+			mi.set_surface_override_material(s, mat if mat != null else _materials[slots[s]])
 		add_child(mi)
 		_pieces.append(mi)
 	for side: int in 2:
@@ -109,7 +111,9 @@ func apply_uniform(colors: Dictionary) -> void:
 	_paint_slot(S.GLOVE_ACCENT, colors.glove_accent)
 	_paint_slot(S.PADS, colors.goalie_pads)
 	_paint_slot(S.PANTS, colors.pants)
-	_paint_slot(S.PANTS_STRIPE, colors.pants_stripe)
+	for m: ShaderMaterial in _pants_paint.values():
+		m.set_shader_parameter("base_color", kit.pants.base)
+		_set_stripes(m, kit.pants.stripes)
 	var preset: Dictionary = colors.get("preset", {})
 	_front.set_crest(TeamCrest.fruit_for(preset), preset)
 	_front_view.render_target_update_mode = SubViewport.UPDATE_ONCE
@@ -143,7 +147,13 @@ func _letter() -> void:
 	_shoulder_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
-func _jersey_material(part: int) -> Material:
+# The kit-shader material a piece's surface wears, or null for its slot's own:
+# the jersey and its sleeves, and the pants with the kit's side stripes.
+func _kit_material(part: int, slot: int) -> Material:
+	if slot == S.PANTS:
+		return _pants_paint.get(part)
+	if slot != S.JERSEY:
+		return null
 	match part:
 		P.CHEST:
 			return _jersey
@@ -151,7 +161,7 @@ func _jersey_material(part: int) -> Material:
 			return _upper_arm
 		P.FOREARM_G, P.FOREARM_B:
 			return _forearm
-	return _materials[S.JERSEY]
+	return null
 
 
 func _build_jersey_materials() -> void:
@@ -174,6 +184,7 @@ func _build_jersey_materials() -> void:
 	_tail_paint.set_shader_parameter("depth_in_uv", true)
 	_upper_arm = _jersey_shader(P.UPPER_ARM_G)
 	_build_shoulder_paint()
+	_build_pants_paint()
 	_forearm = _jersey_shader(P.FOREARM_G)
 	var f: Vector3 = KeeperGear.half_extents(P.FOREARM_G)
 	_forearm.set_shader_parameter("cap_center", KeeperGearMeshes.ELBOW_CAP_CENTER * f)
@@ -194,6 +205,19 @@ func _build_shoulder_paint() -> void:
 	_upper_arm.set_shader_parameter("number_band", Vector2(
 			joint + KeeperGearMeshes.SHOULDER_CAP_PROFILE[2].x, KeeperJerseyDecal.SHOULDER_BAND.y))
 	_upper_arm.set_shader_parameter("number_width", KeeperJerseyDecal.SHOULDER_BAND.x)
+
+
+# The stripe's width is the kit's share of a leg's girth, the same on the
+# shell, so the stripe runs on unbroken from the leg up over the hip.
+func _build_pants_paint() -> void:
+	var around: float = KeeperGearMeshes.thigh_girth_m()
+	for part: int in [P.THIGH_G, P.THIGH_B, P.PANTS]:
+		var m: ShaderMaterial = _jersey_shader(part)
+		m.set_shader_parameter("side_stripes", true)
+		m.set_shader_parameter("around_m", around)
+		_pants_paint[part] = m
+	_pants_paint[P.THIGH_G].set_shader_parameter("stripe_side", -1.0)
+	_pants_paint[P.THIGH_B].set_shader_parameter("stripe_side", 1.0)
 
 
 func _jersey_shader(part: int) -> ShaderMaterial:

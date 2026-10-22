@@ -10,10 +10,10 @@ extends RefCounted
 # shells come out right whichever order their vertices were listed in.
 
 enum Slot {
-	PADS, JERSEY, PANTS, PANTS_STRIPE, GLOVES, GLOVE_ACCENT,
+	PADS, JERSEY, PANTS, GLOVES, GLOVE_ACCENT,
 	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP, SKIN,
 }
-const SLOT_COUNT: int = 14
+const SLOT_COUNT: int = 13
 
 var _tools: Array[SurfaceTool] = []
 var _used: Array[bool] = []
@@ -154,6 +154,21 @@ static func octagon(y: float, hx: float, hz: float, cut: float, front: float = 1
 	out.append(Vector3(cx - hx + cut, y, cz + hz))
 	out.append(Vector3(cx - hx, y, cz + hz - cut))
 	out.append(Vector3(cx - hx, y, cz - f + cut))
+	return out
+
+
+# A loop of `n` points round a rounded box square to Y at height `y`: a
+# superellipse of `order` (2 an ellipse, higher squarer), half width `hx`,
+# reaching `front` toward −Z and `back` toward +Z.
+static func rounded(y: float, hx: float, front: float, back: float, n: int,
+		order: float) -> PackedVector3Array:
+	var e: float = 2.0 / order
+	var out := PackedVector3Array()
+	for i: int in n:
+		var t: float = TAU * (float(i) + 0.5) / float(n)
+		var sx: float = signf(sin(t)) * pow(absf(sin(t)), e)
+		var cz: float = signf(cos(t)) * pow(absf(cos(t)), e)
+		out.append(Vector3(sx * hx, y, -cz * (front if cz > 0.0 else back)))
 	return out
 
 

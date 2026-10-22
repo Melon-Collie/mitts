@@ -17,9 +17,9 @@ one the bots shoot at.
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
-| `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey and sleeves |
+| `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey, sleeves and pants (whose stripes run down the side, as the skaters' do) |
 | `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
-| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail: front and back panels hung from the protector's hem and rested on the pants and thighs |
+| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, all the way round: hung from the protector's own hem edge and shaded on from its facets so the two read as one jersey, rested on the pants and thighs |
 
 ## One body, solved once, read three ways
 

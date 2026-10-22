@@ -160,54 +160,90 @@ static func _skate(k: KeeperMeshKit, h: Vector3) -> void:
 	k.tint = Color.WHITE
 
 
-# The thigh guard's and the pants' sections, bottom to top: height as a share of
-# the box's half height, half width and half depth as shares of the box's. The
-# jersey's tail drapes against the same shapes (KeeperJerseyTail).
-const THIGH_SECTIONS: Array[Vector3] = [
-	Vector3(-1.0, 0.88, 0.85), Vector3(-0.15, 0.97, 0.97), Vector3(1.0, 1.0, 1.0),
+# The pants' legs' and body's sections, bottom to top: height as a share of the
+# box's half height; half width, front depth and back depth as shares of the
+# box's. Each is a rounded box of PANTS_ROUNDNESS, flat enough across the front
+# for the thigh guard under the leg. The jersey's tail drapes against the same
+# shapes (KeeperJerseyTail).
+const PANTS_ROUNDNESS: float = 3.0
+# A leg: the opening just above the knee, roomy up the thigh, and a domed top
+# tucked up into the body, so a flexed hip shows a rounded crease.
+const THIGH_SECTIONS: Array[Vector4] = [
+	Vector4(-1.0, 0.92, 0.82, 0.82), Vector4(-0.6, 0.94, 0.88, 0.86),
+	Vector4(0.2, 0.98, 0.96, 0.96), Vector4(0.75, 0.96, 0.94, 0.92),
+	Vector4(1.0, 0.70, 0.62, 0.62),
 ]
-const PANTS_SECTIONS: Array[Vector3] = [
-	Vector3(-1.0, 1.0, 1.0), Vector3(0.0, 0.98, 0.95), Vector3(1.0, 0.80, 0.62),
+# The body: the seat full and low behind, the hip pads widest, narrowing to the
+# belt at the belly.
+const PANTS_SECTIONS: Array[Vector4] = [
+	Vector4(-1.0, 0.90, 0.68, 0.92), Vector4(-0.55, 1.0, 0.84, 1.0),
+	Vector4(0.0, 0.98, 0.92, 0.95), Vector4(0.5, 0.90, 0.86, 0.80),
+	Vector4(1.0, 0.80, 0.70, 0.62),
 ]
+const _PANTS_SEGMENTS: int = 16
 
 
-# A piece's half width and depth at height `y` in its box frame, from its
-# sections; zero outside it.
-static func section_at(sections: Array[Vector3], h: Vector3, y: float) -> Vector2:
+# A piece's half width, front depth and back depth at height `y` in its box
+# frame, from its sections; zero outside it.
+static func section_at(sections: Array[Vector4], h: Vector3, y: float) -> Vector3:
 	var t: float = y / h.y
 	if t < sections[0].x or t > sections[sections.size() - 1].x:
-		return Vector2.ZERO
+		return Vector3.ZERO
 	for i: int in sections.size() - 1:
-		var a: Vector3 = sections[i]
-		var b: Vector3 = sections[i + 1]
+		var a: Vector4 = sections[i]
+		var b: Vector4 = sections[i + 1]
 		if t <= b.x:
 			var f: float = (t - a.x) / (b.x - a.x)
-			return Vector2(h.x * lerpf(a.y, b.y, f), h.z * lerpf(a.z, b.z, f))
-	return Vector2.ZERO
+			return Vector3(h.x * lerpf(a.y, b.y, f), h.z * lerpf(a.z, b.z, f),
+					h.z * lerpf(a.w, b.w, f))
+	return Vector3.ZERO
 
 
-# The pants leg over the thigh guard: a broad, flat-faced panel across the front
-# of the thigh, narrowing a little to the knee, the pants' stripe round it.
+static func _pants_rings(sections: Array[Vector4], h: Vector3) -> Array[PackedVector3Array]:
+	var rings: Array[PackedVector3Array] = []
+	for st: Vector4 in sections:
+		rings.append(KeeperMeshKit.rounded(h.y * st.x, h.x * st.y, h.z * st.z, h.z * st.w,
+				_PANTS_SEGMENTS, PANTS_ROUNDNESS))
+	return rings
+
+
+# Round a pants leg at its fullest: what the kit's pants stripe widths are
+# shares of.
+static func thigh_girth_m() -> float:
+	var h: Vector3 = KeeperGear.half_extents(P.THIGH_G)
+	var st: Vector4 = THIGH_SECTIONS[2]
+	var ring: PackedVector3Array = KeeperMeshKit.rounded(0.0, h.x * st.y, h.z * st.z, h.z * st.w,
+			_PANTS_SEGMENTS, PANTS_ROUNDNESS)
+	var out: float = 0.0
+	for i: int in ring.size():
+		out += ring[i].distance_to(ring[(i + 1) % ring.size()])
+	return out
+
+
+# A pants leg over the thigh guard, its opening dark inside.
 static func _thigh(k: KeeperMeshKit, h: Vector3) -> void:
-	var cut: float = h.x * 0.3
-	var rings: Array[PackedVector3Array] = []
-	for st: Vector3 in THIGH_SECTIONS:
-		rings.append(KeeperMeshKit.octagon(h.y * st.x, h.x * st.y, h.z * st.z, cut * minf(st.y, 1.0)))
-	k.sweep(S.PANTS, rings, Vector3.ZERO)
-	var band: Array[PackedVector3Array] = [
-		KeeperMeshKit.octagon(-h.y * 0.25, h.x * 0.975, h.z * 0.975, cut),
-		KeeperMeshKit.octagon(-h.y * 0.05, h.x * 0.985, h.z * 0.985, cut),
-	]
-	k.sweep(S.PANTS_STRIPE, band, Vector3(0.0, -h.y * 0.15, 0.0), false, false)
-
-
-static func _pants(k: KeeperMeshKit, h: Vector3) -> void:
-	var rings: Array[PackedVector3Array] = []
-	for st: Vector3 in PANTS_SECTIONS:
-		rings.append(KeeperMeshKit.octagon(h.y * st.x, h.x * st.y, h.z * st.z, h.x * 0.28))
-	k.sweep(S.PANTS, rings, Vector3.ZERO)
+	var rings: Array[PackedVector3Array] = _pants_rings(THIGH_SECTIONS, h)
+	k.sweep(S.PANTS, rings, Vector3.ZERO, false, true)
+	var opening: Vector4 = THIGH_SECTIONS[0]
+	var inside: Array[PackedVector3Array] = [rings[0], KeeperMeshKit.rounded(-h.y + 0.03,
+			h.x * opening.y * 0.8, h.z * opening.z * 0.8, h.z * opening.w * 0.8,
+			_PANTS_SEGMENTS, PANTS_ROUNDNESS)]
 	k.tint = _DEEP
-	k.box(S.PANTS, Vector3(0.0, h.y - 0.02, 0.0), Vector3(h.x * 0.87, 0.02, h.z * 0.86))
+	k.sweep(S.PANTS, inside, Vector3(0.0, -h.y + 0.1, 0.0), false, true)
+	k.tint = Color.WHITE
+
+
+# The pants' body round the hips and seat, the belt dark round its top.
+static func _pants(k: KeeperMeshKit, h: Vector3) -> void:
+	var rings: Array[PackedVector3Array] = _pants_rings(PANTS_SECTIONS, h)
+	k.sweep(S.PANTS, rings, Vector3.ZERO)
+	var top: Vector4 = PANTS_SECTIONS[PANTS_SECTIONS.size() - 1]
+	var belt: Array[PackedVector3Array] = []
+	for y: float in [h.y - 0.025, h.y]:
+		belt.append(KeeperMeshKit.rounded(y, h.x * top.y + 0.003, h.z * top.z + 0.003,
+				h.z * top.w + 0.003, _PANTS_SEGMENTS, PANTS_ROUNDNESS))
+	k.tint = _DEEP
+	k.sweep(S.PANTS, belt, Vector3(0.0, h.y - 0.0125, 0.0), false, false)
 	k.tint = Color.WHITE
 
 
@@ -247,18 +283,18 @@ const ELBOW_CAP_CENTER := Vector3(0.0, 0.82, 0.45)
 const ELBOW_CAP_RADII := Vector3(0.7, 0.22, 0.5)
 
 
-# The jersey's bottom section on the protector, in the chest box's frame: where
-# its tail hangs from (KeeperJerseyTail).
-static func jersey_hem_ring(h: Vector3) -> PackedVector3Array:
-	var st: Vector4 = _CHEST_STATIONS[0]
-	return KeeperMeshKit.octagon(-h.y, h.x * st.y, h.z * st.z, h.x * st.w * st.y)
+# The jersey's section `i` up the protector, in the chest box's frame. The
+# bottom one is its hem, where its tail hangs from (KeeperJerseyTail).
+static func jersey_section(h: Vector3, i: int) -> PackedVector3Array:
+	var st: Vector4 = _CHEST_STATIONS[i]
+	var y: float = -h.y + st.x if st.x > 0.0 or i == 0 else h.y + st.x
+	return KeeperMeshKit.octagon(y, h.x * st.y, h.z * st.z, h.x * st.w * st.y)
 
 
 static func _chest(k: KeeperMeshKit, h: Vector3) -> void:
 	var rings: Array[PackedVector3Array] = []
-	for st: Vector4 in _CHEST_STATIONS:
-		var y: float = -h.y + st.x if st.x > 0.0 or st == _CHEST_STATIONS[0] else h.y + st.x
-		rings.append(KeeperMeshKit.octagon(y, h.x * st.y, h.z * st.z, h.x * st.w * st.y))
+	for i: int in _CHEST_STATIONS.size():
+		rings.append(jersey_section(h, i))
 	k.sweep(S.JERSEY, rings, Vector3.ZERO)
 
 

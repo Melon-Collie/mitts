@@ -5,7 +5,8 @@ shader_type spatial;
 // team kit, by object-space height so every band runs level round it: the
 // base, the yoke over the top, the collar on the top face, the shoulder caps
 // in the kit's shoulder color, the kit's stripe bands, the crest on the front
-// face and the name and number on the back. A sleeve uses the bands alone.
+// face and the name and number on the back. A sleeve uses the bands alone, the
+// pants their side stripes.
 //
 // Heights are normalised over the piece: 0 = its top, 1 = its bottom; the
 // bands over height_m, which for the jersey runs on down its tail.
@@ -37,6 +38,13 @@ uniform bool shoulder_number = false;
 uniform sampler2D number_decal : hint_default_transparent, filter_linear_mipmap;
 uniform vec2 number_band = vec2(0.0, 0.1);
 uniform float number_width = 0.14;
+// The pants: the kit's stripes run down the side as columns instead of round
+// as bands, as on the skaters' pants. Their positions are shares of around_m
+// round the piece, 0.5 the middle of the side face: the −X face for
+// stripe_side −1, +X for +1, both for 0.
+uniform bool side_stripes = false;
+uniform float stripe_side = 0.0;
+uniform float around_m = 0.7;
 uniform int stripe_count = 0;
 uniform vec4 stripe_colors[MAX_STRIPES] : source_color;
 uniform float stripe_positions[MAX_STRIPES];
@@ -62,8 +70,19 @@ void fragment() {
 	float band_y = v_depth / height_m;
 
 	vec3 col = base_color.rgb;
+	float side = stripe_side != 0.0 ? stripe_side : sign(v_obj.x);
 	for (int i = 0; i < MAX_STRIPES; i++) {
-		if (i < stripe_count && abs(band_y - stripe_positions[i]) < stripe_widths[i] * 0.5) {
+		if (i >= stripe_count) {
+			continue;
+		}
+		bool hit = abs(band_y - stripe_positions[i]) < stripe_widths[i] * 0.5;
+		if (side_stripes) {
+			// Across the side face, which is near flat: z is the way round it.
+			float centre = (stripe_positions[i] - 0.5) * around_m;
+			hit = v_obj.x * side > 0.0
+					&& abs(v_obj.z * side - centre) < stripe_widths[i] * around_m * 0.5;
+		}
+		if (hit) {
 			col = stripe_colors[i].rgb;
 		}
 	}
@@ -102,7 +121,8 @@ void fragment() {
 		}
 	}
 
-	ALBEDO = col;
+	// The mesh's vertex tint darkens its creases and openings under the paint.
+	ALBEDO = col * COLOR.rgb;
 	ROUGHNESS = 0.9;
 	// The skaters' rim (BodyRim): a soft fresnel edge so he reads as a lit volume.
 	float rim = pow(1.0 - clamp(dot(normalize(NORMAL), normalize(VIEW)), 0.0, 1.0), 3.0);
