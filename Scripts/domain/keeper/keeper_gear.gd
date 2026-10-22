@@ -45,11 +45,10 @@ const _PAD_CENTER := Vector3(0.0,
 const _PAD_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_LENGTH_M * 0.5, KeeperAnatomy.PAD_DEPTH_M * 0.5)
 # The thigh rise: the pad carried on past the knee stack, thinner, its face
 # flush with the pad's.
-const _RISE_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.45, KeeperAnatomy.PAD_THIGH_RISE_M * 0.5, 0.04)
+const _RISE_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_THIGH_RISE_M * 0.5, 0.04)
 const _RISE_FACE_Z: float = -KeeperAnatomy.PAD_FORWARD_OF_SHIN_M \
 		- KeeperAnatomy.PAD_DEPTH_M * 0.5 + _RISE_HALF.z
-# The rise starts just under the knee stack's top, so the two overlap.
-const _RISE_ROOT_M: float = KeeperAnatomy.PAD_ABOVE_KNEE_M - 0.01
+
 # The pad's boot, laced over the front of the skate by the toe bridge.
 const _BOOT_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M + 0.075, -0.13)
 const _BOOT_HALF := Vector3(0.085, 0.05, 0.075)
@@ -141,7 +140,7 @@ static func _rise_box(skel: KeeperSkeleton, side: int) -> Transform3D:
 	var bend: float = clampf(fold, -KeeperAnatomy.PAD_BREAK_MAX_RAD, KeeperAnatomy.PAD_BREAK_MAX_RAD) \
 			* clampf(shin_dir.y, 0.0, 1.0)
 	var basis: Basis = shin.basis.rotated(hinge_axis, bend)
-	var root: Vector3 = shin * Vector3(0.0, _RISE_ROOT_M, 0.0)
+	var root: Vector3 = shin * Vector3(0.0, KeeperAnatomy.PAD_RISE_ROOT_ABOVE_KNEE_M, 0.0)
 	return Transform3D(basis, root + basis * Vector3(0.0, _RISE_HALF.y, _RISE_FACE_Z))
 
 

@@ -59,7 +59,14 @@ const PAD_DEPTH_M: float = 0.20
 const PAD_BELOW_ANKLE_M: float = 0.05
 const PAD_ABOVE_KNEE_M: float = 0.05
 const PAD_LENGTH_M: float = SHIN_M + PAD_BELOW_ANKLE_M + PAD_ABOVE_KNEE_M
-const PAD_THIGH_RISE_M: float = 0.16
+# NHL: the pad may stand above the knee's centre by at most 45% of the knee to
+# the top of the pelvis. That reach is 0.27 of stature (20 in on the league's
+# 6'2" average), and the pad is built to the limit.
+const KNEE_TO_PELVIS_TOP_M: float = 0.27 * STATURE_M
+const PAD_TOP_ABOVE_KNEE_M: float = 0.45 * KNEE_TO_PELVIS_TOP_M
+# The rise starts just under the knee stack's top, so the two overlap.
+const PAD_RISE_ROOT_ABOVE_KNEE_M: float = PAD_ABOVE_KNEE_M - 0.01
+const PAD_THIGH_RISE_M: float = PAD_TOP_ABOVE_KNEE_M - PAD_RISE_ROOT_ABOVE_KNEE_M
 const PAD_BREAK_MAX_RAD: float = deg_to_rad(30.0)
 # The pad's face stands proud of the shin bone by this much: the leg sits in the
 # channel at the back.

@@ -132,7 +132,7 @@ func test_the_gear_is_inside_the_rule_book() -> void:
 		var h: Vector3 = KeeperGear.half_extents(part)
 		var key: String = KeeperGear.Part.keys()[part]
 		match part:
-			P.PAD_G, P.PAD_B:
+			P.PAD_G, P.PAD_B, P.RISE_G, P.RISE_B:
 				assert_almost_eq(h.x * 2.0, KeeperAnatomy.PAD_WIDTH_M, 1e-6, key)
 			P.BLOCKER:
 				assert_almost_eq(h.x * 2.0, KeeperAnatomy.BLOCKER_WIDTH_M, 1e-6, key)
@@ -192,3 +192,40 @@ func test_the_butterfly_seals_the_ice() -> void:
 				GameRules.PUCK_COLLISION_RADIUS, out, scratch)
 		assert_true(hit >= 0, "a puck along the ice at x %.2f meets him" % x)
 		x += 0.02
+
+
+func _span_y(part: int) -> Vector2:
+	var t: Transform3D = KeeperGear.box(_skel, part)
+	var h: Vector3 = KeeperGear.half_extents(part)
+	var e: float = absf(t.basis.x.y) * h.x + absf(t.basis.y.y) * h.y + absf(t.basis.z.y) * h.z
+	return Vector2(t.origin.y - e, t.origin.y + e)
+
+
+# Standing straight on his skates the pad runs from its boot, just off the ice
+# over the skate's toe, to the rule's limit above the knee: 45% of the knee to
+# the top of the pelvis.
+func test_the_pad_is_cut_to_the_rule() -> void:
+	KeeperPoses.upright(_pose)
+	_skel.pose(_pose)
+	for side: int in 2:
+		var knee: float = _skel.xf[KeeperSkeleton.SHIN[side]].origin.y
+		var top: float = _span_y(P.RISE_G + side).y
+		assert_almost_eq(top - knee, 0.45 * KeeperAnatomy.KNEE_TO_PELVIS_TOP_M, 0.002,
+				"pad top above the knee, side %d" % side)
+		var bottom: float = minf(_span_y(P.PAD_G + side).x, _span_y(P.BOOT_G + side).x)
+		assert_between(bottom, 0.0, 1.5 * IN_TO_M, "the boot rides just off the ice, side %d" % side)
+
+
+# Down, each rise carries its pad on along the ice past the knee, and the two
+# meet under him.
+func test_the_butterfly_rises_lie_flat_and_meet() -> void:
+	KeeperPoses.butterfly(_pose)
+	_skel.pose(_pose)
+	var inner: Array[float] = []
+	for side: int in 2:
+		var part: int = P.RISE_G + side
+		assert_almost_eq(_span_y(part).x, 0.0, 0.01, "rise %d on the ice" % side)
+		var t: Transform3D = KeeperGear.box(_skel, part)
+		var tip: Vector3 = t * Vector3(0.0, KeeperGear.half_extents(part).y, 0.0)
+		inner.append(tip.x)
+	assert_gte(inner[0], inner[1], "the glove-side rise reaches the blocker side's: they meet")

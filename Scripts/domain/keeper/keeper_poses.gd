@@ -28,8 +28,11 @@ const READY_STICK_TILT_RAD: float = deg_to_rad(22.0)
 # The butterfly: knees together on the ice, shins flared out behind them with
 # the pads' faces to the shooter, hips over the knees and the trunk tall.
 # Wide enough that the thigh rises, carried on along the ice past the knees,
-# meet under him rather than lying across each other.
-const BUTTERFLY_KNEE_HALF_SPACING_M: float = 0.17
+# meet under him, overlapping by BUTTERFLY_RISE_OVERLAP_M rather than lying
+# across each other.
+const BUTTERFLY_RISE_OVERLAP_M: float = 0.06
+const BUTTERFLY_KNEE_HALF_SPACING_M: float = KeeperAnatomy.PAD_TOP_ABOVE_KNEE_M \
+		- BUTTERFLY_RISE_OVERLAP_M * 0.5
 const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
