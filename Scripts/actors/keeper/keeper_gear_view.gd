@@ -9,7 +9,8 @@ extends Node3D
 
 const S := KeeperMeshKit.Slot
 
-# The slots no kit colours: skate steel and boot, the stick, tape, straps, cage.
+# The slots no kit colours: skate steel and boot, the stick, tape, straps, cage
+# (and the skin, the default tone until he is given one).
 const _FIXED: Dictionary = {
 	S.SKATE_BOOT: Color(0.10, 0.10, 0.11),
 	S.SKATE_STEEL: Color(0.78, 0.80, 0.84),
@@ -33,6 +34,9 @@ func _ready() -> void:
 		_materials.append(m)
 	_materials[S.SKATE_STEEL].metallic = 0.6
 	_materials[S.SKATE_STEEL].roughness = 0.35
+	_materials[S.SKIN].albedo_color = SkinToneRegistry.color_for(SkinToneRegistry.DEFAULT_INDEX)
+	_materials[S.SKIN].roughness = 0.85
+	BodyRim.apply(_materials[S.SKIN])
 	for part: int in KeeperGear.PART_COUNT:
 		var mi := MeshInstance3D.new()
 		var mesh: ArrayMesh = KeeperGearMeshes.mesh(part)

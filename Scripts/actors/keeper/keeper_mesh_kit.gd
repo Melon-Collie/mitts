@@ -11,9 +11,9 @@ extends RefCounted
 
 enum Slot {
 	PADS, JERSEY, JERSEY_STRIPE, PANTS, PANTS_STRIPE, GLOVES, GLOVE_ACCENT,
-	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP,
+	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP, SKIN,
 }
-const SLOT_COUNT: int = 14
+const SLOT_COUNT: int = 15
 
 var _tools: Array[SurfaceTool] = []
 var _used: Array[bool] = []
@@ -99,6 +99,13 @@ func box(slot: int, center: Vector3, half: Vector3, basis: Basis = Basis.IDENTIT
 			[0, 2, 6, 4], [1, 3, 7, 5]]
 	for f: Array in faces:
 		quad(slot, c[f[0]], c[f[1]], c[f[2]], c[f[3]], center)
+
+
+# A prebuilt mesh's first surface into `slot`, placed by `xform`. Its own
+# vertex colours stay its tints.
+func append(slot: int, mesh: ArrayMesh, xform: Transform3D) -> void:
+	_tools[slot].append_from(mesh, 0, xform)
+	_used[slot] = true
 
 
 # A square bar of half thickness `r` from `a` to `b`.

@@ -90,9 +90,9 @@ const _BLOCKER_HALF := Vector3(KeeperAnatomy.BLOCKER_WIDTH_M * 0.5, KeeperAnatom
 # The paddle rises from the blade's heel, above the ice, not from the ice.
 const _PADDLE_ROOT_M: float = 0.045
 # The mask on the head bone (its origin on the neck's line at chin height): the
-# dangler 10 cm under the chin, the shell 2 cm over the skull, the cage 17 cm
-# ahead of the neck and the backplate 12.5 cm behind it.
-const MASK_BELOW_CHIN_M: float = 0.10
+# shell's chin 4.5 cm under the chin, its dome 2 cm over the skull, the cage
+# 17.5 cm ahead of the neck and the backplate 12.5 cm behind it.
+const MASK_BELOW_CHIN_M: float = 0.045
 const MASK_TOP_M: float = KeeperAnatomy.SKULL_TOP_ABOVE_HEAD_M + 0.02
 const MASK_FRONT_M: float = 0.175
 const MASK_BACK_M: float = 0.125

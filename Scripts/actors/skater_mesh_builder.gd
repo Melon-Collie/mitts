@@ -570,6 +570,13 @@ static func _build_skate_assembly() -> ArrayMesh:
 	return m
 
 
+# The head ball and its face, centred on the origin, face toward −Z, white but
+# for the features' tints under the skin material. The keeper wears it inside
+# his mask.
+static func shared_head() -> ArrayMesh:
+	return _shared("head", _build_head)
+
+
 static func shared_helmet_assembly() -> ArrayMesh:
 	return _shared("helmet_assembly", _build_helmet_assembly)
 

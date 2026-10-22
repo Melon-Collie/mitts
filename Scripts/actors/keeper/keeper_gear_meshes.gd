@@ -280,6 +280,11 @@ const _MASK_SECTIONS: Array[Vector4] = [
 const _MASK_FACE := Vector2(0.095, 0.195)
 const _MASK_FACE_Z: float = -0.095
 const _MASK_SEGMENTS: int = 16
+# The skaters' head and face (SkaterMeshBuilder.shared_head) inside the mask:
+# narrowed and flattened to fit the shell, its eyes on the cage's middle row
+# and its face 4 cm behind the cage, ahead of the dark inside of the shell.
+const _FACE_SCALE := Vector3(0.85, 0.85, 0.75)
+const _FACE_CENTER := Vector3(0.0, 0.147, -0.024)
 # The cage: straight bars, short and wide, flat across the front and wrapped
 # back to the shell at its sides.
 const _CAGE_HALF_WIDTH: float = 0.088
@@ -293,7 +298,7 @@ const _CAGE_WRAP: float = 46.0
 
 
 # The mask: a fibreglass shell over the skull and down the jaw, a bar cage
-# across the face opening, the dangler hanging under the chin.
+# across the face opening, his face behind it.
 static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	var o := Vector3(0.0, -h.y + KeeperGear.MASK_BELOW_CHIN_M, h.z - KeeperGear.MASK_BACK_M)
 	var rings: Array[PackedVector3Array] = []
@@ -302,11 +307,13 @@ static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	k.sweep(S.HELMET, rings, o + Vector3(0.0, 0.12, 0.0))
 	var bottom: float = _CAGE_ROWS[0]
 	var top: float = _CAGE_ROWS[_CAGE_ROWS.size() - 1]
-	var face := PackedVector2Array([
+	k.append(S.SKIN, SkaterMeshBuilder.shared_head(),
+			Transform3D(Basis.from_scale(_FACE_SCALE), o + _FACE_CENTER))
+	var inside := PackedVector2Array([
 		Vector2(-_CAGE_HALF_WIDTH, o.y + bottom), Vector2(_CAGE_HALF_WIDTH, o.y + bottom),
 		Vector2(_CAGE_HALF_WIDTH, o.y + top), Vector2(-_CAGE_HALF_WIDTH, o.y + top),
 	])
-	k.slab(S.STRAP, face, o.z + _MASK_FACE_Z - 0.007, o.z + _MASK_FACE_Z - 0.004)
+	k.slab(S.STRAP, inside, o.z + _MASK_FACE_Z - 0.006, o.z + _MASK_FACE_Z - 0.003)
 	for y: float in _CAGE_ROWS:
 		_cage_bar(k, o, Vector2(-_CAGE_HALF_WIDTH, y), Vector2(_CAGE_HALF_WIDTH, y))
 	for i: int in _CAGE_BARS:
@@ -316,8 +323,6 @@ static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	for side: float in [-1.0, 1.0]:
 		k.box(S.CAGE, o + Vector3(side * (_CAGE_HALF_WIDTH + 0.003), (bottom + top) * 0.5, -0.105),
 				Vector3(0.003, (top - bottom) * 0.5 + 0.004, 0.014))
-	k.box(S.CAGE, o + Vector3(0.0, -0.07, -0.118), Vector3(0.03, 0.02, 0.0015),
-			Basis(Vector3.RIGHT, -0.2))
 
 
 # One section of the shell: a squarish loop (a superellipse), front and back
