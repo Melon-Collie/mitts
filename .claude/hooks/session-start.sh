@@ -15,7 +15,7 @@ echo '{"async": true, "asyncTimeout": 600000}'
 READY_MARKER="/tmp/.godot-ready"
 rm -f "$READY_MARKER"
 
-# Activate the committed pre-commit gdlint gate (.githooks/pre-commit). Runs in
+# Activate the committed pre-commit warning gate (.githooks/pre-commit). Runs in
 # both environments; idempotent. This is what enforces "never commit warnings".
 git -C "$CLAUDE_PROJECT_DIR" config core.hooksPath .githooks 2>/dev/null || true
 
