@@ -567,6 +567,13 @@ Each phase leaves the suite green and the game playable.
 and playtests.
 ---
 
+## 5a. Progress
+
+| Phase | State |
+|---|---|
+| 0 — scoreboard | `tests/instruments/ai/test_goalie_scoreboard.gd` (44 s), old goalie's baseline in `tests/instruments/ai/data/goalie_scoreboard.txt`: EASY 71 / NORMAL 63 / HARD 43 goals of 395 scripted shots, tiers in order. Its shooters are puppets that publish the cursor aim; the new goalie needs a shooter that poses a real skater (blade, coil) before Phase 3 |
+| 1 — the body | built: `Scripts/domain/keeper/`, `Scripts/actors/keeper/` (see its CLAUDE.md). Straight-on coverage, regulation puck: ready 63%, butterfly 72% (old: 58%, 64%); from the dot line at B depth 74% / 89%. Open: a blocker-side slit beside the body in the butterfly, the right-catcher mirror, the seam property, one merged skinned mesh |
+
 ## 6. Things found along the way (flagged, not fixed)
 
 - **`PuckAuthorityRules.FRAME_SUBSTEP_M = 0.04`** is commented "< a puck

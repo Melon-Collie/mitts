@@ -105,10 +105,6 @@ static func save_part(part: int) -> int:
 	return _SAVE_PART[part]
 
 
-static func bone_of(part: int) -> int:
-	return _BONE[part]
-
-
 static func half_extents(part: int) -> Vector3:
 	return _HALF[part]
 
