@@ -59,12 +59,14 @@ a save surface.
 
 ## Seeing him
 
-`.claude/hooks/render-keeper.sh` renders every stance from the front, side and
-three-quarter to `.preview/keeper/` (`tools/keeper_capture.gd`), with the save
-boxes overlaid unless `KEEPER_CAPTURE_BOXES=0`. `tests/unit/keeper/
-test_keeper_body.gd` holds the proportions, the bones' lengths, the gear on the
-ice and inside the rule book, the rigid stick, the packed layout and the sealed
-butterfly; `test_keeper_coverage.gd` snapshots each stance's coverage straight
+`.claude/hooks/render-keeper.sh` renders every stance from the front, side,
+three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
+(`tools/keeper_capture.gd`), with the save boxes overlaid unless
+`KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
+(`kick_glove`, `kick_blocker`). `tests/unit/keeper/test_keeper_body.gd` holds
+the proportions, the bones' lengths, the gear on the ice and inside the rule
+book, the rigid stick, the packed layout and the sealed butterfly and
+extension; `test_keeper_coverage.gd` snapshots each stance's coverage straight
 on and from the dot line.
 
 He is authored left-catching; a right-catcher's mirror is not built yet.

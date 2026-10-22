@@ -110,8 +110,9 @@ display-less test cannot assert. `tools/skater_matrix.gd` is its sibling for
 proportions and paint across builds — one static pose, five bodies.
 
 **To see the NEW GOALIE, render him.** `.claude/hooks/render-keeper.sh` draws the
-rebuilt keeper (`Scripts/domain/keeper/`) in every taught stance from three
-angles, save boxes overlaid, to `.preview/keeper/` (`tools/keeper_capture.gd`).
+rebuilt keeper (`Scripts/domain/keeper/`) in every taught stance from the
+front, side, three-quarter and the shooter's spot on the dot line, save boxes
+overlaid, to `.preview/keeper/` (`tools/keeper_capture.gd`).
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,

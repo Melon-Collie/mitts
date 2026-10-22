@@ -15,6 +15,8 @@ extends SceneTree
 
 const BASE_TILE := Vector2i(360, 450)
 const OUT_DIR: String = "res://.preview/keeper"
+# From the dot line, 20 ft out: both posts and the crossbar in a portrait tile.
+const SHOOTER_FOV_DEG: float = 28.0
 
 var _camera: Camera3D = null
 var _keeper: Keeper = null
@@ -62,6 +64,9 @@ func _init() -> void:
 		root.add_child(post)
 	_camera = Camera3D.new()
 	_camera.fov = 40.0
+	# The camera jumps between views: interpolated, it is drawn partway along
+	# the jump while its fov has already changed.
+	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	root.add_child(_camera)
 	_keeper = Keeper.new()
 	_keeper.show_boxes = OS.get_environment("KEEPER_CAPTURE_BOXES") != "0"
@@ -103,8 +108,9 @@ var _view_i: int = 0
 
 func _process(_delta: float) -> bool:
 	_frames += 1
-	# Two frames to draw each shot: one to place, one to render.
-	if _frames % 3 == 1:
+	# Four frames a shot: one to place the camera, two to draw it (a changed fov
+	# can land a frame late), one to read it back.
+	if _frames % 4 == 1:
 		if _stance_i >= _stances.size():
 			_save_sheet(_fronts, "all_front")
 			return true
@@ -113,9 +119,9 @@ func _process(_delta: float) -> bool:
 		_keeper.apply_pose(_pose)
 		var v: Array = _views[_view_i]
 		_camera.position = v[1]
-		_camera.fov = 17.0 if v[0] == "shooter" else 40.0
+		_camera.fov = SHOOTER_FOV_DEG if v[0] == "shooter" else 40.0
 		_camera.look_at(Vector3(0.0, 0.62, 0.0), Vector3.UP)
-	elif _frames % 3 == 0:
+	elif _frames % 4 == 0:
 		var img: Image = root.get_viewport().get_texture().get_image()
 		_shots.append(img)
 		if _view_i == 0:
