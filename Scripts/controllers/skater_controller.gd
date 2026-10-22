@@ -928,6 +928,15 @@ var pin_stance: float = 0.6
 var pin_pressed_lean_deg: float = 12.0
 var pin_drive_lean_deg: float = 18.0
 var pin_pose_speed: float = 6.0
+# Press pose (GaitPressLayer): the driver sits into a lunge and leans into the
+# man; the man dug in sits deep and wide and leans back into the push.
+var press_drive_stance: float = 0.7
+var press_drive_lean_deg: float = 20.0
+var press_drive_split_deg: float = 18.0
+var press_anchor_stance: float = 0.9
+var press_anchor_lean_deg: float = 22.0
+var press_anchor_width_m: float = 0.06
+var press_pose_speed: float = 6.0
 var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce, below standing
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
@@ -2269,9 +2278,10 @@ func reach_purpose() -> float:
 	return _ik.reach_purpose
 
 
-# The gait's (stop weight, skid weight, turn load) this render pass.
+# The gait's (stop weight as the scrape hears it, skid weight, turn load) this
+# render pass.
 func skate_sound() -> Vector3:
-	return Vector3(_skating.stop_weight, _skating.skid_weight, _skating.turn_load)
+	return Vector3(_skating.scrape_stop_weight(), _skating.skid_weight, _skating.turn_load)
 
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client

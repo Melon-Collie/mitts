@@ -1,7 +1,7 @@
 # Net-front battles — the press, and retiring the cross-check
 
-Status: **Phase 1 built** (the press, the bots' press and dig-in), playtest
-pending; Phases 2-3 not started. Amends the physicality
+Status: **Phases 1-2 built** (the press, the bots' press and dig-in, the
+press's poses and scrape), playtest pending; Phase 3 not started. Amends the physicality
 paragraph of `docs/gameplay-design.md` and Phase B of
 `docs/physicality-plan.md` (the cross-check). The stick half of the battle is
 `docs/defensive-play-plan.md`'s tie; the crease itself (jams, stuffs, wraps)
@@ -255,7 +255,28 @@ is moved slowly just past his hold, never snapped.
 - A contact test: a press applies no impulse and staggers nobody; a check at
   the onset speed still does.
 
-## Phase 2 — the press reads
+## Phase 2 — the press reads (built)
+
+### As built
+
+- **`GaitPressLayer`**, beside the pin layer and on its pattern, from
+  replicated state on every machine: touching a body, the one committed and
+  skating into him (`hit_committed`, his intent within 60° of the man) DRIVES —
+  feet set in a lunge, the stick-side foot back (`press_drive_split_deg`), sat
+  into it, the trunk leaned into the man (`press_drive_lean_deg` on top of the
+  commit's own lean); the one braking slow ANCHORS — sat deeper and wider than
+  his stance (`press_anchor_stance`, `press_anchor_width_m`) and leaned back into
+  the push (`press_anchor_lean_deg`, enough to stand his stance's fold up). A
+  man who does nothing gets no pose: he is carried. The blend is a spring
+  (`EaseRules`). `test_gait_press_layer.gd` holds the roles and their direction.
+- **The scrape:** a dug-in body counts as a stop for the skate scrape at the
+  share his press pose is on, so he is silent held and scrapes as he is shoved,
+  louder the faster (`SkaterSkatingCoordinator.scrape_stop_weight`). No new cue.
+- **The tiles:** `press_drive`, `press_carried`, `press_side` in
+  `tools/pose_capture_runner.gd`, which gained a `partner` key: a second skater
+  in the away kit, in contact, holding his own input.
+
+### As designed
 
 - **The presser leans in.** Committed in contact, the trunk leans into the man
   and the leading shoulder drives (the commit's existing load-up), the legs
