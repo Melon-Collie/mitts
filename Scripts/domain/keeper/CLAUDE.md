@@ -63,7 +63,8 @@ a save surface.
 three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
-(`kick_glove`, `kick_blocker`). `tests/unit/keeper/test_keeper_body.gd` holds
+(`kick_glove`, `kick_blocker`), and a post stance is drawn against its post
+with a fifth view from a sharp angle on that side. `tests/unit/keeper/test_keeper_body.gd` holds
 the proportions, the bones' lengths, the gear on the ice and inside the rule
 book, the rigid stick, the packed layout and the sealed butterfly and
 extension; `test_keeper_coverage.gd` snapshots each stance's coverage straight

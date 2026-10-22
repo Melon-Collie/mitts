@@ -17,10 +17,13 @@ const BASE_TILE := Vector2i(360, 450)
 const OUT_DIR: String = "res://.preview/keeper"
 # From the dot line, 20 ft out: both posts and the crossbar in a portrait tile.
 const SHOOTER_FOV_DEG: float = 28.0
+# The goal line, behind the keeper's origin.
+const POST_Z: float = 0.35
 
 var _camera: Camera3D = null
 var _keeper: Keeper = null
 var _pose := KeeperPose.new()
+var _skel := KeeperSkeleton.new()
 var _frames: int = 0
 var _views: Array = []
 var _stances: Array = []
@@ -60,7 +63,7 @@ func _init() -> void:
 		red.albedo_color = Color(0.8, 0.1, 0.1)
 		cyl.material = red
 		post.mesh = cyl
-		post.position = Vector3(x, GameRules.NET_HEIGHT * 0.5, 0.35)
+		post.position = Vector3(x, GameRules.NET_HEIGHT * 0.5, POST_Z)
 		root.add_child(post)
 	_camera = Camera3D.new()
 	_camera.fov = 40.0
@@ -90,9 +93,11 @@ func _init() -> void:
 		_stances.append(["extension" + tag,
 				func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, side)])
 		_stances.append(["kick" + tag, func(p: KeeperPose) -> void: KeeperPoses.kick(p, side)])
-		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side)])
-		_stances.append(["vh" + tag, func(p: KeeperPose) -> void: KeeperPoses.vh(p, side)])
-		_stances.append(["overlap" + tag, func(p: KeeperPose) -> void: KeeperPoses.overlap(p, side)])
+		# The post stances are drawn on their post, as the brain will place them.
+		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side), side])
+		_stances.append(["vh" + tag, func(p: KeeperPose) -> void: KeeperPoses.vh(p, side), side])
+		_stances.append(["overlap" + tag,
+				func(p: KeeperPose) -> void: KeeperPoses.overlap(p, side), side])
 	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")
 	if not only.is_empty():
 		var keep: PackedStringArray = only.split(",")
@@ -117,22 +122,53 @@ func _process(_delta: float) -> bool:
 		var s: Array = _stances[_stance_i]
 		(s[1] as Callable).call(_pose)
 		_keeper.apply_pose(_pose)
-		var v: Array = _views[_view_i]
+		var post: float = _post_side(s)
+		_keeper.position = Vector3(_on_post_x(post), 0.0, 0.0)
+		_keeper.reset_physics_interpolation()
+		var v: Array = _stance_views(post)[_view_i]
 		_camera.position = v[1]
 		_camera.fov = SHOOTER_FOV_DEG if v[0] == "shooter" else 40.0
-		_camera.look_at(Vector3(0.0, 0.62, 0.0), Vector3.UP)
+		_camera.look_at(v[2] if v.size() > 2 else Vector3(0.0, 0.62, 0.0), Vector3.UP)
 	elif _frames % 4 == 0:
 		var img: Image = root.get_viewport().get_texture().get_image()
 		_shots.append(img)
 		if _view_i == 0:
 			_fronts.append(img)
 		_view_i += 1
-		if _view_i >= _views.size():
+		if _view_i >= _stance_views(_post_side(_stances[_stance_i])).size():
 			_save_sheet(_shots, String(_stances[_stance_i][0]))
 			_shots = []
 			_view_i = 0
 			_stance_i += 1
 	return false
+
+
+static func _post_side(stance: Array) -> float:
+	return float(stance[2]) if stance.size() > 2 else 0.0
+
+
+# The keeper's x that puts his gear's outermost point toward `post` against
+# the post's inner face; 0 off the post.
+func _on_post_x(post: float) -> float:
+	if post == 0.0:
+		return 0.0
+	_skel.pose(_pose)
+	var reach: float = 0.0
+	for part: int in KeeperGear.PART_COUNT:
+		var t: Transform3D = KeeperGear.box(_skel, part)
+		var h: Vector3 = KeeperGear.half_extents(part)
+		reach = maxf(reach, post * t.origin.x + absf(t.basis.x.x) * h.x
+				+ absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z)
+	return post * (GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - reach)
+
+
+# On a post, a fifth view: a shooter at a sharp angle from that side, 15° off
+# the goal line, the shot the stance is for.
+func _stance_views(post: float) -> Array:
+	if post == 0.0:
+		return _views
+	var at := Vector3(_keeper.position.x, 0.5, 0.2)
+	return _views + [["sharp", Vector3(post * 4.5, 0.9, POST_Z - 4.5 * tan(deg_to_rad(15.0))), at]]
 
 
 func _save_sheet(imgs: Array[Image], name: String) -> void:
