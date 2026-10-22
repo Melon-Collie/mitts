@@ -15,12 +15,24 @@ As built, Phase 1 differs from the design below:
 - The set-up also ends once the puck has stopped closing on the spot
   (`SLAPPER_SETUP_SETTLED_*`): on some builds the blade's reach and the carry's
   own offset stop it short of the spot's tolerance.
-- The wind-up apex and the wide base were set against reference photos
-  (Ovechkin's one-timer load, Letang's wind-up): top hand over the back
-  shoulder at helmet height, stick laid back behind it, feet spread across the
+- The wind-up apex and the wide base were set against reference photos of
+  Ovechkin's one-timer load and Karlsson's wind-up, and Ovechkin's flatter
+  backswing was chosen because it reads from above: top hand at head height
+  over the back shoulder, the shaft laid back behind it at about 40°, feet spread across the
   line (`slapper_load_width_m`) and barely staggered. The width is given back
   as the kick drives: held through it, both legs reached it dead straight and
   the back leg had nothing left to extend.
+- The stick swings as one piece (`Skater._swing_rigid`). The dressed blade was
+  solved fresh each frame from the shaft's bearing and spun ~20° a frame
+  through the downswing as the blade crossed over the hands; through the swing
+  the blade and the shaft's roll are now the ones the swing started with,
+  turned by the one rotation that takes the starting hosel line onto the
+  current one, in the shoulders' frame. Anchored rather than carried frame to
+  frame, which drifted ~150° round the loop. Both slapper poses are now held
+  in the shoulders' frame through the release, so neither the world-hold on a
+  torso turn nor the pose bridge leaves the stick behind as the shoulders come
+  through. `test_the_stick_does_not_roll_through_the_swing` measures it, and
+  the strip tool has `slapshot` / `slapdown` scenarios to watch it.
 - `ShotMechanics.slapper_aim_dir` is now unused, but it stays: that file is in
   the shot field's fingerprint, and deleting it would force a regeneration
   while the goalie is changing elsewhere.

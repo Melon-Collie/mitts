@@ -158,3 +158,55 @@ func test_the_bots_default_body_strikes_where_the_default_skater_does() -> void:
 			"AISkaterCaps' default is the default build's spot (%s)" % Vector2(strike.x * side, strike.y))
 	assert_almost_eq(AISkaterCaps.new().slapper_stance_open_rad,
 			deg_to_rad(_controller.slapper_stance_open_deg), 0.0001)
+
+
+# The stick turns as one piece through the swing (Skater._swing_rigid): from the
+# backswing through the release to the end of the finish, neither the blade nor
+# the shaft rolls about the shaft line, frame to frame, in the shoulders' frame
+# the arms swing it in, by more than a sliver of a downswing that sweeps the
+# shaft 15–20° a frame. Solved fresh from the shaft's bearing, the blade spun
+# ~20° a frame through the downswing.
+func test_the_stick_does_not_roll_through_the_swing() -> void:
+	var aim := Vector3(0.0, 0.0, -12.0)
+	for i: int in 60:
+		_frame(Vector3(0.4, 0.0, -2.0), false)
+	_frame(aim, true, true)
+	while not _controller._aiming.slapper_setup_done:
+		_frame(aim, true)
+	var prev_blade: Basis = _in_shoulders(_skater._blade_mesh_instance.global_transform.basis)
+	var prev_shaft: Basis = _in_shoulders(_skater.stick_mesh.global_transform.basis)
+	var worst_blade: float = 0.0
+	var worst_shaft: float = 0.0
+	var t: int = 0
+	while t < 100 or not (_skater.current_shot_state == State.SKATING_WITH_PUCK
+			or _skater.current_shot_state == State.SKATING_WITHOUT_PUCK):
+		_frame(aim, t < 100)
+		var blade: Basis = _in_shoulders(_skater._blade_mesh_instance.global_transform.basis)
+		var shaft: Basis = _in_shoulders(_skater.stick_mesh.global_transform.basis)
+		worst_blade = maxf(worst_blade, _roll_deg(prev_blade, blade, -shaft.z))
+		worst_shaft = maxf(worst_shaft, _roll_deg(prev_shaft, shaft, -shaft.z))
+		prev_blade = blade
+		prev_shaft = shaft
+		t += 1
+	assert_gt(t, 160, "measured through the release and the whole finish (%d frames)" % t)
+	assert_lt(worst_blade, 3.0, "the blade turns with the shaft (worst %.1f° a frame)" % worst_blade)
+	assert_lt(worst_shaft, 3.0, "the shaft does not spin (worst %.1f° a frame)" % worst_shaft)
+
+
+func _frame(aim_local: Vector3, slap: bool, press: bool = false) -> void:
+	_tick(aim_local, slap, press)
+	_skater._process(DT)
+
+
+func _in_shoulders(b: Basis) -> Basis:
+	return (_skater.upper_body.global_transform.basis.orthonormalized().inverse()
+			* b.orthonormalized()).orthonormalized()
+
+
+# The part of the turn from `a` to `b` that is a roll about `axis`: what is left
+# once the axis's own swing (the shortest arc) is taken out.
+func _roll_deg(a: Basis, b: Basis, axis: Vector3) -> float:
+	var turn: Quaternion = (b * a.inverse()).get_rotation_quaternion()
+	var axis_before: Vector3 = (turn.inverse() * axis).normalized()
+	var roll: float = rad_to_deg((turn * Quaternion(axis_before, axis.normalized()).inverse()).get_angle())
+	return 360.0 - roll if roll > 180.0 else roll

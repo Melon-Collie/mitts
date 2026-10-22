@@ -722,7 +722,7 @@ var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
-var slapper_wind_up_height: float = 1.6
+var slapper_wind_up_height: float = 1.44
 # (No separate wind-up duration — the pose fills over max_slapper_charge_time,
 # see slapper_wind_up_t(), so the animation IS the charge readout.)
 # Full-charge tell: with no charge ring, the wind-up pose IS the gauge, so
@@ -755,17 +755,19 @@ var max_slapper_charge_time: float = 0.7
 # max charge.
 var slapper_wind_up_twist_deg: float = 30.0
 # The top hand at full wind-up, in upper-body-local space (m): risen from rest
-# to above the helmet, and carried across the chest to over the stick-side
-# shoulder, a little behind it (forward is −Z).
-var slapper_wind_up_hand_up: float = 0.6
+# to head height, and carried across the chest to over the stick-side shoulder,
+# a little behind it (forward is −Z).
+var slapper_wind_up_hand_up: float = 0.7
 var slapper_wind_up_hand_forward: float = 0.0
-var slapper_wind_up_hand_back: float = 0.15
+var slapper_wind_up_hand_back: float = 0.2
 var slapper_wind_up_hand_inward: float = 0.45
 # The blade at full wind-up, off the top hand's shoulder in upper-body-local
-# space (m), at slapper_wind_up_height: out past the stick-side shoulder and
-# behind it, so the shaft lies back steeply over the back shoulder.
-var slapper_wind_up_blade_x: float = 1.0
-var slapper_wind_up_blade_z: float = 0.7
+# space (m), at slapper_wind_up_height: a stick's length up and out from the
+# hand, so the shaft lies back over the stick-side shoulder at about 40° — the
+# loaded one-timer's backswing rather than a stick stood on end, which reads
+# from above as nothing at all.
+var slapper_wind_up_blade_x: float = 1.33
+var slapper_wind_up_blade_z: float = 0.67
 # Snappier lerp during the slapshot coil — the default upper_body_return_speed
 # is tuned for gentle aim-tracking and lags a fast coil, which reads as a
 # half-finished wind-up.
@@ -1765,15 +1767,18 @@ func _process_input(input: InputState, delta: float) -> void:
 	# the bottom-hand IK the post-rotation geometry — so arm reach is evaluated
 	# as if the body has fully caught up, independent of lerp speed.
 	#
-	# Skip the preservation during slapper wind-up: the slapper pose is authored
-	# in upper-body-local space, so we WANT the stick to travel with the coiling
-	# torso (otherwise the body rotates underneath a stationary hand and the
-	# coil is invisible).
+	# Skip the preservation through the slapper's wind-up and finish: both are
+	# authored in upper-body-local space, so we WANT the stick to travel with the
+	# turning torso (otherwise the body rotates underneath a stationary hand — the
+	# coil is invisible, and on the release tick the shoulders snapping through
+	# leave the stick behind).
 	var pre_state: SkaterStateMachine.State = _sm.get_state()
 	var is_slapper_charge: bool = (
 			pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
 			or pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK
-			or pre_state == SkaterStateMachine.State.ONE_TIMER_RETENTION)
+			or pre_state == SkaterStateMachine.State.ONE_TIMER_RETENTION
+			or (pre_state == SkaterStateMachine.State.FOLLOW_THROUGH
+				and _sm.follow_through_is_slapper))
 	var blade_world_pre: Vector3
 	var hand_world_pre: Vector3
 	if not is_slapper_charge:
@@ -1806,7 +1811,8 @@ func _process_input(input: InputState, delta: float) -> void:
 					_celebration_total - _celebration_timer, _celebration_timer)
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
-		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done)
+		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
+				_sm.follow_through_is_slapper)
 	# Replay too: down with block held, nothing re-solves the stick, so the next
 	# tick's twist follows the one this leaves (Scripts/networking/CLAUDE.md).
 	_apply_down_pose()
