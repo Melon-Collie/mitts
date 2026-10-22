@@ -93,11 +93,9 @@ func _init() -> void:
 		_stances.append(["extension" + tag,
 				func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, side)])
 		_stances.append(["kick" + tag, func(p: KeeperPose) -> void: KeeperPoses.kick(p, side)])
-		# The post stances are drawn on their post, as the brain will place them.
+		# The RVH is drawn on its post, as the brain will place it.
 		_stances.append(["rvh" + tag, func(p: KeeperPose) -> void: KeeperPoses.rvh(p, side),
-				side, true])
-		_stances.append(["overlap" + tag,
-				func(p: KeeperPose) -> void: KeeperPoses.overlap(p, side), side])
+				side])
 	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")
 	if not only.is_empty():
 		var keep: PackedStringArray = only.split(",")
@@ -123,7 +121,7 @@ func _process(_delta: float) -> bool:
 		(s[1] as Callable).call(_pose)
 		_keeper.apply_pose(_pose)
 		var post: float = _post_side(s)
-		_keeper.position = _on_post(post, s.size() > 3 and bool(s[3]))
+		_keeper.position = _on_post(post)
 		_keeper.reset_physics_interpolation()
 		var v: Array = _stance_views(post)[_view_i]
 		_camera.position = v[1]
@@ -148,14 +146,14 @@ static func _post_side(stance: Array) -> float:
 
 
 # Where the keeper stands for a stance on `post`: KeeperGear.post_contact on the
-# post's inner face, on the goal line when `on_line`; the origin off the post.
-func _on_post(post: float, on_line: bool) -> Vector3:
+# post's inner face, on the goal line; the origin off the post.
+func _on_post(post: float) -> Vector3:
 	if post == 0.0:
 		return Vector3.ZERO
 	_skel.pose(_pose)
 	var c: Vector3 = KeeperGear.post_contact(_skel, post)
 	return Vector3(post * (GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS) - c.x, 0.0,
-			POST_Z - c.z if on_line else 0.0)
+			POST_Z - c.z)
 
 
 # On a post, a fifth view: a shooter at a sharp angle from that side, 15° off

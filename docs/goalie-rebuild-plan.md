@@ -203,7 +203,7 @@ One tick runs four layers, on two clocks.
 |---|---|---|---|
 | **Perception** (`GoalieView`) | 120 Hz | no; it is the only reader of live nodes | ~100 scattered `puck.*` / skater reads; `GoalieWorldView` grows into it |
 | **Threat model** | 120 Hz | yes | threat filter, prime, read belief, pass read, cross-crease detector, screen delay, tip/backdoor reads |
-| **Positional planner** | ~30 Hz | yes | depth solver composition, arc target, the slide triggers, beaten-wide, the RVH/overlap choice, recovery, "threat pressing", save selection |
+| **Positional planner** | ~30 Hz | yes | depth solver composition, arc target, the slide triggers, beaten-wide, the RVH-or-overlap choice, recovery, "threat pressing", save selection |
 | **Motor + reflex executor** | 120 Hz | stateful, scene-free | the upright mover, slides, the drop and rise, limb reaches; the pose solve |
 
 The puck-handling half (cover, sweep, catch, behind-net play) stays a separate
@@ -285,7 +285,7 @@ Candidates are a handful of target spots (arc angle × depth) × base stance:
 - READY;
 - butterfly;
 - half-butterfly L/R;
-- post-integrated (RVH, or the new overlap).
+- RVH L/R, on the post.
 
 Each candidate is scored by expected goals against (§2), with the pose he can
 reach by each hypothesis's release time. Reachability comes from the motor model
@@ -298,6 +298,10 @@ Today's special cases become ordinary consequences of that score:
 - **Beaten wide.** The far-side hypothesis outscores the near one, and the
   only reachable answer is the slide.
 - **Staying down.** The rise costs 0.35 s of pose he can't reach.
+- **The overlap.** A sharp-angle shooter in front of the goal line is faced
+  with the READY stance, squared to the puck and placed so its post-side pad's
+  edge covers the post. It is a spot, not a pose: from the shooter, the short
+  side then shows no net. Below the line, or tight to it, the RVH outscores it.
 - **Screens.** The release point is hidden, so its weight spreads.
 
 **Commitment comes from physics, not timers.** A slide is ballistic once pushed,
@@ -395,7 +399,7 @@ code, versioned with the poses that move them.
 | **Butterfly extension** | **New.** One leg pushes out toward the post, pad face down, toe on the ice. This is the low-corner reach the regulation puck is currently scoring through. |
 | **Half-butterfly** | Kept. One knee down, the other leg loaded on its skate. |
 | **Kick / skate save** | **New.** A standing leg's quick extension; the skate and toe stop low shots. |
-| **RVH / overlap** | Overlap is **new**: standing, pad against the post. In both the post is sealed by the pad toe and skate where they really seal it, and the hands stay live. The VH is dropped (§7). |
+| **RVH** | The post pad flat along the goal line, its toe on the post; the off-post pad standing on its skate. The post is sealed by the pad toe and skate where they really seal it, and the hands stay live. The VH is dropped and the overlap is a spot, not a pose (§3.3, §7). |
 | **Paddle-down** | Optional: a jam and wraparound stance. |
 | **T-push, shuffle, C-cut, recovery** | Real footwork on real skates. The existing `GoalieFootwork` stroke becomes leg motion instead of a pad offset. |
 
@@ -615,6 +619,7 @@ and playtests.
 | Build | One goalie, 6'4" (1.93 m) before skates |
 | Pad graphics | Plain for now. Painted designs are later work |
 | VH | Dropped: the RVH is the post stance |
+| Overlap | Not a pose: the READY stance placed on the post, squared to the shooter (§3.3) |
 
 ---
 

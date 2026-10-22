@@ -248,16 +248,6 @@ static func rvh(p: KeeperPose, side: float) -> void:
 		p.blade_center = Vector3(-0.15, 0.0, -0.30)
 
 
-# Overlap at the post on `side`: standing in the ready stance with the post
-# pad's outside edge against the iron, a mobile stance for a shot still live
-# from a sharp angle.
-static func overlap(p: KeeperPose, side: float) -> void:
-	ready(p)
-	var i: int = 0 if side < 0.0 else 1
-	p.legs[i].shin_front = Vector3(side * 0.35, 0.0, -1.0)
-	p.legs[i].toe = Vector3(side * 0.5, 0.0, -1.0)
-
-
 static func _side_x(leg: int) -> float:
 	return -1.0 if leg == 0 else 1.0
 

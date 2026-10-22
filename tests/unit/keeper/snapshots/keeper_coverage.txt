@@ -7,5 +7,3 @@ half_butterfly straight_on	0.6616
 half_butterfly dot_line_at_b	0.8340
 extension straight_on	0.6889
 extension dot_line_at_b	0.9318
-overlap straight_on	0.5974
-overlap dot_line_at_b	0.7386

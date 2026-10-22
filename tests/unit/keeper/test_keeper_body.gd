@@ -29,8 +29,6 @@ func _stances() -> Array:
 		["kick R", func(p: KeeperPose) -> void: KeeperPoses.kick(p, 1.0)],
 		["rvh L", func(p: KeeperPose) -> void: KeeperPoses.rvh(p, -1.0)],
 		["rvh R", func(p: KeeperPose) -> void: KeeperPoses.rvh(p, 1.0)],
-		["overlap L", func(p: KeeperPose) -> void: KeeperPoses.overlap(p, -1.0)],
-		["overlap R", func(p: KeeperPose) -> void: KeeperPoses.overlap(p, 1.0)],
 	]
 
 

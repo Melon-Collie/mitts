@@ -63,7 +63,7 @@ a save surface.
 three-quarter and the shooter's spot on the dot line to `.preview/keeper/`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
-(`kick_glove`, `kick_blocker`), and a post stance is drawn against its post
+(`kick_glove`, `kick_blocker`), and the RVH is drawn against its post
 (`KeeperGear.post_contact` on the post's inner face, on the goal line) with a
 fifth view from a sharp angle on that side. `tests/unit/keeper/
 test_keeper_body.gd` holds the proportions, the bones' lengths, the gear on the

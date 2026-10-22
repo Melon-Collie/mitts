@@ -21,7 +21,6 @@ func _stances() -> Array:
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p)],
 		["half_butterfly", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, -1.0)],
 		["extension", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, -1.0)],
-		["overlap", func(p: KeeperPose) -> void: KeeperPoses.overlap(p, -1.0)],
 	]
 
 
