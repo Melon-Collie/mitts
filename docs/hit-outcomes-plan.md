@@ -1,6 +1,6 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **plan, nothing built.** Amends the physicality paragraphs of
+Status: **Phase 0 built.** Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
 own PR and playtest.
@@ -102,9 +102,13 @@ Small, independent, its own PR.
   `locale/translations.csv` keys like the stick-lift row
   (`test_ui_uses_the_locale_seam.gd` ratchets the file down). The section
   header loses "(Experimental)": the design doc treats the pad as first-class.
-- **The pad's Hit button** — see *Open questions* 2. If it moves, the change is
-  `PlayerPrefs.PAD_DEFAULT_BUTTONS` plus a one-time migration of saved binds,
-  the way pad scheme 2 moved the loft, and the tutorial prose that names it.
+- **Hit takes RB and the deflect takes L3** (decided with the user): Ctrl's
+  whole family — the commit, the brace, the cross-check chord with X — sits on
+  a shoulder held under the index finger instead of a stick click held while
+  steering. `PlayerPrefs.PAD_DEFAULT_BUTTONS` plus pad scheme 3
+  (`PadSchemeMigration.to_scheme_3`), which moves a saved config still on the
+  scheme-2 defaults and leaves a rebound one alone. The tutorial prose names
+  binds through `{hit}` / `{stick_lift}`, so it follows on its own.
 
 ## Phase 1 — the rocked hit
 
@@ -384,23 +388,19 @@ snapshot with the commit saying the new numbers are intended.
 | Rocked pose | `Scripts/controllers/gait/gait_stagger_layer.gd` |
 | Bot hit pricing | `Scripts/domain/ai/body_check.gd`, `skater_agent_board_play.gd` |
 
-## Open questions
+## Decided with the user
 
-1. **Hits from behind.** At the starting values a square hit from behind
+1. **Hits from behind** stay as the table has them: a square hit from behind
    floors an upright man from 8.9 m/s closing, against 14.8 from the front.
-   There is no penalty system, so making them the easiest knockdown is
-   realistic and also unpunished. Recommended: keep them as the table has them
-   (closing from behind is usually low anyway, since the checker has to run
-   his man down) and revisit if the playtest shows hunting from behind.
-2. **The pad's Hit button.** L3 is a stick click held while steering: easy to
-   click by accident at full deflection, tiring to hold, and the cross-check
-   (L3 held + X) takes the right thumb off aim. Swapping Hit with Deflect (RB)
-   would put Ctrl's whole family on a shoulder. Deflect is held too, while
-   waiting on a puck, so it would inherit the stick click.
-3. **Does the rocked stick-off-the-ice window need its own length?** The draft
-   ties it to the rocked band. If the playtest wants the strip without the
-   whole beat of no stick, it becomes `rocked_stick_seconds`, the first part of
-   the band.
+   There is no penalty system; closing from behind is usually low, since the
+   checker has to run his man down. Revisit if the playtest shows hunting from
+   behind.
+2. **The pad's Hit button moves to RB**, the deflect to L3 (Phase 0). The
+   deflect is held while waiting on a puck, so it inherits the stick click's
+   cost; the playtest says whether it can live there.
+3. **The stick is off the ice for the whole rocked band.** If the playtest
+   wants the strip without the whole beat of no stick, it becomes
+   `rocked_stick_seconds`, the first part of the band.
 
 ## Starting values
 

@@ -12,7 +12,7 @@ phases, each its own PR and playtest.
   both sticks out) and plays like one, not like a hit.
 - **The pin moves to the stick button.** Onset needs the stick button held, not
   the commit. Holding the pin is holding the stick button.
-- **The cross-check is a chord: Ctrl held, the stick button pressed** (L3 held,
+- **The cross-check is a chord: Ctrl held, the stick button pressed** (RB held,
   X pressed). Ctrl alone stays the commit and the brace and never shoves by
   accident; F with Ctrl down was dead input, because the commit already has the
   stick. No tap-versus-hold, which would add latency.
@@ -281,9 +281,9 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
 - **The chord needs no new input.** It is `hit_held` and `stick_check_pressed`
   in one input, both already on the record, so the input stays 24 B. Bots press
   it the same way.
-- **The pad holds its aim while L3 is down.** X takes the right thumb off the
+- **The pad holds its aim while Hit (RB) is down.** X takes the right thumb off the
   aim stick, and a released stick otherwise eases the cursor back to its rest
-  in about 0.1 s; with L3 held the stick is off the ice, so there is nothing to
+  in about 0.1 s; with Hit held the stick is off the ice, so there is nothing to
   rest for (`LocalInputGatherer._update_pad_cursor`, after RT's hold).
 - **Facings are vectors.** `in_reach` and `victim_dv` take `Skater.get_facing()`
   (and the snapshot's `facing`), not a yaw.
