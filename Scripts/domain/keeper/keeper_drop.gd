@@ -88,28 +88,20 @@ func pose(p: KeeperPose) -> void:
 
 
 static func _blend(p: KeeperPose, up: KeeperPose, low: KeeperPose, t: float) -> void:
+	blend_body(p, up, low, t)
+	var knees: Array[Vector3] = _ready_knees_solved(up)
+	for i: int in 2:
+		blend_leg(p.legs[i], up.legs[i], knees[i], low.legs[i], t)
+
+
+# Everything but the legs, `t` of the way from `up` to `low`.
+static func blend_body(p: KeeperPose, up: KeeperPose, low: KeeperPose, t: float) -> void:
 	p.pelvis = up.pelvis.lerp(low.pelvis, t)
 	p.pelvis_rot = up.pelvis_rot.lerp(low.pelvis_rot, t)
 	p.lumbar_rot = up.lumbar_rot.lerp(low.lumbar_rot, t)
 	p.chest_rot = up.chest_rot.lerp(low.chest_rot, t)
 	p.neck_rot = up.neck_rot.lerp(low.neck_rot, t)
 	p.head_rot = up.head_rot.lerp(low.head_rot, t)
-	var knees: Array[Vector3] = _ready_knees_solved(up)
-	for i: int in 2:
-		var a: KeeperPose.Leg = up.legs[i]
-		var b: KeeperPose.Leg = low.legs[i]
-		var leg: KeeperPose.Leg = p.legs[i]
-		leg.knee_pinned = true
-		leg.knee = knees[i].lerp(b.knee, t)
-		var kick: float = 1.0 - (1.0 - t) * (1.0 - t)
-		leg.ankle = a.ankle.lerp(b.ankle, kick)
-		leg.ankle.y += SKATES_OFF_M * sin(PI * sqrt(t))
-		leg.thigh_front = a.thigh_front.lerp(b.thigh_front, t).normalized()
-		leg.shin_front = a.shin_front.lerp(b.shin_front, t).normalized()
-		leg.foot_mode = KeeperPose.FootMode.FLAT
-		leg.toe = a.toe
-		leg.flex = b.flex
-		leg.along_shin = t
 	p.glove_hand = up.glove_hand.lerp(low.glove_hand, t)
 	p.glove_from_chest = up.glove_from_chest
 	p.glove_fingers = up.glove_fingers.lerp(low.glove_fingers, t)
@@ -120,6 +112,25 @@ static func _blend(p: KeeperPose, up: KeeperPose, low: KeeperPose, t: float) -> 
 	p.blade_yaw = lerpf(up.blade_yaw, low.blade_yaw, t)
 	p.stick_tilt = lerpf(up.stick_tilt, low.stick_tilt, t)
 	p.blocker_face = up.blocker_face.lerp(low.blocker_face, t)
+
+
+# A leg `t` of the way from standing on its skate (`up`, whose solve puts the
+# knee at `up_knee`) to kneeling in the butterfly (`low`): the knee pinned the
+# shortest way down, the skate kicked out ahead of it and off the ice, turning
+# into the pad's toe.
+static func blend_leg(leg: KeeperPose.Leg, up: KeeperPose.Leg, up_knee: Vector3,
+		low: KeeperPose.Leg, t: float) -> void:
+	leg.knee_pinned = true
+	leg.knee = up_knee.lerp(low.knee, t)
+	var kick: float = 1.0 - (1.0 - t) * (1.0 - t)
+	leg.ankle = up.ankle.lerp(low.ankle, kick)
+	leg.ankle.y += SKATES_OFF_M * sin(PI * sqrt(t))
+	leg.thigh_front = up.thigh_front.lerp(low.thigh_front, t).normalized()
+	leg.shin_front = up.shin_front.lerp(low.shin_front, t).normalized()
+	leg.foot_mode = KeeperPose.FootMode.FLAT
+	leg.toe = up.toe
+	leg.flex = low.flex
+	leg.along_shin = t
 
 
 # Where the ready stance's solve puts the knees, solved once.

@@ -2,7 +2,7 @@ extends SceneTree
 
 # Renders the new keeper's moves as frame strips, so a move can be SEEN a tick
 # at a time: KeeperFootwork stepped through a scripted move (or KeeperDrop
-# down and back up) and drawn by the Keeper actor every few ticks, from the shooter's side, from
+# down and back up, or a KeeperSlide) and drawn by the Keeper actor every few ticks, from the shooter's side, from
 # behind and from high off his glove side in front. One sheet per scenario, a
 # row per view, the frames left to right; a bar over each frame is its phase
 # (PUSH green, GLIDE blue, STOP red, SET grey), and every frame's phase, place
@@ -32,10 +32,14 @@ const SCENARIOS: Array = [
 	["c_cut_back", 1.2, KeeperFootwork.Move.C_CUT],
 	["c_cut_forward", -1.2, KeeperFootwork.Move.C_CUT],
 	["drop_and_rise", 0.0, DROP_AND_RISE],
+	["slide", 1.0, SLIDE],
+	["slide_glove_far", -1.6, SLIDE],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
 const DROP_AND_RISE: int = -1
+# Not a footwork move either: KeeperSlide from the butterfly to the spot.
+const SLIDE: int = -2
 const DROP_FRAME_EVERY: int = 3
 const DROP_HOLD_TICKS: int = 12
 const _PHASE_COLORS: Array[Color] = [
@@ -107,6 +111,8 @@ func _init() -> void:
 func _record(target: float, kind: int) -> Array:
 	if kind == DROP_AND_RISE:
 		return _record_drop()
+	if kind == SLIDE:
+		return _record_slide(target)
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
@@ -154,6 +160,28 @@ func _record_drop() -> Array:
 			held += 1
 			if held >= DROP_HOLD_TICKS:
 				drop.rise()
+	return out
+
+
+# The slide's frames, as _record's: PUSH while the leg loads and drives, GLIDE
+# while he slides, SET down on the spot.
+func _record_slide(target: float) -> Array:
+	var slide := KeeperSlide.new()
+	slide.slide_to(target)
+	var out: Array = []
+	var tick: int = 0
+	var settled: int = -1
+	while settled < SETTLE_FRAMES * FRAME_EVERY:
+		if tick % FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			slide.pose(p)
+			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
+					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE][slide.phase]
+			out.append([p, Vector3(slide.x, 0.0, 0.0), phase, slide.speed, tick * DT])
+		slide.step(DT)
+		tick += 1
+		if slide.phase == KeeperSlide.Phase.DOWN:
+			settled += 1
 	return out
 
 
