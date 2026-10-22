@@ -57,10 +57,10 @@ static func tip_dv(dv: Vector2, heading: Vector2, cfg: Config) -> float:
 
 # 0..1 how square he is to the hitter, who is where `dv` drove him from.
 static func sight(dv: Vector2, facing: Vector2, cfg: Config) -> float:
-	var len: float = dv.length()
-	if len < 1e-6:
+	var dv_len: float = dv.length()
+	if dv_len < 1e-6:
 		return 1.0
-	var cos_to_hitter: float = facing.dot(-dv / len)
+	var cos_to_hitter: float = facing.dot(-dv / dv_len)
 	return lerpf(cfg.sight_behind, 1.0, 0.5 * (1.0 + cos_to_hitter))
 
 
