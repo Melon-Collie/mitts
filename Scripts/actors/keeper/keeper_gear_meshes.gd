@@ -113,15 +113,29 @@ static func _rise(k: KeeperMeshKit, h: Vector3) -> void:
 	k.sweep(S.PADS, rings, Vector3.ZERO)
 
 
-# The pad's boot over the skate's toe, the toe bridge strapping it down.
+# The pad's boot over the skate: flat along the ice, tall where it meets the
+# pad and sloping down to the toe, the toe bridge strapped across it.
 static func _boot(k: KeeperMeshKit, h: Vector3) -> void:
-	var rings: Array[PackedVector3Array] = [
-		KeeperMeshKit.ellipse(2, Vector3(0.0, 0.0, h.z), h.x, h.y, 8, PI / 8.0),
-		KeeperMeshKit.ellipse(2, Vector3(0.0, -0.005, 0.0), h.x * 0.95, h.y * 0.85, 8, PI / 8.0),
-		KeeperMeshKit.ellipse(2, Vector3(0.0, -h.y * 0.35, -h.z), h.x * 0.6, h.y * 0.45, 8, PI / 8.0),
+	var stations: Array[Vector3] = [
+		Vector3(h.z, 0.85, 1.0),
+		Vector3(0.0, 1.0, 0.55),
+		Vector3(-h.z * 0.7, 0.92, -0.15),
+		Vector3(-h.z, 0.72, -0.55),
 	]
-	k.sweep(S.PADS, rings, Vector3.ZERO)
-	k.box(S.STRAP, Vector3(0.0, -h.y * 0.15, -h.z * 0.35), Vector3(h.x * 0.98, h.y * 0.62, 0.012))
+	var rings: Array[PackedVector3Array] = []
+	for st: Vector3 in stations:
+		rings.append(_boot_section(st.x, h.x * st.y, -h.y, h.y * st.z))
+	k.sweep(S.PADS, rings, Vector3(0.0, -h.y * 0.4, 0.0))
+	k.box(S.STRAP, Vector3(0.0, -h.y * 0.15, -h.z * 0.25), Vector3(h.x * 1.01, h.y * 0.62, 0.014))
+
+
+# A boot section square to Z at `z`: flat on the bottom, its top shoulders cut.
+static func _boot_section(z: float, w: float, bottom: float, top: float) -> PackedVector3Array:
+	var shoulder: float = minf(w * 0.3, (top - bottom) * 0.4)
+	return PackedVector3Array([
+		Vector3(-w, bottom, z), Vector3(w, bottom, z), Vector3(w, top - shoulder, z),
+		Vector3(w - shoulder, top, z), Vector3(-w + shoulder, top, z), Vector3(-w, top - shoulder, z),
+	])
 
 
 # A goalie skate: the steel and its holder under a low plastic cowling, the

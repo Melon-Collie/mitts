@@ -47,9 +47,16 @@ const _RISE_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_T
 const _RISE_FACE_Z: float = -KeeperAnatomy.PAD_FORWARD_OF_SHIN_M \
 		- KeeperAnatomy.PAD_DEPTH_M * 0.5 + _RISE_HALF.z
 
-# The pad's boot, laced over the front of the skate by the toe bridge.
-const _BOOT_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M + 0.075, -0.13)
-const _BOOT_HALF := Vector3(0.085, 0.05, 0.075)
+# The pad's boot: the pad's foot, run forward over the skate from under the
+# shin to past the skate's toe, just off the ice, tied down by the toe bridge.
+const _BOOT_BACK_M: float = -0.02
+const _BOOT_FRONT_M: float = -(KeeperAnatomy.FOOT_LENGTH_M - KeeperAnatomy.HEEL_BEHIND_ANKLE_M) - 0.02
+const _BOOT_BOTTOM_M: float = -KeeperAnatomy.ANKLE_ON_SKATES_M + 0.015
+const _BOOT_TOP_M: float = 0.03
+const _BOOT_CENTER := Vector3(0.0, (_BOOT_BOTTOM_M + _BOOT_TOP_M) * 0.5,
+		(_BOOT_BACK_M + _BOOT_FRONT_M) * 0.5)
+const _BOOT_HALF := Vector3(0.10, (_BOOT_TOP_M - _BOOT_BOTTOM_M) * 0.5,
+		(_BOOT_BACK_M - _BOOT_FRONT_M) * 0.5)
 # The skate, ice to above the ankle, heel to toe.
 const _SKATE_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M * 0.5 + 0.01,
 		-(KeeperAnatomy.FOOT_LENGTH_M * 0.5 - KeeperAnatomy.HEEL_BEHIND_ANKLE_M))

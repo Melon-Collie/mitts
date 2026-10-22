@@ -232,3 +232,18 @@ func test_the_butterfly_rises_lie_flat_and_meet() -> void:
 		var tip: Vector3 = t * Vector3(0.0, KeeperGear.half_extents(part).y, 0.0)
 		inner.append(tip.x)
 	assert_gte(inner[0], inner[1], "the glove-side rise reaches the blocker side's: they meet")
+
+
+# No goalie butterflies post to post: on the goal line his gear, skates and all,
+# stops inside the posts, and the low corners are a shot's to find.
+func test_the_butterfly_does_not_span_the_net() -> void:
+	KeeperPoses.butterfly(_pose)
+	_skel.pose(_pose)
+	var reach: float = 0.0
+	for part: int in KeeperGear.PART_COUNT:
+		var t: Transform3D = KeeperGear.box(_skel, part)
+		var h: Vector3 = KeeperGear.half_extents(part)
+		reach = maxf(reach, absf(t.origin.x) + absf(t.basis.x.x) * h.x
+				+ absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z)
+	assert_lt(reach, GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS,
+			"his widest gear stops inside the post")
