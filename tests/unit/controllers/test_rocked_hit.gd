@@ -38,9 +38,9 @@ func before_each() -> void:
 	_controller.set_physics_process(false)
 
 
-# A full check short of the knockdown line.
-func _rocks_him_on_his_feet() -> float:
-	return 0.5 * (_controller.stagger_ref_impulse + _controller.knockdown_impulse)
+# A full check square from the front (he faces +z), which he rides on his feet.
+func _rocks_him_on_his_feet() -> Vector3:
+	return Vector3(0.0, 0.0, -0.5 * (_controller.stagger_ref_impulse + _controller.rocked_ref_impulse))
 
 
 func _tick(input: InputState) -> void:
@@ -78,7 +78,7 @@ func test_rocked_he_can_neither_load_nor_commit() -> void:
 
 
 func test_he_gets_his_stick_and_his_legs_back_at_the_full_stagger() -> void:
-	_controller._on_body_check_received(Vector3(_rocks_him_on_his_feet(), 0.0, 0.0))
+	_controller._on_body_check_received(_rocks_him_on_his_feet())
 	while _controller.stagger_timer > _controller.stagger_max_seconds:
 		_tick(InputState.new())
 	_tick(_loaded())
@@ -88,7 +88,7 @@ func test_he_gets_his_stick_and_his_legs_back_at_the_full_stagger() -> void:
 
 
 func test_a_knockdown_leaves_his_stick_to_the_fall() -> void:
-	_controller._on_body_check_received(Vector3(_controller.knockdown_impulse + 0.2, 0.0, 0.0))
+	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
 	_tick(InputState.new())
 	assert_true(_skater.is_knocked_down)
 	assert_false(_skater.stick_jarred, "down, not rocked")
@@ -110,7 +110,7 @@ func test_a_cross_check_never_rocks() -> void:
 
 
 func test_a_cross_check_on_a_rocked_man_leaves_his_window_alone() -> void:
-	_controller._on_body_check_received(Vector3(_rocks_him_on_his_feet(), 0.0, 0.0))
+	_controller._on_body_check_received(_rocks_him_on_his_feet())
 	var rocked: float = _controller.stagger_timer
 	assert_gt(rocked, _controller.stagger_max_seconds)
 	_controller.take_cross_check(3.0, 100.0, Vector2(1.0, 0.0))
@@ -125,6 +125,33 @@ func test_the_rules_defaults_are_the_controllers_tuning() -> void:
 	for field: String in ["min_impulse", "ref_impulse", "max_stagger_seconds",
 			"max_thrust_penalty", "max_grip_penalty", "rocked_ref_impulse",
 			"rocked_min_seconds", "rocked_max_seconds", "rocked_grip_penalty",
-			"knockdown_impulse", "knockdown_ref_impulse", "min_knockdown_seconds",
-			"max_knockdown_seconds"]:
+			"knockdown_ref_overshoot", "min_knockdown_seconds", "max_knockdown_seconds"]:
 		assert_eq(live.get(field), defaults.get(field), field)
+	var balance: BodyBalanceRules.Config = _controller.get_balance_config()
+	var balance_defaults := BodyBalanceRules.Config.new()
+	for field: String in ["balance_ref_dv", "along_share", "sight_behind", "vulnerable_mult",
+			"stance_base_ratio"]:
+		assert_almost_eq(balance.get(field) as float, balance_defaults.get(field) as float, 1e-6, field)
+
+
+func test_a_cross_check_never_knocks_him_down() -> void:
+	_controller.take_cross_check(3.0, 100.0, Vector2(1.0, 0.0))
+	assert_eq(_controller.knockdown_timer, 0.0, "however hard, from the side")
+
+
+func test_square_on_he_rides_what_floors_him_from_the_side() -> void:
+	_controller._on_body_check_received(Vector3(0.0, 0.0, -3.0))
+	assert_eq(_controller.knockdown_timer, 0.0, "square from the front: rocked, on his feet")
+	assert_true(BodyCheckRules.is_rocked(_controller.stagger_timer, _controller.get_body_check_config()))
+	before_each()
+	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	assert_gt(_controller.knockdown_timer, 0.0, "across his blades: down")
+
+
+func test_in_the_stance_he_rides_the_side_hit() -> void:
+	var input := InputState.new()
+	input.stance_held = true
+	_tick(input)
+	assert_true(_controller.stance_active)
+	_controller._on_body_check_received(Vector3(3.0, 0.0, 0.0))
+	assert_eq(_controller.knockdown_timer, 0.0)

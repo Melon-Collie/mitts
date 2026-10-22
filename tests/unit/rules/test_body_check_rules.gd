@@ -19,37 +19,26 @@ func before_each() -> void:
 	_cfg.rocked_min_seconds = 0.5
 	_cfg.rocked_max_seconds = 0.8
 	_cfg.rocked_grip_penalty = 0.75
-	_cfg.knockdown_impulse = 11.0
-	_cfg.knockdown_ref_impulse = 16.0
+	_cfg.knockdown_ref_overshoot = 2.0
 	_cfg.min_knockdown_seconds = 0.7
 	_cfg.max_knockdown_seconds = 1.5
 
 
-# ── knockdown_seconds_from_impulse ────────────────────────────────────────────
+# ── knockdown_seconds_from_overshoot ──────────────────────────────────────────
 
-func test_no_knockdown_below_threshold() -> void:
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(9.0, _cfg), 0.0, 0.0001,
-			"a hit that staggers but is below knockdown_impulse does not knock down")
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(10.99, _cfg), 0.0, 0.0001,
-			"just below the threshold → no knockdown")
+func test_no_knockdown_within_his_balance() -> void:
+	assert_eq(BodyCheckRules.knockdown_seconds_from_overshoot(0.5, _cfg), 0.0)
+	assert_eq(BodyCheckRules.knockdown_seconds_from_overshoot(1.0, _cfg), 0.0, "at his balance he holds")
 
-func test_knockdown_at_threshold_is_min_seconds() -> void:
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(11.0, _cfg), 0.7, 0.0001,
-			"at the threshold → the minimum down time")
+func test_just_past_his_balance_is_the_min_down_time() -> void:
+	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(1.0001, _cfg), 0.7, 0.001)
 
 func test_knockdown_scales_to_max() -> void:
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(16.0, _cfg), 1.5, 0.0001,
-			"at the reference impulse → the maximum down time")
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(30.0, _cfg), 1.5, 0.0001,
+	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(1.5, _cfg), 1.1, 0.0001,
+			"halfway to the reference overshoot → halfway down time")
+	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(2.0, _cfg), 1.5, 0.0001)
+	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_overshoot(9.0, _cfg), 1.5, 0.0001,
 			"above the reference clamps to max")
-	# Midpoint (13.5) → halfway between 0.7 and 1.5 = 1.1
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(13.5, _cfg), 1.1, 0.0001,
-			"scales linearly between threshold and reference")
-
-func test_knockdown_disabled_when_threshold_zero() -> void:
-	_cfg.knockdown_impulse = 0.0
-	assert_almost_eq(BodyCheckRules.knockdown_seconds_from_impulse(50.0, _cfg), 0.0, 0.0001,
-			"knockdown_impulse 0 disables knockdowns entirely")
 
 
 # ── intensity ─────────────────────────────────────────────────────────────────
@@ -95,7 +84,6 @@ func test_a_full_check_rocks_him_for_the_min_window() -> void:
 
 
 func test_the_rocked_window_grows_to_its_max_and_holds() -> void:
-	_cfg.knockdown_impulse = 0.0
 	var mid: float = BodyCheckRules.stagger_seconds_from_impulse(11.0, _cfg)
 	var top: float = BodyCheckRules.stagger_seconds_from_impulse(13.0, _cfg)
 	var past: float = BodyCheckRules.stagger_seconds_from_impulse(40.0, _cfg)
@@ -105,7 +93,6 @@ func test_the_rocked_window_grows_to_its_max_and_holds() -> void:
 
 
 func test_he_comes_out_of_it_into_the_full_stagger() -> void:
-	_cfg.knockdown_impulse = 0.0
 	var t: float = BodyCheckRules.stagger_seconds_from_impulse(13.0, _cfg)
 	assert_almost_eq(BodyCheckRules.rocked_share(t, _cfg), 1.0, 0.0001)
 	assert_almost_eq(BodyCheckRules.rocked_share(1.4, _cfg), 0.5, 0.0001)
@@ -120,7 +107,7 @@ func test_the_rocked_band_fits_the_wire() -> void:
 
 
 func test_a_knockdown_takes_no_rocked_band() -> void:
-	var t: float = BodyCheckRules.stagger_seconds_from_impulse(_cfg.knockdown_impulse, _cfg)
+	var t: float = BodyCheckRules.stagger_seconds_from_impulse(13.0, _cfg, true)
 	assert_almost_eq(t, _cfg.max_stagger_seconds, 0.0001, "the full stagger, as before")
 	assert_false(BodyCheckRules.is_rocked(t, _cfg))
 

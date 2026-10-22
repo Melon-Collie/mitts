@@ -91,9 +91,9 @@ func _carrier_keeps_the_puck() -> bool:
 
 # The control: the defender is the faster body, so he resolves the contact and
 # delivers his full committed transfer.
-func test_stepping_into_a_slower_carrier_knocks_him_down_and_strips_him() -> void:
+func test_stepping_into_a_slower_carrier_strips_him() -> void:
 	_contact(1.0)
-	assert_gt(_largest(_carrier), _cfg.knockdown_impulse, "a knockdown-strength hit")
+	assert_gt(_largest(_carrier), _cfg.ref_impulse, "a full check")
 	assert_true(_strip_victims.has(_carrier))
 	assert_false(_carrier_keeps_the_puck(), "stripped")
 	assert_lt(_carrier.velocity.x, 1.0, "driven back")

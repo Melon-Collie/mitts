@@ -113,9 +113,9 @@ func test_raised_commit_threshold_suppresses_a_marginal_hit() -> void:
 	assert_false(raised.commit, "declines the same hit once the threshold is raised")
 
 
-# The commit bar is a check that rocks him and still leaves the knockdown as the
-# reward for real closing.
+# The commit bar is a check that rocks him, short of what floors a square,
+# upright man: the knockdown is the angle's and the moment's.
 func test_the_commit_bar_rocks_him_short_of_the_knockdown() -> void:
 	var cfg := BodyCheckRules.Config.new()
 	assert_gte(AIBodyCheck.COMMIT_IMPULSE_M_S, cfg.ref_impulse)
-	assert_lt(AIBodyCheck.COMMIT_IMPULSE_M_S, cfg.knockdown_impulse)
+	assert_lt(AIBodyCheck.COMMIT_IMPULSE_M_S, BodyBalanceRules.Config.new().balance_ref_dv)

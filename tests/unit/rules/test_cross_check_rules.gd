@@ -156,21 +156,3 @@ func test_a_neutral_shove_along_the_blades_staggers() -> void:
 	var cfg := BodyCheckRules.Config.new()
 	var dv: float = _dv(1.0, 1.0, FACING_PLUS_X)
 	assert_gt(dv, cfg.min_impulse, "it lands")
-	assert_lt(dv, cfg.knockdown_impulse)
-
-
-func test_no_legal_pair_of_builds_knocks_down_on_a_standstill_shove() -> void:
-	var cfg := BodyCheckRules.Config.new()
-	var most_force: float = 0.0
-	var least_mass: float = INF
-	for h: int in range(PlayerAttributes.HEIGHT_MIN, PlayerAttributes.HEIGHT_MAX + 1):
-		for w: int in range(PlayerAttributes.weight_min(h), PlayerAttributes.weight_max(h) + 1):
-			for profile: int in [PlayerAttributes.PROFILE_SHIFTY,
-					PlayerAttributes.PROFILE_STABILITY, PlayerAttributes.PROFILE_POWER]:
-				var a := PlayerAttributes.new(h, w, profile)
-				most_force = maxf(most_force, a.mass_mult() * THRUST * a.accel_mult())
-				least_mass = minf(least_mass, a.mass_mult())
-	var worst: float = CrossCheckRules.victim_dv(most_force / THRUST, THRUST, least_mass,
-			Vector2(1.0, 0.0), FACING_PLUS_X, 0.0, Vector2.ZERO, 0.0)
-	assert_lt(worst, cfg.knockdown_impulse,
-			"the hardest legal shove on the lightest body, unresisted: %.2f m/s" % worst)

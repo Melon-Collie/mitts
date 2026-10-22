@@ -1,6 +1,6 @@
 # Hit outcomes — balance, the rocked hit, and both bodies
 
-Status: **Phases 0 and 1 built**, playtest pending. Amends the physicality paragraphs of
+Status: **Phases 0, 1 and 2 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
 own PR and playtest.
@@ -189,7 +189,7 @@ the strip has already put the puck loose.
 - `test_native_movement_parity.gd`: the fuzz's stagger range covers the band.
 - `render-poses.sh --only=rocked`: `rocked_onset` and `rocked_mid`.
 
-## Phase 2 — the knockdown is balance
+## Phase 2 — the knockdown is balance (built)
 
 ### The model
 
@@ -206,26 +206,32 @@ moves the budget, and by how much relative to the others.
 New pure rule class `BodyBalanceRules` (`Scripts/domain/rules/`), two numbers:
 
 - **The tipping share of the hit.** Split the body's Δv along and across its
-  skates' heading (the lower body's yaw, which is where the blades point,
-  forward or backward). Along the blades the skates roll with the body, so
+  skates' heading (his facing, which is where the blades point, forward or
+  backward). Along the blades the skates roll with the body, so
   most of it is carried off as travel; across them the edges bite and the top
   keeps going.
   `tip_dv = √((along_share · Δv_along)² + Δv_across²)`.
 - **His balance budget.** `balance_ref_dv × posture × sight × √(h_ref / h)`:
-  - **posture:** stance by its base-width ratio (the stance's own
-    `stance_width_m` over the skating base, derived rather than picked); a
-    vulnerable body ×`vulnerable_mult`: slapper wind-up, either
-    follow-through, a one-handed reach (`ReachPurposeRules`), a tight turn or
-    a pivot under way. Ctrl is already in the impulse (the brace) and, from
-    Phase 3, in the checker's own share, so it takes no posture term;
+  - **posture:** stance by its base-width ratio, derived rather than picked:
+    each skate `stance_width_m` out from under a hip `GaitPose.HIP_HALF_WIDTH`
+    off centre, (0.13 + 0.125) / 0.13 = 1.96. A vulnerable body
+    ×`vulnerable_mult`: the shot states that commit the body
+    (`SkaterStateMachine.state_off_balance`: wrister load, slapper wind-up,
+    follow-through, one-timer hold). Not modelled: a one-handed reach and a
+    tight turn or pivot, which no replicated field states cleanly. Ctrl is
+    already in the impulse (the brace) and, from Phase 3, in the checker's own
+    share, so it takes no posture term;
   - **sight:** how square he is to the hitter, from 1 facing him down to
     `sight_behind` with his back to him — a man who sees it coming rides it;
-  - **height:** the fall model's centre-of-mass height
-    (`KnockdownFallRules.Config.com_height`, scaled by the build's height).
+  - **height:** the build's height over the reference build's, which the
+    centre of mass scales with (`SkaterController._build_height_mult`, and
+    `AISkaterCaps.height_mult` for the bots).
 
 **Knockdown when `tip_dv > budget`**, for a window that grows with how far
-past it landed (the existing `min/max_knockdown_seconds` ramp, keyed to
-`tip_dv / budget`). The board rule stands: the knockdown reads how far his
+past it landed (`BodyCheckRules.knockdown_seconds_from_overshoot`: the existing
+`min/max_knockdown_seconds` ramp over `tip_dv / budget` from 1 to
+`knockdown_ref_overshoot` 1.7). `knockdown_impulse` and its reference are
+gone. A cross-check is never a full check, so it never reaches it. The board rule stands: the knockdown reads how far his
 body was driven, so a check into the wall rocks and strips him at the
 backstopped strength but leaves him up and pinnable.
 
@@ -239,14 +245,15 @@ three parties).
 
 Closing speed (m/s) for a committed check to knock its man down; rocked and
 stripped from 4.2 for equal builds everywhere (heavy into light 3.4, light
-into heavy 5.5):
+into heavy 5.5). The full grid is the snapshot
+`tests/unit/rules/snapshots/body_balance.txt`:
 
 | victim | square front | 45° | side | from behind, square |
 |---|---|---|---|---|
 | upright, equal builds | 14.8 | 8.8 | 5.9 | 8.9 |
 | upright, heavy into light | 11.9 | 7.1 | 4.8 | 7.2 |
 | upright, light into heavy | 19.3 | 11.5 | 7.7 | 11.6 |
-| in the stance, equal | 26.6 | 15.8 | 10.6 | 16.0 |
+| in the stance, equal | 29.0 | 17.2 | 11.6 | 17.4 |
 | vulnerable, equal | 8.9 | 5.3 | 3.5 | 5.3 |
 
 Read against 10 m/s top speed: a square, upright man rides any one-sided
@@ -257,17 +264,15 @@ off his feet at modest pace, below the rocked line when hit from the side.
 
 ### Bots
 
-- **The checker hunts the moment.** `AIBodyCheck` prices the hit as an
-  outcome against the carrier's balance (`BodyBalanceRules`, the same call
-  the host makes), so a bot commits for a rocked hit and angles for the side
-  or the vulnerable beat when a knockdown is within reach, rather than for
-  closing speed.
-- **The carrier protects himself.** A carrier who can't get out of a check's
-  line squares up to it or braces, the way the board play already braces when
-  it can't beat the checker along the wall.
-- `skater_agent_board_play.gd`'s pin reach compares the hit with the
-  knockdown line; it compares with the balance verdict instead.
-- Easy bots do neither.
+- **Built:** `skater_agent_board_play.gd`'s pin reach asks the host's own
+  question, `BodyBalanceRules.overshoot` on the man's replicated facing,
+  stance and shot state and his build's height, instead of the knockdown line.
+- **Built:** the commit bar already prices a rocked hit; `test_body_check.gd`
+  holds it under what floors a square, upright man.
+- **Not built** (a new decision each, tracked as an issue): the checker
+  angling for the side or the vulnerable beat when a knockdown is in reach,
+  and an open-ice carrier squaring up or bracing against a check he can't
+  avoid.
 
 ### Tests
 
@@ -278,8 +283,17 @@ off his feet at modest pace, below the rocked line when hit from the side.
   90°.
 - The grid above as a snapshot (`tests/snapshot.gd`), so a tuning change shows
   as a reviewed table diff.
-- `test_knockdown_getup.gd` and the board-backstop test keep passing unchanged:
-  the fall and the boards are untouched.
+- `test_rocked_hit.gd`: square on he rides what floors him from the side; in
+  the stance he rides the side hit; a cross-check never knocks down; the
+  balance defaults are the controller's.
+- The fixtures that hit a man square from the front at 3 m/s to put him down
+  (`test_knockdown_lies_on_the_ice.gd`, `test_arms_reach_their_hands.gd`, the
+  `knockdown_lying_back` pose) hit him at 6, since he now rides 3 on his feet;
+  the board-backstop and get-up tests pass unchanged.
+- `body_jerk_harness.gd`'s side knockdown hits at 3.16 m/s, which keeps the
+  1.84 s window it always measured. A shorter knockdown fails the smoothness
+  gate on the get-up, in the code before this phase too (head, bottom arm and
+  stick at 1.74 s); that is its own defect.
 
 ## Phase 3 — both bodies take an outcome
 

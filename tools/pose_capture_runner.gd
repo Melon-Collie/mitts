@@ -304,7 +304,7 @@ const POSES: Array = [
 	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
 		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
 		"steps": [[100, {}]]},
-	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 3.0),
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.0),
 		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
 		"steps": [[100, {}]]},
 	# A full check short of the knockdown line rocks him: the reel, the splayed

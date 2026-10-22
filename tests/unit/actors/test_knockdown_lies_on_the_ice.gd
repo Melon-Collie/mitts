@@ -121,8 +121,10 @@ func test_a_body_shoved_sideways_lies_on_the_ice() -> void:
 			"the skates stay near the ice they tipped about")
 
 
+# From behind takes more than from the side: half a hit along his blades is
+# carried off as travel. Hard enough that he is still lying there.
 func test_a_body_shoved_backward_lies_on_the_ice() -> void:
-	_knock_down(Vector3(0.0, 0.0, 3.0), 100)
+	_knock_down(Vector3(0.0, 0.0, 6.0), 100)
 	var h: Dictionary = _report("lying, shoved backward")
 	assert_lt(h["pelvis"], 0.45, "the hips are down on the ice")
 	assert_lt(h["helmet"], 0.45, "the head is down on the ice")
@@ -143,7 +145,10 @@ func test_mid_fall_the_skates_stay_planted() -> void:
 # ice in any direction, entry to get-up. (Measured before: 0.20–0.28 m under.)
 func test_the_skates_never_go_through_the_ice() -> void:
 	for impulse: Vector3 in [Vector3(3.0, 0.0, 0.0), Vector3(-3.0, 0.0, 0.0),
-			Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, -3.0), Vector3(2.0, 0.0, 2.0)]:
+			Vector3(0.0, 0.0, 3.0), Vector3(0.0, 0.0, -6.0), Vector3(3.0, 0.0, 3.0)]:
+		before_each()
+		_controller._on_body_check_received(impulse)
+		assert_gt(_controller.knockdown_timer, 0.0, "shoved %s, he goes down" % impulse)
 		before_each()
 		var lowest: float = _lowest_skate_through_a_knockdown(impulse)
 		gut.p("shoved %s: lowest skate point %.3f m above the ice" % [impulse, lowest])

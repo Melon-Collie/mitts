@@ -160,21 +160,20 @@ var rocked_splay_m: float = 0.16         # each skate out from under its hip
 var rocked_crouch: float = 1.0           # crouch floor (× stance_hip_deg), under the stance's
 var rocked_catch_rate: float = 15.0      # the catch's ease rate: a step out in ~0.15 s
 # ── Knockdown Tuning ──────────────────────────────────────────────────────────
-# The top of the stagger continuum: a hit whose victim impulse exceeds
-# knockdown_impulse KNOCKS THE VICTIM DOWN — movement locked, no puck interaction,
-# the body slides from the hit and bleeds speed via knockdown_friction — for a
-# recovery window scaling with the hit (see BodyCheckRules.knockdown_seconds_from_
-# impulse). knockdown_timer rides the SAME replicated / snapped / decayed rail as
-# stagger_timer. Deliberately kept ABOVE the full-check point (stagger_ref 1.35):
-# a full check rocks + strips; a KNOCKDOWN is the reward for a genuinely SOLID
-# hit — ~5.5 m/s closing at a medium build (~4.5 for a heavy one), the pace of a
-# committed skate-in on a carrier, up to a maximal ~9.5 m/s head-on
-# collision. It sits just above the AI's commit bar (AIBodyCheck.COMMIT_IMPULSE_M_S
-# 1.6) so a committed bot check rocks and strips and, at real closing,
-# tips into a knockdown. Set knockdown_impulse very high (or 0) to effectively
-# disable knockdowns.
-var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down
-var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
+# A full check that beats his balance (BodyBalanceRules: the part of his Δv his
+# feet can't carry off, against what his base, his sight of the hitter, his
+# posture and his height can take) KNOCKS HIM DOWN — movement locked, no puck
+# interaction, the body slides from the hit and bleeds speed via
+# knockdown_friction — for a window growing with how far past it the hit landed
+# (BodyCheckRules.knockdown_seconds_from_overshoot). knockdown_timer rides the
+# SAME replicated / snapped / decayed rail as stagger_timer. At these values a
+# square, upright man rides any one-sided check below top speed, and a side hit
+# floors him from ~6 m/s closing at equal builds (docs/hit-outcomes-plan.md).
+var balance_ref_dv: float = 2.4            # m/s a square, upright, reference-height man rides
+var balance_along_share: float = 0.5       # share of a hit along his blades that tips him
+var balance_sight_behind: float = 0.6      # his balance with his back to the hitter
+var balance_vulnerable_mult: float = 0.6   # ... mid-shot: a wind-up, a load, a follow-through
+var knockdown_ref_overshoot: float = 1.7   # past his balance by this, the longest knockdown
 var knockdown_min_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
 var knockdown_max_seconds: float = 1.9     # down time of a maximal hit
 var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
@@ -1334,6 +1333,7 @@ func build_ai_caps() -> AISkaterCaps:
 		caps.weight = skater.weight
 		caps.body_check_transfer = skater.body_check_transfer
 		caps.body_radius = skater.collision_radius()
+	caps.height_mult = _build_height_mult
 	return caps
 
 
@@ -1349,6 +1349,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 		_capture_attribute_bases()
 	var m_height:  float = attrs.height_mult()
 	var m_agility: float = attrs.agility_mult()
+	_build_height_mult = m_height / PlayerAttributes.neutral().height_mult()
 	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
 	crossover_thrust_multiplier = _base_crossover_thrust_multiplier * attrs.crossover_mult()
@@ -1546,6 +1547,16 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 # `stagger_strength` (m/s) is how hard it landed (Skater.body_check_received);
 # omitted, the impulse's own magnitude.
 func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -> void:
+	_absorb_hit(impulse, stagger_strength, true)
+
+
+# The outcome of a Δv `impulse` landing on him: the stagger from how hard it
+# landed (`stagger_strength`, or the impulse's own magnitude), and, for a
+# `full_check`, the rocked band and the knockdown — which reads his balance
+# (BodyBalanceRules) against how far his body was driven, so the boards behind
+# him add to the stagger and not to the fall. A shove is no full check: it
+# staggers him and nothing more.
+func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) -> void:
 	var impulse_magnitude: float = impulse.length()
 	var stagger_from: float = maxf(impulse_magnitude, stagger_strength)
 	# Capture the recoil direction (body frame) so the torso reels the way the
@@ -1556,27 +1567,35 @@ func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -
 	var recoil_xz: Vector2 = Vector2(local_impulse.x, local_impulse.z)
 	if recoil_xz.length() > 0.001:
 		stagger_recoil_dir = recoil_xz.normalized()
-	var cfg: BodyCheckRules.Config = _body_check_config()
-	# Knockdown rides the same "extend, never shorten" rule as stagger and is set on
-	# both the host and the local victim's prediction — so a downed local player goes
-	# down immediately, and reconcile snaps knockdown_timer to the host value.
-	var knockdown_add: float = BodyCheckRules.knockdown_seconds_from_impulse(impulse_magnitude, cfg)
-	if not _is_host:
-		if skater.is_local_skater:
-			stagger_timer = maxf(stagger_timer,
-					BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg))
-			_set_knockdown_from_impulse(knockdown_add, impulse)
+	# Set on both the host and the local victim's prediction, so a downed local
+	# player goes down immediately and reconcile snaps the timers to the host's.
+	if not _is_host and not skater.is_local_skater:
 		return
+	var cfg: BodyCheckRules.Config = _body_check_config()
+	var knockdown_add: float = 0.0
+	var stagger_add: float = minf(BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg),
+			cfg.max_stagger_seconds)
+	if full_check:
+		var overshoot: float = BodyBalanceRules.overshoot(Vector2(impulse.x, impulse.z),
+				skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
+		knockdown_add = BodyCheckRules.knockdown_seconds_from_overshoot(overshoot, cfg)
+		stagger_add = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
+				knockdown_add > 0.0)
 	_set_knockdown_from_impulse(knockdown_add, impulse)
-	stagger_timer = maxf(stagger_timer,
-			BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg))
+	stagger_timer = maxf(stagger_timer, stagger_add)
+
+
+# How he stands for BodyBalanceRules, from replicated state.
+func _balance_posture() -> BodyBalanceRules.Posture:
+	return BodyBalanceRules.posture_of(stance_active,
+			SkaterStateMachine.state_off_balance(_sm.get_state()))
 
 
 # Host-only (CrossCheckTracker): a cross-check landing on this skater along
 # `push_dir` (unit XZ) from a shover of `shover_weight` pushing at
 # `shover_thrust`. He answers it with his own edges and stride as he is now
-# (posture, stagger, intent); what gets through is his Δv, taken through the
-# check's stagger path. Returns the Δv (m/s, 0 when he held).
+# (posture, stagger, intent); what gets through is his Δv, a stagger and never
+# more (_absorb_hit). Returns the Δv (m/s, 0 when he held).
 func take_cross_check(shover_weight: float, shover_thrust: float, push_dir: Vector2) -> float:
 	var posture: int = SkaterMovementRules.posture_of(stance_active, hit_active)
 	var bc: BodyCheckRules.Config = _body_check_config()
@@ -1591,11 +1610,7 @@ func take_cross_check(shover_weight: float, shover_thrust: float, push_dir: Vect
 		return 0.0
 	var impulse := Vector3(push_dir.x, 0.0, push_dir.y) * dv
 	skater.velocity += impulse
-	# A shove staggers him on the check's ladder but never rocks him: that would
-	# take his stick, and a cross-check strips nothing.
-	var ceiling: float = maxf(stagger_timer, bc.max_stagger_seconds)
-	skater.body_check_received.emit(impulse, dv)
-	stagger_timer = minf(stagger_timer, ceiling)
+	_absorb_hit(impulse, dv, false)
 	return dv
 
 
@@ -3539,11 +3554,31 @@ func _body_check_config() -> BodyCheckRules.Config:
 		_cached_body_check_cfg.rocked_min_seconds = rocked_min_seconds
 		_cached_body_check_cfg.rocked_max_seconds = rocked_max_seconds
 		_cached_body_check_cfg.rocked_grip_penalty = rocked_grip_penalty
-		_cached_body_check_cfg.knockdown_impulse = knockdown_impulse
-		_cached_body_check_cfg.knockdown_ref_impulse = knockdown_ref_impulse
+		_cached_body_check_cfg.knockdown_ref_overshoot = knockdown_ref_overshoot
 		_cached_body_check_cfg.min_knockdown_seconds = knockdown_min_seconds
 		_cached_body_check_cfg.max_knockdown_seconds = knockdown_max_seconds
 	return _cached_body_check_cfg
+
+# Balance config, flat like the body-check config; the build's height enters
+# per hit as _build_height_mult. The stance's base is the gait's own: each skate
+# set stance_width_m out from under a hip GaitPose.HIP_HALF_WIDTH off centre.
+var _cached_balance_cfg: BodyBalanceRules.Config = null
+var _build_height_mult: float = 1.0
+
+func _balance_config() -> BodyBalanceRules.Config:
+	if _cached_balance_cfg == null:
+		_cached_balance_cfg = BodyBalanceRules.Config.new()
+		_cached_balance_cfg.balance_ref_dv = balance_ref_dv
+		_cached_balance_cfg.along_share = balance_along_share
+		_cached_balance_cfg.sight_behind = balance_sight_behind
+		_cached_balance_cfg.vulnerable_mult = balance_vulnerable_mult
+		_cached_balance_cfg.stance_base_ratio = \
+				(GaitPose.HIP_HALF_WIDTH + stance_width_m) / GaitPose.HIP_HALF_WIDTH
+	return _cached_balance_cfg
+
+
+func get_balance_config() -> BodyBalanceRules.Config:
+	return _balance_config()
 
 # Knockdown-fall config is flat (not attribute-scaled) — lazily built once for
 # the controller's lifetime, same pattern as the body-check config above, with

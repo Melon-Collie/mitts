@@ -49,17 +49,11 @@ class Config:
 	# Peak edge-grip reduction at the top of the rocked band: off his edges, he
 	# glides along the hit rather than cutting out of it.
 	var rocked_grip_penalty: float = 0.75
-	# Knockdown: the top of the same intensity continuum. A hit whose victim impulse
-	# exceeds knockdown_impulse doesn't just stagger — it KNOCKS THE VICTIM DOWN
-	# (movement locked, slides + bleeds speed, can't touch the puck) for a recovery
-	# window that scales with how far past the threshold it landed, from
-	# min_knockdown_seconds at the threshold to max_knockdown_seconds at
-	# knockdown_ref_impulse. Kept just ABOVE the full-check point (ref_impulse): a
-	# full check staggers + strips, and a knockdown is the reward for a SOLID hit —
-	# a committed skate-in at pace (~5.5 m/s closing, medium build) up to a maximal
-	# head-on collision — not the default result of every check.
-	var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down (0 disables)
-	var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
+	# Knockdown: a hit that beats his balance (BodyBalanceRules.overshoot over 1)
+	# knocks him off his skates — movement locked, slides and bleeds speed, can't
+	# touch the puck — for a window from min_knockdown_seconds just past his
+	# balance to max_knockdown_seconds at knockdown_ref_overshoot and beyond.
+	var knockdown_ref_overshoot: float = 1.7
 	var min_knockdown_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
 	var max_knockdown_seconds: float = 1.9     # down time of a maximal hit
 
@@ -73,12 +67,13 @@ static func intensity(impulse_mag: float, cfg: Config) -> float:
 
 # Seconds of stagger a fresh hit adds (0 below min_impulse): up to the stagger's
 # max, and a full check that leaves him on his feet past it into the rocked
-# band. A knockdown takes no rocked band: he is going down, and the timer runs
-# out under the knockdown's own. Callers take the max with any in-flight timer
-# so a weaker follow-up can't shorten an existing stagger.
-static func stagger_seconds_from_impulse(impulse_mag: float, cfg: Config) -> float:
+# band. A hit that `knocked_down` takes no rocked band: he is going down, and
+# the timer runs out under the knockdown's own. Callers take the max with any
+# in-flight timer so a weaker follow-up can't shorten an existing stagger.
+static func stagger_seconds_from_impulse(impulse_mag: float, cfg: Config,
+		knocked_down: bool = false) -> float:
 	var stagger: float = intensity(impulse_mag, cfg) * cfg.max_stagger_seconds
-	if impulse_mag < cfg.ref_impulse or knockdown_seconds_from_impulse(impulse_mag, cfg) > 0.0:
+	if impulse_mag < cfg.ref_impulse or knocked_down:
 		return stagger
 	var span: float = maxf(cfg.rocked_ref_impulse - cfg.ref_impulse, 0.001)
 	var t: float = clampf((impulse_mag - cfg.ref_impulse) / span, 0.0, 1.0)
@@ -97,15 +92,16 @@ static func rocked_share(stagger_timer: float, cfg: Config) -> float:
 	return clampf((stagger_timer - cfg.max_stagger_seconds) / cfg.rocked_max_seconds, 0.0, 1.0)
 
 
-# Seconds of KNOCKDOWN a fresh hit adds: 0 below knockdown_impulse, then ramps
-# from min_knockdown_seconds at the threshold to max_knockdown_seconds at
-# knockdown_ref_impulse (clamped). Like stagger, callers take the max with any
-# in-flight timer so a weaker follow-up can't shorten an existing knockdown.
-static func knockdown_seconds_from_impulse(impulse_mag: float, cfg: Config) -> float:
-	if cfg.knockdown_impulse <= 0.0 or impulse_mag < cfg.knockdown_impulse:
+# Seconds of KNOCKDOWN a hit adds from how far past his balance it landed
+# (BodyBalanceRules.overshoot): 0 at or under 1, then min_knockdown_seconds up to
+# max_knockdown_seconds at knockdown_ref_overshoot (clamped). Like stagger,
+# callers take the max with any in-flight timer so a weaker follow-up can't
+# shorten an existing knockdown.
+static func knockdown_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
+	if overshoot <= 1.0:
 		return 0.0
-	var span: float = maxf(cfg.knockdown_ref_impulse - cfg.knockdown_impulse, 0.001)
-	var t: float = clampf((impulse_mag - cfg.knockdown_impulse) / span, 0.0, 1.0)
+	var span: float = maxf(cfg.knockdown_ref_overshoot - 1.0, 0.001)
+	var t: float = clampf((overshoot - 1.0) / span, 0.0, 1.0)
 	return lerpf(cfg.min_knockdown_seconds, cfg.max_knockdown_seconds, t)
 
 
