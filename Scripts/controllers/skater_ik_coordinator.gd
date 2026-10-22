@@ -942,16 +942,24 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 # (CrossCheckRules.pose_weight); `extension` drives the punch.
 const _SHOVE_HAND_X: float = 0.25        # off the chest's centre, away from the blade
 const _SHOVE_HAND_DROP_M: float = 0.20   # under the shoulder marker: chest height
-const _SHOVE_HAND_Z: float = -0.35       # in front of the chest as the push starts
-const _SHOVE_PUNCH_M: float = 0.40       # the arms' extension at full push: nearly straight
+# The sweater's front at chest height off the trunk's shoulder, in shoulder
+# offsets: its chest ring is 0.195 m deep on the 0.22 m shoulder, and both
+# ride girth (SkaterMeshBuilder, SkaterAppearanceCoordinator).
+const _SHOVE_CHEST_DEPTH: float = 0.89
+const _SHOVE_LOAD_CLEAR_M: float = 0.07  # the top hand off the chest at the deepest load
+const _SHOVE_FULL_Z: float = -0.75       # in front of the shoulder at full push: nearly straight
 const _SHOVE_BEARING_Z: float = -0.15    # the shaft a touch ahead of square across
 
 
 func _cross_check_hand_pose(hand_local: Vector3, blade_local: Vector3,
 		blade_side_sign: float, extension: float, weight: float) -> TopHandIK.Result:
+	var shoulder_z: float = arm_shoulder().z
+	var loaded_z: float = shoulder_z \
+			- _skater.shoulder_offset * _SHOVE_CHEST_DEPTH - _SHOVE_LOAD_CLEAR_M
 	var posed_hand := Vector3(-_SHOVE_HAND_X * blade_side_sign,
 			_skater.shoulder.position.y - _SHOVE_HAND_DROP_M,
-			_SHOVE_HAND_Z - _SHOVE_PUNCH_M * extension)
+			lerpf(loaded_z, shoulder_z + _SHOVE_FULL_Z,
+					(extension + CrossCheckRules.DRAW_IN) / (1.0 + CrossCheckRules.DRAW_IN)))
 	var across: Vector2 = Vector2(blade_side_sign, _SHOVE_BEARING_Z).normalized()
 	var stick: float = solve_stick_length()
 	var posed_blade := Vector3(posed_hand.x + across.x * stick, posed_hand.y,
