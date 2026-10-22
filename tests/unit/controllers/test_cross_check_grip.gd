@@ -59,7 +59,7 @@ func test_the_hands_hold_the_shaft_on_their_own_sides() -> void:
 			var c: SkaterController = _shoving(lefty, aim)
 			var skater: Skater = c.skater
 			var label: String = "%s, aim %s" % ["lefty" if lefty else "righty", aim]
-			assert_eq(skater.cross_check_phase, CrossCheckRules.Phase.EXTEND, label)
+			assert_eq(skater.cross_check_phase, CrossCheckRules.Phase.THROW, label)
 			var top_side: float = signf(skater.shoulder.position.x)
 			var bottom_side: float = signf(skater.bottom_shoulder.position.x)
 			assert_eq(top_side, -bottom_side, "%s: the shoulders are either side" % label)

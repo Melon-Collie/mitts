@@ -242,16 +242,20 @@ const POSES: Array = [
 		"cam": Vector3(-0.8, 0.6, 3.2),
 		"steps": [[60, {"stick": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
 	# ── Cross-check ─────────────────────────────────────────────────────────
-	# The Ctrl+F chord at a standstill: the shaft level across the chest, punched
-	# out. Mid-push, then at full extension, aimed and framed from the front like
-	# the commit (a skater at rest faces +Z).
+	# The Ctrl+F chord at a standstill: the shaft level across the chest, drawn in
+	# to it (the load's end), mid-push, then at full extension, aimed and framed
+	# from the front like the commit (a skater at rest faces +Z).
+	{"name": "cross_check_load", "puck": false, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
+		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
+		[14, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
+	]},
 	{"name": "cross_check_mid", "puck": false, "readout": true, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
 		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
-		[6, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
+		[20, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
 	]},
-	{"name": "cross_check_full", "puck": false, "cam": Vector3(0.6, 2.4, 2.6), "steps": [
+	{"name": "cross_check_full", "puck": false, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
 		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
-		[12, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
+		[26, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
 	]},
 	# Thrown at a cursor 50° off the hips: the chest and the shaft turn to it.
 	{"name": "cross_check_aimed", "puck": false, "cam": Vector3(0.6, 2.4, 2.6), "steps": [

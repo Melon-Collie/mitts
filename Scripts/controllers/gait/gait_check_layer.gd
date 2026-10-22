@@ -7,8 +7,8 @@ extends GaitLayer
 # started off the host-authoritative body_check_landed broadcast (and the replay
 # event dispatcher), so every machine plays the identical drive the same frame as
 # the burst and the thud. The cross-check is pushed the same way, legs under it
-# and trunk into it, for as long as the arms are out (the replicated phase,
-# CrossCheckRules.extension), thrown or whiffed alike.
+# and trunk into it, loading through the draw-in and full as the push lands (the
+# replicated phase, CrossCheckRules.drive), thrown or whiffed alike.
 #
 # The gait owns no shoulder channel here, and must not grow one: the trunk
 # texture is symmetric, so a roll raises the trailing shoulder by exactly what
@@ -70,7 +70,7 @@ func advance(delta: float) -> bool:
 			_drive_env = sin(PI * pow(du, 0.35)) * _drive_intensity
 	_commit_blend = move_toward(_commit_blend, 1.0 if _skater.hit_committed else 0.0,
 			_controller.hit_commit_pose_speed * delta)
-	_shove_env = CrossCheckRules.extension(_skater.cross_check_phase, _skater.cross_check_elapsed)
+	_shove_env = CrossCheckRules.drive(_skater.cross_check_phase, _skater.cross_check_elapsed)
 	return _drive_env > 0.0 or _commit_blend > 0.001 or _shove_env > 0.0
 
 

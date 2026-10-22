@@ -3,8 +3,9 @@ extends RefCounted
 
 # The cross-check on the chord, the stick button pressed with Ctrl held: the
 # shaft across the opponent in both hands, driven by the legs. The press throws
-# it (EXTEND, the only phase that can land), the stick comes back (RECOVER), and
-# the next one waits a rearm. Every
+# it (THROW: drawn in to the chest over LOAD_S, then punched out over PUSH_S, the
+# only stretch that can land), the stick comes back (RECOVER), and the next one
+# waits a rearm. Every
 # transition is a function of the shover's own inputs, so the host and the
 # predicting client step the same phases; whether one lands is the host's
 # (CrossCheckTracker, CrossCheckClaimResolver).
@@ -15,15 +16,20 @@ extends RefCounted
 # into it). See victim_dv. The shover aims it: the shaft goes square across the
 # chest he turns to the cursor, and pushes along its own normal (aim_dir).
 
-enum Phase { IDLE, EXTEND, RECOVER, REARM }
+enum Phase { IDLE, THROW, RECOVER, REARM }
 
+# The wind-up: the shaft drawn in to the chest before it goes out, the beat that
+# telegraphs the shove to the man it is aimed at.
+const LOAD_S: float = 0.12
 # The push itself: arms punched out over a short stride. Sized so a neutral
-# shove along the blades lands in the stagger band and no legal pair of builds
-# reaches a knockdown (test_cross_check_rules.gd holds both).
+# shove along the blades lands in the stagger band (test_cross_check_rules.gd).
 const PUSH_S: float = 0.10
+const THROW_S: float = LOAD_S + PUSH_S
+# How far the hands come in on the load, as a share of the punch's reach out.
+const DRAW_IN: float = 0.5
 # The stick back down after it: the cost of a whiff, in the stick's absence.
 const RECOVER_S: float = 0.20
-# Before the next press throws: about 0.7 s press to press.
+# Before the next press throws: about 0.8 s press to press.
 const REARM_S: float = 0.40
 # Body edge to body edge: an arm's extension with the shaft in both hands.
 const REACH_M: float = 0.55
@@ -35,12 +41,13 @@ const HALF_SPAN_M: float = GRIP_FRACTION * GameRules.DEFAULT_STICK_LENGTH_M * 0.
 # A cursor nearer the shover than this names no bearing; the hips' facing stands.
 const _AIM_DEADZONE_M: float = 0.1
 
-# The pose is fully on a third of the way out, so the shaft is across the chest
-# before the push lands, and comes off over the last third of the way back.
+# The pose is fully on a third of the way through the throw, half way into the
+# load, so the shaft is across the chest as it comes in, and comes off over the
+# last third of the way back.
 const _POSE_IN: float = 3.0
 
 # Wire packing: phase in bits 0-1, time elapsed in bits 2-7 as whole ticks. Every
-# timed phase ends inside 63 (REARM_S, the longest, is 48 at 120 Hz).
+# timed phase ends inside 63 (REARM_S, the longest, is 48 at 120 Hz; the throw 26).
 const _WIRE_TICK_HZ: float = 120.0
 const _WIRE_MAX_UNITS: int = 63
 
@@ -55,12 +62,12 @@ static func step(phase: int, elapsed: float, pressed: bool, can_start: bool,
 		return Vector2(Phase.IDLE, 0.0)
 	if phase == Phase.IDLE:
 		if pressed and can_start:
-			return Vector2(Phase.EXTEND, 0.0)
+			return Vector2(Phase.THROW, 0.0)
 		return Vector2(Phase.IDLE, 0.0)
 	elapsed += delta
 	match phase:
-		Phase.EXTEND:
-			if elapsed >= PUSH_S:
+		Phase.THROW:
+			if elapsed >= THROW_S:
 				return Vector2(Phase.RECOVER, 0.0)
 		Phase.RECOVER:
 			if elapsed >= RECOVER_S:
@@ -73,18 +80,37 @@ static func step(phase: int, elapsed: float, pressed: bool, can_start: bool,
 
 # The shaft is off the ice: no catch, no corral, no poke, no tip.
 static func is_stick_busy(phase: int) -> bool:
-	return phase == Phase.EXTEND or phase == Phase.RECOVER
+	return phase == Phase.THROW or phase == Phase.RECOVER
 
 
-static func can_land(phase: int) -> bool:
-	return phase == Phase.EXTEND
+# The punch, past the load: the only stretch of a throw that can land.
+static func can_land(phase: int, elapsed: float) -> bool:
+	return phase == Phase.THROW and elapsed >= LOAD_S
 
 
-# 0..1 through the push and back: up to 1 over EXTEND, back to 0 over RECOVER.
+# Where the hands are along the punch, as a share of its reach out from where
+# the push starts: in to -DRAW_IN at the chest over the load, out to 1 over the
+# push, back to 0 over RECOVER. Eased at both ends of the load and the push, so
+# the hands settle at the chest and at full extension rather than bouncing off
+# them.
 static func extension(phase: int, elapsed: float) -> float:
 	match phase:
-		Phase.EXTEND:
-			return clampf(elapsed / PUSH_S, 0.0, 1.0)
+		Phase.THROW:
+			if elapsed < LOAD_S:
+				return -DRAW_IN * _ease(elapsed / LOAD_S)
+			return lerpf(-DRAW_IN, 1.0, _ease((elapsed - LOAD_S) / PUSH_S))
+		Phase.RECOVER:
+			return 1.0 - _ease(elapsed / RECOVER_S)
+	return 0.0
+
+
+# 0..1 how far into the whole move he is: up over the throw, down over RECOVER.
+# The legs' drive and the chest's square-up ride it, so they load with the draw
+# and are full as the push lands.
+static func drive(phase: int, elapsed: float) -> float:
+	match phase:
+		Phase.THROW:
+			return clampf(elapsed / THROW_S, 0.0, 1.0)
 		Phase.RECOVER:
 			return 1.0 - clampf(elapsed / RECOVER_S, 0.0, 1.0)
 	return 0.0
@@ -94,7 +120,12 @@ static func extension(phase: int, elapsed: float) -> float:
 # and the shaft (SkaterIKCoordinator) and the chest squared to the push
 # (SkaterPoseCoordinator) read the same share.
 static func pose_weight(phase: int, elapsed: float) -> float:
-	return clampf(extension(phase, elapsed) * _POSE_IN, 0.0, 1.0)
+	return clampf(drive(phase, elapsed) * _POSE_IN, 0.0, 1.0)
+
+
+static func _ease(x: float) -> float:
+	var t: float = clampf(x, 0.0, 1.0)
+	return t * t * (3.0 - 2.0 * t)
 
 
 # The push's direction (unit XZ): the cursor's bearing from the shover

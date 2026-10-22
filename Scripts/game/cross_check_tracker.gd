@@ -2,8 +2,9 @@ class_name CrossCheckTracker
 extends RefCounted
 
 # Host-only owner of every cross-check landing: a shover in the push
-# (CrossCheckRules EXTEND) with an opponent's body on his shaft shoves the
-# nearest one along the aim the throw was pressed with, once per throw — at
+# (CrossCheckRules.can_land, the punch past the load) with an opponent's body on
+# his shaft shoves the nearest one along the aim the throw was pressed with, once
+# per throw — at
 # present time here, or through a client's lag-comp claim
 # (CrossCheckClaimResolver → try_land), the first valid one winning. The victim
 # answers the push himself (SkaterController.take_cross_check); `landed` carries
@@ -32,7 +33,8 @@ func tick(live: bool) -> void:
 		clear()
 		return
 	for shover: Skater in _registry.skaters():
-		var pushing: bool = CrossCheckRules.can_land(shover.cross_check_phase)
+		var pushing: bool = CrossCheckRules.can_land(shover.cross_check_phase,
+				shover.cross_check_elapsed)
 		if pushing and not _was_pushing.get(shover, false):
 			_landed[shover] = false
 		_was_pushing[shover] = pushing

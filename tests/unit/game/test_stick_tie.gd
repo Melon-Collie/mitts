@@ -169,7 +169,7 @@ func test_nobody_in_a_board_pin_ties_or_is_tied() -> void:
 
 func test_a_cross_check_breaks_the_shovers_tie() -> void:
 	_latch()
-	_defender.cross_check_phase = CrossCheckRules.Phase.EXTEND
+	_defender.cross_check_phase = CrossCheckRules.Phase.THROW
 	_ties.tick(true)
 	assert_false(_receiver.stick_tied, "both hands went to the shaft")
 	assert_true(_receiver.is_stick_check_cooling())

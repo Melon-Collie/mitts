@@ -406,3 +406,7 @@ here whenever you bump, in the same format.
 #      .lie_seconds_from_overshoot + the get-up), so knockdown_timer's legal
 #      range grows from 1.9 s to ~2.3 s and every window changes length. Same
 #      layout; a v84 peer predicts the old windows.
+# v86: the cross-check winds up: its throw (CrossCheckRules.Phase.THROW, was
+#      EXTEND) draws the shaft in over LOAD_S before the PUSH_S punch, and only
+#      the punch can land (can_land reads the elapsed time). Same layout and
+#      phase values; a v85 peer lands and claims a push 0.12 s early.

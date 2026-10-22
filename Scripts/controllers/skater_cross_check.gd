@@ -17,7 +17,7 @@ func advance(pressed: bool, can_start: bool, interrupted: bool, aim_now: Vector2
 		delta: float) -> void:
 	var next: Vector2 = CrossCheckRules.step(phase, elapsed, pressed, can_start,
 			interrupted, delta)
-	if phase == CrossCheckRules.Phase.IDLE and int(next.x) == CrossCheckRules.Phase.EXTEND:
+	if phase == CrossCheckRules.Phase.IDLE and int(next.x) == CrossCheckRules.Phase.THROW:
 		aim = aim_now
 	phase = int(next.x)
 	elapsed = next.y

@@ -23,8 +23,8 @@ func _run(phase: int, elapsed: float, seconds: float) -> Vector2:
 
 func test_a_press_throws_then_the_stick_comes_back_then_rearms() -> void:
 	var s: Vector2 = CrossCheckRules.step(Phase.IDLE, 0.0, true, true, false, DT)
-	assert_eq(int(s.x), Phase.EXTEND)
-	s = _run(int(s.x), s.y, CrossCheckRules.PUSH_S + DT)
+	assert_eq(int(s.x), Phase.THROW)
+	s = _run(int(s.x), s.y, CrossCheckRules.THROW_S + DT)
 	assert_eq(int(s.x), Phase.RECOVER)
 	s = _run(int(s.x), s.y, CrossCheckRules.RECOVER_S + DT)
 	assert_eq(int(s.x), Phase.REARM)
@@ -40,28 +40,65 @@ func test_no_throw_without_a_press_or_while_ineligible() -> void:
 func test_a_press_during_the_rearm_is_ignored_and_an_interruption_drops_it() -> void:
 	var s: Vector2 = CrossCheckRules.step(Phase.REARM, 0.0, true, true, false, DT)
 	assert_eq(int(s.x), Phase.REARM)
-	s = CrossCheckRules.step(Phase.EXTEND, 0.02, false, true, true, DT)
+	s = CrossCheckRules.step(Phase.THROW, 0.02, false, true, true, DT)
 	assert_eq(int(s.x), Phase.IDLE)
 
 
 func test_only_the_push_lands_and_the_stick_is_out_through_the_recovery() -> void:
-	assert_true(CrossCheckRules.can_land(Phase.EXTEND))
+	assert_false(CrossCheckRules.can_land(Phase.THROW, CrossCheckRules.LOAD_S - DT),
+			"drawing in, it lands nothing")
+	assert_true(CrossCheckRules.can_land(Phase.THROW, CrossCheckRules.LOAD_S))
 	for phase: int in [Phase.IDLE, Phase.RECOVER, Phase.REARM]:
-		assert_false(CrossCheckRules.can_land(phase))
-	assert_true(CrossCheckRules.is_stick_busy(Phase.EXTEND))
+		assert_false(CrossCheckRules.can_land(phase, CrossCheckRules.LOAD_S))
+	assert_true(CrossCheckRules.is_stick_busy(Phase.THROW))
 	assert_true(CrossCheckRules.is_stick_busy(Phase.RECOVER))
 	assert_false(CrossCheckRules.is_stick_busy(Phase.REARM))
 	assert_false(CrossCheckRules.is_stick_busy(Phase.IDLE))
 
 
 func test_the_wire_round_trips_every_timed_phase() -> void:
-	for phase: int in [Phase.IDLE, Phase.EXTEND, Phase.RECOVER, Phase.REARM]:
+	for phase: int in [Phase.IDLE, Phase.THROW, Phase.RECOVER, Phase.REARM]:
 		var elapsed: float = 0.3 if phase == Phase.REARM else 0.05
 		var packed: int = CrossCheckRules.pack(phase, elapsed)
 		assert_lt(packed, 256, "one byte")
 		assert_eq(CrossCheckRules.unpack_phase(packed), phase)
 		assert_almost_eq(CrossCheckRules.unpack_elapsed(packed), elapsed, 0.5 / 120.0)
 	assert_lte(roundi(CrossCheckRules.REARM_S * 120.0), 63, "the longest phase fits its bits")
+	assert_lte(roundi(CrossCheckRules.THROW_S * 120.0), 63, "and the throw")
+
+
+# ── the wind-up ──────────────────────────────────────────────────────────────
+
+func _ext(t: float) -> float:
+	return CrossCheckRules.extension(Phase.THROW, t)
+
+
+func test_the_hands_come_in_to_the_chest_then_punch_out() -> void:
+	assert_almost_eq(_ext(0.0), 0.0, 1e-5, "from where the push starts")
+	assert_almost_eq(_ext(CrossCheckRules.LOAD_S - 1e-5), -CrossCheckRules.DRAW_IN, 1e-3,
+			"in at the chest")
+	assert_almost_eq(_ext(CrossCheckRules.LOAD_S), -CrossCheckRules.DRAW_IN, 1e-5,
+			"the punch starts where the load stopped")
+	assert_almost_eq(_ext(CrossCheckRules.THROW_S - 1e-5), 1.0, 1e-3, "out at full extension")
+	assert_almost_eq(CrossCheckRules.extension(Phase.RECOVER, 0.0), 1.0, 1e-5,
+			"and comes back from there")
+
+
+func test_in_then_out_without_turning_back() -> void:
+	var prev: float = 0.0
+	var t: float = 0.0
+	while t < CrossCheckRules.LOAD_S:
+		assert_lte(_ext(t), prev + 1e-6, "coming in at %.3f s" % t)
+		prev = _ext(t)
+		t += DT / 4.0
+	while t < CrossCheckRules.THROW_S:
+		assert_gte(_ext(t), prev - 1e-6, "going out at %.3f s" % t)
+		prev = _ext(t)
+		t += DT / 4.0
+
+
+func test_the_shaft_is_across_the_chest_before_it_comes_in() -> void:
+	assert_almost_eq(CrossCheckRules.pose_weight(Phase.THROW, CrossCheckRules.LOAD_S), 1.0, 1e-5)
 
 
 # ── reach ────────────────────────────────────────────────────────────────────

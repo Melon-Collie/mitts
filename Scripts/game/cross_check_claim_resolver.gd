@@ -47,7 +47,7 @@ func maybe_send_claim() -> void:
 	if local == null or local.skater == null:
 		return
 	var me: Skater = local.skater
-	if not CrossCheckRules.can_land(me.cross_check_phase):
+	if not CrossCheckRules.can_land(me.cross_check_phase, me.cross_check_elapsed):
 		_sent_this_throw = false
 		return
 	if _sent_this_throw or me.is_ghost:
@@ -104,7 +104,8 @@ func receive_claim(peer_id: int, host_timestamp: float, interp_delay_ms: float,
 	var shover_snap: SkaterNetworkState = _state_buffer.get_state_at(self_time) \
 			.get_skater_state(peer_id)
 	if shover_snap == null or shover_snap.is_ghost \
-			or not CrossCheckRules.can_land(shover_snap.cross_check_phase):
+			or not CrossCheckRules.can_land(shover_snap.cross_check_phase,
+					shover_snap.cross_check_elapsed):
 		return
 	if not _claimant.resolve(_registry, peer_id, shover_snap,
 			record.controller as SkaterController, self_time,

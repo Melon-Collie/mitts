@@ -922,9 +922,10 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 	return _rigid_result
 
 
-# The cross-check holds the shaft level across the chest in both hands and
-# punches it out: the top hand at chest height on its own shoulder's side (away
-# from the blade), driven forward over the push, and the blade a stick's length
+# The cross-check holds the shaft level across the chest in both hands, draws it
+# in to the chest and punches it out: the top hand at chest height on its own
+# shoulder's side (away from the blade), in over the load and out over the push
+# (CrossCheckRules.extension, negative while it comes in), and the blade a stick's length
 # off it across the body to the blade side (the bottom hand rides the shaft
 # between them, update_bottom_hand, gripped wide enough that the two hands
 # straddle the chest, each on its own shoulder's side). Posed hand-first like
@@ -933,7 +934,7 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 const _SHOVE_HAND_X: float = 0.25        # off the chest's centre, away from the blade
 const _SHOVE_HAND_DROP_M: float = 0.20   # under the shoulder marker: chest height
 const _SHOVE_HAND_Z: float = -0.35       # in front of the chest as the push starts
-const _SHOVE_PUNCH_M: float = 0.25       # the arms' extension at full push
+const _SHOVE_PUNCH_M: float = 0.40       # the arms' extension at full push: nearly straight
 const _SHOVE_BEARING_Z: float = -0.15    # the shaft a touch ahead of square across
 
 

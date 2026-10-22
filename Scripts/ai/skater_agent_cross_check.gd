@@ -62,9 +62,12 @@ func _aim_toward(body: SkaterNetworkState, want: Vector2) -> Vector2:
 	return CrossCheckRules.aim_dir(body.facing, want, AIBotMechanics.UPPER_BODY_MAX_TWIST_RAD)
 
 
+# Where the two of them will be when the push lands, past the load: a shove
+# thrown at a man in reach now reaches the man as he will be.
 func _in_reach(me: SkaterNetworkState, man: SkaterNetworkState, aim: Vector2) -> bool:
-	return CrossCheckRules.in_reach(me.position, aim, GameRules.OFFSIDE_LINE_SLACK,
-			man.position, GameRules.OFFSIDE_LINE_SLACK)
+	return CrossCheckRules.in_reach(me.position + me.velocity * CrossCheckRules.LOAD_S, aim,
+			GameRules.OFFSIDE_LINE_SLACK, man.position + man.velocity * CrossCheckRules.LOAD_S,
+			GameRules.OFFSIDE_LINE_SLACK)
 
 
 # Whether any aim reaches him: the one turned straight at him is the nearest the

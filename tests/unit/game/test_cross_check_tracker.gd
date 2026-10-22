@@ -67,10 +67,20 @@ func _make(pos: Vector3) -> SkaterController:
 	return c
 
 
-func _push(aim: Vector2 = Vector2(1.0, 0.0)) -> void:
-	_shover.skater.cross_check_phase = Phase.EXTEND
+# The throw at `elapsed`: by default the punch's first tick, past the load.
+func _push(aim: Vector2 = Vector2(1.0, 0.0),
+		elapsed: float = CrossCheckRules.LOAD_S) -> void:
+	_shover.skater.cross_check_phase = Phase.THROW
+	_shover.skater.cross_check_elapsed = elapsed
 	_shover.skater.cross_check_aim = aim
 	_tracker.tick(true)
+
+
+func test_drawing_in_it_lands_nothing_and_the_punch_lands() -> void:
+	_push(Vector2(1.0, 0.0), 0.5 * CrossCheckRules.LOAD_S)
+	assert_eq(_landed.size(), 0, "the shaft is coming in")
+	_push()
+	assert_eq(_landed.size(), 1, "and lands going out")
 
 
 func test_a_push_in_reach_lands_once() -> void:
@@ -145,7 +155,7 @@ func _chord() -> InputState:
 func test_the_chord_throws_only_from_puckless_skating_and_holding_is_the_commit() -> void:
 	var input: InputState = _chord()
 	_shover._advance_cross_check(input, DT)
-	assert_eq(_shover.skater.cross_check_phase, Phase.EXTEND)
+	assert_eq(_shover.skater.cross_check_phase, Phase.THROW)
 	_shover._apply_movement(input, DT)
 	assert_true(_shover.skater.hit_committed, "Ctrl still held: the commit")
 	var carrier: SkaterController = _victim
@@ -173,7 +183,7 @@ func test_the_chord_starts_no_lift() -> void:
 	input.stick_check_held = true
 	_shover._advance_cross_check(input, DT)
 	_shover._advance_stick_check(input, DT)
-	assert_eq(_shover.skater.cross_check_phase, Phase.EXTEND)
+	assert_eq(_shover.skater.cross_check_phase, Phase.THROW)
 	assert_eq(_shover.skater.stick_check_phase, StickCheckRules.Phase.IDLE)
 	_shover.skater.cross_check_phase = Phase.REARM
 	_shover._cross_check.phase = Phase.REARM

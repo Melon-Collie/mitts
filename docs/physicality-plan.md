@@ -208,8 +208,8 @@ back:
 
 | Phase | Entered | Duration | Stick |
 |---|---|---|---|
-| `EXTEND` | stick-button press with Ctrl held, eligible | `PUSH_S` 0.10 | off the ice; **the only phase that can land** |
-| `RECOVER` | end of EXTEND | `RECOVER_S` 0.20 | off the ice |
+| `THROW` | stick-button press with Ctrl held, eligible | `LOAD_S` 0.12 drawn in, then `PUSH_S` 0.10 out | off the ice; **only the push, past the load, can land** |
+| `RECOVER` | end of THROW | `RECOVER_S` 0.20 | off the ice |
 | `REARM` | end of RECOVER | `REARM_S` 0.40 | normal (or the commit's, if still held) |
 
 - **Eligible:** puckless (a carrier's Ctrl is the brace, as today), not knocked
@@ -447,9 +447,10 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 
 | Constant | Value | Why |
 |---|---|---|
+| `CrossCheckRules.LOAD_S` | 0.12 s | the shaft drawn in to the chest before the push: the tell |
 | `CrossCheckRules.PUSH_S` | 0.10 s | a neutral shove lands in the stagger band and no build pair reaches a knockdown |
 | `RECOVER_S` | 0.20 s | the stick back down; the cost of a whiff |
-| `REARM_S` | 0.40 s | ~0.7 s press to press |
+| `REARM_S` | 0.40 s | ~0.8 s press to press |
 | `REACH_M` | 0.55 m | arm extension, body edge to body edge |
 | `GRIP_FRACTION` | 0.40 | the pose's bottom hand down the shaft; its half-span (0.26 m on a league stick) is the shaft's reach across |
 | `PIN_ESCAPE_OFFSET_M` | 0.5 m (unchanged) | held by `tests/slow/game/test_pin_escape_race.gd` |

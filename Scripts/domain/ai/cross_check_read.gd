@@ -17,7 +17,7 @@ extends RefCounted
 # the read-and-redirect delay a defender takes on a carrier's cut.
 const PUSHED_REACTION_S: float = AICarrySpace.EVADE_REACTION_S
 # The shover's stick is out of play from the press until it is back.
-const STICK_OUT_S: float = CrossCheckRules.PUSH_S + CrossCheckRules.RECOVER_S
+const STICK_OUT_S: float = CrossCheckRules.THROW_S + CrossCheckRules.RECOVER_S
 # A shove is tried along the way that matters and turned off it by 30° and 60°
 # either side (aim_turn): a push along a man's blades moves him furthest and one
 # across them least, so the best aim trades the two and the tries sample it.
