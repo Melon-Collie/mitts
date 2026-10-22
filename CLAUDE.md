@@ -19,6 +19,7 @@ Deep detail lives next to the code it describes and loads on demand.
 | Everything a bot perceives and decides, where it lives, its test; where a new bot feature plugs in | `Scripts/domain/ai/DECISIONS.md` |
 | Bot agent wiring (state graph, reception and chase doctrine) | `Scripts/ai/CLAUDE.md` |
 | Goalie doctrine, controller collaborators | `Scripts/controllers/CLAUDE.md` |
+| The new goalie being rebuilt (keeper body, gear, poses) | `Scripts/domain/keeper/CLAUDE.md` |
 | Player attributes (body dials, gear slots, routing) | `Scripts/domain/state/CLAUDE.md` |
 | Launch modes, session lifecycle, claim resolvers, backend | `Scripts/game/CLAUDE.md` |
 | UI conventions (locale seam, menu style, popups) | `Scripts/ui/CLAUDE.md` |
@@ -107,6 +108,10 @@ baseline; pose list and framing in `tools/pose_capture.gd`. Same xvfb/software-G
 constraint as the arena, and the same argument: articulation is the thing a
 display-less test cannot assert. `tools/skater_matrix.gd` is its sibling for
 proportions and paint across builds — one static pose, five bodies.
+
+**To see the NEW GOALIE, render him.** `.claude/hooks/render-keeper.sh` draws the
+rebuilt keeper (`Scripts/domain/keeper/`) in every taught stance from three
+angles, save boxes overlaid, to `.preview/keeper/` (`tools/keeper_capture.gd`).
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,

@@ -1,0 +1,192 @@
+class_name KeeperGear
+extends RefCounted
+
+# What stops the puck: one box per piece of gear, each strapped to the bone that
+# carries it, so the gear goes wherever the pose puts the body. The boxes are
+# the save geometry — `fill_boxes` writes them in GoalieContactDetector's packed
+# layout (basis columns, origin, half extents: 15 floats a box) — and the
+# meshes are drawn inside them.
+#
+# Every part rebounds as one of GoalieSaveRules' materials (`save_part`).
+
+enum Part {
+	PAD_G, PAD_B, RISE_G, RISE_B, BOOT_G, BOOT_B, SKATE_G, SKATE_B, THIGH_G, THIGH_B,
+	PANTS, CHEST, UPPER_ARM_G, FOREARM_G, UPPER_ARM_B, FOREARM_B,
+	GLOVE, BLOCKER, MASK, BLADE, PADDLE, SHAFT,
+}
+const PART_COUNT: int = 22
+const FLOATS_PER_BOX: int = 15
+
+const _SP := GoalieSaveRules.SavePart
+const _B := KeeperSkeleton.Bone
+
+const _THIGH_HALF_DEPTH: float = 0.10
+
+# Per part: the bone it rides (-1: the stick, placed from the skeleton's stick
+# solve), its centre and half extents in that bone's frame, and its material.
+const _BONE: Array[int] = [
+	_B.SHIN_G, _B.SHIN_B, _B.THIGH_G, _B.THIGH_B, _B.FOOT_G, _B.FOOT_B, _B.FOOT_G, _B.FOOT_B,
+	_B.THIGH_G, _B.THIGH_B, _B.PELVIS, _B.CHEST,
+	_B.UPPER_ARM_G, _B.FOREARM_G, _B.UPPER_ARM_B, _B.FOREARM_B,
+	_B.HAND_G, _B.HAND_B, _B.HEAD, -1, -1, -1,
+]
+const _SAVE_PART: Array[int] = [
+	_SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD, _SP.PAD,
+	_SP.CHEST, _SP.CHEST, _SP.CHEST, _SP.CHEST, _SP.CHEST, _SP.CHEST,
+	_SP.GLOVE, _SP.BLOCKER, _SP.MASK, _SP.STICK, _SP.STICK, _SP.STICK,
+]
+
+# Pad: from below the ankle, over the skate's toe, up through the knee stack;
+# its face stands proud of the shin.
+const _PAD_CENTER := Vector3(0.0,
+		(KeeperAnatomy.PAD_ABOVE_KNEE_M - KeeperAnatomy.SHIN_M - KeeperAnatomy.PAD_BELOW_ANKLE_M) * 0.5,
+		-KeeperAnatomy.PAD_FORWARD_OF_SHIN_M)
+const _PAD_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.5, KeeperAnatomy.PAD_LENGTH_M * 0.5, KeeperAnatomy.PAD_DEPTH_M * 0.5)
+# The thigh rise: the pad's top, on the front of the thigh above the knee.
+const _RISE_CENTER := Vector3(0.0, -KeeperAnatomy.THIGH_M + KeeperAnatomy.PAD_THIGH_RISE_M * 0.5,
+		-(_THIGH_HALF_DEPTH + 0.03))
+const _RISE_HALF := Vector3(KeeperAnatomy.PAD_WIDTH_M * 0.45, KeeperAnatomy.PAD_THIGH_RISE_M * 0.5, 0.04)
+# The pad's boot, laced over the front of the skate by the toe bridge.
+const _BOOT_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M + 0.075, -0.13)
+const _BOOT_HALF := Vector3(0.085, 0.05, 0.075)
+# The skate, ice to above the ankle, heel to toe.
+const _SKATE_CENTER := Vector3(0.0, -KeeperAnatomy.ANKLE_ON_SKATES_M * 0.5 + 0.01,
+		-(KeeperAnatomy.FOOT_LENGTH_M * 0.5 - KeeperAnatomy.HEEL_BEHIND_ANKLE_M))
+const _SKATE_HALF := Vector3(KeeperAnatomy.SKATE_HALF_WIDTH_M, KeeperAnatomy.ANKLE_ON_SKATES_M * 0.5 + 0.01,
+		KeeperAnatomy.FOOT_LENGTH_M * 0.5)
+const _THIGH_CENTER := Vector3(0.0, -KeeperAnatomy.THIGH_M * 0.5, 0.0)
+const _THIGH_HALF := Vector3(0.10, KeeperAnatomy.THIGH_M * 0.5, _THIGH_HALF_DEPTH)
+const _PANTS_CENTER := Vector3(0.0, 0.05, 0.01)
+const _PANTS_HALF := Vector3(KeeperAnatomy.PANTS_WIDTH_M * 0.5, 0.17, 0.16)
+# The chest protector, floaters to the pants' waistband.
+const _CHEST_TOP: float = KeeperAnatomy.SHOULDER_ABOVE_CHEST_M + 0.05
+const _CHEST_BOTTOM: float = -0.15
+const _CHEST_CENTER := Vector3(0.0, (_CHEST_TOP + _CHEST_BOTTOM) * 0.5, -0.01)
+const _CHEST_HALF := Vector3(KeeperAnatomy.CHEST_WIDTH_M * 0.5, (_CHEST_TOP - _CHEST_BOTTOM) * 0.5,
+		KeeperAnatomy.CHEST_DEPTH_M * 0.5)
+const _UPPER_ARM_CENTER := Vector3(0.0, -KeeperAnatomy.UPPER_ARM_M * 0.5, 0.0)
+const _UPPER_ARM_HALF := Vector3(KeeperAnatomy.ARM_PAD_WIDTH_M * 0.5, KeeperAnatomy.UPPER_ARM_M * 0.5,
+		KeeperAnatomy.ARM_PAD_WIDTH_M * 0.5 + 0.005)
+const _FOREARM_CENTER := Vector3(0.0, -KeeperAnatomy.FOREARM_M * 0.5, 0.0)
+const _FOREARM_HALF := Vector3(KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47, KeeperAnatomy.FOREARM_M * 0.5,
+		KeeperAnatomy.ARM_PAD_WIDTH_M * 0.47)
+# The trapper rides the hand from the cuff past the fingertips.
+const _GLOVE_CENTER := Vector3(0.0, -0.06, 0.0)
+const _GLOVE_HALF := Vector3(KeeperAnatomy.GLOVE_WIDTH_M * 0.5, KeeperAnatomy.GLOVE_HEIGHT_M * 0.5,
+		KeeperAnatomy.GLOVE_DEPTH_M * 0.5)
+# The blocker's board stands on the back of the hand, toward its face.
+const _BLOCKER_CENTER := Vector3(0.0, -0.02, -KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M)
+const _BLOCKER_HALF := Vector3(KeeperAnatomy.BLOCKER_WIDTH_M * 0.5, KeeperAnatomy.BLOCKER_HEIGHT_M * 0.5,
+		KeeperAnatomy.BLOCKER_DEPTH_M * 0.5)
+# The paddle rises from the blade's heel, above the ice, not from the ice.
+const _PADDLE_ROOT_M: float = 0.045
+const _MASK_CENTER := Vector3(0.0, 0.09, -0.01)
+const _MASK_HALF := Vector3(0.12, 0.15, 0.135)
+
+const _CENTER: Array[Vector3] = [
+	_PAD_CENTER, _PAD_CENTER, _RISE_CENTER, _RISE_CENTER, _BOOT_CENTER, _BOOT_CENTER, _SKATE_CENTER, _SKATE_CENTER,
+	_THIGH_CENTER, _THIGH_CENTER, _PANTS_CENTER, _CHEST_CENTER,
+	_UPPER_ARM_CENTER, _FOREARM_CENTER, _UPPER_ARM_CENTER, _FOREARM_CENTER,
+	_GLOVE_CENTER, _BLOCKER_CENTER, _MASK_CENTER,
+	Vector3.ZERO, Vector3.ZERO, Vector3.ZERO,
+]
+const _HALF: Array[Vector3] = [
+	_PAD_HALF, _PAD_HALF, _RISE_HALF, _RISE_HALF, _BOOT_HALF, _BOOT_HALF, _SKATE_HALF, _SKATE_HALF,
+	_THIGH_HALF, _THIGH_HALF, _PANTS_HALF, _CHEST_HALF,
+	_UPPER_ARM_HALF, _FOREARM_HALF, _UPPER_ARM_HALF, _FOREARM_HALF,
+	_GLOVE_HALF, _BLOCKER_HALF, _MASK_HALF,
+	Vector3(KeeperAnatomy.BLADE_LENGTH_M * 0.5, KeeperAnatomy.BLADE_HEIGHT_M * 0.5, KeeperAnatomy.BLADE_THICKNESS_M * 0.5),
+	Vector3(KeeperAnatomy.PADDLE_WIDTH_M * 0.5, KeeperAnatomy.PADDLE_LENGTH_M * 0.5, KeeperAnatomy.PADDLE_THICKNESS_M * 0.5),
+	Vector3(KeeperAnatomy.SHAFT_WIDTH_M * 0.5, KeeperAnatomy.SHAFT_LENGTH_M * 0.5, KeeperAnatomy.PADDLE_THICKNESS_M * 0.5),
+]
+
+
+static func save_part(part: int) -> int:
+	return _SAVE_PART[part]
+
+
+static func bone_of(part: int) -> int:
+	return _BONE[part]
+
+
+static func half_extents(part: int) -> Vector3:
+	return _HALF[part]
+
+
+# The part's box in keeper space: basis columns are its axes, origin its centre.
+static func box(skel: KeeperSkeleton, part: int) -> Transform3D:
+	var bone: int = _BONE[part]
+	if bone >= 0:
+		var b: Transform3D = skel.xf[bone]
+		return Transform3D(b.basis, b * _CENTER[part])
+	return _stick_box(skel, part)
+
+
+static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:
+	var paddle: Vector3 = skel.stick_paddle_dir
+	var blade: Vector3 = skel.stick_blade_dir
+	var h: Vector3 = _HALF[part]
+	if part == Part.BLADE:
+		# The blade's height runs up its face, in the plane the paddle shares, and
+		# it rests on the ice on its lowest edge.
+		var up: Vector3 = (paddle - blade * paddle.dot(blade)).normalized()
+		var basis := Basis(blade, up, blade.cross(up))
+		var center: Vector3 = skel.stick_heel + blade * h.x
+		center.y = h.y * absf(up.y) + h.z * absf(basis.z.y)
+		return Transform3D(basis, center)
+	var across: Vector3 = (blade - paddle * blade.dot(paddle)).normalized()
+	var basis := Basis(across, paddle, across.cross(paddle))
+	var along: float = _PADDLE_ROOT_M + KeeperAnatomy.PADDLE_LENGTH_M * 0.5
+	if part == Part.SHAFT:
+		along = _PADDLE_ROOT_M + KeeperAnatomy.PADDLE_LENGTH_M + KeeperAnatomy.SHAFT_LENGTH_M * 0.5
+	return Transform3D(basis, skel.stick_heel + paddle * along)
+
+
+# Every part's box into `packed`, in GoalieContactDetector's layout, from
+# `start` boxes in; returns the number written. `to_world` places keeper space
+# in the rink. The array grows only the first time.
+static func fill_boxes(skel: KeeperSkeleton, to_world: Transform3D,
+		packed: PackedFloat32Array, start: int = 0) -> int:
+	var need: int = (start + PART_COUNT) * FLOATS_PER_BOX
+	if packed.size() < need:
+		packed.resize(need)
+	for part: int in PART_COUNT:
+		var t: Transform3D = to_world * box(skel, part)
+		var h: Vector3 = _HALF[part]
+		var i: int = (start + part) * FLOATS_PER_BOX
+		packed[i] = t.basis.x.x
+		packed[i + 1] = t.basis.x.y
+		packed[i + 2] = t.basis.x.z
+		packed[i + 3] = t.basis.y.x
+		packed[i + 4] = t.basis.y.y
+		packed[i + 5] = t.basis.y.z
+		packed[i + 6] = t.basis.z.x
+		packed[i + 7] = t.basis.z.y
+		packed[i + 8] = t.basis.z.z
+		packed[i + 9] = t.origin.x
+		packed[i + 10] = t.origin.y
+		packed[i + 11] = t.origin.z
+		packed[i + 12] = h.x
+		packed[i + 13] = h.y
+		packed[i + 14] = h.z
+	return PART_COUNT
+
+
+# The nearest part a puck's swept disc meets between `prev` and `curr`, or -1.
+# Fills `out` with the contact (keeper space in, keeper space out).
+static func nearest(skel: KeeperSkeleton, prev: Vector3, curr: Vector3, radius: float,
+		out: SweptDiscOBB.Result, scratch: SweptDiscOBB.Result) -> int:
+	var best: int = -1
+	var best_toi: float = INF
+	for part: int in PART_COUNT:
+		if not SweptDiscOBB.contact(prev, curr, radius, box(skel, part), _HALF[part], scratch):
+			continue
+		if scratch.toi < best_toi:
+			best_toi = scratch.toi
+			best = part
+			out.hit = true
+			out.toi = scratch.toi
+			out.point = scratch.point
+			out.normal = scratch.normal
+			out.depth = scratch.depth
+	return best
