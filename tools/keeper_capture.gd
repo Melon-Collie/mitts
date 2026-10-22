@@ -4,14 +4,16 @@ extends SceneTree
 # side and three-quarter, so his body can be SEEN without a game: each stance
 # solved by KeeperSkeleton from KeeperPoses and drawn by the Keeper actor, with
 # the save boxes overlaid (KEEPER_CAPTURE_BOXES=0 hides them). One contact sheet
-# per stance, plus one of every stance from the front.
+# per stance — front, side, three-quarter and the shooter's view from the dot
+# line — plus one of every stance from the front. KEEPER_CAPTURE_STANCES names a
+# comma-separated subset; KEEPER_CAPTURE_SCALE enlarges the tiles.
 #
 # Needs a real (software) renderer: run it through .claude/hooks/render-keeper.sh,
 # which wraps xvfb-run and the Compatibility backend. Writes .preview/keeper/.
 #
 # The keeper stands at the origin facing −Z, toward the camera's "front".
 
-const TILE := Vector2i(360, 450)
+const BASE_TILE := Vector2i(360, 450)
 const OUT_DIR: String = "res://.preview/keeper"
 
 var _camera: Camera3D = null
@@ -23,7 +25,8 @@ var _stances: Array = []
 
 
 func _init() -> void:
-	DisplayServer.window_set_size(TILE)
+	var scale: float = maxf(OS.get_environment("KEEPER_CAPTURE_SCALE").to_float(), 1.0)
+	DisplayServer.window_set_size(Vector2i(Vector2(BASE_TILE) * scale))
 	var env := WorldEnvironment.new()
 	var e := Environment.new()
 	e.background_mode = Environment.BG_COLOR
@@ -38,7 +41,7 @@ func _init() -> void:
 	root.add_child(light)
 	var ice := MeshInstance3D.new()
 	var plane := PlaneMesh.new()
-	plane.size = Vector2(6.0, 6.0)
+	plane.size = Vector2(20.0, 20.0)
 	var ice_mat := StandardMaterial3D.new()
 	ice_mat.albedo_color = Color(0.86, 0.90, 0.96)
 	plane.material = ice_mat
@@ -67,6 +70,7 @@ func _init() -> void:
 		["front", Vector3(0.0, 1.0, -4.2)],
 		["side", Vector3(-4.2, 1.0, 0.0)],
 		["34", Vector3(-2.9, 1.3, -3.0)],
+		["shooter", Vector3(0.0, 1.4, -(GameRules.GOAL_LINE_Z - GameRules.ICING_FACEOFF_DOT_Z))],
 	]
 	_stances = [
 		["upright", func(p: KeeperPose) -> void: KeeperPoses.upright(p)],
@@ -79,6 +83,10 @@ func _init() -> void:
 		["vh", func(p: KeeperPose) -> void: KeeperPoses.vh(p, -1.0)],
 		["overlap", func(p: KeeperPose) -> void: KeeperPoses.overlap(p, -1.0)],
 	]
+	var only: String = OS.get_environment("KEEPER_CAPTURE_STANCES")
+	if not only.is_empty():
+		var keep: PackedStringArray = only.split(",")
+		_stances = _stances.filter(func(st: Array) -> bool: return String(st[0]) in keep)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 
 
@@ -100,7 +108,8 @@ func _process(_delta: float) -> bool:
 		_keeper.apply_pose(_pose)
 		var v: Array = _views[_view_i]
 		_camera.position = v[1]
-		_camera.look_at(Vector3(0.0, 0.7, 0.0), Vector3.UP)
+		_camera.fov = 14.0 if v[0] == "shooter" else 40.0
+		_camera.look_at(Vector3(0.0, 0.62, 0.0), Vector3.UP)
 	elif _frames % 3 == 0:
 		var img: Image = root.get_viewport().get_texture().get_image()
 		_shots.append(img)
@@ -120,7 +129,7 @@ func _save_sheet(imgs: Array[Image], name: String) -> void:
 		return
 	var w: int = imgs[0].get_width()
 	var h: int = imgs[0].get_height()
-	var cols: int = mini(imgs.size(), 5)
+	var cols: int = mini(imgs.size(), 4 if imgs.size() == 4 else 5)
 	var rows: int = ceili(float(imgs.size()) / float(cols))
 	var sheet := Image.create(w * cols, h * rows, false, imgs[0].get_format())
 	for i: int in imgs.size():
