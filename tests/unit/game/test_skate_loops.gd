@@ -1,5 +1,7 @@
 extends GutTest
 
+const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
+
 # The skating's held sounds follow the gait (SkaterController.skate_sound). The
 # stop: one bite as the blades dig in, then a scrape held as long as they shed
 # speed, louder the faster; the skid's snowplow scrapes softer and never bites.
@@ -26,7 +28,7 @@ class Heard:
 	func sample(player: AudioStreamPlayer3D, sound: SoundManager.Sound) -> void:
 		if player.playing:
 			ticks += 1
-			loudest = maxf(loudest, player.volume_db - SoundManager.level_db(sound))
+			loudest = maxf(loudest, player.volume_db - SoundManagerScript.level_db(sound))
 
 
 var _skater: Skater = null

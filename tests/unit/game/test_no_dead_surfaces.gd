@@ -112,33 +112,33 @@ func _orphans(pattern: String, skip: PackedStringArray, discount_emits: bool = f
 			var m: RegExMatch = re.search(lines[i])
 			if m == null:
 				continue
-			var name: String = m.get_string(1)
-			if skip.has(name) or (i > 0 and lines[i - 1].strip_edges().begins_with("@rpc")):
+			var ident: String = m.get_string(1)
+			if skip.has(ident) or (i > 0 and lines[i - 1].strip_edges().begins_with("@rpc")):
 				continue
-			decls[name] = int(decls.get(name, 0)) + 1
-			homes[name] = "%s:%d" % [path, i + 1]
+			decls[ident] = int(decls.get(ident, 0)) + 1
+			homes[ident] = "%s:%d" % [path, i + 1]
 	var out: Dictionary = {}
-	for name: String in decls:
-		var uses: int = int(_freq.get(name, 0))
+	for ident: String in decls:
+		var uses: int = int(_freq.get(ident, 0))
 		if discount_emits:
-			uses -= int(_emits.get(name, 0))
-		if uses <= int(decls[name]) and not _ACCEPTED.has(name):
-			out[name] = homes[name]
+			uses -= int(_emits.get(ident, 0))
+		if uses <= int(decls[ident]) and not _ACCEPTED.has(ident):
+			out[ident] = homes[ident]
 	return out
 
 
 func test_no_unreachable_public_functions() -> void:
 	var dead: Dictionary = _orphans("^(?:static )?func ([a-z][a-z_0-9]*)", _ENGINE_VIRTUALS)
-	for name: String in dead:
-		fail_test("`%s()` at %s has no caller anywhere — delete it, or add it to " % [name, dead[name]] +
+	for ident: String in dead:
+		fail_test("`%s()` at %s has no caller anywhere — delete it, or add it to " % [ident, dead[ident]] +
 				"_ACCEPTED with the reason it stays")
 	assert_eq(dead.size(), 0, "no unreachable public functions")
 
 
 func test_no_signals_without_listeners() -> void:
 	var dead: Dictionary = _orphans("^signal ([a-z][a-z_0-9]*)", PackedStringArray(), true)
-	for name: String in dead:
-		fail_test("signal `%s` at %s is emitted but never connected — " % [name, dead[name]] +
+	for ident: String in dead:
+		fail_test("signal `%s` at %s is emitted but never connected — " % [ident, dead[ident]] +
 				"a broadcast with no listener is not a seam, it is a comment that compiles")
 	assert_eq(dead.size(), 0, "no signals without listeners")
 
@@ -151,8 +151,8 @@ func test_no_signals_without_listeners() -> void:
 func test_no_public_fields_nothing_reads() -> void:
 	var dead: Dictionary = _orphans(
 			"^(?:@export(?:_[a-z_]+)?(?:\\([^)]*\\))? )?var ([a-z][a-z_0-9]*)", PackedStringArray())
-	for name: String in dead:
-		fail_test("`%s` at %s is never read — a tunable that tunes nothing" % [name, dead[name]])
+	for ident: String in dead:
+		fail_test("`%s` at %s is never read — a tunable that tunes nothing" % [ident, dead[ident]])
 	assert_eq(dead.size(), 0, "no public fields nothing reads")
 
 

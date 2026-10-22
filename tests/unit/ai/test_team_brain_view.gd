@@ -51,7 +51,6 @@ func test_view_is_reused_across_builds() -> void:
 	# The view object is reused (refilled), not reallocated, each build.
 	var brain := _make_brain()
 	brain.slot_assignments[P1] = AIRoleSlots.Slot.SUPPORT
-	var snap := _make_snapshot(Vector3.ZERO)
 	brain.build_view()
 	var first: TeamBrainView = brain.get_view()
 	brain.build_view()
@@ -64,7 +63,6 @@ func test_view_mirrors_ping_chase_peer() -> void:
 	# missed, leaving _should_chase_loose_puck reading the live brain from the
 	# worker while main-thread apply_ping / advance mutated the same dictionary.
 	var brain := _make_brain()
-	var snap := _make_snapshot(Vector3(1.0, 0.0, 2.0))
 	brain.build_view()
 	assert_eq(brain.get_view().ping_chase_peer(), -1, "no order -> -1")
 

@@ -28,9 +28,9 @@ func reset() -> void:
 	end_race()
 
 
-func end_race(call: InfractionRules.IcingCall = InfractionRules.IcingCall.NONE) -> void:
+func end_race(icing_call: InfractionRules.IcingCall = InfractionRules.IcingCall.NONE) -> void:
 	if pending_team_id != -1:
-		last_call = call
+		last_call = icing_call
 	pending_team_id = -1
 	_pending_time = 0.0
 

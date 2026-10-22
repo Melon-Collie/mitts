@@ -111,7 +111,6 @@ func test_tip_shifts_anchor_onto_puck_path_and_aims_at_goal() -> void:
 	# door. Puck at (4, 0, -15) with vel (-3, 0, -15) — speed ≈ 15 m/s,
 	# heading toward our offensive goal at -Z. Path crosses our z (-22)
 	# at t ≈ 0.467 s, x ≈ 4 + (-3)(0.467) ≈ 2.6.
-	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var teammate_pos := Vector3(4.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -137,7 +136,6 @@ func test_lift_and_tip_when_shooter_is_elevated() -> void:
 	# is_elevated = true. Finisher should still move ONTO the path and aim
 	# at net (a tip), and additionally raise its blade so it can reach the
 	# airborne puck — not step out of the way.
-	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var teammate_pos := Vector3(4.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -159,7 +157,6 @@ func test_lift_and_tip_when_shooter_is_elevated() -> void:
 func test_ground_tip_does_not_lift_blade() -> void:
 	# A fast GROUND shot is tipped with the blade down — lifting would
 	# make the grounded blade unable to touch the on-ice puck.
-	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var teammate_pos := Vector3(4.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -209,7 +206,6 @@ func test_positioning_picks_legal_position_when_carrier_present() -> void:
 	# Teammate carrier in OZ corner. Slow puck so reactive doesn't
 	# fire (puck speed 0). FINISHER should run positioning argmax
 	# and pick a legal back-door / slot candidate.
-	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var carrier_pos := Vector3(5.0, 0.0, -22.0)  # OZ corner, strong-side
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -456,7 +452,6 @@ func test_reactive_fires_on_loose_shots_and_defers_while_the_puck_reads_held() -
 	# must run positioning too: the reactive not-ready decision used to tear
 	# down one-timer readiness on every feed. Reactive TIP fires the tick the
 	# fast on-net puck reads loose.
-	var anchor := Vector3(-2.0, 0.0, -22.0)
 	var teammate_pos := Vector3(4.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),

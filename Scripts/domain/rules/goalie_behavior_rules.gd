@@ -1137,7 +1137,7 @@ static func cross_crease_race_lost(
 # means a defenceman doing his job buys his goalie nothing at all.
 #
 # Coverage enters in the model's own currency, TIME, and as a race like
-# everything else: `defender_arrival_time` is how long until the nearest
+# everything else: `defender_arrival_s` is how long until the nearest
 # defender's stick can reach the reception point. A defender who is ALREADY
 # there disputes the feed for the puck's whole flight, so the play needs the
 # flight twice over; one who arrives exactly as the puck does adds nothing; one
@@ -1164,7 +1164,7 @@ static func backdoor_depth_cap(
 		goal_line_z: float,
 		goal_center_x: float,
 		direction_sign: int,
-		defender_arrival_time: float,
+		defender_arrival_s: float,
 		cfg: BackdoorThreatConfig) -> float:
 	# Live one-timer option only: in front of the goal line (no shooting angle
 	# from behind it) and inside the scoring area.
@@ -1192,7 +1192,7 @@ static func backdoor_depth_cap(
 	var t_pass: float = pass_dist / maxf(cfg.pass_speed, 0.001)
 	# How long a defender has been disputing the reception when the puck lands.
 	# Already there → the whole flight; arriving with it → nothing; late → nothing.
-	var coverage: float = clampf(t_pass - defender_arrival_time, 0.0, t_pass)
+	var coverage: float = clampf(t_pass - defender_arrival_s, 0.0, t_pass)
 	var move_time: float = t_pass + cfg.release_time + coverage - cfg.react_delay
 	var coverable: float = GoaliePushRules.set_reach(
 			cfg.goalie_lateral_speed, cfg.goalie_lateral_accel, move_time)

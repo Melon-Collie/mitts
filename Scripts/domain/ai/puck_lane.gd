@@ -504,14 +504,14 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 				hold_reach = caps.max_blade_reach
 		if accurate:
 			# Survival: the puck must beat this defender too.
-			var block: float = _accurate_block(from.x, from.z, dirx, dirz, line_len,
+			var lane_block: float = _accurate_block(from.x, from.z, dirx, dirz, line_len,
 					eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed).x
 			if has_blades:
 				var b: Vector3 = opponent_blades[i]
-				block = maxf(block, _blade_block(from.x, from.z, dirx, dirz, line_len,
+				lane_block = maxf(lane_block, _blade_block(from.x, from.z, dirx, dirz, line_len,
 						eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
 						blade_speed).x)
-			survival *= 1.0 - block
+			survival *= 1.0 - lane_block
 			if survival <= 0.0:
 				break
 			continue

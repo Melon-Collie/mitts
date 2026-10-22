@@ -43,7 +43,7 @@ const MAX_HOLD_S: float = 0.25
 
 class Entry:
 	var due: float = 0.0
-	var call: Callable = Callable()
+	var resolver: Callable = Callable()
 	var args: Array = []
 
 
@@ -56,15 +56,15 @@ var _pending: Array[Entry] = []
 # parks it. `newest_ts` is `StateBufferManager.newest_host_timestamp()`; a
 # negative value means nothing has been captured yet, in which case there is no
 # timeline to wait for and the resolver's own readiness gate owns the outcome.
-func submit(due: float, newest_ts: float, call: Callable, args: Array) -> void:
-	if not call.is_valid():
+func submit(due: float, newest_ts: float, resolver: Callable, args: Array) -> void:
+	if not resolver.is_valid():
 		return
 	if not is_finite(due) or newest_ts < 0.0 or due <= newest_ts:
-		call.callv(args)
+		resolver.callv(args)
 		return
 	var entry := Entry.new()
 	entry.due = minf(due, newest_ts + MAX_HOLD_S)
-	entry.call = call
+	entry.resolver = resolver
 	entry.args = args
 	var i: int = _pending.size()
 	while i > 0 and _pending[i - 1].due > entry.due:
@@ -80,8 +80,8 @@ func drain(newest_ts: float) -> void:
 		return
 	while not _pending.is_empty() and _pending[0].due <= newest_ts:
 		var entry: Entry = _pending.pop_front()
-		if entry.call.is_valid():
-			entry.call.callv(entry.args)
+		if entry.resolver.is_valid():
+			entry.resolver.callv(entry.args)
 
 
 # Dropped wholesale on reset / rematch / dead-puck phases. A claim parked across
