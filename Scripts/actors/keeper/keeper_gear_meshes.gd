@@ -189,30 +189,56 @@ static func _pants(k: KeeperMeshKit, h: Vector3) -> void:
 	k.tint = Color.WHITE
 
 
-# The chest protector under the jersey: wide at the floaters, pinched at the
-# waist, the hem striped.
+# The jersey over the chest protector, bottom to top: height from the hem (or,
+# negative, down from the top), half width and depth as shares of the box, and
+# how far its corners are cut. It hangs straight and loose from the floaters to
+# a hem past the belt, and slopes from the shoulders up to the collar.
+const _CHEST_STATIONS: Array[Vector4] = [
+	Vector4(0.0, 0.90, 0.92, 0.22),
+	Vector4(0.12, 0.88, 0.93, 0.22),
+	Vector4(0.28, 0.91, 0.98, 0.22),
+	Vector4(-0.12, 0.97, 1.0, 0.22),
+	Vector4(-0.065, 0.95, 0.95, 0.35),
+	Vector4(-0.03, 0.55, 0.72, 0.30),
+	Vector4(0.0, 0.32, 0.55, 0.25),
+]
+# The shoulder caps over each joint, blending into the jersey's sides: centre
+# out from the middle, down from the top, and radii.
+const _SHOULDER_CAP := Vector2(0.185, 0.08)
+const _SHOULDER_CAP_R := Vector3(0.095, 0.075, 0.13)
+
+
 static func _chest(k: KeeperMeshKit, h: Vector3) -> void:
-	var stations: Array[Vector3] = [
-		Vector3(-h.y, 0.80, 0.90),
-		Vector3(-h.y + 0.06, 0.84, 0.92),
-		Vector3(-h.y + 0.20, 0.82, 0.95),
-		Vector3(h.y - 0.14, 0.95, 1.0),
-		Vector3(h.y - 0.04, 1.0, 0.95),
-		Vector3(h.y, 0.70, 0.70),
-	]
 	var rings: Array[PackedVector3Array] = []
-	for s: Vector3 in stations:
-		rings.append(KeeperMeshKit.octagon(s.x, h.x * s.y, h.z * s.z, h.x * 0.2 * s.y))
+	for st: Vector4 in _CHEST_STATIONS:
+		var y: float = -h.y + st.x if st.x > 0.0 or st == _CHEST_STATIONS[0] else h.y + st.x
+		rings.append(KeeperMeshKit.octagon(y, h.x * st.y, h.z * st.z, h.x * st.w * st.y))
 	k.sweep(S.JERSEY, rings, Vector3.ZERO)
-	k.tube(S.JERSEY_STRIPE, -h.y + 0.03, -h.y + 0.08, h.x * 0.81, h.x * 0.83, 8, h.z / h.x * 1.1, false)
-	k.ellipsoid(S.JERSEY_STRIPE, Vector3(0.0, h.y - 0.01, 0.0), Vector3(0.07, 0.02, 0.07), 3, 8)
+	for side: float in [-1.0, 1.0]:
+		k.ellipsoid(S.JERSEY, Vector3(side * _SHOULDER_CAP.x, h.y - _SHOULDER_CAP.y, 0.0),
+				_SHOULDER_CAP_R, 5, 10)
+	for y0: float in [-h.y + 0.035, -h.y + 0.10]:
+		k.tube(S.JERSEY_STRIPE, y0, y0 + 0.035, h.x * 0.905, h.x * 0.89, 8, h.z / h.x * 1.03, false)
+	k.tube(S.JERSEY_STRIPE, h.y - 0.03, h.y, 0.085, 0.08, 8, 0.85)
 
 
+# A sleeve over an arm pad: full at the shoulder or the elbow, narrowing down
+# the bone; the forearm's elbow cap stands out behind the joint, and its two
+# stripes ring the forearm below it.
 static func _sleeve(k: KeeperMeshKit, h: Vector3, fore: bool) -> void:
-	k.tube(S.JERSEY, -h.y, h.y, h.x * (0.85 if fore else 0.95), h.x, 8, h.z / h.x)
+	var zs: float = h.z / h.x
+	var shares: Array[Vector2] = [Vector2(-1.0, 0.86), Vector2(0.0, 0.95), Vector2(1.0, 1.0)]
 	if fore:
-		k.tube(S.JERSEY_STRIPE, -h.y * 0.2, h.y * 0.15, h.x * 0.92, h.x * 0.96, 8, h.z / h.x, false)
-		k.ellipsoid(S.JERSEY, Vector3(0.0, h.y, 0.0), Vector3(h.x, h.x, h.z), 4, 8)
+		shares = [Vector2(-1.0, 0.80), Vector2(0.2, 0.88), Vector2(0.75, 0.97), Vector2(1.0, 0.92)]
+	var rings: Array[PackedVector3Array] = []
+	for sh: Vector2 in shares:
+		rings.append(KeeperMeshKit.ellipse(1, Vector3(0.0, h.y * sh.x, 0.0), h.x * sh.y,
+				h.x * sh.y * zs, 8, PI / 8.0))
+	k.sweep(S.JERSEY, rings, Vector3.ZERO)
+	if fore:
+		k.ellipsoid(S.JERSEY, Vector3(0.0, h.y * 0.82, h.z * 0.45), Vector3(h.x * 0.7, h.y * 0.22, h.z * 0.5), 4, 8)
+		for y0: float in [-0.02, 0.035]:
+			k.tube(S.JERSEY_STRIPE, y0, y0 + 0.03, h.x * 0.885, h.x * 0.9, 8, zs * 1.01, false)
 
 
 # The trapper: a cuff at the wrist, the catching body widening above it and

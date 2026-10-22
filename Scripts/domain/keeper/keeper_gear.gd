@@ -69,7 +69,8 @@ const _PANTS_CENTER := Vector3(0.0, 0.05, 0.01)
 const _PANTS_HALF := Vector3(KeeperAnatomy.PANTS_WIDTH_M * 0.5, 0.17, 0.16)
 # The chest protector, floaters to the pants' waistband.
 const _CHEST_TOP: float = KeeperAnatomy.SHOULDER_ABOVE_CHEST_M + 0.05
-const _CHEST_BOTTOM: float = -0.15
+# The jersey's hem, hanging past the belt over the pants' top.
+const _CHEST_BOTTOM: float = -0.21
 const _CHEST_CENTER := Vector3(0.0, (_CHEST_TOP + _CHEST_BOTTOM) * 0.5, -0.01)
 const _CHEST_HALF := Vector3(KeeperAnatomy.CHEST_WIDTH_M * 0.5, (_CHEST_TOP - _CHEST_BOTTOM) * 0.5,
 		KeeperAnatomy.CHEST_DEPTH_M * 0.5)
