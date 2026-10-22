@@ -84,7 +84,7 @@ const _GLOVE_CENTER := Vector3(0.0, -0.06, 0.0)
 const _GLOVE_HALF := Vector3(KeeperAnatomy.GLOVE_WIDTH_M * 0.5, KeeperAnatomy.GLOVE_HEIGHT_M * 0.5,
 		KeeperAnatomy.GLOVE_DEPTH_M * 0.5)
 # The blocker's board stands on the back of the hand, toward its face.
-const _BLOCKER_CENTER := Vector3(0.0, -0.02, -KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M)
+const _BLOCKER_CENTER := Vector3(0.0, KeeperAnatomy.BLOCKER_ABOVE_GRIP_M, -KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M)
 const _BLOCKER_HALF := Vector3(KeeperAnatomy.BLOCKER_WIDTH_M * 0.5, KeeperAnatomy.BLOCKER_HEIGHT_M * 0.5,
 		KeeperAnatomy.BLOCKER_DEPTH_M * 0.5)
 # The paddle rises from the blade's heel, above the ice, not from the ice.

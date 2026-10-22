@@ -90,6 +90,9 @@ const BLOCKER_WIDTH_M: float = 0.2032
 const BLOCKER_HEIGHT_M: float = 0.381
 const BLOCKER_DEPTH_M: float = 0.05
 const BLOCKER_FACE_OFF_GRIP_M: float = 0.07
+# The board stands upright on the back of the hand, its centre this far above
+# the grip: the stick leaves it low, by the bottom corner.
+const BLOCKER_ABOVE_GRIP_M: float = 0.08
 
 # ── Stick (NHL: blade 3.5 in high, 15.5 in long; paddle 3.5 in × 26 in) ─────
 const BLADE_LENGTH_M: float = 0.394
@@ -98,7 +101,8 @@ const BLADE_THICKNESS_M: float = 0.02
 const PADDLE_LENGTH_M: float = 0.66
 const PADDLE_WIDTH_M: float = 0.0889
 const PADDLE_THICKNESS_M: float = 0.025
-const SHAFT_LENGTH_M: float = 0.62
+# About 30 cm of shaft shows above the blocker hand.
+const SHAFT_LENGTH_M: float = 0.36
 const SHAFT_WIDTH_M: float = 0.03
 # The blocker hand grips the shaft just above the paddle.
 const GRIP_ALONG_STICK_M: float = PADDLE_LENGTH_M + 0.10

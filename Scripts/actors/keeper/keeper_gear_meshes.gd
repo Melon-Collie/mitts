@@ -254,7 +254,7 @@ static func _blocker(k: KeeperMeshKit, h: Vector3) -> void:
 	])
 	k.slab(S.GLOVES, board, -h.z, h.z)
 	k.box(S.GLOVE_ACCENT, Vector3(-h.x * 0.35, 0.0, -h.z - 0.003), Vector3(h.x * 0.22, h.y * 0.88, 0.003))
-	k.ellipsoid(S.GLOVES, Vector3(0.0, 0.02, h.z + KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M * 0.6),
+	k.ellipsoid(S.GLOVES, Vector3(0.0, -KeeperAnatomy.BLOCKER_ABOVE_GRIP_M, h.z + KeeperAnatomy.BLOCKER_FACE_OFF_GRIP_M * 0.6),
 			Vector3(0.05, 0.065, 0.045), 4, 8)
 
 
