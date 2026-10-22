@@ -77,6 +77,7 @@ class Callbacks:
 	# State entry
 	var enter_shot_block: Callable                # ()
 	var enter_slapper_charge: Callable            # (input: InputState)
+	var cancel_slapper: Callable                  # (input: InputState) — call a slapshot off: the stick comes back down
 	var transition_to_skating: Callable           # ()
 	# Shot releases
 	var release_wrister: Callable                 # (input: InputState)
@@ -194,14 +195,14 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 	# The OTHER shot button cancels: tap the wrister (LMB) to bail the slapper
 	# wind-up back to carry. Block is the shot-block stance and cancels nothing.
 	if input.shoot_pressed:
-		_cancel_slapper_internal()
+		_cancel_slapper_internal(input)
 		return
 
 	# Set-up: the blade is still taking the puck to the strike spot and the
 	# charge has not started. Letting go before it is set is no shot at all.
 	if not _aiming.slapper_setup_done:
 		if not input.slap_held:
-			_cancel_slapper_internal()
+			_cancel_slapper_internal(input)
 			return
 		_cb.apply_slapper_setup.call(input, delta)
 		_cb.apply_slapper_velocity_drag.call(delta)
@@ -213,7 +214,7 @@ func _state_slapper_charge_with_puck(_skater: Skater, input: InputState, delta: 
 		_aiming.tick_one_timer_window(delta)
 		if _aiming.one_timer_window_timer <= 0.0:
 			# Window expired — cancel slapper, keep puck in carry state.
-			_cancel_slapper_internal()
+			_cancel_slapper_internal(input)
 			return
 		if not input.slap_held:
 			# A one-timer does not leave on the button edge: the swing commits
@@ -236,7 +237,7 @@ func _state_slapper_charge_without_puck(_skater: Skater, input: InputState, delt
 	# The OTHER shot button cancels: tap the wrister (LMB) to bail a one-timer
 	# wind-up back to carry.
 	if input.shoot_pressed:
-		_cancel_slapper_internal()
+		_cancel_slapper_internal(input)
 		return
 
 	_cb.update_slapper_charge.call(delta)
@@ -320,6 +321,5 @@ func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	_aiming.reset_wrister(intent_pos, origin_world, origin_skater_pos)
 
 
-func _cancel_slapper_internal() -> void:
-	_aiming.slapper_charge_timer = 0.0
-	_cb.transition_to_skating.call()
+func _cancel_slapper_internal(input: InputState) -> void:
+	_cb.cancel_slapper.call(input)

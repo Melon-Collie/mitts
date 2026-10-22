@@ -553,6 +553,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	var pre_slapshot_pin_active: bool = skater.is_slapshot_pinning()
 	var pre_slapshot_pin_local: Vector2 = skater.slapshot_pin_local()
 	var pre_setup_prev_puck: Vector2 = _slapper_setup_prev_puck
+	var pre_fake_puck_offset: Vector2 = fake_puck_offset
 	var pre_setup_still_s: float = _slapper_setup_still_s
 	# Same shape of problem as the slapper timer: tick_wrister_charge evolves the
 	# cursor-speed EMA inside _update_wrister_charge during replay, so without
@@ -693,6 +694,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer
 	_aiming.slapper_setup_done = pre_slapper_setup_done
 	_slapper_setup_prev_puck = pre_setup_prev_puck
+	fake_puck_offset = pre_fake_puck_offset
 	_slapper_setup_still_s = pre_setup_still_s
 	if pre_slapshot_pin_active:
 		skater.enter_slapshot_pinning(pre_slapshot_pin_local)
@@ -750,6 +752,14 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	if apply_server_shot_state \
 			and pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK \
 			and server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
+		apply_server_shot_state = false
+	# A slapshot called off is the client's to have called: through the recovery
+	# that follows (the puck held at its pin, the settle lock running) the host's
+	# lagged wind-up must not re-arm it — the button is already up, so it would
+	# release a zero-charge slapshot. Bounded by the recovery, like the hold above.
+	if apply_server_shot_state and pre_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
+			and skater.is_slapshot_pinning() \
+			and server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK:
 		apply_server_shot_state = false
 	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)

@@ -63,3 +63,11 @@ static func aim_from_strike(skater_xz: Vector2, target_xz: Vector2,
 			return dir
 		dir = from_spot.normalized()
 	return dir
+
+
+# Seconds to bring a raised stick back down to the puck after calling a
+# slapshot off: from `min_s` with the backswing barely started to `max_s` from
+# the top. The wind-up's height climbs linearly with `wind_up_t` (0..1), so the
+# way back down does too.
+static func recover_time(wind_up_t: float, min_s: float, max_s: float) -> float:
+	return lerpf(min_s, max_s, clampf(wind_up_t, 0.0, 1.0))

@@ -745,6 +745,11 @@ var slapper_stance_turn_deg_s: float = 450.0
 # and the puck within this of the strike spot; the puck is pinned where it is.
 var slapper_setup_facing_tol_deg: float = 2.0
 var slapper_setup_spot_tol_m: float = 0.15
+# Calling a slapshot off costs the stick coming back down to the puck (s), from
+# a barely started backswing to the top (SlapperRules.recover_time): no shot,
+# pass or nudge until it is down, and a press inside it waits for it.
+var slapper_recover_min_s: float = 0.1
+var slapper_recover_max_s: float = 0.45
 var min_slapper_power: float = GameRules.DEFAULT_SLAPPER_POWER_MIN_M_S
 var max_slapper_power: float = GameRules.DEFAULT_SLAPPER_POWER_MAX_M_S
 var max_slapper_charge_time: float = 0.7
@@ -1185,6 +1190,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_cb.apply_slapper_follow_through = _shot_pose.apply_slapper_follow_through
 	_cb.enter_shot_block = _enter_shot_block
 	_cb.enter_slapper_charge = _enter_slapper_charge
+	_cb.cancel_slapper = _cancel_slapper
 	_cb.transition_to_skating = _transition_to_skating
 	_cb.release_wrister = _release_wrister
 	_cb.fire_quick_pass = _fire_quick_pass
@@ -2727,8 +2733,19 @@ func _reset_to_skating_state() -> void:
 # the queued press as its own.
 func _apply_state(input: InputState, delta: float) -> void:
 	if _settle.settling:
-		_ik.apply_blade_from_mouse(input, delta, false, true)
+		if skater.is_slapshot_pinning():
+			# A called-off slapshot: the blade comes down onto the held puck.
+			var puck_world := Vector3(skater.global_position.x + fake_puck_offset.x, 0.0,
+					skater.global_position.z + fake_puck_offset.y)
+			var local: Vector3 = skater.to_local(puck_world)
+			skater.enter_slapshot_pinning(Vector2(local.x, local.z))
+			_ik.apply_blade_toward(puck_world, delta)
+		else:
+			_ik.apply_blade_from_mouse(input, delta, false, true)
 		return
+	if skater.is_slapshot_pinning() and _sm.get_state() == State.SKATING_WITH_PUCK:
+		# The stick is down: the carry takes the puck back from where it lies.
+		skater.exit_slapshot_pinning()
 	var press: SkaterSettleGate.Press = _settle.unqueued
 	if press == SkaterSettleGate.Press.NONE or press == SkaterSettleGate.Press.NUDGE \
 			or not has_puck or _sm.get_state() != State.SKATING_WITH_PUCK:
@@ -2861,6 +2878,37 @@ func _enter_slapper_charge(input: InputState) -> void:
 	if show_one_timer_indicator:
 		skater.set_slapshot_arrow(true, strike, slapper_zone_radius)
 		skater.update_slapshot_arrow_direction(skater.slapper_aim_dir)
+
+
+# A slapshot called off — the wrister button pressed, the button let go before
+# the puck was set, or a caught one-timer held past its window. The stick has to
+# come back down: the puck stays where it lies (pinned, if the set-up had not
+# pinned it yet), and the settle lock holds every on-puck action for as long as
+# that takes, from this input's own stamp (SkaterSettleGate.arm_local), while
+# the blade comes down to it (_apply_state). Without the puck there is nothing to
+# lock: the raised blade cannot take a pass until it is back on the ice anyway.
+func _cancel_slapper(input: InputState) -> void:
+	var recover_s: float = SlapperRules.recover_time(
+			slapper_wind_up_t(), slapper_recover_min_s, slapper_recover_max_s)
+	var pin: Vector2 = skater.slapshot_pin_local()
+	if not skater.is_slapshot_pinning():
+		var puck_local: Vector3 = skater.to_local(skater.get_carry_target_global())
+		pin = Vector2(puck_local.x, puck_local.z)
+	_aiming.reset_slapper()
+	_transition_to_skating()
+	if has_puck:
+		skater.enter_slapshot_pinning(pin)
+		var pin_world: Vector3 = skater.global_transform.basis * Vector3(pin.x, 0.0, pin.y)
+		fake_puck_offset = Vector2(pin_world.x, pin_world.z)
+		_settle.arm_local(input.host_timestamp + recover_s)
+	if not is_replaying:
+		_pose_bridge.ease_next_change(recover_s)
+
+
+# Where a called-off slapshot's puck lies off the skater (world XZ): it travels
+# with him, but the hips turning back out of the stance do not swing it round.
+# Saved/restored across reconcile with the pin it re-seats each tick.
+var fake_puck_offset: Vector2 = Vector2.ZERO
 
 
 func _blade_side_sign() -> float:

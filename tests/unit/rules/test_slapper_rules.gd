@@ -64,3 +64,10 @@ func test_the_aim_runs_from_the_strike_spot_to_the_target() -> void:
 	var spot: Vector2 = skater + SlapperRules.strike_offset(dir, strike, RIGHT_BLADE, SIDE_ON)
 	assert_almost_eq(dir.angle_to(target - spot), 0.0, deg_to_rad(0.5),
 			"the line from where the puck is struck passes through the target")
+
+
+func test_the_recovery_grows_with_the_wind_up() -> void:
+	assert_almost_eq(SlapperRules.recover_time(0.0, 0.1, 0.45), 0.1, 0.0001)
+	assert_almost_eq(SlapperRules.recover_time(1.0, 0.1, 0.45), 0.45, 0.0001)
+	assert_lt(SlapperRules.recover_time(0.3, 0.1, 0.45), SlapperRules.recover_time(0.7, 0.1, 0.45))
+	assert_almost_eq(SlapperRules.recover_time(2.0, 0.1, 0.45), 0.45, 0.0001, "past the top is the top")

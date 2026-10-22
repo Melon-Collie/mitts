@@ -1,6 +1,6 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
-Status: **Phase 1 built, awaiting playtest.** Decisions below were agreed in
+Status: **Phases 1 and 2 built, awaiting playtest.** Decisions below were agreed in
 chat; phases are ordered so each one can be played on its own.
 
 As built, Phase 1 differs from the design below:
@@ -176,6 +176,19 @@ the stance at the turn rate and the backswing starts at once.
   the user has looked at them.
 
 ## Phase 2 — the fake costs the stick coming down
+
+As built, this differs from the design below:
+- Through the recovery the puck is held at a fixed world offset from the
+  skater (`SkaterController.fake_puck_offset`), re-pinned each tick, rather
+  than at its pin in the hips' frame: the hips turn back out of the side-on
+  stance as soon as the slapshot is called off, and a hips-frame pin swung the
+  puck round with them.
+- Every way a carried slapshot is called off pays it: the wrister button, the
+  button let go during the set-up (the floor, `slapper_recover_min_s`), and a
+  caught one-timer held past its window.
+- Reconcile does not let the host's lagged wind-up re-arm a slapshot the client
+  has called off while its recovery runs (`Scripts/networking/CLAUDE.md`).
+- The strip tool's `slapfake` scenario shows the stick coming down.
 
 LMB during a slap charge still cancels, but the cancel now:
 

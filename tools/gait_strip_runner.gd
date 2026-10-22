@@ -78,6 +78,9 @@ const SCENARIOS: Array[Dictionary] = [
 	# release and downswing tick by tick — whether the stick turns as one piece.
 	{"name": "slapshot", "warm": SLAP_AT + 10, "step": 30},
 	{"name": "slapdown", "warm": SLAP_RELEASE_AT - 4, "step": 3},
+	# The same wind-up called off at SLAP_RELEASE_AT (the wrister button): the
+	# fake, and the stick coming back down to the puck over the recovery.
+	{"name": "slapfake", "warm": SLAP_RELEASE_AT - 2, "step": 8},
 ]
 # The slapshot scenarios' press and release ticks: past the set-up and a full
 # wind-up.
@@ -291,11 +294,17 @@ func _steer(input: InputState) -> void:
 				aim = Vector2(1.0, 0.0)
 	input.slap_pressed = false
 	input.slap_held = false
+	input.shoot_pressed = false
+	input.shoot_held = false
 	if _slapping():
 		move = Vector2.ZERO
 		aim = up_ice
 		input.slap_pressed = _tick == SLAP_AT
 		input.slap_held = _tick >= SLAP_AT and _tick < SLAP_RELEASE_AT
+		if String(_scenarios[_index]["name"]) == "slapfake" and _tick == SLAP_RELEASE_AT:
+			input.slap_held = true
+			input.shoot_pressed = true
+			input.shoot_held = true
 	input.move_vector = move
 	if String(_scenarios[_index]["name"]) in ["shuffle", "sidehold", "sidestop"]:
 		_shuffle_steps.shape(input, _skater.velocity, _controller.shuffle_step_distance,
@@ -324,7 +333,7 @@ func _dangling() -> bool:
 
 
 func _slapping() -> bool:
-	return String(_scenarios[_index]["name"]) in ["slapshot", "slapdown"]
+	return String(_scenarios[_index]["name"]) in ["slapshot", "slapdown", "slapfake"]
 
 
 func _place_camera(view: int) -> void:

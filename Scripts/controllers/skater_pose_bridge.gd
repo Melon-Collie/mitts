@@ -31,6 +31,9 @@ var _from_hand := Vector3.ZERO
 var _from_blade := Vector3.ZERO
 var _age: float = 0.0
 var _span: float = 0.0
+# The span the next change of owner eases over instead of its usual one (0: the
+# usual); see ease_next_change.
+var _next_span: float = 0.0
 
 
 # `slapper_set`: false while a slapshot's set-up still has the tracked blade
@@ -50,6 +53,12 @@ static func owner_of(state: State, slapper_set: bool = true, slap_finish: bool =
 	return Owner.TRACKED
 
 
+# The next change of owner eases over `span` seconds: a stick brought down out of
+# a called-off slapshot takes as long as its recovery, not a hand-off's blink.
+func ease_next_change(span: float) -> void:
+	_next_span = span
+
+
 # After the tick's last write to the hand and blade: start an ease if the owner
 # changed, lay it on, and remember what was drawn.
 func settle(skater: Skater, state: State, delta: float, slapper_set: bool = true,
@@ -60,6 +69,9 @@ func settle(skater: Skater, state: State, delta: float, slapper_set: bool = true
 		_from_blade = _last_blade
 		_age = 0.0
 		_span = FOLLOW_THROUGH_SPAN_S if owner == Owner.FOLLOW_THROUGH else SPAN_S
+		if _next_span > 0.0:
+			_span = _next_span
+	_next_span = 0.0
 	_owner = owner
 	if _span > 0.0:
 		var held: float = 1.0 - smoothstep(0.0, _span, _age)
