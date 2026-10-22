@@ -9,6 +9,8 @@ extends RefCounted
 const SOURCES: Array[String] = [
 	"res://Scenes/Goalie.tscn",
 	"res://Scripts/actors/goalie.gd",
+	"res://Scripts/actors/goalie_skates.gd",
+	"res://Scripts/actors/goalie_toe_bridge.gd",
 	"res://Scripts/game/goalie_contact_detector.gd",
 	"res://Scripts/domain/ai/goalie_skill_profile.gd",
 	"res://Scripts/domain/rules/puck_authority_rules.gd",

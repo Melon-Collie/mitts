@@ -36,19 +36,26 @@ there is moved or hidden on screen. `GoalieUniformCoordinator` owns it, so
 against — carries no rendering. Anything that changes a part's mesh or material
 must be followed by `rebuild()` (the coordinator's `apply_uniform` does it); a
 part that wears a `ShaderMaterial` (the jersey body) is not merged and draws
-itself. `test_goalie_body_rig.gd` holds it.
+itself, and neither is one in the `DRAWS_ITSELF` group, whose geometry changes
+after the build (the toe bridges). `test_goalie_body_rig.gd` holds it.
 
 ## The goalie stands on skates, and the ankle keeps them level
 
 `GoalieSkates` builds the skater's boot and blade (`shared_boot_assembly`)
-and the pad's toe bridge (`GoalieToeCapMesh`) in code, under
-each pad's body: that pad's save surface, on its collision layer, with no node
-in `Goalie.tscn` and nothing on the wire. After every pad write it re-places
-them flat on the ice under the pad's foot, turned the way the pad faces, so a
-pad that rolls onto its inside edge lifts off a skate that stays down. Each
-collider is sized from its own mesh's bounds. They exist before the body rig's
-first build (which merges their meshes) and before anything gathers the
-collision parts. `test_goalie_skates.gd` holds it.
+in code under each pad's body: that pad's save surface, on its collision layer,
+with no node in `Goalie.tscn` and nothing on the wire. After every pad write it
+re-places them flat on the ice under the pad's foot, turned the way the pad
+faces, so a pad that rolls onto its inside edge lifts off a skate that stays
+down. The skate's collider is sized from its mesh's bounds. They exist before
+the body rig's first build (which merges their meshes) and before anything
+gathers the collision parts.
+
+The pad's toe bridge (`GoalieToeBridge`) hangs from the pad's bottom edge and
+lies over the skate's toe on the ice, so it stretches as the pad rolls. No rigid
+piece does that, so it is redrawn at render rate from the pads' interpolated
+poses, only when they move, and draws itself (`GoalieBodyRig.DRAWS_ITSELF`)
+rather than joining the merged body. Its collider is the box over the toe it
+rests on, placed with the skate. `test_goalie_skates.gd` holds both.
 
 ## The seam
 

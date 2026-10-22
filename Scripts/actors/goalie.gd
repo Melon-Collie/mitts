@@ -121,7 +121,7 @@ func _ready() -> void:
 	GoalieMeshBuilder.apply_goalie(self)
 	# Before the body rig's first build, which merges the skates' meshes, and
 	# before anything gathers the collision parts.
-	_skates = GoalieSkates.new(_left_pad, _right_pad)
+	_skates = GoalieSkates.new(self, _left_pad, _right_pad)
 	_seat_blade()
 	_init_stick_knob()
 	_init_connectors()
@@ -137,6 +137,8 @@ func _ready() -> void:
 
 func _process(_delta: float) -> void:
 	_update_connectors()
+	if is_visible_in_tree():
+		_skates.draw_bridges()
 
 
 func apply_jersey_info(p_name: String, number: int) -> void:
@@ -331,8 +333,8 @@ func get_blocker_world_position() -> Vector3:
 # authoritative socket transforms broadcast in the world snapshot. All values
 # returned in goalie-local space; rotations in radians.
 # The pads' toe bridges over the skates (GoalieSkates), painted as the pads.
-func toe_cap_meshes() -> Array[MeshInstance3D]:
-	return _skates.toe_cap_meshes()
+func toe_bridge_meshes() -> Array[MeshInstance3D]:
+	return _skates.toe_bridge_meshes()
 
 func get_left_pad_position() -> Vector3:
 	return _left_pad.position

@@ -87,8 +87,8 @@ func apply_uniform(colors: Dictionary) -> void:
 	pads_mat.vertex_color_use_as_albedo = true
 	_goalie.left_pad_mesh.material_override = pads_mat
 	_goalie.right_pad_mesh.material_override = pads_mat.duplicate()
-	for cap: MeshInstance3D in _goalie.toe_cap_meshes():
-		cap.material_override = pads_mat.duplicate()
+	for bridge: MeshInstance3D in _goalie.toe_bridge_meshes():
+		bridge.material_override = pads_mat.duplicate()
 	# The glove (rim + pocket + cuff) and the blocker (board + hand) are each one
 	# merged mesh wearing one material, so each is a single paint target.
 	_goalie.glove_main_mesh.material_override = pads_mat.duplicate()

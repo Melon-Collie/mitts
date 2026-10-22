@@ -81,3 +81,23 @@ func test_the_toe_cap_reaches_past_the_boot() -> void:
 			* pieces[1].global_transform
 	assert_almost_eq(cap_in_boot.origin.z - cap_half.z, -boot_half.z - GoalieSkates.TOE_CAP_OVERHANG_M,
 			1e-4, "the toe's front edge lies past the boot's toe, forward (-Z)")
+
+
+# The bridge hangs from the pad's bottom and lies over the toe on the ice, in a
+# stance where the two are far apart.
+func test_the_toe_bridge_hangs_from_the_pad_to_the_ice() -> void:
+	var g := _goalie()
+	_pose(g, State.LOW_READY)
+	g._skates.draw_bridges()
+	var bottom: float = -GoalieAnatomy.PAD_BOX_HEIGHT_M * 0.5
+	for i: int in 2:
+		var pad: Node3D = g.get_node("LeftPad" if i == 0 else "RightPad") as Node3D
+		var to_pad: Transform3D = _in_goalie(g, pad).affine_inverse()
+		var corners: PackedVector3Array = g._skates.bridge_corners(i)
+		for k: int in 4:
+			assert_almost_eq((to_pad * corners[k]).y, bottom, 1e-4, "top on the pad's bottom")
+			assert_almost_eq(corners[k + 4].y, 0.0, 1e-4, "foot on the ice")
+		var top_mean: float = (corners[0].y + corners[1].y + corners[2].y + corners[3].y) * 0.25
+		assert_gt(top_mean, 0.05, "the A's pad has lifted off the toe, so the bridge spans it")
+		var bridge: Node = g.get_node("%sToeBridge" % pad.name)
+		assert_true(bridge.is_in_group(GoalieBodyRig.DRAWS_ITSELF), "drawn apart from the merged body")

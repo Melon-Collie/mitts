@@ -10,8 +10,11 @@ extends Skeleton3D
 # surfaces are zones of the merged mesh (BodyZoneMesh, BodyZonePaint), and the
 # originals move to render layer 0, so nothing draws them twice. A part wearing
 # anything but an opaque StandardMaterial3D — the jersey's ShaderMaterial — is not
-# merged and draws itself. GoalieUniformCoordinator owns it and rebuilds it after
-# every repaint.
+# merged and draws itself, and so does anything in the DRAWS_ITSELF group: a part
+# whose geometry changes after the build (the toe bridges, GoalieSkates).
+# GoalieUniformCoordinator owns it and rebuilds it after every repaint.
+
+const DRAWS_ITSELF := &"goalie_draws_itself"
 
 var _goalie: Node3D
 var _mesh: MeshInstance3D = null
@@ -112,7 +115,7 @@ func paint() -> BodyZonePaint:
 
 
 func _collect(node: Node) -> void:
-	if node is SubViewport or node is GoalieVFX or node == self:
+	if node is SubViewport or node is GoalieVFX or node == self or node.is_in_group(DRAWS_ITSELF):
 		return
 	if node is MeshInstance3D and _mergeable(node as MeshInstance3D):
 		_parts.append(node as MeshInstance3D)
