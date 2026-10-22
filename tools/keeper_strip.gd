@@ -20,11 +20,13 @@ const TILE := Vector2i(220, 280)
 const OUT_DIR: String = "res://.preview/keeper"
 # The stop settling out of him, after he is set.
 const SETTLE_FRAMES: int = 3
-# name, the spot he pushes to from 0.
+# name, the spot he moves to from 0, the move.
 const SCENARIOS: Array = [
-	["t_push", 1.0],
-	["t_push_far", 1.8],
-	["t_push_glove", -1.0],
+	["t_push", 1.0, KeeperFootwork.Move.T_PUSH],
+	["t_push_far", 1.8, KeeperFootwork.Move.T_PUSH],
+	["t_push_glove", -1.0, KeeperFootwork.Move.T_PUSH],
+	["shuffle", 0.3, KeeperFootwork.Move.SHUFFLE],
+	["shuffle_far", 1.0, KeeperFootwork.Move.SHUFFLE],
 ]
 const _PHASE_COLORS: Array[Color] = [
 	Color(0.55, 0.55, 0.58), Color(0.2, 0.8, 0.3), Color(0.25, 0.5, 0.95), Color(0.9, 0.2, 0.2),
@@ -92,9 +94,12 @@ func _init() -> void:
 
 
 # Each frame of a move: [pose, x, phase, speed, t].
-func _record(target: float) -> Array:
+func _record(target: float, kind: int) -> Array:
 	var fw := KeeperFootwork.new()
-	fw.push_to(target)
+	if kind == KeeperFootwork.Move.T_PUSH:
+		fw.push_to(target)
+	else:
+		fw.shuffle_to(target)
 	var out: Array = []
 	var tick: int = 0
 	var settled: int = -1
@@ -130,7 +135,7 @@ func _process(_delta: float) -> bool:
 		if _scenario_i >= _scenarios.size():
 			return true
 		var target: float = float(_scenarios[_scenario_i][1])
-		_frames = _record(target)
+		_frames = _record(target, int(_scenarios[_scenario_i][2]))
 		_views = _views_for(absf(target))
 		_shots = []
 		_shot_i = 0

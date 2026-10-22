@@ -54,7 +54,7 @@ var depth_max_speed: float = 2.2
 # play (wraps, walkouts, dead-angle post seals).
 var min_challenge_depth: float = 0.20
 
-var shuffle_speed: float = 2.0
+var shuffle_speed: float = GameRules.DEFAULT_GOALIE_SHUFFLE_SPEED_M_S
 var t_push_speed: float = GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S
 # Lateral push acceleration (m/s²). The goalie ramps up to shuffle / T-push speed
 # instead of snapping to it, so a quick play can beat him across before he

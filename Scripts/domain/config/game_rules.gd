@@ -611,12 +611,12 @@ const DEFAULT_GOALIE_REACTION_DELAY_S: float = 0.13
 # low read, arms need "where in the upper net" placement math first. Mirrors
 # GoalieController.arm_reaction_delay.
 const DEFAULT_GOALIE_ARM_REACTION_DELAY_S: float = 0.18
-# Goalie's max committed lateral movement speed. Mirrors GoalieController
-# .t_push_speed — the actual translation speed when the goalie commits to
-# a slide (lateral_threshold = 0.3 m). NOT tracking_speed (that's the
-# mental-target lerp speed, not body movement) and NOT shuffle_speed
-# (that's small adjustments, not a recovery slide).
+# The upright goalie's lateral speeds (GoalieController.t_push_speed and
+# shuffle_speed): a T-push to a spot past lateral_threshold, a shuffle (square,
+# both skates on the ice) inside it. Not tracking_speed, which moves the spot
+# he reads, not his body.
 const DEFAULT_GOALIE_T_PUSH_SPEED_M_S: float = 3.8
+const DEFAULT_GOALIE_SHUFFLE_SPEED_M_S: float = 2.0
 # How fast a lateral push ramps toward t_push_speed — pushes accelerate onto
 # the edge, they are not instant. Mirrors the Hard/default GoalieController
 # .lateral_accel (the tiered GoalieSkillProfile values ease it downward; the
