@@ -813,13 +813,21 @@ func _inbound_feed_snap(self_pos: Vector3, puck_pos: Vector3,
 	return s
 
 
+# A feed along +X whose line runs through this bot's slapper circle, `ahead_m`
+# metres short of it.
+func _feed_through_circle(ahead_m: float) -> WorldSnapshot:
+	var zone: Vector3 = sm._one_timer.zone_center(Vector3.ZERO, sm._attacking_goal_pos)
+	return _inbound_feed_snap(Vector3.ZERO, Vector3(zone.x - ahead_m, 0, zone.z),
+			Vector3(16, 0, 0))
+
+
 func test_one_timer_winds_up_the_slapper_through_the_flight() -> void:
 	# A live feed inbound: tick 0 presses SLAP (the real slapper one-timer —
 	# the diegetic wind-up the controller animates) and holds it while the
 	# feed flies. On attachment (the controller's one-timer window) the button
 	# drops and release_slapper fires.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
+	var s := _feed_through_circle(8.0)
 	var i0 := InputState.new()
 	sm.dispatch(i0, s)
 	assert_true(i0.slap_pressed, "tick 0 presses the slap charge")
@@ -866,38 +874,37 @@ func test_one_timer_settles_onto_the_live_feed_line() -> void:
 	assert_lt(i.move_vector.y, -0.3, "shuffles toward the actual crossing line")
 
 
-func test_one_timer_press_waits_for_the_aim_to_settle() -> void:
-	# The one-timer zone turns with the hips, so a bot that enters the press
-	# state still turned away from its stance (late-ready commit, zone-fallback
-	# trigger) must NOT press yet. Facing dead away from the net defers the
-	# press; opened side-on to it (SlapperRules.stance_facing), it fires.
+func test_one_timer_press_waits_for_the_pivot_to_fit_the_flight() -> void:
+	# Wound up, the hips pivot into the stance at their own rate and the circle
+	# turns with them (SkaterAgentOneTimer.time_to_set). Turned square away from
+	# the stance (0.4 s of pivot) against a feed 5 m out at 16 m/s, the press waits;
+	# opened side-on to the net, it fires.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	s.skater_states[SELF_ID].facing = Vector2(0, 1)   # facing OUR end — net at back
+	var s := _feed_through_circle(5.0)
+	var stance: Vector2 = sm._one_timer.stance_facing(Vector2(0, -1))
+	s.skater_states[SELF_ID].facing = -stance
 	var i0 := InputState.new()
 	sm.dispatch(i0, s)
-	assert_false(i0.slap_pressed, "no press while the net aim is in the back wedge")
+	assert_false(i0.slap_pressed, "no press while the pivot outlasts the feed")
 	assert_false(i0.slap_held, "…and nothing to hold yet")
 	assert_eq(sm.get_state(), Agent.State.ONE_TIMER_PRESSED, "still waiting on the feed")
-	s.skater_states[SELF_ID].facing = sm._one_timer.stance_facing(Vector2(0, -1))  # side-on to the net
+	s.skater_states[SELF_ID].facing = stance
 	var i1 := InputState.new()
 	sm.dispatch(i1, s)
 	assert_true(i1.slap_pressed, "opened up — the press fires with a real net aim")
 	assert_true(i1.slap_held, "…and the wind-up holds")
 
 
-func test_one_timer_backstop_aborts_when_it_never_squares() -> void:
-	# Never squaring to the net (the net aim stays beyond the reach cone) means
-	# the locked line would fire WIDE. Past the aim-wait backstop the wind-up is
-	# ABORTED — catch the feed instead of firing into the corner. Nothing was
-	# pressed, so no slapper charge to cancel.
+func test_one_timer_aborts_when_the_feed_beats_the_set() -> void:
+	# A feed arriving before a wind-up could open the one-timer's window, with
+	# the body still unable to set for it, is caught instead of swung at.
+	# Nothing was pressed, so no slapper charge to cancel.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	sm._one_timer_press_tick = Agent.ONE_TIMER_AIM_WAIT_MAX_TICKS
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	s.skater_states[SELF_ID].facing = Vector2(0, 1)   # facing our end — net at back
+	var s := _feed_through_circle(2.0)
+	s.skater_states[SELF_ID].facing = -sm._one_timer.stance_facing(Vector2(0, -1))
 	var i := InputState.new()
 	sm.dispatch(i, s)
-	assert_false(i.slap_pressed, "an unsquared wind-up is not fired wide")
+	assert_false(i.slap_pressed, "an unset wind-up is not fired wide")
 	assert_ne(sm.get_state(), Agent.State.ONE_TIMER_PRESSED, "it bails to catch instead")
 
 

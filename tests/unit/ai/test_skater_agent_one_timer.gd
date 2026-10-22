@@ -49,10 +49,11 @@ func test_feed_time_reads_the_remaining_flight() -> void:
 # puck's REAL path; the settle anchor is what puts the net-aimed blade there.
 
 func test_line_anchor_puts_the_slapper_zone_on_the_live_line() -> void:
-	# Team 0 attacks -Z. A hard feed crosses 1.5 m net-side of the bot along +X,
-	# so the point on the line nearest him is (0, 0, -1.5). The slapper zone is
-	# the strike spot of a RH body whose hips have set side-on for a shot at the
-	# net from that point, so the body stands that offset back from the line.
+	# Team 0 attacks -Z. A hard feed crosses 1.5 m net-side of the bot along +X.
+	# The slapper zone is the strike spot of a RH body whose hips have set
+	# side-on for a shot at the net; the anchor is the nearest body spot that
+	# puts it on the line — straight across the line, since the zone can meet
+	# the puck anywhere along it.
 	var foot := Vector3(0, 0, -1.5)
 	var snap := _feed_snap(Vector3(-8, 0, foot.z), Vector3(16, 0, 0))
 	var anchor: Vector3 = ot.line_anchor(snap, Vector3.ZERO, ATTACKING_GOAL)
@@ -63,9 +64,8 @@ func test_line_anchor_puts_the_slapper_zone_on_the_live_line() -> void:
 	var off: Vector2 = SlapperRules.strike_offset(Vector2(f.x, f.z),
 			AISkaterCaps.new().slapper_strike_local, 1.0, PI * 0.5)
 	var zone: Vector3 = anchor + Vector3(off.x, 0.0, off.y)
-	assert_almost_eq(zone.distance_to(foot), 0.0, 0.01,
-			"the armed slapper ZONE sits exactly ON the line")
-	assert_lt(anchor.x, foot.x, "side-on to the net, the body stands back from the spot it strikes")
+	assert_almost_eq(zone.z, foot.z, 0.01, "the armed slapper ZONE sits exactly ON the line")
+	assert_almost_eq(anchor.x, 0.0, 0.0001, "the body steps straight across the line")
 
 
 func test_line_anchor_defers_to_a_better_positioned_teammate() -> void:

@@ -123,3 +123,20 @@ static func feed_transfer(held_s: float, leniency_s: float, window_s: float) -> 
 	if window_s <= leniency_s:
 		return 1.0 if held_s <= leniency_s else 0.0
 	return clampf(1.0 - (held_s - leniency_s) / (window_s - leniency_s), 0.0, 1.0)
+
+
+# The swing line (unit, world XZ) that sends a one-timer off `feed` along
+# `target` (unit): one_timer_contact pulls the shot toward the feed's cross
+# speed, so the swing leads against it. Three passes settle it under a tenth of
+# a degree; the pull barely changes over the few degrees it leads by.
+static func aim_for_contact(target: Vector2, power: float, feed: Vector2,
+		restitution: float, grip: float) -> Vector2:
+	var d: Vector2 = target
+	for _i: int in 3:
+		var out: Vector3 = one_timer_contact(Vector3(d.x, 0.0, d.y) * power, feed,
+				restitution, grip, INF)
+		var out_h := Vector2(out.x, out.z)
+		if out_h.length_squared() < 0.0001:
+			return target
+		d = d.rotated(out_h.angle_to(target))
+	return d

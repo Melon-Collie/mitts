@@ -465,19 +465,21 @@ const ONE_TIMER_ANCHOR_ARRIVE_M: float = 0.6
 # one-timer charge) until the puck reaches the slapper zone, then drops it.
 var _one_timer_press_tick: int = 0
 
-# Whether ONE_TIMER_PRESSED has fired its slap press yet. The zone turns with
-# the hips, so the press waits for them to open near the slapshot stance first
-# (_state_one_timer_pressed).
+# Whether ONE_TIMER_PRESSED has fired its slap press yet. Wound up, the body
+# only pivots and shuffles, so the press waits until it can set for the feed
+# that way before it arrives (_state_one_timer_pressed).
 var _one_timer_slap_down: bool = false
-
-# Backstop on that stance wait: a body that cannot open up inside it bails to a
-# catch rather than wind up with its circle off the feed.
-const ONE_TIMER_AIM_WAIT_MAX_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 5   # ~0.2 s
+# Seconds wound up since that press.
+var _one_timer_charge_s: float = 0.0
+# The feed in this body's frame (world XZ) as last seen loose: the swing leads
+# against its pull, and once it is caught the snapshot no longer shows it.
+var _one_timer_feed := Vector2.ZERO
 
 # Budget backstop for ONE_TIMER_PRESSED. Entry happens at feed RELEASE, so it
 # must outlast a full pass flight (~1 s on a long diagonal) plus settle slack;
 # the dead-feed bail handles every genuine failure earlier.
 const ONE_TIMER_PRESS_MAX_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 6 / 5   # ~1.2 s
+const _ONE_TICK_S: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
 
 
 # Pre-aim target locked when intent flips from CARRY to a fire action:
@@ -718,7 +720,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_self_facing_turn_rate = caps.facing_turn_rate
 	_self_blade_speed = caps.blade_speed
 	_self_backhand_coefficient = caps.backhand_power_coefficient
-	_one_timer.set_stance(caps.slapper_strike_local, caps.slapper_stance_open_rad)
+	_one_timer.set_caps(caps)
 	_role_ctx.self_wrister_unloaded_share = caps.wrister_unloaded_share
 	_role_ctx.self_wrister_load = caps.wrister_load
 	_role_ctx.self_facing_rules = caps.facing_rules
@@ -2301,57 +2303,79 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3, have_puck: bool) -> void:
 	# Settle on the LIVE line (SkaterAgentOneTimer.line_anchor), re-derived every tick.
 	var line_anchor: Vector3 = _one_timer.line_anchor(snapshot, self_pos, _attacking_goal_pos)
-	if line_anchor.is_finite() \
+	var self_v: Vector3 = snapshot.skater_states[_peer_id].velocity
+	if _one_timer_slap_down:
+		# Wound up the legs only glide, so the circle reaches the line on the
+		# glide the press counted on and then a shuffle: the brake with a stick,
+		# stepping across. Faster than a shuffle, the brake would be a stop.
+		var step: Vector2 = _one_timer.shuffle_stick(self_pos, line_anchor)
+		if Vector2(self_v.x, self_v.z).length() > SkaterMovementRules.SHUFFLE_MAX_SPEED:
+			pass
+		elif step != Vector2.ZERO:
+			input.move_vector = step
+			input.brake = true
+			input.bot_shuffle = true
+		else:
+			_apply_brake_steering(input, snapshot, self_pos)
+	elif line_anchor.is_finite() \
 			and self_pos.distance_to(line_anchor) > ONE_TIMER_ANCHOR_ARRIVE_M:
 		_apply_steering(input, snapshot, self_pos, line_anchor)
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
 	# Open up through the wait, as a shooter loading a one-timer does: skating,
 	# the hips ride the skating line (FacingRules), and only the stance squares
-	# them to the cursor — so without it the square-up gate below waits out its
-	# backstop.
+	# them to the cursor, which shortens the pivot the press has left to make.
 	input.stance_held = true
-	# AIM FROM THE RELEASE POINT, NOT THE CURRENT BODY: the slapper direction locks
-	# at the press tick, and the body may still shuffle up to the reception lateral
-	# (SkaterAgentReception.RECEIVE_TRIGGER_LATERAL_M) onto the feed line, which
-	# would bake in a parallel miss. The release point is the slapper zone centre once settled on the live
-	# line (or the current zone when there's none).
+	# AIM FROM THE RELEASE POINT, NOT THE CURRENT BODY: the body may still shuffle
+	# up to the reception lateral (SkaterAgentReception.RECEIVE_TRIGGER_LATERAL_M)
+	# onto the feed line, which would bake in a parallel miss. The release point
+	# is the slapper zone centre once settled on the live line (or the current
+	# zone when there's none).
 	var release_point: Vector3 = _one_timer.zone_center(
 			line_anchor if line_anchor.is_finite() else self_pos, _attacking_goal_pos)
 	# FACE-aimed at the hole read AGAINST THE FEED'S ARRIVAL — the goalie
 	# re-squares while the pass flies — from the release point.
-	var net_hole: Vector3 = _shot_aim_point(snapshot, release_point,
-			SkaterAgentOneTimer.feed_time_s(snapshot, self_pos))
+	var feed_s: float = SkaterAgentOneTimer.feed_time_s(snapshot, self_pos)
+	var net_hole: Vector3 = _shot_aim_point(snapshot, release_point, feed_s)
+	if not have_puck and snapshot.puck_state != null:
+		var pv: Vector3 = snapshot.puck_state.velocity
+		_one_timer_feed = Vector2(pv.x - self_v.x, pv.z - self_v.z)
 	# COMMIT the direction (input.bot_slapper_aim_dir): release_point → net_hole
-	# plus the committed execution error. Never aim through the cursor: the human
-	# lock measures from the strike spot, off the body, so no cursor placement
-	# cancels the offset. The cursor points the way the stance faces for that
-	# line, so the stance (Shift) opens the hips side-on to it.
+	# plus the committed execution error, led against the feed's pull at the
+	# power the swing will have built when it meets the puck. Never aim through
+	# the cursor: the human lock measures from the strike spot, off the body, so
+	# no cursor placement cancels the offset. The cursor points the way the
+	# stance faces for that line, so the stance (Shift) opens the hips side-on to it.
 	var shot_vec: Vector3 = net_hole - release_point
 	var clean_aim: Vector3 = _apply_committed_aim_error(self_pos, self_pos + shot_vec)
 	var committed_dir := Vector3(
 			clean_aim.x - self_pos.x, 0.0, clean_aim.z - self_pos.z)
+	var shot_line := Vector2.ZERO
 	if committed_dir.length_squared() > 0.0001:
-		input.bot_slapper_aim_dir = committed_dir.normalized()
-		var stance: Vector2 = _one_timer.stance_facing(
-				Vector2(input.bot_slapper_aim_dir.x, input.bot_slapper_aim_dir.z))
+		shot_line = Vector2(committed_dir.x, committed_dir.z).normalized()
+		var charge_at_contact: float = _one_timer_charge_s + (0.0 if have_puck else feed_s)
+		var swing: Vector2 = _one_timer.swing_for(shot_line, _one_timer_feed,
+				_one_timer.power_after(charge_at_contact))
+		input.bot_slapper_aim_dir = Vector3(swing.x, 0.0, swing.y)
+		var stance: Vector2 = _one_timer.stance_facing(shot_line)
 		var reach: float = committed_dir.length()
 		input.mouse_world_pos = _step_mouse_face(
 				self_pos + Vector3(stance.x, 0.0, stance.y) * reach)
 	else:
 		input.mouse_world_pos = _step_mouse_face(clean_aim)
 
-	# The press waits until the stance has squared (SkaterAgentOneTimer.aim_settled):
-	# the cursor is cone-clamped, so pressing early would fire sideways out of the
-	# stance. One that never squares within ONE_TIMER_AIM_WAIT_MAX_TICKS aborts
-	# and catches the feed instead.
+	# The press waits until the body can set — hips pivoted into the stance, the
+	# circle shuffled onto the line — before the feed gets there
+	# (SkaterAgentOneTimer.time_to_set). One whose feed will arrive before a
+	# wind-up could open the one-timer's window, still unable to set, catches it
+	# instead.
 	if not _one_timer_slap_down:
-		if _one_timer.aim_settled(snapshot, self_pos, clean_aim,
-				maxf(_self_reach_cone_half_angle - AIM_COMMIT_CONE_MARGIN_RAD, 0.0)):
+		if shot_line != Vector2.ZERO and _one_timer.time_to_set(
+				snapshot, self_pos, shot_line, line_anchor, feed_s) <= maxf(feed_s, _ONE_TICK_S):
 			debug_last_decision = "ONE_TIMER"
 			input.slap_pressed = true
 			_one_timer_slap_down = true
-		elif _one_timer_press_tick >= ONE_TIMER_AIM_WAIT_MAX_TICKS:
+		elif feed_s < _one_timer.min_windup_s():
 			# Nothing was pressed yet, so there's no charge to cancel.
 			debug_last_decision = "ONE_TIMER_ABORT_WIDE"
 			_set_state(_post_puck_lost_state(snapshot))
@@ -2380,6 +2404,8 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 
 	# Feed still inbound — keep the wind-up building (once pressed).
 	input.slap_held = _one_timer_slap_down
+	if _one_timer_slap_down:
+		_one_timer_charge_s += input.delta
 	_one_timer_press_tick += 1
 
 	# Budget backstop (see ONE_TIMER_PRESS_MAX_TICKS) — the dead-feed bail
@@ -3644,6 +3670,8 @@ func _set_state(s: State) -> void:
 		if s == State.ONE_TIMER_PRESSED:
 			_one_timer_press_tick = 0
 			_one_timer_slap_down = false
+			_one_timer_charge_s = 0.0
+			_one_timer_feed = Vector2.ZERO
 			# The SHOT budget, as the reception gate's spread assumes.
 			_committed_aim_error_rad = _sample_aim_error_rad(_shot_aim_error_rad)
 		# CARRY entry starts a fresh carry; _carrier.clear_intent() also forces an

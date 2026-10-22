@@ -149,3 +149,15 @@ func test_a_caught_feed_is_struck_whole_on_the_beat_and_not_at_all_by_the_window
 	assert_almost_eq(SlapperRules.feed_transfer(-0.05, 0.08, 0.45), 1.0, 0.0001, "a host's grace")
 	assert_lt(SlapperRules.feed_transfer(0.3, 0.08, 0.45), SlapperRules.feed_transfer(0.2, 0.08, 0.45))
 	assert_almost_eq(SlapperRules.feed_transfer(0.45, 0.08, 0.45), 0.0, 0.0001)
+
+
+func test_the_swing_leads_against_the_pull_to_land_on_the_target() -> void:
+	var target := Vector2(0.3, -1.0).normalized()
+	for feed: Vector2 in [Vector2(15.0, 0.0), Vector2(-12.0, 6.0), Vector2(4.0, -9.0)]:
+		var swing: Vector2 = SlapperRules.aim_for_contact(target, 30.0, feed, 0.25, GRIP)
+		var out: Vector3 = SlapperRules.one_timer_contact(Vector3(swing.x, 0.0, swing.y) * 30.0,
+				feed, 0.25, GRIP, MAX_SPEED)
+		assert_almost_eq(target.angle_to(Vector2(out.x, out.z)), 0.0, deg_to_rad(0.1),
+				"feed %s: the shot goes where it was aimed" % feed)
+	assert_almost_eq(SlapperRules.aim_for_contact(target, 30.0, Vector2(15.0, 0.0), 0.25, 0.0),
+			target, Vector2.ONE * 0.0001, "no grip, no lead")

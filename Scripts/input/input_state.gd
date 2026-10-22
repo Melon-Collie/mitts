@@ -96,6 +96,10 @@ var bot_wrister_aim_dir: Vector3 = Vector3.ZERO
 # about a net width. Bots have exactly one slapper — the one-timer — so this is
 # set by ONE_TIMER_PRESSED and nothing else. Humans leave it ZERO.
 var bot_slapper_aim_dir: Vector3 = Vector3.ZERO
+# BOT-ONLY, runtime, NOT serialized. The brake with this stick is a shuffle, not
+# a stop (AIBotMechanics.braked_stick): a one-timer man stepping his circle onto
+# the feed's line while wound up. Set by ONE_TIMER_PRESSED and nothing else.
+var bot_shuffle: bool = false
 
 func to_array() -> Array:
 	return [

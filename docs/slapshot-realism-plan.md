@@ -1,6 +1,7 @@
 # Slapshot realism — the stance, the fake and the one-timer
 
-Status: **Phases 1–5 built, awaiting playtest.** Decisions below were agreed in
+Status: **Phases 1–5 and Phase 6's bot side built, awaiting playtest; the shot
+field's one-timer cells are not yet re-measured.** Decisions below were agreed in
 chat; phases are ordered so each one can be played on its own.
 
 As built, Phase 1 differs from the design below:
@@ -345,6 +346,30 @@ building it.
 - Host and client fire the same caught one-timer (the grant carries the feed).
 
 ## Phase 6 — bots onto it
+
+As built, the bot side differs from the design below:
+- The press is priced as a set, not a square-up angle: wound up, the body only
+  pivots (at `slapper_stance_turn_deg_s`), glides on what it carries, and
+  shuffles (`InputState.bot_shuffle`, the one place a bot shuffles), so it
+  presses once the slower of the pivot and the step fits inside the feed's
+  flight (`SkaterAgentOneTimer.time_to_set`). It skates toward the line until
+  then, and catches a feed that will arrive before it could set and before a
+  wind-up could open the window. `ONE_TIMER_SQUARE_UP_MAX_RAD` and the 0.2 s
+  aim-wait backstop are gone.
+- The line anchor is the nearest body spot that puts the circle on the feed's
+  line — straight across it — not the body moved to the puck's perpendicular
+  foot, which slid it a metre along the line for nothing.
+- The bot leads its swing against the contact's pull (`SlapperRules
+  .aim_for_contact`, at the power the wind-up will have built when the feed
+  arrives), so its one-timer lands on the hole it picked.
+- The passer still leads the receiver's body, not his circle: a cross-seam feed
+  lands within a step of the circle, and one more than a step off is caught.
+- `test_bot_one_timer_loop.gd` drives the real controller through it with the
+  production decision stack; the fixture tests could not see the body.
+- Not done: the shot field. It fires every measured one-timer cold at the bot
+  wrister's speed, so neither the slapshot's own pace nor the feed's reaches
+  it, and the passer's pace choice cannot price the transfer until those cells
+  are re-measured as slapshots struck off the feed.
 
 - `SkaterAgentOneTimer` places the derived strike spot on the feed line, and
   `ONE_TIMER_SQUARE_UP_MAX_RAD` (which exists only because the press snaps the

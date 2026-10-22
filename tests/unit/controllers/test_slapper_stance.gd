@@ -150,14 +150,22 @@ func test_the_one_timer_circle_is_the_strike_spot() -> void:
 	assert_almost_eq(Vector2(zone.x, zone.z).distance_to(Vector2(expected.x, expected.z)), 0.0, 0.001)
 
 
-func test_the_bots_default_body_strikes_where_the_default_skater_does() -> void:
+func test_the_bots_default_slapshot_is_the_default_skaters() -> void:
 	var strike: Vector2 = _controller.slapper_strike_local()
 	var side: float = -1.0 if _skater.is_left_handed else 1.0
 	var caps_default: Vector2 = AISkaterCaps.new().slapper_strike_local
 	assert_almost_eq(Vector2(strike.x * side, strike.y).distance_to(caps_default), 0.0, 0.02,
 			"AISkaterCaps' default is the default build's spot (%s)" % Vector2(strike.x * side, strike.y))
-	assert_almost_eq(AISkaterCaps.new().slapper_stance_open_rad,
+	var caps := AISkaterCaps.new()
+	assert_almost_eq(caps.slapper_stance_open_rad,
 			deg_to_rad(_controller.slapper_stance_open_deg), 0.0001)
+	assert_almost_eq(caps.slapper_stance_turn_rad_s,
+			deg_to_rad(_controller.slapper_stance_turn_deg_s), 0.0001)
+	assert_almost_eq(caps.slapper_power_min, _controller.min_slapper_power, 0.0001)
+	assert_almost_eq(caps.slapper_power_max, _controller.max_slapper_power, 0.0001)
+	assert_almost_eq(caps.slapper_max_charge_s, _controller.max_slapper_charge_time, 0.0001)
+	assert_almost_eq(caps.one_timer_min_windup_s, _controller.one_timer_min_windup_time, 0.0001)
+	assert_almost_eq(caps.one_timer_feed_grip, _controller.one_timer_feed_grip, 0.0001)
 
 
 # The stick turns as one piece through the swing (Skater._swing_rigid): from the

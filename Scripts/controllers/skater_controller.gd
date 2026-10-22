@@ -1308,6 +1308,12 @@ func build_ai_caps() -> AISkaterCaps:
 		var strike: Vector2 = slapper_strike_local()
 		caps.slapper_strike_local = Vector2(strike.x * _blade_side_sign(), strike.y)
 	caps.slapper_stance_open_rad = deg_to_rad(slapper_stance_open_deg)
+	caps.slapper_stance_turn_rad_s = deg_to_rad(slapper_stance_turn_deg_s)
+	caps.slapper_power_min = min_slapper_power
+	caps.slapper_power_max = max_slapper_power
+	caps.slapper_max_charge_s = max_slapper_charge_time
+	caps.one_timer_min_windup_s = one_timer_min_windup_time
+	caps.one_timer_feed_grip = one_timer_feed_grip
 	caps.reception_ceiling_mult = skater.reception_ceiling_mult
 	# Handle reach scales with the blade lever: max_blade_speed / its base is
 	# exactly the lever ratio (attributes v4 — reach + stick length), so a
