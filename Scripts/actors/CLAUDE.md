@@ -24,6 +24,17 @@ delegates to.
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
 
+## The puck's tilt and spin are drawn, never simulated
+
+The analytic puck is a flat disc. `PuckSpinRig` gives the drawn one its spin,
+its wobble after a hit and its tumble in the air, reading only the position
+the puck is drawn at and who this peer draws carrying it
+(`PuckController.drawn_carrier`, through `Puck.set_carrier_view`). It writes
+the mesh's local transform on the tick and nothing else, so it needs no wire
+bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
+relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
+nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
+
 ## The goalie draws as one mesh, and its parts stay nodes
 
 `GoalieBodyRig` merges every goalie part wearing an opaque `StandardMaterial3D`
