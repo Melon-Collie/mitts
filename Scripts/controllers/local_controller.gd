@@ -891,6 +891,49 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 			skater.global_position += _replay_collision_result.sep_b
 
 
+# In a reconcile replay the press reads its partner where the host had him at
+# the replayed input's stamp, like the body checks beside it.
+func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
+	if not is_replaying:
+		return super._find_press_partner(host_ts, out)
+	if not _historical_others_provider.is_valid() or skater.is_ghost:
+		return false
+	var my_pos: Vector3 = skater.global_position
+	var my_radius: float = skater.collision_radius()
+	var others: Array = _historical_others_provider.call(skater, host_ts)
+	var best_i: int = -1
+	var best_gap: float = PressRules.CONTACT_SLACK_M
+	for i: int in others.size():
+		var rec: Dictionary = others[i]
+		var other: Skater = rec["skater"]
+		if other == null or rec["ghost"] or other.is_knocked_down \
+				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
+			continue
+		var d: Vector3 = (rec["position"] as Vector3) - my_pos
+		d.y = 0.0
+		var gap: float = d.length() - my_radius - other.collision_radius()
+		if gap < best_gap:
+			best_gap = gap
+			best_i = i
+	if best_i < 0:
+		return false
+	var best: Dictionary = others[best_i]
+	var partner: Skater = best["skater"]
+	out.position = best["position"]
+	out.velocity = best["velocity"]
+	out.radius = partner.collision_radius()
+	out.weight = partner.weight
+	out.cfg = partner.press_cfg
+	out.thrust = partner.press_thrust
+	out.facing = best["facing"]
+	out.intent = best["intent"]
+	out.braking = best["brake"]
+	out.planted = plants_feet(best["shot_state"])
+	out.posture = SkaterMovementRules.posture_of(best["stance"], best["hit"])
+	out.stagger = best["stagger"]
+	return true
+
+
 func on_puck_picked_up_network(settle_until_ms: int = 0) -> void:
 	super.on_puck_picked_up_network(settle_until_ms)
 	_claim_cooldown = 0.0

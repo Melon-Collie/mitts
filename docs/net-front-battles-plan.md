@@ -1,6 +1,7 @@
 # Net-front battles — the press, and retiring the cross-check
 
-Status: **Phase 0 (measurement) done; nothing built.** Amends the physicality
+Status: **Phase 1 built** (the press, the bots' press and dig-in), playtest
+pending; Phases 2-3 not started. Amends the physicality
 paragraph of `docs/gameplay-design.md` and Phase B of
 `docs/physicality-plan.md` (the cross-check). The stick half of the battle is
 `docs/defensive-play-plan.md`'s tie; the crease itself (jams, stuffs, wraps)
@@ -24,7 +25,11 @@ is `docs/net-play-plan.md`. Each phase is its own PR and playtest.
 - **The press is the cross-check's model run continuously.** What the
   cross-check priced over one 0.1 s push (the pusher's stride on the man's mass,
   less what his edges and his own stride hold) is priced every tick a pair is
-  pressed. `CrossCheckRules.edge_accel` and `drive_accel` are its first terms.
+  pressed.
+- **Decided with the user:** an uncommitted body drives at the passive share,
+  braking is the anchor (Shift alone holds only across the blades), the anchor
+  is sized for weight to decide at the margin, and a press moves a man no faster
+  than its winner skates.
 - **The bots learn the press in the phase that adds it** (the rule from
   `docs/defensive-play-plan.md`).
 
@@ -92,9 +97,55 @@ And the cross-check buys less than skating in: 1.2 m from behind against a man
 who does nothing, nothing from the side, nothing against a stop. Its one unique
 effect is the stagger.
 
-## Phase 1 — the press
+## Phase 1 — the press (built)
 
-### The model
+### As built
+
+- **It lives in the movement step, not the resolver.** Each body's
+  `SkaterController._apply_press` lays the pair's acceleration along the
+  normal over what `_apply_movement` did along it, from the velocity the tick
+  started with; both bodies lay the same one from the same replicated state, so
+  the pair moves as one with no stored history. The resolver still separates the
+  overlap and lands any check, so there is no regime switch: a press is any
+  contact both bodies drive into, at any closing speed.
+- **The partner is the nearest body within `PressRules.CONTACT_SLACK_M`.** A
+  third body on the pair is not modelled. Knocked-down, ghosted and pinned
+  bodies, planted shot states and contact-suspended phases press nothing.
+- **What a partner reads of a body** is published on its `Skater`: the movement
+  config and base thrust of its build (`press_cfg`, `press_thrust`), and its
+  stance and stagger mirrored every tick (`in_stance`, `stagger_left`).
+- **The stride's power limit and the glide's friction** go into the drive and the
+  hold. Without them a man who does nothing reached 10 m/s in 2 s; with them,
+  6 m/s.
+- **`STANCE_ANCHOR` is 1.3, not 1.5.** The builds' mass multiplier is
+  compressed (235 lb is 1.095) and heavier builds have less thrust and stop, so
+  at 1.5 no build moved any anchored man. 1.3 keeps the ladder the starting
+  value was chosen for.
+- **The cross-check is untouched**; its terms did not move into `PressRules`,
+  which has its own.
+- **The bots' read** (`AIPressRead`) prices the press over `READ_S` (1 s) at
+  `STEP_IN_M` (0.3 m) of the man. A planted man reads as standing on his edges:
+  the domain does not name shot states. The loose-puck race stays the
+  cross-check's, because committing would lift the bot's stick off the puck.
+
+What it does on the live rig (`tests/instruments/controllers/test_net_front_press.gd`,
+two seconds, 201 lb each unless noted):
+
+| man | attacker | gave 2 s (m) |
+|---|---|---|
+| does nothing, from behind | skates in | 2.31 |
+| does nothing, from behind | skates in, Ctrl | 7.46 |
+| skates back into him | skates in, Ctrl | 5.66 |
+| skates back into him | skates in | 0.00 |
+| Space | skates in, Ctrl | 1.12 |
+| Space + Shift | skates in, Ctrl | 0.00 |
+| Space, from the side | skates in, Ctrl | 0.97 |
+| does nothing, from the side | skates in, Ctrl | 0.62 |
+| Shift, from the side | skates in, Ctrl | 0.00 |
+| 170 lb, Space + Shift | 235 lb, Ctrl | 0.33 |
+| 235 lb, Space + Shift | 170 lb, Ctrl | 0.00 |
+
+### The model (as designed)
 
 A pair is **pressed** while their discs overlap and the closing impulse would
 leave each body's Δv under `BodyCheckRules.Config.min_impulse` (0.6 m/s, a bump
@@ -118,7 +169,7 @@ hold_X  = braking:  stop_decel_X × anchor_X × stagger_grip_X
   them the edges bite; along them they glide. This is the cross-check's
   `|sin θ|` term.
 - Braking is the stop: the blades turned across, so it holds from any side.
-  `anchor_X` is 1 upright and `PRESS_STANCE_ANCHOR` in the stance — the wider,
+  `anchor_X` is 1 upright and `PressRules.STANCE_ANCHOR` in the stance — the wider,
   lower base takes more edge before it slides. A shuffle is braking, so a
   screener stepping sideways to stay in the lane keeps his anchor.
 
@@ -156,25 +207,26 @@ is moved slowly just past his hold, never snapped.
 - **Everything it reads replicates already:** velocity, facing, `move_intent`,
   `brake_intent`, `stance_active` and `hit_committed` (intent byte bits 5 and
   6), the stagger timer. No wire change.
-- **It runs inside the shared contact resolver**, from both bodies' replicated
-  state, under the existing aggressor gate, so the host, the local prediction
-  and reconcile replay compute the same pair (`Scripts/networking/CLAUDE.md`,
-  body-check contact geometry). It is a pure function of that state, replay-safe.
+- **It runs in each body's movement step**, from both bodies' replicated
+  state, so the host, the local prediction and reconcile replay compute the same
+  pair; the replay reads the partner where the host had him
+  (`LocalController._find_press_partner`, `Scripts/networking/CLAUDE.md`). Every
+  body's intent is wire-quantized first, so the host's raw stick and a client's
+  decoded one drive the same push.
 - **Prediction is no worse than contact today.** A local man pressed by a remote
   reads the remote's forward-predicted intent; a change of intent mispredicts for
   a round trip, exactly as a remote skating into him does now. The press adds no
   coupling the tie ruled out: no stick is dragged, and only the bodies the
   resolver already moves are moved.
-- **Check a native twin.** `SkaterCollisionRules` has none today; confirm before
-  building that the native movement kernel does not duplicate contact.
+- **No native twin.** The press runs in GDScript after the (native or not)
+  movement kernel, which does not model contact.
 
 ### Rules
 
-- New `Scripts/domain/rules/press_rules.gd`: `is_pressed`, `drive`, `hold`,
-  `pair_accel`. `CrossCheckRules.edge_accel` and `drive_accel` move into it
-  (the cross-check calls them from there until Phase 3).
-- `SkaterCollisionRules.resolve` takes the press result for the pressed regime;
-  the overlap is still separated exactly, so bodies never interpenetrate.
+- `Scripts/domain/rules/press_rules.gd`: `drive`, `hold`, `pressing`,
+  `pair_accel`, laid by `SkaterController._apply_press` (see *As built*).
+- The contact resolver is unchanged: it still separates the overlap exactly, so
+  bodies never interpenetrate.
 
 ### Bots
 
@@ -237,31 +289,30 @@ After Phase 1's playtest, and only if the press covers the net front:
 
 | piece | file |
 |---|---|
-| press math | new `Scripts/domain/rules/press_rules.gd` |
-| contact regime | `Scripts/domain/rules/skater_collision_rules.gd`, `Skater._resolve_player_collisions` |
-| bot press and dig-in | a collaborator under `Scripts/ai/` replacing `SkaterAgentCrossCheck` |
+| press math | `Scripts/domain/rules/press_rules.gd` |
+| the pair's motion | `SkaterController._apply_press`, `_find_press_partner` (`LocalController`'s in replay) |
+| bot press and dig-in | `Scripts/ai/skater_agent_press.gd`, `Scripts/domain/ai/press_read.gd` |
+| live-rig tests | `tests/harness/press_harness.gd`, `tests/unit/controllers/test_press.gd`, *slow* `tests/slow/controllers/test_press_table.gd` |
 | measurement | `tests/instruments/controllers/test_net_front_press.gd` |
 
-## Open questions
+## Open questions (decided for Phase 1)
 
-1. **Does an uncommitted skater drive at all?** Recommended: at the passive share
+1. **Does an uncommitted skater drive at all?** Decided: at the passive share
    (0.3), so Ctrl is what moves a man and skating into a teammate or an opponent
    does not shove him along. The alternative, full stride for everyone, is
    simpler physics but makes Ctrl meaningless in contact.
-2. **Is braking the anchor, or Shift alone?** Recommended: braking. It is
+2. **Is braking the anchor, or Shift alone?** Decided: braking. It is
    already the strongest hold, a shuffle keeps it, and "dig in" reads. Shift
    alone then holds only across the blades.
-3. **How strong is the anchor?** `PRESS_STANCE_ANCHOR` 1.5 holds an equal man
-   with a margin of 3 m/s² and lets 235 lb creep 170 lb. 2.0 (the stance's
-   turning grip) makes an anchored man immovable by any build.
-4. **Does a press move a man faster than he could skate?** It cannot today (the
-   pair shares one stride); confirm that is the feel, rather than a defender
-   being able to bulldoze a man to the corner.
+3. **How strong is the anchor?** Decided: weight decides at the margin
+   (`STANCE_ANCHOR` 1.3, see *As built*).
+4. **Does a press move a man faster than he could skate?** Decided: no. The pair
+   shares one stride, capped at the winner's top speed and power-limited.
 
 ## Starting values
 
 | constant | value | why |
 |---|---|---|
-| `PRESS_STANCE_ANCHOR` | 1.5 | the stance's base over the upright one for the stop's edges; an equal man held with margin, weight deciding at the margin |
+| `PressRules.STANCE_ANCHOR` | 1.3 | the stance's base over the upright one for the stop's edges; an equal man held, weight deciding at the margin (1.5 as designed; see *As built*) |
 | uncommitted drive share | 0.3 | `Skater.hit_passive_transfer_mult`, the same share an uncommitted bump transfers |
 | press onset | `min_impulse` (0.6 m/s Δv) | below it a contact cannot stagger, so it is a press |

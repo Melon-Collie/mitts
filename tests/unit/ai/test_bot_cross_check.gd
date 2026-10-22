@@ -3,8 +3,9 @@ extends GutTest
 # The bots' cross-check (SkaterAgentStateMachine.apply_cross_check): a coverer
 # shoves the man he covers off our goalie's sightline when an aim would clear it,
 # and aims it there on the cursor; a bot shoves the man who beats it to a loose
-# puck when the push turns the race; a screener loads up against a defender who could shove him. Never while
-# the stick is busy, from a rearming throw, as a carrier, or on the beginner tier.
+# puck when the push turns the race. Never while the stick is busy, from a
+# rearming throw, as a carrier, or on the beginner tier. A screener's answer is
+# the press's dig-in (test_bot_press.gd).
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
@@ -116,21 +117,3 @@ func test_a_loose_puck_race_the_shove_turns() -> void:
 	sm.apply_cross_check(input, s)
 	assert_false(input.stick_check_pressed)
 
-
-func test_a_screener_loads_up_against_a_shove() -> void:
-	var s := WorldSnapshot.new()
-	s.puck_state = PuckNetworkState.new()
-	s.puck_state.position = Vector3(0.0, 0.02, -_goal_z + 10.0)
-	s.puck_state.carrier_peer_id = MATE_ID
-	s.skater_states[MATE_ID] = _state(s.puck_state.position, Vector2(0.0, -1.0))
-	# Us in front of their goalie (they defend -z), a defender beside us facing us.
-	s.skater_states[SELF_ID] = _state(Vector3(0.0, 0.85, -_goal_z + 3.0), Vector2(0.0, 1.0))
-	s.skater_states[OPP_ID] = _state(Vector3(-0.75, 0.85, -_goal_z + 3.0), Vector2(1.0, 0.0))
-	s.goalie_states[1] = _goalie(-_goal_z + 0.6)
-	var input := InputState.new()
-	sm.apply_cross_check(input, s)
-	assert_true(input.stance_held)
-	sm._protects_the_puck = false
-	input = InputState.new()
-	sm.apply_cross_check(input, s)
-	assert_false(input.stance_held, "the beginner tier does not read it")

@@ -5357,7 +5357,8 @@ func get_state_delayed(delay_seconds: float, out: WorldSnapshot = null) -> World
 	return _state_buffer_manager.get_state_at(ts, out)
 
 
-# Historical {skater, position, velocity, hit, ghost} for every skater EXCEPT
+# Historical {skater, position, velocity, hit, puck, ghost, and the press's
+# shot_state, facing, intent, brake, stance, stagger} for every skater EXCEPT
 # `exclude_skater` at `host_ts`, sampled from each remote's interpolation buffer.
 # Wired to the local player's LocalController as the reconcile replay's
 # body-check re-resolution source (Slice C) — it re-derives contact against where
@@ -5402,6 +5403,12 @@ func _sample_historical_others(exclude_skater: Skater, host_ts: float) -> Array:
 		entry["hit"] = state.hit_committed
 		entry["puck"] = SkaterStateMachine.state_has_puck(state.shot_state)
 		entry["ghost"] = state.is_ghost
+		entry["shot_state"] = state.shot_state
+		entry["facing"] = state.facing
+		entry["intent"] = state.move_intent
+		entry["brake"] = state.brake_intent
+		entry["stance"] = state.stance_active
+		entry["stagger"] = state.stagger_timer
 		_hist_others_scratch.append(entry)
 	return _hist_others_scratch
 

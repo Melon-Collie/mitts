@@ -302,10 +302,18 @@ the sightline the shortest way, or away from the puck, and turned off that by
 30° and 60° either side (`aim_turn`). A push across a man's blades meets his
 edges (doubled if he is loaded low) and one along them moves him furthest, so
 the best aim trades the two and the tries sample it. When no try clears the
-screen, he does not throw it. It rides `check_aggression` (zero on Easy). A
-screener in their end answers it: with a defender who could reach him at any aim
-the defender can turn to, he loads up (the stance), the
-`protects_the_puck` gate.
+screen, he does not throw it. It rides `check_aggression` (zero on Easy).
+
+**Leaned on the man, the coverer presses instead** (`AIPressRead`, applied by
+`SkaterAgentPress` ahead of the cross-check, which then throws nothing). Within
+`STEP_IN_M` of the man who screens our goalie, he holds Ctrl and drives into him
+when the pair's motion the host would lay (`PressRules` on the man's replicated
+facing, posture, brake, stagger and intent) moves him off the sightline within
+`READ_S`. The push runs along the line through the man, so it clears a screen
+only from the side that moves him off it; getting to that side is the role's.
+A held tie keeps its stick through the press. It rides `check_aggression`. A
+screener in their end with a defender on him digs in, braking in the stance,
+whose anchored stop holds an equal man's drive: the `protects_the_puck` gate.
 
 ### The three facts a station reads, and the one that stays unread
 

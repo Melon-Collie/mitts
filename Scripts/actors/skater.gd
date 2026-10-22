@@ -498,11 +498,20 @@ var current_shot_state: int = 0:
 # Movement INTENT — the raw WASD vector (world frame) and brake hold, stamped
 # per tick by whichever controller simulates this skater (local input, bot AI,
 # host-side client sim) and decoded from the wire for client-rendered remotes;
-# same pattern as current_shot_state. Cosmetic-only consumers (the gait) read
-# what the player is TRYING to do — crossover intent, deliberate hockey stop,
-# no-keys glide — a beat before velocity responds.
+# same pattern as current_shot_state. The gait reads what the player is TRYING
+# to do — crossover intent, deliberate hockey stop, no-keys glide — a beat
+# before velocity responds, and a press partner reads how he drives and digs in
+# (SkaterController._apply_press).
 var move_intent: Vector2 = Vector2.ZERO
 var brake_intent: bool = false
+# What a press partner reads of this body that its controller owns: the
+# movement config and base thrust of its build (published when the config is
+# built), and its stance and stagger, mirrored every tick by whichever controller
+# simulates it or decodes it (PressRules).
+var press_cfg: SkaterMovementRules.MovementConfig = null
+var press_thrust: float = 0.0
+var in_stance: bool = false
+var stagger_left: float = 0.0
 # True while this skater is one of the two players taking the draw, set by
 # PhaseCoordinator at every faceoff placement from the record's team slot (C).
 # Cosmetic-only: it deepens the gait's ready stance into the crouch a centre
@@ -597,6 +606,17 @@ var _collision_result: SkaterCollisionRules.Result = SkaterCollisionRules.Result
 
 func set_skater_collision_provider(provider: Callable) -> void:
 	_skater_collision_provider = provider
+
+
+# The skaters this one's contact resolves against (the provider's cached list),
+# empty without a provider. Read-only: the list is shared.
+const _NO_OTHERS: Array = []
+
+func contact_others() -> Array:
+	if not _skater_collision_provider.is_valid():
+		return _NO_OTHERS
+	var others: Array = _skater_collision_provider.call()
+	return others if others != null else _NO_OTHERS
 
 
 # Live (cached) goalie pose list — one Dictionary per goalie with

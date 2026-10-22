@@ -399,7 +399,7 @@ func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 # body checks against the host's authoritative positions rather than replaying a
 # stale recorded impulse, so replay matches host authority. Returns a
 # shared scratch (read it before the next call) with position / velocity /
-# brake_intent, or null when the buffer can't bracket the time (warmup / gap), in
+# brake_intent and what a press reads, or null when the buffer can't bracket the time (warmup / gap), in
 # which case the caller skips the pair. Separate bracket scratch from _interpolate
 # so a reconcile-time sample can't clobber the live render bracket.
 var _sample_bracket: BufferedStateInterpolator.BracketResult = BufferedStateInterpolator.BracketResult.new()
@@ -441,6 +441,11 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		# resolves contacts against ghosted skaters the host skipped, a reconcile
 		# snap-loop for as long as the overlap persists.
 		_sample_scratch.is_ghost = newest.is_ghost
+		# What a press against him reads (SkaterController._apply_press).
+		_sample_scratch.facing = newest.facing
+		_sample_scratch.move_intent = newest.move_intent
+		_sample_scratch.stance_active = newest.stance_active
+		_sample_scratch.stagger_timer = newest.stagger_timer
 		_predict_sample_forward(newest, bracket.extrapolation_dt)
 	else:
 		var f: SkaterNetworkState = bracket.from_state
@@ -455,6 +460,10 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		# Discrete like brake_intent — the at/before-host_time sample, so a
 		# mid-window ghost transition replays the way the host resolved it.
 		_sample_scratch.is_ghost = f.is_ghost
+		_sample_scratch.facing = f.facing
+		_sample_scratch.move_intent = f.move_intent
+		_sample_scratch.stance_active = f.stance_active
+		_sample_scratch.stagger_timer = f.stagger_timer
 	return _sample_scratch
 
 
@@ -819,6 +828,8 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# only the simulating machine resolves (_apply_movement) — mirror it from
 	# the replicated bit so another player's stance reads on this machine.
 	stance_active = state.stance_active
+	skater.in_stance = stance_active
+	skater.stagger_left = stagger_timer
 	# Bottom hand is purely reactive to top_hand + blade and needs no network
 	# state of its own; it's posed once per rendered frame in _render_pose_update
 	# (Skater._process) along with the gait, not here.

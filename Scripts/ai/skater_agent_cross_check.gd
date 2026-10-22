@@ -6,9 +6,8 @@ extends RefCounted
 # - covering a man at our net who hides the release from our goalie, shove him
 #   off the sightline when an aim the chest can turn to clears it;
 # - on a loose puck, shove the man in reach who beats us to it, away from it,
-#   when an aim turns the race;
-# - screening their goalie, set against a defender who could shove us (the
-#   stance: across the blades the edges hold twice as hard).
+#   when an aim turns the race.
+# A man we are leaned on is the press's (SkaterAgentPress), which runs first.
 # The press is a human's chord, Ctrl held and the stick button pressed, with its
 # aim on the cursor. A stick already
 # busy — a lift, a tie, a pin reach, a block — throws nothing, and neither does a
@@ -31,10 +30,9 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
 
 
 # `locked_man_pid` is the man our role covers (-1 for none); `check_aggression`
-# the tier's PACE physicality knob (0 never shoves); `sets_against_shoves` the
-# cognition gate on the screener's answer.
+# the tier's PACE physicality knob (0 never shoves).
 func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
-		locked_man_pid: int, check_aggression: float, sets_against_shoves: bool) -> void:
+		locked_man_pid: int, check_aggression: float) -> void:
 	if snapshot == null or snapshot.puck_state == null:
 		return
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
@@ -52,9 +50,6 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 		input.stick_check_pressed = true
 		input.mouse_world_pos = me.position \
 				+ Vector3(aim.x, 0.0, aim.y) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
-		return
-	if sets_against_shoves:
-		_set_against_a_shove(input, snapshot, me, own_goal_dir)
 
 
 # The aim `body`'s chest can turn to nearest `want` (unit XZ).
@@ -152,23 +147,3 @@ func _race_aim(snapshot: WorldSnapshot, me: SkaterNetworkState) -> Vector2:
 				return aim
 	return Vector2.ZERO
 
-
-# Screening their goalie with an opponent in reach who has us in front of him and
-# his stick free: load up, so a push across our blades meets doubled edges.
-func _set_against_a_shove(input: InputState, snapshot: WorldSnapshot,
-		me: SkaterNetworkState, own_goal_dir: float) -> void:
-	if own_goal_dir * me.position.z > -GameRules.BLUE_LINE_Z or input.hit_held:
-		return
-	var their_goalie: GoalieNetworkState = snapshot.goalie_states.get(1 - _team_id)
-	if their_goalie == null or not AICrossCheckRead.hides_release(me.position,
-			Vector3(their_goalie.position_x, 0.0, their_goalie.position_z),
-			snapshot.puck_state.position, _screen_cfg):
-		return
-	for pid: int in snapshot.skater_states:
-		if _team_id_by_peer.get(pid, -1) == _team_id:
-			continue
-		var opp: SkaterNetworkState = snapshot.skater_states[pid]
-		if opp.cross_check_phase == CrossCheckRules.Phase.IDLE and not opp.is_ghost \
-				and _reachable(opp, me):
-			input.stance_held = true
-			return

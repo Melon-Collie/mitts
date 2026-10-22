@@ -1492,6 +1492,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	_cached_slapper_cfg = null
 	_skating.native_reconfigure()
 	skater.apply_appearance(attrs)
+	_movement_config()
 
 
 func _capture_attribute_bases() -> void:
@@ -1786,6 +1787,9 @@ func _process_input(input: InputState, delta: float) -> void:
 
 	var tick_start_velocity: Vector3 = skater.velocity
 	_apply_movement(input, delta)
+	skater.in_stance = stance_active
+	skater.stagger_left = stagger_timer
+	_apply_press(input, delta, tick_start_velocity)
 	# The frame this tick's IK and twist solve in tilts with the fall: every tick
 	# lays its own, replay included (Scripts/networking/CLAUDE.md).
 	_apply_fall_tilt(knockdown_getup_left())
@@ -3399,11 +3403,7 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		skater.velocity = skater.velocity.move_toward(Vector3.ZERO, knockdown_friction * delta)
 		return
 
-	var move_state: SkaterStateMachine.State = _sm.get_state()
-	# Locomotion is suppressed during a planted slap windup / block stance.
-	var locomotion_suppressed: bool = \
-			move_state == State.SLAPPER_CHARGE_WITH_PUCK or move_state == State.SHOT_BLOCKING \
-			or move_state == State.ONE_TIMER_RETENTION
+	var locomotion_suppressed: bool = plants_feet(_sm.get_state())
 	# The commit wins over the stance: being caught upright is its whole cost.
 	# Mirrored to the skater so the collision resolver reads full-vs-passive
 	# transfer. Deterministic from the input, so reconcile replay reproduces both.
@@ -3444,6 +3444,117 @@ func _apply_movement(input: InputState, delta: float) -> void:
 				has_puck, input.brake, delta, cfg, posture, grip_scale)
 	_apply_pin_slide_cap()
 
+# Locomotion is suppressed during a planted slap windup, the block stance and a
+# one-timer's retention: the feet are planted.
+static func plants_feet(state: int) -> bool:
+	return state == State.SLAPPER_CHARGE_WITH_PUCK or state == State.SHOT_BLOCKING \
+			or state == State.ONE_TIMER_RETENTION
+
+
+# ── The press ────────────────────────────────────────────────────────────────
+# Pressed against another body, this one's movement along the contact normal is
+# the pair's (PressRules): laid over what _apply_movement did along it, from the
+# velocity the tick started with. Both bodies of a pair lay the same acceleration
+# from the same replicated state, so the pair moves as one; the contact resolver
+# still separates the overlap and lands any check. Not modelled: a third body on
+# the pair (the nearest partner presses), and the forward prediction of a
+# pressed remote (it integrates his own movement).
+
+# The partner's state the press reads: live from his skater, or in a reconcile
+# replay from where the host had him (LocalController).
+class PressPartner:
+	var position: Vector3 = Vector3.ZERO
+	var velocity: Vector3 = Vector3.ZERO
+	var radius: float = 0.0
+	var weight: float = 1.0
+	var cfg: SkaterMovementRules.MovementConfig = null
+	var thrust: float = 0.0
+	var facing: Vector2 = Vector2(0.0, -1.0)
+	var intent: Vector2 = Vector2.ZERO
+	var braking: bool = false
+	var planted: bool = false
+	var posture: int = SkaterMovementRules.Posture.UPRIGHT
+	var stagger: float = 0.0
+
+var _press_partner: PressPartner = PressPartner.new()
+
+
+func _apply_press(input: InputState, delta: float, tick_start_velocity: Vector3) -> void:
+	if skater.is_knocked_down or skater.is_ghost or skater.pin_role != BoardPinRules.Role.NONE \
+			or plants_feet(_sm.get_state()) or delta <= 0.0:
+		return
+	if skater.contact_suspended_provider.is_valid() and bool(skater.contact_suspended_provider.call()):
+		return
+	var p: PressPartner = _press_partner
+	if not _find_press_partner(input.host_timestamp, p):
+		return
+	var d: Vector3 = p.position - skater.global_position
+	d.y = 0.0
+	var dist: float = d.length()
+	if dist < 0.0001:
+		return
+	var n3: Vector3 = d / dist
+	var n := Vector2(n3.x, n3.z)
+	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
+	var bc: BodyCheckRules.Config = _body_check_config()
+	var posture: int = SkaterMovementRules.posture_of(stance_active, hit_active)
+	var facing: Vector2 = skater.get_facing()
+	var u: float = tick_start_velocity.dot(n3)
+	var drive_self: float = PressRules.drive(cfg, thrust, posture, input.brake, false,
+			BodyCheckRules.thrust_mult(stagger_timer, bc), facing,
+			WorldStateCodec.quantize_move_intent(skater.move_intent), n, u)
+	var drive_other: float = PressRules.drive(p.cfg, p.thrust, p.posture, p.braking, p.planted,
+			BodyCheckRules.thrust_mult(p.stagger, bc), p.facing,
+			WorldStateCodec.quantize_move_intent(p.intent), -n, -u)
+	if not PressRules.pressing(drive_self, drive_other):
+		return
+	var hold_self: float = PressRules.hold(cfg, posture, input.brake, false,
+			BodyCheckRules.grip_mult(stagger_timer, bc), facing, n, u)
+	var hold_other: float = PressRules.hold(p.cfg, p.posture, p.braking, p.planted,
+			BodyCheckRules.grip_mult(p.stagger, bc), p.facing, n, u)
+	var u_new: float = u + delta * PressRules.pair_accel(skater.weight, drive_self, hold_self,
+			p.weight, drive_other, hold_other, u, delta)
+	# The pair goes no faster than its winner skates: a press is a stride.
+	if absf(u_new) > absf(u):
+		u_new = clampf(u_new, -maxf(p.cfg.max_speed, absf(u)), maxf(cfg.max_speed, absf(u)))
+	skater.velocity += n3 * (u_new - skater.velocity.dot(n3))
+
+
+# The nearest body this one is pressed against (within PressRules.CONTACT_SLACK_M
+# of touching), filled into `out`; false for none. `_host_ts` is the input's
+# stamp, which the reconcile replay samples the partner at.
+func _find_press_partner(_host_ts: float, out: PressPartner) -> bool:
+	var my_pos: Vector3 = skater.global_position
+	var my_radius: float = skater.collision_radius()
+	var best: Skater = null
+	var best_gap: float = PressRules.CONTACT_SLACK_M
+	for other: Skater in skater.contact_others():
+		if other == null or other == skater or other.is_ghost or other.is_knocked_down \
+				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
+			continue
+		var d: Vector3 = other.global_position - my_pos
+		d.y = 0.0
+		var gap: float = d.length() - my_radius - other.collision_radius()
+		if gap < best_gap:
+			best_gap = gap
+			best = other
+	if best == null:
+		return false
+	out.position = best.global_position
+	out.velocity = best.velocity
+	out.radius = best.collision_radius()
+	out.weight = best.weight
+	out.cfg = best.press_cfg
+	out.thrust = best.press_thrust
+	out.facing = best.get_facing()
+	out.intent = best.move_intent
+	out.braking = best.brake_intent
+	out.planted = plants_feet(best.current_shot_state)
+	out.posture = SkaterMovementRules.posture_of(best.in_stance, best.hit_committed)
+	out.stagger = best.stagger_left
+	return true
+
+
 # Movement configs are cached — _apply_movement runs every physics tick (and
 # once per reconcile-replayed input), and the source exports change only in
 # apply_attributes. Same pattern as the goalie controller's cached rule
@@ -3461,6 +3572,9 @@ var _native_block_move: RefCounted = null
 func _movement_config() -> SkaterMovementRules.MovementConfig:
 	if _cached_move_cfg == null:
 		_cached_move_cfg = _build_movement_config()
+		if skater != null:
+			skater.press_cfg = _cached_move_cfg
+			skater.press_thrust = thrust
 		if ClassDB.class_exists(&"NativeSkaterMovement"):
 			_native_move = ClassDB.instantiate(&"NativeSkaterMovement")
 			var missing: String = _native_move.configure(_cached_move_cfg)

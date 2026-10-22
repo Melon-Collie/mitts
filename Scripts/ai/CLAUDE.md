@@ -25,7 +25,8 @@ passed per call, and only its own fields written.
 | `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
 | `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
-| `SkaterAgentCrossCheck` | the cross-check on a screen or a loose-puck race, and a screener's set against one |
+| `SkaterAgentPress` | the press on a screen we are leaned on, and a screener digging in against a defender on him |
+| `SkaterAgentCrossCheck` | the cross-check on a screen or a loose-puck race |
 | `SkaterAgentReception` | reading an incoming feed: is it ours, the blade gate, the squared or wall-kill stance, and whether it is a shot reception |
 | `SkaterAgentOneTimer` | the ready finisher's settle anchor on the feed line, the slapper zone, the feed's remaining flight, the press square-up |
 
@@ -52,12 +53,13 @@ Adding a behaviour is four steps:
 | any press state | CARRY | the release fires, or the press bails |
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 
-After dispatch, `SkaterAgent.tick` runs five per-tick passes that may overwrite
+After dispatch, `SkaterAgent.tick` runs six per-tick passes that may overwrite
 the dispatched input: the stick lift, the stand-up (`apply_stand_up`, ahead of
 the board play so a check it starts at the wall can become a pin), board play
 (`apply_board_play`), the shot
-block (`SkaterAgentShotBlock`) and the cross-check (`SkaterAgentCrossCheck`, last,
-so a stick or a body the others took throws nothing). The offside brake (`apply_offside_guard`)
+block (`SkaterAgentShotBlock`), the press (`SkaterAgentPress`) and the
+cross-check (`SkaterAgentCrossCheck`, last, so a stick or a body the others took
+throws nothing; it is skipped on a tick the press took the body). The offside brake (`apply_offside_guard`)
 runs after all of them as the last write to the move, so no writer — the rolled
 carry inside dispatch, the pinned slide after it — can carry a bot over the line
 (`test_agent_offside_guard.gd`).
