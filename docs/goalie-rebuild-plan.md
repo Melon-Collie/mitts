@@ -1,14 +1,12 @@
 # Goalie rebuild — findings and a proposed design (October 2026)
 
-Status: **proposal, not agreed.** Open questions for the user are in §7. Nothing
-here is implemented yet.
-
-**Revision 2, from user feedback:**
-- **A new goalie model** is in scope: an articulated body with skates, toe
-  bridges, real pads on real legs, and so on (§3.5).
-- **The bots are not a reliable yardstick right now.** They are mid-change,
-  especially on breakaways. So the scoreboard is **bot-free** (§5, Phase 0), and
-  the bot-vs-goalie numbers below are context only.
+Status: **agreed design; implementation not started.** The user's decisions
+are in §7. In short:
+- a new articulated goalie, with skates, toe bridges and real pads on real legs
+  (§3.5);
+- he reads only what a goalie can see (§3.1);
+- a bot-free scoreboard, because the bots are mid-change (§5, Phase 0);
+- the old goalie is deleted once the new one plays (§5).
 
 This document answers three things:
 
@@ -262,7 +260,7 @@ The view is filled once per tick and is plain data:
 
   This is how it works on real ice. It also applies equally to humans and
   bots, because both are read through the same drawn pose.
-- **The old goalie keeps its cursor read** until it is retired (§5, Phase 5).
+- **The old goalie keeps its cursor read** until it is deleted (§5, Phase 4).
   The decision applies to the new goalie only.
 
 ### 3.2 Threat model: what might happen, and when
@@ -336,6 +334,14 @@ That is why his poses read wrong, and why a gap can sit unnoticed between the
 two pucks' widths. **Replace him with an articulated body**, built in code the
 way the skater is (`SkaterBodySkeleton`, `LegIK`, `TwoBoneIK`, `BodyZonePaint`,
 the skate assembly in `SkaterMeshBuilder`). Same low-poly faceted art style.
+
+**One build: 6'4" (1.93 m) before skates.**
+- Segment lengths come from standard stature ratios (thigh, shin, trunk, arm
+  and forearm as fractions of height).
+- The skate adds its boot sole and holder underneath.
+- The pads are sized to that leg the way real pads are fitted: knee centred on
+  the knee stack, the boot over the skate, the thigh rise above the knee.
+- Pad designs stay plain, the kit's one `goalie_pads` colour, for now.
 
 **Skeleton.** Each joint has the range a goalie actually has:
 
@@ -462,7 +468,7 @@ A property test asserts the ladder order on the scoreboard (§5, Phase 0).
   against it, and the bots are mid-change too. So:
   - the goalie work does not gate on the bots;
   - switching the default goalie is the one step that needs a field
-    regeneration and a word with the bot work (§5, Phase 5).
+    regeneration and a word with the bot work (§5, Phase 3).
 - **Shot-field churn.** The fingerprint hashes the **full text** of every
   `goalie_*.gd`, so even a comment edit forces a regeneration. That is why the
   stale comments found during this audit are listed in §8 rather than fixed
@@ -480,11 +486,18 @@ A property test asserts the ladder order on the scoreboard (§5, Phase 0).
 
 ## 5. Phases
 
-The new goalie is a **separate actor and brain**: `GoalieV2` and its
-collaborators, selected in `ActorSpawner`. The old goalie stays complete,
-playable and the default until the new one beats it on the scoreboard and in
-your playtest. No adapter maps the old brain onto the new body: the two bodies
-share no parts, and an adapter would be thrown away.
+The new goalie is a **new actor and brain**, written as new files outside the
+shot field's `goalie_*` fingerprint glob (e.g. `Scripts/goalie/`). That keeps
+the old keeper's field current while the new one is built. No adapter maps the
+old brain onto the new body: the two bodies share no parts, and an adapter
+would be thrown away.
+
+**There is no long side-by-side.**
+- **Offline:** as soon as the new goalie plays (end of Phase 3), he becomes the
+  goalie. Tuning continues on him rather than on a comparison.
+- **Online:** the old goalie survives only until the new wire lands
+  (Phase 4), so online matches never lose their goalie in the gap. Then the old
+  goalie is deleted.
 
 Each phase leaves the suite green and the game playable.
 
@@ -504,8 +517,10 @@ Each phase leaves the suite green and the game playable.
     - a rebound put-back.
   - **Coverage per pose:** straight-on, and from the dot and the wide angle.
 - The old goalie's numbers go in as the baseline snapshot.
-- A tier-order property.
-- Targets agreed with you (§7 Q1).
+- A tier-order property: the only hard assertion.
+- **No targets yet.** The scoreboard records where each goalie stands, and
+  targets come once the new one is playable and there is something to tune
+  toward.
 
 **Phase 1: the new body, posed statically.**
 - Skeleton, gear meshes, bone-hung collision boxes, and the pose set (§3.5).
@@ -525,22 +540,31 @@ Each phase leaves the suite green and the game playable.
 **Phase 3: the brain.**
 - Perception → threat model → planner → reflex (§3.1–3.4).
 - Puck handling: cover, sweep, catch, behind-net play.
-- Scored on the Phase 0 scoreboard against the old goalie.
+- Scored on the Phase 0 scoreboard against the old goalie's baseline.
+- **The offline switch:**
+  - free play, practice and games against bots use the new goalie;
+  - the shot field is regenerated against him;
+  - `AIGoalieModel` reads his body and coverage function instead of copied
+    constants.
 
-**Phase 4: online.**
-- The pose-parameter wire state (§3.5) and a protocol and replay-format bump.
-- Client rebuild from parameters.
-- Lag compensation.
-- Until this phase the new goalie is selectable **offline only**: free play,
-  practice, and games against bots.
+  The bots then shoot at the keeper they face. Coordinate the timing with the
+  bot work; don't gate on it.
 
-**Phase 5: the switch.**
-- New goalie becomes the default.
-- Shot field regenerated, and `AIGoalieModel` reads the body and coverage
-  function instead of copied constants. Timed with the bot work, not gating
-  it.
-- Old goalie, its controller and its 60-odd tests deleted.
-- `Scripts/controllers/CLAUDE.md`'s goalie half rewritten.
+**Phase 4: online, and the old goalie goes.**
+- The pose-parameter wire state (§3.5), with a protocol and replay-format bump.
+  Old replays stop loading; agreed.
+- Clients rebuild the pose from the parameters.
+- Lag compensation (the release rewind poses the goalie from history).
+- Then delete the old goalie:
+  - the controller and its collaborators;
+  - the pose builder;
+  - `Goalie.tscn`'s collider nodes;
+  - the 60-odd tests that reach into him.
+- `Scripts/controllers/CLAUDE.md`'s goalie half is rewritten to the new
+  shape.
+
+**After:** tune on the new goalie, offline and online, against the scoreboard
+and playtests.
 ---
 
 ## 6. Things found along the way (flagged, not fixed)
@@ -571,34 +595,18 @@ Each phase leaves the suite green and the game playable.
 
 ---
 
-## 7. Open questions for the user
+## 7. Decisions
 
-Answered:
-- **Scope:** brain and body, with a new articulated model.
-- **The bots:** not a yardstick right now; the scoreboard is scripted.
-- **The read:** no cursor. He reads only what a goalie can see (§3.1).
-
-Still open:
-
-1. **Targets.** What should HARD concede on the scripted scoreboard? For
-   example:
-   - the dot-line perfect-aim sweep (the old puck gave 13 of 288 on a held
-     wind-up);
-   - an overall save percentage to aim at (NHL is about .905).
-
-   Should EASY / NORMAL / HARD sit at fixed gaps?
-2. **The wire.** The pose-parameter wire (§3.5) needs a protocol and
-   replay-format bump, so old replays stop loading. Acceptable?
-3. **Offline until Phase 4.** Is it fine for the new goalie to be selectable
-   only offline (free play, practice, games against bots) until its wire state
-   exists?
-4. **The model.**
-   - One goalie build, or attribute-scaled like the skaters (height, weight)?
-   - Pad graphics: today a kit has one `goalie_pads` colour. Do you want
-     painted pad designs (stripes, blocks, team accents) in
-     `data/team_colors.json`, laid flat by `render-kits.sh` like the jerseys?
-   - Anything specific you want the model to have beyond skates, toe bridges,
-     real pads, arm sleeves, and trapper/blocker/mask detail?
+| Question | Decision |
+|---|---|
+| Scope | Brain and body, with a new articulated model (§3.5) |
+| Bots as a yardstick | No. The scoreboard is scripted (§5, Phase 0) |
+| The read | No cursor. He reads only what a goalie can see (§3.1) |
+| Targets | None yet. The scoreboard records, and targets come later |
+| Wire | Change it freely. Old replays may stop loading |
+| The old goalie | Delete him. Switch offline first, online once the wire lands (§5) |
+| Build | One goalie, 6'4" (1.93 m) before skates |
+| Pad graphics | Plain for now. Painted designs are later work |
 
 ---
 
