@@ -109,8 +109,9 @@ const BLADE_THICKNESS_M: float = 0.02
 const PADDLE_LENGTH_M: float = 0.66
 const PADDLE_WIDTH_M: float = 0.0889
 const PADDLE_THICKNESS_M: float = 0.025
-# About 30 cm of shaft shows above the blocker hand.
-const SHAFT_LENGTH_M: float = 0.36
+# The shaft above the paddle: a senior goalie stick is about 46 in from heel to
+# knob, which runs it on 41 cm past the grip, its knob clear of the blocker.
+const SHAFT_LENGTH_M: float = 0.47
 const SHAFT_WIDTH_M: float = 0.03
 # The blocker hand grips the shaft just above the paddle.
 const GRIP_ALONG_STICK_M: float = PADDLE_LENGTH_M + 0.10
