@@ -96,7 +96,7 @@ func test_a_still_spot_is_glided_to_and_stopped_on_in_time() -> void:
 	assert_gt(gliding, 0.1, "the stroke glided on before the stop")
 	assert_almost_eq(Vector2(_motor.x, _motor.z), spot, Vector2.ONE * 1e-4, "on it")
 	assert_lt(past, 1e-4, "no further")
-	var skated: float = KeeperGlide.time_to(0.7, _motor.footwork.t_push_speed, _motor.footwork.accel)
+	var skated: float = KeeperFootwork.push_time(0.7, _motor.footwork.t_push_speed, _motor.footwork.accel)
 	assert_almost_eq(t, skated, 3.0 * DT, "in the glide's time")
 	_checked("a still spot")
 

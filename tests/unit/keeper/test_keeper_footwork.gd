@@ -88,11 +88,36 @@ func test_he_is_set_on_his_spot_in_the_push_rules_time() -> void:
 			_fw = KeeperFootwork.new()
 			_go(kind, dist)
 			var t: float = _run()
-			var rules: float = GoaliePushRules.time_to_set(absf(dist), _fw.top_speed(), _fw.accel)
+			var rules: float = _time_to_set(kind, absf(dist))
 			assert_almost_eq(t, rules, 2.5 * DT, _name(kind, dist))
 			# A T-push's spot comes as a Vector2, in single precision.
 			assert_almost_eq(_at(kind), dist, 1e-6, "%s: on the spot" % _name(kind, dist))
 			assert_eq(_fw.speed, 0.0, "%s: stopped" % _name(kind, dist))
+
+
+# A T-push's push, glide and stop (KeeperFootwork.push_time); the strokes'
+# push and stop (GoaliePushRules').
+func _time_to_set(kind: int, d: float) -> float:
+	if kind == KeeperFootwork.Move.T_PUSH:
+		return KeeperFootwork.push_time(d, _fw.top_speed(), _fw.accel)
+	return GoaliePushRules.time_to_set(d, _fw.top_speed(), _fw.accel)
+
+
+# A T-push carries him: pushed up to what carries him the rest of the way, then
+# ridden on the lead skate at that speed before the edge stop, however short.
+func test_a_t_push_glides_on_its_push_before_the_stop() -> void:
+	for dist: float in [0.4, 1.0, 1.8]:
+		_fw = KeeperFootwork.new()
+		_fw.push_to(Vector2(dist, 0.0))
+		var gliding: float = 0.0
+		var t: float = 0.0
+		while _fw.phase != KeeperFootwork.Phase.SET and t < 3.0:
+			var was: float = _fw.speed
+			_fw.step(DT)
+			t += DT
+			if _fw.phase == KeeperFootwork.Phase.GLIDE and _fw.speed == was:
+				gliding += DT
+		assert_gt(gliding, 0.08, "%.1f m: glided on" % dist)
 
 
 func test_he_never_goes_past_his_top_speed_or_his_spot() -> void:
@@ -135,7 +160,7 @@ func test_a_diagonal_t_push_goes_straight_to_its_spot() -> void:
 			t += DT
 			off_line = maxf(off_line, absf(Vector2(_fw.x, _fw.z).cross(way)))
 			assert_lte(_fw.speed, _fw.t_push_speed + 1e-6)
-		var rules: float = GoaliePushRules.time_to_set(spot.length(), _fw.t_push_speed, _fw.accel)
+		var rules: float = KeeperFootwork.push_time(spot.length(), _fw.t_push_speed, _fw.accel)
 		assert_almost_eq(t, rules, 2.5 * DT, "%s: in its time" % spot)
 		assert_lt(off_line, 1e-5, "%s: never off the straight line to it" % spot)
 		assert_eq(Vector2(_fw.x, _fw.z), spot, "%s: on the spot" % spot)

@@ -193,7 +193,7 @@ func test_a_spot_moved_along_his_push_is_taken_on_without_stopping() -> void:
 		t += DT
 	_motor.go_to(Vector2(2.1, 0.0), 0.0)
 	t += _run_checked("on along")
-	var push: float = GoaliePushRules.time_to_set(2.1, _motor.footwork.t_push_speed, _motor.footwork.accel)
+	var push: float = KeeperFootwork.push_time(2.1, _motor.footwork.t_push_speed, _motor.footwork.accel)
 	assert_almost_eq(t, push + KeeperFootwork.SETTLE_S, 3.0 * DT, "one push's time")
 	assert_almost_eq(_motor.x, 2.1, 1e-4)
 

@@ -367,24 +367,24 @@ func _glides_on(d: float) -> bool:
 
 # How long after a move of `d` at up to `top` m/s sets him on its spot his push
 # leg is still coming back under him, which the next move waits for: its
-# recovery from the push's end, less the stop that followed it. A T-push that
-# reaches its top speed (`glides`) rides its lead skate first and is back
-# already; strokes go on to the stop.
+# recovery from the push's end, less what followed it. A T-push (`glides`)
+# ends its push before the glide and the stop; strokes go on to the stop.
 func _hand_off(d: float, top: float, glides: bool) -> float:
+	if glides:
+		var pushed: float = KeeperFootwork.push_peak(d, top, _footwork.accel) / _footwork.accel
+		return maxf(pushed + KeeperFootwork.RECOVER_S - KeeperFootwork.push_time(d, top, _footwork.accel), 0.0)
 	var ratio: float = GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
 	var peak: float = sqrt(2.0 * _footwork.accel * d / (1.0 + 1.0 / ratio))
 	if peak >= top:
-		if glides:
-			return 0.0
 		peak = top
 	return maxf(KeeperFootwork.RECOVER_S - peak / (_footwork.accel * ratio), 0.0)
 
 
 # Skating `d` to a spot and turning `turn` on the way, from rest: the glide's
-# stroke, glide and stop beside the turn at the pivot's rate. His legs settle
-# into the stance after it, but nothing waits for them.
+# stroke, glide and stop, a T-push's, beside the turn at the pivot's rate. His
+# legs settle into the stance after it, but nothing waits for them.
 func glide_time(d: float, turn: float) -> float:
-	return maxf(KeeperGlide.time_to(d, _footwork.t_push_speed, _footwork.accel), absf(turn) / _pivot_rate)
+	return maxf(_push_time(d), absf(turn) / _pivot_rate)
 
 
 # Footwork's time, with the stop settled out of him at its end.
@@ -407,7 +407,7 @@ func _slides_time(d: float, from_feet: bool) -> float:
 
 
 func _push_time(d: float) -> float:
-	return GoaliePushRules.time_to_set(d, _footwork.t_push_speed, _footwork.accel)
+	return KeeperFootwork.push_time(d, _footwork.t_push_speed, _footwork.accel)
 
 
 func _shuffle_time(d: float) -> float:

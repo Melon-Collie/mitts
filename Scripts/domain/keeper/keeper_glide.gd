@@ -6,7 +6,8 @@ extends RefCounted
 #
 # His body is driven by velocity, never stopped between spots, read against
 # the spot's own motion so a spot that keeps moving costs him no lag. A gap
-# he strokes to close at the speed that would close it in `CLOSE_S`, at his
+# he strokes to close at the speed that would close it in `CLOSE_S`, as a
+# T-push does (KeeperFootwork.push_time is the time onto a still one), at his
 # lateral acceleration and at most the T-push's top speed, then glides on what
 # the stroke gave him; only when the glide would carry him past the spot do
 # his edges dig, as late and as hard as the edge stop
@@ -26,9 +27,8 @@ extends RefCounted
 # A spot this near, moving no faster than this relative to him, he is on.
 const THERE_M: float = 0.005
 const MATCHED_M_S: float = 0.05
-# How soon a stroke means to close the gap it is for: a push and the glide
-# after it.
-const CLOSE_S: float = 0.3
+# How soon a stroke means to close the gap it is for: a T-push's.
+const CLOSE_S: float = KeeperFootwork.CLOSE_S
 # The least speed a stroke is taken for, once he is gliding: short of it he
 # glides on.
 const STROKE_GAIN_M_S: float = 0.3
@@ -163,19 +163,6 @@ func step(dt: float, spot: Vector2, spot_velocity: Vector2, yaw: float) -> void:
 
 
 # The next stroke's form, from the way he is going now.
-# How long he takes to skate `d` onto a still spot from rest, `top` and
-# `push` his top speed and acceleration: the stroke up to the closing speed it
-# is for, the glide on it, and the edge stop onto the spot.
-static func time_to(d: float, top: float, push: float) -> float:
-	if d <= THERE_M:
-		return 0.0
-	var stroke: float = minf(push * (sqrt(CLOSE_S * CLOSE_S + 2.0 * d / push) - CLOSE_S), top)
-	var stroked: float = 0.5 * stroke * stroke / push
-	var edge: float = push * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
-	var stopping: float = 0.5 * stroke * stroke / edge
-	return stroke / push + maxf(d - stroked - stopping, 0.0) / stroke + stroke / edge
-
-
 func _take_form() -> void:
 	_lateral = absf(_way.x) >= absf(_way.y)
 	_side = signf(_way.x if _lateral else _way.y)

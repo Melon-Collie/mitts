@@ -9,12 +9,15 @@ extends RefCounted
 # edge accelerates him, and edges brake him onto his spot.
 #
 # The T-push's push is the acceleration: the trail skate is planted for it and
-# the body drives off it, the leg extending as he goes, which is why a push is
-# about a leg's extension long (0.27 s to 3.8 m/s covers 0.52 m).
+# the body drives off it, the leg extending as he goes, up to the speed that
+# would carry him the rest of the way in CLOSE_S (or the top speed), which is
+# why a push is about a leg's extension long; then he glides on it, and the
+# edges stop him only where the glide would carry him past (`push_time`).
 #   PUSH   the lead skate turns toward the travel, its pad part of the way
 #          with it; the trail skate stays where it was set down until the leg
 #          is out straight, the hips sinking a little to reach it
-#   GLIDE  he rides the lead skate; the trail leg lifts and draws back in
+#   GLIDE  he rides the lead skate; the trail leg lifts and draws back in, and
+#          pushes again for a spot moved on ahead
 # The shuffle and the C-cuts are strokes laid over the ground, and he strokes
 # (PUSH) until he stops. In each, a skate's edge holds its place while the body
 # passes over it, then the skate comes back in under him:
@@ -76,8 +79,12 @@ const C_CUT_HOLD_FORWARD_M: float = 0.04
 const C_CUT_OUT_BACK_M: float = 0.12
 const C_CUT_OUT_FORWARD_M: float = 0.18
 const C_CUT_HEEL_OUT_RAD: float = deg_to_rad(35.0)
-# How far under the stop's brake his speed must have fallen before a spot
-# moved on ahead of him is pushed for again, rather than eased into.
+# How soon a T-push means to carry him the rest of the way: a push and the
+# glide after it. The glide's strokes close a gap in it too.
+const CLOSE_S: float = 0.3
+# How far under the stop's brake, or a glide under what a push is for, his
+# speed must have fallen before a spot moved on ahead of him is pushed for
+# again, rather than eased into.
 const RESUME_SHARE: float = 0.9
 # The edges in the stop: a lateral move's lead skate out a little wider, rolled
 # onto its inside edge; and the lean, into the move and back against the stop.
@@ -258,8 +265,10 @@ func step(dt: float) -> void:
 	var left: float = _to - _along
 	# The stop starts the tick it would be too late to after this one's travel.
 	var next_left: float = left - maxf(speed, 0.0) * dt
-	if phase == Phase.STOP and _recover >= 1.0 \
-			and speed < RESUME_SHARE * GoaliePushRules.braking_speed_cap(next_left, accel):
+	var resumes: bool = speed < RESUME_SHARE * GoaliePushRules.braking_speed_cap(next_left, accel) \
+			if phase == Phase.STOP else speed < RESUME_SHARE * _push_for(left)
+	if (phase == Phase.STOP or (phase == Phase.GLIDE and move == Move.T_PUSH)) and _recover >= 1.0 \
+			and resumes:
 		phase = Phase.PUSH
 		_push_from = _along
 		# A fresh stroke, its skate starting from under him.
@@ -278,7 +287,7 @@ func step(dt: float) -> void:
 			speed = minf(speed + accel * dt, top_speed())
 			if move == Move.T_PUSH:
 				_turn = minf(_turn + dt / TURN_IN_S, 1.0)
-				if speed >= top_speed():
+				if speed >= _push_for(left):
 					_end_push()
 					phase = Phase.GLIDE
 		Phase.GLIDE:
@@ -307,6 +316,29 @@ func step(dt: float) -> void:
 		return
 	x = _start_x + _dir.x * _along
 	z = _start_z + _dir.y * _along
+
+
+# The speed a T-push is for, `left` short of its spot.
+func _push_for(left: float) -> float:
+	return minf(left / CLOSE_S, top_speed())
+
+
+# How long a T-push takes to set him on a spot `d` away from rest, `top` and
+# `push` his top speed and acceleration: the push, the glide on it, and the
+# edge stop onto the spot.
+static func push_time(d: float, top: float, push: float) -> float:
+	if d <= 0.0:
+		return 0.0
+	var peak: float = push_peak(d, top, push)
+	var edge: float = push * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
+	var glided: float = d - 0.5 * peak * peak / push - 0.5 * peak * peak / edge
+	return peak / push + maxf(glided, 0.0) / peak + peak / edge
+
+
+# The speed a T-push to a spot `d` away pushes him to from rest: where the
+# speed reached meets what would carry him the rest of the way in CLOSE_S.
+static func push_peak(d: float, top: float, push: float) -> float:
+	return minf(push * (sqrt(CLOSE_S * CLOSE_S + 2.0 * d / push) - CLOSE_S), top)
 
 
 func _end_push() -> void:
