@@ -50,6 +50,11 @@ const SCENARIOS: Array = [
 	["goals", 0.0, GOALS],
 	["stick_reach", 0.0, STICK_REACH],
 	["track", 0.0, TRACK],
+	["save_glove", Vector2(-0.75, 0.95), SAVE],
+	["save_blocker", Vector2(0.75, 0.95), SAVE],
+	["save_low_glove", Vector2(-0.75, 0.15), SAVE],
+	["save_ice_blocker", Vector2(0.65, 0.0), SAVE],
+	["save_tight_low", Vector2(0.2, 0.0), SAVE_TIGHT],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -103,6 +108,19 @@ const TRACK_PATH: Array[Vector2] = [
 	Vector2(-0.3, 1.8), Vector2(-4.0, 1.2), Vector2(-5.0, -3.0), Vector2(-2.0, -8.0),
 ]
 const TRACK_SPEED: float = 4.0
+# A shot at him set at the top of the crease, read and saved as in a match
+# (KeeperShotRead, KeeperSave, the motor's low save): from the slot, or (TIGHT)
+# from the top of the circles' hash marks in, faster, where the drops win; to
+# where it would cross the goal line (x across, height; 0 along the ice).
+const SAVE: int = -12
+const SAVE_TIGHT: int = -13
+const SAVE_FROM_Z: float = -9.0
+const SAVE_TIGHT_FROM_Z: float = -4.5
+const SAVE_SPEED: float = 22.0
+const SAVE_TIGHT_SPEED: float = 26.0
+const SAVE_KEEPER_Z: float = -1.3
+const SAVE_FRAME_EVERY: int = 3
+const SAVE_HOLD_S: float = 0.25
 const PLANNER_EVERY: int = 4
 const SEQUENCE_FRAME_EVERY: int = 12
 const SHEET_WRAP: int = 12
@@ -216,6 +234,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_stick_reach()
 	if kind == TRACK:
 		return _record_track()
+	if kind == SAVE or kind == SAVE_TIGHT:
+		return _record_save(spot, kind == SAVE_TIGHT)
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -377,6 +397,65 @@ func _record_track() -> Array:
 	return out
 
 
+# The shot's frames: his pose and place, the puck where it is (by its centre,
+# less the lift the playback adds); the phase bar PUSH once he has chosen his
+# save, STOP once it is over.
+func _record_save(to: Vector2, tight: bool) -> Array:
+	var motor := KeeperMotor.new()
+	motor.z = SAVE_KEEPER_Z
+	var read := KeeperShotRead.new()
+	var save := KeeperSave.new()
+	var on_ice: bool = to.y <= 0.0
+	var at_line := Vector3(to.x, KeeperShotRead.ON_ICE_Y if on_ice else to.y, 0.0)
+	var puck := Vector3(0.0, KeeperShotRead.ON_ICE_Y if on_ice else 0.3, SAVE_TIGHT_FROM_Z if tight else SAVE_FROM_Z)
+	var flight: float = puck.distance_to(at_line) / (SAVE_TIGHT_SPEED if tight else SAVE_SPEED)
+	var v: Vector3 = (at_line - puck) / flight
+	if not on_ice:
+		v.y += 0.5 * GameRules.GRAVITY_M_S2 * flight
+	read.step(0.0, puck, v)
+	read.start()
+	var out: Array = []
+	var tick: int = 0
+	var chosen: bool = false
+	var over_at: float = INF
+	var p := KeeperPose.new()
+	while tick * DT < flight + SAVE_HOLD_S + 0.5:
+		var t: float = tick * DT
+		if t < flight:
+			puck += v * DT
+			if not on_ice:
+				v.y -= GameRules.GRAVITY_M_S2 * DT
+			read.step(DT, puck, v)
+		if not chosen and read.legs_read():
+			chosen = true
+			save.choose(read, motor, false)
+			print("[keeper_strip] save %s low %s hand %s covers %s ready %.3f impact %.3f" % [to,
+					KeeperSaveMove.Low.keys()[save.low], KeeperSave.Hand.keys()[save.hand], save.covers,
+					save.ready_s, save.impact_s])
+			if save.low != KeeperSaveMove.Low.NONE:
+				motor.save(save.low, save.low_side)
+		if over_at == INF and t >= flight + SAVE_HOLD_S:
+			over_at = t
+			save.release()
+			motor.end_save()
+		motor.step(DT)
+		motor.pose(p)
+		save.step(DT, read.arms_read(), p)
+		if tick % SAVE_FRAME_EVERY == 0:
+			var framed := KeeperPose.new()
+			framed.copy_from(p)
+			save.overlay(framed)
+			var phase: int = KeeperFootwork.Phase.SET
+			if t >= over_at:
+				phase = KeeperFootwork.Phase.STOP
+			elif chosen:
+				phase = KeeperFootwork.Phase.PUSH
+			out.append([framed, Vector3(motor.x, 0.0, motor.z + GOAL_LINE_Z), phase, 0.0, t, motor.yaw,
+					Vector3(puck.x, puck.y - KeeperShotRead.ON_ICE_Y, puck.z + GOAL_LINE_Z)])
+		tick += 1
+	return out
+
+
 func _record_stick_reach() -> Array:
 	var out: Array = []
 	for leg: int in STICK_SWEEP.size() - 1:
@@ -507,10 +586,10 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == SEQUENCE or kind == GOALS or kind == TRACK
+					or kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
-		if kind == SEQUENCE or kind == GOALS or kind == TRACK:
+		if kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT:
 			_views = [_views[0], _views[2]]
 		_shots = []
 		_shot_i = 0

@@ -146,6 +146,17 @@ var _stop: float = 0.0
 var _stop_from_speed: float = 0.0
 
 
+# Stood set and still in the stance where he is, whatever was under way: a
+# save cut it.
+func set_still() -> void:
+	phase = Phase.SET
+	speed = 0.0
+	_stop = 0.0
+	_recover = 1.0
+	_turn = 0.0
+	_drive = 0.0
+
+
 # T-push to `spot`.
 func push_to(spot: Vector2) -> void:
 	_go(spot.x, spot.y, Move.T_PUSH)

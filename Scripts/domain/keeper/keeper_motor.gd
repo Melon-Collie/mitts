@@ -27,12 +27,16 @@ extends RefCounted
 # wins: a goal clears the moves asked for, and a move asked for clears the
 # goal.
 #
+# A low save (`save`, KeeperSaveMove) is the one move that does not wait: it
+# cuts whatever is under way where it is, the speed it had carried into the
+# save, and holds until `end_save`; then he rests where it leaves him.
+#
 # Places are in the stances' frame, as the movers': x across, z depth (+ back
 # toward his net), `yaw` his turn about the vertical, as a Node3D's rotation.y.
 
 const Rest := KeeperRoute.Rest
 const Do := KeeperRoute.Do
-enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST }
+enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE }
 
 # The pivot: its top turn rate, near the old goalie's (whose 5/s lerp turns him
 # through 45° at up to 3.9 rad/s), and how hard his edges start and stop it.
@@ -56,6 +60,7 @@ var drop := KeeperDrop.new()
 var slide := KeeperSlide.new()
 var post := KeeperPost.new()
 var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVOT_ACCEL_RAD_S2, LEAD_MAX_RAD)
+var save_move := KeeperSaveMove.new()
 
 var _queue: Array[_Ask] = []
 var _goal: bool = false
@@ -66,6 +71,9 @@ var _face: float = 0.0
 var _turn_rate: float = 0.0
 var _anchor := Vector2.ZERO
 var _anchor_yaw: float = 0.0
+# His speed over the last step, and the pose a save cuts in from.
+var _velocity := Vector2.ZERO
+var _cut := KeeperPose.new()
 
 
 # One move asked for: what, to where, which side, how fast.
@@ -188,6 +196,30 @@ func rvh_fold_out() -> void:
 	_ask(Do.RVH_FOLD_OUT)
 
 
+# Whether a low save can cut in now: from his feet, standing or with footwork
+# or a pivot under way; down (`down`), only once he is at rest there.
+func can_save(down: bool) -> bool:
+	if down:
+		return rest == Rest.DOWN and _mover == Mover.NONE
+	return rest == Rest.FEET and (_mover == Mover.NONE or _mover == Mover.PIVOT or _mover == Mover.FOOTWORK)
+
+
+# The low save `low` to `side`, cutting in now.
+func save(low: int, side: float) -> void:
+	pose(_cut)
+	save_move.start(_cut, low, side, Vector2(x, z), _velocity)
+	footwork.set_still()
+	lead = 0.0
+	_queue.clear()
+	_mover = Mover.SAVE
+
+
+# The shot a save was made for is over.
+func end_save() -> void:
+	if _mover == Mover.SAVE:
+		save_move.release()
+
+
 func _ask(what: int, spot: Vector2 = Vector2.ZERO, side: float = 0.0, top: float = INF) -> void:
 	_goal = false
 	_queue.append(_Ask.new(what, spot, side, top))
@@ -216,6 +248,12 @@ func _plan() -> int:
 
 
 func step(dt: float) -> void:
+	var was := Vector2(x, z)
+	_step_mover(dt)
+	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
+
+
+func _step_mover(dt: float) -> void:
 	if _mover == Mover.NONE:
 		_start_next()
 		if _mover == Mover.NONE and _goal and _plan() != Do.NONE \
@@ -259,6 +297,12 @@ func step(dt: float) -> void:
 					_rest_on(Rest.FEET)
 				KeeperPost.State.BUTTERFLY:
 					_rest_on(Rest.DOWN)
+		Mover.SAVE:
+			save_move.step(dt)
+			x = save_move.x
+			z = save_move.z
+			if save_move.is_done():
+				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
 
 
 func _rest_on(r: int) -> void:
@@ -414,6 +458,8 @@ func _pose_mover(p: KeeperPose) -> void:
 			slide.pose(p)
 		Mover.POST:
 			post.pose(p)
+		Mover.SAVE:
+			save_move.pose(p)
 		_:
 			match rest:
 				Rest.FEET:

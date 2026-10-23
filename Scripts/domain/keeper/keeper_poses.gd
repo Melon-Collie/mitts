@@ -313,6 +313,8 @@ static func _reset_trunk(p: KeeperPose) -> void:
 	p.head_rot = Vector3.ZERO
 	p.glove_elbow_pole = Vector3(-0.6, -1.0, 0.3)
 	p.blocker_elbow_pole = Vector3(0.6, -1.0, 0.3)
+	# A stance holds the stick by where it lays the blade.
+	p.blocker_reach = false
 
 
 static func _ready_leg(leg: KeeperPose.Leg, sx: float) -> void:

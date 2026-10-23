@@ -263,6 +263,39 @@ func test_a_grip_out_of_reach_brings_the_stick_to_the_hand() -> void:
 	_skel.mirrored = false
 
 
+# A blocker save takes the hand where it is asked, as far as the arm reaches
+# toward it, and the stick with it, still rigid in the fist: up high, out
+# wide, and held straight over the blade's heel, where the paddle stands up.
+func test_a_blocker_reach_takes_the_stick_with_the_hand() -> void:
+	var arm: float = KeeperAnatomy.UPPER_ARM_M + KeeperAnatomy.FOREARM_M
+	var lie: float = deg_to_rad(KeeperAnatomy.PADDLE_TO_BLADE_DEG)
+	for at: Vector3 in [Vector3(0.55, 1.0, -0.45), Vector3(0.75, 0.5, -0.3), Vector3(1.4, 1.2, -0.5)]:
+		KeeperPoses.ready(_pose)
+		_pose.blocker_reach = true
+		_pose.blocker_grip = at
+		_skel.pose(_pose)
+		var what: String = "%s" % at
+		var shoulder: Vector3 = _skel.xf[B.UPPER_ARM_B].origin
+		var wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
+		assert_lte(shoulder.distance_to(wrist), arm + 1e-4, "%s: no longer than an arm" % what)
+		var in_reach: bool = shoulder.distance_to(at + wrist - _skel.grip) <= arm
+		if in_reach:
+			assert_almost_eq(_skel.grip, at, Vector3.ONE * 1e-4, "%s: the hand where it was asked" % what)
+		assert_almost_eq((_skel.grip - _skel.stick_heel).normalized(), _skel.stick_paddle_dir,
+				Vector3.ONE * 1e-4, "%s: the grip on the stick" % what)
+		assert_almost_eq(_skel.stick_paddle_dir.angle_to(_skel.stick_blade_dir), lie, 1e-4, "%s: the lie" % what)
+		assert_gte(_lowest(P.BLADE), -0.001, "%s: the blade out of the ice" % what)
+	KeeperPoses.ready(_pose)
+	_skel.pose(_pose)
+	var over_heel: Vector3 = _skel.stick_heel + Vector3(0.0, KeeperAnatomy.GRIP_LOWEST_M + 0.1, 0.0)
+	_pose.blocker_reach = true
+	_pose.blocker_grip = over_heel
+	_skel.pose(_pose)
+	for part: int in [P.BLADE, P.PADDLE, P.SHAFT]:
+		assert_almost_eq(absf(KeeperGear.box(_skel, part).basis.determinant()), 1.0, 1e-4,
+				"stood straight up: the %s still a box" % KeeperGear.Part.keys()[part])
+
+
 func test_the_gear_is_inside_the_rule_book() -> void:
 	assert_lte(KeeperAnatomy.PAD_WIDTH_M, 11.0 * IN_TO_M + 1e-4, "pads 11 in wide")
 	assert_lte(KeeperAnatomy.BLOCKER_WIDTH_M, 8.0 * IN_TO_M + 1e-4, "blocker 8 in")

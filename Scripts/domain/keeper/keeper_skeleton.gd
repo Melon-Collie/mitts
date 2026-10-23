@@ -88,6 +88,9 @@ func pose(p: KeeperPose) -> void:
 	# past the arm's reach brings the stick to the hand.
 	var blocker_hand: Basis = _limb_basis(Vector3.UP, p.blocker_face)
 	var wrist_off: Vector3 = blocker_hand * KeeperAnatomy.BLOCKER_WRIST
+	if p.blocker_reach:
+		var reach: Vector3 = p.blocker_grip + wrist_off - blocker_shoulder
+		_hold_stick_at(blocker_shoulder + reach.normalized() * minf(reach.length(), arm) - wrist_off)
 	var to_wrist: Vector3 = grip + wrist_off - blocker_shoulder
 	if to_wrist.length() > arm:
 		_hold_stick_at(blocker_shoulder + to_wrist.normalized() * arm - wrist_off)
@@ -240,7 +243,13 @@ static func _blade_under(paddle: Vector3, was: Vector3) -> Vector3:
 	var lie: float = cos(deg_to_rad(KeeperAnatomy.PADDLE_TO_BLADE_DEG))
 	var lean := Vector2(paddle.x, paddle.z)
 	if lean.length() <= absf(lie) + 1e-6:
-		var square: Vector3 = (Vector3.UP - paddle * paddle.y).normalized()
+		var square: Vector3 = Vector3.UP - paddle * paddle.y
+		# A paddle stood straight up has no lean to point away from: the blade
+		# keeps the way it pointed.
+		if square.length_squared() < 1e-8:
+			square = Vector3(was.x, 0.0, was.z) if Vector2(was.x, was.z).length_squared() > 1e-8 \
+					else Vector3.LEFT
+		square = square.normalized()
 		return paddle * lie + square * sqrt(1.0 - lie * lie)
 	var off: float = acos(clampf(lie / lean.length(), -1.0, 1.0))
 	var one := Vector2.from_angle(lean.angle() + off)

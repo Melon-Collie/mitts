@@ -22,6 +22,9 @@ one the bots shoot at.
 | `keeper_positioning.gd` | the first brain, from the puck alone: where he wants to be by zone (beyond the blue line, in the zone, at a sharp angle below the dots, below the goal line), each held a margin past where it took him in, set on the motor as its goal at the planner's rate |
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included; the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line |
+| `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity; the arm read later; a tip restarts it |
+| `keeper_save.gd` | which save he makes (a low half with a hand half, each candidate posed and the flight tested against its own gear, the least committed in time, else the soonest), and the hand laid over whatever pose the motor gives him at its tier speed |
+| `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on |
 | `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
 | `actors/keeper/keeper.gd` | the node: solves a pose on the tick, draws it at render rate when it moved |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
@@ -45,11 +48,34 @@ under the old part body that names its material for the puck
 also places that part body, so the old getters (glove position for the catch
 pin, the pads and hands the bots read through `fill_state`) read his gear. The
 controller extends `GoalieController`, overriding the tick, the reset, the
-stance the bots read and the puck handlers: no shot reactions yet (a release is
-read by where he stands), a contact only timed, a glove catch held and covered
-for the whistle and set down out from his glove side where none comes. Nothing
-of his pose goes on the wire, so a client sees the old goalie's interpolated
-shell, and a replay places him by the recorded root but holds his last pose.
+stance the bots read and the puck handlers: a release read and saved (below), a
+tip read again, a contact only timed, a glove catch held and covered for the
+whistle and set down out from his glove side where none comes. Nothing of his
+pose goes on the wire, so a client sees the old goalie's interpolated shell,
+and in the post-game replay he stands still (it records the old goalie's
+state).
+
+## Saves
+
+A shot is read from its release, the puck's own flight only: no aim before it
+(that is the shooter's drawn body, perception's, not built yet). His legs
+answer after the tier's leg read and his hands after the arm read, the old
+goalie's tiered delays and speeds (`GoalieSkillProfile`), so he is beaten by
+a shot that arrives before a limb can, never by a draw. Once his legs have
+read a shot that would go in, the save is chosen by his shape: every
+candidate a low half (none, the kick, the half butterfly, the butterfly, the
+extension, to the puck's side) with a hand half (none, the blade along the
+ice, the glove, the blocker), its hand aimed at the point of the flight the arm
+reaches with the most time to spare, posed, and the flight tested against
+that pose's gear boxes; the least committed that covers it in time, else the
+soonest. Height is no rule: a hand goes only where its gear stays above the
+ice, and the blade only for a puck low enough for it. A low save cuts whatever
+move is under way (`KeeperMotor.save`); the hand rides any pose. The save holds
+until the shot is over — off him, past the line, stopped, picked up, off the
+iron or boards, or a tip — then the hand comes back and the motor rests him
+where the save left him for the brain to bring back up.
+`test_keeper_save.gd`, `test_keeper_save_move.gd`, and the match through the
+puck's own contact test in `test_keeper_controller.gd`.
 `tests/unit/controllers/test_keeper_controller.gd` holds the swap.
 
 ## One body, solved once, read three ways

@@ -79,6 +79,11 @@ var blade_yaw: float = 0.0
 var stick_tilt: float = 0.35
 # Which way the blocker's board faces.
 var blocker_face: Vector3 = Vector3(0.25, 0.0, -1.0)
+# With `blocker_reach`, the blocker hand goes to `blocker_grip` (as far as the
+# arm reaches toward it) and brings the stick with it, instead of holding the
+# stick where the blade puts it: a blocker save.
+var blocker_reach: bool = false
+var blocker_grip: Vector3 = Vector3.ZERO
 
 
 func copy_from(o: KeeperPose) -> void:
@@ -100,3 +105,5 @@ func copy_from(o: KeeperPose) -> void:
 	blade_yaw = o.blade_yaw
 	stick_tilt = o.stick_tilt
 	blocker_face = o.blocker_face
+	blocker_reach = o.blocker_reach
+	blocker_grip = o.blocker_grip

@@ -5,7 +5,7 @@
 # and speed printed. Wraps tools/keeper_strip.gd.
 #
 #   .claude/hooks/render-keeper-strip.sh               # every scenario
-#   .claude/hooks/render-keeper-strip.sh t_push        # named scenarios only
+#   .claude/hooks/render-keeper-strip.sh t_push,drop_and_rise  # named scenarios only, commas between
 #
 # Same constraint as render-keeper.sh: Godot's --headless draws nothing, so this
 # runs under xvfb-run on the Compatibility renderer and software GL.

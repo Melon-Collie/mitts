@@ -3,8 +3,9 @@ extends GutTest
 # The rebuilt keeper in a match (KeeperController on the Goalie node): the old
 # body hidden and its colliders off, his gear's save boxes live where his gear
 # is; on either net he goes where the brain puts him, square to the puck; a shot
-# at his pad meets a pad box through the puck's own contact test; and a catch is
-# held in his glove and covered, then set down.
+# at his pad meets a pad box through the puck's own contact test; a shot is
+# saved, the puck meeting what he puts in its way; and a catch is held in his
+# glove and covered, then set down.
 
 const DT: float = 1.0 / 120.0
 
@@ -104,3 +105,47 @@ func test_a_catch_is_held_in_his_glove_and_covered_then_set_down() -> void:
 	_run(KeeperController.CATCH_HOLD_S + 0.1)
 	assert_false(_puck.motion_pinned or _puck.pickup_locked, "set down")
 	assert_almost_eq(_puck.global_position.y, _puck.ice_height, 1e-4, "on the ice")
+
+
+# Flies the puck from `from` to arrive on the goal line at `to` (x across from
+# the net's centre, height), released on its way; the save part it first meets.
+func _shot(from: Vector3, to: Vector2, speed: float) -> int:
+	var line_z: float = GameRules.GOAL_LINE_Z
+	var at_line := Vector3(to.x, to.y, line_z)
+	var t: float = from.distance_to(at_line) / speed
+	var v: Vector3 = (at_line - from) / t
+	var lifted: bool = from.y > _puck.ice_height or to.y > _puck.ice_height
+	if lifted:
+		v.y += 0.5 * GameRules.GRAVITY_M_S2 * t
+	_puck.global_position = from
+	_puck.set_puck_velocity(v)
+	_puck.puck_released.emit()
+	var contact := GoalieContactDetector.Contact.new()
+	for i: int in int(1.5 / DT):
+		var was: Vector3 = _puck.global_position
+		var next: Vector3 = was + v * DT
+		if lifted:
+			v.y -= GameRules.GRAVITY_M_S2 * DT
+		_puck.global_position = next
+		_puck.set_puck_velocity(v)
+		_keeper._physics_process(DT)
+		if GoalieContactDetector.nearest([_goalie], was, next, GameRules.PUCK_COLLISION_RADIUS,
+				SweptDiscOBB.Result.new(), contact):
+			return _puck._classify_save_part(contact.part as Node3D)
+		if next.z >= line_z:
+			return -1
+	return -1
+
+
+func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
+	var cases: Array = [
+		[Vector2(-0.75, 0.95), GoalieSaveRules.SavePart.GLOVE, "high to his glove side"],
+		[Vector2(0.75, KeeperShotRead.ON_ICE_Y), GoalieSaveRules.SavePart.PAD, "along the ice to his blocker side"],
+	]
+	for case: Array in cases:
+		_spawn(GameRules.GOAL_LINE_Z)
+		_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
+		_run(1.5)
+		var to: Vector2 = case[0]
+		var from := Vector3(0.0, 0.3 if to.y > 0.1 else _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
+		assert_eq(_shot(from, to, 22.0), case[1], case[2])

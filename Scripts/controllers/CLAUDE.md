@@ -16,7 +16,7 @@ against.
 
 | File | Owns |
 |---|---|
-| `keeper_controller.gd` | the rebuilt keeper in the Goalie node's place: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a glove catch held and covered; host and offline only |
+| `keeper_controller.gd` | the rebuilt keeper in the Goalie node's place: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered; host and offline only |
 | `goalie_controller.gd` | the tick, state transitions, tuning vars, the read belief and its convergence |
 | `goalie_state_machine.gd` | stance transitions |
 | `goalie_body_config_builder.gd` | pose solve into a shared scratch config |
