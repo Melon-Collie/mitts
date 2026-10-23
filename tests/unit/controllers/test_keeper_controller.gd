@@ -227,6 +227,31 @@ func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 		assert_eq(_shot(from, to, 22.0), case[1], case[2])
 
 
+# A shot in on him before his legs have read it (set for a puck wide of him,
+# fired from in tight across him) still gets his save once he has, late, and he
+# goes all the way into it rather than standing still.
+func test_a_shot_that_beats_his_read_is_still_answered() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(1.6, _puck.ice_height, GameRules.GOAL_LINE_Z - 4.5)
+	_run(1.5)
+	var to := Vector2(-0.7, 0.9)
+	var from := Vector3(0.2, _puck.ice_height, GameRules.GOAL_LINE_Z - 2.8)
+	assert_lt(from.distance_to(Vector3(to.x, to.y, GameRules.GOAL_LINE_Z)) / 26.0, _keeper.read.leg_delay_s,
+			"in before his read")
+	assert_eq(_shot(from, to, 26.0), -1, "it beats him")
+	assert_false(_keeper._chosen, "nothing chosen before it was in")
+	var made: bool = false
+	var into: bool = false
+	for i: int in int(0.5 / DT):
+		_keeper._physics_process(DT)
+		var low: bool = _keeper.save.low != KeeperSaveMove.Low.NONE
+		made = made or low or _keeper.save.hand != KeeperSave.Hand.NONE
+		into = into or (low and _keeper.motor.save_move.state == KeeperSaveMove.State.HELD) \
+				or _keeper.save.hand_there()
+	assert_true(made, "a save made once he has read it")
+	assert_true(into, "and carried all the way into")
+
+
 # A tier changed in the session (free play's picker, the tutorial) reaches his
 # reads and his hands.
 func test_a_tier_set_later_reaches_his_saves() -> void:

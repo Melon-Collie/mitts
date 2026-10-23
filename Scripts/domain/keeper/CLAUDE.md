@@ -25,7 +25,7 @@ one the bots shoot at.
 | `keeper_positioning.gd` | the first brain, from the puck as he reads it: where he wants to be by zone (beyond the blue line, in the zone, at a sharp angle below the dots, below the goal line), each held a margin past where it took him in, set on the motor as its goal at the planner's rate with its own motion; in the zone his depth answering the puck's motion from his own skating (`depth_for`: backed in against a puck coming at him, deeper against one swinging across him, and against a pass across to an open receiver no further out than the push he has time for sets him on its angle, `pass_depth`); a shot he sees wound up he is set for at depth, not backing in for the shooter's approach; a pass he reads skated to where its stick meets it, stopped on the one-timer's angle rather than following the puck across; sunk into the low ready once a shot (a hard wrister from a carrier of theirs, or from a pass's meeting stick once it gets there) could reach him before his legs and his drop from the ready stance could answer it, since the low ready covers more of the net than the butterfly from anywhere in front of him; a carrier driving at a post from wide of it raced there only once at a sharp angle or in tight, a stick's length from the post (`_race_to_post`): until then the angle line covers the shot he can still take, and going for the post sooner gives the rest of the net to a feint; on the post he drops into the RVH as the drop-in only just beats the puck, off it he takes his fastest way in (the slide across), and he holds the seal while the puck still heads there |
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him; a goal on his feet that moves, or within `KeeperRoute.GLIDE_REACH_M`, or asked to be skated to (`go_to`'s `skate`), skated to by the glide and held as it moves (`go_to`'s velocity), stopped for where he is before a goal off his feet; a low save cutting any of it; sunk into the low ready when set and asked (`low_ready`), a drop or a save from it the shorter fall |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included (none after a glide: nothing waits for its legs); a spot on his feet within `GLIDE_REACH_M` glided to (a T-push's time, `KeeperFootwork.push_time`, beside the turn), and a way's second leg within it too when the goal is on his feet; past it footwork's moves, the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line; the RVH dropped into straight from where he stands when that is the post's overlap at his turn (`ON_POST_M`), as at a sharp angle, or skated onto that overlap still turned first; `time_to_seal`, a way's time into the RVH whatever goal he is given, for the brain's race to a post |
-| `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity; the arm read later; a tip restarts it |
+| `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity; the arm read later; a tip restarts it; the flight as it left the stick (`rewind`), for a shot that beat his read |
 | `keeper_save.gd` | which save he makes (a low half with a hand half, each candidate posed and the flight tested against its own gear, least committed first: the first that covers his read's band in time, else the first that covers the believed line in time, else the soonest; a save holds only if what comes off the gear it meets stays out), and the hand laid over whatever pose the motor gives him at its tier speed; the glove sent onto a puck to cover it (`cover`), without a read, the trunk folding after it |
 | `keeper_cover.gd` | covering a loose puck he can reach: whether one slowing on the ice will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes) |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on |
@@ -94,10 +94,16 @@ it meets (`GoalieSaveRules.resolve_contact`, the puck's own contact) is caught,
 smothered, goes away from the net or meets more of him before the mouth: a puck
 that clips the outside of a pad glances on in. Height is no rule: a hand goes only where its gear stays above the
 ice, and the blade only for a puck low enough for it. A low save cuts whatever
-move is under way (`KeeperMotor.save`); the hand rides any pose. The save holds
-until the shot is over — off him, past the line, stopped, picked up, off the
-iron or boards, or a tip — then the hand comes back and the motor rests him
-where the save left him for the brain to bring back up. The brain rests while
+move is under way (`KeeperMotor.save`); the hand rides any pose. The save goes on
+until it is there, and he lets it go his leg read after it is there and the
+shot is over — off him, past the line, stopped, off the iron or boards (a tip
+starts a new read, a pick-up ends it at once) — so a save made too late is
+still seen made; then the hand comes back and the motor rests him where the
+save left him for the brain to bring back up. A shot over before his legs
+have read it at all (from in tight, in or off him) he answers once they have:
+the least committed save that would have covered the flight he saw leave the
+stick, however late (`KeeperSave.choose`, not `timed`), made and held the
+same way. The brain rests while
 a save is under way (a hand save sets him where he stands, the hand aimed from
 there); since his read of the play lags it by his leg read, a shot's flight
 reaches the brain no sooner than the save does.
@@ -123,7 +129,7 @@ the cover played out unbroken with the glove ending flat on it),
 and the match through the
 puck's own contact test in `test_keeper_controller.gd`.
 `tests/unit/controllers/test_keeper_controller.gd` holds the swap, a catch
-played out, a puck at his feet covered or, poked away first, escaping, and a
+played out, a shot in before his read answered late and carried into, a puck at his feet covered or, poked away first, escaping, and a
 client posed from his state through the wire with every save box where the
 host's is. `test_keeper_pose_codec.gd` holds the pose on the wire: every
 stance and every tick of a run of his moves solving to the same gear, the

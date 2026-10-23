@@ -11,8 +11,9 @@ extends GoalieController
 # or a replay poses him from it with no AI of its own. A shot is read
 # from its release (KeeperShotRead, restarted by a tip) and saved with the
 # save his gear says covers it (KeeperSave, its low half through the motor),
-# held until the shot is over: it meets him, goes past, stops coming, or is
-# picked up. A glove catch is held and covered; every other contact is the
+# held until it is there and he has read the shot is over (it meets him, goes
+# past, stops coming), or it is picked up; a shot that beat his read answered
+# all the same once he has read it. A glove catch is held and covered; every other contact is the
 # puck's rebound off the box it struck. A loose puck he can reach he covers
 # (KeeperCover): down over it, the glove onto it, live until the glove is on
 # it.
@@ -54,6 +55,10 @@ var _profile: GoalieSkillProfile = GoalieSkillProfile.hard()
 # a loose puck.
 var _chosen: bool = false
 var _covering: bool = false
+# Seconds into the read the save was chosen, and the shot over; below zero, not
+# yet.
+var _chosen_at: float = -1.0
+var _over_at: float = -1.0
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -109,6 +114,8 @@ func _place_in_crease() -> void:
 	cover = KeeperCover.new()
 	_chosen = false
 	_covering = false
+	_chosen_at = -1.0
+	_over_at = -1.0
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
@@ -203,22 +210,38 @@ func _read_receivers() -> void:
 
 
 # Once his legs have read a shot on net, the save, the brain resting until it
-# is over; while it is under way, its end once the shot is over.
+# is over. A save under way goes on until it is there, and he lets it go his
+# leg read after both it is there and the shot is over (past him, off him,
+# met), so one made too late is still seen made. A shot over before he has
+# read it at all he answers once he has: the save he goes to for the flight he
+# saw leave the stick, however late.
 func _save_the_shot() -> void:
 	if not read.reading():
 		return
-	var over: bool = read.time_to_line() == INF or puck.get_carrier() != null \
-			or (_chosen and read.age > save.impact_s + _profile.arm_reaction_delay_s)
-	if over:
+	if puck.get_carrier() != null:
 		_end_save()
 		return
-	if _chosen or not read.legs_read():
+	if _over_at < 0.0 and (read.time_to_line() == INF or (_chosen and read.age > _chosen_at + save.impact_s)):
+		_over_at = read.age
+	if _chosen:
+		if _over_at >= 0.0 and read.age >= maxf(_over_at, _chosen_at + save.ready_s) + read.leg_delay_s:
+			_end_save()
 		return
+	if not read.legs_read():
+		return
+	var late: bool = _over_at >= 0.0
+	if late:
+		read.rewind()
 	if not read.on_net():
 		read.stop()
 		return
+	_choose(not late)
+
+
+func _choose(timed: bool) -> void:
 	_chosen = true
-	save.choose(read, motor, _keeper.skeleton.mirrored)
+	_chosen_at = read.age
+	save.choose(read, motor, _keeper.skeleton.mirrored, timed)
 	if save.low != KeeperSaveMove.Low.NONE:
 		motor.save(save.low, save.low_side)
 	elif motor.rest == KeeperRoute.Rest.FEET:
@@ -229,6 +252,8 @@ func _save_the_shot() -> void:
 func _end_save() -> void:
 	read.stop()
 	_chosen = false
+	_chosen_at = -1.0
+	_over_at = -1.0
 	save.release()
 	motor.end_save()
 
@@ -370,7 +395,8 @@ func _on_puck_touched_loose(_skater: Skater) -> void:
 
 # The puck off the boards, a post or the net: the shot is over.
 func _on_reaction_resolved() -> void:
-	_end_save()
+	if read.reading() and _over_at < 0.0:
+		_over_at = read.age
 
 
 func _on_puck_contact(contacted: Goalie) -> void:

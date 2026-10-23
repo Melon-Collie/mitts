@@ -139,8 +139,9 @@ func active() -> bool:
 # him and the pose it gives him now; `mirrored` for a right-catcher. Lows only
 # where the motor can cut one in (KeeperMotor.can_save): on his feet any, down
 # the extension, on a post or mid-drop or slide none (a shot from the seal is
-# held in it).
-func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
+# held in it). Not `timed`, a shot already by him: the save he goes to anyway,
+# the least committed that would have covered it, however late.
+func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool, timed: bool = true) -> void:
 	_watched = false
 	_believe(read, motor, mirrored)
 	motor.pose(_base)
@@ -190,14 +191,14 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 			var ready: float = travel_s
 			if l != Low.NONE:
 				ready = maxf(ready, leg_wait + drop_s * (fall if l != Low.KICK else 1.0))
-			var late: float = ready - hit_s
+			var late: float = ready - hit_s if timed else -INF
 			if not _holds():
 				# Met in time or not, it goes in: no better than being late.
 				late = maxf(late, 0.0) + 1.0
 			var tier: int = 0
 			if late <= 0.0:
 				var band: float = _band_hit_s()
-				tier = 2 if band < INF and ready <= band else 1
+				tier = 2 if band < INF and (ready <= band or not timed) else 1
 			if tier < best_tier or (tier == best_tier and (tier > 0 or late >= best_late)):
 				continue
 			best_tier = tier

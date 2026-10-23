@@ -12,7 +12,9 @@ extends RefCounted
 # The net frame throughout, as KeeperPositioning reads it: origin at the goal
 # line's centre, x across, z back into the net, y up from the ice, the puck by
 # its centre. Deterministic: he is beaten when the time to answer runs out, not
-# by a draw.
+# by a draw. A shot that beats his read, into the net or off him before he has
+# read it, is still read once he has watched it his read's time: the flight as
+# it left the stick (`rewind`), so he answers it late.
 
 # The ice under a puck lying flat: its centre this high.
 const ON_ICE_Y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
@@ -29,6 +31,9 @@ var age: float = -1.0
 var at := Vector3.ZERO
 var velocity := Vector3.ZERO
 var _primed: bool = false
+# The flight as he first saw it, at the release or the touch.
+var _from := Vector3.ZERO
+var _from_velocity := Vector3.ZERO
 
 
 # A shot leaves a stick, or the puck is touched on its way: read from the start,
@@ -57,8 +62,17 @@ func arms_read() -> bool:
 func step(dt: float, puck_at: Vector3, puck_velocity: Vector3) -> void:
 	at = puck_at
 	velocity = puck_velocity
+	if age == 0.0:
+		_from = at
+		_from_velocity = velocity
 	if age >= 0.0:
 		age += dt
+
+
+# Back to the flight as he first saw it, for a shot that beat his read.
+func rewind() -> void:
+	at = _from
+	velocity = _from_velocity
 
 
 # Where the puck will be `t` seconds on: along its line, falling under gravity
