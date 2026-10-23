@@ -3596,18 +3596,17 @@ static func plants_feet(state: int) -> bool:
 # ── The press ────────────────────────────────────────────────────────────────
 # Pressed against another body, this one's movement along the contact normal is
 # the pair's (PressRules): laid over what _apply_movement did along it, from the
-# velocity the tick started with. Both bodies of a pair lay the same acceleration
-# from the same replicated state, so the pair moves as one; the contact resolver
-# still separates the overlap and lands any check. Not modelled: a third body on
-# the pair (the nearest partner presses), and the forward prediction of a
-# pressed remote (it integrates his own movement).
+# velocity the tick started with, against the partner as he stood at the tick's
+# start (Scripts/networking/CLAUDE.md). Both bodies of a pair lay the same
+# acceleration once their inputs hold, so the pair moves as one; the contact
+# resolver still separates the overlap and lands any check. Not modelled: a
+# third body on the pair (the nearest partner presses), and the forward
+# prediction of a pressed remote (it integrates his own movement).
 
-# The partner's state the press reads: live from his skater, or in a reconcile
-# replay from where the host had him (LocalController).
+# The partner's state the press reads: as his skater latched it at the end of
+# the last tick, or on a client from where the host had him (LocalController).
 class PressPartner:
 	var position: Vector3 = Vector3.ZERO
-	var velocity: Vector3 = Vector3.ZERO
-	var radius: float = 0.0
 	var weight: float = 1.0
 	var cfg: SkaterMovementRules.MovementConfig = null
 	var thrust: float = 0.0
@@ -3662,14 +3661,14 @@ func _apply_press(input: InputState, delta: float, tick_start_velocity: Vector3)
 	skater.velocity += n3 * (u_new - skater.velocity.dot(n3))
 
 
-# The nearest body this one is pressed against (within PressRules.CONTACT_SLACK_M
-# of touching), filled into `out`; false for none. `_host_ts` is the input's
-# stamp, which the reconcile replay samples the partner at.
+# The nearest body this one is pressed against (PressRules.touching, exact),
+# filled into `out` from what he latched at the end of the last tick; false for
+# none. `_host_ts` is the input's stamp, which a client samples the partner at.
 func _find_press_partner(_host_ts: float, out: PressPartner) -> bool:
 	var my_pos: Vector3 = skater.global_position
 	var my_radius: float = skater.collision_radius()
 	var best: Skater = null
-	var best_gap: float = PressRules.CONTACT_SLACK_M
+	var best_gap: float = INF
 	for other: Skater in skater.contact_others():
 		if other == null or other == skater or other.is_ghost or other.is_knocked_down \
 				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
@@ -3677,23 +3676,21 @@ func _find_press_partner(_host_ts: float, out: PressPartner) -> bool:
 		var d: Vector3 = other.global_position - my_pos
 		d.y = 0.0
 		var gap: float = d.length() - my_radius - other.collision_radius()
-		if gap < best_gap:
+		if PressRules.touching(gap, 0.0, 0.0) and gap < best_gap:
 			best_gap = gap
 			best = other
 	if best == null:
 		return false
 	out.position = best.global_position
-	out.velocity = best.velocity
-	out.radius = best.collision_radius()
 	out.weight = best.weight
 	out.cfg = best.press_cfg
 	out.thrust = best.press_thrust
-	out.facing = best.get_facing()
-	out.intent = best.move_intent
-	out.braking = best.brake_intent
-	out.planted = plants_feet(best.current_shot_state)
-	out.posture = SkaterMovementRules.posture_of(best.in_stance, best.hit_committed)
-	out.stagger = best.stagger_left
+	out.facing = best.latched_facing
+	out.intent = best.latched_intent
+	out.braking = best.latched_braking
+	out.planted = plants_feet(best.latched_shot_state)
+	out.posture = SkaterMovementRules.posture_of(best.latched_stance, best.latched_committed)
+	out.stagger = best.latched_stagger
 	return true
 
 

@@ -134,3 +134,14 @@ func test_the_stride_is_power_limited_past_its_knee() -> void:
 	assert_almost_eq(fast, slow * 0.5, 1e-6, "twice the knee, half the drive")
 	assert_almost_eq(PressRules.drive(_cfg(), 10.5, Posture.COMMIT, false, false, 1.0, AHEAD,
 			AHEAD, AHEAD, -5.2), slow, 1e-6, "pushing against the motion is not power-limited")
+
+
+func test_touching_is_the_slack_widened_by_a_reader_timing() -> void:
+	var slack: float = PressRules.CONTACT_SLACK_M
+	assert_true(PressRules.touching(slack - 0.001, 0.0, 0.0))
+	assert_false(PressRules.touching(slack, 6.0, 0.0), "a reader with the bodies: the slack alone")
+	var timing: float = 0.01
+	assert_true(PressRules.touching(slack + 6.0 * timing - 0.001, 6.0, timing))
+	assert_true(PressRules.touching(slack + 6.0 * timing - 0.001, -6.0, timing),
+			"his travel either way")
+	assert_false(PressRules.touching(slack + 6.0 * timing + 0.001, 6.0, timing))

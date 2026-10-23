@@ -2,10 +2,11 @@ class_name PressHarness
 extends RefCounted
 
 # Two real SkaterControllers in contact at a standstill, ticked in the live
-# order (every controller, then every skater's own physics tick): the attacker drives into the man in front of him. The
-# man faces +z (up ice); "behind" puts the attacker between him and the net,
-# pushing along his blades, "beside" off his side, pushing across them.
-# Read by test_press.gd and the net-front press instrument.
+# order (every controller, then every skater's own physics tick): the attacker
+# drives into the man in front of him. The man faces +z (up ice); "behind" puts
+# the attacker between him and the net, pushing along his blades, "beside" off
+# his side, pushing across them. Read by test_press.gd, test_press_reads_one_
+# instant.gd and the net-front press instrument.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -43,10 +44,18 @@ class Result:
 	var man_speed: float = 0.0      # the man's speed along the push at the end
 	var peak_stagger: float = 0.0
 	var knocked: bool = false
+	# Both bodies at the end of every pressing tick, as the host's snapshot of
+	# that tick would carry them.
+	var man_at := PackedVector3Array()
+	var man_vel := PackedVector3Array()
+	var attacker_at := PackedVector3Array()
 
 
 var man: SkaterController = null
 var attacker: SkaterController = null
+# The host runs its controllers in scene order; which comes first must not
+# change the press.
+var attacker_first: bool = false
 var _test: GutTest = null
 
 
@@ -87,8 +96,12 @@ func _tick(mi: InputState, ai: InputState) -> void:
 	mi.host_timestamp += DT
 	ai.host_timestamp += DT
 	mi.mouse_world_pos = man.skater.global_position + Vector3(0.0, 0.0, 3.0)
-	man._process_input(mi, DT)
-	attacker._process_input(ai, DT)
+	if attacker_first:
+		attacker._process_input(ai, DT)
+		man._process_input(mi, DT)
+	else:
+		man._process_input(mi, DT)
+		attacker._process_input(ai, DT)
 	man.skater._physics_process(DT)
 	attacker.skater._physics_process(DT)
 
@@ -129,6 +142,9 @@ func run(spec: Spec, seconds: float) -> Result:
 		ai.hit_held = spec.attacker.contains("commit")
 		ai.move_vector = Vector2(push.x, push.z)
 		_tick(mi, ai)
+		r.man_at.append(man.skater.global_position)
+		r.man_vel.append(man.skater.velocity)
+		r.attacker_at.append(attacker.skater.global_position)
 		r.peak_stagger = maxf(r.peak_stagger, man.stagger_timer)
 		r.knocked = r.knocked or man.knockdown_timer > 0.0
 		if i == int(1.0 / DT) - 1:

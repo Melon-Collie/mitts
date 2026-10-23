@@ -522,6 +522,17 @@ var press_cfg: SkaterMovementRules.MovementConfig = null
 var press_thrust: float = 0.0
 var in_stance: bool = false
 var stagger_left: float = 0.0
+# The same body as it stood at the end of its last physics tick, which is what a
+# partner's press reads: every controller runs before any skater's physics, so
+# a latched read is one instant whichever controller runs first, and it is the
+# instant the host's snapshot of that tick carries.
+var latched_facing: Vector2 = Vector2(0.0, -1.0)
+var latched_intent: Vector2 = Vector2.ZERO
+var latched_braking: bool = false
+var latched_stance: bool = false
+var latched_committed: bool = false
+var latched_stagger: float = 0.0
+var latched_shot_state: int = 0
 # True while this skater is one of the two players taking the draw, set by
 # PhaseCoordinator at every faceoff placement from the record's team slot (C).
 # Cosmetic-only: it deepens the gait's ready stance into the crouch a centre
@@ -1109,6 +1120,7 @@ func _physics_process(delta: float) -> void:
 	_update_blade_lift(delta)
 	_update_commit_stance(delta)
 	_update_carry_contact(delta)
+	_latch_press_read()
 	# Position + velocity are now fully settled for this tick (integration,
 	# body-check resolution, and the containment clamps above have all run).
 	# The local controller captures its reconcile prediction snapshot here so it
@@ -1118,6 +1130,16 @@ func _physics_process(delta: float) -> void:
 	# snapshot records.
 	post_move_integrated.emit()
 	HostCostProbe.record(HostCostProbe.Section.SKATER_PHYS, Time.get_ticks_usec() - _t0)
+
+
+func _latch_press_read() -> void:
+	latched_facing = get_facing()
+	latched_intent = move_intent
+	latched_braking = brake_intent
+	latched_stance = in_stance
+	latched_committed = hit_committed
+	latched_stagger = stagger_left
+	latched_shot_state = current_shot_state
 
 
 # Sanitizes the body's velocity/position to finite values right before the tick

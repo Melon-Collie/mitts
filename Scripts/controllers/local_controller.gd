@@ -916,18 +916,29 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> v
 			skater.global_position += _replay_collision_result.sep_b
 
 
-# In a reconcile replay the press reads its partner where the host had him at
-# the replayed input's stamp, like the body checks beside it.
+# How far from the host's instant a client's read of a press partner can land:
+# the host gates an input on its tick clock but labels its snapshots with its
+# wall clock, which can sit a tick apart, and the two ticks of one rendered
+# frame share one wall reading, a tick more.
+const PRESS_READ_TIMING_S: float = 2.0 * Constants.TICK_DURATION
+# A drawn body this close (edge to edge, m) may be pressed against: the drawn
+# remote sits on the render clock, centimetres from its buffered sample.
+const _PRESS_NEAR_M: float = 0.5
+
+
+# A client reads its partner where the host had him at the input's stamp, from
+# the buffered sample, in its live step and its replay alike, so both meet the
+# host's press the same way. The host's own player reads the bodies themselves.
 func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
-	if not is_replaying:
+	if _is_host or not _historical_others_provider.is_valid():
 		return super._find_press_partner(host_ts, out)
-	if not _historical_others_provider.is_valid() or skater.is_ghost:
+	if skater.is_ghost or (not is_replaying and not _press_candidate_near()):
 		return false
 	var my_pos: Vector3 = skater.global_position
 	var my_radius: float = skater.collision_radius()
 	var others: Array = _historical_others_provider.call(skater, host_ts)
 	var best_i: int = -1
-	var best_gap: float = PressRules.CONTACT_SLACK_M
+	var best_gap: float = INF
 	for i: int in others.size():
 		var rec: Dictionary = others[i]
 		var other: Skater = rec["skater"]
@@ -936,8 +947,12 @@ func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
 			continue
 		var d: Vector3 = (rec["position"] as Vector3) - my_pos
 		d.y = 0.0
-		var gap: float = d.length() - my_radius - other.collision_radius()
-		if gap < best_gap:
+		var dist: float = d.length()
+		if dist < 0.0001:
+			continue
+		var gap: float = dist - my_radius - other.collision_radius()
+		var speed_along: float = (rec["velocity"] as Vector3).dot(d / dist)
+		if PressRules.touching(gap, speed_along, PRESS_READ_TIMING_S) and gap < best_gap:
 			best_gap = gap
 			best_i = i
 	if best_i < 0:
@@ -945,8 +960,6 @@ func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
 	var best: Dictionary = others[best_i]
 	var partner: Skater = best["skater"]
 	out.position = best["position"]
-	out.velocity = best["velocity"]
-	out.radius = partner.collision_radius()
 	out.weight = partner.weight
 	out.cfg = partner.press_cfg
 	out.thrust = partner.press_thrust
@@ -957,6 +970,19 @@ func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
 	out.posture = SkaterMovementRules.posture_of(best["stance"], best["hit"])
 	out.stagger = best["stagger"]
 	return true
+
+
+func _press_candidate_near() -> bool:
+	var my_pos: Vector3 = skater.global_position
+	var my_radius: float = skater.collision_radius()
+	for other: Skater in skater.contact_others():
+		if other == null or other == skater:
+			continue
+		var d: Vector3 = other.global_position - my_pos
+		d.y = 0.0
+		if d.length() - my_radius - other.collision_radius() < _PRESS_NEAR_M:
+			return true
+	return false
 
 
 func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2.ZERO) -> void:

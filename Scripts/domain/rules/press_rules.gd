@@ -28,6 +28,15 @@ const CONTACT_SLACK_M: float = 0.02
 const REST_SPEED: float = 0.01
 
 
+# Whether two bodies `gap` apart (edge to edge, m) touch, for a reader that
+# places the other body only to within `timing_s` of the instant it reads him
+# at, while he moves at `speed_along` (m/s) along the line between them: the
+# slack, plus that much of his travel either way. A reader with the bodies
+# themselves passes 0.
+static func touching(gap: float, speed_along: float, timing_s: float) -> bool:
+	return gap < CONTACT_SLACK_M + absf(speed_along) * timing_s
+
+
 # The acceleration (m/s²) body X's legs push along `n` with: its stride in its
 # posture (the commit's stride penalty is the cost of skating loaded at speed,
 # lifted in contact, where the commit is the drive), the uncommitted share

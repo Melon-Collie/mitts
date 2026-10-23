@@ -209,7 +209,7 @@ is moved slowly just past his hold, never snapped.
   6), the stagger timer. No wire change.
 - **It runs in each body's movement step**, from both bodies' replicated
   state, so the host, the local prediction and reconcile replay compute the same
-  pair; the replay reads the partner where the host had him
+  pair; a client reads the partner where the host had him, live and in replay
   (`LocalController._find_press_partner`, `Scripts/networking/CLAUDE.md`). Every
   body's intent is wire-quantized first, so the host's raw stick and a client's
   decoded one drive the same push.
@@ -303,6 +303,14 @@ As built (v88, replay format 19): the screen's two reads the press still needs
 aim stick no longer holds its aim while RB is down; with nothing to throw, a
 released stick eases back to the carry rest as it does without RB.
 
+Every machine reads a press partner at the tick's start: the host from what his
+skater latched at the end of the last tick, so controller order never changes a
+press; a client from its buffered sample at the input's stamp, in its live step
+and its replay alike, counting him touching within the travel its timing
+allows (`PressRules.touching`, `LocalController.PRESS_READ_TIMING_S`). A
+carried man reaches 6 m/s, where a client a tick off with the bare slack lost
+him on most ticks (`test_press_reads_one_instant.gd`).
+
 ## Docs that change when each phase lands
 
 - `docs/gameplay-design.md` — the physicality paragraph (1, 3).
@@ -315,7 +323,7 @@ released stick eases back to the carry rest as it does without RB.
 | piece | file |
 |---|---|
 | press math | `Scripts/domain/rules/press_rules.gd` |
-| the pair's motion | `SkaterController._apply_press`, `_find_press_partner` (`LocalController`'s in replay) |
+| the pair's motion | `SkaterController._apply_press`, `_find_press_partner` (`LocalController`'s on a client), `Skater._latch_press_read` |
 | bot press and dig-in | `Scripts/ai/skater_agent_press.gd`, `Scripts/domain/ai/press_read.gd`, `Scripts/domain/ai/screen_read.gd` |
 | live-rig tests | `tests/harness/press_harness.gd`, `tests/unit/controllers/test_press.gd`, *slow* `tests/slow/controllers/test_press_table.gd` |
 | measurement | `tests/instruments/controllers/test_net_front_press.gd` |
