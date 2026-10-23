@@ -171,6 +171,11 @@ static func _depth(kind: int) -> bool:
 	return kind == Move.C_CUT
 
 
+# Set on his spot with the move settled out of him: in the ready stance.
+func is_settled() -> bool:
+	return phase == Phase.SET and _stop <= 0.0 and _recover >= 1.0
+
+
 func top_speed() -> float:
 	match move:
 		Move.SHUFFLE:

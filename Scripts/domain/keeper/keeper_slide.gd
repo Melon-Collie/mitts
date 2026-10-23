@@ -171,6 +171,11 @@ func post_spot(post: Vector2, from: Vector2) -> Vector2:
 	return from + heading * maxf(out, 0.0)
 
 
+# Down on his spot with the stop settled out of him: in the butterfly.
+func is_settled() -> bool:
+	return phase == Phase.DOWN and _stop <= 0.0
+
+
 func _brake() -> float:
 	return friction + edge_brake
 

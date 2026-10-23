@@ -43,6 +43,7 @@ const SCENARIOS: Array = [
 	["rvh_drop_in", 1.0, RVH_DROP_IN],
 	["rvh_drop_in_glove", -1.0, RVH_DROP_IN],
 	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
+	["sequence", 0.0, SEQUENCE],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -67,6 +68,14 @@ const POST_SLIDE_START := Vector2(0.6, -0.4)
 const RVH_DROP_IN: int = -5
 const RVH_FROM_SLIDE: int = -6
 const RVH_HOLD_TICKS: int = 18
+# KeeperMotor through a whole sequence across the crease and back (turned to
+# the puck, a T-push, down, a slide to the post, the RVH, back down, a recovery,
+# a shuffle and a C-cut), a frame every SEQUENCE_FRAME_EVERY ticks from the
+# shooter's side and high in front, the frames wrapped SHEET_WRAP to a row; the
+# bar is his rest: on his feet green, down blue, on the post red.
+const SEQUENCE: int = -8
+const SEQUENCE_FRAME_EVERY: int = 12
+const SHEET_WRAP: int = 12
 const GOAL_LINE_Z: float = 0.35
 const DROP_FRAME_EVERY: int = 3
 const DROP_HOLD_TICKS: int = 12
@@ -155,6 +164,8 @@ func _init() -> void:
 func _record(target: float, kind: int) -> Array:
 	if kind == DROP_AND_RISE or kind == RECOVER:
 		return _record_drop(target if kind == RECOVER else 0.0)
+	if kind == SEQUENCE:
+		return _record_sequence()
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -247,6 +258,38 @@ func _record_slide(target: float, from_feet: bool, to_post: bool) -> Array:
 	return out
 
 
+func _record_sequence() -> Array:
+	var motor := KeeperMotor.new()
+	var iron := Vector2(GameRules.NET_HALF_WIDTH, GOAL_LINE_Z)
+	motor.x = -0.3
+	motor.z = -0.6
+	motor.face(-0.25)
+	motor.push_to(Vector2(-0.8, -0.6))
+	motor.drop_down()
+	motor.slide_to(motor.slide.post_spot(iron, Vector2(-0.8, -0.6)))
+	motor.rvh_slide_in(iron, 1.0)
+	motor.rvh_fold_out()
+	motor.recover(-1.0)
+	motor.face(0.0)
+	motor.shuffle_to(Vector2(0.0, 0.0))
+	motor.c_cut_to(Vector2(0.0, -0.6))
+	var out: Array = []
+	var tick: int = 0
+	var idle: int = 0
+	while idle < SETTLE_FRAMES * SEQUENCE_FRAME_EVERY:
+		if tick % SEQUENCE_FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			motor.pose(p)
+			var phase: int = [KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
+					KeeperFootwork.Phase.STOP][motor.rest]
+			out.append([p, Vector3(motor.x, 0.0, motor.z), phase, 0.0, tick * DT, motor.yaw])
+		motor.step(DT)
+		tick += 1
+		if motor.is_idle():
+			idle += 1
+	return out
+
+
 # The RVH's frames, as _record's: PUSH on the way in (and through the slide
 # before it), GLIDE sealed, STOP on the way out, SET at rest.
 func _record_post(post_side: float, from_slide: bool) -> Array:
@@ -328,9 +371,12 @@ func _process(_delta: float) -> bool:
 		var target: float = float(_scenarios[_scenario_i][1])
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
-			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE
+			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
+					or kind == SEQUENCE
 		_frames = _record(target, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
+		if kind == SEQUENCE:
+			_views = [_views[0], _views[2]]
 		_shots = []
 		_shot_i = 0
 		_ticks = 0
@@ -364,10 +410,16 @@ func _save_sheet(name: String) -> void:
 		return
 	var w: int = _shots[0].get_width()
 	var h: int = _shots[0].get_height()
-	var cols: int = _frames.size()
-	var sheet := Image.create(w * cols, h * _views.size(), false, _shots[0].get_format())
+	# A long move wraps: each view's frames run SHEET_WRAP to a row, the views'
+	# blocks one under the other.
+	var frames: int = _frames.size()
+	var cols: int = mini(frames, SHEET_WRAP) if frames > 2 * SHEET_WRAP else frames
+	var rows: int = ceili(float(frames) / float(cols))
+	var sheet := Image.create(w * cols, h * rows * _views.size(), false, _shots[0].get_format())
 	for i: int in _shots.size():
-		sheet.blit_rect(_shots[i], Rect2i(0, 0, w, h), Vector2i((i % cols) * w, (i / cols) * h))
+		var f: int = i % frames
+		var row: int = (i / frames) * rows + f / cols
+		sheet.blit_rect(_shots[i], Rect2i(0, 0, w, h), Vector2i((f % cols) * w, row * h))
 	var path: String = ProjectSettings.globalize_path("%s/strip_%s.png" % [OUT_DIR, name])
 	sheet.save_png(path)
 	print("[keeper_strip] ", path)
