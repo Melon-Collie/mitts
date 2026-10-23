@@ -1,6 +1,9 @@
 # Physicality — the pin on the stick button, and the cross-check
 
-Status: **all three phases built**, playtest pending. Amends
+Status: **all three phases built**; Phases B and C **retired** at v87 — the
+press (`docs/net-front-battles-plan.md`) is how a man is moved off his spot, and
+the cross-check's code is gone. Phase A (the pin on the stick button) stands.
+Amends
 `docs/defensive-play-plan.md` (the pin revision, v74) and adds a new verb. Three
 phases, each its own PR and playtest.
 
@@ -145,7 +148,7 @@ instead, and fails if a movement change breaks it:
   cleaned up.
 - `test_bot_board_play.gd`: a bot pinner holds a one-way slide to the cap.
 
-## Phase B — the cross-check
+## Phase B — the cross-check (retired)
 
 ### The model: a stride delivered through the arms
 
@@ -339,7 +342,7 @@ him sideways off the goalie's eyes rather than only straight away.
   a human's does. A screener's set reads whether a defender could reach him at
   any aim the defender can turn to.
 
-## Phase C — bots cross-check
+## Phase C — bots cross-check (retired)
 
 Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 `Scripts/domain/ai/DECISIONS.md` §8.

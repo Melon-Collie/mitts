@@ -1036,7 +1036,6 @@ var _pose_bridge := SkaterPoseBridge.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
-var _cross_check: SkaterCrossCheck = SkaterCrossCheck.new()
 var _settle: SkaterSettleGate = SkaterSettleGate.new()
 var last_processed_host_timestamp: float = 0.0
 var has_puck: bool = false
@@ -1559,17 +1558,16 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 # `stagger_strength` (m/s) is how hard it landed (Skater.body_check_received);
 # omitted, the impulse's own magnitude.
 func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -> void:
-	_absorb_hit(impulse, stagger_strength, true)
+	_absorb_hit(impulse, stagger_strength)
 
 
 # The outcome of a Δv `impulse` landing on him: the stagger from how hard it
-# landed (`stagger_strength`, or the impulse's own magnitude), and, for a
-# `full_check`, the rocked band and the knockdown — which reads his balance
-# (BodyBalanceRules) against how far his body was driven, so the boards behind
-# him add to the stagger and not to the fall. A shove is no full check: it
-# staggers him and nothing more. Committed to a check, he leans into it
+# landed (`stagger_strength`, or the impulse's own magnitude), the rocked band
+# and the knockdown — which reads his balance (BodyBalanceRules) against how far
+# his body was driven, so the boards behind him add to the stagger and not to
+# the fall. Committed to a check, he leans into it
 # (BodyBalanceRules.leaned_into), whichever body's resolver landed it.
-func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) -> void:
+func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
 	var felt: Vector3 = impulse
 	if skater.delivers_checks():
 		var leaned: Vector2 = BodyBalanceRules.leaned_into(Vector2(impulse.x, impulse.z),
@@ -1592,18 +1590,15 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) ->
 		return
 	var cfg: BodyCheckRules.Config = _body_check_config()
 	var knockdown_add: float = 0.0
-	var stagger_add: float = minf(BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg),
-			cfg.max_stagger_seconds)
-	if full_check:
-		var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
-				skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
-		if overshoot > 1.0:
-			knockdown_add = KnockdownFallRules.first_impact_time(
-					Vector2(impulse.x, impulse.z).length(), _fall_config()) \
-					+ BodyCheckRules.lie_seconds_from_overshoot(overshoot, cfg) \
-					+ knockdown_getup_seconds
-		stagger_add = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
-				knockdown_add > 0.0)
+	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
+			skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
+	if overshoot > 1.0:
+		knockdown_add = KnockdownFallRules.first_impact_time(
+				Vector2(impulse.x, impulse.z).length(), _fall_config()) \
+				+ BodyCheckRules.lie_seconds_from_overshoot(overshoot, cfg) \
+				+ knockdown_getup_seconds
+	var stagger_add: float = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
+			knockdown_add > 0.0)
 	_set_knockdown_from_impulse(knockdown_add, impulse)
 	stagger_timer = maxf(stagger_timer, stagger_add)
 
@@ -1612,29 +1607,6 @@ func _absorb_hit(impulse: Vector3, stagger_strength: float, full_check: bool) ->
 func _balance_posture() -> BodyBalanceRules.Posture:
 	return BodyBalanceRules.posture_of(stance_active,
 			SkaterStateMachine.state_off_balance(_sm.get_state()))
-
-
-# Host-only (CrossCheckTracker): a cross-check landing on this skater along
-# `push_dir` (unit XZ) from a shover of `shover_weight` pushing at
-# `shover_thrust`. He answers it with his own edges and stride as he is now
-# (posture, stagger, intent); what gets through is his Δv, a stagger and never
-# more (_absorb_hit). Returns the Δv (m/s, 0 when he held).
-func take_cross_check(shover_weight: float, shover_thrust: float, push_dir: Vector2) -> float:
-	var posture: int = SkaterMovementRules.posture_of(stance_active, hit_active)
-	var bc: BodyCheckRules.Config = _body_check_config()
-	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
-	var dv: float = CrossCheckRules.victim_dv(shover_weight, shover_thrust, skater.weight,
-			push_dir, skater.get_facing(),
-			CrossCheckRules.edge_accel(cfg, posture, BodyCheckRules.grip_mult(stagger_timer, bc)),
-			skater.move_intent,
-			CrossCheckRules.drive_accel(cfg, posture,
-					thrust * BodyCheckRules.thrust_mult(stagger_timer, bc)))
-	if dv <= 0.0:
-		return 0.0
-	var impulse := Vector3(push_dir.x, 0.0, push_dir.y) * dv
-	skater.velocity += impulse
-	_absorb_hit(impulse, dv, false)
-	return dv
 
 
 # Extend-never-shorten knockdown write for the impulse path (host + local-victim
@@ -1708,9 +1680,9 @@ func _deflect_lift_share() -> float:
 func _advance_stick_check(input: InputState, delta: float) -> void:
 	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
 			or skater.is_forced_lift_active() or skater.stick_tied \
-			or CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 			or skater.pin_role == BoardPinRules.Role.PINNED \
 			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
+	# F under Ctrl is dead: the commit has the stick.
 	_stick_check.advance(input.stick_check_pressed and not input.hit_held,
 			input.stick_check_held, not stick_taken, stick_taken, delta)
 	skater.stick_check_phase = _stick_check.phase
@@ -1718,32 +1690,9 @@ func _advance_stick_check(input: InputState, delta: float) -> void:
 
 
 # Adopts the host's lift phase ahead of a reconcile replay, which steps it on.
-# The cross-check rides the same rail.
 func _adopt_stick_check(state: SkaterNetworkState) -> void:
 	_stick_check.adopt(state.stick_check_phase, state.stick_check_elapsed)
 	skater.stick_check_phase = _stick_check.phase
-	_cross_check.adopt(state.cross_check_phase, state.cross_check_elapsed)
-	_stamp_cross_check()
-
-
-# The stick button pressed with Ctrl held throws it (never a lift), from puckless
-# skating, not a pin or the ice; a puck on the blade, a pin or going down ends it.
-func _advance_cross_check(input: InputState, delta: float) -> void:
-	var free: bool = not has_puck and not skater.is_knocked_down \
-			and skater.pin_role == BoardPinRules.Role.NONE
-	var to_cursor := Vector2(input.mouse_world_pos.x - skater.global_position.x,
-			input.mouse_world_pos.z - skater.global_position.z)
-	_cross_check.advance(input.hit_held and input.stick_check_pressed,
-			free and _sm.get_state() == State.SKATING_WITHOUT_PUCK, not free,
-			CrossCheckRules.aim_dir(skater.get_facing(), to_cursor,
-					deg_to_rad(upper_body_max_twist_deg)), delta)
-	_stamp_cross_check()
-
-
-func _stamp_cross_check() -> void:
-	skater.cross_check_phase = _cross_check.phase
-	skater.cross_check_elapsed = _cross_check.elapsed
-	skater.cross_check_aim = _cross_check.aim
 
 
 func _process_input(input: InputState, delta: float) -> void:
@@ -1821,7 +1770,6 @@ func _process_input(input: InputState, delta: float) -> void:
 	# previously never stamped it, so host-rendered client skaters froze at a
 	# stale shot state.
 	skater.current_shot_state = _sm.get_state() as int
-	_advance_cross_check(input, delta)
 	_advance_stick_check(input, delta)
 	# Save blade/hand world positions before upper body rotation. After the body
 	# rotates toward the blade, re-expressing these in the new local frame gives
@@ -2217,9 +2165,6 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.blade_up = skater.blade_up
 	state.stick_check_phase = _stick_check.phase
 	state.stick_check_elapsed = _stick_check.elapsed
-	state.cross_check_phase = _cross_check.phase
-	state.cross_check_elapsed = _cross_check.elapsed
-	state.cross_check_aim = _cross_check.aim
 	state.stick_tied = skater.stick_tied
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
@@ -2303,8 +2248,6 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	skater.velocity = state.velocity
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
-	skater.cross_check_phase = state.cross_check_phase
-	skater.cross_check_elapsed = state.cross_check_elapsed
 	skater.stick_tied = state.stick_tied
 	skater.pin_role = state.pin_role
 	skater.pin_strength = state.pin_strength
@@ -2580,8 +2523,6 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.hit_committed = false
 	_stick_check.reset()
 	skater.stick_check_phase = _stick_check.phase
-	_cross_check.reset()
-	_stamp_cross_check()
 	_settle.clear()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO

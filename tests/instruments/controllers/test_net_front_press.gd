@@ -2,8 +2,8 @@ extends GutTest
 
 # What a sustained press moves: two real controllers in contact at a standstill
 # (PressHarness), the attacker driving into the man in front of him for two
-# seconds. Prints how far the man gives ground and how far the attacker gets,
-# against what the cross-check buys from the same spot. Read by
+# seconds. Prints how far the man gives ground and how far the attacker gets.
+# Read by
 # docs/net-front-battles-plan.md; asserts nothing.
 
 const PRESS_S: float = 2.0
@@ -45,9 +45,6 @@ func test_print_the_press_table() -> void:
 		["light on heavy", 235, 170, "behind", "nothing", "skate commit"],
 		["from the side", 201, 201, "beside", "nothing", "skate commit"],
 		["from the side, stance", 201, 201, "beside", "stance", "skate commit"],
-		["cross-check", 201, 201, "behind", "nothing", "shove"],
-		["cross-check, man brakes", 201, 201, "behind", "brake", "shove"],
-		["cross-check, side", 201, 201, "beside", "nothing", "shove"],
 	]
 	for c: Array in cases:
 		var r: PressHarness.Result = PressHarness.new(self).run(

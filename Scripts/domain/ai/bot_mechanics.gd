@@ -70,11 +70,6 @@ const WRISTER_SHOT_SPEED_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # puck tight along the boards.
 const CARRY_BLADE_WALL_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 
-# How far the league chest turns off the hips (SkaterController
-# .upper_body_max_twist_deg): the most a bot can aim a cross-check off its facing.
-const UPPER_BODY_MAX_TWIST_RAD: float = 67.0 * PI / 180.0
-
-
 # The stick a bot's input skates. A bot's brake means stop, while its stick still
 # names where it is steering; slow, under the brake, that stick would make the
 # stop a shuffle (SkaterMovementRules.is_shuffle), which no bot decides on.

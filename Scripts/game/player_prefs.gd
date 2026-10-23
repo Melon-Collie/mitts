@@ -202,8 +202,8 @@ const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"block": JOY_BUTTON_A,
 	"brake": JOY_BUTTON_B,
 	# The stance and the hit are held while steering — a carrier braces with the
-	# stick in play, and the cross-check chords the hit with X — so neither can sit
-	# on a click of the steering stick.
+	# stick in play, and a press drives with the hit held — so neither can sit on
+	# a click of the steering stick.
 	"stance": JOY_BUTTON_LEFT_SHOULDER,
 	"hit": JOY_BUTTON_RIGHT_SHOULDER,
 	"stick_check": JOY_BUTTON_X,

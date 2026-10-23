@@ -410,3 +410,8 @@ here whenever you bump, in the same format.
 #      EXTEND) draws the shaft in over LOAD_S before the PUSH_S punch, and only
 #      the punch can land (can_land reads the elapsed time). Same layout and
 #      phase values; a v85 peer lands and claims a push 0.12 s early.
+# v87: the cross-check is retired (docs/net-front-battles-plan.md, Phase 3);
+#      the press is how a man is moved off his spot. The skater block shrinks a
+#      byte (59 -> 58 B, the cross_check u8 gone) and two RPCs
+#      (receive_cross_check_claim, notify_cross_check) leave the rpc ordering.
+#      Replay FORMAT_VERSION 19.

@@ -306,7 +306,6 @@ func _physics_process(delta: float) -> void:
 					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
 					and not skater.is_knocked_down \
 					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-					and not CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 					and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
@@ -360,8 +359,7 @@ func _physics_process(delta: float) -> void:
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
 				elif not skater.blade_up and not skater.stick_tied \
 						and skater.pin_role == BoardPinRules.Role.NONE \
-						and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-						and not CrossCheckRules.is_stick_busy(skater.cross_check_phase):
+						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
@@ -578,8 +576,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
-	# The lift and cross-check phases ride the same rail: the host's at the ack,
-	# stepped on by the replayed inputs.
+	# The lift phase rides the same rail: the host's at the ack, stepped on by
+	# the replayed inputs.
 	_adopt_stick_check(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.

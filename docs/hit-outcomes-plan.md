@@ -3,7 +3,8 @@
 Status: **Phases 0–3 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
-own PR and playtest.
+own PR and playtest. The cross-check this plan names was retired at v87
+(`docs/net-front-battles-plan.md`); its rows here record what was decided then.
 
 ## Decisions banked
 

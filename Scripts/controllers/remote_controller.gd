@@ -98,7 +98,7 @@ func apply_ghost_rpc(is_ghost: bool) -> void:
 		skater.set_ghost(is_ghost)
 
 # Called by GameManager when this remote skater is the victim of a credited check
-# or a landed cross-check (Lever B). Starts the knockback-lead pulse, scaled by the
+# (Lever B). Starts the knockback-lead pulse, scaled by the
 # hit's 0..1 hardness. No-op on the host (host drives remotes from input, not
 # interpolation) and for a zero/degenerate hit direction.
 func start_knockback_lead(hit_dir: Vector3, intensity: float) -> void:
@@ -798,8 +798,6 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# any reader (AI off-puck, VFX) on spectated remotes.
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
-	skater.cross_check_phase = state.cross_check_phase
-	skater.cross_check_elapsed = state.cross_check_elapsed
 	skater.stick_tied = state.stick_tied
 	_adopt_pin(state)
 	skater.current_shot_state = state.shot_state

@@ -2,7 +2,7 @@ class_name SkaterAgentPress
 extends RefCounted
 
 # One bot's press (AIPressRead), every physics tick after dispatch and the other
-# body and stick passes, ahead of the cross-check, which yields to it:
+# body and stick passes:
 # - covering a man at our net who hides the release from our goalie, leaned on
 #   him: drive into him (Ctrl, the stick toward him) when the press moves him
 #   off the sightline;
@@ -60,7 +60,7 @@ func _press_the_screen(input: InputState, snapshot: WorldSnapshot, me: SkaterNet
 	var n := Vector2(man.position.x - me.position.x, man.position.z - me.position.z).normalized()
 	var moved: float = AIPressRead.displacement_m(me, _caps_by_peer.get(_peer_id), man,
 			_caps_by_peer.get(man_pid))
-	if not AICrossCheckRead.clears_screen(man.position, n, moved, goalie_pos,
+	if not AIScreenRead.clears_screen(man.position, n, moved, goalie_pos,
 			snapshot.puck_state.position, _screen_cfg):
 		return false
 	input.hit_held = true
@@ -77,7 +77,7 @@ func _dig_in(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 			or Vector2(me.velocity.x, me.velocity.z).length() > SkaterMovementRules.SHUFFLE_MAX_SPEED:
 		return false
 	var their_goalie: GoalieNetworkState = snapshot.goalie_states.get(1 - _team_id)
-	if their_goalie == null or not AICrossCheckRead.hides_release(me.position,
+	if their_goalie == null or not AIScreenRead.hides_release(me.position,
 			Vector3(their_goalie.position_x, 0.0, their_goalie.position_z),
 			snapshot.puck_state.position, _screen_cfg):
 		return false

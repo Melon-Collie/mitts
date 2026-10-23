@@ -397,14 +397,6 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 				hand_local, blade_local, blade_side_sign, commit_t)
 		hand_local = posed.hand
 		blade_local = posed.blade
-	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
-			_skater.cross_check_elapsed)
-	if shove_w > 0.0:
-		var shoved: TopHandIK.Result = _cross_check_hand_pose(hand_local, blade_local,
-				blade_side_sign, CrossCheckRules.extension(_skater.cross_check_phase,
-						_skater.cross_check_elapsed), shove_w)
-		hand_local = shoved.hand
-		blade_local = shoved.blade
 
 	# Carry transit lift: while carrying, raise the blade over the puck during
 	# a pushing-face flip. One sin-envelope hop per flip (Skater
@@ -762,16 +754,7 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	var side: float = signf(_skater.bottom_shoulder.position.x)
 	var rest_arm: Vector3 = _controller.bh_free_hand_rest_arm + _free_hand_swing(side)
 	var rest: Vector3 = shoulder + Vector3(rest_arm.x * side, rest_arm.y, rest_arm.z) * arm
-	# A cross-check is thrown with both hands, and it takes hold on its own pose's
-	# ease: the spring takes longer than the throw to bring back a hand let go
-	# for an empty stick's reach. Held, the spring lets go from the shaft after.
-	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
-			_skater.cross_check_elapsed)
-	if shove_w >= 1.0:
-		_bh_release = 0.0
-		_bh_release_vel = 0.0
-	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest,
-			_bh_release * (1.0 - shove_w))
+	var bh: Vector3 = Vector3(grip_target_xz.x, grip_y, grip_target_xz.y).lerp(rest, _bh_release)
 	if _held_free_weight > 0.0:
 		bh = bh.lerp(_held_free_hand, _held_free_weight)
 	# Off the stick, the hand hangs where the arm can put it.
@@ -882,10 +865,8 @@ func address_stick_horiz() -> float:
 # How far down the shaft the bottom hand holds: the short lever a draw is won
 # with, walked down over the countdown rather than jumped to.
 func _grip_fraction() -> float:
-	var grip: float = lerpf(_controller.bottom_hand_grip_fraction,
+	return lerpf(_controller.bottom_hand_grip_fraction,
 			_controller.faceoff_center_grip_fraction, _address_blend())
-	return lerpf(grip, CrossCheckRules.GRIP_FRACTION, CrossCheckRules.pose_weight(
-			_skater.cross_check_phase, _skater.cross_check_elapsed))
 
 
 func _address_blend() -> float:
@@ -928,44 +909,6 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 			posed_hand.z + bearing.y * horiz)
 	_rigid_result.hand = hand_local.lerp(posed_hand, commit_t)
 	_rigid_result.blade = blade_local.lerp(posed_blade, commit_t)
-	return _rigid_result
-
-
-# The cross-check holds the shaft level across the chest in both hands, draws it
-# in to the chest and punches it out: the top hand at chest height on its own
-# shoulder's side (away from the blade), in over the load and out over the push
-# (CrossCheckRules.extension, negative while it comes in), and the blade a stick's length
-# off it across the body to the blade side (the bottom hand rides the shaft
-# between them, update_bottom_hand, gripped wide enough that the two hands
-# straddle the chest, each on its own shoulder's side). Posed hand-first like
-# the commit, over whatever the commit or the cursor put there, by `weight`
-# (CrossCheckRules.pose_weight); `extension` drives the punch.
-const _SHOVE_HAND_X: float = 0.25        # off the chest's centre, away from the blade
-const _SHOVE_HAND_DROP_M: float = 0.20   # under the shoulder marker: chest height
-# The sweater's front at chest height off the trunk's shoulder, in shoulder
-# offsets: its chest ring is 0.195 m deep on the 0.22 m shoulder, and both
-# ride girth (SkaterMeshBuilder, SkaterAppearanceCoordinator).
-const _SHOVE_CHEST_DEPTH: float = 0.89
-const _SHOVE_LOAD_CLEAR_M: float = 0.07  # the top hand off the chest at the deepest load
-const _SHOVE_FULL_Z: float = -0.75       # in front of the shoulder at full push: nearly straight
-const _SHOVE_BEARING_Z: float = -0.15    # the shaft a touch ahead of square across
-
-
-func _cross_check_hand_pose(hand_local: Vector3, blade_local: Vector3,
-		blade_side_sign: float, extension: float, weight: float) -> TopHandIK.Result:
-	var shoulder_z: float = arm_shoulder().z
-	var loaded_z: float = shoulder_z \
-			- _skater.shoulder_offset * _SHOVE_CHEST_DEPTH - _SHOVE_LOAD_CLEAR_M
-	var posed_hand := Vector3(-_SHOVE_HAND_X * blade_side_sign,
-			_skater.shoulder.position.y - _SHOVE_HAND_DROP_M,
-			lerpf(loaded_z, shoulder_z + _SHOVE_FULL_Z,
-					(extension + CrossCheckRules.DRAW_IN) / (1.0 + CrossCheckRules.DRAW_IN)))
-	var across: Vector2 = Vector2(blade_side_sign, _SHOVE_BEARING_Z).normalized()
-	var stick: float = solve_stick_length()
-	var posed_blade := Vector3(posed_hand.x + across.x * stick, posed_hand.y,
-			posed_hand.z + across.y * stick)
-	_rigid_result.hand = hand_local.lerp(posed_hand, weight)
-	_rigid_result.blade = blade_local.lerp(posed_blade, weight)
 	return _rigid_result
 
 

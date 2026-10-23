@@ -2,8 +2,8 @@ extends GutTest
 
 # The rocked hit, through the real controller: a full check (stagger_ref_impulse
 # and up) jars his stick off the ice and takes his stance and commit until the
-# stagger timer comes back down to the full stagger, and a cross-check never
-# puts him there (BodyCheckRules' rocked band).
+# stagger timer comes back down to the full stagger (BodyCheckRules' rocked
+# band).
 
 const DT: float = 1.0 / 120.0
 
@@ -101,22 +101,6 @@ func test_a_hit_short_of_a_full_check_never_rocks() -> void:
 	assert_true(_controller.stance_active)
 
 
-func test_a_cross_check_never_rocks() -> void:
-	var dv: float = _controller.take_cross_check(3.0, 100.0, Vector2(1.0, 0.0))
-	assert_gt(dv, _controller.stagger_ref_impulse, "a shove past a full check's strength")
-	assert_lte(_controller.stagger_timer, _controller.stagger_max_seconds)
-	_tick(InputState.new())
-	assert_false(_skater.stick_jarred)
-
-
-func test_a_cross_check_on_a_rocked_man_leaves_his_window_alone() -> void:
-	_controller._on_body_check_received(_rocks_him_on_his_feet())
-	var rocked: float = _controller.stagger_timer
-	assert_gt(rocked, _controller.stagger_max_seconds)
-	_controller.take_cross_check(3.0, 100.0, Vector2(1.0, 0.0))
-	assert_almost_eq(_controller.stagger_timer, rocked, 1e-6)
-
-
 # BodyCheckRules.Config's defaults are read where no controller is at hand (the
 # bots' commit bar, the domain tests), so they are the controller's own values.
 func test_the_rules_defaults_are_the_controllers_tuning() -> void:
@@ -132,11 +116,6 @@ func test_the_rules_defaults_are_the_controllers_tuning() -> void:
 	for field: String in ["balance_ref_dv", "along_share", "sight_behind", "vulnerable_mult",
 			"stance_base_ratio"]:
 		assert_almost_eq(balance.get(field) as float, balance_defaults.get(field) as float, 1e-6, field)
-
-
-func test_a_cross_check_never_knocks_him_down() -> void:
-	_controller.take_cross_check(3.0, 100.0, Vector2(1.0, 0.0))
-	assert_eq(_controller.knockdown_timer, 0.0, "however hard, from the side")
 
 
 func test_square_on_he_rides_what_floors_him_from_the_side() -> void:

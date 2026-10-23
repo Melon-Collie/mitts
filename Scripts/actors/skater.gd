@@ -675,13 +675,6 @@ var blade_up: bool = false
 # controller and replicated. Its raised phases lift the blade like blade_up, but
 # the stick plays no puck while busy — the hook is the only thing it can do.
 var stick_check_phase: int = 0
-# The cross-check (CrossCheckRules.Phase), its seconds in that phase and the aim
-# it was thrown at, stamped the same way: the stick is out of puck play while it
-# is busy, and the pose reads the push's extension and squares the chest to the
-# aim. The aim is not replicated: remotes see the chest turned in the upper body.
-var cross_check_phase: int = 0
-var cross_check_elapsed: float = 0.0
-var cross_check_aim: Vector2 = Vector2.ZERO
 # Tied up with an opponent's stick (StickTieTracker, host-only writer;
 # replicated), set on both players. A tied stick is off the ice and slowed: it
 # catches nothing (an airborne puck that reaches it bobbles off), and pokes,

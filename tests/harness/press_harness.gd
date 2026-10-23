@@ -2,8 +2,7 @@ class_name PressHarness
 extends RefCounted
 
 # Two real SkaterControllers in contact at a standstill, ticked in the live
-# order (every controller, then every skater's own physics tick, then the host's
-# cross-check tracker): the attacker drives into the man in front of him. The
+# order (every controller, then every skater's own physics tick): the attacker drives into the man in front of him. The
 # man faces +z (up ice); "behind" puts the attacker between him and the net,
 # pushing along his blades, "beside" off his side, pushing across them.
 # Read by test_press.gd and the net-front press instrument.
@@ -33,7 +32,7 @@ class Spec:
 	var man_back: bool = false      # skates back into the attacker
 	var man_brake: bool = false
 	var man_stagger_s: float = 0.0  # a stagger he starts the press under
-	var attacker: String = "skate commit"   # "skate", "skate commit", "skate stance", "shove"
+	var attacker: String = "skate commit"   # "skate", "skate commit", "skate stance"
 
 
 class Result:
@@ -48,7 +47,6 @@ class Result:
 
 var man: SkaterController = null
 var attacker: SkaterController = null
-var _shoves: CrossCheckTracker = null
 var _test: GutTest = null
 
 
@@ -81,12 +79,6 @@ func _rig(spec: Spec) -> void:
 	var both: Array = [man.skater, attacker.skater]
 	man.skater.set_skater_collision_provider(func() -> Array: return both)
 	attacker.skater.set_skater_collision_provider(func() -> Array: return both)
-	var reg := PlayerRegistry.new()
-	reg._skaters_cache = [man.skater, attacker.skater] as Array[Skater]
-	reg.team_id_by_skater = {man.skater: 0, attacker.skater: 1}
-	var controller_of: Dictionary = {man.skater: man, attacker.skater: attacker}
-	_shoves = CrossCheckTracker.new()
-	_shoves.setup(reg, func(s: Skater) -> SkaterController: return controller_of.get(s))
 
 
 func _tick(mi: InputState, ai: InputState) -> void:
@@ -99,7 +91,6 @@ func _tick(mi: InputState, ai: InputState) -> void:
 	attacker._process_input(ai, DT)
 	man.skater._physics_process(DT)
 	attacker.skater._physics_process(DT)
-	_shoves.tick(true)
 
 
 func _face(c: SkaterController, facing: Vector2) -> void:
@@ -135,9 +126,8 @@ func run(spec: Spec, seconds: float) -> Result:
 		mi.move_vector = Vector2(-push.x, -push.z) if spec.man_back else Vector2.ZERO
 		ai.mouse_world_pos = attacker.skater.global_position + push * 3.0
 		ai.stance_held = spec.attacker.contains("stance")
-		ai.hit_held = spec.attacker.contains("commit") or spec.attacker == "shove"
-		ai.stick_check_pressed = spec.attacker == "shove" and i == 0
-		ai.move_vector = Vector2(push.x, push.z) if spec.attacker != "shove" else Vector2.ZERO
+		ai.hit_held = spec.attacker.contains("commit")
+		ai.move_vector = Vector2(push.x, push.z)
 		_tick(mi, ai)
 		r.peak_stagger = maxf(r.peak_stagger, man.stagger_timer)
 		r.knocked = r.knocked or man.knockdown_timer > 0.0

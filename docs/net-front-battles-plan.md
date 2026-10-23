@@ -1,7 +1,7 @@
 # Net-front battles — the press, and retiring the cross-check
 
-Status: **Phases 1-2 built** (the press, the bots' press and dig-in, the
-press's poses and scrape), playtest pending; Phase 3 not started. Amends the physicality
+Status: **all three phases built** (the press, the bots' press and dig-in, the
+press's poses and scrape, the cross-check retired), playtest pending. Amends the physicality
 paragraph of `docs/gameplay-design.md` and Phase B of
 `docs/physicality-plan.md` (the cross-check). The stick half of the battle is
 `docs/defensive-play-plan.md`'s tie; the crease itself (jams, stuffs, wraps)
@@ -289,8 +289,6 @@ is moved slowly just past his hold, never snapped.
 
 ## Phase 3 — retire the cross-check
 
-After Phase 1's playtest, and only if the press covers the net front:
-
 - Delete the cross-check: `CrossCheckRules` (its press terms already moved),
   `CrossCheckTracker`, `CrossCheckClaimResolver`, `CrossCheckRead`,
   `SkaterAgentCrossCheck`, the IK pose, the gait layer's shove, the tests, the
@@ -298,6 +296,12 @@ After Phase 1's playtest, and only if the press covers the net front:
 - Ctrl + F goes back to being dead input (Ctrl already has the stick).
 - `docs/physicality-plan.md` Phase B gains a retired note;
   `docs/gameplay-design.md` replaces the cross-check sentences with the press.
+
+As built (v87, replay format 19): the screen's two reads the press still needs
+(`hides_release`, `clears_screen`) moved out of `CrossCheckRead` into
+`AIScreenRead` (`Scripts/domain/ai/screen_read.gd`) before it went. The pad's
+aim stick no longer holds its aim while RB is down; with nothing to throw, a
+released stick eases back to the carry rest as it does without RB.
 
 ## Docs that change when each phase lands
 
@@ -312,7 +316,7 @@ After Phase 1's playtest, and only if the press covers the net front:
 |---|---|
 | press math | `Scripts/domain/rules/press_rules.gd` |
 | the pair's motion | `SkaterController._apply_press`, `_find_press_partner` (`LocalController`'s in replay) |
-| bot press and dig-in | `Scripts/ai/skater_agent_press.gd`, `Scripts/domain/ai/press_read.gd` |
+| bot press and dig-in | `Scripts/ai/skater_agent_press.gd`, `Scripts/domain/ai/press_read.gd`, `Scripts/domain/ai/screen_read.gd` |
 | live-rig tests | `tests/harness/press_harness.gd`, `tests/unit/controllers/test_press.gd`, *slow* `tests/slow/controllers/test_press_table.gd` |
 | measurement | `tests/instruments/controllers/test_net_front_press.gd` |
 
