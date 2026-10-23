@@ -543,7 +543,18 @@ Each phase leaves the suite green and the game playable.
 
 **Phase 3: the brain.**
 - Perception → threat model → planner → reflex (§3.1–3.4).
-- Puck handling: cover, sweep, catch, behind-net play.
+- Puck handling: cover, sweep, catch, behind-net play. Two things the old
+  goalie got wrong in play, which the new one must not:
+  - **Slow pucks close in** (a small bounce, a strip, a dribble at the
+    crease): the old goalie dropped, popped back up, and let the puck in. A
+    slow puck near him is not a shot to react to and recover from; it is a
+    puck to stop, cover or clear. He holds the seal until it is dead or gone.
+    The shot read keys on a fast release, so a slow loose puck needs its own
+    read.
+  - **A puck behind his stick:** caught between the back of the paddle and
+    his pads, it was redirected through the five-hole, and he did nothing
+    about it. A puck trapped on him is his to cover, with the five-hole
+    closed while it is there.
 - Scored on the Phase 0 scoreboard against the old goalie's baseline.
 - **The offline switch:**
   - free play, practice and games against bots use the new goalie;
