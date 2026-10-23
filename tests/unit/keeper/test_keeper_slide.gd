@@ -221,9 +221,10 @@ func test_it_starts_and_ends_in_the_butterfly() -> void:
 		assert_almost_eq(_skel.xf[b].origin, skel.xf[b].origin, Vector3.ONE * 1e-6, "bone %d ends down" % b)
 
 
+# Short slides too: their stop comes while the push leg is still folding down.
 func test_every_tick_keeps_his_gear_out_of_the_ice_his_arms_on_the_stick_and_nothing_jumping() -> void:
 	for from_feet: bool in [false, true]:
-		for target: float in [1.0, -1.6]:
+		for target: float in [1.0, -1.6, 0.3, -0.3]:
 			_check_every_tick(target, from_feet)
 
 

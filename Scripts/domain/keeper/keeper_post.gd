@@ -130,11 +130,20 @@ func _go(next: int, post: Vector2, post_side: float) -> void:
 	state = next
 
 
+# Where the rise out of the RVH he is in stands him: his edge on the post.
+func risen_spot() -> Vector2:
+	return _on_post(_sealed_on(), side, _standing_edge[_index(side)])
+
+
+# The post he is sealed on, from where he is.
+func _sealed_on() -> Vector2:
+	var sealed: Vector3 = _sealed_edge[_index(side)]
+	return Vector2(x, z) + Vector2(sealed.x + side * GameRules.NET_POST_RADIUS, sealed.z)
+
+
 func _leave(next: int, edge: Vector3) -> void:
 	_from = Vector2(x, z)
-	var sealed: Vector3 = _sealed_edge[_index(side)]
-	var post: Vector2 = _from + Vector2(sealed.x + side * GameRules.NET_POST_RADIUS, sealed.z)
-	_to = _on_post(post, side, edge) if next == State.RISING_OUT else _from
+	_to = _on_post(_sealed_on(), side, edge) if next == State.RISING_OUT else _from
 	_yaw_from = yaw
 	_clock = 0.0
 	state = next

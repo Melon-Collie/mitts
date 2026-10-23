@@ -424,9 +424,10 @@ func _bend_for_lateral(p: KeeperPose, stop: float) -> void:
 	lead.ankle.x += s * STOP_LEAD_OUT_M * stop
 	lead.shin_front = lead.shin_front.rotated(Vector3.FORWARD, -s * STOP_EDGE_RAD * stop)
 	var lean: float = PUSH_LEAN_RAD if move == Move.T_PUSH else SHUFFLE_LEAN_RAD
-	var into: float = lean * _drive - STOP_LEAN_RAD * stop
-	p.lumbar_rot.z -= _dir.x * into
-	p.lumbar_rot.x += _dir.y * into
+	p.lumbar_rot.z -= _dir.x * (lean * _drive - STOP_LEAN_RAD * stop)
+	# The stop's lean back against a diagonal stays across his line: leaned
+	# back as well, his blocker shoulder lifts off the stick.
+	p.lumbar_rot.x += _dir.y * lean * _drive
 
 
 # In and out: both skates' edges dug in the stop, a little wider; the lean

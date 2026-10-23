@@ -43,6 +43,13 @@ const SETTLE_S: float = 0.15
 # How much of his weight he gets through the lead skate's edge with both knees
 # down, against the whole of it in a standing edge stop.
 const EDGE_WEIGHT_SHARE: float = 0.3
+# How far off his line a slide is taken: turned further to it, he would be
+# down with his chest off the shot.
+const MAX_OFF_LINE_RAD: float = deg_to_rad(45.0)
+# How high the push skate lifts folding down from his feet: higher than the
+# drop's, since after a short slide the leg comes in barely stretched and its
+# shin pitches the boot's rigid toe into the ice under the falling knee.
+const FOLD_LIFT_M: float = 0.10
 
 # The hardest push's speed, and the pads' friction on the ice (the old goalie's
 # slide_friction, about μ 0.27).
@@ -308,7 +315,7 @@ func pose(p: KeeperPose) -> void:
 				# from the butterfly push it swings back round its knee.
 				if _from_feet:
 					KeeperDrop.blend_leg(p.legs[_push_leg()], _released, _released_knee,
-							_low.legs[_push_leg()], down)
+							_low.legs[_push_leg()], down, FOLD_LIFT_M)
 				else:
 					KeeperDrop.swing_leg(p.legs[_push_leg()], _released, _released_knee, _low.legs[_push_leg()], down)
 			# Back against the stop, as far as the speed it stops from asks.

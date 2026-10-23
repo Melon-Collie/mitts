@@ -47,6 +47,7 @@ const SCENARIOS: Array = [
 	["rvh_drop_in_glove", -1.0, RVH_DROP_IN],
 	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
 	["sequence", 0.0, SEQUENCE],
+	["goals", 0.0, GOALS],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -77,6 +78,11 @@ const RVH_HOLD_TICKS: int = 18
 # shooter's side and high in front, the frames wrapped SHEET_WRAP to a row; the
 # bar is his rest: on his feet green, down blue, on the post red.
 const SEQUENCE: int = -8
+# KeeperMotor given goals one after another (on his feet across and turned, a
+# spot steeper than a diagonal, down across, sealed on the glove post, back on
+# his feet in the middle), each given once he is at the last, making whatever
+# moves KeeperRoute picks; drawn as SEQUENCE is.
+const GOALS: int = -9
 const SEQUENCE_FRAME_EVERY: int = 12
 const SHEET_WRAP: int = 12
 const GOAL_LINE_Z: float = 0.35
@@ -170,6 +176,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_drop(target if kind == RECOVER else 0.0)
 	if kind == SEQUENCE:
 		return _record_sequence()
+	if kind == GOALS:
+		return _record_goals()
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -294,6 +302,41 @@ func _record_sequence() -> Array:
 	return out
 
 
+func _record_goals() -> Array:
+	var motor := KeeperMotor.new()
+	motor.z = -0.6
+	var goals: Array = [
+		[Vector2(-0.8, -0.5), -0.3, KeeperRoute.Rest.FEET], [Vector2(-0.4, -1.3), 0.0, KeeperRoute.Rest.FEET],
+		[Vector2(0.7, -0.5), 0.0, KeeperRoute.Rest.DOWN], [Vector2(-GameRules.NET_HALF_WIDTH, GOAL_LINE_Z), -1.0, -1],
+		[Vector2(0.0, -0.6), 0.0, KeeperRoute.Rest.FEET],
+	]
+	var out: Array = []
+	var tick: int = 0
+	var idle: int = 0
+	var next: int = 0
+	while next < goals.size() or idle < SETTLE_FRAMES * SEQUENCE_FRAME_EVERY:
+		if motor.is_idle() and next < goals.size():
+			var goal: Array = goals[next]
+			if int(goal[2]) < 0:
+				motor.seal(goal[0], goal[1])
+			else:
+				motor.go_to(goal[0], goal[1], goal[2])
+			print("[keeper_strip] goal %d at t %.3f, planned %.3f s" % [next, tick * DT, motor.time_to_goal()])
+			next += 1
+			idle = 0
+		if tick % SEQUENCE_FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			motor.pose(p)
+			var phase: int = [KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
+					KeeperFootwork.Phase.STOP][motor.rest]
+			out.append([p, Vector3(motor.x, 0.0, motor.z), phase, 0.0, tick * DT, motor.yaw])
+		motor.step(DT)
+		tick += 1
+		if motor.is_idle():
+			idle += 1
+	return out
+
+
 # The RVH's frames, as _record's: PUSH on the way in (and through the slide
 # before it), GLIDE sealed, STOP on the way out, SET at rest.
 func _record_post(post_side: float, from_slide: bool) -> Array:
@@ -378,10 +421,10 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == SEQUENCE
+					or kind == SEQUENCE or kind == GOALS
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
-		if kind == SEQUENCE:
+		if kind == SEQUENCE or kind == GOALS:
 			_views = [_views[0], _views[2]]
 		_shots = []
 		_shot_i = 0

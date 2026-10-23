@@ -259,7 +259,7 @@ func test_a_c_cut_turns_its_heel_out() -> void:
 					"going forward, a toe turns well out")
 
 
-func test_his_skates_stay_on_the_ice_and_his_gear_out_of_it() -> void:
+func test_his_skates_stay_on_the_ice_his_gear_out_of_it_and_his_stick_in_hand() -> void:
 	var runs: Array = []
 	for kind: int in MOVES:
 		for target: float in [1.0, -1.0]:
@@ -293,6 +293,10 @@ func test_his_skates_stay_on_the_ice_and_his_gear_out_of_it() -> void:
 				assert_almost_eq(low[1 - trail], 0.0, 0.005, "%s tick %d: the lead skate" % [what, i])
 			if kind == T_PUSH and _fw.phase == KeeperFootwork.Phase.PUSH:
 				assert_almost_eq(low[trail], 0.0, 0.005, "%s tick %d: the push skate" % [what, i])
+			var blocker_wrist: Vector3 = _skel.xf[KeeperSkeleton.Bone.FOREARM_B] \
+					* Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
+			assert_almost_eq(blocker_wrist.distance_to(_skel.xf[KeeperSkeleton.Bone.HAND_B]
+					* KeeperAnatomy.BLOCKER_WRIST), 0.0, 0.002, "%s tick %d: the blocker arm on the stick" % [what, i])
 
 
 func test_nothing_on_him_jumps_between_ticks() -> void:

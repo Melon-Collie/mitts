@@ -19,7 +19,8 @@ one the bots shoot at.
 | `keeper_drop.gd` | his butterfly drop, rise and recovery: how far down he is (a fall down, a push up, from wherever he is), and the pose that far between the ready stance and the butterfly; the recovery bringing the leg away from where he is going up first, so he stands with the skate that pushes him there loaded |
 | `keeper_slide.gd` | his butterfly slide, from the butterfly or from his feet (the lead knee dropping to the half butterfly as the push starts, the push skate never leaving where it stood): the push leg's knee up off the ice to about 45° and its skate catching the ice out wide (`KeeperPoses.butterfly_push`), driving him off it while the lead pad stays down, folding back to seal as the pads slide; the lead skate's edge stopping him on his spot; to a spot off his line, turned as he loads until his lead side faces it, and `post_spot`, the spot that lands the lead pad's end on a post; and the reach and time that gives the brain |
 | `keeper_post.gd` | his RVH on a post: dropping into it from his feet on the overlap (the post knee falling, the off skate sliding out wide on its edge) and rising back out, coming up into it from the butterfly after a slide and folding back; `overlap_spot` and `seal_spot`, where he is on the post standing and sealed |
-| `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame |
+| `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way |
+| `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included; the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -114,7 +115,7 @@ stance once settled. `test_keeper_drop.gd` holds the drop, rise and recovery:
 their times, the ready stance to the butterfly, the drop a fall, a change of
 mind going from where he is, the recovery's far leg up first and its skate
 holding its place, and every tick out of the ice, on the stick and without a
-jump. `test_keeper_slide.gd` holds the slide: at rest on the spot in
+jump. `test_keeper_slide.gd` holds the slide (short ones too, whose stop comes as the push leg folds): at rest on the spot in
 `KeeperSlide.time_to`, or at its reach past it, from the butterfly and from his feet (where the push skate holds from the drop's first frame), friction then the lead edge
 slowing him once pushed and the stop beating a coast, the push skate holding
 its place, the lead pad down on the ice the whole way and both through the
@@ -127,7 +128,12 @@ the off skate on the ice through the drop-in and the rise, and every tick out
 of the ice, on the stick and without a jump. `test_keeper_motor.gd` holds the
 moves strung together: whole sequences across the crease and back with nothing
 jumping at a hand-off, the pivot at its rate onto its facing, footwork in his
-turned frame, and a move from the wrong rest refused.
+turned frame, and a move from the wrong rest refused. `test_keeper_route.gd`
+holds him given where to be: from every rest to every kind of goal, there,
+every tick unbroken, no move refused and in the time the route planned (the
+brain will read it); a short step a shuffle and a long one a T-push, a turn
+first, a recovery toward a spot on his feet, a drop-in from the overlap; a spot
+or facing moved under a move taken on by it; and the last order winning.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
 the shooter's side, behind and high in front (`tools/keeper_strip.gd`).
 
