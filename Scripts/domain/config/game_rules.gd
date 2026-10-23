@@ -495,28 +495,20 @@ const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 20.554
 # called and as candidates when the puck goes out of play in the neutral zone.
 const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_Z - 1.524   # 5.766
 
-# Rule preset that gates which infractions are detected and how they're punished.
-#   OFF    — no offsides, no icing, no crease protection (free-for-all).
-#   ARCADE — offsides ghost the offending player; icing is ignored; crease
-#            camping (anti-cheese, not a real rule) ghosts after a dwell timer.
-#   NHL    — full stoppage rules: icing runs the hybrid race to the end-zone dots,
-#            offsides run delayed (no ghost) and whistle on offending-team touch.
-#            No crease protection — see CREASE_DWELL_DURATION for why.
+# Rule preset that gates which infractions are detected and how they're punished
+# (each set's rules: docs/gameplay-design.md, Game format).
 enum RuleSet { OFF, ARCADE, NHL }
 const DEFAULT_RULE_SET: int = RuleSet.ARCADE
 const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
 
-# Whether a goalie's cover stops play for a defensive-zone faceoff: a frozen
-# puck under him is unplayable in any game; with no faceoffs (OFF, free play)
-# he holds it a beat and plays it out himself.
+# A goalie's cover is a puck nobody can play, so it whistles wherever there
+# are faceoffs; in OFF he holds it a beat and plays it out himself.
 static func whistles_a_cover(rule_set: int) -> bool:
 	return rule_set != RuleSet.OFF
 
-# Slot depth — distance from goal line to the faceoff-hash "hard slot"
-# in front of the net. Real-rink geometry; matches the spot a hockey
-# player reads as the prime scoring area. Used by AI role behaviors
-# (anchor, carrier, finisher) as the "where the slot is" reference.
+# Slot depth — distance from goal line to the faceoff-hash "hard slot" in
+# front of the net: real-rink geometry, the prime scoring area as a player reads it.
 const SLOT_DIST_M: float = 5.0
 
 # ── Skater Defaults ───────────────────────────────────────────────────────────
