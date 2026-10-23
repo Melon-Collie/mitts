@@ -49,6 +49,7 @@ const SCENARIOS: Array = [
 	["sequence", 0.0, SEQUENCE],
 	["goals", 0.0, GOALS],
 	["stick_reach", 0.0, STICK_REACH],
+	["track", 0.0, TRACK],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -93,6 +94,16 @@ const STICK_SWEEP: Array[Vector3] = [
 	KeeperPoses.READY_BLADE,
 ]
 const STICK_SWEEP_FRAMES: int = 6
+# KeeperPositioning deciding at the planner's rate from a puck carried round
+# the zone (TRACK_PATH, in the net's frame at TRACK_SPEED), KeeperMotor moving
+# him there; the puck drawn, the bar his rest as SEQUENCE's.
+const TRACK: int = -11
+const TRACK_PATH: Array[Vector2] = [
+	Vector2(-3.0, -22.0), Vector2(0.0, -9.0), Vector2(8.0, -6.0), Vector2(6.0, -1.5), Vector2(3.0, 1.5),
+	Vector2(-0.3, 1.8), Vector2(-4.0, 1.2), Vector2(-5.0, -3.0), Vector2(-2.0, -8.0),
+]
+const TRACK_SPEED: float = 4.0
+const PLANNER_EVERY: int = 4
 const SEQUENCE_FRAME_EVERY: int = 12
 const SHEET_WRAP: int = 12
 const GOAL_LINE_Z: float = 0.35
@@ -104,6 +115,7 @@ const _PHASE_COLORS: Array[Color] = [
 
 var _camera: Camera3D = null
 var _posts: Array[Node3D] = []
+var _puck: MeshInstance3D = null
 var _keeper: Keeper = null
 var _views: Array = []
 var _scenarios: Array = []
@@ -161,6 +173,17 @@ func _init() -> void:
 		post.visible = false
 		root.add_child(post)
 		_posts.append(post)
+	_puck = MeshInstance3D.new()
+	var disc := CylinderMesh.new()
+	disc.top_radius = GameRules.PUCK_COLLISION_RADIUS
+	disc.bottom_radius = disc.top_radius
+	disc.height = 0.025
+	var black := StandardMaterial3D.new()
+	black.albedo_color = Color(0.02, 0.02, 0.02)
+	disc.material = black
+	_puck.mesh = disc
+	_puck.visible = false
+	root.add_child(_puck)
 	_camera = Camera3D.new()
 	_camera.fov = 40.0
 	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -190,6 +213,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_goals()
 	if kind == STICK_REACH:
 		return _record_stick_reach()
+	if kind == TRACK:
+		return _record_track()
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -311,6 +336,43 @@ func _record_sequence() -> Array:
 		tick += 1
 		if motor.is_idle():
 			idle += 1
+	return out
+
+
+func _record_track() -> Array:
+	var motor := KeeperMotor.new()
+	var brain := KeeperPositioning.new()
+	var out: Array = []
+	var tick: int = 0
+	var leg: int = 0
+	var puck: Vector2 = TRACK_PATH[0]
+	var still: int = 0
+	var zone: int = -1
+	while still < SETTLE_FRAMES * SEQUENCE_FRAME_EVERY:
+		var velocity := Vector2.ZERO
+		if leg < TRACK_PATH.size() - 1:
+			var to: Vector2 = TRACK_PATH[leg + 1]
+			velocity = (to - puck).normalized() * TRACK_SPEED
+			puck = puck.move_toward(to, TRACK_SPEED * DT)
+			if puck == to:
+				leg += 1
+		elif motor.is_idle():
+			still += 1
+		if tick % PLANNER_EVERY == 0:
+			brain.decide(puck, velocity, motor)
+			if brain.zone != zone:
+				zone = brain.zone
+				print("[keeper_strip] t %.2f zone %s" % [tick * DT, KeeperPositioning.Zone.keys()[zone]])
+		if tick % SEQUENCE_FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			motor.pose(p)
+			var phase: int = [KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
+					KeeperFootwork.Phase.STOP][motor.rest]
+			out.append([p, Vector3(motor.x, 0.0, motor.z + GOAL_LINE_Z), phase, 0.0, tick * DT, motor.yaw,
+					Vector3(puck.x, 0.0, puck.y + GOAL_LINE_Z)])
+		motor.step(DT)
+		tick += 1
+	print("[keeper_strip] refused %d" % motor.refused)
 	return out
 
 
@@ -444,10 +506,10 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == SEQUENCE or kind == GOALS
+					or kind == SEQUENCE or kind == GOALS or kind == TRACK
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
-		if kind == SEQUENCE or kind == GOALS:
+		if kind == SEQUENCE or kind == GOALS or kind == TRACK:
 			_views = [_views[0], _views[2]]
 		_shots = []
 		_shot_i = 0
@@ -466,6 +528,9 @@ func _process(_delta: float) -> bool:
 		_keeper.apply_pose(frame[0] as KeeperPose)
 		_keeper.position = frame[1] as Vector3
 		_keeper.rotation.y = float(frame[5]) if frame.size() > 5 else 0.0
+		_puck.visible = frame.size() > 6
+		if _puck.visible:
+			_puck.position = (frame[6] as Vector3) + Vector3(0.0, 0.0125, 0.0)
 		_keeper.reset_physics_interpolation()
 		_camera.position = mid + (view[1] as Vector3)
 		_camera.look_at(mid + (view[2] as Vector3), Vector3.UP)

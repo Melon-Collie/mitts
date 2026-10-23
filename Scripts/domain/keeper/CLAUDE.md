@@ -19,7 +19,8 @@ one the bots shoot at.
 | `keeper_drop.gd` | his butterfly drop, rise and recovery: how far down he is (a fall down, a push up, from wherever he is), and the pose that far between the ready stance and the butterfly; the recovery bringing the leg away from where he is going up first, so he stands with the skate that pushes him there loaded |
 | `keeper_slide.gd` | his butterfly slide, from the butterfly or from his feet (the lead knee dropping to the half butterfly as the push starts, the push skate never leaving where it stood): the push leg's knee up off the ice to about 45° and its skate catching the ice out wide (`KeeperPoses.butterfly_push`), driving him off it while the lead pad stays down, folding back to seal as the pads slide; the lead skate's edge stopping him on his spot; to a spot off his line, turned as he loads until his lead side faces it, and `post_spot`, the spot that lands the lead pad's end on a post; and the reach and time that gives the brain |
 | `keeper_post.gd` | his RVH on a post: dropping into it from his feet on the overlap (the post knee falling, the off skate sliding out wide on its edge) and rising back out, coming up into it from the butterfly after a slide and folding back; `overlap_spot` and `seal_spot`, where he is on the post standing and sealed |
-| `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way |
+| `keeper_positioning.gd` | the first brain, from the puck alone: where he wants to be by zone (beyond the blue line, in the zone, at a sharp angle below the dots, below the goal line), each held a margin past where it took him in, set on the motor as its goal at the planner's rate |
+| `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included; the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
@@ -144,9 +145,17 @@ or facing moved under a move taken on by it; and the last order winning.
 `test_keeper_body.gd` also holds a grip past reach in every direction, both
 catching hands: the fist on the stick, the arm no longer than an arm, the grip
 on the shaft, the lie, and the blade flat on the ice unless it cannot be.
+`test_keeper_positioning.gd` holds the first brain: the spot and facing in
+each zone (on the angle line at the top of the crease, the middle of it out of
+the zone, the near post turned at a sharp angle with his edge on it, the RVH on
+the near post below the line), behind the net the post held until the puck
+will beat him across by his own time to the other, a boundary crossed back and
+forth holding him in one zone, and a puck carried round the zone tracked every
+tick unbroken to rest where it stops.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
-the shooter's side, behind and high in front (`tools/keeper_strip.gd`), and the
-stick swept out of reach (`stick_reach`).
+the shooter's side, behind and high in front (`tools/keeper_strip.gd`), the
+stick swept out of reach (`stick_reach`), and the first brain tracking a puck
+round the zone (`track`).
 
 He is authored left-catching. A right-catcher (`KeeperSkeleton.mirrored`) is
 that body reflected across his centre line once solved: each bone frame is

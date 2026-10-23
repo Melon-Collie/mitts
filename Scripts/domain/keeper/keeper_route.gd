@@ -19,9 +19,13 @@ enum Do {
 	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT,
 }
 
-# Within these of his spot and his facing he is there.
-const THERE_M: float = 0.01
-const FACED_RAD: float = 0.02
+# Within these of his spot and his facing he is there: a goal that drifts no
+# further moves him not at all, rather than in steps of millimetres.
+const THERE_M: float = 0.03
+const FACED_RAD: float = deg_to_rad(2.0)
+# How far off the line of footwork under way a new spot may lie and still be
+# taken on by it; further, the move ends and the way is planned again.
+const ON_LINE_M: float = 0.05
 # Equal times to a tick's width: the shuffle, square on both skates, is taken
 # over a T-push that gets him there no sooner.
 const TIE_S: float = 1.0 / 240.0
@@ -50,25 +54,31 @@ var _slide: KeeperSlide
 var _post: KeeperPost
 var _pivot_rate: float
 var _pivot_accel: float
+var _lead_max: float
 
 var _best: float = INF
 # A way's first move, as the way that found it leaves it: one on his feet
 # (_on_feet) and one from the butterfly to a post (_down_to_post).
 var _step_do: int = Do.NONE
 var _step_spot := Vector2.ZERO
+var _step_legs: int = 0
+var _way_do: int = Do.NONE
+var _way_spot := Vector2.ZERO
+var _way_side: float = 0.0
 var _down_do: int = Do.NONE
 var _down_spot := Vector2.ZERO
 var _down_side: float = 0.0
 
 
 func _init(footwork: KeeperFootwork, drop: KeeperDrop, slide: KeeperSlide, post: KeeperPost,
-		pivot_rate: float, pivot_accel: float) -> void:
+		pivot_rate: float, pivot_accel: float, lead_max: float) -> void:
 	_footwork = footwork
 	_drop = drop
 	_slide = slide
 	_post = post
 	_pivot_rate = pivot_rate
 	_pivot_accel = pivot_accel
+	_lead_max = lead_max
 
 
 # The fastest way from `at` turned `turn`, resting on `from` (on a post, the
@@ -89,6 +99,29 @@ func plan(at: Vector2, turn: float, from: int, post_side: float) -> float:
 	return _best
 
 
+# The fastest way's time into the RVH on the post at `post_iron` on `post_on`,
+# from as `plan` takes it, leaving the goal and its first move as they were.
+func time_to_seal(at: Vector2, turn: float, from: int, post_side: float, post_iron: Vector2,
+		post_on: float) -> float:
+	var was_rest: int = rest
+	var was_iron: Vector2 = iron
+	var was_side: float = side
+	var was_first: int = first
+	var was_spot: Vector2 = first_spot
+	var was_way: float = first_side
+	rest = Rest.POST
+	iron = post_iron
+	side = post_on
+	var t: float = plan(at, turn, from, post_side)
+	rest = was_rest
+	iron = was_iron
+	side = was_side
+	first = was_first
+	first_spot = was_spot
+	first_side = was_way
+	return t
+
+
 func _offer(t: float, what: int, to: Vector2 = Vector2.ZERO, way: float = 0.0) -> void:
 	if t < _best:
 		_best = t
@@ -98,22 +131,40 @@ func _offer(t: float, what: int, to: Vector2 = Vector2.ZERO, way: float = 0.0) -
 
 
 func _to_feet(at: Vector2, turn: float, from: int) -> void:
-	var turning: float = pivot_time(wrapf(facing - turn, -PI, PI))
 	match from:
 		Rest.POST:
-			_offer(_post.rise_s + turning + _on_feet(_post.risen_spot(), facing, spot), Do.RVH_RISE_OUT)
+			# Up square onto the overlap.
+			_offer(_post.rise_s + _standing(_post.risen_spot(), 0.0), Do.RVH_RISE_OUT)
 		Rest.DOWN:
-			var t: float = _drop.rise_s + turning + _on_feet(at, facing, spot)
+			var t: float = _drop.rise_s + _standing(at, turn)
 			var across: float = _local(spot - at, turn).x
 			if absf(across) < THERE_M:
 				_offer(t, Do.RISE)
 			else:
 				_offer(t, Do.RECOVER, Vector2.ZERO, signf(across))
 		Rest.FEET:
-			if absf(wrapf(facing - turn, -PI, PI)) > FACED_RAD:
-				_offer(turning + _on_feet(at, facing, spot), Do.FACE, Vector2.ZERO, facing)
-			else:
-				_offer(_on_feet(at, turn, spot), _step_do, _step_spot)
+			_offer(_standing(at, turn), _way_do, _way_spot, _way_side)
+
+
+# On his feet at `at` turned `turn`, to the goal's spot and facing. A turn the
+# trunk can lead on a single move is made on the way, the skates catching up
+# as the stop settles; any other, first, the footwork planned after it. Its
+# time; its first move in _way_do, _way_spot and _way_side.
+func _standing(at: Vector2, turn: float) -> float:
+	var off: float = absf(wrapf(facing - turn, -PI, PI))
+	var walk: float = _on_feet(at, turn, spot)
+	_way_do = _step_do
+	_way_spot = _step_spot
+	_way_side = 0.0
+	if off <= FACED_RAD:
+		return _settled(walk)
+	if off <= _lead_max and _step_do != Do.NONE and _step_legs == 1:
+		return walk + maxf(KeeperFootwork.SETTLE_S, off / _pivot_rate)
+	walk = _on_feet(at, facing, spot)
+	_way_do = Do.FACE
+	_way_spot = Vector2.ZERO
+	_way_side = facing
+	return pivot_time(off) + _settled(walk)
 
 
 func _to_down(at: Vector2, turn: float, from: int) -> void:
@@ -129,7 +180,7 @@ func _to_down(at: Vector2, turn: float, from: int) -> void:
 				return
 			if _slidable(at, turn, spot):
 				_offer(_slides_time(d, true), Do.SLIDE_FROM_FEET, spot)
-			var t: float = _on_feet(at, turn, spot)
+			var t: float = _settled(_on_feet(at, turn, spot))
 			_offer(t + _drop.drop_s, _step_do, _step_spot)
 
 
@@ -171,7 +222,7 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 	if _slidable(at, turn, spot):
 		best = _slides_time(at.distance_to(spot), false)
 		_down_do = Do.SLIDE
-	var up: float = _drop.rise_s + _on_feet(at, turn, spot) + _drop.drop_s
+	var up: float = _drop.rise_s + _settled(_on_feet(at, turn, spot)) + _drop.drop_s
 	if up < best:
 		best = up
 		var across: float = _local(spot - at, turn).x
@@ -185,7 +236,7 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 # overlap, dropped in. Its time; the footwork's first move in _step_do and
 # _step_spot.
 func _dropped_in(at: Vector2, turn: float) -> float:
-	var walk: float = _on_feet(at, 0.0, _post.overlap_spot(iron, side))
+	var walk: float = _settled(_on_feet(at, 0.0, _post.overlap_spot(iron, side)))
 	return pivot_time(wrapf(-turn, -PI, PI)) + walk + _post.drop_s
 
 
@@ -230,15 +281,18 @@ func _post_spot(at: Vector2, turn: float) -> Vector2:
 	return _slide.post_spot(iron, at)
 
 
-# The fastest footwork from `at` turned `turn` to `to`, square, each move's
-# stop settled: its time, its first move in _step_do and _step_spot.
+# The fastest footwork from `at` turned `turn` to `to`, square, each move
+# starting as the last one's push leg is back under him: its time to set on
+# the spot, its first move in _step_do and _step_spot.
 func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 	_step_spot = to
+	_step_legs = 1
 	var local: Vector2 = _local(to - at, turn)
 	var across: float = absf(local.x)
 	var deep: float = absf(local.y)
 	if local.length() < THERE_M:
 		_step_do = Do.NONE
+		_step_legs = 0
 		return 0.0
 	var steepest: float = tan(KeeperFootwork.DIAGONAL_MAX_RAD) * _DIAGONAL_TAN
 	if deep <= across * tan(KeeperFootwork.DIAGONAL_MAX_RAD):
@@ -253,15 +307,41 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 		return _c_cut_time(deep)
 	# Steeper than a T-push goes: in depth then across, or the steepest
 	# diagonal then the rest in depth.
-	var depth_first: float = _c_cut_time(deep) + _push_time(across)
 	var diagonal := Vector2(local.x, signf(local.y) * across * steepest)
-	var diagonal_first: float = _push_time(diagonal.length()) + _c_cut_time(deep - across * steepest)
+	if deep - across * steepest < THERE_M:
+		_step_do = Do.T_PUSH
+		_step_spot = at + _world(diagonal, turn)
+		return _push_time(diagonal.length())
+	_step_legs = 2
+	var depth_first: float = _c_cut_time(deep) + _hand_off(deep, _footwork.c_cut_speed, false) + _push_time(across)
+	var diagonal_first: float = _push_time(diagonal.length()) \
+			+ _hand_off(diagonal.length(), _footwork.t_push_speed, true) + _c_cut_time(deep - across * steepest)
 	if depth_first <= diagonal_first:
 		_step_do = Do.C_CUT
 		return depth_first
 	_step_do = Do.T_PUSH
 	_step_spot = at + _world(diagonal, turn)
 	return diagonal_first
+
+
+# How long after a move of `d` at up to `top` m/s sets him on its spot his push
+# leg is still coming back under him, which the next move waits for: its
+# recovery from the push's end, less the stop that followed it. A T-push that
+# reaches its top speed (`glides`) rides its lead skate first and is back
+# already; strokes go on to the stop.
+func _hand_off(d: float, top: float, glides: bool) -> float:
+	var ratio: float = GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
+	var peak: float = sqrt(2.0 * _footwork.accel * d / (1.0 + 1.0 / ratio))
+	if peak >= top:
+		if glides:
+			return 0.0
+		peak = top
+	return maxf(KeeperFootwork.RECOVER_S - peak / (_footwork.accel * ratio), 0.0)
+
+
+# Footwork's time, with the stop settled out of him at its end.
+static func _settled(walk: float) -> float:
+	return walk + KeeperFootwork.SETTLE_S if walk > 0.0 else 0.0
 
 
 # Slides one after another to `d` away, each as far as its push carries; the
@@ -279,15 +359,15 @@ func _slides_time(d: float, from_feet: bool) -> float:
 
 
 func _push_time(d: float) -> float:
-	return GoaliePushRules.time_to_set(d, _footwork.t_push_speed, _footwork.accel) + KeeperFootwork.SETTLE_S
+	return GoaliePushRules.time_to_set(d, _footwork.t_push_speed, _footwork.accel)
 
 
 func _shuffle_time(d: float) -> float:
-	return GoaliePushRules.time_to_set(d, _footwork.shuffle_speed, _footwork.accel) + KeeperFootwork.SETTLE_S
+	return GoaliePushRules.time_to_set(d, _footwork.shuffle_speed, _footwork.accel)
 
 
 func _c_cut_time(d: float) -> float:
-	return GoaliePushRules.time_to_set(d, _footwork.c_cut_speed, _footwork.accel) + KeeperFootwork.SETTLE_S
+	return GoaliePushRules.time_to_set(d, _footwork.c_cut_speed, _footwork.accel)
 
 
 # Seconds the pivot takes through `turn`: up to its rate on his edges and back

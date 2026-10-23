@@ -334,9 +334,11 @@ func test_the_t_push_lead_skate_turns_along_the_push_and_squares_to_stop() -> vo
 			_fw.pose(_pose)
 			turned = maxf(turned, _pose.legs[lead].toe.normalized().dot(way))
 		assert_gt(turned, 0.95, "%s: the lead toe points along the push" % spot)
+		for i: int in int(KeeperFootwork.SETTLE_S / DT) + 2:
+			_fw.step(DT)
 		_fw.pose(_pose)
 		assert_almost_eq(_pose.legs[lead].toe, KeeperPoses.ready_toe(signf(spot.x)), Vector3.ONE * 1e-4,
-				"%s: square again once he is on his spot" % spot)
+				"%s: square again once settled on his spot" % spot)
 
 
 # The stop shows as much as the speed it stops: a shuffle's is softer than a

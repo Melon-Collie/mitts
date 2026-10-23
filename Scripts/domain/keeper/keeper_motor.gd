@@ -17,9 +17,15 @@ extends RefCounted
 #
 # Or he is given where to be (`go_to`, `seal`), and makes the first move of the
 # fastest way there (KeeperRoute) each time he comes to rest, until he is
-# there. A new spot along a pivot or footwork under way takes it over; any
-# other change waits for him to come to rest. The last order wins: a goal
-# clears the moves asked for, and a move asked for clears the goal.
+# there. A new spot or facing under a pivot or footwork under way is taken on
+# by it; any other change waits for him to come to rest. Footwork toward a goal
+# turns his trunk toward its facing as he goes (`lead`, up to LEAD_MAX_RAD
+# ahead of his skates), his skates on their line, and the skates turn under
+# him to catch up once he is set on the spot, as the stop
+# settles. More footwork, or a pivot, starts as soon as his push leg is back
+# under him; a drop, slide or the RVH waits for the stop to settle. The last order
+# wins: a goal clears the moves asked for, and a move asked for clears the
+# goal.
 #
 # Places are in the stances' frame, as the movers': x across, z depth (+ back
 # toward his net), `yaw` his turn about the vertical, as a Node3D's rotation.y.
@@ -32,10 +38,15 @@ enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST }
 # through 45° at up to 3.9 rad/s), and how hard his edges start and stop it.
 const PIVOT_RATE_RAD_S: float = 4.0
 const PIVOT_ACCEL_RAD_S2: float = 40.0
+# How far his trunk turns ahead of his skates while footwork carries him; it
+# turns as fast as the pivot.
+const LEAD_MAX_RAD: float = deg_to_rad(30.0)
 
 var x: float = 0.0
 var z: float = 0.0
+# His skates' turn, and his trunk's ahead of it.
 var yaw: float = 0.0
+var lead: float = 0.0
 var rest: int = Rest.FEET
 # Moves asked for from a rest they cannot start from.
 var refused: int = 0
@@ -44,7 +55,7 @@ var footwork := KeeperFootwork.new()
 var drop := KeeperDrop.new()
 var slide := KeeperSlide.new()
 var post := KeeperPost.new()
-var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVOT_ACCEL_RAD_S2)
+var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVOT_ACCEL_RAD_S2, LEAD_MAX_RAD)
 
 var _queue: Array[_Ask] = []
 var _goal: bool = false
@@ -91,15 +102,23 @@ func seal(iron: Vector2, side: float) -> void:
 	route.side = side
 
 
-# A pivot under way turns on to the new facing; footwork under way, still
-# facing it, goes on to where the new spot falls on its line.
+# A pivot under way turns on to the new facing; footwork under way goes on to
+# a new spot on its line, and one set on its last spot pushes again for one
+# further along it than he would call there.
 func _retarget() -> void:
 	if route.rest != Rest.FEET:
 		return
 	if _mover == Mover.PIVOT:
 		_face = route.facing
-	elif _mover == Mover.FOOTWORK and absf(wrapf(route.facing - yaw, -PI, PI)) <= KeeperRoute.FACED_RAD:
+	elif _mover == Mover.FOOTWORK:
 		var local: Vector2 = _turned(route.spot - _anchor, -_anchor_yaw)
+		if footwork.off_line(local) > KeeperRoute.ON_LINE_M:
+			return
+		# Set, his skates may have turned under him since the move began: the
+		# next move is planned afresh in their frame.
+		if footwork.phase == KeeperFootwork.Phase.SET and (yaw != _anchor_yaw
+				or local.distance_to(Vector2(footwork.x, footwork.z)) < KeeperRoute.THERE_M):
+			return
 		match footwork.move:
 			KeeperFootwork.Move.T_PUSH:
 				footwork.push_to(local)
@@ -185,6 +204,12 @@ func time_to_goal() -> float:
 	return route.plan(Vector2(x, z), yaw, rest, post.side) if _goal else 0.0
 
 
+# The fastest way's time from here into the RVH on the post at `iron` on
+# `side`, whatever he is asked to do.
+func time_to_seal(iron: Vector2, side: float) -> float:
+	return route.time_to_seal(Vector2(x, z), yaw, rest, post.side, iron, side)
+
+
 func _plan() -> int:
 	route.plan(Vector2(x, z), yaw, rest, post.side)
 	return route.first
@@ -198,13 +223,16 @@ func step(dt: float) -> void:
 			refused += 1
 	match _mover:
 		Mover.PIVOT:
+			footwork.step(dt)
 			_pivot(dt)
 		Mover.FOOTWORK:
 			footwork.step(dt)
 			var at: Vector2 = _anchor + _turned(Vector2(footwork.x, footwork.z), _anchor_yaw)
 			x = at.x
 			z = at.y
-			if footwork.is_settled():
+			_lead_on(dt)
+			if footwork.phase == KeeperFootwork.Phase.SET and lead == 0.0 \
+					and (footwork.is_settled() or (_goal and footwork.is_recovered() and _next_is_footwork())):
 				_mover = Mover.NONE
 		Mover.DROP:
 			drop.step(dt)
@@ -323,20 +351,60 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 
 # Toward the facing asked for at up to PIVOT_RATE_RAD_S, starting and stopping
 # on his edges at PIVOT_ACCEL_RAD_S2, so he stops turned exactly there.
+# His trunk toward the goal's facing while footwork carries him, no more than
+# LEAD_MAX_RAD ahead of his skates; once he is set on the spot, his skates
+# turn under him after it.
+func _lead_on(dt: float) -> void:
+	var facing: float = route.facing if _goal and route.rest == Rest.FEET else yaw + lead
+	var body: float = yaw + lead
+	var turn: float = PIVOT_RATE_RAD_S * dt
+	if footwork.phase == KeeperFootwork.Phase.SET:
+		body = _turned_toward(body, facing, turn)
+		yaw = _turned_toward(yaw, body, turn)
+	else:
+		var ahead: float = clampf(wrapf(facing - yaw, -PI, PI), -LEAD_MAX_RAD, LEAD_MAX_RAD)
+		body = _turned_toward(body, yaw + ahead, turn)
+	lead = wrapf(body - yaw, -PI, PI)
+	if absf(lead) < 1e-6:
+		lead = 0.0
+
+
+static func _turned_toward(from: float, to: float, most: float) -> float:
+	var left: float = wrapf(to - from, -PI, PI)
+	return wrapf(from + signf(left) * minf(most, absf(left)), -PI, PI)
+
+
+func _next_is_footwork() -> bool:
+	var next: int = _plan()
+	return next == Do.T_PUSH or next == Do.SHUFFLE or next == Do.C_CUT or next == Do.FACE
+
+
+# His trunk, where it leads, turns on at up to the same rate, never past it.
 func _pivot(dt: float) -> void:
+	var body: float = yaw + lead
 	var left: float = wrapf(_face - yaw, -PI, PI)
 	var cap: float = sqrt(2.0 * PIVOT_ACCEL_RAD_S2 * absf(left))
 	_turn_rate = minf(minf(_turn_rate + PIVOT_ACCEL_RAD_S2 * dt, PIVOT_RATE_RAD_S), cap)
 	var turn: float = signf(left) * minf(_turn_rate * dt, absf(left))
 	yaw = wrapf(yaw + turn, -PI, PI)
-	if absf(wrapf(_face - yaw, -PI, PI)) < 1e-5:
+	var body_left: float = wrapf(_face - body, -PI, PI)
+	body += signf(body_left) * minf(PIVOT_RATE_RAD_S * dt, absf(body_left))
+	lead = wrapf(body - yaw, -PI, PI)
+	if absf(wrapf(_face - yaw, -PI, PI)) < 1e-5 and absf(lead) < 1e-5:
 		yaw = _face
+		lead = 0.0
 		_turn_rate = 0.0
 		_mover = Mover.NONE
 
 
-# His pose this tick, in his own frame.
+# His pose this tick, in his skates' frame.
 func pose(p: KeeperPose) -> void:
+	_pose_mover(p)
+	if lead != 0.0:
+		_turn_body(p, lead)
+
+
+func _pose_mover(p: KeeperPose) -> void:
 	match _mover:
 		Mover.FOOTWORK:
 			footwork.pose(p)
@@ -354,6 +422,25 @@ func pose(p: KeeperPose) -> void:
 					slide.pose(p)
 				Rest.POST:
 					post.pose(p)
+
+
+# His trunk turned `turn` ahead of his skates from the waist, about the
+# vertical through his hips, the hands and the stick they hold with it. The
+# pelvis stays with the legs: turned, it would carry the hips round over skates
+# that stay on their line and pitch a pad into the ice.
+static func _turn_body(p: KeeperPose, turn: float) -> void:
+	var about := Basis(Vector3.UP, turn)
+	var hips := Vector3(p.pelvis.x, 0.0, p.pelvis.z)
+	p.lumbar_rot.y += turn
+	p.blade_center = hips + about * (p.blade_center - hips)
+	p.blade_yaw -= turn
+	p.blocker_face = about * p.blocker_face
+	p.glove_fingers = about * p.glove_fingers
+	p.glove_palm = about * p.glove_palm
+	p.glove_elbow_pole = about * p.glove_elbow_pole
+	p.blocker_elbow_pole = about * p.blocker_elbow_pole
+	if not p.glove_from_chest:
+		p.glove_hand = hips + about * (p.glove_hand - hips)
 
 
 # `v` on the ice in his own frame, turned `turn` into the stances' frame.

@@ -75,10 +75,13 @@ func _init() -> void:
 			_rvh[i].glove_from_chest = true
 
 
-# Where he stands, square, with his edge on the post at `post` (x, z) on
-# `post_side`: where the brain puts him to drop in.
-func overlap_spot(post: Vector2, post_side: float) -> Vector2:
-	return _on_post(post, post_side, _standing_edge[_index(post_side)])
+# Where he stands with his edge on the post at `post` (x, z) on `post_side`,
+# turned `turn` (square by default): where the brain puts him to drop in, or
+# turned to a puck at a sharp angle. Turned, his square stance's edge turns
+# with him.
+func overlap_spot(post: Vector2, post_side: float, turn: float = 0.0) -> Vector2:
+	var edge: Vector3 = Basis(Vector3.UP, turn) * _standing_edge[_index(post_side)]
+	return _on_post(post, post_side, edge)
 
 
 # Where he is in the RVH on the post at `post` on `post_side`: the post pad's

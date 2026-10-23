@@ -147,11 +147,18 @@ func test_a_short_step_is_a_shuffle_and_a_long_one_a_t_push() -> void:
 	assert_eq(_motor.route.first, DO.T_PUSH, "a short diagonal")
 
 
-func test_he_turns_before_his_feet_move() -> void:
-	_motor.go_to(Vector2(1.0, 0.0), 0.5)
+# A turn his trunk can lead is made on the way; a bigger one before his feet
+# move.
+func test_he_turns_on_the_way_or_before_his_feet_move() -> void:
+	var within: float = KeeperMotor.LEAD_MAX_RAD * 0.8
+	_motor.go_to(Vector2(1.0, 0.0), within)
 	_motor.time_to_goal()
-	assert_eq(_motor.route.first, DO.FACE)
-	assert_eq(_motor.route.first_side, 0.5)
+	assert_eq(_motor.route.first, DO.T_PUSH, "a turn within the lead")
+	var beyond: float = KeeperMotor.LEAD_MAX_RAD * 1.5
+	_motor.go_to(Vector2(1.0, 0.0), beyond)
+	_motor.time_to_goal()
+	assert_eq(_motor.route.first, DO.FACE, "a turn beyond it")
+	assert_eq(_motor.route.first_side, beyond)
 
 
 func test_down_he_recovers_toward_a_spot_on_his_feet_and_rises_under_one_on_him() -> void:
