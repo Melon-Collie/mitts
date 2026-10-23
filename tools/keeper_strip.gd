@@ -36,6 +36,8 @@ const SCENARIOS: Array = [
 	["slide_glove_far", -1.6, SLIDE],
 	["slide_from_feet", 1.0, SLIDE_FROM_FEET],
 	["slide_from_feet_glove", -1.0, SLIDE_FROM_FEET],
+	["slide_to_post", 1.0, SLIDE_TO_POST],
+	["slide_to_post_glove", -1.0, SLIDE_TO_POST],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -45,6 +47,12 @@ const SLIDE: int = -2
 # KeeperSlide from his feet, by the half butterfly, a frame every
 # DROP_FRAME_EVERY ticks for the drop's sake.
 const SLIDE_FROM_FEET: int = -3
+# KeeperSlide from the butterfly to the post on the target's side
+# (KeeperSlide.post_spot), from the far side of the crease, with the posts
+# drawn on the goal line behind him.
+const SLIDE_TO_POST: int = -4
+const POST_SLIDE_START := Vector2(0.6, -0.4)
+const GOAL_LINE_Z: float = 0.35
 const DROP_FRAME_EVERY: int = 3
 const DROP_HOLD_TICKS: int = 12
 const _PHASE_COLORS: Array[Color] = [
@@ -52,6 +60,7 @@ const _PHASE_COLORS: Array[Color] = [
 ]
 
 var _camera: Camera3D = null
+var _posts: Array[Node3D] = []
 var _keeper: Keeper = null
 var _views: Array = []
 var _scenarios: Array = []
@@ -95,6 +104,20 @@ func _init() -> void:
 		mark.mesh = box
 		mark.position = Vector3(i * 0.5, 0.001, -0.6)
 		root.add_child(mark)
+	for side: float in [-1.0, 1.0]:
+		var post := MeshInstance3D.new()
+		var cyl := CylinderMesh.new()
+		cyl.top_radius = GameRules.NET_POST_RADIUS
+		cyl.bottom_radius = GameRules.NET_POST_RADIUS
+		cyl.height = GameRules.NET_HEIGHT
+		var red := StandardMaterial3D.new()
+		red.albedo_color = Color(0.8, 0.1, 0.1)
+		cyl.material = red
+		post.mesh = cyl
+		post.position = Vector3(side * GameRules.NET_HALF_WIDTH, GameRules.NET_HEIGHT * 0.5, GOAL_LINE_Z)
+		post.visible = false
+		root.add_child(post)
+		_posts.append(post)
 	_camera = Camera3D.new()
 	_camera.fov = 40.0
 	_camera.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
@@ -112,12 +135,13 @@ func _init() -> void:
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 
 
-# Each frame of a move: [pose, where, phase, speed, t].
+# Each frame of a move: [pose, where, phase, speed, t], and his turn if he
+# turns.
 func _record(target: float, kind: int) -> Array:
 	if kind == DROP_AND_RISE:
 		return _record_drop()
-	if kind == SLIDE or kind == SLIDE_FROM_FEET:
-		return _record_slide(target, kind == SLIDE_FROM_FEET)
+	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
+		return _record_slide(target, kind == SLIDE_FROM_FEET, kind == SLIDE_TO_POST)
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
@@ -171,13 +195,19 @@ func _record_drop() -> Array:
 # The slide's frames, as _record's: PUSH while he drops or loads and drives,
 # GLIDE while he slides, STOP while the lead edge stops him, SET down on the
 # spot.
-func _record_slide(target: float, from_feet: bool) -> Array:
+func _record_slide(target: float, from_feet: bool, to_post: bool) -> Array:
 	var slide := KeeperSlide.new()
 	var every: int = DROP_FRAME_EVERY if from_feet else FRAME_EVERY
+	var spot := Vector2(target, 0.0)
+	if to_post:
+		var start := Vector2(-target * POST_SLIDE_START.x, POST_SLIDE_START.y)
+		slide.x = start.x
+		slide.z = start.y
+		spot = slide.post_spot(Vector2(target * GameRules.NET_HALF_WIDTH, GOAL_LINE_Z), start)
 	if from_feet:
-		slide.slide_from_feet(target)
+		slide.slide_from_feet(spot)
 	else:
-		slide.slide_to(target)
+		slide.slide_to(spot)
 	var out: Array = []
 	var tick: int = 0
 	var settled: int = -1
@@ -188,7 +218,7 @@ func _record_slide(target: float, from_feet: bool) -> Array:
 			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
 					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
 					KeeperFootwork.Phase.STOP][slide.phase]
-			out.append([p, Vector3(slide.x, 0.0, 0.0), phase, slide.speed, tick * DT])
+			out.append([p, Vector3(slide.x, 0.0, slide.z), phase, slide.speed, tick * DT, slide.yaw])
 		slide.step(DT)
 		tick += 1
 		if slide.phase == KeeperSlide.Phase.DOWN:
@@ -218,6 +248,8 @@ func _process(_delta: float) -> bool:
 			return true
 		var target: float = float(_scenarios[_scenario_i][1])
 		var kind: int = int(_scenarios[_scenario_i][2])
+		for post: Node3D in _posts:
+			post.visible = kind == SLIDE_TO_POST
 		_frames = _record(target, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
 		_shots = []
@@ -236,6 +268,7 @@ func _process(_delta: float) -> bool:
 	if _ticks % 4 == 1:
 		_keeper.apply_pose(frame[0] as KeeperPose)
 		_keeper.position = frame[1] as Vector3
+		_keeper.rotation.y = float(frame[5]) if frame.size() > 5 else 0.0
 		_keeper.reset_physics_interpolation()
 		_camera.position = mid + (view[1] as Vector3)
 		_camera.look_at(mid + (view[2] as Vector3), Vector3.UP)

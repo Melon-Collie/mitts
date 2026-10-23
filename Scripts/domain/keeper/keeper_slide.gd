@@ -1,18 +1,20 @@
 class_name KeeperSlide
 extends RefCounted
 
-# His butterfly slide along his line: the push leg drives him off its skate
-# while the lead pad stays flat on the ice, then folds back down to seal; he
-# rides the pads, and the lead skate's edge stops him on his spot. Pure,
-# stepped at the tick. From the butterfly the push leg comes up to push; from
-# his feet the lead leg goes down to the half butterfly and the push leg never
-# leaves its skate.
+# His butterfly slide: the push leg drives him off its skate while the lead pad
+# stays flat on the ice, then folds back down to seal; he rides the pads, and
+# the lead skate's edge stops him on his spot. Pure, stepped at the tick. From
+# the butterfly the push leg comes up to push; from his feet the lead leg goes
+# down to the half butterfly and the push leg never leaves its skate. A slide
+# goes along his line: to a spot off it, he turns as he loads until his lead
+# side faces it, so a slide back to a post is the same slide, turned.
 #
 #   DROP   from his feet: the lead knee falls to the ice as the butterfly's
 #          drop does, the push leg loading on its skate where it stood, so the
-#          push starts as the knee lands
-#   LOAD   from the butterfly: the push leg's knee comes up off the ice and in, its skate
-#          planted out wide on its inside edge (KeeperPoses.butterfly_push)
+#          push starts as the knee lands; he turns to the spot as it falls
+#   LOAD   from the butterfly: the push leg's knee comes up off the ice and
+#          in, its skate planted out wide on its inside edge
+#          (KeeperPoses.butterfly_push); he turns to the spot as it comes
 #   PUSH   the skate holds its place on the ice while the leg drives him off
 #          it, from rest up to the push's speed
 #   GLIDE  the push leg folds back down beside the lead pad, sealing the ice,
@@ -25,8 +27,10 @@ extends RefCounted
 # would only just land him on the spot, so a slide is a push and a stop, not a
 # coast. A spot too near for the push to be stopped in gets a softer push; one
 # past where friction alone would stop the push is answered with that reach.
-# Positions are along his line in the stances' frame (x, + toward his blocker
-# side), as KeeperFootwork's.
+# Places are in the stances' frame, as KeeperFootwork's: x across his line (+
+# toward his blocker side), z his depth (+ back toward his net), and `yaw` his
+# turn about the vertical, as a Node3D's rotation.y; his pose is in his own
+# frame, which `yaw` turns.
 
 enum Phase { DOWN, DROP, LOAD, PUSH, GLIDE, STOP }
 
@@ -52,10 +56,20 @@ var edge_brake: float = EDGE_WEIGHT_SHARE * GameRules.DEFAULT_GOALIE_LATERAL_ACC
 		* GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
 
 var x: float = 0.0
+var z: float = 0.0
+var yaw: float = 0.0
 var speed: float = 0.0
 var phase: int = Phase.DOWN
 
+# The lead side in his own frame (+1 his blocker side), where the slide set out
+# from and which way it goes, his turn before it and on it, and how far along
+# he has come of the way to the spot.
 var _side: float = 1.0
+var _origin := Vector2.ZERO
+var _heading := Vector2.RIGHT
+var _yaw_from: float = 0.0
+var _yaw_to: float = 0.0
+var _along: float = 0.0
 var _target: float = 0.0
 # The speed this slide's push builds to, how far through its phase he is, how
 # far the push leg is folded back down, and how far into the stop he is and
@@ -66,8 +80,9 @@ var _clock: float = 0.0
 var _fold: float = 1.0
 var _stop: float = 0.0
 var _stop_from_speed: float = 0.0
-# Where the push skate was planted, along his line; and the push leg as it was
-# when its push ended, with the knee its solve put it at, to fold from.
+# Where the push skate was planted, across him in his own frame when the push
+# began; and the push leg as it was when its push ended, with the knee its
+# solve put it at, to fold from.
 var _plant: float = 0.0
 var _released := KeeperPose.Leg.new()
 var _released_knee := Vector3.ZERO
@@ -79,12 +94,17 @@ var _ready := KeeperPose.new()
 var _loaded: Array[KeeperPose] = [KeeperPose.new(), KeeperPose.new()]
 var _loaded_knee: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _set: Array[KeeperPose] = [KeeperPose.new(), KeeperPose.new()]
+# Where the lead pad's outer end lies, in his own frame, down in the butterfly.
+var _pad_end: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _skel := KeeperSkeleton.new()
 
 
 func _init() -> void:
 	KeeperPoses.butterfly(_low)
 	KeeperPoses.ready(_ready)
+	_skel.pose(_low)
+	_pad_end[0] = KeeperGear.post_contact(_skel, -1.0)
+	_pad_end[1] = KeeperGear.post_contact(_skel, 1.0)
 	for i: int in 2:
 		var side: float = -1.0 if i == 0 else 1.0
 		KeeperPoses.butterfly_push(_loaded[i], side)
@@ -96,31 +116,62 @@ func _init() -> void:
 		_set[i].legs[1 - i].toe = _ready.legs[1 - i].toe
 
 
-# Slide toward `target` from the butterfly, pushing at up to `top` m/s; where
-# he will come to rest.
-func slide_to(target: float, top: float = INF) -> float:
-	return _start(target, top, false)
+# Slide toward `spot` (x, z) from the butterfly, pushing at up to `top` m/s;
+# where he will come to rest.
+func slide_to(spot: Vector2, top: float = INF) -> Vector2:
+	return _start(spot, top, false)
 
 
-# Slide toward `target` from his feet, by the half butterfly; where he will
-# come to rest. He ends in the butterfly.
-func slide_from_feet(target: float, top: float = INF) -> float:
-	return _start(target, top, true)
+# Slide toward `spot` (x, z) from his feet, by the half butterfly; where he
+# will come to rest. He ends in the butterfly.
+func slide_from_feet(spot: Vector2, top: float = INF) -> Vector2:
+	return _start(spot, top, true)
 
 
-func _start(target: float, top: float, from_feet: bool) -> float:
-	if phase != Phase.DOWN or absf(target - x) < 1e-4:
-		return x
-	_side = signf(target - x)
-	var dist: float = absf(target - x)
+func _start(spot: Vector2, top: float, from_feet: bool) -> Vector2:
+	var here := Vector2(x, z)
+	if phase != Phase.DOWN or here.distance_to(spot) < 1e-4:
+		return here
+	var dist: float = here.distance_to(spot)
+	_origin = here
+	_heading = (spot - here) / dist
+	_side = 1.0 if _heading.dot(_across(yaw)) >= 0.0 else -1.0
+	_yaw_from = yaw
+	_yaw_to = facing(_heading, _side)
+	_along = 0.0
 	_peak = minf(minf(top, push_speed), _stoppable_peak(dist))
-	_target = x + _side * minf(dist, glide_reach(_peak))
+	_target = minf(dist, glide_reach(_peak))
 	_from_feet = from_feet
 	phase = Phase.DROP if from_feet else Phase.LOAD
 	_clock = 0.0
 	_fold = 0.0
 	_stop = 0.0
-	return _target
+	return _origin + _heading * _target
+
+
+# His own +x (his blocker side) on the ice, turned `turn`.
+static func _across(turn: float) -> Vector2:
+	return Vector2(cos(turn), -sin(turn))
+
+
+# The turn that faces his `side` (+1 his blocker side) along `heading`.
+static func facing(heading: Vector2, side: float) -> float:
+	return atan2(-heading.y * side, heading.x * side)
+
+
+# Where to slide from `from` so that, down in the butterfly and turned along
+# the slide, his lead pad's outer end meets the post at `post` (x, z). The
+# pad's end lies a little behind his line, so the line that lands it on the
+# post is the one the post lies that far behind; the slide runs along it until
+# the end reaches the post's face. Already there, he stays where he is.
+func post_spot(post: Vector2, from: Vector2) -> Vector2:
+	var to_post: Vector2 = post - from
+	var side: float = 1.0 if to_post.dot(_across(yaw)) >= 0.0 else -1.0
+	var end: Vector3 = _pad_end[1 if side > 0.0 else 0]
+	var behind: float = clampf(end.z / (side * to_post.length()), -1.0, 1.0)
+	var heading: Vector2 = Vector2.from_angle(to_post.angle() - asin(behind))
+	var out: float = to_post.dot(heading) - end.x * side - GameRules.NET_POST_RADIUS
+	return from + heading * maxf(out, 0.0)
 
 
 func _brake() -> float:
@@ -162,19 +213,20 @@ func step(dt: float) -> void:
 			_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 		Phase.DROP, Phase.LOAD:
 			_clock += dt / (drop_s if phase == Phase.DROP else LOAD_S)
+			yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, minf(_clock, 1.0)))
 			if _clock >= 1.0:
 				phase = Phase.PUSH
 				_clock = 0.0
-				_plant = x + _launch().legs[_push_leg()].ankle.x
+				_plant = _launch().legs[_push_leg()].ankle.x
 		Phase.PUSH:
 			var was: float = speed
 			_clock = minf(_clock + dt / PUSH_S, 1.0)
 			speed = _peak * _clock
-			x += _side * 0.5 * (was + speed) * dt
+			_along += 0.5 * (was + speed) * dt
 			if _clock >= 1.0:
 				_release()
 		Phase.GLIDE, Phase.STOP:
-			var left: float = (_target - x) * _side
+			var left: float = _target - _along
 			# The stop starts the tick it would be too late to after this one's.
 			if phase == Phase.GLIDE and speed >= sqrt(2.0 * _brake() * maxf(left - speed * dt, 0.0)):
 				phase = Phase.STOP
@@ -187,12 +239,15 @@ func step(dt: float) -> void:
 				_stop = 1.0 - speed / maxf(_stop_from_speed, 1e-6)
 			else:
 				speed = maxf(speed - friction * dt, 0.0)
-			x += _side * 0.5 * (was + speed) * dt
-			if (_target - x) * _side <= 1e-4 or speed <= 1e-4:
-				x = _target
+			_along += 0.5 * (was + speed) * dt
+			if _target - _along <= 1e-4 or speed <= 1e-4:
+				_along = _target
 				speed = 0.0
 				if _fold >= 1.0:
 					phase = Phase.DOWN
+	var at: Vector2 = _origin + _heading * _along
+	x = at.x
+	z = at.y
 
 
 func _release() -> void:
@@ -264,7 +319,7 @@ func pose(p: KeeperPose) -> void:
 # it was set down.
 func _pushing_pose(p: KeeperPose) -> void:
 	p.copy_from(_launch())
-	p.legs[_push_leg()].ankle.x = _plant - x
+	p.legs[_push_leg()].ankle.x = _plant - _side * _along
 
 
 # The push leg `t` of the way from its skate (`up`, its knee at `up_knee`) down
