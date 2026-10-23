@@ -38,6 +38,9 @@ const SCENARIOS: Array = [
 	["slide_from_feet_glove", -1.0, SLIDE_FROM_FEET],
 	["slide_to_post", 1.0, SLIDE_TO_POST],
 	["slide_to_post_glove", -1.0, SLIDE_TO_POST],
+	["rvh_drop_in", 1.0, RVH_DROP_IN],
+	["rvh_drop_in_glove", -1.0, RVH_DROP_IN],
+	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -52,6 +55,13 @@ const SLIDE_FROM_FEET: int = -3
 # drawn on the goal line behind him.
 const SLIDE_TO_POST: int = -4
 const POST_SLIDE_START := Vector2(0.6, -0.4)
+# KeeperPost on the post on the target's side: dropped into the RVH from his
+# feet on the overlap, held, and risen back out; or come up into it at the end
+# of a slide there, held, and folded back into the butterfly. A frame every
+# DROP_FRAME_EVERY ticks.
+const RVH_DROP_IN: int = -5
+const RVH_FROM_SLIDE: int = -6
+const RVH_HOLD_TICKS: int = 18
 const GOAL_LINE_Z: float = 0.35
 const DROP_FRAME_EVERY: int = 3
 const DROP_HOLD_TICKS: int = 12
@@ -140,6 +150,8 @@ func _init() -> void:
 func _record(target: float, kind: int) -> Array:
 	if kind == DROP_AND_RISE:
 		return _record_drop()
+	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
+		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
 		return _record_slide(target, kind == SLIDE_FROM_FEET, kind == SLIDE_TO_POST)
 	var fw := KeeperFootwork.new()
@@ -226,6 +238,64 @@ func _record_slide(target: float, from_feet: bool, to_post: bool) -> Array:
 	return out
 
 
+# The RVH's frames, as _record's: PUSH on the way in (and through the slide
+# before it), GLIDE sealed, STOP on the way out, SET at rest.
+func _record_post(post_side: float, from_slide: bool) -> Array:
+	var post := Vector2(post_side * GameRules.NET_HALF_WIDTH, GOAL_LINE_Z)
+	var out: Array = []
+	var tick: int = 0
+	var keeper := KeeperPost.new()
+	if from_slide:
+		var slide := KeeperSlide.new()
+		var start := Vector2(-post_side * POST_SLIDE_START.x, POST_SLIDE_START.y)
+		slide.x = start.x
+		slide.z = start.y
+		slide.slide_to(slide.post_spot(post, start))
+		while slide.phase != KeeperSlide.Phase.DOWN or tick == 0:
+			if tick % FRAME_EVERY == 0:
+				var p := KeeperPose.new()
+				slide.pose(p)
+				out.append([p, Vector3(slide.x, 0.0, slide.z), KeeperFootwork.Phase.PUSH, slide.speed,
+						tick * DT, slide.yaw])
+			slide.step(DT)
+			tick += 1
+		keeper.x = slide.x
+		keeper.z = slide.z
+		keeper.yaw = slide.yaw
+		keeper.state = KeeperPost.State.BUTTERFLY
+		keeper.slide_in(post, post_side)
+	else:
+		var at: Vector2 = keeper.overlap_spot(post, post_side)
+		keeper.x = at.x
+		keeper.z = at.y
+		keeper.drop_in(post, post_side)
+	var held: int = 0
+	var settled: int = 0
+	var leaving: bool = false
+	while settled < SETTLE_FRAMES * DROP_FRAME_EVERY:
+		if tick % DROP_FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			keeper.pose(p)
+			var phase: int = KeeperFootwork.Phase.GLIDE if keeper.state == KeeperPost.State.SEALED \
+					else (KeeperFootwork.Phase.STOP if leaving else KeeperFootwork.Phase.PUSH)
+			if leaving and (keeper.state == KeeperPost.State.STANDING or keeper.state == KeeperPost.State.BUTTERFLY):
+				phase = KeeperFootwork.Phase.SET
+			out.append([p, Vector3(keeper.x, 0.0, keeper.z), phase, 0.0, tick * DT, keeper.yaw])
+		keeper.step(DT)
+		tick += 1
+		if keeper.state == KeeperPost.State.SEALED:
+			held += 1
+			if held >= RVH_HOLD_TICKS:
+				leaving = true
+				if from_slide:
+					keeper.fold_out()
+				else:
+					keeper.rise_out()
+		elif leaving and (keeper.state == KeeperPost.State.STANDING or keeper.state == KeeperPost.State.BUTTERFLY):
+			settled += 1
+	return out
+
+
 # view name, camera offset from the middle of the move, look-at offset.
 func _views_for(span: float, depth: bool) -> Array:
 	var back: float = 2.6 + maxf(span, 1.0) * 1.3
@@ -249,7 +319,7 @@ func _process(_delta: float) -> bool:
 		var target: float = float(_scenarios[_scenario_i][1])
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
-			post.visible = kind == SLIDE_TO_POST
+			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE
 		_frames = _record(target, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
 		_shots = []

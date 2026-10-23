@@ -18,6 +18,7 @@ one the bots shoot at.
 | `keeper_footwork.gd` | his skates moving him, on GoaliePushRules' kinematics at each move's top speed: across his line the T-push (push off the planted trail skate, glide on the lead) and the shuffle (square, in strokes, the trail skate holding its place as he passes over it); in and out the C-cuts (the skates taking turns to carve a C, heel out); the edge stop onto the spot that ends each; and the ready stance they bend |
 | `keeper_drop.gd` | his butterfly drop and rise: how far down he is (a fall down, a push up, from wherever he is), and the pose that far between the ready stance and the butterfly |
 | `keeper_slide.gd` | his butterfly slide, from the butterfly or from his feet (the lead knee dropping to the half butterfly as the push starts, the push skate never leaving where it stood): the push leg's knee up off the ice to about 45° and its skate catching the ice out wide (`KeeperPoses.butterfly_push`), driving him off it while the lead pad stays down, folding back to seal as the pads slide; the lead skate's edge stopping him on his spot; to a spot off his line, turned as he loads until his lead side faces it, and `post_spot`, the spot that lands the lead pad's end on a post; and the reach and time that gives the brain |
+| `keeper_post.gd` | his RVH on a post: dropping into it from his feet on the overlap (the post knee falling, the off skate sliding out wide on its edge) and rising back out, coming up into it from the butterfly after a slide and folding back; `overlap_spot` and `seal_spot`, where he is on the post standing and sealed |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -117,6 +118,10 @@ its place, the lead pad down on the ice the whole way and both through the
 stop, butterfly to butterfly, a spot off his line turning him to it as he loads, a
 slide to a post landing the pad's end on it angled back and opened toward
 that side, and every tick out of the ice, on the stick and without a jump.
+`test_keeper_post.gd` holds the RVH's ways in and out: each in its time, from
+and to the overlap and the butterfly, sealed with the pad's end on the post,
+the off skate on the ice through the drop-in and the rise, and every tick out
+of the ice, on the stick and without a jump.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
 the shooter's side, behind and high in front (`tools/keeper_strip.gd`).
 
