@@ -77,9 +77,9 @@ func override(p: GaitPose) -> void:
 	# the foot pivot from where the kneel left it to its standing height in front
 	# of him, the knee lifting it clear of the ice on the way through.
 	var step_shin: float = lerpf(kneel_shin, deg_to_rad(STEP_SHIN_DEG), step)
-	var step_foot: float = lerpf(_foot_height(p, kneel_h, kneel_hip, kneel_shin),
+	var step_foot: float = lerpf(p.foot_height(kneel_h, kneel_hip, kneel_shin),
 			SkaterMeshBuilder.BLADE_ICE_Z, step) + STEP_CLEAR_M * sin(PI * step)
-	var step_hip: float = _thigh_for(p, kneel_h, step_shin, step_foot)
+	var step_hip: float = p.thigh_for(kneel_h, step_shin, step_foot)
 	var lead_pitch: float = up * lerpf(kneel_hip, step_hip, step)
 	var lead_knee: float = up * lerpf(kneel_knee, -(step_hip + step_shin), step)
 	var left_leads: bool = _controller.stagger_recoil_dir.x > 0.0
@@ -99,11 +99,11 @@ func override(p: GaitPose) -> void:
 		var floor_h: float = SkaterMeshBuilder.BLADE_ICE_Z * up
 		var shin_l: float = -p.l_knee - p.l_pitch
 		var shin_r: float = -p.r_knee - p.r_pitch
-		if _foot_height(p, hip_h, p.l_pitch, shin_l) < floor_h:
-			p.l_pitch = lerpf(p.l_pitch, _thigh_for(p, hip_h, shin_l, floor_h), hold)
+		if p.foot_height(hip_h, p.l_pitch, shin_l) < floor_h:
+			p.l_pitch = lerpf(p.l_pitch, p.thigh_for(hip_h, shin_l, floor_h), hold)
 			p.l_knee = -(p.l_pitch + shin_l)
-		if _foot_height(p, hip_h, p.r_pitch, shin_r) < floor_h:
-			p.r_pitch = lerpf(p.r_pitch, _thigh_for(p, hip_h, shin_r, floor_h), hold)
+		if p.foot_height(hip_h, p.r_pitch, shin_r) < floor_h:
+			p.r_pitch = lerpf(p.r_pitch, p.thigh_for(hip_h, shin_r, floor_h), hold)
 			p.r_knee = -(p.r_pitch + shin_r)
 	# The planted skate's ankle gives its fold back so the blade lies flat; a
 	# kneeling skate rests on its toe, as the block's does.
@@ -124,19 +124,3 @@ func override(p: GaitPose) -> void:
 	p.trunk_roll = lerpf(p.trunk_roll, 0.0, weight)
 	p.wobble_pitch = lerpf(p.wobble_pitch, 0.0, weight)
 	p.wobble_roll = lerpf(p.wobble_roll, 0.0, weight)
-
-
-# Height over the ice of a leg's foot pivot (GaitPose's model of the leg), its
-# hip pivot `hip_h` up, the thigh `pitch` forward of vertical and the shin
-# `shin` back from it.
-func _foot_height(p: GaitPose, hip_h: float, pitch: float, shin: float) -> float:
-	return hip_h - p.leg_scale * (GaitPose.THIGH_LEN * cos(pitch)
-			+ GaitPose.SHIN_LEN * cos(shin)) - GaitPose.FOOT_FWD * sin(shin)
-
-
-# The thigh pitch that puts that foot pivot `foot_h` over the ice, the shin
-# held where it is: forward, lifting the knee.
-func _thigh_for(p: GaitPose, hip_h: float, shin: float, foot_h: float) -> float:
-	return acos(clampf((hip_h - foot_h - p.leg_scale * GaitPose.SHIN_LEN * cos(shin)
-			- GaitPose.FOOT_FWD * sin(shin)) / maxf(p.leg_scale * GaitPose.THIGH_LEN, 0.001),
-			-1.0, 1.0))

@@ -161,7 +161,21 @@ func _render_pose_update(delta: float) -> void:
 		return
 	if _is_host:
 		_pose.apply_head_tracking_aim(_current_aim_world, delta)
+	else:
+		_hold_celly_free_hand()
 	_ik.update_bottom_hand(delta)
+
+
+# The celly's free hand for a stick that comes off the wire: the tick that posed
+# the stick ran on another machine, and the free hand is mesh, never sent.
+# Gated to plain skating, as the stick's pose is where it was simulated.
+func _hold_celly_free_hand() -> void:
+	var state: int = skater.current_shot_state
+	if is_celebrating() and (state == SkaterStateMachine.State.SKATING_WITH_PUCK
+			or state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
+		_shot_pose.apply_celebration_free_hand()
+	else:
+		_ik.hold_free_hand(Vector3.ZERO, 0.0)
 
 
 static func _input_ts_less(a: InputState, b: InputState) -> bool:

@@ -21,6 +21,7 @@ func test_default_decodes_to_the_kit_look() -> void:
 	assert_eq(config.facial_hair, HairStyleRegistry.FACIAL_NONE, "and no facial hair")
 	assert_eq(config.hair_color, 0, "in the first palette colour")
 	assert_eq(config.jersey_tuck, GearModelRegistry.TUCK_NONE, "the jersey defaults loose")
+	assert_eq(config.celly, CellyRegistry.RAISED_STICK, "the celly defaults to the raised stick")
 
 
 func test_every_legal_pick_round_trips() -> void:
@@ -86,8 +87,44 @@ func test_a_pre_tuck_code_decodes_loose() -> void:
 	assert_eq(GearStyleConfig.from_code(old_code).jersey_tuck, GearModelRegistry.TUCK_NONE)
 
 
+func test_every_celly_round_trips() -> void:
+	for celly: int in CellyRegistry.count():
+		var config := GearStyleConfig.new(GearModelRegistry.SKATE_PRO,
+				GearModelRegistry.GLOVE_PRO, 3, 1, GearModelRegistry.FACE_VISOR,
+				HairStyleRegistry.hair_count() - 1, 1, HairStyleRegistry.color_count() - 1,
+				GearModelRegistry.tuck_count() - 1, celly)
+		var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
+		assert_eq(back.celly, celly)
+		assert_eq(back.jersey_tuck, GearModelRegistry.tuck_count() - 1,
+				"the celly field leaves the tuck alone")
+
+
+# Every code saved before the celly existed has zeros above the tuck, and those
+# players raised the stick.
+func test_a_pre_celly_code_decodes_to_the_raised_stick() -> void:
+	var old_code: int = GearStyleConfig.new(GearModelRegistry.SKATE_RETRO, 0,
+			GearStyleConfig.LACE_DEFAULT_INDEX, 0, GearModelRegistry.FACE_CAGE,
+			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
+			GearModelRegistry.TUCK_FULL).to_code()
+	assert_eq(GearStyleConfig.from_code(old_code).celly, CellyRegistry.RAISED_STICK)
+
+
+# The replay header carries the code as a JSON number, which is a double: past
+# 2^53 the code would come back rounded.
+func test_the_widest_code_survives_a_json_number() -> void:
+	var widest: int = GearStyleConfig.new(GearModelRegistry.skate_count() - 1,
+			GearModelRegistry.glove_count() - 1, TapeColorRegistry.count() - 1,
+			StickModelRegistry.count() - 1, GearModelRegistry.face_count() - 1,
+			HairStyleRegistry.hair_count() - 1, HairStyleRegistry.facial_count() - 1,
+			HairStyleRegistry.color_count() - 1, GearModelRegistry.tuck_count() - 1,
+			CellyRegistry.count() - 1).to_code()
+	assert_lt(widest, 1 << 53)
+	var back: int = int(JSON.parse_string(JSON.stringify({"g": widest}))["g"])
+	assert_eq(back, widest)
+
+
 func test_garbage_codes_coerce_to_legal_looks() -> void:
-	for code: int in [-1, -999, 1 << 20, 0x7FFFFFFF, 0x7FFFFFFFFF]:
+	for code: int in [-1, -999, 1 << 20, 0x7FFFFFFF, 0x7FFFFFFFFF, 31 << 45]:
 		var config: GearStyleConfig = GearStyleConfig.from_code(code)
 		assert_true(GearModelRegistry.is_valid_skate(config.skate_model), "skate model legal")
 		assert_true(GearModelRegistry.is_valid_glove(config.glove_model), "glove model legal")
@@ -98,6 +135,7 @@ func test_garbage_codes_coerce_to_legal_looks() -> void:
 		assert_true(HairStyleRegistry.is_valid_facial(config.facial_hair), "facial hair legal")
 		assert_true(HairStyleRegistry.is_valid_color(config.hair_color), "hair colour legal")
 		assert_true(GearModelRegistry.is_valid_tuck(config.jersey_tuck), "tuck option legal")
+		assert_true(CellyRegistry.is_valid(config.celly), "celly legal")
 		# And the coerced look re-packs stably (idempotent coercion).
 		var code2: int = config.to_code()
 		assert_eq(GearStyleConfig.from_code(code2).to_code(), code2)

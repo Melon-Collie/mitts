@@ -545,7 +545,7 @@ celebration window is aged by its callers at physics rate instead.
 **It writes leg swing, the ankles' give-back, edge loads and the crouch drop directly
 onto `Skater`, and never a torso or lower-body rotation.** The crouch lowers the
 visible body only — it is render-rate, and the hands and blade hang from the
-gameplay frame — except in the held poses (block, faceoff set, knockdown), whose
+gameplay frame — except in the held poses (block, faceoff set, knockdown, celly), whose
 layers hand the frame their drop by their weight (`GaitPose.frame_share`)
 because those hands are posed in a frame that went down with the body. Everything rotational
 is *published* as a field for `SkaterPoseCoordinator` to sum into one write:
@@ -692,7 +692,7 @@ stroke's path rather than rolling the solved legs off it.
 ### Overlays are layers, and the order is the priority
 
 Everything the gait lays on the stroke — the faceoff stance, the loaded skating
-stance (Shift), the shot loads and kick, the check commit and drive, the stick lift, the celebration bounce, the
+stance (Shift), the shot loads and kick, the check commit and drive, the stick lift, the celly's legs, the
 stagger, the block and the knockdown — is a `GaitLayer`
 (`Scripts/controllers/gait/`). The coordinator runs them lowest priority first
 over the locomotion pose in a `GaitPose`, one stage at a time:
@@ -724,7 +724,7 @@ never called, so `advance` may answer false only when every stage would leave
 the pose untouched (to within the shared 0.001 blend floor).
 
 The upper-body overlays (the shot coil, the follow-through blade, the
-celebration's raised stick, the block's torso lean) are not layers: they move
+celly's stick, the block's torso lean) are not layers: they move
 the gameplay frame and the blade, so they stay in the pose coordinators at
 physics rate.
 
@@ -740,7 +740,7 @@ ticks only — reconcile treats the live tick as the truth, and a bridge advance
 through a replay would play its ease twice — and its effect rides the hand and
 blade the wire already carries. The same rule shapes the rest of the
 hand-offs: a whip's attack takes `whip_attack_time` however long its finish, the
-celebration's stick and fist pump ease in and out over `CELEBRATION_EASE_S`,
+celly's stick and free hand ease in and out over `CELEBRATION_EASE_S`,
 and the slapper and block take their pose from the lean and twist they find
 rather than zeroing them first.
 
@@ -749,6 +749,19 @@ swings the top hand across the body (`SkaterIKCoordinator._stride_pump`), the
 stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
 which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
 every claim reads never takes it.
+
+### A celly is three seams, one window
+
+The goal celebration the scorer picked (`CellyRegistry`, carried in
+`GearStyleConfig`'s code) is posed by `CellyPoseRules` and split by who can
+see what. The stick rides the wire: the simulating machine poses it at physics
+rate (`SkaterShotPoseCoordinator.apply_celebration_pose`). The legs and trunk
+are the gait's (`GaitCelebrationLayer`) and the free hand is mesh, so every
+machine poses those from the same window and celly, which
+`GameManager._trigger_scorer_celebration` starts on all of them. A wire-fed
+remote takes the free hand off the stick it received
+(`RemoteController._hold_celly_free_hand`). Anything a new celly adds must land
+in one of those three, or other machines will not see it.
 
 ### The gait's numeric core is native
 

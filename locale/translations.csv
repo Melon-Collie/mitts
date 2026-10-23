@@ -144,6 +144,14 @@ PLAYER_SHOOTS_LEFT,Left,Zurdo
 PLAYER_SHOOTS_RIGHT,Right,Diestro
 PLAYER_POSITION_HINT,Where a lobby seats you. In 3v3 LW and LD take the left side — RW and RD the right.,Dónde te sienta el lobby. En 3v3 AI y DI van a la izquierda — AD y DD a la derecha.
 PLAYER_TEAM_LABEL,Team,Equipo
+PLAYER_CELLY_LABEL,Celly,Celebración
+PLAYER_CELLY_HINT,What you do when you score.,Lo que haces cuando marcas.
+CELLY_RAISED_STICK,Raised stick,Palo en alto
+CELLY_SWORD_SHEATH,Sword sheath,Envainar la espada
+CELLY_KNEE_SLIDE,Knee slide,Deslizar de rodillas
+CELLY_HOT_STICK,Hot stick,Palo caliente
+CELLY_BOW_AND_ARROW,Bow and arrow,Arco y flecha
+CELLY_CANT_HEAR_YOU,Can't hear you,No te oigo
 PLAYER_HEIGHT_LABEL,Height,Altura
 PLAYER_HEIGHT_HINT,Smaller: quicker first step and turns — bigger: more reach and a harder shot,Más bajo: primer paso y giros más rápidos — más alto: más alcance y un tiro más fuerte
 PLAYER_WEIGHT_LABEL,Weight,Peso

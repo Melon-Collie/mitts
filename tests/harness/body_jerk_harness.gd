@@ -18,6 +18,9 @@ const SETTLE_TICKS: int = 120
 # A jerk above this (mm per tick²) is listed frame by frame, not just as the max.
 const SPIKE_MM: float = 8.0
 
+# Scenario names for the cellies, by CellyRegistry index.
+const CELLY_NAMES: Array[String] = ["raised stick", "sword sheath", "knee slide",
+		"hot stick", "bow and arrow", "can't hear you"]
 const REGIONS: Dictionary = {
 	"legs": [LEG + 0, LEG + 1, LEG + 2, LEG + 3, LEG + 5, LEG + 6,
 			LEG + 7, LEG + 8, LEG + 9, LEG + 10, LEG + 12, LEG + 13],
@@ -333,6 +336,14 @@ func _add_play(out: Array[Dictionary]) -> void:
 		if i == 60:
 			_controller.start_celebration(2.0)
 		return _up(2.0), 26.0)
+	# The other cellies, the same glide.
+	for celly: int in range(1, CellyRegistry.count()):
+		_add(out, "goal celebration while gliding: %s" % CELLY_NAMES[celly], 360,
+				func(inp: InputState, i: int) -> Vector3:
+					inp.move_vector = Vector2(0.0, -1.0) if i < 40 else Vector2.ZERO
+					if i == 60:
+						_controller.start_celebration(2.0, celly)
+					return _up(2.0), 26.0)
 	_add(out, "shuffle: Space + D held, released", 300, func(inp: InputState, i: int) -> Vector3:
 		inp.brake = true
 		inp.move_vector = Vector2(1.0, 0.0) if i >= 30 and i < 150 else Vector2.ZERO

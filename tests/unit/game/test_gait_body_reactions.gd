@@ -7,10 +7,9 @@ const _SHIN_L: int = SkaterMeshBuilder.LegBone.SHIN_L
 # Reactive body language in the gait (SkaterSkatingCoordinator): the
 # check-delivery drive (hitter finishing through a landed hit, armed by the
 # host-authoritative broadcast via start_check_drive), the stick-lift working
-# posture (keyed off the replicated blade_up), and the goal-celebration knee
-# bounce (reading the controller's celebration timer, which the controllers age
-# at physics rate via tick_celebration — the gait itself only reads the progress
-# now that it runs at render rate).
+# posture (keyed off the replicated blade_up), and the celly's legs (reading the
+# controller's celebration timer, which the controllers age at physics rate via
+# tick_celebration — the gait only reads it, at render rate).
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const DT: float = 1.0 / 120.0
@@ -37,9 +36,9 @@ func before_each() -> void:
 
 func _tick(count: int) -> void:
 	for _i: int in count:
-		# The controllers age the celebration timer at physics rate now; the gait
-		# (render rate) only reads its progress. Mirror both here so the coordinator
-		# sees the countdown advance.
+		# The controllers age the celebration timer at physics rate; the gait
+		# (render rate) only reads it. Mirror both here so the coordinator sees the
+		# countdown advance.
 		_controller.tick_celebration(DT)
 		_coord.apply(DT)
 
@@ -84,25 +83,29 @@ func test_stick_lift_pops_chest_and_releases() -> void:
 	assert_almost_eq(_coord.trunk_pitch_add, 0.0, 0.01, "the lift read should release")
 
 
-func test_celebration_bounces_knees_and_timer_ages() -> void:
+func test_knee_slide_kneels_with_the_frame_and_timer_ages() -> void:
 	_tick(60)
-	var standing: float = _skater.leg_bone_euler(_SHIN_L).x
-	_controller.start_celebration(1.5)
-	var min_shin: float = INF
-	var max_shin_late: float = -INF
-	for i: int in 180:  # the full 1.5 s window
-		_controller.tick_celebration(DT)  # physics-rate aging (was owned by the gait)
-		_coord.apply(DT)
-		min_shin = minf(min_shin, _skater.leg_bone_euler(_SHIN_L).x)
-		if i > 36:  # past the ramp — the pump should return to standing between hops
-			max_shin_late = maxf(max_shin_late, _skater.leg_bone_euler(_SHIN_L).x)
-	assert_lt(min_shin, standing - 0.25,
-			"the celebration should pump the knees (deepest %.3f rad, standing %.3f)"
-			% [min_shin, standing])
-	assert_gt(max_shin_late, standing - 0.1,
-			"the pump should release between hops, not hold a squat")
-	# The controllers age the timer at physics rate now (tick_celebration), on
-	# every path including wire-fed remotes. A few grace ticks absorb the
-	# 180 × (1/120) float-summation residue.
-	_tick(6)
+	var standing: float = _coord.crouch_drop
+	_controller.start_celebration(1.5, CellyRegistry.KNEE_SLIDE)
+	_tick(90)  # mid-window, past the ease
+	assert_gt(_coord.crouch_drop, standing + 0.3,
+			"the knee slide should put the body down on a knee (drop %.3f, standing %.3f)"
+			% [_coord.crouch_drop, standing])
+	assert_almost_eq(_coord.frame_drop, _coord.crouch_drop, 0.01,
+			"the arms are posed in a frame that goes down with the body")
+	# The controllers age the timer at physics rate, on every path including
+	# wire-fed remotes. A few grace ticks absorb the float-summation residue.
+	_tick(96)
 	assert_false(_controller.is_celebrating(), "the timer should have aged out")
+	assert_almost_eq(_coord.crouch_drop, standing, 0.02, "and the skater stands back up")
+
+
+func test_raised_stick_stays_on_its_skates() -> void:
+	_tick(60)
+	var standing: float = _coord.crouch_drop
+	_controller.start_celebration(1.5, CellyRegistry.RAISED_STICK)
+	var deepest: float = 0.0
+	for _i: int in 180:
+		_tick(1)
+		deepest = maxf(deepest, _coord.crouch_drop)
+	assert_lt(deepest, standing + 0.1, "a bob, never a squat (deepest %.3f)" % deepest)

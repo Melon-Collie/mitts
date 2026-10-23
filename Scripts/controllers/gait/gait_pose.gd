@@ -118,6 +118,20 @@ func leg_length() -> float:
 	return leg_scale * (THIGH_LEN + SHIN_LEN)
 
 
+# Height over the ice of a leg's foot pivot, its hip pivot `hip_h` up, the thigh
+# `pitch` forward of vertical and the shin `shin` back from it.
+func foot_height(hip_h: float, pitch: float, shin: float) -> float:
+	return hip_h - leg_scale * (THIGH_LEN * cos(pitch) + SHIN_LEN * cos(shin)) \
+			- FOOT_FWD * sin(shin)
+
+
+# The thigh pitch that puts that foot pivot `foot_h` over the ice, the shin
+# held where it is: forward, lifting the knee.
+func thigh_for(hip_h: float, shin: float, foot_h: float) -> float:
+	return acos(clampf((hip_h - foot_h - leg_scale * SHIN_LEN * cos(shin)
+			- FOOT_FWD * sin(shin)) / maxf(leg_scale * THIGH_LEN, 0.001), -1.0, 1.0))
+
+
 # The crouch from the hip flex alone: the knee flex that keeps the skate under
 # the hip (knee = hip + asin(thigh/shin · sin(hip))) and the bent leg's vertical
 # deficit, paid as a whole-body drop so the skates stay on the ice.

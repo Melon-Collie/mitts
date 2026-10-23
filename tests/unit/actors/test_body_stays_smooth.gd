@@ -35,7 +35,17 @@ const BOUNDS: Dictionary = {
 	"shot block down and back up, puck ahead":
 		[28.0, 35.0, 27.0, 37.0, 19.0, 27.0],
 	"goal celebration while gliding":
-		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
+		[10.0, 11.0, 8.0, 8.0, 17.0, 10.0],
+	"goal celebration while gliding: sword sheath":
+		[10.0, 8.0, 8.0, 8.0, 8.0, 14.0],
+	"goal celebration while gliding: knee slide":
+		[23.0, 13.0, 10.0, 10.0, 14.0, 18.0],
+	"goal celebration while gliding: hot stick":
+		[10.0, 14.0, 8.0, 8.0, 28.0, 12.0],
+	"goal celebration while gliding: bow and arrow":
+		[10.0, 16.0, 8.0, 15.0, 26.0, 9.0],
+	"goal celebration while gliding: can't hear you":
+		[10.0, 12.0, 8.0, 24.0, 15.0, 23.0],
 	"shuffle: Space + D held, released":
 		[20.0, 8.0, 8.0, 8.0, 9.0, 8.0],
 }

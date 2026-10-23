@@ -136,52 +136,61 @@ func apply_block_blade_position() -> void:
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
 
-# Seconds the celebration's raised stick eases in and back out over.
-const CELEBRATION_EASE_S: float = 0.25
+# Seconds the celly eases in from the stick the tick placed, and back out to it:
+# long enough that a hand taken from the shaft to overhead moves at a punch's
+# speed, not a teleport's.
+const CELEBRATION_EASE_S: float = 0.45
+
+var _celly_rig := CellyPoseRules.Rig.new()
+var _celly_arms := CellyPoseRules.Arms.new()
 
 # ── Goal Celebration Pose ─────────────────────────────────────────────────────
-# Cosmetic raised-stick celebration for the scorer: top hand punches up with
-# the stick held overhead (blade above the hand, tilted so the shaft never
-# goes dead vertical — the stick/blade look_at needs a horizontal component),
-# off hand pumps up on the free side. t runs [0,1] across the celebration
-# window; the pose eases in from the stick the tick placed over its first
-# CELEBRATION_EASE_S and back out to it over its last, holding a gentle bob
-# between. Applied AFTER the tick's normal hand/blade placement, which it
-# blends from; runs only on the scorer's own machine and rides the hand/blade
-# wire state to everyone else like every other pose. `elapsed` and `left` are
-# seconds into and remaining of the window.
-func apply_celebration_pose(t: float, elapsed: float, left: float) -> void:
+# The scorer's celly (CellyPoseRules), laid over the hand and blade the tick
+# placed. Runs on the machine that simulates the scorer, and rides the
+# hand/blade wire state to everyone else; the free hand is mesh, so each machine
+# poses its own (apply_celebration_free_hand).
+func apply_celebration_pose() -> void:
+	var ramp: float = _celebration_ramp()
+	_fill_celly_rig()
+	CellyPoseRules.arms(_controller.celebration_celly(), _controller.celebration_progress(),
+			_controller.celebration_elapsed(), _celly_rig, _celly_arms)
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var ramp: float = smoothstep(0.0, CELEBRATION_EASE_S, elapsed) \
-			* smoothstep(0.0, CELEBRATION_EASE_S, left)
-	var bob: float = sin(t * TAU * 1.5) * 0.03 * ramp
-	var hand_pos := Vector3(
-			_skater.shoulder.position.x,
-			lerpf(_controller.hand_rest_y, _controller.celebration_hand_y, ramp) + bob,
-			_skater.shoulder.position.z - 0.10)
-	var blade_pos := Vector3(
-			_skater.shoulder.position.x + blade_side_sign * 0.18,
-			hand_pos.y + _controller.celebration_stick_rise * ramp,
-			_skater.shoulder.position.z - 0.28)
-	# The rigid pass reads the same here as anywhere, and it is why the raised
-	# stick survives it: this pose holds the blade well inside a stick-length of
-	# the hand, so the correction is inert until a board clamp actually moves the
-	# blade — and then it slides the hand rather than redrawing the arm from
-	# scratch, which is what keeps the stick overhead where the celebration wants it.
-	hand_pos = _skater.get_top_hand_position().lerp(hand_pos, ramp)
-	blade_pos = _skater.get_blade_position().lerp(blade_pos, ramp)
+	var hand_pos: Vector3 = _skater.get_top_hand_position().lerp(_celly_arms.hand, ramp)
+	var blade_pos: Vector3 = _skater.get_blade_position().lerp(_celly_arms.blade, ramp)
+	# The celly lays a full stick from the hand, so the rigid pass is inert until a
+	# board clamp moves the blade — and then it slides the hand rather than
+	# redrawing the arm.
 	var rigid: TopHandIK.Result = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	hand_pos = rigid.hand
 	blade_pos = _skater.clamp_blade_to_walls(rigid.blade)
 	rigid = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
-	# Off hand: a fist pump on the free side, taken from the shaft by the same
-	# ramp (SkaterIKCoordinator.update_bottom_hand).
-	_ik.hold_free_hand(Vector3(
-			_skater.bottom_shoulder.position.x,
-			_controller.celebration_hand_y + bob * 1.4,
-			_skater.bottom_shoulder.position.z - 0.12), ramp)
+	apply_celebration_free_hand()
+
+
+# The celly's free hand, off the stick as it stands — the one this machine just
+# posed, or a remote's off the wire.
+func apply_celebration_free_hand() -> void:
+	_fill_celly_rig()
+	CellyPoseRules.free_hand(_controller.celebration_celly(),
+			_controller.celebration_progress(), _controller.celebration_elapsed(),
+			_celly_rig, _skater.get_top_hand_position(), _skater.get_blade_position(),
+			_celly_arms)
+	_ik.hold_free_hand(_celly_arms.free, _celebration_ramp() * _celly_arms.free_weight)
+
+
+func _celebration_ramp() -> float:
+	return smoothstep(0.0, CELEBRATION_EASE_S, _controller.celebration_elapsed()) \
+			* smoothstep(0.0, CELEBRATION_EASE_S, _controller.celebration_left())
+
+
+func _fill_celly_rig() -> void:
+	_celly_rig.top_shoulder = _skater.shoulder.position
+	_celly_rig.bottom_shoulder = _skater.bottom_shoulder.position
+	_celly_rig.arm = _skater.upper_arm_length + _skater.forearm_length
+	_celly_rig.stick = _ik.solve_stick_length()
+	_celly_rig.ice_y = _ik.blade_y_local()
 
 
 # ── Wrister Follow-Through ────────────────────────────────────────────────────

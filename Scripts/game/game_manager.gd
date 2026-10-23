@@ -5551,7 +5551,9 @@ func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 	for record: PlayerRecord in _registry.all().values():
 		if record.player_name != scorer_name or record.controller == null:
 			continue
-		record.controller.start_celebration(GameRules.GOAL_CELEBRATION_DURATION)
+		var celly: int = record.skater.gear_style.celly if record.skater != null \
+				else CellyRegistry.RAISED_STICK
+		record.controller.start_celebration(GameRules.GOAL_CELEBRATION_DURATION, celly)
 		return
 
 

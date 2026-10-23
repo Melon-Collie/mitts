@@ -142,13 +142,17 @@ static func swatches(parent: Container, colors: Array[Color], names: Array[Strin
 	return buttons
 
 
-static func option_button(parent: Container, on_pick: Callable) -> OptionButton:
+# `item_keys`, when given, are the items in index order, translated.
+static func option_button(parent: Container, on_pick: Callable,
+		item_keys: Array[StringName] = []) -> OptionButton:
 	var btn := OptionButton.new()
 	btn.custom_minimum_size = Vector2(FIELD_W, CONTROL_H)
 	btn.add_theme_font_size_override("font_size", 15)
 	SoundManager.wire_button(btn)
 	btn.item_selected.connect(on_pick)
 	parent.add_child(btn)
+	for i: int in item_keys.size():
+		btn.add_item(btn.tr(item_keys[i]), i)
 	return btn
 
 

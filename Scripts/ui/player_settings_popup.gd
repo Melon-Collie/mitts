@@ -120,6 +120,7 @@ var _weight_hint: Label = null
 var _skin_buttons: Array[Button] = []
 var _glove_btn: OptionButton = null
 var _tuck_btn: OptionButton = null
+var _celly_btn: OptionButton = null
 # HEAD.
 var _hair_btns: Array[Button] = []
 var _facial_btn: OptionButton = null
@@ -436,6 +437,12 @@ func _build_you(page: VBoxContainer) -> void:
 		_edited())
 	team_col.add_child(_color_dropdown)
 
+	var celly_col: VBoxContainer = _row(page, &"PLAYER_CELLY_LABEL", false, full)
+	_celly_btn = PlayerRowKit.option_button(celly_col,
+			func(i: int) -> void: _edit_gear(&"celly", i), CellyRegistry.NAME_KEYS)
+	PlayerRowKit.hint(celly_col).text = tr(&"PLAYER_CELLY_HINT")
+	_wire_reach([_celly_btn], full)
+
 
 func _warning(parent: Container) -> Label:
 	var w := Label.new()
@@ -473,9 +480,7 @@ func _build_body(page: VBoxContainer) -> void:
 	_glove_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_GLOVES_LABEL", false, gloves),
 			func(i: int) -> void: _edit_gear(&"glove_model", i))
 	_tuck_btn = PlayerRowKit.option_button(_row(page, &"GEAR_TUCK_LABEL", false, full),
-			func(i: int) -> void: _edit_gear(&"jersey_tuck", i))
-	for i: int in GearModelRegistry.tuck_count():
-		_tuck_btn.add_item(tr(GearModelRegistry.TUCK_NAME_KEYS[i]), i)
+			func(i: int) -> void: _edit_gear(&"jersey_tuck", i), GearModelRegistry.TUCK_NAME_KEYS)
 	_wire_reach([_glove_btn], gloves)
 	_wire_reach([_tuck_btn], full)
 
@@ -488,9 +493,7 @@ func _build_head(page: VBoxContainer) -> void:
 	_hair_btns = PlayerRowKit.segmented(_row(page, &"PLAYER_HAIR_LABEL", false, head),
 			hair_names, func(i: int) -> void: _edit_gear(&"hair_style", i))
 	_facial_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_BEARD_LABEL", false, head),
-			func(i: int) -> void: _edit_gear(&"facial_hair", i))
-	for i: int in HairStyleRegistry.facial_count():
-		_facial_btn.add_item(tr(HairStyleRegistry.FACIAL_NAME_KEYS[i]), i)
+			func(i: int) -> void: _edit_gear(&"facial_hair", i), HairStyleRegistry.FACIAL_NAME_KEYS)
 	var color_names: Array[String] = []
 	for key: StringName in HairStyleRegistry.COLOR_NAME_KEYS:
 		color_names.append(tr(key))
@@ -531,15 +534,11 @@ func _build_stick(page: VBoxContainer) -> void:
 	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(i, -1, -1, -1))
 	_span_btn = PlayerRowKit.option_button(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
-			func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
-	for i: int in _SPAN_KEYS.size():
-		_span_btn.add_item(tr(_SPAN_KEYS[i]), i)
+			func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1), _SPAN_KEYS)
 	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
 			func(i: int) -> void: _edit_tape(-1, -1, i, -1))
 	_style_btn = PlayerRowKit.option_button(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
-			func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
-	for i: int in _STYLE_KEYS.size():
-		_style_btn.add_item(tr(_STYLE_KEYS[i]), i)
+			func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]), _STYLE_KEYS)
 	_wire_reach([_stick_model_btn], stick)
 	_wire_reach([_blade_color_dd, _span_btn], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
@@ -679,6 +678,7 @@ func _refresh() -> void:
 	PlayerRowKit.select(_shoots_btns, 0 if _draft.is_left_handed else 1)
 	PlayerRowKit.select(_position_btns, _POSITION_ORDER.find(_draft.position))
 	_color_dropdown.set_selected(_draft.color_slot)
+	_celly_btn.select(gear.celly)
 
 	_height_slider.set_value_no_signal(_draft.height)
 	_height_value.text = PlayerAttributes.inches_label(_draft.height)

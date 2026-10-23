@@ -80,7 +80,8 @@ const CAM_HAND_FOV: float = 22.0
 # cam), cam_ahead (metres down the travel line), cam_hand ("top" / "bottom":
 # cam is then an offset from that hand, looked at through a narrow lens),
 # game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
-# check before the first tick), tuck (a GearModelRegistry TUCK_* option worn). "readout": true also prints the pose's speed
+# check before the first tick), tuck (a GearModelRegistry TUCK_* option worn),
+# celly (a CellyRegistry celebration started before the first tick). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -392,6 +393,29 @@ const POSES: Array = [
 		}},
 	# A blocker caught by the whistle: the shot-block stance must not ride
 	# through the walk-in (the state machine is not dispatched while locked).
+	# ── Goal celebrations ────────────────────────────────────────────────────
+	# Each celly (CellyRegistry) at the moment that names it, seconds into the
+	# GOAL_CELEBRATION window: `celly` picks it, and the steps run the window to
+	# that moment. Each is shot from where its stick reads: one pointed at the
+	# lens draws as a stub straight down.
+	{"name": "celly_raised_stick", "puck": false, "celly": CellyRegistry.RAISED_STICK,
+		"cam": Vector3(-2.0, 1.0, -3.8), "cam_aim": Vector3(0.0, 0.45, 0.0), "steps": [[120, {}]]},
+	{"name": "celly_sword_brandish", "puck": false, "celly": CellyRegistry.SWORD_SHEATH,
+		"cam": Vector3(-3.0, 0.7, -1.4), "cam_aim": Vector3(0.0, 0.25, 0.0), "steps": [[84, {}]]},
+	{"name": "celly_sword_sheathed", "puck": false, "celly": CellyRegistry.SWORD_SHEATH,
+		"cam": Vector3(2.4, 0.6, 2.2), "steps": [[234, {}]]},
+	{"name": "celly_knee_slide", "puck": false, "celly": CellyRegistry.KNEE_SLIDE,
+		"cam": Vector3(-1.6, 0.6, -2.8), "steps": [[150, {}]]},
+	{"name": "celly_hot_stick_warm", "puck": false, "celly": CellyRegistry.HOT_STICK,
+		"cam": Vector3(-2.9, 0.5, 0.6), "steps": [[132, {}]]},
+	{"name": "celly_hot_stick_burnt", "puck": false, "celly": CellyRegistry.HOT_STICK,
+		"cam": Vector3(-2.9, 0.5, 0.6), "steps": [[216, {}]]},
+	{"name": "celly_bow_drawn", "puck": false, "celly": CellyRegistry.BOW_AND_ARROW,
+		"cam": Vector3(-3.0, 0.7, -0.4), "cam_aim": Vector3(0.0, 0.3, -0.3), "steps": [[186, {}]]},
+	{"name": "celly_cant_hear_you", "puck": false, "celly": CellyRegistry.CANT_HEAR_YOU,
+		"cam": Vector3(-1.6, 0.6, -2.8), "steps": [[120, {}]]},
+	{"name": "celly_cant_hear_you_louder", "puck": false, "celly": CellyRegistry.CANT_HEAR_YOU,
+		"cam": Vector3(-2.0, 1.0, -3.8), "cam_aim": Vector3(0.0, 0.45, 0.0), "steps": [[234, {}]]},
 	{"name": "faceoff_after_block", "puck": false,
 		"steps": [[30, {"block": true, "aim": Vector3(0.0, 0.0, -3.0)}]],
 		"faceoff": {
@@ -577,6 +601,8 @@ func _run_pose() -> void:
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
 	if pose.has("pin_role"):
 		_place_for_pin(int(pose["pin_role"]))
+	if pose.has("celly"):
+		_controller.start_celebration(GameRules.GOAL_CELEBRATION_DURATION, int(pose["celly"]))
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]

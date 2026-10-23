@@ -907,8 +907,8 @@ var shot_stride_fade: float = 0.8              # stride suppression while loadin
 # GaitCelebrationLayer). Check delivery fires from the host-authoritative
 # body_check_landed broadcast (start_check_drive), so the hitter's drive lands
 # the same frame as the burst/thud on every machine; the stick-lift read keys
-# off the replicated blade_up; the celebration bounce reads the same timer the
-# raised-stick pose uses (started on every machine — see GameManager._trigger_scorer_celebration).
+# off the replicated blade_up; the celebration's legs read the same timer and
+# celly the arms do (started on every machine — see GameManager._trigger_scorer_celebration).
 var check_drive_time: float = 0.45        # seconds of shoulder-drive after a landed hit
 var check_drive_lean_deg: float = 14.0    # trunk drives INTO the hit at full hardness
 var check_drive_stance: float = 0.6       # legs drive under the hit — the finishing base
@@ -922,13 +922,6 @@ var pin_stance: float = 0.6
 var pin_pressed_lean_deg: float = 12.0
 var pin_drive_lean_deg: float = 18.0
 var pin_pose_speed: float = 6.0
-var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce, below standing
-
-# ── Celebration Tuning ────────────────────────────────────────────────────────
-# Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.
-# apply_celebration_pose) — heights in upper-body-local metres.
-var celebration_hand_y: float = 0.45     # raised top-hand height
-var celebration_stick_rise: float = 0.5  # blade height above the raised hand
 
 # ── Shot-Block Tuning ─────────────────────────────────────────────────────────
 # Movement speed while blocking (unused while the stance is fully planted; kept for tuning).
@@ -1088,11 +1081,12 @@ var hit_active: bool = false
 
 var _game_state_has_faceoff_prep: bool = false
 var _game_state_has_period_break: bool = false
-# Cosmetic goal-celebration window (seconds remaining / total). Set by
-# GameManager on the machine that simulates the scorer; the raised-stick pose
-# rides the normal hand/blade wire state to everyone else.
+# Cosmetic goal-celebration window (seconds remaining / total) and the celly
+# (CellyRegistry) skated in it. Started on every machine; the simulating one
+# poses the stick, which rides the hand/blade wire state to everyone else.
 var _celebration_timer: float = 0.0
 var _celebration_total: float = 1.0
+var _celebration_celly: int = CellyRegistry.RAISED_STICK
 
 # ── Faceoff / intro skate-in approach ─────────────────────────────────────────
 # During FACEOFF_PREP the skater glides from a start point (its bench for the
@@ -1135,9 +1129,10 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
-func start_celebration(duration: float) -> void:
+func start_celebration(duration: float, celly: int = CellyRegistry.RAISED_STICK) -> void:
 	_celebration_total = maxf(duration, 0.001)
 	_celebration_timer = _celebration_total
+	_celebration_celly = celly if CellyRegistry.is_valid(celly) else CellyRegistry.RAISED_STICK
 
 
 func is_celebrating() -> bool:
@@ -1145,11 +1140,23 @@ func is_celebrating() -> bool:
 
 
 # 0..1 progress through the celebration window (0 when idle). Read by the gait
-# for the leg bounce, matching the `t` the raised-stick pose runs on.
+# for the legs, matching the `t` the arms run on.
 func celebration_progress() -> float:
 	if _celebration_timer <= 0.0:
 		return 0.0
 	return 1.0 - _celebration_timer / _celebration_total
+
+
+func celebration_elapsed() -> float:
+	return _celebration_total - _celebration_timer
+
+
+func celebration_left() -> float:
+	return _celebration_timer
+
+
+func celebration_celly() -> int:
+	return _celebration_celly
 
 
 # Ages the celebration window, at physics rate on real ticks from both the
@@ -1824,15 +1831,14 @@ func _process_input(input: InputState, delta: float) -> void:
 		# through reconcile replay) so it stays deterministic and never freezes for
 		# an off-screen scorer.
 		tick_celebration(delta)
-		# Goal celebration: the scorer raises the stick, over the hand/blade pose
-		# the tick just placed — cosmetic-only (pickup is locked through
-		# GOAL_CELEBRATION), real ticks only, and gated to plain skating so a
-		# whiffed shot's follow-through isn't fought over.
+		# Goal celebration: the scorer's celly, over the hand/blade pose the tick
+		# just placed — cosmetic-only (pickup is locked through GOAL_CELEBRATION),
+		# real ticks only, and gated to plain skating so a whiffed shot's
+		# follow-through isn't fought over.
 		var cel_state: SkaterStateMachine.State = _sm.get_state()
 		if _celebration_timer > 0.0 and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
 				or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
-			_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total,
-					_celebration_total - _celebration_timer, _celebration_timer)
+			_shot_pose.apply_celebration_pose()
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
