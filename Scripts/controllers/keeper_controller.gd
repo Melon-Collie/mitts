@@ -36,8 +36,10 @@ var _keeper_pose := KeeperPose.new()
 var _net := Transform3D.IDENTITY
 var _ticks: int = 0
 var _last_velocity := Vector3.ZERO
-# The skaters off the puck in the net's frame, refilled for each read.
+# The skaters in the net's frame, refilled for each read: an opposing
+# carrier's teammates off the puck, every opponent, his own teammates.
 var _attackers := PackedVector2Array()
+var _opponents := PackedVector2Array()
 var _defenders := PackedVector2Array()
 # Seconds he has held a caught puck; below zero, none.
 var _holding: float = -1.0
@@ -136,22 +138,30 @@ func _physics_process(delta: float) -> void:
 func _read_play(delta: float, in_net: Vector3) -> void:
 	var carrier: Skater = puck.get_carrier()
 	var moving: Vector3 = _net.basis.inverse() * (carrier.velocity if carrier != null else puck.get_puck_velocity())
+	var holder: Vector2 = KeeperPlayRead.NO_CARRIER
+	if carrier != null:
+		var body: Vector3 = _net.affine_inverse() * carrier.global_position
+		holder = Vector2(body.x, body.z)
 	# A wind-up shows as the opposing carrier holding the puck on his blade for
 	# a shot: the wrister's address, the slapper's charge, the one-timer's.
 	var winding: bool = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id) \
 			and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
-	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding)
+	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder)
 
 
-# Who an opposing carrier could pass to, through which lanes; none for a loose
-# puck or our own.
+# Who an opposing carrier could pass to, through which lanes; and which of
+# them a puck he sees loose goes to.
 func _read_receivers() -> void:
 	_attackers.clear()
 	_defenders.clear()
+	_opponents.clear()
+	_ensure_view()
+	var to_net: Transform3D = _net.affine_inverse()
+	for at: Vector3 in _view.opponents:
+		var mine: Vector3 = to_net * at
+		_opponents.append(Vector2(mine.x, mine.z))
 	var carrier: Skater = puck.get_carrier()
 	if carrier != null and (team_id == -1 or carrier.get_team_id() != team_id):
-		_ensure_view()
-		var to_net: Transform3D = _net.affine_inverse()
 		for at: Vector3 in _view.off_puck_opponents:
 			var mine: Vector3 = to_net * at
 			_attackers.append(Vector2(mine.x, mine.z))
@@ -159,6 +169,7 @@ func _read_receivers() -> void:
 			var mine: Vector3 = to_net * at
 			_defenders.append(Vector2(mine.x, mine.z))
 	play.read_receivers(_attackers, _defenders)
+	play.read_pass(_opponents)
 
 
 # Once his legs have read a shot on net, the save, the brain resting until it

@@ -15,6 +15,11 @@ extends RefCounted
 #          asks (`depth_for`), so a rush is met deep rather than skated round,
 #          and as a pass across to a receiver in `play` asks (`pass_depth`);
 #          a shot he sees wound up he is set for at depth, not backing in
+#
+# A pass he reads to an opposing stick (KeeperPlayRead.meets) he plays from
+# where that stick meets it, in the zone it is in: skated to at once, turning
+# as he goes, and stopped on the one-timer's angle rather than following the
+# puck across and sliding past it as it stops.
 #   SHARP  below the dots and wide of SHARP_RAD: standing on the near post's
 #          overlap, turned to it
 #   BELOW  at or below the goal line: sealed on the post on its side; directly
@@ -59,6 +64,10 @@ var _velocity := Vector2.ZERO
 # Sets `motor`'s goal for the puck at `puck` moving at `velocity`, both in the
 # net's frame.
 func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
+	var meeting: bool = play != null and play.meets
+	if meeting:
+		puck = play.meet
+		velocity = Vector2.ZERO
 	_velocity = velocity
 	zone = _zone_for(puck)
 	if zone != Zone.BELOW:
@@ -72,7 +81,9 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 			# its motion, which the motor skates him with.
 			var spot: Vector2 = _spot(puck, motor)
 			var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
-			motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S)
+			if meeting:
+				ahead = spot
+			motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
 
 
 # His spot on his feet for the puck at `puck`, in its zone.

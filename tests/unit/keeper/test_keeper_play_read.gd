@@ -5,7 +5,9 @@ extends GutTest
 # passed, a slower tier's later; a wind-up seen late by his read and priming
 # the save once he has watched it long enough; and the receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
-# and inside the blue line.
+# and inside the blue line. A stickhandle read where the puck is on average
+# about its carrier, the carrier's skating as it is; and a loose puck read to
+# the first opposing stick its line reaches before it stops.
 
 const DT: float = 1.0 / 120.0
 
@@ -90,3 +92,68 @@ func test_receivers_are_the_ones_a_pass_can_reach() -> void:
 	assert_eq(play.receivers, PackedVector2Array([Vector2(0.0, -3.0)]), "a stick on the lane takes it")
 	play.read_receivers(attackers, PackedVector2Array([Vector2(8.0, -15.0)]))
 	assert_eq(play.receivers.size(), 2, "one nowhere near takes none")
+
+
+func test_a_stickhandle_is_read_where_the_puck_is_on_average() -> void:
+	var play := KeeperPlayRead.new()
+	var body := Vector2(0.0, -6.0)
+	var lo: float = INF
+	var hi: float = -INF
+	for i: int in 360:
+		var puck := body + Vector2(0.4 * sin(TAU * 1.5 * i * DT), -0.5)
+		play.step(DT, puck, Vector2.ZERO, false, body)
+		if i > 180:
+			lo = minf(lo, play.puck.x)
+			hi = maxf(hi, play.puck.x)
+	assert_lt(hi - lo, 0.8 * 0.5, "a stickhandle swings it less than half as far")
+	for i: int in 240:
+		play.step(DT, body + Vector2(0.5, -0.5), Vector2.ZERO, false, body)
+	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 0.01, "held to the side, read there")
+	var v := Vector2(5.0, 0.0)
+	for i: int in 120:
+		body += v * DT
+		play.step(DT, body + Vector2(0.5, -0.5), v, false, body)
+	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 1e-3, "the carrier's skating as it is")
+
+
+func _loose(play: KeeperPlayRead, from: Vector2, v: Vector2, seconds: float) -> Vector2:
+	var at: Vector2 = from
+	for i: int in roundi(seconds / DT):
+		at += v * DT
+		play.step(DT, at, v)
+	return at
+
+
+func test_a_pass_is_read_to_the_stick_that_meets_it() -> void:
+	var play := KeeperPlayRead.new()
+	var receiver := Vector2(-3.0, -6.0)
+	var reach: float = KeeperPlayRead.LANE_REACH_M
+	var v := Vector2(-15.0, 0.0)
+	for i: int in 60:
+		play.step(DT, Vector2(3.0, -6.0), Vector2.ZERO)
+	var at: Vector2 = _loose(play, Vector2(3.0, -6.0), v, play.delay_s * 0.5)
+	play.read_pass(PackedVector2Array([receiver]))
+	assert_false(play.meets, "not before his read sees it go")
+	at = _loose(play, at, v, play.delay_s)
+	play.read_pass(PackedVector2Array([receiver]))
+	assert_true(play.meets, "once seen")
+	assert_almost_eq(play.meet, receiver + Vector2(reach, 0.0), Vector2.ONE * 1e-3, "where his stick reaches it")
+	var t: float = (at.x - play.meet.x) / 15.0
+	assert_almost_eq(play.meet_s, t, 0.02, "in the time it takes to get there")
+	play.read_pass(PackedVector2Array([Vector2(-3.0, -9.0)]))
+	assert_false(play.meets, "a line no stick reaches: none")
+	play.read_pass(PackedVector2Array([play.puck + Vector2(0.3, 0.0), receiver]))
+	assert_true(play.meets, "the stick it is going away from is no receiver")
+	assert_almost_eq(play.meet, receiver + Vector2(reach, 0.0), Vector2.ONE * 1e-3)
+	for i: int in roundi(play.delay_s / DT) - 1:
+		play.step(DT, at, Vector2.ZERO, false, receiver)
+	play.read_pass(PackedVector2Array([receiver]))
+	assert_true(play.meets, "caught, until he sees it caught")
+	play.step(DT, at, Vector2.ZERO, false, receiver)
+	play.step(DT, at, Vector2.ZERO, false, receiver)
+	play.read_pass(PackedVector2Array([receiver]))
+	assert_false(play.meets, "seen caught: no pass")
+	var slow := KeeperPlayRead.new()
+	_loose(slow, Vector2(3.0, -6.0), Vector2(-1.5, 0.0), 0.5)
+	slow.read_pass(PackedVector2Array([receiver]))
+	assert_false(slow.meets, "one that stops short of him: none")

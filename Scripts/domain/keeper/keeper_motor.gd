@@ -87,6 +87,8 @@ var _cut := KeeperPose.new()
 var _spot_velocity := Vector2.ZERO
 # Seconds since the goal's spot was given.
 var _spot_since: float = 0.0
+# Whether the goal on his feet is skated to however far it is.
+var _skate: bool = false
 
 
 # One move asked for: what, to where, which side, how fast.
@@ -109,14 +111,18 @@ func _init() -> void:
 
 
 # Be on his feet at `spot` facing `facing`, or down at `spot` (`on` Rest.DOWN);
-# on his feet, the spot moving at `velocity`.
-func go_to(spot: Vector2, facing: float, on: int = Rest.FEET, velocity := Vector2.ZERO) -> void:
+# on his feet, the spot moving at `velocity`, or skated to however far it is
+# (`skate`: he goes at once, whichever way it lies, turning as he goes, and
+# stops on it).
+func go_to(spot: Vector2, facing: float, on: int = Rest.FEET, velocity := Vector2.ZERO,
+		skate: bool = false) -> void:
 	_queue.clear()
 	_goal = true
 	route.rest = on
 	route.spot = spot
 	route.facing = facing
 	_spot_velocity = velocity if on == Rest.FEET else Vector2.ZERO
+	_skate = skate and on == Rest.FEET
 	_spot_since = 0.0
 	_retarget()
 
@@ -344,10 +350,10 @@ func _step_mover(dt: float) -> void:
 
 
 # Whether the goal is one he skates to as it moves: on his feet, standing, near
-# him or moving.
+# him, moving, or one to skate to however far.
 func _glides() -> bool:
 	return route.rest == Rest.FEET and rest == Rest.FEET \
-			and (_spot_velocity.length() > MOVING_M_S or route.first == Do.GLIDE)
+			and (_skate or _spot_velocity.length() > MOVING_M_S or route.first == Do.GLIDE)
 
 
 func _start_glide() -> void:

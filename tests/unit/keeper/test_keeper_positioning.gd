@@ -10,7 +10,8 @@ extends GutTest
 # unbroken, to rest where it stops; and his depth answering the play: the top
 # of the crease against a still or slow puck, deeper against one coming at him
 # or swinging across him or with an open receiver across the slot, no deeper
-# than the floor.
+# than the floor. A pass he reads he skates to where its stick meets it, set
+# there, turned to it.
 
 const DT: float = 1.0 / 120.0
 const PLANNER_EVERY: int = 4
@@ -316,3 +317,24 @@ func test_a_shot_wound_up_on_the_rush_is_met_set_at_depth() -> void:
 	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	assert_lt(backing, top - 0.1, "the rush alone backs him in")
 	assert_almost_eq(_motor.route.spot.length(), top, 1e-4, "wound up, set at the top")
+
+
+# A pass read to a stick: his goal is set on that stick's angle, turned to it,
+# not on the puck crossing; out from behind the net, in front of it, not on a
+# post.
+func test_a_pass_he_reads_he_plays_from_where_it_is_met() -> void:
+	_brain.play = KeeperPlayRead.new()
+	var puck := Vector2(3.0, -6.0)
+	var meet := Vector2(-2.6, -6.0)
+	_brain.play.meets = true
+	_brain.play.meet = meet
+	_brain.play.meet_s = 2.0
+	_brain.decide(puck, Vector2(-15.0, 0.0), _motor)
+	var line: Vector2 = meet.normalized()
+	assert_almost_eq(_motor.route.spot, line * KeeperPositioning.crease_edge(line), Vector2.ONE * 1e-4,
+			"on its angle at the top of the crease")
+	_faces(_motor.route.spot, meet, "the pass")
+	assert_eq(_motor.route.rest, R.FEET)
+	_brain.decide(Vector2(0.5, 1.5), Vector2(0.0, -10.0), _motor)
+	assert_eq(_brain.zone, Z.FRONT, "a pass out from behind the net: in front")
+	assert_eq(_motor.route.rest, R.FEET)

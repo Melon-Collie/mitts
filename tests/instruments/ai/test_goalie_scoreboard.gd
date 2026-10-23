@@ -98,6 +98,8 @@ func _build(keeper: bool) -> void:
 		add_child_autofree(n)
 	_h = Harness.new()
 	_h.setup(_goalie, _puck, _ctrl, _shooter)
+	# The shooter is a skater he can see: a receiver a pass is read to.
+	_ctrl.set_skater_getter(func() -> Array: return [_shooter])
 
 
 func test_report_the_old_goalie() -> void:
@@ -210,9 +212,14 @@ func _measure(key: String, tier: int) -> int:
 
 # A fresh keeper on the tier's profile. `apply_skill_profile` rebuilds the cached
 # rule configs, so it goes on before anything reads them.
+# Stepped by hand the engine's physics frame never advances, and his view of
+# the skaters is cached per frame: each staging looks afresh, so no row reads
+# a view left by the last, and the scoreboard's own ticks look again each tick
+# (the harness's own ticks keep the staging's first look).
 func _reset(tier: int) -> void:
 	_ctrl.apply_skill_profile(GoalieSkillProfile.for_difficulty(tier))
 	_ctrl.reset_to_crease()
+	_ctrl._view.invalidate()
 
 
 # Settled on a carrier standing at `spot`. The harness calls a goalie settled
@@ -228,6 +235,7 @@ func _settle_ready(spot: Vector3) -> void:
 			return
 		_puck.global_position = spot
 		_puck.linear_velocity = Vector3.ZERO
+		_ctrl._view.invalidate()
 		_ctrl._physics_process(DT)
 
 
@@ -335,6 +343,7 @@ func _feed(passer: Vector3, receiver: Vector3) -> void:
 		pos += vel * DT
 		_puck.global_position = pos
 		_puck.linear_velocity = vel
+		_ctrl._view.invalidate()
 		_ctrl._physics_process(DT)
 
 
