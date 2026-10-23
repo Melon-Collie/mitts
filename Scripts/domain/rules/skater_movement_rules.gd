@@ -129,15 +129,7 @@ static func apply_movement(
 	var has_input: bool = move_input.length() > cfg.move_deadzone
 	var facing_dir := Vector2(-sin(facing_rotation_y), -cos(facing_rotation_y))
 
-	# Stride scale by how the push lines up with facing (forward > crossover >
-	# backward stride).
-	var thrust_scale: float = 1.0
-	if has_input:
-		var move_dot: float = facing_dir.dot(move_input.normalized())
-		if move_dot >= 0.0:
-			thrust_scale = lerpf(cfg.crossover_thrust_multiplier, 1.0, move_dot)
-		else:
-			thrust_scale = lerpf(cfg.backward_thrust_multiplier, cfg.crossover_thrust_multiplier, move_dot + 1.0)
+	var thrust_scale: float = direction_thrust_scale(cfg, facing_dir, move_input) if has_input else 1.0
 
 	var horiz := Vector2(velocity.x, velocity.z)
 	var speed: float = horiz.length()
@@ -202,6 +194,16 @@ static func apply_movement(
 	velocity.x = horiz.x
 	velocity.z = horiz.y
 	return velocity
+
+
+# The stride's scale for a push along `move_input` (non-zero) from a body facing
+# `facing_dir` (unit): forward > crossover > backward stride.
+static func direction_thrust_scale(cfg: MovementConfig, facing_dir: Vector2,
+		move_input: Vector2) -> float:
+	var move_dot: float = facing_dir.dot(move_input.normalized())
+	if move_dot >= 0.0:
+		return lerpf(cfg.crossover_thrust_multiplier, 1.0, move_dot)
+	return lerpf(cfg.backward_thrust_multiplier, cfg.crossover_thrust_multiplier, move_dot + 1.0)
 
 
 # cos 45°: a stick this near the travel when a stop goes on is held off it

@@ -201,12 +201,13 @@ const PAD_REBINDABLE_ACTIONS: PackedStringArray = [
 const PAD_DEFAULT_BUTTONS: Dictionary = {
 	"block": JOY_BUTTON_A,
 	"brake": JOY_BUTTON_B,
-	# The stance is held while steering, so it cannot sit on a click of the
-	# steering stick; the check commit is held only for the beat before contact.
+	# The stance and the hit are held while steering — a carrier braces with the
+	# stick in play, and a press drives with the hit held — so neither can sit on
+	# a click of the steering stick.
 	"stance": JOY_BUTTON_LEFT_SHOULDER,
-	"stick_lift": JOY_BUTTON_RIGHT_SHOULDER,
+	"hit": JOY_BUTTON_RIGHT_SHOULDER,
 	"stick_check": JOY_BUTTON_X,
-	"hit": JOY_BUTTON_LEFT_STICK,
+	"stick_lift": JOY_BUTTON_LEFT_STICK,
 	"quick_pass": JOY_BUTTON_RIGHT_STICK,
 	# Set before a play rather than inside one, so they can take the D-pad (menus
 	# navigate on it too, but gameplay input is blocked while one is open).
@@ -616,7 +617,7 @@ func save() -> void:
 	# a returning config is remapped exactly once and never re-forces Block off a
 	# key the player has since chosen for it.
 	cfg.set_value("bindings", "scheme_version", 1)
-	cfg.set_value("bindings", "pad_scheme_version", 2)
+	cfg.set_value("bindings", "pad_scheme_version", 3)
 	cfg.save(_get_save_path())
 	_push_to_cloud()
 
@@ -1266,6 +1267,8 @@ func _load() -> void:
 			pad_bindings.erase("stance")
 		if int(cfg.get_value("bindings", "pad_scheme_version", 0)) < 2:
 			PadSchemeMigration.to_scheme_2(pad_bindings, PAD_DEFAULT_BUTTONS)
+		if int(cfg.get_value("bindings", "pad_scheme_version", 0)) < 3:
+			PadSchemeMigration.to_scheme_3(pad_bindings, PAD_DEFAULT_BUTTONS)
 		# Control-scheme swap (scheme_version 1): Hit takes Ctrl, Block moves to C.
 		# A config predating the swap that still has Block on its old Ctrl default
 		# is remapped to C; a player who deliberately rebound Block elsewhere is

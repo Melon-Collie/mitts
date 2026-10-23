@@ -37,18 +37,29 @@ String NativeSkaterMovement::configure(Object *movement_config) {
 }
 
 void NativeSkaterMovement::set_stagger_params(double max_stagger_seconds, double max_thrust_penalty,
-		double max_grip_penalty) {
+		double max_grip_penalty, double p_rocked_max_seconds, double p_rocked_grip_penalty) {
 	stagger_max_seconds = max_stagger_seconds;
 	stagger_max_thrust_penalty = max_thrust_penalty;
 	stagger_max_grip_penalty = max_grip_penalty;
+	rocked_max_seconds = p_rocked_max_seconds;
+	rocked_grip_penalty = p_rocked_grip_penalty;
 }
 
-// BodyCheckRules._stagger_frac; thrust_mult and grip_mult are 1 − frac × penalty.
+// BodyCheckRules._stagger_frac; thrust_mult is 1 − frac × penalty, and grip_mult
+// deepens on through the rocked band (rocked_share).
 static double stagger_frac(double stagger_timer, double max_seconds) {
 	if (stagger_timer <= 0.0 || max_seconds <= 0.0) {
 		return 0.0;
 	}
 	return CLAMP(stagger_timer / max_seconds, 0.0, 1.0);
+}
+
+// BodyCheckRules.rocked_share.
+static double rocked_share(double stagger_timer, double max_seconds, double rocked_max) {
+	if (rocked_max <= 0.0) {
+		return 0.0;
+	}
+	return CLAMP((stagger_timer - max_seconds) / rocked_max, 0.0, 1.0);
 }
 
 Vector3 movement_step(const MovementTunables &cfg,
@@ -194,7 +205,9 @@ void NativeSkaterMovement::integrate_forward(
 			const double remaining = MAX(stagger_timer - (double)(i + 1) * dt, 0.0);
 			const double frac = stagger_frac(remaining, stagger_max_seconds);
 			thrust = cfg.thrust * (1.0 - frac * stagger_max_thrust_penalty);
-			grip_scale = 1.0 - frac * stagger_max_grip_penalty;
+			grip_scale = 1.0 - frac * stagger_max_grip_penalty
+					- rocked_share(remaining, stagger_max_seconds, rocked_max_seconds)
+					* (rocked_grip_penalty - stagger_max_grip_penalty);
 		}
 		vel = movement_step(cfg, vel, decayed_input, facing_rotation_y,
 				has_puck, brake, dt, posture, thrust, grip_scale);
@@ -208,7 +221,7 @@ void NativeSkaterMovement::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("configure", "movement_config"),
 			&NativeSkaterMovement::configure);
 	ClassDB::bind_method(D_METHOD("set_stagger_params", "max_stagger_seconds", "max_thrust_penalty",
-			"max_grip_penalty"),
+			"max_grip_penalty", "rocked_max_seconds", "rocked_grip_penalty"),
 			&NativeSkaterMovement::set_stagger_params);
 	ClassDB::bind_method(D_METHOD("apply_movement",
 			"current_velocity", "move_input", "facing_rotation_y",

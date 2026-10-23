@@ -47,11 +47,6 @@ const _CHECK_VOL_MIN_DB: float = -9.0    # a just-audible full-strength check
 const _CHECK_VOL_MAX_DB: float = 3.0     # the hardest hits
 const _CHECK_PITCH_LIGHT: float = 1.10   # full check — higher, snappier
 const _CHECK_PITCH_HEAVY: float = 0.90   # hardest hits — lower, heavier thud
-# A landed cross-check: the check's thud at the quiet end of its range, since a
-# shove's Δv tops out under a knockdown. A full-stagger shove is as loud as a
-# just-audible check.
-const _SHOVE_VOL_MIN_DB: float = -15.0
-const _SHOVE_VOL_MAX_DB: float = _CHECK_VOL_MIN_DB
 
 # Blade trail — same zero-gap GPU approach as puck trail, one system per skate.
 # Two dots per trail (left/right blade) pinned to IceVFX.ICE_Y so marks scrape the ice surface.
@@ -250,25 +245,6 @@ static func check_sound_volume_db(force: float) -> float:
 
 static func check_sound_pitch_scale(force: float) -> float:
 	return lerpf(_CHECK_PITCH_LIGHT, _CHECK_PITCH_HEAVY, check_sound_intensity(force))
-
-
-static var _shove_cfg := BodyCheckRules.Config.new()
-
-
-# A landed cross-check's 0..1 hardness: the stagger ladder's read of the Δv it
-# landed, so a shove the victim held reads 0. The live broadcast and the replay
-# both read it.
-static func shove_intensity(dv: float) -> float:
-	return BodyCheckRules.intensity(dv, _shove_cfg)
-
-
-# `intensity` is the shove's 0..1 hardness (shove_intensity).
-static func shove_volume_db(intensity: float) -> float:
-	return lerpf(_SHOVE_VOL_MIN_DB, _SHOVE_VOL_MAX_DB, clampf(intensity, 0.0, 1.0))
-
-
-static func shove_pitch_scale() -> float:
-	return _CHECK_PITCH_LIGHT
 
 
 # Driven by the host-authoritative broadcast (GameManager._on_body_check_landed),

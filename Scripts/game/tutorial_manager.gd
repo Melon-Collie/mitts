@@ -616,7 +616,7 @@ func _step_def_for(step_id: int) -> TutorialStep:
 			return _step(
 				"Body Check",
 				"Build up speed, hold {hit} to commit, and drive straight through the opponent to knock them off the puck.",
-				"Committing with {hit} throws your weight into the hit — you land it far harder AND shrug off the collision. An uncommitted bump barely moves them. Up close, hold {hit} and press {stick_check} to cross-check him off his spot instead.")
+				"Committing with {hit} throws your weight into the hit — you land it far harder AND shrug off the collision. An uncommitted bump barely moves them.")
 		STEP_STICK_LIFT:
 			return _step(
 				"Stick Lift",

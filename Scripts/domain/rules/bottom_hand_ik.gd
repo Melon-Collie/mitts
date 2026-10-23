@@ -53,3 +53,22 @@ static func reachable_grip(shoulder: Vector3, top: Vector3, blade: Vector3,
 			return Vector2(clampf(grip, lo, hi), 0.0)
 	var nearest: float = clampf(-b / a, floor_g, 1.0)
 	return Vector2(nearest, maxf((w + u * nearest).length() - reach, 0.0))
+
+
+# The drawn grip: reachable_grip's, but easing up the shaft over the last `band`
+# (shaft fraction) before the preferred grip runs out of reach, rather than
+# turning there. A hard min turns the hand's path through a corner in one frame,
+# and how sharp the corner is depends on how fast the reach was closing — a pop
+# that comes and goes with the stride's phase. Never past what reachable_grip
+# allows, so the drawn arm still reaches its hand. Cosmetic: the gameplay reach
+# (TopHandIK.two_hand_reach) keeps the hard limit.
+static func soft_reachable_grip(shoulder: Vector3, top: Vector3, blade: Vector3,
+		grip: float, reach: float, spacing: float, band: float) -> Vector2:
+	var held: Vector2 = reachable_grip(shoulder, top, blade, grip, reach, spacing)
+	if held.y > 0.0 or band <= 0.0:
+		return held
+	var hi: float = reachable_grip(shoulder, top, blade, 1.0, reach, spacing).x
+	var lo: float = reachable_grip(shoulder, top, blade, 0.0, reach, spacing).x
+	var h: float = clampf(0.5 + 0.5 * (hi - grip) / band, 0.0, 1.0)
+	var soft_min: float = lerpf(hi, grip, h) - band * h * (1.0 - h)
+	return Vector2(maxf(soft_min, lo), 0.0)

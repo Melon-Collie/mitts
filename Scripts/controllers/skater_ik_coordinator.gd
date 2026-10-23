@@ -405,14 +405,6 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 				hand_local, blade_local, blade_side_sign, commit_t)
 		hand_local = posed.hand
 		blade_local = posed.blade
-	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
-			_skater.cross_check_elapsed)
-	if shove_w > 0.0:
-		var shoved: TopHandIK.Result = _cross_check_hand_pose(hand_local, blade_local,
-				blade_side_sign, CrossCheckRules.extension(_skater.cross_check_phase,
-						_skater.cross_check_elapsed), shove_w)
-		hand_local = shoved.hand
-		blade_local = shoved.blade
 
 	# Carry transit lift: while carrying, raise the blade over the puck during
 	# a pushing-face flip. One sin-envelope hop per flip (Skater
@@ -735,6 +727,8 @@ func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> Top
 # lands at once, for the paths with no clock), since a blade dangling at speed
 # crosses the release bands in a tick or two and the hand jumped ~0.4 m between
 # shaft and rest. A let-go hand swings with the stride.
+const BH_GRIP_SLIDE_BAND: float = 0.08
+
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
 	_skater.set_hand_pump(_stride_pump(delta))
@@ -742,8 +736,8 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
 	var reach: float = arm * _skater.arm_working_extension + _skater.shoulder_reach_m
-	var held: Vector2 = BottomHandIK.reachable_grip(
-			shoulder, hand_local, blade_local, _grip_fraction(), reach, _glove_spacing())
+	var held: Vector2 = BottomHandIK.soft_reachable_grip(shoulder, hand_local, blade_local,
+			_grip_fraction(), reach, _glove_spacing(), BH_GRIP_SLIDE_BAND)
 	var grip: float = held.x
 	var grip_target_xz := Vector2(
 			lerpf(hand_local.x, blade_local.x, grip),
@@ -879,10 +873,8 @@ func address_stick_horiz() -> float:
 # How far down the shaft the bottom hand holds: the short lever a draw is won
 # with, walked down over the countdown rather than jumped to.
 func _grip_fraction() -> float:
-	var grip: float = lerpf(_controller.bottom_hand_grip_fraction,
+	return lerpf(_controller.bottom_hand_grip_fraction,
 			_controller.faceoff_center_grip_fraction, _address_blend())
-	return lerpf(grip, CrossCheckRules.GRIP_FRACTION, CrossCheckRules.pose_weight(
-			_skater.cross_check_phase, _skater.cross_check_elapsed))
 
 
 func _address_blend() -> float:
@@ -925,35 +917,6 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 			posed_hand.z + bearing.y * horiz)
 	_rigid_result.hand = hand_local.lerp(posed_hand, commit_t)
 	_rigid_result.blade = blade_local.lerp(posed_blade, commit_t)
-	return _rigid_result
-
-
-# The cross-check holds the shaft level across the chest in both hands and
-# punches it out: the top hand at chest height on its own shoulder's side (away
-# from the blade), driven forward over the push, and the blade a stick's length
-# off it across the body to the blade side (the bottom hand rides the shaft
-# between them, update_bottom_hand, gripped wide enough that the two hands
-# straddle the chest, each on its own shoulder's side). Posed hand-first like
-# the commit, over whatever the commit or the cursor put there, by `weight`
-# (CrossCheckRules.pose_weight); `extension` drives the punch.
-const _SHOVE_HAND_X: float = 0.25        # off the chest's centre, away from the blade
-const _SHOVE_HAND_DROP_M: float = 0.20   # under the shoulder marker: chest height
-const _SHOVE_HAND_Z: float = -0.35       # in front of the chest as the push starts
-const _SHOVE_PUNCH_M: float = 0.25       # the arms' extension at full push
-const _SHOVE_BEARING_Z: float = -0.15    # the shaft a touch ahead of square across
-
-
-func _cross_check_hand_pose(hand_local: Vector3, blade_local: Vector3,
-		blade_side_sign: float, extension: float, weight: float) -> TopHandIK.Result:
-	var posed_hand := Vector3(-_SHOVE_HAND_X * blade_side_sign,
-			_skater.shoulder.position.y - _SHOVE_HAND_DROP_M,
-			_SHOVE_HAND_Z - _SHOVE_PUNCH_M * extension)
-	var across: Vector2 = Vector2(blade_side_sign, _SHOVE_BEARING_Z).normalized()
-	var stick: float = solve_stick_length()
-	var posed_blade := Vector3(posed_hand.x + across.x * stick, posed_hand.y,
-			posed_hand.z + across.y * stick)
-	_rigid_result.hand = hand_local.lerp(posed_hand, weight)
-	_rigid_result.blade = blade_local.lerp(posed_blade, weight)
 	return _rigid_result
 
 

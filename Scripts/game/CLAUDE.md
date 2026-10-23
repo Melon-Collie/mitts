@@ -112,7 +112,7 @@ outlives init (NetworkManager's `local_*` identity) re-reads on it.
 ## Lag-compensated claim resolvers
 
 `PickupClaimResolver`, `PokeClaimResolver`, `StickLiftClaimResolver`,
-`StickTieClaimResolver`, `CrossCheckClaimResolver` and `HitClaimResolver` are host-only resolvers for
+`StickTieClaimResolver` and `HitClaimResolver` are host-only resolvers for
 client-initiated claims. Each
 documents its own geometry and reject list in its header; this is the contract
 they all share. **A new claim resolver must follow all of it.**
@@ -169,10 +169,9 @@ The rest is judgement the seams can't make for you:
   the claim, claim not fresh, skater missing or ghosted, or the claim targets
   self or a teammate.
 
-There is no contest window on poke / stick-lift / stick-tie / cross-check / hit —
+There is no contest window on poke / stick-lift / stick-tie / hit —
 first valid claim wins, and simultaneous claims are arbitrated by RPC arrival
-order (the loser sees `carrier == null`, a tie already held, or a throw already
-landed, and skips). Contested *pickups* are the exception and resolve
+order (the loser sees `carrier == null` or a tie already held, and skips). Contested *pickups* are the exception and resolve
 through `PuckCollisionRules.contested_pickup_velocity` instead.
 
 Full rewind and prediction rules: `Scripts/networking/CLAUDE.md`.

@@ -507,19 +507,6 @@ func test_skater_stick_check_round_trips_every_phase() -> void:
 		assert_almost_eq(dec.stick_check_elapsed, 0.1, tol, "elapsed, phase %d" % phase)
 
 
-func test_skater_cross_check_round_trips_every_phase() -> void:
-	for phase: int in CrossCheckRules.Phase.values():
-		var s := SkaterNetworkState.new()
-		s.cross_check_phase = phase
-		s.cross_check_elapsed = 0.08
-		s.pin_strength = 0.5
-		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
-				WorldStateCodec._encode_skater_quantized(s))
-		assert_eq(dec.cross_check_phase, phase, "phase %d" % phase)
-		assert_almost_eq(dec.cross_check_elapsed, 0.08, 0.5 / 120.0, "elapsed, phase %d" % phase)
-		assert_almost_eq(dec.pin_strength, 0.5, 1.0 / 255.0, "the byte before it is untouched")
-
-
 func test_skater_stick_tied_round_trips_beside_every_flag() -> void:
 	for tied: bool in [false, true]:
 		var s := SkaterNetworkState.new()

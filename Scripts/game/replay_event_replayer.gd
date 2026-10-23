@@ -17,7 +17,7 @@ const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
 # puck.linear_velocity, which is zero during replay (apply_interpolated_snapshot
 # writes velocity=ZERO to the frozen RigidBody).
 #
-# Pass `registry` for body_check and cross_check events so the dispatcher can find the
+# Pass `registry` for body_check events so the dispatcher can find the
 # checker and victim skaters and drive SkaterVFX.fire_body_check_burst
 # directly. We deliberately do NOT re-emit body_checked_player: that signal
 # is wired to GameManager closures (sound, hit-landed stats, replay-event
@@ -108,19 +108,6 @@ static func dispatch_with_records(event: Dictionary, records: Dictionary) -> voi
 				if checker_rec.controller != null:
 					checker_rec.controller.start_check_drive(
 							hit_dir, SkaterVFX.check_intensity(check_force))
-		"cross_check":
-			# "speed" carries the landed Δv: the live broadcast's burst and thud
-			# at the same hardness (GameManager._on_cross_check_landed).
-			var shove: float = SkaterVFX.shove_intensity(speed)
-			var shoved_rec: PlayerRecord = records.get(int(event.get("victim_peer_id", -1)))
-			if shove > 0.0:
-				SoundManager.play_world(SoundManager.Sound.BODY_CHECK, pos,
-						SkaterVFX.shove_volume_db(shove), 0.08, SkaterVFX.shove_pitch_scale())
-				if shoved_rec != null and shoved_rec.skater != null:
-					var vfx_node: SkaterVFX = shoved_rec.skater.get_node_or_null("VFX") as SkaterVFX
-					if vfx_node != null:
-						vfx_node.fire_impact_burst(shoved_rec.skater, shove,
-								_pos_from_array(event.get("push_dir", [])))
 		"goal":
 			# Goal horn fires only via the file-replay path. The in-game goal
 			# cinematic relies on the live goal_scored closure that already
