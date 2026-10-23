@@ -158,9 +158,11 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	if zone == Zone.AWAY:
 		return out * crease_edge(out) * AWAY_DEPTH_SHARE
-	# Set for a shot he sees wound up: no retreat for the shooter's approach.
+	# Set for a shot he sees wound up: no retreat for the shooter's approach,
+	# only for where he is.
 	var winding: bool = play != null and play.winding_up
-	var depth: float = depth_for(puck, Vector2.ZERO if winding else _velocity, motor.footwork)
+	var carried: bool = play != null and play.theirs and not play.loose
+	var depth: float = depth_for(puck, Vector2.ZERO if winding else _velocity, motor.footwork, carried)
 	if play != null:
 		for receiver: Vector2 in play.receivers:
 			depth = minf(depth, pass_depth(puck, receiver, motor.footwork, play.delay_s))
@@ -184,16 +186,25 @@ func _cannot_react(puck: Vector2, meeting: bool, motor: KeeperMotor) -> bool:
 # How far out along the puck's line he stands in the zone: the top of the
 # crease, or deeper as the puck at `puck` moving at `velocity` asks, from his
 # own skating (`skates`): no further out than C-cuts from a standstill set him
-# on the floor by the time a puck coming at him reaches the crease, and no
-# further than his square shuffle keeps on the angle of one moving across him.
-static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork) -> float:
+# on the floor by the time it could reach the crease, and no further than his
+# square shuffle keeps on the angle of one moving across him. A loose puck
+# reaches the crease on its own motion; a `carried` one as soon as its
+# carrier could skate there, driving from the speed he already has toward it
+# (the skaters' stride, AIStrideRamp), so a carrier who stops in tight still
+# holds him in rather than drawing him out at him.
+static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork, carried: bool = false) -> float:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	var top: float = crease_edge(out)
 	var depth: float = top
 	var r: float = puck.length()
 	var coming: float = -velocity.dot(out)
-	if coming > 0.0:
-		var arrives: float = maxf(r - top, 0.0) / coming
+	var arrives: float = INF
+	if carried:
+		arrives = AIStrideRamp.time_to_cover(maxf(coming, 0.0), maxf(r - top, 0.0),
+				GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	elif coming > 0.0:
+		arrives = maxf(r - top, 0.0) / coming
+	if arrives < INF:
 		depth = minf(depth, DEPTH_FLOOR_M + GoaliePushRules.set_reach(skates.c_cut_speed, skates.accel, arrives))
 	var swing: float = absf(out.x * velocity.y - out.y * velocity.x) / maxf(r, 1e-3)
 	if swing > 1e-4:

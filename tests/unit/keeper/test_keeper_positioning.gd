@@ -377,6 +377,32 @@ func test_his_depth_answers_how_the_puck_moves() -> void:
 			"a faster swing deeper")
 
 
+# A carrier of theirs reaches the crease as soon as he could skate there, from
+# the speed he has toward it: one stopped in tight still holds him in, no
+# further out than the C-cuts set him on the floor in that time, where a loose
+# puck lying there asks nothing; and the nearer the deeper.
+func test_a_carrier_stopped_in_tight_still_holds_him_in() -> void:
+	var skates := KeeperFootwork.new()
+	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var floor_m: float = KeeperPositioning.DEPTH_FLOOR_M
+	var puck := Vector2(0.0, -2.5)
+	assert_almost_eq(KeeperPositioning.depth_for(puck, Vector2.ZERO, skates), top, 1e-6, "loose: the top")
+	var held: float = KeeperPositioning.depth_for(puck, Vector2.ZERO, skates, true)
+	var could: float = AIStrideRamp.time_to_cover(0.0, puck.length() - top, GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+			GameRules.DEFAULT_SKATER_THRUST_M_S2)
+	assert_almost_eq(held, floor_m + GoaliePushRules.set_reach(skates.c_cut_speed, skates.accel, could), 1e-6,
+			"carried: on the floor in time for the drive he could make")
+	assert_lt(held, top - 0.5, "held in")
+	var was: float = floor_m
+	for r: float in [2.5, 3.5, 4.5, 6.0]:
+		var d: float = KeeperPositioning.depth_for(Vector2(0.0, -r), Vector2.ZERO, skates, true)
+		assert_gte(d, was - 1e-6, "further out the further off (%.1f m)" % r)
+		was = d
+	assert_almost_eq(was, top, 1e-6, "from the slot: the top")
+	assert_lt(KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2(0.0, 6.0), skates, true),
+			KeeperPositioning.depth_for(Vector2(0.0, -4.0), Vector2.ZERO, skates, true), "coming at him already: deeper")
+
+
 # A rush straight in on him: skated back as it comes, deep and set on the
 # floor's side of the crease by the time it is on him, never deeper.
 func test_a_rush_straight_in_backs_him_in() -> void:

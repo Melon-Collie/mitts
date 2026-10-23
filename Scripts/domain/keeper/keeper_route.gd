@@ -170,7 +170,8 @@ func _glide_to(at: Vector2, turn: float) -> bool:
 # move left in _way_do, _way_spot and _way_side).
 func _up_to(at: Vector2, turn: float) -> float:
 	if _glide_to(at, turn):
-		return glide_time(at.distance_to(spot), wrapf(facing - turn, -PI, PI))
+		var way: Vector2 = _local(spot - at, turn)
+		return glide_time(way.length(), wrapf(facing - turn, -PI, PI), absf(way.y) / maxf(way.length(), 1e-6))
 	return _standing(at, turn)
 
 
@@ -351,10 +352,10 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 		return _push_time(diagonal.length())
 	_step_legs = 2
 	var depth_first: float = _c_cut_time(deep) + _hand_off(deep, _footwork.c_cut_speed, false) \
-			+ _then(across, _push_time(across))
+			+ _then(across, _push_time(across), 0.0)
 	var diagonal_first: float = _push_time(diagonal.length()) \
 			+ _hand_off(diagonal.length(), _footwork.t_push_speed, true) \
-			+ _then(deep - across * steepest, _c_cut_time(deep - across * steepest))
+			+ _then(deep - across * steepest, _c_cut_time(deep - across * steepest), 1.0)
 	if depth_first <= diagonal_first:
 		_step_do = Do.C_CUT
 		_glides_last = _glides_on(across)
@@ -365,10 +366,10 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 	return diagonal_first
 
 
-# A way's second leg, `d` long: skated, within the glide's reach of a goal on
-# his feet, else `footwork`'s time.
-func _then(d: float, footwork: float) -> float:
-	return glide_time(d, 0.0) if _glides_on(d) else footwork
+# A way's second leg, `d` long and `deep` of it in depth: skated, within the
+# glide's reach of a goal on his feet, else `footwork`'s time.
+func _then(d: float, footwork: float, deep: float) -> float:
+	return glide_time(d, 0.0, deep) if _glides_on(d) else footwork
 
 
 # Whether a second leg `d` long is glided: only to a goal on his feet, the
@@ -393,10 +394,14 @@ func _hand_off(d: float, top: float, glides: bool) -> float:
 
 
 # Skating `d` to a spot and turning `turn` on the way, from rest: the glide's
-# stroke, glide and stop, a T-push's, beside the turn at the pivot's rate. His
+# stroke, glide and stop, a T-push's, beside the turn at the pivot's rate; its
+# speed held to the C-cuts' in depth, of which `deep` is the way's share. His
 # legs settle into the stance after it, but nothing waits for them.
-func glide_time(d: float, turn: float) -> float:
-	return maxf(_push_time(d), absf(turn) / _pivot_rate)
+func glide_time(d: float, turn: float, deep: float = 0.0) -> float:
+	var top: float = _footwork.t_push_speed
+	if deep > 1e-6:
+		top = minf(top, _footwork.c_cut_speed / deep)
+	return maxf(KeeperFootwork.push_time(d, top, _footwork.accel), absf(turn) / _pivot_rate)
 
 
 # Footwork's time, with the stop settled out of him at its end.

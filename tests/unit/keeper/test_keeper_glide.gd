@@ -113,3 +113,33 @@ func test_a_spot_that_turns_back_on_him_is_followed_unbroken() -> void:
 		spot += v * DT
 	assert_lt(Vector2(_motor.x, _motor.z).distance_to(spot), 0.3, "with it")
 	_checked("turning back")
+
+
+# In depth his strokes are C-cuts: skating in or out he goes no faster than
+# they take him, even after a spot that goes faster, and a still spot in depth
+# is reached in the glide's time at that speed.
+func test_in_depth_he_skates_no_faster_than_his_c_cuts() -> void:
+	var cap: float = _motor.footwork.c_cut_speed
+	var spot := Vector2(0.0, -1.8)
+	var v := Vector2(0.0, 4.0)
+	var fastest: float = 0.0
+	for i: int in int(0.3 / DT):
+		_tick(spot, v)
+		spot += v * DT
+		fastest = maxf(fastest, absf(_motor.glide.velocity.y))
+	assert_lte(fastest, cap + 1e-4, "backing in after a spot at 4 m/s")
+	before_each()
+	spot = Vector2(0.0, -1.9)
+	var t: float = 0.0
+	fastest = 0.0
+	while not _motor.is_idle() or t == 0.0:
+		_tick(spot, Vector2.ZERO)
+		t += DT
+		fastest = maxf(fastest, absf(_motor.glide.velocity.y))
+		if t > 2.0:
+			break
+	assert_lte(fastest, cap + 1e-4, "out to a still spot")
+	assert_almost_eq(Vector2(_motor.x, _motor.z), spot, Vector2.ONE * 1e-4, "on it")
+	assert_almost_eq(t, KeeperFootwork.push_time(0.9, cap, _motor.footwork.accel), 3.0 * DT,
+			"in the glide's time at the C-cuts' speed")
+	_checked("in depth")

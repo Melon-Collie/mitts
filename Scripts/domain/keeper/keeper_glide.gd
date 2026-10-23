@@ -8,8 +8,9 @@ extends RefCounted
 # the spot's own motion so a spot that keeps moving costs him no lag. A gap
 # he strokes to close at the speed that would close it in `CLOSE_S`, as a
 # T-push does (KeeperFootwork.push_time is the time onto a still one), at his
-# lateral acceleration and at most the T-push's top speed, then glides on what
-# the stroke gave him; only when the glide would carry him past the spot do
+# lateral acceleration and at most the T-push's top speed (in depth, where his
+# strokes are C-cuts, at most theirs, however fast the spot goes), then glides
+# on what the stroke gave him; only when the glide would carry him past the spot do
 # his edges dig, as late and as hard as the edge stop
 # (GoaliePushRules.braking_speed_cap), so he stops on one that stops.
 #
@@ -52,6 +53,7 @@ const CUT_HEEL_RAD: float = KeeperFootwork.C_CUT_HEEL_OUT_RAD
 const RETURN_S: float = KeeperFootwork.RECOVER_S
 
 var t_push_speed: float = GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S
+var c_cut_speed: float = GameRules.DEFAULT_GOALIE_DEPTH_SPEED_M_S
 var shuffle_speed: float = GameRules.DEFAULT_GOALIE_SHUFFLE_SPEED_M_S
 var accel: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
 
@@ -126,6 +128,9 @@ func step(dt: float, spot: Vector2, spot_velocity: Vector2, yaw: float) -> void:
 		velocity = velocity.limit_length(maxf(t_push_speed, spot_velocity.length()))
 		if (velocity - spot_velocity).dot(dir) >= want:
 			_stroking = false
+	var mine_now: Vector2 = velocity.rotated(yaw)
+	mine_now.y = clampf(mine_now.y, -c_cut_speed, c_cut_speed)
+	velocity = mine_now.rotated(-yaw)
 	var moved: Vector2 = 0.5 * (was + velocity) * dt
 	x += moved.x
 	z += moved.y
