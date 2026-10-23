@@ -506,6 +506,13 @@ enum RuleSet { OFF, ARCADE, NHL }
 const DEFAULT_RULE_SET: int = RuleSet.ARCADE
 const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
+
+# Whether a goalie's cover stops play for a defensive-zone faceoff: a frozen
+# puck under him is unplayable in any game; with no faceoffs (OFF, free play)
+# he holds it a beat and plays it out himself.
+static func whistles_a_cover(rule_set: int) -> bool:
+	return rule_set != RuleSet.OFF
+
 # Slot depth — distance from goal line to the faceoff-hash "hard slot"
 # in front of the net. Real-rink geometry; matches the spot a hockey
 # player reads as the prime scoring area. Used by AI role behaviors

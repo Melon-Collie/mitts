@@ -563,13 +563,13 @@ var clear_cooldown: float = 0.45        # s between sweeps (anti-dribble)
 # race — the glove takes `cover_reach_time` to land and until then the puck is
 # live, so a whack that moves it aborts into a RECOVERING scramble. Once secured
 # the puck is dead (pickup_locked) and resolution is ruleset-split by GameManager
-# via the `puck_covered` signal: NHL whistles a defensive-zone faceoff; ARCADE
-# (and OFF / free play) holds `cover_hold_s` then plays it out through the same
-# lane-aware sweep. `cover_cooldown_s` keeps the smother a scramble-killer rather
+# via the `puck_covered` signal: NHL and ARCADE whistle a defensive-zone
+# faceoff (GameRules.whistles_a_cover); OFF (free play) holds `cover_hold_s`
+# then plays it out through the same lane-aware sweep. `cover_cooldown_s` keeps the smother a scramble-killer rather
 # than a spammable wall.
 var cover_reach_time: float = 0.35      # s — glove-to-puck smother race window
 var cover_secure_radius: float = 0.55   # m — puck must still be this close when the glove lands
-var cover_hold_s: float = 0.85          # s — ARCADE hold before the live release
+var cover_hold_s: float = 0.85          # s — OFF hold before the live release
 var cover_cooldown_s: float = 7.0       # s — between covers (success or failed gamble)
 # A puck at rest ON the goalie's body — a deadened save settling on top of the
 # butterfly pads. The goalie is the only body that can support a puck off the
@@ -859,8 +859,8 @@ var blocker_react_max_speed: float = 5.0
 var five_hole_butterfly_move_max: float = 0.18  # opens with slide velocity
 
 # Host-side: the goalie has secured (smothered) a loose puck. GameManager
-# resolves it by ruleset — NHL whistles a defensive-zone faceoff; ARCADE / OFF
-# do nothing (the controller's own hold-and-release timer plays it out).
+# resolves it by ruleset — NHL and ARCADE whistle a defensive-zone faceoff; OFF
+# does nothing (the controller's own hold-and-release timer plays it out).
 signal puck_covered(covering_team_id: int)
 
 # ── References ────────────────────────────────────────────────────────────────
@@ -2717,7 +2717,7 @@ func _enter_cover() -> void:
 # nudge it; skater bodies can't touch it — the puck mask excludes them and the
 # blade paths are pickup_locked-gated). NHL resolution arrives externally as a
 # whistle (GameManager) whose faceoff reset calls reset_to_crease; otherwise
-# the ARCADE hold expires here and the goalie plays it out himself.
+# (OFF) the hold expires here and the goalie plays it out himself.
 func _tick_cover(delta: float) -> void:
 	if not is_server:
 		return
@@ -2748,7 +2748,7 @@ func _tick_cover(delta: float) -> void:
 		puck.set_puck_velocity(Vector3.ZERO)
 		puck_covered.emit(team_id)
 		return
-	# Secured: keep the puck dead and run the ARCADE hold-and-release timer.
+	# Secured: keep the puck dead and run the OFF hold-and-release timer.
 	puck.set_puck_velocity(Vector3.ZERO)
 	if _clear.windup_timer > 0.0:
 		return  # release windup in flight — the strike unlocks, sweeps, stands up

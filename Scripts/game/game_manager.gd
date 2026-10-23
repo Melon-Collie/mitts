@@ -854,7 +854,7 @@ func _whistle_and_faceoff(dot: Vector2) -> void:
 func _on_goalie_covered_puck(covering_team_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
-	if _state_machine == null or _state_machine.rule_set != GameRules.RuleSet.NHL:
+	if _state_machine == null or not GameRules.whistles_a_cover(_state_machine.rule_set):
 		return
 	call_deferred("_whistle_goalie_freeze", covering_team_id)
 
