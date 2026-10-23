@@ -8,7 +8,11 @@ extends GutTest
 # the other, the blade for one along the ice wide of the paddle — and a hand
 # moves no faster than its tier's speed, gets there when the choice said, meets
 # the flight, and goes back once it is over. With no time, he still goes and is
-# beaten.
+# beaten. A low shot at the five-hole he has time for takes him down, since
+# his read leaves a band over the blade it alone does not cover; one he has no
+# time for is left to the blade. A save holds only if what comes off his gear
+# stays out: a puck square on a pad comes back out, one that clips the outside
+# of it glances on in.
 
 const DT: float = 1.0 / 120.0
 # On his angle, at the top of the crease, square to a shot from the slot.
@@ -150,6 +154,23 @@ func test_along_the_ice_wide_of_the_paddle_the_blade_goes() -> void:
 	assert_eq(_save.hand, KeeperSave.Hand.STICK)
 
 
+func test_a_low_five_hole_shot_he_has_time_for_takes_him_down() -> void:
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -12.0), Vector2(-0.05, KeeperShotRead.ON_ICE_Y), 22.0)
+	_save.choose(_read, _motor, false)
+	assert_true(_save.covers)
+	assert_true(_save.low == KeeperSave.Low.BUTTERFLY or _save.low == KeeperSave.Low.HALF, "down over the blade")
+	assert_lte(_save.ready_s, _save.impact_s, "in time")
+
+
+func test_a_low_five_hole_shot_from_close_is_left_to_the_blade() -> void:
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -6.0), Vector2(-0.05, KeeperShotRead.ON_ICE_Y), 25.0)
+	_save.choose(_read, _motor, false)
+	assert_true(_save.covers)
+	assert_gt(_motor.save_move.drop_s, _save.impact_s, "no time to drop")
+	assert_eq(_save.low, KeeperSave.Low.NONE, "so he stays on his feet")
+	assert_lte(_save.ready_s, _save.impact_s, "the blade there in time")
+
+
 func test_in_tight_to_a_far_corner_he_goes_and_is_beaten() -> void:
 	_motor.z = -0.4
 	_shoot(Vector3(0.0, 0.3, -2.5), Vector2(-0.85, 1.05), 30.0)
@@ -181,3 +202,25 @@ func test_a_right_catcher_catches_with_his_glove_on_his_own_side() -> void:
 	_shoot(Vector3(0.0, 0.3, -9.0), Vector2(0.85, 1.0), 20.0)
 	_save.choose(_read, _motor, true)
 	assert_eq(_save.hand, KeeperSave.Hand.GLOVE, "high to +x is his glove side")
+
+
+# The flight from `from` to `to` in his space, standing ready at the top of the
+# crease, met on his gear: whether what comes off it stays out.
+func _holds_on(from: Vector3, to: Vector3) -> bool:
+	var pose := KeeperPose.new()
+	KeeperPoses.ready(pose)
+	_save._skel.pose(pose)
+	_save._line_at = Vector3(0.0, 0.0, -STANDING.y)
+	_save._into_net = Vector3.BACK
+	_save._across = Vector3.RIGHT
+	var path := PackedVector3Array()
+	for i: int in KeeperSave.PIECES + 1:
+		_save._path_t[i] = float(i) * 0.02
+		path.append(from.lerp(to, float(i) / KeeperSave.PIECES))
+	assert_lt(_save._hit_s(path), INF, "it meets him")
+	return _save._holds()
+
+
+func test_a_save_holds_only_if_what_comes_off_him_stays_out() -> void:
+	assert_true(_holds_on(Vector3(0.31, 0.15, -1.5), Vector3(0.31, 0.15, 1.5)), "square on the pad: back out")
+	assert_false(_holds_on(Vector3(0.8, 0.15, -1.5), Vector3(0.0, 0.15, 1.5)), "clipping its outside: on in")

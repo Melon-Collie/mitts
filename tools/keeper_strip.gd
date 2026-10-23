@@ -55,6 +55,8 @@ const SCENARIOS: Array = [
 	["save_blocker", Vector2(0.75, 0.95), SAVE],
 	["save_low_glove", Vector2(-0.75, 0.15), SAVE],
 	["save_ice_blocker", Vector2(0.65, 0.0), SAVE],
+	["save_five_hole", Vector2(-0.05, 0.0), SAVE],
+	["save_five_hole_far", Vector2(-0.05, 0.0), SAVE_FAR],
 	["save_tight_low", Vector2(0.2, 0.0), SAVE_TIGHT],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
@@ -123,6 +125,9 @@ const TRACK_SPEED: float = 4.0
 # where it would cross the goal line (x across, height; 0 along the ice).
 const SAVE: int = -12
 const SAVE_TIGHT: int = -13
+# From the high slot, where he has the time to drop for a low shot.
+const SAVE_FAR: int = -15
+const SAVE_FAR_FROM_Z: float = -14.0
 const SAVE_FROM_Z: float = -9.0
 const SAVE_TIGHT_FROM_Z: float = -4.5
 const SAVE_SPEED: float = 22.0
@@ -245,8 +250,9 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_stick_reach()
 	if kind == TRACK:
 		return _record_track()
-	if kind == SAVE or kind == SAVE_TIGHT:
-		return _record_save(spot, kind == SAVE_TIGHT)
+	if kind == SAVE or kind == SAVE_TIGHT or kind == SAVE_FAR:
+		var from_z: float = SAVE_TIGHT_FROM_Z if kind == SAVE_TIGHT else (SAVE_FAR_FROM_Z if kind == SAVE_FAR else SAVE_FROM_Z)
+		return _record_save(spot, from_z, SAVE_TIGHT_SPEED if kind == SAVE_TIGHT else SAVE_SPEED)
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -452,15 +458,15 @@ func _record_track() -> Array:
 # The shot's frames: his pose and place, the puck where it is (by its centre,
 # less the lift the playback adds); the phase bar PUSH once he has chosen his
 # save, STOP once it is over.
-func _record_save(to: Vector2, tight: bool) -> Array:
+func _record_save(to: Vector2, from_z: float, speed: float) -> Array:
 	var motor := KeeperMotor.new()
 	motor.z = SAVE_KEEPER_Z
 	var read := KeeperShotRead.new()
 	var save := KeeperSave.new()
 	var on_ice: bool = to.y <= 0.0
 	var at_line := Vector3(to.x, KeeperShotRead.ON_ICE_Y if on_ice else to.y, 0.0)
-	var puck := Vector3(0.0, KeeperShotRead.ON_ICE_Y if on_ice else 0.3, SAVE_TIGHT_FROM_Z if tight else SAVE_FROM_Z)
-	var flight: float = puck.distance_to(at_line) / (SAVE_TIGHT_SPEED if tight else SAVE_SPEED)
+	var puck := Vector3(0.0, KeeperShotRead.ON_ICE_Y if on_ice else 0.3, from_z)
+	var flight: float = puck.distance_to(at_line) / speed
 	var v: Vector3 = (at_line - puck) / flight
 	if not on_ice:
 		v.y += 0.5 * GameRules.GRAVITY_M_S2 * flight
@@ -638,10 +644,11 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT
+					or kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
+					or kind == SAVE_FAR
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
-		if kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT:
+		if kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT or kind == SAVE_FAR:
 			_views = [_views[0], _views[2]]
 		_shots = []
 		_shot_i = 0
