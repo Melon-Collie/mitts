@@ -569,6 +569,38 @@ Each phase leaves the suite green and the game playable.
 - `Scripts/controllers/CLAUDE.md`'s goalie half is rewritten to the new
   shape.
 
+**Open: the client predicts the goalie on the render clock.** Today a client
+draws the goalie at the interpolated past (`H − d`), the one thing left off the
+shared render clock (`Scripts/networking/CLAUDE.md` calls it the largest
+remaining coherence gap): a shot is drawn passing where he isn't, then snaps.
+The option is to predict him as the loose puck is predicted:
+- **Re-seeded, never free-running.** On each snapshot the client takes the
+  host's keeper state at its capture instant and steps the same pure keeper
+  code (play read, brain, motor, shot read, save) forward to
+  `estimated_host_time() + input_lead`. It never runs on its own state between
+  snapshots. Client-side goalie AI with soft correction is what caused the
+  ghost saves and phantom goals, and stays banned.
+- **Why it can be exact.** He acts on the play one read delay ago (Hard
+  0.13 s, Easy 0.30 s). While the input lead plus the one-way trip is inside
+  that delay, everything he reacts to at the render instant is already in
+  snapshots the client holds, a shot's release included (the shooter's own
+  from its release seed). The predicted keeper is then the host's, save choice
+  and all: with a 25 ms lead, up to about 105 ms one-way on Hard. Past that he
+  reads the predicted puck and skaters, no worse than the skaters are drawn.
+- **What makes it possible is already decided.** He reads only what a remote
+  client can draw (§3.1), and the keeper's domain is pure and deterministic.
+- **What it changes here.** The wire carries the keeper's sim state at the
+  snapshot (the moves under way with their phases, speeds and timers, the
+  brain's zone and post, the shot read and the save chosen), not only the
+  pose parameters. The play read's history can be rebuilt from the client's
+  own snapshot buffer instead of sent. If render equals the host's instant,
+  the release rewind of the goalie is no longer needed.
+- **Measure before deciding:**
+  - the cost of stepping him forward each frame for two goalies, a save
+    choice (every candidate posed) included;
+  - how often, and how far, a predicted save disagrees with the host's. The
+    client's puck stops at a predicted save, so a disagreement snaps the puck.
+
 **After:** tune on the new goalie, offline and online, against the scoreboard
 and playtests.
 ---
