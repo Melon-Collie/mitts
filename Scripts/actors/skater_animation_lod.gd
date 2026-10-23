@@ -7,7 +7,8 @@ extends RefCounted
 # A frame that is not due is treated exactly like an off-camera frame — the
 # gait still computes (a held pose's crouch moves the gameplay frame), and only
 # the mesh work waits: leg and trunk bones, the contact seat, the head, the off
-# hand, the arm and stick rebuild. The body itself moves every frame regardless
+# hand, the arm and stick rebuild (the blade, which hangs from a marker the tick
+# moves, is held where it was drawn). The body itself moves every frame regardless
 # (physics interpolation), so a distant skater keeps gliding smoothly and only
 # his limbs step at the lower rate.
 

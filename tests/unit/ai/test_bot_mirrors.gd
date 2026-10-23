@@ -1,7 +1,7 @@
 extends GutTest
 
 # Constants the bot code copies from somewhere else it cannot read: the
-# controller's slapper zone, blade speed and pickup radius, the puck's deflect
+# controller's slapper zone radius, blade speed and pickup radius, the puck's deflect
 # threshold and rest height, and the skater's body radius (scene nodes the
 # domain must not reach), the duel harness's copy of the puck's catch, and the
 # pairs two bot modules keep equal so their reads agree. Each was a "must
@@ -29,11 +29,8 @@ func test_the_chase_and_slot_elections_share_their_stickiness() -> void:
 	assert_eq(AILoosePuckChase.HYSTERESIS_S, AIRoleSlots.HYSTERESIS_PENALTY_S)
 
 
-func test_the_one_timer_zone_is_the_controllers() -> void:
+func test_the_one_timer_salvage_sits_inside_the_controllers_zone() -> void:
 	var ctrl: SkaterController = SkaterControllerScript.new()
-	assert_eq(SkaterAgentOneTimer.BOT_ONE_TIMER_ZONE_OFFSET_X_M, ctrl.slapper_zone_offset_x,
-			"the settle puts the controller's zone on the feed line")
-	assert_eq(SkaterAgentOneTimer.BOT_ONE_TIMER_ZONE_OFFSET_Z_M, ctrl.slapper_zone_offset_z)
 	assert_lt(SkaterAgentOneTimer.ONE_TIMER_RELEASE_RADIUS_M, ctrl.slapper_zone_radius,
 			"a clean feed attaches before the salvage release can fire")
 	ctrl.free()

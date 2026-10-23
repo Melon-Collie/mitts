@@ -46,11 +46,12 @@ func _make_callbacks() -> SkaterStateMachine.Callbacks:
 	cb.enter_shot_block = noop
 	cb.enter_slapper_charge = noop_1
 	cb.transition_to_skating = noop
+	cb.cancel_slapper = noop_1
+	cb.update_slapper_aim = noop_1
 	cb.release_wrister = noop_1
 	cb.fire_quick_pass = noop_1
 	cb.update_wrister_charge = noop_1
 	cb.update_slapper_charge = func(delta: float) -> void: _aiming.tick_slapper(delta)
-	cb.apply_slapper_velocity_drag = noop_1
 	cb.apply_block_movement = noop_2
 	cb.release_slapper = func(_i: Variant) -> void:
 		_slapper_releases += 1
@@ -159,5 +160,5 @@ func test_expired_window_still_cancels_back_to_carry() -> void:
 	_aiming.one_timer_window_timer = TICK * 0.5
 	_tick(_held_slap(), true)
 	assert_eq(_sm.get_state(), SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK,
-			"the cancel path routes through transition_to_skating, not the hold")
+			"the cancel path routes through cancel_slapper, not the hold")
 	assert_eq(_retention_entries, 0, "a lapsed window never arms the hold")

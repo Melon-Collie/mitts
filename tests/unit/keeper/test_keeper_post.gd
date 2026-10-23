@@ -90,9 +90,9 @@ func test_he_drops_in_at_the_post_and_rises_back_out() -> void:
 		_post.rise_out()
 		assert_almost_eq(_until(S.STANDING), _post.rise_s, DT, "%+.0f: up in the rise's time" % post_side)
 		assert_almost_eq(Vector2(_post.x, _post.z), overlap, Vector2.ONE * 1e-5, "%+.0f: back on the overlap" % post_side)
-		var ready := KeeperPose.new()
-		KeeperPoses.ready(ready)
-		_same_bones(ready, "%+.0f standing" % post_side)
+		var ready_pose := KeeperPose.new()
+		KeeperPoses.ready(ready_pose)
+		_same_bones(ready_pose, "%+.0f standing" % post_side)
 
 
 func test_from_a_slide_to_the_post_he_comes_up_into_it_and_folds_back() -> void:

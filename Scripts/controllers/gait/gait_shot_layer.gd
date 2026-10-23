@@ -82,14 +82,14 @@ func advance(delta: float) -> bool:
 				_kick_power = maxf(maxf(_wrister_load, _skater.shot_charge),
 						_controller.wrister_kick_min_power)
 		_prev_state = state
-	var ease: float = minf(_controller.wrister_load_blend_speed * delta, 1.0)
+	var blend: float = minf(_controller.wrister_load_blend_speed * delta, 1.0)
 	_wrister_load = lerpf(_wrister_load,
-			_skater.shot_charge if state == State.WRISTER_AIM else 0.0, ease)
+			_skater.shot_charge if state == State.WRISTER_AIM else 0.0, blend)
 	# The hips open with the shoulders' wind-up, whichever way it turns: square
 	# hips under a fully wound torso put the hands over the stick-side thigh,
 	# and the shaft runs through it to a puck out at the side.
 	_wrister_hip = lerpf(_wrister_hip, _controller.wrister_load_hip_share
-			* _skater.upper_body.rotation.y if state == State.WRISTER_AIM else 0.0, ease)
+			* _skater.upper_body.rotation.y if state == State.WRISTER_AIM else 0.0, blend)
 	# shot_charge and the wind-up pose both fill over max_slapper_charge_time
 	# (SkaterController.slapper_wind_up_t), so shot_charge IS the wind-up
 	# progress; sqrt-eased to match the torso coil's front-loaded snap
@@ -97,7 +97,7 @@ func advance(delta: float) -> bool:
 	var slap_target: float = 0.0
 	if _is_slap_charge(state):
 		slap_target = sqrt(clampf(_skater.shot_charge, 0.0, 1.0))
-	_slap_load = lerpf(_slap_load, slap_target, ease)
+	_slap_load = lerpf(_slap_load, slap_target, blend)
 	_kick_env = 0.0
 	if _kick_t >= 0.0:
 		_kick_t += delta
@@ -153,6 +153,13 @@ func stance_floor() -> float:
 			else _controller.wrister_kick_stance
 	return maxf(maxf(_controller.wrister_load_stance * _wrister_load,
 			_controller.slapper_load_stance * _slap_load), kick_stance * _kick_env)
+
+
+# A slapshot is struck side-on, so its base is wide across the shot line rather
+# than staggered along it: the feet spread as the wind-up loads, and give the
+# width back as the kick drives, or the back leg has no stretch left to extend.
+func stance_width() -> float:
+	return _controller.slapper_load_width_m * _slap_load * (1.0 - _kick_env)
 
 
 # Load: the shooting base — the stick-side foot staggers back and both legs roll

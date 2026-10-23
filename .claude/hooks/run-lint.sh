@@ -1,9 +1,8 @@
 #!/bin/bash
 # gdlint the project (or specific files) via gdtoolkit, honoring .gdlintrc.
-# Catches the headless, cross-environment subset of warnings Godot's editor
-# shows — dead code, mistakes, whitespace hygiene — that `godot --headless`
-# cannot surface. (Godot-engine-specific warnings like SHADOWED_VARIABLE_BASE_CLASS
-# / INT_AS_ENUM still only appear in the editor.)
+# Catches dead code, mistakes and whitespace hygiene. Godot's own analyzer
+# warnings (SHADOWED_VARIABLE_BASE_CLASS, INT_AS_ENUM, ...) are invisible to it:
+# .claude/hooks/check-godot-warnings.sh gates those.
 #
 #   .claude/hooks/run-lint.sh                  # lint Scripts/ + tests/
 #   .claude/hooks/run-lint.sh Scripts/foo.gd   # lint specific files

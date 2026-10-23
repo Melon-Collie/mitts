@@ -24,6 +24,17 @@ delegates to.
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
 
+## The puck's tilt and spin are drawn, never simulated
+
+The analytic puck is a flat disc. `PuckSpinRig` gives the drawn one its spin,
+its wobble after a hit and its tumble in the air, reading only the position
+the puck is drawn at and who this peer draws carrying it
+(`PuckController.drawn_carrier`, through `Puck.set_carrier_view`). It writes
+the mesh's local transform on the tick and nothing else, so it needs no wire
+bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
+relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
+nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
+
 ## The goalie draws as one mesh, and its parts stay nodes
 
 `GoalieBodyRig` merges every goalie part wearing an opaque `StandardMaterial3D`
@@ -79,7 +90,8 @@ The whole figure is one `Skeleton3D` (`SkaterBodySkeleton.new_body_skeleton`),
 built by `Skater` and handed to each rig, which poses only its own bones. It
 sits under `MeshRoot` as a sibling of `UpperBody` and `LowerBody`, so skeleton
 space is the space those two gameplay frames are placed in, and the arm IK
-reads the gameplay hands straight into it.
+reads the gameplay hands straight into it, through the frames as drawn (see
+*Cosmetic vs. gameplay* below).
 
 ```
 HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
@@ -236,12 +248,27 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Seven rules the rigs sit inside, all easy to break from in here:
+Nine rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
   marker: the marker plus a render-only offset (the stride's pump), so the arm,
   the stick and the blade's dressing pivot about a blade that has not moved.
   The rebuild gate compares the drawn hand, or the pump would never redraw.
+- **The rig reads the markers and the frames where the engine draws them**
+  (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
+  `drawn_lower_body`): between where the latest tick found them and where they
+  are now, at this frame's interpolation fraction (the snapshot is taken on
+  `SceneTree.physics_frame`). The blade mesh hangs from the interpolated `Blade`
+  marker, so the shaft, the knob and the arms are posed from the same instant,
+  and those three nodes are opted out of physics interpolation. An interpolated
+  node written at render rate is drawn from the pose the previous FRAME wrote,
+  so below 120 fps, where a frame runs two ticks, it lags a tick behind the
+  marker it should meet. The skeleton is the frames' sibling, so the spine and
+  the arms are built in the frames as drawn too; built in the tick's, a glove
+  sat off its shaft by a tick of the trunk's turn. Tick-side reads (the IK's
+  reach, claims) stay on the markers and frames themselves.
+  `tests/slow/actors/test_stick_draws_at_one_instant.gd` holds it on the real
+  main loop.
 - **Anything drawn onto the skater at render rate reads
   `Skater.render_transform()`**, not `global_position` — the post-tick pose is up
   to a tick of travel from the body on screen. A node placed that way must also
@@ -261,6 +288,9 @@ Seven rules the rigs sit inside, all easy to break from in here:
   (`Skater.on_camera`, `SkaterCameraCull`'s sphere against the frustum) skips the leg, trunk and
   sprawl writes, the head, the off hand and the spine/arm/stick rebuild — about
   two thirds of his render pass — and rebuilds on the first frame he is drawn.
+  The blade mesh is the one piece of mesh hung from a gameplay marker, so a
+  skipped frame holds it where it was last drawn (`Skater._hold_blade_mesh`), or
+  the tick carries it off the waiting shaft.
   A frame his animation LOD thins (`SkaterAnimationLod`, far from the camera at
   a lower Animation Detail) is off camera in exactly this sense, so it inherits
   the same guarantee; the plant's ease is then charged the whole span since the
@@ -273,6 +303,13 @@ Seven rules the rigs sit inside, all easy to break from in here:
   which writes the arm and cap bones itself). Change `_update_arm`, the part
   posing or the cap's orient-and-repose and the port changes with it, or
   `test_native_arm_rig_parity.gd` fails; see `native/README.md`.
+- **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):
+  the dressed blade is solved from the shaft's bearing, which whips round as
+  the blade crosses over the hands, so through the swing the blade and the
+  shaft's roll (`Skater.shaft_roll_up`) are instead the swing's starting ones
+  turned by the shortest arc from the starting hosel line, in UpperBody's frame.
+  Anchored, not carried frame to frame — a carry drifts by the solid angle its
+  loop encloses. `test_slapper_stance.gd` measures the roll.
 - **The pelvis must not take the fold.** It hangs from the waist, not the
   spine: folding with the torso is what opens the seat in the first place, and
   hanging it off a leg pivot would swing the whole seat with that leg.

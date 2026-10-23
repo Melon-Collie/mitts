@@ -64,6 +64,16 @@ func arm(until_ms: int) -> void:
 	queued = Press.NONE
 
 
+# A lock the carrier's own input sets — a slapshot called off — rather than one
+# a grant carries: every machine reads the same input at the same stamp, so it
+# arms the same deadline with no notice window. `until_stamp`: input-stamp
+# seconds.
+func arm_local(until_stamp: float) -> void:
+	_until_wire = _to_wire(until_stamp)
+	_notice_from_wire = 0
+	queued = Press.NONE
+
+
 func clear() -> void:
 	_until_wire = 0
 	_notice_from_wire = 0

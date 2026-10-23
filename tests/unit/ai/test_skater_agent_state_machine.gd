@@ -676,9 +676,9 @@ func _self_snap(self_pos: Vector3, have_puck: bool) -> WorldSnapshot:
 	var s := WorldSnapshot.new()
 	s.puck_state = PuckNetworkState.new()
 	s.puck_state.position = self_pos
-	var owner: int = SELF_ID if have_puck else -1
-	s.puck_state.carrier_peer_id = owner
-	s.real_puck_carrier_peer_id = owner
+	var owner_id: int = SELF_ID if have_puck else -1
+	s.puck_state.carrier_peer_id = owner_id
+	s.real_puck_carrier_peer_id = owner_id
 	_add_skater(s, SELF_ID, self_pos)
 	return s
 
@@ -813,13 +813,21 @@ func _inbound_feed_snap(self_pos: Vector3, puck_pos: Vector3,
 	return s
 
 
+# A feed along +X whose line runs through this bot's slapper circle, `ahead_m`
+# metres short of it.
+func _feed_through_circle(ahead_m: float) -> WorldSnapshot:
+	var zone: Vector3 = sm._one_timer.zone_center(Vector3.ZERO, sm._attacking_goal_pos)
+	return _inbound_feed_snap(Vector3.ZERO, Vector3(zone.x - ahead_m, 0, zone.z),
+			Vector3(16, 0, 0))
+
+
 func test_one_timer_winds_up_the_slapper_through_the_flight() -> void:
 	# A live feed inbound: tick 0 presses SLAP (the real slapper one-timer —
 	# the diegetic wind-up the controller animates) and holds it while the
 	# feed flies. On attachment (the controller's one-timer window) the button
 	# drops and release_slapper fires.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
+	var s := _feed_through_circle(8.0)
 	var i0 := InputState.new()
 	sm.dispatch(i0, s)
 	assert_true(i0.slap_pressed, "tick 0 presses the slap charge")
@@ -866,40 +874,37 @@ func test_one_timer_settles_onto_the_live_feed_line() -> void:
 	assert_lt(i.move_vector.y, -0.3, "shuffles toward the actual crossing line")
 
 
-func test_one_timer_press_waits_for_the_aim_to_settle() -> void:
-	# The controller locks the slapper direction from the mouse AT THE PRESS,
-	# so a bot that enters the press state still looking away from the net
-	# (late-ready commit, zone-fallback trigger) must NOT press yet — pressing
-	# immediately locked a watching-the-play aim and the one-timer fired
-	# wherever the bot had been looking. Facing dead away from the net (the
-	# net beyond the reach cone) defers the press; squared up, it fires.
+func test_one_timer_press_waits_for_the_pivot_to_fit_the_flight() -> void:
+	# Wound up, the hips pivot into the stance at their own rate and the circle
+	# turns with them (SkaterAgentOneTimer.time_to_set). Turned square away from
+	# the stance (0.4 s of pivot) against a feed 5 m out at 16 m/s, the press waits;
+	# opened side-on to the net, it fires.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	s.skater_states[SELF_ID].facing = Vector2(0, 1)   # facing OUR end — net at back
+	var s := _feed_through_circle(5.0)
+	var stance: Vector2 = sm._one_timer.stance_facing(Vector2(0, -1))
+	s.skater_states[SELF_ID].facing = -stance
 	var i0 := InputState.new()
 	sm.dispatch(i0, s)
-	assert_false(i0.slap_pressed, "no press while the net aim is in the back wedge")
+	assert_false(i0.slap_pressed, "no press while the pivot outlasts the feed")
 	assert_false(i0.slap_held, "…and nothing to hold yet")
 	assert_eq(sm.get_state(), Agent.State.ONE_TIMER_PRESSED, "still waiting on the feed")
-	s.skater_states[SELF_ID].facing = Vector2(0, -1)   # squared to the net
+	s.skater_states[SELF_ID].facing = stance
 	var i1 := InputState.new()
 	sm.dispatch(i1, s)
-	assert_true(i1.slap_pressed, "squared up — the press fires with a real net aim")
+	assert_true(i1.slap_pressed, "opened up — the press fires with a real net aim")
 	assert_true(i1.slap_held, "…and the wind-up holds")
 
 
-func test_one_timer_backstop_aborts_when_it_never_squares() -> void:
-	# Never squaring to the net (the net aim stays beyond the reach cone) means
-	# the locked line would fire WIDE. Past the aim-wait backstop the wind-up is
-	# ABORTED — catch the feed instead of firing into the corner. Nothing was
-	# pressed, so no slapper charge to cancel.
+func test_one_timer_aborts_when_the_feed_beats_the_set() -> void:
+	# A feed arriving before a wind-up could open the one-timer's window, with
+	# the body still unable to set for it, is caught instead of swung at.
+	# Nothing was pressed, so no slapper charge to cancel.
 	sm._state = Agent.State.ONE_TIMER_PRESSED
-	sm._one_timer_press_tick = Agent.ONE_TIMER_AIM_WAIT_MAX_TICKS
-	var s := _inbound_feed_snap(Vector3.ZERO, Vector3(-8, 0, -1.5), Vector3(16, 0, 0))
-	s.skater_states[SELF_ID].facing = Vector2(0, 1)   # facing our end — net at back
+	var s := _feed_through_circle(2.0)
+	s.skater_states[SELF_ID].facing = -sm._one_timer.stance_facing(Vector2(0, -1))
 	var i := InputState.new()
 	sm.dispatch(i, s)
-	assert_false(i.slap_pressed, "an unsquared wind-up is not fired wide")
+	assert_false(i.slap_pressed, "an unset wind-up is not fired wide")
 	assert_ne(sm.get_state(), Agent.State.ONE_TIMER_PRESSED, "it bails to catch instead")
 
 
@@ -1269,17 +1274,17 @@ class _CarrierStub extends AIRoleCarrier:
 
 func _stub_carry(intent: int, anchor: Vector3 = Vector3.ZERO,
 		pass_target: int = -1) -> _CarrierStub:
-	var stub := _CarrierStub.new()
-	stub.next_intent = intent
-	stub.next_anchor = anchor
-	stub.next_pass_target = pass_target
-	sm._carrier = stub
+	var carrier_stub := _CarrierStub.new()
+	carrier_stub.next_intent = intent
+	carrier_stub.next_anchor = anchor
+	carrier_stub.next_pass_target = pass_target
+	sm._carrier = carrier_stub
 	sm._state = Agent.State.CARRY
-	return stub
+	return carrier_stub
 
 
 func test_carry_lost_puck_bails_and_resets_carrier() -> void:
-	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
+	var carrier_stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
 	sm._intended_action = Agent.State.SHOOT_PRESSED  # some stale intent to clear
 	sm._pass_target_peer_id = TEAMMATE_ID
 	var s := _self_snap(Vector3.ZERO, false)  # no puck
@@ -1288,7 +1293,7 @@ func test_carry_lost_puck_bails_and_resets_carrier() -> void:
 	assert_eq(sm.get_state(), sm._post_puck_lost_state(s))
 	assert_eq(sm._intended_action, Agent.State.CARRY, "stale intent cleared on bail")
 	assert_eq(sm._pass_target_peer_id, -1, "pass target cleared on bail")
-	assert_eq(stub.reset_calls, 1, "the carrier is reset when the puck is lost")
+	assert_eq(carrier_stub.reset_calls, 1, "the carrier is reset when the puck is lost")
 
 
 func test_carry_intent_carry_stays_and_steers_to_anchor() -> void:
@@ -1326,7 +1331,7 @@ func test_carry_intent_maps_to_matching_press_state() -> void:
 	}
 	for intent: int in cases:
 		before_each()  # fresh SM per case
-		var stub := _stub_carry(intent, Vector3.ZERO, TEAMMATE_ID)
+		var carrier_stub := _stub_carry(intent, Vector3.ZERO, TEAMMATE_ID)
 		var s := _self_snap(Vector3.ZERO, true)
 		_add_skater(s, TEAMMATE_ID, Vector3(4, 0, 0))
 		# Force the timeout branch on the first pre-aim tick: after tick-0 sets
@@ -1339,16 +1344,16 @@ func test_carry_intent_maps_to_matching_press_state() -> void:
 				landed = sm.get_state()
 				break
 		assert_eq(landed, cases[intent], "intent %d maps to its press state" % intent)
-		assert_eq(stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
+		assert_eq(carrier_stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
 
 
 func test_carry_dump_intent_commits_and_freezes_target() -> void:
 	# INTENT_DUMP maps to PASS_PRESSED (the reused release path) and the dump
 	# target is captured at commit. Force the timeout branch so the commit lands
 	# on the first pre-aim tick, isolating the mapping + freeze from aim geometry.
-	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
-	stub.next_intent = AIRoleCarrier.INTENT_DUMP
-	stub.next_dump_target = Vector3(12, 0, 5)
+	var carrier_stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)
+	carrier_stub.next_intent = AIRoleCarrier.INTENT_DUMP
+	carrier_stub.next_dump_target = Vector3(12, 0, 5)
 	sm._intent_max_wait_ticks = 0
 	var s := _self_snap(Vector3.ZERO, true)
 	var landed: int = -1
@@ -1359,13 +1364,13 @@ func test_carry_dump_intent_commits_and_freezes_target() -> void:
 			break
 	assert_eq(landed, Agent.State.PASS_PRESSED, "a dump commits to the PASS_PRESSED release path")
 	assert_eq(sm._dump_target, Vector3(12, 0, 5), "the dump target is frozen at commit")
-	assert_eq(stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
+	assert_eq(carrier_stub.clear_intent_calls, 1, "commit forces a carrier re-eval")
 
 
 func test_carry_holds_intent_against_carrier_flip() -> void:
 	# Hysteresis: once a fire intent is locked and the bot is pre-aiming, a
 	# carrier that flips back to CARRY must NOT cancel the pending shot.
-	var stub := _stub_carry(AIRoleCarrier.INTENT_CARRY)  # carrier now wants CARRY
+	_stub_carry(AIRoleCarrier.INTENT_CARRY)  # carrier now wants CARRY
 	sm._intended_action = Agent.State.SHOOT_PRESSED       # but we're mid-pre-aim
 	sm._intent_wait_ticks = 0
 	# Priced at full load with the puck still unloaded at the body, so the press
@@ -2037,8 +2042,8 @@ func test_carry_freezes_shot_aim_after_commit() -> void:
 	# freeze, so the bot fires the exact shot that won the compete — not whatever
 	# a later re-eval moved the hole to. Deferring (facing away + frozen cursor)
 	# holds the latch across dispatches without committing to the press state.
-	var stub := _stub_carry(AIRoleCarrier.INTENT_SHOOT)
-	stub.shot_aim_point = Vector3(0, 0, -20)           # the hole the compete won
+	var carrier_stub := _stub_carry(AIRoleCarrier.INTENT_SHOOT)
+	carrier_stub.shot_aim_point = Vector3(0, 0, -20)           # the hole the compete won
 	var s := _self_snap(Vector3.ZERO, true)
 	s.skater_states[SELF_ID].facing = Vector2(0, 1)    # net in the back wedge → defer
 	sm._mouse_max_speed_m_s = 0.0001                   # cursor can't converge this tick
@@ -2048,7 +2053,7 @@ func test_carry_freezes_shot_aim_after_commit() -> void:
 	assert_eq(sm._intended_action, Agent.State.SHOOT_PRESSED, "fire intent latched, deferring")
 	assert_eq(sm._shot_aim_locked, Vector3(0, 0, -20), "the winning hole aim was captured at commit")
 	# The carrier now drags its hole aim elsewhere; the committed shot must not follow.
-	stub.shot_aim_point = Vector3(0, 0, -5)
+	carrier_stub.shot_aim_point = Vector3(0, 0, -5)
 	sm.dispatch(InputState.new(), s)
 	assert_eq(sm.get_state(), Agent.State.CARRY, "still pre-aiming")
 	assert_eq(sm._shot_aim_locked, Vector3(0, 0, -20),

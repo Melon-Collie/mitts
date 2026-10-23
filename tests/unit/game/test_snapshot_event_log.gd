@@ -12,8 +12,11 @@ const OTHER_PEER: int = 77
 class Capture:
 	var events: Array = []
 
-	func handle(type: int, arg: int) -> void:
+	var arg2s: Array[int] = []
+
+	func handle(type: int, arg: int, arg2: int) -> void:
 		events.append([type, arg])
+		arg2s.append(arg2)
 
 
 func _make() -> SnapshotEventLog:
@@ -21,37 +24,56 @@ func _make() -> SnapshotEventLog:
 
 
 # Simulates the wire: codec payload bytes + appended event block.
-func _packet(log: SnapshotEventLog, now: float, payload_size: int = 32) -> PackedByteArray:
+func _packet(event_log: SnapshotEventLog, now: float, payload_size: int = 32) -> PackedByteArray:
 	var buf := PackedByteArray()
 	buf.resize(payload_size)
-	log.append_block(buf, now)
+	event_log.append_block(buf, now)
 	return buf
 
 
 # ── Round-trip ───────────────────────────────────────────────────────────────
 
 func test_events_round_trip_in_order() -> void:
-	var log := _make()
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 10.0)
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, 10.1)
+	var event_log := _make()
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 10.0)
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, 10.1)
 	var cap := Capture.new()
-	_make().apply_block(_packet(log, 10.2), LOCAL_PEER, cap.handle)
+	_make().apply_block(_packet(event_log, 10.2), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events.size(), 2)
 	assert_eq(cap.events[0], [SnapshotEventLog.EventType.CARRIER_CHANGED, LOCAL_PEER])
 	assert_eq(cap.events[1], [SnapshotEventLog.EventType.CARRIER_CHANGED, -1])
 
 
 func test_negative_arg_round_trips() -> void:
-	var log := _make()
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, 0.0)
+	var event_log := _make()
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, 0.0)
 	var cap := Capture.new()
-	_make().apply_block(_packet(log, 0.0), LOCAL_PEER, cap.handle)
+	_make().apply_block(_packet(event_log, 0.0), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events[0][1], -1)
 
 
+func test_the_second_arg_round_trips() -> void:
+	var event_log := _make()
+	var feed := Vector2(-12.34, 5.67)
+	event_log.record(SnapshotEventLog.EventType.PICKED_UP, LOCAL_PEER, 1234, 0.0,
+			SnapshotEventLog.pack_feed(feed))
+	var cap := Capture.new()
+	_make().apply_block(_packet(event_log, 0.0), LOCAL_PEER, cap.handle)
+	assert_eq(cap.events[0], [SnapshotEventLog.EventType.PICKED_UP, 1234])
+	assert_almost_eq(SnapshotEventLog.unpack_feed(cap.arg2s[0]), feed, Vector2.ONE * 0.0001)
+
+
+func test_a_feed_packs_to_the_centimetre_in_every_quadrant() -> void:
+	for v: Vector2 in [Vector2(0.004, -0.004), Vector2(38.0, -38.0), Vector2(-21.456, 17.001),
+			Vector2(-0.01, -0.01), Vector2(500.0, -500.0)]:
+		var back: Vector2 = SnapshotEventLog.unpack_feed(SnapshotEventLog.pack_feed(v))
+		var expect := Vector2(clampf(v.x, -327.68, 327.67), clampf(v.y, -327.68, 327.67))
+		assert_almost_eq(back, expect, Vector2.ONE * 0.0051, "%s" % v)
+
+
 func test_empty_block_is_one_byte_and_dispatches_nothing() -> void:
-	var log := _make()
-	var buf := _packet(log, 0.0, 32)
+	var event_log := _make()
+	var buf := _packet(event_log, 0.0, 32)
 	assert_eq(buf.size(), 33)
 	var cap := Capture.new()
 	_make().apply_block(buf, LOCAL_PEER, cap.handle)
@@ -61,9 +83,9 @@ func test_empty_block_is_one_byte_and_dispatches_nothing() -> void:
 # ── Target filtering ─────────────────────────────────────────────────────────
 
 func test_targeted_event_reaches_only_its_peer() -> void:
-	var log := _make()
-	log.record(SnapshotEventLog.EventType.STOLEN, OTHER_PEER, 1, 0.0)
-	var pkt := _packet(log, 0.0)
+	var event_log := _make()
+	event_log.record(SnapshotEventLog.EventType.STOLEN, OTHER_PEER, 1, 0.0)
+	var pkt := _packet(event_log, 0.0)
 	var mine := Capture.new()
 	_make().apply_block(pkt, LOCAL_PEER, mine.handle)
 	assert_eq(mine.events.size(), 0, "event for OTHER_PEER must be filtered")
@@ -73,10 +95,10 @@ func test_targeted_event_reaches_only_its_peer() -> void:
 
 
 func test_filtered_event_still_advances_watermark() -> void:
-	var log := _make()
-	var seq: int = log.record(SnapshotEventLog.EventType.PICKED_UP, OTHER_PEER, 0, 0.0)
+	var event_log := _make()
+	var seq: int = event_log.record(SnapshotEventLog.EventType.PICKED_UP, OTHER_PEER, 0, 0.0)
 	var client := _make()
-	client.apply_block(_packet(log, 0.0), LOCAL_PEER, Capture.new().handle)
+	client.apply_block(_packet(event_log, 0.0), LOCAL_PEER, Capture.new().handle)
 	assert_false(client.try_apply_reliable(seq),
 			"a seq seen via the log (even not-for-me) must reject the reliable copy")
 
@@ -84,9 +106,9 @@ func test_filtered_event_still_advances_watermark() -> void:
 # ── Apply-once / dedupe ──────────────────────────────────────────────────────
 
 func test_reapplying_same_block_dispatches_nothing() -> void:
-	var log := _make()
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
-	var pkt := _packet(log, 0.0)
+	var event_log := _make()
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
+	var pkt := _packet(event_log, 0.0)
 	var client := _make()
 	var cap := Capture.new()
 	client.apply_block(pkt, LOCAL_PEER, cap.handle)
@@ -101,20 +123,20 @@ func test_reliable_applies_exactly_once() -> void:
 
 
 func test_log_then_reliable_deduped() -> void:
-	var log := _make()
-	var seq: int = log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
+	var event_log := _make()
+	var seq: int = event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
 	var client := _make()
-	client.apply_block(_packet(log, 0.0), LOCAL_PEER, Capture.new().handle)
+	client.apply_block(_packet(event_log, 0.0), LOCAL_PEER, Capture.new().handle)
 	assert_false(client.try_apply_reliable(seq))
 
 
 func test_reliable_then_log_deduped() -> void:
-	var log := _make()
-	var seq: int = log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
+	var event_log := _make()
+	var seq: int = event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
 	var client := _make()
 	assert_true(client.try_apply_reliable(seq))
 	var cap := Capture.new()
-	client.apply_block(_packet(log, 0.0), LOCAL_PEER, cap.handle)
+	client.apply_block(_packet(event_log, 0.0), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events.size(), 0)
 
 
@@ -126,13 +148,13 @@ func test_stale_reliable_cannot_regress_newer_log_event() -> void:
 	# learns of seq 2 from the log; the late reliable seq 1 must then be
 	# rejected, or the client would re-install carrier=X after the host
 	# cleared it.
-	var log := _make()
-	var seq1: int = log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
-	var seq2: int = log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, SnapshotEventLog.RETENTION_S + 0.05)
+	var event_log := _make()
+	var seq1: int = event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
+	var seq2: int = event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, SnapshotEventLog.RETENTION_S + 0.05)
 	assert_true(seq2 > seq1)
 	var client := _make()
 	var cap := Capture.new()
-	client.apply_block(_packet(log, SnapshotEventLog.RETENTION_S + 0.06), LOCAL_PEER, cap.handle)
+	client.apply_block(_packet(event_log, SnapshotEventLog.RETENTION_S + 0.06), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events.size(), 1, "seq 1 aged out — only seq 2 arrives via the log")
 	assert_eq(cap.events[0][1], -1)
 	assert_false(client.try_apply_reliable(seq1), "stale reliable must not regress")
@@ -141,12 +163,12 @@ func test_stale_reliable_cannot_regress_newer_log_event() -> void:
 func test_missed_snapshots_recovered_from_later_block() -> void:
 	# Every event stays in the block for RETENTION_S, so a client that lost
 	# the packets carrying seq 1 still gets it (in order) from a later packet.
-	var log := _make()
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
-	_packet(log, 0.0)  # this packet is "lost" — client never applies it
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, 0.1)
+	var event_log := _make()
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
+	_packet(event_log, 0.0)  # this packet is "lost" — client never applies it
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, -1, 0.1)
 	var cap := Capture.new()
-	_make().apply_block(_packet(log, 0.1), LOCAL_PEER, cap.handle)
+	_make().apply_block(_packet(event_log, 0.1), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events.size(), 2)
 	assert_eq(cap.events[0][1], LOCAL_PEER)
 	assert_eq(cap.events[1][1], -1)
@@ -155,19 +177,19 @@ func test_missed_snapshots_recovered_from_later_block() -> void:
 # ── Retention / caps ─────────────────────────────────────────────────────────
 
 func test_events_expire_after_retention() -> void:
-	var log := _make()
-	log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
+	var event_log := _make()
+	event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, LOCAL_PEER, 0.0)
 	var cap := Capture.new()
-	_make().apply_block(_packet(log, SnapshotEventLog.RETENTION_S + 0.01), LOCAL_PEER, cap.handle)
+	_make().apply_block(_packet(event_log, SnapshotEventLog.RETENTION_S + 0.01), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events.size(), 0)
 
 
 func test_log_capped_at_max_events_dropping_oldest() -> void:
-	var log := _make()
+	var event_log := _make()
 	for i: int in SnapshotEventLog.MAX_EVENTS + 4:
-		log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, i, 0.0)
+		event_log.record(SnapshotEventLog.EventType.CARRIER_CHANGED, SnapshotEventLog.TARGET_ALL, i, 0.0)
 	var cap := Capture.new()
-	_make().apply_block(_packet(log, 0.0), LOCAL_PEER, cap.handle)
+	_make().apply_block(_packet(event_log, 0.0), LOCAL_PEER, cap.handle)
 	assert_eq(cap.events.size(), SnapshotEventLog.MAX_EVENTS)
 	assert_eq(cap.events[0][1], 4, "oldest events beyond the cap are dropped")
 

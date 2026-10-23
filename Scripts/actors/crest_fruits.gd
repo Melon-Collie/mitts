@@ -130,7 +130,7 @@ static func _coconut(c: CanvasItem, k: Array) -> void:
 static func _dragonfruit(c: CanvasItem, k: Array) -> void:
 	var skin: Color = k[0]
 	var flesh: Color = k[1]
-	var seed: Color = k[2]
+	var seed_color: Color = k[2]
 	var bract: Color = k[3]
 	for b: Array in [
 			[Vector2(0.0, -0.6), Vector2(0.0, -1.0)],
@@ -148,7 +148,7 @@ static func _dragonfruit(c: CanvasItem, k: Array) -> void:
 		var r: float = sqrt((float(i) + 0.5) / 16.0) * 0.82
 		var a: float = float(i) * 2.39996
 		var at := Vector2(cos(a) * r * 0.5, 0.12 + sin(a) * r * 0.72)
-		_poly(c, _ellipse(at, Vector2(0.04, 0.06), 10), seed)
+		_poly(c, _ellipse(at, Vector2(0.04, 0.06), 10), seed_color)
 
 
 static func _lemon(c: CanvasItem, k: Array) -> void:

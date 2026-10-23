@@ -55,16 +55,16 @@ static func contact(prev: Vector3, curr: Vector3, radius: float,
 			var inv_d: float = 1.0 / dir
 			var t1: float = (-e[axis] - o) * inv_d  # low face
 			var t2: float = (e[axis] - o) * inv_d   # high face
-			var sign: float = -1.0                  # entering the low (-axis) face
+			var face_sign: float = -1.0                  # entering the low (-axis) face
 			if t1 > t2:
 				var tmp: float = t1
 				t1 = t2
 				t2 = tmp
-				sign = 1.0                          # entering the high (+axis) face
+				face_sign = 1.0                          # entering the high (+axis) face
 			if t1 > t_near:
 				t_near = t1
 				hit_axis = axis
-				hit_sign = sign
+				hit_sign = face_sign
 			t_far = minf(t_far, t2)
 			if t_near > t_far:
 				return false

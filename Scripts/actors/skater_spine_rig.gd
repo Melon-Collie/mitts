@@ -88,10 +88,10 @@ func build(skeleton: Skeleton3D) -> void:
 # true when any moved, so the arm IK knows its roots did even if no hand marker
 # moved.
 func update() -> bool:
-	var lower: Node3D = _skater.lower_body
-	var upper: Node3D = _skater.upper_body
-	var hip: Vector3 = lower.rotation
-	var trunk: Vector3 = upper.rotation
+	# The frames as drawn, which the stick and the markers hang from.
+	var hip: Vector3 = _skater.drawn_lower_body_rotation()
+	var trunk: Vector3 = _skater.drawn_upper_body_rotation()
+	var lower_pos: Vector3 = _skater.drawn_lower_body().origin
 	var fold: float = _skater.trunk_fold()
 	var skater_basis: Basis = _skater.global_transform.basis
 	var tilt_in: Vector2 = _skater.balance_tilt()
@@ -101,7 +101,7 @@ func update() -> bool:
 	var plant: float = _skater.ground_plant()
 	var legs: int = _skater.leg_pose_version()
 	if hip == _in_hip and trunk == _in_trunk and fold == _in_fold \
-			and lower.position == _in_lower_pos and skater_basis == _in_basis \
+			and lower_pos == _in_lower_pos and skater_basis == _in_basis \
 			and tilt_in == _in_tilt and trunk_tilt_in == _in_trunk_tilt \
 			and drop == _in_drop and shoulder_y == _in_shoulder_y \
 			and plant == _in_plant and legs == _in_legs:
@@ -109,7 +109,7 @@ func update() -> bool:
 	_in_hip = hip
 	_in_trunk = trunk
 	_in_fold = fold
-	_in_lower_pos = lower.position
+	_in_lower_pos = lower_pos
 	_in_basis = skater_basis
 	_in_tilt = tilt_in
 	_in_trunk_tilt = trunk_tilt_in
@@ -142,7 +142,7 @@ func update() -> bool:
 	# (Skater.set_skating_crouch_drop), then are seated on the blades
 	# (SkaterLegRig.seat_on_ice, which also plants the second foot).
 	var hips := Transform3D(lean * hip_basis,
-			lower.position - Vector3(0.0, drop, 0.0))
+			lower_pos - Vector3(0.0, drop, 0.0))
 	var seat: Vector3 = _skater.seat_on_ice(hips)
 	if plant > 0.0:
 		hips.origin += seat * plant

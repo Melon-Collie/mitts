@@ -57,15 +57,15 @@ func test_he_is_down_in_the_drop_time_and_up_in_the_rise_time() -> void:
 
 
 func test_the_drop_runs_from_the_ready_stance_to_the_butterfly() -> void:
-	var ready := KeeperPose.new()
-	KeeperPoses.ready(ready)
+	var ready_pose := KeeperPose.new()
+	KeeperPoses.ready(ready_pose)
 	var fly := KeeperPose.new()
 	KeeperPoses.butterfly(fly)
 	_drop.drop()
 	_drop.step(1e-6)
 	_drop.pose(_pose)
 	var at: Array[Vector3] = _bones(_pose)
-	var want: Array[Vector3] = _bones(ready)
+	var want: Array[Vector3] = _bones(ready_pose)
 	for b: int in KeeperSkeleton.BONE_COUNT:
 		assert_almost_eq(at[b], want[b], Vector3.ONE * 1e-3, "bone %d starts at the stance" % b)
 	_until(KeeperDrop.State.DOWN)
@@ -164,9 +164,9 @@ func test_nothing_on_him_jumps_between_ticks() -> void:
 # place on the ice while the other comes up; and every tick keeps his gear out
 # of the ice, his arms on the stick and nothing jumping.
 func test_the_recovery_stands_him_up_on_the_far_leg_first() -> void:
-	var ready := KeeperPose.new()
-	KeeperPoses.ready(ready)
-	var want: Array[Vector3] = _bones(ready)
+	var ready_pose := KeeperPose.new()
+	KeeperPoses.ready(ready_pose)
+	var want: Array[Vector3] = _bones(ready_pose)
 	for toward: float in [1.0, -1.0]:
 		_drop = KeeperDrop.new()
 		_drop.drop()

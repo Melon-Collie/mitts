@@ -337,19 +337,19 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 # `opps` must already be projected to the time the actor will be at `pos`, in
 # the same snapshot order as opponent_caps. The keeper is at `keeper_pos` moving
 # across at `keeper_vel_x` (AIShotValue.now), or square and set on `pos` when
-# `keeper_pos` is INF (AIShotValue.set_keeper), in `keeper_stance` (an
+# `keeper_pos` is INF (AIShotValue.set_keeper), in `stance` (an
 # AIShotOdds.Stance; keeper_stance_at). It takes no aim spread: the seam prices
 # the chance, not the shooter. `shot_keep` is the odds the shooter still has the
 # puck at the press; it discounts the shot, never the position value.
 func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		opps: Array[Vector3], keeper_pos: Vector3 = Vector3.INF,
 		keeper_vel_x: float = 0.0, shot_keep: float = 1.0,
-		keeper_stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
+		stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return horizon_value(pos)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
-			keeper_stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 			opponent_caps) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s)
 

@@ -173,7 +173,7 @@ func load_native_legs(native: RefCounted) -> void:
 	var stance: Vector4 = native.get_stance()
 	var left: Vector4 = native.get_leg_l()
 	var right: Vector4 = native.get_leg_r()
-	var seed: Vector4 = native.get_seed()
+	var seed_pose: Vector4 = native.get_seed()
 	stance_hip = stance.x
 	stance_knee = stance.y
 	stance_shin = stance.z
@@ -186,10 +186,10 @@ func load_native_legs(native: RefCounted) -> void:
 	r_roll = right.y
 	r_knee = right.z
 	r_yaw = right.w
-	foot_level_l = seed.x
-	foot_level_r = seed.x
-	plant_l = seed.y
-	plant_r = seed.y
+	foot_level_l = seed_pose.x
+	foot_level_r = seed_pose.x
+	plant_l = seed_pose.y
+	plant_r = seed_pose.y
 	frame_share = 0.0
 	plant = 1.0
 	knee_extend_l = 0.0
@@ -201,14 +201,14 @@ func load_native_legs(native: RefCounted) -> void:
 # What seed_trunk sets, from the same pose.
 func load_native_trunk(native: RefCounted) -> void:
 	var trunk: Vector4 = native.get_trunk()
-	var seed: Vector4 = native.get_seed()
+	var seed_pose: Vector4 = native.get_seed()
 	drop += trunk.x
 	trunk_pitch = trunk.y
 	trunk_roll = trunk.z
 	wobble_pitch = 0.0
 	wobble_roll = 0.0
-	edge_l = seed.z
-	edge_r = seed.w
+	edge_l = seed_pose.z
+	edge_r = seed_pose.w
 
 
 # The ankle the stroke's joints put the leg at.
@@ -302,12 +302,12 @@ static func _ease_into(value: float, limit: float, band: float) -> float:
 # the boot's own down. Laying the blade flat drops down's share along the
 # heading and keeps the rest: its share square to the heading (the edge) and
 # its vertical, renormalized.
-static func _runner_depth(leg: LegIK.Leg, ice: Basis) -> float:
-	var posed: Basis = ice * Basis.from_euler(Vector3(leg.pitch, leg.yaw, leg.roll)) \
+static func _runner_depth(leg: LegIK.Leg, ice_basis: Basis) -> float:
+	var posed: Basis = ice_basis * Basis.from_euler(Vector3(leg.pitch, leg.yaw, leg.roll)) \
 			* Basis(Vector3.RIGHT, leg.knee)
 	var along: Vector3 = posed * Vector3.FORWARD
 	var down: Vector3 = posed * Vector3.DOWN
-	var heading: Vector3 = ice * Basis(Vector3.UP, leg.yaw) * Vector3.FORWARD
+	var heading: Vector3 = ice_basis * Basis(Vector3.UP, leg.yaw) * Vector3.FORWARD
 	var flat: float = sqrt(heading.x * heading.x + heading.z * heading.z)
 	var edge: float = 0.0
 	if flat > 1e-6:

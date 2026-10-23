@@ -103,7 +103,6 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 		d.target_position = search_center
 		return d
 
-	var our_net: Vector3 = ctx.defending_goal_pos
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var our_team_excluding_self: Array[Vector3] = ctx.scratch_teammates
 	AIRoleReads.collect_teammates_excluding_self(ctx, our_team_excluding_self)

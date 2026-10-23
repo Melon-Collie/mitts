@@ -135,14 +135,51 @@ const POSES: Array = [
 	]},
 	# The overhead coil, authored in upper-body-local space — the pose most
 	# likely to expose a wrong parent frame.
+	# Faced up the ice first, then pressed and held through the set-up (the blade
+	# bringing the puck in front, the hips opening side-on) to a full wind-up.
 	{"name": "slapper_coil", "puck": true, "steps": [
-		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
-		[58, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
 	]},
 	{"name": "slapper_follow_through", "puck": true, "steps": [
-		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
-		[58, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
 		[16, {"aim": Vector3(0.8, 0.0, -3.2)}],
+	]},
+	# The same coil from down the shot line and from the game camera: the stance
+	# (which way the hips and feet sit against the line) reads from these.
+	{"name": "slapper_coil_front", "puck": true, "cam": Vector3(0.4, 0.9, -3.4), "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
+	# Facing the chest: side-on, the default (left-handed) shooter's chest faces
+	# −X with the net up −Z. Whether the arms come up in front of the body.
+	{"name": "slapper_coil_chest", "puck": true, "cam": Vector3(-3.4, 0.9, 0.3), "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
+	{"name": "slapper_coil_game", "puck": true, "game_cam": true, "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[150, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
+	# Pressed with the puck out on the backhand: a few ticks in, the blade is
+	# still bringing it across to the strike spot.
+	{"name": "slapper_from_backhand", "puck": true, "steps": [
+		[60, {"aim": Vector3(-1.4, 0.0, -1.0)}],
+		[12, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
+	# Loaded for a one-timer, no puck yet.
+	{"name": "one_timer_loaded", "puck": false, "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[120, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
+	{"name": "one_timer_loaded_game", "puck": false, "game_cam": true, "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[120, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
+	]},
+	{"name": "one_timer_loaded_front", "puck": false, "cam": Vector3(0.4, 0.9, -3.4), "steps": [
+		[60, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[120, {"aim": Vector3(0.8, 0.0, -3.2), "slap": true}],
 	]},
 	# Turning at speed: build to cruise heading -Z, then turn toward +X. A
 	# striding crossover turn, the Space + side-key tight turn mid-carve, and
@@ -584,7 +621,7 @@ func _run_pose() -> void:
 					- _controller._aiming.wrister_origin_skater_pos
 			var puck_local: Vector3 = _skater.global_transform.basis.inverse() * pin
 			print("    wrister: load %.2f %s | puck %.0f° off facing | wound %.0f°, torso %.0f°" % [
-					_controller.wrister_load.load,
+					_controller.wrister_load.load_share,
 					"BH" if _controller.wrister_load.is_backhand else "FH",
 					rad_to_deg(atan2(-puck_local.x, -puck_local.z)),
 					rad_to_deg(_controller.wrister_load.wound_yaw),

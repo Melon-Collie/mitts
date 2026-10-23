@@ -1,6 +1,5 @@
 #include "native_arm_rig.h"
 
-#include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/skeleton3d.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/core/object.hpp>
@@ -128,10 +127,9 @@ Vector3 tucked_pole(const Vector3 &pole, double lead, double side) {
 
 } // namespace
 
-void NativeArmRig::bind(Object *p_skeleton, Object *p_upper_body, const PackedInt32Array &p_bones) {
+void NativeArmRig::bind(Object *p_skeleton, const PackedInt32Array &p_bones) {
 	ERR_FAIL_COND(p_bones.size() != 6);
 	skeleton_id = p_skeleton != nullptr ? ObjectID(p_skeleton->get_instance_id()) : ObjectID();
-	upper_body_id = p_upper_body != nullptr ? ObjectID(p_upper_body->get_instance_id()) : ObjectID();
 	bone_upper = p_bones[0];
 	bone_forearm = p_bones[1];
 	bone_cuff = p_bones[2];
@@ -161,11 +159,10 @@ void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thic
 }
 
 bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3 &grip,
-		const Basis &trunk_texture,
+		const Transform3D &frame, const Basis &trunk_texture,
 		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load) {
 	Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(ObjectDB::get_instance(skeleton_id));
-	Node3D *upper_body = Object::cast_to<Node3D>(ObjectDB::get_instance(upper_body_id));
-	if (skeleton == nullptr || upper_body == nullptr || bone_cap < 0) {
+	if (skeleton == nullptr || bone_cap < 0) {
 		return false;
 	}
 	const double lead = load.x;
@@ -175,7 +172,7 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const double forearm_len = lengths.y;
 	const double side = SIGN(marker.x);
 	const Transform3D spine = skeleton->get_bone_global_pose(bone_spine);
-	const Vector3 hand_s = upper_body->get_transform().xform(hand);
+	const Vector3 hand_s = frame.xform(hand);
 
 	// _textured_shoulder, then arm_root.
 	const Vector3 rooted = spine.xform(
@@ -209,7 +206,7 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	skeleton->set_bone_pose(bone_elbow, Transform3D(pad.scaled_local(thick_elbow), elbow_s));
 	// _pose_glove (its direction is normalized(), the same unit vector).
 	const Basis glove = glove_basis(forearm_span.normalized(),
-			upper_body->get_transform().basis.xform(grip), wrist_break_max);
+			frame.basis.xform(grip), wrist_break_max);
 	skeleton->set_bone_pose(bone_glove, Transform3D(glove.scaled_local(thick_glove), hand_s));
 
 	// _orient_shoulder_cap: an invalid direction keeps the last stable roll.
@@ -233,13 +230,13 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 }
 
 void NativeArmRig::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("bind", "skeleton", "upper_body", "bones"), &NativeArmRig::bind);
+	ClassDB::bind_method(D_METHOD("bind", "skeleton", "bones"), &NativeArmRig::bind);
 	ClassDB::bind_method(D_METHOD("configure", "thick_upper", "thick_forearm", "thick_cuff",
 								 "thick_elbow", "thick_glove", "cap_rest_pole", "cap_follow",
 								 "cap_bone", "cap_pos", "cap_scale", "cap_state", "wrist_break_max"),
 			&NativeArmRig::configure);
-	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "trunk_texture", "pole", "lengths",
-								 "load"),
+	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
+								 "lengths", "load"),
 			&NativeArmRig::pose);
 	ClassDB::bind_method(D_METHOD("get_cap_state"), &NativeArmRig::get_cap_state);
 }

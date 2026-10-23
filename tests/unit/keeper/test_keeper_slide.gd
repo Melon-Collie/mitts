@@ -159,10 +159,10 @@ func test_the_push_skate_holds_its_place_while_it_drives() -> void:
 # it holds its place on the ice from the drop's first frame to the push's last,
 # while the lead knee falls; and he starts from the ready stance.
 func test_from_his_feet_the_push_skate_never_leaves_its_spot() -> void:
-	var ready := KeeperPose.new()
-	KeeperPoses.ready(ready)
+	var ready_pose := KeeperPose.new()
+	KeeperPoses.ready(ready_pose)
 	var skel := KeeperSkeleton.new()
-	skel.pose(ready)
+	skel.pose(ready_pose)
 	_slide.slide_from_feet(Vector2(1.0, 0.0))
 	_solve()
 	for b: int in KeeperSkeleton.BONE_COUNT:

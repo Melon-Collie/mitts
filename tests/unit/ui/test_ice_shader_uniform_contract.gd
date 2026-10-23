@@ -47,9 +47,9 @@ func _pushed_uniforms() -> PackedStringArray:
 	var names := PackedStringArray()
 	var re := RegEx.create_from_string('set_shader_parameter\\(&"([a-zA-Z_0-9]+)"')
 	for m: RegExMatch in re.search_all(src):
-		var name: String = m.get_string(1)
-		if not names.has(name):
-			names.append(name)
+		var uniform: String = m.get_string(1)
+		if not names.has(uniform):
+			names.append(uniform)
 	return names
 
 
@@ -57,9 +57,9 @@ func test_shader_declares_every_uniform_the_ring_field_writes() -> void:
 	var declared: PackedStringArray = _declared_uniforms()
 	var pushed: PackedStringArray = _pushed_uniforms()
 	assert_gt(pushed.size(), 0, "found no set_shader_parameter calls — did the parser break?")
-	for name: String in pushed:
-		assert_true(declared.has(name),
-				"IceRingField writes `%s`, which ice.gdshader does not declare. " % name +
+	for uniform: String in pushed:
+		assert_true(declared.has(uniform),
+				"IceRingField writes `%s`, which ice.gdshader does not declare. " % uniform +
 				"set_shader_parameter is silent on an unknown name, so this draws " +
 				"with the shader default and nothing reports it.")
 

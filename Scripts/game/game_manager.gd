@@ -1,5 +1,7 @@
 extends Node
 
+const SoundManagerScript := preload("res://Scripts/game/sound_manager.gd")
+
 # Orchestrator. Owns the GameStateMachine and wires together six focused
 # collaborators, each in its own file:
 #
@@ -1848,7 +1850,7 @@ func _wire_sound_signals() -> void:
 	if NetworkManager.is_host:
 		puck.puck_hit_boards.connect(func() -> void:
 			var spd: float = puck.linear_velocity.length()
-			SoundManager.play_world(SoundManager.board_contact_sound(puck.get_puck_position()), puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
+			SoundManager.play_world(SoundManagerScript.board_contact_sound(puck.get_puck_position()), puck.get_puck_position(), _puck_speed_volume(spd), 0.05)
 			puck.fire_board_impact_vfx(spd)
 			NetworkManager.send_board_hit_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_boards", puck.get_puck_position(), spd))
@@ -1900,7 +1902,7 @@ func _wire_sound_signals() -> void:
 				_local_net_cue_at = NetworkManager.local_time())
 		puck_controller.predicted_board_contact.connect(
 			func(pos: Vector3, spd: float) -> void:
-				SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
+				SoundManager.play_world(SoundManagerScript.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
 				if puck != null:
 					puck.fire_board_impact_vfx(spd)
 				_local_boards_cue_at = NetworkManager.local_time())
@@ -1940,7 +1942,7 @@ func _wire_sound_signals() -> void:
 		func(pos: Vector3, spd: float) -> void:
 			if _cue_is_echo(_local_boards_cue_at):
 				return
-			SoundManager.play_world(SoundManager.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
+			SoundManager.play_world(SoundManagerScript.board_contact_sound(pos), pos, _puck_speed_volume(spd), 0.05)
 			if puck != null:
 				puck.fire_board_impact_vfx(spd))
 	NetworkManager.goal_body_hit_received.connect(
@@ -1979,7 +1981,7 @@ func _wire_sound_signals() -> void:
 	NetworkManager.shot_sound_received.connect(
 		func(pos: Vector3, is_slapper: bool, power: float) -> void:
 			var snd: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-			SoundManager.play_world(snd, pos, SoundManager.shot_volume_db(power), 0.04))
+			SoundManager.play_world(snd, pos, SoundManagerScript.shot_volume_db(power), 0.04))
 	# Period-end buzzer fires only when a period actually ends — END_OF_PERIOD for
 	# regulation periods, GAME_OVER for the final one. (Not period_synced, which
 	# re-emits on every FACEOFF_PREP, i.e. every faceoff including post-goal.)
@@ -1994,7 +1996,7 @@ func _on_phase_changed_period_buzzer(p: GamePhase.Phase) -> void:
 		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER)
 
 
-func _on_local_pickup_sound(_settle_until_ms: int) -> void:
+func _on_local_pickup_sound(_settle_until_ms: int, _feed_packed: int) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null and record.skater != null:
 		_play_pickup_sound(record.skater)
@@ -2012,7 +2014,7 @@ func _on_remote_carrier_sound(new_carrier_peer_id: int) -> void:
 func _play_pickup_sound(carrier: Skater) -> void:
 	var speed: float = puck_controller.arrival_speed_for(carrier) if puck_controller != null else 0.0
 	SoundManager.play_world(SoundManager.Sound.PUCK_PICKUP, carrier.global_position,
-			SoundManager.reception_volume_db(speed), 0.05)
+			SoundManagerScript.reception_volume_db(speed), 0.05)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("puck_pickup", carrier.global_position, speed,
 				{"team": carrier.get_team_id()})
@@ -3157,7 +3159,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 	return _registry.resolve_peer_id(skater) if _registry != null else -1
 
 
-func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
+func _on_server_puck_picked_up_by(peer_id: int, settle_s: float, feed: Vector2) -> void:
 	# clear_for_grant, not clear(): if a different peer's claim was pending,
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
@@ -3183,9 +3185,13 @@ func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
 	if _possession_tracker != null:
 		_possession_tracker.on_pickup(peer_id)
 	var settle_until_ms: int = record.controller.settle_deadline_ms(settle_s)
-	record.controller.on_puck_picked_up_network(settle_until_ms)
+	# Quantized before the host uses it, so the host's one-timer reads the feed
+	# its client decodes.
+	var feed_packed: int = SnapshotEventLog.pack_feed(feed)
+	record.controller.on_puck_picked_up_network(settle_until_ms,
+			SnapshotEventLog.unpack_feed(feed_packed))
 	if not record.is_local:
-		NetworkManager.send_puck_picked_up(peer_id, settle_until_ms)
+		NetworkManager.send_puck_picked_up(peer_id, settle_until_ms, feed_packed)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
 	# NHL delayed-offside: pickup by an offending-team attacker whistles the
 	# play dead. Consume immediately so the faceoff fires before the next
@@ -3502,7 +3508,7 @@ func _defending_team_id_for_goalie(goalie: Goalie) -> int:
 # ── Puck release / one-timer ─────────────────────────────────────────────────
 func _on_puck_release_requested(direction: Vector3, power: float, is_slapper: bool) -> void:
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
-	SoundManager.play_world(sound, puck.get_puck_position(), SoundManager.shot_volume_db(power), 0.04)
+	SoundManager.play_world(sound, puck.get_puck_position(), SoundManagerScript.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("shot", puck.get_puck_position(), power,
 				{"is_slapper": is_slapper, "team": _registry.resolve_team_id(puck.get_carrier())})
@@ -3585,7 +3591,7 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 	# shot sound + replay event here so the goal-replay driver can find the last
 	# "shot" event when scanning the clip — otherwise the slo-mo trims back to
 	# the start of the play instead of the moment of release.
-	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, puck.get_puck_position(), SoundManager.shot_volume_db(power), 0.04)
+	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, puck.get_puck_position(), SoundManagerScript.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("shot", puck.get_puck_position(), power,
 				{"is_slapper": true, "team": skater.get_team_id()})
@@ -3652,7 +3658,7 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			record.controller.max_slapper_power
 					* (1.0 + record.controller.one_timer_center_power_bonus))
 	var shot_pos: Vector3 = puck.get_puck_position()
-	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, shot_pos, SoundManager.shot_volume_db(power), 0.04)
+	SoundManager.play_world(SoundManager.Sound.SHOT_SLAPPER, shot_pos, SoundManagerScript.shot_volume_db(power), 0.04)
 	_record_replay_audio_event("shot", shot_pos, power,
 			{"is_slapper": true, "team": skater.get_team_id()})
 	# Fan the cue out to the other clients (the shooter already played it locally).
@@ -3773,7 +3779,7 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
 	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
-	SoundManager.play_world(sound, shot_pos, SoundManager.shot_volume_db(power), 0.04)
+	SoundManager.play_world(sound, shot_pos, SoundManagerScript.shot_volume_db(power), 0.04)
 	if NetworkManager.is_host:
 		_record_replay_audio_event("shot", shot_pos, power,
 				{"is_slapper": is_slapper, "team": _registry.resolve_team_id_for_peer(shooter_peer_id)})
@@ -4045,10 +4051,11 @@ func on_carrier_puck_dropped() -> void:
 		puck_controller.notify_local_puck_dropped()
 
 
-func on_local_player_picked_up_puck(settle_until_ms: int = 0) -> void:
+func on_local_player_picked_up_puck(settle_until_ms: int = 0, feed_packed: int = 0) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null:
-		record.controller.on_puck_picked_up_network(settle_until_ms)
+		record.controller.on_puck_picked_up_network(settle_until_ms,
+				SnapshotEventLog.unpack_feed(feed_packed))
 		puck_controller.notify_local_pickup(record.skater, settle_until_ms)
 
 

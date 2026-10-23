@@ -647,8 +647,8 @@ static func _cage_bar(k: KeeperMeshKit, o: Vector3, a: Vector2, b: Vector2) -> v
 	var prev := Vector3.ZERO
 	for i: int in STEPS + 1:
 		var q: Vector2 = a.lerp(b, float(i) / float(STEPS))
-		var wrap: float = maxf(absf(q.x) - _CAGE_FLAT_HALF, 0.0)
-		var p: Vector3 = o + Vector3(q.x, q.y, _CAGE_FRONT_Z + _CAGE_WRAP * wrap * wrap)
+		var round_by: float = maxf(absf(q.x) - _CAGE_FLAT_HALF, 0.0)
+		var p: Vector3 = o + Vector3(q.x, q.y, _CAGE_FRONT_Z + _CAGE_WRAP * round_by * round_by)
 		if i > 0:
 			k.rod(S.CAGE, prev, p, 0.0035)
 		prev = p

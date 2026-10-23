@@ -41,9 +41,9 @@ func test_applying_hard_leaves_every_authored_default_untouched() -> void:
 	var authored: GoalieController = autofree(GoalieController.new())
 	var ctrl: GoalieController = autofree(GoalieController.new())
 	ctrl.apply_skill_profile(GoalieSkillProfile.hard())
-	for name: StringName in _MIRRORED_EXPORTS:
-		assert_almost_eq(float(ctrl.get(name)), float(authored.get(name)), 1e-9,
-				"applying Hard must not move `%s` — Hard IS the authored default" % name)
+	for export_name: StringName in _MIRRORED_EXPORTS:
+		assert_almost_eq(float(ctrl.get(export_name)), float(authored.get(export_name)), 1e-9,
+				"applying Hard must not move `%s` — Hard IS the authored default" % export_name)
 
 
 # The list above has to stay complete or the guard quietly shrinks. Every field

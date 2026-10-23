@@ -75,6 +75,9 @@ func setup(skater: Skater) -> void:
 		shaft = shaft.duplicate() as BoxMesh
 		shaft.subdivide_depth = FLEX_SEGMENTS
 		_skater.stick_mesh.mesh = shaft
+	# Posed from the markers as drawn (Skater.drawn_blade / drawn_top_hand), so
+	# the engine must not interpolate it a second time.
+	_skater.stick_mesh.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 
 
 # The uniform pass installs a fresh shaft ShaderMaterial (uniform apply,
@@ -93,7 +96,6 @@ func notify_material_rebuilt() -> void:
 # frame's cosmetic tilt; null until Skater has built it.
 func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	var stick_mesh: MeshInstance3D = _skater.stick_mesh
-	var upper_body: Node3D = _skater.upper_body
 	var stick_origin: Vector3 = _skater.drawn_top_hand()
 	var to_tip: Vector3 = _hosel_tip_upper_body(blade_mesh) - stick_origin
 	if to_tip.length_squared() < 0.0001:
@@ -111,15 +113,14 @@ func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	# SkaterArmRig's bone poses for why the trio is expensive). Unlike the arm bones
 	# the shaft is NOT rotationally symmetric — the handle-wrap paint reads its
 	# faces — so the up vector is carried through exactly rather than replaced by
-	# a convenience fallback: world UP pulled into upper-body space reproduces
-	# the previous roll, where any other choice would spin the wrap.
+	# a convenience fallback: world UP pulled into upper-body space, or through a
+	# slapshot the up the swing has carried (Skater.shaft_roll_up), where any
+	# other choice would spin the wrap.
 	# Z scale is the only component this owns; x/y are the shaft thickness the
 	# sizing seams set, so they are read back rather than overwritten.
 	var shaft_scale: Vector3 = stick_mesh.scale
 	shaft_scale.z = shaft_len
-	var up_local: Vector3 = upper_body.global_transform.basis.inverse() * Vector3.UP
-	if absf(dir.dot(up_local.normalized())) > 0.999:
-		up_local = Vector3.FORWARD
+	var up_local: Vector3 = _skater.shaft_roll_up(dir)
 	stick_mesh.transform = Transform3D(
 			Basis.looking_at(dir, up_local).scaled_local(shaft_scale),
 			butt_start + dir * (shaft_len * 0.5))
@@ -219,13 +220,13 @@ func _solve_flex_axis(shaft_dir: Vector3) -> float:
 
 # The hosel throat's tip in upper-body space: the fixed blade-local tip (the
 # lie axis × hosel length off the heel) carried through the blade mesh's
-# cosmetic tilt and the marker's live orientation.
+# cosmetic tilt and the marker as drawn this frame.
 func _hosel_tip_upper_body(blade_mesh: MeshInstance3D) -> Vector3:
 	var lie: float = deg_to_rad(_skater.blade_lie_deg)
 	var tip_local: Vector3 = Vector3(0.0, sin(lie), cos(lie)) * _skater.blade_hosel_length
 	if blade_mesh != null and is_instance_valid(blade_mesh):
 		tip_local = blade_mesh.transform * tip_local
-	return _skater.blade.transform * tip_local
+	return _skater.drawn_blade() * tip_local
 
 
 # Caps the extended butt end with the knob, its long axis (local Y) aligned to

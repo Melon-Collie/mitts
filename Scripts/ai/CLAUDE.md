@@ -159,6 +159,15 @@ cross-seam feed that arrives while the keeper is still on the passer's side is
 one-timed (`_try_shot_reception`), not caught and turned — turning hands the
 keeper the time the pass took from him. `test_one_timer_chain.gd` holds both.
 
+**Wound up, the one-timer man only glides, pivots and shuffles**, so he presses
+once that is enough to set before the feed arrives (`SkaterAgentOneTimer
+.time_to_set`): the hips into the stance at their pivot rate, the circle onto
+the pass's line on the glide he carries and a shuffle. Until then he skates to
+the line; a feed that will arrive before he could set, and before a wind-up
+could open the window, he catches instead. He leads the swing against the
+feed's pull (`swing_for`), so the shot lands where he aimed it.
+`test_bot_one_timer_loop.gd` drives the real controller through it.
+
 ## Chase doctrine
 
 **Chasing a carrier is angled, not straight-line.** The intercept is shaded one

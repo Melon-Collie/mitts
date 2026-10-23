@@ -97,7 +97,7 @@ func _local(world: Vector2, body: Vector2) -> Vector3:
 func _ref_share(puck: Vector2, aim: Vector2, body: Vector2, left: bool,
 		lr: WristerLoad.Result) -> float:
 	WristerLoad.solve(lr, _local(puck, body), _local(aim, body), left, _load_cfg)
-	return WristerLoad.power_share(lr.load, lr.is_backhand, UNLOADED, BACKHAND)
+	return WristerLoad.power_share(lr.load_share, lr.is_backhand, UNLOADED, BACKHAND)
 
 
 func test_the_bearing_path_matches_the_local_frame_solve() -> void:

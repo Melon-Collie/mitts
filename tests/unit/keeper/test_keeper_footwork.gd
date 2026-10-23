@@ -344,34 +344,34 @@ func test_the_t_push_lead_skate_turns_along_the_push_and_squares_to_stop() -> vo
 # The stop shows as much as the speed it stops: a shuffle's is softer than a
 # T-push's.
 func test_a_slower_stop_leans_back_less() -> void:
-	var ready := KeeperPose.new()
-	KeeperPoses.ready(ready)
+	var ready_pose := KeeperPose.new()
+	KeeperPoses.ready(ready_pose)
 	var lean: Array[float] = []
 	for kind: int in [T_PUSH, SHUFFLE]:
 		_fw = KeeperFootwork.new()
 		_go(kind, 1.5)
 		_run()
 		_fw.pose(_pose)
-		lean.append(absf(_pose.lumbar_rot.z - ready.lumbar_rot.z))
+		lean.append(absf(_pose.lumbar_rot.z - ready_pose.lumbar_rot.z))
 	assert_gt(lean[0], lean[1], "the T-push stops harder than the shuffle")
 	assert_gt(lean[1], 0.01, "the shuffle's stop still shows")
 
 
 func test_set_and_settled_is_the_ready_stance() -> void:
-	var ready := KeeperPose.new()
-	KeeperPoses.ready(ready)
+	var ready_pose := KeeperPose.new()
+	KeeperPoses.ready(ready_pose)
 	for kind: int in MOVES:
 		_fw = KeeperFootwork.new()
 		_fw.pose(_pose)
-		assert_eq(_pose.pelvis, ready.pelvis, "before he moves")
+		assert_eq(_pose.pelvis, ready_pose.pelvis, "before he moves")
 		_go(kind, 0.8)
 		_run()
 		for i: int in int(KeeperFootwork.SETTLE_S / DT) + 2:
 			_fw.step(DT)
 		_fw.pose(_pose)
 		var what: String = KeeperFootwork.Move.keys()[kind]
-		assert_eq(_pose.pelvis, ready.pelvis, what)
-		assert_eq(_pose.lumbar_rot, ready.lumbar_rot, what)
+		assert_eq(_pose.pelvis, ready_pose.pelvis, what)
+		assert_eq(_pose.lumbar_rot, ready_pose.lumbar_rot, what)
 		for side: int in 2:
-			assert_eq(_pose.legs[side].ankle, ready.legs[side].ankle, "%s ankle %d" % [what, side])
-			assert_eq(_pose.legs[side].toe, ready.legs[side].toe, "%s toe %d" % [what, side])
+			assert_eq(_pose.legs[side].ankle, ready_pose.legs[side].ankle, "%s ankle %d" % [what, side])
+			assert_eq(_pose.legs[side].toe, ready_pose.legs[side].toe, "%s toe %d" % [what, side])

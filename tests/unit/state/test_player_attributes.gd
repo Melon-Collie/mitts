@@ -421,10 +421,10 @@ func test_flex_is_slapper_stick_vs_wrister_stick() -> void:
 	assert_almost_eq(0.6 * whippy.wrister_unloaded_mult(), 0.70, 0.0001)
 	assert_almost_eq(0.6 * stiff.wrister_unloaded_mult(), 0.50, 0.0001)
 	# So whippy never loses a wrister: ahead on a partial load, level on a full one.
-	for load: float in [0.0, 0.5, 1.0]:
-		var w: float = WristerLoad.power_share(load, false, 0.6 * whippy.wrister_unloaded_mult(), 1.0)
-		var s: float = WristerLoad.power_share(load, false, 0.6 * stiff.wrister_unloaded_mult(), 1.0)
-		assert_gte(w, s, "whippy wrister at load %.1f" % load)
+	for stance_load: float in [0.0, 0.5, 1.0]:
+		var w: float = WristerLoad.power_share(stance_load, false, 0.6 * whippy.wrister_unloaded_mult(), 1.0)
+		var s: float = WristerLoad.power_share(stance_load, false, 0.6 * stiff.wrister_unloaded_mult(), 1.0)
+		assert_gte(w, s, "whippy wrister at load %.1f" % stance_load)
 	assert_gt(whippy.stick_bend_mult(), stiff.stick_bend_mult(), "whippy visibly bows more")
 	# Height trades the same way underneath.
 	var tall := PlayerAttributes.new(79, 235)

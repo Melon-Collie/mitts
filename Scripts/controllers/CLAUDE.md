@@ -658,10 +658,11 @@ straight into it), and above it the brake is the stop and the stick is ignored.
 The local input is shaped before it is recorded (`ShuffleStepShaper`): a shuffle
 let go of holds its stick until the step-together closes and brakes to rest
 there, and a stick already driving along the travel when the brake goes on at
-speed is held off, so W held through a stop stops. Bots never shuffle: their
-brake keeps steering in the stick, so `AIController.apply_decision` drops it
-under the brake below the gate (`AIBotMechanics.braked_stick`), and
-`AICarryRollout` prices a BRAKE as that stop. The glide is the stance with a joint-space
+speed is held off, so W held through a stop stops. Bots shuffle only onto a
+one-timer's line, wound up (`InputState.bot_shuffle`): otherwise their brake
+keeps steering in the stick, so `AIController.apply_decision` drops it under
+the brake below the gate (`AIBotMechanics.braked_stick`), and `AICarryRollout`
+prices a BRAKE as that stop. The glide is the stance with a joint-space
 edge sway and, out of a turn, a light inside knee; as it comes still it stands on
 the ice like the authored states (`SkaterLocomotion.on_ice`, `1 − glide × speed`)
 on soft knees (`rest_stance`), so a standing skater's lean settles over two

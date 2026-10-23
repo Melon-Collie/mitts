@@ -69,11 +69,11 @@ func test_inside_the_field_only_the_fill_passes_write_the_lists() -> void:
 	var func_re := RegEx.create_from_string("(?m)^(?:static )?func ([a-z_0-9]+)\\(")
 	var bodies: Array[RegExMatch] = func_re.search_all(src)
 	for i: int in bodies.size():
-		var name: String = bodies[i].get_string(1)
-		if name in ["fill", "fill_receivers"]:
+		var body_name: String = bodies[i].get_string(1)
+		if body_name in ["fill", "fill_receivers"]:
 			continue
 		var end: int = bodies[i + 1].get_start() if i + 1 < bodies.size() else src.length()
 		var body: String = src.substr(bodies[i].get_start(), end - bodies[i].get_start())
 		for list: String in publics:
 			var w := RegEx.create_from_string("(?<![\\w.])%s%s" % [list, _LIST_WRITE])
-			assert_null(w.search(body), "AICarrierField.%s writes %s" % [name, list])
+			assert_null(w.search(body), "AICarrierField.%s writes %s" % [body_name, list])

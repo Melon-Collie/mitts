@@ -71,9 +71,9 @@ func test_at_a_sharp_angle_he_stands_on_the_near_post_turned_to_the_puck() -> vo
 		_faces(spot, puck, what)
 		# His edge on the post's side, turned with him, on the post's face.
 		var skel := KeeperSkeleton.new()
-		var ready := KeeperPose.new()
-		KeeperPoses.ready(ready)
-		skel.pose(ready)
+		var ready_pose := KeeperPose.new()
+		KeeperPoses.ready(ready_pose)
+		skel.pose(ready_pose)
 		var edge: Vector3 = Basis(Vector3.UP, _motor.route.facing) * KeeperGear.post_contact(skel, side)
 		var on := Vector2(spot.x + edge.x, spot.y + edge.z)
 		var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)

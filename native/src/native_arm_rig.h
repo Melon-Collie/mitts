@@ -25,7 +25,6 @@ class NativeArmRig : public godot::RefCounted {
 	GDCLASS(NativeArmRig, godot::RefCounted)
 
 	godot::ObjectID skeleton_id;
-	godot::ObjectID upper_body_id;
 	int32_t bone_upper = -1;
 	int32_t bone_forearm = -1;
 	int32_t bone_cuff = -1;
@@ -59,8 +58,7 @@ protected:
 
 public:
 	// `bones` is (upper arm, forearm, cuff, elbow, glove, spine).
-	void bind(godot::Object *p_skeleton, godot::Object *p_upper_body,
-			const godot::PackedInt32Array &p_bones);
+	void bind(godot::Object *p_skeleton, const godot::PackedInt32Array &p_bones);
 	// The cap is the one on this arm's side; `cap_state` is get_cap_state's
 	// shape, the rig's current view of it.
 	void configure(const godot::Vector3 &p_thick_upper, const godot::Vector3 &p_thick_forearm,
@@ -72,11 +70,14 @@ public:
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off
-	// the stick; `pole` the arm's elbow pole mirrored onto its side, untucked.
+	// the stick; `frame` UpperBody as drawn, in skeleton space
+	// (Skater.drawn_upper_body); `pole` the arm's elbow pole mirrored onto its
+	// side, untucked.
 	// `lengths` is (upper arm, forearm, working length, girdle slack), `load`
 	// (check lead, shoulder half-width, cuff back of the hand).
 	bool pose(const godot::Vector3 &marker, const godot::Vector3 &hand,
-			const godot::Vector3 &grip, const godot::Basis &trunk_texture, const godot::Vector3 &pole,
+			const godot::Vector3 &grip, const godot::Transform3D &frame,
+			const godot::Basis &trunk_texture, const godot::Vector3 &pole,
 			const godot::Vector4 &lengths, const godot::Vector3 &load);
 
 	// (cap basis, girdle give) as one Transform3D, so the rig syncs in one read.

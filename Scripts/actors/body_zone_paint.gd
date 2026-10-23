@@ -28,24 +28,20 @@ var _tex := PackedVector4Array()
 var _ghost: bool = false
 
 
-func _init(zone_count: int) -> void:
-	assert(zone_count <= MAX_ZONES, "BodyZonePaint: %d zones, the shader holds %d" % [
-			zone_count, MAX_ZONES])
+func _init(count: int) -> void:
+	assert(count <= MAX_ZONES, "BodyZonePaint: %d zones, the shader holds %d" % [
+			count, MAX_ZONES])
 	material.shader = _SHADER
-	_records.resize(zone_count)
+	_records.resize(count)
 	_textures.resize(MAX_TEXTURES)
 	_albedo.resize(MAX_ZONES)
 	_pbr.resize(MAX_ZONES)
 	_tex.resize(MAX_ZONES)
 	_tex.fill(Vector4(-1.0, 0.0, 0.0, 0.0))
-	for zone: int in zone_count:
-		_records[zone] = StandardMaterial3D.new()
-		_compile(zone)
+	for z: int in count:
+		_records[z] = StandardMaterial3D.new()
+		_compile(z)
 	_push()
-
-
-func zone_count() -> int:
-	return _records.size()
 
 
 # The record a zone is painted from. Read it freely; after editing it in place,

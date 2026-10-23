@@ -440,9 +440,9 @@ func pose(p: KeeperPose) -> void:
 		# drives square to the diagonal, its skate turned with it, or the shin
 		# pitches the pad's face into the ice. Out in front, the face tips up.
 		var turned: float = _turn if phase == Phase.PUSH else _turn_from * (1.0 - back)
-		var off_line: float = atan2(-_dir.y * _side, _dir.x * _side) * turned
-		drive = drive.rotated(Vector3.UP, off_line)
-		pushing.toe = pushing.toe.rotated(Vector3.UP, off_line)
+		var square_to: float = atan2(-_dir.y * _side, _dir.x * _side) * turned
+		drive = drive.rotated(Vector3.UP, square_to)
+		pushing.toe = pushing.toe.rotated(Vector3.UP, square_to)
 	var driven: float = smoothstep(0.0, PUSH_KNEE_DRIVEN_AT, out)
 	pushing.knee_pole = pushing.knee_pole.lerp(drive, driven)
 	pushing.shin_front = pushing.shin_front.lerp(drive, driven)

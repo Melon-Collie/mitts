@@ -112,7 +112,7 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 		for arm: int in 2:
 			var bones := PackedInt32Array(_ARM_PARTS[arm])
 			bones.append(SkaterBodySkeleton.SPINE_BONE)
-			_native_arms[arm].bind(skeleton, upper_body, bones)
+			_native_arms[arm].bind(skeleton, bones)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "UpperMesh"
 	_mesh.mesh = SkaterMeshBuilder.shared_upper_body_mesh()
@@ -210,7 +210,8 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	if not _native_arms.is_empty():
 		_native_dirty = true  # the native's cap state is behind the one posed here
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
-	var hand_s: Vector3 = _skater.upper_body.transform * hand_local
+	var frame: Transform3D = _skater.drawn_upper_body()
+	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
 	# The deltoid cap rides the girdle's give with the arm, in the frame it is
 	# posed in (the spine's, before the trunk texture rotates it).
@@ -223,7 +224,7 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
-	_pose_glove(glove, elbow_s, hand_s, _skater.upper_body.transform.basis * grip_local)
+	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
 	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
 			spine.affine_inverse() * elbow_s)
 
@@ -238,7 +239,8 @@ func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 	var pole: Vector3 = _skater.arm_pole_local
 	pole.x *= pole_sign
 	var arm_len: float = _skater.upper_arm_length + _skater.forearm_length
-	if not _native_arms[arm].pose(marker_local, hand_local, grip_local, _trunk_texture, pole,
+	if not _native_arms[arm].pose(marker_local, hand_local, grip_local, _skater.drawn_upper_body(),
+			_trunk_texture, pole,
 			Vector4(_skater.upper_arm_length, _skater.forearm_length,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
@@ -299,7 +301,7 @@ func visible_shoulder(marker_local: Vector3) -> Vector3:
 	if _skeleton == null:
 		return marker_local
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
-	return _skater.upper_body.transform.affine_inverse() \
+	return _skater.drawn_upper_body().affine_inverse() \
 			* (spine * _textured_shoulder(marker_local))
 
 
@@ -309,7 +311,7 @@ func visible_shoulder(marker_local: Vector3) -> Vector3:
 func arm_root(marker_local: Vector3, hand_local: Vector3) -> Vector3:
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	return TwoBoneIK.reach_root(spine * _textured_shoulder(marker_local),
-			_skater.upper_body.transform * hand_local,
+			_skater.drawn_upper_body() * hand_local,
 			(_skater.upper_arm_length + _skater.forearm_length) * _skater.arm_working_extension,
 			_skater.shoulder_reach_m)
 

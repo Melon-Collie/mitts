@@ -125,6 +125,14 @@ beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
 show a stroke or a state firing at the wrong time.
 
+**To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
+[scenarios]` drives the real `Puck` through the host's analytic drive (a board
+glance, a square hit, a landing, the faceoff drop, a mid-air deflection, a saucer
+off a blade, the saucer tipped) and captures a frame every few ticks from a
+camera following it, printing `PuckSpinRig`'s spin, tilt and tumble per frame
+(`tools/puck_strip_runner.gd`; `--list` prints the names). PNGs go to
+`.preview/puck/`; the full set takes seconds.
+
 **To see a SCREEN, render it.** `.claude/hooks/render-ui.sh [shots]` drives the
 real menus and HUD (title card, each Options tab, the free-play HUD and every
 side-menu overlay, the tutorial HUD, the lobby, a 3v3 against bots a few seconds
@@ -170,10 +178,16 @@ networking changes, describe what to test locally and wait for the user to verif
 gdtoolkit's gdlint (tuned via `.gdlintrc`) — dead code, unused args/vars,
 `duplicated-load`, trailing whitespace. A committed `.githooks/pre-commit` gate
 blocks any commit with gdlint problems in staged `.gd` files (`--no-verify`
-bypasses). Keep the tree gdlint-clean. Caveat: gdlint can't see Godot's
-engine-specific analyzer warnings (`SHADOWED_VARIABLE_BASE_CLASS`, `INT_AS_ENUM`,
-narrowing) — those stay editor-only, so a clean gdlint run isn't proof the editor
-is warning-free.
+bypasses). Keep the tree gdlint-clean.
+
+**gdlint can't see Godot's own analyzer warnings** — shadowing (`name`, `seed`,
+`load` and their kin), a static function called on an instance (the `SoundManager`
+autoload's static helpers go through `preload`ed script constants), int-as-enum,
+narrowing. `.claude/hooks/check-godot-warnings.sh` compiles every script with
+those raised to errors (via a temporary `override.cfg`) and lists each by file and
+line, ~20 s; the pre-commit gate runs it when Godot is found and CI runs it on
+every PR. Silence a deliberate one at its site with `@warning_ignore("<name>")`,
+never by lowering a level in `project.godot`.
 
 **Two limits gate file shape** (`test_no_god_class_growth.gd`): 800 lines a
 file, 25 public functions a class. Files already past them are named in a list,

@@ -1670,9 +1670,9 @@ func _compute_threat_position(delta: float = 0.0) -> Vector3:
 		# NOT front-run a back-door pass: he reads where the puck IS, and loses the
 		# race across the crease to a hard cross-seam pass. The lead scales with puck
 		# speed, so it only bites on FAST loose pucks.
-		var puck_lead: Vector3 = _puck_velocity_est * loose_puck_velocity_lead_time
-		puck_lead.y = 0.0
-		return puck.global_position + puck_lead
+		var loose_lead: Vector3 = _puck_velocity_est * loose_puck_velocity_lead_time
+		loose_lead.y = 0.0
+		return puck.global_position + loose_lead
 	# `_chest_t` ramps 0 in tight → 1 at range off the carrier's distance to goal.
 	# It fades the jittery puck-velocity lead out and slows the tracking lerp; the
 	# body weight itself is flat (see the `shooter_weight` doc-block).

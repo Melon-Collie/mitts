@@ -75,8 +75,9 @@ func _process(_delta: float) -> void:
 	var height: float = maxf(0.0, puck_pos.y - _puck.ice_height)
 
 	# Pin to the ice plane directly below the puck. position is local to the puck;
-	# the puck only yaws (angular X/Z axis-locked), so local Y maps to world Y and
-	# local X/Z=0 keeps the blob on the puck's vertical axis.
+	# the puck node never rotates (its drawn tilt and spin are on the mesh beside
+	# this), so local Y maps to world Y and local X/Z=0 keeps the blob on the
+	# puck's vertical axis.
 	# A grounded puck holds every value below constant, so the writes are guarded
 	# rather than re-pushed each rendered frame (scale and albedo are
 	# RenderingServer pushes; position dirties the transform).

@@ -23,7 +23,7 @@ class Result:
 	# World XZ direction from the body to hold the puck in.
 	var dir: Vector2 = Vector2.ZERO
 	var is_backhand: bool = false
-	var load: float = 1.0
+	var load_share: float = 1.0
 	# Share of max_wrister_power the release from there can carry
 	# (WristerLoad.power_share).
 	var power_share: float = 1.0
@@ -37,7 +37,7 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 		facing_scratch: FacingRules.Result, load_scratch: WristerLoad.Result) -> void:
 	out.dir = aim
 	out.is_backhand = false
-	out.load = 1.0
+	out.load_share = 1.0
 	out.power_share = 1.0
 	out.facing = facing
 	if aim.length_squared() < 0.000001:
@@ -61,13 +61,13 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 		var body_yaw: float = _yaw(facing_scratch.target)
 		WristerLoad.solve_load(load_scratch, _bearing(_yaw(pocket), body_yaw, stick_sign),
 				_bearing(aim_yaw, body_yaw, stick_sign), load_cfg)
-		var share: float = WristerLoad.power_share(load_scratch.load,
+		var share: float = WristerLoad.power_share(load_scratch.load_share,
 				load_scratch.is_backhand, unloaded_share, backhand_coefficient)
 		if share > best:
 			best = share
 			out.dir = pocket
 			out.is_backhand = load_scratch.is_backhand
-			out.load = load_scratch.load
+			out.load_share = load_scratch.load_share
 			out.power_share = share
 			out.facing = facing_scratch.target
 
@@ -80,13 +80,13 @@ static func share_at(puck_offset: Vector2, aim: Vector2, facing: Vector2,
 		backhand_coefficient: float, load_scratch: WristerLoad.Result) -> float:
 	if aim.length_squared() < 0.000001:
 		load_scratch.is_backhand = false
-		load_scratch.load = 1.0
+		load_scratch.load_share = 1.0
 	else:
 		var stick_sign: float = _stick_sign(is_left_handed)
 		var body_yaw: float = _yaw(facing)
 		WristerLoad.solve_load(load_scratch, _bearing(_yaw(puck_offset), body_yaw, stick_sign),
 				_bearing(_yaw(aim), body_yaw, stick_sign), load_cfg)
-	return WristerLoad.power_share(load_scratch.load, load_scratch.is_backhand,
+	return WristerLoad.power_share(load_scratch.load_share, load_scratch.is_backhand,
 			unloaded_share, backhand_coefficient)
 
 

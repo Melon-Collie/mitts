@@ -249,7 +249,7 @@ func apply_decision(delta: float) -> void:
 		return
 	var t0: int = Time.get_ticks_usec()
 	_pending_input.move_vector = AIBotMechanics.braked_stick(_pending_input.move_vector,
-			_pending_input.brake, skater.velocity)
+			_pending_input.brake, skater.velocity, _pending_input.bot_shuffle)
 	_process_input(_pending_input, delta)
 	HostCostProbe.record(HostCostProbe.Section.SKATER_STEP, Time.get_ticks_usec() - t0)
 	skater.current_shot_state = _sm.get_state() as int

@@ -204,10 +204,10 @@ static func _rise_box(skel: KeeperSkeleton, side: int) -> Transform3D:
 # own y to the reflected frame his bones have, so his drawn stick is the true
 # mirror.
 static func _stick_box(skel: KeeperSkeleton, part: int) -> Transform3D:
-	var box: Transform3D = _stick_box_from_lie(skel, part)
+	var lie: Transform3D = _stick_box_from_lie(skel, part)
 	if skel.mirrored:
-		box.basis = Basis(-box.basis.x, box.basis.y, -box.basis.z)
-	return box
+		lie.basis = Basis(-lie.basis.x, lie.basis.y, -lie.basis.z)
+	return lie
 
 
 static func _stick_box_from_lie(skel: KeeperSkeleton, part: int) -> Transform3D:
@@ -218,10 +218,10 @@ static func _stick_box_from_lie(skel: KeeperSkeleton, part: int) -> Transform3D:
 		# The blade's height runs up its face, in the plane the paddle shares, and
 		# it rests on the ice on its lowest edge.
 		var up: Vector3 = (paddle - blade * paddle.dot(blade)).normalized()
-		var basis := Basis(blade, up, blade.cross(up))
+		var flat := Basis(blade, up, blade.cross(up))
 		var center: Vector3 = skel.stick_heel + blade * h.x
-		center.y = skel.stick_heel.y + h.y * absf(up.y) + h.z * absf(basis.z.y)
-		return Transform3D(basis, center)
+		center.y = skel.stick_heel.y + h.y * absf(up.y) + h.z * absf(flat.z.y)
+		return Transform3D(flat, center)
 	var across: Vector3 = (blade - paddle * blade.dot(paddle)).normalized()
 	var basis := Basis(across, paddle, across.cross(paddle))
 	var along: float = (KeeperAnatomy.PADDLE_ROOT_ABOVE_HEEL_M + KeeperAnatomy.PADDLE_LENGTH_M) * 0.5

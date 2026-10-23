@@ -398,9 +398,9 @@ const ICE_FRICTION: float = 0.05
 # (physics/3d/default_gravity = 9.8, un-overridden) rather than textbook 9.81;
 # tests/unit/rules/test_physics_constant_mirrors.gd pins the pair.
 const GRAVITY_M_S2: float = 9.8
-# Puck deceleration on ice — constant Coulomb model. The puck slides flat
-# (Puck.tscn locks angular X/Z), so friction force = μ·m·g and a = μ·g ≈ 0.49 m/s²,
-# independent of speed and mass. Single source of truth for the host's real glide
+# Puck deceleration on ice — constant Coulomb model. The puck slides flat (any
+# tilt on screen is cosmetic), so friction force = μ·m·g and a = μ·g ≈ 0.49
+# m/s², independent of speed and mass. Single source of truth for the host's real glide
 # so AI trajectory prediction and client puck extrapolation decelerate exactly as
 # the host's drive does — all three read this one derivation from ICE_FRICTION.
 const PUCK_ICE_DECEL_M_S2: float = ICE_FRICTION * GRAVITY_M_S2

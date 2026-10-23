@@ -16,7 +16,6 @@ func test_print_head_to_head_vs_geometric() -> void:
 	# depth — i.e. the honest "nobody is beaten yet" case. Where it diverges most
 	# from the baseline is exactly where it conditions on a goalie already moved.
 	gut.p("  dist   baseline    geometric(set goalie)")
-	var speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	var base_sum: float = 0.0
 	var geo_sum: float = 0.0
@@ -24,8 +23,7 @@ func test_print_head_to_head_vs_geometric() -> void:
 		var shooter := Vector3(0.0, 0.0, GOAL_Z + d)
 		var goalie := Vector3(0.0, 0.0, GOAL_Z + minf(1.3, d * 0.4))
 		var base: float = _centred(d)
-		var geo: float = AIActionScoring.expected_goals(
-				shooter, goal, goalie, GameRules.NET_HALF_WIDTH, speed)
+		var geo: float = AIActionScoring.expected_goals(shooter, goal, goalie)
 		base_sum += base
 		geo_sum += geo
 		gut.p("  %5.0f m   %.3f       %.3f" % [d, base, geo])
@@ -41,14 +39,12 @@ func test_print_head_to_head_vs_beaten_goalie() -> void:
 	# execution term: getting the goalie moving is step one, burying it is step
 	# two, and only the baseline is currently pricing both.
 	gut.p("  dist   baseline    geometric(beaten goalie)   ratio")
-	var speed: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	for d: float in [3.0, 5.0, 8.0, 11.0]:
 		var shooter := Vector3(0.0, 0.0, GOAL_Z + d)
 		var goalie := Vector3(0.9, 0.0, GOAL_Z + 0.6)   # slid off, mid-recovery
 		var base: float = _centred(d)
-		var geo: float = AIActionScoring.expected_goals(
-				shooter, goal, goalie, GameRules.NET_HALF_WIDTH, speed)
+		var geo: float = AIActionScoring.expected_goals(shooter, goal, goalie)
 		gut.p("  %5.0f m   %.3f       %.3f                   %.1fx"
 				% [d, base, geo, geo / maxf(base, 0.001)])
 	pass_test("printed")

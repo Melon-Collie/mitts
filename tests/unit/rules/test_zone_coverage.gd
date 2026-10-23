@@ -61,9 +61,9 @@ func test_pressure_owner_is_unique_across_a_zone_sweep() -> void:
 		AIRoleSlots.Slot.ZONE_W_WEAK]
 	for xi: int in range(-12, 13, 3):
 		for di: int in range(-3, 19, 2):
-			var owner: int = AIZoneCoverage.pressure_owner(
+			var owner_id: int = AIZoneCoverage.pressure_owner(
 					1.0, NET_Z, _pt(float(xi), float(di)))
-			assert_has(zone_roles, owner,
+			assert_has(zone_roles, owner_id,
 					"x=%d depth=%d has no owner" % [xi, di])
 
 

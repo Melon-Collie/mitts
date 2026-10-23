@@ -382,8 +382,8 @@ func _update_pad_cursor(delta: float) -> void:
 	# ice, and the right thumb leaves the aim for X to throw the cross-check.
 	elif not _pad_held("hit"):
 		# Stickhandle mode, stick released → ease the blade to its forward carry rest.
-		var ease: float = clampf(REST_RETURN_RATE * delta, 0.0, 1.0)
-		_pad_cursor = _pad_cursor.lerp(_facing_rest_screen(anchor), ease)
+		var blend: float = clampf(REST_RETURN_RATE * delta, 0.0, 1.0)
+		_pad_cursor = _pad_cursor.lerp(_facing_rest_screen(anchor), blend)
 
 # Deadzoned right stick (aim), in the JOY_AXIS_RIGHT_* / screen convention.
 func _pad_right_stick_dz() -> Vector2:
