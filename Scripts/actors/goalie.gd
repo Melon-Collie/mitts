@@ -149,14 +149,9 @@ func apply_uniform(colors: Dictionary) -> void:
 	_uniform_coordinator.apply_uniform(colors)
 
 
-# ── A stand-in body ──────────────────────────────────────────────────────────
-# Another body drawn and saving in this goalie's place (the rebuilt keeper,
-# KeeperController): this node's own meshes hidden and its kit and lettering
-# passed on, its own colliders off, and its saves made on boxes the stand-in's
-# controller places, each under the part body that names its material for the
-# puck (Puck._classify_save_part). Each part's first box also places that part
-# (the blocker's, the BlockArm it hangs from), so every reader of this node's
-# part positions reads the stand-in's.
+# ── A stand-in body (the keeper; Scripts/domain/keeper/CLAUDE.md → In a match)
+# Each box sits under the part body that names its material for the puck
+# (Puck._classify_save_part), and a part's first box places that part.
 var _stand_in: Node3D = null
 var _save_boxes: Array[CollisionShape3D] = []
 # Per box: the node it places, or null where an earlier box places it.
