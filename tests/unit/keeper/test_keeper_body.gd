@@ -23,6 +23,8 @@ func _stances() -> Array:
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p)],
 		["half L", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, -1.0)],
 		["half R", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, 1.0)],
+		["push L", func(p: KeeperPose) -> void: KeeperPoses.butterfly_push(p, -1.0)],
+		["push R", func(p: KeeperPose) -> void: KeeperPoses.butterfly_push(p, 1.0)],
 		["extension L", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, -1.0)],
 		["extension R", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, 1.0)],
 		["kick L", func(p: KeeperPose) -> void: KeeperPoses.kick(p, -1.0)],

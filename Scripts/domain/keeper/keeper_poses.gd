@@ -49,6 +49,14 @@ const BUTTERFLY_FLARE_RAD: float = deg_to_rad(18.0)
 # face so the paddle rises in front of it, its heel up to the standing skate
 # along the ice.
 const HALF_BUTTERFLY_BLADE := Vector3(-0.04, 0.0, -0.52)
+# The butterfly push's loaded skate: out wide where the butterfly flares it, a
+# little ahead of him, its inside edge on the ice; its knee drawn in and
+# forward off the ice, so the pad lies across from the knee to the skate,
+# its face to the shooter tipped up just far enough for its bottom edge to
+# rest on the ice rather than dig.
+const BUTTERFLY_PUSH_SKATE := Vector3(0.55, KeeperAnatomy.ANKLE_ON_SKATES_M, -0.15)
+const BUTTERFLY_PUSH_KNEE_POLE := Vector3(-0.8, 0.0, -1.0)
+const BUTTERFLY_PUSH_PAD_FACE := Vector3(0.0, 0.3, -1.0)
 const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
 # Low enough that the extended leg lies within 30° of straight, high enough that
 # its knee still lands near enough the middle for the thigh rise to meet the
@@ -101,6 +109,26 @@ static func ready(p: KeeperPose) -> void:
 	for i: int in 2:
 		_ready_leg(p.legs[i], _side_x(i))
 	_ready_hands(p, 0.0)
+
+
+# The butterfly, loaded to push toward `side`: the pad on that side stays down
+# sealing the ice, and the other leg's knee comes up off the ice and in while
+# its skate plants out wide to drive off. The push from the butterfly, where
+# the half butterfly, its pad standing, is the push from the feet.
+static func butterfly_push(p: KeeperPose, side: float) -> void:
+	butterfly(p)
+	var push: int = 1 if side < 0.0 else 0
+	var sx: float = _side_x(push)
+	var leg: KeeperPose.Leg = p.legs[push]
+	leg.knee_pinned = false
+	leg.ankle = Vector3(sx * BUTTERFLY_PUSH_SKATE.x, BUTTERFLY_PUSH_SKATE.y, BUTTERFLY_PUSH_SKATE.z)
+	leg.knee_pole = Vector3(sx * BUTTERFLY_PUSH_KNEE_POLE.x, BUTTERFLY_PUSH_KNEE_POLE.y,
+			BUTTERFLY_PUSH_KNEE_POLE.z)
+	leg.shin_front = Vector3(sx * BUTTERFLY_PUSH_PAD_FACE.x, BUTTERFLY_PUSH_PAD_FACE.y,
+			BUTTERFLY_PUSH_PAD_FACE.z)
+	leg.foot_mode = KeeperPose.FootMode.FLAT
+	leg.toe = ready_toe(sx)
+	leg.along_shin = 0.0
 
 
 # One leg down in the butterfly (`side`), the other loaded on its skate.

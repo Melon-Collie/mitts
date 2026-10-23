@@ -188,7 +188,7 @@ func _record_slide(target: float) -> Array:
 
 # view name, camera offset from the middle of the move, look-at offset.
 func _views_for(span: float, depth: bool) -> Array:
-	var back: float = 2.6 + maxf(span, 1.0) * 0.9
+	var back: float = 2.6 + maxf(span, 1.0) * 1.3
 	return [
 		["shooter", Vector3(0.0, 1.0, -back), Vector3(0.0, 0.55, 0.0)],
 		["side", Vector3(-back, 1.0, 0.0), Vector3(0.0, 0.55, 0.0)] if depth
