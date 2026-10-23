@@ -37,24 +37,37 @@ static func displacement_m(me: SkaterNetworkState, my_caps: AISkaterCaps,
 	if d.length_squared() < 0.0001:
 		return 0.0
 	var n: Vector2 = d.normalized()
+	var a: float = pair_accel(me, my_caps, SkaterMovementRules.Posture.COMMIT, n, n, man, man_caps)
+	return 0.5 * maxf(a, 0.0) * READ_S * READ_S
+
+
+# The pair's acceleration (m/s²) as a press starts, along the normal from `me`
+# toward `man` (positive moves him back), with `me` skating `intent` in
+# `posture` facing `my_facing`, against the man as he stands now. Zero when
+# neither body drives into the other.
+static func pair_accel(me: SkaterNetworkState, my_caps: AISkaterCaps, posture: int,
+		intent: Vector2, my_facing: Vector2, man: SkaterNetworkState,
+		man_caps: AISkaterCaps) -> float:
+	var d := Vector2(man.position.x - me.position.x, man.position.z - me.position.z)
+	if d.length_squared() < 0.0001:
+		return 0.0
+	var n: Vector2 = d.normalized()
 	var my_mass: float = my_caps.weight if my_caps != null else 1.0
 	var man_mass: float = man_caps.weight if man_caps != null else 1.0
-	var drive_me: float = PressRules.drive(_league, _thrust(my_caps),
-			SkaterMovementRules.Posture.COMMIT, false, false, 1.0, n, n, n, 0.0)
-	var hold_me: float = PressRules.hold(_league, SkaterMovementRules.Posture.COMMIT, false, false,
-			1.0, n, n, 0.0)
-	var posture: int = SkaterMovementRules.posture_of(man.stance_active, man.hit_committed)
-	var grip: float = BodyCheckRules.grip_mult(man.stagger_timer, _check_cfg)
-	var drive_man: float = PressRules.drive(_league, _thrust(man_caps), posture, man.brake_intent,
-			false, BodyCheckRules.thrust_mult(man.stagger_timer, _check_cfg), man.facing,
-			man.move_intent, -n, 0.0)
-	var hold_man: float = PressRules.hold(_league, posture, man.brake_intent, false, grip,
-			man.facing, n, 0.0)
+	var drive_me: float = PressRules.drive(_league, _thrust(my_caps), posture, false, false,
+			BodyCheckRules.thrust_mult(me.stagger_timer, _check_cfg), my_facing, intent, n, 0.0)
+	var hold_me: float = PressRules.hold(_league, posture, false, false,
+			BodyCheckRules.grip_mult(me.stagger_timer, _check_cfg), my_facing, n, 0.0)
+	var man_posture: int = SkaterMovementRules.posture_of(man.stance_active, man.hit_committed)
+	var drive_man: float = PressRules.drive(_league, _thrust(man_caps), man_posture,
+			man.brake_intent, false, BodyCheckRules.thrust_mult(man.stagger_timer, _check_cfg),
+			man.facing, man.move_intent, -n, 0.0)
+	var hold_man: float = PressRules.hold(_league, man_posture, man.brake_intent, false,
+			BodyCheckRules.grip_mult(man.stagger_timer, _check_cfg), man.facing, n, 0.0)
 	if not PressRules.pressing(drive_me, drive_man):
 		return 0.0
-	var a: float = PressRules.pair_accel(my_mass, drive_me, hold_me, man_mass, drive_man,
-			hold_man, 0.0, READ_S)
-	return 0.5 * maxf(a, 0.0) * READ_S * READ_S
+	return PressRules.pair_accel(my_mass, drive_me, hold_me, man_mass, drive_man, hold_man,
+			0.0, READ_S)
 
 
 static func _thrust(caps: AISkaterCaps) -> float:

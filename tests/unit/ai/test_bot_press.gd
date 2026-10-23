@@ -2,8 +2,9 @@ extends GutTest
 
 # The bots' press (SkaterAgentStateMachine.apply_press): a coverer leaned on the
 # man screening our goalie drives into him when the press moves him off the
-# sightline; a screener with a defender on him digs in. Never from a step away,
-# against a man who holds it, as a carrier, or on the beginner tier.
+# sightline; a screener with a defender on him digs in; a carrier skating into a
+# man who stands him up puts the body into it. Never from a step away, against a
+# man who holds it, or on the beginner tier.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
@@ -112,3 +113,64 @@ func test_a_screener_on_the_move_does_not_dig_in() -> void:
 	s.skater_states[SELF_ID].velocity = Vector3(0.0, 0.0, 4.0)
 	var input := InputState.new()
 	assert_false(sm.apply_press(input, s), "at speed the brake is a stop, not an anchor")
+
+
+# We carry up ice (-z is their net) into OPP standing square in front of us,
+# touching, and skate straight at him.
+func _drive_snap() -> WorldSnapshot:
+	var s := WorldSnapshot.new()
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.position = Vector3(0.3, 0.02, -10.6)
+	s.puck_state.carrier_peer_id = SELF_ID
+	s.skater_states[SELF_ID] = _state(Vector3(0.0, 0.85, -10.0), Vector2(0.0, -1.0))
+	s.skater_states[OPP_ID] = _state(Vector3(0.0, 0.85, -10.0 - TOUCHING_M), Vector2(0.0, 1.0))
+	sm._state = Agent.State.CARRY
+	return s
+
+
+func _skating_at_him() -> InputState:
+	var input := InputState.new()
+	input.move_vector = Vector2(0.0, -1.0)
+	return input
+
+
+func test_a_carrier_stood_up_puts_his_body_into_it() -> void:
+	var input: InputState = _skating_at_him()
+	input.stance_held = true
+	assert_true(sm.apply_press(input, _drive_snap()))
+	assert_true(input.hit_held, "Ctrl, the carrier's brace")
+	assert_false(input.stance_held, "the commit wins over the stance")
+	assert_eq(input.move_vector, Vector2(0.0, -1.0), "his own skate, untouched")
+
+
+func test_the_body_moves_the_pair_his_way_harder() -> void:
+	var s: WorldSnapshot = _drive_snap()
+	var me: SkaterNetworkState = s.skater_states[SELF_ID]
+	var man: SkaterNetworkState = s.skater_states[OPP_ID]
+	var at_him := Vector2(0.0, -1.0)
+	assert_gt(AIPressRead.pair_accel(me, null, SkaterMovementRules.Posture.COMMIT, at_him,
+			me.facing, man, null), AIPressRead.pair_accel(me, null,
+			SkaterMovementRules.Posture.UPRIGHT, at_him, me.facing, man, null))
+
+
+func test_a_carrier_skating_past_a_man_beside_him_does_not() -> void:
+	var s: WorldSnapshot = _drive_snap()
+	s.skater_states[OPP_ID].position = Vector3(-TOUCHING_M, 0.85, -10.0)
+	var input: InputState = _skating_at_him()
+	assert_false(sm.apply_press(input, s), "a man off his line is not in his way")
+	assert_false(input.hit_held)
+
+
+func test_a_carrier_a_step_off_him_does_not() -> void:
+	var s: WorldSnapshot = _drive_snap()
+	s.skater_states[OPP_ID].position.z -= AIPressRead.STEP_IN_M + 0.1
+	assert_false(sm.apply_press(_skating_at_him(), s))
+
+
+func test_a_carrier_winding_up_or_on_the_beginner_tier_does_not() -> void:
+	var s: WorldSnapshot = _drive_snap()
+	sm._state = Agent.State.SHOOT_PRESSED
+	assert_false(sm.apply_press(_skating_at_him(), s), "a release has the body")
+	s = _drive_snap()
+	sm._protects_the_puck = false
+	assert_false(sm.apply_press(_skating_at_him(), s), "the beginner tier does not read it")

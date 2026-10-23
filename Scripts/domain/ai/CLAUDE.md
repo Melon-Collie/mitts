@@ -298,7 +298,10 @@ the line through the man, so it clears a screen only from the side that moves
 him off it; getting to that side is the role's.
 A held tie keeps its stick through the press. It rides `check_aggression`. A
 screener in their end with a defender on him digs in, braking in the stance,
-whose anchored stop holds an equal man's drive: the `protects_the_puck` gate.
+whose anchored stop holds an equal man's drive; a carrier skating into a man
+who stands him up holds Ctrl, the brace, when the pair moves his way harder
+with his body in it (`AIPressRead.pair_accel`, with against without). Both ride
+the `protects_the_puck` gate.
 
 ### The three facts a station reads, and the one that stays unread
 

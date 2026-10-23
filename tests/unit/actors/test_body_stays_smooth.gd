@@ -41,6 +41,10 @@ const BOUNDS: Dictionary = {
 		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
 	"shuffle: Space + D held, released":
 		[20.0, 8.0, 8.0, 8.0, 9.0, 8.0],
+	"press: drive into a man dug in, and off":
+		[12.0, 20.0, 8.0, 50.0, 72.0, 79.0],
+	"press: dug in against a driver, and off":
+		[12.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 }
 
 

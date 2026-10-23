@@ -7,9 +7,14 @@ extends RefCounted
 #   him: drive into him (Ctrl, the stick toward him) when the press moves him
 #   off the sightline;
 # - screening their goalie with an opponent on us: dig in (the brake in the
-#   stance), the stop's edges anchored by the stance's base.
+#   stance), the stop's edges anchored by the stance's base;
+# - carrying into a man who stands us up: put the body into it (Ctrl, which a
+#   carrier holds as the brace, the stick staying on the puck).
 # A held tie keeps its stick through the press: the commit takes the stick off
 # the ice, and the tie holds while the button does. Owns nothing between ticks.
+
+# A man within 45° of the carrier's skate is one he is skating into.
+const DRIVE_THROUGH_COS: float = 0.7071
 
 var _peer_id: int = -1
 var _team_id: int = -1
@@ -28,16 +33,19 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
 
 # `locked_man_pid` is the man our role covers (-1 for none); `check_aggression`
 # the tier's PACE physicality knob (0 never presses); `digs_in` the cognition
-# gate on the screener's answer. True when it took the body this tick.
+# gate on the screener's and the carrier's answers; `carrying` whether we are
+# skating the puck (not winding up a release with it). True when it took the
+# body this tick.
 func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
-		locked_man_pid: int, check_aggression: float, digs_in: bool) -> bool:
+		locked_man_pid: int, check_aggression: float, digs_in: bool, carrying: bool) -> bool:
 	if snapshot == null or snapshot.puck_state == null:
 		return false
 	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if me == null or me.knockdown_timer > 0.0 or me.pin_role != BoardPinRules.Role.NONE \
-			or me.is_ghost or snapshot.puck_state.carrier_peer_id == _peer_id \
-			or input.block_held:
+			or me.is_ghost or input.block_held:
 		return false
+	if snapshot.puck_state.carrier_peer_id == _peer_id:
+		return carrying and digs_in and _drive_through(input, snapshot, me)
 	if check_aggression > 0.0 and _press_the_screen(input, snapshot, me, own_goal_dir,
 			locked_man_pid):
 		return true
@@ -90,3 +98,45 @@ func _dig_in(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
 			input.stance_held = true
 			return true
 	return false
+
+
+# Carrying into the nearest opponent touching us ahead of our skate: hold Ctrl
+# when the pair moves our way harder with the body in it than without. Ahead
+# only, inside DRIVE_THROUGH_COS of the skate, so the stride the commit costs
+# across the normal stays small.
+func _drive_through(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState) -> bool:
+	var intent: Vector2 = input.move_vector
+	if input.hit_held or input.brake or intent.length_squared() <= 0.01:
+		return false
+	var man: SkaterNetworkState = null
+	var man_pid: int = -1
+	var best_gap: float = AIPressRead.STEP_IN_M
+	for pid: int in snapshot.skater_states:
+		if _team_id_by_peer.get(pid, -1) == _team_id:
+			continue
+		var opp: SkaterNetworkState = snapshot.skater_states[pid]
+		if opp.is_ghost or opp.pin_role != BoardPinRules.Role.NONE or opp.knockdown_timer > 0.0:
+			continue
+		var gap: float = AIPressRead.gap_m(me.position, opp.position)
+		if gap <= best_gap:
+			best_gap = gap
+			man = opp
+			man_pid = pid
+	if man == null:
+		return false
+	var n := Vector2(man.position.x - me.position.x, man.position.z - me.position.z).normalized()
+	if intent.normalized().dot(n) < DRIVE_THROUGH_COS:
+		return false
+	var my_caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
+	var man_caps: AISkaterCaps = _caps_by_peer.get(man_pid)
+	var posture: int = SkaterMovementRules.Posture.STANCE if input.stance_held \
+			else SkaterMovementRules.Posture.UPRIGHT
+	var without: float = AIPressRead.pair_accel(me, my_caps, posture, intent, me.facing,
+			man, man_caps)
+	var with_body: float = AIPressRead.pair_accel(me, my_caps, SkaterMovementRules.Posture.COMMIT,
+			intent, me.facing, man, man_caps)
+	if with_body <= without:
+		return false
+	input.hit_held = true
+	input.stance_held = false
+	return true

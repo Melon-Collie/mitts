@@ -10,6 +10,7 @@ extends GutTest
 # which bounds the transitions.
 
 const DT: float = 1.0 / 120.0
+const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const UpperBone = SkaterMeshBuilder.UpperBone
 const LEG: int = SkaterBodySkeleton.LEG_BONE_OFFSET
 # Ticks every scenario skates before its first measured frame, to settle the
@@ -41,6 +42,10 @@ class StubGameState extends Node:
 var _skater: Skater = null
 var _controller: SkaterController = null
 var _puck: Puck = null
+# A second real body for the scenarios played against a man (`partner` in the
+# scenario), ticked in the live order beside the measured one.
+var _partner: SkaterController = null
+var _partner_input := InputState.new()
 
 
 func _rig(start_z: float) -> void:
@@ -48,7 +53,7 @@ func _rig(start_z: float) -> void:
 	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	add_child_autofree(_puck)
 	_puck.global_position = Vector3(30.0, 0.0, 30.0)
-	_skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	_skater = SKATER_SCENE.instantiate() as Skater
 	add_child_autofree(_skater)
 	_skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, start_z)
 	_skater.set_process(false)
@@ -66,6 +71,33 @@ func _rig(start_z: float) -> void:
 	_controller.set_physics_process(false)
 	_controller._pose.facing = Vector2(0.0, -1.0)
 	_skater.set_facing(Vector2(0.0, -1.0))
+	_partner = null
+
+
+# The man a scenario plays against: a real controller set touching us along
+# `dir` (world XZ, unit), facing `face`.
+func _rig_partner(dir: Vector3, face: Vector2) -> void:
+	var skater: Skater = SKATER_SCENE.instantiate() as Skater
+	add_child_autofree(skater)
+	skater.set_process(false)
+	skater.set_physics_process(false)
+	var state := StubGameState.new()
+	add_child_autofree(state)
+	_partner = SkaterController.new()
+	add_child_autofree(_partner)
+	_partner.setup(skater, _puck, state)
+	_partner.set_process(false)
+	_partner.set_physics_process(false)
+	skater.is_host_machine = true
+	_skater.is_host_machine = true
+	skater.global_position = _skater.global_position \
+			+ dir * (_skater.collision_radius() + skater.collision_radius())
+	_partner._pose.facing = face
+	skater.set_facing(face)
+	var both: Array = [_skater, skater]
+	_skater.set_skater_collision_provider(func() -> Array: return both)
+	skater.set_skater_collision_provider(func() -> Array: return both)
+	_partner_input = InputState.new()
 
 
 # Every tracked point, world space less the skater's position. The skeleton's
@@ -100,6 +132,9 @@ func _context(i: int) -> String:
 	for k: int in w.size():
 		if w[k] > 0.15:
 			mix += "%s %.2f " % [names[k], w[k]]
+	var press: GaitPressLayer = _controller._skating._press
+	if press._blend > 0.15:
+		mix += "press %s %.2f " % [GaitPressLayer.Role.keys()[press._role], press._blend]
 	var v := Vector2(_skater.velocity.x, _skater.velocity.z)
 	var state: String = SkaterStateMachine.State.keys()[_controller._sm.get_state()]
 	return "t%d %s puck=%s %.1fm/s lean=%.0f° twist=%.0f° | %s" % [i, state,
@@ -120,6 +155,9 @@ func measure(s: Dictionary, report: bool = false, from_tick: int = 2) -> Diction
 	var steer: Callable = s["steer"]
 	var puck_ahead: float = s["puck_ahead"]
 	_rig(s["start_z"])
+	var partner: Dictionary = s.get("partner", {})
+	if not partner.is_empty():
+		_rig_partner(partner["dir"], partner["face"])
 	var input := InputState.new()
 	var hist: Array[Dictionary] = []
 	var worst: Dictionary = {}
@@ -144,7 +182,16 @@ func measure(s: Dictionary, report: bool = false, from_tick: int = 2) -> Diction
 		input.mouse_world_pos = _skater.global_position + aim
 		input.mouse_world_pos.y = 0.0
 		_controller._process_input(input, DT)
+		if _partner != null:
+			_partner_input.delta = DT
+			_partner_input.host_timestamp = input.host_timestamp
+			var partner_aim: Vector3 = (partner["steer"] as Callable).call(_partner_input, i)
+			_partner_input.mouse_world_pos = _partner.skater.global_position + partner_aim
+			_partner_input.mouse_world_pos.y = 0.0
+			_partner._process_input(_partner_input, DT)
 		_skater._physics_process(DT)
+		if _partner != null:
+			_partner.skater._physics_process(DT)
 		_skater._process(DT)
 		hist.append(_sample())
 		if hist.size() > 3:
@@ -197,9 +244,9 @@ func _drop() -> void:
 
 
 func _add(out: Array[Dictionary], scenario_name: String, ticks: int, steer: Callable,
-		start_z: float = 0.0, puck_ahead: float = -1.0) -> void:
+		start_z: float = 0.0, puck_ahead: float = -1.0, partner: Dictionary = {}) -> void:
 	out.append({"name": scenario_name, "ticks": ticks, "steer": steer, "start_z": start_z,
-			"puck_ahead": puck_ahead})
+			"puck_ahead": puck_ahead, "partner": partner})
 
 
 func scenarios() -> Array[Dictionary]:
@@ -344,3 +391,30 @@ func _add_play(out: Array[Dictionary]) -> void:
 		inp.brake = true
 		inp.move_vector = Vector2(1.0, 0.0) if i >= 30 and i < 150 else Vector2.ZERO
 		return _up(2.0))
+	_add_press(out)
+
+
+# The press (PressRules) from both sides: driving into a man dug in ahead, and
+# dug in with a man driving into us from behind. Each comes on at t60 and goes
+# off at t200, from a standstill in contact.
+func _add_press(out: Array[Dictionary]) -> void:
+	var dug_in: Callable = func(inp: InputState, _i: int) -> Vector3:
+		inp.brake = true
+		inp.stance_held = true
+		return _up(-2.0)
+	_add(out, "press: drive into a man dug in, and off", 320, func(inp: InputState, i: int) -> Vector3:
+		var on: bool = i >= 60 and i < 200
+		inp.hit_held = on
+		inp.move_vector = Vector2(0.0, -1.0) if on else Vector2.ZERO
+		return _up(2.0), 0.0, -1.0, {"dir": Vector3(0.0, 0.0, -1.0),
+				"face": Vector2(0.0, 1.0), "steer": dug_in})
+	_add(out, "press: dug in against a driver, and off", 320, func(inp: InputState, i: int) -> Vector3:
+		var on: bool = i >= 60 and i < 200
+		inp.brake = on
+		inp.stance_held = on
+		return _up(2.0), 0.0, -1.0, {"dir": Vector3(0.0, 0.0, 1.0),
+				"face": Vector2(0.0, -1.0),
+				"steer": func(inp: InputState, i: int) -> Vector3:
+					inp.hit_held = i >= 40 and i < 220
+					inp.move_vector = Vector2(0.0, -1.0) if inp.hit_held else Vector2.ZERO
+					return _up(2.0)})

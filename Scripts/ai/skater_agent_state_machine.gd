@@ -2865,12 +2865,13 @@ func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
 
 
 # The press (SkaterAgentPress), every physics tick after the other body and stick
-# passes; true when it took the body. The screener's dig-in rides the
-# protects_the_puck gate: answering a physical threat to what we hold.
+# passes; true when it took the body. The screener's dig-in and the carrier's
+# drive through a man ride the protects_the_puck gate: answering a physical
+# threat to what we hold.
 func apply_press(input: InputState, snapshot: WorldSnapshot) -> bool:
 	return _press.apply(input, snapshot, _own_goal_dir,
 			_cached_role_decision.locked_man_pid if _cached_role_decision != null else -1,
-			_check_aggression, _protects_the_puck)
+			_check_aggression, _protects_the_puck, _state == State.CARRY)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started, every

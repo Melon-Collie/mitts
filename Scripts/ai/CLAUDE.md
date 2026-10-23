@@ -25,7 +25,7 @@ passed per call, and only its own fields written.
 | `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
 | `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
-| `SkaterAgentPress` | the press on a screen we are leaned on, and a screener digging in against a defender on him |
+| `SkaterAgentPress` | the press on a screen we are leaned on, a screener digging in against a defender on him, and a carrier putting his body into a man who stands him up |
 | `SkaterAgentReception` | reading an incoming feed: is it ours, the blade gate, the squared or wall-kill stance, and whether it is a shot reception |
 | `SkaterAgentOneTimer` | the ready finisher's settle anchor on the feed line, the slapper zone, the feed's remaining flight, the press square-up |
 
