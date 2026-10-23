@@ -101,6 +101,13 @@ func is_done() -> bool:
 	return state == State.NONE
 
 
+# Seconds until it lands in the save's stance; 0 once it has.
+func left_s() -> float:
+	if state != State.GOING:
+		return 0.0
+	return (1.0 - _clock) * drop_s * (fall if low != Low.KICK else 1.0)
+
+
 # Down after it, or up after a kick.
 func rests_down() -> bool:
 	return low != Low.KICK

@@ -58,6 +58,9 @@ const BAND_LINES: int = 12
 # over the ice under him: a piece of flight further off meets none of it.
 const GEAR_CENTRE := Vector3(0.0, 0.8, 0.0)
 const GEAR_REACH_M: float = 2.5
+# The reach a covering glove goes out over the ice, which the trunk folds over
+# in the glove's time.
+const COVER_LEAN_M: float = 0.8
 # A hand aims inside this share of the arm's full length, so the arm still
 # bends a little at the save.
 const REACH_SHARE: float = 0.97
@@ -86,6 +89,11 @@ var _hand_out: bool = false
 var _hand_at := Vector3.ZERO
 var _returning: bool = false
 var _palm := Vector3.FORWARD
+# The glove sent to cover a puck he is watching: it goes without a read, and
+# how far he has leaned on over the pads after it (KeeperPoses.cover_lean).
+var _watched: bool = false
+var _lean: float = 0.0
+var _lean_to: float = 0.0
 
 var _skel := KeeperSkeleton.new()
 var _rest_skel := KeeperSkeleton.new()
@@ -133,6 +141,7 @@ func active() -> bool:
 # the extension, on a post or mid-drop or slide none (a shot from the seal is
 # held in it).
 func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
+	_watched = false
 	_believe(read, motor, mirrored)
 	motor.pose(_base)
 	var side: float = _side_of_flight()
@@ -207,10 +216,14 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 # target at its speed; back toward where the pose under it holds it once
 # released. `base` is that pose.
 func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
+	# The trunk folds after a covering glove as fast as the glove goes out the
+	# cover's reach, and comes back up as it returns.
+	var leaning: bool = _watched and _hand_out and not _returning
+	_lean = move_toward(_lean, _lean_to if leaning else 0.0, dt * glove_speed_m_s / COVER_LEAN_M)
 	if hand == Hand.NONE and not _hand_out:
 		return
 	if not _hand_out:
-		if not arms_read:
+		if not arms_read and not _watched:
 			return
 		_hand_out = true
 		_hand_at = _rest_of(hand, base)
@@ -219,7 +232,25 @@ func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
 	if _returning and _hand_at.distance_to(to) < THERE_M:
 		_hand_out = false
 		_returning = false
+		_watched = false
 		hand = Hand.NONE
+
+
+# The glove onto `target` (his space), palm down, to cover a puck, leaned
+# `lean` of the way on over his pads (KeeperPoses.cover_lean): at once, since
+# he is watching it, and on to a new target as the puck moves.
+func cover(target: Vector3, lean: float) -> void:
+	_lean_to = lean
+	hand = Hand.GLOVE
+	hand_target = target
+	_palm = Vector3.DOWN
+	_watched = true
+	_returning = false
+
+
+# Whether the hand is out on its target.
+func hand_there() -> bool:
+	return _hand_out and not _returning and _hand_at.distance_to(hand_target) < THERE_M
 
 
 # The save is over: the puck met him, went by, or stopped coming. The hand goes
@@ -232,8 +263,11 @@ func release() -> void:
 		hand = Hand.NONE
 
 
-# Lays the hand over `p`, the pose the motor gives him.
+# Lays the hand over `p`, the pose the motor gives him, leaned after it to
+# cover.
 func overlay(p: KeeperPose) -> void:
+	if _lean > 0.0:
+		KeeperPoses.cover_lean(p, hand_target, _lean)
 	if not _hand_out:
 		return
 	_lay_hand(p, hand, _hand_at)
@@ -245,6 +279,9 @@ func _lay_hand(p: KeeperPose, h: int, at: Vector3) -> void:
 			p.glove_from_chest = false
 			p.glove_hand = at
 			p.glove_palm = _palm
+			if _watched:
+				# Laid flat on a puck to cover it, the fingers out ahead.
+				p.glove_fingers = Vector3.FORWARD
 		Hand.BLOCKER:
 			p.blocker_reach = true
 			p.blocker_grip = at

@@ -26,7 +26,8 @@ one the bots shoot at.
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him; a goal on his feet that moves, or within `KeeperRoute.GLIDE_REACH_M`, or asked to be skated to (`go_to`'s `skate`), skated to by the glide and held as it moves (`go_to`'s velocity), stopped for where he is before a goal off his feet; a low save cutting any of it; sunk into the low ready when set and asked (`low_ready`), a drop or a save from it the shorter fall |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included (none after a glide: nothing waits for its legs); a spot on his feet within `GLIDE_REACH_M` glided to (a T-push's time, `KeeperFootwork.push_time`, beside the turn), and a way's second leg within it too when the goal is on his feet; past it footwork's moves, the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line; the RVH dropped into straight from where he stands when that is the post's overlap at his turn (`ON_POST_M`), as at a sharp angle |
 | `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity; the arm read later; a tip restarts it |
-| `keeper_save.gd` | which save he makes (a low half with a hand half, each candidate posed and the flight tested against its own gear, least committed first: the first that covers his read's band in time, else the first that covers the believed line in time, else the soonest; a save holds only if what comes off the gear it meets stays out), and the hand laid over whatever pose the motor gives him at its tier speed |
+| `keeper_save.gd` | which save he makes (a low half with a hand half, each candidate posed and the flight tested against its own gear, least committed first: the first that covers his read's band in time, else the first that covers the believed line in time, else the soonest; a save holds only if what comes off the gear it meets stays out), and the hand laid over whatever pose the motor gives him at its tier speed; the glove sent onto a puck to cover it (`cover`), without a read, the trunk folding after it |
+| `keeper_cover.gd` | covering a loose puck he can reach: whether one slowing on the ice will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes) |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on |
 | `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
 | `actors/keeper/keeper.gd` | the node: solves a pose on the tick, draws it at render rate when it moved |
@@ -53,7 +54,9 @@ pin, the pads and hands the bots read through `fill_state`) read his gear. The
 controller extends `GoalieController`, overriding the tick, the reset, the
 stance the bots read and the puck handlers: a release read and saved (below), a
 tip read again, a contact only timed, a glove catch held and covered for the
-whistle and set down out from his glove side where none comes. Nothing of his
+whistle, and a loose puck he can reach covered (below); where no whistle
+comes (`GameRules.whistles_a_cover`, Off only) he sets it down out from his
+glove side and sweeps it on toward that corner, out of his reach. Nothing of his
 pose goes on the wire, so a client sees the old goalie's interpolated shell,
 and in the post-game replay he stands still (it records the old goalie's
 state).
@@ -91,11 +94,29 @@ where the save left him for the brain to bring back up. The brain rests while
 a save is under way (a hand save sets him where he stands, the hand aimed from
 there); since his read of the play lags it by his leg read, a shot's flight
 reaches the brain no sooner than the save does.
+A loose puck he can reach, with no shot being read, he covers
+(`KeeperCover`, `KeeperController._cover_the_puck`): one slowing on the ice
+that will still be under his glove when the glove can land there, slow enough
+by then for the glove to stop it. From his feet he drops into the butterfly
+(the motor's low save, cutting any move), and the glove goes flat onto it,
+palm down and fingers ahead, his trunk folding on over the pads and turning
+until the puck is ahead of his glove shoulder, as far as it takes. The glove
+follows the puck as it slides. Until the glove is on it the puck is live: a
+puck poked out of his reach ends the cover and he gets back up. Secured, it is
+dead under the glove and covered for the whistle. So a rebound dying at his
+feet, a dribble at the crease or a puck caught behind his stick or between his
+pads is smothered rather than dropped on and popped up from.
+
 `test_keeper_save.gd` (the five-hole down with time and left to the blade
-without, a save holding or not by its rebound), `test_keeper_save_move.gd`,
+without, a save holding or not by its rebound), `test_keeper_cover.gd` (a
+puck at his feet coverable from his feet once his drop lands and sooner down,
+one out of reach or too fast not, a sliding one covered where it will be, and
+the cover played out unbroken with the glove ending flat on it),
+`test_keeper_save_move.gd`,
 and the match through the
 puck's own contact test in `test_keeper_controller.gd`.
-`tests/unit/controllers/test_keeper_controller.gd` holds the swap.
+`tests/unit/controllers/test_keeper_controller.gd` holds the swap, a catch
+played out, and a puck at his feet covered or, poked away first, escaping.
 
 ## One body, solved once, read three ways
 

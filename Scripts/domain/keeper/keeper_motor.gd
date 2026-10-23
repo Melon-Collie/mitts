@@ -540,7 +540,7 @@ func pose(p: KeeperPose) -> void:
 	_pose_mover(p)
 	low_ready.lay_over(p, _mover == Mover.NONE and rest == Rest.FEET and footwork.is_settled())
 	if lead != 0.0:
-		_turn_body(p, lead)
+		KeeperPoses.turn_trunk(p, lead)
 
 
 func _pose_mover(p: KeeperPose) -> void:
@@ -565,25 +565,6 @@ func _pose_mover(p: KeeperPose) -> void:
 					slide.pose(p)
 				Rest.POST:
 					post.pose(p)
-
-
-# His trunk turned `turn` ahead of his skates from the waist, about the
-# vertical through his hips, the hands and the stick they hold with it. The
-# pelvis stays with the legs: turned, it would carry the hips round over skates
-# that stay on their line and pitch a pad into the ice.
-static func _turn_body(p: KeeperPose, turn: float) -> void:
-	var about := Basis(Vector3.UP, turn)
-	var hips := Vector3(p.pelvis.x, 0.0, p.pelvis.z)
-	p.lumbar_rot.y += turn
-	p.blade_center = hips + about * (p.blade_center - hips)
-	p.blade_yaw -= turn
-	p.blocker_face = about * p.blocker_face
-	p.glove_fingers = about * p.glove_fingers
-	p.glove_palm = about * p.glove_palm
-	p.glove_elbow_pole = about * p.glove_elbow_pole
-	p.blocker_elbow_pole = about * p.blocker_elbow_pole
-	if not p.glove_from_chest:
-		p.glove_hand = hips + about * (p.glove_hand - hips)
 
 
 # `v` on the ice in his own frame, turned `turn` into the stances' frame.

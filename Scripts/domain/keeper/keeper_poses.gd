@@ -92,6 +92,11 @@ const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
 # blocker beside the hip above the pad, against it rather than a puck's width
 # off it.
 const BUTTERFLY_BLADE := Vector3(-0.11, 0.0, -0.29)
+# Folded over the pads to cover: hips, trunk and chest, each further on.
+const COVER_HIP_FOLD_RAD: float = deg_to_rad(25.0)
+const COVER_TRUNK_FOLD_RAD: float = deg_to_rad(40.0)
+const COVER_CHEST_FOLD_RAD: float = deg_to_rad(25.0)
+const COVER_TURN_MAX_RAD: float = deg_to_rad(40.0)
 const BUTTERFLY_STICK_TILT_RAD: float = deg_to_rad(28.0)
 
 
@@ -341,6 +346,43 @@ static func rvh(p: KeeperPose, side: float) -> void:
 		p.glove_hand = Vector3(-0.30, -0.10, -0.38)
 		p.blade_center = RVH_BLOCKER_SIDE_BLADE
 		p.blade_yaw += RVH_BLOCKER_SIDE_BLADE_TURN_RAD
+
+
+# Leaning on over the pads to cover a puck at his feet at `toward`, `share` of
+# the way: the trunk folding forward from the hips and the chest after it, and
+# turning until the puck is ahead of his glove shoulder, so that shoulder comes
+# down and out over the ice the glove reaches for.
+static func cover_lean(p: KeeperPose, toward: Vector3, share: float) -> void:
+	p.pelvis_rot.x -= COVER_HIP_FOLD_RAD * share
+	p.lumbar_rot.x -= COVER_TRUNK_FOLD_RAD * share
+	p.chest_rot.x -= COVER_CHEST_FOLD_RAD * share
+	# The elbows still hang from the shoulders as they fold: a pole left
+	# pointing down comes into line with an arm reaching down and flips it.
+	var fold := Basis(Vector3.RIGHT, -(COVER_HIP_FOLD_RAD + COVER_TRUNK_FOLD_RAD + COVER_CHEST_FOLD_RAD) * share)
+	p.glove_elbow_pole = fold * p.glove_elbow_pole
+	p.blocker_elbow_pole = fold * p.blocker_elbow_pole
+	var turn: float = clampf(atan2(-(toward.x + KeeperAnatomy.SHOULDER_HALF_SPACING_M), -toward.z),
+			-COVER_TURN_MAX_RAD, COVER_TURN_MAX_RAD)
+	turn_trunk(p, turn * share)
+
+
+# His trunk turned `turn` from the waist, about the vertical through his hips,
+# the hands and the stick they hold with it. The pelvis stays with the legs:
+# turned, it would carry the hips round over skates that stay on their line and
+# pitch a pad into the ice.
+static func turn_trunk(p: KeeperPose, turn: float) -> void:
+	var about := Basis(Vector3.UP, turn)
+	var hips := Vector3(p.pelvis.x, 0.0, p.pelvis.z)
+	p.lumbar_rot.y += turn
+	p.blade_center = hips + about * (p.blade_center - hips)
+	p.blade_yaw -= turn
+	p.blocker_face = about * p.blocker_face
+	p.glove_fingers = about * p.glove_fingers
+	p.glove_palm = about * p.glove_palm
+	p.glove_elbow_pole = about * p.glove_elbow_pole
+	p.blocker_elbow_pole = about * p.blocker_elbow_pole
+	if not p.glove_from_chest:
+		p.glove_hand = hips + about * (p.glove_hand - hips)
 
 
 static func _side_x(leg: int) -> float:

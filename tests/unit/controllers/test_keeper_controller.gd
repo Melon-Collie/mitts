@@ -4,8 +4,9 @@ extends GutTest
 # body hidden and its colliders off, his gear's save boxes live where his gear
 # is; on either net he goes where the brain puts him, square to the puck; a shot
 # at his pad meets a pad box through the puck's own contact test; a shot is
-# saved, the puck meeting what he puts in its way; and a catch is held in his
-# glove and covered, then set down.
+# saved, the puck meeting what he puts in its way; a catch is held in his
+# glove and covered, then set down and swept out; and a puck at his feet is
+# covered, unless it is poked away before his glove is on it.
 
 const DT: float = 1.0 / 120.0
 
@@ -93,7 +94,7 @@ func test_a_shot_at_his_pad_meets_a_pad_box() -> void:
 	assert_eq(_puck._classify_save_part(contact.part as Node3D), GoalieSaveRules.SavePart.PAD, "on a pad")
 
 
-func test_a_catch_is_held_in_his_glove_and_covered_then_set_down() -> void:
+func test_a_catch_is_held_in_his_glove_and_covered_then_played_out() -> void:
 	_spawn(GameRules.GOAL_LINE_Z)
 	_run(0.5)
 	watch_signals(_keeper)
@@ -105,6 +106,42 @@ func test_a_catch_is_held_in_his_glove_and_covered_then_set_down() -> void:
 	_run(KeeperController.CATCH_HOLD_S + 0.1)
 	assert_false(_puck.motion_pinned or _puck.pickup_locked, "set down")
 	assert_almost_eq(_puck.global_position.y, _puck.ice_height, 1e-4, "on the ice")
+	assert_almost_eq(_puck.get_puck_velocity().length(), KeeperController.PLAY_OUT_M_S, 1e-3,
+			"swept out of his reach")
+
+
+# Settled facing a puck out front, then the puck at his feet, `ahead` in front
+# of him and `across` toward his blocker side.
+func _puck_at_his_feet(ahead: float, across: float) -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 8.0)
+	_run(1.0)
+	var basis: Basis = _goalie.global_transform.basis
+	var at: Vector3 = _goalie.global_position - basis.z * ahead + basis.x * across
+	_puck.global_position = Vector3(at.x, _puck.ice_height, at.z)
+
+
+func test_a_puck_at_his_feet_is_covered() -> void:
+	_puck_at_his_feet(0.6, -0.2)
+	watch_signals(_keeper)
+	_run(0.6)
+	assert_signal_emitted(_keeper, "puck_covered")
+	assert_true(_puck.motion_pinned and _puck.pickup_locked, "dead under him")
+	assert_almost_eq(_puck.global_position, _goalie.get_glove_world_position(), Vector3.ONE * 1e-4,
+			"under his glove")
+	assert_true(_keeper.is_butterfly(), "down on it")
+
+
+func test_a_puck_poked_away_before_his_glove_is_on_it_escapes() -> void:
+	_puck_at_his_feet(0.6, -0.2)
+	watch_signals(_keeper)
+	_run(0.05)
+	assert_true(_keeper._covering, "going for it")
+	_puck.global_position += -_goalie.global_transform.basis.z * 2.0
+	_run(0.6)
+	assert_signal_not_emitted(_keeper, "puck_covered")
+	assert_false(_puck.pickup_locked, "still live")
+	assert_false(_keeper._covering, "the cover given up")
 
 
 # Flies the puck from `from` to arrive on the goal line at `to` (x across from

@@ -12,24 +12,29 @@ extends GoalieController
 # save his gear says covers it (KeeperSave, its low half through the motor),
 # held until the shot is over: it meets him, goes past, stops coming, or is
 # picked up. A glove catch is held and covered; every other contact is the
-# puck's rebound off the box it struck.
+# puck's rebound off the box it struck. A loose puck he can reach he covers
+# (KeeperCover): down over it, the glove onto it, live until the glove is on
+# it.
 #
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
 
 # The planner's rate, against the 120 Hz tick.
 const PLANNER_EVERY: int = 4
-# How long he holds a caught puck before he sets it down, where no whistle has
-# come for the cover.
+# How long he holds a caught or covered puck before he plays it out, where no
+# whistle has come for it (GameRules.whistles_a_cover).
 const CATCH_HOLD_S: float = 1.0
-# Where he sets it: out from his glove side, on the ice.
+# Where he sets it: out from his glove side, on the ice; and how hard he sweeps
+# it on toward that corner, out of his own reach so he does not cover it again.
 const SET_DOWN_OUT_M: float = 0.9
+const PLAY_OUT_M_S: float = 6.0
 
 var motor := KeeperMotor.new()
 var brain := KeeperPositioning.new()
 var read := KeeperShotRead.new()
 var play := KeeperPlayRead.new()
 var save := KeeperSave.new()
+var cover := KeeperCover.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
@@ -44,8 +49,10 @@ var _defenders := PackedVector2Array()
 # Seconds he has held a caught puck; below zero, none.
 var _holding: float = -1.0
 var _profile: GoalieSkillProfile = GoalieSkillProfile.hard()
-# Whether the shot being read has had its save chosen.
+# Whether the shot being read has had its save chosen; whether he is covering
+# a loose puck.
 var _chosen: bool = false
+var _covering: bool = false
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -87,6 +94,7 @@ func _tier() -> void:
 	save.blocker_speed_m_s = _profile.blocker_react_max_speed_mps
 	save.drop_s = _profile.butterfly_drop_s
 	motor.save_move.drop_s = _profile.butterfly_drop_s
+	cover.glove_speed_m_s = _profile.glove_react_max_speed_mps
 
 
 # On his feet at the top of the crease, square to the ice in front of him.
@@ -97,7 +105,9 @@ func _place_in_crease() -> void:
 	play.reset()
 	brain.play = play
 	save = KeeperSave.new()
+	cover = KeeperCover.new()
 	_chosen = false
+	_covering = false
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
@@ -116,7 +126,8 @@ func _physics_process(delta: float) -> void:
 	_read_play(delta, in_net)
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
 	_save_the_shot()
-	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen:
+	_cover_the_puck(in_net)
+	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering:
 		_read_receivers()
 		brain.decide(play.puck, play.motion, motor)
 	_ticks += 1
@@ -202,6 +213,38 @@ func _end_save() -> void:
 	_chosen = false
 	save.release()
 	motor.end_save()
+
+
+# A loose puck he can reach, with no shot to save: down over it and the glove
+# onto it, the glove following it as it slides; secured once the glove is on
+# it with the puck under it. Until then it is live, and a puck poked out of his
+# reach ends the cover.
+func _cover_the_puck(in_net: Vector3) -> void:
+	var coverable: bool = _holding < 0.0 and not read.reading() and puck.get_carrier() == null \
+			and not puck.pickup_locked \
+			and cover.plan(in_net, _net.basis.inverse() * puck.get_puck_velocity(), motor, _keeper.skeleton.mirrored)
+	if not coverable:
+		if _covering:
+			_covering = false
+			save.release()
+			motor.end_save()
+		return
+	if not _covering:
+		_covering = true
+		if motor.can_save(false):
+			motor.save(KeeperSaveMove.Low.BUTTERFLY, signf(cover.target.x))
+	save.cover(cover.target, cover.lean)
+	if save.hand_there() and _glove_on_puck():
+		_covering = false
+		_secure()
+
+
+# The puck under the glove's palm, across the ice and no higher than the glove.
+func _glove_on_puck() -> bool:
+	var glove: Vector3 = goalie.get_glove_world_position()
+	var at: Vector3 = puck.global_position
+	return Vector2(glove.x - at.x, glove.z - at.z).length() <= KeeperCover.PIN_M \
+			and at.y <= glove.y + KeeperGear.half_extents(KeeperGear.Part.GLOVE).y
 
 
 # The node on him, his body posed with the save's hand over it, and his gear's
@@ -291,6 +334,11 @@ func _on_puck_caught(contacted: Goalie) -> void:
 		return
 	if puck.pickup_locked or puck.get_carrier() != null:
 		return
+	_secure()
+
+
+# Under the glove, dead, and covered for the whistle.
+func _secure() -> void:
 	_holding = 0.0
 	puck.pickup_locked = true
 	puck.motion_pinned = true
@@ -298,15 +346,19 @@ func _on_puck_caught(contacted: Goalie) -> void:
 	puck_covered.emit(team_id)
 
 
-# Held in the glove; with no whistle for it, set down out from his glove side.
+# Held in the glove; with no whistle for it, set down out from his glove side
+# and swept on toward that corner.
 func _hold_catch(delta: float) -> void:
 	puck.set_puck_position(goalie.get_glove_world_position())
 	_holding += delta
 	if _holding < CATCH_HOLD_S:
 		return
 	_holding = -1.0
-	var out: Vector3 = _net * Vector3(motor.x - SET_DOWN_OUT_M, 0.0, motor.z)
+	var glove_side: float = 1.0 if _keeper.skeleton.mirrored else -1.0
+	var out: Vector3 = _net * Vector3(motor.x + glove_side * SET_DOWN_OUT_M, 0.0, motor.z)
 	puck.set_puck_position(Vector3(out.x, puck.ice_height, out.z))
-	puck.set_puck_velocity(Vector3.ZERO)
+	puck.set_puck_velocity(_net.basis * Vector3(glove_side, 0.0, -0.5).normalized() * PLAY_OUT_M_S)
 	puck.motion_pinned = false
 	puck.pickup_locked = false
+	save.release()
+	motor.end_save()
