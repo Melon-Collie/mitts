@@ -47,6 +47,7 @@ const SCENARIOS: Array = [
 	["rvh_drop_in_glove", -1.0, RVH_DROP_IN],
 	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
 	["sequence", 0.0, SEQUENCE],
+	["low_ready", 0.0, LOW_READY],
 	["goals", 0.0, GOALS],
 	["stick_reach", 0.0, STICK_REACH],
 	["track", 0.0, TRACK],
@@ -85,6 +86,13 @@ const RVH_HOLD_TICKS: int = 18
 # shooter's side and high in front, the frames wrapped SHEET_WRAP to a row; the
 # bar is his rest: on his feet green, down blue, on the post red.
 const SEQUENCE: int = -8
+# KeeperMotor set and sinking into the low ready (KeeperLowReady), out of it
+# into a T-push, sinking again where it sets him, and dropping from it; a frame
+# every LOW_READY_FRAME_EVERY ticks, the bar green on the move, blue sunk past
+# halfway, red down, grey standing.
+const LOW_READY: int = -14
+const LOW_READY_FRAME_EVERY: int = 4
+const LOW_READY_HOLD_S: float = 0.4
 # KeeperMotor given goals one after another (on his feet across and turned, a
 # spot steeper than a diagonal, down across, sealed on the glove post, back on
 # his feet in the middle), each given once he is at the last, making whatever
@@ -228,6 +236,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_drop(target if kind == RECOVER else 0.0)
 	if kind == SEQUENCE:
 		return _record_sequence()
+	if kind == LOW_READY:
+		return _record_low_ready()
 	if kind == GOALS:
 		return _record_goals()
 	if kind == STICK_REACH:
@@ -357,6 +367,44 @@ func _record_sequence() -> Array:
 		tick += 1
 		if motor.is_idle():
 			idle += 1
+	return out
+
+
+func _record_low_ready() -> Array:
+	var motor := KeeperMotor.new()
+	motor.low_ready.asked = true
+	var out: Array = []
+	var tick: int = 0
+	var set_s: float = 0.0
+	var pushed: bool = false
+	var down_s: float = -1.0
+	while down_s < LOW_READY_HOLD_S * 0.5:
+		if tick % LOW_READY_FRAME_EVERY == 0:
+			var p := KeeperPose.new()
+			motor.pose(p)
+			var phase: int = KeeperFootwork.Phase.SET
+			if motor.rest == KeeperRoute.Rest.DOWN:
+				phase = KeeperFootwork.Phase.STOP
+			elif not motor.is_idle():
+				phase = KeeperFootwork.Phase.PUSH
+			elif motor.low_ready.share > 0.5:
+				phase = KeeperFootwork.Phase.GLIDE
+			out.append([p, Vector3(motor.x, 0.0, motor.z), phase, motor.low_ready.share, tick * DT, motor.yaw])
+		motor.step(DT)
+		tick += 1
+		if down_s >= 0.0:
+			down_s += DT
+		elif motor.rest == KeeperRoute.Rest.DOWN:
+			down_s = 0.0
+		elif motor.is_idle():
+			set_s += DT
+			if set_s >= LOW_READY_HOLD_S:
+				set_s = 0.0
+				if pushed:
+					motor.drop_down()
+				else:
+					motor.push_to(Vector2(1.0, 0.0))
+					pushed = true
 	return out
 
 

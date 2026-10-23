@@ -46,7 +46,8 @@ const REACH_SAMPLES: int = 6
 
 var glove_speed_m_s: float = GoalieSkillProfile.hard().glove_react_max_speed_mps
 var blocker_speed_m_s: float = GoalieSkillProfile.hard().blocker_react_max_speed_mps
-# How long a low save takes to land once his legs move: the drop's.
+# How long a low save takes to land once his legs move: the drop's, the
+# shorter fall from the low ready.
 var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
 
 # The save under way: its low half and the side it goes to (−1 the glove side),
@@ -115,6 +116,7 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 	var leg_wait: float = maxf(read.leg_delay_s - read.age, 0.0)
 	var arm_wait: float = maxf(read.arm_delay_s - read.age, 0.0)
 	_arm_wait = arm_wait
+	var fall: float = motor.low_ready.fall_share()
 	var on_ice: bool = _path_low_at_blade(_skel_base())
 	for l: int in lows:
 		for h: int in [Hand.NONE, Hand.STICK, Hand.GLOVE, Hand.BLOCKER]:
@@ -139,7 +141,7 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 				continue
 			var ready: float = travel_s
 			if l != Low.NONE:
-				ready = maxf(ready, leg_wait + drop_s)
+				ready = maxf(ready, leg_wait + drop_s * (fall if l != Low.KICK else 1.0))
 			var rank: int = LOW_RANK[l] * HAND_RANK.size() + HAND_RANK[h]
 			var late: float = ready - hit_s
 			var better: bool

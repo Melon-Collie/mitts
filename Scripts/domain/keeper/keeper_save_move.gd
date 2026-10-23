@@ -31,6 +31,10 @@ const GATHER_S: float = KeeperDrop.PUSH_LOAD_S
 const SWEEP_LIFT_M: float = 0.03
 
 var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
+# The share of `drop_s` a fall into the save takes from the stance it cuts in
+# from: less from the low ready (KeeperLowReady.fall_share). A kick is a push,
+# in the drop's whole time.
+var fall: float = 1.0
 var pad_friction: float = 2.6
 var edge_decel: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2 * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
 
@@ -47,6 +51,7 @@ var _from := KeeperPose.new()
 var _to := KeeperPose.new()
 var _now := KeeperPose.new()
 var _knees: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _to_knees: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 var _skel := KeeperSkeleton.new()
 
 
@@ -67,6 +72,7 @@ func start(from: KeeperPose, p_low: int, p_side: float, at: Vector2, speed: Vect
 			KeeperPoses.kick(_to, side)
 		Low.EXTENSION:
 			KeeperPoses.butterfly_extension(_to, side)
+	_solve_to()
 	state = State.GOING
 	_clock = 0.0
 
@@ -81,6 +87,7 @@ func release() -> void:
 		KeeperPoses.ready(_to)
 	else:
 		KeeperPoses.butterfly(_to)
+	_solve_to()
 	state = State.GATHERING
 	_clock = 0.0
 
@@ -109,7 +116,7 @@ func step(dt: float) -> void:
 	z += velocity.y * dt
 	match state:
 		State.GOING:
-			_clock = minf(_clock + dt / drop_s, 1.0)
+			_clock = minf(_clock + dt / (drop_s * (fall if low != Low.KICK else 1.0)), 1.0)
 			if _clock >= 1.0:
 				state = State.HELD
 		State.GATHERING:
@@ -136,6 +143,12 @@ func _set_from(from: KeeperPose) -> void:
 		_knees[i] = _skel.xf[KeeperSkeleton.SHIN[i]].origin
 
 
+func _solve_to() -> void:
+	_skel.pose(_to)
+	for i: int in 2:
+		_to_knees[i] = _skel.xf[KeeperSkeleton.SHIN[i]].origin
+
+
 func _blend(p: KeeperPose, t: float) -> void:
 	KeeperDrop.blend_body(p, _from, _to, t)
 	p.blocker_reach = false
@@ -151,6 +164,11 @@ func _blend(p: KeeperPose, t: float) -> void:
 			leg.ankle = from.ankle.lerp(to.ankle, t)
 			leg.thigh_front = from.thigh_front.lerp(to.thigh_front, t).normalized()
 			leg.shin_front = from.shin_front.lerp(to.shin_front, t).normalized()
+		elif from.knee_pinned:
+			# Up out of a low stance (the low ready's) onto the skate.
+			leg.copy_from(to)
+			KeeperLowReady.sink_leg(leg, to, _to_knees[i], from, 1.0 - t, true)
+			leg.knee_pinned = t < 1.0
 		else:
 			leg.copy_from(to)
 			leg.ankle = from.ankle.lerp(to.ankle, t)

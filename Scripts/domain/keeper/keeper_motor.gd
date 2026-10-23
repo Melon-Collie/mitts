@@ -31,6 +31,10 @@ extends RefCounted
 # cuts whatever is under way where it is, the speed it had carried into the
 # save, and holds until `end_save`; then he rests where it leaves him.
 #
+# Set on his feet he sinks into the low ready when asked (`low_ready`), and
+# rises out of it as any move starts; a drop or a low save from it is the
+# shorter fall.
+#
 # Places are in the stances' frame, as the movers': x across, z depth (+ back
 # toward his net), `yaw` his turn about the vertical, as a Node3D's rotation.y.
 
@@ -65,6 +69,7 @@ var post := KeeperPost.new()
 var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVOT_ACCEL_RAD_S2, LEAD_MAX_RAD)
 var save_move := KeeperSaveMove.new()
 var glide := KeeperGlide.new()
+var low_ready := KeeperLowReady.new()
 
 var _queue: Array[_Ask] = []
 var _goal: bool = false
@@ -223,6 +228,8 @@ func can_save(down: bool) -> bool:
 # The low save `low` to `side`, cutting in now.
 func save(low: int, side: float) -> void:
 	pose(_cut)
+	save_move.fall = low_ready.fall_share()
+	low_ready.cut()
 	save_move.start(_cut, low, side, Vector2(x, z), _velocity)
 	footwork.set_still()
 	lead = 0.0
@@ -274,6 +281,9 @@ func _plan() -> int:
 func step(dt: float) -> void:
 	var was := Vector2(x, z)
 	_step_mover(dt)
+	# Sunk while set on his feet and asked, out of it with any move; a drop or
+	# a save goes from where he has sunk to (KeeperDrop.drop_from, `save`).
+	low_ready.step(dt, _mover == Mover.NONE and rest == Rest.FEET)
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
 
 
@@ -418,7 +428,13 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 				return false
 			drop.state = KeeperDrop.State.UP
 			drop.down = 0.0
-			drop.drop()
+			drop.fall = low_ready.fall_share()
+			if low_ready.share > 0.0:
+				pose(_cut)
+				low_ready.cut()
+				drop.drop_from(_cut)
+			else:
+				drop.drop()
 			_mover = Mover.DROP
 		Do.RISE, Do.RECOVER:
 			if rest != Rest.DOWN:
@@ -516,6 +532,7 @@ func _pivot(dt: float) -> void:
 # His pose this tick, in his skates' frame.
 func pose(p: KeeperPose) -> void:
 	_pose_mover(p)
+	low_ready.lay_over(p, _mover == Mover.NONE and rest == Rest.FEET and footwork.is_settled())
 	if lead != 0.0:
 		_turn_body(p, lead)
 

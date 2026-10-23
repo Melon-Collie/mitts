@@ -38,6 +38,9 @@ const FIRST_LEG_LIFT_M: float = 0.12
 
 # Seconds to the ice from standing, and back up.
 var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
+# The share of `drop_s` this drop's fall takes: less from the low ready
+# (KeeperLowReady.fall_share).
+var fall: float = 1.0
 # The old goalie's rise: the new body moves no faster than the old one until
 # it is meant to (docs/goalie-rebuild-plan.md, Phase 2).
 var rise_s: float = 0.35
@@ -60,6 +63,12 @@ var _low := KeeperPose.new()
 # and the push knee's place in each.
 var _loaded: Array[KeeperPose] = [KeeperPose.new(), KeeperPose.new()]
 var _loaded_knee: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+# The stance a drop under way started from in place of the ready stance (sunk
+# into the low ready), and where its solve puts the knees.
+var _start := KeeperPose.new()
+var _start_knees: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+var _from_start: bool = false
+var _skel := KeeperSkeleton.new()
 
 
 func _init() -> void:
@@ -77,6 +86,19 @@ func drop() -> void:
 		state = State.DROPPING
 		_from = down
 		_clock = 0.0
+
+
+# From his feet in `stance` rather than the ready stance (sunk into the low
+# ready): the drop goes from there.
+func drop_from(stance: KeeperPose) -> void:
+	if state != State.UP:
+		return
+	_start.copy_from(stance)
+	_skel.pose(_start)
+	for i: int in 2:
+		_start_knees[i] = _skel.xf[KeeperSkeleton.SHIN[i]].origin
+	_from_start = true
+	drop()
 
 
 func rise() -> void:
@@ -117,11 +139,12 @@ func step(dt: float) -> void:
 				state = State.UP
 				down = 0.0
 		State.DROPPING:
-			_clock = minf(_clock + dt / (drop_s * (1.0 - _from)), 1.0)
+			_clock = minf(_clock + dt / (drop_s * fall * (1.0 - _from)), 1.0)
 			down = _from + (1.0 - _from) * _clock * _clock
 			if _clock >= 1.0:
 				state = State.DOWN
 				down = 1.0
+				_from_start = false
 		State.RISING:
 			_clock = minf(_clock + dt / (rise_s * _from), 1.0)
 			down = _from * (1.0 - smoothstep(0.0, 1.0, _clock))
@@ -137,10 +160,15 @@ func pose(p: KeeperPose) -> void:
 		_recovering(p)
 		return
 	if down <= 0.0:
-		p.copy_from(_up)
+		p.copy_from(_start if _from_start else _up)
 		return
 	if down >= 1.0:
 		p.copy_from(_low)
+		return
+	if _from_start:
+		blend_body(p, _start, _low, down)
+		for i: int in 2:
+			blend_leg(p.legs[i], _start.legs[i], _start_knees[i], _low.legs[i], down)
 		return
 	_blend(p, _up, _low, down)
 
