@@ -1978,7 +1978,7 @@ func _on_phase_changed_period_buzzer(p: GamePhase.Phase) -> void:
 		SoundManager.play_crowd(SoundManager.Sound.PERIOD_BUZZER)
 
 
-func _on_local_pickup_sound(_settle_until_ms: int) -> void:
+func _on_local_pickup_sound(_settle_until_ms: int, _feed_packed: int) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null and record.skater != null:
 		_play_pickup_sound(record.skater)
@@ -3141,7 +3141,7 @@ func _resolve_skater_peer_id(skater: Skater) -> int:
 	return _registry.resolve_peer_id(skater) if _registry != null else -1
 
 
-func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
+func _on_server_puck_picked_up_by(peer_id: int, settle_s: float, feed: Vector2) -> void:
 	# clear_for_grant, not clear(): if a different peer's claim was pending,
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
@@ -3167,9 +3167,13 @@ func _on_server_puck_picked_up_by(peer_id: int, settle_s: float) -> void:
 	if _possession_tracker != null:
 		_possession_tracker.on_pickup(peer_id)
 	var settle_until_ms: int = record.controller.settle_deadline_ms(settle_s)
-	record.controller.on_puck_picked_up_network(settle_until_ms)
+	# Quantized before the host uses it, so the host's one-timer reads the feed
+	# its client decodes.
+	var feed_packed: int = SnapshotEventLog.pack_feed(feed)
+	record.controller.on_puck_picked_up_network(settle_until_ms,
+			SnapshotEventLog.unpack_feed(feed_packed))
 	if not record.is_local:
-		NetworkManager.send_puck_picked_up(peer_id, settle_until_ms)
+		NetworkManager.send_puck_picked_up(peer_id, settle_until_ms, feed_packed)
 	NetworkManager.send_carrier_changed_to_all(peer_id)
 	# NHL delayed-offside: pickup by an offending-team attacker whistles the
 	# play dead. Consume immediately so the faceoff fires before the next
@@ -3990,10 +3994,11 @@ func on_carrier_puck_dropped() -> void:
 		puck_controller.notify_local_puck_dropped()
 
 
-func on_local_player_picked_up_puck(settle_until_ms: int = 0) -> void:
+func on_local_player_picked_up_puck(settle_until_ms: int = 0, feed_packed: int = 0) -> void:
 	var record := _registry.get_local() if _registry != null else null
 	if record != null:
-		record.controller.on_puck_picked_up_network(settle_until_ms)
+		record.controller.on_puck_picked_up_network(settle_until_ms,
+				SnapshotEventLog.unpack_feed(feed_packed))
 		puck_controller.notify_local_pickup(record.skater, settle_until_ms)
 
 

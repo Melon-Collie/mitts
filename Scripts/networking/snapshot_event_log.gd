@@ -21,17 +21,17 @@ extends RefCounted
 
 enum EventType {
 	CARRIER_CHANGED = 0,  # arg = new carrier peer_id (-1 = none), broadcast
-	PICKED_UP = 1,        # targeted at the granted carrier, arg = settle deadline ms (host time, 0 = none)
+	PICKED_UP = 1,        # targeted at the granted carrier, arg = settle deadline ms (host time, 0 = none), arg2 = the feed (pack_feed)
 	STOLEN = 2,           # targeted at the victim, arg = stick-lift forced lift ms (0 = not a lift)
 	DROPPED = 3,          # targeted at the ex-carrier (goal reset), no arg
 }
 
 # Godot peer ids are positive 31-bit ints, so 0 is a safe broadcast sentinel.
 const TARGET_ALL: int = 0
-# u32 seq + u8 type + s32 target_peer + s32 arg. target/arg are s32 because
-# carrier_changed carries -1 for "no carrier".
-const RECORD_SIZE: int = 13
-# Worst-case block: 16 × 13 + 1 count byte = 209 B, and only during a scramble
+# u32 seq + u8 type + s32 target_peer + s32 arg + s32 arg2. target/arg are s32
+# because carrier_changed carries -1 for "no carrier".
+const RECORD_SIZE: int = 17
+# Worst-case block: 16 × 17 + 1 count byte = 273 B, and only during a scramble
 # that produced 16 events inside RETENTION_S. Typical packets carry 1 byte.
 const MAX_EVENTS: int = 16
 # Re-broadcast window. Must comfortably exceed the reliable-retransmit time so
@@ -50,10 +50,10 @@ var _last_applied_seq: int = 0
 
 # Host: register an event for redundant broadcast. Returns the seq the caller
 # must attach to the reliable backstop RPC for the same event.
-func record(type: int, target_peer: int, arg: int, now: float) -> int:
+func record(type: int, target_peer: int, arg: int, now: float, arg2: int = 0) -> int:
 	var seq: int = _next_seq
 	_next_seq += 1
-	_events.append({seq = seq, type = type, target = target_peer, arg = arg, time = now})
+	_events.append({seq = seq, type = type, target = target_peer, arg = arg, arg2 = arg2, time = now})
 	# Cap so offline / free-play sessions (which record but never encode, and
 	# therefore never age-prune) can't grow the log unboundedly.
 	while _events.size() > MAX_EVENTS:
@@ -75,12 +75,13 @@ func append_block(buf: PackedByteArray, now: float) -> void:
 		buf.encode_u8(o + 4, ev.type)
 		buf.encode_s32(o + 5, ev.target)
 		buf.encode_s32(o + 9, ev.arg)
+		buf.encode_s32(o + 13, ev.arg2)
 		o += RECORD_SIZE
 	buf.encode_u8(o, _events.size())
 
 
 # Client: parse the trailing block, advance the watermark, and dispatch fresh
-# events addressed to this peer (or to all) via handler.call(type, arg).
+# events addressed to this peer (or to all) via handler.call(type, arg, arg2).
 # Records are stored oldest-first, so dispatch order matches host emit order.
 func apply_block(data: PackedByteArray, local_peer_id: int, handler: Callable) -> void:
 	if data.size() < 1:
@@ -97,12 +98,31 @@ func apply_block(data: PackedByteArray, local_peer_id: int, handler: Callable) -
 		var type: int = data.decode_u8(o + 4)
 		var target: int = data.decode_s32(o + 5)
 		var arg: int = data.decode_s32(o + 9)
+		var arg2: int = data.decode_s32(o + 13)
 		o += RECORD_SIZE
 		if seq <= _last_applied_seq:
 			continue
 		_last_applied_seq = seq
 		if target == TARGET_ALL or target == local_peer_id:
-			handler.call(type, arg)
+			handler.call(type, arg, arg2)
+
+
+# A horizontal velocity (world XZ, m/s) as one s32: two s16 in cm/s, x low.
+# ±327 m/s, so no puck clips.
+static func pack_feed(v: Vector2) -> int:
+	var x: int = clampi(roundi(v.x * 100.0), -32768, 32767)
+	var z: int = clampi(roundi(v.y * 100.0), -32768, 32767)
+	return (z << 16) | (x & 0xFFFF)
+
+
+static func unpack_feed(packed: int) -> Vector2:
+	var x: int = packed & 0xFFFF
+	var z: int = (packed >> 16) & 0xFFFF
+	if x >= 0x8000:
+		x -= 0x10000
+	if z >= 0x8000:
+		z -= 0x10000
+	return Vector2(x, z) / 100.0
 
 
 # Client: gate for the reliable backstop RPCs. True exactly once per seq, and

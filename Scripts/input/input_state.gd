@@ -89,14 +89,17 @@ static func quantize_power_t(v: float) -> float:
 # for humans. Humans leave aim_dir ZERO → positional.
 var bot_wrister_aim_dir: Vector3 = Vector3.ZERO
 # BOT-ONLY, runtime, NOT serialized. The bot's committed SLAPPER direction (world
-# XZ, normalized), read at the press tick and locked for the wind-up (see
-# SkaterController._enter_slapper_charge). The human lock is measured BLADE→cursor,
-# and the blade's world point is a shoulder-anchored, attribute-scaled offset ~1 m
-# off the body that a bot can't reproduce from the snapshot — a cursor placed to
-# cancel it parallel-shifts the locked line by about a net width (see
-# ShotMechanics.slapper_aim_dir). Bots have exactly one slapper — the one-timer —
-# so this is set by ONE_TIMER_PRESSED and nothing else. Humans leave it ZERO.
+# XZ, normalized), read every tick of the wind-up until the swing commits (see
+# SkaterController._update_slapper_aim). The human aim runs from where the puck
+# is struck toward the cursor, an offset ~1 m off the body that a synthesized
+# cursor can't cancel — one placed to cancel it parallel-shifts the line by
+# about a net width. Bots have exactly one slapper — the one-timer — so this is
+# set by ONE_TIMER_PRESSED and nothing else. Humans leave it ZERO.
 var bot_slapper_aim_dir: Vector3 = Vector3.ZERO
+# BOT-ONLY, runtime, NOT serialized. The brake with this stick is a shuffle, not
+# a stop (AIBotMechanics.braked_stick): a one-timer man stepping his circle onto
+# the feed's line while wound up. Set by ONE_TIMER_PRESSED and nothing else.
+var bot_shuffle: bool = false
 
 func to_array() -> Array:
 	return [

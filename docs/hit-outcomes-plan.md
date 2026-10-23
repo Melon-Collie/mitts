@@ -3,7 +3,7 @@
 Status: **Phases 0–3 built**, playtest pending. Amends the physicality paragraphs of
 `docs/gameplay-design.md` and the body-check verbs of
 `docs/physicality-plan.md`. Four phases plus a small controls pass, each its
-own PR and playtest. The cross-check this plan names was retired at v87
+own PR and playtest. The cross-check this plan names was retired at v88
 (`docs/net-front-battles-plan.md`); its rows here record what was decided then.
 
 ## Decisions banked
@@ -161,7 +161,7 @@ usually does.
 
 No new wire field. Every rocked effect is a function of `stagger_timer`, which
 is already snapped to the host at replay start and decayed deterministically.
-Protocol v83: the field's legal range grows. The native movement kernel
+Protocol v84: the field's legal range grows. The native movement kernel
 (`NativeSkaterMovement.integrate_forward`, which remote prediction and the
 host's rewind run) carries the rocked grip too, through `set_stagger_params`'
 two new arguments, and the parity fuzz now covers the rocked band.
@@ -372,7 +372,7 @@ Read `Scripts/networking/CLAUDE.md` first. What changes:
   hit claim (`HitClaimResolver`) rebuilds the closing speed from the rewound
   velocities along the hitter's line, which never asked who was faster, so
   it validates a stand-up unchanged.
-- Protocol v84, for Phases 2 and 3 together.
+- Protocol v85, for Phases 2 and 3 together.
 
 ### Bots
 

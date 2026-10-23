@@ -72,8 +72,12 @@ const CARRY_BLADE_WALL_MARGIN_M: float = GameRules.DEFAULT_BLADE_LENGTH_M
 
 # The stick a bot's input skates. A bot's brake means stop, while its stick still
 # names where it is steering; slow, under the brake, that stick would make the
-# stop a shuffle (SkaterMovementRules.is_shuffle), which no bot decides on.
-static func braked_stick(stick: Vector2, brake: bool, velocity: Vector3) -> Vector2:
+# stop a shuffle (SkaterMovementRules.is_shuffle), which a bot decides on only
+# with `shuffle` (a wound-up one-timer stepping onto the feed's line).
+static func braked_stick(stick: Vector2, brake: bool, velocity: Vector3,
+		shuffle: bool = false) -> Vector2:
+	if shuffle:
+		return stick
 	if brake and Vector2(velocity.x, velocity.z).length() <= SkaterMovementRules.SHUFFLE_MAX_SPEED:
 		return Vector2.ZERO
 	return stick

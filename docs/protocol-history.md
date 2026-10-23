@@ -388,29 +388,36 @@ here whenever you bump, in the same format.
 #      builds must be refused. Replay FORMAT_VERSION 18: a v17 replay's carry
 #      frames hold +1 in the bit, which would pin every replayed carry to one
 #      side.
-# v83: stagger_timer's legal range grows from [0, 1.0] to [0, 1.8] s — a full
+# v83: the pickup grant carries the feed — the puck's velocity in the
+#      carrier's frame at the catch, two s16 cm/s in one s32
+#      (SnapshotEventLog.pack_feed) — which a caught one-timer strikes.
+#      notify_puck_picked_up gains the argument and every SnapshotEventLog
+#      record grows an s32 arg2 (13 -> 17 B). An RPC signature and packet
+#      layout change, so mixed builds must be refused. Replay format unchanged:
+#      the event block is appended after the recorder's copy.
+# v84: stagger_timer's legal range grows from [0, 1.0] to [0, 1.8] s — a full
 #      check runs it into the rocked band (BodyCheckRules.is_rocked), which
 #      jars the stick off the ice and takes the stance and commit. Same
-#      layout (u8 at 0.01 s); a v82 peer reads a rocked timer as a plain full
+#      layout (u8 at 0.01 s); a v83 peer reads a rocked timer as a plain full
 #      stagger and predicts a skater with his stick and legs, so mixed builds
 #      must be refused.
-# v84: the knockdown is the victim's balance (BodyBalanceRules), not a fixed
+# v85: the knockdown is the victim's balance (BodyBalanceRules), not a fixed
 #      impulse line, and a contact's transfer and outcomes are both bodies'
 #      (SkaterCollisionRules.contact_transfer, a committed checker delivering
 #      whichever body is faster; each body's own Δv judged; the strip and the
-#      credit the checker's). Same layout; a v83 peer predicts the old
+#      credit the checker's). Same layout; a v84 peer predicts the old
 #      knockdowns and the old one-sided contacts, so mixed builds must be
 #      refused.
-# v85: a knockdown lasts the fall to the ice, a lie and the get-up
+# v86: a knockdown lasts the fall to the ice, a lie and the get-up
 #      (KnockdownFallRules.first_impact_time + BodyCheckRules
 #      .lie_seconds_from_overshoot + the get-up), so knockdown_timer's legal
 #      range grows from 1.9 s to ~2.3 s and every window changes length. Same
-#      layout; a v84 peer predicts the old windows.
-# v86: the cross-check winds up: its throw (CrossCheckRules.Phase.THROW, was
+#      layout; a v85 peer predicts the old windows.
+# v87: the cross-check winds up: its throw (CrossCheckRules.Phase.THROW, was
 #      EXTEND) draws the shaft in over LOAD_S before the PUSH_S punch, and only
 #      the punch can land (can_land reads the elapsed time). Same layout and
-#      phase values; a v85 peer lands and claims a push 0.12 s early.
-# v87: the cross-check is retired (docs/net-front-battles-plan.md, Phase 3);
+#      phase values; a v86 peer lands and claims a push 0.12 s early.
+# v88: the cross-check is retired (docs/net-front-battles-plan.md, Phase 3);
 #      the press is how a man is moved off his spot. The skater block shrinks a
 #      byte (59 -> 58 B, the cross_check u8 gone) and two RPCs
 #      (receive_cross_check_claim, notify_cross_check) leave the rpc ordering.

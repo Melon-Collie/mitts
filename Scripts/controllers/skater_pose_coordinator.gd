@@ -335,10 +335,29 @@ func apply_facing(input: InputState, delta: float) -> void:
 			lower_body_lag - turn_delta,
 			-deg_to_rad(_controller.lower_body_lag_max_deg),
 			deg_to_rad(_controller.lower_body_lag_max_deg))
+	elif _is_slapper_charge(s) and _controller.knockdown_timer <= 0.0:
+		_turn_to_slapper_stance(delta)
 	else:
 		facing_turn_rate = 0.0
 
 	apply_lower_body_yaw(delta)
+
+
+# A slapshot is struck side-on (SlapperRules.stance_facing): the hips pivot from
+# wherever the press found them to the stance for the locked line at a steady
+# rate, under the wind-up every other turn obeys — never in one tick.
+func _turn_to_slapper_stance(delta: float) -> void:
+	var prev_angle: float = _skater.rotation.y
+	var stance: Vector2 = _controller.slapper_stance_facing()
+	var step: float = deg_to_rad(_controller.slapper_stance_turn_deg_s) * delta
+	var turned: Vector2 = facing.rotated(clampf(facing.angle_to(stance), -step, step))
+	_turn_toward(turned, delta)
+	_skater.set_facing(facing)
+	var turn_delta: float = angle_difference(prev_angle, _skater.rotation.y)
+	lower_body_lag = clampf(
+		lower_body_lag - turn_delta,
+		-deg_to_rad(_controller.lower_body_lag_max_deg),
+		deg_to_rad(_controller.lower_body_lag_max_deg))
 
 
 # Turns facing toward where the rule put it this tick, at the rate the body can
@@ -419,26 +438,18 @@ func apply_upper_body(delta: float) -> void:
 	# frozen through the hold, so the coil simply holds at its apex — loaded and
 	# still — instead of unwinding to the generic tracking pose for a beat.
 	if _is_slapper_charge(charge_state):
-		# Hold upper body facing the locked shot direction throughout the wind-up,
-		# then layer the coil rotation on top: back shoulder pulls away from the
-		# target as the wind-up timer fills, ending in a loaded stance with the
-		# non-stick shoulder pointing at the puck. Re-computed from world space
-		# each frame so the torso stays on target even if the feet pivot.
-		if _sm.locked_slapper_dir.length_squared() > 0.0001:
-			var locked_world := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
-			var local_dir := _skater.global_transform.basis.inverse() * locked_world
-			var locked_angle := atan2(local_dir.x, -local_dir.z)
-			var max_twist := deg_to_rad(_controller.upper_body_max_twist_deg)
-			var aim_target: float = clampf(-locked_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
-			var wind_up_eased: float = sqrt(_controller.slapper_wind_up_t())
-			var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-			var coil: float = -blade_side_sign * deg_to_rad(_controller.slapper_wind_up_twist_deg) * wind_up_eased
-			upper_body_angle = lerp_angle(upper_body_angle, aim_target + coil, _controller.slapper_wind_up_lerp_speed * delta)
-			_skater.set_upper_body_rotation(upper_body_angle)
-			# Glued to the tracked angle, as through the follow-through: the exit
-			# keeps the pose, so skating must find the spring settled on it.
-			_twist_follow = upper_body_angle
-			_twist_follow_vel = 0.0
+		# The shoulders ride the open hips — the stance already points the top
+		# hand's shoulder down the shot line — and coil back toward the stick side
+		# as the wind-up fills.
+		var wind_up_eased: float = sqrt(_controller.slapper_wind_up_t())
+		var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
+		var coil: float = -blade_side_sign * deg_to_rad(_controller.slapper_wind_up_twist_deg) * wind_up_eased
+		upper_body_angle = lerp_angle(upper_body_angle, coil, _controller.slapper_wind_up_lerp_speed * delta)
+		_skater.set_upper_body_rotation(upper_body_angle)
+		# Glued to the tracked angle, as through the follow-through: the exit
+		# keeps the pose, so skating must find the spring settled on it.
+		_twist_follow = upper_body_angle
+		_twist_follow_vel = 0.0
 		# The wind-up's hands are authored, not reached for, so there is no reach
 		# lean; the posture under the coil — the
 		# skating lean, a stagger's reel — carries on as in every other state.

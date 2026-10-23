@@ -31,29 +31,47 @@ var _from_hand := Vector3.ZERO
 var _from_blade := Vector3.ZERO
 var _age: float = 0.0
 var _span: float = 0.0
+# The span the next change of owner eases over instead of its usual one (0: the
+# usual); see ease_next_change.
+var _next_span: float = 0.0
 
 
-static func owner_of(state: State) -> Owner:
+# `slapper_set`: false while a slapshot's set-up still has the tracked blade
+# taking the puck to the strike spot; the wind-up owns the stick from there.
+# `slap_finish`: a follow-through that is a slapper's, whose downswing starts
+# from the pose its wind-up ended on — one owner, so nothing holds the stick
+# while the shoulders come through.
+static func owner_of(state: State, slapper_set: bool = true, slap_finish: bool = false) -> Owner:
 	match state:
 		State.SLAPPER_CHARGE_WITH_PUCK, State.SLAPPER_CHARGE_WITHOUT_PUCK, \
 				State.ONE_TIMER_RETENTION:
-			return Owner.SLAPPER
+			return Owner.SLAPPER if slapper_set else Owner.TRACKED
 		State.FOLLOW_THROUGH:
-			return Owner.FOLLOW_THROUGH
+			return Owner.SLAPPER if slap_finish else Owner.FOLLOW_THROUGH
 		State.SHOT_BLOCKING:
 			return Owner.BLOCK
 	return Owner.TRACKED
 
 
+# The next change of owner eases over `span` seconds: a stick brought down out of
+# a called-off slapshot takes as long as its recovery, not a hand-off's blink.
+func ease_next_change(span: float) -> void:
+	_next_span = span
+
+
 # After the tick's last write to the hand and blade: start an ease if the owner
 # changed, lay it on, and remember what was drawn.
-func settle(skater: Skater, state: State, delta: float) -> void:
-	var owner: Owner = owner_of(state)
+func settle(skater: Skater, state: State, delta: float, slapper_set: bool = true,
+		slap_finish: bool = false) -> void:
+	var owner: Owner = owner_of(state, slapper_set, slap_finish)
 	if owner != _owner and _have_last:
 		_from_hand = _last_hand
 		_from_blade = _last_blade
 		_age = 0.0
 		_span = FOLLOW_THROUGH_SPAN_S if owner == Owner.FOLLOW_THROUGH else SPAN_S
+		if _next_span > 0.0:
+			_span = _next_span
+	_next_span = 0.0
 	_owner = owner
 	if _span > 0.0:
 		var held: float = 1.0 - smoothstep(0.0, _span, _age)

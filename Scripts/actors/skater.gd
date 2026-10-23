@@ -412,6 +412,16 @@ var _blade_mesh_instance: MeshInstance3D = null
 # Where the blade mesh was last drawn, in UpperBody's frame: a frame that skips
 # the mesh pass holds it there (_hold_blade_mesh).
 var _blade_drawn: Transform3D = Transform3D.IDENTITY
+# The slapshot swing's rigid stick (_swing_rigid), in UpperBody's frame: the
+# blade and hosel line it started from, the blade and shaft roll reference it
+# has turned to, and how much of the drawn stick they own.
+var _swing_anchor_basis: Basis = Basis.IDENTITY
+var _swing_anchor_hosel: Vector3 = Vector3.DOWN
+var _swing_anchor_up: Vector3 = Vector3.UP
+var _swing_basis: Basis = Basis.IDENTITY
+var _swing_up: Vector3 = Vector3.UP
+var _swing_weight: float = 0.0
+var _swing_from_slap: bool = false
 # The params it was built from, read by the carry seat (_seat_on_puck).
 var _blade_params: StickBladeMeshBuilder.Params = null
 # Where a tied blade is drawn toward its partner's (StickTieDraw, world XZ): a
@@ -1515,10 +1525,74 @@ func _apply_blade_tilt() -> void:
 	heel += _seat_on_puck(Vector3(address_x, 0.0, 0.0), hand, twist, marker_global, up)
 	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
 	heel = _toe_on_ice(heel, rot, hand, twist, marker_global.origin.y, up)
-	rot = _rigid_blade_basis(hand - heel, twist)
+	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel)
 	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
 	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
 	_blade_drawn = marker * _blade_mesh_instance.transform
+
+
+# Through a slapshot's swing the stick turns as one piece. The dressed blade
+# above is solved fresh each frame from the shaft's bearing, which whips round as
+# the blade passes over the hands and spins the blade with it (~60° of roll
+# through the downswing). Here the blade, and the shaft's roll, are the ones the
+# swing started with, turned by the single rotation that takes the starting
+# hosel line onto this one — a stick swung with the wrists held. Anchored rather
+# than carried frame to frame: a frame-to-frame carry drifts by the area its
+# loop encloses (up, down through contact, out through the finish), ~150° by
+# the time the finish hands back. Anchored, the blade comes back square through
+# contact and close to the carry at the end, eased back to it over
+# SWING_RELEASE_S. In the shoulders' frame, which the arms swing the stick in:
+# the body turning carries the stick with it, and only a roll in the hands
+# would spin it. The anchor is the dressed
+# blade whenever no swing is on, so the swing starts where the carry was. Read
+# from replicated state alone, so every machine draws the same swing.
+const SWING_RELEASE_S: float = 0.15
+
+
+func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
+	var to_hips: Basis = marker_basis.orthonormalized()
+	var hosel: Vector3 = (to_hips * to_hand).normalized()
+	var dressed: Basis = (to_hips * rot).orthonormalized()
+	var swinging: bool = _slap_swinging()
+	if not swinging and _swing_weight <= 0.0:
+		_swing_anchor_basis = dressed
+		_swing_anchor_hosel = hosel
+		_swing_anchor_up = upper_body.global_transform.basis.inverse() * Vector3.UP
+		return rot
+	var arc := Quaternion(_swing_anchor_hosel, hosel)
+	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
+	_swing_up = arc * _swing_anchor_up
+	_swing_weight = 1.0 if swinging \
+			else move_toward(_swing_weight, 0.0, get_process_delta_time() / SWING_RELEASE_S)
+	var q: Quaternion = dressed.get_rotation_quaternion().slerp(
+			_swing_basis.get_rotation_quaternion(), _swing_weight)
+	return to_hips.inverse() * Basis(q)
+
+
+# A slapper's wind-up, its committed hold and its finish, read off the
+# replicated shot state. The set-up, before the charge starts, is still the
+# carry's blade.
+func _slap_swinging() -> bool:
+	match current_shot_state:
+		SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK, \
+				SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK, \
+				SkaterStateMachine.State.ONE_TIMER_RETENTION:
+			_swing_from_slap = true
+			return shot_charge > 0.0
+		SkaterStateMachine.State.FOLLOW_THROUGH:
+			return _swing_from_slap
+	_swing_from_slap = false
+	return false
+
+
+# The shaft's roll reference (UpperBody frame) for a shaft along `dir`: world up,
+# except through a slapshot's swing, where it turns with the stick.
+func shaft_roll_up(dir: Vector3) -> Vector3:
+	var world_up: Vector3 = upper_body.global_transform.basis.inverse() * Vector3.UP
+	var roll_up: Vector3 = world_up.lerp(_swing_up, _swing_weight)
+	if absf(dir.dot(roll_up.normalized())) > 0.999:
+		return Vector3.FORWARD
+	return roll_up
 
 
 # The blade mesh hangs from the Blade marker, which the tick moves whether or
@@ -2581,12 +2655,11 @@ func get_carry_target_global() -> Vector3:
 # cursor. Falls back to get_blade_contact_global() (centered) when not carrying
 # or when the geometry is degenerate.
 #
-# Slapshot wind-up override: while slapshot pinning is active the puck holds at a
-# fixed lateral/forward offset from the player (matched to the one-timer slapper
-# zone) rather than following the blade, which is lifted overhead and pulled back
-# over the shoulder during the coil. That keeps the puck on the ice in front of
-# the skater — so they can coast or brake through the wind-up without leaving it
-# behind — and fires the shot from a sane ice position, not the elevated tip.
+# Slapshot wind-up override: while slapshot pinning is active the puck holds at
+# the skater-local spot it was set at rather than following the blade, which is
+# lifted overhead during the backswing. That keeps the puck on the ice in front
+# of the skater — so they can coast through the wind-up without leaving it
+# behind — and fires the shot from where it lies, not the elevated tip.
 func _carry_target_raw() -> Vector3:
 	if _slapshot_pin_active:
 		var local := Vector3(_slapshot_pin_local.x, 0.0, _slapshot_pin_local.y)
@@ -2606,14 +2679,14 @@ func _carry_target_raw() -> Vector3:
 	return contact - face_normal * get_carry_forehand_factor() * carry_blade_offset
 
 
-# Slapshot pin state — set by SkaterController._enter_slapper_charge when the
-# carrier commits to a slap, cleared in _transition_to_skating. The pin offset
-# is XZ in skater-local space (already includes blade_side_sign).
+# Slapshot pin state — set by SkaterController when the puck is set for the
+# swing (where it lies then), cleared in _transition_to_skating. The pin is
+# (x, z) in skater-local space.
 var _slapshot_pin_active: bool = false
 var _slapshot_pin_local: Vector2 = Vector2.ZERO
 
-func enter_slapshot_pinning(local_offset_x: float, local_offset_z: float) -> void:
-	_slapshot_pin_local = Vector2(local_offset_x, local_offset_z)
+func enter_slapshot_pinning(local: Vector2) -> void:
+	_slapshot_pin_local = local
 	_slapshot_pin_active = true
 
 func exit_slapshot_pinning() -> void:
@@ -2621,6 +2694,10 @@ func exit_slapshot_pinning() -> void:
 
 func is_slapshot_pinning() -> bool:
 	return _slapshot_pin_active
+
+
+func slapshot_pin_local() -> Vector2:
+	return _slapshot_pin_local
 
 
 func get_prev_blade_contact_global() -> Vector3:
@@ -3108,14 +3185,13 @@ func get_body_block_y_range() -> Vector2:
 
 
 # ── Slapper Zone ──────────────────────────────────────────────────────────────
-# Arms the one-timer catch zone: a disc of `radius` centered `offset_x` to the
-# blade side and `offset_z` ahead, in skater-local space. Disarming keeps the last
-# geometry — every caller gates on is_slapper_zone_active() first.
-func set_slapper_zone(active: bool, radius: float = 0.0, offset_x: float = 0.0, offset_z: float = 0.0) -> void:
+# Arms the one-timer catch zone: a disc of `radius` centred on `center_local`, an
+# (x, z) point in skater-local space. Disarming keeps the last geometry — every
+# caller gates on is_slapper_zone_active() first.
+func set_slapper_zone(active: bool, radius: float = 0.0, center_local: Vector2 = Vector2.ZERO) -> void:
 	if active and radius > 0.0:
 		_slapper_zone_radius = radius
-		var blade_side_sign: float = -1.0 if is_left_handed else 1.0
-		_slapper_zone_offset = Vector3(blade_side_sign * offset_x, 0.0, offset_z)
+		_slapper_zone_offset = Vector3(center_local.x, 0.0, center_local.y)
 	_slapper_zone_active = active
 
 
@@ -3223,12 +3299,12 @@ func set_world_hud_hidden(hidden: bool) -> void:
 	_hud.set_world_hud_hidden(hidden)
 
 
-func set_slapper_indicator(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = 0.5) -> void:
-	_hud.set_slapper_indicator(active, offset_x, offset_z, radius)
+func set_slapper_indicator(active: bool, center_local: Vector2 = Vector2.ZERO, radius: float = 0.5) -> void:
+	_hud.set_slapper_indicator(active, center_local, radius)
 
 
-func set_slapshot_arrow(active: bool, offset_x: float = 0.0, offset_z: float = 0.0, radius: float = -1.0) -> void:
-	_hud.set_slapshot_arrow(active, offset_x, offset_z, radius)
+func set_slapshot_arrow(active: bool, center_local: Vector2 = Vector2.ZERO, radius: float = -1.0) -> void:
+	_hud.set_slapshot_arrow(active, center_local, radius)
 
 
 func update_slapshot_arrow_direction(world_dir: Vector3) -> void:

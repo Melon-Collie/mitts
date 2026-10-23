@@ -1,6 +1,6 @@
 # Physicality — the pin on the stick button, and the cross-check
 
-Status: **all three phases built**; Phases B and C **retired** at v87 — the
+Status: **all three phases built**; Phases B and C **retired** at v88 — the
 press (`docs/net-front-battles-plan.md`) is how a man is moved off his spot, and
 the cross-check's code is gone. Phase A (the pin on the stick button) stands.
 Amends

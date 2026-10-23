@@ -137,3 +137,4 @@ static func zero_input(input: InputState, delta: float, host_timestamp: float) -
 	# ZERO = not committed; a latched aim would be read as a stale bot aim.
 	input.bot_wrister_aim_dir = Vector3.ZERO
 	input.bot_slapper_aim_dir = Vector3.ZERO
+	input.bot_shuffle = false

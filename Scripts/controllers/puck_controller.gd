@@ -193,6 +193,15 @@ func get_client_carrier_skater() -> Skater:
 		return _remote_carrier_skater
 	return null
 
+# Whoever this peer draws the puck on: the host's carrier, or a client's pin —
+# local, provisional or remote. Null while the puck is drawn loose.
+func drawn_carrier() -> Skater:
+	if is_server:
+		return puck.carrier
+	if _provisional_carrier_skater != null and is_instance_valid(_provisional_carrier_skater):
+		return _provisional_carrier_skater
+	return get_client_carrier_skater()
+
 # Callable (Skater) -> int peer_id, or -1 if not registered.
 var _peer_id_resolver: Callable = Callable()
 # Host-only. Callable (grabber: Skater, grabber_peer_id: int, blade_pos: Vector3,
@@ -215,7 +224,7 @@ var _team_id_by_skater: Dictionary = {}
 
 # ── Signals (server-side puck events, GameManager listens) ───────────────────
 # `settle_s`: how long the catch leaves the carrier settling (0 = clean).
-signal puck_picked_up_by(peer_id: int, settle_s: float)
+signal puck_picked_up_by(peer_id: int, settle_s: float, feed: Vector2)  # feed: puck − carrier at the catch, world XZ
 signal puck_released_by_carrier(peer_id: int)
 # `peer_id` is the dispossessed carrier; `stripper_peer_id` is the defender who
 # took the puck (poke / stick-lift / body-check), or -1 when a goalie stripped
@@ -250,6 +259,7 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 	# queried at a claimant's view-time. Injected here to keep the actor clock-agnostic.
 	puck.set_time_provider(NetworkManager.local_time)
 	process_physics_priority = 1  # Run after Skater's integration so blade world pos is current
+	puck.set_carrier_view(drawn_carrier)
 	if is_server:
 		puck.puck_released.connect(_on_puck_released)
 		puck.puck_stripped.connect(_on_puck_stripped)
@@ -396,7 +406,7 @@ func _grant_catch(skater: Skater, relative_velocity: Vector3, catch_load: float)
 	_granted_arrival_speed = relative_velocity.length()
 	skater.trigger_reception_cushion(relative_velocity, catch_load, settle_s)
 	puck.set_carrier(skater)
-	_on_puck_picked_up(skater, settle_s)
+	_on_puck_picked_up(skater, settle_s, Vector2(relative_velocity.x, relative_velocity.z))
 
 
 # Client-side cushion for a carrier this machine just learned of, from its own
@@ -1125,12 +1135,12 @@ func _pin_puck_to_carrier(carrier: Skater, delta: float) -> void:
 # three variants below differ only in how peer_id is sourced (resolve from
 # the skater argument vs. read the cached carrier) and which signal fires.
 # GameManager listens and does the player-registry / RPC work.
-func _on_puck_picked_up(carrier: Skater, settle_s: float) -> void:
+func _on_puck_picked_up(carrier: Skater, settle_s: float, feed: Vector2) -> void:
 	var peer_id: int = _resolve_peer_id(carrier)
 	if peer_id == -1:
 		return
 	_carrier_peer_id = peer_id
-	puck_picked_up_by.emit(peer_id, settle_s)
+	puck_picked_up_by.emit(peer_id, settle_s, feed)
 
 func _on_puck_released() -> void:
 	var peer_id: int = _carrier_peer_id

@@ -297,7 +297,7 @@ is moved slowly just past his hold, never snapped.
 - `docs/physicality-plan.md` Phase B gains a retired note;
   `docs/gameplay-design.md` replaces the cross-check sentences with the press.
 
-As built (v87, replay format 19): the screen's two reads the press still needs
+As built (v88, replay format 19): the screen's two reads the press still needs
 (`hides_release`, `clears_screen`) moved out of `CrossCheckRead` into
 `AIScreenRead` (`Scripts/domain/ai/screen_read.gd`) before it went. The pad's
 aim stick no longer holds its aim while RB is down; with nothing to throw, a
