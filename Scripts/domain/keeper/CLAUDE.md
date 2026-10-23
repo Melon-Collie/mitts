@@ -15,11 +15,11 @@ one the bots shoot at.
 | `keeper_poses.gd` | the taught stances, each written as where the body goes |
 | `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
 | `keeper_seams.gd` | the holes a flat puck fits through in the shape he shows a shot straight on, inside his outline |
-| `keeper_footwork.gd` | his skates moving him, on GoaliePushRules' kinematics at each move's top speed: across his line the T-push (push off the planted trail skate, glide on the lead) and the shuffle (square, in strokes, the trail skate holding its place as he passes over it); in and out the C-cuts (the skates taking turns to carve a C, heel out); the edge stop onto the spot that ends each; and the ready stance they bend |
+| `keeper_footwork.gd` | his skates moving him, on GoaliePushRules' kinematics at each move's top speed: the T-push (push off the planted trail skate, glide on the lead), straight to its spot up to 45° off his line, square to the shooter; across his line the shuffle (square, in strokes, the trail skate holding its place as he passes over it); in and out the C-cuts (the skates taking turns to carve a C, heel out); the edge stop onto the spot that ends each; and the ready stance they bend |
 | `keeper_drop.gd` | his butterfly drop, rise and recovery: how far down he is (a fall down, a push up, from wherever he is), and the pose that far between the ready stance and the butterfly; the recovery bringing the leg away from where he is going up first, so he stands with the skate that pushes him there loaded |
 | `keeper_slide.gd` | his butterfly slide, from the butterfly or from his feet (the lead knee dropping to the half butterfly as the push starts, the push skate never leaving where it stood): the push leg's knee up off the ice to about 45° and its skate catching the ice out wide (`KeeperPoses.butterfly_push`), driving him off it while the lead pad stays down, folding back to seal as the pads slide; the lead skate's edge stopping him on his spot; to a spot off his line, turned as he loads until his lead side faces it, and `post_spot`, the spot that lands the lead pad's end on a post; and the reach and time that gives the brain |
 | `keeper_post.gd` | his RVH on a post: dropping into it from his feet on the overlap (the post knee falling, the off skate sliding out wide on its edge) and rising back out, coming up into it from the butterfly after a slide and folding back; `overlap_spot` and `seal_spot`, where he is on the post standing and sealed |
-| `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork along his turned line |
+| `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -104,8 +104,9 @@ each stance's coverage straight on and from the dot line, and
 intended windows (the five-holes the ready stance, the half butterflies, the
 extensions and the kicks open, the ice under the RVH's off pad).
 `test_keeper_footwork.gd` holds the T-push, the shuffle and the C-cuts: set on
-his spot in `GoaliePushRules.time_to_set`, the T-push skate on its plant until
-the leg is out, a stroke's skate holding its place and never sliding back, a
+his spot in `GoaliePushRules.time_to_set`, a diagonal T-push straight there and
+one steeper than it goes to where its spot falls on his line, the T-push skate
+on its plant until the leg is out, a stroke's skate holding its place and never sliding back, a
 C-cut's skates taking turns with their heels out, the shuffle square, a spot
 on the other axis waiting until he is set, skates on and gear out of the ice
 every tick, nothing jumping a tick, a slower stop showing less, and the ready
@@ -125,8 +126,8 @@ and to the overlap and the butterfly, sealed with the pad's end on the post,
 the off skate on the ice through the drop-in and the rise, and every tick out
 of the ice, on the stick and without a jump. `test_keeper_motor.gd` holds the
 moves strung together: whole sequences across the crease and back with nothing
-jumping at a hand-off, the pivot at its rate onto its facing, footwork along
-his turned line, and a move from the wrong rest refused.
+jumping at a hand-off, the pivot at its rate onto its facing, footwork in his
+turned frame, and a move from the wrong rest refused.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
 the shooter's side, behind and high in front (`tools/keeper_strip.gd`).
 

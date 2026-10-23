@@ -9,10 +9,11 @@ extends RefCounted
 # Moves are asked for in order and each starts when the one before it has come
 # to rest, settled out of him. One asked for from the wrong rest (a slide on
 # his feet, a T-push down) is refused and counted. On his feet he turns by a
-# pivot (`face`), his skates turning under him on their edges, and every move
-# goes along his turned line: a T-push or shuffle to where the spot falls on
-# it, a C-cut to where it falls in depth. Turning first is the brain's, as the
-# coaching orders it: eyes, rotation, then the feet.
+# pivot (`face`), his skates turning under him on their edges, and footwork
+# goes in his turned frame: a T-push straight to the spot (KeeperFootwork's
+# diagonal), a shuffle to where it falls on his line, a C-cut to where it falls
+# in depth. Turning first is the brain's, as the coaching orders it: eyes,
+# rotation, then the feet.
 #
 # Places are in the stances' frame, as the movers': x across, z depth (+ back
 # toward his net), `yaw` his turn about the vertical, as a Node3D's rotation.y.
@@ -71,11 +72,12 @@ func face(turn: float) -> void:
 	_ask(Do.FACE, Vector2.ZERO, turn)
 
 
-# On his feet, along his line to where `spot` falls on it.
+# On his feet, to `spot`, square.
 func push_to(spot: Vector2) -> void:
 	_ask(Do.T_PUSH, spot)
 
 
+# On his feet, along his line to where `spot` falls on it.
 func shuffle_to(spot: Vector2) -> void:
 	_ask(Do.SHUFFLE, spot)
 
@@ -204,7 +206,7 @@ func _start(ask: _Ask) -> bool:
 			var local: Vector2 = _turned(ask.spot - _anchor, -yaw)
 			match ask.what:
 				Do.T_PUSH:
-					footwork.push_to(local.x)
+					footwork.push_to(local)
 				Do.SHUFFLE:
 					footwork.shuffle_to(local.x)
 				Do.C_CUT:

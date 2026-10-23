@@ -2,10 +2,11 @@ extends GutTest
 
 # The keeper's footwork (KeeperFootwork), the T-push, the shuffle and the
 # C-cuts: he gets to his spot in the time GoaliePushRules gives the move's push
-# and stop, stopped on it; a pushing skate holds its place while it pushes and
-# never slides back against the push; his skates stay on the ice and his gear
-# out of it at every tick; nothing on him jumps between ticks; and once the
-# stop has settled out of him he is in the ready stance.
+# and stop, stopped on it, a T-push straight there on a diagonal; a pushing
+# skate holds its place while it pushes and never slides back against the push;
+# his skates stay on the ice and his gear out of it at every tick; nothing on
+# him jumps between ticks; and once the stop has settled out of him he is in
+# the ready stance.
 
 const DT: float = 1.0 / 120.0
 const PAD_GIVE_M: float = 0.025
@@ -17,6 +18,12 @@ const T_PUSH := KeeperFootwork.Move.T_PUSH
 const SHUFFLE := KeeperFootwork.Move.SHUFFLE
 const C_CUT := KeeperFootwork.Move.C_CUT
 const MOVES: Array[int] = [T_PUSH, SHUFFLE, C_CUT]
+# T-pushes off his line, forward (−z) and back, both ways, out to near the
+# steepest he takes.
+const DIAGONALS: Array[Vector2] = [
+	Vector2(1.0, -0.35), Vector2(1.0, 0.35), Vector2(-1.0, -0.8), Vector2(-1.0, 0.8),
+	Vector2(0.5, -0.45), Vector2(-1.4, 1.3),
+]
 
 var _fw: KeeperFootwork = null
 var _pose := KeeperPose.new()
@@ -30,7 +37,7 @@ func before_each() -> void:
 func _go(kind: int, target: float) -> void:
 	match kind:
 		T_PUSH:
-			_fw.push_to(target)
+			_fw.push_to(Vector2(target, 0.0))
 		SHUFFLE:
 			_fw.shuffle_to(target)
 		C_CUT:
@@ -83,7 +90,8 @@ func test_he_is_set_on_his_spot_in_the_push_rules_time() -> void:
 			var t: float = _run()
 			var rules: float = GoaliePushRules.time_to_set(absf(dist), _fw.top_speed(), _fw.accel)
 			assert_almost_eq(t, rules, 2.5 * DT, _name(kind, dist))
-			assert_eq(_at(kind), dist, "%s: on the spot" % _name(kind, dist))
+			# A T-push's spot comes as a Vector2, in single precision.
+			assert_almost_eq(_at(kind), dist, 1e-6, "%s: on the spot" % _name(kind, dist))
 			assert_eq(_fw.speed, 0.0, "%s: stopped" % _name(kind, dist))
 
 
@@ -95,7 +103,7 @@ func test_he_never_goes_past_his_top_speed_or_his_spot() -> void:
 		while _fw.phase != KeeperFootwork.Phase.SET:
 			_fw.step(DT)
 			assert_lte(_fw.speed, top + 1e-6)
-			assert_lte(_at(kind), 1.2)
+			assert_lte(_at(kind), 1.2 + 1e-6)
 	var fw := KeeperFootwork.new()
 	assert_lt(fw.shuffle_speed, fw.t_push_speed, "a shuffle is slower than a T-push")
 	assert_lt(fw.c_cut_speed, fw.t_push_speed, "C-cuts are slower than a T-push")
@@ -113,9 +121,38 @@ func test_a_spot_the_other_way_mid_move_is_reached() -> void:
 		assert_eq(_fw.speed, 0.0)
 
 
+# A T-push off his line goes straight to its spot, in the time its distance
+# takes at the T-push's kinematics.
+func test_a_diagonal_t_push_goes_straight_to_its_spot() -> void:
+	for spot: Vector2 in DIAGONALS:
+		_fw = KeeperFootwork.new()
+		_fw.push_to(spot)
+		var way: Vector2 = spot.normalized()
+		var t: float = 0.0
+		var off_line: float = 0.0
+		while _fw.phase != KeeperFootwork.Phase.SET and t < 3.0:
+			_fw.step(DT)
+			t += DT
+			off_line = maxf(off_line, absf(Vector2(_fw.x, _fw.z).cross(way)))
+			assert_lte(_fw.speed, _fw.t_push_speed + 1e-6)
+		var rules: float = GoaliePushRules.time_to_set(spot.length(), _fw.t_push_speed, _fw.accel)
+		assert_almost_eq(t, rules, 2.5 * DT, "%s: in its time" % spot)
+		assert_lt(off_line, 1e-5, "%s: never off the straight line to it" % spot)
+		assert_eq(Vector2(_fw.x, _fw.z), spot, "%s: on the spot" % spot)
+
+
+func test_a_spot_further_off_his_line_is_pushed_to_where_it_falls_on_it() -> void:
+	var steep: float = tan(KeeperFootwork.DIAGONAL_MAX_RAD) + 0.1
+	for spot: Vector2 in [Vector2(0.8, steep * 0.8), Vector2(-0.8, -steep * 0.8)]:
+		_fw = KeeperFootwork.new()
+		_fw.push_to(spot)
+		_run()
+		assert_eq(Vector2(_fw.x, _fw.z), Vector2(spot.x, 0.0), "%s" % spot)
+
+
 # A move goes along one axis: a spot on the other waits until he is set.
 func test_a_spot_on_the_other_axis_waits_until_he_is_set() -> void:
-	_fw.push_to(1.0)
+	_fw.push_to(Vector2(1.0, 0.0))
 	_fw.step(DT)
 	_fw.c_cut_to(0.5)
 	_run()
@@ -129,23 +166,26 @@ func test_a_spot_on_the_other_axis_waits_until_he_is_set() -> void:
 # The T-push skate is where his push comes from: it does not move on the ice
 # until the leg driving off it is out as far as it goes.
 func test_the_t_push_skate_stays_on_its_plant_until_the_leg_is_out() -> void:
-	_fw.push_to(1.0)
-	var plant: float = -KeeperPoses.READY_SKATE_HALF_SPACING_M
 	var reach: float = KeeperFootwork.TRAIL_REACH * (KeeperAnatomy.THIGH_M + KeeperAnatomy.SHIN_M)
-	var planted_ticks: int = 0
-	while true:
-		_fw.step(DT)
-		if _fw.phase != KeeperFootwork.Phase.PUSH:
-			break
-		_solve()
-		var hip: Vector3 = _skel.xf[KeeperSkeleton.THIGH[0]].origin
-		var ankle: Vector3 = _skel.xf[KeeperSkeleton.FOOT[0]].origin
-		if absf(ankle.x + _fw.x - plant) < 0.001:
-			planted_ticks += 1
-		else:
-			assert_almost_eq(hip.distance_to(ankle), reach, 0.01,
-					"off its plant at x %.3f only with the leg out" % _fw.x)
-	assert_gt(planted_ticks, 20, "it is planted for most of the push")
+	for spot: Vector2 in [Vector2(1.0, 0.0)] + DIAGONALS:
+		_fw = KeeperFootwork.new()
+		_fw.push_to(spot)
+		var trail: int = 0 if spot.x > 0.0 else 1
+		var plant := Vector2(-signf(spot.x) * KeeperPoses.READY_SKATE_HALF_SPACING_M, 0.0)
+		var planted_ticks: int = 0
+		while true:
+			_fw.step(DT)
+			if _fw.phase != KeeperFootwork.Phase.PUSH:
+				break
+			_solve()
+			var hip: Vector3 = _skel.xf[KeeperSkeleton.THIGH[trail]].origin
+			var ankle: Vector3 = _skel.xf[KeeperSkeleton.FOOT[trail]].origin
+			if Vector2(ankle.x + _fw.x, ankle.z + _fw.z).distance_to(plant) < 0.001:
+				planted_ticks += 1
+			else:
+				assert_almost_eq(hip.distance_to(ankle), reach, 0.01,
+						"%s: off its plant at %.3f, %.3f only with the leg out" % [spot, _fw.x, _fw.z])
+		assert_gt(planted_ticks, 15, "%s: it is planted for most of the push" % spot)
 
 
 # The shuffle and the C-cuts are strokes: in each a skate holds its place along
@@ -220,35 +260,50 @@ func test_a_c_cut_turns_its_heel_out() -> void:
 
 
 func test_his_skates_stay_on_the_ice_and_his_gear_out_of_it() -> void:
+	var runs: Array = []
 	for kind: int in MOVES:
 		for target: float in [1.0, -1.0]:
-			_fw = KeeperFootwork.new()
-			_go(kind, target)
-			var trail: int = 0 if target > 0.0 else 1
-			var what: String = _name(kind, target)
-			for i: int in 120:
-				_fw.step(DT)
-				_solve()
-				for part: int in KeeperGear.PART_COUNT:
-					var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
-					assert_gte(_lowest(part), -(PAD_GIVE_M if soft else HARD_GIVE_M),
-							"%s tick %d %s" % [what, i, KeeperGear.Part.keys()[part]])
-				var low: Array[float] = [_lowest(KeeperGear.Part.SKATE_G), _lowest(KeeperGear.Part.SKATE_B)]
-				for leg: int in 2:
-					assert_between(low[leg], -0.005, KeeperFootwork.RECOVER_LIFT_M + 0.005,
-							"%s tick %d: skate %d is never more than lifted clear" % [what, i, leg])
-				assert_lt(minf(absf(low[0]), absf(low[1])), 0.005,
-						"%s tick %d: a skate is on the ice" % [what, i])
-				if kind != C_CUT:
-					assert_almost_eq(low[1 - trail], 0.0, 0.005, "%s tick %d: the lead skate" % [what, i])
-				if kind == T_PUSH and _fw.phase == KeeperFootwork.Phase.PUSH:
-					assert_almost_eq(low[trail], 0.0, 0.005, "%s tick %d: the push skate" % [what, i])
+			runs.append([kind, Vector2(target, 0.0)])
+	for spot: Vector2 in DIAGONALS:
+		runs.append([T_PUSH, spot])
+	for run: Array in runs:
+		var kind: int = run[0]
+		var spot: Vector2 = run[1]
+		_fw = KeeperFootwork.new()
+		if kind == T_PUSH:
+			_fw.push_to(spot)
+		else:
+			_go(kind, spot.x)
+		var trail: int = 0 if spot.x > 0.0 else 1
+		var what: String = "%s %s" % [KeeperFootwork.Move.keys()[kind], spot]
+		for i: int in 120:
+			_fw.step(DT)
+			_solve()
+			for part: int in KeeperGear.PART_COUNT:
+				var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
+				assert_gte(_lowest(part), -(PAD_GIVE_M if soft else HARD_GIVE_M),
+						"%s tick %d %s" % [what, i, KeeperGear.Part.keys()[part]])
+			var low: Array[float] = [_lowest(KeeperGear.Part.SKATE_G), _lowest(KeeperGear.Part.SKATE_B)]
+			for leg: int in 2:
+				assert_between(low[leg], -0.005, KeeperFootwork.RECOVER_LIFT_M + 0.005,
+						"%s tick %d: skate %d is never more than lifted clear" % [what, i, leg])
+			assert_lt(minf(absf(low[0]), absf(low[1])), 0.005,
+					"%s tick %d: a skate is on the ice" % [what, i])
+			if kind != C_CUT:
+				assert_almost_eq(low[1 - trail], 0.0, 0.005, "%s tick %d: the lead skate" % [what, i])
+			if kind == T_PUSH and _fw.phase == KeeperFootwork.Phase.PUSH:
+				assert_almost_eq(low[trail], 0.0, 0.005, "%s tick %d: the push skate" % [what, i])
 
 
 func test_nothing_on_him_jumps_between_ticks() -> void:
-	for kind: int in MOVES:
+	for run: int in MOVES.size() + DIAGONALS.size():
+		var kind: int = MOVES[run] if run < MOVES.size() else T_PUSH
+		var spot: Vector2 = Vector2(1.0, 0.0) if run < MOVES.size() else DIAGONALS[run - MOVES.size()]
 		_fw = KeeperFootwork.new()
-		_go(kind, 1.0)
+		if run < MOVES.size():
+			_go(kind, spot.x)
+		else:
+			_fw.push_to(spot)
 		_solve()
 		var was: Array[Vector3] = []
 		for b: int in KeeperSkeleton.BONE_COUNT:
@@ -259,21 +314,25 @@ func test_nothing_on_him_jumps_between_ticks() -> void:
 			for b: int in KeeperSkeleton.BONE_COUNT:
 				var at: Vector3 = _skel.xf[b].origin + _where()
 				assert_lt(at.distance_to(was[b]), MAX_BONE_STEP_M,
-						"%s tick %d bone %d" % [KeeperFootwork.Move.keys()[kind], i, b])
+						"%s %s tick %d bone %d" % [KeeperFootwork.Move.keys()[kind], spot, i, b])
 				was[b] = at
 
 
 func test_the_t_push_lead_skate_turns_along_the_push_and_squares_to_stop() -> void:
-	_fw.push_to(1.0)
-	var turned: float = 0.0
-	while _fw.phase != KeeperFootwork.Phase.SET:
-		_fw.step(DT)
+	for spot: Vector2 in [Vector2(1.0, 0.0)] + DIAGONALS:
+		_fw = KeeperFootwork.new()
+		_fw.push_to(spot)
+		var lead: int = 1 if spot.x > 0.0 else 0
+		var way := Vector3(spot.x, 0.0, spot.y).normalized()
+		var turned: float = 0.0
+		while _fw.phase != KeeperFootwork.Phase.SET:
+			_fw.step(DT)
+			_fw.pose(_pose)
+			turned = maxf(turned, _pose.legs[lead].toe.normalized().dot(way))
+		assert_gt(turned, 0.95, "%s: the lead toe points along the push" % spot)
 		_fw.pose(_pose)
-		turned = maxf(turned, _pose.legs[1].toe.normalized().x)
-	assert_gt(turned, 0.95, "the lead toe points along the push")
-	_fw.pose(_pose)
-	assert_almost_eq(_pose.legs[1].toe, KeeperPoses.ready_toe(1.0), Vector3.ONE * 1e-4,
-			"square again once he is on his spot")
+		assert_almost_eq(_pose.legs[lead].toe, KeeperPoses.ready_toe(signf(spot.x)), Vector3.ONE * 1e-4,
+				"%s: square again once he is on his spot" % spot)
 
 
 # The stop shows as much as the speed it stops: a shuffle's is softer than a

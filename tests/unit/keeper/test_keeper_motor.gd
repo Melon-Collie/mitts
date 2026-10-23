@@ -3,7 +3,7 @@ extends GutTest
 # The keeper's moves strung together (KeeperMotor): a whole sequence across the
 # crease and back, every hand-off from one move to the next leaving nothing on
 # him jumping and his gear out of the ice; the pivot turning him at its rate and
-# stopping on its facing; footwork going along his turned line; and a move asked
+# stopping on its facing; footwork going in his turned frame; and a move asked
 # for from the wrong rest refused.
 
 const DT: float = 1.0 / 120.0
@@ -137,21 +137,30 @@ func test_the_pivot_turns_him_at_its_rate_and_stops_on_its_facing() -> void:
 				"%.1f: in the time its rate and its edges give" % turn)
 
 
-# Turned, a T-push goes along his turned line, to where the spot falls on it.
-func test_footwork_goes_along_his_turned_line() -> void:
+# Turned, a T-push goes straight to a spot off his line, and a shuffle to
+# where the spot falls on it.
+func test_footwork_goes_in_his_turned_frame() -> void:
 	var turn: float = 0.4
-	_motor.face(turn)
-	_run_checked("turning")
 	var line := Vector2(cos(turn), -sin(turn))
-	_motor.push_to(line * 1.0 + Vector2(-sin(turn), -cos(turn)) * 0.3)
-	var off_line: float = 0.0
-	while not _motor.is_idle():
-		_motor.step(DT)
-		var at := Vector2(_motor.x, _motor.z)
-		off_line = maxf(off_line, absf(at.dot(Vector2(-line.y, line.x))))
-	assert_lt(off_line, 1e-5, "never off his line")
-	assert_almost_eq(Vector2(_motor.x, _motor.z), line * 1.0, Vector2.ONE * 1e-4, "where the spot falls on it")
-	assert_eq(_motor.yaw, turn, "still turned")
+	var spot: Vector2 = line * 1.0 + Vector2(-sin(turn), -cos(turn)) * 0.3
+	for shuffle: bool in [false, true]:
+		_motor = KeeperMotor.new()
+		_motor.face(turn)
+		_run_checked("turning")
+		var to: Vector2 = line * 1.0 if shuffle else spot
+		if shuffle:
+			_motor.shuffle_to(spot)
+		else:
+			_motor.push_to(spot)
+		var way: Vector2 = to.normalized()
+		var off: float = 0.0
+		while not _motor.is_idle():
+			_motor.step(DT)
+			off = maxf(off, absf(Vector2(_motor.x, _motor.z).cross(way)))
+		var what: String = "shuffle" if shuffle else "T-push"
+		assert_lt(off, 1e-5, "%s: straight there" % what)
+		assert_almost_eq(Vector2(_motor.x, _motor.z), to, Vector2.ONE * 1e-4, "%s: there" % what)
+		assert_eq(_motor.yaw, turn, "%s: still turned" % what)
 
 
 func test_a_move_from_the_wrong_rest_is_refused() -> void:

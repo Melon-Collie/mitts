@@ -22,11 +22,14 @@ const TILE := Vector2i(220, 280)
 const OUT_DIR: String = "res://.preview/keeper"
 # The stop settling out of him, after he is set.
 const SETTLE_FRAMES: int = 3
-# name, the spot he moves to from 0, the move.
+# name, the spot he moves to from 0 (a T-push's may be a Vector2 off his
+# line), the move.
 const SCENARIOS: Array = [
 	["t_push", 1.0, KeeperFootwork.Move.T_PUSH],
 	["t_push_far", 1.8, KeeperFootwork.Move.T_PUSH],
 	["t_push_glove", -1.0, KeeperFootwork.Move.T_PUSH],
+	["t_push_diagonal_forward", Vector2(1.0, -0.7), KeeperFootwork.Move.T_PUSH],
+	["t_push_diagonal_back_glove", Vector2(-1.0, 0.7), KeeperFootwork.Move.T_PUSH],
 	["shuffle", 0.3, KeeperFootwork.Move.SHUFFLE],
 	["shuffle_far", 1.0, KeeperFootwork.Move.SHUFFLE],
 	["c_cut_back", 1.2, KeeperFootwork.Move.C_CUT],
@@ -161,7 +164,8 @@ func _init() -> void:
 
 # Each frame of a move: [pose, where, phase, speed, t], and his turn if he
 # turns.
-func _record(target: float, kind: int) -> Array:
+func _record(spot: Vector2, kind: int) -> Array:
+	var target: float = spot.x
 	if kind == DROP_AND_RISE or kind == RECOVER:
 		return _record_drop(target if kind == RECOVER else 0.0)
 	if kind == SEQUENCE:
@@ -173,7 +177,7 @@ func _record(target: float, kind: int) -> Array:
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
-			fw.push_to(target)
+			fw.push_to(spot)
 		KeeperFootwork.Move.SHUFFLE:
 			fw.shuffle_to(target)
 		KeeperFootwork.Move.C_CUT:
@@ -368,12 +372,14 @@ func _process(_delta: float) -> bool:
 		_scenario_i += 1
 		if _scenario_i >= _scenarios.size():
 			return true
-		var target: float = float(_scenarios[_scenario_i][1])
+		var to: Variant = _scenarios[_scenario_i][1]
+		var spot: Vector2 = to if to is Vector2 else Vector2(float(to), 0.0)
+		var target: float = spot.x
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
 					or kind == SEQUENCE
-		_frames = _record(target, kind)
+		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
 		if kind == SEQUENCE:
 			_views = [_views[0], _views[2]]

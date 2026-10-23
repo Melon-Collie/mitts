@@ -32,8 +32,11 @@ extends RefCounted
 #
 # Places are in the stances' frame: x across his line (+ toward his blocker
 # side), z his depth (+ back toward his net). A right-catcher's moves are read
-# through KeeperSkeleton.world_side like his stances'. A move goes along one of
-# them; a spot on the other is taken once he is set.
+# through KeeperSkeleton.world_side like his stances'. The shuffle goes along
+# his line and the C-cuts in depth; the T-push goes straight to its spot, square
+# to the shooter, on a diagonal up to DIAGONAL_MAX_RAD off his line. A move goes
+# on along the line it set out on: a spot off it is taken where it falls on it,
+# the rest once he is set.
 
 enum Phase { SET, PUSH, GLIDE, STOP }
 enum Move { T_PUSH, SHUFFLE, C_CUT }
@@ -43,6 +46,9 @@ enum Move { T_PUSH, SHUFFLE, C_CUT }
 # turn his pad's face follows: a real T-push turns the lead pad off the shooter.
 const LEAD_TURN: float = 1.0
 const LEAD_PAD_FOLLOW: float = 0.5
+# How far off his line a T-push goes, forward or back; a spot further off is
+# pushed to where it falls on his line.
+const DIAGONAL_MAX_RAD: float = deg_to_rad(45.0)
 # How long the lead skate takes to turn in, and the lean into the move to come
 # on or go; a pushing leg to come back in once its push is over; and the stop
 # to leave his body once he is on his spot.
@@ -102,13 +108,22 @@ var speed: float = 0.0
 var phase: int = Phase.SET
 var move: int = Move.T_PUSH
 
-var _target: float = 0.0
-# The way he is going along the move's axis.
+# His spot, and the line he is going along: where it starts, its way, how far
+# along it he is and his spot is; and the way he is going along the move's own
+# axis (across his line, or in depth for a C-cut). Places held as floats, as
+# x and z are, so he lands on a spot exactly.
+var _target_x: float = 0.0
+var _target_z: float = 0.0
+var _start_x: float = 0.0
+var _start_z: float = 0.0
+var _dir := Vector2.RIGHT
+var _along: float = 0.0
+var _to: float = 0.0
 var _side: float = 1.0
 # How far he has come since the move started (the strokes are laid over it),
-# and where the T-push's trail skate was set down, along his line.
+# and how far along his line the T-push's trail skate holds its plant.
 var _travel: float = 0.0
-var _plant: float = 0.0
+var _plant_reach: float = 0.0
 # The leg pushing, and where its skate was against its place in the stance,
 # and how far its heel was turned out, when its push ended; and how far back
 # in it is since.
@@ -120,45 +135,64 @@ var _recover: float = 1.0
 # and how far into the stop he is (held once he is set, and let go over
 # SETTLE_S) and how hard a stop it is.
 var _turn: float = 0.0
+var _turn_from: float = 0.0
 var _drive: float = 0.0
 var _stop: float = 0.0
 var _stop_from_speed: float = 0.0
 
 
-# T-push to `target` across his line.
-func push_to(target: float) -> void:
-	_go(target, Move.T_PUSH)
+# T-push to `spot`.
+func push_to(spot: Vector2) -> void:
+	_go(spot.x, spot.y, Move.T_PUSH)
 
 
 # Shuffle to `target` across his line.
 func shuffle_to(target: float) -> void:
-	_go(target, Move.SHUFFLE)
+	_go(target, z, Move.SHUFFLE)
 
 
 # C-cut to depth `target`.
 func c_cut_to(target: float) -> void:
-	_go(target, Move.C_CUT)
+	_go(x, target, Move.C_CUT)
 
 
-# From the set stance `kind` starts; a new spot the same way mid-move retargets
-# the move under way, and one the other way pushes off the edge he is riding,
-# the way he was going carried into it.
-func _go(target: float, kind: int) -> void:
-	if phase != Phase.SET and _depth(kind) != _depth(move):
-		return
-	_target = target
-	var at: float = z if _depth(kind) else x
-	if absf(target - at) < 1e-4:
-		return
-	var side: float = signf(target - at)
-	if phase != Phase.SET and side == _side:
-		return
+# From the set stance `kind` starts; a new spot ahead mid-move retargets the
+# move under way, and one behind him pushes off the edge he is riding, the way
+# he was going carried into it.
+func _go(to_x: float, to_z: float, kind: int) -> void:
 	if phase != Phase.SET:
+		if _depth(kind) != _depth(move):
+			return
+		_to = (to_x - _start_x) * _dir.x + (to_z - _start_z) * _dir.y
+		if _dir.x != 0.0:
+			_target_x = _start_x + _dir.x * _to
+		if _dir.y != 0.0:
+			_target_z = _start_z + _dir.y * _to
+		if _to >= _along or absf(_to - _along) < 1e-4:
+			return
 		speed = -speed
+		_begin(-_dir, kind)
+		return
+	if kind == Move.T_PUSH and absf(to_z - z) > absf(to_x - x) * tan(DIAGONAL_MAX_RAD):
+		to_z = z
+	var way := Vector2(to_x - x, to_z - z)
+	if way.length() < 1e-4:
+		return
+	_target_x = to_x
+	_target_z = to_z
+	_begin(way.normalized(), kind)
+
+
+func _begin(dir: Vector2, kind: int) -> void:
 	move = kind
-	_side = side
+	_start_x = x
+	_start_z = z
+	_dir = dir
+	_along = 0.0
+	_to = (_target_x - x) * dir.x + (_target_z - z) * dir.y
+	_side = signf(dir.y if _depth(kind) else dir.x)
+	_plant_reach = _trail_reach(dir)
 	_travel = 0.0
-	_plant = x - _side * KeeperPoses.READY_SKATE_HALF_SPACING_M
 	_from = Vector3.ZERO
 	_heel_from = 0.0
 	_recover = 1.0
@@ -191,8 +225,7 @@ func step(dt: float) -> void:
 		_recover = minf(_recover + dt / RECOVER_S, 1.0)
 		_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 		return
-	var at: float = z if _depth(move) else x
-	var left: float = (_target - at) * _side
+	var left: float = _to - _along
 	# The stop starts the tick it would be too late to after this one's travel.
 	var next_left: float = left - maxf(speed, 0.0) * dt
 	if phase != Phase.STOP and speed > 0.0 \
@@ -218,18 +251,19 @@ func step(dt: float) -> void:
 			_recover = minf(_recover + dt / RECOVER_S, 1.0)
 			_stop = 1.0 - speed / maxf(_stop_from_speed, 1e-6)
 	var travelled: float = 0.5 * (was + speed) * dt
-	at += _side * travelled
+	_along += travelled
 	_travel += absf(travelled)
-	if (_target - at) * _side <= 0.0 or (phase == Phase.STOP and speed <= 1e-4):
-		at = _target
+	if _to - _along <= 0.0 or (phase == Phase.STOP and speed <= 1e-4):
+		x = _target_x
+		z = _target_z
+		_along = _to
 		speed = 0.0
 		_stop = 1.0
 		_turn = 0.0
 		phase = Phase.SET
-	if _depth(move):
-		z = at
-	else:
-		x = at
+		return
+	x = _start_x + _dir.x * _along
+	z = _start_z + _dir.y * _along
 
 
 func _end_push() -> void:
@@ -237,6 +271,7 @@ func _end_push() -> void:
 		_leg = _pushing_leg()
 		_from = _pushing_skate()
 		_heel_from = _pushing_heel()
+		_turn_from = _turn
 		_recover = 0.0
 
 
@@ -268,9 +303,8 @@ func _pushing_skate() -> Vector3:
 			return _coming_in(c, _stroke_back(d, C_CUT_CARVE_M, C_CUT_STROKE_M))
 	# The T-push's: on its plant until the leg is out as far as it goes, then
 	# dragged with him.
-	var home: float = -_side * KeeperPoses.READY_SKATE_HALF_SPACING_M
-	var trail: float = maxf((_plant - x) * _side, -_furthest_out()) * _side
-	return Vector3(trail - home, 0.0, 0.0)
+	var behind: Vector2 = -_dir * minf(_along, _plant_reach)
+	return Vector3(behind.x, 0.0, behind.y)
 
 
 # How far a skate's heel is turned out from the stance while it pushes: a
@@ -297,13 +331,19 @@ static func _coming_in(out: Vector3, back: float) -> Vector3:
 	return at
 
 
-# How far out from his middle the push leg reaches from hips sunk
-# MAX_PUSH_SINK_M.
-static func _furthest_out() -> float:
+# How far he goes along `dir` over a T-push's trail skate, set down where it
+# stands in the ready stance, before the leg driving off it is out as far as it
+# reaches from hips sunk MAX_PUSH_SINK_M.
+static func _trail_reach(dir: Vector2) -> float:
+	var s: float = -1.0 if dir.x < 0.0 else 1.0
 	var pelvis: Vector3 = KeeperPoses.READY_PELVIS
 	var up: float = pelvis.y - MAX_PUSH_SINK_M - KeeperAnatomy.ANKLE_ON_SKATES_M
-	var across: float = sqrt(maxf(_TRAIL_REACH_M * _TRAIL_REACH_M - up * up - pelvis.z * pelvis.z, 0.0))
-	return KeeperAnatomy.HIP_HALF_SPACING_M + across
+	var reach_sq: float = _TRAIL_REACH_M * _TRAIL_REACH_M - up * up
+	# The skate from the hip over it, on the ice.
+	var skate := Vector2(-s * (KeeperPoses.READY_SKATE_HALF_SPACING_M - KeeperAnatomy.HIP_HALF_SPACING_M),
+			-pelvis.z)
+	var ahead: float = skate.dot(dir)
+	return ahead + sqrt(maxf(ahead * ahead - skate.length_squared() + reach_sq, 0.0))
 
 
 static func _leg_x(leg: int) -> float:
@@ -327,11 +367,12 @@ func pose(p: KeeperPose) -> void:
 	var sx: float = _leg_x(leg)
 	var skate: Vector3
 	var heel: float
+	var back: float = 0.0
 	if phase == Phase.PUSH:
 		skate = _pushing_skate()
 		heel = _pushing_heel()
 	else:
-		var back: float = smoothstep(0.0, 1.0, _recover)
+		back = smoothstep(0.0, 1.0, _recover)
 		skate = _from.lerp(Vector3.ZERO, back)
 		# A skate already lifted when its push ended comes down from there; the
 		# lift a skate starting in from the ice takes is never added on top.
@@ -344,13 +385,21 @@ func pose(p: KeeperPose) -> void:
 		pushing.toe = Vector3(sx * sin(toe_out), 0.0, -cos(toe_out))
 	# The T-push's hips sink with its leg's drive out to the side; every move's
 	# sink as far as the leg needs to reach its skate.
-	var reach_out: float = _furthest_out() - KeeperPoses.READY_SKATE_HALF_SPACING_M
-	var out: float = clampf(skate.x * sx / reach_out, 0.0, 1.0)
+	var out: float = clampf(skate.x * sx / _trail_reach(Vector2.RIGHT), 0.0, 1.0)
 	if move == Move.T_PUSH:
+		out = clampf(-(skate.x * _dir.x + skate.z * _dir.y) / _plant_reach, 0.0, 1.0)
 		p.pelvis.y -= MAX_PUSH_SINK_M * smoothstep(0.0, 1.0, out)
 	# The leg's knee comes out of the stance's knee-in to drive over its skate,
 	# or the pad's outer corner is driven into the ice.
 	var drive := Vector3(sx * PUSH_KNEE_OUT, 0.0, -1.0)
+	if move == Move.T_PUSH and _dir.y < 0.0:
+		# Going forward on a diagonal, the push leg reaches out behind him: it
+		# drives square to the diagonal, its skate turned with it, or the shin
+		# pitches the pad's face into the ice. Out in front, the face tips up.
+		var turned: float = _turn if phase == Phase.PUSH else _turn_from * (1.0 - back)
+		var off_line: float = atan2(-_dir.y * _side, _dir.x * _side) * turned
+		drive = drive.rotated(Vector3.UP, off_line)
+		pushing.toe = pushing.toe.rotated(Vector3.UP, off_line)
 	var driven: float = smoothstep(0.0, PUSH_KNEE_DRIVEN_AT, out)
 	pushing.knee_pole = pushing.knee_pole.lerp(drive, driven)
 	pushing.shin_front = pushing.shin_front.lerp(drive, driven)
@@ -364,9 +413,10 @@ func pose(p: KeeperPose) -> void:
 # the stop, its edge dug; the lean into the move and back against the stop.
 func _bend_for_lateral(p: KeeperPose, stop: float) -> void:
 	var s: float = _side
+	var way := Vector3(_dir.x, 0.0, _dir.y)
 	var lead: KeeperPose.Leg = p.legs[1 if s > 0.0 else 0]
 	var turn: float = _turn * (1.0 - _stop)
-	lead.toe = lead.toe.slerp(Vector3(s, 0.0, 0.0), LEAD_TURN * turn)
+	lead.toe = lead.toe.slerp(way, LEAD_TURN * turn)
 	var pad_turn: float = KeeperPoses.ready_toe(s).signed_angle_to(lead.toe, Vector3.UP) \
 			* LEAD_PAD_FOLLOW
 	lead.shin_front = lead.shin_front.rotated(Vector3.UP, pad_turn)
@@ -374,7 +424,9 @@ func _bend_for_lateral(p: KeeperPose, stop: float) -> void:
 	lead.ankle.x += s * STOP_LEAD_OUT_M * stop
 	lead.shin_front = lead.shin_front.rotated(Vector3.FORWARD, -s * STOP_EDGE_RAD * stop)
 	var lean: float = PUSH_LEAN_RAD if move == Move.T_PUSH else SHUFFLE_LEAN_RAD
-	p.lumbar_rot.z += -s * lean * _drive + s * STOP_LEAN_RAD * stop
+	var into: float = lean * _drive - STOP_LEAN_RAD * stop
+	p.lumbar_rot.z -= _dir.x * into
+	p.lumbar_rot.x += _dir.y * into
 
 
 # In and out: both skates' edges dug in the stop, a little wider; the lean
