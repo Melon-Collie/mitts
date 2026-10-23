@@ -149,3 +149,17 @@ func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 		var to: Vector2 = case[0]
 		var from := Vector3(0.0, 0.3 if to.y > 0.1 else _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
 		assert_eq(_shot(from, to, 22.0), case[1], case[2])
+
+
+# A tier changed in the session (free play's picker, the tutorial) reaches his
+# reads and his hands.
+func test_a_tier_set_later_reaches_his_saves() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	var easy: GoalieSkillProfile = GoalieSkillProfile.easy()
+	_keeper.apply_skill_profile(easy)
+	assert_eq(_keeper.read.leg_delay_s, easy.reaction_delay_s)
+	assert_eq(_keeper.read.arm_delay_s, easy.arm_reaction_delay_s)
+	assert_eq(_keeper.save.glove_speed_m_s, easy.glove_react_max_speed_mps)
+	assert_eq(_keeper.motor.save_move.drop_s, easy.butterfly_drop_s)
+	_keeper.reset_to_crease()
+	assert_eq(_keeper.read.leg_delay_s, easy.reaction_delay_s, "and keeps it through a reset")

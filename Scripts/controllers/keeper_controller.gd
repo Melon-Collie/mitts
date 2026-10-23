@@ -63,6 +63,13 @@ static func _glove_side(part: int) -> bool:
 	return String(KeeperGear.Part.keys()[part]).ends_with("_G")
 
 
+func apply_skill_profile(profile: GoalieSkillProfile) -> void:
+	super.apply_skill_profile(profile)
+	if profile != null:
+		_profile = profile
+		_tier()
+
+
 # The tier's reads and speeds onto the read, the save and the motor's save.
 func _tier() -> void:
 	read.leg_delay_s = _profile.reaction_delay_s
