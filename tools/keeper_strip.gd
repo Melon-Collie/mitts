@@ -32,6 +32,8 @@ const SCENARIOS: Array = [
 	["c_cut_back", 1.2, KeeperFootwork.Move.C_CUT],
 	["c_cut_forward", -1.2, KeeperFootwork.Move.C_CUT],
 	["drop_and_rise", 0.0, DROP_AND_RISE],
+	["recover_blocker", 1.0, RECOVER],
+	["recover_glove", -1.0, RECOVER],
 	["slide", 1.0, SLIDE],
 	["slide_glove_far", -1.6, SLIDE],
 	["slide_from_feet", 1.0, SLIDE_FROM_FEET],
@@ -45,6 +47,9 @@ const SCENARIOS: Array = [
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
 const DROP_AND_RISE: int = -1
+# The same drop, held, and the recovery toward the target's side instead of the
+# rise.
+const RECOVER: int = -7
 # Not a footwork move either: KeeperSlide from the butterfly to the spot.
 const SLIDE: int = -2
 # KeeperSlide from his feet, by the half butterfly, a frame every
@@ -148,8 +153,8 @@ func _init() -> void:
 # Each frame of a move: [pose, where, phase, speed, t], and his turn if he
 # turns.
 func _record(target: float, kind: int) -> Array:
-	if kind == DROP_AND_RISE:
-		return _record_drop()
+	if kind == DROP_AND_RISE or kind == RECOVER:
+		return _record_drop(target if kind == RECOVER else 0.0)
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -179,7 +184,7 @@ func _record(target: float, kind: int) -> Array:
 
 # The drop's frames, as _record's, the phase column standing in for it: PUSH
 # while he drops, GLIDE while he is down, STOP while he rises, SET up.
-func _record_drop() -> Array:
+func _record_drop(toward: float) -> Array:
 	var drop := KeeperDrop.new()
 	drop.drop()
 	var out: Array = []
@@ -191,7 +196,8 @@ func _record_drop() -> Array:
 			var p := KeeperPose.new()
 			drop.pose(p)
 			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
-					KeeperFootwork.Phase.GLIDE, KeeperFootwork.Phase.STOP][drop.state]
+					KeeperFootwork.Phase.GLIDE, KeeperFootwork.Phase.STOP,
+					KeeperFootwork.Phase.STOP][drop.state]
 			out.append([p, Vector3.ZERO, phase, drop.down, tick * DT])
 			if drop.state == KeeperDrop.State.UP and tick > 0:
 				up_frames += 1
@@ -200,7 +206,10 @@ func _record_drop() -> Array:
 		if drop.state == KeeperDrop.State.DOWN:
 			held += 1
 			if held >= DROP_HOLD_TICKS:
-				drop.rise()
+				if toward == 0.0:
+					drop.rise()
+				else:
+					drop.recover(toward)
 	return out
 
 

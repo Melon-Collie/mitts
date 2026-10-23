@@ -36,7 +36,7 @@ enum Phase { DOWN, DROP, LOAD, PUSH, GLIDE, STOP }
 
 # The push leg rising onto its skate (the old goalie's coil), driving, and
 # folding back down; the stop leaving his body once he is at rest.
-const LOAD_S: float = 0.12
+const LOAD_S: float = KeeperDrop.PUSH_LOAD_S
 const PUSH_S: float = 0.12
 const FOLD_S: float = 0.15
 const SETTLE_S: float = 0.15
@@ -110,10 +110,7 @@ func _init() -> void:
 		KeeperPoses.butterfly_push(_loaded[i], side)
 		_skel.pose(_loaded[i])
 		_loaded_knee[i] = _skel.xf[KeeperSkeleton.SHIN[1 - i]].origin
-		# The half butterfly, its standing skate where the ready stance had it.
-		KeeperPoses.half_butterfly(_set[i], side)
-		_set[i].legs[1 - i].ankle = _ready.legs[1 - i].ankle
-		_set[i].legs[1 - i].toe = _ready.legs[1 - i].toe
+		KeeperPoses.half_butterfly_loaded(_set[i], side)
 
 
 # Slide toward `spot` (x, z) from the butterfly, pushing at up to `top` m/s;
@@ -291,7 +288,7 @@ func pose(p: KeeperPose) -> void:
 			var up: float = smoothstep(0.0, 1.0, _clock)
 			KeeperDrop.blend_body(p, _low, _loaded[_lead()], up)
 			p.legs[_lead()].copy_from(_low.legs[_lead()])
-			_swing(p.legs[_push_leg()], _loaded[_lead()].legs[_push_leg()],
+			KeeperDrop.swing_leg(p.legs[_push_leg()], _loaded[_lead()].legs[_push_leg()],
 					_loaded_knee[_lead()], _low.legs[_push_leg()], 1.0 - up)
 		Phase.PUSH:
 			_pushing_pose(p)
@@ -308,7 +305,7 @@ func pose(p: KeeperPose) -> void:
 					KeeperDrop.blend_leg(p.legs[_push_leg()], _released, _released_knee,
 							_low.legs[_push_leg()], down)
 				else:
-					_swing(p.legs[_push_leg()], _released, _released_knee, _low.legs[_push_leg()], down)
+					KeeperDrop.swing_leg(p.legs[_push_leg()], _released, _released_knee, _low.legs[_push_leg()], down)
 			# Back against the stop, as far as the speed it stops from asks.
 			var stop: float = _stop * clampf(_stop_from_speed / GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S,
 					0.0, 1.0)
@@ -320,28 +317,3 @@ func pose(p: KeeperPose) -> void:
 func _pushing_pose(p: KeeperPose) -> void:
 	p.copy_from(_launch())
 	p.legs[_push_leg()].ankle.x = _plant - _side * _along
-
-
-# The push leg `t` of the way from its skate (`up`, its knee at `up_knee`) down
-# into the butterfly (`low`): the knee pinned the shortest way, and the lower
-# leg swung round it, the skate lifting clear as it goes, so a skate that
-# moves round the knee does not pass through the leg, and the pad's face and
-# the skate turn with it.
-static func _swing(leg: KeeperPose.Leg, up: KeeperPose.Leg, up_knee: Vector3,
-		low: KeeperPose.Leg, t: float) -> void:
-	leg.knee_pinned = true
-	leg.knee = up_knee.lerp(low.knee, t)
-	var from: Vector3 = up.ankle - up_knee
-	var to: Vector3 = low.ankle - low.knee
-	var heading: float = atan2(from.x, from.z)
-	var turn: float = wrapf(atan2(to.x, to.z) - heading, -PI, PI)
-	var y: float = lerpf(from.y, to.y, t) + KeeperDrop.SKATES_OFF_M * sin(PI * t)
-	var flat: float = sqrt(maxf(KeeperAnatomy.SHIN_M * KeeperAnatomy.SHIN_M - y * y, 0.0))
-	var along: float = heading + turn * t
-	leg.ankle = leg.knee + Vector3(sin(along) * flat, y, cos(along) * flat)
-	leg.thigh_front = up.thigh_front.lerp(low.thigh_front, t).normalized()
-	leg.shin_front = up.shin_front.rotated(Vector3.UP, turn * t).lerp(low.shin_front, t).normalized()
-	leg.foot_mode = KeeperPose.FootMode.FLAT
-	leg.toe = up.toe.rotated(Vector3.UP, turn * t)
-	leg.flex = low.flex
-	leg.along_shin = t

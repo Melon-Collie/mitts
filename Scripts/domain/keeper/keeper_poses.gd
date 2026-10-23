@@ -131,6 +131,18 @@ static func butterfly_push(p: KeeperPose, side: float) -> void:
 	leg.along_shin = 0.0
 
 
+# The half butterfly with its standing skate where the ready stance has it,
+# toward `side`: the slide from his feet's stance as the lead knee lands, and
+# the recovery's as the push leg comes up, the skate a T-push toward `side`
+# drives off.
+static func half_butterfly_loaded(p: KeeperPose, side: float) -> void:
+	half_butterfly(p, side)
+	var up: int = 1 if side < 0.0 else 0
+	var sx: float = _side_x(up)
+	p.legs[up].ankle = Vector3(sx * READY_SKATE_HALF_SPACING_M, KeeperAnatomy.ANKLE_ON_SKATES_M, 0.0)
+	p.legs[up].toe = ready_toe(sx)
+
+
 # One leg down in the butterfly (`side`), the other loaded on its skate.
 static func half_butterfly(p: KeeperPose, side: float) -> void:
 	butterfly(p)
