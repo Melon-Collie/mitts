@@ -1,7 +1,8 @@
 extends GutTest
 
 # Saves (KeeperShotRead, KeeperSave): he reads a shot only once he has watched
-# it for his read's delay, its flight under gravity; the save he makes is the
+# it for his read's delay, or the primed read's for one he watched wound up
+# (a tip read cold again), its flight under gravity; the save he makes is the
 # least committed one his own gear says covers the flight in time — standing
 # for a shot at a pad, the glove high on his glove side, the blocker high on
 # the other, the blade for one along the ice wide of the paddle — and a hand
@@ -68,6 +69,19 @@ func test_he_reads_a_shot_only_after_his_read() -> void:
 	_read.step(DT * 2.0, _read.position_in(DT * 2.0), _read.velocity)
 	assert_true(_read.legs_read())
 	assert_false(_read.arms_read(), "the arms read later")
+
+
+# A release he watched wound up is read on the primed delay, legs and hands
+# alike; touched on its way, it is a new shot read cold.
+func test_a_primed_release_is_read_sooner() -> void:
+	_read.start(true)
+	_read.age = _read.primed_delay_s
+	assert_true(_read.legs_read(), "the legs on the primed read")
+	assert_true(_read.arms_read(), "the hands on the primed read")
+	assert_lt(_read.primed_delay_s, _read.leg_delay_s, "sooner than a cold one")
+	_read.start()
+	_read.age = _read.primed_delay_s
+	assert_false(_read.legs_read(), "a tip, read cold")
 
 
 func test_the_flight_falls_and_lands_on_the_net_or_not() -> void:

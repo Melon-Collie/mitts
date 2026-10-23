@@ -8,7 +8,8 @@ extends GutTest
 #
 #   sweep.*   perfect aim across the mouth (13 aims × FLAT/LOW/HIGH, 70 mph)
 #             from a fixed spot at a set keeper — cold (the puck appears in
-#             flight) or held (a 0.25 s wind-up, then an honest release)
+#             flight), held (a 0.25 s wind-up, then an honest release) or
+#             sighted (a 0.75 s wind-up: long enough to be read and primed)
 #   play.*    the moves that beat a goalie by moving him first: a rush shot off
 #             the drive, the breakaway cutback and walkaround, a deke then
 #             elevate, a pass out to a one-timer, a put-back of his own rebound
@@ -39,6 +40,7 @@ const SWEEP_AIMS: int = 13
 const FAN_AIMS: int = 7
 const SHOT_M_S: float = 70.0 * 0.44704
 const HOLD_TICKS: int = 30
+const SIGHTED_TICKS: int = 90
 const SETTLE_MAX_TICKS: int = 400
 const LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
 		ShotMechanics.ELEVATION_HIGH]
@@ -126,7 +128,7 @@ func _score() -> Array[String]:
 
 func _row_keys() -> Array[String]:
 	var keys: Array[String] = [
-		"sweep.dot_line.cold", "sweep.dot_line.held", "sweep.slot.cold",
+		"sweep.dot_line.cold", "sweep.dot_line.held", "sweep.dot_line.sighted", "sweep.slot.cold",
 		"sweep.faceoff_dot.cold", "sweep.faceoff_dot.held", "sweep.point.cold",
 		"play.rush_shot", "play.breakaway_cutback", "play.breakaway_walkaround",
 		"play.deke_elevate", "play.pass_out_one_timer", "play.put_back",
@@ -169,6 +171,8 @@ func _measure(key: String, tier: int) -> int:
 			return _sweep(tier, DOT_LINE, false)
 		"sweep.dot_line.held":
 			return _sweep(tier, DOT_LINE, true)
+		"sweep.dot_line.sighted":
+			return _sweep(tier, DOT_LINE, true, SIGHTED_TICKS)
 		"sweep.slot.cold":
 			return _sweep(tier, SLOT, false)
 		"sweep.faceoff_dot.cold":
@@ -232,7 +236,7 @@ func _aim(i: int, n: int) -> Vector3:
 
 
 # ── Sweeps ──────────────────────────────────────────────────────────────────
-func _sweep(tier: int, spot: Vector3, held: bool) -> int:
+func _sweep(tier: int, spot: Vector3, held: bool, hold_ticks: int = HOLD_TICKS) -> int:
 	var goals: int = 0
 	for loft: int in LOFTS:
 		for ai: int in SWEEP_AIMS:
@@ -241,7 +245,7 @@ func _sweep(tier: int, spot: Vector3, held: bool) -> int:
 			_settle_ready(spot)
 			var o: int
 			if held:
-				_h.hold_windup_at(spot, aim, loft, SHOT_M_S, HOLD_TICKS)
+				_h.hold_windup_at(spot, aim, loft, SHOT_M_S, hold_ticks)
 				o = _h.fire_release_at(spot, aim, loft, SHOT_M_S, 0.0)
 			else:
 				o = _h.fire_at(spot, aim, loft, SHOT_M_S, 0.0)

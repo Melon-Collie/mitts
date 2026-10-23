@@ -77,6 +77,7 @@ func apply_skill_profile(profile: GoalieSkillProfile) -> void:
 func _tier() -> void:
 	clear_reach = 0.0
 	read.leg_delay_s = _profile.reaction_delay_s
+	read.primed_delay_s = _profile.prearmed_reaction_delay_s
 	play.delay_s = _profile.reaction_delay_s
 	read.arm_delay_s = _profile.arm_reaction_delay_s
 	save.glove_speed_m_s = _profile.glove_react_max_speed_mps
@@ -135,7 +136,11 @@ func _physics_process(delta: float) -> void:
 func _read_play(delta: float, in_net: Vector3) -> void:
 	var carrier: Skater = puck.get_carrier()
 	var moving: Vector3 = _net.basis.inverse() * (carrier.velocity if carrier != null else puck.get_puck_velocity())
-	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z))
+	# A wind-up shows as the opposing carrier holding the puck on his blade for
+	# a shot: the wrister's address, the slapper's charge, the one-timer's.
+	var winding: bool = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id) \
+			and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
+	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding)
 
 
 # Who an opposing carrier could pass to, through which lanes; none for a loose
@@ -248,7 +253,7 @@ func _stance() -> GoalieStateMachine.State:
 
 func _on_puck_released() -> void:
 	_end_save()
-	read.start()
+	read.start(play.primed())
 
 
 # A tip or a deflection: a new shot to read from the start.

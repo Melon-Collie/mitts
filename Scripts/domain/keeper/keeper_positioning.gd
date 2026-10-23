@@ -13,7 +13,8 @@ extends RefCounted
 #   FRONT  in the zone: on the line from the puck to the net's centre, square
 #          to it, his skates on the top of the crease; deeper as the play
 #          asks (`depth_for`), so a rush is met deep rather than skated round,
-#          and as a pass across to a receiver in `play` asks (`pass_depth`)
+#          and as a pass across to a receiver in `play` asks (`pass_depth`);
+#          a shot he sees wound up he is set for at depth, not backing in
 #   SHARP  below the dots and wide of SHARP_RAD: standing on the near post's
 #          overlap, turned to it
 #   BELOW  at or below the goal line: sealed on the post on its side; directly
@@ -88,7 +89,9 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	if zone == Zone.AWAY:
 		return out * crease_edge(out) * AWAY_DEPTH_SHARE
-	var depth: float = depth_for(puck, _velocity, motor.footwork)
+	# Set for a shot he sees wound up: no retreat for the shooter's approach.
+	var winding: bool = play != null and play.winding_up
+	var depth: float = depth_for(puck, Vector2.ZERO if winding else _velocity, motor.footwork)
 	if play != null:
 		for receiver: Vector2 in play.receivers:
 			depth = minf(depth, pass_depth(puck, receiver, motor.footwork, play.delay_s))

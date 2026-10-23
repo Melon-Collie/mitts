@@ -3,6 +3,7 @@
 row	EASY	NORMAL	HARD	shots
 sweep.dot_line.cold	12	12	10	39
 sweep.dot_line.held	12	12	10	39
+sweep.dot_line.sighted	12	9	6	39
 sweep.slot.cold	3	3	3	39
 sweep.faceoff_dot.cold	2	0	0	39
 sweep.faceoff_dot.held	2	0	0	39
@@ -17,4 +18,4 @@ cover.ready	57	57	57	100
 cover.butterfly	65	65	65	100
 cover.half_butterfly	65	65	65	100
 cover.rvh	64	64	64	100
-total	79	58	50	395
+total	91	67	56	434

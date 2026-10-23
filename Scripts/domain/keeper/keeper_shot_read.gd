@@ -4,9 +4,10 @@ extends RefCounted
 # What he reads of a shot: nothing until he has watched the puck's own flight
 # for his read's delay, then the flight as it is, carried on — its line, and
 # under gravity its fall. His legs answer after the leg read, his hands after
-# the arm read; a puck touched on the way (a tip, a deflection) is a new shot
-# he has to read again. No aim before the release: what the shooter's body
-# shows is perception's (docs/goalie-rebuild-plan.md §3.1), and none of it here.
+# the arm read, or both after the primed read for a release he watched wound
+# up (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
+# is a new shot he has to read again, cold. No aim before the release: what the
+# shooter's body shows is perception's (docs/goalie-rebuild-plan.md §3.1).
 #
 # The net frame throughout, as KeeperPositioning reads it: origin at the goal
 # line's centre, x across, z back into the net, y up from the ice, the puck by
@@ -20,17 +21,21 @@ const AIRBORNE_M: float = 0.002
 
 var leg_delay_s: float = GoalieSkillProfile.hard().reaction_delay_s
 var arm_delay_s: float = GoalieSkillProfile.hard().arm_reaction_delay_s
+var primed_delay_s: float = GoalieSkillProfile.hard().prearmed_reaction_delay_s
 
 # Seconds since the release or the last touch; below zero, no shot.
 var age: float = -1.0
 # The puck as he sees it now.
 var at := Vector3.ZERO
 var velocity := Vector3.ZERO
+var _primed: bool = false
 
 
-# A shot leaves a stick, or the puck is touched on its way: read from the start.
-func start() -> void:
+# A shot leaves a stick, or the puck is touched on its way: read from the start,
+# on the primed read if he had the save programmed.
+func start(primed: bool = false) -> void:
 	age = 0.0
+	_primed = primed
 
 
 func stop() -> void:
@@ -42,11 +47,11 @@ func reading() -> bool:
 
 
 func legs_read() -> bool:
-	return age >= leg_delay_s
+	return age >= (minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s)
 
 
 func arms_read() -> bool:
-	return age >= arm_delay_s
+	return age >= (minf(arm_delay_s, primed_delay_s) if _primed else arm_delay_s)
 
 
 func step(dt: float, puck_at: Vector3, puck_velocity: Vector3) -> void:

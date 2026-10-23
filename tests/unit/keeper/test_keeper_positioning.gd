@@ -301,3 +301,18 @@ func test_a_receiver_across_the_slot_holds_him_deeper() -> void:
 	assert_almost_eq(alone, KeeperPositioning.crease_edge(puck.normalized()), 1e-4, "alone: the top")
 	assert_almost_eq(_motor.route.spot.length(), maxf(cap, KeeperPositioning.DEPTH_FLOOR_M), 1e-4,
 			"with him open: the pass's depth")
+
+
+# A shooter coming at him who winds up is a shot to be set for: he holds the
+# top of the crease rather than backing in for the approach.
+func test_a_shot_wound_up_on_the_rush_is_met_set_at_depth() -> void:
+	var puck := Vector2(0.0, -4.0)
+	var coming := Vector2(0.0, 8.0)
+	_brain.play = KeeperPlayRead.new()
+	_brain.decide(puck, coming, _motor)
+	var backing: float = _motor.route.spot.length()
+	_brain.play.winding_up = true
+	_brain.decide(puck, coming, _motor)
+	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	assert_lt(backing, top - 0.1, "the rush alone backs him in")
+	assert_almost_eq(_motor.route.spot.length(), top, 1e-4, "wound up, set at the top")

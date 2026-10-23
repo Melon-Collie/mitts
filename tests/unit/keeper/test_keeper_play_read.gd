@@ -2,9 +2,10 @@ extends GutTest
 
 # What he reads of the play (KeeperPlayRead): a puck holding its line read
 # where it is; a change of direction read going the old way until his read has
-# passed, a slower tier's later; and the receivers a pass could reach, through
-# a lane no defender's stick reaches, in front of the goal line and inside the
-# blue line.
+# passed, a slower tier's later; a wind-up seen late by his read and priming
+# the save once he has watched it long enough; and the receivers a pass could
+# reach, through a lane no defender's stick reaches, in front of the goal line
+# and inside the blue line.
 
 const DT: float = 1.0 / 120.0
 
@@ -48,6 +49,31 @@ func test_a_change_of_direction_is_read_after_his_read() -> void:
 	# Seen from the first tick it moves the new way, his read later.
 	assert_almost_eq(hard_t, DT + hard, DT, "his read's time")
 	assert_gt(_flip_seen_after(easy), hard_t, "a slower tier later")
+
+
+# A wind-up is seen his read late, and primes the save once watched for
+# KeeperPlayRead.PRIME_S; a look broken off starts over.
+func test_a_wind_up_watched_long_enough_primes_the_save() -> void:
+	var play := KeeperPlayRead.new()
+	var at := Vector2(0.0, -6.0)
+	for i: int in 60:
+		play.step(DT, at, Vector2.ZERO, false)
+	var seen_at: float = -1.0
+	var primed_at: float = -1.0
+	var t: float = 0.0
+	while t < 1.0 and primed_at < 0.0:
+		play.step(DT, at, Vector2.ZERO, true)
+		t += DT
+		if play.winding_up and seen_at < 0.0:
+			seen_at = t
+		if play.primed():
+			primed_at = t
+	assert_almost_eq(seen_at, DT + play.delay_s, DT, "seen his read late")
+	assert_almost_eq(primed_at - seen_at, KeeperPlayRead.PRIME_S, DT, "primed once watched long enough")
+	for i: int in 40:
+		play.step(DT, at, Vector2.ZERO, false)
+	play.step(DT, at, Vector2.ZERO, true)
+	assert_false(play.primed(), "a broken look starts over")
 
 
 func test_receivers_are_the_ones_a_pass_can_reach() -> void:
