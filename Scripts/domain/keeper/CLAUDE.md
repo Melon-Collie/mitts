@@ -226,6 +226,11 @@ the near post below the line), behind the net the post held until the puck
 will beat him across by his own time to the other, a boundary crossed back and
 forth holding him in one zone, and a puck carried round the zone tracked every
 tick unbroken to rest where it stops.
+`tests/instruments/ai/test_goalie_scoreboard.gd` scores him against scripted
+shooters beside the old goalie (`test_report_the_keeper`, his numbers in
+`data/keeper_scoreboard.txt`), through the harness the old goalie's
+instruments use: `KeeperController` keeps the old goalie's getters true for it
+(his stance in the old state machine, his lateral x and challenge radius).
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
 the shooter's side, behind and high in front (`tools/keeper_strip.gd`), the
 stick swept out of reach (`stick_reach`), and the first brain tracking a puck
