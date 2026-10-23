@@ -133,6 +133,13 @@ static func blend_leg(leg: KeeperPose.Leg, up: KeeperPose.Leg, up_knee: Vector3,
 	leg.along_shin = t
 
 
+# Where the ready stance's solve puts the knee on `side` (0 the glove leg).
+static func ready_knee(side: int) -> Vector3:
+	var ready := KeeperPose.new()
+	KeeperPoses.ready(ready)
+	return _ready_knees_solved(ready)[side]
+
+
 # Where the ready stance's solve puts the knees, solved once.
 static func _ready_knees_solved(ready: KeeperPose) -> Array[Vector3]:
 	if _ready_knees.is_empty():

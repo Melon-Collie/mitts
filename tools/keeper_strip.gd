@@ -34,12 +34,17 @@ const SCENARIOS: Array = [
 	["drop_and_rise", 0.0, DROP_AND_RISE],
 	["slide", 1.0, SLIDE],
 	["slide_glove_far", -1.6, SLIDE],
+	["slide_from_feet", 1.0, SLIDE_FROM_FEET],
+	["slide_from_feet_glove", -1.0, SLIDE_FROM_FEET],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
 const DROP_AND_RISE: int = -1
 # Not a footwork move either: KeeperSlide from the butterfly to the spot.
 const SLIDE: int = -2
+# KeeperSlide from his feet, by the half butterfly, a frame every
+# DROP_FRAME_EVERY ticks for the drop's sake.
+const SLIDE_FROM_FEET: int = -3
 const DROP_FRAME_EVERY: int = 3
 const DROP_HOLD_TICKS: int = 12
 const _PHASE_COLORS: Array[Color] = [
@@ -111,8 +116,8 @@ func _init() -> void:
 func _record(target: float, kind: int) -> Array:
 	if kind == DROP_AND_RISE:
 		return _record_drop()
-	if kind == SLIDE:
-		return _record_slide(target)
+	if kind == SLIDE or kind == SLIDE_FROM_FEET:
+		return _record_slide(target, kind == SLIDE_FROM_FEET)
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
@@ -163,20 +168,25 @@ func _record_drop() -> Array:
 	return out
 
 
-# The slide's frames, as _record's: PUSH while the leg loads and drives, GLIDE
-# while he slides, STOP while the lead edge stops him, SET down on the spot.
-func _record_slide(target: float) -> Array:
+# The slide's frames, as _record's: PUSH while he drops or loads and drives,
+# GLIDE while he slides, STOP while the lead edge stops him, SET down on the
+# spot.
+func _record_slide(target: float, from_feet: bool) -> Array:
 	var slide := KeeperSlide.new()
-	slide.slide_to(target)
+	var every: int = DROP_FRAME_EVERY if from_feet else FRAME_EVERY
+	if from_feet:
+		slide.slide_from_feet(target)
+	else:
+		slide.slide_to(target)
 	var out: Array = []
 	var tick: int = 0
 	var settled: int = -1
-	while settled < SETTLE_FRAMES * FRAME_EVERY:
-		if tick % FRAME_EVERY == 0:
+	while settled < SETTLE_FRAMES * every:
+		if tick % every == 0:
 			var p := KeeperPose.new()
 			slide.pose(p)
 			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
-					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
+					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
 					KeeperFootwork.Phase.STOP][slide.phase]
 			out.append([p, Vector3(slide.x, 0.0, 0.0), phase, slide.speed, tick * DT])
 		slide.step(DT)
@@ -209,8 +219,7 @@ func _process(_delta: float) -> bool:
 		var target: float = float(_scenarios[_scenario_i][1])
 		var kind: int = int(_scenarios[_scenario_i][2])
 		_frames = _record(target, kind)
-		_views = _views_for(absf(target), kind != KeeperFootwork.Move.T_PUSH
-				and kind != KeeperFootwork.Move.SHUFFLE)
+		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)
 		_shots = []
 		_shot_i = 0
 		_ticks = 0
