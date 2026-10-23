@@ -36,7 +36,8 @@ one the bots shoot at.
 On this branch every match spawns him (`ActorSpawner` makes a `KeeperController`
 for each net), offline only. The old `Goalie` node stays as his shell, since
 the puck, the skaters, the bots and the game all address it: its own meshes are
-hidden and its colliders off, a `Keeper` child draws him, the node is placed on
+hidden, its colliders off and nothing of it processed (its merged-body rig and
+ice effects read parts he now places), a `Keeper` child draws him, the node is placed on
 him every tick, and one box per piece of his gear (`KeeperGear.box`) is seated
 under the old part body that names its material for the puck
 (`Goalie.set_stand_in`, `add_save_box`, `seat_save_box`). Each part's first box

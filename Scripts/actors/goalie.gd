@@ -149,9 +149,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	_uniform_coordinator.apply_uniform(colors)
 
 
-# ── A stand-in body (the keeper; Scripts/domain/keeper/CLAUDE.md → In a match)
-# Each box sits under the part body that names its material for the puck
-# (Puck._classify_save_part), and a part's first box places that part.
+# ── A stand-in body: the keeper (Scripts/domain/keeper/CLAUDE.md → In a match)
 var _stand_in: Node3D = null
 var _save_boxes: Array[CollisionShape3D] = []
 # Per box: the node it places, or null where an earlier box places it.
@@ -174,6 +172,7 @@ func _hide_own_meshes(node: Node) -> void:
 			continue
 		if child is VisualInstance3D:
 			(child as VisualInstance3D).visible = false
+		child.set_process(false)
 		_hide_own_meshes(child)
 
 
