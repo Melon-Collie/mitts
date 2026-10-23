@@ -131,29 +131,6 @@ func time_to_seal(at: Vector2, turn: float, from: int, post_side: float, post_ir
 	return t
 
 
-# The fastest way's time onto his feet at `at_spot` facing `at_facing`, from as
-# `plan` takes it, leaving the goal and its first move as they were.
-func time_to_stand(at: Vector2, turn: float, from: int, post_side: float, at_spot: Vector2,
-		at_facing: float) -> float:
-	var was_rest: int = rest
-	var was_spot: Vector2 = spot
-	var was_facing: float = facing
-	var was_first: int = first
-	var was_first_spot: Vector2 = first_spot
-	var was_way: float = first_side
-	rest = Rest.FEET
-	spot = at_spot
-	facing = at_facing
-	var t: float = plan(at, turn, from, post_side)
-	rest = was_rest
-	spot = was_spot
-	facing = was_facing
-	first = was_first
-	first_spot = was_first_spot
-	first_side = was_way
-	return t
-
-
 func _offer(t: float, what: int, to: Vector2 = Vector2.ZERO, way: float = 0.0) -> void:
 	if t < _best:
 		_best = t

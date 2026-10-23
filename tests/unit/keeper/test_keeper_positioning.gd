@@ -14,13 +14,18 @@ extends GutTest
 # there, turned to it. In front of the net he sinks into the low ready once a
 # shot could reach him before his legs and his drop could answer it. At a sharp
 # angle his pad seals the near post along the ice; a carrier driving at a post
-# finds it sealed, and one who cuts back out brings him back up.
+# finds it sealed once he is in tight, one who feints at it from range finds
+# him still on the angle, and one who cuts back out brings him back up.
 
 const DT: float = 1.0 / 120.0
 const PLANNER_EVERY: int = 4
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 const MAX_BONE_STEP_M: float = 0.1
+# How far out from the goal line a carrier driving at the post has it in reach,
+# and how high a puck jammed in there along the ice comes.
+const AT_POST_M: float = 0.4
+const JAMMED_M: float = 0.2
 const Z := KeeperPositioning.Zone
 const R := KeeperRoute.Rest
 
@@ -90,10 +95,6 @@ func test_at_a_sharp_angle_he_stands_on_the_near_post_turned_to_the_puck() -> vo
 # At a sharp angle the near post is sealed along the ice as the puck sees it:
 # his pad overlaps it, not his stick's shaft held out wider than the pad.
 func test_at_a_sharp_angle_his_pad_seals_the_near_post_along_the_ice() -> void:
-	var r: float = GameRules.PUCK_COLLISION_RADIUS
-	var inside: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - r
-	var hit := SweptDiscOBB.Result.new()
-	var scratch := SweptDiscOBB.Result.new()
 	var pose := KeeperPose.new()
 	var skel := KeeperSkeleton.new()
 	KeeperPoses.ready(pose)
@@ -105,19 +106,30 @@ func test_at_a_sharp_angle_his_pad_seals_the_near_post_along_the_ice() -> void:
 			_brain.decide(puck, Vector2.ZERO, _motor)
 			var what: String = "%s" % puck
 			assert_eq(_brain.zone, Z.SHARP, what)
-			var into := Basis(Vector3.UP, _motor.route.facing).inverse()
-			var at := Vector3(_motor.route.spot.x, 0.0, _motor.route.spot.y)
-			var from: Vector3 = into * (Vector3(puck.x, KeeperShotRead.ON_ICE_Y, puck.y) - at)
-			var x: float = inside - 0.25
-			while x <= inside + 1e-6:
-				var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
-				while y <= 0.3:
-					var to: Vector3 = into * (Vector3(x * side, y, 0.0) - at)
-					var met: int = KeeperGear.nearest(skel, from, to, r, hit, scratch)
-					if met < 0:
-						assert_gte(met, 0, "%s: %.2f in from the post, %.2f up, met" % [what, inside - x, y])
-					y += 0.05
-				x += 0.05
+			_assert_near_post_met(puck, side, _motor.route.spot, _motor.route.facing, skel, what)
+
+
+# The ice inside the near post on `side`, a quarter metre in and up to `up_to`,
+# met by his gear (`skel`, standing at `at` turned `turn`) as a puck at `puck`
+# sees it. Only a miss is asserted.
+func _assert_near_post_met(puck: Vector2, side: float, at: Vector2, turn: float, skel: KeeperSkeleton,
+		what: String, up_to: float = 0.3) -> void:
+	var r: float = GameRules.PUCK_COLLISION_RADIUS
+	var inside: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - r
+	var hit := SweptDiscOBB.Result.new()
+	var scratch := SweptDiscOBB.Result.new()
+	var into := Basis(Vector3.UP, turn).inverse()
+	var on := Vector3(at.x, 0.0, at.y)
+	var from: Vector3 = into * (Vector3(puck.x, KeeperShotRead.ON_ICE_Y, puck.y) - on)
+	var x: float = inside - 0.25
+	while x <= inside + 1e-6:
+		var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
+		while y <= up_to + 1e-6:
+			var met: int = KeeperGear.nearest(skel, from, into * (Vector3(x * side, y, 0.0) - on), r, hit, scratch)
+			if met < 0:
+				assert_gte(met, 0, "%s: %.2f in from the post, %.2f up, met" % [what, inside - x, y])
+			y += 0.05
+		x += 0.05
 
 
 func test_below_the_goal_line_he_seals_the_post_on_its_side() -> void:
@@ -251,20 +263,21 @@ func test_a_carrier_cutting_across_the_slot_is_tracked_on_the_angle() -> void:
 	assert_lt(worst, 0.2, "on the angle line as it swings")
 
 
-# A carrier driving down the wing at `side`'s post from `from` at `speed`,
-# turning back out to the slot once `turn_at` from the goal line (never, INF):
-# the brain at the planner's rate, the motor every tick, until the puck reaches
-# the goal line or `after` past the turn. Asserts he stays on his feet while the
-# carrier, not yet turned, is further out than `feet_m`.
-func _drive_at_post(side: float, speed: float, turn_at: float, after: float, feet_m: float) -> Vector2:
+# A carrier driving down the wing at `side`'s post at `speed`, turning out to
+# the slot once `turn_at` from the goal line (never, -INF): the brain at the
+# planner's rate, the motor every tick, until the puck is `stop_out` from the
+# goal line or `after` past the turn. Asserts he stays on his feet while the carrier, not
+# yet turned, is further than a stick's length from the post.
+func _drive_at_post(side: float, speed: float, turn_at: float, after: float, stop_out: float = 0.0) -> Vector2:
 	_brain = KeeperPositioning.new()
 	_motor = KeeperMotor.new()
 	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
 	var puck := Vector2(3.5 * side, -8.0)
 	var v: Vector2 = (Vector2(1.1 * side, 0.0) - puck).normalized() * speed
 	var tick: int = 0
 	var since: float = -1.0
-	while puck.y < 0.0 and since < after:
+	while -puck.y > stop_out and since < after:
 		if since < 0.0 and -puck.y <= turn_at:
 			v = (Vector2(0.0, -6.0) - puck).normalized() * speed
 			since = 0.0
@@ -275,32 +288,54 @@ func _drive_at_post(side: float, speed: float, turn_at: float, after: float, fee
 			_brain.decide(puck, v, _motor)
 		_motor.step(DT)
 		tick += 1
-		if since < 0.0 and -puck.y > feet_m and _motor.rest != R.FEET:
+		var out: bool = puck.distance_to(post) > GameRules.DEFAULT_STICK_LENGTH_M
+		if since < 0.0 and out and _motor.rest != R.FEET:
 			assert_eq(_motor.rest, R.FEET, "%+.0f: on his feet with the carrier %.1f m out" % [side, -puck.y])
 	return puck
 
 
-# Driven at down the wing, he skates onto the post standing, turned to the
-# carrier, and is down into the RVH on it as the puck gets there: on his feet
-# while the carrier is still out, sealed on that post as it reaches the line.
-func test_a_carrier_driving_at_the_post_finds_it_sealed() -> void:
+# Driven at down the wing, he stays on his feet on the angle until the carrier
+# is in tight; as the puck gets to the post his pad overlapping it covers the
+# ice inside it against a puck jammed in, and then he goes down onto that
+# post, sealed on it.
+func test_a_carrier_driving_at_the_post_finds_it_covered_then_sealed() -> void:
+	var pose := KeeperPose.new()
+	var skel := KeeperSkeleton.new()
 	for side: float in [1.0, -1.0]:
-		_drive_at_post(side, 7.5, -INF, INF, 2.5)
+		var puck: Vector2 = _drive_at_post(side, 7.5, -INF, INF, AT_POST_M)
 		var what: String = "%+.0f" % side
-		var going: bool = _motor.post.state == KeeperPost.State.DROPPING_IN \
-				or _motor.post.state == KeeperPost.State.IN_FROM_BUTTERFLY
-		assert_true(_motor.rest == R.POST or going, "%s: down onto the post as the puck gets there" % what)
-		for i: int in int(0.15 / DT):
+		_motor.pose(pose)
+		skel.pose(pose)
+		_assert_near_post_met(puck, side, Vector2(_motor.x, _motor.z), _motor.yaw, skel, what + " at the post",
+				JAMMED_M)
+		var t: float = 0.0
+		while _motor.rest != R.POST and t < 1.0:
+			if t * 120.0 - floorf(t * 120.0 / PLANNER_EVERY) * PLANNER_EVERY < 0.5:
+				_brain.decide(puck, Vector2.ZERO, _motor)
 			_motor.step(DT)
+			t += DT
 		assert_eq(_motor.rest, R.POST, "%s: sealed" % what)
 		assert_eq(_motor.post.side, side, "%s: on that post" % what)
+
+
+# Driven at down the wing and turned out to the slot from range: he has stayed
+# on the carrier's angle rather than going for the post, so the cut finds him
+# in front of the net, on his feet, on the angle line.
+func test_a_feint_at_the_post_from_range_keeps_him_on_the_angle() -> void:
+	for side: float in [1.0, -1.0]:
+		var puck: Vector2 = _drive_at_post(side, 7.5, 4.5, DT)
+		var what: String = "%+.0f" % side
+		assert_false(_brain._racing, "%s: not gone for the post" % what)
+		assert_eq(_motor.route.rest, R.FEET, what)
+		assert_almost_eq(_motor.route.spot.normalized().dot(puck.normalized()), 1.0, 1e-3,
+				"%s: his spot on the angle line" % what)
 
 
 # The same drive turned back out to the slot as he goes down: back up on his
 # feet in front, square to the carrier.
 func test_a_drive_at_the_post_cut_back_out_brings_him_back_up() -> void:
 	for side: float in [1.0, -1.0]:
-		var puck: Vector2 = _drive_at_post(side, 7.5, 2.0, 1.5, 3.0)
+		var puck: Vector2 = _drive_at_post(side, 7.5, 1.0, 1.5)
 		var what: String = "%+.0f" % side
 		assert_eq(_brain.zone, Z.FRONT, what)
 		assert_eq(_motor.rest, R.FEET, "%s: back up" % what)
