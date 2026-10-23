@@ -906,17 +906,17 @@ func notify_remote_pickup(remote_skater: Skater, carrier_peer_id: int) -> void:
 	_release_seed_active = false
 	_state_buffer.clear()
 
-func notify_local_release(direction: Vector3, power: float) -> Vector3:
+# `shooter`: who fired, when they were not carrying (a loose one-timer); the
+# local carrier otherwise. Returns the release origin.
+func notify_local_release(direction: Vector3, power: float, shooter: Skater = null) -> Vector3:
 	# PuckController (priority 1) runs after LocalController (priority 0), so the puck
-	# hasn't been re-pinned to the current blade position yet this frame. Read blade
-	# directly from the carrier so we start from the current-frame position, not last
-	# frame's pin.
-	# Returns the release origin (the blade contact point) so the caller can ship it
-	# to the host in the release RPC — the host fires the authoritative puck from this
-	# exact point instead of guessing it from a stale buffer rewind.
+	# hasn't been re-pinned to the current blade position yet this frame. Read the
+	# origin straight off the shooter so we start from the current-frame position,
+	# not last frame's pin — the same point the host's Puck.release fires from.
 	var release_pos: Vector3 = puck.get_puck_position()
-	if _local_carrier_skater != null:
-		release_pos = _local_carrier_skater.get_blade_contact_global()
+	var from: Skater = shooter if shooter != null else _local_carrier_skater
+	if from != null:
+		release_pos = puck.release_origin(from)
 		release_pos.y = puck.ice_height
 	_local_carrier_skater = null
 	_client_carrier_peer_id = -1

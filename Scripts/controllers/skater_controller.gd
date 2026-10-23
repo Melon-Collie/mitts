@@ -3407,6 +3407,10 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 		_sm.follow_through_power = 1.0
 		_hide_slapshot_hud()
 		return {fired = false, follow_through_duration = _slapper_finish_time()}
+	# The swing meets the puck at the strike spot, as it meets a caught one
+	# (on_puck_picked_up_network): pinned there, the shot leaves from it on every
+	# machine (Puck.release_origin) rather than from under the raised blade.
+	skater.enter_slapshot_pinning(slapper_strike_local())
 	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
