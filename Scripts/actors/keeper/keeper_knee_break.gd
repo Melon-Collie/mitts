@@ -14,6 +14,9 @@ var _pad_ring: PackedVector3Array
 var _rise_ring: PackedVector3Array
 var _mesh := ImmediateMesh.new()
 var _material: Material = null
+# The stack and the rise as last lofted between.
+var _pad_xf: Transform3D
+var _rise_xf: Transform3D
 
 
 func _init(pad_part: int, rise_part: int, material: Material) -> void:
@@ -29,6 +32,10 @@ func _init(pad_part: int, rise_part: int, material: Material) -> void:
 func update(skel: KeeperSkeleton) -> void:
 	var pad_xf: Transform3D = KeeperGear.box(skel, _pad_part)
 	var rise_xf: Transform3D = KeeperGear.box(skel, _rise_part)
+	if pad_xf == _pad_xf and rise_xf == _rise_xf and _mesh.get_surface_count() > 0:
+		return
+	_pad_xf = pad_xf
+	_rise_xf = rise_xf
 	var n: int = _pad_ring.size()
 	var a := PackedVector3Array()
 	var b := PackedVector3Array()

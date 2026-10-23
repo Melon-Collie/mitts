@@ -37,10 +37,14 @@ var _mesh := ImmediateMesh.new()
 var _material: Material = null
 var _pants_h: Vector3
 var _thigh_h: Vector3
-# Per update: the boxes the cloth drapes over, and the cloth being built (the
-# last column repeats the first, closing it round him) with its normals.
+# Per update: the boxes the cloth drapes over and their inverses, and the
+# cloth being built (the last column repeats the first, closing it round him)
+# with its normals.
+var _chest_xf: Transform3D
 var _pants_xf: Transform3D
+var _pants_inv: Transform3D
 var _thigh_xf: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
+var _thigh_inv: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
 var _rows: Array[PackedVector3Array] = []
 var _normals: Array[PackedVector3Array] = []
 var _facet_now := PackedVector3Array()
@@ -91,9 +95,20 @@ static func length_m() -> float:
 
 func update(skel: KeeperSkeleton) -> void:
 	var chest_box: Transform3D = KeeperGear.box(skel, KeeperGear.Part.CHEST)
-	_pants_xf = KeeperGear.box(skel, KeeperGear.Part.PANTS)
-	_thigh_xf[0] = KeeperGear.box(skel, KeeperGear.Part.THIGH_G)
-	_thigh_xf[1] = KeeperGear.box(skel, KeeperGear.Part.THIGH_B)
+	var pants: Transform3D = KeeperGear.box(skel, KeeperGear.Part.PANTS)
+	var thigh_g: Transform3D = KeeperGear.box(skel, KeeperGear.Part.THIGH_G)
+	var thigh_b: Transform3D = KeeperGear.box(skel, KeeperGear.Part.THIGH_B)
+	# Hung on what it hangs from as it already is: nothing to redo.
+	if chest_box == _chest_xf and pants == _pants_xf and thigh_g == _thigh_xf[0] and thigh_b == _thigh_xf[1] \
+			and _mesh.get_surface_count() > 0:
+		return
+	_chest_xf = chest_box
+	_pants_xf = pants
+	_thigh_xf[0] = thigh_g
+	_thigh_xf[1] = thigh_b
+	_pants_inv = _pants_xf.affine_inverse()
+	for i: int in 2:
+		_thigh_inv[i] = _thigh_xf[i].affine_inverse()
 	for e: int in _EDGES:
 		_facet_now[e] = (chest_box.basis * _facet[e]).normalized()
 	for c: int in _COLUMNS:
@@ -129,11 +144,9 @@ func _smooth_normals(chest_box: Transform3D) -> void:
 		_normals[r][_COLUMNS] = _normals[r][0]
 
 
-# The point on a piece's section at height `y` (its box frame) along `dir`,
-# `off` metres out from its surface.
-static func _on_section(sections: Array[Vector4], h: Vector3, y: float, dir: Vector2,
-		off: float) -> Vector3:
-	var sec: Vector3 = KeeperGearMeshes.section_at(sections, h, clampf(y, -h.y, h.y))
+# The point on a section (half width, front depth, back depth) at height `y`
+# of its box frame, along `dir`, `off` metres out from its surface.
+static func _on_section(sec: Vector3, y: float, dir: Vector2, off: float) -> Vector3:
 	var depth: float = sec.y if dir.y < 0.0 else sec.z
 	var order: float = KeeperGearMeshes.PANTS_ROUNDNESS
 	var r: float = pow(pow(absf(dir.x) / sec.x, order) + pow(absf(dir.y) / depth, order),
@@ -147,7 +160,11 @@ static func _on_section(sections: Array[Vector4], h: Vector3, y: float, dir: Vec
 func _hang(prev: Vector3, seg: float) -> Vector3:
 	var p: Vector3 = prev + Vector3(0.0, -seg, 0.0)
 	for i: int in 3:
-		p = _clear(p)
+		var cleared: Vector3 = _clear(p)
+		# Already clear, and within its length: every pass after is this one.
+		if cleared == p:
+			return p
+		p = cleared
 		var d: Vector3 = p - prev
 		if d.length() > seg:
 			p = prev + d.normalized() * seg
@@ -157,25 +174,31 @@ func _hang(prev: Vector3, seg: float) -> Vector3:
 # `p` (keeper space) moved out of the pants and both thigh guards, if it is in
 # one, to a cloth's thickness off its surface.
 func _clear(p: Vector3) -> Vector3:
-	p = _clear_of(p, _pants_xf, KeeperGearMeshes.PANTS_SECTIONS, _pants_h)
-	for xf: Transform3D in _thigh_xf:
-		p = _clear_of(p, xf, KeeperGearMeshes.THIGH_SECTIONS, _thigh_h)
+	p = _clear_of(p, _pants_xf, _pants_inv, KeeperGearMeshes.PANTS_SECTIONS, _pants_h)
+	for i: int in 2:
+		p = _clear_of(p, _thigh_xf[i], _thigh_inv[i], KeeperGearMeshes.THIGH_SECTIONS, _thigh_h)
 	return p
 
 
-static func _clear_of(p: Vector3, xf: Transform3D, sections: Array[Vector4],
+static func _clear_of(p: Vector3, xf: Transform3D, inv: Transform3D, sections: Array[Vector4],
 		h: Vector3) -> Vector3:
-	var local: Vector3 = xf.affine_inverse() * p
-	if absf(local.y) > h.y:
+	var local: Vector3 = inv * p
+	# Outside the box with a cloth's room round it is outside every section in it.
+	if absf(local.y) > h.y or absf(local.x) > h.x + CLOTH_M or absf(local.z) > h.z + CLOTH_M:
 		return p
-	var flat := Vector2(local.x, local.z)
-	if flat.length_squared() < 1e-10:
+	var length: float = Vector2(local.x, local.z).length()
+	if length < 1e-5:
 		return p
-	var dir: Vector2 = flat.normalized()
-	var surface: Vector3 = _on_section(sections, h, local.y, dir, CLOTH_M)
-	if flat.length() >= Vector2(surface.x, surface.z).length():
+	var sec: Vector3 = KeeperGearMeshes.section_at(sections, h, local.y)
+	# Clear of the surface stood off by a cloth's thickness exactly when the
+	# point drawn in by that thickness is outside the section, which asks no
+	# root of the section's order (its cube, PANTS_ROUNDNESS).
+	var share: float = maxf(length - CLOTH_M, 0.0) / length
+	var across: float = absf(local.x) * share / sec.x
+	var deep: float = absf(local.z) * share / (sec.y if local.z < 0.0 else sec.z)
+	if across * across * across + deep * deep * deep >= 1.0:
 		return p
-	return xf * surface
+	return xf * _on_section(sec, local.y, Vector2(local.x, local.z) / length, CLOTH_M)
 
 
 # The cloth between its rows, both faces, each vertex carrying its depth below

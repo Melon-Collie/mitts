@@ -80,11 +80,13 @@ func _physics_process(delta: float) -> void:
 		_hold_catch(delta)
 
 
-# The node on him, his body posed, and his gear's save boxes on it.
+# The node on him, his body posed, and his gear's save boxes on it, where it
+# moved.
 func _place_body() -> void:
 	motor.pose(_keeper_pose)
-	_keeper.apply_pose(_keeper_pose)
 	goalie.global_transform = _net * Transform3D(Basis(Vector3.UP, motor.yaw), Vector3(motor.x, 0.0, motor.z))
+	if not _keeper.apply_pose(_keeper_pose):
+		return
 	for part: int in KeeperGear.PART_COUNT:
 		goalie.seat_save_box(part, KeeperGear.box(_keeper.skeleton, part))
 

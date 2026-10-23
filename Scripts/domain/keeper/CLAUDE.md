@@ -23,7 +23,7 @@ one the bots shoot at.
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included; the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line |
 | `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
-| `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
+| `actors/keeper/keeper.gd` | the node: solves a pose on the tick, draws it at render rate when it moved |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
 | `actors/keeper/keeper_body_rig.gd` | the gear drawn as one skinned mesh, a bone per piece posed on its save box: the plain slots one surface (BodyZonePaint), each kit-shader material one more, its pieces' box-frame places in CUSTOM0/1 since skinning moves VERTEX |
@@ -58,7 +58,11 @@ drawn gear and (later) the planner's coverage all come from the same solve —
 there is no second copy of his shape to drift. A mesh is built inside the box it
 draws on: what he looks like is what he saves with. The skeleton is solved on
 the tick wherever its boxes are gameplay, which is why it is not the skater's
-render-rate rig.
+render-rate rig. The gear is drawn from that solve at render rate
+(`Keeper._process`), once a pose has moved a bone and only while he is on
+camera (`SkaterCameraCull`); the boxes are reseated only when a pose moved one.
+The drawing is the expensive half: the jersey's tail, rebuilt whenever what it
+hangs from moves, is most of a frame's cost for a keeper on the move.
 
 ## Poses are where the body goes, not joint angles
 

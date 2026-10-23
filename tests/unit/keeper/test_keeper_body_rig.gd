@@ -14,6 +14,7 @@ func before_each() -> void:
 	add_child_autofree(_keeper)
 	KeeperPoses.butterfly(_pose)
 	_keeper.apply_pose(_pose)
+	_keeper.draw_now()
 
 
 func _rig() -> KeeperBodyRig:
@@ -53,3 +54,14 @@ func test_the_pieces_draw_one_surface_a_material() -> void:
 		assert_false(mat in kit, "surface %d's material has a surface already" % s)
 		kit.append(mat)
 	assert_eq(mesh.surface_get_material(0), _rig().paint.material, "the plain slots' zones")
+
+
+# He is drawn at render rate from the skeleton the tick solved, and only once
+# a pose has moved it.
+func test_a_pose_that_moves_nothing_asks_for_no_redraw() -> void:
+	assert_false(_keeper.apply_pose(_pose), "the same pose again")
+	_pose.glove_hand += Vector3(0.0, 0.05, 0.0)
+	assert_true(_keeper.apply_pose(_pose), "the glove raised")
+	var was: Transform3D = _rig().get_bone_pose(KeeperGear.Part.GLOVE)
+	_keeper.draw_now()
+	assert_ne(_rig().get_bone_pose(KeeperGear.Part.GLOVE), was, "drawn on it")

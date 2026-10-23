@@ -4,6 +4,8 @@ extends Node3D
 # The new goalie's body in the scene: a KeeperSkeleton solved from a KeeperPose,
 # the gear drawn on it, and the save boxes the puck meets. Its local space is
 # keeper space (KeeperAnatomy); the node's transform places him in the rink.
+# The skeleton is solved when posed, since the saves read it; the gear is drawn
+# from it at render rate, only once it has moved and only while on camera.
 
 var skeleton := KeeperSkeleton.new()
 var show_boxes: bool = false
@@ -14,6 +16,11 @@ var _boxes: KeeperBoxView = null
 var _colors: Dictionary = {}
 var _player_name: String = ""
 var _jersey_number: int = 0
+# The skeleton as last solved, to tell a pose that moved him from one that
+# did not; and whether the gear is drawn on the latest one (at rest until he is
+# first posed).
+var _was := KeeperSkeleton.new()
+var _drawn: bool = true
 
 
 func _ready() -> void:
@@ -41,9 +48,47 @@ func apply_jersey_info(p_name: String, number: int) -> void:
 		_gear.apply_jersey_info(p_name, number)
 
 
-func apply_pose(p: KeeperPose) -> void:
+# Solves the skeleton for `p`; whether it moved since the last.
+func apply_pose(p: KeeperPose) -> bool:
 	skeleton.pose(p)
+	if _same_as_was():
+		return false
+	_keep_as_was()
+	_drawn = false
+	return true
+
+
+func _process(_delta: float) -> void:
+	if not _drawn and SkaterCameraCull.sees(self):
+		draw_now()
+
+
+# The gear on the skeleton as it stands, whether or not it is on camera.
+func draw_now() -> void:
+	_drawn = _gear != null
 	if _gear != null:
 		_gear.update(skeleton)
 	if _boxes != null:
 		_boxes.update(skeleton)
+
+
+func _same_as_was() -> bool:
+	if _was.mirrored != skeleton.mirrored or _was.grip != skeleton.grip \
+			or _was.stick_heel != skeleton.stick_heel or _was.stick_paddle_dir != skeleton.stick_paddle_dir \
+			or _was.stick_blade_dir != skeleton.stick_blade_dir or _was.stick_face != skeleton.stick_face:
+		return false
+	for b: int in KeeperSkeleton.BONE_COUNT:
+		if _was.xf[b] != skeleton.xf[b]:
+			return false
+	return true
+
+
+func _keep_as_was() -> void:
+	_was.mirrored = skeleton.mirrored
+	_was.grip = skeleton.grip
+	_was.stick_heel = skeleton.stick_heel
+	_was.stick_paddle_dir = skeleton.stick_paddle_dir
+	_was.stick_blade_dir = skeleton.stick_blade_dir
+	_was.stick_face = skeleton.stick_face
+	for b: int in KeeperSkeleton.BONE_COUNT:
+		_was.xf[b] = skeleton.xf[b]
