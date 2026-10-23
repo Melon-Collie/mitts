@@ -77,7 +77,7 @@ const COVER_STANCES: Array = [
 	["rvh", GoalieStateMachine.State.RVH_LEFT],
 	["vh", GoalieStateMachine.State.VH_LEFT],
 ]
-const KEEPER_COVER_STANCES: Array[String] = ["ready", "butterfly", "half_butterfly", "rvh"]
+const KEEPER_COVER_STANCES: Array[String] = ["ready", "low_ready", "butterfly", "half_butterfly", "rvh"]
 
 var _goalie: Node = null
 var _puck: Node = null
@@ -420,6 +420,8 @@ func _keeper_coverage(stance: String) -> float:
 	match stance:
 		"ready":
 			KeeperPoses.ready(pose)
+		"low_ready":
+			KeeperPoses.low_ready(pose)
 		"butterfly":
 			KeeperPoses.butterfly(pose)
 		"half_butterfly":

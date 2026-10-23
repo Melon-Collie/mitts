@@ -36,6 +36,24 @@ const READY_BLADE := Vector3(-0.11, 0.0, -0.40)
 # where a tilt toward the hip would tuck the blocker behind them.
 const READY_STICK_TILT_RAD: float = deg_to_rad(8.0)
 
+# The low ready: the ready stance sat down into a deep A, for a shot he may not
+# have time to read. Skates out about twice as wide, knees driven in and down
+# so the pads lie steep with their inside edges near the ice and their faces to
+# the shooter, hips dropped toward knee height, the chest leaning on over the
+# pads to keep him balanced, the hands low and out in front at the pads' tops,
+# the blade on the ice ahead of the five-hole. Its knees are nearer the ice, so
+# the drop into the butterfly from here is the shorter fall. A shin laid that
+# far over rides its pad up onto the inside edge, the face tipped up, or the
+# pad's outer corner by the skate is driven into the ice; and the blade lies
+# out ahead of the A so the paddle rises in front of the pads, not through
+# them.
+const LOW_READY_SKATE_HALF_SPACING_M: float = 0.52
+const LOW_READY_KNEE := Vector3(0.13, 0.27, -0.14)
+const LOW_READY_PAD_FACE := Vector3(0.0, 0.3, -1.0)
+const LOW_READY_PELVIS := Vector3(0.0, 0.58, 0.10)
+const LOW_READY_BLADE := Vector3(-0.15, 0.0, -0.55)
+const LOW_READY_STICK_TILT_RAD: float = deg_to_rad(20.0)
+
 # The butterfly: knees together on the ice, shins flared out behind them with
 # the pads' faces to the shooter, hips over the knees and the trunk tall.
 # Wide enough that the thigh rises, carried on along the ice past the knees,
@@ -111,6 +129,23 @@ static func ready(p: KeeperPose) -> void:
 	for i: int in 2:
 		_ready_leg(p.legs[i], _side_x(i))
 	_ready_hands(p, 0.0)
+
+
+static func low_ready(p: KeeperPose) -> void:
+	ready(p)
+	p.pelvis = LOW_READY_PELVIS
+	p.pelvis_rot = Vector3(-0.55, 0.0, 0.0)
+	p.lumbar_rot = Vector3(-0.25, 0.0, 0.0)
+	p.neck_rot = Vector3(0.45, 0.0, 0.0)
+	for i: int in 2:
+		var sx: float = _side_x(i)
+		var leg: KeeperPose.Leg = p.legs[i]
+		leg.ankle = Vector3(sx * LOW_READY_SKATE_HALF_SPACING_M, KeeperAnatomy.ANKLE_ON_SKATES_M, 0.0)
+		leg.knee_pinned = true
+		leg.knee = Vector3(sx * LOW_READY_KNEE.x, LOW_READY_KNEE.y, LOW_READY_KNEE.z)
+		leg.shin_front = LOW_READY_PAD_FACE.normalized()
+	p.blade_center = LOW_READY_BLADE
+	p.stick_tilt = LOW_READY_STICK_TILT_RAD
 
 
 # The butterfly, loaded to push toward `side`: the pad on that side stays down

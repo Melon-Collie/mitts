@@ -12,7 +12,7 @@ one the bots shoot at.
 | `keeper_pose.gd` | a pose as targets: pelvis and trunk angles, knees, ankles, hands, the stick's blade |
 | `keeper_skeleton.gd` | the bones, solved from a pose (legs and arms by two-bone IK, the stick by its lie) |
 | `keeper_gear.gd` | one save box per piece of gear, on its bone; the contact test's packed layout |
-| `keeper_poses.gd` | the taught stances, each written as where the body goes |
+| `keeper_poses.gd` | the taught stances, each written as where the body goes; the low ready among them, the ready stance sat down into a deep A for a shot he may not have time to read |
 | `keeper_coverage.gd` | how much of the mouth his body covers as the puck sees it |
 | `keeper_seams.gd` | the holes a flat puck fits through in the shape he shows a shot straight on, inside his outline |
 | `keeper_footwork.gd` | his skates moving him, on GoaliePushRules' kinematics at each move's top speed: the T-push (push off the planted trail skate up to the speed that carries him the rest of the way in `CLOSE_S`, glide on the lead, `push_time`), straight to its spot up to 45° off his line, square to the shooter; across his line the shuffle (square, in strokes, the trail skate holding its place as he passes over it); in and out the C-cuts (the skates taking turns to carve a C, heel out); the edge stop onto the spot that ends each; and the ready stance they bend |
@@ -175,8 +175,9 @@ iron (nothing of him past it but that leg's skate, turned out beside the post
 under the toe); `test_keeper_coverage.gd` snapshots
 each stance's coverage straight on and from the dot line, and
 `test_keeper_seams.gd` holds every hole a puck fits through to its stance's
-intended windows (the five-holes the ready stance, the half butterflies, the
-extensions and the kicks open, the ice under the RVH's off pad).
+intended windows (the five-holes the ready stance, the low ready, the half
+butterflies, the extensions and the kicks open, the ice under the low ready's
+blocker pad and the RVH's off pad).
 `test_keeper_footwork.gd` holds the T-push, the shuffle and the C-cuts: set on
 his spot in `KeeperFootwork.push_time` (the T-push, glided on before its stop
 however short) or `GoaliePushRules.time_to_set` (the strokes), a diagonal T-push straight there and

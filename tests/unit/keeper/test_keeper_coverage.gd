@@ -18,6 +18,7 @@ var _skel := KeeperSkeleton.new()
 func _stances() -> Array:
 	return [
 		["ready", func(p: KeeperPose) -> void: KeeperPoses.ready(p)],
+		["low_ready", func(p: KeeperPose) -> void: KeeperPoses.low_ready(p)],
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p)],
 		["half_butterfly", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, -1.0)],
 		["extension", func(p: KeeperPose) -> void: KeeperPoses.butterfly_extension(p, -1.0)],

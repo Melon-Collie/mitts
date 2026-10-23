@@ -109,6 +109,7 @@ func _init() -> void:
 	_stances = [
 		["upright", func(p: KeeperPose) -> void: KeeperPoses.upright(p)],
 		["ready", func(p: KeeperPose) -> void: KeeperPoses.ready(p)],
+		["low_ready", func(p: KeeperPose) -> void: KeeperPoses.low_ready(p)],
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p)],
 	]
 	# The one-sided stances, each named by the side its action is on.

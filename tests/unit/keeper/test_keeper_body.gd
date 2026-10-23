@@ -20,6 +20,7 @@ func _stances() -> Array:
 	return [
 		["upright", func(p: KeeperPose) -> void: KeeperPoses.upright(p)],
 		["ready", func(p: KeeperPose) -> void: KeeperPoses.ready(p)],
+		["low ready", func(p: KeeperPose) -> void: KeeperPoses.low_ready(p)],
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p)],
 		["half L", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, -1.0)],
 		["half R", func(p: KeeperPose) -> void: KeeperPoses.half_butterfly(p, 1.0)],
