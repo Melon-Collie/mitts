@@ -8,7 +8,7 @@ execute; they never reach up. Goalie *math* is pure and lives in
 ## Goalie subsystem map
 
 On this branch every match spawns the rebuilt keeper (`keeper_controller.gd`,
-`Scripts/domain/keeper/CLAUDE.md`), offline only: it extends
+`Scripts/domain/keeper/CLAUDE.md`), offline and online: it extends
 `GoalieController` so every caller, the puck and the bots address him
 unchanged, but it runs none of the old tick below. The doctrine in this file is
 the old goalie's, and stands as the reference the keeper's brain is built
@@ -16,7 +16,7 @@ against.
 
 | File | Owns |
 |---|---|
-| `keeper_controller.gd` | the rebuilt keeper in the Goalie node's place: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover); host and offline only |
+| `keeper_controller.gd` | the rebuilt keeper in the Goalie node's place: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover); played on the host, posed from the wire on a client and in a replay |
 | `goalie_controller.gd` | the tick, state transitions, tuning vars, the read belief and its convergence |
 | `goalie_state_machine.gd` | stance transitions |
 | `goalie_body_config_builder.gd` | pose solve into a shared scratch config |

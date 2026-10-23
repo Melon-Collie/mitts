@@ -7,7 +7,8 @@ extends GoalieController
 # boxes on its part bodies, so the puck, the skaters and the bots address him
 # through the old controller's interface unchanged.
 #
-# Host and offline only: nothing of his pose goes on the wire. A shot is read
+# He plays on the host (and offline); his pose goes on the wire, and a client
+# or a replay poses him from it with no AI of its own. A shot is read
 # from its release (KeeperShotRead, restarted by a tip) and saved with the
 # save his gear says covers it (KeeperSave, its low half through the motor),
 # held until the shot is over: it meets him, goes past, stops coming, or is
@@ -120,8 +121,23 @@ func _place_in_crease() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	if goalie == null or puck == null or not is_server:
+	if goalie == null or puck == null:
 		return
+	var was: Vector3 = goalie.global_position
+	if is_server:
+		_play(delta)
+	else:
+		if _rejoin_blend_elapsed >= 0.0:
+			_rejoin_blend_elapsed += delta
+		_interpolate_and_apply()
+	_measure_motion(was, delta)
+	if is_server and _holding >= 0.0:
+		_hold_catch(delta)
+
+
+# His tick on the host: what he reads of the play and the shot, the save and
+# the cover, the brain at the planner's rate, and the motor moving him.
+func _play(delta: float) -> void:
 	var in_net: Vector3 = _net.affine_inverse() * puck.global_position
 	_read_play(delta, in_net)
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
@@ -131,17 +147,19 @@ func _physics_process(delta: float) -> void:
 		_read_receivers()
 		brain.decide(play.puck, play.motion, motor)
 	_ticks += 1
-	var was: Vector3 = goalie.global_position
 	motor.step(delta)
 	_place_body()
+
+
+# His velocity from where the node was a tick ago, and his acceleration in his
+# own frame from it, which his jersey's tail swings to.
+func _measure_motion(was: Vector3, delta: float) -> void:
 	_velocity_x = (goalie.global_position.x - was.x) / maxf(delta, 1e-4)
 	_velocity_z = (goalie.global_position.z - was.z) / maxf(delta, 1e-4)
 	var velocity := Vector3(_velocity_x, 0.0, _velocity_z)
 	_keeper.acceleration = _keeper.global_basis.orthonormalized().inverse() \
 			* (velocity - _last_velocity) / maxf(delta, 1e-4)
 	_last_velocity = velocity
-	if _holding >= 0.0:
-		_hold_catch(delta)
 
 
 # His look at the play: the carrier's body moving it, or the loose puck's own
@@ -255,10 +273,41 @@ func _place_body() -> void:
 	save.overlay(_keeper_pose)
 	goalie.global_transform = _net * Transform3D(Basis(Vector3.UP, motor.yaw), Vector3(motor.x, 0.0, motor.z))
 	_report_state()
-	if not _keeper.apply_pose(_keeper_pose):
+	_seat(_keeper_pose)
+
+
+# His body posed from `p`, and his gear's save boxes on it where it moved.
+func _seat(p: KeeperPose) -> void:
+	if not _keeper.apply_pose(p):
 		return
 	for part: int in KeeperGear.PART_COUNT:
 		goalie.seat_save_box(part, KeeperGear.box(_keeper.skeleton, part))
+
+
+# On a client, the snapshots' poses blended as their roots are
+# (GoalieController._interpolate_and_apply).
+func _lerp_goalie_state(from_s: GoalieNetworkState, to_s: GoalieNetworkState, t: float) -> GoalieNetworkState:
+	var r: GoalieNetworkState = super._lerp_goalie_state(from_s, to_s, t)
+	r.pose.blend(from_s.pose, to_s.pose, t)
+	return r
+
+
+func _apply_interpolated(s: GoalieNetworkState) -> void:
+	_current_x = s.position_x
+	_follow(s)
+
+
+func apply_replay_state(state: GoalieNetworkState, _delta: float) -> void:
+	_follow(state)
+
+
+# Him as a snapshot has him: the node where it was, his body posed from it and
+# his gear's save boxes on that body, so the puck meets what the host's met.
+func _follow(s: GoalieNetworkState) -> void:
+	_sm.current = s.state_enum as GoalieStateMachine.State
+	goalie.set_goalie_position(s.position_x, s.position_z)
+	goalie.set_goalie_rotation_y(s.rotation_y)
+	_seat(s.pose)
 
 
 # The old goalie's reads of him, kept true for whatever still asks them (the
@@ -290,6 +339,7 @@ func reset_to_crease() -> void:
 func fill_state(s: GoalieNetworkState) -> void:
 	super.fill_state(s)
 	s.state_enum = _stance() as int
+	s.pose.copy_from(_keeper_pose)
 
 
 # His rest as the old goalie's stances, for the bots' read of him: down in a

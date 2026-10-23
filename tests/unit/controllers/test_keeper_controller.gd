@@ -9,6 +9,10 @@ extends GutTest
 # covered, unless it is poked away before his glove is on it.
 
 const DT: float = 1.0 / 120.0
+# How far a save box on a client may lie from the host's: the root's centimetre
+# on the wire, and the pose's millimetres carried out along a limb.
+const WIRE_TOLERANCE_M: float = 0.015
+const GOALIE_SCENE: PackedScene = preload("res://Scenes/Goalie.tscn")
 
 var _goalie: Goalie = null
 var _puck: Puck = null
@@ -16,7 +20,7 @@ var _keeper: KeeperController = null
 
 
 func _spawn(goal_line_z: float) -> void:
-	_goalie = load("res://Scenes/Goalie.tscn").instantiate() as Goalie
+	_goalie = GOALIE_SCENE.instantiate() as Goalie
 	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
 	_keeper = KeeperController.new()
 	add_child_autofree(_goalie)
@@ -108,6 +112,41 @@ func test_a_catch_is_held_in_his_glove_and_covered_then_played_out() -> void:
 	assert_almost_eq(_puck.global_position.y, _puck.ice_height, 1e-4, "on the ice")
 	assert_almost_eq(_puck.get_puck_velocity().length(), KeeperController.PLAY_OUT_M_S, 1e-3,
 			"swept out of his reach")
+
+
+# On a client, and in a replay, he is the host's: his state through the wire
+# and posed from it puts every save box where the host's is, tick by tick as
+# he moves.
+func test_a_client_poses_him_as_the_host_has_him() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	var client_goalie := GOALIE_SCENE.instantiate() as Goalie
+	var client := KeeperController.new()
+	add_child_autofree(client_goalie)
+	add_child_autofree(client)
+	client.setup(client_goalie, _puck, GameRules.GOAL_LINE_Z, false)
+	var s := GoalieNetworkState.new()
+	var worst: float = 0.0
+	var spots: Array[Vector3] = [Vector3(3.0, 0.0, -7.0), Vector3(-2.5, 0.0, -4.0), Vector3(4.5, 0.0, -1.2)]
+	for spot: Vector3 in spots:
+		_puck.global_position = Vector3(spot.x, _puck.ice_height, GameRules.GOAL_LINE_Z + spot.z)
+		for i: int in 60:
+			_keeper._physics_process(DT)
+			_keeper.fill_state(s)
+			var sent: GoalieNetworkState = WorldStateCodec._decode_goalie_quantized(
+					WorldStateCodec._encode_goalie_quantized(s))
+			client.apply_replay_state(sent, DT)
+			var host_boxes: Array[CollisionShape3D] = _live_boxes()
+			var client_boxes: Array[CollisionShape3D] = []
+			for cs: CollisionShape3D in client_goalie.get_collision_parts():
+				if not cs.disabled:
+					client_boxes.append(cs)
+			assert_eq(client_boxes.size(), host_boxes.size())
+			for b: int in host_boxes.size():
+				var off: float = host_boxes[b].global_position.distance_to(client_boxes[b].global_position)
+				if off >= WIRE_TOLERANCE_M:
+					assert_lt(off, WIRE_TOLERANCE_M, "tick %d box %d" % [i, b])
+				worst = maxf(worst, off)
+	gut.p("worst save box off on the client: %.4f m" % worst)
 
 
 # Settled facing a puck out front, then the puck at his feet, `ahead` in front

@@ -86,6 +86,53 @@ var blocker_reach: bool = false
 var blocker_grip: Vector3 = Vector3.ZERO
 
 
+# `t` of the way from `a` to `b` (two poses a tick or a snapshot apart). A
+# target whose meaning a flag sets (the knee pinned or poled, the foot's mode,
+# the glove's frame, the blocker reaching) goes with its flag, from the nearer
+# of the two, rather than blending across two meanings. This pose is neither
+# `a` nor `b`.
+func blend(a: KeeperPose, b: KeeperPose, t: float) -> void:
+	var near: KeeperPose = a if t < 0.5 else b
+	pelvis = a.pelvis.lerp(b.pelvis, t)
+	pelvis_rot = _angles(a.pelvis_rot, b.pelvis_rot, t)
+	lumbar_rot = _angles(a.lumbar_rot, b.lumbar_rot, t)
+	chest_rot = _angles(a.chest_rot, b.chest_rot, t)
+	neck_rot = _angles(a.neck_rot, b.neck_rot, t)
+	head_rot = _angles(a.head_rot, b.head_rot, t)
+	for i: int in 2:
+		var la: Leg = a.legs[i]
+		var lb: Leg = b.legs[i]
+		var leg: Leg = legs[i]
+		leg.ankle = la.ankle.lerp(lb.ankle, t)
+		leg.knee_pinned = near.legs[i].knee_pinned
+		leg.knee = la.knee.lerp(lb.knee, t) if la.knee_pinned == lb.knee_pinned else near.legs[i].knee
+		leg.knee_pole = la.knee_pole.lerp(lb.knee_pole, t)
+		leg.thigh_front = la.thigh_front.lerp(lb.thigh_front, t)
+		leg.shin_front = la.shin_front.lerp(lb.shin_front, t)
+		leg.foot_mode = near.legs[i].foot_mode
+		leg.toe = la.toe.lerp(lb.toe, t)
+		leg.flex = lerpf(la.flex, lb.flex, t) if la.foot_mode == lb.foot_mode else near.legs[i].flex
+		leg.along_shin = lerpf(la.along_shin, lb.along_shin, t)
+	glove_from_chest = near.glove_from_chest
+	glove_hand = a.glove_hand.lerp(b.glove_hand, t) if a.glove_from_chest == b.glove_from_chest \
+			else near.glove_hand
+	glove_fingers = a.glove_fingers.lerp(b.glove_fingers, t)
+	glove_palm = a.glove_palm.lerp(b.glove_palm, t)
+	glove_elbow_pole = a.glove_elbow_pole.lerp(b.glove_elbow_pole, t)
+	blocker_elbow_pole = a.blocker_elbow_pole.lerp(b.blocker_elbow_pole, t)
+	blade_center = a.blade_center.lerp(b.blade_center, t)
+	blade_yaw = lerp_angle(a.blade_yaw, b.blade_yaw, t)
+	stick_tilt = lerpf(a.stick_tilt, b.stick_tilt, t)
+	blocker_face = a.blocker_face.lerp(b.blocker_face, t)
+	blocker_reach = near.blocker_reach
+	blocker_grip = a.blocker_grip.lerp(b.blocker_grip, t) if a.blocker_reach == b.blocker_reach \
+			else near.blocker_grip
+
+
+static func _angles(a: Vector3, b: Vector3, t: float) -> Vector3:
+	return Vector3(lerp_angle(a.x, b.x, t), lerp_angle(a.y, b.y, t), lerp_angle(a.z, b.z, t))
+
+
 func copy_from(o: KeeperPose) -> void:
 	pelvis = o.pelvis
 	pelvis_rot = o.pelvis_rot

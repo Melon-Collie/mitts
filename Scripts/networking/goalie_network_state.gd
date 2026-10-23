@@ -1,21 +1,17 @@
 class_name GoalieNetworkState
 
-# Goalie wire state — populated on the host each tick from the live Goalie
-# node body-part transforms and broadcast as part of the world snapshot.
+# Goalie wire state — populated on the host each tick and broadcast as part of
+# the world snapshot.
 #
-# Two layers of fields:
 #   - Root: position_x/z + rotation_y carry the Goalie node's world placement;
 #     velocity_x/z feed the client's dead-reckon past the newest sample, and
 #     state_enum + five_hole_openness are read back through the accessors below
 #     (the bot shot model's stance read). Clients run no goalie AI of their own.
-#   - Pose: socket transforms for each body part, in goalie-local space.
-#     Rotations are radians. Body root has pitch + roll for shoulder-save lean
-#     (yaw is the existing rotation_y field).
-#
-# The stick is rigid-attached to the blocker arm IRL (blocker pad sits on the
-# back of the stick hand). Its transform is derived from the blocker socket
-# plus the fixed scene offset baked into BlockArm — no independent socket
-# needed on the wire.
+#   - Pose: the keeper's pose (KeeperPose), every target his skeleton solves
+#     from, so a client and a replay rebuild the body the host saved with.
+#   - The old goalie's socket transforms (body_pitch .. head_yaw), in
+#     goalie-local space, radians: his own controller fills and reads them,
+#     but they no longer go on the wire.
 var position_x: float = 0.0
 var position_z: float = 0.0
 var rotation_y: float = 0.0
@@ -40,6 +36,7 @@ var blocker_offset: Vector3 = Vector3.ZERO
 var blocker_yaw: float = 0.0
 var blocker_pitch: float = 0.0
 var head_yaw: float = 0.0
+var pose := KeeperPose.new()
 
 var host_timestamp: float = 0.0  # host-only, not serialized
 
@@ -86,15 +83,16 @@ func post_seal_x_sign(guarded_goal_z: float) -> float:
 	return 0.0
 
 
-# The replicated HAND positions in the NET frame, packed for the shot
+# The old goalie's HAND positions in the NET frame, packed for the shot
 # model's pose-aware HIGH band (hole-model v3):
 #   (glove_net_dx, glove_height, blocker_net_dx, blocker_height)
 # net_dx is the hand's lateral offset from the goalie's own center in world
 # x. Local→world x uses the same mapping the controller's post-seal pick
 # documents above (local_x = world_dx · −direction_sign, direction_sign =
 # sign(−goal_z)) → world_dx = local_x · sign(goal_z). Heights are the local
-# offset y (the rig roots at ice level). Like is_down(), this is the one
-# place the pose offsets are interpreted off the wire for the shot model.
+# offset y (the rig roots at ice level). The one place the old goalie's
+# offsets are interpreted for the shot model; they are filled by his own
+# controller and do not go on the wire.
 func hands_read(guarded_goal_z: float) -> Vector4:
 	# All-zero offsets mean the pose has not been captured/replicated yet
 	# (a real stance always holds both hands off the body's origin —
@@ -108,12 +106,11 @@ func hands_read(guarded_goal_z: float) -> Vector4:
 			blocker_offset.x * m, blocker_offset.y)
 
 
-# The replicated PAD positions + rolls in the NET frame, packed for the shot
+# The old goalie's PAD positions + rolls in the NET frame, packed for the shot
 # model's pose-aware LOW band (hole-model v3):
 #   (left_pad_net_dx, left_pad_roll, right_pad_net_dx, right_pad_roll)
-# Same local→world x mapping as hands_read; rolls are radians straight off
-# the wire (only |sin|/|cos| are consumed, so the roll's sign convention
-# never matters). All-zero pad offsets = pose absent (a real stance always
+# Same local→world x mapping as hands_read; rolls are radians (only
+# |sin|/|cos| are consumed, so the roll's sign convention never matters). All-zero pad offsets = pose absent (a real stance always
 # splits the pads off center).
 func pads_read(guarded_goal_z: float) -> Vector4:
 	if left_pad_offset == Vector3.ZERO and right_pad_offset == Vector3.ZERO:
@@ -157,4 +154,5 @@ func copy_from(s: GoalieNetworkState) -> void:
 	blocker_yaw = s.blocker_yaw
 	blocker_pitch = s.blocker_pitch
 	head_yaw = s.head_yaw
+	pose.copy_from(s.pose)
 	host_timestamp = s.host_timestamp

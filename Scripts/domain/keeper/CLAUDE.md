@@ -42,7 +42,7 @@ one the bots shoot at.
 ## In a match
 
 On this branch every match spawns him (`ActorSpawner` makes a `KeeperController`
-for each net), offline only. The old `Goalie` node stays as his shell, since
+for each net), offline and online. The old `Goalie` node stays as his shell, since
 the puck, the skaters, the bots and the game all address it: its own meshes are
 hidden, its colliders off and nothing of it processed (its merged-body rig and
 ice effects read parts he now places), a `Keeper` child draws him, the node is placed on
@@ -56,10 +56,17 @@ stance the bots read and the puck handlers: a release read and saved (below), a
 tip read again, a contact only timed, a glove catch held and covered for the
 whistle, and a loose puck he can reach covered (below); where no whistle
 comes (`GameRules.whistles_a_cover`, Off only) he sets it down out from his
-glove side and sweeps it on toward that corner, out of his reach. Nothing of his
-pose goes on the wire, so a client sees the old goalie's interpolated shell,
-and in the post-game replay he stands still (it records the old goalie's
-state).
+glove side and sweeps it on toward that corner, out of his reach.
+
+He plays on the host only. His pose goes on the wire with his root
+(`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from), so a
+client buffers the snapshots and draws him at the interpolated past as it does
+the old goalie (`GoalieController._interpolate_and_apply`), root and pose
+blended between them (`KeeperPose.blend`), his skeleton solved and his save
+boxes seated on it: its puck prediction stops against the gear the host saves
+with, to about a centimetre. A replay (the goal cinematic, the post-game reel,
+a replay file) poses him the same way (`apply_replay_state`). The shot
+release's rewind of the goalie moves his root only, not his pose.
 
 ## Saves
 
@@ -116,7 +123,11 @@ the cover played out unbroken with the glove ending flat on it),
 and the match through the
 puck's own contact test in `test_keeper_controller.gd`.
 `tests/unit/controllers/test_keeper_controller.gd` holds the swap, a catch
-played out, and a puck at his feet covered or, poked away first, escaping.
+played out, a puck at his feet covered or, poked away first, escaping, and a
+client posed from his state through the wire with every save box where the
+host's is. `test_keeper_pose_codec.gd` holds the pose on the wire: every
+stance and every tick of a run of his moves solving to the same gear, the
+flags, and a blend that is each snapshot at its ends.
 
 ## One body, solved once, read three ways
 

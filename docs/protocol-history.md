@@ -395,3 +395,11 @@ here whenever you bump, in the same format.
 #      record grows an s32 arg2 (13 -> 17 B). An RPC signature and packet
 #      layout change, so mixed builds must be refused. Replay format unchanged:
 #      the event block is appended after the recorder's copy.
+# v84: the goalie block carries the rebuilt keeper's pose (KeeperPoseCodec:
+#      every target his skeleton solves from, 130 B) in place of the old
+#      goalie's 31 B of part offsets, so a client and a replay pose the body,
+#      and its save boxes, the host saved with. GOALIE_BLOCK_SIZE 43 -> 142;
+#      a snapshot for 6 players + 2 goalies grows 497 -> 695 B (10 players:
+#      951 B), still one unreliable Steam message. Packet layout change, so
+#      mixed builds must be refused. Replay FORMAT_VERSION 19: the embedded
+#      world state's goalie block changed size.
