@@ -73,21 +73,26 @@ func _run_checked(what: String, limit: float = 6.0) -> float:
 	while not _motor.is_idle() and t < limit:
 		_motor.step(DT)
 		t += DT
+		# Only a breach is asserted: every tick of every way would flood the log.
 		var at: Array[Vector3] = _bones()
 		var when: String = "%s t %.3f" % [what, t]
 		for b: int in KeeperSkeleton.BONE_COUNT:
-			assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s bone %d" % [when, b])
+			if at[b].distance_to(was[b]) >= MAX_BONE_STEP_M:
+				assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s bone %d" % [when, b])
 		was = at
 		for part: int in KeeperGear.PART_COUNT:
 			var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
-			assert_gte(_lowest(part), -(PAD_GIVE_M if soft else HARD_GIVE_M),
-					"%s %s" % [when, KeeperGear.Part.keys()[part]])
+			if _lowest(part) < -(PAD_GIVE_M if soft else HARD_GIVE_M):
+				assert_gte(_lowest(part), -(PAD_GIVE_M if soft else HARD_GIVE_M),
+						"%s %s" % [when, KeeperGear.Part.keys()[part]])
 		var glove_wrist: Vector3 = _skel.xf[B.FOREARM_G] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
 		var blocker_wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
-		assert_almost_eq(glove_wrist.distance_to(_skel.xf[B.HAND_G].origin), 0.0, 0.002,
-				"%s: the glove arm reaches its hand" % when)
-		assert_almost_eq(blocker_wrist.distance_to(_skel.xf[B.HAND_B] * KeeperAnatomy.BLOCKER_WRIST),
-				0.0, 0.002, "%s: the blocker arm reaches the stick" % when)
+		var glove_gap: float = glove_wrist.distance_to(_skel.xf[B.HAND_G].origin)
+		var blocker_gap: float = blocker_wrist.distance_to(_skel.xf[B.HAND_B] * KeeperAnatomy.BLOCKER_WRIST)
+		if glove_gap > 0.002:
+			assert_almost_eq(glove_gap, 0.0, 0.002, "%s: the glove arm reaches its hand" % when)
+		if blocker_gap > 0.002:
+			assert_almost_eq(blocker_gap, 0.0, 0.002, "%s: the blocker arm reaches the stick" % when)
 	assert_true(_motor.is_idle(), "%s: there inside %.0f s" % [what, limit])
 	return t
 
@@ -197,6 +202,24 @@ func test_turned_on_the_overlap_he_drops_straight_in() -> void:
 		assert_almost_eq(planned, _motor.post.drop_s + 1.2 / KeeperMotor.PIVOT_RATE_RAD_S, 1e-6,
 				"%s: the drop and the swing" % what)
 		var took: float = _run_checked("%s turned drop-in" % what)
+		assert_almost_eq(took, planned, PLAN_TOLERANCE_S, "%s: as planned" % what)
+		assert_eq(_motor.rest, R.POST, "%s: sealed" % what)
+
+
+# Turned to a puck out wide, short of the overlap: he skates onto it still
+# turned and drops in from there, rather than turning square to the goal line
+# first, unbroken and as planned.
+func test_turned_short_of_the_overlap_he_skates_onto_it_still_turned() -> void:
+	for side: float in [1.0, -1.0]:
+		var turn: float = -side * 0.6
+		var overlap: Vector2 = _motor.post.overlap_spot(_iron(side), side, turn)
+		var out: Vector2 = Vector2(-sin(turn), -cos(turn)) * 0.6
+		_place(R.FEET, overlap + out, turn)
+		_motor.seal(_iron(side), side)
+		var planned: float = _motor.time_to_goal()
+		var what: String = "%+.0f" % side
+		assert_ne(_motor.route.first, DO.FACE, "%s: not turned square first" % what)
+		var took: float = _run_checked("%s skated onto the overlap" % what)
 		assert_almost_eq(took, planned, PLAN_TOLERANCE_S, "%s: as planned" % what)
 		assert_eq(_motor.rest, R.POST, "%s: sealed" % what)
 

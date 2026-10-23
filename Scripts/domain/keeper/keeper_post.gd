@@ -95,6 +95,22 @@ func seal_spot(post: Vector2, post_side: float) -> Vector2:
 	return _on_post(post, post_side, _sealed_edge[_index(post_side)])
 
 
+# The turn that squares him to a puck at `puck` standing on the post at `post`
+# on `post_side` (`overlap_spot` at that turn): his edge pivots on the post's
+# face, so the turn that puts the puck straight ahead of him from there.
+# A puck nearer the post than his edge's reach across him has none; then the
+# turn that faces it from the post.
+func overlap_facing(post: Vector2, post_side: float, puck: Vector2) -> float:
+	var on := Vector2(post.x - post_side * GameRules.NET_POST_RADIUS, post.y)
+	var d: Vector2 = puck - on
+	var across: float = _standing_edge[_index(post_side)].x
+	if d.length() <= absf(across) + 1e-4:
+		return atan2(-d.x, -d.y)
+	# Across him the puck lies at d.x·cos t − d.y·sin t + edge.x, which is 0
+	# where it is straight ahead; the root with the puck ahead of him.
+	return wrapf(-acos(-across / d.length()) - atan2(d.y, d.x), -PI, PI)
+
+
 static func _on_post(post: Vector2, post_side: float, edge: Vector3) -> Vector2:
 	return Vector2(post.x - post_side * GameRules.NET_POST_RADIUS - edge.x, post.y - edge.z)
 

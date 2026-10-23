@@ -4,8 +4,8 @@ extends RefCounted
 # Where he wants to be from the puck as he reads it, and the receivers a pass
 # could reach (KeeperPlayRead): the first brain (docs/goalie-rebuild-plan.md,
 # Phase 3). Pure: given the puck in the net's frame it sets his motor's goal,
-# and the motor gets him there. On
-# his feet everywhere in front of the goal line, since every drop there is a
+# and the motor gets him there. On his feet in front of the goal line but for
+# a post he races a carrier to (below), since every other drop there is a
 # save and the reflex layer's; sealed in the RVH below it.
 #
 #   AWAY   the puck beyond the blue line: in the middle of the crease on its
@@ -15,6 +15,11 @@ extends RefCounted
 #          asks (`depth_for`), so a rush is met deep rather than skated round,
 #          and as a pass across to a receiver in `play` asks (`pass_depth`);
 #          a shot he sees wound up he is set for at depth, not backing in
+#   SHARP  below the dots and wide of SHARP_RAD: standing on the near post,
+#          his pad overlapping it, turned to the puck
+#   BELOW  at or below the goal line: sealed on the post on its side; directly
+#          behind the net, on the post he holds until the puck's own motion
+#          will carry it out the other side before he could get across
 #
 # In the zone he sinks into the low ready once a shot could reach him sooner
 # than his legs could answer it from the ready stance (`_cannot_react`): the
@@ -25,11 +30,12 @@ extends RefCounted
 # where that stick meets it, in the zone it is in: skated to at once, turning
 # as he goes, and stopped on the one-timer's angle rather than following the
 # puck across and sliding past it as it stops.
-#   SHARP  below the dots and wide of SHARP_RAD: standing on the near post's
-#          overlap, turned to it
-#   BELOW  at or below the goal line: sealed on the post on its side; directly
-#          behind the net, on the post he holds until the puck's own motion
-#          will carry it out the other side before he could get across
+#
+# A carrier driving at a post from wide of it he races there
+# (`_race_to_post`): on the angle line no further out than lets him still
+# skate onto the post and drop in by the time the puck gets there; past that,
+# onto the post standing, turned to the carrier; down into the RVH as the drop
+# in only just beats the puck; slid across in tight.
 #
 # Each zone holds him a margin past where it took him in, so a puck on a
 # boundary does not flip him between two. The net's frame: x across (+ his
@@ -61,6 +67,8 @@ const SHOT_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # Sunk, he comes back up only once a shot would leave him this much more
 # time, so a puck on the boundary does not bob him up and down.
 const SINK_MARGIN_S: float = 0.05
+# Halvings of the depth range a post race is solved to (to about a centimetre).
+const RACE_ROUNDS: int = 7
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
@@ -70,6 +78,13 @@ var post_side: float = 0.0
 var play: KeeperPlayRead = null
 # The puck's velocity as decided on.
 var _velocity := Vector2.ZERO
+# For a puck racing him to a post (`_race_to_post`): sealed on `post_side`, or
+# on his way onto the post to seal it.
+var _racing: bool = false
+var _to_post: bool = false
+# The furthest out he stands for a puck racing him to a post
+# (`_post_race_depth`; below 0, the floor).
+var _race_depth: float = INF
 
 
 # Sets `motor`'s goal for the puck at `puck` moving at `velocity`, both in the
@@ -81,34 +96,115 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		velocity = Vector2.ZERO
 	_velocity = velocity
 	zone = _zone_for(puck)
-	if zone != Zone.BELOW:
+	var arrives: float = _at_post_in(puck, velocity)
+	# The angle line holds the race while some depth on it still does.
+	var held: float = INF
+	if zone == Zone.FRONT and arrives < INF:
+		held = _post_race_depth(puck, signf(puck.x), arrives, motor)
+	_race_to_post(puck, arrives, held < 0.0 or zone == Zone.SHARP, motor)
+	_race_depth = INF if _to_post else held
+	if zone != Zone.BELOW and not _racing:
 		post_side = 0.0
-	motor.low_ready.asked = zone == Zone.FRONT and _cannot_react(puck, meeting, motor)
-	match zone:
-		Zone.BELOW:
-			var side: float = _post_below(puck, velocity, motor)
-			motor.seal(Vector2(side * GameRules.NET_HALF_WIDTH, 0.0), side)
-		_:
-			# His spot moves with the puck: the same spot a look ahead along
-			# its motion, which the motor skates him with.
-			var spot: Vector2 = _spot(puck, motor)
-			var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
-			if meeting:
-				ahead = spot
-			motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
+	motor.low_ready.asked = zone == Zone.FRONT and not _to_post and _cannot_react(puck, meeting, motor)
+	if zone == Zone.BELOW or _racing:
+		var side: float = post_side if _racing else _post_below(puck, velocity, motor)
+		motor.seal(Vector2(side * GameRules.NET_HALF_WIDTH, 0.0), side)
+		return
+	# His spot moves with the puck: the same spot a look ahead along its
+	# motion, which the motor skates him with.
+	var spot: Vector2 = _spot(puck, motor)
+	var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
+	if meeting:
+		ahead = spot
+	motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting or _to_post)
+
+
+# How long a puck at `puck` moving at `velocity` takes to reach the post on its
+# side, carried at it from wide of it: heading for the goal line within a
+# stick's length outside the post, where a carrier stuffs or wraps it. INF for
+# any other.
+static func _at_post_in(puck: Vector2, velocity: Vector2) -> float:
+	if absf(puck.x) <= GameRules.NET_HALF_WIDTH or velocity.y <= 1e-3 or puck.y >= 0.0:
+		return INF
+	var arrives: float = -puck.y / velocity.y
+	var at_line: float = puck.x + velocity.x * arrives
+	var outside: float = absf(at_line) - GameRules.NET_HALF_WIDTH
+	if signf(at_line) != signf(puck.x) or outside < 0.0 or outside > GameRules.DEFAULT_STICK_LENGTH_M:
+		return INF
+	return arrives
+
+
+# A puck at `puck` that gets to the post on its side in `arrives`
+# (`_at_post_in`), once nothing else holds the race (`may_start`): he makes
+# for that post while he can still skate onto it, his edge on it and turned to
+# the puck, and drop in from there in time (`_to_post`); on it, he stands
+# until the drop in only just beats the puck there, then drops (`_racing`).
+# Caught off it with the puck in tight (a stick's length from the post), he
+# takes his fastest way in once it only just beats the puck there: the
+# butterfly slide across. Sealed for it, he holds it while the puck
+# still heads there or is at a sharp angle: a puck that turns back out beats
+# him back up.
+func _race_to_post(puck: Vector2, arrives: float, may_start: bool, motor: KeeperMotor) -> void:
+	var was: bool = _racing
+	_racing = false
+	_to_post = false
+	if zone == Zone.BELOW or zone == Zone.AWAY or absf(puck.x) <= GameRules.NET_HALF_WIDTH:
+		return
+	var side: float = signf(puck.x)
+	if was and (arrives < INF or zone == Zone.SHARP):
+		_racing = true
+	elif arrives < INF:
+		var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
+		var at := Vector2(motor.x, motor.z)
+		var on_post: bool = motor.rest == KeeperRoute.Rest.FEET \
+				and at.distance_to(motor.post.overlap_spot(post, side, motor.yaw)) <= KeeperRoute.ON_POST_M
+		if on_post:
+			_racing = arrives <= motor.post.drop_in_s(motor.yaw)
+			_to_post = not _racing
+		elif puck.distance_to(post) <= GameRules.DEFAULT_STICK_LENGTH_M:
+			_racing = arrives <= motor.time_to_seal(post, side)
+		elif may_start:
+			_to_post = arrives <= _skate_in_s(at, motor.yaw, puck, side, motor)
+	if _racing:
+		post_side = side
+
+
+# How far out on the angle line of a puck at `puck` that can be at the post on
+# `side` in `arrives` he can stand and still skate onto that post and drop in
+# by then (`_skate_in_s`); −1 when even the floor is too far.
+func _post_race_depth(puck: Vector2, side: float, arrives: float, motor: KeeperMotor) -> float:
+	var out: Vector2 = puck.normalized()
+	var deep: float = minf(DEPTH_FLOOR_M, crease_edge(out))
+	var far: float = crease_edge(out)
+	if _skate_in_s(out * far, facing(out * far, puck), puck, side, motor) <= arrives:
+		return far
+	if _skate_in_s(out * deep, facing(out * deep, puck), puck, side, motor) > arrives:
+		return -1.0
+	for i: int in RACE_ROUNDS:
+		var mid: float = 0.5 * (deep + far)
+		if _skate_in_s(out * mid, facing(out * mid, puck), puck, side, motor) <= arrives:
+			deep = mid
+		else:
+			far = mid
+	return deep
+
+
+# From his feet at `at` turned `turn`, his time onto the post on `side`, his
+# edge on it turned to the puck at `puck`, and down into the RVH from there.
+static func _skate_in_s(at: Vector2, turn: float, puck: Vector2, side: float, motor: KeeperMotor) -> float:
+	var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
+	var face: float = motor.post.overlap_facing(post, side, puck)
+	var on: Vector2 = motor.post.overlap_spot(post, side, face)
+	return motor.route.time_to_stand(at, turn, KeeperRoute.Rest.FEET, motor.post.side, on, face) \
+			+ motor.post.drop_in_s(face)
 
 
 # His spot on his feet for the puck at `puck`, in its zone.
 func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
-	if zone == Zone.SHARP:
+	if zone == Zone.SHARP or _to_post:
 		var side: float = 1.0 if puck.x >= 0.0 else -1.0
 		var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
-		# Where he stands sets how far he turns, and the turn where he stands:
-		# twice round settles both.
-		var spot: Vector2 = motor.post.overlap_spot(post, side, facing(post, puck))
-		for i: int in 2:
-			spot = motor.post.overlap_spot(post, side, facing(spot, puck))
-		return spot
+		return motor.post.overlap_spot(post, side, motor.post.overlap_facing(post, side, puck))
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	if zone == Zone.AWAY:
 		return out * crease_edge(out) * AWAY_DEPTH_SHARE
@@ -118,7 +214,7 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 	if play != null:
 		for receiver: Vector2 in play.receivers:
 			depth = minf(depth, pass_depth(puck, receiver, motor.footwork, play.delay_s))
-		depth = maxf(depth, minf(DEPTH_FLOOR_M, crease_edge(out)))
+	depth = maxf(minf(depth, _race_depth), minf(DEPTH_FLOOR_M, crease_edge(out)))
 	return out * depth
 
 

@@ -232,14 +232,17 @@ static func _stick_box_from_lie(skel: KeeperSkeleton, part: int) -> Transform3D:
 
 # Where a post stance meets the post at `side` of keeper space (−1 the −X
 # post; a stance's own side through KeeperSkeleton.world_side): the post's
-# inner face at his gear's outermost reach, on the goal line through that
-# side's ankle — the leg lies along the line and the pad's face stands out in
-# front of it.
+# inner face at the outermost reach of that side's leg (pad, boot, skate), on
+# the goal line through its ankle: the pad overlaps the post along the ice,
+# where a puck is jammed in, not the stick's shaft or a hand held out wider.
 static func post_contact(skel: KeeperSkeleton, side: float) -> Vector3:
 	var g: Vector3 = skel.xf[KeeperSkeleton.FOOT[0]].origin
 	var b: Vector3 = skel.xf[KeeperSkeleton.FOOT[1]].origin
-	var ankle: Vector3 = g if g.x * side > b.x * side else b
-	return Vector3(_outermost_x(skel, side), 0.0, ankle.z)
+	var leg: int = 0 if g.x * side > b.x * side else 1
+	var reach: float = -INF
+	for part: int in [Part.PAD_G + leg, Part.BOOT_G + leg, Part.SKATE_G + leg]:
+		reach = maxf(reach, _reach_x(skel, part, side))
+	return Vector3(side * reach, 0.0, (g if leg == 0 else b).z)
 
 
 # Where a pad laid along the goal line meets the post at `side` of keeper
@@ -258,13 +261,6 @@ static func _reach_x(skel: KeeperSkeleton, part: int, side: float) -> float:
 	var t: Transform3D = box(skel, part)
 	var h: Vector3 = _HALF[part]
 	return side * t.origin.x + absf(t.basis.x.x) * h.x + absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z
-
-
-static func _outermost_x(skel: KeeperSkeleton, side: float) -> float:
-	var reach: float = -INF
-	for part: int in PART_COUNT:
-		reach = maxf(reach, _reach_x(skel, part, side))
-	return side * reach
 
 
 # Every part's box into `packed`, in GoalieContactDetector's layout, from

@@ -3,7 +3,8 @@ extends GutTest
 # The keeper into and out of the RVH on a post (KeeperPost): from his feet by
 # the drop-in at the post and back up by the rise, from the butterfly after a
 # slide to the post and back down into it. Each lands where it should in its
-# time, sealed with the post pad's end on the post; and every tick keeps his
+# time, sealed with the post pad's end on the post; standing on the post turned
+# to a puck, it is dead ahead of him; and every tick keeps his
 # gear out of the ice, his arms on the stick and nothing on him jumping, the
 # off skate on the ice through the drop-in and the rise.
 
@@ -96,6 +97,27 @@ func test_he_drops_in_at_the_post_and_rises_back_out() -> void:
 		var ready_pose := KeeperPose.new()
 		KeeperPoses.ready(ready_pose)
 		_same_bones(ready_pose, "%+.0f standing" % post_side)
+
+
+# Standing on the post turned to a puck (`overlap_facing`): the puck dead ahead
+# of him from the spot that turn puts him on, from out wide to tight on the
+# post; a puck nearer the post than his edge's reach across him faced from the
+# post.
+func test_turned_on_the_post_the_puck_is_dead_ahead() -> void:
+	for post_side: float in [1.0, -1.0]:
+		var post: Vector2 = _iron(post_side)
+		for off: Vector2 in [Vector2(6.0, -2.0), Vector2(3.0, -1.0), Vector2(1.4, -0.8), Vector2(0.5, -0.5),
+				Vector2(0.4, -1.5)]:
+			var puck: Vector2 = post + Vector2(off.x * post_side, off.y)
+			var turn: float = _post.overlap_facing(post, post_side, puck)
+			var at: Vector2 = _post.overlap_spot(post, post_side, turn)
+			var ahead := Vector2(-sin(turn), -cos(turn))
+			assert_almost_eq(ahead.dot((puck - at).normalized()), 1.0, 1e-5,
+					"%+.0f %s: dead ahead of him" % [post_side, off])
+		var tight: Vector2 = post + Vector2(0.1 * post_side, -0.1)
+		var from_post: Vector2 = tight - Vector2(post.x - post_side * GameRules.NET_POST_RADIUS, post.y)
+		assert_almost_eq(_post.overlap_facing(post, post_side, tight), atan2(-from_post.x, -from_post.y), 1e-5,
+				"%+.0f: on top of the post, faced from it" % post_side)
 
 
 func test_from_a_slide_to_the_post_he_comes_up_into_it_and_folds_back() -> void:
