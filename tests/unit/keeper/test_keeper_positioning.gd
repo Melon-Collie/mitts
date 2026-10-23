@@ -181,3 +181,31 @@ func test_he_tracks_a_puck_round_the_zone_unbroken() -> void:
 	assert_true(_motor.is_idle(), "at rest where the puck stopped")
 	assert_eq(_motor.refused, 0)
 	assert_almost_eq(Vector2(_motor.x, _motor.z), _motor.route.spot, Vector2.ONE * KeeperRoute.THERE_M)
+
+
+# A carrier in down the middle who cuts across the slot at a skating pace: he
+# stays on the line from the puck to the net's centre as it swings, skated
+# with it rather than stepped after it.
+func test_a_carrier_cutting_across_the_slot_is_tracked_on_the_angle() -> void:
+	var path: Array[Vector2] = [Vector2(0.5, -19.0), Vector2(0.0, -7.0), Vector2(-3.5, -3.0)]
+	var speed: float = 8.0
+	_motor.z = -1.3
+	var puck: Vector2 = path[0]
+	var leg: int = 0
+	var worst: float = 0.0
+	var tick: int = 0
+	while leg < path.size() - 1:
+		var to: Vector2 = path[leg + 1]
+		var velocity: Vector2 = (to - puck).normalized() * speed
+		puck = puck.move_toward(to, speed * DT)
+		if puck == to:
+			leg += 1
+		if tick % PLANNER_EVERY == 0:
+			_brain.decide(puck, velocity, _motor)
+		_motor.step(DT)
+		tick += 1
+		var at := Vector2(_motor.x, _motor.z)
+		var line: Vector2 = puck.normalized()
+		if tick * DT > 0.5:
+			worst = maxf(worst, absf(at.x * line.y - at.y * line.x))
+	assert_lt(worst, 0.2, "on the angle line as it swings")

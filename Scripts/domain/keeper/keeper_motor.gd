@@ -36,7 +36,7 @@ extends RefCounted
 
 const Rest := KeeperRoute.Rest
 const Do := KeeperRoute.Do
-enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE }
+enum Mover { NONE, PIVOT, FOOTWORK, DROP, SLIDE, POST, SAVE, GLIDE }
 
 # The pivot: its top turn rate, near the old goalie's (whose 5/s lerp turns him
 # through 45° at up to 3.9 rad/s), and how hard his edges start and stop it.
@@ -45,6 +45,9 @@ const PIVOT_ACCEL_RAD_S2: float = 40.0
 # How far his trunk turns ahead of his skates while footwork carries him; it
 # turns as fast as the pivot.
 const LEAD_MAX_RAD: float = deg_to_rad(30.0)
+# A goal on his feet that moves this fast he skates to as it moves, however
+# far (KeeperGlide); a still one when the route plans it.
+const MOVING_M_S: float = 0.05
 
 var x: float = 0.0
 var z: float = 0.0
@@ -61,6 +64,7 @@ var slide := KeeperSlide.new()
 var post := KeeperPost.new()
 var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVOT_ACCEL_RAD_S2, LEAD_MAX_RAD)
 var save_move := KeeperSaveMove.new()
+var glide := KeeperGlide.new()
 
 var _queue: Array[_Ask] = []
 var _goal: bool = false
@@ -74,6 +78,8 @@ var _anchor_yaw: float = 0.0
 # His speed over the last step, and the pose a save cuts in from.
 var _velocity := Vector2.ZERO
 var _cut := KeeperPose.new()
+# How fast the spot he is asked to be on is moving.
+var _spot_velocity := Vector2.ZERO
 
 
 # One move asked for: what, to where, which side, how fast.
@@ -91,13 +97,15 @@ class _Ask:
 		top = p_top
 
 
-# Be on his feet at `spot` facing `facing`, or down at `spot` (`on` Rest.DOWN).
-func go_to(spot: Vector2, facing: float, on: int = Rest.FEET) -> void:
+# Be on his feet at `spot` facing `facing`, or down at `spot` (`on` Rest.DOWN);
+# on his feet, the spot moving at `velocity`.
+func go_to(spot: Vector2, facing: float, on: int = Rest.FEET, velocity := Vector2.ZERO) -> void:
 	_queue.clear()
 	_goal = true
 	route.rest = on
 	route.spot = spot
 	route.facing = facing
+	_spot_velocity = velocity if on == Rest.FEET else Vector2.ZERO
 	_retarget()
 
 
@@ -201,7 +209,8 @@ func rvh_fold_out() -> void:
 func can_save(down: bool) -> bool:
 	if down:
 		return rest == Rest.DOWN and _mover == Mover.NONE
-	return rest == Rest.FEET and (_mover == Mover.NONE or _mover == Mover.PIVOT or _mover == Mover.FOOTWORK)
+	return rest == Rest.FEET and (_mover == Mover.NONE or _mover == Mover.PIVOT or _mover == Mover.FOOTWORK
+			or _mover == Mover.GLIDE)
 
 
 # The low save `low` to `side`, cutting in now.
@@ -225,9 +234,17 @@ func _ask(what: int, spot: Vector2 = Vector2.ZERO, side: float = 0.0, top: float
 	_queue.append(_Ask.new(what, spot, side, top))
 
 
-# Every move asked for done and settled, and where he was asked to be.
+# Every move asked for done and settled, and where he was asked to be (a glide
+# there, his legs still settling into the stance, counts).
 func is_idle() -> bool:
-	return _mover == Mover.NONE and _queue.is_empty() and (not _goal or _plan() == Do.NONE)
+	var still: bool = _mover == Mover.NONE or (_mover == Mover.GLIDE and _glided_there())
+	return still and _queue.is_empty() and (not _goal or _plan() == Do.NONE)
+
+
+# Gliding, on a spot at rest and square: there, his legs only still settling.
+func _glided_there() -> bool:
+	return _spot_velocity.length() <= MOVING_M_S and glide.is_on(route.spot, Vector2.ZERO) and lead == 0.0 \
+			and absf(wrapf(route.facing - yaw, -PI, PI)) < 1e-5
 
 
 # The fastest way's time to where he is asked to be, from where he is now and
@@ -256,9 +273,11 @@ func step(dt: float) -> void:
 func _step_mover(dt: float) -> void:
 	if _mover == Mover.NONE:
 		_start_next()
-		if _mover == Mover.NONE and _goal and _plan() != Do.NONE \
-				and not _start(route.first, route.first_spot, route.first_side, INF):
-			refused += 1
+		if _mover == Mover.NONE and _goal and _plan() != Do.NONE:
+			if _glides():
+				_start_glide()
+			elif not _start(route.first, route.first_spot, route.first_side, INF):
+				refused += 1
 	match _mover:
 		Mover.PIVOT:
 			footwork.step(dt)
@@ -303,6 +322,49 @@ func _step_mover(dt: float) -> void:
 			z = save_move.z
 			if save_move.is_done():
 				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
+		Mover.GLIDE:
+			_step_glide(dt)
+
+
+# Whether the goal is one he skates to as it moves: on his feet, standing, near
+# him or moving.
+func _glides() -> bool:
+	return route.rest == Rest.FEET and rest == Rest.FEET \
+			and (_spot_velocity.length() > MOVING_M_S or route.first == Do.GLIDE)
+
+
+func _start_glide() -> void:
+	glide.x = x
+	glide.z = z
+	glide.velocity = _velocity
+	footwork.set_still()
+	_mover = Mover.GLIDE
+
+
+# Skating with the spot, his trunk turned on toward its facing and his skates
+# after it; done once he is on a spot at rest, square, his legs settled. A goal
+# that is no longer on his feet, or none, he stops for first where he is.
+func _step_glide(dt: float) -> void:
+	if not _goal or route.rest != Rest.FEET:
+		glide.step(dt, Vector2(glide.x, glide.z), Vector2.ZERO, yaw)
+		x = glide.x
+		z = glide.z
+		if glide.velocity == Vector2.ZERO and glide.is_settled():
+			_mover = Mover.NONE
+		return
+	glide.step(dt, route.spot, _spot_velocity, yaw)
+	x = glide.x
+	z = glide.z
+	var turn: float = PIVOT_RATE_RAD_S * dt
+	var body: float = _turned_toward(yaw + lead, route.facing, turn)
+	yaw = _turned_toward(yaw, body, turn)
+	lead = wrapf(body - yaw, -PI, PI)
+	if absf(lead) < 1e-6:
+		lead = 0.0
+	if _glided_there():
+		yaw = route.facing
+		if glide.is_settled():
+			_mover = Mover.NONE
 
 
 func _rest_on(r: int) -> void:
@@ -420,7 +482,7 @@ static func _turned_toward(from: float, to: float, most: float) -> float:
 
 func _next_is_footwork() -> bool:
 	var next: int = _plan()
-	return next == Do.T_PUSH or next == Do.SHUFFLE or next == Do.C_CUT or next == Do.FACE
+	return next == Do.T_PUSH or next == Do.SHUFFLE or next == Do.C_CUT or next == Do.FACE or next == Do.GLIDE
 
 
 # His trunk, where it leads, turns on at up to the same rate, never past it.
@@ -460,6 +522,8 @@ func _pose_mover(p: KeeperPose) -> void:
 			post.pose(p)
 		Mover.SAVE:
 			save_move.pose(p)
+		Mover.GLIDE:
+			glide.pose(p)
 		_:
 			match rest:
 				Rest.FEET:

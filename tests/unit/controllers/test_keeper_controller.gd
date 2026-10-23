@@ -139,7 +139,7 @@ func _shot(from: Vector3, to: Vector2, speed: float) -> int:
 
 func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 	var cases: Array = [
-		[Vector2(-0.75, 0.95), GoalieSaveRules.SavePart.GLOVE, "high to his glove side"],
+		[Vector2(-0.84, 0.4), GoalieSaveRules.SavePart.GLOVE, "to his glove side over the pad"],
 		[Vector2(0.75, KeeperShotRead.ON_ICE_Y), GoalieSaveRules.SavePart.PAD, "along the ice to his blocker side"],
 	]
 	for case: Array in cases:

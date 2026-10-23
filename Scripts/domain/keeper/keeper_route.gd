@@ -16,7 +16,7 @@ extends RefCounted
 enum Rest { FEET, DOWN, POST }
 enum Do {
 	NONE, FACE, T_PUSH, SHUFFLE, C_CUT, DROP, RISE, RECOVER, SLIDE, SLIDE_FROM_FEET,
-	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT,
+	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT, GLIDE,
 }
 
 # Within these of his spot and his facing he is there: a goal that drifts no
@@ -32,6 +32,9 @@ const TIE_S: float = 1.0 / 240.0
 # The steepest diagonal a way plans, just inside the T-push's own, so float
 # rounding never tips its spot past it onto his line.
 const _DIAGONAL_TAN: float = 0.99
+# A spot on his feet this near he skates to (KeeperGlide), turning as he goes;
+# further, footwork's moves take him.
+const GLIDE_REACH_M: float = 1.0
 
 # Where he is asked to be: resting on `rest`; on his feet at `spot` facing
 # `facing`, or down at `spot` (his turn there is the slide's), or sealed on the
@@ -62,6 +65,8 @@ var _best: float = INF
 var _step_do: int = Do.NONE
 var _step_spot := Vector2.ZERO
 var _step_legs: int = 0
+# Whether the way _on_feet last timed ends in a glide, which no settle follows.
+var _glides_last: bool = false
 var _way_do: int = Do.NONE
 var _way_spot := Vector2.ZERO
 var _way_side: float = 0.0
@@ -134,16 +139,35 @@ func _to_feet(at: Vector2, turn: float, from: int) -> void:
 	match from:
 		Rest.POST:
 			# Up square onto the overlap.
-			_offer(_post.rise_s + _standing(_post.risen_spot(), 0.0), Do.RVH_RISE_OUT)
+			_offer(_post.rise_s + _up_to(_post.risen_spot(), 0.0), Do.RVH_RISE_OUT)
 		Rest.DOWN:
-			var t: float = _drop.rise_s + _standing(at, turn)
+			var t: float = _drop.rise_s + _up_to(at, turn)
 			var across: float = _local(spot - at, turn).x
 			if absf(across) < THERE_M:
 				_offer(t, Do.RISE)
 			else:
 				_offer(t, Do.RECOVER, Vector2.ZERO, signf(across))
 		Rest.FEET:
-			_offer(_standing(at, turn), _way_do, _way_spot, _way_side)
+			var t: float = _up_to(at, turn)
+			if _glide_to(at, turn):
+				_offer(t, Do.GLIDE, spot)
+			else:
+				_offer(t, _way_do, _way_spot, _way_side)
+
+
+# Whether, on his feet at `at` turned `turn`, he skates to the goal's spot.
+func _glide_to(at: Vector2, turn: float) -> bool:
+	var d: float = at.distance_to(spot)
+	return d <= GLIDE_REACH_M and (d >= THERE_M or absf(wrapf(facing - turn, -PI, PI)) > FACED_RAD)
+
+
+# On his feet at `at` turned `turn`, the time to the goal's spot and facing:
+# skated to within the glide's reach, footwork's moves past it (their first
+# move left in _way_do, _way_spot and _way_side).
+func _up_to(at: Vector2, turn: float) -> float:
+	if _glide_to(at, turn):
+		return glide_time(at.distance_to(spot), wrapf(facing - turn, -PI, PI))
+	return _standing(at, turn)
 
 
 # On his feet at `at` turned `turn`, to the goal's spot and facing. A turn the
@@ -157,14 +181,14 @@ func _standing(at: Vector2, turn: float) -> float:
 	_way_spot = _step_spot
 	_way_side = 0.0
 	if off <= FACED_RAD:
-		return _settled(walk)
+		return walk if _glides_last else _settled(walk)
 	if off <= _lead_max and _step_do != Do.NONE and _step_legs == 1:
 		return walk + maxf(KeeperFootwork.SETTLE_S, off / _pivot_rate)
 	walk = _on_feet(at, facing, spot)
 	_way_do = Do.FACE
 	_way_spot = Vector2.ZERO
 	_way_side = facing
-	return pivot_time(off) + _settled(walk)
+	return pivot_time(off) + (walk if _glides_last else _settled(walk))
 
 
 func _to_down(at: Vector2, turn: float, from: int) -> void:
@@ -287,6 +311,7 @@ func _post_spot(at: Vector2, turn: float) -> Vector2:
 func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 	_step_spot = to
 	_step_legs = 1
+	_glides_last = false
 	var local: Vector2 = _local(to - at, turn)
 	var across: float = absf(local.x)
 	var deep: float = absf(local.y)
@@ -313,15 +338,25 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 		_step_spot = at + _world(diagonal, turn)
 		return _push_time(diagonal.length())
 	_step_legs = 2
-	var depth_first: float = _c_cut_time(deep) + _hand_off(deep, _footwork.c_cut_speed, false) + _push_time(across)
+	var depth_first: float = _c_cut_time(deep) + _hand_off(deep, _footwork.c_cut_speed, false) \
+			+ _then(across, _push_time(across))
 	var diagonal_first: float = _push_time(diagonal.length()) \
-			+ _hand_off(diagonal.length(), _footwork.t_push_speed, true) + _c_cut_time(deep - across * steepest)
+			+ _hand_off(diagonal.length(), _footwork.t_push_speed, true) \
+			+ _then(deep - across * steepest, _c_cut_time(deep - across * steepest))
 	if depth_first <= diagonal_first:
 		_step_do = Do.C_CUT
+		_glides_last = across <= GLIDE_REACH_M
 		return depth_first
 	_step_do = Do.T_PUSH
 	_step_spot = at + _world(diagonal, turn)
+	_glides_last = deep - across * steepest <= GLIDE_REACH_M
 	return diagonal_first
+
+
+# A way's second leg, `d` long: skated, within the glide's reach, else
+# `footwork`'s time.
+func _then(d: float, footwork: float) -> float:
+	return glide_time(d, 0.0) if d <= GLIDE_REACH_M else footwork
 
 
 # How long after a move of `d` at up to `top` m/s sets him on its spot his push
@@ -337,6 +372,13 @@ func _hand_off(d: float, top: float, glides: bool) -> float:
 			return 0.0
 		peak = top
 	return maxf(KeeperFootwork.RECOVER_S - peak / (_footwork.accel * ratio), 0.0)
+
+
+# Skating `d` to a spot and turning `turn` on the way, from rest: the push's
+# kinematics, which are the glide's, beside the turn at the pivot's rate. His
+# legs settle into the stance after it, but nothing waits for them.
+func glide_time(d: float, turn: float) -> float:
+	return maxf(_push_time(d), absf(turn) / _pivot_rate)
 
 
 # Footwork's time, with the stop settled out of him at its end.

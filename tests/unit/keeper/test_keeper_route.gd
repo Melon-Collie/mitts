@@ -131,31 +131,32 @@ func test_from_every_rest_to_every_goal_he_gets_there_in_the_time_planned() -> v
 				assert_almost_eq(_motor.yaw, float(goal[2]), KeeperRoute.FACED_RAD, "%s: facing" % what)
 
 
-# A step short enough that the shuffle's lower top speed never comes into it
-# is a shuffle; a longer one a T-push.
-func test_a_short_step_is_a_shuffle_and_a_long_one_a_t_push() -> void:
-	var top: float = _motor.footwork.shuffle_speed
-	var short: float = 0.9 * top * top / _motor.footwork.accel
-	_motor.go_to(Vector2(short, 0.0), 0.0)
+# A spot near him he skates to, turning as he goes; one past the glide's reach
+# a T-push takes him to, straight or on a diagonal.
+func test_a_near_spot_is_skated_to_and_a_far_one_pushed_for() -> void:
+	_motor.go_to(Vector2(0.3, 0.0), 0.0)
 	_motor.time_to_goal()
-	assert_eq(_motor.route.first, DO.SHUFFLE, "%.2f m across" % short)
-	_motor.go_to(Vector2(-1.0, 0.0), 0.0)
+	assert_eq(_motor.route.first, DO.GLIDE, "0.3 m across")
+	_motor.go_to(Vector2(-0.5, -0.4), 0.3)
 	_motor.time_to_goal()
-	assert_eq(_motor.route.first, DO.T_PUSH, "1 m across")
-	_motor.go_to(Vector2(-0.3, -0.25), 0.0)
+	assert_eq(_motor.route.first, DO.GLIDE, "near, on a diagonal and turned")
+	_motor.go_to(Vector2(-1.5, 0.0), 0.0)
 	_motor.time_to_goal()
-	assert_eq(_motor.route.first, DO.T_PUSH, "a short diagonal")
+	assert_eq(_motor.route.first, DO.T_PUSH, "1.5 m across")
+	_motor.go_to(Vector2(-1.2, -0.9), 0.0)
+	_motor.time_to_goal()
+	assert_eq(_motor.route.first, DO.T_PUSH, "a far diagonal")
 
 
-# A turn his trunk can lead is made on the way; a bigger one before his feet
-# move.
+# Past the glide's reach, a turn his trunk can lead is made on the way; a
+# bigger one before his feet move.
 func test_he_turns_on_the_way_or_before_his_feet_move() -> void:
 	var within: float = KeeperMotor.LEAD_MAX_RAD * 0.8
-	_motor.go_to(Vector2(1.0, 0.0), within)
+	_motor.go_to(Vector2(1.5, 0.0), within)
 	_motor.time_to_goal()
 	assert_eq(_motor.route.first, DO.T_PUSH, "a turn within the lead")
 	var beyond: float = KeeperMotor.LEAD_MAX_RAD * 1.5
-	_motor.go_to(Vector2(1.0, 0.0), beyond)
+	_motor.go_to(Vector2(1.5, 0.0), beyond)
 	_motor.time_to_goal()
 	assert_eq(_motor.route.first, DO.FACE, "a turn beyond it")
 	assert_eq(_motor.route.first_side, beyond)
@@ -185,16 +186,16 @@ func test_square_on_the_overlap_he_drops_into_the_rvh() -> void:
 # The spot moved further along his line mid-push: he carries on to it, in the
 # time one push there takes, not stopping first.
 func test_a_spot_moved_along_his_push_is_taken_on_without_stopping() -> void:
-	_motor.go_to(Vector2(1.0, 0.0), 0.0)
+	_motor.go_to(Vector2(1.5, 0.0), 0.0)
 	var t: float = 0.0
 	for i: int in 15:
 		_motor.step(DT)
 		t += DT
-	_motor.go_to(Vector2(1.6, 0.0), 0.0)
+	_motor.go_to(Vector2(2.1, 0.0), 0.0)
 	t += _run_checked("on along")
-	var push: float = GoaliePushRules.time_to_set(1.6, _motor.footwork.t_push_speed, _motor.footwork.accel)
+	var push: float = GoaliePushRules.time_to_set(2.1, _motor.footwork.t_push_speed, _motor.footwork.accel)
 	assert_almost_eq(t, push + KeeperFootwork.SETTLE_S, 3.0 * DT, "one push's time")
-	assert_almost_eq(_motor.x, 1.6, 1e-4)
+	assert_almost_eq(_motor.x, 2.1, 1e-4)
 
 
 func test_a_facing_moved_mid_pivot_is_turned_on_to() -> void:

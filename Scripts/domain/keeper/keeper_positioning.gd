@@ -33,6 +33,9 @@ const MARGIN_M: float = 0.5
 const MARGIN_RAD: float = deg_to_rad(5.0)
 # How deep he waits with the puck out of the zone, of his depth in it.
 const AWAY_DEPTH_SHARE: float = 0.5
+# How far ahead his spot's own motion is read, along the puck's: a planner
+# tick's worth.
+const LOOK_AHEAD_S: float = 1.0 / 30.0
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
@@ -49,20 +52,27 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		Zone.BELOW:
 			var side: float = _post_below(puck, velocity, motor)
 			motor.seal(Vector2(side * GameRules.NET_HALF_WIDTH, 0.0), side)
-		Zone.SHARP:
-			var side: float = 1.0 if puck.x >= 0.0 else -1.0
-			var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
-			# Where he stands sets how far he turns, and the turn where he
-			# stands: twice round settles both.
-			var spot: Vector2 = motor.post.overlap_spot(post, side, facing(post, puck))
-			for i: int in 2:
-				spot = motor.post.overlap_spot(post, side, facing(spot, puck))
-			motor.go_to(spot, facing(spot, puck))
 		_:
-			var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
-			var depth: float = crease_edge(out) * (AWAY_DEPTH_SHARE if zone == Zone.AWAY else 1.0)
-			var spot: Vector2 = out * depth
-			motor.go_to(spot, facing(spot, puck))
+			# His spot moves with the puck: the same spot a look ahead along
+			# its motion, which the motor skates him with.
+			var spot: Vector2 = _spot(puck, motor)
+			var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
+			motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S)
+
+
+# His spot on his feet for the puck at `puck`, in its zone.
+func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
+	if zone == Zone.SHARP:
+		var side: float = 1.0 if puck.x >= 0.0 else -1.0
+		var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
+		# Where he stands sets how far he turns, and the turn where he stands:
+		# twice round settles both.
+		var spot: Vector2 = motor.post.overlap_spot(post, side, facing(post, puck))
+		for i: int in 2:
+			spot = motor.post.overlap_spot(post, side, facing(spot, puck))
+		return spot
+	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
+	return out * crease_edge(out) * (AWAY_DEPTH_SHARE if zone == Zone.AWAY else 1.0)
 
 
 func _zone_for(puck: Vector2) -> int:
