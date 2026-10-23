@@ -47,14 +47,21 @@ more than they look like:
 - **A kneeling joint keeps its height.** A pinned knee or ankle is placed at its
   target's height and turns only in plan (`KeeperSkeleton.toward_at_height`), so
   a knee on the ice stays on the ice wherever the hips go.
-- **The stick decides the blocker hand.** The blade lies flat, the lie fixes the
-  paddle's angle to it in its own plane (which leans the paddle about 27° toward
-  the blocker side), and `stick_tilt` tips it back toward him. The grip is up
-  the paddle from there, the gloved fist holds it, and the arm reaches the
-  wrist on the back of the fist (`KeeperAnatomy.BLOCKER_WRIST`), where the
-  glove's cuff on the forearm meets it. A stance that holds the stick past the
-  arm's reach is wrong, not the arm: the cuff has no slack to hide a gap.
-  Placing the hand first fights a rigid stick.
+- **In reach, the stick decides the blocker hand.** The blade lies flat, the
+  lie fixes the paddle's angle to it in its own plane (which leans the paddle
+  about 27° toward the blocker side), and `stick_tilt` tips it back toward him.
+  The grip is up the paddle from there, the gloved fist holds it, and the arm
+  reaches the wrist on the back of the fist (`KeeperAnatomy.BLOCKER_WRIST`),
+  where the glove's cuff on the forearm meets it. Every taught stance is laid
+  in reach.
+- **Past reach, the hand brings the stick.** The stick never leaves the fist:
+  the arm reaches as far as it goes toward the grip, and the stick, still
+  rigid, pivots on its heel to the fist, sliding through it along the shaft
+  (`GRIP_LOWEST_M` to `GRIP_HIGHEST_M`), its blade turned to lie flat under the
+  new lean. A hand nearer the heel than the paddle's top slides the heel out
+  along the ice; the blade comes off the ice only for a hand past the butt or
+  under a paddle stood too upright for it to lie flat, and then rests on its
+  toe. The glove's hand likewise goes no further than its arm reaches.
 - **The glove holds its place on the body.** It is placed in the chest's frame
   (`KeeperPose.glove_from_chest`, `KeeperPoses.GLOVE_FROM_CHEST`): just outside
   the chest's width, the elbow a little out, the same spot standing and down,
@@ -134,8 +141,12 @@ every tick unbroken, no move refused and in the time the route planned (the
 brain will read it); a short step a shuffle and a long one a T-push, a turn
 first, a recovery toward a spot on his feet, a drop-in from the overlap; a spot
 or facing moved under a move taken on by it; and the last order winning.
+`test_keeper_body.gd` also holds a grip past reach in every direction, both
+catching hands: the fist on the stick, the arm no longer than an arm, the grip
+on the shaft, the lie, and the blade flat on the ice unless it cannot be.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
-the shooter's side, behind and high in front (`tools/keeper_strip.gd`).
+the shooter's side, behind and high in front (`tools/keeper_strip.gd`), and the
+stick swept out of reach (`stick_reach`).
 
 He is authored left-catching. A right-catcher (`KeeperSkeleton.mirrored`) is
 that body reflected across his centre line once solved: each bone frame is

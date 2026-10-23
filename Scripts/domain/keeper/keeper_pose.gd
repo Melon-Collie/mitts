@@ -72,7 +72,8 @@ var blocker_elbow_pole: Vector3 = Vector3(0.6, -1.0, 0.3)
 # The stick: the blade flat on the ice, its centre at `blade_center`, its toe
 # turned `blade_yaw` from the glove side (+ turns the toe forward), and the paddle
 # tilted `stick_tilt` back toward him about the blade's length. The lie fixes the
-# rest, and the blocker hand is where the rigid stick puts the grip.
+# rest, and the blocker hand is where the rigid stick puts the grip, in the
+# arm's reach; past it the stick comes to the hand (KeeperSkeleton).
 var blade_center: Vector3 = Vector3(0.0, 0.0, -0.45)
 var blade_yaw: float = 0.0
 var stick_tilt: float = 0.35

@@ -48,6 +48,7 @@ const SCENARIOS: Array = [
 	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
 	["sequence", 0.0, SEQUENCE],
 	["goals", 0.0, GOALS],
+	["stick_reach", 0.0, STICK_REACH],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
 # a frame every DROP_FRAME_EVERY ticks since the whole drop is 24.
@@ -83,6 +84,15 @@ const SEQUENCE: int = -8
 # his feet in the middle), each given once he is at the last, making whatever
 # moves KeeperRoute picks; drawn as SEQUENCE is.
 const GOALS: int = -9
+# The ready stance with its blade swept out past the blocker arm's reach (out
+# in front, round to his blocker side and behind him), so the stick is seen
+# brought to the hand: pivoting on its heel, sliding through the grip.
+const STICK_REACH: int = -10
+const STICK_SWEEP: Array[Vector3] = [
+	KeeperPoses.READY_BLADE, Vector3(-0.2, 0.0, -1.3), Vector3(1.2, 0.0, -0.6), Vector3(0.6, 0.0, 0.6),
+	KeeperPoses.READY_BLADE,
+]
+const STICK_SWEEP_FRAMES: int = 6
 const SEQUENCE_FRAME_EVERY: int = 12
 const SHEET_WRAP: int = 12
 const GOAL_LINE_Z: float = 0.35
@@ -178,6 +188,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_sequence()
 	if kind == GOALS:
 		return _record_goals()
+	if kind == STICK_REACH:
+		return _record_stick_reach()
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
 	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
@@ -299,6 +311,17 @@ func _record_sequence() -> Array:
 		tick += 1
 		if motor.is_idle():
 			idle += 1
+	return out
+
+
+func _record_stick_reach() -> Array:
+	var out: Array = []
+	for leg: int in STICK_SWEEP.size() - 1:
+		for f: int in STICK_SWEEP_FRAMES:
+			var p := KeeperPose.new()
+			KeeperPoses.ready(p)
+			p.blade_center = STICK_SWEEP[leg].lerp(STICK_SWEEP[leg + 1], float(f) / STICK_SWEEP_FRAMES)
+			out.append([p, Vector3.ZERO, KeeperFootwork.Phase.SET, 0.0, out.size() * DT])
 	return out
 
 

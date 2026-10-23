@@ -2,8 +2,8 @@ extends GutTest
 
 # The new keeper's body: the skeleton keeps a person's proportions in every
 # taught stance, the gear stays inside the rule book and on top of the ice, the
-# stick is one rigid piece with its blade flat, and the save boxes are the ones
-# the contact test reads.
+# stick is one rigid piece with its blade flat and always in the blocker hand,
+# and the save boxes are the ones the contact test reads.
 
 const B := KeeperSkeleton.Bone
 const P := KeeperGear.Part
@@ -104,12 +104,10 @@ func test_his_skates_stand_on_the_ice_when_he_is_up() -> void:
 
 # The skeleton has no hand bone: each forearm is aimed at its hand and stops at
 # the wrist, so a hand held in reach ends at most a palm past it. Further, the
-# hand is drawn floating off the arm. Standing straight up nobody reaches a
-# stick lying flat on the ice, so the upright reference is not held to it.
+# hand would be drawn floating off the arm; the stick comes to the blocker hand
+# instead.
 func test_every_arm_reaches_its_hand() -> void:
 	for stance: Array in _stances():
-		if stance[0] == "upright":
-			continue
 		_solve(stance)
 		var glove_wrist: Vector3 = _skel.xf[B.FOREARM_G] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
 		var blocker_wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
@@ -188,19 +186,81 @@ func test_a_right_catcher_is_the_left_catcher_reflected() -> void:
 			KeeperGear.post_contact(_skel, -1.0) * flip, Vector3.ONE * 1e-5, "the glove-side post")
 
 
+# Every taught stance holds the stick where it lays it, within the 2 mm the arms
+# are held to. Standing straight up nobody reaches a stick lying flat on the
+# ice, so the upright reference brings it up to the hand.
 func test_the_stick_is_rigid_and_its_blade_lies_flat() -> void:
 	var lie: float = deg_to_rad(KeeperAnatomy.PADDLE_TO_BLADE_DEG)
 	for stance: Array in _stances():
+		if stance[0] == "upright":
+			continue
 		_solve(stance)
 		assert_almost_eq(_skel.stick_paddle_dir.angle_to(_skel.stick_blade_dir), lie, 1e-4,
 				"%s: the lie" % stance[0])
 		assert_almost_eq(_skel.stick_blade_dir.y, 0.0, 1e-6, "%s: blade along the ice" % stance[0])
 		assert_almost_eq(_lowest(P.BLADE), 0.0, 0.001, "%s: blade on the ice" % stance[0])
 		assert_almost_eq(_skel.grip.distance_to(_skel.stick_heel),
-				KeeperAnatomy.GRIP_ALONG_STICK_M, 0.001, "%s: grip up the stick" % stance[0])
+				KeeperAnatomy.GRIP_ALONG_STICK_M, 0.002, "%s: grip up the stick" % stance[0])
 		assert_lt(_skel.stick_face.z, 0.0, "%s: the blade faces the shooter" % stance[0])
 		assert_almost_eq(_skel.xf[B.HAND_B].origin.distance_to(_skel.grip), 0.0, 0.001,
 				"%s: the blocker hand holds the grip" % stance[0])
+
+
+# A grip past the arm's reach, in any direction, brings the stick to the hand:
+# the arm reaches as far as it goes, and the stick, still rigid, pivots on its
+# heel to the fist, its blade flat under it and the grip slid along the shaft;
+# the heel slides out along the ice for a hand too near it, and the blade comes
+# off the ice only for a hand past the butt or a paddle stood too upright for
+# it to lie flat.
+func test_a_grip_out_of_reach_brings_the_stick_to_the_hand() -> void:
+	var lie: float = deg_to_rad(KeeperAnatomy.PADDLE_TO_BLADE_DEG)
+	var arm: float = KeeperAnatomy.UPPER_ARM_M + KeeperAnatomy.FOREARM_M
+	# Far out in front, out to each side, behind him, and down in the butterfly
+	# with the blade drawn in under the hand and far out in front; and standing
+	# straight up.
+	var cases: Array = [
+		["ready", Vector3(-0.2, 0.0, -1.4)], ["ready", Vector3(1.3, 0.0, -0.4)],
+		["ready", Vector3(-1.1, 0.0, -0.2)], ["ready", Vector3(0.4, 0.0, 0.7)],
+		["butterfly", Vector3(0.6, 0.0, -0.1)], ["butterfly", Vector3(0.1, 0.0, -1.5)],
+		["upright", KeeperPoses.READY_BLADE],
+	]
+	for mirrored: bool in [false, true]:
+		_skel.mirrored = mirrored
+		for case: Array in cases:
+			match case[0]:
+				"ready":
+					KeeperPoses.ready(_pose)
+				"butterfly":
+					KeeperPoses.butterfly(_pose)
+				"upright":
+					KeeperPoses.upright(_pose)
+			if case[0] != "upright":
+				_pose.blade_center = case[1]
+			_skel.pose(_pose)
+			var what: String = "%s %s %s" % ["right" if mirrored else "left", case[0], case[1]]
+			var shoulder: Vector3 = _skel.xf[B.UPPER_ARM_B].origin
+			var wrist: Vector3 = _skel.xf[B.FOREARM_B] * Vector3(0.0, -KeeperAnatomy.FOREARM_M, 0.0)
+			# A right-catcher's hand frame is reflected: his wrist is on the
+			# reflected side of it.
+			var on_fist: Vector3 = KeeperAnatomy.BLOCKER_WRIST * (Vector3(-1.0, 1.0, 1.0) if mirrored else Vector3.ONE)
+			assert_almost_eq(wrist.distance_to(_skel.xf[B.HAND_B] * on_fist), 0.0, 0.002,
+					"%s: the arm reaches the fist" % what)
+			assert_lte(shoulder.distance_to(wrist), arm + 1e-4, "%s: no longer than an arm" % what)
+			assert_almost_eq(_skel.xf[B.HAND_B].origin.distance_to(_skel.grip), 0.0, 1e-5,
+					"%s: the fist on the grip" % what)
+			var up: Vector3 = _skel.grip - _skel.stick_heel
+			assert_almost_eq(up.normalized(), _skel.stick_paddle_dir, Vector3.ONE * 1e-4,
+					"%s: the grip on the stick" % what)
+			assert_between(up.length(), KeeperAnatomy.GRIP_LOWEST_M - 1e-4, KeeperAnatomy.GRIP_HIGHEST_M + 1e-4,
+					"%s: the grip on the shaft" % what)
+			assert_almost_eq(_skel.stick_paddle_dir.angle_to(_skel.stick_blade_dir), lie, 1e-4,
+					"%s: the lie" % what)
+			assert_gte(_lowest(P.BLADE), -0.001, "%s: the blade out of the ice" % what)
+			var lean: float = Vector2(_skel.stick_paddle_dir.x, _skel.stick_paddle_dir.z).length()
+			if up.length() < KeeperAnatomy.GRIP_HIGHEST_M - 1e-4 and lean > absf(cos(lie)):
+				assert_almost_eq(_skel.stick_heel.y, 0.0, 1e-5, "%s: the heel on the ice" % what)
+				assert_almost_eq(_skel.stick_blade_dir.y, 0.0, 1e-5, "%s: the blade flat" % what)
+	_skel.mirrored = false
 
 
 func test_the_gear_is_inside_the_rule_book() -> void:

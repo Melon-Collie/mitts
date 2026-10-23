@@ -122,7 +122,10 @@ const PADDLE_THICKNESS_M: float = 0.025
 const STICK_LENGTH_M: float = 60.0 * 0.0254
 const SHAFT_LENGTH_M: float = STICK_LENGTH_M - PADDLE_LENGTH_M
 const SHAFT_WIDTH_M: float = 0.03
-# The blocker hand grips the shaft just above the paddle.
+# The blocker hand grips the shaft just above the paddle, and slides along it
+# from the paddle's top to a fist short of the butt.
 const GRIP_ALONG_STICK_M: float = PADDLE_LENGTH_M + 0.10
+const GRIP_LOWEST_M: float = PADDLE_LENGTH_M
+const GRIP_HIGHEST_M: float = STICK_LENGTH_M - 2.0 * BLOCKER_FIST_HALF.y
 # Angle between paddle and blade in the plane of the blade's face — the lie.
 const PADDLE_TO_BLADE_DEG: float = 117.0

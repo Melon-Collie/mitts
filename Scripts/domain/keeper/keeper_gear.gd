@@ -220,7 +220,7 @@ static func _stick_box_from_lie(skel: KeeperSkeleton, part: int) -> Transform3D:
 		var up: Vector3 = (paddle - blade * paddle.dot(blade)).normalized()
 		var basis := Basis(blade, up, blade.cross(up))
 		var center: Vector3 = skel.stick_heel + blade * h.x
-		center.y = h.y * absf(up.y) + h.z * absf(basis.z.y)
+		center.y = skel.stick_heel.y + h.y * absf(up.y) + h.z * absf(basis.z.y)
 		return Transform3D(basis, center)
 	var across: Vector3 = (blade - paddle * blade.dot(paddle)).normalized()
 	var basis := Basis(across, paddle, across.cross(paddle))

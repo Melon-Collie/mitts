@@ -35,7 +35,8 @@ var xf: Array[Transform3D] = []
 var mirrored: bool = false
 
 # The stick, rigid: the heel where paddle meets blade, the paddle's direction up
-# from it, the blade's direction along the ice from it, and the blade's face.
+# from it, the blade's direction along the ice from it, and the blade's face;
+# and the grip, where the blocker hand holds it.
 var stick_heel: Vector3 = Vector3.ZERO
 var stick_paddle_dir: Vector3 = Vector3.UP
 var stick_blade_dir: Vector3 = Vector3.LEFT
@@ -75,14 +76,23 @@ func pose(p: KeeperPose) -> void:
 			KeeperAnatomy.SHOULDER_HALF_SPACING_M, shoulder_y, 0.0)
 	var fwd: Vector3 = -chest.basis.z
 	var glove_at: Vector3 = chest * p.glove_hand if p.glove_from_chest else p.glove_hand
+	# A hand goes no further than its arm reaches.
+	var arm: float = KeeperAnatomy.UPPER_ARM_M + KeeperAnatomy.FOREARM_M
+	if glove_shoulder.distance_to(glove_at) > arm:
+		glove_at = glove_shoulder + (glove_at - glove_shoulder).normalized() * arm
 	_pose_arm(Bone.UPPER_ARM_G, glove_shoulder, glove_at, p.glove_elbow_pole, fwd)
 	xf[Bone.HAND_G] = Transform3D(_limb_basis(-p.glove_fingers, p.glove_palm), glove_at)
 	# The blocker's board stands upright on the back of the hand whatever the
 	# stick's lean, face to the shooter. The fist holds the stick, so the arm
-	# reaches the wrist on the back of it rather than the stick itself.
-	xf[Bone.HAND_B] = Transform3D(_limb_basis(Vector3.UP, p.blocker_face), grip)
-	_pose_arm(Bone.UPPER_ARM_B, blocker_shoulder, xf[Bone.HAND_B] * KeeperAnatomy.BLOCKER_WRIST,
-			p.blocker_elbow_pole, fwd)
+	# reaches the wrist on the back of it rather than the stick itself; a grip
+	# past the arm's reach brings the stick to the hand.
+	var blocker_hand: Basis = _limb_basis(Vector3.UP, p.blocker_face)
+	var wrist_off: Vector3 = blocker_hand * KeeperAnatomy.BLOCKER_WRIST
+	var to_wrist: Vector3 = grip + wrist_off - blocker_shoulder
+	if to_wrist.length() > arm:
+		_hold_stick_at(blocker_shoulder + to_wrist.normalized() * arm - wrist_off)
+	xf[Bone.HAND_B] = Transform3D(blocker_hand, grip)
+	_pose_arm(Bone.UPPER_ARM_B, blocker_shoulder, grip + wrist_off, p.blocker_elbow_pole, fwd)
 	if mirrored:
 		_mirror()
 
@@ -185,9 +195,56 @@ func _pose_stick(p: KeeperPose) -> void:
 	var paddle: Vector3 = upright.rotated(axis, p.stick_tilt)
 	var heel: Vector3 = p.blade_center - blade * KeeperAnatomy.BLADE_LENGTH_M * 0.5
 	heel.y = 0.0
+	_set_stick(heel, paddle, blade)
+	grip = heel + paddle * KeeperAnatomy.GRIP_ALONG_STICK_M
+
+
+func _set_stick(heel: Vector3, paddle: Vector3, blade: Vector3) -> void:
 	stick_heel = heel
 	stick_paddle_dir = paddle
 	stick_blade_dir = blade
 	var face: Vector3 = blade.cross(paddle).normalized()
 	stick_face = face if face.z <= 0.0 else -face
-	grip = heel + paddle * KeeperAnatomy.GRIP_ALONG_STICK_M
+
+
+# The stick brought to the hand at `at`: it pivots on its heel to point at the
+# hand, sliding through the grip, its blade turned to lie flat under the new
+# lean. A hand nearer the heel than the paddle's top slides the heel out along
+# the ice; one past the butt, or a paddle too upright for the blade to lie
+# flat, lifts it off the ice.
+func _hold_stick_at(at: Vector3) -> void:
+	var heel: Vector3 = stick_heel
+	var along: float = heel.distance_to(at)
+	if along < KeeperAnatomy.GRIP_LOWEST_M:
+		var out := Vector3(heel.x - at.x, 0.0, heel.z - at.z)
+		var on_ice: float = sqrt(maxf(KeeperAnatomy.GRIP_LOWEST_M * KeeperAnatomy.GRIP_LOWEST_M - at.y * at.y, 0.0))
+		heel = Vector3(at.x, 0.0, at.z) + out.normalized() * on_ice
+	elif along > KeeperAnatomy.GRIP_HIGHEST_M:
+		heel = at + (heel - at).normalized() * KeeperAnatomy.GRIP_HIGHEST_M
+	var paddle: Vector3 = (at - heel).normalized()
+	var blade: Vector3 = _blade_under(paddle, stick_blade_dir)
+	# A blade that cannot lie flat points its toe down: the stick rises along
+	# itself through the grip until the toe rests on the ice.
+	var toe_y: float = heel.y + blade.y * KeeperAnatomy.BLADE_LENGTH_M
+	if toe_y < 0.0:
+		heel -= paddle * toe_y / paddle.y
+	_set_stick(heel, paddle, blade)
+	grip = at
+
+
+# The blade the rigid lie puts under `paddle`, flat on the ice and turned as
+# near `was` as it goes; under a paddle too upright for that, the nearest it
+# comes to flat, its toe down, pointing away from the paddle's lean (where the
+# two flat ones meet as the paddle stands up to it).
+static func _blade_under(paddle: Vector3, was: Vector3) -> Vector3:
+	var lie: float = cos(deg_to_rad(KeeperAnatomy.PADDLE_TO_BLADE_DEG))
+	var lean := Vector2(paddle.x, paddle.z)
+	if lean.length() <= absf(lie) + 1e-6:
+		var square: Vector3 = (Vector3.UP - paddle * paddle.y).normalized()
+		return paddle * lie + square * sqrt(1.0 - lie * lie)
+	var off: float = acos(clampf(lie / lean.length(), -1.0, 1.0))
+	var one := Vector2.from_angle(lean.angle() + off)
+	var other := Vector2.from_angle(lean.angle() - off)
+	var a := Vector3(one.x, 0.0, one.y)
+	var b := Vector3(other.x, 0.0, other.y)
+	return a if a.dot(was) >= b.dot(was) else b
