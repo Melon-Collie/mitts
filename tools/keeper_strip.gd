@@ -108,8 +108,9 @@ const STICK_SWEEP: Array[Vector3] = [
 ]
 const STICK_SWEEP_FRAMES: int = 6
 # KeeperPositioning deciding at the planner's rate from a puck carried round
-# the zone (TRACK_PATH, in the net's frame at TRACK_SPEED), KeeperMotor moving
-# him there; the puck drawn, the bar his rest as SEQUENCE's.
+# the zone by one of theirs (TRACK_PATH, in the net's frame at TRACK_SPEED),
+# KeeperMotor moving him there; the puck drawn, the bar his rest as
+# SEQUENCE's, the printed column how far he has sunk into the low ready.
 const TRACK: int = -11
 const TRACK_PATH: Array[Vector2] = [
 	Vector2(-3.0, -22.0), Vector2(0.0, -9.0), Vector2(8.0, -6.0), Vector2(6.0, -1.5), Vector2(3.0, 1.5),
@@ -411,6 +412,9 @@ func _record_low_ready() -> Array:
 func _record_track() -> Array:
 	var motor := KeeperMotor.new()
 	var brain := KeeperPositioning.new()
+	# Carried by one of theirs: set close enough in, he sinks into the low ready.
+	brain.play = KeeperPlayRead.new()
+	brain.play.theirs = true
 	var out: Array = []
 	var tick: int = 0
 	var leg: int = 0
@@ -437,8 +441,8 @@ func _record_track() -> Array:
 			motor.pose(p)
 			var phase: int = [KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
 					KeeperFootwork.Phase.STOP][motor.rest]
-			out.append([p, Vector3(motor.x, 0.0, motor.z + GOAL_LINE_Z), phase, 0.0, tick * DT, motor.yaw,
-					Vector3(puck.x, 0.0, puck.y + GOAL_LINE_Z)])
+			out.append([p, Vector3(motor.x, 0.0, motor.z + GOAL_LINE_Z), phase, motor.low_ready.share, tick * DT,
+					motor.yaw, Vector3(puck.x, 0.0, puck.y + GOAL_LINE_Z)])
 		motor.step(DT)
 		tick += 1
 	print("[keeper_strip] refused %d" % motor.refused)

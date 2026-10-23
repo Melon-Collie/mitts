@@ -80,6 +80,7 @@ func _tier() -> void:
 	clear_reach = 0.0
 	read.leg_delay_s = _profile.reaction_delay_s
 	read.primed_delay_s = _profile.prearmed_reaction_delay_s
+	play.primed_delay_s = _profile.prearmed_reaction_delay_s
 	play.delay_s = _profile.reaction_delay_s
 	read.arm_delay_s = _profile.arm_reaction_delay_s
 	save.glove_speed_m_s = _profile.glove_react_max_speed_mps
@@ -144,8 +145,8 @@ func _read_play(delta: float, in_net: Vector3) -> void:
 		holder = Vector2(body.x, body.z)
 	# A wind-up shows as the opposing carrier holding the puck on his blade for
 	# a shot: the wrister's address, the slapper's charge, the one-timer's.
-	var winding: bool = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id) \
-			and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
+	play.theirs = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id)
+	var winding: bool = play.theirs and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
 	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder)
 
 

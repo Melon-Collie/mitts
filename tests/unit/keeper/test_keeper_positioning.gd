@@ -11,7 +11,8 @@ extends GutTest
 # of the crease against a still or slow puck, deeper against one coming at him
 # or swinging across him or with an open receiver across the slot, no deeper
 # than the floor. A pass he reads he skates to where its stick meets it, set
-# there, turned to it.
+# there, turned to it. In front of the net he sinks into the low ready once a
+# shot could reach him before his legs and his drop could answer it.
 
 const DT: float = 1.0 / 120.0
 const PLANNER_EVERY: int = 4
@@ -338,3 +339,50 @@ func test_a_pass_he_reads_he_plays_from_where_it_is_met() -> void:
 	_brain.decide(Vector2(0.5, 1.5), Vector2(0.0, -10.0), _motor)
 	assert_eq(_brain.zone, Z.FRONT, "a pass out from behind the net: in front")
 	assert_eq(_motor.route.rest, R.FEET)
+
+
+# The distance from him inside which a shot of theirs reaches him before his
+# legs and his drop from the ready stance could answer it.
+func _sink_reach(play: KeeperPlayRead) -> float:
+	return (play.legs_s() + _motor.save_move.drop_s) * KeeperPositioning.SHOT_M_S
+
+
+func _asks_to_sink(puck: Vector2) -> bool:
+	_brain.decide(puck, Vector2.ZERO, _motor)
+	return _motor.low_ready.asked
+
+
+func test_he_sinks_once_a_shot_could_beat_his_reaction() -> void:
+	_brain.play = KeeperPlayRead.new()
+	_brain.play.theirs = true
+	_motor.z = -1.3
+	var me := Vector2(_motor.x, _motor.z)
+	var reach: float = _sink_reach(_brain.play)
+	assert_true(_asks_to_sink(me + Vector2(0.0, -(reach - 0.3))), "inside it: sunk")
+	var margin_m: float = KeeperPositioning.SINK_MARGIN_S * KeeperPositioning.SHOT_M_S
+	assert_true(_asks_to_sink(me + Vector2(0.0, -(reach + margin_m * 0.5))), "just past it, sunk: held")
+	assert_false(_asks_to_sink(me + Vector2(0.0, -(reach + margin_m + 0.3))), "past the margin: up")
+	assert_false(_asks_to_sink(me + Vector2(0.0, -(reach + 0.3))), "up, just past it: stays up")
+	_brain.play.theirs = false
+	assert_false(_asks_to_sink(me + Vector2(0.0, -2.0)), "ours: no shot coming")
+	_brain.play.theirs = true
+	assert_false(_asks_to_sink(Vector2(4.0, -0.5)), "at a sharp angle: on the post standing")
+	# Watched wound up, his read is quicker and he holds the ready stance closer in.
+	_brain.play.watched_s = KeeperPlayRead.PRIME_S
+	assert_lt(_sink_reach(_brain.play), reach, "primed: a shorter reach")
+	assert_false(_asks_to_sink(me + Vector2(0.0, -(_sink_reach(_brain.play) + KeeperPositioning.SINK_MARGIN_S
+			* KeeperPositioning.SHOT_M_S + 0.3))), "primed, past it: up")
+
+
+# A pass he reads is shot from its meeting stick once it gets there.
+func test_a_pass_he_reads_sinks_him_by_when_it_can_be_shot() -> void:
+	_brain.play = KeeperPlayRead.new()
+	_motor.z = -1.3
+	var me := Vector2(_motor.x, _motor.z)
+	var reach: float = _sink_reach(_brain.play)
+	_brain.play.meets = true
+	_brain.play.meet = me + Vector2(0.0, -(reach * 0.5))
+	_brain.play.meet_s = 0.05
+	assert_true(_asks_to_sink(Vector2(3.0, -6.0)), "met close, soon: sunk")
+	_brain.play.meet_s = 1.0
+	assert_false(_asks_to_sink(Vector2(3.0, -6.0)), "met close, later: up, to move")

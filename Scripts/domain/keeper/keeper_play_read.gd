@@ -31,6 +31,7 @@ const HANDLE_S: float = KeeperFootwork.CLOSE_S
 const NO_CARRIER := Vector2(INF, INF)
 
 var delay_s: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
+var primed_delay_s: float = GoalieSkillProfile.hard().prearmed_reaction_delay_s
 
 # The puck as he reads it, and its motion; whether he sees the shooter winding
 # up with it on his blade, and for how long he has watched that.
@@ -38,6 +39,8 @@ var puck := Vector2.ZERO
 var motion := Vector2.ZERO
 # Whether he sees it loose: a pass he has not yet seen caught is still one.
 var loose: bool = true
+# Whether it is carried by one of theirs, who can shoot it now.
+var theirs: bool = false
 var winding_up: bool = false
 var watched_s: float = 0.0
 # The attackers off the puck it could be passed to, through a lane no defender's
@@ -80,6 +83,7 @@ func reset() -> void:
 	winding_up = false
 	watched_s = 0.0
 	meets = false
+	theirs = false
 	_carried = false
 
 
@@ -118,6 +122,11 @@ func _handled(dt: float, at: Vector2, carrier: Vector2) -> Vector2:
 # Whether he has watched the wind-up long enough to have the save programmed.
 func primed() -> bool:
 	return watched_s >= PRIME_S
+
+
+# How long his legs take to answer a shot released now.
+func legs_s() -> float:
+	return minf(delay_s, primed_delay_s) if primed() else delay_s
 
 
 # The attackers off the puck (`attackers`) a pass from it could reach, given

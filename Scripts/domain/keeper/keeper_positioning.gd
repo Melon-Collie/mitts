@@ -16,6 +16,11 @@ extends RefCounted
 #          and as a pass across to a receiver in `play` asks (`pass_depth`);
 #          a shot he sees wound up he is set for at depth, not backing in
 #
+# In the zone he sinks into the low ready once a shot could reach him sooner
+# than his legs could answer it from the ready stance (`_cannot_react`): the
+# low ready covers more of the net than the butterfly from anywhere in front
+# of him, and its drop is the shorter fall.
+#
 # A pass he reads to an opposing stick (KeeperPlayRead.meets) he plays from
 # where that stick meets it, in the zone it is in: skated to at once, turning
 # as he goes, and stopped on the one-timer's angle rather than following the
@@ -50,6 +55,12 @@ const LOOK_AHEAD_S: float = 1.0 / 30.0
 const DEPTH_FLOOR_M: float = 0.5
 # A pass's speed: the quick pass's.
 const PASS_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
+# The hardest shot a carrier releases without a wind-up he reads: the
+# neutral build's full wrister.
+const SHOT_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
+# Sunk, he comes back up only once a shot would leave him this much more
+# time, so a puck on the boundary does not bob him up and down.
+const SINK_MARGIN_S: float = 0.05
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
@@ -72,6 +83,7 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	zone = _zone_for(puck)
 	if zone != Zone.BELOW:
 		post_side = 0.0
+	motor.low_ready.asked = zone == Zone.FRONT and _cannot_react(puck, meeting, motor)
 	match zone:
 		Zone.BELOW:
 			var side: float = _post_below(puck, velocity, motor)
@@ -108,6 +120,19 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 			depth = minf(depth, pass_depth(puck, receiver, motor.footwork, play.delay_s))
 		depth = maxf(depth, minf(DEPTH_FLOOR_M, crease_edge(out)))
 	return out * depth
+
+
+# Whether a shot from the play at `puck` (a pass's meeting stick when
+# `meeting`) could reach him sooner than his legs answer it and his drop
+# lands from the ready stance.
+func _cannot_react(puck: Vector2, meeting: bool, motor: KeeperMotor) -> bool:
+	if play == null or not (meeting or play.theirs):
+		return false
+	var shot: float = puck.distance_to(Vector2(motor.x, motor.z)) / SHOT_M_S
+	if meeting:
+		shot += play.meet_s
+	var answer: float = play.legs_s() + motor.save_move.drop_s
+	return shot < answer + (SINK_MARGIN_S if motor.low_ready.asked else 0.0)
 
 
 # How far out along the puck's line he stands in the zone: the top of the
