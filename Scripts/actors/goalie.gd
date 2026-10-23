@@ -131,15 +131,106 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	_update_connectors()
+	if _stand_in == null:
+		_update_connectors()
 
 
 func apply_jersey_info(p_name: String, number: int) -> void:
+	if _stand_in != null:
+		_stand_in.call(&"apply_jersey_info", p_name, number)
+		return
 	_uniform_coordinator.apply_jersey_info(p_name, number)
 
 
 func apply_uniform(colors: Dictionary) -> void:
+	if _stand_in != null:
+		_stand_in.call(&"apply_uniform", colors)
+		return
 	_uniform_coordinator.apply_uniform(colors)
+
+
+# ── A stand-in body ──────────────────────────────────────────────────────────
+# Another body drawn and saving in this goalie's place (the rebuilt keeper,
+# KeeperController): this node's own meshes hidden and its kit and lettering
+# passed on, its own colliders off, and its saves made on boxes the stand-in's
+# controller places, each under the part body that names its material for the
+# puck (Puck._classify_save_part). Each part's first box also places that part
+# (the blocker's, the BlockArm it hangs from), so every reader of this node's
+# part positions reads the stand-in's.
+var _stand_in: Node3D = null
+var _save_boxes: Array[CollisionShape3D] = []
+# Per box: the node it places, or null where an earlier box places it.
+var _save_box_places: Array[Node3D] = []
+
+
+func set_stand_in(stand_in: Node3D) -> void:
+	_stand_in = stand_in
+	_hide_own_meshes(self)
+	add_child(stand_in)
+	for cs: CollisionShape3D in get_collision_parts():
+		cs.disabled = true
+	_blocker.transform = Transform3D.IDENTITY
+	_stick.transform = Transform3D.IDENTITY
+
+
+func _hide_own_meshes(node: Node) -> void:
+	for child: Node in node.get_children():
+		if child == _stand_in:
+			continue
+		if child is VisualInstance3D:
+			(child as VisualInstance3D).visible = false
+		_hide_own_meshes(child)
+
+
+# A save box of `half_extents` for the stand-in, rebounding as `save_part`
+# (GoalieSaveRules.SavePart; a pad on his glove side if `glove_side`). Boxes
+# are indexed in the order added.
+func add_save_box(save_part: int, glove_side: bool, half_extents: Vector3) -> void:
+	var body: StaticBody3D = _save_part_body(save_part, glove_side)
+	var cs := CollisionShape3D.new()
+	var box := BoxShape3D.new()
+	box.size = half_extents * 2.0
+	cs.shape = box
+	body.add_child(cs)
+	var place: Node3D = _block_arm if save_part == GoalieSaveRules.SavePart.BLOCKER else body
+	_save_boxes.append(cs)
+	_save_box_places.append(null if _save_box_places.has(place) else place)
+	_collision_parts_cache.clear()
+	_collision_part_bodies.clear()
+	_collision_part_half_extents.clear()
+
+
+# Puts save box `i` at `xf` in this node's frame, the boxes in the order added.
+func seat_save_box(i: int, xf: Transform3D) -> void:
+	var place: Node3D = _save_box_places[i]
+	if place != null:
+		place.transform = _in_own_frame(place.get_parent() as Node3D).affine_inverse() * xf
+	var cs: CollisionShape3D = _save_boxes[i]
+	cs.transform = _in_own_frame(cs.get_parent() as Node3D).affine_inverse() * xf
+
+
+# `node`'s transform in this node's frame (identity for this node itself).
+func _in_own_frame(node: Node3D) -> Transform3D:
+	var xf := Transform3D.IDENTITY
+	while node != null and node != self:
+		xf = node.transform * xf
+		node = node.get_parent() as Node3D
+	return xf
+
+
+func _save_part_body(save_part: int, glove_side: bool) -> StaticBody3D:
+	match save_part:
+		GoalieSaveRules.SavePart.GLOVE:
+			return _glove
+		GoalieSaveRules.SavePart.BLOCKER:
+			return _blocker
+		GoalieSaveRules.SavePart.CHEST:
+			return _body
+		GoalieSaveRules.SavePart.MASK:
+			return _head
+		GoalieSaveRules.SavePart.STICK:
+			return _stick
+	return _left_pad if glove_side else _right_pad
 
 # `glove_max_step` / `blocker_max_step`: optional caps on linear movement
 # this frame (metres). Callers pass `*_react_max_speed * delta` to enforce a

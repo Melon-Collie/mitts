@@ -22,6 +22,7 @@ one the bots shoot at.
 | `keeper_positioning.gd` | the first brain, from the puck alone: where he wants to be by zone (beyond the blue line, in the zone, at a sharp angle below the dots, below the goal line), each held a margin past where it took him in, set on the motor as its goal at the planner's rate |
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included; the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line |
+| `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
 | `actors/keeper/keeper.gd` | the node: solves a pose and draws it |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -29,6 +30,25 @@ one the bots shoot at.
 | `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey, sleeves and pants (whose stripes run down the side, as the skaters' do) |
 | `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
 | `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, all the way round: hung from the protector's own hem edge and shaded on from its facets so the two read as one jersey, rested on the pants and thighs |
+
+## In a match
+
+On this branch every match spawns him (`ActorSpawner` makes a `KeeperController`
+for each net), offline only. The old `Goalie` node stays as his shell, since
+the puck, the skaters, the bots and the game all address it: its own meshes are
+hidden and its colliders off, a `Keeper` child draws him, the node is placed on
+him every tick, and one box per piece of his gear (`KeeperGear.box`) is seated
+under the old part body that names its material for the puck
+(`Goalie.set_stand_in`, `add_save_box`, `seat_save_box`). Each part's first box
+also places that part body, so the old getters (glove position for the catch
+pin, the pads and hands the bots read through `fill_state`) read his gear. The
+controller extends `GoalieController`, overriding the tick, the reset, the
+stance the bots read and the puck handlers: no shot reactions yet (a release is
+read by where he stands), a contact only timed, a glove catch held and covered
+for the whistle and set down out from his glove side where none comes. Nothing
+of his pose goes on the wire, so a client sees the old goalie's interpolated
+shell, and a replay places him by the recorded root but holds his last pose.
+`tests/unit/controllers/test_keeper_controller.gd` holds the swap.
 
 ## One body, solved once, read three ways
 
