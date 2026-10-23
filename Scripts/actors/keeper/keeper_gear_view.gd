@@ -75,7 +75,8 @@ func _ready() -> void:
 		add_child(knee)
 		_knees.append(knee)
 	_tail = KeeperJerseyTail.new(_tail_paint)
-	add_child(_tail)
+	_rig.add_child(_tail)
+	_tail.build(_rig, _mirrored)
 	apply_uniform(TeamColorRegistry.get_colors(TeamColorRegistry.DEFAULT_HOME_SLOT, 0))
 
 
@@ -130,7 +131,12 @@ func update(skel: KeeperSkeleton) -> void:
 	_rig.update(skel)
 	for knee: KeeperKneeBreak in _knees:
 		knee.update(skel)
-	_tail.update(skel)
+
+
+# One frame of the jersey's tail swinging on him: `down` is gravity's way and
+# `acceleration` his own, both in his space; its bones are written if `write`.
+func step_tail(delta: float, down: Vector3, acceleration: Vector3, write: bool) -> void:
+	_tail.step(delta, down, acceleration, write)
 
 
 # A right-catcher's bones are the left-catcher's reflected, each box on its own
@@ -142,6 +148,7 @@ func _set_mirrored(mirrored: bool) -> void:
 	for m: ShaderMaterial in [_jersey, _upper_arm]:
 		m.set_shader_parameter("flip_decals", mirrored)
 	_rig.build(_materials, _kit_material, mirrored)
+	_tail.build(_rig, mirrored)
 
 
 func _paint_slot(slot: int, c: Variant) -> void:
@@ -194,6 +201,7 @@ func _build_jersey_materials() -> void:
 	_jersey.set_shader_parameter("text_decal", _back_view.get_texture())
 	_tail_paint = _jersey_shader(P.CHEST)
 	_tail_paint.set_shader_parameter("depth_in_uv", true)
+	_tail_paint.set_shader_parameter("skinned", true)
 	_upper_arm = _jersey_shader(P.UPPER_ARM_G)
 	_build_shoulder_paint()
 	_build_pants_paint()

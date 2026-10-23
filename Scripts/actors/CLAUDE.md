@@ -177,7 +177,11 @@ held to its drape and its neighbours, and pushed out of the thighs and pants
 rigid tail cannot do this: a thigh lifted in a stride or a crouch pokes
 straight through one. It steps every frame and writes its 20 bones when drawn;
 it runs in C++ where the extension is built (`NativeHemFlaps`), and
-`test_native_hem_flaps_parity.gd` holds the two together.
+`test_native_hem_flaps_parity.gd` holds the two together. The solver itself is
+`HemFlaps`, shared with the keeper's jersey tail (`KeeperJerseyTail`); each
+figure brings its own drape, its own bones and its own colliders
+(`HemColliders`: `SkaterHemColliders`, `KeeperTailColliders`), and the port
+takes the same three.
 `test_hem_flaps.gd` holds the drape and `tests/slow/actors/test_hem_stays_out_of_the_legs.gd` the
 tail against the legs across a skated run.
 

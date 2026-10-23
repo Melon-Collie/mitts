@@ -29,7 +29,8 @@ one the bots shoot at.
 | `actors/keeper/keeper_body_rig.gd` | the gear drawn as one skinned mesh, a bone per piece posed on its save box: the plain slots one surface (BodyZonePaint), each kit-shader material one more, its pieces' box-frame places in CUSTOM0/1 since skinning moves VERTEX |
 | `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey, sleeves and pants (whose stripes run down the side, as the skaters' do) |
 | `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
-| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, all the way round: hung from the protector's own hem edge and shaded on from its facets so the two read as one jersey, rested on the pants and thighs |
+| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, all the way round: cloth (`HemFlaps`, the skater's solver), a flap down each column, skinned onto the body rig from the protector's own hem and shaded on from its facets so the two read as one jersey; its rest the cloth settled on him standing ready |
+| `actors/keeper/keeper_tail_colliders.gd` | what the tail drapes over: the pants and thigh guards as their rounded sections |
 
 ## In a match
 
@@ -61,8 +62,10 @@ the tick wherever its boxes are gameplay, which is why it is not the skater's
 render-rate rig. The gear is drawn from that solve at render rate
 (`Keeper._process`), once a pose has moved a bone and only while he is on
 camera (`SkaterCameraCull`); the boxes are reseated only when a pose moved one.
-The drawing is the expensive half: the jersey's tail, rebuilt whenever what it
-hangs from moves, is most of a frame's cost for a keeper on the move.
+The jersey's tail is cloth and steps every frame against the acceleration his
+controller measures off his motion (`Keeper.acceleration`), on camera or not,
+writing its bones only when drawn; it runs in C++ where the extension is built.
+A tool that poses him shot by shot steps it itself (`Keeper.step_cloth`).
 
 ## Poses are where the body goes, not joint angles
 

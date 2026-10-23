@@ -95,6 +95,7 @@ func _init() -> void:
 	_keeper.skeleton.mirrored = _right
 	_skel.mirrored = _right
 	root.add_child(_keeper)
+	_keeper.set_process(false)
 	var team: int = OS.get_environment("KEEPER_CAPTURE_TEAM").to_int()
 	_keeper.apply_uniform(TeamColorRegistry.get_colors(team, 1 if OS.has_environment("KEEPER_CAPTURE_AWAY") else 0))
 	_keeper.apply_jersey_info("Mitts", 31)
@@ -145,6 +146,10 @@ func _process(_delta: float) -> bool:
 		var s: Array = _stances[_stance_i]
 		(s[1] as Callable).call(_pose)
 		_keeper.apply_pose(_pose)
+		_keeper.draw_now()
+		_keeper.acceleration = Vector3.ZERO
+		for i: int in KeeperJerseyTail.SETTLE_STEPS:
+			_keeper.step_cloth(1.0 / 60.0, i == KeeperJerseyTail.SETTLE_STEPS - 1)
 		var post: float = _post_side(s, _skel)
 		_keeper.position = _on_post(post)
 		_keeper.reset_physics_interpolation()

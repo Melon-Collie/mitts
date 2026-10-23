@@ -5,10 +5,14 @@ extends Node3D
 # the gear drawn on it, and the save boxes the puck meets. Its local space is
 # keeper space (KeeperAnatomy); the node's transform places him in the rink.
 # The skeleton is solved when posed, since the saves read it; the gear is drawn
-# from it at render rate, only once it has moved and only while on camera.
+# from it at render rate, only once it has moved and only while on camera. The
+# jersey's tail is cloth and swings every frame, on camera or not.
 
 var skeleton := KeeperSkeleton.new()
 var show_boxes: bool = false
+# His acceleration, keeper space, set by whatever moves him; the jersey's tail
+# swings against it.
+var acceleration := Vector3.ZERO
 
 var _gear: KeeperGearView = null
 var _boxes: KeeperBoxView = null
@@ -58,9 +62,18 @@ func apply_pose(p: KeeperPose) -> bool:
 	return true
 
 
-func _process(_delta: float) -> void:
-	if not _drawn and SkaterCameraCull.sees(self):
+func _process(delta: float) -> void:
+	var seen: bool = SkaterCameraCull.sees(self)
+	if not _drawn and seen:
 		draw_now()
+	step_cloth(delta, seen)
+
+
+# One step of the jersey's tail against his acceleration, its bones written if
+# `write`. A tool posing him shot by shot steps it itself.
+func step_cloth(delta: float, write: bool) -> void:
+	if _gear != null:
+		_gear.step_tail(delta, global_basis.orthonormalized().inverse() * Vector3.DOWN, acceleration, write)
 
 
 # The gear on the skeleton as it stands, whether or not it is on camera.

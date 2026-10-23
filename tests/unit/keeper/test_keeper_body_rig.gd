@@ -1,9 +1,9 @@
 extends GutTest
 
-# The keeper draws as one skinned mesh (KeeperBodyRig): each bone is a gear
-# piece posed on its save box, so what is drawn stays what saves; every vertex
-# rides its own piece's bone alone; and the pieces' surfaces are merged down to
-# one per material.
+# The keeper draws as one skinned mesh (KeeperBodyRig): a bone per gear piece
+# posed on its save box, so what is drawn stays what saves, then the jersey
+# tail's flap bones; every vertex of the gear rides its own piece's bone alone;
+# and the pieces' surfaces are merged down to one per material.
 
 var _keeper: Keeper = null
 var _pose := KeeperPose.new()
@@ -23,7 +23,7 @@ func _rig() -> KeeperBodyRig:
 
 func test_every_bone_is_posed_on_its_save_box() -> void:
 	var rig: KeeperBodyRig = _rig()
-	assert_eq(rig.get_bone_count(), KeeperGear.PART_COUNT)
+	assert_eq(rig.get_bone_count(), KeeperJerseyTail.first_flap_bone() + 2 * KeeperJerseyTail.FLAPS)
 	for part: int in KeeperGear.PART_COUNT:
 		var box: Transform3D = KeeperGear.box(_keeper.skeleton, part)
 		var pose: Transform3D = rig.get_bone_pose(part)

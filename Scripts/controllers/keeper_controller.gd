@@ -30,6 +30,7 @@ var _keeper_pose := KeeperPose.new()
 var _net := Transform3D.IDENTITY
 var _ticks: int = 0
 var _last_puck := Vector3.ZERO
+var _last_velocity := Vector3.ZERO
 # Seconds he has held a caught puck; below zero, none.
 var _holding: float = -1.0
 
@@ -58,6 +59,8 @@ func _place_in_crease() -> void:
 	_holding = -1.0
 	_velocity_x = 0.0
 	_velocity_z = 0.0
+	_last_velocity = Vector3.ZERO
+	_keeper.acceleration = Vector3.ZERO
 	_place_body()
 	goalie.reset_physics_interpolation()
 
@@ -76,6 +79,10 @@ func _physics_process(delta: float) -> void:
 	_place_body()
 	_velocity_x = (goalie.global_position.x - was.x) / maxf(delta, 1e-4)
 	_velocity_z = (goalie.global_position.z - was.z) / maxf(delta, 1e-4)
+	var velocity := Vector3(_velocity_x, 0.0, _velocity_z)
+	_keeper.acceleration = _keeper.global_basis.orthonormalized().inverse() \
+			* (velocity - _last_velocity) / maxf(delta, 1e-4)
+	_last_velocity = velocity
 	if _holding >= 0.0:
 		_hold_catch(delta)
 

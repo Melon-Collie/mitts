@@ -191,6 +191,7 @@ func _init() -> void:
 	_keeper = Keeper.new()
 	_keeper.show_boxes = false
 	root.add_child(_keeper)
+	_keeper.set_process(false)
 	_keeper.apply_uniform(TeamColorRegistry.get_colors(0, 0))
 	_keeper.apply_jersey_info("Mitts", 31)
 	_scenarios = SCENARIOS
@@ -526,6 +527,8 @@ func _process(_delta: float) -> bool:
 	var view: Array = _views[_shot_i / _frames.size()]
 	if _ticks % 4 == 1:
 		_keeper.apply_pose(frame[0] as KeeperPose)
+		_keeper.draw_now()
+		_swing_cloth(_shot_i % _frames.size())
 		_keeper.position = frame[1] as Vector3
 		_keeper.rotation.y = float(frame[5]) if frame.size() > 5 else 0.0
 		_puck.visible = frame.size() > 6
@@ -540,6 +543,28 @@ func _process(_delta: float) -> bool:
 		_shots.append(img)
 		_shot_i += 1
 	return false
+
+
+# The jersey's tail on frame `i`: settled on the first, then a frame's time on
+# from the last, against his acceleration over the recorded places.
+func _swing_cloth(i: int) -> void:
+	if i == 0:
+		_keeper.acceleration = Vector3.ZERO
+		for k: int in KeeperJerseyTail.SETTLE_STEPS:
+			_keeper.step_cloth(1.0 / 60.0, k == KeeperJerseyTail.SETTLE_STEPS - 1)
+		return
+	var frame_dt: float = FRAME_EVERY * DT
+	var a := Vector3.ZERO
+	if i >= 2:
+		var p0: Vector3 = _frames[i - 2][1]
+		var p1: Vector3 = _frames[i - 1][1]
+		var p2: Vector3 = _frames[i][1]
+		var turn: float = float(_frames[i][5]) if _frames[i].size() > 5 else 0.0
+		a = Basis(Vector3.UP, -turn) * ((p2 - 2.0 * p1 + p0) / (frame_dt * frame_dt))
+	_keeper.acceleration = a
+	# Two steps a frame: one would pass the cloth's longest step.
+	_keeper.step_cloth(frame_dt * 0.5, false)
+	_keeper.step_cloth(frame_dt * 0.5, true)
 
 
 func _save_sheet(name: String) -> void:

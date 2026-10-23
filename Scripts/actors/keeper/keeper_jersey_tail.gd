@@ -2,13 +2,22 @@ class_name KeeperJerseyTail
 extends MeshInstance3D
 
 # The jersey's tail, untucked: the cloth below the chest protector, all the way
-# round him, hanging from the protector's hem and resting on what is under it.
-# Its top is the protector's hem wherever the trunk put it; it hangs from there
-# row by row, each row its length of cloth below the last and lifted out of the
-# pants and the thigh guards to a cloth's thickness off them, so it runs down
-# over the belly, the hips, the seat and, in a deep stance, the tops of the
-# thighs rather than cutting through them. Drawn only: the pants under it are
-# the save.
+# round him, hanging from the protector's hem over the pants and the thigh
+# guards. It is cloth (HemFlaps, as the skater's tail is): a flap down each
+# column of the hem, two segments, swung by gravity less his acceleration and
+# pushed out of the pants and thigh guards (KeeperTailColliders). The mesh is
+# skinned once onto his body rig (KeeperBodyRig): its top row on the chest
+# protector's own bone, so it starts on the protector's hem, and each column
+# below on its own flap's segments. A column blended between two flaps would
+# be a chord between two cloths the solver keeps clear, which a thigh or the
+# seat pushes straight through. Drawn only: the pants under it are the save.
+#
+# Its rest is how it settles on him in the ready stance, from a drape hung from
+# the hem row by row, each row its length of cloth below the last and lifted
+# out of the pants and the thigh guards to a cloth's thickness off them, so it
+# runs down over the belly, the hips and the seat rather than cutting through
+# them. That rest is held in the protector's frame, the frame the flaps turn
+# with.
 
 # How much cloth hangs below the protector in front and behind, eased between
 # round the sides: an untucked goalie jersey covers most of his pants, to the
@@ -17,15 +26,24 @@ const FRONT_LENGTH_M: float = 0.18
 const BACK_LENGTH_M: float = 0.20
 # How far the cloth stands off what it lies on.
 const CLOTH_M: float = 0.012
-# Columns along each of the hem's eight edges.
+# Columns along each of the hem's eight edges, a flap each.
 const _PER_EDGE: int = 6
 const _EDGES: int = 8
-const _COLUMNS: int = _PER_EDGE * _EDGES
+const FLAPS: int = _PER_EDGE * _EDGES
+# The rows from the hem down: the top, the upper segment's middle, the bend,
+# the lower segment's middle, the hem.
 const _ROWS: int = 5
+const _BEND_ROW: int = 2
 # A quad's two triangles, its corners taken in order round it: wound to face
 # along the cross of its first two edges, or against it.
 const _WIND_FLAT: PackedInt32Array = [0, 2, 1, 0, 3, 2]
 const _WIND_BACK: PackedInt32Array = [0, 1, 2, 0, 2, 3]
+# Steps the cloth is settled over to find its rest: long past its swing's.
+const SETTLE_STEPS: int = 90
+# Round him in any stance: the skinned mesh is culled by this, not by its rest.
+const _BOUNDS := AABB(Vector3(-1.6, -0.1, -1.6), Vector3(3.2, 2.4, 3.2))
+
+var flaps := HemFlaps.new()
 
 # The hem in the chest box's frame, its edges divided into columns, so the tail
 # starts on the protector's own edge; and each edge's facet normal above it.
@@ -33,28 +51,16 @@ var _top := PackedVector3Array()
 var _facet := PackedVector3Array()
 var _seg := PackedFloat32Array()
 var _top_from_collar_m: float
-var _mesh := ImmediateMesh.new()
 var _material: Material = null
-var _pants_h: Vector3
-var _thigh_h: Vector3
-# Per update: the boxes the cloth drapes over and their inverses, and the
-# cloth being built (the last column repeats the first, closing it round him)
-# with its normals.
-var _chest_xf: Transform3D
-var _pants_xf: Transform3D
-var _pants_inv: Transform3D
-var _thigh_xf: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
-var _thigh_inv: Array[Transform3D] = [Transform3D.IDENTITY, Transform3D.IDENTITY]
+var _colliders := KeeperTailColliders.new()
+# The rest drape, chest frame (the last column repeats the first, closing it
+# round him), and its normals.
 var _rows: Array[PackedVector3Array] = []
 var _normals: Array[PackedVector3Array] = []
-var _facet_now := PackedVector3Array()
-# One quad of it as it is emitted: corners, normals, depths below the collar.
-var _qp := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
-var _qn := PackedVector3Array([Vector3.ZERO, Vector3.ZERO, Vector3.ZERO, Vector3.ZERO])
-var _qd := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])
 
 
 func _init(material: Material) -> void:
+	name = "JerseyTail"
 	_material = material
 	var h: Vector3 = KeeperGear.half_extents(KeeperGear.Part.CHEST)
 	var hem: PackedVector3Array = KeeperGearMeshes.jersey_section(h, 0)
@@ -74,16 +80,16 @@ func _init(material: Material) -> void:
 			var back: float = 0.5 - 0.5 * cos(atan2(p.x, -p.z))
 			_seg.append(lerpf(FRONT_LENGTH_M, BACK_LENGTH_M, back) / float(_ROWS - 1))
 	_top_from_collar_m = 2.0 * h.y
-	_pants_h = KeeperGear.half_extents(KeeperGear.Part.PANTS)
-	_thigh_h = KeeperGear.half_extents(KeeperGear.Part.THIGH_G)
 	for r: int in _ROWS:
 		var row := PackedVector3Array()
-		row.resize(_COLUMNS + 1)
+		row.resize(FLAPS + 1)
 		_rows.append(row)
 		_normals.append(row.duplicate())
-	_facet_now.resize(_EDGES)
-	mesh = _mesh
-	physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	flaps.columns = FLAPS
+	flaps.margin_m = CLOTH_M
+	flaps.hips_share.resize(FLAPS)
+	flaps.tuck_share.resize(FLAPS)
+	custom_aabb = _BOUNDS
 
 
 # How far the hem hangs below the protector, between the front's and the
@@ -93,65 +99,91 @@ static func length_m() -> float:
 	return (FRONT_LENGTH_M + BACK_LENGTH_M) * 0.5
 
 
-func update(skel: KeeperSkeleton) -> void:
-	var chest_box: Transform3D = KeeperGear.box(skel, KeeperGear.Part.CHEST)
-	var pants: Transform3D = KeeperGear.box(skel, KeeperGear.Part.PANTS)
-	var thigh_g: Transform3D = KeeperGear.box(skel, KeeperGear.Part.THIGH_G)
-	var thigh_b: Transform3D = KeeperGear.box(skel, KeeperGear.Part.THIGH_B)
-	# Hung on what it hangs from as it already is: nothing to redo.
-	if chest_box == _chest_xf and pants == _pants_xf and thigh_g == _thigh_xf[0] and thigh_b == _thigh_xf[1] \
-			and _mesh.get_surface_count() > 0:
-		return
-	_chest_xf = chest_box
-	_pants_xf = pants
-	_thigh_xf[0] = thigh_g
-	_thigh_xf[1] = thigh_b
-	_pants_inv = _pants_xf.affine_inverse()
-	for i: int in 2:
-		_thigh_inv[i] = _thigh_xf[i].affine_inverse()
-	for e: int in _EDGES:
-		_facet_now[e] = (chest_box.basis * _facet[e]).normalized()
-	for c: int in _COLUMNS:
-		# The top is the protector's hem itself, so nothing shows where they
-		# meet; the rows below rest on what is under them.
-		_rows[0][c] = chest_box * _top[c]
+# The first of the flaps' bones in his body rig: after a bone per gear piece.
+static func first_flap_bone() -> int:
+	return KeeperGear.PART_COUNT
+
+
+# Hangs it on `rig` (its child) as a left- or right-catcher wears it: the flap
+# bones added if the rig has none yet, the rest drape hung and settled, the
+# mesh skinned, and the cloth started over from its rest.
+func build(rig: KeeperBodyRig, mirrored: bool) -> void:
+	if rig.get_bone_count() == first_flap_bone():
+		for k: int in FLAPS:
+			for joint: int in 2:
+				rig.add_bone("TAIL_%d_%d" % [k, joint])
+	var chest: Transform3D = _hang_at_ready(mirrored, rig)
+	flaps.bind(rig, KeeperGear.Part.CHEST, KeeperGear.Part.CHEST, first_flap_bone(), _colliders)
+	_settle(rig, chest)
+	_smooth_normals()
+	_build_mesh()
+	skeleton = NodePath("..")
+
+
+# One frame of the cloth: `down` is gravity's way and `acceleration` his own,
+# both in his skeleton's space; its bones are written if `write`.
+func step(delta: float, down: Vector3, acceleration: Vector3, write: bool) -> void:
+	flaps.step(delta, down * flaps.gravity_m_s2 - acceleration, write)
+
+
+# The drape on him standing ready, hung row by row, in the protector's frame;
+# `rig`'s gear bones set on him standing so. His protector's box, so.
+func _hang_at_ready(mirrored: bool, rig: KeeperBodyRig) -> Transform3D:
+	var skel := KeeperSkeleton.new()
+	skel.mirrored = mirrored
+	var ready_pose := KeeperPose.new()
+	KeeperPoses.ready(ready_pose)
+	skel.pose(ready_pose)
+	rig.update(skel)
+	for i: int in KeeperTailColliders.PARTS.size():
+		_colliders.place(i, KeeperGear.box(skel, KeeperTailColliders.PARTS[i]))
+	var chest: Transform3D = KeeperGear.box(skel, KeeperGear.Part.CHEST)
+	var to_chest: Transform3D = chest.affine_inverse()
+	flaps.authored_up = (to_chest.basis * Vector3.UP).normalized()
+	for c: int in FLAPS:
+		var p: Vector3 = chest * _top[c]
+		_rows[0][c] = _top[c]
 		for r: int in range(1, _ROWS):
-			_rows[r][c] = _hang(_rows[r - 1][c], _seg[c])
+			p = _hang(p, _seg[c])
+			_rows[r][c] = to_chest * p
 	for r: int in _ROWS:
-		_rows[r][_COLUMNS] = _rows[r][0]
-	_smooth_normals(chest_box)
-	_mesh.clear_surfaces()
-	_mesh.surface_begin(Mesh.PRIMITIVE_TRIANGLES, _material)
-	_cloth(_top_from_collar_m, _top_from_collar_m + length_m())
-	_mesh.surface_end()
+		_rows[r][FLAPS] = _rows[r][0]
+	return chest
 
 
-# The cloth is shaded smooth, from its neighbours, away from the trunk's axis.
-func _smooth_normals(chest_box: Transform3D) -> void:
-	var axis: Vector3 = chest_box.basis.y.normalized()
-	for r: int in _ROWS:
-		var above: PackedVector3Array = _rows[maxi(r - 1, 0)]
-		var below: PackedVector3Array = _rows[mini(r + 1, _ROWS - 1)]
-		for c: int in _COLUMNS:
-			var p: Vector3 = _rows[r][c]
-			var round_dir: Vector3 = _rows[r][c + 1] - _rows[r][(c + _COLUMNS - 1) % _COLUMNS]
-			var n: Vector3 = round_dir.cross(below[c] - above[c])
-			var out: Vector3 = p - chest_box.origin
-			out -= axis * out.dot(axis)
-			if n.dot(out) < 0.0:
-				n = -n
-			_normals[r][c] = n.normalized()
-		_normals[r][_COLUMNS] = _normals[r][0]
+# The cloth let settle on him standing still from the hung drape, and that
+# made its rest: the flaps keep their segments' chords clear of what they lie
+# on, which the drape hung row by row over the seat does not, so only a
+# settled drape is one the cloth rests in. Every row below the top is carried
+# to where the settled bones put it, as the mesh will be.
+func _settle(rig: KeeperBodyRig, chest: Transform3D) -> void:
+	_take_flap_rest()
+	flaps.restart()
+	var down: Vector3 = Vector3.DOWN * flaps.gravity_m_s2
+	for i: int in SETTLE_STEPS:
+		flaps.step(1.0 / 60.0, down, i == SETTLE_STEPS - 1)
+	var to_chest: Transform3D = chest.affine_inverse()
+	for r: int in range(1, _ROWS):
+		for c: int in FLAPS:
+			var bone: Transform3D = rig.get_bone_global_pose(first_flap_bone() + 2 * c + segment_of(r))
+			_rows[r][c] = to_chest * (bone * _rows[r][c])
+		_rows[r][FLAPS] = _rows[r][0]
+	_take_flap_rest()
+	flaps.restart()
 
 
-# The point on a section (half width, front depth, back depth) at height `y`
-# of its box frame, along `dir`, `off` metres out from its surface.
-static func _on_section(sec: Vector3, y: float, dir: Vector2, off: float) -> Vector3:
-	var depth: float = sec.y if dir.y < 0.0 else sec.z
-	var order: float = KeeperGearMeshes.PANTS_ROUNDNESS
-	var r: float = pow(pow(absf(dir.x) / sec.x, order) + pow(absf(dir.y) / depth, order),
-			-1.0 / order)
-	return Vector3(dir.x, y, dir.y) * Vector3(r + off, 1.0, r + off)
+func _take_flap_rest() -> void:
+	flaps.rest.clear()
+	for row: int in [0, 1, _BEND_ROW, _ROWS - 1]:
+		var station := PackedVector3Array()
+		for k: int in FLAPS:
+			station.append(_rows[row][k])
+		flaps.rest.append(station)
+
+
+# Which of a flap's segments a row rides.
+static func segment_of(row: int) -> int:
+	return 0 if row < _BEND_ROW else 1
 
 
 # The next row of cloth below `prev`, `seg` of cloth further on: hung straight
@@ -160,84 +192,111 @@ static func _on_section(sec: Vector3, y: float, dir: Vector2, off: float) -> Vec
 func _hang(prev: Vector3, seg: float) -> Vector3:
 	var p: Vector3 = prev + Vector3(0.0, -seg, 0.0)
 	for i: int in 3:
-		var cleared: Vector3 = _clear(p)
-		# Already clear, and within its length: every pass after is this one.
-		if cleared == p:
-			return p
-		p = cleared
+		p = _colliders.push_out(p, CLOTH_M)
 		var d: Vector3 = p - prev
 		if d.length() > seg:
 			p = prev + d.normalized() * seg
-	return _clear(p)
+	return _colliders.push_out(p, CLOTH_M)
 
 
-# `p` (keeper space) moved out of the pants and both thigh guards, if it is in
-# one, to a cloth's thickness off its surface.
-func _clear(p: Vector3) -> Vector3:
-	p = _clear_of(p, _pants_xf, _pants_inv, KeeperGearMeshes.PANTS_SECTIONS, _pants_h)
-	for i: int in 2:
-		p = _clear_of(p, _thigh_xf[i], _thigh_inv[i], KeeperGearMeshes.THIGH_SECTIONS, _thigh_h)
-	return p
-
-
-static func _clear_of(p: Vector3, xf: Transform3D, inv: Transform3D, sections: Array[Vector4],
-		h: Vector3) -> Vector3:
-	var local: Vector3 = inv * p
-	# Outside the box with a cloth's room round it is outside every section in it.
-	if absf(local.y) > h.y or absf(local.x) > h.x + CLOTH_M or absf(local.z) > h.z + CLOTH_M:
-		return p
-	var length: float = Vector2(local.x, local.z).length()
-	if length < 1e-5:
-		return p
-	var sec: Vector3 = KeeperGearMeshes.section_at(sections, h, local.y)
-	# Clear of the surface stood off by a cloth's thickness exactly when the
-	# point drawn in by that thickness is outside the section, which asks no
-	# root of the section's order (its cube, PANTS_ROUNDNESS).
-	var share: float = maxf(length - CLOTH_M, 0.0) / length
-	var across: float = absf(local.x) * share / sec.x
-	var deep: float = absf(local.z) * share / (sec.y if local.z < 0.0 else sec.z)
-	if across * across * across + deep * deep * deep >= 1.0:
-		return p
-	return xf * _on_section(sec, local.y, Vector2(local.x, local.z) / length, CLOTH_M)
+# The cloth is shaded smooth, from its neighbours, away from the trunk's axis.
+func _smooth_normals() -> void:
+	for r: int in _ROWS:
+		var above: PackedVector3Array = _rows[maxi(r - 1, 0)]
+		var below: PackedVector3Array = _rows[mini(r + 1, _ROWS - 1)]
+		for c: int in FLAPS:
+			var p: Vector3 = _rows[r][c]
+			var round_dir: Vector3 = _rows[r][c + 1] - _rows[r][(c + FLAPS - 1) % FLAPS]
+			var n: Vector3 = round_dir.cross(below[c] - above[c])
+			if n.dot(Vector3(p.x, 0.0, p.z)) < 0.0:
+				n = -n
+			_normals[r][c] = n.normalized()
+		_normals[r][FLAPS] = _normals[r][0]
 
 
 # The cloth between its rows, both faces, each vertex carrying its depth below
-# the collar in UV.y, which is what the jersey paint bands it by. Along its top
-# it takes the protector's facet normals, so the light runs on across the hem.
-func _cloth(top_y: float, hem_y: float) -> void:
+# the collar in UV.y, which is what the jersey paint bands it by, and its rest
+# place and normal in CUSTOM0 and CUSTOM1, which is what it paints by
+# otherwise. Along its top it takes the protector's facet normals, so the light
+# runs on across the hem.
+func _build_mesh() -> void:
+	var b := _Built.new()
+	var hem_y: float = _top_from_collar_m + length_m()
 	for r: int in _ROWS - 1:
-		var y0: float = lerpf(top_y, hem_y, float(r) / float(_ROWS - 1))
-		var y1: float = lerpf(top_y, hem_y, float(r + 1) / float(_ROWS - 1))
-		_qd[0] = y0
-		_qd[1] = y0
-		_qd[2] = y1
-		_qd[3] = y1
-		for c: int in _COLUMNS:
-			_qp[0] = _rows[r][c]
-			_qp[1] = _rows[r][c + 1]
-			_qp[2] = _rows[r + 1][c + 1]
-			_qp[3] = _rows[r + 1][c]
-			_qn[0] = _normals[r][c] if r > 0 else _facet_now[floori(float(c) / _PER_EDGE)]
-			_qn[1] = _normals[r][c + 1] if r > 0 else _qn[0]
-			_qn[2] = _normals[r + 1][c + 1]
-			_qn[3] = _normals[r + 1][c]
-			_quad()
+		var y0: float = lerpf(_top_from_collar_m, hem_y, float(r) / float(_ROWS - 1))
+		var y1: float = lerpf(_top_from_collar_m, hem_y, float(r + 1) / float(_ROWS - 1))
+		for c: int in FLAPS:
+			var corners: Array[Vector2i] = [Vector2i(c, r), Vector2i(c + 1, r), Vector2i(c + 1, r + 1),
+					Vector2i(c, r + 1)]
+			var depths: Array[float] = [y0, y0, y1, y1]
+			var facet: Vector3 = _facet[floori(float(c) / _PER_EDGE)]
+			var qp: Array[Vector3] = []
+			var qn: Array[Vector3] = []
+			for corner: Vector2i in corners:
+				qp.append(_rows[corner.y][corner.x])
+				qn.append(facet if corner.y == 0 else _normals[corner.y][corner.x])
+			var flat: Vector3 = (qp[1] - qp[0]).cross(qp[3] - qp[0])
+			if flat.length_squared() < 1e-14:
+				flat = (qp[2] - qp[1]).cross(qp[0] - qp[1])
+			if flat.length_squared() < 1e-14:
+				continue
+			# Godot's front faces wind clockwise seen from outside, against the
+			# right-hand cross `flat` was taken from. Both faces are drawn, the
+			# inner one with the normals turned in.
+			var flat_out: bool = flat.dot(qn[0] + qn[1] + qn[2] + qn[3]) > 0.0
+			for side: int in 2:
+				var turn: float = 1.0 if side == 0 else -1.0
+				var order: PackedInt32Array = _WIND_FLAT if (side == 0) == flat_out else _WIND_BACK
+				for i: int in order:
+					b.add(qp[i], qn[i] * turn, depths[i], corners[i])
+	mesh = b.commit()
+	mesh.surface_set_material(0, _material)
+	var s := Skin.new()
+	s.add_bind(KeeperGear.Part.CHEST, Transform3D.IDENTITY)
+	for bone: int in 2 * FLAPS:
+		s.add_bind(first_flap_bone() + bone, Transform3D.IDENTITY)
+	skin = s
 
 
-func _quad() -> void:
-	var flat: Vector3 = (_qp[1] - _qp[0]).cross(_qp[3] - _qp[0])
-	if flat.length_squared() < 1e-14:
-		flat = (_qp[2] - _qp[1]).cross(_qp[0] - _qp[1])
-	if flat.length_squared() < 1e-14:
-		return
-	# Godot's front faces wind clockwise seen from outside, against the
-	# right-hand cross `flat` was taken from. Both faces are drawn, the inner
-	# one with the normals turned in.
-	var flat_out: bool = flat.dot(_qn[0] + _qn[1] + _qn[2] + _qn[3]) > 0.0
-	for side: int in 2:
-		var turn: float = 1.0 if side == 0 else -1.0
-		var order: PackedInt32Array = _WIND_FLAT if (side == 0) == flat_out else _WIND_BACK
-		for i: int in order:
-			_mesh.surface_set_normal(_qn[i] * turn)
-			_mesh.surface_set_uv(Vector2(0.0, _qd[i]))
-			_mesh.surface_add_vertex(_qp[i])
+# The tail's vertices as they are skinned: the top row on the chest
+# protector's bind (0), the rows below on their column's flap segment (bind
+# 1 + 2·column + segment).
+class _Built:
+	extends RefCounted
+
+	var _verts := PackedVector3Array()
+	var _normals := PackedVector3Array()
+	var _uvs := PackedVector2Array()
+	var _bones := PackedInt32Array()
+	var _weights := PackedFloat32Array()
+	var _place := PackedFloat32Array()
+	var _facing := PackedFloat32Array()
+
+	func add(p: Vector3, n: Vector3, depth: float, at: Vector2i) -> void:
+		_verts.append(p)
+		_normals.append(n)
+		_uvs.append(Vector2(0.0, depth))
+		_place.append_array([p.x, p.y, p.z])
+		_facing.append_array([n.x, n.y, n.z])
+		if at.y == 0:
+			_bones.append_array([0, 0, 0, 0])
+			_weights.append_array([1.0, 0.0, 0.0, 0.0])
+			return
+		_bones.append_array([1 + 2 * (at.x % FLAPS) + KeeperJerseyTail.segment_of(at.y), 0, 0, 0])
+		_weights.append_array([1.0, 0.0, 0.0, 0.0])
+
+	func commit() -> ArrayMesh:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = _verts
+		arrays[Mesh.ARRAY_NORMAL] = _normals
+		arrays[Mesh.ARRAY_TEX_UV] = _uvs
+		arrays[Mesh.ARRAY_BONES] = _bones
+		arrays[Mesh.ARRAY_WEIGHTS] = _weights
+		arrays[Mesh.ARRAY_CUSTOM0] = _place
+		arrays[Mesh.ARRAY_CUSTOM1] = _facing
+		var format: int = (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) \
+				| (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
+		var out := ArrayMesh.new()
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, format)
+		return out
