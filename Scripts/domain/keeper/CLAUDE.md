@@ -20,7 +20,7 @@ one the bots shoot at.
 | `keeper_drop.gd` | his butterfly drop, rise and recovery: how far down he is (a fall down, a push up, from wherever he is), and the pose that far between the ready stance and the butterfly; the recovery bringing the leg away from where he is going up first, so he stands with the skate that pushes him there loaded |
 | `keeper_slide.gd` | his butterfly slide, from the butterfly or from his feet (the lead knee dropping to the half butterfly as the push starts, the push skate never leaving where it stood): the push leg's knee up off the ice to about 45° and its skate catching the ice out wide (`KeeperPoses.butterfly_push`), driving him off it while the lead pad stays down, folding back to seal as the pads slide; the lead skate's edge stopping him on his spot; to a spot off his line, turned as he loads until his lead side faces it, and `post_spot`, the spot that lands the lead pad's end on a post; and the reach and time that gives the brain |
 | `keeper_post.gd` | his RVH on a post: dropping into it from his feet on the overlap (the post knee falling, the off skate sliding out wide on its edge) and rising back out, coming up into it from the butterfly after a slide and folding back; `overlap_spot` and `seal_spot`, where he is on the post standing and sealed |
-| `keeper_positioning.gd` | the first brain, from the puck alone: where he wants to be by zone (beyond the blue line, in the zone, at a sharp angle below the dots, below the goal line), each held a margin past where it took him in, set on the motor as its goal at the planner's rate |
+| `keeper_positioning.gd` | the first brain, from the puck alone: where he wants to be by zone (beyond the blue line, in the zone, at a sharp angle below the dots, below the goal line), each held a margin past where it took him in, set on the motor as its goal at the planner's rate with its own motion; in the zone his depth answering the puck's motion from his own skating (`depth_for`: backed in against a puck coming at him, deeper against one swinging across him) |
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him; a goal on his feet that moves, or within `KeeperRoute.GLIDE_REACH_M`, skated to by the glide and held as it moves (`go_to`'s velocity), stopped for where he is before a goal off his feet; a low save cutting any of it |
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included (none after a glide: nothing waits for its legs); a spot on his feet within `GLIDE_REACH_M` glided to (the push's kinematics beside the turn), and a way's second leg within it too; past it footwork's moves, the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line |
 | `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity; the arm read later; a tip restarts it |
@@ -74,7 +74,10 @@ ice, and the blade only for a puck low enough for it. A low save cuts whatever
 move is under way (`KeeperMotor.save`); the hand rides any pose. The save holds
 until the shot is over — off him, past the line, stopped, picked up, off the
 iron or boards, or a tip — then the hand comes back and the motor rests him
-where the save left him for the brain to bring back up.
+where the save left him for the brain to bring back up. The brain rests while
+a save is under way (a hand save sets him where he stands, the hand aimed from
+there), and reads the play's motion as it was at the release: a shot's own
+speed would back him in.
 `test_keeper_save.gd`, `test_keeper_save_move.gd`, and the match through the
 puck's own contact test in `test_keeper_controller.gd`.
 `tests/unit/controllers/test_keeper_controller.gd` holds the swap.
@@ -201,7 +204,10 @@ last order winning. `test_keeper_glide.gd` holds the glide: a moving spot
 caught and skated with, never stopped for, gliding once matched; a still one
 stopped on, no further, in the push's time; one that turns back followed
 unbroken. `test_keeper_positioning.gd` holds a carrier cutting across the slot
-tracked on the angle line.
+tracked on the angle line, his depth against the puck's motion (the top of the
+crease still or slow, a rush backing him in no further than the floor and on it
+in time, a swing across him no faster than his shuffle), and a rush straight in
+skated back as it comes.
 `test_keeper_body.gd` also holds a grip past reach in every direction, both
 catching hands: the fist on the stick, the arm no longer than an arm, the grip
 on the shaft, the lie, and the blade flat on the ice unless it cannot be.

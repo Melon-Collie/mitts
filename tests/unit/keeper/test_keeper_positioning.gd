@@ -6,8 +6,10 @@ extends GutTest
 # dots on the near post, turned to the puck; below the goal line sealed on the
 # post on its side, and behind the net on the post he holds until the puck
 # will be out the other side before he could get across; a puck on a boundary
-# never flipping him; and a puck carried round the zone tracked, every tick
-# unbroken, to rest where it stops.
+# never flipping him; a puck carried round the zone tracked, every tick
+# unbroken, to rest where it stops; and his depth answering the play: the top
+# of the crease against a still or slow puck, deeper against one coming at him
+# or swinging across him, no deeper than the floor.
 
 const DT: float = 1.0 / 120.0
 const PLANNER_EVERY: int = 4
@@ -209,3 +211,58 @@ func test_a_carrier_cutting_across_the_slot_is_tracked_on_the_angle() -> void:
 		if tick * DT > 0.5:
 			worst = maxf(worst, absf(at.x * line.y - at.y * line.x))
 	assert_lt(worst, 0.2, "on the angle line as it swings")
+
+
+# His depth from his own skating: the top of the crease unless the play asks
+# for less; against a puck coming at him, no further out than C-cuts from a
+# standstill set him on the floor before it reaches the crease; against one
+# swinging across him, no further out than his shuffle keeps on its angle.
+func test_his_depth_answers_how_the_puck_moves() -> void:
+	var skates := KeeperFootwork.new()
+	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var floor_m: float = KeeperPositioning.DEPTH_FLOOR_M
+	var depth := func(puck: Vector2, v: Vector2) -> float:
+		return KeeperPositioning.depth_for(puck, v, skates)
+	assert_almost_eq(depth.call(Vector2(0.0, -6.0), Vector2.ZERO), top, 1e-6, "still: the top")
+	assert_almost_eq(depth.call(Vector2(0.0, -8.0), Vector2(0.0, 2.0)), top, 1e-6, "a slow carrier: the top")
+	assert_almost_eq(depth.call(Vector2(0.0, -6.0), Vector2(0.0, -8.0)), top, 1e-6, "going away: the top")
+	var was: float = top
+	for r: float in [12.0, 8.0, 6.0, 4.0, 3.0, 2.0, 1.0]:
+		var d: float = depth.call(Vector2(0.0, -r), Vector2(0.0, 8.0))
+		assert_lte(d, was + 1e-6, "a rush backs him in as it comes (%.0f m)" % r)
+		assert_gte(d, floor_m - 1e-6, "never past the floor (%.0f m)" % r)
+		var arrives: float = maxf(r - top, 0.0) / 8.0
+		assert_lte(d - floor_m, GoaliePushRules.set_reach(skates.c_cut_speed, skates.accel, arrives) + 1e-6,
+				"on the floor in time from there (%.0f m)" % r)
+		was = d
+	assert_lt(was, top - 0.5, "met deep")
+	assert_lt(depth.call(Vector2(0.0, -4.0), Vector2(0.0, 12.0)), depth.call(Vector2(0.0, -4.0), Vector2(0.0, 6.0)),
+			"a faster rush deeper")
+	for lateral: float in [2.0, 5.0, 9.0]:
+		var puck := Vector2(1.0, -4.0)
+		var v: Vector2 = puck.normalized().orthogonal() * lateral
+		var d: float = depth.call(puck, v)
+		assert_lte(d * lateral / puck.length(), skates.shuffle_speed + 1e-6,
+				"his spot swings no faster than he shuffles (%.0f m/s)" % lateral)
+	assert_lt(depth.call(Vector2(1.0, -4.0), Vector2(-9.0, 0.0)), depth.call(Vector2(1.0, -4.0), Vector2(-3.0, 0.0)),
+			"a faster swing deeper")
+
+
+# A rush straight in on him: skated back as it comes, deep and set on the
+# floor's side of the crease by the time it is on him, never deeper.
+func test_a_rush_straight_in_backs_him_in() -> void:
+	var speed: float = 8.0
+	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	_motor.z = -top
+	var puck := Vector2(0.0, -16.0)
+	var tick: int = 0
+	var deepest: float = INF
+	while puck.y < -2.5:
+		puck.y += speed * DT
+		if tick % PLANNER_EVERY == 0:
+			_brain.decide(puck, Vector2(0.0, speed), _motor)
+		_motor.step(DT)
+		tick += 1
+		deepest = minf(deepest, -_motor.z)
+	assert_lt(-_motor.z, top - 0.6, "backed in as it came")
+	assert_gte(deepest, KeeperPositioning.DEPTH_FLOOR_M - 0.02, "no deeper than the floor")

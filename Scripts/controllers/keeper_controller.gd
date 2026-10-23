@@ -24,6 +24,9 @@ const PLANNER_EVERY: int = 4
 const CATCH_HOLD_S: float = 1.0
 # Where he sets it: out from his glove side, on the ice.
 const SET_DOWN_OUT_M: float = 0.9
+# How quickly the puck's motion the brain reads follows the puck's own: slow
+# enough that a stickhandle's back and forth does not swing his depth.
+const PUCK_MOTION_S: float = 0.1
 
 var motor := KeeperMotor.new()
 var brain := KeeperPositioning.new()
@@ -36,6 +39,8 @@ var _net := Transform3D.IDENTITY
 var _ticks: int = 0
 var _last_puck := Vector3.ZERO
 var _last_velocity := Vector3.ZERO
+# The puck's motion in the net's frame, on the ice, as the brain reads it.
+var _puck_motion := Vector2.ZERO
 # Seconds he has held a caught puck; below zero, none.
 var _holding: float = -1.0
 var _profile: GoalieSkillProfile = GoalieSkillProfile.hard()
@@ -93,6 +98,7 @@ func _place_in_crease() -> void:
 	_velocity_x = 0.0
 	_velocity_z = 0.0
 	_last_velocity = Vector3.ZERO
+	_puck_motion = Vector2.ZERO
 	_keeper.acceleration = Vector3.ZERO
 	_place_body()
 	goalie.reset_physics_interpolation()
@@ -104,10 +110,13 @@ func _physics_process(delta: float) -> void:
 	var in_net: Vector3 = _net.affine_inverse() * puck.global_position
 	var moved: Vector3 = _net.basis.inverse() * (puck.global_position - _last_puck) / maxf(delta, 1e-4)
 	_last_puck = puck.global_position
+	# A shot's flight is not the play: its speed would back him in.
+	if not read.reading():
+		_puck_motion = _puck_motion.lerp(Vector2(moved.x, moved.z), minf(delta / PUCK_MOTION_S, 1.0))
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
 	_save_the_shot()
-	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0:
-		brain.decide(Vector2(in_net.x, in_net.z), Vector2(moved.x, moved.z), motor)
+	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen:
+		brain.decide(Vector2(in_net.x, in_net.z), _puck_motion, motor)
 	_ticks += 1
 	var was: Vector3 = goalie.global_position
 	motor.step(delta)
@@ -122,8 +131,8 @@ func _physics_process(delta: float) -> void:
 		_hold_catch(delta)
 
 
-# Once his legs have read a shot on net, the save; while it is under way, its
-# end once the shot is over.
+# Once his legs have read a shot on net, the save, the brain resting until it
+# is over; while it is under way, its end once the shot is over.
 func _save_the_shot() -> void:
 	if not read.reading():
 		return
@@ -141,6 +150,9 @@ func _save_the_shot() -> void:
 	save.choose(read, motor, _keeper.skeleton.mirrored)
 	if save.low != KeeperSaveMove.Low.NONE:
 		motor.save(save.low, save.low_side)
+	elif motor.rest == KeeperRoute.Rest.FEET:
+		# Set for it where he is: the hand was aimed from here.
+		motor.go_to(Vector2(motor.x, motor.z), motor.route.facing)
 
 
 func _end_save() -> void:

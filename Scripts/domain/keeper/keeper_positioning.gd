@@ -10,7 +10,8 @@ extends RefCounted
 #   AWAY   the puck beyond the blue line: in the middle of the crease on its
 #          angle line, square to it
 #   FRONT  in the zone: on the line from the puck to the net's centre, square
-#          to it, his skates on the top of the crease
+#          to it, his skates on the top of the crease; deeper as the play
+#          asks (`depth_for`), so a rush is met deep rather than skated round
 #   SHARP  below the dots and wide of SHARP_RAD: standing on the near post's
 #          overlap, turned to it
 #   BELOW  at or below the goal line: sealed on the post on its side; directly
@@ -36,15 +37,21 @@ const AWAY_DEPTH_SHARE: float = 0.5
 # How far ahead his spot's own motion is read, along the puck's: a planner
 # tick's worth.
 const LOOK_AHEAD_S: float = 1.0 / 30.0
+# The deepest the play backs him in to: the back of the blue paint, from where
+# either post is a short slide.
+const DEPTH_FLOOR_M: float = 0.5
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
 var post_side: float = 0.0
+# The puck's velocity as decided on.
+var _velocity := Vector2.ZERO
 
 
 # Sets `motor`'s goal for the puck at `puck` moving at `velocity`, both in the
 # net's frame.
 func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
+	_velocity = velocity
 	zone = _zone_for(puck)
 	if zone != Zone.BELOW:
 		post_side = 0.0
@@ -72,7 +79,29 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 			spot = motor.post.overlap_spot(post, side, facing(spot, puck))
 		return spot
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
-	return out * crease_edge(out) * (AWAY_DEPTH_SHARE if zone == Zone.AWAY else 1.0)
+	if zone == Zone.AWAY:
+		return out * crease_edge(out) * AWAY_DEPTH_SHARE
+	return out * depth_for(puck, _velocity, motor.footwork)
+
+
+# How far out along the puck's line he stands in the zone: the top of the
+# crease, or deeper as the puck at `puck` moving at `velocity` asks, from his
+# own skating (`skates`): no further out than C-cuts from a standstill set him
+# on the floor by the time a puck coming at him reaches the crease, and no
+# further than his square shuffle keeps on the angle of one moving across him.
+static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork) -> float:
+	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
+	var top: float = crease_edge(out)
+	var depth: float = top
+	var r: float = puck.length()
+	var coming: float = -velocity.dot(out)
+	if coming > 0.0:
+		var arrives: float = maxf(r - top, 0.0) / coming
+		depth = minf(depth, DEPTH_FLOOR_M + GoaliePushRules.set_reach(skates.c_cut_speed, skates.accel, arrives))
+	var swing: float = absf(out.x * velocity.y - out.y * velocity.x) / maxf(r, 1e-3)
+	if swing > 1e-4:
+		depth = minf(depth, skates.shuffle_speed / swing)
+	return clampf(depth, minf(DEPTH_FLOOR_M, top), top)
 
 
 func _zone_for(puck: Vector2) -> int:
