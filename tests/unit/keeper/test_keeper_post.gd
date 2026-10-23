@@ -58,10 +58,13 @@ func _until(state: int, limit: float = 2.0) -> float:
 	return t
 
 
-# Where his edge on the post's side touches, in the world, against the post.
+# Where his edge on the post's side touches, in the world, against the post:
+# standing, his outermost reach; sealed, the post pad's toe.
 func _gap_to(post_side: float) -> float:
 	_solve()
-	var edge: Vector3 = _world(KeeperGear.post_contact(_skel, post_side))
+	var on: Vector3 = KeeperGear.post_pad_contact(_skel, post_side) if _post.state == S.SEALED \
+			else KeeperGear.post_contact(_skel, post_side)
+	var edge: Vector3 = _world(on)
 	return Vector2(edge.x, edge.z).distance_to(_iron(post_side)) - GameRules.NET_POST_RADIUS
 
 

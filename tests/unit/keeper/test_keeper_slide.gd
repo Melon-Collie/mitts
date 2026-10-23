@@ -300,7 +300,7 @@ func test_a_slide_to_a_post_lands_the_pad_on_it() -> void:
 				_run()
 				assert_gt(_slide.z, start.y, "%s: angled back" % what)
 				_skel.pose(_butterfly())
-				var end: Vector3 = _world(KeeperGear.post_contact(_skel, post_side))
+				var end: Vector3 = _world(KeeperGear.post_pad_contact(_skel, post_side))
 				assert_almost_eq(Vector2(end.x, end.z).distance_to(post), GameRules.NET_POST_RADIUS, 0.01,
 						"%s: the pad's end is on the post" % what)
 				var front: Vector3 = Basis(Vector3.UP, _slide.yaw) * Vector3.FORWARD

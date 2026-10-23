@@ -242,13 +242,28 @@ static func post_contact(skel: KeeperSkeleton, side: float) -> Vector3:
 	return Vector3(_outermost_x(skel, side), 0.0, ankle.z)
 
 
+# Where a pad laid along the goal line meets the post at `side` of keeper
+# space: the post's inner face at that leg's pad's toe, on the line through its
+# ankle. The skate turned out under the toe reaches past it, beside the iron,
+# and the pad seals the ice up to it.
+static func post_pad_contact(skel: KeeperSkeleton, side: float) -> Vector3:
+	var g: Vector3 = skel.xf[KeeperSkeleton.FOOT[0]].origin
+	var b: Vector3 = skel.xf[KeeperSkeleton.FOOT[1]].origin
+	var leg: int = 0 if g.x * side > b.x * side else 1
+	var reach: float = maxf(_reach_x(skel, Part.PAD_G + leg, side), _reach_x(skel, Part.BOOT_G + leg, side))
+	return Vector3(side * reach, 0.0, (g if leg == 0 else b).z)
+
+
+static func _reach_x(skel: KeeperSkeleton, part: int, side: float) -> float:
+	var t: Transform3D = box(skel, part)
+	var h: Vector3 = _HALF[part]
+	return side * t.origin.x + absf(t.basis.x.x) * h.x + absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z
+
+
 static func _outermost_x(skel: KeeperSkeleton, side: float) -> float:
 	var reach: float = -INF
 	for part: int in PART_COUNT:
-		var t: Transform3D = box(skel, part)
-		var h: Vector3 = _HALF[part]
-		reach = maxf(reach, side * t.origin.x + absf(t.basis.x.x) * h.x
-				+ absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z)
+		reach = maxf(reach, _reach_x(skel, part, side))
 	return side * reach
 
 

@@ -67,7 +67,7 @@ func _init() -> void:
 		var s: float = -1.0 if i == 0 else 1.0
 		KeeperPoses.rvh(_rvh[i], s)
 		skel.pose(_rvh[i])
-		_sealed_edge[i] = KeeperGear.post_contact(skel, s)
+		_sealed_edge[i] = KeeperGear.post_pad_contact(skel, s)
 		# The same glove, held in the chest's frame as every other stance holds
 		# it, so the way in and out blends the hand in one frame.
 		if not _rvh[i].glove_from_chest:

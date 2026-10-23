@@ -110,8 +110,8 @@ func _init() -> void:
 	KeeperPoses.butterfly(_low)
 	KeeperPoses.ready(_ready)
 	_skel.pose(_low)
-	_pad_end[0] = KeeperGear.post_contact(_skel, -1.0)
-	_pad_end[1] = KeeperGear.post_contact(_skel, 1.0)
+	_pad_end[0] = KeeperGear.post_pad_contact(_skel, -1.0)
+	_pad_end[1] = KeeperGear.post_pad_contact(_skel, 1.0)
 	for i: int in 2:
 		var side: float = -1.0 if i == 0 else 1.0
 		KeeperPoses.butterfly_push(_loaded[i], side)

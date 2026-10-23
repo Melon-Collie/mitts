@@ -411,7 +411,7 @@ func test_the_rvh_seals_the_post() -> void:
 	for side: float in [-1.0, 1.0]:
 		KeeperPoses.rvh(_pose, side)
 		_skel.pose(_pose)
-		var post: Vector3 = KeeperGear.post_contact(_skel, side)
+		var post: Vector3 = KeeperGear.post_pad_contact(_skel, side)
 		var shooter := Vector3(post.x + side * (4.5 - inner), y,
 				post.z - 4.5 * tan(deg_to_rad(15.0)))
 		var d: float = 0.0
@@ -423,6 +423,25 @@ func test_the_rvh_seals_the_post() -> void:
 			assert_true(hit >= 0, "rvh %+.0f: a puck along the ice %.2f m in from the post meets him"
 					% [side, d])
 			d += 0.02
+
+
+# The post pad's toe is what the RVH lays on the post: nothing of him reaches
+# past it toward the iron but that leg's skate, turned out under the toe beside
+# the post, and his shoulder on it by no more than a couple of centimetres.
+func test_the_rvh_lays_its_pad_on_the_post() -> void:
+	for side: float in [-1.0, 1.0]:
+		KeeperPoses.rvh(_pose, side)
+		_skel.pose(_pose)
+		var toe: float = side * KeeperGear.post_pad_contact(_skel, side).x
+		var skate: int = P.SKATE_G if side < 0.0 else P.SKATE_B
+		for part: int in KeeperGear.PART_COUNT:
+			if part == skate:
+				continue
+			var t: Transform3D = KeeperGear.box(_skel, part)
+			var h: Vector3 = KeeperGear.half_extents(part)
+			var reach: float = side * t.origin.x + absf(t.basis.x.x) * h.x + absf(t.basis.y.x) * h.y \
+					+ absf(t.basis.z.x) * h.z
+			assert_lt(reach - toe, 0.02, "rvh %+.0f: %s inside the pad's toe" % [side, P.keys()[part]])
 
 
 # Every puck along the ice from the shooter, `from` to `to` metres across

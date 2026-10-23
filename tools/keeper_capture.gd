@@ -187,13 +187,13 @@ static func _post_side(stance: Array, skel: KeeperSkeleton) -> float:
 	return skel.world_side(float(stance[2])) if stance.size() > 2 else 0.0
 
 
-# Where the keeper stands for a stance on `post`: KeeperGear.post_contact on the
-# post's inner face, on the goal line; the origin off the post.
+# Where the keeper stands for a stance on `post`: KeeperGear.post_pad_contact on
+# the post's inner face, on the goal line; the origin off the post.
 func _on_post(post: float) -> Vector3:
 	if post == 0.0:
 		return Vector3.ZERO
 	_skel.pose(_pose)
-	var c: Vector3 = KeeperGear.post_contact(_skel, post)
+	var c: Vector3 = KeeperGear.post_pad_contact(_skel, post)
 	return Vector3(post * (GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS) - c.x, 0.0,
 			POST_Z - c.z)
 

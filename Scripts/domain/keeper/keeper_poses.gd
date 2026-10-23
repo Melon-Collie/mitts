@@ -65,6 +65,8 @@ const EXTENSION_BLADE := Vector3(-0.08, 0.0, -0.45)
 # the blade, as a real extension's does.
 const EXTENSION_PELVIS_HEIGHT_M: float = 0.38
 const RVH_OFF_PAD_RISE_RAD: float = deg_to_rad(30.0)
+const RVH_BLOCKER_SIDE_BLADE := Vector3(-0.35, 0.0, -0.50)
+const RVH_BLOCKER_SIDE_BLADE_TURN_RAD: float = deg_to_rad(10.0)
 const BUTTERFLY_KNEE_FORWARD_M: float = -0.04
 const BUTTERFLY_HIP_BEHIND_KNEE_M: float = 0.14
 # The blade sits a few inches ahead of the pads, to the glove side of centre
@@ -259,9 +261,11 @@ static func kick(p: KeeperPose, side: float) -> void:
 
 # Reverse-VH on the post at `side`, compact and sealed to the iron: sat back on
 # the post leg's calf, its pad flat along the goal line from the knee out to
-# the toe hooked on the post; the other pad standing. Upright and leaning into
-# the post, the hands in close and the blade on the ice in front of the pads.
-# The brain puts KeeperGear.post_contact on the post.
+# the toe hooked on the post; the other pad standing. Upright, his shoulder on
+# the post no further out than the pad's toe, so the pad seals the ice up to
+# the iron; the hands in close and the blade on the ice in front of the pads,
+# the stick leaning no further toward the post than he does. The brain puts
+# KeeperGear.post_pad_contact on the post.
 static func rvh(p: KeeperPose, side: float) -> void:
 	butterfly(p)
 	var post: int = 0 if side < 0.0 else 1
@@ -281,8 +285,8 @@ static func rvh(p: KeeperPose, side: float) -> void:
 	off.shin_front = _FORWARD
 	p.pelvis = Vector3(side * 0.12, 0.55, 0.10)
 	p.pelvis_rot = Vector3(-0.10, -side * 0.25, -side * 0.12)
-	p.lumbar_rot = Vector3(-0.08, 0.0, -side * 0.12)
-	p.chest_rot = Vector3(0.0, 0.0, -side * 0.08)
+	p.lumbar_rot = Vector3(-0.08, 0.0, 0.0)
+	p.chest_rot = Vector3.ZERO
 	p.neck_rot = Vector3(0.20, 0.0, side * 0.06)
 	if side < 0.0:
 		# Low by the post, over the pad: the seal between pad and body. The glove is
@@ -296,9 +300,12 @@ static func rvh(p: KeeperPose, side: float) -> void:
 		p.blade_yaw = deg_to_rad(-15.0)
 		p.stick_tilt = deg_to_rad(18.0)
 	else:
-		# In front at the waist, toward the middle.
+		# In front at the waist, toward the middle; the paddle out in front
+		# toward the glove side and turned in, so the shaft the lie leans to
+		# the post's side keeps its butt inside the pad's toe.
 		p.glove_hand = Vector3(-0.30, -0.10, -0.38)
-		p.blade_center = Vector3(-0.15, 0.0, -0.30)
+		p.blade_center = RVH_BLOCKER_SIDE_BLADE
+		p.blade_yaw += RVH_BLOCKER_SIDE_BLADE_TURN_RAD
 
 
 static func _side_x(leg: int) -> float:

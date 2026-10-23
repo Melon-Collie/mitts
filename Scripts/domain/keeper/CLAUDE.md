@@ -161,12 +161,15 @@ diffed against a baseline recorded with `-- --baseline`
 (`tools/keeper_capture.gd`), with the save boxes overlaid unless
 `KEEPER_CAPTURE_BOXES=0`; a one-sided stance renders once per side
 (`kick_glove`, `kick_blocker`), and the RVH is drawn against its post
-(`KeeperGear.post_contact` on the post's inner face, on the goal line) with one
+(`KeeperGear.post_pad_contact`, the post pad's toe, on the post's inner face,
+on the goal line) with one
 more view from a sharp angle on that side. `tests/unit/keeper/
 test_keeper_body.gd` holds the proportions, the bones' lengths, the arms
 reaching their hands and going into their gloves from the wrist, the gear on the ice and inside the rule book, no skate through its boot, the rigid
 stick, the packed layout, the ice sealed in the butterfly, the extension and
-the kick, and the post sealed in the RVH; `test_keeper_coverage.gd` snapshots
+the kick, the post sealed in the RVH, and its post pad's toe what meets the
+iron (nothing of him past it but that leg's skate, turned out beside the post
+under the toe); `test_keeper_coverage.gd` snapshots
 each stance's coverage straight on and from the dot line, and
 `test_keeper_seams.gd` holds every hole a puck fits through to its stance's
 intended windows (the five-holes the ready stance, the half butterflies, the
@@ -233,7 +236,7 @@ that body reflected across his centre line once solved: each bone frame is
 reflected on both sides, so every save box is the reflected box, and the stick's
 boxes are turned to the same frame. A stance's `side` stays his own (the glove
 side is his right); `KeeperSkeleton.world_side` turns it into keeper space's,
-which is what `KeeperGear.post_contact` takes. The drawn gear, which is not
+which is what `KeeperGear.post_contact` and `post_pad_contact` take. The drawn gear, which is not
 symmetric, is turned over on each piece's own x (`KeeperGearView`), and the
 jersey's lettering and crest read the other way across so they still read
 forwards. `KEEPER_CAPTURE_RIGHT=1` renders him.
