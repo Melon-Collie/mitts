@@ -345,18 +345,24 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 			+ _then(deep - across * steepest, _c_cut_time(deep - across * steepest))
 	if depth_first <= diagonal_first:
 		_step_do = Do.C_CUT
-		_glides_last = across <= GLIDE_REACH_M
+		_glides_last = _glides_on(across)
 		return depth_first
 	_step_do = Do.T_PUSH
 	_step_spot = at + _world(diagonal, turn)
-	_glides_last = deep - across * steepest <= GLIDE_REACH_M
+	_glides_last = _glides_on(deep - across * steepest)
 	return diagonal_first
 
 
-# A way's second leg, `d` long: skated, within the glide's reach, else
-# `footwork`'s time.
+# A way's second leg, `d` long: skated, within the glide's reach of a goal on
+# his feet, else `footwork`'s time.
 func _then(d: float, footwork: float) -> float:
-	return glide_time(d, 0.0) if d <= GLIDE_REACH_M else footwork
+	return glide_time(d, 0.0) if _glides_on(d) else footwork
+
+
+# Whether a second leg `d` long is glided: only to a goal on his feet, the
+# glide's own.
+func _glides_on(d: float) -> bool:
+	return rest == Rest.FEET and d <= GLIDE_REACH_M
 
 
 # How long after a move of `d` at up to `top` m/s sets him on its spot his push
@@ -374,11 +380,11 @@ func _hand_off(d: float, top: float, glides: bool) -> float:
 	return maxf(KeeperFootwork.RECOVER_S - peak / (_footwork.accel * ratio), 0.0)
 
 
-# Skating `d` to a spot and turning `turn` on the way, from rest: the push's
-# kinematics, which are the glide's, beside the turn at the pivot's rate. His
-# legs settle into the stance after it, but nothing waits for them.
+# Skating `d` to a spot and turning `turn` on the way, from rest: the glide's
+# stroke, glide and stop beside the turn at the pivot's rate. His legs settle
+# into the stance after it, but nothing waits for them.
 func glide_time(d: float, turn: float) -> float:
-	return maxf(_push_time(d), absf(turn) / _pivot_rate)
+	return maxf(KeeperGlide.time_to(d, _footwork.t_push_speed, _footwork.accel), absf(turn) / _pivot_rate)
 
 
 # Footwork's time, with the stop settled out of him at its end.

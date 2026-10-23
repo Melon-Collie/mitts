@@ -4,12 +4,13 @@ extends RefCounted
 # Skating to a spot that moves: the way he tracks the play, where footwork's
 # moves go to a spot and stop on it. Pure, stepped at the tick.
 #
-# His body is driven by velocity, never stopped between spots: what he skates
-# at is the spot's own velocity, plus the closing speed his edges could still
-# brake out on it (GoaliePushRules.braking_speed_cap read against the spot's
-# own motion, so a spot that keeps moving costs him no lag and one that stops
-# he stops on), at most the T-push's top speed; his edges change it at most
-# at his lateral acceleration, and dig it out at the edge stop's rate.
+# His body is driven by velocity, never stopped between spots, read against
+# the spot's own motion so a spot that keeps moving costs him no lag. A gap
+# he strokes to close at the speed that would close it in `CLOSE_S`, at his
+# lateral acceleration and at most the T-push's top speed, then glides on what
+# the stroke gave him; only when the glide would carry him past the spot do
+# his edges dig, as late and as hard as the edge stop
+# (GoaliePushRules.braking_speed_cap), so he stops on one that stops.
 #
 # His legs show what that takes. Gaining speed, the trail skate (behind the way
 # he goes) strokes: it holds its place on the ice while the body passes over
@@ -25,6 +26,12 @@ extends RefCounted
 # A spot this near, moving no faster than this relative to him, he is on.
 const THERE_M: float = 0.005
 const MATCHED_M_S: float = 0.05
+# How soon a stroke means to close the gap it is for: a push and the glide
+# after it.
+const CLOSE_S: float = 0.3
+# The least speed a stroke is taken for, once he is gliding: short of it he
+# glides on.
+const STROKE_GAIN_M_S: float = 0.3
 # The stroke: the body travel per stroke, and how much of it the skate holds
 # its place for; at a T-push's speed the stroke is a push this much longer.
 const STROKE_M: float = 0.45
@@ -67,6 +74,8 @@ var _cut_leg: int = 0
 var _drive: float = 0.0
 var _brake: float = 0.0
 var _turn: float = 0.0
+# Whether a stroke is under way, gaining him speed until it has what it was for.
+var _stroking: bool = false
 
 
 # Whether he is on `spot`, moving with it.
@@ -89,28 +98,34 @@ func step(dt: float, spot: Vector2, spot_velocity: Vector2, yaw: float) -> void:
 	var rel: Vector2 = velocity - spot_velocity
 	var closing: float = rel.dot(dir)
 	var next_left: float = d - maxf(closing, 0.0) * dt
+	var edge: float = accel * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
 	var was: Vector2 = velocity
 	var pushing: bool
 	if d > 1e-6 and closing > 0.0 and closing >= GoaliePushRules.braking_speed_cap(next_left, accel):
 		# The stop starts the tick it would be too late to after this one's
 		# travel, the edges digging as hard as it takes to stop on the spot,
+		# no harder than they can (a spot that turns back on him he goes past),
 		# and any drift across it killed on them too.
-		var across: Vector2 = (rel - dir * closing).move_toward(Vector2.ZERO,
-				accel * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO * dt)
-		closing = maxf(closing - closing * closing / (2.0 * d) * dt, 0.0)
+		var across: Vector2 = (rel - dir * closing).move_toward(Vector2.ZERO, edge * dt)
+		closing = maxf(closing - minf(closing * closing / (2.0 * d), edge) * dt, 0.0)
 		velocity = spot_velocity + dir * closing + across
 		pushing = false
+		_stroking = false
 	else:
-		var want: Vector2 = spot_velocity
-		if d > 1e-6:
-			want += dir * GoaliePushRules.braking_speed_cap(next_left, accel)
-		want = want.limit_length(t_push_speed)
-		var change: Vector2 = want - velocity
+		var want: float = d / CLOSE_S
+		if closing < want - minf(STROKE_GAIN_M_S, 0.5 * want):
+			_stroking = true
+		# Gliding, he keeps what he has toward the spot; a stroke takes him on
+		# to what it is for; going away from it, he turns back.
+		var aim: float = want if _stroking or closing < 0.0 else closing
+		var change: Vector2 = spot_velocity + dir * aim - velocity
 		# Speeding up along the way he goes is his push; anything else his
 		# edges.
 		pushing = change.dot(velocity) >= 0.0 or velocity.length() < MATCHED_M_S
-		var most: float = (accel if pushing else accel * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO) * dt
-		velocity += change.limit_length(most)
+		velocity += change.limit_length((accel if pushing else edge) * dt)
+		velocity = velocity.limit_length(maxf(t_push_speed, spot_velocity.length()))
+		if (velocity - spot_velocity).dot(dir) >= want:
+			_stroking = false
 	var moved: Vector2 = 0.5 * (was + velocity) * dt
 	x += moved.x
 	z += moved.y
@@ -148,6 +163,19 @@ func step(dt: float, spot: Vector2, spot_velocity: Vector2, yaw: float) -> void:
 
 
 # The next stroke's form, from the way he is going now.
+# How long he takes to skate `d` onto a still spot from rest, `top` and
+# `push` his top speed and acceleration: the stroke up to the closing speed it
+# is for, the glide on it, and the edge stop onto the spot.
+static func time_to(d: float, top: float, push: float) -> float:
+	if d <= THERE_M:
+		return 0.0
+	var stroke: float = minf(push * (sqrt(CLOSE_S * CLOSE_S + 2.0 * d / push) - CLOSE_S), top)
+	var stroked: float = 0.5 * stroke * stroke / push
+	var edge: float = push * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
+	var stopping: float = 0.5 * stroke * stroke / edge
+	return stroke / push + maxf(d - stroked - stopping, 0.0) / stroke + stroke / edge
+
+
 func _take_form() -> void:
 	_lateral = absf(_way.x) >= absf(_way.y)
 	_side = signf(_way.x if _lateral else _way.y)

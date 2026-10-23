@@ -2,9 +2,9 @@ extends GutTest
 
 # Skating to a spot that moves (KeeperGlide through KeeperMotor.go_to): a spot
 # moving across him is caught and then skated with, never stopped for, his
-# legs gliding once matched rather than stroking; a still one he stops on, no
-# further, in the push's own time; and one that turns back on him is followed
-# every tick unbroken, his gear out of the ice.
+# legs gliding once matched rather than stroking; a still one he strokes for,
+# glides on and stops on, no further, in the glide's own time; and one that
+# turns back on him is followed every tick unbroken, his gear out of the ice.
 
 const DT: float = 1.0 / 120.0
 const PAD_GIVE_M: float = 0.025
@@ -33,7 +33,8 @@ func _lowest(part: int) -> float:
 	return t.origin.y - absf(t.basis.x.y) * h.x - absf(t.basis.y.y) * h.y - absf(t.basis.z.y) * h.z
 
 
-# One tick toward `spot` moving at `v`, the body checked.
+# One tick toward `spot` moving at `v`, given where it is as the tick starts,
+# the body checked.
 func _tick(spot: Vector2, v: Vector2) -> void:
 	_motor.go_to(spot, 0.0, KeeperRoute.Rest.FEET, v)
 	_motor.step(DT)
@@ -64,8 +65,8 @@ func test_a_moving_spot_is_caught_and_skated_with() -> void:
 	var stopped: int = 0
 	var stroking_matched: int = 0
 	for i: int in int(0.9 / DT):
-		spot += v * DT
 		_tick(spot, v)
+		spot += v * DT
 		if i * DT > 0.4:
 			off = maxf(off, Vector2(_motor.x, _motor.z).distance_to(spot))
 			if _motor.glide.velocity.length() < 0.5:
@@ -78,20 +79,25 @@ func test_a_moving_spot_is_caught_and_skated_with() -> void:
 	_checked("a moving spot")
 
 
-func test_a_still_spot_is_stopped_on_in_the_push_s_time() -> void:
+func test_a_still_spot_is_glided_to_and_stopped_on_in_time() -> void:
 	var spot := Vector2(0.7, -1.0)
 	var past: float = 0.0
 	var t: float = 0.0
+	var gliding: float = 0.0
 	while not _motor.is_idle() or t == 0.0:
+		var was: Vector2 = _motor.glide.velocity
 		_tick(spot, Vector2.ZERO)
 		t += DT
 		past = maxf(past, _motor.x - spot.x)
+		if was.length() > 0.5 and _motor.glide.velocity.is_equal_approx(was):
+			gliding += DT
 		if t > 2.0:
 			break
+	assert_gt(gliding, 0.1, "the stroke glided on before the stop")
 	assert_almost_eq(Vector2(_motor.x, _motor.z), spot, Vector2.ONE * 1e-4, "on it")
 	assert_lt(past, 1e-4, "no further")
-	var push: float = GoaliePushRules.time_to_set(0.7, _motor.footwork.t_push_speed, _motor.footwork.accel)
-	assert_almost_eq(t, push, 3.0 * DT, "in the push's time")
+	var skated: float = KeeperGlide.time_to(0.7, _motor.footwork.t_push_speed, _motor.footwork.accel)
+	assert_almost_eq(t, skated, 3.0 * DT, "in the glide's time")
 	_checked("a still spot")
 
 
@@ -103,7 +109,7 @@ func test_a_spot_that_turns_back_on_him_is_followed_unbroken() -> void:
 			v = Vector2(-2.6, -0.3)
 		if i == int(0.9 / DT):
 			v = Vector2(0.5, 1.2)
-		spot += v * DT
 		_tick(spot, v)
+		spot += v * DT
 	assert_lt(Vector2(_motor.x, _motor.z).distance_to(spot), 0.3, "with it")
 	_checked("turning back")

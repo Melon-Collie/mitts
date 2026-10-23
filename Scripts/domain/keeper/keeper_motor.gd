@@ -80,6 +80,8 @@ var _velocity := Vector2.ZERO
 var _cut := KeeperPose.new()
 # How fast the spot he is asked to be on is moving.
 var _spot_velocity := Vector2.ZERO
+# Seconds since the goal's spot was given.
+var _spot_since: float = 0.0
 
 
 # One move asked for: what, to where, which side, how fast.
@@ -106,6 +108,7 @@ func go_to(spot: Vector2, facing: float, on: int = Rest.FEET, velocity := Vector
 	route.spot = spot
 	route.facing = facing
 	_spot_velocity = velocity if on == Rest.FEET else Vector2.ZERO
+	_spot_since = 0.0
 	_retarget()
 
 
@@ -352,7 +355,10 @@ func _step_glide(dt: float) -> void:
 		if glide.velocity == Vector2.ZERO and glide.is_settled():
 			_mover = Mover.NONE
 		return
-	glide.step(dt, route.spot, _spot_velocity, yaw)
+	# The spot carried on at its own speed since it was given, so he skates
+	# with it rather than past it and back between the brain's looks.
+	_spot_since += dt
+	glide.step(dt, route.spot + _spot_velocity * _spot_since, _spot_velocity, yaw)
 	x = glide.x
 	z = glide.z
 	var turn: float = PIVOT_RATE_RAD_S * dt
