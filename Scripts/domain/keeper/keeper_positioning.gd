@@ -1,9 +1,10 @@
 class_name KeeperPositioning
 extends RefCounted
 
-# Where he wants to be from the puck alone: the first brain, before he reads
-# the skaters (docs/goalie-rebuild-plan.md, Phase 3). Pure: given the puck in
-# the net's frame it sets his motor's goal, and the motor gets him there. On
+# Where he wants to be from the puck as he reads it, and the receivers a pass
+# could reach (KeeperPlayRead): the first brain (docs/goalie-rebuild-plan.md,
+# Phase 3). Pure: given the puck in the net's frame it sets his motor's goal,
+# and the motor gets him there. On
 # his feet everywhere in front of the goal line, since every drop there is a
 # save and the reflex layer's; sealed in the RVH below it.
 #
@@ -11,7 +12,8 @@ extends RefCounted
 #          angle line, square to it
 #   FRONT  in the zone: on the line from the puck to the net's centre, square
 #          to it, his skates on the top of the crease; deeper as the play
-#          asks (`depth_for`), so a rush is met deep rather than skated round
+#          asks (`depth_for`), so a rush is met deep rather than skated round,
+#          and as a pass across to a receiver in `play` asks (`pass_depth`)
 #   SHARP  below the dots and wide of SHARP_RAD: standing on the near post's
 #          overlap, turned to it
 #   BELOW  at or below the goal line: sealed on the post on its side; directly
@@ -40,10 +42,15 @@ const LOOK_AHEAD_S: float = 1.0 / 30.0
 # The deepest the play backs him in to: the back of the blue paint, from where
 # either post is a short slide.
 const DEPTH_FLOOR_M: float = 0.5
+# A pass's speed: the quick pass's.
+const PASS_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
 var post_side: float = 0.0
+# What he reads of the play, for its receivers and his read's time; none, no
+# pass is read.
+var play: KeeperPlayRead = null
 # The puck's velocity as decided on.
 var _velocity := Vector2.ZERO
 
@@ -81,7 +88,12 @@ func _spot(puck: Vector2, motor: KeeperMotor) -> Vector2:
 	var out: Vector2 = puck.normalized() if puck.length() > 1e-4 else Vector2(0.0, -1.0)
 	if zone == Zone.AWAY:
 		return out * crease_edge(out) * AWAY_DEPTH_SHARE
-	return out * depth_for(puck, _velocity, motor.footwork)
+	var depth: float = depth_for(puck, _velocity, motor.footwork)
+	if play != null:
+		for receiver: Vector2 in play.receivers:
+			depth = minf(depth, pass_depth(puck, receiver, motor.footwork, play.delay_s))
+		depth = maxf(depth, minf(DEPTH_FLOOR_M, crease_edge(out)))
+	return out * depth
 
 
 # How far out along the puck's line he stands in the zone: the top of the
@@ -102,6 +114,28 @@ static func depth_for(puck: Vector2, velocity: Vector2, skates: KeeperFootwork) 
 	if swing > 1e-4:
 		depth = minf(depth, skates.shuffle_speed / swing)
 	return clampf(depth, minf(DEPTH_FLOOR_M, top), top)
+
+
+# How far out along the line of a puck at `puck` he can stand and still be set
+# on the angle of a receiver at `receiver` when a pass gets there: no further
+# than the push (`skates`) he has time for, once he has read it (`read_s`),
+# reaches the nearest of the receiver's angle line between the floor and the
+# top of the crease. A receiver on his line asks nothing.
+static func pass_depth(puck: Vector2, receiver: Vector2, skates: KeeperFootwork, read_s: float) -> float:
+	var out: Vector2 = puck.normalized()
+	var to: Vector2 = receiver.normalized()
+	var across: float = absf(out.cross(to))
+	if across < 1e-4:
+		return INF
+	var along: float = out.dot(to)
+	var time: float = maxf(puck.distance_to(receiver) / PASS_M_S - read_s, 0.0)
+	var reach: float = GoaliePushRules.set_reach(skates.t_push_speed, skates.accel, time)
+	# Square onto the receiver's line where that falls inside the paint; else
+	# onto the floor's spot on it.
+	var square: float = reach / across
+	if square * along >= DEPTH_FLOOR_M:
+		return square
+	return DEPTH_FLOOR_M * along + sqrt(maxf(reach * reach - DEPTH_FLOOR_M * DEPTH_FLOOR_M * across * across, 0.0))
 
 
 func _zone_for(puck: Vector2) -> int:

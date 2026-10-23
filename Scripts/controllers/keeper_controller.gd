@@ -24,23 +24,21 @@ const PLANNER_EVERY: int = 4
 const CATCH_HOLD_S: float = 1.0
 # Where he sets it: out from his glove side, on the ice.
 const SET_DOWN_OUT_M: float = 0.9
-# How quickly the puck's motion the brain reads follows the puck's own: slow
-# enough that a stickhandle's back and forth does not swing his depth.
-const PUCK_MOTION_S: float = 0.1
 
 var motor := KeeperMotor.new()
 var brain := KeeperPositioning.new()
 var read := KeeperShotRead.new()
+var play := KeeperPlayRead.new()
 var save := KeeperSave.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
 var _net := Transform3D.IDENTITY
 var _ticks: int = 0
-var _last_puck := Vector3.ZERO
 var _last_velocity := Vector3.ZERO
-# The puck's motion in the net's frame, on the ice, as the brain reads it.
-var _puck_motion := Vector2.ZERO
+# The skaters off the puck in the net's frame, refilled for each read.
+var _attackers := PackedVector2Array()
+var _defenders := PackedVector2Array()
 # Seconds he has held a caught puck; below zero, none.
 var _holding: float = -1.0
 var _profile: GoalieSkillProfile = GoalieSkillProfile.hard()
@@ -60,7 +58,6 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 	goalie.set_stand_in(_keeper)
 	for part: int in KeeperGear.PART_COUNT:
 		goalie.add_save_box(KeeperGear.save_part(part), _glove_side(part), KeeperGear.half_extents(part))
-	_last_puck = puck.global_position
 	_place_in_crease()
 
 
@@ -78,6 +75,7 @@ func apply_skill_profile(profile: GoalieSkillProfile) -> void:
 # The tier's reads and speeds onto the read, the save and the motor's save.
 func _tier() -> void:
 	read.leg_delay_s = _profile.reaction_delay_s
+	play.delay_s = _profile.reaction_delay_s
 	read.arm_delay_s = _profile.arm_reaction_delay_s
 	save.glove_speed_m_s = _profile.glove_react_max_speed_mps
 	save.blocker_speed_m_s = _profile.blocker_react_max_speed_mps
@@ -90,6 +88,8 @@ func _place_in_crease() -> void:
 	motor = KeeperMotor.new()
 	brain = KeeperPositioning.new()
 	read = KeeperShotRead.new()
+	play.reset()
+	brain.play = play
 	save = KeeperSave.new()
 	_chosen = false
 	_tier()
@@ -98,7 +98,6 @@ func _place_in_crease() -> void:
 	_velocity_x = 0.0
 	_velocity_z = 0.0
 	_last_velocity = Vector3.ZERO
-	_puck_motion = Vector2.ZERO
 	_keeper.acceleration = Vector3.ZERO
 	_place_body()
 	goalie.reset_physics_interpolation()
@@ -108,15 +107,12 @@ func _physics_process(delta: float) -> void:
 	if goalie == null or puck == null or not is_server:
 		return
 	var in_net: Vector3 = _net.affine_inverse() * puck.global_position
-	var moved: Vector3 = _net.basis.inverse() * (puck.global_position - _last_puck) / maxf(delta, 1e-4)
-	_last_puck = puck.global_position
-	# A shot's flight is not the play: its speed would back him in.
-	if not read.reading():
-		_puck_motion = _puck_motion.lerp(Vector2(moved.x, moved.z), minf(delta / PUCK_MOTION_S, 1.0))
+	_read_play(delta, in_net)
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
 	_save_the_shot()
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen:
-		brain.decide(Vector2(in_net.x, in_net.z), _puck_motion, motor)
+		_read_receivers()
+		brain.decide(play.puck, play.motion, motor)
 	_ticks += 1
 	var was: Vector3 = goalie.global_position
 	motor.step(delta)
@@ -129,6 +125,33 @@ func _physics_process(delta: float) -> void:
 	_last_velocity = velocity
 	if _holding >= 0.0:
 		_hold_catch(delta)
+
+
+# His look at the play: the carrier's body moving it, or the loose puck's own
+# motion. A shot's flight reaches the brain no sooner than his legs read it, and
+# by then the brain is resting on the save.
+func _read_play(delta: float, in_net: Vector3) -> void:
+	var carrier: Skater = puck.get_carrier()
+	var moving: Vector3 = _net.basis.inverse() * (carrier.velocity if carrier != null else puck.get_puck_velocity())
+	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z))
+
+
+# Who an opposing carrier could pass to, through which lanes; none for a loose
+# puck or our own.
+func _read_receivers() -> void:
+	_attackers.clear()
+	_defenders.clear()
+	var carrier: Skater = puck.get_carrier()
+	if carrier != null and (team_id == -1 or carrier.get_team_id() != team_id):
+		_ensure_view()
+		var to_net: Transform3D = _net.affine_inverse()
+		for at: Vector3 in _view.off_puck_opponents:
+			var mine: Vector3 = to_net * at
+			_attackers.append(Vector2(mine.x, mine.z))
+		for at: Vector3 in _view.teammates:
+			var mine: Vector3 = to_net * at
+			_defenders.append(Vector2(mine.x, mine.z))
+	play.read_receivers(_attackers, _defenders)
 
 
 # Once his legs have read a shot on net, the save, the brain resting until it

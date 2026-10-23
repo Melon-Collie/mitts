@@ -9,7 +9,8 @@ extends GutTest
 # never flipping him; a puck carried round the zone tracked, every tick
 # unbroken, to rest where it stops; and his depth answering the play: the top
 # of the crease against a still or slow puck, deeper against one coming at him
-# or swinging across him, no deeper than the floor.
+# or swinging across him or with an open receiver across the slot, no deeper
+# than the floor.
 
 const DT: float = 1.0 / 120.0
 const PLANNER_EVERY: int = 4
@@ -266,3 +267,37 @@ func test_a_rush_straight_in_backs_him_in() -> void:
 		deepest = minf(deepest, -_motor.z)
 	assert_lt(-_motor.z, top - 0.6, "backed in as it came")
 	assert_gte(deepest, KeeperPositioning.DEPTH_FLOOR_M - 0.02, "no deeper than the floor")
+
+
+# Against a pass across to an open receiver he stands no further out than the
+# push he has time for, once read, sets him on the receiver's angle: deeper
+# for a near feed across the slot, nothing for one on his own line or one long
+# enough to cross the crease for.
+func test_a_receiver_across_the_slot_holds_him_deeper() -> void:
+	var skates := KeeperFootwork.new()
+	var read_s: float = GoalieSkillProfile.hard().reaction_delay_s
+	var top: float = KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var puck := Vector2(2.0, -6.0)
+	assert_eq(KeeperPositioning.pass_depth(puck, puck * 0.5, skates, read_s), INF, "on his line: nothing")
+	var far: float = KeeperPositioning.pass_depth(puck, Vector2(-9.0, -14.0), skates, read_s)
+	assert_gt(far, top, "a long pass: nothing")
+	var near := Vector2(-4.0, -9.0)
+	var cap: float = KeeperPositioning.pass_depth(puck, near, skates, read_s)
+	assert_lt(cap, top, "a feed across the slot: deeper")
+	var wider: float = KeeperPositioning.pass_depth(puck, Vector2(-2.5, -3.0), skates, read_s)
+	assert_lt(wider, cap + 1e-6, "a wider angle no further out")
+	# From that depth the receiver's angle is a push he has time for.
+	var time: float = puck.distance_to(near) / KeeperPositioning.PASS_M_S - read_s
+	var spot: Vector2 = puck.normalized() * cap
+	var along: float = maxf(spot.dot(near.normalized()), KeeperPositioning.DEPTH_FLOOR_M)
+	assert_almost_eq(spot.distance_to(near.normalized() * along),
+			GoaliePushRules.set_reach(skates.t_push_speed, skates.accel, time), 1e-4, "set on it in time")
+
+	_brain.decide(puck, Vector2.ZERO, _motor)
+	var alone: float = _motor.route.spot.length()
+	_brain.play = KeeperPlayRead.new()
+	_brain.play.receivers.append(near)
+	_brain.decide(puck, Vector2.ZERO, _motor)
+	assert_almost_eq(alone, KeeperPositioning.crease_edge(puck.normalized()), 1e-4, "alone: the top")
+	assert_almost_eq(_motor.route.spot.length(), maxf(cap, KeeperPositioning.DEPTH_FLOOR_M), 1e-4,
+			"with him open: the pass's depth")
