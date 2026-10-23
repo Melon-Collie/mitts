@@ -19,8 +19,8 @@ extends RefCounted
 #   - Pants thighs → ImageTexture with vertical columns positioned by stripe.pos
 #     (kept as a vertical side stripe, not a horizontal band — pants are the
 #     one region whose stripe.pos refers to U, not V).
-#   - Helmet / gloves / cuffs / elbow / hand spheres / hips / knees / skates →
-#     solid materials.
+#   - Helmet / gloves / cuffs / elbow / hand spheres / hips / knees (sock base) /
+#     skates → solid materials.
 
 # Stick-flex vertex shader — the shaft's per-skater ShaderMaterial wraps it
 # (see _make_stick_shaft_mat); Skater drives the flex_m uniform per frame.
@@ -208,24 +208,26 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	# Pants — vertical side stripes (pants stripe pos is U, width is column
 	# thickness; see make_pants_stripes_texture). The thigh carries the hip joint's
-	# dome now, so its stripe runs up over the hip the way a real pant's does;
-	# the knee ball stays solid, since a stripe would ring it.
+	# dome now, so its stripe runs up over the hip the way a real pant's does.
 	var pants_block: Dictionary = uniform.pants
 	_paint_pants_thighs(pants_block)
-	var pants_solid: StandardMaterial3D = UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON)
-	for surface: int in [SkaterMeshBuilder.LegSurface.KNEE_L,
-			SkaterMeshBuilder.LegSurface.KNEE_R]:
-		_skater.set_leg_surface_material(surface, pants_solid.duplicate())
 	# The pelvis rides the UPPER mesh (it must not fold with the torso, and it
 	# must not swing with a leg either) but it is pants, not jersey.
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.PELVIS,
-			pants_solid.duplicate())
+			UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON))
 
 	# Socks — horizontal stripes on the cylinder side.
 	var sock_mat: StandardMaterial3D = _socks_material(uniform.socks)
 	_skater.set_leg_surface_material(SkaterMeshBuilder.LegSurface.SOCK_L, sock_mat)
 	_skater.set_leg_surface_material(
 			SkaterMeshBuilder.LegSurface.SOCK_R, sock_mat.duplicate())
+	# The knee ball sits below the pant hem, over the shin guard's cap, so it is
+	# sock: solid base, which every kit's sock top already is
+	# (test_knee_wears_the_sock.gd).
+	var knee_mat: StandardMaterial3D = UniformPaint.solid(uniform.socks.base)
+	_skater.set_leg_surface_material(SkaterMeshBuilder.LegSurface.KNEE_L, knee_mat)
+	_skater.set_leg_surface_material(
+			SkaterMeshBuilder.LegSurface.KNEE_R, knee_mat.duplicate())
 
 	# Skates — the gear style's skate MODEL paints the boot quarter, the toe
 	# cap, the ankle collar, the band ringing it and the blade holder. Painted
