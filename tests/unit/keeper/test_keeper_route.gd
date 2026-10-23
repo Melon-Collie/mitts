@@ -183,6 +183,24 @@ func test_square_on_the_overlap_he_drops_into_the_rvh() -> void:
 		assert_eq(_motor.route.first, DO.RVH_DROP_IN)
 
 
+# Turned on the overlap to a puck at a sharp angle, he drops into the RVH from
+# there, the drop swinging him square onto the seal at his pivot's rate as the
+# knee falls; not turned square and pushed back across first.
+func test_turned_on_the_overlap_he_drops_straight_in() -> void:
+	for side: float in [1.0, -1.0]:
+		var turn: float = -side * 1.2
+		_place(R.FEET, _motor.post.overlap_spot(_iron(side), side, turn), turn)
+		_motor.seal(_iron(side), side)
+		var planned: float = _motor.time_to_goal()
+		var what: String = "%+.0f" % side
+		assert_eq(_motor.route.first, DO.RVH_DROP_IN, "%s: dropped in from there" % what)
+		assert_almost_eq(planned, _motor.post.drop_s + 1.2 / KeeperMotor.PIVOT_RATE_RAD_S, 1e-6,
+				"%s: the drop and the swing" % what)
+		var took: float = _run_checked("%s turned drop-in" % what)
+		assert_almost_eq(took, planned, PLAN_TOLERANCE_S, "%s: as planned" % what)
+		assert_eq(_motor.rest, R.POST, "%s: sealed" % what)
+
+
 # The spot moved further along his line mid-push: he carries on to it, in the
 # time one push there takes, not stopping first.
 func test_a_spot_moved_along_his_push_is_taken_on_without_stopping() -> void:

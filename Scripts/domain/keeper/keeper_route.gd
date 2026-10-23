@@ -35,6 +35,10 @@ const _DIAGONAL_TAN: float = 0.99
 # A spot on his feet this near he skates to (KeeperGlide), turning as he goes;
 # further, footwork's moves take him.
 const GLIDE_REACH_M: float = 1.0
+# How near the post's overlap at the turn he stands at he is on the post: near
+# enough that the drop into the RVH, which swings him square onto the seal as
+# the knee falls, takes him in from there.
+const ON_POST_M: float = 0.15
 
 # Where he is asked to be: resting on `rest`; on his feet at `spot` facing
 # `facing`, or down at `spot` (his turn there is the slide's), or sealed on the
@@ -225,6 +229,10 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 				_offer(t, Do.RVH_DROP_IN, iron, side)
 			else:
 				_offer(t, _step_do, _step_spot)
+			# Or down into it straight from his edge on the post, turned to the
+			# puck at a sharp angle.
+			if at.distance_to(_post.overlap_spot(iron, side, turn)) <= ON_POST_M:
+				_offer(_post.drop_in_s(turn), Do.RVH_DROP_IN, iron, side)
 			# Or slid across to the post from his feet and up into it.
 			var to: Vector2 = _post_spot(at, turn)
 			var d: float = at.distance_to(to)

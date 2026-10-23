@@ -32,6 +32,9 @@ const PAD_ROLL_UP: float = 0.7
 # The post knee's fall from his feet (the butterfly drop's), and the rise back.
 var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
 var rise_s: float = 0.35
+# How fast a drop-in swings him square from a turn: his pivot's rate, given by
+# the motor that turns him.
+var swing_rad_s: float = INF
 
 var x: float = 0.0
 var z: float = 0.0
@@ -44,6 +47,8 @@ var _from := Vector2.ZERO
 var _to := Vector2.ZERO
 var _yaw_from: float = 0.0
 var _clock: float = 0.0
+# How long the drop-in under way takes.
+var _drop_in_s: float = 0.0
 
 var _ready := KeeperPose.new()
 var _low := KeeperPose.new()
@@ -99,10 +104,17 @@ static func _index(post_side: float) -> int:
 
 
 # Down into the RVH on the post at `post` on `post_side`, from his feet where he
-# stands.
+# stands, swung square onto the seal as the knee falls.
 func drop_in(post: Vector2, post_side: float) -> void:
 	if state == State.STANDING:
+		_drop_in_s = drop_in_s(yaw)
 		_go(State.DROPPING_IN, post, post_side)
+
+
+# How long a drop-in from his feet turned `from_yaw` takes: the knee's fall,
+# and the swing square at his pivot's rate as it falls.
+func drop_in_s(from_yaw: float) -> float:
+	return drop_s + absf(wrapf(from_yaw, -PI, PI)) / swing_rad_s
 
 
 # Down into the RVH on the post at `post` on `post_side`, from the butterfly
@@ -155,7 +167,7 @@ func _leave(next: int, edge: Vector3) -> void:
 func _seconds(s: int) -> float:
 	match s:
 		State.DROPPING_IN:
-			return drop_s
+			return _drop_in_s
 		State.RISING_OUT:
 			return rise_s
 		State.IN_FROM_BUTTERFLY:

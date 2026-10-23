@@ -99,6 +99,10 @@ class _Ask:
 		top = p_top
 
 
+func _init() -> void:
+	post.swing_rad_s = PIVOT_RATE_RAD_S
+
+
 # Be on his feet at `spot` facing `facing`, or down at `spot` (`on` Rest.DOWN);
 # on his feet, the spot moving at `velocity`.
 func go_to(spot: Vector2, facing: float, on: int = Rest.FEET, velocity := Vector2.ZERO) -> void:
