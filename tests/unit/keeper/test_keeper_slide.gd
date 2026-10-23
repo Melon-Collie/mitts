@@ -1,11 +1,12 @@
 extends GutTest
 
 # The keeper's butterfly slide (KeeperSlide): he comes to rest on his spot in
-# the time the slide model gives, or at the hardest push's reach; once pushed,
-# only the pads' friction slows him; the push skate holds its place while it
-# drives; the lead pad stays down on the ice the whole way; it starts and ends
-# in the butterfly; and every tick keeps his gear out of the ice, his arms on
-# the stick and nothing on him jumping.
+# the time the slide model gives, or at the push's reach; once pushed, the
+# pads' friction slows him and then the lead skate's edge stops him, quicker
+# than friction alone; the push skate holds its place while it drives; the lead
+# pad stays down on the ice the whole way, and both are down through the stop;
+# it starts and ends in the butterfly; and every tick keeps his gear out of the
+# ice, his arms on the stick and nothing on him jumping.
 
 const DT: float = 1.0 / 120.0
 const PAD_GIVE_M: float = 0.025
@@ -57,37 +58,64 @@ func test_he_comes_to_rest_on_his_spot_in_the_slides_time() -> void:
 		_slide = KeeperSlide.new()
 		assert_eq(_slide.slide_to(dist), dist, "%.1f m is within reach" % dist)
 		var t: float = _run()
-		assert_almost_eq(t, KeeperSlide.time_to(absf(dist), _slide.friction), 1.5 * DT, "%.1f m" % dist)
+		assert_almost_eq(t, _slide.time_to(absf(dist)), 1.5 * DT, "%.1f m" % dist)
 		assert_eq(_slide.x, dist, "%.1f m: on the spot" % dist)
 		assert_eq(_slide.speed, 0.0)
 
 
 func test_past_the_hardest_push_he_comes_to_rest_at_its_reach() -> void:
-	var reach: float = KeeperSlide.reach(_slide.push_speed, _slide.friction)
+	var reach: float = _slide.glide_reach(_slide.push_speed)
 	assert_almost_eq(_slide.slide_to(3.0), reach, 1e-6, "says where he will stop")
 	_run()
 	assert_almost_eq(_slide.x, reach, 1e-6)
 
 
-# Once pushed he cannot steer or stop: past the push, every tick slows him by
-# the pads' friction, never harder and never softer.
-func test_once_pushed_only_friction_slows_him() -> void:
+# Once pushed he cannot steer: the pads' friction slows him, and then the lead
+# skate's edge stops him, each at its own rate; nothing speeds him up.
+func test_once_pushed_friction_then_the_edge_slows_him() -> void:
 	_slide.slide_to(1.2)
 	var top: float = 0.0
 	var was: float = 0.0
-	var gliding: bool = false
-	var checked: int = 0
+	var was_phase: int = _slide.phase
+	var glided: int = 0
+	var stopped: int = 0
 	while _slide.phase != KeeperSlide.Phase.DOWN:
 		_slide.step(DT)
 		top = maxf(top, _slide.speed)
-		if gliding and was > 0.2 and _slide.speed > 0.2:
-			assert_almost_eq((was - _slide.speed) / DT, _slide.friction, _slide.friction * 0.05,
-					"at x %.3f" % _slide.x)
-			checked += 1
-		gliding = _slide.phase == KeeperSlide.Phase.GLIDE
+		if was_phase == _slide.phase and was > 0.2 and _slide.speed > 0.2:
+			var decel: float = (was - _slide.speed) / DT
+			if _slide.phase == KeeperSlide.Phase.GLIDE:
+				assert_almost_eq(decel, _slide.friction, _slide.friction * 0.05, "gliding at x %.3f" % _slide.x)
+				glided += 1
+			elif _slide.phase == KeeperSlide.Phase.STOP:
+				var brake: float = _slide.friction + _slide.edge_brake
+				assert_almost_eq(decel, brake, brake * 0.05, "stopping at x %.3f" % _slide.x)
+				stopped += 1
+		was_phase = _slide.phase
 		was = _slide.speed
-	assert_gt(checked, 50, "a glide to measure")
+	assert_gt(glided, 10, "a glide")
+	assert_gt(stopped, 10, "a stop")
 	assert_lte(top, _slide.push_speed + 1e-6)
+
+
+# The edge stop is what makes a slide a push and a stop: to the same spot,
+# quicker than the softer push friction alone would stop on it.
+func test_the_edge_stop_beats_coasting_to_the_spot() -> void:
+	for dist: float in [0.5, 1.0, 1.5]:
+		var coast := KeeperSlide.new()
+		coast.edge_brake = 0.0
+		assert_lt(_slide.time_to(dist), coast.time_to(dist) - 0.1, "%.1f m" % dist)
+
+
+func test_a_softer_push_is_a_slower_slide() -> void:
+	assert_gt(_slide.time_to(1.0, 2.4), _slide.time_to(1.0), "pushing at 2.4 m/s")
+	assert_eq(_slide.slide_to(1.0, 2.4), 1.0, "still within its reach")
+	var top: float = 0.0
+	while _slide.phase != KeeperSlide.Phase.DOWN:
+		_slide.step(DT)
+		top = maxf(top, _slide.speed)
+	assert_almost_eq(top, 2.4, 1e-6)
+	assert_eq(_slide.x, 1.0)
 
 
 func test_the_push_skate_holds_its_place_while_it_drives() -> void:
@@ -114,11 +142,15 @@ func test_the_lead_pad_stays_down_on_the_ice() -> void:
 		_slide = KeeperSlide.new()
 		_slide.slide_to(target)
 		var lead: int = P.PAD_B if target > 0.0 else P.PAD_G
+		var push: int = P.PAD_G if target > 0.0 else P.PAD_B
 		while _slide.phase != KeeperSlide.Phase.DOWN:
 			_slide.step(DT)
 			_solve()
 			assert_between(_lowest(lead), -PAD_GIVE_M, 0.01,
 					"%+.0f at x %.3f: the lead pad is on the ice" % [target, _slide.x])
+			if _slide.phase == KeeperSlide.Phase.STOP and _slide.speed < 1.0:
+				assert_between(_lowest(push), -PAD_GIVE_M, 0.01,
+						"%+.0f at x %.3f: the push pad is back down, sealing" % [target, _slide.x])
 
 
 func test_it_starts_and_ends_in_the_butterfly() -> void:
@@ -132,6 +164,8 @@ func test_it_starts_and_ends_in_the_butterfly() -> void:
 	for b: int in KeeperSkeleton.BONE_COUNT:
 		assert_almost_eq(_skel.xf[b].origin, skel.xf[b].origin, Vector3.ONE * 1e-3, "bone %d starts down" % b)
 	_run()
+	for i: int in int(KeeperSlide.SETTLE_S / DT) + 2:
+		_slide.step(DT)
 	_solve()
 	for b: int in KeeperSkeleton.BONE_COUNT:
 		assert_almost_eq(_skel.xf[b].origin, skel.xf[b].origin, Vector3.ONE * 1e-6, "bone %d ends down" % b)

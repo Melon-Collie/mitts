@@ -164,7 +164,7 @@ func _record_drop() -> Array:
 
 
 # The slide's frames, as _record's: PUSH while the leg loads and drives, GLIDE
-# while he slides, SET down on the spot.
+# while he slides, STOP while the lead edge stops him, SET down on the spot.
 func _record_slide(target: float) -> Array:
 	var slide := KeeperSlide.new()
 	slide.slide_to(target)
@@ -176,7 +176,8 @@ func _record_slide(target: float) -> Array:
 			var p := KeeperPose.new()
 			slide.pose(p)
 			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
-					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE][slide.phase]
+					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
+					KeeperFootwork.Phase.STOP][slide.phase]
 			out.append([p, Vector3(slide.x, 0.0, 0.0), phase, slide.speed, tick * DT])
 		slide.step(DT)
 		tick += 1
