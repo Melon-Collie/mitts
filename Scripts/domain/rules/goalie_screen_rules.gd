@@ -2,7 +2,7 @@ class_name GoalieScreenRules
 
 # How a body in front of the goalie hides a shot from him: the silhouette and
 # the sightline, pure geometry. The bots read it to clear or not make a screen
-# in front of their own goalie (AIShotBlockRead, AICrossCheckRead), and the shot
+# in front of their own goalie (AIShotBlockRead, AIScreenRead), and the shot
 # log records the delay it prices (GoalieController.screen_delay_for).
 
 # ── Screen occlusion (grounded sightline model) ──────────────────────────────

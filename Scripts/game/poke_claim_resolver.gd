@@ -139,8 +139,7 @@ func receive_claim(peer_id: int, host_timestamp: float,
 	# present-time loop).
 	if skater_snap.blade_up or skater_snap.stick_tied \
 			or skater_snap.pin_role != BoardPinRules.Role.NONE \
-			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase) \
-			or CrossCheckRules.is_stick_busy(skater_snap.cross_check_phase):
+			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
 		return
 	# Down pokes nothing, except a diver's stick laid out along the ice.
 	if skater_snap.knockdown_timer > 0.0 and not skater_snap.diving:

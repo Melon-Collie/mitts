@@ -17,6 +17,12 @@ class_name BodyCheckRules
 # and the recovery window: a harder hit sets a longer timer, and the per-tick
 # penalties are proportional to the timer that remains, so depth and duration
 # scale together off a single replicated value and ease back as it decays.
+#
+# The timer has two bands. Up to max_stagger_seconds it is the stagger. A full
+# check (ref_impulse and up) ROCKS its man instead: the timer starts above that
+# floor, and while it stays there he is rocked — his stick jarred off the ice,
+# his stance and commit gone, his edges deeper gone — before the full stagger's
+# tail eases out beneath it.
 
 class Config:
 	# Defaults mirror SkaterController's @export tunables (the authoritative
@@ -34,19 +40,24 @@ class Config:
 	# registers on a skater already at speed — the stride is power-limited there
 	# and the glide is long — so a rattled skater is also off his edges.
 	var max_grip_penalty: float = 0.4
-	# Knockdown: the top of the same intensity continuum. A hit whose victim impulse
-	# exceeds knockdown_impulse doesn't just stagger — it KNOCKS THE VICTIM DOWN
-	# (movement locked, slides + bleeds speed, can't touch the puck) for a recovery
-	# window that scales with how far past the threshold it landed, from
-	# min_knockdown_seconds at the threshold to max_knockdown_seconds at
-	# knockdown_ref_impulse. Kept just ABOVE the full-check point (ref_impulse): a
-	# full check staggers + strips, and a knockdown is the reward for a SOLID hit —
-	# a committed skate-in at pace (~5.5 m/s closing, medium build) up to a maximal
-	# head-on collision — not the default result of every check.
-	var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down (0 disables)
-	var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
-	var min_knockdown_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
-	var max_knockdown_seconds: float = 1.9     # down time of a maximal hit
+	# The rocked band, above max_stagger_seconds: rocked_min_seconds long at
+	# ref_impulse, rocked_max_seconds at rocked_ref_impulse (a full-speed
+	# committed check at equal builds) and beyond.
+	var rocked_ref_impulse: float = 2.6
+	var rocked_min_seconds: float = 0.5
+	var rocked_max_seconds: float = 0.8
+	# Peak edge-grip reduction at the top of the rocked band: off his edges, he
+	# glides along the hit rather than cutting out of it.
+	var rocked_grip_penalty: float = 0.75
+	# Knockdown: a hit that beats his balance (BodyBalanceRules.overshoot over 1)
+	# knocks him off his skates — movement locked, slides and bleeds speed, can't
+	# touch the puck. He falls to the ice (KnockdownFallRules.first_impact_time),
+	# lies there from min_lie_seconds just past his balance to max_lie_seconds at
+	# knockdown_ref_overshoot and beyond, then gets up; the caller adds the fall
+	# and the get-up, so the get-up never starts before he is down.
+	var knockdown_ref_overshoot: float = 1.7
+	var min_lie_seconds: float = 0.15
+	var max_lie_seconds: float = 0.7
 
 
 # 0..1 hit hardness from the victim impulse magnitude.
@@ -56,22 +67,40 @@ static func intensity(impulse_mag: float, cfg: Config) -> float:
 	return clampf((impulse_mag - cfg.min_impulse) / (cfg.ref_impulse - cfg.min_impulse), 0.0, 1.0)
 
 
-# Seconds of stagger a fresh hit adds (0 below min_impulse). Callers take the max
-# with any in-flight timer so a weaker follow-up can't shorten an existing stagger.
-static func stagger_seconds_from_impulse(impulse_mag: float, cfg: Config) -> float:
-	return intensity(impulse_mag, cfg) * cfg.max_stagger_seconds
+# Seconds of stagger a fresh hit adds (0 below min_impulse): up to the stagger's
+# max, and a full check that leaves him on his feet past it into the rocked
+# band. A hit that `knocked_down` takes no rocked band: he is going down, and
+# the timer runs out under the knockdown's own. Callers take the max with any
+# in-flight timer so a weaker follow-up can't shorten an existing stagger.
+static func stagger_seconds_from_impulse(impulse_mag: float, cfg: Config,
+		knocked_down: bool = false) -> float:
+	var stagger: float = intensity(impulse_mag, cfg) * cfg.max_stagger_seconds
+	if impulse_mag < cfg.ref_impulse or knocked_down:
+		return stagger
+	var span: float = maxf(cfg.rocked_ref_impulse - cfg.ref_impulse, 0.001)
+	var t: float = clampf((impulse_mag - cfg.ref_impulse) / span, 0.0, 1.0)
+	return stagger + lerpf(cfg.rocked_min_seconds, cfg.rocked_max_seconds, t)
 
 
-# Seconds of KNOCKDOWN a fresh hit adds: 0 below knockdown_impulse, then ramps
-# from min_knockdown_seconds at the threshold to max_knockdown_seconds at
-# knockdown_ref_impulse (clamped). Like stagger, callers take the max with any
-# in-flight timer so a weaker follow-up can't shorten an existing knockdown.
-static func knockdown_seconds_from_impulse(impulse_mag: float, cfg: Config) -> float:
-	if cfg.knockdown_impulse <= 0.0 or impulse_mag < cfg.knockdown_impulse:
+static func is_rocked(stagger_timer: float, cfg: Config) -> bool:
+	return stagger_timer > cfg.max_stagger_seconds
+
+
+# How far into the rocked band the timer sits, 0..1 of rocked_max_seconds: the
+# depth of the rocked grip and pose, easing to 0 as he comes out of it.
+static func rocked_share(stagger_timer: float, cfg: Config) -> float:
+	if cfg.rocked_max_seconds <= 0.0:
 		return 0.0
-	var span: float = maxf(cfg.knockdown_ref_impulse - cfg.knockdown_impulse, 0.001)
-	var t: float = clampf((impulse_mag - cfg.knockdown_impulse) / span, 0.0, 1.0)
-	return lerpf(cfg.min_knockdown_seconds, cfg.max_knockdown_seconds, t)
+	return clampf((stagger_timer - cfg.max_stagger_seconds) / cfg.rocked_max_seconds, 0.0, 1.0)
+
+
+# Seconds he lies on the ice from how far past his balance the hit landed
+# (BodyBalanceRules.overshoot, over 1 for a knockdown at all): min_lie_seconds
+# just past it, up to max_lie_seconds at knockdown_ref_overshoot (clamped).
+static func lie_seconds_from_overshoot(overshoot: float, cfg: Config) -> float:
+	var span: float = maxf(cfg.knockdown_ref_overshoot - 1.0, 0.001)
+	var t: float = clampf((overshoot - 1.0) / span, 0.0, 1.0)
+	return lerpf(cfg.min_lie_seconds, cfg.max_lie_seconds, t)
 
 
 # Thrust multiplier (<= 1.0) for the stagger remaining this tick. The penalty is
@@ -83,9 +112,12 @@ static func thrust_mult(stagger_timer: float, cfg: Config) -> float:
 
 
 # Edge-grip multiplier (<= 1.0) for the stagger remaining this tick — the same
-# shape as thrust_mult.
+# shape as thrust_mult, deepening on through the rocked band, so it is
+# continuous as he comes out of it. NativeSkaterMovement.integrate_forward
+# carries the same formula.
 static func grip_mult(stagger_timer: float, cfg: Config) -> float:
-	return 1.0 - _stagger_frac(stagger_timer, cfg) * cfg.max_grip_penalty
+	return 1.0 - _stagger_frac(stagger_timer, cfg) * cfg.max_grip_penalty \
+			- rocked_share(stagger_timer, cfg) * (cfg.rocked_grip_penalty - cfg.max_grip_penalty)
 
 
 static func _stagger_frac(stagger_timer: float, cfg: Config) -> float:
@@ -96,27 +128,24 @@ static func _stagger_frac(stagger_timer: float, cfg: Config) -> float:
 
 # The victim transfer-impulse the puck-strip / pickup-denial decision keys off —
 # the SAME "how hard did it land on the victim" magnitude the stagger uses (the
-# actually-applied |Δv|), so the transfer coefficient, both skaters' mass, and the
+# actually-applied |Δv|), so the contact's transfer, both skaters' mass, and the
 # closing speed all decide whether the puck comes loose. A glancing shove barely
 # jars it; an enforcer strips it clean.
 #
-# Reconstructed from impact_force = attacker_weight × approach (what the
-# body_checked_player signal carries): closing = impact_force / attacker_weight,
+# Reconstructed from impact_force = checker_weight × approach (what the
+# body_checked_player signal carries): closing = impact_force / checker_weight,
 # then the delivery is the collision resolver's OWN function
 # (SkaterCollisionRules.victim_kick — the exact inelastic reduced-mass kick
-# resolve() applies), with the brace folded into the transfer the same way the
-# resolver call site does. Delegating rather than mirroring is the point: a
-# reconstruction of the kick here goes silently stale the moment the resolver
-# changes, while delegation propagates a delivery-model change in the same edit.
+# resolve() applies), at the contact's transfer (contact_transfer, the brace in
+# it). Delegating rather than mirroring is the point: a reconstruction of the
+# kick here goes silently stale the moment the resolver changes, while
+# delegation propagates a delivery-model change in the same edit.
 # test_body_check_rules locks the identity against a live resolve() contact.
 static func puck_strip_impulse(
 		impact_force: float,
-		attacker_weight: float,
-		attacker_transfer: float,
-		victim_weight: float,
-		victim_brace_resistance: float,
-		victim_braced: bool) -> float:
-	var effective_transfer: float = attacker_transfer * (victim_brace_resistance if victim_braced else 1.0)
+		checker_weight: float,
+		transfer: float,
+		victim_weight: float) -> float:
 	return SkaterCollisionRules.victim_kick(
-			impact_force / maxf(attacker_weight, 0.001),
-			attacker_weight, victim_weight, effective_transfer)
+			impact_force / maxf(checker_weight, 0.001),
+			checker_weight, victim_weight, transfer)

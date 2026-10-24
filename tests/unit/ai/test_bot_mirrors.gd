@@ -36,13 +36,6 @@ func test_the_one_timer_salvage_sits_inside_the_controllers_zone() -> void:
 	ctrl.free()
 
 
-func test_a_bot_aims_its_cross_check_through_the_controllers_twist() -> void:
-	var ctrl: SkaterController = SkaterControllerScript.new()
-	assert_almost_eq(AIBotMechanics.UPPER_BODY_MAX_TWIST_RAD,
-			deg_to_rad(ctrl.upper_body_max_twist_deg), 1e-6)
-	ctrl.free()
-
-
 func test_the_puck_thresholds_the_bots_price() -> void:
 	var puck: Puck = PuckScript.new()
 	assert_eq(AIActionScoring.TIP_DEFLECT_MIN_SPEED_M_S, puck.deflect_min_speed,

@@ -618,26 +618,19 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 		return
 	if checker.is_ghost or victim.is_ghost:
 		return
-	# Gate on the impulse actually DELIVERED to the victim (folds in the attacker's
+	# Gate on the impulse actually DELIVERED to the victim (folds in the contact's
 	# transfer, both skaters' mass, and the closing speed) rather than the raw
-	# attacker-weight × speed impact_force — so the same hit dislodges the puck for
-	# an enforcer but not for a lighter player. Matches the stagger's
-	# hardness measure; see BodyCheckRules.puck_strip_impulse.
-	#
-	# The attacker's transfer is commit-gated by the Hit button, the SAME way the
-	# knockback is (Skater._resolve_player_collisions): a committed check strips at
-	# full force, an uncommitted bump only at hit_passive_transfer_mult — so
-	# "without the hit button, hits shouldn't be that powerful" holds for the puck
-	# too, not just the knockback. The victim's brace (hit_committed) already cut it.
-	var checker_transfer: float = checker.body_check_transfer \
-			* (1.0 if checker.hit_committed else checker.hit_passive_transfer_mult)
+	# checker-weight × speed impact_force — so the same hit dislodges the puck for
+	# an enforcer but not for a lighter player. Matches the stagger's hardness
+	# measure; see BodyCheckRules.puck_strip_impulse. The transfer is the
+	# contact's own (Skater.contact_transfer_with — commit, possession, brace), the
+	# same number the knockback landed at.
+	var transfer: float = checker.contact_transfer_with(victim)
 	var strip_impulse: float = BodyCheckRules.puck_strip_impulse(
-			impact_force, checker.weight, checker_transfer,
-			victim.weight, victim.body_check_brace_resistance, victim.hit_committed)
+			impact_force, checker.weight, transfer, victim.weight)
 	# Crushed square into the boards he takes the whole hit, as his stagger does.
 	strip_impulse = BoardPinRules.backstop_hit_strength(strip_impulse,
-			impact_force / maxf(checker.weight, 0.001),
-			checker_transfer * (victim.body_check_brace_resistance if victim.hit_committed else 1.0),
+			impact_force / maxf(checker.weight, 0.001), transfer,
 			Vector2(hit_direction.x, hit_direction.z),
 			BoardPinRules.wall_normal(victim.global_position, victim.collision_radius(),
 					BoardPinRules.BACKSTOP_MARGIN_M),

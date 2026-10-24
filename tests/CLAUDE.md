@@ -105,7 +105,8 @@ netcode: `pin_race_harness.gd` ticks two real `SkaterController`s and a
 `BoardPinTracker` against the boards for the pin's escape race, read by
 `tests/slow/game/test_pin_escape_race.gd` and the instrument beside it; and
 `body_jerk_harness.gd` skates the real controller through scripted transitions
-and measures every drawn bone's per-frame jerk, for the body-smoothness
+(the press against a second real body) and measures every drawn bone's
+per-frame jerk, for the body-smoothness
 instrument and the `test_body_stays_smooth.gd` gate, which share its one
 scenario list.) The netcode three exist because every netcode defect found so far has lived in the
 plumbing (clocks, queues, buffers, ordering), and every one was found by reading

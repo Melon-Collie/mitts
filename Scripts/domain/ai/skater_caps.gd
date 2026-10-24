@@ -112,6 +112,9 @@ var one_timer_feed_grip: float = 0.2
 # hits and commits to checks more readily.
 var weight: float = 1.0
 var body_check_transfer: float = 0.65
+# The build's height over the reference build's: what his balance against a hit
+# scales with (BodyBalanceRules.budget).
+var height_mult: float = 1.0
 
 # How far the carrier holds/protects the puck off its body while HANDLING it —
 # the reach that sets how tight an evasion seam it can thread (best_evade_point).

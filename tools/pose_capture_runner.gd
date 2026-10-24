@@ -73,14 +73,16 @@ const CAM_HAND_FOV: float = 22.0
 #
 # Spec keys: move (Vector2, world), aim (Vector3, RELATIVE to the skater —
 # absolute would swing as the body translates), stance, shoot, slap, block,
-# deflect, hit, stick (the stick-check button), shove (the stick button pressed
-# with Ctrl held, the cross-check), brake (bool), loft (int elevation level), face (Vector3, a
+# deflect, hit, stick (the stick-check button), brake (bool), loft (int elevation level), face (Vector3, a
 # facing set on the segment's first tick). Pose keys beyond name/puck/steps:
 # cam (offset), cam_aim (the point it looks at, relative to the skater like
 # cam), cam_ahead (metres down the travel line), cam_hand ("top" / "bottom":
 # cam is then an offset from that hand, looked at through a narrow lens),
 # game_cam, readout, faceoff, knockdown (a world-space impulse absorbed as a
-# check before the first tick), tuck (a GearModelRegistry TUCK_* option worn). "readout": true also prints the pose's speed
+# check before the first tick), tuck (a GearModelRegistry TUCK_* option worn),
+# partner (a second skater in the away kit, the two in contact: "offset" from
+# the posed skater, "face", and the "input" spec he holds every tick — the
+# press's other body). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -278,23 +280,24 @@ const POSES: Array = [
 	{"name": "pin_pinner", "puck": false, "pin_role": BoardPinRules.Role.PINNER,
 		"cam": Vector3(-0.8, 0.6, 3.2),
 		"steps": [[60, {"stick": true, "aim": Vector3(3.0, 0.0, 0.0)}]]},
-	# ── Cross-check ─────────────────────────────────────────────────────────
-	# The Ctrl+F chord at a standstill: the shaft level across the chest, punched
-	# out. Mid-push, then at full extension, aimed and framed from the front like
-	# the commit (a skater at rest faces +Z).
-	{"name": "cross_check_mid", "puck": false, "readout": true, "cam": Vector3(2.4, 0.5, 2.4), "steps": [
-		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
-		[6, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
-	]},
-	{"name": "cross_check_full", "puck": false, "cam": Vector3(0.6, 2.4, 2.6), "steps": [
-		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
-		[12, {"shove": true, "aim": Vector3(0.0, 0.0, 3.0)}],
-	]},
-	# Thrown at a cursor 50° off the hips: the chest and the shaft turn to it.
-	{"name": "cross_check_aimed", "puck": false, "cam": Vector3(0.6, 2.4, 2.6), "steps": [
-		[40, {"aim": Vector3(0.0, 0.0, 3.0)}],
-		[12, {"shove": true, "aim": Vector3(2.3, 0.0, 1.93)}],
-	]},
+	# ── The press ───────────────────────────────────────────────────────────
+	# Two bodies pressed together (PressRules), framed from the side: the posed
+	# skater drives into the man ahead of him with Ctrl, and the man (the away
+	# kit) digs in, does nothing and is carried, or is pushed from his side.
+	{"name": "press_drive", "puck": false, "readout": true, "cam": Vector3(3.2, 0.4, -0.36),
+		"cam_aim": Vector3(0.0, -0.1, -0.36),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.72), "face": Vector2(0.0, -1.0),
+			"input": {"brake": true, "stance": true}},
+		"steps": [[70, {"hit": true, "move": Vector2(0.0, -1.0)}]]},
+	{"name": "press_carried", "puck": false, "readout": true, "cam": Vector3(3.2, 0.4, -0.36),
+		"cam_aim": Vector3(0.0, -0.1, -0.36),
+		"partner": {"offset": Vector3(0.0, 0.0, -0.72), "face": Vector2(0.0, -1.0), "input": {}},
+		"steps": [[70, {"hit": true, "move": Vector2(0.0, -1.0)}]]},
+	{"name": "press_side", "puck": false, "cam": Vector3(0.36, 0.4, 3.2),
+		"cam_aim": Vector3(0.36, -0.1, 0.0),
+		"partner": {"offset": Vector3(0.72, 0.0, 0.0), "face": Vector2(0.0, -1.0),
+			"input": {"brake": true, "stance": true}},
+		"steps": [[70, {"hit": true, "move": Vector2(1.0, 0.0), "aim": Vector3(3.0, 0.0, 0.0)}]]},
 	# ── Jersey ──────────────────────────────────────────────────────────────
 	# The sweater over the pants: loose, each corner (one from its own front
 	# three-quarter, one head-on, where the hem's slope off it reads), all the
@@ -341,9 +344,17 @@ const POSES: Array = [
 	{"name": "knockdown_lying_side", "puck": false, "knockdown": Vector3(3.0, 0.0, 0.0),
 		"cam": Vector3(0.9, -0.45, 2.6), "cam_aim": Vector3(0.9, -0.95, 0.0),
 		"steps": [[100, {}]]},
-	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 3.0),
+	{"name": "knockdown_lying_back", "puck": false, "knockdown": Vector3(0.0, 0.0, 6.0),
 		"cam": Vector3(2.6, -0.45, 0.9), "cam_aim": Vector3(0.0, -0.95, 0.9),
 		"steps": [[100, {}]]},
+	# A full check short of the knockdown line rocks him: the reel, the splayed
+	# catch, the stick jarred up. Hit from the side, seen from behind and from
+	# the side the hit came from.
+	{"name": "rocked_onset", "puck": false, "knockdown": Vector3(1.7, 0.0, 0.0),
+		"steps": [[12, {}]]},
+	{"name": "rocked_mid", "puck": false, "knockdown": Vector3(1.7, 0.0, 0.0),
+		"cam": Vector3(-3.4, 0.0, 0.4), "cam_aim": Vector3(0.0, -0.3, 0.0),
+		"steps": [[40, {}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -431,6 +442,8 @@ var _images: Array[Image] = []
 var _skater: Skater = null
 var _controller: SkaterController = null
 var _puck: Puck = null
+var _partner: Skater = null
+var _partner_controller: SkaterController = null
 
 
 func begin(record_baseline: bool, only: String = "") -> void:
@@ -554,6 +567,34 @@ func _build_actor() -> void:
 	add_child(_controller)
 	_controller.setup(_skater, _puck, _state)
 	_controller.apply_attributes(attrs)
+	if (_poses[_pose_index] as Dictionary).has("partner"):
+		_build_partner(attrs)
+
+
+# The partner, in contact: both bodies' contact and press read each other.
+func _build_partner(attrs: PlayerAttributes) -> void:
+	_partner = _skater_scene.instantiate() as Skater
+	_partner.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+	add_child(_partner)
+	_partner.set_process(false)
+	_partner.set_physics_process(false)
+	_partner.set_gear_style(GearStyleConfig.new())
+	_partner.set_uniform(TeamColorRegistry.get_colors(5, 1))
+	_partner.set_jersey_info("MAN", 4)
+	_partner.apply_appearance(attrs)
+	_partner.set_world_hud_hidden(true)
+	_partner_controller = SkaterController.new()
+	add_child(_partner_controller)
+	_partner_controller.setup(_partner, _puck, _state)
+	_partner_controller.apply_attributes(attrs)
+	var both: Array = [_skater, _partner]
+	_skater.set_skater_collision_provider(func() -> Array: return both)
+	_partner.set_skater_collision_provider(func() -> Array: return both)
+	var spec: Dictionary = (_poses[_pose_index] as Dictionary)["partner"]
+	_partner.global_position = _skater.global_position + (spec.get("offset", Vector3.ZERO) as Vector3)
+	var face: Vector2 = spec.get("face", Vector2(0.0, -1.0))
+	_partner_controller._pose.facing = face.normalized()
+	_partner.set_facing(face.normalized())
 
 
 func _teardown() -> void:
@@ -563,6 +604,11 @@ func _teardown() -> void:
 	_controller = null
 	_skater = null
 	_puck = null
+	if _partner != null:
+		_partner_controller.queue_free()
+		_partner.queue_free()
+		_partner = null
+		_partner_controller = null
 
 
 func _run_pose() -> void:
@@ -572,6 +618,7 @@ func _run_pose() -> void:
 		_controller.on_puck_picked_up_network()
 
 	var input := InputState.new()
+	var partner_input := InputState.new()
 	_state.faceoff_prep = false
 	if pose.has("knockdown"):
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
@@ -591,7 +638,13 @@ func _run_pose() -> void:
 			# -1, ahead of the skater's own integration, and the cosmetic rig
 			# rebuild is the render pass that follows.
 			_controller._process_input(input, DT)
+			if _partner != null:
+				_fill_partner_input(partner_input, pose["partner"]["input"] as Dictionary, t == 0)
+				_partner_controller._process_input(partner_input, DT)
 			_skater._physics_process(DT)
+			if _partner != null:
+				_partner._physics_process(DT)
+				_partner._process(DT)
 			_skater._process(DT)
 			if pose.has("trace") and t % int(pose["trace"]) == 0:
 				_print_trace()
@@ -803,6 +856,20 @@ func _place_for_pin(role: int) -> void:
 	_skater.pin_strength = 0.5
 
 
+# The partner's held input: `aim` and `move` as _fill_input reads them, relative
+# to the partner.
+func _fill_partner_input(input: InputState, spec: Dictionary, first: bool) -> void:
+	input.delta = DT
+	input.host_timestamp += DT
+	input.move_vector = spec.get("move", Vector2.ZERO)
+	input.mouse_world_pos = _partner.global_position + (spec.get("aim", Vector3(0.0, 0.0, -3.0)) as Vector3)
+	input.stance_held = spec.get("stance", false)
+	input.hit_held = spec.get("hit", false)
+	input.brake = spec.get("brake", false)
+	input.stick_check_held = spec.get("stick", false)
+	input.stick_check_pressed = bool(spec.get("stick", false)) and first
+
+
 func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	var aim: Vector3 = spec.get("aim", Vector3(0.0, 0.0, -3.0))
 	var move: Vector2 = spec.get("move", Vector2.ZERO)
@@ -814,8 +881,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.move_vector = move
 	input.mouse_world_pos = _skater.global_position + aim
 	input.stance_held = spec.get("stance", false)
-	var shove: bool = spec.get("shove", false)
-	input.hit_held = spec.get("hit", false) or shove
+	input.hit_held = spec.get("hit", false)
 	input.brake = spec.get("brake", false)
 	input.block_held = spec.get("block", false)
 	input.elevation_level = spec.get("loft", 0)
@@ -827,7 +893,7 @@ func _fill_input(input: InputState, spec: Dictionary, first: bool) -> void:
 	input.stick_lift_pressed = deflect and first
 	var stick: bool = spec.get("stick", false)
 	input.stick_check_held = stick
-	input.stick_check_pressed = (stick or shove) and first
+	input.stick_check_pressed = stick and first
 
 
 func _finish() -> void:

@@ -26,10 +26,11 @@ const CHECK_RANGE_M: float = 6.0
 const MAX_LEAD_S: float = 0.6
 
 # Predicted victim impulse (m/s velocity delta) required to commit: a check that
-# at least fully staggers and strips (SkaterController.stagger_ref_impulse 1.35,
-# the puck-strip threshold) with a little margin, just under the knockdown floor
-# (SkaterController.knockdown_impulse 1.8). At equal mass a committed drive kicks
-# the victim ~0.325 × closing, so a baseline bot commits from ~5 m/s closing.
+# rocks and strips him (BodyCheckRules' rocked band and the puck-strip threshold,
+# both at stagger_ref_impulse 1.35) with a little margin, and short of what
+# floors a square, upright man (BodyBalanceRules.balance_ref_dv): the knockdown
+# is the angle's and the moment's. At equal mass a committed drive kicks the
+# victim ~0.325 × closing, so a baseline bot commits from ~5 m/s closing.
 const COMMIT_IMPULSE_M_S: float = 1.6
 
 # League-average victim mass (Skater.weight default), for a carrier whose build
