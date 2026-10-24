@@ -15,7 +15,10 @@ extends GutTest
 # shot could reach him before his legs and his drop could answer it. At a sharp
 # angle his pad seals the near post along the ice; a carrier driving at a post
 # finds it sealed once he is in tight, one who feints at it from range finds
-# him still on the angle, and one who cuts back out brings him back up.
+# him still on the angle, and one who cuts back out brings him back up. A
+# carrier of theirs in tight beside a post he meets planted in the butterfly
+# on it, and a cut across the front of the crease from there he slides with
+# on his knees, never standing up into it.
 
 const DT: float = 1.0 / 120.0
 const PLANNER_EVERY: int = 4
@@ -538,3 +541,73 @@ func test_a_pass_he_reads_sinks_him_by_when_it_can_be_shot() -> void:
 	assert_true(_asks_to_sink(Vector2(3.0, -6.0)), "met close, soon: sunk")
 	_brain.play.meet_s = 1.0
 	assert_false(_asks_to_sink(Vector2(3.0, -6.0)), "met close, later: up, to move")
+
+
+# A carrier of theirs skated from the wing to just outside the post on `side`
+# and held there; the read his, the puck carried. Where the carrier stopped.
+func _carry_to_post(side: float) -> Vector2:
+	_brain = KeeperPositioning.new()
+	_brain.play = KeeperPlayRead.new()
+	_brain.play.loose = false
+	_brain.play.theirs = true
+	_motor = KeeperMotor.new()
+	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var stop := Vector2(1.2 * side, -0.5)
+	var puck := Vector2(3.5 * side, -5.0)
+	var tick: int = 0
+	var held: float = 0.0
+	while held < 1.5:
+		var v: Vector2 = (stop - puck).normalized() * 5.0 if puck != stop else Vector2.ZERO
+		puck = puck.move_toward(stop, 5.0 * DT)
+		if puck == stop:
+			held += DT
+		if tick % PLANNER_EVERY == 0:
+			_brain.decide(puck, v, _motor)
+		_motor.step(DT)
+		tick += 1
+	return puck
+
+
+# In tight beside the post he is down in the butterfly on it: his pad seals the
+# ice inside the post against a puck jammed in, and he is turned toward the
+# carrier no further than a slide back across to the far post still goes.
+func test_a_carrier_in_tight_beside_the_post_is_met_planted_on_it() -> void:
+	var pose := KeeperPose.new()
+	var skel := KeeperSkeleton.new()
+	for side: float in [1.0, -1.0]:
+		var puck: Vector2 = _carry_to_post(side)
+		var what: String = "%+.0f" % side
+		assert_true(_brain.planted, what)
+		assert_eq(_motor.rest, R.DOWN, "%s: down" % what)
+		_motor.pose(pose)
+		skel.pose(pose)
+		_assert_near_post_met(puck, side, Vector2(_motor.x, _motor.z), _motor.yaw, skel, what, JAMMED_M)
+		assert_lte(absf(_motor.yaw), KeeperSlide.MAX_OFF_LINE_RAD + 1e-4, "%s: turned no further than a slide" % what)
+		assert_gt(-side * _motor.yaw, 0.0, "%s: turned toward the carrier" % what)
+
+
+# From the plant, the carrier cuts across the top of the crease to the far
+# side: he goes with him on his knees, never back up on his feet, and ends
+# across, square to him.
+func test_a_cut_across_from_the_post_is_slid_with_on_his_knees() -> void:
+	for side: float in [1.0, -1.0]:
+		var puck: Vector2 = _carry_to_post(side)
+		var what: String = "%+.0f" % side
+		var to := Vector2(-0.9 * side, -0.9)
+		var tick: int = 0
+		var t: float = 0.0
+		while t < 2.0:
+			var v: Vector2 = (to - puck).normalized() * 3.0 if puck != to else Vector2.ZERO
+			puck = puck.move_toward(to, 3.0 * DT)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(puck, v, _motor)
+			_motor.step(DT)
+			tick += 1
+			t += DT
+			if _motor.rest == R.FEET:
+				assert_ne(_motor.rest, R.FEET, "%s: up at %.2f s" % [what, t])
+				break
+		assert_eq(_motor.rest, R.DOWN, "%s: down" % what)
+		assert_gt(-side * _motor.x, 0.0, "%s: across" % what)
+		assert_almost_eq(_forward(_motor.yaw).dot((puck - Vector2(_motor.x, _motor.z)).normalized()), 1.0,
+				1.0 - cos(KeeperRoute.DOWN_FACED_RAD), "%s: square to the carrier" % what)

@@ -264,8 +264,9 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 
 # From the butterfly to the goal's spot and facing, down: slid there and
 # rotated on his knees to the facing; rotated first onto the slide's line where
-# it is off his own, slid and rotated again; or up, there on his feet and down
-# again. Its time; its first move in _down_do, _down_spot and _down_side.
+# it is off his own and no further off the facing than a slide goes, slid and
+# rotated again; or up, there on his feet and down again. Its time; its first
+# move in _down_do, _down_spot and _down_side.
 func _down_to_down(at: Vector2, turn: float) -> float:
 	_down_do = Do.NONE
 	_down_spot = spot
@@ -284,12 +285,16 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 	var heading: Vector2 = (spot - at) / d
 	for lead: float in [-1.0, 1.0]:
 		var onto: float = KeeperSlide.facing(heading, lead)
+		# Never turned further off the shot than a slide takes him.
+		if absf(wrapf(onto - facing, -PI, PI)) > KeeperSlide.MAX_OFF_LINE_RAD:
+			continue
 		var rotated: float = _slide.rotate_time(wrapf(onto - turn, -PI, PI)) + _slides_time(d, false) + _rotate_s(onto)
 		if rotated < best:
 			best = rotated
 			_down_do = Do.ROTATE
 			_down_side = onto
-	var up: float = _drop.rise_s + _settled(_on_feet(at, turn, spot)) + _drop.drop_s + _rotate_s(turn)
+	var up: float = _drop.rise_s + minf(_standing(at, turn), _settled(_on_feet(at, turn, spot)) + _rotate_s(turn)) \
+			+ _drop.drop_s
 	if up < best:
 		best = up
 		var across: float = _local(spot - at, turn).x

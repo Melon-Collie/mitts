@@ -193,6 +193,21 @@ func test_down_on_his_spot_he_rotates_to_a_new_facing() -> void:
 	assert_eq(_motor.time_to_goal(), 0.0, "there already")
 
 
+# Down and asked down within one push's reach, he stays on his knees, turned
+# off the slide's line or not; past its reach he gets up.
+func test_down_within_a_push_he_stays_down() -> void:
+	_place(R.DOWN, Vector2(-0.4, -0.5), 0.7)
+	_motor.go_to(Vector2(0.4, -0.6), 0.0, R.DOWN)
+	_motor.time_to_goal()
+	assert_true(_motor.route.first == DO.SLIDE or _motor.route.first == DO.ROTATE,
+			"slid or rotated, not %s" % DO.keys()[_motor.route.first])
+	var far: float = _motor.slide.glide_reach(_motor.slide.push_speed) + 0.5
+	_motor.go_to(Vector2(-0.4 + far, -0.5), 0.0, R.DOWN)
+	_motor.time_to_goal()
+	assert_true(_motor.route.first == DO.RISE or _motor.route.first == DO.RECOVER,
+			"up for one past a push, not %s" % DO.keys()[_motor.route.first])
+
+
 func test_square_on_the_overlap_he_drops_into_the_rvh() -> void:
 	for side: float in [1.0, -1.0]:
 		var overlap: Vector2 = _motor.post.overlap_spot(_iron(side), side)

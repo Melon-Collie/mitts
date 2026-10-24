@@ -225,6 +225,14 @@ func post_spot(post: Vector2, from: Vector2) -> Vector2:
 	return from + heading * maxf(out, 0.0)
 
 
+# Where he is, down in the butterfly turned `turn`, with his `side` pad's
+# outer end (+1 his blocker side) on the face of the post at `post` (x, z).
+func post_seal_spot(post: Vector2, side: float, turn: float) -> Vector2:
+	var end: Vector3 = _pad_end[1 if side > 0.0 else 0]
+	var back := Vector2(sin(turn), cos(turn))
+	return post - _across(turn) * (end.x + side * GameRules.NET_POST_RADIUS) - back * end.z
+
+
 # Down on his spot with the stop settled out of him: in the butterfly.
 func is_settled() -> bool:
 	return phase == Phase.DOWN and _stop <= 0.0
