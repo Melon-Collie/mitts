@@ -40,8 +40,8 @@ const READY_STICK_TILT_RAD: float = deg_to_rad(8.0)
 # have time to read. Skates out about twice as wide, knees driven in and down
 # so the pads lie steep with their inside edges near the ice and their faces to
 # the shooter, hips well above the knees and the chest tall over them, leaning
-# on only a little, the glove up and out in front as the chest carries it, the
-# blocker at the pad's top, the blade on the ice ahead of the five-hole (an NHL
+# on only a little, the glove out in front at the belly, the blocker at the
+# pad's top, the blade on the ice ahead of the five-hole (an NHL
 # keeper's, e.g. Shesterkin's). Its knees are nearer the ice, so
 # the drop into the butterfly from here is the shorter fall. A shin laid that
 # far over rides its pad up onto the inside edge, the face tipped up, or the
@@ -54,6 +54,9 @@ const LOW_READY_PAD_FACE := Vector3(0.0, 0.3, -1.0)
 const LOW_READY_PELVIS := Vector3(0.0, 0.65, 0.10)
 const LOW_READY_BLADE := Vector3(-0.15, 0.0, -0.55)
 const LOW_READY_STICK_TILT_RAD: float = deg_to_rad(20.0)
+# Its glove, in the chest's frame as every stance holds it: lower than the
+# ready stance's, at the belly, over the top of the pad.
+const LOW_READY_GLOVE_FROM_CHEST := Vector3(-0.40, -0.11, -0.48)
 
 # The butterfly: knees together on the ice, shins flared out behind them with
 # the pads' faces to the shooter, hips over the knees and the trunk tall.
@@ -152,6 +155,7 @@ static func low_ready(p: KeeperPose) -> void:
 		leg.shin_front = LOW_READY_PAD_FACE.normalized()
 	p.blade_center = LOW_READY_BLADE
 	p.stick_tilt = LOW_READY_STICK_TILT_RAD
+	p.glove_hand = LOW_READY_GLOVE_FROM_CHEST
 
 
 # The butterfly, loaded to push toward `side`: the pad on that side stays down
