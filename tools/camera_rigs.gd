@@ -33,6 +33,10 @@ const RIGS: Array[Dictionary] = [
 	{"name": "sh45_f30", "pitch": 45.0, "dist": 17.40, "ahead": 2.5, "side": 0.0, "fov": 30.0},
 	{"name": "sh45_f20", "pitch": 45.0, "dist": 26.45, "ahead": 2.5, "side": 0.0, "fov": 20.0},
 	{"name": "sh35_f30", "pitch": 35.0, "dist": 17.40, "ahead": 3.5, "side": 0.0, "fov": 30.0},
+	# The end-to-end camera of a console hockey game, fitted to the rink markings
+	# in one of its screenshots: as framed there, and at our framing's span.
+	{"name": "nhl", "pitch": 35.0, "dist": 50.6, "ahead": 4.0, "side": 0.0, "fov": 17.3},
+	{"name": "nhl_ours", "pitch": 35.0, "dist": 30.6, "ahead": 4.0, "side": 0.0, "fov": 17.3},
 ]
 
 
