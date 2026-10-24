@@ -583,23 +583,25 @@ const _FACE_SCALE := Vector3(0.85, 0.85, 0.75)
 const _FACE_CENTER := Vector3(0.0, 0.147, -0.024)
 # The cage: a cat-eye, flat across the front and wrapped back to the shell at
 # its sides. A brow bar and a chin bar across, twin bars down the middle, and
-# three arcs from side to side, each given as its height at the sides (x) and
-# in the middle (y): two arches, the shallow one over the eyes and the deep one
-# from the brow nearly down to the chin bar, and a dip from cheek to cheek under
-# the eyes. Each eye looks out through the lens between the eye arch and the
-# dip. Below them a chin wire on each side rises from the chin bar beside the
-# middle bars and sweeps out to the eye arch's end.
+# arcs each given as its height at its ends (x) and in the middle (y): an arch
+# from the brow nearly down to the chin bar at the sides and a dip from cheek to
+# cheek under the eyes, so each eye looks out through the lens between them,
+# and a small arch over the mouth standing on the chin bar, its top on the
+# dip. A chin wire on each side rises from the mouth arch's foot and sweeps out
+# to the side clip.
 const _CAGE_HALF_WIDTH: float = 0.088
 const _CAGE_FRONT_Z: float = -0.166
 const _CAGE_FLAT_HALF: float = 0.05
 const _CAGE_BOTTOM: float = 0.09
 const _CAGE_TOP: float = 0.20
 const _CAGE_MID_HALF: float = 0.011
-const _CAGE_EYE_ARCH := Vector2(0.14, 0.188)
-const _CAGE_ARCS: Array[Vector2] = [_CAGE_EYE_ARCH, Vector2(0.10, 0.198), Vector2(0.165, 0.125)]
+const _CAGE_ARCH := Vector2(0.10, 0.198)
+const _CAGE_CHEEK_DIP := Vector2(0.165, 0.125)
+const _CAGE_MOUTH_ARCH := Vector2(_CAGE_BOTTOM, _CAGE_CHEEK_DIP.y)
+const _CAGE_MOUTH_HALF: float = 0.044
 # Start, control and end of the left chin wire, mirrored to the right.
-const _CAGE_CHIN_WIRE: Array[Vector2] = [Vector2(0.045, _CAGE_BOTTOM), Vector2(0.075, _CAGE_BOTTOM),
-		Vector2(_CAGE_HALF_WIDTH, _CAGE_EYE_ARCH.x)]
+const _CAGE_CHIN_WIRE: Array[Vector2] = [Vector2(_CAGE_MOUTH_HALF, _CAGE_BOTTOM), Vector2(0.075, _CAGE_BOTTOM),
+		Vector2(_CAGE_HALF_WIDTH, 0.14)]
 # How sharply the cage wraps back past its flat front: its edge lands on the
 # shell's cheek, about where the face opening's side is.
 const _CAGE_WRAP: float = 46.0
@@ -622,9 +624,9 @@ static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	k.slab(S.STRAP, inside, o.z + _MASK_FACE_Z - 0.006, o.z + _MASK_FACE_Z - 0.003)
 	for y: float in [_CAGE_BOTTOM, _CAGE_TOP]:
 		_cage_bar(k, o, Vector2(-_CAGE_HALF_WIDTH, y), Vector2(_CAGE_HALF_WIDTH, y))
-	for arc: Vector2 in _CAGE_ARCS:
-		_cage_bar(k, o, Vector2(-_CAGE_HALF_WIDTH, arc.x), Vector2(_CAGE_HALF_WIDTH, arc.x),
-				Vector2(0.0, 2.0 * arc.y - arc.x))
+	_cage_arc(k, o, _CAGE_HALF_WIDTH, _CAGE_ARCH)
+	_cage_arc(k, o, _CAGE_HALF_WIDTH, _CAGE_CHEEK_DIP)
+	_cage_arc(k, o, _CAGE_MOUTH_HALF, _CAGE_MOUTH_ARCH)
 	for side: float in [-1.0, 1.0]:
 		_cage_bar(k, o, Vector2(side * _CAGE_MID_HALF, _CAGE_BOTTOM), Vector2(side * _CAGE_MID_HALF, _CAGE_TOP))
 		var flip := Vector2(side, 1.0)
@@ -650,6 +652,13 @@ static func _mask_ring(o: Vector3, s: Vector4) -> PackedVector3Array:
 			p.z = maxf(p.z, _MASK_FACE_Z)
 		out.append(o + p)
 	return out
+
+
+# A cage arc across the middle, its ends `half_width` either side and `arc` its
+# height there (x) and in the middle (y).
+static func _cage_arc(k: KeeperMeshKit, o: Vector3, half_width: float, arc: Vector2) -> void:
+	_cage_bar(k, o, Vector2(-half_width, arc.x), Vector2(half_width, arc.x),
+			Vector2(0.0, 2.0 * arc.y - arc.x))
 
 
 # A cage bar from `a` to `b` (x and height in the head's frame), bowed toward
