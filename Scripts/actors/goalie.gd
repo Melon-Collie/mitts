@@ -154,6 +154,11 @@ var _stand_in: Node3D = null
 var _save_boxes: Array[CollisionShape3D] = []
 # Per box: the node it places, or null where an earlier box places it.
 var _save_box_places: Array[Node3D] = []
+# Decides a puck's contact on the chest's save part for a stand-in that can
+# catch on its chest: called with the incoming velocity, the contact point and
+# normal, the struck part's velocity and the shared rule's result, which it
+# rewrites. Unset, the shared rule's (GoalieSaveRules.resolve_contact) stands.
+var chest_contact: Callable = Callable()
 
 
 func set_stand_in(stand_in: Node3D) -> void:

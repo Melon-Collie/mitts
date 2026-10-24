@@ -1033,6 +1033,10 @@ func _drive_analytic(dt: float) -> void:
 			GoalieSaveRules.resolve_contact(
 					vel, part, _goalie_contact.normal, _save_result, fwd,
 					_goalie_contact.part_velocity)
+			var g: Goalie = g3 as Goalie
+			if part == GoalieSaveRules.SavePart.CHEST and g != null and g.chest_contact.is_valid():
+				g.chest_contact.call(vel, _goalie_contact.point, _goalie_contact.normal,
+						_goalie_contact.part_velocity, _save_result)
 			vel = _save_result.velocity
 			# Eject the disc flush off the contacted face. `point` is the sphere
 			# CENTRE at toi — already `radius` off the real face via the

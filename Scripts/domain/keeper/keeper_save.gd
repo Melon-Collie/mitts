@@ -83,6 +83,9 @@ var _hand_out: bool = false
 var _hand_at := Vector3.ZERO
 var _returning: bool = false
 var _palm := Vector3.FORWARD
+# The glove's fingers sent onto a puck he watches: out ahead laid flat on one
+# on the ice, up over one held to his chest.
+var _fingers := Vector3.FORWARD
 # The glove sent to cover a puck he is watching: it goes without a read, and
 # how far he has leaned on over the pads after it (KeeperPoses.cover_lean).
 var _watched: bool = false
@@ -238,6 +241,19 @@ func cover(target: Vector3, lean: float) -> void:
 	hand = Hand.GLOVE
 	hand_target = target
 	_palm = Vector3.DOWN
+	_fingers = Vector3.FORWARD
+	_watched = true
+	_returning = false
+
+
+# The glove over a puck held against his chest at `target` (his space), palm
+# in on it and fingers up, at once.
+func trap(target: Vector3) -> void:
+	_lean_to = 0.0
+	hand = Hand.GLOVE
+	hand_target = target
+	_palm = Vector3.BACK
+	_fingers = Vector3.UP
 	_watched = true
 	_returning = false
 
@@ -274,8 +290,7 @@ func _lay_hand(p: KeeperPose, h: int, at: Vector3) -> void:
 			p.glove_hand = at
 			p.glove_palm = _palm
 			if _watched:
-				# Laid flat on a puck to cover it, the fingers out ahead.
-				p.glove_fingers = Vector3.FORWARD
+				p.glove_fingers = _fingers
 		Hand.BLOCKER:
 			p.blocker_reach = true
 			p.blocker_grip = at

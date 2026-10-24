@@ -63,6 +63,9 @@ var _chosen_at: float = -1.0
 var _over_at: float = -1.0
 # Whether the shot being read has hit him.
 var _felt: bool = false
+# Where a puck caught on his chest is held, in the chest protector's frame;
+# INF none (a glove catch is held in the glove).
+var _chest_held := Vector3.INF
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -72,6 +75,7 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 		_profile = profile
 	if is_server:
 		puck.puck_touched_loose.connect(_on_puck_touched_loose)
+		goalie.chest_contact = _chest_contact
 	_net = Transform3D(Basis(Vector3.UP, goalie.get_goalie_rotation_y()), Vector3(0.0, 0.0, assigned_goal_line_z))
 	_keeper = Keeper.new()
 	goalie.set_stand_in(_keeper)
@@ -125,6 +129,7 @@ func _place_in_crease() -> void:
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
+	_chest_held = Vector3.INF
 	_velocity_x = 0.0
 	_velocity_z = 0.0
 	_last_velocity = Vector3.ZERO
@@ -425,13 +430,49 @@ func _on_puck_contact(contacted: Goalie) -> void:
 				_over_at = read.age
 
 
-# Caught: into the glove and covered for the whistle.
+# A puck on his chest's save part (Goalie.chest_contact): caught at the logo
+# when his arms close on it before it comes off him (KeeperChestTrap); anywhere
+# else, or too hard for that, it comes off the foam as any rebound does rather
+# than dying on him whatever its pace.
+func _chest_contact(incoming: Vector3, point: Vector3, normal: Vector3, surface: Vector3,
+		result: GoalieSaveRules.ContactResult) -> void:
+	if not result.trapped:
+		return
+	result.trapped = false
+	var mine: Vector3 = goalie.global_transform.affine_inverse() * point
+	var reach_s: float = minf(goalie.get_glove_world_position().distance_to(point) / save.glove_speed_m_s,
+			goalie.get_blocker_world_position().distance_to(point) / save.blocker_speed_m_s)
+	if KeeperChestTrap.at_logo(_keeper.skeleton, mine) and KeeperChestTrap.closes_on((surface - incoming).dot(normal), reach_s):
+		result.velocity = Vector3.ZERO
+		result.caught = true
+		_chest_held = KeeperGear.box(_keeper.skeleton, KeeperGear.Part.CHEST).affine_inverse() * mine
+		return
+	result.velocity = GoalieSaveRules.rebound_velocity(incoming, GoalieSaveRules.SavePart.CHEST, normal, surface)
+
+
+# Caught: in the glove, or held to his chest with the glove come over it; and
+# covered for the whistle.
 func _on_puck_caught(contacted: Goalie) -> void:
 	if contacted != goalie or not is_server or _holding >= 0.0:
+		_chest_held = Vector3.INF
 		return
 	if puck.pickup_locked or puck.get_carrier() != null:
+		_chest_held = Vector3.INF
 		return
 	_secure()
+	if _chest_held != Vector3.INF:
+		var chest: Transform3D = KeeperGear.box(_keeper.skeleton, KeeperGear.Part.CHEST)
+		var over: Vector3 = chest * _chest_held - chest.basis.z.normalized() * KeeperChestTrap.GLOVE_OFF_CHEST_M
+		if _keeper.skeleton.mirrored:
+			over.x = -over.x
+		save.trap(over)
+
+
+# Where the puck he holds is: in his glove, or on his chest where it was caught.
+func _held_at() -> Vector3:
+	if _chest_held == Vector3.INF:
+		return goalie.get_glove_world_position()
+	return goalie.global_transform * (KeeperGear.box(_keeper.skeleton, KeeperGear.Part.CHEST) * _chest_held)
 
 
 # Under the glove, dead, and covered for the whistle.
@@ -443,14 +484,15 @@ func _secure() -> void:
 	puck_covered.emit(team_id)
 
 
-# Held in the glove; with no whistle for it, set down out from his glove side
-# and swept on toward that corner.
+# Held in the glove or to his chest; with no whistle for it, set down out from
+# his glove side and swept on toward that corner.
 func _hold_catch(delta: float) -> void:
-	puck.set_puck_position(goalie.get_glove_world_position())
+	puck.set_puck_position(_held_at())
 	_holding += delta
 	if _holding < CATCH_HOLD_S:
 		return
 	_holding = -1.0
+	_chest_held = Vector3.INF
 	var glove_side: float = 1.0 if _keeper.skeleton.mirrored else -1.0
 	var out: Vector3 = _net * Vector3(motor.x + glove_side * SET_DOWN_OUT_M, 0.0, motor.z)
 	puck.set_puck_position(Vector3(out.x, puck.ice_height, out.z))

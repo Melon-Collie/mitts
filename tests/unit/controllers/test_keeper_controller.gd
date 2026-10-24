@@ -271,6 +271,47 @@ func test_hit_he_starts_his_recovery_at_once() -> void:
 	assert_lte(ticks, 1, "let go the tick he feels it")
 
 
+# A shot into the logo of his chest: a soft one he closes his arms on, held to
+# his chest where it hit with the glove come over it, and covered; a hard one
+# comes off the foam as the chest's rebound.
+func test_a_soft_shot_at_his_logo_is_caught_on_his_chest() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
+	_run(1.5)
+	var chest: Transform3D = _goalie.global_transform * KeeperGear.box(_keeper._keeper.skeleton, KeeperGear.Part.CHEST)
+	var front: Vector3 = -chest.basis.z.normalized()
+	var at: Vector3 = chest.origin + front * KeeperGear.half_extents(KeeperGear.Part.CHEST).z
+	var from: Vector3 = at + front * 1.0
+	var contact := GoalieContactDetector.Contact.new()
+	assert_true(GoalieContactDetector.nearest([_goalie], from, at - front * 0.1, GameRules.PUCK_COLLISION_RADIUS,
+			SweptDiscOBB.Result.new(), contact), "it meets him")
+	assert_eq(_puck._classify_save_part(contact.part as Node3D), GoalieSaveRules.SavePart.CHEST, "on his chest")
+	var forward: Vector3 = -_goalie.global_transform.basis.z
+	for case: Array in [[4.0, true], [30.0, false]]:
+		var v: Vector3 = -front * float(case[0])
+		var result := GoalieSaveRules.ContactResult.new()
+		GoalieSaveRules.resolve_contact(v, GoalieSaveRules.SavePart.CHEST, contact.normal, result, forward)
+		_keeper._chest_contact(v, contact.point, contact.normal, Vector3.ZERO, result)
+		var what: String = "%.0f m/s" % float(case[0])
+		assert_eq(result.caught, case[1], what)
+		assert_false(result.trapped, "%s: never dead on him whatever its pace" % what)
+		if not result.caught:
+			assert_almost_eq(result.velocity, GoalieSaveRules.rebound_velocity(v, GoalieSaveRules.SavePart.CHEST,
+					contact.normal), Vector3.ONE * 1e-5, "%s: the chest's rebound" % what)
+			_keeper._chest_held = Vector3.INF
+	# Caught soft: held where it hit, the glove over it, covered.
+	var soft := GoalieSaveRules.ContactResult.new()
+	GoalieSaveRules.resolve_contact(-front * 4.0, GoalieSaveRules.SavePart.CHEST, contact.normal, soft, forward)
+	_keeper._chest_contact(-front * 4.0, contact.point, contact.normal, Vector3.ZERO, soft)
+	watch_signals(_keeper)
+	_puck.puck_caught_by_goalie.emit(_goalie)
+	_run(0.3)
+	assert_signal_emitted(_keeper, "puck_covered")
+	assert_almost_eq(_puck.global_position, contact.point, Vector3.ONE * 0.02, "held to his chest where it hit")
+	assert_lt(_goalie.get_glove_world_position().distance_to(contact.point), KeeperAnatomy.GLOVE_HEIGHT_M,
+			"the glove come over it")
+
+
 # A tier changed in the session (free play's picker, the tutorial) reaches his
 # reads and his hands.
 func test_a_tier_set_later_reaches_his_saves() -> void:
