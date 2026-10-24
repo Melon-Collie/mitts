@@ -12,14 +12,15 @@ extends RefCounted
 #     WorldSnapshots and emitting InputStates, with a real per-team TeamBrain
 #     doing slot assignment — the exact production decision stack.
 #   - Body physics: SkaterMovementRules.apply_movement (the pure extraction
-#     the live controller runs), at the real 120 Hz tick, with the
-#     controller-default MovementConfig.
+#     the live controller runs), at the real 120 Hz tick, with the league
+#     body's MovementConfig — the set-up controller match_caps builds, whose
+#     caps every brain and agent also reads, as in a match.
 #   - Puck contacts: PuckInteractionRules.check_pickup / check_poke — the
 #     real swept-segment tests at the real pickup radius.
 #
 # What is APPROXIMATED (keep scenario assertions coarse because of these):
-#   - Facing: the pose coordinator's exponential lerp toward the cursor,
-#     without the back-wedge IK gate.
+#   - Facing: the game's facing rule (FacingRules) and turn-round step,
+#     without the pose coordinator's wind-up or the back-wedge IK gate.
 #   - Blade: the cursor clamped to the reach ring, rate-limited at the Hands
 #     blade speed (no ROM cone, no lift plane). Through a wrister charge it
 #     holds the shot origin instead, as the controller does.
@@ -131,6 +132,8 @@ class SimSkater:
 
 var skaters: Array[SimSkater] = []
 var team_map: Dictionary = {}
+# Every body's caps (match_caps), as the brains and agents read them in a match.
+var caps_by_peer: Dictionary = {}
 var brains: Dictionary = {}
 # Match team size for the brains (3 = legacy path, 5 = position-aware) and
 # the peer_id → lobby-slot position map the 5v5 election reads. Set before
@@ -165,7 +168,8 @@ var _airborne_keep: float = LANDING_SPEED_KEEP
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
 var _facing_cfg: FacingRules.Config
-var _carry_facing_cfg := FacingRules.Config.new()
+var _carry_facing_cfg: FacingRules.Config
+var _caps: AISkaterCaps
 var _facing_rule := FacingRules.Result.new()
 # Rolling puck positions for the puppets' reaction-delayed read.
 var _puck_history: Array[Vector3] = []
@@ -196,17 +200,48 @@ var goalie_provider: Callable = Callable()
 
 
 func _init() -> void:
-	# The league-default skating physics, read from a real controller so the
-	# harness can't drift from what the bodies actually run.
+	# The league body's skating physics and facing, read from the real set-up
+	# controller the bots' caps come from, so the plant skates what they price.
+	_caps = match_caps()
+	move_cfg = _caps.movement
+	_facing_cfg = _caps.facing_rules
+	_carry_facing_cfg = _caps.carry_facing_rules
+
+
+class StubGameState extends Node:
+	func is_host() -> bool:
+		return true
+
+	func is_movement_locked() -> bool:
+		return false
+
+
+static var _match_caps: AISkaterCaps = null
+
+
+# The league body's caps as a match hands them to a bot (PlayerRegistry:
+# SkaterController.build_ai_caps on a set-up body), right-handed like the
+# harness's agents. Built once: the body needs the scene tree, and caps are
+# never edited once built.
+static func match_caps() -> AISkaterCaps:
+	if _match_caps != null:
+		return _match_caps
+	var root: Window = (Engine.get_main_loop() as SceneTree).root
+	var skater := (load("res://Scenes/Skater.tscn") as PackedScene).instantiate() as Skater
+	var puck := (load("res://Scenes/Puck.tscn") as PackedScene).instantiate() as Puck
+	var state := StubGameState.new()
 	var ctrl := SkaterController.new()
-	move_cfg = ctrl.get_movement_config()
-	_facing_cfg = ctrl.facing_rules
-	# As SkaterController.setup derives the carry edge, which needs a body.
-	_carry_facing_cfg.forehand_edge_rad = _facing_cfg.forehand_edge_rad
-	_carry_facing_cfg.backhand_edge_rad = deg_to_rad(ctrl.bh_release_angle_deg)
-	_carry_facing_cfg.forehand_yield_rad = deg_to_rad(ctrl.carry_forehand_yield_deg)
-	ctrl.free()
-	move_cfg.puck_carry_speed_multiplier = 0.86
+	skater.is_left_handed = false
+	for n: Node in [puck, skater, state, ctrl]:
+		root.add_child(n)
+		n.set_process(false)
+		n.set_physics_process(false)
+	ctrl.setup(skater, puck, state)
+	_match_caps = ctrl.build_ai_caps()
+	for n: Node in [ctrl, state, skater, puck]:
+		root.remove_child(n)
+		n.free()
+	return _match_caps
 
 
 func add_skater(peer_id: int, team_id: int, pos: Vector3,
@@ -250,14 +285,19 @@ func add_scripted_attacker(peer_id: int, team_id: int, path: Array[Vector3],
 # Build brains + agents and hand the puck to `carrier_peer` (-1 = loose at
 # `loose_puck_pos`). Call once, after every add_skater.
 func start(carrier_peer: int, loose_puck_pos: Vector3 = Vector3.ZERO) -> void:
+	var caps: AISkaterCaps = match_caps()
+	for s: SimSkater in skaters:
+		caps_by_peer[s.peer_id] = caps
 	for tid: int in [0, 1]:
-		brains[tid] = TeamBrain.new(tid, team_map, {}, team_size, positions)
+		brains[tid] = TeamBrain.new(tid, team_map, caps_by_peer, team_size, positions)
 	for s: SimSkater in skaters:
 		carry_ticks[s.peer_id] = 0
 		if s.puppet_hold_gap >= 0.0 or not s.script_path.is_empty():
 			continue
 		s.agent = Agent.new()
-		s.agent.setup(s.peer_id, s.team_id, brains[s.team_id], team_map, false)
+		s.agent.setup(s.peer_id, s.team_id, brains[s.team_id], team_map, caps.is_left_handed,
+				caps_by_peer)
+		s.agent.apply_capabilities(caps)
 		if s.profile != null:
 			s.agent.apply_profile(s.profile)
 	carrier_id = carrier_peer
@@ -389,14 +429,16 @@ func step() -> void:
 					Vector2(s.vel.x, s.vel.z), s.input.brake, s.input.stance_held, lefty,
 					_carry_facing_cfg if carrier_id == s.peer_id else _facing_cfg)
 			var target: Vector2 = _facing_rule.target
+			var drag: float = _caps.facing_drag_speed_braking if s.input.brake \
+					else _caps.facing_drag_speed
 			if absf(s.facing.angle_to(cursor_dir)) >= FacingRules.reach_edge(
 					_facing_cfg, s.facing, cursor_dir, lefty) \
 					or absf(s.facing.angle_to(target)) >= FacingRules.reach_edge(
 							_facing_cfg, s.facing, target, lefty):
 				s.facing = s.facing.rotated(FacingRules.turn_round_angle(s.facing, target,
-						cursor_dir) * minf(FACING_DRAG * DT, 1.0))
+						cursor_dir) * minf(drag * DT, 1.0))
 			else:
-				s.facing = s.facing.lerp(target, FACING_DRAG * DT).normalized()
+				s.facing = s.facing.lerp(target, drag * DT).normalized()
 			if carrier_id == s.peer_id:
 				s.facing = FacingRules.yield_on_forehand(s.facing, cursor_dir, lefty,
 						_carry_facing_cfg)

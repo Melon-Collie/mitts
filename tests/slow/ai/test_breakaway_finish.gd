@@ -8,10 +8,6 @@ extends GutTest
 # never lose the puck, and never turn to skate backward or pull up on the way in:
 # a carry that cannot price a drive at the net brakes in the slot or cuts back
 # toward it facing up the ice, and stands there.
-#
-# The bots get the controller's own carry facing (its backhand edge), as
-# PlayerRegistry hands them in a match; the duel harness's league caps would let
-# the shot's hold reach further round the backhand than the body turns.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const DT: float = 1.0 / 120.0
@@ -38,26 +34,6 @@ func before_each() -> void:
 	_ctrl.reset_to_crease()
 
 
-func _match_caps(duel: RefCounted) -> void:
-	var ctrl := SkaterController.new()
-	var caps_by_peer: Dictionary = {}
-	for sk: Object in duel.skaters:
-		var caps := AISkaterCaps.new()
-		caps.facing_rules = ctrl.facing_rules
-		var carry := FacingRules.Config.new()
-		carry.forehand_edge_rad = ctrl.facing_rules.forehand_edge_rad
-		carry.backhand_edge_rad = deg_to_rad(ctrl.bh_release_angle_deg)
-		carry.forehand_yield_rad = deg_to_rad(ctrl.carry_forehand_yield_deg)
-		caps.carry_facing_rules = carry
-		caps.is_left_handed = false
-		caps_by_peer[sk.peer_id] = caps
-	ctrl.free()
-	for sk: Object in duel.skaters:
-		sk.agent.setup(sk.peer_id, sk.team_id, duel.brains[sk.team_id], duel.team_map, false,
-				caps_by_peer)
-		sk.agent.apply_capabilities(caps_by_peer[sk.peer_id])
-
-
 # Skates one breakaway; returns {shot, lost, backward_ticks, min_speed, release,
 # start_speed}.
 func _breakaway(start: Vector3, vel: Vector3, chaser_offset: Vector3) -> Dictionary:
@@ -66,7 +42,6 @@ func _breakaway(start: Vector3, vel: Vector3, chaser_offset: Vector3) -> Diction
 	if chaser_offset.is_finite():
 		duel.add_skater(CHASER, 1, start + chaser_offset, null, vel)
 	duel.start(CARRIER)
-	_match_caps(duel)
 	_shooter.global_position = start
 	_puck.set_carrier(_shooter)
 	duel.goalie_provider = func(team_id: int, puck_pos: Vector3) -> Variant:

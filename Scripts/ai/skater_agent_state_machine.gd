@@ -2158,6 +2158,10 @@ func _retarget_release_dir(input: InputState, snapshot: WorldSnapshot,
 	var blade: Vector3 = self_state.blade_contact_world
 	if blade == Vector3.ZERO:
 		blade = self_pos
+	# The snapshot's blade is a tick old, and the puck leaves from it a tick on:
+	# through the charge it rides the body, so it has slid by the body's velocity.
+	# On a sharp angle that slide swings the crossing several times over.
+	blade += Vector3(self_state.velocity.x, 0.0, self_state.velocity.z) * _current_delta
 	var aim_vec := Vector3(
 			_shot_aim_locked.x - blade.x, 0.0, _shot_aim_locked.z - blade.z)
 	if aim_vec.length_squared() < 0.0001:
