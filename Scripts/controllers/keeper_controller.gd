@@ -430,8 +430,10 @@ func _on_puck_contact(contacted: Goalie) -> void:
 				_over_at = read.age
 
 
-# A puck on his chest's save part (Goalie.chest_contact): caught at the logo
-# when his arms close on it before it comes off him (KeeperChestTrap); anywhere
+# Goalie.chest_contact: a contact on his chest's save part, given the puck's
+# incoming velocity, the contact point and normal, the struck part's velocity
+# and the shared rule's result, which it rewrites. Caught at the logo when his
+# arms close on it before it comes off him (KeeperChestTrap); anywhere
 # else, or too hard for that, it comes off the foam as any rebound does rather
 # than dying on him whatever its pace.
 func _chest_contact(incoming: Vector3, point: Vector3, normal: Vector3, surface: Vector3,
