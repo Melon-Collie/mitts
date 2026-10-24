@@ -583,20 +583,23 @@ const _FACE_SCALE := Vector3(0.85, 0.85, 0.75)
 const _FACE_CENTER := Vector3(0.0, 0.147, -0.024)
 # The cage: a cat-eye, flat across the front and wrapped back to the shell at
 # its sides. A brow bar and a chin bar across, twin bars down the middle, and
-# four arcs from side to side, each given as its height at the sides (x) and in
-# the middle (y): two arches, the shallow one over the eyes and the deep one
-# from the brow nearly down to the chin bar, and two dips, cheek to cheek under
-# the eyes and chin to chin. Each eye looks out through the lens between the
-# shallow arch and the cheek dip.
+# three arcs from side to side, each given as its height at the sides (x) and
+# in the middle (y): two arches, the shallow one over the eyes and the deep one
+# from the brow nearly down to the chin bar, and a dip from cheek to cheek under
+# the eyes. Each eye looks out through the lens between the eye arch and the
+# dip. Below them a chin wire on each side rises from the chin bar beside the
+# middle bars and sweeps out to the eye arch's end.
 const _CAGE_HALF_WIDTH: float = 0.088
 const _CAGE_FRONT_Z: float = -0.166
 const _CAGE_FLAT_HALF: float = 0.05
 const _CAGE_BOTTOM: float = 0.09
 const _CAGE_TOP: float = 0.20
 const _CAGE_MID_HALF: float = 0.011
-const _CAGE_ARCS: Array[Vector2] = [
-	Vector2(0.14, 0.188), Vector2(0.10, 0.198), Vector2(0.165, 0.125), Vector2(0.12, 0.097),
-]
+const _CAGE_EYE_ARCH := Vector2(0.14, 0.188)
+const _CAGE_ARCS: Array[Vector2] = [_CAGE_EYE_ARCH, Vector2(0.10, 0.198), Vector2(0.165, 0.125)]
+# Start, control and end of the left chin wire, mirrored to the right.
+const _CAGE_CHIN_WIRE: Array[Vector2] = [Vector2(0.045, _CAGE_BOTTOM), Vector2(0.075, _CAGE_BOTTOM),
+		Vector2(_CAGE_HALF_WIDTH, _CAGE_EYE_ARCH.x)]
 # How sharply the cage wraps back past its flat front: its edge lands on the
 # shell's cheek, about where the face opening's side is.
 const _CAGE_WRAP: float = 46.0
@@ -624,6 +627,8 @@ static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 				Vector2(0.0, 2.0 * arc.y - arc.x))
 	for side: float in [-1.0, 1.0]:
 		_cage_bar(k, o, Vector2(side * _CAGE_MID_HALF, _CAGE_BOTTOM), Vector2(side * _CAGE_MID_HALF, _CAGE_TOP))
+		var flip := Vector2(side, 1.0)
+		_cage_bar(k, o, _CAGE_CHIN_WIRE[0] * flip, _CAGE_CHIN_WIRE[2] * flip, _CAGE_CHIN_WIRE[1] * flip)
 		# The clip holding the cage's side to the shell.
 		k.box(S.CAGE, o + Vector3(side * (_CAGE_HALF_WIDTH + 0.003), (_CAGE_BOTTOM + _CAGE_TOP) * 0.5, -0.105),
 				Vector3(0.003, (_CAGE_TOP - _CAGE_BOTTOM) * 0.5 + 0.004, 0.014))
