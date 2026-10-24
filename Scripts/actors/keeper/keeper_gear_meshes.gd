@@ -577,23 +577,37 @@ const _MASK_FACE := Vector2(0.095, 0.195)
 const _MASK_FACE_Z: float = -0.095
 const _MASK_SEGMENTS: int = 16
 # The skaters' head and face (SkaterMeshBuilder.shared_head) inside the mask:
-# narrowed and flattened to fit the shell, its eyes on the cage's middle row
+# narrowed and flattened to fit the shell, its eyes in the cage's eye openings
 # and its face 4 cm behind the cage, ahead of the dark inside of the shell.
 const _FACE_SCALE := Vector3(0.85, 0.85, 0.75)
 const _FACE_CENTER := Vector3(0.0, 0.147, -0.024)
-# The cage: straight bars, short and wide, flat across the front and wrapped
-# back to the shell at its sides.
+# The cage: a cat-eye, flat across the front and wrapped back to the shell at
+# its sides. A brow bar and a chin bar across, twin bars down the middle, and
+# arcs each given as its height at its ends (x) and in the middle (y): an arch
+# from the brow nearly down to the chin bar at the sides and a dip from cheek to
+# cheek under the eyes, so each eye looks out through the lens between them,
+# and a small arch over the mouth standing on the chin bar, its top on the
+# dip. A chin wire on each side rises from the mouth arch's foot and sweeps out
+# to the side clip.
 const _CAGE_HALF_WIDTH: float = 0.088
 const _CAGE_FRONT_Z: float = -0.166
 const _CAGE_FLAT_HALF: float = 0.05
-const _CAGE_ROWS: Array[float] = [0.09, 0.127, 0.163, 0.20]
-const _CAGE_BARS: int = 8
+const _CAGE_BOTTOM: float = 0.09
+const _CAGE_TOP: float = 0.20
+const _CAGE_MID_HALF: float = 0.011
+const _CAGE_ARCH := Vector2(0.10, 0.198)
+const _CAGE_CHEEK_DIP := Vector2(0.165, 0.125)
+const _CAGE_MOUTH_ARCH := Vector2(_CAGE_BOTTOM, _CAGE_CHEEK_DIP.y)
+const _CAGE_MOUTH_HALF: float = 0.044
+# Start, control and end of the left chin wire, mirrored to the right.
+const _CAGE_CHIN_WIRE: Array[Vector2] = [Vector2(_CAGE_MOUTH_HALF, _CAGE_BOTTOM), Vector2(0.075, _CAGE_BOTTOM),
+		Vector2(_CAGE_HALF_WIDTH, 0.14)]
 # How sharply the cage wraps back past its flat front: its edge lands on the
 # shell's cheek, about where the face opening's side is.
 const _CAGE_WRAP: float = 46.0
 
 
-# The mask: a fibreglass shell over the skull and down the jaw, a bar cage
+# The mask: a fibreglass shell over the skull and down the jaw, a cat-eye cage
 # across the face opening, his face behind it.
 static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	var o := Vector3(0.0, -h.y + KeeperGear.MASK_BELOW_CHIN_M, h.z - KeeperGear.MASK_BACK_M)
@@ -601,24 +615,25 @@ static func _mask(k: KeeperMeshKit, h: Vector3) -> void:
 	for s: Vector4 in _MASK_SECTIONS:
 		rings.append(_mask_ring(o, s))
 	k.sweep(S.HELMET, rings, o + Vector3(0.0, 0.12, 0.0))
-	var bottom: float = _CAGE_ROWS[0]
-	var top: float = _CAGE_ROWS[_CAGE_ROWS.size() - 1]
 	k.append(S.SKIN, SkaterMeshBuilder.shared_head(),
 			Transform3D(Basis.from_scale(_FACE_SCALE), o + _FACE_CENTER))
 	var inside := PackedVector2Array([
-		Vector2(-_CAGE_HALF_WIDTH, o.y + bottom), Vector2(_CAGE_HALF_WIDTH, o.y + bottom),
-		Vector2(_CAGE_HALF_WIDTH, o.y + top), Vector2(-_CAGE_HALF_WIDTH, o.y + top),
+		Vector2(-_CAGE_HALF_WIDTH, o.y + _CAGE_BOTTOM), Vector2(_CAGE_HALF_WIDTH, o.y + _CAGE_BOTTOM),
+		Vector2(_CAGE_HALF_WIDTH, o.y + _CAGE_TOP), Vector2(-_CAGE_HALF_WIDTH, o.y + _CAGE_TOP),
 	])
 	k.slab(S.STRAP, inside, o.z + _MASK_FACE_Z - 0.006, o.z + _MASK_FACE_Z - 0.003)
-	for y: float in _CAGE_ROWS:
+	for y: float in [_CAGE_BOTTOM, _CAGE_TOP]:
 		_cage_bar(k, o, Vector2(-_CAGE_HALF_WIDTH, y), Vector2(_CAGE_HALF_WIDTH, y))
-	for i: int in _CAGE_BARS:
-		var x: float = _CAGE_HALF_WIDTH * (2.0 * (float(i) + 0.5) / float(_CAGE_BARS) - 1.0)
-		_cage_bar(k, o, Vector2(x, bottom), Vector2(x, top))
-	# The clips holding the cage's sides to the shell.
+	_cage_arc(k, o, _CAGE_HALF_WIDTH, _CAGE_ARCH)
+	_cage_arc(k, o, _CAGE_HALF_WIDTH, _CAGE_CHEEK_DIP)
+	_cage_arc(k, o, _CAGE_MOUTH_HALF, _CAGE_MOUTH_ARCH)
 	for side: float in [-1.0, 1.0]:
-		k.box(S.CAGE, o + Vector3(side * (_CAGE_HALF_WIDTH + 0.003), (bottom + top) * 0.5, -0.105),
-				Vector3(0.003, (top - bottom) * 0.5 + 0.004, 0.014))
+		_cage_bar(k, o, Vector2(side * _CAGE_MID_HALF, _CAGE_BOTTOM), Vector2(side * _CAGE_MID_HALF, _CAGE_TOP))
+		var flip := Vector2(side, 1.0)
+		_cage_bar(k, o, _CAGE_CHIN_WIRE[0] * flip, _CAGE_CHIN_WIRE[2] * flip, _CAGE_CHIN_WIRE[1] * flip)
+		# The clip holding the cage's side to the shell.
+		k.box(S.CAGE, o + Vector3(side * (_CAGE_HALF_WIDTH + 0.003), (_CAGE_BOTTOM + _CAGE_TOP) * 0.5, -0.105),
+				Vector3(0.003, (_CAGE_TOP - _CAGE_BOTTOM) * 0.5 + 0.004, 0.014))
 
 
 # One section of the shell: a squarish loop (a superellipse), front and back
@@ -639,14 +654,24 @@ static func _mask_ring(o: Vector3, s: Vector4) -> PackedVector3Array:
 	return out
 
 
-# A cage bar from `a` to `b` (x and height in the head's frame), on the cage's
-# surface: flat across the front, wrapping back toward the shell past
-# _CAGE_FLAT_HALF.
-static func _cage_bar(k: KeeperMeshKit, o: Vector3, a: Vector2, b: Vector2) -> void:
-	const STEPS: int = 8
+# A cage arc across the middle, its ends `half_width` either side and `arc` its
+# height there (x) and in the middle (y).
+static func _cage_arc(k: KeeperMeshKit, o: Vector3, half_width: float, arc: Vector2) -> void:
+	_cage_bar(k, o, Vector2(-half_width, arc.x), Vector2(half_width, arc.x),
+			Vector2(0.0, 2.0 * arc.y - arc.x))
+
+
+# A cage bar from `a` to `b` (x and height in the head's frame), bowed toward
+# `control` when given, on the cage's surface: flat across the front, wrapping
+# back toward the shell past _CAGE_FLAT_HALF.
+static func _cage_bar(k: KeeperMeshKit, o: Vector3, a: Vector2, b: Vector2,
+		control: Vector2 = Vector2.INF) -> void:
+	const STEPS: int = 16
+	var c: Vector2 = (a + b) * 0.5 if control == Vector2.INF else control
 	var prev := Vector3.ZERO
 	for i: int in STEPS + 1:
-		var q: Vector2 = a.lerp(b, float(i) / float(STEPS))
+		var t: float = float(i) / float(STEPS)
+		var q: Vector2 = a.lerp(c, t).lerp(c.lerp(b, t), t)
 		var round_by: float = maxf(absf(q.x) - _CAGE_FLAT_HALF, 0.0)
 		var p: Vector3 = o + Vector3(q.x, q.y, _CAGE_FRONT_Z + _CAGE_WRAP * round_by * round_by)
 		if i > 0:
