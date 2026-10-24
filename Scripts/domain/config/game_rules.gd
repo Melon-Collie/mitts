@@ -507,6 +507,10 @@ const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 static func whistles_a_cover(rule_set: int) -> bool:
 	return rule_set != RuleSet.OFF
 
+# How long after a goalie secures the puck the referee whistles it: once he has
+# seen it frozen, so the catch or the cover is seen made before the play stops.
+const COVER_WHISTLE_DELAY_S: float = 1.0
+
 # Slot depth — distance from goal line to the faceoff-hash "hard slot" in
 # front of the net: real-rink geometry, the prime scoring area as a player reads it.
 const SLOT_DIST_M: float = 5.0

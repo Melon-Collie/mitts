@@ -353,6 +353,9 @@ var _intermission_timer: SceneTreeTimer = null
 # Host-only: ends the fixed intermission window (stops the looping reel,
 # which advances the period). Cleared alongside _intermission_timer.
 var _intermission_end_timer: SceneTreeTimer = null
+# Host-only: the referee's beat between a goalie securing the puck and the
+# whistle (_on_goalie_covered_puck); one at a time.
+var _cover_whistle: SceneTreeTimer = null
 var _career_reporter: CareerStatsReporter = null
 var _net_session_reporter: NetworkSessionReporter = null
 # Double-post guard for the network-quality row: the game-over path reports
@@ -844,19 +847,24 @@ func _whistle_and_faceoff(dot: Vector2) -> void:
 	_phase_coord.handle_phase_entered()
 
 
-# Host-only: a goalie secured (smothered) a loose puck. NHL rules: whistle
-# the play dead and face off in the covering goalie's defensive zone (same
-# dot geometry as icing — offender's-zone dot picked by puck X). ARCADE / OFF:
-# no stoppage — the goalie's own hold-and-release timer plays the puck out.
-# Deferred: the signal fires mid-goalie-physics-tick, and the faceoff phase
-# entry teleports actors; the same-frame remainder of that tick shouldn't run
-# against a half-reset world.
+# Host-only: a goalie secured (smothered or caught) the puck. Where a cover
+# whistles (GameRules.whistles_a_cover: NHL and ARCADE), the referee blows the
+# play dead GameRules.COVER_WHISTLE_DELAY_S later and it faces off in the
+# covering goalie's defensive zone (same dot geometry as icing — offender's-zone
+# dot picked by puck X); in OFF the goalie's own hold-and-release plays it out.
+# The timer runs on physics time, so a pause holds it, and ends after the tick
+# that secured it, whose remainder must not run against a half-reset world.
 func _on_goalie_covered_puck(covering_team_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
 	if _state_machine == null or not GameRules.whistles_a_cover(_state_machine.rule_set):
 		return
-	call_deferred("_whistle_goalie_freeze", covering_team_id)
+	if _cover_whistle != null:
+		return
+	_cover_whistle = get_tree().create_timer(GameRules.COVER_WHISTLE_DELAY_S, false, true)
+	_cover_whistle.timeout.connect(func() -> void:
+		_cover_whistle = null
+		_whistle_goalie_freeze(covering_team_id))
 
 
 func _whistle_goalie_freeze(covering_team_id: int) -> void:
@@ -1588,10 +1596,9 @@ func _wire_subsystems() -> void:
 		return _registry.skaters() if _registry != null else []
 	for gc: GoalieController in goalie_controllers:
 		gc.set_skater_getter(goalie_skater_getter)
-		# Cover/freeze resolution is ruleset-split here: NHL whistles a
-		# defensive-zone faceoff; ARCADE/OFF let the controller's own
-		# hold-and-release play it out (no stoppage — same philosophy as the
-		# offside ghost standing in for the offside whistle).
+		# Cover/freeze resolution is ruleset-split in _on_goalie_covered_puck:
+		# NHL and ARCADE whistle a defensive-zone faceoff; OFF lets the
+		# controller's own hold-and-release play it out.
 		gc.puck_covered.connect(_on_goalie_covered_puck)
 	_roster_announcer = RosterAnnouncer.new(_registry.player_added, _registry.player_removed, is_spectator_peer)
 	_roster_announcer.announced.connect(roster_announced.emit)
