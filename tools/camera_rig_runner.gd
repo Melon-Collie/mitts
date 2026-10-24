@@ -159,9 +159,12 @@ func _write_table(rigs: Array[Dictionary]) -> void:
 		"Blade columns sample the reach annulus (%.1f–%.1f m, every %d°) around a skater"
 				% [_BLADE_RADII[0], _BLADE_RADII[-1], roundi(360.0 / _BLADE_BEARINGS)]
 				+ " at the origin facing up-ice. mm/px is ice per pixel of cursor travel"
-				+ " (smaller = finer); spread is the largest over the smallest across the"
-				+ " reach; aniso is the worst up-screen ÷ across-screen at one spot (1 = the"
-				+ " cursor maps the same in every direction). Far aim is the farthest ice"
+				+ " (smaller = finer). Stretch is the typical up-screen ÷ across-screen ratio,"
+				+ " the part one constant on the cursor could cancel (1 = the same in every"
+				+ " direction); uneven is what is left after it, the largest over the"
+				+ " smallest gain across the reach (1 = the blade answers alike everywhere)."
+				+ " Cam back/up is the camera's setback behind and height above the skater."
+				+ " Far aim is the farthest ice"
 				+ " the cursor reaches up the centre of the screen, with its bearing and"
 				+ " range per pixel there. Ice ahead/behind is the frame's top/bottom edge"
 				+ " on the centre line. Puck seen is how far ahead a puck on the skater's"
@@ -169,7 +172,7 @@ func _write_table(rigs: Array[Dictionary]) -> void:
 				+ " GameCamera's dynamic zoom and zone lean, which push the now_* view up-ice,"
 				+ " are not modelled.",
 		"",
-		"| rig | pitch | fov | across mm/px | up mm/px | spread | aniso | far aim m | far °/px | far cm/px | ice ahead m | ice behind m | sky % | puck seen m |",
+		"| rig | pitch | fov | across mm/px | up mm/px | stretch | uneven | far aim m | far °/px | far cm/px | ice ahead m | ice behind m | cam back/up m | puck seen m |",
 		"|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
 	]
 	for rig: Dictionary in rigs:
@@ -196,7 +199,6 @@ func _write_table(rigs: Array[Dictionary]) -> void:
 func _row(cam: Camera3D, rig: Dictionary) -> String:
 	var across: Array[float] = []
 	var up: Array[float] = []
-	var aniso: float = 0.0
 	var offscreen: int = 0
 	for r: float in _BLADE_RADII:
 		for k: int in _BLADE_BEARINGS:
@@ -208,12 +210,16 @@ func _row(cam: Camera3D, rig: Dictionary) -> String:
 				continue
 			across.append(g.x)
 			up.append(g.y)
-			aniso = maxf(aniso, g.y / g.x)
 	if across.is_empty():
 		return "| %s | the reach is off screen |" % rig["name"]
-	var all_gains: Array[float] = across.duplicate()
-	all_gains.append_array(up)
-	var spread: float = all_gains.max() / all_gains.min()
+	var ratios: Array[float] = []
+	for i: int in across.size():
+		ratios.append(up[i] / across[i])
+	var stretch: float = _median(ratios)
+	var corrected: Array[float] = across.duplicate()
+	for g_up: float in up:
+		corrected.append(g_up / stretch)
+	var uneven: float = corrected.max() / corrected.min()
 	var far_aim: Vector3 = _ice_at(cam, Vector2(_VIEW.x * 0.5, _VIEW.y * _FAR_AIM_ROW_FRACTION))
 	var far_m: float = INF
 	var far_deg: float = INF
@@ -226,12 +232,13 @@ func _row(cam: Camera3D, rig: Dictionary) -> String:
 	var seen_text: String = _fmt(_puck_seen_from(cam.global_position), "%.2f")
 	if offscreen > 0:
 		seen_text += " (%d reach samples off screen)" % offscreen
-	return "| %s | %d° | %d° | %.1f | %.1f | %.2f | %.2f | %s | %s | %s | %s | %s | %d | %s |" % [
+	var eye: Vector3 = cam.global_position
+	return "| %s | %d° | %d° | %.1f | %.1f | %.2f | %.2f | %s | %s | %s | %s | %s | %.1f / %.1f | %s |" % [
 		rig["name"], int(rig["pitch"]), int(rig["fov"]),
-		_median(across) * 1000.0, _median(up) * 1000.0, spread, aniso,
+		_median(across) * 1000.0, _median(up) * 1000.0, stretch, uneven,
 		_fmt(far_m, "%.1f"), _fmt(far_deg, "%.3f"), _fmt(far_cm, "%.1f"),
 		_fmt(_edge_reach(cam, 0.0), "%.1f"), _fmt(_edge_reach(cam, float(_VIEW.y - 1)), "%.1f"),
-		int(round(_sky_fraction(cam) * 100.0)), seen_text,
+		eye.z, eye.y, seen_text,
 	]
 
 
@@ -269,14 +276,6 @@ func _ice_at(cam: Camera3D, screen: Vector2) -> Vector3:
 func _edge_reach(cam: Camera3D, y: float) -> float:
 	var hit: Vector3 = _ice_at(cam, Vector2(_VIEW.x * 0.5, y))
 	return INF if hit == Vector3.INF else -hit.z
-
-
-# Share of the centre column above the horizon, where the cursor finds no ice.
-func _sky_fraction(cam: Camera3D) -> float:
-	for row: int in _VIEW.y:
-		if _ice_at(cam, Vector2(_VIEW.x * 0.5, row)) != Vector3.INF:
-			return float(row) / float(_VIEW.y)
-	return 1.0
 
 
 # Metres ahead on the skater's line where a puck first shows past the body, or

@@ -25,6 +25,14 @@ const RIGS: Array[Dictionary] = [
 	{"name": "sh45_side", "pitch": 45.0, "dist": 10.0, "ahead": 2.5, "side": 1.2, "fov": 50.0},
 	{"name": "sh45_tele", "pitch": 45.0, "dist": 15.0, "ahead": 2.5, "side": 0.0, "fov": 36.0},
 	{"name": "sh35", "pitch": 35.0, "dist": 10.0, "ahead": 3.5, "side": 0.0, "fov": 50.0},
+	# FOV sweeps at a pitch: dist keeps dist · tan(fov / 2) at its 50° row's value,
+	# so the frame spans the same ice at the look point and only the lens changes.
+	{"name": "sh55_f30", "pitch": 55.0, "dist": 19.14, "ahead": 2.0, "side": 0.0, "fov": 30.0},
+	{"name": "sh55_f20", "pitch": 55.0, "dist": 29.09, "ahead": 2.0, "side": 0.0, "fov": 20.0},
+	{"name": "sh45_f65", "pitch": 45.0, "dist": 7.32, "ahead": 2.5, "side": 0.0, "fov": 65.0},
+	{"name": "sh45_f30", "pitch": 45.0, "dist": 17.40, "ahead": 2.5, "side": 0.0, "fov": 30.0},
+	{"name": "sh45_f20", "pitch": 45.0, "dist": 26.45, "ahead": 2.5, "side": 0.0, "fov": 20.0},
+	{"name": "sh35_f30", "pitch": 35.0, "dist": 17.40, "ahead": 3.5, "side": 0.0, "fov": 30.0},
 ]
 
 
