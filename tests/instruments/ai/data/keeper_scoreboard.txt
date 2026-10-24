@@ -9,9 +9,9 @@ sweep.faceoff_dot.cold	2	1	0	39
 sweep.faceoff_dot.held	2	1	0	39
 sweep.point.cold	1	1	1	39
 play.rush_shot	5	5	3	7
-play.breakaway_cutback	0	3	4	7
-play.breakaway_walkaround	7	1	0	7
-play.deke_elevate	6	4	2	14
+play.breakaway_cutback	5	2	0	7
+play.breakaway_walkaround	4	2	2	7
+play.deke_elevate	6	4	3	14
 play.pass_out_one_timer	20	16	16	42
 play.put_back	12	15	6	84
 cover.ready	57	57	57	100
@@ -19,4 +19,4 @@ cover.low_ready	65	65	65	100
 cover.butterfly	65	65	65	100
 cover.half_butterfly	65	65	65	100
 cover.rvh	64	64	64	100
-total	81	70	52	434
+total	83	70	51	434

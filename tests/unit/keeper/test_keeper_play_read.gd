@@ -6,7 +6,8 @@ extends GutTest
 # the save once he has watched it long enough; and the receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
 # and inside the blue line. A stickhandle read where the puck is on average
-# about its carrier, the carrier's skating as it is; and a loose puck read to
+# about its carrier, the carrier's skating as it is, and the carrier read as
+# late as the puck, none once it is loose; and a loose puck read to
 # the first opposing stick its line reaches before it stops.
 
 const DT: float = 1.0 / 120.0
@@ -114,6 +115,10 @@ func test_a_stickhandle_is_read_where_the_puck_is_on_average() -> void:
 		body += v * DT
 		play.step(DT, body + Vector2(0.5, -0.5), v, false, body)
 	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 1e-3, "the carrier's skating as it is")
+	assert_almost_eq(play.carrier_at, body, Vector2.ONE * 1e-3, "the carrier where he is, carried on as the puck is")
+	for i: int in 240:
+		play.step(DT, body + Vector2(0.5, -0.5), Vector2.ZERO)
+	assert_eq(play.carrier_at, KeeperPlayRead.NO_CARRIER, "none once he sees it loose")
 
 
 func _loose(play: KeeperPlayRead, from: Vector2, v: Vector2, seconds: float) -> Vector2:

@@ -85,6 +85,11 @@ const SEAL_ROUNDS: int = 4
 # still meets the post. Down, he pushes again only once his spot has moved on
 # by as much.
 const SEAL_NEAR_M: float = KeeperAnatomy.PAD_WIDTH_M * 0.5
+# How far a carrier gets the puck out across from his body either side, and
+# how fast he pulls it across: the live skater's, carrying at a dangle's pace
+# or at speed (test_keeper_reads_the_carriers_reach.gd).
+const CARRIER_REACH_M: float = 1.2
+const PULL_M_S: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
@@ -139,11 +144,46 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		return
 	# His spot moves with the puck: the same spot a look ahead along its
 	# motion, which the motor skates him with.
-	var spot: Vector2 = _spot(puck, motor)
-	var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
+	var on: Vector2 = puck
+	if zone == Zone.FRONT and tight:
+		on = _covered(puck, motor)
+	var spot: Vector2 = _spot(on, motor)
+	var ahead: Vector2 = _spot(on + velocity * LOOK_AHEAD_S, motor)
 	if meeting:
 		ahead = spot
-	motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
+	motor.go_to(spot, facing(spot, on), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
+
+
+# Where his angle line goes for a carrier of theirs with the puck at `puck`:
+# not the puck, but what it can still do. Across the carrier, as the net sees
+# him, the puck can be anywhere within his reach, and a pull to the far side
+# of it beats his read; while it goes he follows it once read, from a
+# standstill, his skating turning his angle at the puck's distance. So he takes the line between
+# the shot from where the puck is and the shot after a pull to either edge of
+# the reach, less what he makes up on the pull, at which the worst of them
+# leaves him least off it.
+func _covered(puck: Vector2, motor: KeeperMotor) -> Vector2:
+	var body: Vector2 = play.carrier_at
+	var d: float = body.length()
+	if d < 1e-3:
+		return puck
+	var across := Vector2(-body.y, body.x) / d
+	var u: float = (puck - body).dot(across)
+	var lo: float = minf(-CARRIER_REACH_M, u)
+	var hi: float = maxf(CARRIER_REACH_M, u)
+	var lever: float = d / maxf(Vector2(motor.x, motor.z).length(), 0.1)
+	var lo_made_up: float = lever * _skated(maxf((u - lo) / PULL_M_S - play.delay_s, 0.0), motor.footwork)
+	var hi_made_up: float = lever * _skated(maxf((hi - u) / PULL_M_S - play.delay_s, 0.0), motor.footwork)
+	return body + across * clampf(0.5 * (lo + hi + lo_made_up - hi_made_up), lo, hi)
+
+
+# How far he skates across in `t` seconds from a standstill, pushing up to his
+# T-push's speed.
+static func _skated(t: float, skates: KeeperFootwork) -> float:
+	var to_top: float = skates.t_push_speed / skates.accel
+	if t <= to_top:
+		return 0.5 * skates.accel * t * t
+	return 0.5 * skates.t_push_speed * to_top + skates.t_push_speed * (t - to_top)
 
 
 # Planted in the butterfly on the post at `post` (on `side`), square to the

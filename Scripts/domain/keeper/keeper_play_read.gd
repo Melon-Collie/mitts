@@ -41,6 +41,9 @@ var motion := Vector2.ZERO
 var loose: bool = true
 # Whether it is carried by one of theirs, who can shoot it now.
 var theirs: bool = false
+# Its carrier's body as he reads it, carried on as the puck is; NO_CARRIER
+# while he sees it loose.
+var carrier_at := NO_CARRIER
 var winding_up: bool = false
 var watched_s: float = 0.0
 # The attackers off the puck it could be passed to, through a lane no defender's
@@ -61,6 +64,7 @@ var _sticks := PackedVector3Array()
 
 # What he has watched, a tick a sample, oldest overwritten.
 var _at := PackedVector2Array()
+var _bodies := PackedVector2Array()
 var _moving := PackedVector2Array()
 var _winding := PackedByteArray()
 var _loose := PackedByteArray()
@@ -71,6 +75,7 @@ var _count: int = 0
 func _init() -> void:
 	var ticks: int = ceili(MOST_S * TICK_HZ) + 1
 	_at.resize(ticks)
+	_bodies.resize(ticks)
 	_moving.resize(ticks)
 	_winding.resize(ticks)
 	_loose.resize(ticks)
@@ -84,6 +89,7 @@ func reset() -> void:
 	watched_s = 0.0
 	meets = false
 	theirs = false
+	carrier_at = NO_CARRIER
 	_carried = false
 
 
@@ -94,6 +100,7 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	var size: int = _at.size()
 	_head = (_head + 1) % size
 	_at[_head] = _handled(dt, at, carrier)
+	_bodies[_head] = carrier
 	_moving[_head] = moving
 	_winding[_head] = 1 if winding else 0
 	_loose[_head] = 1 if carrier == NO_CARRIER else 0
@@ -104,6 +111,7 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	puck = _at[seen] + motion * (lag * dt)
 	winding_up = _winding[seen] == 1
 	loose = _loose[seen] == 1
+	carrier_at = NO_CARRIER if loose else _bodies[seen] + motion * (lag * dt)
 	watched_s = watched_s + dt if winding_up else 0.0
 
 

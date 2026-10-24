@@ -611,3 +611,44 @@ func test_a_cut_across_from_the_post_is_slid_with_on_his_knees() -> void:
 		assert_gt(-side * _motor.x, 0.0, "%s: across" % what)
 		assert_almost_eq(_forward(_motor.yaw).dot((puck - Vector2(_motor.x, _motor.z)).normalized()), 1.0,
 				1.0 - cos(KeeperRoute.DOWN_FACED_RAD), "%s: square to the carrier" % what)
+
+
+# Where his angle line crosses a carrier of theirs at `body` holding the puck
+# `held` across from him, read `read_s` late, the keeper at the top of the
+# crease: how far across the carrier, as the net sees him.
+func _covered_across(body: Vector2, held: float, read_s: float) -> float:
+	_brain = KeeperPositioning.new()
+	_brain.play = KeeperPlayRead.new()
+	_brain.play.delay_s = read_s
+	_brain.play.carrier_at = body
+	_motor = KeeperMotor.new()
+	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+	var across := Vector2(-body.y, body.x).normalized()
+	return (_brain._covered(body + across * held, _motor) - body).dot(across)
+
+
+# In tight, a pull across beats his read, so with the puck held out to one
+# side he plays nearer the carrier's body than the puck, the same either side.
+func test_against_a_carrier_in_tight_he_plays_the_reach_not_the_puck() -> void:
+	var hard: float = GoalieSkillProfile.hard().reaction_delay_s
+	for held: float in [0.9, -0.9]:
+		var at: float = _covered_across(Vector2(0.0, -3.0), held, hard)
+		assert_lt(absf(at), absf(held) * 0.5, "%+.1f held: nearer his body than the puck" % held)
+		assert_gte(at * signf(held), 0.0, "%+.1f held: no further off than the middle of his reach" % held)
+	assert_almost_eq(_covered_across(Vector2(0.0, -3.0), 0.9, hard), -_covered_across(Vector2(0.0, -3.0), -0.9, hard),
+			1e-4, "either side alike")
+	assert_almost_eq(_covered_across(Vector2(0.0, -3.0), 0.0, hard), 0.0, 1e-4, "a puck in front of him played there")
+
+
+# Further out his skating follows a pull in time, so he plays nearer the puck;
+# a slower read never nearer it than a quicker one.
+func test_with_time_to_follow_a_pull_he_plays_nearer_the_puck() -> void:
+	var hard: float = GoalieSkillProfile.hard().reaction_delay_s
+	var easy: float = GoalieSkillProfile.easy().reaction_delay_s
+	var was: float = -INF
+	for out: float in [3.0, 6.0, 9.0, 12.0]:
+		var at: float = _covered_across(Vector2(0.0, -out), 0.9, hard)
+		assert_gte(at, was - 1e-6, "%.0f m out: no further from the puck than nearer in" % out)
+		assert_lte(_covered_across(Vector2(0.0, -out), 0.9, easy), at + 1e-6, "%.0f m out: a slower read" % out)
+		was = at
+	assert_gt(was, _covered_across(Vector2(0.0, -3.0), 0.9, hard), "further out, nearer the puck")
