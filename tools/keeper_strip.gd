@@ -46,6 +46,8 @@ const SCENARIOS: Array = [
 	["rvh_drop_in", 1.0, RVH_DROP_IN],
 	["rvh_drop_in_glove", -1.0, RVH_DROP_IN],
 	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
+	["rotate_glove", 0.8, ROTATE],
+	["rotate_blocker", -0.8, ROTATE],
 	["sequence", 0.0, SEQUENCE],
 	["low_ready", 0.0, LOW_READY],
 	["goals", 0.0, GOALS],
@@ -76,6 +78,9 @@ const SLIDE_FROM_FEET: int = -3
 # drawn on the goal line behind him.
 const SLIDE_TO_POST: int = -4
 const POST_SLIDE_START := Vector2(0.6, -0.4)
+# KeeperSlide rotating on his knees from the butterfly through the target's
+# turn (+ toward his glove side).
+const ROTATE: int = -17
 # KeeperPost on the post on the target's side: dropped into the RVH from his
 # feet on the overlap, held, and risen back out; or come up into it at the end
 # of a slide there, held, and folded back into the butterfly. A frame every
@@ -264,8 +269,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_save(spot, from_z, SAVE_TIGHT_SPEED if kind == SAVE_TIGHT else SAVE_SPEED)
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
-	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST:
-		return _record_slide(target, kind == SLIDE_FROM_FEET, kind == SLIDE_TO_POST)
+	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST or kind == ROTATE:
+		return _record_slide(target, kind == SLIDE_FROM_FEET, kind == SLIDE_TO_POST, kind == ROTATE)
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
@@ -323,7 +328,7 @@ func _record_drop(toward: float) -> Array:
 # The slide's frames, as _record's: PUSH while he drops or loads and drives,
 # GLIDE while he slides, STOP while the lead edge stops him, SET down on the
 # spot.
-func _record_slide(target: float, from_feet: bool, to_post: bool) -> Array:
+func _record_slide(target: float, from_feet: bool, to_post: bool, rotate: bool) -> Array:
 	var slide := KeeperSlide.new()
 	var every: int = DROP_FRAME_EVERY if from_feet else FRAME_EVERY
 	var spot := Vector2(target, 0.0)
@@ -332,7 +337,9 @@ func _record_slide(target: float, from_feet: bool, to_post: bool) -> Array:
 		slide.x = start.x
 		slide.z = start.y
 		spot = slide.post_spot(Vector2(target * GameRules.NET_HALF_WIDTH, GOAL_LINE_Z), start)
-	if from_feet:
+	if rotate:
+		slide.rotate_to(target)
+	elif from_feet:
 		slide.slide_from_feet(spot)
 	else:
 		slide.slide_to(spot)
@@ -345,7 +352,7 @@ func _record_slide(target: float, from_feet: bool, to_post: bool) -> Array:
 			slide.pose(p)
 			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
 					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
-					KeeperFootwork.Phase.STOP][slide.phase]
+					KeeperFootwork.Phase.STOP, KeeperFootwork.Phase.PUSH][slide.phase]
 			out.append([p, Vector3(slide.x, 0.0, slide.z), phase, slide.speed, tick * DT, slide.yaw])
 		slide.step(DT)
 		tick += 1

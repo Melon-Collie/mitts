@@ -22,6 +22,9 @@ extends RefCounted
 #   STOP   the lead skate, behind its pad, digs its inside edge, and he leans
 #          back against it; both pads stay down
 #   DOWN   the butterfly, on the spot, once the stop has settled out of him
+#   TURN   a rotation (`rotate_to`): loaded as for a slide, the push skate,
+#          planted on its inside edge, swivels him on his knees to face where
+#          he is turned, the leg folding back down as he comes round
 #
 # He pushes at the speed asked for, and starts the stop when the brake left
 # would only just land him on the spot, so a slide is a push and a stop, not a
@@ -32,7 +35,7 @@ extends RefCounted
 # turn about the vertical, as a Node3D's rotation.y; his pose is in his own
 # frame, which `yaw` turns.
 
-enum Phase { DOWN, DROP, LOAD, PUSH, GLIDE, STOP }
+enum Phase { DOWN, DROP, LOAD, PUSH, GLIDE, STOP, TURN }
 
 # The push leg rising onto its skate (the old goalie's coil), driving, and
 # folding back down; the stop leaving his body once he is at rest.
@@ -93,6 +96,9 @@ var _stop_from_speed: float = 0.0
 var _plant: float = 0.0
 var _released := KeeperPose.Leg.new()
 var _released_knee := Vector3.ZERO
+# Whether the load is for a rotation, and how long its turn takes.
+var _rotating: bool = false
+var _turn_s: float = 0.0
 
 var _low := KeeperPose.new()
 var _ready := KeeperPose.new()
@@ -151,6 +157,47 @@ func _start(spot: Vector2, top: float, from_feet: bool) -> Vector2:
 	_fold = 0.0
 	_stop = 0.0
 	return _origin + _heading * _target
+
+
+# Rotate on his knees from the butterfly to face `turn`: the push skate on
+# the side he turns away from drives him round, the pads swinging over the ice
+# about him.
+func rotate_to(turn: float) -> void:
+	var off: float = wrapf(turn - yaw, -PI, PI)
+	if phase != Phase.DOWN or absf(off) < 1e-4:
+		return
+	_rotating = true
+	_side = -signf(off)
+	_yaw_from = yaw
+	_yaw_to = yaw + off
+	_turn_s = _turn_time(off)
+	_origin = Vector2(x, z)
+	_heading = _across(yaw) * _side
+	_along = 0.0
+	_target = 0.0
+	speed = 0.0
+	_from_feet = false
+	phase = Phase.LOAD
+	_clock = 0.0
+	_fold = 0.0
+	_stop = 0.0
+
+
+# How fast he swivels on his knees: the push's speed carried by the pads' far
+# ends about him.
+func turn_rate() -> float:
+	return push_speed / Vector2(_pad_end[0].x, _pad_end[0].z).length()
+
+
+# Seconds a rotation through `off` radians takes from the butterfly, load and
+# turn.
+func rotate_time(off: float) -> float:
+	return LOAD_S + _turn_time(off) if absf(off) >= 1e-4 else 0.0
+
+
+# The swivel through `off`, no quicker than the push leg folds back down.
+func _turn_time(off: float) -> float:
+	return maxf(absf(off) / turn_rate(), FOLD_S)
 
 
 # His own +x (his blocker side) on the ice, turned `turn`.
@@ -222,11 +269,25 @@ func step(dt: float) -> void:
 			_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 		Phase.DROP, Phase.LOAD:
 			_clock += dt / (drop_s if phase == Phase.DROP else LOAD_S)
-			yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, minf(_clock, 1.0)))
-			if _clock >= 1.0:
+			if not _rotating:
+				yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, minf(_clock, 1.0)))
+			if _clock >= 1.0 and _rotating:
+				phase = Phase.TURN
+				_clock = 0.0
+				_released.copy_from(_loaded[_lead()].legs[_push_leg()])
+				_released_knee = _loaded_knee[_lead()]
+			elif _clock >= 1.0:
 				phase = Phase.PUSH
 				_clock = 0.0
 				_plant = _launch().legs[_push_leg()].ankle.x
+		Phase.TURN:
+			_clock = minf(_clock + dt / maxf(_turn_s, 1e-4), 1.0)
+			yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, _clock))
+			_fold = _clock
+			if _clock >= 1.0:
+				yaw = _yaw_to
+				_rotating = false
+				phase = Phase.DOWN
 		Phase.PUSH:
 			var was: float = speed
 			_clock = minf(_clock + dt / PUSH_S, 1.0)

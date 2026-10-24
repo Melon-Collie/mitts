@@ -489,6 +489,14 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 			else:
 				slide.slide_from_feet(spot, top)
 			_mover = Mover.SLIDE
+		Do.ROTATE:
+			if rest != Rest.DOWN:
+				return false
+			slide.x = x
+			slide.z = z
+			slide.yaw = yaw
+			slide.rotate_to(side)
+			_mover = Mover.SLIDE
 		Do.RVH_DROP_IN, Do.RVH_SLIDE_IN:
 			if rest != (Rest.FEET if what == Do.RVH_DROP_IN else Rest.DOWN):
 				return false

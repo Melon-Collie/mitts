@@ -103,11 +103,11 @@ func test_from_every_rest_to_every_goal_he_gets_there_in_the_time_planned() -> v
 		[R.DOWN, Vector2(-0.3, -0.5), 0.0], [R.POST, Vector2(1.0, 0.0), 0.0],
 	]
 	# On his feet across, forward, steeper than a diagonal and a short step;
-	# down across and near; sealed on either post.
+	# down across, near and turned; sealed on either post.
 	var goals: Array = [
 		[R.FEET, Vector2(-0.8, -0.5), -0.3], [R.FEET, Vector2(0.0, -1.2), 0.0],
 		[R.FEET, Vector2(0.4, -1.3), 0.0], [R.FEET, Vector2(0.15, -0.6), 0.0],
-		[R.DOWN, Vector2(0.9, -0.4), 0.0], [R.DOWN, Vector2(-0.2, -0.6), 0.0],
+		[R.DOWN, Vector2(0.9, -0.4), 0.0], [R.DOWN, Vector2(-0.2, -0.6), 0.0], [R.DOWN, Vector2(0.3, -0.7), -0.5],
 		[R.POST, Vector2(1.0, 0.0), 0.0], [R.POST, Vector2(-1.0, 0.0), 0.0],
 	]
 	for start: Array in starts:
@@ -134,6 +134,8 @@ func test_from_every_rest_to_every_goal_he_gets_there_in_the_time_planned() -> v
 				assert_almost_eq(at, spot, Vector2.ONE * KeeperRoute.THERE_M, "%s: on the spot" % what)
 			if goal[0] == R.FEET:
 				assert_almost_eq(_motor.yaw, float(goal[2]), KeeperRoute.FACED_RAD, "%s: facing" % what)
+			elif goal[0] == R.DOWN:
+				assert_almost_eq(_motor.yaw, float(goal[2]), KeeperRoute.DOWN_FACED_RAD, "%s: facing" % what)
 
 
 # A spot near him he skates to, turning as he goes; one past the glide's reach
@@ -177,6 +179,18 @@ func test_down_he_recovers_toward_a_spot_on_his_feet_and_rises_under_one_on_him(
 	_motor.go_to(Vector2(0.0, -0.3), 0.0)
 	_motor.time_to_goal()
 	assert_eq(_motor.route.first, DO.RISE)
+
+
+# Down on his spot and asked to face elsewhere, he rotates on his knees rather
+# than rising; a turn the trunk makes, he leaves the pads where they are.
+func test_down_on_his_spot_he_rotates_to_a_new_facing() -> void:
+	_place(R.DOWN, Vector2(0.0, -0.6), 0.0)
+	_motor.go_to(Vector2(0.0, -0.6), 0.7, R.DOWN)
+	_motor.time_to_goal()
+	assert_eq(_motor.route.first, DO.ROTATE)
+	assert_eq(_motor.route.first_side, 0.7, "to the facing")
+	_motor.go_to(Vector2(0.0, -0.6), KeeperRoute.DOWN_FACED_RAD * 0.5, R.DOWN)
+	assert_eq(_motor.time_to_goal(), 0.0, "there already")
 
 
 func test_square_on_the_overlap_he_drops_into_the_rvh() -> void:

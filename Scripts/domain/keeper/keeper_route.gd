@@ -16,13 +16,16 @@ extends RefCounted
 enum Rest { FEET, DOWN, POST }
 enum Do {
 	NONE, FACE, T_PUSH, SHUFFLE, C_CUT, DROP, RISE, RECOVER, SLIDE, SLIDE_FROM_FEET,
-	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT, GLIDE,
+	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT, GLIDE, ROTATE,
 }
 
 # Within these of his spot and his facing he is there: a goal that drifts no
 # further moves him not at all, rather than in steps of millimetres.
 const THERE_M: float = 0.03
 const FACED_RAD: float = deg_to_rad(2.0)
+# Down, within this of his facing he is turned to it: a smaller turn his hips
+# and shoulders make over the pads (KeeperLook's trunk), not a rotation.
+const DOWN_FACED_RAD: float = deg_to_rad(10.0)
 # How far off the line of footwork under way a new spot may lie and still be
 # taken on by it; further, the move ends and the way is planned again.
 const ON_LINE_M: float = 0.05
@@ -40,17 +43,17 @@ const GLIDE_REACH_M: float = 1.0
 # the knee falls, takes him in from there.
 const ON_POST_M: float = 0.15
 
-# Where he is asked to be: resting on `rest`; on his feet at `spot` facing
-# `facing`, or down at `spot` (his turn there is the slide's), or sealed on the
-# post at `iron` (x, z) on `side` (+1 his blocker side).
+# Where he is asked to be: resting on `rest`; on his feet or down at `spot`
+# facing `facing` (down, he rotates on his knees to it), or sealed on the post
+# at `iron` (x, z) on `side` (+1 his blocker side).
 var rest: int = Rest.FEET
 var spot := Vector2.ZERO
 var facing: float = 0.0
 var iron := Vector2.ZERO
 var side: float = 1.0
 
-# The way's first move: what, to where, and its side (the turn to face, the way
-# a recovery goes, the post's side).
+# The way's first move: what, to where, and its side (the turn to face or to
+# rotate to, the way a recovery goes, the post's side).
 var first: int = Do.NONE
 var first_spot := Vector2.ZERO
 var first_side: float = 0.0
@@ -69,6 +72,9 @@ var _best: float = INF
 var _step_do: int = Do.NONE
 var _step_spot := Vector2.ZERO
 var _step_legs: int = 0
+# How long after that way sets him on its spot his push leg is still coming
+# back under him (_hand_off of its last move).
+var _step_hand_off: float = 0.0
 # Whether the way _on_feet last timed ends in a glide, which no settle follows.
 var _glides_last: bool = false
 var _way_do: int = Do.NONE
@@ -205,12 +211,22 @@ func _to_down(at: Vector2, turn: float, from: int) -> void:
 			_offer(_down_to_down(at, turn), _down_do, _down_spot, _down_side)
 		Rest.FEET:
 			if d < THERE_M:
-				_offer(_drop.drop_s, Do.DROP)
+				_offer(_drop.drop_s + _rotate_s(turn), Do.DROP)
+				if _pivot_s(turn) > 0.0:
+					_offer(_pivot_s(turn) + _drop.drop_s, Do.FACE, Vector2.ZERO, facing)
 				return
 			if _slidable(at, turn, spot):
-				_offer(_slides_time(d, true), Do.SLIDE_FROM_FEET, spot)
-			var t: float = _settled(_on_feet(at, turn, spot))
-			_offer(t + _drop.drop_s, _step_do, _step_spot)
+				_offer(_slides_time(d, true) + _rotate_s(_slide_turn(at, turn, spot)), Do.SLIDE_FROM_FEET, spot)
+			# There on his feet turned before or on the way, and down; or there,
+			# then turned on his feet (the pivot taking the stop's settle, once
+			# his push leg is back) or on his knees once down.
+			var faced: float = _standing(at, turn)
+			_offer(faced + _drop.drop_s, _way_do, _way_spot, _way_side)
+			var walk: float = _on_feet(at, turn, spot)
+			var then: float = _settled(walk) + _rotate_s(turn)
+			if _pivot_s(turn) > 0.0:
+				then = minf(then, walk + _step_hand_off + _pivot_s(turn))
+			_offer(then + _drop.drop_s, _step_do, _step_spot)
 
 
 func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
@@ -246,20 +262,34 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 				_offer(slid, Do.SLIDE_FROM_FEET, to)
 
 
-# From the butterfly to the goal's spot, down: slid there, or, where the slide
-# is off his line, up, there on his feet and down again. Its time; its first
-# move in _down_do, _down_spot and _down_side.
+# From the butterfly to the goal's spot and facing, down: slid there and
+# rotated on his knees to the facing; rotated first onto the slide's line where
+# it is off his own, slid and rotated again; or up, there on his feet and down
+# again. Its time; its first move in _down_do, _down_spot and _down_side.
 func _down_to_down(at: Vector2, turn: float) -> float:
 	_down_do = Do.NONE
 	_down_spot = spot
 	_down_side = 0.0
-	if at.distance_to(spot) < THERE_M:
-		return 0.0
+	var d: float = at.distance_to(spot)
+	if d < THERE_M:
+		if absf(wrapf(facing - turn, -PI, PI)) <= DOWN_FACED_RAD:
+			return 0.0
+		_down_do = Do.ROTATE
+		_down_side = facing
+		return _rotate_s(turn)
 	var best: float = INF
 	if _slidable(at, turn, spot):
-		best = _slides_time(at.distance_to(spot), false)
+		best = _slides_time(d, false) + _rotate_s(_slide_turn(at, turn, spot))
 		_down_do = Do.SLIDE
-	var up: float = _drop.rise_s + _settled(_on_feet(at, turn, spot)) + _drop.drop_s
+	var heading: Vector2 = (spot - at) / d
+	for lead: float in [-1.0, 1.0]:
+		var onto: float = KeeperSlide.facing(heading, lead)
+		var rotated: float = _slide.rotate_time(wrapf(onto - turn, -PI, PI)) + _slides_time(d, false) + _rotate_s(onto)
+		if rotated < best:
+			best = rotated
+			_down_do = Do.ROTATE
+			_down_side = onto
+	var up: float = _drop.rise_s + _settled(_on_feet(at, turn, spot)) + _drop.drop_s + _rotate_s(turn)
 	if up < best:
 		best = up
 		var across: float = _local(spot - at, turn).x
@@ -267,6 +297,27 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 		_down_spot = Vector2.ZERO
 		_down_side = signf(across)
 	return best
+
+
+# Down at the goal's spot turned `turn`, the rotation on his knees to its
+# facing; none within DOWN_FACED_RAD of it.
+func _rotate_s(turn: float) -> float:
+	var off: float = wrapf(facing - turn, -PI, PI)
+	return _slide.rotate_time(off) if absf(off) > DOWN_FACED_RAD else 0.0
+
+
+# On his feet at the goal's spot turned `turn`, the pivot to its facing before
+# he drops; none within DOWN_FACED_RAD of it.
+func _pivot_s(turn: float) -> float:
+	var off: float = wrapf(facing - turn, -PI, PI)
+	return pivot_time(off) if absf(off) > DOWN_FACED_RAD else 0.0
+
+
+# His turn at the end of a slide from `at` turned `turn` to `to`: turned as he
+# loads until his lead side faces it.
+static func _slide_turn(at: Vector2, turn: float, to: Vector2) -> float:
+	var heading: Vector2 = (to - at).normalized()
+	return KeeperSlide.facing(heading, 1.0 if heading.dot(Vector2(cos(turn), -sin(turn))) >= 0.0 else -1.0)
 
 
 # On his feet into the RVH on the goal's post: turned square, onto the
@@ -324,6 +375,7 @@ func _post_spot(at: Vector2, turn: float) -> Vector2:
 func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 	_step_spot = to
 	_step_legs = 1
+	_step_hand_off = 0.0
 	_glides_last = false
 	var local: Vector2 = _local(to - at, turn)
 	var across: float = absf(local.x)
@@ -337,11 +389,14 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 		var pushed: float = _push_time(local.length())
 		if deep < THERE_M and _shuffle_time(across) <= pushed + TIE_S:
 			_step_do = Do.SHUFFLE
+			_step_hand_off = _hand_off(across, _footwork.shuffle_speed, false)
 			return _shuffle_time(across)
 		_step_do = Do.T_PUSH
+		_step_hand_off = _hand_off(local.length(), _footwork.t_push_speed, true)
 		return pushed
 	if across < THERE_M:
 		_step_do = Do.C_CUT
+		_step_hand_off = _hand_off(deep, _footwork.c_cut_speed, false)
 		return _c_cut_time(deep)
 	# Steeper than a T-push goes: in depth then across, or the steepest
 	# diagonal then the rest in depth.
@@ -349,6 +404,7 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 	if deep - across * steepest < THERE_M:
 		_step_do = Do.T_PUSH
 		_step_spot = at + _world(diagonal, turn)
+		_step_hand_off = _hand_off(diagonal.length(), _footwork.t_push_speed, true)
 		return _push_time(diagonal.length())
 	_step_legs = 2
 	var depth_first: float = _c_cut_time(deep) + _hand_off(deep, _footwork.c_cut_speed, false) \
@@ -359,10 +415,12 @@ func _on_feet(at: Vector2, turn: float, to: Vector2) -> float:
 	if depth_first <= diagonal_first:
 		_step_do = Do.C_CUT
 		_glides_last = _glides_on(across)
+		_step_hand_off = _hand_off(across, _footwork.t_push_speed, true)
 		return depth_first
 	_step_do = Do.T_PUSH
 	_step_spot = at + _world(diagonal, turn)
 	_glides_last = _glides_on(deep - across * steepest)
+	_step_hand_off = _hand_off(deep - across * steepest, _footwork.c_cut_speed, false)
 	return diagonal_first
 
 

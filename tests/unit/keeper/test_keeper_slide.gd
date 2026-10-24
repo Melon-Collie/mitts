@@ -311,3 +311,41 @@ func _butterfly() -> KeeperPose:
 	var p := KeeperPose.new()
 	KeeperPoses.butterfly(p)
 	return p
+
+
+# Rotation on his knees: from the butterfly he turns to face where he is asked,
+# either way, in the rotation's time, staying on his spot, back in the
+# butterfly; the skate that drives it on the side he turns away from, planted
+# on the ice; and every tick out of the ice, on the stick and without a jump.
+func test_he_rotates_on_his_knees_to_a_new_facing() -> void:
+	for off: float in [deg_to_rad(40.0), deg_to_rad(-70.0), deg_to_rad(15.0)]:
+		_slide = KeeperSlide.new()
+		_slide.rotate_to(off)
+		var what: String = "%+.0f°" % rad_to_deg(off)
+		_solve()
+		var was: Array[Vector3] = _bones()
+		var t: float = 0.0
+		var pushing_skate_low: float = INF
+		while _slide.phase != KeeperSlide.Phase.DOWN and t < 2.0:
+			_slide.step(DT)
+			t += DT
+			_solve()
+			for part: int in KeeperGear.PART_COUNT:
+				var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
+				if _lowest(part) < -(PAD_GIVE_M if soft else HARD_GIVE_M):
+					assert_gte(_lowest(part), -(PAD_GIVE_M if soft else HARD_GIVE_M),
+							"%s t %.3f %s" % [what, t, KeeperGear.Part.keys()[part]])
+			var at: Array[Vector3] = _bones()
+			for b: int in KeeperSkeleton.BONE_COUNT:
+				if at[b].distance_to(was[b]) >= MAX_BONE_STEP_M:
+					assert_lt(at[b].distance_to(was[b]), MAX_BONE_STEP_M, "%s t %.3f bone %d" % [what, t, b])
+			was = at
+			if _slide.phase == KeeperSlide.Phase.TURN:
+				# The push skate is the one on the side he turns away from.
+				var away: int = 0 if off < 0.0 else 1
+				pushing_skate_low = minf(pushing_skate_low, _lowest(P.SKATE_G + away))
+		assert_almost_eq(_slide.yaw, off, 1e-4, "%s: turned to it" % what)
+		assert_almost_eq(t, _slide.rotate_time(off), 2.0 * DT, "%s: in the rotation's time" % what)
+		assert_almost_eq(Vector2(_slide.x, _slide.z), Vector2.ZERO, Vector2.ONE * 1e-5, "%s: on his spot" % what)
+		assert_lt(pushing_skate_low, 0.02, "%s: driven off a skate on the ice" % what)
+		assert_true(_slide.is_settled(), "%s: down in the butterfly" % what)
