@@ -3546,7 +3546,7 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 		# (_on_remote_derived_one_timer), so there is no shot RPC — the same
 		# shape every other release already had.
 		if puck_controller != null:
-			puck_controller.notify_local_release(direction, power)
+			puck_controller.notify_local_release(direction, power, skater)
 		return
 	# Host's own one-timer: shooter is local, so its sim and its puck view share
 	# a clock and there is nothing to rewind. interp_delay_ms = 0 short-circuits
@@ -3563,7 +3563,7 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 # the host's own sim of that swing. Nothing here is client-supplied.
 #
 # The eligibility gates are the ones an ordinary corral would apply, because a
-# one-timer teleports the puck onto the shooter's blade to fire it.
+# one-timer teleports the puck onto the shooter's strike spot to fire it.
 # `is_on_cooldown` is the double-fire guard: host and client can disagree about
 # whether the swing had the puck (the host's own pickup detection may grant the
 # feed DURING the hold), and if the host resolved the same swing as a carried

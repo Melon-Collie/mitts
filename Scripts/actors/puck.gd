@@ -723,27 +723,26 @@ func _pinch_lift(checker_vel: Vector3, carrier_vel: Vector3,
 			pinch_lift_threshold, pinch_lift_gain, pinch_lift_max_speed)
 
 
+# Where a shot off `shooter`'s stick leaves from (its height is the caller's).
+# A slapshot's blade is lifted overhead at the release, so its puck leaves from
+# the ice pin it was set on; everything else from mid-blade — also where the
+# wrister's aim line is anchored (SkaterStateMachine._enter_wrister_aim). The
+# heel→toe seat tells live on the blade MESH only, so nothing they show moves
+# this origin. The client's own prediction seeds from here too
+# (PuckController.notify_local_release), so never derive the origin elsewhere.
+func release_origin(shooter: Skater) -> Vector3:
+	if shooter.is_slapshot_pinning():
+		return shooter.get_carry_target_global()
+	return shooter.get_blade_contact_global()
+
+
 func release(direction: Vector3, power: float) -> void:
 	var ex_carrier: Skater = carrier
-	# Slapshot wind-up: the blade is overhead and pulled back, but the puck has
-	# been pinned to a stable ice offset via get_carry_target_global. Read from
-	# that pin instead of the elevated blade contact so the shot fires from
-	# where the puck visibly is.
 	if ex_carrier != null:
-		if ex_carrier.is_slapshot_pinning():
-			global_position = ex_carrier.get_carry_target_global()
-		else:
-			# Mid-blade contact — also where the wrister's aim line is anchored
-			# (SkaterStateMachine._enter_wrister_aim). The heel→toe seat tells
-			# live on the blade MESH only, so nothing they show ever moves this
-			# origin: launch trajectory stays a position-free function of
-			# (level, gear).
-			global_position = ex_carrier.get_blade_contact_global()
+		global_position = release_origin(ex_carrier)
 	# Whoever fires a shot must let this seat the puck and must NOT reposition it
-	# afterwards. The branch above is the only code that knows a slapper's puck is
-	# on its ice pin rather than at the blade lifted over the shoulder, so an
-	# origin computed by the caller silently un-does it — which is what put remote
-	# slapshots on the wind-up blade's x/z.
+	# afterwards: an origin computed by the caller silently un-does the slapshot's
+	# pin and fires from under the raised blade.
 	if direction.y > 0:
 		global_position.y = ice_height + 0.1
 	else:
