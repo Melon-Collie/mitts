@@ -61,6 +61,8 @@ var _covering: bool = false
 # yet.
 var _chosen_at: float = -1.0
 var _over_at: float = -1.0
+# Whether the shot being read has hit him.
+var _felt: bool = false
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -119,6 +121,7 @@ func _place_in_crease() -> void:
 	_covering = false
 	_chosen_at = -1.0
 	_over_at = -1.0
+	_felt = false
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
@@ -213,9 +216,11 @@ func _read_receivers() -> void:
 
 
 # Once his legs have read a shot on net, the save, the brain resting until it
-# is over. A save under way goes on until it is there, and he lets it go his
-# leg read after both it is there and the shot is over (past him, off him,
-# met), so one made too late is still seen made. A shot over before he has
+# is over. A save under way goes on until it is there, and he lets it go once
+# it is and the shot is over: at once for a puck that hit him, which he feels,
+# as goalies are taught to start their recovery the moment it does; his leg
+# read after it for one that went by him (past, off the iron or boards,
+# stopped), which he has to see. So one made too late is still seen made. A shot over before he has
 # read it at all he answers once he has: the save for the flight he saw leave
 # the stick, however late.
 func _save_the_shot() -> void:
@@ -227,7 +232,9 @@ func _save_the_shot() -> void:
 	if _over_at < 0.0 and (read.time_to_line() == INF or (_chosen and read.age > _chosen_at + save.impact_s)):
 		_over_at = read.age
 	if _chosen:
-		if _over_at >= 0.0 and read.age >= maxf(_over_at, _chosen_at + save.ready_s) + read.leg_delay_s:
+		# A puck off him he feels at once; one by him he has to see.
+		var noticed: float = 0.0 if _felt else read.leg_delay_s
+		if _over_at >= 0.0 and read.age >= maxf(_over_at, _chosen_at + save.ready_s) + noticed:
 			_end_save()
 		return
 	if not read.legs_read():
@@ -252,6 +259,7 @@ func _end_save() -> void:
 	_chosen = false
 	_chosen_at = -1.0
 	_over_at = -1.0
+	_felt = false
 	save.release()
 	motor.end_save()
 
@@ -411,6 +419,10 @@ func _on_reaction_resolved() -> void:
 func _on_puck_contact(contacted: Goalie) -> void:
 	if contacted == goalie:
 		_last_save_time = float(Time.get_ticks_msec()) * 0.001
+		if read.reading():
+			_felt = true
+			if _over_at < 0.0:
+				_over_at = read.age
 
 
 # Caught: into the glove and covered for the whistle.

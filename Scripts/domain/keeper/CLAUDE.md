@@ -100,10 +100,12 @@ smothered, goes away from the net or meets more of him before the mouth: a puck
 that clips the outside of a pad glances on in. A hand goes only where its gear
 stays above the ice, and the blade only for a puck low enough for it. A low save cuts whatever
 move is under way (`KeeperMotor.save`); the hand rides any pose. The save goes on
-until it is there, and he lets it go his leg read after it is there and the
-shot is over — off him, past the line, stopped, off the iron or boards (a tip
-starts a new read, a pick-up ends it at once) — so a save made too late is
-still seen made; then the hand comes back and the motor rests him where the
+until it is there, and he lets it go once it is and the shot is over: at once
+for a puck that hit him, which he feels (goalies are taught to start their
+recovery the moment the puck hits them); his leg read after it for one that
+went by him, past the line, stopped, or off the iron or boards, which he has
+to see (a tip starts a new read, a pick-up ends it at once). So a save made
+too late is still seen made; then the hand comes back and the motor rests him where the
 save left him for the brain to bring back up. A shot over before his legs
 have read it at all (from in tight, in or off him) he answers once they have:
 the save for the flight he saw leave the stick, however late, made and held
@@ -140,7 +142,8 @@ the cover played out unbroken with the glove ending flat on it),
 and the match through the
 puck's own contact test in `test_keeper_controller.gd`.
 `tests/unit/controllers/test_keeper_controller.gd` holds the swap, a catch
-played out, a shot in before his read answered late and carried into, a puck at his feet covered or, poked away first, escaping, and a
+played out, a shot in before his read answered late and carried into, a
+shot off him let go the tick he feels it, a puck at his feet covered or, poked away first, escaping, and a
 client posed from his state through the wire with every save box where the
 host's is. `test_keeper_look.gd` holds the look: his face onto the puck in every stance,
 no faster than a head turns, held at the neck's limit, and the stance left

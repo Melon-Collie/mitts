@@ -252,6 +252,25 @@ func test_a_shot_that_beats_his_read_is_still_answered() -> void:
 	assert_true(into, "and carried all the way into")
 
 
+# A puck that hits him he feels: once his save is there, the shot off him, he
+# starts back at once rather than a read later.
+func test_hit_he_starts_his_recovery_at_once() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0)
+	_run(1.5)
+	var from := Vector3(0.0, 0.3, GameRules.GOAL_LINE_Z - 12.0)
+	var part: int = _shot(from, Vector2(-0.84, 1.0), 20.0)
+	assert_eq(part, GoalieSaveRules.SavePart.GLOVE, "met by the glove")
+	assert_true(_keeper.read.reading(), "still on it as it hits him")
+	assert_lte(_keeper._chosen_at + _keeper.save.ready_s, _keeper.read.age, "his glove there first")
+	_puck.puck_touched_goalie.emit(_goalie)
+	var ticks: int = 0
+	while _keeper.read.reading() and ticks < 60:
+		_keeper._physics_process(DT)
+		ticks += 1
+	assert_lte(ticks, 1, "let go the tick he feels it")
+
+
 # A tier changed in the session (free play's picker, the tutorial) reaches his
 # reads and his hands.
 func test_a_tier_set_later_reaches_his_saves() -> void:
