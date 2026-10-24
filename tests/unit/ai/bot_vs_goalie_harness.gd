@@ -16,7 +16,7 @@ extends RefCounted
 #
 # So the sweeps say the keeper is a wall while the logged games say 61.4%, and
 # nothing can reconcile them: the bot decides against `AIActionScoring`'s model
-# of the goalie, the goalie plays as `GoalieController`, and no instrument
+# of the goalie, the goalie plays as `KeeperController`, and no instrument
 # compares their OUTCOMES. The balance is set by the gap between the two models
 # rather than by either, and the gap is invisible.
 #
@@ -27,7 +27,7 @@ extends RefCounted
 #     `shot_aim_point` / `shot_loft_level` / release speed, read off the live
 #     carrier role at the moment it fires
 #   * its steering and pace into the release (duel_harness movement)
-#   * the goalie: real GoalieController on the real Goalie.tscn, ticked once per
+#   * the goalie: the real keeper (KeeperController) on the real Goalie.tscn, ticked once per
 #     frame against the bot's actual puck position, so his depth, tracking,
 #     stance and read pipeline all run
 #   * THE WIND-UP the goalie reads: while the bot holds its charge the shooter

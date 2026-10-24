@@ -3,7 +3,8 @@ extends GutTest
 # The jersey's tail below the belt (SkaterHemFlaps) on a real skater: it hangs
 # out of the thighs and pants it drapes over, swings back when the skater
 # accelerates and comes to rest when he stops, keeps time off camera without
-# writing bones, and holds a tucked corner where the waistband has it.
+# writing bones, and holds a tucked corner where the waistband has it; and the
+# lathe's tail stations are the cloth's (HemFlaps and its port fix them).
 
 const _DT: float = 1.0 / 60.0
 
@@ -104,3 +105,10 @@ func test_a_full_tuck_holds_still() -> void:
 	skater.set_balance_tilt(Vector2(forward.x, forward.z) * deg_to_rad(15.0))
 	_steps(skater, 30)
 	assert_almost_eq(_hem_centre(flaps), held, Vector3.ONE * 1e-4)
+
+
+func test_the_lathe_tail_stations_are_the_cloths() -> void:
+	var belt: int = SkaterMeshBuilder.TORSO_BELT_STATION
+	assert_eq(SkaterMeshBuilder.TORSO_HEM_STATION - belt + 1, HemFlaps.STATIONS)
+	assert_eq(SkaterMeshBuilder.TORSO_BEND_STATION - belt, HemFlaps.BEND)
+	assert_eq(SkaterMeshBuilder.TORSO_HEM_STATION - belt, HemFlaps.HEM)

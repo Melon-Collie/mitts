@@ -28,7 +28,7 @@ how to find what a tier is paying for.
 ## Which tier a test goes in
 
 **Default** unless it is expensive. A test that drives the real
-`GoalieController` tick by tick over a shot grid, or the duel harness through
+keeper tick by tick over a shot grid, or the duel harness through
 seconds of multi-body skating, costs seconds where a fixture costs
 milliseconds; it goes in `slow/`. Before putting one there, ask whether the
 same claim could be made by a fixture against the model — a cheap property in
@@ -38,8 +38,7 @@ same claim could be made by a fixture against the model — a cheap property in
 that prints a table and ends `assert_true(true)`. It is a measuring tool for a
 person deciding something, not a gate, so it lives in `instruments/` and is run
 when that decision comes up. A behaviour the instrument motivated gets its own
-cheap assertion in `unit/` (`test_goalie_rebound_push.gd` holds the push;
-`instruments/ai/test_goalie_put_backs.gd` measures what it is worth).
+cheap assertion in `unit/`.
 
 ## What gets a test
 
@@ -69,14 +68,14 @@ say in the commit that the new numbers are the intended ones. Never write a
 tuned threshold (`assert_gt(score, 0.8)`) as an assertion: it is a snapshot row
 that has to be re-pinned by hand.
 
-Measurements against the live goalie that cost seconds — the breakaway ladder,
-the shot value calibration — are the same kind of thing; they live in the slow
-tier until they are turned into properties plus a snapshot.
+Measurements against the live goalie that cost seconds are the same kind of
+thing; they live in the slow tier until they are turned into properties plus a
+snapshot.
 
 A model that predicts the live goalie is held against **measured data** rather
 than against itself: `tests/unit/ai/data/shot_odds_truth.txt` is the goalie's
 open set per cell, written by an instrument that drives the real
-`GoalieController` (minutes), and `test_shot_odds_vs_truth.gd` scores the shot
+keeper (minutes), and `test_shot_odds_vs_truth.gd` scores the shot
 model against it in milliseconds. The data file is regenerated when the goalie
 changes, never hand-edited; the test's error and concordance bounds are ratchets.
 
@@ -256,7 +255,7 @@ reconcile replay diverges from the host. Tests that touch AI or physics must not
 depend on wall-clock time or unseeded randomness.
 
 Instruments that stage the real goalie must also be order-free: each staging
-starts from a full reset (`GoalieController.reset_to_crease`, the puck
+starts from a full reset (`KeeperController.reset_to_crease`, the puck
 restaged), so a measurement does not depend on what ran before it.
 `tests/slow/ai/test_shot_field_cells_are_order_free.gd` holds it for the shot
 field, whose cells are sharded across processes.

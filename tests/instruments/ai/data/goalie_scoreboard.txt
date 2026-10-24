@@ -1,0 +1,22 @@
+# Goalie scoreboard — written by tests/instruments/ai/test_goalie_scoreboard.gd
+# with MITTS_WRITE_SCOREBOARD=1; never hand-edit. Goals conceded per tier (cover.*: % of mouth).
+row	EASY	NORMAL	HARD	shots
+sweep.dot_line.cold	13	9	4	39
+sweep.dot_line.held	11	9	5	39
+sweep.dot_line.sighted	11	9	5	39
+sweep.slot.cold	8	3	1	39
+sweep.faceoff_dot.cold	3	7	2	39
+sweep.faceoff_dot.held	3	6	2	39
+sweep.point.cold	0	0	0	39
+play.rush_shot	3	3	1	7
+play.breakaway_cutback	7	4	4	7
+play.breakaway_walkaround	0	0	0	7
+play.deke_elevate	4	5	4	14
+play.pass_out_one_timer	19	12	12	42
+play.put_back	0	5	8	84
+cover.ready	57	57	57	100
+cover.butterfly	63	63	63	100
+cover.half_butterfly	60	60	60	100
+cover.rvh	55	55	55	100
+cover.vh	55	55	55	100
+total	82	72	48	434

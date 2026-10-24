@@ -185,15 +185,18 @@ without a built binary, loses performance, never correctness — CI builds it):
   38 → 5 µs a read; the carrier's carry search 26–28% faster in the zone.
   `tests/unit/ai/test_native_shot_odds_parity.gd`.
 
-- **Jersey tail** — `SkaterHemFlaps.step` (render rate, every skater, every
-  frame): the drape below the belt — the belt anchors, the verlet step, the
-  relaxation (segment lengths, the ring's spacing) and the push out of the
-  thighs and pants (`SkaterHemColliders`) — in one call that reads its bones
-  off the skeleton and **writes the 20 flap bones itself**, as `NativeArmRig`
-  does. Its drape, shares, the pants' lathe and the tunables load in
-  `configure` (`SkaterHemFlaps.configure_native`, re-run on a tuck change).
-  280 → 10 µs a frame with the writes, a thigh in the hem.
-  `tests/unit/rules/test_native_hem_flaps_parity.gd`.
+- **Jersey tails** — `HemFlaps.step` (render rate, every skater and keeper,
+  every frame): the cloth below the belt or the chest protector — the
+  anchors, the verlet step, the relaxation (segment lengths, the ring's
+  spacing) and the push out of what it drapes over — in one call that reads
+  its bones off the skeleton and **writes the flap bones itself**, as
+  `NativeArmRig` does. Its drape, shares and tunables load in `configure`
+  (`HemFlaps.configure_native`, re-run on a tuck change), then its colliders:
+  the skater's thighs and lathe pants (`collide_skater`,
+  `SkaterHemColliders`) or the keeper's pants and thigh guards as rounded
+  sections (`collide_sections`, `KeeperTailColliders`). Skater 280 → 10 µs a
+  frame with the writes, a thigh in the hem; a keeper's 48 flaps ~1.7 ms →
+  under 0.1 ms. `tests/unit/rules/test_native_hem_flaps_parity.gd`, both.
 
 The parity suites force the GDScript path on their reference objects (e.g.
 nulling `_skating._native`) — a parity test must never compare the native

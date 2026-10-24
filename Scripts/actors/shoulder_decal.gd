@@ -35,17 +35,6 @@ var _yoke_v: float = SkaterMeshBuilder.SHOULDER_CAP_YOKE_V
 var _number_center_v: float = CAP_NUMBER_CENTER_V
 
 
-# A part other than the skater's cap: its texture size, its girth round U and
-# metres per unit V through the number, the V where the yoke ends, and the
-# number's centre in V. Before the viewport is sized from `size`.
-func use_part(p_size: Vector2i, girth_m: float, m_per_v: float, yoke_v: float,
-		number_center_v: float) -> void:
-	size = p_size
-	_px_per_m = Vector2(p_size.x / girth_m, p_size.y / m_per_v)
-	_yoke_v = yoke_v
-	_number_center_v = number_center_v
-
-
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, size), shoulder_color, true)
 	draw_rect(Rect2(0, 0, size.x, roundf(_yoke_v * size.y)), yoke_color, true)

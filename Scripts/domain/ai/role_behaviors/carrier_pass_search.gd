@@ -227,8 +227,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			if rim_count < 0:
 				rim_count = AIRimPass.build(pass_origin, ctx.self_wrister_shot_speed,
 						ctx.defending_goal_pos.z, _field.opponents,
-						_field.opponent_vels, _field.opponent_caps,
-						AICarrierField.goalie_now(ctx), _field.our_defenders)
+						_field.opponent_vels, _field.opponent_caps)
 			var rank: float = _rim_launch_for(ctx, receiver_state, receiver_omega,
 					receiver_caps, carrier_in_oz) \
 					* _field.receiver_value_at(receiver_state.position)

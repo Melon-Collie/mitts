@@ -59,11 +59,11 @@ static func stays_low(self_pos: Vector3, release: Vector3, elevation_level: int,
 
 
 # A block close enough in front of our goalie that it fills his view
-# (GoalieScreenDepth's "on him" distance, plus the body's own half-width): what
+# (a body on his own eyes, plus the body's own half-width): what
 # gets past it is a puck he never saw, where without us he would have looked
 # around us and made the save.
 static func screens_own_goalie(self_pos: Vector3, goalie_pos: Vector3,
-		cfg: GoalieBehaviorRules.ScreenConfig) -> bool:
+		cfg: GoalieScreenRules.ScreenConfig) -> bool:
 	var reach: float = cfg.min_along + cfg.peek_clearance + cfg.torso_half_width
 	return Vector2(self_pos.x - goalie_pos.x, self_pos.z - goalie_pos.z).length() < reach
 

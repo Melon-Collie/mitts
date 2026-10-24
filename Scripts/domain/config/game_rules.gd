@@ -495,21 +495,21 @@ const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 20.554
 # called and as candidates when the puck goes out of play in the neutral zone.
 const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_Z - 1.524   # 5.766
 
-# Rule preset that gates which infractions are detected and how they're punished.
-#   OFF    — no offsides, no icing, no crease protection (free-for-all).
-#   ARCADE — offsides ghost the offending player; icing is ignored; crease
-#            camping (anti-cheese, not a real rule) ghosts after a dwell timer.
-#   NHL    — full stoppage rules: icing runs the hybrid race to the end-zone dots,
-#            offsides run delayed (no ghost) and whistle on offending-team touch.
-#            No crease protection — see CREASE_DWELL_DURATION for why.
+# Rule preset that gates which infractions are detected and how they're punished
+# (each set's rules: docs/gameplay-design.md, Game format).
 enum RuleSet { OFF, ARCADE, NHL }
 const DEFAULT_RULE_SET: int = RuleSet.ARCADE
 const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
-# Slot depth — distance from goal line to the faceoff-hash "hard slot"
-# in front of the net. Real-rink geometry; matches the spot a hockey
-# player reads as the prime scoring area. Used by AI role behaviors
-# (anchor, carrier, finisher) as the "where the slot is" reference.
+
+# A goalie's cover is a puck nobody can play: whistled wherever there are faceoffs, once the
+# referee has seen it frozen (the catch or cover seen made); in OFF he plays it out himself.
+const COVER_WHISTLE_DELAY_S: float = 1.0
+static func whistles_a_cover(rule_set: int) -> bool:
+	return rule_set != RuleSet.OFF
+
+# Slot depth — distance from goal line to the faceoff-hash "hard slot" in
+# front of the net: real-rink geometry, the prime scoring area as a player reads it.
 const SLOT_DIST_M: float = 5.0
 
 # ── Skater Defaults ───────────────────────────────────────────────────────────
@@ -603,25 +603,19 @@ const DEFAULT_LOFT_VY_HIGH_M_S: float = 4.65
 const DEFAULT_WRISTER_POWER_CURVE: float = 1.1
 
 # ── Goalie Defaults ───────────────────────────────────────────────────────────
-# Shared between GoalieController @export and AIGoalieModel's goalie
+# The keeper's leg read (KeeperPlayRead's default) and AIGoalieModel's goalie
 # react-then-slide model. Calibrate together — the AI's prediction must
 # match the live goalie's reflex.
 const DEFAULT_GOALIE_REACTION_DELAY_S: float = 0.13
-# Arms (glove/blocker) read a shot slower than legs — legs drop reflexively on a
-# low read, arms need "where in the upper net" placement math first. Mirrors
-# GoalieController.arm_reaction_delay.
-const DEFAULT_GOALIE_ARM_REACTION_DELAY_S: float = 0.18
-# Goalie's max committed lateral movement speed. Mirrors GoalieController
-# .t_push_speed — the actual translation speed when the goalie commits to
-# a slide (lateral_threshold = 0.3 m). NOT tracking_speed (that's the
-# mental-target lerp speed, not body movement) and NOT shuffle_speed
-# (that's small adjustments, not a recovery slide).
+# The upright goalie's top speeds (KeeperFootwork's moves): a T-push, a shuffle
+# (square, both skates on the ice), and C-cuts in and out (a real
+# backward C-cut runs ~2-2.5 m/s). Not tracking_speed, which moves the spot he
+# reads, not his body.
 const DEFAULT_GOALIE_T_PUSH_SPEED_M_S: float = 3.8
-# How fast a lateral push ramps toward t_push_speed — pushes accelerate onto
-# the edge, they are not instant. Mirrors the Hard/default GoalieController
-# .lateral_accel (the tiered GoalieSkillProfile values ease it downward; the
-# AI predicts against the top-tier keeper like every other goalie constant
-# here). The ramp is the window a hard lateral cut in tight genuinely beats.
+const DEFAULT_GOALIE_SHUFFLE_SPEED_M_S: float = 2.0
+const DEFAULT_GOALIE_DEPTH_SPEED_M_S: float = 2.2
+# How fast a push ramps to its top speed, on the keeper's footwork and in
+# AIGoalieModel (GoalieSkillProfile's lateral_accel_mps2 at Hard). The ramp is the window a hard cut in tight beats.
 const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
 # How much harder he stops than he pushes. A planned stop sets the lead skate's
 # edge across the travel with his weight on it — the hardest edge a goalie
@@ -629,14 +623,6 @@ const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
 # full T-push inside about a pad's width (~0.3 m) is ~24 m/s², 1.75x the push.
 # A ratio, so a tier's weaker edges stop worse exactly as they push worse.
 const GOALIE_EDGE_STOP_DECEL_RATIO: float = 1.75
-# The pad-top seam: the height where the goalie's coverage changes hands from
-# the leg pads to the torso + arms. Mirrors the stance anatomy in
-# GoalieBodyConfigBuilder (torso bottom glued to the seam — body centre 1.22
-# minus the 0.72 Goalie.tscn torso box's half-height; that derivation is pinned
-# by test_goalie_scene_mirrors). AIActionScoring's hole model uses it as the
-# HIGH band's arrival floor: a lofted shot is only an over-the-pads target if
-# its arc physically crosses the net line above this seam.
-const DEFAULT_GOALIE_PAD_TOP_SEAM_M: float = 0.86
 
 # ── Players ───────────────────────────────────────────────────────────────────
 # Team size is a per-match config latched at puck drop (GameStateMachine.

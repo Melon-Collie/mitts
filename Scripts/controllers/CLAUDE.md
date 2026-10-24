@@ -2,171 +2,34 @@
 
 Scope: `Scripts/controllers/` — the layer that drives actor bodies from
 decisions. Controllers use the domain to decide and reach into infrastructure to
-execute; they never reach up. Goalie *math* is pure and lives in
-`Scripts/domain/rules/goalie_*.gd`; the doctrine below governs both halves.
+execute; they never reach up.
 
-## Goalie subsystem map
+## The goalie
+
+Every match plays the keeper; how he plays is `Scripts/domain/keeper/CLAUDE.md`.
+Four files here hold him in the game:
 
 | File | Owns |
 |---|---|
-| `goalie_controller.gd` | the tick, state transitions, tuning `@export`s |
-| `goalie_state_machine.gd` | stance transitions |
-| `goalie_body_config_builder.gd` | pose solve into a shared scratch config |
-| `goalie_shot_reaction.gd` | the read pipeline (delays, belief, convergence) |
-| `goalie_puck_play.gd` | behind-net trip decision, geometry, phase |
-| `goalie_crease_clear.gd` | loose-puck sweep / cover |
-| `goalie_slide_behavior.gd` | committed slides and post seals |
-| `goalie_footwork.gd` | upright footwork: shuffle stroke, T-push, edge stop (pad steps over the eased stance) |
-| `goalie_world_view.gd` | the perception surface |
-| `domain/rules/goalie_behavior_rules.gd` | reads, depth, races (pure) |
-| `domain/rules/goalie_push_rules.gd` | the upright push: accelerate, cruise, stop on the spot (pure) |
-| `domain/rules/goalie_save_selection.gd` | block-or-react, as one question |
-| `domain/rules/goalie_pass_read.gd` | where a pass in flight will be shot from |
-| `domain/rules/goalie_screen_depth.gd` | room to see around a screen |
-| `domain/rules/goalie_tip_depth.gd` | challenge depth against a net-front stick |
-| `domain/rules/goalie_save_rules.gd` | rebound doctrine |
-| `domain/rules/goalie_depth_solver.gd` | depth constraint composition |
-| `domain/rules/goalie_stick_rules.gd` | stick geometry and coverage |
+| `goalie_controller.gd` | his seat, which every caller, the puck, the wire and the replays address: his node, puck and net, the puck's signals routed to whoever plays him, the host's snapshots and a client's interpolation of them, the reads the shot log takes of him |
+| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover); played on the host, posed from the wire on a client and in a replay |
+| `goalie_state_machine.gd` | the stance enum the wire carries (`state_enum`) and the bots and the pad sounds read, and its families |
+| `goalie_world_view.gd` | one scan of the skaters a tick, shared by every read of them |
 
-### Filter the puck, not the man
-
-The threat the goalie squares to used to be low-passed as a whole — one lerp over
-the blended puck/carrier position. A first-order filter has a **permanent**
-steady-state error against a constant-velocity target: it settles at trailing by
-`speed / k` and no amount of run-up closes it. So the filter charged the
-carrier's real translation a trail proportional to his speed — measured at 0.20 s
-of it beyond `chest_track_far_distance`, i.e. 1.6 m behind an 8 m/s skate.
-
-That trail then entered the SQUARING error a second time, because the body
-rotates toward the tracked threat rather than toward the puck. The two lags
-compound, contributing about equally at 8 m, and together left him 26° off square
-against a shooter crossing at 8 m/s — with the pads, glove, blocker and five-hole
-all posed in that rotated frame.
-
-The fix is that jitter and signal are **separable**, and only one of them needed
-filtering. A carrier's BODY does not teleport; it is the smooth part and
-low-passing it buys nothing. What wiggles is the puck's OFFSET from him (±1.5 m
-of dangle) and the velocity estimate built from it. So the offset and the puck
-lead stay inside the filter at exactly their old time constants and the body
-rides through raw. Steady state is unchanged — once the offset converges the
-blend reproduces the old one exactly — which is why `GoalieBehaviorRules
-.compute_threat_position` is fed a jitter-filtered puck rather than re-derived.
-
-Two things that bite:
-
-- **The puck lead must stay inside the filter.** It is built from a raw per-tick
-  position difference, so unfiltered it hands the goalie precisely the dangle
-  spikes the filter exists to reject.
-- **Removing the trail leaves the LEAD unopposed.** `carrier_velocity_lead_time`
-  was cancelling the trail in tight (0.12 s of lead against a 0.125 s trail) and
-  losing to it at range. With the trail gone the lead is net anticipation
-  everywhere — he now plays *ahead* of a moving carrier by that much, which is a
-  deliberate, beatable-by-cutback property rather than an accident, but it is a
-  different quantity from what the number was chosen for.
-
-`test_goalie_tracking_lag.gd` holds it, and asserts structural properties — trail
-proportional to speed, the compounding — rather than pinned numbers, so replacing
-a filter with a rate limit fails it rather than passing quietly.
+The goalie's rules in `Scripts/domain/rules/goalie_*.gd` are pure and shared:
+the rebound doctrine (`GoalieSaveRules`), the push kinematics his footwork runs
+on (`GoaliePushRules`), where a pass in flight is shot from (`GoaliePassRead`),
+and how a body hides a shot from him (`GoalieScreenRules`, which the bots read
+to clear or not make a screen in front of their own goalie).
 
 ### Delete the copy, don't correct the number
 
 Nothing connects a literal to the collider it was copied from, so every
-hand-built replica of the keeper in the planner — pad splay, glove reach, torso
-size, the depth chart, the band harness — drifts off the body that actually makes
-the saves, silently and without anyone being wrong on purpose. `GoalieAnatomy`
-(his dimensions) and `GoalieStickRules` (his stick, split out because the blade
-also owns an aim solve) are the single source: anything the planner believes
-about the keeper's SHAPE derives from them, so changing the body moves the
-planner for free.
-
-### The stick's angle is not a pose choice
-
-Shaft, paddle and blade are one rigid piece hanging a fixed distance below the
-wrist, and the lie (117°) is the angle between paddle and blade in the plane of
-the blade's FACE. Two things follow, and every stance obeys both:
-
-- **The roll is fixed.** Only the paddle leaning the lie's complement sideways
-  (`GoalieStickRules.FLUSH_ROLL_DEG`, top toward the blocker side) lays the
-  blade's length flush on the ice. Any other roll rests it on its heel or toe,
-  the thing every goalie coach says not to do. Never apply the lie about the
-  blade's long axis: that is a loft, and the forward tilt already owns loft.
-- **The forward tilt follows the hand.** Once the hand is placed, the tilt that
-  lands the blade on the ice is decided (`tilt_for_blade_on_ice`), and it opens
-  the blade's face by the same angle. The last step of
-  `GoalieBodyConfigBuilder.build` is the only writer of `blocker_rot.x`, so every
-  modifier that moved the hand — sweeps, lunge, prelean, elevated reach — gets a
-  stick that follows it.
-
-Upright, the stance picks the tilt (`UPRIGHT_TILT_DEG`, the blade a foot out in
-front of the skates) and the hand height follows (`upright_wrist_y`). Down, the
-hand sits just above the pads, so the paddle lays well forward and the face
-opens with it — a face square to the shooter and a blade flush on the ice put
-the hand at one height, and the butterfly's is lower.
-
-### The hands are held out, and the elbows hang
-
-A hand posed nearer the shoulder than the arm allows can only be drawn by
-folding the elbow into the body. So the pose builder places the glove at the
-depth that gives a real bend for the stance (`GoalieAnatomy.hand_depth_for_bend`,
-from the same arm lengths `Goalie` draws with), and the blocker where the stick
-puts it: paddle rolled in, blade out in front of the five-hole — upright at the
-upright wrist height, down just above the pad tops. The elevated reach
-extends from the hand's rest depth, not from a fixed one.
-
-The elbow is not aimed with a pole. A fixed "down" hint is wrong for a hand held
-out in front and below, because down projects to down-and-behind, into his
-chest. `TwoBoneIK.solve_elbow_hanging` lets it hang: the lowest elbow the bones
-allow that stays out of the trunk — never inside the shoulder, and back past it
-only once it is out beside the body, which is where a butterfly blocker's elbow
-goes. `test_goalie_arm_rig.gd` holds both.
-
-## What kills a collaborator extraction
-
-**A collaborator may accept any number of inputs written from outside. It must
-exclusively own every field it writes itself.**
-
-Measured across the goalie's own collaborators — contested means a field both the
-collaborator and the controller assign:
-
-| collaborator | caller-written fields | contested | methods that died |
-|---|---|---|---|
-| `goalie_puck_play` | 20 | 0 | 0 of 11 |
-| `goalie_shot_reaction` | 7 | 2 | 0 of 10 |
-| `goalie_slide_behavior` | 13 | 2 | 0 of 13 |
-| `goalie_crease_clear` | 37 | 12 | 17 of 27 |
-
-`GoaliePuckPlay` takes the most caller-written fields of any of them and is
-perfectly healthy, so "the caller writes to it" is not the problem. Sharing
-ownership of one field is. Once the controller writes `_clear.cover_cooldown_timer`
-it has re-derived when to write it — the lifecycle — and the collaborator's own
-`tick_cover_cooldown` is redundant from that moment. Twelve contested fields
-produced seventeen unreachable methods, none of which failed anything.
-
-Copy `GoaliePuckPlay`'s field layout: tuning pushed at config time, geometry set
-once at setup, trip state owned outright, and an explicit "requests to the
-controller" block read after `advance()`. One per-tick entry point that takes the
-world as arguments and clears its own outputs at the top.
-
-## Depth is the A/B/C/D ladder, and it is not compressed inward
-
-The Buckley zones are *situational*, not a distance chart. A is ~2 ft outside the
-crease top — challenge a rush, a breakaway, or a clean look and force the shooter
-to beat you. B is heels at the crease top, where most shots are faced. C is the
-middle of the blue paint, held when a lateral play is live. D is on the post or
-tracking behind the net.
-
-At these shot speeds a slot shot leaves almost no lateral reaction window (~0.04 m
-of travel in flight), so **cutting the angle by challenging is what makes the
-save, not reflexes** — depth pulled inward to look safer is a goalie who cannot
-make the save he is standing there to make. The "play conservative on a lateral
-threat" read is produced dynamically by the lateral tracking cap and the backdoor
-depth cap, never baked into a distance curve.
-
-The anchors are real geometry: the NHL crease top is ~4.5 ft ≈ 1.37 m, which is
-`CreaseRules.STRAIGHT_DEPTH`. Depth is gated on a real rink landmark (goal line →
-blue line) rather than a tuned distance, because geometry alone would park him at
-the challenge ceiling for a puck at the far blue line, where the net subtends
-almost nothing.
+hand-built replica of the goalie elsewhere — in the bots' model of him, in an
+instrument — drifts off the body that actually makes the saves, silently and
+without anyone being wrong on purpose. Anything that believes something about
+his SHAPE derives it from his own anatomy and gear (`KeeperAnatomy`,
+`KeeperGear`), so changing the body moves every reader of it for free.
 
 ## Beatable realism
 
@@ -176,335 +39,41 @@ one who gets beaten the way an NHL goalie gets beaten.** Making him better is
 not the failure mode — closing off a way he *ought* to be beatable is, and a
 save count alone cannot tell the two apart.
 
-Two recurring traps, both measured:
+Two traps, both measured on the goalie before him:
 
 - **A goalie who pre-commits cannot be read, and being readable is the game.**
-  Every change that made him block or commit earlier has measured as *more saves*
-  AND *deception ceasing to pay*. Deception paying negatively is the tell. If a
-  change produces that signature, it is wrong even when the save count improves.
-  Three separate changes have produced it: removing the `not _reaction.reacting`
-  gate on the block branch (dot-line beatability 16/288 → 25/288, a cold five-hole
-  window opening from nothing to 17 cm, wrong-height deception falling to 4/14
-  against a 6/14 baseline); counting `WRISTER_AIM` as a shot declaration in the
-  block-or-react launch clock (4/14 across all three deception arms, against 6/14
-  telegraphed and 11/14 wrong-height under the read); and the tip doctrine in
-  `GoalieSaveSelection`.
+  A change that makes him block or commit earlier tends to measure as *more
+  saves* AND *deception ceasing to pay*. Deception paying negatively is the
+  tell: a change with that signature is wrong even when the save count
+  improves.
 - **Blocking concedes the top of the net.** Any path that blocks a shot already
-  read as elevated is strictly wrong. The block model has no `impact_y`.
-
-**The seal is a commitment with an END, and arriving is what ends it.** The
-verdict clears once `tuck_point_travel` is inside a puck's radius, so the reach
-that term subtracts must be the one the SEAL uses — `_seal_cover_radius()`, the
-distance from the seal spot to the tuck point — or he lands somewhere his own
-arrival test still calls short and nothing can ever clear it. The tolerance is
-not slack: an exact `<= 0` cleared only when the knee-shuffle's arc target
-happened to lie past the seal spot, and a seal landing millimetres inside it
-held him down for good. That reach follows the STANCE (standing
-`pad_local_offset`, sealed `_seal_cover_radius()`) and is carried in
-`BeatenWideConfig.cover_radius`, deliberately separate from `reach_half_width`:
-one is arrival, the other is the point of no return, and sharing a number ties
-the threshold that clears a beat to the threshold that decides one. Measured,
-widening both at once cost 3 bot goals in 63 by declining seals he used to push
-into.
-
-Nothing may fight the seal's depth either. `min_challenge_depth` already exempts
-COILING and SLIDING, but those are the states that get him TO the seal and
-BUTTERFLY is the one he sits in once there — flooring him there lifts him off a
-`post_seal_depth` the slide spent half a second reaching, which re-opens the beat
-and commits the same slide again forever.
-
-The shape of that failure is worth recognising: a stance loop at a fixed period
-whose slide has NO lateral leg means two owners are fighting over
-`_current_depth`. `test_goalie_held_puck_slide_loop.gd` holds all of it.
-
-**A shot released from the post seal keeps him in it until it resolves.**
-RVH and VH are entered only while no shot is in flight, and they are left the
-same way: a puck on net released while he is sealed holds the stance, exits and
-post swaps alike, until it is picked up, touches him or a post, the boards or
-the net, or is no longer on net (`_holding_seal_for_shot`). Standing up
-mid-flight swings the post pad into the puck's path, and a moving pad strikes the
-puck with its own speed. While sealed he starts no shot reaction at all, which is
-why the hold is its own flag and not the reaction's.
-`tests/slow/ai/test_goalie_holds_the_seal_through_a_shot.gd` holds it.
-
-**Down, the pad covers the post only if it points there.** The arrival test
-measures the post spot against the sealing pad as a segment turned however far
-his body is from the seal's own facing (`BeatenWideConfig.pad_turn_rad`). A
-butterfly still turned from an earlier push the other way has its post-side pad
-swung out from the line, and a wrap slides in behind it; a radius that ignored
-the turn called him sealed. Sitting on the seal spot turned wrong still coils,
-because the coil is what turns the pad onto the post.
-
-**The coil turns him toward the post he seals, not the way he travels.** A cut
-across the crease leaves him tracking the carrier, outside the seal spot, so he
-reaches it by moving back toward the middle; turning that way pointed the
-sealing pad at the other post. `GoalieSlideBehavior.facing_dir` carries the post
-side, `dir` the travel.
-
-The one sanctioned commit is the **beaten-wide post seal** — and it is sanctioned
-because it is not a prediction. Its gate is positional (the puck is already past
-his standing sealing reach on the side it went), so it fires on an accomplished
-fact rather than a guess about intent, and the goalie pushes into the seal off
-the drop as one motion instead of landing square and re-deciding. Onset needs the
-puck genuinely moving across; *persistence* deliberately drops that term, because
-a puck that settles wide has not un-beaten him. Pulling it back inside the
-sealing reach is what un-commits him, and baiting that commit is the counter.
-
-### Getting up is a race, and it is not a radius
-
-`_is_threat_pressing` decides whether he holds the butterfly, and its first
-clause is `_recovery_loses_the_crossing_race()`: recovering costs
-`recovery_duration` of tracking nothing, so hold once the threat's own lateral
-travel through that window beats his standing reach. It reads the CARRIER's
-translation rather than the puck, like `_lateral_tracking_cap` and for the same
-reason — a dangler's blade beats `t_push_speed` and a goalie does not move for
-it, so both share `_threat_lateral_speed_x()`.
-
-Two failures bracket it, both measured, and either is easy to re-introduce:
-
-- **A radius.** "A hostile carrier within N metres → hold" has no term for
-  whether anything is happening, so a carrier who merely STOPS in tight pins him
-  down forever — 5 s and counting, frozen at whatever depth he dropped at, since
-  an idle butterfly never re-solves depth either. It also contradicted the launch
-  clock beside it, which prices an undeclared carrier as no time pressure at all.
-  Its stated justification was rebounds, which it never covered: it required a
-  carrier, and a loose rebound has none.
-- **Nothing at all.** Delete the clause and he stands up INTO a walkaround,
-  caught mid-recovery at the goal line — the walkaround opens 2 of 7 aim points
-  with the race, 2 of 7 with the old radius, and 5 of 7 with neither.
-
-`should_hold_seal` does not cover this on its own: the seal question asks whether
-a SHOT can beat him, and a walkaround is not a shot yet.
-
-A LOOSE puck is in the race only while an opponent can reach it before he is
-back up (`_seen_contest_time` against `recovery_duration`). A rebound steered to
-the corner keeps its pace to the boards, so reading its slide alone held him
-down 3.7-5 s with nobody near it; a puck no stick can play during the rise is
-not a shot he can be caught standing up into. `test_goalie_rebound_rise.gd`
-holds it.
-
-### He stops on his spot, and every race prices the stop
-
-The upright mover brakes on the lead edge into its target
-(`GoaliePushRules.braking_speed_cap`, at `lateral_accel` ×
-`GOALIE_EDGE_STOP_DECEL_RATIO`) instead of halting dead on it. The cap is read
-against the target's own motion, so tracking a moving threat costs no lag; only
-a spot that stops makes him stop.
-
-A goalie is not covering a one-timer until he is set square to it, so every
-re-square race — cross-crease, backdoor depth, beaten-wide onset, the pass read
-— asks `GoaliePushRules.set_reach` (push, cruise and stop), and the bots read
-his repositioning the same way (`AIGoalieModel._goalie_set_reach`, and
-`goalie_push_progress` for where he is at a release). Pricing a race on a push
-that never stops tells the planner he arrives sooner than the mover can
-deliver. The cost is real and deliberate: a short push to a fixed spot takes
-about 1.25× as long.
-
-The SAVE push is the other kind (`GoaliePushRules.cruise_reach`, through
-`goalie_lateral_reach`): a pad moving through a shot's line stops the puck
-whether or not it could stop there. Charging a save the stop made a squared
-keeper read as beaten by shots he kills.
-
-The footwork the legs show during those moves (`GoalieFootwork`) is laid over
-the pads as a per-tick step the actor does not ease: a stroke's cadence is
-faster than `part_lerp_speed`, which would smooth it to a fifth of its size.
-`test_goalie_footwork.gd` holds the stroke, the turn and the overlay.
-
-### The committed slide is a retreat, and its budget is depth
-
-`_post_edge_reach` puts the body at `net_half_width − pad_edge · cos(slide
-rotation)` = **0.154 m** off centre, because a butterfly pad lies 0.84 m along
-the ice and the seal is the pad's outer EDGE on the post, not the body on it.
-So a slide's lateral leg is centimetres by construction; measured over a full
-beaten-wide seal from 0.78 m of challenge radius, it travels 0.08 m sideways and
-1.20 m in depth, and takes ~0.48 s to settle into an idle butterfly.
-
-Two things follow that are easy to get backwards:
-
-- **"He commits too far out" describes the symptom, not the cause.** A commit
-  baited earlier is beaten no more than a late one, because the extra time is
-  time he spends finishing the retreat — which is what the live log's
-  `goalie_radius` column is really reporting when it correlates with conversion.
-- **The seal answers a puck that keeps going, not one that comes back across.**
-  A carrier who continues to the side the puck was pulled to finds him sealed and
-  facing the post; one who cuts back into the space he left catches him
-  re-committing the other way, and that is the move that scores.
-
-`test_human_wraparound.gd` holds all of it, and the same file records the two
-things the instrument does NOT reproduce (it starts from a fully settled keeper,
-and it never reaches the 1.30–1.60 m radius band the live log holds).
-
-**A rebound gets a push to square, not a seal.** Down after the save, with a
-shooter on a loose puck, he pushes once the knee shuffle would lose the race
-to the release (`knee_shuffle_speed · backdoor_release_time`), to where he is
-square to the puck and at the depth he is at — the slide with `hold_depth`, not
-clamped to the seal band, which is where a body sits with its pad on a post.
-A carried puck still gets the seal. A quick put-back beats him mid-push.
-`test_goalie_rebound_push.gd` holds it.
-
-**The goalie can be WRONG, deterministically.** His committed belief about where
-a shot is going is the aim he read `read_lag` seconds ago, sampled from the
-shooter's published `predicted_shot_velocity`, converging onto the true line over
-`read_converge_time` once the puck is in flight. This is not RNG and must not
-become RNG — both teams field identical goalies and it has to read that way. The
-error is a pure function of what the SHOOTER did with their aim: a stable aim
-through the wind-up means the stale sample EQUALS the truth, so a telegraphed
-shot is read exactly as well as before, while a late swing against the grain
-beats him by exactly the amount the shooter moved the aim. Repeatable, symmetric,
-attributable. What falls out with no extra authoring: a long shot converges
-before it arrives and is read correctly; an in-tight one does not and beats him;
-a screen costs ACCURACY as well as tempo, because there is nothing to converge
-with while the puck is hidden; and a deflection resets the read, so a tip in
-tight beats him while a tip from distance does not.
-
-**Being unset is DIRECTIONAL, and that is the point.** Momentum he cannot cancel
-plus an open trail leg means: shoot against his motion and he cannot get back,
-shoot with it and he over-slides. Both are counter-playable, and neither makes a
-*set* goalie harder to beat. Loading the cost of being unset onto read latency
-instead is the wrong model — latency is not directional — which is why
-`move_read_speed_delay` is deliberately small.
-
-**The prime is a permission to move, not a save buff.** The quiet-eye prearm and
-the slot-proximity prime only make the limbs START moving; the cold arm read
-outlasts a slot shot's flight, so uncredited the goalie never moves at all. The
-flat reach-speed cap still bounds how much net he covers, so a corner picked out
-of that reach beats him — "pick a corner, don't face a statue" is the in-tight
-window this exists to create. A quick-release snap FROM RANGE never earns the
-windup prime, which is the real "quick release beats the read" edge.
-
-**The taught response to a clean windup is GET SET — square, stopped, at depth —
-not retreat.** Backing in concedes angle exactly when the goalie has his best
-look, and a windup is MORE read time, which is why slapshots convert lower than
-snap shots. Being set emerges rather than being applied: the charging carrier
-glides, so the arc target goes stationary and the movement converges. No depth
-concession is applied to a windup; screened windups are handled by the blocking
-drop, not by depth.
-
-**The one depth term a screen earns is room to see around it.** At challenge
-depth he is already tight to a slot or top-of-the-crease screen, which is where
-a peek works best: the sightline pivots about the release, so a head move close
-to the body swings the line past it. What blinds him is a body ON him, inside
-the peek's reach of his own eyes. `GoalieScreenDepth.sight_cap` gives up exactly
-the room that takes, and nothing for a screen he could not see around from
-anywhere (that release is the blocking drop's). The peek holds the side it chose
-on a dead-on screen (`_peek_side`); left to the sign of a perpendicular near
-zero it flipped every tick. `test_goalie_screen_room.gd` holds both.
-
-**The peek is seen, and it is the eyes the reads use.** On his feet the pose
-leans the trunk from the hips by exactly the roll that carries his head to
-`_eye_offset_x` (`GoalieAnatomy.roll_for_head_shift`); the head rides every lean,
-footwork's included. Only the roll goes on the wire, so the network pose
-rebuilds the head and the trunk's hip pivot from it. Never put the head
-somewhere the sightline is not: a peek you cannot see is one a shooter cannot
-read. `test_goalie_screen_peek_pose.gd` holds it.
-
-**A tip is covered by where he stands, never by a reaction or a pre-commit.**
-Its flight from a net-front blade is shorter than his read, and he is frozen
-on the shot until it is touched, so there is no race to run. `GoalieTipDepth`
-holds him on the tip's line (`r · sin θ <= butterfly half-width`) for a stick
-he could not react to. From the point this costs nothing: the direct shot is
-a reaction save at any depth, so A's extra angle only sold the redirect. A
-stick on the shooter's line needs nothing, since challenging covers it. A
-BLOCK on tip risk is the pre-commit trap above and stays out.
-`test_goalie_tip_threat.gd` holds it.
-
-**A pass is not a shot while a stick can still take it.** Passes fire
-`puck_released` like any shot, so a feed whose line runs on at the net reads as
-a low shot, and a goalie who drops for it hands the receiver the top of the net.
-Two rules keep him up until going down is clearly the answer:
-
-- **The leg drop waits on a stick ahead** (`_drop_waits_on_a_stick`) while the
-  puck, once past that blade, still leaves the drop its time before the goal
-  line (`GoaliePassRead.can_wait_out`). Only the drop: he has been on the line
-  since the release, and a puck that slides past untouched is the line he
-  already read. A doorstep stick leaves no such time, so a shot through it drops
-  him exactly as before — the tip doctrine above is untouched.
-- **The pass read's drop-and-slide answers a one-timer, and waits for one** — a
-  receiver loaded before the feed (`SkaterStateMachine.state_loads_one_timer`).
-  One who is not has to catch it and shoot again, which is a save made standing,
-  so he walks to square on his feet and keeps reading; a late load is still
-  answered. The cross-crease fork's pads-first branch asks the same thing.
-
-A caught puck also ends the old shot's drop: the freeze outlives the catch by
-its clear delay, and the carrier is the block-or-react question's from then on.
-`test_goalie_pass_is_not_a_shot.gd` holds all of it.
-
-**Three low-save shapes, picked off the converged read.** On a pad face he
-stays standing. Wide of one standing pad, inside a flat pad's reach and low
-enough for it, he goes to the HALF-butterfly: that pad down, the other leg
-loaded on its skate. The five-hole, a rising shot, or a read that hasn't
-converged get the full butterfly. The half's cost is the up-leg side, so a man
-alive there sends him full. Its payoff is the loaded leg: a slide from it
-skips the coil, he moves at shuffle pace instead of knee-shuffling, and the
-rise is half as long. The full butterfly has two poses of its own: the square
-BLOCK sits tall with the hands tucked, and every other drop leans out with
-the hands ready. The half states ride the wire as `state_enum` values (v60).
-The bot shot model does NOT read them as down (`GoalieNetworkState.is_down`):
-the down pad measures flat through the replicated pads, and the up leg keeps a
-standing leg's drop and the arm's reach.
-`test_goalie_half_butterfly.gd` holds it.
-
-**`elevated_threshold` forks the LEGS, not the hands.** Under it he drops, and
-flat the pads are 0.28 m tall, so a corner shot at 0.3-0.6 m clears them wide
-of the trunk. The hands take every shot read over the flat pad top, after the
-arm read. Left to the legs alone, that band was the one way a set keeper lost
-clean shots from range. The hand aims where the
-believed line crosses HIS plane, not the goal line: from an angle he stands out
-on the shooter's line, and the goal-line x sends the blocker, and the stick on
-it, past the puck. `test_goalie_hands_over_the_pad.gd` holds both, and that the
-arm read still loses in tight.
-
-## Behind-net puck play — the doctrine
-
-**"Stop it, leave it, get back."** The goalie leaves his net ONLY to trap a rim
-behind it. He never carries and never passes: the misplay-prone tiers of real
-puck handling are deliberately absent, because an AI turnover behind the net is
-the most frustrating failure a goalie can produce. A pure stop has no turnover
-mode — the only failure available is a bad GO decision, which is exactly what the
-races pin.
-
-Everything about the decision is deliberately conservative:
-
-- the forechecker is modelled at **FULL SPRINT from the first instant** (no
-  reaction delay, no acceleration ramp) — the fastest opponent physics allows, so
-  the pressure clock always UNDER-estimates the time available;
-- the goalie's clock counts the **WHOLE trip** — out, the stop beat, and the
-  return to his post — before pressure arrives, not just the touch;
-- an opponent near the net front **vetoes outright**;
-- the race is **re-run every tick** of the trip with a stricter margin (abort
-  hysteresis), so a conservative goalie visibly bails early rather than ever
-  getting caught out;
-- the trip routes around the post via a waypoint — never through the net.
-
-Only the HARD tier plays the puck at all (`puck_play_go_margin` is INF below it);
-timid puck play is a real weaker-goalie trait.
+  read as elevated is strictly wrong.
 
 ## Difficulty
 
-Goalie tuning is bundled per tier in `GoalieSkillProfile`. HARD leaves every
-value at the controller's authored default, so HARD is the authored goalie by
-construction.
+Goalie tuning is bundled per tier in `GoalieSkillProfile`: the keeper takes its
+reads and speeds (`KeeperController._tier`). Whenever the bots' shot model reads
+the same quantity, the two must be synced (`AIGoalieModel.set_goalie_profile`)
+or the bots score against a goalie they do not face. See the AI MIRROR note in
+`goalie_skill_profile.gd`.
 
-Whenever the bots' shot model reads the same quantity as a goalie knob, the two
-must be synced (`AIGoalieModel.set_goalie_profile`) or the bots score against a
-goalie they do not face. See the AI MIRROR note in `goalie_skill_profile.gd`.
+## What kills a collaborator extraction
 
-**On a breakaway the ladder lives on the cutback, and comes from the push.**
-Every tier seals the walk-around (0 of 7 aim points). Cutting back across opens
-EASY 5, NORMAL 3, HARD 3: a race to re-commit, where depth sets how far he has
-to come back and the tiered butterfly push (`slide_push_speed_mps`, softer the
-weaker the goalie, like every other movement speed) sets how fast. His edges
-(`lateral_accel_mps2`) move it too, because he brakes onto his spot and a weaker
-edge sets him there later. The read latencies, the drop time, the five-hole and
-the poke do not touch it; the toe-out moves it by one. Depth cuts the wrong way —
-a goalie who challenges the rush harder is easier to beat back across — and the
-push is what keeps the ladder the right way up.
+**A collaborator may accept any number of inputs written from outside. It must
+exclusively own every field it writes itself.**
 
-Pulling `depth_base_m` in is not free — it concedes the centre-lane rush from
-5 m, which is what challenge depth exists for. `test_goalie_breakaway_ladder.gd`
-holds both halves so neither can be improved quietly at the other's expense, and
-Hard's 1.30 m base is the taught B position, heels at the crease top — a rink
-landmark rather than a tuning number.
+A collaborator taking twenty fields its caller writes is healthy; sharing
+ownership of one field is not. Once the caller writes a field the collaborator
+also writes, the caller has re-derived when to write it — the lifecycle — and
+the collaborator's own updater for it is dead from that moment. Measured on the
+old goalie's collaborators, the contested fields per collaborator (0, 2, 2, 12)
+predicted the methods that died (0, 0, 0, 17 of 27), none of which failed
+anything.
+
+The layout that stays healthy: tuning pushed at config time, geometry set once
+at setup, its own state owned outright, and an explicit "requests to the
+caller" block read after its per-tick entry point, which takes the world as
+arguments and clears its own outputs at the top.
 
 ## SkaterController
 
@@ -969,10 +538,9 @@ turned down the line they skated in on.
 A per-tick collaborator that produces a compound result should own ONE
 long-lived scratch instance and fill it, rather than returning a fresh
 `Dictionary` / `Array` / `RefCounted` per call. It is safe exactly when the
-consumer reads the result and never stores the reference: `GoalieBodyConfig` is
-read and lerped into the parts by `Goalie.apply_body_config`, so one instance
-serves both goalies forever and keeps ~150 lines of `Vector3` literals off the
-heap per goalie per physics tick.
+consumer reads the result and never stores the reference: a client's goalie
+interpolation fills one `GoalieNetworkState` (`GoalieController._scratch_state`)
+and poses him from it, so one instance serves every render of him.
 
 Where two consumers can interleave, give each its own scratch instead of sharing
 one — `RemoteController` keeps `_sample_bracket` separate from `_scratch_bracket`

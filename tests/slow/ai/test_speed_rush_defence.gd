@@ -31,8 +31,6 @@ const BOUND_REACTION_S: float = 0.05 + TeamBrain.TICK_PERIOD
 const WINNABLE_MARGIN_M: float = 0.5
 
 const MAX_WINNABLE_LOST: int = 3
-# Un-pend once the goalie stops conceding what the new shot field measured (#836).
-const PENDED_FOR_836: bool = true
 
 
 func _gate_z() -> float:
@@ -79,9 +77,6 @@ func _best_margin(cfg: SkaterMovementRules.MovementConfig, depth: float,
 
 
 func test_a_defender_with_a_start_is_not_burned_by_speed() -> void:
-	if PENDED_FOR_836:
-		pending("red since the regulation puck's shot field: #836")
-		return
 	var cfg: SkaterMovementRules.MovementConfig = Duel.new().move_cfg
 	var lost: Array[String] = []
 	var winnable: int = 0

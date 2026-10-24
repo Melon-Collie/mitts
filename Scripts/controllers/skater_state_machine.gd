@@ -59,8 +59,7 @@ static func state_off_balance(state: int) -> bool:
 # NOTE this says nothing about the carrier's MOBILITY, which differs sharply
 # between the two: the slapper takes no stride or steer and glides on its
 # momentum, while the wrister suppresses nothing and stays fully steerable.
-# Reads that depend on the shooter's mobility must test for that separately —
-# see GoalieController._reading_planted_windup.
+# Reads that depend on the shooter's mobility must test for that separately.
 static func state_pins_puck(state: int) -> bool:
 	return state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK \
