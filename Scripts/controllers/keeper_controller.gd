@@ -124,6 +124,7 @@ func _place_in_crease() -> void:
 	save = KeeperSave.new()
 	cover = KeeperCover.new()
 	look.reset()
+	_ticks = 0
 	_chosen = false
 	_covering = false
 	_fetching = false
