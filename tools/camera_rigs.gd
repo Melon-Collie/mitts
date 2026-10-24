@@ -12,6 +12,10 @@ extends RefCounted
 # The `now_*` rows are GameCamera's own framing at its default 75° tilt, which
 # aims at the subject from height h (dist = h / sin 75°): at the minimum height a
 # carry collapses to, and at a typical open-play height.
+#
+# Every rig keeps GameCamera's cull mask: the end-zone netting hangs across the
+# whole view from a shoulder pitch, so a shoulder mode hides the overhead
+# dressing just as the top-down one does.
 const RIGS: Array[Dictionary] = [
 	{"name": "now_h10", "pitch": 75.0, "dist": 10.35, "ahead": 0.0, "side": 0.0, "fov": 50.0},
 	{"name": "now_h18", "pitch": 75.0, "dist": 18.6, "ahead": 0.0, "side": 0.0, "fov": 50.0},
@@ -22,11 +26,6 @@ const RIGS: Array[Dictionary] = [
 	{"name": "sh45_tele", "pitch": 45.0, "dist": 15.0, "ahead": 2.5, "side": 0.0, "fov": 36.0},
 	{"name": "sh35", "pitch": 35.0, "dist": 10.0, "ahead": 3.5, "side": 0.0, "fov": 50.0},
 ]
-
-
-static func is_current_framing(rig: Dictionary) -> bool:
-	var rig_name: String = rig["name"]
-	return rig_name.begins_with("now_")
 
 
 static func transform_for(rig: Dictionary, subject: Vector3, up_ice: Vector3) -> Transform3D:

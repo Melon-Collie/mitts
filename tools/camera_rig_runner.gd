@@ -96,21 +96,15 @@ func _shoot_moment(moment: int, rigs: Array[Dictionary]) -> void:
 	var up_ice: Vector3 = -cam.global_basis.z
 	var saved_xform: Transform3D = cam.global_transform
 	var saved_fov: float = cam.fov
-	var saved_mask: int = cam.cull_mask
 	Engine.time_scale = 0.0
 	cam.set_process(false)
 	for rig: Dictionary in rigs:
 		cam.global_transform = CameraRigs.transform_for(rig, subject.global_position, up_ice)
 		cam.fov = rig["fov"]
-		# A lower camera sees under the overhead dressing GameCamera hides, so the
-		# shoulder stills show it: whether it intrudes is part of the question.
-		cam.cull_mask = saved_mask if CameraRigs.is_current_framing(rig) \
-				else saved_mask | RenderLayers.OVERHEAD_DRESSING
 		await _settle(2, 0.0)
 		await _snap("m%d_%s" % [moment, rig["name"]])
 	cam.global_transform = saved_xform
 	cam.fov = saved_fov
-	cam.cull_mask = saved_mask
 	cam.set_process(true)
 	Engine.time_scale = 1.0
 
