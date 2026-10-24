@@ -312,6 +312,29 @@ func test_a_soft_shot_at_his_logo_is_caught_on_his_chest() -> void:
 			"the glove come over it")
 
 
+# Caught on the move, he stops where he is and holds it there, turned as he
+# was, until he plays it.
+func test_holding_the_puck_freezes_him_where_he_caught_it() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(-3.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 6.0)
+	_run(1.0)
+	for i: int in 30:
+		_puck.global_position.x += 6.0 * DT
+		_keeper._physics_process(DT)
+	assert_gt(_keeper.motor.glide.velocity.length(), 0.3, "skating with it")
+	_puck.puck_caught_by_goalie.emit(_goalie)
+	_keeper._physics_process(DT)
+	var at: Vector3 = _goalie.global_position
+	var turned: float = _goalie.get_goalie_rotation_y()
+	var held: Vector3 = _puck.global_position
+	_run(KeeperController.CATCH_HOLD_S * 0.9)
+	assert_almost_eq(_goalie.global_position, at, Vector3.ONE * 1e-4, "where he caught it")
+	assert_almost_eq(_goalie.get_goalie_rotation_y(), turned, 1e-4, "turned as he was")
+	assert_almost_eq(_puck.global_position, held, Vector3.ONE * 0.01, "the puck frozen with him")
+	_run(KeeperController.CATCH_HOLD_S * 0.2)
+	assert_false(_keeper.motor._frozen, "free once he has played it")
+
+
 # A tier changed in the session (free play's picker, the tutorial) reaches his
 # reads and his hands.
 func test_a_tier_set_later_reaches_his_saves() -> void:

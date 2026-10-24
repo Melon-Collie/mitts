@@ -477,9 +477,11 @@ func _held_at() -> Vector3:
 	return goalie.global_transform * (KeeperGear.box(_keeper.skeleton, KeeperGear.Part.CHEST) * _chest_held)
 
 
-# Under the glove, dead, and covered for the whistle.
+# Under the glove, dead, and covered for the whistle, him frozen where he holds
+# it.
 func _secure() -> void:
 	_holding = 0.0
+	motor.freeze()
 	puck.pickup_locked = true
 	puck.motion_pinned = true
 	puck.set_puck_velocity(Vector3.ZERO)
@@ -501,5 +503,6 @@ func _hold_catch(delta: float) -> void:
 	puck.set_puck_velocity(_net.basis * Vector3(glove_side, 0.0, -0.5).normalized() * PLAY_OUT_M_S)
 	puck.motion_pinned = false
 	puck.pickup_locked = false
+	motor.thaw()
 	save.release()
 	motor.end_save()

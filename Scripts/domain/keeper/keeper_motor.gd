@@ -89,6 +89,10 @@ var _spot_velocity := Vector2.ZERO
 var _spot_since: float = 0.0
 # Whether the goal on his feet is skated to however far it is.
 var _skate: bool = false
+# Frozen where he is and turned as he is (`freeze`), no move started.
+var _frozen: bool = false
+var _frozen_at := Vector2.ZERO
+var _frozen_yaw: float = 0.0
 
 
 # One move asked for: what, to where, which side, how fast.
@@ -284,9 +288,29 @@ func _plan() -> int:
 	return route.first
 
 
+# A puck he holds, for the whistle: he stops where he is, turned as he is, and
+# starts nothing more until `thaw`; the move under way only settles his pose.
+func freeze() -> void:
+	_frozen = true
+	_frozen_at = Vector2(x, z)
+	_frozen_yaw = yaw
+	_queue.clear()
+	_goal = false
+	glide.velocity = Vector2.ZERO
+	save_move.velocity = Vector2.ZERO
+
+
+func thaw() -> void:
+	_frozen = false
+
+
 func step(dt: float) -> void:
 	var was := Vector2(x, z)
 	_step_mover(dt)
+	if _frozen:
+		x = _frozen_at.x
+		z = _frozen_at.y
+		yaw = _frozen_yaw
 	# Sunk while set on his feet and asked, out of it with any move; a drop or
 	# a save goes from where he has sunk to (KeeperDrop.drop_from, `save`).
 	low_ready.step(dt, _mover == Mover.NONE and rest == Rest.FEET)
