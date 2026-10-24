@@ -502,14 +502,11 @@ const DEFAULT_RULE_SET: int = RuleSet.ARCADE
 const RULE_SET_NAMES: Array[String] = ["Off", "Arcade", "NHL"]
 
 
-# A goalie's cover is a puck nobody can play, so it whistles wherever there
-# are faceoffs; in OFF he holds it a beat and plays it out himself.
+# A goalie's cover is a puck nobody can play: whistled wherever there are faceoffs, once the
+# referee has seen it frozen (the catch or cover seen made); in OFF he plays it out himself.
+const COVER_WHISTLE_DELAY_S: float = 1.0
 static func whistles_a_cover(rule_set: int) -> bool:
 	return rule_set != RuleSet.OFF
-
-# How long after a goalie secures the puck the referee whistles it: once he has
-# seen it frozen, so the catch or the cover is seen made before the play stops.
-const COVER_WHISTLE_DELAY_S: float = 1.0
 
 # Slot depth — distance from goal line to the faceoff-hash "hard slot" in
 # front of the net: real-rink geometry, the prime scoring area as a player reads it.
