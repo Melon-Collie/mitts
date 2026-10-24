@@ -190,9 +190,15 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	_dest_arrival.resize(_dest.kinds.size())
 	_dest_arrival.fill(0.0)
 	var key_bound: float = -INF
+	# The incumbent competes at the plan last search found toward it, when that
+	# beats its straight-carry estimate: the estimate is all a challenger has,
+	# and through a defender's reach every lane's reads alike, so near-equal
+	# lanes would trade places on noise and turn the moves' frame each time.
 	var incumbent: int = _dest.kinds.find(_dest.chosen_kind)
 	if incumbent >= 0:
 		var t: float = _score_destination(ctx, incumbent, our_goalie, behind_net, -INF)
+		if t > -INF:
+			t = maxf(t, value)
 		_dest_totals[incumbent] = t
 		key_bound = t * (1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC) if t > 0.0 else t
 	for i: int in _dest.kinds.size():
@@ -219,8 +225,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 	if caps == null:
 		caps = _league_caps
-	var aim: Vector3 = destination if destination_kind >= 0 \
-			else AICarrierField.slot_anchor(ctx.own_goal_dir)
+	var aim: Vector3 = _fan_aim(ctx)
 	# A destination across a cage is skated at the first waypoint round it.
 	if AINetObstacle.carry_path_blocked_by_net(self_pos, aim):
 		aim = AIArrival.cage_waypoint(self_pos, aim, ctx.self_velocity, caps.max_speed,
@@ -383,6 +388,15 @@ func _prune_bound_for(m: int, bound: float) -> float:
 	return bound
 
 
+# What the rolled moves are oriented on: the destination, or the slot when no
+# carry pays anywhere — an argmax of the menu's losses is an arbitrary lane,
+# and it would turn the whole fan with it.
+func _fan_aim(ctx: RoleContext) -> Vector3:
+	if destination_kind >= 0 and _dest.chosen_total > 0.0:
+		return destination
+	return AICarrierField.slot_anchor(ctx.own_goal_dir)
+
+
 # The |z| a move from in front of the goal lines may not pass; none from behind.
 static func _max_abs_z(behind_net: bool) -> float:
 	return INF if behind_net else GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M
@@ -436,8 +450,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		caps: AISkaterCaps, floor_value: float = -INF) -> float:
 	var t1: float = AICarryRollout.HORIZON_S
 	var start: Vector3 = rollout.end_pos[m1]
-	var aim: Vector3 = destination if destination_kind >= 0 \
-			else AICarrierField.slot_anchor(ctx.own_goal_dir)
+	var aim: Vector3 = _fan_aim(ctx)
 	if AINetObstacle.carry_path_blocked_by_net(start, aim):
 		aim = AIArrival.cage_waypoint(start, aim, rollout.end_vel[m1], caps.max_speed,
 				caps.max_accel, caps.lateral_grip)

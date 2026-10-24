@@ -272,8 +272,10 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 # blade / poke rules, across pace, miss distance and closing geometry), the
 # meeting outcome is a pure DISTANCE band on the contact envelope's own radii,
 # not a speed or dwell-time effect:
-#   core = blade_span − POKE_CONTACT_RADIUS_M   → keep 0 (swept at any pace)
-#   edge = blade_span                            → keep 1 (grazed at pace)
+#   core = reach                         → keep 0 (swept at any pace)
+#   edge = reach + POKE_CONTACT_RADIUS_M  → keep 1 (grazed at pace)
+# where reach is his full blade reach (the build's max_blade_reach): the blade
+# sent at the puck, the poke's contact past its tip.
 #
 # A PROTECTING carrier (puck ridden on the handle envelope away from the
 # threat) shifts the whole band by CROSSING_PROTECT_SHIFT_M. The shift is a
@@ -285,7 +287,20 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 #
 # Slow grazes are stripped by pursuit, not the meeting, and pursuit is what the
 # mid/end transit samples price. Only the window INTERIOR is sampled here.
-const CROSSING_PROTECT_SHIFT_M: float = 0.8
+#
+# Measured by tests/instruments/ai/test_crossing_band.gd: a carrier held past a
+# planted poker who leads the carry keeps the puck once his line passes his
+# full reach + ~0.15 m, at every pace and on either side. The shield rides the
+# puck ~0.3 m off by then (0.8 m only once the stick is already inside it), and
+# the band's half width takes the rest.
+const CROSSING_PROTECT_SHIFT_M: float = 0.1
+
+
+# A defender's crossing span, the band's edge before any shield: his full reach
+# plus the poke's contact.
+static func _crossing_span(caps: AISkaterCaps) -> float:
+	return (caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M) \
+			+ POKE_CONTACT_RADIUS_M
 
 
 static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
@@ -311,11 +326,7 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 	var worst_l: float = INF
 	var worst_r: float = INF
 	for i: int in n:
-		var span: float = EVADE_STICK_REACH_M
-		if has_caps:
-			var caps: AISkaterCaps = opponent_caps[i]
-			if caps != null:
-				span = caps.blade_span
+		var span: float = _crossing_span(opponent_caps[i] if has_caps else null)
 		var r0x: float = from.x - opponents[i].x
 		var r0z: float = from.z - opponents[i].z
 		# PRESCREEN (exact): the meeting can't come nearer than the current
@@ -471,11 +482,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 				continue
 			var mx: float = r0x + rvx * t_star
 			var mz: float = r0z + rvz * t_star
-			var span: float = EVADE_STICK_REACH_M
-			if has_caps:
-				var caps: AISkaterCaps = opponent_caps[i]
-				if caps != null:
-					span = caps.blade_span
+			var span: float = _crossing_span(opponent_caps[i] if has_caps else null)
 			var margin: float = sqrt(mx * mx + mz * mz) - span
 			if dirx * (-mz) - dirz * (-mx) >= 0.0:
 				worst_l = minf(worst_l, margin)
@@ -504,11 +511,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 					continue
 				var mx2: float = r0x2 + rvx2 * t_star2
 				var mz2: float = r0z2 + rvz2 * t_star2
-				var span2: float = EVADE_STICK_REACH_M
-				if has_caps:
-					var caps2: AISkaterCaps = opponent_caps[i]
-					if caps2 != null:
-						span2 = caps2.blade_span
+				var span2: float = _crossing_span(opponent_caps[i] if has_caps else null)
 				var margin2: float = sqrt(mx2 * mx2 + mz2 * mz2) - span2
 				var left: bool = dirx * (-mz2) - dirz * (-mx2) >= 0.0
 				var eff: float = margin2 + CROSSING_PROTECT_SHIFT_M

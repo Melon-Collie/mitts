@@ -45,7 +45,19 @@ roles stand where the lane to them × our possession of the spot is best, so
 there is no second scale left to mix in.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
-to that seam — odds of scoring on today's goalie with a first shot.
+to that seam — odds of scoring on today's goalie with a first shot. A pass's bar
+is weighed against keeping the puck: when both reads of keeping it (the carry
+and the drive-in) lose it where he stands, that loss comes off the bar, up to
+the whole bar, leaving only settle doubt's raise. A pressured carrier with an
+open man ahead is choosing between the pass and a turnover, and a 0.015 outlet
+is not a giveaway next to that.
+
+A pass's receiver is priced at the best of his shot off the feed, his straight
+drive in, and the zone entries our possession of his spot is priced by, from
+when the puck reaches him (`AICarrierField.entry_value`) — the read the defence
+prices a feed to him by. He does not search, and a straight drive alone misses
+every lane but the one at the net: a man taking a feed in stride at the blue
+line with a defender in the middle is worth the lanes either side of him.
 
 ## Difficulty rides three independent axes
 
@@ -659,10 +671,22 @@ reaches back into what remains.
   front of a carrier is a wall he skates into, not a gap that holds
   (`AICarrySpace._stopped_clearance`; a chaser behind only loses ground by it).
   The carrier's projected defence reads him the same way: backing off in front
-  of the carrier, he gives up no more ice than his stop takes
-  (`AICarrierField.project_opponents`). Carried on at its pace, his retreat
-  shows every delay of the entry an emptier blue line, and the carrier pulls up
-  in the neutral zone to wait for it.
+  of the carrier, he gives up no more ice, in any direction, than his stop
+  takes (`AICarrierField.project_opponents`). Carried on, his retreat shows
+  every delay of the entry an emptier blue line and his drift across (which
+  mirrors the carrier) the far lane opening, so the carrier pulls up to wait or
+  flips lanes each time the drift reverses. Which lane the carry is FOR is held
+  the same way: the incumbent destination competes at the plan last found toward
+  it, not at its straight-carry estimate, through which every lane past a
+  defender reads alike.
+  - A defender the carry path **meets** between samples is priced by the
+    crossing band (`carry_crossing_keep`) on his full reach
+    (`AISkaterCaps.max_blade_reach`) plus the poke's contact, the reach a
+    poke-check is thrown at, less the little the shield buys at that range —
+    measured by `tests/instruments/ai/test_crossing_band.gd` against a poker who
+    leads the carry. The dwell and transit maps keep their own calibration on
+    the stick's span: priced at full reach everywhere, a carrier in his own end
+    read every forechecker's disk as closed and escaped fewer forechecks.
   - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
     all") prices the carrier's current safety. Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its

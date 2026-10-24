@@ -44,9 +44,12 @@ func test_container_duel_resolves_with_possession() -> void:
 	# degenerate case — a container with no momentum trivially mirrors every
 	# lateral step (velocity-matched seek makes that near-perfect), which is not
 	# how containment is ever beaten on the ice.
+	#
+	# They start 8 m apart, ~0.7 s of closing: nearer, the container's poke lands
+	# before anyone has read anything, which is a collision rather than a duel.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -6.0), null, Vector3(0, 0, -7.0))
-	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -8.5), null, Vector3(0, 0, 4.0))
+	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -14.0), null, Vector3(0, 0, 4.0))
 	duel.start(CARRIER)
 	# Resolution is checked live, not on the final frame: the carrier beats
 	# the container (dump-past or carry), collects deep, and can then WRAP
@@ -57,7 +60,7 @@ func test_container_duel_resolves_with_possession() -> void:
 	var resolved: bool = false
 	for _i: int in int(6.0 / DuelHarness.DT):
 		duel.step()
-		if duel.puck_pos.z < -8.5 \
+		if duel.puck_pos.z < -14.0 \
 				and (duel.carrier() == CARRIER or duel.releases.size() > 0):
 			resolved = true
 	assert_true(duel.carrier() == CARRIER or duel.releases.size() > 0,
@@ -70,10 +73,12 @@ func test_cornered_carrier_escapes() -> void:
 	# A patient scripted container holds the line to the net while a real
 	# defender pressures from behind — retreat denied, forward contained. The
 	# carrier must get past: the puck crosses the container's depth floor still
-	# in team-0 hands, or gets released on net once the lane opens.
+	# in team-0 hands, or gets released on net once the lane opens. The
+	# container holds just outside his presented stick: inside it, the poke lands
+	# on the first tick.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -9.0))
-	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -11.3), 2.3, -13.0)
+	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -12.5), 3.5, -13.0)
 	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -6.5))
 	duel.start(CARRIER)
 	var crossed_carrying: bool = false

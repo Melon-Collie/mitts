@@ -21,11 +21,17 @@ extends RefCounted
 # What is APPROXIMATED (keep scenario assertions coarse because of these):
 #   - Facing: the game's facing rule (FacingRules) and turn-round step,
 #     without the pose coordinator's wind-up or the back-wedge IK gate.
-#   - Blade: the cursor clamped to the reach ring, rate-limited at the Hands
-#     blade speed (no ROM cone, no lift plane). Through a wrister charge it
+#   - Blade: the cursor clamped to the body's full reach ring, rate-limited at
+#     the Hands blade speed (no ROM cone — forehand and backhand reach alike —
+#     no lift plane). Through a wrister charge it
 #     holds the shot origin instead, as the controller does.
 #   - Strips: a defender's blade sweeping through the carried puck knocks it
-#     loose along the sweep (no host restitution detail).
+#     loose at the real poke exit and cooldowns, flat (no pinch hop).
+#   - One-timers: a puckless slapper wind-up's blade is overhead the whole
+#     charge (no catch on it), and the swing connects through the real zone
+#     test at the build's strike spot. Through any slapper charge the hips
+#     pivot to the shot's stance at the stance rate, without the turn's
+#     wind-up.
 #   - Posture: REAL — the agent's stance and hit buttons resolve to the
 #     movement model's posture exactly as the controller resolves them.
 #   - Absent entirely: body collisions / checks, boards beyond the analytic
@@ -65,8 +71,20 @@ const BOBBLE_GRACE_TICKS: int = 48   # Puck.settle_max_s 0.40 s at 120 Hz
 # A releaser can't re-catch its own release while the puck departs its blade
 # (production has a post-shot pickup cooldown on the controller).
 const RELEASE_GRACE_TICKS: int = 36
-# A stripped puck squirts along the poking blade's sweep at a capped pace.
-const STRIP_SQUIRT_M_S: float = 3.5
+# A strip leaves the puck at Puck.apply_poke_check's exit, with its cooldowns:
+# the ex-carrier can't reattach for reattach_cooldown, the poker for
+# poke_checker_cooldown.
+const POKE_STRIP_MIN_M_S: float = 3.0
+const POKE_STRIP_MAX_M_S: float = 9.0
+const POKE_CARRIER_VEL_BLEND: float = 0.5
+const STRIP_REATTACH_TICKS: int = 60
+const STRIP_CHECKER_TICKS: int = 12
+# A puckless slapper wind-up holds the blade overhead, out of the catch's reach;
+# the swing meets a loose puck in the slapper zone (the build's strike spot)
+# after the retention hold (SkaterController._try_one_timer_release).
+const SLAPPER_ZONE_RADIUS_M: float = 0.5
+const ONE_TIMER_LENIENCY_S: float = 0.08
+const ONE_TIMER_RETENTION_TICKS: int = 13
 # Release pace for a shot (quick-shot scale): the harness records shot EVENTS for
 # assertions, and their flight fidelity is not the point. Passes fly at their
 # own pace (_release_speed).
@@ -112,6 +130,9 @@ class SimSkater:
 	# The charge held last tick was a pass (or dump): it leaves at the pace the bot
 	# committed to (_release_speed).
 	var was_passing: bool = false
+	# The tick a puckless slapper swing lands (-1: none coming) and its aim.
+	var swing_at: int = -1
+	var swing_aim: Vector3 = Vector3.ZERO
 	# Body-relative blade latched as a wrister charge starts (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
 	var wrister_active: bool = false
@@ -128,6 +149,12 @@ class SimSkater:
 	# (stride ramp, power knee) facing its travel, instead of the flat-accel
 	# P-control — for a fixture whose question is a race against it.
 	var script_skates: bool = false
+	# The radius the blade reaches off the body (the body's full reach,
+	# match_caps().max_blade_reach, unless a fixture sets its own), and a
+	# fixture's per-tick write over the decided input (`func(s: SimSkater) ->
+	# void`), run after the agent decides.
+	var blade_reach: float = BLADE_REACH
+	var input_override: Callable = Callable()
 
 
 var skaters: Array[SimSkater] = []
@@ -253,6 +280,7 @@ func add_skater(peer_id: int, team_id: int, pos: Vector3,
 	s.vel = vel
 	s.blade = pos
 	s.prev_blade = pos
+	s.blade_reach = _caps.max_blade_reach
 	s.profile = profile
 	skaters.append(s)
 	team_map[peer_id] = team_id
@@ -354,6 +382,8 @@ func step() -> void:
 			s.agent.dispatch(s.input, snapshot)
 		# Production's last write to the move (SkaterAgent.tick).
 		s.agent.apply_offside_guard(s.input, snapshot)
+		if s.input_override.is_valid():
+			s.input_override.call(s)
 	# Collect one-timer readiness into the brains after dispatch — the write moved
 	# off _set_one_timer_ready for threading (AICoordinator does the same on the
 	# host), so the frozen view reflects it next frame.
@@ -407,6 +437,7 @@ func step() -> void:
 					and c.was_holding_shot and not c.input.shoot_held:
 				airborne_ticks = roundi(AIPuckLane.saucer_hang_time_s() / DT)
 				_airborne_keep = 1.0
+	_puckless_swings()
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
 		if s.agent == null:
@@ -417,7 +448,17 @@ func step() -> void:
 			continue
 		var to_mouse := Vector2(s.input.mouse_world_pos.x - s.pos.x,
 				s.input.mouse_world_pos.z - s.pos.z)
-		if to_mouse.length() > move_cfg.move_deadzone:
+		var slap_line := Vector2(s.input.bot_slapper_aim_dir.x, s.input.bot_slapper_aim_dir.z)
+		if s.swing_at >= ticks:
+			slap_line = Vector2(s.swing_aim.x, s.swing_aim.z)
+		if (s.input.slap_held or s.swing_at >= ticks) and slap_line != Vector2.ZERO:
+			# Through a slapper charge the hips pivot to the stance for the locked
+			# line at their stance rate (SkaterPoseCoordinator._turn_to_slapper_stance).
+			var stance: Vector2 = SlapperRules.stance_facing(slap_line.normalized(),
+					-1.0 if s.agent._is_left_handed else 1.0, _caps.slapper_stance_open_rad)
+			var step_rad: float = _caps.slapper_stance_turn_rad_s * DT
+			s.facing = s.facing.rotated(clampf(s.facing.angle_to(stance), -step_rad, step_rad))
+		elif to_mouse.length() > move_cfg.move_deadzone:
 			# The game's own facing rule (FacingRules) and step
 			# (SkaterPoseCoordinator.apply_facing), so a bot here faces where it
 			# would in a match: its skating line once skating, its cursor otherwise,
@@ -463,7 +504,7 @@ func step() -> void:
 		else:
 			var to_cursor: Vector3 = s.input.mouse_world_pos - s.pos
 			to_cursor.y = 0.0
-			desired = s.pos + to_cursor.limit_length(BLADE_REACH)
+			desired = s.pos + to_cursor.limit_length(s.blade_reach)
 		var max_step: float = (MAX_BLADE_SPEED + s.vel.length()) * DT
 		s.blade = s.blade + (desired - s.blade).limit_length(max_step)
 	# Puck.
@@ -484,9 +525,12 @@ func step() -> void:
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
 				strips += 1
 				carrier_id = -1
-				var sweep: Vector3 = (s.blade - s.prev_blade) / DT
-				sweep.y = 0.0
-				puck_vel = sweep.limit_length(STRIP_SQUIRT_M_S)
+				puck_vel = PuckCollisionRules.poke_strip_velocity(
+						(s.blade - s.prev_blade) / DT, (c2.blade - c2.prev_blade) / DT,
+						c2.pos, s.pos, POKE_CARRIER_VEL_BLEND, POKE_STRIP_MIN_M_S,
+						POKE_STRIP_MAX_M_S, c2.pos - s.pos)
+				_release_grace[c2.peer_id] = ticks + STRIP_REATTACH_TICKS
+				_release_grace[s.peer_id] = ticks + STRIP_CHECKER_TICKS
 				break
 	elif airborne_ticks > 0:
 		# In the air: ballistic ground track, untouchable, lands with a
@@ -529,6 +573,8 @@ func step() -> void:
 				continue   # a puppet contains and pokes; it never carries
 			if ticks < int(_release_grace.get(s.peer_id, 0)):
 				continue   # own release still departing the blade
+			if s.input.slap_held or s.swing_at >= ticks:
+				continue   # blade overhead in a puckless wind-up
 			var rel: Vector3 = puck_vel - s.vel
 			rel.y = 0.0
 			var face: Vector3 = PuckReceptionRules.blade_face_normal(s.blade, s.pos, rel,
@@ -636,6 +682,40 @@ func _script_skate(s: SimSkater, err: Vector3) -> void:
 # committed to (the controller's wrister load, which turns the committed power
 # into that pace, is not modelled), a quick pass at its fixed pace, a shot at
 # RELEASE_SPEED_M_S.
+# A puckless slapper swing: armed as the button drops, it lands after the
+# retention hold and fires a loose puck it meets in the slapper zone
+# (ShotReleaseRules.one_timer_connects) from there, along its committed aim.
+func _puckless_swings() -> void:
+	for s: SimSkater in skaters:
+		if s.agent == null or carrier_id == s.peer_id:
+			continue
+		if s.was_holding_slap and not s.input.slap_held and not s.input.shoot_pressed:
+			s.swing_at = ticks + ONE_TIMER_RETENTION_TICKS
+			s.swing_aim = s.input.bot_slapper_aim_dir
+		if s.swing_at != ticks:
+			continue
+		s.swing_at = -1
+		if carrier_id != -1 or ticks < int(_release_grace.get(s.peer_id, 0)):
+			continue
+		var strike: Vector2 = _caps.slapper_strike_local
+		var off: Vector2 = SlapperRules.local_to_world(Vector2(
+				strike.x * (-1.0 if s.agent._is_left_handed else 1.0), strike.y), s.facing)
+		var zone := Vector3(s.pos.x + off.x, 0.0, s.pos.z + off.y)
+		if not ShotReleaseRules.one_timer_connects(Vector2(zone.x, zone.z),
+				SLAPPER_ZONE_RADIUS_M, Vector2(puck_pos.x, puck_pos.z),
+				Vector2(puck_vel.x, puck_vel.z), airborne_ticks > 0,
+				ONE_TIMER_LENIENCY_S + ONE_TIMER_RETENTION_TICKS * DT, ONE_TIMER_LENIENCY_S):
+			continue
+		releases.append({"tick": ticks, "peer": s.peer_id, "team": s.team_id,
+				"pos": s.pos, "decision": "ONE_TIMER"})
+		_release_grace[s.peer_id] = ticks + RELEASE_GRACE_TICKS
+		var aim := Vector3(s.swing_aim.x, 0.0, s.swing_aim.z)
+		if aim.length_squared() < 0.0001:
+			aim = Vector3(s.facing.x, 0.0, s.facing.y)
+		puck_pos = Vector3(zone.x, puck_pos.y, zone.z)
+		puck_vel = aim.normalized() * RELEASE_SPEED_M_S
+
+
 func _release_speed(c: SimSkater) -> float:
 	if c.input.quick_pass_pressed:
 		return GameRules.DEFAULT_QUICK_PASS_POWER_M_S

@@ -962,11 +962,13 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~11x PASS_MIN_VALUE, the weak one ~1.5x — inside the 1x-2.5x window Normal's
-# doubt holds. The weak outlet is still sliding into the far corner, so his drive
-# up the wall has to brake that out first. Both values are future value and so
-# scale with READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's depth
-# when that moves, never its slide (past 6 m/s the lane dies outright).
+# ~10x PASS_MIN_VALUE, the weak one ~0.9x. Boxed in, the carrier would lose the
+# puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
+# holds is under its doubt's raise (1.5x). The weak outlet is still sliding into
+# the far corner, so his drive up the wall has to brake that out first. Both
+# values are future value and so scale with READ_VALIDITY_TAU_S against a fixed
+# bar: re-size the weak one's depth when that moves, never its slide (past 6 m/s
+# the lane dies outright).
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
 			else Vector3.ZERO
@@ -979,7 +981,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.0)  # deep below the dot
+const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.5)  # deep below the dot
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
@@ -2099,7 +2101,9 @@ func test_pass_option_prefers_the_spot_that_reopens_the_lane() -> void:
 
 const _PINCH_SPOT := Vector3(0.0, 0.0, -18.0)     # OZ, attacking -Z
 const _TIGHT_WALL_HALF_GAP: float = 0.5           # 1.0 m apart: no seam for a body or a puck
-const _SPLITTABLE_HALF_GAP: float = 1.8           # 3.6 m up the middle
+# 6 m up the middle: each man ~3 m off the carrier's line, past his full reach
+# and the poke's contact (AICarrySpace._crossing_span), so the seam is real.
+const _SPLITTABLE_HALF_GAP: float = 3.0
 
 
 # A carrier at _PINCH_SPOT with a teammate open wide and two defenders 1.6 m
@@ -2119,7 +2123,7 @@ func test_a_wider_gap_never_makes_the_carry_worth_less() -> void:
 	# Between the pinch and the split, opening the gap only ever gives the carrier
 	# more room: the carry is never worth less.
 	var prev: float = -INF
-	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.7, 0.9, 1.1, 1.3, 1.5, _SPLITTABLE_HALF_GAP]:
+	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.9, 1.3, 1.7, 2.1, 2.5, _SPLITTABLE_HALF_GAP]:
 		var v: float = _pinch(half_gap)._carry.raw_value
 		assert_gte(v, prev - 1e-4,
 				"gap %.1f m: the carry is worth less (%.3f after %.3f)"

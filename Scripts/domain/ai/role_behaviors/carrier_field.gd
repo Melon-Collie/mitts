@@ -182,21 +182,31 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 
 
 # Every opponent dead-reckoned `time_s` ahead, into `out_buf`, index-matched to
-# `opponents` — except that a man backing off in front of the carrier gives up
-# no more ice than his stop takes. Backing off is his choice, read off the
-# carry; stopping is the one that leaves him in the way, so a retreat carried on
-# at its pace would show every delay of the entry a blue line he has left, and
-# the carrier pulls up to wait for it (the safety read's _stopped_clearance is
-# the same man).
+# `opponents` — except a man backing off in front of the carrier, who gives up
+# no more ice, in any direction, than his stop takes. His motion there is read
+# off the carry: backing off keeps his gap, his drift across mirrors the
+# carrier's, and stopping is the one choice that leaves him in the way. Carried
+# on, his retreat shows every delay of the entry a blue line he has left, and
+# his drift shows the far lane opening, so the carrier pulls up to wait or
+# flips lanes each time it reverses (the safety read's _stopped_clearance is
+# the same man). A man closing on the carrier keeps his momentum.
 func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 	out_buf.clear()
 	for i: int in opponents.size():
-		var p: Vector3 = AITrajectory.predict_at(opponents[i], opponent_vels[i], time_s)
-		var retreat: float = opponent_vels[i].z * _attack_z
-		if retreat > 0.0 and (opponents[i].z - _carrier_z) * _attack_z > 0.0:
-			var stop_m: float = retreat * retreat / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2)
-			p.z -= _attack_z * maxf(retreat * time_s - stop_m, 0.0)
-		out_buf.append(p)
+		var v: Vector3 = opponent_vels[i]
+		if _backing_off_ahead(opponents[i], v):
+			var speed: float = Vector2(v.x, v.z).length()
+			var slide: float = minf(speed * time_s,
+					speed * speed / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
+			out_buf.append(opponents[i] + Vector3(v.x, 0.0, v.z) * (slide / speed))
+			continue
+		out_buf.append(AITrajectory.predict_at(opponents[i], v, time_s))
+
+
+# A man in front of the carrier, between him and the net he attacks, skating
+# toward it.
+func _backing_off_ahead(pos: Vector3, vel: Vector3) -> bool:
+	return vel.z * _attack_z > 0.0 and (pos.z - _carrier_z) * _attack_z > 0.0
 
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`: the
@@ -409,6 +419,12 @@ func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # what the carrier searches: our possession there (AIPossessionValue).
 func horizon_value(pos: Vector3) -> float:
 	return _ours.at(pos)
+
+
+# The best zone entry for our man at `pos` `start_s` from now, moving at `vel`
+# (AIPossessionValue.entry_at), or `known` when none beats it.
+func entry_value(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float:
+	return _ours.entry_at(pos, start_s, vel, known)
 
 
 # The two cases of value_at: `shoot_s` is the shot's odds at `pos`.
