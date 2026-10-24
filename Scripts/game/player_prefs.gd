@@ -524,9 +524,6 @@ func save() -> void:
 	cfg.set_value("player", "preferred_color_slot", preferred_color_slot)
 	cfg.set_value("player", "stick_tape", stick_tape_code)
 	cfg.set_value("player", "gear_style", gear_style_code)
-	# Marks the code above as already carrying MODEL indices, so _load() doesn't
-	# re-run the pre-models accent-color migration on it.
-	cfg.set_value("player", "gear_model_version", 1)
 	cfg.set_value("player", "skin_tone", skin_tone)
 	cfg.set_value("player", "attr_height",  attr_height)
 	cfg.set_value("player", "attr_weight",  attr_weight)
@@ -586,13 +583,8 @@ func save() -> void:
 	cfg.set_value("game", "camera_distance", camera_distance)
 	cfg.set_value("game", "camera_mode", camera_mode)
 	cfg.set_value("game", "bot_difficulty", bot_difficulty)
-	# Marks bot_difficulty as already on the 3-tier (Easy/Normal/Hard) scale so
-	# _load() doesn't re-run the 2-tier → 3-tier remap on a re-saved file.
-	cfg.set_value("game", "bot_difficulty_scale_version", 1)
 	cfg.set_value("game", "goalie_difficulty", goalie_difficulty)
 	cfg.set_value("game", "freeplay_goalie_difficulty", freeplay_goalie_difficulty)
-	# Same marker for the goalie scale.
-	cfg.set_value("game", "goalie_difficulty_scale_version", 1)
 	cfg.set_value("game", "hud_scale", hud_scale)
 	cfg.set_value("game", "share_gameplay_stats", share_gameplay_stats)
 	cfg.set_value("game", "locale", locale)
@@ -613,10 +605,8 @@ func save() -> void:
 	for action: String in PAD_REBINDABLE_ACTIONS:
 		if pad_bindings.has(action):
 			cfg.set_value("pad_bindings", action, int(pad_bindings[action]))
-	# Marks the Hit/Block control-scheme swap applied (see _load's migration), so
-	# a returning config is remapped exactly once and never re-forces Block off a
-	# key the player has since chosen for it.
-	cfg.set_value("bindings", "scheme_version", 1)
+	# Marks the scheme-3 pad remap (see _load) applied, so it runs once and never
+	# moves a bind the player has since chosen.
 	cfg.set_value("bindings", "pad_scheme_version", 3)
 	cfg.save(_get_save_path())
 	_push_to_cloud()
@@ -1120,15 +1110,8 @@ func _load() -> void:
 		# code coerces to a legal tape job instead of riding raw into the wire.
 		stick_tape_code = StickTapeConfig.from_code(int(cfg.get_value(
 				"player", "stick_tape", StickTapeConfig.DEFAULT_CODE))).to_code()
-		# A pre-models save stored two TapeColorRegistry accent picks where the
-		# code now carries skate/glove model indices — map them onto the nearest
-		# designs rather than silently re-equipping stock gear.
-		var stored_gear: int = int(cfg.get_value(
-				"player", "gear_style", GearStyleConfig.DEFAULT_CODE))
-		if int(cfg.get_value("player", "gear_model_version", 0)) >= 1:
-			gear_style_code = GearStyleConfig.from_code(stored_gear).to_code()
-		else:
-			gear_style_code = GearStyleConfig.migrate_colors(stored_gear).to_code()
+		gear_style_code = GearStyleConfig.from_code(int(cfg.get_value(
+				"player", "gear_style", GearStyleConfig.DEFAULT_CODE))).to_code()
 		skin_tone = SkinToneRegistry.clamp_index(int(cfg.get_value(
 				"player", "skin_tone", SkinToneRegistry.DEFAULT_INDEX)))
 		# Only the v5 body+gear build loads; an older save keeps the neutral build
@@ -1146,8 +1129,7 @@ func _load() -> void:
 		master_volume = clampf(cfg.get_value("audio", "master_volume", 0.5), 0.0, 1.0)
 		sfx_volume = clampf(cfg.get_value("audio", "sfx_volume", 1.0), 0.0, 1.0)
 		ui_volume = clampf(cfg.get_value("audio", "ui_volume", 1.0), 0.0, 1.0)
-		# Renamed from "crowd_volume"; fall back to the old key so existing saves keep their level.
-		arena_volume = clampf(cfg.get_value("audio", "arena_volume", cfg.get_value("audio", "crowd_volume", 1.0)), 0.0, 1.0)
+		arena_volume = clampf(cfg.get_value("audio", "arena_volume", 1.0), 0.0, 1.0)
 		master_muted = cfg.get_value("audio", "master_muted", false)
 		mute_when_unfocused = cfg.get_value("audio", "mute_when_unfocused", true)
 		window_mode = clampi(int(cfg.get_value("video", "window_mode", WINDOW_MODE_BORDERLESS)), 0, WINDOW_MODE_LABELS.size() - 1)
@@ -1198,22 +1180,8 @@ func _load() -> void:
 		fov = clampf(cfg.get_value("game", "fov", 50.0), FOV_MIN, FOV_MAX)
 		camera_distance = clampf(cfg.get_value("game", "camera_distance", 1.0), CAMERA_DISTANCE_MIN, CAMERA_DISTANCE_MAX)
 		camera_mode = clampi(int(cfg.get_value("game", "camera_mode", CAMERA_MODE_DYNAMIC)), 0, CAMERA_MODE_LABELS.size() - 1)
-		bot_difficulty = int(cfg.get_value("game", "bot_difficulty", BotSkillProfile.Difficulty.NORMAL))
-		# Easy sits at index 0, so the 2-tier values shift up one (old 0=Normal →
-		# new 1=Normal, old 1=Hard → new 2=Hard). Remap once, and only a value
-		# actually persisted under the old scale (has the key, no version marker)
-		# — a config predating bot_difficulty must keep the new default rather
-		# than being bumped to Hard.
-		if cfg.has_section_key("game", "bot_difficulty") \
-				and int(cfg.get_value("game", "bot_difficulty_scale_version", 0)) < 1:
-			bot_difficulty += 1
-		bot_difficulty = clampi(bot_difficulty, 0, BOT_DIFFICULTY_LABELS.size() - 1)
-		goalie_difficulty = int(cfg.get_value("game", "goalie_difficulty", GoalieSkillProfile.Difficulty.NORMAL))
-		# Same 2-tier → 3-tier remap as bot_difficulty above, gated the same way.
-		if cfg.has_section_key("game", "goalie_difficulty") \
-				and int(cfg.get_value("game", "goalie_difficulty_scale_version", 0)) < 1:
-			goalie_difficulty += 1
-		goalie_difficulty = clampi(goalie_difficulty, 0, GOALIE_DIFFICULTY_LABELS.size() - 1)
+		bot_difficulty = clampi(int(cfg.get_value("game", "bot_difficulty", BotSkillProfile.Difficulty.NORMAL)), 0, BOT_DIFFICULTY_LABELS.size() - 1)
+		goalie_difficulty = clampi(int(cfg.get_value("game", "goalie_difficulty", GoalieSkillProfile.Difficulty.NORMAL)), 0, GOALIE_DIFFICULTY_LABELS.size() - 1)
 		freeplay_goalie_difficulty = clampi(int(cfg.get_value("game", "freeplay_goalie_difficulty", GoalieSkillProfile.Difficulty.EASY)), 0, GOALIE_DIFFICULTY_LABELS.size() - 1)
 		hud_scale = clampf(cfg.get_value("game", "hud_scale", 1.0), HUD_SCALE_MIN, HUD_SCALE_MAX)
 		share_gameplay_stats = cfg.get_value("game", "share_gameplay_stats", true)
@@ -1238,49 +1206,8 @@ func _load() -> void:
 		for action: String in PAD_REBINDABLE_ACTIONS:
 			if cfg.has_section_key("pad_bindings", action):
 				pad_bindings[action] = int(cfg.get_value("pad_bindings", action, -1))
-		# Action rename (quick_shot → quick_pass): a config predating the rename
-		# stored the bind under the old key — adopt it so a player's custom
-		# quick-pass key survives instead of resetting to the E default. (The old
-		# key is left in the file; it's simply never read again.)
-		if not bindings.has("quick_pass"):
-			var old_qp_type: String = cfg.get_value("bindings", "quick_shot_type", "")
-			if old_qp_type == "key":
-				bindings["quick_pass"] = {"type": "key", "physical_keycode": cfg.get_value("bindings", "quick_shot_code", 0)}
-			elif old_qp_type == "mouse":
-				bindings["quick_pass"] = {"type": "mouse", "button_index": cfg.get_value("bindings", "quick_shot_code", 0)}
-		# Action rename (sprint → stance), the same adoption for both devices.
-		if not bindings.has("stance"):
-			var old_sprint_type: String = cfg.get_value("bindings", "sprint_type", "")
-			if old_sprint_type == "key":
-				bindings["stance"] = {"type": "key", "physical_keycode": cfg.get_value("bindings", "sprint_code", 0)}
-			elif old_sprint_type == "mouse":
-				bindings["stance"] = {"type": "mouse", "button_index": cfg.get_value("bindings", "sprint_code", 0)}
-		if not pad_bindings.has("stance") and cfg.has_section_key("pad_bindings", "sprint"):
-			pad_bindings["stance"] = int(cfg.get_value("pad_bindings", "sprint", -1))
-		# Pad scheme swap (pad_scheme_version 1): the stance takes LB and the hit
-		# takes L3. Only a config still on BOTH old defaults moves; a player who
-		# rebound either is left alone.
-		if int(cfg.get_value("bindings", "pad_scheme_version", 0)) < 1 \
-				and int(pad_bindings.get("hit", JOY_BUTTON_LEFT_SHOULDER)) == JOY_BUTTON_LEFT_SHOULDER \
-				and int(pad_bindings.get("stance", JOY_BUTTON_LEFT_STICK)) == JOY_BUTTON_LEFT_STICK:
-			pad_bindings.erase("hit")
-			pad_bindings.erase("stance")
-		if int(cfg.get_value("bindings", "pad_scheme_version", 0)) < 2:
-			PadSchemeMigration.to_scheme_2(pad_bindings, PAD_DEFAULT_BUTTONS)
 		if int(cfg.get_value("bindings", "pad_scheme_version", 0)) < 3:
 			PadSchemeMigration.to_scheme_3(pad_bindings, PAD_DEFAULT_BUTTONS)
-		# Control-scheme swap (scheme_version 1): Hit takes Ctrl, Block moves to C.
-		# A config predating the swap that still has Block on its old Ctrl default
-		# is remapped to C; a player who deliberately rebound Block elsewhere is
-		# left alone. Hit is erased here so the default-fill below seeds it from
-		# the project default (Ctrl). Runs once, gated like the difficulty-scale
-		# remaps above.
-		if int(cfg.get_value("bindings", "scheme_version", 0)) < 1:
-			var old_block: Dictionary = bindings.get("block", {})
-			if old_block.get("type") == "key" \
-					and int(old_block.get("physical_keycode", 0)) == KEY_CTRL:
-				bindings["block"] = {"type": "key", "physical_keycode": KEY_C}
-			bindings.erase("hit")
 	# Fill in InputMap defaults for any action not in the saved config
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
