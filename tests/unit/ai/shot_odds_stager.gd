@@ -22,6 +22,8 @@ const DEKE_FORWARD_M_S: float = 3.0
 # Every staged carrier skated in: from this far straight out, at this pace.
 const APPROACH_M: float = 4.0
 const APPROACH_M_S: float = 4.0
+# A wrap's carrier comes along the end boards from this far across.
+const WRAP_FROM_X_M: float = 5.0
 
 var goal := Vector3(0.0, 0.0, GOAL_Z)
 # The keeper as he stood square on the passer, just before the last feed left.
@@ -70,6 +72,19 @@ func stage_feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
 # position. Returns the release point.
 func stage_decoy(spot: Vector3, decoy: Vector3) -> Vector3:
 	_settle_on(decoy)
+	_shooter.global_position = spot
+	_shooter.velocity = Vector3.ZERO
+	_puck.global_position = spot
+	_puck.linear_velocity = Vector3.ZERO
+	return spot
+
+
+# Sealed in the RVH on a carrier behind the net at `behind`, skated in along
+# the end boards, then the puck is at `spot` with no flight between: the limit
+# of a wrap out front, the keeper still on the post. Returns the release point.
+func stage_wrap(spot: Vector3, behind: Vector3) -> Vector3:
+	_h.approach_and_settle(behind, Vector3(signf(behind.x) * WRAP_FROM_X_M, 0.0, behind.z),
+			APPROACH_M_S)
 	_shooter.global_position = spot
 	_shooter.velocity = Vector3.ZERO
 	_puck.global_position = spot

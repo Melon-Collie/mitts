@@ -621,8 +621,10 @@ reaches back into what remains.
     a neighbour with a close one. Squareness is what tells a keeper set on the
     shot from one a feed dragged off it at the same offset. Out-of-position
     keepers are measured, not extrapolated: DECOY cells set him on a carrier
-    elsewhere, then shoot from the spot, and the grid's first row, 0.6 m out,
-    is where he seals the post. A keeper on the post is read by whether the
+    elsewhere, then shoot from the spot, and WRAP cells seal him in the RVH on
+    a carrier behind the net, then shoot from a spot in close: the field's
+    only keeper on the post, since in front of the goal line he stands on its
+    overlap and reads as upright. A keeper on the post is read by whether the
     release is inside his seal zone (`AIGoalieModel.in_post_seal_zone`):
     inside it he is set there, outside it the puck has been pulled off the
     line and he is leaving, and blending the two priced a shot into a set seal

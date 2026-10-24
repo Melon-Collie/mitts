@@ -1279,10 +1279,10 @@ func test_pass_miss_cost_self_localizes_by_rink_end() -> void:
 # ─── Stance-aware five-hole (measured slot from the replicated pose) ──────
 
 func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
-	# The predictor matches the live goalie's RVH/VH trigger: within ~2 m of the
-	# goal line AND past ~77° off the goal normal. A dead-angle corner seals; a
-	# normal slot / mid look does not; a sharp-but-in-tight shot still short of the
-	# extreme angle does not.
+	# The predictor matches the keeper: his sharp angle (below the dots, past 60°)
+	# and, outside it, a look whose net window his standing span covers. A
+	# dead-angle corner seals; a normal slot / mid look does not; an in-tight
+	# look wide enough to shoot past his body does not.
 	var goal := Vector3(0, 0, -26.65)
 	assert_ne(AIGoalieModel.derive_post_seal_x_sign(Vector3(8, 0, -25.5), goal), 0.0,
 			"dead-angle corner (1.15 m out, ~82°) is sealed")
@@ -1290,8 +1290,8 @@ func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 			"the slot is never sealed")
 	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(7, 0, -18.0), goal), 0.0,
 			"an off-angle mid look (8.6 m out) is not sealed")
-	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(4, 0, -24.0), goal), 0.0,
-			"a sharp but in-tight look (2.65 m out, ~56°) is a real shot, not a seal")
+	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(3.5, 0, -23.65), goal), 0.0,
+			"an in-tight look (3 m out, ~49°) is a real shot, not a seal")
 	# The seal side is the shooter's side of the goal center.
 	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(-8, 0, -25.5), goal), -1.0,
 			"seals the side the shooter is on")

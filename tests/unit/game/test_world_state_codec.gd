@@ -602,9 +602,9 @@ func _sample_goalie() -> GoalieNetworkState:
 	g.position_x = 0.4
 	g.position_z = -27.0
 	g.rotation_y = 0.3
-	g.five_hole_openness = 0.5
-	g.glove_offset = Vector3(0.3, 1.4, 0.1)
-	g.blocker_offset = Vector3(-0.3, 0.9, 0.1)
+	g.state_enum = GoalieStateMachine.State.BUTTERFLY as int
+	g.velocity_x = 1.2
+	g.velocity_z = -0.4
 	return g
 
 

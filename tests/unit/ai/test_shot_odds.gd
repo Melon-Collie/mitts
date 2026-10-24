@@ -97,9 +97,9 @@ func _weight_of(other: int, c: int, use_facing: bool) -> float:
 	var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	var release := Vector3(float(t[7]), 0.0, GOAL_Z + float(t[8]))
-	var keeper := Vector3(float(t[30]), 0.0, float(t[31]))
-	AIShotOdds.shot_now(release, goal, keeper, float(t[35]), AIShotOdds._stance[c],
-			float(t[32]) if use_facing else NAN)
+	var keeper := Vector3(float(t[16]), 0.0, float(t[17]))
+	AIShotOdds.shot_now(release, goal, keeper, float(t[21]), AIShotOdds._stance[c],
+			float(t[18]) if use_facing else NAN)
 	AIShotOdds._sync_cells(AIShotOdds._worker)
 	for j: int in AIShotOdds._worker.cells.size():
 		if AIShotOdds._worker.cells[j] == other:
