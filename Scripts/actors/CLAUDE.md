@@ -35,20 +35,6 @@ bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
 relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
 nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
 
-## The goalie draws as one mesh, and its parts stay nodes
-
-`GoalieBodyRig` merges every goalie part wearing an opaque `StandardMaterial3D`
-into one skinned mesh, a bone per part, and moves the part meshes to render
-layer 0. The parts stay the source of truth: the pose code, the colliders and
-every test still read and write the nodes, and the rig copies their
-**interpolated** transforms into its bones each frame, so a part moved or hidden
-there is moved or hidden on screen. `GoalieUniformCoordinator` owns it, so
-`goalie.gd` — which decides saves, and which the bots' shot field is fingerprinted
-against — carries no rendering. Anything that changes a part's mesh or material
-must be followed by `rebuild()` (the coordinator's `apply_uniform` does it); a
-part that wears a `ShaderMaterial` (the jersey body) is not merged and draws
-itself. `test_goalie_body_rig.gd` holds it.
-
 ## The seam
 
 Traffic runs **one way**. A collaborator holds `_skater` and READS the node's

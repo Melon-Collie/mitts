@@ -33,10 +33,6 @@ func test_puck_vfx() -> void:
 	_assert_none_cast(PuckVFX.new())
 
 
-func test_goalie_vfx() -> void:
-	_assert_none_cast(GoalieVFX.new())
-
-
 func test_blade_spray_vfx() -> void:
 	_assert_none_cast(BladeSprayVFX.new())
 

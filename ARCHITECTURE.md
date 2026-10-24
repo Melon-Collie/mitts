@@ -216,8 +216,6 @@ One trap this rig has to respect: **Godot skins normals with the bone matrix its
 
 **On-ice HUD:** the slot rings, elevation chevrons and the slapper one-timer indicator are drawn by `Shaders/ice.gdshader` from uniforms fed by `IceRingField`, not by meshes. The slapper indicator is self-only, so it is scalar uniforms rather than an array — it was five nodes per skater (reticle, arrow root, arrow, gapped ring) plus an ArrayMesh rebuilt on convergence ticks, so that at most one skater could show it. Its geometry constants are mirrored in the shader; `SkaterHUDCoordinator` and `ice.gdshader` must be kept in sync. What is still a node is the self-beacon, which floats above the head and so cannot be an ice decal — and it is built LAZILY, only on the skater the ring-relation resolver reports as SELF, so exactly one exists in the scene rather than one per skater.
 
-**Goalie rendering:** the goalie is deliberately NOT skinned — its moving parts are `StaticBody3D`s with live colliders, so bones would add per-frame writes rather than replace them (see `docs/skinned-skater-plan.md`). Its meshes are instead merged where they are rigid AND share a material: the catch glove (rim + pocket + cuff), the stick (shaft + paddle + blade) and the blocker (board + hand) are each one mesh on one node. The colliders in `Goalie.tscn` are untouched — the absorbed nodes were mesh-only.
-
 **Leg rendering:** Both legs are one skinned mesh bound into the body skeleton (`SkaterLegRig.build`), fourteen bones chained `Leg → Shin` under the `HIPS` bone (see `Scripts/actors/CLAUDE.md` → *One skeleton, one chain*). Four pivots (`LegL/R`, `ShinL/R`) carry no geometry and exist to be rotated by the gait (`set_leg_swing`); the other ten carry thighs, knees, socks, skate collars and boots. Surfaces are `SkaterMeshBuilder.LegSurface` — twenty, not ten, because the skate collar carries its accent stripe and the boot carries its toe cap, its blade holder, its steel runner and its laces. Each of those is a piece a gear MODEL paints on its own (`GearModelRegistry`); the runner is the exception that stays steel by construction. The segment offsets are **read out of `Scenes/Skater.tscn` at `_ready` and the subtree is then freed**, so the scene stays the place leg proportions are authored while costing nothing at runtime.
 
 **Bottom hand (reactive):** A second hand grips the shaft a short way below the top hand. It is purely reactive — it never influences blade placement. After each top-hand solve, the controller computes the grip target as `top_hand.lerp(blade, bottom_hand_grip_fraction)` (default 0.25, ≈0.33 m down a 1.30 m shaft) and places the hand between it and a free-hand rest hung off the `bottom_shoulder` (blade side of the body) by a release weight: on the grip unless the blade has swung into extreme backhand. Release is angle-based: the controller measures the blade's world direction in the skater's body frame, normalizes it so positive = backhand, and drives a smoothstep from `bh_release_angle_deg` (67°, matching the upper-body rotation clamp) to `+bh_release_angle_band_deg` (15°) — so the hand stays on the stick throughout any swing the upper body can track, and only blends to its rest when the blade genuinely passes the body's rotation limit. The rest (`bh_free_hand_rest_arm`, in arm lengths off the visible shoulder) is tucked ahead of the belly on a bent elbow. The same rest takes the hand when no point of the shaft is within its arm's reach. The weight the geometry asks for is eased by a critically damped spring at render rate (`bh_release_omega`, about a third of a second), because a blade dangling at speed crosses either band in a tick or two; and a let-go hand swings with the stride (`bh_free_hand_swing_arm`), forward and across as its own side's leg pushes. A puck carrier never gets there: carrying, the top hand's solve stops the blade where the bottom hand still holds the shaft and, on the backhand, at the release angle (`Scripts/controllers/CLAUDE.md`, *A carrier keeps both hands on the stick*), so only an empty stick reaching for something goes one-handed. Rendered via the same `TwoBoneIK.solve_elbow` path with a mirrored pole. No network state is added — clients recompute the bottom hand locally from the interpolated top-hand + blade positions.
@@ -410,20 +408,12 @@ stack — `PuckController.is_processing_stick_lift`, the queued release velocity
 read by the dump-release check, and the goalie reaction back-date consumed by
 `_on_puck_released`.
 
-## The goalie is deliberately not skinned
+## The goalie draws as one skinned mesh over his save boxes
 
-His moving parts are `StaticBody3D`s carrying real colliders: the puck bounces
-off the pads, the glove and the stick, and the poke geometry reads the blade
-collider's world position. `apply_body_config` moves six of them per tick and
-their meshes are children that ride along for free — bones would not replace
-those writes, since the bodies still have to move for collision; they would add
-one write per mesh.
-
-What does apply is the rigid merge the boot and helmet already use: several
-meshes that never move relative to each other and share a material collapse to
-one node, one mesh, one draw call. The absorbed nodes are resolved by path and
-freed, so anything that must stay addressable has to stay OUT of its merge — the
-goalie stick blade is the standing example (`GoalieMeshBuilder._merge_stick`).
+The keeper's gear is one skinned mesh, a bone per piece posed on that piece's
+save box (`KeeperBodyRig`, `Scripts/domain/keeper/CLAUDE.md`): the boxes are
+the save geometry the puck meets, so the drawn gear can never sit somewhere
+the saves are not.
 
 ## The skater body is two skinned meshes on one skeleton, not a node tree
 
@@ -451,9 +441,7 @@ four have to hold: every vertex weighted 1.0 to one bone, identity bone rests,
 identity skin binds, and part geometry left in its own local space. Each part
 is posed in its parent bone's frame — the shell under the spine, the pelvis under
 the waist, the legs `Leg` → `Shin` under the hips — and the arms are root bones
-solved in skeleton space. The goalie and the puck still hang meshes on nodes and subclass
-`SkaterMeshBuilder` only for its geometry helpers; the goalie's are drawn through
-`GoalieBodyRig`, which skins one merged mesh to a bone per part.
+solved in skeleton space. The puck still hangs its mesh on a node.
 
 **Paint the skater body through the `Skater` surface seams, never a material.**
 `set_leg_surface_material` / `set_upper_surface_material` take a

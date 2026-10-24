@@ -25,10 +25,8 @@ class Contact:
 # Nearest contact of the swept disc (prev → curr, radius) against every goalie's boxes.
 # Returns true and fills `out` on a hit; clears `out` and returns false otherwise. `scratch`
 # is a caller-owned SweptDiscOBB.Result reused across parts to stay allocation-free.
-# Skips disabled shapes and parts whose collision layer is zeroed — the goalie's clear-sweep
-# deliberately disables the stick collider for the swing's duration
-# (Goalie.set_stick_collision_enabled), and the analytic test must honour that too, or the
-# goalie's own sweep ricochets off his "disabled" blade.
+# Skips disabled shapes (the scene's own boxes under a stand-in, Goalie.set_stand_in) and
+# parts whose collision layer is zeroed: a part switched off is out of play.
 # Native swept-OBB atom (null = extension absent, GDScript SweptDiscOBB). The
 # obb_contact method needs no geometry configuration, so a bare instance
 # suffices; misses cost one boundary crossing, hits add four getters.

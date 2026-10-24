@@ -394,7 +394,6 @@ func _down_in_a_save() -> bool:
 func reset_to_crease() -> void:
 	if puck != null:
 		puck.motion_pinned = false
-	goalie.set_stick_collision_enabled(true)
 	_place_in_crease()
 
 
