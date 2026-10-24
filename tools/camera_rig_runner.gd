@@ -12,9 +12,12 @@ extends "res://tools/ui_preview_runner.gd"
 const CameraRigs = preload("res://tools/camera_rigs.gd")
 
 const _VIEW: Vector2i = Vector2i(1920, 1080)
-# Moments shot per run, and the game time played between them.
+# Moments shot per run, and the game time played between them. A moment that
+# lands on a goal's replay plays on in steps until the gameplay camera is back.
 const _MOMENTS: int = 3
 const _MOMENT_GAP_SEC: float = 2.5
+const _LIVE_WAIT_STEP_SEC: float = 0.5
+const _LIVE_WAIT_MAX_SEC: float = 30.0
 # Blade sample annulus (m from the skater's centre, every bearing): a hand's
 # width off the skates out to near the arm's full reach with the stick.
 const _BLADE_RADII: Array[float] = [0.4, 0.8, 1.2, 1.6]
@@ -49,6 +52,7 @@ func begin(only: String, out_dir: String, measure_only: bool) -> void:
 	for moment: int in _MOMENTS:
 		if moment > 0:
 			await _play(_MOMENT_GAP_SEC)
+		await _wait_for_live_camera()
 		await _shoot_moment(moment, rigs)
 	get_tree().quit(1 if _failed else 0)
 
@@ -78,6 +82,17 @@ func _play(seconds: float) -> void:
 	while Engine.get_physics_frames() < target:
 		await get_tree().process_frame
 	Engine.max_physics_steps_per_frame = default_steps
+
+
+func _wait_for_live_camera() -> void:
+	var waited: float = 0.0
+	while waited < _LIVE_WAIT_MAX_SEC:
+		var cam: GameCamera = _find(get_tree().current_scene, GameCamera) as GameCamera
+		if cam != null and cam.current:
+			return
+		await _play(_LIVE_WAIT_STEP_SEC)
+		waited += _LIVE_WAIT_STEP_SEC
+	_fail("the gameplay camera never came back within %.0f s" % _LIVE_WAIT_MAX_SEC)
 
 
 # Freezes game time and re-places the gameplay camera for each rig, so every rig
