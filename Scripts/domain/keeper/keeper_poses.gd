@@ -39,18 +39,19 @@ const READY_STICK_TILT_RAD: float = deg_to_rad(8.0)
 # The low ready: the ready stance sat down into a deep A, for a shot he may not
 # have time to read. Skates out about twice as wide, knees driven in and down
 # so the pads lie steep with their inside edges near the ice and their faces to
-# the shooter, hips dropped toward knee height, the chest leaning on over the
-# pads to keep him balanced, the hands low and out in front at the pads' tops,
-# the blade on the ice ahead of the five-hole. Its knees are nearer the ice, so
+# the shooter, hips well above the knees and the chest tall over them, leaning
+# on only a little, the glove up and out in front as the chest carries it, the
+# blocker at the pad's top, the blade on the ice ahead of the five-hole (an NHL
+# keeper's, e.g. Shesterkin's). Its knees are nearer the ice, so
 # the drop into the butterfly from here is the shorter fall. A shin laid that
 # far over rides its pad up onto the inside edge, the face tipped up, or the
 # pad's outer corner by the skate is driven into the ice; and the blade lies
 # out ahead of the A so the paddle rises in front of the pads, not through
 # them.
 const LOW_READY_SKATE_HALF_SPACING_M: float = 0.52
-const LOW_READY_KNEE := Vector3(0.13, 0.27, -0.14)
+const LOW_READY_KNEE := Vector3(0.13, 0.32, -0.14)
 const LOW_READY_PAD_FACE := Vector3(0.0, 0.3, -1.0)
-const LOW_READY_PELVIS := Vector3(0.0, 0.58, 0.10)
+const LOW_READY_PELVIS := Vector3(0.0, 0.65, 0.10)
 const LOW_READY_BLADE := Vector3(-0.15, 0.0, -0.55)
 const LOW_READY_STICK_TILT_RAD: float = deg_to_rad(20.0)
 
@@ -139,9 +140,9 @@ static func ready(p: KeeperPose) -> void:
 static func low_ready(p: KeeperPose) -> void:
 	ready(p)
 	p.pelvis = LOW_READY_PELVIS
-	p.pelvis_rot = Vector3(-0.55, 0.0, 0.0)
-	p.lumbar_rot = Vector3(-0.25, 0.0, 0.0)
-	p.neck_rot = Vector3(0.45, 0.0, 0.0)
+	p.pelvis_rot = Vector3(-0.25, 0.0, 0.0)
+	p.lumbar_rot = Vector3(0.0, 0.0, 0.0)
+	p.neck_rot = Vector3(0.15, 0.0, 0.0)
 	for i: int in 2:
 		var sx: float = _side_x(i)
 		var leg: KeeperPose.Leg = p.legs[i]

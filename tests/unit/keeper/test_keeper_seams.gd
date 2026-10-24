@@ -20,7 +20,7 @@ func _stances() -> Array:
 			"five-hole above the blade": Rect2(-0.14, 0.06, 0.25, 0.34),
 		}],
 		["low ready", func(p: KeeperPose) -> void: KeeperPoses.low_ready(p), {
-			"five-hole above the blade": Rect2(-0.14, 0.08, 0.20, 0.10),
+			"five-hole above the blade": Rect2(-0.20, 0.08, 0.26, 0.15),
 			"the ice under the blocker pad's inside edge": Rect2(0.14, 0.0, 0.26, 0.10),
 		}],
 		["butterfly", func(p: KeeperPose) -> void: KeeperPoses.butterfly(p), {}],
