@@ -65,7 +65,7 @@ var _poke_claim_floor: float = 0.0
 # host authority rather than an impulse captured against live interpolated
 # positions. Never cache a recorded impulse and replay that instead.
 # Provider: func(exclude_skater: Skater, host_ts: float) -> Array of
-# {skater, position, velocity, hit}. Set by GameManager (_sample_historical_others).
+# {skater, position, velocity, hit, puck, ghost}. Set by GameManager (_sample_historical_others).
 var _historical_others_provider: Callable = Callable()
 # Reused across pairs during replay re-resolution — no per-pair allocation.
 var _replay_collision_result: SkaterCollisionRules.Result = SkaterCollisionRules.Result.new()
@@ -306,7 +306,6 @@ func _physics_process(delta: float) -> void:
 					and not skater.stick_tied and skater.pin_role == BoardPinRules.Role.NONE \
 					and not skater.is_knocked_down \
 					and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-					and not CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 					and _pickup_claim_floor <= 0.0 and (rising_edge or _claim_cooldown <= 0.0):
 				_pickup_claim_floor = _PICKUP_CLAIM_FLOOR_S
 				_claim_cooldown = _CLAIM_COOLDOWN_S
@@ -360,8 +359,7 @@ func _physics_process(delta: float) -> void:
 							PuckController.STICK_LIFT_RADIUS, PuckController.STICK_LIFT_UNDER_MARGIN)
 				elif not skater.blade_up and not skater.stick_tied \
 						and skater.pin_role == BoardPinRules.Role.NONE \
-						and not StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-						and not CrossCheckRules.is_stick_busy(skater.cross_check_phase):
+						and not StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					in_poke_range = puck.global_position.distance_to(blade_pos_for_claim) <= PuckController.POKE_RADIUS \
 							and not PuckInteractionRules.net_between(blade_pos_for_claim, puck.global_position)
 			var rising_poke_edge: bool = in_poke_range and not _was_in_poke_range
@@ -588,8 +586,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# charge timers).
 	stagger_timer = server_state.stagger_timer
 	stagger_recoil_dir = server_state.recoil_dir
-	# The lift and cross-check phases ride the same rail: the host's at the ack,
-	# stepped on by the replayed inputs.
+	# The lift phase rides the same rail: the host's at the ack, stepped on by
+	# the replayed inputs.
 	_adopt_stick_check(server_state)
 	# The balance and torso leans ride the same rail: the host's values at the
 	# ack, then the replay steps them forward through the unacked inputs.
@@ -649,7 +647,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		# offsets the geometry by ~one tick of travel and mis-phases dvel, which
 		# position-based re-resolution (unlike a recorded impulse) is sensitive to.
 		# sep still lands before the clamps below.
-		_replay_resolve_body_checks(input.host_timestamp, input.hit_held)
+		_replay_resolve_body_checks(input.host_timestamp, skater.hit_committed)
 		# Clamp to the rink boundary after every replay step — the same analytic
 		# projection the live tick applies. Without this, a board interaction that
 		# differed by even one frame between client and host compounds into a
@@ -846,11 +844,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 # instant and the host_ts=T sample instant — and dvel lands on the next tick.
 # Runs the SAME inelastic model + aggressor gate as the live resolver, so
 # aggressor → decel/drive-through, victim → incoming knockback. Deterministic from
-# replicated data + the replayed input (local hit-commit / brace from the input
-# frame). The remote attacker's hit-commit isn't on the wire, so it stays passive
-# here exactly as the live client prediction assumed — the host's real value
-# reconciles on the next ack.
-func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
+# replicated data + the replayed tick: the local commit / brace is the
+# hit_committed this tick's replayed input produced — what the live resolver
+# reads, not the raw button, which a knockdown, a pin, a planted slapper or a
+# rocked hit refuses — and the other's is his replicated one.
+func _replay_resolve_body_checks(host_ts: float, local_hit_committed: bool) -> void:
 	if not _historical_others_provider.is_valid():
 		return
 	# Ghost gate — mirrors the live resolver (Skater._resolve_player_collisions):
@@ -882,7 +880,14 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 		if dist >= my_radius + other_radius:
 			continue
 		var ovel: Vector3 = rec["velocity"]
-		var ohit: bool = rec["hit"]   # the other's replicated hit-commit (brace / delivery)
+		# The live resolver's transfer, from this tick's commit and possession and
+		# the other's replicated ones.
+		var transfer: float = SkaterCollisionRules.contact_transfer(
+				skater.body_check_transfer, local_hit_committed,
+				SkaterStateMachine.state_has_puck(skater.current_shot_state),
+				skater.body_check_brace_resistance,
+				other.body_check_transfer, rec["hit"], rec["puck"],
+				other.body_check_brace_resistance, skater.hit_passive_transfer_mult)
 		var n: Vector3 = axis
 		if axis == Vector3.ZERO:
 			n = Vector3(1.0, 0.0, 0.0) if dist < 0.0001 else d / dist
@@ -897,28 +902,87 @@ func _replay_resolve_body_checks(host_ts: float, local_hit_held: bool) -> void:
 		else:
 			local_is_aggressor = skater.collision_tiebreak_id < other.collision_tiebreak_id
 		if local_is_aggressor:
-			# local delivery (from the replayed input) × the victim's replicated brace.
-			var transfer: float = skater.body_check_transfer \
-					* (1.0 if local_hit_held else skater.hit_passive_transfer_mult) \
-					* (other.body_check_brace_resistance if ohit else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					my_pos, skater.velocity, skater.weight, my_radius,
 					opos, ovel, other.weight, other_radius, transfer, axis)
 			skater.velocity += _replay_collision_result.dvel_a
 			skater.global_position += _replay_collision_result.sep_a
 		else:
-			# Other is the aggressor, local is the victim: the attacker's
-			# full-vs-passive delivery comes from the replicated hit-commit, the
-			# local brace from the replayed input's hit_held.
-			var transfer: float = other.body_check_transfer \
-					* (1.0 if ohit else other.hit_passive_transfer_mult) \
-					* (skater.body_check_brace_resistance if local_hit_held else 1.0)
 			SkaterCollisionRules.resolve(_replay_collision_result,
 					opos, ovel, other.weight, other_radius,
 					my_pos, skater.velocity, skater.weight, my_radius,
 					transfer, -axis)
 			skater.velocity += _replay_collision_result.dvel_b
 			skater.global_position += _replay_collision_result.sep_b
+
+
+# How far from the host's instant a client's read of a press partner can land:
+# the host gates an input on its tick clock but labels its snapshots with its
+# wall clock, which can sit a tick apart, and the two ticks of one rendered
+# frame share one wall reading, a tick more.
+const PRESS_READ_TIMING_S: float = 2.0 * Constants.TICK_DURATION
+# A drawn body this close (edge to edge, m) may be pressed against: the drawn
+# remote sits on the render clock, centimetres from its buffered sample.
+const _PRESS_NEAR_M: float = 0.5
+
+
+# A client reads its partner where the host had him at the input's stamp, from
+# the buffered sample, in its live step and its replay alike, so both meet the
+# host's press the same way. The host's own player reads the bodies themselves.
+func _find_press_partner(host_ts: float, out: PressPartner) -> bool:
+	if _is_host or not _historical_others_provider.is_valid():
+		return super._find_press_partner(host_ts, out)
+	if skater.is_ghost or (not is_replaying and not _press_candidate_near()):
+		return false
+	var my_pos: Vector3 = skater.global_position
+	var my_radius: float = skater.collision_radius()
+	var others: Array = _historical_others_provider.call(skater, host_ts)
+	var best_i: int = -1
+	var best_gap: float = INF
+	for i: int in others.size():
+		var rec: Dictionary = others[i]
+		var other: Skater = rec["skater"]
+		if other == null or rec["ghost"] or other.is_knocked_down \
+				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
+			continue
+		var d: Vector3 = (rec["position"] as Vector3) - my_pos
+		d.y = 0.0
+		var dist: float = d.length()
+		if dist < 0.0001:
+			continue
+		var gap: float = dist - my_radius - other.collision_radius()
+		var speed_along: float = (rec["velocity"] as Vector3).dot(d / dist)
+		if PressRules.touching(gap, speed_along, PRESS_READ_TIMING_S) and gap < best_gap:
+			best_gap = gap
+			best_i = i
+	if best_i < 0:
+		return false
+	var best: Dictionary = others[best_i]
+	var partner: Skater = best["skater"]
+	out.position = best["position"]
+	out.weight = partner.weight
+	out.cfg = partner.press_cfg
+	out.thrust = partner.press_thrust
+	out.facing = best["facing"]
+	out.intent = best["intent"]
+	out.braking = best["brake"]
+	out.planted = plants_feet(best["shot_state"])
+	out.posture = SkaterMovementRules.posture_of(best["stance"], best["hit"])
+	out.stagger = best["stagger"]
+	return true
+
+
+func _press_candidate_near() -> bool:
+	var my_pos: Vector3 = skater.global_position
+	var my_radius: float = skater.collision_radius()
+	for other: Skater in skater.contact_others():
+		if other == null or other == skater:
+			continue
+		var d: Vector3 = other.global_position - my_pos
+		d.y = 0.0
+		if d.length() - my_radius - other.collision_radius() < _PRESS_NEAR_M:
+			return true
+	return false
 
 
 func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2.ZERO) -> void:

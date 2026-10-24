@@ -395,3 +395,38 @@ here whenever you bump, in the same format.
 #      record grows an s32 arg2 (13 -> 17 B). An RPC signature and packet
 #      layout change, so mixed builds must be refused. Replay format unchanged:
 #      the event block is appended after the recorder's copy.
+# v84: stagger_timer's legal range grows from [0, 1.0] to [0, 1.8] s — a full
+#      check runs it into the rocked band (BodyCheckRules.is_rocked), which
+#      jars the stick off the ice and takes the stance and commit. Same
+#      layout (u8 at 0.01 s); a v83 peer reads a rocked timer as a plain full
+#      stagger and predicts a skater with his stick and legs, so mixed builds
+#      must be refused.
+# v85: the knockdown is the victim's balance (BodyBalanceRules), not a fixed
+#      impulse line, and a contact's transfer and outcomes are both bodies'
+#      (SkaterCollisionRules.contact_transfer, a committed checker delivering
+#      whichever body is faster; each body's own Δv judged; the strip and the
+#      credit the checker's). Same layout; a v84 peer predicts the old
+#      knockdowns and the old one-sided contacts, so mixed builds must be
+#      refused.
+# v86: a knockdown lasts the fall to the ice, a lie and the get-up
+#      (KnockdownFallRules.first_impact_time + BodyCheckRules
+#      .lie_seconds_from_overshoot + the get-up), so knockdown_timer's legal
+#      range grows from 1.9 s to ~2.3 s and every window changes length. Same
+#      layout; a v85 peer predicts the old windows.
+# v87: the cross-check winds up: its throw (CrossCheckRules.Phase.THROW, was
+#      EXTEND) draws the shaft in over LOAD_S before the PUSH_S punch, and only
+#      the punch can land (can_land reads the elapsed time). Same layout and
+#      phase values; a v86 peer lands and claims a push 0.12 s early.
+# v88: the cross-check is retired (docs/net-front-battles-plan.md, Phase 3);
+#      the press is how a man is moved off his spot. The skater block shrinks a
+#      byte (59 -> 58 B, the cross_check u8 gone) and two RPCs
+#      (receive_cross_check_claim, notify_cross_check) leave the rpc ordering.
+#      Replay FORMAT_VERSION 19.
+# v89: the goalie block carries the rebuilt keeper's pose (KeeperPoseCodec:
+#      every target his skeleton solves from, 130 B) in place of the old
+#      goalie's 31 B of part offsets, so a client and a replay pose the body,
+#      and its save boxes, the host saved with. GOALIE_BLOCK_SIZE 43 -> 142;
+#      a snapshot for 6 players + 2 goalies grows 491 -> 689 B (10 players:
+#      941 B), still one unreliable Steam message. Packet layout change, so
+#      mixed builds must be refused. Replay FORMAT_VERSION 20: the embedded
+#      world state's goalie block changed size.

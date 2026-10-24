@@ -111,26 +111,7 @@ static func apply_interpolated_snapshot(
 		interp.rotation_y = lerp_angle(fg.rotation_y, tg.rotation_y, t)
 		interp.five_hole_openness = lerpf(fg.five_hole_openness, tg.five_hole_openness, t)
 		interp.state_enum = tg.state_enum if t >= 0.5 else fg.state_enum
-		# Authoritative pose interpolation. Offsets are linear; rotations use
-		# plain lerp because the pose-space ranges are small (no wrap-around
-		# from ±π that would need lerp_angle).
-		interp.body_pitch = lerpf(fg.body_pitch, tg.body_pitch, t)
-		interp.body_roll = lerpf(fg.body_roll, tg.body_roll, t)
-		interp.left_pad_offset = fg.left_pad_offset.lerp(tg.left_pad_offset, t)
-		interp.left_pad_pitch = lerpf(fg.left_pad_pitch, tg.left_pad_pitch, t)
-		interp.left_pad_roll = lerpf(fg.left_pad_roll, tg.left_pad_roll, t)
-		interp.left_pad_yaw = lerpf(fg.left_pad_yaw, tg.left_pad_yaw, t)
-		interp.right_pad_offset = fg.right_pad_offset.lerp(tg.right_pad_offset, t)
-		interp.right_pad_pitch = lerpf(fg.right_pad_pitch, tg.right_pad_pitch, t)
-		interp.right_pad_roll = lerpf(fg.right_pad_roll, tg.right_pad_roll, t)
-		interp.right_pad_yaw = lerpf(fg.right_pad_yaw, tg.right_pad_yaw, t)
-		interp.glove_offset = fg.glove_offset.lerp(tg.glove_offset, t)
-		interp.glove_yaw = lerpf(fg.glove_yaw, tg.glove_yaw, t)
-		interp.glove_pitch = lerpf(fg.glove_pitch, tg.glove_pitch, t)
-		interp.blocker_offset = fg.blocker_offset.lerp(tg.blocker_offset, t)
-		interp.blocker_yaw = lerpf(fg.blocker_yaw, tg.blocker_yaw, t)
-		interp.blocker_pitch = lerpf(fg.blocker_pitch, tg.blocker_pitch, t)
-		interp.head_yaw = lerpf(fg.head_yaw, tg.head_yaw, t)
+		interp.pose.blend(fg.pose, tg.pose, t)
 		goalie_controllers[i].apply_replay_state(interp, sim_delta)
 
 

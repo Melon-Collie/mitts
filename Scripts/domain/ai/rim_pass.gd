@@ -38,17 +38,6 @@ const GLANCE_MAX_RAD: float = deg_to_rad(40.0)
 # At most this many launches survive the bounds (scratch is preallocated).
 const MAX_LAUNCHES: int = 18
 
-# Their keeper's behind-net rim stop, mirrored from GoalieController's puck-play
-# defaults (test_rim_pass.gd holds the two together): the rim pace window he
-# will stop, how early he must be set, the beat he takes stopping it, and the
-# sprint he assumes of the nearest of us. His GO margin is tiered and lives on
-# AIGoalieModel.goalie_puck_play_go_margin_s.
-const KEEPER_RIM_MIN_SPEED_M_S: float = 4.0
-const KEEPER_RIM_MAX_SPEED_M_S: float = 22.0
-const KEEPER_SET_BEAT_S: float = 0.15
-const KEEPER_STOP_BEAT_S: float = 0.25
-const KEEPER_PRESSURE_SPEED_M_S: float = 11.0
-
 # Walk resolution — the chase election's own, so "who meets it" here and "who
 # is elected to go" can never disagree.
 const STEPS: int = AILoosePuckChase.RACE_STEPS
@@ -63,8 +52,7 @@ static var paces: Array[float] = []
 # speed there.
 static var paths: Array = []
 static var speeds: Array = []
-# Soonest opponent arrival on each launch's path — their keeper included, who
-# plays a rim behind his net — and where he meets it. Raced LAZILY (opp_time):
+# Soonest opponent arrival on each launch's path, and where he meets it. Raced LAZILY (opp_time):
 # only a launch some receiver can actually meet pays for it.
 static var opp_t: Array[float] = []
 static var opp_meet: Array[Vector3] = []
@@ -74,8 +62,6 @@ static var _opp_raced: Array[bool] = []
 static var _opp_positions: Array[Vector3] = []
 static var _opp_vels: Array[Vector3] = []
 static var _opp_caps: Array[AISkaterCaps] = []
-static var _keeper_pos: Vector3 = Vector3.INF
-static var _ours: Array[Vector3] = []
 
 
 static func _ensure_scratch() -> void:
@@ -102,20 +88,16 @@ static func _ensure_scratch() -> void:
 # the passer is nowhere near the boards). A launch survives only if no leg of its
 # path runs through a net or across our own slot (`own_goal_z`), which the puck
 # walk itself does not model. `opp_*` are index-matched; caps may be null (league default).
-# `keeper_pos` is their goalie (INF = none), and `ours` our other skaters, whom
-# he races home against before he leaves his net.
+# Their keeper plays no rim behind his net, so he is not in the race.
 static func build(from: Vector3, max_pace: float, own_goal_z: float,
 		opp_positions: Array[Vector3], opp_vels: Array[Vector3],
-		opp_caps: Array[AISkaterCaps], keeper_pos: Vector3 = Vector3.INF,
-		ours: Array[Vector3] = AIActionScoring.EMPTY_VEC3) -> int:
+		opp_caps: Array[AISkaterCaps]) -> int:
 	_ensure_scratch()
 	count = 0
 	origin = Vector3(from.x, 0.0, from.z)
 	_opp_positions = opp_positions
 	_opp_vels = opp_vels
 	_opp_caps = opp_caps
-	_keeper_pos = keeper_pos
-	_ours = ours
 	if AICarrySpace.board_gap_m(origin) > BANK_MAX_M:
 		return 0
 	var o2 := Vector2(origin.x, origin.z)
@@ -218,7 +200,7 @@ static func race_completion(k: int, receiver_t: float) -> float:
 static func opp_time(k: int) -> float:
 	if not _opp_raced[k]:
 		_opp_raced[k] = true
-		_race_opponents(k, _opp_positions, _opp_vels, _opp_caps, _keeper_pos, _ours)
+		_race_opponents(k, _opp_positions, _opp_vels, _opp_caps)
 	return opp_t[k]
 
 
@@ -250,8 +232,7 @@ static func _leg_near_middle(a: Vector3, b: Vector3) -> bool:
 
 
 static func _race_opponents(k: int, opp_positions: Array[Vector3],
-		opp_vels: Array[Vector3], opp_caps: Array[AISkaterCaps],
-		keeper_pos: Vector3, ours: Array[Vector3]) -> void:
+		opp_vels: Array[Vector3], opp_caps: Array[AISkaterCaps]) -> void:
 	var path: Array[Vector3] = paths[k]
 	var margin: float = AILoosePuckChase.setup_margin(dirs[k] * paces[k])
 	var best: float = INF
@@ -264,44 +245,8 @@ static func _race_opponents(k: int, opp_positions: Array[Vector3],
 				opp_positions[i], vel, speed, margin)
 		if t < best:
 			best = t
-	best = minf(best, _keeper_time(k, keeper_pos, ours))
 	opp_t[k] = best if best < float(STEPS) * STEP_DT else INF
 	opp_meet[k] = meet_point(k, best) if opp_t[k] < INF else Vector3.INF
-
-
-# Earliest walk step behind his own goal line where their keeper stops the rim,
-# by the live trip's own gates: a pace he will stop, set there before it arrives
-# (leaving the paint from rest at a keeper's puck-play build), and the whole trip
-# — out, stop, back — inside his GO margin of the nearest of us sprinting to the
-# spot. INF when he stays home, which is every rim for a tier that never plays
-# the puck.
-static func _keeper_time(k: int, keeper_pos: Vector3, ours: Array[Vector3]) -> float:
-	var margin: float = AIGoalieModel.goalie_puck_play_go_margin_s
-	if not keeper_pos.is_finite() or is_inf(margin):
-		return INF
-	var path: Array[Vector3] = paths[k]
-	var spd: Array[float] = speeds[k]
-	for i: int in STEPS:
-		var p: Vector3 = path[i]
-		if absf(p.z) < GameRules.GOAL_LINE_Z or signf(p.z) != signf(keeper_pos.z):
-			continue
-		if spd[i] < KEEPER_RIM_MIN_SPEED_M_S or spd[i] > KEEPER_RIM_MAX_SPEED_M_S:
-			continue
-		var t_out: float = GoalieBehaviorRules.travel_time_from_rest(
-				maxf(AIRoleReads.xz_distance(keeper_pos, p)
-						- AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, 0.0),
-				AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S,
-				AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2)
-		var t_i: float = float(i + 1) * STEP_DT
-		if t_out + KEEPER_SET_BEAT_S > t_i:
-			continue
-		var nearest: float = AIRoleReads.xz_distance(origin, p)
-		for q: Vector3 in ours:
-			nearest = minf(nearest, AIRoleReads.xz_distance(q, p))
-		if nearest / KEEPER_PRESSURE_SPEED_M_S \
-				> 2.0 * t_out + KEEPER_STOP_BEAT_S + margin:
-			return t_i
-	return INF
 
 
 # Inward unit normal of the boards at a point on them: the corner arc's radius

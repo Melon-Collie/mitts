@@ -617,7 +617,8 @@ var _ties_sticks: bool = true
 var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
-var _cross_check := SkaterAgentCrossCheck.new()
+var _stand_up := SkaterAgentStandUp.new()
+var _press := SkaterAgentPress.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
 var _reception := SkaterAgentReception.new()
@@ -756,7 +757,8 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_caps_by_peer = caps_by_peer
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
-	_cross_check.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_stand_up.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_press.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
 	_reception.setup(peer_id, team_id, team_id_by_peer, caps_by_peer, is_left_handed)
@@ -2871,6 +2873,13 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 	return _stick_play.tie_yank_aim(snapshot, self_pos, self_state, _ties_sticks, _blade_reach)
 
 
+# Meeting a carrier about to skate into us with the shoulder
+# (SkaterAgentStandUp), every physics tick after dispatch and before the board
+# play, which may turn that check at the wall into a pin.
+func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
+	_stand_up.apply(input, snapshot, _check_aggression)
+
+
 # The boards, every physics tick after dispatch (SkaterAgentBoardPlay).
 func apply_board_play(input: InputState, snapshot: WorldSnapshot) -> void:
 	_board_play.apply(input, snapshot, _own_goal_dir, _check_aggression,
@@ -2887,13 +2896,14 @@ func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
 	_shot_block.apply(input, snapshot, _own_goal_dir, rush, _blade_reach, _chase_max_accel)
 
 
-# The cross-check (SkaterAgentCrossCheck), every physics tick after the other
-# stick passes, which it yields to. The screener's set against one rides the
-# protects_the_puck gate: answering a physical threat to what we hold.
-func apply_cross_check(input: InputState, snapshot: WorldSnapshot) -> void:
-	_cross_check.apply(input, snapshot, _own_goal_dir,
+# The press (SkaterAgentPress), every physics tick after the other body and stick
+# passes; true when it took the body. The screener's dig-in and the carrier's
+# drive through a man ride the protects_the_puck gate: answering a physical
+# threat to what we hold.
+func apply_press(input: InputState, snapshot: WorldSnapshot) -> bool:
+	return _press.apply(input, snapshot, _own_goal_dir,
 			_cached_role_decision.locked_man_pid if _cached_role_decision != null else -1,
-			_check_aggression, _protects_the_puck)
+			_check_aggression, _protects_the_puck, _state == State.CARRY)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started, every

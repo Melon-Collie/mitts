@@ -3,8 +3,8 @@ class_name GoaliePushRules
 # The upright goalie's lateral push, as kinematics: accelerate at `accel` from
 # rest up to `max_speed`, and — for a push that has to END somewhere — brake on
 # the lead edge at `accel` × GameRules.GOALIE_EDGE_STOP_DECEL_RATIO to a stop on
-# the spot. The live arc mover is the second kind
-# (GoalieController._move_along_arc's braking cap).
+# the spot. The keeper's footwork is the second kind (KeeperFootwork's edge
+# stop).
 #
 # Which one a caller wants is the question it is asking:
 # - SET (set_reach, time_to_set, push_progress): is he square and stopped on a

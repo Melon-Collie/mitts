@@ -14,8 +14,8 @@ extends GutTest
 # (it is the real one — beat him around rather than through). The invariant is
 # only that SOME forward-going play beats the bail-out.
 #
-# Driven against the REAL GoalieController so the keeper doing the challenging is
-# the one the bots actually face, not a static stand-in.
+# Driven against the real keeper (KeeperController) so the one doing the
+# challenging is the one the bots actually face, not a static stand-in.
 
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 
@@ -36,7 +36,7 @@ func before_each() -> void:
 	add_child_autofree(_threat)
 	_threat.set_physics_process(false)
 	_threat.set_process(false)
-	_ctrl = GoalieController.new()
+	_ctrl = KeeperController.new()
 	add_child_autofree(_ctrl)
 	# setup() connects signals and is NOT idempotent, so it runs once per test and
 	# the grid re-aims the same controller via reset_to_crease instead.

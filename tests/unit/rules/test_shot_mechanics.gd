@@ -613,17 +613,17 @@ func test_follow_through_time_clamps_out_of_band_power() -> void:
 
 # ── Per-gear ladders: the posture vocabulary ─────────────────────────────────
 # The level names the SHOT, the gear names the RANGE. Each level targets a
-# goalie-posture landmark (absolute heights off the ice — GoalieAnatomy's pad,
-# hand and torso boxes), and each gear places those same three shots at its own
+# goalie-posture landmark (absolute heights off the ice: his pads, his hands
+# and his torso), and each gear places those same three shots at its own
 # HOME RANGE. Checked at full wrister charge (33 m/s) with the same arrival
 # arithmetic the AI rung-picker uses.
 
 const _FULL_PACE: float = 33.0
 
 # Posture landmarks the rungs are aimed to clear.
-const _BUTTERFLY_PAD_TOP: float = 0.28   # GoalieAnatomy pad box width, rolled flat
-const _BUTTERFLY_HANDS: float = 0.49     # GoalieStickRules butterfly hand height
-const _STANDING_SEAM: float = 0.86       # GameRules.DEFAULT_GOALIE_PAD_TOP_SEAM_M
+const _BUTTERFLY_PAD_TOP: float = 0.28   # a pad's width, rolled flat on the ice
+const _BUTTERFLY_HANDS: float = 0.49     # his hands down in the butterfly
+const _STANDING_SEAM: float = 0.86       # the top of his pads, standing
 const _CAVITY_TOP: float = 1.17
 
 # Where each blade's menu is authored to land.

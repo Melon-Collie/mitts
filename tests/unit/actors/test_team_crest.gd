@@ -70,13 +70,3 @@ func test_home_and_away_wear_the_same_crest() -> void:
 		assert_eq(TeamCrest.team_colors(TeamCrest.fruit_for(home), home),
 				TeamCrest.team_colors(TeamCrest.fruit_for(away), away))
 
-
-# The goalie's front is the narrower chest: the crest, keylines and the drawings'
-# overshoot past the unit circle, must fit across it and above the pants band.
-func test_the_crest_fits_the_goalie_chest() -> void:
-	var outer_m: float = JerseyDecal.CREST_RADIUS_M * (1.1 + 2.0 * TeamCrest.KEYLINE_WIDTH)
-	assert_lt(2.0 * outer_m, 2.0 * GoalieMeshBuilder.BODY_HALF_W)
-	var bottom_m: float = GoalieMeshBuilder.YOKE_DEPTH_M + JerseyDecal.CREST_RADIUS_M + outer_m
-	var pants_m: float = GoalieUniformCoordinator.PANTS_START_NORM_Y \
-			* 2.0 * GoalieMeshBuilder.BODY_TOP_Y
-	assert_lt(bottom_m, pants_m)

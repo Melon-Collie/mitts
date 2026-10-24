@@ -73,12 +73,13 @@ var _stance := GaitStanceLayer.new()
 var _shot := GaitShotLayer.new()
 var _check := GaitCheckLayer.new()
 var _pin := GaitPinLayer.new()
+var _press := GaitPressLayer.new()
 var _lift := GaitStickLiftLayer.new()
 var _celebration := GaitCelebrationLayer.new()
 var _stagger := GaitStaggerLayer.new()
 var _block := GaitBlockLayer.new()
 var _knockdown := GaitKnockdownLayer.new()
-var _layers: Array[GaitLayer] = [_faceoff, _stance, _shot, _check, _pin, _lift,
+var _layers: Array[GaitLayer] = [_faceoff, _stance, _shot, _check, _pin, _press, _lift,
 		_celebration, _stagger, _block, _knockdown]
 # Per-stage subsets of _layers in the same order, each beside its layers' bits
 # in the pass's active mask (built in setup).
@@ -194,6 +195,12 @@ var _push_heard_r: bool = false
 # The highest each skate has lifted since it last landed.
 var _lift_peak_l: float = 0.0
 var _lift_peak_r: float = 0.0
+
+
+# The stop's weight as the scrape hears it: a body dug in against a press counts
+# as a stop, so it scrapes once he is shoved along his edges.
+func scrape_stop_weight() -> float:
+	return maxf(stop_weight, _press.dig())
 
 
 func setup(skater: Skater, sm: SkaterStateMachine, controller: SkaterController) -> void:

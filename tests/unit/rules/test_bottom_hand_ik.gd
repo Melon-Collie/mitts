@@ -75,3 +75,47 @@ func test_an_arm_that_cannot_reach_past_the_top_glove_lets_go() -> void:
 	var bare: Vector2 = BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
 			0.25, 0.61)
 	assert_eq(bare.y, 0.0, "without the glove's room it would hold on top of the other hand")
+
+
+# ── The drawn grip eases into the limit ───────────────────────────────────────
+
+const _BAND: float = 0.08
+
+
+func _soft(grip: float, reach: float) -> float:
+	return BottomHandIK.soft_reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
+			grip, reach, 0.14, _BAND).x
+
+
+func test_well_inside_reach_the_drawn_grip_is_the_preferred_one() -> void:
+	assert_almost_eq(_soft(0.25, 1.2), 0.25, 1e-5)
+
+
+func test_the_drawn_grip_never_reaches_past_the_arm() -> void:
+	for k: int in 40:
+		var reach: float = 0.62 + 0.01 * k
+		var hard: float = BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP, _SHAFT_BLADE,
+				0.5, reach, 0.14).x
+		assert_lte(_soft(0.5, reach), hard + 1e-6, "reach %.2f" % reach)
+
+
+# As the arm's reach closes on the preferred grip the hard limit turns a
+# corner; the drawn grip's slope changes no faster through it than either side.
+func test_the_drawn_grip_turns_no_corner_where_the_limit_begins() -> void:
+	var step: float = 0.002
+	var worst_turn: float = 0.0
+	var prev_slope: float = NAN
+	var reach: float = 0.75
+	while reach < 0.95:
+		var slope: float = (_soft(0.5, reach + step) - _soft(0.5, reach)) / step
+		if not is_nan(prev_slope):
+			worst_turn = maxf(worst_turn, absf(slope - prev_slope))
+		prev_slope = slope
+		reach += step
+	# The hard grip reaches 0.5 at a reach of √0.72 ≈ 0.849 and goes flat: its
+	# turn there is the whole of its slope just below.
+	var hard_turn: float = absf((BottomHandIK.reachable_grip(Vector3.ZERO, _SHAFT_TOP,
+			_SHAFT_BLADE, 0.5, 0.846, 0.14).x - BottomHandIK.reachable_grip(Vector3.ZERO,
+			_SHAFT_TOP, _SHAFT_BLADE, 0.5, 0.844, 0.14).x) / step)
+	assert_gt(hard_turn, 1.0, "the hard grip does turn a corner there")
+	assert_lt(worst_turn, 0.25 * hard_turn, "the slope eases where the hard grip snaps")

@@ -122,30 +122,6 @@ the step's length. The physics step ends when the work does and the remaining
 wall time is `_process` and rendering, so a low percentage is not evidence of
 unattributed physics.
 
-## Goalie cost, from `benchmarks/test_goalie_micro_benchmark.gd`
-
-A goalie is the most expensive actor per capita on the tick — 193 µs against a
-skater body's 38 µs. Where it goes (µs/call, headless):
-
-```
-_physics_process (WHOLE TICK)      111.44
-  body parts                        33.40   ← 30%
-  state                             14.21
-  view invalidate + rebuild         12.44
-  tracking                          10.11
-  depth                              6.66
-  poke                               6.65
-  position                           4.04
-  facing                             3.36
-  shot timer                         1.01
-FAR END: whole tick                 55.10
-FAR END: body parts (suspended)      1.12
-```
-
-The far-end LOD already halves it. The remaining large slice is the body-parts
-pose solve, which is save geometry — cutting its rate trades save fidelity for
-~0.13 ms/frame. Judged not worth it.
-
 ## The AI decide path
 
 `decide()` runs on the worker thread and the main thread never blocks on it. From

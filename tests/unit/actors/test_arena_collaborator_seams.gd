@@ -99,7 +99,7 @@ func test_arena_stands_never_writes_a_collaborator_field() -> void:
 	# The mirror of the rule above, from the owner's side: ArenaStands calls
 	# methods on its collaborators and constructs them, and does nothing else to
 	# them. `_crowd.something = x` here would put the crowd's lifecycle in two
-	# places, which is what killed GoalieCreaseClear's extraction.
+	# places, which is what kills a collaborator's extraction (Scripts/controllers/CLAUDE.md).
 	var src: String = _strip(FileAccess.get_file_as_string(_STANDS))
 	assert_false(src.is_empty(), "read %s" % _STANDS)
 	for holder: String in _HOLDERS:

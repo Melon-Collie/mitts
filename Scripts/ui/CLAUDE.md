@@ -99,7 +99,7 @@ factories, team colors and period/clock text they share.
 - **The HUD never writes a panel's field** — it calls a method. Assigning a
   field is deciding *when* it changes, which is the panel's own lifecycle; once
   the coordinator owns that, the panel's updater is dead code waiting to happen.
-  Same rule, same evidence as `GoalieCreaseClear` in
+  Same rule, same evidence as *What kills a collaborator extraction* in
   `Scripts/controllers/CLAUDE.md`.
 - **Upward flow is a signal.** A panel that needs a toast, an overlay or a
   `GameManager` call emits one (`HudScorebug.warning_toast`,

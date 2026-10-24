@@ -10,8 +10,7 @@ extends Node
 # nothing in the game collides through the physics server, and the goalie is the
 # only actor carrying colliders at all (ARCHITECTURE.md → Collision Layers).
 # GoalieContactDetector reads those shapes directly and skips any part whose
-# collision_layer is 0, which is how set_stick_collision_enabled takes the stick
-# out of play mid-sweep.
+# collision_layer is 0.
 const LAYER_GOALIE_STICK: int   = 4
 const LAYER_GOALIE_BODIES: int  = 128
 

@@ -199,7 +199,8 @@ func _block_trunk_roll() -> float:
 # the hips while the trunk folds forward over them.
 func _apply_lean() -> void:
 	# Body-check recoil: while staggered, the torso reels the way the hit shoved
-	# it, easing out as the timer decays (same directional pitch/roll decomposition
+	# it — further while rocked, easing down onto the stagger's reel as he comes
+	# out of it — and out as the timer decays (same directional pitch/roll decomposition
 	# as the reach lean). Runs on every path — local, bot, and remote, off the
 	# replicated timer and direction — since _apply_lean is the single torso
 	# writer both the live pass and apply_wire_lean go through.
@@ -217,7 +218,9 @@ func _apply_lean() -> void:
 	# lets go as he comes up onto his knees.
 	var kd_t: float = _controller.knockdown_getup_left()
 	var lie: float = KnockdownFallRules.lie_share(kd_t)
-	var mag: float = deg_to_rad(_controller.stagger_recoil_deg) * recoil_t
+	var mag: float = deg_to_rad(_controller.stagger_recoil_deg) * recoil_t \
+			+ deg_to_rad(_controller.rocked_recoil_deg - _controller.stagger_recoil_deg) \
+			* _controller.rocked_share()
 	if lie > 0.0:
 		mag += _controller.knockdown_fold_rad() * lie
 	if mag > 0.0:
@@ -564,17 +567,6 @@ func apply_upper_body(delta: float) -> void:
 		var blade_angle: float = atan2(local_dir.x, -local_dir.z)
 		var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
 		target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
-	# A cross-check squares the chest to its aim: the shaft is across it, and
-	# twisting after its blade would swing the shaft round to point ahead.
-	var shove_w: float = CrossCheckRules.pose_weight(_skater.cross_check_phase,
-			_skater.cross_check_elapsed)
-	if shove_w > 0.0:
-		var aim: Vector2 = _skater.cross_check_aim
-		var aim_local: Vector3 = _skater.global_transform.basis.inverse() \
-				* Vector3(aim.x, 0.0, aim.y)
-		var aim_twist: float = -atan2(aim_local.x, -aim_local.z) \
-				if aim.length_squared() > 0.0 else 0.0
-		target_angle = lerp_angle(target_angle, aim_twist, shove_w)
 	# A wrist shot winds the torso up by the power it would release
 	# with, from squared on the aim (nothing behind it) to the full wind-up.
 	if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:

@@ -7,7 +7,7 @@ extends GutTest
 # numbers can be pushed and are worth reading before quoting any of them.
 #
 # WHY IT EXISTS. The bot decides against `AIActionScoring`'s model of the
-# goalie; the goalie plays as `GoalieController`; and until this file nothing
+# goalie; the goalie plays as `KeeperController`; and until this file nothing
 # compared their OUTCOMES. Every other sweep either scripts the shooter (the
 # real-goalie harness, the xG benchmark, the beatability sweep) or models the
 # save, so the balance was set by the gap between two models
@@ -53,7 +53,7 @@ func before_each() -> void:
 	_goalie = load("res://Scenes/Goalie.tscn").instantiate()
 	_puck = load("res://Scenes/Puck.tscn").instantiate()
 	_shooter = load("res://Scenes/Skater.tscn").instantiate() as Skater
-	_ctrl = GoalieController.new()
+	_ctrl = KeeperController.new()
 	for n: Node in [_goalie, _puck, _shooter, _ctrl]:
 		add_child_autofree(n)
 	_shooter.set_physics_process(false)
