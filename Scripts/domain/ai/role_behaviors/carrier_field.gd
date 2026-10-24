@@ -86,6 +86,9 @@ var holds := AIShotHolds.new()
 var drive_in_reached: Vector3 = Vector3.INF
 # Projection scratch for receiver_drive_in_value: opponents at the start of the
 # drive, and at its end.
+# The way the carrier attacks along z, and where he is along it (fill).
+var _attack_z: float = -1.0
+var _carrier_z: float = 0.0
 var _entry_buf: Array[Vector3] = []
 var _drive_buf: Array[Vector3] = []
 # What possession of a spot is worth to us (against the opponents) and to them
@@ -95,6 +98,8 @@ var _theirs := AIPossessionValue.new()
 
 
 func fill(ctx: RoleContext) -> void:
+	_attack_z = signf(ctx.attacking_goal_pos.z)
+	_carrier_z = ctx.self_pos.z
 	opponents.clear()
 	opponent_vels.clear()
 	opponent_caps.clear()
@@ -177,11 +182,21 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 
 
 # Every opponent dead-reckoned `time_s` ahead, into `out_buf`, index-matched to
-# `opponents`.
+# `opponents` — except that a man backing off in front of the carrier gives up
+# no more ice than his stop takes. Backing off is his choice, read off the
+# carry; stopping is the one that leaves him in the way, so a retreat carried on
+# at its pace would show every delay of the entry a blue line he has left, and
+# the carrier pulls up to wait for it (the safety read's _stopped_clearance is
+# the same man).
 func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 	out_buf.clear()
 	for i: int in opponents.size():
-		out_buf.append(AITrajectory.predict_at(opponents[i], opponent_vels[i], time_s))
+		var p: Vector3 = AITrajectory.predict_at(opponents[i], opponent_vels[i], time_s)
+		var retreat: float = opponent_vels[i].z * _attack_z
+		if retreat > 0.0 and (opponents[i].z - _carrier_z) * _attack_z > 0.0:
+			var stop_m: float = retreat * retreat / (2.0 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2)
+			p.z -= _attack_z * maxf(retreat * time_s - stop_m, 0.0)
+		out_buf.append(p)
 
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`: the

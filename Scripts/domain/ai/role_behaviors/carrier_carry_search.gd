@@ -26,6 +26,12 @@ var destination: Vector3 = Vector3.INF
 # is rollout.stick / brake / cursor at that index, and `anchor` is where it ends.
 var move: int = -1
 var rollout := AICarryRollout.new()
+# The move this search keeps unless a challenger beats it by
+# ACTION_HYSTERESIS_MARGIN_FRAC: last search's, while the destination holds.
+# Every move is priced as held for a horizon and re-planned a fraction of one
+# later, so without it two near-equal cuts alternate and the turns between them
+# spend the speed neither priced.
+var _incumbent_move: int = -1
 # The second step's moves, rolled from where one first move ends.
 var _rollout2 := AICarryRollout.new()
 
@@ -195,7 +201,9 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 		var t: float = _score_destination(ctx, i, our_goalie, behind_net, key_bound)
 		_dest_totals[i] = t
 		key_bound = maxf(key_bound, t)
+	var prev_kind: int = destination_kind
 	_dest.choose(_dest_totals)
+	_incumbent_move = move if _dest.chosen_kind == prev_kind else -1
 	destination_kind = _dest.chosen_kind
 	destination = _dest.chosen_spot
 
@@ -230,6 +238,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 
 	var best_pos: Vector3 = self_pos
 	var best_score: float = -INF
+	var best_key: float = -INF
 	var best_move: int = -1
 
 	# ── Pass 2: complete the two-ply reads for the beam's best rows ──────────
@@ -245,8 +254,13 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 		if bi == -1:
 			break
 		var up_total: float = _upgrade_candidate_two_ply(ctx, bi,
-				rank < CARRY_PLY2_WIDTH, our_goalie, caps, best_score)
-		if up_total > best_score:
+				rank < CARRY_PLY2_WIDTH, our_goalie, caps,
+				_prune_bound_for(_beam_move[bi], best_key))
+		var key: float = up_total
+		if _beam_move[bi] == _incumbent_move and up_total > 0.0:
+			key *= 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
+		if key > best_key:
+			best_key = key
 			best_score = up_total
 			best_pos = _beam_pos[bi]
 			best_move = _beam_move[bi]
@@ -261,7 +275,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	# Stand pays the strip cost like every candidate; without it freezing would be
 	# the one option that never prices losing the puck, and a bot under a
 	# converging forechecker would plant itself exactly when it should skate clear.
-	if stand_total > best_score:
+	if stand_total > best_key:
 		best_score = stand_total
 		best_pos = self_pos
 		best_move = -1
@@ -334,10 +348,11 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var end: Vector3 = rollout.reach_pos(m, reach)
 	var t0: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
 	var decay: float = AIActionScoring.delay_discount(t0)
-	if decay <= _beam_prune_bound:
+	var bound: float = _prune_bound_for(m, _beam_prune_bound)
+	if decay <= bound:
 		return
 	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents, reach)
-	if decay * safety <= _beam_prune_bound:
+	if decay * safety <= bound:
 		return
 	_field.project_opponents(t0, _scratch_opponents_path)
 	var worth: float = _end_worth(ctx, end, rollout.reach_vel(m, reach, ctx.self_pos), t0,
@@ -358,6 +373,14 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_beam_move.append(m)
 	if total > _beam_prune_bound:
 		_beam_prune_bound = total
+
+
+# The total move `m` must beat to matter against `bound`: the incumbent move
+# wins with its hysteresis margin, so its own bar sits that much lower.
+func _prune_bound_for(m: int, bound: float) -> float:
+	if m == _incumbent_move and bound > 0.0:
+		return bound / (1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC)
+	return bound
 
 
 # The |z| a move from in front of the goal lines may not pass; none from behind.

@@ -658,6 +658,11 @@ reaches back into what remains.
   to him, so stopping commits him to no spot, and a defender backing off in
   front of a carrier is a wall he skates into, not a gap that holds
   (`AICarrySpace._stopped_clearance`; a chaser behind only loses ground by it).
+  The carrier's projected defence reads him the same way: backing off in front
+  of the carrier, he gives up no more ice than his stop takes
+  (`AICarrierField.project_opponents`). Carried on at its pace, his retreat
+  shows every delay of the entry an emptier blue line, and the carrier pulls up
+  in the neutral zone to wait for it.
   - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
     all") prices the carrier's current safety. Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its
