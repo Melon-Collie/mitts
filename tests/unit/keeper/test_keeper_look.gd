@@ -70,3 +70,26 @@ func test_a_puck_straight_ahead_leaves_the_stance_as_it_is() -> void:
 	# To within his eyes' place, which the look takes off his trunk.
 	assert_almost_eq(look.yaw, 0.0, 0.01)
 	assert_almost_eq(look.pitch, 0.0, 0.01)
+
+
+# A puck behind him he looks back at over his shoulder: the neck as far as it
+# turns and the trunk the rest, his face on it; dead behind, he keeps to the
+# shoulder he turned over rather than snapping to the other.
+func test_behind_him_he_looks_back_over_his_shoulder() -> void:
+	var look := KeeperLook.new()
+	var p: KeeperPose = _looked(KeeperPoses.ready, Vector3(-1.5, 0.05, 1.2), 0.8, look)
+	var off: float = rad_to_deg(_face(p).angle_to(Vector3(-1.5, 0.05, 1.2) - _eyes(p)))
+	assert_lt(off, 6.0, "his face on it behind him (%.1f° off)" % off)
+	assert_gt(absf(look.trunk), 0.1, "his trunk turned into the look")
+	assert_lte(absf(look.trunk), KeeperLook.TRUNK_MAX_RAD + 1e-5, "no further than a trunk turns")
+	var side: float = signf(look.yaw + look.trunk)
+	var flips: int = 0
+	var behind := Vector3(0.0, 0.05, 3.0)
+	for i: int in 60:
+		var q := KeeperPose.new()
+		KeeperPoses.ready(q)
+		behind.x = 0.05 * sin(float(i))
+		look.step(DT, q, behind)
+		if signf(look.yaw + look.trunk) != side:
+			flips += 1
+	assert_eq(flips, 0, "dead behind: over the same shoulder")
