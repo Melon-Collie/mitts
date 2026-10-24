@@ -27,6 +27,7 @@ one the bots shoot at.
 | `keeper_route.gd` | where he is asked to be (on his feet at a spot and facing, down at a spot, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included (none after a glide: nothing waits for its legs); a spot on his feet within `GLIDE_REACH_M` glided to (a T-push's time, `KeeperFootwork.push_time`, at the C-cuts' speed for its share in depth, beside the turn), and a way's second leg within it too when the goal is on his feet; past it footwork's moves, the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line; the RVH dropped into straight from where he stands when that is the post's overlap at his turn (`ON_POST_M`), as at a sharp angle, or skated onto that overlap still turned first; `time_to_seal`, a way's time into the RVH whatever goal he is given, for the brain's race to a post |
 | `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity; the arm read later; a tip restarts it; the flight as it left the stick (`rewind`), for a shot that beat his read |
 | `keeper_save.gd` | which save he makes: the one taught for where the shot passes him (below his belly button the butterfly, the half butterfly wide of a pad, the extension past it; above it the glove or the blocker on its side, the glove trapping one at the chest), each candidate posed and the flight tested against its own gear, the first in the taught order whose gear meets the flight and holds it, timing deciding only whether he gets there; a save holds only if what comes off the gear it meets stays out), and the hand laid over whatever pose the motor gives him at its tier speed; the glove sent onto a puck to cover it (`cover`), without a read, the trunk folding after it |
+| `keeper_look.gd` | his eyes on the puck: his face turned to follow it in any stance, the neck turning and the head nodding, no faster than a head turns (`TURN_RAD_S`) and no further than a neck does, laid over the pose last, so through a save he watches the puck into the gear |
 | `keeper_cover.gd` | covering a loose puck he can reach: whether one slowing on the ice will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes) |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on |
 | `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
@@ -122,6 +123,10 @@ puck poked out of his reach ends the cover and he gets back up. Secured, it is
 dead under the glove and covered for the whistle. So a rebound dying at his
 feet, a dribble at the crease or a puck caught behind his stick or between his
 pads is smothered rather than dropped on and popped up from.
+His eyes are on the puck throughout (`KeeperLook`, laid over the pose after
+the save's hand): his face follows it wherever his neck lets it, so a save is
+seen tracked into the gear that makes it. The pose carries it on the wire, and
+the mask, which turns with the head, is a save box.
 
 `test_keeper_save.gd` (a low shot at a pad taking him down, his belly button
 splitting the legs' saves from the hands', the half butterfly wide of a pad
@@ -137,7 +142,9 @@ puck's own contact test in `test_keeper_controller.gd`.
 `tests/unit/controllers/test_keeper_controller.gd` holds the swap, a catch
 played out, a shot in before his read answered late and carried into, a puck at his feet covered or, poked away first, escaping, and a
 client posed from his state through the wire with every save box where the
-host's is. `test_keeper_pose_codec.gd` holds the pose on the wire: every
+host's is. `test_keeper_look.gd` holds the look: his face onto the puck in every stance,
+no faster than a head turns, held at the neck's limit, and the stance left
+as it is for a puck straight ahead. `test_keeper_pose_codec.gd` holds the pose on the wire: every
 stance and every tick of a run of his moves solving to the same gear, the
 flags, and a blend that is each snapshot at its ends.
 

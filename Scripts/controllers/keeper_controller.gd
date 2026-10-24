@@ -10,11 +10,12 @@ extends GoalieController
 # He plays on the host (and offline); his pose goes on the wire, and a client
 # or a replay poses him from it with no AI of its own. A shot is read
 # from its release (KeeperShotRead, restarted by a tip) and saved with the
-# save his gear says covers it (KeeperSave, its low half through the motor),
-# held until it is there and he has read the shot is over (it meets him, goes
-# past, stops coming), or it is picked up; a shot that beat his read answered
-# all the same once he has read it. A glove catch is held and covered; every other contact is the
-# puck's rebound off the box it struck. A loose puck he can reach he covers
+# save he is taught for where it passes him (KeeperSave, its low half through
+# the motor), held until it is there and he has read the shot is over (it
+# meets him, goes past, stops coming), or it is picked up; a shot that beat
+# his read answered all the same once he has read it. His eyes follow the puck
+# throughout (KeeperLook). A glove catch is held and covered; every other
+# contact is the puck's rebound off the box it struck. A loose puck he can reach he covers
 # (KeeperCover): down over it, the glove onto it, live until the glove is on
 # it.
 #
@@ -37,6 +38,7 @@ var read := KeeperShotRead.new()
 var play := KeeperPlayRead.new()
 var save := KeeperSave.new()
 var cover := KeeperCover.new()
+var look := KeeperLook.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
@@ -112,6 +114,7 @@ func _place_in_crease() -> void:
 	brain.play = play
 	save = KeeperSave.new()
 	cover = KeeperCover.new()
+	look.reset()
 	_chosen = false
 	_covering = false
 	_chosen_at = -1.0
@@ -285,15 +288,26 @@ func _glove_on_puck() -> bool:
 			and at.y <= glove.y + KeeperGear.half_extents(KeeperGear.Part.GLOVE).y
 
 
-# The node on him, his body posed with the save's hand over it, and his gear's
-# save boxes on it, where it moved.
+# The node on him, his body posed with the save's hand over it and his eyes on
+# the puck, and his gear's save boxes on it, where it moved.
 func _place_body() -> void:
+	var dt: float = get_physics_process_delta_time()
 	motor.pose(_keeper_pose)
-	save.step(get_physics_process_delta_time(), read.arms_read(), _keeper_pose)
+	save.step(dt, read.arms_read(), _keeper_pose)
 	save.overlay(_keeper_pose)
+	look.step(dt, _keeper_pose, _in_his_space(puck.global_position))
 	goalie.global_transform = _net * Transform3D(Basis(Vector3.UP, motor.yaw), Vector3(motor.x, 0.0, motor.z))
 	_report_state()
 	_seat(_keeper_pose)
+
+
+# `at` in the rink, in his authored space (KeeperPose's): from where the motor
+# has him, turned his way, reflected for a right-catcher.
+func _in_his_space(at: Vector3) -> Vector3:
+	var mine: Vector3 = Basis(Vector3.UP, motor.yaw).inverse() * (_net.affine_inverse() * at - Vector3(motor.x, 0.0, motor.z))
+	if _keeper.skeleton.mirrored:
+		mine.x = -mine.x
+	return mine
 
 
 # His body posed from `p`, and his gear's save boxes on it where it moved.
