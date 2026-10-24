@@ -903,4 +903,8 @@ reaches back into what remains.
   priced is what is skated. Never price a near move by a straight line and a
   closed-form clock — that is what let a carrier plan spots it could not reach.
   A destination across a cage is skated at the arrival clock's waypoint round it
-  (`AIArrival.cage_waypoint`).
+  (`AIArrival.cage_waypoint`). A move whose path reaches a crease, or the goal
+  line from in front, ends at its last sample short of it and is priced there
+  (`AICarryRollout.reach_short_of_net`): the carrier re-plans many times a
+  horizon, so a drive at the net is a release on the way in. Never prune it
+  whole — at pace in tight that leaves only the brake and the cut back.

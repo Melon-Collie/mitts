@@ -70,6 +70,7 @@ func _run_flyby(start: Vector3, vel: Vector3, ticks: int,
 	var peak_shoot: float = 0.0
 	var peak_carry: float = 0.0
 	var peak_pass: float = 0.0
+	var sum_carry: float = 0.0
 	var states: Dictionary = {}
 	var carry_dest: Vector3 = Vector3.ZERO
 	var carry_from: Vector3 = Vector3.ZERO
@@ -103,6 +104,7 @@ func _run_flyby(start: Vector3, vel: Vector3, ticks: int,
 		if pos.distance_to(_goal) < 9.0:
 			in_slot_window += 1
 			peak_shoot = maxf(peak_shoot, agent.debug_shoot_score)
+			sum_carry += agent.debug_carry_score
 			if agent.debug_carry_score > peak_carry:
 				peak_carry = agent.debug_carry_score
 				carry_dest = agent.debug_carry_pos
@@ -112,6 +114,7 @@ func _run_flyby(start: Vector3, vel: Vector3, ticks: int,
 			states[sname] = int(states.get(sname, 0)) + 1
 	return {"shots": shots, "first": first, "slot_ticks": in_slot_window,
 			"peak_shoot": peak_shoot, "peak_carry": peak_carry, "peak_pass": peak_pass,
+			"mean_carry": sum_carry / maxf(in_slot_window, 1),
 			"states": states, "carry_dest": carry_dest, "carry_from": carry_from}
 
 
@@ -134,8 +137,8 @@ func test_flyby_shot_by_tier_and_facing() -> void:
 				var r: Dictionary = _run_flyby(start, vel, ticks, p, facing_net, pressure)
 				var cd: Vector3 = r["carry_dest"]
 				var cf: Vector3 = r["carry_from"]
-				gut.p("    %s%-7s shots %d  shoot=%.3f carry=%.3f  carry→(%.1f,%.1f) %.1fm-from-net (from %.1fm)" % [
-						tag, tier_name, r["shots"], r["peak_shoot"], r["peak_carry"],
+				gut.p("    %s%-7s shots %d  shoot=%.3f carry=%.3f (mean %.3f)  carry→(%.1f,%.1f) %.1fm-from-net (from %.1fm)" % [
+						tag, tier_name, r["shots"], r["peak_shoot"], r["peak_carry"], r["mean_carry"],
 						cd.x, cd.z, cd.distance_to(_goal), cf.distance_to(_goal)])
 	# What the probe establishes (see the file header):
 	var free: Dictionary = _run_flyby(start, vel, ticks, BotSkillProfile.hard(), true, 0.0)
@@ -143,8 +146,10 @@ func test_flyby_shot_by_tier_and_facing() -> void:
 	assert_gt(free["slot_ticks"], 0, "the carrier passes through point-blank shot range")
 	# (1) Going by, the shot gets off.
 	assert_gt(free["shots"], 0, "unpressured, the flyby shot is taken")
-	# (2) Pressure is what shifts it: a backchecker collapses the carry's value.
-	assert_lt(pressed["peak_carry"], free["peak_carry"],
+	# (2) Pressure is what shifts it: a backchecker drops the carry's value over
+	# the pass. Not its peak: on the way in, a cut at the net still beats a man
+	# trailing on the tape.
+	assert_lt(pressed["mean_carry"], free["mean_carry"],
 			"a backchecker drops the carry EV toward the shot")
 	# (3) The keeper here is static: a valid study of how often the shot scores
 	# needs the real goalie in the loop (test_bot_vs_goalie_conversion.gd).
