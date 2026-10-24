@@ -17,19 +17,17 @@ extends GutTest
 #   cover.*   the share of the mouth his body covers straight-on, per stance,
 #             tested with the puck's real radius
 #
-# Either goalie runs it, through the same harness and rows: the old one
-# (`test_report_the_old_goalie`, data/goalie_scoreboard.txt) and the rebuilt
-# keeper (`test_report_the_keeper`, data/keeper_scoreboard.txt), whose rows
-# print beside the old goalie's. Select one with -gunit_test_name. Run with
-# MITTS_WRITE_SCOREBOARD=1 to rewrite the run goalie's file; without it every
-# row prints beside the recorded value, so a change reads as a delta. There are
-# no targets yet: the file records where a goalie stands.
+# The keeper runs it (data/keeper_scoreboard.txt), his rows printed beside the
+# old goalie's last recorded table (data/goalie_scoreboard.txt). Run with
+# MITTS_WRITE_SCOREBOARD=1 to rewrite his file; without it every row prints
+# beside the recorded value, so a change reads as a delta. There are no targets
+# yet: the file records where he stands.
 #
 # Every trial starts from a full reset, so a row does not depend on what ran
 # before it (tests/CLAUDE.md → Determinism).
 
 const Harness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
-const OUT_PATH: String = "res://tests/instruments/ai/data/goalie_scoreboard.txt"
+const OLD_GOALIE_PATH: String = "res://tests/instruments/ai/data/goalie_scoreboard.txt"
 const KEEPER_OUT_PATH: String = "res://tests/instruments/ai/data/keeper_scoreboard.txt"
 const WRITE_ENV: String = "MITTS_WRITE_SCOREBOARD"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
@@ -68,15 +66,7 @@ const ONE_TIMER_M_S: float = 30.0
 # and still be the shooter's: one tick of the slowest playable rebound.
 const PUT_BACK_EDGE_M: float = 0.1
 
-# Stances the coverage rows pose, each from the pose builder's own inputs; the
-# keeper's from his own taught stances (he has no VH).
-const COVER_STANCES: Array = [
-	["ready", GoalieStateMachine.State.READY],
-	["butterfly", GoalieStateMachine.State.BUTTERFLY],
-	["half_butterfly", GoalieStateMachine.State.HALF_BUTTERFLY_LEFT],
-	["rvh", GoalieStateMachine.State.RVH_LEFT],
-	["vh", GoalieStateMachine.State.VH_LEFT],
-]
+# The taught stances the coverage rows pose.
 const KEEPER_COVER_STANCES: Array[String] = ["ready", "low_ready", "butterfly", "half_butterfly", "rvh"]
 
 var _goalie: Node = null
@@ -85,15 +75,13 @@ var _shooter: Skater = null
 var _ctrl: GoalieController = null
 var _h: RefCounted = null
 var _put_back_tries: int = 0
-var _keeper: bool = false
 
 
-func _build(keeper: bool) -> void:
-	_keeper = keeper
+func _build() -> void:
 	_goalie = load("res://Scenes/Goalie.tscn").instantiate()
 	_puck = load("res://Scenes/Puck.tscn").instantiate()
 	_shooter = load("res://Scenes/Skater.tscn").instantiate() as Skater
-	_ctrl = KeeperController.new() if keeper else GoalieController.new()
+	_ctrl = KeeperController.new()
 	for n: Node in [_goalie, _puck, _shooter, _ctrl]:
 		add_child_autofree(n)
 	_h = Harness.new()
@@ -102,14 +90,9 @@ func _build(keeper: bool) -> void:
 	_ctrl.set_skater_getter(func() -> Array: return [_shooter])
 
 
-func test_report_the_old_goalie() -> void:
-	_build(false)
-	_report(_score(), OUT_PATH, "")
-
-
 func test_report_the_keeper() -> void:
-	_build(true)
-	_report(_score(), KEEPER_OUT_PATH, OUT_PATH)
+	_build()
+	_report(_score(), KEEPER_OUT_PATH, OLD_GOALIE_PATH)
 
 
 func _score() -> Array[String]:
@@ -135,12 +118,8 @@ func _row_keys() -> Array[String]:
 		"play.rush_shot", "play.breakaway_cutback", "play.breakaway_walkaround",
 		"play.deke_elevate", "play.pass_out_one_timer", "play.put_back",
 	]
-	if _keeper:
-		for stance: String in KEEPER_COVER_STANCES:
-			keys.append("cover." + stance)
-	else:
-		for st: Array in COVER_STANCES:
-			keys.append("cover." + String(st[0]))
+	for stance: String in KEEPER_COVER_STANCES:
+		keys.append("cover." + stance)
 	return keys
 
 
@@ -202,16 +181,10 @@ func _measure(key: String, tier: int) -> int:
 			return g
 	# cover.* — percent of the mouth covered, not goals; the tier does not
 	# change the body.
-	if _keeper:
-		return roundi(100.0 * _keeper_coverage(key.trim_prefix("cover.")))
-	for s: Array in COVER_STANCES:
-		if key == "cover." + String(s[0]):
-			return roundi(100.0 * _coverage(s[1]))
-	return -1
+	return roundi(100.0 * _keeper_coverage(key.trim_prefix("cover.")))
 
 
-# A fresh keeper on the tier's profile. `apply_skill_profile` rebuilds the cached
-# rule configs, so it goes on before anything reads them.
+# A fresh keeper on the tier's profile.
 # Stepped by hand the engine's physics frame never advances, and his view of
 # the skaters is cached per frame: each staging looks afresh, so no row reads
 # a view left by the last, and the scoreboard's own ticks look again each tick
@@ -227,8 +200,6 @@ func _reset(tier: int) -> void:
 # before he skates satisfies; so he is ticked on until his motor is at rest.
 func _settle_ready(spot: Vector3) -> void:
 	_h.settle_ready(spot)
-	if not _keeper:
-		return
 	var keeper := _ctrl as KeeperController
 	for _i: int in SETTLE_MAX_TICKS:
 		if keeper.motor.is_idle():
@@ -387,43 +358,9 @@ func _put_back(tier: int) -> int:
 
 
 # ── Coverage ────────────────────────────────────────────────────────────────
-# Share of the mouth (a 1 cm grid, post to post, ice to bar) a puck fired
-# straight down the goal line's normal meets his body, with the goalie posed
-# at rest in `state` on the goal line. A grid cell counts as covered when the
-# puck's swept disc touches any part — the same test the save loop runs.
-func _coverage(state: int) -> float:
-	var b := GoalieBodyConfigBuilder.new()
-	var inp := GoalieBodyConfigBuilder.Inputs.new()
-	inp.state = state
-	inp.direction_sign = -1
-	inp.puck_position = Vector3(0.0, GameRules.PUCK_COLLISION_HALF_HEIGHT, -0.6)
-	var g: Goalie = _goalie as Goalie
-	g.global_position = Vector3.ZERO
-	g.rotation = Vector3.ZERO
-	var c: GoalieBodyConfig = b.build(inp)
-	for _k: int in 3:
-		g.apply_body_config(c, 1.0)
-	var scratch := SweptDiscOBB.Result.new()
-	var contact := GoalieContactDetector.Contact.new()
-	var goalies: Array = [g]
-	var covered: int = 0
-	var total: int = 0
-	var half_w: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS
-	var x: float = -half_w
-	while x <= half_w:
-		var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
-		while y <= GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS:
-			total += 1
-			if GoalieContactDetector.nearest(goalies, Vector3(x, y, -3.0),
-					Vector3(x, y, 1.0), GameRules.PUCK_COLLISION_RADIUS, scratch, contact):
-				covered += 1
-			y += 0.01
-		x += 0.01
-	return float(covered) / float(maxi(total, 1))
-
-
 # The keeper's share of the mouth straight on, posed at rest in `stance` on
-# the goal line: the old goalie's grid and test, against his gear.
+# the goal line: a 1 cm grid, post to post, ice to bar, a cell covered when the
+# puck's swept disc fired straight down the goal line's normal meets his gear.
 func _keeper_coverage(stance: String) -> float:
 	var pose := KeeperPose.new()
 	match stance:
@@ -458,14 +395,13 @@ func _keeper_coverage(stance: String) -> float:
 
 
 # ── Output ──────────────────────────────────────────────────────────────────
-# The rows beside what `path` recorded, and beside the old goalie's (`beside`)
-# when this is the keeper; written over `path` on request.
+# The rows beside what `path` recorded and the old goalie's (`beside`); written
+# over `path` on request.
 func _report(rows: Array[String], path: String, beside: String) -> void:
 	var header: String = "row\tEASY\tNORMAL\tHARD\tshots"
 	var recorded: Dictionary = _read_recorded(path)
 	var old: Dictionary = _read_recorded(beside) if not beside.is_empty() else {}
-	gut.p("%s SCOREBOARD — goals conceded per tier (cover.* is %% of the mouth)"
-			% ("KEEPER" if _keeper else "GOALIE"))
+	gut.p("KEEPER SCOREBOARD — goals conceded per tier (cover.* is %% of the mouth)")
 	gut.p(header + ("\t| recorded EASY/NORMAL/HARD" if not recorded.is_empty() else "")
 			+ ("\t| old goalie" if not old.is_empty() else ""))
 	for r: String in rows:
@@ -481,8 +417,7 @@ func _report(rows: Array[String], path: String, beside: String) -> void:
 		assert_not_null(f, "can write %s" % path)
 		if f != null:
 			f.store_string("\n".join(PackedStringArray([
-				"# %s scoreboard — written by tests/instruments/ai/test_goalie_scoreboard.gd"
-						% ("Keeper" if _keeper else "Goalie"),
+				"# Keeper scoreboard — written by tests/instruments/ai/test_goalie_scoreboard.gd",
 				"# with %s=1; never hand-edit. Goals conceded per tier (cover.*: %% of mouth)." % WRITE_ENV,
 				header,
 			] + rows)) + "\n")

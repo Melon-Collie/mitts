@@ -1015,11 +1015,6 @@ func _update_host_puck_tracking() -> void:
 			_icing_races_seen = _state_machine.icing.races_opened
 			_icing_releaser = _shot_tracker.get_last_toucher() if _shot_tracker != null else -1
 	_consume_pending_faceoff()
-	# A goalie who plays an iced puck waves the icing off, so the defending one
-	# stays home while the race runs.
-	var icing_team: int = _state_machine.icing.pending_team_id
-	for gc: GoalieController in goalie_controllers:
-		gc.set_icing_hold(icing_team != -1 and gc.team_id != icing_team)
 	_announce_icing_race()
 
 
@@ -5691,11 +5686,8 @@ func spawn_tutorial_goalie(live: bool = false) -> void:
 	else:
 		_tutorial_goalie_controller.set_physics_process(false)
 		_tutorial_goalie_controller.set_process(false)
-		# Frozen AI never ticks the pose builder, so force the upright stance
-		# once — otherwise the goalie holds the scene-default pose with its pads
-		# together, hiding the five-hole the drill asks the player to shoot at.
-		# open_five_hole widens the pads and lifts the paddle off the ice so the
-		# low centre shot the drill teaches has a real lane through.
+		# Frozen, he never ticks: posed once in his stance, the five-hole the
+		# drill asks the player to shoot at open between his pads.
 		_tutorial_goalie_controller.snap_to_standing_pose(true)
 	if teams.size() > 1:
 		var colors: Dictionary = TeamColorRegistry.get_colors(teams[1].color_slot, 1)

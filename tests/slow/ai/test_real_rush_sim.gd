@@ -1,8 +1,8 @@
 extends GutTest
 
 # THE faithful 1v1 sim: a real bot (SkaterAgentStateMachine + real movement, via
-# the duel harness) rushes the net STEERING ITSELF, against the REAL
-# GoalieController (option A) that CHALLENGES it (fed a real carrier Skater so it
+# the duel harness) rushes the net STEERING ITSELF, against the real
+# keeper (KeeperController) that CHALLENGES it (fed a real carrier Skater so it
 # reads a shooter threat) — one temporal loop. Pins the user's MUST-HAVE: a clean
 # 1v1 (no traffic, no closing defenders) has to produce a SHOT ATTEMPT from every
 # angle of attack. A run that skates past without a shot is the bug.
@@ -24,7 +24,7 @@ func _run_rush(start: Vector3, vel: Vector3, secs: float = 3.0,
 	var goalie: Node = load("res://Scenes/Goalie.tscn").instantiate()
 	var puck: Node = load("res://Scenes/Puck.tscn").instantiate()
 	var carrier_actor: Node = load("res://Scenes/Skater.tscn").instantiate()
-	var ctrl := GoalieController.new()
+	var ctrl := KeeperController.new()
 	add_child_autofree(goalie)
 	add_child_autofree(puck)
 	add_child_autofree(carrier_actor)

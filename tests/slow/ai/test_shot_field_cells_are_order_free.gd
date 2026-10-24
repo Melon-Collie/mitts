@@ -16,7 +16,7 @@ func before_each() -> void:
 	var goalie: Node = load("res://Scenes/Goalie.tscn").instantiate()
 	var puck: Node = load("res://Scenes/Puck.tscn").instantiate()
 	var shooter: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
-	var ctrl := GoalieController.new()
+	var ctrl := KeeperController.new()
 	add_child_autofree(goalie)
 	add_child_autofree(puck)
 	add_child_autofree(shooter)

@@ -5,7 +5,7 @@ extends GoalieController
 # saving in the Goalie node's place, where KeeperPositioning wants him and
 # KeeperMotor gets him, the node placed on him every tick and his gear's save
 # boxes on its part bodies, so the puck, the skaters and the bots address him
-# through the old controller's interface unchanged.
+# through GoalieController's interface.
 #
 # He plays on the host (and offline); his pose goes on the wire, and a client
 # or a replay poses him from it with no AI of its own. A shot is read
@@ -100,10 +100,8 @@ func apply_skill_profile(profile: GoalieSkillProfile) -> void:
 		_tier()
 
 
-# The tier's reads and speeds onto the read, the save and the motor's save;
-# and no reach to clear a loose puck with, since he does not take one yet.
+# The tier's reads and speeds onto the read, the save and the motor's save.
 func _tier() -> void:
-	clear_reach = 0.0
 	read.leg_delay_s = _profile.reaction_delay_s
 	read.primed_delay_s = _profile.prearmed_reaction_delay_s
 	play.primed_delay_s = _profile.prearmed_reaction_delay_s
@@ -376,10 +374,8 @@ func _follow(s: GoalieNetworkState) -> void:
 	_seat(s.pose)
 
 
-# The old goalie's reads of him, kept true for whatever still asks them (the
-# shot log's context, the scoreboard's harness): his stance in the old state
-# machine, set without its transition handler, which is the old tick's; and
-# where he stands as its lateral x and challenge radius.
+# Where he stands as the shot log and the bots read him: his stance as the
+# wire's, his lateral x and his challenge radius.
 func _report_state() -> void:
 	_sm.current = _stance()
 	_current_x = goalie.global_position.x
@@ -402,14 +398,19 @@ func reset_to_crease() -> void:
 	_place_in_crease()
 
 
+# Set in his crease, his stance's five-hole open between the pads.
+func snap_to_standing_pose(_open_five_hole: bool = false) -> void:
+	reset_to_crease()
+
+
 func fill_state(s: GoalieNetworkState) -> void:
 	super.fill_state(s)
 	s.state_enum = _stance() as int
 	s.pose.copy_from(_keeper_pose)
 
 
-# His rest as the old goalie's stances, for the bots' read of him: down in a
-# low save that rests him there as in the butterfly.
+# His rest as the wire's stances, for the bots' read of him: down in a low
+# save that rests him there as in the butterfly.
 func _stance() -> GoalieStateMachine.State:
 	if motor.rest == KeeperRoute.Rest.FEET and _down_in_a_save():
 		return GoalieStateMachine.State.BUTTERFLY

@@ -242,13 +242,6 @@ static func blade_offset_at_roll(roll_deg: float) -> Vector3:
 			* blade_centre_offset()
 
 
-# How far below the wrist the blade centre sits at a full stance pose.
-static func blade_centre_drop(tilt_deg: float, roll_deg: float) -> float:
-	var w: Vector3 = blade_offset_at_roll(roll_deg)
-	var t: float = deg_to_rad(tilt_deg)
-	return -(w.y * cos(t) - w.z * sin(t))
-
-
 # The blade's world orientation at an assembly pose, which is the whole stick's
 # rigidity written down: the arm's tilt and roll composed with the blade's own
 # fixed lie, face angle and authored cant. The arm's YAW is deliberately absent —
@@ -258,53 +251,6 @@ static func blade_basis(tilt_deg: float, roll_deg: float) -> Basis:
 	var arm := Basis.from_euler(Vector3(
 			deg_to_rad(tilt_deg), 0.0, deg_to_rad(roll_deg)), EULER_ORDER_YXZ)
 	return arm * blade_rotation()
-
-
-# Half the blade's vertical span at that pose — so "blade centre at this height"
-# and "blade's low edge on the ice" are the same statement. The box's three half
-# extents projected onto vertical, exactly, because approximating it is how the
-# blade ends up under the ice: the 0.38 m long axis is ten times the box height,
-# so every degree that tips or turns it moves the low edge more than the height
-# itself contributes.
-static func blade_half_span_at(tilt_deg: float, roll_deg: float) -> float:
-	var b: Basis = blade_basis(tilt_deg, roll_deg)
-	return absf(b.x.y) * 0.5 * BLADE_WIDTH_M \
-			+ absf(b.y.y) * 0.5 * BLADE_HEIGHT_M \
-			+ absf(b.z.y) * 0.5 * BLADE_THICKNESS_M
-
-
-# The forward tilt that lands the blade on the ice for a hand at `wrist_y` above
-# it. Never back past square: a keeper raising his blocker lifts the blade off
-# rather than cocking his wrist under it, so a hand too high for the lever holds
-# the paddle upright and the blade hangs clear. The span depends on the tilt and
-# the tilt on the span, so it is solved by iteration rather than in closed form.
-# It converges immediately — the span moves by millimetres across the whole tilt
-# range — and three passes is the belt and braces version of two.
-static func tilt_for_blade_on_ice(wrist_y: float, roll_deg: float) -> float:
-	# drop(φ) = -w.y·cos φ + w.z·sin φ, which is R·cos(φ - α) — so the solve is
-	# still one acos, just about α rather than zero. The z term is the curve's:
-	# it turns the blade in plan, which puts the centre out of the assembly plane.
-	var w: Vector3 = blade_offset_at_roll(roll_deg)
-	var r: float = sqrt(w.y * w.y + w.z * w.z)
-	if r < 0.01:
-		return 0.0
-	var alpha: float = atan2(w.z, -w.y)
-	var tilt: float = 0.0
-	for _i: int in 3:
-		var c: float = clampf(
-				(wrist_y - blade_half_span_at(tilt, roll_deg)) / r, -1.0, 1.0)
-		tilt = maxf(0.0, rad_to_deg(alpha + acos(c)))
-	return tilt
-
-
-# The inverse: the hand height that puts the blade on the ice at tilt `φ`.
-static func wrist_y_for_blade_on_ice(tilt_deg: float, roll_deg: float) -> float:
-	return blade_half_span_at(tilt_deg, roll_deg) + blade_centre_drop(tilt_deg, roll_deg)
-
-
-# The upright stances' hand height.
-static func upright_wrist_y() -> float:
-	return wrist_y_for_blade_on_ice(UPRIGHT_TILT_DEG, FLUSH_ROLL_DEG)
 
 
 # ── The lunge: a STRIKE, and therefore the last resort ───────────────────────

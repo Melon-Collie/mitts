@@ -603,25 +603,19 @@ const DEFAULT_LOFT_VY_HIGH_M_S: float = 4.65
 const DEFAULT_WRISTER_POWER_CURVE: float = 1.1
 
 # ── Goalie Defaults ───────────────────────────────────────────────────────────
-# Shared between GoalieController @export and AIGoalieModel's goalie
+# The keeper's leg read (KeeperPlayRead's default) and AIGoalieModel's goalie
 # react-then-slide model. Calibrate together — the AI's prediction must
 # match the live goalie's reflex.
 const DEFAULT_GOALIE_REACTION_DELAY_S: float = 0.13
-# Arms (glove/blocker) read a shot slower than legs — legs drop reflexively on a
-# low read, arms need "where in the upper net" placement math first. Mirrors
-# GoalieController.arm_reaction_delay.
-const DEFAULT_GOALIE_ARM_REACTION_DELAY_S: float = 0.18
-# The upright goalie's top speeds (GoalieController.t_push_speed, shuffle_speed
-# and depth_max_speed): a T-push to a spot past lateral_threshold, a shuffle
-# (square, both skates on the ice) inside it, and C-cuts in and out (a real
+# The upright goalie's top speeds (KeeperFootwork's moves): a T-push, a shuffle
+# (square, both skates on the ice), and C-cuts in and out (a real
 # backward C-cut runs ~2-2.5 m/s). Not tracking_speed, which moves the spot he
 # reads, not his body.
 const DEFAULT_GOALIE_T_PUSH_SPEED_M_S: float = 3.8
 const DEFAULT_GOALIE_SHUFFLE_SPEED_M_S: float = 2.0
 const DEFAULT_GOALIE_DEPTH_SPEED_M_S: float = 2.2
-# How fast a push ramps to its top speed: the Hard/default GoalieController
-# .lateral_accel (GoalieSkillProfile eases it down a tier; the AI predicts
-# against the top tier). The ramp is the window a hard cut in tight beats.
+# How fast a push ramps to its top speed, on the keeper's footwork and in
+# AIGoalieModel (GoalieSkillProfile's lateral_accel_mps2 at Hard). The ramp is the window a hard cut in tight beats.
 const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
 # How much harder he stops than he pushes. A planned stop sets the lead skate's
 # edge across the travel with his weight on it — the hardest edge a goalie
@@ -630,10 +624,7 @@ const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
 # A ratio, so a tier's weaker edges stop worse exactly as they push worse.
 const GOALIE_EDGE_STOP_DECEL_RATIO: float = 1.75
 # The pad-top seam: the height where the goalie's coverage changes hands from
-# the leg pads to the torso + arms. Mirrors the stance anatomy in
-# GoalieBodyConfigBuilder (torso bottom glued to the seam — body centre 1.22
-# minus the 0.72 Goalie.tscn torso box's half-height; that derivation is pinned
-# by test_goalie_scene_mirrors). AIActionScoring's hole model uses it as the
+# the leg pads to the torso + arms. AIActionScoring's hole model uses it as the
 # HIGH band's arrival floor: a lofted shot is only an over-the-pads target if
 # its arc physically crosses the net line above this seam.
 const DEFAULT_GOALIE_PAD_TOP_SEAM_M: float = 0.86

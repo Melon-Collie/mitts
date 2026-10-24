@@ -94,34 +94,6 @@ const DOWN_BLOCKER_Y_M: float = PAD_CENTER_Y_BUTTERFLY_M + PAD_BOX_WIDTH_M * 0.5
 const DOWN_GLOVE_Y_M: float = TORSO_CENTER_Y_BUTTERFLY_M
 
 
-# Height of a pad's centre that rests its lowest corner on the ice, posed at
-# `rot_deg` (Euler, Godot's YXZ: yaw last, so it never changes the height).
-static func pad_center_y_on_ice(rot_deg: Vector3) -> float:
-	var b := Basis.from_euler(rot_deg * (PI / 180.0))
-	var half := Vector3(PAD_BOX_WIDTH_M, PAD_BOX_HEIGHT_M, PAD_BOX_DEPTH_M) * 0.5
-	return absf(b.x.y) * half.x + absf(b.y.y) * half.y + absf(b.z.y) * half.z
-
-
-# The head rides the trunk's sideways lean, pivoting at the hips (the trunk
-# box's bottom): a roll of `roll_deg` (positive tips the chest toward local −x)
-# carries a head at `head_y` this far along local x.
-static func head_shift_for_roll(head_y: float, body_y: float, roll_deg: float) -> float:
-	return -(head_y - body_y + TORSO_BOX_HEIGHT_M * 0.5) * sin(deg_to_rad(roll_deg))
-
-
-# Where the trunk's centre goes for that lean to pivot at the hips: the box
-# turns about its own centre, so it slides back by what that swings its bottom.
-static func trunk_shift_for_roll(roll_deg: float) -> float:
-	return -TORSO_BOX_HEIGHT_M * 0.5 * sin(deg_to_rad(roll_deg))
-
-
-# The inverse of head_shift_for_roll: the lean that carries the head `shift`
-# along local x.
-static func roll_for_head_shift(head_y: float, body_y: float, shift: float) -> float:
-	var lever: float = maxf(head_y - body_y + TORSO_BOX_HEIGHT_M * 0.5, 0.01)
-	return -rad_to_deg(asin(clampf(shift / lever, -1.0, 1.0)))
-
-
 # Vertical extent (bottom, top) of a part, as a Vector2 so callers can test a
 # height against it without allocating.
 static func _span(center_y: float, height: float) -> Vector2:
@@ -146,16 +118,6 @@ static func torso_span(down: bool) -> Vector2:
 	if down:
 		return _span(TORSO_CENTER_Y_BUTTERFLY_M, TORSO_BOX_HEIGHT_M)
 	return _span(TORSO_CENTER_Y_STANDING_M, TORSO_BOX_HEIGHT_M)
-
-
-# The height at which GOING DOWN STOPS COVERING THE SHOT — the top of the trunk
-# in the save stances, above which the butterfly silhouette holds nothing until
-# the mask. This is the anatomical line coaching states as "drop for shots below
-# the belly button": below it the seal is the wider answer, above it dropping
-# concedes the very band it was meant to take away. Derived from the stance so a
-# resize moves the fork with it (GoalieController.elevated_threshold).
-static func butterfly_cover_ceiling() -> float:
-	return torso_span(true).y
 
 
 static func head_span(down: bool) -> Vector2:
@@ -198,17 +160,6 @@ static func structural_cover_half_width_at(y: float, down: bool) -> float:
 	return cover
 
 
-# Does a puck crossing his plane `rel_x` off his midline at height `y` land
-# wholly on a STANDING pad's face? Between the pads is the five-hole and outside
-# them is open ice; both are the butterfly's to close, so neither counts.
-static func standing_pad_takes(rel_x: float, y: float, puck_radius: float) -> bool:
-	var ax: float = absf(rel_x)
-	var half: float = PAD_BOX_WIDTH_M * 0.5
-	var centre: float = GoalieBehaviorRules.STANDING_PAD_CENTER_X_M
-	return ax >= centre - half + puck_radius and ax <= centre + half - puck_radius \
-			and y + puck_radius <= pad_span(false).y
-
-
 # ── The arms ─────────────────────────────────────────────────────────────────
 # Upper arm and forearm-to-glove-centre, and the shoulder joint in the trunk's
 # frame (±x). Goalie draws the arms from these, and the pose builder holds the
@@ -236,18 +187,3 @@ const BLOCKER_FACE_OUTWARD_DEG: float = 15.0
 # instead — which is what a blocker held high does.
 const BLOCKER_WRIST_COCK_MAX_DEG: float = 60.0
 
-
-# Depth (goalie-local z, forward negative) that puts a hand at (`hand_x`,
-# `hand_y`) with the elbow bent to `bend_deg` from a shoulder at `shoulder`. A
-# hand that is already too far for that bend at zero depth offset stays level
-# with the shoulder's depth.
-static func hand_depth_for_bend(shoulder: Vector3, hand_x: float, hand_y: float,
-		bend_deg: float) -> float:
-	var half: float = deg_to_rad(bend_deg) * 0.5
-	# Law of cosines with equal bones reduces to 2·L·sin(θ/2); the general form
-	# covers unequal ones.
-	var reach_sq: float = ARM_UPPER_M * ARM_UPPER_M + ARM_FOREARM_M * ARM_FOREARM_M \
-			- 2.0 * ARM_UPPER_M * ARM_FOREARM_M * cos(half * 2.0)
-	var dx: float = hand_x - shoulder.x
-	var dy: float = hand_y - shoulder.y
-	return shoulder.z - sqrt(maxf(reach_sq - dx * dx - dy * dy, 0.0))

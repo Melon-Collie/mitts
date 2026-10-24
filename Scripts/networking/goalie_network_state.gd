@@ -46,7 +46,7 @@ var host_timestamp: float = 0.0  # host-only, not serialized
 # slot like the other post stances) vs standing-family (standing / ready /
 # recovering — RECOVERING counts as up because the rising legs re-open the
 # standing five-hole slot). state_enum is written as `GoalieStateMachine.State
-# as int` (see GoalieController.capture/apply) — this accessor is the one place
+# as int` (see KeeperController._stance) — this accessor is the one place
 # that mapping is interpreted off the wire, so readers (bot AI shot model,
 # remote pose) never hand-roll the enum split.
 #

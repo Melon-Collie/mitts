@@ -1,7 +1,7 @@
 extends GutTest
 
 # ── The shot-odds TRUTH TABLE (docs/shot-currency-plan.md, step 1) ───────────
-# What a shot is worth is its odds against the live GoalieController. This
+# What a shot is worth is its odds against the live keeper. This
 # measures them: for each cell (a release spot × a keeper state) it fires the
 # bot's real release at the real goalie through real_goalie_shot_harness and
 # records
@@ -45,7 +45,7 @@ func before_each() -> void:
 	var goalie: Node = load("res://Scenes/Goalie.tscn").instantiate()
 	var puck: Node = load("res://Scenes/Puck.tscn").instantiate()
 	var shooter: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
-	var ctrl := GoalieController.new()
+	var ctrl := KeeperController.new()
 	add_child_autofree(goalie)
 	add_child_autofree(puck)
 	add_child_autofree(shooter)

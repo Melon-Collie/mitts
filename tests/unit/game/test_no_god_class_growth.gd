@@ -35,8 +35,6 @@ const _OVERSIZED: Array[String] = [
 	"res://Scripts/actors/skater.gd",
 	"res://Scripts/actors/skater_mesh_builder.gd",
 	"res://Scripts/ai/skater_agent_state_machine.gd",
-	"res://Scripts/controllers/goalie_body_config_builder.gd",
-	"res://Scripts/controllers/goalie_controller.gd",
 	"res://Scripts/controllers/local_controller.gd",
 	"res://Scripts/controllers/puck_controller.gd",
 	"res://Scripts/controllers/remote_controller.gd",

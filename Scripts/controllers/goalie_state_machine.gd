@@ -74,12 +74,6 @@ static func pads_on_ice(state: State) -> int:
 			return 1
 	return 0
 
-# Stances posed on his feet in the ready family — the ones with footwork, whose
-# head rides the trunk's lean (RECOVERING is posed as READY).
-static func is_on_his_feet(state: int) -> bool:
-	return state == State.STANDING or state == State.READY or state == State.RECOVERING
-
-
 # Upright = goalie can drop to butterfly / engage RVH from this state. Both
 # STANDING and READY qualify; RECOVERING does not (it's the vulnerable
 # stand-up window).

@@ -27,18 +27,6 @@ func _build(from: Vector3, opps: Array[Vector3] = [],
 	return AIRimPass.build(from, PACE, OUR_GOAL_Z, opps, vels, NO_CAPS, keeper, ours)
 
 
-func test_the_keeper_mirror_matches_the_live_goalie() -> void:
-	var gc: GoalieController = autofree(GoalieController.new())
-	assert_eq(AIRimPass.KEEPER_RIM_MIN_SPEED_M_S, gc.puck_play_min_puck_speed)
-	assert_eq(AIRimPass.KEEPER_RIM_MAX_SPEED_M_S, gc.puck_play_max_puck_speed)
-	assert_eq(AIRimPass.KEEPER_SET_BEAT_S, gc.puck_play_set_beat)
-	assert_eq(AIRimPass.KEEPER_STOP_BEAT_S, gc.puck_play_stop_beat)
-	assert_eq(AIRimPass.KEEPER_PRESSURE_SPEED_M_S, gc.puck_play_opponent_speed)
-	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S, gc.puck_play_skate_speed)
-	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2, gc.puck_play_skate_accel)
-	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, gc.puck_play_capture_radius)
-
-
 func test_the_go_margin_follows_the_goalie_tier() -> void:
 	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.normal())
 	var normal: float = AIGoalieModel.goalie_puck_play_go_margin_s

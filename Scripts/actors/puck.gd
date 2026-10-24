@@ -721,52 +721,13 @@ func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> v
 	_set_cooldown(ex_carrier, maxf(reattach_cooldown, regrab_cooldown))
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
-# Goalie counterpart to apply_poke_check. A Goalie is not a Skater (no
-# blade_world_velocity, no cooldown-table entry), so it gets its own entry
-# point. Strip velocity uses the goalie's blade position + the controller's
-# computed blade velocity as the checker inputs.
-#
-# No checker-side cooldown — the goalie's lunge cooldown already prevents
-# spam pokes, and adding the goalie to the per-skater cooldown table would
-# fight every other system that filters by Skater identity.
-func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
-	var ex_carrier: Skater = carrier
-	var fallback_dir := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	clear_carrier()
-	linear_velocity = PuckCollisionRules.poke_strip_velocity(
-			blade_vel,
-			ex_carrier.blade_world_velocity,
-			ex_carrier.global_position,
-			blade_pos,
-			poke_carrier_vel_blend,
-			poke_strip_min_speed,
-			poke_strip_max_speed,
-			fallback_dir)
-	linear_velocity.y = _pinch_lift(blade_vel, ex_carrier.blade_world_velocity,
-			blade_pos, ex_carrier.get_blade_contact_global())
-	_set_cooldown(ex_carrier, reattach_cooldown)
-	# No skater checker — a goalie strip earns no player takeaway credit.
-	puck_stripped.emit(ex_carrier, null)
-	puck_released.emit()
+
 
 func _pinch_lift(checker_vel: Vector3, carrier_vel: Vector3,
 		checker_pos: Vector3, carrier_pos: Vector3) -> float:
 	return PuckCollisionRules.pinch_lift_speed(checker_vel, carrier_vel,
 			checker_pos, carrier_pos,
 			pinch_lift_threshold, pinch_lift_gain, pinch_lift_max_speed)
-
-
-# Goalie loose-puck sweep / clear. The poke check (apply_goalie_poke_check)
-# strips a CARRIED puck; this is its loose-puck counterpart — the goalie
-# sweeps an uncarried puck out of the crease toward the corner. There's no
-# carrier to clear and nobody was dispossessed, so it fires no strip/release
-# signals; it just imparts the clearing velocity. No-op on a carried puck
-# (the poke path owns that case). Host-only — the authoritative velocity
-# replicates to clients through the normal puck sync.
-func apply_goalie_sweep(sweep_velocity: Vector3) -> void:
-	if carrier != null:
-		return
-	linear_velocity = sweep_velocity
 
 
 func release(direction: Vector3, power: float) -> void:

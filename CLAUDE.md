@@ -18,8 +18,8 @@ Deep detail lives next to the code it describes and loads on demand.
 | Bot AI design rules (evaluators, difficulty axes, determinism) | `Scripts/domain/ai/CLAUDE.md` |
 | Everything a bot perceives and decides, where it lives, its test; where a new bot feature plugs in | `Scripts/domain/ai/DECISIONS.md` |
 | Bot agent wiring (state graph, reception and chase doctrine) | `Scripts/ai/CLAUDE.md` |
-| Goalie doctrine, controller collaborators | `Scripts/controllers/CLAUDE.md` |
-| The new goalie being rebuilt (keeper body, gear, poses) | `Scripts/domain/keeper/CLAUDE.md` |
+| The goalie's seat, beatable realism, skater controller collaborators | `Scripts/controllers/CLAUDE.md` |
+| The goalie (keeper body, gear, poses, brain, saves) | `Scripts/domain/keeper/CLAUDE.md` |
 | Player attributes (body dials, gear slots, routing) | `Scripts/domain/state/CLAUDE.md` |
 | Launch modes, session lifecycle, claim resolvers, backend | `Scripts/game/CLAUDE.md` |
 | UI conventions (locale seam, menu style, popups) | `Scripts/ui/CLAUDE.md` |
@@ -109,8 +109,8 @@ constraint as the arena, and the same argument: articulation is the thing a
 display-less test cannot assert. `tools/skater_matrix.gd` is its sibling for
 proportions and paint across builds — one static pose, five bodies.
 
-**To see the NEW GOALIE, render him.** `.claude/hooks/render-keeper.sh` draws the
-rebuilt keeper (`Scripts/domain/keeper/`) in every taught stance from the
+**To see the GOALIE, render him.** `.claude/hooks/render-keeper.sh` draws the
+keeper (`Scripts/domain/keeper/`) in every taught stance from the
 front, side, three-quarter, the shooter's spot on the dot line and behind, with
 the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
 `.preview/keeper/` (`tools/keeper_capture.gd`), and diffs each sheet against

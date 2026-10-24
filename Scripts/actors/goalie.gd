@@ -58,12 +58,6 @@ const _GLOVE_CUFF_IN_GLOVE := Vector3(0.0, -0.03, 0.07)
 const _ELBOW_CLEARS_TRUNK_M: float = GoalieAnatomy.TORSO_BOX_WIDTH_M * 0.5 \
 		- GoalieAnatomy.SHOULDER_OFFSET.x + _UPPER_ARM_RADIUS
 
-# The pads' eased stance, which apply_body_config lerps toward the config and
-# lays the footwork step over; the nodes carry the sum.
-var _left_pad_eased_pos: Vector3 = Vector3.ZERO
-var _left_pad_eased_rot: Vector3 = Vector3.ZERO
-var _right_pad_eased_pos: Vector3 = Vector3.ZERO
-var _right_pad_eased_rot: Vector3 = Vector3.ZERO
 # The blocker arm's elbow from the last _seat_blocker, goalie-local; the drawn
 # arm reads it so it is the arm the board rides.
 var _blocker_elbow: Vector3 = Vector3.ZERO
@@ -123,7 +117,6 @@ func _ready() -> void:
 	_init_connectors()
 	_init_arm_bones()
 	_seat_blocker()
-	_rebase_pads()
 	_setup_uniform_coordinator()
 	var vfx := GoalieVFX.new()
 	vfx.name = "VFX"
@@ -226,42 +219,6 @@ func _save_part_body(save_part: int, glove_side: bool) -> StaticBody3D:
 		GoalieSaveRules.SavePart.STICK:
 			return _stick
 	return _left_pad if glove_side else _right_pad
-
-# `glove_max_step` / `blocker_max_step`: optional caps on linear movement
-# this frame (metres). Callers pass `*_react_max_speed * delta` to enforce a
-# realistic arm-speed limit so the catch / block reach can't perfectly beat
-# the puck to the spot. -1 disables the cap (target uses the shared lerp).
-# Rotations still lerp at the shared `t` regardless — wrist orientation
-# tracks position closely enough not to need its own cap. The blocker step
-# applies to the entire BlockArm (pad + stick rigid assembly).
-func apply_body_config(config: GoalieBodyConfig, t: float, glove_max_step: float = -1.0, blocker_max_step: float = -1.0) -> void:
-	_left_pad_eased_pos = _left_pad_eased_pos.lerp(config.left_pad_pos, t)
-	_left_pad_eased_rot = _lerp_euler_deg(_left_pad_eased_rot, config.left_pad_rot, t)
-	_left_pad.position = _left_pad_eased_pos + config.left_pad_step_pos
-	_left_pad.rotation_degrees = _left_pad_eased_rot + config.left_pad_step_rot
-	_right_pad_eased_pos = _right_pad_eased_pos.lerp(config.right_pad_pos, t)
-	_right_pad_eased_rot = _lerp_euler_deg(_right_pad_eased_rot, config.right_pad_rot, t)
-	_right_pad.position = _right_pad_eased_pos + config.right_pad_step_pos
-	_right_pad.rotation_degrees = _right_pad_eased_rot + config.right_pad_step_rot
-	_lerp_part(_body,      config.body_pos,      config.body_rot,      t)
-	_lerp_part(_head,      config.head_pos,      config.head_rot,      t)
-	if glove_max_step < 0.0:
-		_lerp_part(_glove, config.glove_pos, config.glove_rot, t)
-	else:
-		_glove.position = _glove.position.move_toward(config.glove_pos, glove_max_step)
-		_glove.rotation_degrees = _lerp_euler_deg(_glove.rotation_degrees, config.glove_rot, t)
-	# The blocker hand, with the stick rigid in it. Single transform via
-	# `blocker_pos` / `blocker_rot`; the board then rides the arm
-	# (_seat_blocker). When reaching for a blocker save the position is
-	# rate-limited via `blocker_max_step` the same way the glove is, so the
-	# hand can't teleport to the impact point.
-	if blocker_max_step < 0.0:
-		_lerp_part(_block_arm, config.blocker_pos, config.blocker_rot, t)
-	else:
-		_block_arm.position = _block_arm.position.move_toward(config.blocker_pos, blocker_max_step)
-		_block_arm.rotation_degrees = _lerp_euler_deg(_block_arm.rotation_degrees, config.blocker_rot, t)
-	_blocker_over_glove = config.blocker_over_glove
-	_seat_blocker()
 
 func set_goalie_position(x: float, z: float) -> void:
 	global_position = Vector3(x, 0.0, z)
@@ -434,63 +391,6 @@ func get_blocker_rotation() -> Vector3:
 func get_head_yaw() -> float:
 	return _head.rotation.y
 
-# Stick blade world position. Used by the controller's goalie poke check —
-# the puck is magneted to the carrier's blade with no physics during carry,
-# so we can't rely on RigidBody contact firing. The check is host-side:
-# when this position is within poke radius of a carried puck, the goalie
-# strips the puck.
-func get_blade_world_position() -> Vector3:
-	return _stick_blade.global_position
-
-
-# Apply an authoritative pose snapshot directly to the body parts. Used by
-# both live client rendering (interpolated broadcast pose) and replay playback
-# — neither runs the local AI, so this writes the host's socket transforms
-# straight onto the scene nodes. Skips the body_config_builder entirely.
-# Rotations come in radians (matching the wire format); axes we don't carry on
-# the wire (body yaw, blocker/glove roll) are left intact so whatever was last
-# set survives. Pad yaw IS carried (wire v13): it steers the rebound, so a remote
-# client rendering square pads would show rebounds kicking cornerward for no
-# visible reason.
-func apply_network_pose(state: GoalieNetworkState) -> void:
-	# Body + head positions are state-dependent (the pose builder hardcodes
-	# different y-heights per state — body 0.64 in butterfly, 1.22 standing
-	# etc.). The wire format doesn't carry them, so derive from state_enum
-	# via the pose builder's lookup. Without this the chest/head freeze at
-	# the scene-default standing height while the legs animate, which reads
-	# as a floating head over crouching pads.
-	_body.position = GoalieBodyConfigBuilder.resting_body_position_for_state(state.state_enum)
-	_body.rotation = Vector3(state.body_pitch, _body.rotation.y, state.body_roll)
-	_head.position = GoalieBodyConfigBuilder.resting_head_position_for_state(state.state_enum)
-	if GoalieStateMachine.is_on_his_feet(state.state_enum):
-		# On his feet the trunk leans from the hips, the head riding it — derived
-		# from the roll, which is all the wire carries of it.
-		var roll_deg: float = rad_to_deg(state.body_roll)
-		_head.position.x += GoalieAnatomy.head_shift_for_roll(
-				_head.position.y, _body.position.y, roll_deg)
-		_body.position.x += GoalieAnatomy.trunk_shift_for_roll(roll_deg)
-	_head.rotation = Vector3(_head.rotation.x, state.head_yaw, _head.rotation.z)
-	_left_pad.position = state.left_pad_offset
-	_left_pad.rotation = Vector3(state.left_pad_pitch, state.left_pad_yaw, state.left_pad_roll)
-	_right_pad.position = state.right_pad_offset
-	_right_pad.rotation = Vector3(state.right_pad_pitch, state.right_pad_yaw, state.right_pad_roll)
-	_rebase_pads()
-	_glove.position = state.glove_offset
-	_glove.rotation = Vector3(state.glove_pitch, state.glove_yaw, _glove.rotation.z)
-	_block_arm.position = state.blocker_offset
-	_block_arm.rotation = Vector3(state.blocker_pitch, state.blocker_yaw, _block_arm.rotation.z)
-	_blocker_over_glove = GoalieBodyConfigBuilder.blocker_over_glove_for_state(state.state_enum)
-	_seat_blocker()
-
-# Take the pads' eased stance from where they stand — after any pose written
-# straight onto them, so the next eased pose carries on from it.
-func _rebase_pads() -> void:
-	_left_pad_eased_pos = _left_pad.position
-	_left_pad_eased_rot = _left_pad.rotation_degrees
-	_right_pad_eased_pos = _right_pad.position
-	_right_pad_eased_rot = _right_pad.rotation_degrees
-
-
 # Seat the blade at its lie and curve (GoalieStickRules.blade_rotation), which
 # the authored square L does not carry. Applied once at build time: a lie is a
 # property of the stick, so the blade stays rigid to the shaft and every stance
@@ -512,30 +412,6 @@ func _seat_blade() -> void:
 	stick_blade_mesh.mesh = GoalieMeshBuilder.shared_goalie_blade()
 	stick_blade_mesh.transform = Transform3D(
 			rot * Basis.from_euler(Vector3(0.0, PI * 0.5, 0.0)), heel)
-
-
-func _lerp_part(part: Node3D, target_pos: Vector3, target_rot_deg: Vector3, t: float) -> void:
-	part.position = part.position.lerp(target_pos, t)
-	part.rotation_degrees = _lerp_euler_deg(part.rotation_degrees, target_rot_deg, t)
-
-
-# Wrap-safe Euler lerp: rotation_degrees.lerp on a Vector3 interpolates each
-# axis linearly, which crosses through 0° instead of through 180° at sign
-# flips (-179° → +179° becomes a 358° spin through 0°, not a 2° step). All
-# current goalie body parts stay within ±90°, but the moment any rotation
-# range crosses ±180° the latent bug surfaces. Reduce the per-axis delta
-# into [-180°, +180°] via fmod so the lerp always takes the short way.
-static func _lerp_euler_deg(from: Vector3, to: Vector3, t: float) -> Vector3:
-	return Vector3(
-		from.x + _shortest_deg_delta(from.x, to.x) * t,
-		from.y + _shortest_deg_delta(from.y, to.y) * t,
-		from.z + _shortest_deg_delta(from.z, to.z) * t,
-	)
-
-
-static func _shortest_deg_delta(from: float, to: float) -> float:
-	var delta: float = fmod(to - from + 540.0, 360.0) - 180.0
-	return delta
 
 
 func _setup_uniform_coordinator() -> void:

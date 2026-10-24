@@ -1,10 +1,8 @@
 # The keeper (the new goalie)
 
 Scope: `Scripts/domain/keeper/` (pure) and `Scripts/actors/keeper/` (drawn).
-The goalie being rebuilt from the ground up, beside the old one until it
-replaces him (`docs/goalie-rebuild-plan.md`). Files are named `keeper_*` so the
-shot field's `goalie_*` fingerprint never sees them while the old goalie is the
-one the bots shoot at.
+The goalie, rebuilt from the ground up (`docs/goalie-rebuild-plan.md`) in the
+old one's place.
 
 | File | Owns |
 |---|---|
@@ -32,7 +30,7 @@ one the bots shoot at.
 | `keeper_cover.gd` | covering a loose puck he can reach: whether one slowing on the ice will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes) |
 | `keeper_fetch.gd` | going for a loose puck: one a push from him (in front, or beside the post below the goal line, never behind the cage), skated to where his glove lands on it, when no opponent at full sprint gets a stick on it before he is down on it, his read as the margin to set out |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on |
-| `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
+| `controllers/keeper_controller.gd` | him in a match, in the goalie's seat (below) |
 | `actors/keeper/keeper.gd` | the node: solves a pose on the tick, draws it at render rate when it moved |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
@@ -44,17 +42,17 @@ one the bots shoot at.
 
 ## In a match
 
-On this branch every match spawns him (`ActorSpawner` makes a `KeeperController`
-for each net), offline and online. The old `Goalie` node stays as his shell, since
-the puck, the skaters, the bots and the game all address it: its own meshes are
+Every match spawns him (`ActorSpawner` makes a `KeeperController` for each net),
+offline and online. The `Goalie` node is his shell, since the puck, the skaters,
+the bots and the game all address it: its own meshes are
 hidden, its colliders off and nothing of it processed (its merged-body rig and
 ice effects read parts he now places), a `Keeper` child draws him, the node is placed on
 him every tick, and one box per piece of his gear (`KeeperGear.box`) is seated
 under the old part body that names its material for the puck
 (`Goalie.set_stand_in`, `add_save_box`, `seat_save_box`). Each part's first box
-also places that part body, so the old getters (glove position for the catch
+also places that part body, so the node's getters (glove position for the catch
 pin, the pads and hands the bots read through `fill_state`) read his gear. The
-controller extends `GoalieController`, overriding the tick, the reset, the
+controller fills the seat `GoalieController` holds: the tick, the reset, the
 stance the bots read and the puck handlers: a release read and saved (below), a
 tip read again, a contact only timed, a glove catch held and covered for the
 whistle, and a loose puck he can reach covered (below); where no whistle
@@ -63,8 +61,8 @@ glove side and sweeps it on toward that corner, out of his reach.
 
 He plays on the host only. His pose goes on the wire with his root
 (`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from), so a
-client buffers the snapshots and draws him at the interpolated past as it does
-the old goalie (`GoalieController._interpolate_and_apply`), root and pose
+client buffers the snapshots and draws him at the interpolated past
+(`GoalieController._interpolate_and_apply`), root and pose
 blended between them (`KeeperPose.blend`), his skeleton solved and his save
 boxes seated on it: its puck prediction stops against the gear the host saves
 with, to about a centimetre. A replay (the goal cinematic, the post-game reel,
@@ -76,7 +74,7 @@ release's rewind of the goalie moves his root only, not his pose.
 A shot is read from its release, the puck's own flight only: no aim before it
 (the shooter's drawn body shows that a shot is wound up, not yet where it
 goes). His legs answer after the tier's leg read and his hands after the arm
-read, the old goalie's tiered delays and speeds (`GoalieSkillProfile`), and
+read, the tier's delays and speeds (`GoalieSkillProfile`), and
 both after its primed read for a release he watched wound up for
 `KeeperPlayRead.PRIME_S` (the quiet-eye read: the save programmed during the
 look); a tip is read cold. He is beaten by a shot that arrives before a limb
@@ -134,10 +132,10 @@ One a push away that he wins the race to (`KeeperFetch`) he skates to, square
 to it, and once he has stopped on his spot covers the same way: a loose puck
 beside the post below the goal line with nobody near it is his, not left
 lying there. The race prices every opponent at full sprint from the first
-instant, his stick's length short of it, as the old goalie's trip behind the
-net did, and he sets out only with his read to spare.
+instant, his stick's length short of it, and he sets out only with his read
+to spare.
 A shot into his chest (`KeeperController._chest_contact`, through
-`Goalie.chest_contact`, which the old goalie leaves unset) is caught there at
+`Goalie.chest_contact`) is caught there at
 the logo when his nearer hand closes on it before what the foam leaves of its
 pace carries it out of the glove's pocket (`KeeperChestTrap`): held to his
 chest where it hit, the glove come over it, and covered for the whistle like a
@@ -359,11 +357,11 @@ will beat him across by his own time to the other, a boundary crossed back and
 forth holding him in one zone, and a puck carried round the zone tracked every
 tick unbroken to rest where it stops.
 `tests/instruments/ai/test_goalie_scoreboard.gd` scores him against scripted
-shooters beside the old goalie (`test_report_the_keeper`, his numbers in
-`data/keeper_scoreboard.txt`), through the harness the old goalie's
-instruments use: `KeeperController` keeps the old goalie's getters true for it
-(his stance in the old state machine, his lateral x and challenge radius). The
-shooter is a skater both goalies see, and each staging looks afresh, since a
+shooters (`test_report_the_keeper`, his numbers in
+`data/keeper_scoreboard.txt`, printed beside the old goalie's last recorded
+table), through the shot harness the bots' shot field is measured with: it
+reads him through the seat's getters (his stance, lateral x and challenge
+radius). The shooter is a skater he sees, and each staging looks afresh, since a
 goalie stepped by hand never advances the frame his view is cached on.
 `.claude/hooks/render-keeper-strip.sh` draws a move a few ticks a frame from
 the shooter's side, behind and high in front (`tools/keeper_strip.gd`), the

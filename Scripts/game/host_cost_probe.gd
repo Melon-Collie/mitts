@@ -58,7 +58,7 @@ enum Section {
 	# attributed rather than left in a residual.
 	SKATER_PHYS,   # Skater._physics_process, x10 — integrate, analytic contact, clamps
 	PUCK_PHYS,     # Puck._physics_process + PuckController._physics_process
-	GOALIE_PHYS,   # GoalieController._physics_process, x2
+	GOALIE_PHYS,   # the goalies' _physics_process, x2
 	GM_TAIL,       # goal / bounds / ghost checks and the four trackers
 	NET_CAPTURE,   # end-of-tick ring capture + broadcast
 }
