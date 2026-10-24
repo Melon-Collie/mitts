@@ -47,6 +47,8 @@ const SCENARIOS: Array = [
 	["rvh_drop_in_glove", -1.0, RVH_DROP_IN],
 	["rvh_from_slide", 1.0, RVH_FROM_SLIDE],
 	["rotate_glove", 0.8, ROTATE],
+	["rvh_push_off", 1.0, RVH_PUSH_OFF],
+	["rvh_push_off_glove", -1.0, RVH_PUSH_OFF],
 	["rotate_blocker", -0.8, ROTATE],
 	["sequence", 0.0, SEQUENCE],
 	["low_ready", 0.0, LOW_READY],
@@ -81,6 +83,9 @@ const POST_SLIDE_START := Vector2(0.6, -0.4)
 # KeeperSlide rotating on his knees from the butterfly through the target's
 # turn (+ toward his glove side).
 const ROTATE: int = -17
+# KeeperSlide pushed off the post on the target's side from the RVH there,
+# across to the other post, a frame every DROP_FRAME_EVERY ticks.
+const RVH_PUSH_OFF: int = -18
 # KeeperPost on the post on the target's side: dropped into the RVH from his
 # feet on the overlap, held, and risen back out; or come up into it at the end
 # of a slide there, held, and folded back into the butterfly. A frame every
@@ -260,6 +265,7 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_low_ready()
 	if kind == GOALS:
 		return _record_goals()
+
 	if kind == STICK_REACH:
 		return _record_stick_reach()
 	if kind == TRACK:
@@ -269,8 +275,8 @@ func _record(spot: Vector2, kind: int) -> Array:
 		return _record_save(spot, from_z, SAVE_TIGHT_SPEED if kind == SAVE_TIGHT else SAVE_SPEED)
 	if kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE:
 		return _record_post(target, kind == RVH_FROM_SLIDE)
-	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST or kind == ROTATE:
-		return _record_slide(target, kind == SLIDE_FROM_FEET, kind == SLIDE_TO_POST, kind == ROTATE)
+	if kind == SLIDE or kind == SLIDE_FROM_FEET or kind == SLIDE_TO_POST or kind == ROTATE or kind == RVH_PUSH_OFF:
+		return _record_slide(target, kind)
 	var fw := KeeperFootwork.new()
 	match kind:
 		KeeperFootwork.Move.T_PUSH:
@@ -328,21 +334,28 @@ func _record_drop(toward: float) -> Array:
 # The slide's frames, as _record's: PUSH while he drops or loads and drives,
 # GLIDE while he slides, STOP while the lead edge stops him, SET down on the
 # spot.
-func _record_slide(target: float, from_feet: bool, to_post: bool, rotate: bool) -> Array:
+func _record_slide(target: float, kind: int) -> Array:
 	var slide := KeeperSlide.new()
-	var every: int = DROP_FRAME_EVERY if from_feet else FRAME_EVERY
+	var every: int = DROP_FRAME_EVERY if kind == SLIDE_FROM_FEET or kind == RVH_PUSH_OFF else FRAME_EVERY
 	var spot := Vector2(target, 0.0)
-	if to_post:
+	if kind == SLIDE_TO_POST:
 		var start := Vector2(-target * POST_SLIDE_START.x, POST_SLIDE_START.y)
 		slide.x = start.x
 		slide.z = start.y
 		spot = slide.post_spot(Vector2(target * GameRules.NET_HALF_WIDTH, GOAL_LINE_Z), start)
-	if rotate:
-		slide.rotate_to(target)
-	elif from_feet:
-		slide.slide_from_feet(spot)
-	else:
-		slide.slide_to(spot)
+	match kind:
+		ROTATE:
+			slide.rotate_to(target)
+		SLIDE_FROM_FEET:
+			slide.slide_from_feet(spot)
+		RVH_PUSH_OFF:
+			var post := KeeperPost.new()
+			var start: Vector2 = post.seal_spot(Vector2(target * GameRules.NET_HALF_WIDTH, GOAL_LINE_Z), target)
+			slide.x = start.x
+			slide.z = start.y
+			slide.push_off(slide.post_spot(Vector2(-target * GameRules.NET_HALF_WIDTH, GOAL_LINE_Z), start), target)
+		_:
+			slide.slide_to(spot)
 	var out: Array = []
 	var tick: int = 0
 	var settled: int = -1
@@ -352,7 +365,7 @@ func _record_slide(target: float, from_feet: bool, to_post: bool, rotate: bool) 
 			slide.pose(p)
 			var phase: int = [KeeperFootwork.Phase.SET, KeeperFootwork.Phase.PUSH,
 					KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.GLIDE,
-					KeeperFootwork.Phase.STOP, KeeperFootwork.Phase.PUSH][slide.phase]
+					KeeperFootwork.Phase.STOP, KeeperFootwork.Phase.PUSH, KeeperFootwork.Phase.PUSH][slide.phase]
 			out.append([p, Vector3(slide.x, 0.0, slide.z), phase, slide.speed, tick * DT, slide.yaw])
 		slide.step(DT)
 		tick += 1
@@ -705,7 +718,7 @@ func _process(_delta: float) -> bool:
 		var kind: int = int(_scenarios[_scenario_i][2])
 		for post: Node3D in _posts:
 			post.visible = kind == SLIDE_TO_POST or kind == RVH_DROP_IN or kind == RVH_FROM_SLIDE \
-					or kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
+					or kind == RVH_PUSH_OFF or kind == SEQUENCE or kind == GOALS or kind == TRACK or kind == SAVE or kind == SAVE_TIGHT \
 					or kind == SAVE_FAR or kind == COVER
 		_frames = _record(spot, kind)
 		_views = _views_for(absf(target), kind == KeeperFootwork.Move.C_CUT or kind == DROP_AND_RISE)

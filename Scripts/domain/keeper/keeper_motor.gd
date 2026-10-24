@@ -510,6 +510,16 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 				post.state = KeeperPost.State.BUTTERFLY
 				post.slide_in(spot, side)
 			_mover = Mover.POST
+		Do.RVH_PUSH_OFF:
+			if rest != Rest.POST:
+				return false
+			slide.x = x
+			slide.z = z
+			slide.yaw = yaw
+			slide.push_off(spot, post.side, top)
+			if slide.phase == KeeperSlide.Phase.DOWN:
+				return false
+			_mover = Mover.SLIDE
 		Do.RVH_RISE_OUT, Do.RVH_FOLD_OUT:
 			if rest != Rest.POST:
 				return false

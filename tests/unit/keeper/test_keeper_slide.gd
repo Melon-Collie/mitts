@@ -7,7 +7,9 @@ extends GutTest
 # than friction alone; the push skate holds its place while it drives; the lead
 # pad stays down on the ice the whole way, and both are down through the stop;
 # it starts and ends in the butterfly; and every tick keeps his gear out of the
-# ice, his arms on the stick and nothing on him jumping.
+# ice, his arms on the stick and nothing on him jumping. Off the RVH he pushes
+# off the post: from the RVH, the skate on the post holding it until the push
+# ends, to rest on his spot in the slide's time, never toward the post.
 
 const DT: float = 1.0 / 120.0
 const PAD_GIVE_M: float = 0.025
@@ -65,6 +67,10 @@ func _start(target: float, from_feet: bool) -> float:
 	return (_slide.slide_from_feet(spot) if from_feet else _slide.slide_to(spot)).x
 
 
+func _from(from_feet: bool) -> int:
+	return KeeperSlide.From.FEET if from_feet else KeeperSlide.From.BUTTERFLY
+
+
 func _how(from_feet: bool) -> String:
 	return "from his feet" if from_feet else "from the butterfly"
 
@@ -77,7 +83,7 @@ func test_he_comes_to_rest_on_his_spot_in_the_slides_time() -> void:
 			assert_almost_eq(_start(dist, from_feet), dist, 1e-6, "%s is within reach" % what)
 			var t: float = _run()
 			# Each phase ends on a whole tick.
-			assert_almost_eq(t, _slide.time_to(absf(dist), INF, from_feet), 2.5 * DT, what)
+			assert_almost_eq(t, _slide.time_to(absf(dist), INF, _from(from_feet)), 2.5 * DT, what)
 			assert_almost_eq(_slide.x, dist, 1e-6, "%s: on the spot" % what)
 			assert_eq(_slide.speed, 0.0)
 
@@ -226,17 +232,22 @@ func test_every_tick_keeps_his_gear_out_of_the_ice_his_arms_on_the_stick_and_not
 	for from_feet: bool in [false, true]:
 		for target: float in [1.0, -1.6, 0.3, -0.3]:
 			_check_every_tick(target, from_feet)
+	for target: float in [0.8, -0.8, 0.3, -0.3]:
+		_check_every_tick(target, false, true)
 
 
-func _check_every_tick(target: float, from_feet: bool) -> void:
+func _check_every_tick(target: float, from_feet: bool, off_post: bool = false) -> void:
 	_slide = KeeperSlide.new()
-	_start(target, from_feet)
+	if off_post:
+		_push_off(target)
+	else:
+		_start(target, from_feet)
 	_solve()
 	var was: Array[Vector3] = _bones()
 	while _slide.phase != KeeperSlide.Phase.DOWN:
 		_slide.step(DT)
 		_solve()
-		var when: String = "%s %+.1f %s x %.3f" % [_how(from_feet), target,
+		var when: String = "%s %+.1f %s x %.3f" % ["off the post" if off_post else _how(from_feet), target,
 				KeeperSlide.Phase.keys()[_slide.phase], _slide.x]
 		for part: int in KeeperGear.PART_COUNT:
 			var soft: bool = KeeperGear.save_part(part) == GoalieSaveRules.SavePart.PAD
@@ -349,3 +360,67 @@ func test_he_rotates_on_his_knees_to_a_new_facing() -> void:
 		assert_almost_eq(Vector2(_slide.x, _slide.z), Vector2.ZERO, Vector2.ONE * 1e-5, "%s: on his spot" % what)
 		assert_lt(pushing_skate_low, 0.02, "%s: driven off a skate on the ice" % what)
 		assert_true(_slide.is_settled(), "%s: down in the butterfly" % what)
+
+
+# In the RVH on the post on the far side from `target`, sealed, pushed off it
+# `target` across his line; where he set out from.
+func _push_off(target: float) -> Vector2:
+	var side: float = -signf(target)
+	var start: Vector2 = KeeperPost.new().seal_spot(Vector2(side * GameRules.NET_HALF_WIDTH, 0.35), side)
+	_slide.x = start.x
+	_slide.z = start.y
+	_slide.push_off(start + Vector2(target, 0.0), side)
+	return start
+
+
+func test_off_the_rvh_he_pushes_off_the_post_to_rest_on_his_spot_in_its_time() -> void:
+	for target: float in [0.3, 0.8, -0.8, -1.3]:
+		_slide = KeeperSlide.new()
+		var start: Vector2 = _push_off(target)
+		assert_eq(_slide.phase, KeeperSlide.Phase.OFF_POST, "%+.1f: off the post" % target)
+		var t: float = _run()
+		assert_almost_eq(t, _slide.time_to(absf(target), INF, KeeperSlide.From.POST), 2.5 * DT, "%+.1f" % target)
+		assert_almost_eq(_slide.x, start.x + target, 1e-6, "%+.1f: on the spot" % target)
+		assert_lt(_slide.time_to(absf(target), INF, KeeperSlide.From.POST),
+				KeeperPost.OUT_TO_BUTTERFLY_S + _slide.time_to(absf(target)),
+				"%+.1f: quicker than folding out of the RVH and sliding" % target)
+
+
+# He sets out from the RVH as the post holds it, and the boot on the post holds
+# its place on the ice until the push has driven him off it.
+func test_off_the_rvh_the_skate_on_the_post_holds_it_until_the_push_ends() -> void:
+	var post := KeeperPost.new()
+	var rvh := KeeperPose.new()
+	var skel := KeeperSkeleton.new()
+	for target: float in [0.8, -0.8]:
+		var side: float = -signf(target)
+		_slide = KeeperSlide.new()
+		_push_off(target)
+		post.side = side
+		post.state = KeeperPost.State.SEALED
+		post.pose(rvh)
+		skel.pose(rvh)
+		_solve()
+		for b: int in KeeperSkeleton.BONE_COUNT:
+			assert_almost_eq(_skel.xf[b].origin, skel.xf[b].origin, Vector3.ONE * 2e-3, "%+.1f: bone %d starts in the RVH" % [target, b])
+		var foot: int = KeeperSkeleton.FOOT[0 if side < 0.0 else 1]
+		var planted: Vector3 = _world(_skel.xf[foot].origin)
+		var ticks: int = 0
+		while _slide.phase == KeeperSlide.Phase.OFF_POST or _slide.phase == KeeperSlide.Phase.PUSH:
+			_slide.step(DT)
+			_solve()
+			if _slide.phase == KeeperSlide.Phase.GLIDE:
+				break
+			var at: Vector3 = _world(_skel.xf[foot].origin)
+			assert_almost_eq(at, planted, Vector3.ONE * 0.03, "%+.1f %s at x %.3f: on the post" % [target,
+					KeeperSlide.Phase.keys()[_slide.phase], _slide.x])
+			ticks += 1
+		assert_gt(ticks, 30, "%+.1f: the knee coming up and the push" % target)
+
+
+func test_off_the_rvh_he_never_pushes_toward_the_post() -> void:
+	var start: Vector2 = KeeperPost.new().seal_spot(Vector2(GameRules.NET_HALF_WIDTH, 0.35), 1.0)
+	_slide.x = start.x
+	_slide.z = start.y
+	assert_eq(_slide.push_off(start + Vector2(0.5, 0.0), 1.0), start, "stays")
+	assert_eq(_slide.phase, KeeperSlide.Phase.DOWN)

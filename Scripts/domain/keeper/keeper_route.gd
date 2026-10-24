@@ -16,8 +16,9 @@ extends RefCounted
 enum Rest { FEET, DOWN, POST }
 enum Do {
 	NONE, FACE, T_PUSH, SHUFFLE, C_CUT, DROP, RISE, RECOVER, SLIDE, SLIDE_FROM_FEET,
-	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT, GLIDE, ROTATE,
+	RVH_DROP_IN, RVH_SLIDE_IN, RVH_RISE_OUT, RVH_FOLD_OUT, GLIDE, ROTATE, RVH_PUSH_OFF,
 }
+const FROM := KeeperSlide.From
 
 # Within these of his spot and his facing he is there: a goal that drifts no
 # further moves him not at all, rather than in steps of millimetres.
@@ -108,7 +109,7 @@ func plan(at: Vector2, turn: float, from: int, post_side: float) -> float:
 		Rest.FEET:
 			_to_feet(at, turn, from)
 		Rest.DOWN:
-			_to_down(at, turn, from)
+			_to_down(at, turn, from, post_side)
 		Rest.POST:
 			_to_post(at, turn, from, post_side)
 	return _best
@@ -202,11 +203,13 @@ func _standing(at: Vector2, turn: float) -> float:
 	return pivot_time(off) + (walk if _glides_last else _settled(walk))
 
 
-func _to_down(at: Vector2, turn: float, from: int) -> void:
+func _to_down(at: Vector2, turn: float, from: int, post_side: float) -> void:
 	var d: float = at.distance_to(spot)
 	match from:
 		Rest.POST:
 			_offer(KeeperPost.OUT_TO_BUTTERFLY_S + _down_to_down(at, turn), Do.RVH_FOLD_OUT)
+			if _pushes_off(at, turn, post_side, spot):
+				_offer(_slides_time(d, FROM.POST) + _rotate_s(_slide_turn(at, turn, spot)), Do.RVH_PUSH_OFF, spot)
 		Rest.DOWN:
 			_offer(_down_to_down(at, turn), _down_do, _down_spot, _down_side)
 		Rest.FEET:
@@ -216,7 +219,7 @@ func _to_down(at: Vector2, turn: float, from: int) -> void:
 					_offer(_pivot_s(turn) + _drop.drop_s, Do.FACE, Vector2.ZERO, facing)
 				return
 			if _slidable(at, turn, spot):
-				_offer(_slides_time(d, true) + _rotate_s(_slide_turn(at, turn, spot)), Do.SLIDE_FROM_FEET, spot)
+				_offer(_slides_time(d, FROM.FEET) + _rotate_s(_slide_turn(at, turn, spot)), Do.SLIDE_FROM_FEET, spot)
 			# There on his feet turned before or on the way, and down; or there,
 			# then turned on his feet (the pivot taking the stop's settle, once
 			# his push leg is back) or on his knees once down.
@@ -236,6 +239,11 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 				_offer(0.0, Do.NONE)
 				return
 			_offer(KeeperPost.OUT_TO_BUTTERFLY_S + _down_to_post(at, turn), Do.RVH_FOLD_OUT)
+			# Or pushed off this post across to the other and up into it.
+			var across: Vector2 = _post_spot(at, turn)
+			if _pushes_off(at, turn, post_side, across):
+				_offer(_slides_time(at.distance_to(across), FROM.POST) + KeeperPost.IN_FROM_BUTTERFLY_S,
+						Do.RVH_PUSH_OFF, across)
 		Rest.DOWN:
 			_offer(_down_to_post(at, turn), _down_do, _down_spot, _down_side)
 		Rest.FEET:
@@ -258,7 +266,7 @@ func _to_post(at: Vector2, turn: float, from: int, post_side: float) -> void:
 			var to: Vector2 = _post_spot(at, turn)
 			var d: float = at.distance_to(to)
 			if d >= THERE_M and _slidable(at, turn, to):
-				var slid: float = _slides_time(d, true) + KeeperPost.IN_FROM_BUTTERFLY_S
+				var slid: float = _slides_time(d, FROM.FEET) + KeeperPost.IN_FROM_BUTTERFLY_S
 				_offer(slid, Do.SLIDE_FROM_FEET, to)
 
 
@@ -280,7 +288,7 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 		return _rotate_s(turn)
 	var best: float = INF
 	if _slidable(at, turn, spot):
-		best = _slides_time(d, false) + _rotate_s(_slide_turn(at, turn, spot))
+		best = _slides_time(d, FROM.BUTTERFLY) + _rotate_s(_slide_turn(at, turn, spot))
 		_down_do = Do.SLIDE
 	var heading: Vector2 = (spot - at) / d
 	for lead: float in [-1.0, 1.0]:
@@ -288,7 +296,7 @@ func _down_to_down(at: Vector2, turn: float) -> float:
 		# Never turned further off the shot than a slide takes him.
 		if absf(wrapf(onto - facing, -PI, PI)) > KeeperSlide.MAX_OFF_LINE_RAD:
 			continue
-		var rotated: float = _slide.rotate_time(wrapf(onto - turn, -PI, PI)) + _slides_time(d, false) + _rotate_s(onto)
+		var rotated: float = _slide.rotate_time(wrapf(onto - turn, -PI, PI)) + _slides_time(d, FROM.BUTTERFLY) + _rotate_s(onto)
 		if rotated < best:
 			best = rotated
 			_down_do = Do.ROTATE
@@ -347,7 +355,7 @@ func _down_to_post(at: Vector2, turn: float) -> float:
 		return KeeperPost.IN_FROM_BUTTERFLY_S
 	var best: float = INF
 	if _slidable(at, turn, to):
-		best = _slides_time(d, false) + KeeperPost.IN_FROM_BUTTERFLY_S
+		best = _slides_time(d, FROM.BUTTERFLY) + KeeperPost.IN_FROM_BUTTERFLY_S
 		_down_do = Do.SLIDE
 		_down_spot = to
 	var up: float = _drop.rise_s + _dropped_in(at, turn)
@@ -358,6 +366,13 @@ func _down_to_post(at: Vector2, turn: float) -> float:
 		_down_spot = Vector2.ZERO
 		_down_side = signf(across)
 	return best
+
+
+# Whether, in the RVH on the post on `post_side` at `at` turned `turn`, he
+# pushes off it to `to`: a slide he takes, away from the post.
+static func _pushes_off(at: Vector2, turn: float, post_side: float, to: Vector2) -> bool:
+	var local: Vector2 = _local(to - at, turn)
+	return local.x * post_side < -THERE_M and _slidable(at, turn, to)
 
 
 # Whether a slide from `at` turned `turn` to `to` is one he takes.
@@ -473,17 +488,16 @@ static func _settled(walk: float) -> float:
 
 
 # Slides one after another to `d` away, each as far as its push carries; the
-# first from his feet if `from_feet`. A slide that carries as far as it goes
+# first setting out `from` (KeeperSlide.From). A slide that carries as far as it goes
 # coasts to rest; the last, stopped on its spot by the edge, settles.
-func _slides_time(d: float, from_feet: bool) -> float:
+func _slides_time(d: float, from: int) -> float:
 	var reach: float = _slide.glide_reach(_slide.push_speed)
 	var t: float = 0.0
-	var feet: bool = from_feet
 	while d > reach:
-		t += _slide.time_to(reach, INF, feet)
+		t += _slide.time_to(reach, INF, from)
 		d -= reach
-		feet = false
-	return t + _slide.time_to(d, INF, feet) + KeeperSlide.SETTLE_S
+		from = KeeperSlide.From.BUTTERFLY
+	return t + _slide.time_to(d, INF, from) + KeeperSlide.SETTLE_S
 
 
 func _push_time(d: float) -> float:

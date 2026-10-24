@@ -5,7 +5,8 @@ extends GutTest
 # jumping, his gear out of the ice, his arms on the stick), every move he
 # makes one he can make, and in the time the route planned, which is what the
 # brain will read; the shuffle taken where it is no slower than the T-push, a
-# turn before the feet; and a spot or facing moved under a move taken on by it.
+# turn before the feet; in the RVH a post or a spot across pushed off the post
+# for; and a spot or facing moved under a move taken on by it.
 
 const DT: float = 1.0 / 120.0
 const PAD_GIVE_M: float = 0.025
@@ -206,6 +207,22 @@ func test_down_within_a_push_he_stays_down() -> void:
 	_motor.time_to_goal()
 	assert_true(_motor.route.first == DO.RISE or _motor.route.first == DO.RECOVER,
 			"up for one past a push, not %s" % DO.keys()[_motor.route.first])
+
+
+# Sealed in the RVH, a post or a spot down across the crease he pushes off the
+# post for; one on the post's side of him he folds out of it for.
+func test_in_the_rvh_he_pushes_off_the_post_across_the_crease() -> void:
+	for side: float in [1.0, -1.0]:
+		_place(R.POST, Vector2(side, 0.0), 0.0)
+		_motor.seal(_iron(-side), -side)
+		_motor.time_to_goal()
+		assert_eq(_motor.route.first, DO.RVH_PUSH_OFF, "%+.0f: to the other post" % side)
+		_motor.go_to(Vector2(-side * 0.4, -0.1), 0.0, R.DOWN)
+		_motor.time_to_goal()
+		assert_eq(_motor.route.first, DO.RVH_PUSH_OFF, "%+.0f: down across" % side)
+		_motor.go_to(Vector2(side * 0.35, -0.8), 0.0, R.DOWN)
+		_motor.time_to_goal()
+		assert_eq(_motor.route.first, DO.RVH_FOLD_OUT, "%+.0f: down out in front" % side)
 
 
 func test_square_on_the_overlap_he_drops_into_the_rvh() -> void:

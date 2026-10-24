@@ -70,14 +70,19 @@ func _init() -> void:
 		_standing_edge[i] = KeeperGear.post_contact(skel, s)
 	for i: int in 2:
 		var s: float = -1.0 if i == 0 else 1.0
-		KeeperPoses.rvh(_rvh[i], s)
-		skel.pose(_rvh[i])
+		rvh_pose(_rvh[i], s, skel)
 		_sealed_edge[i] = KeeperGear.post_pad_contact(skel, s)
-		# The same glove, held in the chest's frame as every other stance holds
-		# it, so the way in and out blends the hand in one frame.
-		if not _rvh[i].glove_from_chest:
-			_rvh[i].glove_hand = skel.xf[KeeperSkeleton.Bone.CHEST].affine_inverse() * _rvh[i].glove_hand
-			_rvh[i].glove_from_chest = true
+
+
+# The RVH on `post_side` into `p`, `skel` left posed in it; its glove held in
+# the chest's frame as every other stance holds it, so a way in or out blends
+# the hand in one frame.
+static func rvh_pose(p: KeeperPose, post_side: float, skel: KeeperSkeleton) -> void:
+	KeeperPoses.rvh(p, post_side)
+	skel.pose(p)
+	if not p.glove_from_chest:
+		p.glove_hand = skel.xf[KeeperSkeleton.Bone.CHEST].affine_inverse() * p.glove_hand
+		p.glove_from_chest = true
 
 
 # Where he stands with his edge on the post at `post` (x, z) on `post_side`,
