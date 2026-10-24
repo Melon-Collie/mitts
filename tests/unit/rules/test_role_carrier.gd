@@ -1717,23 +1717,28 @@ func test_post_seal_x_sign_decodes_the_wire_convention() -> void:
 	assert_eq(g.post_seal_x_sign(-26.65), 0.0, "no post stance, no seal")
 
 
-func test_sharp_angle_shot_into_a_vh_seal_is_never_worth_firing() -> void:
-	# In tight at a sharp angle the live goalie seals the near post in VH (the
-	# shot field's goal-line row measures him there), and the shot into the seal
-	# from where the carrier stands is no chance. (Pulling the puck off the line
-	# first is a different shot, priced from the field's decoy cells.)
-	var self_pos := Vector3(4.5, 0, -26.0)
-	var g_vh := GoalieNetworkState.new()
-	g_vh.position_x = 0.85                    # parked at the +x post
-	g_vh.position_z = -26.55                  # post-seal depth ~0.10
-	g_vh.state_enum = GoalieStateMachine.State.VH_LEFT as int   # seals +x here
-	_face(g_vh, self_pos)
-	var keeper := Vector3(g_vh.position_x, 0.0, g_vh.position_z)
+func test_sharp_angle_shot_into_an_rvh_seal_is_never_worth_firing() -> void:
+	# In tight at a sharp angle with the keeper sealed in the RVH on the near
+	# post (the field's WRAP cells measure him there), the shot into the seal
+	# from where the carrier stands is no chance. x = 4 is a measured column of
+	# the field. (Pulling the puck off the line first is a different shot,
+	# priced from the field's decoy cells.)
+	var self_pos := Vector3(4.0, 0, -26.0)
 	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	# His net frame is the world's turned half round for a net at −z: his
+	# −x post is the world's +x one.
+	var sealed: Vector2 = KeeperPost.new().seal_spot(Vector2(-GameRules.NET_HALF_WIDTH, 0.0), -1.0)
+	var g_rvh := GoalieNetworkState.new()
+	g_rvh.position_x = goal.x - sealed.x
+	g_rvh.position_z = goal.z - sealed.y
+	g_rvh.state_enum = GoalieStateMachine.State.RVH_LEFT as int   # seals +x here
+	_face(g_rvh, self_pos)
+	var keeper := Vector3(g_rvh.position_x, 0.0, g_rvh.position_z)
 	var into_the_seal: float = AIActionScoring.score_shoot_value(
 			AIGoalieModel.release_ahead_of_goalie(self_pos, goal, keeper), goal, keeper,
-			[] as Array[Vector3], 0.0, AIShotOdds.stance_of(g_vh, goal),
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [], -1.0, g_vh.rotation_y)
+			[] as Array[Vector3], 0.0, AIShotOdds.stance_of(g_rvh, goal),
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [], -1.0, g_rvh.rotation_y)
+	assert_gt(keeper.x, 0.0, "sealed on the +x post")
 	assert_lt(into_the_seal, AIRoleCarrier.SHOT_MIN_VALUE,
 			"the shot into the seal offers no real chance; got %f" % into_the_seal)
 
