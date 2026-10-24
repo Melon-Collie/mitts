@@ -1,7 +1,9 @@
 extends GutTest
 
 # The low ready laid over his stance (KeeperLowReady, through KeeperMotor): set
-# and asked, he sinks into it; any move takes him back out of it as it starts;
+# and asked, he sinks into it; a shuffle or skating with the play he makes in
+# it, stroking from the wide stance; any other move takes him back out of it as
+# it starts;
 # every tick of either unbroken, his gear out of the ice and his arms on the
 # stick. A drop or a low save from it is the shorter fall: the knees' fall to
 # the ice from where it holds them, at the root of the heights.
@@ -127,6 +129,40 @@ func test_skating_with_the_play_he_stays_low() -> void:
 		_step_checked("chasing t %.3f" % (i * DT))
 		spot += v * DT
 	assert_eq(_motor.low_ready.share, 0.0, "up out of it to chase")
+
+
+# Sunk, he moves across in it by shuffling, as goalies do, rather than sliding
+# with his legs still: he stays sunk, and each stroke's trail skate holds its
+# place on the ice as he passes over it, then comes back in under him; by the
+# glide skating with the play the same.
+func test_he_shuffles_across_in_it_still_sunk() -> void:
+	for glide: bool in [false, true]:
+		_motor = KeeperMotor.new()
+		_was = _bones()
+		_sink()
+		var what: String = "skating with the play" if glide else "shuffling"
+		if glide:
+			_motor.go_to(Vector2(0.6, 0.0), 0.0, R.FEET, Vector2.ZERO, true)
+		else:
+			_motor.shuffle_to(Vector2(0.4, 0.0))
+		var trail: int = KeeperSkeleton.FOOT[0]
+		var out: float = 0.0
+		var planted: float = NAN
+		while not _motor.is_idle():
+			_step_checked(what)
+			assert_eq(_motor.low_ready.share, 1.0, "%s: still sunk at x %.3f" % [what, _motor.x])
+			var skate: float = _skel.xf[trail].origin.x
+			var at: float = _was[trail].x
+			out = maxf(out, -skate - KeeperPoses.LOW_READY_SKATE_HALF_SPACING_M)
+			if is_nan(planted) and _motor.x > 0.01:
+				planted = at
+			if not is_nan(planted) and _motor.x < 0.1:
+				assert_almost_eq(at, planted, 0.03, "%s at x %.3f: the trail skate holds its place" % [what, _motor.x])
+		assert_gt(out, 0.05, "%s: the trail skate strokes out from the stance" % what)
+		_motor.pose(_pose)
+		_skel.pose(_pose)
+		assert_almost_eq(-_skel.xf[trail].origin.x, KeeperPoses.LOW_READY_SKATE_HALF_SPACING_M, 0.02,
+				"%s: back in under him once set" % what)
 
 
 # The drop's time goes as the root of the knees' fall to the ice.

@@ -99,8 +99,9 @@ const RVH_HOLD_TICKS: int = 18
 # shooter's side and high in front, the frames wrapped SHEET_WRAP to a row; the
 # bar is his rest: on his feet green, down blue, on the post red.
 const SEQUENCE: int = -8
-# KeeperMotor set and sinking into the low ready (KeeperLowReady), out of it
-# into a T-push, sinking again where it sets him, and dropping from it; a frame
+# KeeperMotor set and sinking into the low ready (KeeperLowReady), shuffling
+# across in it still sunk, out of it into a T-push, sinking again where it
+# sets him, and dropping from it; a frame
 # every LOW_READY_FRAME_EVERY ticks, the bar green on the move, blue sunk past
 # halfway, red down, grey standing.
 const LOW_READY: int = -14
@@ -412,7 +413,7 @@ func _record_low_ready() -> Array:
 	var out: Array = []
 	var tick: int = 0
 	var set_s: float = 0.0
-	var pushed: bool = false
+	var moves: int = 0
 	var down_s: float = -1.0
 	while down_s < LOW_READY_HOLD_S * 0.5:
 		if tick % LOW_READY_FRAME_EVERY == 0:
@@ -436,11 +437,14 @@ func _record_low_ready() -> Array:
 			set_s += DT
 			if set_s >= LOW_READY_HOLD_S:
 				set_s = 0.0
-				if pushed:
-					motor.drop_down()
-				else:
-					motor.push_to(Vector2(1.0, 0.0))
-					pushed = true
+				match moves:
+					0:
+						motor.shuffle_to(Vector2(0.4, 0.0))
+					1:
+						motor.push_to(Vector2(1.4, 0.0))
+					_:
+						motor.drop_down()
+				moves += 1
 	return out
 
 

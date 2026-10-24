@@ -16,6 +16,9 @@ const RISE_S: float = 0.15
 # On the way, the pads' faces tipped up by as much again at the most, or the
 # inside edge by the skate digs in as the shin lays over.
 const PAD_TIP_ON_THE_WAY: float = 0.6
+# Of a stroke's skate carried out, the share its knee goes with it: the leg
+# drives out over the skate rather than reaching from a knee left driven in.
+const STROKE_KNEE_SHARE: float = 0.5
 
 var asked: bool = false
 # How far he has sunk, 0 to 1: the low ready's share of his pose.
@@ -24,12 +27,15 @@ var share: float = 0.0
 # How far he has sunk along the way, eased into `share`.
 var _sunk: float = 0.0
 var _low := KeeperPose.new()
+var _ready := KeeperPose.new()
+var _stroked := KeeperPose.Leg.new()
 var _skel := KeeperSkeleton.new()
 static var _butterfly_knee_y: float = -1.0
 
 
 func _init() -> void:
 	KeeperPoses.low_ready(_low)
+	KeeperPoses.ready(_ready)
 
 
 # One tick on his feet: sinking while `settled` (set, or skating with the play)
@@ -67,7 +73,10 @@ static func fall_share_at(sunk: float) -> float:
 
 # `p` sunk `share` of the way into the low ready; `standing_ready` when `p` is
 # the ready stance itself, whose knees are solved once. The skates go out
-# first and the knees follow them down, as a widening A drives them.
+# first and the knees follow them down, as a widening A drives them. A stroke
+# under way in `p` (a skate off where the ready stance has it, as he shuffles
+# or skates with the play) is carried onto the low ready's skate, so he
+# strokes from the wide stance and stays sunk in it.
 func lay_over(p: KeeperPose, standing_ready: bool) -> void:
 	if share <= 0.0:
 		return
@@ -79,7 +88,11 @@ func lay_over(p: KeeperPose, standing_ready: bool) -> void:
 		var knee: Vector3 = leg.knee
 		if not leg.knee_pinned:
 			knee = KeeperDrop.ready_knee(i) if standing_ready else _skel.xf[KeeperSkeleton.SHIN[i]].origin
-		sink_leg(leg, leg, knee, _low.legs[i], share)
+		var stroke: Vector3 = leg.ankle - _ready.legs[i].ankle
+		_stroked.copy_from(_low.legs[i])
+		_stroked.ankle += stroke
+		_stroked.knee += Vector3(stroke.x, 0.0, stroke.z) * STROKE_KNEE_SHARE
+		sink_leg(leg, leg, knee, _stroked, share)
 
 
 # A leg `s` of the way from standing on its skate (`up`, its knee at `up_knee`)
