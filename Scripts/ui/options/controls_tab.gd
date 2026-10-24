@@ -14,11 +14,11 @@ const _REBINDABLE_ACTIONS: Array = [
 	{"action": "shoot",          "label": "Shoot"},
 	{"action": "quick_pass",     "label": "Quick Pass"},
 	{"action": "slapshot",       "label": "Slapshot"},
-	{"action": "hit",            "label": "Hit"},
+	{"action": "hit",            "label": "CONTROLS_HIT"},
 	{"action": "block",          "label": "Block"},
 	{"action": "elevation_up",   "label": "Elevation Up"},
 	{"action": "elevation_down", "label": "Elevation Down"},
-	{"action": "stick_lift",     "label": "Deflect"},
+	{"action": "stick_lift",     "label": "CONTROLS_DEFLECT"},
 	{"action": "stick_check",    "label": "CONTROLS_STICK_LIFT"},
 	{"action": "smart_ping",     "label": "Smart Ping"},
 ]
@@ -28,8 +28,8 @@ const _REBINDABLE_ACTIONS: Array = [
 const _PAD_REBINDABLE: Array = [
 	{"action": "block",          "label": "Block"},
 	{"action": "brake",          "label": "Brake / Shuffle"},
-	{"action": "hit",            "label": "Hit"},
-	{"action": "stick_lift",     "label": "Deflect"},
+	{"action": "hit",            "label": "CONTROLS_HIT"},
+	{"action": "stick_lift",     "label": "CONTROLS_DEFLECT"},
 	{"action": "stick_check",    "label": "CONTROLS_STICK_LIFT"},
 	{"action": "stance",         "label": "Stance"},
 	{"action": "quick_pass",     "label": "Quick Pass"},
@@ -56,7 +56,7 @@ var _pad_binding_btns: Dictionary = {}
 var _conflict_label: Label = null
 
 func _build_content() -> void:
-	add_child(_section_header("Gamepad (Experimental)"))
+	add_child(_section_header("Gamepad"))
 
 	# No enable toggle: the pad drives whenever it's the most recently used device
 	# (InputDeviceTracker, last-input-wins) and yields the moment the mouse moves, so

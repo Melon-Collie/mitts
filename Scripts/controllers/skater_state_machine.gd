@@ -27,6 +27,17 @@ static func state_has_puck(state: int) -> bool:
 			or state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK
 
+# States whose body is committed to a shot — a wind-up, a wrister's load, a
+# follow-through, a one-timer's hold — so a hit catches him off balance
+# (BodyBalanceRules.Posture.VULNERABLE). Pure, like state_has_puck, so the host,
+# the local victim's prediction and the bots read it alike.
+static func state_off_balance(state: int) -> bool:
+	return state == State.WRISTER_AIM \
+			or state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
+			or state == State.FOLLOW_THROUGH \
+			or state == State.ONE_TIMER_RETENTION
+
 # States in which the puck is RIGIDLY PINNED to the carrier's body rather than
 # riding a live, sweeping blade — the shot wind-ups plus the one-timer retention
 # hold, which keeps the wind-up's pin while the shaft loads. WRISTER_AIM freezes the
@@ -48,8 +59,7 @@ static func state_has_puck(state: int) -> bool:
 # NOTE this says nothing about the carrier's MOBILITY, which differs sharply
 # between the two: the slapper takes no stride or steer and glides on its
 # momentum, while the wrister suppresses nothing and stays fully steerable.
-# Reads that depend on the shooter's mobility must test for that separately —
-# see GoalieController._reading_planted_windup.
+# Reads that depend on the shooter's mobility must test for that separately.
 static func state_pins_puck(state: int) -> bool:
 	return state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK \

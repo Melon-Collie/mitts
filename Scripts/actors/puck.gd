@@ -618,26 +618,19 @@ func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_dir
 		return
 	if checker.is_ghost or victim.is_ghost:
 		return
-	# Gate on the impulse actually DELIVERED to the victim (folds in the attacker's
+	# Gate on the impulse actually DELIVERED to the victim (folds in the contact's
 	# transfer, both skaters' mass, and the closing speed) rather than the raw
-	# attacker-weight × speed impact_force — so the same hit dislodges the puck for
-	# an enforcer but not for a lighter player. Matches the stagger's
-	# hardness measure; see BodyCheckRules.puck_strip_impulse.
-	#
-	# The attacker's transfer is commit-gated by the Hit button, the SAME way the
-	# knockback is (Skater._resolve_player_collisions): a committed check strips at
-	# full force, an uncommitted bump only at hit_passive_transfer_mult — so
-	# "without the hit button, hits shouldn't be that powerful" holds for the puck
-	# too, not just the knockback. The victim's brace (hit_committed) already cut it.
-	var checker_transfer: float = checker.body_check_transfer \
-			* (1.0 if checker.hit_committed else checker.hit_passive_transfer_mult)
+	# checker-weight × speed impact_force — so the same hit dislodges the puck for
+	# an enforcer but not for a lighter player. Matches the stagger's hardness
+	# measure; see BodyCheckRules.puck_strip_impulse. The transfer is the
+	# contact's own (Skater.contact_transfer_with — commit, possession, brace), the
+	# same number the knockback landed at.
+	var transfer: float = checker.contact_transfer_with(victim)
 	var strip_impulse: float = BodyCheckRules.puck_strip_impulse(
-			impact_force, checker.weight, checker_transfer,
-			victim.weight, victim.body_check_brace_resistance, victim.hit_committed)
+			impact_force, checker.weight, transfer, victim.weight)
 	# Crushed square into the boards he takes the whole hit, as his stagger does.
 	strip_impulse = BoardPinRules.backstop_hit_strength(strip_impulse,
-			impact_force / maxf(checker.weight, 0.001),
-			checker_transfer * (victim.body_check_brace_resistance if victim.hit_committed else 1.0),
+			impact_force / maxf(checker.weight, 0.001), transfer,
 			Vector2(hit_direction.x, hit_direction.z),
 			BoardPinRules.wall_normal(victim.global_position, victim.collision_radius(),
 					BoardPinRules.BACKSTOP_MARGIN_M),
@@ -721,52 +714,13 @@ func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> v
 	_set_cooldown(ex_carrier, maxf(reattach_cooldown, regrab_cooldown))
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
-# Goalie counterpart to apply_poke_check. A Goalie is not a Skater (no
-# blade_world_velocity, no cooldown-table entry), so it gets its own entry
-# point. Strip velocity uses the goalie's blade position + the controller's
-# computed blade velocity as the checker inputs.
-#
-# No checker-side cooldown — the goalie's lunge cooldown already prevents
-# spam pokes, and adding the goalie to the per-skater cooldown table would
-# fight every other system that filters by Skater identity.
-func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
-	var ex_carrier: Skater = carrier
-	var fallback_dir := Vector3(randf_range(-1.0, 1.0), 0.0, randf_range(-1.0, 1.0))
-	clear_carrier()
-	linear_velocity = PuckCollisionRules.poke_strip_velocity(
-			blade_vel,
-			ex_carrier.blade_world_velocity,
-			ex_carrier.global_position,
-			blade_pos,
-			poke_carrier_vel_blend,
-			poke_strip_min_speed,
-			poke_strip_max_speed,
-			fallback_dir)
-	linear_velocity.y = _pinch_lift(blade_vel, ex_carrier.blade_world_velocity,
-			blade_pos, ex_carrier.get_blade_contact_global())
-	_set_cooldown(ex_carrier, reattach_cooldown)
-	# No skater checker — a goalie strip earns no player takeaway credit.
-	puck_stripped.emit(ex_carrier, null)
-	puck_released.emit()
+
 
 func _pinch_lift(checker_vel: Vector3, carrier_vel: Vector3,
 		checker_pos: Vector3, carrier_pos: Vector3) -> float:
 	return PuckCollisionRules.pinch_lift_speed(checker_vel, carrier_vel,
 			checker_pos, carrier_pos,
 			pinch_lift_threshold, pinch_lift_gain, pinch_lift_max_speed)
-
-
-# Goalie loose-puck sweep / clear. The poke check (apply_goalie_poke_check)
-# strips a CARRIED puck; this is its loose-puck counterpart — the goalie
-# sweeps an uncarried puck out of the crease toward the corner. There's no
-# carrier to clear and nobody was dispossessed, so it fires no strip/release
-# signals; it just imparts the clearing velocity. No-op on a carried puck
-# (the poke path owns that case). Host-only — the authoritative velocity
-# replicates to clients through the normal puck sync.
-func apply_goalie_sweep(sweep_velocity: Vector3) -> void:
-	if carrier != null:
-		return
-	linear_velocity = sweep_velocity
 
 
 func release(direction: Vector3, power: float) -> void:
@@ -1033,6 +987,10 @@ func _drive_analytic(dt: float) -> void:
 			GoalieSaveRules.resolve_contact(
 					vel, part, _goalie_contact.normal, _save_result, fwd,
 					_goalie_contact.part_velocity)
+			var g: Goalie = g3 as Goalie
+			if part == GoalieSaveRules.SavePart.CHEST and g != null and g.chest_contact.is_valid():
+				g.chest_contact.call(vel, _goalie_contact.point, _goalie_contact.normal,
+						_goalie_contact.part_velocity, _save_result)
 			vel = _save_result.velocity
 			# Eject the disc flush off the contacted face. `point` is the sphere
 			# CENTRE at toi — already `radius` off the real face via the

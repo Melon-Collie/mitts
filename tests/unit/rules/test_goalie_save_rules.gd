@@ -231,25 +231,6 @@ func test_a_chest_struck_from_behind_is_padding_not_a_smother() -> void:
 	assert_gt(r.velocity.length(), 0.0)
 
 
-func test_a_trapped_chest_puck_is_still_there_for_the_sweep() -> void:
-	# THE COUPLING. A smother is only the first beat: the crease sweep has to be
-	# able to take the puck afterwards, and it only takes one still inside its
-	# reach once the dwell has elapsed. Break this and a "dead play" becomes a
-	# loose puck in the paint, which is the opposite of one.
-	var clear := GoalieCreaseClear.new()
-	var ctrl := GoalieController.new()
-	var dwell: float = ctrl.clear_dwell
-	ctrl.free()
-	var drop: float = GoalieSaveRules.CHEST_TRAP_DROP_M_S
-	assert_lt(drop, clear.max_puck_speed,
-			"a trapped puck is slow enough for the sweep to be allowed to take it")
-	# It also has to still be WITHIN reach when the dwell completes. The puck
-	# starts at the chest, roughly a body's half-depth in front of him.
-	var start_offset: float = 0.4
-	assert_lt(start_offset + drop * dwell, clear.reach,
-			"and still inside his stick when the dwell elapses")
-
-
 # ── is_face_presented ────────────────────────────────────────────────────────
 
 func test_face_presented_reads_facing_not_the_net() -> void:

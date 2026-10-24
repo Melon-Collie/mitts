@@ -81,3 +81,35 @@ func test_options_pad_rows_mirror_the_rebindable_actions() -> void:
 	rows.sort()
 	expected.sort()
 	assert_eq(rows, expected, "Options pad rebind rows drifted from PAD_REBINDABLE_ACTIONS")
+
+
+# A scheme-2 config with every pad bind saved at its old default.
+func _scheme_2_config() -> Dictionary:
+	var pad: Dictionary = PlayerPrefsScript.PAD_DEFAULT_BUTTONS.duplicate()
+	pad["hit"] = JOY_BUTTON_LEFT_STICK
+	pad["stick_lift"] = JOY_BUTTON_RIGHT_SHOULDER
+	return pad
+
+
+func test_scheme_3_swaps_the_hit_and_the_deflect_on_an_untouched_config() -> void:
+	var pad: Dictionary = _scheme_2_config()
+	PadSchemeMigration.to_scheme_3(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
+	assert_false(pad.has("hit"), "the hit is reseeded onto RB")
+	assert_false(pad.has("stick_lift"), "the deflect is reseeded onto L3")
+	assert_eq(int(pad["stick_check"]), int(JOY_BUTTON_X), "binds outside the move are untouched")
+
+
+func test_scheme_3_moves_the_hit_when_only_the_deflect_was_rebound() -> void:
+	var pad: Dictionary = _scheme_2_config()
+	pad["stick_lift"] = JOY_BUTTON_Y
+	PadSchemeMigration.to_scheme_3(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
+	assert_false(pad.has("hit"))
+	assert_eq(int(pad["stick_lift"]), int(JOY_BUTTON_Y))
+
+
+func test_scheme_3_never_moves_the_hit_onto_a_button_the_player_bound() -> void:
+	var pad: Dictionary = _scheme_2_config()
+	pad["stick_lift"] = JOY_BUTTON_Y
+	pad["quick_pass"] = JOY_BUTTON_RIGHT_SHOULDER
+	PadSchemeMigration.to_scheme_3(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
+	assert_eq(int(pad["hit"]), int(JOY_BUTTON_LEFT_STICK))

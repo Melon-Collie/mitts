@@ -17,7 +17,7 @@ namespace mitts {
 // ticks cross the boundary in ONE call here — the loop runs natively).
 //
 // MovementConfig fields load by property name from the GDScript config
-// object via configure(cfg); the stagger scaling needs only three
+// object via configure(cfg); the stagger scaling needs only five
 // BodyCheckRules.Config fields, set via set_stagger_params. `posture` is
 // SkaterMovementRules.Posture as an int (UPRIGHT 0, STANCE 1, COMMIT 2).
 
@@ -62,6 +62,8 @@ class NativeSkaterMovement : public godot::RefCounted {
 	double stagger_max_seconds = 0.0;
 	double stagger_max_thrust_penalty = 0.0;
 	double stagger_max_grip_penalty = 0.0;
+	double rocked_max_seconds = 0.0;
+	double rocked_grip_penalty = 0.0;
 
 	godot::Vector3 fwd_position;
 	godot::Vector3 fwd_velocity;
@@ -74,7 +76,7 @@ public:
 	// every tunable loaded.
 	godot::String configure(godot::Object *movement_config);
 	void set_stagger_params(double max_stagger_seconds, double max_thrust_penalty,
-			double max_grip_penalty);
+			double max_grip_penalty, double p_rocked_max_seconds, double p_rocked_grip_penalty);
 
 	godot::Vector3 apply_movement(
 			const godot::Vector3 &current_velocity,

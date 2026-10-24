@@ -224,7 +224,7 @@ static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vect
 	for j: int in q.cells.size():
 		var t: PackedStringArray = AIShotFieldData.ROWS[q.cells[j]].split("\t")
 		for li: int in LOFTS.size():
-			var pattern: String = t[51 + li]
+			var pattern: String = t[23 + li]
 			for i: int in pattern.length():
 				blend[li * AIShotFieldData.AIM_POINTS + i] += \
 						q.weights[j] * aim_odds(pattern, i, sigma_m)
@@ -489,19 +489,19 @@ static func _build() -> void:
 		var mode: String = t[4]
 		var release := Vector3(float(t[7]), 0.0, _FIELD_GOAL.z + float(t[8]))
 		var pre := Vector3(float(t[9]), 0.0, float(t[10]))
-		var now := Vector3(float(t[30]), 0.0, float(t[31]))
+		var now := Vector3(float(t[16]), 0.0, float(t[17]))
 		_is_feed[c] = 1 if kind == "FEED" else 0
 		_one_timer[c] = 1 if mode == "O" else 0
 		# A feed caught and charged is also the keeper as the receiver finds him.
 		_is_shot_sample[c] = 1 if kind != "FEED" or mode == "K" else 0
 		var probe := GoalieNetworkState.new()
-		probe.state_enum = int(float(t[33]))
+		probe.state_enum = int(float(t[19]))
 		_stance[c] = stance_of(probe, _FIELD_GOAL)
 		_in_seal_zone[c] = 1 if AIGoalieModel.in_post_seal_zone(release, _FIELD_GOAL) else 0
 		_offset[c] = now.x - AIGoalieModel.goalie_arc_match_x(now, _FIELD_GOAL, release)
-		_velocity[c] = float(t[35])
+		_velocity[c] = float(t[21])
 		_depth[c] = _depth_of(now, _FIELD_GOAL)
-		_square[c] = squareness(now, float(t[32]), release)
+		_square[c] = squareness(now, float(t[18]), release)
 		if kind == "SET":
 			_set_cell[spot] = c
 		var receiver := Vector3(float(t[1]), 0.0, _FIELD_GOAL.z + float(t[2]))
@@ -512,7 +512,7 @@ static func _build() -> void:
 				* maxf(Vector2(release.x, release.z - _FIELD_GOAL.z).length(), 0.5)
 		var best: float = 0.0
 		for li: int in LOFTS.size():
-			var pattern: String = t[51 + li]
+			var pattern: String = t[23 + li]
 			for i: int in pattern.length():
 				var p: float = aim_odds(pattern, i, sigma_m)
 				_aim_odds[c * _aims_per_cell + li * AIShotFieldData.AIM_POINTS + i] = p

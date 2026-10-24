@@ -146,7 +146,7 @@ Two changes that unify the frame and make the figures read as intentional:
   blobs. Skaters: `rim_enabled` on every body material via the two factories
   (`_make_solid_mat` / `_make_texture_material`) + the inline torso/shoulder
   mats (`_RIM_STRENGTH 0.4`, `_RIM_TINT 0.35` in `skater_uniform_coordinator`).
-  Goalie: a matching Fresnel emission term in `goalie_jersey.gdshader`. Dials:
+  Goalie: a matching Fresnel emission term in `keeper_jersey.gdshader`. Dials:
   the rim constants (up = stronger edge) and the goalie's `rim * 0.2`.
 
 ## Options wiring (done)

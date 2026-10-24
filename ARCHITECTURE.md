@@ -120,8 +120,6 @@ Phase list, durations, constants, and the movement-lock set live under **Game Fl
 
 **The shooter's release rides the one predicted mode via a local-release seed (Phase 4b).** There is no separate trajectory-prediction mode: on a local release/nudge, `PuckController` stores a release seed (origin + velocity + a stamp at the render instant, `estimated_host_time()` + input lead — where the shooter's blade sits and the tick the host fires the release on, so the seeded flight starts at zero on the release frame) and `_predict_loose` runs the shared analytic sim forward from the SEED instead of the newest snapshot, because every buffered snapshot still shows the puck carried until the host processes the release ~one-way later. The seed hands over to normal snapshot prediction on the first loose snapshot stamped at/after the seed — the shot-launch divergence probe measures exactly that seam — and a 0.5 s timeout is the deep-loss escape (stop trusting a shot the host may never have fired). Contacts need no special exit machinery: a goalie contact is the same prediction STOP as any predicted puck (hold at the contact — the save outcome is a host decision), frame bounces are the shared solver's own geometry, and the stateless re-predict folds the authoritative outcome in the moment its snapshot lands. No goal is ever predicted — the prediction loop parks an inbound puck on the goal line inside the posts (all pucks, not just the shooter's) and lets the horn arrive from the host.
 
-**Goalie state transitions and shot reactions via reliable RPCs.** Interpolation gives smooth position but can't guarantee reaction timing — a butterfly during a rapid shot sequence may arrive in the wrong bracket order. Reliable RPCs deliver exact state changes; clients play a local reaction timer from the RPC payload for immediate visual feedback.
-
 **Prediction residuals ride one smoother; only genuine divergence snaps.** The old three-zone trajectory reconcile (soft blend / velocity-only / hard-snap-and-exit, keyed on a full-RTT-projected broadcast) is gone with the trajectory mode itself: prediction is a stateless re-predict, so there is no explicit reconcile pass — each frame's target is recomputed from the newest authority and the residual lands in the velocity-feed-forward SmoothDamp tail. The only discrete decision left is the smoother's velocity-aware snap guard (`PuckHandoffRules.needs_hard_snap`): cross-track error at `_SMOOTH_SNAP_DIST` or along-track error beyond velocity × `_ALONG_SNAP_TIME_S` teleports (recorded as `puck_hard_snaps` telemetry when the target is moving — at-rest snaps are faceoff/goal-reset repositions and aren't counted); everything smaller damps out smoothly.
 
 **Carrier transitions:**
@@ -134,13 +132,9 @@ Phase list, durations, constants, and the movement-lock set live under **Game Fl
 
 ### Goalie Networking
 
-**The goalie AI runs only on the host; clients are pure interpolators.** The host runs the full goalie state machine every physics tick. Clients do **not** run the AI — they buffer the host's broadcast goalie snapshots and render them at `now - interpolation_delay` via `GoalieController._interpolate_and_apply`, exactly like remote skaters and the loose puck. When `render_time` overshoots the newest snapshot, the root translation is dead-reckoned by the broadcast linear velocity (capped at `extrapolation_max_ms`) while the pose holds its newest value — a brief gap reads as a momentary freeze rather than wildly extrapolated sweep angles. This replaced the older "client runs the AI + soft position correction" model, which produced ghost saves and phantom goals whenever the client's local puck read disagreed with the host broadcast.
+**The goalie AI runs only on the host; clients are pure interpolators.** The host runs the keeper every physics tick. Clients do **not** run the AI — they buffer the host's broadcast goalie snapshots and render them at `now - interpolation_delay` via `GoalieController._interpolate_and_apply`, exactly like remote skaters and the loose puck. When `render_time` overshoots the newest snapshot, the root translation is dead-reckoned by the broadcast linear velocity (capped at `extrapolation_max_ms`) while the pose holds its newest value — a brief gap reads as a momentary freeze rather than wildly extrapolated sweep angles. This replaced the older "client runs the AI + soft position correction" model, which produced ghost saves and phantom goals whenever the client's local puck read disagreed with the host broadcast.
 
-The full pose is on the wire, so the broadcast is the authoritative visual: butterfly drop, glove/blocker reach, RVH hug, and recovery all come straight from the interpolated host pose. Serialized per goalie (43 B quantized): root — position (x/z), rotation_y, state_enum, five_hole_openness, velocity (x/z); pose — body pitch/roll, each pad's offset + pitch/roll/yaw (pad yaw is the rebound-steering toe-out, on the wire since PROTOCOL_VERSION 13 so clients render the angled pads the host's rebounds play off), glove and blocker offsets + yaw/pitch, head yaw. `_apply_interpolated` sets `_sm.current` directly from the snapshot enum (body/head height lookups in `apply_network_pose` key off it, and debug/telemetry readers see the host's state), and adopts `five_hole_openness` from the snapshot. There is **no** client-side goalie AI tick, reaction state machine, or goalie state/reaction RPC. The host's only reaction signal, `GoalieShotReaction.started`, is host-internal — `_on_reaction_started` consumes it to arm the slide event-lockout, and it is never fanned out to clients.
-
-Post integration triggers when `_is_puck_in_defensive_zone()` — either the puck is behind the goal line, or it is within `zone_post_z` of the goal line and the horizontal angle to the puck exceeds `rvh_early_angle` (default 77° — a true dead angle, on the conservative side of the modern "don't overuse RVH" teaching. Low enough that a flat shot from 8 m wide and 1.5 m out finds him on the post: standing, the butterfly he drops into cannot finish before it arrives). The stance family then splits at the goal line (hysteresis `post_stance_swap_deadband_m`): puck behind it → **RVH** (ice seal for wraps/walkouts); puck in front at the sharp angle → **VH** (post pad vertical — keeps the short-side-high coverage RVH concedes). This matches the Buckley depth chart's "Defensive" corner zones, which extend slightly in front of the goal line at sharp angles.
-
-**Tracking lag:** `GoalieController` maintains `_tracked_threat_position` that lerps toward the (puck-squared, lightly body-biased in tight) threat at a distance-scaled rate — `tracking_speed` (8.0) in tight fading to `tracking_speed_far` (3.0) at range, the quiet-eye smoothing that low-passes stickhandle jitter without squaring off the shooter's body. All positioning logic — lateral target, depth, facing, and state transitions — reads from this tracked position rather than the real puck. `_on_puck_released` (shot detection, server only) reads the real puck position and velocity so butterfly reactions stay accurate. (Goalie difficulty lives in `GoalieSkillProfile`, not this export.)
+Every match plays the rebuilt keeper (`KeeperController`, `Scripts/domain/keeper/CLAUDE.md`), and his full pose is on the wire, so the broadcast is the authoritative visual and the authoritative geometry. Serialized per goalie (142 B quantized): root — position (x/z), rotation_y, state_enum (his rest as the wire's stances, which the bots read), five_hole_openness, velocity (x/z); then his pose (`KeeperPoseCodec`, 130 B) — every target his skeleton solves from: pelvis and trunk angles, each leg's ankle, knee, poles and flags, the glove and its frame, the blade and the blocker. A client interpolates root and pose between snapshots (`KeeperPose.blend`; a target whose flag differs between them goes with its flag), solves his skeleton from it and seats his save boxes on it, so its puck prediction stops against the gear the host saves with (within about a centimetre: the root's quantization). A replay poses him the same way (`KeeperController.apply_replay_state`). There is **no** client-side goalie AI tick, reaction state machine, or goalie state/reaction RPC.
 
 ### Puck Interactions (server-side)
 
@@ -221,8 +215,6 @@ One trap this rig has to respect: **Godot skins normals with the bone matrix its
 **Upper body:** the arm rig above IS the upper-body rig — the torso, the helmet/head unit and the two deltoid caps are four more bones on the same `Skeleton3D` and four more surfaces (five: the helmet contributes shell + head skin) of the same mesh. They join it rather than getting their own because they are siblings in `UpperBody`'s frame, so one skeleton means one pose array and no extra nodes at all. Their placement is read out of `Scenes/Skater.tscn` at `_ready` and the subtree freed, same as the legs. `set_head_angle` and `_orient_shoulder_cap` write bones; `SkaterMeshBuilder.apply()` is gone, since the skater no longer has a single mesh hanging on a node.
 
 **On-ice HUD:** the slot rings, elevation chevrons and the slapper one-timer indicator are drawn by `Shaders/ice.gdshader` from uniforms fed by `IceRingField`, not by meshes. The slapper indicator is self-only, so it is scalar uniforms rather than an array — it was five nodes per skater (reticle, arrow root, arrow, gapped ring) plus an ArrayMesh rebuilt on convergence ticks, so that at most one skater could show it. Its geometry constants are mirrored in the shader; `SkaterHUDCoordinator` and `ice.gdshader` must be kept in sync. What is still a node is the self-beacon, which floats above the head and so cannot be an ice decal — and it is built LAZILY, only on the skater the ring-relation resolver reports as SELF, so exactly one exists in the scene rather than one per skater.
-
-**Goalie rendering:** the goalie is deliberately NOT skinned — its moving parts are `StaticBody3D`s with live colliders, so bones would add per-frame writes rather than replace them (see `docs/skinned-skater-plan.md`). Its meshes are instead merged where they are rigid AND share a material: the catch glove (rim + pocket + cuff), the stick (shaft + paddle + blade) and the blocker (board + hand) are each one mesh on one node. The colliders in `Goalie.tscn` are untouched — the absorbed nodes were mesh-only.
 
 **Leg rendering:** Both legs are one skinned mesh bound into the body skeleton (`SkaterLegRig.build`), fourteen bones chained `Leg → Shin` under the `HIPS` bone (see `Scripts/actors/CLAUDE.md` → *One skeleton, one chain*). Four pivots (`LegL/R`, `ShinL/R`) carry no geometry and exist to be rotated by the gait (`set_leg_swing`); the other ten carry thighs, knees, socks, skate collars and boots. Surfaces are `SkaterMeshBuilder.LegSurface` — twenty, not ten, because the skate collar carries its accent stripe and the boot carries its toe cap, its blade holder, its steel runner and its laces. Each of those is a piece a gear MODEL paints on its own (`GearModelRegistry`); the runner is the exception that stays steel by construction. The segment offsets are **read out of `Scenes/Skater.tscn` at `_ready` and the subtree is then freed**, so the scene stays the place leg proportions are authored while costing nothing at runtime.
 
@@ -416,20 +408,12 @@ stack — `PuckController.is_processing_stick_lift`, the queued release velocity
 read by the dump-release check, and the goalie reaction back-date consumed by
 `_on_puck_released`.
 
-## The goalie is deliberately not skinned
+## The goalie draws as one skinned mesh over his save boxes
 
-His moving parts are `StaticBody3D`s carrying real colliders: the puck bounces
-off the pads, the glove and the stick, and the poke geometry reads the blade
-collider's world position. `apply_body_config` moves six of them per tick and
-their meshes are children that ride along for free — bones would not replace
-those writes, since the bodies still have to move for collision; they would add
-one write per mesh.
-
-What does apply is the rigid merge the boot and helmet already use: several
-meshes that never move relative to each other and share a material collapse to
-one node, one mesh, one draw call. The absorbed nodes are resolved by path and
-freed, so anything that must stay addressable has to stay OUT of its merge — the
-goalie stick blade is the standing example (`GoalieMeshBuilder._merge_stick`).
+The keeper's gear is one skinned mesh, a bone per piece posed on that piece's
+save box (`KeeperBodyRig`, `Scripts/domain/keeper/CLAUDE.md`): the boxes are
+the save geometry the puck meets, so the drawn gear can never sit somewhere
+the saves are not.
 
 ## The skater body is two skinned meshes on one skeleton, not a node tree
 
@@ -457,9 +441,7 @@ four have to hold: every vertex weighted 1.0 to one bone, identity bone rests,
 identity skin binds, and part geometry left in its own local space. Each part
 is posed in its parent bone's frame — the shell under the spine, the pelvis under
 the waist, the legs `Leg` → `Shin` under the hips — and the arms are root bones
-solved in skeleton space. The goalie and the puck still hang meshes on nodes and subclass
-`SkaterMeshBuilder` only for its geometry helpers; the goalie's are drawn through
-`GoalieBodyRig`, which skins one merged mesh to a bone per part.
+solved in skeleton space. The puck still hangs its mesh on a node.
 
 **Paint the skater body through the `Skater` surface seams, never a material.**
 `set_leg_surface_material` / `set_upper_surface_material` take a

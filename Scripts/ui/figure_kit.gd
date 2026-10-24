@@ -210,10 +210,9 @@ func _paint_body(colors: Dictionary, skin_tone: int, player_name: String,
 	# One-color sleeves here, so an unnamed elbow is the sleeve too.
 	var elbow: Color = uniform.arms.elbow if uniform.arms.get("elbow") is Color else sleeve
 	for i: int in 2:
-		# The knee takes the pants BASE solid — the rink paints it apart from
-		# the thigh, whose side stripe would ring a ball.
 		_paint(thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
-		_paint(knees[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
+		# Below the pant hem the knee is sock, solid base as on the rink.
+		_paint(knees[i], 0, sock_block.base, _CLOTH_ROUGH)
 		if sock_tex != null:
 			_paint_texture(socks[i], 0, sock_tex, _CLOTH_ROUGH)
 		else:

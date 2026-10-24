@@ -18,7 +18,8 @@ Deep detail lives next to the code it describes and loads on demand.
 | Bot AI design rules (evaluators, difficulty axes, determinism) | `Scripts/domain/ai/CLAUDE.md` |
 | Everything a bot perceives and decides, where it lives, its test; where a new bot feature plugs in | `Scripts/domain/ai/DECISIONS.md` |
 | Bot agent wiring (state graph, reception and chase doctrine) | `Scripts/ai/CLAUDE.md` |
-| Goalie doctrine, controller collaborators | `Scripts/controllers/CLAUDE.md` |
+| The goalie's seat, beatable realism, skater controller collaborators | `Scripts/controllers/CLAUDE.md` |
+| The goalie (keeper body, gear, poses, brain, saves) | `Scripts/domain/keeper/CLAUDE.md` |
 | Player attributes (body dials, gear slots, routing) | `Scripts/domain/state/CLAUDE.md` |
 | Launch modes, session lifecycle, claim resolvers, backend | `Scripts/game/CLAUDE.md` |
 | UI conventions (locale seam, menu style, popups) | `Scripts/ui/CLAUDE.md` |
@@ -107,6 +108,14 @@ baseline; pose list and framing in `tools/pose_capture.gd`. Same xvfb/software-G
 constraint as the arena, and the same argument: articulation is the thing a
 display-less test cannot assert. `tools/skater_matrix.gd` is its sibling for
 proportions and paint across builds — one static pose, five bodies.
+
+**To see the GOALIE, render him.** `.claude/hooks/render-keeper.sh` draws the
+keeper (`Scripts/domain/keeper/`) in every taught stance from the
+front, side, three-quarter, the shooter's spot on the dot line and behind, with
+the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
+`.preview/keeper/` (`tools/keeper_capture.gd`), and diffs each sheet against
+a baseline recorded with `--baseline`. `.claude/hooks/render-keeper-strip.sh`
+draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,
@@ -427,8 +436,8 @@ Keep the layer boundary **and** the performance — a Callable/collaborator
 boundary is an interface, not a license to allocate per call. *Memoize at the
 seam* (`PlayerRegistry` caches `Array[Skater]`; `puck_controller` caches
 `team_id_by_skater`). *Build once, fill scratch* — solvers fill a caller-owned
-result instead of returning a fresh `Dictionary` (`GoalieBodyConfigBuilder`'s
-shared scratch config is the model). This is about *structure*, not constants, so
+result instead of returning a fresh `Dictionary` (`GoalieController._scratch_state`,
+one `GoalieNetworkState` filled for every render of him, is the model). This is about *structure*, not constants, so
 it doesn't conflict with "get it working, then tune numbers".
 
 **Don't shy away from complexity when it improves feel.** This project already

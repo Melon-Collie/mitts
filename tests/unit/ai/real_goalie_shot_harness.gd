@@ -2,7 +2,7 @@ extends RefCounted
 
 # ── REAL-goalie shot-outcome instrument ──────────────────────────────────────
 # Ground truth for "does the live goalie actually stop this shot." Drives the
-# REAL GoalieController (from Goalie.tscn) and the REAL analytic puck→goalie
+# controller it is handed (the keeper, on Goalie.tscn) and the REAL analytic puck→goalie
 # save loop — GoalieContactDetector.nearest + GoalieSaveRules.resolve_contact,
 # the exact pair Puck._physics_process runs on the host — with the goalie's real
 # reaction delay, butterfly drop, lateral push and pose anatomy (glove/pad
@@ -92,27 +92,6 @@ func setup(goalie: Node, puck: Node, ctrl: GoalieController, shooter: Skater) ->
 	_shooter.set_process(false)
 	_ctrl.set_skater_getter(func() -> Array: return [_shooter])
 	_ctrl.setup(_goalie, _puck, _goal_z, true)
-
-
-# THE REPLICATED GOALIE READ the shot model is fed in gameplay — the same fields
-# carrier.gd assembles into its _shot_env_* (post seal, stance family, five-hole
-# gap, hand/pad pose). Instruments MUST score through this rather than leaning on
-# score_shoot's defaults: the defaults describe a DEGRADED keeper (no seal, no
-# pose, no measured five-hole), so scoring against them measures a code path the
-# bots never execute while the puck meets the full live goalie. Every
-# disagreement found that way is partly instrument error.
-func shot_env() -> Dictionary:
-	var gs := GoalieNetworkState.new()
-	_ctrl.fill_state(gs)
-	var down: bool = gs.is_down()
-	return {
-		"down": down,
-		"five": GoalieBehaviorRules.five_hole_gap_m(down, gs.five_hole_openness),
-		"seal_x": gs.post_seal_x_sign(_goal_z),
-		"seal_tall": gs.is_post_seal_tall(),
-		"hands": gs.hands_read(_goal_z),
-		"pads": gs.pads_read(_goal_z),
-	}
 
 
 # Drive the goalie to its set pose for a shooter at `shooter`, holding the puck
@@ -559,13 +538,12 @@ func _net_verdict(cross_x: float, cross_y: float) -> int:
 # question that actually matters: where does the puck END UP.
 #
 # A SAVE IS NOT OVER WHEN THE PUCK LEAVES THE PAD. The goalie's own next beat is
-# part of it: a puck that dies in front of him is one he sweeps to the corner
-# (GoalieCreaseClear — inside `reach` of him, on the ice, under `max_puck_speed`,
-# after a dwell), and a puck he gets a glove on is one he holds. So this keeps
+# part of it: a puck that dies in front of him is one he covers, and a puck he
+# gets a glove on is one he holds. So this keeps
 # the CONTROLLER ticking for the whole window and reads the puck back from it
 # each tick, rather than marching over the goalie's own actions with its own
 # integration. Measuring the rebound alone scores "dead at his feet" as a
-# second chance in the slot, when it is the setup for the clear.
+# second chance in the slot, when it is the setup for the cover.
 #
 # Fills `last_part` with the FIRST contact as usual, plus:
 #   rebound_pos     where the puck ended the window
@@ -617,6 +595,8 @@ const PLAYABLE_SPEED_M_S: float = 8.0   # slow enough for a skater to actually p
 # somebody touch it" — a 6 m/s puck crossing the slot qualifies for that and is
 # gone a third of a second later — it is "is it still there".
 const REBOUND_REST_M_S: float = 1.0
+# On the ice, a stick's to play: no higher off it than this.
+const ON_ICE_M: float = 0.12
 
 
 func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
@@ -738,8 +718,7 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 		rebound_danger_dwell_s += DT
 		# At rest in the danger area, and not the goalie's to take: a real second
 		# chance, sitting there.
-		if pos.y <= _ctrl.clear_max_height and vel.length() <= REBOUND_REST_M_S \
-				and (rebound_swept or not _goalie_can_still_play(pos, vel)):
+		if pos.y <= ON_ICE_M and vel.length() <= REBOUND_REST_M_S:
 			rebound_pos = pos
 			rebound_speed = vel.length()
 			return outcome
@@ -757,11 +736,10 @@ func fire_tracking_rebound(shooter: Vector3, aim: Vector3, loft_level: int,
 #
 # This pair drives the real read pipeline instead:
 #   hold_windup()  — the carrier sits in WRISTER_AIM with the puck pinned,
-#                    publishing `declared_aim` as predicted_shot_velocity. This is
-#                    the aim the goalie fixates on: it feeds the pre-lean, the
-#                    pinned-windup squaring, and the quiet-eye pre-arm timer.
+#                    publishing `declared_aim` as predicted_shot_velocity; the
+#                    goalie sees the wind-up, and watching it primes his read.
 #   fire_release() — clears the carry and emits puck_released with the ACTUAL
-#                    shot velocity, so GoalieController._on_puck_released runs
+#                    shot velocity, so the controller's _on_puck_released runs
 #                    (consuming any pre-arm) exactly as it does in a real game.
 #
 # Pointing `declared_aim` and the release aim at the SAME corner is a telegraphed
@@ -913,17 +891,6 @@ func windup_shot(shooter: Vector3, declared_aim: Vector3, aim: Vector3,
 		loft_level: int, power_t: float, windup_ticks: int) -> int:
 	hold_windup(shooter, declared_aim, loft_level, power_t, windup_ticks)
 	return fire_release(shooter, aim, loft_level, power_t, 0.0)
-
-
-# Is the puck still the GOALIE's to play — inside the crease sweep's window? The
-# same geometry GoalieCreaseClear gates on, so the instrument stops crediting a
-# skater with a second chance the keeper is about to take away.
-func _goalie_can_still_play(puck_pos: Vector3, puck_vel: Vector3) -> bool:
-	if puck_pos.y > _ctrl.clear_max_height:
-		return false
-	if puck_vel.length() > _ctrl.clear_max_puck_speed:
-		return false
-	return _goalie.global_position.distance_to(puck_pos) <= _ctrl.clear_reach
 
 
 # One controller tick, measuring how far each collision part moved through it:

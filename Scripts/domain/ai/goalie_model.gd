@@ -1,120 +1,62 @@
 class_name AIGoalieModel
 
 # The keeper the bots plan against where the shot field does not answer: where
-# he will be when a carry arrives or a puck is played — his difficulty-tiered
-# reads (synced from the match's GoalieSkillProfile by set_goalie_profile), the
-# depth he gives ground to, his lateral push and the post he seals. A MIRROR of
-# the live GoalieController, not a second tier — see Scripts/domain/ai/CLAUDE.md
-# → "The goalie is tiered". A leaf (GameRules and the goalie rule classes only).
+# he will be when a carry arrives or a puck is played — his tiered leg read
+# (synced from the match's GoalieSkillProfile by set_goalie_profile), the depth
+# he gives ground to, his lateral push and the post he holds. Every number is
+# the keeper's own, read from his code (Scripts/domain/keeper/), never a copy
+# of it: a MIRROR, not a second goalie — see Scripts/domain/ai/CLAUDE.md → "The
+# goalie is tiered". A leaf (GameRules, the goalie rules and the keeper only).
 
-# The pad column a standing goalie covers with NO reaction — stance pad centre +
-# half a pad box (GoalieBehaviorRules).
-const LOW_CORE_STANDING_M: float = (
-		GoalieBehaviorRules.STANDING_PAD_CENTER_X_M
-		+ GoalieBehaviorRules.PAD_BOX_WIDTH_M * 0.5)
+# The ice either side of his centre his pads cover standing with NO reaction:
+# their outside edge in his ready stance.
+static var standing_pad_reach_m: float = _standing_pad_reach()
 
 # Top speed of the react-then-push lateral model (goalie_lateral_reach): he
-# ACCELERATES onto it at goalie_lateral_accel_m_s2, never snapping to it, which
-# is what a hard lateral cut in tight beats. A const because no tier varies
-# GoalieController.t_push_speed.
+# ACCELERATES onto it at GOALIE_LATERAL_ACCEL_M_S2, never snapping to it, which
+# is what a hard lateral cut in tight beats. His footwork's T-push, untiered.
 const GOALIE_MAX_LATERAL_SPEED_MPS: float = GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S
+const GOALIE_LATERAL_ACCEL_M_S2: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
 
 # ── Difficulty-synced goalie read model ───────────────────────────────────────
-# See Scripts/domain/ai/CLAUDE.md → "The goalie is tiered". Synced by
-# set_goalie_profile; defaults are the Hard/authored baselines, so unwired
-# contexts (unit tests, threat surfaces) score the ceiling goalie. Statics
+# Synced by set_goalie_profile; the default is Hard's, so unwired contexts
+# (unit tests, threat surfaces) plan against the ceiling goalie. A static
 # because the model threads ~every scoring entry point; set at match config,
 # never per tick.
 static var goalie_leg_delay_s: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
-static var goalie_lateral_accel_m_s2: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2
-# The tier's puck-play GO margin (INF = he never leaves the net for a rim).
-static var goalie_puck_play_go_margin_s: float = 0.9
 
-# ── Planning keeper DEPTH: the challenge chart + the rush backflow ───────────
-# The live keeper's depth model (GoalieDepthSolver chart + the speed-matched
-# rush backflow), read RETREAT-ONLY by planned_goalie_depth. Never hold his
-# depth frozen while the shooter closes: coverage is a tangent cone off his
-# body, so a keeper pinned out at challenge depth appears to GROW as the
-# shooter approaches and the doorstep reads as a covered net.
-#
-# Values mirror GoalieController's field defaults (cited per field;
-# test_ai_goalie_model_mirrors.gd holds them); the two
-# tier-varied depths ride set_goalie_profile.
-static var _depth_cfg_planning: GoalieDepthSolver.Constraints = _build_planning_depth_cfg()
-# The tier's challenge ceiling, held separately because the reused Constraints has
-# its `ceiling_radius` overwritten per call by the in-zone gate.
-static var _planning_ceiling: float = 1.75
-static var _rush_cfg_planning: GoalieBehaviorRules.RushRetreatConfig = _build_planning_rush_cfg()
-# Closing speed below which the live keeper keeps his challenge instead of
-# backing in (`rush_min_closing_speed` field default) — a stalled carrier does
-# not retreat him. The live keeper also holds the backflow for a carrier CROSSING
-# him, and for the one who backed him in once he stops inside the hash marks; the
-# planner sees neither, but both keep him near the depth the drive left him at,
-# which is what this retreat-only read holds when closing is low.
-const GOALIE_RUSH_MIN_CLOSING_M_S: float = 1.5
-# Skating speed in and out of the crease (`depth_max_speed` field default) —
-# the rate cap on ordinary chart depth changes. A genuine rush retreat is
-# speed-matched instead (rush_retreat_rate), which can legitimately exceed it.
-const GOALIE_DEPTH_MAX_SPEED_M_S: float = 2.2
+# His skating, which his depth answers the play from (KeeperPositioning.depth_for).
+static var _skates := KeeperFootwork.new()
+
+# Where he stands with the puck in the zone and not coming at him: his skates
+# on the top of the crease, straight out (KeeperPositioning.crease_edge).
+const GOALIE_RESTING_DEPTH_M: float = CreaseRules.ARC_RADIUS
 
 
-# The planner's copy of the live keeper's depth CONSTRAINTS. Reused in place (this
-# is read from the per-tick planning path), and fed to the same
-# GoalieDepthSolver.solve_target the live GoalieController integrates toward — so
-# the planner cannot drift from the keeper it is predicting.
-static func _build_planning_depth_cfg() -> GoalieDepthSolver.Constraints:
-	var cfg := GoalieDepthSolver.Constraints.new()
-	cfg.ceiling_radius = 1.75         # depth_aggressive field default (tier-varied)
-	cfg.floor_radius = 0.10           # depth_defensive
-	return cfg
-
-
-# Resting depth (BPS "C", middle of the paint) held while the play has not entered
-# the zone — `depth_conservative` field default.
-const GOALIE_RESTING_DEPTH_M: float = 0.70
-# Gap the keeper keeps between himself and the threat while challenging —
-# `challenge_standoff` field default. Physical (body depth + stick clearance).
-const GOALIE_CHALLENGE_STANDOFF_M: float = 0.60
-# Depth of the offensive zone; beyond it the play has not entered and the keeper
-# rests instead of challenging (GoalieController._threat_is_in_zone).
-const GOALIE_ZONE_DEPTH_M: float = GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z
-
-
-static func _build_planning_rush_cfg() -> GoalieBehaviorRules.RushRetreatConfig:
-	var cfg := GoalieBehaviorRules.RushRetreatConfig.new()
-	cfg.engage_distance = 8.0    # rush_engage_distance field default
-	cfg.mid_distance = 4.5       # rush_mid_distance
-	cfg.arrive_distance = 1.5    # rush_arrive_distance
-	cfg.depth_engage = 1.75      # = depth_aggressive
-	cfg.depth_mid = 1.30         # = depth_base
-	cfg.depth_arrive = 0.40      # rush_arrive_depth field default
-	return cfg
+static func _standing_pad_reach() -> float:
+	var pose := KeeperPose.new()
+	KeeperPoses.ready(pose)
+	var skel := KeeperSkeleton.new()
+	skel.pose(pose)
+	return 0.5 * (KeeperGear.post_contact(skel, 1.0).x - KeeperGear.post_contact(skel, -1.0).x)
 
 
 # Sync the goalie read model to the match's difficulty tier. Call with
 # GoalieSkillProfile.hard() to restore the baseline (tests must restore).
 static func set_goalie_profile(profile: GoalieSkillProfile) -> void:
 	goalie_leg_delay_s = profile.reaction_delay_s
-	goalie_lateral_accel_m_s2 = profile.lateral_accel_mps2
-	goalie_puck_play_go_margin_s = profile.puck_play_go_margin_s
-	# Depth chart + backflow anchors — the tier's challenge depth (the live
-	# controller feeds these same two profile fields into its own configs).
-	_planning_ceiling = profile.depth_aggressive_m
-	_rush_cfg_planning.depth_engage = profile.depth_aggressive_m
-	_rush_cfg_planning.depth_mid = profile.depth_base_m
 
 
-# The keeper's radial depth (metres out from his goal line) when the puck is at
-# `puck_pos_at_release`, `time_s` from now, with the shooter closing on the net
-# at `closing_speed_m_s`. The chart target, pulled further IN by the rush
-# backflow while a genuinely closing attacker is inside the engage range,
-# approached from his current depth at the rate the budget allows — ordinary
-# crease skating, or the speed-matched retreat rate when the backflow binds.
+# The keeper's depth (metres out from his goal line) when the puck is at
+# `puck_pos_at_release`, `time_s` from now, with its carrier closing on the net
+# at `closing_speed_m_s`: the depth his own rule takes for that carrier
+# (KeeperPositioning.depth_for, from his skating), approached from his current
+# depth no faster than his C-cuts.
 #
 # RETREAT-ONLY: the model may pull the keeper IN but never push him OUT. His
-# live depth is replicated truth set by much this planner cannot see (post
-# seals, backdoor caps, lateral-pressure pull, recoveries), so a static read
-# returns his current depth unchanged and only an approach moves him.
+# live depth is replicated truth set by much this planner cannot see (a pass he
+# reads, a post he races to, a save), so a static read returns his current
+# depth unchanged and only an approach moves him.
 static func planned_goalie_depth(
 		goalie_now: Vector3,
 		attacking_goal: Vector3,
@@ -124,37 +66,31 @@ static func planned_goalie_depth(
 	var now_depth: float = absf(goalie_now.z - attacking_goal.z)
 	if time_s <= 0.0:
 		return now_depth
-	var dx: float = puck_pos_at_release.x - attacking_goal.x
-	var dz: float = puck_pos_at_release.z - attacking_goal.z
-	var dist: float = sqrt(dx * dx + dz * dz)
-	# Same model the live keeper solves — ceiling gated on the play being
-	# in-zone, floored, and bounded by the physical standoff. The caps the
-	# planner cannot see (lateral tracking, backdoor re-square, screen room, a
-	# net-front tip) only ever pull him DEEPER, so with the retreat-only `minf`
-	# omitting them stays conservative.
-	var c := _depth_cfg_planning
-	c.ceiling_radius = _planning_ceiling if dist <= GOALIE_ZONE_DEPTH_M \
-			else GOALIE_RESTING_DEPTH_M
-	c.standoff_cap = dist - GOALIE_CHALLENGE_STANDOFF_M
-	var target: float = minf(now_depth, GoalieDepthSolver.solve_target(c))
-	var rate: float = GOALIE_DEPTH_MAX_SPEED_M_S
-	if dist < _rush_cfg_planning.engage_distance \
-			and closing_speed_m_s >= GOALIE_RUSH_MIN_CLOSING_M_S:
-		var rush_target: float = GoalieBehaviorRules.rush_retreat_depth(
-				dist, _rush_cfg_planning)
-		if rush_target < target:
-			target = rush_target
-			# While the backflow retreats him it OWNS the motion and bypasses
-			# the ordinary rate cap (GoalieDepthSolver.solve), so the rate is
-			# the backflow's own — never the max of the two. Zero means the
-			# curve is flat here, where the live solve falls back to the settle.
-			var rush_rate: float = GoalieBehaviorRules.rush_retreat_rate(
-					dist, closing_speed_m_s, _rush_cfg_planning)
-			if rush_rate > 0.0:
-				rate = rush_rate
+	var target: float = keeper_depth(attacking_goal, puck_pos_at_release, closing_speed_m_s)
 	if target >= now_depth:
 		return now_depth
-	return maxf(now_depth - rate * time_s, target)
+	return maxf(now_depth - _skates.c_cut_speed * time_s, target)
+
+
+# How far out from his goal line he stands for a carrier of theirs at `puck`
+# coming at the net at `closing_speed_m_s`: his spot's depth on his feet
+# (KeeperPositioning._spot) — half the crease out of the zone, in it his own
+# rule's depth along the puck's line, no deeper than the back of the paint. A
+# puck on or behind the goal line leaves him where the caller has him (INF).
+static func keeper_depth(attacking_goal: Vector3, puck: Vector3, closing_speed_m_s: float = 0.0) -> float:
+	var forward: float = (puck.z - attacking_goal.z) * -signf(attacking_goal.z)
+	if forward < 0.001:
+		return INF
+	var in_net := Vector2(puck.x - attacking_goal.x, -forward)
+	var r: float = in_net.length()
+	var out: Vector2 = in_net / r
+	var radial: float
+	if r > KeeperPositioning.BLUE_LINE_M:
+		radial = KeeperPositioning.crease_edge(out) * KeeperPositioning.AWAY_DEPTH_SHARE
+	else:
+		radial = maxf(KeeperPositioning.depth_for(in_net, -out * closing_speed_m_s, _skates, true),
+				minf(KeeperPositioning.DEPTH_FLOOR_M, KeeperPositioning.crease_edge(out)))
+	return radial * forward / r
 
 
 # `goalie_now` relocated to `depth` metres out from the attacked goal line,
@@ -170,7 +106,7 @@ static func at_depth(goalie_now: Vector3, attacking_goal: Vector3,
 # speed — a pad moving through the line stops the puck, so it need not stop.
 static func goalie_lateral_reach(move_time: float) -> float:
 	return GoaliePushRules.cruise_reach(
-			GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2, move_time)
+			GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2, move_time)
 
 
 # Lateral distance he can re-square across in `move_time` (post-reaction) and be
@@ -178,21 +114,21 @@ static func goalie_lateral_reach(move_time: float) -> float:
 # before a release reads this one. The inverse of _goalie_set_time.
 static func _goalie_set_reach(move_time: float) -> float:
 	return GoaliePushRules.set_reach(
-			GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2, move_time)
+			GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2, move_time)
 
 
 # How far along a re-square to a spot `need` away he is `move_time` into it
 # (post-reaction) — where the live mover, braking into the spot, has put him.
 static func goalie_push_progress(need: float, move_time: float) -> float:
 	return GoaliePushRules.push_progress(
-			need, GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2, move_time)
+			need, GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2, move_time)
 
 
 # Time a re-square across `dist` takes, stop included (post-reaction) — the
 # inverse of _goalie_set_reach.
 static func _goalie_set_time(dist: float) -> float:
 	return GoaliePushRules.time_to_set(
-			dist, GOALIE_MAX_LATERAL_SPEED_MPS, goalie_lateral_accel_m_s2)
+			dist, GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2)
 
 # How far (m) from the net mouth a keeper still counts as HOME — the crease
 # depth plus a stride. Beyond it (pulled, or out playing the puck) the net is
@@ -207,31 +143,27 @@ const GOALIE_SHADOW_HALF_M: float = 0.3
 # at his target before the model treats him as fully re-set.
 const GOALIE_SETTLE_REF_S: float = 0.20
 
-# How long (s) a goalie down in his stance takes to stand back up
-# (GoalieController.recovery_duration): a shot sooner than this from now still
-# finds him in the stance he is in.
+# How long (s) he takes to stand back up out of the butterfly (KeeperDrop's
+# rise; test_ai_goalie_model_mirrors.gd holds the two together): a shot sooner
+# than this from now still finds him in the stance he is in.
 const GOALIE_RECOVERY_S: float = 0.35
 
 
-# ── Predicted post-seal (RVH/VH) ────────────────────────────────────────────
+# ── Predicted post-seal ─────────────────────────────────────────────────────
 # The shoot-now eval reads the LIVE goalie's seal state
 # (GoalieNetworkState.post_seal_x_sign); a predictive caller (carry candidate,
 # pass receiver) has none, and left unsealed a sharp-angle spot scores a
-# PHANTOM far-side open net. So the seal a competent keeper WILL adopt is
-# predicted from the trigger the live goalie uses
-# (GoalieBehaviorRules.is_puck_in_defensive_zone).
-#
-# GoalieController.zone_post_z / rvh_early_angle (test_ai_goalie_model_mirrors.gd
-# holds them): within this depth of
-# the goal line AND past this bearing off the goal normal, the keeper is
-# post-sealed — only the wraparound/extreme-corner region.
-const GOALIE_SEAL_ZONE_POST_Z_M: float = 2.0
-const GOALIE_SEAL_ANGLE_RAD: float = deg_to_rad(77.0)
+# PHANTOM far-side open net. So the post he WILL hold is predicted from his own
+# sharp angle (KeeperPositioning's SHARP zone): below the dots and past this
+# bearing off the goal normal he stands on the near post, his pad overlapping
+# it, and holds a seal he races a carrier into.
+const GOALIE_SEAL_ZONE_POST_Z_M: float = KeeperPositioning.DOT_LINE_M
+const GOALIE_SEAL_ANGLE_RAD: float = KeeperPositioning.SHARP_RAD
 
 
-# Whether a puck at `shooter`, in front of the net at `attacking_goal`, is inside
-# the live keeper's RVH/VH trigger zone: where he takes the post, and outside which
-# a keeper still on it is leaving it.
+# Whether a puck at `shooter`, in front of the net at `attacking_goal`, is at
+# his sharp angle: where he holds the post, and outside which a keeper still on
+# it is leaving it.
 static func in_post_seal_zone(shooter: Vector3, attacking_goal: Vector3) -> bool:
 	var forward: float = (shooter.z - attacking_goal.z) * -signf(attacking_goal.z)
 	if forward < 0.001 or forward > GOALIE_SEAL_ZONE_POST_Z_M:
@@ -242,12 +174,12 @@ static func in_post_seal_zone(shooter: Vector3, attacking_goal: Vector3) -> bool
 
 # Predicted post-seal x-sign for a shot from `shooter`: the side (relative to goal
 # center) a keeper would seal, or 0.0 for the common in-front look where no seal
-# applies. Only the IN-FRONT sharp angle is sealed here (VH — tall); a release
+# applies. Only the IN-FRONT sharp angle is sealed here (tall, on his feet); a release
 # behind the goal line is already zeroed by score_shoot_value's forward guard, so it
 # needs no seal. Pure float, allocation-free — safe on the per-candidate path.
 #
 # Two triggers, both grounded in the live keeper:
-#  · The RVH/VH zone (2 m, 77°) — the live controller's own stance trigger.
+#  · His sharp angle (in_post_seal_zone) — where he stands on the post.
 #  · DEAD-ANGLE ERASURE: outside that zone, a keeper hugging the near post
 #    still kills a sharp-angle look. The shot dies when the net's whole
 #    angular window from the shooter is no wider than his stance span plus a
@@ -260,9 +192,9 @@ static func derive_post_seal_x_sign(shooter: Vector3, attacking_goal: Vector3) -
 		return 0.0
 	var lateral: float = absf(shooter.x - attacking_goal.x)
 	# Frontal early-out (hot path — this is on every arc-match): neither
-	# trigger can fire at or inside 45° off the normal. The RVH/VH zone needs
-	# 77°, and the erasure's window at 45° (≥ 1.83·cos 45° / d) is always
-	# wider than the post-body cover (≤ 0.80 / d) at any range.
+	# trigger can fire at or inside 45° off the normal. His sharp angle needs
+	# 60°, and the erasure's window at 45° (≥ 1.83·cos 45° / d) is always
+	# wider than the post-body cover (≤ 1.01 / d) at any range.
 	if lateral <= forward:
 		return 0.0
 	var side: float = signf(shooter.x - attacking_goal.x)
@@ -280,7 +212,7 @@ static func derive_post_seal_x_sign(shooter: Vector3, attacking_goal: Vector3) -
 	var window: float = absf(a_near - a_far)
 	var d_near: float = sqrt(
 			(near_x - shooter.x) * (near_x - shooter.x) + dz * dz)
-	var cover: float = atan((2.0 * LOW_CORE_STANDING_M
+	var cover: float = atan((2.0 * standing_pad_reach_m
 			+ 2.0 * GameRules.PUCK_COLLISION_RADIUS) / maxf(d_near, 0.1))
 	if window <= cover:
 		return side
@@ -412,13 +344,3 @@ static func goalie_unsettled(
 	var slide_time: float = _goalie_set_time(need)
 	var settled_for: float = move_time - slide_time
 	return clampf(1.0 - settled_for / GOALIE_SETTLE_REF_S, 0.0, 1.0)
-
-
-# Keeper puck-play travel build — GoalieController's `puck_play_skate_speed` /
-# `puck_play_skate_accel` field defaults, and `puck_play_capture_radius` (the
-# paddle trap reach at the spot he stops on). UNTIERED: what a resting puck's
-# ownership turns on is how far a keeper can skate, which no difficulty knob
-# changes.
-const GOALIE_PUCK_PLAY_SPEED_M_S: float = 4.2
-const GOALIE_PUCK_PLAY_ACCEL_M_S2: float = 8.0
-const GOALIE_PUCK_PLAY_REACH_M: float = 1.0

@@ -1,5 +1,5 @@
 class_name SkaterHemColliders
-extends RefCounted
+extends HemColliders
 
 # What the jersey's tail drapes over, in skeleton space, as of the bones' poses
 # this frame: each thigh as a capsule from its hip pivot (the dome is the
@@ -32,7 +32,16 @@ func update(skeleton: Skeleton3D) -> void:
 	_pelvis_inv = pelvis.affine_inverse()
 
 
-# `p` moved out of every collider it is inside, to `margin` past its surface.
+func configure_native(native: RefCounted) -> void:
+	var legs: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+	native.call("collide_skater", PackedInt32Array([SkaterMeshBuilder.UpperBone.PELVIS,
+			legs + _LEGS[0], legs + _LEGS[1], legs + _THIGHS[0], legs + _THIGHS[1]]),
+			SkaterMeshBuilder.pelvis_stations(),
+			PackedFloat64Array([SkaterMeshBuilder.THIGH_CAPSULE_LENGTH_M,
+					SkaterMeshBuilder.THIGH_CAPSULE_RADIUS_M,
+					SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y]))
+
+
 func push_out(p: Vector3, margin: float) -> Vector3:
 	for i: int in 2:
 		var c: Vector3 = _closest_on_thigh(i, p)

@@ -44,6 +44,7 @@ func spawn_puck_with_controller(is_server: bool) -> Dictionary:
 	return {"puck": puck, "controller": controller}
 
 # ── Goalies (both nets, with controllers) ────────────────────────────────────
+# Each is the rebuilt keeper (KeeperController) in the Goalie node's place.
 # Returns {
 #   "top_goalie", "bottom_goalie",           # Goalie nodes
 #   "top_controller", "bottom_controller",   # GoalieControllers
@@ -55,8 +56,8 @@ func spawn_goalie_pair(puck: Puck, is_server: bool, profile: GoalieSkillProfile 
 	var bottom: Goalie = GOALIE_SCENE.instantiate()
 	_scene_root.add_child(top)
 	_scene_root.add_child(bottom)
-	var top_controller := GoalieController.new()
-	var bottom_controller := GoalieController.new()
+	var top_controller: GoalieController = KeeperController.new()
+	var bottom_controller: GoalieController = KeeperController.new()
 	_scene_root.add_child(top_controller)
 	_scene_root.add_child(bottom_controller)
 	top_controller.setup(top, puck, -GameRules.GOAL_LINE_Z, is_server, profile)
@@ -80,7 +81,7 @@ func spawn_single_goalie(puck: Puck, goal_line_z: float, is_server: bool,
 		profile: GoalieSkillProfile = null) -> Dictionary:
 	var goalie: Goalie = GOALIE_SCENE.instantiate()
 	_scene_root.add_child(goalie)
-	var controller := GoalieController.new()
+	var controller: GoalieController = KeeperController.new()
 	_scene_root.add_child(controller)
 	controller.setup(goalie, puck, goal_line_z, is_server, profile)
 	_attach_goalie_sound(controller, goalie)

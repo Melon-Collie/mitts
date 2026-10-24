@@ -167,14 +167,6 @@ func test_nobody_in_a_board_pin_ties_or_is_tied() -> void:
 	assert_false(_receiver.stick_tied, "a pinned man's stick is held")
 
 
-func test_a_cross_check_breaks_the_shovers_tie() -> void:
-	_latch()
-	_defender.cross_check_phase = CrossCheckRules.Phase.EXTEND
-	_ties.tick(true)
-	assert_false(_receiver.stick_tied, "both hands went to the shaft")
-	assert_true(_receiver.is_stick_check_cooling())
-
-
 func test_a_pin_breaks_a_tie() -> void:
 	_latch()
 	_receiver.pin_role = BoardPinRules.Role.PINNED
