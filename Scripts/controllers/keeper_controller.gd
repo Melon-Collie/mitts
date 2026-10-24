@@ -213,8 +213,8 @@ func _read_receivers() -> void:
 # is over. A save under way goes on until it is there, and he lets it go his
 # leg read after both it is there and the shot is over (past him, off him,
 # met), so one made too late is still seen made. A shot over before he has
-# read it at all he answers once he has: the save he goes to for the flight he
-# saw leave the stick, however late.
+# read it at all he answers once he has: the save for the flight he saw leave
+# the stick, however late.
 func _save_the_shot() -> void:
 	if not read.reading():
 		return
@@ -229,19 +229,14 @@ func _save_the_shot() -> void:
 		return
 	if not read.legs_read():
 		return
-	var late: bool = _over_at >= 0.0
-	if late:
+	if _over_at >= 0.0:
 		read.rewind()
 	if not read.on_net():
 		read.stop()
 		return
-	_choose(not late)
-
-
-func _choose(timed: bool) -> void:
 	_chosen = true
 	_chosen_at = read.age
-	save.choose(read, motor, _keeper.skeleton.mirrored, timed)
+	save.choose(read, motor, _keeper.skeleton.mirrored)
 	if save.low != KeeperSaveMove.Low.NONE:
 		motor.save(save.low, save.low_side)
 	elif motor.rest == KeeperRoute.Rest.FEET:

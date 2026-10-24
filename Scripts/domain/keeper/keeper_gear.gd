@@ -241,7 +241,7 @@ static func post_contact(skel: KeeperSkeleton, side: float) -> Vector3:
 	var leg: int = 0 if g.x * side > b.x * side else 1
 	var reach: float = -INF
 	for part: int in [Part.PAD_G + leg, Part.BOOT_G + leg, Part.SKATE_G + leg]:
-		reach = maxf(reach, _reach_x(skel, part, side))
+		reach = maxf(reach, reach_x(skel, part, side))
 	return Vector3(side * reach, 0.0, (g if leg == 0 else b).z)
 
 
@@ -253,11 +253,12 @@ static func post_pad_contact(skel: KeeperSkeleton, side: float) -> Vector3:
 	var g: Vector3 = skel.xf[KeeperSkeleton.FOOT[0]].origin
 	var b: Vector3 = skel.xf[KeeperSkeleton.FOOT[1]].origin
 	var leg: int = 0 if g.x * side > b.x * side else 1
-	var reach: float = maxf(_reach_x(skel, Part.PAD_G + leg, side), _reach_x(skel, Part.BOOT_G + leg, side))
+	var reach: float = maxf(reach_x(skel, Part.PAD_G + leg, side), reach_x(skel, Part.BOOT_G + leg, side))
 	return Vector3(side * reach, 0.0, (g if leg == 0 else b).z)
 
 
-static func _reach_x(skel: KeeperSkeleton, part: int, side: float) -> float:
+# How far toward `side` (±1 across keeper space) `part`'s box reaches.
+static func reach_x(skel: KeeperSkeleton, part: int, side: float) -> float:
 	var t: Transform3D = box(skel, part)
 	var h: Vector3 = _HALF[part]
 	return side * t.origin.x + absf(t.basis.x.x) * h.x + absf(t.basis.y.x) * h.y + absf(t.basis.z.x) * h.z

@@ -17,11 +17,14 @@ const _KNEE_H: float = 0.285
 const _HIP_H: float = 0.530
 const _SHOULDER_H: float = 0.818
 const _CHIN_H: float = 0.870
+const _NAVEL_H: float = 0.600
 
 const THIGH_M: float = (_HIP_H - _KNEE_H) * STATURE_M
 const SHIN_M: float = (_KNEE_H - _ANKLE_H) * STATURE_M
 const ANKLE_HEIGHT_M: float = _ANKLE_H * STATURE_M
 const HIP_HEIGHT_M: float = _HIP_H * STATURE_M
+# The belly button over the hip joints, the line the taught saves split at.
+const NAVEL_ABOVE_HIP_M: float = (_NAVEL_H - _HIP_H) * STATURE_M
 const UPPER_ARM_M: float = 0.186 * STATURE_M
 const FOREARM_M: float = 0.146 * STATURE_M
 const FOOT_LENGTH_M: float = 0.152 * STATURE_M

@@ -164,8 +164,9 @@ func test_the_save_prices_the_shorter_fall() -> void:
 	# leg out along the ice gets there.
 	read.step(0.0, Vector3(0.0, 0.05, -6.0), Vector3(-3.5, 0.98, 30.0))
 	var save := KeeperSave.new()
-	save.glove_speed_m_s = 0.001
-	save.blocker_speed_m_s = 0.001
+	# Hands there at once, so the save's time is its leg's.
+	save.glove_speed_m_s = 1000.0
+	save.blocker_speed_m_s = 1000.0
 	_motor.x = 0.4
 	_motor.z = -1.0
 	_was = _bones()

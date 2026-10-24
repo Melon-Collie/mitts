@@ -3,16 +3,15 @@ extends GutTest
 # Saves (KeeperShotRead, KeeperSave): he reads a shot only once he has watched
 # it for his read's delay, or the primed read's for one he watched wound up
 # (a tip read cold again), its flight under gravity; the save he makes is the
-# least committed one his own gear says covers the flight in time — standing
-# for a shot at a pad, the glove high on his glove side, the blocker high on
-# the other, the blade for one along the ice wide of the paddle — and a hand
+# one goalies are taught for where it passes him — below his belly button the
+# butterfly, the half butterfly wide of a pad, the blade or the hand on its
+# side leading it; above it the glove or the
+# blocker on its side, the glove trapping a shot at the chest — and a hand
 # moves no faster than its tier's speed, gets there when the choice said, meets
-# the flight, and goes back once it is over. With no time, he still goes and is
-# beaten. A low shot at the five-hole he has time for takes him down, since
-# his read leaves a band over the blade it alone does not cover; one he has no
-# time for is left to the blade. A save holds only if what comes off his gear
-# stays out: a puck square on a pad comes back out, one that clips the outside
-# of it glances on in.
+# the flight, and goes back once it is over. With no time, he still makes it
+# and is beaten. A save holds only if what comes off his gear stays out: a puck
+# square on a pad comes back out, one that clips the outside of it glances on
+# in.
 
 const DT: float = 1.0 / 120.0
 # On his angle, at the top of the crease, square to a shot from the slot.
@@ -100,13 +99,34 @@ func test_the_flight_falls_and_lands_on_the_net_or_not() -> void:
 	assert_eq(_read.time_to_line(), INF, "going away")
 
 
-func test_a_shot_at_his_pad_is_saved_standing() -> void:
-	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -9.0), Vector2(0.3, 0.25), 25.0)
+func test_a_low_shot_at_his_pad_takes_him_into_the_butterfly() -> void:
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -12.0), Vector2(0.3, 0.25), 22.0)
 	_save.choose(_read, _motor, false)
 	assert_true(_save.covers)
-	assert_eq(_save.low, KeeperSave.Low.NONE)
-	assert_eq(_save.hand, KeeperSave.Hand.NONE, "his pad is already there")
-	assert_lte(_save.ready_s, _save.impact_s)
+	assert_eq(_save.low, KeeperSave.Low.BUTTERFLY, "down, though his pad stood there")
+	assert_lte(_save.ready_s, _save.impact_s, "in time")
+
+
+# The same line either side of his belly button: the butterfly under it, the
+# hands over it.
+func test_his_belly_button_splits_the_legs_from_the_hands() -> void:
+	var pose := KeeperPose.new()
+	_motor.pose(pose)
+	var skel := KeeperSkeleton.new()
+	skel.pose(pose)
+	var belly: float = skel.xf[KeeperSkeleton.Bone.PELVIS].origin.y + KeeperAnatomy.NAVEL_ABOVE_HIP_M
+	for case: Array in [[belly - 0.08, true], [belly + 0.08, false]]:
+		before_each()
+		# Flat, so it passes him at the height it is shot at.
+		var h: float = case[0]
+		_shoot(Vector3(-0.15, h, -9.0), Vector2(-0.15, h), 60.0)
+		_save.choose(_read, _motor, false)
+		var down: bool = case[1]
+		if down:
+			assert_eq(_save.low, KeeperSave.Low.BUTTERFLY, "%.2f m: down" % h)
+		else:
+			assert_eq(_save.low, KeeperSave.Low.NONE, "%.2f m: on his feet" % h)
+			assert_eq(_save.hand, KeeperSave.Hand.GLOVE, "%.2f m: the glove over it" % h)
 
 
 func test_high_on_either_side_his_hand_goes_and_meets_it() -> void:
@@ -147,28 +167,45 @@ func _hand_to_the_puck(part: int, what: String) -> void:
 	assert_eq(hit, part, "%s: the puck meets it" % what)
 
 
-func test_along_the_ice_wide_of_the_paddle_the_blade_goes() -> void:
+func test_along_the_ice_wide_of_his_pad_the_half_butterfly_goes() -> void:
 	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -9.0), Vector2(-0.6, KeeperShotRead.ON_ICE_Y), 22.0)
 	_save.choose(_read, _motor, false)
 	assert_true(_save.covers)
-	assert_eq(_save.hand, KeeperSave.Hand.STICK)
+	assert_eq(_save.low, KeeperSave.Low.HALF)
+	assert_eq(_save.low_side, -1.0, "its pad down on the glove side")
+	assert_eq(_save.hand, KeeperSave.Hand.STICK, "the blade leading it")
 
 
-func test_a_low_five_hole_shot_he_has_time_for_takes_him_down() -> void:
+# Off the ice, wide of his pad: down to it, the glove on its side leading.
+func test_low_and_wide_of_his_pad_the_glove_leads_the_drop() -> void:
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -9.0), Vector2(-0.84, 0.35), 22.0)
+	_save.choose(_read, _motor, false)
+	assert_ne(_save.low, KeeperSave.Low.NONE, "down")
+	assert_eq(_save.hand, KeeperSave.Hand.GLOVE, "the glove leading it")
+	assert_true(_save.covers)
+
+
+func test_a_low_five_hole_shot_takes_him_down() -> void:
 	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -12.0), Vector2(-0.05, KeeperShotRead.ON_ICE_Y), 22.0)
 	_save.choose(_read, _motor, false)
 	assert_true(_save.covers)
-	assert_true(_save.low == KeeperSave.Low.BUTTERFLY or _save.low == KeeperSave.Low.HALF, "down over the blade")
+	assert_eq(_save.low, KeeperSave.Low.BUTTERFLY)
 	assert_lte(_save.ready_s, _save.impact_s, "in time")
 
 
-func test_a_low_five_hole_shot_from_close_is_left_to_the_blade() -> void:
+func test_a_low_five_hole_shot_from_close_he_drops_for_late() -> void:
 	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -6.0), Vector2(-0.05, KeeperShotRead.ON_ICE_Y), 25.0)
 	_save.choose(_read, _motor, false)
+	assert_eq(_save.low, KeeperSave.Low.BUTTERFLY, "he still drops")
+	assert_gt(_save.ready_s, _save.impact_s, "and is late")
+
+
+func test_a_shot_at_his_chest_is_trapped_with_the_glove() -> void:
+	_shoot(Vector3(0.0, 1.1, -9.0), Vector2(0.1, 1.1), 60.0)
+	_save.choose(_read, _motor, false)
+	assert_eq(_save.low, KeeperSave.Low.NONE)
+	assert_eq(_save.hand, KeeperSave.Hand.GLOVE)
 	assert_true(_save.covers)
-	assert_gt(_motor.save_move.drop_s, _save.impact_s, "no time to drop")
-	assert_eq(_save.low, KeeperSave.Low.NONE, "so he stays on his feet")
-	assert_lte(_save.ready_s, _save.impact_s, "the blade there in time")
 
 
 func test_in_tight_to_a_far_corner_he_goes_and_is_beaten() -> void:

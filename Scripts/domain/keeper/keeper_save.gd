@@ -5,27 +5,27 @@ extends RefCounted
 # (KeeperShotRead), which save he makes, and the hand's part of it laid over
 # whatever pose the motor gives him.
 #
-# The save is chosen by his own shape. Each candidate — a low half (none, the
-# butterfly, the half butterfly, the kick, the extension, each to the side the
-# puck is going) with a hand half (none, the stick's blade along the ice, the
-# glove, the blocker) — is posed, its hand put where the believed flight
-# crosses that hand's depth, and the flight tested against that pose's own gear
-# boxes; a save holds only if what comes off the gear it meets
-# (GoalieSaveRules, the puck's own contact) does not go on into the net past
-# the rest of him. His read of the flight is good to READ_BAND_RAD of its
-# direction, so
-# where it crosses him is known only to a band that widens with the way it
-# still has to come. Of the saves that cover the whole band in time he makes
-# the least committed; with none, the least committed that covers the line he
-# believes in time; with none in time, the one that gets there soonest, and he
-# is beaten. Nothing is a rule about heights: a shot at a pad face is a save
-# standing because standing covers it soonest, a low five-hole shot he has
-# time for a butterfly because the blade alone leaves the band over it open, a
-# high shot the hands because no drop covers it.
+# The save is the one goalies are taught for where the shot passes him, made
+# for every shot on net: below his belly button the butterfly, the half
+# butterfly for a shot wide of a pad (the other leg left loaded under him), the
+# extension for one past the flat pad's reach, the hands leading it (the blade
+# to a puck along the ice, else the hand on its side); above it the hands, the glove
+# or the blocker on its side, and a shot at the chest trapped with the glove
+# over it. Each candidate of that kind — a low half (none, the butterfly, the
+# half butterfly, the extension) with a hand half (none, the stick's blade
+# along the ice, the glove, the blocker) — is posed, its hand put where the
+# believed flight crosses that hand's depth, and the flight tested against
+# that pose's own gear boxes; he makes the first, in the taught order, whose
+# gear meets the flight and holds it, a leading hand taken unless the legs'
+# save alone meets it better (GoalieSaveRules, the puck's own contact:
+# what comes off it does not go on into the net past the rest of him), else the
+# first that meets it, else the first. Timing does not choose it: he makes the
+# save he is taught, and one that cannot get there before the puck is beaten,
+# as a goalie dropping late is beaten through the five-hole he opens.
 #
 # A hand moves once his arms have read the shot, at most its tier's speed
 # toward where the flight crosses, and back as fast once the save is over. The
-# low half is the motor's (KeeperMotor.save); the hand rides any pose under it.
+# low half is the motor's (KeeperMotor.save); the hand rides any pose.
 #
 # Space: the read is in the net frame; everything here in his skeleton's
 # authored space (left-catching, KeeperPose's, solved unmirrored), the net
@@ -41,19 +41,13 @@ const PIECES: int = 8
 const PAST_LINE_M: float = 0.1
 # A hand this near its target, or its rest, is there.
 const THERE_M: float = 0.01
-# Each half least committed first: a hand is cheaper than any drop, and of the
-# drops the one that leaves him most on his feet is cheapest.
-const DROPS: Array[int] = [Low.KICK, Low.HALF, Low.BUTTERFLY, Low.EXTENSION]
-const HANDS: Array[int] = [Hand.NONE, Hand.STICK, Hand.GLOVE, Hand.BLOCKER]
-# How far off its direction his read of a flight can be: the discrimination of
-# a fast object's direction of motion seen for the read's tenth or two of a
-# second, a degree or two.
-const READ_BAND_RAD: float = deg_to_rad(1.5)
-# The band is tried at these shares of its width up, down and to either side,
-# so a hole inside it (the five-hole over the blade) is found, not only its
-# edges.
-const BAND_SHARES: Array[float] = [1.0 / 3.0, 2.0 / 3.0, 1.0]
-const BAND_LINES: int = 12
+# The taught saves, in the order they are tried: below the belly button at the
+# body, wide of a pad, and above it at the chest, to the glove side, to the
+# blocker side.
+const LOW_AT_BODY: Array[int] = [Low.BUTTERFLY, Low.HALF, Low.EXTENSION]
+const LOW_WIDE: Array[int] = [Low.HALF, Low.EXTENSION, Low.BUTTERFLY]
+const HANDS_GLOVE_SIDE: Array[int] = [Hand.GLOVE, Hand.BLOCKER]
+const HANDS_BLOCKER_SIDE: Array[int] = [Hand.BLOCKER, Hand.GLOVE]
 # Every piece of his gear in any pose lies within this of the point this high
 # over the ice under him: a piece of flight further off meets none of it.
 const GEAR_CENTRE := Vector3(0.0, 0.8, 0.0)
@@ -104,10 +98,6 @@ var _scratch := SweptDiscOBB.Result.new()
 # The believed flight in his space, PIECES + 1 points, and the seconds to each.
 var _path := PackedVector3Array()
 var _path_t := PackedFloat32Array()
-# The band: the believed flight turned up, down (no lower than the ice) and to
-# either side about where the puck is now, at each of BAND_SHARES of
-# READ_BAND_RAD.
-var _band: Array[PackedVector3Array] = []
 # The goal line in his space: a point on it at the mouth's centre, the way into
 # the net, and the way across it.
 var _line_at := Vector3.ZERO
@@ -118,17 +108,18 @@ var _hit_part: int = -1
 var _hit_v := Vector3.ZERO
 var _contact := GoalieSaveRules.ContactResult.new()
 var _rebound := SweptDiscOBB.Result.new()
-# Seconds until his arms have read the shot, at the choice.
+# Seconds until his arms and legs have read the shot, at the choice; the share
+# of a drop's time the fall into it takes; and how well the best candidate yet
+# meets the flight (`_take`).
 var _arm_wait: float = 0.0
+var _leg_wait: float = 0.0
+var _fall: float = 1.0
+var _best: int = -1
 
 
 func _init() -> void:
 	_path.resize(PIECES + 1)
 	_path_t.resize(PIECES + 1)
-	for i: int in BAND_LINES:
-		var line := PackedVector3Array()
-		line.resize(PIECES + 1)
-		_band.append(line)
 
 
 func active() -> bool:
@@ -139,78 +130,80 @@ func active() -> bool:
 # him and the pose it gives him now; `mirrored` for a right-catcher. Lows only
 # where the motor can cut one in (KeeperMotor.can_save): on his feet any, down
 # the extension, on a post or mid-drop or slide none (a shot from the seal is
-# held in it). Not `timed`, a shot already by him: the save he goes to anyway,
-# the least committed that would have covered it, however late.
-func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool, timed: bool = true) -> void:
+# held in it).
+func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 	_watched = false
 	_believe(read, motor, mirrored)
 	motor.pose(_base)
 	var side: float = _side_of_flight()
-	var lows: Array[int] = [Low.NONE]
-	if motor.can_save(false):
-		lows.append_array(DROPS)
-	elif motor.can_save(true):
-		lows.append(Low.EXTENSION)
+	var stance: KeeperSkeleton = _skel_base()
+	# Where the flight passes him, through the plane of his skates.
+	var by: Vector3 = _crossing(Vector3.ZERO)
+	var low_shot: bool = by.y <= stance.xf[KeeperSkeleton.Bone.PELVIS].origin.y + KeeperAnatomy.NAVEL_ABOVE_HIP_M
+	var wide: bool = absf(by.x) > KeeperGear.reach_x(stance, KeeperGear.Part.PAD_G if side < 0.0 else KeeperGear.Part.PAD_B,
+			side)
+	var on_ice: bool = _path_low_at_blade(stance)
 	covers = false
 	low = Low.NONE
 	low_side = side
 	hand = Hand.NONE
 	ready_s = 0.0
 	impact_s = INF
-	# 2 the band covered in time, 1 the believed line in time, 0 late.
-	var best_tier: int = -1
-	var best_late: float = INF
-	var miss_m: float = INF
-	var leg_wait: float = maxf(read.leg_delay_s - read.age, 0.0)
-	var arm_wait: float = maxf(read.arm_delay_s - read.age, 0.0)
-	_arm_wait = arm_wait
-	var fall: float = motor.low_ready.fall_share()
-	var on_ice: bool = _path_low_at_blade(_skel_base())
-	# Least committed first, so the first that covers the band is the save.
-	for l: int in lows:
-		for h: int in HANDS:
-			# The stick's save is the blade along the ice.
-			if h == Hand.STICK and not on_ice:
-				continue
-			var target: Vector3 = _pose_candidate(l, side, h)
-			var travel_s: float = arm_wait + _hand_travel(h, target) / _speed(h) if h != Hand.NONE else 0.0
-			var hit_s: float = _hit_s(_path)
-			if hit_s == INF:
-				# Nothing yet: the hand that gets nearest the flight is the one
-				# he goes with anyway.
-				if not covers and l == Low.NONE and h != Hand.NONE:
-					var point: Vector3 = _hand_point(h)
-					var miss: float = point.distance_to(_crossing(point))
-					if miss < miss_m:
-						miss_m = miss
-						hand = h
-						hand_target = target
-						ready_s = travel_s
-						impact_s = _time_at_depth(point.z)
-				continue
-			var ready: float = travel_s
-			if l != Low.NONE:
-				ready = maxf(ready, leg_wait + drop_s * (fall if l != Low.KICK else 1.0))
-			var late: float = ready - hit_s if timed else -INF
-			if not _holds():
-				# Met in time or not, it goes in: no better than being late.
-				late = maxf(late, 0.0) + 1.0
-			var tier: int = 0
-			if late <= 0.0:
-				var band: float = _band_hit_s()
-				tier = 2 if band < INF and (ready <= band or not timed) else 1
-			if tier < best_tier or (tier == best_tier and (tier > 0 or late >= best_late)):
-				continue
-			best_tier = tier
-			best_late = late
-			covers = true
-			low = l
-			hand = h
-			hand_target = target
-			ready_s = ready
-			impact_s = hit_s
-			if best_tier == 2:
+	_leg_wait = maxf(read.leg_delay_s - read.age, 0.0)
+	_arm_wait = maxf(read.arm_delay_s - read.age, 0.0)
+	_fall = motor.low_ready.fall_share()
+	_best = -1
+	var side_hand: int = Hand.GLOVE if side < 0.0 else Hand.BLOCKER
+	if not low_shot:
+		var hands: Array[int] = HANDS_GLOVE_SIDE
+		if absf(by.x) > 0.5 * KeeperAnatomy.CHEST_WIDTH_M and side > 0.0:
+			hands = HANDS_BLOCKER_SIDE
+		for h: int in hands:
+			if _take(Low.NONE, side, h):
 				return
+		return
+	var lows: Array[int] = [Low.NONE]
+	if motor.can_save(false):
+		lows = LOW_WIDE if wide else LOW_AT_BODY
+	elif motor.can_save(true):
+		lows = [Low.EXTENSION, Low.NONE]
+	for l: int in lows:
+		if _take(l, side, Hand.NONE):
+			break
+	# The hands lead it: the blade to a puck along the ice, else the hand on its
+	# side, with the legs' save, unless it leaves the flight met less well.
+	var with_legs: int = low
+	var met: int = _best
+	_best = met - 1
+	for h: int in ([Hand.STICK, side_hand] if on_ice else [side_hand]):
+		if _take(with_legs, side, h):
+			return
+	if _best < met:
+		_best = -1
+		_take(with_legs, side, Hand.NONE)
+
+
+# Poses the candidate `l` with `h` and takes it when the flight meets its gear
+# better than the best so far (2 met and held, 1 met, 0 neither); true once one
+# meets and holds it.
+func _take(l: int, side: float, h: int) -> bool:
+	var target: Vector3 = _pose_candidate(l, side, h)
+	var hit_s: float = _hit_s(_path)
+	var kind: int = 0
+	if hit_s < INF:
+		kind = 2 if _holds() else 1
+	if kind <= _best:
+		return false
+	_best = kind
+	covers = hit_s < INF
+	low = l
+	hand = h
+	hand_target = target
+	ready_s = _arm_wait + _hand_travel(h, target) / _speed(h) if h != Hand.NONE else 0.0
+	if l != Low.NONE:
+		ready_s = maxf(ready_s, _leg_wait + drop_s * (_fall if l != Low.KICK else 1.0))
+	impact_s = hit_s if covers else _time_at_depth(_hand_point(h).z if h != Hand.NONE else 0.0)
+	return _best == 2
 
 
 # The hand on its way: still until his arms have read the shot, then toward the
@@ -313,15 +306,6 @@ func _believe(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 		_into_net.x = -_into_net.x
 		_across.x = -_across.x
 	_palm = -(_path[PIECES] - _path[0]).normalized()
-	var spread: float = tan(READ_BAND_RAD)
-	for i: int in PIECES + 1:
-		var p: Vector3 = _path[i]
-		for k: int in BAND_SHARES.size():
-			var off: float = _path[i].distance_to(_path[0]) * spread * BAND_SHARES[k]
-			_band[4 * k][i] = p + Vector3(0.0, off, 0.0)
-			_band[4 * k + 1][i] = Vector3(p.x, maxf(p.y - off, KeeperShotRead.ON_ICE_Y), p.z)
-			_band[4 * k + 2][i] = p + Vector3(off, 0.0, 0.0)
-			_band[4 * k + 3][i] = p - Vector3(off, 0.0, 0.0)
 
 
 # The way the flight goes past him: −1 his glove side.
@@ -507,18 +491,6 @@ func _holds() -> bool:
 		return true
 	var away: Vector3 = from + v.normalized() * (r + 0.01)
 	return KeeperGear.nearest(_skel, away, at_line, r, _rebound, _scratch) >= 0
-
-
-# Seconds until the first of the band's lines meets the posed gear; INF when
-# one of them gets by it.
-func _band_hit_s() -> float:
-	var first: float = INF
-	for line: PackedVector3Array in _band:
-		var t: float = _hit_s(line)
-		if t == INF:
-			return INF
-		first = minf(first, t)
-	return first
 
 
 # How far the hand goes from where the pose holds it to `target`.
