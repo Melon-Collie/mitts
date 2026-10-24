@@ -436,8 +436,8 @@ Keep the layer boundary **and** the performance — a Callable/collaborator
 boundary is an interface, not a license to allocate per call. *Memoize at the
 seam* (`PlayerRegistry` caches `Array[Skater]`; `puck_controller` caches
 `team_id_by_skater`). *Build once, fill scratch* — solvers fill a caller-owned
-result instead of returning a fresh `Dictionary` (`GoalieBodyConfigBuilder`'s
-shared scratch config is the model). This is about *structure*, not constants, so
+result instead of returning a fresh `Dictionary` (`GoalieController._scratch_state`,
+one `GoalieNetworkState` filled for every render of him, is the model). This is about *structure*, not constants, so
 it doesn't conflict with "get it working, then tune numbers".
 
 **Don't shy away from complexity when it improves feel.** This project already
