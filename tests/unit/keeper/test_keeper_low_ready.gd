@@ -107,6 +107,28 @@ func test_a_move_takes_him_out_of_it_as_it_starts() -> void:
 	assert_gt(_motor.low_ready.share, 0.0, "set again and still asked, sinking again")
 
 
+# Skating with the play no faster than he shuffles, he stays sunk; skated
+# harder, he comes up out of it.
+func test_skating_with_the_play_he_stays_low() -> void:
+	_motor.z = -1.0
+	_was = _bones()
+	_motor.low_ready.asked = true
+	var spot := Vector2(0.0, -1.0)
+	var v := Vector2(1.2, 0.0)
+	for i: int in int(0.8 / DT):
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_step_checked("tracking t %.3f" % (i * DT))
+		spot += v * DT
+	assert_gt(_motor.glide.velocity.length(), 1.0, "skating with it")
+	assert_eq(_motor.low_ready.share, 1.0, "sunk as he goes")
+	v = Vector2(3.5, 0.0)
+	for i: int in int(0.6 / DT):
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_step_checked("chasing t %.3f" % (i * DT))
+		spot += v * DT
+	assert_eq(_motor.low_ready.share, 0.0, "up out of it to chase")
+
+
 # The drop's time goes as the root of the knees' fall to the ice.
 func _drop_time(sunk: bool) -> float:
 	_motor = KeeperMotor.new()

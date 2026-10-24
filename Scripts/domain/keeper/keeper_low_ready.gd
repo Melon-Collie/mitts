@@ -5,12 +5,13 @@ extends RefCounted
 # how far he has sunk into it: 0 his skating stance, 1 the low A. Pure, stepped
 # at the tick by KeeperMotor.
 #
-# He moves in his skating stance and sinks once set: asked (`asked`) and at
-# rest on his feet, he sinks over SINK_S; anything else he does, he rises out
-# of it as it starts, over RISE_S. A drop or a low save from it is the
-# shorter fall (`fall_share`), and goes from the pose he is in (`cut`).
+# Asked (`asked`), he sinks over SINK_S while set on his feet or skating with
+# the play no faster than he shuffles; any other move, he rises out of it as
+# it starts, over RISE_S, as quick as he sat into it. A drop or a low save
+# from it is the shorter fall (`fall_share`), and goes from the pose he is in
+# (`cut`).
 
-const SINK_S: float = 0.30
+const SINK_S: float = 0.15
 const RISE_S: float = 0.15
 # On the way, the pads' faces tipped up by as much again at the most, or the
 # inside edge by the skate digs in as the shin lays over.
@@ -31,10 +32,10 @@ func _init() -> void:
 	KeeperPoses.low_ready(_low)
 
 
-# One tick on his feet: sinking while `at_rest` there and asked, rising out of
-# it otherwise.
-func step(dt: float, at_rest: bool) -> void:
-	if at_rest and asked:
+# One tick on his feet: sinking while `settled` (set, or skating with the play)
+# and asked, rising out of it otherwise.
+func step(dt: float, settled: bool) -> void:
+	if settled and asked:
 		_sunk = minf(_sunk + dt / SINK_S, 1.0)
 	else:
 		_sunk = maxf(_sunk - dt / RISE_S, 0.0)

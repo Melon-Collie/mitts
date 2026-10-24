@@ -311,9 +311,11 @@ func step(dt: float) -> void:
 		x = _frozen_at.x
 		z = _frozen_at.y
 		yaw = _frozen_yaw
-	# Sunk while set on his feet and asked, out of it with any move; a drop or
-	# a save goes from where he has sunk to (KeeperDrop.drop_from, `save`).
-	low_ready.step(dt, _mover == Mover.NONE and rest == Rest.FEET)
+	# Sunk while set on his feet or skating with the play and asked, out of it
+	# with any other move; a drop or a save goes from where he has sunk to
+	# (KeeperDrop.drop_from, `save`).
+	var with_play: bool = _mover == Mover.GLIDE and glide.velocity.length() <= glide.shuffle_speed
+	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
 
 
