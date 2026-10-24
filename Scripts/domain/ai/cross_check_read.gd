@@ -7,7 +7,7 @@ extends RefCounted
 # the prediction with it) on the man as he stands now: his facing, posture,
 # stagger and intent. Moving him is worth it:
 # - at our net, when he hides the release from our goalie (the goalie's own
-#   silhouette and sightline, GoalieBehaviorRules.ScreenConfig) and would not
+#   silhouette and sightline, GoalieScreenRules.ScreenConfig) and would not
 #   once moved;
 # - on a loose puck, when he beats us to it now and would not once moved, our
 #   own stick's absence through the push charged to us.
@@ -81,11 +81,10 @@ static func displacement_m(dv: float, thrust: float) -> float:
 
 # Whether `body` stands on the goalie's sightline to the release: between his
 # eyes and the puck, clear of both ends (the shooter, and a body on his own
-# eyes), and within the body's half-width at the height the line crosses it —
-# the test GoalieBehaviorRules.screen_peek_offset makes of each body
-# (test_cross_check_read.gd holds the two together).
+# eyes), and within the body's half-width at the height the line crosses it
+# (GoalieScreenRules.screener_half_width_at).
 static func hides_release(body: Vector3, goalie_pos: Vector3, puck_pos: Vector3,
-		cfg: GoalieBehaviorRules.ScreenConfig) -> bool:
+		cfg: GoalieScreenRules.ScreenConfig) -> bool:
 	var px: float = puck_pos.x - goalie_pos.x
 	var pz: float = puck_pos.z - goalie_pos.z
 	var p_len: float = sqrt(px * px + pz * pz)
@@ -100,13 +99,13 @@ static func hides_release(body: Vector3, goalie_pos: Vector3, puck_pos: Vector3,
 		return false
 	var eye_y: float = goalie_pos.y + cfg.eye_height
 	var sight_y: float = eye_y + along / p_len * (puck_pos.y - eye_y)
-	return absf(wx * -vhz + wz * vhx) < GoalieBehaviorRules.screener_half_width_at(sight_y, cfg)
+	return absf(wx * -vhz + wz * vhx) < GoalieScreenRules.screener_half_width_at(sight_y, cfg)
 
 
 # A screen the shove clears: he hides the release now, and moved
 # `displacement` along `push_dir` he would not.
 static func clears_screen(man_pos: Vector3, push_dir: Vector2, displacement: float,
-		goalie_pos: Vector3, puck_pos: Vector3, cfg: GoalieBehaviorRules.ScreenConfig) -> bool:
+		goalie_pos: Vector3, puck_pos: Vector3, cfg: GoalieScreenRules.ScreenConfig) -> bool:
 	if not hides_release(man_pos, goalie_pos, puck_pos, cfg):
 		return false
 	var moved := Vector3(man_pos.x + push_dir.x * displacement, man_pos.y,

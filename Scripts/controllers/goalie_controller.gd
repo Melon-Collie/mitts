@@ -10,8 +10,6 @@ extends Node
 @warning_ignore("unused_signal")
 signal puck_covered(covering_team_id: int)
 
-const State = GoalieStateMachine.State
-
 var goalie: Goalie = null
 var puck: Puck = null
 var is_server: bool = false
@@ -37,11 +35,11 @@ var _velocity_z: float = 0.0
 var _last_save_time: float = -1.0
 var _pending_reaction_back_date: float = 0.0
 
-# The longest a screen hides a shot from him, for the shot log's read; the
-# tier's.
-var _screen_max_extra_delay_s: float = GoalieSkillProfile.hard().screen_max_extra_delay_s
-var _screen_cfg := GoalieBehaviorRules.ScreenConfig.new()
-var _move_read_cfg := GoalieBehaviorRules.MovementReadConfig.new()
+# The longest a screen hides a shot from him, for the shot log's read; and the
+# speed he counts as fully on the move, for its unset share.
+const SCREEN_MAX_DELAY_S: float = 0.30
+const MOVING_M_S: float = 2.5
+var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
 
 # The host's snapshots, sorted by timestamp, bounded to the skater buffer's
 # 30 (~0.25 s at 120 Hz).
@@ -56,16 +54,14 @@ var _rejoin_blend_from_x: float = 0.0
 var _rejoin_blend_from_z: float = 0.0
 
 
-# `profile` null keeps the tier he has (Hard).
+# `_profile` (null: Hard) is the tier of whoever plays him.
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
-		profile: GoalieSkillProfile = null) -> void:
+		_profile: GoalieSkillProfile = null) -> void:
 	goalie = assigned_goalie
 	puck = assigned_puck
 	is_server = assigned_is_server
 	_goal_line_z = assigned_goal_line_z
 	_goal_center_x = 0.0
-	if profile != null:
-		_screen_max_extra_delay_s = profile.screen_max_extra_delay_s
 	# On the goal line, turned up the ice, before the first tick: otherwise the
 	# node is drawn at the scene default and skates out of it.
 	goalie.set_goalie_position(_goal_center_x, _goal_line_z)
@@ -81,10 +77,10 @@ func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: f
 
 
 # A tier onto a goalie already playing (free play changes it without a
-# respawn). Absolute values, so applying one twice is applying it once.
-func apply_skill_profile(profile: GoalieSkillProfile) -> void:
-	if profile != null:
-		_screen_max_extra_delay_s = profile.screen_max_extra_delay_s
+# respawn), for whoever plays him. Absolute values, so applying one twice is
+# applying it once.
+func apply_skill_profile(_profile: GoalieSkillProfile) -> void:
+	pass
 
 
 # The skaters he reads (GameManager's, so the controller knows no registry).
@@ -148,7 +144,7 @@ func stance() -> int:
 
 
 func unset_fraction() -> float:
-	return GoalieBehaviorRules.unset_fraction(Vector2(_velocity_x, _velocity_z).length(), false, _move_read_cfg)
+	return clampf(Vector2(_velocity_x, _velocity_z).length() / MOVING_M_S, 0.0, 1.0)
 
 
 func challenge_radius() -> float:
@@ -159,16 +155,15 @@ func lateral_x() -> float:
 	return _current_x
 
 
-# How long the bodies between him and this shot hide it, from his eyes at his
-# stance's height.
+# How long the bodies between him and this shot hide it, from his eyes where
+# his mask is.
 func screen_delay_for(shot_velocity: Vector3) -> float:
 	_ensure_view()
 	if _view.screeners.is_empty():
 		return 0.0
-	_screen_cfg.eye_height = GoalieAnatomy.HEAD_CENTER_Y_BUTTERFLY_M if is_butterfly() \
-			else GoalieAnatomy.HEAD_CENTER_Y_STANDING_M
-	return minf(GoalieBehaviorRules.screen_occlusion_delay(puck.global_position, shot_velocity,
-			goalie.global_position, _view.screeners, _screen_cfg), _screen_max_extra_delay_s)
+	_screen_cfg.eye_height = goalie.get_mask_world_position().y - goalie.global_position.y
+	return minf(GoalieScreenRules.screen_occlusion_delay(puck.global_position, shot_velocity,
+			goalie.global_position, _view.screeners, _screen_cfg), SCREEN_MAX_DELAY_S)
 
 
 # Seconds since the puck last touched him, or -1 if it has not this game: the
@@ -181,8 +176,7 @@ func seconds_since_last_save() -> float:
 
 # ── State serialization ───────────────────────────────────────────────────────
 # Into a caller-owned instance (the per-tick StateBufferManager capture), so
-# this must not allocate. The part transforms are the save boxes' bodies, in
-# goalie-local space, which the bots' shot model reads.
+# this must not allocate.
 func fill_state(s: GoalieNetworkState) -> void:
 	s.position_x = goalie.global_position.x
 	s.position_z = goalie.global_position.z
@@ -191,28 +185,6 @@ func fill_state(s: GoalieNetworkState) -> void:
 	s.five_hole_openness = 0.0
 	s.velocity_x = _velocity_x
 	s.velocity_z = _velocity_z
-	var body_rot: Vector3 = goalie.get_body_rotation()
-	s.body_pitch = body_rot.x
-	s.body_roll = body_rot.z
-	s.left_pad_offset = goalie.get_left_pad_position()
-	var lp_rot: Vector3 = goalie.get_left_pad_rotation()
-	s.left_pad_pitch = lp_rot.x
-	s.left_pad_roll = lp_rot.z
-	s.left_pad_yaw = lp_rot.y
-	s.right_pad_offset = goalie.get_right_pad_position()
-	var rp_rot: Vector3 = goalie.get_right_pad_rotation()
-	s.right_pad_pitch = rp_rot.x
-	s.right_pad_roll = rp_rot.z
-	s.right_pad_yaw = rp_rot.y
-	s.glove_offset = goalie.get_glove_position()
-	var g_rot: Vector3 = goalie.get_glove_rotation()
-	s.glove_yaw = g_rot.y
-	s.glove_pitch = g_rot.x
-	s.blocker_offset = goalie.get_blocker_position()
-	var b_rot: Vector3 = goalie.get_blocker_rotation()
-	s.blocker_yaw = b_rot.y
-	s.blocker_pitch = b_rot.x
-	s.head_yaw = goalie.get_head_yaw()
 
 
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:

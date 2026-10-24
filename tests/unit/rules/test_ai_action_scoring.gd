@@ -1340,15 +1340,6 @@ func test_tip_needs_deflect_pace() -> void:
 			"a soft feed is a pass, not a tip")
 
 
-# ── Hole-model v3: the HIGH band reads the replicated hands ──────────────────
-# Pose numbers cited from GoalieBodyConfigBuilder: READY glove (−0.42, 0.90),
-# blocker (0.44, 0.86); butterfly drops both to y ≈ 0.44. GOAL here is +z, so
-# net_dx = local_x (hands_read's m = +1).
-
-const HANDS_READY := Vector4(-0.42, 0.90, 0.44, 0.86)
-const HANDS_BUTTERFLY := Vector4(-0.42, 0.44, 0.44, 0.44)
-
-
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:
 	# The guided floor: a defender on the lane at any crossing speed reads no
 	# clearer than standing still, where the ballistic coast lets a fast one

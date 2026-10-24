@@ -63,9 +63,8 @@ const MAX_OFF_LINE_RAD: float = deg_to_rad(45.0)
 # shin pitches the boot's rigid toe into the ice under the falling knee.
 const FOLD_LIFT_M: float = 0.10
 
-# The hardest push's speed, and the pads' friction on the ice (the old goalie's
-# slide_friction, about μ 0.27).
-var push_speed: float = GoalieSkillProfile.hard().slide_push_speed_mps
+# The push's speed, and the pads' friction on the ice (about μ 0.27).
+var push_speed: float = 2.8
 # The lead knee's fall to the ice from his feet: the butterfly drop's.
 var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
 var friction: float = 2.6

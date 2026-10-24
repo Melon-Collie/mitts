@@ -541,24 +541,23 @@ matchings score the same, so the retain branch holds forever.
 ## The goalie is tiered, but only ever as a weaker goalie
 
 `GoalieSkillProfile` is the goalie's counterpart to `BotSkillProfile`: one bundle
-of knobs per difficulty, applied by `GoalieController.setup()` onto its
-`@export`s and selected per match from the lobby. Hard is every value at the
-controller's authored default, so applying it is a no-op by construction
-(`test_goalie_profile_mirrors.gd` holds that).
+of knobs per difficulty, which the keeper takes onto his reads, his hands and
+his drop (`KeeperController._tier`), selected per match from the lobby.
 
 Every lever in it must be a trait a real weaker goalie actually has, so a lower
 tier still reads as a goalie — tracks the play, squares up, drops butterfly —
-who gives up the net and can't rob you, never as a dumb one. The knobs fall in
-two groups and a tier needs both, or the ladder is only reaction latency: read
-latencies (when he starts moving) and positioning / save levers (how much net he
-concedes standing still).
+who gives up the net and can't rob you, never as a dumb one. Today every lever
+is a read latency or a hand or drop speed (when he starts moving, and how fast
+he gets there); his positioning is the same on every tier.
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
-predict of him outside the shot field — his leg read, lateral accel ramp, depth
-and puck-play margin — lives as static vars on `AIGoalieModel`, synced from the
-match's profile by `set_goalie_profile`. The shot field itself is measured
-against the Hard goalie only, so against a lower tier the bots price shots as
-if the net were Hard's; per-tier fields are the planned fix.
+predict of him outside the shot field — his leg read, his push, the depth he
+takes, the post he holds, his rise — lives on `AIGoalieModel`, read from his own
+code (`KeeperPositioning`, `KeeperFootwork`, `KeeperDrop`, his gear), with the
+leg read synced from the match's profile by `set_goalie_profile`.
+`test_ai_goalie_model_mirrors.gd` holds each one against him. The shot field
+itself is measured against the Hard goalie only, so against a lower tier the
+bots price shots as if the net were Hard's; per-tier fields are the planned fix.
 
 ---
 
@@ -604,7 +603,7 @@ reaches back into what remains.
   post-game xG stat (`now_at_spread`, at the shot's context spread) — so offence
   and defence price a chance alike, and the model behind it can be replaced in
   that file alone. It answers the odds of scoring on today's
-  goalie, read from `AIShotOdds`: the live `GoalieController`'s open set,
+  goalie, read from `AIShotOdds`: the live keeper's open set,
   measured cell by cell (release spot × how he was beaten or set) and generated
   into `generated/shot_field_data.gd` (`docs/shot-currency-plan.md`). A goalie
   change is a regeneration (`.claude/hooks/generate-shot-field.sh`;

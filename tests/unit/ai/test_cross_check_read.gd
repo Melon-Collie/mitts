@@ -1,9 +1,9 @@
 extends GutTest
 
 # AICrossCheckRead: the bots' prediction of a cross-check is the host's own (a
-# live SkaterController.take_cross_check), the screen it reads is the goalie's
-# own (GoalieBehaviorRules.screen_peek_offset), and the two reasons to throw
-# one — a screen it clears, a race it turns.
+# live SkaterController.take_cross_check), the screen it reads is a body on the
+# goalie's sightline (GoalieScreenRules' silhouette), and the two reasons to
+# throw one — a screen it clears, a race it turns.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -19,7 +19,7 @@ class HostStub:
 		return false
 
 
-var _cfg := GoalieBehaviorRules.ScreenConfig.new()
+var _cfg := GoalieScreenRules.ScreenConfig.new()
 
 
 func _controller() -> SkaterController:
@@ -76,19 +76,6 @@ func test_the_shove_leaves_him_a_staggered_stride() -> void:
 	var thrust: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 	assert_lt(AICrossCheckRead.staggered_thrust(1.0, thrust), thrust)
 	assert_eq(AICrossCheckRead.staggered_thrust(0.1, thrust), thrust, "under the stagger floor")
-
-
-func test_the_screen_is_the_goalies_own() -> void:
-	var goalie := Vector3(0.0, 0.0, 25.0)
-	var puck := Vector3(1.5, 0.02, 15.0)
-	for x: float in [-1.0, -0.5, -0.2, 0.0, 0.2, 0.4, 0.8, 1.5]:
-		for z: float in [24.6, 23.0, 21.0, 18.0, 15.5]:
-			var body := Vector3(x, 0.85, z)
-			var bodies := PackedVector3Array([body])
-			var peeks: bool = GoalieBehaviorRules.screen_peek_offset(goalie, puck, bodies, _cfg,
-					100.0) != 0.0
-			assert_eq(AICrossCheckRead.hides_release(body, goalie, puck, _cfg), peeks,
-					"body at (%.1f, %.1f)" % [x, z])
 
 
 func test_a_push_that_moves_him_off_the_sightline_clears_the_screen() -> void:

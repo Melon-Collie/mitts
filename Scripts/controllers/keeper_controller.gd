@@ -145,6 +145,8 @@ func _place_in_crease() -> void:
 func _physics_process(delta: float) -> void:
 	if goalie == null or puck == null:
 		return
+	# A back-date is for the release it was set before, never a later one.
+	_pending_reaction_back_date = 0.0
 	var was: Vector3 = goalie.global_position
 	if is_server:
 		_play(delta)
@@ -379,8 +381,8 @@ func _follow(s: GoalieNetworkState) -> void:
 func _report_state() -> void:
 	_sm.current = _stance()
 	_current_x = goalie.global_position.x
-	_current_depth = GoalieBehaviorRules.threat_distance_to_goal(goalie.global_position, _goal_line_z,
-			_goal_center_x)
+	_current_depth = Vector2(goalie.global_position.x - _goal_center_x,
+			goalie.global_position.z - _goal_line_z).length()
 
 
 func is_butterfly() -> bool:
@@ -422,9 +424,12 @@ func _stance() -> GoalieStateMachine.State:
 	return GoalieStateMachine.State.READY
 
 
+# A remote shooter's release is read from when he saw it leave, the back-date
+# GameManager sets just before it (Scripts/networking/CLAUDE.md, shot lag comp).
 func _on_puck_released() -> void:
 	_end_save()
-	read.start(play.primed())
+	read.start(play.primed(), _pending_reaction_back_date)
+	_pending_reaction_back_date = 0.0
 
 
 # A tip or a deflection: a new shot to read from the start.

@@ -1,66 +1,20 @@
 class_name GoalieStateMachine
 extends RefCounted
 
-# Owns the goalie's current AI state. RECOVERING is the stand-up window after
-# butterfly (vulnerable beat where the goalie can't drop/RVH/react); SLIDING is
-# the committed butterfly slide (push off, translate to seal). COILING sits
-# between BUTTERFLY and SLIDING: the goalie has committed to a slide and is
-# rotating around the planted (pivot) foot before the push-off translates it.
-# READY is the half-down active stance when the puck is in the goalie's
-# defensive half — distinct from STANDING so animation can show engagement.
-# VH_LEFT / VH_RIGHT are the post-integrated stance for a sharp-angle SHOT
-# threat still in FRONT of the goal line (post pad vertical for short-side-high
-# coverage); RVH_* stays the at/below-goal-line seal (wraps, walkouts).
-#
-# The numeric values ride the wire as `state_enum` (u8), so new states are only
-# ever APPENDED — reordering silently re-labels every goalie on every client.
-# COVERING is the smother: the goalie collapses over a loose puck in the
-# crease when every sweep lane is covered — the real cover/freeze, resolved by
-# ruleset (NHL: whistle + defensive-zone faceoff; ARCADE: short hold, then a
-# live release).
-# PLAYING_PUCK is the tier-1 behind-net rim stop: skate out around the post,
-# paddle-down stop at the boards behind the net, skate back — "stop it, leave
-# it, get back", gated by an ultra-conservative go/no-go race.
-# CATCHING / CATCHING_DOWN are the glove catch-and-hold: the puck is pinned in
-# the glove (squeeze-and-look), split into upright and butterfly variants so
-# clients' state-keyed body/head heights render the right silhouette. Same
-# ruleset-split resolution as COVERING when held under pressure; an
-# unpressured catch quick-drops and plays on (the real delay-of-game
-# incentive).
-# HALF_BUTTERFLY_* is one pad down (the goalie-local side named) and the other
-# leg still loaded on its skate: the reach of a flat pad on one side, with a leg
-# left to push and rise on.
+# The goalie's stance as the wire carries it (GoalieNetworkState.state_enum)
+# and the bots and the pad sounds read it. The keeper sets it from his rest
+# (KeeperController._stance): READY on his feet, BUTTERFLY down, RVH_* on a
+# post. The rest are the old goalie's, kept because the numeric values ride
+# the wire as a u8, so states are only ever APPENDED — reordering silently
+# re-labels every goalie on every client.
 enum State {
 	STANDING, BUTTERFLY, RECOVERING, RVH_LEFT, RVH_RIGHT, READY, SLIDING, COILING,
 	VH_LEFT, VH_RIGHT, COVERING, PLAYING_PUCK, CATCHING, CATCHING_DOWN,
 	HALF_BUTTERFLY_LEFT, HALF_BUTTERFLY_RIGHT,
 }
 
-signal transitioned(prev: State, new: State)
-
 var current: State = State.STANDING
-# Counts up while in RECOVERING; reset on entry. The controller checks it
-# against `recovery_duration` to decide when to return to READY/STANDING.
-var recovery_timer: float = 0.0
 
-func reset() -> void:
-	current = State.STANDING
-	recovery_timer = 0.0
-
-func is_butterfly() -> bool:
-	return current == State.BUTTERFLY
-
-func is_half_butterfly() -> bool:
-	return current == State.HALF_BUTTERFLY_LEFT or current == State.HALF_BUTTERFLY_RIGHT
-
-# "On the ice" — a pad down: the full butterfly (idle, coiled or mid-slide) and
-# the half. Use for code that should treat the goalie as "in a butterfly-ish
-# stance" regardless of whether they're coiled, mid-slide, or stationary.
-func is_down() -> bool:
-	return current == State.BUTTERFLY \
-			or is_half_butterfly() \
-			or current == State.COILING \
-			or current == State.SLIDING
 
 # Pads flat on the ice: both in every full-down stance (the post seals and the
 # cover included), one in a half butterfly. RECOVERING counts as up — the legs
@@ -74,33 +28,7 @@ static func pads_on_ice(state: State) -> int:
 			return 1
 	return 0
 
-# Upright = goalie can drop to butterfly / engage RVH from this state. Both
-# STANDING and READY qualify; RECOVERING does not (it's the vulnerable
-# stand-up window).
+
+# On his feet, set to make a save from: STANDING or READY.
 func is_upright() -> bool:
 	return current == State.STANDING or current == State.READY
-
-func is_rvh() -> bool:
-	return current == State.RVH_LEFT or current == State.RVH_RIGHT
-
-func is_vh() -> bool:
-	return current == State.VH_LEFT or current == State.VH_RIGHT
-
-func is_catching() -> bool:
-	return current == State.CATCHING or current == State.CATCHING_DOWN
-
-# Post-integrated — hugging a post in either family (RVH at/below the goal
-# line, VH for the in-front sharp-angle shot threat). Use for code that gates
-# on "the goalie is committed to a post", regardless of which stance.
-func is_post_integrated() -> bool:
-	return is_rvh() or is_vh()
-
-# Sets the state and emits `transitioned(prev, new)`. Returns true if the
-# state actually changed (no-op when new_state == current).
-func transition_to(new_state: State) -> bool:
-	if new_state == current:
-		return false
-	var prev: State = current
-	current = new_state
-	transitioned.emit(prev, new_state)
-	return true

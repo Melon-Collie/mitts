@@ -1,15 +1,16 @@
 extends GutTest
 
-# AIGoalieModel.planned_goalie_depth — the planning keeper's radial depth: the
-# rush backflow pulls him in, retreat-only, at a skating rate. The depths the
-# current chart gives at the reference drives are the snapshot,
+# AIGoalieModel.planned_goalie_depth — the planning keeper's depth: his own rule
+# for a carrier coming at him (KeeperPositioning.depth_for, held against his
+# brain by test_ai_goalie_model_mirrors.gd), taken retreat-only, at his C-cuts'
+# pace. The depths at the reference drives are the snapshot,
 # test_goalie_depth_calibration_snapshot.
 
 const Snapshot := preload("res://tests/snapshot.gd")
 const SNAPSHOT_PATH := "res://tests/unit/rules/snapshots/goalie_depth.txt"
 const GOAL := Vector3(0, 0, -GameRules.GOAL_LINE_Z)
-# Challenge depth the rush fixtures start the keeper at (the Hard tier's).
-const CHALLENGE_DEPTH: float = 1.75
+# Where the fixtures start him: his skates on the top of the crease.
+const TOP: float = CreaseRules.ARC_RADIUS
 const RUSH_CLOSING_M_S: float = 6.0
 
 
@@ -21,81 +22,49 @@ func _puck_out(dist: float) -> Vector3:
 	return Vector3(0.0, 0.0, GOAL.z + dist)
 
 
-func _rush_depth(dist: float, window_s: float) -> float:
-	return AIGoalieModel.planned_goalie_depth(
-			_keeper_at(CHALLENGE_DEPTH), GOAL, _puck_out(dist), window_s, RUSH_CLOSING_M_S)
-
-
-func before_each() -> void:
-	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
-
-
-# ── Retreat-only ────────────────────────────────────────────────────────────
-
-func test_a_settled_read_leaves_the_keeper_exactly_where_he_is() -> void:
-	# His live depth is replicated truth and is set by a lot the planner cannot
-	# see (post seals, backdoor caps, recoveries). Nothing about a static puck
-	# may move him, in either direction.
-	for depth: float in [0.1, 0.6, 1.2, 1.75]:
-		var d: float = AIGoalieModel.planned_goalie_depth(
-				_keeper_at(depth), GOAL, _puck_out(6.6), 0.3, 0.0)
-		assert_almost_eq(d, depth, 0.0001,
-				"a static read never moves the keeper's depth")
+func _rush_depth(dist: float, window_s: float, closing: float = RUSH_CLOSING_M_S) -> float:
+	return AIGoalieModel.planned_goalie_depth(_keeper_at(TOP), GOAL, _puck_out(dist), window_s, closing)
 
 
 func test_the_planner_never_challenges_the_keeper_further_out() -> void:
-	# A keeper sitting deep in his crease with the puck at chart-challenge range
-	# must not be pushed out to the chart station — that would invent an
-	# aggressive challenge the real keeper may already have declined.
-	var d: float = AIGoalieModel.planned_goalie_depth(
-			_keeper_at(0.2), GOAL, _puck_out(6.0), 1.0, 8.0)
+	# His live depth is replicated truth, set by a lot the planner cannot see,
+	# so a keeper sitting deep is never pushed out to where his rule would stand.
+	var d: float = AIGoalieModel.planned_goalie_depth(_keeper_at(0.2), GOAL, _puck_out(6.0), 1.0, 8.0)
 	assert_almost_eq(d, 0.2, 0.0001, "retreat-only: depth is never pushed out")
 
 
-# ── The rush backflow ───────────────────────────────────────────────────────
-
-func test_a_closing_carrier_backs_the_keeper_in() -> void:
-	# A rush inside the engage range backs him off his challenge, never through
-	# his own goal line, and a longer window only lets him retreat further.
-	for dist: float in [6.0, 4.0, 3.0, 2.0]:
-		var prev: float = CHALLENGE_DEPTH
-		for window: float in [0.25, 0.5, 1.0, 2.0]:
-			var d: float = _rush_depth(dist, window)
-			assert_lt(d, CHALLENGE_DEPTH,
-					"a closing rush backs the keeper off his challenge (%.0f m, %.2f s)"
-					% [dist, window])
-			assert_gt(d, 0.0, "…but not through his own goal line")
-			assert_lte(d, prev, "a longer window never leaves him further out")
-			prev = d
+func test_no_time_leaves_him_where_he_is() -> void:
+	assert_almost_eq(_rush_depth(2.0, 0.0), TOP, 0.0001)
 
 
-func test_the_backflow_is_monotone_in_how_far_the_rush_has_come() -> void:
+func test_a_carrier_nearer_backs_him_in_further() -> void:
 	var prev: float = INF
 	for dist: float in [7.0, 5.0, 4.0, 3.0, 2.0]:
 		var d: float = _rush_depth(dist, 1.0)
-		assert_lt(d, prev, "deeper drive → deeper keeper (dist %.1f)" % dist)
+		assert_lte(d, prev, "a nearer carrier never leaves him further out (dist %.1f)" % dist)
 		prev = d
+	assert_lt(prev, TOP, "a carrier in tight backs him off the top of the crease")
 
 
-func test_a_stalled_carrier_does_not_move_him() -> void:
-	# Below the live keeper's rush_min_closing_speed he keeps the challenge and
-	# makes the attacker come to him — a walk-in is not a rush.
-	var d: float = AIGoalieModel.planned_goalie_depth(
-			_keeper_at(CHALLENGE_DEPTH), GOAL, _puck_out(3.0), 1.0,
-			AIGoalieModel.GOALIE_RUSH_MIN_CLOSING_M_S * 0.5)
-	assert_almost_eq(d, CHALLENGE_DEPTH, 0.0001, "a stalled attacker earns no backflow")
+func test_a_carrier_coming_faster_backs_him_in_no_less() -> void:
+	for dist: float in [6.0, 4.0, 3.0]:
+		assert_lte(_rush_depth(dist, 1.0, 9.0), _rush_depth(dist, 1.0, 0.0) + 1e-6,
+				"coming at him faster backs him in at least as far (dist %.1f)" % dist)
 
 
 func test_the_retreat_is_rate_bounded() -> void:
-	# He skates the retreat; a short window cannot teleport him in. The backflow
-	# is speed-matched to the carrier, so he gives depth no faster than the crease
-	# skating rate or the attacker's closing speed, whichever is higher.
-	var max_rate: float = maxf(AIGoalieModel.GOALIE_DEPTH_MAX_SPEED_M_S, RUSH_CLOSING_M_S)
+	# He skates the retreat on his C-cuts; a short window cannot teleport him in.
+	var c_cuts: float = KeeperFootwork.new().c_cut_speed
 	for window: float in [0.02, 0.05, 0.1, 0.2]:
-		var given: float = CHALLENGE_DEPTH - _rush_depth(2.0, window)
+		var given: float = TOP - _rush_depth(2.0, window)
 		assert_gt(given, 0.0, "the rush moves him even over %.2f s" % window)
-		assert_lte(given, max_rate * window + 1e-4,
-				"over %.2f s he gives at most a skating rate's depth" % window)
+		assert_lte(given, c_cuts * window + 1e-4,
+				"over %.2f s he gives at most his C-cuts' depth" % window)
+
+
+func test_out_of_the_zone_he_waits_in_the_middle_of_the_crease() -> void:
+	assert_almost_eq(AIGoalieModel.keeper_depth(GOAL, _puck_out(KeeperPositioning.BLUE_LINE_M + 5.0)),
+			TOP * KeeperPositioning.AWAY_DEPTH_SHARE, 1e-6)
 
 
 func test_goalie_depth_calibration_snapshot() -> void:

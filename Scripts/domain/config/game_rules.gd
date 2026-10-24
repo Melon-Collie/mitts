@@ -623,11 +623,6 @@ const DEFAULT_GOALIE_LATERAL_ACCEL_M_S2: float = 14.0
 # full T-push inside about a pad's width (~0.3 m) is ~24 m/s², 1.75x the push.
 # A ratio, so a tier's weaker edges stop worse exactly as they push worse.
 const GOALIE_EDGE_STOP_DECEL_RATIO: float = 1.75
-# The pad-top seam: the height where the goalie's coverage changes hands from
-# the leg pads to the torso + arms. AIActionScoring's hole model uses it as the
-# HIGH band's arrival floor: a lofted shot is only an over-the-pads target if
-# its arc physically crosses the net line above this seam.
-const DEFAULT_GOALIE_PAD_TOP_SEAM_M: float = 0.86
 
 # ── Players ───────────────────────────────────────────────────────────────────
 # Team size is a per-match config latched at puck drop (GameStateMachine.

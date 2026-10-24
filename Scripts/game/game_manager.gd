@@ -3719,8 +3719,9 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 			and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
 		# Goalie was REMOTE-view from the shooter — clients render the goalie
 		# from buffered host snapshots at host_time - interp_delay, so the
-		# shooter saw the goalie at that earlier moment. Rewind to that snapshot
-		# for fair puck/goalie geometry at the release. See LagCompRewind.
+		# shooter saw the goalie at that earlier moment. Rewound to that snapshot
+		# for the release, so the shot's xG is read against the goalie the
+		# shooter saw. See LagCompRewind.
 		# Anti-cheat: delay bounded against the shooter's measured link first.
 		interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
 				interp_delay_ms, float(NetworkManager.get_peer_ping_ms(pid)))
@@ -3804,8 +3805,8 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and rtt_ms > 0.0 \
 				and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
 			# Goalie is REMOTE-view from the shooter — the shooter saw the goalie at
-			# host_time - interp_delay (the buffered render path); rewind to that
-			# snapshot for fair puck/goalie geometry at the release moment.
+			# host_time - interp_delay (the buffered render path); rewound to that
+			# snapshot for the release, so the shot's xG is read against him.
 			# Anti-cheat: delay bounded against the shooter's measured link first.
 			interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
 					interp_delay_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))

@@ -53,12 +53,9 @@ var _save_box_places: Array[Node3D] = []
 var chest_contact := Callable()  # the stand-in's rule for a contact on the chest's part (Puck)
 
 
-# The scene's own boxes are switched off: the stand-in brings its own.
 func set_stand_in(stand_in: Node3D) -> void:
 	_stand_in = stand_in
 	add_child(stand_in)
-	for cs: CollisionShape3D in get_collision_parts():
-		cs.disabled = true
 	_blocker.transform = Transform3D.IDENTITY
 	_stick.transform = Transform3D.IDENTITY
 
@@ -122,11 +119,6 @@ func set_goalie_rotation_y(y: float) -> void:
 
 func get_goalie_rotation_y() -> float:
 	return rotation.y
-
-# The part bodies where the stand-in seated them, in goalie-local space,
-# rotations in radians: what fill_state hands the bots' shot model.
-func get_glove_position() -> Vector3:
-	return _glove.position
 
 # Cached list of this goalie's CollisionShape3D parts (pads / body / head / glove /
 # stick / blocker) for the analytic puck drive's contact queries. The subtree is
@@ -226,40 +218,16 @@ static func _gather_collision_parts(node: Node, found: Array[CollisionShape3D]) 
 			found.append(child)
 		_gather_collision_parts(child, found)
 
-func get_blocker_position() -> Vector3:
-	return _block_arm.position
-
 # Glove world position — the pin point for a caught puck (catch-and-hold).
 func get_glove_world_position() -> Vector3:
 	return _glove.global_position
 
-# Blocker-assembly world position — the glove's opposite number. Read by the
-# shot-read instrumentation, which has to ask "how far is the NEAREST arm from
-# this shot" (on an elevated shot either arm can make the save, so keying on the
-# glove alone measures glove-side-vs-blocker-side rather than reach).
+# Blocker-assembly world position — the glove's opposite number, for which hand
+# reaches a puck sooner (KeeperController._chest_contact).
 func get_blocker_world_position() -> Vector3:
 	return _block_arm.global_position
 
-func get_left_pad_position() -> Vector3:
-	return _left_pad.position
 
-func get_left_pad_rotation() -> Vector3:
-	return _left_pad.rotation
-
-func get_right_pad_position() -> Vector3:
-	return _right_pad.position
-
-func get_right_pad_rotation() -> Vector3:
-	return _right_pad.rotation
-
-func get_body_rotation() -> Vector3:
-	return _body.rotation
-
-func get_glove_rotation() -> Vector3:
-	return _glove.rotation
-
-func get_blocker_rotation() -> Vector3:
-	return _block_arm.rotation
-
-func get_head_yaw() -> float:
-	return _head.rotation.y
+# The mask's world position: where his eyes are.
+func get_mask_world_position() -> Vector3:
+	return _head.global_position

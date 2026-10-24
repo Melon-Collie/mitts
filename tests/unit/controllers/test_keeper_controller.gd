@@ -43,7 +43,7 @@ func _live_boxes() -> Array[CollisionShape3D]:
 	return out
 
 
-func test_his_gear_is_the_save_geometry_and_the_old_body_is_hidden() -> void:
+func test_his_gear_is_the_save_geometry() -> void:
 	_spawn(GameRules.GOAL_LINE_Z)
 	_run(0.5)
 	var live: Array[CollisionShape3D] = _live_boxes()
@@ -57,9 +57,23 @@ func test_his_gear_is_the_save_geometry_and_the_old_body_is_hidden() -> void:
 					and (box.shape as BoxShape3D).size.is_equal_approx(KeeperGear.half_extents(part) * 2.0):
 				found = true
 		assert_true(found, "%s's box where his gear is" % KeeperGear.Part.keys()[part])
-	for node: Node in _goalie.find_children("*", "VisualInstance3D", true, false):
-		if not _keeper._keeper.is_ancestor_of(node):
-			assert_false((node as VisualInstance3D).visible, "%s hidden" % node.name)
+
+
+# A remote shooter's release reaches the host after he saw it leave his stick:
+# the keeper reads it from then, and a back-date set for one release is not
+# carried to the next.
+func test_a_remote_release_is_read_from_when_its_shooter_saw_it() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_run(0.3)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 8.0)
+	_puck.set_puck_velocity(Vector3(0.0, 0.0, 25.0))
+	_keeper.set_pending_reaction_back_date(0.05)
+	_puck.puck_released.emit()
+	assert_almost_eq(_keeper.read.age, 0.05, 1e-6, "read from when the shooter saw it")
+	_keeper.set_pending_reaction_back_date(0.05)
+	_keeper._physics_process(DT)
+	_puck.puck_released.emit()
+	assert_almost_eq(_keeper.read.age, 0.0, 1e-6, "a back-date lapses with its tick")
 
 
 func test_on_either_net_he_stands_on_the_angle_line_square_to_the_puck() -> void:

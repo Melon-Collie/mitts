@@ -53,15 +53,15 @@ func _cells() -> Array[Cell]:
 		c.spot = Vector3(float(t[3]), 0.0, GOAL_Z + float(t[4]))
 		c.patterns = PackedStringArray([t[5], t[6], t[7]])
 		_fill_read(c.keeper, t, 11)
-		_fill_read(c.pre_keeper, t, 32)
+		_fill_read(c.pre_keeper, t, 18)
 		out.append(c)
 	return out
 
 
-# The stager's 21-field read starting at column `at`.
+# The stager's 7-field read starting at column `at`.
 func _fill_read(g: GoalieNetworkState, t: PackedStringArray, at: int) -> void:
 	var r: Array[float] = []
-	for i: int in range(at, at + 21):
+	for i: int in range(at, at + 7):
 		r.append(float(t[i]))
 	g.position_x = r[0]
 	g.position_z = r[1]
@@ -70,12 +70,6 @@ func _fill_read(g: GoalieNetworkState, t: PackedStringArray, at: int) -> void:
 	g.five_hole_openness = r[4]
 	g.velocity_x = r[5]
 	g.velocity_z = r[6]
-	g.glove_offset = Vector3(r[7], r[8], r[9])
-	g.blocker_offset = Vector3(r[10], r[11], r[12])
-	g.left_pad_offset = Vector3(r[13], r[14], r[15])
-	g.left_pad_roll = r[16]
-	g.right_pad_offset = Vector3(r[17], r[18], r[19])
-	g.right_pad_roll = r[20]
 
 
 func _sigma_m(c: Cell) -> float:

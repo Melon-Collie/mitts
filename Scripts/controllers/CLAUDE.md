@@ -18,7 +18,9 @@ Four files here hold him in the game:
 
 The goalie's rules in `Scripts/domain/rules/goalie_*.gd` are pure and shared:
 the rebound doctrine (`GoalieSaveRules`), the push kinematics his footwork runs
-on (`GoaliePushRules`), where a pass in flight is shot from (`GoaliePassRead`).
+on (`GoaliePushRules`), where a pass in flight is shot from (`GoaliePassRead`),
+and how a body hides a shot from him (`GoalieScreenRules`, which the bots read
+to clear or not make a screen in front of their own goalie).
 
 ### Delete the copy, don't correct the number
 

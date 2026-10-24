@@ -139,13 +139,7 @@ static func aim_x(i: int) -> float:
 
 static func read_fields(gs: GoalieNetworkState) -> String:
 	var v: Array[float] = [gs.position_x, gs.position_z, gs.rotation_y,
-			float(gs.state_enum), gs.five_hole_openness, gs.velocity_x, gs.velocity_z,
-			gs.glove_offset.x, gs.glove_offset.y, gs.glove_offset.z,
-			gs.blocker_offset.x, gs.blocker_offset.y, gs.blocker_offset.z,
-			gs.left_pad_offset.x, gs.left_pad_offset.y, gs.left_pad_offset.z,
-			gs.left_pad_roll,
-			gs.right_pad_offset.x, gs.right_pad_offset.y, gs.right_pad_offset.z,
-			gs.right_pad_roll]
+			float(gs.state_enum), gs.five_hole_openness, gs.velocity_x, gs.velocity_z]
 	var parts: PackedStringArray = []
 	for f: float in v:
 		parts.append("%.4f" % f)

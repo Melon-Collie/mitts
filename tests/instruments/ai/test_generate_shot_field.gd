@@ -158,7 +158,7 @@ func test_merge_the_shards() -> void:
 		"# open set per cell, read by AIShotOdds. Row columns: index, spot x, spot",
 		"# metres out, kind, mode, passer x (a deke's start, a decoy's x), feed pace",
 		"# (a decoy's metres out), release x, release metres",
-		"# out, the 21-field read before the feed, the 21-field read at decision",
+		"# out, the 7-field read before the feed, the 7-field read at decision",
 		"# (shot_odds_stager.gd read_fields), then FLAT / LOW / HIGH outcomes.",
 		"",
 		"const FINGERPRINT: String = \"%s\"" % Fingerprint.compute(),

@@ -31,16 +31,20 @@ var age: float = -1.0
 var at := Vector3.ZERO
 var velocity := Vector3.ZERO
 var _primed: bool = false
+# Whether the next look is his first of this flight.
+var _first: bool = false
 # The flight as he first saw it, at the release or the touch.
 var _from := Vector3.ZERO
 var _from_velocity := Vector3.ZERO
 
 
 # A shot leaves a stick, or the puck is touched on its way: read from the start,
-# on the primed read if he had the save programmed.
-func start(primed: bool = false) -> void:
-	age = 0.0
+# on the primed read if he had the save programmed; `seen_s` ago for a shot
+# whose shooter saw it leave that long before it reached the host (lag comp).
+func start(primed: bool = false, seen_s: float = 0.0) -> void:
+	age = maxf(seen_s, 0.0)
 	_primed = primed
+	_first = true
 
 
 func stop() -> void:
@@ -62,7 +66,8 @@ func arms_read() -> bool:
 func step(dt: float, puck_at: Vector3, puck_velocity: Vector3) -> void:
 	at = puck_at
 	velocity = puck_velocity
-	if age == 0.0:
+	if _first:
+		_first = false
 		_from = at
 		_from_velocity = velocity
 	if age >= 0.0:

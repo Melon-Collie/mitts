@@ -45,7 +45,7 @@ NODES it was handed (bone poses, mesh transforms — that is what a rig does).
 That single rule is the whole contract, and it is not a style preference:
 whoever writes a field has re-derived *when* it changes, which is the other
 side's lifecycle, and from that moment the other side's own updater is dead code
-waiting to happen. The correlation was measured across the goalie's six
+waiting to happen. The correlation was measured across the old goalie's
 collaborators — contested fields 0/2/2/12 predicted dead methods 0/0/0/17. See
 `Scripts/controllers/CLAUDE.md`.
 

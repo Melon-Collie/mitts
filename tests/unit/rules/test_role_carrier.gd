@@ -1705,17 +1705,14 @@ func _symmetric_entry_ctx() -> RoleContext:
 # ─── Post-seal stances: the carrier reads the VH wall ────────────────────────
 
 func test_post_seal_x_sign_decodes_the_wire_convention() -> void:
-	# Convention lock: the controller enters *_LEFT when puck_local_x =
-	# (puck.x − goal.x) · −sign(−goal_z) < 0 — i.e. the sealed post sits at
-	# world-x sign(−goal_z). Both nets, both stance families.
+	# Convention lock: the sealed post of a *_LEFT stance sits at world-x
+	# sign(−goal_z). Both nets, both stance families.
 	var g := GoalieNetworkState.new()
 	g.state_enum = GoalieStateMachine.State.VH_LEFT as int
 	assert_eq(g.post_seal_x_sign(-26.65), 1.0, "net at −z: LEFT seals the +x post")
 	assert_eq(g.post_seal_x_sign(26.65), -1.0, "net at +z: LEFT seals the −x post")
-	assert_true(g.is_post_seal_tall(), "VH is the tall seal")
 	g.state_enum = GoalieStateMachine.State.RVH_RIGHT as int
 	assert_eq(g.post_seal_x_sign(-26.65), -1.0, "net at −z: RIGHT seals the −x post")
-	assert_false(g.is_post_seal_tall(), "RVH is the compressed seal")
 	g.state_enum = GoalieStateMachine.State.READY as int
 	assert_eq(g.post_seal_x_sign(-26.65), 0.0, "no post stance, no seal")
 

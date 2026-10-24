@@ -43,7 +43,7 @@ func test_the_block_concedes_a_shot_over_its_seal() -> void:
 
 
 func test_a_block_on_the_goalies_doorstep_screens_him() -> void:
-	var cfg := GoalieBehaviorRules.ScreenConfig.new()
+	var cfg := GoalieScreenRules.ScreenConfig.new()
 	var goalie := Vector3(0.0, 0.0, 25.5)
 	assert_true(AIShotBlockRead.screens_own_goalie(Vector3(0.0, 0.0, 24.8), goalie, cfg))
 	assert_false(AIShotBlockRead.screens_own_goalie(Vector3(0.0, 0.0, 22.0), goalie, cfg))

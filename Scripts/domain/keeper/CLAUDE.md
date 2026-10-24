@@ -65,8 +65,13 @@ client buffers the snapshots and draws him at the interpolated past
 blended between them (`KeeperPose.blend`), his skeleton solved and his save
 boxes seated on it: its puck prediction stops against the gear the host saves
 with, to about a centimetre. A replay (the goal cinematic, the post-game reel,
-a replay file) poses him the same way (`apply_replay_state`). The shot
-release's rewind of the goalie moves his root only, not his pose.
+a replay file) poses him the same way (`apply_replay_state`). A remote
+shooter's release he reads from when its shooter saw it leave the stick (the
+back-date GameManager sets just before the release, `KeeperShotRead.start`'s
+`seen_s`), as the networking doc's shot lag comp asks. The release's rewind of
+the goalie to where its shooter saw him moves his root only, which is all that
+reads him at that instant (the shot's xG): his read starts from the flight, not
+from his body, and his gear meets the puck only on the ticks after, live.
 
 ## Saves
 
