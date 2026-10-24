@@ -347,3 +347,28 @@ func test_a_tier_set_later_reaches_his_saves() -> void:
 	assert_eq(_keeper.motor.save_move.drop_s, easy.butterfly_drop_s)
 	_keeper.reset_to_crease()
 	assert_eq(_keeper.read.leg_delay_s, easy.reaction_delay_s, "and keeps it through a reset")
+
+
+# A puck lying beside the post, behind the goal line, a push from him with
+# nobody near it: he goes and covers it. With an opponent who would get his
+# stick on it first, he stays where he is.
+func test_a_loose_puck_beside_the_post_he_goes_and_covers() -> void:
+	for near: bool in [false, true]:
+		_spawn(GameRules.GOAL_LINE_Z)
+		_puck.global_position = Vector3(-3.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 2.0)
+		_run(1.5)
+		var lying := Vector3(-1.6, _puck.ice_height, GameRules.GOAL_LINE_Z + 0.3)
+		var them: Array = [lying + Vector3(-1.8, 0.0, 0.5)] if near else [Vector3(-8.0, 0.0, GameRules.GOAL_LINE_Z - 10.0)]
+		var opponent: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+		add_child_autofree(opponent)
+		opponent.global_position = them[0]
+		_keeper.set_skater_getter(func() -> Array: return [opponent])
+		_puck.global_position = lying
+		watch_signals(_keeper)
+		for i: int in int(2.5 / DT):
+			_keeper._view.invalidate()
+			_keeper._physics_process(DT)
+		if near:
+			assert_signal_not_emitted(_keeper, "puck_covered", "a stick nearer it than he is: left")
+		else:
+			assert_signal_emitted(_keeper, "puck_covered", "nobody near it: covered")

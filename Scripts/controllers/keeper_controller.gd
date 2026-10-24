@@ -14,10 +14,12 @@ extends GoalieController
 # the motor), held until it is there and he has read the shot is over (it
 # meets him, goes past, stops coming), or it is picked up; a shot that beat
 # his read answered all the same once he has read it. His eyes follow the puck
-# throughout (KeeperLook). A glove catch is held and covered; every other
-# contact is the puck's rebound off the box it struck. A loose puck he can reach he covers
+# throughout (KeeperLook). A catch, in the glove or on his chest, is held and
+# covered, him frozen where he made it; every other contact is the puck's
+# rebound off the box it struck. A loose puck he can reach he covers
 # (KeeperCover): down over it, the glove onto it, live until the glove is on
-# it.
+# it; one a push away that no opponent can get to first he skates to and
+# covers (KeeperFetch).
 #
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
@@ -39,6 +41,7 @@ var play := KeeperPlayRead.new()
 var save := KeeperSave.new()
 var cover := KeeperCover.new()
 var look := KeeperLook.new()
+var fetch := KeeperFetch.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
@@ -57,6 +60,8 @@ var _profile: GoalieSkillProfile = GoalieSkillProfile.hard()
 # a loose puck.
 var _chosen: bool = false
 var _covering: bool = false
+# Whether he is skating to a loose puck to cover it (KeeperFetch).
+var _fetching: bool = false
 # Seconds into the read the save was chosen, and the shot over; below zero, not
 # yet.
 var _chosen_at: float = -1.0
@@ -123,6 +128,7 @@ func _place_in_crease() -> void:
 	look.reset()
 	_chosen = false
 	_covering = false
+	_fetching = false
 	_chosen_at = -1.0
 	_over_at = -1.0
 	_felt = false
@@ -163,7 +169,9 @@ func _play(delta: float) -> void:
 	_cover_the_puck(in_net)
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering:
 		_read_receivers()
-		brain.decide(play.puck, play.motion, motor)
+		_fetch_the_puck(in_net)
+		if not _fetching:
+			brain.decide(play.puck, play.motion, motor)
 	_ticks += 1
 	motor.step(delta)
 	_place_body()
@@ -274,8 +282,9 @@ func _end_save() -> void:
 # it with the puck under it. Until then it is live, and a puck poked out of his
 # reach ends the cover.
 func _cover_the_puck(in_net: Vector3) -> void:
+	# Skating to one, he stops on his spot before he goes down on it.
 	var coverable: bool = _holding < 0.0 and not read.reading() and puck.get_carrier() == null \
-			and not puck.pickup_locked \
+			and not puck.pickup_locked and (_covering or not _fetching or motor.is_idle()) \
 			and cover.plan(in_net, _net.basis.inverse() * puck.get_puck_velocity(), motor, _keeper.skeleton.mirrored)
 	if not coverable:
 		if _covering:
@@ -291,6 +300,16 @@ func _cover_the_puck(in_net: Vector3) -> void:
 	if save.hand_there() and _glove_on_puck():
 		_covering = false
 		_secure()
+
+
+# A loose puck near him that no opponent will get to first: skated to, square
+# to it, until it is in his reach to cover (KeeperFetch).
+func _fetch_the_puck(in_net: Vector3) -> void:
+	var v: Vector3 = _net.basis.inverse() * puck.get_puck_velocity()
+	_fetching = not read.reading() and puck.get_carrier() == null and not puck.pickup_locked \
+			and fetch.plan(Vector2(in_net.x, in_net.z), Vector2(v.x, v.z), motor, _opponents, play.delay_s, _fetching)
+	if _fetching:
+		motor.go_to(fetch.spot, fetch.facing, KeeperRoute.Rest.FEET, Vector2.ZERO, true)
 
 
 # The puck under the glove's palm, across the ice and no higher than the glove.

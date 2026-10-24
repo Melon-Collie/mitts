@@ -30,6 +30,7 @@ one the bots shoot at.
 | `keeper_look.gd` | his eyes on the puck: his face turned to follow it in any stance, the neck turning and the head nodding, no faster than a head turns (`TURN_RAD_S`) and no further than a neck does, laid over the pose last, so through a save he watches the puck into the gear |
 | `keeper_chest_trap.gd` | a shot caught on his chest: only at the logo (between where his arm pads lie on the protector, the middle of its height, on its face), and only when the nearer hand gets onto it before the foam's rebound carries it out of the glove's pocket |
 | `keeper_cover.gd` | covering a loose puck he can reach: whether one slowing on the ice will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes) |
+| `keeper_fetch.gd` | going for a loose puck: one a push from him (in front, or beside the post below the goal line, never behind the cage), skated to where his glove lands on it, when no opponent at full sprint gets a stick on it before he is down on it, his read as the margin to set out |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on |
 | `controllers/keeper_controller.gd` | him in a match, in the old goalie's place (below) |
 | `actors/keeper/keeper.gd` | the node: solves a pose on the tick, draws it at render rate when it moved |
@@ -129,6 +130,12 @@ it (`KeeperMotor.freeze`): no ground covered and no move started, the move
 under way only settling his pose, until he plays it out. So a rebound dying at his
 feet, a dribble at the crease or a puck caught behind his stick or between his
 pads is smothered rather than dropped on and popped up from.
+One a push away that he wins the race to (`KeeperFetch`) he skates to, square
+to it, and once he has stopped on his spot covers the same way: a loose puck
+beside the post below the goal line with nobody near it is his, not left
+lying there. The race prices every opponent at full sprint from the first
+instant, his stick's length short of it, as the old goalie's trip behind the
+net did, and he sets out only with his read to spare.
 A shot into his chest (`KeeperController._chest_contact`, through
 `Goalie.chest_contact`, which the old goalie leaves unset) is caught there at
 the logo when his nearer hand closes on it before what the foam leaves of its
@@ -159,9 +166,10 @@ puck's own contact test in `test_keeper_controller.gd`.
 played out, a shot in before his read answered late and carried into, a
 shot off him let go the tick he feels it, a soft shot at his logo caught on
 his chest and a hard one coming off it, a catch on the move freezing
-him where he made it, a puck at his feet covered or, poked away first, escaping, and a
+him where he made it, a loose puck beside the post gone for and covered
+with nobody near it and left with a stick nearer it, a puck at his feet covered or, poked away first, escaping, and a
 client posed from his state through the wire with every save box where the
-host's is. `test_keeper_chest_trap.gd` holds the logo and the hands closing in time. `test_keeper_look.gd` holds the look: his face onto the puck in every stance,
+host's is. `test_keeper_fetch.gd` holds the race, the cage and the push's reach. `test_keeper_chest_trap.gd` holds the logo and the hands closing in time. `test_keeper_look.gd` holds the look: his face onto the puck in every stance,
 no faster than a head turns, held at the neck's limit, and the stance left
 as it is for a puck straight ahead. `test_keeper_pose_codec.gd` holds the pose on the wire: every
 stance and every tick of a run of his moves solving to the same gear, the
