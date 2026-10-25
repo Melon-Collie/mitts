@@ -126,7 +126,9 @@ directly, which is legal because `TeamBrain` *is a* `TeamStrategyView`.
 
 `SkaterAgent.tick` returns the state machine's blade cursor as-is. Its slew — the
 bot's real Hands blade speed — is the one motion limit on it, exactly the limit a
-human's blade plays under. A second smoothing stage in the agent is a trap:
+human's blade plays under. Like the controller's cap, it is relative to the
+skater: the cursor rides the body and slews across it, so skating at speed
+never eats the blade's own. A second smoothing stage in the agent is a trap:
 straight-line world blending chord-cuts the state machine's shaped cursor paths
 (the arc, the reach-cone clamp, the front route) across the body on big flips,
 and can trip the pose IK gate's facing freeze.

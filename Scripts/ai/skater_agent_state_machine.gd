@@ -2108,6 +2108,7 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		# tracker reads as a direction reversal.
 		_mouse_pos = self_pos + _shoot_wind_up_start
 		_mouse_pos_initialized = true
+		_mouse_body_at = self_pos
 		input.shoot_pressed = true
 
 	# Clamped at 1: during the sampled late-release hold the blade sits at the
@@ -2284,6 +2285,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		# Snap the cursor to the wind-up start, as SHOOT_PRESSED does.
 		_mouse_pos = self_pos + endpoints.start
 		_mouse_pos_initialized = true
+		_mouse_body_at = self_pos
 		input.shoot_pressed = true
 
 	# Endpoints are offsets from the current self_pos (see _shoot_wind_up_start).
@@ -3026,6 +3028,10 @@ const FACE_TRAVEL_TAG_UP_NEAR_M: float = 2.0
 # a legitimate target at the world origin would otherwise re-trigger it.
 var _mouse_pos: Vector3 = Vector3.ZERO
 var _mouse_pos_initialized: bool = false
+# Where the body was when _mouse_pos was last stepped: the controller caps the
+# blade's speed relative to the skater, so the cursor rides the body and only
+# its own slew is capped.
+var _mouse_body_at: Vector3 = Vector3.INF
 
 
 # Cursor-shaping modes for `_step_mouse_internal`, which steps `_mouse_pos` toward
@@ -3123,6 +3129,10 @@ func _step_mouse_internal(target: Vector3, mode: int,
 	_cached_aim_mode = mode
 	_cached_aim_max_speed = max_speed
 	_cached_aim_arc_rate = arc_rate
+	if _mouse_pos_initialized and _mouse_body_at.is_finite():
+		_mouse_pos.x += _current_self_pos.x - _mouse_body_at.x
+		_mouse_pos.z += _current_self_pos.z - _mouse_body_at.z
+	_mouse_body_at = _current_self_pos
 	var step_target: Vector3 = target
 	if mode == _STEP_ARC:
 		step_target = _arc_step_mouse_target(

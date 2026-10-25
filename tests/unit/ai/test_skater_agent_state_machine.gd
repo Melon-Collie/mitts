@@ -503,6 +503,19 @@ func test_step_toward_within_cap_snaps_to_target() -> void:
 	assert_almost_eq(sm._mouse_pos.z, 0.1, 1e-6)
 
 
+func test_the_cursor_rides_the_body_and_only_its_own_slew_is_capped() -> void:
+	# The controller caps the blade's speed relative to the skater, so a body
+	# skating at 9 m/s still moves the cursor a full slew step across himself.
+	sm._current_self_pos = Vector3.ZERO
+	sm._mouse_pos = Vector3(-1, 0, 0)
+	sm._mouse_pos_initialized = true
+	sm._step_mouse_toward(Vector3(-1, 0, 0))
+	var travel := Vector3(0, 0, -9.0 * Agent.MOUSE_TICK_DELTA)
+	sm._current_self_pos = travel
+	sm._step_mouse_toward(travel + Vector3(1, 0, 0))
+	assert_almost_eq(sm._mouse_pos.x, -1.0 + STEP_MAX, 1e-5, "a full step across him")
+	assert_almost_eq(sm._mouse_pos.z, travel.z, 1e-6, "carried along with him")
+
 func test_step_aim_projects_target_onto_ring() -> void:
 	sm._current_self_pos = Vector3.ZERO
 	sm._current_self_state = _self_state(Vector2(0, 1))
