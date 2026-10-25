@@ -707,7 +707,8 @@ reaches back into what remains.
   - **Body steering** with the puck is threat-gated and route-around
     (`AISteering._carrier_threat_repel`): each defender repels from the closest
     point of his momentum-swept reach (a beaten man exerts nothing; a charger
-    sweeping through produces a sidestep), and the summed force loses any
+    sweeping through produces a sidestep, to the anchor's side or else the side
+    with the ice, never into the boards), and the summed force loses any
     component opposing the anchor direction — pressure bends the carry line but
     never reverses it. Retreat is the carry *deliberation's* call, never a
     reflex.

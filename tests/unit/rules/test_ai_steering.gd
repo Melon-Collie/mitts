@@ -234,6 +234,18 @@ func test_a_head_on_charger_still_forces_the_sidestep_when_moving() -> void:
 	assert_gt(absf(v.x), 0.3, "sidestep perpendicular to the charge line")
 
 
+
+func test_a_charger_down_the_wall_sidesteps_the_carrier_onto_the_ice() -> void:
+	# Up either side wall, met head-on with his anchor on the charger's line: the
+	# side he commits to is the open ice, never the boards beside him.
+	for wall_x: float in [11.5, -11.5]:
+		var anchor := Vector3(wall_x, 0, 8)
+		var opps: Array[Vector3] = [Vector3(wall_x, 0, 4.0)]
+		var vels: Array[Vector3] = [Vector3(0, 0, -6.0)]
+		var v := _moving_carrier_move(Vector3(wall_x, 0, 0), Vector3(0, 0, 4.0), anchor,
+				opps, vels)
+		assert_lt(v.x * signf(wall_x), -0.3, "off the wall at x %.1f; got %s" % [wall_x, v])
+
 # ── Teammate swept-path repel (teammate velocities supplied) ─────────────────
 # With teammate velocities the spacing field repels from each teammate's
 # momentum-swept path, so bots anticipate a crossing route before the bodies
