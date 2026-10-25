@@ -138,14 +138,19 @@ static func pass_launch_speed(distance: float, max_launch: float,
 	return clampf(launch, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S, max_launch)
 
 # ── Saucer pass ──────────────────────────────────────────────────────────────
-# Pure kinematics of the LOW loft's fixed vertical launch
-# (GameRules.DEFAULT_LOFT_VY_LOW_M_S) under gravity:
+# A bot's every pass is a charged wrister, whose LOW loft is the shot ladder's
+# set angle (GameRules.DEFAULT_LOFT_TAN_LOW, ShotMechanics.shot_loft_y), so the
+# lift grows with the pace. Pure kinematics under gravity:
 #
-#   hang time      T_hang = 2·vy / g                       (~0.45 s)
+#   vertical launch vy = v·sin θ                          (~1.2 m/s at 12 m/s)
+#   hang time      T_hang = 2·vy / g
 #   over window    [t_over, t_down] where y(t) exceeds the blade plane
 #                  (GameRules.PUCK_AIRBORNE_HEIGHT_M — the same gate
 #                  PuckReceptionRules.blade_can_interact uses)
-#   airborne carry = launch speed × T_hang (no ice friction in the air)
+#   airborne carry = v·cos θ × T_hang (no ice friction in the air)
+#
+# The quick pass's fixed-vy saucer (GameRules.DEFAULT_LOFT_VY_LOW_M_S) is a
+# human's button; no bot fires it.
 #
 # Inside the over window a defender's reach is LANE_DEFENDER_BODY_RADIUS_M;
 # outside it a stick intercepts normally. An airborne arrival flies over the
@@ -168,24 +173,39 @@ const SAUCER_SKIP_WHEN_LANE_CLEAR: float = 0.85
 const SAUCER_EXTRA_MISS_PROB: float = 0.05
 
 
-# Time a LOW-loft puck spends off the ice (launch to touch-down).
-static func saucer_hang_time_s() -> float:
-	return 2.0 * GameRules.DEFAULT_LOFT_VY_LOW_M_S / GameRules.GRAVITY_M_S2
+# The vertical launch speed of a charged LOW release at `launch_speed`.
+static func saucer_launch_vy(launch_speed: float) -> float:
+	var tan_low: float = GameRules.DEFAULT_LOFT_TAN_LOW
+	return launch_speed * tan_low / sqrt(1.0 + tan_low * tan_low)
+
+
+# Time a saucer launched at `launch_speed` spends off the ice (launch to
+# touch-down).
+static func saucer_hang_time_s(launch_speed: float) -> float:
+	return 2.0 * saucer_launch_vy(launch_speed) / GameRules.GRAVITY_M_S2
 
 
 # Horizontal distance a saucer launched at `launch_speed` covers before
-# touching back down. No ice friction while airborne, so it's linear.
+# touching back down. No ice friction while airborne.
 static func saucer_airborne_distance_m(launch_speed: float) -> float:
-	return launch_speed * saucer_hang_time_s()
+	var tan_low: float = GameRules.DEFAULT_LOFT_TAN_LOW
+	return launch_speed / sqrt(1.0 + tan_low * tan_low) * saucer_hang_time_s(launch_speed)
 
 
 # The fastest launch that still LANDS with SAUCER_LANDING_RUN_M of grounded
 # slide before a receiver `distance` away — the receivability bound (an
-# airborne arrival flies over the tape). Negative/tiny for very short
-# feeds: below min wrister pace there is no legal saucer, the physical
-# floor on saucer distance (~6.5 m at the 10 m/s soft-touch minimum).
+# airborne arrival flies over the tape). The carry goes as the launch squared.
+# 0 for a feed no longer than the runway; below min wrister pace there is no
+# legal saucer, the physical floor on saucer distance (~4 m at the 10 m/s
+# soft-touch minimum).
 static func saucer_max_launch_speed(distance: float) -> float:
-	return (distance - SAUCER_LANDING_RUN_M) / saucer_hang_time_s()
+	var flight: float = distance - SAUCER_LANDING_RUN_M
+	if flight <= 0.0:
+		return 0.0
+	# carry = v² · 2·sin θ·cos θ / g, and sin θ·cos θ = tan θ / (1 + tan² θ).
+	var tan_low: float = GameRules.DEFAULT_LOFT_TAN_LOW
+	var sin_cos: float = tan_low / (1.0 + tan_low * tan_low)
+	return sqrt(flight * GameRules.GRAVITY_M_S2 / (2.0 * sin_cos))
 
 
 # The LAUNCH speed a pass from `shooter` to `receiver` fires at to arrive at
@@ -554,7 +574,7 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	# Over window: y(t) = vy·t − ½·g·t² above the blade plane between its roots.
-	var vy: float = GameRules.DEFAULT_LOFT_VY_LOW_M_S
+	var vy: float = saucer_launch_vy(speed)
 	var root: float = sqrt(maxf(0.0,
 			vy * vy - 2.0 * GameRules.GRAVITY_M_S2 * GameRules.PUCK_AIRBORNE_HEIGHT_M))
 	var t_over: float = (vy - root) / GameRules.GRAVITY_M_S2

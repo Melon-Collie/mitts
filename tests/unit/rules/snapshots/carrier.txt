@@ -21,7 +21,7 @@ wide in the zone, open man at the far-post backdoor: pick	CARRY to (3.2, -22.9)
 our end, middle clogged, winger ahead with a clear path: pick	PASS to 2
 central in the zone, open mate wide at a poor angle: intent	PASS
 neutral ice, straight lane clogged, close outlet up-ice: pick	PASS to 2
-8 m feed past a mid-lane stick: variant	FLAT
+8 m feed past a mid-lane stick: variant	SAUCER
 pinged ahead man 9 m out behind a mid-lane stick: variant	SAUCER
 board pincer closing, open outlet across: pick	PASS to 2
 light pressure, only a covered mate behind: intent	CARRY

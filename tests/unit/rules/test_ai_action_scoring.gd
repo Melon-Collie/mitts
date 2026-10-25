@@ -1030,22 +1030,37 @@ func test_lane_clear_saucer_the_man_it_flew_over_plays_the_landing() -> void:
 
 
 func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
-	# The receivability bound: launch × hang time + landing run must fit
+	# The receivability bound: the airborne carry + landing run must fit
 	# inside the pass distance. At the bound the flip lands exactly a
 	# landing-run short of the tape; below the soft-touch wrister floor
-	# (~6.5 m feeds and shorter) no legal saucer exists.
+	# (~4 m feeds and shorter) no legal saucer exists.
 	var bound: float = AIPuckLane.saucer_max_launch_speed(10.0)
 	assert_almost_eq(
 			AIPuckLane.saucer_airborne_distance_m(bound)
 					+ AIPuckLane.SAUCER_LANDING_RUN_M,
 			10.0, 0.0001,
 			"at the bound the flip lands exactly a landing-run before the tape")
-	assert_gt(AIPuckLane.saucer_max_launch_speed(7.0),
+	assert_gt(AIPuckLane.saucer_max_launch_speed(5.0),
 			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
-			"a 7 m feed still admits a soft saucer above the wrister floor")
-	assert_lt(AIPuckLane.saucer_max_launch_speed(6.0),
+			"a 5 m feed still admits a soft saucer above the wrister floor")
+	assert_lt(AIPuckLane.saucer_max_launch_speed(3.5),
 			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
-			"a 6 m feed can't be saucered — even the softest flip lands too late")
+			"a 3.5 m feed can't be saucered — even the softest flip lands too late")
+
+
+func test_a_saucer_carries_what_a_charged_low_release_flies() -> void:
+	# The bots' saucer is a charged wrister at LOW loft: the carry the pass
+	# search prices is the one ShotMechanics launches, landing where a puck at
+	# that launch comes back down.
+	for pace: float in [12.0, 16.0, 20.0]:
+		var cfg := ShotMechanics.WristerConfig.new()
+		var r: ShotMechanics.ShotResult = ShotMechanics.release_wrister(Vector3.ZERO,
+				Vector3(0, 0, -10), Vector3.ZERO, false, ShotMechanics.ELEVATION_LOW, cfg,
+				Vector3(0, 0, -1), false)
+		var v: Vector3 = r.direction * pace
+		var flight_s: float = 2.0 * v.y / GameRules.GRAVITY_M_S2
+		assert_almost_eq(AIPuckLane.saucer_airborne_distance_m(pace),
+				Vector2(v.x, v.z).length() * flight_s, 0.01, "at %.0f m/s" % pace)
 
 
 # ── lane_loss_point: interceptor location for the turnover-cost term ──────────
