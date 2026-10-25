@@ -3058,6 +3058,13 @@ func _solve_wrister_load(input: InputState) -> void:
 	WristerLoad.solve(wrister_load, to_local * Vector3(pin.x, 0.0, pin.z),
 			to_local * _wrister_aim_dir(input), skater.is_left_handed, _wrister_load_config())
 
+# Share of the full shot the body can drive along this tick's aim (the torso's
+# turn and the arms' push, before the backhand's coefficient): how far the aim
+# pose squares the shoulders onto the aim.
+func wrister_drive_share() -> float:
+	return WristerLoad.power_share(wrister_load.load_share, wrister_load.arm_share, false,
+			wrister_unloaded_share, 1.0)
+
 # The most a release can carry once the load is applied.
 func _wrister_load_cap(is_backhand: bool) -> float:
 	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share,
