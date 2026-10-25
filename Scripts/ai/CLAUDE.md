@@ -206,6 +206,14 @@ stick-reach toward our own net so the approach arrives on the inside lane and th
 carrier's only escape is outside; a straight-line chase lets them cut to the
 middle. Loose pucks get the raw intercept — there is no carrier to angle off.
 
+**A pass in reach is played where the stick gets on it.** A loose puck whose path
+comes within a stride of the stick is chased to the first point the stick can
+reach in time (`AILoosePuckChase.reach_meet_time`, stick out), not to where the
+body could meet it after settling it: the setup margin prices killing a fast
+puck, and waiting for it chases a pass down the lane past the man it is going
+to. This is what lets a defender play a passing lane, and the carrier's lane
+read prices it on the same clock (`AILaneReach`).
+
 ## Who may play the puck
 
 "Can this skater legally touch the puck right now?" is

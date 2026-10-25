@@ -298,6 +298,21 @@ func test_lead_intercept_receding_fast_puck_is_chased_to_where_he_can_make_it() 
 			"he steers to a point he can make, or to the end of the walk")
 
 
+
+func test_lead_intercept_puts_the_stick_in_a_lane_passing_a_stride_off() -> void:
+	# A 12 m/s cross-ice pass whose line runs 2 m off a backing-in defender: his
+	# stick is on it with a step, half a second out. He steers into the lane
+	# there, not to where his body could catch the puck down by the end boards.
+	var self_pos := Vector3(0, 0, -19.4)
+	var puck_pos := Vector3(-3.9, 0, -14.0)
+	var puck_vel := Vector3(9.9, 0, -7.3)
+	var out: Vector3 = sm._lead_intercept(self_pos, Vector3(0.3, 0, -1.8), puck_pos, puck_vel)
+	assert_lt(out.distance_to(self_pos), sm._blade_reach + AILoosePuckChase.INCIDENTAL_STRIDE_M,
+			"the lane a stride off him, not %s" % out)
+	var dir: Vector3 = puck_vel.normalized()
+	var off: Vector3 = out - puck_pos
+	assert_almost_eq((off - dir * off.dot(dir)).length(), 0.0, 0.1, "on the pass's line")
+
 func test_lead_intercept_moving_with_puck_is_where_a_flying_start_closes() -> void:
 	# Already at top speed right behind a slower puck: he meets it no later than
 	# a body holding top speed closes the gap down to his stick on a puck that
@@ -396,14 +411,17 @@ func test_lead_intercept_agrees_with_the_election() -> void:
 	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
 			/ float(AILoosePuckChase.RACE_STEPS)
-	# Same solver, same walk, same margin, and the body's own stick — the self
-	# read passes reach where the election deliberately does not (see the reach
-	# block in AILoosePuckChase), so the agreement is of MODEL, not of arguments.
-	var elected: Vector3 = AILoosePuckChase.path_intercept_point(
-			traj, step_dt, puck_pos, AILoosePuckChase.path_intercept_time(
+	# Same solver, same walk, same margin, the same stick-out meet, and the
+	# body's own stick — the self read passes reach where the election
+	# deliberately does not (see the reach block in AILoosePuckChase), so the
+	# agreement is of MODEL, not of arguments.
+	var t: float = minf(AILoosePuckChase.path_intercept_time(
 					traj, step_dt, puck_pos, self_pos, self_vel,
 					sm._self_max_speed, AILoosePuckChase.setup_margin(puck_vel),
-					sm._chase_max_accel, sm._blade_reach))
+					sm._chase_max_accel, sm._blade_reach),
+			AILoosePuckChase.reach_meet_time(traj, puck_pos, puck_vel, self_pos,
+					self_vel, sm._self_max_speed, sm._blade_reach, true, true))
+	var elected: Vector3 = AILoosePuckChase.path_intercept_point(traj, step_dt, puck_pos, t)
 	var steered: Vector3 = sm._lead_intercept(
 			self_pos, self_vel, puck_pos, puck_vel)
 	assert_almost_eq(steered.distance_to(elected), 0.0, 0.001,

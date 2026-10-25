@@ -3486,6 +3486,11 @@ func _lead_intercept(self_pos: Vector3, self_vel: Vector3, puck_pos: Vector3,
 			traj, step_dt, puck_pos, self_pos, self_vel, cap,
 			AILoosePuckChase.setup_margin(puck_vel), _chase_max_accel, _blade_reach,
 			AILoosePuckChase.race_playable_time(puck_pos, puck_vel))
+	# A puck passing within a stride of our stick is played where the stick first
+	# gets on it: the set-up margin prices settling a fast puck, and waiting for
+	# it chases a pass down the lane past the man it is going to.
+	t = minf(t, AILoosePuckChase.reach_meet_time(traj, puck_pos, puck_vel,
+			self_pos, self_vel, cap, _blade_reach, true, true))
 	# The TIME is reach-aware; the steering target is not pulled back onto the
 	# reach circle. Where the blade can first touch the puck is the right answer
 	# to "am I in this race"; the body should still drive at the meeting point
