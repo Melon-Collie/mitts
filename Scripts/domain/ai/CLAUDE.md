@@ -785,7 +785,11 @@ reaches back into what remains.
     election too, raced at the puck's own time to his band (`reach_meet_time`,
     never the passer's own blade as a feed leaves it): a 15 m/s feed steps clean
     over a receiver between two samples of the body race, and the far point was
-    elected to chase our own pass while it reached its man.
+    elected to chase our own pass while it reached its man. The election times
+    his body only to within a blade of the meet (`stick_out`), so a receiver
+    skating into a feed a couple of metres off his body is still its man; the
+    band itself times the body to the crossing, since it breaks a bot off his
+    job and a feed is never in reach of the blade it is leaving.
   - The **incidental reach band** (`puck_comes_to_reach`) answers "is this puck
     coming to *me*", which is not the election's business. Losing a race by
     0.3 s is no reason to hold your station while the puck slides past your

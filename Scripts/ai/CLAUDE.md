@@ -151,6 +151,14 @@ the blade past the meet, or when their own skating is what carries a feed past
 the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
 its own bobbles however they skate.
 
+**The stance rides the receiver's own skating.** The meet is a rendezvous, so a
+receiver driving into the feed stands where his skating takes him, a stance off
+the puck's path *in his frame* (the face is square across the shaft), and only
+that correction needs the flight's time. He never steers onto the puck's own
+line, which turns the hips to it before contact. The net-forward catch of a shot
+reception stands him behind the catch point, so it is only taken when he gets
+there first; one driving past it takes the feed in stride.
+
 Against the boards the read inverts: the blade goes ON the glass and the body
 stands rink-side, because a blade out on the puck's line leaves exactly the gap a
 rim squirts through.
