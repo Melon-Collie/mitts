@@ -236,7 +236,8 @@ func _read_receivers() -> void:
 # read after it for one that went by him (past, off the iron or boards,
 # stopped), which he has to see. So one made too late is still seen made. A shot over before he has
 # read it at all he answers once he has: the save for the flight he saw leave
-# the stick, however late.
+# the stick, however late. One chosen where he could not go down (mid-slide)
+# is chosen again once he can, while the puck is still coming.
 func _save_the_shot() -> void:
 	if not read.reading():
 		return
@@ -246,6 +247,9 @@ func _save_the_shot() -> void:
 	if _over_at < 0.0 and (read.time_to_line() == INF or (_chosen and read.age > _chosen_at + save.impact_s)):
 		_over_at = read.age
 	if _chosen:
+		if not save.lows_open and _over_at < 0.0 and (motor.can_save(false) or motor.can_save(true)):
+			_choose()
+			return
 		# A puck off him he feels at once; one by him he has to see.
 		var noticed: float = 0.0 if _felt else read.leg_delay_s
 		if _over_at >= 0.0 and read.age >= maxf(_over_at, _chosen_at + save.ready_s) + noticed:
@@ -259,6 +263,10 @@ func _save_the_shot() -> void:
 		read.stop()
 		return
 	_chosen = true
+	_choose()
+
+
+func _choose() -> void:
 	_chosen_at = read.age
 	save.choose(read, motor, _keeper.skeleton.mirrored)
 	if save.low != KeeperSaveMove.Low.NONE:
