@@ -19,6 +19,17 @@ var _puck: Puck = null
 var _keeper: KeeperController = null
 
 
+# A brain that asks nothing of the motor, so a move given to it by hand plays out.
+class QuietBrain extends KeeperPositioning:
+	func decide(_puck_at: Vector2, _motion: Vector2, _motor: KeeperMotor) -> void:
+		pass
+
+
+func _quiet() -> void:
+	_keeper.brain = QuietBrain.new()
+	_keeper.brain.play = _keeper.play
+
+
 func _spawn(goal_line_z: float) -> void:
 	_goalie = GOALIE_SCENE.instantiate() as Goalie
 	_puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
@@ -264,6 +275,53 @@ func test_a_shot_that_beats_his_read_is_still_answered() -> void:
 				or _keeper.save.hand_there()
 	assert_true(made, "a save made once he has read it")
 	assert_true(into, "and carried all the way into")
+
+
+# A low shot while he is getting back up off the ice (a rebound) still takes
+# him down: the save cuts into the rise.
+func test_a_low_shot_mid_rise_takes_him_back_down() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
+	_run(1.5)
+	_quiet()
+	_keeper.motor.drop_down()
+	_run(0.5)
+	_keeper.motor.rise()
+	_run(0.1)
+	assert_eq(_keeper.motor._mover, KeeperMotor.Mover.DROP, "on his way up")
+	_shot(Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0), Vector2(0.6, KeeperShotRead.ON_ICE_Y), 22.0)
+	assert_true(_keeper._chosen, "the shot read")
+	assert_ne(_keeper.save.low, KeeperSaveMove.Low.NONE, "a low save for it")
+
+
+# A low shot read while he slides, when no save can cut in, gets its low save
+# once the slide lands, while the puck is still coming.
+func test_a_shot_read_mid_slide_is_saved_once_he_lands() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 18.0)
+	_run(1.5)
+	_quiet()
+	_keeper.motor.drop_down()
+	_run(0.5)
+	_keeper.motor.slide_to(Vector2(_keeper.motor.x + 0.3, _keeper.motor.z))
+	_run(DT)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 18.0)
+	var v: Vector3 = (Vector3(-0.7, _puck.ice_height, GameRules.GOAL_LINE_Z) - _puck.global_position).normalized() * 15.0
+	_puck.set_puck_velocity(v)
+	_puck.puck_released.emit()
+	var blocked: bool = false
+	var reopened: bool = false
+	for i: int in int(1.2 / DT):
+		_puck.global_position += v * DT
+		_puck.set_puck_velocity(v)
+		_keeper._physics_process(DT)
+		if _keeper._chosen and not _keeper.save.lows_open:
+			blocked = true
+		elif blocked and _keeper._chosen and _keeper.save.low != KeeperSaveMove.Low.NONE:
+			reopened = true
+			break
+	assert_true(blocked, "read while he could not go down")
+	assert_true(reopened, "its low save made once he could")
 
 
 # A puck that hits him he feels: once his save is there, the shot off him, he

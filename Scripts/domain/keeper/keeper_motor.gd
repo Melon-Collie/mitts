@@ -70,6 +70,11 @@ var route := KeeperRoute.new(footwork, drop, slide, post, PIVOT_RATE_RAD_S, PIVO
 var save_move := KeeperSaveMove.new()
 var glide := KeeperGlide.new()
 var low_ready := KeeperLowReady.new()
+# The share of a drop's time a low save cut in now takes to fall: from his feet
+# as far as he has sunk into the low ready; between his feet and the ice, a fall
+# from rest over the height he has left (its root), no shorter than the low
+# ready's, since a leg the save stands up or kicks out still has to get there.
+var fall: float = 1.0
 
 var _queue: Array[_Ask] = []
 var _goal: bool = false
@@ -227,18 +232,21 @@ func rvh_fold_out() -> void:
 
 
 # Whether a low save can cut in now: from his feet, standing or with footwork
-# or a pivot under way; down (`down`), only once he is at rest there.
+# or a pivot under way, or between his feet and the ice (a drop, a rise or a
+# recovery under way, or gathering back up after a kick); down (`down`), at
+# rest there or gathering into the butterfly after a save.
 func can_save(down: bool) -> bool:
+	var gathering: bool = _mover == Mover.SAVE and save_move.state == KeeperSaveMove.State.GATHERING
 	if down:
-		return rest == Rest.DOWN and _mover == Mover.NONE
+		return rest == Rest.DOWN and _mover == Mover.NONE or gathering and save_move.rests_down()
 	return rest == Rest.FEET and (_mover == Mover.NONE or _mover == Mover.PIVOT or _mover == Mover.FOOTWORK
-			or _mover == Mover.GLIDE)
+			or _mover == Mover.GLIDE) or _mover == Mover.DROP or gathering and not save_move.rests_down()
 
 
 # The low save `low` to `side`, cutting in now.
 func save(low: int, side: float) -> void:
 	pose(_cut)
-	save_move.fall = low_ready.fall_share()
+	save_move.fall = fall
 	low_ready.cut()
 	save_move.start(_cut, low, side, Vector2(x, z), _velocity)
 	footwork.set_still()
@@ -318,6 +326,7 @@ func step(dt: float) -> void:
 			or _mover == Mover.FOOTWORK and footwork.move == KeeperFootwork.Move.SHUFFLE
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
+	fall = maxf(sqrt(1.0 - drop.down), KeeperLowReady.fall_share_at(1.0)) if _mover == Mover.DROP else low_ready.fall_share()
 
 
 func _step_mover(dt: float) -> void:
