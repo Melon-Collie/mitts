@@ -169,6 +169,12 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 		skater.visual_offset = Vector3.ZERO
 
 func _physics_process(delta: float) -> void:
+	var t0: int = Time.get_ticks_usec()
+	_step_tick(delta)
+	HostCostProbe.record(HostCostProbe.Section.HUMAN_STEP, Time.get_ticks_usec() - t0)
+
+
+func _step_tick(delta: float) -> void:
 	if skater == null or puck == null or _gatherer == null:
 		return
 	# Cleared every tick; set true below only on ticks that process an input, so

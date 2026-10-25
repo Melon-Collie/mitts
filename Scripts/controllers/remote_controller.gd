@@ -121,7 +121,9 @@ func _physics_process(delta: float) -> void:
 	# swept-segment pickup/poke test. See Skater.capture_prev_blade_contact.
 	skater.capture_prev_blade_contact()
 	if _is_host:
+		var t0: int = Time.get_ticks_usec()
 		_drive_from_input(delta)
+		HostCostProbe.record(HostCostProbe.Section.HUMAN_STEP, Time.get_ticks_usec() - t0)
 	else:
 		# Live interpolation owns this body's cosmetics, so the render-rate gait
 		# hook must run. Clear _self_posing here: a replay driving this same skater

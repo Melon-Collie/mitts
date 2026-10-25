@@ -103,11 +103,11 @@ Per host physics tick, 8333 µs budget at 120 Hz:
 | **attributed total** | **~2500** | |
 | *AI worker (off-thread)* | *1330* | worker behind on <6% of ticks |
 
-Taken in an all-bot 5v5, which matters for two rows. `SKATER_STEP` is recorded
-only inside `AIController.apply_decision`, so a human's controller step
-(`LocalController` / `RemoteController`, priority −1) is in no section. And the
-goalie row measures the goalie before `KeeperController`; nothing records
-`GOALIE_PHYS` now, so the panel reads zero there.
+Taken in an all-bot 5v5 and before `KeeperController`, so two rows have moved
+since. The skater step above is the bots' only (`SKATER_STEP`, inside
+`AIController.apply_decision`); a human's (`LocalController` /
+`RemoteController`, at priority −1) is its own row, "human skater steps". The
+goalie row measures the goalie the keeper replaced.
 
 Three things this settled:
 

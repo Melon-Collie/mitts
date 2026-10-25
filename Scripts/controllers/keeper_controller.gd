@@ -149,6 +149,7 @@ func _physics_process(delta: float) -> void:
 	# A back-date is for the release it was set before, never a later one.
 	_pending_reaction_back_date = 0.0
 	var was: Vector3 = goalie.global_position
+	var t0: int = Time.get_ticks_usec()
 	if is_server:
 		_play(delta)
 	else:
@@ -158,6 +159,7 @@ func _physics_process(delta: float) -> void:
 	_measure_motion(was, delta)
 	if is_server and _holding >= 0.0:
 		_hold_catch(delta)
+	HostCostProbe.record(HostCostProbe.Section.GOALIE_PHYS, Time.get_ticks_usec() - t0)
 
 
 # His tick on the host: what he reads of the play and the shot, the save and

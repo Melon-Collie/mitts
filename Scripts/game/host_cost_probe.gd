@@ -61,20 +61,26 @@ enum Section {
 	GOALIE_PHYS,   # the goalies' _physics_process, x2
 	GM_TAIL,       # goal / bounds / ghost checks and the four trackers
 	NET_CAPTURE,   # end-of-tick ring capture + broadcast
+	# SkaterController._process_input for the humans: the host's own player
+	# (LocalController) and each client it simulates (RemoteController), at
+	# priority -1, ahead of GameManager. SKATER_STEP is the bots' share of the
+	# same call; together they are the whole skater step.
+	HUMAN_STEP,
 }
 
-const SECTION_COUNT: int = 12
+const SECTION_COUNT: int = 13
 # The top-level main-thread sections — each time spent once. Nested ones
 # (AI_APPLY, SKATER_STEP, AI_KICK sit inside DISPATCH) and the worker's
 # (BRAINS, WORKER) are left out, so a sum over these never counts twice.
 const MAIN_THREAD_SECTIONS: Array[int] = [
 	Section.SNAPSHOT, Section.DISPATCH, Section.SKATER_PHYS, Section.PUCK_PHYS,
-	Section.GOALIE_PHYS, Section.GM_TAIL, Section.NET_CAPTURE,
+	Section.GOALIE_PHYS, Section.GM_TAIL, Section.NET_CAPTURE, Section.HUMAN_STEP,
 ]
 const SECTION_NAMES: Array[String] = [
 	"snapshot", "brains (in worker)", "dispatch (total)", "  dispatch: apply",
 	"    of which skater step", "  dispatch: kick", "worker (off-thread)",
 	"skater bodies", "puck", "goalies", "game tail", "capture + broadcast",
+	"human skater steps",
 ]
 
 # One publish per second of host simulation. Matches the cadence a reader can
@@ -231,7 +237,8 @@ static func tick_total_mean_us() -> float:
 	return _pub_mean_us[Section.SNAPSHOT] + _pub_mean_us[Section.BRAINS] \
 			+ _pub_mean_us[Section.DISPATCH] + _pub_mean_us[Section.SKATER_PHYS] \
 			+ _pub_mean_us[Section.PUCK_PHYS] + _pub_mean_us[Section.GOALIE_PHYS] \
-			+ _pub_mean_us[Section.GM_TAIL] + _pub_mean_us[Section.NET_CAPTURE]
+			+ _pub_mean_us[Section.GM_TAIL] + _pub_mean_us[Section.NET_CAPTURE] \
+			+ _pub_mean_us[Section.HUMAN_STEP]
 
 
 # The worst main-thread AI tick in the window. Not the sum of the per-section
