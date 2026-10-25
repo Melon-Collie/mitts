@@ -15,12 +15,18 @@ const HAIR_SHORT: int = 0
 const HAIR_MEDIUM: int = 1
 const HAIR_LONG: int = 2
 const HAIR_BALD: int = 3
+const HAIR_MULLET: int = 4
+const HAIR_BUZZ: int = 5
+const HAIR_SHAGGY: int = 6
 
 const HAIR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_STYLE_SHORT",
 	&"HAIR_STYLE_MEDIUM",
 	&"HAIR_STYLE_LONG",
 	&"HAIR_STYLE_BALD",
+	&"HAIR_STYLE_MULLET",
+	&"HAIR_STYLE_BUZZ",
+	&"HAIR_STYLE_SHAGGY",
 ]
 
 const FACIAL_NONE: int = 0
@@ -28,6 +34,8 @@ const FACIAL_STUBBLE: int = 1
 const FACIAL_MUSTACHE: int = 2
 const FACIAL_GOATEE: int = 3
 const FACIAL_BEARD: int = 4
+const FACIAL_HORSESHOE: int = 5
+const FACIAL_PLAYOFF_BEARD: int = 6
 
 const FACIAL_NAME_KEYS: Array[StringName] = [
 	&"FACIAL_HAIR_NONE",
@@ -35,6 +43,8 @@ const FACIAL_NAME_KEYS: Array[StringName] = [
 	&"FACIAL_HAIR_MUSTACHE",
 	&"FACIAL_HAIR_GOATEE",
 	&"FACIAL_HAIR_BEARD",
+	&"FACIAL_HAIR_HORSESHOE",
+	&"FACIAL_HAIR_PLAYOFF_BEARD",
 ]
 
 const COLOR_NAME_KEYS: Array[StringName] = [

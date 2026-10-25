@@ -114,11 +114,16 @@ HAIR_STYLE_SHORT,Short,Corto
 HAIR_STYLE_MEDIUM,Medium,Medio
 HAIR_STYLE_LONG,Long,Largo
 HAIR_STYLE_BALD,Bald,Calvo
+HAIR_STYLE_MULLET,Mullet,Mullet
+HAIR_STYLE_BUZZ,Buzz cut,Rapado
+HAIR_STYLE_SHAGGY,Shaggy,Desgreñado
 FACIAL_HAIR_NONE,None,Ninguna
 FACIAL_HAIR_STUBBLE,Stubble,Barba de días
 FACIAL_HAIR_MUSTACHE,Mustache,Bigote
 FACIAL_HAIR_GOATEE,Goatee,Perilla
 FACIAL_HAIR_BEARD,Full beard,Barba completa
+FACIAL_HAIR_HORSESHOE,Horseshoe,Herradura
+FACIAL_HAIR_PLAYOFF_BEARD,Playoff beard,Barba de playoffs
 HAIR_COLOR_DARK_BROWN,Dark brown,Castaño oscuro
 HAIR_COLOR_BLACK,Black,Negro
 HAIR_COLOR_BROWN,Brown,Castaño

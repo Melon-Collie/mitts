@@ -63,20 +63,22 @@ func test_the_scalp_hides_its_top_edge_inside_the_head() -> void:
 
 
 # The face gear rides a sphere a centimetre or so off the head (the same bound
-# test_skater_face_mesh.gd holds the face to). Facial hair lives entirely under
-# it; scalp hair only meets it at the sideburns, inside the fishbowl's footprint
-# — the widest and deepest of the three pieces.
+# test_skater_face_mesh.gd holds the face to), down to the fishbowl's chin edge
+# — the deepest of the three pieces. Facial hair lives under it above that
+# edge, and may hang out past it below; scalp hair only meets it at the
+# sideburns, inside the fishbowl's footprint, the widest of them too.
 func test_hair_stays_inside_the_face_gear() -> void:
 	var gear_r: float = minf(SkaterMeshBuilder._CAGE_RADIUS,
 			SkaterMeshBuilder._FACE_SHIELD_RADIUS) - 0.001
+	var gear_floor: float = SkaterMeshBuilder._FACE_SHIELD_RADIUS \
+			* cos(PI * SkaterMeshBuilder._FISHBOWL_V1)
 	for mesh: ArrayMesh in _facials():
 		var worst: float = 0.0
 		for v: Vector3 in _verts(mesh):
-			worst = maxf(worst, v.length())
+			if v.y > gear_floor:
+				worst = maxf(worst, v.length())
 		assert_lt(worst, gear_r,
 				"facial hair reaches %.4f m from the helmet centre" % worst)
-	var gear_floor: float = SkaterMeshBuilder._FACE_SHIELD_RADIUS \
-			* cos(PI * SkaterMeshBuilder._FISHBOWL_V1)
 	for mesh: ArrayMesh in _scalps():
 		var worst: float = 0.0
 		for v: Vector3 in _verts(mesh):
@@ -110,7 +112,8 @@ func test_visible_hair_stands_off_the_head() -> void:
 		if v.z > 0.05 and v.y < -0.105:
 			head_far = maxf(head_far, v.z)
 	for style: int in [HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MEDIUM,
-			HairStyleRegistry.HAIR_LONG]:
+			HairStyleRegistry.HAIR_LONG, HairStyleRegistry.HAIR_MULLET,
+			HairStyleRegistry.HAIR_SHAGGY]:
 		var reach: float = 0.0
 		for v: Vector3 in _verts(SkaterHairMesh.shared_hair(style)):
 			if absf(v.x) < 0.01 and v.y < -0.105 and v.y > -0.118:
@@ -227,7 +230,7 @@ func test_no_skin_shows_through_the_scalp_below_the_rim() -> void:
 		assert_gt(hits, 10, "hair style %d was sampled" % style)
 
 
-func test_stubble_is_translucent_and_hair_is_not() -> void:
+func test_stubble_and_a_buzz_are_translucent_and_hair_is_not() -> void:
 	var hair: StandardMaterial3D = SkaterHairMesh.make_material(1, false)
 	assert_eq(hair.transparency, BaseMaterial3D.TRANSPARENCY_DISABLED, "hair is opaque")
 	assert_eq(hair.cull_mode, BaseMaterial3D.CULL_DISABLED, "hair sheets render two-sided")
@@ -236,3 +239,5 @@ func test_stubble_is_translucent_and_hair_is_not() -> void:
 	assert_almost_eq(stubble.albedo_color.a, SkaterHairMesh.STUBBLE_ALPHA, 0.001)
 	assert_true(SkaterHairMesh.is_translucent(HairStyleRegistry.FACIAL_STUBBLE))
 	assert_false(SkaterHairMesh.is_translucent(HairStyleRegistry.FACIAL_BEARD))
+	assert_true(SkaterHairMesh.is_scalp_translucent(HairStyleRegistry.HAIR_BUZZ))
+	assert_false(SkaterHairMesh.is_scalp_translucent(HairStyleRegistry.HAIR_SHORT))

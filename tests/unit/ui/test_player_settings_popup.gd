@@ -74,7 +74,7 @@ func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_btn("_tuck_btn").item_count, GearModelRegistry.tuck_count())
 	assert_eq(_btn("_facial_btn").item_count, HairStyleRegistry.facial_count())
 	assert_eq(_buttons("_face_btns").size(), GearModelRegistry.face_count())
-	assert_eq(_buttons("_hair_btns").size(), HairStyleRegistry.hair_count())
+	assert_eq(_btn("_hair_btn").item_count, HairStyleRegistry.hair_count())
 	assert_eq(_buttons("_hair_color_buttons").size(), HairStyleRegistry.color_count())
 	assert_eq(_buttons("_skin_buttons").size(), SkinToneRegistry.TONES.size())
 	assert_eq(_btn("_skate_btn").selected, GearModelRegistry.SKATE_RETRO)
@@ -108,7 +108,7 @@ func test_a_model_pick_lands_in_the_draft_and_on_the_figure() -> void:
 # The hair lives in the packed gear code beside the equipment; a pick must land
 # in the pending code without disturbing the equipment fields.
 func test_a_hair_pick_lands_in_the_draft_and_nowhere_else() -> void:
-	_press(_buttons("_hair_btns"), HairStyleRegistry.HAIR_LONG)
+	_btn("_hair_btn").item_selected.emit(HairStyleRegistry.HAIR_LONG)
 	_btn("_facial_btn").item_selected.emit(HairStyleRegistry.FACIAL_GOATEE)
 	_press(_buttons("_hair_color_buttons"), 5)
 	var gear: GearStyleConfig = _draft().gear()
@@ -118,17 +118,17 @@ func test_a_hair_pick_lands_in_the_draft_and_nowhere_else() -> void:
 	assert_eq(gear.skate_model, GearModelRegistry.SKATE_RETRO, "the equipment is untouched")
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_VISOR)
 	assert_eq(_picked(_buttons("_hair_color_buttons")), 5, "one swatch is ringed")
-	assert_eq(_picked(_buttons("_hair_btns")), HairStyleRegistry.HAIR_LONG)
+	assert_eq(_btn("_hair_btn").selected, HairStyleRegistry.HAIR_LONG)
 	assert_false((_popup.get("_apply_btn") as Button).disabled, "Apply wakes up")
 
 
 func test_cancel_drops_the_edits() -> void:
-	_press(_buttons("_hair_btns"), HairStyleRegistry.HAIR_BALD)
+	_btn("_hair_btn").item_selected.emit(HairStyleRegistry.HAIR_BALD)
 	_press((_gear_row(&"curve").get("buttons") as Array), 2)
 	_popup.call("_cancel")
 	_popup.open()
 	assert_eq(_draft().gear().hair_style, HairStyleRegistry.HAIR_SHORT)
-	assert_eq(_picked(_buttons("_hair_btns")), HairStyleRegistry.HAIR_SHORT)
+	assert_eq(_btn("_hair_btn").selected, HairStyleRegistry.HAIR_SHORT)
 	assert_eq(_draft().curve, PlayerAttributes.GEAR_BALANCED)
 	assert_true((_popup.get("_apply_btn") as Button).disabled, "nothing pending")
 
@@ -252,12 +252,12 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 func test_every_row_control_is_pad_reachable() -> void:
 	var controls: Array[Control] = [_btn("_skate_btn"), _btn("_glove_btn"),
 		_btn("_stick_model_btn"), _btn("_span_btn"), _btn("_style_btn"), _btn("_tuck_btn"),
-		_btn("_facial_btn"), _popup.get("_height_slider") as Control,
+		_btn("_hair_btn"), _btn("_facial_btn"), _popup.get("_height_slider") as Control,
 		_popup.get("_weight_slider") as Control, _popup.get("_name_field") as Control,
 		_popup.get("_number_field") as Control]
 	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
 		controls.append((_popup.get(field) as SwatchDropdown).focus_target())
-	for field: String in ["_face_btns", "_hair_btns", "_hair_color_buttons", "_skin_buttons",
+	for field: String in ["_face_btns", "_hair_color_buttons", "_skin_buttons",
 			"_shoots_btns", "_position_btns", "_tab_btns"]:
 		for b: Control in _buttons(field):
 			controls.append(b)

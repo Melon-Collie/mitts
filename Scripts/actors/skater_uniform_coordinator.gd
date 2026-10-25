@@ -560,8 +560,8 @@ func _repaint_head_pieces() -> void:
 	var gear: GearStyleConfig = _skater.gear_style
 	_paint_head_piece(SkaterArmRig.HeadPiece.FACE_GEAR,
 			SkaterMeshBuilder.make_face_gear_material(gear.helmet_face))
-	_paint_head_piece(SkaterArmRig.HeadPiece.SCALP,
-			SkaterHairMesh.make_material(gear.hair_color, false))
+	_paint_head_piece(SkaterArmRig.HeadPiece.SCALP, SkaterHairMesh.make_material(
+			gear.hair_color, SkaterHairMesh.is_scalp_translucent(gear.hair_style)))
 	_paint_head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR, SkaterHairMesh.make_material(
 			gear.hair_color, SkaterHairMesh.is_translucent(gear.facial_hair)))
 	_paint_head_piece(SkaterArmRig.HeadPiece.BROWS,

@@ -25,6 +25,9 @@ const _SPACING_M: float = 0.40
 const _ROW_M: float = 0.42
 const _ORTHO_MARGIN_M: float = 0.40
 const _LABEL_DROP_M: float = 0.20
+# One head's share of the window: the ortho camera fits the columns to its
+# width, so this keeps _ROW_M of height per row at that scale.
+const _CELL_PX := Vector2i(300, 315)
 # Each shot's yaw off facing the camera, degrees.
 const _SHOT_YAWS: Array[float] = [30.0, 90.0, 150.0]
 const _SHOT_NAMES: Array[String] = ["front", "side", "back"]
@@ -41,7 +44,7 @@ var _hair_color: int = 0
 func _init() -> void:
 	var cols: int = HairStyleRegistry.facial_count()
 	var rows: int = HairStyleRegistry.hair_count()
-	DisplayServer.window_set_size(Vector2i(1500, 1300))
+	DisplayServer.window_set_size(Vector2i(_CELL_PX.x * cols, _CELL_PX.y * rows + 40))
 	_face = _env_int("MITTS_FACE", GearModelRegistry.FACE_NONE)
 	_skin = _env_int("MITTS_SKIN", SkinToneRegistry.DEFAULT_INDEX)
 	_hair_color = _env_int("MITTS_HAIR_COLOR", 0)
@@ -105,7 +108,7 @@ func _place(at: Vector3, hair: int, facial: int) -> void:
 	head.add_child(helmet)
 
 	_add_piece(head, SkaterHairMesh.shared_hair(hair),
-			SkaterHairMesh.make_material(_hair_color, false))
+			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_scalp_translucent(hair)))
 	_add_piece(head, SkaterHairMesh.shared_brows(),
 			SkaterHairMesh.make_material(_hair_color, false))
 	_add_piece(head, SkaterHairMesh.shared_facial_hair(facial),
