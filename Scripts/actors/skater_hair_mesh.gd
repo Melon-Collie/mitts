@@ -63,15 +63,8 @@ const _MEDIUM: Array[Vector3] = [
 	Vector3(108.0, -0.062, 0.005),
 	Vector3(125.0, -0.040, 0.003),
 ]
-# Long hair hangs past the helmet over the collar and kicks out at the ends.
-const _LONG: Array[Vector3] = [
-	Vector3(0.0, -0.175, 0.010),
-	Vector3(50.0, -0.168, 0.010),
-	Vector3(85.0, -0.135, 0.009),
-	Vector3(105.0, -0.080, 0.006),
-	Vector3(125.0, -0.045, 0.003),
-]
-# Short's sides and sideburns, long's back: the drop happens behind the ear.
+# Short's sides and sideburns, hanging past the helmet over the collar at the
+# back: the drop happens behind the ear.
 const _MULLET: Array[Vector3] = [
 	Vector3(0.0, -0.182, 0.010),
 	Vector3(35.0, -0.176, 0.010),
@@ -106,7 +99,6 @@ const _SHAGGY: Array[Vector3] = [
 # A style's kick at its ends, added to its lift below its first key: (height,
 # how far out), descending, eased between keys and held past the last.
 const _NO_FLARE: Array[Vector2] = []
-const _LONG_FLARE: Array[Vector2] = [Vector2(-0.11, 0.0), Vector2(-0.175, 0.028)]
 const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
 const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.06, 0.0), Vector2(-0.14, 0.018)]
 
@@ -145,27 +137,39 @@ const _HORSESHOE: Array[Vector4] = [
 	Vector4(14.3, -0.038, -0.090, 0.008),
 	Vector4(21.0, -0.040, -0.088, 0.006),
 ]
-# The beard's footprint, thicker, carried higher up the cheeks and down under
-# the jaw onto the throat.
-const _PLAYOFF_BEARD: Array[Vector4] = [
-	Vector4(0.0, -0.035, -0.150, 0.013),
-	Vector4(10.0, -0.036, -0.148, 0.013),
-	Vector4(14.0, -0.037, -0.146, 0.012),
-	Vector4(24.0, -0.028, -0.140, 0.011),
-	Vector4(40.0, -0.015, -0.128, 0.010),
-	Vector4(52.0, -0.004, -0.110, 0.008),
-	Vector4(58.0, 0.002, -0.100, 0.006),
+# The beard's footprint carried down off the chin to just above the collar,
+# square across the front and rising steeply to the jaw at the sides.
+const _LONG_BEARD: Array[Vector4] = [
+	Vector4(0.0, -0.035, -0.174, 0.013),
+	Vector4(14.0, -0.036, -0.172, 0.013),
+	Vector4(24.0, -0.032, -0.165, 0.012),
+	Vector4(34.0, -0.024, -0.145, 0.011),
+	Vector4(44.0, -0.013, -0.122, 0.010),
+	Vector4(52.0, -0.006, -0.106, 0.008),
+	Vector4(57.0, -0.002, -0.096, 0.006),
 ]
-# Thickens the sheet over the throat. It cannot hang straight down from the
-# chin: the throat is ~3 cm behind it, and that much stand-off above the
-# fishbowl's chin edge pokes through the shield; a stand-off that only grows
-# below the edge reads as a flap.
-const _PLAYOFF_FLARE: Array[Vector2] = [
-	Vector2(-0.112, 0.0),
-	Vector2(-0.150, 0.014),
+# Below the chin the surface under the sheet is the throat, ~3 cm behind it; the
+# flare stands the sheet out to hang straight down from the chin.
+const _LONG_BEARD_FLARE: Array[Vector2] = [
+	Vector2(-0.098, 0.0),
+	Vector2(-0.118, 0.030),
+	Vector2(-0.174, 0.036),
+]
+# Under a fishbowl, whose chin edge curls in under the jaw: held to what fits
+# inside the shield down to that edge, then out.
+const _LONG_BEARD_TUCKED_FLARE: Array[Vector2] = [
+	Vector2(-0.108, 0.0),
+	Vector2(-0.122, 0.016),
+	Vector2(-0.150, 0.030),
+	Vector2(-0.174, 0.034),
 ]
 # A full sheet is thinner over the lip than at the chin.
 const _UPPER_LIFT_SHARE: float = 0.55
+# A facial flare stands the sheet off the throat across the front, then fades
+# out between these shares of the sheet's reach, so the sides close onto the
+# neck: a flare carried round to the jaw leaves the sheet open at the side, a
+# flap seen edge on.
+const _FLARE_SIDE_FADE := Vector2(0.4, 0.7)
 const _MOUTH_MARGIN_M: float = 0.0015
 # How far round the mouth's edge a sheet tapers down to the skin.
 const _MOUTH_TAPER_M: float = 0.006
@@ -179,17 +183,16 @@ const _HAIR_ROUGHNESS: float = 0.8
 static var _cache: Dictionary = {}
 
 
-# The scalp shell for one HairStyleRegistry HAIR_* style — null for bald (and
-# for a forged index, matching the registry's clamp).
+# The scalp shell for one HairStyleRegistry HAIR_* style, a retired one's
+# stand-in for it — null for bald (and for a forged index, matching the
+# registry's clamp).
 static func shared_hair(style: int) -> ArrayMesh:
-	match style:
+	match HairStyleRegistry.worn_hair(style):
 		HairStyleRegistry.HAIR_SHORT:
 			return _shared("hair_short", func() -> ArrayMesh: return _build_scalp(_SHORT, _NO_FLARE))
 		HairStyleRegistry.HAIR_MEDIUM:
 			return _shared("hair_medium",
 					func() -> ArrayMesh: return _build_scalp(_MEDIUM, _NO_FLARE))
-		HairStyleRegistry.HAIR_LONG:
-			return _shared("hair_long", func() -> ArrayMesh: return _build_scalp(_LONG, _LONG_FLARE))
 		HairStyleRegistry.HAIR_MULLET:
 			return _shared("hair_mullet",
 					func() -> ArrayMesh: return _build_scalp(_MULLET, _MULLET_FLARE))
@@ -213,8 +216,9 @@ static func shared_brows() -> ArrayMesh:
 		return st.commit())
 
 
-# The facial shell for one FACIAL_* style — null for none.
-static func shared_facial_hair(style: int) -> ArrayMesh:
+# The facial shell for one FACIAL_* style worn under one GearModelRegistry
+# FACE_* piece — null for none.
+static func shared_facial_hair(style: int, helmet_face: int) -> ArrayMesh:
 	match style:
 		HairStyleRegistry.FACIAL_STUBBLE:
 			return _shared("facial_stubble", func() -> ArrayMesh:
@@ -231,9 +235,12 @@ static func shared_facial_hair(style: int) -> ArrayMesh:
 		HairStyleRegistry.FACIAL_HORSESHOE:
 			return _shared("facial_horseshoe", func() -> ArrayMesh:
 				return _build_facial(_HORSESHOE, -1.0, _NO_FLARE))
-		HairStyleRegistry.FACIAL_PLAYOFF_BEARD:
-			return _shared("facial_playoff_beard", func() -> ArrayMesh:
-				return _build_facial(_PLAYOFF_BEARD, -1.0, _PLAYOFF_FLARE))
+		HairStyleRegistry.FACIAL_LONG_BEARD:
+			if helmet_face == GearModelRegistry.FACE_FISHBOWL:
+				return _shared("facial_long_beard_tucked", func() -> ArrayMesh:
+					return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_TUCKED_FLARE))
+			return _shared("facial_long_beard", func() -> ArrayMesh:
+				return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_FLARE))
 		_:
 			return null
 
@@ -311,7 +318,8 @@ static func _build_facial(outline: Array[Vector4], flat_lift: float,
 					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)), side)
 			edge = minf(edge, _ramp(_rect_distance(mouth, face), 0.0, _MOUTH_TAPER_M))
 			own = lerpf(_EDGE_LIFT_M, _facial_key(outline, a).w
-					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge) + _flare(flare, y) * side
+					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge) \
+					+ _flare(flare, y) * _ramp(a, reach * _FLARE_SIDE_FADE.y, reach * _FLARE_SIDE_FADE.x)
 		return maxf(own, SkaterFaceMesh.relief(face.x, face.y) + _STUBBLE_LIFT_M)
 	# Grid lines on the mouth's edges cut its hole clean; on the chin's, the
 	# sheet follows the relief it rises over.

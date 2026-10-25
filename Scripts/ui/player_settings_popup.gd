@@ -483,9 +483,9 @@ func _build_body(page: VBoxContainer) -> void:
 func _build_head(page: VBoxContainer) -> void:
 	var head: int = LockerMannequin.Focus.HELMET
 	_hair_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_HAIR_LABEL", false, head),
-			func(i: int) -> void: _edit_gear(&"hair_style", i))
-	for i: int in HairStyleRegistry.hair_count():
-		_hair_btn.add_item(tr(HairStyleRegistry.HAIR_NAME_KEYS[i]), i)
+			func(i: int) -> void: _edit_gear(&"hair_style", _hair_btn.get_item_id(i)))
+	for style: int in HairStyleRegistry.pickable_hair():
+		_hair_btn.add_item(tr(HairStyleRegistry.HAIR_NAME_KEYS[style]), style)
 	_facial_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_BEARD_LABEL", false, head),
 			func(i: int) -> void: _edit_gear(&"facial_hair", i))
 	for i: int in HairStyleRegistry.facial_count():
@@ -692,7 +692,7 @@ func _refresh() -> void:
 	PlayerRowKit.select(_skin_buttons, _draft.skin)
 	_tuck_btn.select(gear.jersey_tuck)
 
-	_hair_btn.select(gear.hair_style)
+	_hair_btn.select(_hair_btn.get_item_index(gear.hair_style))
 	_facial_btn.select(gear.facial_hair)
 	PlayerRowKit.select(_hair_color_buttons, gear.hair_color)
 	PlayerRowKit.select(_face_btns, gear.helmet_face)

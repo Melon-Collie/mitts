@@ -23,11 +23,12 @@ func _mat(piece: SkaterArmRig.HeadPiece) -> StandardMaterial3D:
 
 
 func test_a_pick_rides_the_helmet_bone() -> void:
-	_skater.set_gear_style(_look(HairStyleRegistry.HAIR_LONG, HairStyleRegistry.FACIAL_BEARD, 2))
+	_skater.set_gear_style(_look(HairStyleRegistry.HAIR_MULLET, HairStyleRegistry.FACIAL_BEARD, 2))
 	var scalp: MeshInstance3D = _skater.head_piece(SkaterArmRig.HeadPiece.SCALP)
-	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_LONG))
+	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_MULLET))
 	assert_eq(_skater.head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR).mesh,
-			SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_BEARD))
+			SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_BEARD,
+				GearModelRegistry.FACE_NONE))
 	var attach: BoneAttachment3D = scalp.get_parent() as BoneAttachment3D
 	assert_not_null(attach, "the hair hangs off a bone attachment")
 	assert_eq(attach.bone_idx, SkaterMeshBuilder.UpperBone.HELMET, "on the helmet bone")

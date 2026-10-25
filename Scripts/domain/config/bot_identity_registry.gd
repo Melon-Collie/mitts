@@ -41,9 +41,10 @@ class_name BotIdentityRegistry
 #     "helmet_face" (GearModelRegistry FACE_*: 0 bare / 1 visor / 2 cage /
 #     3 fishbowl);
 #   hair     — "hair_style" (HairStyleRegistry HAIR_*: 0 short / 1 medium /
-#     2 long / 3 bald / 4 mullet / 5 buzz / 6 shaggy), "facial_hair" (FACIAL_*:
-#     0 none / 1 stubble / 2 mustache / 3 goatee / 4 full beard / 5 horseshoe /
-#     6 playoff beard), "hair_color" (COLORS index).
+#     3 bald / 4 mullet / 5 buzz / 6 shaggy; 2, the retired long, is worn as
+#     shaggy), "facial_hair" (FACIAL_*: 0 none / 1 stubble / 2 mustache /
+#     3 goatee / 4 full beard / 5 horseshoe / 6 long beard), "hair_color"
+#     (COLORS index).
 # Pinning ANY field of a group claims the whole group (unpinned fields sit at
 # the stock defaults); a card that pins no field of a group draws a stable
 # fallback look from its name hash instead (see the fallback tables below), so
@@ -109,11 +110,11 @@ const _FB_FACE: Array[int] = [GearModelRegistry.FACE_VISOR, GearModelRegistry.FA
 		GearModelRegistry.FACE_NONE, GearModelRegistry.FACE_VISOR,
 		GearModelRegistry.FACE_CAGE, GearModelRegistry.FACE_VISOR,
 		GearModelRegistry.FACE_FISHBOWL, GearModelRegistry.FACE_NONE]
-# Short, medium and buzzed cuts dominate, with the odd long cut, mullet, shag
-# and shaved head. Beards run common, as they do in a dressing room; colours
+# Short, medium and buzzed cuts dominate, with the odd mullet, shag and
+# shaved head. Beards run common, as they do in a dressing room; colours
 # lean dark, so a hash rarely lands on a combination that reads as a costume.
 const _FB_HAIR: Array[int] = [HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MEDIUM,
-		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_LONG,
+		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_SHAGGY,
 		HairStyleRegistry.HAIR_MEDIUM, HairStyleRegistry.HAIR_BUZZ,
 		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MULLET,
 		HairStyleRegistry.HAIR_BALD, HairStyleRegistry.HAIR_MEDIUM,
@@ -122,7 +123,7 @@ const _FB_FACIAL: Array[int] = [HairStyleRegistry.FACIAL_NONE, HairStyleRegistry
 		HairStyleRegistry.FACIAL_BEARD, HairStyleRegistry.FACIAL_NONE,
 		HairStyleRegistry.FACIAL_GOATEE, HairStyleRegistry.FACIAL_STUBBLE,
 		HairStyleRegistry.FACIAL_HORSESHOE, HairStyleRegistry.FACIAL_MUSTACHE,
-		HairStyleRegistry.FACIAL_NONE, HairStyleRegistry.FACIAL_PLAYOFF_BEARD]
+		HairStyleRegistry.FACIAL_NONE, HairStyleRegistry.FACIAL_LONG_BEARD]
 # HairStyleRegistry.COLORS indices: dark brown, black, brown, light brown,
 # blonde, red. Grey and white are left to curated veterans.
 const _FB_HAIR_COLOR: Array[int] = [0, 1, 2, 0, 3, 1, 4, 0, 2, 5, 0, 1]

@@ -74,7 +74,9 @@ func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_btn("_tuck_btn").item_count, GearModelRegistry.tuck_count())
 	assert_eq(_btn("_facial_btn").item_count, HairStyleRegistry.facial_count())
 	assert_eq(_buttons("_face_btns").size(), GearModelRegistry.face_count())
-	assert_eq(_btn("_hair_btn").item_count, HairStyleRegistry.hair_count())
+	assert_eq(_btn("_hair_btn").item_count, HairStyleRegistry.pickable_hair().size())
+	assert_eq(_btn("_hair_btn").get_item_index(HairStyleRegistry.HAIR_LONG), -1,
+			"a retired style is not offered")
 	assert_eq(_buttons("_hair_color_buttons").size(), HairStyleRegistry.color_count())
 	assert_eq(_buttons("_skin_buttons").size(), SkinToneRegistry.TONES.size())
 	assert_eq(_btn("_skate_btn").selected, GearModelRegistry.SKATE_RETRO)
@@ -105,30 +107,36 @@ func test_a_model_pick_lands_in_the_draft_and_on_the_figure() -> void:
 			as StandardMaterial3D).albedo_color, before, "the figure re-dresses")
 
 
+# The hair picker skips retired styles, so its rows are not style indices.
+func _pick_hair(style: int) -> void:
+	var btn: OptionButton = _btn("_hair_btn")
+	btn.item_selected.emit(btn.get_item_index(style))
+
+
 # The hair lives in the packed gear code beside the equipment; a pick must land
 # in the pending code without disturbing the equipment fields.
 func test_a_hair_pick_lands_in_the_draft_and_nowhere_else() -> void:
-	_btn("_hair_btn").item_selected.emit(HairStyleRegistry.HAIR_LONG)
+	_pick_hair(HairStyleRegistry.HAIR_MULLET)
 	_btn("_facial_btn").item_selected.emit(HairStyleRegistry.FACIAL_GOATEE)
 	_press(_buttons("_hair_color_buttons"), 5)
 	var gear: GearStyleConfig = _draft().gear()
-	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_LONG)
+	assert_eq(gear.hair_style, HairStyleRegistry.HAIR_MULLET)
 	assert_eq(gear.facial_hair, HairStyleRegistry.FACIAL_GOATEE)
 	assert_eq(gear.hair_color, 5)
 	assert_eq(gear.skate_model, GearModelRegistry.SKATE_RETRO, "the equipment is untouched")
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_VISOR)
 	assert_eq(_picked(_buttons("_hair_color_buttons")), 5, "one swatch is ringed")
-	assert_eq(_btn("_hair_btn").selected, HairStyleRegistry.HAIR_LONG)
+	assert_eq(_btn("_hair_btn").get_selected_id(), HairStyleRegistry.HAIR_MULLET)
 	assert_false((_popup.get("_apply_btn") as Button).disabled, "Apply wakes up")
 
 
 func test_cancel_drops_the_edits() -> void:
-	_btn("_hair_btn").item_selected.emit(HairStyleRegistry.HAIR_BALD)
+	_pick_hair(HairStyleRegistry.HAIR_BALD)
 	_press((_gear_row(&"curve").get("buttons") as Array), 2)
 	_popup.call("_cancel")
 	_popup.open()
 	assert_eq(_draft().gear().hair_style, HairStyleRegistry.HAIR_SHORT)
-	assert_eq(_btn("_hair_btn").selected, HairStyleRegistry.HAIR_SHORT)
+	assert_eq(_btn("_hair_btn").get_selected_id(), HairStyleRegistry.HAIR_SHORT)
 	assert_eq(_draft().curve, PlayerAttributes.GEAR_BALANCED)
 	assert_true((_popup.get("_apply_btn") as Button).disabled, "nothing pending")
 

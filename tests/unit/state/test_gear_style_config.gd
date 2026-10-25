@@ -46,12 +46,24 @@ func test_every_hair_pick_round_trips_beside_the_gear() -> void:
 						GearModelRegistry.GLOVE_PRO, 3, StickModelRegistry.count() - 1,
 						GearModelRegistry.FACE_CAGE, hair, facial, color)
 				var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
-				assert_eq(back.hair_style, hair)
+				assert_eq(back.hair_style, HairStyleRegistry.worn_hair(hair))
 				assert_eq(back.facial_hair, facial)
 				assert_eq(back.hair_color, color)
 				assert_eq(back.helmet_face, GearModelRegistry.FACE_CAGE,
 						"the hair fields leave the gear fields alone")
 				assert_eq(back.stick_model, StickModelRegistry.count() - 1)
+
+
+# A player who saved a style since retired comes back wearing its stand-in, and
+# the picker can show that.
+func test_a_retired_hair_style_decodes_to_its_stand_in() -> void:
+	var saved: int = GearStyleConfig.DEFAULT_CODE | HairStyleRegistry.HAIR_LONG << 25
+	var config: GearStyleConfig = GearStyleConfig.from_code(saved)
+	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHAGGY)
+	for style: int in HairStyleRegistry.hair_count():
+		if HairStyleRegistry.is_retired_hair(style):
+			assert_true(HairStyleRegistry.worn_hair(style)
+					in HairStyleRegistry.pickable_hair(), "style %d stands in a pickable one" % style)
 
 
 # A code saved before the hair fields existed has zeros above the face field,

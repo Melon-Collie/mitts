@@ -1,8 +1,8 @@
 extends SceneTree
 
-# Dev visualizer: renders every hair style against every facial-hair style —
-# one helmeted head per pair, scalp styles down the rows and facial styles
-# across the columns — and saves PNGs from three angles (front three-quarter,
+# Dev visualizer: renders every pickable hair style against every facial-hair
+# style — one helmeted head per pair, scalp styles down the rows and facial
+# styles across the columns — and saves PNGs from three angles (front three-quarter,
 # side, back three-quarter), so a hair edit can be SEEN without launching the
 # game. Each head is the rink's own helmet assembly wearing the rink's own hair
 # shells and material, so what the sheet shows is what the ice shows.
@@ -39,11 +39,12 @@ var _holders: Array[Node3D] = []
 var _face: int = GearModelRegistry.FACE_NONE
 var _skin: int = SkinToneRegistry.DEFAULT_INDEX
 var _hair_color: int = 0
+var _hair_rows: Array[int] = HairStyleRegistry.pickable_hair()
 
 
 func _init() -> void:
 	var cols: int = HairStyleRegistry.facial_count()
-	var rows: int = HairStyleRegistry.hair_count()
+	var rows: int = _hair_rows.size()
 	DisplayServer.window_set_size(Vector2i(_CELL_PX.x * cols, _CELL_PX.y * rows + 40))
 	_face = _env_int("MITTS_FACE", GearModelRegistry.FACE_NONE)
 	_skin = _env_int("MITTS_SKIN", SkinToneRegistry.DEFAULT_INDEX)
@@ -78,7 +79,7 @@ func _init() -> void:
 	for row: int in rows:
 		for col: int in cols:
 			_place(Vector3(-span * 0.5 + _SPACING_M * float(col), -_ROW_M * float(row), 0.0),
-					row, col)
+					_hair_rows[row], col)
 	process_frame.connect(_on_frame)
 
 
@@ -111,7 +112,7 @@ func _place(at: Vector3, hair: int, facial: int) -> void:
 			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_scalp_translucent(hair)))
 	_add_piece(head, SkaterHairMesh.shared_brows(),
 			SkaterHairMesh.make_material(_hair_color, false))
-	_add_piece(head, SkaterHairMesh.shared_facial_hair(facial),
+	_add_piece(head, SkaterHairMesh.shared_facial_hair(facial, _face),
 			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_translucent(facial)))
 	_add_piece(head, SkaterMeshBuilder.shared_face_gear(_face),
 			SkaterMeshBuilder.make_face_gear_material(_face))
