@@ -64,7 +64,9 @@ static func push_for_pace(pace: float, aim_dir: Vector2, skater_velocity: Vector
 # same pace on the ice from a body moving at `skater_velocity`, never more than
 # `min_push`. A blade can always take pace off a puck, so skating at the target
 # softens the floor; it cannot add pace without a harder push, so skating away
-# leaves it where it is.
+# leaves it where it is. Skating at the target faster than that pace, the floor
+# is no push at all: the softest pass ahead is the puck let go at the body's own
+# pace, since anything slower is a pull back.
 static func floor_push(min_push: float, direction: Vector3, skater_velocity: Vector3) -> float:
 	var d := Vector2(direction.x, direction.z)
 	var d_len: float = d.length()

@@ -89,7 +89,7 @@ func test_a_quick_pass_standing_still_is_the_push_alone() -> void:
 	assert_almost_eq(r.length(), _controller.quick_pass_power, 0.01)
 
 
-func test_a_tapped_wrister_in_stride_lands_the_standing_floor() -> void:
+func test_a_tapped_wrister_in_stride_lands_no_harder_than_the_floor_or_the_stride() -> void:
 	var stride := Vector2(0.0, -1.0)
 	_tick(120, stride)
 	_input.shoot_pressed = true
@@ -104,6 +104,7 @@ func test_a_tapped_wrister_in_stride_lands_the_standing_floor() -> void:
 	var d := Vector2(r.x, r.z).normalized()
 	assert_gt(Vector2(_velocity_at_release.x, _velocity_at_release.z).dot(d), 4.0,
 			"skating at the target")
-	assert_lte(r.length(), _controller.min_wrister_power + 0.05,
-			"the hands cushion the softest touch to the standing floor")
+	assert_lte(r.length(),
+			maxf(_controller.min_wrister_power, _velocity_at_release.length()) + 0.05,
+			"the hands cushion the softest touch to the standing floor, or let it ride")
 

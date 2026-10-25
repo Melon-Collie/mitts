@@ -47,6 +47,8 @@ release would have had standing still). Split `v` along and across the aim:
   Skating at the target, the hands cushion the push down to land that same pace
   (`ReleaseMomentum.floor_push`, read by `ShotMechanics.release_wrister`);
   skating away, the floor push stays 5, since no harder push comes free.
+  Skating at the target faster than the floor, the softest pass ahead is the
+  puck let go at your own pace: anything slower is a pull back.
 
 Numbers at the league ceilings (10 m/s skating, 33 m/s wrister, 14 m/s quick
 pass):
