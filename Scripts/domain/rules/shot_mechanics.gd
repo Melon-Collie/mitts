@@ -327,6 +327,20 @@ static func follow_through_aim(
 	var ang: float = lerp_angle(atan2(sd.x, -sd.z), atan2(cd.x, -cd.z), rt)
 	return Vector3(sin(ang), 0.0, -cos(ang))
 
+# The line a finish drives along (world XZ, unit): `from` turned `drive` (0..1)
+# of the way round onto the shot. A body that drove none of the shot finishes
+# where it was; one that drove it all finishes on the shot line. ZERO when the
+# shot is degenerate; the shot alone when `from` is.
+static func finish_line(from: Vector3, shot: Vector3, drive: float) -> Vector3:
+	var sd := Vector2(shot.x, shot.z)
+	if sd.length_squared() < 0.0001:
+		return Vector3.ZERO
+	var fd := Vector2(from.x, from.z)
+	if fd.length_squared() < 0.0001:
+		fd = sd
+	var line: Vector2 = fd.normalized().rotated(fd.angle_to(sd) * clampf(drive, 0.0, 1.0))
+	return Vector3(line.x, 0.0, line.y)
+
 # Seconds a finish runs after a release at `power_t` (0..1 of the shot's power
 # band): the harder the shot, the higher and further the stick swings through,
 # and the longer it takes to come back down to the ice.

@@ -686,14 +686,16 @@ var weight_spring_damping: float = 14.0     # damping (near-critical — a clean
 var min_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
 var max_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var backhand_power_coefficient: float = 0.75
-# ── Wrister load (WristerLoad): what the torso can put into a human's shot ──
-# Release cap: max_wrister_power × lerp(this, 1, load). With no turn behind it,
-# the arms, wrists and stick flex still carry a real snap. Per-build: the flex
-# pick scales it (PlayerAttributes.wrister_unloaded_mult).
+# ── Wrister load (WristerLoad): what the torso and arms put into a shot ──
+# Release cap: max_wrister_power × (this × arms + (1 − this) × load). With no
+# turn behind it, the arms, wrists and stick flex still carry a real snap on a
+# shot out from the body, and nothing on one back through it. Per-build: the
+# flex pick scales it (PlayerAttributes.wrister_unloaded_mult).
 var wrister_unloaded_share: float = 0.6
 var wrister_full_load_arc_deg: float = 45.0
 var wrister_home_reach_deg: float = 120.0
 var wrister_away_reach_deg: float = 30.0
+var wrister_arm_full_past_tangent_deg: float = 45.0
 # ── Wrister power model (ShotMechanics.wrister_power_t) ──
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
 # a committed target for bots — see _wrister_sweep_speed). power_curve shapes
@@ -2802,7 +2804,7 @@ func _transition_to_skating() -> void:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 	else:
 		_sm.set_state(State.SKATING_WITHOUT_PUCK)
-	_sm.shot_dir = Vector3.ZERO
+	_sm.aim_finish(Vector3.ZERO)
 	# Every exit keeps the smoothed torso and hip pose and lets the skating eases
 	# carry it to the new targets: zeroing it here snaps the shoulders square and
 	# the trunk upright in one tick (a lost puck threw the head ~0.2 m). Out of
@@ -2876,7 +2878,7 @@ func _enter_shot_block() -> void:
 
 func _enter_slapper_charge(input: InputState) -> void:
 	_aiming.reset_slapper()
-	_sm.shot_dir = Vector3.ZERO
+	_sm.aim_finish(Vector3.ZERO)
 	# Nothing turns or moves on the press: the aim starts where the cursor is
 	# (_update_slapper_aim) and the hips turn to its stance at their own rate.
 	var strike: Vector2 = slapper_strike_local()
@@ -3058,8 +3060,8 @@ func _solve_wrister_load(input: InputState) -> void:
 
 # The most a release can carry once the load is applied.
 func _wrister_load_cap(is_backhand: bool) -> float:
-	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share, is_backhand,
-			wrister_unloaded_share, backhand_power_coefficient)
+	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share,
+			wrister_load.arm_share, is_backhand, wrister_unloaded_share, backhand_power_coefficient)
 
 func _release_wrister(input: InputState) -> void:
 	_solve_wrister_load(input)
@@ -3082,7 +3084,15 @@ func _release_wrister(input: InputState) -> void:
 				false,
 				_wrister_sweep_speed(input))
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
-		_sm.shot_dir = result.direction
+		# The finish turns the hips and swings the stick round onto the shot only
+		# as far as the torso drove it; the arms alone push it from where it sat.
+		var drive: float = wrister_load.load_share
+		_sm.aim_finish(result.direction,
+				ShotMechanics.finish_line(Vector3(_pose.facing.x, 0.0, _pose.facing.y),
+						result.direction, drive),
+				ShotMechanics.finish_line(
+						_aiming.wrister_origin_world - _aiming.wrister_origin_skater_pos,
+						result.direction, drive))
 		_do_release(result.direction, result.power)
 		skater.shot_charge = _wrister_charge_of(result.power)
 
@@ -3120,7 +3130,7 @@ func _fire_quick_pass(input: InputState) -> void:
 				_wrister_config(),
 				Vector3.ZERO,
 				true)
-		_sm.shot_dir = result.direction
+		_sm.aim_finish(result.direction)
 		_do_release(result.direction, result.power)
 
 	_sm.follow_through_is_slapper = false
@@ -3164,7 +3174,7 @@ func _fire_slapper_shot(input: InputState) -> bool:
 		result.power = ShotReleaseRules.one_timer_power(
 				result.power, one_timer_center_power_bonus,
 				zone_xz, puck_xz, slapper_zone_radius)
-	_sm.shot_dir = result.direction
+	_sm.aim_finish(result.direction)
 	_do_release(result.direction, result.power)
 	return true
 
@@ -3938,6 +3948,8 @@ func _wrister_load_config() -> WristerLoad.Config:
 		_cached_wrister_load_cfg.max_twist_rad = deg_to_rad(upper_body_max_twist_deg)
 		_cached_wrister_load_cfg.home_reach_rad = deg_to_rad(wrister_home_reach_deg)
 		_cached_wrister_load_cfg.away_reach_rad = deg_to_rad(wrister_away_reach_deg)
+		_cached_wrister_load_cfg.arm_full_past_tangent_rad = \
+				deg_to_rad(wrister_arm_full_past_tangent_deg)
 	return _cached_wrister_load_cfg
 
 # True for bot controllers (AIController overrides). Bots have no real cursor, so

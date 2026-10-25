@@ -248,11 +248,14 @@ func _apply_lean() -> void:
 			upper_body_lean_roll + recoil_roll, velocity_lean_x)
 	_skater.set_lower_body_lean(velocity_lean_x * _controller.lower_body_pitch_follow)
 
-# Through a finish the hips square to the shot line and come back to the cursor
+# Through a finish the hips turn onto the shot line as far as the torso drove
+# the shot (SkaterStateMachine.finish_facing_dir) and come back to the cursor
 # over the same tail as the torso and blade (ShotMechanics.follow_through_aim),
 # so they hold the finish with them rather than chase the live cursor.
 func _finish_facing_dir(cursor_dir: Vector2) -> Vector2:
-	var dir_world: Vector3 = _sm.shot_dir
+	var dir_world: Vector3 = _sm.finish_facing_dir
+	if dir_world.length_squared() <= 0.0001:
+		dir_world = _sm.shot_dir
 	if dir_world.length_squared() <= 0.0001 and _sm.follow_through_is_slapper:
 		dir_world = Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var total: float = maxf(_sm.follow_through_duration_total, 0.001)
