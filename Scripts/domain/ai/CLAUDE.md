@@ -637,8 +637,11 @@ reaches back into what remains.
     four spots around the release, each spot counting by how much matching
     evidence it holds, so a spot whose only cell is unlike the query yields to
     a neighbour with a close one. Squareness is what tells a keeper set on the
-    shot from one a feed dragged off it at the same offset. Out-of-position
-    keepers are measured, not extrapolated: DECOY cells set him on a carrier
+    shot from one a feed dragged off it at the same offset, so the keeper a
+    carry arrives at is read facing the shot, which he has tracked: unread,
+    his facing averages in those decoy and feed keepers, who in tight read far
+    more open than the keeper the carry meets. Out-of-position keepers are
+    measured, not extrapolated: DECOY cells set him on a carrier
     elsewhere, then shoot from the spot, and WRAP cells seal him in the RVH on
     a carrier behind the net, then shoot from a spot in close: the field's
     only keeper on the post, since in front of the goal line he stands on its

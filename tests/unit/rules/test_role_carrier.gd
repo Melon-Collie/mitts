@@ -2658,6 +2658,31 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 			AIShotOdds.Stance.UPRIGHT, "after it, his rise is his call: priced upright")
 
 
+
+func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
+	# The keeper a carry arrives at has tracked it, so he faces the puck, as the
+	# shoot-now read sees him there. Read with his facing unknown, the field
+	# blends in keepers turned to a decoy or a feed, and in tight a carry to the
+	# crease promised odds the shot on arrival never had.
+	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
+			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
+		var ctx := _standstill_ctx(2.5)
+		ctx.self_pos = spot
+		ctx.snapshot.skater_states[1].position = spot
+		ctx.snapshot.puck_state.position = spot
+		var g: GoalieNetworkState = _squared_goalie(spot, ctx.attacking_goal_pos, 1.3)
+		ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+		var c := AIRoleCarrier.new()
+		c._field.fill(ctx)
+		c._field.holds.configure_from(ctx)
+		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
+		var shot_there: float = AIShotValue.now(spot, ctx.attacking_goal_pos,
+				Vector3(g.position_x, 0.0, g.position_z), 0.0, AIShotOdds.Stance.UPRIGHT,
+				g.rotation_y)
+		assert_almost_eq(arrival, shot_there, 1e-4,
+				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
+
+
 # ─── pass pace: a hard feed leaves the receiver settling ─────────────────────
 
 # The same open feed, short and long. Short, the softer pace's flight costs less

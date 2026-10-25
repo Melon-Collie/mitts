@@ -12,12 +12,12 @@ defender abreast 2.2 m off the hip: protect gain	0.2879
 tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
 dead slot over the 8.5 m band, set keeper: shoot-now ratio	2.6487
-spun-off carrier, cut-in over standing still: move-score margin	0.1821
+spun-off carrier, cut-in over standing still: move-score margin	0.1608
 tight-wall pinch, open man wide: carry anchor	(0.0, -22.1)
 spun-off carrier, beaten man behind: pick	CARRY to (1.4, -24.0)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
 outlet straight up the wall, forechecker standing off the lane: pick	PASS to 2
-wide in the zone, open man at the far-post backdoor: pick	CARRY to (3.2, -22.9)
+wide in the zone, open man at the far-post backdoor: pick	PASS to 2
 our end, middle clogged, winger ahead with a clear path: pick	PASS to 2
 central in the zone, open mate wide at a poor angle: intent	PASS
 neutral ice, straight lane clogged, close outlet up-ice: pick	PASS to 2
@@ -37,9 +37,9 @@ level with a mate at the blue line, symmetric set D: intent	CARRY
 fresh entry, finisher driving the house: intent	CARRY
 fresh entry, finisher driving the house: developing feed	0.7516
 fresh entry, finisher driving the house: shoot-now value	0.0138
-head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (3.3, -23.1)
-head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (0.0, -22.4)
-head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (0.0, -23.4)
+head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (0.0, -23.6)
+head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (3.3, -24.1)
+head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (0.0, -20.8)
 head-on drive at 6 m/s, keeper 1 m out, from 7 m: pick	CARRY to (2.0, -23.7)
 head-on drive at 6 m/s, keeper 1 m out, from 6 m: pick	CARRY to (0.0, -22.9)
 head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	SHOOT
