@@ -142,3 +142,78 @@ static func quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
 	st.add_vertex(a)
 	st.add_vertex(c)
 	st.add_vertex(d)
+
+
+# ── Faceted solids ───────────────────────────────────────────────────────────
+# Unlike the primitives above, these carry their own flat normal and a `part`
+# code in UV.x on every vertex, so a mesh poured from them must use nothing
+# else (a SurfaceTool's format is fixed by its first vertex).
+
+# One triangle wound and lit to face away from `inside`. Godot's front faces
+# wind clockwise seen from outside, the opposite of the right-hand cross the
+# normal is taken from, hence a-c-b.
+static func facet(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
+		inside: Vector3, part: float) -> void:
+	var n: Vector3 = (b - a).cross(c - a)
+	if n.length_squared() < 1e-14:
+		return
+	n = n.normalized()
+	if n.dot((a + b + c) / 3.0 - inside) < 0.0:
+		n = -n
+		var t: Vector3 = b
+		b = c
+		c = t
+	var uv := Vector2(part, 0.0)
+	for v: Vector3 in [a, c, b]:
+		st.set_normal(n)
+		st.set_uv(uv)
+		st.add_vertex(v)
+
+
+# A shell through `rings` (closed loops of one count, in order), each band lit
+# away from its own axis. A cap goes on an end only where it can be seen.
+static func loft(st: SurfaceTool, rings: Array[PackedVector3Array], part: float,
+		cap_start: bool, cap_end: bool) -> void:
+	for r: int in rings.size() - 1:
+		var a: PackedVector3Array = rings[r]
+		var b: PackedVector3Array = rings[r + 1]
+		var axis: Vector3 = (_centroid(a) + _centroid(b)) * 0.5
+		for i: int in a.size():
+			var j: int = (i + 1) % a.size()
+			facet(st, a[i], a[j], b[j], axis, part)
+			facet(st, a[i], b[j], b[i], axis, part)
+	if cap_start:
+		_loft_cap(st, rings[0], rings[1], part)
+	if cap_end:
+		_loft_cap(st, rings[rings.size() - 1], rings[rings.size() - 2], part)
+
+
+# A square-sectioned limb from `from` to `to`, `width` across `side` and
+# `depth` across the third axis.
+static func beam(st: SurfaceTool, from: Vector3, to: Vector3, width: float,
+		depth: float, side: Vector3, part: float, cap_from: bool, cap_to: bool) -> void:
+	var along: Vector3 = (to - from).normalized()
+	var across: Vector3 = (side - along * side.dot(along)).normalized() * width * 0.5
+	var through: Vector3 = along.cross(across).normalized() * depth * 0.5
+	var rings: Array[PackedVector3Array] = []
+	for end: Vector3 in [from, to]:
+		rings.append(PackedVector3Array([end - across - through, end + across - through,
+				end + across + through, end - across + through]))
+	loft(st, rings, part, cap_from, cap_to)
+
+
+static func _loft_cap(st: SurfaceTool, ring: PackedVector3Array,
+		neighbour: PackedVector3Array, part: float) -> void:
+	var c: Vector3 = _centroid(ring)
+	var inside: Vector3 = c + (_centroid(neighbour) - c) * 0.5
+	# A fan from one corner: the rings are convex, and it costs two fewer
+	# triangles than a fan from the centre.
+	for i: int in range(1, ring.size() - 1):
+		facet(st, ring[0], ring[i], ring[i + 1], inside, part)
+
+
+static func _centroid(ring: PackedVector3Array) -> Vector3:
+	var sum := Vector3.ZERO
+	for p: Vector3 in ring:
+		sum += p
+	return sum / float(ring.size())

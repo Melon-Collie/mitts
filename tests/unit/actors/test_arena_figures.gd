@@ -3,13 +3,13 @@ extends GutTest
 # The people in the building and the boxes the renderer is told they fit inside.
 #
 # Two unrelated things a display-less run can still check, and both have already
-# shipped a bug:
+# shipped a bug (plus how the crowd's figure fits its seat):
 #
-#   · Stature. A seated spectator and a standing coach are the same two boxes at
-#     different scales, joined only by ArenaFigureMesh's arithmetic — a body that
-#     stretches when it should not is a coach standing at a desk they should be
-#     sitting at, and a uniform scale to standing height is a giant beside the
-#     crowd.
+#   · Stature. A seated spectator and a standing coach share one height and one
+#     stature scale, the coach's figure two boxes joined only by
+#     ArenaFigureMesh's arithmetic — a body that stretches when it should not
+#     is a coach standing at a desk they should be sitting at, and a uniform
+#     scale to standing height is a giant beside the crowd.
 #   · Cull bounds. Every MultiMesh here declares a custom_aabb, because Godot's
 #     auto-AABB mis-culls instances pushed one transform at a time. That makes
 #     the box a hand-written claim about geometry the renderer never re-checks:
@@ -75,7 +75,7 @@ func test_seated_staff_are_the_spectator_figure() -> void:
 func test_a_seated_spectator_is_their_own_stature_tall() -> void:
 	# The crowd's own scale is the other end of the same bridge: a spectator's
 	# whole figure IS sitting height, so the crown lands at the rolled stature.
-	var head_box: AABB = ArenaFigureMesh.head_mesh().get_aabb()
+	var head_box: AABB = ArenaFigureMesh.crowd_head_mesh().get_aabb()
 	for stature: float in [ArenaFigureMesh.SEATED_STATURE_MIN, 0.88,
 			ArenaFigureMesh.SEATED_STATURE_MAX]:
 		var scale: float = ArenaFigureMesh.seated_scale(stature)
@@ -165,14 +165,100 @@ func _assert_bounds_hold(grown: AABB, seed_box: AABB, girth: float, height: floa
 
 
 func test_crowd_section_bounds_hold_the_tallest_spectator() -> void:
+	# The crowd figure reaches past its seat (thighs, raised arms), so the worst
+	# case is its whole pose envelope at the largest roll, turned any way.
 	var spec: ArenaBowlSpec = _spec()
 	var crowd := ArenaCrowd.new(spec, ArenaBowlPath.new(spec),
 			ArenaBowlRake.new(spec, ArenaBowlPath.new(spec)))
 	var seed_box := AABB(Vector3(-4.0, 1.0, -3.0), Vector3(8.0, 2.4, 6.0))
-	_assert_bounds_hold(crowd.grow_section_aabb(seed_box), seed_box,
-			ArenaFigureMesh.CROWD_SCALE_MAX,
-			ArenaFigureMesh.FIGURE_HEIGHT * ArenaFigureMesh.CROWD_SCALE_MAX,
-			"a spectator")
+	var grown: AABB = crowd.grow_section_aabb(seed_box)
+	var pose: AABB = ArenaFigureMesh.crowd_pose_bounds()
+	var scale: float = ArenaFigureMesh.CROWD_SCALE_MAX
+	var reach: float = Vector2(maxf(-pose.position.x, pose.end.x),
+			maxf(-pose.position.z, pose.end.z)).length() * scale
+	for dx: float in [0.0, 1.0]:
+		for dy: float in [0.0, 1.0]:
+			for dz: float in [0.0, 1.0]:
+				var foot: Vector3 = seed_box.position + seed_box.size * Vector3(dx, dy, dz)
+				var figure := AABB(foot + Vector3(-reach, pose.position.y * scale, -reach),
+						Vector3(reach * 2.0, pose.size.y * scale, reach * 2.0))
+				assert_true(grown.encloses(figure),
+						"a spectator at %v should sit inside the declared bounds" % foot)
+
+
+func test_pose_bounds_hold_any_raise_of_the_arms() -> void:
+	# The bound is argued, not measured from the shader: the arms only turn about
+	# the shoulder and the elbow. Turn them every which way about those pivots
+	# and every vertex must stay inside.
+	var bounds: AABB = ArenaFigureMesh.crowd_pose_bounds().grow(0.0001)
+	var arrays: Array = ArenaFigureMesh.crowd_body_mesh().surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	for i: int in verts.size():
+		var part: float = uvs[i].x
+		if part != ArenaFigureMesh.PART_UPPER_ARM and part != ArenaFigureMesh.PART_FOREARM:
+			continue
+		var m := Vector3(signf(verts[i].x), 1.0, 1.0)
+		for unbend: float in [0.0, -1.0, 1.5]:
+			for raise: Basis in [Basis(Vector3.RIGHT, 2.9), Basis(Vector3.RIGHT, 1.6) \
+					* Basis(Vector3.BACK, 0.5), Basis(Vector3.BACK, -1.2)]:
+				var v: Vector3 = verts[i]
+				if part == ArenaFigureMesh.PART_FOREARM:
+					var elbow: Vector3 = ArenaFigureMesh.ELBOW * m
+					v = elbow + Basis(Vector3.RIGHT, unbend) * (v - elbow)
+				var shoulder: Vector3 = ArenaFigureMesh.SHOULDER * m
+				v = shoulder + raise * (v - shoulder)
+				assert_true(bounds.has_point(v), "a raised arm at %v should stay in bounds" % v)
+
+
+# ── The crowd figure in its seat ─────────────────────────────────────────────
+
+func _figure_points(part_filter: float) -> PackedVector3Array:
+	var arrays: Array = ArenaFigureMesh.crowd_body_mesh().surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var out := PackedVector3Array()
+	for i: int in verts.size():
+		if part_filter < 0.0 or uvs[i].x == part_filter:
+			out.append(verts[i])
+	return out
+
+
+func test_the_crowd_body_stops_below_its_head() -> void:
+	assert_lt(ArenaFigureMesh.crowd_body_mesh().get_aabb().end.y,
+			ArenaFigureMesh.crowd_head_mesh().get_aabb().position.y,
+			"the body should stop below the head")
+
+
+func test_knees_overhang_the_tread_but_not_the_row_below() -> void:
+	# Fans sit spectator_inset_from_riser behind the drop to the row below, whose
+	# seat backs stand tread_depth - BACK_OFFSET in front of them. A knee short
+	# of the edge reads as legs folded into the concrete; one past the seat back
+	# is through it. Checked at both stature extremes and both yaw extremes.
+	var spec: ArenaBowlSpec = _spec()
+	var edge: float = spec.spectator_inset_from_riser
+	var row_below_back: float = spec.tread_depth - ArenaSeating.BACK_OFFSET \
+			- ArenaSeating.BACK_THICKNESS * 0.5
+	var legs: PackedVector3Array = _figure_points(ArenaFigureMesh.PART_LEG)
+	for stature: float in [ArenaFigureMesh.SEATED_STATURE_MIN, ArenaFigureMesh.SEATED_STATURE_MAX]:
+		var scale: float = ArenaFigureMesh.seated_scale(stature)
+		for yaw_deg: float in [-spec.spectator_yaw_jitter_deg, 0.0, spec.spectator_yaw_jitter_deg]:
+			var turn := Basis(Vector3.UP, deg_to_rad(yaw_deg))
+			var farthest: float = 0.0
+			for v: Vector3 in legs:
+				farthest = maxf(farthest, -(turn * v).z * scale)
+				assert_lt(-(turn * v).z * scale, row_below_back,
+						"a %.2f m fan's knee should stop short of the row below" % stature)
+			assert_gt(farthest, edge,
+					"a %.2f m fan's knees should reach past the tread's edge" % stature)
+
+
+func test_neighbours_elbows_do_not_meet() -> void:
+	var span: float = 0.0
+	for v: Vector3 in _figure_points(-1.0):
+		span = maxf(span, absf(v.x))
+	assert_lt(span * 2.0 * ArenaFigureMesh.CROWD_SCALE_MAX, _spec().spectator_spacing,
+			"the widest fan should fit inside their seat spacing")
 
 
 func test_staff_bounds_hold_the_tallest_coach() -> void:
@@ -201,16 +287,20 @@ func test_seat_bounds_hold_the_furniture() -> void:
 
 
 func test_a_seat_clears_the_largest_occupant() -> void:
-	# The seat's dimensions are all bounded by the body they have to show around,
-	# and that body is the LARGEST stature roll, not the mesh's nominal size.
-	var widest: float = maxf(ArenaFigureMesh.BODY_SIZE.x, ArenaFigureMesh.BODY_SIZE.z) \
-			* ArenaFigureMesh.CROWD_SCALE_MAX
-	assert_gt(ArenaSeating.WIDTH, widest,
+	# The seat's dimensions are all bounded by the torso they have to show around,
+	# and that torso is the LARGEST stature roll, not the mesh's nominal size.
+	var torso := AABB()
+	var first: bool = true
+	for v: Vector3 in _figure_points(ArenaFigureMesh.PART_BODY):
+		torso = AABB(v, Vector3.ZERO) if first else torso.expand(v)
+		first = false
+	var scale: float = ArenaFigureMesh.CROWD_SCALE_MAX
+	assert_gt(ArenaSeating.WIDTH, torso.size.x * scale,
 			"a seat shows either side of its occupant")
 	assert_lt(ArenaSeating.WIDTH, ArenaBowlSpec.new().spectator_spacing,
 			"and stops short of its neighbour, or the row reads as one bench")
-	assert_gt(ArenaSeating.BACK_OFFSET, widest * 0.5,
-			"the backrest clears the deepest body a roll can produce")
+	assert_gt(ArenaSeating.BACK_OFFSET - ArenaSeating.BACK_THICKNESS * 0.5,
+			torso.end.z * scale, "the backrest clears the deepest torso a roll can produce")
 
 
 func test_only_bare_skin_is_flagged_for_hair() -> void:

@@ -63,12 +63,11 @@ static func release_shared_material() -> void:
 
 # Shared material — crowd.gdshader reads the per-instance MultiMesh color for
 # albedo (its alpha flags a bare head), shades it by height on the figure, and
-# animates sway/hop from INSTANCE_CUSTOM + the excitement uniform. One
-# material across both MultiMeshes and across rebuilds, so excitement state
-# persists and a single uniform write drives the whole bowl. Cull disabled like
-# the terrace material: culling back faces on individual spectators leaves
-# rink-facing faces invisible at some camera angles (the boxes look hollow), and
-# the extra triangles are cheap on a few thousand instances of an 8-vert mesh.
+# animates sway, hop and raised arms from INSTANCE_CUSTOM + the excitement
+# uniform. One material across both MultiMeshes and across rebuilds, so
+# excitement state persists and a single uniform write drives the whole bowl.
+# Cull disabled like the terrace material: the figures are open where they sit
+# on the seat, and a camera below an upper-deck row sees up into them.
 static func shared_material() -> ShaderMaterial:
 	if _crowd_material == null:
 		_crowd_material = ShaderMaterial.new()
@@ -78,6 +77,14 @@ static func shared_material() -> ShaderMaterial:
 		_crowd_material.set_shader_parameter("body_top_y", body_top)
 		_crowd_material.set_shader_parameter("head_base_y",
 				body_top + ArenaFigureMesh.NECK_GAP * 0.5)
+		_crowd_material.set_shader_parameter("shoulder", ArenaFigureMesh.SHOULDER)
+		_crowd_material.set_shader_parameter("elbow", ArenaFigureMesh.ELBOW)
+		_crowd_material.set_shader_parameter("elbow_unbend", ArenaFigureMesh.elbow_unbend())
+		var skin: PackedVector3Array = PackedVector3Array()
+		for i: int in ArenaFigureMesh.BARE_HEAD_TONES:
+			var c: Color = ArenaFigureMesh.HEAD_PALETTE[i]
+			skin.append(Vector3(c.r, c.g, c.b))
+		_crowd_material.set_shader_parameter("skin_tones", skin)
 	return _crowd_material
 
 
@@ -114,8 +121,8 @@ func fill_layout(layout: Dictionary) -> void:
 				_rake.upper_row_offset(j) + _rake.seat_inset(),
 				_rake.upper_row_y(j), -1, true)
 
-	var body_mesh: ArrayMesh = ArenaFigureMesh.body_mesh(shared_material())
-	var head_mesh: ArrayMesh = ArenaFigureMesh.head_mesh(shared_material())
+	var body_mesh: ArrayMesh = ArenaFigureMesh.crowd_body_mesh(shared_material())
+	var head_mesh: ArrayMesh = ArenaFigureMesh.crowd_head_mesh(shared_material())
 	var body_mms: Array[MultiMesh] = []
 	var head_mms: Array[MultiMesh] = []
 	var away_flags: Array[PackedByteArray] = []
@@ -161,22 +168,24 @@ func _make_multimesh(mesh: ArrayMesh, count: int) -> MultiMesh:
 	return mm
 
 
-# Grow a section's origin-fit AABB to cover the spectators' full standing
-# bodies plus the shader animation (crowd.gdshader): up to ~0.18 m of
-# celebration hop on top, ~0.1 m of sway sideways; rotated bodies can extend
-# by the box diagonal in any horizontal direction.
+# Grow a section's origin-fit AABB to hold the tallest spectator a stature roll
+# can produce, in any pose, turned any way, plus what crowd.gdshader adds on top:
+# up to _HOP of celebration hop and a sway of up to _SWAY per unit of height. An
+# under-sized AABB gets the whole section frustum-culled.
+const _HOP: float = 0.18
+const _SWAY: float = 0.14
+
+
 func grow_section_aabb(seed_aabb: AABB) -> AABB:
-	# Sized for the TALLEST spectator a stature roll can produce, not the mesh's
-	# own dimensions — an under-sized AABB gets the whole section frustum-culled.
-	var horizontal_margin: float = max(ArenaFigureMesh.BODY_SIZE.x,
-			ArenaFigureMesh.BODY_SIZE.z) * ArenaFigureMesh.CROWD_SCALE_MAX * 0.71 + 0.15
+	var pose: AABB = ArenaFigureMesh.crowd_pose_bounds()
+	var scale: float = ArenaFigureMesh.CROWD_SCALE_MAX
+	var reach: float = Vector2(maxf(-pose.position.x, pose.end.x),
+			maxf(-pose.position.z, pose.end.z)).length()
+	var horizontal: float = (reach + _SWAY * pose.end.y) * scale
 	var pos: Vector3 = seed_aabb.position \
-			- Vector3(horizontal_margin, 0.1, horizontal_margin)
-	var end: Vector3 = seed_aabb.end + Vector3(
-			horizontal_margin,
-			(ArenaFigureMesh.BODY_SIZE.y + ArenaFigureMesh.HEAD_SIZE.y)
-					* ArenaFigureMesh.CROWD_SCALE_MAX + 0.35,
-			horizontal_margin)
+			- Vector3(horizontal, -minf(pose.position.y, 0.0) * scale, horizontal)
+	var end: Vector3 = seed_aabb.end \
+			+ Vector3(horizontal, (pose.end.y + _HOP) * scale, horizontal)
 	return AABB(pos, end - pos)
 
 

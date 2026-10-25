@@ -4,11 +4,13 @@ class_name ArenaFigureMesh
 # anthropometry, and the arithmetic that stands one up.
 #
 # One file because the crowd and the rinkside staff are the same population in
-# two postures, and the bridge between them (`_SITTING_HEIGHT_FRACTION`) only
-# works if both read it from the same place. `ArenaCrowd` takes the seated form,
-# `ArenaRinkside` takes the standing one; neither depends on the other.
+# two postures, and the bridge between them (`SITTING_HEIGHT_FRACTION`) only
+# works if both read it from the same place. `ArenaCrowd` takes the seated
+# spectator at the bottom of this file, `ArenaRinkside` the box figure, sitting
+# or standing; neither depends on the other.
 
-# Spectator body dimensions — stacked boxes matching the skater art style.
+# The staff's figure: two stacked boxes. Its height is also the crowd figure's
+# (FIGURE_HEIGHT), so both populations share one anthropometry.
 const BODY_SIZE: Vector3 = Vector3(0.28, 0.45, 0.28)
 const HEAD_SIZE: Vector3 = Vector3(0.22, 0.22, 0.22)
 # Tiny lift to keep the body bottom face off the tread without a visible gap.
@@ -66,36 +68,27 @@ const HEAD_PALETTE: Array[Color] = [
 const BARE_HEAD_TONES: int = 5
 
 
-# Body box, origin at the figure's base. Lifted 2 mm off the tread so the bottom
-# face doesn't z-fight — the bottom is visible from any camera below the row
-# (common for back-row spectators in the upper bowl).
-#
-# `surface_material` is embedded in the returned mesh. The crowd passes its
-# animated shader; a caller that sets a material_override on the instance (the
-# staff do) passes nothing, since the override would replace it anyway.
-static func body_mesh(surface_material: Material = null) -> ArrayMesh:
-	return _box_mesh(Vector3(0.0, BODY_Y_LIFT + BODY_SIZE.y * 0.5, 0.0),
-			BODY_SIZE, surface_material)
+# Body box, origin at the figure's base. Lifted 2 mm off the floor so the bottom
+# face doesn't z-fight with it.
+static func body_mesh() -> ArrayMesh:
+	return _box_mesh(Vector3(0.0, BODY_Y_LIFT + BODY_SIZE.y * 0.5, 0.0), BODY_SIZE)
 
 
 # Head box, positioned above the body so it lines up when applied with the same
 # transform as the body. Lifted with the body.
-static func head_mesh(surface_material: Material = null) -> ArrayMesh:
-	return _box_mesh(Vector3(0.0, head_center_y(), 0.0), HEAD_SIZE, surface_material)
+static func head_mesh() -> ArrayMesh:
+	return _box_mesh(Vector3(0.0, head_center_y(), 0.0), HEAD_SIZE)
 
 
 static func head_center_y() -> float:
 	return BODY_Y_LIFT + BODY_SIZE.y + NECK_GAP + HEAD_SIZE.y * 0.5
 
 
-static func _box_mesh(center: Vector3, size: Vector3,
-		surface_material: Material) -> ArrayMesh:
+static func _box_mesh(center: Vector3, size: Vector3) -> ArrayMesh:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PrimitiveType.PRIMITIVE_TRIANGLES)
 	ArenaMeshEmit.box(st, center, size)
 	st.generate_normals()
-	if surface_material != null:
-		st.set_material(surface_material)
 	return st.commit()
 
 
@@ -134,3 +127,131 @@ static func head_transform(post: Vector3, yaw: float, girth: float,
 		lift: float) -> Transform3D:
 	return Transform3D(Basis(Vector3.UP, yaw).scaled(Vector3.ONE * girth),
 			post + Vector3.UP * lift)
+
+
+# ── The seated spectator ─────────────────────────────────────────────────────
+# Flat-shaded and chamfered like the skater: a torso and a head lofted through
+# octagons, arms resting hands-on-lap, and thighs out over the tread's edge. No
+# shins: on 0.6 m treads they would hang into the riser or the seat back of the
+# row below, which hides that space anyway. Built in the unscaled frame the
+# stature scale multiplies (crown at FIGURE_HEIGHT, local -Z toward the rink),
+# with every part tagged in UV.x for crowd.gdshader, which raises the arms.
+
+const PART_BODY: float = 0.0
+const PART_UPPER_ARM: float = 1.0
+const PART_FOREARM: float = 2.0
+const PART_LEG: float = 3.0
+
+# Right-hand joints; the left mirror them in X. The shoulder and elbow are also
+# the pivots crowd.gdshader raises the arm about.
+const SHOULDER: Vector3 = Vector3(0.150, 0.415, 0.005)
+const ELBOW: Vector3 = Vector3(0.160, 0.225, 0.020)
+const HAND: Vector3 = Vector3(0.088, 0.170, -0.150)
+const HIP: Vector3 = Vector3(0.058, 0.085, 0.030)
+# Far enough forward to clear the tread's edge on the smallest roll, short of the
+# row below's seat back on the largest (test_arena_figures.gd).
+const KNEE: Vector3 = Vector3(0.064, 0.090, -0.180)
+const UPPER_ARM_THICKNESS: float = 0.056
+const FOREARM_THICKNESS: float = 0.050
+const THIGH_THICKNESS: float = 0.088
+
+# Torso and head stations, bottom up: [y, z centre, half width, half depth].
+# The torso's back stays inside the seat back's clearance at the largest roll.
+const _TORSO: Array[Vector4] = [
+	Vector4(0.040, 0.025, 0.112, 0.100),
+	Vector4(0.340, 0.012, 0.132, 0.112),
+	Vector4(0.425, 0.010, 0.118, 0.092),
+	Vector4(BODY_Y_LIFT + BODY_SIZE.y, 0.006, 0.062, 0.056),
+]
+const _HEAD: Array[Vector4] = [
+	Vector4(BODY_Y_LIFT + BODY_SIZE.y + NECK_GAP * 0.8, -0.004, 0.072, 0.078),
+	Vector4(0.640, -0.004, 0.096, 0.102),
+	Vector4(FIGURE_HEIGHT, -0.004, 0.062, 0.066),
+]
+# Share of each half-extent an octagon's corners cut away.
+const _CHAMFER: float = 0.38
+
+static var _pose_bounds: AABB = AABB()
+
+
+# Torso, arms and thighs: everything that takes the shirt's colour.
+static func crowd_body_mesh(surface_material: Material = null) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PrimitiveType.PRIMITIVE_TRIANGLES)
+	# Sits on the seat pan, so no bottom; the top shows from above.
+	ArenaMeshEmit.loft(st, _rings(_TORSO), PART_BODY, false, true)
+	for side: float in [1.0, -1.0]:
+		var m := Vector3(side, 1.0, 1.0)
+		# Each limb's root end is buried in what it hangs from.
+		ArenaMeshEmit.beam(st, SHOULDER * m, ELBOW * m, UPPER_ARM_THICKNESS,
+				UPPER_ARM_THICKNESS, Vector3.RIGHT, PART_UPPER_ARM, false, true)
+		ArenaMeshEmit.beam(st, ELBOW * m, HAND * m, FOREARM_THICKNESS,
+				FOREARM_THICKNESS, Vector3.UP, PART_FOREARM, false, true)
+		ArenaMeshEmit.beam(st, HIP * m, KNEE * m, THIGH_THICKNESS,
+				THIGH_THICKNESS, Vector3.RIGHT, PART_LEG, false, true)
+	if surface_material != null:
+		st.set_material(surface_material)
+	return st.commit()
+
+
+static func crowd_head_mesh(surface_material: Material = null) -> ArrayMesh:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PrimitiveType.PRIMITIVE_TRIANGLES)
+	ArenaMeshEmit.loft(st, _rings(_HEAD), PART_BODY, true, true)
+	if surface_material != null:
+		st.set_material(surface_material)
+	return st.commit()
+
+
+# The rotation about X at the elbow that lines the forearm up with the upper
+# arm: how far crowd.gdshader unbends it as the arm goes up.
+static func elbow_unbend() -> float:
+	var upper: Vector3 = ELBOW - SHOULDER
+	var fore: Vector3 = HAND - ELBOW
+	return wrapf(atan2(upper.z, upper.y) - atan2(fore.z, fore.y), -PI, PI)
+
+
+# Every place the figure can reach, in its unscaled frame, before sway and hop.
+# The arms only turn about the shoulder and the elbow, so wherever they are
+# posed, an arm vertex stays within its rest distance of the shoulder — through
+# the elbow, for the forearm — and a sphere that wide holds every raise.
+static func crowd_pose_bounds() -> AABB:
+	if _pose_bounds.has_volume():
+		return _pose_bounds
+	var bounds: AABB = crowd_head_mesh().get_aabb()
+	var arrays: Array = crowd_body_mesh().surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+	var reach: float = 0.0
+	for i: int in verts.size():
+		var v: Vector3 = verts[i]
+		var m := Vector3(signf(v.x), 1.0, 1.0)
+		match uvs[i].x:
+			PART_UPPER_ARM:
+				reach = maxf(reach, v.distance_to(SHOULDER * m))
+			PART_FOREARM:
+				reach = maxf(reach, SHOULDER.distance_to(ELBOW) + v.distance_to(ELBOW * m))
+			_:
+				bounds = bounds.expand(v)
+	for side: float in [1.0, -1.0]:
+		var shoulder: Vector3 = SHOULDER * Vector3(side, 1.0, 1.0)
+		bounds = bounds.merge(AABB(shoulder - Vector3.ONE * reach, Vector3.ONE * reach * 2.0))
+	_pose_bounds = bounds
+	return bounds
+
+
+static func _rings(stations: Array[Vector4]) -> Array[PackedVector3Array]:
+	var rings: Array[PackedVector3Array] = []
+	var k: float = 1.0 - _CHAMFER
+	for s: Vector4 in stations:
+		var y: float = s.x
+		var z: float = s.y
+		var w: float = s.z
+		var d: float = s.w
+		rings.append(PackedVector3Array([
+			Vector3(w, y, z - d * k), Vector3(w, y, z + d * k),
+			Vector3(w * k, y, z + d), Vector3(-w * k, y, z + d),
+			Vector3(-w, y, z + d * k), Vector3(-w, y, z - d * k),
+			Vector3(-w * k, y, z - d), Vector3(w * k, y, z - d),
+		]))
+	return rings

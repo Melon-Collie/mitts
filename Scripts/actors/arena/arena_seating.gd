@@ -25,21 +25,21 @@ extends RefCounted
 # spectator's own local frame (local −Z faces the rink, so +Z is outward).
 #
 # Every number here is bounded by something already fixed, and the body it has
-# to clear is the LARGEST stature roll — 0.39 m across and deep, not the mesh's
-# nominal 0.28 m. The seat is wider than that so it shows either side of an
-# occupant, and narrower than the 0.55 m spacing so neighbours don't merge into a
-# bench. The pan reaches 0.17 m forward — the spectator sits 0.18 m outward of
-# the tread's inner edge, so a deeper pan would hang over the drop. The backrest
-# starts at 0.205 m, clearing that body's 0.195 m back face, and ends at 0.255 m,
-# short of the next riser 0.42 m out. It stands 0.38 m against a seated occupant
-# of 0.80–0.96 m, so shoulders and head clear the top of the seat.
+# to clear is the LARGEST stature roll: a torso 0.37 m across with its back
+# 0.17 m behind the seating point. The seat is wider than that so it shows
+# either side of an occupant, and narrower than the 0.55 m spacing so neighbours
+# don't merge into a bench. The pan reaches 0.17 m forward — the spectator sits
+# 0.18 m outward of the tread's inner edge, so a deeper pan would hang over the
+# drop. The backrest runs from 0.205 m to 0.255 m, behind that torso and short
+# of the next riser 0.42 m out. It stands 0.38 m against a seated occupant of
+# 0.80–0.96 m, so shoulders and head clear the top of the seat.
 const WIDTH: float = 0.46
 const PAN_DEPTH: float = 0.34
 const PAN_THICKNESS: float = 0.05
 const BACK_HEIGHT: float = 0.38
 const BACK_THICKNESS: float = 0.05
-# Clears the deepest body a stature roll can produce (the tallest roll is also
-# the deepest); at 0.20 the backrest passes through it.
+# Clears the deepest torso a stature roll can produce (the tallest roll is
+# also the deepest).
 const BACK_OFFSET: float = 0.23
 # Same trick as ArenaFigureMesh.BODY_Y_LIFT, for the same reason: the pan's
 # underside would otherwise be coplanar with the tread it rests on.
