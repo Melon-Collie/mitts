@@ -268,6 +268,24 @@ func test_a_receiver_driving_into_the_feed_stands_where_his_skating_takes_him() 
 			"a stance off the relative line through the meet")
 
 
+
+func test_a_feed_reaching_where_he_skates_is_his_however_far_off_it_he_is_now() -> void:
+	# 5.5 m off the feed's line now, past the trigger, but driving onto it: by
+	# the time the puck reaches his level he is a stride off it.
+	var s := _pass_snap(Vector3(-8, 0, -5.5), Vector3(12, 0, 0), -1)
+	_add_skater(s, SELF_ID, Vector3.ZERO)
+	s.skater_states[SELF_ID].velocity = Vector3(0, 0, -6)
+	assert_true(rec.incoming_pass(s, Vector3.ZERO), "the feed is coming to him")
+	var body_offset: float = BLADE_REACH - AIBotMechanics.BLADE_REACH_BUFFER_M \
+			- SkaterAgentReception.RECEIVE_BODY_INSET_M
+	assert_true(rec.read_pass(s, Vector3.ZERO, BLADE_REACH, body_offset, 8.0),
+			"and he sets for it in stride")
+	# Inside the trigger now, but skating away: by then he is well off it.
+	var away := _pass_snap(Vector3(-8, 0, -4.5), Vector3(12, 0, 0), -1)
+	_add_skater(away, SELF_ID, Vector3.ZERO)
+	away.skater_states[SELF_ID].velocity = Vector3(0, 0, 3)
+	assert_false(rec.incoming_pass(away, Vector3.ZERO), "skating away from it, it is not his")
+
 func _slot_feed_snap(self_vel: Vector3) -> WorldSnapshot:
 	var s := _pass_snap(Vector3(-9, 0, -20), Vector3(15, 0, 0), -1)
 	_add_skater(s, SELF_ID, Vector3(1.5, 0, -19))

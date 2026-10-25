@@ -165,19 +165,26 @@ func line_anchor(snapshot: WorldSnapshot, self_pos: Vector3,
 	if t <= 0.0:
 		return Vector3.INF
 	var perp_foot := Vector3(puck_pos.x + dir.x * t, 0.0, puck_pos.z + dir.z * t)
-	var perp_dx: float = self_pos.x - perp_foot.x
-	var perp_dz: float = self_pos.z - perp_foot.z
-	var my_d2: float = perp_dx * perp_dx + perp_dz * perp_dz
+	# The band and the best-positioned filter read where each skater's skating
+	# takes him, as SkaterAgentReception.incoming_pass does.
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	var self_vel: Vector3 = self_state.velocity if self_state != null else Vector3.ZERO
+	var me: Vector3 = SkaterAgentReception.skating_point(self_pos, self_vel, puck_pos, dir, speed)
+	var me_along: float = (me.x - puck_pos.x) * dir.x + (me.z - puck_pos.z) * dir.z
+	var me_foot := Vector3(puck_pos.x + dir.x * me_along, 0.0, puck_pos.z + dir.z * me_along)
+	var my_d2: float = (me.x - me_foot.x) * (me.x - me_foot.x) \
+			+ (me.z - me_foot.z) * (me.z - me_foot.z)
 	var lateral: float = SkaterAgentReception.RECEIVE_TRIGGER_LATERAL_M
 	if my_d2 > lateral * lateral:
 		return Vector3.INF
-	# Best-positioned-receiver filter, as in SkaterAgentReception.incoming_pass.
 	for pid: int in snapshot.skater_states:
 		if pid == _peer_id or _team_id_by_peer.get(pid, -1) != _team_id:
 			continue
-		var tp: Vector3 = snapshot.skater_states[pid].position
-		var dx: float = tp.x - perp_foot.x
-		var dz: float = tp.z - perp_foot.z
+		var tm: SkaterNetworkState = snapshot.skater_states[pid]
+		var tp: Vector3 = SkaterAgentReception.skating_point(
+				tm.position, tm.velocity, puck_pos, dir, speed)
+		var dx: float = tp.x - me_foot.x
+		var dz: float = tp.z - me_foot.z
 		if dx * dx + dz * dz < my_d2:
 			return Vector3.INF
 	var to_net: Vector3 = attacking_goal - perp_foot

@@ -159,7 +159,10 @@ the puck's path *in his frame* (the face is square across the shaft), and only
 that correction needs the flight's time. He never steers onto the puck's own
 line, which turns the hips to it before contact. The net-forward catch of a shot
 reception stands him behind the catch point, so it is only taken when he gets
-there first; one driving past it takes the feed in stride.
+there first; one driving past it takes the feed in stride. Whose feed it is
+reads the same way: each teammate where his own skating has him when the puck
+reaches his level (`SkaterAgentReception.skating_point`), so a forward driving
+onto a feed is its man however far off its line he is now.
 
 Against the boards the read inverts: the blade goes ON the glass and the body
 stands rink-side, because a blade out on the puck's line leaves exactly the gap a

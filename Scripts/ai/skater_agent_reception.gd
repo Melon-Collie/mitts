@@ -15,8 +15,9 @@ extends RefCounted
 # fires (pass_launch_speed floors the arrival at the min wrister, 10 m/s), less
 # a margin for the pace it sheds on the way.
 const RECEIVE_TRIGGER_PUCK_SPEED_M_S: float = 9.0
-# Farther than this off the puck's line, the pass isn't ours; sized generously to
-# cover any pass that would realistically end up at this bot.
+# Farther than this off the puck's line where our skating takes us, the pass
+# isn't ours; sized generously to cover any pass that would realistically end up
+# at this bot.
 const RECEIVE_TRIGGER_LATERAL_M: float = 5.0
 # Sideways stand-off from the path: stick + blade reach less this inset, so the
 # IK isn't at the ROM clamp.
@@ -159,7 +160,9 @@ func read_pass(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	var puck_eta: float = AITrajectory.gate_time_s
 	if puck_eta <= 0.0:
 		return false
-	if Vector2(self_pos.x - perp_foot.x, self_pos.z - perp_foot.z).length() \
+	# A meet the rendezvous solved is where our skating takes the body; a feed
+	# that never enters our moving reach must be close enough to step to.
+	if not meets and Vector2(self_pos.x - perp_foot.x, self_pos.z - perp_foot.z).length() \
 			> RECEIVE_TRIGGER_LATERAL_M:
 		return false
 	# Where our own skating puts the body at the meet: the rendezvous solved the
@@ -326,27 +329,40 @@ func incoming_pass(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
 	var speed: float = sqrt(speed_sq)
 	var dir := Vector3(pv.x / speed, 0.0, pv.z / speed)
 	var puck_pos: Vector3 = snapshot.puck_state.position
-	var to_self := Vector3(self_pos.x - puck_pos.x, 0.0, self_pos.z - puck_pos.z)
-	var t: float = to_self.dot(dir)
-	if t <= 0.0:
+	if (self_pos.x - puck_pos.x) * dir.x + (self_pos.z - puck_pos.z) * dir.z <= 0.0:
 		return false
-	var perp_foot: Vector3 = puck_pos + dir * t
-	var perp_dx: float = self_pos.x - perp_foot.x
-	var perp_dz: float = self_pos.z - perp_foot.z
-	var my_d2: float = perp_dx * perp_dx + perp_dz * perp_dz
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	var self_vel: Vector3 = self_state.velocity if self_state != null else Vector3.ZERO
+	var me: Vector3 = skating_point(self_pos, self_vel, puck_pos, dir, speed)
+	var along: float = (me.x - puck_pos.x) * dir.x + (me.z - puck_pos.z) * dir.z
+	var perp_foot: Vector3 = puck_pos + dir * along
+	var my_d2: float = (me.x - perp_foot.x) * (me.x - perp_foot.x) \
+			+ (me.z - perp_foot.z) * (me.z - perp_foot.z)
 	if my_d2 > RECEIVE_TRIGGER_LATERAL_M * RECEIVE_TRIGGER_LATERAL_M:
 		return false
-	# Only the teammate nearest where the puck crosses their level anticipates,
-	# or a fast puck would pull every bot in its lateral band out of position.
+	# Only the teammate nearest where the puck crosses our level anticipates, or
+	# a fast puck would pull every bot in its lateral band out of position. Each
+	# is read where his own skating takes him.
 	for pid: int in snapshot.skater_states:
 		if pid == _peer_id or _team_id_by_peer.get(pid, -1) != _team_id:
 			continue
-		var tp: Vector3 = snapshot.skater_states[pid].position
+		var tm: SkaterNetworkState = snapshot.skater_states[pid]
+		var tp: Vector3 = skating_point(tm.position, tm.velocity, puck_pos, dir, speed)
 		var dx: float = tp.x - perp_foot.x
 		var dz: float = tp.z - perp_foot.z
 		if dx * dx + dz * dz < my_d2:
 			return false
 	return true
+
+
+# Where a skater's own skating puts him when the puck (`dir` from `puck_pos` at
+# `speed`) reaches his level, the drift capped at the longest lead a pass is
+# thrown on.
+static func skating_point(pos: Vector3, vel: Vector3, puck_pos: Vector3,
+		dir: Vector3, speed: float) -> Vector3:
+	var along: float = (pos.x - puck_pos.x) * dir.x + (pos.z - puck_pos.z) * dir.z
+	var drift_s: float = clampf(along / speed, 0.0, AICarrierPassSearch.PASS_LEAD_MAX_S)
+	return Vector3(pos.x + vel.x * drift_s, 0.0, pos.z + vel.z * drift_s)
 
 
 # Shot-aware reception read (the shot-aware block above) into the shot_*
