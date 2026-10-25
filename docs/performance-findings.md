@@ -169,6 +169,10 @@ analytic antialiasing, and the HUD's cost going to zero.
   skaters, phase-staggered, the local skater at full rate. It thins the bone
   writes, the seat, the head, the off hand and the arm/stick rebuild; the gait
   and the hem cloth still step every visible frame.
+- **Run the render pass on worker threads** — each skater's and keeper's
+  `_process` in its own process thread group, so the ~half of a skater's frame
+  that is cosmetic spreads across cores. Proposed, spike first:
+  `docs/parallel-render-pass-plan.md`.
 - **Lowering the physics rate (issue #606, 120 → 90 Hz)** would cut every
   per-tick item at once, ~0.7 ms/frame. **Rejected**: the broadcast cadence is
   counted in physics ticks, so it trades responsiveness over ping for frame rate,
