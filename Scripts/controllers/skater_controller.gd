@@ -3089,7 +3089,9 @@ func _release_wrister(input: InputState) -> void:
 				_wrister_config(),
 				aim_dir,
 				false,
-				_wrister_sweep_speed(input))
+				_wrister_sweep_speed(input),
+				null,
+				skater.velocity)
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
 		var push: float = result.power
 		_carry_momentum(result)
@@ -3298,7 +3300,7 @@ func _update_wrister_charge(input: InputState) -> void:
 			skater.global_position, input.mouse_world_pos, blade_world,
 			is_backhand, _elevation_level,
 			_wrister_config(), charge_aim_dir, false,
-			_wrister_sweep_speed(input), _wrister_pred_scratch)
+			_wrister_sweep_speed(input), _wrister_pred_scratch, skater.velocity)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
 	wrister_coil = minf(wrister_load.load_share, ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config()))

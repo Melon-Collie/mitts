@@ -170,7 +170,8 @@ static func release_wrister(
 		charge_direction: Vector3 = Vector3.ZERO,
 		is_quick_pass: bool = false,
 		sweep_speed: float = 0.0,
-		out: ShotResult = null) -> ShotResult:
+		out: ShotResult = null,
+		skater_velocity: Vector3 = Vector3.ZERO) -> ShotResult:
 	var target := Vector3(mouse_world_pos.x, 0.0, mouse_world_pos.z)
 	var player_xz := Vector3(player_pos.x, 0.0, player_pos.z)
 
@@ -203,16 +204,18 @@ static func release_wrister(
 		wrister_dir = Vector3(charge_direction.x, 0.0, charge_direction.z).normalized()
 	else:
 		wrister_dir = (target - player_xz).normalized()
-	var power: float = lerpf(cfg.min_wrister_power, cfg.max_wrister_power,
+	var y: float = shot_loft_y(elevation_level,
+			cfg.loft_tan_low, cfg.loft_tan_mid, cfg.loft_tan_high)
+	var direction: Vector3 = Vector3(wrister_dir.x, y, wrister_dir.z).normalized()
+	# The band's floor is a pace on the ice (ReleaseMomentum.floor_push): the
+	# softest touch skating at the target is cushioned down to the standing one.
+	var floor_power: float = ReleaseMomentum.floor_push(cfg.min_wrister_power, direction,
+			skater_velocity)
+	var power: float = lerpf(floor_power, cfg.max_wrister_power,
 			wrister_power_t(sweep_speed, cfg))
 	if is_backhand:
 		power *= cfg.backhand_power_coefficient
-
-	var y: float = shot_loft_y(elevation_level,
-			cfg.loft_tan_low, cfg.loft_tan_mid, cfg.loft_tan_high)
-	return ShotResult.make(
-			Vector3(wrister_dir.x, y, wrister_dir.z).normalized(),
-			power, out)
+	return ShotResult.make(direction, power, out)
 
 # Slapper release — power scales linearly with charge time.
 #

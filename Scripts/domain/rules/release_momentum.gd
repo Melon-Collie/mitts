@@ -57,3 +57,19 @@ static func push_for_pace(pace: float, aim_dir: Vector2, skater_velocity: Vector
 	if pace <= v_par:
 		return 0.0
 	return sqrt((pace - v_par) * (pace - v_par) + perp_sq)
+
+
+# The softest push a release along `direction` (loft included) can be asked for,
+# when the softest a standing release goes is `min_push`: the push that lands that
+# same pace on the ice from a body moving at `skater_velocity`, never more than
+# `min_push`. A blade can always take pace off a puck, so skating at the target
+# softens the floor; it cannot add pace without a harder push, so skating away
+# leaves it where it is.
+static func floor_push(min_push: float, direction: Vector3, skater_velocity: Vector3) -> float:
+	var d := Vector2(direction.x, direction.z)
+	var d_len: float = d.length()
+	if d_len < 0.0001:
+		return min_push
+	var cos_loft: float = d_len / direction.length()
+	var pace: float = min_push * cos_loft
+	return minf(min_push, push_for_pace(pace, d / d_len, skater_velocity) / cos_loft)

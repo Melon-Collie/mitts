@@ -88,3 +88,19 @@ func test_push_for_pace_inverts_the_release() -> void:
 		else:
 			assert_almost_eq(Vector2(r.x, r.z).dot(aim), pace, 0.001, "case %d" % i)
 			assert_almost_eq(r.length(), pace, 0.001, "case %d: no drift" % i)
+
+
+func test_the_floor_is_a_pace_on_the_ice() -> void:
+	var lofted := Vector3(0.0, 0.3, -1.0).normalized()
+	for direction: Vector3 in [AIM, lofted]:
+		assert_almost_eq(ReleaseMomentum.floor_push(10.0, direction, Vector3.ZERO), 10.0, 0.0001,
+				"standing, the floor is the push")
+		var push: float = ReleaseMomentum.floor_push(10.0, direction, AT_IT)
+		assert_lt(push, 10.0, "skating at the target, the hands cushion it")
+		assert_almost_eq(_r(push, AT_IT, direction).length(), 10.0, 0.001,
+				"and the softest touch still lands at the standing floor")
+	assert_almost_eq(ReleaseMomentum.floor_push(10.0, AIM, AWAY), 10.0, 0.0001,
+			"skating away, no harder push comes free")
+	assert_almost_eq(ReleaseMomentum.floor_push(10.0, AIM, Vector3(0.0, 0.0, -12.0)), 0.0, 0.0001,
+			"outskating the floor, the softest release is the puck left with the body's pace")
+

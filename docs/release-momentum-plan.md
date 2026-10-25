@@ -42,6 +42,11 @@ release would have had standing still). Split `v` along and across the aim:
   `(v_par + √(P² − |v_perp|²)) × d`: exactly at the cursor. Past it the puck
   drifts by the motion the push could not cancel.
 - **The stop:** the speed along the aim floors at zero.
+- **The soft floor is a pace on the ice.** The cursor band's floor
+  (`min_wrister_power`, 10 m/s) is the softest pace a standing release lands.
+  Skating at the target, the hands cushion the push down to land that same pace
+  (`ReleaseMomentum.floor_push`, read by `ShotMechanics.release_wrister`);
+  skating away, the floor push stays 10, since no harder push comes free.
 
 Numbers at the league ceilings (10 m/s skating, 33 m/s wrister, 14 m/s quick
 pass):
@@ -111,11 +116,6 @@ set by playtest. The puckless one-timer already folds the feed's motion
 
 ## Flagged, not in scope
 
-- **A push cannot be asked for below the wrister's soft floor**
-  (`min_wrister_power`, 10 m/s). Skating hard at a receiver, the pace a feed
-  needs can call for less, so a bot's feed (and a human's softest touch) lands
-  harder than priced there. The load's cap can take a push lower; the cursor
-  model cannot.
 - **The host clamps a one-timer's power to the slapper's ceiling plus its
   centre bonus.** Phase 3 must widen that bound the same way Phase 1 widens the
   wrister's.

@@ -61,6 +61,7 @@ func _tick(count: int, move: Vector2) -> void:
 		_controller._process_input(_input, DT)
 		_skater._physics_process(DT)
 		_input.quick_pass_pressed = false
+		_input.shoot_pressed = false
 
 
 func _quick_pass_after(move: Vector2) -> Vector3:
@@ -86,3 +87,23 @@ func test_a_quick_pass_in_stride_adds_the_skaters_pace() -> void:
 func test_a_quick_pass_standing_still_is_the_push_alone() -> void:
 	var r: Vector3 = _quick_pass_after(Vector2.ZERO)
 	assert_almost_eq(r.length(), _controller.quick_pass_power, 0.01)
+
+
+func test_a_tapped_wrister_in_stride_lands_the_standing_floor() -> void:
+	var stride := Vector2(0.0, -1.0)
+	_tick(120, stride)
+	_input.shoot_pressed = true
+	_input.shoot_held = true
+	_tick(1, stride)
+	_input.shoot_held = false
+	_tick(1, stride)
+	assert_eq(_released.size(), 1, "the tap went")
+	if _released.is_empty():
+		return
+	var r: Vector3 = _released[0]
+	var d := Vector2(r.x, r.z).normalized()
+	assert_gt(Vector2(_velocity_at_release.x, _velocity_at_release.z).dot(d), 4.0,
+			"skating at the target")
+	assert_lte(r.length(), _controller.min_wrister_power + 0.05,
+			"the hands cushion the softest touch to the standing floor")
+
