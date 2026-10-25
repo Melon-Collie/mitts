@@ -169,8 +169,9 @@ the line; a feed that will arrive before he could set, and before a wind-up
 could open the window, he catches instead, and stays given up on it until
 someone has the puck again (`_one_timer_spent`): re-committing on the next tick
 leaves him neither swinging nor squared to catch. The passer feeds him on his
-tape (`AIPassLead.one_timer_tape`), the zone his stance sets for the net, so a
-feed on time leaves nothing to shuffle. He leads the swing against the
+tape, the zone his stance sets for the net, when he can set for it in the
+feed's flight (`AIPassLead.feed_point`, on the same `SlapperRules.time_to_set`
+he presses on), and at his body to catch when he cannot. He leads the swing against the
 feed's pull (`swing_for`), so the shot lands where he aimed it.
 `test_bot_one_timer_loop.gd` drives the real controller through it.
 

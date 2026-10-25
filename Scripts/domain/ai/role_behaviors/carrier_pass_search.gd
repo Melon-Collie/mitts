@@ -372,8 +372,9 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 #   - A softer pace (`soft`) whose flight outruns PASS_LEAD_MAX_S: its lead is
 #     the horizon's, not the meet's, so it is not priced at all.
 #
-# One-timer-ready receivers fire on contact (no wrister windup), so the goalie
-# only gets the pass flight to react; nor do they settle the catch.
+# A one-timer-ready receiver who can set for the feed takes it on his tape and
+# fires on contact (no wrister windup), so the goalie only gets the pass flight
+# to react; nor does he settle the catch. One who cannot set catches it.
 func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		receiver_accel: Vector3, receiver_omega: float, receiver_caps: AISkaterCaps,
 		pass_origin: Vector3, pass_speed: float, saucer: bool,
@@ -387,7 +388,10 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			PASS_LEAD_MAX_S, receiver_caps)
 	var receiver: Vector3 = lead[0]
 	var flight_t: float = lead[1]
-	if receiver_is_one_timer:
+	# Fed on his tape only when he can set for it; otherwise he catches it.
+	var one_timed: bool = receiver_is_one_timer and AIPassLead.one_timer_sets(
+			receiver_state, receiver, flight_t, receiver_caps, ctx.attacking_goal_pos)
+	if one_timed:
 		receiver = AIPassLead.one_timer_tape(receiver, receiver_caps, ctx.attacking_goal_pos)
 	if soft and flight_t >= PASS_LEAD_MAX_S - 0.0001:
 		return 0.0
@@ -443,7 +447,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
 	var closing: float = 0.0
-	if not receiver_is_one_timer:
+	if not one_timed:
 		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 		closing = AIFeedReception.arrival_closing_speed(
 				pass_origin, receiver, pass_speed, receiver_state.velocity)

@@ -2161,18 +2161,7 @@ func _retarget_release_dir(input: InputState, snapshot: WorldSnapshot,
 		self_pos: Vector3) -> void:
 	if not _shot_aim_locked.is_finite():
 		return
-	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state == null:
-		return
-	var blade: Vector3 = self_state.blade_contact_world
-	if blade == Vector3.ZERO:
-		blade = self_pos
-	# The snapshot's blade is a tick old, and the puck leaves from it a tick on:
-	# through the charge it rides the body, so it has slid by the body's velocity.
-	# On a sharp angle that slide swings the crossing several times over.
-	blade += Vector3(self_state.velocity.x, 0.0, self_state.velocity.z) * _current_delta
-	var aim_vec := Vector3(
-			_shot_aim_locked.x - blade.x, 0.0, _shot_aim_locked.z - blade.z)
+	var aim_vec: Vector3 = _from_release_blade(snapshot, self_pos, _shot_aim_locked)
 	if aim_vec.length_squared() < 0.0001:
 		return
 	# The SAME committed error the press drew — re-aiming must not re-roll the
@@ -2181,6 +2170,23 @@ func _retarget_release_dir(input: InputState, snapshot: WorldSnapshot,
 		aim_vec = aim_vec.rotated(Vector3.UP, _committed_aim_error_rad)
 	_shoot_aim_dir_locked = aim_vec.normalized()
 	input.bot_wrister_aim_dir = _shoot_aim_dir_locked
+
+
+# `target` off the blade the puck leaves from on this tick's release (world XZ,
+# un-normalized; off the body when the blade is unavailable).
+func _from_release_blade(snapshot: WorldSnapshot, self_pos: Vector3,
+		target: Vector3) -> Vector3:
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if self_state == null:
+		return Vector3(target.x - self_pos.x, 0.0, target.z - self_pos.z)
+	var blade: Vector3 = self_state.blade_contact_world
+	if blade == Vector3.ZERO:
+		blade = self_pos
+	# The snapshot's blade is a tick old, and the puck leaves from it a tick on:
+	# through the charge it rides the body, so it has slid by the body's velocity.
+	# On a sharp angle that slide swings the crossing several times over.
+	blade += Vector3(self_state.velocity.x, 0.0, self_state.velocity.z) * _current_delta
+	return Vector3(target.x - blade.x, 0.0, target.z - blade.z)
 
 
 # Pre-tilts aim_dir for the wind-up's lateral release offset: both endpoints sit
@@ -2295,7 +2301,13 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		input.shoot_held = true
 		_pass_charge_tick += 1
 	else:
-		# Release: shoot_held drops and release_wrister fires.
+		# Release: shoot_held drops and release_wrister fires, re-pointed from the
+		# blade the puck leaves from to the lead. Locked off the body, the pass runs
+		# parallel to its lead a blade's offset wide of it.
+		var release_vec: Vector3 = _from_release_blade(snapshot, self_pos, clean_pass_aim)
+		if release_vec.length_squared() > 0.0001:
+			_pass_aim_dir_locked = release_vec.normalized()
+			input.bot_wrister_aim_dir = _pass_aim_dir_locked
 		input.shoot_held = false
 		_pass_target_peer_id = -1
 		_pass_should_saucer = false
@@ -2534,10 +2546,11 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	if snapshot.puck_state != null and snapshot.puck_state.carrier_peer_id == _peer_id:
 		origin = Vector3(
 				snapshot.puck_state.position.x, 0.0, snapshot.puck_state.position.z)
-	var lead: Vector3 = AIPassLead.lead_point(
+	var led: Array = AIPassLead.lead(
 			origin, receiver, accel, pass_speed, AICarrierPassSearch.PASS_LEAD_MAX_S, receiver_caps)
-	if _current_strategy != null and _current_strategy.is_one_timer_ready(_pass_target_peer_id):
-		lead = AIPassLead.one_timer_tape(lead, receiver_caps, _attacking_goal_pos)
+	var lead: Vector3 = AIPassLead.feed_point(receiver, led[0], led[1],
+			_current_strategy != null and _current_strategy.is_one_timer_ready(_pass_target_peer_id),
+			receiver_caps, _attacking_goal_pos)
 	# Net guard on the FIRED lane: the scored lane was net-checked at commit, but
 	# the lead re-solves every tick and a receiver drifting near the net plane can
 	# walk it into the cage (the classic behind-the-net feed that rings off the

@@ -22,8 +22,8 @@ class_name AIPassLead
 # the travel lead add and the aim lands a full stick reach past the receiver
 # (tests/unit/ai/test_pass_lead_blade_base.gd). The reception geometry
 # (`_pass_receive_aim_and_steer`) is what puts the receiver's blade on the line;
-# a ready one-timer man, whose zone sits a metre off his body, is fed on it
-# instead (one_timer_tape).
+# a ready one-timer man who can set for it, whose zone sits a metre off his
+# body, is fed on it instead (feed_point).
 
 # Below this speed (m/s) there's no reliable travel direction to project onto,
 # so the raw accel — here "starting to move" — is kept as-is.
@@ -115,3 +115,33 @@ static func one_timer_tape(body: Vector3, receiver_caps: AISkaterCaps,
 			Vector2(caps.slapper_strike_local.x * side, caps.slapper_strike_local.y), side,
 			caps.slapper_stance_open_rad)
 	return Vector3(body.x + off.x, body.y, body.z + off.y)
+
+
+# Whether a one-timer-ready receiver led to `body` (his body there in `flight_t`)
+# can set for a feed on his tape before it arrives (SlapperRules.time_to_set, as
+# he reads it on the release tick). Fed there, the circle meets the line wherever
+# his glide takes him, so what is left is his hips' pivot and any lead his glide
+# alone does not cover.
+static func one_timer_sets(receiver: SkaterNetworkState, body: Vector3, flight_t: float,
+		receiver_caps: AISkaterCaps, attacking_goal: Vector3) -> bool:
+	var caps: AISkaterCaps = receiver_caps if receiver_caps != null else AISkaterCaps.new()
+	var tape: Vector3 = one_timer_tape(body, caps, attacking_goal)
+	var shot := Vector2(attacking_goal.x - tape.x, attacking_goal.z - tape.z)
+	if shot.length_squared() < 0.000001:
+		return true
+	return SlapperRules.time_to_set(receiver.facing,
+			Vector2(receiver.velocity.x, receiver.velocity.z),
+			Vector2(body.x - receiver.position.x, body.z - receiver.position.z),
+			shot.normalized(), flight_t, -1.0 if caps.is_left_handed else 1.0,
+			caps.slapper_stance_open_rad, caps.slapper_stance_turn_rad_s,
+			caps.movement.shuffle_speed) <= flight_t
+
+
+# Where a pass leading its receiver to `body` in `flight_t` is aimed: his tape
+# when he is one-timer ready and can set for it, else his body.
+static func feed_point(receiver: SkaterNetworkState, body: Vector3, flight_t: float,
+		one_timer_ready: bool, receiver_caps: AISkaterCaps, attacking_goal: Vector3) -> Vector3:
+	if one_timer_ready and one_timer_sets(receiver, body, flight_t, receiver_caps,
+			attacking_goal):
+		return one_timer_tape(body, receiver_caps, attacking_goal)
+	return body

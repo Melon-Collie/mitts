@@ -1535,6 +1535,50 @@ func test_pass_aim_feeds_a_ready_one_timer_man_on_his_tape() -> void:
 	assert_gt(at_tape.distance_to(receiver_pos), 0.5, "which sits off his body")
 
 
+func test_pass_aim_feeds_the_body_of_a_one_timer_man_who_cannot_set() -> void:
+	# Turned square away from the stance he would shoot from, a feed from close
+	# in arrives before his hips can pivot round: he will catch it, so it goes to
+	# his body.
+	var receiver_pos := Vector3(-2.5, 0, -24.45)
+	var s := WorldSnapshot.new()
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.carrier_peer_id = SELF_ID
+	s.puck_state.position = Vector3(0.5, 0, -24.45)
+	_add_skater(s, SELF_ID, s.puck_state.position)
+	_add_skater(s, TEAMMATE_ID, receiver_pos)
+	var caps := AISkaterCaps.new()
+	var tape: Vector3 = AIPassLead.one_timer_tape(receiver_pos, caps, sm._attacking_goal_pos)
+	s.skater_states[TEAMMATE_ID].facing = -SlapperRules.stance_facing(Vector2(
+			sm._attacking_goal_pos.x - tape.x, sm._attacking_goal_pos.z - tape.z).normalized(),
+			-1.0 if caps.is_left_handed else 1.0, caps.slapper_stance_open_rad)
+	sm._pass_target_peer_id = TEAMMATE_ID
+	sm._pass_target_speed = 20.0
+	sm._current_strategy = sm._strategy()
+	sm._team_brain.set_one_timer_ready(TEAMMATE_ID, true)
+	assert_almost_eq(sm._pass_aim_point(s, s.skater_states[SELF_ID].position), receiver_pos,
+			Vector3.ONE * 0.001, "fed at the body, to catch")
+
+
+func test_a_released_pass_leaves_the_blade_for_the_lead() -> void:
+	# The puck leaves from the blade, not the body: the release direction is the
+	# blade's line to the lead, or the pass runs a blade's offset wide of it.
+	var s := _self_snap(Vector3.ZERO, true)
+	var blade := Vector3(1.0, 0.0, -0.5)
+	s.puck_state.position = blade
+	s.skater_states[SELF_ID].blade_contact_world = blade
+	_add_skater(s, TEAMMATE_ID, Vector3(10, 0, 0))
+	sm._state = Agent.State.PASS_PRESSED
+	sm._pass_target_peer_id = TEAMMATE_ID
+	sm._pass_target_speed = 20.0
+	sm._pass_charge_tick = AIBotMechanics.BOT_WRISTER_CHARGE_TICKS
+	var input := InputState.new()
+	input.delta = 1.0 / 120.0
+	sm.dispatch(input, s)
+	assert_false(input.shoot_held, "the pass releases this tick")
+	assert_almost_eq(input.bot_wrister_aim_dir, Vector3(9.0, 0.0, 0.5).normalized(),
+			Vector3.ONE * 0.001, "from the blade to the receiver")
+
+
 # ── Contest read + live-bot execution error ─────────────────────────────────
 
 func test_opponent_within_of_reads_contest_range() -> void:
