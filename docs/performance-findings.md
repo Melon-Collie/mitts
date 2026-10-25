@@ -107,7 +107,11 @@ Taken in an all-bot 5v5 and before `KeeperController`, so two rows have moved
 since. The skater step above is the bots' only (`SKATER_STEP`, inside
 `AIController.apply_decision`); a human's (`LocalController` /
 `RemoteController`, at priority −1) is its own row, "human skater steps". The
-goalie row measures the goalie the keeper replaced.
+goalie row measures the goalie the keeper replaced. The worker row was the last
+batch's time re-recorded every tick, which reads as a batch's duration; it is
+now charged once, on the tick its batch is harvested, so it reads as worker time
+per tick. And the AI block's main-thread totals no longer add in the brains,
+which run on the worker.
 
 Three things this settled:
 

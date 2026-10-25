@@ -686,8 +686,9 @@ func _physics_process(delta: float) -> void:
 					_registry.ai_controllers(), team_brains, current_snapshot, delta)
 			HostCostProbe.record(HostCostProbe.Section.DISPATCH,
 					Time.get_ticks_usec() - t_section)
-	HostCostProbe.record(HostCostProbe.Section.WORKER, _ai_coordinator.last_worker_us)
-	HostCostProbe.record(HostCostProbe.Section.BRAINS, _ai_coordinator.last_brain_us)
+	if _ai_coordinator.harvested_this_tick():
+		HostCostProbe.record(HostCostProbe.Section.WORKER, _ai_coordinator.last_worker_us)
+		HostCostProbe.record(HostCostProbe.Section.BRAINS, _ai_coordinator.last_brain_us)
 	t_section = Time.get_ticks_usec()
 	_update_host_puck_tracking()
 	_check_goal_crossing()
