@@ -43,10 +43,10 @@ release would have had standing still). Split `v` along and across the aim:
   drifts by the motion the push could not cancel.
 - **The stop:** the speed along the aim floors at zero.
 - **The soft floor is a pace on the ice.** The cursor band's floor
-  (`min_wrister_power`, 10 m/s) is the softest pace a standing release lands.
+  (`min_wrister_power`, 5 m/s) is the softest pace a standing release lands.
   Skating at the target, the hands cushion the push down to land that same pace
   (`ReleaseMomentum.floor_push`, read by `ShotMechanics.release_wrister`);
-  skating away, the floor push stays 10, since no harder push comes free.
+  skating away, the floor push stays 5, since no harder push comes free.
 
 Numbers at the league ceilings (10 m/s skating, 33 m/s wrister, 14 m/s quick
 pass):
@@ -55,8 +55,8 @@ pass):
 |---|---|---|---|---|
 | full wrister | 33 | 41 | 32.0 | 25 |
 | quick pass | 14 | 22 | 11.5 | 6 |
-| soft wrister | 10 | 18 | 6 | 2 |
-| a push of 5 | 5 | 13 | drifts | 0 (left behind) |
+| a push of 10 | 10 | 18 | 6 | 2 |
+| a push of 5, the soft floor | 5 | 13 | drifts | 0 (left behind) |
 
 The inverse, the push a release needs for a pace `S` along `d`:
 `P = √((S − v_par)² + |v_perp|²)`, for `S ≥ v_par`.
