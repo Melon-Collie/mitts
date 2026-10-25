@@ -77,11 +77,18 @@ var hand_target := Vector3.ZERO
 var covers: bool = false
 var ready_s: float = 0.0
 var impact_s: float = INF
+# Whether the motor could cut a low save in when it was chosen (mid-slide or on
+# the post it cannot): one chosen without is chosen again once it can.
+var lows_open: bool = true
 
 # Whether a hand is out (reaching, held, or on its way back), and where.
 var _hand_out: bool = false
 var _hand_at := Vector3.ZERO
 var _returning: bool = false
+# A hand still on its way back from the last save when another went out for
+# the next, going on back by itself, and where it is.
+var _back: int = Hand.NONE
+var _back_at := Vector3.ZERO
 var _palm := Vector3.FORWARD
 # The glove's fingers sent onto a puck he watches: out ahead laid flat on one
 # on the ice, up over one held to his chest.
@@ -131,10 +138,19 @@ func active() -> bool:
 
 # Chooses the save against the flight `read` believes, from where `motor` has
 # him and the pose it gives him now; `mirrored` for a right-catcher. Lows only
-# where the motor can cut one in (KeeperMotor.can_save): on his feet any, down
-# the extension, on a post or mid-drop or slide none (a shot from the seal is
-# held in it).
+# where the motor can cut one in (KeeperMotor.can_save): on his feet or on the
+# way between them and the ice any, down the extension, on a post or mid-slide
+# none (a shot from the seal is held in it).
 func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
+	# A hand already out on this shot (chosen again once he can go down) stays
+	# the one he saves with.
+	var kept: int = hand if _hand_out and not _returning else -1
+	_park()
+	_choose(read, motor, mirrored, kept)
+	_resume()
+
+
+func _choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool, kept: int) -> void:
 	_watched = false
 	_believe(read, motor, mirrored)
 	motor.pose(_base)
@@ -150,17 +166,20 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 	low = Low.NONE
 	low_side = side
 	hand = Hand.NONE
+	lows_open = true
 	ready_s = 0.0
 	impact_s = INF
 	_leg_wait = maxf(read.leg_delay_s - read.age, 0.0)
 	_arm_wait = maxf(read.arm_delay_s - read.age, 0.0)
-	_fall = motor.low_ready.fall_share()
+	_fall = motor.fall
 	_best = -1
 	var side_hand: int = Hand.GLOVE if side < 0.0 else Hand.BLOCKER
 	if not low_shot:
 		var hands: Array[int] = HANDS_GLOVE_SIDE
 		if absf(by.x) > 0.5 * KeeperAnatomy.CHEST_WIDTH_M and side > 0.0:
 			hands = HANDS_BLOCKER_SIDE
+		if kept >= 0:
+			hands = [kept]
 		for h: int in hands:
 			if _take(Low.NONE, side, h):
 				return
@@ -170,6 +189,8 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 		lows = LOW_WIDE if wide else LOW_AT_BODY
 	elif motor.can_save(true):
 		lows = [Low.EXTENSION, Low.NONE]
+	else:
+		lows_open = false
 	for l: int in lows:
 		if _take(l, side, Hand.NONE):
 			break
@@ -178,7 +199,12 @@ func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 	var with_legs: int = low
 	var met: int = _best
 	_best = met - 1
-	for h: int in ([Hand.STICK, side_hand] if on_ice else [side_hand]):
+	var leads: Array[int] = [side_hand]
+	if on_ice:
+		leads = [Hand.STICK, side_hand]
+	if kept >= 0:
+		leads = [kept]
+	for h: int in leads:
 		if _take(with_legs, side, h):
 			return
 	if _best < met:
@@ -209,10 +235,43 @@ func _take(l: int, side: float, h: int) -> bool:
 	return _best == 2
 
 
+# The hand out goes on back by itself (`_back`) while another goes out; one
+# that is out again turns from where it is.
+func _park() -> void:
+	if not _hand_out:
+		return
+	_back = hand
+	_back_at = _hand_at
+	_hand_out = false
+	_returning = false
+
+
+func _resume() -> void:
+	if _back == Hand.NONE or _back != hand:
+		return
+	_hand_out = true
+	_hand_at = _back_at
+	_back = Hand.NONE
+
+
+# `h` sent out on its own: another hand out goes on back by itself.
+func _send(h: int) -> void:
+	if _hand_out and hand != h:
+		_park()
+	hand = h
+	_resume()
+	_returning = false
+
+
 # The hand on its way: still until his arms have read the shot, then toward the
 # target at its speed; back toward where the pose under it holds it once
 # released. `base` is that pose.
 func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
+	if _back != Hand.NONE:
+		var home: Vector3 = _rest_of(_back, base)
+		_back_at = _back_at.move_toward(home, _speed(_back) * dt)
+		if _back_at.distance_to(home) < THERE_M:
+			_back = Hand.NONE
 	# The trunk folds after a covering glove as fast as the glove goes out the
 	# cover's reach, and comes back up as it returns.
 	var leaning: bool = _watched and _hand_out and not _returning
@@ -238,24 +297,22 @@ func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
 # he is watching it, and on to a new target as the puck moves.
 func cover(target: Vector3, lean: float) -> void:
 	_lean_to = lean
-	hand = Hand.GLOVE
+	_send(Hand.GLOVE)
 	hand_target = target
 	_palm = Vector3.DOWN
 	_fingers = Vector3.FORWARD
 	_watched = true
-	_returning = false
 
 
 # The glove over a puck held against his chest at `target` (his space), palm
 # in on it and fingers up, at once.
 func trap(target: Vector3) -> void:
 	_lean_to = 0.0
-	hand = Hand.GLOVE
+	_send(Hand.GLOVE)
 	hand_target = target
 	_palm = Vector3.BACK
 	_fingers = Vector3.UP
 	_watched = true
-	_returning = false
 
 
 # Whether the hand is out on its target.
@@ -278,6 +335,8 @@ func release() -> void:
 func overlay(p: KeeperPose) -> void:
 	if _lean > 0.0:
 		KeeperPoses.cover_lean(p, hand_target, _lean)
+	if _back != Hand.NONE:
+		_lay_hand(p, _back, _back_at)
 	if not _hand_out:
 		return
 	_lay_hand(p, hand, _hand_at)

@@ -124,3 +124,38 @@ func test_down_he_can_still_extend_but_not_mid_slide() -> void:
 	_motor.slide_to(Vector2(0.8, 0.0))
 	_motor.step(DT)
 	assert_false(_motor.can_save(true), "not mid-slide")
+
+
+func test_cut_into_a_rise_it_falls_back_from_as_far_down_as_he_is() -> void:
+	_motor.drop_down()
+	var was: Array[Vector3] = _run("drop", 0.6, _bones())
+	_motor.rise()
+	was = _run("rise", 0.15, was)
+	assert_eq(_motor._mover, KeeperMotor.Mover.DROP, "on his way up")
+	assert_true(_motor.can_save(false), "a low save cuts into the rise")
+	var fall: float = _motor.fall
+	assert_lt(fall, 1.0, "less of a fall than from his feet")
+	assert_gte(fall, KeeperLowReady.fall_share_at(1.0), "no less than the low ready's")
+	_motor.save(L.BUTTERFLY, 1.0)
+	was = _run("butterfly cut into a rise", _motor.save_move.drop_s * fall + DT, was)
+	assert_true(_motor.save_move.is_set(), "in its stance in the fall he had left")
+	_motor.end_save()
+	_run("butterfly cut into a rise", KeeperSaveMove.GATHER_S + DT, was)
+	assert_eq(_motor.rest, R.DOWN)
+
+
+func test_gathering_after_a_save_he_can_save_again() -> void:
+	for low: int in [L.BUTTERFLY, L.KICK]:
+		before_each()
+		var what: String = L.keys()[low]
+		_motor.save(low, -1.0)
+		var was: Array[Vector3] = _run(what, _motor.save_move.drop_s + DT, _bones())
+		_motor.end_save()
+		was = _run(what, DT, was)
+		assert_eq(_motor.save_move.state, KeeperSaveMove.State.GATHERING, what)
+		var down: bool = low != L.KICK
+		assert_eq(_motor.can_save(true), down, "%s: the extension from the gather down" % what)
+		assert_eq(_motor.can_save(false), not down, "%s: any low from the gather up" % what)
+		_motor.save(L.EXTENSION if down else L.BUTTERFLY, 1.0)
+		was = _run(what + " again", _motor.save_move.drop_s + DT, was)
+		assert_true(_motor.save_move.is_set(), "%s: the second save made" % what)

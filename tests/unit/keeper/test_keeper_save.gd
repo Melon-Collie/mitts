@@ -235,6 +235,44 @@ func test_released_the_hand_goes_back_and_the_save_ends() -> void:
 	assert_eq(_save.hand, KeeperSave.Hand.NONE)
 
 
+# A new shot while the last save's glove is still on its way back: the glove
+# goes on back by itself, never jumping, and the new save's hand goes out and
+# meets the puck, the glove too when it is the glove again.
+func test_a_shot_while_a_hand_goes_back_gets_its_hand() -> void:
+	for case: Array in [[0.85, KeeperSave.Hand.BLOCKER, KeeperGear.Part.BLOCKER],
+			[-0.85, KeeperSave.Hand.GLOVE, KeeperGear.Part.GLOVE]]:
+		before_each()
+		var what: String = "then %s" % KeeperSave.Hand.keys()[case[1]]
+		_shoot(Vector3(0.0, 0.3, -9.0), Vector2(-0.85, 1.0), 20.0)
+		_save.choose(_read, _motor, false)
+		var glove: Array[Vector3] = []
+		for i: int in 40:
+			_fly(DT)
+			glove.append(_glove_after_step())
+		_save.release()
+		for i: int in 3:
+			glove.append(_glove_after_step())
+		_read = KeeperShotRead.new()
+		_shoot(Vector3(0.0, 0.3, -9.0), Vector2(float(case[0]), 1.0), 20.0)
+		_save.choose(_read, _motor, false)
+		assert_eq(_save.hand, case[1], what)
+		for i: int in 3:
+			_fly(DT)
+			glove.append(_glove_after_step())
+		for i: int in range(1, glove.size()):
+			assert_lte(glove[i].distance_to(glove[i - 1]), _save.glove_speed_m_s * DT + 0.01,
+					"%s: the glove never jumps (tick %d)" % [what, i])
+		_hand_to_the_puck(case[2], what)
+
+
+func _glove_after_step() -> Vector3:
+	_motor.pose(_pose)
+	_save.step(DT, _read.arms_read(), _pose)
+	_save.overlay(_pose)
+	_skel.pose(_pose)
+	return KeeperGear.box(_skel, KeeperGear.Part.GLOVE).origin
+
+
 func test_a_right_catcher_catches_with_his_glove_on_his_own_side() -> void:
 	_shoot(Vector3(0.0, 0.3, -9.0), Vector2(0.85, 1.0), 20.0)
 	_save.choose(_read, _motor, true)
