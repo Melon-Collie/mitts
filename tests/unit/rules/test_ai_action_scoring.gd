@@ -1012,7 +1012,10 @@ func test_lane_clear_saucer_soft_flip_lands_earlier() -> void:
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 12.0)
 	var mid_stick: Array[Vector3] = [Vector3(0.5, 0.0, 5.0)]
-	var crisp: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, AIPuckLane.PASS_CHARGE_SPEED_M_S)
+	var crisp_pace: float = 22.0
+	assert_gt(AIPuckLane.saucer_airborne_distance_m(crisp_pace), 8.0,
+			"precondition: the crisp flip lands well past him")
+	var crisp: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, crisp_pace)
 	var soft: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, 12.0)
 	assert_almost_eq(crisp, 1.0, 0.0001, "the crisp flip lands well past the 5 m defender")
 	assert_lt(soft, crisp, "the soft flip lands beside him — he blocks it")
