@@ -43,6 +43,7 @@ var _rake: ArenaBowlRake
 # Rebuilt with the spectators (a rebuild frees all children), so guard reads
 # with is_instance_valid during the free→re-add window.
 var _flashbulbs: CrowdFlashbulbs = null
+var _instances: Array[MultiMeshInstance3D] = []
 
 
 func _init(spec: ArenaBowlSpec, path: ArenaBowlPath, rake: ArenaBowlRake) -> void:
@@ -317,13 +318,27 @@ func attach(root: Node3D, layout: Dictionary) -> void:
 		# sway/hop animation. (The goalie disables shadow casting the same way.)
 		body_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(body_mmi)
+		_instances.append(body_mmi)
 		var head_mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 		head_mmi.multimesh = head_mms[k]
 		head_mmi.name = "SpectatorHeads%d" % k
 		head_mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(head_mmi)
+		_instances.append(head_mmi)
 
 	_flashbulbs = CrowdFlashbulbs.new()
 	_flashbulbs.name = "CrowdFlashbulbs"
 	_flashbulbs.set_sources(head_mms)
 	root.add_child(_flashbulbs)
+
+
+# Shows or hides the fans and their flashbulbs, leaving their seats empty. A
+# hidden flashbulb rig stops spawning too.
+func set_shown(shown: bool) -> void:
+	for mmi: MultiMeshInstance3D in _instances:
+		if is_instance_valid(mmi):
+			mmi.visible = shown
+	if _flashbulbs != null and is_instance_valid(_flashbulbs):
+		_flashbulbs.visible = shown
+		_flashbulbs.process_mode = Node.PROCESS_MODE_INHERIT if shown \
+				else Node.PROCESS_MODE_DISABLED

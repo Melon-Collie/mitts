@@ -253,8 +253,8 @@ the milliseconds.
 | Anti-Aliasing MSAA 8x | +71 (+23..+119) | +14% | 602 | High |
 | Anti-Aliasing TAA | +72 (+14..+131) | +15% | 596 | High |
 | Global Illumination SDFGI | +605 (+538..+672) | +122% | 602 | High |
-| Crowd Density Low | −75 (−90..−61) | −15% | 649 | Medium |
-| Crowd Density Off | −123 (−202..−44) | −25% | 526 | Medium |
+| Crowd Density Low | not measured | — | — | Medium |
+| Crowd Density Off | not measured | — | — | Medium |
 | Volumetric Fog on | +80 (+74..+85) | +16% | 624 | High |
 | Reflections off | −90 (−106..−75) | −18% | 636 | High |
 | Ambient Occlusion off | −49 (−62..−36) | −10% | 660 | Medium |
@@ -270,9 +270,10 @@ of each row, whose tooltip explains the setting) follow the table: High for a ch
 Medium for 5–15%, Low for what cannot be told from noise but does real work, None
 for a colour adjustment or a one-off paint. Three calls are judgement and say so:
 
-- **Crowd Density is Medium**, not the High its 15–25% would earn: the stands are
-  instanced figures, cheap on a graphics card, and the software rasteriser's
-  per-triangle cost is what puts them that high here.
+- **Crowd Density is Medium** by judgement alone, with no measurement of the
+  setting as it stands: it changes only the fans (Low draws every one with the
+  far figure, Off empties the seats), which are instanced figures, cheap on a
+  graphics card. `measure-graphics.sh crowd` on a machine with one settles it.
 - **Upscaling is Medium**: FSR costs nothing over bilinear, and FSR2's compute
   pass is the kind of work lavapipe is slowest at.
 - **Animation Detail costs the processor, not the GPU** — the per-skater pose
