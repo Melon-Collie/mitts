@@ -471,6 +471,11 @@ var _one_timer_press_tick: int = 0
 var _one_timer_slap_down: bool = false
 # Seconds wound up since that press.
 var _one_timer_charge_s: float = 0.0
+# A feed ONE_TIMER_PRESSED has played — swung at, or given up on because it
+# arrives before the body could set or a wind-up could open the window — gets no
+# second commit: given up on it is caught instead. No one-timer entry fires until
+# someone has the puck again.
+var _one_timer_spent: bool = false
 # The feed in this body's frame (world XZ) as last seen loose: the swing leads
 # against its pull, and once it is caught the snapshot no longer shows it.
 var _one_timer_feed := Vector2.ZERO
@@ -968,6 +973,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	# tag-up override in _state_off_puck routes us back to the blue line.
 	if snapshot.is_out_of_play(_peer_id) and _state == State.CHASE_PUCK:
 		_set_state(State.OFF_PUCK)
+	if snapshot.real_puck_carrier_peer_id != -1:
+		_one_timer_spent = false
 
 	# Decision throttle (see DISPATCH_PERIOD_TICKS). `_set_state` zeroes
 	# `_dispatch_skip_counter`, so a fresh state dispatches full on its first tick.
@@ -1216,7 +1223,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# Transitions
 	if have_puck:
 		_set_state(State.CARRY)
-	elif _is_one_timer_ready and _in_attacking_zone(self_pos) \
+	elif _is_one_timer_ready and not _one_timer_spent and _in_attacking_zone(self_pos) \
 			and (_one_timer.line_anchor(snapshot, self_pos, _attacking_goal_pos).is_finite()
 			or _puck_in_one_timer_zone(snapshot, self_pos)):
 		# Commit at feed RELEASE, not contact: the slap wind-up needs the flight
@@ -1224,7 +1231,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# onto the pass's path. The zone-entry check is the fallback for feeds too
 		# soft/close to read as a live line.
 		_set_state(State.ONE_TIMER_PRESSED)
-	elif _is_one_timer_ready and not _loose_puck_in_reach_band(snapshot, self_pos):
+	elif _is_one_timer_ready and not _one_timer_spent \
+			and not _loose_puck_in_reach_band(snapshot, self_pos):
 		# Stay camped + pre-aimed even if the brain says we're closest to a loose
 		# puck: chasing would lose the goal-aim lock. The exception is a puck
 		# coming into the camper's own reach band — he takes it.
@@ -1548,7 +1556,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 	# A ready one-timer with the puck in our zone fires instead of picking up.
 	if have_puck:
 		_set_state(State.CARRY)
-	elif _is_one_timer_ready and _in_attacking_zone(self_pos) \
+	elif _is_one_timer_ready and not _one_timer_spent and _in_attacking_zone(self_pos) \
 			and _puck_in_one_timer_zone(snapshot, self_pos):
 		_set_state(State.ONE_TIMER_PRESSED)
 	elif not _should_chase_loose_puck(snapshot, self_pos) \
@@ -1583,7 +1591,8 @@ func _pass_receive_aim_and_steer(input: InputState, snapshot: WorldSnapshot, sel
 func _try_shot_reception(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3) -> int:
 	if not _reception.read_shot(snapshot, self_pos, _blade_reach, _attacking_goal_pos):
 		return _RECV_NONE
-	if _reception.shot_one_time_geometry and _squared_to_shoot(snapshot, self_pos):
+	if _reception.shot_one_time_geometry and not _one_timer_spent \
+			and _squared_to_shoot(snapshot, self_pos):
 		# One transitional tick of net-aimed steering before ONE_TIMER_PRESSED
 		# takes over next dispatch (it presses slap on its tick 0 and settles
 		# on the live line itself — no latched anchor to hand over).
@@ -2384,6 +2393,7 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		elif feed_s < _one_timer.min_windup_s():
 			# Nothing was pressed yet, so there's no charge to cancel.
 			debug_last_decision = "ONE_TIMER_ABORT_WIDE"
+			_one_timer_spent = true
 			_set_state(_post_puck_lost_state(snapshot))
 			return
 
@@ -2398,6 +2408,7 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		# On the centre beat but not attached: drop the button and let the
 		# controller's release buffer sweep the leniency zone.
 		input.slap_held = false
+		_one_timer_spent = true
 		_set_state(_post_puck_lost_state(snapshot))
 		return
 
@@ -2525,6 +2536,8 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 				snapshot.puck_state.position.x, 0.0, snapshot.puck_state.position.z)
 	var lead: Vector3 = AIPassLead.lead_point(
 			origin, receiver, accel, pass_speed, AICarrierPassSearch.PASS_LEAD_MAX_S, receiver_caps)
+	if _current_strategy != null and _current_strategy.is_one_timer_ready(_pass_target_peer_id):
+		lead = AIPassLead.one_timer_tape(lead, receiver_caps, _attacking_goal_pos)
 	# Net guard on the FIRED lane: the scored lane was net-checked at commit, but
 	# the lead re-solves every tick and a receiver drifting near the net plane can
 	# walk it into the cage (the classic behind-the-net feed that rings off the

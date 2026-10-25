@@ -3208,8 +3208,8 @@ func get_body_block_y_range() -> Vector2:
 
 # ── Slapper Zone ──────────────────────────────────────────────────────────────
 # Arms the one-timer catch zone: a disc of `radius` centred on `center_local`, an
-# (x, z) point in skater-local space. Disarming keeps the last geometry — every
-# caller gates on is_slapper_zone_active() first.
+# (x, z) point in skater-local space. Disarming keeps the last geometry: the
+# one-timer's release reads the zone after the catch has disarmed it.
 func set_slapper_zone(active: bool, radius: float = 0.0, center_local: Vector2 = Vector2.ZERO) -> void:
 	if active and radius > 0.0:
 		_slapper_zone_radius = radius

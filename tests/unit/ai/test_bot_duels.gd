@@ -74,11 +74,12 @@ func test_cornered_carrier_escapes() -> void:
 	# defender pressures from behind — retreat denied, forward contained. The
 	# carrier must get past: the puck crosses the container's depth floor still
 	# in team-0 hands, or gets released on net once the lane opens. The
-	# container holds just outside his presented stick: inside it, the poke lands
-	# on the first tick.
+	# container holds 4 m off, its presented stick a metre and a half short of
+	# the puck carried ahead: any tighter and the box is closed by the carrier's
+	# own read, and the puck rides into the stick.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -9.0))
-	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -12.5), 3.5, -13.0)
+	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -13.0), 4.0, -13.0)
 	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -6.5))
 	duel.start(CARRIER)
 	var crossed_carrying: bool = false

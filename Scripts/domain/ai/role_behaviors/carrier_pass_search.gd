@@ -387,6 +387,8 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			PASS_LEAD_MAX_S, receiver_caps)
 	var receiver: Vector3 = lead[0]
 	var flight_t: float = lead[1]
+	if receiver_is_one_timer:
+		receiver = AIPassLead.one_timer_tape(receiver, receiver_caps, ctx.attacking_goal_pos)
 	if soft and flight_t >= PASS_LEAD_MAX_S - 0.0001:
 		return 0.0
 	if ctx.own_goal_dir * receiver.z > GameRules.GOAL_LINE_Z:

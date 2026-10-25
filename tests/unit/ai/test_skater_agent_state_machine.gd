@@ -1511,6 +1511,30 @@ func test_pass_aim_leads_from_the_puck_not_the_body() -> void:
 			"a puck 3 m out front shortens the flight and the lead follows")
 
 
+func test_pass_aim_feeds_a_ready_one_timer_man_on_his_tape() -> void:
+	# A ready one-timer man takes the feed in his slapper zone, so the fired aim
+	# is his tape — the point the carrier's pass search scored him at — and an
+	# unready receiver is still fed at the body.
+	var receiver_pos := Vector3(-2.5, 0, -24.45)
+	var s := WorldSnapshot.new()
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.carrier_peer_id = SELF_ID
+	s.puck_state.position = Vector3(7, 0, -22.6)
+	_add_skater(s, SELF_ID, Vector3(7, 0, -22.6))
+	_add_skater(s, TEAMMATE_ID, receiver_pos)
+	sm._pass_target_peer_id = TEAMMATE_ID
+	sm._pass_target_speed = 20.0
+	sm._current_strategy = sm._strategy()
+	var at_body: Vector3 = sm._pass_aim_point(s, s.skater_states[SELF_ID].position)
+	assert_almost_eq(at_body, receiver_pos, Vector3.ONE * 0.001, "unready: fed at the body")
+	sm._team_brain.set_one_timer_ready(TEAMMATE_ID, true)
+	var at_tape: Vector3 = sm._pass_aim_point(s, s.skater_states[SELF_ID].position)
+	assert_almost_eq(at_tape, AIPassLead.one_timer_tape(receiver_pos,
+			sm._caps_by_peer.get(TEAMMATE_ID), sm._attacking_goal_pos), Vector3.ONE * 0.001,
+			"ready: fed on his tape")
+	assert_gt(at_tape.distance_to(receiver_pos), 0.5, "which sits off his body")
+
+
 # ── Contest read + live-bot execution error ─────────────────────────────────
 
 func test_opponent_within_of_reads_contest_range() -> void:

@@ -261,6 +261,47 @@ func test_one_timer_aborts_when_it_cannot_set_before_the_feed() -> void:
 			"it aborts the wind-up and drops to catch the feed")
 
 
+func test_a_feed_given_up_on_is_caught_not_recommitted() -> void:
+	# The camped man gives up on a feed he cannot set for and stays given up on
+	# it: re-committing on the next tick only to give up again leaves him neither
+	# swinging nor squared to catch it. The next possession re-arms him.
+	var finisher_pos := Vector3(-4.0, 0.0, -21.65)
+	var s: WorldSnapshot = _cycle_snap(finisher_pos)
+	_brain.tick(1.0, s)
+	var sm: SkaterAgentStateMachine = Agent.new()
+	sm.setup(FINISHER_ID, 0, _brain, _team_map, false)
+	var probe: RoleDecision = AIRoleFinisher.decide(
+			sm._build_role_context(s, finisher_pos, s.skater_states[FINISHER_ID]))
+	finisher_pos = probe.target_position
+	s.skater_states[FINISHER_ID].position = finisher_pos
+	var input := InputState.new()
+	for i: int in 12:
+		sm.dispatch(input, s)
+	s.skater_states[FINISHER_ID].facing = Vector2(0.0, 1.0)  # net dead behind
+	# The loose-puck election still names the passer early in the flight, so
+	# giving up drops him off-puck, where the camp reads the feed afresh.
+	s.closest_to_puck_by_team[0] = CARRIER_ID
+	s.closest_to_puck_by_team[1] = OPP_MARK
+	var dir := Vector3(-18.0, 0.0, -6.0).normalized()
+	var states: Array[int] = []
+	for tick: int in 8:
+		s.puck_state.position = finisher_pos - dir * (3.0 - 18.0 * float(tick) / 120.0)
+		s.puck_state.velocity = dir * 18.0
+		s.puck_state.carrier_peer_id = -1
+		s.real_puck_carrier_peer_id = -1
+		sm.dispatch(input, s)
+		states.append(sm.get_state())
+	assert_eq(states[0], Agent.State.ONE_TIMER_PRESSED, "the ready man commits at the feed")
+	var gave_up: int = states.find(Agent.State.OFF_PUCK)
+	assert_gt(gave_up, 0, "gives up on it to catch it: %s" % [states])
+	assert_eq(states.slice(gave_up).count(Agent.State.ONE_TIMER_PRESSED), 0,
+			"and stays given up on it: %s" % [states])
+	s.real_puck_carrier_peer_id = CARRIER_ID
+	s.puck_state.carrier_peer_id = CARRIER_ID
+	sm.dispatch(input, s)
+	assert_false(sm._one_timer_spent, "the next possession re-arms the one-timer")
+
+
 func test_cross_seam_reception_one_times_off_the_displaced_goalie() -> void:
 	# Mode A (shot-aware reception): a lateral feed across the slot with the
 	# goalie still parked on the passer's side — the chasing bot commits to

@@ -21,7 +21,9 @@ class_name AIPassLead
 # bot's ready stance points its stick along its travel, so the stance offset and
 # the travel lead add and the aim lands a full stick reach past the receiver
 # (tests/unit/ai/test_pass_lead_blade_base.gd). The reception geometry
-# (`_pass_receive_aim_and_steer`) is what puts the receiver's blade on the line.
+# (`_pass_receive_aim_and_steer`) is what puts the receiver's blade on the line;
+# a ready one-timer man, whose zone sits a metre off his body, is fed on it
+# instead (one_timer_tape).
 
 # Below this speed (m/s) there's no reliable travel direction to project onto,
 # so the raw accel — here "starting to move" — is kept as-is.
@@ -95,3 +97,21 @@ static func along_velocity_component(accel: Vector3, vel: Vector3) -> Vector3:
 		return accel
 	var dir: Vector3 = vel / speed
 	return dir * accel.dot(dir)
+
+
+# Where a one-timer-ready receiver whose body meets the feed at `body` takes it:
+# his slapper zone, the strike spot of a stance set for `attacking_goal` from
+# there (SkaterAgentOneTimer.zone_center), so the feed arrives on the line he
+# would otherwise have to shuffle onto. Fed at the body, a cross-crease feed
+# reaches him before he can set.
+static func one_timer_tape(body: Vector3, receiver_caps: AISkaterCaps,
+		attacking_goal: Vector3) -> Vector3:
+	var caps: AISkaterCaps = receiver_caps if receiver_caps != null else AISkaterCaps.new()
+	var to_net := Vector2(attacking_goal.x - body.x, attacking_goal.z - body.z)
+	if to_net.length_squared() < 0.000001:
+		return body
+	var side: float = -1.0 if caps.is_left_handed else 1.0
+	var off: Vector2 = SlapperRules.strike_offset(to_net.normalized(),
+			Vector2(caps.slapper_strike_local.x * side, caps.slapper_strike_local.y), side,
+			caps.slapper_stance_open_rad)
+	return Vector3(body.x + off.x, body.y, body.z + off.y)
