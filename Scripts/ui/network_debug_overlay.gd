@@ -315,6 +315,10 @@ func _copy_session_digest() -> void:
 			"vsync_mode": _vsync_mode_name(),
 			"fps_cap": Engine.max_fps,
 			"refresh_hz": DisplayServer.screen_get_refresh_rate(),
+			# Safe renders on the main thread, so cpu_render_ms is serial with it;
+			# Separate gives it a thread of its own. Read from ProjectSettings, which
+			# an override.cfg beside the executable writes, so an A/B can show it took.
+			"thread_model": _thread_model_name(),
 			"bound_by": _frame_bound_verdict(_ema_frame_ms, _main_thread_ms(_ema_frame_ms)),
 			"skaters": get_tree().get_nodes_in_group("skaters").size(),
 			"frame_ms": _ema_frame_ms,
@@ -677,16 +681,17 @@ func _render_frame_cost() -> void:
 	var frame_ms: float = _ema_frame_ms
 	var main_ms: float = _main_thread_ms(frame_ms)
 	_info("Frame", "%.2f ms (%.0f fps)" % [frame_ms, 1000.0 / maxf(frame_ms, 0.001)],
-		"wall-clock per rendered frame; the three costs below run CONCURRENTLY (the GPU and render thread trail the main thread by a frame), so the frame is set by the largest, not their sum")
+		"wall-clock per rendered frame; the GPU trails the CPU by a frame, so the frame is set by the larger of the two, not their sum. CPU render shares the main thread under the Safe thread model and has its own under Separate")
 	_context(_band(_frac(_ema_gpu_ms, frame_ms), 0.60, 0.85), "GPU",
 		"%.2f ms (%.0f%% of frame)" % [_ema_gpu_ms, _frac(_ema_gpu_ms, frame_ms) * 100.0],
 		"drawing cost — resolution, MSAA, shadow maps, transparent overdraw, post FX")
 	_context(_band(_frac(_ema_cpu_render_ms, frame_ms), 0.60, 0.85), "CPU render",
-		"%.2f ms (%.0f%% of frame)" % [_ema_cpu_render_ms, _frac(_ema_cpu_render_ms, frame_ms) * 100.0],
-		"render thread building draw commands; scales with the draw-call count below, not with pixels")
+		"%.2f ms (%.0f%% of frame) · %s" % [_ema_cpu_render_ms, _frac(_ema_cpu_render_ms, frame_ms) * 100.0,
+				_thread_model_name()],
+		"the CPU building draw commands; scales with the draw-call count below, not with pixels. Under Safe it runs on the main thread, after the game's own work; under Separate on its own thread, alongside it")
 	_context(_band(_frac(main_ms, frame_ms), 0.60, 0.85), "Main thread",
 		"%.2f ms (%.0f%% of frame)" % [main_ms, _frac(main_ms, frame_ms) * 100.0],
-		"the frame MINUS the render terms — your _process/_physics_process, the physics server, and engine work. Not measured directly: it is what neither the GPU nor the render thread accounts for, so an idle wait on vsync lands here too (the verdict rules that out first)")
+		"the frame MINUS the render terms — your _process/_physics_process, the physics server, and engine work. Not measured directly: it is what neither the GPU nor CPU render accounts for, so an idle wait on vsync lands here too (the verdict rules that out first)")
 	_info("Peak step (last 1 s)", "process %.2f ms · physics %.2f ms" % [_peak_process_ms, _peak_physics_ms],
 		"engine's WORST single step in the last second, not an average — a peak above the frame budget is a hitch you feel, but it does not mean the typical step costs this")
 	_info("Scene", "%d draws · %d objects · %.1f M prims" % [
@@ -849,6 +854,16 @@ func _host_ai_cost_dict() -> Dictionary:
 		"worker_behind_pct": HostCostProbe.worker_busy_pct(),
 		"sections": sections,
 	}
+
+
+const _THREAD_MODELS: Array[String] = ["Unsafe", "Safe", "Separate"]
+
+
+func _thread_model_name() -> String:
+	var model: int = int(ProjectSettings.get_setting("rendering/driver/threads/thread_model", 1))
+	if model < 0 or model >= _THREAD_MODELS.size():
+		return "unknown (%d)" % model
+	return _THREAD_MODELS[model]
 
 
 func _vsync_mode_name() -> String:

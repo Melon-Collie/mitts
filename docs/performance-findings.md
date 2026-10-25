@@ -32,7 +32,7 @@ length independently of how much work the main thread did therefore lands in it.
 
 The shipped defaults are **vsync Enabled, no cap**. A sweep taken there is not
 comparable to one taken uncapped. The digest reports `vsync_mode`, `fps_cap`,
-`refresh_hz` and `bound_by` so a pasted capture can be checked rather than
+`refresh_hz`, `thread_model` and `bound_by` so a pasted capture can be checked rather than
 trusted.
 
 Mailbox vsync is exempt — triple-buffered and not capped to refresh.
