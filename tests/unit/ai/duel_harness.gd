@@ -1173,8 +1173,10 @@ func _puckless_swings() -> void:
 # The carrier's release as the controller fires it: the quick pass at its fixed
 # pace toward the cursor; a charged wrister at the bot's committed power along its
 # committed aim, at the backhand's share on the backhand, capped by how far the
-# body loads it (WristerLoad); a slapper at its charge's power. Each finishes over
-# its follow-through, and a lofted release flies over the sticks.
+# body loads it (WristerLoad); a slapper at its charge's power. The wrister and the
+# quick pass keep the skater's motion (ReleaseMomentum), as the controller's
+# _carry_momentum folds it in. Each finishes over its follow-through, and a lofted
+# release flies over the sticks.
 func _release(c: SimSkater) -> void:
 	var kit: ShotKit = _shot_kit
 	var lefty: bool = c.agent._is_left_handed
@@ -1183,6 +1185,7 @@ func _release(c: SimSkater) -> void:
 	if c.input.quick_pass_pressed:
 		result = ShotMechanics.release_wrister(c.pos, c.input.mouse_world_pos, c.blade, false,
 				c.input.elevation_level, kit.wrister, Vector3.ZERO, true)
+		_carry_momentum(result, c.vel, true)
 		finish_s = kit.quick_finish
 	elif c.was_holding_slap and not c.input.slap_held:
 		result = ShotMechanics.release_slapper(c.blade, c.input.mouse_world_pos,
@@ -1199,15 +1202,29 @@ func _release(c: SimSkater) -> void:
 				lefty, kit.wrister_load)
 		result = ShotMechanics.release_wrister(c.pos, c.input.mouse_world_pos, c.blade,
 				_load.is_backhand, c.input.elevation_level, kit.wrister, aim, false,
-				ShotMechanics.wrister_speed_for_power_t(c.input.bot_wrister_power_t, kit.wrister))
+				ShotMechanics.wrister_speed_for_power_t(c.input.bot_wrister_power_t, kit.wrister),
+				null, c.vel)
 		result.power = minf(result.power, kit.max_wrister * WristerLoad.power_share(
 				_load.load_share, _load.arm_share, _load.is_backhand, kit.unloaded_share,
 				kit.backhand_coefficient))
 		finish_s = ShotMechanics.follow_through_time(clampf((result.power - kit.min_wrister)
 				/ maxf(kit.max_wrister - kit.min_wrister, 0.001), 0.0, 1.0),
 				kit.wrister_finish_min, kit.wrister_finish_max)
+		_carry_momentum(result, c.vel)
 	c.follow_until = ticks + roundi(finish_s / DT)
 	_launch(result.direction * result.power)
+
+
+# SkaterController._carry_momentum: the release keeps the body's velocity, the
+# hands correcting it onto the aim out of the push; a pass keeps its vertical
+# launch speed.
+static func _carry_momentum(result: ShotMechanics.ShotResult, body_vel: Vector3,
+		is_pass: bool = false) -> void:
+	var v: Vector3 = ReleaseMomentum.release_velocity(result.direction, result.power,
+			body_vel, is_pass)
+	result.power = v.length()
+	if result.power > 0.0001:
+		result.direction = v / result.power
 
 
 # The puck off a blade at `v`: along the ice, and over the sticks for as long as

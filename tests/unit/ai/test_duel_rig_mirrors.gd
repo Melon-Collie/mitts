@@ -4,7 +4,7 @@ extends GutTest
 # for as the live SkaterIKCoordinator does, on the same set-up body: the range of
 # motion, the carry's two hands and backhand stop, and the rest reach without a
 # puck to reach for. At rest, so the twist and lean are the coordinator's own
-# zeros.
+# zeros. Its release keeps the skater's motion as the controller's does.
 
 const DuelRig := preload("res://tests/unit/ai/duel_rig.gd")
 const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
@@ -68,3 +68,17 @@ func test_an_empty_stick_at_rest_resolves_as_the_coordinator_does() -> void:
 
 func test_a_carried_blade_resolves_as_the_coordinator_does() -> void:
 	_resolves_alike(true, Vector3.ZERO)
+
+
+func test_a_release_keeps_the_skaters_motion_as_the_controller_does() -> void:
+	for body_vel: Vector3 in [Vector3(0, 0, -7), Vector3(5, 0, -3), Vector3(-6, 0, 2)]:
+		for is_pass: bool in [false, true]:
+			var dir := Vector3(0.8, 0.12, -0.6).normalized()
+			var ctrl_result := ShotMechanics.ShotResult.make(dir, 14.0)
+			var harness_result := ShotMechanics.ShotResult.make(dir, 14.0)
+			_skater.velocity = body_vel
+			_ctrl._carry_momentum(ctrl_result, is_pass)
+			DuelHarness._carry_momentum(harness_result, body_vel, is_pass)
+			assert_almost_eq(harness_result.direction * harness_result.power,
+					ctrl_result.direction * ctrl_result.power, Vector3.ONE * 0.0001,
+					"skating %s, pass %s" % [body_vel, is_pass])
