@@ -54,6 +54,19 @@ const float ARM_PUMP = 0.22;
 const float HAIRLINE_FRONT = 0.655;
 const float HAIRLINE_SIDE = 0.615;
 const float HAIRLINE_BACK = 0.53;
+// The face, on the head's front facet (figure-local metres, x from the centre
+// line): eyes, the brows over them, a mouth. Each is a box; the brows take the
+// hair's colour on a bare head and a dark one under a cap.
+const vec2 EYE = vec2(0.024, 0.583);
+const vec2 EYE_HALF = vec2(0.0085, 0.011);
+const vec2 BROW = vec2(0.025, 0.607);
+const vec2 BROW_HALF = vec2(0.014, 0.0045);
+const vec2 MOUTH = vec2(0.0, 0.515);
+const vec2 MOUTH_HALF = vec2(0.017, 0.0045);
+const vec3 EYE_COLOUR = vec3(0.05, 0.04, 0.04);
+// Features fade out as an eye shrinks below this many pixels across, so a far
+// face is plain skin rather than a shimmer of sub-pixel dots.
+const vec2 FACE_FADE_PX = vec2(1.0, 2.5);
 const vec3 SHOE = vec3(0.06, 0.05, 0.05);
 
 varying float v_height;
@@ -66,6 +79,14 @@ varying flat float v_leg;
 varying flat float v_shoe;
 varying flat float v_head;
 varying flat vec3 v_normal;
+varying float v_x;
+
+// 1 inside the box of half-size `half_size` about `centre`, 0 outside, with an
+// edge `aa` wide.
+float box(vec2 p, vec2 centre, vec2 half_size, float aa) {
+	vec2 d = abs(p - centre) - half_size;
+	return 1.0 - smoothstep(-aa * 0.5, aa * 0.5, max(d.x, d.y));
+}
 
 float roll(float seed, float salt) {
 	return fract(sin(seed * salt) * 43758.5453);
@@ -136,6 +157,7 @@ void vertex() {
 	}
 	v_height = VERTEX.y;
 	v_normal = NORMAL;
+	v_x = VERTEX.x;
 
 	float sway_amp = INSTANCE_CUSTOM.y;
 	float hop_amp = INSTANCE_CUSTOM.z;
@@ -160,6 +182,15 @@ void fragment() {
 				: mix(HAIRLINE_SIDE, HAIRLINE_BACK, v_normal.z);
 		bool covered = v_height > hairline && !(bare && v_bald > 0.5);
 		paint = covered ? top : skin;
+		if (!covered && v_normal.z < -0.9) {
+			float px = max(fwidth(v_x), 1e-6);
+			float detail = smoothstep(FACE_FADE_PX.x, FACE_FADE_PX.y, EYE_HALF.x * 2.0 / px);
+			vec2 p = vec2(abs(v_x), v_height);
+			vec3 brow_colour = bare ? v_hair : EYE_COLOUR * 2.0;
+			paint = mix(paint, brow_colour, detail * box(p, BROW, BROW_HALF, px));
+			paint = mix(paint, EYE_COLOUR, detail * box(p, EYE, EYE_HALF, px));
+			paint = mix(paint, skin * 0.55, detail * box(p, MOUTH, MOUTH_HALF, px));
+		}
 	}
 	float lap = v_head > 0.5 ? 1.0
 			: mix(LAP_SHADE, 1.0, smoothstep(0.0, body_top_y, v_height));
