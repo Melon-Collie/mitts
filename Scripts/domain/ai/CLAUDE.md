@@ -734,7 +734,20 @@ reaches back into what remains.
 
 - **Pass lanes** (`lane_clear`) — reach-vs-flight-time reachability: a defender
   blocks iff they can get a stick onto the puck's path before it passes; faster
-  pucks thread better for free. The carrier's own read also takes each
+  pucks thread better for free. The pass a carrier fires is read on the
+  momentum-honest arrival clock (`AILaneReach`): at each point of the lane, can
+  the defender's body get within a blade of it before the puck, skated from
+  where his momentum has him when he reads the windup — a man backing in has to
+  stop his retreat first. It is the reach the loose-puck chase plays a pass with
+  (`AILoosePuckChase.reach_meet_time`, stick out), so a lane the passer reads
+  open is one the defender cannot take. Graded by the clock's calibrated error,
+  not a shaped curve; it ends a blade short of the receiver, whose own stick
+  takes the puck there (a defender on his back is the reception's
+  `catch_safety`). The lane is the one at the release: the carrier braked through
+  his windup (`AICarrierField.pass_origin`), the receiver led from where he has
+  skated to (`AIPassLead.lead`'s `release_s`), the defenders where their momentum
+  has them (`opponents_release`). The cheap read the shot and off-puck searches
+  use keeps the closest approach at a constant closing speed. The carrier's own read also takes each
   defender's **stick where he holds it** (`opponent_blades_release`): a
   forechecker reaching for the puck has his blade a metre nearer the lane than
   his body, and his hands start on the windup, so the first metres of a pass out

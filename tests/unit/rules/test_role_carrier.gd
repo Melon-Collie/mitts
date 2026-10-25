@@ -72,7 +72,7 @@ func _lane_forechecker_ctx(vel: Vector3) -> RoleContext:
 	return _make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos],
 			[2, TEAM_ID, Vector3(4.0, 0.0, -1.0)],
-			[11, 1, Vector3(6.6, 0.0, 13.5), false, vel]])
+			[11, 1, Vector3(7.6, 0.0, 13.5), false, vel]])
 
 
 func test_forechecker_closing_the_breakout_lane_devalues_the_pass() -> void:
@@ -1818,10 +1818,12 @@ func _mid_lane_feed_ctx(receiver_z: float, stick_z: float) -> RoleContext:
 
 
 func test_short_feed_below_saucer_floor_stays_grounded() -> void:
-	# At 5.5 m even the softest legal flip (min wrister pace) can't land with
+	# At 3.5 m even the softest flip a bot offers (SOFTEST_FEED_M_S) can't land with
 	# runway, so no saucer variant exists and the pass stays flat whatever the
 	# lane looks like. (Which variant the 8 m feed takes is the snapshot's row.)
-	assert_false(_best_pass_to_mate(_mid_lane_feed_ctx(4.5, 7.5)).best_is_saucer,
+	assert_lt(AIPuckLane.saucer_max_launch_speed(3.5),
+			AIPuckLane.SOFTEST_FEED_M_S, "precondition: below the saucer floor")
+	assert_false(_best_pass_to_mate(_mid_lane_feed_ctx(6.5, 8.0)).best_is_saucer,
 			"below the physical saucer floor the feed stays grounded")
 
 
@@ -2543,8 +2545,9 @@ func _record_feed_and_pressure_picks(snap: Snapshot) -> void:
 			_intent_name(_decided(_poor_spot_mate_ctx()).intended_action))
 	snap.record("neutral ice, straight lane clogged, close outlet up-ice: pick",
 			_pick(_decided(_close_outlet_ctx())))
+	var mid_lane: AICarrierPassSearch = _best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5))
 	snap.record("8 m feed past a mid-lane stick: variant",
-			_variant(_best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5)).best_is_saucer))
+			_variant(mid_lane.best_is_saucer) if mid_lane.best_score > 0.0 else "NONE")
 	snap.record("pinged ahead man 9 m out behind a mid-lane stick: variant",
 			_variant(_decided(_pinged_saucer_ctx()).pass_should_saucer))
 	snap.record("board pincer closing, open outlet across: pick", _pick(_decided(_pincer_ctx())))

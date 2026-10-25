@@ -35,13 +35,14 @@ const MIN_SPEED_FOR_PROJECTION: float = 0.5
 # effective_flight_speed). `receiver_caps` is the receiver's real attribute-scaled
 # build (AISkaterCaps) — its max_accel caps how hard it can keep accelerating
 # into the lead, and its max_speed how far ahead it can get; null is the league
-# baseline. Returns [lead_point: Vector3, flight_t: float] — the carrier needs
-# the solved flight time downstream (opponent projection, goalie prediction,
+# baseline. `release_s` is how long the receiver keeps skating before the puck
+# leaves the blade (a carrier pricing a pass at its decision passes the windup).
+# Returns [lead_point: Vector3, flight_t: float] — flight_t from the release; the
+# carrier needs it downstream (opponent projection, goalie prediction,
 # time-decay).
 static func lead(shooter_pos: Vector3, receiver: SkaterNetworkState,
 		accel: Vector3, launch_speed: float, max_lead_s: float,
-		receiver_caps: AISkaterCaps = null) -> Array:
-	var body_world: Vector3 = receiver.position
+		receiver_caps: AISkaterCaps = null, release_s: float = 0.0) -> Array:
 	var a: Vector3 = along_velocity_component(accel, receiver.velocity)
 	# Observed accel is low-passed and can spike above what the body can pull,
 	# which over-leads a low-Acceleration receiver into ice it can't reach.
@@ -54,16 +55,24 @@ static func lead(shooter_pos: Vector3, receiver: SkaterNetworkState,
 	var speed_cap: float = maxf(
 			_speed_xz(receiver.velocity),
 			receiver_caps.max_speed if receiver_caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
+	var body_world: Vector3 = receiver.position
+	var vel: Vector3 = receiver.velocity
+	if release_s > 0.0:
+		body_world = AITrajectory.predict_at(body_world, vel, release_s, 6, a, speed_cap)
+		vel += a * release_s
+		var v_len: float = _speed_xz(vel)
+		if v_len > speed_cap:
+			vel *= speed_cap / v_len
 	# The intercept solver treats the puck as constant-speed, so feed it the
-	# AVERAGE flight speed. Distance to the receiver's current body stands in for
-	# the pass length; the intercept iteration refines against his motion.
+	# AVERAGE flight speed. Distance to the receiver's body stands in for the
+	# pass length; the intercept iteration refines against his motion.
 	var eff_speed: float = effective_flight_speed(
 			launch_speed, shooter_pos.distance_to(body_world))
 	var flight_t: float = AITrajectory.intercept_time(
-			shooter_pos, body_world, receiver.velocity, a,
+			shooter_pos, body_world, vel, a,
 			eff_speed, max_lead_s, 6, speed_cap)
 	var point: Vector3 = AITrajectory.predict_at(
-			body_world, receiver.velocity, flight_t, 6, a, speed_cap)
+			body_world, vel, flight_t, 6, a, speed_cap)
 	return [point, flight_t]
 
 

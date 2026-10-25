@@ -272,14 +272,25 @@ static func slot_anchor(own_goal_dir: float) -> Vector3:
 
 # Where a pass physically leaves from: the carried puck (up to a stick's reach
 # from the body), falling back to the body center when the snapshot has no
-# puck. Measured from the chest instead, the ~1 m origin error is a systematic
-# over-lead on a close feed.
+# puck, carried on to the release — the windup (BOT_WRISTER_LOOKAHEAD_S) later,
+# the carrier braking through it as a pass press does — where the defenders are
+# read too (opponents_release). Measured from the chest instead, the ~1 m origin
+# error is a systematic over-lead on a close feed; from where he stands at the
+# decision, a carrier at speed prices a lane a metre behind the one he throws.
 static func pass_origin(ctx: RoleContext) -> Vector3:
+	var at: Vector3 = ctx.self_pos
 	if ctx.snapshot.puck_state != null:
-		return Vector3(
-				ctx.snapshot.puck_state.position.x, 0.0,
+		at = Vector3(ctx.snapshot.puck_state.position.x, 0.0,
 				ctx.snapshot.puck_state.position.z)
-	return ctx.self_pos
+	var v: Vector3 = ctx.self_velocity
+	var speed: float = sqrt(v.x * v.x + v.z * v.z)
+	if speed < 0.01:
+		return at
+	var t: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	var b: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+	var travel: float = speed * t - 0.5 * b * t * t if speed > b * t \
+			else speed * speed / (2.0 * b)
+	return Vector3(at.x + v.x / speed * travel, 0.0, at.z + v.z / speed * travel)
 
 
 # The keeper's stance at a shot `t` s from now: the one he is in for a shot

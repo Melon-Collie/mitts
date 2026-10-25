@@ -800,9 +800,11 @@ func test_lane_loss_point_follows_the_caps_aware_worst_defender() -> void:
 			"at league reach the near defender is the interceptor")
 	var short_slow := AISkaterCaps.new()
 	short_slow.stick_reach = 1.05
+	short_slow.blade_span = 1.35
 	short_slow.max_speed = 5.0
 	var long_fast := AISkaterCaps.new()
 	long_fast.stick_reach = 1.6
+	long_fast.blade_span = 1.9
 	long_fast.max_speed = 12.0
 	var caps_p: Vector3 = AIPuckLane.lane_loss_point(
 			from, to, opps, AIPuckLane.PASS_SPEED_M_S, vels,
@@ -879,6 +881,23 @@ func test_lane_clear_defender_drifting_away_blocks_less() -> void:
 	assert_gt(drifting, stationary, "a defender drifting off the lane blocks less")
 
 
+func test_the_accurate_lane_reads_a_defenders_momentum() -> void:
+	# The same man the same distance off a pass: skating away from the lane he
+	# has to stop his retreat before he can step to it, standing he steps
+	# straight in, and skating at it he is already on his way.
+	var from := Vector3(0.0, 0.0, 0.0)
+	var to := Vector3(0.0, 0.0, 14.0)
+	var man: Array[Vector3] = [Vector3(3.0, 0.0, 7.0)]
+	var read := func(vel: Vector3) -> float:
+		var vels: Array[Vector3] = [vel]
+		return AIPuckLane.lane_clear(from, to, man, 16.0, vels, [], true)
+	var away: float = read.call(Vector3(4.0, 0.0, 0.0))
+	var still: float = read.call(Vector3.ZERO)
+	var toward: float = read.call(Vector3(-4.0, 0.0, 0.0))
+	assert_gt(away, still, "backing away from the lane leaves it more open")
+	assert_gt(still, toward, "skating at it closes it")
+
+
 func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
 	# The legacy model takes 1 − max(block): two defenders threatening DIFFERENT
 	# segments of a long lane read only as open as the easier gap. The `accurate`
@@ -886,8 +905,8 @@ func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
 	# compound to a much less clear lane than either alone.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var one_a: Array[Vector3] = [Vector3(3.6, 0.0, 12.0)]     # contests the middle
-	var one_b: Array[Vector3] = [Vector3(-4.2, 0.0, 14.0)]    # contests the receiver end
+	var one_a: Array[Vector3] = [Vector3(5.0, 0.0, 12.0)]     # contests the middle
+	var one_b: Array[Vector3] = [Vector3(-5.6, 0.0, 14.0)]    # contests the receiver end
 	var both: Array[Vector3] = [one_a[0], one_b[0]]
 	var speed: float = 18.0
 	var clear_a: float = AIPuckLane.lane_clear(from, to, one_a, speed, [], [], true)

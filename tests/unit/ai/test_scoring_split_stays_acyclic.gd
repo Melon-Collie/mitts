@@ -17,6 +17,7 @@ const _LEAVES: PackedStringArray = [
 	"res://Scripts/domain/ai/arrival.gd",
 	"res://Scripts/domain/ai/net_obstacle.gd",
 	"res://Scripts/domain/ai/puck_lane.gd",
+	"res://Scripts/domain/ai/lane_reach.gd",
 	"res://Scripts/domain/ai/feed_reception.gd",
 	"res://Scripts/domain/ai/bot_mechanics.gd",
 	"res://Scripts/domain/ai/goalie_model.gd",

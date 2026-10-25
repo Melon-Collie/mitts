@@ -3,7 +3,8 @@ class_name AIPuckLane
 # Whether a fired puck gets through: the lane (can a defender's stick reach the
 # path before the puck passes), the saucer that flies over the sticks, the
 # release contest at the blade, the pass's launch speed and its own miss. A leaf
-# (GameRules, the puck rules, AIBotMechanics and AISkaterCaps only).
+# (GameRules, the puck rules, AIBotMechanics, AISkaterCaps and the lane's
+# arrival-clock read, AILaneReach, only).
 
 # ── Lane interception: closest-approach reachability model ───────────────────
 # A fired puck (shot or pass) travels the straight segment from→to at
@@ -26,6 +27,10 @@ class_name AIPuckLane
 #   REACH       — blade reach of a lane defender (stick length).
 #   REACTION    — read delay (s) before he starts closing.
 #   CLOSE_SPEED — lateral adjustment pace (LANE_LATERAL_FRACTION below).
+#
+# This is the cheap read, for shots and the off-puck spot searches. The pass a
+# carrier actually fires is read on the arrival clock instead (lane_clear's
+# `accurate`, AILaneReach), where the closing honours his momentum.
 const LANE_DEFENDER_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M
 const LANE_REACTION_DELAY_S: float = 0.08
 # Fraction of top skating speed a defender covers LATERALLY sliding into a lane
@@ -43,9 +48,10 @@ const LANE_DEFENDER_CLOSE_SPEED_M_S: float = LANE_LATERAL_FRACTION * GameRules.D
 # nearer the passing lane than his body: read from the body alone, the first
 # metres of every pass out of his reach look clean.
 const LANE_BLADE_CATCH_M: float = 0.5
-# His hands start on the windup, not the release: the charged pass shows itself
-# for its whole wind-up (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) before it flies.
-const LANE_BLADE_READ_DELAY_S: float = LANE_REACTION_DELAY_S \
+# He reads the windup, not the release — hands and body alike: the charged pass
+# shows itself for its whole wind-up (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
+# before it flies. Negative: he is moving to it before the puck leaves the blade.
+const LANE_WINDUP_READ_DELAY_S: float = LANE_REACTION_DELAY_S \
 		- AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 
 # A defender's reach in the airborne stretch of a saucer: his BODY radius, no
@@ -345,11 +351,11 @@ static func lane_block_at(
 	return clampf((reach - miss) / stick_reach, 0.0, 1.0)
 
 
-# Brake-and-clog reachability block [0, 1] for one defender: the best lane point
-# he can skate to and STOP on before the puck crosses it. The ballistic term
-# (lane_block_at) lets a fast defender COAST through the lane and out the far
-# side; this asks the guided-interceptor question instead. lane_clear takes the
-# max of the two, so it only ever ADDS block.
+# Brake-and-clog reachability block [0, 1] for a defender's BLADE (_blade_block):
+# the best lane point his hands can carry it to and hold it on before the puck
+# crosses it, closing at a constant `close_speed`. The ballistic term
+# (lane_block_at) lets the blade COAST through the lane and out the far side;
+# this asks the guided question instead.
 #
 # Closed form: maximise block(u) = (stick + close·(u/speed − reaction) − |X(u)−D|)
 # over the lane arc-coord u, where X(u) is the point u metres along the lane and
@@ -383,34 +389,10 @@ static func _lane_brake_block(
 	return Vector2(blk_foot, u_foot)
 
 
-# One defender's block on an `accurate` lane (see lane_clear) and where he makes
-# it: the ballistic read at his closest approach, or the guided interceptor's
-# planted point when that blocks harder. Returns (block, lane arc-coord of the
-# pick), so lane_clear's probability and lane_loss_point's place come from one
-# read of the same defender, closing from `read_delay` (< 0: already reading).
-static func _accurate_block(fx: float, fz: float, dirx: float, dirz: float,
-		line_len: float, eff_speed: float, px: float, pz: float,
-		vx: float, vz: float, stick_reach: float, close_speed: float,
-		read_delay: float = LANE_REACTION_DELAY_S) -> Vector2:
-	var pvx: float = dirx * eff_speed
-	var pvz: float = dirz * eff_speed
-	var block: float = 0.0
-	var u: float = 0.0
-	# Ballistic (coasting) block — 0 for a defender whose closest approach is
-	# only AFTER the puck reaches the receiver (trailing the play).
-	var t_raw: float = _lane_closest_approach_t(fx, fz, pvx, pvz, px, pz, vx, vz)
-	if t_raw <= line_len / eff_speed:
-		var t: float = maxf(t_raw, 0.0)
-		block = lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
-				stick_reach, close_speed, read_delay)
-		u = eff_speed * t
-	# Guided-interceptor floor: he can brake and clog a reachable crossing
-	# instead of coasting through it (only ADDS block).
-	var brake: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
-			px, pz, stick_reach, close_speed, read_delay)
-	if brake.x > block:
-		return brake
-	return Vector2(block, u)
+# How far short of the receiver's spot the accurate read ends: inside it his own
+# blade is on the puck, so a stick there contests the catch rather than picking
+# the pass — the reception read prices that (the carrier's catch_safety).
+const LANE_RECEIVER_REACH_M: float = AIBotMechanics.BLADE_REACH_M
 
 
 # Block strength if the defender aims to occupy lane arc-coord `u` — reach at the
@@ -439,7 +421,7 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 	return (v0 - sqrt(disc)) / a
 
 
-# One defender's blade on an `accurate` lane, as _accurate_block reads his body:
+# One defender's blade on an `accurate` lane, as AILaneReach reads his body:
 # (block, lane arc-coord of the pick) for the blade (bx, bz), where his body could
 # hold the stick there — within `hold_reach` (AISkaterCaps.max_blade_reach) of it
 # as it closes (see LANE_BLADE_CATCH_M).
@@ -454,12 +436,12 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 	if t_raw <= line_len / eff_speed:
 		var t: float = maxf(t_raw, 0.0)
 		var block: float = lane_block_at(fx, fz, pvx, pvz, t, bx, bz, vx, vz,
-				LANE_BLADE_CATCH_M, blade_speed, LANE_BLADE_READ_DELAY_S)
+				LANE_BLADE_CATCH_M, blade_speed, LANE_WINDUP_READ_DELAY_S)
 		if block > 0.0 and lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
 				hold_reach, close_speed) > 0.0:
 			best = Vector2(block, eff_speed * t)
 	var guided: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
-			bx, bz, LANE_BLADE_CATCH_M, blade_speed, LANE_BLADE_READ_DELAY_S)
+			bx, bz, LANE_BLADE_CATCH_M, blade_speed, LANE_WINDUP_READ_DELAY_S)
 	if guided.x > best.x and lane_block_at(fx, fz, pvx, pvz, guided.y / eff_speed,
 			px, pz, vx, vz, hold_reach, close_speed) > 0.0:
 		best = guided
@@ -473,9 +455,10 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 # is an OPTIONAL array index-matched to `opponents`; missing entries read as
 # stationary.
 #
-# `accurate` (the carrier's own pass EV opts in) composes three refinements
+# `accurate` (the carrier's own pass EV opts in) composes these refinements
 # over the default `1 − max(block)` constant-speed ballistic model:
-#   1. Guided interceptor (_lane_brake_block, max'd per defender).
+#   1. Each defender's BODY read on the momentum-honest arrival clock: the best
+#      lane point he can get within a blade of before the puck (AILaneReach).
 #   2. Independent-defender SURVIVAL (product, not max) — the puck must beat
 #      EVERY defender, so two on different segments compound; two stacked on
 #      one spot are mildly over-counted, which errs conservative.
@@ -498,6 +481,7 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	var eff_speed: float = speed
 	if accurate:
 		eff_speed = line_len / _friction_traverse_time(line_len, speed)
+	var read_len: float = maxf(line_len - LANE_RECEIVER_REACH_M, 0.0)
 	var seg_time: float = line_len / eff_speed
 	var inv_len: float = 1.0 / line_len
 	var pvx: float = dx * inv_len * eff_speed
@@ -530,11 +514,15 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 				hold_reach = caps.max_blade_reach
 		if accurate:
 			# Survival: the puck must beat this defender too.
-			var lane_block: float = _accurate_block(from.x, from.z, dirx, dirz, line_len,
-					eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed).x
+			var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+			var lane_block: float = AILaneReach.block(from.x, from.z, dirx, dirz, read_len,
+					eff_speed, p.x, p.z, vx, vz, AILaneReach.defender_reach(caps_i),
+					caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+					caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
+					LANE_WINDUP_READ_DELAY_S).x
 			if has_blades:
 				var b: Vector3 = opponent_blades[i]
-				lane_block = maxf(lane_block, _blade_block(from.x, from.z, dirx, dirz, line_len,
+				lane_block = maxf(lane_block, _blade_block(from.x, from.z, dirx, dirz, read_len,
 						eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
 						blade_speed).x)
 			survival *= 1.0 - lane_block
@@ -588,8 +576,6 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	# From the touch-down on it is a flat pass on the ice for the rest of the lane.
 	var flown: float = speed * t_down
 	var landed_len: float = line_len - flown
-	var land_x: float = from.x + dirx * flown
-	var land_z: float = from.z + dirz * flown
 	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
 			if landed_len > 0.01 else speed
 	var survival: float = 1.0
@@ -616,12 +602,16 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 		elif t_raw < t_over:   # still on the blade: a stick stuffs the flip
 			block = lane_block_at(from.x, from.z, pvx, pvz, maxf(t_raw, 0.0),
 					p.x, p.z, v.x, v.z, stick_reach, close_speed)
-		# Landed, it is the accurate flat lane from where he is then, read that far
-		# on: the man it flew over still plays it sliding off behind him.
+		# Landed, it is the accurate flat lane, skated to from the release: the
+		# man it flew over still plays it sliding off behind him.
 		if landed_len > 0.01:
-			block = maxf(block, _accurate_block(land_x, land_z, dirx, dirz,
-					landed_len, landed_speed, p.x + v.x * t_down, p.z + v.z * t_down,
-					v.x, v.z, stick_reach, close_speed, LANE_REACTION_DELAY_S - t_down).x)
+			var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+			block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz,
+					line_len - LANE_RECEIVER_REACH_M, landed_speed, p.x, p.z, v.x, v.z,
+					AILaneReach.defender_reach(caps_i),
+					caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+					caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
+					LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
 		survival *= 1.0 - block
 		if survival <= 0.0:
 			return 0.0
@@ -649,6 +639,7 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 	var eff_speed: float = line_len / _friction_traverse_time(line_len, speed)
 	var dirx: float = dx / line_len
 	var dirz: float = dz / line_len
+	var read_len: float = maxf(line_len - LANE_RECEIVER_REACH_M, 0.0)
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	var has_blades: bool = opponent_blades.size() == opponents.size()
@@ -661,22 +652,24 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 		if i < vel_count:
 			vx = opponent_vels[i].x
 			vz = opponent_vels[i].z
-		var stick_reach: float = LANE_DEFENDER_REACH_M
 		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
 		var blade_speed: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
 		var hold_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
 		if has_caps:
 			var caps: AISkaterCaps = opponent_caps[i]
 			if caps != null:
-				stick_reach = caps.stick_reach
 				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
 				blade_speed = caps.blade_speed
 				hold_reach = caps.max_blade_reach
-		var read: Vector2 = _accurate_block(from.x, from.z, dirx, dirz, line_len,
-				eff_speed, p.x, p.z, vx, vz, stick_reach, close_speed)
+		var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+		var read: Vector2 = AILaneReach.block(from.x, from.z, dirx, dirz, read_len,
+				eff_speed, p.x, p.z, vx, vz, AILaneReach.defender_reach(caps_i),
+				caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+				caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
+				LANE_WINDUP_READ_DELAY_S)
 		if has_blades:
 			var b: Vector3 = opponent_blades[i]
-			var blade_read: Vector2 = _blade_block(from.x, from.z, dirx, dirz, line_len,
+			var blade_read: Vector2 = _blade_block(from.x, from.z, dirx, dirz, read_len,
 					eff_speed, b.x, b.z, p.x, p.z, vx, vz, hold_reach, close_speed,
 					blade_speed)
 			if blade_read.x > read.x:

@@ -382,10 +382,12 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		our_goalie: Vector3, carrier_in_oz: bool,
 		useless_below: float = -INF, soft: bool = false) -> float:
 	# Intercept-aware lead, shared with the state machine's firing aim; flight_t
-	# is the SOLVED time. The receiver's real build bounds how far he is led.
+	# is the SOLVED time. The receiver's real build bounds how far he is led. He
+	# skates on through the windup, so the lead is solved from the release, where
+	# the state machine aims it and pass_origin throws it.
 	var lead: Array = AIPassLead.lead(
 			pass_origin, receiver_state, receiver_accel, pass_speed,
-			PASS_LEAD_MAX_S, receiver_caps)
+			PASS_LEAD_MAX_S, receiver_caps, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
 	var receiver: Vector3 = lead[0]
 	var flight_t: float = lead[1]
 	# Fed on his tape only when he can set for it; otherwise he catches it.
