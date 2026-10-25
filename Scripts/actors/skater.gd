@@ -807,13 +807,10 @@ var _lean_shift_upper: Vector3 = Vector3.ZERO
 # torso write re-places UpperBody without re-deriving what it cannot change.
 var _lean_trunk_local: Basis = Basis.IDENTITY
 var _block_stance_active: bool = false
-# Slapper one-timer zone — armed only while charging a slapper without the puck
-# (see set_slapper_zone). Plain state: the zone is an ice-plane disc the analytic
-# one-timer scans test against, not anything the engine knows about.
-var _slapper_zone_active: bool = false
-var _slapper_zone_radius: float = 0.0
-# Zone center in skater-local space; get_slapper_zone_global_position rotates it
-# with the body and drops it to the ice plane.
+# Slapper one-timer zone center in skater-local space (see set_slapper_zone);
+# get_slapper_zone_global_position rotates it with the body and drops it to the
+# ice plane. Plain state: the zone is an ice-plane disc the analytic one-timer
+# scans test against, not anything the engine knows about.
 var _slapper_zone_offset: Vector3 = Vector3.ZERO
 var _skeleton_root_offset: float = 0.0  # see set_skeleton_root_offset
 # Sticky carry side: 0 when not carrying, ±1 while carrying — stored in
@@ -3207,14 +3204,11 @@ func get_body_block_y_range() -> Vector2:
 
 
 # ── Slapper Zone ──────────────────────────────────────────────────────────────
-# Arms the one-timer catch zone: a disc of `radius` centred on `center_local`, an
-# (x, z) point in skater-local space. Disarming keeps the last geometry: the
-# one-timer's release reads the zone after the catch has disarmed it.
-func set_slapper_zone(active: bool, radius: float = 0.0, center_local: Vector2 = Vector2.ZERO) -> void:
-	if active and radius > 0.0:
-		_slapper_zone_radius = radius
-		_slapper_zone_offset = Vector3(center_local.x, 0.0, center_local.y)
-	_slapper_zone_active = active
+# Centres the one-timer catch zone on `center_local`, an (x, z) point in
+# skater-local space. The controller owns its radius and when it is live; the
+# one-timer's release reads the zone after the catch, so it keeps this center.
+func set_slapper_zone(center_local: Vector2) -> void:
+	_slapper_zone_offset = Vector3(center_local.x, 0.0, center_local.y)
 
 
 func get_slapper_zone_global_position() -> Vector3:
