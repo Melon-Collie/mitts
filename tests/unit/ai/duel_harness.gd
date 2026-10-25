@@ -1201,7 +1201,8 @@ func _release(c: SimSkater) -> void:
 				_load.is_backhand, c.input.elevation_level, kit.wrister, aim, false,
 				ShotMechanics.wrister_speed_for_power_t(c.input.bot_wrister_power_t, kit.wrister))
 		result.power = minf(result.power, kit.max_wrister * WristerLoad.power_share(
-				_load.load_share, _load.is_backhand, kit.unloaded_share, kit.backhand_coefficient))
+				_load.load_share, _load.arm_share, _load.is_backhand, kit.unloaded_share,
+				kit.backhand_coefficient))
 		finish_s = ShotMechanics.follow_through_time(clampf((result.power - kit.min_wrister)
 				/ maxf(kit.max_wrister - kit.min_wrister, 0.001), 0.0, 1.0),
 				kit.wrister_finish_min, kit.wrister_finish_max)

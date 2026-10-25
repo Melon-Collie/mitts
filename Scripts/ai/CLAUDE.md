@@ -145,7 +145,7 @@ prices is the path the cursor walks.
 
 ## Reception doctrine
 
-**A fast loose puck is a reception, not a race.** The catch is decided by blade
+**A feed is a reception, not a race.** The catch is decided by blade
 squareness plus the puck's speed *in the receiver's frame*, so squaring on the
 line is what collects it and stopping is a wait rather than a technique. Bots
 receive in stride by default and brake only when arriving early enough to carry
@@ -163,6 +163,17 @@ there first; one driving past it takes the feed in stride. Whose feed it is
 reads the same way: each teammate where his own skating has him when the puck
 reaches his level (`SkaterAgentReception.skating_point`), so a forward driving
 onto a feed is its man however far off its line he is now.
+
+**A feed is a puck that was sent, and who sent it is all a bot knows.** A fast
+loose puck reads as one (`RECEIVE_TRIGGER_PUCK_SPEED_M_S`), and so does a
+teammate's release at any pace while it slides
+(`WorldSnapshot.loose_puck_released_by`, kept until any stick, body or goalie
+touches it): the teammate nearest its line goes to it (`incoming_pass`), and
+squares up to it where its real path reaches him (`read_pass`). Whom the passer
+meant is never published: the bots read what a human watching the play would
+see, the passer and the puck, and nothing a human cannot. The shot-aware
+reception and the one-timer plan on the puck's line without its friction, so
+they keep the fast trigger.
 
 Against the boards the read inverts: the blade goes ON the glass and the body
 stands rink-side, because a blade out on the puck's line leaves exactly the gap a

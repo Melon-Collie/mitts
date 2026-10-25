@@ -535,6 +535,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# rest of the live follow-through animates toward Vector3.ZERO and the
 	# blade pops off the shot line.
 	var pre_shot_dir: Vector3 = _sm.shot_dir
+	var pre_finish_facing_dir: Vector3 = _sm.finish_facing_dir
+	var pre_finish_stick_dir: Vector3 = _sm.finish_stick_dir
 	var pre_one_timer_window_timer: float = _aiming.one_timer_window_timer
 	# Same rail as the charge timer: _state_one_timer_retention counts this down
 	# inside the replay loop, so without save/restore each reconcile drains the
@@ -687,7 +689,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_sm.follow_through_is_slapper = pre_follow_through_is_slapper
 	_sm.follow_through_duration_total = pre_follow_through_total
 	_sm.follow_through_power = pre_follow_through_power
-	_sm.shot_dir = pre_shot_dir
+	_sm.aim_finish(pre_shot_dir, pre_finish_facing_dir, pre_finish_stick_dir)
 	_aiming.one_timer_window_timer = pre_one_timer_window_timer
 	_aiming.one_timer_retention_timer = pre_one_timer_retention_timer
 	_aiming.slapper_charge_timer = pre_slapper_charge_timer

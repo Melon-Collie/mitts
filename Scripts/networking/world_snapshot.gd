@@ -40,6 +40,13 @@ var tag_up_peers: Dictionary[int, bool] = {}
 # is on your stick). -1 = loose.
 var real_puck_carrier_peer_id: int = -1
 
+# The skater whose deliberate release the loose puck is still on: set when a
+# carrier shoots or passes it, cleared by the next touch of any stick, body or
+# goalie (the boards keep it), and -1 otherwise. Who RELEASED it is what anyone
+# watching sees; who it was meant for is never here. AI-only, host-filled
+# (GameManager._enrich_snapshot_for_ai).
+var loose_puck_released_by: int = -1
+
 func get_skater_state(peer_id: int) -> SkaterNetworkState:
 	return skater_states.get(peer_id)
 

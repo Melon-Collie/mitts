@@ -12,9 +12,13 @@ extends RefCounted
 # is square to the incoming line, maximizing PuckReceptionRules' alignment bonus
 # (up to +8 m/s head-on), which lifts the catch ceiling and shortens the settle.
 # The trigger is what reads as a pass at all: under the softest feed a bot
-# fires (pass_launch_speed floors the arrival at the min wrister, 10 m/s), less
-# a margin for the pace it sheds on the way.
+# fires (AIPuckLane.SOFTEST_FEED_M_S), less a margin for the pace it sheds on the
+# way.
 const RECEIVE_TRIGGER_PUCK_SPEED_M_S: float = 9.0
+# A teammate's release the puck is still on (WorldSnapshot.loose_puck_released_by)
+# is a feed at any pace while it slides: whether it reaches us is the path read's
+# call. Only the releaser is known, never who it was for.
+const RECEIVE_FEED_MOVING_M_S: float = 0.5
 # Farther than this off the puck's line where our skating takes us, the pass
 # isn't ours; sized generously to cover any pass that would realistically end up
 # at this bot.
@@ -133,7 +137,7 @@ func read_pass(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 		return false
 	var puck_vel: Vector3 = snapshot.puck_state.velocity
 	var puck_speed_sq: float = puck_vel.x * puck_vel.x + puck_vel.z * puck_vel.z
-	if puck_speed_sq < RECEIVE_TRIGGER_PUCK_SPEED_M_S * RECEIVE_TRIGGER_PUCK_SPEED_M_S:
+	if not _reads_as_feed(snapshot, puck_speed_sq):
 		return false
 	var puck_pos: Vector3 = snapshot.puck_state.position
 	var self_vel: Vector3 = Vector3.ZERO
@@ -324,7 +328,7 @@ func incoming_pass(snapshot: WorldSnapshot, self_pos: Vector3) -> bool:
 		return false
 	var pv: Vector3 = snapshot.puck_state.velocity
 	var speed_sq: float = pv.x * pv.x + pv.z * pv.z
-	if speed_sq < RECEIVE_TRIGGER_PUCK_SPEED_M_S * RECEIVE_TRIGGER_PUCK_SPEED_M_S:
+	if not _reads_as_feed(snapshot, speed_sq):
 		return false
 	var speed: float = sqrt(speed_sq)
 	var dir := Vector3(pv.x / speed, 0.0, pv.z / speed)
@@ -446,6 +450,17 @@ func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	return AIArrival.time_to_arrive(self_pos, shot_anchor, shot_self_vel, max_speed) \
 			<= t / puck_speed * RECEIVE_TIMING_MARGIN
+
+
+# Whether a loose puck moving at sqrt(`speed_sq`) reads as a feed at all: fast
+# enough that it was sent, or a teammate's release still sliding.
+func _reads_as_feed(snapshot: WorldSnapshot, speed_sq: float) -> bool:
+	if speed_sq >= RECEIVE_TRIGGER_PUCK_SPEED_M_S * RECEIVE_TRIGGER_PUCK_SPEED_M_S:
+		return true
+	var releaser: int = snapshot.loose_puck_released_by
+	return releaser != -1 and releaser != _peer_id \
+			and _team_id_by_peer.get(releaser, -1) == _team_id \
+			and speed_sq >= RECEIVE_FEED_MOVING_M_S * RECEIVE_FEED_MOVING_M_S
 
 
 func _gather_opponents(snapshot: WorldSnapshot) -> void:

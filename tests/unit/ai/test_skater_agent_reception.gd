@@ -53,7 +53,7 @@ func test_incoming_pass_ignores_slow_carried_or_away_pucks() -> void:
 			"a slow loose puck isn't a pass to receive")
 	# The softest feed a bot fires still is one.
 	assert_true(rec.incoming_pass(_pass_snap(Vector3(0, 0, 10),
-			Vector3(0, 0, -GameRules.DEFAULT_WRISTER_POWER_MIN_M_S), -1), Vector3.ZERO),
+			Vector3(0, 0, -AIPuckLane.SOFTEST_FEED_M_S), -1), Vector3.ZERO),
 			"a soft feed is a pass to receive")
 	# Carried — not loose.
 	assert_false(rec.incoming_pass(
@@ -68,6 +68,35 @@ func test_incoming_pass_ignores_slow_carried_or_away_pucks() -> void:
 			_pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -21), -1),
 			Vector3(SkaterAgentReception.RECEIVE_TRIGGER_LATERAL_M + 2.0, 0, 0)),
 			"a pass whose line runs well wide of us is not ours to receive")
+
+
+func test_a_teammates_soft_release_is_a_pass_at_any_pace() -> void:
+	var soft: float = SkaterAgentReception.RECEIVE_TRIGGER_PUCK_SPEED_M_S * 0.5
+	var s := _pass_snap(Vector3(0, 0, 10), Vector3(0, 0, -soft), -1)
+	assert_false(rec.incoming_pass(s, Vector3.ZERO), "a slow loose puck nobody sent")
+	s.loose_puck_released_by = TEAMMATE_ID
+	assert_true(rec.incoming_pass(s, Vector3.ZERO), "a teammate's soft feed")
+	s.loose_puck_released_by = OPP_ID
+	assert_false(rec.incoming_pass(s, Vector3.ZERO), "an opponent's soft release is a loose puck")
+	s.loose_puck_released_by = SELF_ID
+	assert_false(rec.incoming_pass(s, Vector3.ZERO), "our own release is not a pass to us")
+
+
+func test_a_teammates_release_that_has_stopped_is_a_loose_puck() -> void:
+	var s := _pass_snap(Vector3(0, 0, 10),
+			Vector3(0, 0, -SkaterAgentReception.RECEIVE_FEED_MOVING_M_S * 0.5), -1)
+	s.loose_puck_released_by = TEAMMATE_ID
+	assert_false(rec.incoming_pass(s, Vector3.ZERO))
+
+
+func test_a_teammates_soft_feed_is_squared_up_to() -> void:
+	var s := _pass_snap(Vector3(0, 0, 12), Vector3(0, 0, -6.0), -1)
+	_add_skater(s, SELF_ID, Vector3(1.0, 0, 0))
+	assert_false(rec.read_pass(s, Vector3(1.0, 0, 0), BLADE_REACH, 0.9, 9.0),
+			"nobody sent it: a race, not a reception")
+	s.loose_puck_released_by = TEAMMATE_ID
+	assert_true(rec.read_pass(s, Vector3(1.0, 0, 0), BLADE_REACH, 0.9, 9.0),
+			"a teammate's soft feed whose path reaches us is set up for")
 
 
 func test_incoming_pass_defers_to_a_closer_teammate() -> void:

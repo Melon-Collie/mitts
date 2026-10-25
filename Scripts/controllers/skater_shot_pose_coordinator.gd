@@ -206,18 +206,27 @@ func apply_wrister_follow_through() -> void:
 	var cursor_dir: Vector3 = _controller._current_aim_world - _skater.global_position
 	var aim_world: Vector3 = ShotMechanics.follow_through_aim(
 			_sm.shot_dir, cursor_dir, t, _controller.follow_through_return_frac)
-	_apply_wrister_whip(t, aim_world)
+	var stick_line: Vector3 = _sm.finish_stick_dir
+	if stick_line.length_squared() <= 0.0001:
+		stick_line = _sm.shot_dir
+	var stick_world: Vector3 = ShotMechanics.follow_through_aim(
+			stick_line, cursor_dir, t, _controller.follow_through_return_frac)
+	_apply_wrister_whip(t, aim_world, stick_world)
 
 # Blade whip for the frozen wrister (coil → instant release → blade replays the
 # shot). ARM-CONTROLLED, same geometry as the tracked follow-through: the hand
-# sits near the shoulder plus a forward carry, and the blade is one stick-length
-# AHEAD along the shot line (whip_local_dir). So the blade extends along the shot
-# vector FROM THE BODY — never radially outward — and the arm stays short (= the
-# carry) so it can't stretch. The frozen-specific parts: the aim points straight
-# down the shot line from t=0 (no coiled-back sweep, no retracted-origin bridge)
-# and the reach rides an attack-hold-release envelope, so the blade SNAPS to the
-# extended finish, HOLDS it, then relaxes — the explosive discharge, committed.
-func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
+# sits near the shoulder plus a carry along the shot line, and the blade is one
+# stick-length beyond it along `stick_world`, the finish line
+# (SkaterStateMachine.finish_stick_dir): the shot line when the torso drove the
+# shot, where the puck sat when only the arms pushed it. So a loaded shot's blade
+# extends along the shot vector FROM THE BODY — never radially outward — and an
+# unloaded one pushes the stick through the puck rather than swinging it round
+# the body; the arm stays short (= the carry) so it can't stretch. The
+# frozen-specific parts: the aim points straight down the shot line from t=0 (no
+# coiled-back sweep, no retracted-origin bridge) and the reach rides an
+# attack-hold-release envelope, so the blade SNAPS to the extended finish, HOLDS
+# it, then relaxes — the explosive discharge, committed.
+func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> void:
 	var env: float = finish_envelope(t, _sm.follow_through_duration_total,
 			_controller.whip_attack_time, _controller.wrister_whip_release_frac) \
 			* _sm.follow_through_power
@@ -225,24 +234,27 @@ func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
 	if axis.length_squared() < 0.0001:
 		axis = -_skater.global_transform.basis.z  # whiff: skate-forward, never radial
 		axis.y = 0.0
-	var local_dir: Vector3 = ShotMechanics.whip_local_dir(
-			axis, _skater.upper_body.global_transform.basis)
+	var upper_basis: Basis = _skater.upper_body.global_transform.basis
+	var local_dir: Vector3 = ShotMechanics.whip_local_dir(axis, upper_basis)
 	if local_dir.length_squared() < 0.0001:
 		return
-	# Hand near the shoulder + a forward carry, blade one stick-length ahead along
-	# the shot line at ice + lift. This is the shared finish shape — the slapper's
-	# is the same pose reached a different way (see _place_finish).
+	var stick_dir: Vector3 = ShotMechanics.whip_local_dir(stick_world, upper_basis)
+	if stick_dir.length_squared() < 0.0001:
+		stick_dir = local_dir
+	# Hand near the shoulder + a carry along the shot, blade one stick-length
+	# along the finish line at ice + lift. This is the shared finish shape — the
+	# slapper's is the same pose reached a different way (see _place_finish).
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 	var carry: float = env * _controller.wrister_follow_through_reach
 	var hand_pos: Vector3 = _skater.shoulder.position + local_dir * carry
 	hand_pos.y = _controller.hand_rest_y + env * _controller.wrister_follow_through_hand_y
-	var probe: Vector3 = hand_pos + local_dir * _ik.stick_horiz()
+	var probe: Vector3 = hand_pos + stick_dir * _ik.stick_horiz()
 	var blade_y: float = _ik.blade_y_lean_corrected(probe.x, probe.z) \
 			+ env * _controller.wrister_follow_through_blade_lift
 	var drop: float = hand_pos.y - blade_y
 	var stick: float = _ik.solve_stick_length()
 	var horiz: float = sqrt(maxf(stick * stick - drop * drop, 0.0001))
-	var blade_pos: Vector3 = hand_pos + local_dir * horiz
+	var blade_pos: Vector3 = hand_pos + stick_dir * horiz
 	blade_pos.y = blade_y
 	_place_finish(hand_pos, blade_pos, blade_side_sign)
 

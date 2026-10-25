@@ -77,7 +77,7 @@ func configure_from(ctx: RoleContext) -> void:
 func share_at(puck_offset: Vector2, aim: Vector2, facing: Vector2) -> float:
 	if puck_offset.length() < MIN_OFFSET_M:
 		is_backhand = false
-		return WristerLoad.power_share(0.0, false, unloaded_share, backhand_coefficient)
+		return WristerLoad.power_share(0.0, 1.0, false, unloaded_share, backhand_coefficient)
 	var s: float = WristerPocket.share_at(puck_offset, aim, facing, is_left_handed,
 			load_cfg, unloaded_share, backhand_coefficient, _load)
 	is_backhand = _load.is_backhand

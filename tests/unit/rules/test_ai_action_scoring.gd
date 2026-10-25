@@ -658,7 +658,7 @@ func test_pass_launch_speed_fires_harder_onto_a_streaking_receiver() -> void:
 			"a mild curl-back stays crisp — softening is capped at the catch ceiling")
 	assert_lt(hard_curl, static_launch,
 			"a hard curl-back still softens to stay catchable")
-	assert_gt(hard_curl, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S + 5.0,
+	assert_gt(hard_curl, AIPuckLane.SOFTEST_FEED_M_S + 5.0,
 			"but only to the reception ceiling, not collapsed to the soft floater")
 
 
@@ -1032,8 +1032,8 @@ func test_lane_clear_saucer_the_man_it_flew_over_plays_the_landing() -> void:
 func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
 	# The receivability bound: the airborne carry + landing run must fit
 	# inside the pass distance. At the bound the flip lands exactly a
-	# landing-run short of the tape; below the soft-touch wrister floor
-	# (~4 m feeds and shorter) no legal saucer exists.
+	# landing-run short of the tape; below the softest feed (~4 m feeds and
+	# shorter) no saucer is offered.
 	var bound: float = AIPuckLane.saucer_max_launch_speed(10.0)
 	assert_almost_eq(
 			AIPuckLane.saucer_airborne_distance_m(bound)
@@ -1041,10 +1041,10 @@ func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
 			10.0, 0.0001,
 			"at the bound the flip lands exactly a landing-run before the tape")
 	assert_gt(AIPuckLane.saucer_max_launch_speed(5.0),
-			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
-			"a 5 m feed still admits a soft saucer above the wrister floor")
+			AIPuckLane.SOFTEST_FEED_M_S,
+			"a 5 m feed still admits a soft saucer above the softest feed")
 	assert_lt(AIPuckLane.saucer_max_launch_speed(3.5),
-			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
+			AIPuckLane.SOFTEST_FEED_M_S,
 			"a 3.5 m feed can't be saucered — even the softest flip lands too late")
 
 

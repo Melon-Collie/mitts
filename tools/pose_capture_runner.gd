@@ -135,6 +135,31 @@ const POSES: Array = [
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],
 		[14, {"aim": Vector3(1.4, 0.0, -3.0)}],
 	]},
+	# Wind-ups and finishes the torso drives none of, from facing +Z: the puck in
+	# front shot back through the body (a dead puck: the shoulders stay on it and
+	# the stick taps back where it sat), and the puck pulled out to the stick side
+	# pushed straight out (the arms' push: the shoulders part way round, the hips
+	# holding).
+	{"name": "wrister_through_body_aim", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0), "shoot": true}],
+	]},
+	{"name": "wrister_push_out_aim", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[40, {"aim": Vector3(2.5, 0.0, 0.0)}],
+		[40, {"aim": Vector3(4.0, 0.0, 0.0), "shoot": true, "face": Vector3(0.0, 0.0, 1.0)}],
+	]},
+	{"name": "wrister_through_body_finish", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[40, {"aim": Vector3(0.0, 0.0, -3.0), "shoot": true}],
+		[14, {"aim": Vector3(0.0, 0.0, -3.0)}],
+	]},
+	{"name": "wrister_push_out_finish", "puck": true, "readout": true, "steps": [
+		[60, {"aim": Vector3(0.0, 0.0, 2.5)}],
+		[40, {"aim": Vector3(2.5, 0.0, 0.0)}],
+		[40, {"aim": Vector3(4.0, 0.0, 0.0), "shoot": true, "face": Vector3(0.0, 0.0, 1.0)}],
+		[14, {"aim": Vector3(4.0, 0.0, 0.0)}],
+	]},
 	# The overhead coil, authored in upper-body-local space — the pose most
 	# likely to expose a wrong parent frame.
 	# Faced up the ice first, then pressed and held through the set-up (the blade

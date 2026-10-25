@@ -770,7 +770,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 				pass_target_speed = clampf(
 						AIPuckLane.saucer_max_launch_speed(
 								puck_now.distance_to(receiver.position)),
-						GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
+						AIPuckLane.SOFTEST_FEED_M_S,
 						pass_target_speed)
 		elif new_intent == INTENT_SHOOT and _shot_sample_is_tip:
 			# TIP rip at the net centre — the line the tipper's reactive mode
