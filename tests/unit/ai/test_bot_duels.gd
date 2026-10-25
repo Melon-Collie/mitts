@@ -143,3 +143,32 @@ func test_loose_puck_pickup_is_blade_first() -> void:
 					"puck met out FRONT of the facing, not beside or behind")
 			break
 	assert_true(attached, "the bot retrieves the loose puck within 5 s")
+
+
+func test_a_pass_in_flight_is_published_as_its_passers_until_it_is_picked_up() -> void:
+	# The host publishes whose release a loose puck is still on
+	# (WorldSnapshot.loose_puck_released_by), and the harness snapshot must too,
+	# or a soft feed never reads as a pass to the bots it plays. Read over the
+	# feed's flight: until someone picks it up, touches it or releases again.
+	var goal_z: float = -GameRules.GOAL_LINE_Z
+	var duel := DuelHarness.new()
+	duel.add_skater(1, 0, Vector3(7, 0, goal_z + 4), null, Vector3(-2, 0, 0))
+	duel.add_skater(2, 0, Vector3(-2.5, 0, goal_z + 2.2))
+	duel.add_skater(DEFENDER, 1, Vector3(10, 0, goal_z + 7), null, Vector3(-2, 0, 0))
+	duel.start(1)
+	var flight_ticks: int = 0
+	for _t: int in 240:
+		duel.step()
+		var touches: int = duel.bobbles + duel.deflects + duel.contests
+		if duel.releases.size() > 1 or touches > 0:
+			break
+		var published: int = duel._build_snapshot().loose_puck_released_by
+		if duel.releases.is_empty():
+			assert_eq(published, -1, "a carried puck is nobody's release")
+		elif duel.carrier_id == -1:
+			assert_eq(published, 1, "the feed in flight is the passer's")
+			flight_ticks += 1
+		else:
+			assert_eq(published, -1, "a feed picked up is nobody's release")
+			break
+	assert_gt(flight_ticks, 0, "the carrier fed the back door")

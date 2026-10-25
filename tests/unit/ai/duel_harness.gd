@@ -233,6 +233,10 @@ var perf_tick_us: Array[int] = []
 var puck_pos: Vector3 = Vector3.ZERO
 var puck_vel: Vector3 = Vector3.ZERO
 var carrier_id: int = -1
+# Whose deliberate release the loose puck is still on, or -1, as the host keeps
+# it (GameManager._loose_puck_released_by): set by a release from carry or a
+# one-timer, cleared by a pickup or a blade touching it loose.
+var loose_released_by: int = -1
 # Airborne CHIP support: while > 0 the puck is in the air — constant ground
 # velocity (ballistic track), no ice friction, no pickups (no bot volunteers
 # a deflect) — then it lands, keeping LANDING_SPEED_KEEP of its pace (the
@@ -427,6 +431,7 @@ func start(carrier_peer: int, loose_puck_pos: Vector3 = Vector3.ZERO) -> void:
 		if s.profile != null:
 			s.agent.apply_profile(s.profile)
 	carrier_id = carrier_peer
+	loose_released_by = -1
 	# The play is staged under way: the bots already know who has the puck.
 	_carrier_belief.perceived = carrier_peer
 	if carrier_peer == -1:
@@ -530,6 +535,7 @@ func step() -> void:
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
 			_release(c)
 			carrier_id = -1
+			loose_released_by = c.peer_id
 	_puckless_swings()
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
@@ -656,6 +662,7 @@ func step() -> void:
 				_release_grace[s.peer_id] = ticks + (BOBBLE_COOLDOWN_TICKS
 						if puck_vel.length() < BOBBLE_SPEED_M_S else DEFLECT_COOLDOWN_TICKS)
 				deflects += 1
+				loose_released_by = -1
 				break
 			var axis: Vector3 = PuckReceptionRules.blade_axis(s.blade, _hand(s),
 					Vector3(s.facing.x, 0.0, s.facing.y))
@@ -674,6 +681,7 @@ func step() -> void:
 						BOBBLE_LIFT_THRESHOLD_M_S, BOBBLE_LIFT_GAIN, BOBBLE_LIFT_MAX_M_S))
 				_release_grace[s.peer_id] = ticks + BOBBLE_GRACE_TICKS
 				bobbles += 1
+				loose_released_by = -1
 				break
 			# A second blade corralling it on the same tick contests it: nobody gets
 			# it (PuckController.apply_contested_pickup).
@@ -689,8 +697,10 @@ func step() -> void:
 				_release_grace[s.peer_id] = ticks + STRIP_REATTACH_TICKS
 				_release_grace[rival.peer_id] = ticks + STRIP_REATTACH_TICKS
 				contests += 1
+				loose_released_by = -1
 				break
 			carrier_id = s.peer_id
+			loose_released_by = -1
 			puck_pos = s.blade
 			puck_vel = s.vel
 			s.settle_until = ticks + roundi(PuckReceptionRules.settle_time(catch_load,
@@ -1154,6 +1164,7 @@ func _puckless_swings() -> void:
 			continue
 		releases.append({"tick": ticks, "peer": s.peer_id, "team": s.team_id,
 				"pos": s.pos, "decision": "ONE_TIMER"})
+		loose_released_by = s.peer_id
 		_release_grace[s.peer_id] = ticks + RELEASE_GRACE_TICKS
 		var aim := Vector3(s.swing_aim.x, 0.0, s.swing_aim.z)
 		if aim.length_squared() < 0.0001:
@@ -1362,4 +1373,6 @@ func _build_snapshot() -> WorldSnapshot:
 		# Facing the puck, as a live keeper turns to it.
 		g.rotation_y = atan2(-(puck_pos.x - g.position_x), -(puck_pos.z - g.position_z))
 		snap.goalie_states[tid] = g
+	# Published only while the puck is loose (GameManager._enrich_snapshot_for_ai).
+	snap.loose_puck_released_by = loose_released_by if carrier_id == -1 else -1
 	return snap
