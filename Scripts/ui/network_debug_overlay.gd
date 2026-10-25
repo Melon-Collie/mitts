@@ -799,12 +799,13 @@ func _phase_hist_dict() -> Dictionary:
 
 
 # Derived rather than measured: the part of the frame that neither the GPU nor
-# the render thread explains. The three run concurrently (Godot's render thread
-# and the GPU each trail the main thread by a frame), so the frame length is set
-# by the LARGEST of them, not their sum — which makes `frame - max(render terms)`
-# a sound lower bound on what the main thread cost. A lower bound, not an exact
-# figure: on a capped frame rate the idle wait is charged here too, which is why
-# the verdict rules the cap out before naming this.
+# CPU render explains. The GPU trails the main thread by a frame, so the frame
+# is as long as the larger of the two, not their sum. CPU render runs on the
+# main thread itself under the Safe thread model (the default) and on its own
+# thread only under Separate; either way `frame - max(render terms)` is a sound
+# lower bound on the main thread's own work. Not an exact figure: on a capped
+# frame rate the idle wait is charged here too, which is why the verdict rules
+# the cap out before naming this.
 func _main_thread_ms(frame_ms: float) -> float:
 	return maxf(frame_ms - maxf(_ema_gpu_ms, _ema_cpu_render_ms), 0.0)
 

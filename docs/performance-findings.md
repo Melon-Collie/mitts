@@ -103,6 +103,12 @@ Per host physics tick, 8333 µs budget at 120 Hz:
 | **attributed total** | **~2500** | |
 | *AI worker (off-thread)* | *1330* | worker behind on <6% of ticks |
 
+Taken in an all-bot 5v5, which matters for two rows. `SKATER_STEP` is recorded
+only inside `AIController.apply_decision`, so a human's controller step
+(`LocalController` / `RemoteController`, priority −1) is in no section. And the
+goalie row measures the goalie before `KeeperController`; nothing records
+`GOALIE_PHYS` now, so the panel reads zero there.
+
 Three things this settled:
 
 - **`dispatch: apply` is not AI.** The bulk of it is
@@ -158,10 +164,11 @@ analytic antialiasing, and the HUD's cost going to zero.
   host work plus the AI worker from the playing client — the single largest
   available win, and it costs nothing in feel. Server-side it is ~30% of a core
   per lobby at 120 Hz.
-- **Rig solve LOD** — run the cosmetic pose solve at half rate for non-local
-  skaters, phase-staggered so the load spreads across frames rather than
-  alternating heavy/light. Worth ~0.8 ms/frame. The local skater stays at full
-  rate. Not yet built.
+- **Rig solve LOD** — built as `SkaterAnimationLod` (Options → Video →
+  Animation Detail): the mesh pass thins by camera distance for non-local
+  skaters, phase-staggered, the local skater at full rate. It thins the bone
+  writes, the seat, the head, the off hand and the arm/stick rebuild; the gait
+  and the hem cloth still step every visible frame.
 - **Lowering the physics rate (issue #606, 120 → 90 Hz)** would cut every
   per-tick item at once, ~0.7 ms/frame. **Rejected**: the broadcast cadence is
   counted in physics ticks, so it trades responsiveness over ping for frame rate,
