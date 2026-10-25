@@ -105,6 +105,28 @@ func test_power_negative_and_nan_zeroed() -> void:
 	assert_almost_eq(ShotReleaseRules.clamp_power(NAN, 34.0), 0.0, 0.001)
 
 
+func test_power_bound_covers_any_honest_release_in_motion() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0xB0D7
+	for i: int in 300:
+		var max_push: float = 33.0
+		var skater := Vector3(rng.randf_range(-11.0, 11.0), 0.0, rng.randf_range(-11.0, 11.0))
+		var dir := ShotReleaseRules.sanitize_direction(Vector3(rng.randf_range(-1.0, 1.0),
+				rng.randf_range(0.0, 2.0), rng.randf_range(-1.0, 1.0)))
+		if dir == Vector3.ZERO:
+			continue
+		var r: Vector3 = ReleaseMomentum.release_velocity(dir, rng.randf_range(0.0, max_push),
+				skater)
+		assert_lte(r.length(), ShotReleaseRules.release_power_bound(max_push, skater) + 0.0001,
+				"case %d" % i)
+		if r.length() > 0.0001:
+			assert_almost_eq(ShotReleaseRules.sanitize_direction(r).distance_to(r.normalized()),
+					0.0, 0.0001, "case %d: the host's direction check leaves it alone" % i)
+
+func test_power_bound_standing_still_is_the_push() -> void:
+	assert_almost_eq(ShotReleaseRules.release_power_bound(33.0, Vector3.ZERO), 33.0, 0.0001)
+
+
 # ── one_timer_claim_blocked ───────────────────────────────────────────────────
 
 func test_one_timer_claim_allowed_when_nothing_objects() -> void:

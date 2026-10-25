@@ -66,11 +66,19 @@ at the release by `SkaterController._solve_wrister_load`. In the hips' frame:
   the body is the full share. So the crossed-arms forehand (lefty: puck at 3,
   toward 6) and its mirror, a backhand from out on the stick side (puck at 9,
   toward 6), are both weak.
+- **Arms:** the arms push the blade away from the hands: full on any shot out
+  from the body or up to `wrister_arm_full_past_tangent_deg` (45°) past the
+  tangent toward it, linear to nothing on the line back through the body.
 - **The cap:** `min(cursor-speed power, max_wrister_power ×
-  lerp(wrister_unloaded_share, 1, alignment × coil))`, × the backhand coefficient.
-  With no turn behind it a shot still carries 60% (the arms, wrists and stick
-  flex — measured trunk-rotation gains are a few m/s on a 25–33 m/s shot). The
-  goalie's predicted shot takes the same cap.
+  (wrister_unloaded_share × arms + (1 − wrister_unloaded_share) × alignment ×
+  coil))`, × the backhand coefficient. With no turn behind it a shot out from the
+  body still carries 60% (the arms, wrists and stick flex — measured
+  trunk-rotation gains are a few m/s on a 25–33 m/s shot); one back through the
+  body carries nothing, which leaves a puck in front as a drop pass. The goalie's
+  predicted shot takes the same cap.
+- **The finish follows the load.** The hips turn and the stick swings onto the
+  shot line by the load's share of the way (`ShotMechanics.finish_line`); an
+  arms-only shot holds the hips and pushes the stick through where the puck sat.
 - **The puck is the pinned origin** carried along by any skating since the pin —
   never the blade's contact point, which swings with the torso's wind-up.
 - **The pose is the gauge.** The aim pose winds the torso from squared on the aim
@@ -385,6 +393,8 @@ These are left for issues.
   axis** (`swept_disc_obb.gd`). For a 0.2 m-deep pad that can be the net side.
   This is inferred from the code and not reproduced.
 - **`Puck.release` sets velocity to `direction × power` exactly.** The skater's
-  own velocity is not inherited.
+  own velocity is folded in before it, for wrist shots and quick passes
+  (`docs/release-momentum-plan.md`); slapshots and one-timers do not inherit it
+  yet.
 - **The goalie's poke reaches 0.25 m** (audit F11). He has no in-tight answer to a
   carrier on his doorstep beyond the block.

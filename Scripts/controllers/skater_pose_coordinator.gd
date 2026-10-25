@@ -248,11 +248,14 @@ func _apply_lean() -> void:
 			upper_body_lean_roll + recoil_roll, velocity_lean_x)
 	_skater.set_lower_body_lean(velocity_lean_x * _controller.lower_body_pitch_follow)
 
-# Through a finish the hips square to the shot line and come back to the cursor
+# Through a finish the hips turn onto the shot line as far as the torso drove
+# the shot (SkaterStateMachine.finish_facing_dir) and come back to the cursor
 # over the same tail as the torso and blade (ShotMechanics.follow_through_aim),
 # so they hold the finish with them rather than chase the live cursor.
 func _finish_facing_dir(cursor_dir: Vector2) -> Vector2:
-	var dir_world: Vector3 = _sm.shot_dir
+	var dir_world: Vector3 = _sm.finish_facing_dir
+	if dir_world.length_squared() <= 0.0001:
+		dir_world = _sm.shot_dir
 	if dir_world.length_squared() <= 0.0001 and _sm.follow_through_is_slapper:
 		dir_world = Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var total: float = maxf(_sm.follow_through_duration_total, 0.001)
@@ -413,6 +416,19 @@ func apply_lower_body_yaw(delta: float) -> void:
 	_skater.set_lower_body_lag(lag_share + gait_yaw)
 
 
+# The torso twist off the hips that squares the shoulders to `world_point`,
+# clamped to the twist limit; 0 for a point on top of the body.
+func _twist_toward(world_point: Vector3) -> float:
+	var to_point: Vector3 = world_point - _skater.global_position
+	to_point.y = 0.0
+	if to_point.length() <= 0.01:
+		return 0.0
+	var local_dir: Vector3 = _skater.global_transform.basis.inverse() * to_point.normalized()
+	var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
+	return clampf(-atan2(local_dir.x, -local_dir.z) * _controller.upper_body_twist_ratio,
+			-max_twist, max_twist)
+
+
 func apply_upper_body(delta: float) -> void:
 	if _sm.get_state() == State.SHOT_BLOCKING:
 		# Chest tips forward AND onto the down knee — the weight sits over the
@@ -468,8 +484,12 @@ func apply_upper_body(delta: float) -> void:
 		# trunk also drives forward over the front foot. Both targets decay to
 		# the neutral aim pose by the end of the timer, handing the generic
 		# blade-tracking branch a torso it can pick up without a pop. Whiffed
-		# wristers (no shot_dir) fall through to blade tracking.
-		var dir_world: Vector3 = _sm.shot_dir
+		# wristers (no shot_dir) fall through to blade tracking. The shoulders
+		# square to the line the stick drove (SkaterStateMachine.finish_stick_dir),
+		# which is the shot line only when the torso drove the shot.
+		var dir_world: Vector3 = _sm.finish_stick_dir
+		if dir_world.length_squared() <= 0.0001:
+			dir_world = _sm.shot_dir
 		if dir_world.length_squared() <= 0.0001 and _sm.follow_through_is_slapper:
 			dir_world = Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 		if dir_world.length_squared() > 0.0001:
@@ -555,20 +575,16 @@ func apply_upper_body(delta: float) -> void:
 	# It never reads the hand: in close the hand sits over the shoulder, and a
 	# twist gated on its reach squared the chest to a blade beside the hips.
 	# FREEZE: the coil normally faces the blade (which tracks the cursor), but a
-	# FROZEN blade can't lead the wind-up — so face the CURSOR directly, keeping
-	# the shoulders rotating toward the aim while the puck sits still.
-	var twist_source: Vector3 = _skater.upper_body_to_global(_skater.get_blade_position())
+	# FROZEN blade can't lead the wind-up, so the shoulders turn from the puck
+	# toward the CURSOR by the share of the shot the body can drive along it
+	# (SkaterController.wrister_drive_share): squared on the aim when it can,
+	# left on the puck when the shot goes somewhere the body cannot push it.
+	target_angle = _twist_toward(_skater.upper_body_to_global(_skater.get_blade_position()))
 	if _sm.get_state() == State.WRISTER_AIM:
-		twist_source = _controller._current_aim_world
-	var to_blade: Vector3 = twist_source - _skater.global_position
-	to_blade.y = 0.0
-	if to_blade.length() > 0.01:
-		var local_dir: Vector3 = _skater.global_transform.basis.inverse() * to_blade.normalized()
-		var blade_angle: float = atan2(local_dir.x, -local_dir.z)
-		var max_twist: float = deg_to_rad(_controller.upper_body_max_twist_deg)
-		target_angle = clampf(-blade_angle * _controller.upper_body_twist_ratio, -max_twist, max_twist)
-	# A wrist shot winds the torso up by the power it would release
-	# with, from squared on the aim (nothing behind it) to the full wind-up.
+		target_angle = lerp_angle(target_angle, _twist_toward(_controller._current_aim_world),
+				_controller.wrister_drive_share() if _controller.has_puck else 1.0)
+	# A wrist shot winds the torso up by the power it would release with, from
+	# there to the full wind-up.
 	if _sm.get_state() == State.WRISTER_AIM and _controller.has_puck:
 		target_angle = lerp_angle(target_angle, _controller.wrister_load.wound_yaw,
 				_controller.wrister_coil)

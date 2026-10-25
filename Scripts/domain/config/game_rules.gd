@@ -549,9 +549,9 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 # `direction × power` directly as linear velocity (see Puck.release),
 # so "power" IS m/s. Min and max bracket the wrister power model
 # (ShotMechanics.wrister_power_t — pure cursor speed, feel-curve shaped).
-# The min sits BELOW the quick-shot/pass
-# speed on purpose: a slow deliberate sweep is a soft touch pass, softer than
-# the fixed snap pass.
+# The min sits well BELOW the quick-shot/pass
+# speed on purpose: a slow deliberate sweep is a soft touch pass (5 m/s ≈ 11
+# mph), softer than the fixed snap pass.
 # The maxes are the NEUTRAL-BUILD anchors (6'1", medium flex, M92), calibrated
 # so the build spread tops out at an elite NHL release — the wrister by height
 # alone (PlayerAttributes.shot_power_mult), the slapper by height × flex × curve
@@ -563,7 +563,7 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 # catch-with-care territory.
 # The slapper min is a hurried, barely-wound release — still a heavy shot
 # (~45 mph); one-timers always fire at max regardless of charge.
-const DEFAULT_WRISTER_POWER_MIN_M_S: float = 10.0
+const DEFAULT_WRISTER_POWER_MIN_M_S: float = 5.0
 const DEFAULT_WRISTER_POWER_MAX_M_S: float = 33.0
 const DEFAULT_SLAPPER_POWER_MIN_M_S: float = 20.0
 const DEFAULT_SLAPPER_POWER_MAX_M_S: float = 40.0

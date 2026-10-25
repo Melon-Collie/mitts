@@ -1,7 +1,8 @@
 class_name WristerLoad
 
-# How much of a wrist shot the torso can put into the puck, from where the puck
-# sits off the body and which way it is aimed. Two factors, multiplied:
+# How much of a wrist shot the torso and the arms can put into the puck, from
+# where the puck sits off the body and which way it is aimed. The torso's share
+# is two factors, multiplied:
 #
 #   ALIGNMENT — turning the torso carries the puck AROUND the body, so it drives
 #   the puck along the tangent at the puck's bearing. A shot along that tangent
@@ -18,6 +19,10 @@ class_name WristerLoad
 #   what leaves a cross-body forehand, and a backhand from out on the stick
 #   side, weak.
 #
+# The arms, wrists and stick flex carry the rest. They push the blade away from
+# the hands, so they drive any shot out from the body or along the tangent, and
+# nothing straight back through it: a puck in front cannot be shot behind.
+#
 # Everything is in the hips' frame, as YAWS off forward with the stick side
 # positive, so one set of numbers serves both hands.
 
@@ -30,13 +35,18 @@ class Config:
 	# the other side.
 	var home_reach_rad: float = deg_to_rad(120.0)
 	var away_reach_rad: float = deg_to_rad(30.0)
+	# How far past the tangent, toward the body, the arms still push their whole
+	# share; from there it tapers to nothing on the line back through the body.
+	var arm_full_past_tangent_rad: float = deg_to_rad(45.0)
 
 
 # Caller-owned result: filled, never allocated, so the per-tick aim path is free.
 class Result:
 	var is_backhand: bool = false
-	# 0..1, alignment × coil: the share of the full shot this release can carry.
+	# 0..1, alignment × coil: the share of the torso's turn this release carries.
 	var load_share: float = 1.0
+	# 0..1: the share of the arms' push this release carries.
+	var arm_share: float = 1.0
 	# The torso yaw off the hips that holds the full wind-up for this shot, in
 	# upper_body_angle's convention (left positive).
 	var wound_yaw: float = 0.0
@@ -49,6 +59,7 @@ static func solve(out: Result, puck_local: Vector3, aim_local: Vector3,
 	if Vector2(aim_local.x, aim_local.z).length_squared() < 0.000001:
 		out.is_backhand = false
 		out.load_share = 1.0
+		out.arm_share = 1.0
 		out.wound_yaw = 0.0
 		return
 	# Left-positive yaw, flipped for a right-handed shooter so the stick side
@@ -59,9 +70,9 @@ static func solve(out: Result, puck_local: Vector3, aim_local: Vector3,
 	out.wound_yaw = stick_sign * wound_bearing(puck_bearing, out.is_backhand, cfg)
 
 
-# The hand and the load alone (no wound yaw), from the puck's and the aim's
-# bearings already in the shooter's frame: left-positive yaw off forward, flipped
-# for a right-hander so the stick side is positive.
+# The hand, the load and the arms' share (no wound yaw), from the puck's and the
+# aim's bearings already in the shooter's frame: left-positive yaw off forward,
+# flipped for a right-hander so the stick side is positive.
 static func solve_load(out: Result, puck_bearing: float, aim_bearing: float,
 		cfg: Config) -> void:
 	# A forehand moves the puck toward the off side (decreasing bearing), so its
@@ -70,6 +81,8 @@ static func solve_load(out: Result, puck_bearing: float, aim_bearing: float,
 	out.is_backhand = forehand_alignment < 0.0
 	out.load_share = alignment_share(absf(forehand_alignment), cfg.full_arc_rad) \
 			* coil_share(puck_bearing, out.is_backhand, cfg)
+	out.arm_share = arm_push_share(absf(wrapf(aim_bearing - puck_bearing, -PI, PI)),
+			cfg.arm_full_past_tangent_rad)
 
 
 # |cos| of the angle between the shot and the tangent → 0..1: full inside the
@@ -80,6 +93,16 @@ static func alignment_share(tangent_cos: float, full_arc_rad: float) -> float:
 	if taper <= 0.0:
 		return 1.0
 	return clampf((PI * 0.5 - off_tangent) / taper, 0.0, 1.0)
+
+
+# The shot's angle off straight out from the body (0 out, PI back through it) →
+# 0..1: full to `full_past_tangent_rad` past the tangent, linear to nothing on
+# the line through the body.
+static func arm_push_share(off_outward: float, full_past_tangent_rad: float) -> float:
+	var full_until: float = PI * 0.5 + full_past_tangent_rad
+	if full_until >= PI:
+		return 1.0
+	return clampf((PI - off_outward) / (PI - full_until), 0.0, 1.0)
 
 
 # Wind-up available, as a share of the hips' twist limit — the turn a forehand
@@ -116,9 +139,9 @@ static func _torso_hi(puck_bearing: float, is_backhand: bool, cfg: Config) -> fl
 
 
 # The share of max_wrister_power a release can carry: the turn buys the top of
-# the band, while the arms, wrists and stick flex alone still carry
-# `unloaded_share` of it; a backhand pays its coefficient on top.
-static func power_share(load_share: float, is_backhand: bool, unloaded_share: float,
-		backhand_coefficient: float) -> float:
-	var share: float = lerpf(unloaded_share, 1.0, load_share)
+# the band, the arms, wrists and stick flex `unloaded_share` of it; a backhand
+# pays its coefficient on top.
+static func power_share(load_share: float, arm_share: float, is_backhand: bool,
+		unloaded_share: float, backhand_coefficient: float) -> float:
+	var share: float = unloaded_share * arm_share + (1.0 - unloaded_share) * load_share
 	return share * backhand_coefficient if is_backhand else share

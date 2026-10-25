@@ -170,7 +170,8 @@ static func release_wrister(
 		charge_direction: Vector3 = Vector3.ZERO,
 		is_quick_pass: bool = false,
 		sweep_speed: float = 0.0,
-		out: ShotResult = null) -> ShotResult:
+		out: ShotResult = null,
+		skater_velocity: Vector3 = Vector3.ZERO) -> ShotResult:
 	var target := Vector3(mouse_world_pos.x, 0.0, mouse_world_pos.z)
 	var player_xz := Vector3(player_pos.x, 0.0, player_pos.z)
 
@@ -203,16 +204,18 @@ static func release_wrister(
 		wrister_dir = Vector3(charge_direction.x, 0.0, charge_direction.z).normalized()
 	else:
 		wrister_dir = (target - player_xz).normalized()
-	var power: float = lerpf(cfg.min_wrister_power, cfg.max_wrister_power,
+	var y: float = shot_loft_y(elevation_level,
+			cfg.loft_tan_low, cfg.loft_tan_mid, cfg.loft_tan_high)
+	var direction: Vector3 = Vector3(wrister_dir.x, y, wrister_dir.z).normalized()
+	# The band's floor is a pace on the ice (ReleaseMomentum.floor_push): the
+	# softest touch skating at the target is cushioned down to the standing one.
+	var floor_power: float = ReleaseMomentum.floor_push(cfg.min_wrister_power, direction,
+			skater_velocity)
+	var power: float = lerpf(floor_power, cfg.max_wrister_power,
 			wrister_power_t(sweep_speed, cfg))
 	if is_backhand:
 		power *= cfg.backhand_power_coefficient
-
-	var y: float = shot_loft_y(elevation_level,
-			cfg.loft_tan_low, cfg.loft_tan_mid, cfg.loft_tan_high)
-	return ShotResult.make(
-			Vector3(wrister_dir.x, y, wrister_dir.z).normalized(),
-			power, out)
+	return ShotResult.make(direction, power, out)
 
 # Slapper release — power scales linearly with charge time.
 #
@@ -326,6 +329,20 @@ static func follow_through_aim(
 	rt = rt * rt * (3.0 - 2.0 * rt)  # smoothstep
 	var ang: float = lerp_angle(atan2(sd.x, -sd.z), atan2(cd.x, -cd.z), rt)
 	return Vector3(sin(ang), 0.0, -cos(ang))
+
+# The line a finish drives along (world XZ, unit): `from` turned `drive` (0..1)
+# of the way round onto the shot. A body that drove none of the shot finishes
+# where it was; one that drove it all finishes on the shot line. ZERO when the
+# shot is degenerate; the shot alone when `from` is.
+static func finish_line(from: Vector3, shot: Vector3, drive: float) -> Vector3:
+	var sd := Vector2(shot.x, shot.z)
+	if sd.length_squared() < 0.0001:
+		return Vector3.ZERO
+	var fd := Vector2(from.x, from.z)
+	if fd.length_squared() < 0.0001:
+		fd = sd
+	var line: Vector2 = fd.normalized().rotated(fd.angle_to(sd) * clampf(drive, 0.0, 1.0))
+	return Vector3(line.x, 0.0, line.y)
 
 # Seconds a finish runs after a release at `power_t` (0..1 of the shot's power
 # band): the harder the shot, the higher and further the stick swings through,

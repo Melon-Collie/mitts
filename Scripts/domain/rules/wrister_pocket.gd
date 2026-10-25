@@ -62,7 +62,8 @@ static func solve(out: Result, aim: Vector2, velocity: Vector2, facing: Vector2,
 		WristerLoad.solve_load(load_scratch, _bearing(_yaw(pocket), body_yaw, stick_sign),
 				_bearing(aim_yaw, body_yaw, stick_sign), load_cfg)
 		var share: float = WristerLoad.power_share(load_scratch.load_share,
-				load_scratch.is_backhand, unloaded_share, backhand_coefficient)
+				load_scratch.arm_share, load_scratch.is_backhand, unloaded_share,
+				backhand_coefficient)
 		if share > best:
 			best = share
 			out.dir = pocket
@@ -81,13 +82,14 @@ static func share_at(puck_offset: Vector2, aim: Vector2, facing: Vector2,
 	if aim.length_squared() < 0.000001:
 		load_scratch.is_backhand = false
 		load_scratch.load_share = 1.0
+		load_scratch.arm_share = 1.0
 	else:
 		var stick_sign: float = _stick_sign(is_left_handed)
 		var body_yaw: float = _yaw(facing)
 		WristerLoad.solve_load(load_scratch, _bearing(_yaw(puck_offset), body_yaw, stick_sign),
 				_bearing(_yaw(aim), body_yaw, stick_sign), load_cfg)
-	return WristerLoad.power_share(load_scratch.load_share, load_scratch.is_backhand,
-			unloaded_share, backhand_coefficient)
+	return WristerLoad.power_share(load_scratch.load_share, load_scratch.arm_share,
+			load_scratch.is_backhand, unloaded_share, backhand_coefficient)
 
 
 # WristerLoad's bearing frame: left-positive yaw, stick side positive.
