@@ -133,6 +133,10 @@ extends Node3D
 	set(v):
 		spectator_y_jitter = v
 		_request_rebuild()
+@export var crowd_detail_rows: int = 6:
+	set(v):
+		crowd_detail_rows = v
+		_request_rebuild()
 
 @export_group("Sections")
 # Radial aisles dividing the bowl into seating sections. Aisle positions are
@@ -493,6 +497,7 @@ func _build_collaborators() -> void:
 	spec.spectator_inset_from_riser = spectator_inset_from_riser
 	spec.spectator_yaw_jitter_deg = spectator_yaw_jitter_deg
 	spec.spectator_y_jitter = spectator_y_jitter
+	spec.crowd_detail_rows = crowd_detail_rows
 	spec.home_fan_ratio = home_fan_ratio
 	spec.away_fan_ratio = away_fan_ratio
 	spec.secondary_color_ratio = secondary_color_ratio

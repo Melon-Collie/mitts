@@ -15,8 +15,6 @@ extends RefCounted
 # spectator's colours belong to the same person their stature does.
 const _SEED: int = 31337
 
-const _CROWD_SHADER_PATH: String = "res://Shaders/crowd.gdshader"
-
 # Away-fan share inside the designated visiting block. A feel constant: real
 # visiting sections read as a wall of away colors with locals mixed through,
 # and 0.7 sells that without looking like a printed flag.
@@ -64,27 +62,13 @@ static func release_shared_material() -> void:
 # Shared material — crowd.gdshader reads the per-instance MultiMesh color for
 # albedo (its alpha flags a bare head), shades it by height on the figure, and
 # animates sway, hop and raised arms from INSTANCE_CUSTOM + the excitement
-# uniform. One material across both MultiMeshes and across rebuilds, so
+# uniform. One material across every crowd MultiMesh and across rebuilds, so
 # excitement state persists and a single uniform write drives the whole bowl.
 # Cull disabled like the terrace material: the figures are open where they sit
 # on the seat, and a camera below an upper-deck row sees up into them.
 static func shared_material() -> ShaderMaterial:
 	if _crowd_material == null:
-		_crowd_material = ShaderMaterial.new()
-		_crowd_material.shader = load(_CROWD_SHADER_PATH)
-		_crowd_material.set_shader_parameter("excitement", 0.0)
-		var body_top: float = ArenaFigureMesh.BODY_Y_LIFT + ArenaFigureMesh.BODY_SIZE.y
-		_crowd_material.set_shader_parameter("body_top_y", body_top)
-		_crowd_material.set_shader_parameter("head_base_y",
-				body_top + ArenaFigureMesh.NECK_GAP * 0.5)
-		_crowd_material.set_shader_parameter("shoulder", ArenaFigureMesh.SHOULDER)
-		_crowd_material.set_shader_parameter("elbow", ArenaFigureMesh.ELBOW)
-		_crowd_material.set_shader_parameter("elbow_unbend", ArenaFigureMesh.elbow_unbend())
-		var skin: PackedVector3Array = PackedVector3Array()
-		for i: int in ArenaFigureMesh.BARE_HEAD_TONES:
-			var c: Color = ArenaFigureMesh.HEAD_PALETTE[i]
-			skin.append(Vector3(c.r, c.g, c.b))
-		_crowd_material.set_shader_parameter("skin_tones", skin)
+		_crowd_material = ArenaFigureMesh.new_material()
 	return _crowd_material
 
 
@@ -101,61 +85,80 @@ func set_excitement(v: float) -> void:
 # Build the color-independent half of the crowd into `layout`: per-section
 # MultiMesh pairs with meshes, transforms, anim data, and AABBs. Each section
 # is a pair because bodies tint with the team-mix color while heads tint from
-# the skin/hat palette — an extra draw call vs. a combined mesh, but it lets
-# the head pick a color independent of the body without a custom shader.
-# Colors stay default until the first `paint` pass.
+# the skin/hat palette. A section is split again by detail: the first
+# `crowd_detail_rows` of the lower bowl get the full figure, everyone further
+# out the far one. Colors stay default until the first `paint` pass.
 func fill_layout(layout: Dictionary) -> void:
 	var transforms: Array[Transform3D] = []
 	var anim_data: Array[Color] = []
 	var away_block: PackedByteArray = PackedByteArray()
+	var far: PackedByteArray = PackedByteArray()
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = _SEED
 	for i: int in _rake.lower_row_count():
+		var placed: int = transforms.size()
 		_append_row(transforms, anim_data, away_block, rng,
 				_rake.lower_row_offset(i) + _rake.seat_inset(),
 				_rake.lower_row_y(i), i, false)
+		_flag_detail(far, transforms.size() - placed, i >= _spec.crowd_detail_rows)
 	# Upper deck rows. bench_row -1: the bench cutout is an ice-level concern
 	# only — the deck hangs far above the benches.
 	for j: int in _rake.upper_row_count():
+		var placed: int = transforms.size()
 		_append_row(transforms, anim_data, away_block, rng,
 				_rake.upper_row_offset(j) + _rake.seat_inset(),
 				_rake.upper_row_y(j), -1, true)
+		_flag_detail(far, transforms.size() - placed, true)
 
-	var body_mesh: ArrayMesh = ArenaFigureMesh.crowd_body_mesh(shared_material())
-	var head_mesh: ArrayMesh = ArenaFigureMesh.crowd_head_mesh(shared_material())
+	var meshes: Array[ArrayMesh] = [
+		ArenaFigureMesh.seated_body_mesh(shared_material()),
+		ArenaFigureMesh.head_mesh(shared_material()),
+		ArenaFigureMesh.far_body_mesh(shared_material()),
+		ArenaFigureMesh.far_head_mesh(shared_material()),
+	]
 	var body_mms: Array[MultiMesh] = []
 	var head_mms: Array[MultiMesh] = []
 	var away_flags: Array[PackedByteArray] = []
-	for idxs: PackedInt32Array in ArenaBowlPath.sector_bins(transforms):
-		if idxs.is_empty():
-			continue
-		var body_mm: MultiMesh = _make_multimesh(body_mesh, idxs.size())
-		var head_mm: MultiMesh = _make_multimesh(head_mesh, idxs.size())
-		var slice_away: PackedByteArray = PackedByteArray()
-		slice_away.resize(idxs.size())
-		var seed_aabb: AABB = AABB(transforms[idxs[0]].origin, Vector3.ZERO)
-		for n_i: int in idxs.size():
-			var src: int = idxs[n_i]
-			body_mm.set_instance_transform(n_i, transforms[src])
-			body_mm.set_instance_custom_data(n_i, anim_data[src])
-			head_mm.set_instance_transform(n_i, transforms[src])
-			head_mm.set_instance_custom_data(n_i, anim_data[src])
-			slice_away[n_i] = away_block[src]
-			seed_aabb = seed_aabb.expand(transforms[src].origin)
-		# Godot's auto-AABB for MultiMesh is unreliable when transforms are
-		# pushed via set_instance_transform individually (vs. a single `buffer`
-		# set), and especially when the source mesh AABB is offset from origin
-		# (the head box is centered at y~0.58). Without an explicit AABB the
-		# renderer mis-culls whole stretches of crowd from certain angles.
-		var section_aabb: AABB = grow_section_aabb(seed_aabb)
-		body_mm.custom_aabb = section_aabb
-		head_mm.custom_aabb = section_aabb
-		body_mms.append(body_mm)
-		head_mms.append(head_mm)
-		away_flags.append(slice_away)
+	for slice: PackedInt32Array in ArenaBowlPath.sector_bins(transforms):
+		for tier: int in 2:
+			var idxs := PackedInt32Array()
+			for src: int in slice:
+				if far[src] == tier:
+					idxs.append(src)
+			if idxs.is_empty():
+				continue
+			var body_mm: MultiMesh = _make_multimesh(meshes[tier * 2], idxs.size())
+			var head_mm: MultiMesh = _make_multimesh(meshes[tier * 2 + 1], idxs.size())
+			var slice_away: PackedByteArray = PackedByteArray()
+			slice_away.resize(idxs.size())
+			var seed_aabb: AABB = AABB(transforms[idxs[0]].origin, Vector3.ZERO)
+			for n_i: int in idxs.size():
+				var src: int = idxs[n_i]
+				body_mm.set_instance_transform(n_i, transforms[src])
+				body_mm.set_instance_custom_data(n_i, anim_data[src])
+				head_mm.set_instance_transform(n_i, transforms[src])
+				head_mm.set_instance_custom_data(n_i, anim_data[src])
+				slice_away[n_i] = away_block[src]
+				seed_aabb = seed_aabb.expand(transforms[src].origin)
+			# Godot's auto-AABB for MultiMesh is unreliable when transforms are
+			# pushed via set_instance_transform individually (vs. a single
+			# `buffer` set), and especially when the source mesh AABB is offset
+			# from origin. Without an explicit AABB the renderer mis-culls whole
+			# stretches of crowd from certain angles.
+			var section_aabb: AABB = grow_section_aabb(seed_aabb)
+			body_mm.custom_aabb = section_aabb
+			head_mm.custom_aabb = section_aabb
+			body_mms.append(body_mm)
+			head_mms.append(head_mm)
+			away_flags.append(slice_away)
 	layout["body_mms"] = body_mms
 	layout["head_mms"] = head_mms
 	layout["away_flags"] = away_flags
+
+
+func _flag_detail(far: PackedByteArray, count: int, is_far: bool) -> void:
+	for n: int in count:
+		far.append(1 if is_far else 0)
 
 
 func _make_multimesh(mesh: ArrayMesh, count: int) -> MultiMesh:
@@ -289,11 +292,7 @@ func pick_colors(rng: RandomNumberGenerator,
 	if team_loyalty.a > 0.0 and rng.randf() < _spec.team_cap_ratio:
 		head = _shade(team_loyalty, rng)
 	else:
-		var tone: int = rng.randi() % ArenaFigureMesh.HEAD_PALETTE.size()
-		head = ArenaFigureMesh.HEAD_PALETTE[tone]
-		# Alpha 0 tells crowd.gdshader there is skin on top, to crown with hair.
-		if tone < ArenaFigureMesh.BARE_HEAD_TONES:
-			head.a = 0.0
+		head = ArenaFigureMesh.roll_head(rng)
 	return [body, head]
 
 

@@ -48,7 +48,7 @@ func test_rebuild_child_inventory() -> void:
 	for expected: String in ["Terraces", "Shell", "SpectatorBodies*",
 			"SpectatorHeads*", "Seats*", "CrowdFlashbulbs", "VomitoryTunnels",
 			"BenchSeatHome", "BenchSeatAway", "PenaltySeatHome", "OfficialsTable",
-			"StaffBodies", "StaffHeads", "RibbonBoard", "RafterBanners"]:
+			"StaffStanding", "StaffSeated", "StaffHeads", "RibbonBoard", "RafterBanners"]:
 		assert_not_null(stands.find_child(expected, false, false),
 				"rebuild should produce a %s child" % expected)
 
@@ -62,8 +62,8 @@ func test_the_build_order_is_the_child_order() -> void:
 	# Written as the stage sequence rather than the literal names, so a change in
 	# how many cull slices the crowd splits into does not fail it — only a change
 	# in which stage runs when. The per-slice runs collapse to one entry each:
-	# "Seats" is eight MultiMeshes, and "Crowd" is eight body/head PAIRS, since
-	# each slice's two instances are added together.
+	# "Seats" is eight MultiMeshes, and "Crowd" is body/head PAIRS, one per
+	# slice and detail tier, each pair's two instances added together.
 	var stages: PackedStringArray = PackedStringArray()
 	for child_name: String in _child_names(_make_stands(3, 2)):
 		var stage: String = child_name
@@ -84,7 +84,7 @@ func test_the_build_order_is_the_child_order() -> void:
 		"PenaltySeatAway", "PenaltyBackAway", "PenaltyDividerAway",
 		"PenaltySeatHome", "PenaltyBackHome", "PenaltyDividerHome",
 		"OfficialsTable", "OfficialsSeat",
-		"StaffBodies", "StaffHeads",
+		"StaffStanding", "StaffSeated", "StaffHeads",
 		"RibbonStripViewport", "RibbonBoard",
 		"BannerAtlasViewport", "RafterBanners", "RafterBannersBack",
 		# Added by _ready after the rebuild, and deliberately outside it: the

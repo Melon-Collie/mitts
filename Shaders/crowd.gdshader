@@ -14,18 +14,17 @@
 // displacement is a continuous function of local VERTEX.y — so head and body
 // move as one person even though they're separate draw calls.
 //
-// The figure (ArenaFigureMesh) tags each vertex's part in UV.x: 0 torso and
-// head, 1 upper arm, 2 forearm, 3 thigh. The arms are posed here, rigidly about
-// the shoulder and elbow pivots — the cull bounds rely on nothing else moving
-// them (ArenaFigureMesh.crowd_pose_bounds).
+// The figure (ArenaFigureMesh) tags each vertex's part in UV.x: 0 torso, 1
+// upper arm, 2 forearm, 3 leg, 4 shoe, 5 head. The arms are posed here, rigidly
+// about the shoulder and elbow pivots — the cull bounds rely on nothing else
+// moving them (ArenaFigureMesh.crowd_pose_bounds). The rinkside staff use this
+// shader too, on a material nobody excites and with no sway or hop rolled.
 shader_type spatial;
 render_mode cull_disabled;
 
 // 0 = idle murmur sway, 1 = goal celebration. Tweened by ArenaStands.
 uniform float excitement : hint_range(0.0, 1.0) = 0.0;
-// Figure-local heights, written from ArenaFigureMesh by ArenaCrowd: above
-// head_base_y is head, and body_top_y is where the torso ends.
-uniform float head_base_y;
+// Where the seated torso ends, written from ArenaFigureMesh.
 uniform float body_top_y;
 // The right arm's pivots (the left mirrors them in X), and the turn at the
 // elbow that straightens the forearm onto the upper arm.
@@ -55,6 +54,7 @@ const float ARM_PUMP = 0.22;
 const float HAIRLINE_FRONT = 0.655;
 const float HAIRLINE_SIDE = 0.615;
 const float HAIRLINE_BACK = 0.53;
+const vec3 SHOE = vec3(0.06, 0.05, 0.05);
 
 varying float v_height;
 varying flat float v_shade;
@@ -63,6 +63,7 @@ varying flat vec3 v_skin;
 varying flat vec3 v_trousers;
 varying flat float v_bald;
 varying flat float v_leg;
+varying flat float v_shoe;
 varying flat float v_head;
 varying flat vec3 v_normal;
 
@@ -112,8 +113,8 @@ void vertex() {
 	v_bald = step(roll(seed, 39.346), BALD_SHARE);
 	int part = int(UV.x + 0.5);
 	v_leg = part == 3 ? 1.0 : 0.0;
-	// From the rest pose: a raised hand climbs past head_base_y.
-	v_head = part == 0 && VERTEX.y > head_base_y ? 1.0 : 0.0;
+	v_shoe = part == 4 ? 1.0 : 0.0;
+	v_head = part == 5 ? 1.0 : 0.0;
 
 	if (part == 1 || part == 2) {
 		float side = sign(VERTEX.x);
@@ -147,7 +148,7 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 paint = mix(COLOR.rgb, v_trousers, v_leg);
+	vec3 paint = mix(mix(COLOR.rgb, v_trousers, v_leg), SHOE, v_shoe);
 	if (v_head > 0.5) {
 		// A bare head (alpha 0) is painted its skin, with hair rolled here; any
 		// other head is painted its cap or hair, with skin rolled here.
