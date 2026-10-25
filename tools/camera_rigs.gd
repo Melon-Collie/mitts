@@ -37,6 +37,10 @@ const RIGS: Array[Dictionary] = [
 	# in one of its screenshots: as framed there, and at our framing's span.
 	{"name": "nhl", "pitch": 35.0, "dist": 50.6, "ahead": 4.0, "side": 0.0, "fov": 17.3},
 	{"name": "nhl_ours", "pitch": 35.0, "dist": 30.6, "ahead": 4.0, "side": 0.0, "fov": 17.3},
+	# The same for an arcade hockey game's screenshot (goal line, net width, the
+	# end-zone circles and dots, the end boards).
+	{"name": "arcade", "pitch": 33.2, "dist": 36.1, "ahead": 4.0, "side": 0.0, "fov": 20.8},
+	{"name": "arcade_ours", "pitch": 33.2, "dist": 25.4, "ahead": 4.0, "side": 0.0, "fov": 20.8},
 ]
 
 
