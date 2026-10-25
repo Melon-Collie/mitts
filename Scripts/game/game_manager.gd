@@ -3720,6 +3720,11 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		if shooter != null and shooter.controller != null:
 			var max_power: float = shooter.controller.max_slapper_power if is_slapper \
 					else shooter.controller.max_wrister_power
+			# A wrist shot keeps the shooter's motion (ReleaseMomentum), read off
+			# the host's own copy of the body.
+			if not is_slapper and shooter.skater != null:
+				max_power = ShotReleaseRules.release_power_bound(max_power,
+						shooter.skater.velocity)
 			power = ShotReleaseRules.clamp_power(power, max_power)
 		rtt_ms = ShotReleaseRules.clamp_rtt_ms(
 				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))

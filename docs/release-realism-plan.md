@@ -393,6 +393,8 @@ These are left for issues.
   axis** (`swept_disc_obb.gd`). For a 0.2 m-deep pad that can be the net side.
   This is inferred from the code and not reproduced.
 - **`Puck.release` sets velocity to `direction × power` exactly.** The skater's
-  own velocity is not inherited.
+  own velocity is folded in before it, for wrist shots and quick passes
+  (`docs/release-momentum-plan.md`); slapshots and one-timers do not inherit it
+  yet.
 - **The goalie's poke reaches 0.25 m** (audit F11). He has no in-tight answer to a
   carrier on his doorstep beyond the block.

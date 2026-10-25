@@ -3091,6 +3091,8 @@ func _release_wrister(input: InputState) -> void:
 				false,
 				_wrister_sweep_speed(input))
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
+		var push: float = result.power
+		_carry_momentum(result)
 		# The finish turns the hips and swings the stick round onto the shot only
 		# as far as the torso drove it; the arms alone push it from where it sat.
 		var drive: float = wrister_load.load_share
@@ -3101,7 +3103,7 @@ func _release_wrister(input: InputState) -> void:
 						_aiming.wrister_origin_world - _aiming.wrister_origin_skater_pos,
 						result.direction, drive))
 		_do_release(result.direction, result.power)
-		skater.shot_charge = _wrister_charge_of(result.power)
+		skater.shot_charge = _wrister_charge_of(push)
 
 	_sm.follow_through_is_slapper = false
 	# Finish size follows the released POWER (pre-backhand — the body swing is the
@@ -3117,6 +3119,17 @@ func _release_wrister(input: InputState) -> void:
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
+
+# Folds the skater's motion into a wrist shot's or quick pass's release
+# (ReleaseMomentum): the puck keeps the body's velocity, the hands correcting it
+# onto the aim out of the push; a pass keeps its vertical launch speed. A puck
+# the blade leaves at rest keeps its direction at no pace.
+func _carry_momentum(result: ShotMechanics.ShotResult, is_pass: bool = false) -> void:
+	var v: Vector3 = ReleaseMomentum.release_velocity(result.direction, result.power,
+			skater.velocity, is_pass)
+	result.power = v.length()
+	if result.power > 0.0001:
+		result.direction = v / result.power
 
 # Instant quick pass — the fixed-power blade→cursor snap, fired straight from
 # carry by the dedicated quick_pass button (no wrister aim/charge). Backhand is
@@ -3137,6 +3150,7 @@ func _fire_quick_pass(input: InputState) -> void:
 				_wrister_config(),
 				Vector3.ZERO,
 				true)
+		_carry_momentum(result, true)
 		_sm.aim_finish(result.direction)
 		_do_release(result.direction, result.power)
 
@@ -3288,12 +3302,13 @@ func _update_wrister_charge(input: InputState) -> void:
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
 	wrister_coil = minf(wrister_load.load_share, ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config()))
-	skater.predicted_shot_velocity = pred.direction * pred.power
-	# shot_charge carries the release-now SPEED (normalized predicted power over
-	# the min→max band) — the pure mouse-speed model, so it always matches the
-	# shot that would come out this tick. This is the honest readout the goalie
-	# leans on and what the stick-flex pose keys off (the flex is the only
-	# visual charge feedback — there is no charge ring).
+	skater.predicted_shot_velocity = ReleaseMomentum.release_velocity(
+			pred.direction, pred.power, skater.velocity)
+	# shot_charge carries the release-now PUSH (normalized predicted power over
+	# the min→max band, before the skater's own motion joins it) — the pure
+	# mouse-speed model, so it always matches the blade's push this tick. This is
+	# the honest readout the goalie leans on and what the stick-flex pose keys off
+	# (the flex is the only visual charge feedback — there is no charge ring).
 	skater.shot_charge = _wrister_charge_of(pred.power)
 
 
