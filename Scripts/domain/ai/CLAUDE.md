@@ -433,8 +433,10 @@ eats the depth he holds past his gap — `approach_speed_cap`, the step-up bound
 with its pivot, the carrier's pace being his whole speed turned at our net. A
 gap-up keeps its stand a stick off the carrier; what the cap stops is the
 moving-frame closing term walking him up-ice at a carrier who is crossing rather
-than coming, which the turn down then beats. A carrier with no speed has no
-turn to beat him with, so the cap is wide open and he is attacked.
+than coming, which the turn down then beats. A carrier with no speed still has
+his burst, which he starts the moment the defender commits: the cap prices what
+he builds along his stride ramp while the defender brakes, so a stalled carrier
+is closed on at a pace the defender can turn out of, never charged.
 
 ### Facing the play, or turned to skate with him
 
