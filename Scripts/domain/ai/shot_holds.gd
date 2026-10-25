@@ -132,15 +132,16 @@ func solve_shot(aim: Vector2, puck_offset: Vector2, velocity: Vector2,
 # The hold a shot on arrival at a carry's spot is taken from: the best-loaded
 # pocket for `aim` at `velocity`, or the reach to the shot line's other side when
 # a man's stick makes the pocket the worse bet (share × keep). Each is kept
-# through `t` from now, the body then at `at` (world), against every opponent's
-# reachable stick (AICarrySpace).
+# through `t` from now, the body then at `at` (world) after a carry from `from`,
+# against every opponent's reachable stick (AICarrySpace).
 func solve_arrival(aim: Vector2, velocity: Vector2, facing: Vector2, at: Vector3,
 		t: float, opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array) -> void:
+		opponent_caps: Array, from: Vector3 = Vector3.INF) -> void:
 	pocket(aim, velocity, facing)
 	arrival_offset = pocket_offset()
 	arrival_share = pocket_result.power_share
-	arrival_keep = _dwell_keep(at, arrival_offset, t, opponents, opponent_vels, opponent_caps)
+	arrival_keep = _dwell_keep(at, arrival_offset, t, opponents, opponent_vels, opponent_caps,
+			from)
 	if arrival_keep >= 1.0:
 		return
 	var side: float = -1.0 if aim.cross(pocket_result.dir) > 0.0 else 1.0
@@ -151,18 +152,25 @@ func solve_arrival(aim: Vector2, velocity: Vector2, facing: Vector2, at: Vector3
 		return
 	var other: Vector2 = dir * handle_reach
 	var other_share: float = share_at(other, aim, _facing.target)
-	var other_keep: float = _dwell_keep(at, other, t, opponents, opponent_vels, opponent_caps)
+	var other_keep: float = _dwell_keep(at, other, t, opponents, opponent_vels, opponent_caps,
+			from)
 	if other_share * other_keep > arrival_share * arrival_keep:
 		arrival_offset = other
 		arrival_share = other_share
 		arrival_keep = other_keep
 
 
+# The odds the puck sits at `at` + `off` through `t` unreached, carried there
+# from `from`. A man chasing that carry from behind is on it there for the whole
+# carry (AICarrySpace.reach_clearance): a puck in the shooting pocket is not
+# shielded as a carried one is.
 static func _dwell_keep(at: Vector3, off: Vector2, t: float, opponents: Array[Vector3],
-		opponent_vels: Array[Vector3], opponent_caps: Array) -> float:
+		opponent_vels: Array[Vector3], opponent_caps: Array,
+		from: Vector3 = Vector3.INF) -> float:
+	var spot := Vector3(at.x + off.x, 0.0, at.z + off.y)
 	return AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
-			Vector3(at.x + off.x, 0.0, at.z + off.y), t, opponents, opponent_vels,
-			opponent_caps, minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S)))
+			spot, t, opponents, opponent_vels, opponent_caps,
+			minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S), Vector2.ZERO, 0.0, -INF, from))
 
 
 # Odds each solve_shot hold keeps the puck from `self_pos` (world) skating at

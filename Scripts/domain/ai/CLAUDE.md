@@ -687,6 +687,13 @@ reaches back into what remains.
     leads the carry. The dwell and transit maps keep their own calibration on
     the stick's span: priced at full reach everywhere, a carrier in his own end
     read every forechecker's disk as closed and escaped fewer forechecks.
+  - The **shot on a carry's arrival** reads a man behind the carry, skating its
+    way, as on it for the whole carry (`AICarrySpace._chases`, through
+    `AIShotHolds.solve_arrival`): a puck in the shooting pocket is not shielded
+    as a carried one is, so the carry's own samples keep the short lunge while
+    the wind-up at the crease does not. Never read that man as coasting to a
+    last lunge there: a backchecker out-skating a carrier who slows into the
+    crease then sails past it on paper, and the drive in out-prices the shot.
   - The **max-clearance seam** (`best_evade_point`, "can I keep the puck at
     all") prices the carrier's current safety. Where the body goes to beat a
     man is not a seam read: it is the carry's rolled moves, each priced at its

@@ -345,7 +345,7 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 	var windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	holds.solve_arrival(aim.normalized(), Vector2(arrive_vel.x, arrive_vel.z), facing,
 			candidate + arrive_vel * windup, carry_s + windup,
-			opponents, opponent_vels, opponent_caps)
+			opponents, opponent_vels, opponent_caps, ctx.self_pos)
 	var puck: Vector3 = ctx.self_pos if ctx.snapshot.puck_state == null \
 			else ctx.snapshot.puck_state.position
 	var from := Vector2(puck.x - ctx.self_pos.x, puck.z - ctx.self_pos.z)

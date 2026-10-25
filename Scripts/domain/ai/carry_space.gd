@@ -71,7 +71,7 @@ static func reach_clearance(
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], maneuver_time: float = -1.0,
 		carry_dir: Vector2 = Vector2.ZERO, carry_speed: float = 0.0,
-		abort_below: float = -INF) -> float:
+		abort_below: float = -INF, carried_from: Vector3 = Vector3.INF) -> float:
 	var n: int = opponents.size()
 	if n == 0 or opponent_vels.size() != n:
 		return EVADE_SAFE_MARGIN_M   # nothing to evade — fully clear
@@ -82,7 +82,9 @@ static func reach_clearance(
 	# CARRY_LUNGE_WINDOW_S): the defender isn't credited with committing to the
 	# catch spot for the whole flight — the in-flight interception is the lane
 	# model's ledger, and at a carry's arrival the carrier is established and
-	# protecting.
+	# protecting. A man chasing a carry from `carried_from` to `puck_point`
+	# commits the whole window regardless (_chases): he is after the carrier, not
+	# a spot.
 	var w: float = time if maneuver_time < 0.0 else minf(time, maneuver_time)
 	var has_caps: bool = opponent_caps.size() == n
 	var gated: bool = carry_speed > 0.0
@@ -129,8 +131,11 @@ static func reach_clearance(
 			v_along_carry = opponent_vels[i].x * carry_dir.x \
 					+ opponent_vels[i].z * carry_dir.y
 			accel *= clampf(1.0 - maxf(v_along_carry, 0.0) / carry_speed, 0.0, 1.0)
+		var w_i: float = w
+		if _chases(carried_from, puck_point, opponents[i], opponent_vels[i]):
+			w_i = time
 		var clear: float = _reach_clearance_one(
-				puck_point.x, puck_point.z, time, w,
+				puck_point.x, puck_point.z, time, w_i,
 				opponents[i].x, opponents[i].z,
 				opponent_vels[i].x, opponent_vels[i].z, accel, stick, vmax, grip)
 		if v_along_carry > 0.0 and w < time:
@@ -147,6 +152,19 @@ static func reach_clearance(
 			if worst < abort_below:
 				return worst
 	return worst
+
+
+# Whether a man at `pos` moving at `vel` is chasing a carry from `from` to `to`:
+# behind where it starts along it and skating its way, so where it ends is where
+# he is going and he is on it the whole window, never coasting past it. One
+# level with the carrier or in front of the carry is not: he has to cut across
+# to it, which is the reach the lunge prices.
+static func _chases(from: Vector3, to: Vector3, pos: Vector3, vel: Vector3) -> bool:
+	if not from.is_finite():
+		return false
+	var cx: float = to.x - from.x
+	var cz: float = to.z - from.z
+	return vel.x * cx + vel.z * cz > 0.0 and (pos.x - from.x) * cx + (pos.z - from.z) * cz < 0.0
 
 
 # One defender's nominal reach clearance (see reach_clearance): coast on
