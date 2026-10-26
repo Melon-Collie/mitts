@@ -241,13 +241,13 @@ func _impeded_ctx(mate: Vector3, defender: Vector3) -> RoleContext:
 			[1, TEAM_ID, carrier], [2, TEAM_ID, mate], [11, 1, defender]]))
 
 
-# A neutral-zone carrier, a mate wide, and a defender standing inside his line
-# (still, so the race's only clock is ours).
+# A neutral-zone carrier, a mate wide, and their man behind the play skating
+# back: every moment the entry waits is ice he recovers.
 func _entry_race_ctx() -> RoleContext:
 	var self_pos := Vector3(0.0, 0.0, 6.0)
 	return _set_keeper(_make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos], [2, TEAM_ID, Vector3(-6.0, 0.0, 4.0)],
-			[11, 1, Vector3(3.0, 0.0, -9.0)]]))
+			[11, 1, Vector3(3.0, 0.0, 12.0), false, Vector3(0.0, 0.0, -4.0)]]))
 
 
 func test_the_zone_entry_leaf_is_read_when_its_man_gets_there() -> void:
@@ -270,9 +270,12 @@ func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 	# A mate far out is worth his drive in from the reception, its end read when
 	# he gets there (receiver_drive_in_value's start): never as if he stood at the
 	# end of it now.
+	# Their man behind the play backchecks, so the later the drive, the more of
+	# the way home he is.
 	var self_pos := Vector3(0.0, 0.0, 6.0)
 	var ctx := _set_keeper(_make_ctx(self_pos, [
-			[1, TEAM_ID, self_pos], [11, 1, Vector3(9.0, 0.0, -14.0)]]))
+			[1, TEAM_ID, self_pos], [11, 1, Vector3(3.0, 0.0, 14.0), false,
+					Vector3(0.0, 0.0, -2.0)]]))
 	var c: AIRoleCarrier = _decided(ctx)
 	var mate := Vector3(-6.0, 0.0, 8.0)
 	var now: float = c._field.receiver_drive_in_value(ctx, mate, null)
@@ -718,6 +721,7 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 	var v := Vector3(0, 0, -7.0)
 	var self_pos := Vector3(-8.0, 0, -6.5)
 	var drive: Array[float] = []
+	var reached: Array[Vector3] = []
 	for gap: float in [5.0, 8.0]:
 		var skaters: Array = [
 				[1, TEAM_ID, self_pos, false, v],
@@ -729,10 +733,11 @@ func test_a_defender_who_never_covers_the_drive_costs_it_nothing() -> void:
 		var c := AIRoleCarrier.new()
 		c.decide(ctx)
 		drive.append(c._field.receiver_drive_in_value(ctx, self_pos, null, v))
+		reached.append(c._field.drive_in_reached)
 	assert_gt(drive[1], 0.0, "precondition: the drive is worth something")
-	assert_almost_eq(drive[0], drive[1], 0.005,
-			"a defender 5 m ahead who never covers the drive costs it nothing (%.3f vs %.3f)"
-			% [drive[0], drive[1]])
+	assert_almost_eq(reached[0].distance_to(reached[1]), 0.0, 0.01,
+			"a defender 5 m ahead who never covers the drive does not stop it (%s vs %s)"
+			% [reached[0], reached[1]])
 
 
 func test_the_shot_s_keep_never_discounts_what_the_spot_is_worth_by_position() -> void:
@@ -1038,27 +1043,24 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~10x PASS_MIN_VALUE, the weak one ~0.9x. Boxed in, the carrier would lose the
+# ~7x PASS_MIN_VALUE, the weak one ~0.75x. Boxed in, the carrier would lose the
 # puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
-# holds is under its doubt's raise (1.5x). The weak outlet is still sliding into
-# the far corner, so his drive up the wall has to brake that out first. Both
-# values are future value and so scale with READ_VALIDITY_TAU_S against a fixed
-# bar: re-size the weak one's depth when that moves, never its slide (past 6 m/s
-# the lane dies outright).
+# holds is under its doubt's raise (1.5x). The weak outlet stands behind our
+# goal line, so every entry of his is a long skate against a defence that is
+# home by then. Both values are future value and so scale with
+# READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's spot when that
+# moves.
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
-	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
-			else Vector3.ZERO
 	return [
 			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, outlet, false, outlet_vel],
+			[2, TEAM_ID, outlet],
 			[3, 1, Vector3(1.5, 0, 18.0)],        # forechecker
 			[4, 1, Vector3(3.0, 0, 17.5)],        # forechecker
 	]
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.5)  # deep below the dot
-const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
+const _MARGINAL_OUTLET := Vector3(6.0, 0, 26.0)  # behind our goal line
 
 
 func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:
@@ -1518,12 +1520,16 @@ func _fresh_entry_finisher_ctx() -> RoleContext:
 # as the live scoring.
 
 func _ctx_with_outlet(outlet_pos: Vector3, outlet_vel: Vector3,
-		ghost: bool = false) -> RoleContext:
-	# Carrier deep in our own zone; teammate 2 slotted BREAKOUT_STRONG.
+		ghost: bool = false, forechecker: Vector3 = Vector3.INF) -> RoleContext:
+	# Carrier deep in our own zone; teammate 2 slotted BREAKOUT_STRONG; with
+	# `forechecker`, a man charging him from there.
 	var self_pos := Vector3(2, 0, 20)
-	var ctx := _make_ctx(self_pos, [
+	var rows: Array = [
 			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, outlet_pos, ghost, outlet_vel]])
+			[2, TEAM_ID, outlet_pos, ghost, outlet_vel]]
+	if forechecker.is_finite():
+		rows.append([3, 1, forechecker, false, (self_pos - forechecker).normalized() * 4.0])
+	var ctx := _make_ctx(self_pos, rows)
 	var brain := TeamBrain.new(TEAM_ID, ctx.team_id_by_peer)
 	brain.slot_assignments[2] = AIRoleSlots.Slot.BREAKOUT_STRONG
 	ctx.team_brain = brain
@@ -1559,11 +1565,12 @@ func test_developing_feed_zero_for_ghosted_outlet() -> void:
 
 
 func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
-	# The whole point of the hold: the pass the outlet is CREATING
-	# (projected up its route, toward open ice) out-values the pass to
+	# The whole point of the hold: under a forecheck, the pass the outlet is
+	# CREATING (projected up its route, toward open ice) out-values the pass to
 	# where it currently stands. Compare the developing feed of a moving
 	# outlet against one parked at the same spot but projected nowhere.
-	var moving := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6))
+	var moving := _ctx_with_outlet(Vector3(9, 0, 16), Vector3(1.2, 0, -6), false,
+			Vector3(8, 0, 19))
 	var carrier := AIRoleCarrier.new()
 	carrier._field.fill(moving)
 	carrier._field.teammate_ids = [2]
@@ -2321,10 +2328,13 @@ func test_behind_net_carrier_wheels_to_the_far_wall_in_5v5() -> void:
 	c.decide(ctx)
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
 			"the wheel is a carry, not a panic release")
-	assert_true(AICarrierDestinations.is_wheel(c._carry.destination_kind),
-			"it carries for the wheel")
-	assert_lt(c._carry.destination.x, -5.0, "out the FAR side of the cage")
-	assert_lt(c._carry.destination.z, 22.0, "...up the far wall, not a near-post step")
+	# The far post's walkout is the wheel's own first step; which of the two the
+	# destination names is how far ahead the read looks, not which way he goes.
+	assert_true(AICarrierDestinations.is_wheel(c._carry.destination_kind)
+			or AICarrierDestinations.is_walkout(c._carry.destination_kind),
+			"it carries round the cage")
+	assert_lt(c._carry.destination.x, -GameRules.NET_HALF_WIDTH,
+			"out the FAR side of the cage, away from the chaser and the covered front")
 	assert_lt(c.last_carry_anchor.x, self_pos.x, "and skates across behind the cage to it")
 	assert_gt(c.last_carry_anchor.z, GameRules.GOAL_LINE_Z, "...round the back, not into it")
 

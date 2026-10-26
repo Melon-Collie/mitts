@@ -1,6 +1,7 @@
 # Grounding the bots' physical reads
 
-Status: **agreed direction; phases 1 and 2 done, phase 3 next.** The CLAUDE.md workflow
+Status: **agreed direction; phases 1 and 2 done; phase 3 in progress, paused on
+a design question (below, "Phase 3 so far").** The CLAUDE.md workflow
 applies: this doc is the plan, deviations get discussed first.
 
 ## Why
@@ -311,6 +312,51 @@ judge a threat too.
 Measured at each step on the rim and feed fixtures, the entry and breakout
 drills (`tests/instruments/ai/test_nz_entry_drill.gd`,
 `test_breakout_drill.gd`), the slow tier and the benchmarks.
+
+### Phase 3 so far
+
+In the working tree of the commit that adds this section:
+
+- **The entry is a contest at the line** (`AIPossessionValue._line_keep`): no
+  race veto. A defender inside his line shadows where the carrier is heading
+  (his natural crossing), on the carrier→net line at his own depth, if he can
+  get there before the carrier commits, then has the carry-arrival lunge to
+  cover the crossing actually taken; one outside the line is projected. Five
+  crossings along the line, not three spots.
+- **Each defender charged once**: the skate, the line and the drive keep the
+  puck at the worst of the three (the `carry_safety` convention).
+- **One projection model** (`AIPossessionValue.project_defender`, which
+  `AICarrierField.project_opponents` now calls): a man backing off ahead slides
+  to a stop; one stepping up carries on until level with the carrier; one
+  behind the play backchecks to the top of his house on the arrival clock. His
+  velocity is projected with him (`projected_vel`), so the reach reads see a
+  backchecker skating home, not his old heading.
+- **The entry's follow-up against the defence as it will be**: priced at
+  `FOLLOW_UP_TIMES` (0, 1, 2, 4 s) and read between them.
+- **One leaf on both sides of the line**: the carrier's value of a spot is the
+  better of his shot there and our play on from it
+  (`AIPossessionValue.play_on`, no second keeper read for the shot), so the
+  surface no longer changes model at the line. In-zone entries count only ahead
+  of the man (no curl back up into a defender who is projected to stop).
+- Items 9 and 10: the in-zone receiver entry credit is gone (one leaf covers
+  it); no entry is ours before an owed tag-up is made (`_tag_up_time`).
+- Not yet: the stash re-applied, the threat reads on man caps, the stand timed.
+
+**Where it stands.** Default tier green (re-pinned: carrier, role_breakout,
+counter_rush snapshots; fixtures corrected where they leaned on the old race).
+Entry drill **regressed**: 30 of 30 carried with 4 passes (phase 2) → 25 carried,
+41 passes (23 backward). Breakout 18 exits in 2.80 s (2.92 at phase 2). Three of
+the four 2-on-1s now end in a close shot.
+
+**The design question.** With the defence projected honestly, the possession
+read's single-carrier assumption ("one man carries") makes every defender
+converge on the carrier: in the follow-up all of them are home on the same spot,
+so the middle is shut and the wings untouched, and no defender is left to mark
+our other skaters. Every neutral-zone spot then reads 0.03–0.05, and passes win
+on hundredths (a winger with a free wing lane beats a carrier with a backchecker
+ahead; then it comes back). The grounded fix is numbers: a defender marking
+another of our skaters is not the carrier's — which extends the read past the
+agreed plan, so it waits on a decision.
 
 ### Open
 

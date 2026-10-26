@@ -29,7 +29,8 @@ const STRONG_MIN_LEAD_M: float = 3.0
 # STRONG's second column: a mid-seam lane at this fraction of the wall offset,
 # so the outlet has a move when the wall lane dies. In 5v5 STRONG is a WALL POST
 # (docs/breakout-plan.md, Phase C) and gets the column only when the carrier's
-# own route occupies the wall lane; 3v3's rover always has it.
+# own route occupies the wall lane; 3v3's rover always has it. Either way the
+# carrier's route leaves him the mid-seam alone.
 const MID_SEAM_FRACTION: float = 0.5
 # "The carrier owns the wall lane": within the wall inset plus a body of
 # the boards on the outlet's side.
@@ -104,7 +105,9 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 	# maxf: a carrier already near the line collapses the samples onto it.
 	var bottom_depth: float = maxf(carrier_depth - STRONG_MIN_LEAD_M, blue_depth)
 	var top_depth: float = blue_depth
-	# The 5v5 wall post yields its lane only to the carrier's own route.
+	# The wall lane is the carrier's own road when he skates it, and two bodies
+	# do not share a lane: the outlet takes the mid-seam then. Otherwise the 5v5
+	# wall post holds the boards.
 	var carrier_on_wall: bool = signf(carrier_pos.x) == signf(side_x) \
 			and GameRules.RINK_HALF_WIDTH - absf(carrier_pos.x) < WALL_LANE_BAND_M
 	var wall_only: bool = ctx.team_size >= 5 and not carrier_on_wall
@@ -113,7 +116,8 @@ static func _strong_wall_candidates(ctx: RoleContext, carrier_pos: Vector3,
 		if STRONG_WALL_SAMPLES > 1:
 			t = float(i) / float(STRONG_WALL_SAMPLES - 1)
 		var depth: float = lerpf(bottom_depth, top_depth, t)
-		result.append(Vector3(wall_x, 0.0, own_dir * depth))
+		if not carrier_on_wall:
+			result.append(Vector3(wall_x, 0.0, own_dir * depth))
 		if not wall_only:
 			result.append(Vector3(mid_x, 0.0, own_dir * depth))
 	result.append(ctx.self_pos)

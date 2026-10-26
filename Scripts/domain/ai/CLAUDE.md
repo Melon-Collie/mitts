@@ -52,12 +52,13 @@ the whole bar, leaving only settle doubt's raise. A pressured carrier with an
 open man ahead is choosing between the pass and a turnover, and a 0.015 outlet
 is not a giveaway next to that.
 
-A pass's receiver is priced at the best of his shot off the feed, his straight
-drive in, and the zone entries our possession of his spot is priced by, from
-when the puck reaches him (`AICarrierField.entry_value`) — the read the defence
-prices a feed to him by. He does not search, and a straight drive alone misses
-every lane but the one at the net: a man taking a feed in stride at the blue
-line with a defender in the middle is worth the lanes either side of him.
+A pass's receiver is priced at the best of his shot off the feed and our play
+on from his spot (`AICarrierField.horizon_value` → `AIPossessionValue.play_on`:
+his straight drive in, and the crossings of the line still ahead of him) — the
+read the defence prices a feed to him by. He does not search, and a straight
+drive alone misses every lane but the one at the net: a man taking a feed in
+stride at the blue line with a defender in the middle is worth the crossings
+either side of him.
 
 ## Difficulty rides three independent axes
 

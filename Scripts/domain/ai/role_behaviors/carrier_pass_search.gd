@@ -537,13 +537,6 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# the instant value above has already consumed.)
 	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
 			ctx, receiver_spot, receiver_caps, receiver_vel, Vector3.INF, flight_t))
-	# He does not search, so in the zone the lanes his one straight drive misses
-	# are priced as our possession of his spot prices them, by its zone entries:
-	# the read the defence prices a feed to him by. Outside it the feed's value
-	# already is that possession.
-	if AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
-		receiver_value = _field.entry_value(receiver_spot, flight_t, receiver_vel,
-				receiver_value, receiver_caps)
 	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
 	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
 	# Reception pressure on a catch: the reachable-set clearance at the reception

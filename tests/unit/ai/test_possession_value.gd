@@ -26,12 +26,12 @@ func test_in_the_zone_it_is_at_least_the_shot() -> void:
 
 
 func test_a_defender_on_the_drive_takes_it() -> void:
-	# From the corner the shot is nothing: the spot is worth its drive in.
+	# From the corner the shot is nothing: the spot's own play is its drive in.
 	var corner := Vector3(-10.0, 0.0, -22.0)
-	var open: float = _read(_none).at(corner)
+	var open: float = _read(_none)._drive(corner, 0.0)
 	assert_gt(open, 0.0, "an open drive from the corner is worth something")
 	var home: Array[Vector3] = [Vector3(-4.5, 0.0, -24.4)]
-	assert_lt(_read(home).at(corner), open, "a defender home first takes it away")
+	assert_lt(_read(home)._drive(corner, 0.0), open, "a defender home first takes it away")
 
 
 func test_closer_to_the_zone_is_worth_more() -> void:
@@ -55,15 +55,15 @@ func test_crossing_the_line_never_costs_the_puck_value() -> void:
 			prev = here
 
 
-func test_a_body_on_his_stick_costs_him_the_puck_where_the_race_is_his() -> void:
-	# Both defenders trail him to every entry, so neither takes the race; only
-	# the one in reach of his skate takes the puck off it.
+func test_a_body_on_his_stick_costs_him_the_puck_where_the_line_is_his() -> void:
+	# Neither defender is set at the line; the one in reach of his skate, standing
+	# between him and the zone, takes the puck off it.
 	var spot := Vector3(0.0, 0.0, 4.0)
-	var on_him: Array[Vector3] = [Vector3(1.0, 0.0, 5.0)]
+	var on_him: Array[Vector3] = [Vector3(0.8, 0.0, 2.8)]
 	var far_back: Array[Vector3] = [Vector3(1.0, 0.0, 16.0)]
 	var open: float = _read(_none).at(spot)
-	assert_almost_eq(_read(far_back).at(spot), open, 1e-6,
-			"a man he out-skates to every entry costs him nothing")
+	assert_gt(_read(far_back).at(spot), open * 0.8,
+			"a man he leaves behind costs him only what his backcheck recovers")
 	assert_lt(_read(on_him).at(spot), open * 0.8, "a body on his stick does")
 
 
@@ -243,3 +243,36 @@ func test_a_body_on_the_lane_takes_the_feed() -> void:
 	assert_lt(covered, open * 0.5, "a stick in the lane")
 	assert_almost_eq(v.threat_of_feed(carrier, receiver, Vector3.ZERO, OUR_KEEPER), open,
 			1e-6, "and off again, the read is as it was")
+
+
+# ── The contest at the line ──────────────────────────────────────────────────
+
+func test_a_defender_set_at_his_line_shadows_the_carriers_lane_not_the_whole_line() -> void:
+	# He takes the carrier→net line at his depth where the carrier is heading;
+	# the crossing that carrier picks late is the lunge's to cover, so the far
+	# lane stays open however long the skate, until the carrier heads for it.
+	var line_z: float = -GameRules.BLUE_LINE_Z
+	var v: AIPossessionValue = _read([Vector3(-6.0, 0.0, line_z - 0.4)])
+	var carrier := Vector3(0.0, 0.0, 6.0)
+	var up_ice := Vector3(0.0, 0.0, -6.0)
+	var middle := Vector3(0.0, 0.0, line_z)
+	var wide := Vector3(GameRules.RINK_HALF_WIDTH - AIPossessionValue.ENTRY_WALL_INSET_M,
+			0.0, line_z)
+	assert_lt(v._line_keep(middle, 2.5, carrier, up_ice), 0.1,
+			"the lane the carrier is skating is his")
+	assert_gt(v._line_keep(wide, 2.5, carrier, up_ice), 0.9,
+			"the far lane is open to a late choice")
+	var at_wide := Vector3(wide.x - carrier.x, 0.0, wide.z - carrier.z).normalized() * 6.0
+	assert_lt(v._line_keep(wide, 2.5, carrier, at_wide), 0.1,
+			"and his once the carrier heads for it")
+
+
+func test_a_defender_gapped_back_leaves_the_line_to_the_drive() -> void:
+	var line_z: float = -GameRules.BLUE_LINE_Z
+	var middle := Vector3(0.0, 0.0, line_z)
+	var gapped: AIPossessionValue = _read([Vector3(0.0, 0.0, line_z - 7.0)])
+	assert_gt(gapped._line_keep(middle, 1.0, Vector3(0.0, 0.0, 4.0), Vector3(0.0, 0.0, -6.0)),
+			0.9, "he is no wall at the line")
+	assert_lt(gapped._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
+			_read(_none)._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
+			"the drive in from the crossing is where he costs it")
