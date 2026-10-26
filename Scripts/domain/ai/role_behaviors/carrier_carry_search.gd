@@ -43,8 +43,10 @@ var _dest_arrival: Array[float] = []
 var _wheel: AICarrierWheel
 # A carrier with no caps of its own skates the league body.
 var _league_caps := AISkaterCaps.new()
-# Where the last _rolled_safety read strips the puck (INF when it keeps it).
+# Where the last _rolled_safety read strips the puck (INF when it keeps it), and
+# when, from the start of its move.
 var _strip_point: Vector3 = Vector3.INF
+var _strip_t: float = 0.0
 # How many of each first move's path samples are skated (reach_short_of_net),
 # index-matched by AICarryRollout.Move.
 var _move_reach: Array[int] = []
@@ -371,7 +373,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 			caps, dest_arrival)
 	var cost: float = 0.0
 	if safety < 1.0 and _strip_point.is_finite():
-		cost = _field.turnover_cost(_strip_point, 1.0 - safety)
+		cost = _field.turnover_cost(_strip_point, 1.0 - safety, _strip_t)
 		cost += _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety, end,
 				our_goalie)
 	var total: float = worth * decay * safety - cost
@@ -497,7 +499,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		if move_value <= best:
 			continue
 		if safety < 1.0 and _strip_point.is_finite():
-			move_value -= _field.turnover_cost(_strip_point, 1.0 - safety)
+			move_value -= _field.turnover_cost(_strip_point, 1.0 - safety, _strip_t)
 			move_value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
 					_rollout2.reach_pos(m, reach), our_goalie)
 		best = maxf(best, move_value)
@@ -544,6 +546,8 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 		if piece < 1.0 and not _strip_point.is_finite():
 			_strip_point = AICarrySpace.carry_strip_point(prev, p, leg_t, leg_opps,
 					_field.opponent_vels, _field.opponent_caps, true)
+			_strip_t = t_prev + (leg_t * Vector2(_strip_point.x - prev.x,
+					_strip_point.z - prev.z).length() / leg_len if leg_len > 0.001 else 0.0)
 		keep = minf(keep, piece)
 		if keep <= 0.0:
 			return 0.0
@@ -633,8 +637,9 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 		var strip_point: Vector3 = AICarrySpace.carry_strip_point(
 				cur_puck_pos, cand_puck_pos, local_time,
 				_field.opponents, _field.opponent_vels, _field.opponent_caps, true)
-		cost = _field.turnover_cost(strip_point,
-			1.0 - keep_prob)
+		var cand_len: float = cur_puck_pos.distance_to(cand_puck_pos)
+		cost = _field.turnover_cost(strip_point, 1.0 - keep_prob, local_time
+				* cur_puck_pos.distance_to(strip_point) / cand_len if cand_len > 0.001 else 0.0)
 		# Transition exposure (5v5): the carrier's recovery race starts from the
 		# CANDIDATE, the spot this carry commits him to.
 		cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep_prob,

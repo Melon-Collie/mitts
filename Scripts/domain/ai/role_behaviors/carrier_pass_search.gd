@@ -525,20 +525,22 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 					self_pos + rim_dir if is_rim else receiver_spot),
 			_field.opponents, _field.opponent_caps)
 	_field.project_opponents(flight_t, _proj_buf)
-	# The receiver's shot off this feed, the keeper square on the passer as it
-	# leaves (the goalie's own answer to the flight, AIShotValue.feed). A
-	# one-timer-ready receiver's release is the flight alone (_pass_variant_ev).
-	var receiver_value: float = _field.feed_value_at(ctx, origin, receiver_spot,
-			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf, 0.0,
-			Vector3.ZERO, receiver_caps)
-	# An OPEN receiver can carry into a better look, so he is credited the best
-	# value he can REACH with a short drive toward the net. It bites in the OZ,
-	# where value_at is shot-only. (Re-projects _proj_buf, which
-	# the instant value above has already consumed.)
-	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
-			ctx, receiver_spot, receiver_caps, receiver_vel, Vector3.INF, flight_t))
 	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
 	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
+	var catch_s: float = delay_s + settle_s
+	# What the receiver does at the catch: his shot off this feed, the keeper
+	# square on the passer as it leaves (the goalie's own answer to the flight,
+	# AIShotValue.feed; a one-timer-ready receiver's release is the flight alone,
+	# _pass_variant_ev), or the short drive toward the net an open receiver can
+	# carry into. (The drive re-projects _proj_buf, which the shot has consumed.)
+	var drive_in: float = _field.receiver_drive_in_value(ctx, receiver_spot, receiver_caps,
+			receiver_vel, Vector3.INF, flight_t)
+	var at_catch: float = maxf(_field.feed_shot_at(ctx, origin, receiver_spot, pass_speed,
+			receiver_release_t <= flight_t, self_pos, _proj_buf), drive_in)
+	# His possession is read when the carry's first step is (_possession_on_clock),
+	# so a pass and a carry are told apart by where each leaves the puck then.
+	var on_catch: float = maxf(at_catch * AIActionScoring.delay_discount(catch_s),
+			_possession_on_clock(receiver_spot, receiver_vel, receiver_caps, delay_s, catch_s))
 	# Reception pressure on a catch: the reachable-set clearance at the reception
 	# spot when the puck arrives — defenders momentum-projected from their
 	# RELEASE-TIME spots over the flight, sticks maneuvering over the short
@@ -549,14 +551,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 					_field.opponents_release, _field.opponent_vels,
 					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + settle_s))
 	# A bobble is a loose puck he must win back: the race to the spot, him at his
-	# regather against their first body there from the release.
+	# regather against their first body there from the release, and his drive or
+	# his possession from there once he has it.
 	var bobble_won: float = 0.0
-	var bobble_decay: float = 0.0
+	var on_bobble: float = 0.0
 	if p_bobble > 0.0:
 		var regather_s: float = AIFeedReception.bobble_regather_s(closing)
 		bobble_won = AIActionScoring.arrival_race(receiver_spot, flight_t + regather_s,
 				_field.opponents_release, _field.opponent_vels, false, _field.opponent_caps)
-		bobble_decay = AIActionScoring.delay_discount(delay_s + regather_s)
+		on_bobble = maxf(drive_in * AIActionScoring.delay_discount(delay_s + regather_s),
+				_possession_on_clock(receiver_spot, Vector3.ZERO, receiver_caps,
+						delay_s + regather_s, delay_s + regather_s))
 	var reception_kept: float = (1.0 - p_bobble) * catch_safety + p_bobble * bobble_won
 	# Four completion loss modes, mutually exclusive and summing to 1 with the
 	# retained case: poked at the release (1 − release_clean), lane interception
@@ -564,9 +569,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# and lost on reception (clean lane, no miss, but a stick on the catch or a
 	# lost race to the bobble).
 	var clean_lane: float = lane * (1.0 - miss_prob)   # reaches the tape, in flight
-	var benefit: float = receiver_value * release_clean * clean_lane * (
-			(1.0 - p_bobble) * catch_safety * AIActionScoring.delay_discount(delay_s + settle_s)
-			+ p_bobble * bobble_won * bobble_decay)
+	var benefit: float = release_clean * clean_lane * (
+			(1.0 - p_bobble) * catch_safety * on_catch + p_bobble * bobble_won * on_bobble)
 	# CEILING PRUNE (exact): every turnover cost below can only LOWER this EV,
 	# so the benefit is a hard upper bound.
 	if benefit <= useless_below:
@@ -582,14 +586,16 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 					origin, receiver_spot, _field.opponents_release, pass_speed,
 					_field.opponent_vels, _field.opponent_caps,
 					_field.opponent_blades_release)
+	var loss_s: float = minf(AIPuckLane.traverse_time(origin.distance_to(loss_point), pass_speed),
+			flight_t) if loss_point.is_finite() else flight_t
 	cost += _field.turnover_cost(loss_point,
-			release_clean * (1.0 - lane))
+			release_clean * (1.0 - lane), loss_s)
 	cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
-			release_clean * lane * miss_prob)
+			release_clean * lane * miss_prob, flight_t)
 	# Lost on reception: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
-			release_clean * clean_lane * (1.0 - reception_kept))
+			release_clean * clean_lane * (1.0 - reception_kept), flight_t + settle_s)
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
@@ -598,6 +604,19 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
 			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	return benefit - cost
+
+
+# The receiver's possession, discounted to now, read when the carry's first step
+# is (AICarryRollout.HORIZON_S) or when he has the puck, whichever is later: he
+# has it at `has_s`, standing at `spot` `at_spot_s` from now and skating on at
+# `vel` from there.
+func _possession_on_clock(spot: Vector3, vel: Vector3, caps: AISkaterCaps,
+		at_spot_s: float, has_s: float) -> float:
+	var t: float = maxf(AICarryRollout.HORIZON_S, has_s)
+	var there: Vector3 = spot + Vector3(vel.x, 0.0, vel.z) * (t - at_spot_s)
+	if not AIStationSearch.is_legal_position(there):
+		there = spot
+	return _field.horizon_value(there, t, vel, caps) * AIActionScoring.delay_discount(t)
 
 
 # Seconds the bot needs to rotate its facing before the blade can fire at

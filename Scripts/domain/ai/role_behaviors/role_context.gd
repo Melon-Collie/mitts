@@ -114,7 +114,7 @@ var settle_penalty_frac: float = 0.0
 var settle_penalty_tau_s: float = 0.25
 # COGNITION gate: false = the keeper always reads SET to the carrier: still to the
 # shot reads (AICarrierField.goalie_unsettled_at returns 0) and already square on a
-# pass's receiver (AICarrierField.feed_value_at). The aim-side half of the gate
+# pass's receiver (AICarrierField.feed_shot_at). The aim-side half of the gate
 # lives on the state machine.
 var reads_goalie_motion: bool = true
 # COGNITION gate: false = the carrier never values a play that doesn't exist

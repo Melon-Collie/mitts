@@ -934,10 +934,7 @@ remains.
     starting when the feed reaches him: a leg read from rest against the
     defence as it stands now out-prices the others, so a cut back ending short
     of the line read as an entry still to win, and a feed back to a man 15 m
-    out read as his drive in. A receiver's own spot is still read at the
-    release: the race prices any defender reaching an entry first as the entry
-    lost, and over a breakout's 25 m a rim's flight hands every such race to
-    the forecheck.
+    out read as his drive in.
     No shape terms and no guess at where the defence will be: the leaf ranks by
     how far the zone is and whether a defender gets to the entry first. The
     race is what keeps the leaf honest against the searched lines — without it
@@ -946,6 +943,16 @@ remains.
     step's decay like every move. A straight carry on to a destination across
     the attacking line is not credited from outside: the race prices getting
     in.
+  - **A pass and a carry are read on one clock.** A receiver's possession is
+    read when the carry's first step is (`AICarryRollout.HORIZON_S`), or when
+    he has the puck if that is later, where his skating has him by then
+    (`carrier_pass_search.gd:_possession_on_clock`); his shot off the feed and
+    his drive in are read at the catch, since a shot settles at once. Never read
+    him as having the puck at the release: he would see the defence as it was
+    before the pass, and every pass would out-price the carry that reaches the
+    same ice later. A bobble credits his drive or possession once he has it back, never
+    his shot off the feed. A turnover is priced as the opponent's possession
+    from when it happens (`turnover_cost`'s `loss_s`).
   - Candidates also price the **pass option** they open
     (`carrier_field.gd:pass_option_from`: cached per-teammate spot values × the lane from
     the candidate, discounted as a future action), credited as the *improvement*

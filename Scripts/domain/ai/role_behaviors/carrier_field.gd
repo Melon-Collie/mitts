@@ -224,13 +224,14 @@ func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 				time_s, _carrier_z, _attack_z, opponent_caps[i]))
 
 
-# The cost of losing the puck at `loss_point` with probability `loss_prob`: the
-# opponent's possession there (AIPossessionValue), in the odds the carrier's
-# gains are priced in.
-func turnover_cost(loss_point: Vector3, loss_prob: float) -> float:
+# The cost of losing the puck at `loss_point` with probability `loss_prob`,
+# `loss_s` from now: the opponent's possession there from then
+# (AIPossessionValue), in the odds the carrier's gains are priced in and
+# discounted to now as they are.
+func turnover_cost(loss_point: Vector3, loss_prob: float, loss_s: float = 0.0) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0:
 		return 0.0
-	return loss_prob * _theirs.at(loss_point)
+	return loss_prob * _theirs.at(loss_point, loss_s)
 
 
 # Transition-exposure cost of losing the puck at `loss_point` with
@@ -412,17 +413,15 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	return maxf(shoot_s, horizon_value(pos, arrive_s, arrive_vel, man_caps))
 
 
-# value_at for a receiver at `pos` fed from `passer` at `pass_speed`, the keeper
-# square on the passer as it leaves (AIShotValue.feed). `one_timer`: he one-times
-# it; otherwise he catches and charges. A goalie-motion-blind tier
-# (ctx.reads_goalie_motion) reads the keeper already set on the receiver. The
-# feed reaches him `arrive_s` from now, moving at `arrive_vel`, on his build
-# `man_caps` (horizon_value).
-func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
-		one_timer: bool, from_pos: Vector3, opps: Array[Vector3], arrive_s: float = 0.0,
-		arrive_vel: Vector3 = Vector3.ZERO, man_caps: AISkaterCaps = null) -> float:
+# A receiver's shot at `pos` off a feed from `passer` at `pass_speed`, the keeper
+# square on the passer as it leaves (AIShotValue.feed), 0 where a shot from there
+# is dead. `one_timer`: he one-times it; otherwise he catches and charges. A
+# goalie-motion-blind tier (ctx.reads_goalie_motion) reads the keeper already set
+# on the receiver.
+func feed_shot_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
+		one_timer: bool, from_pos: Vector3, opps: Array[Vector3]) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
-		return horizon_value(pos, arrive_s, arrive_vel, man_caps)
+		return 0.0
 	var shoot_s: float = AIShotValue.feed(passer, pos, pass_speed, ctx.attacking_goal_pos,
 			goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
 			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
@@ -435,7 +434,7 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 				* AIPuckLane.release_contest_clean(
 						AIPuckLane.release_point_toward(pos, ctx.attacking_goal_pos),
 						opps, opponent_caps)
-	return maxf(shoot_s, horizon_value(pos, arrive_s, arrive_vel, man_caps))
+	return shoot_s
 
 
 # Hot-path skip (the same proof AIPossessionValue.threat_of_carrier runs): with the keeper HOME
@@ -542,7 +541,8 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			opps, opponent_vels, opponent_caps, true, true)
 	if keep <= 0.0:
 		drive_in_reached = reached
-		return -_drive_loss_cost(ctx, reached, 1.0, own_hands)
+		return -_drive_loss_cost(ctx, reached, 1.0, own_hands, _drive_time(ctx, receiver_spot,
+				reached, receiver_vel, receiver_caps, own_hands))
 	var t: float = reach_time if reached == target \
 			else _drive_time(ctx, receiver_spot, reached, receiver_vel, receiver_caps, own_hands)
 	project_opponents(start_s + t, _drive_buf)
@@ -560,7 +560,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			receiver_caps)
 	drive_in_reached = reached
 	return advanced * keep * AIActionScoring.delay_discount(t + wait) \
-			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands)
+			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands, t)
 
 
 # The driver's time from `from` to `to` on his build: `caps`, or for the
@@ -576,10 +576,12 @@ static func _drive_time(ctx: RoleContext, from: Vector3, to: Vector3, vel: Vecto
 
 # A drive lost at `at` with probability `lost`, as a carry candidate's strip is
 # priced: the carrier's own recovery starts there, a receiver's passer stays put.
-func _drive_loss_cost(ctx: RoleContext, at: Vector3, lost: float, own_hands: bool) -> float:
+# `loss_s` is from the drive's start, as the drive's own value is discounted.
+func _drive_loss_cost(ctx: RoleContext, at: Vector3, lost: float, own_hands: bool,
+		loss_s: float) -> float:
 	if lost <= 0.0:
 		return 0.0
-	return turnover_cost(at, lost) + counter_exposure_cost(ctx, at, lost,
+	return turnover_cost(at, lost, loss_s) + counter_exposure_cost(ctx, at, lost,
 			at if own_hands else ctx.self_pos, AIRoleReads.resolve_our_goalie_pos(ctx))
 
 

@@ -235,13 +235,13 @@ The worst instance, all patterns at once. Its own section below.
 
 ### Stashed (`stash@{0}` in the working session; re-apply as described)
 
-Two more timings, consistent with the above, held back because they leave the
-rim and feed-softening fixtures in `test_role_carrier.gd` failing until the
-entry race is rebuilt:
+Two more timings, consistent with the above, are in (phase 3):
 
-1. **The receiver's own spot read on arrival.** In
-   `AICarrierPassSearch._pass_ev`, `_field.feed_value_at(...)` takes
-   `flight_t, receiver_vel` (its `arrive_s` / `arrive_vel`, already plumbed).
+1. **The receiver read on the carry's clock.** `AICarrierPassSearch._pass_ev`
+   reads his possession when the carry's first step is, or when he has the puck
+   if later, where his skating has him then (`_possession_on_clock`); his shot
+   off the feed (`AICarrierField.feed_shot_at`) and his drive in at the catch.
+   A bobble credits his drive or possession once regathered, not the shot.
 2. **Turnover costs read when the loss happens.**
    `AICarrierField.turnover_cost(loss_point, loss_prob, loss_s = 0.0)` reads
    `_theirs.at(loss_point, loss_s)`. Times: a pass's release poke 0; its lane
@@ -253,10 +253,6 @@ entry race is rebuilt:
    share of the path; the wheel's by `AICarrierWheel._leg_share`;
    `_drive_loss_cost(..., loss_s)` relative to the drive's start, as the drive's
    value is discounted.
-
-With both, the drills hold (entries 30 of 30 in 3.43 s, breakouts 18 of 20 in
-2.13 s); the rim goes worthless (0.159 untimed → 0.010 at its 1.5 s flight)
-because of the race below, not the timing.
 
 ### What is wrong with the entry read (`AIPossessionValue`)
 
@@ -353,9 +349,9 @@ In the working tree of the commit that adds this section:
 
 **Where it stands.** Default tier green (re-pinned: carrier, role_breakout,
 counter_rush snapshots; fixtures corrected where they leaned on the old race).
-Entry drill: 30 of 30 carried with 4 passes at phase 2; 26 carried, 29 passes
-(18 backward) now, the 3-on-2s clean (15 of 15 carried, 3 passes) and the
-passing left in the 3-on-3s. Breakout 18 exits in 3.26 s (2.92 at phase 2).
+Entry drill: 30 of 30 carried with 4 passes at phase 2; 27 carried, 20 passes
+(12 backward) now, the 3-on-2s near clean (15 of 15 carried, 3 passes) and the
+passing left in the 3-on-3s. Breakout 17 of 20 exits in 2.67 s (2.92 at phase 2).
 
 **What the 3-on-3 passing is.** Traced decision by decision: against an even,
 set defence every neutral-zone option reads 0.03–0.05 — the first shot an entry

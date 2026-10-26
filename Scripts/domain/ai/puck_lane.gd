@@ -411,6 +411,10 @@ static func _brake_block_at(u: float, a: float, b: float, speed: float,
 # Time for a puck launched at `v0` to slide `dist` against ice friction (Coulomb
 # decel PUCK_ICE_DECEL_M_S2): the first root of dist = v0·T − ½·a·T². Falls
 # back to frictionless if the puck would stop before arriving.
+static func traverse_time(dist: float, v0: float) -> float:
+	return _friction_traverse_time(dist, v0)
+
+
 static func _friction_traverse_time(dist: float, v0: float) -> float:
 	var a: float = GameRules.PUCK_ICE_DECEL_M_S2
 	if a <= 0.0:

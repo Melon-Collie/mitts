@@ -74,17 +74,25 @@ func score(ctx: RoleContext, dest: Vector3,
 		return benefit
 	# The strip is priced on whichever leg is the unsafe one.
 	var strip_point: Vector3
+	var strip_s: float
 	if safety1 <= safety2:
 		strip_point = AICarrySpace.carry_strip_point(
 				cur_puck, apex_puck, t1, _field.opponents,
 				_field.opponent_vels, _field.opponent_caps, true)
+		strip_s = t1 * _leg_share(cur_puck, apex_puck, strip_point)
 	else:
 		_field.project_opponents(t1, _scratch_opponents)
 		strip_point = AICarrySpace.carry_strip_point(
 				apex_puck, dest_puck, t2, _scratch_opponents,
 				_field.opponent_vels, _field.opponent_caps, true)
+		strip_s = t1 + t2 * _leg_share(apex_puck, dest_puck, strip_point)
 	var cost: float = _field.turnover_cost(strip_point,
-			1.0 - keep)
+			1.0 - keep, strip_s)
 	cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep, dest, our_goalie)
 	return benefit - cost
 
+
+# How far along the leg `from` → `to` the point `at` lies, as a share of its length.
+static func _leg_share(from: Vector3, to: Vector3, at: Vector3) -> float:
+	var length: float = from.distance_to(to)
+	return clampf(from.distance_to(at) / length, 0.0, 1.0) if length > 0.001 else 0.0
