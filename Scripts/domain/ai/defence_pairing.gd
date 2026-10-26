@@ -104,11 +104,11 @@ func pair(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 			_pair_cols.append(j)
 	if _pair_cols.size() == (1 if holder.is_finite() else 0):
 		return
-	_sort_by_place(_pair_cols, holder)
+	_sort_by_place(_pair_cols)
 	_pair_rows.clear()
 	for k: int in _defenders.size():
 		_pair_rows.append(k)
-	_sort_by_place(_pair_rows, Vector3.INF, true)
+	_sort_by_place(_pair_rows, true)
 	var n_rows: int = _pair_rows.size()
 	_pair_cost.resize(_pair_cols.size() * n_rows)
 	for c: int in _pair_cols.size():
@@ -151,15 +151,15 @@ func _pair_search(c: int, skips: int, cost: float) -> void:
 		_pair_search(c + 1, skips - 1, cost)
 
 
-# Orders `idx` (attacker indices and HOLDER at `holder`, or defender indices) by
-# place, x then z.
-func _sort_by_place(idx: Array[int], holder: Vector3, defenders: bool = false) -> void:
+# Orders `idx` (attacker indices and HOLDER, or defender indices) by place, x
+# then z.
+func _sort_by_place(idx: Array[int], defenders: bool = false) -> void:
 	for a: int in range(1, idx.size()):
 		var key: int = idx[a]
-		var kp: Vector3 = _place_of(key, holder, defenders)
+		var kp: Vector3 = _place_of(key, defenders)
 		var b: int = a - 1
 		while b >= 0:
-			var bp: Vector3 = _place_of(idx[b], holder, defenders)
+			var bp: Vector3 = _place_of(idx[b], defenders)
 			if bp.x < kp.x or (bp.x == kp.x and bp.z <= kp.z):
 				break
 			idx[b + 1] = idx[b]
@@ -167,7 +167,7 @@ func _sort_by_place(idx: Array[int], holder: Vector3, defenders: bool = false) -
 		idx[b + 1] = key
 
 
-func _place_of(i: int, holder: Vector3, defenders: bool) -> Vector3:
+func _place_of(i: int, defenders: bool) -> Vector3:
 	if defenders:
 		return _defenders[i]
 	return holder if i == HOLDER else attackers[i]

@@ -32,20 +32,34 @@ a different model makes that leg win or lose on scale alone, and a hold priced i
 the wrong model is a permanent veto on the other two. The committed shot is the
 seam's own pick (aim and loft), so what is priced is what is fired.
 
-The turnover COST is in the same currency as the gains it is subtracted from.
-The carrier's gains are odds of scoring wherever he stands, so
-`AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
-spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
-with no shot right now is worth — a turnover there, the carrier's search
-horizon — is that one read, for either side. The defence reads
+What the carrier's options are priced in is set by the zone he is in
+(`AICarrierField.objective`, `docs/zone-currency-plan.md`): in their zone the odds
+of scoring; in the neutral zone the odds of getting into theirs with the puck
+(`AIPossessionValue.p_enter`); in ours the odds of getting out with it
+(`p_exit`). Each zone's goal is the next line with the puck, and what being past
+it is worth multiplies every option alike, so nothing is measured or floored. A
+spot past the next line is worth its keep; one behind it is the chain (out, then
+in from where it gets out). Shots outside their zone are dead and score nothing.
+
+The turnover COST is in the same currency as the gains it is subtracted from
+(`AICarrierField.turnover_cost`): in their zone a loss is credited back by the
+odds they fail to get it out × our possession of it regained, since our lost
+chance is already the share of plays we don't keep it; elsewhere it is their odds
+of getting into our zone from the loss, or, lost in our zone, their scoring odds
+there in zone entries (against their odds from an ordinary entry) — our exit and
+their entry weighed one for one. The 5v5 counter (`counter_rush_cost`, `in_xg`) is
+paid from their zone only; elsewhere the turnover cost already is their run at
+our zone. What a spot with no shot right now is worth to either side is
+`AIPossessionValue`. The defence reads
 a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
 and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
 body pushed onto the read's defence for the one call. The outlet and breakout
-roles stand where the lane to them × our possession of the spot is best, so
-there is no second scale left to mix in.
+roles stand where the lane to them × our possession of the spot is best.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
-to that seam — odds of scoring on today's goalie with a first shot. A pass's bar
+to that seam — odds of scoring on today's goalie with a first shot — and so is
+settle doubt's raise of them, which outside their zone, where options are worth
+line odds of order one, bites only on a pass worth next to nothing. A pass's bar
 is weighed against keeping the puck: when both reads of keeping it (the carry
 and the drive-in) lose it where he stands, that loss comes off the bar, up to
 the whole bar, leaving only settle doubt's raise. A pressured carrier with an
@@ -911,8 +925,10 @@ remains.
   puck a carry-handle ahead of the body toward the net.
 
 - **Positional value** — the carrier searches forward until play reaches
-  something concrete, and only values a spot where the search stops. One unit
-  on both sides of the line: the odds of scoring.
+  something concrete, and only values a spot where the search stops, in his
+  zone's currency (above): the odds of scoring in their zone, of reaching the
+  next line with the puck outside it. What follows is the scoring read, which
+  their zone's currency and the defence still use.
   - *In the zone* (the spot or the carrier) every candidate is priced through
     the value seam. There is no possession floor: the seam is smooth, so a spot
     with no shot right now still scores by its distance and angle. Behind the
@@ -943,10 +959,13 @@ remains.
     step's decay like every move. A straight carry on to a destination across
     the attacking line is not credited from outside: the race prices getting
     in.
-  - **A pass and a carry are read on one clock.** A receiver's possession is
-    read when the carry's first step is (`AICarryRollout.HORIZON_S`), or when
-    he has the puck if that is later, where his skating has him by then
-    (`carrier_pass_search.gd:_possession_on_clock`); his shot off the feed and
+  - **A pass and a carry are read on one clock.** In their zone a receiver's
+    possession is read when the carry's first step is (`AICarryRollout.HORIZON_S`),
+    or when he has the puck if that is later, where his skating has him by then
+    (`carrier_pass_search.gd:_possession_on_clock`); outside it his odds of the
+    next line are a race on that clock already, read from when he has the puck,
+    since held on his catch velocity to the horizon a man caught at rest would
+    stand still that long and a hard feed's settle would cost nothing. His shot off the feed and
     his drive in are read at the catch, since a shot settles at once. Never read
     him as having the puck at the release: he would see the defence as it was
     before the pass, and every pass would out-price the carry that reaches the

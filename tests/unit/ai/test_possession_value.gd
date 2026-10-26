@@ -258,12 +258,12 @@ func test_a_defender_set_at_his_line_shadows_the_carriers_lane_not_the_whole_lin
 	var middle := Vector3(0.0, 0.0, line_z)
 	var wide := Vector3(GameRules.RINK_HALF_WIDTH - AIPossessionValue.ENTRY_WALL_INSET_M,
 			0.0, line_z)
-	assert_lt(v._line_keep(middle, 2.5, carrier, up_ice), 0.1,
+	assert_lt(v._line_keep(middle, 2.5, carrier, up_ice, line_z), 0.1,
 			"the lane the carrier is skating is his")
-	assert_gt(v._line_keep(wide, 2.5, carrier, up_ice), 0.9,
+	assert_gt(v._line_keep(wide, 2.5, carrier, up_ice, line_z), 0.9,
 			"the far lane is open to a late choice")
 	var at_wide := Vector3(wide.x - carrier.x, 0.0, wide.z - carrier.z).normalized() * 6.0
-	assert_lt(v._line_keep(wide, 2.5, carrier, at_wide), 0.1,
+	assert_lt(v._line_keep(wide, 2.5, carrier, at_wide, line_z), 0.1,
 			"and his once the carrier heads for it")
 
 
@@ -271,7 +271,7 @@ func test_a_defender_gapped_back_leaves_the_line_to_the_drive() -> void:
 	var line_z: float = -GameRules.BLUE_LINE_Z
 	var middle := Vector3(0.0, 0.0, line_z)
 	var gapped: AIPossessionValue = _read([Vector3(0.0, 0.0, line_z - 7.0)])
-	assert_gt(gapped._line_keep(middle, 1.0, Vector3(0.0, 0.0, 4.0), Vector3(0.0, 0.0, -6.0)),
+	assert_gt(gapped._line_keep(middle, 1.0, Vector3(0.0, 0.0, 4.0), Vector3(0.0, 0.0, -6.0), line_z),
 			0.9, "he is no wall at the line")
 	assert_lt(gapped._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
 			_read(_none)._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
@@ -288,3 +288,46 @@ func test_a_man_up_his_lane_is_no_worse_off_against_a_set_line_than_one_further_
 	var near: float = v.at(Vector3(8.5, 0.0, -0.2), 0.0, up_ice)
 	var far: float = v.at(Vector3(8.5, 0.0, 9.0), 0.0, up_ice)
 	assert_gte(near, far, "a stride from the line, up his own lane")
+
+
+# ── The zone currency (docs/zone-currency-plan.md) ──────────────────────────
+
+func test_a_man_in_the_attacked_zone_has_already_got_in() -> void:
+	assert_almost_eq(_read(_none).p_next(Vector3(0.0, 0.0, -15.0)), 1.0, 1e-6)
+
+
+func test_on_open_ice_nearer_the_line_gets_in_surer() -> void:
+	var v: AIPossessionValue = _read(_none)
+	var up_ice := Vector3(0.0, 0.0, -6.0)
+	var far: float = v.p_next(Vector3(0.0, 0.0, 6.0), 0.0, up_ice)
+	var near: float = v.p_next(Vector3(0.0, 0.0, -2.0), 0.0, up_ice)
+	assert_gt(far, 0.5, "open ice is an entry")
+	assert_gt(near, far, "and the nearer one is surer")
+
+
+func test_a_man_standing_up_at_the_line_costs_the_entry() -> void:
+	var line_z: float = -GameRules.BLUE_LINE_Z
+	var spot := Vector3(0.0, 0.0, -1.0)
+	var up_ice := Vector3(0.0, 0.0, -6.0)
+	var open: float = _read(_none).p_next(spot, 0.0, up_ice)
+	var stood: float = _read([Vector3(-3.0, 0.0, line_z - 0.5), Vector3(3.0, 0.0, line_z - 0.5)]) \
+			.p_next(spot, 0.0, up_ice)
+	assert_lt(stood, open, "a pair standing up at their line takes some of it")
+
+
+func test_in_our_zone_the_next_line_is_ours_and_a_forechecker_costs_it() -> void:
+	var spot := Vector3(3.0, 0.0, 14.0)
+	var out_ice := Vector3(0.0, 0.0, -4.0)
+	var open: float = _read(_none).p_next(spot, 0.0, out_ice)
+	assert_gt(open, 0.5, "an open way out")
+	var checked: float = _read([Vector3(3.0, 0.0, 11.0)]).p_next(spot, 0.0, out_ice)
+	assert_lt(checked, open, "a forechecker in the way costs the exit")
+
+
+func test_from_our_zone_getting_in_is_getting_out_and_then_in() -> void:
+	var v: AIPossessionValue = _read(_none)
+	var spot := Vector3(3.0, 0.0, 14.0)
+	var out_ice := Vector3(0.0, 0.0, -4.0)
+	var enter: float = v.p_enter(spot, 0.0, out_ice)
+	assert_gt(enter, 0.0)
+	assert_lte(enter, v.p_next(spot, 0.0, out_ice) + 1e-6, "no surer than getting out")

@@ -607,13 +607,17 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	return benefit - cost
 
 
-# The receiver's possession, discounted to now, read when the carry's first step
-# is (AICarryRollout.HORIZON_S) or when he has the puck, whichever is later: he
-# has it at `has_s`, standing at `spot` `at_spot_s` from now and skating on at
-# `vel` from there.
+# The receiver's possession, discounted to now: he has it at `has_s`, standing
+# at `spot` `at_spot_s` from now and skating on at `vel` from there. Scoring odds
+# are read when the carry's first step is (AICarryRollout.HORIZON_S) or when he
+# has the puck, whichever is later; the odds of reaching the next line are a race
+# on the clock itself, read from when he has it, since held on his catch velocity
+# to the horizon a man caught at rest would stand still that long.
 func _possession_on_clock(spot: Vector3, vel: Vector3, caps: AISkaterCaps,
 		at_spot_s: float, has_s: float) -> float:
-	var t: float = maxf(AICarryRollout.HORIZON_S, has_s)
+	var t: float = has_s
+	if _field.objective == AICarrierField.Objective.SCORE:
+		t = maxf(AICarryRollout.HORIZON_S, has_s)
 	var there: Vector3 = spot + Vector3(vel.x, 0.0, vel.z) * (t - at_spot_s)
 	if not AIStationSearch.is_legal_position(there):
 		there = spot
@@ -678,6 +682,10 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			continue
 		var feed: float = 0.0
 		if slot == AIRoleSlots.Slot.FINISHER or slot == AIRoleSlots.Slot.NET_FRONT:
+			# Priced in scoring odds, so only a carrier whose currency they are
+			# holds for it.
+			if _field.objective != AICarrierField.Objective.SCORE:
+				continue
 			# A one-timer-flagged finisher is already fed by the normal pass
 			# scoring. The OZ gate reads the PROJECTED spot — a finisher a stride
 			# outside the line, driving in, is the developing cross-seam — and

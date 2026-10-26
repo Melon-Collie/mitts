@@ -322,9 +322,12 @@ In the working tree of the commit that adds this section:
 - **Each defender charged once**: the skate, the line and the drive keep the
   puck at the worst of the three (the `carry_safety` convention).
 - **One projection model** (`AIPossessionValue.project_defender`, which
-  `AICarrierField.project_opponents` now calls): a man backing off ahead slides
-  to a stop; one stepping up carries on until level with the carrier; one
-  behind the play backchecks to the top of his house on the arrival clock. His
+  `AICarrierField.project_opponents` now calls): a man ahead who is standing up
+  or backing off holds his gap, giving ground down the carrier's line as the
+  carrier gains it, down to the top of his house — except a forechecker in the
+  carrier's own zone, who holds his ice; one stepping up carries on until level
+  with the carrier; one behind the play backchecks to the top of his house on
+  the arrival clock. His
   velocity is projected with him (`projected_vel`), so the reach reads see a
   backchecker skating home, not his old heading.
 - **The entry's follow-up against the defence as it will be**: priced at

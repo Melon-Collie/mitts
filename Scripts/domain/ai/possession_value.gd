@@ -127,8 +127,12 @@ var _skate_vels: Array[Vector3] = []
 var _skate_caps: Array = []
 var _line_defence: Array[Vector3] = []
 var _line_vels: Array[Vector3] = []
-# The depth of the line a side crosses.
+# The depth of the line a side crosses into the attacked zone (its own blue line
+# is at -_line_z).
 var _line_z: float = 0.0
+# _p_cross's other results: where and when its best crossing is made.
+var _cross_at: Vector3 = Vector3.ZERO
+var _cross_s: float = 0.0
 # The entries' worth on empty ice at _open_goal: _worth's bound.
 var _open_goal: Vector3 = Vector3.INF
 var _open_worth: Array[float] = []
@@ -183,9 +187,9 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_entry_spots.clear()
 	_entry_worth.clear()
 	_slot = null
+	_line_z = signf(goal.z) * GameRules.BLUE_LINE_Z
 	if in_zone_only:
 		return
-	_line_z = signf(goal.z) * GameRules.BLUE_LINE_Z
 	var z: float = signf(goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
 	for k: int in CROSSINGS:
@@ -217,6 +221,78 @@ func play_on(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 	return entry_at(pos, start_s, vel, best, man_caps)
 
 
+# The odds the man at `pos` (as at() reads him) gets the puck into the next zone
+# with it — out of his own zone, or into the attacked one — discounted to now as
+# at() is: 1 once he is in it (at `start_s`). The zone currency
+# (docs/zone-currency-plan.md).
+func p_next(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
+		man_caps: AISkaterCaps = null) -> float:
+	if AIActionScoring.in_offensive_zone(pos, _goal):
+		return AIActionScoring.delay_discount(start_s)
+	if _in_own_zone(pos):
+		return _p_cross(pos, start_s, vel, man_caps, -_line_z)
+	return _p_cross(pos, start_s, vel, man_caps, _line_z)
+
+
+# The odds the man at `pos` gets the puck out of his own zone with it: 1 (at
+# `start_s`) once he is out.
+func p_exit(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
+		man_caps: AISkaterCaps = null) -> float:
+	if not _in_own_zone(pos):
+		return AIActionScoring.delay_discount(start_s)
+	return _p_cross(pos, start_s, vel, man_caps, -_line_z)
+
+
+# The odds the man at `pos` gets the puck into the attacked zone with it: p_next,
+# and from his own zone the chain — out by the crossing he gets out through
+# surest, then in from there.
+func p_enter(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
+		man_caps: AISkaterCaps = null) -> float:
+	if not _in_own_zone(pos):
+		return p_next(pos, start_s, vel, man_caps)
+	var out: float = _p_cross(pos, start_s, vel, man_caps, -_line_z)
+	if out <= 0.0:
+		return 0.0
+	var speed: float = man_caps.max_speed if man_caps != null else AIArrival.SKATER_REF_SPEED_M_S
+	var heading := Vector3(0.0, 0.0, signf(_goal.z) * speed)
+	return out / AIActionScoring.delay_discount(_cross_s) \
+			* _p_cross(_cross_at, _cross_s, heading, man_caps, _line_z)
+
+
+func _in_own_zone(pos: Vector3) -> bool:
+	return AIActionScoring.in_offensive_zone(pos, Vector3(0.0, 0.0, -_goal.z))
+
+
+# The best crossing of the blue line at depth `line_z` for the man at `pos` (as
+# at() reads him): the keep of the skate there against the men short of it
+# (_skate_keep), and of the contest at it (_line_keep), discounted to the
+# crossing. Leaves where and when the best one crosses in _cross_at / _cross_s.
+func _p_cross(pos: Vector3, start_s: float, vel: Vector3, man_caps: AISkaterCaps,
+		line_z: float) -> float:
+	var best: float = 0.0
+	var projected: bool = false
+	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
+	for k: int in CROSSINGS:
+		var crossing := Vector3(wide_x * (2.0 * k / (CROSSINGS - 1) - 1.0), 0.0, line_z)
+		var t: float = start_s + AIArrival.time_to_arrive_caps(pos, crossing, vel, man_caps)
+		var discount: float = AIActionScoring.delay_discount(t)
+		if discount <= best:
+			continue
+		var keep: float = _line_keep(crossing, t, pos, vel, line_z)
+		if keep * discount <= best:
+			continue
+		if not projected:
+			projected = true
+			_skate_defence_for(pos, start_s, line_z)
+		keep = minf(keep, _skate_keep(pos, crossing, vel, _skate_defence, _skate_vels,
+				_skate_caps, man_caps))
+		if keep * discount > best:
+			best = keep * discount
+			_cross_at = crossing
+			_cross_s = t
+	return best
+
+
 # The best zone entry for the man at `pos` (as at() reads him), or `known` when
 # none is worth more: a value already known prunes the entries it beats.
 func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
@@ -244,12 +320,12 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 		if not in_zone:
 			var crossing := Vector3(_entry_spots[i].x, 0.0, _line_z)
 			keep = _line_keep(crossing, start_s + AIArrival.time_to_arrive_caps(
-					pos, crossing, vel, man_caps), pos, vel)
+					pos, crossing, vel, man_caps), pos, vel, _line_z)
 			if maxf(shot, drive) * keep * discount <= best:
 				continue
 		if not projected:
 			projected = true
-			_skate_defence_for(pos, start_s, in_zone)
+			_skate_defence_for(pos, start_s, INF if in_zone else _line_z)
 		var skate_to: Vector3 = _entry_spots[i] if in_zone \
 				else Vector3(_entry_spots[i].x, 0.0, _line_z)
 		keep = minf(keep, _skate_keep(pos, skate_to, vel, _skate_defence, _skate_vels,
@@ -258,22 +334,22 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 	return best
 
 
-# The odds a crossing of the line at `crossing`, reached `t` from now by a
-# carrier now at `carrier_pos` skating at `carrier_vel`, survives the defence
-# there — a moving puck's band. Each defender is placed where he is as the
-# carrier commits to it, the lunge window before. Inside the line, he shadows
-# the carrier's natural crossing (_natural_crossing: where his skate is taking
-# him) — on the carrier→net line at his own depth into the zone, if his skate
-# gets him there (part way along if not) — since he can stand in one place, and
-# a crossing the carrier picks late is the lunge's to cover. Outside the line,
-# where project_defender has him.
+# The odds a crossing of the blue line at depth `line_z`, at `crossing`, reached
+# `t` from now by a carrier now at `carrier_pos` skating at `carrier_vel`,
+# survives the defence there — a moving puck's band. Each defender is placed
+# where he is as the carrier commits to it, the lunge window before. Past the
+# line, he shadows the carrier's natural crossing (_natural_crossing: where his
+# skate is taking him) — on the carrier→net line at his own depth past it, if his
+# skate gets him there (part way along if not) — since he can stand in one place,
+# and a crossing the carrier picks late is the lunge's to cover. Short of the
+# line, where project_defender has him.
 func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
-		carrier_vel: Vector3) -> float:
+		carrier_vel: Vector3, line_z: float) -> float:
 	if _defenders.is_empty():
 		return 1.0
 	var w: float = minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S)
 	var commit: float = t - w
-	var natural: Vector3 = _natural_crossing(carrier_pos, carrier_vel)
+	var natural: Vector3 = _natural_crossing(carrier_pos, carrier_vel, line_z)
 	var to_net := Vector3(_goal.x - natural.x, 0.0, _goal.z - natural.z).normalized()
 	_line_defence.clear()
 	_line_vels.clear()
@@ -303,16 +379,16 @@ func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
 			crossing, w, _line_defence, _line_vels, _defender_caps, w))
 
 
-# Where on the line a carrier at `pos` skating at `vel` crosses if he holds his
-# course: along it when it takes him at the line, else straight ahead; within
-# the wall lanes.
-func _natural_crossing(pos: Vector3, vel: Vector3) -> Vector3:
+# Where on the line at depth `line_z` a carrier at `pos` skating at `vel` crosses
+# if he holds his course: along it when it takes him at the line, else straight
+# ahead; within the wall lanes.
+func _natural_crossing(pos: Vector3, vel: Vector3, line_z: float) -> Vector3:
 	var x: float = pos.x
 	var toward: float = vel.z * signf(_goal.z)
 	if toward > 0.1:
-		x += vel.x * (absf(_line_z - pos.z) / toward)
+		x += vel.x * (absf(line_z - pos.z) / toward)
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
-	return Vector3(clampf(x, -wide_x, wide_x), 0.0, _line_z)
+	return Vector3(clampf(x, -wide_x, wide_x), 0.0, line_z)
 
 
 # Where a defender at `pos` skating at `vel`, built as `caps` (null: the league
@@ -321,13 +397,14 @@ func _natural_crossing(pos: Vector3, vel: Vector3) -> Vector3:
 # means goal-side of him along his line to that net (a man level in depth but in
 # the middle is between a wide carrier and the net):
 #
-#   ahead, not closing on him — standing up at his line or backing off the
-#     carry: he holds his gap, giving ground down the carrier's line as the
+#   ahead, not closing on him, outside the carrier's own zone — standing up at
+#     his line or backing off the carry: he holds his gap, giving ground down the carrier's line as the
 #     carrier gains it — a carrier who waits gains no ice by it — down to the
 #     top of his house, the floor a defender with a gap retreats to
 #     (AIRoleRushD.set_retreat_floor), as far as his skate gets him there;
-#   ahead otherwise — he carries on as he is until he is level with the carrier
-#     on that line, and is behind him from then;
+#   ahead otherwise — closing on him, or forechecking in the carrier's own zone,
+#     where he holds his ice: he carries on as he is until he is level with the
+#     carrier on that line, and is behind him from then;
 #   behind him — he backchecks (_backcheck).
 #
 # His velocity then is left in projected_vel.
@@ -340,7 +417,8 @@ static func project_defender(pos: Vector3, vel: Vector3, t: float, carrier_now: 
 	var ahead: float = (pos.x - carrier_now.x) * d.x + (pos.z - carrier_now.z) * d.z
 	if ahead > 0.0:
 		var toward: float = vel.x * d.x + vel.z * d.z
-		if toward >= 0.0:
+		if toward >= 0.0 and not AIActionScoring.in_offensive_zone(
+				pos, Vector3(0.0, 0.0, -goal.z)):
 			return _hold_gap(pos, vel, t, carrier_now, carrier_then, goal, caps)
 		var t_level: float = ahead / -toward if toward < 0.0 else INF
 		if t <= t_level:
@@ -379,20 +457,6 @@ static func _hold_gap(pos: Vector3, vel: Vector3, t: float, carrier_now: Vector3
 		return stand
 	projected_vel = (stand - pos) / t_stand
 	return pos.lerp(stand, t / t_stand)
-
-
-# A man at `pos` braking out `vel` at the reversal decel, `t` from now; his
-# velocity then in projected_vel.
-static func _slide_to_stop(pos: Vector3, vel: Vector3, t: float) -> Vector3:
-	var speed: float = Vector2(vel.x, vel.z).length()
-	if speed < 0.001:
-		projected_vel = Vector3.ZERO
-		return pos
-	var t_stop: float = speed / AIArrival.REVERSAL_BRAKE_DECEL_M_S2
-	var tb: float = minf(t, t_stop)
-	var slide: float = speed * tb - 0.5 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * tb * tb
-	projected_vel = Vector3(vel.x, 0.0, vel.z) * (1.0 - tb / t_stop)
-	return pos + Vector3(vel.x, 0.0, vel.z) * (slide / speed)
 
 
 # project_defender's other result: the projected man's velocity.
@@ -435,15 +499,16 @@ func _caps_of(k: int) -> AISkaterCaps:
 
 # The defence a skate from `pos`, setting off `start_s` from now, is priced
 # against, into _skate_defence / _skate_vels / _skate_caps: fill()'s, carried on to
-# then, less — for a man outside the zone — the men inside the line, who are the
-# line contest's (_line_keep) and are charged there alone.
-func _skate_defence_for(pos: Vector3, start_s: float, in_zone: bool) -> void:
+# then, less the men past the line at depth `line_z` he is skating to, who are the
+# line contest's (_line_keep) and are charged there alone (INF: no line, all of
+# them).
+func _skate_defence_for(pos: Vector3, start_s: float, line_z: float) -> void:
 	_project(_projected, _projected_vels, start_s, pos)
 	_skate_defence.clear()
 	_skate_vels.clear()
 	_skate_caps.clear()
 	for k: int in _defenders.size():
-		if not in_zone and (_defenders[k].z - _line_z) * signf(_goal.z) > 0.0:
+		if line_z != INF and (_defenders[k].z - line_z) * signf(_goal.z) > 0.0:
 			continue
 		_skate_defence.append(_projected[k])
 		_skate_vels.append(_projected_vels[k])

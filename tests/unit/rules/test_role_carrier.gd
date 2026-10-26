@@ -241,13 +241,13 @@ func _impeded_ctx(mate: Vector3, defender: Vector3) -> RoleContext:
 			[1, TEAM_ID, carrier], [2, TEAM_ID, mate], [11, 1, defender]]))
 
 
-# A neutral-zone carrier, a mate wide, and their man behind the play skating
-# back: every moment the entry waits is ice he recovers.
+# A neutral-zone carrier, a mate wide, and their man behind the leaf's spot
+# skating back: every moment the entry waits is ice he recovers.
 func _entry_race_ctx() -> RoleContext:
 	var self_pos := Vector3(0.0, 0.0, 6.0)
 	return _set_keeper(_make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos], [2, TEAM_ID, Vector3(-6.0, 0.0, 4.0)],
-			[11, 1, Vector3(3.0, 0.0, 12.0), false, Vector3(0.0, 0.0, -4.0)]]))
+			[11, 1, Vector3(-4.0, 0.0, 2.0), false, Vector3(0.0, 0.0, -5.0)]]))
 
 
 func test_the_zone_entry_leaf_is_read_when_its_man_gets_there() -> void:
@@ -274,8 +274,8 @@ func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 	# the way home he is.
 	var self_pos := Vector3(0.0, 0.0, 6.0)
 	var ctx := _set_keeper(_make_ctx(self_pos, [
-			[1, TEAM_ID, self_pos], [11, 1, Vector3(3.0, 0.0, 14.0), false,
-					Vector3(0.0, 0.0, -2.0)]]))
+			[1, TEAM_ID, self_pos], [11, 1, Vector3(-6.0, 0.0, 12.0), false,
+					Vector3(0.0, 0.0, -7.0)]]))
 	var c: AIRoleCarrier = _decided(ctx)
 	var mate := Vector3(-6.0, 0.0, 8.0)
 	var now: float = c._field.receiver_drive_in_value(ctx, mate, null)
@@ -691,22 +691,48 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
-func test_a_turnover_costs_the_opponents_possession_wherever_the_carrier_is() -> void:
-	# The carrier's gains are odds of scoring on both sides of the line, so a loss
-	# costs the opponent's possession of the spot in odds (AIPossessionValue), for
-	# a carrier inside the zone and outside it alike. Same loss point, two carriers.
+func test_a_turnover_in_their_zone_is_credited_back_by_the_odds_we_regain_it() -> void:
+	# In their zone the gains are scoring odds, and the share of plays we don't
+	# keep the puck already costs our chance: a loss there is credited back by
+	# the odds they fail to get it out × our possession of it regained.
+	var c := AIRoleCarrier.new()
+	c.decide(_make_ctx(Vector3(-8.0, 0.0, -16.0)))
+	assert_eq(c._field.objective, AICarrierField.Objective.SCORE)
 	var loss := Vector3(-4.0, 0.0, -15.0)
-	var c_in := AIRoleCarrier.new()
-	c_in.decide(_make_ctx(Vector3(-8.0, 0.0, -16.0)))
-	var c_out := AIRoleCarrier.new()
-	c_out.decide(_make_ctx(Vector3(-8.0, 0.0, -4.0)))
-	var cost_in: float = c_in._field.turnover_cost(loss, 1.0)
-	assert_almost_eq(cost_in, c_in._field._theirs.at(loss), 1e-6,
-			"a certain loss costs the opponent's possession there")
-	assert_almost_eq(c_out._field.turnover_cost(loss, 1.0), cost_in, 1e-6,
-			"the same loss costs the same odds from outside the zone")
-	assert_gt(c_in._field.turnover_cost(Vector3(-4.0, 0.0, 20.0), 1.0), cost_in,
-			"and more in front of our net")
+	var f: AICarrierField = c._field
+	assert_almost_eq(f.turnover_cost(loss, 1.0),
+			-(1.0 - f._theirs.p_next(loss)) * f._ours.at(loss), 1e-6,
+			"a certain loss in their zone is the regain credit")
+	assert_gt(f.turnover_cost(Vector3(-4.0, 0.0, 20.0), 1.0), 0.0,
+			"a loss in front of our net costs their possession there")
+
+
+func test_a_turnover_in_the_neutral_zone_costs_their_entry() -> void:
+	# Outside their zone the gains are the odds of reaching the next line with
+	# the puck, so a loss costs the odds they reach ours with it.
+	var c := AIRoleCarrier.new()
+	c.decide(_make_ctx(Vector3(-8.0, 0.0, -4.0)))
+	assert_eq(c._field.objective, AICarrierField.Objective.ENTER)
+	var loss := Vector3(-4.0, 0.0, -2.0)
+	assert_almost_eq(c._field.turnover_cost(loss, 1.0), c._field._theirs.p_enter(loss), 1e-6,
+			"a certain loss costs their entry from there")
+	assert_almost_eq(c._field.turnover_cost(loss, 0.5), 0.5 * c._field._theirs.p_enter(loss),
+			1e-6, "in proportion to its odds")
+
+
+func test_a_turnover_in_our_zone_costs_the_entries_it_hands_them() -> void:
+	# In our zone a loss costs their scoring odds from there in zone entries:
+	# against their odds from an ordinary entry, so the slot hands them more
+	# than the corner.
+	var c := AIRoleCarrier.new()
+	c.decide(_make_ctx(Vector3(-8.0, 0.0, 16.0)))
+	assert_eq(c._field.objective, AICarrierField.Objective.EXIT)
+	var corner := Vector3(-11.0, 0.0, 24.0)
+	var slot := Vector3(0.0, 0.0, 20.0)
+	assert_gt(c._field.turnover_cost(slot, 1.0), c._field.turnover_cost(corner, 1.0),
+			"the slot hands them more than the corner")
+	assert_almost_eq(c._field.turnover_cost(slot, 1.0), c._field._entries_handed(slot, 0.0),
+			1e-6, "a certain loss costs the entries it hands them")
 
 
 # ─── drive-in: a clear drive is credited all the way ────────────────────────
@@ -2469,16 +2495,18 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 
 
 # ── The rim pass (AIRimPass) ─────────────────────────────────────────────────
-# Our D behind our own net, a forechecker on his hip and another sitting in the
-# straight lane to the strong half-wall winger. The boards are the open lane:
-# rimmed round the corner, the puck reaches the winger before anybody of theirs.
+# Our D behind our own net, a forechecker on his hip and the strong half-wall
+# winger up the boards. Blocked: the forechecker closes on him and another sits
+# in the straight lane, so the boards are the open lane: rimmed round the
+# corner, the puck reaches the winger before anybody of theirs. Open: neither.
 
 func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	var self_pos := Vector3(3.0, 0, 28.0)
+	var hip_vel: Vector3 = Vector3(5.0, 0, -1.5) if lane_blocked else Vector3.ZERO
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
 		[2, TEAM_ID, Vector3(11.5, 0, 14.0)],      # strong half-wall winger
-		[3, 1, Vector3(1.5, 0, 28.5)],             # on the D's hip
+		[3, 1, Vector3(1.5, 0, 28.5), false, hip_vel],   # on the D's hip
 		[5, 1, Vector3(-3.0, 0, 18.0)],
 	]
 	if lane_blocked:
