@@ -18,7 +18,8 @@ extends SceneTree
 # llvmpipe is far slower and forward+ needs it. Shot list and output directory
 # come from the environment so the caller drives it without editing this file:
 # ARENA_PREVIEW_OUT (default user://arena_preview), ARENA_PREVIEW_SHOTS (comma
-# separated names from _SHOTS, default all).
+# separated names from _SHOTS, default all) and ARENA_PREVIEW_EXCITEMENT (the
+# crowd's 0..1 reaction, default 0).
 
 # Each shot is a camera placement in world metres. `bench` and `box` are the
 # reason this exists — they frame rinkside staff against the crowd behind them,
@@ -72,6 +73,18 @@ const _SHOTS: Dictionary = {
 		"look_at": Vector3(12.0, 3.5, 26.0),
 		"fov": 45.0,
 	},
+	# The crowd itself, close: a few rows from just over the boards, and the
+	# same rows from the height and pitch of the match camera.
+	"fans": {
+		"from": Vector3(8.5, 2.6, -6.0),
+		"look_at": Vector3(16.5, 3.4, -9.0),
+		"fov": 40.0,
+	},
+	"fans_above": {
+		"from": Vector3(4.0, 12.0, -8.0),
+		"look_at": Vector3(16.0, 3.0, -10.0),
+		"fov": 40.0,
+	},
 	"wide": {
 		"from": Vector3(26.0, 14.0, 34.0),
 		"look_at": Vector3(0.0, 2.0, 0.0),
@@ -110,6 +123,9 @@ func _render_shots() -> void:
 	var stands := ArenaStands.new()
 	world.add_child(stands)
 	_ice(world, stands)
+	var excitement: String = OS.get_environment("ARENA_PREVIEW_EXCITEMENT")
+	if not excitement.is_empty():
+		ArenaCrowd.shared_material().set_shader_parameter("excitement", excitement.to_float())
 
 	var cam := Camera3D.new()
 	world.add_child(cam)
