@@ -5437,8 +5437,8 @@ func get_world_state() -> PackedByteArray:
 
 # Tee a broadcast world-state frame into the .mreplay file. The viewer
 # interpolates between snapshots, so the steady PLAYING stream is decimated from
-# STATE_RATE (120 Hz) to ~30 Hz — a ~4x file-size cut at no perceptible playback
-# cost. The throttle and the phase rules are the recorder's.
+# STATE_RATE to REPLAY_FILE_RATE at no perceptible playback cost. The throttle
+# and the phase rules are the recorder's.
 func _record_world_state_to_file(host_ts: float, data: PackedByteArray) -> void:
 	_replay_file.record_frame(host_ts, data, _live_phase())
 
