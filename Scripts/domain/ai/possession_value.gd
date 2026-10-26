@@ -71,7 +71,8 @@ var _line_z: float = 0.0
 # _p_cross's other results: where and when its best crossing is made.
 var _cross_at: Vector3 = Vector3.ZERO
 var _cross_s: float = 0.0
-# The entries' worth on empty ice at _open_goal: _worth's bound.
+# The entries' worth on empty ice at _open_goal, at their best follow-up time:
+# _worth's bound.
 var _open_goal: Vector3 = Vector3.INF
 var _open_worth: Array[float] = []
 var _open_fields: Array[float] = []
@@ -200,10 +201,20 @@ func p_enter(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 	var out: float = _p_cross(pos, start_s, vel, man_caps, -_line_z)
 	if out <= 0.0:
 		return 0.0
-	var speed: float = man_caps.max_speed if man_caps != null else AIArrival.SKATER_REF_SPEED_M_S
-	var heading := Vector3(0.0, 0.0, signf(_goal.z) * speed)
 	return out / AIActionScoring.delay_discount(_cross_s) \
-			* _p_cross(_cross_at, _cross_s, heading, man_caps, _line_z, true)
+			* _p_cross(_cross_at, _cross_s, _exit_vel(pos, start_s, vel, man_caps), man_caps,
+					_line_z, true)
+
+
+# The man's velocity as he crosses at _cross_at / _cross_s, from `pos` at `vel`
+# `start_s` from now: along his skate there, at the pace its stride ramp reaches.
+func _exit_vel(pos: Vector3, start_s: float, vel: Vector3, man_caps: AISkaterCaps) -> Vector3:
+	var dir := Vector3(_cross_at.x - pos.x, 0.0, _cross_at.z - pos.z).normalized()
+	var vmax: float = man_caps.max_speed if man_caps != null else AIArrival.SKATER_REF_SPEED_M_S
+	var accel: float = man_caps.max_accel if man_caps != null \
+			else AIArrival.SHED_ACCEL_DEFAULT_M_S2
+	return dir * maxf(0.0, AIStrideRamp.signed_speed_at(vel.dot(dir), _cross_s - start_s, vmax,
+			accel, AIArrival.REVERSAL_BRAKE_DECEL_M_S2))
 
 
 # What the side fill() priced is after with the puck, by where the man deciding
@@ -527,9 +538,12 @@ func _price_open() -> void:
 	_open_fields.resize(ENTRY_FIELDS)
 	var sum: float = 0.0
 	for spot: Vector3 in _entry_spots:
-		_price_entry(spot, _open_fields, 0, 0.0)
-		_open_worth.append(maxf(_open_fields[0], _open_fields[1]))
-		sum += _open_worth[-1]
+		var open: float = 0.0
+		for t: float in FOLLOW_UP_TIMES:
+			_price_entry(spot, _open_fields, 0, t)
+			open = maxf(open, maxf(_open_fields[0], _open_fields[1]))
+		_open_worth.append(open)
+		sum += open
 	_open_mean = maxf(sum / CROSSINGS, ENTRY_ODDS_GUARD)
 	_open_shot_cap = _shot_vs(Vector3(_goal.x, 0.0,
 			_goal.z - signf(_goal.z) * DRIVE_MIN_NET_DIST_M), _no_one)
@@ -539,16 +553,19 @@ func _price_open() -> void:
 
 
 # Values an entry is priced to, from `base` in `out`, against the defence `t`
-# from now: the shot from it; the drive in from it, from rest, at its end's shot
-# × the skate's discount; the odds that drive keeps the puck; and the pass to a
-# teammate following in (_mate_pass).
+# from now: the shot from it; the drive in from it, carried up ice at the pace a
+# skate of `t` from rest reaches (whoever enters, he has had that long to build
+# it), at its end's shot × the skate's discount; the odds that drive keeps the
+# puck; and the pass to a teammate following in (_mate_pass).
 const ENTRY_FIELDS: int = 4
 
 
 func _price_entry(spot: Vector3, out: Array[float], base: int, t: float) -> void:
 	_project(_follow_defence, _follow_vels, t, spot)
 	out[base] = _shot_vs(spot, _follow_defence)
-	out[base + 2] = _best_drive_keep(spot, t)
+	var pace: float = AIStrideRamp.speed_at(0.0, t, AIArrival.SKATER_REF_SPEED_M_S,
+			AIArrival.SHED_ACCEL_DEFAULT_M_S2)
+	out[base + 2] = _best_drive_keep(spot, t, Vector3(0.0, 0.0, signf(_goal.z) * pace))
 	out[base + 1] = _drive_reached_value
 	if out[base + 2] <= 0.0:
 		out[base + 1] = 0.0

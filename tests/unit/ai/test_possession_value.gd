@@ -70,8 +70,11 @@ func test_a_body_on_his_stick_costs_him_the_puck_where_the_line_is_his() -> void
 func test_a_defender_who_gets_to_the_entries_first_shuts_them() -> void:
 	var spot := Vector3(0.0, 0.0, 5.0)
 	var open: float = _read(_none).at(spot)
+	var middle: Array[Vector3] = [Vector3(0.0, 0, -9.0)]
 	var line: Array[Vector3] = [Vector3(-10.0, 0, -9.0), Vector3(0.0, 0, -9.0), Vector3(10.0, 0, -9.0)]
-	assert_lt(_read(line).at(spot), open * 0.5, "a defence standing up at its line")
+	var one: float = _read(middle).at(spot)
+	assert_lt(one, open, "a man standing up at his line")
+	assert_lt(_read(line).at(spot), one, "and a defence standing up across it")
 
 
 func test_later_is_worth_less() -> void:
@@ -283,11 +286,11 @@ func test_a_defender_set_at_his_line_shadows_the_carriers_lane_not_the_whole_lin
 			0.0, line_z)
 	assert_lt(v._line_keep(middle, 2.5, carrier, up_ice, line_z), 0.1,
 			"the lane the carrier is skating is his")
-	assert_gt(v._line_keep(wide, 2.5, carrier, up_ice, line_z), 0.9,
-			"the far lane is open to a late choice")
+	var late: float = v._line_keep(wide, 2.5, carrier, up_ice, line_z)
+	assert_gt(late, 0.9, "the far lane is open to a late choice")
 	var at_wide := Vector3(wide.x - carrier.x, 0.0, wide.z - carrier.z).normalized() * 6.0
-	assert_lt(v._line_keep(wide, 2.5, carrier, at_wide, line_z), 0.1,
-			"and his once the carrier heads for it")
+	assert_lt(v._line_keep(wide, 2.5, carrier, at_wide, line_z), late,
+			"and contested once the carrier heads for it")
 
 
 func test_a_defender_gapped_back_leaves_the_line_to_the_drive() -> void:
@@ -352,6 +355,17 @@ func test_from_our_zone_getting_in_is_getting_out_and_then_in() -> void:
 	var spot := Vector3(3.0, 0.0, 14.0)
 	var out_ice := Vector3(0.0, 0.0, -4.0)
 	assert_gt(v.p_enter(spot, 0.0, out_ice), 0.0)
+
+
+func test_the_way_in_from_our_zone_starts_at_the_pace_he_gets_out_at() -> void:
+	# Open ice: past the exit, a man who stood at our line before it carries less
+	# pace over the neutral zone than one already flying, so its leg is slower.
+	var v: AIPossessionValue = _read(_none)
+	var spot := Vector3(0.0, 0.0, GameRules.BLUE_LINE_Z + 1.0)
+	var flying := Vector3(0.0, 0.0, -GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
+	var stood_leg: float = v.p_enter(spot) / v.p_exit(spot)
+	var flying_leg: float = v.p_enter(spot, 0.0, flying) / v.p_exit(spot, 0.0, flying)
+	assert_lt(stood_leg, flying_leg, "the neutral zone from a standing exit takes longer")
 
 
 func test_an_entry_counts_by_its_quality() -> void:

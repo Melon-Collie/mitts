@@ -140,20 +140,24 @@ static func reach_clearance(
 				puck_point.x, puck_point.z, time, w_i,
 				opponents[i].x, opponents[i].z,
 				opponent_vels[i].x, opponent_vels[i].z, accel, stick, vmax, grip)
+		var closing: float = _closing_speed
 		if v_along_carry > 0.0 and w < time:
 			# A man skating WITH the carry can also just stop: the carry is coming
 			# to him, so braking commits him to no spot and starts at his read,
 			# not when the commit window opens. The pace he still carries then
 			# gates his stride as above. (A chaser behind only loses ground by it,
 			# so the min leaves him be.)
-			clear = minf(clear, _stopped_clearance(puck_point.x, puck_point.z, time, w,
+			var stopped: float = _stopped_clearance(puck_point.x, puck_point.z, time, w,
 					opponents[i].x, opponents[i].z, opponent_vels[i].x, opponent_vels[i].z,
-					stride_accel, stick, vmax, grip, v_along_carry / carry_speed))
+					stride_accel, stick, vmax, grip, v_along_carry / carry_speed)
+			if stopped < clear:
+				clear = stopped
+				closing = _closing_speed
 		if clear < worst:
 			worst = clear
-			reach_band_m = minf(vmax, Vector2(opponent_vels[i].x, opponent_vels[i].z).length()
-					+ accel * maxf(0.0, minf(time, w_i) - EVADE_REACTION_S)) \
-					* maxf(AIArrival.ERROR_FRAC * (time + projected_s), AIArrival.ERROR_FLOOR_S)
+			reach_band_m = maxf(AIArrival.ERROR_FRAC * (minf(time, w_i) * closing
+					+ projected_s * Vector2(opponent_vels[i].x, opponent_vels[i].z).length()),
+					AIArrival.ERROR_FLOOR_S * closing)
 			if worst < abort_below:
 				return worst
 	return worst
@@ -161,9 +165,9 @@ static func reach_clearance(
 
 # reach_clearance's other result: how far the binding defender's nominal reach is
 # uncertain by — the arrival clock's calibrated error on his trip
-# (AIArrival.ERROR_FRAC, ERROR_FLOOR_S) in ground at the speed he ends it with;
-# a defence the caller projected `projected_s` ahead to start from carries that
-# trip's error too.
+# (AIArrival.ERROR_FRAC, ERROR_FLOOR_S) in ground: over his commit window at the
+# speed he is closing on the point with as it ends, and, for a defence the caller
+# projected `projected_s` ahead to start from, over that trip at his speed then.
 # The safety maps grade a clearance across it, as AILaneReach grades a lane.
 static var reach_band_m: float = 0.0
 
@@ -217,6 +221,11 @@ static func _stopped_clearance(point_x: float, point_z: float, time: float,
 			stick, vmax, lateral_grip)
 
 
+# _committed_clearance's other result: the defender's speed toward the point as
+# the window closes.
+static var _closing_speed: float = 0.0
+
+
 # Clearance of the point from a defender at (px, pz) moving (vx, vz) as his
 # commit window of `tau` opens.
 static func _committed_clearance(point_x: float, point_z: float, tau: float,
@@ -226,9 +235,13 @@ static func _committed_clearance(point_x: float, point_z: float, tau: float,
 	var dz: float = point_z - pz
 	var dist: float = sqrt(dx * dx + dz * dz)
 	var d: float = 0.0
-	if tau > 0.0 and dist > 0.001:
-		var inv: float = 1.0 / dist
-		var v_along: float = (vx * dx + vz * dz) * inv
+	_closing_speed = 0.0
+	if dist <= 0.001:
+		return -stick
+	var inv: float = 1.0 / dist
+	var v_along: float = (vx * dx + vz * dz) * inv
+	_closing_speed = maxf(0.0, v_along)
+	if tau > 0.0:
 		var v_perp: float = absf((vx * dz - vz * dx) * inv)
 		# Shed excess cross-speed (a pure delay, as calibrated — authority is
 		# the edge grip the movement core turns with), then brake out any
@@ -244,6 +257,7 @@ static func _committed_clearance(point_x: float, point_z: float, tau: float,
 				v0 += AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * t_b
 				tau_p -= t_b
 			d += AIStrideRamp.distance_in(v0, tau_p, vmax, accel)
+			_closing_speed = AIStrideRamp.speed_at(v0, tau_p, vmax, accel)
 	return dist - d - stick
 
 

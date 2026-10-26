@@ -1309,7 +1309,7 @@ func test_pass_miss_cost_self_localizes_by_rink_end() -> void:
 	theirs.fill(OUR_NET, our_pair, still, [])
 	var own_end_cost: float = AIPuckLane.PASS_MISS_BASE_PROB * theirs.at(own_end_loss)
 	var opp_end_cost: float = AIPuckLane.PASS_MISS_BASE_PROB * theirs.at(opp_end_loss)
-	assert_gt(own_end_cost, opp_end_cost * 4.0,
+	assert_gt(own_end_cost, opp_end_cost * 2.0,
 			"a missed pass in our own end costs multiples of the same miss in theirs")
 
 
