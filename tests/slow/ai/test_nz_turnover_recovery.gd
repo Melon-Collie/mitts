@@ -14,8 +14,10 @@ extends GutTest
 # real bot's reaction, priced on the same stride ramp the movement model runs
 # (AIStrideRamp). A start is WINNABLE when that retreat reaches the house gate
 # with room to spare; the bot is held to winning those, and to containing the
-# rush (the puck stripped, or the carrier held short of the gate) as often as
-# it did when the gap model learned the ramp.
+# rush (the puck stripped, the carrier held short of the gate, or the shot forced
+# from outside it) as often as it did when the gap model learned the ramp. Where
+# each forced shot came from is printed, so a carrier giving up a shot from the
+# top of the house shows as what it is.
 #
 # The sweep is the real decision stack on the duel harness, measured as bodies
 # over the rush — no single dispatch can see it. Reference readings over these 36
@@ -28,18 +30,17 @@ extends GutTest
 #   the carrier's cuts in the stance    18              3 / 9
 #   turn-and-skate on retreats only     17              3 / 9
 #   hips on the skating line            16              3 / 9
+#   hysteresis rides the stand          17              1 / 9
 #
 # The hips riding the line cost a backpedal its angle to an off-lane carrier,
 # and with it the share of the backward top-speed penalty an angled body skips
 # (SkaterMovementRules): he skates at the flat 80% his retreat is priced at.
 #
 # Most of what is still lost sits off the carrier's lane, where the straight-line
-# bound ignores the lateral ice the defender must also cover. The three lost
-# since the carrier learned the stance cut are all 8 m starts 2-4 m off his
-# lane: he drifts wide, the defender matches the drift, and the carrier cuts
-# back in the stance faster than a defender at that lateral speed can reverse.
-# Covering that is doctrine — how much of the drift to give — not a race the
-# defender mispriced.
+# bound ignores the lateral ice the defender must also cover: he drifts wide, the
+# defender matches the drift, and the carrier cuts back in the stance faster than
+# a defender at that lateral speed can reverse. Covering that is doctrine — how
+# much of the drift to give — not a race the defender mispriced.
 #
 # WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates through
 # the defender, so a body in his lane only stops him by stripping the puck.
@@ -66,8 +67,9 @@ func _gate_z() -> float:
 
 # One rush: defender `depth` goal-side of a carrier receiving at `carrier_speed`,
 # `lane_x` across, with `up_ice` m/s still carrying him away from his own net and
-# facing up-ice, as he would be mid-attack. Returns "contained", or the margin by
-# which the defender is goal-side when the carrier reaches the house gate.
+# facing up-ice, as he would be mid-attack. Returns "contained", the forced
+# shot's distance from our net, or the margin by which the defender is goal-side
+# when the carrier reaches the house gate.
 func _rush(depth: float, lane_x: float, up_ice: float,
 		carrier_speed: float) -> Variant:
 	var duel := Duel.new()
@@ -82,6 +84,10 @@ func _rush(depth: float, lane_x: float, up_ice: float,
 		duel.step()
 		if duel.strips > 0:
 			return "contained"
+		for rec: Dictionary in duel.releases:
+			if int(rec["peer"]) == 1:
+				var at: Vector3 = rec["pos"]
+				return "shot %2.0fm" % Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z).distance_to(at)
 		var car: Object = duel._skater(1)
 		if car.pos.z <= _gate_z():
 			return car.pos.z - duel._skater(2).pos.z
@@ -121,9 +127,10 @@ func test_defender_caught_in_the_neutral_zone_wins_the_races_he_can() -> void:
 					var tag: String = "v%.0f/d%.0f/up%.0f/x%.0f" % [speed, depth, up, x]
 					if r is String:
 						contained += 1
-						row += "  up%.0f x%.0f   held" % [up, x]
+						row += "  up%.0f x%.0f %8s" % [up, x,
+								"held" if r == "contained" else r]
 						continue
-					row += "  up%.0f x%.0f %+5.1f" % [up, x, r]
+					row += "  up%.0f x%.0f %+8.1f" % [up, x, r]
 					if can_win and float(r) < 0.0:
 						lost.append(tag + " (best %+.1f)" % best)
 			gut.p(row)

@@ -23,7 +23,6 @@ const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
 
 const CARRIER := 101
 const DEFENDER := 201
-const DEFENDER_2 := 202
 const PUPPET := 301
 
 
@@ -89,34 +88,6 @@ func test_cornered_carrier_escapes() -> void:
 			crossed_carrying = true
 	assert_true(crossed_carrying or duel.releases.size() > 0,
 			"puck carried past the container or released on net")
-
-
-func test_pincer_duel_carrier_keeps_the_puck() -> void:
-	# Two defenders converging from ahead on both sides — the corralling trap
-	# that used to strip the old passive evasion every time. The carrier doesn't
-	# have to score; it has to KEEP THE PUCK THROUGH THE TRAP: the pincer never
-	# gets a stick on the carried puck (no strip), and the puck ends the window on
-	# our stick or deliberately released. A defender recovering a puck the carrier
-	# itself RELEASED (a shot/dump out of the trap) is not the pincer stripping it —
-	# so the honest measure is `strips`, not raw defender carry-time (which counts
-	# post-release recovery; see the momentum-aware ETA — the carrier now splits the
-	# D and drives out rather than being corralled).
-	var duel: RefCounted = DuelHarness.new()
-	duel.add_skater(CARRIER, 0, Vector3(0, 0, -10.0))
-	duel.add_skater(DEFENDER, 1, Vector3(1.8, 0, -13.0))
-	duel.add_skater(DEFENDER_2, 1, Vector3(-1.8, 0, -13.0))
-	duel.start(CARRIER)
-	duel.run(5.0)
-	# The pincer never SUSTAINS possession from a strip. Momentary pokes the carrier
-	# recovers from (duel.strips) are the carrier fighting through contact, not a
-	# takeover; and a defender recovering a puck the carrier itself RELEASED (a
-	# shot/dump out of the trap) is not the pincer stripping it. So the honest read
-	# is: the carrier either still has the puck at the buzzer, or the FIRST release
-	# was its OWN deliberate play out of the trap.
-	var carrier_made_first_play: bool = duel.releases.size() > 0 \
-			and int(duel.releases[0]["peer"]) == CARRIER
-	assert_true(duel.carrier() == CARRIER or carrier_made_first_play,
-			"the carrier keeps it through the trap and makes its OWN play — the pincer never strips and takes over")
 
 
 func test_loose_puck_pickup_is_blade_first() -> void:

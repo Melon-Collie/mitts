@@ -144,9 +144,11 @@ var ping_pass_target_peer: int = -1
 # its wall-clock durations stretch with the tier.
 var dispatch_period_ticks: int = 1
 
-# Last dispatch's target_position, or Vector3.INF on the first dispatch and
-# across a slot change (no role inherits another's target). The incumbent for
-# argmax switch-hysteresis (AIStationSearch.append_incumbent / incumbent_bonus).
+# Last dispatch's target_position carried to now at its target_velocity (a stand
+# riding a man is held in his frame, not left on the ice behind him), or
+# Vector3.INF on the first dispatch and across a slot change (no role inherits
+# another's target). The incumbent for argmax switch-hysteresis
+# (AIStationSearch.append_incumbent / incumbent_bonus).
 var prev_role_target: Vector3 = Vector3.INF
 
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its

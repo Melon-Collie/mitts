@@ -142,7 +142,7 @@ a closing term that is spent by the time you arrive, so an approach ends
 point, a defender could only defend from ice he was already standing on: one
 starting 20 m off his stand meets the carrier at ~10 m/s of relative speed.
 
-Three consequences:
+Four consequences:
 
 - **Price a stand at the ride it is skated at.** A candidate pushed onto a
   possession read standing still is a man a carrier at speed out-skates
@@ -162,6 +162,11 @@ Three consequences:
   are" fallback that also rides a man matches his velocity forever — out through
   the end boards. `AISteering.is_rideable_anchor` is the structural backstop; the
   role is still expected not to publish one it did not earn.
+- **Hysteresis rides too.** The argmax incumbent (`RoleContext.prev_role_target`)
+  is last dispatch's stand carried to now at its published velocity. Left on the
+  ice where it was chosen, it falls behind a man every other candidate rides, and
+  while his options read close it takes the switch bonus every dispatch and holds
+  the defender on a spot the play has left (`test_nz_turnover_recovery.gd`).
 
 Both halves are pinned by `tests/slow/ai/test_defensive_routing.gd` (share of
 time in shape, and whether a defence pair gets blown by) and

@@ -285,6 +285,10 @@ var _inert_rush_read := AIRushRead.new()
 # stamped across a slot change so no role inherits another role's target).
 var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
+# The previous target's ride (RoleDecision.target_velocity) and the physics ticks
+# since it was chosen, which carry it to now as the incumbent.
+var _prev_role_target_velocity: Vector3 = Vector3.ZERO
+var _role_decision_age_ticks: int = 0
 # The man this skater's role is covering, from the last role dispatch
 # (RoleDecision.locked_man_pid) — reset on slot change, and cleared on
 # leaving OFF_PUCK: a skater chasing or carrying
@@ -1110,6 +1114,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 						and (finisher_puck_near or not is_finisher_slot)) \
 				or _cached_role_decision.commit_check
 		var decision: RoleDecision
+		_role_decision_age_ticks += _dispatch_armed_span_ticks
 		if must_recompute or _role_decision_cooldown <= 0:
 			decision = _dispatch_role_decision(ctx)
 			_cached_role_decision = decision
@@ -1334,9 +1339,13 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	var slot: int = _current_strategy.get_slot(_peer_id) if _current_strategy != null else AIRoleSlots.Slot.NONE
 	# Target switch-hysteresis input: the target this bot's role chose last
-	# dispatch — INF across a slot change so no role inherits another's
-	# target (see RoleContext.prev_role_target).
-	ctx.prev_role_target = _prev_role_target if slot == _prev_role_slot else Vector3.INF
+	# dispatch, ridden to now — INF across a slot change so no role inherits
+	# another's target (see RoleContext.prev_role_target).
+	ctx.prev_role_target = Vector3.INF
+	if slot == _prev_role_slot and _prev_role_target.is_finite():
+		ctx.prev_role_target = _prev_role_target + _prev_role_target_velocity \
+				* (float(_role_decision_age_ticks) / _PhysicsConstants.PHYSICS_TICK)
+	_role_decision_age_ticks = 0
 	# Pinch-read hysteresis incumbent, same reset-across-slot-change contract.
 	ctx.prev_held_forward_stand = _prev_held_forward_stand \
 			if slot == _prev_role_slot else false
@@ -1420,6 +1429,7 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			decision.target_position = ctx.self_pos
 	_prev_role_slot = slot
 	_prev_role_target = decision.target_position
+	_prev_role_target_velocity = decision.target_velocity
 	_prev_locked_man_pid = decision.locked_man_pid
 	_prev_held_forward_stand = decision.held_forward_stand
 	return decision
