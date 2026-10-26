@@ -1,6 +1,6 @@
 # Grounding the bots' physical reads
 
-Status: **agreed direction; phase 1 done, phase 2 next.** The CLAUDE.md workflow
+Status: **agreed direction; phases 1 and 2 done, phase 3 next.** The CLAUDE.md workflow
 applies: this doc is the plan, deviations get discussed first.
 
 ## Why
@@ -83,12 +83,12 @@ takes the receiver's caps; `best_evade_point` the carrier's thrust;
 goal-side shade the bot's own reach; `SkaterAgentStickPlay` each skater's reach.
 Every direct `time_to_arrive` call now passes speed, thrust and grip.
 
-**Carried to phase 2:** the brake-to-set margins at league top speed
-(`AIActionScoring.COUNTER_SET_MARGIN_S`, `role_slots_5v5.gd`'s RUSH_D1
-deadline) with the counter-cover rework; the DZONE cover envelope at league
-reach (`AIRushRead.cover_envelope_m`, a shared static) with pattern 2; the
+**Carried on:** the brake-to-set margins at league top speed went with the
+counter-cover rework (phase 2, below). Still open: the DZONE cover envelope at
+league reach (`AIRushRead.cover_envelope_m`, a shared static; phase 4) and the
 defence's threat reads (`threat_of_carrier`, `threat_of_feed`), whose callers
-hold positions without peers, so they still time the man on the league build.
+hold positions without peers, so they still time the man on the league build
+(phase 3, with the entry read they share).
 
 ### 2. Depth comparisons standing in for "somebody is home"
 
@@ -104,6 +104,17 @@ hold positions without peers, so they still time the man on the league build.
 
 **Fix:** each is a race, as `_attacker_behind` already reads attackers
 (`race_depth_to_net`): can this teammate be goal-side of the play in time.
+
+**Done (phase 2), `has_support_behind`:** two questions, both races on each
+body's arrival clock, ghosts never counting. *Is anybody home if he beats me?*
+(`has_support_behind(ctx, ap)`, the check commit and the step-ups) — a teammate
+reaches a point of the threat's run at our net, past us, before the threat does.
+*Am I the body to pick up the man behind?* (`_mate_better_placed`, folded into
+`_attacker_behind`, the stations' hold) — a teammate takes a bigger lead on that
+man's run than we can, ties to the lower peer id, so exactly one body draws him;
+our carrier is never a candidate. The rest of this pattern
+(`home_layer_behind_me`, `rush_read.gd:269`, the containment gate,
+`_pinch_is_covered`) is phase 4.
 
 ### 3. Fixed distances standing in for reach or a contest
 
@@ -123,6 +134,11 @@ hold positions without peers, so they still time the man on the league build.
 
 **Fix:** reach against time — `reach_clearance` for "can he touch it", the
 arrival clock against the charge or flight time left.
+
+**Done (phase 2), `carry_lane_clearance`:** deleted. `carry_safety` already
+prices every carry on the reach model (the crossing band, the transit and dwell
+samples, each defender's build); the one read it had no safety for, the rest of
+a rolled move's trip to its destination (`_end_worth`), reads `carry_safety`.
 
 ### 4. Targets frozen where they are, or drifted at constant velocity
 
@@ -153,6 +169,17 @@ arrival clock against the charge or flight time left.
 use (`AILoosePuckChase` walks, `AICarrierField.project_opponents`, the
 receiver's skating point on the arrival clock).
 
+**Done (phase 2), receiver stations:** `AIRoleReads.collect_feed_defence` /
+`feed_origin` / `feed_speed` / `feed_lane` give every station the carrier's own
+read — his release point, the defence and its blades carried to the release on
+their velocities and builds, the accurate lane model, his launch
+(`test_a_station_reads_the_feed_its_carrier_reads` holds the mirror). The
+outlets price a spot as the passer prices the feed (`AIRoleReads.feed_ev`:
+completion × our possession − interception × theirs at the loss point), by
+possession alone while no lane is open (`AIFeedStationPick`); the 0.15 floor on
+dead lanes is gone. Shot lanes from a station (`high_slot.gd`, the point) are
+still read off a frozen defence: phase 4.
+
 ### 5. Momentum or burst left out
 
 - `body_check.gd:77-87` — the checker as a projectile already at top speed
@@ -174,6 +201,18 @@ receiver's skating point on the arrival clock).
   reaction or speed cap.
 - `skater_agent_board_play.gd:184-192` support race by `distance / speed`
   (doc'd as deliberately momentum-blind; still a fixed-speed race).
+
+**Done (phase 2):** the counter-rush race — each teammate's time to stand set
+at the counter point is his arrival on his build and momentum plus his own brake
+from top speed (`AIArrival.set_margin_s`, which RUSH_D1's feasibility deadline
+also charges per body); the carrier recovers from a standstill at the
+candidate; the collector carries on from the pace he collects at; an outlet is
+home once both his run (on his momentum) and the collector's hardest feed are,
+and the collector never feeds himself. `settable_stand_depth` takes the man on
+a loose puck (`loose_puck_driver`), who bursts on his build the moment we
+commit, so a still puck binds too. Still open from this pattern: the body
+check, the reactive tip, the pinch race, `shot_block_read`, `press_read`'s
+best case and the board-play support race (phase 4).
 
 ### 6. The zone-entry picture
 
@@ -275,6 +314,17 @@ drills (`tests/instruments/ai/test_nz_entry_drill.gd`,
 
 ### Open
 
+- **Phase 2 findings, to re-measure after this rebuild.** With the receiver
+  stations on the passer's read, the breakout drill's exits slowed (18 of 20 in
+  2.17 s → 2.92 s): an outlet who has the puck now often feeds across to the
+  other winger, whom the new read stands where the lane really is open, rather
+  than carrying out — the passer prices that feed above the carry, which is
+  this section's possession read. And two 2-on-1s in
+  `test_advantage_scenarios.gd` fail: with his feeds read honestly the
+  finisher's tip station wins, he cuts across into the slot at ~9 m/s, and the
+  carrier feeds him a pass that arrives too hard to catch (the passer prices
+  the bobble and still rates it 0.685), and a shot from 12.06 m against the
+  12 m bound. The reception half is phase 4's "whose feed it is".
 - `tests/slow/ai/test_nz_turnover_recovery.gd` contains 14 of 36 since
   `81d18257` (floor 16): the carrier beats a caught-flat defender more often.
   Re-measure after the rebuild and pattern 2 before touching the floor — the

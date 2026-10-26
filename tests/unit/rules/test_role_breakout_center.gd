@@ -51,9 +51,12 @@ func _circle_lane(carrier: Vector3) -> Vector3:
 			carrier.z + AIRoleBreakoutCenter.SWING_BELOW_M)
 
 
+# The carrier's feed to `to`, as the station reads it (AIRoleReads.feed_lane).
 func _lane(carrier: Vector3, to: Vector3, opponents: Array[Vector3]) -> float:
-	return AIPuckLane.lane_clear(carrier, to, opponents,
-			AIPuckLane.expected_pass_speed(carrier, to))
+	var ctx := _make_ctx(Vector3(0, 0, 20), carrier, opponents)
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier)
+	return AIRoleReads.feed_lane(ctx, origin, to, AIRoleReads.feed_speed(ctx, origin, to))
 
 
 func test_no_puck_stands_still() -> void:
@@ -76,7 +79,9 @@ func test_on_open_ice_he_swings_low_through_the_middle() -> void:
 func test_a_blocked_middle_sends_him_to_the_circle_lane() -> void:
 	var carrier := Vector3(1, 0, 14)
 	var mid: Vector3 = _mid_lane(carrier)
-	var blocker: Array[Vector3] = [carrier.lerp(mid, 0.5)]
+	# In the middle lane past a stick of the release: a man on the release
+	# kills every feed alike.
+	var blocker: Array[Vector3] = [carrier.lerp(mid, 0.85)]
 	assert_lt(_lane(carrier, mid, blocker), _lane(carrier, _circle_lane(carrier), blocker),
 			"fixture: the defender stands in the middle lane, not the circle lane")
 	var d: RoleDecision = AIRoleBreakoutCenter.decide(
@@ -87,7 +92,7 @@ func test_a_blocked_middle_sends_him_to_the_circle_lane() -> void:
 func test_the_circle_lane_is_on_the_carriers_side() -> void:
 	var carrier := Vector3(-1, 0, 14)
 	var mid: Vector3 = _mid_lane(carrier)
-	var blocker: Array[Vector3] = [carrier.lerp(mid, 0.5)]
+	var blocker: Array[Vector3] = [carrier.lerp(mid, 0.85)]
 	var d: RoleDecision = AIRoleBreakoutCenter.decide(
 			_make_ctx(Vector3(0, 0, 20), carrier, blocker))
 	assert_almost_eq(d.target_position.x, -AIRoleBreakoutCenter.CIRCLE_LANE_X_M, 1e-4)

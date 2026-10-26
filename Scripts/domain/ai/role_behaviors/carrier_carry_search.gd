@@ -92,7 +92,6 @@ const CARRY_PLY2_WIDTH: int = 3
 var _beam_pos: Array[Vector3] = []
 var _beam_total: Array[float] = []
 var _beam_dest: Array[float] = []
-var _beam_lane: Array[float] = []
 var _beam_decay: Array[float] = []
 var _beam_safety: Array[float] = []
 var _beam_cost: Array[float] = []
@@ -176,7 +175,6 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	_beam_pos.clear()
 	_beam_total.clear()
 	_beam_dest.clear()
-	_beam_lane.clear()
 	_beam_decay.clear()
 	_beam_safety.clear()
 	_beam_cost.clear()
@@ -331,7 +329,6 @@ func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_ne
 	_beam_pos.resize(rows_before)
 	_beam_total.resize(rows_before)
 	_beam_dest.resize(rows_before)
-	_beam_lane.resize(rows_before)
 	_beam_decay.resize(rows_before)
 	_beam_safety.resize(rows_before)
 	_beam_cost.resize(rows_before)
@@ -344,8 +341,8 @@ func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_ne
 #     × decay(horizon) × keep odds along the rolled path − turnover cost
 #
 # The arrival value is the shot or position at the move's end at its real end
-# velocity; carried on, the destination is worth its value on arrival × the lane
-# from the end × the decay of the rest of the trip. Illegal moves add no row:
+# velocity; carried on, the destination is worth its value on arrival × the keep
+# odds of the rest of the trip × its decay. Illegal moves add no row:
 # out of the zone through the one-way valve, or into it while a tag-up is owed.
 # A move ends at its last sample short of a crease, or of the goal line from in
 # front: the carrier re-plans many times a horizon, so a drive at the net is a
@@ -381,7 +378,6 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_beam_pos.append(end)
 	_beam_total.append(total)
 	_beam_dest.append(worth)
-	_beam_lane.append(1.0)
 	_beam_decay.append(decay)
 	_beam_safety.append(safety)
 	_beam_cost.append(cost)
@@ -429,10 +425,10 @@ func _move_legal(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3) 
 
 # What a rolled move's end at `end`, moving at `end_vel` and reached `t_end`
 # from now, is worth: the arrival value there, or the destination's value carried on from there —
-# its value on arrival × the lane from the end × the decay of the rest of the
-# trip — unless that carry crosses into the attacking zone: getting in past the
+# its value on arrival × the keep odds of the rest of the trip × its decay —
+# unless that carry crosses into the attacking zone: getting in past the
 # defence at the line is priced by the race in the end's own horizon value
-# (AICarrierField.horizon_value), not by a straight lane read beyond what the
+# (AICarrierField.horizon_value), not by a straight carry read beyond what the
 # search reached. Reads the defence in _scratch_opponents_path, projected to
 # `t_end`.
 func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
@@ -445,8 +441,11 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 		var t_rest: float = AIArrival.time_to_arrive(end, destination, end_vel,
 				caps.max_speed, caps.max_accel, caps.lateral_grip)
 		worth = maxf(worth, dest_arrival * AIActionScoring.delay_discount(t_rest)
-				* AICarrySpace.carry_lane_clearance(end, destination, t_rest,
-						_scratch_opponents_path, _field.opponent_vels, caps.max_speed))
+				* AICarrySpace.carry_safety(
+						AICarrierField.puck_pos_at(end, goal),
+						AICarrierField.puck_pos_at(destination, goal), t_rest,
+						_scratch_opponents_path, _field.opponent_vels, _field.opponent_caps,
+						true))
 	return worth
 
 
@@ -556,7 +555,7 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 # One-ply EV of one movement carry candidate — the scoring every non-stand-still
 # candidate in the beam runs:
 #
-#   dest_score × lane × decay × safety − turnover_cost
+#   dest_score × decay × safety − turnover_cost
 #
 # `safety` is the reachable clearance over the PUCK's path to the candidate
 # across the arrival time, so it sees both a defender converging on the ROUTE
@@ -588,7 +587,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			and AIActionScoring.in_offensive_zone(candidate, ctx.attacking_goal_pos) \
 			and not AIActionScoring.in_offensive_zone(self_pos, ctx.attacking_goal_pos):
 		return -INF
-	# The cage is a wall: the time/lane/safety math below assumes the straight
+	# The cage is a wall: the time/safety math below assumes the straight
 	# traverse. POST-WALKOUT candidates are exempt — they are reached around the
 	# post (the steering's net detour), which the straight-segment test can't see.
 	if not is_post_walkout \
@@ -599,19 +598,11 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			ctx.self_max_accel, ctx.self_lateral_grip)
 	# CEILING PRUNES (exact): with dest_score ≤ 1 and cost ≥ 0, each partial
 	# product of the ≤ 1 factors is a hard upper bound, checked in cost order —
-	# decay alone before the opponent projection, × lane before the safety read,
-	# × safety before the arrival-shot / strip machinery. Under pressure SAFETY
-	# is the killer, so a swarmed carrier doesn't pay full price for doomed spots.
+	# decay alone before the safety read, × safety before the arrival-shot /
+	# strip machinery. Under pressure SAFETY is the killer, so a swarmed carrier
+	# doesn't pay full price for doomed spots.
 	var decay: float = AIActionScoring.delay_discount(local_time)
 	if decay <= best_so_far:
-		return -INF
-	_field.project_opponents(local_time, _scratch_opponents_path)
-	var lane: float = AICarrySpace.carry_lane_clearance(
-			self_pos, candidate, local_time, _field.opponents, _field.opponent_vels,
-			ctx.self_max_speed)
-	if lane <= 0.0:
-		return -INF
-	if lane * decay <= best_so_far:
 		return -INF
 	var cand_puck_pos: Vector3 = AICarrierField.puck_pos_at(candidate, ctx.attacking_goal_pos)
 	var cur_puck_pos: Vector3 = AICarrierField.puck_pos_at(self_pos, ctx.attacking_goal_pos)
@@ -621,8 +612,9 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			cur_puck_pos, cand_puck_pos, local_time,
 			_field.opponents, _field.opponent_vels, _field.opponent_caps,
 			true)
-	if lane * decay * safety <= best_so_far:
+	if decay * safety <= best_so_far:
 		return -INF
+	_field.project_opponents(local_time, _scratch_opponents_path)
 	var to_cand: Vector3 = candidate - self_pos
 	to_cand.y = 0.0
 	var cand_dist: float = to_cand.length()
@@ -647,12 +639,11 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 		# CANDIDATE, the spot this carry commits him to.
 		cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep_prob,
 				candidate, our_goalie)
-	var total: float = dest_score * lane * decay * safety - cost
+	var total: float = dest_score * decay * safety - cost
 	# Beam row: this candidate's final value unless pass 2 upgrades it.
 	_beam_pos.append(candidate)
 	_beam_total.append(total)
 	_beam_dest.append(dest_score)
-	_beam_lane.append(lane)
 	_beam_decay.append(decay)
 	_beam_safety.append(safety)
 	_beam_cost.append(cost)
@@ -751,10 +742,9 @@ func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false
 		best_so_far: float = -INF) -> float:
 	var candidate: Vector3 = _beam_pos[i]
 	var dest_score: float = _beam_dest[i]
-	var lane: float = _beam_lane[i]
 	var decay: float = _beam_decay[i]
 	var safety: float = _beam_safety[i]
-	var row_scale: float = lane * decay * safety
+	var row_scale: float = decay * safety
 	var step_needs: float = dest_score
 	if row_scale > 0.0:
 		step_needs = maxf(step_needs, (best_so_far + _beam_cost[i]) / row_scale)
@@ -769,7 +759,7 @@ func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false
 				0.0, _field.pass_option_from(ctx, candidate,
 						dest_score + _field.pass_option_at_self) - _field.pass_option_at_self))
 	_beam_dest[i] = dest_score
-	return dest_score * lane * decay * safety - _beam_cost[i]
+	return dest_score * decay * safety - _beam_cost[i]
 
 
 # FULL eval of a single candidate — base + two-ply upgrade in one call: a

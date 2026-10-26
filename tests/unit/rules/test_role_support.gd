@@ -130,14 +130,17 @@ func test_stays_goal_side_of_carrier() -> void:
 
 
 # A pass in flight on a 2-on-1: the passer is SUPPORT, the receiver driving at
-# the net, their only skater back. Team 0 attacks -Z.
-func _feed_in_flight_ctx(with_receiver: bool) -> RoleContext:
+# the net, their only skater back. The receiver skating at their net covers no
+# counter at ours; `with_cover` adds a mate standing at our blue line who does.
+# Team 0 attacks -Z.
+func _feed_in_flight_ctx(with_cover: bool) -> RoleContext:
 	var skaters: Array = [
 		[1, TEAM_ID, Vector3(-3.7, 0, -10.2), Vector3(2.8, 0, -3.9)],   # the passer
 		[200, 1, Vector3(0.3, 0, -19.8), Vector3(2.6, 0, -2.2)],         # the lone D
+		[2, TEAM_ID, Vector3(3.8, 0, -14.7), Vector3(-0.5, 0, -7.8)],   # the receiver
 	]
-	if with_receiver:
-		skaters.append([2, TEAM_ID, Vector3(3.8, 0, -14.7), Vector3(-0.5, 0, -7.8)])
+	if with_cover:
+		skaters.append([3, TEAM_ID, Vector3(-2.0, 0, GameRules.BLUE_LINE_Z), Vector3.ZERO])
 	var ctx: RoleContext = _make_ctx(skaters[0][2], -1, skaters)
 	ctx.snapshot.puck_state.position = Vector3(-1.9, 0, -15.4)
 	ctx.snapshot.puck_state.velocity = Vector3(9.9, 0, -7.3)
@@ -146,7 +149,7 @@ func _feed_in_flight_ctx(with_receiver: bool) -> RoleContext:
 
 
 func test_a_support_a_teammate_covers_for_joins_the_attack() -> void:
-	# The receiver beats a counter home, so the passer is not the last man back:
+	# A mate beats a counter home, so the passer is not the last man back:
 	# nothing holds him goal-side of the puck, and he goes forward with it.
 	var ctx: RoleContext = _feed_in_flight_ctx(true)
 	var puck_z: float = ctx.snapshot.puck_state.position.z

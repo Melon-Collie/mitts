@@ -450,7 +450,7 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 
 # Lane-clear factor in [0, 1] for a FIRED puck (shot or pass) — the
 # closest-approach reachability model (see the doc-block above the lane
-# constants), not the carry-path AICarrySpace.carry_lane_clearance.
+# constants); a carried puck's path is AICarrySpace.carry_safety's.
 # `puck_speed_m_s` is the speed the puck travels the segment. `opponent_vels`
 # is an OPTIONAL array index-matched to `opponents`; missing entries read as
 # stationary.

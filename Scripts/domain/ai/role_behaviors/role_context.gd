@@ -174,6 +174,13 @@ var scratch_opp_caps: Array[AISkaterCaps] = []
 var scratch_opp_ids: Array[int] = []
 # Index-matched to scratch_opp_positions: each opponent's velocity, never led.
 var scratch_opp_vels: Array[Vector3] = []
+# The defence our carrier's feed is read against (AIRoleReads.collect_feed_defence),
+# index-matched: each opponent and his blade carried to the release, his
+# velocity and his build.
+var scratch_feed_opp_release: Array[Vector3] = []
+var scratch_feed_opp_blades: Array[Vector3] = []
+var scratch_feed_opp_vels: Array[Vector3] = []
+var scratch_feed_opp_caps: Array[AISkaterCaps] = []
 # Our possession read against the opponents (AIRoleReads.attack_possession), over
 # the opponent buffers above.
 var scratch_attack_possession := AIPossessionValue.new()
@@ -188,5 +195,7 @@ var scratch_defence_possession := AIPossessionValue.new()
 var scratch_opp_receivers: Array[Vector3] = []
 # Option-value upper bounds (AIDefensiveVerbs.carrier_option_bases).
 var scratch_option_bases: Array[float] = []
+# A feed station's argmax (AIFeedStationPick).
+var scratch_feed_pick := AIFeedStationPick.new()
 # AIDefensiveVerbs.read_carrier_approach's output.
 var scratch_carrier_approach := AICarrierApproach.new()

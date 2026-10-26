@@ -760,13 +760,13 @@ to lose the forward stand, and neither is "control is contested":
 
 - they have it **and** it is coming at us (`Mode.RUSH` — a bottled carrier reads REGROUP,
   and forechecking a bottled carrier is exactly right), or
-- somebody is **behind** us and nobody is covering for us (`has_support_behind`, which
-  survived §10).
+- somebody is **behind** us and nobody is covering for us (`_attacker_behind`: no
+  teammate is better placed to get goal-side of him, raced on the arrival clock).
 
 Which body counts as "support behind" falls out of the geometry rather than being named.
 During an O-zone cycle the **points are the rearmost bodies** (~9 m off our blue line);
-F3's high-slot float sits ~8 m further up-ice. So the points read no support and respect
-any man who gets behind them (correct — they *are* the last layer), while F3 reads the
+F3's high-slot float sits ~8 m further up-ice. So the points are the best-placed bodies
+against any man who gets behind them and respect him (correct — they *are* the last layer), while F3 reads the
 points as his support and holds his float (correct — the layer behind him is home). The
 turnover-conscious forward is `HIGH_SLOT` / `F3_HIGH`, the designated first man back;
 `SUPPORT` / `TRAILER` prices turnover risk natively via `counter_rush_cost`, and (since the

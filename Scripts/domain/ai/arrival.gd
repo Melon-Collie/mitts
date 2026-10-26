@@ -102,6 +102,15 @@ static func time_to_arrive_caps(from_pos: Vector3, dest: Vector3,
 			caps.lateral_grip)
 
 
+# The brake a body built as `caps` (null: the league build) owes after arriving
+# at full stride before he stands SET there: his top speed shed at the arrival
+# brake. Beating a man somewhere stride-for-stride is chasing him, not being
+# there first.
+static func set_margin_s(caps: AISkaterCaps) -> float:
+	var vmax: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	return vmax / AISteering.ARRIVAL_BRAKE_DECEL_M_S2
+
+
 # Extra lateral/depth clearance the net-aware ETA's corner waypoints keep
 # beyond the inflated frame — a body's half-width, the corner is skated
 # around, not clipped (see _time_to_arrive_routed).

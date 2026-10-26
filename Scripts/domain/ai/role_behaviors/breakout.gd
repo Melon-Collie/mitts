@@ -9,11 +9,12 @@ class_name AIRoleBreakout
 #     side, held goal-side of the carrier so a reverse is always on and the
 #     carrier is never the last man back.
 #
-# Both argmax `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) × our possession
-# of c` (AIPossessionValue, him there when the pass arrives, moving as he is).
-# lane_clear is the carrier's own pass model, so the outlet stands where his lane
-# really is clean; the possession read rewards up-ice progress and, unlike
-# score_pass, stays non-zero deep in our zone.
+# Both argmax the feed to c as the carrier prices it (AIFeedStationPick): our
+# possession of c (AIPossessionValue, him there when the pass arrives, moving as
+# he is) over the carrier's own lane read (AIRoleReads.feed_lane), less theirs
+# where it is picked off, so the outlet stands where his lane really is clean.
+# The possession read rewards up-ice progress and, unlike score_pass, stays
+# non-zero deep in our zone.
 
 # Lateral inset from the boards for the strong-side wall: a shoulder of air, no
 # more. The STRONG outlet is the rim receiver, so the boards line must stay
@@ -34,10 +35,6 @@ const MID_SEAM_FRACTION: float = 0.5
 # the boards on the outlet's side.
 const WALL_LANE_BAND_M: float = 3.0
 
-# Floor on the lane term, so dead lanes still rank candidates: a forechecker
-# draped on the carrier zeroes every lane, and without the floor the outlet would
-# freeze.
-const BLOCKED_LANE_FLOOR: float = 0.15
 
 
 # `is_strong` selects the strong-side-wall outlet (true) vs the
@@ -68,8 +65,11 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 
 	var possession: AIPossessionValue = AIRoleReads.attack_possession(ctx,
 			opp_positions)
-	var best_pos: Vector3 = ctx.self_pos
-	var best_score: float = -INF
+	var theirs: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammate_positions)
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
+	var pick: AIFeedStationPick = ctx.scratch_feed_pick
+	pick.reset()
 	for c: Vector3 in candidates:
 		if not AIStationSearch.is_legal_position(c):
 			continue
@@ -79,19 +79,13 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		if not is_strong and not AIRoleSupport.is_goal_side_of_carrier(
 				c, carrier_pos, ctx.own_goal_dir):
 			continue
-		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
-		var lane: float = AIPuckLane.lane_clear(
-				carrier_pos, c, opp_positions, pass_speed,
-				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
+		var pass_speed: float = AIRoleReads.feed_speed(ctx, origin, c)
+		var held: float = possession.at(c, origin.distance_to(c) / pass_speed,
 				ctx.self_velocity, ctx.caps_by_peer.get(ctx.peer_id))
-		var score: float = maxf(lane, BLOCKED_LANE_FLOOR) * held \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
-		if score > best_score:
-			best_score = score
-			best_pos = c
+		pick.offer(ctx, origin, c, pass_speed, held, AIStationSearch.incumbent_bonus(ctx, c),
+				theirs)
 
-	d.target_position = best_pos
+	d.target_position = pick.best(ctx.self_pos)
 	return d
 
 

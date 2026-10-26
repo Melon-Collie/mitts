@@ -323,14 +323,17 @@ behind you gives a retreat nothing to cover, so it cannot send bodies home; and
 shrinking the leash under pressure turns an outer bound into an attractor that
 drags a POINT into the corner. The pressure-dependent "give close support under
 heavy pressure" belongs to SUPPORT's own positioning, which already prices
-pressure. **SUPPORT** (`has_support_behind`) and **NUMBERS** (an attacker behind
-my stand) are the two that bind.
+pressure. **NUMBERS** (an attacker behind my stand) and **SUPPORT** (a teammate
+better placed than me to get goal-side of him — the best lead on his run at our
+net, on everyone's arrival clock) are the two that bind, read together: the
+station retreats only for a man it is the best-placed body to pick up.
 
 The D-vs-forward asymmetry needs **no per-position appetite scalar** — it emerges
-from who is physically rearmost. In an O-zone cycle the POINTS are the rearmost
-bodies (~9 m from our blue line), so they read no support and respect any man who
-gets behind them: they ARE the last layer. F3's high-slot float sits ~8 m further
-up-ice, reads the points as support, and holds.
+from who is best placed. In an O-zone cycle the POINTS sit ~8 m nearer our net
+than F3's high-slot float, so against a man behind them they are the bodies who
+get goal-side first: they ARE the last layer, and F3 holds. A point skating
+up-ice at full stride, or one parked at the far boards, is no longer the better
+placed body just for being deeper.
 
 And when the read says back off, the target is **not home**. Better a 3-on-2 than
 a pinch that becomes a 3-on-1: backing off restores a NUMBERS LAYER and then
@@ -395,8 +398,9 @@ So the TRANS_DEFENSE → DZONE re-election is not a geometry discontinuity: *the
 who gapped a carrier through the neutral zone keeps him into the zone; there is
 no handoff at the line.* The same holds for the route (above) and for the hit:
 the pressurer commits a body check only with support behind
-(`AILastManDiscipline.has_support_behind`) or a cover its caller has already
-priced (the pinch's rotation), because a committed hit loads him on
+(`AILastManDiscipline.has_support_behind`: a teammate who can still get
+goal-side of the carrier's run past us before he reaches our net) or a cover
+its caller has already priced (the pinch's rotation), because a committed hit loads him on
 a shoulder at half a stride, and the last man back who throws one at a carrier
 with speed is skated around (`test_speed_rush_defence.gd`).
 

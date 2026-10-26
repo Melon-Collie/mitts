@@ -25,8 +25,11 @@ func _cost(teammates: Array[Vector3], self_pos: Vector3,
 	for _i: int in opponents.size():
 		opp_vels.append(Vector3.ZERO)
 		opp_caps.append(null)
+	var self_caps := AISkaterCaps.new()
+	self_caps.max_speed = self_speed
 	return AIActionScoring.counter_rush_cost(
-			LOSS_POINT, 1.0, OUR_NET, OUR_GOALIE, teammates, self_pos, self_speed, opponents, opp_vels, opp_caps)
+			LOSS_POINT, 1.0, OUR_NET, OUR_GOALIE, teammates, self_pos, self_caps, opponents,
+			opp_vels, opp_caps)
 
 
 # Their possession of the loss point with nobody of ours to contest it — what
@@ -81,7 +84,7 @@ func _self_cover_cost(recover_from: Vector3) -> float:
 	var no_mates: Array[Vector3] = []
 	return AIActionScoring.counter_rush_cost(
 			Vector3.ZERO, 1.0, net, goalie, no_mates,
-			recover_from, AIArrival.SKATER_REF_SPEED_M_S, opps, vels, [])
+			recover_from, null, opps, vels, [])
 
 
 func test_covering_self_erases_the_counter_from_a_recoverable_spot() -> void:
@@ -118,7 +121,8 @@ func test_zero_loss_prob_is_free() -> void:
 	var opp_vels: Array[Vector3] = [Vector3.ZERO]
 	var opp_caps: Array = [null]
 	assert_eq(AIActionScoring.counter_rush_cost(
-			LOSS_POINT, 0.0, OUR_NET, OUR_GOALIE, nobody, LOSS_POINT, 8.0, opponents, opp_vels, opp_caps), 0.0)
+			LOSS_POINT, 0.0, OUR_NET, OUR_GOALIE, nobody, LOSS_POINT, null, opponents, opp_vels,
+			opp_caps), 0.0)
 
 
 func test_sooner_counter_costs_more() -> void:
@@ -172,3 +176,35 @@ func test_counter_rush_calibration_snapshot() -> void:
 	snap.record("centre-ice loss, carrier recovers from our slot", _self_cover_cost(Vector3(0, 0, 14)))
 	snap.record("centre-ice loss, carrier 15 m past the play", _self_cover_cost(Vector3(0, 0, -15)))
 	snap.verify(self)
+
+
+func test_a_collector_skating_away_from_our_net_brings_the_counter_later() -> void:
+	# The counter is collect-and-carry on the arrival clock: a man who collects
+	# skating up-ice has to turn it home, one already skating home does not.
+	var opps: Array[Vector3] = [Vector3(6.0, 0.0, -22.0)]   # just past the loss
+	var away: Array[Vector3] = [Vector3(0.0, 0.0, -7.0)]
+	var home: Array[Vector3] = [Vector3(0.0, 0.0, 7.0)]
+	assert_gt(AIActionScoring.counter_time(LOSS_POINT, OUR_NET, opps, away, [null]),
+			AIActionScoring.counter_time(LOSS_POINT, OUR_NET, opps, home, [null]))
+
+
+func test_the_counter_is_never_home_before_the_puck_is_collected() -> void:
+	# A lone opponent nearer our net than the loss cannot feed himself: his
+	# counter starts when he has the puck.
+	var opps: Array[Vector3] = [Vector3(0.0, 0.0, -6.0)]
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	var t_collect: float = AIArrival.time_to_arrive_caps(opps[0], LOSS_POINT, Vector3.ZERO, null)
+	assert_gt(AIActionScoring.counter_time(LOSS_POINT, OUR_NET, opps, vels, [null]), t_collect)
+
+
+func test_a_mate_covers_by_standing_set_on_his_own_build() -> void:
+	# Cover is the mate's arrival on his build and momentum plus his brake: the
+	# same spot covers sooner standing than skating away from home.
+	var mates: Array[Vector3] = [Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 0.0)]
+	var vels: Array[Vector3] = [Vector3.ZERO, Vector3(0.0, 0.0, -8.0)]
+	var etas: Array[float] = []
+	AIActionScoring.fill_counter_cover_etas(OUR_NET, mates, vels, [null, null], etas)
+	assert_lt(etas[0], etas[1], "skating up-ice at full stride he is home later")
+	var cp: Vector3 = AIActionScoring.counter_point_for(OUR_NET)
+	assert_almost_eq(etas[0], AIArrival.time_to_arrive_caps(mates[0], cp, Vector3.ZERO, null)
+			+ AIArrival.set_margin_s(null), 1e-4, "arrival, then the brake to set")

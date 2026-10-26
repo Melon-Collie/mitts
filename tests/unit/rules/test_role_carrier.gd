@@ -281,6 +281,42 @@ func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 			0.8), now, "fed, his drive starts 0.8 s from now")
 
 
+func test_a_station_reads_the_feed_its_carrier_reads() -> void:
+	# A receiver station prices its feed on the passer's own read (AIRoleReads
+	# .feed_lane): the same release point and the same defence, carried to the
+	# release with its blades, velocities and builds, as AICarrierField.fill.
+	var self_pos := Vector3(2.0, 0.0, 10.0)
+	var ctx := _make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos, false, Vector3(1.0, 0.0, -6.0)],
+			[2, TEAM_ID, Vector3(-8.0, 0.0, 2.0)],
+			[11, 1, Vector3(-3.0, 0.0, 4.0), false, Vector3(-2.0, 0.0, 4.0)],
+			[12, 1, Vector3(6.0, 0.0, -2.0), false, Vector3(0.0, 0.0, 3.0)]])
+	ctx.self_velocity = Vector3(1.0, 0.0, -6.0)
+	ctx.snapshot.skater_states[11].blade_contact_world = Vector3(-2.2, 0.1, 3.3)
+	ctx.snapshot.skater_states[12].blade_contact_world = Vector3(5.1, 0.1, -1.4)
+	var big := AISkaterCaps.new()
+	big.max_speed = 9.5
+	ctx.caps_by_peer = {12: big}
+	var field := AICarrierField.new()
+	field.fill(ctx)
+
+	var station := RoleContext.new()
+	station.snapshot = ctx.snapshot
+	station.peer_id = 2
+	station.team_id = TEAM_ID
+	station.team_id_by_peer = ctx.team_id_by_peer
+	station.caps_by_peer = ctx.caps_by_peer
+	AIRoleReads.collect_feed_defence(station)
+	assert_eq(AIRoleReads.feed_origin(station, self_pos), AICarrierField.pass_origin(ctx),
+			"the feed leaves where the passer releases it")
+	assert_eq(station.scratch_feed_opp_release, field.opponents_release,
+			"the defence at the release")
+	assert_eq(station.scratch_feed_opp_blades, field.opponent_blades_release,
+			"their blades at the release")
+	assert_eq(station.scratch_feed_opp_vels, field.opponent_vels, "their skating")
+	assert_eq(station.scratch_feed_opp_caps, field.opponent_caps, "their builds")
+
+
 func test_forward_pressure_is_directional_and_the_pass_must_be_earned() -> void:
 	# Forward pressure is read as controlled space (AICarrySpace.controlled_space),
 	# so a defender between the carrier and the zone costs the carry more than the

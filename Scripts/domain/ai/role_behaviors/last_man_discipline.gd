@@ -4,8 +4,9 @@ class_name AILastManDiscipline
 # falls back to when it may not — the numbers floor, the retreat floor, the
 # house gate — plus PRESSURE's step-up bound. See Scripts/domain/ai/CLAUDE.md →
 # "Last-man discipline". The pinch read's three facts (docs/transition-defense-
-# plan.md §13): SUPPORT is has_support_behind, NUMBERS is _attacker_behind;
-# CONTROL stays unread (CLAUDE.md → "The three facts a station reads").
+# plan.md §13): SUPPORT and NUMBERS are _attacker_behind (a man behind us whom
+# no teammate is better placed to pick up); CONTROL stays unread (CLAUDE.md →
+# "The three facts a station reads").
 
 
 # While HOLDING, a station demands this much extra separation before it accepts
@@ -33,9 +34,9 @@ static func may_hold_forward_stand(ctx: RoleContext, was_holding: bool,
 		# exactly who you pinch on. The trigger is that they are moving out
 		# (Mode.RUSH); bottled or turning back reads REGROUP: hold.
 		return false
-	# The numbers half: nobody behind us, or somebody covering for us if we get
-	# beaten. `was_holding` makes it hysteretic — see _attacker_behind.
-	return has_support_behind(ctx) or not _attacker_behind(ctx, stand, was_holding)
+	# The numbers half: nobody behind us that we are the body to pick up.
+	# `was_holding` makes it hysteretic — see _attacker_behind.
+	return not _attacker_behind(ctx, stand, was_holding)
 
 
 # True when one of ours carries the puck — whether a station is making a pinch
@@ -132,8 +133,8 @@ static func neutral_station_target(ctx: RoleContext, stand: Vector3,
 
 # ── "If I go, is anybody home?" ──────────────────────────────────────────────
 #
-# has_support_behind's depth read, minus the elected chaser (committed to the
-# puck, he holds nothing) and with a cover-envelope margin, so two bodies level
+# A teammate deeper than us by a cover envelope, the elected chaser aside
+# (committed to the puck, he holds nothing). With the margin, two bodies level
 # with each other cover nothing for one another. Antisymmetric: exactly one body
 # draws the layer, and no two can each appoint the other.
 static func home_layer_behind_me(ctx: RoleContext) -> bool:
@@ -155,7 +156,8 @@ static func home_layer_behind_me(ctx: RoleContext) -> bool:
 	return false
 
 
-# Is any attacker deeper (nearer our net) than `stand`, as we have to race him?
+# Is any attacker deeper (nearer our net) than `stand`, as we have to race him,
+# with no teammate better placed than us to pick him up?
 static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 		was_holding: bool = false) -> bool:
 	var our_net: Vector3 = ctx.defending_goal_pos
@@ -166,26 +168,116 @@ static func _attacker_behind(ctx: RoleContext, stand: Vector3,
 	if was_holding:
 		margin += BEHIND_HOLD_EXTRA_M
 	for pid: int in ctx.rush_read.attackers:
-		if AIRoleRushD.race_depth_to_net(ctx, pid) < stand_d - margin:
+		if AIRoleRushD.race_depth_to_net(ctx, pid) < stand_d - margin \
+				and not _mate_better_placed(ctx, pid):
 			return true
 	return false
 
 
-# True when a teammate is deeper toward our net than we are — a layer that picks
-# the carrier up if our challenge is beaten. False: we are the last man back.
-# A depth read, not a race: "beaten wide, nobody home" is a positional question.
-static func has_support_behind(ctx: RoleContext) -> bool:
-	if ctx.snapshot == null:
+# True when a teammate can still get goal-side of the threat on his run at our
+# net, somewhere past us, before he gets there: the layer that picks him up
+# if our challenge is beaten. False: we are the last man back. The threat is
+# `ap`'s subject (carrier or loose puck), timed on its carrier's build; nobody
+# is charged the time it takes him to beat us.
+static func has_support_behind(ctx: RoleContext, ap: AICarrierApproach) -> bool:
+	if ctx.snapshot == null or ap.dir_net == Vector3.ZERO:
 		return false
-	var my_depth: float = ctx.own_goal_dir * ctx.self_pos.z
-	for pid: int in ctx.snapshot.skater_states:
-		if pid == ctx.peer_id:
+	var line_len: float = ap.net_dist
+	# Only ground past us covers for us: a mate who is goal-side of him only
+	# where we already are is level with the challenge, not behind it.
+	var from_s: float = maxf((ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x
+			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
+			+ AIRushRead.cover_envelope_m(), 0.0)
+	if from_s >= line_len:
+		return false
+	var threat_caps: AISkaterCaps = ctx.caps_by_peer.get(_threat_peer(ctx))
+	for k: int in range(1, SUPPORT_RACE_SAMPLES + 1):
+		var s: float = from_s + (line_len - from_s) * float(k) / SUPPORT_RACE_SAMPLES
+		var spot: Vector3 = ap.carrier_pos + ap.dir_net * s
+		var t_threat: float = AIArrival.time_to_arrive_caps(
+				ap.carrier_pos, spot, ap.carrier_vel, threat_caps)
+		for pid: int in ctx.snapshot.skater_states:
+			if pid == ctx.peer_id or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
+				continue
+			var mate: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+			if mate.is_ghost:
+				continue
+			# Exact prescreen: no skate there beats the straight line at his best pace.
+			var caps: AISkaterCaps = ctx.caps_by_peer.get(pid)
+			var pace: float = maxf(caps.max_speed if caps != null
+					else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S, mate.velocity.length())
+			if AIRoleReads.xz_distance(mate.position, spot) > pace * t_threat:
+				continue
+			if AIArrival.time_to_arrive_caps(mate.position, spot, mate.velocity, caps) \
+					<= t_threat:
+				return true
+	return false
+
+
+# Points on a threat's run that the support races sample, evenly to its end.
+const SUPPORT_RACE_SAMPLES: int = 4
+
+
+# The opposing carrier, whose build a threat run is timed on; -1 (the league
+# build) for a loose puck or our own.
+static func _threat_peer(ctx: RoleContext) -> int:
+	if ctx.snapshot.puck_state == null:
+		return -1
+	var pid: int = ctx.snapshot.puck_state.carrier_peer_id
+	if pid == -1 or ctx.team_id_by_peer.get(pid, -1) == ctx.team_id:
+		return -1
+	return pid
+
+
+# Is some teammate better placed than us to get goal-side of attacker `pid` on
+# his run at our net? Placement is the best lead a body can take on him at any
+# point of the run (arrival time against his). The station that is not the best
+# placed body has no business retreating for him: someone else gets there
+# first. Ties go to the lower peer id, so exactly one body draws the job. Our
+# carrier is not a candidate: the man behind matters only once the puck is lost.
+static func _mate_better_placed(ctx: RoleContext, pid: int) -> bool:
+	var threat: SkaterNetworkState = ctx.snapshot.skater_states.get(pid)
+	if threat == null:
+		return false
+	var our_net: Vector3 = ctx.defending_goal_pos
+	var net_dist: float = AIRoleReads.xz_distance(threat.position, our_net)
+	if net_dist < 0.001:
+		return false
+	var dir_net := Vector3((our_net.x - threat.position.x) / net_dist, 0.0,
+			(our_net.z - threat.position.z) / net_dist)
+	var line_len: float = net_dist
+	var threat_caps: AISkaterCaps = ctx.caps_by_peer.get(pid)
+	var mine: float = _lead_on_run(threat, threat_caps, dir_net, line_len,
+			ctx.self_pos, ctx.self_velocity, ctx.caps_by_peer.get(ctx.peer_id))
+	var carrier: int = ctx.snapshot.puck_state.carrier_peer_id \
+			if ctx.snapshot.puck_state != null else -1
+	for mate_pid: int in ctx.snapshot.skater_states:
+		if mate_pid == ctx.peer_id or mate_pid == carrier \
+				or ctx.team_id_by_peer.get(mate_pid, -1) != ctx.team_id:
 			continue
-		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
+		var mate: SkaterNetworkState = ctx.snapshot.skater_states[mate_pid]
+		if mate.is_ghost:
 			continue
-		if ctx.own_goal_dir * ctx.snapshot.skater_states[pid].position.z > my_depth:
+		var theirs: float = _lead_on_run(threat, threat_caps, dir_net, line_len,
+				mate.position, mate.velocity, ctx.caps_by_peer.get(mate_pid))
+		if theirs > mine or (theirs == mine and mate_pid < ctx.peer_id):
 			return true
 	return false
+
+
+# The most time a body arrives ahead of a threat at any sampled point of his run
+# (negative: it is beaten everywhere).
+static func _lead_on_run(threat: SkaterNetworkState, threat_caps: AISkaterCaps,
+		dir_net: Vector3, line_len: float, body_pos: Vector3, body_vel: Vector3,
+		body_caps: AISkaterCaps) -> float:
+	var best: float = -INF
+	for k: int in range(1, SUPPORT_RACE_SAMPLES + 1):
+		var spot: Vector3 = threat.position + dir_net * (line_len * float(k) / SUPPORT_RACE_SAMPLES)
+		var lead: float = AIArrival.time_to_arrive_caps(
+				threat.position, spot, threat.velocity, threat_caps) \
+				- AIArrival.time_to_arrive_caps(body_pos, spot, body_vel, body_caps)
+		best = maxf(best, lead)
+	return best
 
 
 # The shallowest stand depth — metres goal-side of `threat_pos` along `dir_net`
@@ -212,20 +304,38 @@ static func has_support_behind(ctx: RoleContext) -> bool:
 # Never re-derive it as a per-dispatch step-up plan: recomputed with no memory
 # of the plan it revises, that shape ratchets.
 #
+# `threat_peer` is the man who drives at our net from the threat, bursting from
+# `closing` on his own build the moment we commit (approach_speed_cap); -1 for
+# nobody, when only `closing` itself comes at us.
+#
 # Returns `desired_depth` unchanged when no bound applies (a stand already
-# goal-side of us, or a threat not closing).
+# goal-side of us, or nothing coming at us).
 static func settable_stand_depth(ctx: RoleContext, threat_pos: Vector3,
-		dir_net: Vector3, desired_depth: float, closing: float) -> float:
+		dir_net: Vector3, desired_depth: float, closing: float,
+		threat_peer: int = -1) -> float:
 	var self_along: float = (ctx.self_pos.x - threat_pos.x) * dir_net.x \
 			+ (ctx.self_pos.z - threat_pos.z) * dir_net.z
 	var spare: float = self_along - desired_depth
-	if spare <= 0.0 or closing <= 0.01:
+	if spare <= 0.0 or (closing <= 0.01 and threat_peer == -1):
 		return desired_depth
-	var v_cap: float = approach_speed_cap(
-			spare, closing, ctx.self_max_speed, ctx.self_max_accel)
+	var threat_vmax: float = 0.0
+	var threat_accel: float = 0.0
+	if threat_peer != -1:
+		var caps: AISkaterCaps = ctx.caps_by_peer.get(threat_peer)
+		threat_vmax = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+		threat_accel = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var v_cap: float = approach_speed_cap(spare, closing, ctx.self_max_speed,
+			ctx.self_max_accel, threat_vmax, threat_accel)
 	var brake_lead: float = v_cap * v_cap \
 			/ (2.0 * AISteering.ARRIVAL_BRAKE_DECEL_M_S2)
 	return maxf(desired_depth, self_along - brake_lead)
+
+
+# Their man on a loose puck — who drives at our net once he has it — or -1.
+static func loose_puck_driver(ctx: RoleContext) -> int:
+	if ctx.snapshot == null:
+		return -1
+	return ctx.snapshot.closest_to_puck_by_team.get(1 - ctx.team_id, -1)
 
 
 # Halvings of [0, v_max] approach_speed_cap solves to: under a centimetre a second

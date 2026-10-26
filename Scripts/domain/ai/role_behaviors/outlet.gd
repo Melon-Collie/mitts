@@ -4,9 +4,9 @@ class_name AIRoleOutlet
 # stretch-pass option waiting NZ-side of the opp blue line. It accepts being
 # past the play; defensive responsibility falls to SUPPORT.
 #
-# Argmax over `max(lane_clear(carrier → c), BLOCKED_LANE_FLOOR) × our possession
-# of c` (AIPossessionValue, him there when the pass arrives, moving as he is), as
-# the BREAKOUT outlets do: this far from the opp goal a shot from the spot is ~0,
+# Argmax over the feed to c as the carrier prices it (AIFeedStationPick, our
+# possession of c, him there when the pass arrives, moving as he is), as the
+# BREAKOUT outlets do: this far from the opp goal a shot from the spot is ~0,
 # so a score_pass argmax would read ~0 for every candidate and go blind to a
 # defender on the spot or in the lane.
 
@@ -73,8 +73,11 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	var possession: AIPossessionValue = AIRoleReads.attack_possession(ctx,
 			opp_positions)
-	var best_pos: Vector3 = ctx.self_pos
-	var best_score: float = -INF
+	var theirs: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammate_positions)
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
+	var pick: AIFeedStationPick = ctx.scratch_feed_pick
+	pick.reset()
 	for c: Vector3 in candidates:
 		if not AIStationSearch.is_legal_position(c):
 			continue
@@ -86,21 +89,13 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
-		# The speed our carrier would actually fire at — on a long pass, the
-		# charged speed.
-		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
-		var lane: float = AIPuckLane.lane_clear(
-				carrier_pos, c, opp_positions, pass_speed,
-				AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-		var held: float = possession.at(c, carrier_pos.distance_to(c) / pass_speed,
+		var pass_speed: float = AIRoleReads.feed_speed(ctx, origin, c)
+		var held: float = possession.at(c, origin.distance_to(c) / pass_speed,
 				ctx.self_velocity, ctx.caps_by_peer.get(ctx.peer_id))
-		var score: float = maxf(lane, AIRoleBreakout.BLOCKED_LANE_FLOOR) * held \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
-		if score > best_score:
-			best_score = score
-			best_pos = c
+		pick.offer(ctx, origin, c, pass_speed, held, AIStationSearch.incumbent_bonus(ctx, c),
+				theirs)
 
-	d.target_position = best_pos
+	d.target_position = pick.best(ctx.self_pos)
 	return d
 
 

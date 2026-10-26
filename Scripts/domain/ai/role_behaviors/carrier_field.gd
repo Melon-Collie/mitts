@@ -57,8 +57,9 @@ var opponent_blades_release: Array[Vector3] = []
 var our_defenders: Array[Vector3] = []
 var our_defender_caps: Array[AISkaterCaps] = []
 var our_defender_vels: Array[Vector3] = []
-# Teammate ETAs to the counter point (5v5), candidate-invariant across a phase,
-# and the counter-threat memo by covering-body count, -1-seeded with them.
+# Teammate times to stand set at the counter point (5v5), candidate-invariant
+# across a phase, and the counter-threat memo by covering-body count, -1-seeded
+# with them.
 var exposure_mate_etas: Array[float] = []
 var exposure_threat_memo: Array[float] = []
 var exposure_opp_home: Array[float] = []
@@ -126,12 +127,12 @@ func fill(ctx: RoleContext) -> void:
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
 			our_defender_vels.append(s.velocity)
 	if ctx.team_size >= 5:
-		AIActionScoring.fill_counter_cover_etas(
-				ctx.defending_goal_pos, our_defenders, exposure_mate_etas)
+		AIActionScoring.fill_counter_cover_etas(ctx.defending_goal_pos, our_defenders,
+				our_defender_vels, our_defender_caps, exposure_mate_etas)
 		exposure_threat_memo.resize(our_defenders.size() + 2)
 		exposure_threat_memo.fill(-1.0)
-		AIActionScoring.fill_counter_opp_home(
-				ctx.defending_goal_pos, opponents, opponent_caps, exposure_opp_home)
+		AIActionScoring.fill_counter_opp_home(ctx.defending_goal_pos, opponents,
+				opponent_vels, opponent_caps, exposure_opp_home)
 	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
 	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
 			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
@@ -233,7 +234,7 @@ func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 	return appetite * AIActionScoring.counter_rush_cost(
 			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
 			our_defenders,
-			recover_from, ctx.self_max_speed,
+			recover_from, ctx.caps_by_peer.get(ctx.peer_id),
 			opponents, opponent_vels, opponent_caps,
 			exposure_mate_etas, exposure_threat_memo, true, exposure_opp_home)
 
@@ -284,7 +285,11 @@ static func pass_origin(ctx: RoleContext) -> Vector3:
 	if ctx.snapshot.puck_state != null:
 		at = Vector3(ctx.snapshot.puck_state.position.x, 0.0,
 				ctx.snapshot.puck_state.position.z)
-	var v: Vector3 = ctx.self_velocity
+	return pass_origin_from(at, ctx.self_velocity)
+
+
+# pass_origin for a puck at `at` carried by a skater moving at `v`.
+static func pass_origin_from(at: Vector3, v: Vector3) -> Vector3:
 	var speed: float = sqrt(v.x * v.x + v.z * v.z)
 	if speed < 0.01:
 		return at

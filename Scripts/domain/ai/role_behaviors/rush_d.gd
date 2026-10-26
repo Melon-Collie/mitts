@@ -74,7 +74,6 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 		return d
 	var dir_net: Vector3 = ap.dir_net
 	var dist: float = ap.net_dist
-	var closing: float = ap.closing
 
 	var cushion: float = ramp_cushion_m(ctx, ap, read.carrier_peer)
 	var gap: float = _gap_for(ctx, read, carrier_pos, cushion)
@@ -88,7 +87,7 @@ static func _decide_d1(ctx: RoleContext) -> RoleDecision:
 	if gapping_up:
 		gap = minf(stick_m(ctx) * GAP_MIN_STICKS, dist)
 	elif ride == Vector3.ZERO:
-		gap = minf(_settable_gap(ctx, carrier_pos, dir_net, gap, closing), dist)
+		gap = minf(_settable_gap(ctx, ap, gap), dist)
 	# Stepping UP into the stand, or retreating with it? No dead band needed: the
 	# arrival brake it selects has its own hysteresis and speed floor.
 	var stepping_up: bool = _depth_along(ctx, carrier_pos, dir_net) > gap
@@ -504,12 +503,12 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 # Never apply it while the stand RIDES a man: the moving-frame route already
 # regulates its own approach, and the bound on top pins the stand to wherever
 # the defender stands.
-static func _settable_gap(ctx: RoleContext, carrier_pos: Vector3,
-		dir_net: Vector3, gap: float, closing: float) -> float:
-	if AILastManDiscipline.has_support_behind(ctx):
+static func _settable_gap(ctx: RoleContext, ap: AICarrierApproach, gap: float) -> float:
+	if AILastManDiscipline.has_support_behind(ctx, ap):
 		return gap
 	return AILastManDiscipline.settable_stand_depth(
-			ctx, carrier_pos, dir_net, gap, closing)
+			ctx, ap.carrier_pos, ap.dir_net, gap, ap.closing,
+			AILastManDiscipline.loose_puck_driver(ctx))
 
 
 # ── RUSH_D2: hold mid-ice, take the mid-lane drive ───────────────────────────

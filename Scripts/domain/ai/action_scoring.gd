@@ -371,11 +371,11 @@ const THREAT_GOALIE_HOME_M: float = AIGoalieModel.GOALIE_HOME_M
 # vacated. This is the additive second half:
 #   loss_prob × shot(counter_point | covering set) × delay_discount(t_counter)
 # counter_point is our slot (where a rush shoots from); t_counter the fastest
-# opponent's collect-and-carry there at his real Speed cap; the covering set
-# every teammate, and the carrier recovering from the candidate, who beats him
-# home, standing at the goal-side cover anchor (AIThreatAssignment.cover_anchor).
-# Teammates race at the league reference speed (their caps are not in scope).
-# One-up-one-back falls out with no pairing rule: a partner holding the point
+# opponent's collect-and-carry there, or collect-and-feed to an outlet already
+# ahead, all on the arrival clock; the covering set every teammate, and the
+# carrier recovering from the candidate, who stands SET there before him
+# (AIArrival.set_margin_s), at the goal-side cover anchor
+# (AIThreatAssignment.cover_anchor). One-up-one-back falls out with no pairing rule: a partner holding the point
 # beats any counter home.
 
 # Scratch for the covering-defender positions (caller-owned pattern; this
@@ -383,49 +383,68 @@ const THREAT_GOALIE_HOME_M: float = AIGoalieModel.GOALIE_HOME_M
 static var _scratch_counter_cover: Array[Vector3] = []
 
 
-# The counter point a rush shoots from, and each teammate's standing-start
-# ETA to it — candidate-invariant inputs the carrier precomputes once per
+# The counter point a rush shoots from, and each teammate's time to stand set
+# there — candidate-invariant inputs the carrier precomputes once per
 # compete (fill_counter_cover_etas) instead of re-racing per candidate.
 static func counter_point_for(our_net: Vector3) -> Vector3:
 	var own_dir: float = signf(our_net.z)
 	return Vector3(0.0, 0.0, our_net.z - own_dir * GameRules.SLOT_DIST_M)
 
 
-# A body covers a counter when he beats it home WITH TIME TO SET — the same
-# brake-to-arrive margin AIRoleSlots5.assign charges the RUSH_D1 deadline
-# (stride-for-stride beside the rush is chasing, not covering). League-paced,
-# like the mate ETAs it pads.
-const COUNTER_SET_MARGIN_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
-		/ AISteering.ARRIVAL_BRAKE_DECEL_M_S2
-
-
-# Whether a teammate (fill_counter_cover_etas' `mate_etas`) already covers a
-# counter reaching the counter point at `t_counter`.
+# Whether a teammate (fill_counter_cover_etas' `mate_etas`) already stands set
+# for a counter reaching the counter point at `t_counter`.
 static func counter_covered(t_counter: float, mate_etas: Array[float]) -> bool:
 	for eta: float in mate_etas:
-		if eta + COUNTER_SET_MARGIN_S <= t_counter:
+		if eta <= t_counter:
 			return true
 	return false
 
 
-static func fill_counter_cover_etas(our_net: Vector3,
-		teammates: Array[Vector3], out_etas: Array[float]) -> void:
+# Each teammate's time to stand set at the counter point: his arrival on his
+# build and momentum, then his brake (AIArrival.set_margin_s). Velocities and
+# caps index-matched to `teammates`; missing entries read as standing league
+# bodies.
+static func fill_counter_cover_etas(our_net: Vector3, teammates: Array[Vector3],
+		teammate_vels: Array[Vector3], teammate_caps: Array,
+		out_etas: Array[float]) -> void:
 	var cp: Vector3 = counter_point_for(our_net)
+	var has_vels: bool = teammate_vels.size() == teammates.size()
+	var has_caps: bool = teammate_caps.size() == teammates.size()
 	out_etas.clear()
-	for tm: Vector3 in teammates:
-		out_etas.append(tm.distance_to(cp) / AIArrival.SKATER_REF_SPEED_M_S)
+	for i: int in teammates.size():
+		var caps: AISkaterCaps = teammate_caps[i] if has_caps else null
+		out_etas.append(_set_at(teammates[i], cp,
+				teammate_vels[i] if has_vels else Vector3.ZERO, caps))
 
 
-# Each opponent's carry home to the counter point from rest, at his Speed cap:
+static func _set_at(from: Vector3, spot: Vector3, vel: Vector3, caps: AISkaterCaps) -> float:
+	return AIArrival.time_to_arrive_caps(from, spot, vel, caps) + AIArrival.set_margin_s(caps)
+
+
+# Whether a body built as `caps`, standing at `from`, stands set at `spot` by
+# `deadline`; screened first on the straight line at his top speed (exact: no
+# skate beats it).
+static func _sets_by(from: Vector3, spot: Vector3, caps: AISkaterCaps, deadline: float) -> bool:
+	var margin: float = AIArrival.set_margin_s(caps)
+	var vmax: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	if from.distance_to(spot) / vmax + margin > deadline:
+		return false
+	return AIArrival.time_to_arrive_caps(from, spot, Vector3.ZERO, caps) + margin <= deadline
+
+
+# Each opponent's run home to the counter point on his build and momentum:
 # what the pass-forward leg races, and the same for every loss point, so a
 # compete fills it once (counter_time's `opp_home`).
 static func fill_counter_opp_home(our_net: Vector3, opponents: Array[Vector3],
-		opponent_caps: Array, out_home: Array[float]) -> void:
+		opponent_vels: Array[Vector3], opponent_caps: Array,
+		out_home: Array[float]) -> void:
 	var cp: Vector3 = counter_point_for(our_net)
+	var has_vels: bool = opponent_vels.size() == opponents.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	out_home.clear()
 	for j: int in opponents.size():
-		out_home.append(AIArrival.time_to_arrive_caps(opponents[j], cp, Vector3.ZERO,
+		out_home.append(AIArrival.time_to_arrive_caps(opponents[j], cp,
+				opponent_vels[j] if has_vels else Vector3.ZERO,
 				_opponent_caps(opponent_caps, j, has_caps)))
 
 
@@ -436,7 +455,7 @@ static func counter_rush_cost(
 		our_goalie_pos: Vector3,
 		teammates: Array[Vector3],
 		self_recover_pos: Vector3,
-		self_max_speed: float,
+		self_caps: AISkaterCaps,
 		opponents: Array[Vector3],
 		opponent_vels: Array[Vector3],
 		opponent_caps: Array,
@@ -450,7 +469,7 @@ static func counter_rush_cost(
 			counter_time(loss_point, our_net, opponents, opponent_vels, opponent_caps,
 					opp_home),
 			loss_prob, our_net, our_goalie_pos, teammates, self_recover_pos,
-			self_max_speed, mate_etas, threat_by_cover, in_xg)
+			self_caps, mate_etas, threat_by_cover, in_xg)
 
 
 # When the fastest counter off a loss at `loss_point` reaches the counter point:
@@ -461,49 +480,66 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 		opponent_caps: Array, opp_home: Array[float] = []) -> float:
 	var counter_point: Vector3 = counter_point_for(our_net)
 
-	# Fastest opponent: collect the loss, then carry to the counter point at
-	# his top speed.
+	# Fastest opponent: collect the loss, then carry on to the counter point
+	# from the pace he collects it at.
 	var carry_dist: float = loss_point.distance_to(counter_point)
 	var t_counter: float = INF
 	var t_collect_best: float = INF
+	var collector: int = -1
+	var collector_caps: AISkaterCaps = null
 	var has_vels: bool = opponent_vels.size() == opponents.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	for i: int in opponents.size():
-		var speed: float = _opponent_speed(opponent_caps, i, has_caps)
+		var caps: AISkaterCaps = _opponent_caps(opponent_caps, i, has_caps)
 		var vel: Vector3 = opponent_vels[i] if has_vels else Vector3.ZERO
 		var t_collect: float = AIArrival.time_to_arrive_caps(opponents[i], loss_point, vel,
-				_opponent_caps(opponent_caps, i, has_caps))
+				caps)
 		if t_collect < t_collect_best:
 			t_collect_best = t_collect
-		var t: float = t_collect + carry_dist / maxf(speed, 0.001)
+			collector = i
+			collector_caps = caps
+		# Exact screen: no carry home beats the straight line at his top speed.
+		if t_collect + carry_dist / (caps.max_speed if caps != null
+				else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S) >= t_counter:
+			continue
+		var t: float = t_collect + AIArrival.time_to_arrive_caps(loss_point, counter_point,
+				_collect_velocity(opponents[i], loss_point, vel, t_collect, caps), caps)
 		if t < t_counter:
 			t_counter = t
 	if t_counter == INF:
 		return INF
 	# PASS-FORWARD leg: the counter can hit an outlet already AHEAD. From the
-	# fastest collect, price the hardest feed to each other opponent and HIS
-	# carry home from rest, and let the min compete with the lone-carrier time.
+	# fastest collect, the collector's hardest feed leads each other opponent
+	# home: the counter is there once both the feed and his run home are.
 	var has_home: bool = opp_home.size() == opponents.size()
+	var feed_s: float = t_collect_best + carry_dist / (collector_caps.wrister_shot_speed
+			if collector_caps != null else GameRules.DEFAULT_WRISTER_POWER_MAX_M_S)
 	for j: int in opponents.size():
 		# The feed only helps when the outlet is genuinely AHEAD of the
 		# lug — skip receivers whose own carry isn't shorter.
-		if opponents[j].distance_to(counter_point) >= carry_dist:
+		if j == collector or opponents[j].distance_to(counter_point) >= carry_dist:
 			continue
 		var home: float = opp_home[j] if has_home else AIArrival.time_to_arrive_caps(
-				opponents[j], counter_point, Vector3.ZERO,
+				opponents[j], counter_point,
+				opponent_vels[j] if has_vels else Vector3.ZERO,
 				_opponent_caps(opponent_caps, j, has_caps))
-		var t_pf: float = t_collect_best \
-				+ loss_point.distance_to(opponents[j]) \
-						/ GameRules.DEFAULT_WRISTER_POWER_MAX_M_S \
-				+ home
+		var t_pf: float = maxf(feed_s, home)
 		if t_pf < t_counter:
 			t_counter = t_pf
 	return t_counter
 
 
-static func _opponent_speed(opponent_caps: Array, i: int, has_caps: bool) -> float:
-	var caps: AISkaterCaps = _opponent_caps(opponent_caps, i, has_caps)
-	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
+# The velocity a man skating from `from` (at `vel`) collects a puck at `spot`
+# with, `t` later: his pace over the trip, capped at his top speed, along it —
+# the arrival clock's own effective-speed model. On the spot already, his own.
+static func _collect_velocity(from: Vector3, spot: Vector3, vel: Vector3, t: float,
+		caps: AISkaterCaps) -> Vector3:
+	var to_spot := Vector3(spot.x - from.x, 0.0, spot.z - from.z)
+	var dist: float = to_spot.length()
+	if dist < 0.01 or t <= 0.0:
+		return vel
+	var vmax: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	return to_spot * (minf(dist / t, vmax) / dist)
 
 
 static func _opponent_caps(opponent_caps: Array, i: int, has_caps: bool) -> AISkaterCaps:
@@ -519,14 +555,13 @@ static func counter_rush_cost_at(
 		our_goalie_pos: Vector3,
 		teammates: Array[Vector3],
 		self_recover_pos: Vector3,
-		self_max_speed: float,
+		self_caps: AISkaterCaps,
 		mate_etas: Array[float] = [],
 		threat_by_cover: Array[float] = [],
 		in_xg: bool = false) -> float:
 	if t_counter == INF or loss_prob <= 0.0:
 		return 0.0
 	var counter_point: Vector3 = counter_point_for(our_net)
-	var setup_margin: float = COUNTER_SET_MARGIN_S
 	var cover_anchor: Vector3 = AIThreatAssignment.cover_anchor(
 			counter_point, our_net)
 	_scratch_counter_cover.clear()
@@ -534,16 +569,15 @@ static func counter_rush_cost_at(
 		# Precomputed teammate races (fill_counter_cover_etas) — the hot
 		# per-candidate path.
 		for eta: float in mate_etas:
-			if eta + setup_margin <= t_counter:
+			if eta <= t_counter:
 				_scratch_counter_cover.append(cover_anchor)
 	else:
 		for tm: Vector3 in teammates:
-			if tm.distance_to(counter_point) / AIArrival.SKATER_REF_SPEED_M_S \
-					+ setup_margin <= t_counter:
+			if _sets_by(tm, counter_point, null, t_counter):
 				_scratch_counter_cover.append(cover_anchor)
+	# He recovers from a standstill where the candidate leaves him.
 	if self_recover_pos.is_finite() \
-			and self_recover_pos.distance_to(counter_point) \
-					/ maxf(self_max_speed, 0.001) + setup_margin <= t_counter:
+			and _sets_by(self_recover_pos, counter_point, self_caps, t_counter):
 		_scratch_counter_cover.append(cover_anchor)
 
 	# score_shoot_value directly, not a possession read: the counter point IS a shot

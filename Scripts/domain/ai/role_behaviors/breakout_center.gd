@@ -6,8 +6,8 @@ class_name AIRoleBreakoutCenter
 # rather than park.
 #
 # The swing point sits SWING_BELOW_M goal-side of the carrier, in the mid lane
-# or the carrier's-side circle lane — whichever the carrier has the cleaner
-# lane_clear to.
+# or the carrier's-side circle lane — whichever the carrier reads the cleaner
+# feed to (AIRoleReads.feed_lane).
 
 const SWING_BELOW_M: float = 3.0       # goal-side of the carrier
 const GOAL_LINE_PAD_M: float = 2.0
@@ -23,25 +23,20 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		d.target_position = ctx.self_pos
 		return d
 
-	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
-	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
-
 	# Never behind our goal line.
 	var cap: float = GameRules.GOAL_LINE_Z - GOAL_LINE_PAD_M
 	var z: float = clampf(carrier_pos.z + own_dir * SWING_BELOW_M, -cap, cap)
 
 	var mid := Vector3(carrier_pos.x * MID_LANE_FRACTION, 0.0, z)
 	var circle := Vector3(signf(carrier_pos.x) * CIRCLE_LANE_X_M, 0.0, z)
-	var pass_speed_mid: float = AIPuckLane.expected_pass_speed(carrier_pos, mid)
-	var pass_speed_circle: float = AIPuckLane.expected_pass_speed(carrier_pos, circle)
-	var lane_mid: float = AIPuckLane.lane_clear(
-			carrier_pos, mid, opp_positions, pass_speed_mid,
-			AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-	var lane_circle: float = AIPuckLane.lane_clear(
-			carrier_pos, circle, opp_positions, pass_speed_circle,
-			AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-	var target: Vector3 = mid if lane_mid >= lane_circle else circle
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
+	var lane_mid: float = AIRoleReads.feed_lane(ctx, origin, mid,
+			AIRoleReads.feed_speed(ctx, origin, mid))
+	var target: Vector3 = mid
+	if lane_mid < 1.0 and AIRoleReads.feed_lane(ctx, origin, circle,
+			AIRoleReads.feed_speed(ctx, origin, circle)) > lane_mid:
+		target = circle
 	if not AIStationSearch.is_legal_position(target):
 		target = mid if target == circle else circle
 	d.target_position = target

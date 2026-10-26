@@ -181,8 +181,8 @@ func test_strong_swings_mid_seam_when_wall_route_is_covered() -> void:
 func test_strong_keeps_skating_route_when_every_lane_is_dead() -> void:
 	# A forechecker draped right on the carrier blocks EVERY pass lane at
 	# the release point (reachability model: a defender within a stick of
-	# the origin blocks all lanes). Dead lanes still rank by the possession
-	# read (BLOCKED_LANE_FLOOR), so the outlet never freezes at self_pos.
+	# the origin blocks all lanes). With no feed to read, the spots rank by the
+	# possession read (AIFeedStationPick), so the outlet never freezes at self_pos.
 	var self_pos := Vector3(9, 0, 20)
 	var carrier_pos := Vector3(0, 0, 24)
 	var skaters: Array = [

@@ -27,7 +27,8 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 
 	# A committed hit loads him on a shoulder at half a stride, so a carrier who
 	# cuts is gone: the last man back never throws one (has_support_behind).
-	if cover_priced or AILastManDiscipline.has_support_behind(ctx):
+	var has_support: bool = AILastManDiscipline.has_support_behind(ctx, ap)
+	if cover_priced or has_support:
 		var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
 		if check.commit:
 			d.commit_check = true
@@ -80,13 +81,14 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var min_depth: float = -INF
 	var depth_dir: Vector3 = Vector3.ZERO
 	if not gapping_up and AIRoleReads.stand_ride_velocity(ctx) == Vector3.ZERO \
-			and not AILastManDiscipline.has_support_behind(ctx):
+			and not has_support:
 		if ap.dir_net != Vector3.ZERO:
 			var net_dir: Vector3 = ap.dir_net
 			var want: float = (search_center.x - carrier_pos.x) * net_dir.x \
 					+ (search_center.z - carrier_pos.z) * net_dir.z
 			var settable: float = AILastManDiscipline.settable_stand_depth(
-					ctx, carrier_pos, net_dir, want, closing_now)
+					ctx, carrier_pos, net_dir, want, closing_now,
+					AILastManDiscipline.loose_puck_driver(ctx))
 			if settable > want:
 				# Re-centre the ring on the settable line so the argmax still picks
 				# the angle; the ring spans ±SEARCH_STEP_M, so depth is also

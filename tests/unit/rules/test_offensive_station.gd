@@ -281,15 +281,15 @@ func test_the_high_slot_holds_while_two_points_are_behind_it() -> void:
 	# The 5v5 O-zone shape is 3 low / 2 high: the POINTS are the insurance, so F3
 	# in the high slot is an attacking body, not a defensive layer. Verified rather
 	# than assumed — with both points home he holds his float even with a man
-	# behind him, because has_support_behind is true.
+	# behind him, because a point is better placed to pick that man up.
 	var hs_stand := Vector3(0.0, 0.0, -OUR_NET_Z + 9.5)
 	var ctx: RoleContext = _ctx(hs_stand, [
 				[2, Vector3(8.0, 0.0, -22.0)],       # our carrier, cycling low
 				[3, Vector3(6.7, 0.0, -9.29)],       # strong point
 				[4, Vector3(-3.0, 0.0, -9.29)],      # weak point
 			], [[10, Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, 7.0)]], 2, false)
-	assert_true(AILastManDiscipline.has_support_behind(ctx),
-			"scenario check: the points are genuinely behind the high slot")
+	assert_true(AILastManDiscipline._mate_better_placed(ctx, 10),
+			"scenario check: a point is better placed than the high slot")
 	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, hs_stand, true)
 	assert_almost_eq(t.z, hs_stand.z, 0.5,
 			"with two points home the high slot keeps attacking; got %s" % t)
@@ -305,8 +305,76 @@ func test_the_high_slot_does_back_off_once_both_points_activate() -> void:
 				[3, Vector3(7.0, 0.0, -21.0)],       # point activated deep
 				[4, Vector3(-6.0, 0.0, -20.0)],      # point activated deep
 			], [[10, Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, 7.0)]], 2, false)
-	assert_false(AILastManDiscipline.has_support_behind(ctx),
-			"scenario check: nobody is behind the high slot now")
+	assert_false(AILastManDiscipline._mate_better_placed(ctx, 10),
+			"scenario check: nobody is better placed than the high slot now")
 	var t: Vector3 = AILastManDiscipline.offensive_station_target(ctx, hs_stand, true)
 	assert_gt(t.z, hs_stand.z,
 			"as the rearmost body it does back off; got %s" % t)
+
+
+# ── Support is a race, not a depth ───────────────────────────────────────────
+
+func _carrier_run(ctx: RoleContext, pid: int) -> AICarrierApproach:
+	var ap := AICarrierApproach.new()
+	var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+	AIDefensiveVerbs.fill_approach(ctx, s.position, s.velocity, ap)
+	return ap
+
+
+func test_a_mate_home_is_support_and_one_racing_up_ice_is_not() -> void:
+	# Same spot, deeper than us, against a carrier at speed: standing there he
+	# picks the carrier up if we are beaten; skating up-ice at full stride he is
+	# carried away from the run and cannot get back goal-side of it in time.
+	var me := Vector3(0.0, 0.0, 10.0)
+	var carrier := [10, Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 8.5)]
+	var home: RoleContext = _ctx(me, [[2, Vector3(2.0, 0.0, 15.0)]], [carrier], 10)
+	var leaving: RoleContext = _ctx(me,
+			[[2, Vector3(2.0, 0.0, 15.0), Vector3(0.0, 0.0, -8.5)]], [carrier], 10)
+	assert_true(AILastManDiscipline.has_support_behind(home, _carrier_run(home, 10)),
+			"a mate standing goal-side of the run is the layer behind")
+	assert_false(AILastManDiscipline.has_support_behind(leaving, _carrier_run(leaving, 10)),
+			"the same mate skating up-ice at full stride is not")
+
+
+func test_a_ghost_is_never_support() -> void:
+	var me := Vector3(0.0, 0.0, 10.0)
+	var ctx: RoleContext = _ctx(me, [[2, Vector3(2.0, 0.0, 20.0)]],
+			[[10, Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 8.5)]], 10)
+	ctx.snapshot.skater_states[2].is_ghost = true
+	assert_false(AILastManDiscipline.has_support_behind(ctx, _carrier_run(ctx, 10)),
+			"a body out of play covers nothing")
+
+
+func test_exactly_one_of_two_stations_is_the_body_for_a_man_behind() -> void:
+	# The deeper station is skating up-ice; the shallower one is standing. Depth
+	# alone would send the shallower one home for the deeper one; the race says
+	# the standing body gets goal-side of the man first. Whichever it is, the two
+	# reads must not each appoint the other.
+	var deep := Vector3(-6.0, 0.0, -9.0)
+	var deep_vel := Vector3(0.0, 0.0, -8.0)
+	var shallow := Vector3(6.0, 0.0, -12.0)
+	var man := [10, Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, 6.0)]
+	var from_deep: RoleContext = _ctx(deep, [[2, shallow], [3, Vector3(8.0, 0.0, -22.0)]],
+			[man], 3, false)
+	from_deep.self_velocity = deep_vel
+	from_deep.snapshot.skater_states[1].velocity = deep_vel
+	var from_shallow: RoleContext = _ctx(shallow,
+			[[2, deep, deep_vel], [3, Vector3(8.0, 0.0, -22.0)]], [man], 3, false)
+	var deep_defers: bool = AILastManDiscipline._mate_better_placed(from_deep, 10)
+	var shallow_defers: bool = AILastManDiscipline._mate_better_placed(from_shallow, 10)
+	assert_ne(deep_defers, shallow_defers, "exactly one body draws the man behind")
+	assert_true(deep_defers, "and it is the standing one, not the deeper one")
+
+
+func test_a_man_on_a_still_loose_puck_bounds_the_last_mans_charge() -> void:
+	# Nothing is closing, but their man on the puck bursts the moment we commit
+	# (settable_stand_depth's driver): the last man may not charge it as if it
+	# stayed still.
+	var me := Vector3(0.0, 0.0, 0.0)
+	var puck := Vector3(0.0, 0.0, -12.0)
+	var ctx: RoleContext = _ctx(me, [], [[10, puck]], -1)
+	var dir_net := Vector3(0.0, 0.0, 1.0)
+	assert_eq(AILastManDiscipline.settable_stand_depth(ctx, puck, dir_net, 3.0, 0.0), 3.0,
+			"a puck nobody drives binds nothing")
+	assert_gt(AILastManDiscipline.settable_stand_depth(ctx, puck, dir_net, 3.0, 0.0, 10), 3.0,
+			"a man on it holds the stand deeper")

@@ -99,8 +99,13 @@ func _run_cycle(seconds: float, live_opponents: bool = false) -> Sample:
 		var c: int = h.carrier()
 		var z_d1: float = h.skater_pos(OUR_D1).z
 		var z_d2: float = h.skater_pos(OUR_D2).z
-		# Count a point as "up" when it is inside the offensive zone.
+		# Count a point as "up" when it is inside the offensive zone — by the puck
+		# while he carries it, since the line rules the puck, not his skates.
 		var line_z: float = -GameRules.BLUE_LINE_Z
+		if c == OUR_D1:
+			z_d1 = h.puck_pos.z
+		elif c == OUR_D2:
+			z_d2 = h.puck_pos.z
 		var up: int = (1 if z_d1 < line_z else 0) + (1 if z_d2 < line_z else 0)
 		if c == -1:
 			s.loose += 1

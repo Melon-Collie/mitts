@@ -126,7 +126,7 @@ func test_flank_refuses_to_step_up_into_a_guaranteed_breakaway() -> void:
 	# shared read drops him for exactly that reason.
 	var puck_pos := Vector3(0, 0, -22)
 	# No home mate: this case is about the LAST MAN, and a body on our goal line
-	# would make him not one (has_support_behind).
+	# would be better placed to pick the lurker up.
 	var ctx: RoleContext = _make_ctx(Vector3(0, 0, -18), puck_pos, false)
 	_with_opponent(ctx, Vector3(1, 0, 5), Vector3(0, 0, 6))
 	var raw_z: float = puck_pos.z + AIRoleFlank.FLANK_DEPTH_M

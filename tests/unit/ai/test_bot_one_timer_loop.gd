@@ -95,13 +95,14 @@ func _add_skater(pid: int, pos: Vector3) -> void:
 
 
 # The settled OZONE cycle test_one_timer_chain.gd plays: the carrier on the
-# right half-wall, the finisher weak-side, the mark drawn to the puck side.
+# right half-wall, the finisher weak-side, the mark drawn to the puck side and
+# the pressure up the wall, off the carrier's lanes.
 func _cycle_snap() -> WorldSnapshot:
 	_snap = WorldSnapshot.new()
 	_add_skater(FINISHER_ID, Vector3.ZERO)
 	_add_skater(CARRIER_ID, PASSER)
 	_add_skater(OPP_MARK, Vector3(3.0, 0.0, -24.0))
-	_add_skater(OPP_PRESSURE, Vector3(7.0, 0.0, -16.5))
+	_add_skater(OPP_PRESSURE, Vector3(9.5, 0.0, -16.0))
 	var g := GoalieNetworkState.new()
 	g.position_x = 0.8
 	g.position_z = -25.3

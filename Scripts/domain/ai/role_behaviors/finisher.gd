@@ -198,6 +198,8 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 	var carrier_release: Vector3 = AIPuckLane.release_point_toward(
 			carrier_pos, ctx.attacking_goal_pos)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
@@ -215,20 +217,22 @@ static func _positioning_decision(ctx: RoleContext) -> RoleDecision:
 			continue
 		if absf(c.z - goal_z) > depth_cap:
 			continue
-		# The speed our carrier would actually fire at, not a flat constant —
-		# the defenders' reaction time scales with it.
-		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
-		# The FINISHER fires on contact: his one-timer off the feed.
+		var pass_speed: float = AIRoleReads.feed_speed(ctx, origin, c)
+		# The FINISHER fires on contact: his one-timer off the feed. Its worth is
+		# linear in the lane, read only where an open one could win (exact).
 		var feed: float = AIActionScoring.score_pass_value(
-				carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
-				pass_speed, ctx.scratch_opp_caps, true)
+				origin, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
+				pass_speed, ctx.scratch_opp_caps, true, 1.0)
 		var tip: float = AIActionScoring.tip_ev(
 				carrier_release, c, ctx.attacking_goal_pos, goalie_pos,
 				opp_positions,
 				carrier_shot_speed, ctx.scratch_opp_caps, self_caps)
+		var bonus: float = AIStationSearch.incumbent_bonus(ctx, c)
+		if feed > tip and feed + bonus > best_score:
+			feed *= AIRoleReads.feed_lane(ctx, origin, c, pass_speed)
 		# The better of the one-timer feed and the tip — max(), not sum: one puck,
 		# one outcome.
-		var score: float = maxf(feed, tip) + AIStationSearch.incumbent_bonus(ctx, c)
+		var score: float = maxf(feed, tip) + bonus
 		if score > best_score:
 			best_score = score
 			best_pos = c

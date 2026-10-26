@@ -60,8 +60,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		turnover_prior = 1.0 - AICarrySpace.carry_safety(
 				carrier_pos, carrier_pos, AICarrySpace.EVADE_HORIZON_S,
 				opp_positions, _scratch_opp_vels, ctx.scratch_opp_caps)
-	AIActionScoring.fill_counter_cover_etas(
-			our_net, teammate_positions, _scratch_mate_etas)
+	AIActionScoring.fill_counter_cover_etas(our_net, teammate_positions,
+			ctx.scratch_teammate_vels, ctx.scratch_teammate_caps, _scratch_mate_etas)
 	_scratch_threat_by_cover.clear()
 	for _i: int in teammate_positions.size() + 2:
 		_scratch_threat_by_cover.append(-1.0)
@@ -89,6 +89,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	var candidates: Array[Vector3] = _generate_candidates(ctx, carrier_pos)
 	AIStationSearch.append_incumbent(ctx, candidates)
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
 
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
@@ -99,15 +101,20 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 		if last_back and not is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
 			continue
-		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
-		var pass_value: float = AIActionScoring.score_pass_value(
-				carrier_pos, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
-				pass_speed, ctx.scratch_opp_caps)
+		# The pass's worth is linear in its lane: priced on an open one first, the
+		# lane is read only where the spot could still win (exact).
+		var pass_speed: float = AIRoleReads.feed_speed(ctx, origin, c)
+		var open_value: float = AIActionScoring.score_pass_value(
+				origin, c, ctx.attacking_goal_pos, goalie_pos, opp_positions,
+				pass_speed, ctx.scratch_opp_caps, false, 1.0)
 		var counter_cost: float = AIActionScoring.counter_rush_cost_at(
 				t_counter, turnover_prior, our_net, our_goalie,
-				teammate_positions, c, ctx.self_max_speed,
+				teammate_positions, c, ctx.caps_by_peer.get(ctx.peer_id),
 				_scratch_mate_etas, _scratch_threat_by_cover)
-		var score: float = pass_value - counter_cost + AIStationSearch.incumbent_bonus(ctx, c)
+		var rest: float = AIStationSearch.incumbent_bonus(ctx, c) - counter_cost
+		if open_value + rest <= best_score:
+			continue
+		var score: float = open_value * AIRoleReads.feed_lane(ctx, origin, c, pass_speed) + rest
 		if score > best_score:
 			best_score = score
 			best_pos = c

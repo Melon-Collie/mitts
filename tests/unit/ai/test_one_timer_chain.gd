@@ -46,13 +46,15 @@ func _add_goalie(s: WorldSnapshot, team_id: int, pos: Vector3) -> void:
 # (peer 1) camped weak-side, the MARK defender caught low at the net-front
 # and DRAWN TO THE PUCK SIDE — the genuinely open cross-seam window. A MARK
 # low on the weak side shades the backdoor lane, and the release-contest model
-# reads that half-open seam as no better than a reposition carry.
+# reads that half-open seam as no better than a reposition carry. The PRESSURE
+# rides him from up the wall: standing between him and the far side, it would
+# close every feed across.
 func _cycle_snap(finisher_pos: Vector3) -> WorldSnapshot:
 	var s := WorldSnapshot.new()
 	_add_skater(s, FINISHER_ID, finisher_pos)
 	_add_skater(s, CARRIER_ID, Vector3(8.0, 0.0, -18.0))
 	_add_skater(s, OPP_MARK, Vector3(3.0, 0.0, -24.0))
-	_add_skater(s, OPP_PRESSURE, Vector3(7.0, 0.0, -16.5))
+	_add_skater(s, OPP_PRESSURE, Vector3(9.5, 0.0, -16.0))
 	_add_goalie(s, 1, Vector3(0.8, 0.0, -25.3))  # squared toward the carrier side
 	s.puck_state = PuckNetworkState.new()
 	s.puck_state.position = Vector3(8.0, 0.0, -18.0)

@@ -47,8 +47,8 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		d.held_forward_stand = d.target_position.distance_to(band_center) < 0.5
 		return d
 
-	var pass_speed_ref: float = AIPuckLane.expected_pass_speed(
-			carrier_pos, opp_net)
+	AIRoleReads.collect_feed_defence(ctx)
+	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	for depth: float in BAND_DEPTHS_M:
@@ -62,13 +62,15 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			if AIStationSearch.too_close_to_teammate(c, teammates):
 				continue
 			# The seam look: can the carrier feed me here, and can I shoot from here?
-			var feed: float = AIPuckLane.lane_clear(
-					carrier_pos, c, opp_positions, pass_speed_ref,
-					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
+			# The feed is read only where the shot lets the spot win (exact: ≤ 1).
 			var shot: float = AIPuckLane.lane_clear(
 					c, opp_net, opp_positions, ctx.self_wrister_shot_speed,
 					AIActionScoring.EMPTY_VEC3, ctx.scratch_opp_caps)
-			var score: float = feed * shot + AIStationSearch.incumbent_bonus(ctx, c)
+			var bonus: float = AIStationSearch.incumbent_bonus(ctx, c)
+			if shot + bonus <= best_score:
+				continue
+			var score: float = AIRoleReads.feed_lane(ctx, origin, c,
+					AIRoleReads.feed_speed(ctx, origin, c)) * shot + bonus
 			if score > best_score:
 				best_score = score
 				best_pos = c

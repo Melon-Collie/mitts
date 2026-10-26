@@ -214,6 +214,84 @@ static func collect_opponents(ctx: RoleContext,
 			ctx.scratch_opp_vels.append(s.velocity)
 
 
+# ── The feed our carrier reads ───────────────────────────────────────────────
+# A station a teammate feeds is priced on the lane the carrier's own pass search
+# reads (AICarrierPassSearch over AICarrierField.fill): from his release point,
+# against the defence and its blades carried to the release, read on their
+# velocities and builds by the accurate lane model, at his own launch. A station
+# read off a frozen defence stands in lanes its passer reads closed.
+
+# Fills the ctx.scratch_feed_* buffers. Call once per decide, before feed_lane.
+static func collect_feed_defence(ctx: RoleContext) -> void:
+	ctx.scratch_feed_opp_release.clear()
+	ctx.scratch_feed_opp_blades.clear()
+	ctx.scratch_feed_opp_vels.clear()
+	ctx.scratch_feed_opp_caps.clear()
+	var windup: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	for pid: int in ctx.snapshot.skater_states:
+		if ctx.team_id_by_peer.get(pid, -1) == ctx.team_id:
+			continue
+		var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+		ctx.scratch_feed_opp_release.append(AITrajectory.predict_at(s.position, s.velocity, windup))
+		var blade := Vector3(s.blade_contact_world.x, 0.0, s.blade_contact_world.z)
+		ctx.scratch_feed_opp_blades.append(AITrajectory.predict_at(blade, s.velocity, windup))
+		ctx.scratch_feed_opp_vels.append(s.velocity)
+		ctx.scratch_feed_opp_caps.append(ctx.caps_by_peer.get(pid))
+
+
+# Where our carrier's feed leaves from (AICarrierField.pass_origin_from);
+# `carrier_pos` when no teammate carries the puck.
+static func feed_origin(ctx: RoleContext, carrier_pos: Vector3) -> Vector3:
+	var pid: int = _our_carrier(ctx)
+	if pid == -1:
+		return carrier_pos
+	var puck: Vector3 = ctx.snapshot.puck_state.position
+	return AICarrierField.pass_origin_from(Vector3(puck.x, 0.0, puck.z),
+			ctx.snapshot.skater_states[pid].velocity)
+
+
+# The launch of our carrier's feed from `origin` to a receiver standing at
+# `spot`, under his own wrister.
+static func feed_speed(ctx: RoleContext, origin: Vector3, spot: Vector3) -> float:
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(_our_carrier(ctx))
+	var launch_cap: float = caps.wrister_shot_speed if caps != null \
+			else GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
+	return AIPuckLane.pass_launch_speed(origin.distance_to(spot), launch_cap)
+
+
+# The lane of that feed, against the defence collect_feed_defence filled.
+static func feed_lane(ctx: RoleContext, origin: Vector3, spot: Vector3,
+		speed: float) -> float:
+	return AIPuckLane.lane_clear(origin, spot, ctx.scratch_feed_opp_release, speed,
+			ctx.scratch_feed_opp_vels, ctx.scratch_feed_opp_caps, true,
+			ctx.scratch_feed_opp_blades)
+
+
+# What the feed of `lane` to a receiver at `spot` is worth, as the passer prices
+# it: completed, our possession there (`held`); picked off, their possession
+# where it is picked (`theirs`, read against our skaters).
+static func feed_ev(ctx: RoleContext, origin: Vector3, spot: Vector3, speed: float,
+		lane: float, held: float, theirs: AIPossessionValue) -> float:
+	if lane >= 1.0:
+		return held
+	var loss: Vector3 = AIPuckLane.lane_loss_point(origin, spot,
+			ctx.scratch_feed_opp_release, speed, ctx.scratch_feed_opp_vels,
+			ctx.scratch_feed_opp_caps, ctx.scratch_feed_opp_blades)
+	var cost: float = theirs.at(loss) if loss.is_finite() else 0.0
+	return lane * held - (1.0 - lane) * cost
+
+
+# The teammate carrying the puck, or -1.
+static func _our_carrier(ctx: RoleContext) -> int:
+	if ctx.snapshot == null or ctx.snapshot.puck_state == null:
+		return -1
+	var pid: int = ctx.snapshot.puck_state.carrier_peer_id
+	if pid == -1 or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id \
+			or not ctx.snapshot.skater_states.has(pid):
+		return -1
+	return pid
+
+
 # Our possession read (AIPossessionValue) against the opponents collect_opponents
 # filled into `opponents` — the attack's scale for what a spot is worth to us.
 # Call it after collect_opponents.
