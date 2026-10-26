@@ -114,7 +114,6 @@ Agent-side per-slot facts outside the role: `_is_reactive_slot` (argmax cadence)
 ## 4. The carrier
 
 Doctrine: [One currency across the carrier's compete](CLAUDE.md#one-currency-across-the-carriers-compete),
-[Hesitation is a raised bar](CLAUDE.md#hesitation-is-a-raised-bar-never-a-timer),
 [The models in detail](CLAUDE.md#the-models-in-detail) (shot value, carry safety, pass lanes, rims, positional value, controlled space),
 [Where an evaluator goes](CLAUDE.md#where-an-evaluator-goes).
 The carrier is `carrier.gd` (the compete: intents, phases, argmax, commitment) over `carrier_field.gd` (`AICarrierField`: what it sees, what a spot is worth, what a turnover costs) and two searches that read the field — `carrier_pass_search.gd`, `carrier_carry_search.gd`. Bare function names below are in `carrier.gd`; `test_carrier_collaborator_seams.gd` holds the seam.
@@ -137,9 +136,9 @@ The carrier is `carrier.gd` (the compete: intents, phases, argmax, commitment) o
 | evade seam | `carry_space.gd:best_evade_point` (current safety) | momentum-projected reach | — | `test_reach_safety.gd` |
 
 **Argmax / commitment** — `decide` (throttle `PICK_ACTION_PERIOD_TICKS`, open-ice LOD `_arm_pick_cooldown`, slicing `_pick_fire_phase` → next dispatch `_pick_commit_phase`; full eval on `reset`/`clear_intent`) → `_pick_commit_phase`:
-1. each fire option qualifies against its **own** bar using `_settle_handicap(value, _settle_penalty(ctx))`; best qualified = `fire_score` (−INF if none);
+1. each fire option qualifies against its **own** bar (`SHOT_MIN_VALUE`, `PASS_MIN_VALUE`); best qualified = `fire_score` (−INF if none);
 2. hysteresis ×(1+`ACTION_HYSTERESIS_MARGIN_FRAC`) on the incumbent fire intent only (CARRY never; inside the carry, the destination and the near move each keep their own incumbent by the same margin, `carrier_carry_search.gd:_prune_bound_for`);
-3. fire if `fire ≥ carry` and `fire ≥ hold` (ties fire), or retention hopeless — never while staggered, nor while settling a hard catch (`ctx.self_settle_s`, the controller's settle lock, which would only queue the press — `docs/stick-settling-plan.md`; unrelated to the settle *doubt* in step 1);
+3. fire if `fire ≥ carry` and `fire ≥ hold` (ties fire), or retention hopeless — never while staggered, nor while settling a hard catch (`ctx.self_settle_s`, the controller's settle lock, which would only queue the press — `docs/stick-settling-plan.md`);
 4. else CARRY (advance `_hold_elapsed_s` only while hold > carry and retention is not hopeless).
 
 Agent side (`skater_agent_state_machine.gd`): `_state_carry` latches the intent (`_state_from_carrier_intent`), freezes shot/dump params, pre-aims (`_aim_target_for_intent`, `_lock_pass_hold`), presses when `_load_ready` or on `_intent_max_wait_ticks` (every release is a charged wrister); then `carrier.clear_intent()`.
@@ -201,7 +200,6 @@ Plumbing: `skater_agent_state_machine.gd:apply_profile` → SM field → (roles)
 | `shot_aim_error_rad` | precision | 0.055 / 0.04 / 0.01 | `_set_state` (sample); execution only |
 | `pass_aim_error_rad` | precision | 0.0225 / 0.015 / 0.01 | `_set_state`; `carrier_pass_search.gd:_pass_variant_ev`, `carrier_pass_search.gd:_rim_launch_for`, `carrier_field.gd:pass_option_from` (`pass_miss_prob`) |
 | `shot_timing_error_s` | precision | 0.24 / 0.16 / 0.10 | `_sample_release_hold_ticks` |
-| `settle_penalty_frac` / `_tau_s` | precision | 0.85, 0.55 / 0.60, 0.30 / 0.0, 0.25 | `carrier.gd:_settle_penalty` → `_pick_commit_phase` bars |
 | `pursuit_standoff_m` | pace (space) | 3.0 / 0.75 / 0.0 | `pressure.gd:decide` |
 | `pass_speed_scale` | pace | 0.75 / 0.85 / 1.0 | `carrier_pass_search.gd:search`, `_pick_commit_phase`, `carrier_field.gd:pass_option_from`, `carrier_pass_search.gd:developing_feed_value`, `carrier_pass_search.gd:_developing_outlet_feed` |
 | `check_aggression` | pace (threat) | 0.0 / 0.65 / 1.0 | `defensive_verbs.gd:evaluate_body_check`; `skater_agent_board_play.gd:apply` |

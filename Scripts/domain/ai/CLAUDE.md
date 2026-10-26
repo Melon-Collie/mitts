@@ -57,12 +57,10 @@ body pushed onto the read's defence for the one call. The outlet and breakout
 roles stand where the lane to them × our possession of the spot is best.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
-to that seam — odds of scoring on today's goalie with a first shot — and so is
-settle doubt's raise of them, which outside their zone, where options are worth
-line odds of order one, bites only on a pass worth next to nothing. A pass's bar
+to that seam — odds of scoring on today's goalie with a first shot. A pass's bar
 is weighed against keeping the puck: when both reads of keeping it (the carry
 and the drive-in) lose it where he stands, that loss comes off the bar, up to
-the whole bar, leaving only settle doubt's raise. A pressured carrier with an
+the whole bar. A pressured carrier with an
 open man ahead is choosing between the pass and a turnover, and a 0.015 outlet
 is not a giveaway next to that.
 
@@ -81,7 +79,7 @@ separate is what makes tiers tunable without a rebalance cascade:
 
 | axis | what it changes | knobs |
 |---|---|---|
-| **PRECISION** | how sharp the bot is | reaction delay, dispatch cadence, aim/timing error, settle doubt |
+| **PRECISION** | how sharp the bot is | reaction delay, dispatch cadence, aim/timing error |
 | **PACE** | how much time and space a human gets | pursuit standoff, anticipation lead, check aggression |
 | **COGNITION** | which reads exist in its model at all | the bool gates |
 
@@ -108,27 +106,16 @@ Tuning order, when a tier is wrong: if it plays like a pushover, raise the
 precision knobs back toward Hard and let the pace knobs keep it beatable; if it
 still feels superhuman, soften pace (standoff up, anticipation and aggression
 down) before touching precision. If it makes plays a human wouldn't SEE rather
-than plays it executes too well, that is settle doubt — raise the frac for a
-higher bar, the τ for a longer one.
+than plays it executes too well, that is a cognition gate.
 
-### Hesitation is a raised bar, never a timer
+### No tier hesitates on a timer
 
-A lower tier is less sure of a puck it has just gained. That is expressed as
-**settle doubt** (`BotSkillProfile.settle_penalty_frac`): a decaying fraction by
-which a fresh carrier handicaps its own read of every ACTIVE option against that
-option's *giveaway bar*. An obvious play out-values a raised bar on the first
-tick; a marginal one waits for the doubt to drain. So the bot deliberates over
-close calls and is decisive on clear ones — a tier reads as *less sure* rather
-than *laggier*.
-
-Charge it against the **bar**, never against the carry it competes with. The
-stand-still carry candidate is by construction worth the same as firing from
-where the bot stands, so a handicap inside the fire-vs-carry compete can only be
-a uniform delay — it holds the doorstep tap-in exactly as hard as the hopeless
-point shot, which is the flat "may not commit for N seconds" gate this rule
-exists to rule out. The decay is exp(-t/τ) and never reaches exactly zero: that
-is harmless against an absolute bar, but inside the compete, where stand-still
-ties fire exactly, any residual penalty would suppress firing forever.
+Never hold a lower tier's release with a delay or a handicap inside the
+fire-vs-carry compete. The stand-still carry candidate is by construction worth
+the same as firing from where the bot stands, so a handicap there is a uniform
+delay: it holds the doorstep tap-in exactly as hard as the hopeless point shot.
+A lower tier is slower to see and decide (reaction delay, dispatch cadence),
+not slower to act on what it has decided.
 
 ### The rule that keeps cognition gates honest
 

@@ -107,11 +107,6 @@ var check_aggression: float = 1.0
 # Multiplier on AIRoleReads.DEFENSIVE_ANTICIPATION_S (lead_threat). Never
 # moves a stand.
 var defensive_anticipation_scale: float = 1.0
-# Settle doubt: the fraction a fresh carrier raises every active option's
-# giveaway bar by, decaying exp(-t / settle_penalty_tau_s) from the gain. See
-# Scripts/domain/ai/CLAUDE.md → "Hesitation is a raised bar, never a timer".
-var settle_penalty_frac: float = 0.0
-var settle_penalty_tau_s: float = 0.25
 # COGNITION gate: false = the keeper always reads SET to the carrier: still to the
 # shot reads (AICarrierField.goalie_unsettled_at returns 0) and already square on a
 # pass's receiver (AICarrierField.feed_shot_at). The aim-side half of the gate

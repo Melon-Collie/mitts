@@ -2,7 +2,7 @@ extends GutTest
 
 # AIRoleCarrier's compete on fixture snapshots: what it picks (shoot, pass and
 # its variants and the rim, carry, hold) and where, plus its lifecycle (reset,
-# clear_intent, cooldown, settle doubt). The evaluators it prices with are
+# clear_intent, cooldown). The evaluators it prices with are
 # covered in test_ai_action_scoring and test_reach_safety. A pick asserted here
 # is doctrine (Scripts/domain/ai/CLAUDE.md, Scripts/ai/CLAUDE.md, the design
 # docs); what the carrier picks at a fixture whose outcome is tuning, and the
@@ -1045,6 +1045,16 @@ func test_wall_exit_candidates_absent_in_offensive_half() -> void:
 
 # ─── stagger: don't wind up a shot off-balance ──────────────────────────────
 
+# Deep in our zone, boxed by two forecheckers, an outlet open up the strong wall.
+func _strong_outlet_ctx() -> RoleContext:
+	var self_pos := Vector3(3, 0, 20)
+	return _make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos],
+			[2, TEAM_ID, Vector3(11, 0, 11)],
+			[3, 1, Vector3(1.5, 0, 18.0)],
+			[4, 1, Vector3(3.0, 0, 17.5)]])
+
+
 func test_staggered_carrier_holds_instead_of_firing() -> void:
 	# A staggered bot does not START a fire: winding up through a body check's
 	# stagger flails the release (Scripts/domain/ai/DECISIONS.md, the carrier's
@@ -1063,124 +1073,6 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 	ctx.self_settle_s = 0.2
 	assert_eq(_decided(ctx).intended_action, AIRoleCarrier.INTENT_CARRY,
 			"settling carrier holds instead of committing the fire")
-
-
-# ─── settle doubt: a fresh carrier's bar for giving the puck up ──────────────
-
-# The same pressured breakout, with the outlet in two different situations. Both
-# are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~7x PASS_MIN_VALUE, the weak one ~0.75x. Boxed in, the carrier would lose the
-# puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
-# holds is under its doubt's raise (1.5x). The weak outlet stands behind our
-# goal line, so every entry of his is a long skate against a defence that is
-# home by then. Both values are future value and so scale with
-# READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's spot when that
-# moves.
-func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
-	return [
-			[1, TEAM_ID, self_pos],
-			[2, TEAM_ID, outlet],
-			[3, 1, Vector3(1.5, 0, 18.0)],        # forechecker
-			[4, 1, Vector3(3.0, 0, 17.5)],        # forechecker
-	]
-
-
-const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(6.0, 0, 26.0)  # behind our goal line
-
-
-func _settle_ctx(self_pos: Vector3, outlet: Vector3) -> RoleContext:
-	var ctx: RoleContext = _make_ctx(self_pos, _settle_skaters(self_pos, outlet))
-	ctx.settle_penalty_frac = 0.6   # Normal's own dial
-	ctx.settle_penalty_tau_s = 0.3
-	return ctx
-
-
-# Deep in our zone, boxed by two forecheckers, the strong outlet open up the
-# wall; no settle doubt.
-func _strong_outlet_ctx() -> RoleContext:
-	var self_pos := Vector3(3, 0, 20)
-	return _make_ctx(self_pos, _settle_skaters(self_pos, _STRONG_OUTLET))
-
-
-# The whole reason the settle knob is a raised bar rather than the flat "may not
-# commit for N seconds" gate it replaced: on the same fresh touch, under the SAME
-# doubt, the obvious play goes at once and the marginal one waits. A flat gate
-# can only hold both.
-
-func test_an_obvious_outlet_beats_the_settle_doubt_outright() -> void:
-	var self_pos := Vector3(3, 0, 20)
-	var c := AIRoleCarrier.new()
-	c.decide(_settle_ctx(self_pos, _STRONG_OUTLET))
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
-			"a wide-open outlet is worth the puck on the first touch")
-
-
-func test_a_marginal_outlet_pays_the_settle_doubt() -> void:
-	var self_pos := Vector3(3, 0, 20)
-	# Sanity: the weak outlet IS a legal fire — it's the doubt that holds it, not
-	# the standing giveaway bar.
-	var undoubted := AIRoleCarrier.new()
-	undoubted.decide(_make_ctx(self_pos, _settle_skaters(self_pos, _MARGINAL_OUTLET)))
-	assert_eq(undoubted.intended_action, AIRoleCarrier.INTENT_PASS,
-			"sanity: with no doubt the weak outlet fires on tick one")
-
-	var ctx: RoleContext = _settle_ctx(self_pos, _MARGINAL_OUTLET)
-	var c := AIRoleCarrier.new()
-	c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
-			"the weak outlet isn't worth a fresh puck — the raised bar rejects it")
-	assert_gt(c.debug_pass_score, 0.0,
-			"scores keep computing — the doubt only raises the bar they must clear")
-	# Let the doubt decay in real ticks (decide() steps ctx.dispatch_period_ticks
-	# = 1 tick per call). 60 ticks = 0.5 s covers the flip plus a re-eval cadence.
-	for _i: int in range(60):
-		c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
-			"the same outlet is worth the puck once the carrier has settled")
-
-
-func test_an_obvious_shot_beats_the_settle_doubt_outright() -> void:
-	# The open backdoor tap-in the flat gate used to swallow: from the slot with
-	# the keeper stranded on the far post, no pressure, the look is worth many
-	# times SHOT_MIN_VALUE, so a raised bar is nothing to it.
-	var self_pos := Vector3(-1.0, 0.0, -GameRules.GOAL_LINE_Z + 4.5)
-	var ctx := _make_ctx(self_pos)
-	var g := GoalieNetworkState.new()
-	g.position_x = 1.2
-	g.position_z = -GameRules.GOAL_LINE_Z + 0.5
-	_place_keeper(ctx, g)
-	ctx.settle_penalty_frac = 0.6
-	ctx.settle_penalty_tau_s = 0.3
-	var c := AIRoleCarrier.new()
-	c.decide(ctx)
-	assert_gt(c.debug_shoot_score, AIRoleCarrier.SHOT_MIN_VALUE * 4.0,
-			"sanity: the look is obvious; got %f" % c.debug_shoot_score)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_SHOOT,
-			"an obvious shot fires on tick one despite a deep settle doubt")
-
-
-func test_settle_doubt_rearms_on_reset_but_not_on_clear_intent() -> void:
-	var self_pos := Vector3(3, 0, 20)
-	var ctx: RoleContext = _settle_ctx(self_pos, _MARGINAL_OUTLET)
-	var c := AIRoleCarrier.new()
-	for _i: int in range(61):
-		c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS, "sanity: the doubt drained")
-
-	# clear_intent (press-state handoff / bail) is the SAME possession — the
-	# next decide may re-commit immediately, with no fresh doubt.
-	c.clear_intent()
-	c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_PASS,
-			"a press bail back to CARRY re-fires without re-settling")
-
-	# reset (puck lost) marks the next decide as a NEW possession — the doubt
-	# re-arms at full and the marginal outlet is held again.
-	c.reset()
-	c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_CARRY,
-			"regaining the puck starts a fresh settle doubt")
 
 
 # ─── reset() ──────────────────────────────────────────────────────────────

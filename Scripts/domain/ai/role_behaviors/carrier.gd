@@ -47,26 +47,6 @@ const SHOT_MIN_VALUE: float = 0.05
 # the bar (_pick_commit_phase).
 const PASS_MIN_VALUE: float = 0.02
 
-# ── Settle doubt ─────────────────────────────────────────────────────────────
-# The fraction by which a fresh carrier raises every ACTIVE option's giveaway
-# bar (ctx.settle_penalty_frac = 0.5 doubles it), decaying as exp(-t/τ) over the
-# possession. See Scripts/domain/ai/CLAUDE.md → "Hesitation is a raised bar".
-# The decay never reaches exactly zero: harmless against an absolute bar, but it
-# would not be inside the fire-vs-carry compete, where stand-still ties fire
-# exactly and any residual penalty would suppress firing forever.
-func _settle_penalty(ctx: RoleContext) -> float:
-	if ctx.settle_penalty_frac <= 0.0:
-		return 0.0
-	return ctx.settle_penalty_frac * exp(
-			-_settle_elapsed_s / maxf(ctx.settle_penalty_tau_s, 0.001))
-
-
-# Move `value` away from being chosen by `penalty` of its own magnitude: a
-# positive score shrinks toward zero, a negative one deepens. Higher is better
-# everywhere this is read, so the one form handicaps both signs.
-static func _settle_handicap(value: float, penalty: float) -> float:
-	return value - penalty * absf(value)
-
 # Minimum forward distance (m) the PUCK must sit in front of the goal-line plane
 # for a direct shot to be scored at all — on/behind the line the mouth faces
 # away and the only play is a wrap/walk-out carry. Feel gate; a walk-out shooter
@@ -127,13 +107,6 @@ var _carry_committed: bool = false
 # _pick_commit_phase). Feeds the delay discount so a wait that never pays off
 # self-extinguishes, with no fixed timeout.
 var _hold_elapsed_s: float = 0.0
-
-# Seconds since this possession began — the clock the settle doubt decays on
-# (see _settle_penalty). Armed to 0 on the first decide() after reset(), which
-# marks a possession loss (or spawn). clear_intent() does NOT re-arm it: a
-# press-state bail back to CARRY is the same possession.
-var _settle_arm_pending: bool = true
-var _settle_elapsed_s: float = 0.0
 
 # Set when intent commits to PASS (or to a rim, released as a DUMP). Consumed by
 # the state machine entering PASS_PRESSED. -1 = no current pass target.
@@ -288,11 +261,6 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	# Each call spans this many physics ticks; draining the cooldown by the real
 	# span keeps the re-eval cadence in wall time at every difficulty tier.
 	var step_ticks: int = maxi(1, ctx.dispatch_period_ticks)
-	if _settle_arm_pending:
-		_settle_arm_pending = false
-		_settle_elapsed_s = 0.0
-	else:
-		_settle_elapsed_s += float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
 	_ticks_since_pick += step_ticks
 	if _commit_phase_pending:
 		# Second dispatch of a sliced re-eval (see _commit_phase_pending). The
@@ -364,8 +332,6 @@ func reset() -> void:
 	# A half-finished sliced eval priced a puck we no longer hold.
 	_commit_phase_pending = false
 	_full_eval_pending = true
-	_settle_arm_pending = true
-	_settle_elapsed_s = 0.0
 	_carry.reset()
 
 
@@ -675,8 +641,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var best_shot_score: float = shoot_score
 	var best_shot_intent: int = INTENT_SHOOT
 
-	var settle_penalty: float = _settle_penalty(ctx)
-
 	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
 	# where the other sees: the raw carry is one beat ahead and cannot see the
 	# entry a carrier skates into by beating his man; the drive-in sees that but
@@ -694,21 +658,14 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	# a mediocre shot mask a legal outlet pass, so raising the shot's bar would
 	# silently suppress passing too. Nothing qualifying leaves fire at -INF, which
 	# loses every compete below.
-	#
-	# The bar is cleared by the DOUBTED value (the pass's bar raised by the same
-	# doubt instead), the compete is entered at the HONEST one: the doubt says
-	# whether this option is worth the puck yet, not what it is worth (see
-	# _settle_penalty).
 	var fire_score: float = -INF
 	var fire_intent: int = best_shot_intent
-	if _settle_handicap(best_shot_score, settle_penalty) > SHOT_MIN_VALUE:
+	if best_shot_score > SHOT_MIN_VALUE:
 		fire_score = best_shot_score
 	# A pass is weighed against keeping the puck, so a carrier who would lose it
 	# where he stands has that loss off the bar, up to the whole bar: what is left
-	# is his settle doubt's raise, or nothing, which is what a search that found
-	# no pass returns.
-	var pass_bar: float = PASS_MIN_VALUE / maxf(1.0 - settle_penalty, 0.001) \
-			- clampf(-keep_value, 0.0, PASS_MIN_VALUE)
+	# is nothing, which is what a search that found no pass returns.
+	var pass_bar: float = PASS_MIN_VALUE - clampf(-keep_value, 0.0, PASS_MIN_VALUE)
 	if best_pass_score > pass_bar and best_pass_score > fire_score:
 		fire_score = best_pass_score
 		fire_intent = INTENT_PASS
