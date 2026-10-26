@@ -25,9 +25,9 @@ const INPUT_RATE: int = 120
 # costs a slightly larger residual when a host-side bounce/save/deflect lands
 # between packets, not staleness), the local player is predicted and reconciled
 # on acks, and remote interpolation cushions include one broadcast_interval so
-# they widen automatically. Halving it halves host per-tick encode/send cost and
-# upload — a 3-human playtest measured ~140 KB/s at 2 peers against a
-# ~60 KB/s-per-peer guide, and 5v5 would otherwise need ~5 Mbps of host upload.
+# they widen automatically. Host upload is linear in it: a 5v5 snapshot is
+# ~950 B, ~57 KB/s per human client at 60 Hz, so an all-human 5v5 costs the host
+# ~4.1 Mbps (docs/performance-findings.md → Network bytes by broadcast rate).
 # PHYSICS_TICK must stay an integer multiple (_state_tick_divisor).
 const STATE_RATE: int = 60
 # Rate at which world-state snapshots are written to the .mreplay file, below

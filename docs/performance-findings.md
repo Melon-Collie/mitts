@@ -317,9 +317,42 @@ not change the scaling anyway.
 - **Lowering the physics rate (issue #606, 120 → 90 Hz)** would cut every
   per-tick item at once, ~0.7 ms/frame. **Rejected**: the broadcast cadence is
   counted in physics ticks, so it trades responsiveness over ping for frame rate,
-  and responsiveness is the higher priority.
+  and responsiveness is the higher priority. Broadcasting every tick at 90 Hz
+  (`STATE_RATE` = `PHYSICS_TICK`, which the cadence supports) would keep the
+  cadence ahead of today's 60 Hz, for +50% host upload (*Network bytes by
+  broadcast rate*).
 - **Goalie update LOD** — ~0.22 ms/frame, but the only real slice is save
   geometry. Rejected on risk.
+
+## Network bytes by broadcast rate
+
+Measured headless in a 5v5 against bots (60 s, 7200 encodes) and over ENet
+loopback for the framing. The snapshot is a fixed layout: 7 B header, 63 B per
+skater, 14 B puck, 142 B per goalie, 6 B game state, so 941 B at 10 skaters and
+689 B at 6, every tick. The carrier-event tail (`SnapshotEventLog`) averaged
+8 B: one count byte on 71% of snapshots, 17 B per event still inside its 1 s
+retention on the rest, at most 3 seen. Bots raise only carrier changes; a human
+carrier's pickups and steals add records, so expect a little more with humans.
+Godot's RPC framing is 3 B (a lone `PackedByteArray` argument goes raw, not
+Variant-encoded); ENet adds ~10 B, Steam plus UDP/IP more (~50 B per packet is
+the netcode audit's estimate, ~5%). The figures below are payload plus framing,
+without the transport.
+
+Host upload, per human client and for an all-human lobby (bots cost nothing):
+
+| broadcast | per client (5v5) | 3v3 (5 clients) | 5v5 (9 clients) |
+|---|---|---|---|
+| 45 Hz | 43 KB/s | 1.3 Mbps | 3.1 Mbps |
+| 60 Hz (shipped) | 57 KB/s | 1.7 Mbps | 4.1 Mbps |
+| 90 Hz | 86 KB/s | 2.5 Mbps | 6.2 Mbps |
+| 120 Hz | 114 KB/s | 3.4 Mbps | 8.2 Mbps |
+
+The other direction is the input batch: 3 B + 12 × 24 B inputs (24 when the
+client measures >10% loss), sent at `INPUT_RATE`: 35 KB/s per client at 120 Hz,
+26 KB/s at 90; an all-human 5v5's host downloads ~2.5 Mbps at 120 Hz.
+
+Where the snapshot's bytes are: skaters 67% (of a skater's 63 B, 4 B is the
+peer id), goalies 30% (130 B of each is the keeper's pose).
 
 ## How to measure something new
 
