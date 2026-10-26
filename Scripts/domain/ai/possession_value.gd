@@ -286,7 +286,8 @@ func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
 		var v: Vector3 = _defender_vels[k]
 		var depth: float = (p.z - natural.z) * signf(_goal.z)
 		if depth <= 0.0 or absf(to_net.z) < 0.001:
-			_line_defence.append(project_defender(p, v, commit, carrier_pos, _goal,
+			_line_defence.append(project_defender(p, v, commit, carrier_pos,
+					carrier_pos.lerp(crossing, commit / t) if t > 0.0 else carrier_pos, _goal,
 					_caps_of(k)))
 			_line_vels.append(projected_vel)
 			continue
@@ -315,43 +316,83 @@ func _natural_crossing(pos: Vector3, vel: Vector3) -> Vector3:
 
 
 # Where a defender at `pos` skating at `vel`, built as `caps` (null: the league
-# build), is `t` from now, against a carrier at `carrier` attacking the net at
-# `goal`. Ahead of the carrier means goal-side of him along his line to that net
-# (a man level in depth but in the middle is between a wide carrier and the net):
+# build), is `t` from now, against a carrier now at `carrier_now` and at
+# `carrier_then` `t` from now, attacking the net at `goal`. Ahead of the carrier
+# means goal-side of him along his line to that net (a man level in depth but in
+# the middle is between a wide carrier and the net):
 #
-#   ahead, skating toward that net — backing off the carry: backing off keeps
-#     his gap, and stopping is the one choice that leaves him in the way, so he
-#     slides to a stop and stays;
+#   ahead, not closing on him — standing up at his line or backing off the
+#     carry: he holds his gap, giving ground down the carrier's line as the
+#     carrier gains it — a carrier who waits gains no ice by it — down to the
+#     top of his house, the floor a defender with a gap retreats to
+#     (AIRoleRushD.set_retreat_floor), as far as his skate gets him there;
 #   ahead otherwise — he carries on as he is until he is level with the carrier
 #     on that line, and is behind him from then;
 #   behind him — he backchecks (_backcheck).
 #
 # His velocity then is left in projected_vel.
-static func project_defender(pos: Vector3, vel: Vector3, t: float, carrier: Vector3,
-		goal: Vector3, caps: AISkaterCaps = null) -> Vector3:
+static func project_defender(pos: Vector3, vel: Vector3, t: float, carrier_now: Vector3,
+		carrier_then: Vector3, goal: Vector3, caps: AISkaterCaps = null) -> Vector3:
 	projected_vel = vel
 	if t <= 0.0:
 		return pos
-	var line := Vector3(goal.x - carrier.x, 0.0, goal.z - carrier.z)
-	var line_len: float = line.length()
-	var d: Vector3 = line / line_len if line_len > 0.001 \
-			else Vector3(0.0, 0.0, signf(goal.z))
-	var ahead: float = (pos.x - carrier.x) * d.x + (pos.z - carrier.z) * d.z
+	var d: Vector3 = _line_to(carrier_now, goal)
+	var ahead: float = (pos.x - carrier_now.x) * d.x + (pos.z - carrier_now.z) * d.z
 	if ahead > 0.0:
 		var toward: float = vel.x * d.x + vel.z * d.z
-		if toward > 0.0:
-			var speed: float = Vector2(vel.x, vel.z).length()
-			var t_stop: float = speed / AIArrival.REVERSAL_BRAKE_DECEL_M_S2
-			var tb: float = minf(t, t_stop)
-			var slide: float = speed * tb - 0.5 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * tb * tb
-			projected_vel = Vector3(vel.x, 0.0, vel.z) * (1.0 - tb / t_stop)
-			return pos + Vector3(vel.x, 0.0, vel.z) * (slide / speed)
+		if toward >= 0.0:
+			return _hold_gap(pos, vel, t, carrier_now, carrier_then, goal, caps)
 		var t_level: float = ahead / -toward if toward < 0.0 else INF
 		if t <= t_level:
 			return AITrajectory.predict_at(pos, vel, t)
 		pos = pos + vel * t_level
 		t -= t_level
 	return _backcheck(pos, vel, t, goal.z, caps)
+
+
+# The unit direction from `from` to `goal` on the ice.
+static func _line_to(from: Vector3, goal: Vector3) -> Vector3:
+	var line := Vector3(goal.x - from.x, 0.0, goal.z - from.z)
+	var line_len: float = line.length()
+	return line / line_len if line_len > 0.001 else Vector3(0.0, 0.0, signf(goal.z))
+
+
+# project_defender's gap-holder: he gives ground down the carrier's line as the
+# carrier gains it, from `carrier_now` to `carrier_then` over `t` (and closes as
+# the carrier gives it), keeping his place across the ice, no deeper than the top
+# of the house, as far as his skate from `pos` gets him there.
+static func _hold_gap(pos: Vector3, vel: Vector3, t: float, carrier_now: Vector3,
+		carrier_then: Vector3, goal: Vector3, caps: AISkaterCaps) -> Vector3:
+	var d: Vector3 = _line_to(carrier_now, goal)
+	var gained: float = (carrier_then.x - carrier_now.x) * d.x \
+			+ (carrier_then.z - carrier_now.z) * d.z
+	var stand: Vector3 = pos + d * gained
+	var sign_z: float = signf(goal.z)
+	var gate_z: float = goal.z - sign_z * AIZoneCoverage.HOUSE_TOP_DEPTH_M
+	var past: float = (stand.z - gate_z) * sign_z
+	if past > 0.0 and absf(d.z) > 0.001:
+		stand -= d * minf(past / absf(d.z), maxf(gained, 0.0))
+	var carrier_vel: Vector3 = (carrier_then - carrier_now) / t
+	var t_stand: float = AIArrival.time_to_arrive_caps(pos, stand, vel, caps)
+	if t_stand <= t:
+		projected_vel = Vector3(carrier_vel.x, 0.0, carrier_vel.z)
+		return stand
+	projected_vel = (stand - pos) / t_stand
+	return pos.lerp(stand, t / t_stand)
+
+
+# A man at `pos` braking out `vel` at the reversal decel, `t` from now; his
+# velocity then in projected_vel.
+static func _slide_to_stop(pos: Vector3, vel: Vector3, t: float) -> Vector3:
+	var speed: float = Vector2(vel.x, vel.z).length()
+	if speed < 0.001:
+		projected_vel = Vector3.ZERO
+		return pos
+	var t_stop: float = speed / AIArrival.REVERSAL_BRAKE_DECEL_M_S2
+	var tb: float = minf(t, t_stop)
+	var slide: float = speed * tb - 0.5 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * tb * tb
+	projected_vel = Vector3(vel.x, 0.0, vel.z) * (1.0 - tb / t_stop)
+	return pos + Vector3(vel.x, 0.0, vel.z) * (slide / speed)
 
 
 # project_defender's other result: the projected man's velocity.
@@ -535,11 +576,13 @@ func _price_entry(spot: Vector3, out: Array[float], base: int, t: float) -> void
 		out[base + 1] = 0.0
 
 
-# Every defender `t` from now against a carrier at `carrier` (project_defender, or
-# riding his man, AIDefencePairing), into `out` and his velocity then into
-# `out_vels`, index-matched to the read's defenders.
+# Every defender `t` from now against a carrier who is at `carrier` then
+# (project_defender, read against the puck's holder now; or riding his man,
+# AIDefencePairing), into `out` and his velocity then into `out_vels`,
+# index-matched to the read's defenders.
 func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
 		carrier: Vector3) -> void:
+	var now: Vector3 = _pairing.holder if _pairing.holder.is_finite() else carrier
 	out.clear()
 	out_vels.clear()
 	for k: int in _defenders.size():
@@ -547,7 +590,7 @@ func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
 			out.append(_pairing.ride_at(k, t))
 			out_vels.append(AIDefencePairing.ride_vel)
 		else:
-			out.append(project_defender(_defenders[k], _defender_vels[k], t, carrier,
+			out.append(project_defender(_defenders[k], _defender_vels[k], t, now, carrier,
 					_goal, _caps_of(k)))
 			out_vels.append(projected_vel)
 

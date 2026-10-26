@@ -14,6 +14,7 @@ var arrival: float = 0.0
 var _field: AICarrierField
 # Opponents projected to a later leg's start.
 var _scratch_opponents: Array[Vector3] = []
+var _scratch_vels: Array[Vector3] = []
 
 
 func _init(field: AICarrierField) -> void:
@@ -56,15 +57,15 @@ func score(ctx: RoleContext, dest: Vector3,
 	if decay * safety1 <= best_so_far:
 		return -INF
 	# Leg two starts where the defense has skated to during leg one.
-	_field.project_opponents(t1, _scratch_opponents)
+	_field.project_opponents(t1, _scratch_opponents, _scratch_vels, apex)
 	var safety2: float = AICarrySpace.carry_safety(
 			apex_puck, dest_puck, t2, _scratch_opponents,
-			_field.opponent_vels, _field.opponent_caps, true)
+			_scratch_vels, _field.opponent_caps, true)
 	var keep: float = safety1 * safety2
 	var ceiling: float = decay * keep
 	if ceiling <= best_so_far:
 		return -INF
-	_field.project_opponents(t1 + t2, _scratch_opponents)
+	_field.project_opponents(t1 + t2, _scratch_opponents, _scratch_vels, dest)
 	var dest_score: float = _field.value_at(ctx, dest, self_pos, _scratch_opponents,
 			Vector3.INF, 0.0, 1.0, AIShotOdds.Stance.UPRIGHT, NAN, 0.0, Vector3.ZERO,
 			ctx.caps_by_peer.get(ctx.peer_id))
@@ -81,10 +82,10 @@ func score(ctx: RoleContext, dest: Vector3,
 				_field.opponent_vels, _field.opponent_caps, true)
 		strip_s = t1 * _leg_share(cur_puck, apex_puck, strip_point)
 	else:
-		_field.project_opponents(t1, _scratch_opponents)
+		_field.project_opponents(t1, _scratch_opponents, _scratch_vels, apex)
 		strip_point = AICarrySpace.carry_strip_point(
 				apex_puck, dest_puck, t2, _scratch_opponents,
-				_field.opponent_vels, _field.opponent_caps, true)
+				_scratch_vels, _field.opponent_caps, true)
 		strip_s = t1 + t2 * _leg_share(apex_puck, dest_puck, strip_point)
 	var cost: float = _field.turnover_cost(strip_point,
 			1.0 - keep, strip_s)

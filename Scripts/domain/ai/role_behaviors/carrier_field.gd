@@ -94,7 +94,9 @@ var _goal: Vector3 = Vector3.ZERO
 # _tag_up_time while a teammate owes a tag-up, else 0.
 var _tag_up_s: float = 0.0
 var _entry_buf: Array[Vector3] = []
+var _entry_vels: Array[Vector3] = []
 var _drive_buf: Array[Vector3] = []
+var _drive_vels: Array[Vector3] = []
 # What possession of a spot is worth to us (against the opponents) and to them
 # (against our defenders), priced by fill().
 var _ours := AIPossessionValue.new()
@@ -208,20 +210,23 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 			pass_option_ceiling = v * PASS_OPTION_DISCOUNT
 
 
-# Every opponent `time_s` ahead, into `out_buf`, index-matched to `opponents`, on
-# the possession read's model of where a defender will be
-# (AIPossessionValue.project_defender): a man backing off in front of the
-# carrier gives up no more ice, in any direction, than his stop takes. Carried
-# on, his retreat shows every delay of the entry a blue line he has left, and
-# his drift shows the far lane opening, so the carrier pulls up to wait or
-# flips lanes each time it reverses (the safety read's _stopped_clearance is
-# the same man). A man closing on the carrier keeps his momentum until he is
-# level with him; behind the play, he backchecks.
-func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
+# Every opponent `time_s` ahead, into `out_buf` and his velocity then into
+# `out_vels`, index-matched to `opponents`, against the carrier at
+# `carrier_then` by then, on the possession read's model of where a defender
+# will be (AIPossessionValue.project_defender): a man backing off in front of
+# the carrier holds his gap to where the carrier has got to, never to where he
+# might have been — carried on regardless, his retreat would show every delay of
+# the entry a blue line he has left, and the carrier would pull up to wait. A
+# man closing on the carrier keeps his momentum until he is level with him;
+# behind the play, he backchecks.
+func project_opponents(time_s: float, out_buf: Array[Vector3],
+		out_vels: Array[Vector3], carrier_then: Vector3) -> void:
 	out_buf.clear()
+	out_vels.clear()
 	for i: int in opponents.size():
 		out_buf.append(AIPossessionValue.project_defender(opponents[i], opponent_vels[i],
-				time_s, _carrier_pos, _goal, opponent_caps[i]))
+				time_s, _carrier_pos, carrier_then, _goal, opponent_caps[i]))
+		out_vels.append(AIPossessionValue.projected_vel)
 
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`,
@@ -530,22 +535,24 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# A defender in the way drops keep and stops the drive where he covers it;
 	# apply_escape as for the carrier's own candidates.
 	var opps: Array[Vector3] = opponents
+	var opp_vels: Array[Vector3] = opponent_vels
 	if start_s > 0.0:
-		project_opponents(start_s, _entry_buf)
+		project_opponents(start_s, _entry_buf, _entry_vels, receiver_spot)
 		opps = _entry_buf
+		opp_vels = _entry_vels
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
-			opps, opponent_vels, opponent_caps, true)
+			opps, opp_vels, opponent_caps, true)
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
-			opps, opponent_vels, opponent_caps, true, true)
+			opps, opp_vels, opponent_caps, true, true)
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -_drive_loss_cost(ctx, reached, 1.0, own_hands, _drive_time(ctx, receiver_spot,
 				reached, receiver_vel, receiver_caps, own_hands))
 	var t: float = reach_time if reached == target \
 			else _drive_time(ctx, receiver_spot, reached, receiver_vel, receiver_caps, own_hands)
-	project_opponents(start_s + t, _drive_buf)
+	project_opponents(start_s + t, _drive_buf, _drive_vels, reached)
 	# The keeper tracks the drive the whole way, so it arrives at him square and
 	# set — for the carrier's own drive and a receiver's alike.
 	var regime_from: Vector3 = from_pos if from_pos.is_finite() else ctx.self_pos

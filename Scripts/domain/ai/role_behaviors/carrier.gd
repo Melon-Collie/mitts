@@ -120,6 +120,8 @@ const PROTECT_SCREEN_BEHIND_M: float = 0.75
 # fire intents persist across cooldown ticks so pre-aim keeps
 # driving toward the chosen action.
 var intended_action: int = INTENT_CARRY
+# The last compete answered CARRY this possession (a carry is under way).
+var _carry_committed: bool = false
 
 # Seconds we've been HOLDING the puck for a developing feed (see
 # _pick_commit_phase). Feeds the delay discount so a wait that never pays off
@@ -339,6 +341,7 @@ func _arm_pick_cooldown(ctx: RoleContext, base_ticks: int) -> void:
 # next time the bot enters CARRY.
 func reset() -> void:
 	intended_action = INTENT_CARRY
+	_carry_committed = false
 	pass_target_peer_id = -1
 	pass_target_speed = AIPuckLane.PASS_SPEED_M_S
 	pass_should_saucer = false
@@ -372,6 +375,7 @@ func reset() -> void:
 # back to CARRY is the same possession.
 func clear_intent() -> void:
 	intended_action = INTENT_CARRY
+	_carry_committed = false
 	pass_target_peer_id = -1
 	pass_target_speed = AIPuckLane.PASS_SPEED_M_S
 	pass_should_saucer = false
@@ -725,11 +729,17 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var hold_value: float = (_pass.developing_feed_value(ctx)
 			* keep_prob * AIActionScoring.delay_discount(_hold_elapsed_s))
 
+	# A carry under way holds against a pass by the same margin a committed pass
+	# holds against it, so a near tie does not move the puck on noise. Never
+	# against a shot: stand-still's shot branch IS the shot.
+	var retain_score: float = carry_score
+	if fire_intent == INTENT_PASS and _carry_committed and carry_score > 0.0:
+		retain_score = carry_score * (1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC)
 	var new_intent: int
 	# Fire if it beats retention (carrying, or holding for the developing play) —
 	# or, when retention is hopeless, at all: there is nothing to compare it with,
 	# and an unqualified fire arrives as -INF and loses both.
-	if ((fire_score >= carry_score and fire_score >= hold_value)
+	if ((fire_score >= retain_score and fire_score >= hold_value)
 			or (retention_hopeless and fire_score > -INF)) \
 			and not staggered:
 		_hold_elapsed_s = 0.0
@@ -811,6 +821,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 		new_intent = INTENT_CARRY
 
 	intended_action = new_intent
+	_carry_committed = new_intent == INTENT_CARRY
 
 
 # Refills the directional protect-opponent triple from the full opponent lists,

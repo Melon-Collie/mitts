@@ -37,7 +37,8 @@ const READ_VALIDITY_TAU_S: float = 6.0
 # close fire options during pre-aim. PROPORTIONAL, not additive, because scores
 # span ~0.02 (deep-DZ escapes) to ~0.7 (slot chances): a flat margin sane in the
 # OZ exceeds the whole gap between options in the DZ. Applied only to positive
-# scores and only to fire intents (shoot, pass, a rim).
+# scores: to fire intents (shoot, pass, a rim), and to a carry against a pass,
+# never against a shot.
 const ACTION_HYSTERESIS_MARGIN_FRAC: float = 0.15
 
 

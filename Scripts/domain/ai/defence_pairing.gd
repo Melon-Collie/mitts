@@ -17,6 +17,8 @@ static var ride_vel: Vector3 = Vector3.ZERO
 var attackers: Array[Vector3] = []
 var attacker_vels: Array[Vector3] = []
 var ride: Array[int] = []
+# Where the puck's holder is (INF: nobody holds it).
+var holder: Vector3 = Vector3.INF
 var _goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
 var _defender_vels: Array[Vector3] = []
@@ -58,30 +60,31 @@ static func collect_attack(snapshot: WorldSnapshot, team_id_by_peer: Dictionary,
 			if d < best_d or (d == best_d and pid < holder_pid):
 				best_d = d
 				holder_pid = pid
-	var holder: Vector3 = Vector3.INF
+	var holder_pos: Vector3 = Vector3.INF
 	for pid: int in snapshot.skater_states:
 		if team_id_by_peer.get(pid, -1) != attack_team:
 			continue
 		var st: SkaterNetworkState = snapshot.skater_states[pid]
 		if pid == holder_pid:
-			holder = st.position
+			holder_pos = st.position
 			continue
 		out_pos.append(st.position)
 		out_vels.append(st.velocity)
-	return holder
+	return holder_pos
 
 
 # Pairs each of `defenders` (velocities and caps index-matched) with the attacker
 # he gets goal-side of soonest (_cover_point, on his own build's arrival clock),
-# into `ride`; `attackers` are the side's skaters other than the holder, at
-# `holder` (INF: nobody holds the puck). The arrays are read, not copied. The holder is always covered while there is a
-# defender; the others count only level with or ahead of the puck (all of them
-# with nobody holding it). The pairing covers as many men as there are defenders,
+# into `ride`; `p_attackers` are the side's skaters other than the holder, at
+# `p_holder` (INF: nobody holds the puck). The arrays are read, not copied. The
+# holder is always covered while there is a defender; the others count only level
+# with or ahead of the puck (all of them with nobody holding it). The pairing covers as many men as there are defenders,
 # at the least total time; ties go to the earlier column and row in (x, z) order,
 # which no peer's registration moves.
 func pair(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3],
 		defender_caps: Array, pattackers: Array[Vector3], pattacker_vels: Array[Vector3],
-		holder: Vector3) -> void:
+		p_holder: Vector3) -> void:
+	holder = p_holder
 	_goal = goal
 	_defenders = defenders
 	_defender_vels = defender_vels

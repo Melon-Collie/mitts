@@ -65,6 +65,7 @@ var _rim_lane_by_k: PackedFloat64Array = PackedFloat64Array()
 var _rim_miss_by_k: PackedFloat64Array = PackedFloat64Array()
 # Opponents projected to a feed's arrival (and a developing feed's flight).
 var _proj_buf: Array[Vector3] = []
+var _proj_vels: Array[Vector3] = []
 # Lane of the last FLAT _pass_variant_ev (0.0 when the variant filtered out
 # before its lane solve). The saucer gate reads it — see search.
 var _last_flat_variant_lane: float = 0.0
@@ -524,7 +525,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			AIPuckLane.release_point_toward(self_pos,
 					self_pos + rim_dir if is_rim else receiver_spot),
 			_field.opponents, _field.opponent_caps)
-	_field.project_opponents(flight_t, _proj_buf)
+	_field.project_opponents(flight_t, _proj_buf, _proj_vels, receiver_spot)
 	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
 	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
 	var catch_s: float = delay_s + settle_s
@@ -695,7 +696,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			var pass_speed: float = AIPuckLane.pass_launch_speed(
 					dist, ctx.self_wrister_shot_speed, ctx.pass_speed_scale)
 			var flight_t: float = clampf(dist / pass_speed, 0.0, PASS_LEAD_MAX_S)
-			_field.project_opponents(flight_t, _proj_buf)
+			_field.project_opponents(flight_t, _proj_buf, _proj_vels, spot)
 			# On the seam, because this value is compared directly against
 			# fire_score (see score_pass_value).
 			feed = AIActionScoring.score_pass_value(

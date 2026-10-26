@@ -67,11 +67,13 @@ const OZ_RETREAT_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 1.0
 # ── Scratch buffers (reused across ticks, refilled per call) ────────────────
 # Opponents projected to a carry's arrival.
 var _scratch_opponents_path: Array[Vector3] = []
+var _scratch_vels_path: Array[Vector3] = []
 
 # Opponents projected to the start of a rolled path's later pieces.
 var _scratch_opponents_cont: Array[Vector3] = []
 # Opponents where the second step starts, a first move's horizon from now.
 var _scratch_opponents_ply2: Array[Vector3] = []
+var _scratch_vels_ply2: Array[Vector3] = []
 
 # ── The near moves' beam (two-ply search budget) ─────────────────────────────
 # The two-ply pass-OPTION read is most of a move's cost. Pass 1 (_score_move)
@@ -365,10 +367,11 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var bound: float = _prune_bound_for(m, _beam_prune_bound)
 	if decay <= bound:
 		return
-	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents, reach)
+	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents,
+			_field.opponent_vels, reach)
 	if decay * safety <= bound:
 		return
-	_field.project_opponents(t0, _scratch_opponents_path)
+	_field.project_opponents(t0, _scratch_opponents_path, _scratch_vels_path, end)
 	var worth: float = _end_worth(ctx, end, rollout.reach_vel(m, reach, ctx.self_pos), t0,
 			caps, dest_arrival)
 	var cost: float = 0.0
@@ -446,7 +449,7 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 				* AICarrySpace.carry_safety(
 						AICarrierField.puck_pos_at(end, goal),
 						AICarrierField.puck_pos_at(destination, goal), t_rest,
-						_scratch_opponents_path, _field.opponent_vels, _field.opponent_caps,
+						_scratch_opponents_path, _scratch_vels_path, _field.opponent_caps,
 						true))
 	return worth
 
@@ -470,13 +473,12 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		toward = Vector2(0.0, -ctx.own_goal_dir)
 	_rollout2.roll_all(start, rollout.end_vel[m1], rollout.end_facing[m1], toward, caps, true,
 			rollout.end_turn_rate[m1])
-	_field.project_opponents(t1, _scratch_opponents_ply2)
+	_field.project_opponents(t1, _scratch_opponents_ply2, _scratch_vels_ply2, start)
 	var dest_arrival: float = 0.0
 	var dest_i: int = _dest.kinds.find(destination_kind)
 	if dest_i >= 0:
 		dest_arrival = _dest_arrival[dest_i]
 	var behind_net: bool = absf(start.z) > GameRules.GOAL_LINE_Z
-	var projected_reach: int = -1
 	var best: float = floor_value
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
@@ -485,16 +487,15 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		if reach == 0:
 			continue
 		var t2: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
-		if reach != projected_reach:
-			_field.project_opponents(t1 + t2, _scratch_opponents_path)
-			projected_reach = reach
+		_field.project_opponents(t1 + t2, _scratch_opponents_path, _scratch_vels_path,
+				_rollout2.reach_pos(m, reach))
 		var worth: float = _end_worth(ctx, _rollout2.reach_pos(m, reach),
 				_rollout2.reach_vel(m, reach, start), t1 + t2, caps, dest_arrival) \
 				* AIActionScoring.delay_discount(t2)
 		if worth <= best:
 			continue
 		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2,
-				reach)
+				_scratch_vels_ply2, reach)
 		var move_value: float = worth * safety
 		if move_value <= best:
 			continue
@@ -507,14 +508,15 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 
 
 # The odds of keeping the puck along rolled move `m` of `roll` from `from`,
-# against the defence at the move's start `opps` (moving at the field's
-# velocities) — carry_safety's regimes on each leg of the skated path: the
+# against the defence at the move's start `opps` (moving at `opp_vels`, their
+# velocities then) — carry_safety's regimes on each leg of the skated path: the
 # meeting band against the defence at the leg's start, a moving puck at every
 # interior sample, a dwelling one with the arrival lunge at the end, each sample
 # read at its own time into the move. Leaves where the earliest uncertain leg
 # strips it in _strip_point.
 func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3,
-		opps: Array[Vector3], reach: int = AICarryRollout.SAMPLES) -> float:
+		opps: Array[Vector3], opp_vels: Array[Vector3],
+		reach: int = AICarryRollout.SAMPLES) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var prev: Vector3 = AICarrierField.puck_pos_at(from, goal)
 	var t_prev: float = 0.0
@@ -532,20 +534,20 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 			_scratch_opponents_cont.clear()
 			for i: int in opps.size():
 				_scratch_opponents_cont.append(AITrajectory.predict_at(opps[i],
-						_field.opponent_vels[i], t_prev))
+						opp_vels[i], t_prev))
 			leg_opps = _scratch_opponents_cont
 		var piece: float = AICarrySpace.carry_crossing_keep(prev, p, leg_t, leg_opps,
-				_field.opponent_vels, _field.opponent_caps)
+				opp_vels, _field.opponent_caps)
 		var last: bool = k == reach - 1
 		var c: float = AICarrySpace.reach_clearance(p, t, opps,
-				_field.opponent_vels, _field.opponent_caps,
+				opp_vels, _field.opponent_caps,
 				minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S) if last else -1.0,
 				dir, leg_len / leg_t)
 		piece = minf(piece, AICarrySpace.clearance_to_safety(c) if last
 				else AICarrySpace.transit_clearance_to_safety(c))
 		if piece < 1.0 and not _strip_point.is_finite():
 			_strip_point = AICarrySpace.carry_strip_point(prev, p, leg_t, leg_opps,
-					_field.opponent_vels, _field.opponent_caps, true)
+					opp_vels, _field.opponent_caps, true)
 			_strip_t = t_prev + (leg_t * Vector2(_strip_point.x - prev.x,
 					_strip_point.z - prev.z).length() / leg_len if leg_len > 0.001 else 0.0)
 		keep = minf(keep, piece)
@@ -618,7 +620,8 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			true)
 	if decay * safety <= best_so_far:
 		return -INF
-	_field.project_opponents(local_time, _scratch_opponents_path)
+	_field.project_opponents(local_time, _scratch_opponents_path, _scratch_vels_path,
+			candidate)
 	var to_cand: Vector3 = candidate - self_pos
 	to_cand.y = 0.0
 	var cand_dist: float = to_cand.length()
