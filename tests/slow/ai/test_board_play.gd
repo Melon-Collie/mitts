@@ -107,11 +107,12 @@ func test_3v3_high_forward_keeps_a_wall_clear_in_easy() -> void:
 # ── The pinch and the rotation behind it (5v5) ───────────────────────────────
 # Their winger holds the puck on the +x half-wall a few metres inside their
 # line, going nowhere — the bottled carrier a strong-side D pinches on. The
-# whole exchange should happen: the RD steps down the wall onto him, a forward
-# rotates up to the RD's point, and the LD slides to the middle of the line.
-# The pinch waits on its cover (a forward able to take the point in time), and
-# F2_WEAK starts on the weak-side breakout lane, so the exchange runs ~4 s: the
-# point is covered at ~4.0 s.
+# whole exchange should happen: the RD steps down the wall onto him, and while
+# the puck is still theirs a forward rotates up to the RD's point, and the LD
+# slides to the middle of the line. The pinch waits on its cover (a forward able
+# to take the point in time), and F2_WEAK starts on the weak-side breakout lane,
+# so the rotation runs ~4 s; the pinch and the low forward can win the puck off
+# the bottled carrier sooner, which ends the pinch's need of a cover.
 func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 	var h = Harness.new()
 	h.team_size = 5
@@ -132,10 +133,14 @@ func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 	var rd_deepest: float = 0.0
 	var point_covered: bool = false
 	var ld_middle: bool = false
+	var won: bool = false
 	var strong_point := Vector3(AIRoleDefenseman.DP_STRONG_LANE_X_M, 0.0,
 			-(GameRules.BLUE_LINE_Z + AIRoleDefenseman.DP_LINE_INSET_M))
 	for _i: int in int(4.5 / Harness.DT):
 		h.step()
+		if h.carrier_id != -1 and h.team_map.get(h.carrier_id, -1) == 0:
+			won = true
+			break
 		var rd_depth: float = -h.skater_pos(5).z - GameRules.BLUE_LINE_Z
 		rd_deepest = maxf(rd_deepest, rd_depth)
 		if rd_depth > 3.0:
@@ -145,8 +150,10 @@ func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 			if absf(h.skater_pos(4).x) < 2.0 \
 					and h.skater_pos(4).z > -(GameRules.BLUE_LINE_Z + 3.0):
 				ld_middle = true
-	gut.p("  RD deepest %.1f m inside | point covered %s | LD middle %s"
-			% [rd_deepest, point_covered, ld_middle])
+	gut.p("  RD deepest %.1f m inside | point covered %s | LD middle %s | won the puck %s"
+			% [rd_deepest, point_covered, ld_middle, won])
 	assert_gt(rd_deepest, 3.0, "the strong-side D pinches down the wall")
-	assert_true(point_covered, "a forward rotates up to his point")
-	assert_true(ld_middle, "the weak D slides to the middle of the line")
+	assert_true(point_covered or won,
+			"a forward rotates up to his point while the puck is still theirs")
+	assert_true(ld_middle or won,
+			"the weak D slides to the middle of the line while the puck is still theirs")
