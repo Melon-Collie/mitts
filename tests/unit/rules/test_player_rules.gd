@@ -70,52 +70,62 @@ func test_faceoff_offsets_preserve_team_split_around_dot() -> void:
 
 # ── End-zone draw alignment (5v5) ────────────────────────────────────────────
 # At an end-zone dot the jobs are positional, not dot-relative (the
-# FACEOFF_END_* doc in GameRules): defending — strong-side D on the wall,
-# weak-side D low on the goal-side arc, both wingers shoulder to shoulder at
-# the inside hashes, net-front left to the goalie; attacking — points at the
-# blue line. The boards winger's paired spot is 5v5-gated (`team_size`), so
+# FACEOFF_END_* doc in GameRules): defending — strong-side D on the boards
+# hash, boards-side winger on the inside hash with the inside winger beside
+# him toward the middle, weak-side D behind them at the net front; attacking —
+# points at the blue line. The wingers' spots are 5v5-gated (`team_size`), so
 # 3v3's shipped alignment is untouched.
 
 const _END_DOT_T0 := Vector2(
 		GameRules.END_ZONE_FACEOFF_DOT_X, GameRules.ICING_FACEOFF_DOT_Z)
+const _FACEOFF_CIRCLE_RADIUS_M: float = 4.57
 
-func test_defending_strong_d_holds_the_wall() -> void:
-	# Team 0 defends +Z; on the +x dot the RD (slot 4, identity +x) is strong:
-	# at the boards, level with the dot (a hair on-side).
+func _outside_circle(p: Vector3, dot: Vector2) -> bool:
+	return Vector2(p.x, p.z).distance_to(dot) > _FACEOFF_CIRCLE_RADIUS_M
+
+func test_defending_strong_d_holds_the_boards_hash() -> void:
+	# Team 0 defends +Z; on the +x dot the RD (slot 4, identity +x) is strong.
 	var p: Vector3 = PlayerRules.faceoff_position(0, 4, _END_DOT_T0)
-	assert_almost_eq(p.x,
-			GameRules.INNER_HALF_WIDTH - GameRules.FACEOFF_END_WALL_INSET_M, 0.001,
-			"wall D stands at the boards")
-	assert_almost_eq(p.z, _END_DOT_T0.y + GameRules.FACEOFF_END_WALL_ONSIDE_M, 0.001,
-			"wall D is level with the dot, a hair on-side")
-
-func test_defending_weak_d_sets_up_low_inside_the_dot() -> void:
-	# The LD (slot 3, identity -x) is weak on the +x dot: low on the goal-side
-	# arc, inside the dot — boxes out to the net-front on a lost draw.
-	var p: Vector3 = PlayerRules.faceoff_position(0, 3, _END_DOT_T0)
-	assert_almost_eq(p.x, _END_DOT_T0.x - GameRules.FACEOFF_END_LOW_D_INSIDE_M, 0.001,
-			"low D sits inside the dot, toward the net")
-	assert_almost_eq(p.z, _END_DOT_T0.y + GameRules.FACEOFF_END_LOW_D_BEHIND_M, 0.001,
-			"low D stands on the goal-side arc")
-	# On-side legality: the low D stands OUTSIDE the 4.57 m faceoff circle.
-	var dot3 := Vector3(_END_DOT_T0.x, p.y, _END_DOT_T0.y)
-	assert_gt(p.distance_to(dot3), 4.57, "low D is outside the circle")
-
-func test_defending_boards_winger_pairs_with_the_inside_winger_in_5v5() -> void:
-	# The RW (slot 2, identity +x) is the boards-side winger on the +x dot: he
-	# lines up shoulder to shoulder with the inside winger, on the middle-ice
-	# side, level with him.
-	var p: Vector3 = PlayerRules.faceoff_position(0, 2, _END_DOT_T0, -1.0, 5)
-	# The inside winger keeps the hash-mark checking spot even in 5v5.
-	var inside: Vector3 = PlayerRules.faceoff_position(0, 1, _END_DOT_T0, -1.0, 5)
-	assert_almost_eq(inside, Vector3(_END_DOT_T0.x - 4.7,
+	assert_almost_eq(p, Vector3(_END_DOT_T0.x + 4.7,
 			GameRules.FACEOFF_SPAWN_HEIGHT, _END_DOT_T0.y + 0.9),
 			Vector3.ONE * 0.001)
-	assert_almost_eq(p.x, inside.x - GameRules.FACEOFF_END_WINGER_PAIR_SEP_M, 0.001,
-			"boards winger stands on the inside winger's middle-ice side")
-	assert_almost_eq(p.z, inside.z, 0.001, "the wingers line up level")
-	var dot3 := Vector3(_END_DOT_T0.x, p.y, _END_DOT_T0.y)
-	assert_gt(p.distance_to(dot3), 4.57, "paired winger is outside the circle")
+
+func test_defending_boards_winger_takes_the_inside_hash_in_5v5() -> void:
+	# The RW (slot 2, identity +x) is the boards-side winger on the +x dot.
+	var p: Vector3 = PlayerRules.faceoff_position(0, 2, _END_DOT_T0, -1.0, 5)
+	assert_almost_eq(p, Vector3(_END_DOT_T0.x - 4.7,
+			GameRules.FACEOFF_SPAWN_HEIGHT, _END_DOT_T0.y + 0.9),
+			Vector3.ONE * 0.001)
+
+func test_defending_inside_winger_pairs_toward_the_middle_in_5v5() -> void:
+	# The LW lines up level with the hash winger on his middle-ice side, so on
+	# a lost draw their paths to the two points don't cross.
+	var hash_w: Vector3 = PlayerRules.faceoff_position(0, 2, _END_DOT_T0, -1.0, 5)
+	var p: Vector3 = PlayerRules.faceoff_position(0, 1, _END_DOT_T0, -1.0, 5)
+	assert_almost_eq(p.x, hash_w.x - GameRules.FACEOFF_END_WINGER_PAIR_SEP_M, 0.001,
+			"inside winger stands on the hash winger's middle-ice side")
+	assert_almost_eq(p.z, hash_w.z, 0.001, "the wingers line up level")
+	assert_true(_outside_circle(p, _END_DOT_T0), "paired winger is outside the circle")
+
+func test_defending_weak_d_holds_the_net_front() -> void:
+	# The LD (slot 3, identity -x) is weak on the +x dot: behind the hash
+	# winger, goal-side, in front of the goal line.
+	var hash_w: Vector3 = PlayerRules.faceoff_position(0, 2, _END_DOT_T0, -1.0, 5)
+	var p: Vector3 = PlayerRules.faceoff_position(0, 3, _END_DOT_T0)
+	assert_almost_eq(p.x, hash_w.x, 0.001, "net-front D is behind the hash winger")
+	assert_almost_eq(p.z, hash_w.z + GameRules.FACEOFF_END_NET_FRONT_D_BEHIND_M, 0.001,
+			"net-front D is goal-side of him")
+	assert_lt(p.z, GameRules.GOAL_LINE_Z, "net-front D is in front of the goal line")
+	assert_true(_outside_circle(p, _END_DOT_T0), "net-front D is outside the circle")
+
+func test_defending_5v5_spots_do_not_overlap() -> void:
+	var spots: Array[Vector3] = []
+	for slot: int in range(PlayerRules.MAX_PER_TEAM):
+		spots.append(PlayerRules.faceoff_position(0, slot, _END_DOT_T0, -1.0, 5))
+	for i: int in range(spots.size()):
+		for j: int in range(i + 1, spots.size()):
+			assert_gt(spots[i].distance_to(spots[j]), 1.0,
+					"slots %d and %d stand apart" % [i, j])
 
 func test_attacking_wingers_hold_the_hash_marks_in_5v5() -> void:
 	# The winger pair is a DEFENDING shape: at the same dot the attacking team's
@@ -140,22 +150,22 @@ func test_attacking_points_hold_the_blue_line() -> void:
 
 func test_end_zone_alignment_mirrors_for_team_1() -> void:
 	# Team 1 defending at its own -x/-z dot. Facing +Z its right side is -x, so
-	# the RD is strong (wall); the LD sets up low inside the dot; the RW (the
-	# boards winger there) pairs with the inside LW in 5v5.
+	# the RD holds the boards hash, the RW takes the inside hash with the LW
+	# beside him toward the middle, and the LD stands at the net front.
 	var dot := Vector2(-GameRules.END_ZONE_FACEOFF_DOT_X,
 			-GameRules.ICING_FACEOFF_DOT_Z)
 	var wall: Vector3 = PlayerRules.faceoff_position(1, 4, dot)
-	var low_d: Vector3 = PlayerRules.faceoff_position(1, 3, dot)
-	var inside_w: Vector3 = PlayerRules.faceoff_position(1, 1, dot, -1.0, 5)
-	var paired_w: Vector3 = PlayerRules.faceoff_position(1, 2, dot, -1.0, 5)
-	assert_almost_eq(wall.x,
-			-(GameRules.INNER_HALF_WIDTH - GameRules.FACEOFF_END_WALL_INSET_M), 0.001)
-	assert_almost_eq(wall.z, dot.y - GameRules.FACEOFF_END_WALL_ONSIDE_M, 0.001)
-	assert_almost_eq(low_d.x, dot.x + GameRules.FACEOFF_END_LOW_D_INSIDE_M, 0.001)
-	assert_almost_eq(low_d.z, dot.y - GameRules.FACEOFF_END_LOW_D_BEHIND_M, 0.001)
-	assert_almost_eq(inside_w.x, dot.x + 4.7, 0.001)
-	assert_almost_eq(paired_w.x, inside_w.x + GameRules.FACEOFF_END_WINGER_PAIR_SEP_M, 0.001)
-	assert_almost_eq(paired_w.z, inside_w.z, 0.001)
+	var net_d: Vector3 = PlayerRules.faceoff_position(1, 3, dot)
+	var hash_w: Vector3 = PlayerRules.faceoff_position(1, 2, dot, -1.0, 5)
+	var pair_w: Vector3 = PlayerRules.faceoff_position(1, 1, dot, -1.0, 5)
+	assert_almost_eq(wall.x, dot.x - 4.7, 0.001)
+	assert_almost_eq(wall.z, dot.y - 0.9, 0.001)
+	assert_almost_eq(hash_w.x, dot.x + 4.7, 0.001)
+	assert_almost_eq(hash_w.z, dot.y - 0.9, 0.001)
+	assert_almost_eq(pair_w.x, hash_w.x + GameRules.FACEOFF_END_WINGER_PAIR_SEP_M, 0.001)
+	assert_almost_eq(pair_w.z, hash_w.z, 0.001)
+	assert_almost_eq(net_d.x, hash_w.x, 0.001)
+	assert_almost_eq(net_d.z, hash_w.z - GameRules.FACEOFF_END_NET_FRONT_D_BEHIND_M, 0.001)
 
 func test_center_and_neutral_dots_keep_the_legacy_d_offsets() -> void:
 	# The positional override is end-zone only: |dot z| inside the blue line
