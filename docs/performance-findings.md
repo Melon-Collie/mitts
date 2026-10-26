@@ -354,6 +354,30 @@ client measures >10% loss), sent at `INPUT_RATE`: 35 KB/s per client at 120 Hz,
 Where the snapshot's bytes are: skaters 67% (of a skater's 63 B, 4 B is the
 peer id), goalies 30% (130 B of each is the keeper's pose).
 
+### What the broadcast interval costs on screen
+
+A remote skater is drawn forward-predicted from a base `rtt/2 + interval + PDV`
+in the past to `rtt/2 + lead` ahead, so the interval is not staleness but
+prediction horizon: `rtt + PDV + interval + 1/INPUT_RATE + 2 ticks`. Its cost is
+how far that prediction lands from the host's body. Measured by recording a
+5v5 against bots as the wire carries it and replaying the client's render
+offline (the same hermite base and `integrate_forward`, PDV 3 ms, against the
+host's position at the instant the prediction lands; downed and pinned bodies
+left out), cm:
+
+| RTT | 120/60 shipped: mean, p95, p99 | 90/90 | 90/45 | no forward prediction, mean |
+|---|---|---|---|---|
+| 30 ms | 1.4, 3.3, 5.6 | 1.3, 3.2, 5.4 | 1.9, 4.3, 7.1 | 27 |
+| 60 ms | 2.6, 5.9, 9.4 | 2.7, 6.3, 10.0 | 3.1, 6.9, 10.9 | 38 |
+| 120 ms | 6.3, 14.1, 21.7 | 6.3, 14.2, 21.8 | 7.0, 15.6, 23.9 | 59 |
+
+A 90 Hz physics rate lengthens the lead by 8.3 ms (the batch interval and the two
+buffer ticks are tick-sized), which cancels what a 90 Hz broadcast saves:
+90/90's horizon is today's within 3 ms. 90/45 adds ~11 ms of horizon and under
+a centimetre. The worst cases (0.3–0.8 m) are contacts, the same at every
+cadence. The replay runs on a 120 Hz recording, so it isolates what the client
+knows from how the body moves; bots, not humans, did the skating.
+
 ## How to measure something new
 
 The freeze-sweep approach is gone, and its lesson is worth keeping: **an A/B that
