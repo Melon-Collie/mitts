@@ -76,9 +76,10 @@ var _scratch_opponents_ply2: Array[Vector3] = []
 # scores every move ONE-PLY — a strict LOWER bound on its full value, since the
 # two-ply reads only ever RAISE a spot — and pass 2 (_upgrade_candidate_two_ply)
 # completes the two-ply reads for the CARRY_BEAM_WIDTH best one-ply rows only,
-# best-first. The argmax is therefore approximate (a move whose whole winning
-# margin lives in the second ply can miss the beam) — a search-budget policy,
-# not an evaluation-model change.
+# best-first, and for the incumbent move wherever it ranks. The argmax is
+# therefore approximate (a challenger whose whole winning margin lives in the
+# second ply can miss the beam) — a search-budget policy, not an
+# evaluation-model change.
 const CARRY_BEAM_WIDTH: int = 5
 # How many of the beam's best rolled moves are searched a second step deep
 # (_carry_on_value): carrying on from where each ends is a full roll of the
@@ -248,18 +249,26 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 
 	# ── Pass 2: complete the two-ply reads for the beam's best rows ──────────
 	# Best-first, consuming each row as it upgrades. Rows outside the beam never
-	# enter best_score (see CARRY_BEAM_WIDTH).
-	for rank: int in CARRY_BEAM_WIDTH:
+	# enter best_score (see CARRY_BEAM_WIDTH), except the incumbent: the move
+	# being skated is always read as deep as the moves challenging it, or one
+	# whose worth lives in its second step loses to a challenger read there
+	# whenever its first step drops out of the beam, and wins back the next
+	# re-plan, and the turns between them spend the speed.
+	var incumbent_row: int = _beam_move.find(_incumbent_move) if _incumbent_move >= 0 else -1
+	for rank: int in CARRY_BEAM_WIDTH + 1:
 		var bi: int = -1
-		var bt: float = -INF
-		for j: int in _beam_total.size():
-			if _beam_total[j] > bt:
-				bt = _beam_total[j]
-				bi = j
+		if rank < CARRY_BEAM_WIDTH:
+			var bt: float = -INF
+			for j: int in _beam_total.size():
+				if _beam_total[j] > bt:
+					bt = _beam_total[j]
+					bi = j
+		elif incumbent_row >= 0 and _beam_total[incumbent_row] > -INF:
+			bi = incumbent_row
 		if bi == -1:
 			break
 		var up_total: float = _upgrade_candidate_two_ply(ctx, bi,
-				rank < CARRY_PLY2_WIDTH, our_goalie, caps,
+				rank < CARRY_PLY2_WIDTH or bi == incumbent_row, our_goalie, caps,
 				_prune_bound_for(_beam_move[bi], best_key))
 		var key: float = up_total
 		if _beam_move[bi] == _incumbent_move and up_total > 0.0:
