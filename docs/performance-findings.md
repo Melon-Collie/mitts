@@ -175,22 +175,44 @@ machine.
 
 | skaters | process ms/frame | tick ms | main thread at 90 fps | per added skater |
 |---|---|---|---|---|
-| 2 | 1.32 | 2.56 | 4.73 | |
-| 4 | 1.93 | 3.10 | 6.06 | 0.66 |
-| 6 | 2.43 | 3.84 | 7.56 | 0.75 |
-| 8 | 3.18 | 4.66 | 9.39 | 0.92 |
-| 10 | 3.49 | 4.84 | 9.94 | 0.27 |
+| 2 | 1.30 | 2.26 | 4.32 | |
+| 4 | 2.01 | 2.86 | 5.81 | 0.75 |
+| 6 | 2.39 | 3.76 | 7.41 | 0.80 |
+| 8 | 2.99 | 4.33 | 8.76 | 0.67 |
+| 10 | 3.56 | 4.87 | 10.06 | 0.65 |
 
-- **Linear, no blow-up.** About 0.65 ms of main thread per skater at 90 fps on
-  that machine. The per-step slope is noise: read the 2 → 10 line.
+The tick by `HostCostProbe` section, same runs (µs a tick; one probe window a
+run, so single sections are noisy):
+
+| section | 2 | 4 | 6 | 8 | 10 |
+|---|---|---|---|---|---|
+| dispatch: apply (bots' skater step inside) | 369 | 912 | 1438 | 1626 | 1897 |
+| goalies | 587 | 701 | 624 | 485 | 646 |
+| snapshot | 224 | 292 | 326 | 290 | 490 |
+| human skater steps (one human) | 430 | 509 | 450 | 441 | 432 |
+| skater bodies | 122 | 217 | 227 | 247 | 354 |
+| capture + broadcast | 161 | 248 | 249 | 252 | 314 |
+| game tail | 137 | 141 | 137 | 120 | 157 |
+| dispatch: kick | 61 | 69 | 79 | 75 | 90 |
+| puck | 31 | 47 | 95 | 68 | 78 |
+| **attributed** | 2137 | 3156 | 3648 | 3625 | 4484 |
+| *worker (off-thread)* | *589* | *1542* | *1391* | *1394* | *2321* |
+
+- **Linear, no blow-up.** About 0.72 ms of main thread per skater at 90 fps on
+  that machine (2 → 10). Each single step's slope is noise.
 - **Per skater, the tick is slightly the larger half.** The controller step is
   ~0.2 ms a tick (paid 1.33 times a frame at 90 fps) against ~0.27 ms of render
   pass a frame.
-- **The probe attributes the tick.** Its sections sum to within ~1% of the
-  measured tick at both ends of the sweep, so the tick has no hidden half.
+- **The probe attributes most of the tick.** Its sections cover 84–95% of the
+  measured tick. The rest is the step's engine side (transform propagation,
+  signal dispatch), so the tick has no hidden half.
 - **The two keepers are the largest fixed cost.** ~0.6 ms a tick together,
-  whatever the skater count. Next are the AI snapshot (0.26–0.5 ms) and capture
-  + broadcast (0.2–0.3 ms).
+  whatever the skater count. Next are the AI snapshot (0.2–0.5 ms) and capture
+  + broadcast (0.16–0.31 ms).
+- **The one human's step costs about twice a bot's skater step** (~450 µs
+  against ~200). The rows are not like for like: the human's covers the whole
+  `LocalController` tick (input gather, offside prediction, the prediction
+  history), the bots' only `_process_input`.
 - **Engine render CPU barely moves with skaters.** Drawn
   (`FRAME_COST_RENDER=1`, Forward+ on software Vulkan), CPU render went from
   1.39 to 1.63 ms between 2 and 10 skaters, ~25 draw calls a skater. Drawing
