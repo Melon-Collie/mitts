@@ -335,6 +335,20 @@ state (`GaitPose.leg_l`, `_gripping`) and `_locomotion`'s fields stay stale on
 the native path, as does every alignment and pivot field but the published
 ones (`travel_align_yaw`, `pivot_hold`).
 
+### The blade pass is native
+
+Where the extension is built, `NativeBladePass` runs the whole of
+`SkaterIKCoordinator.apply_blade_toward`: everything from the cursor to the two
+markers, the clamps included. The GDScript is the reference and the fallback.
+Change `apply_blade_toward` or anything it calls (`_solve_top_hand` and its
+reach limits, `_board_reach_limit`, `_blade_target_for`,
+`_carry_backhand_stop`, `_commit_hand_pose`, the goalie clamps,
+`resolve_blade_against_net`, `Skater.clamp_blade_to_walls`, and the
+`TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
+rink functions under them) and the port changes with it, or
+`test_native_blade_pass_parity.gd` fails. A tunable the pass newly reads goes
+into `_sync_pass_config` too.
+
 ### Pose the hand, not the blade
 
 The tracked path is blade-first: the cursor names a blade position and

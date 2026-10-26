@@ -3053,6 +3053,12 @@ func get_blade_wall_normal() -> Vector3:
 	return _last_wall_normal
 
 
+# The wall normal a blade pass found when it ran natively (NativeBladePass),
+# which clamps the blade to the boards itself.
+func set_blade_wall_normal(normal: Vector3) -> void:
+	_last_wall_normal = normal
+
+
 # ── Stick rig (delegate to SkaterStickRig) ────────────────────────────────────
 
 # The hosel tip the shaft aims at rides the blade's cosmetic pitch, so the tilt
