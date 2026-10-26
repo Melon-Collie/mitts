@@ -241,6 +241,46 @@ func _impeded_ctx(mate: Vector3, defender: Vector3) -> RoleContext:
 			[1, TEAM_ID, carrier], [2, TEAM_ID, mate], [11, 1, defender]]))
 
 
+# A neutral-zone carrier, a mate wide, and a defender standing inside his line
+# (still, so the race's only clock is ours).
+func _entry_race_ctx() -> RoleContext:
+	var self_pos := Vector3(0.0, 0.0, 6.0)
+	return _set_keeper(_make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos], [2, TEAM_ID, Vector3(-6.0, 0.0, 4.0)],
+			[11, 1, Vector3(3.0, 0.0, -9.0)]]))
+
+
+func test_the_zone_entry_leaf_is_read_when_its_man_gets_there() -> void:
+	# Our possession of a spot short of the line is the entries its man races
+	# the defence for, from when he reaches it and at the pace he arrives with
+	# (AICarrierField.horizon_value): later is never easier, and skating away
+	# from the zone is worse than arriving at rest.
+	var ctx := _entry_race_ctx()
+	var c: AIRoleCarrier = _decided(ctx)
+	var spot := Vector3(-6.0, 0.0, -3.0)
+	var now: float = c._field.horizon_value(spot)
+	var later: float = c._field.horizon_value(spot, 0.6)
+	assert_gt(later, 0.0, "the entry is still worth racing for")
+	assert_lt(later, now, "arriving later hands the defence time")
+	assert_lt(c._field.horizon_value(spot, 0.6, Vector3(0.0, 0.0, 5.0)), later,
+			"arriving skating away from the zone is worth less than at rest")
+
+
+func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
+	# A mate far out is worth his drive in from the reception, its end read when
+	# he gets there (receiver_drive_in_value's start): never as if he stood at the
+	# end of it now.
+	var self_pos := Vector3(0.0, 0.0, 6.0)
+	var ctx := _set_keeper(_make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos], [11, 1, Vector3(9.0, 0.0, -14.0)]]))
+	var c: AIRoleCarrier = _decided(ctx)
+	var mate := Vector3(-6.0, 0.0, 8.0)
+	var now: float = c._field.receiver_drive_in_value(ctx, mate, null)
+	assert_gt(now, 0.0, "his drive in is credited")
+	assert_lt(c._field.receiver_drive_in_value(ctx, mate, null, Vector3.ZERO, Vector3.INF,
+			0.8), now, "fed, his drive starts 0.8 s from now")
+
+
 func test_forward_pressure_is_directional_and_the_pass_must_be_earned() -> void:
 	# Forward pressure is read as controlled space (AICarrySpace.controlled_space),
 	# so a defender between the carrier and the zone costs the carry more than the
