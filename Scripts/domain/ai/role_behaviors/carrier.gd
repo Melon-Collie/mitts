@@ -411,7 +411,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	var cur_puck_pos: Vector3 = AICarrierField.puck_pos_at(self_pos, attacking_goal)
 	var evade_seam: Vector3 = AICarrySpace.best_evade_point(
 			cur_puck_pos, ctx.self_velocity, _field.opponents, _field.opponent_vels,
-			ctx.self_handle_reach, _field.opponent_caps)
+			ctx.self_handle_reach, _field.opponent_caps, ctx.self_max_accel)
 	_phase_current_safety = AICarrySpace.clearance_to_safety(
 			AICarrySpace.reach_clearance(evade_seam, AICarrySpace.EVADE_HORIZON_S,
 					_field.opponents, _field.opponent_vels, _field.opponent_caps))

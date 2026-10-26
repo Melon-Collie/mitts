@@ -160,7 +160,8 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	# Outside the zone the plan is still to get in, and standing a step brings
 	# the entry no closer: it pays the step's time as every move does.
 	if not AIActionScoring.in_offensive_zone(self_pos, attacking_goal):
-		stand_score = maxf(stand_score, _field.horizon_value(self_pos)
+		stand_score = maxf(stand_score, _field.horizon_value(self_pos, 0.0, Vector3.ZERO,
+				ctx.caps_by_peer.get(ctx.peer_id))
 				* AIActionScoring.delay_discount(AICarryRollout.HORIZON_S))
 	var stand_puck_pos: Vector3 = AICarrierField.puck_pos_at(self_pos, attacking_goal)
 	var stand_safety: float = AICarrySpace.carry_safety(
@@ -720,7 +721,7 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
 			_field.keeper_stance_at(local_time + cand_windup),
 			atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
-			local_time, arrive_vel)
+			local_time, arrive_vel, ctx.caps_by_peer.get(ctx.peer_id))
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly

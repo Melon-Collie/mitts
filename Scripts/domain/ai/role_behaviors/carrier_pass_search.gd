@@ -295,8 +295,6 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		receiver_omega: float, receiver_caps: AISkaterCaps,
 		carrier_in_oz: bool) -> float:
-	var speed: float = receiver_caps.max_speed if receiver_caps != null \
-			else AIArrival.SKATER_REF_SPEED_M_S
 	var catch_radius: float = receiver_caps.handle_reach if receiver_caps != null \
 			else AIBotMechanics.EVADE_CARRY_HANDLE_M
 	var receiver_speed: float = Vector2(
@@ -310,7 +308,7 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	for k: int in AIRimPass.count:
 		_rim_sure_by_k[k] = -1.0
 		var t: float = AIRimPass.meet_time(k, receiver_state.position,
-				receiver_state.velocity, speed)
+				receiver_state.velocity, receiver_caps)
 		if t == INF:
 			continue
 		if not AIRimPass.catchable(k, t, receiver_state.velocity):
@@ -531,7 +529,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# leaves (the goalie's own answer to the flight, AIShotValue.feed). A
 	# one-timer-ready receiver's release is the flight alone (_pass_variant_ev).
 	var receiver_value: float = _field.feed_value_at(ctx, origin, receiver_spot,
-			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf)
+			pass_speed, receiver_release_t <= flight_t, self_pos, _proj_buf, 0.0,
+			Vector3.ZERO, receiver_caps)
 	# An OPEN receiver can carry into a better look, so he is credited the best
 	# value he can REACH with a short drive toward the net. It bites in the OZ,
 	# where value_at is shot-only. (Re-projects _proj_buf, which
@@ -544,7 +543,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# already is that possession.
 	if AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
 		receiver_value = _field.entry_value(receiver_spot, flight_t, receiver_vel,
-				receiver_value)
+				receiver_value, receiver_caps)
 	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
 	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
 	# Reception pressure on a catch: the reachable-set clearance at the reception
@@ -563,7 +562,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	if p_bobble > 0.0:
 		var regather_s: float = AIFeedReception.bobble_regather_s(closing)
 		bobble_won = AIActionScoring.arrival_race(receiver_spot, flight_t + regather_s,
-				_field.opponents_release, _field.opponent_vels)
+				_field.opponents_release, _field.opponent_vels, false, _field.opponent_caps)
 		bobble_decay = AIActionScoring.delay_discount(delay_s + regather_s)
 	var reception_kept: float = (1.0 - p_bobble) * catch_safety + p_bobble * bobble_won
 	# Four completion loss modes, mutually exclusive and summing to 1 with the

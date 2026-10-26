@@ -304,11 +304,8 @@ static func _pick_soonest_with_hysteresis(
 		if fixed_peers.has(pid):
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
-		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var speed: float = caps.max_speed if caps != null \
-				else AIArrival.SKATER_REF_SPEED_M_S
-		var t: float = AIArrival.time_to_arrive(
-				s.position, target_pos, s.velocity, speed)
+		var t: float = AIArrival.time_to_arrive_caps(
+				s.position, target_pos, s.velocity, caps_by_peer.get(pid))
 		if _hysteresis_class(prev_assignments.get(pid, Slot.NONE)) != _hysteresis_class(slot):
 			t += HYSTERESIS_PENALTY_S
 		if t < best_score or (t == best_score and (best_pid == -1 or pid < best_pid)):

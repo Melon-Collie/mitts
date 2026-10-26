@@ -222,12 +222,8 @@ func _fill_attackers(snapshot: WorldSnapshot, team_id: int,
 			attackers.append(pid)
 			attacker_leads.append(_lead(s.position, s.velocity))
 			continue
-		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var accel: float = caps.max_accel if caps != null \
-				else AIArrival.SHED_ACCEL_DEFAULT_M_S2
-		var t: float = AIArrival.time_to_arrive(
-				s.position, our_net, s.velocity,
-				_race_speed(caps), accel)
+		var t: float = AIArrival.time_to_arrive_caps(
+				s.position, our_net, s.velocity, caps_by_peer.get(pid))
 		if t <= bar:
 			attackers.append(pid)
 			attacker_leads.append(_lead(s.position, s.velocity))
@@ -269,12 +265,8 @@ func _fill_recovery(snapshot: WorldSnapshot, team_id: int,
 		if _xz_dist(s.position, our_net) < origin_along:
 			recovery_by_peer[pid] = Recovery.INSIDE
 			continue
-		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var accel: float = caps.max_accel if caps != null \
-				else AIArrival.SHED_ACCEL_DEFAULT_M_S2
-		var t: float = AIArrival.time_to_arrive(
-				s.position, gate, s.velocity,
-				_race_speed(caps), accel)
+		var t: float = AIArrival.time_to_arrive_caps(
+				s.position, gate, s.velocity, caps_by_peer.get(pid))
 		# Enter/hold hysteresis on the race (see TRACK_ENTER_MARGIN_S).
 		var was_counted: bool = prev_recovery.get(pid, Recovery.BEATEN) \
 				!= Recovery.BEATEN
@@ -315,12 +307,8 @@ func _fill_backpressure(snapshot: WorldSnapshot,
 			snapshot.skater_states[carrier_peer].velocity)
 	for pid: int in _tracking:
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
-		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var speed: float = _race_speed(caps)
-		var accel: float = caps.max_accel if caps != null \
-				else AIArrival.SHED_ACCEL_DEFAULT_M_S2
-		var t: float = AIArrival.time_to_arrive(
-				s.position, hip, s.velocity, speed, accel)
+		var t: float = AIArrival.time_to_arrive_caps(
+				s.position, hip, s.velocity, caps_by_peer.get(pid))
 		if t < backpressure_s:
 			backpressure_s = t
 
@@ -366,28 +354,25 @@ func _origin_eta(snapshot: WorldSnapshot, team_id: int,
 		our_net: Vector3, opp_carries: bool, pid_carrier: int) -> float:
 	if opp_carries:
 		var cs: SkaterNetworkState = snapshot.skater_states[pid_carrier]
-		return AIArrival.time_to_arrive(cs.position, our_net, cs.velocity,
-				_race_speed(caps_by_peer.get(pid_carrier)))
+		return AIArrival.time_to_arrive_caps(cs.position, our_net, cs.velocity,
+				caps_by_peer.get(pid_carrier))
 	var best_collect: float = INF
+	var collector_caps: AISkaterCaps = null
 	for pid: int in snapshot.skater_states:
 		if team_id_by_peer.get(pid, -1) == team_id:
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
-		var t: float = AIArrival.time_to_arrive(
-				s.position, _rush_origin, s.velocity,
-				_race_speed(caps_by_peer.get(pid)))
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var t: float = AIArrival.time_to_arrive_caps(s.position, _rush_origin, s.velocity,
+				caps)
 		if t < best_collect:
 			best_collect = t
+			collector_caps = caps
 	if best_collect == INF:
 		return INF
 	# Carry from the pickup, restarting from rest — the gather costs the momentum.
-	return best_collect + AIArrival.time_to_arrive(
-			_rush_origin, our_net, Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S)
-
-
-# The rush and the backcheck both race at the skater's own top speed.
-func _race_speed(caps: AISkaterCaps) -> float:
-	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
+	return best_collect + AIArrival.time_to_arrive_caps(
+			_rush_origin, our_net, Vector3.ZERO, collector_caps)
 
 
 # Velocity lead, clamped — cover where he's cutting, not the freeze-frame. Shrinks
@@ -433,10 +418,8 @@ func _pressure_eta(snapshot: WorldSnapshot, team_id: int,
 		if team_id_by_peer.get(pid, -1) == team_id:
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
-		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var t: float = AIArrival.time_to_arrive(
-				s.position, carrier_pos, s.velocity,
-				caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S)
+		var t: float = AIArrival.time_to_arrive_caps(
+				s.position, carrier_pos, s.velocity, caps_by_peer.get(pid))
 		if t < best:
 			best = t
 	return best

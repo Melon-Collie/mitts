@@ -560,15 +560,17 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 # The carrier's best evasion target — the point in his handling envelope (where he
 # can put/protect the puck over EVADE_HORIZON_S) with the most clearance from
 # every defender: the SEAM. `handle_reach` is how far he holds the puck off his
-# body (scaled by the blade lever), so a longer reach threads a tighter seam. Returned as a
+# body (scaled by the blade lever), so a longer reach threads a tighter seam, and
+# `maneuver_accel` is his own thrust. Returned as a
 # world point (y = 0); this max-clearance seam is the carrier's honest
 # evadability read (reach_clearance at this point = "can I keep the puck at
 # all"). Value-type math; allocation-free.
 static func best_evade_point(
 		carrier_pos: Vector3, carrier_vel: Vector3,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		handle_reach: float, opponent_caps: Array = []) -> Vector3:
-	var env: float = 0.5 * MANEUVER_ACCEL_M_S2 * EVADE_HORIZON_S * EVADE_HORIZON_S \
+		handle_reach: float, opponent_caps: Array = [],
+		maneuver_accel: float = MANEUVER_ACCEL_M_S2) -> Vector3:
+	var env: float = 0.5 * maneuver_accel * EVADE_HORIZON_S * EVADE_HORIZON_S \
 			+ handle_reach
 	return _best_clear_point(
 			carrier_pos.x + carrier_vel.x * EVADE_HORIZON_S,

@@ -23,11 +23,14 @@ const SAMPLES: int = 8
 # The stretch read runs from arc `u0`, which the puck reaches at `t0`, to
 # `line_len` at `eff_speed` — a saucer's landed run is the stretch after its
 # touch-down. `read_delay` is when he starts skating to it, from the release
-# (AIPuckLane.LANE_WINDUP_READ_DELAY_S: on the windup, before it).
+# (AIPuckLane.LANE_WINDUP_READ_DELAY_S: on the windup, before it). He skates and
+# reaches on his build `caps` (null: the league build).
 static func block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, px: float, pz: float,
-		vx: float, vz: float, reach: float, vmax: float, accel: float,
+		vx: float, vz: float, caps: AISkaterCaps,
 		read_delay: float, u0: float = 0.0, t0: float = 0.0) -> Vector2:
+	var reach: float = defender_reach(caps)
+	var vmax: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var span: float = line_len - u0
 	if span <= 0.0:
 		return Vector2.ZERO
@@ -48,15 +51,13 @@ static func block(fx: float, fz: float, dirx: float, dirz: float,
 	# His own crossing first, so a tie is picked where he stands.
 	var foot: float = clampf((from.x - fx) * dirx + (from.z - fz) * dirz, u0, line_len)
 	var best := Vector2(_block_at(fx, fz, dirx, dirz, foot,
-			t0 + (foot - u0) / eff_speed, px, pz, from, vel, reach, vmax, accel,
-			read_delay), foot)
+			t0 + (foot - u0) / eff_speed, px, pz, from, vel, reach, caps, read_delay), foot)
 	for k: int in SAMPLES:
 		if best.x >= 1.0:
 			break
 		var u: float = u0 + span * float(k + 1) / float(SAMPLES)
 		var at_u: float = _block_at(fx, fz, dirx, dirz, u,
-				t0 + (u - u0) / eff_speed, px, pz, from, vel, reach, vmax, accel,
-				read_delay)
+				t0 + (u - u0) / eff_speed, px, pz, from, vel, reach, caps, read_delay)
 		if at_u > best.x:
 			best = Vector2(at_u, u)
 	return best
@@ -67,7 +68,7 @@ static func block(fx: float, fz: float, dirx: float, dirz: float,
 # timing; otherwise he skates to it from `from` (where his read finds him).
 static func _block_at(fx: float, fz: float, dirx: float, dirz: float,
 		u: float, t_puck: float, px: float, pz: float, from: Vector3, vel: Vector3,
-		reach: float, vmax: float, accel: float, read_delay: float) -> float:
+		reach: float, caps: AISkaterCaps, read_delay: float) -> float:
 	var lx: float = fx + dirx * u
 	var lz: float = fz + dirz * u
 	var window: float = t_puck - read_delay
@@ -80,8 +81,8 @@ static func _block_at(fx: float, fz: float, dirx: float, dirz: float,
 	var off: float = sqrt(ox * ox + oz * oz)
 	if off <= reach:
 		return 1.0
-	var t_arrive: float = AIArrival.time_to_arrive(from,
-			Vector3(lx + ox / off * reach, 0.0, lz + oz / off * reach), vel, vmax, accel)
+	var t_arrive: float = AIArrival.time_to_arrive_caps(from,
+			Vector3(lx + ox / off * reach, 0.0, lz + oz / off * reach), vel, caps)
 	var err: float = maxf(AIArrival.ERROR_FRAC * t_arrive, AIArrival.ERROR_FLOOR_S)
 	return clampf(0.5 + (window - t_arrive) / (2.0 * err), 0.0, 1.0)
 

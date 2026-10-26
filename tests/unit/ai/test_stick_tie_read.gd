@@ -19,7 +19,7 @@ func test_a_feed_reaches_the_man_only_along_its_path() -> void:
 func test_a_lane_is_open_unless_a_defender_reaches_the_line() -> void:
 	var carrier := Vector3(0.0, 0.0, 10.0)
 	var man := Vector3(0.0, 0.0, 0.0)
-	var reach: float = GameRules.DEFAULT_STICK_LENGTH_M
+	var reach: Array[float] = [GameRules.DEFAULT_STICK_LENGTH_M]
 	assert_true(AIStickTieRead.lane_open(carrier, man,
 			[Vector3(3.0, 0.0, 5.0)] as Array[Vector3], reach))
 	assert_false(AIStickTieRead.lane_open(carrier, man,

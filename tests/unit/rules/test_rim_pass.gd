@@ -67,6 +67,6 @@ func test_a_receiver_up_the_wall_meets_the_rim() -> void:
 	var best_t: float = INF
 	for k: int in n:
 		best_t = minf(best_t, AIRimPass.meet_time(k, Vector3(11.5, 0.0, 14.0),
-				Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S))
+				Vector3.ZERO, null))
 	assert_lt(best_t, INF, "the half-wall winger can meet a rim")
 

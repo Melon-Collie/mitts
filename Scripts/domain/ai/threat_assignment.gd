@@ -109,11 +109,9 @@ static func assign(
 	for d: int in open_defenders:
 		var d_pos: Vector3 = defender_pos.get(d, Vector3.ZERO)
 		var d_vel: Vector3 = defender_vel.get(d, Vector3.ZERO)
-		# This defender covers at ITS real top speed — a fast defender
-		# reaches a further man in time, so it's assigned the harder cover.
+		# This defender covers on ITS real build — a fast defender reaches a
+		# further man in time, so it's assigned the harder cover.
 		var d_caps: AISkaterCaps = defender_caps.get(d)
-		var d_speed: float = d_caps.max_speed if d_caps != null \
-				else AIArrival.SKATER_REF_SPEED_M_S
 		# ZONE ELIGIBILITY. Omitting the pair from the row is the whole
 		# mechanism: _best_matching skips men the row does not carry, and
 		# _matching_reward / _restrict_prev reject a mapping naming one.
@@ -124,7 +122,7 @@ static func assign(
 			if restricted and not allowed.has(m):
 				continue
 			var anchor: Vector3 = cover_anchor(man_pos.get(m, Vector3.ZERO), our_net)
-			var t: float = AIArrival.time_to_arrive(d_pos, anchor, d_vel, d_speed)
+			var t: float = AIArrival.time_to_arrive_caps(d_pos, anchor, d_vel, d_caps)
 			var reach: float = 1.0 / (1.0 + maxf(t, 0.0))
 			row[m] = maxf(man_value.get(m, 0.0), 0.0) * reach
 		reward[d] = row
@@ -197,12 +195,9 @@ static func _pick_house_defender(
 	for d: int in defenders:
 		if not _may_cover(d, house_man, eligible_men):
 			continue
-		var d_caps: AISkaterCaps = defender_caps.get(d)
-		var d_speed: float = d_caps.max_speed if d_caps != null \
-				else AIArrival.SKATER_REF_SPEED_M_S
-		var t: float = AIArrival.time_to_arrive(
+		var t: float = AIArrival.time_to_arrive_caps(
 				defender_pos.get(d, Vector3.ZERO), anchor,
-				defender_vel.get(d, Vector3.ZERO), d_speed)
+				defender_vel.get(d, Vector3.ZERO), defender_caps.get(d))
 		if t < best_t or (t == best_t and (best_def == -1 or d < best_def)):
 			best_t = t
 			best_def = d

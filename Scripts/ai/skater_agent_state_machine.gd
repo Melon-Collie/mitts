@@ -765,7 +765,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stand_up.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_press.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
-	_stick_play.setup(peer_id, team_id, team_id_by_peer)
+	_stick_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
 	_reception.setup(peer_id, team_id, team_id_by_peer, caps_by_peer, is_left_handed)
 	_one_timer.setup(peer_id, team_id, team_id_by_peer, is_left_handed)
@@ -1497,7 +1497,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 		var carrier_pid: int = snapshot.puck_state.carrier_peer_id
 		if _angles_the_chase and carrier_pid != -1 and carrier_pid != _peer_id:
 			var our_net := Vector3(0.0, 0.0, _own_goal_dir * GameRules.GOAL_LINE_Z)
-			target = _shade_intercept_goal_side(target, our_net)
+			target = _shade_intercept_goal_side(target, our_net, _blade_reach)
 
 		# No "soft-hands" slow-down here: easing the approach doesn't help the
 		# pickup (see Reception doctrine) and only surrenders time on a race.
@@ -3450,17 +3450,18 @@ func _clamp_anchor(p: Vector3) -> Vector3:
 	return Vector3(x, 0.0, z)
 
 
-# Shades a carrier-chase intercept one stick-reach (BLADE_REACH_M) toward our net
-# — the inside lane (see Scripts/ai/CLAUDE.md → Chase doctrine). The shade is
+# Shades a carrier-chase intercept one stick-reach (`reach`, the bot's own) toward
+# our net — the inside lane (see Scripts/ai/CLAUDE.md → Chase doctrine). The shade is
 # exactly what the stick can poke, so the blade still reaches the puck from the
 # shaded body, and it is clamped so a doorstep intercept never projects past our
 # goal line. Static so it's unit-testable.
-static func _shade_intercept_goal_side(target: Vector3, our_net: Vector3) -> Vector3:
+static func _shade_intercept_goal_side(target: Vector3, our_net: Vector3,
+		reach: float = AIBotMechanics.BLADE_REACH_M) -> Vector3:
 	var to_net: Vector3 = our_net - target
 	var dist: float = Vector2(to_net.x, to_net.z).length()
 	if dist < 0.001:
 		return target
-	var shade: float = minf(AIBotMechanics.BLADE_REACH_M, dist)
+	var shade: float = minf(reach, dist)
 	var inv: float = shade / dist
 	return Vector3(target.x + to_net.x * inv, target.y, target.z + to_net.z * inv)
 
@@ -3478,19 +3479,19 @@ func _lead_intercept(self_pos: Vector3, self_vel: Vector3, puck_pos: Vector3,
 	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
 			/ float(AILoosePuckChase.RACE_STEPS)
-	# Own thrust and own stick, not the league defaults: this caller reasons about
-	# ITSELF. `_blade_reach`, not the bare blade_span: it must be the SAME radius
-	# the pickup gate and puck_comes_to_reach use, or the chase steers to a point
-	# its own reach band disagrees about.
+	# Own build and own stick. `_blade_reach`, not the bare blade_span: it must be
+	# the SAME radius the pickup gate and puck_comes_to_reach use, or the chase
+	# steers to a point its own reach band disagrees about.
 	var t: float = AILoosePuckChase.path_intercept_time(
 			traj, step_dt, puck_pos, self_pos, self_vel, cap,
 			AILoosePuckChase.setup_margin(puck_vel), _chase_max_accel, _blade_reach,
-			AILoosePuckChase.race_playable_time(puck_pos, puck_vel))
+			AILoosePuckChase.race_playable_time(puck_pos, puck_vel), _self_lateral_grip)
 	# A puck passing within a stride of our stick is played where the stick first
 	# gets on it: the set-up margin prices settling a fast puck, and waiting for
 	# it chases a pass down the lane past the man it is going to.
 	t = minf(t, AILoosePuckChase.reach_meet_time(traj, puck_pos, puck_vel,
-			self_pos, self_vel, cap, _blade_reach, true, true))
+			self_pos, self_vel, cap, _blade_reach, true, true, _chase_max_accel,
+			_self_lateral_grip))
 	# The TIME is reach-aware; the steering target is not pulled back onto the
 	# reach circle. Where the blade can first touch the puck is the right answer
 	# to "am I in this race"; the body should still drive at the meeting point
@@ -3577,7 +3578,8 @@ func _loose_puck_in_reach_band(snapshot: WorldSnapshot, self_pos: Vector3) -> bo
 		return false
 	return AILoosePuckChase.puck_comes_to_reach(
 			snapshot.puck_state.position, snapshot.puck_state.velocity,
-			self_pos, self_state.velocity, _self_max_speed, _blade_reach)
+			self_pos, self_state.velocity, _self_max_speed, _blade_reach, _chase_max_accel,
+			_self_lateral_grip)
 
 
 # Is a teammate's blade clearly first to this puck? See

@@ -287,11 +287,12 @@ static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 	if partner == null or _depth_inside_attacked_zone(ctx, partner.position) \
 			> DP_LINE_INSET_M + POINT_VACATED_SLACK_M:
 		return false
-	var filler: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.F2_WEAK)
-	if filler == null:
+	var filler_pid: int = _slot_holder_pid(ctx, AIRoleSlots.Slot.F2_WEAK)
+	if filler_pid == -1:
 		return false
-	return AIArrival.time_to_arrive(filler.position, line_stand,
-			filler.velocity) <= t_engage + AIRushRead.LATE_MAN_WINDOW_S
+	var filler: SkaterNetworkState = ctx.snapshot.skater_states[filler_pid]
+	return AIArrival.time_to_arrive_caps(filler.position, line_stand, filler.velocity,
+			ctx.caps_by_peer.get(filler_pid)) <= t_engage + AIRushRead.LATE_MAN_WINDOW_S
 
 
 # ── The rotation ─────────────────────────────────────────────────────────────
@@ -345,14 +346,19 @@ static func _partner_vacated(ctx: RoleContext, strong_slot: int) -> bool:
 
 # The teammate (not me) the brain has in `slot`, or null.
 static func _slot_holder(ctx: RoleContext, slot: int) -> SkaterNetworkState:
+	var pid: int = _slot_holder_pid(ctx, slot)
+	return ctx.snapshot.skater_states[pid] if pid != -1 else null
+
+
+static func _slot_holder_pid(ctx: RoleContext, slot: int) -> int:
 	if ctx.team_brain == null or ctx.snapshot == null:
-		return null
+		return -1
 	for pid: int in ctx.snapshot.skater_states:
 		if pid == ctx.peer_id or ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			continue
 		if ctx.team_brain.get_slot(pid) == slot:
-			return ctx.snapshot.skater_states[pid]
-	return null
+			return pid
+	return -1
 
 
 # Metres inside the zone we attack, past its blue line (negative = outside it).

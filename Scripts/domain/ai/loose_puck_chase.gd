@@ -86,6 +86,15 @@ static func race_vmax(caps: AISkaterCaps) -> float:
 	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
+# His thrust and edge grip for a race's arrival clock, league when unset.
+static func race_accel(caps: AISkaterCaps) -> float:
+	return caps.max_accel if caps != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2
+
+
+static func race_grip(caps: AISkaterCaps) -> float:
+	return caps.lateral_grip if caps != null else 1.0
+
+
 # Blade reach for one candidate's reach band: his blade span from caps plus the
 # agent's buffer (SkaterAgentStateMachine._blade_reach), league when unset.
 static func race_reach(caps: AISkaterCaps) -> float:
@@ -128,10 +137,9 @@ static func race_trajectory(puck_pos: Vector3, puck_vel: Vector3) -> Array[Vecto
 # skater collects the puck where it stops (or exits the horizon), arriving no
 # earlier than the horizon itself.
 #
-# `accel` is the redirect authority the ETA prices the cross-momentum shed at.
-# Cross-player callers (the election, which must rank every bot on one shared
-# baseline) leave it at the league default; a bot solving its OWN chase passes
-# its attribute-scaled max_accel, exactly as time_to_arrive documents.
+# `max_speed`, `accel` and `lateral_grip` are the racer's own build
+# (race_vmax / race_accel / race_grip), whoever is reading: every bot reads every
+# racer off the same build, so the election still ranks alike on all of them.
 #
 # `reach` lets the SELF read steer to where the blade, not the body, meets the
 # puck. The comparative reads (the election, best_intercept_time, the race-lost
@@ -147,7 +155,7 @@ static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		puck_pos: Vector3, skater_pos: Vector3, skater_vel: Vector3,
 		max_speed: float, margin: float = KILL_SETUP_MARGIN_S,
 		accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2,
-		reach: float = 0.0, playable_from: float = 0.0) -> float:
+		reach: float = 0.0, playable_from: float = 0.0, lateral_grip: float = 1.0) -> float:
 	if traj.is_empty():
 		return INF
 	for i: int in traj.size():
@@ -165,7 +173,7 @@ static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		if dx * dx + dz * dz > span * span:
 			continue
 		var eta: float = _reach_eta(
-				skater_pos, traj[i], skater_vel, max_speed, accel, reach)
+				skater_pos, traj[i], skater_vel, max_speed, accel, reach, lateral_grip)
 		if eta > t_set:
 			continue
 		# Crossing found — now solve WHERE in the step it happens. Returning
@@ -182,13 +190,13 @@ static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 			prev_t = playable_from
 			prev_point = path_intercept_point(traj, step_dt, puck_pos, prev_t)
 		var prev_slack: float = (prev_t - margin) - _reach_eta(
-				skater_pos, prev_point, skater_vel, max_speed, accel, reach)
+				skater_pos, prev_point, skater_vel, max_speed, accel, reach, lateral_grip)
 		if prev_slack >= 0.0:
 			return prev_t   # already makeable at the left endpoint
 		return prev_t + (t_step - prev_t) * (-prev_slack / (t_set - eta - prev_slack))
 	var horizon: float = maxf(traj.size() * step_dt, playable_from)
 	return maxf(horizon, _reach_eta(
-			skater_pos, traj[-1], skater_vel, max_speed, accel, reach))
+			skater_pos, traj[-1], skater_vel, max_speed, accel, reach, lateral_grip))
 
 
 # The `playable_from` every race read of this puck passes: when it is back on
@@ -204,9 +212,9 @@ static func race_playable_time(puck_pos: Vector3, puck_vel: Vector3) -> float:
 # length is never charged as travel. Already inside reach is 0: the stick is on
 # it now.
 static func _reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
-		max_speed: float, accel: float, reach: float) -> float:
+		max_speed: float, accel: float, reach: float, lateral_grip: float) -> float:
 	if reach <= 0.0:
-		return AIArrival.time_to_arrive(from_pos, point, vel, max_speed, accel)
+		return AIArrival.time_to_arrive(from_pos, point, vel, max_speed, accel, lateral_grip)
 	var dx: float = point.x - from_pos.x
 	var dz: float = point.z - from_pos.z
 	var d: float = sqrt(dx * dx + dz * dz)
@@ -215,7 +223,7 @@ static func _reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 	var f: float = (d - reach) / d
 	return AIArrival.time_to_arrive(from_pos,
 			Vector3(from_pos.x + dx * f, point.y, from_pos.z + dz * f),
-			vel, max_speed, accel)
+			vel, max_speed, accel, lateral_grip)
 
 
 # The path point a path_intercept_time result names — the spot on the walk the
@@ -266,9 +274,10 @@ const INCIDENTAL_STRIDE_M: float = 1.5
 static func puck_comes_to_reach(
 		puck_pos: Vector3, puck_vel: Vector3,
 		self_pos: Vector3, self_vel: Vector3,
-		max_speed: float, reach: float) -> bool:
+		max_speed: float, reach: float,
+		accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2, lateral_grip: float = 1.0) -> bool:
 	return reach_meet_time(race_trajectory(puck_pos, puck_vel), puck_pos, puck_vel,
-			self_pos, self_vel, max_speed, reach, false) < INF
+			self_pos, self_vel, max_speed, reach, false, false, accel, lateral_grip) < INF
 
 
 # When the puck on `traj` first meets this skater's reach band, by
@@ -279,7 +288,8 @@ static func puck_comes_to_reach(
 # whether to break off for it.
 static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: Vector3,
 		self_pos: Vector3, self_vel: Vector3, max_speed: float, reach: float,
-		approaching_only: bool, stick_out: bool = false) -> float:
+		approaching_only: bool, stick_out: bool = false,
+		accel: float = AIArrival.SHED_ACCEL_DEFAULT_M_S2, lateral_grip: float = 1.0) -> float:
 	var band: float = reach + INCIDENTAL_STRIDE_M
 	var band2: float = band * band
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
@@ -313,7 +323,8 @@ static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: V
 			if d <= reach:
 				return t_meet
 			stand = Vector3(meet.x - dx / d * reach, 0.0, meet.z - dz / d * reach)
-		if AIArrival.time_to_arrive(self_pos, stand, self_vel, max_speed) <= t_meet:
+		if AIArrival.time_to_arrive(self_pos, stand, self_vel, max_speed, accel,
+				lateral_grip) <= t_meet:
 			return t_meet
 	return INF
 
@@ -436,12 +447,12 @@ static func elect(
 		var max_speed: float = race_vmax(caps)
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
-				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				race_accel(caps), 0.0, t_play, race_grip(caps))
 		# A puck coming to his stick is his: the race counts it, the stick taking
 		# the last reach, or a pass reaching its man elects someone else to chase
 		# it too.
 		t = minf(t, reach_meet_time(traj, puck_pos, puck_vel, s.position, s.velocity,
-				max_speed, race_reach(caps), true, true))
+				max_speed, race_reach(caps), true, true, race_accel(caps), race_grip(caps)))
 		if pid != prev_elected:
 			t += HYSTERESIS_S
 		# Tie-break on the lower peer_id, never iteration order.
@@ -474,10 +485,10 @@ static func best_intercept_time(
 		var s: SkaterNetworkState = skater_states.get(pid)
 		if s == null:
 			continue
-		var max_speed: float = race_vmax(caps_by_peer.get(pid))
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
-				s.position, s.velocity, max_speed, margin,
-				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				s.position, s.velocity, race_vmax(caps), margin,
+				race_accel(caps), 0.0, t_play, race_grip(caps))
 		if t < best_t:
 			best_t = t
 	return best_t
@@ -506,9 +517,11 @@ static func loose_puck_race_lost(
 	var margin: float = AILoosePuckChase.setup_margin(puck_vel)
 	var t_play: float = AILoosePuckChase.race_playable_time(puck_pos, puck_vel)
 	var self_vmax: float = maxf(self_max_speed, 1.0)
+	var self_caps: AISkaterCaps = caps_by_peer.get(self_pid)
 	var my_eta: float = AILoosePuckChase.path_intercept_time(
 			traj, step_dt, puck_pos, self_pos, self_vel, self_vmax, margin,
-			AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+			AILoosePuckChase.race_accel(self_caps), 0.0, t_play,
+			AILoosePuckChase.race_grip(self_caps))
 	var best_opp_eta: float = INF
 	var best_opp_meet: Vector3 = puck_pos
 	for pid: int in snapshot.skater_states:
@@ -518,10 +531,11 @@ static func loose_puck_race_lost(
 		# Lost only to an opponent RUNNING it: the ETA prices a hypothetical run,
 		# so a flat-footed body off the line would otherwise veto the chase. A
 		# downstream interceptor whose band the puck's path enters counts.
-		var speed: float = AILoosePuckChase.race_vmax(caps_by_peer.get(pid))
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var t: float = AILoosePuckChase.path_intercept_time(
-				traj, step_dt, puck_pos, s.position, s.velocity, speed, margin,
-				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
+				traj, step_dt, puck_pos, s.position, s.velocity,
+				AILoosePuckChase.race_vmax(caps), margin, AILoosePuckChase.race_accel(caps),
+				0.0, t_play, AILoosePuckChase.race_grip(caps))
 		var meet: Vector3 = AILoosePuckChase.path_intercept_point(
 				traj, step_dt, puck_pos, t)
 		var committed: bool = AILoosePuckChase.path_enters_band(traj, puck_pos,
@@ -539,7 +553,7 @@ static func loose_puck_race_lost(
 	if my_eta <= best_opp_eta + contest_window:
 		return false
 	# Declining buys a pre-contain body, worth it only when nobody else contains.
-	return not _has_containment_behind(snapshot, team_id, team_id_by_peer,
+	return not _has_containment_behind(snapshot, team_id, team_id_by_peer, caps_by_peer,
 			self_pid, best_opp_meet, own_goal_dir)
 
 
@@ -551,8 +565,8 @@ static func loose_puck_race_lost(
 # Never re-phrase this as a race to the pickup: behind our goal line the pickup
 # IS our net, so the collector is already home and nobody beats him there.
 static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
-		team_id_by_peer: Dictionary, self_pid: int, pickup: Vector3,
-		own_goal_dir: float) -> bool:
+		team_id_by_peer: Dictionary, caps_by_peer: Dictionary, self_pid: int,
+		pickup: Vector3, own_goal_dir: float) -> bool:
 	if own_goal_dir == 0.0:
 		return false
 	var gate := Vector3(0.0, 0.0, own_goal_dir
@@ -566,7 +580,7 @@ static func _has_containment_behind(snapshot: WorldSnapshot, team_id: int,
 		if own_goal_dir * (mate.position.z - pickup.z) \
 				> AIActionScoring.CHASE_CONTEST_MARGIN_M:
 			return true
-		if AIArrival.time_to_arrive(mate.position, gate, mate.velocity) \
-				<= AIRushRead.LATE_MAN_WINDOW_S:
+		if AIArrival.time_to_arrive_caps(mate.position, gate, mate.velocity,
+				caps_by_peer.get(pid)) <= AIRushRead.LATE_MAN_WINDOW_S:
 			return true
 	return false

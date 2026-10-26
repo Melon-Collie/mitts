@@ -124,8 +124,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			var lane_len: float = sqrt(lane.x * lane.x + lane.z * lane.z)
 			if lane_len > 0.001:
 				var pass_stand: Vector3 = lead + lane * (
-						(AIBotMechanics.BLADE_REACH_M
-								+ ctx.pursuit_standoff_m) / lane_len)
+						(ctx.self_blade_reach + ctx.pursuit_standoff_m) / lane_len)
 				candidates.append(pass_stand)
 				candidates.append((search_center + pass_stand) * 0.5)
 	# Switch-hysteresis: "block the shot" and "block the best pass" are often

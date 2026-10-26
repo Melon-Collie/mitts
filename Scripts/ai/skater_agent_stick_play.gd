@@ -43,14 +43,19 @@ var _stick_tie_holding_on: bool = false
 # (StickCheckRules.TIE_LAG_BUDGET_S), so a bot holding a tie is beaten by the
 # same pulls a human would be. INF until a tie reach starts.
 var _tie_follow: Vector3 = Vector3.INF
-# Our team's bodies for the tie's lane read, refilled per full dispatch.
+# The bodies for the tie's lane read and each one's stick reach (his blade span
+# and the buffer, as the chase reads every racer), refilled per full dispatch.
 var _tie_defender_scratch: Array[Vector3] = []
+var _tie_reach_scratch: Array[float] = []
+var _caps_by_peer: Dictionary = {}
 
 
-func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary) -> void:
+func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
+		caps_by_peer: Dictionary = {}) -> void:
 	_peer_id = peer_id
 	_team_id = team_id
 	_team_id_by_peer = team_id_by_peer
+	_caps_by_peer = caps_by_peer
 
 
 # A fresh carry: no reach-in window, cooldown or lift hold.
@@ -192,12 +197,9 @@ func _man_is_a_live_target(snapshot: WorldSnapshot, self_pos: Vector3, man_pid: 
 	var carrier: SkaterNetworkState = snapshot.skater_states.get(carrier_pid)
 	if carrier == null:
 		return false
-	_tie_defender_scratch.clear()
-	for pid: int in snapshot.skater_states:
-		if _team_id_by_peer.get(pid, -1) == _team_id:
-			_tie_defender_scratch.append(snapshot.skater_states[pid].position)
+	_fill_lane_sticks(snapshot, true)
 	return AIStickTieRead.lane_open(carrier.position, man.position,
-			_tie_defender_scratch, blade_reach)
+			_tie_defender_scratch, _tie_reach_scratch)
 
 
 # Our stick is tied while our team has the puck or it is loose. If the feed is
@@ -228,7 +230,7 @@ func tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 			tier = opp
 	if tier == null:
 		return Vector3.INF
-	if not _feed_is_coming_to(snapshot, self_state, blade_reach):
+	if not _feed_is_coming_to(snapshot, self_state):
 		_stick_tie_holding_on = true
 		return Vector3.INF
 	return AIStickTieRead.yank_aim(self_pos, self_state.blade_contact_world,
@@ -237,8 +239,7 @@ func tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 
 # The puck is on its way to us: a loose puck whose path reaches our blade, or a
 # teammate carrying with an open lane to us past the opponents' sticks.
-func _feed_is_coming_to(snapshot: WorldSnapshot, self_state: SkaterNetworkState,
-		blade_reach: float) -> bool:
+func _feed_is_coming_to(snapshot: WorldSnapshot, self_state: SkaterNetworkState) -> bool:
 	var puck: PuckNetworkState = snapshot.puck_state
 	if puck.carrier_peer_id == -1:
 		return AIStickTieRead.path_passes_within(puck.position, puck.velocity,
@@ -247,12 +248,20 @@ func _feed_is_coming_to(snapshot: WorldSnapshot, self_state: SkaterNetworkState,
 	var carrier: SkaterNetworkState = snapshot.skater_states.get(puck.carrier_peer_id)
 	if carrier == null or puck.carrier_peer_id == _peer_id:
 		return false
-	_tie_defender_scratch.clear()
-	for pid: int in snapshot.skater_states:
-		if _team_id_by_peer.get(pid, -1) != _team_id:
-			_tie_defender_scratch.append(snapshot.skater_states[pid].position)
+	_fill_lane_sticks(snapshot, false)
 	return AIStickTieRead.lane_open(carrier.position, self_state.position,
-			_tie_defender_scratch, blade_reach)
+			_tie_defender_scratch, _tie_reach_scratch)
+
+
+# One side's bodies and their reaches into the lane scratch: ours when `ours`.
+func _fill_lane_sticks(snapshot: WorldSnapshot, ours: bool) -> void:
+	_tie_defender_scratch.clear()
+	_tie_reach_scratch.clear()
+	for pid: int in snapshot.skater_states:
+		if (_team_id_by_peer.get(pid, -1) == _team_id) != ours:
+			continue
+		_tie_defender_scratch.append(snapshot.skater_states[pid].position)
+		_tie_reach_scratch.append(AILoosePuckChase.race_reach(_caps_by_peer.get(pid)))
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started. Runs

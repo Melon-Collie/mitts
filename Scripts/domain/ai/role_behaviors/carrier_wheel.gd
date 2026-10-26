@@ -75,7 +75,9 @@ func score(ctx: RoleContext, dest: Vector3,
 	if ceiling <= best_so_far:
 		return -INF
 	_field.project_opponents(t1 + t2, _scratch_opponents)
-	var dest_score: float = _field.value_at(ctx, dest, self_pos, _scratch_opponents)
+	var dest_score: float = _field.value_at(ctx, dest, self_pos, _scratch_opponents,
+			Vector3.INF, 0.0, 1.0, AIShotOdds.Stance.UPRIGHT, NAN, 0.0, Vector3.ZERO,
+			ctx.caps_by_peer.get(ctx.peer_id))
 	arrival = dest_score
 	var benefit: float = dest_score * ceiling
 	if keep >= 1.0:

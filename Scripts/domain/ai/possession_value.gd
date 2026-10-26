@@ -132,21 +132,25 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 
 
 # The puck at `pos` for the side fill() priced, its man there `start_s` from now
-# and moving at `vel` (his skate to an entry or down the drive starts from it).
-func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> float:
+# and moving at `vel` (his skate to an entry or down the drive starts from it), on
+# his build `man_caps` (null: the league build).
+func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
+		man_caps: AISkaterCaps = null) -> float:
 	var best: float = 0.0
 	if AIActionScoring.in_offensive_zone(pos, _goal):
 		best = maxf(_shot(pos) * AIActionScoring.delay_discount(start_s),
-				_drive(pos, start_s, vel))
-	return entry_at(pos, start_s, vel, best)
+				_drive(pos, start_s, vel, man_caps))
+	return entry_at(pos, start_s, vel, best, man_caps)
 
 
 # The best zone entry for the man at `pos` (as at() reads him), or `known` when
 # none is worth more: a value already known prunes the entries it beats.
-func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float:
+func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
+		man_caps: AISkaterCaps = null) -> float:
 	var best: float = known
 	for i: int in _entry_spots.size():
-		var t: float = start_s + AIArrival.time_to_arrive(pos, _entry_spots[i], vel)
+		var t: float = start_s + AIArrival.time_to_arrive_caps(pos, _entry_spots[i], vel,
+				man_caps)
 		var discount: float = AIActionScoring.delay_discount(t)
 		if _open_worth[i] * discount <= best:
 			continue
@@ -154,7 +158,7 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float
 		if timed <= best:
 			continue
 		timed *= AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
-				_defender_vels, true)
+				_defender_vels, true, _defender_caps)
 		if timed <= best:
 			continue
 		var defence: Array[Vector3] = _defenders
@@ -164,7 +168,7 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float
 				_skate_defence.append(AITrajectory.predict_at(_defenders[k],
 						_defender_vels[k], start_s))
 			defence = _skate_defence
-		best = maxf(best, timed * _skate_keep(pos, _entry_spots[i], vel, defence))
+		best = maxf(best, timed * _skate_keep(pos, _entry_spots[i], vel, defence, man_caps))
 	return best
 
 
@@ -172,12 +176,12 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float
 # `entry` against `defence`: priced over the drive's own horizon (DRIVE_MAX_M),
 # the rest of the way left to the race for the entry.
 func _skate_keep(from: Vector3, entry: Vector3, vel: Vector3,
-		defence: Array[Vector3]) -> float:
+		defence: Array[Vector3], man_caps: AISkaterCaps) -> float:
 	var leg: Vector3 = entry - from
 	var d: float = leg.length()
 	if d > DRIVE_MAX_M:
 		leg *= DRIVE_MAX_M / d
-	var t: float = AIArrival.time_to_arrive(from, from + leg, vel)
+	var t: float = AIArrival.time_to_arrive_caps(from, from + leg, vel, man_caps)
 	return AICarrySpace.carry_safety(from, from + leg, t, defence, _defender_vels,
 			_defender_caps, true)
 
@@ -280,7 +284,8 @@ func _goalie_half(from: Vector3, to: Vector3, keeper: Vector3, speed: float) -> 
 # credited as far as the path stays clear and at the odds it is kept that far
 # (AICarrySpace's reachable sets, a man he out-skates beaten — as the carrier's
 # own drive-in is), against the defence carried on to when he sets off.
-func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float:
+func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
+		man_caps: AISkaterCaps = null) -> float:
 	var to_net := Vector3(_goal.x - from.x, 0.0, _goal.z - from.z)
 	var d: float = to_net.length()
 	if d <= DRIVE_MIN_NET_DIST_M + 0.1:
@@ -294,7 +299,7 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 		for i: int in _defenders.size():
 			_projected.append(AITrajectory.predict_at(_defenders[i], _defender_vels[i], start_s))
 		defence = _projected
-	var t: float = AIArrival.time_to_arrive(from, target, vel)
+	var t: float = AIArrival.time_to_arrive_caps(from, target, vel, man_caps)
 	var keep: float = AICarrySpace.carry_safety(from, target, t, defence, _defender_vels,
 			_defender_caps, true)
 	if keep <= 0.0:
@@ -304,7 +309,7 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 		reached = AICarrySpace.carry_strip_point(from, target, t, defence,
 				_defender_vels, _defender_caps, true, true)
 		if reached != target:
-			t = AIArrival.time_to_arrive(from, reached, vel)
+			t = AIArrival.time_to_arrive_caps(from, reached, vel, man_caps)
 	return _shot(reached) * keep * AIActionScoring.delay_discount(start_s + t)
 
 

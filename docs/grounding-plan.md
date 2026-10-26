@@ -1,6 +1,6 @@
 # Grounding the bots' physical reads
 
-Status: **agreed direction; phase 1 in progress.** The CLAUDE.md workflow
+Status: **agreed direction; phase 1 done, phase 2 next.** The CLAUDE.md workflow
 applies: this doc is the plan, deviations get discussed first.
 
 ## Why
@@ -71,6 +71,24 @@ skater (`skater_agent_stick_play.gd:186-200,254`).
 **Fix:** one `AIArrival` entry point that takes an `AISkaterCaps` (null is the
 league build), and an optional caps array on `first_arrival` / `arrival_race`.
 Every call site above passes the build it has.
+
+**Done (phase 1):** `AIArrival.time_to_arrive_caps`; `first_arrival` /
+`arrival_race` take caps; the loose-puck reads (`path_intercept_time`,
+`reach_meet_time`, `puck_comes_to_reach`, the containment gate) and
+`AILaneReach.block` take the full build; `AIPossessionValue` races each
+defender's build and times its man on `man_caps`, which the carrier's leaf, its
+receivers and the outlet and breakout stations pass; `AIRimPass.meet_time`
+takes the receiver's caps; `best_evade_point` the carrier's thrust;
+`AIPressRead` each body's movement config; PRESSURE's pass stand and the chase's
+goal-side shade the bot's own reach; `SkaterAgentStickPlay` each skater's reach.
+Every direct `time_to_arrive` call now passes speed, thrust and grip.
+
+**Carried to phase 2:** the brake-to-set margins at league top speed
+(`AIActionScoring.COUNTER_SET_MARGIN_S`, `role_slots_5v5.gd`'s RUSH_D1
+deadline) with the counter-cover rework; the DZONE cover envelope at league
+reach (`AIRushRead.cover_envelope_m`, a shared static) with pattern 2; the
+defence's threat reads (`threat_of_carrier`, `threat_of_feed`), whose callers
+hold positions without peers, so they still time the man on the league build.
 
 ### 2. Depth comparisons standing in for "somebody is home"
 

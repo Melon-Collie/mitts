@@ -39,18 +39,19 @@ static func puck_within(puck_pos: Vector3, point: Vector3, reach: float) -> bool
 
 
 # A carrier's pass lane to the man is open when no defender's stick reaches the
-# straight line between them (`defenders` includes the one asking).
+# straight line between them (`defenders` includes the one asking), each by his
+# own reach (`reaches`, index-matched).
 static func lane_open(carrier_pos: Vector3, man_pos: Vector3,
-		defenders: Array[Vector3], stick_reach: float) -> bool:
+		defenders: Array[Vector3], reaches: Array[float]) -> bool:
 	var a := Vector2(carrier_pos.x, carrier_pos.z)
 	var ab := Vector2(man_pos.x, man_pos.z) - a
 	var len_sq: float = ab.length_squared()
 	if len_sq < 1e-4:
 		return true
-	for d: Vector3 in defenders:
-		var p := Vector2(d.x, d.z)
+	for i: int in defenders.size():
+		var p := Vector2(defenders[i].x, defenders[i].z)
 		var t: float = clampf((p - a).dot(ab) / len_sq, 0.0, 1.0)
-		if (a + ab * t).distance_to(p) <= stick_reach:
+		if (a + ab * t).distance_to(p) <= reaches[i]:
 			return false
 	return true
 

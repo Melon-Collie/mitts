@@ -216,15 +216,15 @@ func read_pass(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	# the rendezvous itself, so only the stance's correction off it needs the
 	# time: what the stride covers from rest in the margin of the flight. A puck
 	# that never enters our moving reach is a stance to get to.
+	var caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
+	var accel: float = AILoosePuckChase.race_accel(caps)
 	if meets:
-		var caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
-		var accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
 		var drift_at: Vector3 = self_pos + self_vel * puck_eta
 		if Vector2(body_anchor.x - drift_at.x, body_anchor.z - drift_at.z).length() \
 				> AIStrideRamp.distance_in(0.0, puck_eta * RECEIVE_TIMING_MARGIN, max_speed, accel):
 			return false
-	elif AIArrival.time_to_arrive(self_pos, body_anchor, self_vel, max_speed) \
-			> puck_eta * RECEIVE_TIMING_MARGIN:
+	elif AIArrival.time_to_arrive(self_pos, body_anchor, self_vel, max_speed, accel,
+			AILoosePuckChase.race_grip(caps)) > puck_eta * RECEIVE_TIMING_MARGIN:
 		return false
 	# Receive IN STRIDE; brake only when skating on as we are would carry the
 	# blade past the meet before the puck gets there. Judged on the unbounded
@@ -445,11 +445,8 @@ func read_shot(snapshot: WorldSnapshot, self_pos: Vector3, blade_reach: float,
 	# only a catch when the body gets there first (RECEIVE_TIMING_MARGIN, as the
 	# pass stance's): one driving past it on its own skating takes the feed in
 	# stride instead (read_pass), never steering back up the ice for it.
-	var caps: AISkaterCaps = _caps_by_peer.get(_peer_id)
-	var max_speed: float = caps.max_speed if caps != null \
-			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-	return AIArrival.time_to_arrive(self_pos, shot_anchor, shot_self_vel, max_speed) \
-			<= t / puck_speed * RECEIVE_TIMING_MARGIN
+	return AIArrival.time_to_arrive_caps(self_pos, shot_anchor, shot_self_vel,
+			_caps_by_peer.get(_peer_id)) <= t / puck_speed * RECEIVE_TIMING_MARGIN
 
 
 # Whether a loose puck moving at sqrt(`speed_sq`) reads as a feed at all: fast

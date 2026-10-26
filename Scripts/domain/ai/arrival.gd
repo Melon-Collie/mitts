@@ -2,14 +2,14 @@ class_name AIArrival
 
 # The momentum-honest arrival clock the bots share: how long a body carrying
 # its current velocity takes to reach a point, routed around the nets. A leaf —
-# it reads GameRules, AIStrideRamp and AINetObstacle only — so the scorer and
-# AICarrySpace can both depend on it (test_scoring_split_stays_acyclic.gd).
+# it reads GameRules, AIStrideRamp, AINetObstacle and AISkaterCaps only — so the
+# scorer and AICarrySpace can both depend on it
+# (test_scoring_split_stays_acyclic.gd).
 
 # Reference (league-average) top skating speed, shared with
-# SkaterController.max_speed via GameRules. A FALLBACK: a read with a peer in
-# view resolves his real top speed through AISkaterCaps (caps_by_peer). The
-# sites that price at this reference by design — the realization discount and
-# the counter-cover teammate races — say so at the site.
+# SkaterController.max_speed via GameRules. A FALLBACK for a body whose build is
+# not in view: a read with a peer in view times him on his own build
+# (time_to_arrive_caps).
 const SKATER_REF_SPEED_M_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 
 # Floor (m/s) for momentum-adverse `time_to_arrive` returns, so reverse
@@ -17,8 +17,7 @@ const SKATER_REF_SPEED_M_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 const MIN_TRAVEL_SPEED_M_S: float = 1.0
 
 # League-default all-direction thrust — the redirect authority a caps-less
-# time_to_arrive caller assumes for the cross-momentum shed. Per-bot callers
-# pass the skater's real AISkaterCaps.max_accel instead. Mirrors
+# time_to_arrive caller assumes for the cross-momentum shed. Mirrors
 # SkaterController.thrust.
 const SHED_ACCEL_DEFAULT_M_S2: float = GameRules.DEFAULT_SKATER_THRUST_M_S2
 
@@ -61,12 +60,12 @@ const VM_SHED_DECEL_M_S2: float = 11.0
 const REVERSAL_BRAKE_DECEL_M_S2: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 
 
-# `ref_speed_m_s` is the actor's flat skating speed; `accel_m_s2` its all-direction
-# thrust (Acceleration-scaled) — both default to league references so cross-player
-# callers (opponent / teammate ETA, the loose-puck election that must stay
-# consistent across all bots) keep the shared baseline. A bot estimating ITS OWN
-# arrival passes its attribute-scaled top speed AND max_accel (a higher-Acceleration
-# build redirects and ramps faster, so it reaches an off-axis cut sooner).
+# `ref_speed_m_s` is the actor's flat skating speed, `accel_m_s2` its all-direction
+# thrust and `lateral_grip` its edge grip, each defaulting to the league build. A
+# skater in view is timed on his own build, whoever is asking — through
+# time_to_arrive_caps, so no read passes his speed and leaves his acceleration
+# and grip at the league's. Every bot reads every racer off the same build
+# (RoleContext.caps_by_peer), so a race all of them run still ranks alike.
 #
 # NET-AWARE: a route whose straight line crosses a cage prices the real
 # around-the-cage detour (_time_to_arrive_routed). The common open-ice case
@@ -91,6 +90,16 @@ static func time_to_arrive(from_pos: Vector3, dest: Vector3,
 	return _time_to_arrive_direct(
 			from_pos, dest, from_velocity, ref_speed_m_s, accel_m_s2,
 			lateral_grip)
+
+
+# time_to_arrive for a body built as `caps`: his top speed, thrust and edge grip
+# (null: the league build).
+static func time_to_arrive_caps(from_pos: Vector3, dest: Vector3,
+		from_velocity: Vector3, caps: AISkaterCaps) -> float:
+	if caps == null:
+		return time_to_arrive(from_pos, dest, from_velocity)
+	return time_to_arrive(from_pos, dest, from_velocity, caps.max_speed, caps.max_accel,
+			caps.lateral_grip)
 
 
 # Extra lateral/depth clearance the net-aware ETA's corner waypoints keep

@@ -319,38 +319,43 @@ const CHASE_CONTEST_MARGIN_S: float = CHASE_CONTEST_MARGIN_M / AIArrival.SKATER_
 # body two metres nearer but skating the other way loses this race. Keep
 # `our_t` on the same arrival model.
 #
-# `opp_vels` is index-matched to `opp_chasers`; omit it and every chaser races
-# from rest, at the league reference build.
+# `opp_vels` and `opp_caps` are index-matched to `opp_chasers`; omit them and
+# every chaser races from rest, on the league build.
 # `clock_error`: widen the contest band by the arrival clock's own error over
 # the longer trip (AIArrival.ERROR_FRAC), for a race decided seconds from now.
 static func arrival_race(target: Vector3, our_t: float, opp_chasers: Array[Vector3],
-		opp_vels: Array[Vector3] = EMPTY_VEC3, clock_error: bool = false) -> float:
+		opp_vels: Array[Vector3] = EMPTY_VEC3, clock_error: bool = false,
+		opp_caps: Array = []) -> float:
 	if opp_chasers.is_empty():
 		return 1.0
-	var opp_t: float = first_arrival(target, opp_chasers, opp_vels)
+	var opp_t: float = first_arrival(target, opp_chasers, opp_vels, opp_caps)
 	var band: float = CHASE_CONTEST_MARGIN_S
 	if clock_error:
 		band += AIArrival.ERROR_FRAC * minf(maxf(our_t, opp_t), 1e6)
 	return clampf(0.5 + (opp_t - our_t) / (2.0 * band), 0.0, 1.0)
 
 
-# Soonest any of `chasers` reaches `target`. `vels` is used only when it is
-# index-matched to `chasers`, so callers that hold no velocities pass EMPTY_VEC3
-# and every body races from rest.
+# Soonest any of `chasers` reaches `target`, each on his own build. `vels` and
+# `caps` are used only when index-matched to `chasers`, so callers that hold no
+# velocities pass EMPTY_VEC3 and every body races from rest; without caps every
+# body is the league build.
 #
 # Exact prune: time_to_arrive only ever ADDS time to `straight_line_distance /
 # cap`, so a chaser whose bound is already beaten cannot win. It matters
 # because the possession read races every entry it prices.
 static func first_arrival(target: Vector3, chasers: Array[Vector3],
-		vels: Array[Vector3]) -> float:
+		vels: Array[Vector3], caps: Array = []) -> float:
 	var has_vels: bool = vels.size() == chasers.size()
-	var vmax: float = maxf(AIArrival.SKATER_REF_SPEED_M_S, AIArrival.MIN_TRAVEL_SPEED_M_S)
+	var has_caps: bool = caps.size() == chasers.size()
 	var best: float = INF
 	for i: int in chasers.size():
+		var c: AISkaterCaps = caps[i] if has_caps else null
+		var vmax: float = maxf(c.max_speed if c != null else AIArrival.SKATER_REF_SPEED_M_S,
+				AIArrival.MIN_TRAVEL_SPEED_M_S)
 		if chasers[i].distance_to(target) >= best * vmax:
 			continue
-		best = minf(best, AIArrival.time_to_arrive(chasers[i], target,
-				vels[i] if has_vels else Vector3.ZERO))
+		best = minf(best, AIArrival.time_to_arrive_caps(chasers[i], target,
+				vels[i] if has_vels else Vector3.ZERO, c))
 	return best
 
 
@@ -420,8 +425,8 @@ static func fill_counter_opp_home(our_net: Vector3, opponents: Array[Vector3],
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	out_home.clear()
 	for j: int in opponents.size():
-		out_home.append(AIArrival.time_to_arrive(opponents[j], cp, Vector3.ZERO,
-				_opponent_speed(opponent_caps, j, has_caps)))
+		out_home.append(AIArrival.time_to_arrive_caps(opponents[j], cp, Vector3.ZERO,
+				_opponent_caps(opponent_caps, j, has_caps)))
 
 
 static func counter_rush_cost(
@@ -466,7 +471,8 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 	for i: int in opponents.size():
 		var speed: float = _opponent_speed(opponent_caps, i, has_caps)
 		var vel: Vector3 = opponent_vels[i] if has_vels else Vector3.ZERO
-		var t_collect: float = AIArrival.time_to_arrive(opponents[i], loss_point, vel, speed)
+		var t_collect: float = AIArrival.time_to_arrive_caps(opponents[i], loss_point, vel,
+				_opponent_caps(opponent_caps, i, has_caps))
 		if t_collect < t_collect_best:
 			t_collect_best = t_collect
 		var t: float = t_collect + carry_dist / maxf(speed, 0.001)
@@ -483,9 +489,9 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 		# lug — skip receivers whose own carry isn't shorter.
 		if opponents[j].distance_to(counter_point) >= carry_dist:
 			continue
-		var home: float = opp_home[j] if has_home else AIArrival.time_to_arrive(
+		var home: float = opp_home[j] if has_home else AIArrival.time_to_arrive_caps(
 				opponents[j], counter_point, Vector3.ZERO,
-				_opponent_speed(opponent_caps, j, has_caps))
+				_opponent_caps(opponent_caps, j, has_caps))
 		var t_pf: float = t_collect_best \
 				+ loss_point.distance_to(opponents[j]) \
 						/ GameRules.DEFAULT_WRISTER_POWER_MAX_M_S \
@@ -496,11 +502,12 @@ static func counter_time(loss_point: Vector3, our_net: Vector3,
 
 
 static func _opponent_speed(opponent_caps: Array, i: int, has_caps: bool) -> float:
-	if has_caps:
-		var caps: AISkaterCaps = opponent_caps[i]
-		if caps != null:
-			return caps.max_speed
-	return AIArrival.SKATER_REF_SPEED_M_S
+	var caps: AISkaterCaps = _opponent_caps(opponent_caps, i, has_caps)
+	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
+
+
+static func _opponent_caps(opponent_caps: Array, i: int, has_caps: bool) -> AISkaterCaps:
+	return opponent_caps[i] if has_caps else null
 
 
 # counter_rush_cost once the counter's time `t_counter` is known: who beats it

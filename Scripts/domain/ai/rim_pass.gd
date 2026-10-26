@@ -127,12 +127,15 @@ static func build(from: Vector3, max_pace: float, own_goal_z: float,
 	return count
 
 
-# The receiver's (or anyone's) meet time on launch `k`, at the race read the
-# election uses. INF when he never makes it inside the walk.
-static func meet_time(k: int, pos: Vector3, vel: Vector3, max_speed: float) -> float:
+# The receiver's (or anyone's) meet time on launch `k` on his build `caps`
+# (null: the league build), at the race read the election uses. INF when he
+# never makes it inside the walk.
+static func meet_time(k: int, pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> float:
 	var path: Array[Vector3] = paths[k]
 	var t: float = AILoosePuckChase.path_intercept_time(path, STEP_DT, origin,
-			pos, vel, max_speed, AILoosePuckChase.setup_margin(dirs[k] * paces[k]))
+			pos, vel, AILoosePuckChase.race_vmax(caps),
+			AILoosePuckChase.setup_margin(dirs[k] * paces[k]), AILoosePuckChase.race_accel(caps),
+			0.0, 0.0, AILoosePuckChase.race_grip(caps))
 	return t if t < float(STEPS) * STEP_DT else INF
 
 
@@ -238,11 +241,10 @@ static func _race_opponents(k: int, opp_positions: Array[Vector3],
 	var best: float = INF
 	for i: int in opp_positions.size():
 		var caps: AISkaterCaps = opp_caps[i] if i < opp_caps.size() else null
-		var speed: float = caps.max_speed if caps != null \
-				else AIArrival.SKATER_REF_SPEED_M_S
 		var vel: Vector3 = opp_vels[i] if i < opp_vels.size() else Vector3.ZERO
 		var t: float = AILoosePuckChase.path_intercept_time(path, STEP_DT, origin,
-				opp_positions[i], vel, speed, margin)
+				opp_positions[i], vel, AILoosePuckChase.race_vmax(caps), margin,
+				AILoosePuckChase.race_accel(caps), 0.0, 0.0, AILoosePuckChase.race_grip(caps))
 		if t < best:
 			best = t
 	opp_t[k] = best if best < float(STEPS) * STEP_DT else INF
