@@ -168,9 +168,10 @@ static func _dwell_keep(at: Vector3, off: Vector2, t: float, opponents: Array[Ve
 		opponent_vels: Array[Vector3], opponent_caps: Array,
 		from: Vector3 = Vector3.INF) -> float:
 	var spot := Vector3(at.x + off.x, 0.0, at.z + off.y)
-	return AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
-			spot, t, opponents, opponent_vels, opponent_caps,
-			minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S), Vector2.ZERO, 0.0, -INF, from))
+	var clear: float = AICarrySpace.reach_clearance(spot, t, opponents, opponent_vels,
+			opponent_caps, minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S), Vector2.ZERO, 0.0,
+			-INF, from)
+	return AICarrySpace.clearance_to_safety(clear, AICarrySpace.reach_band_m)
 
 
 # Odds each solve_shot hold keeps the puck from `self_pos` (world) skating at
@@ -192,10 +193,11 @@ func price_keep(self_pos: Vector3, velocity: Vector2, facing: Vector2, charge_s:
 		if pull_s[k] > 0.0 and k_keep > 0.0:
 			var t_mid: float = pull_s[k] * 0.5
 			_fill_route(k, facing, velocity)
-			k_keep = minf(k_keep, AICarrySpace.transit_clearance_to_safety(
-					AICarrySpace.reach_clearance(
-							_world(self_pos, _route[ROUTE_SEGMENTS / 2], velocity, t_mid),
-							t_mid, opponents, opponent_vels, opponent_caps)))
+			var mid_clear: float = AICarrySpace.reach_clearance(
+					_world(self_pos, _route[ROUTE_SEGMENTS / 2], velocity, t_mid),
+					t_mid, opponents, opponent_vels, opponent_caps)
+			k_keep = minf(k_keep, AICarrySpace.transit_clearance_to_safety(mid_clear,
+					AICarrySpace.reach_band_m))
 			for i: int in opponents.size():
 				if k_keep <= 0.0:
 					break

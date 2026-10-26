@@ -450,7 +450,7 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 						AICarrierField.puck_pos_at(end, goal),
 						AICarrierField.puck_pos_at(destination, goal), t_rest,
 						_scratch_opponents_path, _scratch_vels_path, _field.opponent_caps,
-						true))
+						true, t_end))
 	return worth
 
 
@@ -495,7 +495,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		if worth <= best:
 			continue
 		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2,
-				_scratch_vels_ply2, reach)
+				_scratch_vels_ply2, reach, t1)
 		var move_value: float = worth * safety
 		if move_value <= best:
 			continue
@@ -512,11 +512,11 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 # velocities then) — carry_safety's regimes on each leg of the skated path: the
 # meeting band against the defence at the leg's start, a moving puck at every
 # interior sample, a dwelling one with the arrival lunge at the end, each sample
-# read at its own time into the move. Leaves where the earliest uncertain leg
-# strips it in _strip_point.
+# read at its own time into the move; `opps` read `projected_s` ahead of now.
+# Leaves where the earliest uncertain leg strips it in _strip_point.
 func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3,
 		opps: Array[Vector3], opp_vels: Array[Vector3],
-		reach: int = AICarryRollout.SAMPLES) -> float:
+		reach: int = AICarryRollout.SAMPLES, projected_s: float = 0.0) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var prev: Vector3 = AICarrierField.puck_pos_at(from, goal)
 	var t_prev: float = 0.0
@@ -542,9 +542,10 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 		var c: float = AICarrySpace.reach_clearance(p, t, opps,
 				opp_vels, _field.opponent_caps,
 				minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S) if last else -1.0,
-				dir, leg_len / leg_t)
-		piece = minf(piece, AICarrySpace.clearance_to_safety(c) if last
-				else AICarrySpace.transit_clearance_to_safety(c))
+				dir, leg_len / leg_t, -INF, Vector3.INF, projected_s)
+		piece = minf(piece, AICarrySpace.clearance_to_safety(c, AICarrySpace.reach_band_m)
+				if last else AICarrySpace.transit_clearance_to_safety(c,
+						AICarrySpace.reach_band_m))
 		if piece < 1.0 and not _strip_point.is_finite():
 			_strip_point = AICarrySpace.carry_strip_point(prev, p, leg_t, leg_opps,
 					opp_vels, _field.opponent_caps, true)

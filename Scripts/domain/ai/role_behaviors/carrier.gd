@@ -382,9 +382,11 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	var evade_seam: Vector3 = AICarrySpace.best_evade_point(
 			cur_puck_pos, ctx.self_velocity, _field.opponents, _field.opponent_vels,
 			ctx.self_handle_reach, _field.opponent_caps, ctx.self_max_accel)
-	_phase_current_safety = AICarrySpace.clearance_to_safety(
-			AICarrySpace.reach_clearance(evade_seam, AICarrySpace.EVADE_HORIZON_S,
-					_field.opponents, _field.opponent_vels, _field.opponent_caps))
+	var seam_clear: float = AICarrySpace.reach_clearance(evade_seam,
+			AICarrySpace.EVADE_HORIZON_S, _field.opponents, _field.opponent_vels,
+			_field.opponent_caps)
+	_phase_current_safety = AICarrySpace.clearance_to_safety(seam_clear,
+			AICarrySpace.reach_band_m)
 
 	# Puck-protect read (see protect_offset / protect_gain) against the
 	# directional opponent set (see PROTECT_SCREEN_BEHIND_M). Pure stick work:
@@ -398,9 +400,10 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	forward_puck_clearance = AICarrySpace.reach_clearance(fwd_spot, horizon,
 			_scratch_protect_opponents, _scratch_protect_vels,
 			_scratch_protect_caps)
+	var fwd_band: float = AICarrySpace.reach_band_m
 	if ctx.protects_the_puck:
 		var fwd_safety: float = AICarrySpace.clearance_to_safety(
-				forward_puck_clearance)
+				forward_puck_clearance, fwd_band)
 		# HOW MUCH to shield and WHERE to put the puck are answered by two seams
 		# (see best_handle_protect_point). The WEIGHT reads the MAX-clearance
 		# seam — the safety the best available shield buys.
@@ -410,10 +413,10 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		# best_handle_protect_point projects the body to the same horizon, so
 		# proj + offset is the seam's world point.
 		var seam_world: Vector3 = self_pos + ctx.self_velocity * horizon + max_seam
-		var seam_safety: float = AICarrySpace.clearance_to_safety(
-				AICarrySpace.reach_clearance(seam_world, horizon,
-						_scratch_protect_opponents, _scratch_protect_vels,
-						_scratch_protect_caps))
+		var protect_clear: float = AICarrySpace.reach_clearance(seam_world, horizon,
+				_scratch_protect_opponents, _scratch_protect_vels, _scratch_protect_caps)
+		var seam_safety: float = AICarrySpace.clearance_to_safety(protect_clear,
+				AICarrySpace.reach_band_m)
 		protect_gain = clampf(seam_safety - fwd_safety, 0.0, 1.0)
 		# …and the DIRECTION is the least-committal seam that is still safe,
 		# directed at the presented-forward spot, so the blade goes no further off

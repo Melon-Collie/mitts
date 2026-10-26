@@ -71,8 +71,10 @@ static func reach_clearance(
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], maneuver_time: float = -1.0,
 		carry_dir: Vector2 = Vector2.ZERO, carry_speed: float = 0.0,
-		abort_below: float = -INF, carried_from: Vector3 = Vector3.INF) -> float:
+		abort_below: float = -INF, carried_from: Vector3 = Vector3.INF,
+		projected_s: float = 0.0) -> float:
 	var n: int = opponents.size()
+	reach_band_m = 0.0
 	if n == 0 or opponent_vels.size() != n:
 		return EVADE_SAFE_MARGIN_M   # nothing to evade — fully clear
 	# `maneuver_time` is the defender's COMMIT window — how long he actively
@@ -149,9 +151,21 @@ static func reach_clearance(
 					stride_accel, stick, vmax, grip, v_along_carry / carry_speed))
 		if clear < worst:
 			worst = clear
+			reach_band_m = minf(vmax, Vector2(opponent_vels[i].x, opponent_vels[i].z).length()
+					+ accel * maxf(0.0, minf(time, w_i) - EVADE_REACTION_S)) \
+					* maxf(AIArrival.ERROR_FRAC * (time + projected_s), AIArrival.ERROR_FLOOR_S)
 			if worst < abort_below:
 				return worst
 	return worst
+
+
+# reach_clearance's other result: how far the binding defender's nominal reach is
+# uncertain by — the arrival clock's calibrated error on his trip
+# (AIArrival.ERROR_FRAC, ERROR_FLOOR_S) in ground at the speed he ends it with;
+# a defence the caller projected `projected_s` ahead to start from carries that
+# trip's error too.
+# The safety maps grade a clearance across it, as AILaneReach grades a lane.
+static var reach_band_m: float = 0.0
 
 
 # Whether a man at `pos` moving at `vel` is chasing a carry from `from` to `to`:
@@ -255,20 +269,20 @@ const TRANSIT_SAFE_CLEAR_M: float = 0.6
 
 # Dwelling-puck safety: 0 once the sweep standard is nominally met
 # (POKE_CONTACT_RADIUS_M − DWELL_HALF_BAND_M), 1 a blade past it. The map for
-# every hold/stand/arrival/reception read.
-static func clearance_to_safety(clearance: float) -> float:
-	return clampf(
-			(clearance - (POKE_CONTACT_RADIUS_M - DWELL_HALF_BAND_M))
-					/ (2.0 * DWELL_HALF_BAND_M),
-			0.0, 1.0)
+# every hold/stand/arrival/reception read. `band_m` (reach_band_m) widens the
+# band about its middle when the reach read is that uncertain.
+static func clearance_to_safety(clearance: float, band_m: float = 0.0) -> float:
+	var half: float = maxf(DWELL_HALF_BAND_M, band_m)
+	return clampf((clearance - (POKE_CONTACT_RADIUS_M - half)) / (2.0 * half), 0.0, 1.0)
 
 
 # Moving-puck safety: the mixed band for a puck traversing the sample at stride.
 # More lenient than the dwell map — outrunning a reaction-delayed pursuit is
-# real protection.
-static func transit_clearance_to_safety(clearance: float) -> float:
-	return clampf((clearance - TRANSIT_STRIP_CLEAR_M)
-			/ (TRANSIT_SAFE_CLEAR_M - TRANSIT_STRIP_CLEAR_M), 0.0, 1.0)
+# real protection. `band_m` widens it as for clearance_to_safety.
+static func transit_clearance_to_safety(clearance: float, band_m: float = 0.0) -> float:
+	var mid: float = 0.5 * (TRANSIT_STRIP_CLEAR_M + TRANSIT_SAFE_CLEAR_M)
+	var half: float = maxf(0.5 * (TRANSIT_SAFE_CLEAR_M - TRANSIT_STRIP_CLEAR_M), band_m)
+	return clampf((clearance - (mid - half)) / (2.0 * half), 0.0, 1.0)
 
 
 # Lunge window for a defender's stick redirect onto a carried puck AT ITS
@@ -408,7 +422,8 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 # forces the dwell band onto a puck in transit.
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		opponent_caps: Array = [], apply_escape: bool = false) -> float:
+		opponent_caps: Array = [], apply_escape: bool = false,
+		projected_s: float = 0.0) -> float:
 	var carry_dir := Vector2.ZERO
 	var carry_speed: float = 0.0
 	var dx: float = to.x - from.x
@@ -419,29 +434,32 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		carry_speed = dist / arrival_time
 	if dist < 0.001:
 		# A stand: the puck dwells the whole window — both samples read dwell.
-		var s_mid: float = clearance_to_safety(reach_clearance(
-				from, arrival_time * 0.5, opponents, opponent_vels,
-				opponent_caps))
+		var c_mid: float = reach_clearance(from, arrival_time * 0.5, opponents,
+				opponent_vels, opponent_caps, -1.0, Vector2.ZERO, 0.0, -INF, Vector3.INF,
+				projected_s)
+		var s_mid: float = clearance_to_safety(c_mid, reach_band_m)
 		if s_mid <= 0.0:
 			return 0.0
-		return minf(s_mid, clearance_to_safety(reach_clearance(
-				from, arrival_time, opponents, opponent_vels,
-				opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S))))
+		var c_end: float = reach_clearance(from, arrival_time, opponents, opponent_vels,
+				opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S), Vector2.ZERO, 0.0,
+				-INF, Vector3.INF, projected_s)
+		return minf(s_mid, clearance_to_safety(c_end, reach_band_m))
 	# Sequential early-outs — each factor can only lower the min, so any zero
 	# skips the remaining defender loops.
 	var crossing: float = carry_crossing_keep(
 			from, to, arrival_time, opponents, opponent_vels, opponent_caps)
 	if crossing <= 0.0:
 		return 0.0
-	var t_mid: float = transit_clearance_to_safety(reach_clearance(
-			from.lerp(to, 0.5), arrival_time * 0.5, opponents, opponent_vels,
-			opponent_caps, -1.0, carry_dir, carry_speed))
+	var c_mid2: float = reach_clearance(from.lerp(to, 0.5), arrival_time * 0.5, opponents,
+			opponent_vels, opponent_caps, -1.0, carry_dir, carry_speed, -INF, Vector3.INF,
+			projected_s)
+	var t_mid: float = transit_clearance_to_safety(c_mid2, reach_band_m)
 	if t_mid <= 0.0:
 		return 0.0
-	return minf(crossing, minf(t_mid, clearance_to_safety(reach_clearance(
-			to, arrival_time, opponents, opponent_vels,
-			opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S),
-			carry_dir, carry_speed))))
+	var c_to: float = reach_clearance(to, arrival_time, opponents, opponent_vels,
+			opponent_caps, minf(arrival_time, CARRY_LUNGE_WINDOW_S), carry_dir, carry_speed,
+			-INF, Vector3.INF, projected_s)
+	return minf(crossing, minf(t_mid, clearance_to_safety(c_to, reach_band_m)))
 
 
 # WHERE a carry gets stripped, if it does: the EARLIEST covered point on the path.

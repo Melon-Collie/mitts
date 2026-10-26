@@ -547,10 +547,11 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# RELEASE-TIME spots over the flight, sticks maneuvering over the short
 	# reception window and his settle. It prices a defender draped on the
 	# receiver's back, who is off both the lane and the receiver's forward shot cone.
-	var catch_safety: float = AICarrySpace.clearance_to_safety(
-			AICarrySpace.reach_clearance(receiver_spot, flight_t + settle_s,
-					_field.opponents_release, _field.opponent_vels,
-					_field.opponent_caps, AICarrySpace.EVADE_HORIZON_S + settle_s))
+	var catch_clear: float = AICarrySpace.reach_clearance(receiver_spot, flight_t + settle_s,
+			_field.opponents_release, _field.opponent_vels, _field.opponent_caps,
+			AICarrySpace.EVADE_HORIZON_S + settle_s)
+	var catch_safety: float = AICarrySpace.clearance_to_safety(catch_clear,
+			AICarrySpace.reach_band_m)
 	# A bobble is a loose puck he must win back: the race to the spot, him at his
 	# regather against their first body there from the release, and his drive or
 	# his possession from there once he has it.
