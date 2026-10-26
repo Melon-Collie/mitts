@@ -257,9 +257,19 @@ Two follow-ups settled what that is not:
   is a small share of ticks, so it was not kept.
 
 What remains is ordinary GDScript overhead, around 0.1–0.5 µs per member
-access and call, across a few hundred of them per pass. Only porting the pass's
-orchestration itself would remove it, and `native/README.md` keeps feel-tuned
-orchestration in GDScript.
+access and call, across a few hundred of them per pass. Only porting the
+pass's orchestration itself removes it, so the whole pass moved to C++
+(`NativeBladePass`, `native/README.md`). In the 10-skater match, three
+alternating runs a mode:
+
+| | GDScript pass | native pass | |
+|---|---|---|---|
+| the bots' skater step, µs a tick | 2,103 | 1,524 | −28% |
+| the human's skater step, µs a tick | 639 | 512 | −20% |
+| the whole host tick, ms | 6.44 | 5.59 | −13% |
+
+Reconcile replay runs the same pass once per replayed input, so a client
+gains the same per input it replays.
 
 The keeper's tick came to ~445 µs on the host:
 
