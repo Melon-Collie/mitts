@@ -617,20 +617,32 @@ func apply_head_tracking(input: InputState, delta: float) -> void:
 
 # Head tracking from a raw aim point rather than an InputState — used by the
 # render-rate cosmetic pass (Skater.render_pose_update), which has no input
-# frame, off the controller's last-seen aim world position.
-func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
+# frame, off the controller's last-seen aim world position. `aim_known` is false
+# on a peer drawing someone else's skater, which has no cursor for it.
+func apply_head_tracking_aim(aim_world: Vector3, delta: float, aim_known: bool = true) -> void:
 	var target_angle: float = 0.0
-	# A downed head lolls to neutral instead of tracking the cursor across the
+	# A downed head lolls to neutral instead of tracking anything across the
 	# ice (the spring carries it there and back smoothly).
 	if _controller.knockdown_timer <= 0.0:
-		var mouse_local: Vector3 = _skater.upper_body_to_local(aim_world)
-		mouse_local.y = 0.0
-		if mouse_local.length() > 0.01:
-			target_angle = clampf(
-				atan2(mouse_local.x, -mouse_local.z),
-				-deg_to_rad(_controller.head_track_max_deg),
-				deg_to_rad(_controller.head_track_max_deg))
-	# On a spring rather than a lag, so the head starts after the cursor from rest.
+		var look: Vector3
+		var has_look: bool = true
+		var puck: Puck = _controller.puck
+		var state: int = _skater.current_shot_state
+		match HeadLookRules.target(SkaterStateMachine.state_aims_shot(state),
+				SkaterStateMachine.state_has_puck(state), aim_known,
+				puck != null and HeadLookRules.is_puck_in_play(puck.global_position)):
+			HeadLookRules.Target.AIM:
+				look = aim_world
+			HeadLookRules.Target.PUCK:
+				look = puck.global_position
+			HeadLookRules.Target.NET:
+				look = HeadLookRules.attacking_net(_skater.get_team_id())
+			_:
+				has_look = false
+		if has_look:
+			target_angle = HeadLookRules.yaw(_skater.upper_body_to_local(look), head_angle,
+					deg_to_rad(_controller.head_track_max_deg))
+	# On a spring rather than a lag, so the head starts after its target from rest.
 	var omega: float = _controller.head_track_speed * EaseRules.OMEGA_PER_RATE
 	var was: float = head_angle
 	head_angle = EaseRules.critical_x(was, _head_rate, target_angle, omega, delta)
