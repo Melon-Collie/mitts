@@ -618,9 +618,11 @@ takes the whole class down and every static call on it from every file at once.
 
 Both evaluators read the leaves and never each other. `possession_value.gd`
 (`AIPossessionValue`, what possession of a spot is worth) reads both from above,
-so neither may read it. `test_scoring_split_stays_acyclic.gd` holds that. A
-primitive both need goes in a leaf; an extraction is cut where nothing in the cut
-reaches back into what remains.
+so neither may read it; its defence is paired to the attack by
+`defence_pairing.gd` (`AIDefencePairing`), which reads only the leaves.
+`test_scoring_split_stays_acyclic.gd` holds that. A primitive both need goes in a
+leaf; an extraction is cut where nothing in the cut reaches back into what
+remains.
 
 ## The models in detail
 

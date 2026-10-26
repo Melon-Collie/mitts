@@ -194,6 +194,13 @@ var scratch_teammate_vels: Array[Vector3] = []
 # The opposing attack's possession read against our skaters
 # (AIRoleReads.defence_possession), over the three teammate buffers above.
 var scratch_defence_possession := AIPossessionValue.new()
+# The attacking side a possession read pairs its defence to
+# (AIDefencePairing.collect_attack): ours for attack_possession, theirs for
+# defence_possession.
+var scratch_attack_pairing: Array[Vector3] = []
+var scratch_attack_pairing_vels: Array[Vector3] = []
+var scratch_defence_pairing: Array[Vector3] = []
+var scratch_defence_pairing_vels: Array[Vector3] = []
 var scratch_opp_receivers: Array[Vector3] = []
 # Option-value upper bounds (AIDefensiveVerbs.carrier_option_bases).
 var scratch_option_bases: Array[float] = []

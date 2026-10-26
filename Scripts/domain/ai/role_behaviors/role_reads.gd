@@ -187,8 +187,11 @@ static func collect_teammates_excluding_self(ctx: RoleContext,
 static func defence_possession(ctx: RoleContext,
 		teammates: Array[Vector3]) -> AIPossessionValue:
 	var poss: AIPossessionValue = ctx.scratch_defence_possession
+	var holder: Vector3 = AIDefencePairing.collect_attack(ctx.snapshot, ctx.team_id_by_peer,
+			1 - ctx.team_id, ctx.scratch_defence_pairing, ctx.scratch_defence_pairing_vels)
 	poss.fill(ctx.defending_goal_pos, teammates, ctx.scratch_teammate_vels,
-			ctx.scratch_teammate_caps)
+			ctx.scratch_teammate_caps, false, ctx.scratch_defence_pairing,
+			ctx.scratch_defence_pairing_vels, holder)
 	return poss
 
 
@@ -298,8 +301,11 @@ static func _our_carrier(ctx: RoleContext) -> int:
 static func attack_possession(ctx: RoleContext,
 		opponents: Array[Vector3]) -> AIPossessionValue:
 	var poss: AIPossessionValue = ctx.scratch_attack_possession
+	var holder: Vector3 = AIDefencePairing.collect_attack(ctx.snapshot, ctx.team_id_by_peer,
+			ctx.team_id, ctx.scratch_attack_pairing, ctx.scratch_attack_pairing_vels)
 	poss.fill(ctx.attacking_goal_pos, opponents, ctx.scratch_opp_vels,
-			ctx.scratch_opp_caps)
+			ctx.scratch_opp_caps, false, ctx.scratch_attack_pairing,
+			ctx.scratch_attack_pairing_vels, holder)
 	return poss
 
 

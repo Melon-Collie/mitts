@@ -57,6 +57,8 @@ var _memo_defenders: Array[Vector3] = []
 var _memo_defender_vels: Array[Vector3] = []
 var _memo_defender_caps: Array[AISkaterCaps] = []
 var _memo_possession := AIPossessionValue.new()
+var _memo_attackers: Array[Vector3] = []
+var _memo_attacker_vels: Array[Vector3] = []
 # The opposing attack's possession read with no defenders, for the partition's
 # man values (see _compute_threat_assignments).
 var _open_possession := AIPossessionValue.new()
@@ -380,8 +382,10 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 			_memo_defenders.append(snapshot.skater_states[pid].position)
 			_memo_defender_vels.append(snapshot.skater_states[pid].velocity)
 			_memo_defender_caps.append(_caps_by_peer.get(pid))
+	var holder: Vector3 = AIDefencePairing.collect_attack(snapshot, _team_id_by_peer,
+			1 - team_id, _memo_attackers, _memo_attacker_vels)
 	_memo_possession.fill(our_net, _memo_defenders, _memo_defender_vels,
-			_memo_defender_caps)
+			_memo_defender_caps, false, _memo_attackers, _memo_attacker_vels, holder)
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			continue

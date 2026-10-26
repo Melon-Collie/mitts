@@ -30,9 +30,15 @@ extends RefCounted
 # so it is priced once per fill, and only when a read could use it: its worth on
 # empty ice, which a defence only lowers, bounds it until then.
 #
+# The defence is read in numbers (AIDefencePairing): a defender paired to an
+# attacker other than the puck's holder rides him through the read instead of
+# skating at the puck. The holder's own defender, and any left over, play the
+# puck: project_defender. So a 3-on-2 leaves a man open and a 1-on-3 brings every
+# spare body.
+#
 # Every shot is against a keeper who tracked the play: set and square
-# (AIShotValue.set_keeper). Not modelled: passes — one man carries — and the
-# pace he crosses with: the drive in from an entry starts from rest.
+# (AIShotValue.set_keeper). Not modelled: passes — the man with the puck carries
+# it — and the pace he crosses with: the drive in from an entry starts from rest.
 
 # Where a side crosses: a stride past the line, at CROSSINGS points spread evenly
 # between the two wall lanes.
@@ -54,6 +60,7 @@ const GOALIE_MEMO_CAP: int = 32
 # the same entries against the same defence in one AI batch. Round-robin past
 # this many defences.
 const SHARED_ENTRY_SLOTS: int = 4
+const _NO_SKATERS: Array[Vector3] = []
 
 
 # One defence's entry worths, keyed on the exact ice they were priced against.
@@ -64,20 +71,28 @@ class _SharedEntries:
 	var defenders: Array[Vector3] = []
 	var vels: Array[Vector3] = []
 	var caps: Array = []
+	var ride: Array[int] = []
+	var attackers: Array[Vector3] = []
+	var attacker_vels: Array[Vector3] = []
 	# Per entry and follow-up time, ENTRY_FIELDS values (_price_entry): < 0 until
 	# priced.
 	var worth: Array[float] = []
 	var generation: int = 0
 
-	func matches(g: Vector3, d: Array[Vector3], v: Array[Vector3], c: Array) -> bool:
-		return goal == g and defenders == d and vels == v and caps == c
+	func matches(g: Vector3, d: Array[Vector3], v: Array[Vector3], c: Array,
+			r: Array[int], a: Array[Vector3], av: Array[Vector3]) -> bool:
+		return goal == g and defenders == d and vels == v and caps == c \
+				and ride == r and attackers == a and attacker_vels == av
 
 	func claim(g: Vector3, d: Array[Vector3], v: Array[Vector3], c: Array,
-			entries: int) -> void:
+			r: Array[int], a: Array[Vector3], av: Array[Vector3], entries: int) -> void:
 		goal = g
 		defenders.assign(d)
 		vels.assign(v)
 		caps.assign(c)
+		ride.assign(r)
+		attackers.assign(a)
+		attacker_vels.assign(av)
 		worth.resize(entries * FOLLOW_UP_TIMES.size() * ENTRY_FIELDS)
 		worth.fill(-1.0)
 		generation += 1
@@ -90,6 +105,8 @@ var _goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
 var _defender_vels: Array[Vector3] = []
 var _defender_caps: Array = []
+# Who of fill()'s defence rides which attacker.
+var _pairing := AIDefencePairing.new()
 var _entry_spots: Array[Vector3] = []
 # Per entry and follow-up time, ENTRY_FIELDS values (_price_entry); < 0 until
 # priced (_priced).
@@ -140,15 +157,22 @@ var _slot_generation: int = -1
 
 # Reads the ice for the side attacking `goal` against `defenders` (velocities and
 # caps index-matched) and prices its entries, unless `in_zone_only`: then only
-# spots in the zone may be read. The arrays are read, not copied: refill them in
-# place and call fill() again when the ice changes. push_defender appends to
-# them, so a read that is pushed onto needs its three arrays distinct.
+# spots in the zone may be read. `attackers` (velocities index-matched) are that
+# side's skaters other than the puck's holder, at `holder` (INF: nobody holds
+# it), which the defence is paired to (_pair). The arrays are read, not copied:
+# refill them in place and call fill() again when the ice changes. push_defender
+# appends to the defence's, so a read that is pushed onto needs its three arrays
+# distinct.
 func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3],
-		defender_caps: Array, in_zone_only: bool = false) -> void:
+		defender_caps: Array, in_zone_only: bool = false,
+		attackers: Array[Vector3] = _NO_SKATERS, attacker_vels: Array[Vector3] = _NO_SKATERS,
+		holder: Vector3 = Vector3.INF) -> void:
 	_goal = goal
 	_defenders = defenders
 	_defender_vels = defender_vels
 	_defender_caps = defender_caps
+	_pairing.pair(goal, defenders, defender_vels, defender_caps, attackers, attacker_vels,
+			holder)
 	_pushed = 0
 	_memo_from.clear()
 	_memo_to.clear()
@@ -255,6 +279,10 @@ func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
 	_line_defence.clear()
 	_line_vels.clear()
 	for k: int in _defenders.size():
+		if _pairing.rides(k):
+			_line_defence.append(_pairing.ride_at(k, commit))
+			_line_vels.append(AIDefencePairing.ride_vel)
+			continue
 		var p: Vector3 = _defenders[k]
 		var v: Vector3 = _defender_vels[k]
 		var depth: float = (p.z - natural.z) * signf(_goal.z)
@@ -436,7 +464,8 @@ func _shared_price(i: int, b: int, base: int) -> void:
 
 func _find_slot() -> _SharedEntries:
 	for slot: _SharedEntries in _shared:
-		if slot.matches(_goal, _defenders, _defender_vels, _defender_caps):
+		if slot.matches(_goal, _defenders, _defender_vels, _defender_caps, _pairing.ride,
+				_pairing.attackers, _pairing.attacker_vels):
 			return slot
 	var slot: _SharedEntries
 	if _shared.size() < SHARED_ENTRY_SLOTS:
@@ -445,7 +474,8 @@ func _find_slot() -> _SharedEntries:
 	else:
 		slot = _shared[_shared_next]
 		_shared_next = (_shared_next + 1) % SHARED_ENTRY_SLOTS
-	slot.claim(_goal, _defenders, _defender_vels, _defender_caps, _entry_spots.size())
+	slot.claim(_goal, _defenders, _defender_vels, _defender_caps, _pairing.ride,
+			_pairing.attackers, _pairing.attacker_vels, _entry_spots.size())
 	return slot
 
 
@@ -490,9 +520,13 @@ func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
 	out.clear()
 	out_vels.clear()
 	for k: int in _defenders.size():
-		out.append(project_defender(_defenders[k], _defender_vels[k], t, carrier_z, _goal.z,
-				_caps_of(k)))
-		out_vels.append(projected_vel)
+		if _pairing.rides(k):
+			out.append(_pairing.ride_at(k, t))
+			out_vels.append(AIDefencePairing.ride_vel)
+		else:
+			out.append(project_defender(_defenders[k], _defender_vels[k], t, carrier_z,
+					_goal.z, _caps_of(k)))
+			out_vels.append(projected_vel)
 
 
 func _shot(pos: Vector3) -> float:

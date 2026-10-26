@@ -99,6 +99,9 @@ var _drive_buf: Array[Vector3] = []
 # (against our defenders), priced by fill().
 var _ours := AIPossessionValue.new()
 var _theirs := AIPossessionValue.new()
+# The opponents _theirs pairs our defence to: all but the one nearest the carrier.
+var _their_attackers: Array[Vector3] = []
+var _their_attacker_vels: Array[Vector3] = []
 
 
 func fill(ctx: RoleContext) -> void:
@@ -140,11 +143,27 @@ func fill(ctx: RoleContext) -> void:
 	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
 	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
 			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
-	# In the zone the carrier reads our possession only of spots in it.
+	# In the zone the carrier reads our possession only of spots in it. The
+	# defence pairs to his teammates, him holding; a turnover's is the opponents',
+	# their man nearest him collecting.
 	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
-			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos))
+			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos),
+			our_defenders, our_defender_vels, ctx.self_pos)
 	_tag_up_s = _tag_up_time(ctx) if ctx.zone_entry_blocked else 0.0
-	_theirs.fill(ctx.defending_goal_pos, our_defenders, our_defender_vels, our_defender_caps)
+	var collector: int = -1
+	for i: int in opponents.size():
+		if collector == -1 or opponents[i].distance_squared_to(ctx.self_pos) \
+				< opponents[collector].distance_squared_to(ctx.self_pos):
+			collector = i
+	_their_attackers.clear()
+	_their_attacker_vels.clear()
+	for i: int in opponents.size():
+		if i != collector:
+			_their_attackers.append(opponents[i])
+			_their_attacker_vels.append(opponent_vels[i])
+	_theirs.fill(ctx.defending_goal_pos, our_defenders, our_defender_vels, our_defender_caps,
+			false, _their_attackers, _their_attacker_vels,
+			opponents[collector] if collector != -1 else Vector3.INF)
 
 
 func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
