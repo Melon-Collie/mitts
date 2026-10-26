@@ -43,8 +43,8 @@ extends RefCounted
 # Where a side crosses: a stride past the line, at CROSSINGS points spread evenly
 # between the two wall lanes.
 const ENTRY_LEAD_M: float = 3.0
-# Division guard on the side's odds from an ordinary entry (entries_handed), far
-# below any entry the read can price.
+# Division guard on the side's odds from an ordinary entry, far below any entry
+# the read can price.
 const ENTRY_ODDS_GUARD: float = 0.001
 const ENTRY_WALL_INSET_M: float = 2.0
 const CROSSINGS: int = 5
@@ -140,6 +140,8 @@ var _cross_s: float = 0.0
 var _open_goal: Vector3 = Vector3.INF
 var _open_worth: Array[float] = []
 var _open_fields: Array[float] = []
+# The mean of _open_worth: the unit _entry_quality counts in.
+var _open_mean: float = 1.0
 # _drive_keep's other result.
 var _drive_reached_value: float = 0.0
 var _no_one: Array[Vector3] = []
@@ -246,20 +248,44 @@ func p_exit(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 	return _p_cross(pos, start_s, vel, man_caps, -_line_z)
 
 
-# The odds the man at `pos` gets the puck into the attacked zone with it: p_next,
-# and from his own zone the chain — out by the crossing he gets out through
+# The entries the man at `pos` (as at() reads him) makes of the puck: the odds he
+# gets it into the attacked zone, each entry counted by where it is made — its
+# worth on empty ice against the mean entry's (_entry_quality), so one through
+# the middle counts for more than one along the boards; what the defence takes
+# from it is the keep's. In the zone he has entered, where he stands, in that
+# unit. From his own zone, the chain — out by the crossing he gets out through
 # surest, then in from there.
 func p_enter(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 		man_caps: AISkaterCaps = null) -> float:
+	if AIActionScoring.in_offensive_zone(pos, _goal):
+		return AIActionScoring.delay_discount(start_s) * _entry_quality(pos)
 	if not _in_own_zone(pos):
-		return p_next(pos, start_s, vel, man_caps)
+		return _p_cross(pos, start_s, vel, man_caps, _line_z, true)
 	var out: float = _p_cross(pos, start_s, vel, man_caps, -_line_z)
 	if out <= 0.0:
 		return 0.0
 	var speed: float = man_caps.max_speed if man_caps != null else AIArrival.SKATER_REF_SPEED_M_S
 	var heading := Vector3(0.0, 0.0, signf(_goal.z) * speed)
 	return out / AIActionScoring.delay_discount(_cross_s) \
-			* _p_cross(_cross_at, _cross_s, heading, man_caps, _line_z)
+			* _p_cross(_cross_at, _cross_s, heading, man_caps, _line_z, true)
+
+
+# Where an entry is made, as a count of entries: the worth on empty ice of an
+# entry at `pos` (its shot, or its drive in) against the mean of the crossings'
+# (_open_mean). Geometry alone, so it holds still while the defence moves.
+func _entry_quality(pos: Vector3) -> float:
+	var swap_d: Array[Vector3] = _defenders
+	var swap_v: Array[Vector3] = _defender_vels
+	var swap_c: Array = _defender_caps
+	_defenders = _no_one
+	_defender_vels = _no_one
+	_defender_caps = _no_caps
+	_open_fields.resize(ENTRY_FIELDS)
+	_price_entry(pos, _open_fields, 0, 0.0)
+	_defenders = swap_d
+	_defender_vels = swap_v
+	_defender_caps = swap_c
+	return maxf(_open_fields[0], _open_fields[1]) / _open_mean
 
 
 # What the side fill() priced is after with the puck, by where the man deciding
@@ -317,16 +343,21 @@ func _in_own_zone(pos: Vector3) -> bool:
 # The best crossing of the blue line at depth `line_z` for the man at `pos` (as
 # at() reads him): the keep of the skate there against the men short of it
 # (_skate_keep), and of the contest at it (_line_keep), discounted to the
-# crossing. Leaves where and when the best one crosses in _cross_at / _cross_s.
+# crossing — and, with `quality`, × where the entry there is made
+# (_entry_quality, read off the entry spot a stride past it). Leaves where and
+# when the best one crosses in _cross_at / _cross_s.
 func _p_cross(pos: Vector3, start_s: float, vel: Vector3, man_caps: AISkaterCaps,
-		line_z: float) -> float:
+		line_z: float, quality: bool = false) -> float:
 	var best: float = 0.0
 	var projected: bool = false
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
+	quality = quality and _open_worth.size() == CROSSINGS
 	for k: int in CROSSINGS:
 		var crossing := Vector3(wide_x * (2.0 * k / (CROSSINGS - 1) - 1.0), 0.0, line_z)
 		var t: float = start_s + AIArrival.time_to_arrive_caps(pos, crossing, vel, man_caps)
 		var discount: float = AIActionScoring.delay_discount(t)
+		if quality:
+			discount *= _open_worth[k] / _open_mean
 		if discount <= best:
 			continue
 		var keep: float = _line_keep(crossing, t, pos, vel, line_z)
@@ -568,9 +599,12 @@ func _price_open() -> void:
 	_defender_caps = _no_caps
 	_open_worth.clear()
 	_open_fields.resize(ENTRY_FIELDS)
+	var sum: float = 0.0
 	for spot: Vector3 in _entry_spots:
 		_price_entry(spot, _open_fields, 0, 0.0)
 		_open_worth.append(maxf(_open_fields[0], _open_fields[1]))
+		sum += _open_worth[-1]
+	_open_mean = maxf(sum / CROSSINGS, ENTRY_ODDS_GUARD)
 	_defenders = defenders
 	_defender_vels = vels
 	_defender_caps = caps

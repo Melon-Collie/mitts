@@ -249,8 +249,9 @@ func test_outside_the_zone_a_man_threatens_his_odds_of_getting_in() -> void:
 	assert_almost_eq(v.threat_of_carrier(man, Vector3.ZERO, OUR_KEEPER, enter),
 			v.p_enter(man), 1e-6, "his entry, not a shot dead from there")
 	var carrier := Vector3(4.0, 0.0, 0.0)
+	var flight: float = carrier.distance_to(man) / AIPuckLane.expected_pass_speed(carrier, man)
 	assert_lte(v.threat_of_feed(carrier, man, Vector3.ZERO, OUR_KEEPER, enter),
-			v.p_enter(man), "a feed to him is worth at most his entry")
+			v.p_enter(man, flight) + 1e-6, "a feed to him is worth at most his entry once it arrives")
 
 
 func test_a_body_on_the_lane_takes_the_feed() -> void:
@@ -350,6 +351,17 @@ func test_from_our_zone_getting_in_is_getting_out_and_then_in() -> void:
 	var v: AIPossessionValue = _read(_none)
 	var spot := Vector3(3.0, 0.0, 14.0)
 	var out_ice := Vector3(0.0, 0.0, -4.0)
-	var enter: float = v.p_enter(spot, 0.0, out_ice)
-	assert_gt(enter, 0.0)
-	assert_lte(enter, v.p_next(spot, 0.0, out_ice) + 1e-6, "no surer than getting out")
+	assert_gt(v.p_enter(spot, 0.0, out_ice), 0.0)
+
+
+func test_an_entry_counts_by_its_quality() -> void:
+	# Open ice both: the man coming down the middle enters where his shot and
+	# drive are worth more than along the boards, so his entries count for more.
+	var v: AIPossessionValue = _read(_none)
+	var up_ice := Vector3(0.0, 0.0, -6.0)
+	var middle: float = v.p_enter(Vector3(0.0, 0.0, -2.0), 0.0, up_ice)
+	var boards: float = v.p_enter(Vector3(11.0, 0.0, -2.0), 0.0, up_ice)
+	assert_gt(middle, boards, "the middle entry over the one along the boards")
+	assert_almost_eq(v.p_next(Vector3(0.0, 0.0, -2.0), 0.0, up_ice),
+			v.p_next(Vector3(11.0, 0.0, -2.0), 0.0, up_ice), 0.05,
+			"though either is about as sure")

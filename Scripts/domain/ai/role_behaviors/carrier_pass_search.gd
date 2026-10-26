@@ -574,6 +574,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			(1.0 - p_bobble) * catch_safety * on_catch + p_bobble * bobble_won * on_bobble)
 	# CEILING PRUNE (exact): every turnover cost below can only LOWER this EV,
 	# so the benefit is a hard upper bound.
+	if OS.has_environment("PROBE"): print("PROBEB spot=%s v=%s flight=%.2f catch=%.2f lane=%.3f pb=%.3f drive=%.3f atc=%.3f onc=%.3f clock=%.3f ben=%.4f" % [receiver_spot, receiver_vel, flight_t, catch_s, lane, p_bobble, drive_in, at_catch, on_catch, _possession_on_clock(receiver_spot, receiver_vel, receiver_caps, delay_s, catch_s), benefit])
 	if benefit <= useless_below:
 		return 0.0
 	# No separate "escape" bonus for a pressured carrier: the pressure is
