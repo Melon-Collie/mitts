@@ -2,10 +2,10 @@ class_name GaitCelebrationLayer
 extends GaitLayer
 
 # The celebration bounce: the knees pump between standing and seated (the body
-# drop follows, so it reads as a hop bob) — 3 pumps across the window, double
-# the raised-stick pose's bob rate. Gated to plain skating like that pose
-# (SkaterController's celebration block) so it never fights a follow-through
-# kick, and ramped in over the same first 20%.
+# drop follows, so it reads as a hop bob) on SkaterController.celebration_pump,
+# the hops the raised-stick pose's fist pump rides. Gated to plain skating like
+# that pose (SkaterController's celebration block) so it never fights a
+# follow-through kick, and ramped in over the window's first 20%.
 #
 # This pass runs at render rate and is visibility-gated, so the layer only
 # READS the progress: the callers age the timer at physics rate
@@ -35,5 +35,5 @@ func stance_floor() -> float:
 		return 0.0
 	var ramp: float = clampf(progress / 0.2, 0.0, 1.0)
 	ramp = ramp * ramp * (3.0 - 2.0 * ramp)
-	var pump: float = 0.5 - 0.5 * cos(progress * TAU * 3.0)
-	return _controller.rest_stance + _controller.celebration_leg_stance * ramp * pump
+	return _controller.rest_stance \
+			+ _controller.celebration_leg_stance * ramp * _controller.celebration_pump()

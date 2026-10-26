@@ -5510,7 +5510,8 @@ func faceoff_time_until_drop() -> float:
 # pose (which rides the hand/blade wire state outward, including the host's sim
 # of a remote human scorer), and every machine's gait reads the same timer for
 # the celebration leg bounce (legs are computed locally per machine and never
-# ride the wire).
+# ride the wire). The window opens once the goal clip has closed, so the
+# replay never records a stick the knees and fist do not replay with it.
 func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 		_assist1: String, _assist2: String) -> void:
 	if scorer_name.is_empty():
@@ -5518,7 +5519,9 @@ func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 	for record: PlayerRecord in _registry.all().values():
 		if record.player_name != scorer_name or record.controller == null:
 			continue
-		record.controller.start_celebration(GameRules.GOAL_CELEBRATION_DURATION)
+		record.controller.start_celebration(
+				GameRules.GOAL_CELEBRATION_DURATION - GoalReplayRules.POST_GOAL_TAIL,
+				GoalReplayRules.POST_GOAL_TAIL)
 		return
 
 

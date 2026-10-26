@@ -136,52 +136,68 @@ func apply_block_blade_position() -> void:
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
 
-# Seconds the celebration's raised stick eases in and back out over.
-const CELEBRATION_EASE_S: float = 0.25
+# Seconds the celebration's raised stick eases in and back out over: the shaft
+# swings ~150° on a 1.3 m lever, and quicker than this its tip's turn alone
+# outruns the body's smoothness bounds (test_body_stays_smooth.gd).
+const CELEBRATION_EASE_S: float = 0.4
 
 # ── Goal Celebration Pose ─────────────────────────────────────────────────────
-# Cosmetic raised-stick celebration for the scorer: top hand punches up with
-# the stick held overhead (blade above the hand, tilted so the shaft never
-# goes dead vertical — the stick/blade look_at needs a horizontal component),
-# off hand pumps up on the free side. t runs [0,1] across the celebration
-# window; the pose eases in from the stick the tick placed over its first
-# CELEBRATION_EASE_S and back out to it over its last, holding a gentle bob
-# between. Applied AFTER the tick's normal hand/blade placement, which it
-# blends from; runs only on the scorer's own machine and rides the hand/blade
-# wire state to everyone else like every other pose. `elapsed` and `left` are
-# seconds into and remaining of the window.
-func apply_celebration_pose(t: float, elapsed: float, left: float) -> void:
+# Cosmetic raised-stick celebration for the scorer: the top arm thrown up near
+# full extension with the stick held up its full length, leaning out off the
+# helmet, and the free hand pumping a fist on the hops the knees bounce. The
+# pose authors the HAND and derives the blade one solve_stick_length() along
+# the shaft's bearing; through the ease both the hand and that bearing blend
+# from the stick the tick placed, and the span from its length, so the stick
+# never draws short. Applied AFTER the tick's normal hand/blade placement, on
+# the machine that simulates the scorer, and rides the hand/blade wire state to
+# everyone else. `elapsed` and `left` are seconds into and remaining of the
+# window.
+func apply_celebration_pose(elapsed: float, left: float) -> void:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var ramp: float = smoothstep(0.0, CELEBRATION_EASE_S, elapsed) \
-			* smoothstep(0.0, CELEBRATION_EASE_S, left)
-	var bob: float = sin(t * TAU * 1.5) * 0.03 * ramp
-	var hand_pos := Vector3(
-			_skater.shoulder.position.x,
-			lerpf(_controller.hand_rest_y, _controller.celebration_hand_y, ramp) + bob,
-			_skater.shoulder.position.z - 0.10)
-	var blade_pos := Vector3(
-			_skater.shoulder.position.x + blade_side_sign * 0.18,
-			hand_pos.y + _controller.celebration_stick_rise * ramp,
-			_skater.shoulder.position.z - 0.28)
-	# The rigid pass reads the same here as anywhere, and it is why the raised
-	# stick survives it: this pose holds the blade well inside a stick-length of
-	# the hand, so the correction is inert until a board clamp actually moves the
-	# blade — and then it slides the hand rather than redrawing the arm from
-	# scratch, which is what keeps the stick overhead where the celebration wants it.
-	hand_pos = _skater.get_top_hand_position().lerp(hand_pos, ramp)
-	blade_pos = _skater.get_blade_position().lerp(blade_pos, ramp)
+	var ramp: float = _smootherstep(elapsed / CELEBRATION_EASE_S) \
+			* _smootherstep(left / CELEBRATION_EASE_S)
+	var pump: float = _controller.celebration_pump()
+	var arm: float = _skater.upper_arm_length + _skater.forearm_length
+	var top_side: float = signf(_skater.shoulder.position.x)
+	var bearing: Vector3 = _controller.celebration_hand_bearing
+	var raised_hand: Vector3 = _ik.arm_shoulder() \
+			+ Vector3(bearing.x * top_side, bearing.y, bearing.z).normalized() * arm \
+			* (_controller.celebration_hand_reach - _controller.celebration_hand_pump * pump)
+	bearing = _controller.celebration_stick_bearing
+	var raised_shaft: Vector3 = Vector3(bearing.x * top_side, bearing.y, bearing.z).normalized()
+
+	var hand_from: Vector3 = _skater.get_top_hand_position()
+	var shaft_from: Vector3 = _skater.get_blade_position() - hand_from
+	var span_from: float = shaft_from.length()
+	# Slerped, so the shaft turns at an even rate: a lerp between bearings this
+	# far apart all but vanishes midway and whips the stick through it.
+	var shaft: Vector3 = raised_shaft
+	if span_from > 0.001:
+		shaft = (shaft_from / span_from).slerp(raised_shaft, ramp)
+	var hand_pos: Vector3 = hand_from.lerp(raised_hand, ramp)
+	var blade_pos: Vector3 = hand_pos + shaft * lerpf(span_from, _ik.solve_stick_length(), ramp)
+	# The rigid pass is inert while the stick is held at its own length; a board
+	# clamp that moves the blade is what it answers, by sliding the hand.
 	var rigid: TopHandIK.Result = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	hand_pos = rigid.hand
 	blade_pos = _skater.clamp_blade_to_walls(rigid.blade)
 	rigid = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
-	# Off hand: a fist pump on the free side, taken from the shaft by the same
-	# ramp (SkaterIKCoordinator.update_bottom_hand).
-	_ik.hold_free_hand(Vector3(
-			_skater.bottom_shoulder.position.x,
-			_controller.celebration_hand_y + bob * 1.4,
-			_skater.bottom_shoulder.position.z - 0.12), ramp)
+	# Off hand: punched up as the knees drive out of each hop, taken from the
+	# shaft by the same ramp (SkaterIKCoordinator.update_bottom_hand).
+	var bottom_side: float = signf(_skater.bottom_shoulder.position.x)
+	bearing = _controller.celebration_fist_bearing
+	_ik.hold_free_hand(_skater.bottom_shoulder.position
+			+ Vector3(bearing.x * bottom_side, bearing.y, bearing.z).normalized() * arm
+			* lerpf(_controller.celebration_fist_reach_high,
+					_controller.celebration_fist_reach_low, pump), ramp)
+
+
+# 0..1 ease with no step in its rate or its acceleration at either end.
+static func _smootherstep(x: float) -> float:
+	var t: float = clampf(x, 0.0, 1.0)
+	return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
 
 
 # ── Wrister Follow-Through ────────────────────────────────────────────────────

@@ -43,6 +43,9 @@ func _wants_deflect(_input: InputState) -> bool:
 # frame. All flags default to false; we only overwrite mouse_world_pos / time
 # / delta. Lifetime is the controller — bots aren't re-allocated mid-match.
 var _faceoff_input: InputState = InputState.new()
+# The same, for a bot scorer's celebration (_celebrate).
+var _celebration_input: InputState = InputState.new()
+const _CELEBRATION_REST_AHEAD_M: float = 1.0
 
 # Bot draw swing. A center bot loads its blade on the dot through the countdown,
 # then in the final bot_draw_swing_time before the drop yanks the blade-aim target
@@ -209,6 +212,8 @@ func begin_tick(delta: float) -> bool:
 		# Celebration is movement-allowed live gameplay (humans can react), but
 		# bots shouldn't be playing — they'd chase a pickup-locked puck and bunch
 		# at the net. Skip agent input; friction coasts them to a stop.
+		if has_celebration_window():
+			_celebrate(delta)
 		return false
 	# Deliberately NO is_input_blocked() gate here: that flag means the LOCAL
 	# human's menu is open, and bots run only on the host — gating on it froze
@@ -218,6 +223,22 @@ func begin_tick(delta: float) -> bool:
 	# main thread) so decide() reads no autoloads and, on the threaded path, the
 	# non-blocking worker never sees them mutated mid-batch.
 	return true
+
+
+# A bot scorer celebrates like a human with the keys let go: no move, no
+# buttons, the blade resting ahead, through the live tick that ages the window
+# and lays the raised-stick pose over it — which is what carries the pose onto
+# the wire. Aimed off the body, never the blade, or the pose would feed its own
+# raised blade back to the aim.
+func _celebrate(delta: float) -> void:
+	var facing: Vector2 = skater.get_facing()
+	_celebration_input.delta = delta
+	_celebration_input.host_timestamp = NetworkManager.estimated_host_time()
+	_celebration_input.mouse_world_pos = Vector3(
+			skater.global_position.x + facing.x * _CELEBRATION_REST_AHEAD_M, 0.0,
+			skater.global_position.z + facing.y * _CELEBRATION_REST_AHEAD_M)
+	_process_input(_celebration_input, delta)
+	skater.current_shot_state = _sm.get_state() as int
 
 
 # Main-thread stamp done right before the worker is kicked (worker idle), so the
