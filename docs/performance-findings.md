@@ -218,6 +218,47 @@ run, so single sections are noisy):
   1.39 to 1.63 ms between 2 and 10 skaters, ~25 draw calls a skater. Drawing
   adds ~0.07 ms a skater to the process step (skeleton and skin work).
 
+### Inside the skater step and the keeper's tick
+
+Timed in place by temporary instrumentation (`Time.get_ticks_usec()` around each
+phase, not committed), 10 skaters, the same machine. The timers add ~1 µs a
+phase, so read the shares. A bot's `_process_input` came to ~330 µs a call:
+
+| phase | µs | |
+|---|---|---|
+| `_apply_state`: the state machine, nearly all of it the blade IK (`apply_blade_toward`, ~127) | 143 | |
+| ↳ resolving the cursor to a reachable target | 74 | the first `_solve_top_hand` with its reach limits 43, `arm_shoulder` 8, `_board_reach_limit` 8, `_reach_purpose` 5 |
+| ↳ the hand solve for the speed-capped blade | 28 | |
+| ↳ wall and net clamps | 19 | |
+| ↳ the marker writes; the dangle | 6; 4 | |
+| `apply_facing` | 37 | |
+| `apply_upper_body` and the re-expression | 35 | |
+| fall tilt, balance, velocity lean | 29 | |
+| `_apply_press` | 26 | |
+| `_apply_movement` | 21 | |
+| the head (intent, deflect, nudge); the stick check; the tail | 11 each | |
+
+No phase dominates the way a missing kernel would; the IK's kernels are all
+native already. The cost is GDScript orchestration spread across dozens of
+small calls. `arm_shoulder()` alone is re-derived four or five times a pass,
+each time from `upper_body.rotation` (a basis-to-Euler decomposition per read).
+
+The keeper's tick came to ~445 µs on the host:
+
+| phase | µs |
+|---|---|
+| `_place_body` | 313 |
+| ↳ `_seat`: the skeleton solve 65, `KeeperGear.box` ×22 60, the parent-frame walks in `seat_save_box` ~60, the 29 node writes ~90 | ~220–320 |
+| ↳ `motor.pose`; look, transform and report; the save overlay | 42; 36; 9 |
+| `motor.step` | 47 |
+| `_read_play` | 26 |
+| `_read_receivers`, every 4th tick | 88 |
+| `brain.decide`, every 4th tick | 50 |
+
+The save boxes have to be nodes: `GoalieContactDetector` reads each one's
+`global_transform`. But `seat_save_box` walks the parent chain twice a box to
+re-derive frames that only change when a body is placed.
+
 ### The Separate render thread model, tried
 
 Under `rendering/driver/threads/thread_model = Separate` (4.6.2, `override.cfg`,
