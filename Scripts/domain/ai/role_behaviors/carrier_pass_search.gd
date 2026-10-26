@@ -537,7 +537,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# where value_at is shot-only. (Re-projects _proj_buf, which
 	# the instant value above has already consumed.)
 	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
-			ctx, receiver_spot, receiver_caps, receiver_vel))
+			ctx, receiver_spot, receiver_caps, receiver_vel, Vector3.INF, flight_t))
 	# He does not search, so in the zone the lanes his one straight drive misses
 	# are priced as our possession of his spot prices them, by its zone entries:
 	# the read the defence prices a feed to him by. Outside it the feed's value

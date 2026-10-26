@@ -915,6 +915,17 @@ reaches back into what remains.
     the carry-safety read allows) × the skate there × the race to it
     (`arrival_race`, its band widened by the arrival clock's own error over the
     trip). In the zone the same read is the better of the shot and the drive.
+    The leaf is read on arrival: its man reaches the spot when the line does,
+    at the pace he arrives with, and races the defence for the entries from
+    then (`horizon_value`'s `arrive_s` / `arrive_vel`). The carry's moves and
+    destinations read it so, and so does a straight drive in, a receiver's
+    starting when the feed reaches him: a leg read from rest against the
+    defence as it stands now out-prices the others, so a cut back ending short
+    of the line read as an entry still to win, and a feed back to a man 15 m
+    out read as his drive in. A receiver's own spot is still read at the
+    release: the race prices any defender reaching an entry first as the entry
+    lost, and over a breakout's 25 m a rim's flight hands every such race to
+    the forecheck.
     No shape terms and no guess at where the defence will be: the leaf ranks by
     how far the zone is and whether a defender gets to the entry first. The
     race is what keeps the leaf honest against the searched lines — without it
