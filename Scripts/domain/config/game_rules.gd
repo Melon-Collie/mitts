@@ -681,10 +681,10 @@ const NEUTRAL_ZONE_FACEOFF_DOTS: Array[Vector2] = [
 # Slots 3/4 (LD/RD, 5v5 only) stand behind everyone outside the circle — the
 # real alignment puts D behind the hash marks; near an end-zone dot the raw
 # offset can land past the goal line, which faceoff_position clamps back in.
-# END-ZONE draws override this table for the D pair only (the FACEOFF_END_*
-# constants below + PlayerRules.faceoff_position): the one dot-relative shape
-# is the real alignment at center/neutral dots, but an end-zone draw's D jobs
-# are positional, not dot-relative.
+# END-ZONE draws override this table for the D pair and the defending boards
+# winger (the FACEOFF_END_* constants below + PlayerRules.faceoff_position):
+# the one dot-relative shape is the real alignment at center/neutral dots, but
+# those end-zone jobs are positional, not dot-relative.
 const FACEOFF_OFFSETS: Array = [
 	[Vector2( 0.0,  1.5), Vector2(-4.7,  0.9), Vector2( 4.7,  0.9),
 			Vector2(-2.4,  7.0), Vector2( 2.4,  7.0)],  # team 0
@@ -695,22 +695,22 @@ const FACEOFF_OFFSETS: Array = [
 # ── End-zone draw alignment (5v5; see PlayerRules.faceoff_position) ──────────
 # The real positional jobs at an end-zone dot, replacing the dot-relative
 # offsets above for the players whose jobs there aren't dot-relative.
-# DEFENDING side plays the NHL wall-and-stack: the strong-side D (identity
-# side == the dot's side of the ice) holds the WALL — at the boards, level
-# with the dot (a hair on-side) — for the boards battle and the rim; the
-# weak-side D and the boards-side WINGER form the shoulder-to-shoulder STACK
-# on the goal-side arc of the circle (just outside it — the on-side rule) —
-# a won draw comes straight back to the stack for the breakout, and on a
-# loss the stack D boxes out to the net-front while the stack W releases up
-# to the strong point. The net-front itself is the goalie's at the drop.
-# The inside winger keeps the table's hash-mark spot (the checking matchup).
+# DEFENDING side: the strong-side D (identity side == the dot's side of the
+# ice) holds the WALL — at the boards, level with the dot (a hair on-side) —
+# for the boards battle and the rim; the weak-side D sets up LOW on the
+# goal-side arc of the circle (just outside it — the on-side rule), inside
+# the dot, where a won draw comes back to him and from where he boxes out to
+# the net-front on a loss. Both wingers line up shoulder to shoulder at the
+# inside hash marks, the boards-side winger on the middle-ice side, each
+# taking a point on a loss. The net-front itself is the goalie's at the drop.
 # ATTACKING side plays the points at the blue line: strong point directly
 # above the dot (the boards-side lane + draw-back target), weak point toward
 # the middle of the line (the middle-ice valve).
 const FACEOFF_END_WALL_INSET_M: float = 1.2       # wall D: in from the boards
 const FACEOFF_END_WALL_ONSIDE_M: float = 0.3      # ...level with the dot, a hair on-side
-const FACEOFF_END_STACK_BEHIND_M: float = 4.8     # stack: goal-side, outside the 4.57 m circle
-const FACEOFF_END_STACK_HALF_SEP_M: float = 0.9   # shoulder-to-shoulder half split
+const FACEOFF_END_LOW_D_BEHIND_M: float = 4.8     # low D: goal-side, outside the 4.57 m circle
+const FACEOFF_END_LOW_D_INSIDE_M: float = 0.9     # ...this far inside the dot, toward the net
+const FACEOFF_END_WINGER_PAIR_SEP_M: float = 1.2  # wingers' shoulder-to-shoulder spacing
 const FACEOFF_END_POINT_INSIDE_M: float = 1.0     # points: inside the blue line
 const FACEOFF_END_WEAK_POINT_X_M: float = 1.2     # weak point: past mid, off-dot side
 # Depth cap for faceoff placements: no slot spawns closer to the end boards

@@ -481,12 +481,13 @@ Each phase is shippable/testable on its own; 3v3 is untouched throughout.
   D holds the middle of the line and F2_WEAK / HIGH_SLOT takes his point.
 - **Eyes/numbers pressure read** (post-v1): the researched pressure-vs-contain trigger.
 - **3-on-3 OT for 5v5 matches** (post-v1): needs mid-game roster reduction machinery.
-- **Positional faceoff variants** — LANDED: end-zone draws play the NHL
-  wall-and-stack on the defending side (strong-side D on the wall level with the dot,
-  weak-side D + boards-side winger stacked on the goal-side arc, inside winger at the
-  hashes, net-front left to the goalie) and blue-line points on the attacking side
-  (`GameRules.FACEOFF_END_*` + `PlayerRules.faceoff_position`); the winger's stack
-  spot is `team_size`-gated so 3v3's shipped alignment is untouched.
+- **Positional faceoff variants** — LANDED: end-zone draws on the defending side put
+  the strong-side D on the wall level with the dot, the weak-side D low on the
+  goal-side arc, and both wingers shoulder to shoulder at the inside hashes (the
+  boards winger on the middle-ice side), net-front left to the goalie; the attacking
+  side plays blue-line points (`GameRules.FACEOFF_END_*` +
+  `PlayerRules.faceoff_position`). The boards winger's paired spot is
+  `team_size`-gated so 3v3's shipped alignment is untouched.
 - **Globalize transition-exposure** (post-v1): apply the exposure term to 3v3 too, with
   a 3v3 bot-feel re-verification pass. Deferred to protect shipping 3v3.
 - **Positional inference for humans** (post-v1 polish): infer a human's position from
