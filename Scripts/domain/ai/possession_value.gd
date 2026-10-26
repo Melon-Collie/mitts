@@ -13,9 +13,9 @@ extends RefCounted
 # far × the delay discount of the skate. An entry is a crossing of the line,
 # anywhere along it (CROSSINGS samples): the better of the shot from a stride
 # inside and the drive in from there, × the skate's delay discount, × the odds
-# the puck is kept along the whole of it — the skate to the line, the contest at
-# the line and the drive in — which is the worst of the three, so each defender
-# is charged once. At the line (_line_keep) a defender inside the line shadows
+# the puck is kept along the whole of it — the skate to the line (against the men
+# outside it), the contest at the line and the drive in — which is the worst of
+# the three, so each defender is charged once. At the line (_line_keep) a defender inside the line shadows
 # where the carrier is heading — he takes the carrier→net line at his own depth,
 # if his skate gets him there before the carrier commits — and then has the
 # lunge the carry search gives a defender at a carry's arrival (AICarrySpace
@@ -124,6 +124,7 @@ var _projected: Array[Vector3] = []
 var _projected_vels: Array[Vector3] = []
 var _skate_defence: Array[Vector3] = []
 var _skate_vels: Array[Vector3] = []
+var _skate_caps: Array = []
 var _line_defence: Array[Vector3] = []
 var _line_vels: Array[Vector3] = []
 # The depth of the line a side crosses.
@@ -221,8 +222,6 @@ func play_on(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 		man_caps: AISkaterCaps = null) -> float:
 	var best: float = known
-	var skate_defence: Array[Vector3] = _defenders
-	var skate_vels: Array[Vector3] = _defender_vels
 	var projected: bool = false
 	# A man already in the zone skates on to an entry without crossing the line,
 	# and never back up to one behind him.
@@ -248,13 +247,13 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 					pos, crossing, vel, man_caps), pos, vel)
 			if maxf(shot, drive) * keep * discount <= best:
 				continue
-		if start_s > 0.0 and not projected:
+		if not projected:
 			projected = true
-			_project(_skate_defence, _skate_vels, start_s, pos.z)
-			skate_defence = _skate_defence
-			skate_vels = _skate_vels
-		keep = minf(keep, _skate_keep(pos, _entry_spots[i], vel, skate_defence, skate_vels,
-				man_caps))
+			_skate_defence_for(pos, start_s, in_zone)
+		var skate_to: Vector3 = _entry_spots[i] if in_zone \
+				else Vector3(_entry_spots[i].x, 0.0, _line_z)
+		keep = minf(keep, _skate_keep(pos, skate_to, vel, _skate_defence, _skate_vels,
+				_skate_caps, man_caps))
 		best = maxf(best, maxf(shot * keep, drive * minf(keep, drive_keep)) * discount)
 	return best
 
@@ -389,18 +388,38 @@ func _caps_of(k: int) -> AISkaterCaps:
 	return _defender_caps[k] if _defender_caps.size() == _defenders.size() else null
 
 
+# The defence a skate from `pos`, setting off `start_s` from now, is priced
+# against, into _skate_defence / _skate_vels / _skate_caps: fill()'s, carried on to
+# then, less — for a man outside the zone — the men inside the line, who are the
+# line contest's (_line_keep) and are charged there alone.
+func _skate_defence_for(pos: Vector3, start_s: float, in_zone: bool) -> void:
+	_project(_projected, _projected_vels, start_s, pos.z)
+	_skate_defence.clear()
+	_skate_vels.clear()
+	_skate_caps.clear()
+	for k: int in _defenders.size():
+		if not in_zone and (_defenders[k].z - _line_z) * signf(_goal.z) > 0.0:
+			continue
+		_skate_defence.append(_projected[k])
+		_skate_vels.append(_projected_vels[k])
+		_skate_caps.append(_caps_of(k))
+
+
 # The odds the man at `from`, moving at `vel`, keeps the puck on his skate toward
-# `entry` against `defence`: priced over the drive's own horizon (DRIVE_MAX_M),
-# the rest of the way left to the contest at the line.
-func _skate_keep(from: Vector3, entry: Vector3, vel: Vector3,
-		defence: Array[Vector3], defence_vels: Array[Vector3], man_caps: AISkaterCaps) -> float:
-	var leg: Vector3 = entry - from
+# `to` against `defence` (caps index-matched): priced over the drive's own horizon
+# (DRIVE_MAX_M), the rest of the way left to the contest at the line.
+func _skate_keep(from: Vector3, to: Vector3, vel: Vector3,
+		defence: Array[Vector3], defence_vels: Array[Vector3], defence_caps: Array,
+		man_caps: AISkaterCaps) -> float:
+	var leg: Vector3 = to - from
 	var d: float = leg.length()
+	if d < 0.01:
+		return 1.0
 	if d > DRIVE_MAX_M:
 		leg *= DRIVE_MAX_M / d
 	var t: float = AIArrival.time_to_arrive_caps(from, from + leg, vel, man_caps)
 	return AICarrySpace.carry_safety(from, from + leg, t, defence, defence_vels,
-			_defender_caps, true)
+			defence_caps, true)
 
 
 # Entry `i`'s shot and drive against the defence `t` from now, into _f_shot,

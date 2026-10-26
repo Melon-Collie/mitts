@@ -276,3 +276,15 @@ func test_a_defender_gapped_back_leaves_the_line_to_the_drive() -> void:
 	assert_lt(gapped._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
 			_read(_none)._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
 			"the drive in from the crossing is where he costs it")
+
+
+func test_a_man_up_his_lane_is_no_worse_off_against_a_set_line_than_one_further_back() -> void:
+	# The men set inside the line are charged at the line contest alone, however
+	# near the skate brings him: nearer the line, the same defence costs no more.
+	var line_z: float = -GameRules.BLUE_LINE_Z
+	var v: AIPossessionValue = _read([Vector3(4.0, 0.0, line_z - 0.7),
+			Vector3(6.0, 0.0, line_z - 0.6)])
+	var up_ice := Vector3(0.0, 0.0, -7.0)
+	var near: float = v.at(Vector3(8.5, 0.0, -0.2), 0.0, up_ice)
+	var far: float = v.at(Vector3(8.5, 0.0, 9.0), 0.0, up_ice)
+	assert_gte(near, far, "a stride from the line, up his own lane")

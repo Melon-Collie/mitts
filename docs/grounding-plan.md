@@ -1,7 +1,7 @@
 # Grounding the bots' physical reads
 
-Status: **agreed direction; phases 1 and 2 done; phase 3 in progress, paused on
-a design question (below, "Phase 3 so far").** The CLAUDE.md workflow
+Status: **agreed direction; phases 1 and 2 done; phase 3 in progress (below,
+"Phase 3 so far").** The CLAUDE.md workflow
 applies: this doc is the plan, deviations get discussed first.
 
 ## Why
@@ -342,21 +342,29 @@ In the working tree of the commit that adds this section:
   it); no entry is ours before an owed tag-up is made (`_tag_up_time`).
 - Not yet: the stash re-applied, the threat reads on man caps, the stand timed.
 
+- **The defence read in numbers** (`AIDefencePairing`): each defender is paired
+  to the attacker he gets goal-side of soonest — the puck's holder always, then
+  the men level with or ahead of the puck — and one paired to a man other than
+  the holder rides him through the read; the rest play the puck.
+- **The men inside the line are the line contest's alone**: the skate to the
+  line is priced against the men outside it. Charged through the skate's reach
+  read as well, the same set defence cost a man near the line more than one
+  further back, so the puck went back to whoever was furthest from it.
+
 **Where it stands.** Default tier green (re-pinned: carrier, role_breakout,
 counter_rush snapshots; fixtures corrected where they leaned on the old race).
-Entry drill **regressed**: 30 of 30 carried with 4 passes (phase 2) → 25 carried,
-41 passes (23 backward). Breakout 18 exits in 2.80 s (2.92 at phase 2). Three of
-the four 2-on-1s now end in a close shot.
+Entry drill: 30 of 30 carried with 4 passes at phase 2; 26 carried, 29 passes
+(18 backward) now, the 3-on-2s clean (15 of 15 carried, 3 passes) and the
+passing left in the 3-on-3s. Breakout 18 exits in 3.26 s (2.92 at phase 2).
 
-**The design question.** With the defence projected honestly, the possession
-read's single-carrier assumption ("one man carries") makes every defender
-converge on the carrier: in the follow-up all of them are home on the same spot,
-so the middle is shut and the wings untouched, and no defender is left to mark
-our other skaters. Every neutral-zone spot then reads 0.03–0.05, and passes win
-on hundredths (a winger with a free wing lane beats a carrier with a backchecker
-ahead; then it comes back). The grounded fix is numbers: a defender marking
-another of our skaters is not the carrier's — which extends the read past the
-agreed plan, so it waits on a decision.
+**What the 3-on-3 passing is.** Traced decision by decision: against an even,
+set defence every neutral-zone option reads 0.03–0.05 — the first shot an entry
+gets — and what separates them is the time discount, so a feed that arrives in
+half a second beats a carry step priced a second out, backward or forward. The
+read counts only that first shot, so gaining the zone is worth little more than
+staying out of it. Open: what a real carrier is carrying in FOR at even
+strength, and whether the open man's credit (agreed, not yet built) is still
+wanted now that the 3-on-2s carry.
 
 ### Open
 

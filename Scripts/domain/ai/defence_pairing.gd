@@ -189,6 +189,9 @@ func rides(k: int) -> bool:
 # carries on, once his skate gets him there, part way along until then. His
 # velocity then is left in ride_vel.
 func ride_at(k: int, t: float) -> Vector3:
+	if t <= 0.0:
+		ride_vel = _defender_vels[k]
+		return _defenders[k]
 	var j: int = ride[k]
 	var man: Vector3 = AITrajectory.predict_at(attackers[j], attacker_vels[j], t)
 	var cover: Vector3 = _cover_point(man)
