@@ -563,7 +563,7 @@ func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	pen = _stripe_rows(c, pen, kit.pants.stripes)
 	pen = _legend_row(c, pen, "socks", [kit.socks.base], [""])
 	pen = _stripe_rows(c, pen, kit.socks.stripes)
-	pen = _legend_row(c, pen, "goalie_pads", [kit.goalie_pads], [""])
+	pen = _legend_row(c, pen, "goalie_pads", [kit.goalie_pads], ["(and blocker, trapper)"])
 	_legend_row(c, pen, "text", [kit.text.color, kit.text.outline], ["", "outline (UI only)"])
 
 

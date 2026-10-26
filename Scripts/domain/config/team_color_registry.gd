@@ -12,7 +12,7 @@ class_name TeamColorRegistry
 #
 # get_colors(slot, team_id) returns a Dictionary that's a hybrid:
 #   - Flat legacy keys (primary, secondary, light, helmet, gloves,
-#     goalie_pads, text, text_outline, jersey, jersey_stripe, pants,
+#     goalie_pads, goalie_accent, text, text_outline, jersey, jersey_stripe, pants,
 #     pants_stripe, socks, socks_stripe) for simple consumers (replay
 #     records, goalie/spawn paint) — *_stripe are derived from the first
 #     stripe color of the matching region (or the region base if no stripes).
@@ -101,6 +101,7 @@ static func get_colors(slot: int, team_id: int) -> Dictionary:
 		"socks":          socks_block.base,
 		"socks_stripe":   _accent_color(socks_block, shoulders.color),
 		"goalie_pads":    kit.goalie_pads,
+		"goalie_accent":  _goalie_accent(preset, kit.goalie_pads),
 		"text":           kit.text.color,
 		"text_outline":   kit.text.outline,
 		"uniform":        kit,
@@ -108,6 +109,36 @@ static func get_colors(slot: int, team_id: int) -> Dictionary:
 		# them, so it is the same crest home and away.
 		"preset":         preset,
 	}
+
+
+# Below this contrast ratio against the pads (WCAG's 3:1 for graphics) the
+# team's primary is too faint to read as trim on them.
+const _GOALIE_ACCENT_MIN_CONTRAST: float = 3.0
+
+
+# The goalie's trim on his pads, blocker and trapper, which wear the pads'
+# colour: the team's primary, unless it is too faint on the pads — a yellow on
+# white, or a team that dressed its pads in its primary — and then whichever of
+# its two colours stands out more.
+static func _goalie_accent(preset: Dictionary, pads: Color) -> Color:
+	var primary: Color = preset.primary
+	var secondary: Color = preset.secondary
+	var p: float = contrast_ratio(primary, pads)
+	if p >= _GOALIE_ACCENT_MIN_CONTRAST:
+		return primary
+	return primary if p >= contrast_ratio(secondary, pads) else secondary
+
+
+# WCAG contrast ratio between two colours, 1 (identical) to 21 (black on white).
+static func contrast_ratio(a: Color, b: Color) -> float:
+	var la: float = _relative_luminance(a)
+	var lb: float = _relative_luminance(b)
+	return (maxf(la, lb) + 0.05) / (minf(la, lb) + 0.05)
+
+
+static func _relative_luminance(c: Color) -> float:
+	var l: Color = c.srgb_to_linear()
+	return 0.2126 * l.r + 0.7152 * l.g + 0.0722 * l.b
 
 
 # Canonical UI palette for a team's side. The single source of truth for how
@@ -309,7 +340,7 @@ static func _hardcoded_pomegranate() -> Dictionary:
 			"gloves":      "#971829",
 			"pants":       {"base": "#971829", "stripes": []},
 			"socks":       {"base": "#971829", "stripes": []},
-			"goalie_pads": "#971829",
+			"goalie_pads": "#FFFFFF",
 			"text":        {"color": "#F5E6D3", "outline": "#E8445A"},
 		}),
 		"away":      _parse_kit({
@@ -321,7 +352,7 @@ static func _hardcoded_pomegranate() -> Dictionary:
 			"gloves":      "#971829",
 			"pants":       {"base": "#971829", "stripes": []},
 			"socks":       {"base": "#F5E6D3", "stripes": []},
-			"goalie_pads": "#F5E6D3",
+			"goalie_pads": "#FFFFFF",
 			"text":        {"color": "#971829", "outline": "#E8445A"},
 		}),
 	}
@@ -342,7 +373,7 @@ static func _hardcoded_blueberry() -> Dictionary:
 			"gloves":      "#6B1E4A",
 			"pants":       {"base": "#6B1E4A", "stripes": []},
 			"socks":       {"base": "#4A7AD6", "stripes": []},
-			"goalie_pads": "#4A7AD6",
+			"goalie_pads": "#FFFFFF",
 			"text":        {"color": "#FFFFFF", "outline": "#6B1E4A"},
 		}),
 		"away":      _parse_kit({

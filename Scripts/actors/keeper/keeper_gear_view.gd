@@ -103,8 +103,9 @@ func apply_uniform(colors: Dictionary) -> void:
 	_set_stripes(_forearm, arms.lower.stripes)
 	_paint_slot(S.JERSEY, jersey.base)
 	_paint_slot(S.HELMET, kit.helmet)
-	_paint_slot(S.GLOVES, colors.gloves)
-	_paint_slot(S.GLOVE_ACCENT, colors.glove_accent)
+	# The blocker and trapper are a set with the pads, trimmed alike.
+	_paint_slot(S.GLOVES, colors.goalie_pads)
+	_paint_slot(S.ACCENT, colors.goalie_accent)
 	_paint_slot(S.PADS, colors.goalie_pads)
 	_paint_slot(S.PANTS, colors.pants)
 	for m: ShaderMaterial in _pants_paint.values():

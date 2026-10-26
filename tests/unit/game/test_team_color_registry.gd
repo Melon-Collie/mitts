@@ -159,3 +159,43 @@ func test_hardcoded_fallback_mirrors_the_bundled_first_slots() -> void:
 				assert_eq(kit[region].base, bundled[region].base, "%s %s" % [label, region])
 			for part: String in ["upper", "lower"]:
 				assert_eq(kit.arms[part].base, bundled.arms[part].base, "%s arms.%s" % [label, part])
+
+
+# Every shipped kit dresses its goalie in white pads; a user file may change
+# them per side.
+func test_every_bundled_kit_ships_white_goalie_pads() -> void:
+	var raw: Dictionary = JSON.parse_string(
+			FileAccess.get_file_as_string("res://data/team_colors.json"))
+	for entry: Dictionary in raw.teams:
+		for side: String in ["home", "away"]:
+			assert_eq(Color(entry[side].goalie_pads), Color.WHITE,
+					"%s %s goalie pads" % [entry.name, side])
+
+
+# The goalie's trim is the team's primary unless it is too faint on his pads,
+# and then the stronger of its two colours.
+func test_the_goalie_accent_reads_on_the_pads() -> void:
+	for slot: int in TeamColorRegistry.get_all_slots():
+		for team_id: int in 2:
+			var colors: Dictionary = TeamColorRegistry.get_colors(slot, team_id)
+			var label: String = "%s side %d" % [TeamColorRegistry.get_preset_name(slot), team_id]
+			var pads: Color = colors.goalie_pads
+			var accent: Color = colors.goalie_accent
+			var p: float = TeamColorRegistry.contrast_ratio(colors.primary, pads)
+			var s: float = TeamColorRegistry.contrast_ratio(colors.secondary, pads)
+			if p >= TeamColorRegistry._GOALIE_ACCENT_MIN_CONTRAST:
+				assert_eq(accent, colors.primary, label + ": the primary reads, so it trims")
+			else:
+				assert_almost_eq(TeamColorRegistry.contrast_ratio(accent, pads), maxf(p, s), 0.001,
+						label + ": the stronger team colour trims")
+
+
+# A kit that dresses the pads in its own primary is trimmed in the other colour.
+func test_pads_in_the_primary_are_trimmed_in_the_secondary() -> void:
+	var preset: Dictionary = TeamColorRegistry.get_preset(_HOME_SLOT)
+	assert_eq(TeamColorRegistry._goalie_accent(preset, preset.primary), preset.secondary)
+
+
+func test_contrast_ratio_spans_one_to_twenty_one() -> void:
+	assert_almost_eq(TeamColorRegistry.contrast_ratio(Color.WHITE, Color.WHITE), 1.0, 0.001)
+	assert_almost_eq(TeamColorRegistry.contrast_ratio(Color.BLACK, Color.WHITE), 21.0, 0.01)

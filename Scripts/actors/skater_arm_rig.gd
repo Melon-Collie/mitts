@@ -621,7 +621,8 @@ func apply_gear_meshes() -> void:
 	_hem_tuck = gear.jersey_tuck
 	_head_pieces[HeadPiece.FACE_GEAR].mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	_head_pieces[HeadPiece.SCALP].mesh = SkaterHairMesh.shared_hair(gear.hair_style)
-	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
+	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(
+			gear.facial_hair, gear.helmet_face)
 	_head_pieces[HeadPiece.BROWS].mesh = SkaterHairMesh.shared_brows()
 
 

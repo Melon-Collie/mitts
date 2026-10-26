@@ -28,7 +28,8 @@ extends RefCounted
 # and cuff), laces WHITE, stick model 0 (the house MITTS stick), face 0 (bare),
 # short dark-brown hair, no facial hair, the jersey worn loose — are the stock
 # look an untouched player wears. Zero in every hair and tuck field is that
-# stock look, so a code saved before those fields existed decodes to it.
+# stock look, so a code saved before those fields existed decodes to it. A
+# retired hair style decodes to the one that stands in for it.
 
 # 5 bits per field, matching StickTapeConfig's palette headroom.
 const _FIELD_BITS: int = 5
@@ -73,8 +74,8 @@ func _init(p_skate_model: int = 0, p_glove_model: int = 0,
 	stick_model = p_stick_model if StickModelRegistry.is_valid(p_stick_model) else 0
 	helmet_face = p_helmet_face if GearModelRegistry.is_valid_face(p_helmet_face) \
 			else GearModelRegistry.FACE_NONE
-	hair_style = p_hair_style if HairStyleRegistry.is_valid_hair(p_hair_style) \
-			else HairStyleRegistry.HAIR_SHORT
+	hair_style = HairStyleRegistry.worn_hair(p_hair_style) \
+			if HairStyleRegistry.is_valid_hair(p_hair_style) else HairStyleRegistry.HAIR_SHORT
 	facial_hair = p_facial_hair if HairStyleRegistry.is_valid_facial(p_facial_hair) \
 			else HairStyleRegistry.FACIAL_NONE
 	hair_color = p_hair_color if HairStyleRegistry.is_valid_color(p_hair_color) else 0

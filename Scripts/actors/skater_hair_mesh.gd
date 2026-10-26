@@ -63,17 +63,44 @@ const _MEDIUM: Array[Vector3] = [
 	Vector3(108.0, -0.062, 0.005),
 	Vector3(125.0, -0.040, 0.003),
 ]
-# Long hair hangs past the helmet over the collar and kicks out at the ends.
-const _LONG: Array[Vector3] = [
-	Vector3(0.0, -0.175, 0.010),
-	Vector3(50.0, -0.168, 0.010),
-	Vector3(85.0, -0.135, 0.009),
-	Vector3(105.0, -0.080, 0.006),
-	Vector3(125.0, -0.045, 0.003),
+# Short's sides and sideburns, hanging past the helmet over the collar at the
+# back: the drop happens behind the ear.
+const _MULLET: Array[Vector3] = [
+	Vector3(0.0, -0.182, 0.010),
+	Vector3(35.0, -0.176, 0.010),
+	Vector3(62.0, -0.128, 0.006),
+	Vector3(82.0, -0.062, 0.004),
+	Vector3(108.0, -0.040, 0.003),
+	Vector3(125.0, -0.032, 0.002),
 ]
-const _LONG_FLARE_M: float = 0.028
-const _LONG_FLARE_TOP_Y: float = -0.11
-const _LONG_FLARE_BOTTOM_Y: float = -0.175
+# Clipped high and tight, with a short sideburn; drawn translucent like stubble.
+const _BUZZ: Array[Vector3] = [
+	Vector3(0.0, -0.112, 0.0025),
+	Vector3(60.0, -0.094, 0.0025),
+	Vector3(90.0, -0.046, 0.0022),
+	Vector3(108.0, -0.036, 0.0022),
+	Vector3(118.0, -0.030, 0.002),
+]
+# Thick over the ears and the nape, flipping out all round a choppy bottom edge.
+const _SHAGGY: Array[Vector3] = [
+	Vector3(0.0, -0.162, 0.011),
+	Vector3(12.0, -0.149, 0.011),
+	Vector3(24.0, -0.163, 0.011),
+	Vector3(36.0, -0.148, 0.011),
+	Vector3(48.0, -0.160, 0.011),
+	Vector3(60.0, -0.144, 0.011),
+	Vector3(72.0, -0.146, 0.011),
+	Vector3(84.0, -0.116, 0.010),
+	Vector3(96.0, -0.112, 0.010),
+	Vector3(108.0, -0.084, 0.008),
+	Vector3(118.0, -0.074, 0.006),
+	Vector3(128.0, -0.048, 0.004),
+]
+# A style's kick at its ends, added to its lift below its first key: (height,
+# how far out), descending, eased between keys and held past the last.
+const _NO_FLARE: Array[Vector2] = []
+const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
+const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.06, 0.0), Vector2(-0.14, 0.018)]
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -101,8 +128,48 @@ const _BEARD: Array[Vector4] = [
 	Vector4(52.0, -0.008, -0.090, 0.006),
 	Vector4(56.0, -0.004, -0.084, 0.005),
 ]
+# A mustache running past the corners of the mouth, and a strip from each end
+# down to the jaw. The strips start clear of the chin (SkaterFaceMesh's relief),
+# or they frame it and it reads as an open mouth.
+const _HORSESHOE: Array[Vector4] = [
+	Vector4(0.0, -0.036, -0.0545, 0.007),
+	Vector4(14.0, -0.038, -0.0545, 0.007),
+	Vector4(14.3, -0.038, -0.090, 0.008),
+	Vector4(21.0, -0.040, -0.088, 0.006),
+]
+# The beard's footprint carried down off the chin to just above the collar,
+# square across the front and rising steeply to the jaw at the sides.
+const _LONG_BEARD: Array[Vector4] = [
+	Vector4(0.0, -0.035, -0.174, 0.013),
+	Vector4(14.0, -0.036, -0.172, 0.013),
+	Vector4(24.0, -0.032, -0.165, 0.012),
+	Vector4(34.0, -0.024, -0.145, 0.011),
+	Vector4(44.0, -0.013, -0.122, 0.010),
+	Vector4(52.0, -0.006, -0.106, 0.008),
+	Vector4(57.0, -0.002, -0.096, 0.006),
+]
+# Below the chin the surface under the sheet is the throat, ~3 cm behind it; the
+# flare stands the sheet out to hang straight down from the chin.
+const _LONG_BEARD_FLARE: Array[Vector2] = [
+	Vector2(-0.098, 0.0),
+	Vector2(-0.118, 0.030),
+	Vector2(-0.174, 0.036),
+]
+# Under a fishbowl, whose chin edge curls in under the jaw: held to what fits
+# inside the shield down to that edge, then out.
+const _LONG_BEARD_TUCKED_FLARE: Array[Vector2] = [
+	Vector2(-0.108, 0.0),
+	Vector2(-0.122, 0.016),
+	Vector2(-0.150, 0.030),
+	Vector2(-0.174, 0.034),
+]
 # A full sheet is thinner over the lip than at the chin.
 const _UPPER_LIFT_SHARE: float = 0.55
+# A facial flare stands the sheet off the throat across the front, then fades
+# out between these shares of the sheet's reach, so the sides close onto the
+# neck: a flare carried round to the jaw leaves the sheet open at the side, a
+# flap seen edge on.
+const _FLARE_SIDE_FADE := Vector2(0.4, 0.7)
 const _MOUTH_MARGIN_M: float = 0.0015
 # How far round the mouth's edge a sheet tapers down to the skin.
 const _MOUTH_TAPER_M: float = 0.006
@@ -116,17 +183,24 @@ const _HAIR_ROUGHNESS: float = 0.8
 static var _cache: Dictionary = {}
 
 
-# The scalp shell for one HairStyleRegistry HAIR_* style — null for bald (and
-# for a forged index, matching the registry's clamp).
+# The scalp shell for one HairStyleRegistry HAIR_* style, a retired one's
+# stand-in for it — null for bald (and for a forged index, matching the
+# registry's clamp).
 static func shared_hair(style: int) -> ArrayMesh:
-	match style:
+	match HairStyleRegistry.worn_hair(style):
 		HairStyleRegistry.HAIR_SHORT:
-			return _shared("hair_short", func() -> ArrayMesh: return _build_scalp(_SHORT, 0.0))
+			return _shared("hair_short", func() -> ArrayMesh: return _build_scalp(_SHORT, _NO_FLARE))
 		HairStyleRegistry.HAIR_MEDIUM:
-			return _shared("hair_medium", func() -> ArrayMesh: return _build_scalp(_MEDIUM, 0.0))
-		HairStyleRegistry.HAIR_LONG:
-			return _shared("hair_long",
-					func() -> ArrayMesh: return _build_scalp(_LONG, _LONG_FLARE_M))
+			return _shared("hair_medium",
+					func() -> ArrayMesh: return _build_scalp(_MEDIUM, _NO_FLARE))
+		HairStyleRegistry.HAIR_MULLET:
+			return _shared("hair_mullet",
+					func() -> ArrayMesh: return _build_scalp(_MULLET, _MULLET_FLARE))
+		HairStyleRegistry.HAIR_BUZZ:
+			return _shared("hair_buzz", func() -> ArrayMesh: return _build_scalp(_BUZZ, _NO_FLARE))
+		HairStyleRegistry.HAIR_SHAGGY:
+			return _shared("hair_shaggy",
+					func() -> ArrayMesh: return _build_scalp(_SHAGGY, _SHAGGY_FLARE))
 		_:
 			return null
 
@@ -142,30 +216,40 @@ static func shared_brows() -> ArrayMesh:
 		return st.commit())
 
 
-# The facial shell for one FACIAL_* style — null for none.
-static func shared_facial_hair(style: int) -> ArrayMesh:
+# The facial shell for one FACIAL_* style worn under one GearModelRegistry
+# FACE_* piece — null for none.
+static func shared_facial_hair(style: int, helmet_face: int) -> ArrayMesh:
 	match style:
 		HairStyleRegistry.FACIAL_STUBBLE:
 			return _shared("facial_stubble", func() -> ArrayMesh:
-				return _build_facial(_BEARD, _STUBBLE_LIFT_M))
+				return _build_facial(_BEARD, _STUBBLE_LIFT_M, _NO_FLARE))
 		HairStyleRegistry.FACIAL_MUSTACHE:
 			return _shared("facial_mustache", func() -> ArrayMesh:
-				return _build_facial(_MUSTACHE, -1.0))
+				return _build_facial(_MUSTACHE, -1.0, _NO_FLARE))
 		HairStyleRegistry.FACIAL_GOATEE:
 			return _shared("facial_goatee", func() -> ArrayMesh:
-				return _build_facial(_GOATEE, -1.0))
+				return _build_facial(_GOATEE, -1.0, _NO_FLARE))
 		HairStyleRegistry.FACIAL_BEARD:
 			return _shared("facial_beard", func() -> ArrayMesh:
-				return _build_facial(_BEARD, -1.0))
+				return _build_facial(_BEARD, -1.0, _NO_FLARE))
+		HairStyleRegistry.FACIAL_HORSESHOE:
+			return _shared("facial_horseshoe", func() -> ArrayMesh:
+				return _build_facial(_HORSESHOE, -1.0, _NO_FLARE))
+		HairStyleRegistry.FACIAL_LONG_BEARD:
+			if helmet_face == GearModelRegistry.FACE_FISHBOWL:
+				return _shared("facial_long_beard_tucked", func() -> ArrayMesh:
+					return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_TUCKED_FLARE))
+			return _shared("facial_long_beard", func() -> ArrayMesh:
+				return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_FLARE))
 		_:
 			return null
 
 
 # Hair is open sheets seen from both sides (under long hair, behind a sideburn),
-# so it renders two-sided. Stubble is a shadow on the skin rather than a
-# volume, so it is translucent by design — like the face gear, a ghost fade
-# has to rebuild it from here rather than restore alpha 1 — and one-sided, or
-# its own far side doubles it wherever the sheet turns away.
+# so it renders two-sided. Stubble and a buzz cut are a shadow on the skin
+# rather than a volume, so they are translucent by design — like the face gear,
+# a ghost fade has to rebuild them from here rather than restore alpha 1 — and
+# one-sided, or the sheet's own far side doubles it wherever it turns away.
 static func make_material(color_index: int, translucent: bool) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = HairStyleRegistry.color_for(color_index)
@@ -182,6 +266,10 @@ static func is_translucent(facial_style: int) -> bool:
 	return facial_style == HairStyleRegistry.FACIAL_STUBBLE
 
 
+static func is_scalp_translucent(hair_style: int) -> bool:
+	return hair_style == HairStyleRegistry.HAIR_BUZZ
+
+
 static func _shared(key: String, builder: Callable) -> ArrayMesh:
 	if not _cache.has(key):
 		_cache[key] = builder.call()
@@ -190,7 +278,7 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 
 # ── Builders ────────────────────────────────────────────────────────────────
 
-static func _build_scalp(keys: Array[Vector3], flare: float) -> ArrayMesh:
+static func _build_scalp(keys: Array[Vector3], flare: Array[Vector2]) -> ArrayMesh:
 	var reach: float = deg_to_rad(keys[keys.size() - 1].x)
 	var span := func(theta: float, rim: float) -> Vector2:
 		return Vector2(rim + _RIM_OVERLAP_M, _scalp_key(keys, absf(_wrap_pi(theta))).x)
@@ -198,35 +286,40 @@ static func _build_scalp(keys: Array[Vector3], flare: float) -> ArrayMesh:
 		var a: float = absf(_wrap_pi(theta))
 		var side: float = _ramp(a, reach, reach * (1.0 - _EDGE_TAPER * 0.5))
 		var edge: float = minf(_ramp(t, 1.0, 1.0 - _EDGE_TAPER), side)
-		# The flare is long hair's kick, so the bottom edge keeps it.
+		# The flare is the hair's kick, so the bottom edge keeps it.
 		var full: float = lerpf(_EDGE_LIFT_M, _scalp_key(keys, a).y, edge) \
-				+ flare * side * _ramp(y, _LONG_FLARE_TOP_Y, _LONG_FLARE_BOTTOM_Y)
+				+ _flare(flare, y) * side
 		return lerpf(-_SINK_M, full, _ramp(y, rim + _RIM_OVERLAP_M, rim))
+	var key_th := PackedFloat32Array()
+	for k: Vector3 in keys:
+		key_th.append_array(_mirrored(0.0, k.x))
 	var st := _begin()
-	_emit_shell(st, -reach, reach, 0.0, span, lift, PackedFloat32Array(),
+	_emit_shell(st, -reach, reach, 0.0, span, lift, key_th,
 			PackedFloat32Array(), Rect2(), _SCALP_ROWS)
 	return _commit(st)
 
 
 # `flat_lift` >= 0 replaces the outline's own lift, untapered (stubble).
-static func _build_facial(outline: Array[Vector4], flat_lift: float) -> ArrayMesh:
+static func _build_facial(outline: Array[Vector4], flat_lift: float,
+		flare: Array[Vector2]) -> ArrayMesh:
 	var reach: float = deg_to_rad(outline[outline.size() - 1].x)
 	var mouth: Rect2 = SkaterFaceMesh.mouth_rect().grow(_MOUTH_MARGIN_M)
 	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
 	var span := func(theta: float, _rim: float) -> Vector2:
 		var k: Vector4 = _facial_key(outline, absf(_wrap_pi(theta - PI)))
 		return Vector2(k.y, k.z)
-	var lift := func(theta: float, t: float, _y: float, _rim: float, at: Vector3) -> float:
+	var lift := func(theta: float, t: float, y: float, _rim: float, at: Vector3) -> float:
 		var face := Vector2(at.x - centre.x, at.y - centre.y)
 		var own: float = flat_lift
 		if flat_lift < 0.0:
 			var a: float = absf(_wrap_pi(theta - PI))
+			var side: float = _ramp(a, reach, reach * (1.0 - _EDGE_TAPER))
 			var edge: float = minf(minf(_ramp(t, 0.0, _EDGE_TAPER),
-					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)),
-					_ramp(a, reach, reach * (1.0 - _EDGE_TAPER)))
+					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)), side)
 			edge = minf(edge, _ramp(_rect_distance(mouth, face), 0.0, _MOUTH_TAPER_M))
 			own = lerpf(_EDGE_LIFT_M, _facial_key(outline, a).w
-					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge)
+					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge) \
+					+ _flare(flare, y) * _ramp(a, reach * _FLARE_SIDE_FADE.y, reach * _FLARE_SIDE_FADE.x)
 		return maxf(own, SkaterFaceMesh.relief(face.x, face.y) + _STUBBLE_LIFT_M)
 	# Grid lines on the mouth's edges cut its hole clean; on the chin's, the
 	# sheet follows the relief it rises over.
@@ -234,6 +327,8 @@ static func _build_facial(outline: Array[Vector4], flat_lift: float) -> ArrayMes
 			PackedFloat32Array([mouth.position.x, mouth.end.x]), mouth.get_center().y)
 	var chin_ys: PackedFloat32Array = SkaterFaceMesh.relief_ys()
 	cut_th.append_array(_azimuths_for_x(SkaterFaceMesh.relief_xs(), chin_ys[1]))
+	for k: Vector4 in outline:
+		cut_th.append_array(_mirrored(PI, k.x))
 	var cut_y := PackedFloat32Array([mouth.position.y, mouth.end.y])
 	cut_y.append_array(chin_ys)
 	var st := _begin()
@@ -513,6 +608,22 @@ static func _facial_key(keys: Array[Vector4], a: float) -> Vector4:
 		if deg <= keys[i + 1].x:
 			return keys[i].lerp(keys[i + 1], (deg - keys[i].x) / (keys[i + 1].x - keys[i].x))
 	return keys[keys.size() - 1]
+
+
+# Azimuths `deg` either side of `about`: a key's column on both sides, so the
+# outline's corners are grid lines rather than smeared across a quad.
+static func _mirrored(about: float, deg: float) -> PackedFloat32Array:
+	var r: float = deg_to_rad(deg)
+	return PackedFloat32Array([about - r, about + r])
+
+
+static func _flare(flare: Array[Vector2], y: float) -> float:
+	if flare.is_empty() or y >= flare[0].x:
+		return 0.0
+	for i: int in flare.size() - 1:
+		if y >= flare[i + 1].x:
+			return lerpf(flare[i].y, flare[i + 1].y, _ramp(y, flare[i].x, flare[i + 1].x))
+	return flare[flare.size() - 1].y
 
 
 # 0 at `from`, 1 at `to`, smoothstepped between; either order.
