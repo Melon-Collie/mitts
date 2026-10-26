@@ -162,6 +162,51 @@ is in the plan document's closing section.
 What the work did buy: no transparency pass for the on-ice HUD, no z-fighting,
 analytic antialiasing, and the HUD's cost going to zero.
 
+## Main thread by skater count
+
+`.claude/hooks/measure-frame-cost.sh` plays a match against bots headless at
+each skater count and times the process step (every `_process`, once a frame)
+and the physics tick apart, because they scale differently with frame rate. "At
+90 fps" composes them: the process step plus 120/90 ticks. Headless draws
+nothing, so this is the CPU's frame alone. The table below was taken on a 4-core
+cloud container with the editor (debug) binary and the native kernels built,
+two runs a count. Read the shape and the shares; the milliseconds belong to that
+machine.
+
+| skaters | process ms/frame | tick ms | main thread at 90 fps | per added skater |
+|---|---|---|---|---|
+| 2 | 1.32 | 2.56 | 4.73 | |
+| 4 | 1.93 | 3.10 | 6.06 | 0.66 |
+| 6 | 2.43 | 3.84 | 7.56 | 0.75 |
+| 8 | 3.18 | 4.66 | 9.39 | 0.92 |
+| 10 | 3.49 | 4.84 | 9.94 | 0.27 |
+
+- **Linear, no blow-up.** About 0.65 ms of main thread per skater at 90 fps on
+  that machine. The per-step slope is noise: read the 2 → 10 line.
+- **Per skater, the tick is slightly the larger half.** The controller step is
+  ~0.2 ms a tick (paid 1.33 times a frame at 90 fps) against ~0.27 ms of render
+  pass a frame.
+- **The probe attributes the tick.** Its sections sum to within ~1% of the
+  measured tick at both ends of the sweep, so the tick has no hidden half.
+- **The two keepers are the largest fixed cost.** ~0.6 ms a tick together,
+  whatever the skater count. Next are the AI snapshot (0.26–0.5 ms) and capture
+  + broadcast (0.2–0.3 ms).
+- **Engine render CPU barely moves with skaters.** Drawn
+  (`FRAME_COST_RENDER=1`, Forward+ on software Vulkan), CPU render went from
+  1.39 to 1.63 ms between 2 and 10 skaters, ~25 draw calls a skater. Drawing
+  adds ~0.07 ms a skater to the process step (skeleton and skin work).
+
+### The Separate render thread model, tried
+
+Under `rendering/driver/threads/thread_model = Separate` (4.6.2, `override.cfg`,
+the same drawn 10-skater run), Godot warns that the feature is experimental. The
+run then logs 128 "can only be called from the render thread" errors from inside
+the engine: `RenderingDevice::buffer_update` and `_texture_2d_update`, with no
+script frame on the stack. The F3 overlay's own
+`viewport_get_measured_render_time_cpu` read errors too. It is not a free lever on
+this engine version, and with CPU render this flat in the skater count it would
+not change the scaling anyway.
+
 ## Open levers, and why each is or is not being taken
 
 - **Move host duty to a dedicated server.** Deletes ~2.9 ms/frame of attributed
