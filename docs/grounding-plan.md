@@ -386,9 +386,14 @@ ranked within each layer; [x] done.
 - [ ] Inside `carry_safety` the puck moves at a uniform `dist/T` and the
   mid-sample is the midpoint at T/2, while T ramps: from rest the pursuit time
   is ~28% short.
-- [ ] The keep bands (0.5–1 m) are narrow against reach growing ~10 m/s per
-  second of horizon, so reads are cliff-shaped in time; widen by the arrival
-  clock's calibrated error over the horizon, as `AILaneReach` does.
+- [x] The keep bands (0.5–1 m) were narrow against reach growing ~10 m/s per
+  second of horizon, so reads were cliff-shaped in time. `reach_clearance`
+  reports the binding man's arrival-clock error in ground (`reach_band_m`: his
+  commit window at the speed he is closing with as it ends, plus a projected
+  trip at his speed then) and the safety maps widen to it. Entry read 1 s
+  prediction error 0.44 → 0.37, local spread 0.11 → 0.12. Open: against a
+  square defender at the line the flatter read lets the carrier chase a lateral
+  cut the defender mirrors (`test_nz_carry_keeps_pace` gap 10 m).
 - [ ] `delay_discount` charged on reads whose defence is already projected to
   that time (entries, drives, the counter cost): time paid twice.
 - [ ] Stand-still outside the zone reads the defence now while every move reads
