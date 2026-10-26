@@ -34,6 +34,8 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammates)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 
+	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
+
 	var search_center: Vector3 = AIThreatAssignment.cover_anchor(man_pos, our_net)
 	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(ctx.self_pos, search_center)
 	# Switch-hysteresis: hold the covering spot unless a fresh one deflates the
@@ -62,7 +64,7 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 			continue
 		poss.push_defender(c, Vector3.ZERO, self_caps)
 		var threat: float = poss.threat_of_feed(carrier_pos, man_pos, man_vel,
-				our_goalie_pos)
+				our_goalie_pos, objective)
 		poss.pop_defender()
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		# A man on the net (no lane) disables the goal-side filter.
@@ -210,10 +212,12 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
 		out_bases: Array[float]) -> void:
 	out_bases.clear()
-	out_bases.append(poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos))
+	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
+	out_bases.append(poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos,
+			objective))
 	for opp_pos: Vector3 in opp_teammates:
 		out_bases.append(poss.threat_of_feed(carrier_pos, opp_pos, Vector3.ZERO,
-				our_goalie_pos))
+				our_goalie_pos, objective))
 
 
 # The opposing carrier's best option — keep it himself, or feed any of
@@ -232,6 +236,7 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 		candidate_vel: Vector3, self_caps: AISkaterCaps, carrier_pos: Vector3,
 		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
 		bases: Array[float]) -> float:
+	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
 	poss.push_defender(candidate, candidate_vel, self_caps)
 	var best: float = 0.0
 	var used: int = 0
@@ -245,9 +250,9 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 		if bi == -1 or bound <= best:
 			break
 		used |= 1 << bi
-		var v: float = poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos) \
-				if bi == 0 else poss.threat_of_feed(carrier_pos, opp_teammates[bi - 1],
-						Vector3.ZERO, our_goalie_pos)
+		var v: float = poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos,
+				objective) if bi == 0 else poss.threat_of_feed(carrier_pos,
+						opp_teammates[bi - 1], Vector3.ZERO, our_goalie_pos, objective)
 		best = maxf(best, v)
 	poss.pop_defender()
 	return best

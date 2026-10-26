@@ -69,6 +69,8 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 	var theirs: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammate_positions)
 	AIRoleReads.collect_feed_defence(ctx)
 	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
+	# In the currency of our carrier, who decides the feed.
+	var objective: int = possession.objective_at(origin, AICarrierField.goalie_now(ctx))
 	var pick: AIFeedStationPick = ctx.scratch_feed_pick
 	pick.reset()
 	for c: Vector3 in candidates:
@@ -81,10 +83,10 @@ static func decide(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 				c, carrier_pos, ctx.own_goal_dir):
 			continue
 		var pass_speed: float = AIRoleReads.feed_speed(ctx, origin, c)
-		var held: float = possession.at(c, origin.distance_to(c) / pass_speed,
+		var held: float = possession.worth(objective, c, origin.distance_to(c) / pass_speed,
 				ctx.self_velocity, ctx.caps_by_peer.get(ctx.peer_id))
 		pick.offer(ctx, origin, c, pass_speed, held, AIStationSearch.incumbent_bonus(ctx, c),
-				theirs)
+				objective, possession, theirs)
 
 	d.target_position = pick.best(ctx.self_pos)
 	return d

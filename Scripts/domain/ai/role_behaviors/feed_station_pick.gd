@@ -22,13 +22,16 @@ func reset() -> void:
 	_any_lane = false
 
 
-# Candidate `spot`, fed from `origin` at `speed`: our possession there `held`,
-# the hysteresis `bonus` both reads carry, theirs `theirs` where a feed is picked
-# off. Every feed's worth is at most `held` (its lane ≤ 1, the interception cost
-# ≥ 0), so a spot that cannot beat the best feed so far has no lane read, nor a
-# lane that cannot its loss point (exact).
+# Candidate `spot`, fed from `origin` at `speed`: our possession there `held` in
+# `objective`'s currency, the hysteresis `bonus` both reads carry, the turnover
+# where a feed is picked off read off `ours` and `theirs` (AIRoleReads.feed_ev).
+# Every feed's worth is at most `held` (its lane ≤ 1, the interception cost ≥ 0),
+# so a spot that cannot beat the best feed so far has no lane read, nor a lane
+# that cannot its loss point — exact but for a loss in their zone, whose regain
+# credit can lift a feed past it by at most that credit.
 func offer(ctx: RoleContext, origin: Vector3, spot: Vector3, speed: float, held: float,
-		bonus: float, theirs: AIPossessionValue) -> void:
+		bonus: float, objective: int, ours: AIPossessionValue,
+		theirs: AIPossessionValue) -> void:
 	if held + bonus > _best_held:
 		_best_held = held + bonus
 		_best_held_pos = spot
@@ -41,7 +44,7 @@ func offer(ctx: RoleContext, origin: Vector3, spot: Vector3, speed: float, held:
 	if ev + bonus <= _best_ev:
 		return
 	if lane < 1.0:
-		ev = AIRoleReads.feed_ev(ctx, origin, spot, speed, lane, held, theirs)
+		ev = AIRoleReads.feed_ev(ctx, origin, spot, speed, lane, held, objective, ours, theirs)
 	if ev + bonus > _best_ev:
 		_best_ev = ev + bonus
 		_best_ev_pos = spot

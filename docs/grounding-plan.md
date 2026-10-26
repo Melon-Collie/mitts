@@ -321,14 +321,14 @@ In the working tree of the commit that adds this section:
   crossings along the line, not three spots.
 - **Each defender charged once**: the skate, the line and the drive keep the
   puck at the worst of the three (the `carry_safety` convention).
-- **One projection model** (`AIPossessionValue.project_defender`, which
+- **One projection model** (`AIDefenderProjection.at`, which
   `AICarrierField.project_opponents` now calls): a man ahead who is standing up
   or backing off holds his gap, giving ground down the carrier's line as the
   carrier gains it, down to the top of his house — except a forechecker in the
   carrier's own zone, who holds his ice; one stepping up carries on until level
   with the carrier; one behind the play backchecks to the top of his house on
   the arrival clock. His
-  velocity is projected with him (`projected_vel`), so the reach reads see a
+  velocity is projected with him (`AIDefenderProjection.vel_then`), so the reach reads see a
   backchecker skating home, not his old heading.
 - **The entry's follow-up against the defence as it will be**: priced at
   `FOLLOW_UP_TIMES` (0, 1, 2, 4 s) and read between them.
@@ -375,7 +375,7 @@ ranked within each layer; [x] done.
 - [x] Defenders "ahead" of a carrier judged by depth alone: a man level in z but
   in the middle read as beaten by a wide carrier, so a step either way flipped
   the in-zone value 0.35 → 0.04. Now goal-side along the carrier's line to the
-  net (`AIPossessionValue.project_defender`).
+  net (`AIDefenderProjection.at`).
 - [x] `AICarrierField.project_opponents` passed the attack's sign as the goal's
   depth, so the carrier's backcheckers skated for the far blue line.
 - [ ] `project_opponents` projects positions but hands the reach reads current
@@ -408,7 +408,7 @@ ranked within each layer; [x] done.
 - [ ] The pairing is frozen at t = 0; a priced man's own rider follows his
   straight line rather than the read's skate.
 - [ ] Counter exposure ignores when the loss happens.
-- [ ] `project_defender` classifies against the drive's start, not where it is.
+- [ ] `AIDefenderProjection.at` classifies against the drive's start, not where it is.
 - [ ] Loose-puck walk treats its 3 s end as settled; goalie re-square from rest.
 
 **Off-puck roles and the brain**

@@ -50,6 +50,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# published: APPROXIMATE (full-team defender set, raw positions, up to a brain
 	# tick stale), the accepted price of not paying these per marker. An empty
 	# memo computes exactly.
+	# Every man is weighed in the currency of where their play is.
+	var play_ref: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
+	var objective: int = poss.objective_at(
+			play_ref if play_ref.is_finite() else search_center, our_goalie_pos)
 	var memo: Dictionary[int, float] = ctx.threat_shoot_base_by_opp
 	var opp_ids: Array[int] = ctx.scratch_opp_ids
 	var bases: Array[float] = ctx.scratch_option_bases
@@ -58,7 +62,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 		var base: float = memo.get(opp_ids[i], -1.0) if not memo.is_empty() else -1.0
 		if base < 0.0:
 			base = poss.threat_of_carrier(opp_positions[i], opp_states[i].velocity,
-					our_goalie_pos)
+					our_goalie_pos, objective)
 		bases.append(base)
 
 	# Far from the recovery region, skate at the cover anchor on the biggest base
@@ -85,7 +89,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 
 		var mark_score: float = -_max_threat(poss, c, ctx.caps_by_peer.get(ctx.peer_id),
-				opp_positions, opp_states, our_goalie_pos, bases) \
+				opp_positions, opp_states, our_goalie_pos, bases, objective) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if mark_score > best_score:
 			best_score = mark_score
@@ -95,15 +99,15 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	return d
 
 
-# The highest threat any opp carries (AIPossessionValue.threat_of_carrier) with
-# our defender at `candidate`. On the possession scale, so a gradient survives
+# The highest threat any opp carries (AIPossessionValue.threat_of_carrier in
+# `objective`'s currency) with our defender at `candidate`. On the possession scale, so a gradient survives
 # where no opp is in shooting range. `bases` (per-opp threats without the
 # candidate, in opp_positions order) bound each term from above, so terms
 # evaluate in descending-bound order and stop early — an exact prune.
 static func _max_threat(poss: AIPossessionValue, candidate: Vector3,
 		self_caps: AISkaterCaps, opp_positions: Array[Vector3],
 		opp_states: Array[SkaterNetworkState], our_goalie_pos: Vector3,
-		bases: Array[float]) -> float:
+		bases: Array[float], objective: int) -> float:
 	poss.push_defender(candidate, Vector3.ZERO, self_caps)
 	var max_threat: float = 0.0
 	var used: int = 0
@@ -118,6 +122,6 @@ static func _max_threat(poss: AIPossessionValue, candidate: Vector3,
 			break
 		used |= 1 << bi
 		max_threat = maxf(max_threat, poss.threat_of_carrier(opp_positions[bi],
-				opp_states[bi].velocity, our_goalie_pos))
+				opp_states[bi].velocity, our_goalie_pos, objective))
 	poss.pop_defender()
 	return max_threat

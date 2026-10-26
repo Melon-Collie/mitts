@@ -1,6 +1,6 @@
 # Zone currency — what a carrier is trying to do depends on where he is
 
-Status: **agreed design (in chat); building.** The CLAUDE.md workflow applies:
+Status: **agreed design (in chat); steps 1–3 built.** The CLAUDE.md workflow applies:
 this doc is the plan, deviations get discussed first.
 
 ## Why
@@ -31,7 +31,8 @@ option alike and cancels — no floor, nothing measured.
 - An option that ends past the decider's next line has reached the goal: worth
   its keep odds. One that ends behind it (a pass back into our zone from the
   neutral zone) is the chain: P(out) × P(in from where it gets out).
-- Shots outside their zone are dead and are not a currency there.
+- Shots outside their zone are dead and are not a currency there — unless their
+  keeper is off his net, when it is scoring everywhere.
 - Their counter after they get out stays the 5v5 counter-exposure cost, in their
   zone only (elsewhere the turnover cost already is their entry).
 - Every probability comes from the physical reads already in place: the keep
@@ -53,7 +54,10 @@ option alike and cancels — no floor, nothing measured.
    the carrier's zone; `horizon_value` / `value_at` answer in it; the turnover
    cost per the table; counter exposure in their zone only.
 3. **The stations and the defence reads** (`AIRoleReads.attack_possession` /
-   `defence_possession`, the threat reads): the same currency rule.
+   `defence_possession`, the threat reads): the same currency rule — the
+   decider is whoever plays the puck for the side (their carrier for the
+   defence, ours for a station), and a keeper off his net makes it scoring
+   everywhere.
 4. **The in-zone model** (`docs/grounding-plan.md` step 2): one read of being in
    their zone at every horizon — the shot on arrival at pace, drives at several
    headings credited to where each is first covered, the pass to the open man.

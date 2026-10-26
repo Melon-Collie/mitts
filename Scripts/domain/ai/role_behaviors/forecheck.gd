@@ -118,9 +118,10 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	# AIDefensiveVerbs.carrier_option_bases).
 	var bases: Array[float] = ctx.scratch_option_bases
 	bases.clear()
+	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
 	for opp_pos: Vector3 in opp_teammates:
 		bases.append(poss.threat_of_feed(carrier_pos, opp_pos, Vector3.ZERO,
-				our_goalie_pos))
+				our_goalie_pos, objective))
 
 	var best_pos: Vector3 = search_center
 	var best_score: float = -INF
@@ -133,7 +134,7 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 		var threat: float = _max_pass_threat(poss, c, ctx.caps_by_peer.get(ctx.peer_id),
-				carrier_pos, opp_teammates, our_goalie_pos, bases)
+				carrier_pos, opp_teammates, our_goalie_pos, bases, objective)
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		if score > best_score:
 			best_score = score
@@ -153,13 +154,13 @@ static func _mid_search_center(ctx: RoleContext, carrier_pos: Vector3) -> Vector
 
 
 # The biggest threat the carrier's feed to any teammate carries
-# (AIPossessionValue.threat_of_feed; receivers led by anticipation, so read
-# standing), with our defender at `candidate`. `bases` (per-receiver threats
+# (AIPossessionValue.threat_of_feed in `objective`'s currency; receivers led by
+# anticipation, so read standing), with our defender at `candidate`. `bases` (per-receiver threats
 # without the candidate, in opp_teammates order) bound each term from above, so
 # terms evaluate in descending-bound order and stop early — an exact prune.
 static func _max_pass_threat(poss: AIPossessionValue, candidate: Vector3,
 		self_caps: AISkaterCaps, carrier_pos: Vector3, opp_teammates: Array[Vector3],
-		our_goalie_pos: Vector3, bases: Array[float]) -> float:
+		our_goalie_pos: Vector3, bases: Array[float], objective: int) -> float:
 	poss.push_defender(candidate, Vector3.ZERO, self_caps)
 	var max_threat: float = 0.0
 	var used: int = 0
@@ -174,6 +175,6 @@ static func _max_pass_threat(poss: AIPossessionValue, candidate: Vector3,
 			break
 		used |= 1 << bi
 		max_threat = maxf(max_threat, poss.threat_of_feed(carrier_pos,
-				opp_teammates[bi], Vector3.ZERO, our_goalie_pos))
+				opp_teammates[bi], Vector3.ZERO, our_goalie_pos, objective))
 	poss.pop_defender()
 	return max_threat

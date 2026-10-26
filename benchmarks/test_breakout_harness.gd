@@ -270,8 +270,9 @@ func _run_trial(scenario: String, mirror: float, jitter: int,
 					our_vels.append(s3.vel)
 			var theirs := AIPossessionValue.new()
 			theirs.fill(Vector3(0, 0, GameRules.GOAL_LINE_Z), our_bodies, our_vels, [])
+			var their_keeper := Vector3(0, 0, GameRules.GOAL_LINE_Z - 0.8)
 			cough_danger = theirs.threat_of_carrier(duel.puck_pos, Vector3.ZERO,
-					Vector3(0, 0, GameRules.GOAL_LINE_Z - 0.8))
+					their_keeper, theirs.objective_at(duel.puck_pos, their_keeper))
 			break
 
 	# First team-0 release after the trigger — the retriever's first move.

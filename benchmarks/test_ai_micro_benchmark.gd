@@ -355,10 +355,11 @@ func test_evaluator_costs() -> void:
 	# The defence's read of a man, `opps` standing in as the defence.
 	var poss := AIPossessionValue.new()
 	poss.fill(net, opps, opp_vels, opp_caps)
+	var objective: int = poss.objective_at(from, goalie)
 	_bench("threat_of_feed (5 def)", func() -> void:
-		poss.threat_of_feed(from, Vector3(-4, 0, -19), Vector3.ZERO, goalie))
+		poss.threat_of_feed(from, Vector3(-4, 0, -19), Vector3.ZERO, goalie, objective))
 	_bench("threat_of_carrier (5 def)", func() -> void:
-		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie, objective))
 	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
 	# re-run with us standing at the candidate. This is the inner loop of the
 	# outer 18-candidate argmax.

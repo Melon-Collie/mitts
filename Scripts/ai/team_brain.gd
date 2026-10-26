@@ -308,6 +308,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	var our_net := Vector3(0.0, 0.0, _own_goal_z)
 	var our_goalie_pos: Vector3 = _resolve_our_goalie_pos(snapshot)
 	_open_possession.fill(our_net, _no_skaters, _no_skaters, [])
+	var objective: int = _open_possession.objective_at(play_ref, our_goalie_pos)
 	var men: Array[int] = []
 	var man_pos: Dictionary = {}
 	var man_value: Dictionary = {}
@@ -336,7 +337,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 					eligible_men[def_pid] = {}
 				(eligible_men[def_pid] as Dictionary)[pid] = true
 		man_value[pid] = _open_possession.threat_of_feed(play_ref, mp,
-				snapshot.skater_states[pid].velocity, our_goalie_pos)
+				snapshot.skater_states[pid].velocity, our_goalie_pos, objective)
 		# Finish danger if fed: his one-timer off the feed, our keeper square on
 		# the play as he stands (AIShotValue.feed). Unlike man_value it carries no
 		# lane factor: a contested feed still becomes a tap-in if it arrives. And
@@ -386,12 +387,21 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 			1 - team_id, _memo_attackers, _memo_attacker_vels)
 	_memo_possession.fill(our_net, _memo_defenders, _memo_defender_vels,
 			_memo_defender_caps, false, _memo_attackers, _memo_attacker_vels, holder)
+	# In the currency of where their play is, as MARK reads it
+	# (AIRoleReads.resolve_defensive_play_ref).
+	var play_ref: Vector3 = our_net
+	if snapshot.puck_state != null:
+		play_ref = snapshot.puck_state.position
+		var carrier_pid: int = snapshot.puck_state.carrier_peer_id
+		if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
+			play_ref = snapshot.skater_states[carrier_pid].position
+	var objective: int = _memo_possession.objective_at(play_ref, our_goalie_pos)
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
 		threat_shoot_base_by_opp[pid] = _memo_possession.threat_of_carrier(s.position,
-				s.velocity, our_goalie_pos)
+				s.velocity, our_goalie_pos, objective)
 
 
 # Our goalie's current world position, or the goal mouth as a first-frame

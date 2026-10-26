@@ -39,7 +39,9 @@ of scoring; in the neutral zone the odds of getting into theirs with the puck
 (`p_exit`). Each zone's goal is the next line with the puck, and what being past
 it is worth multiplies every option alike, so nothing is measured or floored. A
 spot past the next line is worth its keep; one behind it is the chain (out, then
-in from where it gets out). Shots outside their zone are dead and score nothing.
+in from where it gets out). Shots outside their zone are dead and score nothing,
+unless their keeper is off his net: then a shot from anywhere is live and the
+currency is scoring everywhere.
 
 The turnover COST is in the same currency as the gains it is subtracted from
 (`AICarrierField.turnover_cost`): in their zone a loss is credited back by the
@@ -50,11 +52,16 @@ there in zone entries (against their odds from an ordinary entry) — our exit a
 their entry weighed one for one. The 5v5 counter (`counter_rush_cost`, `in_xg`) is
 paid from their zone only; elsewhere the turnover cost already is their run at
 our zone. What a spot with no shot right now is worth to either side is
-`AIPossessionValue`. The defence reads
-a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
-and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
-body pushed onto the read's defence for the one call. The outlet and breakout
-roles stand where the lane to them × our possession of the spot is best.
+`AIPossessionValue`, and the currency and the turnover cost live there
+(`objective_at`, `worth`, `turnover_cost`), so every reader prices alike. The
+defence reads a man on it too: `threat_of_carrier` (his shot, or his possession
+of the spot) and `threat_of_feed` (his one-timer, or the lane × his
+possession), a candidate's body pushed onto the read's defence for the one call
+— in the currency of where their play is (the carrier, or the puck), never of
+where each man stands: the threats of several men are compared, so they are
+weighed in one, and a defender in the neutral zone defends the entry, in our
+zone the shot. The outlet and breakout roles stand where the lane to them × our
+possession of the spot, in our carrier's currency, is best.
 
 The giveaway bars (`SHOT_MIN_VALUE` 0.05, `PASS_MIN_VALUE` 0.02) are scale-bound
 to that seam — odds of scoring on today's goalie with a first shot. A pass's bar
@@ -620,7 +627,9 @@ takes the whole class down and every static call on it from every file at once.
 Both evaluators read the leaves and never each other. `possession_value.gd`
 (`AIPossessionValue`, what possession of a spot is worth) reads both from above,
 so neither may read it; its defence is paired to the attack by
-`defence_pairing.gd` (`AIDefencePairing`), which reads only the leaves.
+`defence_pairing.gd` (`AIDefencePairing`), which reads only the leaves, and where
+each defender will be is `defender_projection.gd` (`AIDefenderProjection`), which
+the carrier's own projection of the defence shares.
 `test_scoring_split_stays_acyclic.gd` holds that. A primitive both need goes in a
 leaf; an extraction is cut where nothing in the cut reaches back into what
 remains.

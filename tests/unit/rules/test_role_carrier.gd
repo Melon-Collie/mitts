@@ -697,7 +697,7 @@ func test_a_turnover_in_their_zone_is_credited_back_by_the_odds_we_regain_it() -
 	# the odds they fail to get it out × our possession of it regained.
 	var c := AIRoleCarrier.new()
 	c.decide(_make_ctx(Vector3(-8.0, 0.0, -16.0)))
-	assert_eq(c._field.objective, AICarrierField.Objective.SCORE)
+	assert_eq(c._field.objective, AIPossessionValue.Objective.SCORE)
 	var loss := Vector3(-4.0, 0.0, -15.0)
 	var f: AICarrierField = c._field
 	assert_almost_eq(f.turnover_cost(loss, 1.0),
@@ -712,7 +712,7 @@ func test_a_turnover_in_the_neutral_zone_costs_their_entry() -> void:
 	# the puck, so a loss costs the odds they reach ours with it.
 	var c := AIRoleCarrier.new()
 	c.decide(_make_ctx(Vector3(-8.0, 0.0, -4.0)))
-	assert_eq(c._field.objective, AICarrierField.Objective.ENTER)
+	assert_eq(c._field.objective, AIPossessionValue.Objective.ENTER)
 	var loss := Vector3(-4.0, 0.0, -2.0)
 	assert_almost_eq(c._field.turnover_cost(loss, 1.0), c._field._theirs.p_enter(loss), 1e-6,
 			"a certain loss costs their entry from there")
@@ -726,12 +726,12 @@ func test_a_turnover_in_our_zone_costs_the_entries_it_hands_them() -> void:
 	# than the corner.
 	var c := AIRoleCarrier.new()
 	c.decide(_make_ctx(Vector3(-8.0, 0.0, 16.0)))
-	assert_eq(c._field.objective, AICarrierField.Objective.EXIT)
+	assert_eq(c._field.objective, AIPossessionValue.Objective.EXIT)
 	var corner := Vector3(-11.0, 0.0, 24.0)
 	var slot := Vector3(0.0, 0.0, 20.0)
 	assert_gt(c._field.turnover_cost(slot, 1.0), c._field.turnover_cost(corner, 1.0),
 			"the slot hands them more than the corner")
-	assert_almost_eq(c._field.turnover_cost(slot, 1.0), c._field._entries_handed(slot, 0.0),
+	assert_almost_eq(c._field.turnover_cost(slot, 1.0), c._field._theirs.entries_handed(slot),
 			1e-6, "a certain loss costs the entries it hands them")
 
 

@@ -18,9 +18,6 @@ const EXPOSURE_APPETITE_FORWARD: float = 0.7
 # Loss probabilities below this skip the counter read entirely (hot-path
 # floor, not a tuning knob: at 4% × a bounded threat the term is noise).
 const EXPOSURE_PROB_FLOOR: float = 0.04
-# Division guard on their odds from an ordinary entry (_entries_handed), far
-# below any entry the read can price.
-const ENTRY_ODDS_GUARD: float = 0.001
 
 # Receiver drive-in credit (see receiver_drive_in_value): the one drive in every
 # possession read credits (AIPossessionValue), here carried on the carrier's
@@ -94,7 +91,6 @@ var drive_in_reached: Vector3 = Vector3.INF
 var _attack_z: float = -1.0
 var _carrier_pos: Vector3 = Vector3.ZERO
 var _goal: Vector3 = Vector3.ZERO
-var _theirs_goal: Vector3 = Vector3.ZERO
 # _tag_up_time while a teammate owes a tag-up, else 0.
 var _tag_up_s: float = 0.0
 var _entry_buf: Array[Vector3] = []
@@ -102,10 +98,8 @@ var _entry_vels: Array[Vector3] = []
 var _drive_buf: Array[Vector3] = []
 var _drive_vels: Array[Vector3] = []
 # What the carrier is trying to do from where he is, the currency every option
-# of his is priced in (docs/zone-currency-plan.md): score in their zone, get the
-# puck into it from the neutral zone, get it out of ours.
-enum Objective { SCORE, ENTER, EXIT }
-var objective: int = Objective.SCORE
+# of his is priced in (AIPossessionValue.Objective).
+var objective: int = AIPossessionValue.Objective.SCORE
 # What possession of a spot is worth to us (against the opponents) and to them
 # (against our defenders), priced by fill().
 var _ours := AIPossessionValue.new()
@@ -119,7 +113,6 @@ func fill(ctx: RoleContext) -> void:
 	_attack_z = signf(ctx.attacking_goal_pos.z)
 	_carrier_pos = ctx.self_pos
 	_goal = ctx.attacking_goal_pos
-	_theirs_goal = ctx.defending_goal_pos
 	opponents.clear()
 	opponent_vels.clear()
 	opponent_caps.clear()
@@ -155,18 +148,13 @@ func fill(ctx: RoleContext) -> void:
 	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
 	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
 			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
-	if AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos):
-		objective = Objective.SCORE
-	elif AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.defending_goal_pos):
-		objective = Objective.EXIT
-	else:
-		objective = Objective.ENTER
 	# In the zone the carrier reads our possession only of spots in it. The
 	# defence pairs to his teammates, him holding; a turnover's is the opponents',
 	# their man nearest him collecting.
 	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos),
 			our_defenders, our_defender_vels, ctx.self_pos)
+	objective = _ours.objective_at(ctx.self_pos, goalie_now(ctx))
 	_tag_up_s = _tag_up_time(ctx) if ctx.zone_entry_blocked else 0.0
 	var collector: int = -1
 	for i: int in opponents.size():
@@ -229,7 +217,7 @@ func fill_receivers(ctx: RoleContext, cur_puck_pos: Vector3) -> void:
 # Every opponent `time_s` ahead, into `out_buf` and his velocity then into
 # `out_vels`, index-matched to `opponents`, against the carrier at
 # `carrier_then` by then, on the possession read's model of where a defender
-# will be (AIPossessionValue.project_defender): a man backing off in front of
+# will be (AIDefenderProjection.at): a man backing off in front of
 # the carrier holds his gap to where the carrier has got to, never to where he
 # might have been — carried on regardless, his retreat would show every delay of
 # the entry a blue line he has left, and the carrier would pull up to wait. A
@@ -240,43 +228,21 @@ func project_opponents(time_s: float, out_buf: Array[Vector3],
 	out_buf.clear()
 	out_vels.clear()
 	for i: int in opponents.size():
-		out_buf.append(AIPossessionValue.project_defender(opponents[i], opponent_vels[i],
+		out_buf.append(AIDefenderProjection.at(opponents[i], opponent_vels[i],
 				time_s, _carrier_pos, carrier_then, _goal, opponent_caps[i]))
-		out_vels.append(AIPossessionValue.projected_vel)
+		out_vels.append(AIDefenderProjection.vel_then)
 
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`,
-# `loss_s` from now, in the carrier's currency (objective) and discounted to now as
-# his gains are:
-#
-#   SCORE  in their zone our lost chance is already the plays we don't keep it,
-#          so a loss there is credited back by the odds they fail to get it out
-#          × our possession of it regained (negative: the carry and pass
-#          ceilings that assume a cost is never negative are short by at most
-#          that much); elsewhere their possession of it;
-#   ENTER  their odds of getting into our zone with it;
-#   EXIT   the same from our neutral zone; in our zone, the entries it hands
-#          them (_entries_handed).
+# `loss_s` from now, in the carrier's currency and discounted to now as his gains
+# are (AIPossessionValue.turnover_cost). In their zone it is a credit (negative):
+# the carry and pass ceilings that assume a cost is never negative are short by
+# at most that much.
 func turnover_cost(loss_point: Vector3, loss_prob: float, loss_s: float = 0.0) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0:
 		return 0.0
-	if objective == Objective.SCORE:
-		if AIActionScoring.in_offensive_zone(loss_point, _goal):
-			return -loss_prob * (1.0 - _theirs.p_next(loss_point, loss_s)) \
-					* _ours.at(loss_point, loss_s)
-		return loss_prob * _theirs.at(loss_point, loss_s)
-	if AIActionScoring.in_offensive_zone(loss_point, _theirs_goal):
-		return loss_prob * _entries_handed(loss_point, loss_s)
-	return loss_prob * _theirs.p_enter(loss_point, loss_s)
-
-
-# A turnover in our zone, counted in zone entries for them: their scoring odds
-# from `at` against their odds from an ordinary entry, the middle a stride over
-# our line, both on the same read.
-func _entries_handed(at: Vector3, loss_s: float) -> float:
-	var entry := Vector3(0.0, 0.0,
-			signf(_theirs_goal.z) * (GameRules.BLUE_LINE_Z + AIPossessionValue.ENTRY_LEAD_M))
-	return _theirs.at(at, loss_s) / maxf(_theirs.at(entry, loss_s), ENTRY_ODDS_GUARD)
+	return loss_prob * AIPossessionValue.turnover_cost(objective, loss_point, loss_s,
+			_ours, _theirs)
 
 
 # Transition-exposure cost of losing the puck at `loss_point` with
@@ -286,7 +252,7 @@ func _entries_handed(at: Vector3, loss_s: float) -> float:
 func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
 		loss_prob: float, recover_from: Vector3, our_goalie: Vector3) -> float:
 	# Outside their zone the turnover cost already is their run at our zone.
-	if objective != Objective.SCORE or ctx.team_size < 5 \
+	if objective != AIPossessionValue.Objective.SCORE or ctx.team_size < 5 \
 			or loss_prob <= EXPOSURE_PROB_FLOOR:
 		return 0.0
 	var appetite: float = EXPOSURE_APPETITE_DEFENSE if ctx.self_is_defense \
@@ -451,7 +417,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		stance: int = AIShotOdds.Stance.UPRIGHT, keeper_yaw: float = NAN,
 		arrive_s: float = 0.0, arrive_vel: Vector3 = Vector3.ZERO,
 		man_caps: AISkaterCaps = null) -> float:
-	if objective != Objective.SCORE \
+	if objective != AIPossessionValue.Objective.SCORE \
 			or _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return horizon_value(pos, arrive_s, arrive_vel, man_caps)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
@@ -468,7 +434,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # on the receiver.
 func feed_shot_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: float,
 		one_timer: bool, from_pos: Vector3, opps: Array[Vector3]) -> float:
-	if objective != Objective.SCORE or _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
+	if objective != AIPossessionValue.Objective.SCORE or _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
 		return 0.0
 	var shoot_s: float = AIShotValue.feed(passer, pos, pass_speed, ctx.attacking_goal_pos,
 			goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
@@ -512,9 +478,9 @@ func horizon_value(pos: Vector3, arrive_s: float = 0.0,
 	if _tag_up_s > start_s and not AIActionScoring.in_offensive_zone(pos, _goal):
 		start_s = _tag_up_s
 	var v: float
-	if objective == Objective.ENTER:
+	if objective == AIPossessionValue.Objective.ENTER:
 		v = _ours.p_enter(pos, start_s, arrive_vel, man_caps)
-	elif objective == Objective.EXIT:
+	elif objective == AIPossessionValue.Objective.EXIT:
 		v = _ours.p_exit(pos, start_s, arrive_vel, man_caps)
 	else:
 		v = _ours.play_on(pos, start_s, arrive_vel, man_caps)

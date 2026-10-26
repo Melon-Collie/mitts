@@ -22,10 +22,10 @@ extends RefCounted
 # .CARRY_LUNGE_WINDOW_S) to cover the crossing the carrier picks: a man set at
 # his line covers the lane he shadows and what his lunge reaches of the rest,
 # never the whole line; a man gapped back covers none of it and is the drive's
-# to charge. One outside the line is where project_defender has him.
+# to charge. One outside the line is where AIDefenderProjection has him.
 #
 # An entry's shot and drive are read against the defence as it will be when he
-# crosses (project_defender: a man behind the play backchecks), priced at
+# crosses (AIDefenderProjection: a man behind the play backchecks), priced at
 # FOLLOW_UP_TIMES and read between them. Each depends only on fill()'s defence,
 # so it is priced once per fill, and only when a read could use it: its worth on
 # empty ice, which a defence only lowers, bounds it until then.
@@ -33,8 +33,8 @@ extends RefCounted
 # The defence is read in numbers (AIDefencePairing): a defender paired to an
 # attacker other than the puck's holder rides him through the read instead of
 # skating at the puck. The holder's own defender, and any left over, play the
-# puck: project_defender. So a 3-on-2 leaves a man open and a 1-on-3 brings every
-# spare body.
+# puck: AIDefenderProjection. So a 3-on-2 leaves a man open and a 1-on-3 brings
+# every spare body.
 #
 # Every shot is against a keeper who tracked the play: set and square
 # (AIShotValue.set_keeper). Not modelled: passes — the man with the puck carries
@@ -43,6 +43,9 @@ extends RefCounted
 # Where a side crosses: a stride past the line, at CROSSINGS points spread evenly
 # between the two wall lanes.
 const ENTRY_LEAD_M: float = 3.0
+# Division guard on the side's odds from an ordinary entry (entries_handed), far
+# below any entry the read can price.
+const ENTRY_ODDS_GUARD: float = 0.001
 const ENTRY_WALL_INSET_M: float = 2.0
 const CROSSINGS: int = 5
 # When, from now, an entry's shot and drive are priced against the defence; read
@@ -259,6 +262,56 @@ func p_enter(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 			* _p_cross(_cross_at, _cross_s, heading, man_caps, _line_z)
 
 
+# What the side fill() priced is after with the puck, by where the man deciding
+# for it plays (docs/zone-currency-plan.md): score in the attacked zone, get into
+# it from the neutral zone, get out of its own. A keeper off his net makes a shot
+# from anywhere live, so then it is scoring everywhere.
+enum Objective { SCORE, ENTER, EXIT }
+
+
+func objective_at(decider: Vector3, keeper: Vector3 = Vector3.INF) -> int:
+	if AIActionScoring.in_offensive_zone(decider, _goal) or (keeper.is_finite()
+			and keeper.distance_to(_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M):
+		return Objective.SCORE
+	if _in_own_zone(decider):
+		return Objective.EXIT
+	return Objective.ENTER
+
+
+# The puck at `pos` (as at() reads it) in `objective`'s currency.
+func worth(objective: int, pos: Vector3, start_s: float = 0.0,
+		vel: Vector3 = Vector3.ZERO, man_caps: AISkaterCaps = null) -> float:
+	if objective == Objective.ENTER:
+		return p_enter(pos, start_s, vel, man_caps)
+	if objective == Objective.EXIT:
+		return p_exit(pos, start_s, vel, man_caps)
+	return at(pos, start_s, vel, man_caps)
+
+
+# What the side `ours` prices loses by losing the puck at `loss`, `loss_s` from
+# now, in `objective`'s currency; `theirs` is the other side's read. Scoring, a
+# loss in the attacked zone is credited back by the odds they fail to get it out
+# × ours regained there, our lost chance being already the plays we don't keep
+# it; elsewhere it is their possession there. Getting in or out, it is their
+# entry from there, or, in our zone, the entries it hands them.
+static func turnover_cost(objective: int, loss: Vector3, loss_s: float,
+		ours: AIPossessionValue, theirs: AIPossessionValue) -> float:
+	if objective == Objective.SCORE:
+		if AIActionScoring.in_offensive_zone(loss, ours._goal):
+			return -(1.0 - theirs.p_next(loss, loss_s)) * ours.at(loss, loss_s)
+		return theirs.at(loss, loss_s)
+	if AIActionScoring.in_offensive_zone(loss, theirs._goal):
+		return theirs.entries_handed(loss, loss_s)
+	return theirs.p_enter(loss, loss_s)
+
+
+# The side's scoring odds from `pos` counted in zone entries: against its odds
+# from an ordinary entry, the middle a stride over the line, on the same read.
+func entries_handed(pos: Vector3, start_s: float = 0.0) -> float:
+	var entry := Vector3(0.0, 0.0, signf(_goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M))
+	return at(pos, start_s) / maxf(at(entry, start_s), ENTRY_ODDS_GUARD)
+
+
 func _in_own_zone(pos: Vector3) -> bool:
 	return AIActionScoring.in_offensive_zone(pos, Vector3(0.0, 0.0, -_goal.z))
 
@@ -342,7 +395,7 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 # skate is taking him) — on the carrier→net line at his own depth past it, if his
 # skate gets him there (part way along if not) — since he can stand in one place,
 # and a crossing the carrier picks late is the lunge's to cover. Short of the
-# line, where project_defender has him.
+# line, where AIDefenderProjection has him.
 func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
 		carrier_vel: Vector3, line_z: float) -> float:
 	if _defenders.is_empty():
@@ -362,10 +415,10 @@ func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
 		var v: Vector3 = _defender_vels[k]
 		var depth: float = (p.z - natural.z) * signf(_goal.z)
 		if depth <= 0.0 or absf(to_net.z) < 0.001:
-			_line_defence.append(project_defender(p, v, commit, carrier_pos,
+			_line_defence.append(AIDefenderProjection.at(p, v, commit, carrier_pos,
 					carrier_pos.lerp(crossing, commit / t) if t > 0.0 else carrier_pos, _goal,
 					_caps_of(k)))
-			_line_vels.append(projected_vel)
+			_line_vels.append(AIDefenderProjection.vel_then)
 			continue
 		var shadow: Vector3 = natural + to_net * (depth / absf(to_net.z))
 		var t_shadow: float = AIArrival.time_to_arrive_caps(p, shadow, v, _caps_of(k))
@@ -389,107 +442,6 @@ func _natural_crossing(pos: Vector3, vel: Vector3, line_z: float) -> Vector3:
 		x += vel.x * (absf(line_z - pos.z) / toward)
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
 	return Vector3(clampf(x, -wide_x, wide_x), 0.0, line_z)
-
-
-# Where a defender at `pos` skating at `vel`, built as `caps` (null: the league
-# build), is `t` from now, against a carrier now at `carrier_now` and at
-# `carrier_then` `t` from now, attacking the net at `goal`. Ahead of the carrier
-# means goal-side of him along his line to that net (a man level in depth but in
-# the middle is between a wide carrier and the net):
-#
-#   ahead, not closing on him, outside the carrier's own zone — standing up at
-#     his line or backing off the carry: he holds his gap, giving ground down the carrier's line as the
-#     carrier gains it — a carrier who waits gains no ice by it — down to the
-#     top of his house, the floor a defender with a gap retreats to
-#     (AIRoleRushD.set_retreat_floor), as far as his skate gets him there;
-#   ahead otherwise — closing on him, or forechecking in the carrier's own zone,
-#     where he holds his ice: he carries on as he is until he is level with the
-#     carrier on that line, and is behind him from then;
-#   behind him — he backchecks (_backcheck).
-#
-# His velocity then is left in projected_vel.
-static func project_defender(pos: Vector3, vel: Vector3, t: float, carrier_now: Vector3,
-		carrier_then: Vector3, goal: Vector3, caps: AISkaterCaps = null) -> Vector3:
-	projected_vel = vel
-	if t <= 0.0:
-		return pos
-	var d: Vector3 = _line_to(carrier_now, goal)
-	var ahead: float = (pos.x - carrier_now.x) * d.x + (pos.z - carrier_now.z) * d.z
-	if ahead > 0.0:
-		var toward: float = vel.x * d.x + vel.z * d.z
-		if toward >= 0.0 and not AIActionScoring.in_offensive_zone(
-				pos, Vector3(0.0, 0.0, -goal.z)):
-			return _hold_gap(pos, vel, t, carrier_now, carrier_then, goal, caps)
-		var t_level: float = ahead / -toward if toward < 0.0 else INF
-		if t <= t_level:
-			return AITrajectory.predict_at(pos, vel, t)
-		pos = pos + vel * t_level
-		t -= t_level
-	return _backcheck(pos, vel, t, goal.z, caps)
-
-
-# The unit direction from `from` to `goal` on the ice.
-static func _line_to(from: Vector3, goal: Vector3) -> Vector3:
-	var line := Vector3(goal.x - from.x, 0.0, goal.z - from.z)
-	var line_len: float = line.length()
-	return line / line_len if line_len > 0.001 else Vector3(0.0, 0.0, signf(goal.z))
-
-
-# project_defender's gap-holder: he gives ground down the carrier's line as the
-# carrier gains it, from `carrier_now` to `carrier_then` over `t` (and closes as
-# the carrier gives it), keeping his place across the ice, no deeper than the top
-# of the house, as far as his skate from `pos` gets him there.
-static func _hold_gap(pos: Vector3, vel: Vector3, t: float, carrier_now: Vector3,
-		carrier_then: Vector3, goal: Vector3, caps: AISkaterCaps) -> Vector3:
-	var d: Vector3 = _line_to(carrier_now, goal)
-	var gained: float = (carrier_then.x - carrier_now.x) * d.x \
-			+ (carrier_then.z - carrier_now.z) * d.z
-	var stand: Vector3 = pos + d * gained
-	var sign_z: float = signf(goal.z)
-	var gate_z: float = goal.z - sign_z * AIZoneCoverage.HOUSE_TOP_DEPTH_M
-	var past: float = (stand.z - gate_z) * sign_z
-	if past > 0.0 and absf(d.z) > 0.001:
-		stand -= d * minf(past / absf(d.z), maxf(gained, 0.0))
-	var carrier_vel: Vector3 = (carrier_then - carrier_now) / t
-	var t_stand: float = AIArrival.time_to_arrive_caps(pos, stand, vel, caps)
-	if t_stand <= t:
-		projected_vel = Vector3(carrier_vel.x, 0.0, carrier_vel.z)
-		return stand
-	projected_vel = (stand - pos) / t_stand
-	return pos.lerp(stand, t / t_stand)
-
-
-# project_defender's other result: the projected man's velocity.
-static var projected_vel: Vector3 = Vector3.ZERO
-
-
-# A man behind the play `t` from now: he brakes out what speed he has away from
-# home, the rest carrying on, then skates for the top of his house on the
-# arrival clock, the share of the trip he has made by then along the way.
-static func _backcheck(pos: Vector3, vel: Vector3, t: float, goal_z: float,
-		caps: AISkaterCaps) -> Vector3:
-	var home := Vector3(0.0, 0.0, goal_z - signf(goal_z) * AIZoneCoverage.HOUSE_TOP_DEPTH_M)
-	var to_home := Vector3(home.x - pos.x, 0.0, home.z - pos.z)
-	var dist: float = to_home.length()
-	if dist < 0.01:
-		projected_vel = Vector3.ZERO
-		return home
-	var h: Vector3 = to_home / dist
-	var away: float = maxf(0.0, -(vel.x * h.x + vel.z * h.z))
-	var brake: float = AIArrival.REVERSAL_BRAKE_DECEL_M_S2
-	var t_shed: float = minf(t, away / brake)
-	var v_rest: Vector3 = Vector3(vel.x, 0.0, vel.z) + h * away
-	var m: Vector3 = pos + v_rest * t_shed - h * (away * t_shed - 0.5 * brake * t_shed * t_shed)
-	var rest: float = t - t_shed
-	if rest <= 0.0:
-		projected_vel = v_rest - h * (away - brake * t_shed)
-		return m
-	var t_home: float = AIArrival.time_to_arrive_caps(m, home, v_rest, caps)
-	if t_home <= rest:
-		projected_vel = Vector3.ZERO
-		return home
-	projected_vel = (home - m) / t_home
-	return m.lerp(home, rest / t_home)
 
 
 # Defender `k`'s caps, when the read's caps are index-matched.
@@ -642,7 +594,7 @@ func _price_entry(spot: Vector3, out: Array[float], base: int, t: float) -> void
 
 
 # Every defender `t` from now against a carrier who is at `carrier` then
-# (project_defender, read against the puck's holder now; or riding his man,
+# (AIDefenderProjection, read against the puck's holder now; or riding his man,
 # AIDefencePairing), into `out` and his velocity then into `out_vels`,
 # index-matched to the read's defenders.
 func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
@@ -655,9 +607,9 @@ func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
 			out.append(_pairing.ride_at(k, t))
 			out_vels.append(AIDefencePairing.ride_vel)
 		else:
-			out.append(project_defender(_defenders[k], _defender_vels[k], t, now, carrier,
+			out.append(AIDefenderProjection.at(_defenders[k], _defender_vels[k], t, now, carrier,
 					_goal, _caps_of(k)))
-			out_vels.append(projected_vel)
+			out_vels.append(AIDefenderProjection.vel_then)
 
 
 func _shot(pos: Vector3) -> float:
@@ -746,32 +698,40 @@ func _drive_keep(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
 # Read off a fill() whose `defenders` are the defence and whose `goal` is the
 # net it defends. The keeper is where he stands.
 
-# What a man at `pos`, moving at `vel`, threatens with the puck on his stick:
-# his shot where he stands, or what possession of his spot is worth.
-func threat_of_carrier(pos: Vector3, vel: Vector3, keeper: Vector3) -> float:
-	var shot: float = 0.0
-	# Outside the zone with the keeper home a shot is dead by the hole geometry.
-	if AIActionScoring.in_offensive_zone(pos, _goal) \
-			or keeper.distance_to(_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M:
-		shot = AIActionScoring.score_shoot_value(pos, _goal, keeper, _defenders, 0.0,
-				AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				_defender_caps, _goalie_half(pos, Vector3.INF, keeper, 0.0))
+# What a man at `pos`, moving at `vel`, threatens with the puck on his stick, in
+# `objective`'s currency (objective_at, read off the attack's play, so every man
+# is weighed in one): scoring, his shot where he stands or his possession of the
+# spot; otherwise his odds of the next line from there.
+func threat_of_carrier(pos: Vector3, vel: Vector3, keeper: Vector3, objective: int) -> float:
+	if objective != Objective.SCORE:
+		return worth(objective, pos, 0.0, vel)
+	var shot: float = AIActionScoring.score_shoot_value(pos, _goal, keeper, _defenders, 0.0,
+			AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
+			_defender_caps, _goalie_half(pos, Vector3.INF, keeper, 0.0)) \
+			if AIActionScoring.in_offensive_zone(pos, _goal) \
+					or keeper.distance_to(_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M \
+			else 0.0
 	return maxf(shot, at(pos, 0.0, vel))
 
 
-# What a feed from `from` to a man at `to`, moving at `to_vel`, threatens: his
-# one-timer off it, or the lane × his possession of the spot once it gets there.
+# What a feed from `from` to a man at `to`, moving at `to_vel`, threatens in
+# `objective`'s currency: scoring, his one-timer off it or the lane × his
+# possession of the spot once it gets there; otherwise the lane × his odds of the
+# next line from there.
 func threat_of_feed(from: Vector3, to: Vector3, to_vel: Vector3,
-		keeper: Vector3) -> float:
+		keeper: Vector3, objective: int) -> float:
 	if AINetObstacle.pass_lane_blocked_by_net(from, to):
 		return 0.0
 	var speed: float = AIPuckLane.expected_pass_speed(from, to)
 	var lane: float = AIPuckLane.lane_clear(from, to, _defenders, speed,
 			AIActionScoring.EMPTY_VEC3, _defender_caps)
+	var flight: float = from.distance_to(to) / maxf(speed, 0.1)
+	if objective != Objective.SCORE:
+		return lane * worth(objective, to, flight, to_vel)
 	var odds: float = _goalie_half(from, to, keeper, speed) if lane > 0.0 else 0.0
 	var one_timer: float = AIActionScoring.score_pass_value(from, to, _goal, keeper,
 			_defenders, speed, _defender_caps, true, lane, odds)
-	return maxf(one_timer, lane * at(to, from.distance_to(to) / maxf(speed, 0.1), to_vel))
+	return maxf(one_timer, lane * at(to, flight, to_vel))
 
 
 # A hypothetical defender added to the read's (the caller's) arrays for a read,

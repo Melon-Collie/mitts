@@ -616,7 +616,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 func _possession_on_clock(spot: Vector3, vel: Vector3, caps: AISkaterCaps,
 		at_spot_s: float, has_s: float) -> float:
 	var t: float = has_s
-	if _field.objective == AICarrierField.Objective.SCORE:
+	if _field.objective == AIPossessionValue.Objective.SCORE:
 		t = maxf(AICarryRollout.HORIZON_S, has_s)
 	var there: Vector3 = spot + Vector3(vel.x, 0.0, vel.z) * (t - at_spot_s)
 	if not AIStationSearch.is_legal_position(there):
@@ -684,7 +684,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 		if slot == AIRoleSlots.Slot.FINISHER or slot == AIRoleSlots.Slot.NET_FRONT:
 			# Priced in scoring odds, so only a carrier whose currency they are
 			# holds for it.
-			if _field.objective != AICarrierField.Objective.SCORE:
+			if _field.objective != AIPossessionValue.Objective.SCORE:
 				continue
 			# A one-timer-flagged finisher is already fed by the normal pass
 			# scoring. The OZ gate reads the PROJECTED spot — a finisher a stride

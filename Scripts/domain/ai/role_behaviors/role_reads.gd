@@ -271,16 +271,19 @@ static func feed_lane(ctx: RoleContext, origin: Vector3, spot: Vector3,
 
 
 # What the feed of `lane` to a receiver at `spot` is worth, as the passer prices
-# it: completed, our possession there (`held`); picked off, their possession
-# where it is picked (`theirs`, read against our skaters).
+# it in `objective`'s currency: completed, our possession there (`held`); picked
+# off, the turnover where it is picked (AIPossessionValue.turnover_cost, `ours`
+# read against their skaters, `theirs` against ours).
 static func feed_ev(ctx: RoleContext, origin: Vector3, spot: Vector3, speed: float,
-		lane: float, held: float, theirs: AIPossessionValue) -> float:
+		lane: float, held: float, objective: int, ours: AIPossessionValue,
+		theirs: AIPossessionValue) -> float:
 	if lane >= 1.0:
 		return held
 	var loss: Vector3 = AIPuckLane.lane_loss_point(origin, spot,
 			ctx.scratch_feed_opp_release, speed, ctx.scratch_feed_opp_vels,
 			ctx.scratch_feed_opp_caps, ctx.scratch_feed_opp_blades)
-	var cost: float = theirs.at(loss) if loss.is_finite() else 0.0
+	var cost: float = AIPossessionValue.turnover_cost(objective, loss, 0.0, ours, theirs) \
+			if loss.is_finite() else 0.0
 	return lane * held - (1.0 - lane) * cost
 
 
