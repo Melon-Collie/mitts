@@ -230,7 +230,10 @@ part. There is no slide cap, no escape offset and no 3 s limit.
   placement, the grant. Ticked where the pin tracker is.
 - `PuckController._check_interactions`: a wall puck with a battle on it is the
   tracker's, not the pickup pass's.
-- `FrozenPuckRules`: `trapped` is a stalled battle, not a pinned body.
+- `FrozenPuckRules`: `trapped` is a stalled battle, not a pinned body. A pin no
+  longer whistles or squirts anything; it lives on untouched otherwise.
+- `BoardContactRules` takes the shared boards math out of `BoardPinRules`
+  (*Retiring the pin*, below).
 - Bots as above; `AIBoardBattleRead` in `Scripts/domain/ai/`.
 - The pin stays in the build untouched until Phase 3, so a playtest can compare.
 - **Instrument:** `tests/instruments/game/test_board_battles.gd`, the probe made
@@ -269,7 +272,84 @@ real win rates to price with.
 
 ## Retiring the pin
 
-_Inventory pending._
+### What survives, and moves first (Phase 1)
+
+The pin's files hold four things other mechanics use. Phase 1 moves them out,
+because the battle needs them too, and leaves `BoardPinRules` calling the new
+home until Phase 3 deletes it.
+
+| what | today | used by | moves to |
+|---|---|---|---|
+| `wall_normal`, `backstop_hit_strength`, `BACKSTOP_MARGIN_M`, `BACKSTOP_MIN_INTO_WALL` | `board_pin_rules.gd` | the boards in a hit: `Skater._backstopped` (the stagger), `Puck.on_body_check` (the strip); `FrozenPuckRules` | `Scripts/domain/rules/board_contact_rules.gd` (`BoardContactRules`) |
+| `time_to_contact`, `TOUCHING_M` | `pin_threat_read.gd` | `AIStandUpRead`, `test_stand_up_read.gd` | `AIStandUpRead` (or a contact leaf beside it) |
+| `PIN_CONTACT_SLACK_M` (0.05) | `board_pin_rules.gd` | `TOUCHING_M` | with `TOUCHING_M` |
+| the frozen-puck rule, its RPC, the `TOAST_PUCK_FROZEN` toast | `FrozenPuckRules`, `GameManager._check_frozen_puck` | today it only ever fires under a pin | re-keyed to a stalled battle in Phase 1, so the RPC and the toast keep their meaning and no wire changes |
+
+The pin's coached hold rule (`_pin_worth_holding`, `_last_back`,
+`_team_arrival_s`) moves into the bots' seal in Phase 1. The carrier's
+brace-or-escape read (`_answer_pin_threat`) does not survive: there is no brace
+against a seal, only driving back off the wall, and the carrier's answer on the
+boards is Phase 2's to design.
+
+### What Phase 3 deletes
+
+**Whole files:**
+- `Scripts/domain/rules/board_pin_rules.gd` (what is left of it), `Scripts/game/board_pin_tracker.gd`
+- `Scripts/controllers/gait/gait_pin_layer.gd` and its slot in `SkaterSkatingCoordinator._layers`
+- `Scripts/ai/skater_agent_board_play.gd` and `Scripts/domain/ai/pin_threat_read.gd` (what is left of it), with their wiring in `SkaterAgentStateMachine` (`_board_play`, `apply_board_play`) and `SkaterAgent.tick`
+- `Puck.apply_pin_strip`, `GameManager._strip_pinned_carrier` and the tracker's construction, tick and teardown
+- the `GaitPinLayer` tunables on `SkaterController` (`pin_stance`, `pin_*_lean_deg`, `pin_pose_speed`), `_adopt_pin`, `_apply_pin_slide_cap`
+- `SkaterCollisionRules.resolve`'s `axis` parameter, which only a locked pair ever sets
+- the pin poses in `tools/pose_capture_runner.gd`
+
+**Pin clauses inside shared code** (delete the clause, keep the path): the
+stick check (`_advance_stick_check`), the commit and stance gates in
+`_apply_movement`, the one-timer whiff, the press's exclusion of locked bodies
+(`_apply_press`, both `_find_press_partner`s, `GaitPressLayer._read_role`), the
+pickup, poke and provisional-pickup gates (`PuckController`, `LocalController`,
+`PickupClaimResolver`, `PokeClaimResolver`), the tie's three gates
+(`StickTieTracker`), the forward caps (`RemoteController._correct_forward`,
+`LagCompRewind._integrate_skater`), the flat contact axis
+(`Skater._resolve_player_collisions`, `LocalController._replay_resolve_body_checks`),
+and the agents' locked-self skips (press, shot block, stand-up).
+
+**The wire (protocol v90, replay format 21):**
+- `SkaterNetworkState.pin_role` and `pin_strength`, in `to_array` /
+  `from_array` / `copy_from` / `copy_stick_play_from` (the array shrinks from 32
+  slots, and `diving` moves down).
+- `WorldStateCodec`: byte 56 packs `pin_role` in bits 0–1 and `diving` in bit 2;
+  it stays, as `diving`'s byte. Byte 57 (`pin_strength`) goes, and the skater
+  block goes from 58 to 57 bytes, as v88 did for the cross-check.
+- `docs/protocol-history.md` gains the v90 entry.
+
+**Tests:**
+- Whole files: `test_board_pin_tracker.gd`, `test_pin_slide_cap.gd`,
+  `test_bot_board_play.gd`, `pin_race_harness.gd`, both
+  `test_pin_escape_race.gd`, and `test_pin_threat_read.gd` once its
+  `time_to_contact` case has moved with the function.
+- Mixed: `test_board_pin_rules.gd` keeps its `wall_normal` and backstop cases
+  (renamed for `BoardContactRules`) and its frozen-puck cases (re-keyed in
+  Phase 1); `test_board_backstop.gd` loses its pinner case.
+- `test_agent_offside_guard.gd` drives the offside guard with a pinned bot's
+  slide; it needs another writer of the move to guard against.
+- Pin assertions in `test_world_state_codec.gd`, `test_skater_network_state.gd`,
+  `test_state_buffer_manager.gd`, `test_stick_tie.gd`,
+  `test_skater_collision_rules.gd` (the axis case) and
+  `test_agent_collaborator_seams.gd`.
+
+**Docs:** `docs/gameplay-design.md` (the pin half of *The boards are part of
+the hit*), `ARCHITECTURE.md` (*The boards in body contact*, its pin sentences),
+`docs/physicality-plan.md` Phase A and `docs/defensive-play-plan.md`'s pin
+sections (a retired note), the pin mentions in `docs/hit-outcomes-plan.md` and
+`docs/net-front-battles-plan.md`, `Scripts/domain/ai/CLAUDE.md`,
+`Scripts/domain/ai/DECISIONS.md` (four rows and two knob lines;
+`test_decisions_inventory_resolves.gd` fails if a cited file goes first),
+`Scripts/ai/CLAUDE.md`, `Scripts/controllers/CLAUDE.md`, `tests/CLAUDE.md`
+(the pin race harness), and the tutorial's stick-lift line.
+
+**Not the board pin**, and staying: the carried puck "pinned" to the blade, the
+wall-pin auto-release of a carry, the slapshot pin, the keeper's glove pin, the
+knockdown's pinned leg, `BoardPlayRules`, and telemetry's `provisional_pin`.
 
 ## Tests
 
