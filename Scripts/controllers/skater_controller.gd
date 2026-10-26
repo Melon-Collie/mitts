@@ -954,9 +954,15 @@ var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration b
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
 # Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.
-# apply_celebration_pose) — heights in upper-body-local metres.
-var celebration_hand_y: float = 0.45     # raised top-hand height
-var celebration_stick_rise: float = 0.5  # blade height above the raised hand
+# apply_celebration_pose). Bearings are upper-body local with x toward the
+# arm's own side and −z forward; reaches are in arm lengths from the shoulder.
+var celebration_hand_bearing := Vector3(0.18, 1.0, -0.22)  # the stick arm thrown up, a touch forward
+var celebration_hand_reach: float = 0.9      # near full extension, short of a locked elbow
+var celebration_hand_pump: float = 0.06      # the arm gives this much at the bottom of each hop
+var celebration_stick_bearing := Vector3(0.4, 1.0, 0.12)   # shaft leans out and back, clear of the helmet
+var celebration_fist_bearing := Vector3(0.22, 1.0, -0.3)
+var celebration_fist_reach_low: float = 0.5  # elbow bent, fist at the face
+var celebration_fist_reach_high: float = 0.78  # punched up above the helmet
 
 # ── Shot-Block Tuning ─────────────────────────────────────────────────────────
 # Movement speed while blocking (unused while the stance is fully planted; kept for tuning).
@@ -1115,11 +1121,14 @@ var hit_active: bool = false
 
 var _game_state_has_faceoff_prep: bool = false
 var _game_state_has_period_break: bool = false
-# Cosmetic goal-celebration window (seconds remaining / total). Set by
-# GameManager on the machine that simulates the scorer; the raised-stick pose
-# rides the normal hand/blade wire state to everyone else.
+# Cosmetic goal-celebration window (seconds remaining / total), opened after
+# _celebration_lead seconds. Started by GameManager on every machine; the
+# raised-stick pose rides the normal hand/blade wire state to everyone else.
 var _celebration_timer: float = 0.0
 var _celebration_total: float = 1.0
+var _celebration_lead: float = 0.0
+# Hops across the window: the knee bounce and the fist pump share them.
+const CELEBRATION_PUMPS: float = 3.0
 
 # ── Faceoff / intro skate-in approach ─────────────────────────────────────────
 # During FACEOFF_PREP the skater glides from a start point (its bench for the
@@ -1162,21 +1171,44 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
-func start_celebration(duration: float) -> void:
+# `lead` seconds pass before the window opens; nothing is posed through them.
+func start_celebration(duration: float, lead: float = 0.0) -> void:
 	_celebration_total = maxf(duration, 0.001)
 	_celebration_timer = _celebration_total
+	_celebration_lead = maxf(lead, 0.0)
 
 
+# Drops the window, lead and all, and hands the free hand back to the stick.
+func end_celebration() -> void:
+	_celebration_timer = 0.0
+	_celebration_lead = 0.0
+	_ik.hold_free_hand(Vector3.ZERO, 0.0)
+
+
+# The window is open: the pose is live.
 func is_celebrating() -> bool:
+	return _celebration_timer > 0.0 and _celebration_lead <= 0.0
+
+
+# A window is open or still waiting out its lead.
+func has_celebration_window() -> bool:
 	return _celebration_timer > 0.0
 
 
-# 0..1 progress through the celebration window (0 when idle). Read by the gait
-# for the leg bounce, matching the `t` the raised-stick pose runs on.
+# 0..1 progress through the celebration window (0 when idle).
 func celebration_progress() -> float:
-	if _celebration_timer <= 0.0:
+	if not is_celebrating():
 		return 0.0
 	return 1.0 - _celebration_timer / _celebration_total
+
+
+# 0 standing to 1 at the bottom of a hop, CELEBRATION_PUMPS times across the
+# window: the gait's knee bounce and the pose's fist pump both ride it.
+func celebration_pump() -> float:
+	var progress: float = celebration_progress()
+	if progress <= 0.0:
+		return 0.0
+	return 0.5 - 0.5 * cos(progress * TAU * CELEBRATION_PUMPS)
 
 
 # Ages the celebration window, at physics rate on real ticks from both the
@@ -1184,7 +1216,9 @@ func celebration_progress() -> float:
 # skaters this machine doesn't simulate (the timer starts on every machine;
 # see GameManager._trigger_scorer_celebration).
 func tick_celebration(delta: float) -> void:
-	if _celebration_timer > 0.0:
+	if _celebration_lead > 0.0:
+		_celebration_lead = maxf(_celebration_lead - delta, 0.0)
+	elif _celebration_timer > 0.0:
 		_celebration_timer = maxf(_celebration_timer - delta, 0.0)
 
 
@@ -1842,10 +1876,10 @@ func _process_input(input: InputState, delta: float) -> void:
 		# GOAL_CELEBRATION), real ticks only, and gated to plain skating so a
 		# whiffed shot's follow-through isn't fought over.
 		var cel_state: SkaterStateMachine.State = _sm.get_state()
-		if _celebration_timer > 0.0 and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
+		if is_celebrating() and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
 				or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
-			_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total,
-					_celebration_total - _celebration_timer, _celebration_timer)
+			_shot_pose.apply_celebration_pose(_celebration_total - _celebration_timer,
+					_celebration_timer)
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
@@ -2275,6 +2309,9 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# This path poses the gait + off-hand itself (below), so the render-rate
 	# cosmetic hook yields to it while a replay is driving this skater.
 	_self_posing = true
+	# The replay poses the recorded body; a live celebration's knee bounce and
+	# fist pump are read off this controller, and its timer is frozen here.
+	end_celebration()
 	skater.global_position = state.position
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
@@ -2595,12 +2632,11 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 		# plant the legs at their rest pose so the stride doesn't resume mid-swing.
 		_pose.reset_lean_and_lag()
 		_skating.reset_to_rest()
-		# Kill any celebration remainder. The timer only ticks in
-		# _process_input, which doesn't run through the goal replay or the
-		# faceoff-prep aim-only path — so the leftover slice (goal_scored
-		# signal latency; larger on clients) would otherwise freeze through
-		# the replay and fire the raised-stick pose AT the next faceoff.
-		_celebration_timer = 0.0
+		# Kill any celebration remainder. The timer only ticks on live ticks,
+		# which the faceoff-prep aim-only path is not — so a leftover slice
+		# (goal_scored signal latency; larger on clients) would otherwise fire
+		# the raised-stick pose AT the next faceoff.
+		end_celebration()
 	# The body (and with it the blade) just jumped, and the pose resets above
 	# moved the stick again. Re-anchor the blade histories to where the stick
 	# actually is now, or the next tick differences them across the whole jump:
