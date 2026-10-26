@@ -928,6 +928,32 @@ remains.
     with no shot right now still scores by its distance and angle. Behind the
     goal line every shot is 0, so a candidate there is worth only the pass
     OPTION it opens.
+  - **The possession read** (`AIPossessionValue`). In the zone a spot is worth
+    the best of the shot from it, a drive in, and the best entry still ahead
+    skated to without crossing the line; outside it, the best entry. A drive
+    runs straight at the net or cuts in to the top of the slot, whichever ends
+    on the better shot × its keep, credited where it is first covered. An entry
+    is a crossing anywhere along the line (`CROSSINGS`), worth the better of the
+    shot and the drive from a stride inside × the delay × the odds the puck is
+    kept along all of it — the skate to the line, the contest at it
+    (`_line_keep`) and the drive in — the worst of the three, so each defender
+    is charged once. An entry's shot and drive are read against the defence as
+    it will be (`FOLLOW_UP_TIMES`), priced once per fill and shared across a
+    side's reads (`AISharedEntries`), bounded by their worth on empty ice until
+    then. The defence is read in numbers (`AIDefencePairing`): a defender
+    paired to another attacker rides him; the holder's own and any spare play
+    the puck (`AIDefenderProjection`). Every shot is against a keeper who
+    tracked the play (`AIShotValue.set_keeper`). In the zone currency an entry
+    counts by what it makes of the puck against the defence as it will be —
+    its shot, its drive, or the pass to a teammate onside behind it who follows
+    in (`_mate_pass`) — in units of the mean crossing on empty ice
+    (`_open_mean`, fixed, so a set defence makes every entry worth less rather
+    than moving the yardstick): the middle, or the boards with a man driving
+    the middle, counts for more than the boards alone, and a regroup that lets
+    the defence get home counts for less. The in-zone read itself (`at`,
+    `entry_at`) leaves the pass out: the carrier's pass search prices it there.
+    Not modelled: the pace he crosses with (the drive from an entry starts from
+    rest).
   - *Outside it* the carry searches two steps (a rolled move, then each move
     again from where it ends, for the `CARRY_PLY2_WIDTH` best: shoot, pass or
     carry on), pricing the defence it meets on each. Where a line stops outside
