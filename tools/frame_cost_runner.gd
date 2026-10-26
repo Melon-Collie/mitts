@@ -51,7 +51,8 @@ class Bracket extends Node:
 var _head: Bracket = null
 
 
-func begin(skaters: int, frames: int) -> void:
+func begin(skaters: int, frames: int, parallel: bool = false) -> void:
+	Skater.parallel_render = parallel
 	await _start_match(clampi(skaters, 2, 10))
 	_install_brackets()
 	await _play_for(_SETTLE_SEC)
@@ -180,6 +181,7 @@ func _sample(frames: int) -> Dictionary:
 		"tick_ms": tick_ms,
 		"at_90fps_ms": proc_ms + tick_ms * float(Engine.physics_ticks_per_second) / 90.0,
 		"native": NativeKernels.summary(),
+		"parallel": Skater.parallel_render,
 		"cpu_render_ms": _mean(render) if drawn else -1.0,
 		"draw_calls": _mean(draws) if drawn else -1.0,
 		"probe_us": _probe_sections(),

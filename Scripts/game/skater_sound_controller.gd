@@ -84,6 +84,10 @@ var _foot_players: Array[AudioStreamPlayer3D] = []
 
 func setup(skater: Skater, controller: SkaterController) -> void:
 	_skater = skater
+	# A parallel skater's group would take these players' internal physics to a
+	# worker, and AudioStreamPlayer3D queries the physics space there.
+	if Skater.parallel_render:
+		process_thread_group = Node.PROCESS_THREAD_GROUP_MAIN_THREAD
 	_controller = controller
 	_brake_player = _make_player("res://Sounds/skate_brake.wav")
 	_brake_player.volume_db = SoundManagerScript.level_db(SoundManager.Sound.SKATE_BRAKE)
@@ -92,8 +96,10 @@ func setup(skater: Skater, controller: SkaterController) -> void:
 	_foot_players = [_make_player(""), _make_player("")]
 	skater.carry_caught.connect(_on_carry_caught)
 	skater.carry_face_changed.connect(_on_carry_face_changed)
-	skater.skate_pushed.connect(_on_skate_pushed)
-	skater.skate_touched.connect(_on_skate_touched)
+	# Deferred: the gait emits these from the render pass, which a parallel
+	# skater runs on a worker (Skater.parallel_render); the players are main's.
+	skater.skate_pushed.connect(_on_skate_pushed, CONNECT_DEFERRED)
+	skater.skate_touched.connect(_on_skate_touched, CONNECT_DEFERRED)
 
 
 func _enter_tree() -> void:

@@ -1,8 +1,9 @@
 # Parallel render pass — plan
 
 Run every skater's (and keeper's) per-frame cosmetic pass on worker threads at
-once, instead of one after another on the main thread. Status: **proposed; a
-spike comes first** (step 1 below).
+once, instead of one after another on the main thread. Status: **spiked; blocked
+on an engine race** (*What the spike found*, below). The spike is in the tree behind
+`Skater.parallel_render`, off by default; `tools/frame_cost.gd --parallel` runs it.
 
 ## Why this lever
 
@@ -71,13 +72,14 @@ own subtree change.
 ## Design
 
 1. **The skater subtree is its own sub-thread group**, set in code in
-   `Skater._ready` (no `.tscn` edit), with `process_thread_group_order = 1`.
+   `Skater._init`, before it enters the tree (no `.tscn` edit), with
+   `process_thread_group_order = 1`.
    `GameCamera` and the rest of the main-thread scene still process first.
 2. **The skater's tick stays on main, in its current slot.**
    `Skater._physics_process` integrates and resolves collisions against other
    skaters, so it cannot run on a worker. The skater stops physics-processing
-   itself, and an order-0 main-thread driver calls the same step in the same
-   order. The step must keep its place: after `GameManager`'s dispatch, before
+   itself, and a main-thread node beside it (`SkaterTickProxy`) calls the same
+   step in the same slot. The step must keep its place: after `GameManager`'s dispatch, before
    the puck (+1) and the capture hook (+2), and in today's order relative to
    the keeper controllers, which read live skater positions. A test pins that
    order before and after the change. Doing this first is what makes the rest
@@ -113,34 +115,86 @@ that gameplay reads (the held poses' frame drop, the faceoff address, the hip
 yaw channels) are computed by the same code from the same inputs, in the same
 frame, before the next tick.
 
-## Risks to settle in the spike
+## What the spike found
 
-- **Release builds may not check the thread guards.** They are debug-build
-  errors, so an illegal write that the suite never exercises would race
-  silently in an export. The parallel path needs a GUT test that runs real
-  frames under a sub-thread group and fails on any engine error.
-- **Script calls into the controller.** `render_pose_update` is a `Callable`
-  into the controller, a main-thread node. Calling GDScript methods is not
-  guarded, but any engine method the controller calls on its own node during
-  the pass would be. The spike lists these.
-- **Native kernels writing bones from a worker.** `NativeArmRig` and
-  `NativeHemFlaps` call `Skeleton3D` through the extension API. Inside the
-  skater's own group that should be the same as a GDScript write; the spike
-  confirms it.
-- **The headless suite drives `_process` directly on main.** The existing tests
-  keep passing but prove nothing about the threads. The new test is what proves
-  the parallel path.
+Built for skaters only (design steps 1–4), run in a headless 10-skater bot match
+and in a GUT test that drives three parallel skaters through real frames.
+
+What worked, and is in the tree:
+
+- **The tick proxy.** `SkaterTickProxy` sits right after its skater and runs
+  `Skater.physics_tick` there on the main thread, so the tick keeps its slot.
+  A parallel skater's own `_physics_process` is a no-op;
+  `set_physics_process(false)` (the replay viewer's) still stops the tick,
+  because the proxy checks it.
+- **The group has to be set before the skater enters the tree.** On a node
+  already in the tree, 4.6.2's `_add_tree_to_process_thread_group` updates
+  the owner of that node alone. Its children are re-added under their old
+  owner, and the guard then refused the render pass every write below
+  `MeshRoot`. So `Skater._init` sets it.
+- **Camera culling** readies the shared frustum on the main thread
+  (`SkaterCameraCull.prepare`, from the proxy's `_process`). Workers only read it.
+- **Audio.** `AudioStreamPlayer3D` queries the physics space in its internal
+  physics step, which is main-thread only; that crashed the first run. In
+  parallel mode the skater's `SkaterSoundController` is its own main-thread
+  group. The two skate sounds are connected deferred, and a deferred signal
+  emitted on a worker is handled on the main thread the same frame.
+- **`Node3D.visible` is main-thread only.** The world HUD writes it through
+  `SkaterHUDCoordinator._show`, which defers the write off the main thread.
+
+Measured, three alternating runs a mode, 10 skaters, 4 cores (one busy with the
+AI worker): the process step fell from 5.6 to 4.4 ms a frame (−21%), and the main
+thread at 90 fps from 13.9 to 13.0 ms.
+
+**The blocker: physics interpolation's bookkeeping is not thread-safe.** In
+4.6.2 every Node3D transform write calls `SceneTreeFTI::_node_3d_notify_set_xform`,
+which pushes the node onto shared `LocalVector`s (`tick_xform_list`,
+`frame_xform_list`) without taking `data.mutex`. Two skaters writing a node
+transform on two workers corrupt the heap: `realloc(): invalid next size`, or a
+SIGSEGV on the main thread a frame later. The test crashed in 4 of 10 runs with
+interpolation on, and in 0 of 10 with `SceneTree.physics_interpolation` off.
+The game needs interpolation (root `CLAUDE.md`, the render clock), so in
+parallel mode **no Node3D transform may be written on a worker**. That covers:
+
+- the stick, knob and blade meshes;
+- the bottom-hand marker;
+- the held poses' frame drop;
+- the knockdown's `MeshRoot`;
+- a remote's lower-body lag;
+- the world HUD's labels;
+- the VFX emitters.
+
+It also covers one write the engine makes for us. The skeleton's update runs as
+`notify_deferred_thread_group`, on the skater's worker, and its
+`skeleton_updated` signal moves the head's `BoneAttachment3D` (the face gear and
+hair).
+
+### The ways forward
+
+1. **Split the pass at the node writes.** Workers keep the gait, spine, legs,
+   head and hem, which write only bones. An order-2 main-thread pass after them
+   (`process_thread_group_order = 2`) does the stick, the arms (which read the
+   stick), the hold, the HUD and the VFX. The worker side's few node writes are
+   recorded and applied there. The head attachment becomes a placement on main.
+   That puts roughly 60% of the pass in parallel. Its gate is a stress run: the
+   threaded test and a full bot match, many times over, with no crash.
+2. **A pure-data pose buffer.** Workers compute and write nothing; main writes
+   every bone and node. The safest version, and the largest refactor: the rigs
+   and the arm, hem and leg kernels all write bones themselves today.
+3. **Do not thread; port to C++ instead** (the blade IK's orchestration, the
+   keeper's `_seat`). No exposure to the engine's threading at all.
+
+The race is an engine bug worth reporting upstream: thread groups are a
+documented feature, and physics interpolation is on by default in new 3D
+projects.
 
 ## Steps
 
-1. **Spike** (throwaway branch): steps 1–4 of the design for skaters only, run in
-   a bot 5v5. Done when there are no guard errors in a debug run and the user
-   measures the frame on an export build.
-2. **A render-pass probe** beside `HostCostProbe`: wall time of the sub-thread
+1. ~~Spike~~ — done, above.
+2. Choose a way forward.
+3. **A render-pass probe** beside `HostCostProbe`: wall time of the sub-thread
    phase and the sum of per-skater passes. Their ratio is the parallelism
    actually achieved, in the F3 panel and the digest.
-3. The design, step by step, each with its test: the tick driver and its order
-   test first.
 4. The keeper.
 
 ## Related levers, decided separately

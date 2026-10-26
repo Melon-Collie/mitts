@@ -204,10 +204,10 @@ func update(delta: float) -> void:
 		if not _hidden_for_replay:
 			_hidden_for_replay = true
 			_ring_visible = false
-			_name_label.visible = false
-			if _self_beacon != null: _self_beacon.visible = false
+			_show(_name_label, false)
+			if _self_beacon != null: _show(_self_beacon, false)
 			if _ping_label != null:
-				_ping_label.visible = false
+				_show(_ping_label, false)
 				_ping_bubble_time_left = 0.0
 		return
 	if _hidden_for_replay:
@@ -216,7 +216,7 @@ func update(delta: float) -> void:
 		# are gated by their own show logic (driven from skater state) and
 		# re-enable themselves as needed.
 		_ring_visible = true
-		_name_label.visible = true
+		_show(_name_label, true)
 		_update_beacon_visibility()
 
 	_refresh_screen_down_cache_if_camera_changed()
@@ -257,7 +257,7 @@ func update(delta: float) -> void:
 	if _ping_label != null and _ping_bubble_time_left > 0.0:
 		_ping_bubble_time_left -= delta
 		if _ping_bubble_time_left <= 0.0:
-			_ping_label.visible = false
+			_show(_ping_label, false)
 		else:
 			_ping_label.global_position = Vector3(
 					render_pos.x,
@@ -327,7 +327,7 @@ func show_ping_bubble(text: String) -> void:
 		_ping_label.outline_size = 10
 		_ping_label.pixel_size = 0.005
 		_ping_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		_ping_label.visible = false
+		_show(_ping_label, false)
 		_skater.add_child(_ping_label)
 	_ping_label.text = text
 	_ping_label.modulate = Color(1.0, 1.0, 1.0, 1.0)
@@ -337,7 +337,7 @@ func show_ping_bubble(text: String) -> void:
 			render_pos.x,
 			render_pos.y + _PING_BUBBLE_HOVER_OFFSET,
 			render_pos.z)
-	_ping_label.visible = true
+	_show(_ping_label, true)
 	_ping_bubble_time_left = _PING_BUBBLE_HOLD_S + _PING_BUBBLE_FADE_S
 
 
@@ -408,7 +408,7 @@ func _update_beacon_visibility() -> void:
 		PlayerPrefs.BEACON_MODE_ALWAYS: gate = true
 		PlayerPrefs.BEACON_MODE_SMART:  gate = _beacon_crowded or ghosted
 		_:                              gate = false
-	_self_beacon.visible = (_self_beacon_active
+	_show(_self_beacon, _self_beacon_active
 			and gate
 			and not _hidden_for_replay
 			and not _force_world_hud_hidden)
@@ -427,7 +427,7 @@ func _ensure_self_beacon() -> void:
 	# unlike it, carrying a wall-clock bob and pulse the interpolator would chew
 	# into a stutter by resampling them at the tick rate.
 	_self_beacon.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	_self_beacon.visible = false
+	_show(_self_beacon, false)
 	_skater.add_child(_self_beacon)
 
 	var beacon_outline := MeshInstance3D.new()
@@ -502,10 +502,10 @@ func set_world_hud_hidden(hidden: bool) -> void:
 	if hidden:
 		_hidden_for_replay = true
 		_ring_visible = false
-		_name_label.visible = false
+		_show(_name_label, false)
 		_slapper_indicator_on = false
 		_slapper_arrow_on = false
-		if _self_beacon != null: _self_beacon.visible = false
+		if _self_beacon != null: _show(_self_beacon, false)
 
 
 func update_slapper_indicator_convergence(ratio: float) -> void:
@@ -626,7 +626,7 @@ func apply_ghost(ghost: bool) -> void:
 	# via _update_beacon_visibility().
 	var hud_hidden: bool = _force_world_hud_hidden or _hidden_for_replay
 	_ring_visible = not ghost and not hud_hidden
-	_name_label.visible = not ghost and not hud_hidden
+	_show(_name_label, not ghost and not hud_hidden)
 	# The slapper indicator reads _skater.is_ghost directly (see slapper_visible),
 	# so ghosting needs no latch of its own here.
 	# set_ghost() writes _skater.is_ghost before calling here, so the gate sees
@@ -678,3 +678,15 @@ func _make_beacon_material(color: Color, render_priority: int) -> StandardMateri
 	mat.render_priority = render_priority
 	mat.albedo_color = color
 	return mat
+
+
+# Node3D.visible may be written only on the main thread, and a parallel skater
+# (Skater.parallel_render) runs this coordinator on a worker; there the write
+# waits for main. Unchanged writes are skipped either way.
+static func _show(node: Node3D, on: bool) -> void:
+	if node.visible == on:
+		return
+	if OS.get_thread_caller_id() == OS.get_main_thread_id():
+		node.visible = on
+	else:
+		node.set_deferred("visible", on)

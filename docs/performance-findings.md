@@ -283,8 +283,9 @@ not change the scaling anyway.
   and the hem cloth still step every visible frame.
 - **Run the render pass on worker threads** — each skater's and keeper's
   `_process` in its own process thread group, so the ~half of a skater's frame
-  that is cosmetic spreads across cores. Proposed, spike first:
-  `docs/parallel-render-pass-plan.md`.
+  that is cosmetic spreads across cores. Spiked: −21% on the process step, but
+  blocked by an engine race (physics interpolation's lists are unlocked against
+  worker-thread transform writes). `docs/parallel-render-pass-plan.md`.
 - **Lowering the physics rate (issue #606, 120 → 90 Hz)** would cut every
   per-tick item at once, ~0.7 ms/frame. **Rejected**: the broadcast cadence is
   counted in physics ticks, so it trades responsiveness over ping for frame rate,
