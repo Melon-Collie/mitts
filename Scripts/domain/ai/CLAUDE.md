@@ -39,9 +39,7 @@ of scoring; in the neutral zone the odds of getting into theirs with the puck
 (`p_exit`). Each zone's goal is the next line with the puck, and what being past
 it is worth multiplies every option alike, so nothing is measured or floored. A
 spot past the next line is worth its keep; one behind it is the chain (out, then
-in from where it gets out). Shots outside their zone are dead and score nothing,
-unless their keeper is off his net: then a shot from anywhere is live and the
-currency is scoring everywhere.
+in from where it gets out). Shots outside their zone are dead and score nothing.
 
 The turnover COST is in the same currency as the gains it is subtracted from
 (`AICarrierField.turnover_cost`): in their zone a loss is credited back by the

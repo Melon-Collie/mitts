@@ -53,7 +53,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	# Every man is weighed in the currency of where their play is.
 	var play_ref: Vector3 = AIRoleReads.resolve_defensive_play_ref(ctx)
 	var objective: int = poss.objective_at(
-			play_ref if play_ref.is_finite() else search_center, our_goalie_pos)
+			play_ref if play_ref.is_finite() else search_center)
 	var memo: Dictionary[int, float] = ctx.threat_shoot_base_by_opp
 	var opp_ids: Array[int] = ctx.scratch_opp_ids
 	var bases: Array[float] = ctx.scratch_option_bases

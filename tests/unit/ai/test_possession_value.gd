@@ -234,14 +234,12 @@ func test_a_carrier_threatens_at_least_his_shot_and_his_possession() -> void:
 
 func test_the_currency_is_where_the_decider_plays() -> void:
 	var v: AIPossessionValue = _defence([] as Array[Vector3], [])
-	assert_eq(v.objective_at(Vector3(0.0, 0.0, 16.0), OUR_KEEPER), SCORE,
+	assert_eq(v.objective_at(Vector3(0.0, 0.0, 16.0)), SCORE,
 			"in the attacked zone, scoring")
-	assert_eq(v.objective_at(Vector3(0.0, 0.0, 0.0), OUR_KEEPER),
+	assert_eq(v.objective_at(Vector3(0.0, 0.0, 0.0)),
 			AIPossessionValue.Objective.ENTER, "in the neutral zone, getting in")
-	assert_eq(v.objective_at(Vector3(0.0, 0.0, -16.0), OUR_KEEPER),
+	assert_eq(v.objective_at(Vector3(0.0, 0.0, -16.0)),
 			AIPossessionValue.Objective.EXIT, "in his own zone, getting out")
-	assert_eq(v.objective_at(Vector3(0.0, 0.0, -16.0), Vector3(0.0, 0.0, 10.0)), SCORE,
-			"with the keeper off his net, a shot from anywhere: scoring")
 
 
 func test_outside_the_zone_a_man_threatens_his_odds_of_getting_in() -> void:

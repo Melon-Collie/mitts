@@ -77,7 +77,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	AIRoleReads.collect_feed_defence(ctx)
 	var origin: Vector3 = AIRoleReads.feed_origin(ctx, carrier_pos)
 	# In the currency of our carrier, who decides the feed.
-	var objective: int = possession.objective_at(origin, AICarrierField.goalie_now(ctx))
+	var objective: int = possession.objective_at(origin)
 	var pick: AIFeedStationPick = ctx.scratch_feed_pick
 	pick.reset()
 	for c: Vector3 in candidates:

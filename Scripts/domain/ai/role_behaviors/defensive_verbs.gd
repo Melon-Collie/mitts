@@ -34,7 +34,7 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 	var poss: AIPossessionValue = AIRoleReads.defence_possession(ctx, teammates)
 	var self_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 
-	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
+	var objective: int = poss.objective_at(carrier_pos)
 
 	var search_center: Vector3 = AIThreatAssignment.cover_anchor(man_pos, our_net)
 	var candidates: Array[Vector3] = AIStationSearch.generate_candidates_around(ctx.self_pos, search_center)
@@ -212,7 +212,7 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
 		out_bases: Array[float]) -> void:
 	out_bases.clear()
-	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
+	var objective: int = poss.objective_at(carrier_pos)
 	out_bases.append(poss.threat_of_carrier(carrier_pos, carrier_vel, our_goalie_pos,
 			objective))
 	for opp_pos: Vector3 in opp_teammates:
@@ -236,7 +236,7 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 		candidate_vel: Vector3, self_caps: AISkaterCaps, carrier_pos: Vector3,
 		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
 		bases: Array[float]) -> float:
-	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
+	var objective: int = poss.objective_at(carrier_pos)
 	poss.push_defender(candidate, candidate_vel, self_caps)
 	var best: float = 0.0
 	var used: int = 0

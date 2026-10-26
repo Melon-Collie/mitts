@@ -118,7 +118,7 @@ static func _decide_mid_at(ctx: RoleContext, carrier_pos: Vector3,
 	# AIDefensiveVerbs.carrier_option_bases).
 	var bases: Array[float] = ctx.scratch_option_bases
 	bases.clear()
-	var objective: int = poss.objective_at(carrier_pos, our_goalie_pos)
+	var objective: int = poss.objective_at(carrier_pos)
 	for opp_pos: Vector3 in opp_teammates:
 		bases.append(poss.threat_of_feed(carrier_pos, opp_pos, Vector3.ZERO,
 				our_goalie_pos, objective))

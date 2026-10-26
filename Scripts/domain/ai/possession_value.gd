@@ -264,14 +264,12 @@ func p_enter(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO,
 
 # What the side fill() priced is after with the puck, by where the man deciding
 # for it plays (docs/zone-currency-plan.md): score in the attacked zone, get into
-# it from the neutral zone, get out of its own. A keeper off his net makes a shot
-# from anywhere live, so then it is scoring everywhere.
+# it from the neutral zone, get out of its own.
 enum Objective { SCORE, ENTER, EXIT }
 
 
-func objective_at(decider: Vector3, keeper: Vector3 = Vector3.INF) -> int:
-	if AIActionScoring.in_offensive_zone(decider, _goal) or (keeper.is_finite()
-			and keeper.distance_to(_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M):
+func objective_at(decider: Vector3) -> int:
+	if AIActionScoring.in_offensive_zone(decider, _goal):
 		return Objective.SCORE
 	if _in_own_zone(decider):
 		return Objective.EXIT

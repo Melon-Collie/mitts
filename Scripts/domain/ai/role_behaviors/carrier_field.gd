@@ -154,7 +154,7 @@ func fill(ctx: RoleContext) -> void:
 	_ours.fill(ctx.attacking_goal_pos, opponents, opponent_vels, opponent_caps,
 			AIActionScoring.in_offensive_zone(ctx.self_pos, ctx.attacking_goal_pos),
 			our_defenders, our_defender_vels, ctx.self_pos)
-	objective = _ours.objective_at(ctx.self_pos, goalie_now(ctx))
+	objective = _ours.objective_at(ctx.self_pos)
 	_tag_up_s = _tag_up_time(ctx) if ctx.zone_entry_blocked else 0.0
 	var collector: int = -1
 	for i: int in opponents.size():

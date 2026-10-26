@@ -308,7 +308,7 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	var our_net := Vector3(0.0, 0.0, _own_goal_z)
 	var our_goalie_pos: Vector3 = _resolve_our_goalie_pos(snapshot)
 	_open_possession.fill(our_net, _no_skaters, _no_skaters, [])
-	var objective: int = _open_possession.objective_at(play_ref, our_goalie_pos)
+	var objective: int = _open_possession.objective_at(play_ref)
 	var men: Array[int] = []
 	var man_pos: Dictionary = {}
 	var man_value: Dictionary = {}
@@ -395,7 +395,7 @@ func _refresh_threat_base_memo(snapshot: WorldSnapshot) -> void:
 		var carrier_pid: int = snapshot.puck_state.carrier_peer_id
 		if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
 			play_ref = snapshot.skater_states[carrier_pid].position
-	var objective: int = _memo_possession.objective_at(play_ref, our_goalie_pos)
+	var objective: int = _memo_possession.objective_at(play_ref)
 	for pid: int in snapshot.skater_states:
 		if _team_id_by_peer.get(pid, -1) == team_id:
 			continue
