@@ -152,11 +152,21 @@ func _sample(frames: int) -> Dictionary:
 	var tick_prev: int = Engine.get_physics_frames()
 	_head.proc_us = 0
 	_head.phys_us = 0
+	_probe_sums.resize(HostCostProbe.SECTION_COUNT)
+	_probe_sums.fill(0.0)
+	_probe_windows = 0
+	var window_seen: int = HostCostProbe.windows
+	var window_live: bool = false
 	while proc.size() < frames:
 		await get_tree().process_frame
 		var t: int = Time.get_ticks_usec()
 		var tick: int = Engine.get_physics_frames()
 		var live: bool = _live()
+		if HostCostProbe.windows != window_seen:
+			_take_probe_window(window_live and HostCostProbe.windows == window_seen + 1)
+			window_seen = HostCostProbe.windows
+			window_live = true
+		window_live = window_live and live
 		if live:
 			wall.append(float(t - t_prev) / 1000.0)
 			proc.append(float(_head.proc_us) / 1000.0)
@@ -188,14 +198,33 @@ func _sample(frames: int) -> Dictionary:
 	}
 
 
-# HostCostProbe's last window, per section: where the tick's time went.
-static func _probe_sections() -> Dictionary:
-	var out: Dictionary = {}
-	if not HostCostProbe.has_data():
-		return out
+# HostCostProbe's windows, per section: where the tick's time went. A window
+# counts only if it was wholly live play and began after sampling did; a single
+# window can land on a faceoff or a goal replay, where no bot steps at all.
+var _probe_sums := PackedFloat64Array()
+var _probe_windows: int = 0
+
+
+func _take_probe_window(counts: bool) -> void:
+	if not counts:
+		return
 	for s: int in HostCostProbe.SECTION_COUNT:
-		out[HostCostProbe.SECTION_NAMES[s].strip_edges()] = snappedf(HostCostProbe.mean_us(s), 0.1)
-	out["tick total"] = snappedf(HostCostProbe.tick_total_mean_us(), 0.1)
+		_probe_sums[s] += HostCostProbe.mean_us(s)
+	_probe_windows += 1
+
+
+func _probe_sections() -> Dictionary:
+	var out: Dictionary = {}
+	if _probe_windows == 0:
+		return out
+	var total: float = 0.0
+	for s: int in HostCostProbe.SECTION_COUNT:
+		var mean: float = _probe_sums[s] / float(_probe_windows)
+		out[HostCostProbe.SECTION_NAMES[s].strip_edges()] = snappedf(mean, 0.1)
+		if s in HostCostProbe.MAIN_THREAD_SECTIONS:
+			total += mean
+	out["tick total"] = snappedf(total, 0.1)
+	out["windows"] = _probe_windows
 	return out
 
 

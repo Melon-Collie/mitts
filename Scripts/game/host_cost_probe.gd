@@ -122,6 +122,8 @@ static var _pub_mean_us: PackedFloat64Array = _new_bins()
 static var _pub_max_us: PackedFloat64Array = _new_bins()
 static var _pub_worker_busy_pct: float = 0.0
 static var _pub_ticks: int = 0
+# Windows published since the last reset, so a reader can tell a new one.
+static var windows: int = 0
 
 # Worst single tick since the session began. A window max decays as soon as the
 # window rolls; this is the one that survives to be pasted into a bug report.
@@ -172,6 +174,7 @@ static func end_tick() -> void:
 		_max_us[s] = 0.0
 	_pub_worker_busy_pct = 100.0 * float(_worker_busy_ticks) / float(_ticks)
 	_pub_ticks = _ticks
+	windows += 1
 	_ticks = 0
 	_worker_busy_ticks = 0
 
@@ -261,3 +264,4 @@ static func reset() -> void:
 	_worker_busy_ticks = 0
 	_pub_ticks = 0
 	_pub_worker_busy_pct = 0.0
+	windows = 0
