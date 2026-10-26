@@ -286,7 +286,7 @@ func _line_keep(crossing: Vector3, t: float, carrier_pos: Vector3,
 		var v: Vector3 = _defender_vels[k]
 		var depth: float = (p.z - natural.z) * signf(_goal.z)
 		if depth <= 0.0 or absf(to_net.z) < 0.001:
-			_line_defence.append(project_defender(p, v, commit, carrier_pos.z, _goal.z,
+			_line_defence.append(project_defender(p, v, commit, carrier_pos, _goal,
 					_caps_of(k)))
 			_line_vels.append(projected_vel)
 			continue
@@ -315,39 +315,43 @@ func _natural_crossing(pos: Vector3, vel: Vector3) -> Vector3:
 
 
 # Where a defender at `pos` skating at `vel`, built as `caps` (null: the league
-# build), is `t` from now, against a carrier at depth `carrier_z` attacking the
-# net at depth `goal_z`:
+# build), is `t` from now, against a carrier at `carrier` attacking the net at
+# `goal`. Ahead of the carrier means goal-side of him along his line to that net
+# (a man level in depth but in the middle is between a wide carrier and the net):
 #
-#   in front of the carrier, skating toward that net — backing off the carry:
-#     backing off keeps his gap, and stopping is the one choice that leaves him
-#     in the way, so he slides to a stop and stays;
-#   in front of him otherwise — he carries on as he is until he is level with
-#     the carrier, and is behind him from then;
+#   ahead, skating toward that net — backing off the carry: backing off keeps
+#     his gap, and stopping is the one choice that leaves him in the way, so he
+#     slides to a stop and stays;
+#   ahead otherwise — he carries on as he is until he is level with the carrier
+#     on that line, and is behind him from then;
 #   behind him — he backchecks (_backcheck).
 #
 # His velocity then is left in projected_vel.
-static func project_defender(pos: Vector3, vel: Vector3, t: float, carrier_z: float,
-		goal_z: float, caps: AISkaterCaps = null) -> Vector3:
+static func project_defender(pos: Vector3, vel: Vector3, t: float, carrier: Vector3,
+		goal: Vector3, caps: AISkaterCaps = null) -> Vector3:
 	projected_vel = vel
 	if t <= 0.0:
 		return pos
-	var attack_z: float = signf(goal_z)
-	var ahead: float = (pos.z - carrier_z) * attack_z
+	var line := Vector3(goal.x - carrier.x, 0.0, goal.z - carrier.z)
+	var line_len: float = line.length()
+	var d: Vector3 = line / line_len if line_len > 0.001 \
+			else Vector3(0.0, 0.0, signf(goal.z))
+	var ahead: float = (pos.x - carrier.x) * d.x + (pos.z - carrier.z) * d.z
 	if ahead > 0.0:
-		if vel.z * attack_z > 0.0:
+		var toward: float = vel.x * d.x + vel.z * d.z
+		if toward > 0.0:
 			var speed: float = Vector2(vel.x, vel.z).length()
 			var t_stop: float = speed / AIArrival.REVERSAL_BRAKE_DECEL_M_S2
 			var tb: float = minf(t, t_stop)
 			var slide: float = speed * tb - 0.5 * AIArrival.REVERSAL_BRAKE_DECEL_M_S2 * tb * tb
 			projected_vel = Vector3(vel.x, 0.0, vel.z) * (1.0 - tb / t_stop)
 			return pos + Vector3(vel.x, 0.0, vel.z) * (slide / speed)
-		var closing: float = -vel.z * attack_z
-		var t_level: float = ahead / closing if closing > 0.0 else INF
+		var t_level: float = ahead / -toward if toward < 0.0 else INF
 		if t <= t_level:
 			return AITrajectory.predict_at(pos, vel, t)
 		pos = pos + vel * t_level
 		t -= t_level
-	return _backcheck(pos, vel, t, goal_z, caps)
+	return _backcheck(pos, vel, t, goal.z, caps)
 
 
 # project_defender's other result: the projected man's velocity.
@@ -393,7 +397,7 @@ func _caps_of(k: int) -> AISkaterCaps:
 # then, less — for a man outside the zone — the men inside the line, who are the
 # line contest's (_line_keep) and are charged there alone.
 func _skate_defence_for(pos: Vector3, start_s: float, in_zone: bool) -> void:
-	_project(_projected, _projected_vels, start_s, pos.z)
+	_project(_projected, _projected_vels, start_s, pos)
 	_skate_defence.clear()
 	_skate_vels.clear()
 	_skate_caps.clear()
@@ -523,7 +527,7 @@ const ENTRY_FIELDS: int = 3
 
 
 func _price_entry(spot: Vector3, out: Array[float], base: int, t: float) -> void:
-	_project(_follow_defence, _follow_vels, t, spot.z)
+	_project(_follow_defence, _follow_vels, t, spot)
 	out[base] = _shot_vs(spot, _follow_defence)
 	out[base + 2] = _drive_keep(spot, t)
 	out[base + 1] = _drive_reached_value
@@ -531,11 +535,11 @@ func _price_entry(spot: Vector3, out: Array[float], base: int, t: float) -> void
 		out[base + 1] = 0.0
 
 
-# Every defender `t` from now against a carrier at depth `carrier_z`
-# (project_defender), into `out` and his velocity then into `out_vels`,
-# index-matched to the read's defenders.
+# Every defender `t` from now against a carrier at `carrier` (project_defender, or
+# riding his man, AIDefencePairing), into `out` and his velocity then into
+# `out_vels`, index-matched to the read's defenders.
 func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
-		carrier_z: float) -> void:
+		carrier: Vector3) -> void:
 	out.clear()
 	out_vels.clear()
 	for k: int in _defenders.size():
@@ -543,8 +547,8 @@ func _project(out: Array[Vector3], out_vels: Array[Vector3], t: float,
 			out.append(_pairing.ride_at(k, t))
 			out_vels.append(AIDefencePairing.ride_vel)
 		else:
-			out.append(project_defender(_defenders[k], _defender_vels[k], t, carrier_z,
-					_goal.z, _caps_of(k)))
+			out.append(project_defender(_defenders[k], _defender_vels[k], t, carrier,
+					_goal, _caps_of(k)))
 			out_vels.append(projected_vel)
 
 
@@ -610,7 +614,7 @@ func _drive_keep(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
 	var defence: Array[Vector3] = _defenders
 	var defence_vels: Array[Vector3] = _defender_vels
 	if start_s > 0.0:
-		_project(_projected, _projected_vels, start_s, from.z)
+		_project(_projected, _projected_vels, start_s, from)
 		defence = _projected
 		defence_vels = _projected_vels
 	var t: float = AIArrival.time_to_arrive_caps(from, target, vel, man_caps)
@@ -624,7 +628,7 @@ func _drive_keep(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
 				defence_vels, _defender_caps, true, true)
 		if reached != target:
 			t = AIArrival.time_to_arrive_caps(from, reached, vel, man_caps)
-	_project(_reached_defence, _reached_vels, start_s + t, from.z)
+	_project(_reached_defence, _reached_vels, start_s + t, from)
 	_drive_reached_value = _shot_vs(reached, _reached_defence) \
 			* AIActionScoring.delay_discount(t)
 	return keep

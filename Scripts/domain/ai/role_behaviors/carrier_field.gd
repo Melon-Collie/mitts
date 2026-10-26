@@ -87,9 +87,9 @@ var holds := AIShotHolds.new()
 var drive_in_reached: Vector3 = Vector3.INF
 # Projection scratch for receiver_drive_in_value: opponents at the start of the
 # drive, and at its end.
-# The way the carrier attacks along z, and where he is along it (fill).
+# The way the carrier attacks along z, where he is, and the net he attacks (fill).
 var _attack_z: float = -1.0
-var _carrier_z: float = 0.0
+var _carrier_pos: Vector3 = Vector3.ZERO
 var _goal: Vector3 = Vector3.ZERO
 # _tag_up_time while a teammate owes a tag-up, else 0.
 var _tag_up_s: float = 0.0
@@ -106,7 +106,7 @@ var _their_attacker_vels: Array[Vector3] = []
 
 func fill(ctx: RoleContext) -> void:
 	_attack_z = signf(ctx.attacking_goal_pos.z)
-	_carrier_z = ctx.self_pos.z
+	_carrier_pos = ctx.self_pos
 	_goal = ctx.attacking_goal_pos
 	opponents.clear()
 	opponent_vels.clear()
@@ -221,7 +221,7 @@ func project_opponents(time_s: float, out_buf: Array[Vector3]) -> void:
 	out_buf.clear()
 	for i: int in opponents.size():
 		out_buf.append(AIPossessionValue.project_defender(opponents[i], opponent_vels[i],
-				time_s, _carrier_z, _attack_z, opponent_caps[i]))
+				time_s, _carrier_pos, _goal, opponent_caps[i]))
 
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`,

@@ -362,6 +362,78 @@ staying out of it. Open: what a real carrier is carrying in FOR at even
 strength, and whether the open man's credit (agreed, not yet built) is still
 wanted now that the 3-on-2s carry.
 
+### The temporal audit
+
+Every read checked for the world being sampled at a different moment from the
+event it prices, or two competing options priced at different moments. Found,
+ranked within each layer; [x] done.
+
+**Evaluators and the carrier's compete**
+- [x] Defenders "ahead" of a carrier judged by depth alone: a man level in z but
+  in the middle read as beaten by a wide carrier, so a step either way flipped
+  the in-zone value 0.35 → 0.04. Now goal-side along the carrier's line to the
+  net (`AIPossessionValue.project_defender`).
+- [x] `AICarrierField.project_opponents` passed the attack's sign as the goal's
+  depth, so the carrier's backcheckers skated for the far blue line.
+- [ ] `project_opponents` projects positions but hands the reach reads current
+  velocities (ply-2 `_rolled_safety`, the carry-on, the wheel's second leg,
+  `receiver_drive_in_value`): a man projected to a stop still moves at 6 m/s.
+- [ ] A defender backing off ahead is projected to stop dead within ~0.7 s and
+  stand: a wall at every follow-up time, the main cliff in time.
+- [ ] Inside `carry_safety` the puck moves at a uniform `dist/T` and the
+  mid-sample is the midpoint at T/2, while T ramps: from rest the pursuit time
+  is ~28% short.
+- [ ] The keep bands (0.5–1 m) are narrow against reach growing ~10 m/s per
+  second of horizon, so reads are cliff-shaped in time; widen by the arrival
+  clock's calibrated error over the horizon, as `AILaneReach` does.
+- [ ] `delay_discount` charged on reads whose defence is already projected to
+  that time (entries, drives, the counter cost): time paid twice.
+- [ ] Stand-still outside the zone reads the defence now while every move reads
+  it at 1 s; its safety over 0.4 s against the moves' 1 s.
+- [ ] A destination reached from a move's end keeps its straight-carry value;
+  the wheel prices its play-on at 0 s after a ~3 s trip.
+- [ ] The developing-feed hold: priced as if fired now, the wait uncharged, a
+  different pass model from `_pass_ev`, the spot never converging.
+- [ ] The pass clock leaves out the windup and the facing rotation.
+- [ ] Shoot-now holds that need a pull read the defence and keeper at the
+  windup only.
+- [ ] The pass option values receivers and lanes frozen now for a release ≥1 s
+  later (the 0.8 haircut stands in for it).
+- [ ] `score_pass_value` uses one defender array for the flight and the catch;
+  `threat_of_feed` / `_shot_defender_terms` read lanes with no velocities.
+- [ ] `at()` reads the shot from the spot now and the drive later.
+- [ ] The pairing is frozen at t = 0; a priced man's own rider follows his
+  straight line rather than the read's skate.
+- [ ] Counter exposure ignores when the loss happens.
+- [ ] `project_defender` classifies against the drive's start, not where it is.
+- [ ] Loose-puck walk treats its 3 s end as settled; goalie re-square from rest.
+
+**Off-puck roles and the brain**
+- [ ] SUPPORT / TRAILER / OUTLET / BREAKOUT incumbents are fixed ice points while
+  their candidates ride the carrier (the PRESSURE bug again).
+- [ ] `backpressure_s` races a tracker to a fixed hip, not the moving one.
+- [ ] Threat partition: men read now, defenders timed into the future; danger
+  read at the man's spot with no flight; the house incumbent never re-raced.
+- [ ] `cover_man_target` prices a candidate standing, publishes a ride.
+- [ ] Recovery INSIDE tests (`rush_read`, `home_layer_behind_me`) are positions,
+  not races.
+- [ ] Receiver stations priced as if the receiver were there already.
+- [ ] MARK's memo bases are not upper bounds but drive an exact prune.
+- [ ] Defensive receiver leads a fixed 0.3 s, not the feed's flight.
+
+**The agent layer**
+- [ ] Counters count calls, not ticks: a late AI batch stretches charges, slew,
+  lag filters; the puck lead for input latency is one tick of two.
+- [ ] The jab window stretches on slower tiers (Easy pokes longer than Hard).
+- [ ] The engagement cooldown reads the debounced carrier for the bot's own
+  strip.
+- [ ] The stick tie reads the man where he is, not where his skating takes him.
+- [ ] The 2-on-1 dive commits on current geometry.
+- [ ] Board play and the stand-up have no perception lag, despite their docs.
+- [ ] The one-timer feed clock is capped and frictionless.
+- [ ] `gives_with` uses the puck's velocity now, not at the gate.
+- [ ] Pass pace committed at charge tick 0, before the windup brake.
+
 ### Open
 
 - **Phase 2 findings, to re-measure after this rebuild.** With the receiver
