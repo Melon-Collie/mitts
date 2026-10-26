@@ -393,7 +393,9 @@ ranked within each layer; [x] done.
   trip at his speed then) and the safety maps widen to it. Entry read 1 s
   prediction error 0.44 → 0.37, local spread 0.11 → 0.12. Open: against a
   square defender at the line the flatter read lets the carrier chase a lateral
-  cut the defender mirrors (`test_nz_carry_keeps_pace` gap 10 m).
+  cut the defender mirrors (`test_nz_carry_keeps_pace` gap 10 m). Superseded by
+  `docs/defender-race-plan.md`: one race for every keep read, its uncertainty
+  growing with how far ahead it looks.
 - [ ] `delay_discount` charged on reads whose defence is already projected to
   that time (entries, drives, the counter cost): time paid twice.
 - [ ] Stand-still outside the zone reads the defence now while every move reads
