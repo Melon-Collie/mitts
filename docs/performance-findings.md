@@ -243,6 +243,24 @@ native already. The cost is GDScript orchestration spread across dozens of
 small calls. `arm_shoulder()` alone is re-derived four or five times a pass,
 each time from `upper_body.rotation` (a basis-to-Euler decomposition per read).
 
+Two follow-ups settled what that is not:
+
+- **Not GDExtension crossings.** Measured from GDScript on the same binary: a
+  native property write is 0.08 µs, a `Vector3` getter 0.13 µs, and a whole
+  `NativeTopHandIK.solve_on_ice` 0.7 µs. Bundling the solve's dozen crossings
+  into one coarse call would save a few microseconds.
+- **Not repeated reads, at match scale.** Reading the pass's body state once
+  instead of once a helper (rotation, tilt, the shoulder chain, the blade
+  height) was bitwise identical and took an isolated carry's step from ~345 to
+  ~290 µs. Across a 10-skater match, though, it moved the bots' skater step
+  from 2,123 to 2,110 µs a tick (three alternating runs each): noise. A carry
+  is a small share of ticks, so it was not kept.
+
+What remains is ordinary GDScript overhead, around 0.1–0.5 µs per member
+access and call, across a few hundred of them per pass. Only porting the pass's
+orchestration itself would remove it, and `native/README.md` keeps feel-tuned
+orchestration in GDScript.
+
 The keeper's tick came to ~445 µs on the host:
 
 | phase | µs |
