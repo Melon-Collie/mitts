@@ -86,15 +86,21 @@ play shows it.
 - `AIDefenderProjection` and `AIPossessionValue._project` in keep reads, and
   `AICarrierField.project_opponents` where it feeds a keep read (ply 2,
   `_end_worth`, the wheel, `receiver_drive_in_value`, the feed's catch).
+- **`AIDefencePairing`'s pairing and riding** (`pair`, `rides`, `ride_at`) and
+  the shared entry cache's key on it. Who a defender is marking needs no
+  assignment: a man skating with his attacker carries on that way through his
+  reaction and is late to the carrier's path, and the race reads that. The same
+  defender counts against the carry and the pass to his man alike — the 2-on-1
+  read: each option sees which way he is drifting, and a man square between
+  them covers both. `collect_attack` (our own skaters, for the pass to a man
+  following in) is not a defender model and stays as a helper.
 
 ## What it does not touch
 
-- **Who plays the puck.** `AIDefencePairing` (a defender riding his man is not
-  in the carrier's race) stays as it is.
 - **Where the defence stands later for the shot model.** A shot priced after an
   entry still needs defender positions for blockers and screens. Positions are
-  not part of the race; this stays on `AIDefenderProjection` for now and gets its
-  own pass.
+  not part of the race; this stays on `AIDefenderProjection` for now, riders
+  included, and gets its own pass — the pairing goes entirely with it.
 - The arrival clock, the shot odds and the keeper, which are calibrated on their
   own.
 
