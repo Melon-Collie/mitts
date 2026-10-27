@@ -1500,7 +1500,7 @@
         "helmet": "#2B070F",
         "shoulders": {
           "color": "#2B070F",
-          "text": "#FFFFFF"
+          "text": "#D2142C"
         },
         "jersey": {
           "base": "#D2142C",
@@ -1561,8 +1561,7 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#FFFFFF",
-          "stroke": "#2B070F",
+          "color": "#2B070F",
           "outline": "#D2142C"
         }
       },
@@ -1632,7 +1631,6 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#D2142C",
-          "stroke": "#2B070F",
           "outline": "#2B070F"
         }
       }
