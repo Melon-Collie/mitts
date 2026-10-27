@@ -378,6 +378,29 @@ a centimetre. The worst cases (0.3–0.8 m) are contacts, the same at every
 cadence. The replay runs on a 120 Hz recording, so it isolates what the client
 knows from how the body moves; bots, not humans, did the skating.
 
+### What it costs a pickup
+
+The loose puck predicts from the NEWEST snapshot, not from an interpolated
+past, so its span is `one_way + snapshot age + lead`: a faster broadcast saves
+only the age, half an interval on average, while the lead pays in full. Measured
+on a copy of `NetGeometryHarness` stepped at 360 Hz (the shipped one rounds
+every lead to a 120 Hz tick, coarser than the differences here), snapshots on
+each rate's schedule, the lead `rtt/2 + margin` as `ClockSync` sets it, the
+same 16 seeds per row. Refused share of earned claims at 60 ms RTT:
+
+| | 120/60 shipped | 90/90 | 90/45 | 90/90, cushion 16.7 ms | 90/45, cushion 16.7 ms |
+|---|---|---|---|---|---|
+| a deflection every ~333 ms | 11.3% | 12.5% | 13.6% | 11.3% | 12.4% |
+| a deflection every ~100 ms (scramble) | 30.5% | 33.1% | 35.6% | 30.4% | 33.1% |
+
+At 30 and 120 ms the order and the gaps are the same. The input cushion is
+two ticks, so 90 Hz physics stretches it from 16.7 to 22.2 ms, and that, more
+than the broadcast rate, is what a pickup pays for. Held at 16.7 ms
+(`BUFFER_TICKS` 1.5), 90/90 refuses what today does; whether 1.5 ticks still
+covers input jitter is `NetTimingHarness`'s question. The same cushion is in a
+remote skater's horizon above, where holding it leaves 90/90 3 ms shorter than
+today.
+
 ## How to measure something new
 
 The freeze-sweep approach is gone, and its lesson is worth keeping: **an A/B that
