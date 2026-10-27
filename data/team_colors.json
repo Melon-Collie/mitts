@@ -1039,139 +1039,139 @@
     },
     {
       "name": "Plum",
-      "primary": "#382B6E",
-      "secondary": "#DE7324",
-      "light": "#F7EFDD",
+      "primary": "#5B2A6E",
+      "secondary": "#E8862A",
+      "light": "#FFFFFF",
       "home": {
-        "helmet": "#382B6E",
+        "helmet": "#5B2A6E",
         "shoulders": {
-          "color": "#382B6E",
-          "text": "#F7EFDD"
+          "color": "#5B2A6E",
+          "text": "#FFFFFF"
         },
         "jersey": {
-          "base": "#382B6E",
-          "yoke": "#F7EFDD",
-          "collar": "#DE7324",
+          "base": "#5B2A6E",
+          "yoke": "#FFFFFF",
+          "collar": "#E8862A",
           "stripes": [
             {
               "pos": 0.95,
               "width": 0.04,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "arms": {
           "upper": {
-            "base": "#382B6E",
+            "base": "#5B2A6E",
             "stripes": [
               {
                 "pos": 0.9,
                 "width": 0.12,
-                "color": "#F7EFDD"
+                "color": "#FFFFFF"
               }
             ]
           },
           "lower": {
-            "base": "#DE7324",
+            "base": "#E8862A",
             "stripes": []
           }
         },
-        "gloves": "#382B6E",
+        "gloves": "#5B2A6E",
         "pants": {
-          "base": "#382B6E",
+          "base": "#5B2A6E",
           "stripes": [
             {
               "pos": 0.5,
               "width": 0.08,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "socks": {
-          "base": "#382B6E",
+          "base": "#5B2A6E",
           "stripes": [
             {
               "pos": 0.75,
               "width": 0.5,
-              "color": "#DE7324"
+              "color": "#E8862A"
             },
             {
               "pos": 0.5,
               "width": 0.07,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#F7EFDD",
-          "outline": "#F7EFDD"
+          "color": "#FFFFFF",
+          "outline": "#FFFFFF"
         }
       },
       "away": {
-        "helmet": "#F7EFDD",
+        "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#F7EFDD",
-          "text": "#382B6E"
+          "color": "#FFFFFF",
+          "text": "#5B2A6E"
         },
         "jersey": {
-          "base": "#F7EFDD",
-          "yoke": "#382B6E",
-          "collar": "#DE7324",
+          "base": "#FFFFFF",
+          "yoke": "#5B2A6E",
+          "collar": "#E8862A",
           "stripes": [
             {
               "pos": 0.95,
               "width": 0.04,
-              "color": "#382B6E"
+              "color": "#5B2A6E"
             }
           ]
         },
         "arms": {
           "upper": {
-            "base": "#F7EFDD",
+            "base": "#FFFFFF",
             "stripes": [
               {
                 "pos": 0.9,
                 "width": 0.12,
-                "color": "#382B6E"
+                "color": "#5B2A6E"
               }
             ]
           },
           "lower": {
-            "base": "#DE7324",
+            "base": "#E8862A",
             "stripes": []
           }
         },
-        "gloves": "#F7EFDD",
+        "gloves": "#FFFFFF",
         "pants": {
-          "base": "#382B6E",
+          "base": "#5B2A6E",
           "stripes": [
             {
               "pos": 0.5,
               "width": 0.08,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "socks": {
-          "base": "#F7EFDD",
+          "base": "#FFFFFF",
           "stripes": [
             {
               "pos": 0.75,
               "width": 0.5,
-              "color": "#DE7324"
+              "color": "#E8862A"
             },
             {
               "pos": 0.5,
               "width": 0.07,
-              "color": "#382B6E"
+              "color": "#5B2A6E"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#382B6E",
-          "outline": "#382B6E"
+          "color": "#5B2A6E",
+          "outline": "#5B2A6E"
         }
       }
     },
