@@ -43,8 +43,8 @@ var _dest_arrival: Array[float] = []
 var _wheel: AICarrierWheel
 # A carrier with no caps of its own skates the league body.
 var _league_caps := AISkaterCaps.new()
-# Where the last _rolled_safety read strips the puck (INF when it keeps it), and
-# when, from the start of its move.
+# Where the last _rolled_safety read expects a loss (INF when none), and when,
+# from the start of its move.
 var _strip_point: Vector3 = Vector3.INF
 var _strip_t: float = 0.0
 # How many of each first move's path samples are skated (reach_short_of_net),
@@ -68,12 +68,6 @@ const OZ_RETREAT_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 1.0
 # Opponents projected to a carry's arrival.
 var _scratch_opponents_path: Array[Vector3] = []
 var _scratch_vels_path: Array[Vector3] = []
-
-# Opponents projected to the start of a rolled path's later pieces.
-var _scratch_opponents_cont: Array[Vector3] = []
-# Opponents where the second step starts, a first move's horizon from now.
-var _scratch_opponents_ply2: Array[Vector3] = []
-var _scratch_vels_ply2: Array[Vector3] = []
 
 # ── The near moves' beam (two-ply search budget) ─────────────────────────────
 # The two-ply pass-OPTION read is most of a move's cost. Pass 1 (_score_move)
@@ -367,8 +361,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var bound: float = _prune_bound_for(m, _beam_prune_bound)
 	if decay <= bound:
 		return
-	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents,
-			_field.opponent_vels, reach)
+	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, reach)
 	if decay * safety <= bound:
 		return
 	_field.project_opponents(t0, _scratch_opponents_path, _scratch_vels_path, end)
@@ -449,14 +442,14 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 				* AICarrySpace.carry_safety(
 						AICarrierField.puck_pos_at(end, goal),
 						AICarrierField.puck_pos_at(destination, goal), t_rest,
-						_scratch_opponents_path, _scratch_vels_path, _field.opponent_caps,
-						true, t_end))
+						_field.opponents, _field.opponent_vels, _field.opponent_caps,
+						0.0, t_end))
 	return worth
 
 
 # The best second step from where first move `m1` ends, as a value at that end:
-# each rolled move again, from the end's position, pace and facing, against the
-# defence projected a first move's horizon on, priced as a first move is —
+# each rolled move again, from the end's position, pace and facing, setting off
+# a first move's horizon from now, priced as a first move is —
 # its end's worth × the decay of the step × its keep odds − its strip cost.
 # Returns `floor_value` when no second move beats it (exact: a move whose worth ×
 # decay cannot clear it is not read for safety, nor costed when × keep odds cannot).
@@ -473,7 +466,6 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		toward = Vector2(0.0, -ctx.own_goal_dir)
 	_rollout2.roll_all(start, rollout.end_vel[m1], rollout.end_facing[m1], toward, caps, true,
 			rollout.end_turn_rate[m1])
-	_field.project_opponents(t1, _scratch_opponents_ply2, _scratch_vels_ply2, start)
 	var dest_arrival: float = 0.0
 	var dest_i: int = _dest.kinds.find(destination_kind)
 	if dest_i >= 0:
@@ -494,8 +486,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 				* AIActionScoring.delay_discount(t2)
 		if worth <= best:
 			continue
-		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2,
-				_scratch_vels_ply2, reach, t1)
+		var safety: float = _rolled_safety(ctx, _rollout2, m, start, reach, t1)
 		var move_value: float = worth * safety
 		if move_value <= best:
 			continue
@@ -508,54 +499,32 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 
 
 # The odds of keeping the puck along rolled move `m` of `roll` from `from`,
-# against the defence at the move's start `opps` (moving at `opp_vels`, their
-# velocities then) — carry_safety's regimes on each leg of the skated path: the
-# meeting band against the defence at the leg's start, a moving puck at every
-# interior sample, a dwelling one with the arrival lunge at the end, each sample
-# read at its own time into the move; `opps` read `projected_s` ahead of now.
-# Leaves where the earliest uncertain leg strips it in _strip_point.
+# setting off `start_s` from now against the defence as it is now: the strip
+# odds (AIStripOdds) over the move's skated samples, each at its own time. Leaves
+# where a loss is expected in _strip_point (INF: none) and when, into the move,
+# in _strip_t.
 func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3,
-		opps: Array[Vector3], opp_vels: Array[Vector3],
-		reach: int = AICarryRollout.SAMPLES, projected_s: float = 0.0) -> float:
+		reach: int = AICarryRollout.SAMPLES, start_s: float = 0.0) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var prev: Vector3 = AICarrierField.puck_pos_at(from, goal)
 	var t_prev: float = 0.0
 	var keep: float = 1.0
-	_strip_point = Vector3.INF
+	var lost: float = 0.0
+	var at := Vector3.ZERO
+	var when: float = 0.0
 	for k: int in reach:
 		var p: Vector3 = AICarrierField.puck_pos_at(roll.sample(m, k), goal)
 		var t: float = AICarryRollout.HORIZON_S * float(k + 1) / AICarryRollout.SAMPLES
-		var leg_t: float = t - t_prev
-		var leg := Vector2(p.x - prev.x, p.z - prev.z)
-		var leg_len: float = leg.length()
-		var dir: Vector2 = leg / leg_len if leg_len > 0.001 else Vector2.ZERO
-		var leg_opps: Array[Vector3] = opps
-		if t_prev > 0.0:
-			_scratch_opponents_cont.clear()
-			for i: int in opps.size():
-				_scratch_opponents_cont.append(AITrajectory.predict_at(opps[i],
-						opp_vels[i], t_prev))
-			leg_opps = _scratch_opponents_cont
-		var piece: float = AICarrySpace.carry_crossing_keep(prev, p, leg_t, leg_opps,
-				opp_vels, _field.opponent_caps)
-		var last: bool = k == reach - 1
-		var c: float = AICarrySpace.reach_clearance(p, t, opps,
-				opp_vels, _field.opponent_caps,
-				minf(t, AICarrySpace.CARRY_LUNGE_WINDOW_S) if last else -1.0,
-				dir, leg_len / leg_t, -INF, Vector3.INF, projected_s)
-		piece = minf(piece, AICarrySpace.clearance_to_safety(c, AICarrySpace.reach_band_m)
-				if last else AICarrySpace.transit_clearance_to_safety(c,
-						AICarrySpace.reach_band_m))
-		if piece < 1.0 and not _strip_point.is_finite():
-			_strip_point = AICarrySpace.carry_strip_point(prev, p, leg_t, leg_opps,
-					opp_vels, _field.opponent_caps, true)
-			_strip_t = t_prev + (leg_t * Vector2(_strip_point.x - prev.x,
-					_strip_point.z - prev.z).length() / leg_len if leg_len > 0.001 else 0.0)
-		keep = minf(keep, piece)
-		if keep <= 0.0:
-			return 0.0
+		var stretch: float = exp(-AIStripOdds.stretch_strips(prev, p, t - t_prev, start_s + t,
+				_field.opponents, _field.opponent_vels, _field.opponent_caps))
+		at += p * keep * (1.0 - stretch)
+		when += t * keep * (1.0 - stretch)
+		lost += keep * (1.0 - stretch)
+		keep *= stretch
 		prev = p
 		t_prev = t
+	_strip_point = at / lost if lost > 1e-4 else Vector3.INF
+	_strip_t = when / lost if lost > 1e-4 else 0.0
 	return keep
 
 
@@ -617,8 +586,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	# the strip, so driving PAST a man reads as winnable, not as a wall.
 	var safety: float = AICarrySpace.carry_safety(
 			cur_puck_pos, cand_puck_pos, local_time,
-			_field.opponents, _field.opponent_vels, _field.opponent_caps,
-			true)
+			_field.opponents, _field.opponent_vels, _field.opponent_caps)
 	if decay * safety <= best_so_far:
 		return -INF
 	_field.project_opponents(local_time, _scratch_opponents_path, _scratch_vels_path,
@@ -640,7 +608,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	if keep_prob < 1.0:
 		var strip_point: Vector3 = AICarrySpace.carry_strip_point(
 				cur_puck_pos, cand_puck_pos, local_time,
-				_field.opponents, _field.opponent_vels, _field.opponent_caps, true)
+				_field.opponents, _field.opponent_vels, _field.opponent_caps)
 		var cand_len: float = cur_puck_pos.distance_to(cand_puck_pos)
 		cost = _field.turnover_cost(strip_point, 1.0 - keep_prob, local_time
 				* cur_puck_pos.distance_to(strip_point) / cand_len if cand_len > 0.001 else 0.0)

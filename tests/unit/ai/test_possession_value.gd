@@ -271,34 +271,29 @@ func test_a_body_on_the_lane_takes_the_feed() -> void:
 			1e-6, "and off again, the read is as it was")
 
 
-# ── The contest at the line ──────────────────────────────────────────────────
+# ── The skate to the line ────────────────────────────────────────────────────
 
-func test_a_defender_set_at_his_line_shadows_the_carriers_lane_not_the_whole_line() -> void:
-	# He takes the carrier→net line at his depth where the carrier is heading;
-	# the crossing that carrier picks late is the lunge's to cover, so the far
-	# lane stays open however long the skate, until the carrier heads for it.
+func test_a_defender_set_at_his_line_costs_the_lane_in_front_of_him_most() -> void:
+	# The skate to the line is read against where he is likely to be (the strip
+	# odds): the crossing in front of him is his, the far lane far less so.
 	var line_z: float = -GameRules.BLUE_LINE_Z
 	var v: AIPossessionValue = _read([Vector3(-6.0, 0.0, line_z - 0.4)])
 	var carrier := Vector3(0.0, 0.0, 6.0)
-	var up_ice := Vector3(0.0, 0.0, -6.0)
-	var middle := Vector3(0.0, 0.0, line_z)
+	var his := Vector3(-6.0, 0.0, line_z)
 	var wide := Vector3(GameRules.RINK_HALF_WIDTH - AIPossessionValue.ENTRY_WALL_INSET_M,
 			0.0, line_z)
-	assert_lt(v._line_keep(middle, 2.5, carrier, up_ice, line_z), 0.1,
-			"the lane the carrier is skating is his")
-	var late: float = v._line_keep(wide, 2.5, carrier, up_ice, line_z)
-	assert_gt(late, 0.9, "the far lane is open to a late choice")
-	var at_wide := Vector3(wide.x - carrier.x, 0.0, wide.z - carrier.z).normalized() * 6.0
-	assert_lt(v._line_keep(wide, 2.5, carrier, at_wide, line_z), late,
-			"and contested once the carrier heads for it")
+	assert_lt(v._skate_keep(carrier, his, 0.0, 2.5), v._skate_keep(carrier, wide, 0.0, 2.5),
+			"the lane in front of him costs more than the far one")
 
 
 func test_a_defender_gapped_back_leaves_the_line_to_the_drive() -> void:
 	var line_z: float = -GameRules.BLUE_LINE_Z
 	var middle := Vector3(0.0, 0.0, line_z)
 	var gapped: AIPossessionValue = _read([Vector3(0.0, 0.0, line_z - 7.0)])
-	assert_gt(gapped._line_keep(middle, 1.0, Vector3(0.0, 0.0, 4.0), Vector3(0.0, 0.0, -6.0), line_z),
-			0.9, "he is no wall at the line")
+	var stood_up: AIPossessionValue = _read([Vector3(0.0, 0.0, line_z - 0.4)])
+	var carrier := Vector3(0.0, 0.0, 4.0)
+	assert_gt(gapped._skate_keep(carrier, middle, 0.0, 1.5), stood_up._skate_keep(carrier, middle, 0.0, 1.5),
+			"he is less of a wall at the line than a man set on it")
 	assert_lt(gapped._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
 			_read(_none)._drive(Vector3(0.0, 0.0, line_z - AIPossessionValue.ENTRY_LEAD_M), 0.0),
 			"the drive in from the crossing is where he costs it")

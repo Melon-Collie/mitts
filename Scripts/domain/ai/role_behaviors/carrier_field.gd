@@ -93,8 +93,6 @@ var _carrier_pos: Vector3 = Vector3.ZERO
 var _goal: Vector3 = Vector3.ZERO
 # _tag_up_time while a teammate owes a tag-up, else 0.
 var _tag_up_s: float = 0.0
-var _entry_buf: Array[Vector3] = []
-var _entry_vels: Array[Vector3] = []
 var _drive_buf: Array[Vector3] = []
 var _drive_vels: Array[Vector3] = []
 # What the carrier is trying to do from where he is, the currency every option
@@ -545,20 +543,13 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# back brakes it out first. Never `reach / max_speed`.
 	var reach_time: float = _drive_time(ctx, receiver_spot, target, receiver_vel,
 			receiver_caps, own_hands)
-	# A defender in the way drops keep and stops the drive where he covers it;
-	# apply_escape as for the carrier's own candidates.
-	var opps: Array[Vector3] = opponents
-	var opp_vels: Array[Vector3] = opponent_vels
-	if start_s > 0.0:
-		project_opponents(start_s, _entry_buf, _entry_vels, receiver_spot)
-		opps = _entry_buf
-		opp_vels = _entry_vels
+	# A defender in the way drops keep and stops the drive where he covers it.
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
-			opps, opp_vels, opponent_caps, true)
+			opponents, opponent_vels, opponent_caps, 0.0, start_s)
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
-			opps, opp_vels, opponent_caps, true, true)
+			opponents, opponent_vels, opponent_caps, true, 0.0, start_s)
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -_drive_loss_cost(ctx, reached, 1.0, own_hands, _drive_time(ctx, receiver_spot,

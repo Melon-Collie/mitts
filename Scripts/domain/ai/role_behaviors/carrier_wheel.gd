@@ -53,14 +53,13 @@ func score(ctx: RoleContext, dest: Vector3,
 	var dest_puck: Vector3 = AICarrierField.puck_pos_at(dest, ctx.attacking_goal_pos)
 	var safety1: float = AICarrySpace.carry_safety(
 			cur_puck, apex_puck, t1, _field.opponents,
-			_field.opponent_vels, _field.opponent_caps, true)
+			_field.opponent_vels, _field.opponent_caps)
 	if decay * safety1 <= best_so_far:
 		return -INF
-	# Leg two starts where the defense has skated to during leg one.
-	_field.project_opponents(t1, _scratch_opponents, _scratch_vels, apex)
+	# Leg two sets off when leg one ends.
 	var safety2: float = AICarrySpace.carry_safety(
-			apex_puck, dest_puck, t2, _scratch_opponents,
-			_scratch_vels, _field.opponent_caps, true)
+			apex_puck, dest_puck, t2, _field.opponents,
+			_field.opponent_vels, _field.opponent_caps, 0.0, t1)
 	var keep: float = safety1 * safety2
 	var ceiling: float = decay * keep
 	if ceiling <= best_so_far:
@@ -79,13 +78,12 @@ func score(ctx: RoleContext, dest: Vector3,
 	if safety1 <= safety2:
 		strip_point = AICarrySpace.carry_strip_point(
 				cur_puck, apex_puck, t1, _field.opponents,
-				_field.opponent_vels, _field.opponent_caps, true)
+				_field.opponent_vels, _field.opponent_caps)
 		strip_s = t1 * _leg_share(cur_puck, apex_puck, strip_point)
 	else:
-		_field.project_opponents(t1, _scratch_opponents, _scratch_vels, apex)
 		strip_point = AICarrySpace.carry_strip_point(
-				apex_puck, dest_puck, t2, _scratch_opponents,
-				_scratch_vels, _field.opponent_caps, true)
+				apex_puck, dest_puck, t2, _field.opponents,
+				_field.opponent_vels, _field.opponent_caps, false, 0.0, t1)
 		strip_s = t1 + t2 * _leg_share(apex_puck, dest_puck, strip_point)
 	var cost: float = _field.turnover_cost(strip_point,
 			1.0 - keep, strip_s)

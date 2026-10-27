@@ -131,30 +131,17 @@ func test_jockey_cannot_strip_a_careful_carrier() -> void:
 			"the pacer is safer to carry against than the same man standing still")
 
 
-# An 8 m/s carry along +X for a second, a man `gap` ahead of it skating `pace`
-# along it.
-func _carry_at(start: Vector3, pace: float, apply_escape: bool = true) -> float:
+# An 8 m/s carry along +X for a second, a man at `start` skating `pace` along it.
+func _carry_at(start: Vector3, pace: float) -> float:
 	var opps: Array[Vector3] = [start]
 	var vels: Array[Vector3] = [Vector3(pace, 0, 0)]
-	return AICarrySpace.carry_safety(Vector3.ZERO, Vector3(8.0, 0, 0), 1.0, opps, vels,
-			[], apply_escape)
+	return AICarrySpace.carry_safety(Vector3.ZERO, Vector3(8.0, 0, 0), 1.0, opps, vels)
 
 
-func test_a_man_retreating_in_the_lane_can_stop_on_the_carry() -> void:
-	# The carry is coming to him, so braking commits him to no spot: he stops from
-	# his read rather than coasting to the commit window. Backing off at the
-	# carrier's own pace, he is as much a wall as a man standing there.
-	for gap: float in [3.0, 5.0]:
-		for pace: float in [0.0, 4.0, 8.0]:
-			assert_eq(_carry_at(Vector3(gap, 0, 0.2), pace), 0.0,
-					"%.0f m ahead backing off at %.0f m/s" % [gap, pace])
-
-
-func test_stopping_spares_a_chaser_his_escape_gate() -> void:
-	# Braking only loses him ground on a carry running away from him, so a chaser
-	# pacing it keeps the gate's credit.
-	var behind := Vector3(-2.0, 0, 0.2)
-	assert_gt(_carry_at(behind, 8.0), _carry_at(behind, 8.0, false))
+func test_a_man_in_the_carrys_lane_costs_it_more_than_one_off_it() -> void:
+	for pace: float in [0.0, 4.0]:
+		assert_lt(_carry_at(Vector3(4.0, 0, 0.2), pace), _carry_at(Vector3(4.0, 0, 4.0), pace),
+				"in the lane at %.0f m/s" % pace)
 
 
 func test_a_chaser_out_pacing_the_carry_is_on_it_where_it_ends() -> void:
@@ -202,14 +189,15 @@ func test_seam_points_into_open_space() -> void:
 
 func test_strip_point_is_the_tight_midroute_not_the_safe_destination() -> void:
 	# Carry from (0,0) to a clear destination (0,10), but a defender sits right on
-	# the mid-route point (0,5). The strip, if it happens, is mid-route — the cost
-	# must localize there, not at the open destination.
+	# the mid-route point (0,5). The strip, if it happens, is in his reach — the
+	# cost must localize there, not at the open destination.
 	var from := Vector3(0, 0, 0)
 	var to := Vector3(0, 0, 10)
 	var opps: Array[Vector3] = [Vector3(0, 0, 5)]     # parked on the midpoint
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var strip: Vector3 = AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels)
-	assert_almost_eq(strip.z, 5.0, 0.01, "strip localizes to the tight mid-route point")
+	assert_almost_eq(strip.z, 5.0, AIStripOdds.STRIP_RADIUS_M,
+			"strip localizes to the tight mid-route point")
 
 
 func test_strip_point_is_destination_when_that_is_the_tight_end() -> void:
@@ -219,30 +207,28 @@ func test_strip_point_is_destination_when_that_is_the_tight_end() -> void:
 	var opps: Array[Vector3] = [Vector3(0, 0, 10)]    # waiting at the destination
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var strip: Vector3 = AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels)
-	assert_almost_eq(strip.z, 10.0, 0.01, "strip localizes to the covered destination")
+	assert_gte(strip.z, 10.0 - AIStripOdds.STRIP_RADIUS_M,
+			"strip localizes to the covered destination")
 
 
 func test_covered_only_carry_reaches_its_destination_when_nothing_covers_it() -> void:
-	# A defender well off the route covers neither sample. As a strip LOCATION the
-	# tighter sample still answers (the default); as how far the carry GETS, it
-	# gets all the way.
+	# A defender well off the route: as how far the carry GETS, it gets all the
+	# way.
 	var from := Vector3(0, 0, 0)
 	var to := Vector3(0, 0, 10)
 	var opps: Array[Vector3] = [Vector3(5, 0, 5)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
-	assert_almost_eq(AICarrySpace.carry_safety(from, to, 1.4, opps, vels), 1.0, 0.001,
-			"precondition: the route is clear")
-	assert_almost_eq(AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels).z, 5.0, 0.01,
-			"the strip location is still the tighter sample")
+	assert_gt(AICarrySpace.carry_safety(from, to, 1.4, opps, vels), 0.9,
+			"precondition: the route is mostly clear")
 	assert_almost_eq(AICarrySpace.carry_strip_point(
-			from, to, 1.4, opps, vels, [], false, true).z, 10.0, 0.01,
+			from, to, 1.4, opps, vels, [], true).z, 10.0, 0.01,
 			"a clear carry reaches its destination")
 
-	# A defender ON the route still stops it there.
+	# A defender ON the route stops it before it passes him.
 	var on_route: Array[Vector3] = [Vector3(0, 0, 5)]
-	assert_almost_eq(AICarrySpace.carry_strip_point(
-			from, to, 1.4, on_route, vels, [], false, true).z, 5.0, 0.01,
-			"a covered mid-route still ends the carry mid-route")
+	assert_lte(AICarrySpace.carry_strip_point(
+			from, to, 1.4, on_route, vels, [], true).z, 5.0,
+			"a covered mid-route ends the carry by the man on it")
 
 
 func test_strip_point_of_a_stand_is_the_spot_itself() -> void:
