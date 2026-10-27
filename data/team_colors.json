@@ -876,9 +876,19 @@
           "collar": "#3B5511",
           "stripes": [
             {
-              "pos": 0.92,
-              "width": 0.05,
+              "pos": 0.88,
+              "width": 0.15,
+              "color": "#3B5511"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.098,
               "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.052,
+              "color": "#7FB320"
             }
           ]
         },
@@ -952,8 +962,18 @@
           "collar": "#3B5511",
           "stripes": [
             {
-              "pos": 0.92,
-              "width": 0.05,
+              "pos": 0.88,
+              "width": 0.15,
+              "color": "#3B5511"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.098,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.052,
               "color": "#7FB320"
             }
           ]
