@@ -17,6 +17,8 @@ const IMG_W: int = 512
 # The shoulder number's band on the cap, and how tall its digits stand.
 const SHOULDER_BAND := Vector2(0.14, 0.10)
 const SHOULDER_NUMBER_EM_M: float = 0.08
+# How much of the back box's width a name may take, leaving a margin each side.
+const NAME_WIDTH_SHARE: float = 0.85
 const _SHOULDER_IMG_W: int = 256
 
 var face: int = Face.FRONT
@@ -56,7 +58,8 @@ func _draw() -> void:
 						px_per_m(face), YOKE_DEPTH_M)
 		Face.BACK:
 			JerseyDecal.draw_back_lettering(self, player_name, jersey_number, text_color,
-					text_stroke, IMG_W * 0.5, px_per_m(face), YOKE_DEPTH_M)
+					text_stroke, IMG_W * 0.5, px_per_m(face), YOKE_DEPTH_M,
+					_face_m(face).x * NAME_WIDTH_SHARE)
 		Face.SHOULDER:
 			_draw_shoulder_number()
 

@@ -48,6 +48,13 @@ const NAME_GAP_M: float = 0.02
 const NAME_EM_M: float = 0.075
 const NUMBER_GAP_M: float = 0.012
 const NUMBER_EM_M: float = 0.25
+# The skater's back between the shoulder caps at the name's height, less a
+# margin: 0.45 m shows on the posed rig, and a name wider than this is cut off
+# by the caps.
+const NAME_MAX_WIDTH_M: float = 0.40
+# A long name is set narrower, as a real sweater's is, but no narrower than
+# this; past it the name is set smaller as well, so it stays readable.
+const NAME_MIN_SQUEEZE: float = 0.7
 # A kit's lettering stroke: draw_string_outline's size, in ems of the text it
 # borders. It reaches about a sixth of that past the glyph's edge (measured on
 # the kit sheet), so 1 cm round a back number, a real sweater's twill border.
@@ -92,7 +99,7 @@ func _draw() -> void:
 
 	var yoke_bottom_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y
 	draw_back_lettering(self, player_name, jersey_number, text_color, text_stroke,
-			float(BACK_CENTER_X), PX_PER_M, yoke_bottom_m)
+			float(BACK_CENTER_X), PX_PER_M, yoke_bottom_m, NAME_MAX_WIDTH_M)
 	if not crest_fruit.is_empty():
 		draw_chest_crest(self, crest_fruit, crest_preset, float(FRONT_CENTER_X), PX_PER_M,
 				yoke_bottom_m)
@@ -111,16 +118,33 @@ static func draw_chest_crest(canvas: CanvasItem, fruit: String, preset: Dictiona
 
 
 # A back's name and number, laid out in metres down from the top of the back
-# (`yoke_bottom_m` is where the yoke ends) and centred on `center_x` px. The
-# goalie's back letters through this too, so every player's back reads alike.
+# (`yoke_bottom_m` is where the yoke ends) and centred on `center_x` px, the name
+# fitted to `name_max_m` across. The goalie's back letters through this too, so
+# every player's back reads alike.
 static func draw_back_lettering(canvas: CanvasItem, p_name: String, number: int, color: Color,
-		stroke: Color, center_x: float, px_per_m: Vector2, yoke_bottom_m: float) -> void:
+		stroke: Color, center_x: float, px_per_m: Vector2, yoke_bottom_m: float,
+		name_max_m: float) -> void:
 	var name_top_m: float = yoke_bottom_m + NAME_GAP_M
 	if not p_name.is_empty():
 		_draw_centered(canvas, NAME_FONT, p_name.to_upper(), NAME_EM_M, name_top_m,
-				center_x, px_per_m, color, stroke)
+				center_x, px_per_m, color, stroke, name_max_m)
 	_draw_centered(canvas, FONT, str(number), NUMBER_EM_M,
-			name_top_m + NAME_EM_M + NUMBER_GAP_M, center_x, px_per_m, color, stroke)
+			name_top_m + NAME_EM_M + NUMBER_GAP_M, center_x, px_per_m, color, stroke, INF)
+
+
+# How `s` is set to fit `max_px` across at `font_size`: x the size to set it at,
+# y the horizontal squeeze. A string that fits is (font_size, 1); a longer one
+# is squeezed, and past NAME_MIN_SQUEEZE made smaller too.
+static func fit_lettering(font: Font, s: String, font_size: int, max_px: float) -> Vector2:
+	var width: float = font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size).x
+	if width <= max_px:
+		return Vector2(font_size, 1.0)
+	var squeeze: float = max_px / width
+	if squeeze >= NAME_MIN_SQUEEZE:
+		return Vector2(font_size, squeeze)
+	var smaller: int = maxi(1, floori(font_size * squeeze / NAME_MIN_SQUEEZE))
+	width = font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, smaller).x
+	return Vector2(smaller, minf(1.0, max_px / width))
 
 
 # A string at `pos` (its baseline), bordered by `stroke` when that is not
@@ -149,14 +173,18 @@ static func _stripe_band(stripe: Dictionary, region_px: int) -> Vector2i:
 # `em_m` tall with its em box's top `top_m` below the top of the back. The text
 # is set at the vertical texel density and squeezed or widened to the
 # horizontal one, so it is the shape the font draws once on the body, its
-# stroke included.
+# stroke included; then fitted to `max_width_m` (fit_lettering), a smaller
+# setting centred in the em box it would have filled.
 static func _draw_centered(canvas: CanvasItem, font: Font, s: String, em_m: float,
-		top_m: float, center_x: float, px_per_m: Vector2, color: Color, stroke: Color) -> void:
-	var size: int = roundi(em_m * px_per_m.y)
-	var stretch: float = px_per_m.x / px_per_m.y
+		top_m: float, center_x: float, px_per_m: Vector2, color: Color, stroke: Color,
+		max_width_m: float) -> void:
+	var em_px: int = roundi(em_m * px_per_m.y)
+	var fit: Vector2 = fit_lettering(font, s, em_px, max_width_m * px_per_m.y)
+	var size: int = int(fit.x)
+	var stretch: float = px_per_m.x / px_per_m.y * fit.y
 	var width: float = font.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1, size).x
 	var pos := Vector2(center_x / stretch - width * 0.5,
-			top_m * px_per_m.y + font.get_ascent(size))
+			top_m * px_per_m.y + (em_px - size) * 0.5 + font.get_ascent(size))
 	canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
 	draw_lettering(canvas, font, pos, s, size, color, stroke)
 	canvas.draw_set_transform_matrix(Transform2D.IDENTITY)
