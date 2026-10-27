@@ -4,8 +4,8 @@ class_name AIStripOdds
 # (docs/defender-race-plan.md): where the defender will be is his momentum's
 # line give or take his push, and while the puck is within his stick it is
 # stripped at a rate. Every number is measured against our defending bots
-# (tests/instruments/ai/test_defender_race_truth.gd). A leaf — GameRules and
-# AISkaterCaps only.
+# (tests/instruments/ai/test_defender_race_truth.gd). A leaf — GameRules,
+# AIStrideRamp and AISkaterCaps only.
 
 # How far off his body his stick takes the puck (m): stick, blade and poke.
 const STRIP_RADIUS_M: float = 2.0
@@ -15,7 +15,7 @@ const STANDING_STRIP_RATE: float = 3.0
 # A puck slower than this (m/s) is standing.
 const STANDING_PUCK_M_S: float = 1.0
 # How far off his momentum's line he goes: the odds of a spot fall by e per this
-# share of his body's push it takes to be there.
+# share of the ground his stride covers in the time; none past all of it.
 const FAN_SCALE: float = 0.25
 # A held puck's samples (s).
 const DWELL_STEP_S: float = 0.1
@@ -28,9 +28,17 @@ const _L_STEPS: int = 25
 const _L_MIN: float = 0.02
 const _L_MAX: float = 8.0
 const _BUILD_STEPS: int = 400
-const _BUILD_SPAN: float = 30.0
+# The fan's edge, in its lengths: all the ground his stride covers.
+const _EDGE: float = 1.0 / FAN_SCALE
+# _tail's table: the share of the fan past a line its centre is so many lengths
+# from, up to _EDGE.
+const _TAIL_STEPS: int = 81
 
+# The share of an untruncated fan within its edge, which the truncated one is
+# rescaled by.
+static var _norm: float = 1.0 - (1.0 + _EDGE) * exp(-_EDGE)
 static var _table: PackedFloat32Array = _build_table()
+static var _tail: PackedFloat32Array = _build_tail()
 
 
 # The odds a defender at `pos` moving `vel`, built as `caps` (null: the league
@@ -39,12 +47,23 @@ static var _table: PackedFloat32Array = _build_table()
 # his spread has been growing over too.
 static func odds_within(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
 		t: float, elapsed_s: float = 0.0) -> float:
-	var dx: float = point.x - pos.x - vel.x * t
-	var dz: float = point.z - pos.z - vel.z * t
 	var thrust: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
-	var spread: float = t + elapsed_s
-	return _within(sqrt(dx * dx + dz * dz) / STRIP_RADIUS_M,
-			FAN_SCALE * 0.5 * thrust * spread * spread / STRIP_RADIUS_M)
+	var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var length: float = FAN_SCALE * AIStrideRamp.distance_in(0.0, t + elapsed_s, top, thrust)
+	# His momentum stops at the boards.
+	var at: Vector2 = GameRules.clamp_to_rink_inner(Vector2(pos.x + vel.x * t, pos.z + vel.z * t))
+	var d: float = Vector2(point.x - at.x, point.z - at.y).length()
+	return minf(_within(d / STRIP_RADIUS_M, length / STRIP_RADIUS_M) / _on_ice(at, length), 1.0)
+
+
+# The share of a fan of `length` (m) round `at` that lies on the ice: the walls
+# either side of it cut it, the corners' rounding aside.
+static func _on_ice(at: Vector2, length: float) -> float:
+	if length < 0.001:
+		return 1.0
+	var across: float = _tail_at((GameRules.INNER_HALF_WIDTH - absf(at.x)) / length)
+	var along: float = _tail_at((GameRules.INNER_HALF_LENGTH - absf(at.y)) / length)
+	return maxf((1.0 - across) * (1.0 - along), 0.25)
 
 
 # The expected strips over one stretch of a path: the puck from `prev` to
@@ -123,9 +142,11 @@ static func keep(strips: float) -> float:
 static func _within(d: float, l: float) -> float:
 	if l < _L_MIN:
 		return 1.0 if d < 1.0 else 0.0
+	if d - 1.0 > _EDGE * l:
+		return 0.0
 	if l > _L_MAX or d >= _D_MAX:
 		# The fan is wide against the disc: its density there × the disc's area.
-		return minf(exp(-d / l) / (2.0 * l * l), 1.0)
+		return minf(exp(-d / l) / (2.0 * l * l * _norm), 1.0)
 	var fd: float = d / _D_MAX * (_D_STEPS - 1)
 	var fl: float = log(l / _L_MIN) / log(_L_MAX / _L_MIN) * (_L_STEPS - 1)
 	var i: int = mini(int(fd), _D_STEPS - 2)
@@ -138,8 +159,8 @@ static func _within(d: float, l: float) -> float:
 
 
 # Every cell of _within's table: the fan's radial density, e^(−r/l) / (2π l²),
-# over each circle round its centre times the share of that circle inside the
-# disc.
+# over each circle round its centre out to its edge times the share of that
+# circle inside the disc, rescaled to the truncated fan.
 static func _build_table() -> PackedFloat32Array:
 	var out := PackedFloat32Array()
 	out.resize(_D_STEPS * _L_STEPS)
@@ -148,11 +169,37 @@ static func _build_table() -> PackedFloat32Array:
 		for j: int in _L_STEPS:
 			var l: float = _L_MIN * pow(_L_MAX / _L_MIN, float(j) / (_L_STEPS - 1))
 			var total: float = 0.0
-			var ds: float = _BUILD_SPAN / _BUILD_STEPS
+			var ds: float = _EDGE / _BUILD_STEPS
 			for k: int in _BUILD_STEPS:
 				var s: float = (k + 0.5) * ds
 				total += s / PI * exp(-s) * _inside_angle(s * l, d) * ds
-			out[i * _L_STEPS + j] = minf(total, 1.0)
+			out[i * _L_STEPS + j] = minf(total / _norm, 1.0)
+	return out
+
+
+# The share of the truncated fan past a line `a` of its lengths from its centre.
+static func _tail_at(a: float) -> float:
+	if a >= _EDGE:
+		return 0.0
+	var f: float = maxf(a, 0.0) / _EDGE * (_TAIL_STEPS - 1)
+	var i: int = mini(int(f), _TAIL_STEPS - 2)
+	return lerpf(_tail[i], _tail[i + 1], f - i)
+
+
+# Every cell of _tail's table: the fan's radial density over each circle round
+# its centre times the share of that circle past the line.
+static func _build_tail() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	out.resize(_TAIL_STEPS)
+	for i: int in _TAIL_STEPS:
+		var a: float = _EDGE * i / (_TAIL_STEPS - 1)
+		var total: float = 0.0
+		var ds: float = _EDGE / _BUILD_STEPS
+		for k: int in _BUILD_STEPS:
+			var s: float = (k + 0.5) * ds
+			if s > a:
+				total += s / PI * exp(-s) * acos(a / s) * ds
+		out[i] = total / _norm
 	return out
 
 

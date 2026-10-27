@@ -50,8 +50,10 @@ func test_the_table_matches_the_integral() -> void:
 				if x * x + z * z > 1.0:
 					continue
 				var r: float = Vector2(x + d, z).length()
-				brute += exp(-r / l) / (TAU * l * l) * (4.0 / (n * n))
-		assert_almost_eq(AIStripOdds._within(d, l), brute, 0.02, "d %.1f, l %.1f" % [d, l])
+				if r <= AIStripOdds._EDGE * l:
+					brute += exp(-r / l) / (TAU * l * l) * (4.0 / (n * n))
+		assert_almost_eq(AIStripOdds._within(d, l), brute / AIStripOdds._norm, 0.02,
+				"d %.1f, l %.1f" % [d, l])
 
 
 func test_defenders_add() -> void:
@@ -82,3 +84,28 @@ func test_a_held_puck_in_his_reach_is_stripped_at_the_standing_rate() -> void:
 	assert_almost_eq(AIStripOdds.dwell_strips(Vector3.ZERO, 0.0, 0.1, him, still),
 			0.1 * AIStripOdds.STANDING_STRIP_RATE, 0.02)
 	assert_almost_eq(AIStripOdds.keep(0.0), 1.0, 1e-9)
+
+
+func test_he_is_never_where_his_stride_cannot_take_him() -> void:
+	# Standing, he covers well under 30 m in 3 s: a point that far off is not his.
+	assert_eq(AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null, Vector3(35.0, 0, 0), 3.0),
+			0.0)
+
+
+func test_his_momentum_stops_at_the_boards() -> void:
+	# Skating at the side boards, a second on he is on them, not through them.
+	var wall_x: float = GameRules.INNER_HALF_WIDTH
+	var at_wall: float = AIStripOdds.odds_within(Vector3(wall_x - 3.0, 0, 0), Vector3(6.0, 0, 0),
+			null, Vector3(wall_x - 0.5, 0, 0), 1.0)
+	assert_gt(at_wall, 0.5, "he is where the boards stopped him")
+
+
+func test_the_boards_keep_his_weight_on_the_ice() -> void:
+	# A man standing on the boards, against the same man in open ice: his weight
+	# that would be past the boards is on the ice side.
+	var wall_x: float = GameRules.INNER_HALF_WIDTH
+	var on_boards: float = AIStripOdds.odds_within(Vector3(wall_x, 0, 0), Vector3.ZERO, null,
+			Vector3(wall_x - 3.0, 0, 0), 1.0)
+	var open_ice: float = AIStripOdds.odds_within(Vector3(0, 0, 0), Vector3.ZERO, null,
+			Vector3(-3.0, 0, 0), 1.0)
+	assert_gt(on_boards, open_ice)
