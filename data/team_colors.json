@@ -1865,13 +1865,7 @@
         "gloves": "#161618",
         "pants": {
           "base": "#5E2457",
-          "stripes": [
-            {
-              "pos": 0.5,
-              "width": 0.08,
-              "color": "#B0243A"
-            }
-          ]
+          "stripes": []
         },
         "socks": {
           "base": "#161618",
