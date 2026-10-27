@@ -741,7 +741,8 @@
         "helmet": "#1A1A1A",
         "shoulders": {
           "color": "#E31B6D",
-          "text": "#FFFFFF"
+          "text": "#FFFFFF",
+          "stroke": "#1A1A1A"
         },
         "jersey": {
           "base": "#E31B6D",
@@ -792,6 +793,7 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#FFFFFF",
+          "stroke": "#1A1A1A",
           "outline": "#1A1A1A"
         }
       },
@@ -799,7 +801,8 @@
         "helmet": "#FFFFFF",
         "shoulders": {
           "color": "#FFFFFF",
-          "text": "#E31B6D"
+          "text": "#E31B6D",
+          "stroke": "#1A1A1A"
         },
         "jersey": {
           "base": "#FFFFFF",
@@ -850,6 +853,7 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#E31B6D",
+          "stroke": "#1A1A1A",
           "outline": "#1A1A1A"
         }
       }
