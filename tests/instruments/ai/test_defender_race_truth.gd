@@ -165,6 +165,10 @@ func _add_carrier(duel: Object, pos: Vector3, vel: Vector3, path: Array[Vector3]
 	s.script_protects = OS.get_environment("MITTS_RACE_SHIELD") != "0"
 
 
+func _add_defender(duel: Object, peer_id: int, pos: Vector3, vel: Vector3) -> void:
+	duel.add_skater(peer_id, 1, pos, null, vel)
+
+
 func _losses(duel: Object) -> int:
 	return duel.strips + duel.lifts + duel.hit_strips
 
@@ -184,7 +188,7 @@ func _run(st: Dictionary) -> void:
 	var duel: Object = Duel.new()
 	_add_carrier(duel, c_pos, c_vel, path)
 	for j: int in defs.size():
-		duel.add_skater(DEFENDER + j, 1, defs[j], null, vels[j])
+		_add_defender(duel, DEFENDER + j, defs[j], vels[j])
 	duel.start(CARRIER)
 	var pts: Array[Vector3] = []
 	var ts: Array[float] = []
