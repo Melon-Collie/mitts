@@ -491,6 +491,31 @@ func _report_brier(odds: Array, best: Array) -> void:
 	var base: float = kept_sum / n
 	gut.p("Brier over %d reads: base rate %.3f, race %.3f | straight and standing (%d): today %.3f, race %.3f" % [
 			n, base * (1.0 - base), race_b / n, n_sub, now_b / n_sub, race_sub / n_sub])
+	gut.p("ranking (the odds a kept run reads safer than a lost one, at %.0f s): %.3f" % [
+			HORIZON_S, _ranking(odds, best)])
+
+
+# Over the fit set at the horizon: how often a run that kept the puck reads safer
+# than one that lost it (0.5 is no better than a coin; ties count half).
+func _ranking(odds: Array, best: Array) -> float:
+	var rates: Vector3 = best[4]
+	var kept: Array[float] = []
+	var lost: Array[float] = []
+	for r: int in _family.size():
+		if not _fit_set(r):
+			continue
+		var e: Vector2 = _exposure(r, odds[r], HORIZON_S)
+		var p: float = exp(-rates.x * e.x - rates.y * e.y
+				- rates.z * _coast_exposure(r, _coast(r, best[6]), HORIZON_S))
+		if _event_t[r] >= 0.0:
+			lost.append(p)
+		else:
+			kept.append(p)
+	var wins: float = 0.0
+	for a: float in kept:
+		for b: float in lost:
+			wins += 1.0 if a > b else (0.5 if a == b else 0.0)
+	return wins / maxf(float(kept.size() * lost.size()), 1.0)
 
 
 func _save(path: String) -> void:
