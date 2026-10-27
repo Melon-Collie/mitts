@@ -1351,12 +1351,12 @@
           "stripes": [
             {
               "pos": 0.88,
-              "width": 0.12,
+              "width": 0.13,
               "color": "#F3EAD3"
             },
             {
               "pos": 0.88,
-              "width": 0.04,
+              "width": 0.078,
               "color": "#3FB8AF"
             }
           ]
@@ -1371,12 +1371,12 @@
             "stripes": [
               {
                 "pos": 0.55,
-                "width": 0.22,
+                "width": 0.26,
                 "color": "#F3EAD3"
               },
               {
                 "pos": 0.55,
-                "width": 0.07,
+                "width": 0.156,
                 "color": "#3FB8AF"
               }
             ]
@@ -1398,12 +1398,12 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.26,
+              "width": 0.3,
               "color": "#F3EAD3"
             },
             {
               "pos": 0.5,
-              "width": 0.08,
+              "width": 0.18,
               "color": "#3FB8AF"
             }
           ]
@@ -1427,12 +1427,17 @@
           "stripes": [
             {
               "pos": 0.88,
-              "width": 0.12,
+              "width": 0.163,
               "color": "#5C3A21"
             },
             {
               "pos": 0.88,
-              "width": 0.04,
+              "width": 0.13,
+              "color": "#F3EAD3"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.078,
               "color": "#3FB8AF"
             }
           ]
@@ -1447,12 +1452,17 @@
             "stripes": [
               {
                 "pos": 0.55,
-                "width": 0.22,
+                "width": 0.325,
                 "color": "#5C3A21"
               },
               {
                 "pos": 0.55,
-                "width": 0.07,
+                "width": 0.26,
+                "color": "#F3EAD3"
+              },
+              {
+                "pos": 0.55,
+                "width": 0.156,
                 "color": "#3FB8AF"
               }
             ]
@@ -1474,12 +1484,17 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.26,
+              "width": 0.375,
               "color": "#5C3A21"
             },
             {
               "pos": 0.5,
-              "width": 0.08,
+              "width": 0.3,
+              "color": "#F3EAD3"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.18,
               "color": "#3FB8AF"
             }
           ]
