@@ -428,22 +428,23 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 
 
 # The odds of keeping the puck on a straight carry from `from` to `to` in
-# `arrival_time` (a stand when they meet): the strip odds along it
+# `arrival_time` (a stand when they meet): each defender's one chance at it
 # (AIStripOdds), against `opponents` (index-matched velocities and caps) — read
 # `projected_s` after now when the caller carried them forward, or as they are
 # now for a carry setting off `start_s` from now.
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], projected_s: float = 0.0, start_s: float = 0.0) -> float:
-	return AIStripOdds.keep(AIStripOdds.carry_strips(from, to, arrival_time, opponents,
-			opponent_vels, opponent_caps, projected_s, start_s))
+	return AIStripOdds.carry_keep(from, to, arrival_time, opponents, opponent_vels,
+			opponent_caps, projected_s, start_s)
 
 
-# Where a carry is stripped, if it is: the point on it a loss is expected at
-# (each stretch weighted by the odds the puck is lost there), so a strip
-# surrenders the puck in the traffic it was skating through, not at the safe
-# spot it was headed for. `covered_only`: how far the carry gets — the point by
-# which half its carries are lost, or `to`.
+# Where a carry is stripped, if it is: each defender's first chance at it — the
+# first point his stick is set on with even odds, else his best — weighted by his
+# odds of taking it, so a strip surrenders the puck in the traffic it was skating
+# through, not at the safe spot it was headed for. `covered_only`: how far the
+# carry gets — the first point a defender is set on with better than even odds of
+# taking the puck, or `to`.
 static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], covered_only: bool = false,
@@ -452,25 +453,37 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		return to
 	if from.is_equal_approx(to):
 		return from
+	var has_caps: bool = opponent_caps.size() == opponents.size()
 	var steps: int = maxi(1, ceili(arrival_time / AIStripOdds.DWELL_STEP_S - 1e-6))
-	var dt: float = arrival_time / steps
-	var keep: float = 1.0
-	var lost: float = 0.0
-	var at := Vector3.ZERO
-	var prev: Vector3 = from
-	for k: int in steps:
-		var p: Vector3 = from.lerp(to, float(k + 1) / steps)
-		var stretch: float = exp(-AIStripOdds.stretch_strips(prev, p, dt, start_s + dt * (k + 1),
-				opponents, opponent_vels, opponent_caps, projected_s))
-		if covered_only and keep * stretch < 0.5:
-			return p
-		at += p * keep * (1.0 - stretch)
-		lost += keep * (1.0 - stretch)
-		keep *= stretch
-		prev = p
-	if covered_only or lost < 1e-4:
+	if covered_only:
+		for k: int in steps:
+			var f: float = float(k + 1) / steps
+			var p: Vector3 = from.lerp(to, f)
+			for i: int in opponents.size():
+				if AIStripOdds.SET_STRIP * AIStripOdds.chance_at(opponents[i], opponent_vels[i],
+						opponent_caps[i] if has_caps else null, p,
+						start_s + arrival_time * f - projected_s) > 0.5:
+					return p
 		return to
-	return at / lost
+	var at := Vector3.ZERO
+	var lost: float = 0.0
+	for i: int in opponents.size():
+		var best: float = 0.0
+		var best_p: Vector3 = to
+		var first: bool = false
+		for k: int in steps:
+			var f: float = float(k + 1) / steps
+			var p: Vector3 = from.lerp(to, f)
+			var c: float = AIStripOdds.chance_at(opponents[i], opponent_vels[i],
+					opponent_caps[i] if has_caps else null, p,
+					start_s + arrival_time * f - projected_s)
+			if not first and (c > best or c >= 0.5):
+				best_p = p
+				first = c >= 0.5
+			best = maxf(best, c)
+		at += best_p * best
+		lost += best
+	return at / lost if lost > 1e-4 else to
 
 
 # The carrier's best evasion target — the point in his handling envelope (where he

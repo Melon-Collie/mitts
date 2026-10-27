@@ -196,8 +196,8 @@ func test_strip_point_is_the_tight_midroute_not_the_safe_destination() -> void:
 	var opps: Array[Vector3] = [Vector3(0, 0, 5)]     # parked on the midpoint
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var strip: Vector3 = AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels)
-	assert_almost_eq(strip.z, 5.0, AIStripOdds.STRIP_RADIUS_M,
-			"strip localizes to the tight mid-route point")
+	assert_almost_eq(strip.z, 5.0, AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + 10.0 / 14.0,
+			"strip localizes to the tight mid-route point, within his reach and a sample")
 
 
 func test_strip_point_is_destination_when_that_is_the_tight_end() -> void:
@@ -207,7 +207,7 @@ func test_strip_point_is_destination_when_that_is_the_tight_end() -> void:
 	var opps: Array[Vector3] = [Vector3(0, 0, 10)]    # waiting at the destination
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var strip: Vector3 = AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels)
-	assert_gte(strip.z, 10.0 - AIStripOdds.STRIP_RADIUS_M,
+	assert_gte(strip.z, 10.0 - AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M,
 			"strip localizes to the covered destination")
 
 

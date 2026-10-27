@@ -616,7 +616,9 @@ takes the whole class down and every static call on it from every file at once.
     carry-cursor ring, the wrister charge and its lookahead);
   - `goalie_model.gd` (`AIGoalieModel`) — the keeper the bots plan against: his
     body's cover numbers, the difficulty-synced reads, planned depth, lateral
-    push, post seal and predicted position.
+    push, post seal and predicted position;
+  - `strip_odds.gd` (`AIStripOdds`) — whether a defender takes the puck off a
+    path: each one's one chance at it, on the arrival clock.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -704,14 +706,15 @@ remains.
   the same way: the incumbent destination competes at the plan last found toward
   it, not at its straight-carry estimate, through which every lane past a
   defender reads alike.
-  - A defender the carry path **meets** between samples is priced by the
-    crossing band (`carry_crossing_keep`) on his full reach
-    (`AISkaterCaps.max_blade_reach`) plus the poke's contact, the reach a
-    poke-check is thrown at, less the little the shield buys at that range —
-    measured by `tests/instruments/ai/test_crossing_band.gd` against a poker who
-    leads the carry. The dwell and transit maps keep their own calibration on
-    the stick's span: priced at full reach everywhere, a carrier in his own end
-    read every forechecker's disk as closed and escaped fewer forechecks.
+  - A carry path's **keep odds** — every carry, rolled move, drive and entry
+    skate — are each defender's one chance at it (`AIStripOdds`,
+    `docs/strip-interception-plan.md`): can his stick, from where he is and how
+    he is moving, be set on some point of the path a beat before the puck,
+    graded across the arrival clock's error. One chance however long the puck
+    is in his reach, and measured against a worst-case interceptor, never our
+    defending bots. Never read where a defender might be as a spread that thins
+    with how far ahead it looks: an entry read from further back then looks
+    easier, and the carrier backs off to re-approach.
   - The **shot on a carry's arrival** reads a man behind the carry, skating its
     way, as on it for the whole carry (`AICarrySpace._chases`, through
     `AIShotHolds.solve_arrival`): a puck in the shooting pocket is not shielded

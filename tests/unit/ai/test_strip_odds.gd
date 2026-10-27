@@ -1,111 +1,92 @@
 extends GutTest
 
-# Properties of the strip odds (AIStripOdds): what any calibration of it does.
+# Properties of the one-chance strip read (AIStripOdds): what any calibration of
+# it does.
 
-var _none: Array[Vector3] = []
-
-
-func test_a_defender_on_the_puck_now_is_within_his_stick() -> void:
-	assert_eq(AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null, Vector3(1.0, 0, 0), 0.0),
-			1.0)
-	assert_eq(AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null, Vector3(3.0, 0, 0), 0.0),
-			0.0, "and one out of reach now is not")
+var _still: Array[Vector3] = [Vector3.ZERO]
 
 
-func test_the_further_off_his_line_the_less_likely() -> void:
-	var prev: float = 2.0
-	for d: float in [0.0, 1.0, 2.0, 3.0, 5.0, 8.0]:
-		var p: float = AIStripOdds.odds_within(Vector3.ZERO, Vector3(0, 0, -4.0), null,
-				Vector3(d, 0, -4.0), 1.0)
-		assert_lte(p, prev + 1e-6, "%.0f m off it" % d)
-		prev = p
+func _keep(defs: Array[Vector3], vels: Array[Vector3], from: Vector3, to: Vector3,
+		t: float) -> float:
+	return AIStripOdds.carry_keep(from, to, t, defs, vels)
 
 
-func test_his_momentum_carries_his_threat() -> void:
-	var ahead: float = AIStripOdds.odds_within(Vector3.ZERO, Vector3(0, 0, -6.0), null,
-			Vector3(0, 0, -6.0), 1.0)
-	var behind: float = AIStripOdds.odds_within(Vector3.ZERO, Vector3(0, 0, -6.0), null,
-			Vector3(0, 0, 6.0), 1.0)
-	assert_gt(ahead, behind, "where he is going, not where he was")
-
-
-func test_the_spread_grows_with_time() -> void:
-	var point := Vector3(4.0, 0, 0)
-	var soon: float = AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null, point, 0.3)
-	var later: float = AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null, point, 1.5)
-	assert_lt(soon, later, "a spot 4 m off is his only given time")
-
-
-func test_the_table_matches_the_integral() -> void:
-	# The fan's odds over the disc by brute force, against the table's.
-	for c: Vector2 in [Vector2(0.0, 0.5), Vector2(1.5, 0.3), Vector2(2.5, 1.2), Vector2(0.7, 3.0)]:
-		var d: float = c.x
-		var l: float = c.y
-		var brute: float = 0.0
-		var n: int = 200
-		for a: int in n:
-			for b: int in n:
-				var x: float = -1.0 + 2.0 * (a + 0.5) / n
-				var z: float = -1.0 + 2.0 * (b + 0.5) / n
-				if x * x + z * z > 1.0:
-					continue
-				var r: float = Vector2(x + d, z).length()
-				if r <= AIStripOdds._EDGE * l:
-					brute += exp(-r / l) / (TAU * l * l) * (4.0 / (n * n))
-		assert_almost_eq(AIStripOdds._within(d, l), brute / AIStripOdds._norm, 0.02,
-				"d %.1f, l %.1f" % [d, l])
-
-
-func test_defenders_add() -> void:
-	var points: Array[Vector3] = [Vector3(0, 0, -2), Vector3(0, 0, -4), Vector3(0, 0, -6)]
-	var times: Array[float] = [0.3, 0.6, 0.9]
-	var one: Array[Vector3] = [Vector3(2.5, 0, -5)]
-	var still: Array[Vector3] = [Vector3.ZERO]
-	var alone: float = AIStripOdds.path_strips(Vector3.ZERO, points, times, one, still)
-	assert_gt(alone, 0.0)
-	var two: Array[Vector3] = [one[0], Vector3(-2.5, 0, -5)]
-	var stills: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
-	assert_almost_eq(AIStripOdds.path_strips(Vector3.ZERO, points, times, two, stills),
-			2.0 * alone, 1e-5, "a mirror image of him costs as much again")
-	assert_eq(AIStripOdds.path_strips(Vector3.ZERO, points, times, _none, []), 0.0)
-
-
-func test_a_man_far_from_the_path_costs_nothing() -> void:
-	var points: Array[Vector3] = [Vector3(0, 0, -2)]
-	var times: Array[float] = [0.3]
+func test_a_man_who_cannot_get_there_first_takes_nothing() -> void:
 	var far: Array[Vector3] = [Vector3(0, 0, 25)]
-	var still: Array[Vector3] = [Vector3.ZERO]
-	assert_almost_eq(AIStripOdds.path_strips(Vector3.ZERO, points, times, far, still), 0.0, 1e-6)
+	assert_eq(_keep(far, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0), 1.0)
 
 
-func test_a_held_puck_in_his_reach_is_stripped_at_the_standing_rate() -> void:
-	var him: Array[Vector3] = [Vector3(1.0, 0, 0)]
-	var still: Array[Vector3] = [Vector3.ZERO]
-	assert_almost_eq(AIStripOdds.dwell_strips(Vector3.ZERO, 0.0, 0.1, him, still),
-			0.1 * AIStripOdds.STANDING_STRIP_RATE, 0.02)
-	assert_almost_eq(AIStripOdds.keep(0.0), 1.0, 1e-9)
+func test_a_set_stick_on_the_path_takes_it_at_the_set_odds() -> void:
+	var on: Array[Vector3] = [Vector3(0, 0, -6)]
+	assert_almost_eq(_keep(on, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0),
+			1.0 - AIStripOdds.SET_STRIP, 1e-6)
 
 
-func test_he_is_never_where_his_stride_cannot_take_him() -> void:
-	# Standing, he covers well under 30 m in 3 s: a point that far off is not his.
-	assert_eq(AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null, Vector3(35.0, 0, 0), 3.0),
-			0.0)
+func test_a_stick_arriving_just_in_time_takes_nothing() -> void:
+	# His stick reaches the point the instant the puck does: no time to set.
+	var reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+	var him := Vector3(0, 0, -reach - 4.0)
+	var point := Vector3(0, 0, -reach)
+	var arrive: float = AIArrival.time_to_arrive_caps(him, Vector3(0, 0, -2.0 * reach), Vector3.ZERO,
+			null)
+	assert_eq(AIStripOdds.chance_at(him, Vector3.ZERO, null, point, arrive), 0.0)
+	assert_gt(AIStripOdds.chance_at(him, Vector3.ZERO, null, point, arrive + 1.0), 0.9,
+			"and given a second to set, he has it")
 
 
-func test_his_momentum_stops_at_the_boards() -> void:
-	# Skating at the side boards, a second on he is on them, not through them.
-	var wall_x: float = GameRules.INNER_HALF_WIDTH
-	var at_wall: float = AIStripOdds.odds_within(Vector3(wall_x - 3.0, 0, 0), Vector3(6.0, 0, 0),
-			null, Vector3(wall_x - 0.5, 0, 0), 1.0)
-	assert_gt(at_wall, 0.5, "he is where the boards stopped him")
+func test_the_further_he_has_to_go_the_safer() -> void:
+	var prev: float = -1.0
+	for d: float in [3.0, 5.0, 7.0, 9.0, 12.0]:
+		var him: Array[Vector3] = [Vector3(d, 0, -5)]
+		var k: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -8), 1.0)
+		assert_gte(k, prev - 1e-6, "%.0f m off it" % d)
+		prev = k
 
 
-func test_the_boards_keep_his_weight_on_the_ice() -> void:
-	# A man standing on the boards, against the same man in open ice: his weight
-	# that would be past the boards is on the ice side.
-	var wall_x: float = GameRules.INNER_HALF_WIDTH
-	var on_boards: float = AIStripOdds.odds_within(Vector3(wall_x, 0, 0), Vector3.ZERO, null,
-			Vector3(wall_x - 3.0, 0, 0), 1.0)
-	var open_ice: float = AIStripOdds.odds_within(Vector3(0, 0, 0), Vector3.ZERO, null,
-			Vector3(-3.0, 0, 0), 1.0)
-	assert_gt(on_boards, open_ice)
+func test_his_momentum_is_his_head_start() -> void:
+	var him: Array[Vector3] = [Vector3(5, 0, -5)]
+	var toward: Array[Vector3] = [Vector3(-6, 0, 0)]
+	var away: Array[Vector3] = [Vector3(6, 0, 0)]
+	assert_lt(_keep(him, toward, Vector3.ZERO, Vector3(0, 0, -8), 1.0),
+			_keep(him, away, Vector3.ZERO, Vector3(0, 0, -8), 1.0))
+
+
+func test_waiting_never_thins_the_defence() -> void:
+	# Holding the puck longer only gives a defender more time to get to it.
+	var him: Array[Vector3] = [Vector3(6, 0, 0)]
+	var prev: float = 2.0
+	for t: float in [0.3, 0.6, 1.0, 1.5, 2.0, 3.0]:
+		var k: float = _keep(him, _still, Vector3.ZERO, Vector3.ZERO, t)
+		assert_lte(k, prev + 1e-6, "held %.1f s" % t)
+		prev = k
+
+
+func test_defenders_are_separate_chances() -> void:
+	var one: Array[Vector3] = [Vector3(3, 0, -5)]
+	var two: Array[Vector3] = [Vector3(3, 0, -5), Vector3(-3, 0, -5)]
+	var stills: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+	var alone: float = _keep(one, _still, Vector3.ZERO, Vector3(0, 0, -8), 1.0)
+	assert_lt(alone, 1.0)
+	assert_almost_eq(_keep(two, stills, Vector3.ZERO, Vector3(0, 0, -8), 1.0), alone * alone, 1e-6,
+			"a mirror image of him is another chance as good")
+
+
+func test_a_man_gets_one_chance_however_long_the_puck_is_in_his_reach() -> void:
+	# Skating past him or straight through him, he has the one chance.
+	var him: Array[Vector3] = [Vector3(0, 0, -5)]
+	var through: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -10), 1.5)
+	var past: float = _keep(him, _still, Vector3(1, 0, 0), Vector3(1, 0, -10), 1.5)
+	assert_almost_eq(through, past, 1e-6)
+	assert_almost_eq(through, 1.0 - AIStripOdds.SET_STRIP, 1e-6)
+
+
+func test_the_path_keep_reads_as_the_carry_keep() -> void:
+	var him: Array[Vector3] = [Vector3(4, 0, -6)]
+	var vel: Array[Vector3] = [Vector3(-2, 0, 1)]
+	var points: Array[Vector3] = []
+	var times: Array[float] = []
+	for k: int in 10:
+		points.append(Vector3(0, 0, -0.8 * (k + 1)))
+		times.append(0.1 * (k + 1))
+	assert_almost_eq(AIStripOdds.path_keep(points, times, him, vel),
+			AIStripOdds.carry_keep(Vector3.ZERO, Vector3(0, 0, -8), 1.0, him, vel), 1e-6)

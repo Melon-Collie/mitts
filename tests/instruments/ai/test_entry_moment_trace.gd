@@ -5,7 +5,8 @@ extends "res://tests/instruments/ai/test_entry_decision_maps.gd"
 # still, and each rolled move's row (where it ends, its worth there and what
 # made it: the arrival value, the destination carried on, the pass option, the
 # second step; the decay, the keep odds and the strip cost) — beside the pass and
-# the drive-in floor. The moment is MITTS_TRACE_RUN (an index into RUNS) at
+# the drive-in floor, and how a standing man's chance at a spot grows with how
+# far ahead it is read. The moment is MITTS_TRACE_RUN (an index into RUNS) at
 # MITTS_TRACE_T seconds. Reports only.
 
 const DEST_NAMES: Array[String] = ["SLOT", "WIDE_L", "WIDE_R", "EXIT_L", "EXIT_R", "WALK_L",
@@ -59,9 +60,9 @@ func test_trace_moment() -> void:
 	gut.p("drive-in floor %.3f, reached (%.1f, %.1f)" % [drive, field.drive_in_reached.x,
 			field.drive_in_reached.z])
 	_trace_value_field(ctx, field)
-	var odds: String = "a man standing on a spot covers it, by how far ahead it is read:"
+	var odds: String = "a man standing 6 m off a spot has his stick set on it, by how far ahead:"
 	for t: float in [0.25, 0.5, 1.0, 1.5, 2.0, 3.0]:
-		odds += "  %.2f s %.2f" % [t, AIStripOdds.odds_within(Vector3.ZERO, Vector3.ZERO, null,
+		odds += "  %.2f s %.2f" % [t, AIStripOdds.chance_at(Vector3(6.0, 0, 0), Vector3.ZERO, null,
 				Vector3.ZERO, t)]
 	gut.p(odds)
 	assert_true(true)

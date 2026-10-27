@@ -4,10 +4,9 @@ The question the carrier's keep read answers: given his planned path and each
 defender's position and velocity, how risky is the path? Two parts:
 
 1. **His space** — the stretch of the path the defender can physically get his
-   stick to before the puck gets there: his position, his velocity and the
+   stick to, set, before the puck gets there: his position, his velocity and the
    movement physics (`AIArrival`), his options and not his choices.
-2. **Will he strip it** — given he can get there, the odds he takes the puck, by
-   how much time he has to spare there.
+2. **Will he strip it** — given he can, the odds he takes the puck.
 
 What it leaves out on purpose:
 
@@ -18,54 +17,58 @@ What it leaves out on purpose:
   bots play (gap keeping, late engagement). Fitting the planner to the bots it
   plays against, then judging it by them, confirms itself.
 
-## Why not the strip odds as they are
+## The read (`AIStripOdds`)
 
-`AIStripOdds` (`docs/defender-race-plan.md`) sums expected strips over the path's
-stretches from a fan of where each defender might be. Read by how far ahead it
-looks (`tests/instruments/ai/test_strip_odds_by_horizon.gd`) it expects twice the
-losses our defenders take at 0.5–1.5 s and a third of them at 2–3 s: the fan
-thins a defender the further ahead it looks, so an entry read from further back
-looks easier and the carrier backs off to re-approach (the entry drill's
-moment 04, `tests/instruments/ai/test_entry_moment_trace.gd`). It is also fitted
-to our defending bots.
+- **His chance at a point** (`chance_at`): his arrival clock to within his
+  blade's reach of it, against the puck's time there less `SET_S` (0.25 s — a
+  stick arriving with less strips next to nothing), graded across the clock's
+  calibrated error the way `arrival_race` grades a race: `clamp(0.5 + (puck_t −
+  arrive − SET_S) / (2 band))`, `band = max(ERROR_FLOOR_S, ERROR_FRAC × arrive)`.
+- **One chance per defender per path** (`path_keep`, `carry_keep`): his best
+  chance anywhere on it, taken with the odds a set stick strips (`SET_STRIP`,
+  0.88). However long the puck stays in his reach, it is the one chance.
+- **Defenders are separate chances:** keep = Π (1 − SET_STRIP × chance_i).
+- **Where a loss happens** (`carry_strip_point`, the carry search's rolled
+  moves): each defender's first chance — the first point his stick is set on with
+  even odds, else his best — weighted by his odds of taking it.
 
-What the race reads measured (`tools/strip_race_fit.py`): no loss anywhere a
-defender could not get his stick first, and once he can, a rate that does not
-grow with the time he has to spare. Summed over stretches, though, any race read
-inherits the sum's trouble — time in reach, the contact burst, every defender
-reaching everything late.
+Waiting never thins the defence: with more time a defender reaches more of the
+path, so a carry read from further back does not look easier. That is what
+stalled the entry drill's carrier under the fan read it replaced (moment 04,
+`tests/instruments/ai/test_entry_moment_trace.gd`), which spread each defender
+thinner the further ahead it looked.
 
-## The model
+## What it is measured against
 
-- **One chance per defender per path.** For each defender, the point of the path
-  where his spare time (the puck's time there less his stick's) is greatest.
-  None non-negative: he is no threat. Otherwise the path's risk from him is
-  `p(spare)` there.
-- **Defenders are separate chances:** keep = Π (1 − p_i).
-- **`p(spare)` is the one curve calibrated**, against a worst-case interceptor
-  (below), never against our defending bots.
+A worst-case interceptor (`tests/instruments/ai/test_interceptor_truth.gd`): a
+real body in the duel harness whose input is replaced every tick. He knows the
+carrier's path, skates flat out to the earliest point of it he reaches `SET_S`
+before the puck (else the point he has most time to spare at), faces it, and jabs
+his blade through the puck once it is in reach — what a defender can do, not what
+ours choose to, so the read's risk is the upper bound a planner plans against.
+He runs the race truth instrument's scripted carrier paths plus stagings far off
+the path's side and behind it.
 
-## The worst-case interceptor
+What the 2160 runs measured (`tools/strip_interception_fit.py`):
 
-A scripted defender in the duel harness: a real body (movement, arm, poke rules)
-whose input is replaced every tick. He knows the carrier's path, skates flat out
-to the earliest point of it he reaches with time to set, faces it, and jabs his
-blade through the puck once it is in reach. What he can do, not what ours
-choose to — so the model's risk is the upper bound a planner should plan against.
+- No time to spare anywhere on the path: 10 of 386 lost.
+- With it: ~88% lost, not rising with more spare time; the runs kept are nearly
+  all ones whose first chance came as the 3 s run ended.
+- The set time is physical, not his policy: aiming for no spare time instead, he
+  strips less (half the runs, against 73%), and with less than a quarter second
+  to spare at his point either way he takes almost nothing.
+- Our defending bots, on the same paths: 30–45% of the paths they can reach.
+  Not used.
 
-Run against the same scripted carrier paths as the race truth instrument
-(`tests/instruments/ai/test_defender_race_truth.gd`), the stagings recorded with
-each defender's spare time at his best point; `p(spare)` is read off them.
-
-## Steps
-
-1. The interceptor and its instrument; record the runs.
-2. Fit `p(spare)`; score the one-chance model on the interceptor runs (held
-   out), and on the bot runs as a sanity check only.
-3. Talk it through before anything reaches production.
+`tests/unit/ai/test_strip_odds_vs_truth.gd` holds the read against the
+interceptor's runs (`tests/unit/ai/data/strip_intercept_truth.txt`, written by
+`tests/instruments/ai/test_interception_export.gd`): its ranking of lost runs
+over kept ones and its expected losses are ratchets.
 
 ## Open questions
 
+- The exact set time: 0.25 s is the interceptor's best policy measured so far;
+  runs aiming for 0.1 s and 0.5 s would pin the shortest that strips reliably.
 - Whether the stick lift belongs in the worst case beside the jab.
-- Whether a defender who fails his one chance can earn a second one further down
-  a long path (a chase from behind).
+- Whether a defender who fails his one chance can earn a second further down a
+  long path (a chase from behind).

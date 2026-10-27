@@ -361,7 +361,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var bound: float = _prune_bound_for(m, _beam_prune_bound)
 	if decay <= bound:
 		return
-	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, reach)
+	var safety: float = _rolled_safety(ctx, rollout, m, reach)
 	if decay * safety <= bound:
 		return
 	_field.project_opponents(t0, _scratch_opponents_path, _scratch_vels_path, end)
@@ -486,7 +486,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 				* AIActionScoring.delay_discount(t2)
 		if worth <= best:
 			continue
-		var safety: float = _rolled_safety(ctx, _rollout2, m, start, reach, t1)
+		var safety: float = _rolled_safety(ctx, _rollout2, m, reach, t1)
 		var move_value: float = worth * safety
 		if move_value <= best:
 			continue
@@ -499,30 +499,40 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 
 
 # The odds of keeping the puck along rolled move `m` of `roll` from `from`,
-# setting off `start_s` from now against the defence as it is now: the strip
-# odds (AIStripOdds) over the move's skated samples, each at its own time. Leaves
-# where a loss is expected in _strip_point (INF: none) and when, into the move,
-# in _strip_t.
-func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3,
+# setting off `start_s` from now against the defence as it is now: each
+# defender's one chance at the move's skated samples (AIStripOdds), each sample
+# at its own time. Leaves where a loss is expected in _strip_point (INF: none) —
+# each defender's first chance, weighted by his odds of taking it — and when,
+# from the start of the move, in _strip_t.
+func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int,
 		reach: int = AICarryRollout.SAMPLES, start_s: float = 0.0) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
-	var prev: Vector3 = AICarrierField.puck_pos_at(from, goal)
-	var t_prev: float = 0.0
+	var opps: Array[Vector3] = _field.opponents
+	var has_caps: bool = _field.opponent_caps.size() == opps.size()
 	var keep: float = 1.0
 	var lost: float = 0.0
 	var at := Vector3.ZERO
 	var when: float = 0.0
-	for k: int in reach:
-		var p: Vector3 = AICarrierField.puck_pos_at(roll.sample(m, k), goal)
-		var t: float = AICarryRollout.HORIZON_S * float(k + 1) / AICarryRollout.SAMPLES
-		var stretch: float = exp(-AIStripOdds.stretch_strips(prev, p, t - t_prev, start_s + t,
-				_field.opponents, _field.opponent_vels, _field.opponent_caps))
-		at += p * keep * (1.0 - stretch)
-		when += t * keep * (1.0 - stretch)
-		lost += keep * (1.0 - stretch)
-		keep *= stretch
-		prev = p
-		t_prev = t
+	for i: int in opps.size():
+		var caps: AISkaterCaps = _field.opponent_caps[i] if has_caps else null
+		var best: float = 0.0
+		var best_p := Vector3.ZERO
+		var best_t: float = 0.0
+		var first: bool = false
+		for k: int in reach:
+			var t: float = AICarryRollout.HORIZON_S * float(k + 1) / AICarryRollout.SAMPLES
+			var p: Vector3 = AICarrierField.puck_pos_at(roll.sample(m, k), goal)
+			var c: float = AIStripOdds.chance_at(opps[i], _field.opponent_vels[i], caps, p,
+					start_s + t)
+			if not first and (c > best or c >= 0.5):
+				best_p = p
+				best_t = t
+				first = c >= 0.5
+			best = maxf(best, c)
+		keep *= 1.0 - AIStripOdds.SET_STRIP * best
+		at += best_p * best
+		when += best_t * best
+		lost += best
 	_strip_point = at / lost if lost > 1e-4 else Vector3.INF
 	_strip_t = when / lost if lost > 1e-4 else 0.0
 	return keep

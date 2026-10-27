@@ -1,7 +1,7 @@
 """Draw the entry drill's decision moments (tests/instruments/ai/test_entry_decision_maps.gd).
 
-Each moment is one PNG: the defenders' coverage (the odds one of them is within
-his stick of each spot, AIStripOdds) 0.3 s, 1 s and 2 s on, with where each
+Each moment is one PNG: the defenders' coverage (the odds one of them has his
+stick set on each spot and takes a puck there, AIStripOdds) 0.3 s, 1 s and 2 s on, with where each
 defender really was then, the carrier and his mates, and what the carrier
 decided. Our team attacks up the page.
 
@@ -52,7 +52,7 @@ def draw(moment, path):
     fig.suptitle("play %d at %.1f s: %s   (carry %.3f, pass %.3f to %d)" % (
         moment["run"], moment["t"], moment["decision"], moment["carry"], moment["pass"],
         moment["pass_to"]), fontsize=12)
-    fig.text(0.5, 0.01, "red shade: odds a defender's stick is within 2 m of that spot then; "
+    fig.text(0.5, 0.01, "red shade: odds a defender's stick is set on that spot by then and takes it; "
              "dots and arrows: now and 0.5 s of velocity; black = carrier, blue = mates "
              "(filled: pass target), star = carry target", ha="center", fontsize=9)
     fig.tight_layout(rect=(0, 0.03, 1, 0.95))

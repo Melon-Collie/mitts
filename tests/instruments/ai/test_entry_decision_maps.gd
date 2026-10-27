@@ -3,8 +3,9 @@ extends "res://tests/instruments/ai/test_nz_entry_drill.gd"
 # The entry drill's decision moments, for drawing: every half second while our
 # carrier has the puck short of their line, the play (carrier, mates, defenders),
 # what the carrier decided and its values, and the defenders' coverage — the odds
-# one of them is within his stick (AIStripOdds) of each spot of the ice 0.3 s,
-# 1 s and 2 s on — beside where each defender really was then. Writes
+# one of them has his stick set on each spot of the ice (AIStripOdds) and takes
+# a puck there 0.3 s, 1 s and 2 s on — beside where each defender really was
+# then. Writes
 # .preview/decision_maps/moments.jsonl; tools/decision_maps.py draws it. Reports
 # only.
 
@@ -89,8 +90,9 @@ func _moment(duel: Object, run: int, t: float) -> Dictionary:
 			"actual": actual}
 
 
-# The odds one of the defenders is within his stick of each grid spot `ahead`
-# from now, the defenders' odds summed: rows from the near end, columns across.
+# The odds one of the defenders has his stick set on each grid spot `ahead` from
+# now and takes a puck there, the defenders as separate chances: rows from the
+# near end, columns across.
 func _coverage(defs: Array[Vector3], vels: Array[Vector3], caps: Array, ahead: float) -> Array:
 	var rows: Array = []
 	var z: float = GRID_Z_NEAR
@@ -99,10 +101,11 @@ func _coverage(defs: Array[Vector3], vels: Array[Vector3], caps: Array, ahead: f
 		var x: float = -GRID_X
 		while x <= GRID_X + 1e-6:
 			var p := Vector3(x, 0.0, z)
-			var sum: float = 0.0
+			var keep: float = 1.0
 			for i: int in defs.size():
-				sum += AIStripOdds.odds_within(defs[i], vels[i], caps[i], p, ahead)
-			row.append(snappedf(sum, 0.001))
+				keep *= 1.0 - AIStripOdds.SET_STRIP * AIStripOdds.chance_at(defs[i], vels[i],
+						caps[i], p, ahead)
+			row.append(snappedf(1.0 - keep, 0.001))
 			x += GRID_M
 		rows.append(row)
 		z -= GRID_M
