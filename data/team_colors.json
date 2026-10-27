@@ -803,7 +803,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#1A1A1A",
+          "collar": "#E31B6D",
           "stripes": []
         },
         "arms": {
