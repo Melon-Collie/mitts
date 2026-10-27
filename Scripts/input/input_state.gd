@@ -137,7 +137,7 @@ func to_bytes() -> PackedByteArray:
 
 
 # to_bytes' in-place twin: writes this input's BYTES_SIZE record at `offset` in a
-# caller-owned buffer. The batch send packs up to 24 inputs per RPC at 120 Hz, so
+# caller-owned buffer. The batch send packs up to 24 inputs per RPC every tick, so
 # a per-record PackedByteArray would churn a throwaway buffer per input per batch
 # (~1.4-2.9k/s). Same bytes as to_bytes by construction — that one delegates here.
 func write_bytes(b: PackedByteArray, offset: int) -> void:

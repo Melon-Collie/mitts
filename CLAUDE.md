@@ -402,8 +402,8 @@ the *model*, not by bolting on a corrective hack. Feel tunables (staging offsets
 loft heights, difficulty knobs) are legitimately hand-picked; the line is
 evaluation vs. feel. Full rules: `Scripts/domain/ai/CLAUDE.md`.
 
-**Hot-path discipline — the 120 Hz tick multiplies every cost.** Anything reached
-from `_physics_process` or a per-tick `update()` runs 120×/second × actor count
+**Hot-path discipline — the 90 Hz tick multiplies every cost.** Anything reached
+from `_physics_process` or a per-tick `update()` runs 90×/second × actor count
 (6 skaters + 2 goalies + puck), and reconcile replay re-runs the per-tick body
 once *per replayed input* — so the cost is amplified exactly when the network is
 bad. When the host's tick budget overruns, physics dilates and the broadcast
@@ -426,7 +426,7 @@ sampled at that instant. Moving visual work to `_process` is therefore safe only
 when nothing still on the tick shares a spatial relationship with it — and the
 camera shares one with every actor, so it can never move alone. Moving *it* to
 render rate while actors stayed on the tick is what put a one-tick-of-travel
-sawtooth into every skater's screen position above 120 fps (see
+sawtooth into every skater's screen position above the tick rate (see
 `GameCamera._process`). Either everything visible moves together, or the
 tick-rate half is interpolated up to render time; `physics/common/
 physics_interpolation` now does the latter, which is why actor teleports must

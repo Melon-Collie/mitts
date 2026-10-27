@@ -564,6 +564,6 @@ the one thing a caller can get wrong.
 
 ## Hot path
 
-Everything here runs at 120 Hz × actor count, and reconcile replay re-runs the
+Everything here runs at the tick rate × actor count, and reconcile replay re-runs the
 per-tick body once per replayed input. Cosmetic-only work belongs in `_process`,
 not `_physics_process`. See CLAUDE.md → *Hot-path discipline*.

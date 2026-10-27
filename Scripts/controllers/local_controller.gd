@@ -74,7 +74,8 @@ const _CLAIM_COOLDOWN_S: float = 0.3  # sustained re-fire gap while a claim targ
 const _PICKUP_CLAIM_FLOOR_S: float = 0.05  # min gap between pickup claims; caps rising-edge jitter spam
 const _POKE_CLAIM_FLOOR_S: float = 0.05    # same for poke / stick-lift claims
 
-const _RECONCILE_VISUAL_ALPHA: float = 0.20  # per-tick decay factor at the nominal 120 Hz tick; applied frame-rate-independently (see _physics_process)
+const _RECONCILE_VISUAL_ALPHA: float = 0.20  # decay factor per 1/_RECONCILE_VISUAL_HZ s, whatever the tick (see _physics_process)
+const _RECONCILE_VISUAL_HZ: float = 120.0
 
 func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> void:
 	camera = $Camera3D
@@ -187,11 +188,7 @@ func _step_tick(delta: float) -> void:
 	# _process_input. See Skater.capture_prev_blade_contact.
 	skater.capture_prev_blade_contact()
 	if not skater.visual_offset.is_zero_approx():
-		# Per-tick decay: (1 - alpha) is the factor at the nominal 120 Hz tick.
-		# Godot reports a CONSTANT physics delta (1/120) even when the sim
-		# dilates, so the exponent is always 1.0 today — the pow form only
-		# matters if this decay ever moves to a variable-delta context.
-		var decay: float = pow(1.0 - _RECONCILE_VISUAL_ALPHA, delta * float(Constants.PHYSICS_TICK))
+		var decay: float = pow(1.0 - _RECONCILE_VISUAL_ALPHA, delta * _RECONCILE_VISUAL_HZ)
 		var new_offset: Vector3 = skater.visual_offset * decay
 		skater.visual_offset = new_offset if new_offset.length_squared() > 0.000001 else Vector3.ZERO
 	if _game_state.is_movement_locked():
@@ -437,7 +434,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# Front-trim the acked prefix of each history. All three arrays are
 	# timestamp-sorted (appended chronologically), so everything at or before
 	# last_processed_host_timestamp sits at the front. Trimmed in place — a
-	# filter() rebuild allocates a fresh array per broadcast at 120 Hz, even in
+	# filter() rebuild allocates a fresh array per broadcast, even in
 	# the healthy no-reconcile case.
 	# The trim boundary carries TS_MATCH_EPSILON slack: the ack arrives
 	# through the 0.1ms wire grid while local stamps are full-precision f64,

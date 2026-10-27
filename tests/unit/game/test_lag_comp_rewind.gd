@@ -67,16 +67,17 @@ func test_forward_predict_ticks_zero_fraction_is_zero() -> void:
 
 
 func test_forward_predict_ticks_full_fraction_is_interp_delay_worth() -> void:
-	# fraction 1.0, 75 ms interp delay, 120 Hz -> 9 ticks (0.075 * 120).
-	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.075), 9)
+	# fraction 1.0, 75 ms interp delay -> 0.075 s of ticks.
+	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.075), roundi(0.075 * Constants.PHYSICS_TICK))
 
 
 func test_forward_predict_ticks_half_fraction() -> void:
-	assert_eq(LagCompRewind.forward_predict_ticks(0.5, 0.075), 5)  # round(4.5)
+	assert_eq(LagCompRewind.forward_predict_ticks(0.5, 0.075), roundi(0.5 * 0.075 * Constants.PHYSICS_TICK))
 
 
 func test_forward_predict_ticks_clamps_and_guards() -> void:
-	assert_eq(LagCompRewind.forward_predict_ticks(2.0, 0.075), 9, "fraction clamps to 1.0")
+	assert_eq(LagCompRewind.forward_predict_ticks(2.0, 0.075), roundi(0.075 * Constants.PHYSICS_TICK),
+			"fraction clamps to 1.0")
 	assert_eq(LagCompRewind.forward_predict_ticks(-1.0, 0.075), 0, "negative fraction -> 0")
 	assert_eq(LagCompRewind.forward_predict_ticks(1.0, -0.05), 0, "negative delay -> 0")
 
@@ -85,9 +86,10 @@ func test_forward_predict_ticks_caps_hostile_delay() -> void:
 	# The host-side caller feeds this the RAW client-reported interp_delay_ms —
 	# without the 200 ms ceiling (same clamp as remote_view_time) a crafted
 	# claim with a huge delay turns the per-claim integration loop into an
-	# unbounded host stall. 200 ms at 120 Hz -> 24 ticks, the hard ceiling.
-	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 1.0e6), 24)
-	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.2), 24, "legit delay at the ceiling")
+	# unbounded host stall. 200 ms of ticks is the hard ceiling.
+	var ceiling: int = roundi(0.2 * Constants.PHYSICS_TICK)
+	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 1.0e6), ceiling)
+	assert_eq(LagCompRewind.forward_predict_ticks(1.0, 0.2), ceiling, "legit delay at the ceiling")
 	assert_eq(LagCompRewind.forward_predict_ticks(1.0, INF), 0, "non-finite -> 0")
 	assert_eq(LagCompRewind.forward_predict_ticks(1.0, NAN), 0, "non-finite -> 0")
 

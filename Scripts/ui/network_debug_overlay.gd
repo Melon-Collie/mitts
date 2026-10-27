@@ -116,8 +116,8 @@ var _peak_physics_ms: float = 0.0
 #
 # Whether that sawtooth is visible is purely a sampling question. Rendered motion
 # is smooth only when every frame advances the sim by the same whole number of
-# ticks, which needs the frame rate to DIVIDE the tick rate — 120, 60, 40, 30
-# against a 120 Hz sim, where each frame samples the sawtooth at the same phase
+# ticks, which needs the frame rate to DIVIDE the tick rate — 90, 45, 30 against
+# a 90 Hz sim, where each frame samples the sawtooth at the same phase
 # and it aliases away entirely. Any other rate samples it mid-sweep. Note the
 # direction of that test: 240 fps is not a clean multiple but the worst case,
 # because half its frames advance no tick at all.
@@ -666,11 +666,11 @@ func _frame_health(t: NetworkTelemetry) -> void:
 #                  not their size, and every shadow-casting light re-submits the
 #                  casters in its range. A hundred small MeshInstance3Ds cost
 #                  here, not on the GPU.
-#   • Script     — _process + _physics_process on the main thread. At a 120 Hz
+#   • Script     — _process + _physics_process on the main thread. At a 90 Hz
 #                  sim, roughly one physics tick runs inside every rendered
 #                  frame, so per-tick work is charged straight to frame time.
 #                  Note this stays invisible to "Sim rate": the sim can hold a
-#                  perfect 120 Hz while still eating half the frame budget.
+#                  perfect 90 Hz while still eating half the frame budget.
 # Verdict-neutral throughout (_context / _info) — the header verdict is about the
 # NETWORK, and a GPU-bound frame is not a network problem.
 func _render_frame_cost() -> void:
@@ -781,7 +781,7 @@ func _render_sim_phase() -> void:
 	var health: Health = _band(uneven_frac, 0.02, 0.10)
 	_info("Rates", "%d Hz sim · %.0f fps · %.2f ticks/frame" % [
 			Constants.PHYSICS_TICK, fps, float(Constants.PHYSICS_TICK) / maxf(fps, 0.001)],
-		"the frame rate has to DIVIDE the sim rate for every frame to advance it equally — 120 / 60 / 40 / 30 against a 120 Hz sim. Not the other way round: above the sim rate some frames must advance no tick at all, so 240 fps is the worst case here, not a clean multiple")
+		"the frame rate has to DIVIDE the sim rate for every frame to advance it equally — 90 / 45 / 30 against a 90 Hz sim. Not the other way round: above the sim rate some frames must advance no tick at all, so 180 fps is the worst case here, not a clean multiple")
 	_context(health, "Ticks per frame", "%s (%.0f%% uneven)" % [pattern.strip_edges(), uneven_frac * 100.0],
 		"ticks×frames over the last second. One bucket = every frame sampled the motion at the same phase and it looks smooth. A second bucket IS the visible jitter, and its share is how much of each second you spend seeing it")
 	var speed: float = _local_skater_speed()

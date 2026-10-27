@@ -11,7 +11,7 @@ reference; each ported kernel is pinned to its reference by a seeded fuzz test
 (`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
 solver in both places or not at all** — the parity tests are the gate.
 
-This directory exists because interpreter overhead on the 120 Hz tick (and its
+This directory exists because interpreter overhead on the 90 Hz tick (and its
 reconcile-replay amplification) is the game's scripting bottleneck. The rule
 for what belongs here: settled, evaluation-grade math with a coarse call
 boundary — primitives and vectors in, results out, no callbacks into GDScript

@@ -1,7 +1,9 @@
 class_name ReplayRecorder
 extends RefCounted
 
-# Shadows the host's 120 Hz world-state broadcast into a fixed-size in-memory
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
+# Shadows the host's world-state broadcast into a fixed-size in-memory
 # circular buffer so GoalReplayDriver can extract the last N seconds on demand.
 # Lives on the host only; created alongside WorldStateCodec in game_scene.gd.
 #
@@ -14,7 +16,7 @@ extends RefCounted
 # 18 s at the Constants.STATE_RATE broadcast. Sized in FRAMES, so it must cover
 # GoalReplayDriver.CLIP_DURATION at that rate — an undersized ring truncates a
 # goal replay silently; test_replay_recorder.gd holds the two together.
-const MEMORY_SIZE: int = 1080
+const MEMORY_SIZE: int = 18 * _PhysicsConstants.STATE_RATE
 const EVENT_MEMORY_SIZE: int = 720  # bursty (shots, body checks, deflections); size for headroom
 
 var _frames: Array[PackedByteArray]

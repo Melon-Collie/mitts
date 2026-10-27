@@ -1,6 +1,8 @@
 class_name HostCostProbe
 extends Object
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # Per-tick timing of the host's main-thread work, section by section.
 #
 # Why it times in place rather than switching work off and reading the frame:
@@ -24,8 +26,8 @@ extends Object
 # inconsistent frame rate. So every section publishes its window MAX beside its
 # mean, and a max far above the mean IS the finding.
 #
-# Microseconds throughout, deliberately un-normalised: one 120 Hz physics tick is
-# 8333 us, which is the number every reading here should be held against.
+# Microseconds throughout, deliberately un-normalised: one 90 Hz physics tick is
+# 11111 us, which is the number every reading here should be held against.
 #
 # Host-only. `enabled` is set by GameManager when it takes the host role and
 # cleared on teardown, so a client pays two branch tests per tick and nothing
@@ -89,7 +91,7 @@ const SECTION_NAMES: Array[String] = [
 # One publish per second of host simulation. Matches the cadence a reader can
 # follow on screen, and is long enough that a 6 Hz section contributes ~6
 # samples rather than 0 or 1.
-const WINDOW_TICKS: int = 120
+const WINDOW_TICKS: int = _PhysicsConstants.PHYSICS_TICK
 
 static var enabled: bool = false
 

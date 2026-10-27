@@ -26,13 +26,13 @@ const RIM_FRICTION: float = GameRules.PUCK_BOARD_FRICTION
 const SPIN_DECEL_AT_REST: float = (4.0 / 3.0) * GameRules.ICE_FRICTION * GameRules.GRAVITY_M_S2 / RADIUS
 
 # Velocity change in one tick that only a contact makes (m/s). Gravity is
-# 0.08 a tick at 120 Hz and ice friction a twentieth of that.
+# 0.11 a tick at 90 Hz and ice friction a twentieth of that.
 var impact_min_dv: float = 1.0
 # Share of the gap between the observed velocity and the impact reference
 # closed each tick, so a contact smoothed across a few ticks (a client
 # correction) still reads as one change rather than several small ones.
 var impact_ref_follow: float = 0.5
-# Further than this in one tick (m) is a restage, not motion: 90 m/s.
+# Further than this in one tick (m) is a restage, not motion: 67 m/s at 90 Hz.
 var teleport_dist: float = 0.75
 # Loose ticks after a release before its velocity is trusted — the first
 # ticks carry the jump from the blade pin to the release point.

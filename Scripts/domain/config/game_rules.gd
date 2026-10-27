@@ -185,7 +185,7 @@ static func distance_to_rink_inner(world_xz: Vector2) -> float:
 # so a reach limited by this result stops exactly where that clamp would have
 # caught it.
 #
-# Exact rather than iterative, which the 120 Hz blade IK needs. The straight
+# Exact rather than iterative, which the per-tick blade IK needs. The straight
 # walls give an axis-aligned box exit; the true boundary in a corner quadrant is
 # the arc, which is always nearer than the box corner, so an exit landing there
 # is re-solved against that corner's circle. The ray is inside the disc wherever
@@ -233,7 +233,7 @@ static func is_over_net_footprint(world_xz: Vector2) -> bool:
 # Projects a skater's XZ clear of the goal net — the body disc of `radius` held
 # off the cage footprint, mirroring what clamp_to_rink_inner does for the boards.
 # Returns world_xz unchanged when the disc is already clear. Handles both net ends
-# (|z|). Pure value-type math — no allocation, hot-path safe at 120 Hz × actors.
+# (|z|). Pure value-type math — no allocation, hot-path safe at the tick rate × actors.
 #
 # The footprint is |x| <= NET_BACK_HALF_WIDTH (the wider trapezoid end) by
 # |z| in [GOAL_LINE_Z, GOAL_LINE_Z + NET_DEPTH], and EVERY face holds the body
@@ -326,7 +326,7 @@ const GOALIE_BUTTERFLY_HALF_Z: float = 0.25
 # goalie's yaw) covering the spread leg pads. `radius` / half-extents should
 # already include the skater's own collision radius so the body EDGE stops at the
 # goalie surface. Returns world_xz unchanged when the center is already clear.
-# Pure value-type math — no allocation, hot-path safe at 120 Hz × actors.
+# Pure value-type math — no allocation, hot-path safe at the tick rate × actors.
 static func push_out_of_goalie(world_xz: Vector2, gpos: Vector2, rot_y: float,
 		is_butterfly: bool, radius: float, half_x: float, half_z: float) -> Vector2:
 	if is_butterfly:

@@ -17,7 +17,7 @@ extends RefCounted
 
 # Any single-tick puck travel beyond this (metres) is a reset/reposition, not a
 # real crossing — the tracker reseeds and skips it. Far above any shot or blade
-# speed at 120 Hz (~2 m/tick = 240 m/s); a faceoff/OOB reset jumps much further.
+# speed at 90 Hz (~2 m/tick = 180 m/s); a faceoff/OOB reset jumps much further.
 const MAX_TICK_TRAVEL: float = 2.0
 # Tighter bound for a puck that was PINNED on both ends of the segment. A carried
 # puck teleports to the carry target every tick, and that target can jump

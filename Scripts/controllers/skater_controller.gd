@@ -1024,7 +1024,7 @@ var _is_host: bool = false
 var _current_aim_world: Vector3 = Vector3.ZERO
 # Reused ShotResult for the per-tick "where would this charge go if released now"
 # prediction in _update_wrister_charge — a caller-owned scratch so that hot path
-# (120 Hz while charging, re-run per replayed input on reconcile) doesn't churn
+# (every tick while charging, re-run per replayed input on reconcile) doesn't churn
 # the heap. Pure output, overwritten each solve.
 var _wrister_pred_scratch: ShotMechanics.ShotResult = ShotMechanics.ShotResult.new()
 # The wrist shot's load, re-solved every aim tick and at the release from the
@@ -1066,7 +1066,7 @@ var _has_prev_carry_pin: bool = false
 # True on frames where a special locked-phase path posed the body itself this
 # tick — faceoff-prep blade aim, the faceoff skate-in approach, and replay
 # playback. Those paths run their own gait / head / off-hand (they're brief and
-# not the 120 Hz × N hot path), so the render-rate cosmetic hook yields to them
+# not the per-tick × N hot path), so the render-rate cosmetic hook yields to them
 # to avoid a double gait pass. The main live path (_process_input) clears it and
 # delegates cosmetics to the render hook.
 var _self_posing: bool = false
@@ -1201,7 +1201,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_game_state = game_state
 	_is_host = game_state.is_host()
 	# Cached so the per-tick gait can ask about the faceoff phase without a
-	# has_method() call at 120 Hz (test stubs may not implement it).
+	# has_method() call every tick (test stubs may not implement it).
 	_game_state_has_faceoff_prep = game_state.has_method("is_faceoff_prep")
 	_game_state_has_period_break = game_state.has_method("is_period_break")
 	process_physics_priority = -1  # Run before Skater's integration step
@@ -1825,7 +1825,7 @@ func _process_input(input: InputState, delta: float) -> void:
 		skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# Head tracking, off-hand IK, and the leg gait moved to render rate
 	# (Skater.render_pose_update / _render_pose_update) — they feed only meshes,
-	# not the blade world frame, so they don't belong in the 120 Hz + reconcile-
+	# not the blade world frame, so they don't belong in the per-tick + reconcile-
 	# replay path. Stick/arm mesh rebuild already lives in Skater._process too.
 	if not is_replaying:
 		_pose.update_angular_velocities(delta)
@@ -1855,7 +1855,7 @@ func _process_input(input: InputState, delta: float) -> void:
 
 # Render-rate cosmetic pose pass, registered on the skater and invoked once per
 # rendered frame from Skater._process (visibility-gated). Runs the purely-cosmetic
-# passes that used to sit in the 120 Hz physics tick: the leg gait, head tracking
+# passes that used to sit in the physics tick: the leg gait, head tracking
 # (off the last-seen aim), and the off-hand grip IK. None feed the blade world
 # frame, so running them at render rate can't affect pickup or reconcile. Local
 # and AI controllers use this base; RemoteController overrides it to drop head
@@ -3904,7 +3904,7 @@ func _diving() -> bool:
 # is down (same rationale as _cached_fall_cfg above).
 var _sprawl_scratch: KnockdownFallRules.SprawlPose = null
 
-# Cached — _update_wrister_charge reads it every aim tick (120 Hz, replayed
+# Cached — _update_wrister_charge reads it every aim tick (replayed
 # again per input through reconcile), so a per-call .new() is hot-path churn.
 # Rebuilt lazily after apply_attributes nulls it (same pattern as the
 # movement configs above).
@@ -3982,7 +3982,7 @@ func _wrister_sweep_speed(input: InputState) -> float:
 	return _aiming.cursor_speed_ema * shot_power_sensitivity()
 
 # Cached like the wrister config: _update_slapper_charge now re-solves the release
-# every windup tick (120 Hz × actors, replayed on reconcile) to publish
+# every windup tick (× actors, replayed on reconcile) to publish
 # predicted_shot_velocity, so a fresh SlapperConfig per call would be per-tick heap
 # churn. Rebuilt lazily; invalidated in apply_attributes when the source exports change.
 var _cached_slapper_cfg: ShotMechanics.SlapperConfig = null

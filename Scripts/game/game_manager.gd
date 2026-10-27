@@ -317,7 +317,7 @@ var shape_tally := AIPossessionShapeTally.new()
 # Live breakout-outcome tally (F6 overlay) — the in-game counterpart of the
 # breakout harness, so its staged verdicts can be checked against real play.
 var breakout_episodes := AIBreakoutEpisodeTracker.new()
-# Both tallies sample at the 120 Hz host tick, so they stay OFF until asked for:
+# Both tallies sample at the host tick, so they stay OFF until asked for:
 # the overlay only exists in a debug build, and the first F6 press latches this.
 # It never un-latches — closing the panel would otherwise punch a hole in the
 # denominator and quietly corrupt every share it reports.
@@ -5312,7 +5312,7 @@ func get_state_delayed(delay_seconds: float, out: WorldSnapshot = null) -> World
 # body-check re-resolution source (Slice C) — it re-derives contact against where
 # the host actually had the others.
 #
-# HOT PATH: called once per replayed input during a reconcile (120 Hz × unacked
+# HOT PATH: called once per replayed input during a reconcile (per tick × unacked
 # window, worst exactly when the network is bad — the case CLAUDE.md forbids
 # allocating in). So it fills a persistent scratch Array from a pooled set of
 # reused Dictionaries and iterates the roster by key (avoiding the fresh array

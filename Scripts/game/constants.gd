@@ -18,7 +18,7 @@ const LAYER_GOALIE_BODIES: int  = 128
 # Client input batches are sent once per physics tick. Matching PHYSICS_TICK
 # minimizes the batch-send wait folded into ClockSync.INPUT_LEAD_SEC, which
 # derives BATCH_INTERVAL from this constant.
-const INPUT_RATE: int = 120
+const INPUT_RATE: int = PHYSICS_TICK
 # World-state broadcast rate — deliberately HALF INPUT_RATE. How fresh a client
 # feels does not ride this rate: the loose puck re-predicts from the newest
 # snapshot to host-present every frame on the shared solver (so a sparser stream
@@ -26,10 +26,10 @@ const INPUT_RATE: int = 120
 # between packets, not staleness), the local player is predicted and reconciled
 # on acks, and remote interpolation cushions include one broadcast_interval so
 # they widen automatically. Host upload is linear in it: a 5v5 snapshot is
-# ~950 B, ~57 KB/s per human client at 60 Hz, so an all-human 5v5 costs the host
-# ~4.1 Mbps (docs/performance-findings.md → Network bytes by broadcast rate).
+# ~950 B, ~43 KB/s per human client at 45 Hz, so an all-human 5v5 costs the host
+# ~3.1 Mbps (docs/performance-findings.md → Network bytes by broadcast rate).
 # PHYSICS_TICK must stay an integer multiple (_state_tick_divisor).
-const STATE_RATE: int = 60
+const STATE_RATE: int = 45
 # Rate at which world-state snapshots are written to the .mreplay file, below
 # STATE_RATE: the viewer interpolates between snapshots (ReplayPlaybackEngine),
 # so 30 Hz keeps playback smooth at a fraction of the file size. Only the steady
@@ -61,9 +61,9 @@ const REMOTE_FORWARD_PREDICT_FRACTION: float = 1.0
 # REMOTE_FORWARD_PREDICT_FRACTION is the dominant lever. Read by BOTH the client
 # render (RemoteController) and the host claim rewind (HitClaimResolver) via
 # SkaterMovementRules.integrate_forward, so the decay is identical on both.
-# 0 = no decay (full intent every tick); ~5 fades over the near half of a
-# full-lead (~9-tick) window.
-const FORWARD_PREDICT_INTENT_DECAY_TICKS: int = 5
+# 0 = no decay (full intent every tick); 4 (~45 ms) fades over the near half of a
+# full-lead window.
+const FORWARD_PREDICT_INTENT_DECAY_TICKS: int = 4
 # Depth cap on the client-side loose-puck prediction (Scripts/networking/
 # CLAUDE.md → puck modes): a snapshot older than this — deep packet loss, clock
 # warmup — is too stale to predict from, and the client falls back to the
@@ -83,7 +83,7 @@ const TIME_WIRE_SCALE: float = 10000.0
 # The ENGINE steps at project.godot's physics/common/physics_ticks_per_second,
 # which is a SEPARATE knob — to change the tick rate, edit BOTH. `_ready()` below
 # push_errors at boot if they drift (a mismatch silently dilates the sim).
-const PHYSICS_TICK: int = 120
+const PHYSICS_TICK: int = 90
 # One physics step, in seconds. Derived here so the tick-domain clocks (the sim
 # clock in NetworkManager, ClockSync's input lead) and the rules that quantize to
 # the tick grid all read the same value PHYSICS_TICK defines.
