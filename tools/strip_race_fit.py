@@ -16,7 +16,10 @@ they are and rescaled to their best level) and a constant rate. Then, fitted on
 all: the losses each expects by how far ahead, the ranking the truth gate
 scores, and the loss rate by margin and by closing speed with no shape assumed.
 
-    python3 tools/strip_race_fit.py [.preview/strip_race/stretches.csv]
+    python3 tools/strip_race_fit.py [.preview/strip_race/stretches.csv] [--contact]
+
+--contact reports only the contact burst (the rate by the time since he could
+first get his stick to the puck) against the share of time read.
 """
 import csv
 import sys
@@ -138,6 +141,158 @@ def fit_share(d, mask):
     return tuple(best.x)
 
 
+def contact_times(d):
+    """Per defender, the time since he could first have got his stick to the puck
+    on its path (from the first stretch whose race margin is not negative: the
+    stretch's time less his margin to it), NaN until then and where his margin
+    is negative."""
+    out = {}
+    for k in ("m1", "m2"):
+        tau = np.full(len(d["t"]), np.nan)
+        first = None
+        for i in range(len(d["t"])):
+            if i == 0 or d["run"][i] != d["run"][i - 1]:
+                first = None
+            m = d[k][i]
+            if np.isnan(m):
+                continue
+            if first is None and m >= 0.0:
+                first = max(0.0, d["t"][i] - m)
+            if first is not None and m >= 0.0:
+                tau[i] = d["t"][i] - first
+        out[k] = tau
+    return out
+
+
+def contact_lambda(d, tau, p):
+    r0, decay, r_inf, stand = p
+    cover = sum(np.where(np.isnan(tau[k]), 0.0, r0 * np.exp(-np.nan_to_num(tau[k]) / decay) + r_inf)
+                for k in ("m1", "m2"))
+    return d["dt"] * cover * np.where(d["stand"] == 1, stand, 1.0)
+
+
+def fit_contact(d, tau, mask):
+    sub = {k: v[mask] for k, v in d.items()}
+    sub_tau = {k: v[mask] for k, v in tau.items()}
+
+    def nll(x):
+        return -loglik(contact_lambda(sub, sub_tau, x), sub["lost"])
+
+    best = None
+    for start in ([2.0, 0.3, 0.2, 0.5], [1.0, 1.0, 0.1, 1.0], [4.0, 0.15, 0.3, 0.3]):
+        r = minimize(nll, start, method="L-BFGS-B",
+                     bounds=[(0.0, 30.0), (0.02, 5.0), (0.0, 10.0), (0.0, 5.0)])
+        if best is None or r.fun < best.fun:
+            best = r
+    return tuple(best.x)
+
+
+def started_in_reach(d):
+    """Per defender, whether his stick was in reach of the puck at the start."""
+    out = {}
+    for k in ("m1", "m2"):
+        on = np.zeros(len(d["t"]), bool)
+        cur = False
+        for i in range(len(d["t"])):
+            if i == 0 or d["run"][i] != d["run"][i - 1]:
+                cur = (not np.isnan(d[k][i])) and abs(d[k][i] - d["t"][i]) < 1e-3
+            on[i] = cur
+        out[k] = on
+    return out
+
+
+def share_burst_lambda(d, tau, start, p):
+    """The share of time read, plus a burst rb * exp(-since / decay) from a
+    defender whose stick was in reach of the puck at the start."""
+    base = share_lambda(d, p[:4])
+    rb, decay = p[4], p[5]
+    burst = sum(np.where(start[k] & ~np.isnan(tau[k]),
+                         rb * np.exp(-np.nan_to_num(tau[k]) / decay), 0.0) for k in ("m1", "m2"))
+    return base + d["dt"] * burst
+
+
+def fit_share_burst(d, tau, start, mask):
+    sub = {k: v[mask] for k, v in d.items()}
+    sub_tau = {k: v[mask] for k, v in tau.items()}
+    sub_start = {k: v[mask] for k, v in start.items()}
+    w = fit_share(d, mask)
+
+    def nll(x):
+        return -loglik(share_burst_lambda(sub, sub_tau, sub_start, x), sub["lost"])
+
+    best = None
+    for b in ([2.0, 0.5], [4.0, 0.25], [1.0, 1.0]):
+        r = minimize(nll, list(w) + b, method="L-BFGS-B",
+                     bounds=[(-0.5, 1.5), (0.01, 1.0), (0.0, 30.0), (0.0, 30.0), (0.0, 30.0),
+                             (0.02, 5.0)])
+        if best is None or r.fun < best.fun:
+            best = r
+    return tuple(best.x)
+
+
+def contact_report(d):
+    """The contact burst: the strip rate from the moment he could first get his
+    stick to the puck, r0 * exp(-since / decay) + r_inf, against the share of
+    time read."""
+    tau = contact_times(d)
+    n_runs = len(np.unique(d["run"]))
+    print("\n== contact burst: rate by the time since he could first get there ==")
+    single = np.isnan(d["m2"]) & (d["stand"] == 0)
+    started = np.zeros(len(d["t"]), bool)
+    for i in range(len(d["t"])):
+        if i == 0 or d["run"][i] != d["run"][i - 1]:
+            on = abs(d["m1"][i] - d["t"][i]) < 1e-3
+        started[i] = on
+    edges = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.1]
+    for label, who in (("in reach at the start", started), ("got there later", ~started)):
+        print("  one defender, puck moving, %s:" % label)
+        for a, b in zip(edges[:-1], edges[1:]):
+            sel = single & who & (tau["m1"] >= a) & (tau["m1"] < b)
+            expo = d["dt"][sel].sum()
+            ev = d["lost"][sel].sum()
+            print("    %.2f-%.2f s since: %3d losses in %6.1f s = %.2f /s" % (
+                a, b, ev, expo, ev / expo if expo > 0 else 0.0))
+    halves = [d["run"] % 2 == 0, d["run"] % 2 == 1]
+    start = started_in_reach(d)
+    ll = {"share of time": 0.0, "contact burst": 0.0, "share + start burst": 0.0}
+    for fit_mask, test_mask in ((halves[0], halves[1]), (halves[1], halves[0])):
+        w = fit_share(d, fit_mask)
+        ll["share of time"] += loglik(share_lambda(d, w)[test_mask], d["lost"][test_mask])
+        c = fit_contact(d, tau, fit_mask)
+        ll["contact burst"] += loglik(contact_lambda(d, tau, c)[test_mask], d["lost"][test_mask])
+        print("  fit on a half: r0 %.2f /s, decay %.2f s, r_inf %.3f /s, standing x %.2f" % c)
+        sb = fit_share_burst(d, tau, start, fit_mask)
+        ll["share + start burst"] += loglik(share_burst_lambda(d, tau, start, sb)[test_mask],
+                                            d["lost"][test_mask])
+        print("  fit on a half: share + start burst, burst %.2f /s decaying over %.2f s" % sb[4:])
+    print("  held out, log likelihood per run:")
+    for name, v in ll.items():
+        print("    %-14s %.4f" % (name, v / n_runs))
+    everything = np.ones_like(d["lost"], bool)
+    w = fit_share(d, everything)
+    c = fit_contact(d, tau, everything)
+    lams = share_lambda(d, w)
+    lamk = contact_lambda(d, tau, c)
+    sb = fit_share_burst(d, tau, start, everything)
+    lamb = share_burst_lambda(d, tau, start, sb)
+    print("  fitted on all: r0 %.2f /s, decay %.2f s, r_inf %.3f /s, standing x %.2f" % c)
+    print("  fitted on all: share + start burst: u0 %.2f, s %.2f, rates moving %.2f, standing %.2f /s,"
+          " burst %.2f /s over %.2f s" % sb)
+    print("  losses by how far ahead (lost/expected):")
+    print("    current        " + by_band(d, d["cur"]))
+    print("    share of time  " + by_band(d, lams))
+    print("    contact burst  " + by_band(d, lamk))
+    print("    share + burst  " + by_band(d, lamb))
+    print("  by family (lost / current / share of time / contact burst / share + start burst):")
+    for fam in sorted(set(d["family"])):
+        sel = d["family"] == fam
+        print("    %-14s %4d / %6.1f / %6.1f / %6.1f / %6.1f" % (
+            fam, d["lost"][sel].sum(), d["cur"][sel].sum(), lams[sel].sum(), lamk[sel].sum(),
+            lamb[sel].sum()))
+    print("  ranking: current %.3f, share of time %.3f, contact burst %.3f, share + start burst %.3f" % (
+        ranking(d, d["cur"]), ranking(d, lams), ranking(d, lamk), ranking(d, lamb)))
+
+
 def ranking(d, lam):
     """The truth gate's ranking: at each loss, the run that lost read riskier up to
     then than each run still in play."""
@@ -180,7 +335,11 @@ def by_band(d, lam, mask=None):
 
 
 def main():
-    d = load(sys.argv[1] if len(sys.argv) > 1 else ".preview/strip_race/stretches.csv")
+    paths = [a for a in sys.argv[1:] if not a.startswith("--")]
+    d = load(paths[0] if paths else ".preview/strip_race/stretches.csv")
+    if "--contact" in sys.argv:
+        contact_report(d)
+        return
     n_runs = len(np.unique(d["run"]))
     print("%d stretches of %d runs, %d losses" % (len(d["t"]), n_runs, d["lost"].sum()))
 
