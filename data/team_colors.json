@@ -1427,13 +1427,8 @@
           "stripes": [
             {
               "pos": 0.88,
-              "width": 0.163,
-              "color": "#5C3A21"
-            },
-            {
-              "pos": 0.88,
               "width": 0.13,
-              "color": "#F3EAD3"
+              "color": "#5C3A21"
             },
             {
               "pos": 0.88,
@@ -1452,13 +1447,8 @@
             "stripes": [
               {
                 "pos": 0.55,
-                "width": 0.325,
-                "color": "#5C3A21"
-              },
-              {
-                "pos": 0.55,
                 "width": 0.26,
-                "color": "#F3EAD3"
+                "color": "#5C3A21"
               },
               {
                 "pos": 0.55,
@@ -1484,13 +1474,8 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.375,
-              "color": "#5C3A21"
-            },
-            {
-              "pos": 0.5,
               "width": 0.3,
-              "color": "#F3EAD3"
+              "color": "#5C3A21"
             },
             {
               "pos": 0.5,
