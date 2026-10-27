@@ -130,9 +130,10 @@ const PUPPET_GAIN: float = 4.0              # P-control: desired m/s per m of er
 # ── Scripted ATTACKER tuning ─────────────────────────────────────────────────
 # A scripted attacker (add_scripted_attacker) is an agentless skater looping a
 # fixed waypoint path at a set pace, facing the net it attacks. A scripted
-# carrier keeps the puck on its blade for the whole run — no release, no strip
-# — so a defensive fixture measures the defence against a held possession
-# instead of riding on whatever the attack decides to do.
+# carrier keeps the puck on its blade for the whole run — no release, and no
+# strip unless `script_strippable` — so a defensive fixture measures the defence
+# against a held possession instead of riding on whatever the attack decides to
+# do.
 const SCRIPT_ARRIVE_M: float = 0.2
 const SCRIPT_CARRY_REACH_M: float = 0.8
 
@@ -199,6 +200,11 @@ class SimSkater:
 	# (stride ramp, power knee) facing its travel, instead of the flat-accel
 	# P-control — for a fixture whose question is a race against it.
 	var script_skates: bool = false
+	# False: the path is skated once, and the skater stops on its last waypoint.
+	var script_loop: bool = true
+	# True: the scripted carrier can be stripped like a bot's — for a fixture
+	# measuring whether the defence gets to the puck on a path the carrier keeps to.
+	var script_strippable: bool = false
 	# The arm the rig places the blade with (duel_rig.gd). A fixture may set
 	# `blade_reach` to place the blade on a plain ring of that radius instead, and
 	# a per-tick write over the decided input (`func(s: SimSkater) -> void`), run
@@ -574,7 +580,7 @@ func step() -> void:
 		# Strips: an opponent's blade sweeping through the carried puck. A
 		# scripted carrier holds possession by construction.
 		for s: SimSkater in skaters:
-			if not c2.script_path.is_empty():
+			if not c2.script_path.is_empty() and not c2.script_strippable:
 				break
 			if s.team_id == c2.team_id or not s.puppet_can_strip:
 				continue
@@ -976,8 +982,14 @@ func _puppet_step(s: SimSkater) -> void:
 func _script_step(s: SimSkater) -> void:
 	var target: Vector3 = s.script_path[s.script_idx]
 	var err := Vector3(target.x - s.pos.x, 0.0, target.z - s.pos.z)
+	if not s.script_loop and s.script_idx == s.script_path.size() - 1 \
+			and err.length() < SCRIPT_ARRIVE_M:
+		_script_stop(s)
+		return
 	if err.length() < SCRIPT_ARRIVE_M:
 		s.script_idx = (s.script_idx + 1) % s.script_path.size()
+		if not s.script_loop and s.script_idx == 0:
+			s.script_idx = s.script_path.size() - 1
 		target = s.script_path[s.script_idx]
 		err = Vector3(target.x - s.pos.x, 0.0, target.z - s.pos.z)
 	if s.script_skates:
@@ -1006,6 +1018,14 @@ func _script_skate(s: SimSkater, err: Vector3) -> void:
 	s.vel = SkaterMovementRules.apply_movement(s.vel, move,
 			atan2(-s.facing.x, -s.facing.y), carrier_id == s.peer_id, false, DT,
 			move_cfg)
+	s.pos += s.vel * DT
+	s.prev_blade = s.blade
+	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+
+
+# A one-shot path's end: the hockey stop, blade held where it was carried.
+func _script_stop(s: SimSkater) -> void:
+	s.vel = s.vel.move_toward(Vector3.ZERO, GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2 * DT)
 	s.pos += s.vel * DT
 	s.prev_blade = s.blade
 	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
