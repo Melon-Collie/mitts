@@ -8,8 +8,9 @@ extends "res://tests/instruments/ai/test_interceptor_truth.gd"
 # swerves off it, away from a defender whose short-term heading puts his stick
 # near the puck, then carries on. The carrier is a real body (movement, carry,
 # arm) whose input is replaced every tick, with no decision of the bots' in it.
-# The planned path is the carrier's dry run alone, as a planner reads it. Saves
-# as test_interceptor_truth.gd does (MITTS_RACE_SAVE, <path>.planned).
+# The planned path is the carrier's dry run alone, as a planner reads it. He
+# skates at no more than TOP_PACE_M_S, or flat out with MITTS_REACT_FLAT_OUT=1.
+# Saves as test_interceptor_truth.gd does (MITTS_RACE_SAVE, <path>.planned).
 # Reports only.
 
 # The carrier's read of a defender: where his heading takes him this far ahead.
@@ -21,6 +22,8 @@ const DODGE_M: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + 1.5
 const DODGE_WEIGHT: float = 1.5
 const WAYPOINT_M: float = 1.0
 const PLAN_HORIZON_S: float = 3.0
+
+var _flat_out: bool = OS.get_environment("MITTS_REACT_FLAT_OUT") == "1"
 
 
 
@@ -56,7 +59,7 @@ func _add_reacting_carrier(duel: Object, pos: Vector3, vel: Vector3,
 
 
 # One tick of the carrier's input: toward his next waypoint at no more than
-# TOP_PACE_M_S, swerving away from each defender whose heading brings his stick
+# TOP_PACE_M_S (or flat out), swerving away from each defender whose heading brings his stick
 # near the puck. `next` holds the index of the waypoint he is skating to.
 func _carry(s: Object, duel: Object, waypoints: Array[Vector3], next: Array[int]) -> void:
 	var input: InputState = s.input
@@ -89,7 +92,8 @@ func _carry(s: Object, duel: Object, waypoints: Array[Vector3], next: Array[int]
 		input.mouse_world_pos = duel.puck_pos
 		return
 	dir = dir.normalized()
-	input.move_vector = dir if speed < TOP_PACE_M_S or away != Vector2.ZERO else Vector2.ZERO
+	input.move_vector = dir if _flat_out or speed < TOP_PACE_M_S or away != Vector2.ZERO \
+			else Vector2.ZERO
 	input.mouse_world_pos = s.pos + Vector3(dir.x, 0.0, dir.y) * PLAY_M
 
 
