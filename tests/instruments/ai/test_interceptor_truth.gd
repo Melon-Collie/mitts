@@ -12,7 +12,8 @@ extends "res://tests/instruments/ai/test_defender_race_truth.gd"
 # sample, whether or not the puck was lost on it; MITTS_RACE_LIMIT caps the
 # stagings. Reports only.
 
-# The spare time he aims to arrive with: a reaction's worth to set his blade.
+# The spare time he aims to arrive with: a reaction's worth to set his blade
+# (MITTS_INTERCEPT_SET_S overrides it).
 const SET_S: float = 0.25
 # How far ahead his plan reads the path, and how finely.
 const PLAN_STEP_TICKS: int = 6
@@ -26,6 +27,7 @@ const INTERCEPT_FAMILIES: Array[String] = ["straight_lane", "straight_side", "ch
 # The carrier's body every tick of a dry run of his path alone, index i after
 # step i + 1.
 var _schedule: Array[Vector3] = []
+var _set_s: float = SET_S
 # The dry run's puck every sample (the planned path), and one per recorded run.
 var _planned_now: Array[Vector3] = []
 var _planned: Array = []
@@ -37,6 +39,8 @@ func test_defender_race_truth() -> void:
 
 func test_interceptor_truth() -> void:
 	_rng.seed = 20261028
+	if OS.has_environment("MITTS_INTERCEPT_SET_S"):
+		_set_s = float(OS.get_environment("MITTS_INTERCEPT_SET_S"))
 	var stagings: Array[Dictionary] = []
 	for st: Dictionary in _stagings():
 		if st["family"] in INTERCEPT_FAMILIES:
@@ -162,7 +166,7 @@ func _intercept(s: Object, duel: Object, caps: AISkaterCaps) -> void:
 		input.mouse_world_pos = puck
 
 
-# Where his stick meets the carrier's path: the earliest point he reaches SET_S
+# Where his stick meets the carrier's path: the earliest point he reaches _set_s
 # before the carrier, else the one he has the most time to spare at — the body
 # spot a blade's reach short of the carrier's, on his side.
 func _intercept_point(s: Object, now_tick: int, caps: AISkaterCaps) -> Vector3:
@@ -176,7 +180,7 @@ func _intercept_point(s: Object, now_tick: int, caps: AISkaterCaps) -> Vector3:
 		var spot: Vector3 = s.pos if d <= reach else s.pos + to * ((d - reach) / d)
 		var spare: float = (j + 1 - now_tick) * Duel.DT \
 				- AIArrival.time_to_arrive_caps(s.pos, spot, s.vel, caps)
-		if spare >= SET_S:
+		if spare >= _set_s:
 			return spot
 		if spare > best_spare:
 			best_spare = spare

@@ -5,7 +5,9 @@ extends "res://tests/instruments/ai/test_strip_odds_by_horizon.gd"
 # (MITTS_HORIZON_RUNS) whether the puck was lost, and for each defender his best
 # spare time on the carrier's planned path — over its samples, the puck's time
 # there less the time his stick takes to get within his blade's reach of it,
-# read from the run's start on his arrival clock — and when that point comes.
+# read from the run's start on his arrival clock — and when that point comes,
+# and the first sample he reaches with no time to spare and with FIRST_SET_S
+# (his first chance; -1 when none).
 # The planned path is <runs>.planned when it exists (the interceptor's dry runs),
 # else the puck's path as recorded, which stops at a loss. Also the strips the
 # current strip odds expect along it. Writes .preview/strip_interception/runs.csv.
@@ -13,6 +15,7 @@ extends "res://tests/instruments/ai/test_strip_odds_by_horizon.gd"
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const OUT_DIR: String = "res://.preview/strip_interception"
+const FIRST_SET_S: float = 0.25
 
 
 func test_strip_odds_by_horizon() -> void:
@@ -32,7 +35,7 @@ func test_export_interception() -> void:
 			"from the dry runs" if planned.size() == runs.size() else "as recorded"])
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var f := FileAccess.open(OUT_DIR + "/runs.csv", FileAccess.WRITE)
-	f.store_line("run,family,lost,lost_at,s1,t1,s2,t2,current")
+	f.store_line("run,family,lost,lost_at,s1,t1,s2,t2,current,f1,g1,f2,g2")
 	for ri: int in runs.size():
 		var r: Run = runs[ri]
 		var pts: Array[Vector3] = r.points
@@ -42,22 +45,32 @@ func test_export_interception() -> void:
 		for k: int in pts.size():
 			times.append((k + 1) * 0.1)
 		var cols := PackedStringArray()
+		var firsts := PackedStringArray()
 		for i: int in 2:
 			if i >= r.defenders.size():
 				cols.append_array(["", ""])
+				firsts.append_array(["", ""])
 				continue
 			var best: float = -INF
 			var best_t: float = 0.0
+			var first: float = -1.0
+			var first_set: float = -1.0
 			for k: int in pts.size():
 				var spare: float = times[k] - _stick_arrival(r.defenders[i], r.vels[i], pts[k], caps)
 				if spare > best:
 					best = spare
 					best_t = times[k]
+				if first < 0.0 and spare >= 0.0:
+					first = times[k]
+				if first_set < 0.0 and spare >= FIRST_SET_S:
+					first_set = times[k]
 			cols.append_array([str(best), str(best_t)])
+			firsts.append_array([str(first), str(first_set)])
 		var current: float = AIStripOdds.path_strips(pts[0], pts.slice(1), times.slice(1),
 				r.defenders, r.vels)
-		f.store_line("%d,%s,%d,%.3f,%s,%s,%s,%s,%.6f" % [ri, r.family, 1 if r.lost_at >= 0.0 else 0,
-				r.lost_at, cols[0], cols[1], cols[2], cols[3], current])
+		f.store_line("%d,%s,%d,%.3f,%s,%s,%s,%s,%.6f,%s,%s,%s,%s" % [ri, r.family,
+				1 if r.lost_at >= 0.0 else 0, r.lost_at, cols[0], cols[1], cols[2], cols[3], current,
+				firsts[0], firsts[1], firsts[2], firsts[3]])
 	gut.p("wrote %s/runs.csv" % OUT_DIR)
 	assert_true(true)
 

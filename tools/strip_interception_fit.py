@@ -26,7 +26,7 @@ from scipy.optimize import minimize
 
 
 def load(path):
-    cols = {k: [] for k in ("run", "family", "lost", "s1", "s2", "cur")}
+    cols = {k: [] for k in ("run", "family", "lost", "lost_at", "s1", "s2", "cur", "f1", "g1")}
     with open(path) as f:
         for row in csv.DictReader(f):
             cols["run"].append(int(row["run"]))
@@ -35,6 +35,9 @@ def load(path):
             cols["s1"].append(float(row["s1"]))
             cols["s2"].append(float(row["s2"]) if row["s2"] else np.nan)
             cols["cur"].append(float(row["current"]))
+            cols["lost_at"].append(float(row["lost_at"]))
+            cols["f1"].append(float(row.get("f1") or -1.0))
+            cols["g1"].append(float(row.get("g1") or -1.0))
     return {k: np.array(v) for k, v in cols.items()}
 
 
@@ -123,6 +126,26 @@ def report(d, p, k, label):
             a, b, d["lost"][sel].sum(), sel.sum(), d["lost"][sel].mean(), q[sel].mean()))
 
 
+def first_chance_report(d):
+    """One defender: the share lost by when he first reaches the planned path with
+    no time to spare (f) and with a quarter second (g), and how long after it the
+    loss came."""
+    single = np.isnan(d["s2"])
+    for key, label in (("f1", "no time to spare"), ("g1", "0.25 s to spare")):
+        print("  one defender, share lost by his first chance (%s):" % label)
+        never = single & (d[key] < 0.0)
+        print("    never    : %3d of %4d = %.2f" % (d["lost"][never].sum(), never.sum(),
+                                                   d["lost"][never].mean() if never.sum() else 0.0))
+        for a in np.arange(0.0, 3.0, 0.5):
+            sel = single & (d[key] >= a + 1e-6) & (d[key] < a + 0.5 + 1e-6)
+            if sel.sum() == 0:
+                continue
+            lost = sel & (d["lost"] == 1)
+            lag = (d["lost_at"][lost] - d[key][lost]).mean() if lost.sum() else float("nan")
+            print("    %.1f-%.1f s: %3d of %4d = %.2f   lost %.2f s after it on average" % (
+                a, a + 0.5, d["lost"][sel].sum(), sel.sum(), d["lost"][sel].mean(), lag))
+
+
 def main():
     args = [a for a in sys.argv[1:]]
     fit_from = None
@@ -161,6 +184,7 @@ def main():
     k = fit_scale(d["cur"], d["lost"])
     print("\nfitted on all: p_max %.2f, s0 %.2f s, w %.2f s" % p)
     report(d, p, k, "fitted on all")
+    first_chance_report(d)
 
 
 if __name__ == "__main__":
