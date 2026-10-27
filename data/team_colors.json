@@ -1078,12 +1078,12 @@
         },
         "gloves": "#382B6E",
         "pants": {
-          "base": "#DE7324",
+          "base": "#382B6E",
           "stripes": [
             {
               "pos": 0.5,
               "width": 0.08,
-              "color": "#382B6E"
+              "color": "#F7EFDD"
             }
           ]
         },
