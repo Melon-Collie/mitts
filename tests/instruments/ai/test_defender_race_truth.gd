@@ -74,6 +74,10 @@ var _event_t: Array[float] = []   # when the puck was lost (-1: not)
 var _event_kind: Array[String] = []   # poke, lift or hit ("" when not lost)
 var _end_t: Array[float] = []     # when the run stopped being watched
 var _tracks: Array = []    # Array[Array[Array[Vector3]]]: each defender every sample (empty: not recorded)
+# The movement fit's best [log likelihood, react, shaped, scale], and the strip
+# fit's time-in-reach [radius, moving rate, standing rate], for the combined read.
+var _best_move: Array = [-INF, 0.0, true, 1.0]
+var _best_strip: Array = []
 
 
 func _stagings() -> Array[Dictionary]:
@@ -546,6 +550,8 @@ func _report_movement() -> void:
 					/ us.size()
 			us.sort()
 			var within: int = us.bsearch(1.0)
+			if ll > _best_move[0]:
+				_best_move = [ll, react, shaped, scale]
 			gut.p("  react %.1f s, %s: scale %.2f | log likelihood per point %.3f | push needed: median %.2f, 90%% %.2f; within his body's %.0f%%" % [
 					react, "top speed and stop" if shaped else "a disc", scale, ll,
 					us[us.size() / 2], us[us.size() * 9 / 10], 100.0 * within / us.size()])
@@ -776,6 +782,8 @@ func _report_overlap() -> void:
 				exposures = ex
 				radius = rad
 		var rates: Array[float] = best[1]
+		if comps == [MOVE_IN, STAND_IN]:
+			_best_strip = [radius, rates[0], rates[1]]
 		var risk: Array = []
 		for r: int in _family.size():
 			risk.append(_strip_risk(exposures[r], comps, rates) if r in rows else [])
@@ -817,6 +825,79 @@ func _risk_ranking(rows: Array[int], risk: Array) -> float:
 			pairs += 1.0
 			concordant += 1.0 if rx > ry else (0.5 if rx == ry else 0.0)
 	return concordant / maxf(pairs, 1.0)
+
+
+# The two halves together, from the start alone: the odds each defender is
+# within the strip radius of the puck at each sample (the movement fit's fan,
+# integrated over the radius) × the strip fit's rate, the defenders adding — no
+# rate refitted. On the scripted runs, against a constant loss rate; the scale
+# its losses would take, and observed against expected by family.
+func _report_combined() -> void:
+	var rows: Array[int] = _tracked_rows(SCRIPTED)
+	if rows.is_empty() or _best_strip.is_empty():
+		return
+	var radius: float = _best_strip[0]
+	var risk: Array = []
+	var total_expected: float = 0.0
+	var events: float = 0.0
+	for r: int in _family.size():
+		if not r in rows:
+			risk.append([])
+			continue
+		var rk: Array[float] = _combined_risk(r, radius)
+		risk.append(rk)
+		total_expected += rk[rk.size() - 1]
+		events += 1.0 if _event_t[r] >= 0.0 else 0.0
+	gut.p("combined (react %.1f s, %s fan of scale %.2f; strip within %.1f m at %.2f /s moving, %.2f /s standing): %d losses against %.1f expected, ranking %.3f" % [
+			_best_move[1], "shaped" if _best_move[2] else "disc", _best_move[3], radius,
+			_best_strip[1], _best_strip[2], int(events), total_expected, _risk_ranking(rows, risk)])
+	for fam: String in SCRIPTED + ["pair"]:
+		var fam_rows: Array[int] = _tracked_rows([fam])
+		var obs: float = 0.0
+		var expct: float = 0.0
+		for r: int in fam_rows:
+			var rk: Array[float] = _combined_risk(r, radius)
+			expct += rk[rk.size() - 1]
+			obs += 1.0 if _event_t[r] >= 0.0 else 0.0
+		if not fam_rows.is_empty():
+			gut.p("    %-13s %4.0f / %6.1f = %.2f" % [fam, obs, expct, obs / maxf(expct, 1e-6)])
+
+
+# Row `r`'s expected losses up to each sample, read from each defender's start.
+func _combined_risk(r: int, radius: float) -> Array[float]:
+	var defs: Array[Vector3] = _defs[r]
+	var vels: Array[Vector3] = _def_vels[r]
+	var pts: Array[Vector3] = _points[r]
+	var ts: Array[float] = _times[r]
+	var stand: Array[bool] = _stand[r]
+	var out: Array[float] = []
+	var total: float = 0.0
+	for k: int in ts.size():
+		var dt: float = ts[k] - (ts[k - 1] if k > 0 else 0.0)
+		var p_in: float = 0.0
+		for i: int in defs.size():
+			p_in += _odds_within(defs[i], vels[i], pts[k], ts[k], radius)
+		total += dt * (_best_strip[2] if stand[k] else _best_strip[1]) * p_in
+		out.append(total)
+	return out
+
+
+# The movement fan's odds a defender starting at `p0` moving `v0` is within
+# `radius` of `point` at `t`: its density over the disc, on three rings.
+func _odds_within(p0: Vector3, v0: Vector3, point: Vector3, t: float, radius: float) -> float:
+	var scale: float = _best_move[3]
+	var total: float = 0.0
+	var rings: Array[float] = [0.0, 0.45, 0.8]
+	var shares: Array[float] = [0.09, 0.36, 0.55]
+	for j: int in rings.size():
+		var n: int = 1 if rings[j] == 0.0 else 8
+		for a: int in n:
+			var ang: float = TAU * a / n
+			var x := Vector3(point.x + cos(ang) * rings[j] * radius, 0.0,
+					point.z + sin(ang) * rings[j] * radius)
+			var e: Vector2 = _ease(p0, v0, x, t, _best_move[1], _best_move[2])
+			total += shares[j] / n * exp(-e.x / scale - e.y) / (scale * scale)
+	return minf(total * PI * radius * radius, 1.0)
 
 
 func _save(path: String) -> void:
@@ -956,4 +1037,5 @@ func test_defender_race_truth() -> void:
 	_report(_fit())
 	_report_movement()
 	_report_overlap()
+	_report_combined()
 	assert_true(true)
