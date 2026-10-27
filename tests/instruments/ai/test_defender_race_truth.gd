@@ -18,7 +18,8 @@ extends GutTest
 # and observed against expected losses by family and by time read the rest.
 # Reports only. MITTS_RACE_ONLY runs the named families, MITTS_RACE_LIMIT caps
 # the stagings, MITTS_RACE_SAVE writes the runs to a file and MITTS_RACE_FROM
-# refits from files (comma separated).
+# refits from files (comma separated), MITTS_RACE_MIN_GAP leaving out the runs
+# that start with a defender that close.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const CARRIER := 1
@@ -533,6 +534,26 @@ func _load(path: String) -> void:
 		_points.append(pts)
 		_times.append(ts)
 		_stand.append(stand)
+		if _starts_inside(defs, pts):
+			_drop_last()
+
+
+# Whether a defender starts within MITTS_RACE_MIN_GAP (m) of the puck: a staging
+# that drops the carrier on a man before he has had a read to react to him.
+func _starts_inside(defs: Array[Vector3], pts: Array[Vector3]) -> bool:
+	if not OS.has_environment("MITTS_RACE_MIN_GAP") or pts.is_empty():
+		return false
+	var gap: float = float(OS.get_environment("MITTS_RACE_MIN_GAP"))
+	for d: Vector3 in defs:
+		if Vector2(d.x - pts[0].x, d.z - pts[0].z).length() < gap:
+			return true
+	return false
+
+
+func _drop_last() -> void:
+	for arr: Array in [_family, _defs, _def_vels, _points, _times, _stand, _event_t, _event_kind,
+			_end_t]:
+		arr.pop_back()
 
 
 func _env_list(key: String, fallback: Array[String]) -> Array[String]:
