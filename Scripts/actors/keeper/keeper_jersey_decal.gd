@@ -25,6 +25,7 @@ var preset: Dictionary = {}
 var player_name: String = ""
 var jersey_number: int = 0
 var text_color: Color = Color.WHITE
+var text_stroke: Color = Color.TRANSPARENT
 
 
 # The texture's size for a face: the chest box's or the shoulder band's aspect.
@@ -55,7 +56,7 @@ func _draw() -> void:
 						px_per_m(face), YOKE_DEPTH_M)
 		Face.BACK:
 			JerseyDecal.draw_back_lettering(self, player_name, jersey_number, text_color,
-					IMG_W * 0.5, px_per_m(face), YOKE_DEPTH_M)
+					text_stroke, IMG_W * 0.5, px_per_m(face), YOKE_DEPTH_M)
 		Face.SHOULDER:
 			_draw_shoulder_number()
 
@@ -73,7 +74,7 @@ func _draw_shoulder_number() -> void:
 	var pos := Vector2(size.x * 0.5 / stretch - text.x * 0.5,
 			size.y * 0.5 - text.y * 0.5 + font.get_ascent(font_size))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
-	draw_string(font, pos, num, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
+	JerseyDecal.draw_lettering(self, font, pos, num, font_size, text_color, text_stroke)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -83,8 +84,9 @@ func set_crest(p_fruit: String, p_preset: Dictionary) -> void:
 	queue_redraw()
 
 
-func set_lettering(p_name: String, number: int, color: Color) -> void:
+func set_lettering(p_name: String, number: int, color: Color, stroke: Color) -> void:
 	player_name = p_name
 	jersey_number = number
 	text_color = color
+	text_stroke = stroke
 	queue_redraw()

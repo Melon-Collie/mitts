@@ -42,12 +42,13 @@ func _colors() -> Dictionary:
 		"text": _LIGHT,
 		"uniform": {
 			"helmet": Color(0.2, 0.2, 0.2),
-			"shoulders": {"color": _PRIMARY, "text": _LIGHT},
+			"shoulders": {"color": _PRIMARY, "text": _LIGHT, "stroke": Color.TRANSPARENT},
 			"jersey": {"base": _PRIMARY, "stripes": stripes, "yoke": _SECONDARY},
 			"arms": {"upper": {"base": _PRIMARY, "stripes": bare}},
 			"gloves": _KIT_GLOVES,
 			"pants": {"base": _SECONDARY, "stripes": bare},
 			"socks": {"base": _PRIMARY, "stripes": stripes},
+			"text": {"color": _LIGHT, "stroke": Color.TRANSPARENT},
 		},
 	}
 

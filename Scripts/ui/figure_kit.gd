@@ -193,10 +193,10 @@ func _paint_body(colors: Dictionary, skin_tone: int, player_name: String,
 	jersey_decal.update_crest(TeamCrest.fruit_for(preset), preset)
 	jersey_decal.update_jersey(jersey.base, UniformPaint.yoke_color(jersey),
 			UniformPaint.collar_color(jersey), jersey.stripes, player_name, jersey_number,
-			colors.text)
+			colors.text, uniform.text.stroke)
 	jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	shoulder_decal.update_shoulder(uniform.shoulders.color, UniformPaint.yoke_color(jersey),
-			jersey_number, uniform.shoulders.text)
+			jersey_number, uniform.shoulders.text, uniform.shoulders.stroke)
 	shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_paint(pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 	_paint(helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
