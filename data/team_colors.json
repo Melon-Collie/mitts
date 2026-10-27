@@ -1494,26 +1494,27 @@
     {
       "name": "Cherry",
       "primary": "#D2142C",
-      "secondary": "#1A1A1A",
+      "secondary": "#2B070F",
       "light": "#FFFFFF",
       "home": {
-        "helmet": "#1A1A1A",
+        "helmet": "#2B070F",
         "shoulders": {
-          "color": "#1A1A1A",
-          "text": "#D2142C"
+          "color": "#2B070F",
+          "text": "#FFFFFF"
         },
         "jersey": {
           "base": "#D2142C",
+          "collar": "#2B070F",
           "stripes": [
             {
               "pos": 0.76,
               "width": 0.055,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             },
             {
               "pos": 0.88,
               "width": 0.055,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             }
           ]
         },
@@ -1524,12 +1525,12 @@
               {
                 "pos": 0.6,
                 "width": 0.11,
-                "color": "#1A1A1A"
+                "color": "#2B070F"
               },
               {
                 "pos": 0.84,
                 "width": 0.11,
-                "color": "#1A1A1A"
+                "color": "#2B070F"
               }
             ]
           },
@@ -1538,9 +1539,9 @@
             "stripes": []
           }
         },
-        "gloves": "#1A1A1A",
+        "gloves": "#2B070F",
         "pants": {
-          "base": "#1A1A1A",
+          "base": "#2B070F",
           "stripes": []
         },
         "socks": {
@@ -1549,18 +1550,19 @@
             {
               "pos": 0.42,
               "width": 0.1,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             },
             {
               "pos": 0.6,
               "width": 0.1,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#1A1A1A",
+          "color": "#FFFFFF",
+          "stroke": "#2B070F",
           "outline": "#D2142C"
         }
       },
@@ -1572,6 +1574,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#D2142C",
           "stripes": [
             {
               "pos": 0.76,
@@ -1606,9 +1609,9 @@
             "stripes": []
           }
         },
-        "gloves": "#1A1A1A",
+        "gloves": "#2B070F",
         "pants": {
-          "base": "#1A1A1A",
+          "base": "#2B070F",
           "stripes": []
         },
         "socks": {
@@ -1629,7 +1632,8 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#D2142C",
-          "outline": "#1A1A1A"
+          "stroke": "#2B070F",
+          "outline": "#2B070F"
         }
       }
     },
