@@ -13,7 +13,7 @@ extends GutTest
 # square on a pad comes back out, one that clips the outside of it glances on
 # in.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # On his angle, at the top of the crease, square to a shot from the slot.
 const STANDING := Vector2(0.0, -1.3)
 

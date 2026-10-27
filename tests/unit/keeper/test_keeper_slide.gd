@@ -11,7 +11,7 @@ extends GutTest
 # off the post: from the RVH, the skate on the post holding it until the push
 # ends, to rest on his spot in the slide's time, never toward the post.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 const MAX_BONE_STEP_M: float = 0.1

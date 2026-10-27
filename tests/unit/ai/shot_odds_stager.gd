@@ -8,7 +8,7 @@ extends RefCounted
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
 
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SHOT_SPEED: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S
 const CHARGE_TICKS: int = AIBotMechanics.BOT_WRISTER_CHARGE_TICKS
 # Post to post at ~6.5 cm.

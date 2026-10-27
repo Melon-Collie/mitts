@@ -6,7 +6,7 @@ extends GutTest
 # drop mid-rise goes from where he is; and at every tick his gear stays out of
 # the ice, his arms reach the stick and nothing on him jumps.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 # A bone's travel in a tick, past which it has jumped: the knees land at about

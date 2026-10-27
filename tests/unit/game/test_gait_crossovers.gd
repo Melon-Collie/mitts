@@ -16,7 +16,7 @@ const _LEG_R: int = SkaterMeshBuilder.LegBone.LEG_R
 #  4. It crosses: the outside skate passes the inside one every step.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const WARMUP_TICKS: int = 300
 const MEASURE_TICKS: int = 240
 const SPEED: float = 5.0

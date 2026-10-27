@@ -12,14 +12,14 @@ defender abreast 2.2 m off the hip: protect gain	0.2879
 tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
 dead slot over the 8.5 m band, set keeper: shoot-now ratio	2.6487
-spun-off carrier, cut-in over standing still: move-score margin	0.1821
+spun-off carrier, cut-in over standing still: move-score margin	0.1810
 tight-wall pinch, open man wide: carry anchor	(0.0, -22.1)
 spun-off carrier, beaten man behind: pick	CARRY to (1.4, -24.0)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
 outlet straight up the wall, forechecker standing off the lane: pick	PASS to 2
 wide in the zone, open man at the far-post backdoor: pick	CARRY to (3.2, -22.9)
 our end, middle clogged, winger ahead with a clear path: pick	PASS to 2
-central in the zone, open mate wide at a poor angle: intent	CARRY
+central in the zone, open mate wide at a poor angle: intent	PASS
 neutral ice, straight lane clogged, close outlet up-ice: pick	PASS to 2
 8 m feed past a mid-lane stick: variant	FLAT
 pinged ahead man 9 m out behind a mid-lane stick: variant	SAUCER
@@ -46,9 +46,9 @@ head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	SHOOT
 head-on drive at 6 m/s, keeper 1 m out, from 4 m: pick	SHOOT
 head-on drive at 6 m/s, keeper 1 m out, from 3 m: pick	SHOOT
 1v1 cutting across 3 m out, keeper squared 0.9 m out: pick	SHOOT
-1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.9713
+1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.9736
 1v1 mid-cut, keeper lagging the arc: intent	SHOOT
-1v1 mid-cut, keeper lagging the arc: shoot-now value	0.9091
+1v1 mid-cut, keeper lagging the arc: shoot-now value	0.9076
 1v1 flat-footed 3 m out, keeper squared 0.9 m out: carry anchor	(0.0, -23.6)
 standing 3 m out, keeper squared 1.3 m out: intent	SHOOT
 standing 9 m out, keeper squared 1.3 m out: pick	CARRY to (0.0, -21.7)
@@ -56,7 +56,7 @@ standing 3 m out, keeper displaced to the backhand side: winning hold	(-0.8, -0.
 standing 3 m out, keeper displaced to the backhand side: hold load share	0.7500
 dead-sharp beside the net, keeper on the near post: winning hold	(-0.5, 0.8)
 69 deg off the normal, keeper squared 1.2 m out: intent	CARRY
-69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.1463
+69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.1462
 swarmed on the blade in our slot: intent	CARRY
 swarmed in our slot a stride looser: intent	CARRY
 past centre, stand-up line at gap, open backfield: pick	CARRY to (2.0, -7.8)

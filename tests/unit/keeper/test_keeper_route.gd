@@ -8,7 +8,7 @@ extends GutTest
 # turn before the feet; in the RVH a post or a spot across pushed off the post
 # for; and a spot or facing moved under a move taken on by it.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 const MAX_BONE_STEP_M: float = 0.1

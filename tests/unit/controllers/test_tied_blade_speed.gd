@@ -6,7 +6,7 @@ extends GutTest
 # and the replicated stick_tied bit, so a tied client predicts its own blade.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class GameStateStub:

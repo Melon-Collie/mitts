@@ -7,7 +7,7 @@ extends GutTest
 # goes down, leans on over his pads after the glove and lays it on the puck,
 # every tick unbroken, his gear out of the ice and his arms on their gear.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 const MAX_BONE_STEP_M: float = 0.1

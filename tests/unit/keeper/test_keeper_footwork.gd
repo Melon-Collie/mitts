@@ -8,7 +8,7 @@ extends GutTest
 # him jumps between ticks; and once the stop has settled out of him he is in
 # the ready stance.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 # A bone's travel in a tick, past which it has jumped: the recovering leg is

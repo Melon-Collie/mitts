@@ -6,7 +6,7 @@ extends GutTest
 # stopping on its facing; footwork going in his turned frame; and a move asked
 # for from the wrong rest refused.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 const MAX_BONE_STEP_M: float = 0.1

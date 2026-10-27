@@ -15,7 +15,7 @@ extends GutTest
 #     unpressured flyby takes its shot. A backchecker still drops the carry.
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const CARRIER: int = 1
 
 var _goal := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)   # team 0 attacks -Z

@@ -30,9 +30,10 @@ const INPUT_RATE: int = PHYSICS_TICK
 # ~3.1 Mbps (docs/performance-findings.md → Network bytes by broadcast rate).
 # PHYSICS_TICK must stay an integer multiple (_state_tick_divisor).
 const STATE_RATE: int = 45
-# Rate at which world-state snapshots are written to the .mreplay file, below
-# STATE_RATE: the viewer interpolates between snapshots (ReplayPlaybackEngine),
-# so 30 Hz keeps playback smooth at a fraction of the file size. Only the steady
+# The most often world-state snapshots are written to the .mreplay file: the
+# viewer interpolates between snapshots (ReplayPlaybackEngine), so a sparse file
+# keeps playback smooth at a fraction of the size. It is a minimum gap, so a
+# 45 Hz broadcast writes every other snapshot, 22.5 Hz on disk. Only the steady
 # PLAYING stream is throttled — phase-transition keyframes and the goal moment
 # are always recorded (GameManager._record_world_state_to_file).
 const REPLAY_FILE_RATE: int = 30

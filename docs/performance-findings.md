@@ -342,8 +342,8 @@ Host upload, per human client and for an all-human lobby (bots cost nothing):
 
 | broadcast | per client (5v5) | 3v3 (5 clients) | 5v5 (9 clients) |
 |---|---|---|---|
-| 45 Hz | 43 KB/s | 1.3 Mbps | 3.1 Mbps |
-| 60 Hz (shipped) | 57 KB/s | 1.7 Mbps | 4.1 Mbps |
+| 45 Hz (shipped) | 43 KB/s | 1.3 Mbps | 3.1 Mbps |
+| 60 Hz (before 90/45) | 57 KB/s | 1.7 Mbps | 4.1 Mbps |
 | 90 Hz | 86 KB/s | 2.5 Mbps | 6.2 Mbps |
 | 120 Hz | 114 KB/s | 3.4 Mbps | 8.2 Mbps |
 
@@ -365,7 +365,7 @@ offline (the same hermite base and `integrate_forward`, PDV 3 ms, against the
 host's position at the instant the prediction lands; downed and pinned bodies
 left out), cm:
 
-| RTT | 120/60 shipped: mean, p95, p99 | 90/90 | 90/45 | no forward prediction, mean |
+| RTT | 120/60 (before): mean, p95, p99 | 90/90 | 90/45 (2-tick cushion) | no forward prediction, mean |
 |---|---|---|---|---|
 | 30 ms | 1.4, 3.3, 5.6 | 1.3, 3.2, 5.4 | 1.9, 4.3, 7.1 | 27 |
 | 60 ms | 2.6, 5.9, 9.4 | 2.7, 6.3, 10.0 | 3.1, 6.9, 10.9 | 38 |
@@ -388,7 +388,7 @@ every lead to a 120 Hz tick, coarser than the differences here), snapshots on
 each rate's schedule, the lead `rtt/2 + margin` as `ClockSync` sets it, the
 same 16 seeds per row. Refused share of earned claims at 60 ms RTT:
 
-| | 120/60 shipped | 90/90 | 90/45 | 90/90, cushion 16.7 ms | 90/45, cushion 16.7 ms |
+| | 120/60 (before) | 90/90 | 90/45 | 90/90, cushion 16.7 ms | 90/45, cushion 16.7 ms (shipped) |
 |---|---|---|---|---|---|
 | a deflection every ~333 ms | 11.3% | 12.5% | 13.6% | 11.3% | 12.4% |
 | a deflection every ~100 ms (scramble) | 30.5% | 33.1% | 35.6% | 30.4% | 33.1% |
