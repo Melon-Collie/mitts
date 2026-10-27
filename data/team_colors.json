@@ -573,7 +573,8 @@
         "helmet": "#5AB4E0",
         "shoulders": {
           "color": "#F5D028",
-          "text": "#5AB4E0"
+          "text": "#5AB4E0",
+          "stroke": "#1F6AA5"
         },
         "jersey": {
           "base": "#F5D028",
@@ -583,6 +584,11 @@
               "pos": 0.9,
               "width": 0.14,
               "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.09,
+              "color": "#1F6AA5"
             },
             {
               "pos": 0.9,
@@ -599,6 +605,11 @@
           "lower": {
             "base": "#FFFFFF",
             "stripes": [
+              {
+                "pos": 0.5,
+                "width": 0.26,
+                "color": "#1F6AA5"
+              },
               {
                 "pos": 0.5,
                 "width": 0.2,
@@ -622,6 +633,11 @@
             },
             {
               "pos": 0.5,
+              "width": 0.16,
+              "color": "#1F6AA5"
+            },
+            {
+              "pos": 0.5,
               "width": 0.1,
               "color": "#5AB4E0"
             }
@@ -630,6 +646,7 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#5AB4E0",
+          "stroke": "#1F6AA5",
           "outline": "#FFFFFF"
         }
       },
@@ -637,7 +654,8 @@
         "helmet": "#FFFFFF",
         "shoulders": {
           "color": "#FFFFFF",
-          "text": "#5AB4E0"
+          "text": "#5AB4E0",
+          "stroke": "#1F6AA5"
         },
         "jersey": {
           "base": "#FFFFFF",
@@ -647,6 +665,11 @@
               "pos": 0.9,
               "width": 0.14,
               "color": "#F5D028"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.09,
+              "color": "#1F6AA5"
             },
             {
               "pos": 0.9,
@@ -663,6 +686,11 @@
           "lower": {
             "base": "#F5D028",
             "stripes": [
+              {
+                "pos": 0.5,
+                "width": 0.26,
+                "color": "#1F6AA5"
+              },
               {
                 "pos": 0.5,
                 "width": 0.2,
@@ -686,6 +714,11 @@
             },
             {
               "pos": 0.5,
+              "width": 0.16,
+              "color": "#1F6AA5"
+            },
+            {
+              "pos": 0.5,
               "width": 0.1,
               "color": "#5AB4E0"
             }
@@ -694,6 +727,7 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#5AB4E0",
+          "stroke": "#1F6AA5",
           "outline": "#F5D028"
         }
       }
