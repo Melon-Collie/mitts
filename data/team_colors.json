@@ -301,8 +301,8 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#C8D8F0",
-          "text": "#6B1E4A"
+          "color": "#3B67C4",
+          "text": "#FFFFFF"
         },
         "jersey": {
           "base": "#FFFFFF",
