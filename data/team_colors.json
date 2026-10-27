@@ -953,8 +953,8 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#7FB320",
-          "text": "#FFFFFF",
+          "color": "#FFFFFF",
+          "text": "#7FB320",
           "stroke": "#3B5511"
         },
         "jersey": {
@@ -1006,7 +1006,7 @@
         },
         "gloves": "#3B5511",
         "pants": {
-          "base": "#3B5511",
+          "base": "#7FB320",
           "stripes": []
         },
         "socks": {
