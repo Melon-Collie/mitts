@@ -1,14 +1,15 @@
-# Defender race — one model of whether a defender gets to the puck
+# Strip odds — one model of whether a defender takes the puck
 
-Status: **agreed design (in chat); not built.** The CLAUDE.md workflow applies:
-this doc is the plan, deviations get discussed first.
+Status: **agreed design (in chat), measured; building.** The CLAUDE.md workflow
+applies: this doc is the plan, deviations get discussed first. (The file keeps
+its first name, from when the model was a race.)
 
 ## Why
 
 Every read that asks "does the carrier keep the puck" asks the same question:
-**if the puck is at P at time T, does a defender get his stick on it first?**
-Today that question is answered several ways, each with its own guess at what
-the defender will choose to do:
+**if the carrier skates this path, what are the odds a defender strips him of
+the puck within it?** Today that question is answered several ways, each with
+its own guess at what the defender will choose to do:
 
 | Read | What it assumes the defender does |
 |---|---|
@@ -16,151 +17,111 @@ the defender will choose to do:
 | `AIPossessionValue._line_keep` | past the line, shadows the carrier's current course at his own depth; a crossing picked late is "the lunge's to cover" |
 | `AIDefenderProjection` | ahead: holds his gap down to the top of the house; behind: backchecks; forechecker exception in our zone |
 | `AIPossessionValue._skate_keep` / `_drive_keep` | the projected defence above, then the lunge model, over a fixed drive length |
-| `AILaneReach.block` (passes) | momentum through the read, then the arrival clock; graded by the clock's error over his trip |
-| `AILoosePuckChase.reach_meet_time` | the arrival clock to the reach band |
 
 The carrier compares the outputs as if they were one currency. They are not, and
-the disagreements show up as behaviour: against a square defender at the line,
-`_line_keep` reads the lane the carrier is cutting toward as open to a late
-choice on every re-plan while the real defender mirrors him
-(`test_nz_carry_keeps_pace`, gap 10 m). The keep band added in bfd851ff /
-0530a7d2 patches the cliffs these reads have in time; it does not make them
-agree.
-
-The pass-lane and loose-puck reads already answer the question as a race on the
-arrival clock. This plan puts every keep read on that race.
-
-## Prior work
-
-The model is Spearman's pitch control (MIT Sloan 2017, Liverpool FC): a
-player's time to intercept is his current course for a reaction time (0.7 s),
-then a straight run at top speed; the gap between his time and the ball's goes
-through a logistic with a constant σ ≈ 0.45 s; all opponents are combined
-probabilistically. "Pass Evaluation in Women's Olympic Hockey" (2022) carries it
-to the rink with a puck model and per-player motion. Neither grows the
-uncertainty with how far ahead the read looks; Spearman prices ~1 s passes. Our
-reads plan 2–4 s ahead, where what the defender chooses matters more, so the
-uncertainty here grows with T.
+the disagreements show up as behaviour (a carrier chasing a lateral cut a
+square defender mirrors, `test_nz_carry_keeps_pace` gap 10 m). And none of them
+was ever held to what our defenders do: measured, today's carry read predicts
+losses worse than guessing the base rate.
 
 ## The model
 
-For defender *i*, a point *P* the puck is at, at time *T* from now:
+For a carrier's path (the plan being priced: the puck at each point at each time
+from now) against each defender (his position and velocity now, his build):
 
-1. **His time.** `t_i(P)`: the time for his stick to get to P. He carries on as
-   he is for a reaction time `t_react`, then the shared calibrated arrival clock
-   (`AIArrival.time_to_arrive_caps`) to within his reach of P
-   (`AILaneReach.defender_reach`). The same function `AILaneReach._block_at` uses
-   today, on his own build.
-2. **The odds he is not there yet.** `keep_i = grade((t_i(P) − T) / s(T))` with
-   `s(T) = σ₀ + k·T`: the uncertainty of his arrival, σ₀ the clock's own error,
-   `k·T` what we don't know of what he will choose. The fit decides both.
-3. **A strip rate while he is in reach.** Reach is not a take. While his stick
-   is in reach the puck is stripped at a rate λ per second (Spearman's control
-   rate), so the odds the puck keeps to a path are
-   `exp(−λ · ∫ P(his stick is in reach at t) dt)`, with `P(in reach at t) =
-   1 − keep_i` at the path's point for t. λ is a strip rate measured per regime —
-   a standing puck and a moving one.
-4. **Several defenders.** Their time in reach adds: `exp(−λ · Σ_i ∫ P_i dt)`,
-   the product of each one's keep (Spearman's probabilistic combine), not the
-   worst one alone.
+1. **Where he will be: his momentum's line, give or take his push.** His centre
+   at `t` is `pos + vel·t`; around it, the odds he is at a spot fall as
+   `e^(−push / FAN_SCALE)`, push being the share of his body's push (his thrust
+   over the time, `½·A·t²` of ground) he needs to be there. No reaction delay and
+   no intent: measured, a defender centred on chasing the puck, on intercepting
+   it, or anywhere between predicts where our defenders go worse than his
+   momentum does.
+2. **What he takes: a strip rate while the puck is within his stick.** Within
+   `STRIP_RADIUS_M` of his body the puck is stripped at a rate per second — one
+   for a moving puck, one for a standing puck. The odds the puck keeps to the
+   path are `exp(−Σ rate · P(he is within the radius of the puck then) · dt)`.
+3. **Several defenders: their exposures add** (Spearman's probabilistic
+   combine), not the likeliest one alone.
 
-**Measured (bb396363, single defender, scripted carrier):** the race graded
-directly is worse than predicting the base rate (Brier 0.19 against 0.16): when
-it reads his stick there, the puck is still kept 74% of the time. With the strip
-rate it scores 0.128, calibrated across its range, at λ 0.35/s, reaction 0.15 s
-and a near-sharp grade — the growth of the grade with T fits to about nothing:
-the room further out is the time in reach, which a later arrival has less of.
-Today's carry read scores 0.235 on the families it prices.
+Measured against our defending bots (`test_defender_race_truth.gd`, 1584 runs of
+a scripted carrier protecting as a bot does, every defender tracked):
 
-There is no defender intent in it: no lunge window, no shadow, no gap-holding,
-no backcheck target, no projected defence. A read that starts later (a follow-up
-`t` from now, a second ply, a reception) is the same race with T counted from
-now, from the defender's state now.
+| | value |
+|---|---|
+| strip radius off his body | 2.0 m (stick, blade and poke; the race's 1.8 m was short) |
+| strip rate, moving puck in reach | 4.5 /s |
+| strip rate, standing puck in reach | 3.0 /s |
+| fan scale | 0.25 of his push |
 
-**The deke tradeoff, accepted.** In a pure race a defender close to the carrier
-covers every lane; a cut beats him only by what his reaction gives up. The deke
-evaluator (`AICarrySpace`) still prices beating a man one on one. Revisit if
-play shows it.
+- Given where he really is, the strip rate reads which runs lose the puck 96% of
+  the time (ranking at each loss against a run still in play); it is the
+  movement — where he goes — that a model of a defender has to predict.
+- From the start alone, the two halves together (nothing refitted) expect 568
+  losses against 543 and rank 0.763 — the race with a strip rate 0.751, a
+  constant loss rate nothing. Today's carry read scored worse than predicting
+  the base rate.
+- Left in it, measured: against the momentum line a defender to the side of the
+  carrier's path takes the puck about twice as often as read, as does one
+  facing a standing carrier, and a carrier cutting away loses it about half as
+  often. Every generic movement (momentum, pursuit, interception, blends) ranks
+  0.74–0.76; what is missing is what a defender decides (step up, hold the gap,
+  angle), which no kinematics sees. A later pass, perhaps something more human
+  than a mirror of our defenders' code.
+
+**Measure on fixed paths.** A planner asks "if I take this path, what happens";
+a bot carrier's own runs answer only for the paths he chose, which avoid the
+danger — fitted to them, the lane in front of a defender reads safe because
+nobody who saw him went into it.
+
+**The deke tradeoff, accepted.** Revisit if play shows it.
 
 ## What it retires
 
 - `reach_clearance`'s commit window (`maneuver_time`, `CARRY_LUNGE_WINDOW_S` in
   keep reads), `_stopped_clearance`, `_chases`, the escape-speed gate — all
   defender-intent guesses.
-- `reach_band_m` and the `band_m` argument on the safety maps (it becomes
-  `s(T)`), and `projected_s`.
-- Probably the dwell / transit safety maps as separate curves: σ₀ per regime if
-  the calibration shows a standing puck is stripped more surely than a passing
-  one, else one curve.
+- `reach_band_m`, the `band_m` argument on the safety maps and `projected_s`;
+  the dwell and transit safety maps as keep reads (the two strip rates).
 - `_line_keep`'s shadow and natural crossing; `_skate_keep`'s `DRIVE_MAX_M`
   horizon as a defence rule.
 - `AIDefenderProjection` and `AIPossessionValue._project` in keep reads, and
   `AICarrierField.project_opponents` where it feeds a keep read (ply 2,
   `_end_worth`, the wheel, `receiver_drive_in_value`, the feed's catch).
 - **`AIDefencePairing`'s pairing and riding** (`pair`, `rides`, `ride_at`) and
-  the shared entry cache's key on it. Who a defender is marking needs no
-  assignment: a man skating with his attacker carries on that way through his
-  reaction and is late to the carrier's path, and the race reads that. The same
-  defender counts against the carry and the pass to his man alike — the 2-on-1
-  read: each option sees which way he is drifting, and a man square between
-  them covers both. `collect_attack` (our own skaters, for the pass to a man
-  following in) is not a defender model and stays as a helper.
+  the shared entry cache's key on it: a man skating with his attacker carries on
+  that way, and the fan reads it. `collect_attack` (our own skaters, for the pass
+  to a man following in) is not a defender model and stays as a helper.
+- The race (`AIDefenderRace`), superseded by this.
 
 ## What it does not touch
 
-- **Where the defence stands later for the shot model.** A shot priced after an
-  entry still needs defender positions for blockers and screens. Positions are
-  not part of the race; this stays on `AIDefenderProjection` for now, riders
-  included, and gets its own pass — the pairing goes entirely with it.
-- The arrival clock, the shot odds and the keeper, which are calibrated on their
-  own.
-
-## Calibration — measure first
-
-The model is grounded by fitting it to our real defending bots, as the shot
-model is held to the live keeper (`tests/unit/ai/data/shot_odds_truth.txt`).
-
-- **Instrument** `tests/instruments/ai/test_defender_race_truth.gd` on the duel
-  harness. The carrier skates a scripted puck path; the defender is the real bot.
-  This needs a scripted-carrier mode in `duel_harness.gd`.
-- **Stagings.** Defender ahead, beside, behind, 1–20 m off; standing, closing,
-  backing off, mirroring, chasing. Carries straight, cut at several angles and
-  speeds, and stopped. Passes from release to reception. Each staging jittered
-  (±0.5 m, ±10% speed) and repeated.
-- **Outcome.** Did the defender get his stick to the puck before the path's
-  end, and where and when.
-- **Fit.** `t_react`, σ₀, k against the outcomes, by the model's margin at its
-  binding point. The fit tests the model's shape too: a residual that trends
-  with T means `s(T)` linear in T is wrong, one by staging family means the race
-  is missing something. Fit the grade's shape the same way: linear ramp (finite
-  support, what `AILaneReach` uses, keeps the prescreens exact) against
-  logistic; take the ramp unless the logistic fits clearly better. A
-  two-defender set decides product against worst-one.
-- **Truth file and gate.** The instrument writes a data file; a default-tier
-  test scores the model against it in milliseconds with an error bound as a
-  ratchet, as `test_shot_odds_vs_truth.gd` does. The file is regenerated when
-  the defender bots change, never hand-edited.
+- **Where the defence stands later for the shot model** (blockers and screens
+  after an entry) stays on `AIDefenderProjection`, riders included, for its own
+  pass; the pairing goes entirely with it.
+- **Pass lanes** (`AILaneReach`) stay on the arrival clock for now. A puck in
+  flight through a defender's reach is the same question on a faster path; moving
+  lanes onto the fan and the moving strip rate is a later step, measured first.
+- The arrival clock, the shot odds and the keeper.
 
 ## Steps
 
-1. **Scripted-carrier mode and the instrument.** Measure today's reads against
-   the outcomes too, as the baseline.
-2. **`AIDefenderRace`** (`Scripts/domain/ai/defender_race.gd`, a leaf beside
-   `AIArrival`): `stick_time(pos, vel, caps, point)`, `keep(t_stick, T)`,
-   `path_keep(...)`, the defenders' product. Unit properties: keep never falls as
-   T shrinks with the defender fixed; a defender with his stick on P at T = 0
-   takes it; one out of reach of every point costs nothing; product order-free.
-   `AILaneReach._block_at` grades on it, so passes and carries share one curve.
-3. **Fit** `t_react`, σ₀, k; truth file and gate.
+1. ~~Scripted-carrier mode, protecting, defenders tracked; the instrument.~~
+2. ~~Fit and compare: race, overlap, time in reach, entries; momentum,
+   pursuit, interception and blends.~~
+3. **`AIStripOdds`** (`Scripts/domain/ai/strip_odds.gd`, a leaf): the odds a
+   defender is within the radius of a point at a time, a path's expected strips
+   and keep, and a dwell's. Unit properties; a truth file
+   (`tests/unit/ai/data/strip_odds_truth.txt`, written by the instrument) and a
+   default-tier gate scoring the model against it, its ranking and calibration
+   as ratchets.
 4. **Swap the reads**, one family per commit, the default tier, the entry and
    breakout drills and `test_entry_read_stability.gd` after each:
-   `AICarrySpace` core (`reach_clearance`, `carry_safety`, `carry_crossing_keep`,
+   `AICarrySpace` core (`carry_safety`, `carry_crossing_keep`,
    `carry_strip_point`) → the carrier's searches (`_rolled_safety`, stand,
    candidates, `_end_worth`, the wheel) → `AIPossessionValue` (`_line_keep`,
    `_skate_keep`, `_drive_keep`) → reception and holds (`catch_clear`,
    `_dwell_keep`, `mid_clear`, protect and seam reads in `carrier.gd`,
-   `support.gd`). Benchmarks before and after: a clock read per point per
-   defender replaces a closed-form clearance.
+   `support.gd`). Benchmarks before and after.
 5. **Retire** what the swap leaves unread (list above).
 6. **Test audit.** Every pinned behaviour rerun over jittered setups; one that
    holds ~90%+ is pinned, a near tie is not pinned as a pick. Each tagged with
@@ -169,8 +130,7 @@ model is held to the live keeper (`tests/unit/ai/data/shot_odds_truth.txt`).
 
 ## Open questions
 
-- Grade shape and the defenders' combine: decided by the fit.
-- Dwell against transit: one curve or σ₀ per regime, decided by the fit.
-- Bots, not humans: the fit is against our defending bots. A human defender
-  will differ; whether `s(T)` should widen for them is a later question.
-- Shot-model defender positions at follow-up times: a second pass.
+- Bots, not humans: every number is measured against our defending bots. A
+  human defender will strip, step up and angle differently.
+- The defender's decisions (the families left in the model, above).
+- Shot-model defender positions at follow-up times; pass lanes on the fan.

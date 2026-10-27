@@ -1,25 +1,25 @@
 extends GutTest
 
-# The defender race (AIDefenderRace, docs/defender-race-plan.md) against our
-# real defending bots. Each staging puts a carrier on the ice with one or two
-# real defender bots and records when the puck was lost, and where the puck was
-# until then. A bot carrier decides for himself (protecting, evading), and a
-# release ends his run without a loss; a scripted carrier skates a one-shot path
-# through the real movement model and can be stripped.
+# The strip odds (AIStripOdds, docs/defender-race-plan.md) against our real
+# defending bots. Each staging puts a carrier on the ice with one or two real
+# defender bots and records when the puck was lost, where the puck was until then
+# and where each defender was. A scripted carrier skates a one-shot path through
+# the real movement model, protecting the puck as a bot does, and can be
+# stripped; a bot carrier decides for himself, and a release ends his run without
+# a loss.
 #
-# The model: while a defender's stick is in reach the puck is stripped at a rate
-# per second — the race giving the odds he is in reach at each moment, faded by
-# how far the puck is off where his momentum has him (what he has to commit to),
-# a rate for a standing puck and one for a moving puck — plus a rate while the
-# puck is within his reach of where his momentum has him; the defenders'
-# exposures add. Fitted on the bot carriers' single-defender runs (MITTS_RACE_FIT
-# names other families), scored by likelihood against a constant loss rate and
-# by how often a kept run reads safer than a lost one; the pairs test the adding,
-# and observed against expected losses by family and by time read the rest.
-# Reports only. MITTS_RACE_ONLY runs the named families, MITTS_RACE_LIMIT caps
-# the stagings, MITTS_RACE_SAVE writes the runs to a file and MITTS_RACE_FROM
-# refits from files (comma separated), MITTS_RACE_MIN_GAP leaving out the runs
-# that start with a defender that close.
+# Fitted apart: where the defenders went against the ease of getting there, for
+# what their spread is centred on (the movement half), and, given where they
+# were, the losses by the puck's path through their reach, by time in reach and
+# by entries into it, the strip radius fitted (the strip half); then the two
+# together from the start alone, nothing refitted. Scored by likelihood against a
+# constant loss rate and by how often, at each loss, the run that lost the puck
+# had read riskier than one still in play. Reports only. MITTS_RACE_ONLY runs the
+# named families, MITTS_RACE_LIMIT caps the stagings, MITTS_RACE_SAVE writes the
+# runs to a file and MITTS_RACE_FROM refits from files (comma separated),
+# MITTS_RACE_MIN_GAP leaving out the runs that start with a defender that close;
+# MITTS_WRITE_STRIP_TRUTH=1 writes the strip odds' truth file from the tracked
+# runs.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const CARRIER := 1
@@ -37,7 +37,6 @@ const PATH_END_Z: float = -(GameRules.GOAL_LINE_Z - 3.0)
 const EDGE_M: float = 1.5
 # A puck slower than this between samples is standing.
 const STAND_M_S: float = 1.0
-const COAST_EDGE_M: float = 0.3
 const FAMILIES: Array[String] = ["bot_lane", "bot_off", "bot_pair", "bot",
 		"straight", "straight_lane", "straight_side", "chased", "cut", "stand", "pair"]
 # The scripted single-defender families the movement and overlap fits read.
@@ -49,20 +48,9 @@ const MOVE_MIN_T: float = 0.2
 # and rate per second a standing puck sits in it.
 const OVERLAP_RATES: Array[float] = [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.3, 1.7, 2.2, 3.0, 4.0, 5.5]
 const STAND_IN_RATES: Array[float] = [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 1.0, 1.5, 2.2, 3.0, 4.5, 6.0]
-const DEFAULT_FIT: Array[String] = ["bot_lane", "bot_off"]
-
-const REACTS: Array[float] = [0.1, 0.15, 0.2, 0.3]
-const SIGMAS: Array[float] = [0.1, 0.2, 0.3]
-# How far off his momentum's line (m, past his reach) the race's odds fade by
-# e; the last is the pure race.
-const COMMITS: Array[float] = [1.0, 2.0, 3.0, 5.0, 8.0, 1.0e6]
-const COAST_RATES: Array[float] = [0.0, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0]
-const MOVING_RATES: Array[float] = [0.0, 0.02, 0.05, 0.08, 0.12, 0.16, 0.2, 0.25, 0.3, 0.4, 0.5]
-const STANDING_RATES: Array[float] = [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0]
 
 var _rng := RandomNumberGenerator.new()
 var _caps: AISkaterCaps = Duel.match_caps()
-var _fit_families: Array[String] = []
 # One row per run.
 var _family: Array[String] = []
 var _defs: Array = []      # Array[Array[Vector3]]
@@ -253,265 +241,11 @@ func _standing(pts: Array[Vector3], ts: Array[float], start: Vector3) -> Array[b
 	return out
 
 
-# Every row's stick time per defender at every sample, for a reaction.
-func _stick_times(react: float) -> Array:
-	var out: Array = []
-	for r: int in _family.size():
-		var per_def: Array = []
-		var defs: Array[Vector3] = _defs[r]
-		var vels: Array[Vector3] = _def_vels[r]
-		var pts: Array[Vector3] = _points[r]
-		for i: int in defs.size():
-			var st: Array[float] = []
-			for p: Vector3 in pts:
-				st.append(AIDefenderRace.stick_time(defs[i], vels[i], _caps, p, react))
-			per_def.append(st)
-		out.append(per_def)
-	return out
-
-
-# Every row's distance past his reach of the puck from where each defender's
-# momentum has him, at every sample.
-func _offsets() -> Array:
-	var reach: float = AILaneReach.defender_reach(_caps)
-	var out: Array = []
-	for r: int in _family.size():
-		var per_def: Array = []
-		var defs: Array[Vector3] = _defs[r]
-		var vels: Array[Vector3] = _def_vels[r]
-		var pts: Array[Vector3] = _points[r]
-		var ts: Array[float] = _times[r]
-		for i: int in defs.size():
-			var off: Array[float] = []
-			for k: int in pts.size():
-				var at: Vector3 = defs[i] + vels[i] * ts[k]
-				off.append(Vector2(pts[k].x - at.x, pts[k].z - at.z).length() - reach)
-			per_def.append(off)
-		out.append(per_def)
-	return out
-
-
-# Row `r`'s in-reach odds at each sample, each defender's faded by `commit_m`,
-# summed over the defenders (or the likeliest one's alone).
-func _reach(sticks_r: Array, offsets_r: Array, ts: Array[float], sigma: float,
-		commit_m: float, worst_only: bool = false) -> Array[float]:
-	var out: Array[float] = []
-	for k: int in ts.size():
-		var total: float = 0.0
-		for i: int in sticks_r.size():
-			var st: Array[float] = sticks_r[i]
-			var off: Array[float] = offsets_r[i]
-			var p: float = (1.0 - AIDefenderRace.keep(st[k], ts[k], sigma, 0.0)) \
-					* exp(-maxf(off[k], 0.0) / commit_m)
-			total = maxf(total, p) if worst_only else total + p
-		out.append(total)
-	return out
-
-
-# Row `r`'s odds the puck is within reach of where each defender's momentum has
-# him, summed.
-func _coast(offsets_r: Array, ts: Array[float]) -> Array[float]:
-	var out: Array[float] = []
-	for k: int in ts.size():
-		var c: float = 0.0
-		for off: Array[float] in offsets_r:
-			c += clampf((COAST_EDGE_M - off[k]) / (2.0 * COAST_EDGE_M), 0.0, 1.0)
-		out.append(c)
-	return out
-
-
-# Row `r`'s exposure up to `until`: seconds in reach while the puck stands, while
-# it moves, and seconds coming to him.
-func _exposure(r: int, reach: Array[float], coast: Array[float], until: float) -> Vector3:
-	var ts: Array[float] = _times[r]
-	var stand: Array[bool] = _stand[r]
-	var e := Vector3.ZERO
-	var prev_t: float = 0.0
-	for k: int in ts.size():
-		if prev_t >= until - 1e-6:
-			break
-		var dt: float = minf(ts[k], until) - prev_t
-		if stand[k]:
-			e.x += dt * reach[k]
-		else:
-			e.y += dt * reach[k]
-		e.z += dt * coast[k]
-		prev_t = ts[k]
-	return e
-
-
-func _event_sample(r: int) -> int:
-	var ts: Array[float] = _times[r]
-	for k: int in ts.size():
-		if ts[k] >= _event_t[r] - 1e-6:
-			return k
-	return ts.size() - 1
-
-
-func _fit_set(r: int) -> bool:
-	return _family[r] in _fit_families
-
-
-# `rates`: strip rate in reach standing, moving, and coming to him (/s).
-func _hazard(r: int, k: int, reach: Array[float], coast: Array[float], rates: Vector3) -> float:
-	return (rates.x if _stand[r][k] else rates.y) * reach[k] + rates.z * coast[k]
-
-
-# A fit's in-reach and coming-to-him odds per row.
-func _odds(sticks: Array, offsets: Array, coasts: Array, sigma: float, commit_m: float,
-		worst_only: bool = false) -> Array:
-	var reach: Array = []
-	for r: int in _family.size():
-		reach.append(_reach(sticks[r], offsets[r], _times[r], sigma, commit_m, worst_only))
-	return [reach, coasts]
-
-
-func _fit() -> Array:
-	var best: Array = [-INF, 0.0, 0.0, 0.0, Vector3.ZERO]
-	var offsets: Array = _offsets()
-	var coasts: Array = []
-	for r: int in _family.size():
-		coasts.append(_coast(offsets[r], _times[r]))
-	for react: float in REACTS:
-		var sticks: Array = _stick_times(react)
-		for sigma: float in SIGMAS:
-			for commit_m: float in COMMITS:
-				var odds: Array = _odds(sticks, offsets, coasts, sigma, commit_m)
-				var total := Vector3.ZERO
-				var events: Array[Vector2i] = []
-				for r: int in _family.size():
-					if not _fit_set(r):
-						continue
-					total += _exposure(r, odds[0][r], coasts[r], _end_t[r])
-					if _event_t[r] >= 0.0:
-						events.append(Vector2i(r, _event_sample(r)))
-				for c: float in COAST_RATES:
-					for m: float in MOVING_RATES:
-						for s: float in STANDING_RATES:
-							var rates := Vector3(s, m, c)
-							var ll: float = -rates.x * total.x - rates.y * total.y - rates.z * total.z
-							for ev: Vector2i in events:
-								ll += log(maxf(_hazard(ev.x, ev.y, odds[0][ev.x], coasts[ev.x],
-										rates), 1e-9))
-							if ll > best[0]:
-								best = [ll, react, sigma, commit_m, rates]
-	return best
-
-
-# Observed and expected losses over `rows`, at the fit's rates.
-func _observed_expected(odds: Array, rates: Vector3, rows: Array[int],
-		t_lo: float = 0.0, t_hi: float = HORIZON_S) -> Vector2:
-	var obs: float = 0.0
-	var expct: float = 0.0
-	for r: int in rows:
-		var until: float = minf(_end_t[r], t_hi)
-		if until <= t_lo:
-			continue
-		var e: Vector3 = _exposure(r, odds[0][r], odds[1][r], until) \
-				- _exposure(r, odds[0][r], odds[1][r], t_lo)
-		expct += rates.x * e.x + rates.y * e.y + rates.z * e.z
-		if _event_t[r] >= t_lo and _event_t[r] < t_hi:
-			obs += 1.0
-	return Vector2(obs, expct)
-
-
 func _rows(family: String) -> Array[int]:
 	var out: Array[int] = []
 	for r: int in _family.size():
 		if _family[r] == family:
 			out.append(r)
-	return out
-
-
-func _fit_rows() -> Array[int]:
-	var out: Array[int] = []
-	for r: int in _family.size():
-		if _fit_set(r):
-			out.append(r)
-	return out
-
-
-func _report(best: Array) -> void:
-	var rates: Vector3 = best[4]
-	gut.p("fit on %s: react %.2f s, grade %.2f s, commitment fades over %s | strip rate in reach standing %.2f /s, moving %.2f /s; coming to him %.2f /s" % [
-			str(_fit_families), best[1], best[2],
-			"never" if best[3] > 1000.0 else "%.0f m" % best[3], rates.x, rates.y, rates.z])
-	var offsets: Array = _offsets()
-	var coasts: Array = []
-	for r: int in _family.size():
-		coasts.append(_coast(offsets[r], _times[r]))
-	var sticks: Array = _stick_times(best[1])
-	var odds: Array = _odds(sticks, offsets, coasts, best[2], best[3])
-	gut.p("observed / expected losses by family:")
-	for fam: String in FAMILIES:
-		var rows: Array[int] = _rows(fam)
-		if rows.is_empty():
-			continue
-		var oe: Vector2 = _observed_expected(odds, rates, rows)
-		gut.p("  %-9s %4.0f / %6.1f = %.2f" % [fam, oe.x, oe.y, oe.x / maxf(oe.y, 1e-6)])
-	for fam: String in ["bot_pair", "pair"]:
-		var rows: Array[int] = _rows(fam)
-		if rows.is_empty():
-			continue
-		var worst: Vector2 = _observed_expected(_odds(sticks, offsets, coasts, best[2], best[3],
-				true), rates, rows)
-		gut.p("  %s, the likeliest man alone: %4.0f / %6.1f = %.2f" % [fam, worst.x, worst.y,
-				worst.x / maxf(worst.y, 1e-6)])
-	var fit_rows: Array[int] = _fit_rows()
-	gut.p("observed / expected by time (fit set):")
-	for b: int in 3:
-		var oe: Vector2 = _observed_expected(odds, rates, fit_rows, float(b), b + 1.0)
-		gut.p("  %d-%d s  %4.0f / %6.1f = %.2f" % [b, b + 1, oe.x, oe.y, oe.x / maxf(oe.y, 1e-6)])
-	_report_scores(odds, best)
-
-
-# Over the fit set: log likelihood per run against a constant loss rate, and how
-# often, at each loss, the run that lost it had read riskier up to then than a
-# run still in play (0.5 is a coin).
-func _report_scores(odds: Array, best: Array) -> void:
-	var rates: Vector3 = best[4]
-	var rows: Array[int] = _fit_rows()
-	var events: float = 0.0
-	var watched: float = 0.0
-	for r: int in rows:
-		events += 1.0 if _event_t[r] >= 0.0 else 0.0
-		watched += _end_t[r]
-	var rate0: float = events / maxf(watched, 1e-6)
-	var ll0: float = events * log(maxf(rate0, 1e-9)) - rate0 * watched
-	gut.p("log likelihood per run: race %.3f, a constant %.2f losses/s %.3f" % [
-			best[0] / rows.size(), rate0, ll0 / rows.size()])
-	var risk: Array = []
-	for r: int in _family.size():
-		risk.append(_cumulative_risk(r, odds, rates) if _fit_set(r) else [])
-	var concordant: float = 0.0
-	var pairs: float = 0.0
-	for a: int in rows:
-		if _event_t[a] < 0.0:
-			continue
-		var k: int = _event_sample(a)
-		var risk_a: Array[float] = risk[a]
-		for b: int in rows:
-			var risk_b: Array[float] = risk[b]
-			if b == a or _end_t[b] <= _event_t[a] or risk_b.size() <= k:
-				continue
-			pairs += 1.0
-			concordant += 1.0 if risk_a[k] > risk_b[k] else (0.5 if risk_a[k] == risk_b[k] else 0.0)
-	gut.p("ranking (at each loss, the lost run read riskier than one still in play): %.3f over %.0f pairs" % [
-			concordant / maxf(pairs, 1.0), pairs])
-
-
-# Row `r`'s expected losses up to each sample at `rates`.
-func _cumulative_risk(r: int, odds: Array, rates: Vector3) -> Array[float]:
-	var ts: Array[float] = _times[r]
-	var reach: Array[float] = odds[0][r]
-	var coast: Array[float] = odds[1][r]
-	var out: Array[float] = []
-	var total: float = 0.0
-	var prev_t: float = 0.0
-	for k: int in ts.size():
-		total += (ts[k] - prev_t) * _hazard(r, k, reach, coast, rates)
-		prev_t = ts[k]
-		out.append(total)
 	return out
 
 
@@ -1000,6 +734,37 @@ func _odds_within(centre: Vector3, cvel: Vector3, point: Vector3, t: float, radi
 	return minf(total * PI * radius * radius, 1.0)
 
 
+# The strip odds' truth file (tests/unit/ai/data/strip_odds_truth.txt, read by
+# test_strip_odds_vs_truth.gd): the tracked scripted runs, one of each staging's
+# repeats, each defender's start and the puck's path to two decimals.
+const STRIP_TRUTH_PATH: String = "res://tests/unit/ai/data/strip_odds_truth.txt"
+
+
+func _write_strip_truth() -> void:
+	var f := FileAccess.open(STRIP_TRUTH_PATH, FileAccess.WRITE)
+	f.store_line("# Generated by tests/instruments/ai/test_defender_race_truth.gd with MITTS_WRITE_STRIP_TRUTH=1; never hand-edit.")
+	f.store_line("# family	lost_at (-1: kept)	watched_to	defenders	per defender: x z vx vz	per sample: t x z (the puck)")
+	var n: int = 0
+	for r: int in _family.size():
+		if _tracks[r].is_empty() or not (_family[r] in SCRIPTED or _family[r] == "pair") \
+				or r % REPEATS != 0:
+			continue
+		var defs: Array[Vector3] = _defs[r]
+		var vels: Array[Vector3] = _def_vels[r]
+		var line := PackedStringArray([_family[r], "%.3f" % _event_t[r], "%.3f" % _end_t[r],
+				str(defs.size())])
+		for i: int in defs.size():
+			line.append_array(["%.2f" % defs[i].x, "%.2f" % defs[i].z, "%.2f" % vels[i].x,
+					"%.2f" % vels[i].z])
+		var pts: Array[Vector3] = _points[r]
+		var ts: Array[float] = _times[r]
+		for k: int in pts.size():
+			line.append_array(["%.3f" % ts[k], "%.2f" % pts[k].x, "%.2f" % pts[k].z])
+		f.store_line("\t".join(line))
+		n += 1
+	gut.p("wrote %d runs to %s" % [n, STRIP_TRUTH_PATH])
+
+
 func _save(path: String) -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	for r: int in _family.size():
@@ -1098,7 +863,6 @@ func _env_list(key: String, fallback: Array[String]) -> Array[String]:
 
 
 func test_defender_race_truth() -> void:
-	_fit_families = _env_list("MITTS_RACE_FIT", DEFAULT_FIT)
 	if OS.has_environment("MITTS_RACE_FROM"):
 		for path: String in OS.get_environment("MITTS_RACE_FROM").split(",", false):
 			_load(path)
@@ -1134,8 +898,9 @@ func test_defender_race_truth() -> void:
 				released += 1
 		gut.p("  %-9s lost %d, released %d, of %d %s" % [fam, lost, released, rows.size(),
 				str(kinds)])
-	_report(_fit())
 	_report_movement()
 	_report_overlap()
 	_report_combined()
+	if OS.get_environment("MITTS_WRITE_STRIP_TRUTH") == "1":
+		_write_strip_truth()
 	assert_true(true)
