@@ -195,7 +195,7 @@ func _standing(at: Vector2, turn: float) -> float:
 	if off <= FACED_RAD:
 		return walk if _glides_last else _settled(walk)
 	if off <= _lead_max and _step_do != Do.NONE and _step_legs == 1:
-		return walk + maxf(KeeperFootwork.SETTLE_S, off / _pivot_rate)
+		return walk + maxf(KeeperFootwork.SETTLE_S, pivot_time(off))
 	walk = _on_feet(at, facing, spot)
 	_way_do = Do.FACE
 	_way_spot = Vector2.ZERO
