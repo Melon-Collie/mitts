@@ -734,28 +734,28 @@
     },
     {
       "name": "Dragonfruit",
-      "primary": "#E31B6D",
+      "primary": "#CC1F93",
       "secondary": "#1A1A1A",
       "light": "#FFFFFF",
       "home": {
         "helmet": "#1A1A1A",
         "shoulders": {
-          "color": "#E31B6D",
+          "color": "#CC1F93",
           "text": "#FFFFFF",
           "stroke": "#1A1A1A"
         },
         "jersey": {
-          "base": "#E31B6D",
+          "base": "#CC1F93",
           "collar": "#1A1A1A",
           "stripes": []
         },
         "arms": {
           "upper": {
-            "base": "#E31B6D",
+            "base": "#CC1F93",
             "stripes": []
           },
           "lower": {
-            "base": "#E31B6D",
+            "base": "#CC1F93",
             "stripes": [
               {
                 "pos": 0.5,
@@ -776,7 +776,7 @@
           "stripes": []
         },
         "socks": {
-          "base": "#E31B6D",
+          "base": "#CC1F93",
           "stripes": [
             {
               "pos": 0.5,
@@ -801,12 +801,12 @@
         "helmet": "#FFFFFF",
         "shoulders": {
           "color": "#FFFFFF",
-          "text": "#E31B6D",
+          "text": "#CC1F93",
           "stroke": "#1A1A1A"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#E31B6D",
+          "collar": "#CC1F93",
           "stripes": []
         },
         "arms": {
@@ -815,7 +815,7 @@
             "stripes": []
           },
           "lower": {
-            "base": "#E31B6D",
+            "base": "#CC1F93",
             "stripes": [
               {
                 "pos": 0.5,
@@ -836,7 +836,7 @@
           "stripes": []
         },
         "socks": {
-          "base": "#E31B6D",
+          "base": "#CC1F93",
           "stripes": [
             {
               "pos": 0.5,
@@ -852,7 +852,7 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#E31B6D",
+          "color": "#CC1F93",
           "stroke": "#1A1A1A",
           "outline": "#1A1A1A"
         }
