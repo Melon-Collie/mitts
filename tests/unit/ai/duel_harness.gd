@@ -205,6 +205,9 @@ class SimSkater:
 	# True: the scripted carrier can be stripped like a bot's — for a fixture
 	# measuring whether the defence gets to the puck on a path the carrier keeps to.
 	var script_strippable: bool = false
+	# True: the scripted carrier holds the puck where a bot protecting it would
+	# (_script_blade).
+	var script_protects: bool = false
 	# The arm the rig places the blade with (duel_rig.gd). A fixture may set
 	# `blade_reach` to place the blade on a plain ring of that radius instead, and
 	# a per-tick write over the decided input (`func(s: SimSkater) -> void`), run
@@ -258,6 +261,10 @@ var move_cfg: SkaterMovementRules.MovementConfig
 var _facing_cfg: FacingRules.Config
 var _carry_facing_cfg: FacingRules.Config
 var _caps: AISkaterCaps
+# _script_blade's scratch: the opponents it protects from.
+var _script_opps: Array[Vector3] = []
+var _script_opp_vels: Array[Vector3] = []
+var _script_opp_caps: Array = []
 var _facing_rule := FacingRules.Result.new()
 var _load := WristerLoad.Result.new()
 var _collision := SkaterCollisionRules.Result.new()
@@ -1003,7 +1010,7 @@ func _script_step(s: SimSkater) -> void:
 	if to_net.length() > 0.05:
 		s.facing = to_net.normalized()
 	s.prev_blade = s.blade
-	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+	s.blade = _script_blade(s)
 
 
 # The real stride toward the waypoint, facing travel, never past script_speed:
@@ -1020,7 +1027,52 @@ func _script_skate(s: SimSkater, err: Vector3) -> void:
 			move_cfg)
 	s.pos += s.vel * DT
 	s.prev_blade = s.blade
-	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+	s.blade = _script_blade(s)
+
+
+# A scripted skater's blade: carried out in front; protecting, swung toward the
+# bot's protect seam by the safety it buys — AIRoleCarrier's protect read and the
+# agent's blend (CARRY_PROTECT_MAX_TURN_DEG), without the agent's low-pass or its
+# screen of the men already behind him.
+func _script_blade(s: SimSkater) -> Vector3:
+	var fwd := Vector3(s.facing.x, 0.0, s.facing.y)
+	var carried: Vector3 = s.pos + fwd * SCRIPT_CARRY_REACH_M
+	if not s.script_protects or carrier_id != s.peer_id:
+		return carried
+	_script_opps.clear()
+	_script_opp_vels.clear()
+	_script_opp_caps.clear()
+	for o: SimSkater in skaters:
+		if o.team_id != s.team_id:
+			_script_opps.append(o.pos)
+			_script_opp_vels.append(o.vel)
+			_script_opp_caps.append(caps_by_peer.get(o.peer_id))
+	var horizon: float = AICarrySpace.EVADE_HORIZON_S
+	var ahead: Vector3 = s.pos + s.vel * horizon
+	var fwd_spot: Vector3 = ahead + fwd * SCRIPT_CARRY_REACH_M
+	var fwd_safety: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+			fwd_spot, horizon, _script_opps, _script_opp_vels, _script_opp_caps),
+			AICarrySpace.reach_band_m)
+	var reach: float = _caps.handle_reach
+	var seam: Vector3 = ahead + AICarrySpace.best_handle_protect_point(s.pos, s.vel,
+			_script_opps, _script_opp_vels, reach, _script_opp_caps)
+	var seam_safety: float = AICarrySpace.clearance_to_safety(AICarrySpace.reach_clearance(
+			seam, horizon, _script_opps, _script_opp_vels, _script_opp_caps),
+			AICarrySpace.reach_band_m)
+	var gain: float = clampf(seam_safety - fwd_safety, 0.0, 1.0)
+	if gain <= 0.0:
+		return carried
+	var offset: Vector3 = AICarrySpace.best_handle_protect_point(s.pos, s.vel, _script_opps,
+			_script_opp_vels, reach, _script_opp_caps, fwd_spot)
+	var prot := Vector2(offset.x, offset.z)
+	if prot.length_squared() <= 0.0025:
+		return carried
+	prot = prot.normalized()
+	var turn: float = s.facing.angle_to(prot)
+	var max_turn: float = deg_to_rad(Agent.CARRY_PROTECT_MAX_TURN_DEG)
+	if absf(turn) > max_turn:
+		prot = s.facing.rotated(signf(turn) * max_turn)
+	return carried.lerp(s.pos + Vector3(prot.x, 0.0, prot.y) * SCRIPT_CARRY_REACH_M, gain)
 
 
 # A one-shot path's end: the hockey stop, blade held where it was carried.
@@ -1028,7 +1080,7 @@ func _script_stop(s: SimSkater) -> void:
 	s.vel = s.vel.move_toward(Vector3.ZERO, GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2 * DT)
 	s.pos += s.vel * DT
 	s.prev_blade = s.blade
-	s.blade = s.pos + Vector3(s.facing.x, 0.0, s.facing.y) * SCRIPT_CARRY_REACH_M
+	s.blade = _script_blade(s)
 
 
 # Whether `s` may play a loose puck this tick (PuckController's pickup gates): a

@@ -39,7 +39,16 @@ const EDGE_M: float = 1.5
 const STAND_M_S: float = 1.0
 const COAST_EDGE_M: float = 0.3
 const FAMILIES: Array[String] = ["bot_lane", "bot_off", "bot_pair", "bot",
-		"straight", "chased", "cut", "stand", "pair"]
+		"straight", "straight_lane", "straight_side", "chased", "cut", "stand", "pair"]
+# The scripted single-defender families the movement and overlap fits read.
+const SCRIPTED: Array[String] = ["straight_lane", "straight_side", "chased", "cut", "stand"]
+# Where a defender is read from, after a reaction (s), for the movement fit.
+const MOVE_REACTS: Array[float] = [0.0, 0.1, 0.2, 0.3]
+const MOVE_MIN_T: float = 0.2
+# The overlap fit's strip chance per metre of the puck's path through his reach,
+# and rate per second a standing puck sits in it.
+const OVERLAP_RATES: Array[float] = [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.3, 1.7, 2.2, 3.0, 4.0, 5.5]
+const STAND_IN_RATES: Array[float] = [0.0, 0.1, 0.2, 0.3, 0.45, 0.6, 1.0, 1.5, 2.2, 3.0, 4.5, 6.0]
 const DEFAULT_FIT: Array[String] = ["bot_lane", "bot_off"]
 
 const REACTS: Array[float] = [0.1, 0.15, 0.2, 0.3]
@@ -64,6 +73,7 @@ var _stand: Array = []     # Array[Array[bool]]: the puck standing at each sampl
 var _event_t: Array[float] = []   # when the puck was lost (-1: not)
 var _event_kind: Array[String] = []   # poke, lift or hit ("" when not lost)
 var _end_t: Array[float] = []     # when the run stopped being watched
+var _tracks: Array = []    # Array[Array[Array[Vector3]]]: each defender every sample (empty: not recorded)
 
 
 func _stagings() -> Array[Dictionary]:
@@ -97,8 +107,8 @@ func _stagings() -> Array[Dictionary]:
 			for d: float in [3.0, 6.0, 10.0, 15.0]:
 				for lat: float in [0.0, 3.0, 6.0]:
 					for dv: Vector3 in [still, backing, closing]:
-						out.append(_staging("straight", c, cv, straight,
-								[c + Vector3(lat, 0, -d)], [dv]))
+						out.append(_staging("straight_lane" if lat == 0.0 else "straight_side", c,
+								cv, straight, [c + Vector3(lat, 0, -d)], [dv]))
 			for d: float in [2.0, 4.0]:
 				for lat: float in [0.0, 2.0]:
 					out.append(_staging("chased", c, cv, straight, [c + Vector3(lat, 0, d)],
@@ -159,6 +169,7 @@ func _add_carrier(duel: Object, pos: Vector3, vel: Vector3, path: Array[Vector3]
 	s.script_skates = true
 	s.script_loop = false
 	s.script_strippable = true
+	s.script_protects = OS.get_environment("MITTS_RACE_SHIELD") != "0"
 
 
 func _losses(duel: Object) -> int:
@@ -184,6 +195,10 @@ func _run(st: Dictionary) -> void:
 	duel.start(CARRIER)
 	var pts: Array[Vector3] = []
 	var ts: Array[float] = []
+	var track: Array = []
+	for j: int in defs.size():
+		var tj: Array[Vector3] = []
+		track.append(tj)
 	var event_t: float = -1.0
 	var event_kind: String = ""
 	var end_t: float = HORIZON_S
@@ -197,10 +212,16 @@ func _run(st: Dictionary) -> void:
 				event_kind = "poke" if duel.strips > before.x \
 						else ("lift" if duel.lifts > before.y else "hit")
 			end_t = t
+			pts.append(duel._skater(CARRIER).blade)
+			ts.append(t)
+			for j: int in defs.size():
+				track[j].append(duel._skater(DEFENDER + j).pos)
 			break
 		if (i + 1) % SAMPLE_TICKS == 0:
 			pts.append(duel.puck_pos)
 			ts.append(t)
+			for j: int in defs.size():
+				track[j].append(duel._skater(DEFENDER + j).pos)
 	if pts.is_empty():
 		return
 	_family.append(st["family"])
@@ -212,6 +233,7 @@ func _run(st: Dictionary) -> void:
 	_event_t.append(event_t)
 	_event_kind.append(event_kind)
 	_end_t.append(end_t)
+	_tracks.append(track)
 
 
 func _standing(pts: Array[Vector3], ts: Array[float], start: Vector3) -> Array[bool]:
@@ -488,6 +510,315 @@ func _cumulative_risk(r: int, odds: Array, rates: Vector3) -> Array[float]:
 	return out
 
 
+# The movement half: where each tracked defender really went against the ease
+# of getting there — the push needed to bend his momentum's line onto the spot in
+# the time after his reaction, as a share of what his body gives (thrust ahead,
+# capped by his top speed; the stop behind; thrust across) — fanned as
+# e^(−push / scale), the scale the likelihood's own answer (the mean push over
+# 2). Against the same fan with neither the top speed nor the stop (a disc).
+func _report_movement() -> void:
+	var rows: Array[int] = _tracked_rows(FAMILIES)
+	if rows.is_empty():
+		return
+	gut.p("movement: where %d tracked runs' defenders went, against the ease of getting there" % rows.size())
+	for react: float in MOVE_REACTS:
+		for shaped: bool in [true, false]:
+			var us: Array[float] = []
+			var log_area: float = 0.0
+			for r: int in rows:
+				var defs: Array[Vector3] = _defs[r]
+				var vels: Array[Vector3] = _def_vels[r]
+				var ts: Array[float] = _times[r]
+				var track: Array = _tracks[r]
+				for i: int in defs.size():
+					for k: int in ts.size():
+						if ts[k] < MOVE_MIN_T:
+							continue
+						var e: Vector2 = _ease(defs[i], vels[i], track[i][k], ts[k], react, shaped)
+						us.append(e.x)
+						log_area += e.y
+			var mean: float = 0.0
+			for u: float in us:
+				mean += u
+			mean /= us.size()
+			var scale: float = 0.5 * mean
+			var ll: float = (-mean * us.size() / scale - us.size() * 2.0 * log(scale) - log_area) \
+					/ us.size()
+			us.sort()
+			var within: int = us.bsearch(1.0)
+			gut.p("  react %.1f s, %s: scale %.2f | log likelihood per point %.3f | push needed: median %.2f, 90%% %.2f; within his body's %.0f%%" % [
+					react, "top speed and stop" if shaped else "a disc", scale, ll,
+					us[us.size() / 2], us[us.size() * 9 / 10], 100.0 * within / us.size()])
+
+
+# The push a defender at `p0` moving `v0` needs to be at `x` `t` from now (his
+# share of his body's push), and the log of the fan's area scale.
+func _ease(p0: Vector3, v0: Vector3, x: Vector3, t: float, react: float,
+		shaped: bool) -> Vector2:
+	var tau: float = maxf(t - react, 0.05)
+	var coast: Vector3 = p0 + v0 * t
+	var d := Vector2(x.x - coast.x, x.z - coast.z)
+	var speed: float = Vector2(v0.x, v0.z).length()
+	var dir: Vector2 = Vector2(v0.x, v0.z) / speed if speed > 0.5 \
+			else (d.normalized() if d.length() > 0.001 else Vector2(1, 0))
+	var along: float = d.dot(dir)
+	var across: float = absf(d.cross(dir))
+	var half: float = 0.5 * tau * tau
+	var s_f: float = half * _caps.max_accel
+	var s_b: float = s_f
+	var s_c: float = s_f
+	if shaped:
+		s_f = maxf(minf(s_f, (_caps.max_speed - speed) * tau), 0.1)
+		if speed > 0.5:
+			s_b = half * GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+	var s_a: float = s_f if along >= 0.0 else s_b
+	var u: float = sqrt((along / s_a) * (along / s_a) + (across / s_c) * (across / s_c))
+	return Vector2(u, log(PI * s_c * (s_f + s_b)))
+
+
+func _tracked_rows(families: Array[String]) -> Array[int]:
+	var out: Array[int] = []
+	for r: int in _family.size():
+		if not _tracks[r].is_empty() and _family[r] in families:
+			out.append(r)
+	return out
+
+
+# How much of the segment `a`→`b` lies within `rad` of the origin (m).
+func _segment_in_disc(a: Vector2, b: Vector2, rad: float) -> float:
+	var d: Vector2 = b - a
+	var aa: float = d.dot(d)
+	if aa < 1e-9:
+		return 0.0
+	var bb: float = 2.0 * a.dot(d)
+	var cc: float = a.dot(a) - rad * rad
+	var disc: float = bb * bb - 4.0 * aa * cc
+	if disc <= 0.0:
+		return 0.0
+	var sq: float = sqrt(disc)
+	var t1: float = clampf((-bb - sq) / (2.0 * aa), 0.0, 1.0)
+	var t2: float = clampf((-bb + sq) / (2.0 * aa), 0.0, 1.0)
+	return maxf(0.0, t2 - t1) * sqrt(aa)
+
+
+# Row `r`'s per-sample exposure, given where each defender really was, summed
+# over them: the metres of the puck's path through his reach in his frame (a
+# standing puck he arrives on counting a full pass through it), the seconds a
+# standing puck sat in his reach, the seconds a moving one did, and the puck's
+# entries into his reach (from outside it, or through it between samples).
+func _overlaps(r: int, reach: float) -> Array:
+	var pts: Array[Vector3] = _points[r]
+	var ts: Array[float] = _times[r]
+	var stand: Array[bool] = _stand[r]
+	var track: Array = _tracks[r]
+	var ov: Array[float] = []
+	var st: Array[float] = []
+	var mv: Array[float] = []
+	var en: Array[float] = []
+	for k: int in ts.size():
+		var dt: float = ts[k] - (ts[k - 1] if k > 0 else 0.0)
+		var o: float = 0.0
+		var s_in: float = 0.0
+		var m_in: float = 0.0
+		var entries: float = 0.0
+		for i: int in track.size():
+			var r1 := Vector2(pts[k].x - track[i][k].x, pts[k].z - track[i][k].z)
+			var r0: Vector2 = r1 if k == 0 \
+					else Vector2(pts[k - 1].x - track[i][k - 1].x, pts[k - 1].z - track[i][k - 1].z)
+			var inside: bool = r1.length() <= reach
+			if r0.length() > reach and (inside or _segment_in_disc(r0, r1, reach) > 0.0):
+				entries += 1.0
+			elif k == 0 and inside:
+				entries += 1.0
+			if stand[k]:
+				if inside:
+					s_in += dt
+					if r0.length() > reach:
+						o += 2.0 * reach
+			else:
+				o += _segment_in_disc(r0, r1, reach)
+				if inside:
+					m_in += dt
+		ov.append(o)
+		st.append(s_in)
+		mv.append(m_in)
+		en.append(entries)
+	return [ov, st, mv, en]
+
+
+# The strip models the tracked runs are read by: each a list of exposure
+# components (_overlaps' indices) with a rate on each, gridded.
+const OVERLAP := 0
+const STAND_IN := 1
+const MOVE_IN := 2
+const ENTRY := 3
+const ENTRY_RATES: Array[float] = [0.0, 0.05, 0.1, 0.2, 0.3, 0.45, 0.6, 0.8, 1.0, 1.5, 2.0, 3.0]
+# The strip rate (/s) while a moving puck is in reach, for the time-in-reach
+# models.
+const MOVE_IN_RATES: Array[float] = [0.0, 0.1, 0.2, 0.3, 0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.5, 6.0]
+# The radius (m) his stick takes the puck within, off his body: the race's reach
+# (stick, blade and a buffer) and further out to his full reach with the poke.
+const STRIP_RADII: Array[float] = [1.8, 2.0, 2.2, 2.4, 2.6]
+
+
+func _strip_models() -> Array:
+	return [
+		["overlap (per metre) + standing in reach (/s)", [OVERLAP, STAND_IN], [OVERLAP_RATES, STAND_IN_RATES]],
+		["time in reach, moving and standing (/s)", [MOVE_IN, STAND_IN], [MOVE_IN_RATES, STAND_IN_RATES]],
+		["entry (per entry) + moving and standing in reach (/s)", [ENTRY, MOVE_IN, STAND_IN],
+				[ENTRY_RATES, MOVE_IN_RATES, STAND_IN_RATES]],
+	]
+
+
+# Over `rows`: each component's total, and each loss's components at its sample
+# over the interval's length.
+func _strip_basis(rows: Array[int], exposures: Array, comps: Array) -> Array:
+	var totals: Array[float] = []
+	for _c: int in comps.size():
+		totals.append(0.0)
+	var events: Array = []
+	for r: int in rows:
+		var e: Array = exposures[r]
+		var ts: Array[float] = _times[r]
+		for c: int in comps.size():
+			var col: Array[float] = e[comps[c]]
+			for k: int in ts.size():
+				totals[c] += col[k]
+		if _event_t[r] >= 0.0:
+			var k: int = ts.size() - 1
+			var dt: float = maxf(ts[k] - (ts[k - 1] if k > 0 else 0.0), 0.001)
+			var at: Array[float] = []
+			for c: int in comps.size():
+				var col: Array[float] = e[comps[c]]
+				at.append(col[k] / dt)
+			events.append(at)
+	return [totals, events]
+
+
+func _basis_ll(basis: Array, rates: Array[float]) -> float:
+	var totals: Array[float] = basis[0]
+	var ll: float = 0.0
+	for c: int in rates.size():
+		ll -= rates[c] * totals[c]
+	for at: Array[float] in basis[1]:
+		var h: float = 0.0
+		for c: int in rates.size():
+			h += rates[c] * at[c]
+		ll += log(maxf(h, 1e-9))
+	return ll
+
+
+func _grid_fit(basis: Array, grids: Array) -> Array:
+	var best: Array = [-INF, []]
+	var idx: Array[int] = []
+	for _g: int in grids.size():
+		idx.append(0)
+	while true:
+		var rates: Array[float] = []
+		for g: int in grids.size():
+			rates.append(grids[g][idx[g]])
+		var ll: float = _basis_ll(basis, rates)
+		if ll > best[0]:
+			best = [ll, rates]
+		var g2: int = 0
+		while g2 < grids.size():
+			idx[g2] += 1
+			if idx[g2] < grids[g2].size():
+				break
+			idx[g2] = 0
+			g2 += 1
+		if g2 == grids.size():
+			break
+	return best
+
+
+# Row `r`'s expected losses up to each sample at `rates` on `comps`.
+func _strip_risk(e: Array, comps: Array, rates: Array[float]) -> Array[float]:
+	var first: Array[float] = e[comps[0]]
+	var out: Array[float] = []
+	var total: float = 0.0
+	for k: int in first.size():
+		for c: int in comps.size():
+			var col: Array[float] = e[comps[c]]
+			total += rates[c] * col[k]
+		out.append(total)
+	return out
+
+
+# The strip half: given where each defender really was, how surely each strip
+# model reads the losses on the scripted single-defender runs, against a
+# constant loss rate; then observed against expected by family.
+func _report_overlap() -> void:
+	var rows: Array[int] = _tracked_rows(SCRIPTED)
+	if rows.is_empty():
+		return
+	var events: float = 0.0
+	var watched: float = 0.0
+	for r: int in rows:
+		events += 1.0 if _event_t[r] >= 0.0 else 0.0
+		watched += _end_t[r]
+	var rate0: float = events / watched
+	gut.p("strip: %d tracked scripted runs, %d losses; a constant %.2f losses/s: log likelihood per run %.3f" % [
+			rows.size(), int(events), rate0,
+			(events * log(rate0) - rate0 * watched) / rows.size()])
+	for model: Array in _strip_models():
+		var comps: Array = model[1]
+		var best: Array = [-INF, []]
+		var exposures: Array = []
+		var radius: float = 0.0
+		for rad: float in STRIP_RADII:
+			var ex: Array = []
+			for r: int in _family.size():
+				ex.append(_overlaps(r, rad) if not _tracks[r].is_empty() else [])
+			var fit: Array = _grid_fit(_strip_basis(rows, ex, comps), model[2])
+			if fit[0] > best[0]:
+				best = fit
+				exposures = ex
+				radius = rad
+		var rates: Array[float] = best[1]
+		var risk: Array = []
+		for r: int in _family.size():
+			risk.append(_strip_risk(exposures[r], comps, rates) if r in rows else [])
+		gut.p("  %s within %.1f m: rates %s | log likelihood per run %.3f | ranking %.3f" % [
+				model[0], radius, str(rates), best[0] / rows.size(), _risk_ranking(rows, risk)])
+		for fam: String in SCRIPTED + ["pair"]:
+			var fam_rows: Array[int] = _tracked_rows([fam])
+			if fam_rows.is_empty():
+				continue
+			var obs: float = 0.0
+			var expct: float = 0.0
+			for r: int in fam_rows:
+				var rk: Array[float] = _strip_risk(exposures[r], comps, rates)
+				expct += rk[rk.size() - 1] if not rk.is_empty() else 0.0
+				obs += 1.0 if _event_t[r] >= 0.0 else 0.0
+			gut.p("    %-13s %4.0f / %6.1f = %.2f" % [fam, obs, expct, obs / maxf(expct, 1e-6)])
+
+
+# At each loss, how often the run that lost it had read riskier up to then than
+# a run still in play.
+func _risk_ranking(rows: Array[int], risk: Array) -> float:
+	var concordant: float = 0.0
+	var pairs: float = 0.0
+	for x: int in rows:
+		if _event_t[x] < 0.0:
+			continue
+		var risk_x: Array[float] = risk[x]
+		var rx: float = risk_x[risk_x.size() - 1]
+		for y: int in rows:
+			if y == x or _end_t[y] <= _event_t[x]:
+				continue
+			var ts_y: Array[float] = _times[y]
+			var risk_y: Array[float] = risk[y]
+			var ry: float = 0.0
+			for k: int in ts_y.size():
+				if ts_y[k] > _event_t[x] + 1e-6:
+					break
+				ry = risk_y[k]
+			pairs += 1.0
+			concordant += 1.0 if rx > ry else (0.5 if rx == ry else 0.0)
+	return concordant / maxf(pairs, 1.0)
+
+
 func _save(path: String) -> void:
 	var f := FileAccess.open(path, FileAccess.WRITE)
 	for r: int in _family.size():
@@ -495,6 +826,10 @@ func _save(path: String) -> void:
 		var vels: Array[Vector3] = _def_vels[r]
 		var line := PackedStringArray([_family[r], str(_event_t[r]), str(_end_t[r]),
 				_event_kind[r] if _event_kind[r] != "" else "-", str(defs.size())])
+		var track: Array = _tracks[r]
+		var tracked: bool = not track.is_empty()
+		if tracked:
+			line.append("T")
 		for i: int in defs.size():
 			line.append_array([str(defs[i].x), str(defs[i].z), str(vels[i].x), str(vels[i].z)])
 		var pts: Array[Vector3] = _points[r]
@@ -502,6 +837,9 @@ func _save(path: String) -> void:
 		var stand: Array[bool] = _stand[r]
 		for k: int in pts.size():
 			line.append_array([str(ts[k]), str(pts[k].x), str(pts[k].z), "1" if stand[k] else "0"])
+			if tracked:
+				for i: int in defs.size():
+					line.append_array([str(track[i][k].x), str(track[i][k].z)])
 		f.store_line(" ".join(line))
 
 
@@ -516,10 +854,12 @@ func _load(path: String) -> void:
 		_end_t.append(float(parts[2]))
 		_event_kind.append(parts[3] if parts[3] != "-" else "")
 		var nd: int = int(parts[4])
+		var tracked: bool = parts[5] == "T"
+		var head: int = 6 if tracked else 5
 		var defs: Array[Vector3] = []
 		var vels: Array[Vector3] = []
 		for i: int in nd:
-			var b: int = 5 + i * 4
+			var b: int = head + i * 4
 			defs.append(Vector3(float(parts[b]), 0, float(parts[b + 1])))
 			vels.append(Vector3(float(parts[b + 2]), 0, float(parts[b + 3])))
 		_defs.append(defs)
@@ -527,13 +867,24 @@ func _load(path: String) -> void:
 		var pts: Array[Vector3] = []
 		var ts: Array[float] = []
 		var stand: Array[bool] = []
-		for k: int in range(5 + nd * 4, parts.size(), 4):
+		var track: Array = []
+		if tracked:
+			for i: int in nd:
+				var tj: Array[Vector3] = []
+				track.append(tj)
+		var stride: int = 4 + (2 * nd if tracked else 0)
+		for k: int in range(head + nd * 4, parts.size(), stride):
 			ts.append(float(parts[k]))
 			pts.append(Vector3(float(parts[k + 1]), 0, float(parts[k + 2])))
 			stand.append(parts[k + 3] == "1")
+			if tracked:
+				for i: int in nd:
+					track[i].append(Vector3(float(parts[k + 4 + 2 * i]), 0,
+							float(parts[k + 5 + 2 * i])))
 		_points.append(pts)
 		_times.append(ts)
 		_stand.append(stand)
+		_tracks.append(track)
 		if _starts_inside(defs, pts):
 			_drop_last()
 
@@ -552,7 +903,7 @@ func _starts_inside(defs: Array[Vector3], pts: Array[Vector3]) -> bool:
 
 func _drop_last() -> void:
 	for arr: Array in [_family, _defs, _def_vels, _points, _times, _stand, _event_t, _event_kind,
-			_end_t]:
+			_end_t, _tracks]:
 		arr.pop_back()
 
 
@@ -603,4 +954,6 @@ func test_defender_race_truth() -> void:
 		gut.p("  %-9s lost %d, released %d, of %d %s" % [fam, lost, released, rows.size(),
 				str(kinds)])
 	_report(_fit())
+	_report_movement()
+	_report_overlap()
 	assert_true(true)
