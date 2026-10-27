@@ -220,17 +220,17 @@
     },
     {
       "name": "Blueberry",
-      "primary": "#4A7AD6",
+      "primary": "#3B67C4",
       "secondary": "#6B1E4A",
       "light": "#FFFFFF",
       "home": {
         "helmet": "#6B1E4A",
         "shoulders": {
-          "color": "#4A7AD6",
+          "color": "#3B67C4",
           "text": "#FFFFFF"
         },
         "jersey": {
-          "base": "#4A7AD6",
+          "base": "#3B67C4",
           "collar": "#6B1E4A",
           "stripes": [
             {
@@ -247,11 +247,11 @@
         },
         "arms": {
           "upper": {
-            "base": "#4A7AD6",
+            "base": "#3B67C4",
             "stripes": []
           },
           "lower": {
-            "base": "#4A7AD6",
+            "base": "#3B67C4",
             "stripes": [
               {
                 "pos": 0.46,
@@ -278,7 +278,7 @@
           ]
         },
         "socks": {
-          "base": "#4A7AD6",
+          "base": "#3B67C4",
           "stripes": [
             {
               "pos": 0.46,
@@ -306,12 +306,12 @@
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#4A7AD6",
+          "collar": "#3B67C4",
           "stripes": [
             {
               "pos": 0.88,
               "width": 0.07,
-              "color": "#4A7AD6"
+              "color": "#3B67C4"
             },
             {
               "pos": 0.95,
@@ -331,7 +331,7 @@
               {
                 "pos": 0.46,
                 "width": 0.14,
-                "color": "#4A7AD6"
+                "color": "#3B67C4"
               },
               {
                 "pos": 0.6,
@@ -341,9 +341,9 @@
             ]
           }
         },
-        "gloves": "#4A7AD6",
+        "gloves": "#3B67C4",
         "pants": {
-          "base": "#4A7AD6",
+          "base": "#3B67C4",
           "stripes": [
             {
               "pos": 0.5,
@@ -358,7 +358,7 @@
             {
               "pos": 0.46,
               "width": 0.14,
-              "color": "#4A7AD6"
+              "color": "#3B67C4"
             },
             {
               "pos": 0.6,
@@ -369,7 +369,7 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#4A7AD6",
+          "color": "#3B67C4",
           "outline": "#6B1E4A"
         }
       }
