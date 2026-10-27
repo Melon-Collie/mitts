@@ -7,7 +7,9 @@ extends GutTest
 # planned path — over its samples, the puck's time there less the time his stick
 # takes to get within his blade's reach of it, read from the run's start on his
 # arrival clock — when that point comes, and the first sample he reaches with no
-# time to spare and with FIRST_SET_S (his first chance; -1 when none). The
+# time to spare and with FIRST_SET_S (his first chance; -1 when none), and the
+# least share of the time to a sample his stick needs to get there (how little of
+# his range reaches the path). The
 # planned path is <runs>.planned when it exists (the interceptor's dry runs),
 # else the puck's path as recorded, which stops at a loss. `current` is the
 # strip read's keep along it as −ln(keep). Writes
@@ -46,24 +48,29 @@ func test_export_interception() -> void:
 			"from the dry runs" if has_planned else "as recorded"])
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
 	var f := FileAccess.open(OUT_DIR + "/runs.csv", FileAccess.WRITE)
-	f.store_line("run,family,lost,lost_at,s1,t1,s2,t2,current,f1,g1,f2,g2")
+	f.store_line("run,family,lost,lost_at,s1,t1,s2,t2,current,f1,g1,f2,g2,u1,u2")
 	for ri: int in runs.size():
 		var r: Run = runs[ri]
 		var pts: Array[Vector3] = planned[ri] if has_planned else r.points
 		var times: Array[float] = _times(pts.size())
 		var cols := PackedStringArray()
 		var firsts := PackedStringArray()
+		var shares := PackedStringArray()
 		for i: int in 2:
 			if i >= r.defenders.size():
 				cols.append_array(["", ""])
 				firsts.append_array(["", ""])
+				shares.append("")
 				continue
 			var best: float = -INF
 			var best_t: float = 0.0
 			var first: float = -1.0
 			var first_set: float = -1.0
+			var least: float = INF
 			for k: int in pts.size():
-				var spare: float = times[k] - _stick_arrival(r.defenders[i], r.vels[i], pts[k], caps)
+				var arrive: float = _stick_arrival(r.defenders[i], r.vels[i], pts[k], caps)
+				least = minf(least, arrive / times[k])
+				var spare: float = times[k] - arrive
 				if spare > best:
 					best = spare
 					best_t = times[k]
@@ -73,10 +80,12 @@ func test_export_interception() -> void:
 					first_set = times[k]
 			cols.append_array([str(best), str(best_t)])
 			firsts.append_array([str(first), str(first_set)])
+			shares.append(str(least))
 		var keep: float = AIStripOdds.path_keep(pts, times, r.defenders, r.vels)
-		f.store_line("%d,%s,%d,%.3f,%s,%s,%s,%s,%.6f,%s,%s,%s,%s" % [ri, r.family,
+		f.store_line("%d,%s,%d,%.3f,%s,%s,%s,%s,%.6f,%s,%s,%s,%s,%s,%s" % [ri, r.family,
 				1 if r.lost_at >= 0.0 else 0, r.lost_at, cols[0], cols[1], cols[2], cols[3],
-				-log(maxf(keep, 1e-9)), firsts[0], firsts[1], firsts[2], firsts[3]])
+				-log(maxf(keep, 1e-9)), firsts[0], firsts[1], firsts[2], firsts[3], shares[0],
+				shares[1]])
 	gut.p("wrote %s/runs.csv" % OUT_DIR)
 	if OS.get_environment("MITTS_WRITE_INTERCEPT_TRUTH") == "1" and has_planned:
 		_write_truth(runs, planned)

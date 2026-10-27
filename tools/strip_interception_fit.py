@@ -13,10 +13,16 @@ level) and a constant. Then, fitted on all: the share lost by best spare against
 the fit, by family, and how well each separates the runs that lost the puck
 (AUC: the odds a lost run read riskier than a kept one).
 
-    python3 tools/strip_interception_fit.py [runs.csv] [--fit-from other_runs.csv]
+    python3 tools/strip_interception_fit.py [runs.csv] [--fit-from other_runs.csv] [--keys]
 
 --fit-from fits on another file's runs and scores this one with it, nothing
 refitted (the bot runs, read with the interceptor's curve).
+
+--keys compares what a defender's one chance should fall off with, each fitted
+the same way: how early his first chance is (the first sample of the path he
+reaches with a quarter second to spare), or how little of his range reaches the
+path (the least share of the time to a sample his stick needs) — against a flat
+chance whenever he can get there, and the strip read as it is.
 """
 import csv
 import sys
@@ -26,7 +32,8 @@ from scipy.optimize import minimize
 
 
 def load(path):
-    cols = {k: [] for k in ("run", "family", "lost", "lost_at", "s1", "s2", "cur", "f1", "g1")}
+    cols = {k: [] for k in ("run", "family", "lost", "lost_at", "s1", "s2", "cur", "f1", "g1",
+                            "g2", "u1", "u2")}
     with open(path) as f:
         for row in csv.DictReader(f):
             cols["run"].append(int(row["run"]))
@@ -38,6 +45,9 @@ def load(path):
             cols["lost_at"].append(float(row["lost_at"]))
             cols["f1"].append(float(row.get("f1") or -1.0))
             cols["g1"].append(float(row.get("g1") or -1.0))
+            cols["g2"].append(float(row["g2"]) if row.get("g2") else np.nan)
+            cols["u1"].append(float(row["u1"]) if row.get("u1") else np.nan)
+            cols["u2"].append(float(row["u2"]) if row.get("u2") else np.nan)
     return {k: np.array(v) for k, v in cols.items()}
 
 
@@ -146,6 +156,99 @@ def first_chance_report(d):
                 a, a + 0.5, d["lost"][sel].sum(), sel.sum(), d["lost"][sel].mean(), lag))
 
 
+def key_chance(x, p, never=None):
+    """A defender's chance falling off with `x`: p_max / (1 + exp((x - x0) / w)),
+    none where `never` (no first chance) or no defender."""
+    p_max, x0, w = p
+    out = p_max / (1.0 + np.exp(np.clip((x - x0) / w, -50.0, 50.0)))
+    out = np.where(np.isnan(x), 0.0, out)
+    if never is not None:
+        out = np.where(never, 0.0, out)
+    return out
+
+
+def key_lost(d, key, p):
+    if key == "time":
+        a = key_chance(d["g1"], p, d["g1"] < 0.0)
+        b = key_chance(d["g2"], p, ~(d["g2"] >= 0.0))
+    elif key == "share":
+        a = key_chance(d["u1"], p)
+        b = key_chance(d["u2"], p)
+    else:  # flat: p_max whenever he has a first chance
+        a = np.where(d["g1"] >= 0.0, p[0], 0.0)
+        b = np.where(d["g2"] >= 0.0, p[0], 0.0)
+    return 1.0 - (1.0 - a) * (1.0 - b)
+
+
+def fit_key(d, key, mask):
+    sub = {k: v[mask] for k, v in d.items()}
+
+    def nll(x):
+        return -loglik(key_lost(sub, key, x), sub["lost"])
+
+    starts = {"time": ([0.9, 1.0, 0.3], [0.9, 2.0, 0.5], [0.7, 0.5, 0.1]),
+              "share": ([0.9, 0.5, 0.1], [0.9, 0.8, 0.2], [0.7, 0.3, 0.05]),
+              "flat": ([0.8, 0.0, 1.0],)}[key]
+    bounds = {"time": [(0.01, 1.0), (-1.0, 5.0), (0.01, 3.0)],
+              "share": [(0.01, 1.0), (-0.5, 2.0), (0.005, 2.0)],
+              "flat": [(0.01, 1.0), (0.0, 0.0), (1.0, 1.0)]}[key]
+    best = None
+    for start in starts:
+        r = minimize(nll, start, method="L-BFGS-B", bounds=bounds)
+        if best is None or r.fun < best.fun:
+            best = r
+    return tuple(best.x)
+
+
+def keys_report(d):
+    n = len(d["lost"])
+    print("%d runs, %d lost (%.0f%%)" % (n, d["lost"].sum(), 100.0 * d["lost"].mean()))
+    halves = [d["run"] % 2 == 0, d["run"] % 2 == 1]
+    ll = {"time": 0.0, "share": 0.0, "flat": 0.0, "strip read": 0.0}
+    print("held out (fit on one half, scored on the other), log likelihood per run:")
+    for fit_mask, test_mask in ((halves[0], halves[1]), (halves[1], halves[0])):
+        sub = {k: v[test_mask] for k, v in d.items()}
+        for key in ("time", "share", "flat"):
+            p = fit_key(d, key, fit_mask)
+            ll[key] += loglik(key_lost(sub, key, p), sub["lost"])
+        ll["strip read"] += loglik(1.0 - np.exp(-sub["cur"]), sub["lost"])
+    for name, v in ll.items():
+        print("  %-11s %.4f" % (name, v / n))
+    everything = np.ones_like(d["lost"], bool)
+    fits = {key: fit_key(d, key, everything) for key in ("time", "share", "flat")}
+    print("fitted on all:")
+    print("  time : p_max %.2f, falls to half at a first chance %.2f s in, over %.2f s" % fits["time"])
+    print("  share: p_max %.2f, falls to half at %.2f of his range, over %.2f" % fits["share"])
+    print("  flat : p_max %.2f" % fits["flat"][0])
+    q_cur = 1.0 - np.exp(-d["cur"])
+    print("AUC: time %.3f, share %.3f, flat %.3f, strip read %.3f" % (
+        auc(key_lost(d, "time", fits["time"]), d["lost"]),
+        auc(key_lost(d, "share", fits["share"]), d["lost"]),
+        auc(key_lost(d, "flat", fits["flat"]), d["lost"]), auc(q_cur, d["lost"])))
+    print("expected lost: time %.1f, share %.1f, flat %.1f, strip read %.1f" % (
+        key_lost(d, "time", fits["time"]).sum(), key_lost(d, "share", fits["share"]).sum(),
+        key_lost(d, "flat", fits["flat"]).sum(), q_cur.sum()))
+    single = np.isnan(d["s2"])
+    print("one defender, share lost by his first chance (fit: time):")
+    never = single & (d["g1"] < 0.0)
+    print("    never    : %3d of %4d = %.2f" % (d["lost"][never].sum(), never.sum(),
+                                               d["lost"][never].mean() if never.sum() else 0.0))
+    for a in np.arange(0.0, 3.0, 0.25):
+        sel = single & (d["g1"] >= a + 1e-6) & (d["g1"] < a + 0.25 + 1e-6)
+        if sel.sum():
+            print("    %.2f-%.2f s: %3d of %4d = %.2f   (fit %.2f)" % (
+                a, a + 0.25, d["lost"][sel].sum(), sel.sum(), d["lost"][sel].mean(),
+                key_chance(np.array([a + 0.125]), fits["time"])[0]))
+    print("one defender, share lost by the least share of his range that reaches the path (fit: share):")
+    for a, b in zip([0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25],
+                    [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.25, 99.0]):
+        sel = single & (d["u1"] >= a) & (d["u1"] < b)
+        if sel.sum():
+            print("    %.2f-%.2f: %3d of %4d = %.2f   (fit %.2f)" % (
+                a, min(b, 9.99), d["lost"][sel].sum(), sel.sum(), d["lost"][sel].mean(),
+                key_chance(np.array([(a + min(b, 2.0)) / 2]), fits["share"])[0]))
+
+
 def main():
     args = [a for a in sys.argv[1:]]
     fit_from = None
@@ -153,7 +256,13 @@ def main():
         i = args.index("--fit-from")
         fit_from = args[i + 1]
         del args[i:i + 2]
+    keys = "--keys" in args
+    if keys:
+        args.remove("--keys")
     d = load(args[0] if args else ".preview/strip_interception/runs.csv")
+    if keys:
+        keys_report(d)
+        return
     if fit_from:
         src = load(fit_from)
         everything = np.ones_like(src["lost"], bool)
