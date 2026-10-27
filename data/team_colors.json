@@ -746,18 +746,7 @@
         "jersey": {
           "base": "#E31B6D",
           "collar": "#1A1A1A",
-          "stripes": [
-            {
-              "pos": 0.93,
-              "width": 0.06,
-              "color": "#E31B6D"
-            },
-            {
-              "pos": 0.97,
-              "width": 0.03,
-              "color": "#1A1A1A"
-            }
-          ]
+          "stripes": []
         },
         "arms": {
           "upper": {
@@ -815,18 +804,7 @@
         "jersey": {
           "base": "#FFFFFF",
           "collar": "#1A1A1A",
-          "stripes": [
-            {
-              "pos": 0.93,
-              "width": 0.06,
-              "color": "#E31B6D"
-            },
-            {
-              "pos": 0.97,
-              "width": 0.03,
-              "color": "#1A1A1A"
-            }
-          ]
+          "stripes": []
         },
         "arms": {
           "upper": {
@@ -849,7 +827,7 @@
             ]
           }
         },
-        "gloves": "#FFFFFF",
+        "gloves": "#1A1A1A",
         "pants": {
           "base": "#1A1A1A",
           "stripes": []
