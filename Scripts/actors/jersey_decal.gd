@@ -55,9 +55,15 @@ const STROKE_SIZE_EM: float = 0.24
 const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
 
 # The chest crest (TeamCrest), half a turn from the back: 28 cm across, about a
-# real sweater's, with its top at the yoke line.
+# real sweater's, hung under the yoke.
 const FRONT_CENTER_X: int = BACK_CENTER_X + IMG_W / 2
 const CREST_RADIUS_M: float = 0.14
+# Clear air between the yoke line and the crest's top, keylines included, so a
+# kit's trim under its yoke (Pineapple's) never meets the crest.
+const CREST_YOKE_GAP_M: float = 0.02
+# How far above its centre a crest reaches, in radii: the fruit fills the unit
+# circle and its two keylines stand outside it.
+const _CREST_REACH: float = 1.0 + 2.0 * TeamCrest.KEYLINE_WIDTH
 
 var jersey_color: Color = Color.WHITE
 var yoke_color: Color = Color.WHITE
@@ -92,15 +98,16 @@ func _draw() -> void:
 				yoke_bottom_m)
 
 
-# A chest's crest, centred on `center_x` px with its unit circle's top at the
-# yoke line (`yoke_bottom_m` down from the top), drawn in metres through
+# A chest's crest, centred on `center_x` px with its top CREST_YOKE_GAP_M under
+# the yoke line (`yoke_bottom_m` down from the top), drawn in metres through
 # `px_per_m` so it lands round on a texture whose texels are not square. The
 # goalie's chest draws through this too.
 static func draw_chest_crest(canvas: CanvasItem, fruit: String, preset: Dictionary,
 		center_x: float, px_per_m: Vector2, yoke_bottom_m: float) -> void:
 	var r: Vector2 = px_per_m * CREST_RADIUS_M
+	var center_m: float = yoke_bottom_m + CREST_YOKE_GAP_M + CREST_RADIUS_M * _CREST_REACH
 	TeamCrest.draw(canvas, fruit, Transform2D(Vector2(r.x, 0.0), Vector2(0.0, r.y),
-			Vector2(center_x, (yoke_bottom_m + CREST_RADIUS_M) * px_per_m.y)), preset)
+			Vector2(center_x, center_m * px_per_m.y)), preset)
 
 
 # A back's name and number, laid out in metres down from the top of the back
