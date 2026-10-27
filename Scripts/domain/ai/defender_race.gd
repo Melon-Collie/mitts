@@ -14,11 +14,12 @@ const SIGMA_PER_S: float = AIArrival.ERROR_FRAC
 
 
 # When the stick of a defender at `pos` moving at `vel`, built as `caps` (null:
-# the league build), is within his reach of `point`: now if it already is; else
-# he carries on for `react_s`, then skates to it on the arrival clock.
+# the league build), is within his reach of `point` (or within `reach_m` of it):
+# now if it already is; else he carries on for `react_s`, then skates to it on
+# the arrival clock.
 static func stick_time(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
-		react_s: float = REACT_S) -> float:
-	var reach: float = AILaneReach.defender_reach(caps)
+		react_s: float = REACT_S, reach_m: float = -1.0) -> float:
+	var reach: float = reach_m if reach_m >= 0.0 else AILaneReach.defender_reach(caps)
 	var nx: float = point.x - pos.x
 	var nz: float = point.z - pos.z
 	if nx * nx + nz * nz <= reach * reach:

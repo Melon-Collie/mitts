@@ -51,20 +51,31 @@ For defender *i*, a point *P* the puck is at, at time *T* from now:
    (`AIArrival.time_to_arrive_caps`) to within his reach of P
    (`AILaneReach.defender_reach`). The same function `AILaneReach._block_at` uses
    today, on his own build.
-2. **The odds he doesn't get it.** `keep_i = grade((t_i(P) − T) / s(T))` with
-   `s(T) = σ₀ + k·T`. σ₀ is the near-certain part (the clock's own error, the
-   contact); `k·T` is that we don't know what he will choose: the further out the
-   collision, the more he can do something else, and the more room the carrier
-   has. Closer, the read is surer.
-3. **A path.** Along a carry, each defender's odds are his best point on it (the
-   lowest keep over the samples, each at its own T).
-4. **Several defenders.** Keep = the product of each one's keep (Spearman's
-   probabilistic combine), not the worst one alone.
+2. **The odds he is not there yet.** `keep_i = grade((t_i(P) − T) / s(T))` with
+   `s(T) = σ₀ + k·T`: the uncertainty of his arrival, σ₀ the clock's own error,
+   `k·T` what we don't know of what he will choose. The fit decides both.
+3. **A strip rate while he is in reach.** Reach is not a take. While his stick
+   is in reach the puck is stripped at a rate λ per second (Spearman's control
+   rate), so the odds the puck keeps to a path are
+   `exp(−λ · ∫ P(his stick is in reach at t) dt)`, with `P(in reach at t) =
+   1 − keep_i` at the path's point for t. λ is a strip rate measured per regime —
+   a standing puck and a moving one.
+4. **Several defenders.** Their time in reach adds: `exp(−λ · Σ_i ∫ P_i dt)`,
+   the product of each one's keep (Spearman's probabilistic combine), not the
+   worst one alone.
+
+**Measured (bb396363, single defender, scripted carrier):** the race graded
+directly is worse than predicting the base rate (Brier 0.19 against 0.16): when
+it reads his stick there, the puck is still kept 74% of the time. With the strip
+rate it scores 0.128, calibrated across its range, at λ 0.35/s, reaction 0.15 s
+and a near-sharp grade — the growth of the grade with T fits to about nothing:
+the room further out is the time in reach, which a later arrival has less of.
+Today's carry read scores 0.235 on the families it prices.
 
 There is no defender intent in it: no lunge window, no shadow, no gap-holding,
 no backcheck target, no projected defence. A read that starts later (a follow-up
 `t` from now, a second ply, a reception) is the same race with T counted from
-now, from the defender's state now: the uncertainty of the wait is in `s(T)`.
+now, from the defender's state now.
 
 **The deke tradeoff, accepted.** In a pure race a defender close to the carrier
 covers every lane; a cut beats him only by what his reaction gives up. The deke
