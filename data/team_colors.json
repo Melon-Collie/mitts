@@ -20,6 +20,11 @@
             {
               "pos": 0.92,
               "width": 0.12,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.92,
+              "width": 0.09,
               "color": "#E8445A"
             }
           ]
@@ -109,7 +114,17 @@
           "stripes": [
             {
               "pos": 0.92,
+              "width": 0.15,
+              "color": "#971829"
+            },
+            {
+              "pos": 0.92,
               "width": 0.12,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.92,
+              "width": 0.09,
               "color": "#E8445A"
             }
           ]
@@ -161,23 +176,28 @@
           "stripes": [
             {
               "pos": 0.5,
+              "width": 0.32,
+              "color": "#971829"
+            },
+            {
+              "pos": 0.5,
               "width": 0.26,
               "color": "#E8445A"
             },
             {
               "pos": 0.4,
               "width": 0.035,
-              "color": "#971829"
+              "color": "#F5E6D3"
             },
             {
               "pos": 0.5,
               "width": 0.035,
-              "color": "#971829"
+              "color": "#F5E6D3"
             },
             {
               "pos": 0.6,
               "width": 0.035,
-              "color": "#971829"
+              "color": "#F5E6D3"
             }
           ]
         },
