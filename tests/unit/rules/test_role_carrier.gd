@@ -163,7 +163,7 @@ func test_turning_receiver_devalues_the_pass_and_the_blind_tier_ignores_it() -> 
 			[1, TEAM_ID, self_pos],
 			[2, TEAM_ID, outlet, false, recv_vel],
 			[3, 1, Vector3(1.5, 0, 18.0)],
-			[4, 1, Vector3(3.0, 0, 17.5)],
+			[4, 1, Vector3(3.0, 0, 16.8)],
 	]
 	# Settled receiver (no heading rotation injected → omega 0).
 	var settled_ctx := _make_ctx(self_pos, skaters)
@@ -1832,13 +1832,14 @@ const _SAUCER_PASSER := Vector3(3.0, 0.0, 5.0)
 const _SAUCER_RECEIVER := Vector3(3.0, 0.0, -4.0)
 
 
-# Neutral ice, a 9 m ahead-man behind a mid-lane stick, two forecheckers
-# pressuring the carry, and the receiver's PASS_TO_ME ping.
+# Neutral ice, a 9 m ahead-man behind a mid-lane stick (out of reach of the puck
+# on the passer's blade through his windup), two forecheckers pressuring the
+# carry, and the receiver's PASS_TO_ME ping.
 func _pinged_saucer_ctx() -> RoleContext:
 	var ctx := _make_ctx(_SAUCER_PASSER, [
 			[1, TEAM_ID, _SAUCER_PASSER],
 			[2, TEAM_ID, _SAUCER_RECEIVER],
-			[3, 1, Vector3(3.7, 0.0, 2.5)],
+			[3, 1, Vector3(3.7, 0.0, 1.5)],
 			[4, 1, Vector3(1.5, 0.0, 7.0)],
 			[5, 1, Vector3(4.5, 0.0, 6.5)]])
 	ctx.ping_pass_target_peer = 2
@@ -2122,14 +2123,17 @@ func _pinch(half_gap: float) -> AIRoleCarrier:
 	return _decided(ctx)
 
 
-func test_a_wider_gap_never_makes_the_carry_worth_less() -> void:
+func test_a_wider_gap_never_makes_the_best_play_worth_less() -> void:
 	# Between the pinch and the split, opening the gap only ever gives the carrier
-	# more room: the carry is never worth less.
+	# more room: his best play is never worth less. (The carry alone may be: it is
+	# credited by what it improves on where he stands, and a wider gap frees the
+	# shot from there sooner than it frees the carry.)
 	var prev: float = -INF
 	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.9, 1.3, 1.7, 2.1, 2.5, _SPLITTABLE_HALF_GAP]:
-		var v: float = _pinch(half_gap)._carry.raw_value
+		var c: AIRoleCarrier = _pinch(half_gap)
+		var v: float = maxf(c._carry.raw_value, maxf(c.debug_shoot_score, c.debug_pass_score))
 		assert_gte(v, prev - 1e-4,
-				"gap %.1f m: the carry is worth less (%.3f after %.3f)"
+				"gap %.1f m: the best play is worth less (%.3f after %.3f)"
 				% [2.0 * half_gap, v, prev])
 		prev = v
 
@@ -2387,10 +2391,12 @@ func test_a_carrier_out_front_keeps_the_old_goal_line_clamp() -> void:
 
 
 # ── The rim pass (AIRimPass) ─────────────────────────────────────────────────
-# Our D behind our own net, a forechecker on his hip and the strong half-wall
-# winger up the boards. Blocked: the forechecker closes on him and another sits
-# in the straight lane, so the boards are the open lane: rimmed round the
-# corner, the puck reaches the winger before anybody of theirs. Open: neither.
+# Our D behind our own net, a forechecker coming onto his hip and the strong
+# half-wall winger up the boards. Blocked: the forechecker closes on him — near
+# enough to take a carry, still out of reach of the puck on the blade through a
+# windup (AIPuckLane.release_contest_clean) — and another sits in the straight
+# lane, so the boards are the open lane: rimmed round the corner, the puck
+# reaches the winger before anybody of theirs. Open: neither.
 
 func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	var self_pos := Vector3(3.0, 0, 28.0)
@@ -2398,7 +2404,7 @@ func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
 		[2, TEAM_ID, Vector3(11.5, 0, 14.0)],      # strong half-wall winger
-		[3, 1, Vector3(1.5, 0, 28.5), false, hip_vel],   # on the D's hip
+		[3, 1, Vector3(0.5, 0, 28.5), false, hip_vel],   # coming onto the D's hip
 		[5, 1, Vector3(-3.0, 0, 18.0)],
 	]
 	if lane_blocked:

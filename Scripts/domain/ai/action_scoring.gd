@@ -173,7 +173,7 @@ static func tip_ev(
 		return 0.0
 	return p_contact * lane * redirect * _shot_defender_terms(tip_pt, attacking_goal,
 			goalie_pos if goalie_pos.is_finite() else attacking_goal, opponents, speed,
-			opponent_caps)
+			opponent_caps, false)
 
 
 # ── The shot, priced on the field ────────────────────────────────────────────
@@ -231,24 +231,25 @@ static func shot_quality(shooter: Vector3, attacking_goal: Vector3, keeper_pos: 
 
 
 # The defenders' share of a shot from `shooter`: its lane past them to the open
-# side of `keeper`, times the release contest on the wind-up.
+# side of `keeper`, times the release contest on the wind-up — none for a shot
+# with no `windup` (a one-timer or a tip leaves the blade on contact).
 static func _shot_defender_terms(shooter: Vector3, attacking_goal: Vector3,
 		keeper: Vector3, opponents: Array[Vector3], shot_speed_m_s: float,
-		opponent_caps: Array) -> float:
+		opponent_caps: Array, windup: bool = true) -> float:
 	var aim: Vector3 = AIShotAim.compute_open_net_aim(
 			shooter, keeper, attacking_goal.z,
 			GameRules.NET_HALF_WIDTH, AIGoalieModel.GOALIE_SHADOW_HALF_M)
 	var lane: float = AIPuckLane.lane_clear(shooter, aim, opponents, shot_speed_m_s,
 			EMPTY_VEC3, opponent_caps)
-	if lane <= 0.0:
-		return 0.0
+	if lane <= 0.0 or not windup:
+		return maxf(lane, 0.0)
 	return lane * AIPuckLane.release_contest_clean(
 			AIPuckLane.release_point_toward(shooter, attacking_goal), opponents, opponent_caps)
 
 
 # A pass on the seam: its lane × the receiver's odds off the feed (the keeper at
 # `keeper_pos` square on the passer as it leaves; INF, none replicated) × his
-# shot's own lane and release contest. Every read of a pass prices it here —
+# shot's own lane and, caught and shot, its release contest. Every read of a pass prices it here —
 # the carrier's, a defender's, a support or finisher spot — so offence and
 # defence agree on what a feed is worth. `precomputed_lane` (>= 0) hands in the
 # identical pass lane_clear a caller already ran; `precomputed_odds` (>= 0) the
@@ -280,7 +281,7 @@ static func score_pass_value(
 		return 0.0
 	var keeper: Vector3 = keeper_pos if keeper_pos.is_finite() else attacking_goal
 	return lane * odds * _shot_defender_terms(receiver, attacking_goal, keeper, opponents,
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, opponent_caps)
+			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, opponent_caps, not one_timer)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
