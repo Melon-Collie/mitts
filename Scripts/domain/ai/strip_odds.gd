@@ -19,8 +19,11 @@ const DWELL_STEP_S: float = 0.1
 # How much of a path a keep read looks at, from where the read starts (s): the
 # carrier re-plans many times a second, and inside this he cannot get out of a
 # stick's reach however he re-plans (his reaction, then sliding a blade's reach
-# aside), so it is what taking the space commits him to. A man who can only get
-# to the path after it — a chase down from behind — is a later decision's.
+# aside), so it is what taking the space commits him to. Past it a read looks
+# only at where the path is going, when it gets there — whether that place is
+# taken first, the race to a crossing of the line that makes speed worth having.
+# A man who can only get to the path in between — a chase down from behind — is
+# a later decision's.
 const COMMIT_S: float = 1.0
 
 
@@ -43,8 +46,9 @@ static func chance_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vec
 
 # The odds the puck is kept along a path: through `points`, reached at `times`
 # from now, against `defenders` (index-matched `vels`, and `caps` or empty for
-# the league build) read `elapsed_s` after now, over its first `window_s`. Each
-# defender's one chance is his best on it; the chances are separate.
+# the league build) read `elapsed_s` after now, over its first `window_s` and its
+# last point. Each defender's one chance is his best on it; the chances are
+# separate.
 static func path_keep(points: Array[Vector3], times: Array[float],
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
 		elapsed_s: float = 0.0, window_s: float = COMMIT_S) -> float:
@@ -53,8 +57,8 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 	for i: int in defenders.size():
 		var best: float = 0.0
 		for k: int in points.size():
-			if times[k] > window_s + 1e-6:
-				break
+			if times[k] > window_s + 1e-6 and k < points.size() - 1:
+				continue
 			best = maxf(best, chance_at(defenders[i], vels[i], caps[i] if has_caps else null,
 					points[k], times[k] - elapsed_s))
 			if best >= 1.0:
@@ -65,7 +69,7 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 
 # The odds the puck is kept on a straight carry from `from` to `to` in
 # `arrival_time` (held, when they meet), sampled every DWELL_STEP_S, setting off
-# `start_s` from now: over the carry's first COMMIT_S.
+# `start_s` from now: over the carry's first COMMIT_S and where it ends.
 static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
 		elapsed_s: float = 0.0, start_s: float = 0.0) -> float:
@@ -83,11 +87,14 @@ static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 					from.lerp(to, f), start_s + arrival_time * f - elapsed_s))
 			if best >= 1.0:
 				break
+		if read < steps and best < 1.0:
+			best = maxf(best, chance_at(defenders[i], vels[i], caps[i] if has_caps else null,
+					to, start_s + arrival_time - elapsed_s))
 		keep *= 1.0 - SET_STRIP * best
 	return keep
 
 
 # How many of a carry's `steps` samples, over `arrival_time`, fall in its first
-# COMMIT_S.
+# COMMIT_S (its end is read beside them).
 static func committed_steps(arrival_time: float, steps: int) -> int:
 	return mini(steps, maxi(1, floori(steps * COMMIT_S / arrival_time + 1e-6)))

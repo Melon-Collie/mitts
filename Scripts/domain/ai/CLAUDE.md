@@ -710,9 +710,12 @@ remains.
     skate — are each defender's one chance at it (`AIStripOdds`,
     `docs/strip-interception-plan.md`): can his stick, from where he is and how
     he is moving, be set on some point of the path a beat before the puck,
-    graded across the arrival clock's error, over only the first second of the
-    path from where its read starts (`COMMIT_S`: how long a stick he sees coming
-    cannot be escaped; a chase down after it is a later decision's). One chance
+    graded across the arrival clock's error, over the first second of the path
+    from where its read starts (`COMMIT_S`: how long a stick he sees coming
+    cannot be escaped) and where it is going, when it gets there: a crossing
+    of the line held before he arrives is shut, which is what makes getting
+    there sooner worth more than the time discount. A chase down in between is
+    a later decision's. One chance
     however long the puck is in his reach, and measured against a worst-case
     interceptor, never our defending bots. Never read where a defender might be
     as a spread that thins with how far ahead it looks: an entry read from

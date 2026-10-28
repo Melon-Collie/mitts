@@ -31,15 +31,17 @@ What it leaves out on purpose:
 - **Where a loss happens** (`carry_strip_point`, the carry search's rolled
   moves): each defender's first chance — the first point his stick is set on with
   even odds, else his best — weighted by his odds of taking it.
-- **Only the first second of a path counts** (`COMMIT_S`), from where its read
-  starts. The carrier re-plans every 33–75 ms, but a stick he sees coming
-  cannot be escaped inside his reaction plus sliding a blade's reach aside —
-  about a second — so that is what taking the space commits him to. A defender
-  who can only get to the path after it, typically running the carrier down
-  from behind ~2.4 s in, is a later decision's: that read starts again from
-  wherever the later decision is made. A destination 4 s off is read on its
-  first second; whether its far end is held is the possession read's race at
-  it.
+- **A read looks at the first second of its path and where it is going**
+  (`COMMIT_S`), from where it starts. The carrier re-plans every 33–75 ms, but a
+  stick he sees coming cannot be escaped inside his reaction plus sliding a
+  blade's reach aside — about a second — so that is what taking the space
+  commits him to. Past it only the path's end is read, when the puck gets
+  there: whether the place he is going — a crossing of the line, a destination,
+  the end of a drive — is taken before he arrives. That race is what makes
+  speed worth having: getting to the line sooner leaves a defender less time to
+  shut a lane, so forward ice earns more than the time discount alone. A
+  defender who can only get to the path in between, typically running the
+  carrier down from behind ~2.4 s in, is a later decision's.
 
 Waiting never thins the defence: with more time a defender reaches more of the
 path, so a carry read from further back does not look easier. That is what

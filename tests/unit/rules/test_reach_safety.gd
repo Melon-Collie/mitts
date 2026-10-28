@@ -212,11 +212,11 @@ func test_strip_point_is_toward_the_tight_end() -> void:
 
 
 func test_covered_only_carry_reaches_its_destination_when_nothing_covers_it() -> void:
-	# A defender too far off the route to get to it in time: as how far the carry
-	# GETS, it gets all the way.
+	# A defender too far off the route, and off where it ends, to get to either in
+	# time: as how far the carry GETS, it gets all the way.
 	var from := Vector3(0, 0, 0)
 	var to := Vector3(0, 0, 10)
-	var opps: Array[Vector3] = [Vector3(8, 0, 5)]
+	var opps: Array[Vector3] = [Vector3(11, 0, 5)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	assert_gt(AICarrySpace.carry_safety(from, to, 1.4, opps, vels), 0.9,
 			"precondition: the route is mostly clear")

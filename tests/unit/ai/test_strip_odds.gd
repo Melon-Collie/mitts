@@ -61,19 +61,23 @@ func test_waiting_never_thins_the_defence() -> void:
 		prev = k
 
 
-func test_a_man_who_can_only_get_there_after_the_window_is_a_later_decision() -> void:
-	# He reaches the far end of a long carry in time, but not any of its first
-	# COMMIT_S.
+func test_a_man_who_can_only_get_to_the_middle_after_the_window_is_a_later_decision() -> void:
+	# The path passes him only after its first COMMIT_S, and ends where he cannot
+	# get to.
+	var him: Array[Vector3] = [Vector3(0, 0, -15)]
+	var points: Array[Vector3] = [Vector3(0, 0, -2), Vector3(0, 0, -4), Vector3(0, 0, -15),
+			Vector3(0, 0, 25)]
+	var times: Array[float] = [0.5, 1.0, 1.5, 1.6]
+	assert_eq(AIStripOdds.path_keep(points, times, him, _still), 1.0)
+	assert_lt(AIStripOdds.path_keep(points, times, him, _still, [], 0.0, INF), 1.0,
+			"read the whole way, he takes it")
+
+
+func test_where_the_carry_is_going_is_read_past_the_window() -> void:
+	# A man waiting where a 3 s carry ends: the place it is going is his.
 	var him: Array[Vector3] = [Vector3(0, 0, -24)]
-	var to := Vector3(0, 0, -24)
-	assert_eq(_keep(him, _still, Vector3.ZERO, to, 3.0), 1.0)
-	var whole: Array[float] = []
-	var points: Array[Vector3] = []
-	for k: int in 30:
-		points.append(Vector3(0, 0, -0.8 * (k + 1)))
-		whole.append(0.1 * (k + 1))
-	assert_lt(AIStripOdds.path_keep(points, whole, him, _still, [], 0.0, INF), 1.0,
-			"read to its end, he takes it")
+	assert_almost_eq(_keep(him, _still, Vector3.ZERO, Vector3(0, 0, -24), 3.0),
+			1.0 - AIStripOdds.SET_STRIP, 1e-6)
 
 
 func test_defenders_are_separate_chances() -> void:
