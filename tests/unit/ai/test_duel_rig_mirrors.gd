@@ -4,7 +4,8 @@ extends GutTest
 # for as the live SkaterIKCoordinator does, on the same set-up body: the range of
 # motion, the carry's two hands and backhand stop, and the rest reach without a
 # puck to reach for. At rest, so the twist and lean are the coordinator's own
-# zeros. Its release keeps the skater's motion as the controller's does.
+# zeros. Its release keeps the skater's motion as the controller's does, and its
+# body blocks a loose puck in the band the live skater's does.
 
 const DuelRig := preload("res://tests/unit/ai/duel_rig.gd")
 const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
@@ -82,3 +83,19 @@ func test_a_release_keeps_the_skaters_motion_as_the_controller_does() -> void:
 			assert_almost_eq(harness_result.direction * harness_result.power,
 					ctrl_result.direction * ctrl_result.power, Vector3.ONE * 0.0001,
 					"skating %s, pass %s" % [body_vel, is_pass])
+
+
+func test_the_body_blocks_in_the_band_the_skater_does() -> void:
+	var body: RefCounted = (load("res://tests/unit/ai/duel_body.gd") as GDScript).capture(
+			_skater, _ctrl, _puck)
+	var band: Vector2 = _skater.get_body_block_y_range()
+	var reach: float = _skater.get_body_block_radius() + GameRules.PUCK_COLLISION_RADIUS
+	var at := Vector3(_skater.global_position.x, 0.0, _skater.global_position.z)
+	for y: float in [band.x - 0.02, band.x + 0.02, band.y - 0.02, band.y + 0.02]:
+		for off: float in [reach - 0.02, reach + 0.02]:
+			var prev := Vector3(at.x + off, 0.0, at.z - 1.0)
+			var curr := Vector3(at.x + off, 0.0, at.z + 1.0)
+			var live: bool = PuckInteractionRules.check_body_block(Vector3(prev.x, y, prev.z),
+					Vector3(curr.x, y, curr.z), Vector2(at.x, at.z), reach, band.x, band.y)
+			assert_eq(body.blocks(prev, curr, y, y, at), live,
+					"a puck %.2f m up, %.2f m off his axis" % [y, off])

@@ -27,8 +27,10 @@ var strip_trickle_m_s: float
 var strip_loose_m_s: float
 var hit_cooldown_s: float
 var hit_cooldown_threshold: float
-# The upright torso band a loose puck is blocked by: its radius (and half-height)
-# and its centre's height off the ice, and what the block leaves the puck.
+# The upright band a loose puck is blocked by: its radius (and half-height) and
+# its centre's height off the ice — Skater.get_body_block_y_range's, from a body
+# standing at GameRules.FACEOFF_SPAWN_HEIGHT, where a skater's origin rides — and
+# what the block leaves the puck.
 var block_radius: float
 var block_center_y: float
 var block_cor_scale: float
@@ -57,7 +59,7 @@ static func capture(skater: Skater, ctrl: SkaterController, puck: Puck) -> RefCo
 	body.hit_cooldown_s = puck.hit_pickup_cooldown
 	body.hit_cooldown_threshold = puck.hit_pickup_cooldown_threshold
 	body.block_radius = skater.body_block_radius
-	body.block_center_y = skater.body_block_height
+	body.block_center_y = GameRules.FACEOFF_SPAWN_HEIGHT + skater.body_block_height
 	body.block_cor_scale = puck.body_block_cor_scale
 	body.block_friction = puck.body_block_friction
 	body.block_cooldown_s = puck.body_block_cooldown
