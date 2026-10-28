@@ -13,18 +13,20 @@ var vfx: GoalVFX = null
 # (three-sided rounded rectangle at crossbar height, inset from the posts).
 # All values in metres. NHL regulation dimensions (rulebook: 40" deep base).
 
-const GOAL_WIDTH: float         = 1.83    # 72" opening width
-const NET_HEIGHT: float         = 1.22    # 48" post height
+const POST_RADIUS: float        = 0.030   # 2 3/8" OD pipe
+# The rulebook's 72" x 48" is the clear opening: between the posts' inner faces
+# and up to the crossbar's underside. These are the pipes' centerlines.
+const GOAL_WIDTH: float         = 1.8288 + 2.0 * POST_RADIUS
+const NET_HEIGHT: float         = 1.2192 + POST_RADIUS
 const BASE_DEPTH: float         = GameRules.NET_DEPTH  # 40" (NHL rulebook), single-sourced
 const TOP_DEPTH: float          = 0.559   # 22" top shelf depth
-const POST_RADIUS: float        = 0.030   # 2 3/8" OD pipe
 
 const MOUTH_CORNER_RADIUS: float = 0.10   # post-to-crossbar bend
 const SKIRT_CORNER_RADIUS: float = 0.15   # back corners of ice skirt
 const CROWN_CORNER_RADIUS: float = 0.10   # back corners of top crown
 
-const POST_HALF_WIDTH: float    = GOAL_WIDTH / 2.0              # 0.915
-const CROWN_HALF_WIDTH: float   = POST_HALF_WIDTH - MOUTH_CORNER_RADIUS  # 0.815
+const POST_HALF_WIDTH: float    = GOAL_WIDTH / 2.0              # 0.9444
+const CROWN_HALF_WIDTH: float   = POST_HALF_WIDTH - MOUTH_CORNER_RADIUS  # 0.8444
 
 const BEND_SEGMENTS: int        = 6       # curve tessellation per quarter bend
 const PIPE_RADIAL_SEGMENTS: int = 8

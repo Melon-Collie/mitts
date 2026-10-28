@@ -277,7 +277,7 @@ const _TARGET_WALL_AHEAD: float   = 2.2
 # HIGH shot needs ~10.6 m/s to drop onto the 0.95 m targets — under the 10 m/s
 # wrister floor, i.e. only makeable by bottoming out the power band — while
 # from here it wants ~15 m/s and a full rip still crests at 1.07 m, under the
-# 1.22 m crossbar, so the doorstep roof cannot sail. The same geometry is what
+# 1.22 m crossbar underside, so the doorstep roof cannot sail. The same geometry is what
 # makes the pairing teach range: MID tops out at 0.79 m from here and cannot
 # reach these targets at any charge, having just cleared them from the slot.
 const _DOORSTEP_DIST_M: float = 2.5

@@ -74,12 +74,14 @@ const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.
 const BLUE_LINE_Z: float = 7.29  # centre of the line; its far edge is 64 ft from the goal line's back edge
 # Net frame. HockeyGoal draws the same frame from its own constants; every pair
 # is pinned by test_net_geometry_mirrors.
-const NET_HALF_WIDTH: float = 0.915      # half of goal opening (post centerline)
+# The rulebook's 72" x 48" opening is clear of the pipes, so the centerlines sit
+# a pipe radius outside it.
+const NET_HALF_WIDTH: float = 0.9444     # half of goal opening (post centerline)
 const NET_POST_RADIUS: float = 0.030     # goal-pipe radius
 const NET_DEPTH: float = 1.016           # 40" goal-line-to-back-frame depth (NHL rulebook)
 const NET_BACK_HALF_WIDTH: float = 1.02  # half-width at back of net (trapezoid wider end)
-const NET_HEIGHT: float = 1.22           # crossbar height (pipe centerline)
-const NET_CROWN_HALF_WIDTH: float = 0.815  # half-span of the crossbar / top net panel
+const NET_HEIGHT: float = 1.2492         # crossbar height (pipe centerline)
+const NET_CROWN_HALF_WIDTH: float = 0.8444  # half-span of the crossbar / top net panel
 # Radius of the post-to-crossbar bend. The frame is continuous by construction:
 # the post stands to NET_HEIGHT − this, the bend sweeps a quarter circle from
 # there to the crossbar end, and NET_CROWN_HALF_WIDTH is NET_HALF_WIDTH − this
@@ -496,9 +498,9 @@ const CREASE_DWELL_DURATION: float = 0.6  # seconds in the crease before ghostin
 const END_ZONE_FACEOFF_DOT_X: float = 6.7056
 const ICING_FACEOFF_DOT_Z: float = GOAL_LINE_Z - 6.096   # 20.554
 # Neutral-zone faceoff dots — NHL spec. Painted 5' (1.524m) from each blue
-# line on the neutral-zone side. Used as the faceoff spot when an offside is
+# line's neutral-zone edge. Used as the faceoff spot when an offside is
 # called and as candidates when the puck goes out of play in the neutral zone.
-const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_Z - 1.524   # 5.766
+const NEUTRAL_ZONE_FACEOFF_DOT_Z: float = BLUE_LINE_NEUTRAL_EDGE_Z - 1.524
 
 # Rule preset that gates which infractions are detected and how they're punished
 # (each set's rules: docs/gameplay-design.md, Game format).

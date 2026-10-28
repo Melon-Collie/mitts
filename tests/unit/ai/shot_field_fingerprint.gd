@@ -30,8 +30,8 @@ const GOALIE_DIRS: Array[String] = [
 ]
 const GOALIE_PREFIXES: Array[String] = ["goalie_", "goalie_", "keeper_", "keeper_"]
 # GameRules holds the goalie's league defaults among everything else; only its
-# goalie lines and the puck's size count, so an unrelated rule change does not
-# stale the field.
+# goalie lines, the net's frame and the puck's size count, so an unrelated rule
+# change does not stale the field.
 const GAME_RULES: String = "res://Scripts/domain/config/game_rules.gd"
 
 
@@ -46,7 +46,7 @@ static func compute() -> String:
 	for p: String in paths:
 		text += p + "\n" + FileAccess.get_file_as_string(p)
 	for line: String in FileAccess.get_file_as_string(GAME_RULES).split("\n"):
-		if line.contains("GOALIE") or line.contains("PUCK_COLLISION"):
+		if line.contains("GOALIE") or line.contains("NET_") or line.contains("PUCK_COLLISION"):
 			text += line + "\n"
 	# A Windows checkout may carry CRLF; the hash must not depend on it.
 	return text.replace("\r", "").md5_text()

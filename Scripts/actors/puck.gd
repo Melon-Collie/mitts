@@ -131,10 +131,9 @@ var body_block_active_cor_scale: float = 0.25
 var body_block_friction: float = 0.50
 @export var body_block_cooldown: float = 0.1
 # Vertical clamp: PuckAuthorityRules.advance_loose_puck caps the puck's Y at
-# ice_height + max_height and kills any remaining upward velocity. 3 m sits just
-# above the glass top (HockeyRink wall_height 1.07 + glass_height 1.83 ≈ 2.9 m),
-# so a hard deflection can visibly clear the glass without ever leaving the play
-# area — the board carom is a height-independent XZ clamp, so height alone never
+# ice_height + max_height and kills any remaining upward velocity. 3 m clears the
+# side glass (HockeyRink wall_height 1.07 + glass_height 1.52 ≈ 2.6 m), so a hard
+# deflection can visibly clear it without ever leaving the play area — the board carom is a height-independent XZ clamp, so height alone never
 # lets the puck out of the rink.
 @export var max_height: float = 3.0
 

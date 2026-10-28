@@ -546,8 +546,8 @@ class RinkMap extends Control:
 			draw_arc(_p(z, 0.0), 1.8 * _scale,
 					start, start + PI, 24, _BLUE, 1.0)
 			# Net footprint just outside the goal line.
-			var mouth_a: Vector2 = _p(z - inward * 1.0, -0.915)
-			var mouth_b: Vector2 = _p(z, 0.915)
+			var mouth_a: Vector2 = _p(z - inward * 1.0, -GameRules.NET_HALF_WIDTH)
+			var mouth_b: Vector2 = _p(z, GameRules.NET_HALF_WIDTH)
 			draw_rect(Rect2(mouth_a, mouth_b - mouth_a), _BOARDS, false, 1.0)
 		# Faceoff dots (4 end-zone + centre).
 		for z: float in [-20.0, 20.0]:

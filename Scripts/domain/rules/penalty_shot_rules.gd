@@ -59,7 +59,7 @@ class Config:
 	# it began. This is the "get a running start" window.
 	var start_grace: float = 0.8
 	# Crossbar height (m); a puck crossing the line above this sailed over the net.
-	var crossbar_height: float = 1.22
+	var crossbar_height: float = GameRules.NET_HEIGHT
 
 
 # Displacement from the start point, projected onto the attack direction. The

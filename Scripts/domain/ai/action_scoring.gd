@@ -287,8 +287,8 @@ static func score_pass_value(
 
 # True if `pos` is past the attacking goal line in the direction the
 # attacking team is going (i.e. "behind the net" relative to the
-# shooter). For Team 0 attacking -Z (attacking_goal.z = -26.65),
-# "past" means z < -26.65; for Team 1 attacking +Z, z > +26.65.
+# shooter). For Team 0 attacking -Z (attacking_goal.z = -GOAL_LINE_Z),
+# "past" means z < -GOAL_LINE_Z; for Team 1 attacking +Z, z > +GOAL_LINE_Z.
 static func _is_past_goal_line(pos: Vector3, attacking_goal: Vector3) -> bool:
 	return (pos.z - attacking_goal.z) * signf(attacking_goal.z) > 0.0
 

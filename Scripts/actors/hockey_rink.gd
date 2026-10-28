@@ -66,9 +66,15 @@ extends Node3D
 	set(v):
 		kickplate_height = v
 		_rebuild()
-@export var glass_height: float = 1.83:
+# Above the boards: along the sides, and round each end from where its netting
+# starts (NET_EDGE_Z). NHL: 5 ft and 8 ft.
+@export var glass_height: float = 1.524:
 	set(v):
 		glass_height = v
+		_rebuild()
+@export var glass_end_height: float = 2.438:
+	set(v):
+		glass_end_height = v
 		_rebuild()
 @export var glass_thickness: float = 0.05:
 	set(v):
@@ -161,7 +167,7 @@ const GLASS_LIFT: float = 0.001
 const KICKPLATE_ICE_OFFSET: float = 0.005
 # NHL spec for reference (so future tuning has a target):
 #   Board height (kickplate + white + cap): 1.07-1.22 m (42-48 in)
-#   Glass height above boards:              1.52-2.44 m (5-8 ft)
+#   Glass height above boards:              1.52 m sides, 2.44 m ends (5 / 8 ft)
 #   Kickplate height:                       0.15-0.30 m (6-12 in)
 #   Cap rail height:                        0.05-0.08 m (2-3 in)
 
@@ -403,7 +409,7 @@ func _rebuild() -> void:
 func _cache_key() -> String:
 	return str([rink_length, rink_width, corner_radius, wall_height,
 			wall_thickness, corner_segments,
-			kickplate_height, glass_height, glass_thickness, _px_per_meter,
+			kickplate_height, glass_height, glass_end_height, glass_thickness, _px_per_meter,
 			ice_color, red_line_color, blue_line_color])
 
 
@@ -420,7 +426,6 @@ func _get_or_build_products() -> Dictionary:
 	var board_top: float = wall_height - CAP_RAIL_HEIGHT
 	var rail_top: float = wall_height
 	var glass_y_bot: float = rail_top + GLASS_LIFT
-	var glass_y_top: float = glass_y_bot + glass_height
 	var board_half_thick: float = wall_thickness / 2.0
 	var kick_half_thick: float = board_half_thick + KICKPLATE_PROTRUSION
 	var cap_half_thick: float = board_half_thick + CAP_RAIL_PROTRUSION
@@ -450,8 +455,7 @@ func _get_or_build_products() -> Dictionary:
 				board_top, rail_top),
 		# Glass — transparent, narrower than the boards, lifted by GLASS_LIFT so
 		# its bottom cap doesn't z-fight the cap rail's top.
-		"band_glass": _perimeter_band_mesh(stations, glass_half_thick, glass_half_thick,
-				glass_y_bot, glass_y_top),
+		"band_glass": _glass_band_mesh(stations, glass_half_thick, glass_y_bot),
 		# Sponsor panels: one merged ribbon hugging the white board's inner face.
 		# Built regardless of board_ads_enabled — it is a handful of quads, and
 		# keeping it out of the cache key means toggling the ads in the editor
@@ -515,14 +519,13 @@ func _build_ice_texture() -> ImageTexture:
 	_draw_crease_arc(img, img_w / 2.0, img_h / 2.0 + goal_z, -1, thin_line, red_line_color)
 
 	# ── Faceoff markings ────────────────────────────────────────────────────────
-	# Dot and circle sizes from NHL Official Rules — 2' diameter filled dot,
-	# 15' radius surrounding circle.
-	var dot_r:    float = 0.3048 * _px_per_meter
-	var circle_r: float = 4.572  * _px_per_meter
+	var dot_r:    float = RinkMarkings.FACEOFF_DOT_RADIUS_M * _px_per_meter
+	var circle_r: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M * _px_per_meter
 
 	# Center ice circle + filled dot
 	_draw_circle(img, img_w / 2.0, img_h / 2.0, circle_r, thin_line, blue_line_color)
-	_draw_filled_circle(img, img_w / 2.0, img_h / 2.0, dot_r, blue_line_color)
+	_draw_filled_circle(img, img_w / 2.0, img_h / 2.0,
+			RinkMarkings.CENTER_ICE_DOT_RADIUS_M * _px_per_meter, blue_line_color)
 
 	# End-zone faceoff dots + circles — positions sourced from GameRules so
 	# faceoff teleports land exactly on the painted dot.
@@ -531,6 +534,7 @@ func _build_ice_texture() -> ImageTexture:
 		var py: float = img_h / 2.0 + dot.y * _px_per_meter
 		_draw_filled_circle(img, px, py, dot_r, red_line_color)
 		_draw_circle(img, px, py, circle_r, thin_line, red_line_color)
+		_draw_hash_marks(img, dot, thin_line)
 
 	# Neutral-zone faceoff dots (no surrounding circle per NHL spec)
 	for dot: Vector2 in GameRules.NEUTRAL_ZONE_FACEOFF_DOTS:
@@ -538,7 +542,54 @@ func _build_ice_texture() -> ImageTexture:
 		var py: float = img_h / 2.0 + dot.y * _px_per_meter
 		_draw_filled_circle(img, px, py, dot_r, red_line_color)
 
+	# Goalkeeper's restricted areas: two lines behind each net, goal line to boards.
+	for end: float in [-1.0, 1.0]:
+		for side: float in [-1.0, 1.0]:
+			_draw_segment(img,
+					Vector2(side * RinkMarkings.TRAPEZOID_GOAL_LINE_HALF_M, end * GameRules.GOAL_LINE_Z),
+					Vector2(side * RinkMarkings.TRAPEZOID_BOARDS_HALF_M, end * rink_length / 2.0),
+					thin_line, red_line_color)
+
+	# Referee's crease, centred on the boards' face; the half behind it is hidden.
+	_draw_circle(img, img_w / 2.0 - GameRules.INNER_HALF_WIDTH * _px_per_meter, img_h / 2.0,
+			RinkMarkings.REFEREE_CREASE_RADIUS_M * _px_per_meter, thin_line, red_line_color)
+
 	return ImageTexture.create_from_image(img)
+
+
+# The hash-mark pairs either side of the end-zone circle at `dot` (metres),
+# each starting on the circle and running away from it.
+func _draw_hash_marks(img: Image, dot: Vector2, thickness: int) -> void:
+	var r: float = RinkMarkings.FACEOFF_CIRCLE_RADIUS_M
+	var dz: float = RinkMarkings.HASH_MARK_SPACING_M * 0.5
+	var on_circle: float = sqrt(r * r - dz * dz)
+	for side: float in [-1.0, 1.0]:
+		for z: float in [dot.y - dz, dot.y + dz]:
+			var x0: float = dot.x + side * on_circle
+			_draw_segment(img, Vector2(x0, z),
+					Vector2(x0 + side * RinkMarkings.HASH_MARK_LENGTH_M, z),
+					thickness, red_line_color)
+
+
+# A straight stroke between two rink points in metres (x, z).
+func _draw_segment(img: Image, a_m: Vector2, b_m: Vector2, thickness: int, color: Color) -> void:
+	var centre := Vector2(img.get_width() / 2.0, img.get_height() / 2.0)
+	var a: Vector2 = centre + a_m * _px_per_meter
+	var b: Vector2 = centre + b_m * _px_per_meter
+	var half_t: float = thickness / 2.0
+	var aa: float = 1.0
+	var lo: Vector2 = a.min(b) - Vector2.ONE * (half_t + aa + 1.0)
+	var hi: Vector2 = a.max(b) + Vector2.ONE * (half_t + aa + 1.0)
+	var ab: Vector2 = b - a
+	var len_sq: float = maxf(ab.length_squared(), 1e-6)
+	for py: int in range(maxi(int(lo.y), 0), mini(int(hi.y) + 1, img.get_height())):
+		for px: int in range(maxi(int(lo.x), 0), mini(int(hi.x) + 1, img.get_width())):
+			var p := Vector2(px, py)
+			var t: float = clampf((p - a).dot(ab) / len_sq, 0.0, 1.0)
+			var dist: float = p.distance_to(a + ab * t)
+			var alpha: float = clampf((half_t + aa - dist) / aa, 0.0, 1.0)
+			if alpha > 0.0:
+				img.set_pixel(px, py, img.get_pixel(px, py).lerp(color, alpha))
 
 
 func _add_ice(tex: ImageTexture) -> void:
@@ -1062,7 +1113,7 @@ func _build_net_band(stations: Array, glass_half_thick: float) -> ArrayMesh:
 		placements.append(Vector2(arc_start, width))
 		uv_rects.append(Rect2(0.0, 0.0, width / NET_TILE_M, NET_HEIGHT / NET_TILE_M))
 
-	var glass_top: float = wall_height + GLASS_LIFT + glass_height
+	var glass_top: float = wall_height + GLASS_LIFT + glass_end_height
 	return BoardAdBandBuilder.build_band(stations, cumulative, placements, uv_rects,
 			glass_half_thick, glass_top, glass_top + NET_HEIGHT)
 
@@ -1271,10 +1322,12 @@ func _build_perimeter_stations(n: int) -> Array:
 # (both equal half-thickness for symmetric bands). Quads connect each
 # station to the next, with the last station wrapping back to stations[0]
 # so the band closes cleanly.
+# `tops`, when given, is each station's own y_top.
 func _emit_perimeter_band_arrays(stations: Array,
 		inner_offset: float, outer_offset: float,
 		y_bot: float, y_top: float,
-		with_top_cap: bool, with_bottom_cap: bool) -> Dictionary:
+		with_top_cap: bool, with_bottom_cap: bool,
+		tops: PackedFloat32Array = PackedFloat32Array()) -> Dictionary:
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
@@ -1294,9 +1347,10 @@ func _emit_perimeter_band_arrays(stations: Array,
 		var sn: Vector2 = s.inward
 		var ip := sp + sn * inner_offset
 		var op := sp - sn * outer_offset
-		inner_top[i] = Vector3(ip.x, y_top, ip.y)
+		var top: float = y_top if tops.is_empty() else tops[i]
+		inner_top[i] = Vector3(ip.x, top, ip.y)
 		inner_bot[i] = Vector3(ip.x, y_bot, ip.y)
-		outer_top[i] = Vector3(op.x, y_top, op.y)
+		outer_top[i] = Vector3(op.x, top, op.y)
 		outer_bot[i] = Vector3(op.x, y_bot, op.y)
 		inward_n[i] = Vector3(sn.x, 0.0, sn.y)
 		outward_n[i] = Vector3(-sn.x, 0.0, -sn.y)
@@ -1383,10 +1437,11 @@ func _emit_perimeter_band_arrays(stations: Array,
 func _perimeter_band_mesh(stations: Array,
 		inner_offset: float, outer_offset: float,
 		y_bot: float, y_top: float,
-		with_top_cap: bool = true, with_bottom_cap: bool = true) -> ArrayMesh:
+		with_top_cap: bool = true, with_bottom_cap: bool = true,
+		tops: PackedFloat32Array = PackedFloat32Array()) -> ArrayMesh:
 	var data: Dictionary = _emit_perimeter_band_arrays(
 			stations, inner_offset, outer_offset, y_bot, y_top,
-			with_top_cap, with_bottom_cap)
+			with_top_cap, with_bottom_cap, tops)
 	var arrays: Array = []
 	arrays.resize(Mesh.ARRAY_MAX)
 	arrays[Mesh.ARRAY_VERTEX] = data.verts
@@ -1396,6 +1451,39 @@ func _perimeter_band_mesh(stations: Array,
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 	return mesh
+
+
+# The glass band: the end height wherever |z| is past NET_EDGE_Z, the side
+# height between. Each step is a station doubled on the side wall, one copy per
+# height, so the band steps straight up there.
+func _glass_band_mesh(stations: Array, half_thick: float, y_bot: float) -> ArrayMesh:
+	var glass_stations: Array = []
+	var tops := PackedFloat32Array()
+	var n: int = stations.size()
+	for i: int in n:
+		var a: Dictionary = stations[i]
+		var b: Dictionary = stations[(i + 1) % n]
+		var az: float = (a.pos as Vector2).y
+		var bz: float = (b.pos as Vector2).y
+		glass_stations.append(a)
+		tops.append(_glass_top(az, y_bot))
+		# The steps this side crosses, in the order the walk meets them.
+		var first: float = -NET_EDGE_Z if bz > az else NET_EDGE_Z
+		for z: float in [first, -first]:
+			if (az - z) * (bz - z) >= 0.0:
+				continue
+			var t: float = (z - az) / (bz - az)
+			var at: Vector2 = (a.pos as Vector2).lerp(b.pos as Vector2, t)
+			var step: float = signf(bz - az) * 0.01
+			for side_z: float in [z - step, z + step]:
+				glass_stations.append({"pos": at, "inward": a.inward})
+				tops.append(_glass_top(side_z, y_bot))
+	return _perimeter_band_mesh(glass_stations, half_thick, half_thick,
+			y_bot, y_bot + glass_height, true, true, tops)
+
+
+func _glass_top(z: float, y_bot: float) -> float:
+	return y_bot + (glass_end_height if absf(z) > NET_EDGE_Z else glass_height)
 
 
 func _add_band_instance(mesh: ArrayMesh, material: Material) -> void:

@@ -277,7 +277,7 @@ func _drive_at_post(side: float, speed: float, turn_at: float, after: float, sto
 	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
 	var puck := Vector2(3.5 * side, -8.0)
-	var v: Vector2 = (Vector2(1.1 * side, 0.0) - puck).normalized() * speed
+	var v: Vector2 = (Vector2((GameRules.NET_HALF_WIDTH + 0.185) * side, 0.0) - puck).normalized() * speed
 	var tick: int = 0
 	var since: float = -1.0
 	while -puck.y > stop_out and since < after:

@@ -380,10 +380,10 @@ func test_missing_high_is_a_real_outcome() -> void:
 	var cfg := _wrister_cfg()
 	cfg.max_wrister_power = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 	var full: ShotMechanics.ShotResult = _wrister_at(cfg, 3, FULL_SWEEP)
-	assert_gt(_crossing_height(full, 8.0), GameRules.NET_HEIGHT + 0.03,
-			"full-charge HIGH from 8 m sails over the bar")
+	assert_gt(_crossing_height(full, 8.5), GameRules.NET_HEIGHT + GameRules.NET_POST_RADIUS,
+			"full-charge HIGH from 8.5 m sails over the bar")
 	var eased: ShotMechanics.ShotResult = _wrister_at(cfg, 3, 2.5)
-	assert_lt(_crossing_height(eased, 8.0), GameRules.NET_HEIGHT,
+	assert_lt(_crossing_height(eased, 8.5), GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS,
 			"an eased charge on the same rung stays under the bar")
 
 
