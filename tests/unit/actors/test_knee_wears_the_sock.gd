@@ -1,7 +1,7 @@
 extends GutTest
 
-# The knee ball sits below the pant hem, over the shin guard's cap, so both
-# painters — the rink's SkaterUniformCoordinator and the display figures'
+# The knee is the sock carried up into the pant leg, over the shin guard's cap,
+# so both painters — the rink's SkaterUniformCoordinator and the display figures'
 # FigureKit — dress it in the sock's base, solid. Solid works only because every
 # kit's sock top is that base; a stripe running off the top would seam there.
 

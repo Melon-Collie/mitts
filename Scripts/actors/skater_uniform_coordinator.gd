@@ -225,8 +225,8 @@ func apply_uniform(colors: Dictionary) -> void:
 	_skater.set_leg_surface_material(SkaterMeshBuilder.LegSurface.SOCK_L, sock_mat)
 	_skater.set_leg_surface_material(
 			SkaterMeshBuilder.LegSurface.SOCK_R, sock_mat.duplicate())
-	# The knee ball sits below the pant hem, over the shin guard's cap, so it is
-	# sock: solid base, which every kit's sock top already is
+	# The knee is the sock carried up into the pant leg, over the shin guard's
+	# cap: solid sock base, which every kit's sock top already is
 	# (test_knee_wears_the_sock.gd).
 	var knee_mat: StandardMaterial3D = UniformPaint.solid(uniform.socks.base)
 	_skater.set_leg_surface_material(SkaterMeshBuilder.LegSurface.KNEE_L, knee_mat)

@@ -42,7 +42,7 @@ class PartSpec:
 
 
 # Envelopes come from the primitives in Scenes/Skater.tscn: torso cylinder
-# r 0.22 h 0.55, helmet sphere r 0.155, knee r 0.095, thigh
+# r 0.22 h 0.55, helmet sphere r 0.155, thigh
 # cylinder r 0.14 h 0.3, sock r 0.09 h 0.3, skate r 0.09 h 0.2, foot prolate
 # sphere r 0.08 half-length 0.125. Two deliberate exceptions: the shoulder cap
 # is prolate along its pole (it leans along the arm, high on the torso — no
@@ -91,8 +91,9 @@ func _parts() -> Array[PartSpec]:
 		# own nominal envelope, so a runaway edit still trips something.
 		PartSpec.new("pelvis", SkaterMeshBuilder._build_pelvis(),
 				Vector3(0.44, 0.36, 0.38), true),
+		# The sock carried up through the joint, its kneecap proud at the front.
 		PartSpec.new("knee", SkaterMeshBuilder._build_knee(),
-				Vector3(0.19, 0.19, 0.19), false),
+				Vector3(0.19, 0.12, 0.215), true),
 		# The thigh carries the hip joint's dome, so its envelope is the thigh
 		# cylinder PLUS the r-0.138 ball that used to sit on the pivot as a part
 		# of its own — the same volume, one piece.
@@ -269,8 +270,8 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 # three. Blended weights would make a bone pose an approximation of the node
 # transform it stands in for, and the pose diff would start reporting drift with
 # no obvious cause. Cheap to check here, invisible in a render. The torso is the
-# one deliberate blend (its tail rides the jersey's own bones) and has its own
-# test below.
+# one deliberate blend (its tail rides the jersey's own bones) and the knees the
+# one surface stitched across two bones; each has its own test below.
 func test_skinned_rigs_are_rigidly_weighted() -> void:
 	var rigs: Array = [
 		["upper", SkaterMeshBuilder.shared_upper_skin_mesh(),
@@ -295,6 +296,8 @@ func test_skinned_rigs_are_rigidly_weighted() -> void:
 			var bone: int = bones[0]
 			assert_between(bone, 0, int(rig[3]) - 1,
 					"%s surface %d bone index in range" % [label, surface])
+			var stitched: bool = label == "leg" and (surface == SkaterMeshBuilder.LegSurface.KNEE_L
+					or surface == SkaterMeshBuilder.LegSurface.KNEE_R)
 			var uniform_bone: bool = true
 			var rigid: bool = true
 			for v: int in verts:
@@ -305,10 +308,53 @@ func test_skinned_rigs_are_rigidly_weighted() -> void:
 						or weights[v * 4 + 2] != 0.0 \
 						or weights[v * 4 + 3] != 0.0:
 					rigid = false
-			assert_true(uniform_bone,
+			assert_true(uniform_bone or stitched,
 					"%s surface %d must ride ONE bone" % [label, surface])
 			assert_true(rigid,
 					"%s surface %d must be weight 1.0 on that bone alone" % [label, surface])
+
+
+# The knee is the sock carried up through the joint: its top ring rides the
+# thigh's KNEE bone, every other vertex the SOCK bone in the sock's own frame,
+# where its bottom ring lands exactly on the sock's top ring.
+func test_the_knee_is_stitched_from_thigh_to_sock() -> void:
+	var leg: ArrayMesh = SkaterMeshBuilder.shared_leg_skin_mesh()
+	var sock_rest: PackedVector3Array = SkaterMeshBuilder.shared_sock().surface_get_arrays(
+			0)[Mesh.ARRAY_VERTEX]
+	var sock_top: float = SkaterMeshBuilder._SOCK_PROFILE[0].x
+	var drop: float = SkaterMeshBuilder._KNEE_ABOVE_SOCK
+	for side: int in 2:
+		var surface: int = SkaterMeshBuilder.LegSurface.KNEE_L if side == 0 \
+				else SkaterMeshBuilder.LegSurface.KNEE_R
+		var knee_bone: int = SkaterMeshBuilder.LegBone.KNEE_L if side == 0 \
+				else SkaterMeshBuilder.LegBone.KNEE_R
+		var sock_bone: int = SkaterMeshBuilder.LegBone.SOCK_L if side == 0 \
+				else SkaterMeshBuilder.LegBone.SOCK_R
+		var arrays: Array = leg.surface_get_arrays(surface)
+		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+		var on_thigh: int = 0
+		var seam: int = 0
+		for v: int in verts.size():
+			var bone: int = bones[v * 4]
+			assert_true(bone == knee_bone or bone == sock_bone, "a knee vertex rides the leg")
+			if bone == knee_bone:
+				on_thigh += 1
+				assert_gt(verts[v].y, SkaterMeshBuilder._KNEE_STITCH_Y,
+						"only the ring in the pants rides the thigh")
+				continue
+			assert_lt(verts[v].y - drop, SkaterMeshBuilder._KNEE_STITCH_Y,
+					"a shin vertex is authored in the sock's frame")
+			if is_equal_approx(verts[v].y, sock_top):
+				seam += 1
+				var on_sock: bool = false
+				for p: Vector3 in sock_rest:
+					if p.is_equal_approx(verts[v]):
+						on_sock = true
+						break
+				assert_true(on_sock, "the knee's bottom ring is the sock's top ring")
+		assert_gt(on_thigh, 0, "side %d: the top ring rides the thigh" % side)
+		assert_gt(seam, 0, "side %d: the bottom ring meets the sock" % side)
 
 
 # The torso is rigid on its own bone down to where the tail hangs free, then

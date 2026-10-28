@@ -187,7 +187,24 @@ const _SHOULDER_PROFILE: Array[Vector3] = [
 # matches the jersey and the cap's own color starts below it.
 const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
 
-const _KNEE_RADIUS: float = 0.095
+# The knee: the sock carried up through the joint, so thigh and shin read as
+# one leg. Stations are (y, radius, kneecap) in the KNEE bone's frame, whose
+# origin is the knee pivot. Rings at or below _KNEE_STITCH_Y ride the shin (the
+# SOCK bone, _KNEE_ABOVE_SOCK below the pivot), the one above it the thigh, deep
+# in the pants leg, so a bend stretches the band between them instead of
+# opening a gap. The bottom ring is the sock's top ring exactly. `kneecap` is
+# how far the shin guard's cap stands proud at the front, on the shin, as the
+# real cap is.
+const _KNEE_PROFILE: Array[Vector3] = [
+	Vector3(0.075, 0.088, 0.0),     # inside the pants leg, on the thigh
+	Vector3(0.040, 0.090, 0.010),
+	Vector3(0.010, 0.094, 0.022),   # the cap's crown, at the pivot
+	Vector3(-0.020, 0.092, 0.012),
+	Vector3(-0.040, 0.088, 0.0),    # = _SOCK_PROFILE[0], in the sock's frame
+]
+const _KNEE_STITCH_Y: float = 0.06
+# SockL's drop below the knee pivot in Scenes/Skater.tscn (test_skater_scene_mirrors).
+const _KNEE_ABOVE_SOCK: float = 0.19
 
 # Gloved fist, swept along local Y from the wrist (+Y, toward the elbow) to the
 # curled fingertips, its knuckle roll across local X; SkaterArmRig.glove_basis
@@ -474,7 +491,7 @@ static func shared_leg_skin_mesh() -> ArrayMesh:
 			var leg: int = LegBone.LEG_L if side == 0 else LegBone.LEG_R
 			var shin: int = LegBone.SHIN_L if side == 0 else LegBone.SHIN_R
 			_append_skinned_surface(m, thigh, leg + 1)
-			_append_skinned_surface(m, knee, leg + 2)
+			_append_knee_surface(m, knee, leg + 2, shin + 1)
 			_append_skinned_surface(m, sock, shin + 1)
 			_append_skinned_surface(m, skate, shin + 2, SKATE_SURF_COLLAR)
 			_append_skinned_surface(m, skate, shin + 2, SKATE_SURF_STRIPE)
@@ -1035,11 +1052,10 @@ static func shared_thigh() -> ArrayMesh:
 	return _shared("thigh", _build_thigh)
 
 
-# The joint balls that close the leg chain. A figure built from thigh and sock
-# alone has a hole where each knee should be — the thigh ends at leg-local
-# −0.28 and the sock starts at −0.35, and the ball is what spans it. Both are
-# built at their real radii, so a placer scales them only by the build's dials.
-static func shared_knee_ball() -> ArrayMesh:
+# The knee as a straight leg wears it, rigid in the KNEE frame (origin on the
+# knee pivot), for a figure that places parts rather than skinning them. Built
+# at its real size, so a placer scales it only by the build's dials.
+static func shared_knee() -> ArrayMesh:
 	return _shared("knee", _build_knee)
 
 
@@ -1318,7 +1334,49 @@ static func _build_shoulder() -> ArrayMesh:
 
 
 static func _build_knee() -> ArrayMesh:
-	return _build_ball(_KNEE_RADIUS, 8, 4, 1.0)
+	var profile: Array[Vector2] = []
+	for s: Vector3 in _KNEE_PROFILE:
+		profile.append(Vector2(s.x, s.y))
+	return _build_lathe(profile, _LEG_SIDES, 1.0, 1.0, [], 0.0, _kneecap)
+
+
+# Pushes a knee ring's front (−Z) out by its station's kneecap, fading to
+# nothing at the sides.
+static func _kneecap(ring: PackedVector3Array, y: float, radius: float,
+		_z_off: float) -> PackedVector3Array:
+	var proud: float = 0.0
+	for s: Vector3 in _KNEE_PROFILE:
+		if is_equal_approx(s.x, y):
+			proud = s.z
+	for k: int in ring.size():
+		var front: float = maxf(-ring[k].z / radius, 0.0)
+		var grow: float = 1.0 + proud / radius * front * front
+		ring[k].x *= grow
+		ring[k].z *= grow
+	return ring
+
+
+# The knee into `target` as the leg skin wears it: rings below the stitch move
+# to the sock's frame and ride `sock_bone`, the rest ride `knee_bone`.
+static func _append_knee_surface(target: ArrayMesh, src: ArrayMesh, knee_bone: int,
+		sock_bone: int) -> void:
+	var arrays: Array = src.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones := PackedInt32Array()
+	bones.resize(verts.size() * 4)
+	var weights := PackedFloat32Array()
+	weights.resize(verts.size() * 4)
+	for i: int in verts.size():
+		weights[i * 4] = 1.0
+		if verts[i].y < _KNEE_STITCH_Y:
+			bones[i * 4] = sock_bone
+			verts[i].y += _KNEE_ABOVE_SOCK
+		else:
+			bones[i * 4] = knee_bone
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	target.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 
 static func _build_thigh() -> ArrayMesh:

@@ -87,16 +87,32 @@ func test_the_thigh_dome_is_centred_on_the_hip_pivot() -> void:
 	assert_gt(stations, 2, "the dome must be more than an equator and a pole")
 
 
-# The knee ball has to span the gap the thigh and sock leave between them, or
-# the leg shows daylight at the joint through the whole stride.
-func test_the_knee_ball_covers_the_thigh_to_sock_gap() -> void:
-	var thigh_bottom: float = _origin("./MeshRoot/LowerBody/LegL/ThighL").y + (-0.15)
-	var shin: float = _origin("./MeshRoot/LowerBody/LegL/ShinL").y
-	var sock_top: float = shin + _origin("./MeshRoot/LowerBody/LegL/ShinL/SockL").y + 0.150
-	var gap: float = thigh_bottom - sock_top
-	assert_gt(0.095 * 2.0, gap,
-			"_KNEE_RADIUS (0.095) must span the %.3f m the thigh and sock leave " % gap +
-			"between them")
+# The knee is one lathe whose lower rings are skinned to the sock and whose top
+# ring to the knee bone, both authored in the knee's frame. They meet only while
+# the knee bone sits on the shin's pivot and the sock hangs _KNEE_ABOVE_SOCK
+# below it; a drift tears the leg open at the joint before it bends at all.
+func test_the_knee_stitch_sits_on_the_scene_pivot() -> void:
+	var knee: Vector3 = _origin("./MeshRoot/LowerBody/LegL/KneeL")
+	var shin: Vector3 = _origin("./MeshRoot/LowerBody/LegL/ShinL")
+	var sock: Vector3 = _origin("./MeshRoot/LowerBody/LegL/ShinL/SockL")
+	assert_almost_eq(knee, shin, Vector3.ONE * 1e-6, "the knee bone is on the knee pivot")
+	assert_almost_eq(sock, Vector3(0.0, -SkaterMeshBuilder._KNEE_ABOVE_SOCK, 0.0),
+			Vector3.ONE * 1e-6, "the sock hangs _KNEE_ABOVE_SOCK straight below it")
+	var bottom: Vector3 = SkaterMeshBuilder._KNEE_PROFILE[-1]
+	var sock_top: Vector2 = SkaterMeshBuilder._SOCK_PROFILE[0]
+	assert_almost_eq(bottom.x + SkaterMeshBuilder._KNEE_ABOVE_SOCK, sock_top.x, 1e-6,
+			"the knee's bottom ring is the sock's top ring")
+	assert_almost_eq(bottom.y, sock_top.y, 1e-6, "at the sock's radius")
+	assert_eq(bottom.z, 0.0, "with no kneecap on it")
+	# The top ring rides the thigh and must stay inside the pants' hem.
+	var top: Vector3 = SkaterMeshBuilder._KNEE_PROFILE[0]
+	var hem_y: float = _origin("./MeshRoot/LowerBody/LegL/ThighL").y \
+			+ SkaterMeshBuilder._THIGH_PROFILE[-1].x - knee.y
+	assert_gt(top.x, hem_y, "the thigh's ring is above the pants' hem")
+	assert_lt(top.y, SkaterMeshBuilder._THIGH_PROFILE[-1].y, "and inside it")
+	assert_gt(top.x, SkaterMeshBuilder._KNEE_STITCH_Y, "the top ring is the thigh's")
+	assert_lt(SkaterMeshBuilder._KNEE_PROFILE[1].x, SkaterMeshBuilder._KNEE_STITCH_Y,
+			"and only the top ring")
 
 
 # The skate collar perches ON the boot with an overlap seal rather than dropping

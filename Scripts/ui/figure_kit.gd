@@ -84,10 +84,10 @@ func build(rig: Node3D, viewport_host: Node) -> void:
 	helmet.add_child(brows)
 	for i: int in 2:
 		shoulders.append(_part(SkaterMeshBuilder.shared_shoulder_cap()))
-		# The thigh carries the hip joint's own dome; the knee ball closes the
-		# other end, where the thigh would otherwise stop short of the sock.
+		# The thigh carries the hip joint's own dome; the knee carries the sock
+		# up into the pant leg, where the thigh would otherwise stop short of it.
 		thighs.append(_part(SkaterMeshBuilder.shared_thigh()))
-		knees.append(_part(SkaterMeshBuilder.shared_knee_ball()))
+		knees.append(_part(SkaterMeshBuilder.shared_knee()))
 		socks.append(_part(SkaterMeshBuilder.shared_sock()))
 		collars.append(_part(SkaterMeshBuilder.shared_skate_assembly()))
 		boots.append(_part(SkaterMeshBuilder.shared_boot_assembly()))
