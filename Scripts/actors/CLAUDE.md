@@ -30,7 +30,9 @@ The analytic puck is a flat disc. `PuckSpinRig` gives the drawn one its spin,
 its wobble after a hit and its tumble in the air, reading only the position
 the puck is drawn at and who this peer draws carrying it
 (`PuckController.drawn_carrier`, through `Puck.set_carrier_view`). It writes
-the mesh's local transform on the tick and nothing else, so it needs no wire
+the mesh's local transform and the smear on the face print (`PuckPrint`, the
+Mitts skater over a bar, blurred across the angle the disc turns in a 60 fps
+frame) on the tick and nothing else, so it needs no wire
 bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
 relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
 nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
