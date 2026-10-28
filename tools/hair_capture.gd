@@ -13,7 +13,8 @@ extends SceneTree
 #
 # HAIR_PREVIEW_OUT (default user://hair_preview), HAIR_PREVIEW_SHOTS (comma
 # list of shot names), HAIR_PREVIEW_FACIALS (comma list of FACIAL_* indices,
-# default all), HAIR_PREVIEW_ZOOM (pixels per head, a multiple, default 1). MITTS_FACE (a GearModelRegistry FACE_* index, default bare),
+# default all), HAIR_PREVIEW_HAIRS (comma list of HAIR_* indices, default every
+# pickable one), HAIR_PREVIEW_ZOOM (pixels per head, a multiple, default 1). MITTS_FACE (a GearModelRegistry FACE_* index, default bare),
 # MITTS_SKIN (a SkinToneRegistry index) and MITTS_HAIR_COLOR (a
 # HairStyleRegistry colour) dress every head the same, so one run answers one
 # question — does the beard clear the cage, does blonde read on the lightest
@@ -65,6 +66,12 @@ func _init() -> void:
 	if _facial_cols.is_empty():
 		for style: int in HairStyleRegistry.facial_count():
 			_facial_cols.append(style)
+	var hairs: Array[int] = []
+	for raw: String in OS.get_environment("HAIR_PREVIEW_HAIRS").split(",", false):
+		if raw.is_valid_int() and HairStyleRegistry.is_valid_hair(int(raw)):
+			hairs.append(int(raw))
+	if not hairs.is_empty():
+		_hair_rows = hairs
 	for raw: String in OS.get_environment("HAIR_PREVIEW_SHOTS").split(",", false):
 		if _SHOTS.has(raw):
 			_shot_names.append(raw)

@@ -121,7 +121,8 @@ draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recover
 hair style against every facial-hair style, one head each, from the front, side,
 back, below and above, to `.preview/hair/` (`tools/hair_capture.gd`).
 `HAIR_PREVIEW_BARE=1` leaves the helmet shell off, which is how the scalp is
-judged; `HAIR_PREVIEW_FACIALS` and `HAIR_PREVIEW_ZOOM` narrow and enlarge it.
+judged; `HAIR_PREVIEW_HAIRS`, `HAIR_PREVIEW_FACIALS` and `HAIR_PREVIEW_ZOOM` narrow
+and enlarge it.
 
 **To see a STROKE, render a strip.** `.claude/hooks/render-strip.sh [scenarios]`
 skates scripted inputs (a start, a stride, a reach for a loose puck, a held arc,

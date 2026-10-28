@@ -105,17 +105,13 @@ const _BUZZ: Array[Vector3] = [
 	Vector3(180.0, 0.080, 0.0022),
 ]
 const _BUZZ_CROWN_M: float = 0.0022
-# Thick over the ears and the nape, flipping out all round a choppy bottom edge.
+# Thick over the ears and the nape, hanging to a blunt edge over the collar.
 const _SHAGGY: Array[Vector3] = [
-	Vector3(0.0, -0.162, 0.011),
-	Vector3(12.0, -0.149, 0.011),
-	Vector3(24.0, -0.163, 0.011),
-	Vector3(36.0, -0.148, 0.011),
-	Vector3(48.0, -0.160, 0.011),
-	Vector3(60.0, -0.144, 0.011),
-	Vector3(72.0, -0.146, 0.011),
-	Vector3(84.0, -0.116, 0.010),
-	Vector3(96.0, -0.112, 0.010),
+	Vector3(0.0, -0.158, 0.011),
+	Vector3(60.0, -0.150, 0.011),
+	Vector3(72.0, -0.144, 0.011),
+	Vector3(84.0, -0.118, 0.010),
+	Vector3(96.0, -0.110, 0.010),
 	Vector3(108.0, -0.084, 0.008),
 	Vector3(118.0, -0.074, 0.006),
 	Vector3(128.0, -0.048, 0.005),
@@ -126,11 +122,19 @@ const _SHAGGY: Array[Vector3] = [
 	Vector3(180.0, 0.068, 0.011),
 ]
 const _SHAGGY_CROWN_M: float = 0.012
+# How fast a style's hair may close in toward the neck as it falls below the
+# head's widest point (m in per m down): what falls faster hangs instead of
+# wrapping under the skull. Zero hugs the head all the way down.
+const _HUG: float = 0.0
+const _SHAGGY_HANG: float = 0.4
+# Between these azimuths from dead back (degrees) the hang gives way: in front
+# of the ear hair lies on the cheek, inside the face gear.
+const _HANG_FADE_DEG := Vector2(80.0, 100.0)
 # A style's kick at its ends, added to its lift below its first key: (height,
 # how far out), descending, eased between keys and held past the last.
 const _NO_FLARE: Array[Vector2] = []
 const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
-const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.06, 0.0), Vector2(-0.14, 0.018)]
+const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.10, 0.0), Vector2(-0.17, 0.012)]
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -220,19 +224,19 @@ static func shared_hair(style: int) -> ArrayMesh:
 	match HairStyleRegistry.worn_hair(style):
 		HairStyleRegistry.HAIR_SHORT:
 			return _shared("hair_short", func() -> ArrayMesh:
-				return _build_scalp(_SHORT, _SHORT_CROWN_M, _NO_FLARE))
+				return _build_scalp(_SHORT, _SHORT_CROWN_M, _HUG, _NO_FLARE))
 		HairStyleRegistry.HAIR_MEDIUM:
 			return _shared("hair_medium", func() -> ArrayMesh:
-				return _build_scalp(_MEDIUM, _MEDIUM_CROWN_M, _NO_FLARE))
+				return _build_scalp(_MEDIUM, _MEDIUM_CROWN_M, _HUG, _NO_FLARE))
 		HairStyleRegistry.HAIR_MULLET:
 			return _shared("hair_mullet", func() -> ArrayMesh:
-				return _build_scalp(_MULLET, _MULLET_CROWN_M, _MULLET_FLARE))
+				return _build_scalp(_MULLET, _MULLET_CROWN_M, _HUG, _MULLET_FLARE))
 		HairStyleRegistry.HAIR_BUZZ:
 			return _shared("hair_buzz", func() -> ArrayMesh:
-				return _build_scalp(_BUZZ, _BUZZ_CROWN_M, _NO_FLARE))
+				return _build_scalp(_BUZZ, _BUZZ_CROWN_M, _HUG, _NO_FLARE))
 		HairStyleRegistry.HAIR_SHAGGY:
 			return _shared("hair_shaggy", func() -> ArrayMesh:
-				return _build_scalp(_SHAGGY, _SHAGGY_CROWN_M, _SHAGGY_FLARE))
+				return _build_scalp(_SHAGGY, _SHAGGY_CROWN_M, _SHAGGY_HANG, _SHAGGY_FLARE))
 		_:
 			return null
 
@@ -310,7 +314,7 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 
 # ── Builders ────────────────────────────────────────────────────────────────
 
-static func _build_scalp(keys: Array[Vector3], crown: float,
+static func _build_scalp(keys: Array[Vector3], crown: float, hang: float,
 		flare: Array[Vector2]) -> ArrayMesh:
 	var hairline := PackedVector2Array()
 	for deg: int in range(-180, 181):
@@ -329,9 +333,41 @@ static func _build_scalp(keys: Array[Vector3], crown: float,
 	var key_th := PackedFloat32Array()
 	for k: Vector3 in keys:
 		key_th.append_array(_mirrored(0.0, k.x))
+	var settle := Callable()
+	if hang > 0.0:
+		settle = func(strip: PackedVector3Array) -> PackedVector3Array:
+			return _hang(strip, hang, shell)
 	var st := _begin()
-	_emit_shell(st, -PI, PI, _SCALP_ROW_M, span, lift, key_th)
+	_emit_shell(st, -PI, PI, _SCALP_ROW_M, span, lift, key_th, PackedFloat32Array(),
+			Rect2(), settle)
 	return st.commit()
+
+
+# One column of a scalp, crown down, with each point held out from the head's
+# axis to no less than the point above it less `hang` per metre fallen — unless
+# that would carry it through the helmet shell.
+static func _hang(strip: PackedVector3Array, hang: float,
+		shell: PackedVector3Array) -> PackedVector3Array:
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
+	var last: Vector3 = strip[strip.size() - 1] - centre
+	var held: float = _ramp(rad_to_deg(absf(atan2(last.x, last.z))),
+			_HANG_FADE_DEG.y, _HANG_FADE_DEG.x)
+	if held <= 0.0:
+		return strip
+	hang /= held
+	for i: int in range(1, strip.size()):
+		var above: Vector3 = strip[i - 1] - centre
+		var p: Vector3 = strip[i] - centre
+		var across := Vector2(p.x, p.z)
+		var floor_m: float = Vector2(above.x, above.z).length() - hang * (above.y - p.y)
+		if across.length() >= floor_m or across.length_squared() < 1e-12:
+			continue
+		across = across.normalized() * floor_m
+		var hung: Vector3 = centre + Vector3(across.x, p.y, across.y)
+		if _shell_room(shell, Vector3.ZERO, hung.normalized()) - hung.length() < _SHELL_GAP_M:
+			continue
+		strip[i] = hung
+	return strip
 
 
 # How far (m, over the head's surface) the point at (θ, y) is from the
@@ -410,9 +446,10 @@ static func _begin() -> SurfaceTool:
 # heights shared by every strip, clamped into each strip's own span, so a
 # crease's row lines up across them. `cut_th` and `cut_y` add grid lines, and
 # quads whose surface centre falls in `hole` (head-local x, y) are left out.
+# `settle(strip)`, if given, has the last word on each column's points.
 static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 		span: Callable, lift: Callable, cut_th := PackedFloat32Array(),
-		cut_y := PackedFloat32Array(), hole := Rect2()) -> void:
+		cut_y := PackedFloat32Array(), hole := Rect2(), settle := Callable()) -> void:
 	var cols: Array[Vector2] = _azimuth_samples(th0, th1, cut_th)
 	var thetas := PackedFloat32Array()
 	var rims := PackedFloat32Array()
@@ -443,7 +480,7 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 			var at: Vector3 = _point(cols[k], y, 0.0)
 			under.append(at)
 			strip.append(_point(cols[k], y, lift.call(thetas[k], t, y, rims[k], at)))
-		grid.append(strip)
+		grid.append(settle.call(strip) if settle.is_valid() else strip)
 		bare.append(under)
 	for k: int in grid.size() - 1:
 		for i: int in heights.size() - 1:

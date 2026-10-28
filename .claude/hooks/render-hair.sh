@@ -7,6 +7,7 @@
 #   .claude/hooks/render-hair.sh below_front,side       # named shots
 #   HAIR_PREVIEW_BARE=1 .claude/hooks/render-hair.sh    # the helmet shell left off
 #   HAIR_PREVIEW_FACIALS=0 .claude/hooks/render-hair.sh # one facial column
+#   HAIR_PREVIEW_HAIRS=6 .claude/hooks/render-hair.sh    # one hair row
 #
 # Godot's own --headless is a DUMMY renderer: it draws nothing and captures
 # come back blank. Without a GPU this runs under xvfb-run on the Compatibility
