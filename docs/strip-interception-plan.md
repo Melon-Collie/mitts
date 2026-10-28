@@ -36,14 +36,17 @@ What it leaves out on purpose:
   defenders are read together — one dodge has to clear all of them, so two men
   either side shut a gap neither shuts alone — and the margin is the deepest
   stick at his best escape.
-- **From margin to odds** (`strip_odds`): `DEAD_ON_STRIP · clamp(0.5 + (margin −
-  ESCAPE_SET_M) / (2 ESCAPE_BAND_M))` — 0.84 deep inside, even odds 0.73 m
-  inside his reach (a blade's length and the poke's contact past its tip),
-  graded across 1.40 m either side.
-- **One chance per path** (`path_keep`, `carry_keep`): the deepest margin over
-  the window, and at the path's end each defender's race, `chance_at` taken with
-  the odds a set stick strips (`SET_STRIP`, 0.88), a separate chance each.
-  However long the puck stays in reach, the window is the one chance.
+- **From margin to odds** (`strip_odds`): one poke takes it at `DEAD_ON_STRIP ·
+  clamp(0.5 + (margin − ESCAPE_SET_M) / (2 ESCAPE_BAND_M))` — 0.77 deep inside,
+  even odds 1.23 m inside his reach, graded across 1.89 m either side — and he
+  gets a poke more for every `POKE_CYCLE_S` (0.31 s, about a jab's cycle) his
+  stick stays on the carrier: the chord of his reach the carrier crosses at
+  their closing speed, to the end of the window (`last_dwell_s`). A man met head
+  on passes through in a blink; one skating with the carrier stays on him.
+- **The path's read** (`path_keep`, `carry_keep`): the deepest margin over the
+  window with its time on him, and at the path's end each defender's race,
+  `chance_at` taken with the odds a set stick strips (`SET_STRIP`, 0.88), a
+  separate chance each.
 - **Where a loss happens** (`carry_strip_point`, the carry search's rolled
   moves): the first point the defence takes it at with even odds, else the one
   it comes nearest to, weighted with each defender's race to the end.
@@ -120,13 +123,14 @@ behind — the losses inside 1 s by how deep the escape is:
 | 1.5 to 2 | 0.77 |
 | 2 and deeper | 0.84–0.87 |
 
-`strip_odds` is that grade, fit by likelihood (AUC 0.960; 438 losses expected
-against 437). By family, real / expected: run down 113 / 94, straight lane
-91 / 112, cut 122 / 111, stand 52 / 55, pair 49 / 57, chased 10 / 4, side 0 /
-4.5. What it does not see: a chaser who stays just inside reach gets several
-pokes, and one chance reads only his deepest — a chance every 0.1 s in reach
-fits a little better, at several times the cost in the carry search, and is
-not used.
+`strip_odds` is that grade with the time on him, fit by likelihood (AUC 0.962;
+441 losses expected against 437). By family, real / expected: run down 113 / 95,
+straight lane 91 / 110, cut 122 / 122, stand 52 / 49, pair 49 / 56, chased 10 /
+5, side 0 / 3. Read at the deepest moment only, it costs nothing over one chance;
+a fresh chance every 0.1 s in reach fits no better, at several times the cost in
+the carry search. What it does not see yet: a man trailing the carrier is still
+read short (chased, run down) and one met head on long (straight lane), more
+than his time in reach explains.
 
 The share of the defender's range it replaced (the distance over his blade's
 reach and the ground he skates toward the point) had no carrier in it: it

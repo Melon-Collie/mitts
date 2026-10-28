@@ -16,10 +16,10 @@ func test_a_man_who_cannot_get_there_first_takes_nothing() -> void:
 	assert_eq(_keep(far, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0), 1.0)
 
 
-func test_a_stick_on_the_path_takes_it_at_the_dead_on_odds() -> void:
+func test_a_man_on_the_path_takes_it_at_better_than_even_odds() -> void:
 	var on: Array[Vector3] = [Vector3(0, 0, -6)]
-	assert_almost_eq(_keep(on, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0),
-			1.0 - AIStripOdds.DEAD_ON_STRIP, 1e-6)
+	assert_lt(_keep(on, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0),
+			1.0 - 0.5 * AIStripOdds.DEAD_ON_STRIP)
 
 
 func test_the_further_off_his_line_the_safer_and_out_of_his_reach_none() -> void:
@@ -36,6 +36,7 @@ func test_the_further_off_his_line_the_safer_and_out_of_his_reach_none() -> void
 
 
 func test_the_odds_climb_with_how_deep_in_his_reach_the_escape_is() -> void:
+	# One poke's odds (no time on him beyond it).
 	var set_m: float = AIStripOdds.ESCAPE_SET_M
 	var band: float = AIStripOdds.ESCAPE_BAND_M
 	assert_almost_eq(AIStripOdds.strip_odds(set_m), 0.5 * AIStripOdds.DEAD_ON_STRIP, 1e-6)
@@ -159,13 +160,36 @@ func test_where_the_carry_is_going_is_read_past_the_window() -> void:
 			1.0 - AIStripOdds.SET_STRIP, 1e-6)
 
 
-func test_a_man_gets_one_chance_however_long_the_puck_is_in_his_reach() -> void:
-	# Skating straight through him slowly or quickly, he has the one chance.
-	var him: Array[Vector3] = [Vector3(0, 0, -4)]
-	var slow: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -5), 1.0)
-	var fast: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -8), 1.0)
-	assert_almost_eq(slow, fast, 1e-6)
-	assert_almost_eq(slow, 1.0 - AIStripOdds.DEAD_ON_STRIP, 1e-6)
+func test_the_slower_the_carrier_passes_his_stick_the_more_pokes() -> void:
+	# The same stick on the same spot at the same moment: a slower carrier is on
+	# it longer.
+	var him: Array[Vector3] = [Vector3(0, 0, -2)]
+	var m_slow: float = AIStripOdds.escape_margin(Vector3(0, 0, -2), Vector3(0, 0, -3), 0.3, him,
+			_still)
+	var slow: float = AIStripOdds.last_dwell_s
+	var m_fast: float = AIStripOdds.escape_margin(Vector3(0, 0, -2), Vector3(0, 0, -8), 0.3, him,
+			_still)
+	var fast: float = AIStripOdds.last_dwell_s
+	assert_almost_eq(m_slow, m_fast, 1e-6, "his stick is as deep either way")
+	assert_gt(slow, fast)
+	assert_gt(AIStripOdds.strip_odds(m_slow, slow), AIStripOdds.strip_odds(m_fast, fast))
+
+
+func test_a_man_skating_with_the_carrier_gets_more_pokes_than_one_meeting_him() -> void:
+	# The same stick depth on the carrier: met head on, he passes through it; at
+	# the carrier's own pace, he stays on him.
+	var plan := Vector3(0, 0, -6)
+	var him: Array[Vector3] = [Vector3(1.5, 0, -3)]
+	var meeting: Array[Vector3] = [Vector3(0, 0, 6)]
+	var riding: Array[Vector3] = [plan]
+	var m_meet: float = AIStripOdds.escape_margin(Vector3(0, 0, -3), plan, 0.5, him, meeting)
+	var dwell_meet: float = AIStripOdds.last_dwell_s
+	var m_ride: float = AIStripOdds.escape_margin(Vector3(0, 0, -3), plan, 0.5, him, riding)
+	var dwell_ride: float = AIStripOdds.last_dwell_s
+	assert_gt(dwell_ride, dwell_meet)
+	assert_gt(AIStripOdds.strip_odds(1.0, dwell_ride), AIStripOdds.strip_odds(1.0, dwell_meet))
+	assert_gt(m_meet, -INF)
+	assert_gt(m_ride, -INF)
 
 
 func test_the_path_keep_reads_as_the_carry_keep() -> void:

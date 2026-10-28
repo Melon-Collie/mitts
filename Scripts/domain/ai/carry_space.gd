@@ -441,8 +441,8 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 
 
 # Where a carry is stripped, if it is: in its first AIStripOdds.COMMIT_S, the
-# first point the defence takes it at with even odds, else the one it comes
-# nearest to; where it ends, each defender's race to it — weighted
+# first point a poke takes it at with even odds, else the one it comes nearest
+# to; where it ends, each defender's race to it — weighted
 # by the odds of each, so a strip surrenders the puck in the traffic it was
 # skating through, not at the safe spot it was headed for. `covered_only`: how far
 # the carry gets — the first point the defence takes it at with better than even
@@ -460,6 +460,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 	var read: int = AIStripOdds.committed_steps(arrival_time, steps)
 	var plan_vel: Vector3 = (to - from) / arrival_time
 	var best_m: float = -INF
+	var dwell: float = 0.0
 	var best_p: Vector3 = to
 	var first: bool = false
 	for k: int in read:
@@ -469,16 +470,18 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 				start_s + arrival_time * f - projected_s, opponents, opponent_vels,
 				opponent_caps, carrier_caps, arrival_time * f)
 		if covered_only:
-			if AIStripOdds.strip_odds(m) > 0.5:
+			if AIStripOdds.strip_odds(m, AIStripOdds.last_dwell_s) > 0.5:
 				return p
 			continue
 		if not first and (m > best_m or m >= AIStripOdds.ESCAPE_SET_M):
 			best_p = p
 			first = m >= AIStripOdds.ESCAPE_SET_M
-		best_m = maxf(best_m, m)
+		if m > best_m:
+			best_m = m
+			dwell = AIStripOdds.last_dwell_s
 	if covered_only:
 		return to
-	var lost: float = AIStripOdds.strip_odds(best_m)
+	var lost: float = AIStripOdds.strip_odds(best_m, dwell)
 	var at: Vector3 = best_p * lost
 	if read < steps and not first:
 		var has_caps: bool = opponent_caps.size() == opponents.size()

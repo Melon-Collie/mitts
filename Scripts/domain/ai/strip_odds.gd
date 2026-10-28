@@ -16,20 +16,26 @@ class_name AIStripOdds
 const SET_S: float = 0.25
 # The odds a stick set on the path strips a carrier who keeps to it.
 const SET_STRIP: float = 0.88
-# A carrier dodging them: the odds the defence takes the puck by how deep inside a
+# A carrier dodging them: the odds one poke takes the puck by how deep inside a
 # stick's reach his best escape is — DEAD_ON_STRIP deep inside, even odds of
-# that ESCAPE_SET_M inside (a blade's length and the poke's contact past its
-# tip), graded across ESCAPE_BAND_M either side — the losses inside COMMIT_S
-# against an interceptor the carrier dodges, fit by likelihood.
-const DEAD_ON_STRIP: float = 0.84
-const ESCAPE_SET_M: float = 0.73
-const ESCAPE_BAND_M: float = 1.40
+# that ESCAPE_SET_M inside, graded across ESCAPE_BAND_M either side — and a poke
+# more for every POKE_CYCLE_S the stick stays on him: the losses inside
+# COMMIT_S against an interceptor the carrier dodges, fit by likelihood.
+const DEAD_ON_STRIP: float = 0.77
+const ESCAPE_SET_M: float = 1.23
+const ESCAPE_BAND_M: float = 1.89
+const POKE_CYCLE_S: float = 0.31
 # A carrier dodges off his line with his whole thrust from this planned pace
 # (m/s), ramping in from none on a plan that stands: holding a spot, a dodge
 # leaves it, and leaving it is another plan.
 const DODGE_FULL_PACE_M_S: float = 1.0
 # A straight carry's samples (s).
 const DWELL_STEP_S: float = 0.1
+
+# How long the deepest stick at the carrier's best escape stays on him, left by
+# the last escape_margin: across his reach at their closing speed, to the end of
+# COMMIT_S.
+static var last_dwell_s: float = 0.0
 # How much of a path a keep read looks at, from where the read starts (s): the
 # carrier re-plans many times a second, and inside this he cannot get out of a
 # stick's reach however he re-plans (his reaction, then sliding a blade's reach
@@ -65,7 +71,8 @@ static func chance_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vec
 # either way as far as his thrust and top speed (`carrier_caps`, null: the
 # league build) take him in that time, ramped in by DODGE_FULL_PACE_M_S —
 # against the deepest of `defenders` (index-matched `vels`, and `caps` or empty
-# for the league build) at each.
+# for the league build) at each. Leaves how long that stick stays on him in
+# last_dwell_s.
 static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
 		carrier_caps: AISkaterCaps = null, on_plan_s: float = -1.0) -> float:
@@ -80,29 +87,59 @@ static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
 	var side := Vector3(-plan_vel.z / pace, 0.0, plan_vel.x / pace) if pace > 1e-6 \
 			else Vector3.ZERO
 	var has_caps: bool = caps.size() == defenders.size()
+	var plan_t: float = t if on_plan_s < 0.0 else on_plan_s
 	# His escapes: either way off his line as far as he gets, or holding it.
 	var best: float = INF
+	var at := Vector3.ZERO
+	var by: int = -1
+	var by_reach: float = 0.0
 	for j: int in (3 if dodge > 0.0 else 1):
 		var escape: Vector3 = point + side * (dodge * (j - 1)) if dodge > 0.0 else point
 		var worst: float = -INF
+		var worst_i: int = -1
+		var worst_reach: float = 0.0
 		for i: int in defenders.size():
-			worst = maxf(worst, _depth(defenders[i], vels[i], caps[i] if has_caps else null,
-					escape, t))
-		best = minf(best, worst)
+			var rd: Vector2 = _reach(defenders[i], vels[i], caps[i] if has_caps else null,
+					escape, t)
+			if rd.x - rd.y > worst:
+				worst = rd.x - rd.y
+				worst_i = i
+				worst_reach = rd.x
+		if worst < best:
+			best = worst
+			at = escape
+			by = worst_i
+			by_reach = worst_reach
+	last_dwell_s = 0.0
+	if by >= 0:
+		var rel := Vector3(plan_vel.x - vels[by].x, 0.0, plan_vel.z - vels[by].z)
+		var rel_speed: float = rel.length()
+		var miss: float = 0.0
+		if rel_speed > 1e-3:
+			var off: Vector3 = at - defenders[by] - vels[by] * t
+			miss = absf(off.x * rel.z - off.z * rel.x) / rel_speed
+		var chord: float = 2.0 * sqrt(maxf(by_reach * by_reach - miss * miss, 0.0))
+		last_dwell_s = minf(chord / maxf(rel_speed, 1e-3), COMMIT_S - plan_t + DWELL_STEP_S)
 	return best
 
 
-# The odds the defence takes the puck from an escape margin (escape_margin).
-static func strip_odds(margin: float) -> float:
-	return DEAD_ON_STRIP * clampf(0.5 + (margin - ESCAPE_SET_M) / (2.0 * ESCAPE_BAND_M), 0.0,
-			1.0)
+# The odds the defence takes the puck from an escape margin, its stick on him for
+# `dwell_s` (escape_margin, last_dwell_s): a poke at those odds, and another
+# every POKE_CYCLE_S.
+static func strip_odds(margin: float, dwell_s: float = 0.0) -> float:
+	var poke: float = DEAD_ON_STRIP * clampf(0.5 + (margin - ESCAPE_SET_M) / (2.0 * ESCAPE_BAND_M),
+			0.0, 1.0)
+	if poke <= 0.0:
+		return 0.0
+	return 1.0 - pow(1.0 - poke, 1.0 + maxf(dwell_s, 0.0) / POKE_CYCLE_S)
 
 
-# How far inside the reach of a defender at `pos` moving `vel`, built as `caps`,
-# `point` is `t` after his read: his blade's reach and his own thrust to his top
-# speed toward it, beyond where his drift has him by then.
-static func _depth(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
-		t: float) -> float:
+# A defender at `pos` moving `vel`, built as `caps`, `t` after his read: how far
+# from where his drift has him by then his stick gets toward `point` — his
+# blade's reach and his own thrust to his top speed that way (x) — and how far
+# the point is from there (y).
+static func _reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
+		t: float) -> Vector2:
 	var reach: float = caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
 	var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
@@ -110,7 +147,7 @@ static func _depth(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector
 	var wz: float = point.z - pos.z - vel.z * t
 	var d: float = sqrt(wx * wx + wz * wz)
 	var toward: float = minf((vel.x * wx + vel.z * wz) / d, top) if d > 1e-6 else 0.0
-	return reach + _skated(toward, t, top, accel) - d
+	return Vector2(reach + _skated(toward, t, top, accel), d)
 
 
 # How much further than his drift a skater moving `speed` along a line gets
@@ -136,6 +173,7 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 	if n == 0 or defenders.is_empty():
 		return 1.0
 	var margin: float = -INF
+	var dwell: float = 0.0
 	for k: int in n:
 		if times[k] > window_s + 1e-6:
 			continue
@@ -143,9 +181,12 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 		var b: int = mini(k + 1, n - 1)
 		var plan_vel: Vector3 = (points[b] - points[a]) / (times[b] - times[a]) if b > a \
 				else Vector3.ZERO
-		margin = maxf(margin, escape_margin(points[k], plan_vel, times[k] - elapsed_s,
-				defenders, vels, caps, carrier_caps, times[k]))
-	var keep: float = 1.0 - strip_odds(margin)
+		var m: float = escape_margin(points[k], plan_vel, times[k] - elapsed_s, defenders, vels,
+				caps, carrier_caps, times[k])
+		if m > margin:
+			margin = m
+			dwell = last_dwell_s
+	var keep: float = 1.0 - strip_odds(margin, dwell)
 	if times[n - 1] > window_s + 1e-6:
 		keep *= _race_keep(points[n - 1], times[n - 1] - elapsed_s, defenders, vels, caps)
 	return keep
@@ -165,12 +206,16 @@ static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 	var read: int = committed_steps(arrival_time, steps)
 	var plan_vel: Vector3 = (to - from) / arrival_time
 	var margin: float = -INF
+	var dwell: float = 0.0
 	for k: int in read:
 		var f: float = float(k + 1) / steps
-		margin = maxf(margin, escape_margin(from.lerp(to, f), plan_vel,
+		var m: float = escape_margin(from.lerp(to, f), plan_vel,
 				start_s + arrival_time * f - elapsed_s, defenders, vels, caps, carrier_caps,
-				arrival_time * f))
-	var keep: float = 1.0 - strip_odds(margin)
+				arrival_time * f)
+		if m > margin:
+			margin = m
+			dwell = last_dwell_s
+	var keep: float = 1.0 - strip_odds(margin, dwell)
 	if read < steps:
 		keep *= _race_keep(to, start_s + arrival_time - elapsed_s, defenders, vels, caps)
 	return keep

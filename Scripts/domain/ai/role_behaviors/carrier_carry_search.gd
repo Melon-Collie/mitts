@@ -502,14 +502,15 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 # setting off `start_s` from now against the defence as it is now: the carrier's
 # best escape over the move's skated samples (AIStripOdds.escape_margin), each
 # sample at its own time and pace. Leaves where a loss is expected in
-# _strip_point (INF: none) — the first sample the defence takes it at with even
-# odds, else the one nearest to it — and when, from the start of the move, in
+# _strip_point (INF: none) — the first sample a poke takes it at with even odds,
+# else the one nearest to it — and when, from the start of the move, in
 # _strip_t.
 func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3,
 		reach: int = AICarryRollout.SAMPLES, start_s: float = 0.0) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var carrier_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 	var best_m: float = -INF
+	var dwell: float = 0.0
 	var best_p := Vector3.ZERO
 	var best_t: float = 0.0
 	var first: bool = false
@@ -523,8 +524,10 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 			best_p = p
 			best_t = t
 			first = margin >= AIStripOdds.ESCAPE_SET_M
-		best_m = maxf(best_m, margin)
-	var lost: float = AIStripOdds.strip_odds(best_m)
+		if margin > best_m:
+			best_m = margin
+			dwell = AIStripOdds.last_dwell_s
+	var lost: float = AIStripOdds.strip_odds(best_m, dwell)
 	_strip_point = best_p if lost > 1e-4 else Vector3.INF
 	_strip_t = best_t if lost > 1e-4 else 0.0
 	return 1.0 - lost

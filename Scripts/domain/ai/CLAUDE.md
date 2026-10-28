@@ -721,8 +721,10 @@ remains.
     the arrival clock's error (`chance_at`, measured against a worst-case
     interceptor); a crossing of the line held before he arrives is shut, which
     is what makes getting there sooner worth more than the time discount. A
-    chase down in between is a later decision's. One chance however long the
-    puck is in reach; never measured against our defending bots. Never read
+    chase down in between is a later decision's. The deepest stick gets a poke
+    more for every cycle of a jab it stays on him (`POKE_CYCLE_S`), so a man
+    skating with the carrier takes more than one met head on; never measured
+    against our defending bots. Never read
     where a defender might be as a spread that thins with how far ahead it looks: an entry read from
     further back then looks easier, and the carrier backs off to re-approach.
   - The **shot on a carry's arrival** reads a man behind the carry, skating its

@@ -101,8 +101,8 @@ func _coverage(defs: Array[Vector3], vels: Array[Vector3], caps: Array, ahead: f
 		var x: float = -GRID_X
 		while x <= GRID_X + 1e-6:
 			var p := Vector3(x, 0.0, z)
-			row.append(snappedf(AIStripOdds.strip_odds(AIStripOdds.escape_margin(p, Vector3.ZERO,
-					ahead, defs, vels, caps)), 0.001))
+			var margin: float = AIStripOdds.escape_margin(p, Vector3.ZERO, ahead, defs, vels, caps)
+			row.append(snappedf(AIStripOdds.strip_odds(margin, AIStripOdds.last_dwell_s), 0.001))
 			x += GRID_M
 		rows.append(row)
 		z -= GRID_M

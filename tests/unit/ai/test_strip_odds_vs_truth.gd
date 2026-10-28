@@ -25,8 +25,8 @@ const MAX_EXPECTED_RATIO_ERR: float = 0.05
 const FAMILY_SLACK_LOST: float = 0.4
 const FAMILY_SLACK_RUNS: float = 0.04
 # The families the read is known to misjudge, and by at most how many losses: a
-# chaser who stays just inside reach gets several pokes, and one chance per path
-# reads only his deepest.
+# man trailing the carrier is read short, by more than his time in reach
+# explains.
 const FAMILY_KNOWN_GAP: Dictionary = {"chased": 6.0}
 const BANK_MARGIN: float = 0.02
 
