@@ -88,6 +88,16 @@ static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
 			else Vector3.ZERO
 	var has_caps: bool = caps.size() == defenders.size()
 	var plan_t: float = t if on_plan_s < 0.0 else on_plan_s
+	# The men who could take it: a stick that cannot get within the odds' floor of
+	# any escape changes nothing, whichever is deepest.
+	var near: int = 0
+	for i: int in defenders.size():
+		if _could_reach(defenders[i], vels[i], caps[i] if has_caps else null, point, t,
+				dodge + ESCAPE_BAND_M - ESCAPE_SET_M):
+			near |= 1 << i
+	last_dwell_s = 0.0
+	if near == 0:
+		return -INF
 	# His escapes: either way off his line as far as he gets, or holding it.
 	var best: float = INF
 	var at := Vector3.ZERO
@@ -99,6 +109,8 @@ static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
 		var worst_i: int = -1
 		var worst_reach: float = 0.0
 		for i: int in defenders.size():
+			if near & (1 << i) == 0:
+				continue
 			var rd: Vector2 = _reach(defenders[i], vels[i], caps[i] if has_caps else null,
 					escape, t)
 			if rd.x - rd.y > worst:
@@ -110,7 +122,6 @@ static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
 			at = escape
 			by = worst_i
 			by_reach = worst_reach
-	last_dwell_s = 0.0
 	if by >= 0:
 		var rel := Vector3(plan_vel.x - vels[by].x, 0.0, plan_vel.z - vels[by].z)
 		var rel_speed: float = rel.length()
@@ -148,6 +159,20 @@ static func _reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector
 	var d: float = sqrt(wx * wx + wz * wz)
 	var toward: float = minf((vel.x * wx + vel.z * wz) / d, top) if d > 1e-6 else 0.0
 	return Vector2(reach + _skated(toward, t, top, accel), d)
+
+
+# Whether a defender at `pos` moving `vel`, built as `caps`, could have his
+# stick within `slack` of `point` `t` after his read: his reach at its longest,
+# whichever way it points.
+static func _could_reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
+		t: float, slack: float) -> bool:
+	var reach: float = caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+	var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var wx: float = point.x - pos.x - vel.x * t
+	var wz: float = point.z - pos.z - vel.z * t
+	var longest: float = reach + _skated(-top, t, top, accel) + slack
+	return wx * wx + wz * wz < longest * longest
 
 
 # How much further than his drift a skater moving `speed` along a line gets
