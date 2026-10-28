@@ -1113,16 +1113,18 @@ func test_lane_loss_point_is_on_the_path() -> void:
 
 
 func test_lane_loss_point_finite_for_close_release_defender() -> void:
-	# Companion to the lane_clear close-defender regression: a defender 1 m
-	# in front of the passer on the line now produces a finite loss point
-	# (the old model returned INF here, zeroing the turnover cost). The
-	# pick spot is right where they stand, ~1 m down the line.
+	# A defender 1 m in front of the passer on the line produces a finite loss
+	# point, so the turnover is priced. The puck reaches him before he can set
+	# his stick (AIStripOdds.SET_S, even read off the windup), so the pick is
+	# down the lane from him — and well short of the receiver.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 12.0)
 	var close_on_line: Array[Vector3] = [Vector3(0.0, 0.0, 1.0)]
 	var p: Vector3 = AIPuckLane.lane_loss_point(from, to, close_on_line, AIPuckLane.PASS_SPEED_M_S)
 	assert_true(p.is_finite(), "a close on-line defender yields a real interception point")
-	assert_almost_eq(p.z, 1.0, 0.1, "the pick happens right where the defender stands")
+	assert_almost_eq(p.x, 0.0, 0.001, "the pick is on the lane")
+	assert_gt(p.z, 1.0, "the pick is past where he stands: his stick is not yet set as it reaches him")
+	assert_lt(p.z, to.z * 0.5, "the pick is well short of the receiver")
 
 
 func test_lane_loss_point_prices_a_lane_only_the_planted_interceptor_blocks() -> void:
