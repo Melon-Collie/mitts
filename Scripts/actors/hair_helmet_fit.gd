@@ -37,21 +37,30 @@ static func room(shell: PackedVector3Array, at: Vector3, dir: Vector3) -> float:
 # gear.
 static func drape(strip: PackedVector3Array, hang: float, kick: Callable,
 		shell: PackedVector3Array) -> PackedVector3Array:
-	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
-	var last: Vector3 = strip[strip.size() - 1] - centre
+	var last: Vector3 = strip[strip.size() - 1] \
+			+ Vector3(0.0, 0.0, SkaterMeshBuilder.HEAD_FORWARD_M)
 	var held: float = smoothstep(_HANG_FADE_DEG.y, _HANG_FADE_DEG.x,
 			rad_to_deg(absf(atan2(last.x, last.z))))
 	if hang > 0.0 and held > 0.0:
-		var rate: float = hang / held
-		for i: int in range(1, strip.size()):
-			var above: Vector3 = strip[i - 1] - centre
-			var p: Vector3 = strip[i] - centre
-			var floor_m: float = Vector2(above.x, above.z).length() - rate * (above.y - p.y)
-			strip[i] = _held_out(strip[i], floor_m - Vector2(p.x, p.z).length(), shell)
+		strip = hang_from(strip, hang / held, shell)
 	for i: int in strip.size():
 		var p: Vector3 = strip[i]
 		var below_rim: float = SkaterMeshBuilder.helmet_rim_y(atan2(p.x, p.z)) - p.y
 		strip[i] = _held_out(p, minf(kick.call(p.y), below_rim * _RIM_SPRING), shell)
+	return strip
+
+
+# One column, top down, each point held out from the head's axis to no less
+# than the point above it less `rate` per metre fallen, no further than the
+# shell and the face gear allow.
+static func hang_from(strip: PackedVector3Array, rate: float,
+		shell: PackedVector3Array) -> PackedVector3Array:
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
+	for i: int in range(1, strip.size()):
+		var above: Vector3 = strip[i - 1] - centre
+		var p: Vector3 = strip[i] - centre
+		var floor_m: float = Vector2(above.x, above.z).length() - rate * (above.y - p.y)
+		strip[i] = _held_out(strip[i], floor_m - Vector2(p.x, p.z).length(), shell)
 	return strip
 
 

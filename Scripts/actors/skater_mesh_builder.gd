@@ -1215,7 +1215,7 @@ static func face_gear_room(at: Vector3, dir: Vector3) -> float:
 	var t: float = -b + sqrt(maxf(b * b - at.length_squared() + radius * radius, 0.0))
 	var hit: Vector3 = at + dir * t
 	var off_front: float = absf(wrapf(atan2(hit.x, hit.z) - PI, -PI, PI))
-	if off_front > _FISHBOWL_HALF_ARC or hit.y < radius * cos(PI * _FISHBOWL_V1):
+	if off_front > _FISHBOWL_HALF_ARC or hit.y < _FACE_SHIELD_RADIUS * cos(PI * _FISHBOWL_V1):
 		return INF
 	return t
 

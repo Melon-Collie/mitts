@@ -24,15 +24,12 @@ const _FACES: Array[int] = [GearModelRegistry.FACE_NONE, GearModelRegistry.FACE_
 	GearModelRegistry.FACE_CAGE, GearModelRegistry.FACE_FISHBOWL]
 
 
-# Every facial shell, once each: a style may wear a different one under a
-# different piece of face gear.
 func _facials() -> Array[ArrayMesh]:
 	var out: Array[ArrayMesh] = []
-	for face: int in _FACES:
-		for style: int in HairStyleRegistry.facial_count():
-			var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style, face)
-			if mesh != null and not out.has(mesh):
-				out.append(mesh)
+	for style: int in HairStyleRegistry.facial_count():
+		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
+		if mesh != null:
+			out.append(mesh)
 	return out
 
 
@@ -59,18 +56,17 @@ func test_every_style_but_the_bare_ones_has_geometry() -> void:
 		else:
 			assert_not_null(mesh, "hair style %d has a shell" % style)
 			assert_gt(_verts(mesh).size(), 0)
-	for face: int in _FACES:
-		for style: int in HairStyleRegistry.facial_count():
-			var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style, face)
-			if style == HairStyleRegistry.FACIAL_NONE:
-				assert_null(mesh, "no facial hair grows nothing")
-			else:
-				assert_not_null(mesh, "facial style %d has a shell under face %d" % [style, face])
+	for style: int in HairStyleRegistry.facial_count():
+		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
+		if style == HairStyleRegistry.FACIAL_NONE:
+			assert_null(mesh, "no facial hair grows nothing")
+		else:
+			assert_not_null(mesh, "facial style %d has a shell" % style)
 	assert_eq(SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_LONG),
 			SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_SHAGGY),
 			"a retired style is drawn as its stand-in")
 	assert_null(SkaterHairMesh.shared_hair(99), "a forged index renders bald")
-	assert_null(SkaterHairMesh.shared_facial_hair(-1, GearModelRegistry.FACE_NONE),
+	assert_null(SkaterHairMesh.shared_facial_hair(-1),
 			"a forged index renders clean")
 
 
@@ -129,15 +125,14 @@ func test_no_scalp_edge_crosses_the_helmet_shell() -> void:
 
 # The face gear rides a sphere a centimetre or so off the head (the same bound
 # test_skater_face_mesh.gd holds the face to), down to its lower edge. Facial
-# hair worn under a piece lives inside it above that edge, and may hang out
-# past it below; scalp hair only meets it at the sideburns, inside the
+# hair lives inside every piece above that piece's edge, and may hang out past
+# it below; scalp hair only meets it at the sideburns, inside the
 # fishbowl's footprint — the widest and deepest of the three pieces.
 func test_hair_stays_inside_the_face_gear() -> void:
 	for face: int in _FACES.slice(1):
 		var bound: Vector2 = _gear_bound(face)
 		var worn: Array[ArrayMesh] = [SkaterHairMesh.shared_brows()]
-		for style: int in range(1, HairStyleRegistry.facial_count()):
-			worn.append(SkaterHairMesh.shared_facial_hair(style, face))
+		worn.append_array(_facials())
 		for mesh: ArrayMesh in worn:
 			var worst: float = 0.0
 			for v: Vector3 in _verts(mesh):

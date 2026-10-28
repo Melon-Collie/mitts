@@ -281,7 +281,7 @@ func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
 	scalp.mesh = SkaterHairMesh.shared_hair(gear.hair_style)
 	scalp.material_override = SkaterHairMesh.make_material(gear.hair_color,
 			SkaterHairMesh.is_scalp_translucent(gear.hair_style))
-	facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair, gear.helmet_face)
+	facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
 	facial_hair.material_override = SkaterHairMesh.make_material(gear.hair_color,
 			SkaterHairMesh.is_translucent(gear.facial_hair))
 	brows.material_override = SkaterHairMesh.make_material(gear.hair_color, false)

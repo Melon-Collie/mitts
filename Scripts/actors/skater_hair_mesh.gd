@@ -193,38 +193,21 @@ const _HORSESHOE: Array[Vector4] = [
 	Vector4(21.0, -0.040, -0.088, 0.006),
 ]
 # The beard's footprint carried down off the chin to just above the collar,
-# square across the front and rising steeply to the jaw at the sides.
+# square across the front and hanging from the whole jaw at the sides.
 const _LONG_BEARD: Array[Vector4] = [
 	Vector4(0.0, -0.035, -0.174, 0.013),
 	Vector4(14.0, -0.036, -0.172, 0.013),
-	Vector4(24.0, -0.032, -0.165, 0.012),
-	Vector4(34.0, -0.024, -0.145, 0.011),
-	Vector4(44.0, -0.013, -0.122, 0.010),
-	Vector4(52.0, -0.006, -0.106, 0.008),
-	Vector4(57.0, -0.002, -0.096, 0.006),
+	Vector4(24.0, -0.032, -0.168, 0.012),
+	Vector4(34.0, -0.024, -0.160, 0.011),
+	Vector4(44.0, -0.013, -0.146, 0.010),
+	Vector4(52.0, -0.006, -0.130, 0.008),
+	Vector4(57.0, -0.002, -0.118, 0.006),
 ]
-# Below the chin the surface under the sheet is the throat, ~3 cm behind it; the
-# flare stands the sheet out to hang straight down from the chin.
-const _LONG_BEARD_FLARE: Array[Vector2] = [
-	Vector2(-0.098, 0.0),
-	Vector2(-0.118, 0.030),
-	Vector2(-0.174, 0.036),
-]
-# Under a fishbowl, whose chin edge curls in under the jaw: held to what fits
-# inside the shield down to that edge, then out.
-const _LONG_BEARD_TUCKED_FLARE: Array[Vector2] = [
-	Vector2(-0.108, 0.0),
-	Vector2(-0.122, 0.016),
-	Vector2(-0.150, 0.030),
-	Vector2(-0.174, 0.034),
-]
+# How fast the long beard may close in toward the throat as it falls (m in per
+# m down): it hangs from the chin and jaw rather than following them under.
+const _LONG_BEARD_HANG: float = 0.25
 # A full sheet is thinner over the lip than at the chin.
 const _UPPER_LIFT_SHARE: float = 0.55
-# A facial flare stands the sheet off the throat across the front, then fades
-# out between these shares of the sheet's reach, so the sides close onto the
-# neck: a flare carried round to the jaw leaves the sheet open at the side, a
-# flap seen edge on.
-const _FLARE_SIDE_FADE := Vector2(0.4, 0.7)
 const _MOUTH_MARGIN_M: float = 0.0015
 # How far round the mouth's edge a sheet tapers down to the skin.
 const _MOUTH_TAPER_M: float = 0.006
@@ -276,31 +259,28 @@ static func shared_brows() -> ArrayMesh:
 		return st.commit())
 
 
-# The facial shell for one FACIAL_* style worn under one GearModelRegistry
-# FACE_* piece — null for none.
-static func shared_facial_hair(style: int, helmet_face: int) -> ArrayMesh:
+# The facial shell for one FACIAL_* style, which fits under any face piece —
+# null for none.
+static func shared_facial_hair(style: int) -> ArrayMesh:
 	match style:
 		HairStyleRegistry.FACIAL_STUBBLE:
 			return _shared("facial_stubble", func() -> ArrayMesh:
-				return _build_facial(_BEARD, _STUBBLE_LIFT_M, _NO_FLARE))
+				return _build_facial(_BEARD, _STUBBLE_LIFT_M))
 		HairStyleRegistry.FACIAL_MUSTACHE:
 			return _shared("facial_mustache", func() -> ArrayMesh:
-				return _build_facial(_MUSTACHE, -1.0, _NO_FLARE))
+				return _build_facial(_MUSTACHE, -1.0))
 		HairStyleRegistry.FACIAL_GOATEE:
 			return _shared("facial_goatee", func() -> ArrayMesh:
-				return _build_facial(_GOATEE, -1.0, _NO_FLARE))
+				return _build_facial(_GOATEE, -1.0))
 		HairStyleRegistry.FACIAL_BEARD:
 			return _shared("facial_beard", func() -> ArrayMesh:
-				return _build_facial(_BEARD, -1.0, _NO_FLARE))
+				return _build_facial(_BEARD, -1.0))
 		HairStyleRegistry.FACIAL_HORSESHOE:
 			return _shared("facial_horseshoe", func() -> ArrayMesh:
-				return _build_facial(_HORSESHOE, -1.0, _NO_FLARE))
+				return _build_facial(_HORSESHOE, -1.0))
 		HairStyleRegistry.FACIAL_LONG_BEARD:
-			if helmet_face == GearModelRegistry.FACE_FISHBOWL:
-				return _shared("facial_long_beard_tucked", func() -> ArrayMesh:
-					return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_TUCKED_FLARE))
 			return _shared("facial_long_beard", func() -> ArrayMesh:
-				return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_FLARE))
+				return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_HANG))
 		_:
 			return null
 
@@ -380,16 +360,18 @@ static func _hairline_distance(hairline: PackedVector2Array, theta: float, y: fl
 	return best
 
 
-# `flat_lift` >= 0 replaces the outline's own lift, untapered (stubble).
+# `flat_lift` >= 0 replaces the outline's own lift, untapered (stubble). `hang`
+# > 0 hangs the sheet (HairHelmetFit.hang_from), inside any face gear worn
+# over it.
 static func _build_facial(outline: Array[Vector4], flat_lift: float,
-		flare: Array[Vector2]) -> ArrayMesh:
+		hang: float = 0.0) -> ArrayMesh:
 	var reach: float = deg_to_rad(outline[outline.size() - 1].x)
 	var mouth: Rect2 = SkaterFaceMesh.mouth_rect().grow(_MOUTH_MARGIN_M)
 	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
 	var span := func(theta: float, _rim: float) -> Vector2:
 		var k: Vector4 = _facial_key(outline, absf(_wrap_pi(theta - PI)))
 		return Vector2(k.y, k.z)
-	var lift := func(theta: float, t: float, y: float, _rim: float, at: Vector3) -> float:
+	var lift := func(theta: float, t: float, _y: float, _rim: float, at: Vector3) -> float:
 		var face := Vector2(at.x - centre.x, at.y - centre.y)
 		var own: float = flat_lift
 		if flat_lift < 0.0:
@@ -399,8 +381,7 @@ static func _build_facial(outline: Array[Vector4], flat_lift: float,
 					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)), side)
 			edge = minf(edge, _ramp(_rect_distance(mouth, face), 0.0, _MOUTH_TAPER_M))
 			own = lerpf(_EDGE_LIFT_M, _facial_key(outline, a).w
-					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge) \
-					+ _flare(flare, y) * _ramp(a, reach * _FLARE_SIDE_FADE.y, reach * _FLARE_SIDE_FADE.x)
+					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge)
 		return maxf(own, SkaterFaceMesh.relief(face.x, face.y) + _STUBBLE_LIFT_M)
 	# Grid lines on the mouth's edges cut its hole clean; on the chin's, the
 	# sheet follows the relief it rises over.
@@ -412,8 +393,14 @@ static func _build_facial(outline: Array[Vector4], flat_lift: float,
 		cut_th.append_array(_mirrored(PI, k.x))
 	var cut_y := PackedFloat32Array([mouth.position.y, mouth.end.y])
 	cut_y.append_array(chin_ys)
+	var settle := Callable()
+	if hang > 0.0:
+		var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+		settle = func(strip: PackedVector3Array) -> PackedVector3Array:
+			return HairHelmetFit.hang_from(strip, hang, shell)
 	var st := _begin()
-	_emit_shell(st, PI - reach, PI + reach, _FACIAL_ROW_M, span, lift, cut_th, cut_y, mouth)
+	_emit_shell(st, PI - reach, PI + reach, _FACIAL_ROW_M, span, lift, cut_th, cut_y, mouth,
+			settle)
 	return st.commit()
 
 
@@ -480,12 +467,14 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 			_quad(st, grid[k][i], grid[k + 1][i], grid[k + 1][i + 1], grid[k][i + 1])
 	# Where the bottom edge stands off the surface under it (a hanging cut, a
 	# long beard), it is closed back to that surface, or a camera below sees up
-	# into the shell.
+	# into the shell; so are the side edges of a shell that does not wrap round.
 	var last: int = heights.size() - 1
 	for k: int in grid.size() - 1:
-		if maxf(grid[k][last].distance_to(bare[k][last]),
-				grid[k + 1][last].distance_to(bare[k + 1][last])) > _CLOSE_GAP_M:
-			_quad(st, grid[k][last], grid[k + 1][last], bare[k + 1][last], bare[k][last])
+		_close(st, grid[k][last], grid[k + 1][last], bare[k + 1][last], bare[k][last])
+	if th1 - th0 < TAU - 1e-4:
+		for k: int in [0, grid.size() - 1]:
+			for i: int in last:
+				_close(st, grid[k][i], grid[k][i + 1], bare[k][i + 1], bare[k][i])
 
 
 # Shared row heights from y_hi down to y_lo: every crease of the head ball's
@@ -655,6 +644,13 @@ static func _neck_reach(dir: Vector3, y: float) -> float:
 	var offset := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
 	var b: float = offset.dot(dir)
 	return -b + sqrt(maxf(b * b - offset.length_squared() + rho * rho, 0.0))
+
+
+# The quad from a shell edge (a, b) back to the surface under it (c, d), where
+# the edge stands off that surface by more than _CLOSE_GAP_M.
+static func _close(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+	if maxf(a.distance_to(d), b.distance_to(c)) > _CLOSE_GAP_M:
+		_quad(st, a, b, c, d)
 
 
 # A quad wound to face away from the head's centre, both its triangles lit by

@@ -14,11 +14,11 @@ extends SceneTree
 # HAIR_PREVIEW_OUT (default user://hair_preview), HAIR_PREVIEW_SHOTS (comma
 # list of shot names), HAIR_PREVIEW_FACIALS (comma list of FACIAL_* indices,
 # default all), HAIR_PREVIEW_HAIRS (comma list of HAIR_* indices, default every
-# pickable one), HAIR_PREVIEW_ZOOM (pixels per head, a multiple, default 1). MITTS_FACE (a GearModelRegistry FACE_* index, default bare),
-# MITTS_SKIN (a SkinToneRegistry index) and MITTS_HAIR_COLOR (a
-# HairStyleRegistry colour) dress every head the same, so one run answers one
-# question — does the beard clear the cage, does blonde read on the lightest
-# skin.
+# pickable one), HAIR_PREVIEW_ZOOM (pixels per head, a multiple, default 1).
+# MITTS_FACE (a GearModelRegistry FACE_* index, default bare), MITTS_SKIN (a
+# SkinToneRegistry index) and MITTS_HAIR_COLOR (a HairStyleRegistry colour)
+# dress every head the same, so one run answers one question — does the beard
+# clear the cage, does blonde read on the lightest skin.
 
 const _SPACING_M: float = 0.40
 const _ROW_M: float = 0.42
@@ -149,7 +149,7 @@ func _place(at: Vector3, hair: int, facial: int) -> void:
 			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_scalp_translucent(hair)))
 	_add_piece(head, SkaterHairMesh.shared_brows(),
 			SkaterHairMesh.make_material(_hair_color, false))
-	_add_piece(head, SkaterHairMesh.shared_facial_hair(facial, _face),
+	_add_piece(head, SkaterHairMesh.shared_facial_hair(facial),
 			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_translucent(facial)))
 	_add_piece(head, SkaterMeshBuilder.shared_face_gear(_face),
 			SkaterMeshBuilder.make_face_gear_material(_face))
