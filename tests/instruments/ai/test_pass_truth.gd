@@ -390,7 +390,7 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 	# The windup: the shot read's release contest, and the one-chance read on the
 	# puck held at the release point through it by a man already playing him.
 	var release_pt: Vector3 = AIPuckLane.release_point_toward(o, r)
-	var release_clean: float = AIPuckLane.release_contest_clean(release_pt, defs, cap_list)
+	var release_clean: float = AIPuckLane.release_contest_clean(release_pt, defs, cap_list, vels)
 	var windup_keep: float = 1.0 - AIStripOdds.SET_STRIP * AIStripOdds.chance_at(d, dv, caps,
 			release_pt, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
 	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%s,%d,%s,%.2f,%.4f,%.4f" % [

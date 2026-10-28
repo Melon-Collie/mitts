@@ -516,15 +516,15 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 				_field.opponent_blades_release)
 	if lane <= 0.0:
 		return 0.0
-	# RELEASE CONTEST — the cough-up loss mode: a forechecker whose stick reaches
-	# the release point inside the ~135 ms windup pokes the puck off the blade
-	# before it flies (the same race as the shot's release_contest_clean). It is
-	# what prices a defender on the carrier's HIP, off the lane line. Raced from
-	# CURRENT opponent spots, since the windup starts now.
+	# RELEASE CONTEST — the cough-up loss mode: a forechecker whose stick gets to
+	# the puck on the blade inside the windup pokes it off before it flies (the
+	# shot's own release_contest_clean). It is what prices a defender on the
+	# carrier's HIP, off the lane line. Read from CURRENT opponent spots, since
+	# the windup starts now.
 	var release_clean: float = AIPuckLane.release_contest_clean(
 			AIPuckLane.release_point_toward(self_pos,
 					self_pos + rim_dir if is_rim else receiver_spot),
-			_field.opponents, _field.opponent_caps)
+			_field.opponents, _field.opponent_caps, _field.opponent_vels)
 	_field.project_opponents(flight_t, _proj_buf, _proj_vels, receiver_spot)
 	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
 	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)

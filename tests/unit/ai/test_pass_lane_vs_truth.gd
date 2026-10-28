@@ -14,14 +14,14 @@ extends GutTest
 # Ratchets on the flat feeds and rims together: how often a lost pass read
 # riskier than a completed one may not fall, and the losses the reads expect,
 # against those that happened, may not stray further from one. The saucers'
-# ranking is held too; their level is not yet — the read expects about half as
-# many losses again as a saucer suffers.
+# ranking is held too; their level is not yet — the read expects about twice the
+# losses a saucer suffers.
 
 const TRUTH_PATH: String = "res://tests/unit/ai/data/pass_lane_truth.txt"
 
-const MIN_RANKING: float = 0.86
+const MIN_RANKING: float = 0.90
 const MAX_EXPECTED_RATIO_ERR: float = 0.10
-const MIN_SAUCER_RANKING: float = 0.85
+const MIN_SAUCER_RANKING: float = 0.87
 const BANK_MARGIN: float = 0.02
 
 

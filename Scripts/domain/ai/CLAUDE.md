@@ -932,9 +932,14 @@ remains.
   challenge may lunge). Do not resurrect a per-station graded counter race
   without a reason the shared read cannot serve, and a measurement.
 
-- **Openness** (`release_contest_clean`, inside every shot's defender share) —
-  could a carrier get his action off from this spot: the release-contest race, run to the
-  puck a carry-handle ahead of the body toward the net.
+- **Openness** (`release_contest_clean`, inside every shot's and pass's
+  defender share) — could a carrier get his action off from this spot: each
+  defender's one chance (`AIStripOdds.chance_at`) at the puck held on the blade
+  a carry-handle ahead of the body through the windup, read as already playing
+  him, with a held puck's set time (`RELEASE_SET_S`). A body does not shield it:
+  a man behind the shooter reaches past him. Measured against a worst-case
+  defender on the passer (`test_pass_truth.gd`'s windup runs), gated by
+  `test_release_contest_vs_truth.gd`.
 
 - **Positional value** — the carrier searches forward until play reaches
   something concrete, and only values a spot where the search stops, in his

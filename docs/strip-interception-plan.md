@@ -127,11 +127,15 @@ defender takes it, or nobody catches it and he touched it first (a deflection,
 a body block); one nobody catches that he never touched first is the
 reception's, and left out.
 
-| kind | lost | expected | ranking | before the stop odds | the race-era read |
-|---|---|---|---|---|---|
-| flat | 448 | 420 | 0.849 | 531, 0.826 | 723, 0.824 |
-| rim | 141 | 141 | 0.803 | 143, 0.815 | 105, 0.725 |
-| saucer | 67 | 97 | 0.860 | 148, 0.862 | — |
+| kind | lost | expected | ranking |
+|---|---|---|---|
+| flat | 416 | 417 | 0.904 |
+| rim | 125 | 142 | 0.891 |
+| saucer | 43 | 85 | 0.871 |
+
+(Before the defender's stop odds the flat read expected 531 against 448 lost at
+0.826; the race-era read 723 at 0.824. The interceptor faces the passer from
+his staging; facing away, his blade could not come round to the puck.)
 
 What the data says about a defender close to the release: standing on a flat
 feed's line within 3 m of the passer he takes 6 of 18 — he still has to set his
@@ -147,7 +151,34 @@ What it leaves open:
   released, so defenders seem not to close during the flight (the rim breakout
   trace: 0.80 at the release, 0.005 at the catch 1.27 s later).
 
+## The windup
+
+Through the windup the puck sits on the blade at the release point, a
+carry-handle ahead of the body toward the target, and a stick that gets to it
+pokes it off before it flies. `AIPuckLane.release_contest_clean` (every shot's
+and pass's release) is each defender's one chance at that held puck: within his
+blade's reach (`AISkaterCaps.max_blade_reach`), from where his momentum has him,
+read as already playing the carrier from the windup's start, by `SET_STRIP`.
+The set time on a held puck is 0.1 s (`RELEASE_SET_S`): it fits the strips'
+level, where the moving carry's 0.25 s expects a quarter of them.
+
+Measured by the instrument's windup runs: a passer holding the puck through the
+windup, strippable, and a defender at 0.8–3 m round him, standing or closing at
+3 m/s, playing him from its start. Gated by
+`tests/unit/ai/test_release_contest_vs_truth.gd`.
+
+- 111 of 288 windups are stripped; the read expects 108, ranking 0.766. The
+  closed-form contest it replaced expected 17, ranking 0.65.
+- A standing defender within about 2 m of the held puck strips two thirds of the
+  time; one closing reaches out to about 2.4 m; none past it.
+- A body does not shield it: a man 0.8–1.2 m directly behind the passer strips
+  every time, reaching past him to a puck in front.
+- What the read does not see: a defender right in front, within about a metre
+  of the puck, strips less than one beside or behind (his blade cannot come in
+  that close), and the stick's side.
+
 ## Open questions
+
 
 - The exact set time: 0.25 s is the interceptor's best policy measured so far;
   runs aiming for 0.1 s and 0.5 s would pin the shortest that strips reliably.

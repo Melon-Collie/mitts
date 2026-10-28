@@ -4,7 +4,7 @@ class_name AIPuckLane
 # path before the puck passes), the saucer that flies over the sticks, the
 # release contest at the blade, the pass's launch speed and its own miss. A leaf
 # (GameRules, the puck rules, AIBotMechanics, AISkaterCaps and the lane's
-# arrival-clock read, AILaneReach, only).
+# arrival-clock reads, AILaneReach and AIStripOdds, only).
 
 # ── Lane interception: closest-approach reachability model ───────────────────
 # A fired puck (shot or pass) travels the straight segment from→to at
@@ -233,59 +233,37 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 	return pass_launch_speed(shooter.distance_to(receiver), GameRules.DEFAULT_WRISTER_POWER_MAX_M_S)
 
 
-# ── Release contest: the pressure read, as a physical race ────────────────────
-# P(the release completes clean) in [0, 1] against every nearby opponent — the
-# factor the shot scorers multiply by. A physical
-# contest, never a density curve: an opponent's BLADE must reach the RELEASE
-# POINT (release_point_toward) while the puck is still on the blade.
+# ── Release contest: the windup, as each defender's one chance ────────────────
+# P(the release completes clean) in [0, 1] against every opponent — the factor
+# the shot and pass scorers multiply by. Through the windup
+# (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) the puck sits on the blade at the
+# release point (release_point_toward), and a stick that gets to it there pokes
+# it off: each opponent's one chance at a held puck (AIStripOdds.chance_at on the
+# arrival clock, within his blade's reach, by SET_STRIP), from where his
+# momentum has him (`opponent_vels`, index-matched; missing ones stand). He is
+# read as already playing the carrier, from the windup's start. A body does not
+# shield it: a man behind the shooter reaches past him to a puck in reach.
+# Measured against a worst-case defender on the passer
+# (tests/instruments/ai/test_pass_truth.gd's windup runs), gated by
+# test_release_contest_vs_truth.gd.
 #
-# Per opponent, in lane_block_at's vocabulary (same reach convention, read
-# delay and lateral close pace):
-#
-#   reach_i  = stick_i + close_speed_i × max(0, T_window − read delay)
-#              — his stick, plus what he closes after a competitive read,
-#              over the real windup window
-#   block_i  = clamp((reach_i − d_i) / stick_i, 0, 1)
-#              — one full stick inside reach ⇒ certain blade-on-puck
-#   p_i      = block_i × (T_window − read delay)⁺ / T_window
-#              — a blade can only disrupt the fraction of the release
-#              that remains after its read: arriving as the puck leaves
-#              does nothing, arriving at the start of the windup kills it
-#
-#   clean    = Π (1 − p_i)      — independent contests compose as a
-#              product; no count normalizer, no saturation constant
-#
-# T_window is the bot's real decision→puck-away time
-# (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S). Directionality is
-# emergent: the release point sits a carry-handle toward the target, so a man
-# behind the shooter is farther from the puck. A blade planted on the release
-# point still leaves read_delay / T_window clean per opponent.
+# The set time on a held puck: his stick on a puck that is not going anywhere,
+# measured on those runs (the level of the strips they suffer).
+const RELEASE_SET_S: float = 0.1
+
+
 static func release_contest_clean(release_pt: Vector3,
-		opponents: Array[Vector3], opponent_caps: Array = []) -> float:
-	var t_window: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-	var contest_frac: float = maxf(0.0, t_window - LANE_REACTION_DELAY_S) \
-			/ t_window
+		opponents: Array[Vector3], opponent_caps: Array = [],
+		opponent_vels: Array[Vector3] = []) -> float:
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	var clean: float = 1.0
 	for i: int in opponents.size():
-		var p: Vector3 = opponents[i]
-		var stick_reach: float = LANE_DEFENDER_REACH_M
-		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
-		if has_caps:
-			var caps: AISkaterCaps = opponent_caps[i]
-			if caps != null:
-				stick_reach = caps.stick_reach
-				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
-		var reach: float = stick_reach \
-				+ close_speed * maxf(0.0, t_window - LANE_REACTION_DELAY_S)
-		var dx: float = p.x - release_pt.x
-		var dz: float = p.z - release_pt.z
-		var d_sq: float = dx * dx + dz * dz
-		if d_sq >= reach * reach:
-			continue
-		var block: float = clampf(
-				(reach - sqrt(d_sq)) / maxf(stick_reach, 0.001), 0.0, 1.0)
-		clean *= 1.0 - block * contest_frac
+		var caps: AISkaterCaps = opponent_caps[i] if has_caps else null
+		var vel: Vector3 = opponent_vels[i] if i < opponent_vels.size() else Vector3.ZERO
+		clean *= 1.0 - AIStripOdds.SET_STRIP * AIStripOdds.chance_at(opponents[i], vel, caps,
+				release_pt, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, RELEASE_SET_S)
+		if clean <= 0.0:
+			return 0.0
 	return clean
 
 
