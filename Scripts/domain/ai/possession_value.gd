@@ -56,9 +56,15 @@ var _follow_defence: Array[Vector3] = []
 var _follow_vels: Array[Vector3] = []
 var _reached_defence: Array[Vector3] = []
 var _reached_vels: Array[Vector3] = []
-# The defence as it will be when a skate read sets off later (_skate_keep).
+# The defence as it will be when a skate read sets off later (_skate_keep), for
+# the man at _leg_from setting off _leg_s from now, on the defence of
+# _defence_gen (bumped whenever the read's defence changes).
 var _leg_defence: Array[Vector3] = []
 var _leg_vels: Array[Vector3] = []
+var _leg_from: Vector3 = Vector3.INF
+var _leg_s: float = -1.0
+var _leg_gen: int = -1
+var _defence_gen: int = 0
 # The depth of the line a side crosses into the attacked zone (its own blue line
 # is at -_line_z).
 var _line_z: float = 0.0
@@ -116,6 +122,7 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_pairing.pair(goal, defenders, defender_vels, defender_caps, attackers, attacker_vels,
 			holder)
 	_pushed = 0
+	_defence_gen += 1
 	_memo_from.clear()
 	_memo_to.clear()
 	_memo_keeper.clear()
@@ -336,7 +343,11 @@ func _skate_keep(from: Vector3, to: Vector3, start_s: float, trip: float,
 	if start_s <= 0.0:
 		return AICarrySpace.carry_safety(from, to, trip, _defenders, _defender_vels,
 				_defender_caps, 0.0, 0.0, man_caps)
-	_project(_leg_defence, _leg_vels, start_s, from)
+	if _leg_gen != _defence_gen or _leg_s != start_s or _leg_from != from:
+		_project(_leg_defence, _leg_vels, start_s, from)
+		_leg_gen = _defence_gen
+		_leg_s = start_s
+		_leg_from = from
 	return AICarrySpace.carry_safety(from, to, trip, _leg_defence, _leg_vels,
 			_defender_caps, 0.0, 0.0, man_caps)
 
@@ -663,10 +674,12 @@ func push_defender(pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> void:
 	_defenders.push_back(pos)
 	_defender_vels.push_back(vel)
 	_pushed += 1
+	_defence_gen += 1
 
 
 func pop_defender() -> void:
 	_pushed -= 1
+	_defence_gen += 1
 	_defenders.pop_back()
 	_defender_vels.pop_back()
 	if _defender_caps.size() > _defenders.size():
