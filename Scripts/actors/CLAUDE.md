@@ -179,9 +179,11 @@ tail against the legs across a skated run.
 Each knee, elbow and shoulder is a band whose rings ride the bones either side
 (and, at the elbow and shoulder, a bone turned part way between them), every
 vertex still rigid on one bone, so a bend stretches the band instead of opening
-a gap or showing a ball. The shoulder is the top of the sleeve: its base ring
-lies on the torso, its middle rides the deltoid, and its last ring is the upper
-arm prism's top ring.
+a gap or showing a ball. The shoulder is the top of the sleeve: it flares out
+of the torso from an armhole laid on the torso's surface, and bends at three
+rings round the shoulder's pivot (the torso's, the half-turned deltoid's and the
+cap's, which is the upper arm prism's top ring), as the elbow bends at its
+three.
 
 A band only lies flat if ring k is the same facet on every bone it spans, so
 the arm is one frame carried down from the shoulder cap: the cap points down

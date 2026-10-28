@@ -1,12 +1,12 @@
 extends GutTest
 
 # The skinned figure's shoulder is the top of its sleeve
-# (SkaterMeshBuilder._append_cap_surface): a base ring laid on the torso, rings
-# on the deltoid turned half as far as the arm, and a seam ring on the cap bone
-# that IS the upper arm prism's top ring, where the prism carries the sleeve on.
-# The seam closes only while the cap bone and the prism stand in one frame
-# (SkaterArmRig._pose_arm_chain carries the arm's frame down from the cap) and
-# the cap's −Y and the prism are the same length of arm.
+# (SkaterMeshBuilder._append_cap_surface): rings on the torso flaring into it
+# from an armhole laid on the torso's surface, then three rings round the
+# shoulder's pivot on the torso, the deltoid turned half as far as the arm and
+# the cap bone, the last of which IS the upper arm prism's top ring. The seam
+# closes only while the cap bone and the prism stand in one frame
+# (SkaterArmRig._pose_arm_chain carries the arm's frame down from the cap).
 
 const UpperBone = SkaterMeshBuilder.UpperBone
 const CASES: int = 200
@@ -15,39 +15,38 @@ const SEED: int = 0x53484C44  # "SHLD"
 var _rng := RandomNumberGenerator.new()
 
 
-# Where a cap-local point of the seam ring sits in the upper arm prism's frame.
+# Where a cap-local point of the seam ring, at the pivot, sits in the upper arm
+# prism's frame.
 func _in_prism(q: Vector3) -> Vector3:
-	return Vector3(q.x / SkaterMeshBuilder.SLEEVE_RADIUS_M, -q.z / SkaterMeshBuilder.SLEEVE_RADIUS_M,
-			0.5 + q.y / SkaterMeshBuilder.UPPER_ARM_LENGTH_M)
+	return Vector3(q.x / SkaterMeshBuilder.SLEEVE_RADIUS_M,
+			-q.z / SkaterMeshBuilder.SLEEVE_RADIUS_M, 0.5)
 
 
-func _seam(cap: int) -> PackedVector3Array:
-	var arrays: Array = SkaterMeshBuilder.shared_upper_skin_mesh().surface_get_arrays(
+func _surface(cap: int) -> Array:
+	return SkaterMeshBuilder.shared_upper_skin_mesh().surface_get_arrays(
 			SkaterMeshBuilder.UpperSurface.SHOULDER_L if cap == UpperBone.SHOULDER_L
 			else SkaterMeshBuilder.UpperSurface.SHOULDER_R)
+
+
+func _riding(cap: int, bone: int) -> PackedVector3Array:
+	var arrays: Array = _surface(cap)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
 	var out := PackedVector3Array()
 	for v: int in verts.size():
-		if bones[v * 4] == cap:
+		if bones[v * 4] == bone:
 			out.append(verts[v])
 	return out
 
 
-func test_the_upper_arm_length_is_the_skaters() -> void:
-	var sk := Skater.new()
-	assert_almost_eq(SkaterMeshBuilder.UPPER_ARM_LENGTH_M, sk.upper_arm_length, 1e-6,
-			"the seam's place on the prism is a fraction of the default upper arm")
-	sk.free()
-
-
 func test_the_seam_ring_is_the_prisms_top_ring() -> void:
-	var prism: PackedVector3Array = SkaterMeshBuilder.shared_upper_arm_bone_z() \
+	var prism: PackedVector3Array = SkaterMeshBuilder.shared_arm_bone_z() \
 			.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	for cap: int in [UpperBone.SHOULDER_L, UpperBone.SHOULDER_R]:
-		var seam: PackedVector3Array = _seam(cap)
+		var seam: PackedVector3Array = _riding(cap, cap)
 		assert_gt(seam.size(), 0, "the cap bone carries the seam ring")
 		for q: Vector3 in seam:
+			assert_almost_eq(q.y, 0.0, 1e-6, "the seam ring is round the pivot")
 			var on_prism: bool = false
 			for p: Vector3 in prism:
 				if p.is_equal_approx(_in_prism(q)):
@@ -56,23 +55,23 @@ func test_the_seam_ring_is_the_prisms_top_ring() -> void:
 			assert_true(on_prism, "%s lands on the prism's top ring" % q)
 
 
-func test_the_base_ring_lies_on_the_torso() -> void:
-	var arrays: Array = SkaterMeshBuilder.shared_upper_skin_mesh().surface_get_arrays(
-			SkaterMeshBuilder.UpperSurface.SHOULDER_R)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-	var on_torso: int = 0
-	for v: int in verts.size():
-		if bones[v * 4] != UpperBone.TORSO:
-			continue
-		on_torso += 1
-		var p: Vector3 = verts[v]
+func test_the_armhole_lies_on_the_torso() -> void:
+	var laid: Array[float] = []
+	for spec: Vector3 in SkaterMeshBuilder._SHOULDER_TORSO_RINGS:
+		if spec.z > 0.0:
+			laid.append(spec.z)
+	assert_gt(laid.size(), 0, "the flare is laid on the torso somewhere")
+	var on_lathe: Dictionary = {}
+	for p: Vector3 in _riding(UpperBone.SHOULDER_R, UpperBone.TORSO):
 		var radius: float = SkaterMeshBuilder._torso_radius_at(p.y)
 		var across: float = Vector2(p.x / (radius * SkaterMeshBuilder._TORSO_X_SCALE),
 				p.z / (radius * SkaterMeshBuilder._TORSO_Z_SCALE)).length()
-		assert_almost_eq(across, SkaterMeshBuilder._CAP_SEAT_INSET, 1e-3,
-				"%s is on the torso's lathe" % p)
-	assert_gt(on_torso, 0, "the torso carries the shoulder's base ring")
+		for scale: float in laid:
+			if absf(across - scale) < 1e-3:
+				on_lathe[scale] = int(on_lathe.get(scale, 0)) + 1
+	for scale: float in laid:
+		assert_gt(int(on_lathe.get(scale, 0)), SkaterMeshBuilder.TORSO_SIDES,
+				"the ring laid at %.2f of the torso's lathe is on it" % scale)
 
 
 func test_the_sleeve_closes_at_the_seam_and_the_deltoid_is_halfway() -> void:
@@ -115,7 +114,7 @@ func test_the_sleeve_closes_at_the_seam_and_the_deltoid_is_halfway() -> void:
 			for cap: int in arm_of:
 				var cap_pose: Transform3D = body.get_bone_global_pose(cap)
 				var prism_pose: Transform3D = body.get_bone_global_pose(arm_of[cap])
-				for q: Vector3 in _seam(cap):
+				for q: Vector3 in _riding(cap, cap):
 					worst_gap = maxf(worst_gap,
 							(cap_pose * q).distance_to(prism_pose * _in_prism(q)))
 				var side: float = -1.0 if cap == UpperBone.SHOULDER_L else 1.0

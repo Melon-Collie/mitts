@@ -29,7 +29,7 @@ func _has_point(mesh: ArrayMesh, p: Vector3) -> bool:
 
 func test_the_band_ends_on_the_prisms_end_rings() -> void:
 	var skin: ArrayMesh = SkaterMeshBuilder.shared_upper_skin_mesh()
-	var upper_prism: ArrayMesh = SkaterMeshBuilder.shared_upper_arm_bone_z()
+	var upper_prism: ArrayMesh = SkaterMeshBuilder.shared_arm_bone_z()
 	var forearm_prism: ArrayMesh = SkaterMeshBuilder._forearm_bone_z()
 	for arm: Array in _ARMS:
 		var arrays: Array = skin.surface_get_arrays(arm[1])
