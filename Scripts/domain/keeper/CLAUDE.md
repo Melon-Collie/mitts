@@ -253,7 +253,14 @@ The pad's back is open, as a real one's is: its face and two side wings run
 back either side of the leg, which lies in the channel between them in the
 kit's socks (painted down the shin as the skaters' are), strapped across at
 the ankle, calf and under the knee. The channel is lined in a shaded pad
-colour, since most kits' socks are their pads' colour.
+colour, so the leg stands out even in socks the pads' colour.
+
+The pads, the blocker and the trapper are one set in the kit's `goalie_pads`
+colour (white in every bundled kit, changeable per side), trimmed alike in
+`TeamColorRegistry`'s `goalie_accent`: the team's primary, or its secondary
+where the primary is too faint on the pads. A pad's trim is its knee stack's
+front and a stripe inside each roll — a symmetric pair, because both legs wear
+one mesh and the keeper is mirrored whole.
 
 ## Seeing him
 

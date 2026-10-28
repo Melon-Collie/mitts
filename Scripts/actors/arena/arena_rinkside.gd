@@ -15,9 +15,9 @@ extends RefCounted
 # Staff: the people the rinkside furniture was built for. Coaches stand behind
 # each bench; the timekeeping crew and the penalty-box attendants sit at theirs,
 # which is how a real rink works — the bench is the only post nobody works from a
-# chair. They are the crowd's own body and head boxes, standing ones stood up per
-# the stature block, but on a plain material rather than the crowd shader,
-# because a coach does not do the wave.
+# chair. They are the crowd's own figure, the coaches its standing form, painted
+# by the crowd's shader on a material of their own that nothing excites, because
+# a coach does not do the wave.
 const _STAFF_SEED: int = 5150
 
 var _spec: ArenaBowlSpec
@@ -138,9 +138,9 @@ func _add_box(root: Node3D, node_name: String, size: Vector3, pos: Vector3,
 # attendant at each penalty box door, and three of the off-ice crew at the
 # table. A table with no timekeeper reads emptier than no table.
 #
-# One MultiMesh pair for the lot, same body and head meshes the crowd uses, but
-# with a plain material: the crowd shader sways and hops off per-instance custom
-# data, and staff standing at their posts should do neither.
+# A MultiMesh per body (seated, standing) and one for the heads. The heads ride
+# their own transforms: a standing body carries its legs in its mesh, and its
+# head is the seated figure's carried up by the hip height.
 func build_staff(root: Node3D) -> void:
 	var posts: Array[Vector3] = []
 	var jackets: Array[Color] = []
@@ -149,49 +149,62 @@ func build_staff(root: Node3D) -> void:
 
 	var rng := RandomNumberGenerator.new()
 	rng.seed = _STAFF_SEED
-	# Body and head take separate transforms, where the crowd shares one: a
-	# standing figure stretches in Y and its head does not, so the two cannot
-	# ride the same basis.
-	var body_mm: MultiMesh = _staff_multimesh(ArenaFigureMesh.body_mesh(), posts.size())
+	var on_feet: int = standing.count(true)
+	var standing_mm: MultiMesh = _staff_multimesh(ArenaFigureMesh.standing_body_mesh(), on_feet)
+	var seated_mm: MultiMesh = _staff_multimesh(ArenaFigureMesh.seated_body_mesh(),
+			posts.size() - on_feet)
 	var head_mm: MultiMesh = _staff_multimesh(ArenaFigureMesh.head_mesh(), posts.size())
 	var bounds := AABB(posts[0], Vector3.ZERO)
+	var n_standing: int = 0
+	var n_seated: int = 0
 	for i: int in posts.size():
 		var stature: float = rng.randf_range(
 				ArenaFigureMesh.STANDING_STATURE_MIN,
 				ArenaFigureMesh.STANDING_STATURE_MAX)
 		var girth: float = ArenaFigureMesh.girth_scale(stature)
-		# Sitting IS the unscaled figure, so a seated staffer lifts by nothing and
-		# both transforms collapse to the spectator's.
 		var lift: float = ArenaFigureMesh.hip_height(stature) if standing[i] else 0.0
 		var yaw: float = atan2(posts[i].x, posts[i].z)
-		body_mm.set_instance_transform(i,
-				ArenaFigureMesh.body_transform(posts[i], yaw, girth, lift))
+		# Only the phase slot: its paint rolls (skin, hair, trousers) come from
+		# it, and with no sway or hop amplitude the figure holds still.
+		var custom := Color(rng.randf(), 0.0, 0.0, 0.0)
+		var body_mm: MultiMesh = standing_mm if standing[i] else seated_mm
+		var b: int = n_standing if standing[i] else n_seated
+		body_mm.set_instance_transform(b, ArenaFigureMesh.figure_transform(posts[i], yaw, girth))
+		body_mm.set_instance_color(b, jackets[i])
+		body_mm.set_instance_custom_data(b, custom)
+		if standing[i]:
+			n_standing += 1
+		else:
+			n_seated += 1
 		head_mm.set_instance_transform(i,
 				ArenaFigureMesh.head_transform(posts[i], yaw, girth, lift))
-		body_mm.set_instance_color(i, jackets[i])
-		head_mm.set_instance_color(i,
-				ArenaFigureMesh.HEAD_PALETTE[
-						rng.randi() % ArenaFigureMesh.HEAD_PALETTE.size()])
+		head_mm.set_instance_color(i, ArenaFigureMesh.roll_head(rng))
+		head_mm.set_instance_custom_data(i, custom)
 		bounds = bounds.expand(posts[i])
 	var staff_aabb: AABB = grow_staff_aabb(bounds)
-	body_mm.custom_aabb = staff_aabb
-	head_mm.custom_aabb = staff_aabb
-
-	for part: Array in [["StaffBodies", body_mm], ["StaffHeads", head_mm]]:
+	var material: ShaderMaterial = ArenaFigureMesh.new_material()
+	for part: Array in [["StaffStanding", standing_mm], ["StaffSeated", seated_mm],
+			["StaffHeads", head_mm]]:
+		var mm: MultiMesh = part[1]
+		mm.custom_aabb = staff_aabb
 		var mmi := MultiMeshInstance3D.new()
 		mmi.name = part[0]
-		mmi.multimesh = part[1]
-		mmi.material_override = _staff_material()
+		mmi.multimesh = mm
+		mmi.material_override = material
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		root.add_child(mmi)
 
 
 # Explicit bounds for the same reason the crowd sections have them (see
 # ArenaCrowd.grow_section_aabb). The seed box covers instance ORIGINS (their
-# feet) only, so it has to grow by the tallest figure's own reach — sideways by a
-# rotated body's half-diagonal, up by a full stature.
+# feet) only, so it has to grow by the largest figure's own reach, turned any
+# way — sideways by its farthest point from the post, up by a full stature.
 func grow_staff_aabb(seed_aabb: AABB) -> AABB:
-	var reach: float = maxf(ArenaFigureMesh.BODY_SIZE.x, ArenaFigureMesh.BODY_SIZE.z) \
+	var still: AABB = ArenaFigureMesh.seated_body_mesh().get_aabb() \
+			.merge(ArenaFigureMesh.standing_body_mesh().get_aabb()) \
+			.merge(ArenaFigureMesh.head_mesh().get_aabb())
+	var reach: float = Vector2(maxf(-still.position.x, still.end.x),
+			maxf(-still.position.z, still.end.z)).length() \
 			* ArenaFigureMesh.girth_scale(ArenaFigureMesh.STANDING_STATURE_MAX)
 	return AABB(seed_aabb.position - Vector3(reach, 0.1, reach),
 			seed_aabb.size + Vector3(reach * 2.0,
@@ -248,15 +261,7 @@ func _staff_multimesh(mesh: ArrayMesh, count: int) -> MultiMesh:
 	var mm := MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.use_colors = true
+	mm.use_custom_data = true
 	mm.mesh = mesh
 	mm.instance_count = count
 	return mm
-
-
-# Lit, unlike the crowd — staff stand at ice level under the rig that lights the
-# boards, close enough to the camera that flat shading would read as cardboard.
-func _staff_material() -> StandardMaterial3D:
-	var mat := StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.85
-	return mat

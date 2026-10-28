@@ -145,6 +145,10 @@ var _last_ghost_state: Dictionary = {}  # peer_id -> bool, host only
 # _apply_ghost_state, and on clients by notify_offside_state. Read by the HUD
 # banner, the teammate markers and the bots.
 var _tag_up_peers: Dictionary[int, bool] = {}
+# Host: whose deliberate release the loose puck is still on, or -1
+# (WorldSnapshot.loose_puck_released_by). Set by a release from carry or a
+# one-timer; cleared by a pickup, a loose touch, a goalie touch or a stoppage.
+var _loose_puck_released_by: int = -1
 # Reused peer_id -> position scratch for the per-tick ghost-state and icing
 # checks (host only). The domain calls read it synchronously and never retain
 # it; each call site clears + refills before use.
@@ -921,6 +925,7 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 	if phase == GamePhase.Phase.PLAYING or phase == GamePhase.Phase.FACEOFF:
 		return
 	_flush_pending_faceoff_win()
+	_loose_puck_released_by = -1
 	# After the flush: its last-toucher fallback reads the assist chain.
 	if _shot_tracker != null:
 		_shot_tracker.on_play_stopped()
@@ -3031,6 +3036,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	snap.teammate_ids_by_team.clear()
 	snap.closest_to_puck_by_team.clear()
 	snap.tag_up_peers.clear()
+	snap.loose_puck_released_by = _loose_puck_released_by \
+			if puck != null and puck.get_carrier() == null else -1
 	for pid: int in _tag_up_peers:
 		snap.tag_up_peers[pid] = true
 	if _registry == null:
@@ -3149,6 +3156,7 @@ func _on_server_puck_picked_up_by(peer_id: int, settle_s: float, feed: Vector2) 
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
 	_pickup_claim.clear_for_grant(peer_id)
+	_loose_puck_released_by = -1
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null:
 		return
@@ -3414,6 +3422,7 @@ func _on_goal_resolve_faceoff(scoring_team: Team,
 
 
 func _on_server_puck_touched_while_loose(peer_id: int) -> void:
+	_loose_puck_released_by = -1
 	# A loose-puck touch during FACEOFF (deflect / body redirect) makes the puck
 	# live — end the faceoff so a goal off the deflection counts (see P2-2).
 	_phase_coord.on_puck_touched_live()
@@ -3437,6 +3446,7 @@ func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	if not NetworkManager.is_host:
 		return
 	var defending_team_id: int = _defending_team_id_for_goalie(goalie)
+	_loose_puck_released_by = -1
 	_shot_tracker.on_goalie_touch(defending_team_id)
 	_stats_sync_gate.mark_dirty()
 	# A goalie touch only ever waves icing off, so no whistle fires mid-tick here.
@@ -3650,6 +3660,7 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 	# work — without this, get_last_toucher() returns the passer at goal time.
 	_shot_tracker.on_deflection(pid)
 	_shot_tracker.on_shot_started(pid, true)  # one-timer tag → One-Timer achievement
+	_loose_puck_released_by = pid
 	# Lag-comp the goalie reaction trigger (see _fire_remote_shot). clamp_back_date
 	# also zeroes the host's own path (host_timestamp = 0 → stale → 0); without it
 	# `now - 0` back-dates the goalie by the whole session.
@@ -3721,6 +3732,11 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		if shooter != null and shooter.controller != null:
 			var max_power: float = shooter.controller.max_slapper_power if is_slapper \
 					else shooter.controller.max_wrister_power
+			# A wrist shot keeps the shooter's motion (ReleaseMomentum), read off
+			# the host's own copy of the body.
+			if not is_slapper and shooter.skater != null:
+				max_power = ShotReleaseRules.release_power_bound(max_power,
+						shooter.skater.velocity)
 			power = ShotReleaseRules.clamp_power(power, max_power)
 		rtt_ms = ShotReleaseRules.clamp_rtt_ms(
 				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
@@ -3814,6 +3830,7 @@ func _start_pending_shot_from_carrier() -> void:
 	if puck == null or puck.carrier == null:
 		return
 	var shooter_peer_id: int = _registry.resolve_peer_id(puck.carrier)
+	_loose_puck_released_by = shooter_peer_id
 	# A pass/shot from carry is a deliberate play — instant possession
 	# establishment (PossessionRules), even off a one-touch. Runs while the
 	# carrier is still set, before release() fires the generic release signal.
@@ -5494,7 +5511,8 @@ func faceoff_time_until_drop() -> float:
 # pose (which rides the hand/blade wire state outward, including the host's sim
 # of a remote human scorer), and every machine's gait reads the same timer for
 # the celebration leg bounce (legs are computed locally per machine and never
-# ride the wire).
+# ride the wire). The window opens once the goal clip has closed, so the
+# replay never records a stick the knees and fist do not replay with it.
 func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 		_assist1: String, _assist2: String) -> void:
 	if scorer_name.is_empty():
@@ -5502,7 +5520,9 @@ func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 	for record: PlayerRecord in _registry.all().values():
 		if record.player_name != scorer_name or record.controller == null:
 			continue
-		record.controller.start_celebration(GameRules.GOAL_CELEBRATION_DURATION)
+		record.controller.start_celebration(
+				GameRules.GOAL_CELEBRATION_DURATION - GoalReplayRules.POST_GOAL_TAIL,
+				GoalReplayRules.POST_GOAL_TAIL)
 		return
 
 

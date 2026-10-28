@@ -549,9 +549,9 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 # `direction × power` directly as linear velocity (see Puck.release),
 # so "power" IS m/s. Min and max bracket the wrister power model
 # (ShotMechanics.wrister_power_t — pure cursor speed, feel-curve shaped).
-# The min sits BELOW the quick-shot/pass
-# speed on purpose: a slow deliberate sweep is a soft touch pass, softer than
-# the fixed snap pass.
+# The min sits well BELOW the quick-shot/pass
+# speed on purpose: a slow deliberate sweep is a soft touch pass (5 m/s ≈ 11
+# mph), softer than the fixed snap pass.
 # The maxes are the NEUTRAL-BUILD anchors (6'1", medium flex, M92), calibrated
 # so the build spread tops out at an elite NHL release — the wrister by height
 # alone (PlayerAttributes.shot_power_mult), the slapper by height × flex × curve
@@ -563,7 +563,7 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 # catch-with-care territory.
 # The slapper min is a hurried, barely-wound release — still a heavy shot
 # (~45 mph); one-timers always fire at max regardless of charge.
-const DEFAULT_WRISTER_POWER_MIN_M_S: float = 10.0
+const DEFAULT_WRISTER_POWER_MIN_M_S: float = 5.0
 const DEFAULT_WRISTER_POWER_MAX_M_S: float = 33.0
 const DEFAULT_SLAPPER_POWER_MIN_M_S: float = 20.0
 const DEFAULT_SLAPPER_POWER_MAX_M_S: float = 40.0
@@ -681,10 +681,10 @@ const NEUTRAL_ZONE_FACEOFF_DOTS: Array[Vector2] = [
 # Slots 3/4 (LD/RD, 5v5 only) stand behind everyone outside the circle — the
 # real alignment puts D behind the hash marks; near an end-zone dot the raw
 # offset can land past the goal line, which faceoff_position clamps back in.
-# END-ZONE draws override this table for the D pair only (the FACEOFF_END_*
-# constants below + PlayerRules.faceoff_position): the one dot-relative shape
-# is the real alignment at center/neutral dots, but an end-zone draw's D jobs
-# are positional, not dot-relative.
+# END-ZONE draws override this table for the D pair and the defending wingers
+# (the FACEOFF_END_* constants below + PlayerRules.faceoff_position):
+# the one dot-relative shape is the real alignment at center/neutral dots, but
+# those end-zone jobs are positional, not dot-relative.
 const FACEOFF_OFFSETS: Array = [
 	[Vector2( 0.0,  1.5), Vector2(-4.7,  0.9), Vector2( 4.7,  0.9),
 			Vector2(-2.4,  7.0), Vector2( 2.4,  7.0)],  # team 0
@@ -695,24 +695,21 @@ const FACEOFF_OFFSETS: Array = [
 # ── End-zone draw alignment (5v5; see PlayerRules.faceoff_position) ──────────
 # The real positional jobs at an end-zone dot, replacing the dot-relative
 # offsets above for the players whose jobs there aren't dot-relative.
-# DEFENDING side plays the NHL wall-and-stack: the strong-side D (identity
-# side == the dot's side of the ice) holds the WALL — at the boards, level
-# with the dot (a hair on-side) — for the boards battle and the rim; the
-# weak-side D and the boards-side WINGER form the shoulder-to-shoulder STACK
-# on the goal-side arc of the circle (just outside it — the on-side rule) —
-# a won draw comes straight back to the stack for the breakout, and on a
-# loss the stack D boxes out to the net-front while the stack W releases up
-# to the strong point. The net-front itself is the goalie's at the drop.
-# The inside winger keeps the table's hash-mark spot (the checking matchup).
+# DEFENDING side, built on the table's hash-mark spots: the strong-side D
+# (identity side == the dot's side of the ice) holds the BOARDS hash for the
+# wall battle; the boards-side winger takes the INSIDE hash, with the inside
+# winger shoulder to shoulder beside him toward the middle, so on a lost draw
+# the hash winger cuts across the circle to the strong point and the other
+# goes straight to the weak point without their paths crossing; the weak-side
+# D stands behind the hash winger at the NET FRONT, on the opposing inside
+# winger.
 # ATTACKING side plays the points at the blue line: strong point directly
 # above the dot (the boards-side lane + draw-back target), weak point toward
 # the middle of the line (the middle-ice valve).
-const FACEOFF_END_WALL_INSET_M: float = 1.2       # wall D: in from the boards
-const FACEOFF_END_WALL_ONSIDE_M: float = 0.3      # ...level with the dot, a hair on-side
-const FACEOFF_END_STACK_BEHIND_M: float = 4.8     # stack: goal-side, outside the 4.57 m circle
-const FACEOFF_END_STACK_HALF_SEP_M: float = 0.9   # shoulder-to-shoulder half split
-const FACEOFF_END_POINT_INSIDE_M: float = 1.0     # points: inside the blue line
-const FACEOFF_END_WEAK_POINT_X_M: float = 1.2     # weak point: past mid, off-dot side
+const FACEOFF_END_WINGER_PAIR_SEP_M: float = 1.2     # wingers' shoulder-to-shoulder spacing
+const FACEOFF_END_NET_FRONT_D_BEHIND_M: float = 2.0  # net-front D: goal-side of the hash winger
+const FACEOFF_END_POINT_INSIDE_M: float = 1.0        # points: inside the blue line
+const FACEOFF_END_WEAK_POINT_X_M: float = 1.2        # weak point: past mid, off-dot side
 # Depth cap for faceoff placements: no slot spawns closer to the end boards
 # than this far in front of the goal line, so a defensive-zone draw's D pair
 # (raw offset ~7 m behind an end-zone dot) stands net-side instead of inside

@@ -209,7 +209,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# a clear-lane receiver skips the second solve. A flat variant filtered
 		# before its lane solve leaves 0.0 — "contested" — so the saucer still
 		# gets its own look at leads the flat pass couldn't take.
-		if saucer_speed >= GameRules.DEFAULT_WRISTER_POWER_MIN_M_S \
+		if saucer_speed >= AIPuckLane.SOFTEST_FEED_M_S \
 				and _last_flat_variant_lane < AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR:
 			var s_saucer: float = _pass_variant_ev(
 					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,

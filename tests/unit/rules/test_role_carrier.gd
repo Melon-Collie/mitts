@@ -1857,8 +1857,8 @@ func test_committed_saucer_pass_caps_launch_at_the_receivability_bound() -> void
 	assert_lt(c.pass_target_speed, bound + 0.01,
 			"committed saucer launch is capped so the flip lands before the tape")
 	assert_gt(c.pass_target_speed,
-			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S - 0.01,
-			"committed saucer launch stays at/above the soft-touch floor")
+			AIPuckLane.SOFTEST_FEED_M_S - 0.01,
+			"committed saucer launch stays at/above the softest feed")
 
 
 # ─── puck-protect mirror (blade shielding read by the state machine) ─────────

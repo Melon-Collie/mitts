@@ -121,7 +121,7 @@ var _skin_buttons: Array[Button] = []
 var _glove_btn: OptionButton = null
 var _tuck_btn: OptionButton = null
 # HEAD.
-var _hair_btns: Array[Button] = []
+var _hair_btn: OptionButton = null
 var _facial_btn: OptionButton = null
 var _hair_color_buttons: Array[Button] = []
 var _face_btns: Array[Button] = []
@@ -392,9 +392,7 @@ func _build_you(page: VBoxContainer) -> void:
 	var name_col: VBoxContainer = _row(page, &"PLAYER_NAME_LABEL", false, full)
 	_name_field = LineEdit.new()
 	_name_field.placeholder_text = tr(&"PLAYER_NAME_PLACEHOLDER")
-	# 12 fits the jersey nameplate at font 28 without clipping at the back seam,
-	# and the lobby slot cards shrink-to-fit anything up to it.
-	_name_field.max_length = 12
+	_name_field.max_length = NameFilter.MAX_LENGTH
 	_name_field.custom_minimum_size = Vector2(PlayerRowKit.FIELD_W, PlayerRowKit.CONTROL_H)
 	_name_field.add_theme_font_size_override("font_size", 18)
 	_name_field.text_changed.connect(_on_name_text_changed)
@@ -482,11 +480,10 @@ func _build_body(page: VBoxContainer) -> void:
 
 func _build_head(page: VBoxContainer) -> void:
 	var head: int = LockerMannequin.Focus.HELMET
-	var hair_names: Array[String] = []
-	for key: StringName in HairStyleRegistry.HAIR_NAME_KEYS:
-		hair_names.append(tr(key))
-	_hair_btns = PlayerRowKit.segmented(_row(page, &"PLAYER_HAIR_LABEL", false, head),
-			hair_names, func(i: int) -> void: _edit_gear(&"hair_style", i))
+	_hair_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_HAIR_LABEL", false, head),
+			func(i: int) -> void: _edit_gear(&"hair_style", _hair_btn.get_item_id(i)))
+	for style: int in HairStyleRegistry.pickable_hair():
+		_hair_btn.add_item(tr(HairStyleRegistry.HAIR_NAME_KEYS[style]), style)
 	_facial_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_BEARD_LABEL", false, head),
 			func(i: int) -> void: _edit_gear(&"facial_hair", i))
 	for i: int in HairStyleRegistry.facial_count():
@@ -502,8 +499,7 @@ func _build_head(page: VBoxContainer) -> void:
 		face_names.append(tr(key))
 	_face_btns = PlayerRowKit.segmented(_row(page, &"PLAYER_HELMET_LABEL", false, head),
 			face_names, func(i: int) -> void: _edit_gear(&"helmet_face", i))
-	var head_controls: Array = [_facial_btn]
-	head_controls.append_array(_hair_btns)
+	var head_controls: Array = [_hair_btn, _facial_btn]
 	head_controls.append_array(_hair_color_buttons)
 	head_controls.append_array(_face_btns)
 	_wire_reach(head_controls, head)
@@ -694,7 +690,7 @@ func _refresh() -> void:
 	PlayerRowKit.select(_skin_buttons, _draft.skin)
 	_tuck_btn.select(gear.jersey_tuck)
 
-	PlayerRowKit.select(_hair_btns, gear.hair_style)
+	_hair_btn.select(_hair_btn.get_item_index(gear.hair_style))
 	_facial_btn.select(gear.facial_hair)
 	PlayerRowKit.select(_hair_color_buttons, gear.hair_color)
 	PlayerRowKit.select(_face_btns, gear.helmet_face)

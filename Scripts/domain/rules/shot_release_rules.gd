@@ -93,6 +93,15 @@ static func sanitize_direction(direction: Vector3) -> Vector3:
 	return dir
 
 
+# The most a release can honestly carry from a shooter whose push tops out at
+# `max_push` and whose body moves at `skater_velocity` (the host's own): the push
+# plus the body's motion (ReleaseMomentum), which the kept launch angle scales
+# by up to 1 / cos of the steepest legal loft.
+static func release_power_bound(max_push: float, skater_velocity: Vector3) -> float:
+	var body: float = Vector2(skater_velocity.x, skater_velocity.z).length()
+	return max_push + body / sqrt(1.0 - MAX_DIRECTION_Y * MAX_DIRECTION_Y)
+
+
 # Clamp a client-supplied shot power to the shooter's host-known maximum
 # (attribute-scaled controller export, plus any legit bonus the caller folds
 # into `max_power`).

@@ -10,7 +10,7 @@ extends RefCounted
 # shells come out right whichever order their vertices were listed in.
 
 enum Slot {
-	PADS, JERSEY, PANTS, GLOVES, GLOVE_ACCENT,
+	PADS, JERSEY, PANTS, GLOVES, ACCENT,
 	HELMET, CAGE, SKATE_BOOT, SKATE_STEEL, STICK, STICK_TAPE, STRAP, SKIN, SOCK,
 }
 const SLOT_COUNT: int = 14

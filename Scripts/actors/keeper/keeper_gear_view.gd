@@ -48,6 +48,7 @@ var _front_view: SubViewport = null
 var _back_view: SubViewport = null
 var _shoulder_view: SubViewport = null
 var _text_color: Color = Color.WHITE
+var _text_stroke: Color = Color.TRANSPARENT
 var _player_name: String = ""
 var _jersey_number: int = 0
 
@@ -97,14 +98,16 @@ func apply_uniform(colors: Dictionary) -> void:
 	_upper_arm.set_shader_parameter("yoke_color", UniformPaint.yoke_color(jersey))
 	_upper_arm.set_shader_parameter("cap_color", kit.shoulders.color)
 	_shoulder.text_color = kit.shoulders.text
+	_shoulder.text_stroke = kit.shoulders.stroke
 	_set_stripes(_upper_arm, arms.upper.stripes)
 	_forearm.set_shader_parameter("base_color", arms.lower.base)
 	_forearm.set_shader_parameter("cap_color", _elbow_color(arms))
 	_set_stripes(_forearm, arms.lower.stripes)
 	_paint_slot(S.JERSEY, jersey.base)
 	_paint_slot(S.HELMET, kit.helmet)
-	_paint_slot(S.GLOVES, colors.gloves)
-	_paint_slot(S.GLOVE_ACCENT, colors.glove_accent)
+	# The blocker and trapper are a set with the pads, trimmed alike.
+	_paint_slot(S.GLOVES, colors.goalie_pads)
+	_paint_slot(S.ACCENT, colors.goalie_accent)
 	_paint_slot(S.PADS, colors.goalie_pads)
 	_paint_slot(S.PANTS, colors.pants)
 	for m: ShaderMaterial in _pants_paint.values():
@@ -116,6 +119,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	_front.set_crest(TeamCrest.fruit_for(preset), preset)
 	_front_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_text_color = colors.text
+	_text_stroke = kit.text.stroke
 	_letter()
 
 
@@ -158,9 +162,9 @@ func _paint_slot(slot: int, c: Variant) -> void:
 
 
 func _letter() -> void:
-	_back.set_lettering(_player_name, _jersey_number, _text_color)
+	_back.set_lettering(_player_name, _jersey_number, _text_color, _text_stroke)
 	_back_view.render_target_update_mode = SubViewport.UPDATE_ONCE
-	_shoulder.set_lettering("", _jersey_number, _shoulder.text_color)
+	_shoulder.set_lettering("", _jersey_number, _shoulder.text_color, _shoulder.text_stroke)
 	_shoulder_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 

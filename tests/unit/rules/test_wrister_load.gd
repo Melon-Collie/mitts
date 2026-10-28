@@ -100,6 +100,45 @@ func test_zero_aim_leaves_the_shot_alone() -> void:
 	assert_almost_eq(r.load_share, 1.0, 0.001)
 
 
+# ── The arms ─────────────────────────────────────────────────────────────────
+
+func test_arms_push_a_shot_straight_out_from_the_body() -> void:
+	var r := _solve(AT_9, TO_9, LEFTY)
+	assert_almost_eq(r.arm_share, 1.0, 0.001)
+	assert_almost_eq(WristerLoad.power_share(r.load_share, r.arm_share, r.is_backhand, 0.6, 1.0),
+			0.6, 0.001, "no turn behind it, but the arms still snap it out")
+
+
+func test_a_puck_in_front_cannot_be_shot_back_through_the_body() -> void:
+	for left_handed: bool in [LEFTY, RIGHTY]:
+		var r := _solve(AT_12, TO_6, left_handed)
+		assert_almost_eq(r.arm_share, 0.0, 0.001)
+		assert_almost_eq(WristerLoad.power_share(r.load_share, r.arm_share, r.is_backhand,
+				0.6, 0.75), 0.0, 0.001)
+
+
+func test_arms_full_past_the_tangent_then_linear_taper() -> void:
+	# Puck at 9, aims swung off the forward tangent toward the off side, i.e. in
+	# toward the body.
+	assert_almost_eq(_solve(AT_9, _aim_off_forward(0.0), LEFTY).arm_share, 1.0, 0.001,
+			"along the tangent")
+	assert_almost_eq(_solve(AT_9, _aim_off_forward(-45.0), LEFTY).arm_share, 1.0, 0.001,
+			"45° past the tangent is still a full push")
+	assert_almost_eq(_solve(AT_9, _aim_off_forward(-67.5), LEFTY).arm_share, 0.5, 0.001,
+			"halfway down the taper")
+
+
+func test_a_full_load_always_has_the_arms_behind_it() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 0xA4A5
+	for i: int in 500:
+		var puck := Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-1.0, 1.0))
+		var aim := Vector3(rng.randf_range(-1.0, 1.0), 0.0, rng.randf_range(-1.0, 1.0))
+		var r := _solve(puck, aim, rng.randf() < 0.5)
+		if r.load_share > 0.999:
+			assert_almost_eq(r.arm_share, 1.0, 0.001, "case %d" % i)
+
+
 # A forward aim swung `deg` toward the left.
 func _aim_off_forward(deg: float) -> Vector3:
 	var a: float = deg_to_rad(deg)

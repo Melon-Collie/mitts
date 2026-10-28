@@ -686,14 +686,16 @@ var weight_spring_damping: float = 14.0     # damping (near-critical — a clean
 var min_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
 var max_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var backhand_power_coefficient: float = 0.75
-# ── Wrister load (WristerLoad): what the torso can put into a human's shot ──
-# Release cap: max_wrister_power × lerp(this, 1, load). With no turn behind it,
-# the arms, wrists and stick flex still carry a real snap. Per-build: the flex
-# pick scales it (PlayerAttributes.wrister_unloaded_mult).
+# ── Wrister load (WristerLoad): what the torso and arms put into a shot ──
+# Release cap: max_wrister_power × (this × arms + (1 − this) × load). With no
+# turn behind it, the arms, wrists and stick flex still carry a real snap on a
+# shot out from the body, and nothing on one back through it. Per-build: the
+# flex pick scales it (PlayerAttributes.wrister_unloaded_mult).
 var wrister_unloaded_share: float = 0.6
 var wrister_full_load_arc_deg: float = 45.0
 var wrister_home_reach_deg: float = 120.0
 var wrister_away_reach_deg: float = 30.0
+var wrister_arm_full_past_tangent_deg: float = 45.0
 # ── Wrister power model (ShotMechanics.wrister_power_t) ──
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
 # a committed target for bots — see _wrister_sweep_speed). power_curve shapes
@@ -952,9 +954,15 @@ var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration b
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
 # Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.
-# apply_celebration_pose) — heights in upper-body-local metres.
-var celebration_hand_y: float = 0.45     # raised top-hand height
-var celebration_stick_rise: float = 0.5  # blade height above the raised hand
+# apply_celebration_pose). Bearings are upper-body local with x toward the
+# arm's own side and −z forward; reaches are in arm lengths from the shoulder.
+var celebration_hand_bearing := Vector3(0.18, 1.0, -0.22)  # the stick arm thrown up, a touch forward
+var celebration_hand_reach: float = 0.9      # near full extension, short of a locked elbow
+var celebration_hand_pump: float = 0.06      # the arm gives this much at the bottom of each hop
+var celebration_stick_bearing := Vector3(0.4, 1.0, 0.12)   # shaft leans out and back, clear of the helmet
+var celebration_fist_bearing := Vector3(0.22, 1.0, -0.3)
+var celebration_fist_reach_low: float = 0.5  # elbow bent, fist at the face
+var celebration_fist_reach_high: float = 0.78  # punched up above the helmet
 
 # ── Shot-Block Tuning ─────────────────────────────────────────────────────────
 # Movement speed while blocking (unused while the stance is fully planted; kept for tuning).
@@ -1113,11 +1121,14 @@ var hit_active: bool = false
 
 var _game_state_has_faceoff_prep: bool = false
 var _game_state_has_period_break: bool = false
-# Cosmetic goal-celebration window (seconds remaining / total). Set by
-# GameManager on the machine that simulates the scorer; the raised-stick pose
-# rides the normal hand/blade wire state to everyone else.
+# Cosmetic goal-celebration window (seconds remaining / total), opened after
+# _celebration_lead seconds. Started by GameManager on every machine; the
+# raised-stick pose rides the normal hand/blade wire state to everyone else.
 var _celebration_timer: float = 0.0
 var _celebration_total: float = 1.0
+var _celebration_lead: float = 0.0
+# Hops across the window: the knee bounce and the fist pump share them.
+const CELEBRATION_PUMPS: float = 3.0
 
 # ── Faceoff / intro skate-in approach ─────────────────────────────────────────
 # During FACEOFF_PREP the skater glides from a start point (its bench for the
@@ -1160,21 +1171,44 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
-func start_celebration(duration: float) -> void:
+# `lead` seconds pass before the window opens; nothing is posed through them.
+func start_celebration(duration: float, lead: float = 0.0) -> void:
 	_celebration_total = maxf(duration, 0.001)
 	_celebration_timer = _celebration_total
+	_celebration_lead = maxf(lead, 0.0)
 
 
+# Drops the window, lead and all, and hands the free hand back to the stick.
+func end_celebration() -> void:
+	_celebration_timer = 0.0
+	_celebration_lead = 0.0
+	_ik.hold_free_hand(Vector3.ZERO, 0.0)
+
+
+# The window is open: the pose is live.
 func is_celebrating() -> bool:
+	return _celebration_timer > 0.0 and _celebration_lead <= 0.0
+
+
+# A window is open or still waiting out its lead.
+func has_celebration_window() -> bool:
 	return _celebration_timer > 0.0
 
 
-# 0..1 progress through the celebration window (0 when idle). Read by the gait
-# for the leg bounce, matching the `t` the raised-stick pose runs on.
+# 0..1 progress through the celebration window (0 when idle).
 func celebration_progress() -> float:
-	if _celebration_timer <= 0.0:
+	if not is_celebrating():
 		return 0.0
 	return 1.0 - _celebration_timer / _celebration_total
+
+
+# 0 standing to 1 at the bottom of a hop, CELEBRATION_PUMPS times across the
+# window: the gait's knee bounce and the pose's fist pump both ride it.
+func celebration_pump() -> float:
+	var progress: float = celebration_progress()
+	if progress <= 0.0:
+		return 0.0
+	return 0.5 - 0.5 * cos(progress * TAU * CELEBRATION_PUMPS)
 
 
 # Ages the celebration window, at physics rate on real ticks from both the
@@ -1182,7 +1216,9 @@ func celebration_progress() -> float:
 # skaters this machine doesn't simulate (the timer starts on every machine;
 # see GameManager._trigger_scorer_celebration).
 func tick_celebration(delta: float) -> void:
-	if _celebration_timer > 0.0:
+	if _celebration_lead > 0.0:
+		_celebration_lead = maxf(_celebration_lead - delta, 0.0)
+	elif _celebration_timer > 0.0:
 		_celebration_timer = maxf(_celebration_timer - delta, 0.0)
 
 
@@ -1840,10 +1876,10 @@ func _process_input(input: InputState, delta: float) -> void:
 		# GOAL_CELEBRATION), real ticks only, and gated to plain skating so a
 		# whiffed shot's follow-through isn't fought over.
 		var cel_state: SkaterStateMachine.State = _sm.get_state()
-		if _celebration_timer > 0.0 and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
+		if is_celebrating() and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
 				or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
-			_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total,
-					_celebration_total - _celebration_timer, _celebration_timer)
+			_shot_pose.apply_celebration_pose(_celebration_total - _celebration_timer,
+					_celebration_timer)
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
@@ -1868,7 +1904,7 @@ func _render_pose_update(delta: float) -> void:
 	# The head and the off hand are mesh (Skater.on_camera).
 	if not skater.on_camera():
 		return
-	_pose.apply_head_tracking_aim(_current_aim_world, delta)
+	_pose.apply_head_tracking(delta)
 	_ik.update_bottom_hand(delta)
 
 
@@ -2158,7 +2194,7 @@ func apply_blade_aim_only(input: InputState, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(input, delta)
+	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# This locked-phase path poses its own gait ready-stance + off-hand (a brief
@@ -2273,6 +2309,9 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# This path poses the gait + off-hand itself (below), so the render-rate
 	# cosmetic hook yields to it while a replay is driving this skater.
 	_self_posing = true
+	# The replay poses the recorded body; a live celebration's knee bounce and
+	# fist pump are read off this controller, and its timer is frozen here.
+	end_celebration()
 	skater.global_position = state.position
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
@@ -2593,12 +2632,11 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 		# plant the legs at their rest pose so the stride doesn't resume mid-swing.
 		_pose.reset_lean_and_lag()
 		_skating.reset_to_rest()
-		# Kill any celebration remainder. The timer only ticks in
-		# _process_input, which doesn't run through the goal replay or the
-		# faceoff-prep aim-only path — so the leftover slice (goal_scored
-		# signal latency; larger on clients) would otherwise freeze through
-		# the replay and fire the raised-stick pose AT the next faceoff.
-		_celebration_timer = 0.0
+		# Kill any celebration remainder. The timer only ticks on live ticks,
+		# which the faceoff-prep aim-only path is not — so a leftover slice
+		# (goal_scored signal latency; larger on clients) would otherwise fire
+		# the raised-stick pose AT the next faceoff.
+		end_celebration()
 	# The body (and with it the blade) just jumped, and the pose resets above
 	# moved the stick again. Re-anchor the blade histories to where the stick
 	# actually is now, or the next tick differences them across the whole jump:
@@ -2725,7 +2763,7 @@ func _render_approach_pose(facing: Vector2, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(_approach_input, delta)
+	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# This intro-skate path poses its own gait + off-hand (a brief locked phase,
@@ -2802,7 +2840,7 @@ func _transition_to_skating() -> void:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 	else:
 		_sm.set_state(State.SKATING_WITHOUT_PUCK)
-	_sm.shot_dir = Vector3.ZERO
+	_sm.aim_finish(Vector3.ZERO)
 	# Every exit keeps the smoothed torso and hip pose and lets the skating eases
 	# carry it to the new targets: zeroing it here snaps the shoulders square and
 	# the trunk upright in one tick (a lost puck threw the head ~0.2 m). Out of
@@ -2876,7 +2914,7 @@ func _enter_shot_block() -> void:
 
 func _enter_slapper_charge(input: InputState) -> void:
 	_aiming.reset_slapper()
-	_sm.shot_dir = Vector3.ZERO
+	_sm.aim_finish(Vector3.ZERO)
 	# Nothing turns or moves on the press: the aim starts where the cursor is
 	# (_update_slapper_aim) and the hips turn to its stance at their own rate.
 	var strike: Vector2 = slapper_strike_local()
@@ -3056,10 +3094,17 @@ func _solve_wrister_load(input: InputState) -> void:
 	WristerLoad.solve(wrister_load, to_local * Vector3(pin.x, 0.0, pin.z),
 			to_local * _wrister_aim_dir(input), skater.is_left_handed, _wrister_load_config())
 
+# Share of the full shot the body can drive along this tick's aim (the torso's
+# turn and the arms' push, before the backhand's coefficient): how far the aim
+# pose squares the shoulders onto the aim.
+func wrister_drive_share() -> float:
+	return WristerLoad.power_share(wrister_load.load_share, wrister_load.arm_share, false,
+			wrister_unloaded_share, 1.0)
+
 # The most a release can carry once the load is applied.
 func _wrister_load_cap(is_backhand: bool) -> float:
-	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share, is_backhand,
-			wrister_unloaded_share, backhand_power_coefficient)
+	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share,
+			wrister_load.arm_share, is_backhand, wrister_unloaded_share, backhand_power_coefficient)
 
 func _release_wrister(input: InputState) -> void:
 	_solve_wrister_load(input)
@@ -3080,11 +3125,23 @@ func _release_wrister(input: InputState) -> void:
 				_wrister_config(),
 				aim_dir,
 				false,
-				_wrister_sweep_speed(input))
+				_wrister_sweep_speed(input),
+				null,
+				skater.velocity)
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
-		_sm.shot_dir = result.direction
+		var push: float = result.power
+		_carry_momentum(result)
+		# The finish turns the hips and swings the stick round onto the shot only
+		# as far as the torso drove it; the arms alone push it from where it sat.
+		var drive: float = wrister_load.load_share
+		_sm.aim_finish(result.direction,
+				ShotMechanics.finish_line(Vector3(_pose.facing.x, 0.0, _pose.facing.y),
+						result.direction, drive),
+				ShotMechanics.finish_line(
+						_aiming.wrister_origin_world - _aiming.wrister_origin_skater_pos,
+						result.direction, drive))
 		_do_release(result.direction, result.power)
-		skater.shot_charge = _wrister_charge_of(result.power)
+		skater.shot_charge = _wrister_charge_of(push)
 
 	_sm.follow_through_is_slapper = false
 	# Finish size follows the released POWER (pre-backhand — the body swing is the
@@ -3100,6 +3157,17 @@ func _release_wrister(input: InputState) -> void:
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
+
+# Folds the skater's motion into a wrist shot's or quick pass's release
+# (ReleaseMomentum): the puck keeps the body's velocity, the hands correcting it
+# onto the aim out of the push; a pass keeps its vertical launch speed. A puck
+# the blade leaves at rest keeps its direction at no pace.
+func _carry_momentum(result: ShotMechanics.ShotResult, is_pass: bool = false) -> void:
+	var v: Vector3 = ReleaseMomentum.release_velocity(result.direction, result.power,
+			skater.velocity, is_pass)
+	result.power = v.length()
+	if result.power > 0.0001:
+		result.direction = v / result.power
 
 # Instant quick pass — the fixed-power blade→cursor snap, fired straight from
 # carry by the dedicated quick_pass button (no wrister aim/charge). Backhand is
@@ -3120,7 +3188,8 @@ func _fire_quick_pass(input: InputState) -> void:
 				_wrister_config(),
 				Vector3.ZERO,
 				true)
-		_sm.shot_dir = result.direction
+		_carry_momentum(result, true)
+		_sm.aim_finish(result.direction)
 		_do_release(result.direction, result.power)
 
 	_sm.follow_through_is_slapper = false
@@ -3164,7 +3233,7 @@ func _fire_slapper_shot(input: InputState) -> bool:
 		result.power = ShotReleaseRules.one_timer_power(
 				result.power, one_timer_center_power_bonus,
 				zone_xz, puck_xz, slapper_zone_radius)
-	_sm.shot_dir = result.direction
+	_sm.aim_finish(result.direction)
 	_do_release(result.direction, result.power)
 	return true
 
@@ -3267,16 +3336,17 @@ func _update_wrister_charge(input: InputState) -> void:
 			skater.global_position, input.mouse_world_pos, blade_world,
 			is_backhand, _elevation_level,
 			_wrister_config(), charge_aim_dir, false,
-			_wrister_sweep_speed(input), _wrister_pred_scratch)
+			_wrister_sweep_speed(input), _wrister_pred_scratch, skater.velocity)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
 	wrister_coil = minf(wrister_load.load_share, ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config()))
-	skater.predicted_shot_velocity = pred.direction * pred.power
-	# shot_charge carries the release-now SPEED (normalized predicted power over
-	# the min→max band) — the pure mouse-speed model, so it always matches the
-	# shot that would come out this tick. This is the honest readout the goalie
-	# leans on and what the stick-flex pose keys off (the flex is the only
-	# visual charge feedback — there is no charge ring).
+	skater.predicted_shot_velocity = ReleaseMomentum.release_velocity(
+			pred.direction, pred.power, skater.velocity)
+	# shot_charge carries the release-now PUSH (normalized predicted power over
+	# the min→max band, before the skater's own motion joins it) — the pure
+	# mouse-speed model, so it always matches the blade's push this tick. This is
+	# the honest readout the goalie leans on and what the stick-flex pose keys off
+	# (the flex is the only visual charge feedback — there is no charge ring).
 	skater.shot_charge = _wrister_charge_of(pred.power)
 
 
@@ -3938,6 +4008,8 @@ func _wrister_load_config() -> WristerLoad.Config:
 		_cached_wrister_load_cfg.max_twist_rad = deg_to_rad(upper_body_max_twist_deg)
 		_cached_wrister_load_cfg.home_reach_rad = deg_to_rad(wrister_home_reach_deg)
 		_cached_wrister_load_cfg.away_reach_rad = deg_to_rad(wrister_away_reach_deg)
+		_cached_wrister_load_cfg.arm_full_past_tangent_rad = \
+				deg_to_rad(wrister_arm_full_past_tangent_deg)
 	return _cached_wrister_load_cfg
 
 # True for bot controllers (AIController overrides). Bots have no real cursor, so

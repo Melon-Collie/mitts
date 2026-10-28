@@ -136,52 +136,68 @@ func apply_block_blade_position() -> void:
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
 
-# Seconds the celebration's raised stick eases in and back out over.
-const CELEBRATION_EASE_S: float = 0.25
+# Seconds the celebration's raised stick eases in and back out over: the shaft
+# swings ~150° on a 1.3 m lever, and quicker than this its tip's turn alone
+# outruns the body's smoothness bounds (test_body_stays_smooth.gd).
+const CELEBRATION_EASE_S: float = 0.4
 
 # ── Goal Celebration Pose ─────────────────────────────────────────────────────
-# Cosmetic raised-stick celebration for the scorer: top hand punches up with
-# the stick held overhead (blade above the hand, tilted so the shaft never
-# goes dead vertical — the stick/blade look_at needs a horizontal component),
-# off hand pumps up on the free side. t runs [0,1] across the celebration
-# window; the pose eases in from the stick the tick placed over its first
-# CELEBRATION_EASE_S and back out to it over its last, holding a gentle bob
-# between. Applied AFTER the tick's normal hand/blade placement, which it
-# blends from; runs only on the scorer's own machine and rides the hand/blade
-# wire state to everyone else like every other pose. `elapsed` and `left` are
-# seconds into and remaining of the window.
-func apply_celebration_pose(t: float, elapsed: float, left: float) -> void:
+# Cosmetic raised-stick celebration for the scorer: the top arm thrown up near
+# full extension with the stick held up its full length, leaning out off the
+# helmet, and the free hand pumping a fist on the hops the knees bounce. The
+# pose authors the HAND and derives the blade one solve_stick_length() along
+# the shaft's bearing; through the ease both the hand and that bearing blend
+# from the stick the tick placed, and the span from its length, so the stick
+# never draws short. Applied AFTER the tick's normal hand/blade placement, on
+# the machine that simulates the scorer, and rides the hand/blade wire state to
+# everyone else. `elapsed` and `left` are seconds into and remaining of the
+# window.
+func apply_celebration_pose(elapsed: float, left: float) -> void:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var ramp: float = smoothstep(0.0, CELEBRATION_EASE_S, elapsed) \
-			* smoothstep(0.0, CELEBRATION_EASE_S, left)
-	var bob: float = sin(t * TAU * 1.5) * 0.03 * ramp
-	var hand_pos := Vector3(
-			_skater.shoulder.position.x,
-			lerpf(_controller.hand_rest_y, _controller.celebration_hand_y, ramp) + bob,
-			_skater.shoulder.position.z - 0.10)
-	var blade_pos := Vector3(
-			_skater.shoulder.position.x + blade_side_sign * 0.18,
-			hand_pos.y + _controller.celebration_stick_rise * ramp,
-			_skater.shoulder.position.z - 0.28)
-	# The rigid pass reads the same here as anywhere, and it is why the raised
-	# stick survives it: this pose holds the blade well inside a stick-length of
-	# the hand, so the correction is inert until a board clamp actually moves the
-	# blade — and then it slides the hand rather than redrawing the arm from
-	# scratch, which is what keeps the stick overhead where the celebration wants it.
-	hand_pos = _skater.get_top_hand_position().lerp(hand_pos, ramp)
-	blade_pos = _skater.get_blade_position().lerp(blade_pos, ramp)
+	var ramp: float = _smootherstep(elapsed / CELEBRATION_EASE_S) \
+			* _smootherstep(left / CELEBRATION_EASE_S)
+	var pump: float = _controller.celebration_pump()
+	var arm: float = _skater.upper_arm_length + _skater.forearm_length
+	var top_side: float = signf(_skater.shoulder.position.x)
+	var bearing: Vector3 = _controller.celebration_hand_bearing
+	var raised_hand: Vector3 = _ik.arm_shoulder() \
+			+ Vector3(bearing.x * top_side, bearing.y, bearing.z).normalized() * arm \
+			* (_controller.celebration_hand_reach - _controller.celebration_hand_pump * pump)
+	bearing = _controller.celebration_stick_bearing
+	var raised_shaft: Vector3 = Vector3(bearing.x * top_side, bearing.y, bearing.z).normalized()
+
+	var hand_from: Vector3 = _skater.get_top_hand_position()
+	var shaft_from: Vector3 = _skater.get_blade_position() - hand_from
+	var span_from: float = shaft_from.length()
+	# Slerped, so the shaft turns at an even rate: a lerp between bearings this
+	# far apart all but vanishes midway and whips the stick through it.
+	var shaft: Vector3 = raised_shaft
+	if span_from > 0.001:
+		shaft = (shaft_from / span_from).slerp(raised_shaft, ramp)
+	var hand_pos: Vector3 = hand_from.lerp(raised_hand, ramp)
+	var blade_pos: Vector3 = hand_pos + shaft * lerpf(span_from, _ik.solve_stick_length(), ramp)
+	# The rigid pass is inert while the stick is held at its own length; a board
+	# clamp that moves the blade is what it answers, by sliding the hand.
 	var rigid: TopHandIK.Result = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	hand_pos = rigid.hand
 	blade_pos = _skater.clamp_blade_to_walls(rigid.blade)
 	rigid = _ik.rigid_stick(hand_pos, blade_pos, blade_side_sign)
 	_skater.set_top_hand_position(rigid.hand)
 	_skater.set_blade_position(rigid.blade)
-	# Off hand: a fist pump on the free side, taken from the shaft by the same
-	# ramp (SkaterIKCoordinator.update_bottom_hand).
-	_ik.hold_free_hand(Vector3(
-			_skater.bottom_shoulder.position.x,
-			_controller.celebration_hand_y + bob * 1.4,
-			_skater.bottom_shoulder.position.z - 0.12), ramp)
+	# Off hand: punched up as the knees drive out of each hop, taken from the
+	# shaft by the same ramp (SkaterIKCoordinator.update_bottom_hand).
+	var bottom_side: float = signf(_skater.bottom_shoulder.position.x)
+	bearing = _controller.celebration_fist_bearing
+	_ik.hold_free_hand(_skater.bottom_shoulder.position
+			+ Vector3(bearing.x * bottom_side, bearing.y, bearing.z).normalized() * arm
+			* lerpf(_controller.celebration_fist_reach_high,
+					_controller.celebration_fist_reach_low, pump), ramp)
+
+
+# 0..1 ease with no step in its rate or its acceleration at either end.
+static func _smootherstep(x: float) -> float:
+	var t: float = clampf(x, 0.0, 1.0)
+	return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
 
 
 # ── Wrister Follow-Through ────────────────────────────────────────────────────
@@ -206,18 +222,27 @@ func apply_wrister_follow_through() -> void:
 	var cursor_dir: Vector3 = _controller._current_aim_world - _skater.global_position
 	var aim_world: Vector3 = ShotMechanics.follow_through_aim(
 			_sm.shot_dir, cursor_dir, t, _controller.follow_through_return_frac)
-	_apply_wrister_whip(t, aim_world)
+	var stick_line: Vector3 = _sm.finish_stick_dir
+	if stick_line.length_squared() <= 0.0001:
+		stick_line = _sm.shot_dir
+	var stick_world: Vector3 = ShotMechanics.follow_through_aim(
+			stick_line, cursor_dir, t, _controller.follow_through_return_frac)
+	_apply_wrister_whip(t, aim_world, stick_world)
 
 # Blade whip for the frozen wrister (coil → instant release → blade replays the
 # shot). ARM-CONTROLLED, same geometry as the tracked follow-through: the hand
-# sits near the shoulder plus a forward carry, and the blade is one stick-length
-# AHEAD along the shot line (whip_local_dir). So the blade extends along the shot
-# vector FROM THE BODY — never radially outward — and the arm stays short (= the
-# carry) so it can't stretch. The frozen-specific parts: the aim points straight
-# down the shot line from t=0 (no coiled-back sweep, no retracted-origin bridge)
-# and the reach rides an attack-hold-release envelope, so the blade SNAPS to the
-# extended finish, HOLDS it, then relaxes — the explosive discharge, committed.
-func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
+# sits near the shoulder plus a carry along the shot line, and the blade is one
+# stick-length beyond it along `stick_world`, the finish line
+# (SkaterStateMachine.finish_stick_dir): the shot line when the torso drove the
+# shot, where the puck sat when only the arms pushed it. So a loaded shot's blade
+# extends along the shot vector FROM THE BODY — never radially outward — and an
+# unloaded one pushes the stick through the puck rather than swinging it round
+# the body; the arm stays short (= the carry) so it can't stretch. The
+# frozen-specific parts: the aim points straight down the shot line from t=0 (no
+# coiled-back sweep, no retracted-origin bridge) and the reach rides an
+# attack-hold-release envelope, so the blade SNAPS to the extended finish, HOLDS
+# it, then relaxes — the explosive discharge, committed.
+func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> void:
 	var env: float = finish_envelope(t, _sm.follow_through_duration_total,
 			_controller.whip_attack_time, _controller.wrister_whip_release_frac) \
 			* _sm.follow_through_power
@@ -225,24 +250,27 @@ func _apply_wrister_whip(t: float, aim_world: Vector3) -> void:
 	if axis.length_squared() < 0.0001:
 		axis = -_skater.global_transform.basis.z  # whiff: skate-forward, never radial
 		axis.y = 0.0
-	var local_dir: Vector3 = ShotMechanics.whip_local_dir(
-			axis, _skater.upper_body.global_transform.basis)
+	var upper_basis: Basis = _skater.upper_body.global_transform.basis
+	var local_dir: Vector3 = ShotMechanics.whip_local_dir(axis, upper_basis)
 	if local_dir.length_squared() < 0.0001:
 		return
-	# Hand near the shoulder + a forward carry, blade one stick-length ahead along
-	# the shot line at ice + lift. This is the shared finish shape — the slapper's
-	# is the same pose reached a different way (see _place_finish).
+	var stick_dir: Vector3 = ShotMechanics.whip_local_dir(stick_world, upper_basis)
+	if stick_dir.length_squared() < 0.0001:
+		stick_dir = local_dir
+	# Hand near the shoulder + a carry along the shot, blade one stick-length
+	# along the finish line at ice + lift. This is the shared finish shape — the
+	# slapper's is the same pose reached a different way (see _place_finish).
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
 	var carry: float = env * _controller.wrister_follow_through_reach
 	var hand_pos: Vector3 = _skater.shoulder.position + local_dir * carry
 	hand_pos.y = _controller.hand_rest_y + env * _controller.wrister_follow_through_hand_y
-	var probe: Vector3 = hand_pos + local_dir * _ik.stick_horiz()
+	var probe: Vector3 = hand_pos + stick_dir * _ik.stick_horiz()
 	var blade_y: float = _ik.blade_y_lean_corrected(probe.x, probe.z) \
 			+ env * _controller.wrister_follow_through_blade_lift
 	var drop: float = hand_pos.y - blade_y
 	var stick: float = _ik.solve_stick_length()
 	var horiz: float = sqrt(maxf(stick * stick - drop * drop, 0.0001))
-	var blade_pos: Vector3 = hand_pos + local_dir * horiz
+	var blade_pos: Vector3 = hand_pos + stick_dir * horiz
 	blade_pos.y = blade_y
 	_place_finish(hand_pos, blade_pos, blade_side_sign)
 

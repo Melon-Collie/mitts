@@ -582,6 +582,24 @@ func test_follow_through_aim_whiff_returns_zero() -> void:
 			Vector3.ZERO, Vector3(1, 0, 0), 1.0, 0.4)
 	assert_almost_eq(aim.length(), 0.0, 0.0001, "whiff yields no aim")
 
+func test_finish_line_turns_by_the_drive() -> void:
+	var from := Vector3(-1, 0, 0)
+	var shot := Vector3(0, 0, -1)
+	var none: Vector3 = ShotMechanics.finish_line(from, shot, 0.0)
+	assert_almost_eq(none.x, -1.0, 0.0001, "no drive finishes where it was")
+	var all: Vector3 = ShotMechanics.finish_line(from, shot * 3.0, 1.0)
+	assert_almost_eq(all.z, -1.0, 0.0001, "a full drive finishes on the shot line")
+	var half: Vector3 = ShotMechanics.finish_line(from, shot, 0.5)
+	assert_almost_eq(absf(rad_to_deg(Vector2(half.x, half.z).angle_to(Vector2(0, -1)))), 45.0, 0.01,
+			"half the drive turns half the way, the short way round")
+	assert_almost_eq(half.length(), 1.0, 0.0001)
+
+func test_finish_line_degenerate_inputs() -> void:
+	assert_eq(ShotMechanics.finish_line(Vector3(1, 0, 0), Vector3.ZERO, 0.5), Vector3.ZERO,
+			"a whiff has no line")
+	var shot_only: Vector3 = ShotMechanics.finish_line(Vector3.ZERO, Vector3(0, 0, -2), 0.0)
+	assert_almost_eq(shot_only.z, -1.0, 0.0001, "no line to turn from keeps the shot")
+
 func test_follow_through_aim_ignores_degenerate_cursor() -> void:
 	# No cursor direction (mouse on top of the skater) → hold the shot line.
 	var shot_dir := Vector3(0, 0, -1)
