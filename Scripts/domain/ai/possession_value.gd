@@ -56,6 +56,9 @@ var _follow_defence: Array[Vector3] = []
 var _follow_vels: Array[Vector3] = []
 var _reached_defence: Array[Vector3] = []
 var _reached_vels: Array[Vector3] = []
+# The defence as it will be when a skate read sets off later (_skate_keep).
+var _leg_defence: Array[Vector3] = []
+var _leg_vels: Array[Vector3] = []
 # The depth of the line a side crosses into the attacked zone (its own blue line
 # is at -_line_z).
 var _line_z: float = 0.0
@@ -325,11 +328,17 @@ func _caps_of(k: int) -> AISkaterCaps:
 
 # The odds the man built as `man_caps` skating from `from` to `to` in `trip` s,
 # setting off `start_s` from now, keeps the puck the whole way: the strip odds
-# against the defence as it is now (AIStripOdds).
+# (AIStripOdds) against the defence as it will be when he sets off (_project,
+# left in _leg_defence), read from then — the skate is his decision then, not a
+# plan the defence can read now.
 func _skate_keep(from: Vector3, to: Vector3, start_s: float, trip: float,
 		man_caps: AISkaterCaps = null) -> float:
-	return AICarrySpace.carry_safety(from, to, trip, _defenders, _defender_vels,
-			_defender_caps, 0.0, maxf(0.0, start_s), man_caps)
+	if start_s <= 0.0:
+		return AICarrySpace.carry_safety(from, to, trip, _defenders, _defender_vels,
+				_defender_caps, 0.0, 0.0, man_caps)
+	_project(_leg_defence, _leg_vels, start_s, from)
+	return AICarrySpace.carry_safety(from, to, trip, _leg_defence, _leg_vels,
+			_defender_caps, 0.0, 0.0, man_caps)
 
 
 # Entry `i`'s shot, drive and pass against the defence `t` from now, into
@@ -592,8 +601,10 @@ func _drive_keep(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
 		return 0.0
 	var reached: Vector3 = target
 	if keep < 1.0:
-		reached = AICarrySpace.carry_strip_point(from, target, t, _defenders,
-				_defender_vels, _defender_caps, true, 0.0, maxf(0.0, start_s), man_caps)
+		reached = AICarrySpace.carry_strip_point(from, target, t,
+				_leg_defence if start_s > 0.0 else _defenders,
+				_leg_vels if start_s > 0.0 else _defender_vels, _defender_caps, true, 0.0, 0.0,
+				man_caps)
 		if reached != target:
 			t = AIArrival.time_to_arrive_caps(from, reached, vel, man_caps)
 	_project(_reached_defence, _reached_vels, start_s + t, from)

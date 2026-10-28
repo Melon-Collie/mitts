@@ -68,6 +68,12 @@ const OZ_RETREAT_LINE_BUFFER_M: float = GameRules.DEFAULT_STICK_LENGTH_M + 1.0
 # Opponents projected to a carry's arrival.
 var _scratch_opponents_path: Array[Vector3] = []
 var _scratch_vels_path: Array[Vector3] = []
+# The defence as it will be when a later leg sets off — the carry on to the
+# destination (_leg_*), a second step (_step_*) — which the carrier decides then.
+var _leg_opponents: Array[Vector3] = []
+var _leg_vels: Array[Vector3] = []
+var _step_opponents: Array[Vector3] = []
+var _step_vels: Array[Vector3] = []
 
 # ── The near moves' beam (two-ply search budget) ─────────────────────────────
 # The two-ply pass-OPTION read is most of a move's cost. Pass 1 (_score_move)
@@ -358,7 +364,8 @@ func _score_move(ctx: RoleContext, m: int, behind_net: bool,
 	var bound: float = _prune_bound_for(m, _beam_prune_bound)
 	if decay <= bound:
 		return
-	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, reach)
+	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents,
+			_field.opponent_vels, reach)
 	if decay * safety <= bound:
 		return
 	_field.project_opponents(t0, _scratch_opponents_path, _scratch_vels_path, end)
@@ -433,12 +440,13 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 					or not AIActionScoring.in_offensive_zone(destination, goal)):
 		var t_rest: float = AIArrival.time_to_arrive(end, destination, end_vel,
 				caps.max_speed, caps.max_accel, caps.lateral_grip)
+		# The carry on is decided at `end`: read against the defence as it is then.
+		_field.project_opponents(t_end, _leg_opponents, _leg_vels, end)
 		worth = maxf(worth, dest_arrival * AIActionScoring.delay_discount(t_rest)
 				* AICarrySpace.carry_safety(
 						AICarrierField.puck_pos_at(end, goal),
 						AICarrierField.puck_pos_at(destination, goal), t_rest,
-						_field.opponents, _field.opponent_vels, _field.opponent_caps,
-						0.0, t_end))
+						_leg_opponents, _leg_vels, _field.opponent_caps))
 	return worth
 
 
@@ -466,6 +474,9 @@ func _carry_on_value(ctx: RoleContext, m1: int, caps: AISkaterCaps,
 	if dest_i >= 0:
 		dest_arrival = _dest_arrival[dest_i]
 	var behind_net: bool = absf(start.z) > GameRules.GOAL_LINE_Z
+	# The second step is decided where the first ends: read against the defence
+	# as it is then.
+	_field.project_opponents(t1, _step_opponents, _step_vels, start)
 	var best: float = floor_value
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
@@ -481,7 +492,8 @@ func _carry_on_value(ctx: RoleContext, m1: int, caps: AISkaterCaps,
 				* AIActionScoring.delay_discount(t2)
 		if worth <= best:
 			continue
-		var safety: float = _rolled_safety(ctx, _rollout2, m, start, reach, t1)
+		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _step_opponents,
+				_step_vels, reach)
 		var move_value: float = worth * safety
 		if move_value <= best:
 			continue
@@ -492,14 +504,15 @@ func _carry_on_value(ctx: RoleContext, m1: int, caps: AISkaterCaps,
 
 
 # The odds of keeping the puck along rolled move `m` of `roll` from `from`,
-# setting off `start_s` from now against the defence as it is now: the carrier's
-# best escape over the move's skated samples (AIStripOdds.escape_margin), each
-# sample at its own time and pace. Leaves where a loss is expected in
+# against `opps` (index-matched `vels`, the field's caps) as they are when the
+# move sets off: the carrier's best escape over the move's skated samples
+# (AIStripOdds.escape_margin), each sample at its own time and pace from then. Leaves where a loss is expected in
 # _strip_point (INF: none) — the first sample a poke takes it at with even odds,
 # else the one nearest to it — and when, from the start of the move, in
 # _strip_t.
 func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector3,
-		reach: int = AICarryRollout.SAMPLES, start_s: float = 0.0) -> float:
+		opps: Array[Vector3], vels: Array[Vector3],
+		reach: int = AICarryRollout.SAMPLES) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var carrier_caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
 	var best_m: float = -INF
@@ -510,9 +523,8 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 	for k: int in reach:
 		var t: float = AICarryRollout.HORIZON_S * float(k + 1) / AICarryRollout.SAMPLES
 		var p: Vector3 = AICarrierField.puck_pos_at(roll.sample(m, k), goal)
-		var margin: float = AIStripOdds.escape_margin(p, roll.reach_vel(m, k + 1, from),
-				start_s + t, _field.opponents, _field.opponent_vels, _field.opponent_caps,
-				carrier_caps, t)
+		var margin: float = AIStripOdds.escape_margin(p, roll.reach_vel(m, k + 1, from), t,
+				opps, vels, _field.opponent_caps, carrier_caps)
 		if not first and (margin > best_m or margin >= AIStripOdds.ESCAPE_SET_M):
 			best_p = p
 			best_t = t

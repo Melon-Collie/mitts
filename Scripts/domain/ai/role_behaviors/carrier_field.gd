@@ -79,6 +79,9 @@ var _goal: Vector3 = Vector3.ZERO
 var _tag_up_s: float = 0.0
 var _drive_buf: Array[Vector3] = []
 var _drive_vels: Array[Vector3] = []
+# The defence as it will be when a drive sets off later (receiver_drive_in_value).
+var _drive_start_buf: Array[Vector3] = []
+var _drive_start_vels: Array[Vector3] = []
 # What the carrier is trying to do from where he is, the currency every option
 # of his is priced in (AIPossessionValue.Objective).
 var objective: int = AIPossessionValue.Objective.SCORE
@@ -498,13 +501,16 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# back brakes it out first. Never `reach / max_speed`.
 	var reach_time: float = _drive_time(ctx, receiver_spot, target, receiver_vel,
 			receiver_caps, own_hands)
-	# A defender in the way drops keep and stops the drive where he covers it.
+	# A defender in the way drops keep and stops the drive where he covers it,
+	# read against the defence as it will be when the drive sets off: the drive is
+	# the receiver's decision then.
+	project_opponents(start_s, _drive_start_buf, _drive_start_vels, receiver_spot)
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
-			opponents, opponent_vels, opponent_caps, 0.0, start_s, receiver_caps)
+			_drive_start_buf, _drive_start_vels, opponent_caps, 0.0, 0.0, receiver_caps)
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
-			opponents, opponent_vels, opponent_caps, true, 0.0, start_s, receiver_caps)
+			_drive_start_buf, _drive_start_vels, opponent_caps, true, 0.0, 0.0, receiver_caps)
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -turnover_cost(reached, 1.0, _drive_time(ctx, receiver_spot, reached,
