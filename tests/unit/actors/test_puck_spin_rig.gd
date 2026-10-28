@@ -196,6 +196,40 @@ func test_the_tilted_disc_rests_on_the_ice() -> void:
 			assert_lt(low, ice_y + 0.0005, "tilt %.2f az %.1f floats off the ice" % [tilt, az])
 
 
+func _print_rig() -> ShaderMaterial:
+	(_mesh.mesh as ArrayMesh).surface_set_material(PuckMeshBuilder.SURF_FACE, PuckPrint.material(Color.BLACK))
+	_rig = PuckSpinRig.new(_mesh)
+	return _mesh.get_surface_override_material(PuckMeshBuilder.SURF_FACE) as ShaderMaterial
+
+
+func test_the_print_smears_across_a_frame_of_spin() -> void:
+	var print_mat: ShaderMaterial = _print_rig()
+	assert_ne(print_mat, PuckPrint.material(Color.BLACK), "each puck smears its own copy")
+	_hold(DT)
+	_rig.spin = 60.0
+	_hold(DT)
+	assert_almost_eq(print_mat.get_shader_parameter(PuckPrint.SWEEP_PARAM) as float,
+			absf(_rig.spin) * PuckPrint.SHUTTER_S, 0.011)
+	while _rig.spin != 0.0:
+		_hold(DT)
+	assert_eq(print_mat.get_shader_parameter(PuckPrint.SWEEP_PARAM) as float, 0.0,
+			"a still puck's print is crisp")
+
+
+func test_a_puck_coming_to_rest_keeps_its_angle() -> void:
+	_hold(DT)
+	_rig.spin = 8.0
+	var facing: Vector3 = Vector3.ZERO
+	var ticks: int = 0
+	while _rig.spin != 0.0 and ticks < 1000:
+		facing = _mesh.transform.basis.x
+		_hold(DT)
+		ticks += 1
+	assert_almost_eq(_mesh.transform.basis.x.angle_to(facing), 0.0, 0.01,
+			"the print would jump to angle zero as the spin dies")
+	assert_gt(_mesh.transform.basis.x.angle_to(Vector3.RIGHT), 0.1, "it did turn")
+
+
 func test_only_the_puck_drives_the_rig() -> void:
 	var users: Array[String] = []
 	_scan("res://Scripts", users)
