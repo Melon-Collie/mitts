@@ -71,7 +71,7 @@ const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
-const BLUE_LINE_Z: float = 7.29  # centre of the line; its zone-side edge is 63 ft from the goal line
+const BLUE_LINE_Z: float = 7.29  # centre of the line; its far edge is 64 ft from the goal line's back edge
 # Net frame. HockeyGoal draws the same frame from its own constants; every pair
 # is pinned by test_net_geometry_mirrors.
 const NET_HALF_WIDTH: float = 0.915      # half of goal opening (post centerline)

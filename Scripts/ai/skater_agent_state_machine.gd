@@ -232,6 +232,8 @@ var _team_id: int = 0
 # +1 if own goal is at +GOAL_LINE_Z (Team 0), -1 for Team 1.
 # See GameManager._assign_goals_to_teams for the source of truth.
 var _own_goal_dir: float = 1.0
+# The puck's zone as the offside guard reads it, followed every tick it runs.
+var _puck_zone: PuckZoneTracker = PuckZoneTracker.new()
 var _attacking_goal_pos: Vector3 = Vector3.ZERO
 var _team_brain: TeamBrain = null
 # The strategy surface read during this dispatch — set at the top of dispatch()
@@ -2567,13 +2569,15 @@ func apply_offside_guard(input: InputState, snapshot: WorldSnapshot) -> void:
 	if self_state == null:
 		return
 	var puck_pos: Vector3 = snapshot.puck_state.position
+	_puck_zone.update(puck_pos.z)
 	var team_offside: bool = _teammate_must_tag_up(snapshot)
 	var is_carrier: bool = snapshot.real_puck_carrier_peer_id == _peer_id
 	var hold_entry: bool = is_carrier and team_offside
 	input.move_vector = AISteering.offside_brake(
 			input.move_vector, puck_pos if hold_entry else self_state.position,
-			self_state.velocity, _own_goal_dir, puck_pos.z,
-			is_carrier and not hold_entry, team_offside)
+			self_state.velocity, _own_goal_dir, _puck_zone.in_attacking_zone(_team_id),
+			is_carrier and not hold_entry, team_offside,
+			InfractionRules.PUCK_ZONE_ENTRY_DEPTH_M if hold_entry else InfractionRules.OFFSIDE_DEPTH_M)
 
 
 # Opponent peer ids, read straight from the per-frame roster cache published by

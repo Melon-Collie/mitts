@@ -108,6 +108,8 @@ var coverage_ready: bool = false
 # a 0.4 s horizon, far too late for a defenseman 40 m away. A time lets each
 # reader compare against its own notice period.
 var pressure_eta_s: float = 0.0
+# The puck's zone, followed across fills for the offside reads.
+var _puck_zone: PuckZoneTracker = PuckZoneTracker.new()
 
 
 # Fills this read from the snapshot. `prev_recovery` is last tick's
@@ -124,6 +126,7 @@ func fill(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
 	var our_net := Vector3(0.0, 0.0, own_goal_z)
 	var own_dir: float = signf(own_goal_z)
 	var puck_pos: Vector3 = snapshot.puck_state.position
+	_puck_zone.update(puck_pos.z)
 	var pid_carrier: int = snapshot.puck_state.carrier_peer_id
 	var opp_carries: bool = pid_carrier != -1 \
 			and team_id_by_peer.get(pid_carrier, -1) != team_id \
@@ -178,7 +181,7 @@ func fill(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
 			our_net, opp_carries, pid_carrier)
 
 	_fill_attackers(snapshot, team_id, team_id_by_peer, caps_by_peer, our_net,
-			offsides_enforced and own_dir * puck_pos.z <= GameRules.BLUE_LINE_Z,
+			offsides_enforced and not _puck_zone.in_attacking_zone(1 - team_id),
 			own_dir)
 	if we_carry:
 		# Turnover hypothesis only — see the `we_carry` note above.
@@ -216,7 +219,7 @@ func _fill_attackers(snapshot: WorldSnapshot, team_id: int,
 		# the touch. Counting him is how an illegal cherry-picker drags a station
 		# out of the play.
 		if offside_reads and pid != carrier_peer \
-				and own_dir * s.position.z > GameRules.BLUE_LINE_Z:
+				and own_dir * s.position.z > InfractionRules.OFFSIDE_DEPTH_M:
 			continue
 		if pid == carrier_peer:
 			attackers.append(pid)

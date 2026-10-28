@@ -8,6 +8,14 @@ class_name InfractionRules
 # Team 0 attacks toward -Z (defends +Z goal at z = +GoalLineZ).
 # Team 1 attacks toward +Z (defends -Z goal at z = -GoalLineZ).
 
+# The blue line as depths of a CENTRE toward the attacking goal: the puck's,
+# entering and leaving the zone, and the skater's, ruled offside past it.
+const PUCK_ZONE_ENTRY_DEPTH_M: float = GameRules.BLUE_LINE_ZONE_EDGE_Z \
+		+ GameRules.PUCK_COLLISION_RADIUS
+const PUCK_ZONE_EXIT_DEPTH_M: float = GameRules.BLUE_LINE_NEUTRAL_EDGE_Z \
+		- GameRules.PUCK_COLLISION_RADIUS
+const OFFSIDE_DEPTH_M: float = GameRules.BLUE_LINE_ZONE_EDGE_Z + GameRules.OFFSIDE_LINE_SLACK
+
 # Whether the puck is in `team_id`'s attacking zone, given whether it was last
 # tick (`was_in`). The blue line belongs to the zone the puck is in (NHL 83.1):
 # it enters once wholly past the line's zone-side edge, and stays in while any
@@ -16,8 +24,8 @@ static func puck_in_attacking_zone(puck_z: float, team_id: int, was_in: bool) ->
 	var attack_dir: float = -1.0 if team_id == 0 else 1.0
 	var depth: float = puck_z * attack_dir
 	if was_in:
-		return depth + GameRules.PUCK_COLLISION_RADIUS >= GameRules.BLUE_LINE_NEUTRAL_EDGE_Z
-	return depth - GameRules.PUCK_COLLISION_RADIUS > GameRules.BLUE_LINE_ZONE_EDGE_Z
+		return depth >= PUCK_ZONE_EXIT_DEPTH_M
+	return depth > PUCK_ZONE_ENTRY_DEPTH_M
 
 
 # Whether this skater is offside: wholly past the blue line's zone-side edge
@@ -81,7 +89,7 @@ static func judge_icing_race(icing_eta: float, defending_eta: float) -> IcingCal
 # offside (the skate back on the line, NHL 83.3).
 static func has_tagged_up(skater_z: float, team_id: int) -> bool:
 	var attack_dir: float = -1.0 if team_id == 0 else 1.0
-	return skater_z * attack_dir - GameRules.OFFSIDE_LINE_SLACK <= GameRules.BLUE_LINE_ZONE_EDGE_Z
+	return skater_z * attack_dir <= OFFSIDE_DEPTH_M
 
 # Whether a puck at `puck_z` sits wholly behind the red line for a team
 # attacking toward `attack_dir` (-1 = team 0, +1 = team 1) — the only spot an

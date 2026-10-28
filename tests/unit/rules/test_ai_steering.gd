@@ -617,15 +617,13 @@ func test_should_brake_off_for_zero_desired() -> void:
 			"no desired direction, no brake")
 
 
-# offside_brake tests — body-level guard against skating across the
-# attacking blue line before the puck. Team 0 (own_goal_dir = +1)
-# attacks -Z, so its attacking blue line is at -BLUE_LINE_Z and "toward
-# the zone" is -Z. The puck is "near side" (offside risk) while
-# puck_z >= -BLUE_LINE_Z.
+# offside_brake tests — body-level guard against skating offside before
+# the puck. Team 0 (own_goal_dir = +1) attacks -Z, so "toward the zone"
+# is -Z.
 
 const TEAM0_DIR: float = 1.0   # own net +Z, attacks -Z
 const TEAM1_DIR: float = -1.0  # own net -Z, attacks +Z
-const NEAR_PUCK_Z: float = 0.0 # center ice — near side for both teams
+const PUCK_OUT: bool = false   # the puck not yet in the attacking zone
 
 
 func test_offside_brake_noop_for_carrier() -> void:
@@ -633,18 +631,17 @@ func test_offside_brake_noop_for_carrier() -> void:
 	var desired := Vector2(0.0, -1.0)
 	var pos := Vector3(0.0, 0.0, -7.0)
 	var vel := Vector3(0.0, 0.0, -8.0)
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, NEAR_PUCK_Z, true)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, true)
 	assert_eq(v, desired, "carrier is exempt from the offside brake")
 
 
 func test_offside_brake_noop_when_puck_already_across() -> void:
-	# Puck already in the attacking zone (z < -BLUE_LINE_Z) → entering is
-	# legal, no brake even at speed toward the line.
+	# Puck already in the attacking zone → entering is legal, no brake even
+	# at speed toward the line.
 	var desired := Vector2(0.0, -1.0)
 	var pos := Vector3(0.0, 0.0, -7.0)
 	var vel := Vector3(0.0, 0.0, -8.0)
-	var puck_across: float = -GameRules.BLUE_LINE_Z - 2.0
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, puck_across, false)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, true, false)
 	assert_eq(v, desired, "no brake once the puck has entered the zone")
 
 
@@ -654,8 +651,7 @@ func test_offside_brake_holds_the_line_during_a_delayed_offside() -> void:
 	var desired := Vector2(0.0, -1.0)
 	var pos := Vector3(0.0, 0.0, -5.0)
 	var vel := Vector3(0.0, 0.0, -8.0)
-	var puck_across: float = -GameRules.BLUE_LINE_Z - 2.0
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, puck_across, false, true)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, true, false, true)
 	assert_gt(v.y, 0.0, "the line stays shut while the team's delayed offside is up")
 
 
@@ -665,7 +661,7 @@ func test_offside_brake_noop_when_moving_away_from_line() -> void:
 	var desired := Vector2(0.0, 1.0)
 	var pos := Vector3(0.0, 0.0, -7.0)
 	var vel := Vector3(0.0, 0.0, 5.0)  # +Z, away from the -Z zone
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, NEAR_PUCK_Z, false)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, false)
 	assert_eq(v, desired, "no brake when already moving away from the line")
 
 
@@ -673,9 +669,9 @@ func test_offside_brake_noop_with_room_to_stop() -> void:
 	# Far from the line and slow — stopping distance clears the line by
 	# more than the margin, so the bot is free to keep its target.
 	var desired := Vector2(0.0, -1.0)
-	var pos := Vector3(0.0, 0.0, 0.0)   # center ice, ~7.3 m from the line
+	var pos := Vector3(0.0, 0.0, 0.0)   # center ice, ~7.8 m from the offside line
 	var vel := Vector3(0.0, 0.0, -2.0)  # slow toward the zone
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, NEAR_PUCK_Z, false)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, false)
 	assert_eq(v, desired, "plenty of room to stop → no brake")
 
 
@@ -683,9 +679,9 @@ func test_offside_brake_engages_on_fast_approach() -> void:
 	# Near the line and fast toward the zone — stopping distance would
 	# carry the body across, so brake away from the line (+Z for team 0).
 	var desired := Vector2(0.0, -1.0)  # bot wants to keep driving into the zone
-	var pos := Vector3(0.0, 0.0, -5.0) # ~2.3 m from the -7.29 line
+	var pos := Vector3(0.0, 0.0, -5.0) # ~2.8 m from the offside line
 	var vel := Vector3(0.0, 0.0, -8.0) # 8 m/s toward the zone
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, NEAR_PUCK_Z, false)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, false)
 	assert_gt(v.y, 0.0, "team 0 should brake back toward +Z to avoid crossing the -Z blue line")
 
 
@@ -694,8 +690,28 @@ func test_offside_brake_engages_team1_mirrored() -> void:
 	var desired := Vector2(0.0, 1.0)
 	var pos := Vector3(0.0, 0.0, 5.0)
 	var vel := Vector3(0.0, 0.0, 8.0)  # toward the +Z zone
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM1_DIR, NEAR_PUCK_Z, false)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM1_DIR, PUCK_OUT, false)
 	assert_lt(v.y, 0.0, "team 1 should brake back toward -Z to avoid crossing the +Z blue line")
+
+
+func test_offside_brake_stops_short_of_the_offside_line() -> void:
+	# The body may stand on the line: at rest a hair inside the offside depth
+	# with a crawl toward it, the stop lands short and nothing brakes.
+	var pos := Vector3(0.0, 0.0, -(InfractionRules.OFFSIDE_DEPTH_M - 0.5))
+	var vel := Vector3(0.0, 0.0, -0.5)
+	var desired := Vector2(0.0, -1.0)
+	assert_eq(AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, false), desired)
+	pos = Vector3(0.0, 0.0, -(InfractionRules.OFFSIDE_DEPTH_M - 0.2))
+	assert_gt(AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, false).y, 0.0,
+			"inside the margin of the line, it brakes")
+
+
+func test_offside_brake_holds_a_carried_puck_at_its_entry() -> void:
+	var puck := Vector3(0.0, 0.0, -(InfractionRules.PUCK_ZONE_ENTRY_DEPTH_M - 0.2))
+	var vel := Vector3(0.0, 0.0, -0.5)
+	var v := AISteering.offside_brake(Vector2(0.0, -1.0), puck, vel, TEAM0_DIR, PUCK_OUT,
+			false, true, InfractionRules.PUCK_ZONE_ENTRY_DEPTH_M)
+	assert_gt(v.y, 0.0, "the carried puck is held short of wholly entering")
 
 
 func test_offside_brake_preserves_lateral_intent() -> void:
@@ -704,7 +720,7 @@ func test_offside_brake_preserves_lateral_intent() -> void:
 	var desired := Vector2(0.6, -1.0)
 	var pos := Vector3(0.0, 0.0, -5.0)
 	var vel := Vector3(0.0, 0.0, -8.0)
-	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, NEAR_PUCK_Z, false)
+	var v := AISteering.offside_brake(desired, pos, vel, TEAM0_DIR, PUCK_OUT, false)
 	assert_gt(v.x, 0.0, "lateral intent is preserved through the brake")
 	assert_gt(v.y, 0.0, "depth component still brakes back from the line")
 
