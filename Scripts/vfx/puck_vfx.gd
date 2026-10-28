@@ -10,9 +10,16 @@ extends Node3D
 #   _trail_particles — the sub-emitter that actually renders each trail dot. Receives
 #                      world-space positions from the parent shader and fades them out
 #                      over TRAIL_LIFETIME seconds.
-const TRAIL_SPACING: float = 0.07   # meters between trail dots (~puck diameter); trail appears above ~4 m/s
+const TRAIL_DOT_RADIUS: float = GameRules.PUCK_COLLISION_RADIUS * 0.85
+# Dots overlap by about a third of a diameter, so the chain reads as one
+# continuous scrape; spaced at a diameter or more it reads as a dotted line.
+const TRAIL_SPACING: float = TRAIL_DOT_RADIUS * 2.0 * 0.64
 const TRAIL_LIFETIME: float = 0.25  # seconds each dot lingers
-const TRAIL_AMOUNT: int = 150       # max concurrent trail dots (covers ~25 m/s at 60 fps with 0.25 s lifetime)
+# Above the hardest slapper the build spread allows (~48 m/s).
+const TRAIL_MAX_SPEED: float = 50.0
+# Dots alive at once when the puck moves at TRAIL_MAX_SPEED; a faster puck's
+# trail is cut short at its tail rather than broken up.
+const TRAIL_AMOUNT: int = int(TRAIL_MAX_SPEED * TRAIL_LIFETIME / TRAIL_SPACING) + 1
 
 # Speed-reactive color: cream at slow, hot orange at fast.
 const TRAIL_COLOR_SLOW: Color = IceVFX.SNOW_RGB
@@ -222,8 +229,8 @@ func _make_trail_sub_emitter() -> GPUParticles3D:
 	# Flat disk lying on the ice. CylinderMesh with negligible height gives a
 	# circular scrape mark; cull_mode disabled so it's visible from above.
 	var disk := CylinderMesh.new()
-	disk.top_radius = GameRules.PUCK_COLLISION_RADIUS * 0.85
-	disk.bottom_radius = GameRules.PUCK_COLLISION_RADIUS * 0.85
+	disk.top_radius = TRAIL_DOT_RADIUS
+	disk.bottom_radius = TRAIL_DOT_RADIUS
 	disk.height = 0.003
 	disk.radial_segments = 10
 	disk.rings = 1
