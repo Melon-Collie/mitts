@@ -24,20 +24,29 @@ What it leaves out on purpose:
   stick arriving with less strips next to nothing), graded across the clock's
   calibrated error the way `arrival_race` grades a race: `clamp(0.5 + (puck_t −
   arrive − SET_S) / (2 band))`, `band = max(ERROR_FLOOR_S, ERROR_FRAC × arrive)`.
-- **His odds at a point the carrier is dodging him** (`strip_at`): inside the
-  window below the carrier sees him coming and swerves, so what decides it is
-  how much of his range the point's distance takes — his range is his blade's
-  reach plus the ground he skates toward it by then, from his speed that way at
-  his thrust to his top speed (`range_at`). `DEAD_ON_STRIP` (0.86) on his stick,
-  falling in a straight line to nothing at `EDGE_SHARE` (0.70) of his range.
-- **One chance per defender per path** (`path_keep`, `carry_keep`): his best
-  odds anywhere on it — `strip_at` over the window, and at the path's end the
-  race, `chance_at` taken with the odds a set stick strips (`SET_STRIP`, 0.88).
-  However long the puck stays in his reach, it is the one chance.
-- **Defenders are separate chances:** keep = Π (1 − best_i).
+- **The carrier's escape inside the window** (`escape_margin`): over the
+  window below the carrier sees the defence coming and dodges, so at each point
+  of the plan the read asks how deep inside a stick's reach his best escape is.
+  His escapes are holding his line or dodging square off it either way, as far
+  as his thrust and top speed take him in the time since he set off on the
+  plan, ramped in from none on a plan that stands (`DODGE_FULL_PACE_M_S`):
+  holding a spot, a dodge leaves it, and leaving it is another plan. Against
+  each escape, each defender's stick: where his drift has him by then, plus his
+  blade's reach and his own thrust to his top speed toward that escape. The
+  defenders are read together — one dodge has to clear all of them, so two men
+  either side shut a gap neither shuts alone — and the margin is the deepest
+  stick at his best escape.
+- **From margin to odds** (`strip_odds`): `DEAD_ON_STRIP · clamp(0.5 + (margin −
+  ESCAPE_SET_M) / (2 ESCAPE_BAND_M))` — 0.84 deep inside, even odds 0.73 m
+  inside his reach (a blade's length and the poke's contact past its tip),
+  graded across 1.40 m either side.
+- **One chance per path** (`path_keep`, `carry_keep`): the deepest margin over
+  the window, and at the path's end each defender's race, `chance_at` taken with
+  the odds a set stick strips (`SET_STRIP`, 0.88), a separate chance each.
+  However long the puck stays in reach, the window is the one chance.
 - **Where a loss happens** (`carry_strip_point`, the carry search's rolled
-  moves): each defender's first chance — the first point his odds pass even,
-  else his best — weighted by his odds of taking it.
+  moves): the first point the defence takes it at with even odds, else the one
+  it comes nearest to, weighted with each defender's race to the end.
 - **A read looks at the first second of its path and where it is going**
   (`COMMIT_S`), from where it starts. The carrier re-plans every 33–75 ms, but a
   stick he sees coming cannot be escaped inside his reaction plus sliding a
@@ -96,30 +105,38 @@ and long range, none at the edge — while losses run down from behind rise to
 40% at long range, all of them about 2.4 s in. The window is what separates the
 two.
 
-Inside the window, flat out (`MITTS_REACT_FLAT_OUT=1`, 2160 runs), the losses
-by the least share of his range the planned path needs:
+Inside the window, flat out (`MITTS_REACT_FLAT_OUT=1`), 2484 runs — the
+interceptor's stagings and `run_down`, a slow carrier with a quicker man close
+behind — the losses inside 1 s by how deep the escape is:
 
-| share of range | lost inside 1 s |
+| margin (m) | lost inside 1 s |
 |---|---|
-| 0–0.1 | 0.81 |
-| 0.1–0.2 | 0.73 |
-| 0.2–0.3 | 0.60 |
-| 0.3–0.4 | 0.39 |
-| 0.4–0.5 | 0.22 |
-| 0.5–0.6 | 0.18 |
-| 0.6–0.7 | 0.05 |
-| 0.7+ | ~0 |
+| below −1 | ~0 |
+| −1 to −0.5 | 0.06 |
+| −0.5 to 0 | 0.22 |
+| 0 to 0.5 | 0.32 |
+| 0.5 to 1 | 0.44 |
+| 1 to 1.5 | 0.56 |
+| 1.5 to 2 | 0.77 |
+| 2 and deeper | 0.84–0.87 |
 
-`strip_at` is that line, fit by likelihood. Graded by the gate below, the race
-read it replaced inside the window ranks a lost run over a kept one 0.903 of the
-time and expects 312 losses where 164 happened; `strip_at` ranks 0.925 and
-expects 167. The race read saturates: every point a defender's stick can be set
-on reads the same 0.88, so a carry straight at him and one curling away read
-alike within about 3 m.
-`tests/unit/ai/test_strip_odds_vs_truth.gd` holds it against these runs
+`strip_odds` is that grade, fit by likelihood (AUC 0.960; 438 losses expected
+against 437). By family, real / expected: run down 113 / 94, straight lane
+91 / 112, cut 122 / 111, stand 52 / 55, pair 49 / 57, chased 10 / 4, side 0 /
+4.5. What it does not see: a chaser who stays just inside reach gets several
+pokes, and one chance reads only his deepest — a chance every 0.1 s in reach
+fits a little better, at several times the cost in the carry search, and is
+not used.
+
+The share of the defender's range it replaced (the distance over his blade's
+reach and the ground he skates toward the point) had no carrier in it: it
+expected 3 of the run-down family's 113 losses and half the standing and paired
+carriers', because nothing in it said a carrier could not dodge.
+`tests/unit/ai/test_strip_odds_vs_truth.gd` holds the read against these runs
 (`tests/unit/ai/data/strip_intercept_truth.txt`, written by
 `tests/instruments/ai/test_interception_export.gd`): its ranking of lost runs
-over kept ones and its expected losses are ratchets.
+over kept ones, its expected losses, and each family's are ratchets, so a good
+total cannot hide a family the read is blind to.
 
 ## Passes
 

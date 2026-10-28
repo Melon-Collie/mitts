@@ -710,18 +710,20 @@ remains.
     skate — are each defender's one chance at it (`AIStripOdds`,
     `docs/strip-interception-plan.md`). Over the first second of the path from
     where its read starts (`COMMIT_S`: how long a stick he sees coming cannot
-    be escaped) the carrier dodges him, so the odds at each point fall with the
-    share of his range — his blade's reach and the ground he skates toward it by
-    then, from where he is and how he is moving — its distance takes
-    (`strip_at`), measured against an interceptor the carrier dodges. Where the
-    path is going is a race, read when it gets there: can his stick be set on it
-    a beat before the puck, across the arrival clock's error (`chance_at`,
-    measured against a worst-case interceptor); a crossing of the line held
-    before he arrives is shut, which is what makes getting there sooner worth
-    more than the time discount. A chase down in between is a later decision's.
-    One chance however long the puck is in his reach; never measured against our
-    defending bots. Never read where a defender might be
-    as a spread that thins with how far ahead it looks: an entry read from
+    be escaped) the carrier dodges, so the odds are how deep inside a stick's
+    reach his best escape is (`escape_margin`): holding his line or dodging
+    square off it as far as his thrust takes him since he set off on the plan,
+    against every defender's drift and his reach toward that escape, the
+    defenders read together — one dodge has to clear them all. A plan that
+    stands has no dodge: leaving the spot is another plan. Measured against an
+    interceptor the carrier dodges. Where the path is going is a race, read
+    when it gets there: can a stick be set on it a beat before the puck, across
+    the arrival clock's error (`chance_at`, measured against a worst-case
+    interceptor); a crossing of the line held before he arrives is shut, which
+    is what makes getting there sooner worth more than the time discount. A
+    chase down in between is a later decision's. One chance however long the
+    puck is in reach; never measured against our defending bots. Never read
+    where a defender might be as a spread that thins with how far ahead it looks: an entry read from
     further back then looks easier, and the carrier backs off to re-approach.
   - The **shot on a carry's arrival** reads a man behind the carry, skating its
     way, as on it for the whole carry (`AICarrySpace._chases`, through
