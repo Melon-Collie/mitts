@@ -79,6 +79,25 @@ Basis swing(const Vector3 &from, const Vector3 &to) {
 	return Basis(axis / (real_t)s, (real_t)Math::atan2(s, c));
 }
 
+// SkaterArmRig._deltoid_basis.
+Basis deltoid_basis(const Basis &rest, const Basis &cap, double share, double stretch_max) {
+	const Basis half(rest.get_quaternion().slerp(cap.get_quaternion(), (real_t)share));
+	const Vector3 rest_y = rest.get_column(1).normalized();
+	const Vector3 cap_y = cap.get_column(1).normalized();
+	const Vector3 axis = rest_y.cross(cap_y);
+	const double s = axis.length();
+	if (s < 1e-6) {
+		return half;
+	}
+	const double turn = Math::atan2(s, (double)rest_y.dot(cap_y)) * share;
+	const double stretch = MIN(1.0 / Math::cos(MIN(turn, Math_PI * 0.49)), stretch_max);
+	const Vector3 across = (axis / (real_t)s).cross(half.get_column(1).normalized());
+	const real_t k = (real_t)(stretch - 1.0);
+	return Basis(Vector3(1, 0, 0) + across * (k * across.x), Vector3(0, 1, 0) + across * (k * across.y),
+				   Vector3(0, 0, 1) + across * (k * across.z)) *
+			half;
+}
+
 // SkaterMeshBuilder.CAP_TO_PRISM.
 const Basis CAP_TO_PRISM(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0));
 
@@ -169,7 +188,7 @@ void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thic
 		const Vector3 &p_thick_cuff, const Vector3 &p_thick_elbow, const Vector3 &p_thick_glove,
 		int32_t p_cap_bone, const Vector3 &p_cap_pos, const Vector3 &p_cap_scale, const Transform3D &p_cap_state,
 		double p_wrist_break_max, int32_t p_deltoid_bone, const Basis &p_cap_rest,
-		double p_deltoid_share) {
+		double p_deltoid_share, double p_deltoid_stretch_max) {
 	thick_upper = p_thick_upper;
 	thick_forearm = p_thick_forearm;
 	thick_cuff = p_thick_cuff;
@@ -184,6 +203,7 @@ void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thic
 	bone_deltoid = p_deltoid_bone;
 	cap_rest = p_cap_rest;
 	deltoid_share = p_deltoid_share;
+	deltoid_stretch_max = p_deltoid_stretch_max;
 }
 
 bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3 &grip,
@@ -227,9 +247,9 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	}
 	// repose_bone for a cap and its deltoid.
 	const Vector3 origin = cap_pos + check_load_offset(lead, SIGN(cap_pos.x), half_width) + girdle;
-	const Basis half(cap_rest.get_quaternion().slerp(cap.get_quaternion(), (real_t)deltoid_share));
+	const Basis deltoid = deltoid_basis(cap_rest, cap, deltoid_share, deltoid_stretch_max);
 	skeleton->set_bone_pose(bone_deltoid,
-			Transform3D(trunk_texture, Vector3()) * Transform3D(half.scaled_local(cap_scale), origin));
+			Transform3D(trunk_texture, Vector3()) * Transform3D(deltoid.scaled_local(cap_scale), origin));
 	skeleton->set_bone_pose(bone_cap,
 			Transform3D(trunk_texture, Vector3()) * Transform3D(cap.scaled_local(cap_scale), origin));
 
@@ -264,7 +284,7 @@ void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("bind", "skeleton", "bones"), &NativeArmRig::bind);
 	ClassDB::bind_method(D_METHOD("configure", "thick_upper", "thick_forearm", "thick_cuff",
 								 "thick_elbow", "thick_glove", "cap_bone", "cap_pos", "cap_scale", "cap_state", "wrist_break_max",
-								 "deltoid_bone", "cap_rest", "deltoid_share"),
+								 "deltoid_bone", "cap_rest", "deltoid_share", "deltoid_stretch_max"),
 			&NativeArmRig::configure);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
 								 "lengths", "load"),

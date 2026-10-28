@@ -912,8 +912,13 @@ const _ARMHOLE_RIGHT_CORNER: int = 2
 const _TORSO_DELTOID_SHARE: float = 0.45
 const _TORSO_DELTOID_NEAR_M: float = 0.07
 const _TORSO_DELTOID_FAR_M: float = 0.22
+# The shoulder's rings lie level at the pivot and above it, and below it lean
+# back toward the arm's tilt as if all the way by this far down; the last of
+# them is still mostly level, and the upper arm's band turns the rest by the
+# elbow.
+const _SHOULDER_LEVEL_FADE_M: float = 0.2
 const _SHOULDER_RINGS: Array[Vector4] = [
-	Vector4(-0.035, 1.08, 0.45, 0.0),
+	Vector4(-0.035, 0.95, 0.45, 0.0),
 	Vector4(0.0, 1.0, 1.0, 0.0),
 	Vector4(0.035, 0.0, 0.5, 0.5),
 	Vector4(0.07, 0.0, 0.0, 1.0),
@@ -1011,17 +1016,19 @@ static func _sleeve(side_i: int) -> Dictionary:
 				weights.append(share.y)
 		var ring: Dictionary = _arm_ring(prism, pivot + down * spec.x, radius, binds, weights,
 				spec.x)
-		if spec.x <= 0.0:
-			# At the pivot and up into the body. Tilted with the arm's hang, a ring's
-			# outer side would stand over the torso's shoulder line, a tent the
-			# arm's swing lifts further, so it lies level; and up the axis its inner
-			# side would sit inside the chest, and the band to it fold under, so it
-			# lies on the chest.
-			var pts: PackedVector3Array = ring["pts"]
-			var level: float = (pivot + down * spec.x).y
-			for k: int in pts.size():
-				pts[k] = _out_of_torso(Vector3(pts[k].x, level, pts[k].z))
-			ring["pts"] = pts
+		# Tilted with the arm's hang, a ring at the pivot or above it stands its
+		# outer side over the torso's shoulder line, a tent the arm's swing lifts
+		# further; so the shoulder's rings lie level (_SHOULDER_LEVEL_FADE_M). Up
+		# the axis a ring's inner side would sit inside the chest, and the band to
+		# it fold under; it lies on the chest.
+		var pts: PackedVector3Array = ring["pts"]
+		var level: float = (pivot + down * spec.x).y
+		var flatten: float = clampf(1.0 - spec.x / _SHOULDER_LEVEL_FADE_M, 0.0, 1.0)
+		for k: int in pts.size():
+			pts[k].y = lerpf(pts[k].y, level, flatten)
+			if spec.x < 0.0:
+				pts[k] = _out_of_torso(pts[k])
+		ring["pts"] = pts
 		rings.append(ring)
 	var shoulder_end: int = rings.size() - 1
 	var elbow_at: Vector3 = pivot + down * UPPER_ARM_REST_M

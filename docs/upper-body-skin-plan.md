@@ -157,8 +157,15 @@ untouched. Gameplay reads nothing here.
   point of the arm's axis, the pivot above it); the armhole's top faces up, not
   round the arm.
 - **The rings at the pivot and above it lie level**, not square to the arm's
-  outward hang: tilted, their outer side stood over the torso's shoulder line
-  and the deltoid's swing lifted it into a tent (`test_shoulder_has_no_peak.gd`).
+  outward hang, the rings below leaning back toward it and the upper arm's band
+  turning the rest by the elbow: tilted, their
+  outer side stood over the torso's shoulder line and the deltoid's swing lifted
+  it into a tent (`test_shoulder_has_no_peak.gd`). The ring above the pivot is a
+  little narrower than the arm (0.95), so the shoulder's corner is bevelled
+  rather than a wall.
+- **The deltoid stretches across the bend** by 1/cos of its own turn, capped at
+  1.5: its ring is the mitre between the chest's side and the arm's, and left
+  round it pinched the bend's outside into a notch.
 - Known: an arm driven well past the body (a full cross-body reach, the
   slapper's wind-up) still creases on the inside of the shoulder's bend; the
   shoulder has few rings. More rings, or a corrective share, are the next

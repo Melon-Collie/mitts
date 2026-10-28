@@ -50,6 +50,7 @@ class NativeArmRig : public godot::RefCounted {
 	// under it turns (SkaterArmRig._cap_rest, _DELTOID_SHARE).
 	godot::Basis cap_rest;
 	double deltoid_share = 0.5;
+	double deltoid_stretch_max = 1.0;
 
 	// The cap's last stable roll and its share of the girdle's give, in the
 	// cap's untextured pose frame — read back by the rig for its own reposes.
@@ -69,7 +70,7 @@ public:
 			const godot::Vector3 &p_thick_glove, int32_t p_cap_bone, const godot::Vector3 &p_cap_pos,
 			const godot::Vector3 &p_cap_scale, const godot::Transform3D &p_cap_state,
 			double p_wrist_break_max, int32_t p_deltoid_bone, const godot::Basis &p_cap_rest,
-			double p_deltoid_share);
+			double p_deltoid_share, double p_deltoid_stretch_max);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off

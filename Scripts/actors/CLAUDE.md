@@ -198,8 +198,13 @@ is that turned through the elbow's bend, the elbow bone's half of it
 (`_pose_arm_chain`). Roll any of them its own way and the sleeve wrings.
 
 The sleeve's rings at the pivot and above it lie level rather than square to
-the arm's outward hang. Tilted, their outer side stands over the torso's
-shoulder line, and the deltoid's swing lifts it into a tent over the joint.
+the arm's outward hang, and the rings below lean back toward it, the upper
+arm's band turning the rest by the elbow.
+Tilted, their outer side stands over the torso's shoulder line, and the
+deltoid's swing lifts it into a tent over the joint. The deltoid's ring is the
+mitre between the chest's side of the bend and the arm's, so the deltoid
+stretches across the bend by 1/cos of its turn (`SkaterArmRig._deltoid_basis`,
+and NativeArmRig's), or the bend's outside pinches into a notch.
 `test_sleeve_is_one_piece.gd` holds the binds, the seams and the facing,
 `test_arm_frames_are_carried.gd` the frames, and `test_shoulder_has_no_peak.gd`
 the outline over the joint with the arm down.

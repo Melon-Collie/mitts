@@ -20,9 +20,14 @@ extends RefCounted
 
 # The deltoid under each cap turns this share of the way from the cap's rest hang
 # (SkaterMeshBuilder.SHOULDER_CAP_REST_POLE) toward the cap, which points down
-# the upper arm: the shoulder bends between the chest its base rides and the arm
-# its seam follows (SkaterMeshBuilder._append_cap_surface).
+# the upper arm: the sleeve's shoulder bends between the chest and the arm
+# (SkaterMeshBuilder._sleeve), and its ring at the pivot rides the deltoid.
 const _DELTOID_SHARE: float = 0.5
+# A ring halfway round a bend is the mitre between the two tubes either side, so
+# it stretches across the bend by 1/cos of its turn or the sleeve pinches in on
+# the bend's outside (_deltoid_basis). Capped: past a quarter turn either way the
+# mitre runs away to a blade.
+const _DELTOID_STRETCH_MAX: float = 1.5
 # A cap's frame (+Y up the arm) as an arm prism's (+Z up the arm, X shared).
 # Each cap's rest basis (left, right), where the deltoid turns from.
 var _cap_rest: Array[Basis] = [SkaterMeshBuilder.shoulder_cap_rest(-1.0),
@@ -266,7 +271,7 @@ func _configure_native() -> void:
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
 				cap, _pos[cap], _scale[cap], Transform3D(_basis[cap], _girdle[side_i]),
 				deg_to_rad(_skater.wrist_break_max_deg), SkaterBodySkeleton.deltoid_bone(cap),
-				_cap_rest[side_i], _DELTOID_SHARE)
+				_cap_rest[side_i], _DELTOID_SHARE, _DELTOID_STRETCH_MAX)
 
 
 # Brings the rig's own view of one cap (_basis, _girdle) up to the native that
@@ -504,6 +509,24 @@ static func swing(from: Vector3, to: Vector3) -> Basis:
 	return Basis(axis / s, atan2(s, c))
 
 
+# The deltoid's basis: `share` of the way from the cap's rest hang `rest` to
+# `cap`, swung from it, and stretched across the bend as the mitre between the
+# two by 1/cos of its own turn, at most `stretch_max`. NativeArmRig takes the
+# same steps.
+static func _deltoid_basis(rest: Basis, cap: Basis, share: float, stretch_max: float) -> Basis:
+	var half := Basis(Quaternion(rest).slerp(Quaternion(cap), share))
+	var axis: Vector3 = rest.y.normalized().cross(cap.y.normalized())
+	var s: float = axis.length()
+	if s < 1e-6:
+		return half
+	var turn: float = atan2(s, rest.y.normalized().dot(cap.y.normalized())) * share
+	var stretch: float = minf(1.0 / cos(minf(turn, PI * 0.49)), stretch_max)
+	var across: Vector3 = (axis / s).cross(half.y.normalized())
+	var k: float = stretch - 1.0
+	return Basis(Vector3.RIGHT + across * (k * across.x), Vector3.UP + across * (k * across.y),
+			Vector3.BACK + across * (k * across.z)) * half
+
+
 # An up vector safely non-colinear with `direction`. Falls back to
 # Vector3.FORWARD when `direction` is near-vertical so look_at() doesn't warn
 # about colinear basis vectors. Cylindrical meshes (cuffs, the stick knob) are
@@ -585,11 +608,11 @@ func repose_bone(bone: int) -> void:
 		var side_i: int = 0 if bone == SkaterMeshBuilder.UpperBone.SHOULDER_L else 1
 		_sync_cap(side_i)
 		origin += _check_load_offset(signf(origin.x)) + _girdle[side_i]
-		var half := Basis(Quaternion(_cap_rest[side_i]).slerp(Quaternion(_basis[bone]),
-				_DELTOID_SHARE))
+		var deltoid: Basis = _deltoid_basis(_cap_rest[side_i], _basis[bone], _DELTOID_SHARE,
+				_DELTOID_STRETCH_MAX)
 		_skeleton.set_bone_pose(SkaterBodySkeleton.deltoid_bone(bone),
 				Transform3D(_trunk_texture, Vector3.ZERO)
-				* Transform3D(half.scaled_local(_scale[bone]), origin))
+				* Transform3D(deltoid.scaled_local(_scale[bone]), origin))
 	if bone == SkaterMeshBuilder.UpperBone.HELMET:
 		origin += _head_nod_shift
 	var pose := Transform3D(_basis[bone].scaled_local(_scale[bone]), origin)
