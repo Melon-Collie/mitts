@@ -33,6 +33,8 @@ const _SCALP_ROW_M: float = 0.01
 # Lift an edge tapers down to; the facial sheet tapers over this share of its
 # reach, the scalp over this far from its hairline.
 const _EDGE_LIFT_M: float = 0.0015
+# A bottom edge standing further off the surface than this is closed to it.
+const _CLOSE_GAP_M: float = 0.003
 const _EDGE_TAPER: float = 0.3
 const _HAIRLINE_TAPER_M: float = 0.01
 # Over the crown every style's lift blends to its crown lift between these
@@ -474,6 +476,14 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 				if hole.has_point(Vector2(mid.x, mid.y)):
 					continue
 			_quad(st, grid[k][i], grid[k + 1][i], grid[k + 1][i + 1], grid[k][i + 1])
+	# Where the bottom edge stands off the surface under it (a hanging cut, a
+	# long beard), it is closed back to that surface, or a camera below sees up
+	# into the shell.
+	var last: int = heights.size() - 1
+	for k: int in grid.size() - 1:
+		if maxf(grid[k][last].distance_to(bare[k][last]),
+				grid[k + 1][last].distance_to(bare[k + 1][last])) > _CLOSE_GAP_M:
+			_quad(st, grid[k][last], grid[k + 1][last], bare[k + 1][last], bare[k][last])
 
 
 # Shared row heights from y_hi down to y_lo: every crease of the head ball's
