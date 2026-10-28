@@ -71,7 +71,7 @@ const OT_DURATION: float           = 4.0 * 60.0   # 240 s per OT period
 
 # ── Rink Geometry ─────────────────────────────────────────────────────────────
 const GOAL_LINE_Z: float = 26.65  # rink_length / 2 - distance_from_end (30 - 3.35)
-const BLUE_LINE_Z: float = 7.29  # 64 ft from goal line to near edge + 0.15m to center
+const BLUE_LINE_Z: float = 7.29  # centre of the line; its zone-side edge is 63 ft from the goal line
 # Net frame. HockeyGoal draws the same frame from its own constants; every pair
 # is pinned by test_net_geometry_mirrors.
 const NET_HALF_WIDTH: float = 0.915      # half of goal opening (post centerline)
@@ -101,13 +101,10 @@ const NET_PUCK_BUFFER: float = 0.10
 # in the mesh touches nothing on either side of it.
 const NET_BLADE_MESH_GIVE: float = 0.04
 
-# Half the skater's body so the blue line keys off the body EDGE, not its
-# centre — matching real hockey. You tag up the instant any part of your body
-# reaches the line (centre still a body-width inside the zone), and you're only
-# ruled offside once your whole body is over it. Shared by is_offside (entry) and
-# has_tagged_up (clear) so the strict-< / ≥ split keeps a dead-band and the ghost
-# never oscillates at the boundary. Tracks the medium collision-cylinder radius
-# (Skater.tscn) — the canonical body half-width.
+# Half the skater's body, standing in for the skates: offside keys off the body's
+# trailing edge against the blue line's zone-side edge (InfractionRules). Tracks
+# the medium collision-cylinder radius (Skater.tscn) — the canonical body
+# half-width.
 const OFFSIDE_LINE_SLACK: float = 0.35
 
 # Rink dimensions. HockeyRink's export defaults mirror these — pinned by
@@ -463,6 +460,14 @@ const NET_STUCK_PLAYABLE_HEIGHT: float = 0.30  # m above ice; at/under → drop 
 # Centre red line and blue lines: 12 in in the NHL book. A puck touching the
 # red line has "gained the line" and cannot be iced.
 const THICK_LINE_WIDTH_M: float = 0.3
+# The blue line's two edges, as |z|. The line belongs to the zone the puck is in
+# (NHL 83.1): the puck enters the attacking zone wholly past the zone-side edge,
+# and leaves it wholly past the neutral-side edge.
+const BLUE_LINE_ZONE_EDGE_Z: float = BLUE_LINE_Z + THICK_LINE_WIDTH_M * 0.5
+const BLUE_LINE_NEUTRAL_EDGE_Z: float = BLUE_LINE_Z - THICK_LINE_WIDTH_M * 0.5
+# Goal line: 2 in in the NHL book, centred on GOAL_LINE_Z. A goal (78.1) and an
+# icing (81.1) need the whole puck past its far edge.
+const GOAL_LINE_WIDTH_M: float = 0.05
 # Hybrid icing race (NHL Rule 81). A race too close to call at the end-zone dots
 # is icing: the attacker must reach the dots this far ahead of the nearest
 # defender to wave it off — about a stride at race pace.

@@ -11,7 +11,7 @@ class_name TutorialShotRules
 #
 # `attack_dir_z` is the sign of the attacking team's shooting direction along Z
 # (the Shooting tutorial is always team 0, attacking toward -Z, so this is -1).
-# A goal counts only when the puck is past the line in the attack direction AND
+# A goal counts only when the whole puck is past the line in the attack direction AND
 # the whole disc is inside the mouth — between the posts, under the bar. The
 # posts/bar test is shared with live play and penalty shots via GoalDetection-
 # Rules.point_in_mouth (`half_width` / `net_height` are the post-centerline /
@@ -26,10 +26,7 @@ static func crossed_goal_line(
 		attack_dir_z: float,
 		half_width: float,
 		net_height: float) -> bool:
-	if attack_dir_z < 0.0:
-		if puck_z > goal_line_z:
-			return false
-	elif puck_z < goal_line_z:
+	if not crossed_goal_plane(puck_z, goal_line_z, attack_dir_z):
 		return false
 	return GoalDetectionRules.point_in_mouth(
 			puck_x, puck_y, half_width, net_height,
@@ -38,7 +35,7 @@ static func crossed_goal_line(
 			GameRules.PUCK_COLLISION_HALF_HEIGHT)
 
 
-# Whether the puck has reached the goal-line DEPTH, ignoring width and height.
+# Whether the whole puck is past the goal line, ignoring width and height.
 # `crossed_goal_line` answers "is this a goal?" (past the line AND inside the
 # posts); this answers the looser "has the shot reached the net's depth?" — true
 # for a goal, but also for a puck sailing wide of a post or over the crossbar.
@@ -48,9 +45,8 @@ static func crossed_goal_plane(
 		puck_z: float,
 		goal_line_z: float,
 		attack_dir_z: float) -> bool:
-	if attack_dir_z < 0.0:
-		return puck_z <= goal_line_z
-	return puck_z >= goal_line_z
+	return (puck_z - goal_line_z) * signf(attack_dir_z) \
+			>= GoalDetectionRules.scoring_depth(GameRules.PUCK_COLLISION_RADIUS)
 
 
 # Whether a shot in flight has clearly missed and the attempt should be retired.

@@ -8,25 +8,29 @@ class_name InfractionRules
 # Team 0 attacks toward -Z (defends +Z goal at z = +GoalLineZ).
 # Team 1 attacks toward +Z (defends -Z goal at z = -GoalLineZ).
 
-# Returns true if this skater is offside given their position, team, and the
-# puck's position. Carriers are never offside.
+# Whether the puck is in `team_id`'s attacking zone, given whether it was last
+# tick (`was_in`). The blue line belongs to the zone the puck is in (NHL 83.1):
+# it enters once wholly past the line's zone-side edge, and stays in while any
+# part of it still touches the line. PuckZoneTracker holds `was_in`.
+static func puck_in_attacking_zone(puck_z: float, team_id: int, was_in: bool) -> bool:
+	var attack_dir: float = -1.0 if team_id == 0 else 1.0
+	var depth: float = puck_z * attack_dir
+	if was_in:
+		return depth + GameRules.PUCK_COLLISION_RADIUS >= GameRules.BLUE_LINE_NEUTRAL_EDGE_Z
+	return depth - GameRules.PUCK_COLLISION_RADIUS > GameRules.BLUE_LINE_ZONE_EDGE_Z
+
+
+# Whether this skater is offside: wholly past the blue line's zone-side edge
+# while the puck is not in the zone. The body's trailing edge stands in for the
+# trailing skate. Carriers are never offside.
 static func is_offside(
 		skater_z: float,
 		skater_team_id: int,
-		puck_z: float,
+		puck_in_zone: bool,
 		is_carrier: bool) -> bool:
-	if is_carrier:
+	if is_carrier or puck_in_zone:
 		return false
-	# Skater line is slacked a skate-length past the blue line (OFFSIDE_LINE_SLACK)
-	# so a toe over the line isn't offside; the puck line stays at the true blue
-	# line — the puck physically crossing it is what clears the zone.
-	var line: float = GameRules.BLUE_LINE_Z + GameRules.OFFSIDE_LINE_SLACK
-	if skater_team_id == 0:
-		# Team 0 attacking zone: z < -BlueLineZ
-		return skater_z < -line and puck_z >= -GameRules.BLUE_LINE_Z
-	else:
-		# Team 1 attacking zone: z > BlueLineZ
-		return skater_z > line and puck_z <= GameRules.BLUE_LINE_Z
+	return not has_tagged_up(skater_z, skater_team_id)
 
 enum IcingCall { NONE, ICING, WAVED_OFF }
 
@@ -72,18 +76,12 @@ static func judge_icing_race(icing_eta: float, defending_eta: float) -> IcingCal
 		return IcingCall.WAVED_OFF
 	return IcingCall.ICING
 
-# Returns true when a player who was serving an offside has crossed back into
-# the neutral zone or their own zone — i.e. they have "tagged up" at the line.
+# Whether the skater is onside of their attacking blue line: some part of the
+# body still touching the line's zone-side edge, or behind it. Clears a served
+# offside (the skate back on the line, NHL 83.3).
 static func has_tagged_up(skater_z: float, team_id: int) -> bool:
-	# Mirrors the slacked entry line so the player tags up as soon as their skate
-	# reaches the line — they need only get back to the same edge that ruled them
-	# offside, not drag their whole body across. The shared line keeps a dead-band
-	# with is_offside so a just-tagged skater isn't instantly re-ghosted.
-	var line: float = GameRules.BLUE_LINE_Z + GameRules.OFFSIDE_LINE_SLACK
-	if team_id == 0:
-		return skater_z >= -line
-	else:
-		return skater_z <= line
+	var attack_dir: float = -1.0 if team_id == 0 else 1.0
+	return skater_z * attack_dir - GameRules.OFFSIDE_LINE_SLACK <= GameRules.BLUE_LINE_ZONE_EDGE_Z
 
 # Whether a puck at `puck_z` sits wholly behind the red line for a team
 # attacking toward `attack_dir` (-1 = team 0, +1 = team 1) — the only spot an
@@ -106,6 +104,7 @@ static func check_icing(
 	var attack_dir: float = -1.0 if last_touch_team_id == 0 else 1.0
 	if not behind_red_line(last_touch_z, attack_dir):
 		return -1
-	if puck_z * attack_dir > GameRules.GOAL_LINE_Z + GameRules.PUCK_COLLISION_RADIUS:
+	if puck_z * attack_dir > GameRules.GOAL_LINE_Z + GameRules.GOAL_LINE_WIDTH_M * 0.5 \
+			+ GameRules.PUCK_COLLISION_RADIUS:
 		return last_touch_team_id
 	return -1

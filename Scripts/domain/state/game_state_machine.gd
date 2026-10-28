@@ -87,6 +87,9 @@ var _all_tagged_up_scratch: Array[bool] = [true, true]
 # Team that last touched the puck (-1 unknown): only the attacking team bringing
 # the puck in can put itself offside.
 var _last_touch_team_id: int = -1
+# Followed from every puck position the offside paths are handed; updating it
+# twice with one position is a no-op, so each path updates it itself.
+var _puck_zone: PuckZoneTracker = PuckZoneTracker.new()
 
 # ── Crease protection ─────────────────────────────────────────────────────────
 # peer_id → seconds the skater has continuously dwelt inside a goalie crease.
@@ -204,7 +207,8 @@ func notify_possession_established(team_id: int, puck_z: float) -> void:
 	if rule_set != GameRules.RuleSet.ARCADE or _offside_peer_ids.is_empty():
 		return
 	var offending_team_id: int = 1 - team_id
-	if _puck_in_attacking_zone(offending_team_id, puck_z):
+	_puck_zone.update(puck_z)
+	if _puck_zone.in_attacking_zone(offending_team_id):
 		_void_arcade_offside_for_team(offending_team_id)
 
 # Host-side: a loose puck was touched — a skater's deflection or body block, a
@@ -245,6 +249,7 @@ func compute_ghost_state(
 		delta: float = 0.0,
 		result: Dictionary = {}) -> Dictionary:
 	result.clear()
+	_puck_zone.update(puck_position.z)
 	# OFF preset disables every infraction-driven ghost.
 	if rule_set == GameRules.RuleSet.OFF:
 		_offside_peer_ids.clear()
@@ -280,7 +285,8 @@ func compute_ghost_state(
 				else:
 					ghost = true
 			else:
-				if InfractionRules.is_offside(pos_z, slot.team_id, puck_position.z, is_carrier):
+				if InfractionRules.is_offside(pos_z, slot.team_id,
+						_puck_zone.in_attacking_zone(slot.team_id), is_carrier):
 					_offside_peer_ids[peer_id] = true
 					ghost = true
 		# Crease protection (ARCADE only — see GameRules.CREASE_DWELL_DURATION).
@@ -321,7 +327,7 @@ func update_delayed_offside(
 		_delayed_offside_peer_ids.clear()
 		delayed_offside_team_id = -1
 		return
-	var puck_z: float = puck_position.z
+	_puck_zone.update(puck_position.z)
 	_last_puck_x = puck_position.x
 	var prev_offside_team: int = delayed_offside_team_id
 
@@ -339,17 +345,18 @@ func update_delayed_offside(
 		if not tagged_up:
 			all_tagged_up[team_id] = false
 		if _delayed_offside_peer_ids.has(peer_id):
-			if tagged_up and not _puck_in_attacking_zone(team_id, puck_z):
+			if tagged_up and not _puck_zone.in_attacking_zone(team_id):
 				_delayed_offside_peer_ids.erase(peer_id)
 		else:
 			var is_carrier: bool = peer_id == puck_carrier_peer_id
-			if InfractionRules.is_offside(pos_z, team_id, puck_z, is_carrier):
+			if InfractionRules.is_offside(pos_z, team_id,
+					_puck_zone.in_attacking_zone(team_id), is_carrier):
 				_delayed_offside_peer_ids[peer_id] = team_id
 
 	delayed_offside_team_id = -1
 	for peer_id in _delayed_offside_peer_ids:
 		var tid: int = _delayed_offside_peer_ids[peer_id]
-		if _puck_in_attacking_zone(tid, puck_z):
+		if _puck_zone.in_attacking_zone(tid):
 			delayed_offside_team_id = tid
 			break
 	if delayed_offside_team_id == -1:
@@ -381,13 +388,6 @@ func must_tag_up(peer_id: int, pos_z: float) -> bool:
 	var team_id: int = players[peer_id].team_id
 	return team_id == delayed_offside_team_id \
 			and not InfractionRules.has_tagged_up(pos_z, team_id)
-
-
-static func _puck_in_attacking_zone(team_id: int, puck_z: float) -> bool:
-	if team_id == 0:
-		return puck_z < -GameRules.BLUE_LINE_Z
-	else:
-		return puck_z > GameRules.BLUE_LINE_Z
 
 
 func _void_arcade_offside_for_team(team_id: int) -> void:

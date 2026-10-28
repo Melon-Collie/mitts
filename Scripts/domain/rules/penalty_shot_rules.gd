@@ -70,14 +70,14 @@ static func forward_progress(pos_z: float, start_z: float, attack_dir_z: float) 
 	return (pos_z - start_z) * attack_dir_z
 
 
-# Whether the puck has reached the goal-line depth, irrespective of width/height.
+# Whether the whole puck is past the goal line, irrespective of width/height.
 static func crossed_goal_plane(puck_z: float, goal_line_z: float, attack_dir_z: float) -> bool:
-	if attack_dir_z < 0.0:
-		return puck_z <= goal_line_z
-	return puck_z >= goal_line_z
+	return (puck_z - goal_line_z) * signf(attack_dir_z) \
+			>= GoalDetectionRules.scoring_depth(GameRules.PUCK_COLLISION_RADIUS)
 
 
-# Whether the puck is a goal: across the line, inside the posts, under the bar.
+# Whether the puck is a goal: wholly across the line, inside the posts, under
+# the bar.
 # The "between the posts, under the bar" test is shared with live play and the
 # tutorial via GoalDetectionRules.point_in_mouth, so `half_width` / `crossbar_
 # height` are the post-centerline / crossbar-centerline geometry and the pipe

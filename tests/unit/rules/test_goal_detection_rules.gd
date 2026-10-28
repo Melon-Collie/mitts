@@ -8,7 +8,8 @@ extends GutTest
 #   half_width  = POST_HALF_WIDTH - POST_RADIUS = 0.915 - 0.030 = 0.885
 #   net_height  = NET_HEIGHT      - POST_RADIUS = 1.220 - 0.030 = 1.190
 # Fixture puck:  radius 0.065, half-height 0.0175. So the effective center bounds
-# are |x| <= 0.820, y <= 1.1725, and "fully across" = center >= 0.065 past the line.
+# are |x| <= 0.820, y <= 1.1725, and "fully across" = center >= 0.065 past the
+# goal line's far edge (CLEAR past its centre).
 
 const GOAL_Z: float = GameRules.GOAL_LINE_Z          # 26.65
 const HALF_W: float = 0.915   # POST_HALF_WIDTH (post centerline)
@@ -18,9 +19,10 @@ const R: float = 0.065
 const HH: float = 0.0175
 const DEPTH: float = 1.016    # BASE_DEPTH (goal line to back frame)
 const ICE_Y: float = 0.0175
+const CLEAR: float = GameRules.GOAL_LINE_WIDTH_M * 0.5 + R
 # Effective whole-disc mouth after post + puck insets: |x| <= 0.820, y <= 1.1725.
 # Cavity fallback bounds (endpoint fully inside the net): |x| <= 0.850,
-# y <= 1.1725, depth in [0.065, 0.951].
+# y <= 1.1725, depth in [CLEAR, 0.951].
 
 
 func _crossed(prev: Vector3, curr: Vector3, facing: float = 1.0) -> bool:
@@ -256,6 +258,16 @@ func test_not_yet_fully_across_is_no_goal() -> void:
 	assert_false(_crossed(
 			Vector3(0.0, ICE_Y, GOAL_Z - 0.05),
 			Vector3(0.0, ICE_Y, GOAL_Z + 0.03)))
+
+
+func test_still_touching_the_goal_lines_far_edge_is_no_goal() -> void:
+	# Center a radius past the line's centre: the disc still overlaps the paint.
+	assert_false(_crossed(
+			Vector3(0.0, ICE_Y, GOAL_Z - 0.05),
+			Vector3(0.0, ICE_Y, GOAL_Z + CLEAR - 0.005)))
+	assert_true(_crossed(
+			Vector3(0.0, ICE_Y, GOAL_Z - 0.05),
+			Vector3(0.0, ICE_Y, GOAL_Z + CLEAR + 0.005)))
 
 
 func test_approaching_but_short_of_the_line_is_no_goal() -> void:

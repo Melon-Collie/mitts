@@ -47,6 +47,7 @@ var _last_reconcile_ack_ts: float = 0.0
 # Gates the deferred snapshot connected in setup().
 var _snapshot_pending: bool = false
 var _team_id: int = -1  # set at setup; needed for client-side offside prediction
+var _puck_zone: PuckZoneTracker = PuckZoneTracker.new()
 var last_reconcile_error: float = 0.0
 var _claim_cooldown: float = 0.0
 # Claim edge state: whether the blade was within pickup / poke range last tick,
@@ -416,8 +417,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		# has_puck, not the host-only puck.carrier (see _predict_offside): a
 		# carrier is never offside, and reading it wrong here also refuses the
 		# server's authoritative un-ghost.
-		var puck_z: float = puck.global_position.z if puck != null else 0.0
-		if not InfractionRules.is_offside(skater.global_position.z, _team_id, puck_z, has_puck):
+		if not InfractionRules.is_offside(skater.global_position.z, _team_id,
+				_puck_zone.in_attacking_zone(_team_id), has_puck):
 			skater.set_ghost(false)
 	# A tie is the host's call alone (StickTieTracker), so it lands every
 	# broadcast rather than only on a reconcile.
@@ -1040,12 +1041,13 @@ func _predict_offside() -> void:
 	# prediction — the FACEOFF_PREP teleport is the visible feedback).
 	if GameManager.get_rule_set() != GameRules.RuleSet.ARCADE:
 		return
+	_puck_zone.update(puck.global_position.z)
 	# has_puck, NOT puck.carrier — puck.carrier is host-only (never set on
 	# clients), so reading it here reports false while legally carrying, killing
 	# the "carriers are never offside" exemption in local prediction: a
 	# body-leading zone entry self-ghosts the carrier.
 	var offside: bool = InfractionRules.is_offside(
-		skater.global_position.z, _team_id, puck.global_position.z, has_puck)
+		skater.global_position.z, _team_id, _puck_zone.in_attacking_zone(_team_id), has_puck)
 	# Only predict offside → ghost. Icing ghost comes from server via reconcile.
 	if offside and not skater.is_ghost:
 		skater.set_ghost(true)

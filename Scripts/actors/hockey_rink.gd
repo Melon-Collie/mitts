@@ -496,8 +496,8 @@ func _build_ice_texture() -> ImageTexture:
 	_draw_crease_fill(img, img_w / 2.0, img_h / 2.0 + goal_z, -1, crease_color)
 
 	# Line widths in pixels — thick (center/blue): 0.3m, thin (goal/circles): 0.05m
-	var thick_line: int = int(0.3 * _px_per_meter)
-	var thin_line: int  = max(int(0.05 * _px_per_meter), 2)
+	var thick_line: int = int(GameRules.THICK_LINE_WIDTH_M * _px_per_meter)
+	var thin_line: int  = max(int(GameRules.GOAL_LINE_WIDTH_M * _px_per_meter), 2)
 
 	# Center red line (at Z=0)
 	_draw_h_line(img, img_h / 2.0, thick_line, red_line_color)
@@ -736,7 +736,7 @@ func _build_side_stripe_texture() -> ImageTexture:
 	var img := Image.create(img_w, img_h, false, Image.FORMAT_RGBA8)
 	img.fill(Color(0.0, 0.0, 0.0, 0.0))  # transparent — board color shows through
 
-	var thick_px: int = int(0.3 * _px_per_meter)
+	var thick_px: int = int(GameRules.THICK_LINE_WIDTH_M * _px_per_meter)
 	var cx: float = float(img_w) / 2.0
 	var bx: float = GameRules.BLUE_LINE_Z * _px_per_meter
 	_draw_v_line(img, cx,        thick_px, red_line_color)
