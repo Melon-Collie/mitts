@@ -727,7 +727,13 @@ remains.
     chase down in between is a later decision's. The deepest stick gets a poke
     more for every cycle of a jab it stays on him (`POKE_CYCLE_S`), so a man
     skating with the carrier takes more than one met head on; never measured
-    against our defending bots. Never read
+    against our defending bots. A leg that sets off later — a second step, the
+    carry on to a destination, a receiver's drive after the catch, a possession
+    read's skate from a later start — is the carrier's decision then: its keep
+    is read against the defence projected to the leg's start
+    (`AIDefenderProjection`), its clocks from then. Never read it against the
+    defence as it is now with a head start: that is a defender who knows a plan
+    not yet made, and every second step reads as a sure loss. Never read
     where a defender might be as a spread that thins with how far ahead it looks: an entry read from
     further back then looks easier, and the carrier backs off to re-approach.
   - The **shot on a carry's arrival** reads a man behind the carry, skating its
