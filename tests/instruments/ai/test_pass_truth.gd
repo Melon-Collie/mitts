@@ -5,7 +5,8 @@ extends GutTest
 # receiver, past a defender who reads the windup and knows where the puck is
 # going — a real body in the duel harness whose input is replaced every tick. He
 # skates flat out to the earliest point of the puck's path his stick reaches
-# _set_s before the puck (else the point he has most time to spare at) and puts
+# _set_s before the puck (else the point he has most time to spare at), a point
+# where it is on the ice for a stick to play (never under a saucer), and puts
 # his blade through it; once the receiver has it he runs him down instead. The
 # receiver is a real bot taking the feed; the passer stands. Never our defending
 # bots: what a defender can do, not what ours choose to.
@@ -13,11 +14,13 @@ extends GutTest
 # Each run records whether the pass got through (caught by the receiver, taken
 # by the defender, or neither), who touched it first after the release (a
 # defender's deflection or body block is the lane's, a receiver's bobble the
-# reception's) and how many torsos it ran into, whether the receiver still had the puck
+# reception's), what the defender's first touch did (caught it, bobbled it,
+# deflected it, contested it, blocked it) at what closing speed in his frame,
+# and how many torsos it ran into, whether the receiver still had the puck
 # KEEP_S after the catch, and beside it each lane read the bots price with now —
 # the flat accurate lane, the saucer's, the rim's — and, along the puck's
 # own path, the one-chance strip read and the defender's best and first spare
-# time on it. Writes .preview/pass_truth/runs.csv. MITTS_PASS_SET_S overrides the
+# time on it where a stick can play it. Writes .preview/pass_truth/runs.csv. MITTS_PASS_SET_S overrides the
 # interceptor's set margin; MITTS_PASS_LIMIT caps the stagings.
 # MITTS_PASS_READS_FROM=<runs.csv> re-reads a recorded set without running it
 # (the same stagings in the same order, outcomes from the file) and adds, along
@@ -50,6 +53,8 @@ var _path: Array[Vector3] = []
 var _air: Array[bool] = []
 # The interceptor's line to aim at, every tick from the decision.
 var _aim: Array[Vector3] = []
+# Per _aim entry: the puck is in the air there, out of every stick's reach.
+var _aim_air: Array[bool] = []
 
 
 func test_pass_truth() -> void:
@@ -75,7 +80,8 @@ func test_pass_truth() -> void:
 		gut.p("re-reading %d recorded runs" % recorded.size())
 	var f := FileAccess.open(OUT_DIR + "/runs.csv", FileAccess.WRITE)
 	var header: String = "kind,ox,oz,rx,rz,lx,ly,lz,dx,dz,dvx,dvz,outcome,t_out,kept,lane_flat," \
-			+ "lane_saucer,rim_lane,path_keep,best_spare,first_spare,flight_s,first_touch,blocks"
+			+ "lane_saucer,rim_lane,path_keep,best_spare,first_spare,flight_s,first_touch,blocks," \
+			+ "touch_kind,touch_closing"
 	for set_s: float in READ_SETS:
 		header += ",pass_%02d" % roundi(set_s * 100.0)
 	f.store_line(header)
@@ -230,9 +236,23 @@ func _run(st: Dictionary) -> Dictionary:
 	var kept: int = -1
 	var caught_at: int = -1
 	var first_touch: String = "none"
+	var touch_kind: String = "none"
+	var touch_closing: float = -1.0
+	var d_body: Object = duel._skater(DEFENDER)
 	for i: int in int((WATCH_S + KEEP_S) / Duel.DT):
+		var before := Vector4(duel.bobbles, duel.deflects, duel.contests, duel.body_blocks)
+		var closing: float = Vector2(duel.puck_vel.x - d_body.vel.x,
+				duel.puck_vel.z - d_body.vel.z).length()
+		var defender_touched: bool = duel.touched_by == DEFENDER
 		duel.step()
 		var t: float = (i + 1) * Duel.DT
+		if touch_kind == "none" and not defender_touched and duel.touched_by == DEFENDER:
+			touch_closing = closing
+			touch_kind = "catch" if duel.carrier() == DEFENDER \
+					else "bobble" if duel.bobbles > before.x \
+					else "deflect" if duel.deflects > before.y \
+					else "contest" if duel.contests > before.z \
+					else "block" if duel.body_blocks > before.w else "other"
 		if first_touch == "none" and duel.touched_by == DEFENDER:
 			first_touch = "defender"
 		elif first_touch == "none" and duel.touched_by == RECEIVER:
@@ -260,7 +280,7 @@ func _run(st: Dictionary) -> Dictionary:
 		if c != RECEIVER or (i - caught_at) * Duel.DT >= KEEP_S:
 			break
 	return {"outcome": outcome, "line": _line(st, outcome, t_out, kept, caps, first_touch,
-			duel.body_blocks)}
+			duel.body_blocks, touch_kind, touch_closing)}
 
 
 # A recorded run re-read: its outcome from `cols`, every read afresh.
@@ -270,12 +290,12 @@ func _reread(st: Dictionary, cols: PackedStringArray) -> Dictionary:
 		return {}
 	var caps: AISkaterCaps = Duel.match_caps()
 	return {"outcome": cols[12], "line": _line(st, cols[12], float(cols[13]), int(cols[14]), caps,
-			cols[22], int(cols[23]))}
+			cols[22], int(cols[23]), cols[24], float(cols[25]))}
 
 
 # The run's row: its staging, outcome and the lane reads from the decision.
 func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISkaterCaps,
-		first_touch: String, blocks: int) -> String:
+		first_touch: String, blocks: int, touch_kind: String, touch_closing: float) -> String:
 	var o: Vector3 = st["o"]
 	var r: Vector3 = st["r"]
 	var launch: Vector3 = st["launch"]
@@ -305,10 +325,11 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 	var every: int = int(SAMPLE_S / Duel.DT)
 	for j: int in _path.size():
 		var t: float = lead + (j + 1) * Duel.DT
-		var spare: float = t - _stick_arrival(d, dv, _path[j], caps)
-		best = maxf(best, spare)
-		if first < 0.0 and spare >= 0.0:
-			first = t
+		if not _air[j]:
+			var spare: float = t - _stick_arrival(d, dv, _path[j], caps)
+			best = maxf(best, spare)
+			if first < 0.0 and spare >= 0.0:
+				first = t
 		if (j + 1) % every == 0 or j == _path.size() - 1:
 			points.append(_path[j])
 			times.append(t)
@@ -322,10 +343,10 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 					lead + (j + 1) * Duel.DT, set_s,
 					AIPuckLane.LANE_DEFENDER_BODY_RADIUS_M if _air[j] else reach))
 		reads.append("%.4f" % (1.0 - best_chance))
-	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%s,%d" % [
+	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%s,%d,%s,%.2f" % [
 			st["kind"], o.x, o.z, r.x, r.z, launch.x, launch.y, launch.z, d.x, d.z, dv.x, dv.z,
 			outcome, t_out, kept, lane_flat, lane_saucer, rim_lane, keep, best, first,
-			_path.size() * Duel.DT, first_touch, blocks]
+			_path.size() * Duel.DT, first_touch, blocks, touch_kind, touch_closing]
 	return head + "," + ",".join(reads)
 
 
@@ -348,6 +369,8 @@ func _intercept(s: Object, duel: Object, caps: AISkaterCaps) -> void:
 	input.bot_shuffle = false
 	var now: int = duel.ticks
 	_aim.resize(now + int(WATCH_S / Duel.DT))
+	_aim_air.resize(_aim.size())
+	_aim_air.fill(false)
 	var c: int = duel.carrier()
 	var start: int = now
 	if c == RECEIVER:
@@ -362,8 +385,10 @@ func _intercept(s: Object, duel: Object, caps: AISkaterCaps) -> void:
 		# The puck's own path, from the release on.
 		start = maxi(now, PREROLL_TICKS)
 		_aim.resize(PREROLL_TICKS + _path.size())
+		_aim_air.resize(_aim.size())
 		for j: int in range(PREROLL_TICKS, _aim.size()):
 			_aim[j] = _path[j - PREROLL_TICKS]
+			_aim_air[j] = _air[j - PREROLL_TICKS]
 	var target: Vector3 = _intercept_point(s, now, start, caps)
 	var to := Vector3(target.x - s.pos.x, 0.0, target.z - s.pos.z)
 	var dist: float = to.length()
@@ -388,6 +413,8 @@ func _intercept_point(s: Object, now: int, start: int, caps: AISkaterCaps) -> Ve
 	var best := Vector3.INF
 	var best_spare: float = -INF
 	for j: int in range(start, _aim.size(), PLAN_STEP_TICKS):
+		if _aim_air[j]:
+			continue
 		var p: Vector3 = _aim[j]
 		var to := Vector3(p.x - s.pos.x, 0.0, p.z - s.pos.z)
 		var d: float = to.length()
