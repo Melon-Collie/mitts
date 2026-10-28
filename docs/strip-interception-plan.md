@@ -107,28 +107,34 @@ on a carry.
 
 It is measured against a worst-case interceptor who reads the windup and knows
 where the puck is going (`tests/instruments/ai/test_pass_truth.gd`: flat feeds,
-saucers and rims to a bot receiver), and held by
-`tests/unit/ai/test_pass_lane_vs_truth.gd`. Passes nobody caught are the
-reception's, not the lane's, and are left out. Interceptions by the defender's
-spare time at his best point on the path: 1% when he cannot get there, then 14,
-45, 65 and 97% as he arrives earlier.
+saucers and rims to a bot receiver, in the duel harness with the game's body
+blocks), and held by `tests/unit/ai/test_pass_lane_vs_truth.gd`. A pass is lost
+to the lane when the defender takes it, or nobody catches it and he touched it
+first (a deflection, a body block); one nobody catches that he never touched
+first is the reception's, and left out. Of the flat feeds caught or lost, by
+the defender's spare time at his best point on the path: none lost when he is
+more than a quarter second late, 3% just short, then 13, 39, 53, 67 and 83% as
+he arrives earlier (0–0.1, 0.1–0.25, 0.25–0.5, 0.5–1 and over 1 s).
 
-| kind | expected | intercepted | ranking |
-|---|---|---|---|
-| flat | 523 | 439 | 0.861 |
-| rim | 143 | 144 | 0.831 |
-| saucer | 133 | 47 | 0.834 |
+| kind | expected | lost | ranking | the read it replaced |
+|---|---|---|---|---|
+| flat | 531 | 448 | 0.826 | 723 expected, 0.824 |
+| rim | 143 | 141 | 0.815 | 105 expected, 0.725 (a race to a loose puck) |
+| saucer | 142 | 63 | 0.821 | 202 expected, 0.814 |
 
-The rim's lane was a race to a loose puck before this and expected 105; the
-flat feed's old read expected 709.
+What the data says about a defender close to the release: standing on a flat
+feed's line within 3 m of the passer he takes 6 of 18 — he still has to set his
+stick, and the flat puck slides under his torso. Over a saucer his body is in
+the way: on its line 3–6 m out, 14 of 24 are blocked (8 taken, 6 knocked loose).
 
 What it leaves open:
 
-- The saucer's level: the read expects about three times the interceptions a
-  saucer suffers. Its ranking is right.
-- Reception: a third of fast passes are never caught by anyone (62% at
-  24 m/s). That is the receiver's, not the lane's, and says the bots pass too
-  hard.
+- The saucer's level: the read expects about twice the losses a saucer suffers.
+  Over him it reads his body like a stick that must be set, where the game's
+  block is a torso band (0.2–1.2 m) the puck is inside for only part of its
+  flight.
+- Reception: of the flat feeds nobody caught, nearly all were the receiver's to
+  lose (276 of 286), and most at pace. That says the bots pass too hard.
 - The after-catch read: the receiver's exit odds are read where the pass is
   released, so defenders seem not to close during the flight (the rim breakout
   trace: 0.80 at the release, 0.005 at the catch 1.27 s later).

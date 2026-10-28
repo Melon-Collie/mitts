@@ -5,20 +5,21 @@ extends GutTest
 # worst-case interceptor (docs/strip-interception-plan.md).
 # tests/unit/ai/data/pass_lane_truth.txt is flat feeds, saucers and rims to a bot
 # receiver past a defender who reads the windup and knows where the puck is
-# going — whether he intercepted it — measured by
-# tests/instruments/ai/test_pass_truth.gd (passes nobody caught are the
-# reception's, and left out). Each pass is read from the defender's start, as
-# the passer reads it.
+# going — whether the lane lost it: he took it, or nobody caught it and he
+# touched it first (a deflection, a body block) — measured by
+# tests/instruments/ai/test_pass_truth.gd (passes nobody caught that he never
+# touched first are the reception's, and left out). Each pass is read from the
+# defender's start, as the passer reads it.
 #
-# Ratchets on the flat feeds and rims together: how often an intercepted pass
-# read riskier than a completed one may not fall, and the interceptions the
-# reads expect, against those that happened, may not stray further from one. The
-# saucers' ranking is held too; their level is not yet — every read expects
-# about three times the interceptions a saucer suffers.
+# Ratchets on the flat feeds and rims together: how often a lost pass read
+# riskier than a completed one may not fall, and the losses the reads expect,
+# against those that happened, may not stray further from one. The saucers'
+# ranking is held too; their level is not yet — the read expects about twice
+# the losses a saucer suffers.
 
 const TRUTH_PATH: String = "res://tests/unit/ai/data/pass_lane_truth.txt"
 
-const MIN_RANKING: float = 0.85
+const MIN_RANKING: float = 0.83
 const MAX_EXPECTED_RATIO_ERR: float = 0.15
 const MIN_SAUCER_RANKING: float = 0.82
 const BANK_MARGIN: float = 0.02
@@ -60,12 +61,12 @@ func test_the_lane_reads_read_a_worst_case_interceptor() -> void:
 	var ranking: float = _ranking(risk, lost)
 	var ratio: float = n_lost / expected
 	var saucer_ranking: float = _ranking(saucer_risk, saucer_lost)
-	gut.p("flat and rim: %d passes, %d intercepted against %.1f expected (%.2f); ranking %.3f" % [
+	gut.p("flat and rim: %d passes, %d lost against %.1f expected (%.2f); ranking %.3f" % [
 			risk.size(), n_lost, expected, ratio, ranking])
 	gut.p("saucer: %d passes, ranking %.3f" % [saucer_risk.size(), saucer_ranking])
-	assert_gte(ranking, MIN_RANKING, "the interceptions read riskier than the passes completed")
-	assert_lte(absf(ratio - 1.0), MAX_EXPECTED_RATIO_ERR, "the interceptions it expects are the interceptions")
-	assert_gte(saucer_ranking, MIN_SAUCER_RANKING, "the saucers' interceptions read riskier")
+	assert_gte(ranking, MIN_RANKING, "the lost passes read riskier than the passes completed")
+	assert_lte(absf(ratio - 1.0), MAX_EXPECTED_RATIO_ERR, "the losses it expects are the losses")
+	assert_gte(saucer_ranking, MIN_SAUCER_RANKING, "the saucers' losses read riskier")
 	if ranking > MIN_RANKING + BANK_MARGIN:
 		gut.p("ranking %.3f beats its ratchet by more than %.2f: bank it" % [ranking, BANK_MARGIN])
 
