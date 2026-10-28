@@ -11,7 +11,9 @@ extends GutTest
 # bots: what a defender can do, not what ours choose to.
 #
 # Each run records whether the pass got through (caught by the receiver, taken
-# by the defender, or neither), whether the receiver still had the puck
+# by the defender, or neither), who touched it first after the release (a
+# defender's deflection or body block is the lane's, a receiver's bobble the
+# reception's) and how many torsos it ran into, whether the receiver still had the puck
 # KEEP_S after the catch, and beside it each lane read the bots price with now —
 # the flat accurate lane, the saucer's, the rim's — and, along the puck's
 # own path, the one-chance strip read and the defender's best and first spare
@@ -73,7 +75,7 @@ func test_pass_truth() -> void:
 		gut.p("re-reading %d recorded runs" % recorded.size())
 	var f := FileAccess.open(OUT_DIR + "/runs.csv", FileAccess.WRITE)
 	var header: String = "kind,ox,oz,rx,rz,lx,ly,lz,dx,dz,dvx,dvz,outcome,t_out,kept,lane_flat," \
-			+ "lane_saucer,rim_lane,path_keep,best_spare,first_spare,flight_s"
+			+ "lane_saucer,rim_lane,path_keep,best_spare,first_spare,flight_s,first_touch,blocks"
 	for set_s: float in READ_SETS:
 		header += ",pass_%02d" % roundi(set_s * 100.0)
 	f.store_line(header)
@@ -203,6 +205,7 @@ func _release(duel: Object, launch: Vector3) -> void:
 	var s: Object = duel._skater(PASSER)
 	duel.carrier_id = -1
 	duel.loose_released_by = PASSER
+	duel.touched_by = PASSER
 	duel._release_grace[PASSER] = 1 << 30
 	duel.puck_pos = s.blade
 	duel._launch(launch)
@@ -226,9 +229,14 @@ func _run(st: Dictionary) -> Dictionary:
 	var t_out: float = WATCH_S
 	var kept: int = -1
 	var caught_at: int = -1
+	var first_touch: String = "none"
 	for i: int in int((WATCH_S + KEEP_S) / Duel.DT):
 		duel.step()
 		var t: float = (i + 1) * Duel.DT
+		if first_touch == "none" and duel.touched_by == DEFENDER:
+			first_touch = "defender"
+		elif first_touch == "none" and duel.touched_by == RECEIVER:
+			first_touch = "receiver"
 		var c: int = duel.carrier()
 		if caught_at < 0:
 			if c == DEFENDER:
@@ -251,7 +259,8 @@ func _run(st: Dictionary) -> Dictionary:
 			break
 		if c != RECEIVER or (i - caught_at) * Duel.DT >= KEEP_S:
 			break
-	return {"outcome": outcome, "line": _line(st, outcome, t_out, kept, caps)}
+	return {"outcome": outcome, "line": _line(st, outcome, t_out, kept, caps, first_touch,
+			duel.body_blocks)}
 
 
 # A recorded run re-read: its outcome from `cols`, every read afresh.
@@ -260,11 +269,13 @@ func _reread(st: Dictionary, cols: PackedStringArray) -> Dictionary:
 	if _path.size() < 4:
 		return {}
 	var caps: AISkaterCaps = Duel.match_caps()
-	return {"outcome": cols[12], "line": _line(st, cols[12], float(cols[13]), int(cols[14]), caps)}
+	return {"outcome": cols[12], "line": _line(st, cols[12], float(cols[13]), int(cols[14]), caps,
+			cols[22], int(cols[23]))}
 
 
 # The run's row: its staging, outcome and the lane reads from the decision.
-func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISkaterCaps) -> String:
+func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISkaterCaps,
+		first_touch: String, blocks: int) -> String:
 	var o: Vector3 = st["o"]
 	var r: Vector3 = st["r"]
 	var launch: Vector3 = st["launch"]
@@ -311,10 +322,10 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 					lead + (j + 1) * Duel.DT, set_s,
 					AIPuckLane.LANE_DEFENDER_BODY_RADIUS_M if _air[j] else reach))
 		reads.append("%.4f" % (1.0 - best_chance))
-	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f" % [
+	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%s,%d" % [
 			st["kind"], o.x, o.z, r.x, r.z, launch.x, launch.y, launch.z, d.x, d.z, dv.x, dv.z,
 			outcome, t_out, kept, lane_flat, lane_saucer, rim_lane, keep, best, first,
-			_path.size() * Duel.DT]
+			_path.size() * Duel.DT, first_touch, blocks]
 	return head + "," + ",".join(reads)
 
 

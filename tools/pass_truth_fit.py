@@ -2,15 +2,17 @@
 
 Reads .preview/pass_truth/runs.csv (tests/instruments/ai/test_pass_truth.gd): per
 run the pass kind (flat, saucer, rim), whether it got through (complete), was
-taken (intercepted) or neither (incomplete), whether the receiver still had it a
+taken (intercepted) or neither (incomplete), who touched it first, whether the receiver still had it a
 second after the catch, and the reads the bots price it with: the flat accurate
 lane, the saucer's, the rim's lane, the one-chance strip read along the puck's
 own path, and the defender's best and first spare time on that path.
 
 For each kind: the interceptions against the ones each read expects, and how
-well each read ranks the intercepted passes over the completed ones (AUC) —
-passes nobody caught are left out of both, since they are the reception's and
-not the lane's — and the share intercepted and the share never caught by the
+well each read ranks the lost passes over the completed ones (AUC). A pass is
+lost to the lane when the defender took it, or nobody caught it and the
+defender touched it first (a deflection, a body block); one nobody caught that
+the receiver touched first, or nobody touched, is the reception's and left out
+of both. Then the share intercepted and the share never caught by the
 defender's best spare time.
 
     python3 tools/pass_truth_fit.py [runs.csv ...]
@@ -18,8 +20,8 @@ defender's best spare time.
 
 Several files (one per interceptor set margin) are tabled side by side.
 --write-truth writes tests/unit/ai/data/pass_lane_truth.txt from a recorded run
-set: every pass that was caught or intercepted (never caught is the reception's,
-not the lane's), its staging and whether it was intercepted.
+set: every pass that was caught or lost to the lane (the reception's left out),
+its staging and whether the lane lost it.
 """
 import csv
 import sys
@@ -29,11 +31,18 @@ import numpy as np
 
 def load(path):
     rows = list(csv.DictReader(open(path)))
-    d = {k: np.array([r[k] for r in rows]) for k in ("kind", "outcome")}
+    d = {k: np.array([r[k] for r in rows]) for k in ("kind", "outcome", "first_touch")}
+    d["blocks"] = np.array([int(r["blocks"]) for r in rows])
+    d["lane_lost"] = np.array([lane_lost(r) for r in rows])
     for k in ("kept", "lane_flat", "lane_saucer", "rim_lane", "path_keep", "best_spare",
               "first_spare", "t_out", "flight_s"):
         d[k] = np.array([float(r[k]) for r in rows])
     return d
+
+
+def lane_lost(r):
+    return r["outcome"] == "intercepted" or (r["outcome"] == "incomplete"
+                                             and r["first_touch"] == "defender")
 
 
 def auc(risk, lost):
@@ -61,17 +70,21 @@ def report(path):
             continue
         out = d["outcome"][sel]
         n = sel.sum()
-        scored = out != "incomplete"
-        lost = out[scored] == "intercepted"
+        gone = d["lane_lost"][sel]
+        scored = (out == "complete") | gone
+        lost = gone[scored]
+        deflected = gone & (out == "incomplete")
         kept = d["kept"][sel]
         caught = kept >= 0
-        print("  %-6s %4d runs: complete %3d, intercepted %3d, incomplete %3d | kept a second after the catch %d of %d"
+        print("  %-6s %4d runs: complete %3d, intercepted %3d, deflected %3d, reception's %3d"
+              " | body blocks %d | kept a second after the catch %d of %d"
               % (kind, n, (out == "complete").sum(), (out == "intercepted").sum(),
-                 (out == "incomplete").sum(), (kept[caught] == 1).sum(), caught.sum()))
+                 deflected.sum(), (~scored).sum(), (d["blocks"][sel] > 0).sum(),
+                 (kept[caught] == 1).sum(), caught.sum()))
         for name, read in ((own, d[own][sel][scored]), ("path_keep", d["path_keep"][sel][scored])):
-            print("    %-11s expects %6.1f intercepted of %3d (AUC %.3f)" % (
+            print("    %-11s expects %6.1f lost of %3d (AUC %.3f)" % (
                 name, (1.0 - read).sum(), lost.sum(), auc(1.0 - read, lost)))
-        print("    intercepted / never caught / runs, by the defender's best spare time on the puck's path:")
+        print("    lost to the lane / reception's / runs, by the defender's best spare time on the puck's path:")
         edges = [-99, -0.5, -0.25, 0.0, 0.1, 0.25, 0.5, 1.0, 99]
         line = "     "
         for a, b in zip(edges[:-1], edges[1:]):
@@ -79,8 +92,7 @@ def report(path):
             m = (s2 >= a) & (s2 < b)
             if m.sum():
                 line += " %s..%s: %d/%d/%d" % (a if a > -99 else "", b if b < 99 else "",
-                                              (out[m] == "intercepted").sum(),
-                                              (out[m] == "incomplete").sum(), m.sum())
+                                              gone[m].sum(), (~scored[m]).sum(), m.sum())
         print(line)
 
 
@@ -88,14 +100,14 @@ TRUTH_PATH = "tests/unit/ai/data/pass_lane_truth.txt"
 
 
 def write_truth(path):
-    rows = [r for r in csv.DictReader(open(path)) if r["outcome"] != "incomplete"]
+    rows = [r for r in csv.DictReader(open(path)) if r["outcome"] == "complete" or lane_lost(r)]
     with open(TRUTH_PATH, "w") as f:
         f.write("# Generated by tools/pass_truth_fit.py --write-truth from "
                 "tests/instruments/ai/test_pass_truth.gd's runs; never hand-edit.\n")
-        f.write("# kind\tintercepted (1/0)\tpasser x z\treceiver x z\tlaunch x y z\t"
+        f.write("# kind\tlost to the lane (1/0)\tpasser x z\treceiver x z\tlaunch x y z\t"
                 "defender x z\tdefender vx vz\n")
         for r in rows:
-            f.write("\t".join([r["kind"], "1" if r["outcome"] == "intercepted" else "0"]
+            f.write("\t".join([r["kind"], "1" if lane_lost(r) else "0"]
                                + [r[k] for k in ("ox", "oz", "rx", "rz", "lx", "ly", "lz", "dx", "dz",
                                                   "dvx", "dvz")]) + "\n")
     print("wrote %d passes to %s" % (len(rows), TRUTH_PATH))

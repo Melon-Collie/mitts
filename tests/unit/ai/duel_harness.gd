@@ -35,8 +35,9 @@ extends RefCounted
 # What is APPROXIMATED (keep scenario assertions coarse because of these):
 #   - The arm leaves out the skating lean and the trunk's fold, and the boards
 #     do not limit its reach.
-#   - The puck is flat: an airborne one is touched by nothing, and a landing
-#     keeps its pace; shots take no body blocks.
+#   - The puck has a height only in the air: a lofted one is touched by no
+#     stick, a landing keeps its pace, and a loose puck is blocked by an upright
+#     torso only (no shot-block crouch, no diver).
 #   - Board pins and the press's pair coupling are absent, as is goalie
 #     BEHAVIOR (a static net-center keeper per team, or a goalie_provider's).
 #   - Puppets and scripted attackers skate their own simple policies.
@@ -246,6 +247,11 @@ var carrier_id: int = -1
 # it (GameManager._loose_puck_released_by): set by a release from carry or a
 # one-timer, cleared by a pickup or a blade touching it loose.
 var loose_released_by: int = -1
+# The last skater whose stick or body touched the puck — its release, a pickup, a
+# deflection, a bobble, a contest, a poke or a body block — or -1.
+var touched_by: int = -1
+# Body blocks landed (PuckController._check_body_blocks).
+var body_blocks: int = 0
 # Airborne CHIP support: while > 0 the puck is in the air — constant ground
 # velocity (ballistic track), no ice friction, no pickups (no bot volunteers
 # a deflect) — then it lands, keeping LANDING_SPEED_KEEP of its pace (the
@@ -256,6 +262,11 @@ const LANDING_SPEED_KEEP: float = 0.6
 # The share of pace the airborne puck lands with: LANDING_SPEED_KEEP for a staged
 # chip, all of it for a saucer (the bots' own saucer model).
 var _airborne_keep: float = LANDING_SPEED_KEEP
+# A lofted puck's height off the ice and its climb (m, m/s), from its launch or
+# hop; a chip staged through airborne_ticks alone has none and flies under every
+# torso.
+var _air_y: float = 0.0
+var _air_vy: float = 0.0
 var ticks: int = 0
 var move_cfg: SkaterMovementRules.MovementConfig
 var _facing_cfg: FacingRules.Config
@@ -549,6 +560,7 @@ func step() -> void:
 			_release(c)
 			carrier_id = -1
 			loose_released_by = c.peer_id
+			touched_by = c.peer_id
 	_puckless_swings()
 	# Integrate bodies + blades.
 	for s: SimSkater in skaters:
@@ -609,6 +621,7 @@ func step() -> void:
 					prev_puck, puck_pos, s.prev_blade, s.blade, GameRules.POKE_RADIUS_M):
 				strips += 1
 				carrier_id = -1
+				touched_by = s.peer_id
 				var poker_v: Vector3 = (s.blade - s.prev_blade) / DT
 				var carrier_v: Vector3 = (c2.blade - c2.prev_blade) / DT
 				puck_vel = PuckCollisionRules.poke_strip_velocity(poker_v, carrier_v,
@@ -625,6 +638,9 @@ func step() -> void:
 		# glass drops at the boards).
 		airborne_ticks -= 1
 		puck_pos += puck_vel * DT
+		var prev_y: float = _air_y
+		_air_y += (_air_vy - 0.5 * GameRules.GRAVITY_M_S2 * DT) * DT
+		_air_vy -= GameRules.GRAVITY_M_S2 * DT
 		var clamped_air: Vector2 = GameRules.clamp_to_rink_inner(
 				Vector2(puck_pos.x, puck_pos.z))
 		if clamped_air.x != puck_pos.x or clamped_air.y != puck_pos.z:
@@ -633,6 +649,9 @@ func step() -> void:
 			puck_vel = PuckCollisionRules.board_rescue_velocity(
 					puck_vel, outward_air, BOARD_RESTITUTION)
 			puck_pos = Vector3(clamped_air.x, puck_pos.y, clamped_air.y)
+		if _body_block(prev_puck, prev_y, _air_y):
+			airborne_ticks = 0
+			_airborne_keep = 1.0
 		if airborne_ticks == 0:
 			puck_vel *= _airborne_keep
 			_airborne_keep = LANDING_SPEED_KEEP
@@ -655,7 +674,12 @@ func step() -> void:
 			puck_vel = PuckCollisionRules.board_rescue_velocity(
 					puck_vel, outward, BOARD_RESTITUTION)
 			puck_pos = Vector3(clamped.x, puck_pos.y, clamped.y)
+		# A torso first: a block changes the puck's path, and no stick plays it
+		# this tick.
+		var blocked: bool = _body_block(prev_puck, 0.0, 0.0)
 		for s: SimSkater in skaters:
+			if blocked:
+				break
 			if not _can_play(s) or not PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):
 				continue
@@ -676,6 +700,7 @@ func step() -> void:
 						if puck_vel.length() < BOBBLE_SPEED_M_S else DEFLECT_COOLDOWN_TICKS)
 				deflects += 1
 				loose_released_by = -1
+				touched_by = s.peer_id
 				break
 			var axis: Vector3 = PuckReceptionRules.blade_axis(s.blade, _hand(s),
 					Vector3(s.facing.x, 0.0, s.facing.y))
@@ -695,6 +720,7 @@ func step() -> void:
 				_release_grace[s.peer_id] = ticks + BOBBLE_GRACE_TICKS
 				bobbles += 1
 				loose_released_by = -1
+				touched_by = s.peer_id
 				break
 			# A second blade corralling it on the same tick contests it: nobody gets
 			# it (PuckController.apply_contested_pickup).
@@ -711,9 +737,11 @@ func step() -> void:
 				_release_grace[rival.peer_id] = ticks + STRIP_REATTACH_TICKS
 				contests += 1
 				loose_released_by = -1
+				touched_by = s.peer_id
 				break
 			carrier_id = s.peer_id
 			loose_released_by = -1
+			touched_by = s.peer_id
 			puck_pos = s.blade
 			puck_vel = s.vel
 			s.settle_until = ticks + roundi(PuckReceptionRules.settle_time(catch_load,
@@ -1205,8 +1233,29 @@ func _hop(vy: float) -> void:
 	var disc: float = vy * vy - 2.0 * GameRules.GRAVITY_M_S2 * h
 	if vy <= 0.0 or disc <= 0.0:
 		return
-	airborne_ticks = maxi(airborne_ticks, roundi((vy + sqrt(disc)) / GameRules.GRAVITY_M_S2 / DT))
+	var hang: int = roundi((vy + sqrt(disc)) / GameRules.GRAVITY_M_S2 / DT)
+	if hang > airborne_ticks:
+		_air_y = 0.0
+		_air_vy = vy
+	airborne_ticks = maxi(airborne_ticks, hang)
 	_airborne_keep = 1.0
+
+
+# PuckController._check_body_blocks: a loose puck swept from `prev_puck` to the
+# puck's spot this tick, `prev_y` to `curr_y` off the ice, comes off the first
+# upright torso it runs into, and that body is cooled off it. True on a block.
+func _body_block(prev_puck: Vector3, prev_y: float, curr_y: float) -> bool:
+	for s: SimSkater in skaters:
+		if ticks < int(_release_grace.get(s.peer_id, 0)) \
+				or not _match_body.blocks(prev_puck, puck_pos, prev_y, curr_y, s.pos):
+			continue
+		puck_vel = _match_body.block_velocity(prev_puck, puck_pos, puck_vel, s.pos)
+		_release_grace[s.peer_id] = ticks + roundi(_match_body.block_cooldown_s / DT)
+		body_blocks += 1
+		loose_released_by = -1
+		touched_by = s.peer_id
+		return true
+	return false
 
 
 # A puckless slapper swing: armed as the button drops, it lands after the
@@ -1237,6 +1286,7 @@ func _puckless_swings() -> void:
 		releases.append({"tick": ticks, "peer": s.peer_id, "team": s.team_id,
 				"pos": s.pos, "decision": "ONE_TIMER"})
 		loose_released_by = s.peer_id
+		touched_by = s.peer_id
 		_release_grace[s.peer_id] = ticks + RELEASE_GRACE_TICKS
 		var aim := Vector3(s.swing_aim.x, 0.0, s.swing_aim.z)
 		if aim.length_squared() < 0.0001:
@@ -1321,6 +1371,8 @@ func _launch(v: Vector3) -> void:
 	airborne_ticks = roundi((v.y + sqrt(v.y * v.y + 2.0 * GameRules.GRAVITY_M_S2 * drop))
 			/ GameRules.GRAVITY_M_S2 / DT)
 	_airborne_keep = 1.0
+	_air_y = LOFT_SEAT_M
+	_air_vy = v.y
 
 
 func carrier() -> int:
