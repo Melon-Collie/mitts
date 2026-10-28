@@ -110,13 +110,13 @@ const _FB_FACE: Array[int] = [GearModelRegistry.FACE_VISOR, GearModelRegistry.FA
 		GearModelRegistry.FACE_NONE, GearModelRegistry.FACE_VISOR,
 		GearModelRegistry.FACE_CAGE, GearModelRegistry.FACE_VISOR,
 		GearModelRegistry.FACE_FISHBOWL, GearModelRegistry.FACE_NONE]
-# Short, medium and buzzed cuts dominate, with the odd mullet, shag and
+# Short, medium and buzzed cuts dominate, with the odd mullet, shag, flow and
 # shaved head. Beards run common, as they do in a dressing room; colours
 # lean dark, so a hash rarely lands on a combination that reads as a costume.
 const _FB_HAIR: Array[int] = [HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MEDIUM,
 		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_SHAGGY,
 		HairStyleRegistry.HAIR_MEDIUM, HairStyleRegistry.HAIR_BUZZ,
-		HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MULLET,
+		HairStyleRegistry.HAIR_FLOW, HairStyleRegistry.HAIR_MULLET,
 		HairStyleRegistry.HAIR_BALD, HairStyleRegistry.HAIR_MEDIUM,
 		HairStyleRegistry.HAIR_BUZZ, HairStyleRegistry.HAIR_SHAGGY]
 const _FB_FACIAL: Array[int] = [HairStyleRegistry.FACIAL_NONE, HairStyleRegistry.FACIAL_STUBBLE,

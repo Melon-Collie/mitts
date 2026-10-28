@@ -164,8 +164,7 @@ func test_the_figure_wears_the_pending_hair() -> void:
 	var facial: MeshInstance3D = _mannequin().get("_facial_hair") as MeshInstance3D
 	var brows: MeshInstance3D = _mannequin().get("_brows") as MeshInstance3D
 	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_MULLET))
-	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(
-			HairStyleRegistry.FACIAL_STUBBLE, GearModelRegistry.FACE_NONE))
+	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_STUBBLE))
 	assert_lt((facial.material_override as StandardMaterial3D).albedo_color.a, 1.0,
 			"stubble previews translucent")
 	assert_eq((brows.material_override as StandardMaterial3D).albedo_color,
