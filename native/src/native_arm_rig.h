@@ -31,6 +31,7 @@ class NativeArmRig : public godot::RefCounted {
 	int32_t bone_elbow = -1;
 	int32_t bone_glove = -1;
 	int32_t bone_cap = -1;
+	int32_t bone_deltoid = -1;
 	int32_t bone_spine = -1;
 
 	// Per-part pose scale (SkaterArmRig._thickness): X/Y the radius, the
@@ -40,13 +41,15 @@ class NativeArmRig : public godot::RefCounted {
 	godot::Vector3 thick_cuff;
 	godot::Vector3 thick_elbow;
 	godot::Vector3 thick_glove;
-	godot::Vector3 cap_rest_pole;
-	double cap_follow = 0.6;
 	// Skater.wrist_break_max_deg, in radians.
 	double wrist_break_max = 0.0;
 	// The cap bone's scene rest (SkaterArmRig._pos / _scale).
 	godot::Vector3 cap_pos;
 	godot::Vector3 cap_scale = godot::Vector3(1, 1, 1);
+	// The cap's rest basis, and how far from it toward the cap the deltoid
+	// under it turns (SkaterArmRig._cap_rest, _DELTOID_SHARE).
+	godot::Basis cap_rest;
+	double deltoid_share = 0.5;
 
 	// The cap's last stable roll and its share of the girdle's give, in the
 	// cap's untextured pose frame — read back by the rig for its own reposes.
@@ -59,14 +62,14 @@ protected:
 public:
 	// `bones` is (upper arm, forearm, cuff, elbow, glove, spine).
 	void bind(godot::Object *p_skeleton, const godot::PackedInt32Array &p_bones);
-	// The cap is the one on this arm's side; `cap_state` is get_cap_state's
-	// shape, the rig's current view of it.
+	// The cap is the one on this arm's side, and the deltoid the one under it;
+	// `cap_state` is get_cap_state's shape, the rig's current view of it.
 	void configure(const godot::Vector3 &p_thick_upper, const godot::Vector3 &p_thick_forearm,
 			const godot::Vector3 &p_thick_cuff, const godot::Vector3 &p_thick_elbow,
-			const godot::Vector3 &p_thick_glove, const godot::Vector3 &p_cap_rest_pole,
-			double p_cap_follow, int32_t p_cap_bone, const godot::Vector3 &p_cap_pos,
+			const godot::Vector3 &p_thick_glove, int32_t p_cap_bone, const godot::Vector3 &p_cap_pos,
 			const godot::Vector3 &p_cap_scale, const godot::Transform3D &p_cap_state,
-			double p_wrist_break_max);
+			double p_wrist_break_max, int32_t p_deltoid_bone, const godot::Basis &p_cap_rest,
+			double p_deltoid_share);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off

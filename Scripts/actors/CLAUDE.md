@@ -88,6 +88,7 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
     SPINE  the fold about the hips, then the rest of the twist, then the
            reach lean, less the lean the trunk hands back; torso and caps
       NECK   takes back part of the trunk's lean; the helmet
+      DELTOID_L/R  the shoulders' middles, turned half as far as the caps
     TAIL   the torso's placement hung from the waist: the share of the
            jersey's tail the hips carry
 tail     roots, one pair per torso facet: the jersey's tail below the belt,
@@ -172,6 +173,23 @@ figure brings its own drape, its own bones and its own colliders
 takes the same three.
 `test_hem_flaps.gd` holds the drape and `tests/slow/actors/test_hem_stays_out_of_the_legs.gd` the
 tail against the legs across a skated run.
+
+## The joints are stitched, not capped
+
+Each knee, elbow and shoulder is a band whose rings ride the bones either side
+(and, at the elbow and shoulder, a bone turned part way between them), every
+vertex still rigid on one bone, so a bend stretches the band instead of opening
+a gap or showing a ball. The shoulder is the top of the sleeve: its base ring
+lies on the torso, its middle rides the deltoid, and its last ring is the upper
+arm prism's top ring.
+
+A band only lies flat if ring k is the same facet on every bone it spans, so
+the arm is one frame carried down from the shoulder cap: the cap points down
+the upper arm, the upper arm prism takes its frame, the forearm's is that
+turned through the elbow's bend, the elbow bone's half of it
+(`SkaterArmRig._pose_arm_chain`). Change how any of them is rolled and the
+sleeve twists. `test_shoulder_is_stitched.gd`, `test_elbow_is_stitched.gd` and
+`test_skater_mesh_builder.gd`'s knee test hold the seams.
 
 ## The blades stand on the ice
 
@@ -292,7 +310,7 @@ Nine rules the rigs sit inside, all easy to break from in here:
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
   off while its own camera records.
 - **The arms are posed in C++ when the extension is built** (`NativeArmRig`,
-  which writes the arm and cap bones itself). Change `_update_arm`, the part
+  which writes the arm, cap and deltoid bones itself). Change `_update_arm`, the part
   posing or the cap's orient-and-repose and the port changes with it, or
   `test_native_arm_rig_parity.gd` fails; see `native/README.md`.
 - **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):

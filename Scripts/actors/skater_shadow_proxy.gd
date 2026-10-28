@@ -96,6 +96,8 @@ static func shared_mesh() -> ArrayMesh:
 		for bind: int in 2 * SkaterMeshBuilder.TORSO_SIDES:
 			tail[SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE + bind] = \
 					SkaterBodySkeleton.COLUMN_BONE_BASE + bind
+		tail[SkaterMeshBuilder.UPPER_DELTOID_BIND] = SkaterBodySkeleton.DELTOID_L_BONE
+		tail[SkaterMeshBuilder.UPPER_DELTOID_BIND + 1] = SkaterBodySkeleton.DELTOID_R_BONE
 		_append_mesh(out, SkaterMeshBuilder.shared_upper_skin_mesh(), 0, tail)
 		_append_mesh(out, SkaterMeshBuilder.shared_leg_skin_mesh(),
 				SkaterBodySkeleton.LEG_BONE_OFFSET)
@@ -114,7 +116,8 @@ static func shared_skin() -> Skin:
 
 # `bone_offset` turns a rig skin's bind index into the body skeleton's bone
 # index (the rig skins bind index i to bone offset + i), except the binds in
-# `extra`, which name their own bones (the upper skin's jersey tail).
+# `extra`, which name their own bones (the upper skin's jersey tail and
+# deltoids).
 static func _append_mesh(out: Array, src: ArrayMesh, bone_offset: int,
 		extra: Dictionary = {}) -> void:
 	var verts: PackedVector3Array = out[Mesh.ARRAY_VERTEX]

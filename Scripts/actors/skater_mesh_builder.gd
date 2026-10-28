@@ -167,12 +167,6 @@ const HEAD_FORWARD_M: float = 0.015
 # figures read it. The elbow pad only fills the bend, just proud of it.
 const SLEEVE_RADIUS_M: float = 0.080
 const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
-# The elbow ring the skinned arm's two prisms are stitched through
-# (_append_elbow_surface), in sleeve radii: between the upper arm's tapered end
-# and the forearm's full one, and standing proud by up to _ELBOW_PAD_PROUD at the
-# point of the bend, where the pad under the sleeve shows.
-const _ELBOW_RING_SLEEVES: float = 0.94
-const _ELBOW_PAD_PROUD: float = 0.18
 
 # Shoulder cap: the pad under the sleeve. Its +Y end (SkaterArmRig points it
 # into the trap) is a blunt base tucked under the torso's trapezius slope; the
@@ -192,6 +186,48 @@ const _SHOULDER_PROFILE: Array[Vector3] = [
 # The yoke crosses the cap at its second ring, so the top of the shoulder
 # matches the jersey and the cap's own color starts below it.
 const SHOULDER_CAP_YOKE_V: float = _SHOULDER_PROFILE[1].z
+# The skinned figure's shoulder is the top of its sleeve (_append_cap_surface):
+# _SHOULDER_PROFILE's rings down to _SHOULDER_SEAM_STATION, where the upper arm's
+# prism takes over (shared_upper_arm_bone_z), each ring riding the torso
+# (_CAP_ON_TORSO), the deltoid turned half as far as the arm (_CAP_ON_DELTOID),
+# or the cap bone, which turns with it.
+const _CAP_ON_TORSO: int = 0
+const _CAP_ON_DELTOID: int = 1
+const _CAP_ON_ARM: int = 2
+const _CAP_RIDES: Array[int] = [
+	_CAP_ON_TORSO, _CAP_ON_DELTOID, _CAP_ON_DELTOID, _CAP_ON_DELTOID, _CAP_ON_ARM,
+]
+const _SHOULDER_SEAM_STATION: int = 4
+# The RIGHT cap's origin in the torso bone's frame as Scenes/Skater.tscn places
+# both (ShoulderR less UpperBodyMesh; x mirrors for the left), where its torso
+# ring is authored.
+const _CAP_IN_TORSO := Vector3(0.22, 0.205, 0.0)
+# How far inside the torso lathe's vertex circle the cap's base ring is laid:
+# the facets between the corners sit up to 1 − cos(18°) inside it.
+const _CAP_SEAT_INSET: float = 0.96
+# The standalone cap lathe's facets round its pole (_build_shoulder); the skinned
+# shoulder has the arm's, so its seam ring is the prism's.
+const _CAP_LON: int = 10
+# The cap's rest pole in upper-body space for the RIGHT cap (x mirrors for the
+# left): down, a touch outboard and forward — the deltoid's hang on a relaxed
+# arm, and the orientation the shoulder's torso ring is authored at.
+const SHOULDER_CAP_REST_POLE := Vector3(0.32, -0.93, -0.17)
+
+
+# A cap's basis with its +Y on `pole` and its X as near `toward` as that allows.
+# At world +X (shoulder_cap_rest) each side's shoulder decal picks its outboard
+# face by uv1_offset, as at identity; the caller passes the cap's last X instead
+# when the pole runs too near ±X to leave one.
+static func shoulder_cap_basis(pole: Vector3, toward: Vector3 = Vector3.RIGHT) -> Basis:
+	var x_axis: Vector3 = (toward - pole * pole.dot(toward)).normalized()
+	return Basis(x_axis, pole, x_axis.cross(pole)).orthonormalized()
+
+
+# The cap on `side` (−1 left, +1 right) hanging at rest.
+static func shoulder_cap_rest(side: float) -> Basis:
+	var rest: Vector3 = SHOULDER_CAP_REST_POLE.normalized()
+	rest.x *= side
+	return shoulder_cap_basis(-rest)
 
 # The knee: the sock carried up through the joint, so thigh and shin read as
 # one leg. Stations are (y, radius, kneecap) in the KNEE bone's frame, whose
@@ -662,13 +698,34 @@ static func _append_surface(target: ArrayMesh, src: ArrayMesh,
 	st.commit(target)
 
 
-# The same prism with 90°-about-X baked into the vertices, so its long axis is
-# local Z — the axis the arm rig's looking_at basis aims. That alignment is what
-# lets a single bone transform carry (radius, radius, length) with no rotated
-# child under it.
-static func shared_arm_bone_z() -> ArrayMesh:
-	return _shared("arm_bone_z", func() -> ArrayMesh:
-		return _along_z(shared_arm_bone()))
+# Skater.upper_arm_length's default. The cap's −Y runs down the upper arm and both
+# scale with height, so a cap-local height is a fixed fraction of the upper arm.
+const UPPER_ARM_LENGTH_M: float = 0.33
+# Where the shoulder meets the upper arm's prism, in the prism's local Z (+0.5 at
+# the shoulder), and the prism's radius there, in sleeve radii.
+const _SHOULDER_SEAM_Z: float = 0.5 + _SHOULDER_PROFILE[_SHOULDER_SEAM_STATION].x \
+		/ UPPER_ARM_LENGTH_M
+const _SHOULDER_SEAM_RADIUS: float = _ARM_TAPER + (1.0 - _ARM_TAPER) * (_SHOULDER_SEAM_Z + 0.5)
+
+
+# The skinned upper arm's prism: the plain arm prism from the shoulder seam down,
+# the shoulder (_append_cap_surface) being the sleeve above it. Its side keeps the
+# whole prism's V, so a sleeve's stripes land where they did.
+static func shared_upper_arm_bone_z() -> ArrayMesh:
+	return _shared("upper_arm_bone_z", func() -> ArrayMesh:
+		var profile: Array[Vector2] = [Vector2(_SHOULDER_SEAM_Z, _SHOULDER_SEAM_RADIUS),
+				Vector2(-0.5, _ARM_TAPER)]
+		var prism: ArrayMesh = _radial_side_normals(_build_lathe(profile, _LEG_SIDES, 1.0, 1.0))
+		var arrays: Array = prism.surface_get_arrays(0)
+		var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
+		var span: float = _SHOULDER_SEAM_Z + 0.5
+		for i: int in uvs.size():
+			if uvs[i].y <= 0.5:
+				uvs[i].y = uvs[i].y * span + 0.5 * (0.5 - _SHOULDER_SEAM_Z)
+		arrays[Mesh.ARRAY_TEX_UV] = uvs
+		var out := ArrayMesh.new()
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		return _along_z(out))
 
 
 static func _forearm_bone_z() -> ArrayMesh:
@@ -676,6 +733,10 @@ static func _forearm_bone_z() -> ArrayMesh:
 		return _along_z(shared_forearm_bone()))
 
 
+# A prism with 90°-about-X baked into its vertices, so its long axis is local Z —
+# the axis the arm rig's frames run down the arm. That alignment is what lets a
+# single bone transform carry (radius, radius, length) with no rotated child
+# under it.
 static func _along_z(src: ArrayMesh) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -693,7 +754,10 @@ static func _along_z(src: ArrayMesh) -> ArrayMesh:
 # have to hold: every vertex is weighted 1.0 to a single bone (the jersey's tail is
 # the one exception — SkaterJerseyHem), the bone rests
 # are identity, the skin binds are identity, and each part's geometry is left in
-# its own local space. A skinned vertex is then exactly `bone_pose * v`.
+# its own local space. A skinned vertex is then exactly `bone_pose * v`. The
+# joints' surfaces are the stitched exception to "one part, one bone": the elbow
+# and the shoulders put each ring on the bone it rides, in that bone's space
+# (_append_elbow_surface, _append_cap_surface), still rigid vertex by vertex.
 #
 # The shell parts hang from the SPINE bone and the pelvis from WAIST
 # (SkaterBodySkeleton.upper_bone_parent); their poses are authored in a space that equals the old
@@ -722,6 +786,8 @@ const UPPER_BONE_COUNT: int = 15
 # one from the bend to the hem (SkaterBodySkeleton.column_bone, in that order).
 const UPPER_TAIL_BIND: int = UPPER_BONE_COUNT
 const UPPER_COLUMN_BIND_BASE: int = UPPER_BONE_COUNT + 1
+# Then the two deltoids', left and right (_append_cap_surface).
+const UPPER_DELTOID_BIND: int = UPPER_COLUMN_BIND_BASE + 2 * _TORSO_SIDES
 
 # Surfaces. One per bone for the first thirteen; the helmet is the exception,
 # carrying the shell and the head/neck skin as two surfaces of one bone (they
@@ -773,12 +839,11 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 		tuck = GearModelRegistry.TUCK_NONE
 	return _shared("upper_skin_%d" % tuck, func() -> ArrayMesh:
 		var m := ArrayMesh.new()
-		var bone: ArrayMesh = shared_arm_bone_z()
+		var bone: ArrayMesh = shared_upper_arm_bone_z()
 		var forearm: ArrayMesh = _forearm_bone_z()
 		var fist: ArrayMesh = shared_glove_fist()
 		var cuff: ArrayMesh = shared_cuff()
 		var helmet: ArrayMesh = shared_helmet_assembly()
-		var shoulder: ArrayMesh = _shared("shoulder", _build_shoulder)
 		# Appended in UpperSurface order. For the ten arm parts the surface index
 		# and the bone index coincide, which is why they can share a number.
 		_append_skinned_surface(m, bone, UpperBone.TOP_UPPER_ARM)
@@ -798,8 +863,8 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 				UPPER_COLUMN_BIND_BASE, _TORSO_PROFILE[TORSO_BEND_STATION].x)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SHELL)
 		_append_skinned_surface(m, helmet, UpperBone.HELMET, HELMET_SURF_SKIN)
-		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_L)
-		_append_skinned_surface(m, shoulder, UpperBone.SHOULDER_R)
+		_append_cap_surface(m, UpperBone.SHOULDER_L, UPPER_DELTOID_BIND, -1.0)
+		_append_cap_surface(m, UpperBone.SHOULDER_R, UPPER_DELTOID_BIND + 1, 1.0)
 		# Out of anatomical order — see the UpperSurface doc block.
 		_append_skinned_surface(m, fist, UpperBone.TOP_HAND, FIST_PART_FINGERS)
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_FINGERS)
@@ -829,7 +894,105 @@ static func shared_upper_skin() -> Skin:
 			for joint: int in 2:
 				_upper_skin.add_bind(SkaterBodySkeleton.column_bone(column, joint),
 						Transform3D.IDENTITY)
+		_upper_skin.add_bind(SkaterBodySkeleton.DELTOID_L_BONE, Transform3D.IDENTITY)
+		_upper_skin.add_bind(SkaterBodySkeleton.DELTOID_R_BONE, Transform3D.IDENTITY)
 	return _upper_skin
+
+
+# A shoulder into `target` as the skinned figure wears it: the top of the sleeve,
+# its rings riding the bones _CAP_RIDES gives them, each in its own bone's frame.
+# The base ring is laid onto the torso's surface where the cap rests on it, with
+# no base disc, so the band from it to the next ring is the fillet the shoulder
+# grows out of the chest by; the last ring is the upper arm prism's top ring,
+# facet for facet, and the prism carries the sleeve on from there. `deltoid` is a
+# bind index; `side` is −1 left.
+static func _append_cap_surface(target: ArrayMesh, cap_bone: int, deltoid: int,
+		side: float) -> void:
+	var rest := Transform3D(shoulder_cap_rest(side),
+			Vector3(_CAP_IN_TORSO.x * side, _CAP_IN_TORSO.y, _CAP_IN_TORSO.z))
+	var to_cap: Transform3D = rest.affine_inverse()
+	var rings: Array[PackedVector3Array] = []
+	for i: int in _SHOULDER_SEAM_STATION + 1:
+		var radius: float = _SHOULDER_PROFILE[i].y
+		if i == _SHOULDER_SEAM_STATION:
+			radius = _SHOULDER_SEAM_RADIUS * SLEEVE_RADIUS_M
+		var ring: PackedVector3Array = _ring(_SHOULDER_PROFILE[i].x, radius, 1.0, 1.0,
+				_LEG_SIDES)
+		for k: int in ring.size():
+			ring[k] = rest * ring[k]
+			if _CAP_RIDES[i] == _CAP_ON_TORSO:
+				ring[k] = _onto_torso(ring[k])
+		rings.append(ring)
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	for i: int in rings.size() - 1:
+		for k: int in _LEG_SIDES:
+			var u0: float = float(k) / float(_LEG_SIDES)
+			var u1: float = float(k + 1) / float(_LEG_SIDES)
+			_uv_quad(st,
+					rings[i][k], Vector2(u0, _SHOULDER_PROFILE[i].z),
+					rings[i][k + 1], Vector2(u1, _SHOULDER_PROFILE[i].z),
+					rings[i + 1][k + 1], Vector2(u1, _SHOULDER_PROFILE[i + 1].z),
+					rings[i + 1][k], Vector2(u0, _SHOULDER_PROFILE[i + 1].z))
+	st.generate_normals()
+	var arrays: Array = st.commit().surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
+	var ride_bone: Array[int] = [UpperBone.TORSO, deltoid, cap_bone]
+	var bones := PackedInt32Array()
+	bones.resize(verts.size() * 4)
+	var weights := PackedFloat32Array()
+	weights.resize(verts.size() * 4)
+	for v: int in verts.size():
+		var rides: int = _CAP_RIDES[_cap_ring_of(rings, verts[v])]
+		bones[v * 4] = ride_bone[rides]
+		weights[v * 4] = 1.0
+		if rides != _CAP_ON_TORSO:
+			verts[v] = to_cap * verts[v]
+			normals[v] = to_cap.basis * normals[v]
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	target.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+
+# Which ring of `rings` a built shoulder vertex is.
+static func _cap_ring_of(rings: Array[PackedVector3Array], p: Vector3) -> int:
+	var nearest: int = 0
+	var best: float = INF
+	for i: int in rings.size():
+		for q: Vector3 in rings[i]:
+			var d: float = p.distance_squared_to(q)
+			if d < best:
+				best = d
+				nearest = i
+	return nearest
+
+
+# A torso-frame point moved straight in or out from the torso's axis onto its
+# lathe at that height, a little inside the vertex circle so it lies under the
+# facets rather than proud of them between their corners.
+static func _onto_torso(p: Vector3) -> Vector3:
+	var radius: float = _torso_radius_at(p.y) * _CAP_SEAT_INSET
+	var across := Vector2(p.x / (radius * _TORSO_X_SCALE), p.z / (radius * _TORSO_Z_SCALE))
+	if across.length_squared() < 1e-8:
+		return p
+	var onto: float = 1.0 / across.length()
+	return Vector3(p.x * onto, p.y, p.z * onto)
+
+
+# The torso lathe's profile radius at torso-local height `y`, clamped to its ends.
+static func _torso_radius_at(y: float) -> float:
+	if y >= _TORSO_PROFILE[0].x:
+		return _TORSO_PROFILE[0].y
+	for i: int in _TORSO_PROFILE.size() - 1:
+		var hi: Vector2 = _TORSO_PROFILE[i]
+		var lo: Vector2 = _TORSO_PROFILE[i + 1]
+		if y >= lo.x:
+			return lerpf(hi.y, lo.y, (hi.x - y) / (hi.x - lo.x))
+	return _TORSO_PROFILE[-1].y
 
 
 static var _upper_skin: Skin = null
@@ -917,15 +1080,16 @@ static func _append_skinned_surface(target: ArrayMesh, src: ArrayMesh, bone: int
 # The elbow as the skinned arm wears it: a band from the upper arm's elbow-end
 # ring, through a ring on the elbow bone, to the forearm's elbow-end ring, each
 # ring rigid on its own bone in that bone's own frame, so the bend stretches the
-# band instead of opening the sleeve. The prisms' X is the hinge and their +Y
-# points out of the bend (SkaterArmRig._pose_bone), as the elbow bone's Z and +Y
-# do, so ring k is the same facet on all three. Each facet's normal is radial at
-# its middle angle in every vertex's frame: a lit facet like the prisms', and
-# with no axial component for their (r, r, length) scale to skew.
+# band instead of opening the sleeve. The three frames are one frame carried down
+# the arm (SkaterArmRig._pose_arm_chain): the elbow's turned half the bend from
+# the upper arm's, the forearm's the whole of it, so ring k is the same facet on
+# all three. The elbow ring is the bone's unit one, the elbow pad's radius, just
+# fuller than the sleeve. Each facet's normal is radial at its middle angle in
+# every vertex's frame: a lit facet like the prisms', and with no axial component
+# for their (r, r, length) scale to skew.
 static func _append_elbow_surface(target: ArrayMesh, upper: int, elbow: int,
 		forearm: int) -> void:
 	var ring_bones: Array[int] = [upper, elbow, forearm]
-	var in_elbow: float = _ELBOW_RING_SLEEVES * SLEEVE_RADIUS_M / ELBOW_PAD_RADIUS_M
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()
 	var uvs := PackedVector2Array()
@@ -934,10 +1098,10 @@ static func _append_elbow_surface(target: ArrayMesh, upper: int, elbow: int,
 	for ring: int in 2:
 		for k: int in _LEG_SIDES:
 			var mid: float = TAU * (float(k) + 0.5) / float(_LEG_SIDES)
-			var a: Vector3 = _elbow_ring_point(ring, k, in_elbow)
-			var b: Vector3 = _elbow_ring_point(ring, k + 1, in_elbow)
-			var c: Vector3 = _elbow_ring_point(ring + 1, k + 1, in_elbow)
-			var d: Vector3 = _elbow_ring_point(ring + 1, k, in_elbow)
+			var a: Vector3 = _elbow_ring_point(ring, k)
+			var b: Vector3 = _elbow_ring_point(ring, k + 1)
+			var c: Vector3 = _elbow_ring_point(ring + 1, k + 1)
+			var d: Vector3 = _elbow_ring_point(ring + 1, k)
 			var u0: float = float(k) / float(_LEG_SIDES)
 			var u1: float = float(k + 1) / float(_LEG_SIDES)
 			var near: Array = [a, ring, u0, b, ring, u1, c, ring + 1, u1]
@@ -946,8 +1110,7 @@ static func _append_elbow_surface(target: ArrayMesh, upper: int, elbow: int,
 				for i: int in 3:
 					var on: int = tri[i * 3 + 1]
 					verts.append(tri[i * 3])
-					normals.append(Vector3(0.0, -cos(mid), sin(mid)) if on == 1
-							else Vector3(sin(mid), -cos(mid), 0.0))
+					normals.append(Vector3(sin(mid), -cos(mid), 0.0))
 					uvs.append(Vector2(tri[i * 3 + 2], 0.25 + 0.125 * on))
 					bones.append_array([ring_bones[on], 0, 0, 0])
 					weights.append_array([1.0, 0.0, 0.0, 0.0])
@@ -962,20 +1125,17 @@ static func _append_elbow_surface(target: ArrayMesh, upper: int, elbow: int,
 
 
 # Point k of the elbow band's ring 0 (the upper arm's tapered end), 1 (the elbow
-# bone's, `in_elbow` of its unit across, the pad proud out of the bend) or 2 (the
-# forearm's full end), each in its own bone's frame. The angle runs as the
-# prisms' lathe does once laid along Z: +X is sin, −Y is cos.
-static func _elbow_ring_point(ring: int, k: int, in_elbow: float) -> Vector3:
+# bone's unit ring) or 2 (the forearm's full end), each in its own bone's frame.
+# The angle runs as the prisms' lathe does once laid along Z: +X is sin, −Y is cos.
+static func _elbow_ring_point(ring: int, k: int) -> Vector3:
 	var theta: float = TAU * float(k) / float(_LEG_SIDES)
-	var across: float = sin(theta)
-	var out: float = -cos(theta)
+	var ring_point := Vector3(sin(theta), -cos(theta), 0.0)
 	match ring:
 		0:
-			return Vector3(across * _ARM_TAPER, out * _ARM_TAPER, -0.5)
+			return ring_point * _ARM_TAPER + Vector3(0.0, 0.0, -0.5)
 		1:
-			var proud: float = 1.0 + _ELBOW_PAD_PROUD * maxf(out, 0.0) * maxf(out, 0.0)
-			return Vector3(0.0, out, across) * in_elbow * proud
-	return Vector3(across, out, 0.5)
+			return ring_point
+	return ring_point + Vector3(0.0, 0.0, 0.5)
 
 
 # Elbow ball, unit radius.
@@ -1381,7 +1541,7 @@ static func _build_shoulder() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
-	var lon: int = 10
+	var lon: int = _CAP_LON
 	var n: int = _SHOULDER_PROFILE.size()
 	var rings: Array[PackedVector3Array] = []
 	for s: Vector3 in _SHOULDER_PROFILE:

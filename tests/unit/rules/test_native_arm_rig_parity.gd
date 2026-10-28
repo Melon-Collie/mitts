@@ -4,7 +4,7 @@ extends GutTest
 # GDScript reference (SkaterArmRig._update_arm). Seeded RNG over the live rig:
 # hands in and out of reach (the girdle's give and the IK clamp), trunk
 # texture, a twisted and leaned trunk, the balance lean, a check load,
-# per-build arm lengths and part thicknesses, and gloves on and off the shaft. Every arm bone, both deltoid caps
+# per-build arm lengths and part thicknesses, and gloves on and off the shaft. Every arm bone, both shoulder caps and their deltoids
 # and the girdle offsets must agree, and again once a trunk-texture change has
 # reposed the caps from the rig's read-back of the native's cap state.
 #
@@ -21,6 +21,7 @@ const _BONES: Array[int] = [
 	UpperBone.BOTTOM_UPPER_ARM, UpperBone.BOTTOM_FOREARM, UpperBone.BOTTOM_CUFF,
 	UpperBone.BOTTOM_ELBOW, UpperBone.BOTTOM_HAND,
 	UpperBone.SHOULDER_L, UpperBone.SHOULDER_R,
+	SkaterBodySkeleton.DELTOID_L_BONE, SkaterBodySkeleton.DELTOID_R_BONE,
 ]
 
 var _rng := RandomNumberGenerator.new()

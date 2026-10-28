@@ -4,9 +4,10 @@ extends GutTest
 # through a ring on the elbow bone, to the forearm's
 # (SkaterMeshBuilder._append_elbow_surface). It closes the sleeve only while its
 # outer rings ARE the prisms' end rings, and it lies flat only while ring point k
-# is the same facet on all three bones: the prisms' X and the elbow bone's Z on
-# one hinge (SkaterArmRig._pose_bone). Rolled from world up, the band twisted
-# by whatever the arm's bend plane made with it.
+# is the same facet on all three bones: one frame carried through the bend, the
+# elbow's turned half of it and the forearm's all of it
+# (SkaterArmRig._pose_arm_chain). Rolled each from its own up, the band twisted
+# by whatever the two rolls made with each other.
 
 const UpperBone = SkaterMeshBuilder.UpperBone
 const CASES: int = 200
@@ -28,7 +29,7 @@ func _has_point(mesh: ArrayMesh, p: Vector3) -> bool:
 
 func test_the_band_ends_on_the_prisms_end_rings() -> void:
 	var skin: ArrayMesh = SkaterMeshBuilder.shared_upper_skin_mesh()
-	var upper_prism: ArrayMesh = SkaterMeshBuilder.shared_arm_bone_z()
+	var upper_prism: ArrayMesh = SkaterMeshBuilder.shared_upper_arm_bone_z()
 	var forearm_prism: ArrayMesh = SkaterMeshBuilder._forearm_bone_z()
 	for arm: Array in _ARMS:
 		var arrays: Array = skin.surface_get_arrays(arm[1])
@@ -51,16 +52,23 @@ func test_the_band_ends_on_the_prisms_end_rings() -> void:
 			assert_gt(counts[ring], 0, "ring %d is stitched in" % ring)
 
 
-func _hinge_error(body: Skeleton3D, arm: Array) -> float:
-	var hinge: Vector3 = body.get_bone_pose(arm[1]).basis.z.normalized()
+# How far the elbow and the forearm are from the upper arm's frame turned half
+# and all the way through the bend: the largest axis error of the two.
+func _carry_error(body: Skeleton3D, arm: Array) -> float:
+	var upper: Basis = body.get_bone_pose(arm[0]).basis.orthonormalized()
+	var fore: Basis = body.get_bone_pose(arm[2]).basis.orthonormalized()
+	var bend := Quaternion(-upper.z, -fore.z)
 	var worst: float = 0.0
-	for bone: int in [arm[0], arm[2]]:
-		var across: Vector3 = body.get_bone_pose(bone).basis.x.normalized()
-		worst = maxf(worst, 1.0 - across.dot(hinge))
+	var turned: Array[Basis] = [Basis(Quaternion.IDENTITY.slerp(bend, 0.5)) * upper,
+			Basis(bend) * upper]
+	var drawn: Array[Basis] = [body.get_bone_pose(arm[1]).basis.orthonormalized(), fore]
+	for i: int in 2:
+		for axis: int in 3:
+			worst = maxf(worst, (turned[i][axis] - drawn[i][axis]).length())
 	return worst
 
 
-func test_the_prisms_and_the_elbow_share_one_hinge() -> void:
+func test_one_frame_is_carried_through_the_bend() -> void:
 	_rng.seed = SEED
 	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
 	add_child_autofree(sk)
@@ -75,7 +83,6 @@ func test_the_prisms_and_the_elbow_share_one_hinge() -> void:
 	if ClassDB.class_exists(&"NativeArmRig"):
 		paths.append(true)
 	var worst: float = 0.0
-	var bent: int = 0
 	for i: int in CASES:
 		sk.set_facing(Vector2.from_angle(_rng.randf() * TAU))
 		sk.set_upper_body_rotation(_rng.randf_range(-1.0, 1.0))
@@ -91,12 +98,7 @@ func test_the_prisms_and_the_elbow_share_one_hinge() -> void:
 			rig.update_top_arm()
 			rig.update_bottom_arm()
 			for arm: Array in _ARMS:
-				var upper: Vector3 = body.get_bone_pose(arm[0]).basis.z.normalized()
-				var fore: Vector3 = body.get_bone_pose(arm[2]).basis.z.normalized()
-				if upper.dot(fore) > 0.999:
-					continue  # straight: no bend plane to share
-				bent += 1
-				worst = maxf(worst, _hinge_error(body, arm))
-	gut.p("elbow hinge: %d bent arms, worst 1 - cos %s" % [bent, String.num_scientific(worst)])
-	assert_gt(bent, CASES, "the arms bent in most cases")
-	assert_lt(worst, 1e-4, "the upper arm, the elbow and the forearm turn on one hinge")
+				worst = maxf(worst, _carry_error(body, arm))
+	gut.p("elbow carry: worst axis error %s" % String.num_scientific(worst))
+	assert_lt(worst, 1e-4, "the elbow and the forearm are the upper arm's frame carried "
+			+ "through the bend")

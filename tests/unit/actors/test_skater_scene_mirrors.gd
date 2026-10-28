@@ -59,6 +59,10 @@ func test_helmet_and_torso_stations_mirror_the_scene() -> void:
 	var torso_origin: float = _origin("./MeshRoot/UpperBody/UpperBodyMesh").y
 	assert_almost_eq(torso_origin, 0.195, 1e-6,
 			"the torso lathe is built around this origin")
+	assert_almost_eq(_origin("./MeshRoot/UpperBody/ShoulderR") - _origin(
+			"./MeshRoot/UpperBody/UpperBodyMesh"), SkaterMeshBuilder._CAP_IN_TORSO,
+			Vector3.ONE * 1e-6, "the cap's base ring is laid on the torso from where the " +
+			"scene puts the cap in the torso's frame")
 	assert_almost_eq(torso_origin + 0.275, 0.47, 1e-6,
 			"torso origin plus the trap-line station (_TORSO_PROFILE[0].x) is the " +
 			"shoulder shelf the neck profile is sized against")
