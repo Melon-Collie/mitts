@@ -2238,14 +2238,15 @@ func test_behind_net_carrier_wheels_to_the_far_wall_in_5v5() -> void:
 	# candidate can represent it (every straight far-side route crosses the
 	# cage and prunes).
 	# The wheel's real trigger: the retriever is already moving with a step
-	# on his chaser, who trails in his wake (committed to the same line —
-	# the escape gate reads him as beaten). The strong-side front is
+	# on his chaser, who trails in his wake 4 m back (committed to the same
+	# line — the escape gate reads him as beaten; closer, a man as quick is
+	# still on him, AIStripOdds). The strong-side front is
 	# covered, so turning up the near side means the wall battle.
 	var self_pos := Vector3(2.0, 0, 27.6)
 	var self_vel := Vector3(-4.0, 0, 0.4)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos, false, self_vel],
-		[3, 1, Vector3(4.6, 0, 27.4), false, Vector3(-4.2, 0, 0)],
+		[3, 1, Vector3(6.0, 0, 27.4), false, Vector3(-4.2, 0, 0)],
 		[4, 1, Vector3(4.5, 0, 22.0)],
 	]
 	var ctx := _make_ctx(self_pos, skaters)
@@ -2273,7 +2274,7 @@ func test_wheel_is_5v5_exclusive() -> void:
 	var self_vel := Vector3(-4.0, 0, 0.4)
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos, false, self_vel],
-		[3, 1, Vector3(4.6, 0, 27.4), false, Vector3(-4.2, 0, 0)],
+		[3, 1, Vector3(6.0, 0, 27.4), false, Vector3(-4.2, 0, 0)],
 		[4, 1, Vector3(4.5, 0, 22.0)],
 	]
 	var ctx := _make_ctx(self_pos, skaters)
@@ -2408,7 +2409,7 @@ func _rim_breakout_ctx(lane_blocked: bool) -> RoleContext:
 	var hip_vel: Vector3 = Vector3(5.0, 0, -1.5) if lane_blocked else Vector3.ZERO
 	var skaters: Array = [
 		[1, TEAM_ID, self_pos],
-		[2, TEAM_ID, Vector3(11.5, 0, 14.0)],      # strong half-wall winger
+		[2, TEAM_ID, Vector3(11.5, 0, 10.0)],      # strong half-wall winger
 		[3, 1, Vector3(0.5, 0, 28.5), false, hip_vel],   # coming onto the D's hip
 		[5, 1, Vector3(-3.0, 0, 18.0)],
 	]

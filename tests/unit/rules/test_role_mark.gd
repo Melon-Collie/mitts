@@ -173,8 +173,9 @@ func test_assigned_man_is_covered_tight_not_from_the_slot() -> void:
 func test_man_coverage_rides_a_moving_man_instead_of_leading_him() -> void:
 	# Same assigned man, stationary vs cutting toward center (+x). The
 	# anticipation is real but it lives in the FRAME, not in the point: the
-	# stand stays pinned on his real body and the route flies it at his
-	# velocity (AISteering's moving-frame pursuit). Doing both — aiming the
+	# stand is never led downrange of his real body (his options from where he
+	# is may tighten it on him), and the route flies it at his velocity
+	# (AISteering's moving-frame pursuit). Doing both — aiming the
 	# anchor downrange AND riding him — double-counts his motion and covers
 	# him from further off the faster he skates, which is the defect the gap
 	# ladder and the backchecker's hip were already fixed for.
@@ -195,8 +196,8 @@ func test_man_coverage_rides_a_moving_man_instead_of_leading_him() -> void:
 	ctx_move.snapshot.skater_states[210].velocity = cut
 	var moved: RoleDecision = AIRoleMark.decide(ctx_move)
 
-	assert_almost_eq(moved.target_position.x, still.target_position.x, 0.001,
-			"the stand is pinned on his real body, not aimed downrange of it")
+	assert_lte(moved.target_position.x, still.target_position.x + 0.001,
+			"the stand is never aimed downrange of his body")
 	assert_eq(still.target_velocity, Vector3.ZERO,
 			"a still man's stand does not move")
 	assert_eq(moved.target_velocity, cut,
