@@ -691,19 +691,15 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
-func test_a_turnover_in_their_zone_costs_the_entry_their_exit_takes_back() -> void:
-	# In their zone the gains are scoring odds: a loss there costs their odds of
-	# getting out with it × what an ordinary entry is worth to us — never a
-	# credit, as in every other zone.
+func test_a_turnover_in_their_zone_costs_nothing() -> void:
+	# In their zone a possession is worth its odds of scoring, and losing it ends
+	# it at nothing, which the keep odds already price: no credit, no charge.
 	var c := AIRoleCarrier.new()
 	c.decide(_make_ctx(Vector3(-8.0, 0.0, -16.0)))
 	assert_eq(c._field.objective, AIPossessionValue.Objective.SCORE)
-	var loss := Vector3(-4.0, 0.0, -15.0)
 	var f: AICarrierField = c._field
-	assert_almost_eq(f.turnover_cost(loss, 1.0),
-			f._theirs.p_exit(loss) * f._ours.open_entry_odds(), 1e-6,
-			"a certain loss in their zone is the entry their exit takes back")
-	assert_gte(f.turnover_cost(loss, 1.0), 0.0, "never a credit")
+	assert_eq(f.turnover_cost(Vector3(-4.0, 0.0, -15.0), 1.0), 0.0,
+			"a certain loss in their zone costs nothing")
 	assert_gt(f.turnover_cost(Vector3(-4.0, 0.0, 20.0), 1.0), 0.0,
 			"a loss in front of our net costs their possession there")
 
@@ -1507,8 +1503,7 @@ func test_developing_outlet_beats_the_spot_it_left_behind() -> void:
 	carrier2._field.teammate_ids = [2]
 	var stay_put: float = carrier2._pass._pass_ev(
 			moving, spot, pass_speed, flight_t,
-			flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t,
-			moving.defending_goal_pos)
+			flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, flight_t)
 
 	assert_gt(developing, stay_put,
 			"the projected up-ice spot out-values the spot the outlet is leaving")
@@ -1601,12 +1596,11 @@ func test_delayed_offside_closes_the_zone_to_the_carry() -> void:
 	var ctx := _make_ctx(self_pos)
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
-	var goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var in_zone := Vector3(0, 0, -9)
-	assert_gt(c._carry._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+	assert_gt(c._carry._score_move_candidate_base(ctx, in_zone), -INF,
 			"an open entry is a candidate")
 	ctx.zone_entry_blocked = true
-	assert_eq(c._carry._score_move_candidate_base(ctx, in_zone, goalie), -INF,
+	assert_eq(c._carry._score_move_candidate_base(ctx, in_zone), -INF,
 			"with a teammate owing a tag-up, carrying in would be whistled")
 
 
@@ -1767,9 +1761,9 @@ func test_oz_valve_prunes_carry_candidates_in_the_blue_line_band() -> void:
 			-(GameRules.BLUE_LINE_Z + AICarrierCarrySearch.OZ_RETREAT_LINE_BUFFER_M * 0.5))
 	var past_band := Vector3(0.0, 0.0,
 			-(GameRules.BLUE_LINE_Z + AICarrierCarrySearch.OZ_RETREAT_LINE_BUFFER_M + 1.0))
-	assert_eq(c._carry._score_move_candidate(ctx, in_band, ctx.defending_goal_pos), -INF,
+	assert_eq(c._carry._score_move_candidate(ctx, in_band), -INF,
 			"a retreat to within windup reach of the blue line is pruned")
-	assert_gt(c._carry._score_move_candidate(ctx, past_band, ctx.defending_goal_pos), -INF,
+	assert_gt(c._carry._score_move_candidate(ctx, past_band), -INF,
 			"a retreat that keeps the windup envelope inside the zone stays legal")
 
 
@@ -1782,7 +1776,7 @@ func test_nz_carrier_may_target_entry_candidates_near_the_line() -> void:
 	var c := AIRoleCarrier.new()
 	c._field.fill(ctx)
 	var just_inside := Vector3(0.0, 0.0, -(GameRules.BLUE_LINE_Z + 0.7))
-	assert_gt(c._carry._score_move_candidate(ctx, just_inside, ctx.defending_goal_pos), -INF,
+	assert_gt(c._carry._score_move_candidate(ctx, just_inside), -INF,
 			"an entry candidate in the band is not pruned from outside the zone")
 
 
@@ -2183,7 +2177,7 @@ func _spun_off_cut_in() -> Vector3:
 
 
 func _move_score(c: AIRoleCarrier, ctx: RoleContext, spot: Vector3) -> float:
-	return c._carry._score_move_candidate(ctx, spot, Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z))
+	return c._carry._score_move_candidate(ctx, spot)
 
 
 func test_spun_off_carrier_prices_the_cut_in_over_escape_and_standing() -> void:
@@ -2222,11 +2216,10 @@ func test_continuation_credit_respects_live_containment() -> void:
 	ctx.snapshot.goalie_states[1 - TEAM_ID] = _squared_goalie(self_pos, net, 1.3)
 	var c := AIRoleCarrier.new()
 	c.decide(ctx)
-	var our_goalie := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z)
 	var cut_in: Vector3 = self_pos + (net - self_pos).normalized() * 3.0
 	var lateral := Vector3(8.2, 0.0, -17.0)
-	assert_gt(c._carry._score_move_candidate(ctx, lateral, our_goalie),
-			c._carry._score_move_candidate(ctx, cut_in, our_goalie),
+	assert_gt(c._carry._score_move_candidate(ctx, lateral),
+			c._carry._score_move_candidate(ctx, cut_in),
 			"a live defender in the cut lane still owns it — cycle, don't force")
 
 

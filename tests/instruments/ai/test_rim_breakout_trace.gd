@@ -74,8 +74,7 @@ func _price(ctx: RoleContext, field: AICarrierField, ps: AICarrierPassSearch, me
 			field.horizon_value(recv.position, t, recv.velocity, caps)])
 	gut.p("  catch clearance %.2f m -> catch safety %.3f" % [catch_clear, catch_safety])
 	var total: float = ps._pass_ev(ctx, meet, AIRimPass.paces[k], t,
-			t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, t, AIRoleReads.resolve_our_goalie_pos(ctx),
-			caps, ps._rim_lane, ps._rim_miss, recv.velocity, -INF, AIRimPass.dirs[k],
+			t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, t, caps, ps._rim_lane, ps._rim_miss, recv.velocity, -INF, AIRimPass.dirs[k],
 			AIRimPass.opp_meet[k])
 	var benefit: float = release_clean * ps._rim_lane * (1.0 - ps._rim_miss) * catch_safety \
 			* maxf(drive_in * AIActionScoring.delay_discount(t), possession)

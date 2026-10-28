@@ -147,7 +147,6 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	var self_pos: Vector3 = ctx.self_pos
 	_field.holds.configure_from(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
-	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var behind_net: bool = absf(self_pos.z) > GameRules.GOAL_LINE_Z
 
 	# Stand-still is COMPUTED up front because it doubles as an exact pruning
@@ -166,8 +165,6 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 			_field.opponents, _field.opponent_vels, _field.opponent_caps)
 	var stand_cost: float = _field.turnover_cost(stand_puck_pos,
 			1.0 - stand_safety)
-	stand_cost += _field.counter_exposure_cost(ctx, stand_puck_pos,
-			1.0 - stand_safety, self_pos, our_goalie)
 	var stand_total: float = stand_score * stand_safety - stand_cost
 
 	_beam_pos.clear()
@@ -194,7 +191,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	# lanes would trade places on noise and turn the moves' frame each time.
 	var incumbent: int = _dest.kinds.find(_dest.chosen_kind)
 	if incumbent >= 0:
-		var t: float = _score_destination(ctx, incumbent, our_goalie, behind_net, -INF)
+		var t: float = _score_destination(ctx, incumbent, behind_net, -INF)
 		if t > -INF:
 			t = maxf(t, value)
 		_dest_totals[incumbent] = t
@@ -202,7 +199,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	for i: int in _dest.kinds.size():
 		if i == incumbent:
 			continue
-		var t: float = _score_destination(ctx, i, our_goalie, behind_net, key_bound)
+		var t: float = _score_destination(ctx, i, behind_net, key_bound)
 		_dest_totals[i] = t
 		key_bound = maxf(key_bound, t)
 	var prev_kind: int = destination_kind
@@ -237,7 +234,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 			-self_state.facing_angular_velocity if self_state != null else 0.0)
 	_beam_prune_bound = stand_total
 	for m: int in AICarryRollout.MOVE_COUNT:
-		_score_move(ctx, m, our_goalie, behind_net, caps, dest_arrival)
+		_score_move(ctx, m, behind_net, caps, dest_arrival)
 
 	var best_pos: Vector3 = self_pos
 	var best_score: float = -INF
@@ -265,7 +262,7 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 		if bi == -1:
 			break
 		var up_total: float = _upgrade_candidate_two_ply(ctx, bi,
-				rank < CARRY_PLY2_WIDTH or bi == incumbent_row, our_goalie, caps,
+				rank < CARRY_PLY2_WIDTH or bi == incumbent_row, caps,
 				_prune_bound_for(_beam_move[bi], best_key))
 		var key: float = up_total
 		if _beam_move[bi] == _incumbent_move and up_total > 0.0:
@@ -308,18 +305,18 @@ func reset() -> void:
 # The full value of carrying to menu destination `i`, -INF when it cannot be
 # carried to or cannot beat `best_so_far`. Scored outside the beam: its row is
 # dropped again.
-func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_net: bool,
+func _score_destination(ctx: RoleContext, i: int, behind_net: bool,
 		best_so_far: float) -> float:
 	var kind: int = _dest.kinds[i]
 	var spot: Vector3 = _dest.spots[i]
 	if AICarrierDestinations.is_wheel(kind):
-		var wheel_total: float = _wheel.score(ctx, spot, our_goalie, best_so_far)
+		var wheel_total: float = _wheel.score(ctx, spot, best_so_far)
 		_dest_arrival[i] = _wheel.arrival
 		return wheel_total
 	if not _candidate_ice_legal(spot, behind_net):
 		return -INF
 	var rows_before: int = _beam_total.size()
-	var total: float = _score_move_candidate(ctx, spot, our_goalie,
+	var total: float = _score_move_candidate(ctx, spot,
 			AICarrierDestinations.is_walkout(kind), best_so_far)
 	if _beam_total.size() > rows_before:
 		_dest_arrival[i] = _beam_dest[rows_before]
@@ -346,7 +343,7 @@ func _score_destination(ctx: RoleContext, i: int, our_goalie: Vector3, behind_ne
 # front: the carrier re-plans many times a horizon, so a drive at the net is a
 # release on the way in. Pruned whole, every move at pace in tight was, and only
 # the brake and the cut back were left.
-func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool,
+func _score_move(ctx: RoleContext, m: int, behind_net: bool,
 		caps: AISkaterCaps, dest_arrival: float) -> void:
 	_move_reach[m] = 0
 	if not _move_legal(ctx, rollout, m, ctx.self_pos):
@@ -370,8 +367,6 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var cost: float = 0.0
 	if safety < 1.0 and _strip_point.is_finite():
 		cost = _field.turnover_cost(_strip_point, 1.0 - safety, _strip_t)
-		cost += _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety, end,
-				our_goalie)
 	var total: float = worth * decay * safety - cost
 	_beam_pos.append(end)
 	_beam_total.append(total)
@@ -453,8 +448,8 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 # its end's worth × the decay of the step × its keep odds − its strip cost.
 # Returns `floor_value` when no second move beats it (exact: a move whose worth ×
 # decay cannot clear it is not read for safety, nor costed when × keep odds cannot).
-func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
-		caps: AISkaterCaps, floor_value: float = -INF) -> float:
+func _carry_on_value(ctx: RoleContext, m1: int, caps: AISkaterCaps,
+		floor_value: float = -INF) -> float:
 	var t1: float = AICarryRollout.HORIZON_S
 	var start: Vector3 = rollout.end_pos[m1]
 	var aim: Vector3 = _fan_aim(ctx)
@@ -492,8 +487,6 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 			continue
 		if safety < 1.0 and _strip_point.is_finite():
 			move_value -= _field.turnover_cost(_strip_point, 1.0 - safety, _strip_t)
-			move_value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
-					_rollout2.reach_pos(m, reach), our_goalie)
 		best = maxf(best, move_value)
 	return best
 
@@ -550,7 +543,7 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 # cannot beat `best_so_far`. Every finite score appends a beam row stashing the
 # intermediates _upgrade_candidate_two_ply needs, so pass 2 recomputes nothing.
 func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
-		our_goalie: Vector3, is_post_walkout: bool = false,
+		is_post_walkout: bool = false,
 		best_so_far: float = -INF) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# One-way valve: once in the offensive zone, don't carry the puck back out,
@@ -619,10 +612,6 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 		var cand_len: float = cur_puck_pos.distance_to(cand_puck_pos)
 		cost = _field.turnover_cost(strip_point, 1.0 - keep_prob, local_time
 				* cur_puck_pos.distance_to(strip_point) / cand_len if cand_len > 0.001 else 0.0)
-		# Transition exposure (5v5): the carrier's recovery race starts from the
-		# CANDIDATE, the spot this carry commits him to.
-		cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep_prob,
-				candidate, our_goalie)
 	var total: float = dest_score * decay * safety - cost
 	# Beam row: this candidate's final value unless pass 2 upgrades it.
 	_beam_pos.append(candidate)
@@ -722,7 +711,7 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 # most 1, so it is worth at most its own decay; one that cannot win the argmax
 # is not priced).
 func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false,
-		our_goalie: Vector3 = Vector3.ZERO, caps: AISkaterCaps = null,
+		caps: AISkaterCaps = null,
 		best_so_far: float = -INF) -> float:
 	var candidate: Vector3 = _beam_pos[i]
 	var dest_score: float = _beam_dest[i]
@@ -735,7 +724,7 @@ func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false
 	if carry_on and _beam_move[i] >= 0 \
 			and _move_reach[_beam_move[i]] == AICarryRollout.SAMPLES \
 			and AIActionScoring.delay_discount(AICarryRollout.HORIZON_S) > step_needs:
-		var step: float = _carry_on_value(ctx, _beam_move[i], our_goalie, caps, step_needs)
+		var step: float = _carry_on_value(ctx, _beam_move[i], caps, step_needs)
 		if step > step_needs:
 			dest_score = step
 	if _field.pass_option_ceiling - _field.pass_option_at_self > dest_score:
@@ -750,11 +739,11 @@ func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false
 # destination, and the single-candidate consumers (unit tests, the ai_micro
 # bench). Leaves the candidate's row in the beam scratch.
 func _score_move_candidate(ctx: RoleContext, candidate: Vector3,
-		our_goalie: Vector3, is_post_walkout: bool = false,
+		is_post_walkout: bool = false,
 		best_so_far: float = -INF) -> float:
 	var rows_before: int = _beam_total.size()
 	var base: float = _score_move_candidate_base(
-			ctx, candidate, our_goalie, is_post_walkout, best_so_far)
+			ctx, candidate, is_post_walkout, best_so_far)
 	if _beam_total.size() == rows_before:
 		return base   # ceiling-pruned — no row to upgrade
 	return _upgrade_candidate_two_ply(ctx, _beam_total.size() - 1)

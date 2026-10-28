@@ -42,17 +42,17 @@ spot past the next line is worth its keep; one behind it is the chain (out, then
 in from where it gets out). Shots outside their zone are dead and score nothing.
 
 The turnover COST is in the same currency as the gains it is subtracted from
-(`AICarrierField.turnover_cost`), and is always the other side's gain: in their
-zone their odds of getting out with it from the loss × what one entry is worth
-in scoring odds (the entry their exit takes back, on the fixed yardstick
-`p_enter` counts entries in: the mean crossing on empty ice); in the neutral zone their odds
-of getting into our zone from the loss; lost in our zone, their scoring odds
-there in zone entries (against their odds from an ordinary entry) — our entry
-and their exit, our exit and their entry, weighed one for one. Never credit a
-loss back by the odds they fail to make it: no other zone does, and near their
-net that credit made a carry into traffic nearly free. The 5v5 counter (`counter_rush_cost`, `in_xg`) is
-paid from their zone only; elsewhere the turnover cost already is their run at
-our zone. What a spot with no shot right now is worth to either side is
+(`AICarrierField.turnover_cost`): in the neutral zone their odds of getting into
+our zone from the loss; lost in our zone, their scoring odds there in zone
+entries (against their odds from an ordinary entry) — our exit and their entry
+weighed one for one. In their zone a turnover costs nothing, in 3v3 and 5v5
+alike: a possession there is worth its odds of scoring, and losing it ends the
+possession at nothing, which the keep odds already price. Never credit a loss
+back by the odds they fail to get it out — near their net that made a carry into
+traffic nearly free — and never add a second, mode-specific charge on top: if
+their zone ever needs a turnover cost, it is one, the same shape in both modes.
+Getting back on defence after a loss is the off-puck roles' job (last-man
+discipline, SUPPORT's counter read), not the carrier's price. What a spot with no shot right now is worth to either side is
 `AIPossessionValue`, and the currency and the turnover cost live there
 (`objective_at`, `worth`, `turnover_cost`), so every reader prices alike. The
 defence reads a man on it too: `threat_of_carrier` (his shot, or his possession

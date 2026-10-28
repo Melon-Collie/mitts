@@ -1,9 +1,8 @@
 extends GutTest
 
-# AIActionScoring.counter_rush_cost — the transition-exposure term (plan §6).
-# Team 0 defends +Z. The canonical scene: our defenseman weighs a deep
-# O-zone carry; the loss point is in THEIR end (where turnover_cost reads
-# little) and the question is who beats the counter-rush home. The costs the
+# AIActionScoring.counter_rush_cost — the transition-exposure read SUPPORT
+# stands by (plan §6). Team 0 defends +Z. The canonical scene: a loss deep in
+# THEIR end, and the question is who beats the counter-rush home. The costs the
 # current calibration gives at the reference scenes are the snapshot,
 # test_counter_rush_calibration_snapshot.
 
@@ -32,8 +31,7 @@ func _cost(teammates: Array[Vector3], self_pos: Vector3,
 			opp_vels, opp_caps)
 
 
-# Their possession of the loss point with nobody of ours to contest it — what
-# the carrier's turnover cost prices a loss at (AICarrierField.turnover_cost).
+# Their possession of the loss point with nobody of ours to contest it.
 func _local_cost(loss_point: Vector3) -> float:
 	var theirs := AIPossessionValue.new()
 	var nobody: Array[Vector3] = []

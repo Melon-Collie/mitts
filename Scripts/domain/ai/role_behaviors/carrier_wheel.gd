@@ -27,8 +27,7 @@ func _init(field: AICarrierField) -> void:
 # through leg one, because a straight-line read for this route would sample the
 # inside of the cage. The escape gate (apply_escape) makes a committed same-side chaser
 # read as beaten, while a body already waiting on the far side kills leg two.
-func score(ctx: RoleContext, dest: Vector3,
-		our_goalie: Vector3, best_so_far: float) -> float:
+func score(ctx: RoleContext, dest: Vector3, best_so_far: float) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	var apex := Vector3(0.0, 0.0, ctx.own_goal_dir
 			* (GameRules.GOAL_LINE_Z + GameRules.NET_DEPTH + APEX_CLEARANCE_M))
@@ -88,7 +87,6 @@ func score(ctx: RoleContext, dest: Vector3,
 		strip_s = t1 + t2 * _leg_share(apex_puck, dest_puck, strip_point)
 	var cost: float = _field.turnover_cost(strip_point,
 			1.0 - keep, strip_s)
-	cost += _field.counter_exposure_cost(ctx, strip_point, 1.0 - keep, dest, our_goalie)
 	return benefit - cost
 
 

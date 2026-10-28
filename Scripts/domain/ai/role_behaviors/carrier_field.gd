@@ -6,18 +6,8 @@ extends RefCounted
 # what pass option it opens. AIRoleCarrier owns one, refills it with fill(ctx) at
 # the head of each phase (fill_receivers in the fire phase), and hands it to the
 # searches; nothing but those two writes the lists, so every search in a phase
-# reads the same field. The counter-threat memo and the hold solver are the
-# exceptions: both are scratch the valuations fill as they go.
-
-# ── Transition-exposure appetite (5v5 only — plan §6) ────────────────────────
-# The per-position risk-aversion FEEL scalar on the counter-rush cost: the model
-# does the seeing, this sets the appetite. Forwards discount it because the
-# F3-high rotation is expected to absorb a forward caught deep. 3v3 pays zero.
-const EXPOSURE_APPETITE_DEFENSE: float = 1.0
-const EXPOSURE_APPETITE_FORWARD: float = 0.7
-# Loss probabilities below this skip the counter read entirely (hot-path
-# floor, not a tuning knob: at 4% × a bounded threat the term is noise).
-const EXPOSURE_PROB_FLOOR: float = 0.04
+# reads the same field. The hold solver is the exception: scratch the
+# valuations fill as they go.
 
 # Receiver drive-in credit (see receiver_drive_in_value): the one drive in every
 # possession read credits (AIPossessionValue), here carried on the carrier's
@@ -57,12 +47,6 @@ var opponent_blades_release: Array[Vector3] = []
 var our_defenders: Array[Vector3] = []
 var our_defender_caps: Array[AISkaterCaps] = []
 var our_defender_vels: Array[Vector3] = []
-# Teammate times to stand set at the counter point (5v5), candidate-invariant
-# across a phase, and the counter-threat memo by covering-body count, -1-seeded
-# with them.
-var exposure_mate_etas: Array[float] = []
-var exposure_threat_memo: Array[float] = []
-var exposure_opp_home: Array[float] = []
 
 # ── Receivers (fill_receivers: the FIRE phase only) ──────────────────────────
 # Read in the fire phase and carried into a sliced commit phase unchanged, since
@@ -136,13 +120,6 @@ func fill(ctx: RoleContext) -> void:
 			our_defenders.append(s.position)
 			our_defender_caps.append(ctx.caps_by_peer.get(peer_id))
 			our_defender_vels.append(s.velocity)
-	if ctx.team_size >= 5:
-		AIActionScoring.fill_counter_cover_etas(ctx.defending_goal_pos, our_defenders,
-				our_defender_vels, our_defender_caps, exposure_mate_etas)
-		exposure_threat_memo.resize(our_defenders.size() + 2)
-		exposure_threat_memo.fill(-1.0)
-		AIActionScoring.fill_counter_opp_home(ctx.defending_goal_pos, opponents,
-				opponent_vels, opponent_caps, exposure_opp_home)
 	var opp_keeper: GoalieNetworkState = ctx.snapshot.goalie_states.get(1 - ctx.team_id)
 	keeper_stance = AIShotOdds.stance_of(opp_keeper, ctx.attacking_goal_pos) \
 			if opp_keeper != null else AIShotOdds.Stance.UPRIGHT
@@ -239,26 +216,6 @@ func turnover_cost(loss_point: Vector3, loss_prob: float, loss_s: float = 0.0) -
 		return 0.0
 	return loss_prob * AIPossessionValue.turnover_cost(objective, loss_point, loss_s,
 			_ours, _theirs)
-
-
-# Transition-exposure cost of losing the puck at `loss_point` with
-# probability `loss_prob`, while this carrier would be recovering from
-# `recover_from` — the additive counter-rush half of the turnover price
-# (AIActionScoring.counter_rush_cost; plan §6). 5v5 only, from their zone only.
-func counter_exposure_cost(ctx: RoleContext, loss_point: Vector3,
-		loss_prob: float, recover_from: Vector3, our_goalie: Vector3) -> float:
-	# Outside their zone the turnover cost already is their run at our zone.
-	if objective != AIPossessionValue.Objective.SCORE or ctx.team_size < 5 \
-			or loss_prob <= EXPOSURE_PROB_FLOOR:
-		return 0.0
-	var appetite: float = EXPOSURE_APPETITE_DEFENSE if ctx.self_is_defense \
-			else EXPOSURE_APPETITE_FORWARD
-	return appetite * AIActionScoring.counter_rush_cost(
-			loss_point, loss_prob, ctx.defending_goal_pos, our_goalie,
-			our_defenders,
-			recover_from, ctx.caps_by_peer.get(ctx.peer_id),
-			opponents, opponent_vels, opponent_caps,
-			exposure_mate_etas, exposure_threat_memo, true, exposure_opp_home)
 
 
 # ── Stateless reads every search shares ──────────────────────────────────────
@@ -550,8 +507,8 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			opponents, opponent_vels, opponent_caps, true, 0.0, start_s, receiver_caps)
 	if keep <= 0.0:
 		drive_in_reached = reached
-		return -_drive_loss_cost(ctx, reached, 1.0, own_hands, _drive_time(ctx, receiver_spot,
-				reached, receiver_vel, receiver_caps, own_hands))
+		return -turnover_cost(reached, 1.0, _drive_time(ctx, receiver_spot, reached,
+				receiver_vel, receiver_caps, own_hands))
 	var t: float = reach_time if reached == target \
 			else _drive_time(ctx, receiver_spot, reached, receiver_vel, receiver_caps, own_hands)
 	project_opponents(start_s + t, _drive_buf, _drive_vels, reached)
@@ -569,7 +526,7 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 			receiver_caps)
 	drive_in_reached = reached
 	return advanced * keep * AIActionScoring.delay_discount(t + wait) \
-			- _drive_loss_cost(ctx, reached, 1.0 - keep, own_hands, t)
+			- turnover_cost(reached, 1.0 - keep, t)
 
 
 # The driver's time from `from` to `to` on his build: `caps`, or for the
@@ -581,17 +538,6 @@ static func _drive_time(ctx: RoleContext, from: Vector3, to: Vector3, vel: Vecto
 		return AIArrival.time_to_arrive_caps(from, to, vel, caps)
 	return AIArrival.time_to_arrive(from, to, vel, ctx.self_max_speed, ctx.self_max_accel,
 			ctx.self_lateral_grip)
-
-
-# A drive lost at `at` with probability `lost`, as a carry candidate's strip is
-# priced: the carrier's own recovery starts there, a receiver's passer stays put.
-# `loss_s` is from the drive's start, as the drive's own value is discounted.
-func _drive_loss_cost(ctx: RoleContext, at: Vector3, lost: float, own_hands: bool,
-		loss_s: float) -> float:
-	if lost <= 0.0:
-		return 0.0
-	return turnover_cost(at, lost, loss_s) + counter_exposure_cost(ctx, at, lost,
-			at if own_hands else ctx.self_pos, AIRoleReads.resolve_our_goalie_pos(ctx))
 
 
 # The pass-option cache's spot value for the receiver standing at `pos` (0.0 when

@@ -98,7 +98,6 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	var best_pass_score: float = 0.0
 	var best_pass_saucer: bool = false
 	var best_pass_frac: float = 1.0
-	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var attacking_goal: Vector3 = ctx.attacking_goal_pos
 	# One-way valve: once the zone is taken the carrier won't pass the puck back
 	# out of it (the carry-side valve is in AICarrierCarrySearch).
@@ -184,7 +183,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			var s_pace: float = _pass_variant_ev(
 					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
 					pass_origin, speed, false, receiver_is_one_timer,
-					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s),
+					self_facing_xz, carrier_in_oz, maxf(prune_floor, s),
 					frac < 1.0)
 			if frac == 1.0:
 				full_speed = speed
@@ -215,7 +214,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 			var s_saucer: float = _pass_variant_ev(
 					ctx, receiver_state, receiver_accel, receiver_omega, receiver_caps,
 					pass_origin, saucer_speed, true, receiver_is_one_timer,
-					self_facing_xz, our_goalie, carrier_in_oz, maxf(prune_floor, s))
+					self_facing_xz, carrier_in_oz, maxf(prune_floor, s))
 			if s_saucer > s:
 				s = s_saucer
 				use_saucer = true
@@ -259,7 +258,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		var s_rim: float = _pass_ev(ctx, AIRimPass.meet_point(rim_k, rim_t),
 				AIRimPass.paces[rim_k], rim_t,
 				rim_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
-				rim_t + rotation_time, our_goalie, rim_caps, rim_lane, rim_miss,
+				rim_t + rotation_time, rim_caps, rim_lane, rim_miss,
 				rim_state.velocity, floor_ev,
 				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k])
 		if rim_peer == ctx.ping_pass_target_peer and s_rim > 0.0:
@@ -378,7 +377,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		receiver_accel: Vector3, receiver_omega: float, receiver_caps: AISkaterCaps,
 		pass_origin: Vector3, pass_speed: float, saucer: bool,
 		receiver_is_one_timer: bool, self_facing_xz: Vector2,
-		our_goalie: Vector3, carrier_in_oz: bool,
+		carrier_in_oz: bool,
 		useless_below: float = -INF, soft: bool = false) -> float:
 	# Intercept-aware lead, shared with the state machine's firing aim; flight_t
 	# is the SOLVED time. The receiver's real build bounds how far he is led. He
@@ -456,8 +455,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			self_facing_xz, ctx.self_pos, receiver,
 			ctx.self_reach_cone_half_angle, ctx.self_facing_turn_rate)
 	return _pass_ev(ctx, receiver, pass_speed, flight_t,
-			receiver_release_t, flight_t + rotation_time, our_goalie,
-			receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
+			receiver_release_t, flight_t + rotation_time, receiver_caps, lane, miss_prob, receiver_state.velocity, useless_below,
 			Vector3.ZERO, Vector3.INF, closing)
 
 
@@ -487,7 +485,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # (AIFeedReception.bobble_regather_s) — his only if he wins that race.
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
-		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
+		receiver_caps: AISkaterCaps = null,
 		lane: float = -1.0,
 		miss_prob: float = AIPuckLane.PASS_MISS_BASE_PROB,
 		receiver_vel: Vector3 = Vector3.ZERO,
@@ -598,13 +596,6 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
 			release_clean * clean_lane * (1.0 - reception_kept), flight_t + settle_s)
-	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
-	# it hands over — the carrier stays at self_pos through a pass, so his
-	# own recovery race starts from here (plan §6).
-	cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
-			self_pos, our_goalie)
-	cost += _field.counter_exposure_cost(ctx, receiver_spot,
-			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	return benefit - cost
 
 
@@ -670,7 +661,6 @@ func developing_feed_value(ctx: RoleContext) -> float:
 	if ctx.team_brain == null:
 		return 0.0
 	var self_pos: Vector3 = ctx.self_pos
-	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var self_state: SkaterNetworkState = ctx.snapshot.skater_states.get(ctx.peer_id)
 	var self_facing: Vector2 = self_state.facing if self_state != null else Vector2.ZERO
 	var best: float = 0.0
@@ -719,7 +709,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 			# partner is still SKATING to it (unlike BREAKOUT_WEAK, see
 			# _developing_outlet_feed). The min-speed gate means a partner
 			# already parked there never reads as developing.
-			feed = _developing_outlet_feed(ctx, tm, our_goalie, self_facing, ctx.caps_by_peer.get(pid))
+			feed = _developing_outlet_feed(ctx, tm, self_facing, ctx.caps_by_peer.get(pid))
 		if feed > best:
 			best = feed
 	return best
@@ -735,7 +725,7 @@ func developing_feed_value(ctx: RoleContext) -> float:
 # of the carrier by role contract, so waiting for it would mean holding for a
 # backpass — the play this hold exists to avoid forcing.
 func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
-		our_goalie: Vector3, self_facing_xz: Vector2,
+		self_facing_xz: Vector2,
 		receiver_caps: AISkaterCaps = null) -> float:
 	var vel: Vector3 = tm.velocity
 	if vel.x * vel.x + vel.z * vel.z \
@@ -763,7 +753,7 @@ func _developing_outlet_feed(ctx: RoleContext, tm: SkaterNetworkState,
 		# charge and the hold, as the live pass scoring bills a non-ready one.
 		var release_t: float = flight_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 		best = maxf(best, _pass_ev(ctx, spot, pass_speed, flight_t, release_t,
-				flight_t + rotation_time, our_goalie, receiver_caps, -1.0,
+				flight_t + rotation_time, receiver_caps, -1.0,
 				AIPuckLane.PASS_MISS_BASE_PROB, Vector3.ZERO, best,
 				Vector3.ZERO, Vector3.INF,
 				AIFeedReception.arrival_closing_speed(ctx.self_pos, spot, pass_speed, vel)))

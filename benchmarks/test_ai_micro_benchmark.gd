@@ -288,16 +288,15 @@ func test_evaluator_costs() -> void:
 
 	# One carry candidate in isolation.
 	var one_cand: Vector3 = cx.self_pos + Vector3(2.0, 0.0, 2.0)
-	var goalie_pos := Vector3(0.0, 0.0, -(GameRules.GOAL_LINE_Z - 0.8))
 	_bench("carrier: one carry candidate", func() -> void:
-		cinst._carry._score_move_candidate(cx, one_cand, goalie_pos))
+		cinst._carry._score_move_candidate(cx, one_cand))
 	_bench("carrier: one pass-option read", func() -> void:
 		cinst._field.pass_option_from(cx, one_cand))
 
 	# The second carry step from one first move: every move rolled again from
 	# where it ends and priced as a first move is.
 	_bench("carrier: one second carry step", func() -> void:
-		cinst._carry._carry_on_value(cx, 0, goalie_pos, cinst._carry._league_caps))
+		cinst._carry._carry_on_value(cx, 0, cinst._carry._league_caps))
 	_bench("reach_clearance (one point)", func() -> void:
 		AICarrySpace.reach_clearance(
 				one_cand, 0.8, cinst._field.opponents,

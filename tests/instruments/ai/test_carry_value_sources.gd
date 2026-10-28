@@ -107,12 +107,11 @@ func _sample(s: Object) -> void:
 # option only, then with the second step too.
 func _source(ctx: RoleContext, cs: AICarrierCarrySearch, m: int) -> String:
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
-	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var dest_i: int = cs._dest.kinds.find(cs.destination_kind)
 	var dest_arrival: float = cs._dest_arrival[dest_i] if dest_i >= 0 else 0.0
 	var incumbent: int = cs._incumbent_move
 	cs._incumbent_move = -1
-	var one_ply: float = _row(ctx, cs, m, our_goalie, caps, dest_arrival)
+	var one_ply: float = _row(ctx, cs, m, caps, dest_arrival)
 	if one_ply == -INF:
 		cs._incumbent_move = incumbent
 		return "spot"
@@ -121,10 +120,10 @@ func _source(ctx: RoleContext, cs: AICarrierCarrySearch, m: int) -> String:
 	var t0: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
 	cs._field.project_opponents(t0, cs._scratch_opponents_path, cs._scratch_vels_path, end)
 	var arrive: float = cs._arrival_value(ctx, end, cs.rollout.reach_vel(m, reach, ctx.self_pos), t0)
-	cs._upgrade_candidate_two_ply(ctx, 0, false, our_goalie, caps, -INF)
+	cs._upgrade_candidate_two_ply(ctx, 0, false, caps, -INF)
 	var with_option: float = cs._beam_dest[0]
-	_row(ctx, cs, m, our_goalie, caps, dest_arrival)
-	cs._upgrade_candidate_two_ply(ctx, 0, true, our_goalie, caps, -INF)
+	_row(ctx, cs, m, caps, dest_arrival)
+	cs._upgrade_candidate_two_ply(ctx, 0, true, caps, -INF)
 	var full: float = cs._beam_dest[0]
 	cs._incumbent_move = incumbent
 	if full > with_option + EPS:
@@ -138,7 +137,7 @@ func _source(ctx: RoleContext, cs: AICarrierCarrySearch, m: int) -> String:
 
 # Rolled move `m`'s one-ply row, priced afresh into an empty beam; its worth, or
 # -INF when it adds no row.
-func _row(ctx: RoleContext, cs: AICarrierCarrySearch, m: int, our_goalie: Vector3,
+func _row(ctx: RoleContext, cs: AICarrierCarrySearch, m: int,
 		caps: AISkaterCaps, dest_arrival: float) -> float:
 	cs._beam_pos.clear()
 	cs._beam_total.clear()
@@ -148,7 +147,7 @@ func _row(ctx: RoleContext, cs: AICarrierCarrySearch, m: int, our_goalie: Vector
 	cs._beam_cost.clear()
 	cs._beam_move.clear()
 	cs._beam_prune_bound = -INF
-	cs._score_move(ctx, m, our_goalie, false, caps, dest_arrival)
+	cs._score_move(ctx, m, false, caps, dest_arrival)
 	return cs._beam_dest[0] if not cs._beam_dest.is_empty() else -INF
 
 

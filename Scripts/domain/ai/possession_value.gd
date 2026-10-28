@@ -239,7 +239,7 @@ static func turnover_cost(objective: int, loss: Vector3, loss_s: float,
 		ours: AIPossessionValue, theirs: AIPossessionValue) -> float:
 	if objective == Objective.SCORE:
 		if AIActionScoring.in_offensive_zone(loss, ours._goal):
-			return theirs.p_exit(loss, loss_s) * ours.open_entry_odds()
+			return 0.0
 		return theirs.at(loss, loss_s)
 	if AIActionScoring.in_offensive_zone(loss, theirs._goal):
 		return theirs.entries_handed(loss, loss_s)
@@ -251,23 +251,6 @@ static func turnover_cost(objective: int, loss: Vector3, loss_s: float,
 func entries_handed(pos: Vector3, start_s: float = 0.0) -> float:
 	var entry := Vector3(0.0, 0.0, signf(_goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M))
 	return at(pos, start_s) / maxf(at(entry, start_s), ENTRY_ODDS_GUARD)
-
-
-# What one entry is worth in scoring odds: the mean crossing on empty ice
-# (_open_mean, the unit p_enter counts entries in), priced once per goal — fixed,
-# so the defence as it stands does not move the yardstick.
-func open_entry_odds() -> float:
-	if _open_goal != _goal:
-		var spots_built: bool = _entry_spots.is_empty()
-		if spots_built:
-			var z: float = signf(_goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
-			var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
-			for k: int in CROSSINGS:
-				_entry_spots.append(Vector3(wide_x * (2.0 * k / (CROSSINGS - 1) - 1.0), 0.0, z))
-		_price_open()
-		if spots_built:
-			_entry_spots.clear()
-	return _open_mean
 
 
 func _in_own_zone(pos: Vector3) -> bool:

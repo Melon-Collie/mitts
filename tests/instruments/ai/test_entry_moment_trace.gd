@@ -95,7 +95,6 @@ func _trace_stand(ctx: RoleContext, field: AICarrierField) -> void:
 # search completes its beam.
 func _trace_moves(ctx: RoleContext, cs: AICarrierCarrySearch) -> void:
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.peer_id)
-	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	var dest_i: int = cs._dest.kinds.find(cs.destination_kind)
 	var dest_arrival: float = cs._dest_arrival[dest_i] if dest_i >= 0 else 0.0
 	cs._incumbent_move = -1
@@ -111,7 +110,7 @@ func _trace_moves(ctx: RoleContext, cs: AICarrierCarrySearch) -> void:
 		cs._beam_cost.clear()
 		cs._beam_move.clear()
 		cs._beam_prune_bound = -INF
-		cs._score_move(ctx, m, our_goalie, false, caps, dest_arrival)
+		cs._score_move(ctx, m, false, caps, dest_arrival)
 		if cs._beam_total.is_empty():
 			gut.p("  %-9s illegal" % MOVE_NAMES[m])
 			continue
@@ -122,7 +121,7 @@ func _trace_moves(ctx: RoleContext, cs: AICarrierCarrySearch) -> void:
 		cs._field.project_opponents(t0, cs._scratch_opponents_path, cs._scratch_vels_path, end)
 		var arrive: float = cs._arrival_value(ctx, end, end_vel, t0)
 		var one_ply: float = cs._beam_dest[0]
-		cs._upgrade_candidate_two_ply(ctx, 0, true, our_goalie, caps, -INF)
+		cs._upgrade_candidate_two_ply(ctx, 0, true, caps, -INF)
 		gut.p("  %-9s (%5.1f,%5.1f) (%5.1f,%5.1f) %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f %6.3f" % [
 				MOVE_NAMES[m], end.x, end.z, end_vel.x, end_vel.z, arrive,
 				maxf(one_ply - arrive, 0.0), one_ply, cs._beam_dest[0], cs._beam_decay[0],
