@@ -2,8 +2,10 @@
 
 Run every skater's (and keeper's) per-frame cosmetic pass on worker threads at
 once, instead of one after another on the main thread. Status: **spiked; blocked
-on an engine race** (*What the spike found*, below). The spike is in the tree behind
-`Skater.parallel_render`, off by default; `tools/frame_cost.gd --parallel` runs it.
+on an engine race** (*What the spike found*, below). The spike's code is not in
+the tree: it is commit `f5c5c74` on the PR #871 branch (reverted there), to cherry-
+pick if the engine race is fixed. The names below (`Skater.parallel_render`,
+`SkaterTickProxy`) are that commit's.
 
 ## Why this lever
 

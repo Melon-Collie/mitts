@@ -927,24 +927,6 @@ var _paint: BodyZonePaint = _new_body_paint()
 var _anim_lod := SkaterAnimationLod.new(fposmod(float(get_instance_id()) * 0.618034, 1.0))
 var _trunk_fold: float = 0.0
 
-# Render every skater's _process on a worker, in parallel with the others
-# (docs/parallel-render-pass-plan.md). Read once, as the skater is made.
-static var parallel_render: bool = false
-# The sub-thread group order of a parallel skater: after every main-thread node
-# that processes at the default order 0, the camera among them.
-const PARALLEL_RENDER_ORDER: int = 1
-var _parallel: bool = false
-
-
-# The group is set before the skater enters the tree: set on a node already in
-# it, Godot 4.6 hands the new owner to that node alone, and the guard then
-# refuses the render pass every write below MeshRoot.
-func _init() -> void:
-	if parallel_render:
-		_parallel = true
-		process_thread_group = Node.PROCESS_THREAD_GROUP_SUB_THREAD
-		process_thread_group_order = PARALLEL_RENDER_ORDER
-
 
 func _ready() -> void:
 	add_to_group("skaters")
@@ -978,8 +960,6 @@ func _ready() -> void:
 
 	_position_hand_markers()
 	get_tree().physics_frame.connect(_snapshot_tick_start)
-	if _parallel:
-		add_sibling(SkaterTickProxy.new(self))
 
 	_prev_blade_world_pos = upper_body.to_global(blade.position)
 	_last_finite_position = global_position
@@ -1098,15 +1078,7 @@ func _rig_pose_changed() -> bool:
 	return true
 
 
-# A parallel skater's group takes _physics_process to a worker with it, and the
-# tick writes other skaters (_resolve_player_collisions), so there it is a no-op
-# and SkaterTickProxy runs physics_tick on the main thread, in this slot.
 func _physics_process(delta: float) -> void:
-	if not _parallel:
-		physics_tick(delta)
-
-
-func physics_tick(delta: float) -> void:
 	var _t0: int = Time.get_ticks_usec()
 	# _prev_blade_contact is captured at the top of each controller's tick, before
 	# the per-tick IK update runs (see Skater.capture_prev_blade_contact()).
@@ -1158,7 +1130,6 @@ func physics_tick(delta: float) -> void:
 	# snapshot records.
 	post_move_integrated.emit()
 	HostCostProbe.record(HostCostProbe.Section.SKATER_PHYS, Time.get_ticks_usec() - _t0)
-
 
 
 func _latch_press_read() -> void:

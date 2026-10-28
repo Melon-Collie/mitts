@@ -118,7 +118,7 @@ func _run(native: bool, sc: Scenario) -> Dictionary:
 			puck.global_position = skater.global_position + dir * 1.8
 			puck.global_position.y = 0.0
 		c._process_input(input, DT)
-		skater.physics_tick(DT)
+		skater._physics_process(DT)
 		out.append(skater.get_top_hand_position())
 		out.append(skater.get_blade_position())
 		out.append(c._ik.last_target_blade_world)

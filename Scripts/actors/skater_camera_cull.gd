@@ -21,28 +21,26 @@ static var _planes: Array[Plane] = []
 static var _camera: int = 0
 static var _camera_xform := Transform3D()
 static var _to_camera := Transform3D()
-
-
-# Rebuilds the shared frustum if the camera moved or changed. `sees` calls it
-# too, so a caller on one thread needs nothing else; parallel skaters
-# (Skater.parallel_render) read the frustum from workers, so it is readied on the
-# main thread first (SkaterTickProxy), leaving the workers nothing to write.
-static func prepare(node: Node3D) -> void:
-	if not enabled:
-		return
-	var cam: Camera3D = node.get_viewport().get_camera_3d()
-	if cam != null:
-		_frame(cam)
+static var _has_camera: bool = false
 
 
 # True with no camera (tests, headless tools) or with culling off.
 static func sees(node: Node3D) -> bool:
+	_has_camera = false
 	if not enabled:
 		return true
 	var cam: Camera3D = node.get_viewport().get_camera_3d()
 	if cam == null:
 		return true
-	_frame(cam)
+	_has_camera = true
+	if cam.get_instance_id() != _camera or cam.global_transform != _camera_xform:
+		_camera = cam.get_instance_id()
+		_camera_xform = cam.global_transform
+		_to_camera = _camera_xform.affine_inverse()
+		var projection: Projection = cam.get_camera_projection()
+		_planes.resize(6)
+		for i: int in 6:
+			_planes[i] = projection.get_projection_plane(i)
 	var center: Vector3 = _to_camera * node.global_position
 	for plane: Plane in _planes:
 		if plane.distance_to(center) > RADIUS_M:
@@ -50,24 +48,9 @@ static func sees(node: Node3D) -> bool:
 	return true
 
 
-# How far `node` is from the camera `sees` tests it against, or -1 when there is
-# none to test (tests, headless tools, culling off).
+# How far `node` is from the camera `sees` just tested it against, or -1 when
+# that call had no camera to test (tests, headless tools, culling off).
 static func distance(node: Node3D) -> float:
-	if not enabled:
+	if not _has_camera:
 		return -1.0
-	var cam: Camera3D = node.get_viewport().get_camera_3d()
-	if cam == null:
-		return -1.0
-	return cam.global_transform.origin.distance_to(node.global_position)
-
-
-static func _frame(cam: Camera3D) -> void:
-	if cam.get_instance_id() == _camera and cam.global_transform == _camera_xform:
-		return
-	_camera = cam.get_instance_id()
-	_camera_xform = cam.global_transform
-	_to_camera = _camera_xform.affine_inverse()
-	var projection: Projection = cam.get_camera_projection()
-	_planes.resize(6)
-	for i: int in 6:
-		_planes[i] = projection.get_projection_plane(i)
+	return _camera_xform.origin.distance_to(node.global_position)

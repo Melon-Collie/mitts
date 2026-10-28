@@ -7,7 +7,6 @@ extends SceneTree
 #
 #   --skaters=<n>   skaters on the ice, 2..10 (the local player and n - 1 bots)
 #   --frames=<n>    live-play frames to sample (default 1200)
-#   --parallel      skaters render on worker threads (Skater.parallel_render)
 #
 # A bootstrap only, for the reason pose_capture.gd gives: a `-s` script compiles
 # before the autoloads register, so the typed runner is loaded once the tree is up.
@@ -26,14 +25,11 @@ func _on_frame() -> void:
 	_started = true
 	var skaters: int = 10
 	var frames: int = 1200
-	var parallel: bool = false
 	for a: String in OS.get_cmdline_user_args():
 		if a.begins_with("--skaters="):
 			skaters = int(a.trim_prefix("--skaters="))
 		elif a.begins_with("--frames="):
 			frames = int(a.trim_prefix("--frames="))
-		elif a == "--parallel":
-			parallel = true
 	var runner: Node = (load(RUNNER) as GDScript).new() as Node
 	root.add_child(runner)
-	runner.call("begin", skaters, frames, parallel)
+	runner.call("begin", skaters, frames)
