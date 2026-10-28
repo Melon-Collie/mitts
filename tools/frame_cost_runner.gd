@@ -5,9 +5,9 @@ extends Node
 # frames: the process step (every _process) and each physics tick, apart.
 #
 # The two are reported apart because they scale differently with frame rate. A
-# frame pays the process step once and the tick 120 / fps times, so "the frame at
-# 90 fps" is composed from both rather than read off a headless run, whose frame
-# rate is whatever the CPU allows.
+# frame pays the process step once and the tick (tick rate / fps) times, so "the
+# frame at 90 fps" is composed from both rather than read off a headless run,
+# whose frame rate is whatever the CPU allows.
 #
 # Headless draws nothing: render-side CPU (culling, draw calls, skinning) is not
 # in these numbers, and neither is anything a GPU would cost. Run with a display

@@ -167,8 +167,9 @@ analytic antialiasing, and the HUD's cost going to zero.
 `.claude/hooks/measure-frame-cost.sh` plays a match against bots headless at
 each skater count and times the process step (every `_process`, once a frame)
 and the physics tick apart, because they scale differently with frame rate. "At
-90 fps" composes them: the process step plus 120/90 ticks. Headless draws
-nothing, so this is the CPU's frame alone. The table below was taken on a 4-core
+90 fps" composes them: the process step plus (tick rate / 90) ticks. The table
+below was taken at the 120 Hz tick; *The tick at 90 Hz* after it compares the
+two. Headless draws nothing, so this is the CPU's frame alone. The table below was taken on a 4-core
 cloud container with the editor (debug) binary and the native kernels built,
 two runs a count. Read the shape and the shares; the milliseconds belong to that
 machine.
@@ -217,6 +218,23 @@ run, so single sections are noisy):
   (`FRAME_COST_RENDER=1`, Forward+ on software Vulkan), CPU render went from
   1.39 to 1.63 ms between 2 and 10 skaters, ~25 draw calls a skater. Drawing
   adds ~0.07 ms a skater to the process step (skeleton and skin work).
+
+### The tick at 90 Hz
+
+The tick went from 120 to 90 Hz with the broadcast at 45 Hz (the network
+sections below hold what that costs on the wire and on screen). Same machine,
+back to back, three runs a count, the 120 Hz build in a worktree beside it:
+
+| skaters | 120 Hz: main thread at 90 fps | 90 Hz | per added skater, 120 → 90 Hz |
+|---|---|---|---|
+| 2 | 5.90 ms | 4.85 ms | |
+| 6 | 8.71 ms | 7.50 ms | 0.70 → 0.66 ms |
+| 10 | 11.99 ms | 9.61 ms | 0.82 → 0.53 ms |
+
+A tick costs about what it did (5.2 → 5.4 ms at 10 skaters); the saving is
+paying it once a frame at 90 fps rather than 1.33 times. Above 90 fps a frame
+runs fewer than one tick either way, and the saving per second is the same
+quarter of the tick's cost.
 
 ### Inside the skater step and the keeper's tick
 
@@ -314,13 +332,12 @@ not change the scaling anyway.
   that is cosmetic spreads across cores. Spiked: −21% on the process step, but
   blocked by an engine race (physics interpolation's lists are unlocked against
   worker-thread transform writes). `docs/parallel-render-pass-plan.md`.
-- **Lowering the physics rate (issue #606, 120 → 90 Hz)** would cut every
-  per-tick item at once, ~0.7 ms/frame. **Rejected**: the broadcast cadence is
-  counted in physics ticks, so it trades responsiveness over ping for frame rate,
-  and responsiveness is the higher priority. Broadcasting every tick at 90 Hz
-  (`STATE_RATE` = `PHYSICS_TICK`, which the cadence supports) would keep the
-  cadence ahead of today's 60 Hz, for +50% host upload (*Network bytes by
-  broadcast rate*).
+- **Lowering the physics rate (issue #606, 120 → 90 Hz)** — taken, with the
+  broadcast at 45 Hz and the input cushion held at 16.7 ms (1.5 ticks): −20% of
+  the main thread in a 10-skater match (*The tick at 90 Hz*). What it costs is
+  measured below (*Network bytes by broadcast rate* and the two sections after
+  it): under a centimetre on a remote skater, about a point of refused pickup
+  claims at 60 ms RTT, and host upload down a quarter.
 - **Goalie update LOD** — ~0.22 ms/frame, but the only real slice is save
   geometry. Rejected on risk.
 

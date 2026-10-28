@@ -79,7 +79,7 @@ for r in rows:
     by.setdefault(r["skaters"], []).append(r)
 lines = [
     "Headless, %s; per count, the mean of %d run(s)." % (rows[0]["native"] if rows else "?", max((len(v) for v in by.values()), default=0)),
-    "process = every _process, once a frame; tick = one physics step, paid 120/fps times a frame.",
+    "process = every _process, once a frame; tick = one physics step, paid tick-rate/fps times a frame.",
     "",
     "| skaters | process ms/frame (p95) | tick ms | main thread at 90 fps, ms | per added skater, ms | CPU render ms | draw calls |",
     "|---|---|---|---|---|---|---|",
