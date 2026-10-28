@@ -1011,12 +1011,16 @@ static func _sleeve(side_i: int) -> Dictionary:
 				weights.append(share.y)
 		var ring: Dictionary = _arm_ring(prism, pivot + down * spec.x, radius, binds, weights,
 				spec.x)
-		if spec.x < 0.0:
-			# Up the axis into the body, its inner side would sit inside the chest,
-			# and the band to it fold under; it lies on the chest instead.
+		if spec.x <= 0.0:
+			# At the pivot and up into the body. Tilted with the arm's hang, a ring's
+			# outer side would stand over the torso's shoulder line, a tent the
+			# arm's swing lifts further, so it lies level; and up the axis its inner
+			# side would sit inside the chest, and the band to it fold under, so it
+			# lies on the chest.
 			var pts: PackedVector3Array = ring["pts"]
+			var level: float = (pivot + down * spec.x).y
 			for k: int in pts.size():
-				pts[k] = _out_of_torso(pts[k])
+				pts[k] = _out_of_torso(Vector3(pts[k].x, level, pts[k].z))
 			ring["pts"] = pts
 		rings.append(ring)
 	var shoulder_end: int = rings.size() - 1

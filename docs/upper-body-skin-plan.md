@@ -156,6 +156,9 @@ untouched. Gameplay reads nothing here.
 - **Each facet is wound from its own outward normal** (away from the nearest
   point of the arm's axis, the pivot above it); the armhole's top faces up, not
   round the arm.
+- **The rings at the pivot and above it lie level**, not square to the arm's
+  outward hang: tilted, their outer side stood over the torso's shoulder line
+  and the deltoid's swing lifted it into a tent (`test_shoulder_has_no_peak.gd`).
 - Known: an arm driven well past the body (a full cross-body reach, the
   slapper's wind-up) still creases on the inside of the shoulder's bend; the
   shoulder has few rings. More rings, or a corrective share, are the next
