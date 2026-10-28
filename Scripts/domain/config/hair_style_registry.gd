@@ -7,9 +7,10 @@ extends RefCounted
 # an untouched player wears — short dark-brown hair, no facial hair. Cosmetic
 # only: nothing gameplay reads them.
 #
-# The helmet covers the crown, so a style is really a statement about what
-# shows under its rim: a short cut is a nape and sideburns, medium covers the
-# ears and the top of the neck, a shag or a mullet spills out over the collar.
+# Every style is a whole head of hair, but the helmet covers the crown, so on
+# the ice a style mostly reads by what shows under its rim: a short cut is a
+# nape and sideburns, medium covers the ears and the top of the neck, a shag or
+# a mullet spills out over the collar.
 #
 # A style is retired rather than removed: its index stays (a saved or sent code
 # still names it), it leaves the picker and the bots' rolls, and whoever wore it

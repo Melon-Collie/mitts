@@ -1094,30 +1094,48 @@ static func _build_helmet() -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
-	var lon: int = _HELMET_LON
-	var lat: int = 4
-	var rings: Array[PackedVector3Array] = []
-	for j in lat + 1:
-		var ring := PackedVector3Array()
-		ring.resize(lon + 1)
-		for k in lon + 1:
-			var theta: float = TAU * float(k) / float(lon)
-			var v: float = _helmet_cut_v(theta) * float(j) / float(lat)
-			var y: float = _HELMET_RADIUS * cos(PI * v)
-			var ring_r: float = _HELMET_RADIUS * sin(PI * v)
-			ring[k] = Vector3(sin(theta) * ring_r, y, cos(theta) * ring_r)
-		rings.append(ring)
-	for j in lat:
-		for k in lon:
+	var rings: Array[PackedVector3Array] = _helmet_rings()
+	for j in rings.size() - 1:
+		for k in _HELMET_LON:
 			_uv_quad(st,
 					rings[j][k], Vector2.ZERO,
 					rings[j][k + 1], Vector2(0.1, 0.0),
 					rings[j + 1][k + 1], Vector2(0.1, 0.1),
 					rings[j + 1][k], Vector2(0.0, 0.1))
 	var apex := Vector3(0.0, _HELMET_RADIUS * _HELMET_LINER_APEX_FRAC, 0.0)
-	_cap(st, rings[lat], apex, Vector2(0.5, 0.9), false, 0.05)
+	_cap(st, rings[rings.size() - 1], apex, Vector2(0.5, 0.9), false, 0.05)
 	st.generate_normals()
 	return st.commit()
+
+
+# The shell's outer faces as a triangle list, helmet-local, without the liner
+# that closes it — what anything worn under the helmet has to stay inside.
+static func helmet_shell_triangles() -> PackedVector3Array:
+	var rings: Array[PackedVector3Array] = _helmet_rings()
+	var out := PackedVector3Array()
+	for j in rings.size() - 1:
+		for k in _HELMET_LON:
+			out.append_array([rings[j][k], rings[j][k + 1], rings[j + 1][k + 1],
+					rings[j][k], rings[j + 1][k + 1], rings[j + 1][k]])
+	return out
+
+
+# The shell's rings from the crown down to the rim, each closed (its first
+# point repeated at the end).
+static func _helmet_rings() -> Array[PackedVector3Array]:
+	var lat: int = 4
+	var rings: Array[PackedVector3Array] = []
+	for j in lat + 1:
+		var ring := PackedVector3Array()
+		ring.resize(_HELMET_LON + 1)
+		for k in _HELMET_LON + 1:
+			var theta: float = TAU * float(k) / float(_HELMET_LON)
+			var v: float = _helmet_cut_v(theta) * float(j) / float(lat)
+			var y: float = _HELMET_RADIUS * cos(PI * v)
+			var ring_r: float = _HELMET_RADIUS * sin(PI * v)
+			ring[k] = Vector3(sin(theta) * ring_r, y, cos(theta) * ring_r)
+		rings.append(ring)
+	return rings
 
 
 # The rim's latitude fraction at azimuth θ (helmet-local, θ = 0 the back).
