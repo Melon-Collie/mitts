@@ -32,6 +32,9 @@ var _point_z: float = -(GameRules.BLUE_LINE_Z + 2.0)
 const AT_LINE_TOL_M: float = 3.0
 # Seconds of cycle each assertion measures — see _run_cycle's shelf-life note.
 const CYCLE_S: float = 2.5
+# How soon a point who passed or shot from on the line, his follow-through
+# carrying his skates over it, must be back inside: right back in.
+const RETURN_S: float = 1.0
 
 
 class Sample:
@@ -47,6 +50,9 @@ class Sample:
 	var in_ours: int = 0
 	var in_loose: int = 0
 	var in_theirs: int = 0
+	# The longest a point who has just released the puck spends with his skates
+	# outside the line before he is back in (s).
+	var release_excursion_s: float = 0.0
 
 
 # A settled offensive-zone cycle: our three forwards low in their end, our two D
@@ -93,18 +99,34 @@ func _run_cycle(seconds: float, live_opponents: bool = false) -> Sample:
 	var s := Sample.new()
 	var steps: int = int(seconds / Harness.DT)
 	var our_ids := [OUR_F1, OUR_F2, OUR_F3, OUR_D1, OUR_D2]
+	# Per point: ticks out since his own release, -1 while he has none pending.
+	var out_since_release: Dictionary = {OUR_D1: -1, OUR_D2: -1}
 	for _i: int in steps:
+		var n_rel: int = h.releases.size()
 		h.step()
+		if h.releases.size() > n_rel and int(h.releases[-1]["peer"]) in out_since_release:
+			out_since_release[int(h.releases[-1]["peer"])] = 0
 		s.ticks += 1
 		var c: int = h.carrier()
 		var z_d1: float = h.skater_pos(OUR_D1).z
 		var z_d2: float = h.skater_pos(OUR_D2).z
 		# Count a point as "up" when it is inside the offensive zone — by the puck
-		# while he carries it, since the line rules the puck, not his skates.
+		# while he carries it, and while the loose puck is still his own release
+		# (his follow-through may carry his skates over the line; RETURN_S holds
+		# that he comes straight back), since the line rules the puck, not his skates.
 		var line_z: float = -GameRules.BLUE_LINE_Z
-		if c == OUR_D1:
+		for d: int in out_since_release:
+			if int(out_since_release[d]) < 0:
+				continue
+			if h.skater_pos(d).z < line_z:
+				out_since_release[d] = -1
+			else:
+				out_since_release[d] = int(out_since_release[d]) + 1
+				s.release_excursion_s = maxf(s.release_excursion_s,
+						int(out_since_release[d]) * Harness.DT)
+		if c == OUR_D1 or (c == -1 and h.loose_released_by == OUR_D1):
 			z_d1 = h.puck_pos.z
-		elif c == OUR_D2:
+		if c == OUR_D2 or (c == -1 and h.loose_released_by == OUR_D2):
 			z_d2 = h.puck_pos.z
 		var up: int = (1 if z_d1 < line_z else 0) + (1 if z_d2 < line_z else 0)
 		if c == -1:
@@ -162,10 +184,13 @@ func test_a_loose_puck_is_when_the_points_leave() -> void:
 	var s: Sample = _run_cycle(CYCLE_S)
 	var in_ours: float = 100.0 * s.in_ours / maxf(2.0 * s.ours, 1.0)
 	var in_loose: float = 100.0 * s.in_loose / maxf(2.0 * s.loose, 1.0)
-	gut.p("  in zone: ours %.0f%% | loose %.0f%%" % [in_ours, in_loose])
+	gut.p("  in zone: ours %.0f%% | loose %.0f%% | a releasing point back in within %.2f s"
+			% [in_ours, in_loose, s.release_excursion_s])
 	assert_gt(in_ours, 95.0, "points hold the zone while a teammate carries")
 	assert_gt(in_loose, 95.0,
 			"and while the puck is loose between our own players")
+	assert_lte(s.release_excursion_s, RETURN_S,
+			"a point who releases from on the line comes straight back in")
 
 
 func test_what_a_live_forecheck_does_to_the_points() -> void:
