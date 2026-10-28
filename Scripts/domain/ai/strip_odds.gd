@@ -16,6 +16,12 @@ const SET_S: float = 0.25
 const SET_STRIP: float = 0.88
 # A straight carry's samples (s).
 const DWELL_STEP_S: float = 0.1
+# How much of a path a keep read looks at, from where the read starts (s): the
+# carrier re-plans many times a second, and inside this he cannot get out of a
+# stick's reach however he re-plans (his reaction, then sliding a blade's reach
+# aside), so it is what taking the space commits him to. A man who can only get
+# to the path after it — a chase down from behind — is a later decision's.
+const COMMIT_S: float = 1.0
 
 
 # The odds a defender at `pos` moving `vel`, built as `caps` (null: the league
@@ -37,16 +43,18 @@ static func chance_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vec
 
 # The odds the puck is kept along a path: through `points`, reached at `times`
 # from now, against `defenders` (index-matched `vels`, and `caps` or empty for
-# the league build) read `elapsed_s` after now. Each defender's one chance is his
-# best on the path; the chances are separate.
+# the league build) read `elapsed_s` after now, over its first `window_s`. Each
+# defender's one chance is his best on it; the chances are separate.
 static func path_keep(points: Array[Vector3], times: Array[float],
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
-		elapsed_s: float = 0.0) -> float:
+		elapsed_s: float = 0.0, window_s: float = COMMIT_S) -> float:
 	var has_caps: bool = caps.size() == defenders.size()
 	var keep: float = 1.0
 	for i: int in defenders.size():
 		var best: float = 0.0
 		for k: int in points.size():
+			if times[k] > window_s + 1e-6:
+				break
 			best = maxf(best, chance_at(defenders[i], vels[i], caps[i] if has_caps else null,
 					points[k], times[k] - elapsed_s))
 			if best >= 1.0:
@@ -57,7 +65,7 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 
 # The odds the puck is kept on a straight carry from `from` to `to` in
 # `arrival_time` (held, when they meet), sampled every DWELL_STEP_S, setting off
-# `start_s` from now.
+# `start_s` from now: over the carry's first COMMIT_S.
 static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
 		elapsed_s: float = 0.0, start_s: float = 0.0) -> float:
@@ -65,10 +73,11 @@ static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 		return 1.0
 	var has_caps: bool = caps.size() == defenders.size()
 	var steps: int = maxi(1, ceili(arrival_time / DWELL_STEP_S - 1e-6))
+	var read: int = committed_steps(arrival_time, steps)
 	var keep: float = 1.0
 	for i: int in defenders.size():
 		var best: float = 0.0
-		for k: int in steps:
+		for k: int in read:
 			var f: float = float(k + 1) / steps
 			best = maxf(best, chance_at(defenders[i], vels[i], caps[i] if has_caps else null,
 					from.lerp(to, f), start_s + arrival_time * f - elapsed_s))
@@ -76,3 +85,9 @@ static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 				break
 		keep *= 1.0 - SET_STRIP * best
 	return keep
+
+
+# How many of a carry's `steps` samples, over `arrival_time`, fall in its first
+# COMMIT_S.
+static func committed_steps(arrival_time: float, steps: int) -> int:
+	return mini(steps, maxi(1, floori(steps * COMMIT_S / arrival_time + 1e-6)))

@@ -12,7 +12,8 @@ extends GutTest
 # his range reaches the path). The
 # planned path is <runs>.planned when it exists (the interceptor's dry runs),
 # else the puck's path as recorded, which stops at a loss. `current` is the
-# strip read's keep along it as −ln(keep). Writes
+# strip read's keep along all of it (past the planner's commitment window) as
+# −ln(keep). Writes
 # .preview/strip_interception/runs.csv; with MITTS_WRITE_INTERCEPT_TRUTH=1 and
 # planned paths, also the strip read's truth file (one of each staging's
 # repeats). Reports only.
@@ -81,7 +82,7 @@ func test_export_interception() -> void:
 			cols.append_array([str(best), str(best_t)])
 			firsts.append_array([str(first), str(first_set)])
 			shares.append(str(least))
-		var keep: float = AIStripOdds.path_keep(pts, times, r.defenders, r.vels)
+		var keep: float = AIStripOdds.path_keep(pts, times, r.defenders, r.vels, [], 0.0, INF)
 		f.store_line("%d,%s,%d,%.3f,%s,%s,%s,%s,%.6f,%s,%s,%s,%s,%s,%s" % [ri, r.family,
 				1 if r.lost_at >= 0.0 else 0, r.lost_at, cols[0], cols[1], cols[2], cols[3],
 				-log(maxf(keep, 1e-9)), firsts[0], firsts[1], firsts[2], firsts[3], shares[0],

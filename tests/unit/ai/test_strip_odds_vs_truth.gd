@@ -7,7 +7,8 @@ extends GutTest
 # it he can be set on — whether he took the puck — measured by
 # tests/instruments/ai/test_interceptor_truth.gd and written by
 # test_interception_export.gd. Each run is read from its defender's start along
-# the planned path, as a planner reads a path.
+# the planned path, as a planner reads a path — the whole of it, since the run
+# watches all of it (the planner's own reads stop at AIStripOdds.COMMIT_S).
 #
 # Two ratchets: how often a run that lost the puck read riskier than one that
 # kept it may not fall; and the losses the read expects, against those that
@@ -47,7 +48,7 @@ func test_the_strip_read_reads_a_worst_case_interceptor() -> void:
 		for k: int in range(3 + nd * 4, t.size(), 2):
 			points.append(Vector3(float(t[k]), 0, float(t[k + 1])))
 			times.append(SAMPLE_S * points.size())
-		var risk: float = 1.0 - AIStripOdds.path_keep(points, times, defs, vels)
+		var risk: float = 1.0 - AIStripOdds.path_keep(points, times, defs, vels, [], 0.0, INF)
 		expected += risk
 		if t[1] == "1":
 			lost_risk.append(risk)

@@ -710,11 +710,13 @@ remains.
     skate — are each defender's one chance at it (`AIStripOdds`,
     `docs/strip-interception-plan.md`): can his stick, from where he is and how
     he is moving, be set on some point of the path a beat before the puck,
-    graded across the arrival clock's error. One chance however long the puck
-    is in his reach, and measured against a worst-case interceptor, never our
-    defending bots. Never read where a defender might be as a spread that thins
-    with how far ahead it looks: an entry read from further back then looks
-    easier, and the carrier backs off to re-approach.
+    graded across the arrival clock's error, over only the first second of the
+    path from where its read starts (`COMMIT_S`: how long a stick he sees coming
+    cannot be escaped; a chase down after it is a later decision's). One chance
+    however long the puck is in his reach, and measured against a worst-case
+    interceptor, never our defending bots. Never read where a defender might be
+    as a spread that thins with how far ahead it looks: an entry read from
+    further back then looks easier, and the carrier backs off to re-approach.
   - The **shot on a carry's arrival** reads a man behind the carry, skating its
     way, as on it for the whole carry (`AICarrySpace._chases`, through
     `AIShotHolds.solve_arrival`): a puck in the shooting pocket is not shielded

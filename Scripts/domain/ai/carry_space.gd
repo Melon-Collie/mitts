@@ -439,12 +439,12 @@ static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 			opponent_caps, projected_s, start_s)
 
 
-# Where a carry is stripped, if it is: each defender's first chance at it — the
-# first point his stick is set on with even odds, else his best — weighted by his
-# odds of taking it, so a strip surrenders the puck in the traffic it was skating
-# through, not at the safe spot it was headed for. `covered_only`: how far the
-# carry gets — the first point a defender is set on with better than even odds of
-# taking the puck, or `to`.
+# Where a carry is stripped, if it is: each defender's first chance at it in its
+# first AIStripOdds.COMMIT_S — the first point his stick is set on with even odds,
+# else his best — weighted by his odds of taking it, so a strip surrenders the
+# puck in the traffic it was skating through, not at the safe spot it was headed
+# for. `covered_only`: how far the carry gets — the first point a defender is set
+# on with better than even odds of taking the puck, or `to`.
 static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], covered_only: bool = false,
@@ -455,8 +455,9 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		return from
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	var steps: int = maxi(1, ceili(arrival_time / AIStripOdds.DWELL_STEP_S - 1e-6))
+	var read: int = AIStripOdds.committed_steps(arrival_time, steps)
 	if covered_only:
-		for k: int in steps:
+		for k: int in read:
 			var f: float = float(k + 1) / steps
 			var p: Vector3 = from.lerp(to, f)
 			for i: int in opponents.size():
@@ -471,7 +472,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		var best: float = 0.0
 		var best_p: Vector3 = to
 		var first: bool = false
-		for k: int in steps:
+		for k: int in read:
 			var f: float = float(k + 1) / steps
 			var p: Vector3 = from.lerp(to, f)
 			var c: float = AIStripOdds.chance_at(opponents[i], opponent_vels[i],

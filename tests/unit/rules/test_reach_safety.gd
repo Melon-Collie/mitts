@@ -200,23 +200,23 @@ func test_strip_point_is_the_tight_midroute_not_the_safe_destination() -> void:
 			"strip localizes to the tight mid-route point, within his reach and a sample")
 
 
-func test_strip_point_is_destination_when_that_is_the_tight_end() -> void:
-	# Clear mid-route, but a defender waiting AT the destination. The strip is there.
+func test_strip_point_is_toward_the_tight_end() -> void:
+	# Clear start, but a defender waiting at the destination: he steps up to meet
+	# the carry, so the strip is where he first can, in the half of it he guards.
 	var from := Vector3(0, 0, 0)
 	var to := Vector3(0, 0, 10)
 	var opps: Array[Vector3] = [Vector3(0, 0, 10)]    # waiting at the destination
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var strip: Vector3 = AICarrySpace.carry_strip_point(from, to, 1.4, opps, vels)
-	assert_gte(strip.z, 10.0 - AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M,
-			"strip localizes to the covered destination")
+	assert_gt(strip.z, 5.0, "strip localizes toward the covered end, not the open start")
 
 
 func test_covered_only_carry_reaches_its_destination_when_nothing_covers_it() -> void:
-	# A defender well off the route: as how far the carry GETS, it gets all the
-	# way.
+	# A defender too far off the route to get to it in time: as how far the carry
+	# GETS, it gets all the way.
 	var from := Vector3(0, 0, 0)
 	var to := Vector3(0, 0, 10)
-	var opps: Array[Vector3] = [Vector3(5, 0, 5)]
+	var opps: Array[Vector3] = [Vector3(8, 0, 5)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	assert_gt(AICarrySpace.carry_safety(from, to, 1.4, opps, vels), 0.9,
 			"precondition: the route is mostly clear")

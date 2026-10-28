@@ -61,6 +61,21 @@ func test_waiting_never_thins_the_defence() -> void:
 		prev = k
 
 
+func test_a_man_who_can_only_get_there_after_the_window_is_a_later_decision() -> void:
+	# He reaches the far end of a long carry in time, but not any of its first
+	# COMMIT_S.
+	var him: Array[Vector3] = [Vector3(0, 0, -24)]
+	var to := Vector3(0, 0, -24)
+	assert_eq(_keep(him, _still, Vector3.ZERO, to, 3.0), 1.0)
+	var whole: Array[float] = []
+	var points: Array[Vector3] = []
+	for k: int in 30:
+		points.append(Vector3(0, 0, -0.8 * (k + 1)))
+		whole.append(0.1 * (k + 1))
+	assert_lt(AIStripOdds.path_keep(points, whole, him, _still, [], 0.0, INF), 1.0,
+			"read to its end, he takes it")
+
+
 func test_defenders_are_separate_chances() -> void:
 	var one: Array[Vector3] = [Vector3(3, 0, -5)]
 	var two: Array[Vector3] = [Vector3(3, 0, -5), Vector3(-3, 0, -5)]

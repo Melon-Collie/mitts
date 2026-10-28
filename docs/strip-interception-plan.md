@@ -31,6 +31,15 @@ What it leaves out on purpose:
 - **Where a loss happens** (`carry_strip_point`, the carry search's rolled
   moves): each defender's first chance — the first point his stick is set on with
   even odds, else his best — weighted by his odds of taking it.
+- **Only the first second of a path counts** (`COMMIT_S`), from where its read
+  starts. The carrier re-plans every 33–75 ms, but a stick he sees coming
+  cannot be escaped inside his reaction plus sliding a blade's reach aside —
+  about a second — so that is what taking the space commits him to. A defender
+  who can only get to the path after it, typically running the carrier down
+  from behind ~2.4 s in, is a later decision's: that read starts again from
+  wherever the later decision is made. A destination 4 s off is read on its
+  first second; whether its far end is held is the possession read's race at
+  it.
 
 Waiting never thins the defence: with more time a defender reaches more of the
 path, so a carry read from further back does not look easier. That is what
@@ -65,10 +74,23 @@ interceptor's runs (`tests/unit/ai/data/strip_intercept_truth.txt`, written by
 `tests/instruments/ai/test_interception_export.gd`): its ranking of lost runs
 over kept ones and its expected losses are ratchets.
 
+What sets the carrier's decisions (`tests/instruments/ai/test_carry_value_sources.gd`,
+through the breakout and entry drills): the 1 s move's own end spot in 73% of
+our-zone samples, 54% of neutral-zone and 32% of their zone, the destination
+carried on in about one in ten, and that end spot's worth is the possession
+read — the next line's odds from it — whose skate to the line is the long read
+the window keeps from saturating.
+
+What the reacting interceptor measured
+(`tests/instruments/ai/test_reacting_interceptor_truth.gd`, both sides
+reacting): losses met head on or from the side fall with how much of his range
+the defender needs — half the runs a single step off the path, 5–20% at mid
+and long range, none at the edge — while losses run down from behind rise to
+40% at long range, all of them about 2.4 s in. The window is what separates the
+two.
+
 ## Open questions
 
 - The exact set time: 0.25 s is the interceptor's best policy measured so far;
   runs aiming for 0.1 s and 0.5 s would pin the shortest that strips reliably.
 - Whether the stick lift belongs in the worst case beside the jab.
-- Whether a defender who fails his one chance can earn a second further down a
-  long path (a chase from behind).
