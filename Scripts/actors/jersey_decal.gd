@@ -1,10 +1,10 @@
 class_name JerseyDecal
 extends Node2D
 
-# Draws the jersey base color, the collar (the torso's top cap) and the yoke (the
-# side from the collar down to the shoulder line), the procedural stripe
-# array, and player name/number into a SubViewport that the torso material
-# samples as its albedo texture. The torso's CylinderMesh wraps this 2D
+# Draws the jersey base color, the collar (the torso's top cap and a V down the
+# front) and the yoke (the side from the collar down to the shoulder line), the
+# procedural stripe array, and player name/number into a SubViewport that the
+# torso material samples as its albedo texture. The torso mesh wraps this 2D
 # texture around its surface; text at x=BACK_CENTER_X lands on the +Z back
 # of the skater (paired with the torso material's uv1_offset.x = UV_OFFSET_X).
 #
@@ -60,6 +60,11 @@ const NAME_MIN_SQUEEZE: float = 0.7
 # the kit sheet), so 1 cm round a back number, a real sweater's twill border.
 const STROKE_SIZE_EM: float = 0.24
 const YOKE_BOTTOM_PX: int = roundi(SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION * SIDE_V_MAX_PX)
+# The collar's V down the front: as wide at the neck as the torso's front panel
+# (one facet, which the mesh drops below the collar so it shows from ahead), and
+# its point this far down the side, short of the yoke line the crest hangs from.
+const COLLAR_V_HALF_WIDTH_PX: float = 0.5 * IMG_W / SkaterMeshBuilder.TORSO_SIDES
+const COLLAR_V_DEPTH_PX: float = 0.9 * YOKE_BOTTOM_PX
 
 # The chest crest (TeamCrest), half a turn from the back: 28 cm across, about a
 # real sweater's, hung under the yoke.
@@ -91,6 +96,10 @@ func _draw() -> void:
 	draw_rect(Rect2(0, 0, IMG_W, IMG_H), jersey_color, true)
 	draw_rect(TOP_CAP_RECT, collar_color, true)
 	draw_rect(Rect2(0, 0, IMG_W, YOKE_BOTTOM_PX), yoke_color, true)
+	draw_colored_polygon(PackedVector2Array([
+		Vector2(FRONT_CENTER_X - COLLAR_V_HALF_WIDTH_PX, 0.0),
+		Vector2(FRONT_CENTER_X + COLLAR_V_HALF_WIDTH_PX, 0.0),
+		Vector2(FRONT_CENTER_X, COLLAR_V_DEPTH_PX)]), collar_color)
 	# Stripes paint in array order over the side region [0, SIDE_V_MAX_PX].
 	for stripe: Dictionary in stripes:
 		var band: Vector2i = _stripe_band(stripe, SIDE_V_MAX_PX)

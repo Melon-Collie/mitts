@@ -131,6 +131,26 @@ func test_the_arm_is_lit_from_outside() -> void:
 					% [side_i, surface])
 
 
+# The sleeve lays its rings that sit in the body onto the torso's surface
+# (_out_of_torso), which it reads from the torso's section rather than its mesh;
+# round the armhole the two must be one surface, or the sleeve's inner side
+# floats off the chest or sinks into it.
+func test_the_sleeve_knows_where_the_torso_is() -> void:
+	for station: int in SkaterMeshBuilder.ARMHOLE_BOTTOM_STATION + 1:
+		var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station,
+				GearModelRegistry.TUCK_NONE)
+		for k: int in SkaterMeshBuilder.TORSO_SIDES:
+			if ring[k].z < -absf(ring[k].x):
+				continue  # the front panel, dropped below its ring and far from the arms
+			var on: Vector3 = ring[k] + SkaterMeshBuilder.TORSO_REST_POS
+			assert_almost_eq(SkaterMeshBuilder._out_of_torso(on), on, Vector3.ONE * 1e-4,
+					"station %d corner %d is on the surface" % [station, k])
+			var inside: Vector3 = SkaterMeshBuilder.TORSO_REST_POS \
+					+ Vector3(ring[k].x * 0.8, ring[k].y, ring[k].z * 0.8)
+			assert_almost_eq(SkaterMeshBuilder._out_of_torso(inside), on, Vector3.ONE * 1e-4,
+					"station %d corner %d: a point inside goes out to it" % [station, k])
+
+
 func test_each_skin_rides_the_arm_on_its_side() -> void:
 	for top_on_right: bool in [true, false]:
 		var skin: Skin = SkaterMeshBuilder.shared_upper_skin(top_on_right)

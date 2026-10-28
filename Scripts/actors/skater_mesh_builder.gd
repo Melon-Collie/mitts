@@ -29,8 +29,8 @@ extends RefCounted
 # was tuned around the primitive silhouettes.
 const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.275, 0.125),   # collar, around the neck's trapezius flare
-	Vector2(0.255, 0.185),   # trapezius slope over the shoulder pads
-	Vector2(0.215, 0.222),   # shoulder line — the pads' widest, the arms hang from it
+	Vector2(0.262, 0.185),   # trapezius, nearly flat over the shoulder pads
+	Vector2(0.221, 0.222),   # shoulder line — the pads' widest, the arms hang from it
 	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
 	Vector2(0.000, 0.212),   # barely in at the waist
 	Vector2(-0.070, 0.214),  # bunches over a tuck's pad (SkaterJerseyHem.BUNCH_Y_M)
@@ -50,6 +50,26 @@ const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2]
 # over it, while the chest rings stay centered so the belly keeps its line.
 const _TORSO_REAR_SWAY: Array[float] = [
 	0.0, 0.0, 0.0, 0.0, 0.006, 0.012, 0.018, 0.020, 0.026, 0.032, 0.036]
+# Per _TORSO_PROFILE ring: (width, depth) against the lathe's ellipse; how
+# square the section is (2 is the ellipse; more flattens the chest and back into
+# planes and puts a corner at each side) — a chest under shoulder pads, broad and
+# shallow, rather than a column; and how far the front panel's two corners sit
+# below the ring, metres. The front's drop tips the collar toward the viewer and
+# lets the chest fall away under it while the shoulders stay up on their pads.
+# The tail's rings stay elliptical: the tuck and the pants under them are built
+# against that ellipse.
+const _TORSO_SECTION: Array[Vector4] = [
+	Vector4(1.0, 1.0, 2.0, 0.025),   # collar, round the neck
+	Vector4(1.17, 0.80, 3.4, 0.03),
+	Vector4(1.03, 0.76, 4.0, 0.014),  # the shoulder line
+	Vector4(1.01, 0.80, 3.6, 0.0),    # the chest
+	Vector4(0.95, 0.90, 2.8, 0.0),
+	Vector4(1.0, 1.0, 2.0, 0.0), Vector4(1.0, 1.0, 2.0, 0.0), Vector4(1.0, 1.0, 2.0, 0.0),
+	Vector4(1.0, 1.0, 2.0, 0.0), Vector4(1.0, 1.0, 2.0, 0.0), Vector4(1.0, 1.0, 2.0, 0.0),
+]
+# How far toward the front a corner is (−z over the half depth) before the front's
+# drop reaches it: the front panel's two corners and no others.
+const _TORSO_FRONT_PANEL: float = 0.9
 # The pelvis, in the waist's space (y 0 is the trunk's fold pivot, the hip
 # pivots sit at −0.13): the pants from the waistband down, and the seat the
 # torso does NOT carry. A real pelvis does not fold with the spine, so this one
@@ -366,6 +386,7 @@ const NECK_PROFILE: Array[Vector2] = [
 	Vector2(-0.095, 0.064),
 	Vector2(-0.155, 0.070),
 	Vector2(-0.190, 0.092),  # trapezius flare into the collar
+	Vector2(-0.225, 0.092),  # sunk under the collar, whose front is low
 ]
 
 static var _cache: Dictionary = {}
@@ -1092,27 +1113,37 @@ static func _armhole_ring(side_i: int, prism: Basis, down: Vector3) -> Dictionar
 
 
 # A spine-frame point inside the torso moved straight out from its axis onto
-# its lathe; a point outside it is left alone.
+# its section; a point outside it is left alone. Between stations the section is
+# interpolated, which the lathe's flat facets only approximate.
 static func _out_of_torso(p: Vector3) -> Vector3:
 	var local: Vector3 = p - TORSO_REST_POS
-	var radius: float = _torso_radius_at(local.y)
-	var across := Vector2(local.x / (radius * _TORSO_X_SCALE),
-			local.z / (radius * _TORSO_Z_SCALE)).length()
+	var section: Vector3 = _torso_section_at(local.y)
+	var across: float = pow(pow(absf(local.x) / section.x, section.z)
+			+ pow(absf(local.z) / section.y, section.z), 1.0 / section.z)
 	if across >= 1.0 or across < 1e-4:
 		return p
 	return Vector3(local.x / across, local.y, local.z / across) + TORSO_REST_POS
 
 
-# The torso lathe's profile radius at torso-local height `y`, clamped to its ends.
-static func _torso_radius_at(y: float) -> float:
-	if y >= _TORSO_PROFILE[0].x:
-		return _TORSO_PROFILE[0].y
-	for i: int in _TORSO_PROFILE.size() - 1:
-		var hi: Vector2 = _TORSO_PROFILE[i]
-		var lo: Vector2 = _TORSO_PROFILE[i + 1]
-		if y >= lo.x:
-			return lerpf(hi.y, lo.y, (hi.x - y) / (hi.x - lo.x))
-	return _TORSO_PROFILE[-1].y
+# The torso's (half width, half depth, squareness) at torso-local height `y`,
+# clamped to its ends. The front panel's drop is not in it: the sleeve, its one
+# reader, meets the torso at the sides.
+static func _torso_section_at(y: float) -> Vector3:
+	var i: int = 0
+	var t: float = 0.0
+	if y < _TORSO_PROFILE[-1].x:
+		i = _TORSO_PROFILE.size() - 2
+		t = 1.0
+	elif y < _TORSO_PROFILE[0].x:
+		while y < _TORSO_PROFILE[i + 1].x:
+			i += 1
+		t = (_TORSO_PROFILE[i].x - y) / (_TORSO_PROFILE[i].x - _TORSO_PROFILE[i + 1].x)
+	var hi := Vector3(_TORSO_SECTION[i].x * _TORSO_PROFILE[i].y * _TORSO_X_SCALE,
+			_TORSO_SECTION[i].y * _TORSO_PROFILE[i].y * _TORSO_Z_SCALE, _TORSO_SECTION[i].z)
+	var lo := Vector3(_TORSO_SECTION[i + 1].x * _TORSO_PROFILE[i + 1].y * _TORSO_X_SCALE,
+			_TORSO_SECTION[i + 1].y * _TORSO_PROFILE[i + 1].y * _TORSO_Z_SCALE,
+			_TORSO_SECTION[i + 1].z)
+	return hi.lerp(lo, t)
 
 
 # The deltoid's share of a torso vertex on a side, at torso-local `p`.
@@ -1248,19 +1279,19 @@ static func _sleeve_v(surface: int, span: Vector2i, ring_i: int, ring: Dictionar
 # shoulder take their share of that side's deltoid (_torso_deltoid_share).
 static func _cut_armholes(arrays: Array) -> Array:
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
 	var y_top: float = _TORSO_PROFILE[ARMHOLE_TOP_STATION].x + 1e-4
 	var y_bottom: float = _TORSO_PROFILE[ARMHOLE_BOTTOM_STATION].x - 1e-4
-	var half_span: float = TAU / float(_TORSO_SIDES) + 1e-3
+	# Round the torso by u, which counts its corners whatever its section.
+	var half_span: float = 1.0 / float(_TORSO_SIDES) + 1e-3
 	for t: int in range(0, verts.size(), 3):
 		for side_i: int in 2:
-			var corner_angle: float = TAU * float(armhole_corner(side_i)) / float(_TORSO_SIDES) \
-					+ TAU * TORSO_U_PHASE
+			var corner_u: float = float(armhole_corner(side_i)) / float(_TORSO_SIDES)
 			var inside: bool = true
 			for j: int in 3:
 				var p: Vector3 = verts[t + j]
-				var angle: float = atan2(p.x / _TORSO_X_SCALE, p.z / _TORSO_Z_SCALE)
 				if p.y > y_top or p.y < y_bottom \
-						or absf(wrapf(angle - corner_angle, -PI, PI)) > half_span:
+						or absf(wrapf(uvs[t + j].x - corner_u, -0.5, 0.5)) > half_span:
 					inside = false
 					break
 			if inside:
@@ -1303,8 +1334,8 @@ static func torso_ring(station: int, tuck: int) -> PackedVector3Array:
 			_TORSO_SIDES, phase)
 	for k: int in ring.size():
 		ring[k].z += z_off
-	return SkaterJerseyHem.tuck_ring(ring, s.x, s.y, z_off, tuck, phase,
-			_TORSO_X_SCALE, _TORSO_Z_SCALE)
+	return SkaterJerseyHem.tuck_ring(_torso_section(ring, station, z_off), s.x, s.y, z_off,
+			tuck, phase, _TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 
 # The pants at waist-space height `y`: (radius, rear sway), radius < 0 outside
@@ -1457,14 +1488,44 @@ static func _build_pelvis(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
 
 static func _build_torso(tuck: int = GearModelRegistry.TUCK_NONE) -> ArrayMesh:
 	var phase: float = TAU * TORSO_U_PHASE
-	var deform := Callable()
-	if tuck != GearModelRegistry.TUCK_NONE:
-		deform = func(ring: PackedVector3Array, y: float, radius: float,
-				z_off: float) -> PackedVector3Array:
-			return SkaterJerseyHem.tuck_ring(ring, y, radius, z_off, tuck, phase,
-					_TORSO_X_SCALE, _TORSO_Z_SCALE)
+	var deform := func(ring: PackedVector3Array, y: float, radius: float,
+			z_off: float) -> PackedVector3Array:
+		var shaped: PackedVector3Array = _torso_section(ring, _torso_station(y), z_off)
+		return SkaterJerseyHem.tuck_ring(shaped, y, radius, z_off, tuck, phase,
+				_TORSO_X_SCALE, _TORSO_Z_SCALE)
 	return _build_lathe(_TORSO_PROFILE, _TORSO_SIDES, _TORSO_X_SCALE, _TORSO_Z_SCALE,
 			_TORSO_REAR_SWAY, phase, deform)
+
+
+# The _TORSO_PROFILE station at torso-local height `y`, which is one of theirs.
+static func _torso_station(y: float) -> int:
+	for i: int in _TORSO_PROFILE.size():
+		if absf(_TORSO_PROFILE[i].x - y) < 1e-5:
+			return i
+	return -1
+
+
+# An elliptical lathe ring (z shifted by `z_off`) given `station`'s
+# _TORSO_SECTION: each corner is pushed straight out onto the section's
+# superellipse. Along its own ray, so the corners either side of the chest and
+# the back stay about as far apart as on the ellipse and the decals painted
+# between them keep their width; the corners at the diagonals go out the most.
+static func _torso_section(ring: PackedVector3Array, station: int,
+		z_off: float) -> PackedVector3Array:
+	var section: Vector4 = _TORSO_SECTION[station]
+	var half_width: float = _TORSO_PROFILE[station].y * _TORSO_X_SCALE
+	var half_depth: float = _TORSO_PROFILE[station].y * _TORSO_Z_SCALE
+	var out := PackedVector3Array(ring)
+	for k: int in out.size():
+		var across: float = out[k].x / half_width
+		var along: float = (out[k].z - z_off) / half_depth
+		var push: float = pow(pow(absf(across), section.z) + pow(absf(along), section.z),
+				-1.0 / section.z)
+		out[k].x = half_width * section.x * across * push
+		out[k].z = half_depth * section.y * along * push + z_off
+		if -along > _TORSO_FRONT_PANEL:
+			out[k].y -= section.w
+	return out
 
 
 # Head ball at HEAD_RADIUS, sitting HEAD_FORWARD_M ahead of the helmet center,

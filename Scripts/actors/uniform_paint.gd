@@ -42,7 +42,7 @@ static func textured(tex: Texture2D, roughness: float = ROUGH_CLOTH) -> Standard
 
 
 # The top of a sweater is three colors, each falling back to the one below it:
-# the collar ring (the torso's top cap) to the yoke, and the yoke (the top of
+# the collar (the torso's top cap and its V down the front) to the yoke, and the yoke (the top of
 # the shoulders) to the jersey body.
 static func yoke_color(jersey: Dictionary) -> Color:
 	var yoke: Variant = jersey.get("yoke")
