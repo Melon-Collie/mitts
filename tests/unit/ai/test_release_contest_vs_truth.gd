@@ -15,7 +15,7 @@ extends GutTest
 const TRUTH_PATH: String = "res://tests/unit/ai/data/release_contest_truth.txt"
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
-const MIN_RANKING: float = 0.76
+const MIN_RANKING: float = 0.78
 const MAX_EXPECTED_RATIO_ERR: float = 0.10
 const BANK_MARGIN: float = 0.02
 

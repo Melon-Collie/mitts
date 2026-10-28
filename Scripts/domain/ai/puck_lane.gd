@@ -239,7 +239,8 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 # (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) the puck sits on the blade at the
 # release point (release_point_toward), and a stick that gets to it there pokes
 # it off: each opponent's one chance at a held puck (AIStripOdds.chance_at on the
-# arrival clock, within his blade's reach, by SET_STRIP), from where his
+# arrival clock, within the reach a pass is played at, AILaneReach.defender_reach,
+# by SET_STRIP), from where his
 # momentum has him (`opponent_vels`, index-matched; missing ones stand). He is
 # read as already playing the carrier, from the windup's start. A body does not
 # shield it: a man behind the shooter reaches past him to a puck in reach.
@@ -249,7 +250,7 @@ static func expected_pass_speed(shooter: Vector3, receiver: Vector3) -> float:
 #
 # The set time on a held puck: his stick on a puck that is not going anywhere,
 # measured on those runs (the level of the strips they suffer).
-const RELEASE_SET_S: float = 0.1
+const RELEASE_SET_S: float = 0.05
 
 
 static func release_contest_clean(release_pt: Vector3,
@@ -261,7 +262,8 @@ static func release_contest_clean(release_pt: Vector3,
 		var caps: AISkaterCaps = opponent_caps[i] if has_caps else null
 		var vel: Vector3 = opponent_vels[i] if i < opponent_vels.size() else Vector3.ZERO
 		clean *= 1.0 - AIStripOdds.SET_STRIP * AIStripOdds.chance_at(opponents[i], vel, caps,
-				release_pt, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, RELEASE_SET_S)
+				release_pt, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S, RELEASE_SET_S,
+				AILaneReach.defender_reach(caps))
 		if clean <= 0.0:
 			return 0.0
 	return clean

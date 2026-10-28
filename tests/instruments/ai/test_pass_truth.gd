@@ -20,6 +20,7 @@ extends GutTest
 # defender's deflection or body block is the lane's, a receiver's bobble the
 # reception's), what the defender's first touch did (caught it, bobbled it,
 # deflected it, contested it, blocked it) at what closing speed in his frame,
+# and the same of the receiver's first touch,
 # and how many torsos it ran into, whether the receiver still had the puck
 # KEEP_S after the catch, and beside it each lane read the bots price with now —
 # the flat accurate lane, the saucer's, the rim's — and, along the puck's
@@ -90,7 +91,7 @@ func test_pass_truth() -> void:
 	var f := FileAccess.open(OUT_DIR + "/runs.csv", FileAccess.WRITE)
 	var header: String = "kind,ox,oz,rx,rz,lx,ly,lz,dx,dz,dvx,dvz,outcome,t_out,kept,lane_flat," \
 			+ "lane_saucer,rim_lane,path_keep,best_spare,first_spare,flight_s,first_touch,blocks," \
-			+ "touch_kind,touch_closing,release_clean,windup_keep"
+			+ "touch_kind,touch_closing,release_clean,windup_keep,rec_touch_kind,rec_touch_closing"
 	for set_s: float in READ_SETS:
 		header += ",pass_%02d" % roundi(set_s * 100.0)
 	f.store_line(header)
@@ -273,7 +274,7 @@ func _run(st: Dictionary) -> Dictionary:
 		duel.step()
 		if duel.carrier() != PASSER:
 			return {"outcome": "stripped", "line": _line(st, "stripped", (i + 1 - _preroll) * Duel.DT,
-					-1, caps, "defender", 0, "strip", -1.0)}
+					-1, caps, "defender", 0, "strip", -1.0, "none", -1.0)}
 	_release(duel, st["launch"])
 	var outcome: String = "incomplete"
 	var t_out: float = WATCH_S
@@ -282,20 +283,25 @@ func _run(st: Dictionary) -> Dictionary:
 	var first_touch: String = "none"
 	var touch_kind: String = "none"
 	var touch_closing: float = -1.0
+	var rec_kind: String = "none"
+	var rec_closing: float = -1.0
+	var r_body: Object = duel._skater(RECEIVER)
 	for i: int in int((WATCH_S + KEEP_S) / Duel.DT):
 		var before := Vector4(duel.bobbles, duel.deflects, duel.contests, duel.body_blocks)
 		var closing: float = Vector2(duel.puck_vel.x - d_body.vel.x,
 				duel.puck_vel.z - d_body.vel.z).length()
 		var defender_touched: bool = duel.touched_by == DEFENDER
+		var r_closing: float = Vector2(duel.puck_vel.x - r_body.vel.x,
+				duel.puck_vel.z - r_body.vel.z).length()
+		var receiver_touched: bool = duel.touched_by == RECEIVER
 		duel.step()
 		var t: float = (i + 1) * Duel.DT
 		if touch_kind == "none" and not defender_touched and duel.touched_by == DEFENDER:
 			touch_closing = closing
-			touch_kind = "catch" if duel.carrier() == DEFENDER \
-					else "bobble" if duel.bobbles > before.x \
-					else "deflect" if duel.deflects > before.y \
-					else "contest" if duel.contests > before.z \
-					else "block" if duel.body_blocks > before.w else "other"
+			touch_kind = _touch_kind(duel, DEFENDER, before)
+		if rec_kind == "none" and not receiver_touched and duel.touched_by == RECEIVER:
+			rec_closing = r_closing
+			rec_kind = _touch_kind(duel, RECEIVER, before)
 		if first_touch == "none" and duel.touched_by == DEFENDER:
 			first_touch = "defender"
 		elif first_touch == "none" and duel.touched_by == RECEIVER:
@@ -323,7 +329,20 @@ func _run(st: Dictionary) -> Dictionary:
 		if c != RECEIVER or (i - caught_at) * Duel.DT >= KEEP_S:
 			break
 	return {"outcome": outcome, "line": _line(st, outcome, t_out, kept, caps, first_touch,
-			duel.body_blocks, touch_kind, touch_closing)}
+			duel.body_blocks, touch_kind, touch_closing, rec_kind, rec_closing)}
+
+
+# What a first touch by `peer` did this tick, from the harness's counters before it.
+func _touch_kind(duel: Object, peer: int, before: Vector4) -> String:
+	if duel.carrier() == peer:
+		return "catch"
+	if duel.bobbles > before.x:
+		return "bobble"
+	if duel.deflects > before.y:
+		return "deflect"
+	if duel.contests > before.z:
+		return "contest"
+	return "block" if duel.body_blocks > before.w else "other"
 
 
 # A recorded run re-read: its outcome from `cols`, every read afresh.
@@ -334,12 +353,13 @@ func _reread(st: Dictionary, cols: PackedStringArray) -> Dictionary:
 		return {}
 	var caps: AISkaterCaps = Duel.match_caps()
 	return {"outcome": cols[12], "line": _line(st, cols[12], float(cols[13]), int(cols[14]), caps,
-			cols[22], int(cols[23]), cols[24], float(cols[25]))}
+			cols[22], int(cols[23]), cols[24], float(cols[25]), cols[28], float(cols[29]))}
 
 
 # The run's row: its staging, outcome and the lane reads from the decision.
 func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISkaterCaps,
-		first_touch: String, blocks: int, touch_kind: String, touch_closing: float) -> String:
+		first_touch: String, blocks: int, touch_kind: String, touch_closing: float,
+		rec_kind: String, rec_closing: float) -> String:
 	var o: Vector3 = st["o"]
 	var r: Vector3 = st["r"]
 	var launch: Vector3 = st["launch"]
@@ -393,11 +413,11 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 	var release_clean: float = AIPuckLane.release_contest_clean(release_pt, defs, cap_list, vels)
 	var windup_keep: float = 1.0 - AIStripOdds.SET_STRIP * AIStripOdds.chance_at(d, dv, caps,
 			release_pt, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
-	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%s,%d,%s,%.2f,%.4f,%.4f" % [
+	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f,%s,%d,%s,%.2f,%.4f,%.4f,%s,%.2f" % [
 			st["kind"], o.x, o.z, r.x, r.z, launch.x, launch.y, launch.z, d.x, d.z, dv.x, dv.z,
 			outcome, t_out, kept, lane_flat, lane_saucer, rim_lane, keep, best, first,
 			_path.size() * Duel.DT, first_touch, blocks, touch_kind, touch_closing, release_clean,
-			windup_keep]
+			windup_keep, rec_kind, rec_closing]
 	return head + "," + ",".join(reads)
 
 

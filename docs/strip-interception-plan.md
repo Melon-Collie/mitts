@@ -156,18 +156,20 @@ What it leaves open:
 Through the windup the puck sits on the blade at the release point, a
 carry-handle ahead of the body toward the target, and a stick that gets to it
 pokes it off before it flies. `AIPuckLane.release_contest_clean` (every shot's
-and pass's release) is each defender's one chance at that held puck: within his
-blade's reach (`AISkaterCaps.max_blade_reach`), from where his momentum has him,
-read as already playing the carrier from the windup's start, by `SET_STRIP`.
-The set time on a held puck is 0.1 s (`RELEASE_SET_S`): it fits the strips'
-level, where the moving carry's 0.25 s expects a quarter of them.
+and pass's release) is each defender's one chance at that held puck: within the
+reach a pass is played at (`AILaneReach.defender_reach`, 1.8 m), from where his
+momentum has him, read as already playing the carrier from the windup's start,
+by `SET_STRIP`. The set time on a held puck is 0.05 s (`RELEASE_SET_S`): with
+that reach it fits the strips' level and ranks them best of the reaches and set
+times tried; the full blade reach (2.3 m) reads a standing man at its edge as
+in reach, where he strips one time in six.
 
 Measured by the instrument's windup runs: a passer holding the puck through the
 windup, strippable, and a defender at 0.8–3 m round him, standing or closing at
 3 m/s, playing him from its start. Gated by
 `tests/unit/ai/test_release_contest_vs_truth.gd`.
 
-- 111 of 288 windups are stripped; the read expects 108, ranking 0.766. The
+- 111 of 288 windups are stripped; the read expects 103, ranking 0.789. The
   closed-form contest it replaced expected 17, ranking 0.65.
 - A standing defender within about 2 m of the held puck strips two thirds of the
   time; one closing reaches out to about 2.4 m; none past it.
