@@ -280,7 +280,7 @@ func _p_cross(pos: Vector3, start_s: float, vel: Vector3, man_caps: AISkaterCaps
 			discount *= maxf(maxf(_f_shot, _f_drive * _f_keep), _f_pass) / _open_mean
 		if discount <= best:
 			continue
-		var keep: float = _skate_keep(pos, crossing, start_s, t - start_s)
+		var keep: float = _skate_keep(pos, crossing, start_s, t - start_s, man_caps)
 		if keep * discount > best:
 			best = keep * discount
 			_cross_at = crossing
@@ -313,7 +313,7 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 		var skate_to: Vector3 = _entry_spots[i] if in_zone \
 				else Vector3(_entry_spots[i].x, 0.0, _line_z)
 		var keep: float = _skate_keep(pos, skate_to, start_s,
-				AIArrival.time_to_arrive_caps(pos, skate_to, vel, man_caps))
+				AIArrival.time_to_arrive_caps(pos, skate_to, vel, man_caps), man_caps)
 		best = maxf(best, maxf(shot * keep, drive * minf(keep, drive_keep)) * discount)
 	return best
 
@@ -323,12 +323,13 @@ func _caps_of(k: int) -> AISkaterCaps:
 	return _defender_caps[k] if _defender_caps.size() == _defenders.size() else null
 
 
-# The odds the man skating from `from` to `to` in `trip` s, setting off `start_s`
-# from now, keeps the puck the whole way: the strip odds against the defence as
-# it is now (AIStripOdds).
-func _skate_keep(from: Vector3, to: Vector3, start_s: float, trip: float) -> float:
+# The odds the man built as `man_caps` skating from `from` to `to` in `trip` s,
+# setting off `start_s` from now, keeps the puck the whole way: the strip odds
+# against the defence as it is now (AIStripOdds).
+func _skate_keep(from: Vector3, to: Vector3, start_s: float, trip: float,
+		man_caps: AISkaterCaps = null) -> float:
 	return AICarrySpace.carry_safety(from, to, trip, _defenders, _defender_vels,
-			_defender_caps, 0.0, maxf(0.0, start_s))
+			_defender_caps, 0.0, maxf(0.0, start_s), man_caps)
 
 
 # Entry `i`'s shot, drive and pass against the defence `t` from now, into
@@ -586,13 +587,13 @@ func _drive_keep(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
 	if AINetObstacle.carry_path_blocked_by_net(from, target):
 		return 0.0
 	var t: float = AIArrival.time_to_arrive_caps(from, target, vel, man_caps)
-	var keep: float = _skate_keep(from, target, start_s, t)
+	var keep: float = _skate_keep(from, target, start_s, t, man_caps)
 	if keep <= 0.0:
 		return 0.0
 	var reached: Vector3 = target
 	if keep < 1.0:
 		reached = AICarrySpace.carry_strip_point(from, target, t, _defenders,
-				_defender_vels, _defender_caps, true, 0.0, maxf(0.0, start_s))
+				_defender_vels, _defender_caps, true, 0.0, maxf(0.0, start_s), man_caps)
 		if reached != target:
 			t = AIArrival.time_to_arrive_caps(from, reached, vel, man_caps)
 	_project(_reached_defence, _reached_vels, start_s + t, from)

@@ -90,9 +90,9 @@ func _moment(duel: Object, run: int, t: float) -> Dictionary:
 			"actual": actual}
 
 
-# The odds one of the defenders takes a puck carried to each grid spot `ahead`
-# from now (AIStripOdds.strip_at), the defenders as separate chances: rows from
-# the near end, columns across.
+# The odds the defenders take a puck held on each grid spot `ahead` from now
+# (AIStripOdds.escape_margin, a carrier who stands there): rows from the near
+# end, columns across.
 func _coverage(defs: Array[Vector3], vels: Array[Vector3], caps: Array, ahead: float) -> Array:
 	var rows: Array = []
 	var z: float = GRID_Z_NEAR
@@ -101,10 +101,8 @@ func _coverage(defs: Array[Vector3], vels: Array[Vector3], caps: Array, ahead: f
 		var x: float = -GRID_X
 		while x <= GRID_X + 1e-6:
 			var p := Vector3(x, 0.0, z)
-			var keep: float = 1.0
-			for i: int in defs.size():
-				keep *= 1.0 - AIStripOdds.strip_at(defs[i], vels[i], caps[i], p, ahead)
-			row.append(snappedf(1.0 - keep, 0.001))
+			row.append(snappedf(AIStripOdds.strip_odds(AIStripOdds.escape_margin(p, Vector3.ZERO,
+					ahead, defs, vels, caps)), 0.001))
 			x += GRID_M
 		rows.append(row)
 		z -= GRID_M

@@ -546,10 +546,10 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	# A defender in the way drops keep and stops the drive where he covers it.
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
-			opponents, opponent_vels, opponent_caps, 0.0, start_s)
+			opponents, opponent_vels, opponent_caps, 0.0, start_s, receiver_caps)
 	var reached: Vector3 = AICarrySpace.carry_strip_point(
 			receiver_spot, target, reach_time,
-			opponents, opponent_vels, opponent_caps, true, 0.0, start_s)
+			opponents, opponent_vels, opponent_caps, true, 0.0, start_s, receiver_caps)
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -_drive_loss_cost(ctx, reached, 1.0, own_hands, _drive_time(ctx, receiver_spot,

@@ -10,8 +10,9 @@ extends "res://tests/instruments/ai/test_interceptor_truth.gd"
 # arm) whose input is replaced every tick, with no decision of the bots' in it.
 # The planned path is the carrier's dry run alone, as a planner reads it. He
 # skates at no more than TOP_PACE_M_S, or flat out with MITTS_REACT_FLAT_OUT=1.
-# Saves as test_interceptor_truth.gd does (MITTS_RACE_SAVE, <path>.planned).
-# Reports only.
+# Adds one family the interceptor's stagings lack, run_down: a slow carrier with
+# a man close behind him and quicker. Saves as test_interceptor_truth.gd does
+# (MITTS_RACE_SAVE, <path>.planned). Reports only.
 
 # The carrier's read of a defender: where his heading takes him this far ahead.
 const DODGE_READ_S: float = 0.3
@@ -33,6 +34,20 @@ func test_interceptor_truth() -> void:
 
 func test_reacting_interceptor_truth() -> void:
 	super.test_interceptor_truth()
+
+
+func _stagings() -> Array[Dictionary]:
+	var out: Array[Dictionary] = super()
+	for z0: float in START_ZS:
+		var c := Vector3(START_X, 0, z0)
+		var straight: Array[Vector3] = [c, Vector3(START_X, 0, PATH_END_Z)]
+		for v0: float in [0.0, 2.0, 4.0]:
+			for d: float in [2.0, 3.0, 4.0]:
+				for lat: float in [0.0, 1.5]:
+					for gain: float in [2.0, 4.0, 6.0]:
+						out.append(_staging("run_down", c, Vector3(0, 0, -v0), straight,
+								[c + Vector3(lat, 0, d)], [Vector3(0, 0, -(v0 + gain))]))
+	return out
 
 
 func _add_carrier(duel: Object, pos: Vector3, vel: Vector3, path: Array[Vector3]) -> void:

@@ -1,13 +1,13 @@
 class_name AIStripOdds
 
-# Whether a defender takes the puck off a path the carrier skates
-# (docs/strip-interception-plan.md): one chance per defender, his options from
-# where he is and how he is moving, never a guess at what he will do. Over the
-# path's first COMMIT_S the carrier sees him coming and dodges, so the odds are
-# how much of his range he needs to get there (strip_at, measured against an
+# Whether the defence takes the puck off a path the carrier skates
+# (docs/strip-interception-plan.md): the defenders' options from where they are
+# and how they are moving, never a guess at what they will do. Over the path's
+# first COMMIT_S the carrier sees them coming and dodges, so the odds are whether
+# every place he can dodge to is a stick's (escape_margin, measured against an
 # interceptor the carrier dodges, tests/instruments/ai/
-# test_reacting_interceptor_truth.gd); where the path is going is a race — can
-# his stick be set there first (chance_at, measured against a worst-case
+# test_reacting_interceptor_truth.gd); where the path is going is a race — can a
+# stick be set there first (chance_at, measured against a worst-case
 # interceptor). Never measured against our defending bots. A leaf — GameRules,
 # AIArrival and AISkaterCaps only.
 
@@ -16,11 +16,18 @@ class_name AIStripOdds
 const SET_S: float = 0.25
 # The odds a stick set on the path strips a carrier who keeps to it.
 const SET_STRIP: float = 0.88
-# A carrier dodging him: the odds he takes the puck on a path that comes to his
-# stick, and the share of his range at which they are gone — the losses inside
-# COMMIT_S against an interceptor the carrier dodges, fit by likelihood.
-const DEAD_ON_STRIP: float = 0.86
-const EDGE_SHARE: float = 0.70
+# A carrier dodging them: the odds the defence takes the puck by how deep inside a
+# stick's reach his best escape is — DEAD_ON_STRIP deep inside, even odds of
+# that ESCAPE_SET_M inside (a blade's length and the poke's contact past its
+# tip), graded across ESCAPE_BAND_M either side — the losses inside COMMIT_S
+# against an interceptor the carrier dodges, fit by likelihood.
+const DEAD_ON_STRIP: float = 0.84
+const ESCAPE_SET_M: float = 0.73
+const ESCAPE_BAND_M: float = 1.40
+# A carrier dodges off his line with his whole thrust from this planned pace
+# (m/s), ramping in from none on a plan that stands: holding a spot, a dodge
+# leaves it, and leaving it is another plan.
+const DODGE_FULL_PACE_M_S: float = 1.0
 # A straight carry's samples (s).
 const DWELL_STEP_S: float = 0.1
 # How much of a path a keep read looks at, from where the read starts (s): the
@@ -51,82 +58,133 @@ static func chance_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vec
 	return clampf(0.5 + (puck_t - arrive - set_s) / (2.0 * band), 0.0, 1.0)
 
 
-# The odds a defender at `pos` moving `vel`, built as `caps` (null: the league
-# build), takes a carried puck at `point` `puck_t` after his read, its carrier
-# dodging him: DEAD_ON_STRIP where his stick already is, falling with the share
-# of his range — his blade's reach and the ground his skating covers toward it by
-# then — the point's distance takes, to none at EDGE_SHARE.
-static func strip_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
-		puck_t: float) -> float:
-	var to := Vector3(point.x - pos.x, 0.0, point.z - pos.z)
-	var d: float = to.length()
-	if d < 1e-4:
-		return DEAD_ON_STRIP
-	var share: float = d / range_at(caps, vel, to / d, maxf(puck_t, 0.0))
-	return DEAD_ON_STRIP * maxf(0.0, 1.0 - share / EDGE_SHARE)
+# How far inside a stick's reach the carrier's best escape from `point` is
+# `t` after the defence's read (negative: outside every stick's; -INF with no
+# defenders), the plan carrying him through it at `plan_vel` and `on_plan_s`
+# after he set off on it (negative: `t`): holding his line, or dodging off it
+# either way as far as his thrust and top speed (`carrier_caps`, null: the
+# league build) take him in that time, ramped in by DODGE_FULL_PACE_M_S —
+# against the deepest of `defenders` (index-matched `vels`, and `caps` or empty
+# for the league build) at each.
+static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
+		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
+		carrier_caps: AISkaterCaps = null, on_plan_s: float = -1.0) -> float:
+	t = maxf(t, 0.0)
+	var accel: float = carrier_caps.max_accel if carrier_caps != null \
+			else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var top: float = carrier_caps.max_speed if carrier_caps != null \
+			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var pace: float = sqrt(plan_vel.x * plan_vel.x + plan_vel.z * plan_vel.z)
+	var dodge: float = _skated(0.0, t if on_plan_s < 0.0 else on_plan_s, top, accel) \
+			* minf(1.0, pace / DODGE_FULL_PACE_M_S)
+	var side := Vector3(-plan_vel.z / pace, 0.0, plan_vel.x / pace) if pace > 1e-6 \
+			else Vector3.ZERO
+	var has_caps: bool = caps.size() == defenders.size()
+	# His escapes: either way off his line as far as he gets, or holding it.
+	var best: float = INF
+	for j: int in (3 if dodge > 0.0 else 1):
+		var escape: Vector3 = point + side * (dodge * (j - 1)) if dodge > 0.0 else point
+		var worst: float = -INF
+		for i: int in defenders.size():
+			worst = maxf(worst, _depth(defenders[i], vels[i], caps[i] if has_caps else null,
+					escape, t))
+		best = minf(best, worst)
+	return best
 
 
-# How far from where he stands a defender's stick can be by `t`: his blade's
-# reach and what he skates along `dir` from his speed that way, driving at his
-# thrust to his top speed.
-static func range_at(caps: AISkaterCaps, vel: Vector3, dir: Vector3, t: float) -> float:
+# The odds the defence takes the puck from an escape margin (escape_margin).
+static func strip_odds(margin: float) -> float:
+	return DEAD_ON_STRIP * clampf(0.5 + (margin - ESCAPE_SET_M) / (2.0 * ESCAPE_BAND_M), 0.0,
+			1.0)
+
+
+# How far inside the reach of a defender at `pos` moving `vel`, built as `caps`,
+# `point` is `t` after his read: his blade's reach and his own thrust to his top
+# speed toward it, beyond where his drift has him by then.
+static func _depth(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
+		t: float) -> float:
 	var reach: float = caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
 	var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
-	var v0: float = minf(maxf(vel.x * dir.x + vel.z * dir.z, 0.0), top)
-	var t_top: float = (top - v0) / accel
+	var wx: float = point.x - pos.x - vel.x * t
+	var wz: float = point.z - pos.z - vel.z * t
+	var d: float = sqrt(wx * wx + wz * wz)
+	var toward: float = minf((vel.x * wx + vel.z * wz) / d, top) if d > 1e-6 else 0.0
+	return reach + _skated(toward, t, top, accel) - d
+
+
+# How much further than his drift a skater moving `speed` along a line gets
+# along it in `t`, driving at `accel` to `top`.
+static func _skated(speed: float, t: float, top: float, accel: float) -> float:
+	var t_top: float = maxf(top - speed, 0.0) / accel
 	if t <= t_top:
-		return reach + v0 * t + 0.5 * accel * t * t
-	return reach + v0 * t_top + 0.5 * accel * t_top * t_top + top * (t - t_top)
+		return 0.5 * accel * t * t
+	return 0.5 * accel * t_top * t_top + (top - speed) * (t - t_top)
 
 
 # The odds the puck is kept along a path: through `points`, reached at `times`
 # from now, against `defenders` (index-matched `vels`, and `caps` or empty for
-# the league build) read `elapsed_s` after now — strip_at over its first
-# `window_s`, and the race to its last point past that. Each defender's one
-# chance is his best on it; the chances are separate.
+# the league build) read `elapsed_s` after now, carried by a man built as
+# `carrier_caps` — his best escape over its first `window_s` (escape_margin, the
+# plan's pace at each point from its neighbours), and each defender's race to
+# its last point past that, a separate chance.
 static func path_keep(points: Array[Vector3], times: Array[float],
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
-		elapsed_s: float = 0.0, window_s: float = COMMIT_S) -> float:
-	var has_caps: bool = caps.size() == defenders.size()
-	var keep: float = 1.0
-	for i: int in defenders.size():
-		var c: AISkaterCaps = caps[i] if has_caps else null
-		var best: float = 0.0
-		for k: int in points.size():
-			if times[k] <= window_s + 1e-6:
-				best = maxf(best, strip_at(defenders[i], vels[i], c, points[k], times[k] - elapsed_s))
-			elif k == points.size() - 1:
-				best = maxf(best, SET_STRIP * chance_at(defenders[i], vels[i], c, points[k],
-						times[k] - elapsed_s))
-		keep *= 1.0 - best
+		elapsed_s: float = 0.0, window_s: float = COMMIT_S,
+		carrier_caps: AISkaterCaps = null) -> float:
+	var n: int = points.size()
+	if n == 0 or defenders.is_empty():
+		return 1.0
+	var margin: float = -INF
+	for k: int in n:
+		if times[k] > window_s + 1e-6:
+			continue
+		var a: int = maxi(k - 1, 0)
+		var b: int = mini(k + 1, n - 1)
+		var plan_vel: Vector3 = (points[b] - points[a]) / (times[b] - times[a]) if b > a \
+				else Vector3.ZERO
+		margin = maxf(margin, escape_margin(points[k], plan_vel, times[k] - elapsed_s,
+				defenders, vels, caps, carrier_caps, times[k]))
+	var keep: float = 1.0 - strip_odds(margin)
+	if times[n - 1] > window_s + 1e-6:
+		keep *= _race_keep(points[n - 1], times[n - 1] - elapsed_s, defenders, vels, caps)
 	return keep
 
 
 # The odds the puck is kept on a straight carry from `from` to `to` in
 # `arrival_time` (held, when they meet), sampled every DWELL_STEP_S, setting off
-# `start_s` from now: strip_at over the carry's first COMMIT_S, and the race to
-# where it ends.
+# `start_s` from now, carried by a man built as `carrier_caps`: his best escape
+# over the carry's first COMMIT_S, and the race to where it ends.
 static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
-		elapsed_s: float = 0.0, start_s: float = 0.0) -> float:
+		elapsed_s: float = 0.0, start_s: float = 0.0,
+		carrier_caps: AISkaterCaps = null) -> float:
 	if arrival_time <= 0.0 or defenders.is_empty():
 		return 1.0
-	var has_caps: bool = caps.size() == defenders.size()
 	var steps: int = maxi(1, ceili(arrival_time / DWELL_STEP_S - 1e-6))
 	var read: int = committed_steps(arrival_time, steps)
+	var plan_vel: Vector3 = (to - from) / arrival_time
+	var margin: float = -INF
+	for k: int in read:
+		var f: float = float(k + 1) / steps
+		margin = maxf(margin, escape_margin(from.lerp(to, f), plan_vel,
+				start_s + arrival_time * f - elapsed_s, defenders, vels, caps, carrier_caps,
+				arrival_time * f))
+	var keep: float = 1.0 - strip_odds(margin)
+	if read < steps:
+		keep *= _race_keep(to, start_s + arrival_time - elapsed_s, defenders, vels, caps)
+	return keep
+
+
+# The odds no defender's stick is set on `point` before the puck gets there
+# `puck_t` after his read, each a separate chance.
+static func _race_keep(point: Vector3, puck_t: float, defenders: Array[Vector3],
+		vels: Array[Vector3], caps: Array) -> float:
+	var has_caps: bool = caps.size() == defenders.size()
 	var keep: float = 1.0
 	for i: int in defenders.size():
-		var c: AISkaterCaps = caps[i] if has_caps else null
-		var best: float = 0.0
-		for k: int in read:
-			var f: float = float(k + 1) / steps
-			best = maxf(best, strip_at(defenders[i], vels[i], c, from.lerp(to, f),
-					start_s + arrival_time * f - elapsed_s))
-		if read < steps:
-			best = maxf(best, SET_STRIP * chance_at(defenders[i], vels[i], c, to,
-					start_s + arrival_time - elapsed_s))
-		keep *= 1.0 - best
+		keep *= 1.0 - SET_STRIP * chance_at(defenders[i], vels[i],
+				caps[i] if has_caps else null, point, puck_t)
 	return keep
 
 

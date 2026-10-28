@@ -2124,18 +2124,23 @@ func _pinch(half_gap: float) -> AIRoleCarrier:
 
 
 func test_a_wider_gap_never_makes_the_best_play_worth_less() -> void:
-	# Between the pinch and the split, opening the gap only ever gives the carrier
-	# more room: his best play is never worth less. (The carry alone may be: it is
-	# credited by what it improves on where he stands, and a wider gap frees the
-	# shot from there sooner than it frees the carry.)
+	# Once neither stick reaches the puck, opening the gap only ever gives the
+	# carrier more room: his best play is never worth less. (The carry alone may
+	# be: it is credited by what it improves on where he stands, and a wider gap
+	# frees the shot from there sooner than it frees the carry.) Tighter, both
+	# sticks are on the puck and every way out reads caught (AIStripOdds).
+	var puck: Vector3 = AICarrierField.puck_pos_at(_PINCH_SPOT, Vector3(0.0, 0.0, OPP_NET_Z))
 	var prev: float = -INF
 	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.9, 1.3, 1.7, 2.1, 2.5, _SPLITTABLE_HALF_GAP]:
+		if Vector3(half_gap, 0.0, -19.6).distance_to(puck) <= AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M:
+			continue
 		var c: AIRoleCarrier = _pinch(half_gap)
 		var v: float = maxf(c._carry.raw_value, maxf(c.debug_shoot_score, c.debug_pass_score))
 		assert_gte(v, prev - 1e-4,
 				"gap %.1f m: the best play is worth less (%.3f after %.3f)"
 				% [2.0 * half_gap, v, prev])
 		prev = v
+	assert_gt(prev, -INF, "some gap is past their reach")
 
 
 # Entering down the wing in stride, a defender on the inside lane, the keeper

@@ -10,7 +10,8 @@ extends "res://tests/instruments/ai/test_defender_race_truth.gd"
 # ours choose to. MITTS_RACE_SAVE writes the runs in the race truth format, and
 # beside it (<path>.planned) each run's planned puck path — the dry run's, every
 # sample, whether or not the puck was lost on it; MITTS_RACE_LIMIT caps the
-# stagings. Reports only.
+# stagings and MITTS_INTERCEPT_ONLY (comma-separated) keeps only those families.
+# Reports only.
 
 # The spare time he aims to arrive with: a reaction's worth to set his blade
 # (MITTS_INTERCEPT_SET_S overrides it).
@@ -22,7 +23,7 @@ const PLAY_M: float = 3.0
 const JAB_THROUGH_M: float = 0.6
 const ARRIVE_M: float = 0.3
 const INTERCEPT_FAMILIES: Array[String] = ["straight_lane", "straight_side", "chased", "cut",
-		"stand", "pair", "far_side", "behind"]
+		"stand", "pair", "far_side", "behind", "run_down"]
 
 # The carrier's body every tick of a dry run of his path alone, index i after
 # step i + 1.
@@ -41,9 +42,10 @@ func test_interceptor_truth() -> void:
 	_rng.seed = 20261028
 	if OS.has_environment("MITTS_INTERCEPT_SET_S"):
 		_set_s = float(OS.get_environment("MITTS_INTERCEPT_SET_S"))
+	var only: PackedStringArray = OS.get_environment("MITTS_INTERCEPT_ONLY").split(",", false)
 	var stagings: Array[Dictionary] = []
 	for st: Dictionary in _stagings():
-		if st["family"] in INTERCEPT_FAMILIES:
+		if st["family"] in INTERCEPT_FAMILIES and (only.is_empty() or st["family"] in only):
 			stagings.append(st)
 	var limit: int = int(OS.get_environment("MITTS_RACE_LIMIT")) \
 			if OS.has_environment("MITTS_RACE_LIMIT") else stagings.size()
