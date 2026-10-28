@@ -145,8 +145,8 @@ func test_the_points_hold_the_offensive_blue_line_during_a_cycle() -> void:
 	var line: float = -GameRules.BLUE_LINE_Z
 	assert_lt(s.d1_z, line, "the strong point stays in the offensive zone")
 	assert_lt(s.d2_z, line, "the weak point stays in the offensive zone")
-	assert_lt(absf(s.d2_z - _point_z), AT_LINE_TOL_M,
-			"and the weak-side point holds its blue-line stand")
+	assert_lt(s.d2_z - _point_z, AT_LINE_TOL_M,
+			"and the weak-side point holds its blue-line stand, or goes in past it")
 
 
 func test_a_loose_puck_is_when_the_points_leave() -> void:

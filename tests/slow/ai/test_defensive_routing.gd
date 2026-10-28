@@ -44,10 +44,9 @@ extends GutTest
 # off the man, and a wide shade on someone you are not with is not angling. It is
 # asserted only as a floor — a defender must end up on the middle side of his man.
 #
-# WHAT THE HARNESS DOES NOT MODEL: body collisions (the carrier skates through
-# the defender), so "did he stop the rush" is not a question it can answer and is
-# never asserted. What it answers faithfully is where the bodies are and how fast
-# they are going, which is the whole of the defect.
+# "Did he stop the rush" is never asserted: a rush killed at the line is a fine
+# outcome and not a route reading. What it answers is where the bodies are and
+# how fast they are going, which is the whole of the defect.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 

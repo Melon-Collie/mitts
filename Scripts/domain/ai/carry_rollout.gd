@@ -138,6 +138,30 @@ func sample(move: int, k: int) -> Vector3:
 	return samples[move * SAMPLES + k]
 
 
+# How many of `move`'s samples come before its path reaches a crease or passes
+# |z| = `max_abs_z`: SAMPLES for the whole move, 0 for none of it.
+func reach_short_of_net(move: int, max_abs_z: float) -> int:
+	for k: int in SAMPLES:
+		var s: Vector3 = sample(move, k)
+		if absf(s.z) > max_abs_z or CreaseRules.is_in_crease(Vector2(s.x, s.z)):
+			return k
+	return SAMPLES
+
+
+# Where `move` is `reach` samples in (its end, at SAMPLES).
+func reach_pos(move: int, reach: int) -> Vector3:
+	return end_pos[move] if reach == SAMPLES else sample(move, reach - 1)
+
+
+# Its velocity there: the end's, or the mean over that sample's leg from `from`,
+# the roll's start (no velocity is kept between the ends).
+func reach_vel(move: int, reach: int, from: Vector3) -> Vector3:
+	if reach == SAMPLES:
+		return end_vel[move]
+	var prev: Vector3 = from if reach == 1 else sample(move, reach - 2)
+	return (sample(move, reach - 1) - prev) * (SAMPLES / HORIZON_S)
+
+
 func _set_move(m: int, t: Vector2) -> void:
 	brake[m] = false
 	match m:

@@ -372,8 +372,9 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 #   - A softer pace (`soft`) whose flight outruns PASS_LEAD_MAX_S: its lead is
 #     the horizon's, not the meet's, so it is not priced at all.
 #
-# One-timer-ready receivers fire on contact (no wrister windup), so the goalie
-# only gets the pass flight to react; nor do they settle the catch.
+# A one-timer-ready receiver who can set for the feed takes it on his tape and
+# fires on contact (no wrister windup), so the goalie only gets the pass flight
+# to react; nor does he settle the catch. One who cannot set catches it.
 func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		receiver_accel: Vector3, receiver_omega: float, receiver_caps: AISkaterCaps,
 		pass_origin: Vector3, pass_speed: float, saucer: bool,
@@ -381,12 +382,19 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		our_goalie: Vector3, carrier_in_oz: bool,
 		useless_below: float = -INF, soft: bool = false) -> float:
 	# Intercept-aware lead, shared with the state machine's firing aim; flight_t
-	# is the SOLVED time. The receiver's real build bounds how far he is led.
+	# is the SOLVED time. The receiver's real build bounds how far he is led. He
+	# skates on through the windup, so the lead is solved from the release, where
+	# the state machine aims it and pass_origin throws it.
 	var lead: Array = AIPassLead.lead(
 			pass_origin, receiver_state, receiver_accel, pass_speed,
-			PASS_LEAD_MAX_S, receiver_caps)
+			PASS_LEAD_MAX_S, receiver_caps, AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
 	var receiver: Vector3 = lead[0]
 	var flight_t: float = lead[1]
+	# Fed on his tape only when he can set for it; otherwise he catches it.
+	var one_timed: bool = receiver_is_one_timer and AIPassLead.one_timer_sets(
+			receiver_state, receiver, flight_t, receiver_caps, ctx.attacking_goal_pos)
+	if one_timed:
+		receiver = AIPassLead.one_timer_tape(receiver, receiver_caps, ctx.attacking_goal_pos)
 	if soft and flight_t >= PASS_LEAD_MAX_S - 0.0001:
 		return 0.0
 	if ctx.own_goal_dir * receiver.z > GameRules.GOAL_LINE_Z:
@@ -441,7 +449,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		_last_flat_variant_lane = lane
 	var receiver_release_t: float = flight_t
 	var closing: float = 0.0
-	if not receiver_is_one_timer:
+	if not one_timed:
 		receiver_release_t += AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 		closing = AIFeedReception.arrival_closing_speed(
 				pass_origin, receiver, pass_speed, receiver_state.velocity)
@@ -529,7 +537,14 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# where value_at is shot-only. (Re-projects _proj_buf, which
 	# the instant value above has already consumed.)
 	receiver_value = maxf(receiver_value, _field.receiver_drive_in_value(
-			ctx, receiver_spot, receiver_caps, receiver_vel))
+			ctx, receiver_spot, receiver_caps, receiver_vel, Vector3.INF, flight_t))
+	# He does not search, so in the zone the lanes his one straight drive misses
+	# are priced as our possession of his spot prices them, by its zone entries:
+	# the read the defence prices a feed to him by. Outside it the feed's value
+	# already is that possession.
+	if AIActionScoring.in_offensive_zone(receiver_spot, ctx.attacking_goal_pos):
+		receiver_value = _field.entry_value(receiver_spot, flight_t, receiver_vel,
+				receiver_value)
 	var settle_s: float = AIFeedReception.receiver_settle_s(closing)
 	var p_bobble: float = AIFeedReception.receiver_bobble_prob(closing)
 	# Reception pressure on a catch: the reachable-set clearance at the reception

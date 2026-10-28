@@ -9,9 +9,8 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # it, and the swing that lands the shot where it is aimed. Reads only: the state
 # machine's ONE_TIMER_PRESSED steers, presses and fires on them.
 
-# Within this of its anchor the shuffle has put the circle on the line. A
-# fraction of the circle's own radius (SkaterController.slapper_zone_radius).
-const ONE_TIMER_SHUFFLE_ARRIVE_M: float = 0.1
+# Within this of its anchor the shuffle has put the circle on the line.
+const ONE_TIMER_SHUFFLE_ARRIVE_M: float = SlapperRules.SET_ARRIVE_M
 # The shuffle eases off over its last step, as a step-together closes: the
 # stick is full until the anchor is this many seconds of shuffle away.
 const ONE_TIMER_SHUFFLE_EASE_S: float = 0.15
@@ -61,34 +60,19 @@ func set_caps(caps: AISkaterCaps) -> void:
 
 # Seconds this body takes, wound up now, to set for a shot along `shot_dir`
 # (unit, world XZ) with its circle on `anchor` (INF: wherever it is) for a feed
-# arriving in `feed_s`: the hips pivot into the stance at their own rate while
-# the feet shuffle across, so the slower of the two. Loaded, a skater can do
-# nothing else — the stride is gone (docs/slapshot-realism-plan.md, Phase 4) —
-# so his momentum glides him on across the line meanwhile, and a body still
-# faster than a shuffle steers has to arrive on that glide alone (INF when it
-# would not). Unreadable facing reads as set.
+# arriving in `feed_s` (SlapperRules.time_to_set).
 func time_to_set(snapshot: WorldSnapshot, self_pos: Vector3, shot_dir: Vector2,
 		anchor: Vector3, feed_s: float) -> float:
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state == null:
 		return 0.0
-	var turn_s: float = 0.0
-	if self_state.facing.length_squared() > 0.0001:
-		turn_s = absf(self_state.facing.angle_to(stance_facing(shot_dir))) \
-				/ maxf(_caps.slapper_stance_turn_rad_s, 0.001)
-	var step_s: float = 0.0
+	var to_anchor := Vector2(INF, INF)
 	if anchor.is_finite():
-		# The anchor lies straight across the line from the body, so only the
-		# glide's share across it moves the circle onto it.
-		var off := Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z)
-		var v := Vector2(self_state.velocity.x, self_state.velocity.z)
-		var across: Vector2 = off.normalized() if off.length_squared() > 0.000001 else Vector2.ZERO
-		var miss: float = absf(off.length() - v.dot(across) * feed_s)
-		if v.length() > SkaterMovementRules.SHUFFLE_MAX_SPEED:
-			return INF if miss > ONE_TIMER_SHUFFLE_ARRIVE_M else turn_s
-		step_s = maxf(miss - ONE_TIMER_SHUFFLE_ARRIVE_M, 0.0) \
-				/ maxf(_caps.movement.shuffle_speed, 0.001)
-	return maxf(turn_s, step_s)
+		to_anchor = Vector2(anchor.x - self_pos.x, anchor.z - self_pos.z)
+	return SlapperRules.time_to_set(self_state.facing,
+			Vector2(self_state.velocity.x, self_state.velocity.z), to_anchor, shot_dir, feed_s,
+			_side(), _stance_open_rad, _caps.slapper_stance_turn_rad_s,
+			_caps.movement.shuffle_speed)
 
 
 # The shuffle onto `anchor` once wound up (world XZ stick, under the brake), or
@@ -181,19 +165,26 @@ func line_anchor(snapshot: WorldSnapshot, self_pos: Vector3,
 	if t <= 0.0:
 		return Vector3.INF
 	var perp_foot := Vector3(puck_pos.x + dir.x * t, 0.0, puck_pos.z + dir.z * t)
-	var perp_dx: float = self_pos.x - perp_foot.x
-	var perp_dz: float = self_pos.z - perp_foot.z
-	var my_d2: float = perp_dx * perp_dx + perp_dz * perp_dz
+	# The band and the best-positioned filter read where each skater's skating
+	# takes him, as SkaterAgentReception.incoming_pass does.
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	var self_vel: Vector3 = self_state.velocity if self_state != null else Vector3.ZERO
+	var me: Vector3 = SkaterAgentReception.skating_point(self_pos, self_vel, puck_pos, dir, speed)
+	var me_along: float = (me.x - puck_pos.x) * dir.x + (me.z - puck_pos.z) * dir.z
+	var me_foot := Vector3(puck_pos.x + dir.x * me_along, 0.0, puck_pos.z + dir.z * me_along)
+	var my_d2: float = (me.x - me_foot.x) * (me.x - me_foot.x) \
+			+ (me.z - me_foot.z) * (me.z - me_foot.z)
 	var lateral: float = SkaterAgentReception.RECEIVE_TRIGGER_LATERAL_M
 	if my_d2 > lateral * lateral:
 		return Vector3.INF
-	# Best-positioned-receiver filter, as in SkaterAgentReception.incoming_pass.
 	for pid: int in snapshot.skater_states:
 		if pid == _peer_id or _team_id_by_peer.get(pid, -1) != _team_id:
 			continue
-		var tp: Vector3 = snapshot.skater_states[pid].position
-		var dx: float = tp.x - perp_foot.x
-		var dz: float = tp.z - perp_foot.z
+		var tm: SkaterNetworkState = snapshot.skater_states[pid]
+		var tp: Vector3 = SkaterAgentReception.skating_point(
+				tm.position, tm.velocity, puck_pos, dir, speed)
+		var dx: float = tp.x - me_foot.x
+		var dz: float = tp.z - me_foot.z
 		if dx * dx + dz * dz < my_d2:
 			return Vector3.INF
 	var to_net: Vector3 = attacking_goal - perp_foot

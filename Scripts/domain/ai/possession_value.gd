@@ -138,6 +138,13 @@ func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> floa
 	if AIActionScoring.in_offensive_zone(pos, _goal):
 		best = maxf(_shot(pos) * AIActionScoring.delay_discount(start_s),
 				_drive(pos, start_s, vel))
+	return entry_at(pos, start_s, vel, best)
+
+
+# The best zone entry for the man at `pos` (as at() reads him), or `known` when
+# none is worth more: a value already known prunes the entries it beats.
+func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float:
+	var best: float = known
 	for i: int in _entry_spots.size():
 		var t: float = start_s + AIArrival.time_to_arrive(pos, _entry_spots[i], vel)
 		var discount: float = AIActionScoring.delay_discount(t)
