@@ -5,7 +5,7 @@ extends GutTest
 # while the skater coasts — so a stride is heard exactly when it is seen. A
 # start's pushes dig.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class StubGameState extends Node:

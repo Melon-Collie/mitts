@@ -7,7 +7,7 @@ extends GutTest
 # the render pass the game runs, from the runner mesh's own vertices rather than
 # from the edge the solve reads, so a solve that seats the wrong points fails.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 const LegBone = SkaterMeshBuilder.LegBone
 const WARMUP_TICKS: int = 300
 const MEASURE_TICKS: int = 300

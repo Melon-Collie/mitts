@@ -2,7 +2,7 @@ extends GutTest
 
 # PuckSpinRig: the drawn puck's spin, wobble and tumble, read off its motion.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const LOOSE: Vector3 = Vector3.INF
 const R: float = PuckSpinRig.RADIUS
 

@@ -3,7 +3,7 @@ extends GutTest
 # ── Breakout scenario harness (report-only; NOT in the default suite) ────────
 # The Phase D measurement instrument (docs/breakout-plan.md): 5v5 retrievals
 # against the live forecheck on the real decision stack (the duel harness's
-# 120 Hz movement + agents + brains), classified per trial:
+# tick-rate movement + agents + brains), classified per trial:
 #
 #   clean-exit — the puck crosses our blue line with OUR carrier on it
 #   clear-exit — the puck leaves the zone uncontrolled (a rim/chip out —
@@ -249,7 +249,8 @@ func _run_trial(scenario: String, mirror: float, jitter: int,
 				var last_rel: Dictionary = duel.releases[-1]
 				controlled = int(last_rel.get("team", -1)) == 0 \
 						and String(last_rel.get("decision", "")).begins_with("PASS") \
-						and duel.ticks - int(last_rel.get("tick", 0)) < 180
+						and duel.ticks - int(last_rel.get("tick", 0)) \
+								< int(AIBreakoutEpisodeTracker.CONTROLLED_RELEASE_S * Constants.PHYSICS_TICK)
 			outcome = "clean-exit" if controlled else "clear-exit"
 			break
 		if cid != -1 and duel.team_map.get(cid, -1) == 1:

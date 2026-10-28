@@ -286,6 +286,9 @@ func step(dt: float) -> void:
 			_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 			speed = minf(speed + accel * dt, top_speed())
 			if move == Move.T_PUSH:
+				# Never past the speed it is for, or a short push's few ticks
+				# overshoot push_peak by a step's acceleration.
+				speed = minf(speed, _push_for(left))
 				_turn = minf(_turn + dt / TURN_IN_S, 1.0)
 				if speed >= _push_for(left):
 					_end_push()

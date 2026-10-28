@@ -1,6 +1,8 @@
 class_name KeeperPlayRead
 extends RefCounted
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # What he sees of the play before a shot: the puck where he last read it,
 # carried on along the motion he read it with, the skaters it could be passed
 # to, and where a pass he sees will be met. Pure, stepped at the tick, in the
@@ -16,7 +18,7 @@ extends RefCounted
 
 # The longest read any tier has, kept at the physics tick.
 const MOST_S: float = 0.6
-const TICK_HZ: float = 120.0
+const TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK
 # How close to a pass's lane a defender's stick takes it away: a stick's length.
 const LANE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M
 # A wind-up watched this long has the save programmed before the release: the

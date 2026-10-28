@@ -363,11 +363,14 @@ func test_zone_defenders_never_cover_the_same_man() -> void:
 func test_a_zone_defender_is_only_given_a_man_in_his_own_area() -> void:
 	# Areas enter the matcher as ELIGIBILITY. Whatever the reward says, a
 	# defender may not be handed a body standing outside the ice he owns —
-	# chasing out of the structure is the thing the zone exists to prevent.
+	# chasing out of the structure is the thing the zone exists to prevent. The
+	# puck owner's area is everyone's while he is on the puck.
 	var brain: TeamBrain = _zone_brain()
 	brain.force_retick()
 	var snap: WorldSnapshot = _make_5v5_zone_snapshot()
 	brain.tick(0.001, snap)
+	var owner_slot: int = AIZoneCoverage.pressure_owner(
+			brain.strong_x(), GameRules.GOAL_LINE_Z, snap.puck_state.position)
 
 	for def_pid: int in brain.threat_assignments:
 		var slot: int = brain.get_slot(def_pid)
@@ -375,8 +378,11 @@ func test_a_zone_defender_is_only_given_a_man_in_his_own_area() -> void:
 			continue
 		var man_pos: Vector3 = snap.skater_states[
 				brain.threat_assignments[def_pid]].position
-		assert_true(AIZoneCoverage.in_area(slot, brain.strong_x(),
-				GameRules.GOAL_LINE_Z, man_pos, AIZoneCoverage.AREA_RELEASE_MARGIN_M),
+		var in_own: bool = AIZoneCoverage.in_area(slot, brain.strong_x(),
+				GameRules.GOAL_LINE_Z, man_pos, AIZoneCoverage.AREA_RELEASE_MARGIN_M)
+		var in_owners: bool = AIZoneCoverage.in_area(owner_slot, brain.strong_x(),
+				GameRules.GOAL_LINE_Z, man_pos)
+		assert_true(in_own or in_owners,
 				"peer %d (slot %d) was given a man outside its area at %s"
 				% [def_pid, slot, str(man_pos)])
 

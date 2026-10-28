@@ -40,11 +40,11 @@ const DT: float = 1.0 / _PhysicsConstants.PHYSICS_TICK
 const SAMPLES: int = 3
 const _TICKS_PER_SAMPLE: int = TICKS / SAMPLES
 
-# Physics ticks per rollout step. 1 is the live integration exactly; 4 (30 Hz)
+# Physics ticks per rollout step. 1 is the live integration exactly; 30 Hz
 # drifts from it by up to ~20 cm and 0.3 m/s over the horizon, inside a stick's
 # reach, for a quarter of the cost (test_carry_rollout.gd bounds the drift). Must
 # divide _TICKS_PER_SAMPLE.
-const STEP_TICKS: int = 4
+const STEP_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 30
 var step_ticks: int = STEP_TICKS
 
 # Stick angles off `toward`. In world XZ a positive Vector2.rotated turns toward

@@ -121,7 +121,9 @@ func _physics_process(delta: float) -> void:
 	# swept-segment pickup/poke test. See Skater.capture_prev_blade_contact.
 	skater.capture_prev_blade_contact()
 	if _is_host:
+		var t0: int = Time.get_ticks_usec()
 		_drive_from_input(delta)
+		HostCostProbe.record(HostCostProbe.Section.HUMAN_STEP, Time.get_ticks_usec() - t0)
 	else:
 		# Live interpolation owns this body's cosmetics, so the render-rate gait
 		# hook must run. Clear _self_posing here: a replay driving this same skater
@@ -241,7 +243,7 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 # SIZING (measured, 3-peer 5v5 host row + the host_input_queue_depth metric):
 # the queue runs 9-10 deep — that IS the stamp-lead cushion working — while the
 # front pops ~12 ms overdue in steady state. That 12 ms is not lateness: the
-# host renders ~100-110 fps against a 120 Hz tick, so physics ticks bunch two
+# host renders ~100-110 fps against a 120 Hz tick (as measured), so physics ticks bunch two
 # to a frame and a pop lands up to a frame after its due instant. Ordinary
 # hitches add ~15-25 ms on top.
 #
@@ -255,8 +257,8 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 # costs a visible correction. So the trigger sits above the quantization +
 # hitch band and only catches a genuine ratchet, and the target lands clear of
 # the quantization floor so one drain actually settles it.
-const _DRAIN_TRIGGER_S: float = 8.0 / 120.0  # ~67 ms overdue engages the drain
-const _DRAIN_TARGET_S: float = 2.0 / 120.0   # drain back to ~17 ms, clear of the ~12 ms floor
+const _DRAIN_TRIGGER_S: float = 0.067  # overdue past this engages the drain
+const _DRAIN_TARGET_S: float = 0.017  # drained back to, clear of the ~12 ms floor
 # A LONE input this stale is a phase-resume artifact (parked across a goal
 # replay / intermission), not the freshest available intent — drop-and-ack it
 # (fallback covers the tick) instead of applying seconds-old held state. Its
@@ -319,7 +321,7 @@ func _drive_from_input(delta: float) -> void:
 	#
 	# Timestamp gate: only pop an input when its scheduled host time has arrived.
 	# Without this, inputs are consumed immediately on arrival regardless of their
-	# timestamp, so the queue empties between 60Hz batches and fallback-input fires
+	# timestamp, so the queue empties between batches and fallback-input fires
 	# every gap. Fall through when clock isn't ready to preserve behaviour during
 	# NTP warmup.
 	if NetworkManager.is_clock_ready():
@@ -744,7 +746,7 @@ func _interpolate(delta: float) -> void:
 
 # Unity-style critically damped smoothing toward a (possibly moving) target.
 # Mutates _smooth_vel; returns the new position. Pure value-type math — no alloc,
-# hot-path safe at 120 Hz × remotes.
+# hot-path safe at the tick rate × remotes.
 func _smooth_damp(current: Vector3, target: Vector3, smooth_time: float, delta: float) -> Vector3:
 	var omega: float = 2.0 / maxf(smooth_time, 0.0001)
 	var x: float = omega * delta

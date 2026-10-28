@@ -4,7 +4,7 @@ extends GutTest
 # Frame: Vector2(x, z); travelling "up-ice" is (0, −1). Sign convention
 # pinned here: turning toward +X yields a POSITIVE turn rate.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const MIN_SPEED: float = 2.5
 
 

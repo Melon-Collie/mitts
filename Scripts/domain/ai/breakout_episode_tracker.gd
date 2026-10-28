@@ -53,7 +53,7 @@ const ESTABLISH_DEPTH_M: float = 2.0
 const LIMIT_S: float = 12.0
 
 # How long after our last carrier an uncarried puck crossing out still counts as
-# CONTROLLED: the harness's 180-tick (120 Hz) pass-in-flight window, approximated
+# CONTROLLED: the harness's 1.5 s pass-in-flight window, approximated
 # from carrier history since the live tracker has no release log. It can only
 # mislabel a puck we lost and then had rim out inside the window, so a clean-exit
 # read here is the optimistic bound.

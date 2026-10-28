@@ -1,6 +1,8 @@
 class_name HostCostProbe
 extends Object
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # Per-tick timing of the host's main-thread work, section by section.
 #
 # Why it times in place rather than switching work off and reading the frame:
@@ -24,8 +26,8 @@ extends Object
 # inconsistent frame rate. So every section publishes its window MAX beside its
 # mean, and a max far above the mean IS the finding.
 #
-# Microseconds throughout, deliberately un-normalised: one 120 Hz physics tick is
-# 8333 us, which is the number every reading here should be held against.
+# Microseconds throughout, deliberately un-normalised: one 90 Hz physics tick is
+# 11111 us, which is the number every reading here should be held against.
 #
 # Host-only. `enabled` is set by GameManager when it takes the host role and
 # cleared on teardown, so a client pays two branch tests per tick and nothing
@@ -51,7 +53,10 @@ enum Section {
 	# not a cheaper bot.
 	SKATER_STEP,
 	AI_KICK,    # brain-command drain + prep_for_decide + _stabilize_snapshot, per kick
-	WORKER,     # the whole off-thread batch: context, NOT main-thread cost
+	# The whole off-thread batch: context, NOT main-thread cost. Charged once, on
+	# the tick the batch is harvested, so its mean is worker time per tick and its
+	# peak the worst batch; BRAINS is charged the same way.
+	WORKER,
 	# ── The rest of the host's physics tick ──────────────────────────────────
 	# Everything above is reached from GameManager's AI block. These are the
 	# other per-tick bodies, each summed over its actors, so the tick's cost is
@@ -61,26 +66,32 @@ enum Section {
 	GOALIE_PHYS,   # the goalies' _physics_process, x2
 	GM_TAIL,       # goal / bounds / ghost checks and the four trackers
 	NET_CAPTURE,   # end-of-tick ring capture + broadcast
+	# SkaterController._process_input for the humans: the host's own player
+	# (LocalController) and each client it simulates (RemoteController), at
+	# priority -1, ahead of GameManager. SKATER_STEP is the bots' share of the
+	# same call; together they are the whole skater step.
+	HUMAN_STEP,
 }
 
-const SECTION_COUNT: int = 12
+const SECTION_COUNT: int = 13
 # The top-level main-thread sections — each time spent once. Nested ones
 # (AI_APPLY, SKATER_STEP, AI_KICK sit inside DISPATCH) and the worker's
 # (BRAINS, WORKER) are left out, so a sum over these never counts twice.
 const MAIN_THREAD_SECTIONS: Array[int] = [
 	Section.SNAPSHOT, Section.DISPATCH, Section.SKATER_PHYS, Section.PUCK_PHYS,
-	Section.GOALIE_PHYS, Section.GM_TAIL, Section.NET_CAPTURE,
+	Section.GOALIE_PHYS, Section.GM_TAIL, Section.NET_CAPTURE, Section.HUMAN_STEP,
 ]
 const SECTION_NAMES: Array[String] = [
 	"snapshot", "brains (in worker)", "dispatch (total)", "  dispatch: apply",
 	"    of which skater step", "  dispatch: kick", "worker (off-thread)",
 	"skater bodies", "puck", "goalies", "game tail", "capture + broadcast",
+	"human skater steps",
 ]
 
 # One publish per second of host simulation. Matches the cadence a reader can
 # follow on screen, and is long enough that a 6 Hz section contributes ~6
 # samples rather than 0 or 1.
-const WINDOW_TICKS: int = 120
+const WINDOW_TICKS: int = _PhysicsConstants.PHYSICS_TICK
 
 static var enabled: bool = false
 
@@ -113,6 +124,8 @@ static var _pub_mean_us: PackedFloat64Array = _new_bins()
 static var _pub_max_us: PackedFloat64Array = _new_bins()
 static var _pub_worker_busy_pct: float = 0.0
 static var _pub_ticks: int = 0
+# Windows published since the last reset, so a reader can tell a new one.
+static var windows: int = 0
 
 # Worst single tick since the session began. A window max decays as soon as the
 # window rolls; this is the one that survives to be pasted into a bug report.
@@ -163,6 +176,7 @@ static func end_tick() -> void:
 		_max_us[s] = 0.0
 	_pub_worker_busy_pct = 100.0 * float(_worker_busy_ticks) / float(_ticks)
 	_pub_ticks = _ticks
+	windows += 1
 	_ticks = 0
 	_worker_busy_ticks = 0
 
@@ -205,14 +219,12 @@ static func worker_busy_pct() -> float:
 	return _pub_worker_busy_pct
 
 
-# The sum of the MAIN-thread sections' means — what AI costs the host tick on
-# average. WORKER is excluded: it runs on its own thread and adding it would
-# double-count time the main thread never spent.
-# AI_APPLY, SKATER_STEP and AI_KICK are excluded as well — they are nested
-# inside DISPATCH, and adding them would count the same microseconds twice.
+# What AI costs the host's main thread per tick, on average: the snapshot and
+# the dispatch. BRAINS and WORKER run on the worker, so adding them would charge
+# the main thread for time it never spent; AI_APPLY, SKATER_STEP and AI_KICK are
+# nested inside DISPATCH, and adding them would count the same microseconds twice.
 static func main_thread_mean_us() -> float:
-	return _pub_mean_us[Section.SNAPSHOT] + _pub_mean_us[Section.BRAINS] \
-			+ _pub_mean_us[Section.DISPATCH]
+	return _pub_mean_us[Section.SNAPSHOT] + _pub_mean_us[Section.DISPATCH]
 
 
 # The same figure with the skater step taken back out — what the AI itself costs
@@ -222,16 +234,15 @@ static func ai_only_mean_us() -> float:
 	return maxf(main_thread_mean_us() - _pub_mean_us[Section.SKATER_STEP], 0.0)
 
 
-# Every attributed main-thread section of the host tick. Nested sections
-# (AI_APPLY, SKATER_STEP, AI_KICK) and the off-thread WORKER are left out. What
-# this MISSES is as informative as what it holds: the gap between this and the
-# engine's physics step is unattributed tick cost — engine-side transform
+# Every attributed main-thread section of the host tick (MAIN_THREAD_SECTIONS).
+# What this MISSES is as informative as what it holds: the gap between this and
+# the engine's physics step is unattributed tick cost — engine-side transform
 # propagation, signal dispatch, and whatever body has not been instrumented.
 static func tick_total_mean_us() -> float:
-	return _pub_mean_us[Section.SNAPSHOT] + _pub_mean_us[Section.BRAINS] \
-			+ _pub_mean_us[Section.DISPATCH] + _pub_mean_us[Section.SKATER_PHYS] \
-			+ _pub_mean_us[Section.PUCK_PHYS] + _pub_mean_us[Section.GOALIE_PHYS] \
-			+ _pub_mean_us[Section.GM_TAIL] + _pub_mean_us[Section.NET_CAPTURE]
+	var total: float = 0.0
+	for s: int in MAIN_THREAD_SECTIONS:
+		total += _pub_mean_us[s]
+	return total
 
 
 # The worst main-thread AI tick in the window. Not the sum of the per-section
@@ -239,8 +250,7 @@ static func tick_total_mean_us() -> float:
 # tick that never happened. This is a lower bound on the true worst tick, which
 # is the safe direction for a number used to accuse a subsystem.
 static func main_thread_max_us() -> float:
-	return maxf(_pub_max_us[Section.SNAPSHOT],
-			maxf(_pub_max_us[Section.BRAINS], _pub_max_us[Section.DISPATCH]))
+	return maxf(_pub_max_us[Section.SNAPSHOT], _pub_max_us[Section.DISPATCH])
 
 
 static func reset() -> void:
@@ -256,3 +266,4 @@ static func reset() -> void:
 	_worker_busy_ticks = 0
 	_pub_ticks = 0
 	_pub_worker_busy_pct = 0.0
+	windows = 0

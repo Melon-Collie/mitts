@@ -17,7 +17,7 @@ class StubGameState extends Node:
 		return false
 
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # The ack the client receives trails its live tick by about an RTT plus the
 # input lead; the host broadcasts every other tick.
 const LAG_TICKS: int = 6

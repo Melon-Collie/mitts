@@ -68,10 +68,9 @@ anticipation concede **space** (positioning); check aggression concedes
 
 Two things deliberately outside the table. **Aim slew is not a tier knob** — a
 bot slews its cursor at its build's lever-derived blade speed (`AISkaterCaps.blade_speed`),
-so execution difficulty rides the bot's attribute build. And
-**`dispatch_period_ticks` is the one knob that is not tick-independent**: every
-other one is denominated in seconds, so it is the one to rescale if the sim rate
-ever moves off 120 Hz.
+so execution difficulty rides the bot's attribute build. Every knob is
+denominated in seconds; the dispatch period is rounded to whole ticks at the
+current rate.
 
 Shot scatter (`shot_aim_error_rad`) acts on execution only: the compete prices a
 spot through the value seam, which is a property of the chance rather than the

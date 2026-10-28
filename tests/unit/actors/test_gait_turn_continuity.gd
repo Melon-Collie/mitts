@@ -8,7 +8,7 @@ extends GutTest
 # same swap happened once wherever travel crossed the hips' lateral axis, which
 # a joint bound is too coarse for, so that case is held on the skate's path.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a rendered frame, not the tick
 const LegBone = SkaterMeshBuilder.LegBone
 const PIVOTS: Array[int] = [LegBone.LEG_L, LegBone.SHIN_L, LegBone.LEG_R, LegBone.SHIN_R]
 const MAX_STEP_RAD: float = 0.2

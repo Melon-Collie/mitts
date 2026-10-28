@@ -42,7 +42,7 @@ const MOVING_M_S: float = 2.5
 var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
 
 # The host's snapshots, sorted by timestamp, bounded to the skater buffer's
-# 30 (~0.25 s at 120 Hz).
+# 30 (~0.67 s at the 45 Hz broadcast).
 var _state_buffer: Array[BufferedGoalieState] = []
 var _scratch_bracket := BufferedStateInterpolator.BracketResult.new()
 var _scratch_state := GoalieNetworkState.new()

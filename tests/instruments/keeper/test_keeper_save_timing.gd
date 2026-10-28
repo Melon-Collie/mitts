@@ -21,7 +21,7 @@ extends GutTest
 
 const Harness := preload("res://tests/unit/ai/human_wraparound_harness.gd")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const MAX_TICKS: int = 200
 const SETTLE_MAX_TICKS: int = 400
 # Inside the iron, by a puck's width.

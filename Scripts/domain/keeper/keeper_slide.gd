@@ -310,7 +310,8 @@ func time_to(dist: float, top: float = INF, from: int = From.BUTTERFLY) -> float
 	# what the push left.
 	var v1_sq: float = (v0 * v0 / (2.0 * friction) - left) / (1.0 / (2.0 * friction) - 1.0 / (2.0 * b))
 	var v1: float = sqrt(clampf(v1_sq, 0.0, v0 * v0))
-	return lead_in_s(from) + PUSH_S + (v0 - v1) / friction + v1 / b
+	# He is down only once the pads have folded, which a short slide outlasts.
+	return lead_in_s(from) + PUSH_S + maxf((v0 - v1) / friction + v1 / b, FOLD_S)
 
 
 # Seconds from the call to the push setting out `from` (From).
@@ -359,19 +360,27 @@ func step(dt: float) -> void:
 				_release()
 		Phase.GLIDE, Phase.STOP:
 			var left: float = _target - _along
-			# The stop starts the tick it would be too late to after this one's.
+			var braking_s: float = dt
+			# The stop starts the tick it would be too late to after this one's,
+			# and within it at the instant the brake stops him on the spot, so
+			# the edge digs at its brake whatever the step.
 			if phase == Phase.GLIDE and speed >= sqrt(2.0 * _brake() * maxf(left - speed * dt, 0.0)):
 				phase = Phase.STOP
 				_stop_from_speed = speed
+				var glide_s: float = clampf(
+						(left - speed * speed / (2.0 * _brake())) / maxf(speed, 1e-6), 0.0, dt)
+				_along += speed * glide_s
+				left -= speed * glide_s
+				braking_s = dt - glide_s
 			var was: float = speed
 			if phase == Phase.STOP:
 				# The edge digs as hard as it takes to stop on the spot, which
-				# from the tick the stop starts is its brake.
-				speed = maxf(speed - speed * speed / (2.0 * maxf(left, 1e-6)) * dt, 0.0)
+				# from the instant the stop starts is its brake.
+				speed = maxf(speed - speed * speed / (2.0 * maxf(left, 1e-6)) * braking_s, 0.0)
 				_stop = 1.0 - speed / maxf(_stop_from_speed, 1e-6)
 			else:
 				speed = maxf(speed - friction * dt, 0.0)
-			_along += 0.5 * (was + speed) * dt
+			_along += 0.5 * (was + speed) * braking_s
 			if _target - _along <= 1e-4 or speed <= 1e-4:
 				_along = _target
 				speed = 0.0

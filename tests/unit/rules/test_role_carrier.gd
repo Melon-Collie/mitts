@@ -1717,12 +1717,13 @@ func test_post_seal_x_sign_decodes_the_wire_convention() -> void:
 	assert_eq(g.post_seal_x_sign(-26.65), 0.0, "no post stance, no seal")
 
 
-func test_sharp_angle_shot_into_an_rvh_seal_is_never_worth_firing() -> void:
+func test_sharp_angle_shot_along_the_ice_into_an_rvh_seal_is_never_worth_firing() -> void:
 	# In tight at a sharp angle with the keeper sealed in the RVH on the near
-	# post (the field's WRAP cells measure him there), the shot into the seal
-	# from where the carrier stands is no chance. x = 4 is a measured column of
-	# the field. (Pulling the puck off the line first is a different shot,
-	# priced from the field's decoy cells.)
+	# post (the field's WRAP cells measure him there), a shot along the ice into
+	# the seal from where the carrier stands is no chance. x = 4 is a measured
+	# column of the field. (Pulling the puck off the line first is a different
+	# shot, priced from the field's decoy cells.) The high far side over the
+	# seal is open in the field (#870), so only the flat and low lofts are held.
 	var self_pos := Vector3(4.0, 0, -26.0)
 	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
 	# His net frame is the world's turned half round for a net at −z: his
@@ -1734,13 +1735,19 @@ func test_sharp_angle_shot_into_an_rvh_seal_is_never_worth_firing() -> void:
 	g_rvh.state_enum = GoalieStateMachine.State.RVH_LEFT as int   # seals +x here
 	_face(g_rvh, self_pos)
 	var keeper := Vector3(g_rvh.position_x, 0.0, g_rvh.position_z)
-	var into_the_seal: float = AIActionScoring.score_shoot_value(
-			AIGoalieModel.release_ahead_of_goalie(self_pos, goal, keeper), goal, keeper,
-			[] as Array[Vector3], 0.0, AIShotOdds.stance_of(g_rvh, goal),
-			AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [], -1.0, g_rvh.rotation_y)
 	assert_gt(keeper.x, 0.0, "sealed on the +x post")
-	assert_lt(into_the_seal, AIRoleCarrier.SHOT_MIN_VALUE,
-			"the shot into the seal offers no real chance; got %f" % into_the_seal)
+	var q := AIShotOdds.Query.new()
+	var pick := AIShotOdds.Pick.new()
+	AIShotOdds.pick_shot_now(AIGoalieModel.release_ahead_of_goalie(self_pos, goal, keeper), goal,
+			keeper, 0.0, AIShotOdds.stance_of(g_rvh, goal), pick, g_rvh.rotation_y, q)
+	var n: int = AIShotFieldData.AIM_POINTS
+	for i: int in q.blend.size():
+		var loft: int = AIShotOdds.LOFTS[i / n]
+		if loft == ShotMechanics.ELEVATION_HIGH:
+			continue
+		assert_lt(q.blend[i], AIRoleCarrier.SHOT_MIN_VALUE,
+				"loft %d, aim %d: a shot along the ice into the seal offers no real chance; got %f"
+				% [loft, i % n, q.blend[i]])
 
 
 # ─── attacking blue-line keep-out bands ──────────────────────────────────────

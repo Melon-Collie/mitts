@@ -6,7 +6,7 @@ extends GutTest
 # poses (block, faceoff, knockdown) are the exception: their hands are posed in
 # a frame that goes down with the body (Skater.set_skating_crouch_drop).
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class StubGameState extends Node:
