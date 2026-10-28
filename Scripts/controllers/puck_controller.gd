@@ -634,8 +634,7 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 		# and a stick lift in progress do the same (stick off the ice — no corral).
 		if skater.blade_up or skater.deflect_intent or skater.hit_committed \
 				or skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
-				or StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-				or CrossCheckRules.is_stick_busy(skater.cross_check_phase):
+				or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 			continue
 		if not PuckReceptionRules.blade_can_interact(skater.blade_up, puck_airborne):
 			continue
@@ -713,8 +712,7 @@ func _check_interactions() -> void:
 						break
 					continue
 				if skater.blade_up or skater.stick_tied or skater.pin_role != BoardPinRules.Role.NONE \
-						or StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-						or CrossCheckRules.is_stick_busy(skater.cross_check_phase):
+						or StickCheckRules.is_stick_busy(skater.stick_check_phase):
 					continue
 				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
 				if PuckInteractionRules.check_poke(_prev_puck_pos, puck_curr,
@@ -750,7 +748,6 @@ func _check_interactions() -> void:
 				# Mid-lift the stick is hooking, not playing the puck; locked in a
 				# pin, it is out of the play altogether.
 				if StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-						or CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 						or skater.pin_role != BoardPinRules.Role.NONE:
 					continue
 				# Reach gate — grounded blade ↔ grounded puck, lifted ↔ airborne, so a
@@ -906,17 +903,17 @@ func notify_remote_pickup(remote_skater: Skater, carrier_peer_id: int) -> void:
 	_release_seed_active = false
 	_state_buffer.clear()
 
-func notify_local_release(direction: Vector3, power: float) -> Vector3:
+# `shooter`: who fired, when they were not carrying (a loose one-timer); the
+# local carrier otherwise. Returns the release origin.
+func notify_local_release(direction: Vector3, power: float, shooter: Skater = null) -> Vector3:
 	# PuckController (priority 1) runs after LocalController (priority 0), so the puck
-	# hasn't been re-pinned to the current blade position yet this frame. Read blade
-	# directly from the carrier so we start from the current-frame position, not last
-	# frame's pin.
-	# Returns the release origin (the blade contact point) so the caller can ship it
-	# to the host in the release RPC — the host fires the authoritative puck from this
-	# exact point instead of guessing it from a stale buffer rewind.
+	# hasn't been re-pinned to the current blade position yet this frame. Read the
+	# origin straight off the shooter so we start from the current-frame position,
+	# not last frame's pin — the same point the host's Puck.release fires from.
 	var release_pos: Vector3 = puck.get_puck_position()
-	if _local_carrier_skater != null:
-		release_pos = _local_carrier_skater.get_blade_contact_global()
+	var from: Skater = shooter if shooter != null else _local_carrier_skater
+	if from != null:
+		release_pos = puck.release_origin(from)
 		release_pos.y = puck.ice_height
 	_local_carrier_skater = null
 	_client_carrier_peer_id = -1
@@ -1032,8 +1029,7 @@ func try_provisional_pickup(local_skater: Skater) -> void:
 	# hit_committed pickup gate), so don't pin a puck the host won't grant.
 	if local_skater.hit_committed or local_skater.stick_tied \
 			or local_skater.pin_role != BoardPinRules.Role.NONE \
-			or StickCheckRules.is_stick_busy(local_skater.stick_check_phase) \
-			or CrossCheckRules.is_stick_busy(local_skater.cross_check_phase):
+			or StickCheckRules.is_stick_busy(local_skater.stick_check_phase):
 		return
 	if _is_pickup_contested(local_skater):
 		return

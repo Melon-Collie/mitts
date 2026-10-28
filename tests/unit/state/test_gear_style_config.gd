@@ -46,12 +46,24 @@ func test_every_hair_pick_round_trips_beside_the_gear() -> void:
 						GearModelRegistry.GLOVE_PRO, 3, StickModelRegistry.count() - 1,
 						GearModelRegistry.FACE_CAGE, hair, facial, color)
 				var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
-				assert_eq(back.hair_style, hair)
+				assert_eq(back.hair_style, HairStyleRegistry.worn_hair(hair))
 				assert_eq(back.facial_hair, facial)
 				assert_eq(back.hair_color, color)
 				assert_eq(back.helmet_face, GearModelRegistry.FACE_CAGE,
 						"the hair fields leave the gear fields alone")
 				assert_eq(back.stick_model, StickModelRegistry.count() - 1)
+
+
+# A player who saved a style since retired comes back wearing its stand-in, and
+# the picker can show that.
+func test_a_retired_hair_style_decodes_to_its_stand_in() -> void:
+	var saved: int = GearStyleConfig.DEFAULT_CODE | HairStyleRegistry.HAIR_LONG << 25
+	var config: GearStyleConfig = GearStyleConfig.from_code(saved)
+	assert_eq(config.hair_style, HairStyleRegistry.HAIR_SHAGGY)
+	for style: int in HairStyleRegistry.hair_count():
+		if HairStyleRegistry.is_retired_hair(style):
+			assert_true(HairStyleRegistry.worn_hair(style)
+					in HairStyleRegistry.pickable_hair(), "style %d stands in a pickable one" % style)
 
 
 # A code saved before the hair fields existed has zeros above the face field,
@@ -101,52 +113,3 @@ func test_garbage_codes_coerce_to_legal_looks() -> void:
 		# And the coerced look re-packs stably (idempotent coercion).
 		var code2: int = config.to_code()
 		assert_eq(GearStyleConfig.from_code(code2).to_code(), code2)
-
-
-# The pre-models code packed TapeColorRegistry accent picks in the two low
-# fields (skate 5 bits, glove 5 bits, laces unchanged in the high field).
-func _legacy_code(skate_color: int, glove_color: int, lace_color: int) -> int:
-	return skate_color | (glove_color << 5) | (lace_color << 10)
-
-
-func test_migration_keeps_the_stock_look_stock() -> void:
-	# The old default: BLACK skate accent, TEAM gloves, WHITE laces.
-	var migrated: GearStyleConfig = GearStyleConfig.migrate_colors(
-			_legacy_code(2, TapeColorRegistry.TEAM_INDEX, 1))
-	assert_eq(migrated.to_code(), GearStyleConfig.DEFAULT_CODE,
-			"an untouched pre-models save is still the stock kit")
-	assert_eq(migrated.stick_model, StickModelRegistry.STICK_STEALTH,
-			"a pre-stick-models save carries the house stick")
-
-
-func test_migration_maps_picks_onto_designs() -> void:
-	# A white boot stays white; a colored accent becomes the team-band design.
-	assert_eq(GearStyleConfig.migrate_colors(_legacy_code(1, 0, 1)).skate_model,
-			GearModelRegistry.SKATE_WHITEOUT, "white skates -> Whiteout")
-	assert_eq(GearStyleConfig.migrate_colors(_legacy_code(3, 0, 1)).skate_model,
-			GearModelRegistry.SKATE_TEAM, "a colored accent -> Team")
-	# Gloves only ever tinted the cuff, so every mapping keeps a kit-colored body.
-	# There is no black glove to land on any more, so a black pick becomes the
-	# design whose cuff takes the team's other color.
-	assert_eq(GearStyleConfig.migrate_colors(_legacy_code(2, 1, 1)).glove_model,
-			GearModelRegistry.GLOVE_PRO, "white cuffs -> Pro")
-	assert_eq(GearStyleConfig.migrate_colors(_legacy_code(2, 2, 1)).glove_model,
-			GearModelRegistry.GLOVE_CONTRAST, "black cuffs -> Contrast")
-	assert_eq(GearStyleConfig.migrate_colors(_legacy_code(2, 5, 1)).glove_model,
-			GearModelRegistry.GLOVE_CONTRAST, "a colored cuff -> Contrast")
-	for body: int in [GearModelRegistry.GLOVE_TEAM, GearModelRegistry.GLOVE_PRO,
-			GearModelRegistry.GLOVE_CONTRAST]:
-		assert_eq(GearModelRegistry.glove_color(body, GearModelRegistry.GLOVE_BODY,
-				Color.RED, Color.GREEN, Color.BLUE), Color.RED,
-				"migrated gloves keep a kit-colored body")
-
-
-func test_migration_preserves_laces_and_lands_legal() -> void:
-	for lace: int in TapeColorRegistry.count():
-		var migrated: GearStyleConfig = GearStyleConfig.migrate_colors(
-				_legacy_code(4, 7, lace))
-		assert_eq(migrated.lace_color, lace, "laces are unchanged by the migration")
-	# Garbage in the old fields still lands on a legal design.
-	var junk: GearStyleConfig = GearStyleConfig.migrate_colors(0x7FFFFFFF)
-	assert_true(GearModelRegistry.is_valid_skate(junk.skate_model), "skate model legal")
-	assert_true(GearModelRegistry.is_valid_glove(junk.glove_model), "glove model legal")

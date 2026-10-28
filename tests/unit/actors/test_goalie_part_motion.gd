@@ -12,10 +12,19 @@ extends GutTest
 const _GOALIE_SCENE: String = "res://Scenes/Goalie.tscn"
 
 
+# A goalie wearing the keeper's save boxes, posed in his ready stance.
 func _live_goalie() -> Goalie:
 	var packed: PackedScene = load(_GOALIE_SCENE)
 	var goalie: Goalie = packed.instantiate() as Goalie
 	add_child_autofree(goalie)
+	var pose := KeeperPose.new()
+	KeeperPoses.ready(pose)
+	var skel := KeeperSkeleton.new()
+	skel.pose(pose)
+	for part: int in KeeperGear.PART_COUNT:
+		goalie.add_save_box(KeeperGear.save_part(part), String(KeeperGear.Part.keys()[part]).ends_with("_G"),
+				KeeperGear.half_extents(part))
+		goalie.seat_save_box(part, KeeperGear.box(skel, part))
 	return goalie
 
 

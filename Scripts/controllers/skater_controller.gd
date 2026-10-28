@@ -143,24 +143,41 @@ var stagger_wobble_hz: float = 3.0    # wobble frequency
 # absorbing the check, not just shaking. Direction is the transfer impulse
 # (stagger_recoil_dir, replicated). Applied in SkaterPoseCoordinator._apply_lean.
 var stagger_recoil_deg: float = 13.0  # peak torso recoil lean at full stagger
+# ── Rocked Tuning ─────────────────────────────────────────────────────────────
+# A full check (stagger_ref_impulse and up) rocks its man: the stagger timer
+# runs past stagger_max_seconds, and while it does his stick is off the ice, his
+# stance and commit are gone and his edges deeper gone (BodyCheckRules, the
+# rocked band). Measured in docs/hit-outcomes-plan.md.
+var rocked_ref_impulse: float = 2.6      # m/s: a full-speed committed check at equal builds
+var rocked_min_seconds: float = 0.5      # rocked window at stagger_ref_impulse
+var rocked_max_seconds: float = 0.8      # ... at rocked_ref_impulse and beyond
+var rocked_grip_penalty: float = 0.75    # peak edge-grip reduction, rocked
+# The torso reels this far at the top of the rocked band, eased down onto the
+# stagger's recoil as he comes out of it; the skates splay and he sits into
+# them as he catches himself.
+var rocked_recoil_deg: float = 30.0
+var rocked_splay_m: float = 0.16         # each skate out from under its hip
+var rocked_crouch: float = 1.0           # crouch floor (× stance_hip_deg), under the stance's
+var rocked_catch_rate: float = 15.0      # the catch's ease rate: a step out in ~0.15 s
 # ── Knockdown Tuning ──────────────────────────────────────────────────────────
-# The top of the stagger continuum: a hit whose victim impulse exceeds
-# knockdown_impulse KNOCKS THE VICTIM DOWN — movement locked, no puck interaction,
-# the body slides from the hit and bleeds speed via knockdown_friction — for a
-# recovery window scaling with the hit (see BodyCheckRules.knockdown_seconds_from_
-# impulse). knockdown_timer rides the SAME replicated / snapped / decayed rail as
-# stagger_timer. Deliberately kept ABOVE the full-check point (stagger_ref 1.35):
-# a full check staggers + strips; a KNOCKDOWN is the reward for a genuinely SOLID
-# hit — ~5.5 m/s closing at a medium build (~4.5 for a heavy one), the pace of a
-# committed skate-in on a carrier, up to a maximal ~9.5 m/s head-on
-# collision. It sits just above the AI's commit bar (AIBodyCheck.COMMIT_IMPULSE_M_S
-# 1.6) so a committed bot check lands a hard stagger/strip and, at real closing,
-# tips into a knockdown. Set knockdown_impulse very high (or 0) to effectively
-# disable knockdowns.
-var knockdown_impulse: float = 1.8         # m/s victim impulse above which a hit knocks down
-var knockdown_ref_impulse: float = 3.1     # m/s impulse of a maximal (longest) knockdown
-var knockdown_min_seconds: float = 1.1     # down time of a just-barely knockdown, the get-up included
-var knockdown_max_seconds: float = 1.9     # down time of a maximal hit
+# A full check that beats his balance (BodyBalanceRules: the part of his Δv his
+# feet can't carry off, against what his base, his sight of the hitter, his
+# posture and his height can take) KNOCKS HIM DOWN — movement locked, no puck
+# interaction, the body slides from the hit and bleeds speed via
+# knockdown_friction — for the fall to the ice, a lie growing with how far past
+# it the hit landed (BodyCheckRules.lie_seconds_from_overshoot) and the get-up,
+# so the get-up never starts before he is down. knockdown_timer rides the
+# SAME replicated / snapped / decayed rail as stagger_timer. At these values a
+# square, upright man rides any one-sided check below top speed, and a side hit
+# floors him from ~6 m/s closing at equal builds (docs/hit-outcomes-plan.md).
+var balance_ref_dv: float = 2.4            # m/s a square, upright, reference-height man rides
+var balance_along_share: float = 0.5       # share of a hit along his blades that tips him
+var balance_sight_behind: float = 0.6      # his balance with his back to the hitter
+var balance_vulnerable_mult: float = 0.6   # ... mid-shot: a wind-up, a load, a follow-through
+var balance_checker_front_share: float = 0.4  # a committed checker takes his own hit at this
+var knockdown_ref_overshoot: float = 1.7   # past his balance by this, the longest knockdown
+var knockdown_lie_min_seconds: float = 0.15  # on the ice before the get-up, just past his balance
+var knockdown_lie_max_seconds: float = 0.7   # ... at knockdown_ref_overshoot: ~1.9 s down in all
 var knockdown_friction: float = 2.0  # m/s² a downed body sheds sliding on its gear: μ ≈ 0.2, padded nylon on ice
 # Knockdown pose (cosmetic): a downed player FALLS — the knees buckle into the
 # collapse crouch that matches the gait's drop, the whole cosmetic rig tips
@@ -669,14 +686,16 @@ var weight_spring_damping: float = 14.0     # damping (near-critical — a clean
 var min_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
 var max_wrister_power: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var backhand_power_coefficient: float = 0.75
-# ── Wrister load (WristerLoad): what the torso can put into a human's shot ──
-# Release cap: max_wrister_power × lerp(this, 1, load). With no turn behind it,
-# the arms, wrists and stick flex still carry a real snap. Per-build: the flex
-# pick scales it (PlayerAttributes.wrister_unloaded_mult).
+# ── Wrister load (WristerLoad): what the torso and arms put into a shot ──
+# Release cap: max_wrister_power × (this × arms + (1 − this) × load). With no
+# turn behind it, the arms, wrists and stick flex still carry a real snap on a
+# shot out from the body, and nothing on one back through it. Per-build: the
+# flex pick scales it (PlayerAttributes.wrister_unloaded_mult).
 var wrister_unloaded_share: float = 0.6
 var wrister_full_load_arc_deg: float = 45.0
 var wrister_home_reach_deg: float = 120.0
 var wrister_away_reach_deg: float = 30.0
+var wrister_arm_full_past_tangent_deg: float = 45.0
 # ── Wrister power model (ShotMechanics.wrister_power_t) ──
 # Power is a feel-curve over the release speed signal (cursor speed for humans,
 # a committed target for bots — see _wrister_sweep_speed). power_curve shapes
@@ -922,13 +941,28 @@ var pin_stance: float = 0.6
 var pin_pressed_lean_deg: float = 12.0
 var pin_drive_lean_deg: float = 18.0
 var pin_pose_speed: float = 6.0
+# Press pose (GaitPressLayer): the driver sits into a lunge and leans into the
+# man; the man dug in sits deep and wide and leans back into the push.
+var press_drive_stance: float = 0.7
+var press_drive_lean_deg: float = 20.0
+var press_drive_split_deg: float = 18.0
+var press_anchor_stance: float = 0.9
+var press_anchor_lean_deg: float = 22.0
+var press_anchor_width_m: float = 0.06
+var press_pose_speed: float = 6.0
 var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration bounce, below standing
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
 # Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.
-# apply_celebration_pose) — heights in upper-body-local metres.
-var celebration_hand_y: float = 0.45     # raised top-hand height
-var celebration_stick_rise: float = 0.5  # blade height above the raised hand
+# apply_celebration_pose). Bearings are upper-body local with x toward the
+# arm's own side and −z forward; reaches are in arm lengths from the shoulder.
+var celebration_hand_bearing := Vector3(0.18, 1.0, -0.22)  # the stick arm thrown up, a touch forward
+var celebration_hand_reach: float = 0.9      # near full extension, short of a locked elbow
+var celebration_hand_pump: float = 0.06      # the arm gives this much at the bottom of each hop
+var celebration_stick_bearing := Vector3(0.4, 1.0, 0.12)   # shaft leans out and back, clear of the helmet
+var celebration_fist_bearing := Vector3(0.22, 1.0, -0.3)
+var celebration_fist_reach_low: float = 0.5  # elbow bent, fist at the face
+var celebration_fist_reach_high: float = 0.78  # punched up above the helmet
 
 # ── Shot-Block Tuning ─────────────────────────────────────────────────────────
 # Movement speed while blocking (unused while the stance is fully planted; kept for tuning).
@@ -1021,7 +1055,6 @@ var _pose_bridge := SkaterPoseBridge.new()
 var _skating: SkaterSkatingCoordinator = SkaterSkatingCoordinator.new()
 var _ik: SkaterIKCoordinator = SkaterIKCoordinator.new()
 var _stick_check: SkaterStickCheck = SkaterStickCheck.new()
-var _cross_check: SkaterCrossCheck = SkaterCrossCheck.new()
 var _settle: SkaterSettleGate = SkaterSettleGate.new()
 # The puck's velocity in this skater's frame at its last catch (world XZ),
 # quantized as the grant carries it.
@@ -1088,11 +1121,14 @@ var hit_active: bool = false
 
 var _game_state_has_faceoff_prep: bool = false
 var _game_state_has_period_break: bool = false
-# Cosmetic goal-celebration window (seconds remaining / total). Set by
-# GameManager on the machine that simulates the scorer; the raised-stick pose
-# rides the normal hand/blade wire state to everyone else.
+# Cosmetic goal-celebration window (seconds remaining / total), opened after
+# _celebration_lead seconds. Started by GameManager on every machine; the
+# raised-stick pose rides the normal hand/blade wire state to everyone else.
 var _celebration_timer: float = 0.0
 var _celebration_total: float = 1.0
+var _celebration_lead: float = 0.0
+# Hops across the window: the knee bounce and the fist pump share them.
+const CELEBRATION_PUMPS: float = 3.0
 
 # ── Faceoff / intro skate-in approach ─────────────────────────────────────────
 # During FACEOFF_PREP the skater glides from a start point (its bench for the
@@ -1135,21 +1171,44 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
-func start_celebration(duration: float) -> void:
+# `lead` seconds pass before the window opens; nothing is posed through them.
+func start_celebration(duration: float, lead: float = 0.0) -> void:
 	_celebration_total = maxf(duration, 0.001)
 	_celebration_timer = _celebration_total
+	_celebration_lead = maxf(lead, 0.0)
 
 
+# Drops the window, lead and all, and hands the free hand back to the stick.
+func end_celebration() -> void:
+	_celebration_timer = 0.0
+	_celebration_lead = 0.0
+	_ik.hold_free_hand(Vector3.ZERO, 0.0)
+
+
+# The window is open: the pose is live.
 func is_celebrating() -> bool:
+	return _celebration_timer > 0.0 and _celebration_lead <= 0.0
+
+
+# A window is open or still waiting out its lead.
+func has_celebration_window() -> bool:
 	return _celebration_timer > 0.0
 
 
-# 0..1 progress through the celebration window (0 when idle). Read by the gait
-# for the leg bounce, matching the `t` the raised-stick pose runs on.
+# 0..1 progress through the celebration window (0 when idle).
 func celebration_progress() -> float:
-	if _celebration_timer <= 0.0:
+	if not is_celebrating():
 		return 0.0
 	return 1.0 - _celebration_timer / _celebration_total
+
+
+# 0 standing to 1 at the bottom of a hop, CELEBRATION_PUMPS times across the
+# window: the gait's knee bounce and the pose's fist pump both ride it.
+func celebration_pump() -> float:
+	var progress: float = celebration_progress()
+	if progress <= 0.0:
+		return 0.0
+	return 0.5 - 0.5 * cos(progress * TAU * CELEBRATION_PUMPS)
 
 
 # Ages the celebration window, at physics rate on real ticks from both the
@@ -1157,7 +1216,9 @@ func celebration_progress() -> float:
 # skaters this machine doesn't simulate (the timer starts on every machine;
 # see GameManager._trigger_scorer_celebration).
 func tick_celebration(delta: float) -> void:
-	if _celebration_timer > 0.0:
+	if _celebration_lead > 0.0:
+		_celebration_lead = maxf(_celebration_lead - delta, 0.0)
+	elif _celebration_timer > 0.0:
 		_celebration_timer = maxf(_celebration_timer - delta, 0.0)
 
 
@@ -1344,6 +1405,7 @@ func build_ai_caps() -> AISkaterCaps:
 		caps.weight = skater.weight
 		caps.body_check_transfer = skater.body_check_transfer
 		caps.body_radius = skater.collision_radius()
+	caps.height_mult = _build_height_mult
 	return caps
 
 
@@ -1359,6 +1421,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 		_capture_attribute_bases()
 	var m_height:  float = attrs.height_mult()
 	var m_agility: float = attrs.agility_mult()
+	_build_height_mult = m_height / PlayerAttributes.neutral().height_mult()
 	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
 	crossover_thrust_multiplier = _base_crossover_thrust_multiplier * attrs.crossover_mult()
@@ -1499,6 +1562,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	_cached_slapper_cfg = null
 	_skating.native_reconfigure()
 	skater.apply_appearance(attrs)
+	_movement_config()
 
 
 func _capture_attribute_bases() -> void:
@@ -1543,12 +1607,12 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 		return
 	puck.on_body_check(skater, victim, impact_force, hit_direction)
 
-# This skater just absorbed a check (victim-only signal). The host sets the stagger
-# window scaled by hit strength, then broadcasts stagger_timer via
+# This skater just absorbed his side of a contact (either body's). The host sets
+# the stagger window scaled by hit strength, then broadcasts stagger_timer via
 # fill_network_state. `max` so a weaker follow-up never shortens an in-flight
 # stagger.
 #
-# The LOCAL victim also fires this, so it predicts its own stagger off the same
+# The LOCAL skater also fires this, so it predicts its own stagger off the same
 # transfer impulse rather than waiting a round-trip for the host's snapshot.
 # Reconcile snaps stagger_timer to the server value and re-derives the decay, so
 # a misprediction self-heals in one reconcile. Remote bodies on a client still
@@ -1556,8 +1620,24 @@ func _on_body_checked_player(victim: Skater, impact_force: float, hit_direction:
 # `stagger_strength` (m/s) is how hard it landed (Skater.body_check_received);
 # omitted, the impulse's own magnitude.
 func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -> void:
-	var impulse_magnitude: float = impulse.length()
-	var stagger_from: float = maxf(impulse_magnitude, stagger_strength)
+	_absorb_hit(impulse, stagger_strength)
+
+
+# The outcome of a Δv `impulse` landing on him: the stagger from how hard it
+# landed (`stagger_strength`, or the impulse's own magnitude), the rocked band
+# and the knockdown — which reads his balance (BodyBalanceRules) against how far
+# his body was driven, so the boards behind him add to the stagger and not to
+# the fall. Committed to a check, he leans into it
+# (BodyBalanceRules.leaned_into), whichever body's resolver landed it.
+func _absorb_hit(impulse: Vector3, stagger_strength: float) -> void:
+	var felt: Vector3 = impulse
+	if skater.delivers_checks():
+		var leaned: Vector2 = BodyBalanceRules.leaned_into(Vector2(impulse.x, impulse.z),
+				skater.get_facing(), _balance_config())
+		felt = Vector3(leaned.x, 0.0, leaned.y)
+	var impulse_magnitude: float = felt.length()
+	var felt_share: float = impulse_magnitude / maxf(impulse.length(), 1e-6)
+	var stagger_from: float = maxf(impulse_magnitude, stagger_strength * felt_share)
 	# Capture the recoil direction (body frame) so the torso reels the way the
 	# hit shoved it — see SkaterPoseCoordinator._apply_lean. Set on every
 	# machine that resolves the hit; a client-rendered remote's is overwritten by
@@ -1566,43 +1646,29 @@ func _on_body_check_received(impulse: Vector3, stagger_strength: float = -1.0) -
 	var recoil_xz: Vector2 = Vector2(local_impulse.x, local_impulse.z)
 	if recoil_xz.length() > 0.001:
 		stagger_recoil_dir = recoil_xz.normalized()
-	var cfg: BodyCheckRules.Config = _body_check_config()
-	# Knockdown rides the same "extend, never shorten" rule as stagger and is set on
-	# both the host and the local victim's prediction — so a downed local player goes
-	# down immediately, and reconcile snaps knockdown_timer to the host value.
-	var knockdown_add: float = BodyCheckRules.knockdown_seconds_from_impulse(impulse_magnitude, cfg)
-	if not _is_host:
-		if skater.is_local_skater:
-			stagger_timer = maxf(stagger_timer,
-					BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg))
-			_set_knockdown_from_impulse(knockdown_add, impulse)
+	# Set on both the host and the local victim's prediction, so a downed local
+	# player goes down immediately and reconcile snaps the timers to the host's.
+	if not _is_host and not skater.is_local_skater:
 		return
+	var cfg: BodyCheckRules.Config = _body_check_config()
+	var knockdown_add: float = 0.0
+	var overshoot: float = BodyBalanceRules.overshoot(Vector2(felt.x, felt.z),
+			skater.get_facing(), _balance_posture(), _build_height_mult, _balance_config())
+	if overshoot > 1.0:
+		knockdown_add = KnockdownFallRules.first_impact_time(
+				Vector2(impulse.x, impulse.z).length(), _fall_config()) \
+				+ BodyCheckRules.lie_seconds_from_overshoot(overshoot, cfg) \
+				+ knockdown_getup_seconds
+	var stagger_add: float = BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg,
+			knockdown_add > 0.0)
 	_set_knockdown_from_impulse(knockdown_add, impulse)
-	stagger_timer = maxf(stagger_timer,
-			BodyCheckRules.stagger_seconds_from_impulse(stagger_from, cfg))
+	stagger_timer = maxf(stagger_timer, stagger_add)
 
 
-# Host-only (CrossCheckTracker): a cross-check landing on this skater along
-# `push_dir` (unit XZ) from a shover of `shover_weight` pushing at
-# `shover_thrust`. He answers it with his own edges and stride as he is now
-# (posture, stagger, intent); what gets through is his Δv, taken through the
-# check's stagger path. Returns the Δv (m/s, 0 when he held).
-func take_cross_check(shover_weight: float, shover_thrust: float, push_dir: Vector2) -> float:
-	var posture: int = SkaterMovementRules.posture_of(stance_active, hit_active)
-	var bc: BodyCheckRules.Config = _body_check_config()
-	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
-	var dv: float = CrossCheckRules.victim_dv(shover_weight, shover_thrust, skater.weight,
-			push_dir, skater.get_facing(),
-			CrossCheckRules.edge_accel(cfg, posture, BodyCheckRules.grip_mult(stagger_timer, bc)),
-			skater.move_intent,
-			CrossCheckRules.drive_accel(cfg, posture,
-					thrust * BodyCheckRules.thrust_mult(stagger_timer, bc)))
-	if dv <= 0.0:
-		return 0.0
-	var impulse := Vector3(push_dir.x, 0.0, push_dir.y) * dv
-	skater.velocity += impulse
-	skater.body_check_received.emit(impulse, dv)
-	return dv
+# How he stands for BodyBalanceRules, from replicated state.
+func _balance_posture() -> BodyBalanceRules.Posture:
+	return BodyBalanceRules.posture_of(stance_active,
+			SkaterStateMachine.state_off_balance(_sm.get_state()))
 
 
 # Extend-never-shorten knockdown write for the impulse path (host + local-victim
@@ -1676,9 +1742,9 @@ func _deflect_lift_share() -> float:
 func _advance_stick_check(input: InputState, delta: float) -> void:
 	var stick_taken: bool = has_puck or skater.hit_committed or skater.is_knocked_down \
 			or skater.is_forced_lift_active() or skater.stick_tied \
-			or CrossCheckRules.is_stick_busy(skater.cross_check_phase) \
 			or skater.pin_role == BoardPinRules.Role.PINNED \
 			or _sm.get_state() != State.SKATING_WITHOUT_PUCK
+	# F under Ctrl is dead: the commit has the stick.
 	_stick_check.advance(input.stick_check_pressed and not input.hit_held,
 			input.stick_check_held, not stick_taken, stick_taken, delta)
 	skater.stick_check_phase = _stick_check.phase
@@ -1686,32 +1752,9 @@ func _advance_stick_check(input: InputState, delta: float) -> void:
 
 
 # Adopts the host's lift phase ahead of a reconcile replay, which steps it on.
-# The cross-check rides the same rail.
 func _adopt_stick_check(state: SkaterNetworkState) -> void:
 	_stick_check.adopt(state.stick_check_phase, state.stick_check_elapsed)
 	skater.stick_check_phase = _stick_check.phase
-	_cross_check.adopt(state.cross_check_phase, state.cross_check_elapsed)
-	_stamp_cross_check()
-
-
-# The stick button pressed with Ctrl held throws it (never a lift), from puckless
-# skating, not a pin or the ice; a puck on the blade, a pin or going down ends it.
-func _advance_cross_check(input: InputState, delta: float) -> void:
-	var free: bool = not has_puck and not skater.is_knocked_down \
-			and skater.pin_role == BoardPinRules.Role.NONE
-	var to_cursor := Vector2(input.mouse_world_pos.x - skater.global_position.x,
-			input.mouse_world_pos.z - skater.global_position.z)
-	_cross_check.advance(input.hit_held and input.stick_check_pressed,
-			free and _sm.get_state() == State.SKATING_WITHOUT_PUCK, not free,
-			CrossCheckRules.aim_dir(skater.get_facing(), to_cursor,
-					deg_to_rad(upper_body_max_twist_deg)), delta)
-	_stamp_cross_check()
-
-
-func _stamp_cross_check() -> void:
-	skater.cross_check_phase = _cross_check.phase
-	skater.cross_check_elapsed = _cross_check.elapsed
-	skater.cross_check_aim = _cross_check.aim
 
 
 func _process_input(input: InputState, delta: float) -> void:
@@ -1735,6 +1778,7 @@ func _process_input(input: InputState, delta: float) -> void:
 	_elevation_level = input.elevation_level
 	skater.elevation_level = _elevation_level
 	_current_aim_world = input.mouse_world_pos
+	skater.stick_jarred = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
 	_settle.read(input, has_puck and _sm.get_state() == State.SKATING_WITH_PUCK)
 
 	# Deliberate-deflect intent (see Skater.deflect_intent): Q without the puck
@@ -1749,7 +1793,8 @@ func _process_input(input: InputState, delta: float) -> void:
 	skater.deflect_intent = deflecting
 
 	# The deflecting blade rises to the puck it is about to meet. A forced lift (an
-	# opponent hooked under your stick) overrides regardless of possession.
+	# opponent hooked under your stick, or a check that rocked you) overrides
+	# regardless of possession.
 	skater.blade_up = skater.deflect_lift_share > 0.0 or skater.is_forced_lift_active()
 
 	# Nudge: a deflect-button TAP while carrying pushes the puck off the blade as a
@@ -1762,6 +1807,9 @@ func _process_input(input: InputState, delta: float) -> void:
 
 	var tick_start_velocity: Vector3 = skater.velocity
 	_apply_movement(input, delta)
+	skater.in_stance = stance_active
+	skater.stagger_left = stagger_timer
+	_apply_press(input, delta, tick_start_velocity)
 	# The frame this tick's IK and twist solve in tilts with the fall: every tick
 	# lays its own, replay included (Scripts/networking/CLAUDE.md).
 	_apply_fall_tilt(knockdown_getup_left())
@@ -1784,7 +1832,6 @@ func _process_input(input: InputState, delta: float) -> void:
 	# previously never stamped it, so host-rendered client skaters froze at a
 	# stale shot state.
 	skater.current_shot_state = _sm.get_state() as int
-	_advance_cross_check(input, delta)
 	_advance_stick_check(input, delta)
 	# Save blade/hand world positions before upper body rotation. After the body
 	# rotates toward the blade, re-expressing these in the new local frame gives
@@ -1829,10 +1876,10 @@ func _process_input(input: InputState, delta: float) -> void:
 		# GOAL_CELEBRATION), real ticks only, and gated to plain skating so a
 		# whiffed shot's follow-through isn't fought over.
 		var cel_state: SkaterStateMachine.State = _sm.get_state()
-		if _celebration_timer > 0.0 and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
+		if is_celebrating() and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
 				or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
-			_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total,
-					_celebration_total - _celebration_timer, _celebration_timer)
+			_shot_pose.apply_celebration_pose(_celebration_total - _celebration_timer,
+					_celebration_timer)
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
@@ -1942,6 +1989,11 @@ func knockdown_elapsed() -> float:
 # get-up envelope in KnockdownFallRules takes.
 func knockdown_getup_left() -> float:
 	return clampf(knockdown_timer / maxf(knockdown_getup_seconds, 0.001), 0.0, 1.0)
+
+
+# How deep into the rocked band he is, 0..1 (BodyCheckRules.rocked_share).
+func rocked_share() -> float:
+	return BodyCheckRules.rocked_share(stagger_timer, _body_check_config())
 
 
 # How much of the down pose holds over the live one (0..1): ramped in over the
@@ -2179,9 +2231,6 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.blade_up = skater.blade_up
 	state.stick_check_phase = _stick_check.phase
 	state.stick_check_elapsed = _stick_check.elapsed
-	state.cross_check_phase = _cross_check.phase
-	state.cross_check_elapsed = _cross_check.elapsed
-	state.cross_check_aim = _cross_check.aim
 	state.stick_tied = skater.stick_tied
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
@@ -2240,9 +2289,10 @@ func reach_purpose() -> float:
 	return _ik.reach_purpose
 
 
-# The gait's (stop weight, skid weight, turn load) this render pass.
+# The gait's (stop weight as the scrape hears it, skid weight, turn load) this
+# render pass.
 func skate_sound() -> Vector3:
-	return Vector3(_skating.stop_weight, _skating.skid_weight, _skating.turn_load)
+	return Vector3(_skating.scrape_stop_weight(), _skating.skid_weight, _skating.turn_load)
 
 func apply_network_state(_net_state: SkaterNetworkState, _host_ts: float) -> void:
 	pass  # overridden by RemoteController on client
@@ -2259,13 +2309,14 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# This path poses the gait + off-hand itself (below), so the render-rate
 	# cosmetic hook yields to it while a replay is driving this skater.
 	_self_posing = true
+	# The replay poses the recorded body; a live celebration's knee bounce and
+	# fist pump are read off this controller, and its timer is frozen here.
+	end_celebration()
 	skater.global_position = state.position
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
 	skater.blade_up = state.blade_up
 	skater.stick_check_phase = state.stick_check_phase
-	skater.cross_check_phase = state.cross_check_phase
-	skater.cross_check_elapsed = state.cross_check_elapsed
 	skater.stick_tied = state.stick_tied
 	skater.pin_role = state.pin_role
 	skater.pin_strength = state.pin_strength
@@ -2546,8 +2597,6 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 	skater.hit_committed = false
 	_stick_check.reset()
 	skater.stick_check_phase = _stick_check.phase
-	_cross_check.reset()
-	_stamp_cross_check()
 	_settle.clear()
 	stagger_timer = 0.0
 	balance_tilt_vel = Vector2.ZERO
@@ -2583,12 +2632,11 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 		# plant the legs at their rest pose so the stride doesn't resume mid-swing.
 		_pose.reset_lean_and_lag()
 		_skating.reset_to_rest()
-		# Kill any celebration remainder. The timer only ticks in
-		# _process_input, which doesn't run through the goal replay or the
-		# faceoff-prep aim-only path — so the leftover slice (goal_scored
-		# signal latency; larger on clients) would otherwise freeze through
-		# the replay and fire the raised-stick pose AT the next faceoff.
-		_celebration_timer = 0.0
+		# Kill any celebration remainder. The timer only ticks on live ticks,
+		# which the faceoff-prep aim-only path is not — so a leftover slice
+		# (goal_scored signal latency; larger on clients) would otherwise fire
+		# the raised-stick pose AT the next faceoff.
+		end_celebration()
 	# The body (and with it the blade) just jumped, and the pose resets above
 	# moved the stick again. Re-anchor the blade histories to where the stick
 	# actually is now, or the next tick differences them across the whole jump:
@@ -2792,7 +2840,7 @@ func _transition_to_skating() -> void:
 		_sm.set_state(State.SKATING_WITH_PUCK)
 	else:
 		_sm.set_state(State.SKATING_WITHOUT_PUCK)
-	_sm.shot_dir = Vector3.ZERO
+	_sm.aim_finish(Vector3.ZERO)
 	# Every exit keeps the smoothed torso and hip pose and lets the skating eases
 	# carry it to the new targets: zeroing it here snaps the shoulders square and
 	# the trunk upright in one tick (a lost puck threw the head ~0.2 m). Out of
@@ -2866,7 +2914,7 @@ func _enter_shot_block() -> void:
 
 func _enter_slapper_charge(input: InputState) -> void:
 	_aiming.reset_slapper()
-	_sm.shot_dir = Vector3.ZERO
+	_sm.aim_finish(Vector3.ZERO)
 	# Nothing turns or moves on the press: the aim starts where the cursor is
 	# (_update_slapper_aim) and the hips turn to its stance at their own rate.
 	var strike: Vector2 = slapper_strike_local()
@@ -3046,10 +3094,17 @@ func _solve_wrister_load(input: InputState) -> void:
 	WristerLoad.solve(wrister_load, to_local * Vector3(pin.x, 0.0, pin.z),
 			to_local * _wrister_aim_dir(input), skater.is_left_handed, _wrister_load_config())
 
+# Share of the full shot the body can drive along this tick's aim (the torso's
+# turn and the arms' push, before the backhand's coefficient): how far the aim
+# pose squares the shoulders onto the aim.
+func wrister_drive_share() -> float:
+	return WristerLoad.power_share(wrister_load.load_share, wrister_load.arm_share, false,
+			wrister_unloaded_share, 1.0)
+
 # The most a release can carry once the load is applied.
 func _wrister_load_cap(is_backhand: bool) -> float:
-	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share, is_backhand,
-			wrister_unloaded_share, backhand_power_coefficient)
+	return max_wrister_power * WristerLoad.power_share(wrister_load.load_share,
+			wrister_load.arm_share, is_backhand, wrister_unloaded_share, backhand_power_coefficient)
 
 func _release_wrister(input: InputState) -> void:
 	_solve_wrister_load(input)
@@ -3070,11 +3125,23 @@ func _release_wrister(input: InputState) -> void:
 				_wrister_config(),
 				aim_dir,
 				false,
-				_wrister_sweep_speed(input))
+				_wrister_sweep_speed(input),
+				null,
+				skater.velocity)
 		result.power = minf(result.power, _wrister_load_cap(is_backhand))
-		_sm.shot_dir = result.direction
+		var push: float = result.power
+		_carry_momentum(result)
+		# The finish turns the hips and swings the stick round onto the shot only
+		# as far as the torso drove it; the arms alone push it from where it sat.
+		var drive: float = wrister_load.load_share
+		_sm.aim_finish(result.direction,
+				ShotMechanics.finish_line(Vector3(_pose.facing.x, 0.0, _pose.facing.y),
+						result.direction, drive),
+				ShotMechanics.finish_line(
+						_aiming.wrister_origin_world - _aiming.wrister_origin_skater_pos,
+						result.direction, drive))
 		_do_release(result.direction, result.power)
-		skater.shot_charge = _wrister_charge_of(result.power)
+		skater.shot_charge = _wrister_charge_of(push)
 
 	_sm.follow_through_is_slapper = false
 	# Finish size follows the released POWER (pre-backhand — the body swing is the
@@ -3090,6 +3157,17 @@ func _release_wrister(input: InputState) -> void:
 	_sm.set_state(State.FOLLOW_THROUGH)
 	_sm.follow_through_timer = finish_s
 	_sm.follow_through_duration_total = finish_s
+
+# Folds the skater's motion into a wrist shot's or quick pass's release
+# (ReleaseMomentum): the puck keeps the body's velocity, the hands correcting it
+# onto the aim out of the push; a pass keeps its vertical launch speed. A puck
+# the blade leaves at rest keeps its direction at no pace.
+func _carry_momentum(result: ShotMechanics.ShotResult, is_pass: bool = false) -> void:
+	var v: Vector3 = ReleaseMomentum.release_velocity(result.direction, result.power,
+			skater.velocity, is_pass)
+	result.power = v.length()
+	if result.power > 0.0001:
+		result.direction = v / result.power
 
 # Instant quick pass — the fixed-power blade→cursor snap, fired straight from
 # carry by the dedicated quick_pass button (no wrister aim/charge). Backhand is
@@ -3110,7 +3188,8 @@ func _fire_quick_pass(input: InputState) -> void:
 				_wrister_config(),
 				Vector3.ZERO,
 				true)
-		_sm.shot_dir = result.direction
+		_carry_momentum(result, true)
+		_sm.aim_finish(result.direction)
 		_do_release(result.direction, result.power)
 
 	_sm.follow_through_is_slapper = false
@@ -3154,7 +3233,7 @@ func _fire_slapper_shot(input: InputState) -> bool:
 		result.power = ShotReleaseRules.one_timer_power(
 				result.power, one_timer_center_power_bonus,
 				zone_xz, puck_xz, slapper_zone_radius)
-	_sm.shot_dir = result.direction
+	_sm.aim_finish(result.direction)
 	_do_release(result.direction, result.power)
 	return true
 
@@ -3257,16 +3336,17 @@ func _update_wrister_charge(input: InputState) -> void:
 			skater.global_position, input.mouse_world_pos, blade_world,
 			is_backhand, _elevation_level,
 			_wrister_config(), charge_aim_dir, false,
-			_wrister_sweep_speed(input), _wrister_pred_scratch)
+			_wrister_sweep_speed(input), _wrister_pred_scratch, skater.velocity)
 	pred.power = minf(pred.power, _wrister_load_cap(is_backhand))
 	wrister_coil = minf(wrister_load.load_share, ShotMechanics.wrister_power_t(
 			_wrister_sweep_speed(input), _wrister_config()))
-	skater.predicted_shot_velocity = pred.direction * pred.power
-	# shot_charge carries the release-now SPEED (normalized predicted power over
-	# the min→max band) — the pure mouse-speed model, so it always matches the
-	# shot that would come out this tick. This is the honest readout the goalie
-	# leans on and what the stick-flex pose keys off (the flex is the only
-	# visual charge feedback — there is no charge ring).
+	skater.predicted_shot_velocity = ReleaseMomentum.release_velocity(
+			pred.direction, pred.power, skater.velocity)
+	# shot_charge carries the release-now PUSH (normalized predicted power over
+	# the min→max band, before the skater's own motion joins it) — the pure
+	# mouse-speed model, so it always matches the blade's push this tick. This is
+	# the honest readout the goalie leans on and what the stick-flex pose keys off
+	# (the flex is the only visual charge feedback — there is no charge ring).
 	skater.shot_charge = _wrister_charge_of(pred.power)
 
 
@@ -3407,6 +3487,10 @@ func _try_one_timer_release(input: InputState) -> Dictionary:
 		_sm.follow_through_power = 1.0
 		_hide_slapshot_hud()
 		return {fired = false, follow_through_duration = _slapper_finish_time()}
+	# The swing meets the puck at the strike spot, as it meets a caught one
+	# (on_puck_picked_up_network): pinned there, the shot leaves from it on every
+	# machine (Puck.release_origin) rather than from under the raised blade.
+	skater.enter_slapshot_pinning(slapper_strike_local())
 	var blade_world: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var locked_dir_3d := Vector3(_sm.locked_slapper_dir.x, 0.0, _sm.locked_slapper_dir.y)
 	var cfg: ShotMechanics.SlapperConfig = _slapper_config()
@@ -3527,8 +3611,7 @@ func _apply_movement(input: InputState, delta: float) -> void:
 		return
 
 	var move_state: SkaterStateMachine.State = _sm.get_state()
-	# The block stance plants; it skates itself (_apply_block_movement).
-	var locomotion_suppressed: bool = move_state == State.SHOT_BLOCKING
+	var locomotion_suppressed: bool = plants_feet(move_state)
 	var loaded: bool = move_state == State.SLAPPER_CHARGE_WITH_PUCK \
 			or move_state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
 			or move_state == State.ONE_TIMER_RETENTION
@@ -3537,11 +3620,14 @@ func _apply_movement(input: InputState, delta: float) -> void:
 	# transfer. Deterministic from the input, so reconcile replay reproduces both.
 	# Neither side of a pin commits (it is held on the stick button, and nothing
 	# stacks on it); the pinned one, pressed into the glass, has no stance either.
+	# A rocked skater has neither: the hit took his legs out of both.
 	var locked: bool = skater.pin_role != BoardPinRules.Role.NONE
-	hit_active = not locomotion_suppressed and not loaded and input.hit_held and not locked
+	var rocked: bool = BodyCheckRules.is_rocked(stagger_timer, _body_check_config())
+	hit_active = not locomotion_suppressed and not loaded and input.hit_held and not locked \
+			and not rocked
 	skater.hit_committed = hit_active
 	stance_active = not locomotion_suppressed and not loaded and input.stance_held \
-			and not hit_active and skater.pin_role != BoardPinRules.Role.PINNED
+			and not hit_active and skater.pin_role != BoardPinRules.Role.PINNED and not rocked
 	# Body-check stagger decays deterministically every tick (including during a
 	# planted charge/block and through reconcile replay), so the penalties ease
 	# back on their own. Decayed before the suppression early-out so a player
@@ -3576,6 +3662,111 @@ func _apply_movement(input: InputState, delta: float) -> void:
 				has_puck, brake, delta, cfg, posture, grip_scale)
 	_apply_pin_slide_cap()
 
+# The block stance plants the feet; it skates itself (_apply_block_movement).
+static func plants_feet(state: int) -> bool:
+	return state == State.SHOT_BLOCKING
+
+
+# ── The press ────────────────────────────────────────────────────────────────
+# Pressed against another body, this one's movement along the contact normal is
+# the pair's (PressRules): laid over what _apply_movement did along it, from the
+# velocity the tick started with, against the partner as he stood at the tick's
+# start (Scripts/networking/CLAUDE.md). Both bodies of a pair lay the same
+# acceleration once their inputs hold, so the pair moves as one; the contact
+# resolver still separates the overlap and lands any check. Not modelled: a
+# third body on the pair (the nearest partner presses), and the forward
+# prediction of a pressed remote (it integrates his own movement).
+
+# The partner's state the press reads: as his skater latched it at the end of
+# the last tick, or on a client from where the host had him (LocalController).
+class PressPartner:
+	var position: Vector3 = Vector3.ZERO
+	var weight: float = 1.0
+	var cfg: SkaterMovementRules.MovementConfig = null
+	var thrust: float = 0.0
+	var facing: Vector2 = Vector2(0.0, -1.0)
+	var intent: Vector2 = Vector2.ZERO
+	var braking: bool = false
+	var planted: bool = false
+	var posture: int = SkaterMovementRules.Posture.UPRIGHT
+	var stagger: float = 0.0
+
+var _press_partner: PressPartner = PressPartner.new()
+
+
+func _apply_press(input: InputState, delta: float, tick_start_velocity: Vector3) -> void:
+	if skater.is_knocked_down or skater.is_ghost or skater.pin_role != BoardPinRules.Role.NONE \
+			or plants_feet(_sm.get_state()) or delta <= 0.0:
+		return
+	if skater.contact_suspended_provider.is_valid() and bool(skater.contact_suspended_provider.call()):
+		return
+	var p: PressPartner = _press_partner
+	if not _find_press_partner(input.host_timestamp, p):
+		return
+	var d: Vector3 = p.position - skater.global_position
+	d.y = 0.0
+	var dist: float = d.length()
+	if dist < 0.0001:
+		return
+	var n3: Vector3 = d / dist
+	var n := Vector2(n3.x, n3.z)
+	var cfg: SkaterMovementRules.MovementConfig = _movement_config()
+	var bc: BodyCheckRules.Config = _body_check_config()
+	var posture: int = SkaterMovementRules.posture_of(stance_active, hit_active)
+	var facing: Vector2 = skater.get_facing()
+	var u: float = tick_start_velocity.dot(n3)
+	var drive_self: float = PressRules.drive(cfg, thrust, posture, skater.brake_intent, false,
+			BodyCheckRules.thrust_mult(stagger_timer, bc), facing,
+			WorldStateCodec.quantize_move_intent(skater.move_intent), n, u)
+	var drive_other: float = PressRules.drive(p.cfg, p.thrust, p.posture, p.braking, p.planted,
+			BodyCheckRules.thrust_mult(p.stagger, bc), p.facing,
+			WorldStateCodec.quantize_move_intent(p.intent), -n, -u)
+	if not PressRules.pressing(drive_self, drive_other):
+		return
+	var hold_self: float = PressRules.hold(cfg, posture, skater.brake_intent, false,
+			BodyCheckRules.grip_mult(stagger_timer, bc), facing, n, u)
+	var hold_other: float = PressRules.hold(p.cfg, p.posture, p.braking, p.planted,
+			BodyCheckRules.grip_mult(p.stagger, bc), p.facing, n, u)
+	var u_new: float = u + delta * PressRules.pair_accel(skater.weight, drive_self, hold_self,
+			p.weight, drive_other, hold_other, u, delta)
+	# The pair goes no faster than its winner skates: a press is a stride.
+	if absf(u_new) > absf(u):
+		u_new = clampf(u_new, -maxf(p.cfg.max_speed, absf(u)), maxf(cfg.max_speed, absf(u)))
+	skater.velocity += n3 * (u_new - skater.velocity.dot(n3))
+
+
+# The nearest body this one is pressed against (PressRules.touching, exact),
+# filled into `out` from what he latched at the end of the last tick; false for
+# none. `_host_ts` is the input's stamp, which a client samples the partner at.
+func _find_press_partner(_host_ts: float, out: PressPartner) -> bool:
+	var my_pos: Vector3 = skater.global_position
+	var my_radius: float = skater.collision_radius()
+	var best: Skater = null
+	var best_gap: float = INF
+	for other: Skater in skater.contact_others():
+		if other == null or other == skater or other.is_ghost or other.is_knocked_down \
+				or other.pin_role != BoardPinRules.Role.NONE or other.press_cfg == null:
+			continue
+		var d: Vector3 = other.global_position - my_pos
+		d.y = 0.0
+		var gap: float = d.length() - my_radius - other.collision_radius()
+		if PressRules.touching(gap, 0.0, 0.0) and gap < best_gap:
+			best_gap = gap
+			best = other
+	if best == null:
+		return false
+	out.position = best.global_position
+	out.weight = best.weight
+	out.cfg = best.press_cfg
+	out.thrust = best.press_thrust
+	out.facing = best.latched_facing
+	out.intent = best.latched_intent
+	out.braking = best.latched_braking
+	out.planted = plants_feet(best.latched_shot_state)
+	out.posture = SkaterMovementRules.posture_of(best.latched_stance, best.latched_committed)
+	out.stagger = best.latched_stagger
+	return true
+
 
 # Wound up, the hands are on the stick and the legs cannot stride: a skater
 # glides on whatever momentum the wind-up found. Waiting on a feed with no puck
@@ -3607,6 +3798,9 @@ var _native_block_move: RefCounted = null
 func _movement_config() -> SkaterMovementRules.MovementConfig:
 	if _cached_move_cfg == null:
 		_cached_move_cfg = _build_movement_config()
+		if skater != null:
+			skater.press_cfg = _cached_move_cfg
+			skater.press_thrust = thrust
 		if ClassDB.class_exists(&"NativeSkaterMovement"):
 			_native_move = ClassDB.instantiate(&"NativeSkaterMovement")
 			var missing: String = _native_move.configure(_cached_move_cfg)
@@ -3616,7 +3810,7 @@ func _movement_config() -> SkaterMovementRules.MovementConfig:
 			else:
 				var bc: BodyCheckRules.Config = _body_check_config()
 				_native_move.set_stagger_params(bc.max_stagger_seconds, bc.max_thrust_penalty,
-						bc.max_grip_penalty)
+						bc.max_grip_penalty, bc.rocked_max_seconds, bc.rocked_grip_penalty)
 	return _cached_move_cfg
 
 # The configured native movement kernel for this skater, or null when the
@@ -3709,11 +3903,36 @@ func _body_check_config() -> BodyCheckRules.Config:
 		_cached_body_check_cfg.max_stagger_seconds = stagger_max_seconds
 		_cached_body_check_cfg.max_thrust_penalty = stagger_max_thrust_penalty
 		_cached_body_check_cfg.max_grip_penalty = stagger_max_grip_penalty
-		_cached_body_check_cfg.knockdown_impulse = knockdown_impulse
-		_cached_body_check_cfg.knockdown_ref_impulse = knockdown_ref_impulse
-		_cached_body_check_cfg.min_knockdown_seconds = knockdown_min_seconds
-		_cached_body_check_cfg.max_knockdown_seconds = knockdown_max_seconds
+		_cached_body_check_cfg.rocked_ref_impulse = rocked_ref_impulse
+		_cached_body_check_cfg.rocked_min_seconds = rocked_min_seconds
+		_cached_body_check_cfg.rocked_max_seconds = rocked_max_seconds
+		_cached_body_check_cfg.rocked_grip_penalty = rocked_grip_penalty
+		_cached_body_check_cfg.knockdown_ref_overshoot = knockdown_ref_overshoot
+		_cached_body_check_cfg.min_lie_seconds = knockdown_lie_min_seconds
+		_cached_body_check_cfg.max_lie_seconds = knockdown_lie_max_seconds
 	return _cached_body_check_cfg
+
+# Balance config, flat like the body-check config; the build's height enters
+# per hit as _build_height_mult. The stance's base is the gait's own: each skate
+# set stance_width_m out from under a hip GaitPose.HIP_HALF_WIDTH off centre.
+var _cached_balance_cfg: BodyBalanceRules.Config = null
+var _build_height_mult: float = 1.0
+
+func _balance_config() -> BodyBalanceRules.Config:
+	if _cached_balance_cfg == null:
+		_cached_balance_cfg = BodyBalanceRules.Config.new()
+		_cached_balance_cfg.balance_ref_dv = balance_ref_dv
+		_cached_balance_cfg.along_share = balance_along_share
+		_cached_balance_cfg.sight_behind = balance_sight_behind
+		_cached_balance_cfg.vulnerable_mult = balance_vulnerable_mult
+		_cached_balance_cfg.checker_front_share = balance_checker_front_share
+		_cached_balance_cfg.stance_base_ratio = \
+				(GaitPose.HIP_HALF_WIDTH + stance_width_m) / GaitPose.HIP_HALF_WIDTH
+	return _cached_balance_cfg
+
+
+func get_balance_config() -> BodyBalanceRules.Config:
+	return _balance_config()
 
 # Knockdown-fall config is flat (not attribute-scaled) — lazily built once for
 # the controller's lifetime, same pattern as the body-check config above, with
@@ -3789,6 +4008,8 @@ func _wrister_load_config() -> WristerLoad.Config:
 		_cached_wrister_load_cfg.max_twist_rad = deg_to_rad(upper_body_max_twist_deg)
 		_cached_wrister_load_cfg.home_reach_rad = deg_to_rad(wrister_home_reach_deg)
 		_cached_wrister_load_cfg.away_reach_rad = deg_to_rad(wrister_away_reach_deg)
+		_cached_wrister_load_cfg.arm_full_past_tangent_rad = \
+				deg_to_rad(wrister_arm_full_past_tangent_deg)
 	return _cached_wrister_load_cfg
 
 # True for bot controllers (AIController overrides). Bots have no real cursor, so

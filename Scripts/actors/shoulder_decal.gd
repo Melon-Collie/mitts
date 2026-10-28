@@ -8,9 +8,9 @@ extends Node2D
 # and V runs pole to pole.
 #
 # The number is lettered in metres at the part's own texel density, so it is
-# the same size and shape on every player's shoulder. One color, no outline,
-# like the back's lettering. Defaults are the skater's cap; the goalie's
-# floater states its own (use_part).
+# the same size and shape on every player's shoulder, stroked like the back's
+# lettering when the kit borders it. Defaults are the skater's cap; the
+# goalie's floater states its own (use_part).
 
 const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf")
 # A sleeve number a little over half the back name's em.
@@ -30,20 +30,10 @@ var shoulder_color: Color = Color.WHITE
 var yoke_color: Color = Color.WHITE
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
+var text_stroke: Color = Color.TRANSPARENT
 var _px_per_m: Vector2 = Vector2(CAP_SIZE.x / CAP_GIRTH_M, CAP_SIZE.y / CAP_M_PER_V)
 var _yoke_v: float = SkaterMeshBuilder.SHOULDER_CAP_YOKE_V
 var _number_center_v: float = CAP_NUMBER_CENTER_V
-
-
-# A part other than the skater's cap: its texture size, its girth round U and
-# metres per unit V through the number, the V where the yoke ends, and the
-# number's centre in V. Before the viewport is sized from `size`.
-func use_part(p_size: Vector2i, girth_m: float, m_per_v: float, yoke_v: float,
-		number_center_v: float) -> void:
-	size = p_size
-	_px_per_m = Vector2(p_size.x / girth_m, p_size.y / m_per_v)
-	_yoke_v = yoke_v
-	_number_center_v = number_center_v
 
 
 func _draw() -> void:
@@ -58,7 +48,7 @@ func _draw() -> void:
 	var pos := Vector2(float(size.x) * 0.5 / stretch - text.x * 0.5,
 			_number_center_v * float(size.y) - text.y * 0.5 + FONT.get_ascent(font_size))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
-	draw_string(FONT, pos, num_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, text_color)
+	JerseyDecal.draw_lettering(self, FONT, pos, num_str, font_size, text_color, text_stroke)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -74,9 +64,11 @@ static func part_material(tex: Texture2D, side: float) -> StandardMaterial3D:
 	return mat
 
 
-func update_shoulder(s_color: Color, s_yoke: Color, p_number: int, t_color: Color) -> void:
+func update_shoulder(s_color: Color, s_yoke: Color, p_number: int, t_color: Color,
+		t_stroke: Color) -> void:
 	shoulder_color = s_color
 	yoke_color = s_yoke
 	jersey_number = p_number
 	text_color = t_color
+	text_stroke = t_stroke
 	queue_redraw()

@@ -19,7 +19,7 @@ const PIN_REVERSAL_MIN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20   # 
 const PIN_REACH_S: float = StickCheckRules.RISE_S + StickCheckRules.HOOK_MAX_S \
 		+ 1.0 / _PhysicsConstants.PHYSICS_TICK
 
-static var _check_cfg := BodyCheckRules.Config.new()
+static var _balance_cfg := BodyBalanceRules.Config.new()
 
 # One bot's board play, every physics tick after dispatch. Owns only its pin
 # state; the tier's knobs and the bot's state come in per call.
@@ -93,8 +93,8 @@ func apply(input: InputState, snapshot: WorldSnapshot, own_goal_dir: float,
 
 # The dispatch is driving a check: when its man is against the boards in front of
 # us, about to be touched, unbraced, and the hit will not knock him down (the
-# collision's own victim_kick against the knockdown line — the boards add to the
-# stagger, not the knockdown), reach for the
+# collision's own victim_kick against his balance, as the host reads it — the
+# boards add to the stagger, not the knockdown), reach for the
 # pin instead where one is worth holding. The stick goes out on the button, so the
 # commit lets go: the check and the pin are two buttons.
 func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetworkState,
@@ -121,9 +121,13 @@ func _reach_for_pin(input: InputState, snapshot: WorldSnapshot, me: SkaterNetwor
 		var closing: float = maxf(Vector2(me.velocity.x - man.velocity.x,
 				me.velocity.z - man.velocity.z).dot(to_man / dist), 0.0)
 		var man_caps: AISkaterCaps = _caps_by_peer.get(pid)
-		if SkaterCollisionRules.victim_kick(closing, caps.weight if caps != null else 1.0,
-				man_caps.weight if man_caps != null else 1.0, transfer) \
-				>= _check_cfg.knockdown_impulse \
+		var kick: float = SkaterCollisionRules.victim_kick(closing,
+				caps.weight if caps != null else 1.0,
+				man_caps.weight if man_caps != null else 1.0, transfer)
+		var posture: BodyBalanceRules.Posture = BodyBalanceRules.posture_of(man.stance_active,
+				SkaterStateMachine.state_off_balance(man.shot_state))
+		if BodyBalanceRules.overshoot(to_man / dist * kick, man.facing, posture,
+				man_caps.height_mult if man_caps != null else 1.0, _balance_cfg) > 1.0 \
 				or not _pin_worth_holding(snapshot, me, pid, own_goal_dir):
 			return
 		input.hit_held = false

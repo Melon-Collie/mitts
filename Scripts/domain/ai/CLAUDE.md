@@ -268,6 +268,14 @@ stride, so it is never free insurance. Read through the tier's perception delay,
 a fast square drive catches him still thinking he has time, and a slow approach
 gives him time to leave. The `protects_the_puck` cognition gate.
 
+**Any defender meets a carrier skating into him with the shoulder**
+(`AIStandUpRead`, applied by `SkaterAgentStandUp` after dispatch): Ctrl held
+inside `MEET_S` of contact when, committed, the contact rocks him. It is not
+the body-check commit — nothing is chased and no containment is given up,
+because by then the contact is happening anyway; it only makes a carrier who
+skates into a set defender meet a check rather than a bump. It rides
+`check_aggression` (zero on Easy).
+
 **Any defender's extra is the shot block** (`AIShotBlockRead`, applied by
 `SkaterAgentShotBlock` every tick after dispatch). He drops into it when an
 opponent in our end winds up and we stand on the line from the release to our
@@ -280,24 +288,20 @@ travels to it from rest across it. The dive must still reach the lane, and no
 teammate may be nearer it. Both are the `blocks_shots` cognition gate, closed on
 Easy.
 
-**The coverer's other extra is the cross-check** (`AICrossCheckRead`, applied by
-`SkaterAgentCrossCheck` after every other stick pass, so a stick they took throws
-nothing). He prices the push the host would land (`predicted_dv` is
-`CrossCheckRules.victim_dv` on the man's replicated facing, posture, stagger and
-intent) and how far it moves a man who pushes back once he has read it. At our
-net he shoves the man he covers when that man hides the release from our goalie
-by the goalie's own body test and would not once moved; anywhere, he shoves the
-man in reach who beats him to a loose puck when the push and the stagger it
-lands turn the race, his own stick out through the push charged to him. The
-push goes where it is aimed, and he aims it as a human would, on the cursor: off
-the sightline the shortest way, or away from the puck, and turned off that by
-30° and 60° either side (`aim_turn`). A push across a man's blades meets his
-edges (doubled if he is loaded low) and one along them moves him furthest, so
-the best aim trades the two and the tries sample it. When no try clears the
-screen, he does not throw it. It rides `check_aggression` (zero on Easy). A
-screener in their end answers it: with a defender who could reach him at any aim
-the defender can turn to, he loads up (the stance), the
-`protects_the_puck` gate.
+**The coverer's other extra is the press** (`AIPressRead`, applied by
+`SkaterAgentPress` after every other body and stick pass). Within
+`STEP_IN_M` of the man who screens our goalie, he holds Ctrl and drives into him
+when the pair's motion the host would lay (`PressRules` on the man's replicated
+facing, posture, brake, stagger and intent) moves him off the sightline within
+`READ_S`, by the goalie's own body test (`AIScreenRead`). The push runs along
+the line through the man, so it clears a screen only from the side that moves
+him off it; getting to that side is the role's.
+A held tie keeps its stick through the press. It rides `check_aggression`. A
+screener in their end with a defender on him digs in, braking in the stance,
+whose anchored stop holds an equal man's drive; a carrier skating into a man
+who stands him up holds Ctrl, the brace, when the pair moves his way harder
+with his body in it (`AIPressRead.pair_accel`, with against without). Both ride
+the `protects_the_puck` gate.
 
 ### The three facts a station reads, and the one that stays unread
 
@@ -541,24 +545,23 @@ matchings score the same, so the retain branch holds forever.
 ## The goalie is tiered, but only ever as a weaker goalie
 
 `GoalieSkillProfile` is the goalie's counterpart to `BotSkillProfile`: one bundle
-of knobs per difficulty, applied by `GoalieController.setup()` onto its
-`@export`s and selected per match from the lobby. Hard is every value at the
-controller's authored default, so applying it is a no-op by construction
-(`test_goalie_profile_mirrors.gd` holds that).
+of knobs per difficulty, which the keeper takes onto his reads, his hands and
+his drop (`KeeperController._tier`), selected per match from the lobby.
 
 Every lever in it must be a trait a real weaker goalie actually has, so a lower
 tier still reads as a goalie — tracks the play, squares up, drops butterfly —
-who gives up the net and can't rob you, never as a dumb one. The knobs fall in
-two groups and a tier needs both, or the ladder is only reaction latency: read
-latencies (when he starts moving) and positioning / save levers (how much net he
-concedes standing still).
+who gives up the net and can't rob you, never as a dumb one. Today every lever
+is a read latency or a hand or drop speed (when he starts moving, and how fast
+he gets there); his positioning is the same on every tier.
 
 **The skater AI's goalie model is a MIRROR, not a second tier.** What the bots
-predict of him outside the shot field — his leg read, lateral accel ramp, depth
-and puck-play margin — lives as static vars on `AIGoalieModel`, synced from the
-match's profile by `set_goalie_profile`. The shot field itself is measured
-against the Hard goalie only, so against a lower tier the bots price shots as
-if the net were Hard's; per-tier fields are the planned fix.
+predict of him outside the shot field — his leg read, his push, the depth he
+takes, the post he holds, his rise — lives on `AIGoalieModel`, read from his own
+code (`KeeperPositioning`, `KeeperFootwork`, `KeeperDrop`, his gear), with the
+leg read synced from the match's profile by `set_goalie_profile`.
+`test_ai_goalie_model_mirrors.gd` holds each one against him. The shot field
+itself is measured against the Hard goalie only, so against a lower tier the
+bots price shots as if the net were Hard's; per-tier fields are the planned fix.
 
 ---
 
@@ -604,7 +607,7 @@ reaches back into what remains.
   post-game xG stat (`now_at_spread`, at the shot's context spread) — so offence
   and defence price a chance alike, and the model behind it can be replaced in
   that file alone. It answers the odds of scoring on today's
-  goalie, read from `AIShotOdds`: the live `GoalieController`'s open set,
+  goalie, read from `AIShotOdds`: the live keeper's open set,
   measured cell by cell (release spot × how he was beaten or set) and generated
   into `generated/shot_field_data.gd` (`docs/shot-currency-plan.md`). A goalie
   change is a regeneration (`.claude/hooks/generate-shot-field.sh`;
@@ -622,8 +625,10 @@ reaches back into what remains.
     a neighbour with a close one. Squareness is what tells a keeper set on the
     shot from one a feed dragged off it at the same offset. Out-of-position
     keepers are measured, not extrapolated: DECOY cells set him on a carrier
-    elsewhere, then shoot from the spot, and the grid's first row, 0.6 m out,
-    is where he seals the post. A keeper on the post is read by whether the
+    elsewhere, then shoot from the spot, and WRAP cells seal him in the RVH on
+    a carrier behind the net, then shoot from a spot in close: the field's
+    only keeper on the post, since in front of the goal line he stands on its
+    overlap and reads as upright. A keeper on the post is read by whether the
     release is inside his seal zone (`AIGoalieModel.in_post_seal_zone`):
     inside it he is set there, outside it the puck has been pulled off the
     line and he is leaving, and blending the two priced a shot into a set seal

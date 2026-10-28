@@ -48,7 +48,7 @@ func _strip(src: String) -> String:
 func test_every_resolver_is_discovered() -> void:
 	for expected: String in ["pickup_claim_resolver.gd", "poke_claim_resolver.gd",
 			"stick_lift_claim_resolver.gd", "stick_tie_claim_resolver.gd",
-			"hit_claim_resolver.gd", "cross_check_claim_resolver.gd"]:
+			"hit_claim_resolver.gd"]:
 		assert_true(_sources.has(expected), "%s should be discovered as a claim resolver" % expected)
 
 

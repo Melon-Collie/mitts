@@ -27,6 +27,17 @@ static func state_has_puck(state: int) -> bool:
 			or state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK
 
+# States whose body is committed to a shot — a wind-up, a wrister's load, a
+# follow-through, a one-timer's hold — so a hit catches him off balance
+# (BodyBalanceRules.Posture.VULNERABLE). Pure, like state_has_puck, so the host,
+# the local victim's prediction and the bots read it alike.
+static func state_off_balance(state: int) -> bool:
+	return state == State.WRISTER_AIM \
+			or state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
+			or state == State.FOLLOW_THROUGH \
+			or state == State.ONE_TIMER_RETENTION
+
 # States in which the puck is RIGIDLY PINNED to the carrier's body rather than
 # riding a live, sweeping blade — the shot wind-ups plus the one-timer retention
 # hold, which keeps the wind-up's pin while the shaft loads. WRISTER_AIM freezes the
@@ -48,8 +59,7 @@ static func state_has_puck(state: int) -> bool:
 # NOTE this says nothing about the carrier's MOBILITY, which differs sharply
 # between the two: the slapper takes no stride or steer and glides on its
 # momentum, while the wrister suppresses nothing and stays fully steerable.
-# Reads that depend on the shooter's mobility must test for that separately —
-# see GoalieController._reading_planted_windup.
+# Reads that depend on the shooter's mobility must test for that separately.
 static func state_pins_puck(state: int) -> bool:
 	return state == State.WRISTER_AIM \
 			or state == State.SLAPPER_CHARGE_WITH_PUCK \
@@ -115,6 +125,10 @@ var follow_through_is_slapper: bool = false
 var follow_through_duration_total: float = 0.25
 var follow_through_power: float = 1.0
 var shot_dir: Vector3 = Vector3.ZERO
+# World XZ lines a wrist shot's finish turns the hips and swings the stick
+# along: as far round onto shot_dir as the torso drove it. ZERO is shot_dir.
+var finish_facing_dir: Vector3 = Vector3.ZERO
+var finish_stick_dir: Vector3 = Vector3.ZERO
 var locked_slapper_dir: Vector2 = Vector2.ZERO
 
 var _cb: Callbacks
@@ -130,6 +144,12 @@ func setup(callbacks: Callbacks, aiming: SkaterAimingBehavior) -> void:
 
 func get_state() -> State:
 	return _state
+
+func aim_finish(shot: Vector3, facing_line: Vector3 = Vector3.ZERO,
+		stick_line: Vector3 = Vector3.ZERO) -> void:
+	shot_dir = shot
+	finish_facing_dir = facing_line
+	finish_stick_dir = stick_line
 
 
 func set_state(s: State) -> void:
@@ -165,7 +185,7 @@ func _state_skating_without_puck(_skater: Skater, input: InputState, delta: floa
 	_cb.apply_blade_from_mouse.call(input, delta)
 	if input.shoot_pressed:
 		_state = State.WRISTER_AIM
-		shot_dir = Vector3.ZERO
+		aim_finish(Vector3.ZERO)
 	if input.slap_pressed:
 		_cb.enter_slapper_charge.call(input)
 
@@ -277,12 +297,12 @@ func _state_one_timer_retention(_skater: Skater, input: InputState, delta: float
 		return
 	var result: Dictionary = _cb.release_retained_one_timer.call(input)
 	if result.get("fired", false):
-		shot_dir = result.direction
+		aim_finish(result.direction)
 	else:
 		# Whiffed one-timer: the swing is already committed — play the full
 		# follow-through through empty air (shot_dir stays zero; the pose falls
 		# back to locked_slapper_dir) rather than snapping the wind-up away.
-		shot_dir = Vector3.ZERO
+		aim_finish(Vector3.ZERO)
 	follow_through_is_slapper = true
 	_state = State.FOLLOW_THROUGH
 	follow_through_timer = result.get("follow_through_duration", 0.5)
@@ -311,7 +331,7 @@ func _state_shot_blocking(skater: Skater, input: InputState, delta: float, _has_
 
 func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	_state = State.WRISTER_AIM
-	shot_dir = Vector3.ZERO
+	aim_finish(Vector3.ZERO)
 	# Seed the cursor (screen-space) baseline the speed EMA differences against,
 	# so the first tick after press reads zero speed rather than a jump.
 	var intent_pos := Vector3(input.mouse_screen_pos.x, 0.0, input.mouse_screen_pos.y)

@@ -115,7 +115,6 @@ signal deflection_received(position: Vector3, speed: float)
 signal body_block_received(position: Vector3, speed: float)
 signal puck_strip_received(position: Vector3, speed: float)
 signal stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int, blade_curr: Vector3)
-signal cross_check_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, target_peer_id: int)
 signal stick_lift_received(position: Vector3, speed: float)
 # Distinct from stick_lift_received on purpose: a nudge (self-tap) is its own
 # gameplay event, so it carries its own cue and can be re-sounded independently
@@ -128,7 +127,6 @@ signal shot_sound_received(position: Vector3, is_slapper: bool, power: float)
 # relying on each client's non-authoritative local collision detection.
 # `force` is the VFX-scale impact force.
 signal body_check_landed(hitter_peer_id: int, victim_peer_id: int, force: float, hit_dir: Vector3)
-signal cross_check_landed(victim_peer_id: int, dv: float, push_dir: Vector3)
 # Smart ping (context-sensitive team message). Fired on every peer (host
 # self-emits) with the sender's resolved ping; GameManager filters display to
 # the sender's team and — host-only — routes the bot directive. `ping_type`
@@ -1184,7 +1182,7 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 	_pending_handshake.erase(sender_id)
 	_peer_handedness[sender_id] = is_left_handed
 	_peer_steam_ids[sender_id] = steam_id
-	var sanitized_name: String = player_name.strip_edges().left(10)
+	var sanitized_name: String = player_name.strip_edges().left(NameFilter.MAX_LENGTH)
 	_peer_names[sender_id] = sanitized_name if NameFilter.is_alphanumeric(sanitized_name) and NameFilter.is_clean(sanitized_name) else "Player"
 	_peer_numbers[sender_id] = clampi(jersey_number, 0, 99)
 	# v4 builds have no power economy to validate — every axis is lateral, so
@@ -1713,25 +1711,6 @@ func receive_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, inpu
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
 	stick_tie_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr)
-
-func send_cross_check_claim(host_timestamp: float, interp_delay_ms: float, target_peer_id: int) -> void:
-	NetworkSimManager.send(
-		func(ts: float, idms: float, ilms: float, tpid: int) -> void:
-			receive_cross_check_claim.rpc_id(1, ts, idms, ilms, tpid),
-		[host_timestamp, interp_delay_ms, get_input_lead_ms(), target_peer_id], true)
-
-@rpc("any_peer", "reliable")
-func receive_cross_check_claim(host_timestamp: float, interp_delay_ms: float, input_lead_ms: float,
-		target_peer_id: int) -> void:
-	if not is_host:
-		return
-	var peer_id: int = multiplayer.get_remote_sender_id()
-	if not _rate_ok(peer_id, _CLAIM_RATE_CAP_PER_S, _claim_rate_window_start, _claim_rate_count):
-		return
-	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
-		NetworkTelemetry.record_claim_stamp_reject()
-		return
-	cross_check_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id)
 
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
 	NetworkSimManager.send(
@@ -2780,18 +2759,6 @@ func notify_body_check(hitter_peer_id: int, victim_peer_id: int,
 			func(hid: int, vid: int, f: float, d: Vector3) -> void:
 				body_check_landed.emit(hid, vid, f, d),
 			[hitter_peer_id, victim_peer_id, force, hit_dir], true)
-
-func send_cross_check_to_all(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
-	for peer_id: int in connected_peer_ids():
-		notify_cross_check.rpc_id(peer_id, victim_peer_id, dv, push_dir)
-
-# The landed shove's feedback (burst, thud, knockback lead) on every machine; the
-# push itself reaches the victim through the snapshot.
-@rpc("authority", "reliable")
-func notify_cross_check(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
-	NetworkSimManager.send(
-			func(vid: int, v: float, d: Vector3) -> void: cross_check_landed.emit(vid, v, d),
-			[victim_peer_id, dv, push_dir], true)
 
 func send_stick_lift_to_all(position: Vector3, speed: float) -> void:
 	for peer_id: int in connected_peer_ids():

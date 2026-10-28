@@ -145,6 +145,10 @@ var _last_ghost_state: Dictionary = {}  # peer_id -> bool, host only
 # _apply_ghost_state, and on clients by notify_offside_state. Read by the HUD
 # banner, the teammate markers and the bots.
 var _tag_up_peers: Dictionary[int, bool] = {}
+# Host: whose deliberate release the loose puck is still on, or -1
+# (WorldSnapshot.loose_puck_released_by). Set by a release from carry or a
+# one-timer; cleared by a pickup, a loose touch, a goalie touch or a stoppage.
+var _loose_puck_released_by: int = -1
 # Reused peer_id -> position scratch for the per-tick ghost-state and icing
 # checks (host only). The domain calls read it synchronously and never retain
 # it; each call site clears + refills before use.
@@ -286,7 +290,6 @@ var _xg_query := AIShotOdds.Query.new()
 var _hit_tracker: HitTracker = null
 var _stick_ties: StickTieTracker = null
 var _board_pins: BoardPinTracker = null
-var _cross_checks: CrossCheckTracker = null
 var _stick_tie_draw := StickTieDraw.new()
 var _frozen_puck := FrozenPuckRules.State.new()
 var _turnover_tracker: TurnoverTracker = null
@@ -300,7 +303,6 @@ var _pickup_claim: PickupClaimResolver = null
 var _poke_claim: PokeClaimResolver = null
 var _stick_lift_claim: StickLiftClaimResolver = null
 var _stick_tie_claim: StickTieClaimResolver = null
-var _cross_check_claim: CrossCheckClaimResolver = null
 var _hit_claim: HitClaimResolver = null
 var _phase_coord: PhaseCoordinator = null
 var _swap_coord: SlotSwapCoordinator = null
@@ -353,6 +355,9 @@ var _intermission_timer: SceneTreeTimer = null
 # Host-only: ends the fixed intermission window (stops the looping reel,
 # which advances the period). Cleared alongside _intermission_timer.
 var _intermission_end_timer: SceneTreeTimer = null
+# Host-only: the referee's beat between a goalie securing the puck and the
+# whistle (_on_goalie_covered_puck); one at a time.
+var _cover_whistle: SceneTreeTimer = null
 var _career_reporter: CareerStatsReporter = null
 var _net_session_reporter: NetworkSessionReporter = null
 # Double-post guard for the network-quality row: the game-over path reports
@@ -552,7 +557,6 @@ func _wire_network_signals() -> void:
 	NetworkManager.poke_claim_received.connect(_on_poke_claim_received)
 	NetworkManager.stick_lift_claim_received.connect(_on_stick_lift_claim_received)
 	NetworkManager.stick_tie_claim_received.connect(_on_stick_tie_claim_received)
-	NetworkManager.cross_check_claim_received.connect(_on_cross_check_claim_received)
 	NetworkManager.ghost_state_received.connect(_on_ghost_state_received)
 	NetworkManager.offside_state_received.connect(_on_offside_state_received)
 	NetworkManager.hit_claim_received.connect(_on_hit_claim_received)
@@ -617,8 +621,6 @@ func _physics_process(delta: float) -> void:
 	_refresh_goalie_data_cache()
 	if _stick_tie_claim != null:
 		_stick_tie_claim.maybe_send_claim()
-	if _cross_check_claim != null:
-		_cross_check_claim.maybe_send_claim()
 	if not NetworkManager.is_host or puck == null or _state_machine == null:
 		return
 	# Goal replay temporarily owns actor positions on the host. Skip the live
@@ -700,7 +702,6 @@ func _physics_process(delta: float) -> void:
 	_shot_tracker.tick(delta)
 	_hit_tracker.tick(delta)
 	_board_pins.tick(not _state_machine.is_movement_locked())
-	_cross_checks.tick(not _state_machine.is_movement_locked())
 	_stick_ties.tick(not _state_machine.is_movement_locked())
 	_possession_tracker.tick(delta)
 	# Release before _pickup_claim.tick so a claim coming due this frame can still
@@ -844,19 +845,24 @@ func _whistle_and_faceoff(dot: Vector2) -> void:
 	_phase_coord.handle_phase_entered()
 
 
-# Host-only: a goalie secured (smothered) a loose puck. NHL rules: whistle
-# the play dead and face off in the covering goalie's defensive zone (same
-# dot geometry as icing — offender's-zone dot picked by puck X). ARCADE / OFF:
-# no stoppage — the goalie's own hold-and-release timer plays the puck out.
-# Deferred: the signal fires mid-goalie-physics-tick, and the faceoff phase
-# entry teleports actors; the same-frame remainder of that tick shouldn't run
-# against a half-reset world.
+# Host-only: a goalie secured (smothered or caught) the puck. Where a cover
+# whistles (GameRules.whistles_a_cover: NHL and ARCADE), the referee blows the
+# play dead GameRules.COVER_WHISTLE_DELAY_S later and it faces off in the
+# covering goalie's defensive zone (same dot geometry as icing — offender's-zone
+# dot picked by puck X); in OFF the goalie's own hold-and-release plays it out.
+# The timer runs on physics time, so a pause holds it, and ends after the tick
+# that secured it, whose remainder must not run against a half-reset world.
 func _on_goalie_covered_puck(covering_team_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
-	if _state_machine == null or _state_machine.rule_set != GameRules.RuleSet.NHL:
+	if _state_machine == null or not GameRules.whistles_a_cover(_state_machine.rule_set):
 		return
-	call_deferred("_whistle_goalie_freeze", covering_team_id)
+	if _cover_whistle != null:
+		return
+	_cover_whistle = get_tree().create_timer(GameRules.COVER_WHISTLE_DELAY_S, false, true)
+	_cover_whistle.timeout.connect(func() -> void:
+		_cover_whistle = null
+		_whistle_goalie_freeze(covering_team_id))
 
 
 func _whistle_goalie_freeze(covering_team_id: int) -> void:
@@ -918,6 +924,7 @@ func _on_stoppage_flush_stat_trackers(phase: GamePhase.Phase) -> void:
 	if phase == GamePhase.Phase.PLAYING or phase == GamePhase.Phase.FACEOFF:
 		return
 	_flush_pending_faceoff_win()
+	_loose_puck_released_by = -1
 	# After the flush: its last-toucher fallback reads the assist chain.
 	if _shot_tracker != null:
 		_shot_tracker.on_play_stopped()
@@ -1007,11 +1014,6 @@ func _update_host_puck_tracking() -> void:
 			_icing_races_seen = _state_machine.icing.races_opened
 			_icing_releaser = _shot_tracker.get_last_toucher() if _shot_tracker != null else -1
 	_consume_pending_faceoff()
-	# A goalie who plays an iced puck waves the icing off, so the defending one
-	# stays home while the race runs.
-	var icing_team: int = _state_machine.icing.pending_team_id
-	for gc: GoalieController in goalie_controllers:
-		gc.set_icing_hold(icing_team != -1 and gc.team_id != icing_team)
 	_announce_icing_race()
 
 
@@ -1588,10 +1590,9 @@ func _wire_subsystems() -> void:
 		return _registry.skaters() if _registry != null else []
 	for gc: GoalieController in goalie_controllers:
 		gc.set_skater_getter(goalie_skater_getter)
-		# Cover/freeze resolution is ruleset-split here: NHL whistles a
-		# defensive-zone faceoff; ARCADE/OFF let the controller's own
-		# hold-and-release play it out (no stoppage — same philosophy as the
-		# offside ghost standing in for the offside whistle).
+		# Cover/freeze resolution is ruleset-split in _on_goalie_covered_puck:
+		# NHL and ARCADE whistle a defensive-zone faceoff; OFF lets the
+		# controller's own hold-and-release play it out.
 		gc.puck_covered.connect(_on_goalie_covered_puck)
 	_roster_announcer = RosterAnnouncer.new(_registry.player_added, _registry.player_removed, is_spectator_peer)
 	_roster_announcer.announced.connect(roster_announced.emit)
@@ -1685,13 +1686,6 @@ func _wire_subsystems() -> void:
 		_board_pins.clear()
 	_board_pins = BoardPinTracker.new()
 	_board_pins.setup(_registry, NetworkManager.local_time, _strip_pinned_carrier)
-	if _cross_checks != null:
-		_cross_checks.clear()
-	_cross_checks = CrossCheckTracker.new()
-	_cross_checks.setup(_registry, func(s: Skater) -> SkaterController:
-		var rec: PlayerRecord = _registry.get_record(_registry.resolve_peer_id(s))
-		return rec.controller as SkaterController if rec != null else null)
-	_cross_checks.landed.connect(_on_cross_check_thrown)
 	_hit_tracker.impact_landed.connect(_on_impact_landed)
 	_hit_tracker.hit_credited.connect(_on_hit_credited)
 
@@ -1751,10 +1745,6 @@ func _wire_subsystems() -> void:
 	_stick_tie_claim = StickTieClaimResolver.new()
 	_stick_tie_claim.setup(_registry, _state_buffer_manager,
 			func() -> StickTieTracker: return _stick_ties, _get_puck_controller)
-
-	_cross_check_claim = CrossCheckClaimResolver.new()
-	_cross_check_claim.setup(_registry, _state_buffer_manager,
-			func() -> CrossCheckTracker: return _cross_checks)
 
 	_hit_claim = HitClaimResolver.new()
 	_hit_claim.setup(_registry, _state_buffer_manager, _hit_tracker, _get_puck_controller)
@@ -1970,7 +1960,6 @@ func _wire_sound_signals() -> void:
 	NetworkManager.puck_strip_received.connect(
 		func(pos: Vector3, spd: float) -> void: SoundManager.play_world(SoundManager.Sound.PUCK_STRIP, pos, _puck_speed_volume(spd), 0.06))
 	NetworkManager.body_check_landed.connect(_on_body_check_landed)
-	NetworkManager.cross_check_landed.connect(_on_cross_check_landed)
 	NetworkManager.smart_ping_received.connect(_on_smart_ping_received)
 	NetworkManager.stick_lift_received.connect(
 		func(pos: Vector3, spd: float) -> void:
@@ -3046,6 +3035,8 @@ func _enrich_snapshot_for_ai(snap: WorldSnapshot) -> void:
 	snap.teammate_ids_by_team.clear()
 	snap.closest_to_puck_by_team.clear()
 	snap.tag_up_peers.clear()
+	snap.loose_puck_released_by = _loose_puck_released_by \
+			if puck != null and puck.get_carrier() == null else -1
 	for pid: int in _tag_up_peers:
 		snap.tag_up_peers[pid] = true
 	if _registry == null:
@@ -3164,6 +3155,7 @@ func _on_server_puck_picked_up_by(peer_id: int, settle_s: float, feed: Vector2) 
 	# NACK it so their optimistic pin rolls back now (covers every
 	# authoritative grant path, including the one-timer catch).
 	_pickup_claim.clear_for_grant(peer_id)
+	_loose_puck_released_by = -1
 	var record: PlayerRecord = _registry.get_record(peer_id)
 	if record == null:
 		return
@@ -3284,45 +3276,6 @@ func _on_stick_tie_claim_received(peer_id: int, host_timestamp: float, interp_de
 			_state_buffer_manager.newest_host_timestamp(),
 			_stick_tie_claim.receive_claim,
 			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr])
-
-
-func _on_cross_check_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
-		input_lead_ms: float, target_peer_id: int) -> void:
-	if not NetworkManager.is_host:
-		return
-	_deferred_claims.submit(
-			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
-			_state_buffer_manager.newest_host_timestamp(),
-			_cross_check_claim.receive_claim,
-			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id])
-
-
-# Host-only: a landed cross-check's feedback to every peer, and self-fired.
-func _on_cross_check_thrown(_shover: Skater, victim: Skater, dv: float, push_dir: Vector3) -> void:
-	var victim_peer_id: int = _registry.resolve_peer_id(victim)
-	NetworkManager.send_cross_check_to_all(victim_peer_id, dv, push_dir)
-	_on_cross_check_landed(victim_peer_id, dv, push_dir)
-	_record_replay_audio_event("cross_check", victim.global_position, dv, {
-		"victim_peer_id": victim_peer_id,
-		"push_dir": [push_dir.x, push_dir.y, push_dir.z],
-	})
-
-
-# The shove's burst, thud and knockback lead, at the hardness of the stagger it
-# lands (a shove the victim held lands none).
-func _on_cross_check_landed(victim_peer_id: int, dv: float, push_dir: Vector3) -> void:
-	var rec: PlayerRecord = _registry.get_record(victim_peer_id) if _registry != null else null
-	var t: float = SkaterVFX.shove_intensity(dv)
-	if rec == null or rec.skater == null or t <= 0.0:
-		return
-	var vfx: SkaterVFX = rec.skater.get_node_or_null("VFX") as SkaterVFX
-	if vfx != null:
-		vfx.fire_impact_burst(rec.skater, t, push_dir)
-	SoundManager.play_world(SoundManager.Sound.BODY_CHECK, rec.skater.global_position,
-			SkaterVFX.shove_volume_db(t), 0.08, SkaterVFX.shove_pitch_scale())
-	var rc: RemoteController = rec.controller as RemoteController
-	if rc != null:
-		rc.start_knockback_lead(push_dir, t)
 
 
 func _on_server_puck_released_by_carrier(peer_id: int) -> void:
@@ -3468,6 +3421,7 @@ func _on_goal_resolve_faceoff(scoring_team: Team,
 
 
 func _on_server_puck_touched_while_loose(peer_id: int) -> void:
+	_loose_puck_released_by = -1
 	# A loose-puck touch during FACEOFF (deflect / body redirect) makes the puck
 	# live — end the faceoff so a goal off the deflection counts (see P2-2).
 	_phase_coord.on_puck_touched_live()
@@ -3491,6 +3445,7 @@ func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	if not NetworkManager.is_host:
 		return
 	var defending_team_id: int = _defending_team_id_for_goalie(goalie)
+	_loose_puck_released_by = -1
 	_shot_tracker.on_goalie_touch(defending_team_id)
 	_stats_sync_gate.mark_dirty()
 	# A goalie touch only ever waves icing off, so no whistle fires mid-tick here.
@@ -3601,7 +3556,7 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 		# (_on_remote_derived_one_timer), so there is no shot RPC — the same
 		# shape every other release already had.
 		if puck_controller != null:
-			puck_controller.notify_local_release(direction, power)
+			puck_controller.notify_local_release(direction, power, skater)
 		return
 	# Host's own one-timer: shooter is local, so its sim and its puck view share
 	# a clock and there is nothing to rewind. interp_delay_ms = 0 short-circuits
@@ -3618,7 +3573,7 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 # the host's own sim of that swing. Nothing here is client-supplied.
 #
 # The eligibility gates are the ones an ordinary corral would apply, because a
-# one-timer teleports the puck onto the shooter's blade to fire it.
+# one-timer teleports the puck onto the shooter's strike spot to fire it.
 # `is_on_cooldown` is the double-fire guard: host and client can disagree about
 # whether the swing had the puck (the host's own pickup detection may grant the
 # feed DURING the hold), and if the host resolved the same swing as a carried
@@ -3704,6 +3659,7 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 	# work — without this, get_last_toucher() returns the passer at goal time.
 	_shot_tracker.on_deflection(pid)
 	_shot_tracker.on_shot_started(pid, true)  # one-timer tag → One-Timer achievement
+	_loose_puck_released_by = pid
 	# Lag-comp the goalie reaction trigger (see _fire_remote_shot). clamp_back_date
 	# also zeroes the host's own path (host_timestamp = 0 → stale → 0); without it
 	# `now - 0` back-dates the goalie by the whole session.
@@ -3717,8 +3673,9 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 			and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
 		# Goalie was REMOTE-view from the shooter — clients render the goalie
 		# from buffered host snapshots at host_time - interp_delay, so the
-		# shooter saw the goalie at that earlier moment. Rewind to that snapshot
-		# for fair puck/goalie geometry at the release. See LagCompRewind.
+		# shooter saw the goalie at that earlier moment. Rewound to that snapshot
+		# for the release, so the shot's xG is read against the goalie the
+		# shooter saw. See LagCompRewind.
 		# Anti-cheat: delay bounded against the shooter's measured link first.
 		interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
 				interp_delay_ms, float(NetworkManager.get_peer_ping_ms(pid)))
@@ -3774,6 +3731,11 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		if shooter != null and shooter.controller != null:
 			var max_power: float = shooter.controller.max_slapper_power if is_slapper \
 					else shooter.controller.max_wrister_power
+			# A wrist shot keeps the shooter's motion (ReleaseMomentum), read off
+			# the host's own copy of the body.
+			if not is_slapper and shooter.skater != null:
+				max_power = ShotReleaseRules.release_power_bound(max_power,
+						shooter.skater.velocity)
 			power = ShotReleaseRules.clamp_power(power, max_power)
 		rtt_ms = ShotReleaseRules.clamp_rtt_ms(
 				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
@@ -3802,8 +3764,8 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and rtt_ms > 0.0 \
 				and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
 			# Goalie is REMOTE-view from the shooter — the shooter saw the goalie at
-			# host_time - interp_delay (the buffered render path); rewind to that
-			# snapshot for fair puck/goalie geometry at the release moment.
+			# host_time - interp_delay (the buffered render path); rewound to that
+			# snapshot for the release, so the shot's xG is read against him.
 			# Anti-cheat: delay bounded against the shooter's measured link first.
 			interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
 					interp_delay_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
@@ -3867,6 +3829,7 @@ func _start_pending_shot_from_carrier() -> void:
 	if puck == null or puck.carrier == null:
 		return
 	var shooter_peer_id: int = _registry.resolve_peer_id(puck.carrier)
+	_loose_puck_released_by = shooter_peer_id
 	# A pass/shot from carry is a deliberate play — instant possession
 	# establishment (PossessionRules), even off a one-touch. Runs while the
 	# carrier is still set, before release() fires the generic release signal.
@@ -4804,7 +4767,6 @@ func on_scene_exit() -> void:
 	_poke_claim = null
 	_stick_lift_claim = null
 	_stick_tie_claim = null
-	_cross_check_claim = null
 	_hit_claim = null
 	if _stick_ties != null:
 		_stick_ties.clear()
@@ -4812,9 +4774,6 @@ func on_scene_exit() -> void:
 	if _board_pins != null:
 		_board_pins.clear()
 	_board_pins = null
-	if _cross_checks != null:
-		_cross_checks.clear()
-	_cross_checks = null
 	_phase_coord = null
 	_swap_coord = null
 	if _debug_overlay:
@@ -5362,7 +5321,8 @@ func get_state_delayed(delay_seconds: float, out: WorldSnapshot = null) -> World
 	return _state_buffer_manager.get_state_at(ts, out)
 
 
-# Historical {skater, position, velocity, hit, ghost} for every skater EXCEPT
+# Historical {skater, position, velocity, hit, puck, ghost, and the press's
+# shot_state, facing, intent, brake, stance, stagger} for every skater EXCEPT
 # `exclude_skater` at `host_ts`, sampled from each remote's interpolation buffer.
 # Wired to the local player's LocalController as the reconcile replay's
 # body-check re-resolution source (Slice C) — it re-derives contact against where
@@ -5405,7 +5365,14 @@ func _sample_historical_others(exclude_skater: Skater, host_ts: float) -> Array:
 		entry["position"] = state.position
 		entry["velocity"] = state.velocity
 		entry["hit"] = state.hit_committed
+		entry["puck"] = SkaterStateMachine.state_has_puck(state.shot_state)
 		entry["ghost"] = state.is_ghost
+		entry["shot_state"] = state.shot_state
+		entry["facing"] = state.facing
+		entry["intent"] = state.move_intent
+		entry["brake"] = state.brake_intent
+		entry["stance"] = state.stance_active
+		entry["stagger"] = state.stagger_timer
 		_hist_others_scratch.append(entry)
 	return _hist_others_scratch
 
@@ -5543,7 +5510,8 @@ func faceoff_time_until_drop() -> float:
 # pose (which rides the hand/blade wire state outward, including the host's sim
 # of a remote human scorer), and every machine's gait reads the same timer for
 # the celebration leg bounce (legs are computed locally per machine and never
-# ride the wire).
+# ride the wire). The window opens once the goal clip has closed, so the
+# replay never records a stick the knees and fist do not replay with it.
 func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 		_assist1: String, _assist2: String) -> void:
 	if scorer_name.is_empty():
@@ -5551,7 +5519,9 @@ func _trigger_scorer_celebration(_team: Team, scorer_name: String,
 	for record: PlayerRecord in _registry.all().values():
 		if record.player_name != scorer_name or record.controller == null:
 			continue
-		record.controller.start_celebration(GameRules.GOAL_CELEBRATION_DURATION)
+		record.controller.start_celebration(
+				GameRules.GOAL_CELEBRATION_DURATION - GoalReplayRules.POST_GOAL_TAIL,
+				GoalReplayRules.POST_GOAL_TAIL)
 		return
 
 
@@ -5684,11 +5654,8 @@ func spawn_tutorial_goalie(live: bool = false) -> void:
 	else:
 		_tutorial_goalie_controller.set_physics_process(false)
 		_tutorial_goalie_controller.set_process(false)
-		# Frozen AI never ticks the pose builder, so force the upright stance
-		# once — otherwise the goalie holds the scene-default pose with its pads
-		# together, hiding the five-hole the drill asks the player to shoot at.
-		# open_five_hole widens the pads and lifts the paddle off the ice so the
-		# low centre shot the drill teaches has a real lane through.
+		# Frozen, he never ticks: posed once in his stance, the five-hole the
+		# drill asks the player to shoot at open between his pads.
 		_tutorial_goalie_controller.snap_to_standing_pose(true)
 	if teams.size() > 1:
 		var colors: Dictionary = TeamColorRegistry.get_colors(teams[1].color_slot, 1)

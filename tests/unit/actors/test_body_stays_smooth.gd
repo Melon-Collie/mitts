@@ -7,9 +7,10 @@ extends "res://tests/harness/body_jerk_harness.gd"
 # instruments/actors/test_body_smoothness.gd, says which frame), and a scenario
 # that has got well under its bounds has them tightened.
 #
-# The knockdown is held from t120: the hit itself is a shove, and meant to jolt.
+# A knockdown is held from t136, once the softest of them has hit the ice (t125):
+# the hit is a shove and the landing a bounce, both meant to jolt.
 
-const KNOCKDOWN_FROM_TICK: int = 120
+const KNOCKDOWN_FROM_TICK: int = 136
 const ORDER: Array[String] = ["legs", "trunk", "head", "top_arm", "bot_arm", "stick"]
 const BOUNDS: Dictionary = {
 	"steady stride, cursor 6 m ahead":
@@ -32,12 +33,18 @@ const BOUNDS: Dictionary = {
 		[13.0, 8.0, 8.0, 11.0, 11.0, 17.0],
 	"knocked down from the side and up again":
 		[84.0, 16.0, 13.0, 14.0, 21.0, 11.0],
+	"knocked down just past his balance and up again":
+		[84.0, 16.0, 13.0, 14.0, 21.0, 11.0],
 	"shot block down and back up, puck ahead":
 		[28.0, 35.0, 27.0, 37.0, 19.0, 27.0],
 	"goal celebration while gliding":
 		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
 	"shuffle: Space + D held, released":
 		[20.0, 8.0, 8.0, 8.0, 9.0, 8.0],
+	"press: drive into a man dug in, and off":
+		[12.0, 20.0, 8.0, 50.0, 72.0, 79.0],
+	"press: dug in against a driver, and off":
+		[12.0, 8.0, 8.0, 8.0, 8.0, 8.0],
 }
 
 

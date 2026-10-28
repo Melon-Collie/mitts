@@ -28,7 +28,8 @@ extends RefCounted
 # and cuff), laces WHITE, stick model 0 (the house MITTS stick), face 0 (bare),
 # short dark-brown hair, no facial hair, the jersey worn loose — are the stock
 # look an untouched player wears. Zero in every hair and tuck field is that
-# stock look, so a code saved before those fields existed decodes to it.
+# stock look, so a code saved before those fields existed decodes to it. A
+# retired hair style decodes to the one that stands in for it.
 
 # 5 bits per field, matching StickTapeConfig's palette headroom.
 const _FIELD_BITS: int = 5
@@ -43,12 +44,6 @@ const _TUCK_SHIFT: int = _FIELD_BITS * 8
 
 # Palette index of the classic lace (TapeColorRegistry WHITE).
 const LACE_DEFAULT_INDEX: int = 1
-
-# TapeColorRegistry indices migrate_colors reads by name. Local constants
-# rather than registry lookups: they are the values the OLD codes were written
-# with, and must not drift if the palette is ever reordered.
-const _TAPE_WHITE: int = 1
-const _TAPE_BLACK: int = 2
 
 # The all-default packed code — the wire default for every payload that carries
 # a gear style code.
@@ -79,8 +74,8 @@ func _init(p_skate_model: int = 0, p_glove_model: int = 0,
 	stick_model = p_stick_model if StickModelRegistry.is_valid(p_stick_model) else 0
 	helmet_face = p_helmet_face if GearModelRegistry.is_valid_face(p_helmet_face) \
 			else GearModelRegistry.FACE_NONE
-	hair_style = p_hair_style if HairStyleRegistry.is_valid_hair(p_hair_style) \
-			else HairStyleRegistry.HAIR_SHORT
+	hair_style = HairStyleRegistry.worn_hair(p_hair_style) \
+			if HairStyleRegistry.is_valid_hair(p_hair_style) else HairStyleRegistry.HAIR_SHORT
 	facial_hair = p_facial_hair if HairStyleRegistry.is_valid_facial(p_facial_hair) \
 			else HairStyleRegistry.FACIAL_NONE
 	hair_color = p_hair_color if HairStyleRegistry.is_valid_color(p_hair_color) else 0
@@ -108,25 +103,3 @@ static func from_code(code: int) -> GearStyleConfig:
 			(code >> _TUCK_SHIFT) & _FIELD_MASK)
 
 
-# Maps a pre-models gear code (skate accent color, glove accent color, laces —
-# all TapeColorRegistry indices) onto the nearest model design, so a saved
-# look survives the switch instead of silently reverting to stock. Skates keep
-# their intent — a black pick was the stock skate, white was a white boot,
-# anything else was an accent band, which is what the Team model is. Gloves
-# only ever tinted the CUFF, so every pick lands on a model whose body stays
-# kit-colored.
-static func migrate_colors(code: int) -> GearStyleConfig:
-	var skate_color: int = code & _FIELD_MASK
-	var glove_color: int = (code >> _FIELD_BITS) & _FIELD_MASK
-	var skate: int = GearModelRegistry.SKATE_TEAM
-	if skate_color == _TAPE_BLACK:
-		skate = GearModelRegistry.SKATE_BLACKOUT
-	elif skate_color == _TAPE_WHITE:
-		skate = GearModelRegistry.SKATE_WHITEOUT
-	var glove: int = GearModelRegistry.GLOVE_CONTRAST
-	if glove_color == TapeColorRegistry.TEAM_INDEX:
-		glove = GearModelRegistry.GLOVE_TEAM
-	elif glove_color == _TAPE_WHITE:
-		glove = GearModelRegistry.GLOVE_PRO
-	return GearStyleConfig.new(skate, glove,
-			(code >> _LACE_SHIFT) & _FIELD_MASK)

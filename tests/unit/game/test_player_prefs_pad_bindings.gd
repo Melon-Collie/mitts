@@ -83,38 +83,33 @@ func test_options_pad_rows_mirror_the_rebindable_actions() -> void:
 	assert_eq(rows, expected, "Options pad rebind rows drifted from PAD_REBINDABLE_ACTIONS")
 
 
-# A scheme-1 config with every pad bind saved at its old default.
-func _scheme_1_config() -> Dictionary:
+# A scheme-2 config with every pad bind saved at its old default.
+func _scheme_2_config() -> Dictionary:
 	var pad: Dictionary = PlayerPrefsScript.PAD_DEFAULT_BUTTONS.duplicate()
-	pad["elevation_up"] = JOY_BUTTON_Y
-	pad["elevation_down"] = JOY_BUTTON_X
-	pad["smart_ping"] = JOY_BUTTON_DPAD_UP
+	pad["hit"] = JOY_BUTTON_LEFT_STICK
+	pad["stick_lift"] = JOY_BUTTON_RIGHT_SHOULDER
 	return pad
 
 
-func test_scheme_2_moves_an_untouched_config_onto_the_new_defaults() -> void:
-	var pad: Dictionary = _scheme_1_config()
-	PadSchemeMigration.to_scheme_2(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
-	for action: String in ["elevation_up", "elevation_down", "smart_ping"]:
-		assert_false(pad.has(action), "'%s' should be erased for the default fill" % action)
-	assert_eq(int(pad["block"]), int(JOY_BUTTON_A), "binds outside the move are untouched")
+func test_scheme_3_swaps_the_hit_and_the_deflect_on_an_untouched_config() -> void:
+	var pad: Dictionary = _scheme_2_config()
+	PadSchemeMigration.to_scheme_3(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
+	assert_false(pad.has("hit"), "the hit is reseeded onto RB")
+	assert_false(pad.has("stick_lift"), "the deflect is reseeded onto L3")
+	assert_eq(int(pad["stick_check"]), int(JOY_BUTTON_X), "binds outside the move are untouched")
 
 
-func test_scheme_2_leaves_a_rebound_action_alone() -> void:
-	var pad: Dictionary = _scheme_1_config()
-	pad["elevation_up"] = JOY_BUTTON_DPAD_RIGHT
-	PadSchemeMigration.to_scheme_2(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
-	assert_eq(int(pad["elevation_up"]), int(JOY_BUTTON_DPAD_RIGHT))
-	assert_false(pad.has("elevation_down"))
-	assert_false(pad.has("smart_ping"))
+func test_scheme_3_moves_the_hit_when_only_the_deflect_was_rebound() -> void:
+	var pad: Dictionary = _scheme_2_config()
+	pad["stick_lift"] = JOY_BUTTON_Y
+	PadSchemeMigration.to_scheme_3(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
+	assert_false(pad.has("hit"))
+	assert_eq(int(pad["stick_lift"]), int(JOY_BUTTON_Y))
 
 
-func test_scheme_2_never_moves_onto_a_button_the_player_bound() -> void:
-	var pad: Dictionary = _scheme_1_config()
-	pad["block"] = JOY_BUTTON_DPAD_LEFT
-	PadSchemeMigration.to_scheme_2(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
-	# The ping can't take D-pad left, so it keeps D-pad up — and that in turn
-	# keeps the loft off D-pad up.
-	assert_eq(int(pad["smart_ping"]), int(JOY_BUTTON_DPAD_UP))
-	assert_eq(int(pad["elevation_up"]), int(JOY_BUTTON_Y))
-	assert_false(pad.has("elevation_down"))
+func test_scheme_3_never_moves_the_hit_onto_a_button_the_player_bound() -> void:
+	var pad: Dictionary = _scheme_2_config()
+	pad["stick_lift"] = JOY_BUTTON_Y
+	pad["quick_pass"] = JOY_BUTTON_RIGHT_SHOULDER
+	PadSchemeMigration.to_scheme_3(pad, PlayerPrefsScript.PAD_DEFAULT_BUTTONS)
+	assert_eq(int(pad["hit"]), int(JOY_BUTTON_LEFT_STICK))

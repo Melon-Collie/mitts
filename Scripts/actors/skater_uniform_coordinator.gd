@@ -19,8 +19,8 @@ extends RefCounted
 #   - Pants thighs → ImageTexture with vertical columns positioned by stripe.pos
 #     (kept as a vertical side stripe, not a horizontal band — pants are the
 #     one region whose stripe.pos refers to U, not V).
-#   - Helmet / gloves / cuffs / elbow / hand spheres / hips / knees / skates →
-#     solid materials.
+#   - Helmet / gloves / cuffs / elbow / hand spheres / hips / knees (sock base) /
+#     skates → solid materials.
 
 # Stick-flex vertex shader — the shaft's per-skater ShaderMaterial wraps it
 # (see _make_stick_shaft_mat); Skater drives the flex_m uniform per frame.
@@ -41,9 +41,11 @@ var _jersey_collar_color: Color = Color.WHITE
 var _jersey_stripes: Array[Dictionary] = []
 var _shoulder_color: Color = Color.WHITE
 var _shoulder_text_color: Color = Color.BLACK
+var _shoulder_text_stroke: Color = Color.TRANSPARENT
 var _player_name: String = ""
 var _jersey_number: int = 0
 var _text_color: Color = Color.BLACK
+var _text_stroke: Color = Color.TRANSPARENT
 # The kit colors a gear model or tape pick resolves against, cached from the
 # last apply_uniform so a live cosmetic change repaints without one.
 # _team_accent is colors.primary (TEAM for tape and skates), _kit_gloves is
@@ -128,7 +130,7 @@ func _create_shoulder_viewport() -> void:
 
 # Applies the full v2 colors dict (TeamColorRegistry.get_colors output) to
 # every uniform mesh. Reads colors.uniform for kit detail and colors.primary
-# for the stick blade; text colors come from colors.text/.text_outline.
+# for the stick blade; lettering from colors.text and the kit's strokes.
 func apply_uniform(colors: Dictionary) -> void:
 	# Sweep legacy mesh-based stripes from older builds (if a saved scene
 	# happens to carry them) so they don't double up with the texture paint.
@@ -143,6 +145,7 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	var uniform: Dictionary = colors.uniform
 	_text_color = colors.text
+	_text_stroke = uniform.text.stroke
 
 	# Jersey torso (decal repaint).
 	_jersey_base_color = uniform.jersey.base
@@ -157,6 +160,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	# Shoulder caps (decal repaint with shoulder-specific color + text).
 	_shoulder_color = uniform.shoulders.color
 	_shoulder_text_color = uniform.shoulders.text
+	_shoulder_text_stroke = uniform.shoulders.stroke
 	_rebuild_shoulder_texture()
 
 	# Helmet — glossy hard plastic.
@@ -208,24 +212,26 @@ func apply_uniform(colors: Dictionary) -> void:
 
 	# Pants — vertical side stripes (pants stripe pos is U, width is column
 	# thickness; see make_pants_stripes_texture). The thigh carries the hip joint's
-	# dome now, so its stripe runs up over the hip the way a real pant's does;
-	# the knee ball stays solid, since a stripe would ring it.
+	# dome now, so its stripe runs up over the hip the way a real pant's does.
 	var pants_block: Dictionary = uniform.pants
 	_paint_pants_thighs(pants_block)
-	var pants_solid: StandardMaterial3D = UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON)
-	for surface: int in [SkaterMeshBuilder.LegSurface.KNEE_L,
-			SkaterMeshBuilder.LegSurface.KNEE_R]:
-		_skater.set_leg_surface_material(surface, pants_solid.duplicate())
 	# The pelvis rides the UPPER mesh (it must not fold with the torso, and it
 	# must not swing with a leg either) but it is pants, not jersey.
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperSurface.PELVIS,
-			pants_solid.duplicate())
+			UniformPaint.solid(pants_block.base, UniformPaint.ROUGH_NYLON))
 
 	# Socks — horizontal stripes on the cylinder side.
 	var sock_mat: StandardMaterial3D = _socks_material(uniform.socks)
 	_skater.set_leg_surface_material(SkaterMeshBuilder.LegSurface.SOCK_L, sock_mat)
 	_skater.set_leg_surface_material(
 			SkaterMeshBuilder.LegSurface.SOCK_R, sock_mat.duplicate())
+	# The knee ball sits below the pant hem, over the shin guard's cap, so it is
+	# sock: solid base, which every kit's sock top already is
+	# (test_knee_wears_the_sock.gd).
+	var knee_mat: StandardMaterial3D = UniformPaint.solid(uniform.socks.base)
+	_skater.set_leg_surface_material(SkaterMeshBuilder.LegSurface.KNEE_L, knee_mat)
+	_skater.set_leg_surface_material(
+			SkaterMeshBuilder.LegSurface.KNEE_R, knee_mat.duplicate())
 
 	# Skates — the gear style's skate MODEL paints the boot quarter, the toe
 	# cap, the ankle collar, the band ringing it and the blade holder. Painted
@@ -255,7 +261,7 @@ func _rebuild_jersey_texture() -> void:
 		return
 	_jersey_decal.update_jersey(
 			_jersey_base_color, _jersey_yoke_color, _jersey_collar_color, _jersey_stripes,
-			_player_name, _jersey_number, _text_color)
+			_player_name, _jersey_number, _text_color, _text_stroke)
 	_jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -263,7 +269,8 @@ func _rebuild_shoulder_texture() -> void:
 	if _shoulder_decal == null:
 		return
 	_shoulder_decal.update_shoulder(
-			_shoulder_color, _jersey_yoke_color, _jersey_number, _shoulder_text_color)
+			_shoulder_color, _jersey_yoke_color, _jersey_number, _shoulder_text_color,
+			_shoulder_text_stroke)
 	_shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
@@ -558,8 +565,8 @@ func _repaint_head_pieces() -> void:
 	var gear: GearStyleConfig = _skater.gear_style
 	_paint_head_piece(SkaterArmRig.HeadPiece.FACE_GEAR,
 			SkaterMeshBuilder.make_face_gear_material(gear.helmet_face))
-	_paint_head_piece(SkaterArmRig.HeadPiece.SCALP,
-			SkaterHairMesh.make_material(gear.hair_color, false))
+	_paint_head_piece(SkaterArmRig.HeadPiece.SCALP, SkaterHairMesh.make_material(
+			gear.hair_color, SkaterHairMesh.is_scalp_translucent(gear.hair_style)))
 	_paint_head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR, SkaterHairMesh.make_material(
 			gear.hair_color, SkaterHairMesh.is_translucent(gear.facial_hair)))
 	_paint_head_piece(SkaterArmRig.HeadPiece.BROWS,

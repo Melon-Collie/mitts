@@ -1,6 +1,9 @@
 # Physicality — the pin on the stick button, and the cross-check
 
-Status: **all three phases built**, playtest pending. Amends
+Status: **all three phases built**; Phases B and C **retired** at v88 — the
+press (`docs/net-front-battles-plan.md`) is how a man is moved off his spot, and
+the cross-check's code is gone. Phase A (the pin on the stick button) stands.
+Amends
 `docs/defensive-play-plan.md` (the pin revision, v74) and adds a new verb. Three
 phases, each its own PR and playtest.
 
@@ -12,7 +15,7 @@ phases, each its own PR and playtest.
   both sticks out) and plays like one, not like a hit.
 - **The pin moves to the stick button.** Onset needs the stick button held, not
   the commit. Holding the pin is holding the stick button.
-- **The cross-check is a chord: Ctrl held, the stick button pressed** (L3 held,
+- **The cross-check is a chord: Ctrl held, the stick button pressed** (RB held,
   X pressed). Ctrl alone stays the commit and the brace and never shoves by
   accident; F with Ctrl down was dead input, because the commit already has the
   stick. No tap-versus-hold, which would add latency.
@@ -145,7 +148,7 @@ instead, and fails if a movement change breaks it:
   cleaned up.
 - `test_bot_board_play.gd`: a bot pinner holds a one-way slide to the cap.
 
-## Phase B — the cross-check
+## Phase B — the cross-check (retired)
 
 ### The model: a stride delivered through the arms
 
@@ -208,8 +211,8 @@ back:
 
 | Phase | Entered | Duration | Stick |
 |---|---|---|---|
-| `EXTEND` | stick-button press with Ctrl held, eligible | `PUSH_S` 0.10 | off the ice; **the only phase that can land** |
-| `RECOVER` | end of EXTEND | `RECOVER_S` 0.20 | off the ice |
+| `THROW` | stick-button press with Ctrl held, eligible | `LOAD_S` 0.12 drawn in, then `PUSH_S` 0.10 out | off the ice; **only the push, past the load, can land** |
+| `RECOVER` | end of THROW | `RECOVER_S` 0.20 | off the ice |
 | `REARM` | end of RECOVER | `REARM_S` 0.40 | normal (or the commit's, if still held) |
 
 - **Eligible:** puckless (a carrier's Ctrl is the brace, as today), not knocked
@@ -281,9 +284,9 @@ Read `Scripts/networking/CLAUDE.md` first; this follows the stick lift's shape.
 - **The chord needs no new input.** It is `hit_held` and `stick_check_pressed`
   in one input, both already on the record, so the input stays 24 B. Bots press
   it the same way.
-- **The pad holds its aim while L3 is down.** X takes the right thumb off the
+- **The pad holds its aim while Hit (RB) is down.** X takes the right thumb off the
   aim stick, and a released stick otherwise eases the cursor back to its rest
-  in about 0.1 s; with L3 held the stick is off the ice, so there is nothing to
+  in about 0.1 s; with Hit held the stick is off the ice, so there is nothing to
   rest for (`LocalInputGatherer._update_pad_cursor`, after RT's hold).
 - **Facings are vectors.** `in_reach` and `victim_dv` take `Skater.get_facing()`
   (and the snapshot's `facing`), not a yaw.
@@ -339,7 +342,7 @@ him sideways off the goalie's eyes rather than only straight away.
   a human's does. A screener's set reads whether a defender could reach him at
   any aim the defender can turn to.
 
-## Phase C — bots cross-check
+## Phase C — bots cross-check (retired)
 
 Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 `Scripts/domain/ai/DECISIONS.md` §8.
@@ -447,9 +450,10 @@ Grounded per `Scripts/domain/ai/CLAUDE.md`; the checklist is
 
 | Constant | Value | Why |
 |---|---|---|
+| `CrossCheckRules.LOAD_S` | 0.12 s | the shaft drawn in to the chest before the push: the tell |
 | `CrossCheckRules.PUSH_S` | 0.10 s | a neutral shove lands in the stagger band and no build pair reaches a knockdown |
 | `RECOVER_S` | 0.20 s | the stick back down; the cost of a whiff |
-| `REARM_S` | 0.40 s | ~0.7 s press to press |
+| `REARM_S` | 0.40 s | ~0.8 s press to press |
 | `REACH_M` | 0.55 m | arm extension, body edge to body edge |
 | `GRIP_FRACTION` | 0.40 | the pose's bottom hand down the shaft; its half-span (0.26 m on a league stick) is the shaft's reach across |
 | `PIN_ESCAPE_OFFSET_M` | 0.5 m (unchanged) | held by `tests/slow/game/test_pin_escape_race.gd` |

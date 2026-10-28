@@ -12,8 +12,7 @@ extends RefCounted
 # lag-comp claim, StickTieClaimResolver → try_engage). It holds while either of
 # the two holds the stick-check button and the sticks stay within
 # TIE_SEPARATION_M, and breaks otherwise, on a knockdown or a ghost, when either
-# gains the puck or is in a board pin, when either throws a cross-check (both
-# hands go to the shaft), or at a stoppage. A break puts both on the shared
+# gains the puck or is in a board pin, or at a stoppage. A break puts both on the shared
 # cooldown. Nobody in a pin ties or is tied: the pin is ticked first.
 
 var _registry: PlayerRegistry = null
@@ -86,8 +85,6 @@ func _hold_or_break() -> void:
 				and not a.is_knocked_down and not b.is_knocked_down \
 				and not a.is_ghost and not b.is_ghost \
 				and a.pin_role == BoardPinRules.Role.NONE and b.pin_role == BoardPinRules.Role.NONE \
-				and not CrossCheckRules.is_stick_busy(a.cross_check_phase) \
-				and not CrossCheckRules.is_stick_busy(b.cross_check_phase) \
 				and a != carrier and b != carrier \
 				and _stick_gap(a, b) <= StickCheckRules.TIE_SEPARATION_M
 		if not holds:

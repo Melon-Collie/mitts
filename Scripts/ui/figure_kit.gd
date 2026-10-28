@@ -193,10 +193,10 @@ func _paint_body(colors: Dictionary, skin_tone: int, player_name: String,
 	jersey_decal.update_crest(TeamCrest.fruit_for(preset), preset)
 	jersey_decal.update_jersey(jersey.base, UniformPaint.yoke_color(jersey),
 			UniformPaint.collar_color(jersey), jersey.stripes, player_name, jersey_number,
-			colors.text)
+			colors.text, uniform.text.stroke)
 	jersey_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	shoulder_decal.update_shoulder(uniform.shoulders.color, UniformPaint.yoke_color(jersey),
-			jersey_number, uniform.shoulders.text)
+			jersey_number, uniform.shoulders.text, uniform.shoulders.stroke)
 	shoulder_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
 	_paint(pelvis, 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
 	_paint(helmet, SkaterMeshBuilder.HELMET_SURF_SHELL, uniform.helmet, _HELMET_ROUGH)
@@ -210,10 +210,9 @@ func _paint_body(colors: Dictionary, skin_tone: int, player_name: String,
 	# One-color sleeves here, so an unnamed elbow is the sleeve too.
 	var elbow: Color = uniform.arms.elbow if uniform.arms.get("elbow") is Color else sleeve
 	for i: int in 2:
-		# The knee takes the pants BASE solid — the rink paints it apart from
-		# the thigh, whose side stripe would ring a ball.
 		_paint(thighs[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
-		_paint(knees[i], 0, uniform.pants.base, UniformPaint.ROUGH_NYLON)
+		# Below the pant hem the knee is sock, solid base as on the rink.
+		_paint(knees[i], 0, sock_block.base, _CLOTH_ROUGH)
 		if sock_tex != null:
 			_paint_texture(socks[i], 0, sock_tex, _CLOTH_ROUGH)
 		else:
@@ -280,8 +279,9 @@ func _paint_gear(gear: GearStyleConfig, colors: Dictionary) -> void:
 	face.mesh = SkaterMeshBuilder.shared_face_gear(gear.helmet_face)
 	face.material_override = SkaterMeshBuilder.make_face_gear_material(gear.helmet_face)
 	scalp.mesh = SkaterHairMesh.shared_hair(gear.hair_style)
-	scalp.material_override = SkaterHairMesh.make_material(gear.hair_color, false)
-	facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
+	scalp.material_override = SkaterHairMesh.make_material(gear.hair_color,
+			SkaterHairMesh.is_scalp_translucent(gear.hair_style))
+	facial_hair.mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair, gear.helmet_face)
 	facial_hair.material_override = SkaterHairMesh.make_material(gear.hair_color,
 			SkaterHairMesh.is_translucent(gear.facial_hair))
 	brows.material_override = SkaterHairMesh.make_material(gear.hair_color, false)

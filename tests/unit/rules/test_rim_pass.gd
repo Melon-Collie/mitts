@@ -8,44 +8,12 @@ const PACE: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 var NONE: Array[Vector3] = []
 var NO_CAPS: Array[AISkaterCaps] = []
 
-var _saved_margin: float
 
-
-func before_each() -> void:
-	_saved_margin = AIGoalieModel.goalie_puck_play_go_margin_s
-
-
-func after_each() -> void:
-	AIGoalieModel.goalie_puck_play_go_margin_s = _saved_margin
-
-
-func _build(from: Vector3, opps: Array[Vector3] = [],
-		keeper: Vector3 = Vector3.INF, ours: Array[Vector3] = []) -> int:
+func _build(from: Vector3, opps: Array[Vector3] = []) -> int:
 	var vels: Array[Vector3] = []
 	for _o: Vector3 in opps:
 		vels.append(Vector3.ZERO)
-	return AIRimPass.build(from, PACE, OUR_GOAL_Z, opps, vels, NO_CAPS, keeper, ours)
-
-
-func test_the_keeper_mirror_matches_the_live_goalie() -> void:
-	var gc: GoalieController = autofree(GoalieController.new())
-	assert_eq(AIRimPass.KEEPER_RIM_MIN_SPEED_M_S, gc.puck_play_min_puck_speed)
-	assert_eq(AIRimPass.KEEPER_RIM_MAX_SPEED_M_S, gc.puck_play_max_puck_speed)
-	assert_eq(AIRimPass.KEEPER_SET_BEAT_S, gc.puck_play_set_beat)
-	assert_eq(AIRimPass.KEEPER_STOP_BEAT_S, gc.puck_play_stop_beat)
-	assert_eq(AIRimPass.KEEPER_PRESSURE_SPEED_M_S, gc.puck_play_opponent_speed)
-	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_SPEED_M_S, gc.puck_play_skate_speed)
-	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_ACCEL_M_S2, gc.puck_play_skate_accel)
-	assert_eq(AIGoalieModel.GOALIE_PUCK_PLAY_REACH_M, gc.puck_play_capture_radius)
-
-
-func test_the_go_margin_follows_the_goalie_tier() -> void:
-	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.normal())
-	var normal: float = AIGoalieModel.goalie_puck_play_go_margin_s
-	AIGoalieModel.set_goalie_profile(GoalieSkillProfile.hard())
-	assert_eq(AIGoalieModel.goalie_puck_play_go_margin_s,
-			GoalieSkillProfile.hard().puck_play_go_margin_s)
-	assert_eq(normal, GoalieSkillProfile.normal().puck_play_go_margin_s)
+	return AIRimPass.build(from, PACE, OUR_GOAL_Z, opps, vels, NO_CAPS)
 
 
 func test_no_rims_from_centre_ice() -> void:
@@ -102,27 +70,3 @@ func test_a_receiver_up_the_wall_meets_the_rim() -> void:
 				Vector3.ZERO, AIArrival.SKATER_REF_SPEED_M_S))
 	assert_lt(best_t, INF, "the half-wall winger can meet a rim")
 
-
-func _keeper_stops(margin: float) -> int:
-	# OUR rim around THEIR end boards (team 0 attacks -Z) from the far corner.
-	AIGoalieModel.goalie_puck_play_go_margin_s = margin
-	var n: int = _build(Vector3(-11.5, 0.0, -24.0), [], Vector3(0.0, 0.0, -25.8))
-	var stopped: int = 0
-	for k: int in n:
-		if AIRimPass.opp_time(k) < INF:
-			stopped += 1
-	return stopped
-
-
-func test_the_keeper_stays_home_with_the_rimmer_on_top_of_him() -> void:
-	# The live trip needs the whole out-stop-back inside his GO margin of the
-	# nearest of us, and the rimmer himself is metres away: even the Hard keeper
-	# lets a rim from his own corner go by.
-	assert_eq(_keeper_stops(GoalieSkillProfile.hard().puck_play_go_margin_s), 0)
-
-
-func test_the_keeper_race_is_the_trip_and_the_tier() -> void:
-	# Trip gate waived: the keeper can be set on the rim behind his net. A tier
-	# that never plays the puck takes none however much time he has.
-	assert_gt(_keeper_stops(-10.0), 0, "set in time, he stops it")
-	assert_eq(_keeper_stops(INF), 0, "a keeper who never leaves stops none")

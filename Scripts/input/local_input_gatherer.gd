@@ -378,9 +378,7 @@ func _update_pad_cursor(delta: float) -> void:
 					_shot_anchor_screen(anchor), stick.normalized(), AIM_RADIUS_PX)
 	elif not stick.is_zero_approx():
 		_pad_cursor = GamepadAimRules.absolute_cursor(anchor, stick, AIM_RADIUS_PX)
-	# Released with L3 held, the stick holds the aim it set: the stick is off the
-	# ice, and the right thumb leaves the aim for X to throw the cross-check.
-	elif not _pad_held("hit"):
+	else:
 		# Stickhandle mode, stick released → ease the blade to its forward carry rest.
 		var blend: float = clampf(REST_RETURN_RATE * delta, 0.0, 1.0)
 		_pad_cursor = _pad_cursor.lerp(_facing_rest_screen(anchor), blend)

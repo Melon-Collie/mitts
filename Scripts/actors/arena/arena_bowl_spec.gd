@@ -53,6 +53,9 @@ var spectator_spacing: float = 0.55
 var spectator_inset_from_riser: float = 0.18
 var spectator_yaw_jitter_deg: float = 18.0
 var spectator_y_jitter: float = 0.03
+# Lower-bowl rows drawn with the full figure; every row behind them, and the
+# whole upper deck, takes the far one.
+var crowd_detail_rows: int = 6
 
 # ── Fan mix ──────────────────────────────────────────────────────────────────
 var home_fan_ratio: float = 0.65
@@ -83,7 +86,7 @@ func geometry_key() -> String:
 	return str([rink_length, rink_width, corner_radius, stands_base_y,
 			num_terraces, tread_depth, riser_height, base_outward_offset,
 			corner_segments, spectator_spacing, spectator_inset_from_riser,
-			spectator_yaw_jitter_deg, spectator_y_jitter,
+			spectator_yaw_jitter_deg, spectator_y_jitter, crowd_detail_rows,
 			walkway_depth, upper_terraces, upper_riser_height, upper_deck_rise,
 			shell_height, num_aisles, aisle_width, attendance,
 			seat_shade_variation,

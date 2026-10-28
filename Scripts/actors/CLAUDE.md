@@ -35,20 +35,6 @@ bytes and no reconcile, and the `Puck` node itself never rotates (`PuckShadow`
 relies on that). `test_puck_spin_rig.gd` holds the model, and holds that
 nothing but `Puck` names the rig; `.claude/hooks/render-puck.sh` shows it.
 
-## The goalie draws as one mesh, and its parts stay nodes
-
-`GoalieBodyRig` merges every goalie part wearing an opaque `StandardMaterial3D`
-into one skinned mesh, a bone per part, and moves the part meshes to render
-layer 0. The parts stay the source of truth: the pose code, the colliders and
-every test still read and write the nodes, and the rig copies their
-**interpolated** transforms into its bones each frame, so a part moved or hidden
-there is moved or hidden on screen. `GoalieUniformCoordinator` owns it, so
-`goalie.gd` — which decides saves, and which the bots' shot field is fingerprinted
-against — carries no rendering. Anything that changes a part's mesh or material
-must be followed by `rebuild()` (the coordinator's `apply_uniform` does it); a
-part that wears a `ShaderMaterial` (the jersey body) is not merged and draws
-itself. `test_goalie_body_rig.gd` holds it.
-
 ## The seam
 
 Traffic runs **one way**. A collaborator holds `_skater` and READS the node's
@@ -59,7 +45,7 @@ NODES it was handed (bone poses, mesh transforms — that is what a rig does).
 That single rule is the whole contract, and it is not a style preference:
 whoever writes a field has re-derived *when* it changes, which is the other
 side's lifecycle, and from that moment the other side's own updater is dead code
-waiting to happen. The correlation was measured across the goalie's six
+waiting to happen. The correlation was measured across the old goalie's
 collaborators — contested fields 0/2/2/12 predicted dead methods 0/0/0/17. See
 `Scripts/controllers/CLAUDE.md`.
 
@@ -177,7 +163,11 @@ held to its drape and its neighbours, and pushed out of the thighs and pants
 rigid tail cannot do this: a thigh lifted in a stride or a crouch pokes
 straight through one. It steps every frame and writes its 20 bones when drawn;
 it runs in C++ where the extension is built (`NativeHemFlaps`), and
-`test_native_hem_flaps_parity.gd` holds the two together.
+`test_native_hem_flaps_parity.gd` holds the two together. The solver itself is
+`HemFlaps`, shared with the keeper's jersey tail (`KeeperJerseyTail`); each
+figure brings its own drape, its own bones and its own colliders
+(`HemColliders`: `SkaterHemColliders`, `KeeperTailColliders`), and the port
+takes the same three.
 `test_hem_flaps.gd` holds the drape and `tests/slow/actors/test_hem_stays_out_of_the_legs.gd` the
 tail against the legs across a skated run.
 

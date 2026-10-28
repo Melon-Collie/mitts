@@ -16,8 +16,7 @@ class_name SkaterCollisionRules
 #      structurally impossible here, not merely tuned to zero.
 #
 # All the gameplay attributes AND the hit button enter through ONE caller-supplied
-# scalar, `transfer` (0..1): transfer = attacker check-delivery × hit-commit ×
-# victim brace. It scales the shared impulse, so:
+# scalar, `transfer` (0..1), from contact_transfer. It scales the shared impulse, so:
 #   * transfer → 1  : full inelastic transfer. Equal masses converge to a shared
 #                     velocity (the grind); a heavy attacker on a light victim
 #                     barely slows (drive-through) while the victim is launched.
@@ -28,8 +27,9 @@ class_name SkaterCollisionRules
 # Drive-through vs. grind is thus emergent from the mass ratio (Δv = J/m), NOT a
 # hand-shaped restitution curve — the grounded-model discipline (see Scripts/domain/ai/CLAUDE.md).
 #
-# The victim's own Δv magnitude (|dvel_b|) is the "how hard did it land" number the
-# stagger / knockdown / puck-strip all key off downstream.
+# Each body's own Δv is the "how hard did it land" number its stagger, rocked
+# band, knockdown and puck strip key off downstream — both bodies', whichever
+# one's resolver ran.
 #
 # Pure/static + value-type math (Vector3, no heap allocation beyond the caller-owned
 # Result), so it is hot-path safe at 120 Hz × pairs AND — unlike an engine contact
@@ -142,3 +142,26 @@ static func victim_kick(closing_speed: float, mass_a: float, mass_b: float,
 		transfer: float) -> float:
 	return closing_speed * clampf(transfer, 0.0, 1.0) \
 			* mass_a / maxf(mass_a + mass_b, _EPS)
+
+
+# The transfer a contact between bodies A and B lands at: the one rule the live
+# resolver, the reconcile replay and the puck strip read, symmetric in A and B.
+# A committed checker (Ctrl held without the puck) delivers his whole transfer,
+# whichever of the two is moving faster; with neither committed it is the
+# passive bump; a carrier holding Ctrl braces, cutting it by his resistance.
+static func contact_transfer(
+		a_transfer: float, a_committed: bool, a_has_puck: bool, a_brace: float,
+		b_transfer: float, b_committed: bool, b_has_puck: bool, b_brace: float,
+		passive_mult: float) -> float:
+	var a_delivers: bool = a_committed and not a_has_puck
+	var b_delivers: bool = b_committed and not b_has_puck
+	var t: float
+	if a_delivers or b_delivers:
+		t = maxf(a_transfer if a_delivers else 0.0, b_transfer if b_delivers else 0.0)
+	else:
+		t = maxf(a_transfer, b_transfer) * passive_mult
+	if a_committed and a_has_puck:
+		t *= a_brace
+	if b_committed and b_has_puck:
+		t *= b_brace
+	return t

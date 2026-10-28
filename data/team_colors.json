@@ -1,6 +1,6 @@
 {
   "schema": "mitts.jersey.v2",
-  "description": "Mitts fruit league - one team per slot, each with home and away kits. Stripes are procedural horizontal bands over a UV region: pos = band center (0=top of region, 1=bottom), width = band height as a fraction of the region, both 0..1. Stripes paint in array order (later over earlier). Centered cross-section bands = stack stripes sharing pos with shrinking widths, widest first (Lime, Pomegranate, Pineapple). Stacked bands = adjacent stripes edge to edge (Watermelon's slice edge, Peach's sunset). Asymmetric slices offset a band's pos off-center (Dragonfruit seed-line). For a cross-section to show its outer color, set the region base to that color so it reads as the skin/rind edges. Uniform lettering is one color; text.outline is the outline UI chrome (off-screen indicators) draws around the number. jersey.collar (optional, falls back to yoke) = the ring around the neck; jersey.yoke (optional, falls back to the jersey base) = the top of the shoulders, from the collar over the top of each shoulder cap; shoulders.color = the rest of the cap, the patch at the top of the arm carrying the number. arms.elbow (optional) = the elbow pad, which otherwise takes the forearm's color at the elbow and disappears into the sleeve. primary/secondary/light are the team's UI palette (HUD, lobby cards, scorebug headers): home cards render as primary body + secondary stripe, away cards as light body + primary stripe. light mirrors the away kit's jersey base (the away body color) so the UI away card matches the 3D away sweater. ui_ink (optional) letters both UI sides instead of light/primary, for a team whose primary contrasts with neither white text nor a white card (Lemon, Pineapple, Lime). These drive UI only; the home/away kit blocks below drive the 3D uniform meshes.",
+  "description": "Mitts fruit league - one team per slot, each with home and away kits. Stripes are procedural horizontal bands over a UV region: pos = band center (0=top of region, 1=bottom), width = band height as a fraction of the region, both 0..1. Stripes paint in array order (later over earlier). Centered cross-section bands = stack stripes sharing pos with shrinking widths, widest first (Lime, Pomegranate, Pineapple). Stacked bands = adjacent stripes edge to edge (Watermelon's slice edge, Peach's sunset). Asymmetric slices offset a band's pos off-center (Dragonfruit seed-line). For a cross-section to show its outer color, set the region base to that color so it reads as the skin/rind edges. Uniform lettering is text.color, bordered on the sweater by text.stroke when set (optional; absent = no border); shoulders.stroke borders the shoulder numbers the same way. text.outline is a separate color, the outline UI chrome (off-screen indicators) draws around the number. jersey.collar (optional, falls back to yoke) = the ring around the neck; jersey.yoke (optional, falls back to the jersey base) = the top of the shoulders, from the collar over the top of each shoulder cap; shoulders.color = the rest of the cap, the patch at the top of the arm carrying the number. arms.elbow (optional) = the elbow pad, which otherwise takes the forearm's color at the elbow and disappears into the sleeve. primary/secondary/light are the team's UI palette (HUD, lobby cards, scorebug headers): home cards render as primary body + secondary stripe, away cards as light body + primary stripe. light mirrors the away kit's jersey base (the away body color) so the UI away card matches the 3D away sweater. ui_ink (optional) letters both UI sides instead of light/primary, for a team whose primary contrasts with neither white text nor a white card (Lemon, Pineapple, Lime). These drive UI only; the home/away kit blocks below drive the 3D uniform meshes. goalie_pads is the goalie's pads, blocker and trapper, white in every bundled kit; his trim on them is the team's primary, or its secondary where the primary is too faint on the pads.",
   "teams": [
     {
       "name": "Pomegranate",
@@ -20,6 +20,11 @@
             {
               "pos": 0.92,
               "width": 0.12,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.92,
+              "width": 0.09,
               "color": "#E8445A"
             }
           ]
@@ -61,7 +66,12 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.07,
+              "width": 0.095,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.065,
               "color": "#E8445A"
             }
           ]
@@ -91,7 +101,7 @@
             }
           ]
         },
-        "goalie_pads": "#971829",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#F5E6D3",
           "outline": "#E8445A"
@@ -109,7 +119,17 @@
           "stripes": [
             {
               "pos": 0.92,
+              "width": 0.15,
+              "color": "#971829"
+            },
+            {
+              "pos": 0.92,
               "width": 0.12,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.92,
+              "width": 0.09,
               "color": "#E8445A"
             }
           ]
@@ -151,7 +171,12 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.07,
+              "width": 0.095,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.065,
               "color": "#E8445A"
             }
           ]
@@ -161,27 +186,32 @@
           "stripes": [
             {
               "pos": 0.5,
+              "width": 0.32,
+              "color": "#971829"
+            },
+            {
+              "pos": 0.5,
               "width": 0.26,
               "color": "#E8445A"
             },
             {
               "pos": 0.4,
               "width": 0.035,
-              "color": "#971829"
+              "color": "#F5E6D3"
             },
             {
               "pos": 0.5,
               "width": 0.035,
-              "color": "#971829"
+              "color": "#F5E6D3"
             },
             {
               "pos": 0.6,
               "width": 0.035,
-              "color": "#971829"
+              "color": "#F5E6D3"
             }
           ]
         },
-        "goalie_pads": "#F5E6D3",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#971829",
           "outline": "#E8445A"
@@ -190,17 +220,17 @@
     },
     {
       "name": "Blueberry",
-      "primary": "#4A7AD6",
+      "primary": "#3B67C4",
       "secondary": "#6B1E4A",
       "light": "#FFFFFF",
       "home": {
         "helmet": "#6B1E4A",
         "shoulders": {
-          "color": "#4A7AD6",
+          "color": "#3B67C4",
           "text": "#FFFFFF"
         },
         "jersey": {
-          "base": "#4A7AD6",
+          "base": "#3B67C4",
           "collar": "#6B1E4A",
           "stripes": [
             {
@@ -217,11 +247,11 @@
         },
         "arms": {
           "upper": {
-            "base": "#4A7AD6",
+            "base": "#3B67C4",
             "stripes": []
           },
           "lower": {
-            "base": "#4A7AD6",
+            "base": "#3B67C4",
             "stripes": [
               {
                 "pos": 0.46,
@@ -248,7 +278,7 @@
           ]
         },
         "socks": {
-          "base": "#4A7AD6",
+          "base": "#3B67C4",
           "stripes": [
             {
               "pos": 0.46,
@@ -262,7 +292,7 @@
             }
           ]
         },
-        "goalie_pads": "#4A7AD6",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#FFFFFF",
           "outline": "#6B1E4A"
@@ -271,17 +301,17 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#C8D8F0",
-          "text": "#6B1E4A"
+          "color": "#3B67C4",
+          "text": "#FFFFFF"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#4A7AD6",
+          "collar": "#3B67C4",
           "stripes": [
             {
               "pos": 0.88,
               "width": 0.07,
-              "color": "#4A7AD6"
+              "color": "#3B67C4"
             },
             {
               "pos": 0.95,
@@ -301,7 +331,7 @@
               {
                 "pos": 0.46,
                 "width": 0.14,
-                "color": "#4A7AD6"
+                "color": "#3B67C4"
               },
               {
                 "pos": 0.6,
@@ -311,9 +341,9 @@
             ]
           }
         },
-        "gloves": "#4A7AD6",
+        "gloves": "#3B67C4",
         "pants": {
-          "base": "#4A7AD6",
+          "base": "#3B67C4",
           "stripes": [
             {
               "pos": 0.5,
@@ -328,7 +358,7 @@
             {
               "pos": 0.46,
               "width": 0.14,
-              "color": "#4A7AD6"
+              "color": "#3B67C4"
             },
             {
               "pos": 0.6,
@@ -339,7 +369,7 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#4A7AD6",
+          "color": "#3B67C4",
           "outline": "#6B1E4A"
         }
       }
@@ -362,6 +392,11 @@
           "collar": "#F7E7A6",
           "stripes": [
             {
+              "pos": 0.12,
+              "width": 0.022,
+              "color": "#F7E7A6"
+            },
+            {
               "pos": 0.86,
               "width": 0.15,
               "color": "#B8691E"
@@ -429,9 +464,10 @@
             }
           ]
         },
-        "goalie_pads": "#F4AC1C",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#2E7A5A",
+          "stroke": "#F7E7A6",
           "outline": "#2E7A5A"
         }
       },
@@ -446,6 +482,11 @@
           "yoke": "#2E7A5A",
           "collar": "#F4AC1C",
           "stripes": [
+            {
+              "pos": 0.12,
+              "width": 0.022,
+              "color": "#F4AC1C"
+            },
             {
               "pos": 0.86,
               "width": 0.15,
@@ -517,6 +558,7 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#2E7A5A",
+          "stroke": "#F4AC1C",
           "outline": "#2E7A5A"
         }
       }
@@ -526,12 +568,13 @@
       "primary": "#F5D028",
       "secondary": "#5AB4E0",
       "light": "#FFFFFF",
-      "ui_ink": "#1B4F72",
+      "ui_ink": "#1F6AA5",
       "home": {
         "helmet": "#5AB4E0",
         "shoulders": {
           "color": "#F5D028",
-          "text": "#5AB4E0"
+          "text": "#5AB4E0",
+          "stroke": "#1F6AA5"
         },
         "jersey": {
           "base": "#F5D028",
@@ -541,6 +584,11 @@
               "pos": 0.9,
               "width": 0.14,
               "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.09,
+              "color": "#1F6AA5"
             },
             {
               "pos": 0.9,
@@ -557,6 +605,11 @@
           "lower": {
             "base": "#FFFFFF",
             "stripes": [
+              {
+                "pos": 0.5,
+                "width": 0.26,
+                "color": "#1F6AA5"
+              },
               {
                 "pos": 0.5,
                 "width": 0.2,
@@ -580,67 +633,8 @@
             },
             {
               "pos": 0.5,
-              "width": 0.1,
-              "color": "#5AB4E0"
-            }
-          ]
-        },
-        "goalie_pads": "#F5D028",
-        "text": {
-          "color": "#5AB4E0",
-          "outline": "#FFFFFF"
-        }
-      },
-      "away": {
-        "helmet": "#FFFFFF",
-        "shoulders": {
-          "color": "#FFFFFF",
-          "text": "#5AB4E0"
-        },
-        "jersey": {
-          "base": "#FFFFFF",
-          "collar": "#5AB4E0",
-          "stripes": [
-            {
-              "pos": 0.9,
-              "width": 0.14,
-              "color": "#F5D028"
-            },
-            {
-              "pos": 0.9,
-              "width": 0.07,
-              "color": "#5AB4E0"
-            }
-          ]
-        },
-        "arms": {
-          "upper": {
-            "base": "#F5D028",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#F5D028",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.2,
-                "color": "#5AB4E0"
-              }
-            ]
-          }
-        },
-        "gloves": "#5AB4E0",
-        "pants": {
-          "base": "#5AB4E0",
-          "stripes": []
-        },
-        "socks": {
-          "base": "#FFFFFF",
-          "stripes": [
-            {
-              "pos": 0.5,
-              "width": 0.2,
-              "color": "#F5D028"
+              "width": 0.16,
+              "color": "#1F6AA5"
             },
             {
               "pos": 0.5,
@@ -652,44 +646,116 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#5AB4E0",
+          "stroke": "#1F6AA5",
+          "outline": "#FFFFFF"
+        }
+      },
+      "away": {
+        "helmet": "#FFFFFF",
+        "shoulders": {
+          "color": "#FFFFFF",
+          "text": "#5AB4E0",
+          "stroke": "#1F6AA5"
+        },
+        "jersey": {
+          "base": "#FFFFFF",
+          "collar": "#5AB4E0",
+          "stripes": [
+            {
+              "pos": 0.9,
+              "width": 0.14,
+              "color": "#F5D028"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.09,
+              "color": "#1F6AA5"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.07,
+              "color": "#5AB4E0"
+            }
+          ]
+        },
+        "arms": {
+          "upper": {
+            "base": "#F5D028",
+            "stripes": []
+          },
+          "lower": {
+            "base": "#F5D028",
+            "stripes": [
+              {
+                "pos": 0.5,
+                "width": 0.26,
+                "color": "#1F6AA5"
+              },
+              {
+                "pos": 0.5,
+                "width": 0.2,
+                "color": "#5AB4E0"
+              }
+            ]
+          }
+        },
+        "gloves": "#5AB4E0",
+        "pants": {
+          "base": "#5AB4E0",
+          "stripes": []
+        },
+        "socks": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.5,
+              "width": 0.2,
+              "color": "#F5D028"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.16,
+              "color": "#1F6AA5"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.1,
+              "color": "#5AB4E0"
+            }
+          ]
+        },
+        "goalie_pads": "#FFFFFF",
+        "text": {
+          "color": "#5AB4E0",
+          "stroke": "#1F6AA5",
           "outline": "#F5D028"
         }
       }
     },
     {
       "name": "Dragonfruit",
-      "primary": "#E31B6D",
+      "primary": "#CC1F93",
       "secondary": "#1A1A1A",
       "light": "#FFFFFF",
       "home": {
         "helmet": "#1A1A1A",
         "shoulders": {
-          "color": "#E31B6D",
-          "text": "#FFFFFF"
+          "color": "#CC1F93",
+          "text": "#FFFFFF",
+          "stroke": "#1A1A1A"
         },
         "jersey": {
-          "base": "#E31B6D",
+          "base": "#CC1F93",
           "collar": "#1A1A1A",
-          "stripes": [
-            {
-              "pos": 0.93,
-              "width": 0.06,
-              "color": "#E31B6D"
-            },
-            {
-              "pos": 0.97,
-              "width": 0.03,
-              "color": "#1A1A1A"
-            }
-          ]
+          "stripes": []
         },
         "arms": {
           "upper": {
-            "base": "#E31B6D",
+            "base": "#CC1F93",
             "stripes": []
           },
           "lower": {
-            "base": "#E31B6D",
+            "base": "#CC1F93",
             "stripes": [
               {
                 "pos": 0.5,
@@ -710,7 +776,7 @@
           "stripes": []
         },
         "socks": {
-          "base": "#E31B6D",
+          "base": "#CC1F93",
           "stripes": [
             {
               "pos": 0.5,
@@ -724,9 +790,10 @@
             }
           ]
         },
-        "goalie_pads": "#E31B6D",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#FFFFFF",
+          "stroke": "#1A1A1A",
           "outline": "#1A1A1A"
         }
       },
@@ -734,23 +801,13 @@
         "helmet": "#FFFFFF",
         "shoulders": {
           "color": "#FFFFFF",
-          "text": "#E31B6D"
+          "text": "#CC1F93",
+          "stroke": "#1A1A1A"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#1A1A1A",
-          "stripes": [
-            {
-              "pos": 0.93,
-              "width": 0.06,
-              "color": "#E31B6D"
-            },
-            {
-              "pos": 0.97,
-              "width": 0.03,
-              "color": "#1A1A1A"
-            }
-          ]
+          "collar": "#CC1F93",
+          "stripes": []
         },
         "arms": {
           "upper": {
@@ -758,7 +815,7 @@
             "stripes": []
           },
           "lower": {
-            "base": "#E31B6D",
+            "base": "#CC1F93",
             "stripes": [
               {
                 "pos": 0.5,
@@ -773,13 +830,13 @@
             ]
           }
         },
-        "gloves": "#FFFFFF",
+        "gloves": "#1A1A1A",
         "pants": {
           "base": "#1A1A1A",
           "stripes": []
         },
         "socks": {
-          "base": "#E31B6D",
+          "base": "#CC1F93",
           "stripes": [
             {
               "pos": 0.5,
@@ -795,7 +852,8 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#E31B6D",
+          "color": "#CC1F93",
+          "stroke": "#1A1A1A",
           "outline": "#1A1A1A"
         }
       }
@@ -803,23 +861,34 @@
     {
       "name": "Lime",
       "primary": "#7FB320",
-      "secondary": "#4A6B15",
+      "secondary": "#3B5511",
       "light": "#FFFFFF",
-      "ui_ink": "#2F4A0C",
+      "ui_ink": "#3B5511",
       "home": {
-        "helmet": "#4A6B15",
+        "helmet": "#3B5511",
         "shoulders": {
           "color": "#7FB320",
-          "text": "#FFFFFF"
+          "text": "#F5E6D3",
+          "stroke": "#3B5511"
         },
         "jersey": {
           "base": "#7FB320",
-          "collar": "#4A6B15",
+          "collar": "#3B5511",
           "stripes": [
             {
-              "pos": 0.92,
-              "width": 0.05,
+              "pos": 0.88,
+              "width": 0.15,
+              "color": "#3B5511"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.098,
               "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.052,
+              "color": "#7FB320"
             }
           ]
         },
@@ -834,7 +903,7 @@
               {
                 "pos": 0.5,
                 "width": 0.46,
-                "color": "#4A6B15"
+                "color": "#3B5511"
               },
               {
                 "pos": 0.5,
@@ -849,9 +918,9 @@
             ]
           }
         },
-        "gloves": "#4A6B15",
+        "gloves": "#3B5511",
         "pants": {
-          "base": "#4A6B15",
+          "base": "#3B5511",
           "stripes": []
         },
         "socks": {
@@ -860,7 +929,7 @@
             {
               "pos": 0.5,
               "width": 0.437,
-              "color": "#4A6B15"
+              "color": "#3B5511"
             },
             {
               "pos": 0.5,
@@ -874,25 +943,37 @@
             }
           ]
         },
-        "goalie_pads": "#7FB320",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#F5E6D3",
-          "outline": "#4A6B15"
+          "stroke": "#3B5511",
+          "outline": "#3B5511"
         }
       },
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#7FB320",
-          "text": "#FFFFFF"
+          "color": "#FFFFFF",
+          "text": "#7FB320",
+          "stroke": "#3B5511"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#4A6B15",
+          "collar": "#3B5511",
           "stripes": [
             {
-              "pos": 0.92,
-              "width": 0.05,
+              "pos": 0.88,
+              "width": 0.15,
+              "color": "#3B5511"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.098,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.88,
+              "width": 0.052,
               "color": "#7FB320"
             }
           ]
@@ -908,7 +989,7 @@
               {
                 "pos": 0.5,
                 "width": 0.46,
-                "color": "#4A6B15"
+                "color": "#3B5511"
               },
               {
                 "pos": 0.5,
@@ -923,9 +1004,9 @@
             ]
           }
         },
-        "gloves": "#4A6B15",
+        "gloves": "#7FB320",
         "pants": {
-          "base": "#4A6B15",
+          "base": "#7FB320",
           "stripes": []
         },
         "socks": {
@@ -934,7 +1015,7 @@
             {
               "pos": 0.5,
               "width": 0.437,
-              "color": "#4A6B15"
+              "color": "#3B5511"
             },
             {
               "pos": 0.5,
@@ -951,145 +1032,146 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#7FB320",
-          "outline": "#4A6B15"
+          "stroke": "#3B5511",
+          "outline": "#3B5511"
         }
       }
     },
     {
       "name": "Plum",
-      "primary": "#382B6E",
-      "secondary": "#DE7324",
-      "light": "#F7EFDD",
+      "primary": "#5B2A6E",
+      "secondary": "#E8862A",
+      "light": "#FFFFFF",
       "home": {
-        "helmet": "#382B6E",
+        "helmet": "#5B2A6E",
         "shoulders": {
-          "color": "#382B6E",
-          "text": "#F7EFDD"
+          "color": "#5B2A6E",
+          "text": "#FFFFFF"
         },
         "jersey": {
-          "base": "#382B6E",
-          "yoke": "#F7EFDD",
-          "collar": "#DE7324",
+          "base": "#5B2A6E",
+          "yoke": "#FFFFFF",
+          "collar": "#E8862A",
           "stripes": [
             {
               "pos": 0.95,
               "width": 0.04,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "arms": {
           "upper": {
-            "base": "#382B6E",
+            "base": "#5B2A6E",
             "stripes": [
               {
                 "pos": 0.9,
                 "width": 0.12,
-                "color": "#F7EFDD"
+                "color": "#FFFFFF"
               }
             ]
           },
           "lower": {
-            "base": "#DE7324",
+            "base": "#E8862A",
             "stripes": []
           }
         },
-        "gloves": "#382B6E",
+        "gloves": "#5B2A6E",
         "pants": {
-          "base": "#382B6E",
+          "base": "#5B2A6E",
           "stripes": [
             {
               "pos": 0.5,
               "width": 0.08,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "socks": {
-          "base": "#382B6E",
+          "base": "#5B2A6E",
           "stripes": [
             {
               "pos": 0.75,
               "width": 0.5,
-              "color": "#DE7324"
+              "color": "#E8862A"
             },
             {
               "pos": 0.5,
               "width": 0.07,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
-        "goalie_pads": "#382B6E",
+        "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#F7EFDD",
-          "outline": "#F7EFDD"
+          "color": "#FFFFFF",
+          "outline": "#FFFFFF"
         }
       },
       "away": {
-        "helmet": "#F7EFDD",
+        "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#F7EFDD",
-          "text": "#382B6E"
+          "color": "#FFFFFF",
+          "text": "#5B2A6E"
         },
         "jersey": {
-          "base": "#F7EFDD",
-          "yoke": "#382B6E",
-          "collar": "#DE7324",
+          "base": "#FFFFFF",
+          "yoke": "#5B2A6E",
+          "collar": "#E8862A",
           "stripes": [
             {
               "pos": 0.95,
               "width": 0.04,
-              "color": "#382B6E"
+              "color": "#5B2A6E"
             }
           ]
         },
         "arms": {
           "upper": {
-            "base": "#F7EFDD",
+            "base": "#FFFFFF",
             "stripes": [
               {
                 "pos": 0.9,
                 "width": 0.12,
-                "color": "#382B6E"
+                "color": "#5B2A6E"
               }
             ]
           },
           "lower": {
-            "base": "#DE7324",
+            "base": "#E8862A",
             "stripes": []
           }
         },
-        "gloves": "#F7EFDD",
+        "gloves": "#FFFFFF",
         "pants": {
-          "base": "#382B6E",
+          "base": "#5B2A6E",
           "stripes": [
             {
               "pos": 0.5,
               "width": 0.08,
-              "color": "#F7EFDD"
+              "color": "#FFFFFF"
             }
           ]
         },
         "socks": {
-          "base": "#F7EFDD",
+          "base": "#FFFFFF",
           "stripes": [
             {
               "pos": 0.75,
               "width": 0.5,
-              "color": "#DE7324"
+              "color": "#E8862A"
             },
             {
               "pos": 0.5,
               "width": 0.07,
-              "color": "#382B6E"
+              "color": "#5B2A6E"
             }
           ]
         },
-        "goalie_pads": "#F7EFDD",
+        "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#382B6E",
-          "outline": "#382B6E"
+          "color": "#5B2A6E",
+          "outline": "#5B2A6E"
         }
       }
     },
@@ -1161,7 +1243,7 @@
             }
           ]
         },
-        "goalie_pads": "#C2405A",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#FFFFFF",
           "outline": "#FFFFFF"
@@ -1269,12 +1351,12 @@
           "stripes": [
             {
               "pos": 0.88,
-              "width": 0.12,
+              "width": 0.13,
               "color": "#F3EAD3"
             },
             {
               "pos": 0.88,
-              "width": 0.04,
+              "width": 0.078,
               "color": "#3FB8AF"
             }
           ]
@@ -1289,12 +1371,12 @@
             "stripes": [
               {
                 "pos": 0.55,
-                "width": 0.22,
+                "width": 0.26,
                 "color": "#F3EAD3"
               },
               {
                 "pos": 0.55,
-                "width": 0.07,
+                "width": 0.156,
                 "color": "#3FB8AF"
               }
             ]
@@ -1302,7 +1384,7 @@
         },
         "gloves": "#3FB8AF",
         "pants": {
-          "base": "#5C3A21",
+          "base": "#3FB8AF",
           "stripes": [
             {
               "pos": 0.5,
@@ -1316,17 +1398,17 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.26,
+              "width": 0.3,
               "color": "#F3EAD3"
             },
             {
               "pos": 0.5,
-              "width": 0.08,
+              "width": 0.18,
               "color": "#3FB8AF"
             }
           ]
         },
-        "goalie_pads": "#F3EAD3",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#F3EAD3",
           "outline": "#5C3A21"
@@ -1345,12 +1427,12 @@
           "stripes": [
             {
               "pos": 0.88,
-              "width": 0.12,
+              "width": 0.13,
               "color": "#5C3A21"
             },
             {
               "pos": 0.88,
-              "width": 0.04,
+              "width": 0.078,
               "color": "#3FB8AF"
             }
           ]
@@ -1365,12 +1447,12 @@
             "stripes": [
               {
                 "pos": 0.55,
-                "width": 0.22,
+                "width": 0.26,
                 "color": "#5C3A21"
               },
               {
                 "pos": 0.55,
-                "width": 0.07,
+                "width": 0.156,
                 "color": "#3FB8AF"
               }
             ]
@@ -1392,17 +1474,17 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.26,
+              "width": 0.3,
               "color": "#5C3A21"
             },
             {
               "pos": 0.5,
-              "width": 0.08,
+              "width": 0.18,
               "color": "#3FB8AF"
             }
           ]
         },
-        "goalie_pads": "#F3EAD3",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#5C3A21",
           "outline": "#5C3A21"
@@ -1412,26 +1494,27 @@
     {
       "name": "Cherry",
       "primary": "#D2142C",
-      "secondary": "#1A1A1A",
+      "secondary": "#2B070F",
       "light": "#FFFFFF",
       "home": {
-        "helmet": "#1A1A1A",
+        "helmet": "#2B070F",
         "shoulders": {
-          "color": "#1A1A1A",
+          "color": "#2B070F",
           "text": "#D2142C"
         },
         "jersey": {
           "base": "#D2142C",
+          "collar": "#2B070F",
           "stripes": [
             {
               "pos": 0.76,
               "width": 0.055,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             },
             {
               "pos": 0.88,
               "width": 0.055,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             }
           ]
         },
@@ -1442,12 +1525,12 @@
               {
                 "pos": 0.6,
                 "width": 0.11,
-                "color": "#1A1A1A"
+                "color": "#2B070F"
               },
               {
                 "pos": 0.84,
                 "width": 0.11,
-                "color": "#1A1A1A"
+                "color": "#2B070F"
               }
             ]
           },
@@ -1456,9 +1539,9 @@
             "stripes": []
           }
         },
-        "gloves": "#1A1A1A",
+        "gloves": "#2B070F",
         "pants": {
-          "base": "#1A1A1A",
+          "base": "#2B070F",
           "stripes": []
         },
         "socks": {
@@ -1467,18 +1550,18 @@
             {
               "pos": 0.42,
               "width": 0.1,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             },
             {
               "pos": 0.6,
               "width": 0.1,
-              "color": "#1A1A1A"
+              "color": "#2B070F"
             }
           ]
         },
-        "goalie_pads": "#D2142C",
+        "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#1A1A1A",
+          "color": "#2B070F",
           "outline": "#D2142C"
         }
       },
@@ -1490,6 +1573,7 @@
         },
         "jersey": {
           "base": "#FFFFFF",
+          "collar": "#D2142C",
           "stripes": [
             {
               "pos": 0.76,
@@ -1524,9 +1608,9 @@
             "stripes": []
           }
         },
-        "gloves": "#1A1A1A",
+        "gloves": "#2B070F",
         "pants": {
-          "base": "#1A1A1A",
+          "base": "#2B070F",
           "stripes": []
         },
         "socks": {
@@ -1547,7 +1631,7 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#D2142C",
-          "outline": "#1A1A1A"
+          "outline": "#2B070F"
         }
       }
     },
@@ -1634,7 +1718,7 @@
             }
           ]
         },
-        "goalie_pads": "#1E2A5A",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#F5EBDA",
           "outline": "#F5EBDA"
@@ -1723,7 +1807,7 @@
             }
           ]
         },
-        "goalie_pads": "#F5EBDA",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#1E2A5A",
           "outline": "#1E2A5A"
@@ -1780,7 +1864,7 @@
         },
         "gloves": "#161618",
         "pants": {
-          "base": "#161618",
+          "base": "#5E2457",
           "stripes": []
         },
         "socks": {
@@ -1798,7 +1882,7 @@
             }
           ]
         },
-        "goalie_pads": "#161618",
+        "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#FFFFFF",
           "outline": "#FFFFFF"

@@ -67,6 +67,13 @@ const PASS_SPEED_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
 # distance and receiver motion.
 const PASS_TARGET_CLOSING_M_S: float = 20.0
 
+# The softest feed a bot fires: a pass's world arrival and its launch never go
+# below it, and a saucer that has to launch softer is not offered. A bot
+# tactic, deliberately above the softest touch a wrister has
+# (GameRules.DEFAULT_WRISTER_POWER_MIN_M_S), so a slow loose puck never reads
+# as a feed (SkaterAgentReception.RECEIVE_TRIGGER_PUCK_SPEED_M_S sits under it).
+const SOFTEST_FEED_M_S: float = 10.0
+
 # The paces a carrier prices a pass at, as fractions of the target closing
 # speed — 12 / 16 / 20 m/s at full pace, from the NHL short-pass received mean
 # to the stretch pass's (docs/stick-settling-plan.md). The pass EV picks: a
@@ -130,12 +137,12 @@ static func pass_launch_speed(distance: float, max_launch: float,
 				PASS_RECEIVE_CEILING_M_S * PASS_RECEIVE_CEILING_M_S - perp_sq))
 		world_arrival = clampf(target_closing, soft_arrival, crisp_arrival)
 		# A receiver charging the passer harder than the target could drive this
-		# negative/tiny; floor at the soft-pass minimum so we still fire a real pass.
-		world_arrival = maxf(world_arrival, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S)
+		# negative/tiny; floor at the softest feed so we still fire a real pass.
+		world_arrival = maxf(world_arrival, SOFTEST_FEED_M_S)
 	var launch: float = sqrt(
 			world_arrival * world_arrival
 			+ 2.0 * GameRules.PUCK_ICE_DECEL_M_S2 * maxf(distance, 0.0))
-	return clampf(launch, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S, max_launch)
+	return clampf(launch, SOFTEST_FEED_M_S, max_launch)
 
 # ── Saucer pass ──────────────────────────────────────────────────────────────
 # Pure kinematics of the LOW loft's fixed vertical launch
@@ -182,8 +189,8 @@ static func saucer_airborne_distance_m(launch_speed: float) -> float:
 # The fastest launch that still LANDS with SAUCER_LANDING_RUN_M of grounded
 # slide before a receiver `distance` away — the receivability bound (an
 # airborne arrival flies over the tape). Negative/tiny for very short
-# feeds: below min wrister pace there is no legal saucer, the physical
-# floor on saucer distance (~6.5 m at the 10 m/s soft-touch minimum).
+# feeds: below the softest feed there is no saucer a bot offers, the floor on
+# saucer distance (~6.5 m at SOFTEST_FEED_M_S).
 static func saucer_max_launch_speed(distance: float) -> float:
 	return (distance - SAUCER_LANDING_RUN_M) / saucer_hang_time_s()
 

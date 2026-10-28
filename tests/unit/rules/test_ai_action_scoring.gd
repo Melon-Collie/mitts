@@ -658,7 +658,7 @@ func test_pass_launch_speed_fires_harder_onto_a_streaking_receiver() -> void:
 			"a mild curl-back stays crisp — softening is capped at the catch ceiling")
 	assert_lt(hard_curl, static_launch,
 			"a hard curl-back still softens to stay catchable")
-	assert_gt(hard_curl, GameRules.DEFAULT_WRISTER_POWER_MIN_M_S + 5.0,
+	assert_gt(hard_curl, AIPuckLane.SOFTEST_FEED_M_S + 5.0,
 			"but only to the reception ceiling, not collapsed to the soft floater")
 
 
@@ -1032,8 +1032,8 @@ func test_lane_clear_saucer_the_man_it_flew_over_plays_the_landing() -> void:
 func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
 	# The receivability bound: launch × hang time + landing run must fit
 	# inside the pass distance. At the bound the flip lands exactly a
-	# landing-run short of the tape; below the soft-touch wrister floor
-	# (~6.5 m feeds and shorter) no legal saucer exists.
+	# landing-run short of the tape; below the softest feed (~6.5 m feeds and
+	# shorter) no saucer is offered.
 	var bound: float = AIPuckLane.saucer_max_launch_speed(10.0)
 	assert_almost_eq(
 			AIPuckLane.saucer_airborne_distance_m(bound)
@@ -1041,10 +1041,10 @@ func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
 			10.0, 0.0001,
 			"at the bound the flip lands exactly a landing-run before the tape")
 	assert_gt(AIPuckLane.saucer_max_launch_speed(7.0),
-			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
-			"a 7 m feed still admits a soft saucer above the wrister floor")
+			AIPuckLane.SOFTEST_FEED_M_S,
+			"a 7 m feed still admits a soft saucer above the softest feed")
 	assert_lt(AIPuckLane.saucer_max_launch_speed(6.0),
-			GameRules.DEFAULT_WRISTER_POWER_MIN_M_S,
+			AIPuckLane.SOFTEST_FEED_M_S,
 			"a 6 m feed can't be saucered — even the softest flip lands too late")
 
 
@@ -1279,10 +1279,10 @@ func test_pass_miss_cost_self_localizes_by_rink_end() -> void:
 # ─── Stance-aware five-hole (measured slot from the replicated pose) ──────
 
 func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
-	# The predictor matches the live goalie's RVH/VH trigger: within ~2 m of the
-	# goal line AND past ~77° off the goal normal. A dead-angle corner seals; a
-	# normal slot / mid look does not; a sharp-but-in-tight shot still short of the
-	# extreme angle does not.
+	# The predictor matches the keeper: his sharp angle (below the dots, past 60°)
+	# and, outside it, a look whose net window his standing span covers. A
+	# dead-angle corner seals; a normal slot / mid look does not; an in-tight
+	# look wide enough to shoot past his body does not.
 	var goal := Vector3(0, 0, -26.65)
 	assert_ne(AIGoalieModel.derive_post_seal_x_sign(Vector3(8, 0, -25.5), goal), 0.0,
 			"dead-angle corner (1.15 m out, ~82°) is sealed")
@@ -1290,8 +1290,8 @@ func test_derive_post_seal_only_fires_in_the_sharp_near_line_zone() -> void:
 			"the slot is never sealed")
 	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(7, 0, -18.0), goal), 0.0,
 			"an off-angle mid look (8.6 m out) is not sealed")
-	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(4, 0, -24.0), goal), 0.0,
-			"a sharp but in-tight look (2.65 m out, ~56°) is a real shot, not a seal")
+	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(3.5, 0, -23.65), goal), 0.0,
+			"an in-tight look (3 m out, ~49°) is a real shot, not a seal")
 	# The seal side is the shooter's side of the goal center.
 	assert_eq(AIGoalieModel.derive_post_seal_x_sign(Vector3(-8, 0, -25.5), goal), -1.0,
 			"seals the side the shooter is on")
@@ -1338,15 +1338,6 @@ func test_tip_needs_deflect_pace() -> void:
 	var none: Array[Vector3] = []
 	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
 			"a soft feed is a pass, not a tip")
-
-
-# ── Hole-model v3: the HIGH band reads the replicated hands ──────────────────
-# Pose numbers cited from GoalieBodyConfigBuilder: READY glove (−0.42, 0.90),
-# blocker (0.44, 0.86); butterfly drops both to y ≈ 0.44. GOAL here is +z, so
-# net_dx = local_x (hands_read's m = +1).
-
-const HANDS_READY := Vector4(-0.42, 0.90, 0.44, 0.86)
-const HANDS_BUTTERFLY := Vector4(-0.42, 0.44, 0.44, 0.44)
 
 
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:

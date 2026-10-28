@@ -22,9 +22,10 @@ passed per call, and only its own fields written.
 |---|---|
 | `SkaterAgentSteering` | body steering to an anchor: the field, brake-pivot, arrival brake, stance carve |
 | `SkaterAgentStickPlay` | the jab / lift reach-in, the tie and its pull, the stick-check button |
+| `SkaterAgentStandUp` | meeting a carrier about to skate into us with Ctrl held, so the contact is our check |
 | `SkaterAgentBoardPlay` | reaching for and holding a pin, the pinned slide, a carrier's answer to a square checker |
 | `SkaterAgentShotBlock` | the shot block and the 2-on-1 dive |
-| `SkaterAgentCrossCheck` | the cross-check on a screen or a loose-puck race, and a screener's set against one |
+| `SkaterAgentPress` | the press on a screen we are leaned on, a screener digging in against a defender on him, and a carrier putting his body into a man who stands him up |
 | `SkaterAgentReception` | reading an incoming feed: is it ours, the blade gate, the squared or wall-kill stance, and whether it is a shot reception |
 | `SkaterAgentOneTimer` | the ready finisher's settle anchor on the feed line, the slapper zone, the feed's remaining flight, the press square-up |
 
@@ -51,10 +52,11 @@ Adding a behaviour is four steps:
 | any press state | CARRY | the release fires, or the press bails |
 | CARRY, any press state | `_post_puck_lost_state` | the puck is gone: CHASE_PUCK for the nearest teammate to a loose puck, else OFF_PUCK |
 
-After dispatch, `SkaterAgent.tick` runs four per-tick passes that may overwrite
-the dispatched input: the stick lift, board play (`apply_board_play`), the shot
-block (`SkaterAgentShotBlock`) and the cross-check (`SkaterAgentCrossCheck`, last,
-so a stick or a body the others took throws nothing). The offside brake (`apply_offside_guard`)
+After dispatch, `SkaterAgent.tick` runs five per-tick passes that may overwrite
+the dispatched input: the stick lift, the stand-up (`apply_stand_up`, ahead of
+the board play so a check it starts at the wall can become a pin), board play
+(`apply_board_play`), the shot
+block (`SkaterAgentShotBlock`) and the press (`SkaterAgentPress`). The offside brake (`apply_offside_guard`)
 runs after all of them as the last write to the move, so no writer — the rolled
 carry inside dispatch, the pinned slide after it — can carry a bot over the line
 (`test_agent_offside_guard.gd`).
@@ -141,13 +143,24 @@ prices is the path the cursor walks.
 
 ## Reception doctrine
 
-**A fast loose puck is a reception, not a race.** The catch is decided by blade
+**A feed is a reception, not a race.** The catch is decided by blade
 squareness plus the puck's speed *in the receiver's frame*, so squaring on the
 line is what collects it and stopping is a wait rather than a technique. Bots
 receive in stride by default and brake only when arriving early enough to carry
 the blade past the meet, or when their own skating is what carries a feed past
 the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
 its own bobbles however they skate.
+
+**A feed is a puck that was sent, and who sent it is all a bot knows.** A fast
+loose puck reads as one (`RECEIVE_TRIGGER_PUCK_SPEED_M_S`), and so does a
+teammate's release at any pace while it slides
+(`WorldSnapshot.loose_puck_released_by`, kept until any stick, body or goalie
+touches it): the teammate nearest its line goes to it (`incoming_pass`), and
+squares up to it where its real path reaches him (`read_pass`). Whom the passer
+meant is never published: the bots read what a human watching the play would
+see, the passer and the puck, and nothing a human cannot. The shot-aware
+reception and the one-timer plan on the puck's line without its friction, so
+they keep the fast trigger.
 
 Against the boards the read inverts: the blade goes ON the glass and the body
 stands rink-side, because a blade out on the puck's line leaves exactly the gap a

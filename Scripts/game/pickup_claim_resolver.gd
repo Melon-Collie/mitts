@@ -289,8 +289,7 @@ func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
 	# pucks away, which the present-time loop applies.
 	if skater_snap.stick_tied or skater_snap.pin_role != BoardPinRules.Role.NONE \
 			or skater_snap.knockdown_timer > 0.0 \
-			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase) \
-			or CrossCheckRules.is_stick_busy(skater_snap.cross_check_phase):
+			or StickCheckRules.is_stick_busy(skater_snap.stick_check_phase):
 		NetworkManager.send_pickup_claim_nack(peer_id)
 		return
 	# Client-authoritative blade ("aim") — the claim carries the geometry the

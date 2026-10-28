@@ -617,7 +617,8 @@ var _ties_sticks: bool = true
 var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
-var _cross_check := SkaterAgentCrossCheck.new()
+var _stand_up := SkaterAgentStandUp.new()
+var _press := SkaterAgentPress.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
 var _reception := SkaterAgentReception.new()
@@ -729,16 +730,17 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_apply_aim_slew(caps.blade_speed, caps.blade_span)
 
 
-# This bot's power fraction (0..1) for a charged pass at _pass_target_speed, over
-# its own wrister band [DEFAULT_WRISTER_POWER_MIN_M_S, _self_wrister_shot_speed]
-# (the controller holds the minimum at the league baseline for every build).
-# `hand_coefficient` is the share the release's hand fires at (the backhand
-# coefficient on a backhand), so the commit asks for the pace over it.
-func _pass_power_t(hand_coefficient: float = 1.0) -> float:
+# This bot's power fraction (0..1) for a charged pass whose blade push is `push`
+# (m/s), over its own wrister band [floor_push, _self_wrister_shot_speed]: the
+# controller holds the standing floor at the league baseline for every build,
+# and cushions it to a pace on the ice by the body's motion
+# (ReleaseMomentum.floor_push). `hand_coefficient` is the share the release's
+# hand fires at (the backhand coefficient on a backhand), so the commit asks for
+# the push over it.
+func _pass_power_t(push: float, floor_push: float, hand_coefficient: float = 1.0) -> float:
 	return clampf(
-			(_pass_target_speed / maxf(hand_coefficient, 0.05)
-					- GameRules.DEFAULT_WRISTER_POWER_MIN_M_S)
-			/ maxf(_self_wrister_shot_speed - GameRules.DEFAULT_WRISTER_POWER_MIN_M_S, 0.001),
+			(push / maxf(hand_coefficient, 0.05) - floor_push)
+			/ maxf(_self_wrister_shot_speed - floor_push, 0.001),
 			0.0, 1.0)
 
 
@@ -756,7 +758,8 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_caps_by_peer = caps_by_peer
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
-	_cross_check.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_stand_up.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_press.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
 	_reception.setup(peer_id, team_id, team_id_by_peer, caps_by_peer, is_left_handed)
@@ -2253,7 +2256,15 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		if self_state0 != null:
 			_share_as_is(snapshot, self_pos, self_state0, clean_pass_aim)
 			backhand = _holds.is_backhand
-		_pass_power_committed = _pass_power_t(
+		# The puck keeps the passer's motion (ReleaseMomentum), so the blade pushes
+		# what lands the pace the pass was priced at from how he is moving now.
+		var push: float = _pass_target_speed
+		var floor_push: float = GameRules.DEFAULT_WRISTER_POWER_MIN_M_S
+		if self_state0 != null:
+			push = ReleaseMomentum.push_for_pace(_pass_target_speed,
+					Vector2(aim_dir_init.x, aim_dir_init.z), self_state0.velocity)
+			floor_push = ReleaseMomentum.floor_push(floor_push, aim_dir_init, self_state0.velocity)
+		_pass_power_committed = _pass_power_t(push, floor_push,
 				_self_backhand_coefficient if backhand else 1.0)
 		var pass_span: float = BOT_WRISTER_WIND_UP_SPAN_M * maxf(_pass_power_committed, 0.35)
 		var endpoints: Dictionary = _wind_up_endpoint_offsets(aim_dir_init, aim_distance, pass_span,
@@ -2871,6 +2882,13 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 	return _stick_play.tie_yank_aim(snapshot, self_pos, self_state, _ties_sticks, _blade_reach)
 
 
+# Meeting a carrier about to skate into us with the shoulder
+# (SkaterAgentStandUp), every physics tick after dispatch and before the board
+# play, which may turn that check at the wall into a pin.
+func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
+	_stand_up.apply(input, snapshot, _check_aggression)
+
+
 # The boards, every physics tick after dispatch (SkaterAgentBoardPlay).
 func apply_board_play(input: InputState, snapshot: WorldSnapshot) -> void:
 	_board_play.apply(input, snapshot, _own_goal_dir, _check_aggression,
@@ -2887,13 +2905,14 @@ func apply_shot_block(input: InputState, snapshot: WorldSnapshot) -> void:
 	_shot_block.apply(input, snapshot, _own_goal_dir, rush, _blade_reach, _chase_max_accel)
 
 
-# The cross-check (SkaterAgentCrossCheck), every physics tick after the other
-# stick passes, which it yields to. The screener's set against one rides the
-# protects_the_puck gate: answering a physical threat to what we hold.
-func apply_cross_check(input: InputState, snapshot: WorldSnapshot) -> void:
-	_cross_check.apply(input, snapshot, _own_goal_dir,
+# The press (SkaterAgentPress), every physics tick after the other body and stick
+# passes; true when it took the body. The screener's dig-in and the carrier's
+# drive through a man ride the protects_the_puck gate: answering a physical
+# threat to what we hold.
+func apply_press(input: InputState, snapshot: WorldSnapshot) -> bool:
+	return _press.apply(input, snapshot, _own_goal_dir,
 			_cached_role_decision.locked_man_pid if _cached_role_decision != null else -1,
-			_check_aggression, _protects_the_puck)
+			_check_aggression, _protects_the_puck, _state == State.CARRY)
 
 
 # Holds the stick-check button for a lift or a tie the dispatch started, every

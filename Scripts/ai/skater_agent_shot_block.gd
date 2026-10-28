@@ -12,7 +12,7 @@ var _peer_id: int = -1
 var _team_id: int = -1
 var _team_id_by_peer: Dictionary = {}
 var _caps_by_peer: Dictionary = {}
-var _screen_cfg := GoalieBehaviorRules.ScreenConfig.new()
+var _screen_cfg := GoalieScreenRules.ScreenConfig.new()
 var _blocking: bool = false
 
 

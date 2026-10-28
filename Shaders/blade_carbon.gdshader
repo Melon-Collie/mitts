@@ -8,9 +8,8 @@ shader_type spatial;
 // albedo and roughness, which is what makes a weave read as material rather
 // than paint under a moving light.
 //
-// The Fresnel emission term mirrors BodyRim for ShaderMaterials (same
-// formula as goalie_jersey.gdshader) so the blade keeps the shared
-// player-silhouette rim.
+// The Fresnel emission term mirrors BodyRim for ShaderMaterials so the
+// blade keeps the shared player-silhouette rim.
 
 uniform vec4 albedo_a : source_color = vec4(0.045, 0.045, 0.05, 1.0);
 uniform vec4 albedo_b : source_color = vec4(0.085, 0.085, 0.095, 1.0);
