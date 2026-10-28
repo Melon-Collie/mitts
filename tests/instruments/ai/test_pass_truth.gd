@@ -13,10 +13,15 @@ extends GutTest
 # Each run records whether the pass got through (caught by the receiver, taken
 # by the defender, or neither), whether the receiver still had the puck
 # KEEP_S after the catch, and beside it each lane read the bots price with now —
-# the flat accurate lane, the saucer's, the rim's race — and, along the puck's
+# the flat accurate lane, the saucer's, the rim's — and, along the puck's
 # own path, the one-chance strip read and the defender's best and first spare
 # time on it. Writes .preview/pass_truth/runs.csv. MITTS_PASS_SET_S overrides the
-# interceptor's set margin; MITTS_PASS_LIMIT caps the stagings. Reports only.
+# interceptor's set margin; MITTS_PASS_LIMIT caps the stagings.
+# MITTS_PASS_READS_FROM=<runs.csv> re-reads a recorded set without running it
+# (the same stagings in the same order, outcomes from the file) and adds, along
+# the puck's own path, the one-chance pass read at each of READ_SETS set margins:
+# each defender's best AIStripOdds.chance_at on the path, his lane reach, only his
+# body where the puck flies. Reports only.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const PASSER: int = 1
@@ -34,11 +39,13 @@ const OUT_DIR: String = "res://.preview/pass_truth"
 # He reads the windup, not the release (AIPuckLane.LANE_WINDUP_READ_DELAY_S):
 # the passer holds the puck these ticks while he already skates.
 const PREROLL_TICKS: int = maxi(0, roundi(-AIPuckLane.LANE_WINDUP_READ_DELAY_S * 120.0))
+const READ_SETS: Array[float] = [0.0, 0.15, 0.25, 0.3, 0.45, 0.6]
 
 var _set_s: float = SET_S
 # The puck's free path, every tick after the release, up to where it reaches the
-# receiver's blade (the dry run's).
+# receiver's blade (the dry run's), and whether it is in the air there.
 var _path: Array[Vector3] = []
+var _air: Array[bool] = []
 # The interceptor's line to aim at, every tick from the decision.
 var _aim: Array[Vector3] = []
 
@@ -55,14 +62,27 @@ func test_pass_truth() -> void:
 			if OS.has_environment("MITTS_PASS_LIMIT") else stagings.size()
 	var stride: int = maxi(1, stagings.size() / maxi(limit, 1))
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(OUT_DIR))
+	var recorded: Array[PackedStringArray] = []
+	if OS.has_environment("MITTS_PASS_READS_FROM"):
+		var src := FileAccess.open(OS.get_environment("MITTS_PASS_READS_FROM"), FileAccess.READ)
+		src.get_line()
+		while not src.eof_reached():
+			var l: String = src.get_line()
+			if not l.is_empty():
+				recorded.append(l.split(","))
+		gut.p("re-reading %d recorded runs" % recorded.size())
 	var f := FileAccess.open(OUT_DIR + "/runs.csv", FileAccess.WRITE)
-	f.store_line("kind,ox,oz,rx,rz,lx,ly,lz,dx,dz,dvx,dvz,outcome,t_out,kept,lane_flat,lane_saucer,"
-			+ "rim_race,path_keep,best_spare,first_spare,flight_s")
+	var header: String = "kind,ox,oz,rx,rz,lx,ly,lz,dx,dz,dvx,dvz,outcome,t_out,kept,lane_flat," \
+			+ "lane_saucer,rim_lane,path_keep,best_spare,first_spare,flight_s"
+	for set_s: float in READ_SETS:
+		header += ",pass_%02d" % roundi(set_s * 100.0)
+	f.store_line(header)
 	var tally: Dictionary = {}
 	var t0: int = Time.get_ticks_msec()
 	var n: int = 0
 	for i: int in range(0, stagings.size(), stride):
-		var row: Dictionary = _run(stagings[i])
+		var row: Dictionary = _reread(stagings[i], recorded[n]) if not recorded.is_empty() \
+				else _run(stagings[i])
 		if row.is_empty():
 			continue
 		f.store_line(row["line"])
@@ -161,9 +181,11 @@ func _free_path(o: Vector3, r: Vector3, launch: Vector3) -> Array[Vector3]:
 	duel.start(PASSER)
 	_release(duel, launch)
 	var out: Array[Vector3] = []
+	_air.clear()
 	for _i: int in int(WATCH_S / Duel.DT):
 		duel.step()
 		out.append(duel.puck_pos)
+		_air.append(duel.airborne_ticks > 0)
 		if Vector2(duel.puck_pos.x - r.x, duel.puck_pos.z - r.z).length() <= Duel.BLADE_REACH:
 			break
 	return out
@@ -232,6 +254,15 @@ func _run(st: Dictionary) -> Dictionary:
 	return {"outcome": outcome, "line": _line(st, outcome, t_out, kept, caps)}
 
 
+# A recorded run re-read: its outcome from `cols`, every read afresh.
+func _reread(st: Dictionary, cols: PackedStringArray) -> Dictionary:
+	_path = _free_path(st["o"], st["r"], st["launch"])
+	if _path.size() < 4:
+		return {}
+	var caps: AISkaterCaps = Duel.match_caps()
+	return {"outcome": cols[12], "line": _line(st, cols[12], float(cols[13]), int(cols[14]), caps)}
+
+
 # The run's row: its staging, outcome and the lane reads from the decision.
 func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISkaterCaps) -> String:
 	var o: Vector3 = st["o"]
@@ -246,7 +277,7 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 	var lane_flat: float = AIPuckLane.lane_clear(o, r, defs, pace, vels, cap_list, true)
 	var lane_saucer: float = AIPuckLane.lane_clear_saucer(o, r, defs, pace, vels, cap_list) \
 			if st["kind"] == "saucer" else -1.0
-	var rim_race: float = -1.0
+	var rim_lane: float = -1.0
 	if st["kind"] == "rim":
 		var rim_caps: Array[AISkaterCaps] = [caps]
 		AIRimPass.build(o, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
@@ -254,7 +285,7 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 		for k: int in AIRimPass.count:
 			if AIRimPass.dirs[k].is_equal_approx(launch / pace) \
 					and is_equal_approx(AIRimPass.paces[k], pace):
-				rim_race = AIRimPass.race_completion(k, AIRimPass.meet_time(k, r, Vector3.ZERO, null))
+				rim_lane = AIRimPass.lane(k, AIRimPass.meet_time(k, r, Vector3.ZERO, null))
 	var lead: float = PREROLL_TICKS * Duel.DT
 	var points: Array[Vector3] = []
 	var times: Array[float] = []
@@ -271,10 +302,20 @@ func _line(st: Dictionary, outcome: String, t_out: float, kept: int, caps: AISka
 			points.append(_path[j])
 			times.append(t)
 	var keep: float = AIStripOdds.path_keep(points, times, defs, vels, cap_list, 0.0, INF)
-	return "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f" % [
+	var reads := PackedStringArray()
+	var reach: float = AILaneReach.defender_reach(caps)
+	for set_s: float in READ_SETS:
+		var best_chance: float = 0.0
+		for j: int in _path.size():
+			best_chance = maxf(best_chance, AIStripOdds.chance_at(d, dv, caps, _path[j],
+					lead + (j + 1) * Duel.DT, set_s,
+					AIPuckLane.LANE_DEFENDER_BODY_RADIUS_M if _air[j] else reach))
+		reads.append("%.4f" % (1.0 - best_chance))
+	var head: String = "%s,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%s,%.3f,%d,%.4f,%.4f,%.4f,%.4f,%.3f,%.3f,%.3f" % [
 			st["kind"], o.x, o.z, r.x, r.z, launch.x, launch.y, launch.z, d.x, d.z, dv.x, dv.z,
-			outcome, t_out, kept, lane_flat, lane_saucer, rim_race, keep, best, first,
+			outcome, t_out, kept, lane_flat, lane_saucer, rim_lane, keep, best, first,
 			_path.size() * Duel.DT]
+	return head + "," + ",".join(reads)
 
 
 # One tick of the interceptor: to the earliest point of the line he aims at that

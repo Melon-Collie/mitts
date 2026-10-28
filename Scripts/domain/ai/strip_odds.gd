@@ -28,20 +28,20 @@ const COMMIT_S: float = 1.0
 
 
 # The odds a defender at `pos` moving `vel`, built as `caps` (null: the league
-# build), has his stick set on `point` by `puck_t` from his read: his arrival
-# clock to within his blade's reach of it, graded across the clock's error as
-# the arrival race grades a race.
+# build), has his stick set on `point` `set_s` before `puck_t` from his read: his
+# arrival clock to within `reach` of it (his blade's, when negative), graded
+# across the clock's error as the arrival race grades a race.
 static func chance_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
-		puck_t: float) -> float:
-	var reach: float = caps.max_blade_reach if caps != null \
-			else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+		puck_t: float, set_s: float = SET_S, reach: float = -1.0) -> float:
+	if reach < 0.0:
+		reach = caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
 	var to := Vector3(point.x - pos.x, 0.0, point.z - pos.z)
 	var d: float = to.length()
 	var arrive: float = 0.0
 	if d > reach:
 		arrive = AIArrival.time_to_arrive_caps(pos, pos + to * ((d - reach) / d), vel, caps)
 	var band: float = maxf(AIArrival.ERROR_FLOOR_S, AIArrival.ERROR_FRAC * arrive)
-	return clampf(0.5 + (puck_t - arrive - SET_S) / (2.0 * band), 0.0, 1.0)
+	return clampf(0.5 + (puck_t - arrive - set_s) / (2.0 * band), 0.0, 1.0)
 
 
 # The odds the puck is kept along a path: through `points`, reached at `times`

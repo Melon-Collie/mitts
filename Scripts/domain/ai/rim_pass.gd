@@ -14,14 +14,15 @@ class_name AIRimPass
 # that still reaches him (AICarrierPassSearch._rim_launch_for).
 #
 # This file is the path half: which launches are rims, where each one goes, and
-# who reaches it first. What a rim is WORTH stays in the carrier's pass compete
+# whether an opponent's stick gets on it first (lane — the flat feed's own lane
+# read along the walked path). What a rim is WORTH stays in the carrier's pass compete
 # (AICarrierPassSearch ranks it in _rim_launch_for and prices the best in _pass_ev), in one currency with the
 # flat feed and the saucer.
 #
 # A launch is a rim when its first board contact is near the passer and
 # glancing, so the boards carry it rather than turning it back into the middle.
 # Both are sampling bounds — which bearings to walk — not evaluation: whatever
-# survives is priced on the race along its own path.
+# survives is priced on the lane along its own path.
 
 # Bearings sampled around the passer, and the pace ladder (fractions of the
 # passer's wrister max) each surviving bearing is walked at. Ascending: a softer
@@ -188,15 +189,19 @@ static func stays_in_zone(k: int, t: float, attacking_goal: Vector3,
 	return true
 
 
-# Race completion: the receiver against the soonest opponent on the same path,
-# in the contest band AIActionScoring.arrival_race prices with — one currency
-# for "who gets to a loose puck first".
-static func race_completion(k: int, receiver_t: float) -> float:
-	var t_opp: float = opp_time(k)
-	if t_opp == INF:
-		return 1.0
-	return clampf(0.5 + (t_opp - receiver_t)
-			/ (2.0 * AIActionScoring.CHASE_CONTEST_MARGIN_S), 0.0, 1.0)
+# The lane: the odds launch `k` gets to its receiver at `receiver_t` — every
+# opponent's one chance at its path up to him, the flat lane's read along the
+# boards (AILaneReach.path_block), read from the windup as a flat feed is.
+static func lane(k: int, receiver_t: float) -> float:
+	var survival: float = 1.0
+	for i: int in _opp_positions.size():
+		survival *= 1.0 - AILaneReach.path_block(paths[k], STEP_DT, receiver_t,
+				_opp_positions[i], _opp_vels[i] if i < _opp_vels.size() else Vector3.ZERO,
+				_opp_caps[i] if i < _opp_caps.size() else null,
+				AIPuckLane.LANE_WINDUP_READ_DELAY_S)
+		if survival <= 0.0:
+			return 0.0
+	return survival
 
 
 # The soonest opponent arrival on launch `k` (INF = nobody), raced on first ask.

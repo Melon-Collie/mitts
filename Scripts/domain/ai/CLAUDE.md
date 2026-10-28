@@ -771,8 +771,12 @@ remains.
   where his momentum has him when he reads the windup — a man backing in has to
   stop his retreat first. It is the reach the loose-puck chase plays a pass with
   (`AILoosePuckChase.reach_meet_time`, stick out), so a lane the passer reads
-  open is one the defender cannot take. Graded by the clock's calibrated error,
-  not a shaped curve; it ends a blade short of the receiver, whose own stick
+  open is one the defender cannot take. Each point is graded as the carry's keep
+  odds grade it (`AIStripOdds.chance_at`: his stick set on it `SET_S` before the
+  puck, across the clock's calibrated error), one chance per defender, but a
+  pass cannot react to him, so a stick set on its path stops it — measured
+  against a worst-case interceptor (`tests/instruments/ai/test_pass_truth.gd`,
+  gated by `test_pass_lane_vs_truth.gd`); it ends a blade short of the receiver, whose own stick
   takes the puck there (a defender on his back is the reception's
   `catch_safety`). The lane is the one at the release: the carrier braked through
   his windup (`AICarrierField.pass_origin`), the receiver led from where he has
@@ -894,9 +898,9 @@ remains.
   (`AICarrierPassSearch.RIM_SOFT_SHARE`), the SOFTEST is fired: easier to stop, and
   one that gets by him dies sooner. The walk is the chase election's own, so the
   receiver a rim is priced to reach is the one the election will send to it. The
-  LANE is a race along that path in `arrival_race`'s contest band — the
-  receiver against the soonest opponent, and against their keeper behind his own
-  net by the live goalie's trip gates. Arrivals over the receiver's catch
+  LANE is graded like a flat feed's (`AIRimPass.lane` → `AILaneReach.path_block`):
+  each opponent's one chance at the walked path up to the receiver's catch, read
+  from the windup. Arrivals over the receiver's catch
   threshold are dropped. Zone rules mirror the straight feed's. A winner is
   released as a FLAT charged dump along its bearing at its pace. In the O-zone
   the currency prices a rim to a man low in the corner near zero; the breakout

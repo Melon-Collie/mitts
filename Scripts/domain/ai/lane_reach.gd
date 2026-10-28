@@ -1,35 +1,36 @@
 class_name AILaneReach
 
-# A defender's body on a fired puck's lane, read on the shared momentum-honest
-# arrival clock (AIArrival): the accurate lane read AIPuckLane.lane_clear prices
-# a pass the carrier fires with. A leaf — GameRules, AIArrival, AIBotMechanics
-# and AISkaterCaps only — that AIPuckLane calls and never the other way.
+# A defender's stick on a fired puck's path: the one-chance read the carry's
+# keep odds use (AIStripOdds.chance_at — set on a point AIStripOdds.SET_S before
+# the puck, on the shared momentum-honest arrival clock, graded across its error),
+# along the puck's lane, the read AIPuckLane.lane_clear prices a pass the carrier
+# fires with and AIRimPass a rim's path along the boards. Unlike a carrier, a pass
+# cannot react to him: a stick set on its path stops it. Measured against a
+# worst-case interceptor (tests/instruments/ai/test_pass_truth.gd). A leaf —
+# GameRules, AIArrival, AIBotMechanics, AISkaterCaps and AIStripOdds only — that
+# AIPuckLane and AIRimPass call and never the other way.
 
 # Lane points the reach read samples, evenly along the stretch it reads.
 const SAMPLES: int = 8
 
 
 # One defender's block on an accurate lane (AIPuckLane.lane_clear) and where he makes
-# it: the best lane point his BODY can get within a blade of before the puck
-# passes it, on the shared momentum-honest arrival clock (AIArrival.time_to_arrive)
-# from where his momentum carries him through his read. The same reach the
-# loose-puck chase plays a pass with (AILoosePuckChase.reach_meet_time, stick out),
-# so a lane the passer reads open is one the defender cannot take.
-#
-# Graded by the clock's own calibrated error (AIArrival.ERROR_FRAC, ERROR_FLOOR_S):
-# arriving exactly as the puck does is even odds, a full error band early is a
-# certain block, a band late none. Returns (block, lane arc-coord of the pick).
+# it: his best chance on the lane — a point his stick can be set on before the puck
+# passes it, within `reach` (his lane reach, defender_reach, when negative: the
+# reach the loose-puck chase plays a pass with) — from where his momentum carries
+# him through his read. Returns (block, lane arc-coord of the pick).
 #
 # The stretch read runs from arc `u0`, which the puck reaches at `t0`, to
-# `line_len` at `eff_speed` — a saucer's landed run is the stretch after its
-# touch-down. `read_delay` is when he starts skating to it, from the release
+# `line_len` at `eff_speed` — a saucer's flight and landed run are stretches of
+# it. `read_delay` is when he starts skating to it, from the release
 # (AIPuckLane.LANE_WINDUP_READ_DELAY_S: on the windup, before it). He skates and
 # reaches on his build `caps` (null: the league build).
 static func block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, px: float, pz: float,
 		vx: float, vz: float, caps: AISkaterCaps,
-		read_delay: float, u0: float = 0.0, t0: float = 0.0) -> Vector2:
-	var reach: float = defender_reach(caps)
+		read_delay: float, u0: float = 0.0, t0: float = 0.0, reach: float = -1.0) -> Vector2:
+	if reach < 0.0:
+		reach = defender_reach(caps)
 	var vmax: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var span: float = line_len - u0
 	if span <= 0.0:
@@ -51,40 +52,45 @@ static func block(fx: float, fz: float, dirx: float, dirz: float,
 	# His own crossing first, so a tie is picked where he stands.
 	var foot: float = clampf((from.x - fx) * dirx + (from.z - fz) * dirz, u0, line_len)
 	var best := Vector2(_block_at(fx, fz, dirx, dirz, foot,
-			t0 + (foot - u0) / eff_speed, px, pz, from, vel, reach, caps, read_delay), foot)
+			t0 + (foot - u0) / eff_speed, from, vel, reach, caps, read_delay), foot)
 	for k: int in SAMPLES:
 		if best.x >= 1.0:
 			break
 		var u: float = u0 + span * float(k + 1) / float(SAMPLES)
 		var at_u: float = _block_at(fx, fz, dirx, dirz, u,
-				t0 + (u - u0) / eff_speed, px, pz, from, vel, reach, caps, read_delay)
+				t0 + (u - u0) / eff_speed, from, vel, reach, caps, read_delay)
 		if at_u > best.x:
 			best = Vector2(at_u, u)
 	return best
 
 
-# block's read of one lane point `u`, which the puck reaches at
-# `t_puck`. A stick already within a blade of it is in the path whatever the
-# timing; otherwise he skates to it from `from` (where his read finds him).
+# block's read of one lane point `u`, which the puck reaches at `t_puck` from the
+# release: his chance at it from `from` (where his read finds him), the time since
+# his read being his window.
 static func _block_at(fx: float, fz: float, dirx: float, dirz: float,
-		u: float, t_puck: float, px: float, pz: float, from: Vector3, vel: Vector3,
-		reach: float, caps: AISkaterCaps, read_delay: float) -> float:
-	var lx: float = fx + dirx * u
-	var lz: float = fz + dirz * u
-	var window: float = t_puck - read_delay
-	if window <= 0.0:
-		var nx: float = px - lx
-		var nz: float = pz - lz
-		return 1.0 if nx * nx + nz * nz <= reach * reach else 0.0
-	var ox: float = from.x - lx
-	var oz: float = from.z - lz
-	var off: float = sqrt(ox * ox + oz * oz)
-	if off <= reach:
-		return 1.0
-	var t_arrive: float = AIArrival.time_to_arrive_caps(from,
-			Vector3(lx + ox / off * reach, 0.0, lz + oz / off * reach), vel, caps)
-	var err: float = maxf(AIArrival.ERROR_FRAC * t_arrive, AIArrival.ERROR_FLOOR_S)
-	return clampf(0.5 + (window - t_arrive) / (2.0 * err), 0.0, 1.0)
+		u: float, t_puck: float, from: Vector3, vel: Vector3, reach: float,
+		caps: AISkaterCaps, read_delay: float) -> float:
+	return AIStripOdds.chance_at(from, vel, caps, Vector3(fx + dirx * u, 0.0, fz + dirz * u),
+			t_puck - read_delay, AIStripOdds.SET_S, reach)
+
+
+# One defender's chance at a puck walking `path` (a point every `step_dt` from the
+# release) up to `t_end`: his best chance on it, read from `pos` moving `vel`
+# `read_delay` from the release (on the windup, before it), within his lane reach.
+static func path_block(path: Array[Vector3], step_dt: float, t_end: float, pos: Vector3,
+		vel: Vector3, caps: AISkaterCaps, read_delay: float) -> float:
+	var reach: float = defender_reach(caps)
+	var from: Vector3 = pos + vel * read_delay
+	var best: float = 0.0
+	for i: int in path.size():
+		var t: float = float(i + 1) * step_dt
+		if t > t_end:
+			break
+		best = maxf(best, AIStripOdds.chance_at(from, vel, caps, path[i], t - read_delay,
+				AIStripOdds.SET_S, reach))
+		if best >= 1.0:
+			break
+	return best
 
 
 # A defender's reach for the accurate lane read: his blade span and the outward

@@ -16,7 +16,7 @@ const PING_PASS_EV_MULT: float = 3.0
 # one ~20 m, so a pass softens across the distances the NHL ones do.
 const PASS_LEAD_MAX_S: float = 1.0
 
-# A rim is fired as soft as the race allows: any launch reaching the receiver at
+# A rim is fired as soft as its lane allows: any launch reaching the receiver at
 # least this share as surely as the best one may be picked, and the softest of
 # those is. Doctrine, not a measurement — a soft rim is easier to stop, and one
 # that gets by him dies sooner (under NHL rules, short of an icing).
@@ -281,8 +281,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 
 # How surely and soon a RIM reaches `receiver_state` (completion × the delay
 # discount, 0.0 when none does) — the softest launch within RIM_SOFT_SHARE of the
-# surest — with that launch's path reads (meet time on the walked path, the race
-# against the soonest opponent as the lane, the passer's aim error over the path
+# surest — with that launch's path reads (meet time on the walked path, every
+# opponent's chance at it as the lane, the passer's aim error over the path
 # length) left in _rim_k / _rim_t / _rim_lane / _rim_miss.
 #
 # A RANK, not a price: search weighs it by the receiver's cached spot
@@ -330,7 +330,7 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 		# most 1, so a launch that cannot reach the soft band unraced cannot raced.
 		if sure < best_sure * RIM_SOFT_SHARE:
 			continue
-		var lane: float = AIRimPass.race_completion(k, t)
+		var lane: float = AIRimPass.lane(k, t)
 		sure *= lane
 		_rim_sure_by_k[k] = sure
 		_rim_t_by_k[k] = t

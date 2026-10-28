@@ -91,6 +91,48 @@ and long range, none at the edge — while losses run down from behind rise to
 40% at long range, all of them about 2.4 s in. The window is what separates the
 two.
 
+## Passes
+
+A pass is the same question asked of the puck's path instead of the carrier's:
+can a defender get his stick to this point before the puck does?
+`AILaneReach` grades every pass lane with `AIStripOdds.chance_at` — the flat
+feed along its line, the saucer in three stretches (on the blade, in the air
+with only the body radius reaching it, landed), and the rim along the board
+path `AIRimPass` walks. A defender reads the windup
+(`AIPuckLane.LANE_WINDUP_READ_DELAY_S`), so his clock starts before the release.
+The set time is the carry's 0.25 s (the best ranking of the set times tried,
+0.859 overall), but a set stick stops a pass for certain: a pass cannot react,
+so the chance is not scaled by `SET_STRIP`. Defenders are separate chances, as
+on a carry.
+
+It is measured against a worst-case interceptor who reads the windup and knows
+where the puck is going (`tests/instruments/ai/test_pass_truth.gd`: flat feeds,
+saucers and rims to a bot receiver), and held by
+`tests/unit/ai/test_pass_lane_vs_truth.gd`. Passes nobody caught are the
+reception's, not the lane's, and are left out. Interceptions by the defender's
+spare time at his best point on the path: 1% when he cannot get there, then 14,
+45, 65 and 97% as he arrives earlier.
+
+| kind | expected | intercepted | ranking |
+|---|---|---|---|
+| flat | 523 | 439 | 0.861 |
+| rim | 143 | 144 | 0.831 |
+| saucer | 133 | 47 | 0.834 |
+
+The rim's lane was a race to a loose puck before this and expected 105; the
+flat feed's old read expected 709.
+
+What it leaves open:
+
+- The saucer's level: the read expects about three times the interceptions a
+  saucer suffers. Its ranking is right.
+- Reception: a third of fast passes are never caught by anyone (62% at
+  24 m/s). That is the receiver's, not the lane's, and says the bots pass too
+  hard.
+- The after-catch read: the receiver's exit odds are read where the pass is
+  released, so defenders seem not to close during the flight (the rim breakout
+  trace: 0.80 at the release, 0.005 at the catch 1.27 s later).
+
 ## Open questions
 
 - The exact set time: 0.25 s is the interceptor's best policy measured so far;

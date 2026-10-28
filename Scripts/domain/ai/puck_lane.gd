@@ -547,10 +547,11 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 	return clampf(1.0 - max_block, 0.0, 1.0)
 
 
-# Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: in the air
-# (the over window, see the saucer doc-block) a defender blocks with his BODY
-# radius, on the release with his stick, and from the touch-down on the rest of
-# the lane is the accurate flat lane_clear's. Every defender must be beaten.
+# Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: the accurate
+# flat lane's read (AILaneReach) stretch by stretch — his stick while it is still
+# on the blade, only his BODY radius while it flies over (the over window, see the
+# saucer doc-block), his stick again from the touch-down on. Every defender must
+# be beaten.
 static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = []) -> float:
@@ -564,8 +565,6 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	var inv_len: float = 1.0 / line_len
 	var dirx: float = dx * inv_len
 	var dirz: float = dz * inv_len
-	var pvx: float = dirx * speed
-	var pvz: float = dirz * speed
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
 	# Over window: y(t) = vy·t − ½·g·t² above the blade plane between its roots.
@@ -583,30 +582,15 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	for i: int in opponents.size():
 		var p: Vector3 = opponents[i]
 		var v: Vector3 = opponent_vels[i] if i < vel_count else Vector3.ZERO
-		var stick_reach: float = LANE_DEFENDER_REACH_M
-		var close_speed: float = LANE_DEFENDER_CLOSE_SPEED_M_S
-		if has_caps:
-			var caps: AISkaterCaps = opponent_caps[i]
-			if caps != null:
-				stick_reach = caps.stick_reach
-				close_speed = LANE_LATERAL_FRACTION * caps.max_speed
-		var t_raw: float = _lane_closest_approach_t(
-				from.x, from.z, pvx, pvz, p.x, p.z, v.x, v.z)
-		var block: float = 0.0
-		if t_raw >= t_over and t_raw <= t_down:
-			# It flies over him: only his body blocks it in the air.
-			var miss: float = _lane_miss_at(
-					from.x, from.z, pvx, pvz, t_raw, p.x, p.z, v.x, v.z)
-			block = clampf(
-					(LANE_DEFENDER_BODY_RADIUS_M - miss) / LANE_DEFENDER_BODY_RADIUS_M,
-					0.0, 1.0)
-		elif t_raw < t_over:   # still on the blade: a stick stuffs the flip
-			block = lane_block_at(from.x, from.z, pvx, pvz, maxf(t_raw, 0.0),
-					p.x, p.z, v.x, v.z, stick_reach, close_speed)
-		# Landed, it is the accurate flat lane, skated to from the release: the
-		# man it flew over still plays it sliding off behind him.
+		var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
+		# On the blade a stick stuffs the flip; over him only his body is in the way;
+		# landed, the man it flew over still plays it sliding off behind him.
+		var block: float = AILaneReach.block(from.x, from.z, dirx, dirz, minf(speed * t_over,
+				line_len), speed, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S).x
+		block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz, minf(flown, line_len),
+				speed, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S, speed * t_over,
+				t_over, LANE_DEFENDER_BODY_RADIUS_M).x)
 		if landed_len > 0.01:
-			var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
 			block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz,
 					line_len - LANE_RECEIVER_REACH_M, landed_speed, p.x, p.z, v.x, v.z,
 					caps_i, LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
