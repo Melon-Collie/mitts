@@ -5,27 +5,22 @@ const MAX: float = PI / 3.0
 
 
 func test_without_the_puck_the_head_watches_it() -> void:
-	assert_eq(HeadLookRules.target(false, false, true, true), T.PUCK)
-	assert_eq(HeadLookRules.target(false, false, false, true), T.PUCK)
+	assert_eq(HeadLookRules.target(false, false, true), T.PUCK)
 
 
 func test_a_carrier_looks_at_the_net() -> void:
-	assert_eq(HeadLookRules.target(false, true, true, true), T.NET)
-	assert_eq(HeadLookRules.target(false, true, false, true), T.NET)
+	assert_eq(HeadLookRules.target(true, false, true), T.NET)
+	assert_eq(HeadLookRules.target(true, true, true), T.NET)
 
 
-func test_a_charge_looks_at_its_aim() -> void:
-	assert_eq(HeadLookRules.target(true, true, true, true), T.AIM)
-
-
-# A peer that cannot see the shooter's cursor looks at the net instead.
-func test_an_unseen_aim_falls_back_to_the_net() -> void:
-	assert_eq(HeadLookRules.target(true, true, false, true), T.NET)
+# The one-timer's committed swing: the puck is not carried, the shot is aimed.
+func test_an_aimed_shot_looks_at_the_net() -> void:
+	assert_eq(HeadLookRules.target(false, true, true), T.NET)
 
 
 func test_a_parked_puck_is_not_watched() -> void:
-	assert_eq(HeadLookRules.target(false, false, true, false), T.AIM)
-	assert_eq(HeadLookRules.target(false, false, false, false), T.NONE)
+	assert_eq(HeadLookRules.target(false, false, false), T.NONE)
+	assert_eq(HeadLookRules.target(true, false, false), T.NET)
 
 
 func test_puck_in_play() -> void:

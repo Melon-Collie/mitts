@@ -143,11 +143,11 @@ func _physics_process(delta: float) -> void:
 
 # Render-rate cosmetic pose for a remote body (overrides SkaterController).
 # Two sub-cases:
-#  - Host-simulating this client's real inputs (_is_host): it has a live cursor
-#    aim and apply_facing already wrote the leg-yaw, so head-track like a local.
-#  - Client-rendering an interpolated remote: no cursor aim (the head reads only
-#    replicated state), and apply_facing never ran, so mirror the gait's leg-yaw
-#    channels here — every frame, since the gait reads LowerBody back.
+#  - Host-simulating this client's real inputs (_is_host): apply_facing already
+#    wrote the leg-yaw.
+#  - Client-rendering an interpolated remote: apply_facing never ran, so mirror
+#    the gait's leg-yaw channels here — every frame, since the gait reads
+#    LowerBody back.
 func _render_pose_update(delta: float) -> void:
 	if skater == null or _self_posing:
 		return
@@ -159,7 +159,7 @@ func _render_pose_update(delta: float) -> void:
 	# The head and the off hand are mesh (Skater.on_camera).
 	if not skater.on_camera():
 		return
-	_pose.apply_head_tracking_aim(_current_aim_world, delta, _is_host)
+	_pose.apply_head_tracking(delta)
 	_ik.update_bottom_hand(delta)
 
 

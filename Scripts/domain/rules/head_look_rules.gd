@@ -1,10 +1,11 @@
 class_name HeadLookRules
 extends RefCounted
 
-# Where a skater's head turns. Everything is derivable from replicated state
-# except the shooter's aim, which only the simulating peer has (`aim_known`).
+# Where a skater's head turns. Read from replicated state alone, so every peer
+# turns a skater's head the same way; the shooter's aim is deliberately not an
+# input, since only the simulating peer has it.
 
-enum Target { NONE, PUCK, NET, AIM }
+enum Target { NONE, PUCK, NET }
 
 # A puck this far outside the boards is parked off the rink (drills stash it
 # between reps), not in play.
@@ -14,18 +15,12 @@ const PUCK_IN_PLAY_MARGIN_M: float = 1.0
 const BEHIND_HOLD_RAD: float = PI * 5.0 / 6.0
 
 
-# A charge looks where it will go (the net stands in for an aim this peer
-# cannot see), a carrier skates head-up at the net, and everyone else watches
-# the puck — including a one-timer wind-up, which is waiting on the feed.
-static func target(aiming_shot: bool, carrying: bool, aim_known: bool,
-		puck_in_play: bool) -> Target:
-	if aiming_shot:
-		return Target.AIM if aim_known else Target.NET
-	if carrying:
+# A carrier, or a shooter whose shot is aimed, looks at the net; everyone else
+# watches the puck, including a one-timer wind-up, which is waiting on the feed.
+static func target(carrying: bool, aiming_shot: bool, puck_in_play: bool) -> Target:
+	if carrying or aiming_shot:
 		return Target.NET
-	if puck_in_play:
-		return Target.PUCK
-	return Target.AIM if aim_known else Target.NONE
+	return Target.PUCK if puck_in_play else Target.NONE
 
 
 static func is_puck_in_play(puck_pos: Vector3) -> bool:

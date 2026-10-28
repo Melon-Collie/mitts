@@ -1904,7 +1904,7 @@ func _render_pose_update(delta: float) -> void:
 	# The head and the off hand are mesh (Skater.on_camera).
 	if not skater.on_camera():
 		return
-	_pose.apply_head_tracking_aim(_current_aim_world, delta)
+	_pose.apply_head_tracking(delta)
 	_ik.update_bottom_hand(delta)
 
 
@@ -2194,7 +2194,7 @@ func apply_blade_aim_only(input: InputState, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(input, delta)
+	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# This locked-phase path poses its own gait ready-stance + off-hand (a brief
@@ -2763,7 +2763,7 @@ func _render_approach_pose(facing: Vector2, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(_approach_input, delta)
+	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# This intro-skate path poses its own gait + off-hand (a brief locked phase,
