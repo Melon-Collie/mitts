@@ -96,9 +96,8 @@ two.
 A pass is the same question asked of the puck's path instead of the carrier's:
 can a defender get his stick to this point before the puck does?
 `AILaneReach` grades every pass lane with `AIStripOdds.chance_at` — the flat
-feed along its line, the saucer in two stretches (in the air with only the body
-radius reaching it, landed), and the rim along the board path `AIRimPass`
-walks. A defender reads the windup (`AIPuckLane.LANE_WINDUP_READ_DELAY_S`), so
+feed along its line, the saucer from where it lands, and the rim along the board
+path `AIRimPass` walks. A defender reads the windup (`AIPuckLane.LANE_WINDUP_READ_DELAY_S`), so
 his clock starts before the release. The set time is the carry's 0.25 s (the
 best ranking of the set times tried). Defenders are separate chances, as on a
 carry.
@@ -115,7 +114,9 @@ pace. So a hard pass is hard for the defender to hold too.
 
 A saucer is seated above the blade plane from the release
 (`GameRules.PUCK_LOFT_SEAT_M`, as `Puck.release` seats it), so no grounded stick
-touches it until it lands, a metre later than a launch from the ice would.
+touches it until it lands, a metre later than a launch from the ice would. Nor
+does a body: a skater body-blocks hips to shoulders, and the hardest LOW release
+peaks well below the hips (0.72 m at 36 m/s).
 
 It is measured against a worst-case interceptor who reads the windup and knows
 where the puck is going (`tests/instruments/ai/test_pass_truth.gd`: flat feeds,
@@ -134,16 +135,12 @@ reception's, and left out.
 
 What the data says about a defender close to the release: standing on a flat
 feed's line within 3 m of the passer he takes 6 of 18 — he still has to set his
-stick, and the flat puck slides under his torso. Over a saucer his body is in
-the way only where the puck is inside the game's torso band (0.2–1.2 m), at 18
-m/s from about 1.4 m to 4.8 m out: on its line 3–6 m out, 14 of 24 are blocked.
+stick, and the flat puck slides through his legs.
 
 What it leaves open:
 
 - The saucer's level: the read expects about half as many losses again as a
-  saucer suffers. In the air it reads his body like a stick that must be set,
-  at a third of the game's block radius, where the game's block is a torso band
-  the puck is inside for only part of its flight.
+  saucer suffers (measured before its in-air body read was dropped).
 - Reception: of the flat feeds nobody caught, nearly all were the receiver's to
   lose (276 of 286), and most at pace. That says the bots pass too hard.
 - The after-catch read: the receiver's exit odds are read where the pass is

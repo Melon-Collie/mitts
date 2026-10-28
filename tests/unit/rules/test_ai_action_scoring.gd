@@ -980,14 +980,17 @@ func test_lane_clear_saucer_clears_near_stick_range_defender() -> void:
 	assert_almost_eq(saucer, 1.0, 0.0001, "saucer flies over a near stick → lane clear")
 
 
-func test_lane_clear_saucer_blocked_by_body_in_lane() -> void:
-	# Defender standing dead in the lane inside the over window (within a
-	# body radius of the line): the saucer can't fly over a torso, blocks.
+func test_lane_clear_saucer_flies_through_a_body_in_lane() -> void:
+	# A defender standing dead on the line where the saucer is in the air: it
+	# passes under his torso (his body blocks hips to shoulders) and over his
+	# stick, where the flat feed runs into his stick.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 14.0)
 	var body_in_lane: Array[Vector3] = [Vector3(0.0, 0.0, 3.0)]
+	var grounded: float = AIPuckLane.lane_clear(from, to, body_in_lane,
+			AIPuckLane.PASS_CHARGE_SPEED_M_S, [], [], true)
 	var saucer: float = AIPuckLane.lane_clear_saucer(from, to, body_in_lane, AIPuckLane.PASS_CHARGE_SPEED_M_S)
-	assert_lt(saucer, 0.1, "a body dead in the lane blocks a saucer")
+	assert_gt(saucer, grounded, "the saucer flies past the man who takes the flat feed")
 
 
 func test_lane_clear_saucer_flies_over_a_stick_on_the_release() -> void:

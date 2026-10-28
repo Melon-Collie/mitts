@@ -793,10 +793,12 @@ remains.
   (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
   model under the flight a charged LOW release really gets (the shot ladder's
   set angle, so the lift and the carry grow with pace), seated above the blade
-  plane from the release (`GameRules.PUCK_LOFT_SEAT_M`): while it flies a
-  defender's reach collapses to their body radius (sticks fly under it), and from
-  the touch-down on the rest of the lane is the accurate flat read, so the man it
-  flew over still plays it sliding off behind him. A flip
+  plane from the release (`GameRules.PUCK_LOFT_SEAT_M`): while it flies nothing
+  plays it — it is over every grounded stick and under every torso (a skater
+  body-blocks hips to shoulders, and the hardest LOW release peaks below the
+  hips, `test_bot_mirrors.gd`) — and from the touch-down on the rest of the lane
+  is the accurate flat read, so the man it flew over still plays it sliding off
+  behind him. A flip
   only clears a stick when it lands out of his reach. The flip must land with runway before the tape
   (`saucer_max_launch_speed`), so the carrier scores each receiver flat and
   saucered and lets EV decide (`carrier_pass_search.gd:_pass_variant_ev`, the saucer paying

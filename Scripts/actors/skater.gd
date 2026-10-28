@@ -386,15 +386,6 @@ var block_body_radius: float = 0.9
 # collision must not depend on when a frame happened to draw. Re-derive it if
 # the kneel angles move — test_shot_body_animation pins the two together.
 var block_seal_height: float = 1.45
-# Vertical center of the body-block sphere, in skater-local space (origin sits at
-# the hips). Raised to torso height so the PASSIVE sphere (body_block_radius)
-# clears a grounded puck (top ≈ ice_height + radius ≈ 0.12) — loose pucks on the
-# ice slip under/between the legs, enabling nutmegs. The WIDER explicit-block
-# sphere (block_body_radius, Ctrl) is what stops a low puck: set_block_stance
-# rebases it to seal from the ice up (the hip-height origin puts this local
-# offset at the torso, so without the rebase a flat shot slid under the block).
-# Mirrors the grounded-vs-airborne split the blade already uses.
-var body_block_height: float = 0.7
 
 # ── Node References ───────────────────────────────────────────────────────────
 @onready var mesh_root: Node3D = $MeshRoot
@@ -3181,8 +3172,9 @@ func set_block_stance(active: bool) -> void:
 
 
 # The body-block CYLINDER the analytic detector tests against (PuckController) — a vertical
-# cylinder at the skater's XZ axis matching the torso. PASSIVE: radius body_block_radius over a
-# torso band raised off the ice, so a grounded puck slides UNDER (a flat shot passes clean).
+# cylinder at the skater's XZ axis matching the torso. PASSIVE: radius body_block_radius over
+# the torso, hips to shoulders, so a puck below the hips goes through the legs (a flat shot,
+# a saucer, a nutmeg) and the head is not a blocker.
 # SHOT-BLOCK: the wider block_body_radius, banded from the ice up to block_seal_height so a
 # low shot is sealed. Both dimensions are the one-knee pose's — the leg extended along the
 # ice on one side and the stick flat on the other earn the width; the kneeling head caps the
@@ -3198,9 +3190,10 @@ func get_body_block_y_range() -> Vector2:
 		# Seal the ice up through the kneeling body (a committed block stops a
 		# flat shot; over the top of him it goes through).
 		return Vector2(0.0, block_seal_height)
-	# Torso band centred at body_block_height, raised off the ice so a grounded puck passes under.
-	var center_y: float = global_position.y + body_block_height
-	return Vector2(center_y - body_block_radius, center_y + body_block_radius)
+	# The origin sits at the hips; the shoulder marker tops the torso, read off the
+	# unleaned frame so the band is the build's, not the moment's pose.
+	var hips: float = global_position.y
+	return Vector2(hips, hips + upper_body.position.y + shoulder.position.y)
 
 
 # ── Slapper Zone ──────────────────────────────────────────────────────────────

@@ -27,12 +27,13 @@ var strip_trickle_m_s: float
 var strip_loose_m_s: float
 var hit_cooldown_s: float
 var hit_cooldown_threshold: float
-# The upright band a loose puck is blocked by: its radius (and half-height) and
-# its centre's height off the ice — Skater.get_body_block_y_range's, from a body
-# standing at GameRules.FACEOFF_SPAWN_HEIGHT, where a skater's origin rides — and
-# what the block leaves the puck.
+# The upright band a loose puck is blocked by: its radius and its bottom and top
+# off the ice — Skater.get_body_block_y_range's, from a body standing at
+# GameRules.FACEOFF_SPAWN_HEIGHT, where a skater's origin rides — and what the
+# block leaves the puck.
 var block_radius: float
-var block_center_y: float
+var block_bottom_y: float
+var block_top_y: float
 var block_cor_scale: float
 var block_friction: float
 var block_cooldown_s: float
@@ -59,7 +60,9 @@ static func capture(skater: Skater, ctrl: SkaterController, puck: Puck) -> RefCo
 	body.hit_cooldown_s = puck.hit_pickup_cooldown
 	body.hit_cooldown_threshold = puck.hit_pickup_cooldown_threshold
 	body.block_radius = skater.body_block_radius
-	body.block_center_y = GameRules.FACEOFF_SPAWN_HEIGHT + skater.body_block_height
+	var band: Vector2 = skater.get_body_block_y_range() - Vector2.ONE * skater.global_position.y
+	body.block_bottom_y = GameRules.FACEOFF_SPAWN_HEIGHT + band.x
+	body.block_top_y = GameRules.FACEOFF_SPAWN_HEIGHT + band.y
 	body.block_cor_scale = puck.body_block_cor_scale
 	body.block_friction = puck.body_block_friction
 	body.block_cooldown_s = puck.body_block_cooldown
@@ -124,8 +127,7 @@ func strip_velocity(hit_dir: Vector3, delivered: float) -> Vector3:
 func blocks(prev: Vector3, curr: Vector3, prev_y: float, curr_y: float, pos: Vector3) -> bool:
 	return PuckInteractionRules.check_body_block(Vector3(prev.x, prev_y, prev.z),
 			Vector3(curr.x, curr_y, curr.z), Vector2(pos.x, pos.z),
-			block_radius + GameRules.PUCK_COLLISION_RADIUS, block_center_y - block_radius,
-			block_center_y + block_radius)
+			block_radius + GameRules.PUCK_COLLISION_RADIUS, block_bottom_y, block_top_y)
 
 
 # The puck off a body it ran into at `vel` (Puck.on_body_block): along the ice.

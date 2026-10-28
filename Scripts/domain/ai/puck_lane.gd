@@ -54,11 +54,6 @@ const LANE_BLADE_CATCH_M: float = 0.5
 const LANE_WINDUP_READ_DELAY_S: float = LANE_REACTION_DELAY_S \
 		- AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 
-# A defender's reach in the airborne stretch of a saucer: his BODY radius, no
-# stick, no closing — a flip clears a grounded stick but not a torso. The
-# canonical body half-width (GameRules.OFFSIDE_LINE_SLACK tracks the skater's
-# collision-cylinder radius).
-const LANE_DEFENDER_BODY_RADIUS_M: float = GameRules.OFFSIDE_LINE_SLACK
 
 # The quick pass's release speed (m/s — Puck.release consumes `direction ×
 # power` as linear velocity, so "power" IS m/s); longer passes are
@@ -166,8 +161,10 @@ static func pass_launch_speed(distance: float, max_launch: float,
 # The quick pass's fixed-vy saucer (GameRules.DEFAULT_LOFT_VY_LOW_M_S) is a
 # human's button; no bot fires it.
 #
-# While it flies a defender's reach is LANE_DEFENDER_BODY_RADIUS_M; landed, a
-# stick intercepts normally. An airborne arrival flies over the
+# While it flies nothing touches it: it is over every grounded stick, and under
+# every torso (a skater body-blocks hips to shoulders, Skater.get_body_block_y_range,
+# and the hardest LOW release peaks below the hips — test_bot_mirrors.gd). Landed,
+# a stick intercepts normally. An airborne arrival flies over the
 # receiver's grounded blade too, so the launch is capped by
 # saucer_max_launch_speed. See Scripts/domain/ai/CLAUDE.md → "Pass lanes".
 
@@ -557,9 +554,8 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 
 
 # Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: the accurate
-# flat lane's read (AILaneReach) stretch by stretch — only his BODY radius while
-# it flies (see the saucer doc-block), his stick from the touch-down on. Every
-# defender must be beaten.
+# flat lane's read (AILaneReach) from the touch-down on — nothing plays it while
+# it flies (see the saucer doc-block). Every defender must be beaten.
 static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = []) -> float:
@@ -582,21 +578,18 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	var landed_len: float = line_len - flown
 	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
 			if landed_len > 0.01 else speed
+	if landed_len <= 0.01:
+		return 1.0
 	var survival: float = 1.0
 	for i: int in opponents.size():
 		var p: Vector3 = opponents[i]
 		var v: Vector3 = opponent_vels[i] if i < vel_count else Vector3.ZERO
 		var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
-		# Over him only his body is in the way; landed, the man it flew over still
-		# plays it sliding off behind him.
-		var block: float = AILaneReach.block(from.x, from.z, dirx, dirz, minf(flown, line_len),
-				speed, speed, 0.0, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S, 0.0, 0.0,
-				LANE_DEFENDER_BODY_RADIUS_M).x
-		if landed_len > 0.01:
-			block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz,
-					line_len - LANE_RECEIVER_REACH_M, landed_speed, speed,
-					GameRules.PUCK_ICE_DECEL_M_S2, p.x, p.z, v.x, v.z, caps_i,
-					LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
+		# The man it flew over still plays it sliding off behind him.
+		var block: float = AILaneReach.block(from.x, from.z, dirx, dirz,
+				line_len - LANE_RECEIVER_REACH_M, landed_speed, speed,
+				GameRules.PUCK_ICE_DECEL_M_S2, p.x, p.z, v.x, v.z, caps_i,
+				LANE_WINDUP_READ_DELAY_S, flown, t_down).x
 		survival *= 1.0 - block
 		if survival <= 0.0:
 			return 0.0

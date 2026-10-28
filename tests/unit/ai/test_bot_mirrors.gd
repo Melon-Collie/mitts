@@ -9,7 +9,6 @@ extends GutTest
 
 const SkaterControllerScript := preload("res://Scripts/controllers/skater_controller.gd")
 const PuckScript := preload("res://Scripts/actors/puck.gd")
-const SkaterScript := preload("res://Scripts/actors/skater.gd")
 const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
 
 
@@ -148,11 +147,19 @@ func test_a_strip_connects_at_the_pickup_radius() -> void:
 	assert_eq(DuelHarness.PICKUP_RADIUS, PuckController.PICKUP_RADIUS)
 
 
-func test_a_saucer_clears_the_body_a_skater_has() -> void:
-	var skater: Skater = SkaterScript.new()
-	assert_eq(AIPuckLane.LANE_DEFENDER_BODY_RADIUS_M, skater.body_collision_radius,
-			"over a saucer a defender reaches with his body alone")
-	skater.free()
+func test_no_saucer_flies_into_a_torso() -> void:
+	# The saucer lane reads nothing touching a flying saucer: the hardest LOW
+	# release the strongest shooter fires peaks under the hips, where a standing
+	# skater's body block starts.
+	var skater := (load("res://Scenes/Skater.tscn") as PackedScene).instantiate() as Skater
+	add_child_autofree(skater)
+	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+	var hardest: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S \
+			* PlayerAttributes.new(PlayerAttributes.HEIGHT_MAX).shot_power_mult()
+	var vy: float = AIPuckLane.saucer_launch_vy(hardest)
+	var peak: float = GameRules.PUCK_LOFT_SEAT_M + vy * vy / (2.0 * GameRules.GRAVITY_M_S2)
+	assert_lt(peak, skater.get_body_block_y_range().x,
+			"a %.1f m/s saucer peaks at %.2f m" % [hardest, peak])
 
 
 func test_the_wheel_exits_at_the_top_of_the_low_battle_ice() -> void:
