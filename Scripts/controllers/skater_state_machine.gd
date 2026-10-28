@@ -72,6 +72,14 @@ static func state_loads_one_timer(state: int) -> bool:
 	return state == State.SLAPPER_CHARGE_WITHOUT_PUCK \
 			or state == State.ONE_TIMER_RETENTION
 
+# A shot or pass whose aim is being chosen or has just been committed: the
+# wrister's charge, the carried slapper's wind-up, and the one-timer's swing. The
+# puckless one-timer wind-up is not one — it is still waiting on the feed.
+static func state_aims_shot(state: int) -> bool:
+	return state == State.WRISTER_AIM \
+			or state == State.SLAPPER_CHARGE_WITH_PUCK \
+			or state == State.ONE_TIMER_RETENTION
+
 # Controller operations injected at setup. All methods that need @export params
 # or actor/puck references stay on SkaterController and are wired as Callables
 # so the state machine only owns transition logic.
