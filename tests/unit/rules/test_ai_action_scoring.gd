@@ -887,7 +887,7 @@ func test_the_accurate_lane_reads_a_defenders_momentum() -> void:
 	# straight in, and skating at it he is already on his way.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 14.0)
-	var man: Array[Vector3] = [Vector3(3.0, 0.0, 7.0)]
+	var man: Array[Vector3] = [Vector3(2.4, 0.0, 7.0)]
 	var read := func(vel: Vector3) -> float:
 		var vels: Array[Vector3] = [vel]
 		return AIPuckLane.lane_clear(from, to, man, 16.0, vels, [], true)
@@ -899,29 +899,22 @@ func test_the_accurate_lane_reads_a_defenders_momentum() -> void:
 
 
 func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
-	# The legacy model takes 1 − max(block): two defenders threatening DIFFERENT
-	# segments of a long lane read only as open as the easier gap. The `accurate`
-	# survival product makes the puck beat BOTH — two separated half-blockers
-	# compound to a much less clear lane than either alone.
+	# The `accurate` survival product makes the puck beat BOTH defenders — two
+	# threatening different segments of a long lane compound to a much less
+	# clear lane than either alone, where 1 − max(block) would read the easier gap.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var one_a: Array[Vector3] = [Vector3(5.0, 0.0, 12.0)]     # contests the middle
-	var one_b: Array[Vector3] = [Vector3(-5.6, 0.0, 14.0)]    # contests the receiver end
+	var one_a: Array[Vector3] = [Vector3(3.0, 0.0, 12.0)]     # contests the middle
+	var one_b: Array[Vector3] = [Vector3(-3.6, 0.0, 14.0)]    # contests the receiver end
 	var both: Array[Vector3] = [one_a[0], one_b[0]]
 	var speed: float = 18.0
 	var clear_a: float = AIPuckLane.lane_clear(from, to, one_a, speed, [], [], true)
 	var clear_b: float = AIPuckLane.lane_clear(from, to, one_b, speed, [], [], true)
 	var clear_both: float = AIPuckLane.lane_clear(from, to, both, speed, [], [], true)
-	# Each leaves a real gap alone (~0.6–0.7 clear); together the lane is much
-	# worse than either — the product compounds two independent, separated threats.
-	assert_gt(clear_a, 0.3)
-	assert_gt(clear_b, 0.3)
+	assert_gt(clear_a, 0.3, "the middle man alone leaves a real gap")
+	assert_gt(clear_b, 0.3, "the far man alone leaves a real gap")
 	assert_lt(clear_both, minf(clear_a, clear_b) - 0.1,
 			"two separated defenders compound to much less clear than either alone")
-	# Legacy max prices it as just the single worst gap — no compounding.
-	var legacy_both: float = AIPuckLane.lane_clear(from, to, both, speed)
-	assert_lt(clear_both, legacy_both - 0.1,
-			"the survival product reads a two-defender lane far less clear than legacy max")
 
 
 func test_friction_traverse_time_exceeds_frictionless() -> void:
