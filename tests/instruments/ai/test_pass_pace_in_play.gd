@@ -1,7 +1,7 @@
 extends GutTest
 
-# The passes real bots fire in play, and how they are taken: every team-0 release
-# in the breakout and neutral-zone drills' stagings (test_breakout_drill.gd,
+# The passes real bots fire in play, and how they are taken: every team-0 pass
+# and rim (every release but a shot or a one-timer) in the breakout and neutral-zone drills' stagings (test_breakout_drill.gd,
 # test_nz_entry_drill.gd) on the duel harness. Per release: the pace it left the
 # blade at, whether it flew, the receiver the carrier priced it to, and its first
 # touch — whose (the receiver, another teammate, an opponent, nobody), what it did
@@ -19,6 +19,7 @@ const KEEP_S: float = 1.0
 const WATCH_S: float = 3.0
 
 var _passes: Array[Dictionary] = []
+var _decisions: Dictionary = {}
 
 
 func test_pass_pace_in_play() -> void:
@@ -57,7 +58,10 @@ func _play(duel: Object) -> void:
 			if not open.is_empty():
 				_close(open, duel)
 			open = {}
-			if duel.team_map[int(rec["peer"])] == 0 and duel.carrier() == -1:
+			var decision: String = str(rec.get("decision", ""))
+			_decisions[decision] = int(_decisions.get(decision, 0)) + 1
+			if duel.team_map[int(rec["peer"])] == 0 and duel.carrier() == -1 \
+					and not decision.begins_with("SHOOT") and not decision.begins_with("ONE_TIMER"):
 				open = {"tick": duel.ticks, "passer": int(rec["peer"]),
 						"to": int(rec.get("pass_peer", -1)),
 						"pace": Vector2(duel.puck_vel.x, duel.puck_vel.z).length(),
@@ -93,7 +97,8 @@ func _close(rel: Dictionary, duel: Object) -> void:
 
 
 func _report() -> void:
-	gut.p("%d team-0 releases" % _passes.size())
+	gut.p("decisions at release: %s" % str(_decisions))
+	gut.p("%d team-0 passes and rims" % _passes.size())
 	var paces: Dictionary = {}
 	var whos: Dictionary = {}
 	for p: Dictionary in _passes:
