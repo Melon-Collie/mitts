@@ -1189,10 +1189,14 @@ static func _add_sleeve_surface(target: ArrayMesh, sleeve: Dictionary, surface: 
 			var c: Vector3 = rings[i + 1]["pts"][k1]
 			var d: Vector3 = rings[i + 1]["pts"][k]
 			var n: Vector3 = radial
-			var order: Array[int] = [0, 1, 2, 0, 2, 3]
+			var tris: Array = [[0, 1, 3], [1, 2, 3]] if _cut_bd([a, b, c, d]) \
+					else [[0, 1, 2], [0, 2, 3]]
+			var order: Array[int] = []
+			for tri: Array in tris:
+				order.append_array(tri)
 			if surface != SleeveSurface.ELBOW:
 				n = _sleeve_facet_normal(a, b, c, d, radial, sleeve)
-				order = _sleeve_facet_order([a, b, c, d], n)
+				order = _sleeve_facet_order([a, b, c, d], tris, n)
 			var u0: float = float(k) / float(_LEG_SIDES)
 			var u1: float = float(k + 1) / float(_LEG_SIDES)
 			var corners: Array = [[a, i, u0, k], [b, i, u1, k1], [c, i + 1, u1, k1],
@@ -1223,8 +1227,6 @@ static func _add_sleeve_surface(target: ArrayMesh, sleeve: Dictionary, surface: 
 	target.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 
 
-# A ring vertex's influences: the ring's, or corner k's own where the ring
-# carries them per corner (the armhole's, which match the torso's there).
 # A sleeve facet's flat normal at rest, turned away from the inside of the arm:
 # the nearest point of the arm's axis, which above the shoulder's pivot is the
 # pivot itself, so the armhole's top faces up rather than round the arm.
@@ -1243,9 +1245,9 @@ static func _sleeve_facet_normal(a: Vector3, b: Vector3, c: Vector3, d: Vector3,
 
 # A facet's two triangles wound to face `n`: Godot's front faces are clockwise
 # seen from the side they face.
-static func _sleeve_facet_order(quad: Array, n: Vector3) -> Array[int]:
+static func _sleeve_facet_order(quad: Array, tris: Array, n: Vector3) -> Array[int]:
 	var order: Array[int] = []
-	for tri: Array in [[0, 1, 2], [0, 2, 3]]:
+	for tri: Array in tris:
 		var p0: Vector3 = quad[tri[0]]
 		var p1: Vector3 = quad[tri[1]]
 		var p2: Vector3 = quad[tri[2]]
@@ -1256,6 +1258,8 @@ static func _sleeve_facet_order(quad: Array, n: Vector3) -> Array[int]:
 	return order
 
 
+# A ring vertex's influences: the ring's, or corner k's own where the ring
+# carries them per corner (the armhole's, which match the torso's there).
 static func _append_influences(bones: PackedInt32Array, weights: PackedFloat32Array,
 		ring: Dictionary, k: int) -> void:
 	var ring_binds: PackedInt32Array = ring["binds"]
@@ -1960,11 +1964,12 @@ static func _build_lathe(profile: Array[Vector2], sides: int,
 		for k in sides:
 			var u0: float = float(k) / float(sides)
 			var u1: float = float(k + 1) / float(sides)
-			_uv_quad(st,
+			_uv_quad_cut(st,
 					rings[i][k], Vector2(u0, vs[i]),
 					rings[i][k + 1], Vector2(u1, vs[i]),
 					rings[i + 1][k + 1], Vector2(u1, vs[i + 1]),
-					rings[i + 1][k], Vector2(u0, vs[i + 1]))
+					rings[i + 1][k], Vector2(u0, vs[i + 1]),
+					sin(TAU * (float(k) + 0.5) / float(sides) + phase) < -1e-6)
 	var top_off: float = z_offsets[0] if z_offsets.size() > 0 else 0.0
 	var bot_off: float = z_offsets[profile.size() - 1] \
 			if z_offsets.size() >= profile.size() else 0.0
@@ -2233,6 +2238,31 @@ static func _uv_quad(st: SurfaceTool,
 		c: Vector3, uvc: Vector2, d: Vector3, uvd: Vector2) -> void:
 	_tri(st, a, uva, b, uvb, c, uvc)
 	_tri(st, a, uva, c, uvc, d, uvd)
+
+
+# _uv_quad, or cut along b-d instead when `cut_bd`. A lathe cuts its −X half's
+# quads the other way, so its two halves crease as each other's mirror; the
+# quads the middle runs through are their own mirror and flat, cut either way
+# alike. By side, not by shape: the tucked torso is the loose one vertex for
+# vertex (SkaterJerseyHem), and a tuck changes its shape.
+static func _uv_quad_cut(st: SurfaceTool,
+		a: Vector3, uva: Vector2, b: Vector3, uvb: Vector2,
+		c: Vector3, uvc: Vector2, d: Vector3, uvd: Vector2, cut_bd: bool) -> void:
+	if cut_bd:
+		_tri(st, a, uva, b, uvb, d, uvd)
+		_tri(st, b, uvb, c, uvc, d, uvd)
+	else:
+		_uv_quad(st, a, uva, b, uvb, c, uvc, d, uvd)
+
+
+# Whether quad a-b-c-d's shorter diagonal is b-d rather than a-c, past a hair
+# so float noise on a tie does not decide it: the smaller crease where the quad
+# is not flat, and a mirror keeps lengths, so the two sleeves are cut as each
+# other's mirror.
+static func _cut_bd(quad: Array) -> bool:
+	var ac: float = (quad[2] - quad[0]).length()
+	var bd: float = (quad[3] - quad[1]).length()
+	return bd < ac - 1e-6
 
 
 static func _tri(st: SurfaceTool,
