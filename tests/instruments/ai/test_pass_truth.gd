@@ -262,6 +262,10 @@ func _run(st: Dictionary) -> Dictionary:
 	var d_body: Object = duel._skater(DEFENDER)
 	d_body.pos = st["d"]
 	d_body.vel = st["dv"]
+	# Facing the play, as a defender reading the passer does.
+	var to_passer := Vector2(st["o"].x - st["d"].x, st["o"].z - st["d"].z)
+	if to_passer.length() > 0.01:
+		d_body.facing = to_passer.normalized()
 	duel._skater(PASSER).script_strippable = windup
 	var caps: AISkaterCaps = duel.caps_by_peer.get(DEFENDER)
 	duel._skater(DEFENDER).input_override = func(s: Object) -> void: _intercept(s, duel, caps)
