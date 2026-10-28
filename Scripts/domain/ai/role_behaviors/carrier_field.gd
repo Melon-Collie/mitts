@@ -233,9 +233,7 @@ func project_opponents(time_s: float, out_buf: Array[Vector3],
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`,
 # `loss_s` from now, in the carrier's currency and discounted to now as his gains
-# are (AIPossessionValue.turnover_cost). In their zone it is a credit (negative):
-# the carry and pass ceilings that assume a cost is never negative are short by
-# at most that much.
+# are (AIPossessionValue.turnover_cost); never negative.
 func turnover_cost(loss_point: Vector3, loss_prob: float, loss_s: float = 0.0) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0:
 		return 0.0

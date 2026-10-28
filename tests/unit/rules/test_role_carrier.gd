@@ -691,18 +691,19 @@ func _decided_twice(ctx: RoleContext) -> AIRoleCarrier:
 
 # ─── turnover costs are priced in the unit of the gains ─────────────────────
 
-func test_a_turnover_in_their_zone_is_credited_back_by_the_odds_we_regain_it() -> void:
-	# In their zone the gains are scoring odds, and the share of plays we don't
-	# keep the puck already costs our chance: a loss there is credited back by
-	# the odds they fail to get it out × our possession of it regained.
+func test_a_turnover_in_their_zone_costs_the_entry_their_exit_takes_back() -> void:
+	# In their zone the gains are scoring odds: a loss there costs their odds of
+	# getting out with it × what an ordinary entry is worth to us — never a
+	# credit, as in every other zone.
 	var c := AIRoleCarrier.new()
 	c.decide(_make_ctx(Vector3(-8.0, 0.0, -16.0)))
 	assert_eq(c._field.objective, AIPossessionValue.Objective.SCORE)
 	var loss := Vector3(-4.0, 0.0, -15.0)
 	var f: AICarrierField = c._field
 	assert_almost_eq(f.turnover_cost(loss, 1.0),
-			-(1.0 - f._theirs.p_next(loss)) * f._ours.at(loss), 1e-6,
-			"a certain loss in their zone is the regain credit")
+			f._theirs.p_exit(loss) * f._ours.open_entry_odds(), 1e-6,
+			"a certain loss in their zone is the entry their exit takes back")
+	assert_gte(f.turnover_cost(loss, 1.0), 0.0, "never a credit")
 	assert_gt(f.turnover_cost(Vector3(-4.0, 0.0, 20.0), 1.0), 0.0,
 			"a loss in front of our net costs their possession there")
 

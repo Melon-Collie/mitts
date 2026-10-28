@@ -22,12 +22,14 @@ option alike and cancels — no floor, nothing measured.
 
 | Decider in | Currency | A turnover at L costs |
 |---|---|---|
-| Their zone | Scoring odds (today's) | Our lost chance is already the share of plays we don't keep it; a loss is credited back by the odds they fail to get it out × our value of it regained at L |
+| Their zone | Scoring odds (today's) | P(they get out of their zone with it) from L × one entry in scoring odds (the mean crossing on empty ice, the neutral zone's unit) — the entry their exit takes back |
 | Neutral zone | P(we get into their zone with the puck) | P(they get into our zone with it) from L |
 | Our zone | P(we get out with the puck) | Their scoring odds from L ÷ their scoring odds from an ordinary entry — "how many entries that turnover hands them" |
 
-- Our entry and their entry, and our exit and their entry, are weighed one for
-  one: the one symmetry the scheme assumes.
+- Our entry and their entry, our exit and their entry, and our entry and their
+  exit are weighed one for one: the one symmetry the scheme assumes. A loss is
+  always the other side's gain, never credited back by the odds they fail to
+  make it.
 - An option that ends past the decider's next line has reached the goal: worth
   its keep odds. One that ends behind it (a pass back into our zone from the
   neutral zone) is the chain: P(out) × P(in from where it gets out).

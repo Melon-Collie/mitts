@@ -42,12 +42,15 @@ spot past the next line is worth its keep; one behind it is the chain (out, then
 in from where it gets out). Shots outside their zone are dead and score nothing.
 
 The turnover COST is in the same currency as the gains it is subtracted from
-(`AICarrierField.turnover_cost`): in their zone a loss is credited back by the
-odds they fail to get it out × our possession of it regained, since our lost
-chance is already the share of plays we don't keep it; elsewhere it is their odds
-of getting into our zone from the loss, or, lost in our zone, their scoring odds
-there in zone entries (against their odds from an ordinary entry) — our exit and
-their entry weighed one for one. The 5v5 counter (`counter_rush_cost`, `in_xg`) is
+(`AICarrierField.turnover_cost`), and is always the other side's gain: in their
+zone their odds of getting out with it from the loss × what one entry is worth
+in scoring odds (the entry their exit takes back, on the fixed yardstick
+`p_enter` counts entries in: the mean crossing on empty ice); in the neutral zone their odds
+of getting into our zone from the loss; lost in our zone, their scoring odds
+there in zone entries (against their odds from an ordinary entry) — our entry
+and their exit, our exit and their entry, weighed one for one. Never credit a
+loss back by the odds they fail to make it: no other zone does, and near their
+net that credit made a carry into traffic nearly free. The 5v5 counter (`counter_rush_cost`, `in_xg`) is
 paid from their zone only; elsewhere the turnover cost already is their run at
 our zone. What a spot with no shot right now is worth to either side is
 `AIPossessionValue`, and the currency and the turnover cost live there
