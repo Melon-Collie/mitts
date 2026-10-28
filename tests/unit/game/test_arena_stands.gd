@@ -16,7 +16,8 @@ func _make_stands(lower: int, upper: int) -> ArenaStands:
 	var stands: ArenaStands = ArenaStands.new()
 	# Configure BEFORE entering the tree: _request_rebuild no-ops outside it,
 	# so _ready() builds this geometry directly instead of the default bowl.
-	stands.set_crowd_rows(lower, upper)
+	stands.num_terraces = lower
+	stands.upper_terraces = upper
 	add_child_autofree(stands)
 	return stands
 
@@ -36,6 +37,19 @@ func _crowd_sections(stands: ArenaStands) -> Array[MultiMesh]:
 	return sections
 
 
+# The live crowd after a rebuild inside the tree, found by its shared material:
+# the old nodes are only queued for freeing, so they still hold the names and
+# the new ones come out auto-named.
+func _live_crowd(stands: ArenaStands) -> Array[MultiMeshInstance3D]:
+	var out: Array[MultiMeshInstance3D] = []
+	for child: Node in stands.get_children():
+		var mmi := child as MultiMeshInstance3D
+		if mmi != null and not mmi.is_queued_for_deletion() \
+				and mmi.multimesh.mesh.surface_get_material(0) == ArenaCrowd.shared_material():
+			out.append(mmi)
+	return out
+
+
 func _crowd_count(stands: ArenaStands) -> int:
 	var total: int = 0
 	for mm: MultiMesh in _crowd_sections(stands):
@@ -48,7 +62,7 @@ func test_rebuild_child_inventory() -> void:
 	for expected: String in ["Terraces", "Shell", "SpectatorBodies*",
 			"SpectatorHeads*", "Seats*", "CrowdFlashbulbs", "VomitoryTunnels",
 			"BenchSeatHome", "BenchSeatAway", "PenaltySeatHome", "OfficialsTable",
-			"StaffBodies", "StaffHeads", "RibbonBoard", "RafterBanners"]:
+			"StaffStanding", "StaffSeated", "StaffHeads", "RibbonBoard", "RafterBanners"]:
 		assert_not_null(stands.find_child(expected, false, false),
 				"rebuild should produce a %s child" % expected)
 
@@ -62,8 +76,8 @@ func test_the_build_order_is_the_child_order() -> void:
 	# Written as the stage sequence rather than the literal names, so a change in
 	# how many cull slices the crowd splits into does not fail it — only a change
 	# in which stage runs when. The per-slice runs collapse to one entry each:
-	# "Seats" is eight MultiMeshes, and "Crowd" is eight body/head PAIRS, since
-	# each slice's two instances are added together.
+	# "Seats" is eight MultiMeshes, and "Crowd" is body/head PAIRS, one per
+	# slice and detail tier, each pair's two instances added together.
 	var stages: PackedStringArray = PackedStringArray()
 	for child_name: String in _child_names(_make_stands(3, 2)):
 		var stage: String = child_name
@@ -84,7 +98,7 @@ func test_the_build_order_is_the_child_order() -> void:
 		"PenaltySeatAway", "PenaltyBackAway", "PenaltyDividerAway",
 		"PenaltySeatHome", "PenaltyBackHome", "PenaltyDividerHome",
 		"OfficialsTable", "OfficialsSeat",
-		"StaffBodies", "StaffHeads",
+		"StaffStanding", "StaffSeated", "StaffHeads",
 		"RibbonStripViewport", "RibbonBoard",
 		"BannerAtlasViewport", "RafterBanners", "RafterBannersBack",
 		# Added by _ready after the rebuild, and deliberately outside it: the
@@ -152,11 +166,72 @@ func _crowd_aabb(stands: ArenaStands) -> AABB:
 	return union
 
 
-func test_set_crowd_rows_applies_both_counts() -> void:
+# ── Crowd Density ────────────────────────────────────────────────────────────
+
+func test_hiding_the_crowd_leaves_the_building() -> void:
+	# Off empties the seats. Everything else — concrete, seats, benches, staff,
+	# signage, house lights, reflection probe — must stay exactly as it was, and
+	# the switch must not rebuild.
 	var stands: ArenaStands = _make_stands(3, 2)
-	stands.set_crowd_rows(4, 0)
-	assert_eq(stands.num_terraces, 4)
-	assert_eq(stands.upper_terraces, 0)
+	var terraces: Node = stands.find_child("Terraces", false, false)
+	stands.set_crowd_density(false, true)
+	assert_same(stands.find_child("Terraces", false, false), terraces,
+			"hiding the crowd must not rebuild the bowl")
+	assert_true(stands.visible, "the stands themselves stay drawn")
+	var hidden: int = 0
+	for child: Node in stands.get_children():
+		var crowd: bool = child.name.begins_with("Spectator") \
+				or child.name == "CrowdFlashbulbs"
+		if crowd:
+			hidden += 1
+			assert_false((child as Node3D).visible, "%s should be hidden" % child.name)
+		elif child is Node3D:
+			assert_true((child as Node3D).visible, "%s should stay drawn" % child.name)
+	assert_gt(hidden, 1, "there should be crowd to hide")
+	var bulbs: Node = stands.find_child("CrowdFlashbulbs", false, false)
+	assert_eq(bulbs.process_mode, Node.PROCESS_MODE_DISABLED,
+			"hidden flashbulbs should stop spawning")
+	stands.set_crowd_density(true, true)
+	for child: Node in stands.get_children():
+		if child.name.begins_with("Spectator"):
+			assert_true((child as Node3D).visible, "%s should come back" % child.name)
+
+
+func test_a_build_with_the_crowd_hidden_stays_hidden() -> void:
+	# Applied before the stands enter the tree (the scene's first apply_video),
+	# the setting has to survive the first build and every rebuild after it.
+	var stands: ArenaStands = ArenaStands.new()
+	stands.num_terraces = 3
+	stands.upper_terraces = 2
+	stands.set_crowd_density(false, true)
+	add_child_autofree(stands)
+	stands.attendance = 0.9
+	var crowd: Array[MultiMeshInstance3D] = _live_crowd(stands)
+	assert_gt(crowd.size(), 1, "the rebuild should have built a crowd")
+	for mmi: MultiMeshInstance3D in crowd:
+		assert_false(mmi.visible, "the rebuilt crowd should stay hidden")
+
+
+func test_low_detail_draws_every_fan_far_in_the_same_building() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	var high: int = _crowd_count(stands)
+	var far_body: AABB = ArenaFigureMesh.far_body_mesh().get_aabb()
+	var near_before: int = 0
+	for mm: MultiMesh in _crowd_sections(stands):
+		if mm.mesh.get_aabb() != far_body:
+			near_before += 1
+	assert_gt(near_before, 0, "high detail should give the front rows the full figure")
+	stands.set_crowd_density(true, false)
+	assert_eq(stands.num_terraces, 3, "the bowl keeps its rows")
+	assert_eq(stands.upper_terraces, 2, "and its upper deck")
+	var far_head: AABB = ArenaFigureMesh.far_head_mesh().get_aabb()
+	var fans: int = 0
+	for mmi: MultiMeshInstance3D in _live_crowd(stands):
+		var box: AABB = mmi.multimesh.mesh.get_aabb()
+		assert_true(box == far_body or box == far_head, "every fan should be the far figure")
+		if box == far_body:
+			fans += mmi.multimesh.instance_count
+	assert_eq(fans, high, "the same fans, only drawn cheaper")
 
 
 func test_a_seat_is_built_for_every_spectator_and_then_some() -> void:
@@ -190,7 +265,8 @@ func _make_sectioned_stands(aisles: int, fill: float) -> ArenaStands:
 	var stands: ArenaStands = ArenaStands.new()
 	stands.num_aisles = aisles
 	stands.attendance = fill
-	stands.set_crowd_rows(3, 2)
+	stands.num_terraces = 3
+	stands.upper_terraces = 2
 	add_child_autofree(stands)
 	return stands
 
@@ -224,7 +300,10 @@ func test_away_block_flags_upper_deck_only() -> void:
 
 
 func _away_flag_count(stands: ArenaStands, lower: int, upper: int) -> int:
-	stands.set_crowd_rows(lower, upper)
+	if stands.num_terraces != lower:
+		stands.num_terraces = lower
+	if stands.upper_terraces != upper:
+		stands.upper_terraces = upper
 	var layout: Dictionary = stands._get_or_build_layout()
 	var count: int = 0
 	for slice_flags: PackedByteArray in (layout.away_flags as Array[PackedByteArray]):
@@ -281,7 +360,8 @@ func test_hiding_ads_hides_the_ribbon_and_stops_its_scroll() -> void:
 
 func test_a_build_with_ads_off_hides_the_ribbon() -> void:
 	var stands: ArenaStands = ArenaStands.new()
-	stands.set_crowd_rows(3, 2)
+	stands.num_terraces = 3
+	stands.upper_terraces = 2
 	stands.set_ads_shown(false)
 	add_child_autofree(stands)
 	var ribbon := stands.find_child("RibbonBoard", false, false) as MeshInstance3D

@@ -82,7 +82,8 @@ const CAM_HAND_FOV: float = 22.0
 # check before the first tick), tuck (a GearModelRegistry TUCK_* option worn),
 # partner (a second skater in the away kit, the two in contact: "offset" from
 # the posed skater, "face", and the "input" spec he holds every tick — the
-# press's other body). "readout": true also prints the pose's speed
+# press's other body), celebrate (the goal-celebration window started before the
+# first tick, in seconds). "readout": true also prints the pose's speed
 # and body lean, which a tile can't be read for.
 const POSES: Array = [
 	{"name": "rest", "puck": false, "steps": [[40, {}]]},
@@ -380,6 +381,17 @@ const POSES: Array = [
 	{"name": "rocked_mid", "puck": false, "knockdown": Vector3(1.7, 0.0, 0.0),
 		"cam": Vector3(-3.4, 0.0, 0.4), "cam_aim": Vector3(0.0, -0.3, 0.0),
 		"steps": [[40, {}]]},
+	# ── Goal celebration ────────────────────────────────────────────────────
+	# The scorer's raised stick, fist pump and knee bounce, a second into the
+	# GOAL_CELEBRATION window: standing, and coasting out of a skate.
+	{"name": "celebrate", "puck": false, "celebrate": GameRules.GOAL_CELEBRATION_DURATION,
+		"steps": [[120, {}]]},
+	{"name": "celebrate_front", "puck": false, "celebrate": GameRules.GOAL_CELEBRATION_DURATION,
+		"cam": Vector3(0.4, 1.0, -5.2), "cam_aim": Vector3(0.0, 0.7, 0.0), "steps": [[120, {}]]},
+	{"name": "celebrate_side", "puck": false, "celebrate": GameRules.GOAL_CELEBRATION_DURATION,
+		"cam": Vector3(-3.4, 0.6, 0.3), "steps": [[120, {}]]},
+	{"name": "celebrate_game", "puck": false, "celebrate": GameRules.GOAL_CELEBRATION_DURATION,
+		"game_cam": true, "steps": [[120, {"move": Vector2(0.0, -1.0)}]]},
 	# ── FACEOFF_PREP ──────────────────────────────────────────────────────────
 	# The locked-phase path (begin_approach → tick_faceoff_approach →
 	# apply_blade_aim_only), which _process_input never reaches, so the specs
@@ -649,6 +661,8 @@ func _run_pose() -> void:
 		_controller._on_body_check_received(pose["knockdown"] as Vector3)
 	if pose.has("pin_role"):
 		_place_for_pin(int(pose["pin_role"]))
+	if pose.has("celebrate"):
+		_controller.start_celebration(float(pose["celebrate"]))
 	var steps: Array = pose.get("steps", [])
 	for step: Array in steps:
 		var ticks: int = step[0]

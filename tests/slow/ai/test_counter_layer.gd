@@ -34,7 +34,7 @@ const MAX_5V5_BEATEN: int = 7
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SETTLE_S: float = 2.5
 const AFTER_S: float = 2.0
 const MARKS_S: Array[float] = [1.0, 1.5, 2.0]

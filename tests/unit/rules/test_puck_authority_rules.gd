@@ -4,7 +4,7 @@ extends GutTest
 # step_puck_3d (tested separately) with the two post-integration safety clamps a free puck
 # needs: max speed and max height. These tests pin those clamps and the delegation.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 const ICE: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const MAX_SPEED: float = 60.0
 const MAX_HEIGHT: float = 2.0

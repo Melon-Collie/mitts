@@ -507,7 +507,7 @@ var _rng: RandomNumberGenerator = RandomNumberGenerator.new()
 # states always run full-rate (charge timing and pre-aim convergence are
 # tick-sensitive). DISPATCH_PERIOD_TICKS is the perfect-bot default; the per-agent
 # cadence comes from BotSkillProfile in apply_profile().
-const DISPATCH_PERIOD_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 60   # ~60 Hz
+const DISPATCH_PERIOD_TICKS: int = (_PhysicsConstants.PHYSICS_TICK + 30) / 60   # ~60 Hz, rounded
 var _dispatch_period_ticks: int = DISPATCH_PERIOD_TICKS
 
 var _dispatch_skip_counter: int = 0

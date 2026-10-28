@@ -11,10 +11,10 @@ extends GutTest
 # off the post: from the RVH, the skate on the post holding it until the push
 # ends, to rest on his spot in the slide's time, never toward the post.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 const B := KeeperSkeleton.Bone
 const P := KeeperGear.Part
 
@@ -118,8 +118,8 @@ func test_once_pushed_friction_then_the_edge_slows_him() -> void:
 				stopped += 1
 		was_phase = _slide.phase
 		was = _slide.speed
-	assert_gt(glided, 10, "a glide")
-	assert_gt(stopped, 10, "a stop")
+	assert_gt(glided, roundi(0.083 / DT), "a glide")
+	assert_gt(stopped, roundi(0.083 / DT), "a stop")
 	assert_lte(top, _slide.push_speed + 1e-6)
 
 
@@ -158,7 +158,7 @@ func test_the_push_skate_holds_its_place_while_it_drives() -> void:
 			planted = at
 		assert_almost_eq(at, planted, 0.001, "at x %.3f it holds" % _slide.x)
 		ticks += 1
-	assert_gt(ticks, 10, "a push, not a flick")
+	assert_gt(ticks, roundi(0.083 / DT), "a push, not a flick")
 
 
 # From his feet the push skate is where his push comes from from the start:
@@ -184,7 +184,7 @@ func test_from_his_feet_the_push_skate_never_leaves_its_spot() -> void:
 		assert_almost_eq(_world(_skel.xf[KeeperSkeleton.FOOT[0]].origin).x, planted, 0.001,
 				"%s at x %.3f it holds" % [KeeperSlide.Phase.keys()[_slide.phase], _slide.x])
 		ticks += 1
-	assert_gt(ticks, 30, "the drop and the push")
+	assert_gt(ticks, roundi(0.25 / DT), "the drop and the push")
 
 
 # The lead pad seals the ice it slides along: down on it every tick, from the
@@ -415,7 +415,7 @@ func test_off_the_rvh_the_skate_on_the_post_holds_it_until_the_push_ends() -> vo
 			assert_almost_eq(at, planted, Vector3.ONE * 0.03, "%+.1f %s at x %.3f: on the post" % [target,
 					KeeperSlide.Phase.keys()[_slide.phase], _slide.x])
 			ticks += 1
-		assert_gt(ticks, 30, "%+.1f: the knee coming up and the push" % target)
+		assert_gt(ticks, roundi(0.25 / DT), "%+.1f: the knee coming up and the push" % target)
 
 
 func test_off_the_rvh_he_never_pushes_toward_the_post() -> void:

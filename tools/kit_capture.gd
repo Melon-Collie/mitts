@@ -147,10 +147,10 @@ func _render() -> void:
 			_jersey_decals[side].update_crest(TeamCrest.fruit_for(_preset), _preset)
 			_jersey_decals[side].update_jersey(kit.jersey.base,
 					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
-					kit.jersey.stripes, _player_name, _number, kit.text.color)
+					kit.jersey.stripes, _player_name, _number, kit.text.color, kit.text.stroke)
 			_shoulder_decals[side].update_shoulder(kit.shoulders.color,
 					UniformPaint.yoke_color(kit.jersey), _number,
-					kit.shoulders.text)
+					kit.shoulders.text, kit.shoulders.stroke)
 			_upper_arm_textures[side] = SkaterUniformCoordinator.make_arm_stripes_texture(
 					kit.arms.upper.base, kit.arms.upper.stripes)
 			_forearm_textures[side] = SkaterUniformCoordinator.make_arm_stripes_texture(
@@ -545,8 +545,9 @@ func _draw_tube(c: Node2D, top_center: Vector2, stations: Array[Vector3],
 func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	var pen: Vector2 = at
 	pen = _legend_row(c, pen, "helmet", [kit.helmet], [""])
-	pen = _legend_row(c, pen, "shoulders", [kit.shoulders.color, kit.shoulders.text],
-			["", "text"])
+	pen = _legend_row(c, pen, "shoulders",
+			[kit.shoulders.color, kit.shoulders.text, kit.shoulders.stroke],
+			["", "text", _stroke_note(kit.shoulders.stroke)])
 	pen = _legend_row(c, pen, "jersey", [kit.jersey.base, UniformPaint.yoke_color(kit.jersey),
 			UniformPaint.collar_color(kit.jersey)],
 			["", "yoke" if kit.jersey.yoke is Color else "yoke (base)",
@@ -563,8 +564,13 @@ func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	pen = _stripe_rows(c, pen, kit.pants.stripes)
 	pen = _legend_row(c, pen, "socks", [kit.socks.base], [""])
 	pen = _stripe_rows(c, pen, kit.socks.stripes)
-	pen = _legend_row(c, pen, "goalie_pads", [kit.goalie_pads], [""])
-	_legend_row(c, pen, "text", [kit.text.color, kit.text.outline], ["", "outline (UI only)"])
+	pen = _legend_row(c, pen, "goalie_pads", [kit.goalie_pads], ["(and blocker, trapper)"])
+	_legend_row(c, pen, "text", [kit.text.color, kit.text.stroke, kit.text.outline],
+			["", _stroke_note(kit.text.stroke), "outline (UI only)"])
+
+
+func _stroke_note(stroke: Color) -> String:
+	return "stroke" if stroke.a > 0.0 else "(no stroke)"
 
 
 # One labelled row of chips; returns the pen at the next row.

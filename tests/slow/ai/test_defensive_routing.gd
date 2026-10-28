@@ -50,7 +50,7 @@ extends GutTest
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SECS: float = 4.0
 # Team 1 defends -Z here, so the rush travels in -Z and our blue line is at
 # -BLUE_LINE_Z.

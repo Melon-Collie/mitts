@@ -8,7 +8,7 @@ extends GutTest
 # surface stood off by the margin along its own direction from the piece's
 # axis, onto that stood-off surface.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SAMPLES: int = 4000
 const AT_REST_M: float = 0.001
 const SINK_M: float = 0.004

@@ -8,10 +8,10 @@ extends GutTest
 # stick. A drop or a low save from it is the shorter fall: the knees' fall to
 # the ice from where it holds them, at the root of the heights.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 const B := KeeperSkeleton.Bone
 const R := KeeperMotor.Rest
 const Low := KeeperSaveMove.Low

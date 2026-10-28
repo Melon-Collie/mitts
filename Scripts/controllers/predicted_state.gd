@@ -47,8 +47,8 @@ var twist_follow_vel: float
 # f64 the local history stores is 0.05ms — constant regardless of session
 # length, which an f32 encoding would not be (its ULP grows with host uptime).
 # 1ms is comfortably
-# above that and well below the 8.33ms gap between adjacent 120 Hz-stamped
-# inputs, so no risk of off-by-one matches.
+# above that and well below the gap between adjacent tick-stamped inputs
+# (11.1 ms at 90 Hz), so no risk of off-by-one matches.
 const TS_MATCH_EPSILON: float = 1e-3
 
 static func find_at(history: Array[PredictedState], target_ts: float) -> PredictedState:

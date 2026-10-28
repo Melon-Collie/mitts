@@ -11,7 +11,7 @@ extends GutTest
 # attacks -Z.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 # The home plate a defence must keep a lone rusher out of: the slot, out to the
 # hash marks' depth and the posts' width plus a stride.

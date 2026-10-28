@@ -57,14 +57,11 @@ const _CARD_HEIGHT: int = 96
 const _STRIPE_WIDTH: int = 6
 const _ICON_SIZE: int = 20
 
-# Name label font sizing. The name auto-shrinks to fit the card so long names
-# (e.g. "SCHROEDER") display in full instead of hard-clipping at the default
-# size. _NAME_FONT_SIZE is the preferred size on filled cards, _OPEN the
-# (smaller, centered) "OPEN SLOT" placeholder size, and _MIN the floor below
-# which we stop shrinking and let clip_text take over as a last resort.
+# Name label font sizing: the preferred size on filled cards, and the smaller
+# centred "OPEN SLOT" placeholder's. A long name shrinks from it to fit
+# (MenuStyle.fit_label_to_width).
 const _NAME_FONT_SIZE: int = 24
 const _NAME_FONT_SIZE_OPEN: int = 18
-const _NAME_FONT_MIN: int = 14
 
 # Ping color bands (ms).
 const _PING_GREEN: int  = 60
@@ -384,7 +381,7 @@ func _build_card(team_id: int, slot: int) -> PanelContainer:
 	# auto-shrinks to fit (see _fit_name): "fit_base" is the preferred size,
 	# re-fit on every layout change via the resized signal so it tracks
 	# window resizing. clip_text stays on purely as a last-resort guard for
-	# pathologically long names that hit _NAME_FONT_MIN.
+	# pathologically long names that hit MenuStyle.NAME_FIT_MIN_PX.
 	var name_lbl := Label.new()
 	name_lbl.add_theme_font_override("font", MenuStyle.NAME_FONT)
 	name_lbl.add_theme_font_size_override("font_size", _NAME_FONT_SIZE)
@@ -713,29 +710,11 @@ func _update_card(team_id: int, slot: int, entry) -> void:
 		action.visible = false
 
 
-# Shrink the name's font size so the whole name fits the label's current
-# width, mirroring the in-game jersey renderer (which measures the string and
-# fits it) rather than hard-clipping. Measures at the label's preferred
-# "fit_base" size and scales down proportionally if the text overflows,
-# flooring at _NAME_FONT_MIN; clip_text catches anything still too long. Wired
-# to the label's resized signal so it re-fits on window/layout changes, and
-# called explicitly after each text update. Idempotent — always measures from
-# fit_base, so repeated calls converge without drift.
+# Fits the name to the label's width from its "fit_base" size. Wired to the
+# label's resized signal so it re-fits on layout changes, and called after each
+# text update.
 func _fit_name(lbl: Label) -> void:
-	var base: int = lbl.get_meta("fit_base", _NAME_FONT_SIZE)
-	var avail: float = lbl.size.x
-	if avail <= 0.0 or lbl.text.is_empty():
-		# Layout not resolved yet (or nothing to show) — keep the preferred
-		# size; the resized signal will re-fit once a real width is known.
-		lbl.add_theme_font_size_override("font_size", base)
-		return
-	var font: Font = lbl.get_theme_font("font")
-	var text_w: float = font.get_string_size(
-			lbl.text, lbl.horizontal_alignment, -1, base).x
-	var size_px: int = base
-	if text_w > avail:
-		size_px = maxi(_NAME_FONT_MIN, int(floor(base * avail / text_w)))
-	lbl.add_theme_font_size_override("font_size", size_px)
+	MenuStyle.fit_label_to_width(lbl, lbl.get_meta("fit_base", _NAME_FONT_SIZE))
 
 
 # Small outline-only square in the top-left corner of a card. `accent` is

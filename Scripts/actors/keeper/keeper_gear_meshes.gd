@@ -80,7 +80,8 @@ const _SOCK_PROFILE: Array[Vector2] = [
 # knee stack standing out at the top and the face falling back toward the toe
 # at the bottom, and side wings running back from it either side of the leg.
 # The back is the open channel the leg lies in, strapped across. The face is
-# left plain for the pad's paint.
+# trimmed in the accent: the knee stack's front, and a stripe down inside each
+# roll — a pair, since both legs wear this one mesh.
 static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
 	var cut: float = h.x * PAD_CUT
 	var stations: Array[Vector3] = [
@@ -107,7 +108,11 @@ static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
 				Vector3(sx * (w - cut * 0.5), s.x, h.z),
 				Vector3(sx * (w - _PAD_WING_M), s.x, h.z),
 			]))
-	k.sweep(S.PADS, face, Vector3(0.0, 0.0, (face_back - h.z) * 0.5))
+	var inside := Vector3(0.0, 0.0, (face_back - h.z) * 0.5)
+	k.sweep(S.PADS, face.slice(0, _PAD_STACK_FRONT.x + 1), inside, true, false)
+	k.sweep(S.ACCENT, face.slice(_PAD_STACK_FRONT.x, _PAD_STACK_FRONT.y + 1), inside, false, false)
+	k.sweep(S.PADS, face.slice(_PAD_STACK_FRONT.y), inside, false, true)
+	_pad_stripes(k, h, stations.slice(_PAD_STRIPE_STATIONS.x, _PAD_STRIPE_STATIONS.y + 1), cut)
 	for side: int in 2:
 		var sx: float = -1.0 if side == 0 else 1.0
 		k.sweep(S.PADS, wings[side], Vector3(sx * (h.x - _PAD_WING_M * 0.5), 0.0, h.z * 0.5))
@@ -118,9 +123,36 @@ static func _pad(k: KeeperMeshKit, h: Vector3) -> void:
 		k.box(S.STRAP, Vector3(0.0, y, h.z - 0.006), Vector3(h.x - _PAD_WING_M * 0.5, 0.018, 0.006))
 
 
+# Which of the pad's stations the knee stack's trimmed front runs between, and
+# which the stripes run down.
+const _PAD_STACK_FRONT := Vector2i(4, 5)
+const _PAD_STRIPE_STATIONS := Vector2i(1, 3)
+# The stripes: in from the roll, wide, and how far they stand off the face.
+const _PAD_STRIPE_INSET_M: float = 0.012
+const _PAD_STRIPE_WIDTH_M: float = 0.024
+const _PAD_STRIPE_PROUD_M: float = 0.002
+
+
+# A stripe down the pad's flat face just inside each roll, following the face
+# between `stations`.
+static func _pad_stripes(k: KeeperMeshKit, h: Vector3, stations: Array[Vector3], cut: float) -> void:
+	for sx: float in [-1.0, 1.0]:
+		var rings: Array[PackedVector3Array] = []
+		for st: Vector3 in stations:
+			var edge: float = h.x * st.y - cut * st.y - _PAD_STRIPE_INSET_M
+			var front: float = -h.z * st.z
+			var x0: float = sx * (edge - _PAD_STRIPE_WIDTH_M)
+			var x1: float = sx * edge
+			rings.append(PackedVector3Array([
+				Vector3(x0, st.x, front - _PAD_STRIPE_PROUD_M), Vector3(x1, st.x, front - _PAD_STRIPE_PROUD_M),
+				Vector3(x1, st.x, front + 0.004), Vector3(x0, st.x, front + 0.004),
+			]))
+		k.sweep(S.ACCENT, rings, Vector3(sx * (h.x * 0.5), 0.0, -h.z * 0.5))
+
+
 # The channel's lining, facing into it: the back of the face and the inside of
-# each wing, shaded so the leg in its sock stands out in a kit whose socks are
-# its pads' colour.
+# each wing, shaded so the leg in its sock stands out even where the socks are
+# the pads' colour.
 static func _pad_lining(k: KeeperMeshKit, h: Vector3, stations: Array[Vector3],
 		face_back: float) -> void:
 	k.tint = _DEEP
@@ -470,11 +502,11 @@ static func _trapper(k: KeeperMeshKit, h: Vector3) -> void:
 			ring[i].z += h.z * 0.075
 		cuff.append(ring)
 	var mid: Vector3 = Vector3(0.0, h.y - 0.05, h.z * 0.075)
-	k.sweep(S.GLOVE_ACCENT, cuff.slice(0, _TRAPPER_CUFF_BAND), mid, true, false)
+	k.sweep(S.ACCENT, cuff.slice(0, _TRAPPER_CUFF_BAND), mid, true, false)
 	k.sweep(S.GLOVES, cuff.slice(_TRAPPER_CUFF_BAND - 1), mid, false, true)
 	k.slab(S.GLOVES, _trapper_outline(h, _TRAPPER_BODY), -h.z * 0.62, h.z)
 	k.slab(S.GLOVES, _trapper_outline(h, _TRAPPER_CHEATER), -h.z, h.z * 0.5)
-	k.slab(S.GLOVE_ACCENT, _trapper_outline(h, _TRAPPER_CHEATER, 0.75), -h.z - 0.003, -h.z)
+	k.slab(S.ACCENT, _trapper_outline(h, _TRAPPER_CHEATER, 0.75), -h.z - 0.003, -h.z)
 	# The pocket: shaded, not a hole, in the middle of the palm.
 	k.tint = Color(0.82, 0.82, 0.85)
 	var pocket := PackedVector2Array()
@@ -487,8 +519,8 @@ static func _trapper(k: KeeperMeshKit, h: Vector3) -> void:
 	k.tint = Color.WHITE
 	# The T-trap's laces: its stem down the web from the top, its bar across.
 	var z: float = -h.z * 0.45 - 0.004
-	k.box(S.GLOVE_ACCENT, Vector3(-0.08, h.y - 0.265, z), Vector3(0.008, 0.045, 0.004))
-	k.box(S.GLOVE_ACCENT, Vector3(-0.08, h.y - 0.30, z), Vector3(0.04, 0.008, 0.004))
+	k.box(S.ACCENT, Vector3(-0.08, h.y - 0.265, z), Vector3(0.008, 0.045, 0.004))
+	k.box(S.ACCENT, Vector3(-0.08, h.y - 0.30, z), Vector3(0.04, 0.008, 0.004))
 	# The finger rolls down the back of the catching body.
 	for x: float in [0.0, 0.045, 0.09]:
 		k.box(S.GLOVES, Vector3(x, h.y - 0.235, h.z - 0.004), Vector3(0.016, 0.065, 0.006))
@@ -534,7 +566,7 @@ static func _blocker(k: KeeperMeshKit, h: Vector3) -> void:
 		Vector2(-h.x, h.y - cut), Vector2(-h.x, -h.y + cut),
 	])
 	k.slab(S.GLOVES, board, -h.z, back)
-	k.box(S.GLOVE_ACCENT, Vector3(-h.x * 0.35, 0.0, -h.z - 0.003), Vector3(h.x * 0.22, h.y * 0.88, 0.003))
+	k.box(S.ACCENT, Vector3(-h.x * 0.35, 0.0, -h.z - 0.003), Vector3(h.x * 0.22, h.y * 0.88, 0.003))
 	var near := PackedVector3Array()
 	var far := PackedVector3Array()
 	for p: Vector2 in _BLOCKER_TOP_SIDE:

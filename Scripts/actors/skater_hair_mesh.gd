@@ -12,14 +12,14 @@ extends RefCounted
 # behind it — the skin would show through as a row of teeth. The lift tapers
 # toward the edges so a hairline meets the skin instead of ending in a step.
 #
-# Scalp hair only has to exist where the helmet does not cover it, but its top
-# edge must never show: above the rim the lift goes negative and the shell sinks
-# into the head, so the edge is hidden by the head and the shell together.
+# Scalp hair is a whole head of hair, crown to hairline, as it would be with
+# the helmet off: the locker and a replay camera can look up under the rim.
+# HairHelmetFit holds it inside the helmet shell and the face gear, and hangs
+# and kicks it below the rim.
 # Facial hair is one sheet per style with the mouth cut out of it, so a
 # translucent style never doubles up; it sits under the face gear, so its lift
 # is bounded the same way the face's features are, and it rises over the chin
-# rather than letting the chin through (test_skater_hair_mesh.gd holds all
-# three).
+# rather than letting the chin through.
 
 # Azimuth: θ = 0 is +Z (the back), increasing toward +X, as _build_ball and
 # _build_helmet sample it. Facial keys are measured from dead front instead.
@@ -28,52 +28,134 @@ const _ROWS: int = SkaterMeshBuilder.HEAD_LAT
 # Largest azimuth (rad) and height (m) step between grid lines.
 const _MAX_TH_STEP: float = TAU / float(SkaterMeshBuilder.HEAD_LON) / 3.0
 const _FACIAL_ROW_M: float = 0.006
-# The scalp's rows instead run parallel to its top edge, which follows the
-# helmet rim: its lift sinks under the skin within a row or two of that edge,
-# and rows crossing the rim's slope would step that line over the ear.
-const _SCALP_ROWS: int = 14
+const _SCALP_ROW_M: float = 0.01
 
-# How far above the helmet rim the scalp shell carries on before it is fully
-# sunk, and how deep it sinks. The rim hides everything above it.
-const _RIM_OVERLAP_M: float = 0.012
-const _SINK_M: float = 0.003
-# Lift an edge tapers down to, and over what share of the shell it tapers.
+# Lift an edge tapers down to; the facial sheet tapers over this share of its
+# reach, the scalp over this far from its hairline.
 const _EDGE_LIFT_M: float = 0.0015
+# A bottom edge standing further off the surface than this is closed to it.
+const _CLOSE_GAP_M: float = 0.003
 const _EDGE_TAPER: float = 0.3
+const _HAIRLINE_TAPER_M: float = 0.01
+# Over the crown every style's lift blends to its crown lift between these
+# heights, so the columns meet at the pole.
+const _CROWN_BLEND_Y := Vector2(0.04, 0.12)
 
 # Below the head ball the shell rides the neck, so its lift turns from
 # radial (off the head's centre) to horizontal (off the neck) over this band.
 const _NECK_BLEND_TOP_Y: float = -0.09
 const _NECK_BLEND_BOTTOM_Y: float = -0.125
 
-# Scalp styles, keyed by azimuth from dead back (degrees, mirrored): (θ, the
-# hairline's height, the lift). The last key's θ is where the hair ends, which
-# is the sideburn's front edge.
+# Scalp styles, keyed by azimuth from dead back (degrees, mirrored to dead
+# front): (θ, the hairline's height, the lift). The keys run the nape, round
+# the ear to the sideburn, up its front edge to the temple and across the
+# forehead, which the helmet's brow covers. Each style's crown lift follows it.
 const _SHORT: Array[Vector3] = [
 	Vector3(0.0, -0.128, 0.004),
 	Vector3(60.0, -0.104, 0.004),
 	Vector3(90.0, -0.052, 0.003),
 	Vector3(108.0, -0.040, 0.003),
-	Vector3(125.0, -0.032, 0.002),
+	Vector3(125.0, -0.032, 0.003),
+	Vector3(128.0, 0.022, 0.003),
+	Vector3(140.0, 0.050, 0.004),
+	Vector3(155.0, 0.068, 0.004),
+	Vector3(168.0, 0.076, 0.004),
+	Vector3(180.0, 0.078, 0.004),
 ]
+const _SHORT_CROWN_M: float = 0.005
 const _MEDIUM: Array[Vector3] = [
 	Vector3(0.0, -0.145, 0.008),
 	Vector3(60.0, -0.130, 0.008),
 	Vector3(90.0, -0.080, 0.007),
 	Vector3(108.0, -0.062, 0.005),
-	Vector3(125.0, -0.040, 0.003),
+	Vector3(125.0, -0.040, 0.004),
+	Vector3(128.0, 0.018, 0.004),
+	Vector3(140.0, 0.046, 0.006),
+	Vector3(155.0, 0.064, 0.007),
+	Vector3(168.0, 0.072, 0.008),
+	Vector3(180.0, 0.074, 0.008),
 ]
-# Long hair hangs past the helmet over the collar and kicks out at the ends.
-const _LONG: Array[Vector3] = [
-	Vector3(0.0, -0.175, 0.010),
-	Vector3(50.0, -0.168, 0.010),
-	Vector3(85.0, -0.135, 0.009),
-	Vector3(105.0, -0.080, 0.006),
-	Vector3(125.0, -0.045, 0.003),
+const _MEDIUM_CROWN_M: float = 0.009
+# Short's sides and sideburns, and a full tail behind the neck hanging past the
+# helmet to the collar: the drop happens behind the ear.
+const _MULLET: Array[Vector3] = [
+	Vector3(0.0, -0.188, 0.014),
+	Vector3(35.0, -0.182, 0.014),
+	Vector3(52.0, -0.166, 0.012),
+	Vector3(62.0, -0.090, 0.006),
+	Vector3(82.0, -0.062, 0.004),
+	Vector3(108.0, -0.040, 0.003),
+	Vector3(125.0, -0.032, 0.003),
+	Vector3(128.0, 0.022, 0.003),
+	Vector3(140.0, 0.050, 0.004),
+	Vector3(155.0, 0.068, 0.004),
+	Vector3(168.0, 0.076, 0.004),
+	Vector3(180.0, 0.078, 0.004),
 ]
-const _LONG_FLARE_M: float = 0.028
-const _LONG_FLARE_TOP_Y: float = -0.11
-const _LONG_FLARE_BOTTOM_Y: float = -0.175
+const _MULLET_CROWN_M: float = 0.005
+# Clipped high and tight, with a short sideburn; drawn translucent like stubble.
+const _BUZZ: Array[Vector3] = [
+	Vector3(0.0, -0.112, 0.0025),
+	Vector3(60.0, -0.094, 0.0025),
+	Vector3(90.0, -0.046, 0.0022),
+	Vector3(108.0, -0.036, 0.0022),
+	Vector3(118.0, -0.030, 0.0022),
+	Vector3(121.0, 0.026, 0.0022),
+	Vector3(140.0, 0.054, 0.0022),
+	Vector3(155.0, 0.070, 0.0022),
+	Vector3(168.0, 0.078, 0.0022),
+	Vector3(180.0, 0.080, 0.0022),
+]
+const _BUZZ_CROWN_M: float = 0.0022
+# Thick over the ears and the nape, hanging to a blunt edge over the collar.
+const _SHAGGY: Array[Vector3] = [
+	Vector3(0.0, -0.158, 0.011),
+	Vector3(60.0, -0.150, 0.011),
+	Vector3(72.0, -0.144, 0.011),
+	Vector3(84.0, -0.118, 0.010),
+	Vector3(96.0, -0.110, 0.010),
+	Vector3(108.0, -0.084, 0.008),
+	Vector3(118.0, -0.074, 0.006),
+	Vector3(128.0, -0.048, 0.005),
+	Vector3(131.0, 0.012, 0.006),
+	Vector3(142.0, 0.040, 0.009),
+	Vector3(155.0, 0.058, 0.010),
+	Vector3(168.0, 0.066, 0.011),
+	Vector3(180.0, 0.068, 0.011),
+]
+const _SHAGGY_CROWN_M: float = 0.012
+# Full over the ears and at the back, falling nearly straight from the helmet
+# to just under the ears and flipping out at the ends into wings. Drawn on coarser rows than the
+# others, so the curtain and the flip read as a few broad planes.
+const _FLOW: Array[Vector3] = [
+	Vector3(0.0, -0.135, 0.018),
+	Vector3(40.0, -0.130, 0.020),
+	Vector3(70.0, -0.112, 0.022),
+	Vector3(95.0, -0.082, 0.020),
+	Vector3(112.0, -0.068, 0.012),
+	Vector3(128.0, -0.050, 0.005),
+	Vector3(131.0, 0.012, 0.006),
+	Vector3(142.0, 0.040, 0.009),
+	Vector3(155.0, 0.058, 0.010),
+	Vector3(168.0, 0.066, 0.011),
+	Vector3(180.0, 0.068, 0.011),
+]
+const _FLOW_CROWN_M: float = 0.012
+const _FLOW_ROW_M: float = 0.03
+# How fast a style's hair may close in toward the neck as it falls below the
+# head's widest point (m in per m down): what falls faster hangs instead of
+# wrapping under the skull. Zero hugs the head all the way down.
+const _HUG: float = 0.0
+const _SHAGGY_HANG: float = 0.4
+const _MULLET_HANG: float = 0.3
+const _FLOW_HANG: float = 0.15
+# A style's kick at its ends (HairHelmetFit.drape): (height, how far out),
+# descending, eased between keys and held past the last.
+const _NO_FLARE: Array[Vector2] = []
+const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.15, 0.0), Vector2(-0.186, 0.018)]
+const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.10, 0.0), Vector2(-0.17, 0.012)]
+const _FLOW_FLARE: Array[Vector2] = [Vector2(-0.04, 0.0), Vector2(-0.082, 0.025),
+		Vector2(-0.135, 0.045)]
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -101,6 +183,29 @@ const _BEARD: Array[Vector4] = [
 	Vector4(52.0, -0.008, -0.090, 0.006),
 	Vector4(56.0, -0.004, -0.084, 0.005),
 ]
+# A mustache running past the corners of the mouth, and a strip from each end
+# down to the jaw. The strips start clear of the chin (SkaterFaceMesh's relief),
+# or they frame it and it reads as an open mouth.
+const _HORSESHOE: Array[Vector4] = [
+	Vector4(0.0, -0.036, -0.0545, 0.007),
+	Vector4(14.0, -0.038, -0.0545, 0.007),
+	Vector4(14.3, -0.038, -0.090, 0.008),
+	Vector4(21.0, -0.040, -0.088, 0.006),
+]
+# The beard's footprint carried down off the chin to just above the collar,
+# square across the front and hanging from the whole jaw at the sides.
+const _LONG_BEARD: Array[Vector4] = [
+	Vector4(0.0, -0.035, -0.174, 0.013),
+	Vector4(14.0, -0.036, -0.172, 0.013),
+	Vector4(24.0, -0.032, -0.168, 0.012),
+	Vector4(34.0, -0.024, -0.160, 0.011),
+	Vector4(44.0, -0.013, -0.146, 0.010),
+	Vector4(52.0, -0.006, -0.130, 0.008),
+	Vector4(57.0, -0.002, -0.118, 0.006),
+]
+# How fast the long beard may close in toward the throat as it falls (m in per
+# m down): it hangs from the chin and jaw rather than following them under.
+const _LONG_BEARD_HANG: float = 0.25
 # A full sheet is thinner over the lip than at the chin.
 const _UPPER_LIFT_SHARE: float = 0.55
 const _MOUTH_MARGIN_M: float = 0.0015
@@ -116,17 +221,29 @@ const _HAIR_ROUGHNESS: float = 0.8
 static var _cache: Dictionary = {}
 
 
-# The scalp shell for one HairStyleRegistry HAIR_* style — null for bald (and
-# for a forged index, matching the registry's clamp).
+# The scalp shell for one HairStyleRegistry HAIR_* style, a retired one's
+# stand-in for it — null for bald (and for a forged index, matching the
+# registry's clamp).
 static func shared_hair(style: int) -> ArrayMesh:
-	match style:
+	match HairStyleRegistry.worn_hair(style):
 		HairStyleRegistry.HAIR_SHORT:
-			return _shared("hair_short", func() -> ArrayMesh: return _build_scalp(_SHORT, 0.0))
+			return _shared("hair_short", func() -> ArrayMesh:
+				return _build_scalp(_SHORT, _SHORT_CROWN_M, _HUG, _NO_FLARE))
 		HairStyleRegistry.HAIR_MEDIUM:
-			return _shared("hair_medium", func() -> ArrayMesh: return _build_scalp(_MEDIUM, 0.0))
-		HairStyleRegistry.HAIR_LONG:
-			return _shared("hair_long",
-					func() -> ArrayMesh: return _build_scalp(_LONG, _LONG_FLARE_M))
+			return _shared("hair_medium", func() -> ArrayMesh:
+				return _build_scalp(_MEDIUM, _MEDIUM_CROWN_M, _HUG, _NO_FLARE))
+		HairStyleRegistry.HAIR_MULLET:
+			return _shared("hair_mullet", func() -> ArrayMesh:
+				return _build_scalp(_MULLET, _MULLET_CROWN_M, _MULLET_HANG, _MULLET_FLARE))
+		HairStyleRegistry.HAIR_BUZZ:
+			return _shared("hair_buzz", func() -> ArrayMesh:
+				return _build_scalp(_BUZZ, _BUZZ_CROWN_M, _HUG, _NO_FLARE))
+		HairStyleRegistry.HAIR_SHAGGY:
+			return _shared("hair_shaggy", func() -> ArrayMesh:
+				return _build_scalp(_SHAGGY, _SHAGGY_CROWN_M, _SHAGGY_HANG, _SHAGGY_FLARE))
+		HairStyleRegistry.HAIR_FLOW:
+			return _shared("hair_flow", func() -> ArrayMesh:
+				return _build_scalp(_FLOW, _FLOW_CROWN_M, _FLOW_HANG, _FLOW_FLARE, _FLOW_ROW_M))
 		_:
 			return null
 
@@ -142,7 +259,8 @@ static func shared_brows() -> ArrayMesh:
 		return st.commit())
 
 
-# The facial shell for one FACIAL_* style — null for none.
+# The facial shell for one FACIAL_* style, which fits under any face piece —
+# null for none.
 static func shared_facial_hair(style: int) -> ArrayMesh:
 	match style:
 		HairStyleRegistry.FACIAL_STUBBLE:
@@ -157,15 +275,21 @@ static func shared_facial_hair(style: int) -> ArrayMesh:
 		HairStyleRegistry.FACIAL_BEARD:
 			return _shared("facial_beard", func() -> ArrayMesh:
 				return _build_facial(_BEARD, -1.0))
+		HairStyleRegistry.FACIAL_HORSESHOE:
+			return _shared("facial_horseshoe", func() -> ArrayMesh:
+				return _build_facial(_HORSESHOE, -1.0))
+		HairStyleRegistry.FACIAL_LONG_BEARD:
+			return _shared("facial_long_beard", func() -> ArrayMesh:
+				return _build_facial(_LONG_BEARD, -1.0, _LONG_BEARD_HANG))
 		_:
 			return null
 
 
 # Hair is open sheets seen from both sides (under long hair, behind a sideburn),
-# so it renders two-sided. Stubble is a shadow on the skin rather than a
-# volume, so it is translucent by design — like the face gear, a ghost fade
-# has to rebuild it from here rather than restore alpha 1 — and one-sided, or
-# its own far side doubles it wherever the sheet turns away.
+# so it renders two-sided. Stubble and a buzz cut are a shadow on the skin
+# rather than a volume, so they are translucent by design — like the face gear,
+# a ghost fade has to rebuild them from here rather than restore alpha 1 — and
+# one-sided, or the sheet's own far side doubles it wherever it turns away.
 static func make_material(color_index: int, translucent: bool) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = HairStyleRegistry.color_for(color_index)
@@ -182,6 +306,10 @@ static func is_translucent(facial_style: int) -> bool:
 	return facial_style == HairStyleRegistry.FACIAL_STUBBLE
 
 
+static func is_scalp_translucent(hair_style: int) -> bool:
+	return hair_style == HairStyleRegistry.HAIR_BUZZ
+
+
 static func _shared(key: String, builder: Callable) -> ArrayMesh:
 	if not _cache.has(key):
 		_cache[key] = builder.call()
@@ -190,26 +318,53 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 
 # ── Builders ────────────────────────────────────────────────────────────────
 
-static func _build_scalp(keys: Array[Vector3], flare: float) -> ArrayMesh:
-	var reach: float = deg_to_rad(keys[keys.size() - 1].x)
-	var span := func(theta: float, rim: float) -> Vector2:
-		return Vector2(rim + _RIM_OVERLAP_M, _scalp_key(keys, absf(_wrap_pi(theta))).x)
-	var lift := func(theta: float, t: float, y: float, rim: float, _at: Vector3) -> float:
-		var a: float = absf(_wrap_pi(theta))
-		var side: float = _ramp(a, reach, reach * (1.0 - _EDGE_TAPER * 0.5))
-		var edge: float = minf(_ramp(t, 1.0, 1.0 - _EDGE_TAPER), side)
-		# The flare is long hair's kick, so the bottom edge keeps it.
-		var full: float = lerpf(_EDGE_LIFT_M, _scalp_key(keys, a).y, edge) \
-				+ flare * side * _ramp(y, _LONG_FLARE_TOP_Y, _LONG_FLARE_BOTTOM_Y)
-		return lerpf(-_SINK_M, full, _ramp(y, rim + _RIM_OVERLAP_M, rim))
+static func _build_scalp(keys: Array[Vector3], crown: float, hang: float,
+		flare: Array[Vector2], row_m: float = _SCALP_ROW_M) -> ArrayMesh:
+	var hairline := PackedVector2Array()
+	for deg: int in range(-180, 181):
+		var th: float = deg_to_rad(float(deg))
+		hairline.append(Vector2(th, _scalp_key(keys, absf(th)).x))
+	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+	var span := func(theta: float, _rim: float) -> Vector2:
+		return Vector2(SkaterMeshBuilder.HEAD_RADIUS, _scalp_key(keys, absf(_wrap_pi(theta))).x)
+	var lift := func(theta: float, _t: float, y: float, _rim: float, at: Vector3) -> float:
+		var edge: float = _ramp(_hairline_distance(hairline, theta, y), 0.0, _HAIRLINE_TAPER_M)
+		var own: float = lerpf(_scalp_key(keys, absf(_wrap_pi(theta))).y, crown,
+				_ramp(y, _CROWN_BLEND_Y.x, _CROWN_BLEND_Y.y))
+		return minf(lerpf(_EDGE_LIFT_M, own, edge), HairHelmetFit.room(shell, at, _out_dir(at, y)))
+	var key_th := PackedFloat32Array()
+	for k: Vector3 in keys:
+		key_th.append_array(_mirrored(0.0, k.x))
+	var kick := func(y: float) -> float: return _flare(flare, y)
+	var settle := func(strip: PackedVector3Array) -> PackedVector3Array:
+		return HairHelmetFit.drape(strip, hang, kick, shell)
+	var relax := func(grid: Array[PackedVector3Array], bare: Array[PackedVector3Array]) -> void:
+		HairHelmetFit.clear(grid, bare, shell)
 	var st := _begin()
-	_emit_shell(st, -reach, reach, 0.0, span, lift, PackedFloat32Array(),
-			PackedFloat32Array(), Rect2(), _SCALP_ROWS)
-	return _commit(st)
+	_emit_shell(st, -PI, PI, row_m, span, lift, key_th, PackedFloat32Array(),
+			Rect2(), settle, relax)
+	return st.commit()
 
 
-# `flat_lift` >= 0 replaces the outline's own lift, untapered (stubble).
-static func _build_facial(outline: Array[Vector4], flat_lift: float) -> ArrayMesh:
+# How far (m, over the head's surface) the point at (θ, y) is from the
+# hairline, sampled as (θ, height) a degree apart; held at the taper past it.
+static func _hairline_distance(hairline: PackedVector2Array, theta: float, y: float) -> float:
+	var across: float = maxf(_ball_ring_radius(y), SkaterMeshBuilder.NECK_PROFILE[0].y)
+	var reach: int = ceili(rad_to_deg(_HAIRLINE_TAPER_M / across)) + 1
+	var centre: int = roundi(rad_to_deg(_wrap_pi(theta))) + 180
+	var best: float = _HAIRLINE_TAPER_M
+	for i: int in range(centre - reach, centre + reach + 1):
+		var p: Vector2 = hairline[posmod(i, hairline.size() - 1)]
+		var d := Vector2(_wrap_pi(theta - p.x) * across, y - p.y)
+		best = minf(best, d.length())
+	return best
+
+
+# `flat_lift` >= 0 replaces the outline's own lift, untapered (stubble). `hang`
+# > 0 hangs the sheet (HairHelmetFit.hang_from), inside any face gear worn
+# over it.
+static func _build_facial(outline: Array[Vector4], flat_lift: float,
+		hang: float = 0.0) -> ArrayMesh:
 	var reach: float = deg_to_rad(outline[outline.size() - 1].x)
 	var mouth: Rect2 = SkaterFaceMesh.mouth_rect().grow(_MOUTH_MARGIN_M)
 	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
@@ -221,9 +376,9 @@ static func _build_facial(outline: Array[Vector4], flat_lift: float) -> ArrayMes
 		var own: float = flat_lift
 		if flat_lift < 0.0:
 			var a: float = absf(_wrap_pi(theta - PI))
+			var side: float = _ramp(a, reach, reach * (1.0 - _EDGE_TAPER))
 			var edge: float = minf(minf(_ramp(t, 0.0, _EDGE_TAPER),
-					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)),
-					_ramp(a, reach, reach * (1.0 - _EDGE_TAPER)))
+					_ramp(t, 1.0, 1.0 - _EDGE_TAPER)), side)
 			edge = minf(edge, _ramp(_rect_distance(mouth, face), 0.0, _MOUTH_TAPER_M))
 			own = lerpf(_EDGE_LIFT_M, _facial_key(outline, a).w
 					* lerpf(_UPPER_LIFT_SHARE, 1.0, t), edge)
@@ -234,11 +389,19 @@ static func _build_facial(outline: Array[Vector4], flat_lift: float) -> ArrayMes
 			PackedFloat32Array([mouth.position.x, mouth.end.x]), mouth.get_center().y)
 	var chin_ys: PackedFloat32Array = SkaterFaceMesh.relief_ys()
 	cut_th.append_array(_azimuths_for_x(SkaterFaceMesh.relief_xs(), chin_ys[1]))
+	for k: Vector4 in outline:
+		cut_th.append_array(_mirrored(PI, k.x))
 	var cut_y := PackedFloat32Array([mouth.position.y, mouth.end.y])
 	cut_y.append_array(chin_ys)
+	var settle := Callable()
+	if hang > 0.0:
+		var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+		settle = func(strip: PackedVector3Array) -> PackedVector3Array:
+			return HairHelmetFit.hang_from(strip, hang, shell)
 	var st := _begin()
-	_emit_shell(st, PI - reach, PI + reach, _FACIAL_ROW_M, span, lift, cut_th, cut_y, mouth)
-	return _commit(st)
+	_emit_shell(st, PI - reach, PI + reach, _FACIAL_ROW_M, span, lift, cut_th, cut_y, mouth,
+			settle)
+	return st.commit()
 
 
 static func _begin() -> SurfaceTool:
@@ -248,23 +411,19 @@ static func _begin() -> SurfaceTool:
 	return st
 
 
-static func _commit(st: SurfaceTool) -> ArrayMesh:
-	st.generate_normals()
-	return st.commit()
-
-
 # Samples the shell between azimuths th0 < th1. `span(θ, rim)` gives the
 # (top, bottom) heights at θ; `lift(θ, t, y, rim, at)` the stand-off at height
 # fraction t (0 top, 1 bottom), height y and unlifted surface point `at`.
 # `rim` is the helmet rim's height over the strip. The rows are one set of
 # heights shared by every strip, clamped into each strip's own span, so a
-# crease's row lines up across them — unless `even_rows` > 0, which spaces that
-# many rows evenly down each strip's own span instead. `cut_th` and `cut_y` add
-# grid lines, and quads whose surface centre falls in `hole` (head-local x, y)
-# are left out.
+# crease's row lines up across them. `cut_th` and `cut_y` add grid lines, and
+# quads whose surface centre falls in `hole` (head-local x, y) are left out.
+# `settle(strip)`, if given, has the last word on each column's points, and
+# `relax(grid, bare)` on the finished grid and the surface under it.
 static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 		span: Callable, lift: Callable, cut_th := PackedFloat32Array(),
-		cut_y := PackedFloat32Array(), hole := Rect2(), even_rows: int = 0) -> void:
+		cut_y := PackedFloat32Array(), hole := Rect2(), settle := Callable(),
+		relax := Callable()) -> void:
 	var cols: Array[Vector2] = _azimuth_samples(th0, th1, cut_th)
 	var thetas := PackedFloat32Array()
 	var rims := PackedFloat32Array()
@@ -280,12 +439,7 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 		spans.append(range_y)
 		y_hi = maxf(y_hi, range_y.x)
 		y_lo = minf(y_lo, range_y.y)
-	var heights := PackedFloat32Array()
-	if even_rows > 0:
-		for i: int in even_rows + 1:
-			heights.append(float(i) / float(even_rows))
-	else:
-		heights = _row_heights(y_hi, y_lo, row_m, cut_y)
+	var heights: PackedFloat32Array = _row_heights(y_hi, y_lo, row_m, cut_y)
 	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
 	var grid: Array[PackedVector3Array] = []
 	var bare: Array[PackedVector3Array] = []
@@ -295,13 +449,15 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 		var top: float = spans[k].x
 		var bottom: float = spans[k].y
 		for h: float in heights:
-			var y: float = lerpf(top, bottom, h) if even_rows > 0 else clampf(h, bottom, top)
+			var y: float = clampf(h, bottom, top)
 			var t: float = (top - y) / maxf(top - bottom, 1e-6)
 			var at: Vector3 = _point(cols[k], y, 0.0)
 			under.append(at)
 			strip.append(_point(cols[k], y, lift.call(thetas[k], t, y, rims[k], at)))
-		grid.append(strip)
+		grid.append(settle.call(strip) if settle.is_valid() else strip)
 		bare.append(under)
+	if relax.is_valid():
+		relax.call(grid, bare)
 	for k: int in grid.size() - 1:
 		for i: int in heights.size() - 1:
 			if hole.has_area():
@@ -309,6 +465,16 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 				if hole.has_point(Vector2(mid.x, mid.y)):
 					continue
 			_quad(st, grid[k][i], grid[k + 1][i], grid[k + 1][i + 1], grid[k][i + 1])
+	# Where the bottom edge stands off the surface under it (a hanging cut, a
+	# long beard), it is closed back to that surface, or a camera below sees up
+	# into the shell; so are the side edges of a shell that does not wrap round.
+	var last: int = heights.size() - 1
+	for k: int in grid.size() - 1:
+		_close(st, grid[k][last], grid[k + 1][last], bare[k + 1][last], bare[k][last])
+	if th1 - th0 < TAU - 1e-4:
+		for k: int in [0, grid.size() - 1]:
+			for i: int in last:
+				_close(st, grid[k][i], grid[k][i + 1], bare[k][i + 1], bare[k][i])
 
 
 # Shared row heights from y_hi down to y_lo: every crease of the head ball's
@@ -435,9 +601,16 @@ static func _point(c: Vector2, y: float, lift: float) -> Vector3:
 	var dir: Vector3 = w.normalized()
 	var reach: float = maxf(w.length() * _ball_ring_radius(y), _neck_reach(dir, y))
 	var surface: Vector3 = centre + dir * reach + Vector3(0.0, y, 0.0)
+	return surface + _out_dir(surface, y) * lift
+
+
+# The way a lift stands a surface point at height y off: radial from the head's
+# centre, turning horizontal down the neck.
+static func _out_dir(surface: Vector3, y: float) -> Vector3:
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
 	var radial: Vector3 = (surface - centre).normalized()
-	var out: Vector3 = radial.lerp(dir, _ramp(y, _NECK_BLEND_TOP_Y, _NECK_BLEND_BOTTOM_Y))
-	return surface + out.normalized() * lift
+	var across := Vector3(surface.x - centre.x, 0.0, surface.z - centre.z).normalized()
+	return radial.lerp(across, _ramp(y, _NECK_BLEND_TOP_Y, _NECK_BLEND_BOTTOM_Y)).normalized()
 
 
 # The ball's ring radius at height y, linear between its rings as the facets are.
@@ -473,23 +646,39 @@ static func _neck_reach(dir: Vector3, y: float) -> float:
 	return -b + sqrt(maxf(b * b - offset.length_squared() + rho * rho, 0.0))
 
 
-# A quad wound to face away from the head's centre.
+# The quad from a shell edge (a, b) back to the surface under it (c, d), where
+# the edge stands off that surface by more than _CLOSE_GAP_M.
+static func _close(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+	if maxf(a.distance_to(d), b.distance_to(c)) > _CLOSE_GAP_M:
+		_quad(st, a, b, c, d)
+
+
+# A quad wound to face away from the head's centre, both its triangles lit by
+# the normal of the quad as a whole (across its diagonals): a cell bent across
+# a diagonal would otherwise show as two differently lit triangles.
 static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	var out: Vector3 = (a + b + c + d) * 0.25 - Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
-	_tri(st, a, b, c, out)
-	_tri(st, a, c, d, out)
-
-
-# Godot's front faces are clockwise: the normal is (c − a) × (b − a).
-# Rows clamped into a strip's span collapse at its edges; their slivers go.
-static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, out: Vector3) -> void:
-	var n: Vector3 = (c - a).cross(b - a)
+	var n: Vector3 = (c - a).cross(d - b)
 	if n.length_squared() < 1e-14:
 		return
+	n = n.normalized()
 	if n.dot(out) < 0.0:
+		n = -n
+	_tri(st, a, b, c, n)
+	_tri(st, a, c, d, n)
+
+
+# Godot's front faces are clockwise: the face normal is (c − a) × (b − a).
+# Rows clamped into a strip's span collapse at its edges; their slivers go.
+static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, n: Vector3) -> void:
+	var face: Vector3 = (c - a).cross(b - a)
+	if face.length_squared() < 1e-14:
+		return
+	if face.dot(n) < 0.0:
 		var t: Vector3 = b
 		b = c
 		c = t
+	st.set_normal(n)
 	st.set_uv(Vector2.ZERO)
 	st.add_vertex(a)
 	st.add_vertex(b)
@@ -513,6 +702,22 @@ static func _facial_key(keys: Array[Vector4], a: float) -> Vector4:
 		if deg <= keys[i + 1].x:
 			return keys[i].lerp(keys[i + 1], (deg - keys[i].x) / (keys[i + 1].x - keys[i].x))
 	return keys[keys.size() - 1]
+
+
+# Azimuths `deg` either side of `about`: a key's column on both sides, so the
+# outline's corners are grid lines rather than smeared across a quad.
+static func _mirrored(about: float, deg: float) -> PackedFloat32Array:
+	var r: float = deg_to_rad(deg)
+	return PackedFloat32Array([about - r, about + r])
+
+
+static func _flare(flare: Array[Vector2], y: float) -> float:
+	if flare.is_empty() or y >= flare[0].x:
+		return 0.0
+	for i: int in flare.size() - 1:
+		if y >= flare[i + 1].x:
+			return lerpf(flare[i].y, flare[i + 1].y, _ramp(y, flare[i].x, flare[i + 1].x))
+	return flare[flare.size() - 1].y
 
 
 # 0 at `from`, 1 at `to`, smoothstepped between; either order.

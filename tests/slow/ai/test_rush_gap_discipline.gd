@@ -54,7 +54,7 @@ extends GutTest
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SECS: float = 4.0
 # The stalled carrier is 20 m off: a set approach and the gap-up after it.
 const STALLED_SECS: float = 6.0

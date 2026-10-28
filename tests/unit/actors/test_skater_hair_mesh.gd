@@ -2,8 +2,7 @@ extends GutTest
 
 # Hair rides between two shells it must not cross: the head under it and the
 # helmet and face gear over it. A style tuned to read better pokes through the
-# visor or the shell without anything else noticing, and a scalp whose top edge
-# clears the rim shows as a hairline drawn on the helmet's underside.
+# visor or the shell without anything else noticing.
 
 const _CENTRE := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
 
@@ -21,13 +20,32 @@ func _scalps() -> Array[ArrayMesh]:
 	return out
 
 
+const _FACES: Array[int] = [GearModelRegistry.FACE_NONE, GearModelRegistry.FACE_VISOR,
+	GearModelRegistry.FACE_CAGE, GearModelRegistry.FACE_FISHBOWL]
+
+
 func _facials() -> Array[ArrayMesh]:
-	var out: Array[ArrayMesh] = [SkaterHairMesh.shared_brows()]
+	var out: Array[ArrayMesh] = []
 	for style: int in HairStyleRegistry.facial_count():
 		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
 		if mesh != null:
 			out.append(mesh)
 	return out
+
+
+# How far off the helmet's centre a face piece stands, and the height of its
+# lower edge, below which it is open.
+func _gear_bound(face: int) -> Vector2:
+	match face:
+		GearModelRegistry.FACE_VISOR:
+			return Vector2(SkaterMeshBuilder._FACE_SHIELD_RADIUS, SkaterMeshBuilder
+					._FACE_SHIELD_RADIUS * cos(PI * SkaterMeshBuilder._VISOR_V1))
+		GearModelRegistry.FACE_CAGE:
+			return Vector2(SkaterMeshBuilder._CAGE_RADIUS,
+					SkaterMeshBuilder._CAGE_RADIUS * cos(PI * SkaterMeshBuilder._CAGE_V1))
+		_:
+			return Vector2(SkaterMeshBuilder._FACE_SHIELD_RADIUS, SkaterMeshBuilder
+					._FACE_SHIELD_RADIUS * cos(PI * SkaterMeshBuilder._FISHBOWL_V1))
 
 
 func test_every_style_but_the_bare_ones_has_geometry() -> void:
@@ -44,39 +62,87 @@ func test_every_style_but_the_bare_ones_has_geometry() -> void:
 			assert_null(mesh, "no facial hair grows nothing")
 		else:
 			assert_not_null(mesh, "facial style %d has a shell" % style)
+	assert_eq(SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_LONG),
+			SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_SHAGGY),
+			"a retired style is drawn as its stand-in")
 	assert_null(SkaterHairMesh.shared_hair(99), "a forged index renders bald")
-	assert_null(SkaterHairMesh.shared_facial_hair(-1), "a forged index renders clean")
+	assert_null(SkaterHairMesh.shared_facial_hair(-1),
+			"a forged index renders clean")
 
 
-# Above the rim the scalp has to be inside the head, which is inside the helmet;
-# anywhere it stood proud there would be a hairline on the shell's inside.
-func test_the_scalp_hides_its_top_edge_inside_the_head() -> void:
+# Under the helmet the scalp fills the room between the head and the shell, and
+# no further: along the ray from the helmet's centre through any vertex above
+# the rim, the shell is farther out than the hair. (Below the rim hair may
+# flip out past the shell's radius; the shell is not there.)
+func test_the_scalp_stays_inside_the_helmet_shell() -> void:
+	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
 	for mesh: ArrayMesh in _scalps():
-		var worst: float = -1.0
+		var covered: int = 0
+		var worst: float = INF
 		for v: Vector3 in _verts(mesh):
-			var rim: float = SkaterMeshBuilder.helmet_rim_y(atan2(v.x, v.z))
-			if v.y > rim + 0.012:
-				worst = maxf(worst, (v - _CENTRE).length())
-		assert_gt(worst, 0.0, "the scalp carries on above the rim")
-		assert_lt(worst, SkaterMeshBuilder.HEAD_RADIUS,
-				"hidden scalp reaches %.4f m off the head's centre" % worst)
+			if v.y < SkaterMeshBuilder.helmet_rim_y(atan2(v.x, v.z)):
+				continue
+			var dir: Vector3 = v.normalized()
+			var room: float = INF
+			for i: int in range(0, shell.size(), 3):
+				var hit: Variant = Geometry3D.ray_intersects_triangle(Vector3.ZERO, dir,
+						shell[i], shell[i + 1], shell[i + 2])
+				if hit != null:
+					room = minf(room, (hit as Vector3).length())
+			if room == INF:
+				continue
+			covered += 1
+			worst = minf(worst, room - v.length())
+		assert_gt(covered, 0, "the scalp carries on under the shell")
+		assert_gt(worst, 0.001, "the scalp comes within %.4f m of the shell" % worst)
+
+
+# Corners inside the shell are not enough: a face whose upper corner is tucked
+# under the rim and whose lower one flips out below it cuts through the shell's
+# lowest band. No edge of any scalp triangle may cross a face of the shell.
+func test_no_scalp_edge_crosses_the_helmet_shell() -> void:
+	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+	for style: int in HairStyleRegistry.hair_count():
+		var mesh: ArrayMesh = SkaterHairMesh.shared_hair(style)
+		if mesh == null or HairStyleRegistry.is_retired_hair(style):
+			continue
+		var tris: PackedVector3Array = _verts(mesh)
+		var crossings: int = 0
+		var first := ""
+		for t: int in range(0, tris.size(), 3):
+			for e: int in 3:
+				var a: Vector3 = tris[t + e]
+				var b: Vector3 = tris[t + (e + 1) % 3]
+				for s: int in range(0, shell.size(), 3):
+					if Geometry3D.segment_intersects_triangle(a, b,
+							shell[s], shell[s + 1], shell[s + 2]) != null:
+						crossings += 1
+						if first.is_empty():
+							first = "%s to %s" % [a, b]
+		assert_eq(crossings, 0, "hair style %d crosses the shell %d times, first %s"
+				% [style, crossings, first])
 
 
 # The face gear rides a sphere a centimetre or so off the head (the same bound
-# test_skater_face_mesh.gd holds the face to). Facial hair lives entirely under
-# it; scalp hair only meets it at the sideburns, inside the fishbowl's footprint
-# — the widest and deepest of the three pieces.
+# test_skater_face_mesh.gd holds the face to), down to its lower edge. Facial
+# hair lives inside every piece above that piece's edge, and may hang out past
+# it below; scalp hair only meets it at the sideburns, inside the
+# fishbowl's footprint — the widest and deepest of the three pieces.
 func test_hair_stays_inside_the_face_gear() -> void:
+	for face: int in _FACES.slice(1):
+		var bound: Vector2 = _gear_bound(face)
+		var worn: Array[ArrayMesh] = [SkaterHairMesh.shared_brows()]
+		worn.append_array(_facials())
+		for mesh: ArrayMesh in worn:
+			var worst: float = 0.0
+			for v: Vector3 in _verts(mesh):
+				if v.y > bound.y:
+					worst = maxf(worst, v.length())
+			assert_lt(worst, bound.x - 0.001,
+					"facial hair under face %d reaches %.4f m from the helmet centre" % [face, worst])
 	var gear_r: float = minf(SkaterMeshBuilder._CAGE_RADIUS,
 			SkaterMeshBuilder._FACE_SHIELD_RADIUS) - 0.001
-	for mesh: ArrayMesh in _facials():
-		var worst: float = 0.0
-		for v: Vector3 in _verts(mesh):
-			worst = maxf(worst, v.length())
-		assert_lt(worst, gear_r,
-				"facial hair reaches %.4f m from the helmet centre" % worst)
-	var gear_floor: float = SkaterMeshBuilder._FACE_SHIELD_RADIUS \
-			* cos(PI * SkaterMeshBuilder._FISHBOWL_V1)
+	var gear_floor: float = _gear_bound(GearModelRegistry.FACE_FISHBOWL).y
 	for mesh: ArrayMesh in _scalps():
 		var worst: float = 0.0
 		for v: Vector3 in _verts(mesh):
@@ -89,15 +155,13 @@ func test_hair_stays_inside_the_face_gear() -> void:
 
 func test_facial_hair_leaves_the_mouth_bare() -> void:
 	var mouth: Vector3 = SkaterFaceMesh._MOUTH   # (y, half width, half height)
-	for style: int in HairStyleRegistry.facial_count():
-		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
-		if mesh == null:
-			continue
+	var facials: Array[ArrayMesh] = _facials()
+	for i: int in facials.size():
 		var covering: int = 0
-		for v: Vector3 in _verts(mesh):
+		for v: Vector3 in _verts(facials[i]):
 			if absf(v.x) < mouth.y and absf(v.y - mouth.x) < mouth.z and v.z < 0.0:
 				covering += 1
-		assert_eq(covering, 0, "facial style %d keeps off the mouth" % style)
+		assert_eq(covering, 0, "facial shell %d keeps off the mouth" % i)
 
 
 # Where the hair shows it must stand off the skin, or the head shows through it.
@@ -110,7 +174,8 @@ func test_visible_hair_stands_off_the_head() -> void:
 		if v.z > 0.05 and v.y < -0.105:
 			head_far = maxf(head_far, v.z)
 	for style: int in [HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.HAIR_MEDIUM,
-			HairStyleRegistry.HAIR_LONG]:
+			HairStyleRegistry.HAIR_MULLET,
+			HairStyleRegistry.HAIR_SHAGGY]:
 		var reach: float = 0.0
 		for v: Vector3 in _verts(SkaterHairMesh.shared_hair(style)):
 			if absf(v.x) < 0.01 and v.y < -0.105 and v.y > -0.118:
@@ -182,11 +247,9 @@ func _reach(tris: PackedVector3Array, dir: Vector3) -> float:
 # as a bare patch.
 func test_no_skin_shows_through_the_facial_hair() -> void:
 	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head_ball(), _CENTRE)
-	for style: int in HairStyleRegistry.facial_count():
-		var mesh: ArrayMesh = SkaterHairMesh.shared_facial_hair(style)
-		if mesh == null:
-			continue
-		var sheet: PackedVector3Array = _tris(mesh, Vector3.ZERO)
+	var facials: Array[ArrayMesh] = _facials()
+	for style: int in facials.size():
+		var sheet: PackedVector3Array = _tris(facials[style], Vector3.ZERO)
 		var hits: int = 0
 		for i: int in 24:
 			for j: int in 12:
@@ -198,11 +261,13 @@ func test_no_skin_shows_through_the_facial_hair() -> void:
 					continue
 				hits += 1
 				assert_gt(hair, _reach(skin, dir),
-						"facial style %d clears the skin at θ %.2f, y %.3f" % [style, theta, y])
-		assert_gt(hits, 4, "facial style %d was sampled" % style)
+						"facial shell %d clears the skin at θ %.2f, y %.3f" % [style, theta, y])
+		assert_gt(hits, 4, "facial shell %d was sampled" % style)
 
 
-func test_no_skin_shows_through_the_scalp_below_the_rim() -> void:
+# Every style but bald is a whole head of hair, as it would be with the helmet
+# off: from the crown down past the rim all round the back and sides.
+func test_no_skin_shows_through_the_scalp() -> void:
 	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head_ball(), _CENTRE)
 	for style: int in HairStyleRegistry.hair_count():
 		var mesh: ArrayMesh = SkaterHairMesh.shared_hair(style)
@@ -211,23 +276,25 @@ func test_no_skin_shows_through_the_scalp_below_the_rim() -> void:
 		var sheet: PackedVector3Array = _tris(mesh, Vector3.ZERO)
 		var hits: int = 0
 		for i: int in 24:
-			for j: int in 8:
-				var theta: float = deg_to_rad(lerpf(-120.0, 120.0, float(i) / 23.0))
-				var y: float = lerpf(-0.04, -0.12, float(j) / 7.0)
-				if y > SkaterMeshBuilder.helmet_rim_y(theta) - 0.004:
+			for j: int in 12:
+				var theta: float = deg_to_rad(lerpf(-177.3, 177.3, float(i) / 23.0))
+				var y: float = lerpf(0.13, -0.02, float(j) / 11.0)
+				var below_rim: bool = y < SkaterMeshBuilder.helmet_rim_y(theta) - 0.004
+				# The crown all round, and below it the back and sides.
+				if y < 0.09 and absf(wrapf(theta, -PI, PI)) > deg_to_rad(110.0):
 					continue
 				var dir: Vector3 = _toward(theta, y)
 				var hair: float = _reach(sheet, dir)
 				var head: float = _reach(skin, dir)
-				if hair == 0.0 or head == 0.0:
+				if head == 0.0:
 					continue
 				hits += 1
-				assert_gt(hair, head,
-						"hair style %d clears the skin at θ %.2f, y %.3f" % [style, theta, y])
-		assert_gt(hits, 10, "hair style %d was sampled" % style)
+				assert_gt(hair, head, "hair style %d covers the skin at θ %.2f, y %.3f%s"
+						% [style, theta, y, " (below the rim)" if below_rim else ""])
+		assert_gt(hits, 100, "hair style %d was sampled" % style)
 
 
-func test_stubble_is_translucent_and_hair_is_not() -> void:
+func test_stubble_and_a_buzz_are_translucent_and_hair_is_not() -> void:
 	var hair: StandardMaterial3D = SkaterHairMesh.make_material(1, false)
 	assert_eq(hair.transparency, BaseMaterial3D.TRANSPARENCY_DISABLED, "hair is opaque")
 	assert_eq(hair.cull_mode, BaseMaterial3D.CULL_DISABLED, "hair sheets render two-sided")
@@ -236,3 +303,5 @@ func test_stubble_is_translucent_and_hair_is_not() -> void:
 	assert_almost_eq(stubble.albedo_color.a, SkaterHairMesh.STUBBLE_ALPHA, 0.001)
 	assert_true(SkaterHairMesh.is_translucent(HairStyleRegistry.FACIAL_STUBBLE))
 	assert_false(SkaterHairMesh.is_translucent(HairStyleRegistry.FACIAL_BEARD))
+	assert_true(SkaterHairMesh.is_scalp_translucent(HairStyleRegistry.HAIR_BUZZ))
+	assert_false(SkaterHairMesh.is_scalp_translucent(HairStyleRegistry.HAIR_SHORT))

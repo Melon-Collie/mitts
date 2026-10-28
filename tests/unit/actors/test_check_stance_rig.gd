@@ -11,7 +11,7 @@ extends GutTest
 # plumbing the rule cannot see — handedness → stick side → which cap loads.
 
 const _SCENE: String = "res://Scenes/Skater.tscn"
-const _DT: float = 1.0 / 120.0
+const _DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # Enough ticks for the lead ease to converge (_CHECK_LEAD_SPEED is 5/s).
 const _TICKS: int = 60
 # A representative commit texture: the stance's own forward lean, plus a roll

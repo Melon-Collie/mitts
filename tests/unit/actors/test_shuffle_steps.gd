@@ -12,7 +12,7 @@ extends GutTest
 # Both are counted only while the body moves: the blade seat's own settle after
 # a sideways move (SkaterLegRig) is not a step.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const LegBone = SkaterMeshBuilder.LegBone
 const SETTLE_TICKS: int = 60
 const PRESS_TICKS: int = 6

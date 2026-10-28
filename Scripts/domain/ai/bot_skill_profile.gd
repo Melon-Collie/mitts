@@ -1,6 +1,8 @@
 class_name BotSkillProfile
 extends RefCounted
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # Per-difficulty bundle of deterministic bot-skill knobs. Every knob rides one of
 # the three difficulty axes — PRECISION / PACE / COGNITION; the rules that keep
 # them separate (and why aim slew is not a tier knob) are in
@@ -26,9 +28,8 @@ enum Difficulty {
 var carrier_reaction_delay_s: float
 
 # Physics ticks between full decision re-evaluations during non-press states
-# (press states always run full-rate). Higher = laggier reads. The one knob not
-# denominated in seconds: calibrated at the 120 Hz sim, so it rescales linearly
-# if the tick rate ever moves.
+# (press states always run full-rate). Higher = laggier reads. Authored in
+# seconds and rounded to whole ticks, so a tier keeps its cadence at any tick.
 var dispatch_period_ticks: int
 
 # Execution error on SHOT releases (radians of release-direction error; one
@@ -141,7 +142,7 @@ var blocks_shots: bool
 
 
 func _init(p_carrier_reaction_delay_s: float,
-		p_dispatch_period_ticks: int,
+		p_dispatch_period_s: float,
 		p_shot_aim_error_rad: float, p_pass_aim_error_rad: float,
 		p_shot_timing_error_s: float,
 		p_pursuit_standoff_m: float, p_pass_speed_scale: float,
@@ -152,7 +153,7 @@ func _init(p_carrier_reaction_delay_s: float,
 		p_reads_receiver_commitment: bool,
 		p_lifts_sticks: bool, p_ties_sticks: bool, p_blocks_shots: bool) -> void:
 	carrier_reaction_delay_s = p_carrier_reaction_delay_s
-	dispatch_period_ticks = p_dispatch_period_ticks
+	dispatch_period_ticks = maxi(1, roundi(p_dispatch_period_s * _PhysicsConstants.PHYSICS_TICK))
 	shot_aim_error_rad = p_shot_aim_error_rad
 	pass_aim_error_rad = p_pass_aim_error_rad
 	shot_timing_error_s = p_shot_timing_error_s
@@ -172,7 +173,7 @@ func _init(p_carrier_reaction_delay_s: float,
 
 
 # Hard reads as a very strong human rather than a frame-perfect robot: ~50 ms
-# reaction, dispatch every 2 ticks, a flat ±0.6° of execution error on both
+# reaction, re-deciding every ~17 ms, a flat ±0.6° of execution error on both
 # releases, and 0.10 s of release slop — so the doorstep lateral beat is still
 # hunted but a window in the ~0.05–0.10 s band is a coin flip the goalie
 # sometimes robs. Pace knobs at their no-op baseline, every cognition gate
@@ -180,7 +181,7 @@ func _init(p_carrier_reaction_delay_s: float,
 #
 # Tune carrier_reaction_delay_s UP if it matches passes too readily.
 static func hard() -> BotSkillProfile:
-	return BotSkillProfile.new(0.05, 2, 0.01, 0.01, 0.10,
+	return BotSkillProfile.new(0.05, 1.0 / 60.0, 0.01, 0.01, 0.10,
 			0.0, 1.0, 1.0, 1.0,
 			true, true, true, true, true, true, true, true, true)
 
@@ -197,7 +198,7 @@ static func hard() -> BotSkillProfile:
 # own motion brings the puck transiently into contest range while the human
 # still gets his beat.
 static func normal() -> BotSkillProfile:
-	return BotSkillProfile.new(0.22, 6, 0.04, 0.015, 0.16,
+	return BotSkillProfile.new(0.22, 0.05, 0.04, 0.015, 0.16,
 			0.75, 0.85, 0.65, 0.6,
 			true, true, true, true, true, true, true, true, true)
 
@@ -215,7 +216,7 @@ static func normal() -> BotSkillProfile:
 # Cognition: all gates closed, so the cutback to the middle, the straight-line
 # poke-check, and the cross-crease 2-on-1 glory feed all genuinely work.
 static func easy() -> BotSkillProfile:
-	return BotSkillProfile.new(0.34, 9, 0.055, 0.0225, 0.24,
+	return BotSkillProfile.new(0.34, 0.075, 0.055, 0.0225, 0.24,
 			3.0, 0.75, 0.0, 0.2,
 			false, false, false, false, false, false, false, false, false)
 

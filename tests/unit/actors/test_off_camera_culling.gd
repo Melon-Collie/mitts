@@ -4,7 +4,7 @@ extends GutTest
 # but nothing gameplay reads may depend on whether he is drawn: a held pose's
 # crouch moves the gameplay frame, so the gait keeps computing off camera.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a rendered frame, not the tick
 const UpperBone = SkaterMeshBuilder.UpperBone
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")

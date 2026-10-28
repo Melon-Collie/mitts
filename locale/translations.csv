@@ -114,11 +114,17 @@ HAIR_STYLE_SHORT,Short,Corto
 HAIR_STYLE_MEDIUM,Medium,Medio
 HAIR_STYLE_LONG,Long,Largo
 HAIR_STYLE_BALD,Bald,Calvo
+HAIR_STYLE_MULLET,Mullet,Mullet
+HAIR_STYLE_BUZZ,Buzz cut,Rapado
+HAIR_STYLE_SHAGGY,Shaggy,Desgreñado
+HAIR_STYLE_FLOW,Flow,Melena
 FACIAL_HAIR_NONE,None,Ninguna
 FACIAL_HAIR_STUBBLE,Stubble,Barba de días
 FACIAL_HAIR_MUSTACHE,Mustache,Bigote
 FACIAL_HAIR_GOATEE,Goatee,Perilla
 FACIAL_HAIR_BEARD,Full beard,Barba completa
+FACIAL_HAIR_HORSESHOE,Horseshoe,Herradura
+FACIAL_HAIR_LONG_BEARD,Long beard,Barba larga
 HAIR_COLOR_DARK_BROWN,Dark brown,Castaño oscuro
 HAIR_COLOR_BLACK,Black,Negro
 HAIR_COLOR_BROWN,Brown,Castaño
@@ -359,7 +365,7 @@ OPTIONS_VIDEO_NOTE_UPSCALING,"How a Render Scale below 100% is scaled back up. B
 OPTIONS_VIDEO_NOTE_ANTI_ALIASING,"Smooths jagged edges. MSAA 2x is the balanced default; 4x and 8x cost much more for little visible difference. FXAA is cheap but blurs, and TAA is smooth but can smear in motion.","Suaviza los bordes dentados. «MSAA 2x» es el equilibrio por defecto; «4x» y «8x» cuestan mucho más con poca diferencia visible. «FXAA» es barato pero desenfoca, y «TAA» es suave pero puede dejar estela en movimiento."
 OPTIONS_VIDEO_NOTE_GI,"SDFGI bounces light around the arena for softer, richer lighting. One of the most expensive effects, and off by default.",«SDFGI» hace rebotar la luz por el pabellón para una iluminación más suave y rica. Es uno de los efectos más caros y está desactivado por defecto.
 OPTIONS_VIDEO_NOTE_SHADOWS,"Eight ceiling lights cast shadows, and each one redraws the arena every frame while players move. Medium keeps four and Low keeps two: shadows get lighter, and the ice looks almost the same.","Ocho luces del techo proyectan sombras, y cada una vuelve a dibujar el pabellón en cada fotograma mientras los jugadores se mueven. «Medium» mantiene cuatro y «Low» dos: las sombras se aclaran y el hielo se ve casi igual."
-OPTIONS_VIDEO_NOTE_CROWD,Fans in the stands. Low drops the upper deck and Off hides the stands.,Aficionados en las gradas. «Low» quita la grada superior y «Off» oculta las gradas.
+OPTIONS_VIDEO_NOTE_CROWD,Fans in the stands. Low draws every fan with a simpler figure and Off empties the seats.,Aficionados en las gradas. «Low» dibuja a todos con una figura más simple y «Off» vacía las gradas.
 OPTIONS_VIDEO_NOTE_ICE_SCRATCHES,Skate marks that build up on the ice during a period.,Marcas de patines que se acumulan en el hielo durante un periodo.
 OPTIONS_VIDEO_NOTE_PUCK_SHADOW,"The soft shadow under the puck that shows how high it is in the air. Cheap, and worth keeping for reading shots and passes.",La sombra suave bajo el disco que muestra a qué altura va por el aire. Es barata y vale la pena mantenerla para leer tiros y pases.
 OPTIONS_VIDEO_NOTE_PLAYER_SHADOWS,Shadows under the skaters. Each skater's shadow is one cheap draw per light.,Sombras bajo los patinadores. La sombra de cada patinador es un único dibujo barato por luz.

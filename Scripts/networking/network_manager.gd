@@ -317,7 +317,7 @@ var _world_state_provider: Callable = Callable()
 # local player spawns; the input-tick poll uses it to gather a batch without
 # holding a controller reference.
 var _input_batch_provider: Callable = Callable()
-# Reused across the 120 Hz input sends: the provider fills the Array, the buffer
+# Reused across the per-tick input sends: the provider fills the Array, the buffer
 # is resized to the exact packet size and written at offsets. Both are consumed
 # entirely within one send.
 var _input_batch_scratch: Array[InputState] = []
@@ -331,7 +331,7 @@ var _clock_sync: RefCounted = null  # ClockSync instance, client only
 # which stays the clock for RENDER instants. See CLAUDE.md in this directory,
 # "Two clocks, and the input path uses the tick one", for why a wall-derived
 # clock cannot stamp a per-tick event.
-const _SIM_SLEW_S: float = 0.0001   # 0.1 ms/tick = 12 ms/s of drift tracking
+const _SIM_SLEW_S: float = 0.0001   # 0.1 ms/tick = 9 ms/s of drift tracking at 90 Hz
 const _SIM_RESYNC_S: float = 0.1    # beyond this, snap: NTP warmup, not drift
 var _sim_ticks: int = 0
 var _sim_offset: float = 0.0
@@ -341,7 +341,7 @@ var _sim_started: bool = false
 # connections and their seq watermarks alive, and restarting the seq would make
 # them silently drop every event of the next match.
 var _event_log: SnapshotEventLog = SnapshotEventLog.new()
-# Stored once so the 120 Hz client receive path doesn't allocate a bound
+# Stored once so the client receive path doesn't allocate a bound
 # Callable per packet.
 var _snapshot_event_dispatch: Callable = _dispatch_snapshot_event
 var _session_start_ms: int = 0
@@ -664,7 +664,7 @@ func _on_steam_lobby_joined(_lobby_id: int, owner_steam_id: int) -> void:
 
 # Disable Steam's Nagle batching so each send flushes immediately instead of
 # being coalesced up to the Nagle timer (~ms scale). Steam's default coalescing
-# clumps the steady 120 Hz world-state stream into bursts, which the client sees
+# clumps the steady world-state stream into bursts, which the client sees
 # as irregular arrivals → interpolation-buffer dry-outs → extrapolation snaps on
 # remote actors. Applied to both peers: the host's flag governs its world-state
 # sends, the client's governs its input-batch sends. Guarded by has_method so a
@@ -966,7 +966,7 @@ func _notification(what: int) -> void:
 func _physics_process(_delta: float) -> void:
 	_advance_sim_tick()
 	# Single source of truth for the host-side integer tick counter. Increments
-	# at the engine's physics rate (120 Hz). AI agents salt their per-tick RNG
+	# at the engine's physics rate (Constants.PHYSICS_TICK). AI agents salt their per-tick RNG
 	# with this value; consumers must tolerate the counter being zero before
 	# the host starts ticking and must not assume monotonicity across host
 	# transfers (Phase 1 has no host transfer support anyway).
@@ -1083,8 +1083,8 @@ func set_broadcast_rate(hz: float) -> void:
 	state_delta = 1.0 / maxf(hz, 1.0)
 	# `_physics_process` fires the broadcast every Nth physics tick. Round to
 	# the nearest integer so any hz that doesn't divide PHYSICS_TICK evenly
-	# (5, 10, 20, 30, 40, 48, 60, 80, 120) still produces the closest cadence.
-	# At 120 Hz → every tick; at 60 Hz → every 2nd tick.
+	# still produces the closest cadence.
+	# At PHYSICS_TICK Hz → every tick; at half of it → every 2nd tick.
 	_state_tick_divisor = maxi(int(round(float(Constants.PHYSICS_TICK) / maxf(hz, 1.0))), 1)
 	# Reset the counter so the new cadence starts cleanly from the next tick.
 	_state_tick_counter = 0
@@ -1182,7 +1182,7 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 	_pending_handshake.erase(sender_id)
 	_peer_handedness[sender_id] = is_left_handed
 	_peer_steam_ids[sender_id] = steam_id
-	var sanitized_name: String = player_name.strip_edges().left(10)
+	var sanitized_name: String = player_name.strip_edges().left(NameFilter.MAX_LENGTH)
 	_peer_names[sender_id] = sanitized_name if NameFilter.is_alphanumeric(sanitized_name) and NameFilter.is_clean(sanitized_name) else "Player"
 	_peer_numbers[sender_id] = clampi(jersey_number, 0, 99)
 	# v4 builds have no power economy to validate — every axis is lateral, so
@@ -1458,7 +1458,7 @@ func receive_world_state(data: PackedByteArray) -> void:
 		return
 	# Branch rather than build a closure per packet — same reasoning as
 	# receive_input_batch: with the sim disabled, send() just calls straight
-	# through, so the closure and its args Array were pure waste at 60 Hz.
+	# through, so the closure and its args Array were pure waste at the broadcast rate.
 	if NetworkSimManager.enabled:
 		NetworkSimManager.send(_apply_world_state, [data], false)
 	else:
@@ -1481,7 +1481,7 @@ func _apply_world_state(s: PackedByteArray) -> void:
 		#
 		# Raw inter-arrival gap histogram: distinguishes Steam Nagle
 		# clumping (bimodal — a cluster of near-0 gaps then a big one)
-		# from smooth path/relay jitter (spread around the 8.3ms interval).
+		# from smooth path/relay jitter (spread around the broadcast interval).
 		NetworkTelemetry.record_ws_arrival_gap(gap * 1000.0)
 	_last_ws_arrival_time = now
 	# PDV delay vs the synced host clock, off the world-state header's
@@ -2621,22 +2621,25 @@ func _compute_target_interpolation_delay() -> float:
 	var target: float = rtt_half + broadcast_interval + jitter_margin
 	return clampf(target, maxf(rtt_half + broadcast_interval, 0.016), 0.200)
 
+const _INTERP_UP_PER_S: float = 0.6
+const _INTERP_DOWN_PER_S: float = 0.09
+
 func adapt_interpolation_delay(current: float) -> float:
 	var target: float = get_target_interpolation_delay()
 	var change: float = lerpf(current, target, 0.15) - current
 	# Asymmetric clamp: react fast to sustained jitter, relax gently from one-offs.
-	# Effective recovery rate = per-packet × broadcast rate. At the current 60Hz:
-	#   +10ms/packet up: 600ms/sec, catches a 150ms sustained RTT spike in ~250ms.
-	#     Without this aggressive up-rate, extrapolation fires repeatedly on all
-	#     remote skaters during the catch-up window (visible micro-stutter).
-	#   -1.5ms/packet down: 90ms/sec, recovers a 60ms buffer over-inflation in
-	#     ~660ms — inside the industry norm band (~80-150 ms/sec). Faster risks
-	#     undershoot if the jitter returns inside the recovery window.
-	# NOTE: these are PER-PACKET steps, so halving STATE_RATE halves both rates.
-	# If the 60Hz up-rate proves too slow on a jittery link the canary is
-	# extrapolation_pct climbing after RTT spikes — raise the up-clamp, don't
+	# Stepped once per packet, so the rates are per second divided by STATE_RATE:
+	#   up 600 ms/s catches a 150ms sustained RTT spike in ~250ms. Without this
+	#     aggressive up-rate, extrapolation fires repeatedly on all remote skaters
+	#     during the catch-up window (visible micro-stutter).
+	#   down 90 ms/s recovers a 60ms buffer over-inflation in ~660ms — inside the
+	#     industry norm band (~80-150 ms/sec). Faster risks undershoot if the
+	#     jitter returns inside the recovery window.
+	# If the up-rate proves too slow on a jittery link the canary is
+	# extrapolation_pct climbing after RTT spikes — raise the up-rate, don't
 	# re-raise the broadcast rate.
-	return current + clampf(change, -0.0015, 0.010)
+	return current + clampf(change, -_INTERP_DOWN_PER_S / Constants.STATE_RATE,
+			_INTERP_UP_PER_S / Constants.STATE_RATE)
 
 # ── Shared interpolation delay ──────────────────────────────────────────────
 # One delay drives every remote interpolator (remote skaters, loose puck,

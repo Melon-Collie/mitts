@@ -24,7 +24,7 @@ const _FOOT_R: int = SkaterMeshBuilder.LegBone.FOOT_R
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const State = SkaterStateMachine.State
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 
 var _skater: Skater = null
 var _coord: SkaterSkatingCoordinator = null

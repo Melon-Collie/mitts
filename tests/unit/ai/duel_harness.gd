@@ -16,7 +16,7 @@ extends RefCounted
 #     with a real per-team TeamBrain, on a snapshot filled as GameManager fills
 #     it: the lagged carrier belief, shot state, stick check and tie, stagger
 #     and knockdown, settle, top hand, loft and intents.
-#   - The body: SkaterMovementRules at 120 Hz, the controller's facing step
+#   - The body: SkaterMovementRules at the physics tick, the controller's facing step
 #     (turn wind-up, board shield, a wrister's freeze, the slapper stance), a
 #     wound-up body only gliding, skater contacts (SkaterCollisionRules), hits
 #     staggering and knocking down by the balance model, the boards and nets
@@ -51,7 +51,8 @@ const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 const DuelRig := preload("res://tests/unit/ai/duel_rig.gd")
 const DuelBody := preload("res://tests/unit/ai/duel_body.gd")
 
-const DT: float = 1.0 / 120.0
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+const DT: float = _PhysicsConstants.TICK_DURATION
 # The puppets' plain facing, blade speed and reach (and a fixture's ring), and
 # PuckController.PICKUP_RADIUS.
 const FACING_DRAG: float = 5.0
@@ -73,24 +74,24 @@ const RECEIVE_ALIGNMENT_BONUS: float = 8.0
 # test_bot_mirrors.gd holds these to Puck.
 const BOBBLE_LOAD: float = 0.67
 const BOBBLE_EDGE_SHARE: float = 0.4
-const BOBBLE_GRACE_TICKS: int = 48   # Puck.settle_max_s 0.40 s at 120 Hz
+const BOBBLE_GRACE_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 2 / 5   # Puck.settle_max_s
 # A releaser can't re-catch its own release (Puck.release's reattach_cooldown).
-const RELEASE_GRACE_TICKS: int = 60
+const RELEASE_GRACE_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 2
 # A strip leaves the puck at Puck.apply_poke_check's exit, with its cooldowns:
 # the ex-carrier can't reattach for reattach_cooldown, the poker for
 # poke_checker_cooldown.
 const POKE_STRIP_MIN_M_S: float = 3.0
 const POKE_STRIP_MAX_M_S: float = 9.0
 const POKE_CARRIER_VEL_BLEND: float = 0.5
-const STRIP_REATTACH_TICKS: int = 60
-const STRIP_CHECKER_TICKS: int = 12
+const STRIP_REATTACH_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 2
+const STRIP_CHECKER_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 10
 # A puck too fast to hold comes off the face (Puck.apply_blade_deflect) keeping
 # this much of its glancing pace; under the bobble speed the deflector gets the
 # short cooldown, over it the long one.
 const DEFLECT_TANGENTIAL_RETAIN: float = 0.85
 const BOBBLE_SPEED_M_S: float = 11.0
-const BOBBLE_COOLDOWN_TICKS: int = 14
-const DEFLECT_COOLDOWN_TICKS: int = 36
+const BOBBLE_COOLDOWN_TICKS: int = (_PhysicsConstants.PHYSICS_TICK * 12 + 50) / 100
+const DEFLECT_COOLDOWN_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 10
 # The hop a squeezed puck takes: a bobble off the face, and two blades pinching it
 # (a poke, a contested pickup) — PuckCollisionRules.squeeze_lift_speed's dials at
 # Puck's values.
@@ -110,10 +111,10 @@ const CONTEST_DEADLOCK_THRESHOLD_M_S: float = 0.5
 # after the retention hold (SkaterController._try_one_timer_release).
 const SLAPPER_ZONE_RADIUS_M: float = 0.5
 const ONE_TIMER_LENIENCY_S: float = 0.08
-const ONE_TIMER_RETENTION_TICKS: int = 13
+const ONE_TIMER_RETENTION_TICKS: int = (_PhysicsConstants.PHYSICS_TICK * 11 + 50) / 100
 const LOFT_SEAT_M: float = GameRules.PUCK_LOFT_SEAT_M
 # TeamBrain re-slot cadence (~6 Hz, the production rhythm).
-const BRAIN_PERIOD_TICKS: int = 20
+const BRAIN_PERIOD_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 6
 
 # ── Scripted PUPPET container tuning ─────────────────────────────────────────
 # A puppet (add_puppet_container) is an agentless defender running a fixed
@@ -122,7 +123,7 @@ const BRAIN_PERIOD_TICKS: int = 20
 # puck read, blade presented on the puck line. Real defender bots CHASE a
 # carrier one-on-one (and the carrier rightly beats them with speed and a cut),
 # so patient containment has to be staged deliberately.
-const PUPPET_REACTION_TICKS: int = 18       # ≈ EVADE_REACTION_S at 120 Hz
+const PUPPET_REACTION_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20  # ≈ EVADE_REACTION_S
 const PUPPET_ACCEL_M_S2: float = 10.5       # DEFAULT_SKATER_THRUST_M_S2
 const PUPPET_MAX_SPEED_M_S: float = 9.0
 const PUPPET_GAIN: float = 4.0              # P-control: desired m/s per m of error

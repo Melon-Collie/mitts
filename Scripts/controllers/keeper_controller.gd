@@ -1,6 +1,8 @@
 class_name KeeperController
 extends GoalieController
 
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+
 # The rebuilt goalie in a match (Scripts/domain/keeper/): the keeper drawn and
 # saving in the Goalie node's place, where KeeperPositioning wants him and
 # KeeperMotor gets him, the node placed on him every tick and his gear's save
@@ -24,8 +26,8 @@ extends GoalieController
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
 
-# The planner's rate, against the 120 Hz tick.
-const PLANNER_EVERY: int = 4
+# Ticks between the planner's runs: 30 Hz.
+const PLANNER_EVERY: int = _PhysicsConstants.PHYSICS_TICK / 30
 # How long he holds a caught or covered puck before he plays it out, where no
 # whistle has come for it (GameRules.whistles_a_cover).
 const CATCH_HOLD_S: float = 1.0
@@ -149,6 +151,7 @@ func _physics_process(delta: float) -> void:
 	# A back-date is for the release it was set before, never a later one.
 	_pending_reaction_back_date = 0.0
 	var was: Vector3 = goalie.global_position
+	var t0: int = Time.get_ticks_usec()
 	if is_server:
 		_play(delta)
 	else:
@@ -158,6 +161,7 @@ func _physics_process(delta: float) -> void:
 	_measure_motion(was, delta)
 	if is_server and _holding >= 0.0:
 		_hold_catch(delta)
+	HostCostProbe.record(HostCostProbe.Section.GOALIE_PHYS, Time.get_ticks_usec() - t0)
 
 
 # His tick on the host: what he reads of the play and the shot, the save and

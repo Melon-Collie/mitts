@@ -8,7 +8,7 @@ extends GutTest
 # glove and covered, then set down and swept out; and a puck at his feet is
 # covered, unless it is poked away before his glove is on it.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # How far a save box on a client may lie from the host's: the root's centimetre
 # on the wire, and the pose's millimetres carried out along a limb.
 const WIRE_TOLERANCE_M: float = 0.015

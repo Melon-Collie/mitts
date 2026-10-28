@@ -320,7 +320,7 @@ var _contact_latch_net: bool = false
 var _contact_latch_goalie: bool = false
 
 # ── Deferred contact-event queue ──────────────────────────────────────────────
-# Contact signals raised inside the 120 Hz timed physics sections (_drive_analytic
+# Contact signals raised inside the timed physics sections (_drive_analytic
 # here; the deflect / body-block checks PuckController drives) are latched here
 # instead of fanning out synchronously — each emit reaches sounds, VFX, RPC sends,
 # stat tracking and replay recording, all of it otherwise paid inside the tick's
@@ -854,7 +854,7 @@ func _drive_analytic(dt: float) -> void:
 	# scrubs recorded frames) owns the transform — the drive must not integrate
 	# gravity or collision against it. Without this gate the drive fights the glove
 	# pin every tick, re-detecting the held puck inside the glove box and re-firing
-	# puck_touched_goalie at 120 Hz. pickup_locked is deliberately NOT a freeze
+	# puck_touched_goalie every tick. pickup_locked is deliberately NOT a freeze
 	# condition — see motion_pinned.
 	if motion_pinned or _replay_hold or _held:
 		_contact_latch_goalie = false
@@ -1016,7 +1016,7 @@ func _drive_analytic(dt: float) -> void:
 	# Board feedback: a real carom is the raw (un-reflected) full-tick position crossing the
 	# boundary with into-board pace — a puck sliding parallel doesn't fire. Latched like the
 	# other contacts (a rim-around can re-cross the raw boundary every tick of the curve —
-	# one carom must read as one thud, not a 120 Hz burst).
+	# one carom must read as one thud, not a per-tick burst).
 	# Inset by the disc's radius, matching where the carom actually resolves
 	# (AITrajectory._step's board_margin): contact is the puck's EDGE meeting the
 	# board, so a centre-based test would report the thud a radius late — and for a

@@ -10,7 +10,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # The kind of jump a post-goal faceoff staging makes: end zone to center ice.
 const FAR: Vector3 = Vector3(0.0, 1.0, -40.0)
 const NEAR: Vector3 = Vector3(0.0, 1.0, 0.0)

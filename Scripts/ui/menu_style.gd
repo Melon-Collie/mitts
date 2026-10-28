@@ -309,5 +309,28 @@ static func controller_focus_theme() -> Theme:
 		t.set_stylebox("focus", control_type, ring)
 	return t
 
+
+# The smallest a player-name card sets a name: a full-length one
+# (NameFilter.MAX_LENGTH) fits both name cards at it.
+const NAME_FIT_MIN_PX: int = 11
+
+
+# Sets `lbl`'s font size so its whole text fits its current width: `base` when
+# it fits, scaled down to it, but never under NAME_FIT_MIN_PX (the label's
+# clip_text catches anything past that). Always measures from `base`, so a
+# re-fit on every resize converges. The player cards in the side menu and the
+# lobby both fit names through here.
+static func fit_label_to_width(lbl: Label, base: int) -> void:
+	var avail: float = lbl.size.x
+	if avail <= 0.0 or lbl.text.is_empty():
+		lbl.add_theme_font_size_override("font_size", base)
+		return
+	var font: Font = lbl.get_theme_font("font")
+	var text_w: float = font.get_string_size(lbl.text, lbl.horizontal_alignment, -1, base).x
+	var size_px: int = base
+	if text_w > avail:
+		size_px = maxi(NAME_FIT_MIN_PX, floori(base * avail / text_w))
+	lbl.add_theme_font_size_override("font_size", size_px)
+
 # Focus-grab / focus-first / list-focus and the input routing live in ControllerNav
 # (the nav BEHAVIOR); MenuStyle keeps only the focus VISUALS above.

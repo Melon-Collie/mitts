@@ -16,7 +16,7 @@ extends GutTest
 # band's edges and its protect shift are claims about exactly that.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const CARRIER := 1
 const POKER := 201
 const REACTION_S: float = 0.15

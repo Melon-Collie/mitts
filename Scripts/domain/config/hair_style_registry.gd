@@ -7,20 +7,33 @@ extends RefCounted
 # an untouched player wears — short dark-brown hair, no facial hair. Cosmetic
 # only: nothing gameplay reads them.
 #
-# The helmet covers the crown, so a style is really a statement about what
-# shows under its rim: a short cut is a nape and sideburns, medium covers the
-# ears and the top of the neck, long hair spills out over the collar.
+# Every style is a whole head of hair, but the helmet covers the crown, so on
+# the ice a style mostly reads by what shows under its rim: a short cut is a
+# nape and sideburns, medium covers the ears and the top of the neck, a shag or
+# a mullet spills out over the collar, and a flow wings out past it.
+#
+# A style is retired rather than removed: its index stays (a saved or sent code
+# still names it), it leaves the picker and the bots' rolls, and whoever wore it
+# is drawn in its stand-in from _RETIRED_HAIR.
 
 const HAIR_SHORT: int = 0
 const HAIR_MEDIUM: int = 1
-const HAIR_LONG: int = 2
+const HAIR_LONG: int = 2  # retired
 const HAIR_BALD: int = 3
+const HAIR_MULLET: int = 4
+const HAIR_BUZZ: int = 5
+const HAIR_SHAGGY: int = 6
+const HAIR_FLOW: int = 7
 
 const HAIR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_STYLE_SHORT",
 	&"HAIR_STYLE_MEDIUM",
 	&"HAIR_STYLE_LONG",
 	&"HAIR_STYLE_BALD",
+	&"HAIR_STYLE_MULLET",
+	&"HAIR_STYLE_BUZZ",
+	&"HAIR_STYLE_SHAGGY",
+	&"HAIR_STYLE_FLOW",
 ]
 
 const FACIAL_NONE: int = 0
@@ -28,6 +41,8 @@ const FACIAL_STUBBLE: int = 1
 const FACIAL_MUSTACHE: int = 2
 const FACIAL_GOATEE: int = 3
 const FACIAL_BEARD: int = 4
+const FACIAL_HORSESHOE: int = 5
+const FACIAL_LONG_BEARD: int = 6
 
 const FACIAL_NAME_KEYS: Array[StringName] = [
 	&"FACIAL_HAIR_NONE",
@@ -35,7 +50,13 @@ const FACIAL_NAME_KEYS: Array[StringName] = [
 	&"FACIAL_HAIR_MUSTACHE",
 	&"FACIAL_HAIR_GOATEE",
 	&"FACIAL_HAIR_BEARD",
+	&"FACIAL_HAIR_HORSESHOE",
+	&"FACIAL_HAIR_LONG_BEARD",
 ]
+
+const _RETIRED_HAIR: Dictionary[int, int] = {
+	HAIR_LONG: HAIR_SHAGGY,
+}
 
 const COLOR_NAME_KEYS: Array[StringName] = [
 	&"HAIR_COLOR_DARK_BROWN",
@@ -77,6 +98,24 @@ static func color_count() -> int:
 
 static func is_valid_hair(style: int) -> bool:
 	return style >= 0 and style < HAIR_NAME_KEYS.size()
+
+
+static func is_retired_hair(style: int) -> bool:
+	return _RETIRED_HAIR.has(style)
+
+
+# The style a valid index is drawn as: itself, or a retired one's stand-in.
+static func worn_hair(style: int) -> int:
+	return _RETIRED_HAIR.get(style, style)
+
+
+# Every style the picker offers, in index order. Allocates; menus only.
+static func pickable_hair() -> Array[int]:
+	var out: Array[int] = []
+	for style: int in HAIR_NAME_KEYS.size():
+		if not is_retired_hair(style):
+			out.append(style)
+	return out
 
 
 static func is_valid_facial(style: int) -> bool:

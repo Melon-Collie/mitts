@@ -8,7 +8,7 @@ extends GutTest
 # into the next applied input. These tests drive the method directly with a
 # synthetic queue — it touches only the queue, the ack, and telemetry.
 
-const TICK: float = 1.0 / 120.0
+const TICK: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 
 
 func _controller() -> RemoteController:

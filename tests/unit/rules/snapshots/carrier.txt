@@ -46,15 +46,15 @@ head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	SHOOT
 head-on drive at 6 m/s, keeper 1 m out, from 4 m: pick	SHOOT
 head-on drive at 6 m/s, keeper 1 m out, from 3 m: pick	SHOOT
 1v1 cutting across 3 m out, keeper squared 0.9 m out: pick	SHOOT
-1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.9713
+1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.9721
 1v1 mid-cut, keeper lagging the arc: intent	SHOOT
-1v1 mid-cut, keeper lagging the arc: shoot-now value	0.9091
+1v1 mid-cut, keeper lagging the arc: shoot-now value	0.8865
 1v1 flat-footed 3 m out, keeper squared 0.9 m out: carry anchor	(0.0, -23.6)
 standing 3 m out, keeper squared 1.3 m out: intent	SHOOT
 standing 9 m out, keeper squared 1.3 m out: pick	CARRY to (2.0, -21.2)
 standing 3 m out, keeper displaced to the backhand side: winning hold	(-0.8, -0.3)
 standing 3 m out, keeper displaced to the backhand side: hold load share	0.7500
-dead-sharp beside the net, keeper on the near post: winning hold	(-0.5, 0.8)
+dead-sharp beside the net, keeper on the near post: winning hold	(-0.4, 0.8)
 69 deg off the normal, keeper squared 1.2 m out: intent	CARRY
 69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.1462
 swarmed on the blade in our slot: intent	CARRY

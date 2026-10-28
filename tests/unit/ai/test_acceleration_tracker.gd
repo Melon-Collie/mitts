@@ -6,7 +6,7 @@ extends GutTest
 # estimate the pass EV reads to avoid chucking feeds at turning players. It
 # GAINS confidence over time: a receiver settling onto a line decays toward 0.
 
-const DT: float = 1.0 / 120.0  # PHYSICS_TICK
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION  # PHYSICS_TICK
 
 
 func _state(vel: Vector3) -> SkaterNetworkState:

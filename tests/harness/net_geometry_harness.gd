@@ -69,6 +69,7 @@ extends RefCounted
 # the instant the blade was physically there. Refusals are felt by the claimant,
 # grants by everyone else, and an option is only picked by reading both.
 
+const _ClockSyncScript: GDScript = preload("res://Scripts/networking/clock_sync.gd")
 const _PEER: int = 3
 
 # Where the blade sits on a tick the client never planned a pose for. Must be far
@@ -98,7 +99,10 @@ enum AdjudicationMode {
 
 class Config:
 	var rtt_ms: float = 30.0
-	var input_lead_ms: float = 25.0
+	# The margin rounded up to whole ticks: the client's blade lands on a tick, so
+	# a lead off the grid would put it and the puck view at different instants.
+	var input_lead_ms: float = ceilf(_ClockSyncScript.INPUT_LEAD_SEC / Constants.TICK_DURATION - 1e-6) \
+			* Constants.TICK_DURATION * 1000.0
 	var duration_s: float = 6.0
 	var render_mode: RenderMode = RenderMode.AT_INPUT_STAMP
 	var adjudication: AdjudicationMode = AdjudicationMode.LOOKUP_TRUTH

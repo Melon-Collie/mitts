@@ -89,10 +89,11 @@ var _delta_accum: float = 0.0
 var _worker_delta: float = 0.0
 
 # Diagnostics: wall-clock µs of the most recent worker batch, and of the brain
-# tick nested inside it. Written by the worker, read by the main thread for
-# telemetry — a benign torn-int read.
+# tick nested inside it. The worker writes both before it publishes the batch
+# under _mutex, so they belong to the batch harvested on _harvest_tick.
 var last_worker_us: int = 0
 var last_brain_us: int = 0
+var _harvest_tick: int = -1
 
 # ── Deferred brain mutations (main thread only) ──────────────────────────────
 # Parked here by the host and drained onto the live brains in the idle window
@@ -203,9 +204,16 @@ func _try_harvest() -> bool:
 	if not ready:
 		return false
 	_run_in_flight = false
+	_harvest_tick = Engine.get_physics_frames()
 	for b: AIController in _worker_bots:
 		b.collect_one_timer_ready()
 	return true
+
+
+# Whether a batch was harvested on this physics tick — the one tick its
+# last_worker_us / last_brain_us should be charged to.
+func harvested_this_tick() -> bool:
+	return _harvest_tick == Engine.get_physics_frames()
 
 
 # Block until the worker is idle, then release the batch's hold on its bots.

@@ -954,9 +954,15 @@ var celebration_leg_stance: float = 0.6   # knee-pump depth of the celebration b
 
 # ── Celebration Tuning ────────────────────────────────────────────────────────
 # Cosmetic raised-stick goal celebration (SkaterShotPoseCoordinator.
-# apply_celebration_pose) — heights in upper-body-local metres.
-var celebration_hand_y: float = 0.45     # raised top-hand height
-var celebration_stick_rise: float = 0.5  # blade height above the raised hand
+# apply_celebration_pose). Bearings are upper-body local with x toward the
+# arm's own side and −z forward; reaches are in arm lengths from the shoulder.
+var celebration_hand_bearing := Vector3(0.18, 1.0, -0.22)  # the stick arm thrown up, a touch forward
+var celebration_hand_reach: float = 0.9      # near full extension, short of a locked elbow
+var celebration_hand_pump: float = 0.06      # the arm gives this much at the bottom of each hop
+var celebration_stick_bearing := Vector3(0.4, 1.0, 0.12)   # shaft leans out and back, clear of the helmet
+var celebration_fist_bearing := Vector3(0.22, 1.0, -0.3)
+var celebration_fist_reach_low: float = 0.5  # elbow bent, fist at the face
+var celebration_fist_reach_high: float = 0.78  # punched up above the helmet
 
 # ── Shot-Block Tuning ─────────────────────────────────────────────────────────
 # Movement speed while blocking (unused while the stance is fully planted; kept for tuning).
@@ -1026,7 +1032,7 @@ var _is_host: bool = false
 var _current_aim_world: Vector3 = Vector3.ZERO
 # Reused ShotResult for the per-tick "where would this charge go if released now"
 # prediction in _update_wrister_charge — a caller-owned scratch so that hot path
-# (120 Hz while charging, re-run per replayed input on reconcile) doesn't churn
+# (every tick while charging, re-run per replayed input on reconcile) doesn't churn
 # the heap. Pure output, overwritten each solve.
 var _wrister_pred_scratch: ShotMechanics.ShotResult = ShotMechanics.ShotResult.new()
 # The wrist shot's load, re-solved every aim tick and at the release from the
@@ -1068,7 +1074,7 @@ var _has_prev_carry_pin: bool = false
 # True on frames where a special locked-phase path posed the body itself this
 # tick — faceoff-prep blade aim, the faceoff skate-in approach, and replay
 # playback. Those paths run their own gait / head / off-hand (they're brief and
-# not the 120 Hz × N hot path), so the render-rate cosmetic hook yields to them
+# not the per-tick × N hot path), so the render-rate cosmetic hook yields to them
 # to avoid a double gait pass. The main live path (_process_input) clears it and
 # delegates cosmetics to the render hook.
 var _self_posing: bool = false
@@ -1115,11 +1121,14 @@ var hit_active: bool = false
 
 var _game_state_has_faceoff_prep: bool = false
 var _game_state_has_period_break: bool = false
-# Cosmetic goal-celebration window (seconds remaining / total). Set by
-# GameManager on the machine that simulates the scorer; the raised-stick pose
-# rides the normal hand/blade wire state to everyone else.
+# Cosmetic goal-celebration window (seconds remaining / total), opened after
+# _celebration_lead seconds. Started by GameManager on every machine; the
+# raised-stick pose rides the normal hand/blade wire state to everyone else.
 var _celebration_timer: float = 0.0
 var _celebration_total: float = 1.0
+var _celebration_lead: float = 0.0
+# Hops across the window: the knee bounce and the fist pump share them.
+const CELEBRATION_PUMPS: float = 3.0
 
 # ── Faceoff / intro skate-in approach ─────────────────────────────────────────
 # During FACEOFF_PREP the skater glides from a start point (its bench for the
@@ -1162,21 +1171,44 @@ func is_faceoff_ready() -> bool:
 			and Vector2(skater.velocity.x, skater.velocity.z).length() < FACEOFF_SET_MAX_SPEED
 
 
-func start_celebration(duration: float) -> void:
+# `lead` seconds pass before the window opens; nothing is posed through them.
+func start_celebration(duration: float, lead: float = 0.0) -> void:
 	_celebration_total = maxf(duration, 0.001)
 	_celebration_timer = _celebration_total
+	_celebration_lead = maxf(lead, 0.0)
 
 
+# Drops the window, lead and all, and hands the free hand back to the stick.
+func end_celebration() -> void:
+	_celebration_timer = 0.0
+	_celebration_lead = 0.0
+	_ik.hold_free_hand(Vector3.ZERO, 0.0)
+
+
+# The window is open: the pose is live.
 func is_celebrating() -> bool:
+	return _celebration_timer > 0.0 and _celebration_lead <= 0.0
+
+
+# A window is open or still waiting out its lead.
+func has_celebration_window() -> bool:
 	return _celebration_timer > 0.0
 
 
-# 0..1 progress through the celebration window (0 when idle). Read by the gait
-# for the leg bounce, matching the `t` the raised-stick pose runs on.
+# 0..1 progress through the celebration window (0 when idle).
 func celebration_progress() -> float:
-	if _celebration_timer <= 0.0:
+	if not is_celebrating():
 		return 0.0
 	return 1.0 - _celebration_timer / _celebration_total
+
+
+# 0 standing to 1 at the bottom of a hop, CELEBRATION_PUMPS times across the
+# window: the gait's knee bounce and the pose's fist pump both ride it.
+func celebration_pump() -> float:
+	var progress: float = celebration_progress()
+	if progress <= 0.0:
+		return 0.0
+	return 0.5 - 0.5 * cos(progress * TAU * CELEBRATION_PUMPS)
 
 
 # Ages the celebration window, at physics rate on real ticks from both the
@@ -1184,7 +1216,9 @@ func celebration_progress() -> float:
 # skaters this machine doesn't simulate (the timer starts on every machine;
 # see GameManager._trigger_scorer_celebration).
 func tick_celebration(delta: float) -> void:
-	if _celebration_timer > 0.0:
+	if _celebration_lead > 0.0:
+		_celebration_lead = maxf(_celebration_lead - delta, 0.0)
+	elif _celebration_timer > 0.0:
 		_celebration_timer = maxf(_celebration_timer - delta, 0.0)
 
 
@@ -1203,7 +1237,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	_game_state = game_state
 	_is_host = game_state.is_host()
 	# Cached so the per-tick gait can ask about the faceoff phase without a
-	# has_method() call at 120 Hz (test stubs may not implement it).
+	# has_method() call every tick (test stubs may not implement it).
 	_game_state_has_faceoff_prep = game_state.has_method("is_faceoff_prep")
 	_game_state_has_period_break = game_state.has_method("is_period_break")
 	process_physics_priority = -1  # Run before Skater's integration step
@@ -1827,7 +1861,7 @@ func _process_input(input: InputState, delta: float) -> void:
 		skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# Head tracking, off-hand IK, and the leg gait moved to render rate
 	# (Skater.render_pose_update / _render_pose_update) — they feed only meshes,
-	# not the blade world frame, so they don't belong in the 120 Hz + reconcile-
+	# not the blade world frame, so they don't belong in the per-tick + reconcile-
 	# replay path. Stick/arm mesh rebuild already lives in Skater._process too.
 	if not is_replaying:
 		_pose.update_angular_velocities(delta)
@@ -1842,10 +1876,10 @@ func _process_input(input: InputState, delta: float) -> void:
 		# GOAL_CELEBRATION), real ticks only, and gated to plain skating so a
 		# whiffed shot's follow-through isn't fought over.
 		var cel_state: SkaterStateMachine.State = _sm.get_state()
-		if _celebration_timer > 0.0 and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
+		if is_celebrating() and (cel_state == SkaterStateMachine.State.SKATING_WITH_PUCK
 				or cel_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK):
-			_shot_pose.apply_celebration_pose(1.0 - _celebration_timer / _celebration_total,
-					_celebration_total - _celebration_timer, _celebration_timer)
+			_shot_pose.apply_celebration_pose(_celebration_total - _celebration_timer,
+					_celebration_timer)
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
@@ -1857,7 +1891,7 @@ func _process_input(input: InputState, delta: float) -> void:
 
 # Render-rate cosmetic pose pass, registered on the skater and invoked once per
 # rendered frame from Skater._process (visibility-gated). Runs the purely-cosmetic
-# passes that used to sit in the 120 Hz physics tick: the leg gait, head tracking
+# passes that used to sit in the physics tick: the leg gait, head tracking
 # (off the last-seen aim), and the off-hand grip IK. None feed the blade world
 # frame, so running them at render rate can't affect pickup or reconcile. Local
 # and AI controllers use this base; RemoteController overrides it to drop head
@@ -1870,7 +1904,7 @@ func _render_pose_update(delta: float) -> void:
 	# The head and the off hand are mesh (Skater.on_camera).
 	if not skater.on_camera():
 		return
-	_pose.apply_head_tracking_aim(_current_aim_world, delta)
+	_pose.apply_head_tracking(delta)
 	_ik.update_bottom_hand(delta)
 
 
@@ -2160,7 +2194,7 @@ func apply_blade_aim_only(input: InputState, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(input, delta)
+	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# This locked-phase path poses its own gait ready-stance + off-hand (a brief
@@ -2275,6 +2309,9 @@ func apply_replay_state(state: SkaterNetworkState, delta: float) -> void:
 	# This path poses the gait + off-hand itself (below), so the render-rate
 	# cosmetic hook yields to it while a replay is driving this skater.
 	_self_posing = true
+	# The replay poses the recorded body; a live celebration's knee bounce and
+	# fist pump are read off this controller, and its timer is frozen here.
+	end_celebration()
 	skater.global_position = state.position
 	skater.visual_offset = Vector3.ZERO
 	skater.velocity = state.velocity
@@ -2593,12 +2630,11 @@ func teleport_to(pos: Vector3, facing: Vector2 = Vector2.ZERO) -> void:
 		# plant the legs at their rest pose so the stride doesn't resume mid-swing.
 		_pose.reset_lean_and_lag()
 		_skating.reset_to_rest()
-		# Kill any celebration remainder. The timer only ticks in
-		# _process_input, which doesn't run through the goal replay or the
-		# faceoff-prep aim-only path — so the leftover slice (goal_scored
-		# signal latency; larger on clients) would otherwise freeze through
-		# the replay and fire the raised-stick pose AT the next faceoff.
-		_celebration_timer = 0.0
+		# Kill any celebration remainder. The timer only ticks on live ticks,
+		# which the faceoff-prep aim-only path is not — so a leftover slice
+		# (goal_scored signal latency; larger on clients) would otherwise fire
+		# the raised-stick pose AT the next faceoff.
+		end_celebration()
 	# The body (and with it the blade) just jumped, and the pose resets above
 	# moved the stick again. Re-anchor the blade histories to where the stick
 	# actually is now, or the next tick differences them across the whole jump:
@@ -2725,7 +2761,7 @@ func _render_approach_pose(facing: Vector2, delta: float) -> void:
 	var blade_world_pre: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var hand_world_pre: Vector3 = skater.upper_body_to_global(skater.get_top_hand_position())
 	_pose.apply_upper_body(delta)
-	_pose.apply_head_tracking(_approach_input, delta)
+	_pose.apply_head_tracking(delta)
 	skater.set_top_hand_position(skater.upper_body_to_local(hand_world_pre))
 	skater.set_blade_position(skater.upper_body_to_local(blade_world_pre))
 	# This intro-skate path poses its own gait + off-hand (a brief locked phase,
@@ -3935,7 +3971,7 @@ func _diving() -> bool:
 # is down (same rationale as _cached_fall_cfg above).
 var _sprawl_scratch: KnockdownFallRules.SprawlPose = null
 
-# Cached — _update_wrister_charge reads it every aim tick (120 Hz, replayed
+# Cached — _update_wrister_charge reads it every aim tick (replayed
 # again per input through reconcile), so a per-call .new() is hot-path churn.
 # Rebuilt lazily after apply_attributes nulls it (same pattern as the
 # movement configs above).
@@ -4015,7 +4051,7 @@ func _wrister_sweep_speed(input: InputState) -> float:
 	return _aiming.cursor_speed_ema * shot_power_sensitivity()
 
 # Cached like the wrister config: _update_slapper_charge now re-solves the release
-# every windup tick (120 Hz × actors, replayed on reconcile) to publish
+# every windup tick (× actors, replayed on reconcile) to publish
 # predicted_shot_velocity, so a fresh SlapperConfig per call would be per-tick heap
 # churn. Rebuilt lazily; invalidated in apply_attributes when the source exports change.
 var _cached_slapper_cfg: ShotMechanics.SlapperConfig = null

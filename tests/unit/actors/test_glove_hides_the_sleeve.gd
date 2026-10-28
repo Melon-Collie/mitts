@@ -7,7 +7,7 @@ extends GutTest
 # rig at the corners of the build range and holds every sleeve vertex the glove
 # reaches over to being inside the cuff or the fist.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const UpperBone = SkaterMeshBuilder.UpperBone
 # [forearm, cuff, fist] per arm.
 const _ARMS: Array = [

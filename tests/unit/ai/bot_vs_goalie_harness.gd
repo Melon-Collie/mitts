@@ -55,7 +55,7 @@ extends RefCounted
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const CARRIER: int = 1
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z   # the bot (team 0) attacks -Z
 

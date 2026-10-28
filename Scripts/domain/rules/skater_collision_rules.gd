@@ -32,7 +32,7 @@ class_name SkaterCollisionRules
 # one's resolver ran.
 #
 # Pure/static + value-type math (Vector3, no heap allocation beyond the caller-owned
-# Result), so it is hot-path safe at 120 Hz × pairs AND — unlike an engine contact
+# Result), so it is hot-path safe at the tick rate × pairs AND — unlike an engine contact
 # solver — replays bit-identically in reconcile: live prediction, host authority,
 # and replay all call this same function on the same replicated inputs.
 

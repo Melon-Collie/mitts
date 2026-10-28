@@ -48,10 +48,10 @@ const ARRIVE_M: float = 0.3
 const OUT_DIR: String = "res://.preview/pass_truth"
 # He reads the windup, not the release (AIPuckLane.LANE_WINDUP_READ_DELAY_S):
 # the passer holds the puck these ticks while he already skates.
-const PREROLL_TICKS: int = maxi(0, roundi(-AIPuckLane.LANE_WINDUP_READ_DELAY_S * 120.0))
+const PREROLL_TICKS: int = maxi(0, roundi(-AIPuckLane.LANE_WINDUP_READ_DELAY_S * Duel._PhysicsConstants.PHYSICS_TICK))
 # A windup run's passer holds the puck for the whole windup, strippable, against a
 # defender already playing him (on his hip, or closing on it) from its start.
-const WINDUP_TICKS: int = roundi(AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S * 120.0)
+const WINDUP_TICKS: int = roundi(AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S * Duel._PhysicsConstants.PHYSICS_TICK)
 const READ_SETS: Array[float] = [0.0, 0.15, 0.25, 0.3, 0.45, 0.6]
 
 var _set_s: float = SET_S

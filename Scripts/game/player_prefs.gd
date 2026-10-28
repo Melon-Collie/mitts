@@ -127,8 +127,9 @@ const SHADOW_QUALITY_LABELS: Array[String] = [
 const SHADOW_LIGHTS_MEDIUM: PackedInt32Array = [0, 2, 5, 7]
 const SHADOW_LIGHTS_LOW: PackedInt32Array = [1, 6]
 
-# Spectator bowl density. Off hides the stands entirely; Low / High set the
-# terrace row count on ArenaStands.
+# Spectator detail (ArenaStands.set_crowd_density). The building is the same on
+# every setting: Off empties the seats, Low draws every fan with the far figure,
+# High gives the front rows the full one.
 const CROWD_DENSITY_OFF: int = 0
 const CROWD_DENSITY_LOW: int = 1
 const CROWD_DENSITY_HIGH: int = 2
@@ -137,13 +138,6 @@ const CROWD_DENSITY_LABELS: Array[String] = [
 	"Low",
 	"High",
 ]
-const CROWD_DENSITY_LOW_TERRACES: int = 5
-const CROWD_DENSITY_HIGH_TERRACES: int = 15
-# Upper-deck rows behind the concourse walkway (ArenaStands.upper_terraces).
-# LOW skips the second deck entirely — it roughly doubles the spectator
-# instance count — leaving the shell wall to close in behind the small bowl.
-const CROWD_DENSITY_LOW_UPPER_TERRACES: int = 0
-const CROWD_DENSITY_HIGH_UPPER_TERRACES: int = 10
 
 # 3D render scale. Lowers the internal rendertarget resolution and upscales
 # back to window size. Bilinear is cheap and blurry; FSR/FSR2 reconstruct
@@ -875,18 +869,11 @@ func apply_video() -> void:
 	if reflection != null:
 		reflection.visible = reflections_enabled
 	_apply_shadow_quality(scene)
-	var stands := scene.find_child("ArenaStands", true, false) as Node3D
+	var stands := scene.find_child("ArenaStands", true, false) as ArenaStands
 	if stands != null:
-		stands.visible = (crowd_density != CROWD_DENSITY_OFF)
-		if stands is ArenaStands:
-			(stands as ArenaStands).set_ads_shown(arena_ads_enabled)
-		if crowd_density != CROWD_DENSITY_OFF and stands.has_method("set_crowd_rows"):
-			if crowd_density == CROWD_DENSITY_HIGH:
-				stands.call("set_crowd_rows",
-						CROWD_DENSITY_HIGH_TERRACES, CROWD_DENSITY_HIGH_UPPER_TERRACES)
-			else:
-				stands.call("set_crowd_rows",
-						CROWD_DENSITY_LOW_TERRACES, CROWD_DENSITY_LOW_UPPER_TERRACES)
+		stands.set_ads_shown(arena_ads_enabled)
+		stands.set_crowd_density(crowd_density != CROWD_DENSITY_OFF,
+				crowd_density == CROWD_DENSITY_HIGH)
 	var scratch := scene.find_child("IceScratchMap", true, false)
 	if scratch != null and scratch.has_method("set_enabled"):
 		scratch.call("set_enabled", ice_scratches_enabled)
@@ -1095,7 +1082,7 @@ func _load() -> void:
 				default_bindings[action] = d
 	var cfg := ConfigFile.new()
 	if cfg.load(_get_save_path()) == OK:
-		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
+		player_name = cfg.get_value("player", "name", "Player").substr(0, NameFilter.MAX_LENGTH)
 		jersey_number = clamp(cfg.get_value("player", "jersey_number", 10), 0, 99)
 		is_left_handed = cfg.get_value("player", "left_handed", true)
 		preferred_position = clampi(int(cfg.get_value("player", "preferred_position", 0)),

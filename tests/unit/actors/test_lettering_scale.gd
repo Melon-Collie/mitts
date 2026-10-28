@@ -32,6 +32,41 @@ func _perimeter(ring: Dictionary) -> float:
 	return total
 
 
+func _name_size() -> int:
+	return roundi(JerseyDecal.NAME_EM_M * JerseyDecal.PX_PER_M.y)
+
+
+func _fitted_width_m(s: String) -> float:
+	var fit: Vector2 = JerseyDecal.fit_lettering(JerseyDecal.NAME_FONT, s, _name_size(),
+			JerseyDecal.NAME_MAX_WIDTH_M * JerseyDecal.PX_PER_M.y)
+	var width: float = JerseyDecal.NAME_FONT.get_string_size(s, HORIZONTAL_ALIGNMENT_LEFT, -1,
+			int(fit.x)).x
+	return width * fit.y / JerseyDecal.PX_PER_M.y
+
+
+func test_a_name_that_fits_is_set_as_drawn() -> void:
+	var fit: Vector2 = JerseyDecal.fit_lettering(JerseyDecal.NAME_FONT, "LIME", _name_size(),
+			JerseyDecal.NAME_MAX_WIDTH_M * JerseyDecal.PX_PER_M.y)
+	assert_eq(fit, Vector2(_name_size(), 1.0))
+
+
+# Every name lands between the shoulder caps, however long, and is never
+# squeezed past the floor.
+func test_a_long_name_fits_between_the_caps() -> void:
+	for s: String in ["POMEGRANATE", "VAN RIEMSDYK", "CHRISTOPHERSON-LAFRENIERE"]:
+		var fit: Vector2 = JerseyDecal.fit_lettering(JerseyDecal.NAME_FONT, s, _name_size(),
+				JerseyDecal.NAME_MAX_WIDTH_M * JerseyDecal.PX_PER_M.y)
+		assert_lte(_fitted_width_m(s), JerseyDecal.NAME_MAX_WIDTH_M + 0.001, s)
+		assert_gte(fit.y, JerseyDecal.NAME_MIN_SQUEEZE - 0.001, s + " squeeze")
+
+
+func test_a_name_only_shrinks_once_squeezing_runs_out() -> void:
+	var fit: Vector2 = JerseyDecal.fit_lettering(JerseyDecal.NAME_FONT, "POMEGRANATE",
+			_name_size(), JerseyDecal.NAME_MAX_WIDTH_M * JerseyDecal.PX_PER_M.y)
+	assert_eq(int(fit.x), _name_size(), "a name a little long keeps its size")
+	assert_lt(fit.y, 1.0, "and is set narrower")
+
+
 func test_the_back_is_as_tall_as_the_torso_side() -> void:
 	var rings: Dictionary = _rings(SkaterMeshBuilder.shared_torso(), 0.5)
 	var ys: Array[float] = []

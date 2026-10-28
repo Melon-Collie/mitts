@@ -39,7 +39,7 @@ reach for each other. The table in the seam test is the enforced copy of this.
 | tier | class | what it is |
 |---|---|---|
 | 0 | `ArenaBowlSpec` | the numbers, as a record |
-| 0 | `ArenaMeshEmit` | SurfaceTool primitives — treads, risers, boxes, quads |
+| 0 | `ArenaMeshEmit` | SurfaceTool primitives — treads, risers, boxes, quads, faceted solids |
 | 0 | `ArenaRinksideLayout` | where the benches and boxes are, and what they clear |
 | 1 | `ArenaBowlPath` | the perimeter in plan: ring sampling, arc-length, aisles, cull slices |
 | 1 | `ArenaFigureMesh` | the human figure: geometry, anthropometry, sitting↔standing |

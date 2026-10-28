@@ -17,7 +17,7 @@ extends GutTest
 # These pin that the sample now tracks the requested instant, and that the freeze
 # survives only as the deep-loss fallback.
 
-const TICK: float = 1.0 / 120.0
+const TICK: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func _controller() -> RemoteController:
@@ -43,18 +43,19 @@ func _buffer(rc: RemoteController, at: float, pos: Vector3, vel: Vector3) -> voi
 
 
 func test_sample_past_the_buffer_advances_toward_the_requested_instant() -> void:
-	# A remote coasting at 6 m/s, sampled 50 ms past the newest snapshot — the
-	# steady-state replay case. Frozen, this returned the snapshot position; it
-	# must now have travelled toward the requested instant.
+	# A remote coasting at 6 m/s, sampled ~50 ms (whole ticks) past the newest
+	# snapshot — the steady-state replay case. Frozen, this returned the snapshot
+	# position; it must now have travelled toward the requested instant.
 	var rc := _controller()
 	_buffer(rc, 10.0, Vector3.ZERO, Vector3(0.0, 0.0, 6.0))
-	var s: SkaterNetworkState = rc.sample_state_at(10.05)
+	var ahead: float = roundf(0.05 / TICK) * TICK
+	var s: SkaterNetworkState = rc.sample_state_at(10.0 + ahead)
 	assert_not_null(s)
 	assert_gt(s.position.z, 0.0, "the sample projected forward instead of freezing")
 	# Coasting on ice, so it travels slightly under vel*dt (friction) but on the
 	# same order — not the frozen 0, and not an unbounded overshoot.
-	assert_between(s.position.z, 0.15, 0.30,
-			"travel is on the order of velocity x dt for a 50 ms coast at 6 m/s")
+	assert_between(s.position.z, 3.0 * ahead, 6.0 * ahead,
+			"travel is on the order of velocity x dt for a ~50 ms coast at 6 m/s")
 
 
 func test_further_requests_project_further() -> void:

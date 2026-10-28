@@ -42,12 +42,13 @@ func _colors() -> Dictionary:
 		"text": _LIGHT,
 		"uniform": {
 			"helmet": Color(0.2, 0.2, 0.2),
-			"shoulders": {"color": _PRIMARY, "text": _LIGHT},
+			"shoulders": {"color": _PRIMARY, "text": _LIGHT, "stroke": Color.TRANSPARENT},
 			"jersey": {"base": _PRIMARY, "stripes": stripes, "yoke": _SECONDARY},
 			"arms": {"upper": {"base": _PRIMARY, "stripes": bare}},
 			"gloves": _KIT_GLOVES,
 			"pants": {"base": _SECONDARY, "stripes": bare},
 			"socks": {"base": _PRIMARY, "stripes": stripes},
+			"text": {"color": _LIGHT, "stroke": Color.TRANSPARENT},
 		},
 	}
 
@@ -157,12 +158,12 @@ func test_face_gear_dresses_the_helmet() -> void:
 # The figure wears the pending hair, brows included.
 func test_the_figure_wears_the_pending_hair() -> void:
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
-			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_LONG,
+			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_MULLET,
 			HairStyleRegistry.FACIAL_STUBBLE, 6))
 	var scalp: MeshInstance3D = _mannequin().get("_scalp") as MeshInstance3D
 	var facial: MeshInstance3D = _mannequin().get("_facial_hair") as MeshInstance3D
 	var brows: MeshInstance3D = _mannequin().get("_brows") as MeshInstance3D
-	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_LONG))
+	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_MULLET))
 	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_STUBBLE))
 	assert_lt((facial.material_override as StandardMaterial3D).albedo_color.a, 1.0,
 			"stubble previews translucent")

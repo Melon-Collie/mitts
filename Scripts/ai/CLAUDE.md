@@ -64,8 +64,8 @@ carry inside dispatch, the pinned slide after it — can carry a bot over the li
 ### The dispatch throttle
 
 The DECISION is throttled; the blade is not. Outside the press states the full
-dispatch runs every `_dispatch_period_ticks` (60 Hz Hard, 20 Hz Normal, ~13 Hz
-Easy). Skipped ticks reuse the cached move vector and the brake / stance / hit /
+dispatch runs every `_dispatch_period_ticks` (~45 Hz Hard, ~18 Hz Normal, ~13 Hz
+Easy at the 90 Hz tick). Skipped ticks reuse the cached move vector and the brake / stance / hit /
 stick-lift flags, but re-derive the blade target from CURRENT perception — the
 chase reception aim, the off-puck ready stance, jab and tie aims, and the carry
 cursor — so a catchable feed never transits a blade that only re-aims on

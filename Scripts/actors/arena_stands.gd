@@ -133,6 +133,10 @@ extends Node3D
 	set(v):
 		spectator_y_jitter = v
 		_request_rebuild()
+@export var crowd_detail_rows: int = 6:
+	set(v):
+		crowd_detail_rows = v
+		_request_rebuild()
 
 @export_group("Sections")
 # Radial aisles dividing the bowl into seating sections. Aisle positions are
@@ -292,9 +296,9 @@ var _house_lights: ArenaHouseLights = null
 var _reflection: ArenaReflection = null
 var _render_targets_freed: bool = false
 var _ads_shown: bool = true
-# Set while set_crowd_rows writes both row counts, so the two setters don't
-# each trigger a rebuild of their own.
-var _suspend_rebuild: bool = false
+# The player's Crowd Density; see set_crowd_density.
+var _crowd_shown: bool = true
+var _crowd_detailed: bool = true
 
 # Rebuilt from the exports at the top of every _rebuild; see _build_collaborators.
 var _spec: ArenaBowlSpec = null
@@ -410,23 +414,21 @@ func setup(home_primary: Color, home_secondary: Color,
 
 
 func _request_rebuild() -> void:
-	if _suspend_rebuild:
-		return
 	if is_inside_tree():
 		_rebuild()
 
 
-# One-shot crowd-density setter for PlayerPrefs.apply_video: both row counts
-# land in a single rebuild instead of one per setter (which would also litter
-# the layout cache with a never-again-used intermediate geometry).
-func set_crowd_rows(lower: int, upper: int) -> void:
-	if lower == num_terraces and upper == upper_terraces:
-		return
-	_suspend_rebuild = true
-	num_terraces = lower
-	upper_terraces = upper
-	_suspend_rebuild = false
-	_request_rebuild()
+# The player's Crowd Density. The building is the same on every setting: hiding
+# leaves the fans' seats empty and is only a visibility switch, while dropping
+# the detail draws every fan with the far figure, which rebuilds, since the
+# tiers are baked into the cached layout.
+func set_crowd_density(shown: bool, detailed: bool) -> void:
+	_crowd_shown = shown
+	if _crowd != null:
+		_crowd.set_shown(shown)
+	if detailed != _crowd_detailed:
+		_crowd_detailed = detailed
+		_request_rebuild()
 
 
 # The player's Arena Ads option. Hides the built ribbon board rather than
@@ -493,6 +495,7 @@ func _build_collaborators() -> void:
 	spec.spectator_inset_from_riser = spectator_inset_from_riser
 	spec.spectator_yaw_jitter_deg = spectator_yaw_jitter_deg
 	spec.spectator_y_jitter = spectator_y_jitter
+	spec.crowd_detail_rows = crowd_detail_rows if _crowd_detailed else 0
 	spec.home_fan_ratio = home_fan_ratio
 	spec.away_fan_ratio = away_fan_ratio
 	spec.secondary_color_ratio = secondary_color_ratio
@@ -570,6 +573,7 @@ func _attach_spectators(layout: Dictionary) -> void:
 		_crowd.paint(layout)
 		layout.paint_key = key
 	_crowd.attach(self, layout)
+	_crowd.set_shown(_crowd_shown)
 
 
 func _get_or_build_layout() -> Dictionary:

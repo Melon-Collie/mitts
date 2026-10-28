@@ -13,7 +13,7 @@ extends GutTest
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const SlapState = SkaterStateMachine.State
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const GOAL := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 const FINISHER_ID := 1
 const CARRIER_ID := 2

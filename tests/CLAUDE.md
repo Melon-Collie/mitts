@@ -135,7 +135,7 @@ tick-domain stamping (`test_legacy_wall_stamping_loses_inputs_at_60fps`), and
 (`test_a_margin_only_lead_runs_inputs_overdue`).
 
 `test_net_timing_harness.gd` sweeps client framerates (including 75/100/144,
-which do NOT divide the 120 Hz tick and so produce an irregular step pattern)
+which do NOT divide the physics tick and so produce an irregular step pattern)
 against a latency matrix, asserting: stamps never collide, no input is dropped as
 a duplicate, the drain never fires on a clean link, queue depth stays bounded,
 inputs land on time at every RTT, and pop-overdue does not track framerate.

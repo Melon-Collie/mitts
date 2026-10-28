@@ -8,7 +8,7 @@ extends GutTest
 # angle of attack. A run that skates past without a shot is the bug.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const CARRIER: int = 1
 
 
