@@ -1097,11 +1097,16 @@ static func _build_helmet() -> ArrayMesh:
 	var rings: Array[PackedVector3Array] = _helmet_rings()
 	for j in rings.size() - 1:
 		for k in _HELMET_LON:
-			_uv_quad(st,
-					rings[j][k], Vector2.ZERO,
-					rings[j][k + 1], Vector2(0.1, 0.0),
-					rings[j + 1][k + 1], Vector2(0.1, 0.1),
-					rings[j + 1][k], Vector2(0.0, 0.1))
+			var a: Vector3 = rings[j][k]
+			var b: Vector3 = rings[j][k + 1]
+			var c: Vector3 = rings[j + 1][k + 1]
+			var d: Vector3 = rings[j + 1][k]
+			if _helmet_splits_ac(a, b, c, d):
+				_uv_quad(st, a, Vector2.ZERO, b, Vector2(0.1, 0.0), c, Vector2(0.1, 0.1),
+						d, Vector2(0.0, 0.1))
+			else:
+				_tri(st, a, Vector2.ZERO, b, Vector2(0.1, 0.0), d, Vector2(0.0, 0.1))
+				_tri(st, b, Vector2(0.1, 0.0), c, Vector2(0.1, 0.1), d, Vector2(0.0, 0.1))
 	var apex := Vector3(0.0, _HELMET_RADIUS * _HELMET_LINER_APEX_FRAC, 0.0)
 	_cap(st, rings[rings.size() - 1], apex, Vector2(0.5, 0.9), false, 0.05)
 	st.generate_normals()
@@ -1115,9 +1120,23 @@ static func helmet_shell_triangles() -> PackedVector3Array:
 	var out := PackedVector3Array()
 	for j in rings.size() - 1:
 		for k in _HELMET_LON:
-			out.append_array([rings[j][k], rings[j][k + 1], rings[j + 1][k + 1],
-					rings[j][k], rings[j + 1][k + 1], rings[j + 1][k]])
+			var a: Vector3 = rings[j][k]
+			var b: Vector3 = rings[j][k + 1]
+			var c: Vector3 = rings[j + 1][k + 1]
+			var d: Vector3 = rings[j + 1][k]
+			if _helmet_splits_ac(a, b, c, d):
+				out.append_array([a, b, c, a, c, d])
+			else:
+				out.append_array([a, b, d, b, c, d])
 	return out
+
+
+# Whether a shell quad (a, b, c, d round its edge) splits along a–c rather than
+# b–d: whichever diagonal stands further out from the centre. Where the rim's
+# cut drops between two azimuths (brow to ear loop) the quad twists, and the
+# inner diagonal would fold the shell in through the temple under it.
+static func _helmet_splits_ac(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> bool:
+	return (a + c).length() >= (b + d).length()
 
 
 # The shell's rings from the crown down to the rim, each closed (its first

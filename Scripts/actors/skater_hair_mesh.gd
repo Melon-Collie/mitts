@@ -14,7 +14,8 @@ extends RefCounted
 #
 # Scalp hair is a whole head of hair, crown to hairline, as it would be with
 # the helmet off: the locker and a replay camera can look up under the rim.
-# Under the shell it is held inside it (test_skater_hair_mesh.gd holds that).
+# HairHelmetFit holds it inside the helmet shell and the face gear, and hangs
+# and kicks it below the rim.
 # Facial hair is one sheet per style with the mouth cut out of it, so a
 # translucent style never doubles up; it sits under the face gear, so its lift
 # is bounded the same way the face's features are, and it rises over the chin
@@ -34,8 +35,6 @@ const _SCALP_ROW_M: float = 0.01
 const _EDGE_LIFT_M: float = 0.0015
 const _EDGE_TAPER: float = 0.3
 const _HAIRLINE_TAPER_M: float = 0.01
-# The scalp keeps at least this far inside the helmet shell and the face gear.
-const _SHELL_GAP_M: float = 0.002
 # Over the crown every style's lift blends to its crown lift between these
 # heights, so the columns meet at the pole.
 const _CROWN_BLEND_Y := Vector2(0.04, 0.12)
@@ -146,19 +145,13 @@ const _FLOW_ROW_M: float = 0.03
 const _HUG: float = 0.0
 const _SHAGGY_HANG: float = 0.4
 const _FLOW_HANG: float = 0.15
-# Between these azimuths from dead back (degrees) the hang gives way: in front
-# of the ear hair lies on the cheek.
-const _HANG_FADE_DEG := Vector2(80.0, 100.0)
-# A style's kick at its ends, added to its lift below its first key: (height,
-# how far out), descending, eased between keys and held past the last.
+# A style's kick at its ends (HairHelmetFit.drape): (height, how far out),
+# descending, eased between keys and held past the last.
 const _NO_FLARE: Array[Vector2] = []
 const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
 const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.10, 0.0), Vector2(-0.17, 0.012)]
 const _FLOW_FLARE: Array[Vector2] = [Vector2(-0.04, 0.0), Vector2(-0.082, 0.025),
 		Vector2(-0.135, 0.045)]
-# Hair coming out from under the helmet rim kicks out no faster than this (m out
-# per m below the rim), so the kick grows from the rim instead of starting there.
-const _RIM_SPRING: float = 1.5
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -354,57 +347,19 @@ static func _build_scalp(keys: Array[Vector3], crown: float, hang: float,
 		var edge: float = _ramp(_hairline_distance(hairline, theta, y), 0.0, _HAIRLINE_TAPER_M)
 		var own: float = lerpf(_scalp_key(keys, absf(_wrap_pi(theta))).y, crown,
 				_ramp(y, _CROWN_BLEND_Y.x, _CROWN_BLEND_Y.y))
-		var full: float = lerpf(_EDGE_LIFT_M, own, edge)
-		var out: Vector3 = _out_dir(at, y)
-		return minf(full, minf(_shell_room(shell, at, out),
-				SkaterMeshBuilder.face_gear_room(at, out)) - _SHELL_GAP_M)
+		return minf(lerpf(_EDGE_LIFT_M, own, edge), HairHelmetFit.room(shell, at, _out_dir(at, y)))
 	var key_th := PackedFloat32Array()
 	for k: Vector3 in keys:
 		key_th.append_array(_mirrored(0.0, k.x))
+	var kick := func(y: float) -> float: return _flare(flare, y)
 	var settle := func(strip: PackedVector3Array) -> PackedVector3Array:
-		return _drape(strip, hang, flare, shell)
+		return HairHelmetFit.drape(strip, hang, kick, shell)
+	var relax := func(grid: Array[PackedVector3Array], bare: Array[PackedVector3Array]) -> void:
+		HairHelmetFit.clear(grid, bare, shell)
 	var st := _begin()
 	_emit_shell(st, -PI, PI, row_m, span, lift, key_th, PackedFloat32Array(),
-			Rect2(), settle)
+			Rect2(), settle, relax)
 	return st.commit()
-
-
-# One column of a scalp, crown down, hung and then kicked out. Each point is
-# held out from the head's axis to no less than the point above it less `hang`
-# per metre fallen, then pushed further out by the flare at its height — the
-# kick is the hair's own, so it is measured from where the hair hangs, not from
-# the skin — as far as the rim has let it. Neither carries it past the helmet
-# shell or the face gear.
-static func _drape(strip: PackedVector3Array, hang: float, flare: Array[Vector2],
-		shell: PackedVector3Array) -> PackedVector3Array:
-	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
-	var last: Vector3 = strip[strip.size() - 1] - centre
-	var held: float = _ramp(rad_to_deg(absf(atan2(last.x, last.z))),
-			_HANG_FADE_DEG.y, _HANG_FADE_DEG.x)
-	if hang > 0.0 and held > 0.0:
-		var rate: float = hang / held
-		for i: int in range(1, strip.size()):
-			var above: Vector3 = strip[i - 1] - centre
-			var p: Vector3 = strip[i] - centre
-			var floor_m: float = Vector2(above.x, above.z).length() - rate * (above.y - p.y)
-			strip[i] = _held_out(strip[i], floor_m - Vector2(p.x, p.z).length(), shell)
-	for i: int in strip.size():
-		var p: Vector3 = strip[i]
-		var below_rim: float = SkaterMeshBuilder.helmet_rim_y(atan2(p.x, p.z)) - p.y
-		strip[i] = _held_out(p, minf(_flare(flare, p.y), below_rim * _RIM_SPRING), shell)
-	return strip
-
-
-# `p` moved `by` metres straight out from the head's axis, no further than the
-# helmet shell and the face gear allow; unmoved for `by` <= 0.
-static func _held_out(p: Vector3, by: float, shell: PackedVector3Array) -> Vector3:
-	var across := Vector3(p.x, 0.0, p.z + SkaterMeshBuilder.HEAD_FORWARD_M)
-	if by <= 0.0 or across.length_squared() < 1e-12:
-		return p
-	var out: Vector3 = across.normalized()
-	var room: float = minf(_shell_room(shell, p, out),
-			SkaterMeshBuilder.face_gear_room(p, out)) - _SHELL_GAP_M
-	return p + out * clampf(by, 0.0, room)
 
 
 # How far (m, over the head's surface) the point at (θ, y) is from the
@@ -418,17 +373,6 @@ static func _hairline_distance(hairline: PackedVector2Array, theta: float, y: fl
 		var p: Vector2 = hairline[posmod(i, hairline.size() - 1)]
 		var d := Vector2(_wrap_pi(theta - p.x) * across, y - p.y)
 		best = minf(best, d.length())
-	return best
-
-
-# Distance along `dir` from `at` to the helmet shell, INF where it misses.
-static func _shell_room(shell: PackedVector3Array, at: Vector3, dir: Vector3) -> float:
-	var best: float = INF
-	for i: int in range(0, shell.size(), 3):
-		var hit: Variant = Geometry3D.ray_intersects_triangle(at, dir,
-				shell[i], shell[i + 1], shell[i + 2])
-		if hit != null:
-			best = minf(best, ((hit as Vector3) - at).length())
 	return best
 
 
@@ -483,10 +427,12 @@ static func _begin() -> SurfaceTool:
 # heights shared by every strip, clamped into each strip's own span, so a
 # crease's row lines up across them. `cut_th` and `cut_y` add grid lines, and
 # quads whose surface centre falls in `hole` (head-local x, y) are left out.
-# `settle(strip)`, if given, has the last word on each column's points.
+# `settle(strip)`, if given, has the last word on each column's points, and
+# `relax(grid, bare)` on the finished grid and the surface under it.
 static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 		span: Callable, lift: Callable, cut_th := PackedFloat32Array(),
-		cut_y := PackedFloat32Array(), hole := Rect2(), settle := Callable()) -> void:
+		cut_y := PackedFloat32Array(), hole := Rect2(), settle := Callable(),
+		relax := Callable()) -> void:
 	var cols: Array[Vector2] = _azimuth_samples(th0, th1, cut_th)
 	var thetas := PackedFloat32Array()
 	var rims := PackedFloat32Array()
@@ -519,6 +465,8 @@ static func _emit_shell(st: SurfaceTool, th0: float, th1: float, row_m: float,
 			strip.append(_point(cols[k], y, lift.call(thetas[k], t, y, rims[k], at)))
 		grid.append(settle.call(strip) if settle.is_valid() else strip)
 		bare.append(under)
+	if relax.is_valid():
+		relax.call(grid, bare)
 	for k: int in grid.size() - 1:
 		for i: int in heights.size() - 1:
 			if hole.has_area():

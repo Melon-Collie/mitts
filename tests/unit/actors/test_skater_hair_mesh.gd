@@ -101,6 +101,32 @@ func test_the_scalp_stays_inside_the_helmet_shell() -> void:
 		assert_gt(worst, 0.001, "the scalp comes within %.4f m of the shell" % worst)
 
 
+# Corners inside the shell are not enough: a face whose upper corner is tucked
+# under the rim and whose lower one flips out below it cuts through the shell's
+# lowest band. No edge of any scalp triangle may cross a face of the shell.
+func test_no_scalp_edge_crosses_the_helmet_shell() -> void:
+	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+	for style: int in HairStyleRegistry.hair_count():
+		var mesh: ArrayMesh = SkaterHairMesh.shared_hair(style)
+		if mesh == null or HairStyleRegistry.is_retired_hair(style):
+			continue
+		var tris: PackedVector3Array = _verts(mesh)
+		var crossings: int = 0
+		var first := ""
+		for t: int in range(0, tris.size(), 3):
+			for e: int in 3:
+				var a: Vector3 = tris[t + e]
+				var b: Vector3 = tris[t + (e + 1) % 3]
+				for s: int in range(0, shell.size(), 3):
+					if Geometry3D.segment_intersects_triangle(a, b,
+							shell[s], shell[s + 1], shell[s + 2]) != null:
+						crossings += 1
+						if first.is_empty():
+							first = "%s to %s" % [a, b]
+		assert_eq(crossings, 0, "hair style %d crosses the shell %d times, first %s"
+				% [style, crossings, first])
+
+
 # The face gear rides a sphere a centimetre or so off the head (the same bound
 # test_skater_face_mesh.gd holds the face to), down to its lower edge. Facial
 # hair worn under a piece lives inside it above that edge, and may hang out
