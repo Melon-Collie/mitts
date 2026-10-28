@@ -132,6 +132,19 @@ func test_collar_and_yoke_are_optional_and_parse_null() -> void:
 	assert_eq(named.jersey.collar, Color("#0000FF"))
 
 
+# A lettering stroke is optional; a kit that omits one parses transparent, which
+# every lettering painter reads as unbordered.
+func test_lettering_strokes_are_optional_and_parse_transparent() -> void:
+	var bare: Dictionary = TeamColorRegistry._parse_kit({"text": {"color": "#FFFFFF"}})
+	assert_eq(bare.text.stroke, Color.TRANSPARENT, "an unnamed back stroke is none")
+	assert_eq(bare.shoulders.stroke, Color.TRANSPARENT, "and so is a shoulder one")
+	var named: Dictionary = TeamColorRegistry._parse_kit({
+		"text": {"color": "#FFFFFF", "stroke": "#00FF00"},
+		"shoulders": {"color": "#000000", "text": "#FFFFFF", "stroke": "#0000FF"}})
+	assert_eq(named.text.stroke, Color("#00FF00"))
+	assert_eq(named.shoulders.stroke, Color("#0000FF"))
+
+
 # With no JSON at all the registry falls back to two hardcoded presets, and they
 # stand for the bundled file's first two slots: same team, same solid colors
 # (the fallback carries no stripes, yoke or collar).

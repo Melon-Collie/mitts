@@ -1182,7 +1182,7 @@ func request_join(is_left_handed: bool, player_name: String, jersey_number: int 
 	_pending_handshake.erase(sender_id)
 	_peer_handedness[sender_id] = is_left_handed
 	_peer_steam_ids[sender_id] = steam_id
-	var sanitized_name: String = player_name.strip_edges().left(10)
+	var sanitized_name: String = player_name.strip_edges().left(NameFilter.MAX_LENGTH)
 	_peer_names[sender_id] = sanitized_name if NameFilter.is_alphanumeric(sanitized_name) and NameFilter.is_clean(sanitized_name) else "Player"
 	_peer_numbers[sender_id] = clampi(jersey_number, 0, 99)
 	# v4 builds have no power economy to validate — every axis is lateral, so

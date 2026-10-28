@@ -90,10 +90,10 @@ static func get_colors(slot: int, team_id: int) -> Dictionary:
 		"jersey_stripe":  _accent_color(jersey_block, shoulders.color),
 		"gloves":         kit.gloves,
 		# A glove design's SECOND color is whichever team color the glove body
-		# is not. Five of the eight presets dress their gloves in the secondary,
-		# so a design that reached for the secondary again would paint those
-		# teams a monochrome glove — this is the only derived color that has to
-		# look at what it is contrasting against.
+		# is not. Most presets dress their gloves in the secondary, so a design
+		# that reached for the secondary again would paint those teams a
+		# monochrome glove — this is the only derived color that has to look at
+		# what it is contrasting against.
 		"glove_accent":   preset.primary if kit.gloves.is_equal_approx(preset.secondary) \
 				else preset.secondary,
 		"pants":          pants_block.base,
@@ -250,6 +250,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		"shoulders": {
 			"color":   _parse_color(shoulders_raw.get("color",   "#FFFFFF")),
 			"text":    _parse_color(shoulders_raw.get("text",    "#FFFFFF")),
+			"stroke":  _parse_stroke(shoulders_raw.get("stroke", null)),
 		},
 		"jersey": {
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
@@ -281,6 +282,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		"text": {
 			"color":   _parse_color(text_raw.get("color",   "#FFFFFF")),
 			"outline": _parse_color(text_raw.get("outline", "#000000")),
+			"stroke":  _parse_stroke(text_raw.get("stroke", null)),
 		},
 	}
 
@@ -315,6 +317,14 @@ static func _parse_color(hex: Variant) -> Color:
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null
+	return _parse_color(hex)
+
+
+# A lettering stroke (text.stroke, shoulders.stroke) is optional too, but
+# absent means unbordered, which a transparent Color says to every painter.
+static func _parse_stroke(hex: Variant) -> Color:
+	if hex == null:
+		return Color.TRANSPARENT
 	return _parse_color(hex)
 
 
@@ -361,31 +371,31 @@ static func _hardcoded_pomegranate() -> Dictionary:
 static func _hardcoded_blueberry() -> Dictionary:
 	return {
 		"name":      "Blueberry",
-		"primary":   _parse_color("#4A7AD6"),
+		"primary":   _parse_color("#3B67C4"),
 		"secondary": _parse_color("#6B1E4A"),
 		"light":     _parse_color("#FFFFFF"),  # mirrors away jersey base
 		"home":      _parse_kit({
 			"helmet":      "#6B1E4A",
-			"shoulders":   {"color": "#4A7AD6", "text": "#FFFFFF"},
-			"jersey":      {"base": "#4A7AD6", "stripes": []},
-			"arms":        {"upper": {"base": "#4A7AD6", "stripes": []},
-							"lower": {"base": "#4A7AD6", "stripes": []}},
+			"shoulders":   {"color": "#3B67C4", "text": "#FFFFFF"},
+			"jersey":      {"base": "#3B67C4", "stripes": []},
+			"arms":        {"upper": {"base": "#3B67C4", "stripes": []},
+							"lower": {"base": "#3B67C4", "stripes": []}},
 			"gloves":      "#6B1E4A",
 			"pants":       {"base": "#6B1E4A", "stripes": []},
-			"socks":       {"base": "#4A7AD6", "stripes": []},
+			"socks":       {"base": "#3B67C4", "stripes": []},
 			"goalie_pads": "#FFFFFF",
 			"text":        {"color": "#FFFFFF", "outline": "#6B1E4A"},
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#FFFFFF",
-			"shoulders":   {"color": "#C8D8F0", "text": "#6B1E4A"},
+			"shoulders":   {"color": "#3B67C4", "text": "#FFFFFF"},
 			"jersey":      {"base": "#FFFFFF", "stripes": []},
 			"arms":        {"upper": {"base": "#C8D8F0", "stripes": []},
 							"lower": {"base": "#C8D8F0", "stripes": []}},
-			"gloves":      "#4A7AD6",
-			"pants":       {"base": "#4A7AD6", "stripes": []},
+			"gloves":      "#3B67C4",
+			"pants":       {"base": "#3B67C4", "stripes": []},
 			"socks":       {"base": "#FFFFFF", "stripes": []},
 			"goalie_pads": "#FFFFFF",
-			"text":        {"color": "#4A7AD6", "outline": "#6B1E4A"},
+			"text":        {"color": "#3B67C4", "outline": "#6B1E4A"},
 		}),
 	}
