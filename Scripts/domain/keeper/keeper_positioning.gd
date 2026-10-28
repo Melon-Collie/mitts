@@ -29,8 +29,8 @@ extends RefCounted
 #
 # In the zone he sinks into the low ready once a shot could reach him sooner
 # than his legs could answer it from the ready stance (`_cannot_react`): the
-# low ready covers more of the net than the butterfly from anywhere in front
-# of him, and its drop is the shorter fall.
+# low ready covers more of the net than the ready stance, nothing off its gear
+# goes on in, and its drop is the shorter fall.
 #
 # A pass he reads to an opposing stick (KeeperPlayRead.meets) he plays from
 # where that stick meets it, in the zone it is in: skated to at once, turning

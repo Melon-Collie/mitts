@@ -37,26 +37,27 @@ const READY_BLADE := Vector3(-0.11, 0.0, -0.40)
 const READY_STICK_TILT_RAD: float = deg_to_rad(8.0)
 
 # The low ready: the ready stance sat down into a deep A, for a shot he may not
-# have time to read. Skates out about twice as wide, knees driven in and down
-# so the pads lie steep with their inside edges near the ice and their faces to
-# the shooter, hips well above the knees and the chest tall over them, leaning
-# on only a little, the glove out in front at the belly, the blocker at the
-# pad's top, the blade on the ice ahead of the five-hole (an NHL
-# keeper's, e.g. Shesterkin's). Its knees are nearer the ice, so
-# the drop into the butterfly from here is the shorter fall. A shin laid that
-# far over rides its pad up onto the inside edge, the face tipped up, or the
-# pad's outer corner by the skate is driven into the ice; and the blade lies
-# out ahead of the A so the paddle rises in front of the pads, not through
-# them.
-const LOW_READY_SKATE_HALF_SPACING_M: float = 0.52
-const LOW_READY_KNEE := Vector3(0.13, 0.32, -0.14)
-const LOW_READY_PAD_FACE := Vector3(0.0, 0.3, -1.0)
+# have time to read (Carey Price's). Skates wide and straight ahead, a little
+# behind his hips; knees driven in and forward, no closer than keeps the pads
+# off each other; the pads' faces rolled in toward the five-hole, so their
+# inside edges come down to the ice and nothing that meets them is turned on
+# into the net; the chest folded on over the knees from the small of the back,
+# the head up; the glove up and out in front, open to the shooter; the blade on
+# the ice ahead of the five-hole on the glove side, the paddle stood nearly
+# upright in front of the pads, not through them. Its knees are nearer the ice,
+# so the drop into the butterfly from here is the shorter fall. The pads settle
+# on the ice and their toes flex off it (KeeperGear); the knee and the skate are
+# where the solve puts them.
+const LOW_READY_SKATE_HALF_SPACING_M: float = 0.47
+const LOW_READY_SKATE_BACK_M: float = 0.085
+const LOW_READY_KNEE := Vector3(0.27, 0.40, -0.26)
+const LOW_READY_PAD_FACE := Vector3(0.45, -0.10, -1.0)
 const LOW_READY_PELVIS := Vector3(0.0, 0.65, 0.10)
-const LOW_READY_BLADE := Vector3(-0.15, 0.0, -0.55)
-const LOW_READY_STICK_TILT_RAD: float = deg_to_rad(20.0)
-# Its glove, in the chest's frame as every stance holds it: lower than the
-# ready stance's, at the belly, over the top of the pad.
-const LOW_READY_GLOVE_FROM_CHEST := Vector3(-0.40, -0.11, -0.48)
+const LOW_READY_BLADE := Vector3(-0.25, 0.0, -0.58)
+const LOW_READY_STICK_TILT_RAD: float = deg_to_rad(5.0)
+# Its glove, in the chest's frame as every stance holds it: up at the chest
+# as the ready stance's, which with the chest folded on carries it out in front.
+const LOW_READY_GLOVE_FROM_CHEST := Vector3(-0.42, 0.16, -0.46)
 
 # The butterfly: knees together on the ice, shins flared out behind them with
 # the pads' faces to the shooter, hips over the knees and the trunk tall.
@@ -143,16 +144,18 @@ static func ready(p: KeeperPose) -> void:
 static func low_ready(p: KeeperPose) -> void:
 	ready(p)
 	p.pelvis = LOW_READY_PELVIS
-	p.pelvis_rot = Vector3(-0.25, 0.0, 0.0)
-	p.lumbar_rot = Vector3(0.0, 0.0, 0.0)
-	p.neck_rot = Vector3(0.15, 0.0, 0.0)
+	p.pelvis_rot = Vector3(-0.35, 0.0, 0.0)
+	p.lumbar_rot = Vector3(-0.35, 0.0, 0.0)
+	p.neck_rot = Vector3(0.45, 0.0, 0.0)
 	for i: int in 2:
 		var sx: float = _side_x(i)
 		var leg: KeeperPose.Leg = p.legs[i]
-		leg.ankle = Vector3(sx * LOW_READY_SKATE_HALF_SPACING_M, KeeperAnatomy.ANKLE_ON_SKATES_M, 0.0)
+		leg.ankle = Vector3(sx * LOW_READY_SKATE_HALF_SPACING_M, KeeperAnatomy.ANKLE_ON_SKATES_M,
+				LOW_READY_SKATE_BACK_M)
 		leg.knee_pinned = true
 		leg.knee = Vector3(sx * LOW_READY_KNEE.x, LOW_READY_KNEE.y, LOW_READY_KNEE.z)
-		leg.shin_front = LOW_READY_PAD_FACE.normalized()
+		leg.shin_front = Vector3(-sx * LOW_READY_PAD_FACE.x, LOW_READY_PAD_FACE.y, LOW_READY_PAD_FACE.z).normalized()
+		leg.toe = _FORWARD
 	p.blade_center = LOW_READY_BLADE
 	p.stick_tilt = LOW_READY_STICK_TILT_RAD
 	p.glove_hand = LOW_READY_GLOVE_FROM_CHEST

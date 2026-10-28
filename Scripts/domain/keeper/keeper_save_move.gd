@@ -163,7 +163,10 @@ func _blend(p: KeeperPose, t: float) -> void:
 		var from: KeeperPose.Leg = _from.legs[i]
 		var to: KeeperPose.Leg = _to.legs[i]
 		var leg: KeeperPose.Leg = p.legs[i]
-		if to.knee_pinned and not from.knee_pinned:
+		var kneels: bool = from.foot_mode == KeeperPose.FootMode.FLAT \
+				and to.foot_mode == KeeperPose.FootMode.ALONG_SHIN
+		if to.knee_pinned and (not from.knee_pinned or kneels):
+			# Off the skate onto the knee, from his feet or from a low stance on them.
 			KeeperDrop.blend_leg(leg, from, _knees[i], to, t)
 		elif to.knee_pinned:
 			leg.copy_from(to)
