@@ -34,7 +34,7 @@ const _SCALP_ROW_M: float = 0.01
 const _EDGE_LIFT_M: float = 0.0015
 const _EDGE_TAPER: float = 0.3
 const _HAIRLINE_TAPER_M: float = 0.01
-# Under the helmet the scalp keeps at least this far inside the shell.
+# The scalp keeps at least this far inside the helmet shell and the face gear.
 const _SHELL_GAP_M: float = 0.002
 # Over the crown every style's lift blends to its crown lift between these
 # heights, so the columns meet at the pole.
@@ -122,19 +122,39 @@ const _SHAGGY: Array[Vector3] = [
 	Vector3(180.0, 0.068, 0.011),
 ]
 const _SHAGGY_CROWN_M: float = 0.012
+# Long and full at the back and over the ears, falling nearly straight from the
+# helmet and kicking out hard at the ends into wings.
+const _FLOW: Array[Vector3] = [
+	Vector3(0.0, -0.168, 0.018),
+	Vector3(40.0, -0.164, 0.020),
+	Vector3(70.0, -0.158, 0.024),
+	Vector3(90.0, -0.150, 0.024),
+	Vector3(105.0, -0.130, 0.016),
+	Vector3(118.0, -0.095, 0.008),
+	Vector3(128.0, -0.055, 0.005),
+	Vector3(131.0, 0.012, 0.006),
+	Vector3(142.0, 0.040, 0.009),
+	Vector3(155.0, 0.058, 0.010),
+	Vector3(168.0, 0.066, 0.011),
+	Vector3(180.0, 0.068, 0.011),
+]
+const _FLOW_CROWN_M: float = 0.012
 # How fast a style's hair may close in toward the neck as it falls below the
 # head's widest point (m in per m down): what falls faster hangs instead of
 # wrapping under the skull. Zero hugs the head all the way down.
 const _HUG: float = 0.0
 const _SHAGGY_HANG: float = 0.4
+const _FLOW_HANG: float = 0.15
 # Between these azimuths from dead back (degrees) the hang gives way: in front
-# of the ear hair lies on the cheek, inside the face gear.
+# of the ear hair lies on the cheek.
 const _HANG_FADE_DEG := Vector2(80.0, 100.0)
 # A style's kick at its ends, added to its lift below its first key: (height,
 # how far out), descending, eased between keys and held past the last.
 const _NO_FLARE: Array[Vector2] = []
 const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
 const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.10, 0.0), Vector2(-0.17, 0.012)]
+const _FLOW_FLARE: Array[Vector2] = [Vector2(-0.06, 0.0), Vector2(-0.11, 0.015),
+		Vector2(-0.14, 0.035), Vector2(-0.17, 0.060)]
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -237,6 +257,9 @@ static func shared_hair(style: int) -> ArrayMesh:
 		HairStyleRegistry.HAIR_SHAGGY:
 			return _shared("hair_shaggy", func() -> ArrayMesh:
 				return _build_scalp(_SHAGGY, _SHAGGY_CROWN_M, _SHAGGY_HANG, _SHAGGY_FLARE))
+		HairStyleRegistry.HAIR_FLOW:
+			return _shared("hair_flow", func() -> ArrayMesh:
+				return _build_scalp(_FLOW, _FLOW_CROWN_M, _FLOW_HANG, _FLOW_FLARE))
 		_:
 			return null
 
@@ -329,7 +352,9 @@ static func _build_scalp(keys: Array[Vector3], crown: float, hang: float,
 				_ramp(y, _CROWN_BLEND_Y.x, _CROWN_BLEND_Y.y))
 		# The flare is the hair's kick, so the bottom edge keeps it.
 		var full: float = lerpf(_EDGE_LIFT_M, own, edge) + _flare(flare, y)
-		return minf(full, _shell_room(shell, at, _out_dir(at, y)) - _SHELL_GAP_M)
+		var out: Vector3 = _out_dir(at, y)
+		return minf(full, minf(_shell_room(shell, at, out),
+				SkaterMeshBuilder.face_gear_room(at, out)) - _SHELL_GAP_M)
 	var key_th := PackedFloat32Array()
 	for k: Vector3 in keys:
 		key_th.append_array(_mirrored(0.0, k.x))
@@ -344,8 +369,8 @@ static func _build_scalp(keys: Array[Vector3], crown: float, hang: float,
 
 
 # One column of a scalp, crown down, with each point held out from the head's
-# axis to no less than the point above it less `hang` per metre fallen — unless
-# that would carry it through the helmet shell.
+# axis to no less than the point above it less `hang` per metre fallen, and no
+# further than the helmet shell and the face gear allow.
 static func _hang(strip: PackedVector3Array, hang: float,
 		shell: PackedVector3Array) -> PackedVector3Array:
 	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
@@ -362,11 +387,11 @@ static func _hang(strip: PackedVector3Array, hang: float,
 		var floor_m: float = Vector2(above.x, above.z).length() - hang * (above.y - p.y)
 		if across.length() >= floor_m or across.length_squared() < 1e-12:
 			continue
-		across = across.normalized() * floor_m
-		var hung: Vector3 = centre + Vector3(across.x, p.y, across.y)
-		if _shell_room(shell, Vector3.ZERO, hung.normalized()) - hung.length() < _SHELL_GAP_M:
-			continue
-		strip[i] = hung
+		var out := Vector3(across.x, 0.0, across.y).normalized()
+		var room: float = minf(_shell_room(shell, strip[i], out),
+				SkaterMeshBuilder.face_gear_room(strip[i], out)) - _SHELL_GAP_M
+		var reach: float = across.length() + clampf(floor_m - across.length(), 0.0, room)
+		strip[i] = centre + Vector3(0.0, p.y, 0.0) + out * reach
 	return strip
 
 

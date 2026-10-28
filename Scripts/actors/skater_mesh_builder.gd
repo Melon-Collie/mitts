@@ -1187,6 +1187,20 @@ const _CAGE_H_BAR_COUNT: int = 4
 const _CAGE_V_BAR_OFFSETS: Array[float] = [-0.84, -0.42, 0.0, 0.42, 0.84]
 
 
+# Distance along `dir` from `at` (helmet-local, inside the face gear) to the
+# innermost face piece's sphere, where the widest piece (the fishbowl) covers;
+# INF where the ray leaves under or beside it.
+static func face_gear_room(at: Vector3, dir: Vector3) -> float:
+	var radius: float = minf(_CAGE_RADIUS, _FACE_SHIELD_RADIUS)
+	var b: float = at.dot(dir)
+	var t: float = -b + sqrt(maxf(b * b - at.length_squared() + radius * radius, 0.0))
+	var hit: Vector3 = at + dir * t
+	var off_front: float = absf(wrapf(atan2(hit.x, hit.z) - PI, -PI, PI))
+	if off_front > _FISHBOWL_HALF_ARC or hit.y < radius * cos(PI * _FISHBOWL_V1):
+		return INF
+	return t
+
+
 # The face piece's fixed look — the one gear piece whose colors never resolve
 # against the kit (a visor is smoked polycarbonate and a cage bare steel
 # whoever wears them), so the material lives here with the geometry instead of
