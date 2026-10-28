@@ -16,7 +16,7 @@ const _SHIN_R: int = SkaterMeshBuilder.LegBone.SHIN_R
 # several stride cycles in each direction and diffs every leg channel.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const TICKS: int = 240  # 2 s at 120 Hz — several full stride cycles
 
 

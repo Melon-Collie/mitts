@@ -620,25 +620,30 @@ func apply_upper_body(delta: float) -> void:
 	_skater.set_upper_body_rotation(rendered_twist)
 	_apply_lean()
 
-func apply_head_tracking(input: InputState, delta: float) -> void:
-	apply_head_tracking_aim(input.mouse_world_pos, delta)
-
-# Head tracking from a raw aim point rather than an InputState — used by the
-# render-rate cosmetic pass (Skater.render_pose_update), which has no input
-# frame, off the controller's last-seen aim world position.
-func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
+# Reads only replicated state (HeadLookRules), so a skater's head turns the same
+# on every peer.
+func apply_head_tracking(delta: float) -> void:
 	var target_angle: float = 0.0
-	# A downed head lolls to neutral instead of tracking the cursor across the
+	# A downed head lolls to neutral instead of tracking anything across the
 	# ice (the spring carries it there and back smoothly).
 	if _controller.knockdown_timer <= 0.0:
-		var mouse_local: Vector3 = _skater.upper_body_to_local(aim_world)
-		mouse_local.y = 0.0
-		if mouse_local.length() > 0.01:
-			target_angle = clampf(
-				atan2(mouse_local.x, -mouse_local.z),
-				-deg_to_rad(_controller.head_track_max_deg),
-				deg_to_rad(_controller.head_track_max_deg))
-	# On a spring rather than a lag, so the head starts after the cursor from rest.
+		var look: Vector3
+		var has_look: bool = true
+		var puck: Puck = _controller.puck
+		var state: int = _skater.current_shot_state
+		match HeadLookRules.target(SkaterStateMachine.state_has_puck(state),
+				SkaterStateMachine.state_aims_shot(state),
+				puck != null and HeadLookRules.is_puck_in_play(puck.global_position)):
+			HeadLookRules.Target.PUCK:
+				look = puck.global_position
+			HeadLookRules.Target.NET:
+				look = HeadLookRules.attacking_net(_skater.get_team_id())
+			_:
+				has_look = false
+		if has_look:
+			target_angle = HeadLookRules.yaw(_skater.upper_body_to_local(look), head_angle,
+					deg_to_rad(_controller.head_track_max_deg))
+	# On a spring rather than a lag, so the head starts after its target from rest.
 	var omega: float = _controller.head_track_speed * EaseRules.OMEGA_PER_RATE
 	var was: float = head_angle
 	head_angle = EaseRules.critical_x(was, _head_rate, target_angle, omega, delta)
@@ -652,9 +657,10 @@ func apply_head_tracking_aim(aim_world: Vector3, delta: float) -> void:
 
 
 # How far a carrier's head nods down to the puck: the larger of the hands
-# working it and it coming in tight, eased off by skating speed.
+# working it and it coming in tight, eased off by skating speed. Gated on the
+# replicated shot state: a client never sets has_puck on another player's controller.
 func _puck_nod() -> float:
-	if not _controller.has_puck:
+	if not SkaterStateMachine.state_has_puck(_skater.current_shot_state):
 		return 0.0
 	var c: SkaterController = _controller
 	var hands: float = smoothstep(c.head_puck_hands_band.x, c.head_puck_hands_band.y,

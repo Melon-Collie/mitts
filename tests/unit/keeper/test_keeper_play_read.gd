@@ -10,7 +10,7 @@ extends GutTest
 # late as the puck, none once it is loose; and a loose puck read to
 # the first opposing stick its line reaches before it stops.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 func test_a_puck_holding_its_line_is_read_where_it_is() -> void:

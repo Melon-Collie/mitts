@@ -23,7 +23,7 @@ class_name GoalDetectionRules
 # the crossing point inside a mouth tightened by the puck's own extent (so the
 # whole disc is within the posts / under the bar). Because we work from the swept
 # segment prev_center -> curr_center, a fast shot that clears the full goal depth
-# in a single 120 Hz tick is caught reliably — the exact case an Area3D can
+# in a single tick is caught reliably — the exact case an Area3D can
 # tunnel straight through.
 #
 # `facing` is +1 for the +Z net, -1 for the -Z net (matches HockeyGoal.facing).
@@ -59,7 +59,7 @@ static func crossed_into_net(
 	# Interpolate where the center pierces the goal-line plane (depth == 0), so a
 	# puck curling in is judged at the spot it actually crossed. If it was already
 	# a hair past the line last tick, t clamps to prev_center — close enough at
-	# 120 Hz for these slow-dribble cases.
+	# the tick rate for these slow-dribble cases.
 	var span: float = curr_depth - prev_depth
 	var t: float = 0.0
 	if span > 0.0:

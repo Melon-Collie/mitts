@@ -4,7 +4,7 @@ extends GutTest
 # wherever the neck lets it, no faster than a head turns, held at the neck's
 # limit past it, and back where the stance holds it when the puck is there.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 var _skel := KeeperSkeleton.new()
 

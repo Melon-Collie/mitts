@@ -430,3 +430,10 @@ here whenever you bump, in the same format.
 #      941 B), still one unreliable Steam message. Packet layout change, so
 #      mixed builds must be refused. Replay FORMAT_VERSION 20: the embedded
 #      world state's goalie block changed size.
+# v90: the physics tick is 90 Hz and the world-state broadcast 45 Hz (was
+#      120 / 60). Input stamps are a tick apart and the host consumes one a
+#      tick, the input lead's margin is 1.5 ticks (16.7 ms), and the stick
+#      check's elapsed byte counts ticks at the new rate. Nothing changed size,
+#      so a v89 peer would decode cleanly and desync; mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: an older replay's stick-check
+#      timing reads a third long, which is cosmetic.

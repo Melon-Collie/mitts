@@ -10,7 +10,7 @@ extends GutTest
 
 const H := preload("res://tests/harness/net_timing_harness.gd")
 
-# Deliberately includes rates that do NOT divide the 120 Hz physics tick (75,
+# Deliberately includes rates that do NOT divide the physics tick (75,
 # 100, 144): those produce an irregular 1-2-1-2 step pattern per frame, which is
 # harder on the clock than a clean 2-per-frame.
 const CLIENT_FPS: Array[float] = [30.0, 60.0, 75.0, 100.0, 144.0, 240.0]
@@ -96,11 +96,13 @@ func test_a_margin_only_lead_runs_inputs_overdue() -> void:
 
 
 func test_the_lead_keeps_inputs_on_time_at_every_rtt() -> void:
-	# What remains is the host's frame quantization (two ticks per 60 fps frame).
+	# What remains is the host's frame quantization: a 60 fps frame runs up to
+	# two ticks, so a pop lands up to two ticks after its due instant.
+	var bound_ms: float = 2.0 * Constants.TICK_DURATION * 1000.0
 	for fps: float in CLIENT_FPS:
 		for rtt: float in RTTS:
 			var r: RefCounted = H.new().run(_cfg(fps, rtt))
-			assert_lt(r.overdue_mean_ms, 15.0,
+			assert_lt(r.overdue_mean_ms, bound_ms,
 					"client %d fps @ %d ms: %s" % [int(fps), int(rtt), r.summary()])
 			assert_eq(r.drains, 0,
 					"client %d fps @ %d ms: %s" % [int(fps), int(rtt), r.summary()])

@@ -27,7 +27,7 @@ extends CanvasLayer
 # The sampling itself is OFF until this panel is first opened (F6 latches
 # GameManager.shape_tally_armed) and the overlay is only built in a debug build,
 # so an ordinary match pays nothing for it. Cost of being wrong here is real:
-# the tally ticks at 120 Hz per team off the host's physics step.
+# the tally ticks every physics tick per team off the host's physics step.
 #
 # Debug surface — strings are deliberately not routed through tr(), matching
 # NetworkDebugOverlay. Built entirely in code (no .tscn) so it stays a
@@ -52,7 +52,7 @@ const CHURN_MEAN_SPELL_S: float = 0.5
 # meant to be a transient handoff, so a sustained slice is the interesting case.
 const DOWNGRADE_FLAG_SHARE: float = 0.05
 
-# Refresh cadence while open. The tally moves at 120 Hz but a human reads it at
+# Refresh cadence while open. The tally moves every tick but a human reads it at
 # reading speed, and rebuilding the bbcode every frame is pure waste.
 const REFRESH_SECONDS: float = 0.25
 
@@ -120,7 +120,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		_showing = not _showing
 		_panel.visible = _showing
 		if _showing:
-			# Arm the host-side sampling on first open. It is a 120 Hz tick cost,
+			# Arm the host-side sampling on first open. It is a per-tick cost,
 			# so it does not run in a match nobody asked to measure — and it
 			# stays armed once latched, because a gap in the sampling would skew
 			# every share the panel then reports.

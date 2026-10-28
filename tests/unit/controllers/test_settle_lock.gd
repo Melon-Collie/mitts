@@ -5,7 +5,7 @@ extends GutTest
 # it queue, and the latest fires on the first unlocked input.
 
 const State = SkaterStateMachine.State
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const T0: float = 10.0
 const SETTLE_S: float = 0.2
 

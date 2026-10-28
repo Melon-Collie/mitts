@@ -158,7 +158,7 @@ func _enqueue(host_ts: float, kind: int, payload: PackedByteArray) -> void:
 #
 # Flushing after every drain (rather than only on shutdown) bounds the
 # crash-recovery loss to a single batch instead of whatever the OS happened
-# to buffer. Cost is up to ~120 user-space flushes/sec at the 120 Hz
+# to buffer. Cost is up to ~90 user-space flushes/sec at the 90 Hz
 # broadcast cadence; negligible vs. the data-recovery benefit.
 func _worker_loop() -> void:
 	while true:

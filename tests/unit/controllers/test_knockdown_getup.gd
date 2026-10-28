@@ -6,7 +6,7 @@ extends GutTest
 # then skates staggered for a moment, a hit and a dive alike. Measured through
 # the render pass that applies the pose, as test_knockdown_lies_on_the_ice does.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const UpperBone = SkaterMeshBuilder.UpperBone
 const LegBone = SkaterMeshBuilder.LegBone
 

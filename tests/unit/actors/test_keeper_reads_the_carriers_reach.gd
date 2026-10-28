@@ -7,7 +7,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # The reach he plays is the skater's furthest pull on average, to within
 # MEAN_TOLERANCE_M, and no pull falls further than SPREAD_M from it.
 const MEAN_TOLERANCE_M: float = 0.05

@@ -13,7 +13,7 @@ extends GutTest
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const State = SkaterStateMachine.State
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # Comfortably past every ease in the prep pose (the slowest is the crouch's
 # stride_intensity_speed at 6/s) so the assertions are about the settled value.
 const SETTLE_TICKS: int = 120

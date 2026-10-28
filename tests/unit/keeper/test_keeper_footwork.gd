@@ -8,12 +8,12 @@ extends GutTest
 # him jumps between ticks; and once the stop has settled out of him he is in
 # the ready stance.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
 # A bone's travel in a tick, past which it has jumped: the recovering leg is
 # the fastest thing on him, about 7 m/s at its peak.
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 const T_PUSH := KeeperFootwork.Move.T_PUSH
 const SHUFFLE := KeeperFootwork.Move.SHUFFLE
 const C_CUT := KeeperFootwork.Move.C_CUT
@@ -210,7 +210,7 @@ func test_the_t_push_skate_stays_on_its_plant_until_the_leg_is_out() -> void:
 			else:
 				assert_almost_eq(hip.distance_to(ankle), reach, 0.01,
 						"%s: off its plant at %.3f, %.3f only with the leg out" % [spot, _fw.x, _fw.z])
-		assert_gt(planted_ticks, 15, "%s: it is planted for most of the push" % spot)
+		assert_gt(planted_ticks, roundi(0.125 / DT), "%s: it is planted for most of the push" % spot)
 
 
 # The shuffle and the C-cuts are strokes: in each a skate holds its place along

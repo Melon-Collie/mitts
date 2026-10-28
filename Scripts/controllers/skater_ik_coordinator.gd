@@ -94,6 +94,26 @@ var _native_top: RefCounted = null
 var _native_dangle: RefCounted = null
 # The tie state the dangle config was last synced for (the blade cap follows it).
 var _dangle_synced_tied: bool = false
+# The whole blade pass in C++ (null = extension absent or stale: the GDScript
+# below runs). It drives the two kernels above, so they keep one state between
+# the paths. native_pass_enabled routes round it for the parity test.
+var _native_pass: RefCounted = null
+var native_pass_enabled: bool = true
+var _pass_scalars := PackedFloat64Array()
+var _pass_vectors := PackedVector3Array()
+var _pass_goalies := PackedFloat64Array()
+# NativeBladePass.run's inputs, by index (its Scalar and Vec enums).
+enum PassS {
+	DELTA, HOLD_BLADE, HOLD_SEAT, HAS_PUCK, LEFT_HANDED, WRISTER_AIM, TRUNK_FOLD,
+	ADDRESS, FOREHAND_FACTOR, TRANSIT_FACTOR, LIFT_BLEND, COMMIT_BLEND, GRIP_CHOKE,
+	CHECK_LEAD, HAS_PUCK_NODE, PURPOSE_RIM, BLADE_LENGTH, CARRY_BLADE_OFFSET,
+	CARRY_TRANSIT_LIFT, WALL_SQUEEZE_THRESHOLD, WALL_PIN_INWARD_BIAS, BOTTOM_REACH,
+	GLOVE_SPACING, HAS_NET_ANCHOR, REACH_PURPOSE, COUNT,
+}
+enum PassV {
+	TARGET, SHOULDER, BOTTOM_SHOULDER, BLADE_MARKER, BLADE_FORWARD, PREV_CONTACT,
+	PUCK_POS, PUCK_VEL, VELOCITY, UB_ROTATION, LAST_TARGET, NET_ANCHOR, COUNT,
+}
 
 func setup(skater: Skater, controller: SkaterController,
 		skating: SkaterSkatingCoordinator) -> void:
@@ -114,6 +134,18 @@ func setup(skater: Skater, controller: SkaterController,
 	if ClassDB.class_exists(&"NativeBladeDangle"):
 		_native_dangle = ClassDB.instantiate(&"NativeBladeDangle")
 		_sync_dangle_config()
+	if _native_top != null and _native_dangle != null and ClassDB.class_exists(&"NativeBladePass"):
+		_native_pass = ClassDB.instantiate(&"NativeBladePass")
+		_native_pass.bind(_native_top, _native_dangle)
+		_native_pass.set_rink(GameRules.INNER_HALF_WIDTH, GameRules.INNER_HALF_LENGTH,
+				GameRules.INNER_CORNER_RADIUS, GameRules.CORNER_CENTER_X, GameRules.CORNER_CENTER_Z)
+		_native_pass.set_net(GameRules.GOAL_LINE_Z, GameRules.NET_HALF_WIDTH,
+				GameRules.NET_POST_RADIUS, GameRules.NET_DEPTH, GameRules.NET_TOP_DEPTH,
+				GameRules.NET_HEIGHT, GameRules.NET_BACK_HALF_WIDTH, GameRules.NET_CROWN_HALF_WIDTH,
+				GameRules.NET_MOUTH_CORNER_RADIUS, GameRules.NET_BLADE_MESH_GIVE)
+		_pass_scalars.resize(PassS.COUNT)
+		_pass_vectors.resize(PassV.COUNT)
+		_sync_pass_config()
 
 # Drop the cached configs so the next solve rebuilds them from the controller
 # exports. Called by SkaterController.apply_attributes (stick length, ROM, and
@@ -123,6 +155,49 @@ func invalidate_configs() -> void:
 	_cached_bottom_cfg = null
 	_purpose_rim = -1.0
 	_sync_dangle_config()
+	_sync_pass_config()
+
+
+# The tunables the native pass reads, on the moment they change (apply_attributes).
+# A binary older than one of them takes the GDScript path.
+func _sync_pass_config() -> void:
+	if _native_pass == null:
+		return
+	var c: SkaterController = _controller
+	var ok: bool = _native_pass.configure({
+		"hand_rest_y": c.hand_rest_y, "hand_y_max": c.hand_y_max,
+		"faceoff_center_hand_rise": c.faceoff_center_hand_rise,
+		"faceoff_center_lean_deg": c.faceoff_center_lean_deg,
+		"stick_length": c.stick_length, "rom_forward_reach_max": c.rom_forward_reach_max,
+		"rom_forehand_reach_max": c.rom_forehand_reach_max,
+		"rom_backhand_reach_max": c.rom_backhand_reach_max,
+		"rom_forehand_angle_max": deg_to_rad(c.rom_forehand_angle_max_deg),
+		"rom_backhand_angle_max": deg_to_rad(c.rom_backhand_angle_max_deg),
+		"net_blade_half_thickness": c.net_blade_half_thickness,
+		"blade_height": c.blade_height, "blade_lift_height": c.blade_lift_height,
+		"hit_commit_blade_lift_m": c.hit_commit_blade_lift_m,
+		"bh_release_angle_deg": c.bh_release_angle_deg,
+		"reach_purpose_lookahead_s": c.reach_purpose_lookahead_s,
+		"reach_purpose_near_m": c.reach_purpose_near_m,
+		"reach_purpose_far_m": c.reach_purpose_far_m,
+		"hit_commit_hand_local_x": c.hit_commit_hand_local_x,
+		"hit_commit_hand_local_y": c.hit_commit_hand_local_y,
+		"hit_commit_hand_local_z": c.hit_commit_hand_local_z,
+		"hit_commit_blade_bearing_x": c.hit_commit_blade_bearing_x,
+		"hit_commit_blade_bearing_z": c.hit_commit_blade_bearing_z,
+		"hit_commit_blade_sweep": c.hit_commit_blade_sweep,
+		"goalie_block_radius": c.goalie_block_radius,
+		"butterfly_pad_half_x": c.butterfly_pad_half_x,
+		"butterfly_pad_half_z": c.butterfly_pad_half_z,
+		"goalie_strip_power": c.goalie_strip_power,
+		"bottom_hand_grip_fraction": c.bottom_hand_grip_fraction,
+		"faceoff_center_grip_fraction": c.faceoff_center_grip_fraction,
+		"twist_limit": SkaterSpineRig.TWIST_LIMIT,
+	})
+	if not ok:
+		push_warning("NativeBladePass lacks a tunable — using the GDScript blade pass. "
+				+ "Rebuild native/ (bash native/build.sh).")
+		_native_pass = null
 
 # The dangle tunables are plain controller @exports (not part of the cached IK
 # configs), so they sync here — covered by the same invalidate_configs moment
@@ -183,6 +258,12 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 # (a slapshot's set-up taking the puck to the strike spot).
 func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = false,
 		hold_seat: bool = false) -> void:
+	# The pass drives the two kernels it was bound to; with either taken away it
+	# would keep driving the stale one.
+	if _native_pass != null and native_pass_enabled and _native_top != null \
+			and _native_dangle != null:
+		_native_blade_toward(target_world, delta, hold_blade, hold_seat)
+		return
 	var mouse_world: Vector3 = target_world
 	mouse_world.y = 0.0
 
@@ -498,6 +579,85 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 
 	_skater.set_top_hand_position(hand_local)
 	_skater.set_blade_position(wall_clamped)
+
+# apply_blade_toward in C++ (NativeBladePass): its inputs gathered once, its
+# releases fired where the GDScript fires them (mid-pass, each resumed with
+# the live has_puck), the reach target and wall normal written before them and
+# the markers after, as there.
+func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
+		hold_seat: bool) -> void:
+	if _skater.stick_tied != _dangle_synced_tied:
+		_sync_dangle_config()
+	var has_puck: bool = _controller.has_puck
+	var puck: Puck = _controller.puck
+	var s: PackedFloat64Array = _pass_scalars
+	s[PassS.DELTA] = delta
+	s[PassS.HOLD_BLADE] = 1.0 if hold_blade else 0.0
+	s[PassS.HOLD_SEAT] = 1.0 if hold_seat else 0.0
+	s[PassS.HAS_PUCK] = 1.0 if has_puck else 0.0
+	s[PassS.LEFT_HANDED] = 1.0 if _skater.is_left_handed else 0.0
+	s[PassS.WRISTER_AIM] = 1.0 if _controller.get_shot_state() == State.WRISTER_AIM else 0.0
+	s[PassS.TRUNK_FOLD] = _skater.trunk_fold()
+	s[PassS.ADDRESS] = _address_blend()
+	s[PassS.FOREHAND_FACTOR] = _skater.get_carry_forehand_factor() if has_puck else 0.0
+	s[PassS.TRANSIT_FACTOR] = _skater.get_carry_transit_factor() \
+			if has_puck and _skater.carry_transit_lift > 0.0 else 0.0
+	s[PassS.LIFT_BLEND] = _skater.get_blade_lift_blend()
+	s[PassS.COMMIT_BLEND] = _skater.get_commit_lift_blend()
+	s[PassS.GRIP_CHOKE] = _skater.grip_choke()
+	s[PassS.CHECK_LEAD] = _skater.get_check_lead()
+	s[PassS.HAS_PUCK_NODE] = 1.0 if puck != null else 0.0
+	if puck != null and not has_puck and _purpose_rim < 0.0:
+		_purpose_rim = full_blade_reach()
+	s[PassS.PURPOSE_RIM] = _purpose_rim
+	s[PassS.BLADE_LENGTH] = _skater.blade_length
+	s[PassS.CARRY_BLADE_OFFSET] = _skater.carry_blade_offset
+	s[PassS.CARRY_TRANSIT_LIFT] = _skater.carry_transit_lift
+	s[PassS.WALL_SQUEEZE_THRESHOLD] = _skater.wall_squeeze_threshold
+	s[PassS.WALL_PIN_INWARD_BIAS] = _skater.wall_pin_inward_bias
+	s[PassS.BOTTOM_REACH] = (_skater.upper_arm_length + _skater.forearm_length) \
+			* _skater.arm_working_extension + _skater.shoulder_reach_m
+	s[PassS.GLOVE_SPACING] = _glove_spacing()
+	s[PassS.HAS_NET_ANCHOR] = 1.0 if _has_net_side_anchor else 0.0
+	s[PassS.REACH_PURPOSE] = reach_purpose
+	var v: PackedVector3Array = _pass_vectors
+	v[PassV.TARGET] = target_world
+	v[PassV.SHOULDER] = _skater.shoulder.position
+	v[PassV.BOTTOM_SHOULDER] = _skater.bottom_shoulder.position
+	v[PassV.BLADE_MARKER] = _skater.get_blade_position()
+	v[PassV.BLADE_FORWARD] = -_skater.blade.global_transform.basis.z
+	v[PassV.PREV_CONTACT] = _skater.get_prev_blade_contact_global()
+	if puck != null:
+		v[PassV.PUCK_POS] = puck.global_position
+		v[PassV.PUCK_VEL] = puck.linear_velocity
+	v[PassV.VELOCITY] = _skater.velocity
+	v[PassV.UB_ROTATION] = _skater.upper_body.rotation
+	v[PassV.LAST_TARGET] = last_target_blade_world
+	v[PassV.NET_ANCHOR] = _net_side_anchor
+	_pass_goalies.clear()
+	if has_puck and _controller._game_state.has_method("get_goalie_data"):
+		for data: Dictionary in _controller._game_state.get_goalie_data():
+			var gpos: Vector3 = data["position"]
+			_pass_goalies.append(gpos.x)
+			_pass_goalies.append(gpos.z)
+			_pass_goalies.append(1.0 if data["is_butterfly"] else 0.0)
+			_pass_goalies.append(data["rotation_y"])
+	_native_pass.run(_skater.global_transform, _skater.upper_body.global_transform,
+			s, v, _pass_goalies)
+	if _native_pass.get_skipped():
+		return
+	last_target_blade_world = _native_pass.get_last_target()
+	reach_purpose = _native_pass.get_reach_purpose()
+	_smoothed_blade_world = _native_pass.get_smoothed_blade()
+	_smoothed_blade_initialized = true
+	_skater.set_blade_wall_normal(_native_pass.get_wall_normal())
+	while _native_pass.get_pending():
+		_controller._do_release(_native_pass.get_pending_dir(), _native_pass.get_pending_power())
+		_native_pass.resume(_controller.has_puck)
+	_net_side_anchor = _native_pass.get_net_anchor()
+	_has_net_side_anchor = _native_pass.get_has_net_anchor()
+	_skater.set_top_hand_position(_native_pass.get_hand())
+	_skater.set_blade_position(_native_pass.get_blade())
 
 # ── Board Reach Limit ─────────────────────────────────────────────────────────
 # How far the blade may sit from the shoulder along the aim toward

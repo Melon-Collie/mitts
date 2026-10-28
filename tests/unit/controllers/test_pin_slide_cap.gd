@@ -6,7 +6,7 @@ extends GutTest
 # both reproduce it; unlocked, the same stride runs free.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class GameStateStub:

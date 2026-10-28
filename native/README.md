@@ -3,18 +3,22 @@
 C++ ports of per-tick math kernels, registered as `Native*` classes
 (`NativeTopHandIK`, `NativeSkaterMovement`,
 `NativePuckStep`, `NativeBladeDangle`, `NativeArmRig`, `NativeSkaterGait`,
-`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`). The
+`NativeLegChain`, `NativeCarryRollout`, `NativeShotOdds`, `NativeHemFlaps`,
+`NativeBladePass`). The
 GDScript originals (in `Scripts/domain/rules/`, `Scripts/domain/ai/`,
 `Scripts/controllers/` and `Scripts/actors/`) remain the behavioral
 reference; each ported kernel is pinned to its reference by a seeded fuzz test
 (`tests/unit/rules/test_native_ik_parity.gd` and its siblings). **Change a
 solver in both places or not at all** — the parity tests are the gate.
 
-This directory exists because interpreter overhead on the 120 Hz tick (and its
+This directory exists because interpreter overhead on the 90 Hz tick (and its
 reconcile-replay amplification) is the game's scripting bottleneck. The rule
 for what belongs here: settled, evaluation-grade math with a coarse call
 boundary — primitives and vectors in, results out, no callbacks into GDScript
-mid-solve. Feel-tunable orchestration stays in GDScript.
+mid-solve. "Settled" is the bar for something new: a mechanic still being found
+stays in GDScript until it stops changing. Mature orchestration, feel tunables
+and all, may be ported when the measured cost earns it; the GDScript stays the
+reference and the parity test is the gate, as for any kernel.
 
 ## The one non-kernel: `NativeGifEncoder`
 
@@ -126,6 +130,20 @@ without a built binary, loses performance, never correctness — CI builds it):
   stateful speed-cap / arrive-law smoother, `NativeBladeDangle.advance`);
   reset/seed forward from `reset_blade_smoothing` / `seed_blade_smoothing`,
   config syncs via `_sync_dangle_config` under `invalidate_configs()`.
+- **Blade pass** — the whole of `SkaterIKCoordinator.apply_blade_toward`
+  (every skater's tick, and every replayed input): the reach target, the board
+  and net reach limits, the carry's two hands and backhand stop, the rest reach,
+  the hand solve, the commit pose, the transit hop, the board, goalie and net
+  clamps and the rigid rebuild. It drives the two kernels above through `bind`,
+  so the dangle's state and the top hand's config are one between the paths.
+  The coordinator gathers the pass's inputs once
+  (`_native_blade_toward`); the rink and net arrive by `set_rink` / `set_net`,
+  and the tunables by `configure` under `invalidate_configs()`. A puck released
+  mid-pass is the one place the GDScript calls out: `run` returns with the
+  release pending, the coordinator fires it and `resume`s with the live
+  `has_puck`, because what the goalie loop does next depends on whether the
+  release took the puck. `test_native_blade_pass_parity.gd` skates the two side
+  by side; the GDScript stays the reference.
 - **Puck step** — host drive (`Puck._drive_analytic`, per sub-step so the
   goalie interleave keeps its exact order) and client prediction
   (`PuckController._run_prediction`, whole-tick `step_tick` batching), both

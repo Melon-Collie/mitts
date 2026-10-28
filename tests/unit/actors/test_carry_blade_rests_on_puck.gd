@@ -9,7 +9,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # The drawn puck's rim (PuckMeshBuilder) is the collision radius.
 const PUCK_R: float = GameRules.PUCK_COLLISION_RADIUS
 # Off its forehand-ahead diagonal, or round the backhand, from the body.

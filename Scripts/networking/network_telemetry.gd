@@ -24,7 +24,7 @@ var current_actor_count: int = 0
 var _last_host_event: String = ""
 var _last_host_event_sec: float = -1.0
 # Host physics ticks whose inter-tick wall gap exceeded _HOST_STALL_MS this
-# window. The threshold is a feel/diagnostic cutoff (~2 dropped 60 Hz frames),
+# window. The threshold is a feel/diagnostic cutoff (~2 dropped 60 fps frames),
 # not an evaluator constant. Host only; folded as a TOTAL_KEY.
 const _HOST_STALL_MS: float = 33.0
 var _host_stall_count: int = 0
@@ -264,7 +264,7 @@ var broadcast_interval_p95_ms: float = 0.0
 var _phys_tick_samples_us: Array[int] = []
 var _bcast_interval_samples_us: Array[int] = []
 const PHYS_TICK_WINDOW: int = _PhysicsConstants.PHYSICS_TICK   # 1 s of samples
-const BCAST_INTERVAL_WINDOW: int = 120  # 2 s at the 60 Hz broadcast rate
+const BCAST_INTERVAL_WINDOW: int = 120  # ~2.7 s at the 45 Hz broadcast rate
 
 # ── Static call sites (no-op when not in a game session) ─────────────────────
 static func record_world_state() -> void:
@@ -287,7 +287,7 @@ static func record_bytes_sent(n: int) -> void:
 static func record_bytes_received(n: int) -> void:
 	if instance: instance._bytes_received_window += n
 
-const QUEUE_DEPTH_WINDOW: int = 240  # samples, ~4 s at the 60 Hz broadcast rate
+const QUEUE_DEPTH_WINDOW: int = 240  # samples, ~5.3 s at the 45 Hz broadcast rate
 
 static func record_queue_depth(depth: int) -> void:
 	if instance == null:
@@ -344,7 +344,7 @@ static func record_reconcile(delta_m: float) -> void:
 # blade_jump: a reconcile teleported the blade > 5 cm (a real visible pop).
 # Recorded only from the reconcile path — a per-tick live check does NOT belong
 # here, because ordinary fast stickhandling legitimately moves the blade > 5 cm
-# in one 8.3 ms tick (= 6 m/s).
+# in one 11 ms tick (= 4.5 m/s).
 static func record_blade_jump(magnitude: float) -> void:
 	if instance == null:
 		return
@@ -544,7 +544,7 @@ static func record_provisional_stolen() -> void:
 	if instance: instance._provisional_stolen_count += 1
 
 # Wall-clock microseconds between consecutive host physics ticks (steady state
-# ≈ 8333 µs at the 120 Hz tick). A stall produces one large sample followed by
+# ≈ 11111 µs at the 90 Hz tick). A stall produces one large sample followed by
 # near-zero catch-up samples. Host-only.
 static func record_host_physics_tick_us(us: int) -> void:
 	if instance == null:

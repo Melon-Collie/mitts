@@ -9,7 +9,7 @@ extends GutTest
 # which prints every scenario, and the gate (unit/actors/test_body_stays_smooth.gd),
 # which bounds the transitions.
 
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const UpperBone = SkaterMeshBuilder.UpperBone
 const LEG: int = SkaterBodySkeleton.LEG_BONE_OFFSET

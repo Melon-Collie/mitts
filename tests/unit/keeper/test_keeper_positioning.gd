@@ -20,11 +20,11 @@ extends GutTest
 # on it, and a cut across the front of the crease from there he slides with
 # on his knees, never standing up into it.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PLANNER_EVERY: int = 4
 const PAD_GIVE_M: float = 0.025
 const HARD_GIVE_M: float = 0.005
-const MAX_BONE_STEP_M: float = 0.1
+const MAX_BONE_STEP_M: float = 12.0 * DT  # nothing on him moves 12 m/s
 # How far out from the goal line a carrier driving at the post has it in reach,
 # and how high a puck jammed in there along the ice comes.
 const AT_POST_M: float = 0.4

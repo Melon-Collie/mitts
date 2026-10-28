@@ -9,7 +9,7 @@ extends GutTest
 
 const _SCENE: String = "res://Scenes/Skater.tscn"
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = 1.0 / 120.0  # a fixed step: the script below is timed in it
 
 
 class StubGameState extends Node:

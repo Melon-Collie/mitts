@@ -1,6 +1,7 @@
 #include "register_types.h"
 
 #include "native_arm_rig.h"
+#include "native_blade_pass.h"
 #include "native_blade_dangle.h"
 #include "native_carry_rollout.h"
 #include "native_gif_encoder.h"
@@ -34,6 +35,7 @@ void initialize_mitts_native_module(ModuleInitializationLevel p_level) {
 	ClassDB::register_class<mitts::NativeShotOdds>();
 	ClassDB::register_class<mitts::NativeHemFlaps>();
 	ClassDB::register_class<mitts::NativeGifEncoder>();
+	ClassDB::register_class<mitts::NativeBladePass>();
 }
 
 void uninitialize_mitts_native_module(ModuleInitializationLevel p_level) {

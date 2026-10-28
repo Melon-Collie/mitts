@@ -12,7 +12,7 @@ extends RefCounted
 #     WorldSnapshots and emitting InputStates, with a real per-team TeamBrain
 #     doing slot assignment — the exact production decision stack.
 #   - Body physics: SkaterMovementRules.apply_movement (the pure extraction
-#     the live controller runs), at the real 120 Hz tick, with the
+#     the live controller runs), at the real physics tick, with the
 #     controller-default MovementConfig.
 #   - Puck contacts: PuckInteractionRules.check_pickup / check_poke — the
 #     real swept-segment tests at the real pickup radius.
@@ -38,7 +38,8 @@ extends RefCounted
 
 const Agent := preload("res://Scripts/ai/skater_agent_state_machine.gd")
 
-const DT: float = 1.0 / 120.0
+const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
+const DT: float = _PhysicsConstants.TICK_DURATION
 # Mirrors of live tuning the plant integrates with (SkaterController export
 # defaults; PuckController.PICKUP_RADIUS; AIBotMechanics.BLADE_REACH_M).
 const FACING_DRAG: float = 5.0
@@ -60,10 +61,10 @@ const RECEIVE_ALIGNMENT_BONUS: float = 8.0
 # blade runs body→blade (no hands); test_bot_mirrors.gd holds these to Puck.
 const BOBBLE_LOAD: float = 0.67
 const BOBBLE_EDGE_SHARE: float = 0.4
-const BOBBLE_GRACE_TICKS: int = 48   # Puck.settle_max_s 0.40 s at 120 Hz
+const BOBBLE_GRACE_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 2 / 5   # Puck.settle_max_s
 # A releaser can't re-catch its own release while the puck departs its blade
 # (production has a post-shot pickup cooldown on the controller).
-const RELEASE_GRACE_TICKS: int = 36
+const RELEASE_GRACE_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 10
 # A stripped puck squirts along the poking blade's sweep at a capped pace.
 const STRIP_SQUIRT_M_S: float = 3.5
 # Release pace for a shot (quick-shot scale): the harness records shot EVENTS for
@@ -71,7 +72,7 @@ const STRIP_SQUIRT_M_S: float = 3.5
 # own pace (_release_speed).
 const RELEASE_SPEED_M_S: float = 15.0
 # TeamBrain re-slot cadence (~6 Hz, the production rhythm).
-const BRAIN_PERIOD_TICKS: int = 20
+const BRAIN_PERIOD_TICKS: int = _PhysicsConstants.PHYSICS_TICK / 6
 
 # ── Scripted PUPPET container tuning ─────────────────────────────────────────
 # A puppet (add_puppet_container) is an agentless defender running a fixed
@@ -80,7 +81,7 @@ const BRAIN_PERIOD_TICKS: int = 20
 # puck read, blade presented on the puck line. Real defender bots CHASE a
 # carrier one-on-one (and the carrier rightly beats them with speed and a cut),
 # so patient containment has to be staged deliberately.
-const PUPPET_REACTION_TICKS: int = 18       # ≈ EVADE_REACTION_S at 120 Hz
+const PUPPET_REACTION_TICKS: int = _PhysicsConstants.PHYSICS_TICK * 3 / 20  # ≈ EVADE_REACTION_S
 const PUPPET_ACCEL_M_S2: float = 10.5       # DEFAULT_SKATER_THRUST_M_S2
 const PUPPET_MAX_SPEED_M_S: float = 9.0
 const PUPPET_GAIN: float = 4.0              # P-control: desired m/s per m of error

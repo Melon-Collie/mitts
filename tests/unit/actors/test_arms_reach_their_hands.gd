@@ -8,7 +8,7 @@ extends GutTest
 # shaft and the shoulder girdle gives to keep them within reach
 # (BottomHandIK.reachable_grip, TwoBoneIK.reach_root).
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const UpperBone = SkaterMeshBuilder.UpperBone
 const _ARM_BONES: Array[int] = [UpperBone.TOP_UPPER_ARM, UpperBone.TOP_FOREARM,
 		UpperBone.BOTTOM_UPPER_ARM, UpperBone.BOTTOM_FOREARM]

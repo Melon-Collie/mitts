@@ -7,7 +7,7 @@ extends RefCounted
 #
 # Two wire formats are defined here:
 #
-# 1. World state  (STATE_RATE = 60 Hz, unreliable_ordered) — single flat
+# 1. World state  (STATE_RATE = 45 Hz, unreliable_ordered) — single flat
 #    PackedByteArray, sized once and written at offsets (see encode_world_state):
 #      u16 ws_sequence, u32 host_capture_time (0.1ms units), u8 num_skaters
 #      [u32 peer_id, skater_bytes(58), u8 queue_depth] × num_skaters
@@ -225,7 +225,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 	# game-state block lands at the right offset.
 	var skip_actors: bool = NetworkManager.is_replay_mode()
 	# Skaters — collect peer_ids in packet order so we can resolve the puck carrier
-	# index below. The roster scratch is cleared and refilled per packet (60 Hz).
+	# index below. The roster scratch is cleared and refilled per packet.
 	var decoded_peers: Array[int] = _decoded_peers_scratch
 	decoded_peers.clear()
 	for _i: int in num_skaters:
@@ -556,7 +556,7 @@ static func quantize_move_intent(v: Vector2) -> Vector2:
 
 # `offset` mirrors _write_skater_quantized: the packet decodes in place at a
 # cursor rather than being sliced into a per-actor copy first (~600 throwaway
-# PackedByteArrays/s across skaters, puck and goalies at the 60 Hz packet rate).
+# PackedByteArrays/s across skaters, puck and goalies at the broadcast rate).
 static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> SkaterNetworkState:
 	if b.size() < offset + SKATER_STATE_BYTES:
 		push_warning("WorldStateCodec: truncated skater block (%d bytes)" % (b.size() - offset))

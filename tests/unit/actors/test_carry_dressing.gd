@@ -7,7 +7,7 @@ extends GutTest
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
 class GameStateStub:
@@ -55,7 +55,7 @@ func _run(c: SkaterController, ticks: int, cursor: Callable, move: Vector2,
 		c._process_input(input, DT)
 		sk._physics_process(DT)
 		sk._process(DT)
-		c._pose.apply_head_tracking_aim(input.mouse_world_pos, DT)
+		c._pose.apply_head_tracking(DT)
 		each.call(t)
 
 
@@ -92,6 +92,19 @@ func test_the_head_comes_down_to_a_puck_in_tight() -> void:
 	var tight: float = _settled_nod(Vector3(0.0, 0.0, -0.45), Vector2.ZERO)
 	assert_almost_eq(out, 0.0, 1.0, "a puck held out, still: eyes up")
 	assert_gt(tight, 15.0, "in tight, the head is down on it")
+
+
+# A client draws another player's carry from the replicated shot state alone and
+# never sets has_puck on that player's controller.
+func test_the_nod_reads_the_replicated_carry_not_the_controller_flag() -> void:
+	var c: SkaterController = _make_carrier()
+	_run(c, 240, func(_t: int) -> Vector3: return Vector3(0.0, 0.0, -0.45), Vector2.ZERO,
+			func(_t: int) -> void: pass)
+	c.has_puck = false
+	for _i: int in 120:
+		c._pose.apply_head_tracking(DT)
+	assert_eq(c.skater.current_shot_state, SkaterStateMachine.State.SKATING_WITH_PUCK)
+	assert_gt(rad_to_deg(c._pose.head_nod), 15.0)
 
 
 func test_skating_puts_the_eyes_up() -> void:

@@ -15,7 +15,7 @@ extends GutTest
 # extension isn't built.
 
 const State = SkaterStateMachine.State
-const DELTA: float = 1.0 / 120.0
+const DELTA: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const TOLERANCE: float = 0.001
 const SEED: int = 0x44414E47  # "DANG"
 

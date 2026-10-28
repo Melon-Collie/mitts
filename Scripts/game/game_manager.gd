@@ -321,7 +321,7 @@ var shape_tally := AIPossessionShapeTally.new()
 # Live breakout-outcome tally (F6 overlay) — the in-game counterpart of the
 # breakout harness, so its staged verdicts can be checked against real play.
 var breakout_episodes := AIBreakoutEpisodeTracker.new()
-# Both tallies sample at the 120 Hz host tick, so they stay OFF until asked for:
+# Both tallies sample at the host tick, so they stay OFF until asked for:
 # the overlay only exists in a debug build, and the first F6 press latches this.
 # It never un-latches — closing the panel would otherwise punch a hole in the
 # denominator and quietly corrupt every share it reports.
@@ -690,8 +690,9 @@ func _physics_process(delta: float) -> void:
 					_registry.ai_controllers(), team_brains, current_snapshot, delta)
 			HostCostProbe.record(HostCostProbe.Section.DISPATCH,
 					Time.get_ticks_usec() - t_section)
-	HostCostProbe.record(HostCostProbe.Section.WORKER, _ai_coordinator.last_worker_us)
-	HostCostProbe.record(HostCostProbe.Section.BRAINS, _ai_coordinator.last_brain_us)
+	if _ai_coordinator.harvested_this_tick():
+		HostCostProbe.record(HostCostProbe.Section.WORKER, _ai_coordinator.last_worker_us)
+		HostCostProbe.record(HostCostProbe.Section.BRAINS, _ai_coordinator.last_brain_us)
 	t_section = Time.get_ticks_usec()
 	_update_host_puck_tracking()
 	_check_goal_crossing()
@@ -5328,7 +5329,7 @@ func get_state_delayed(delay_seconds: float, out: WorldSnapshot = null) -> World
 # body-check re-resolution source (Slice C) — it re-derives contact against where
 # the host actually had the others.
 #
-# HOT PATH: called once per replayed input during a reconcile (120 Hz × unacked
+# HOT PATH: called once per replayed input during a reconcile (per tick × unacked
 # window, worst exactly when the network is bad — the case CLAUDE.md forbids
 # allocating in). So it fills a persistent scratch Array from a pooled set of
 # reused Dictionaries and iterates the roster by key (avoiding the fresh array
@@ -5453,8 +5454,8 @@ func get_world_state() -> PackedByteArray:
 
 # Tee a broadcast world-state frame into the .mreplay file. The viewer
 # interpolates between snapshots, so the steady PLAYING stream is decimated from
-# STATE_RATE (120 Hz) to ~30 Hz — a ~4x file-size cut at no perceptible playback
-# cost. The throttle and the phase rules are the recorder's.
+# STATE_RATE to REPLAY_FILE_RATE at no perceptible playback cost. The throttle
+# and the phase rules are the recorder's.
 func _record_world_state_to_file(host_ts: float, data: PackedByteArray) -> void:
 	_replay_file.record_frame(host_ts, data, _live_phase())
 

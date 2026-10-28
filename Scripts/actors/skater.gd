@@ -584,7 +584,7 @@ var _drawn_at_tick_start: Array[Transform3D] = [Transform3D.IDENTITY, Transform3
 var _drawn_tick: int = -1
 # Render-rate cosmetic pose hook. The controller registers a Callable(delta)
 # that runs the purely-cosmetic pose passes — the leg gait, head tracking, and
-# off-hand IK — which used to run in the physics tick (120 Hz × every skater,
+# off-hand IK — which used to run in the physics tick (every skater,
 # plus once per replayed input during reconcile). None of them feed the blade's
 # world frame (the gait's stride texture was decoupled from it), so they're pure
 # render concerns: run once per rendered frame here, visibility-gated, like the
@@ -620,7 +620,7 @@ var contact_suspended_provider: Callable = Callable()
 # identical on every machine (get_instance_id() is per-process and would let host
 # and client resolve the same pair from opposite sides, desyncing reconcile).
 var collision_tiebreak_id: int = 0
-# Reused across pairs each tick — no per-pair heap allocation in the 120 Hz
+# Reused across pairs each tick — no per-pair heap allocation in the per-tick
 # resolver (the hot-path "build once, fill scratch" pattern).
 var _collision_result: SkaterCollisionRules.Result = SkaterCollisionRules.Result.new()
 
@@ -1145,7 +1145,7 @@ func _latch_press_read() -> void:
 # Sanitizes the body's velocity/position to finite values right before the tick
 # integrates them. A NaN/Inf transform can't be un-poisoned once written (every
 # derived read — camera, IK, wire state — inherits it), so we clamp at the seam
-# and log where it came from. Cheap value-type checks — hot-path safe at 120 Hz ×
+# and log where it came from. Cheap value-type checks — hot-path safe at the tick rate ×
 # skaters; the string-formatting cost only ever runs on the (should-never) branch.
 func _sanitize_physics_state() -> void:
 	if not velocity.is_finite():
@@ -1293,7 +1293,7 @@ func _backstopped(victim: Skater, from: Skater, delta_v: Vector3, n: Vector3,
 # boundary (the same GameRules.clamp_to_rink_inner the puck-OOB check, blade
 # clamp, and reconcile replay use) and removing any velocity pointing into the
 # boards, so the skater slides smoothly along them. Pure value-type math — no
-# allocation, so it's hot-path safe at 120 Hz × actors. Called live from the
+# allocation, so it's hot-path safe at the tick rate × actors. Called live from the
 # integration step and re-used by LocalController's reconcile replay so both paths
 # agree.
 func clamp_body_to_rink() -> void:
@@ -3022,6 +3022,12 @@ func get_wall_squeeze(intended_pos: Vector3, clamped_pos: Vector3) -> float:
 
 func get_blade_wall_normal() -> Vector3:
 	return _last_wall_normal
+
+
+# The wall normal a blade pass found when it ran natively (NativeBladePass),
+# which clamps the blade to the boards itself.
+func set_blade_wall_normal(normal: Vector3) -> void:
+	_last_wall_normal = normal
 
 
 # ── Stick rig (delegate to SkaterStickRig) ────────────────────────────────────

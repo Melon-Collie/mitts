@@ -8,7 +8,7 @@ extends GutTest
 # job is that nothing of it does — nothing loose, that is: a tucked column is
 # inside the pants by design. Seconds of skating the real controller, so slow.
 
-const DT: float = 1.0 / 120.0
+const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # The solver keeps its points a fabric margin outside; this is what is left of
 # it once the legs have moved on within the frame.
 const CLIP_M: float = 0.004
