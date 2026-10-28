@@ -75,14 +75,17 @@ func test_every_style_but_the_bare_ones_has_geometry() -> void:
 
 
 # Under the helmet the scalp fills the room between the head and the shell, and
-# no further: along the ray from the helmet's centre through any vertex, the
-# shell is farther out than the hair.
+# no further: along the ray from the helmet's centre through any vertex above
+# the rim, the shell is farther out than the hair. (Below the rim hair may
+# flip out past the shell's radius; the shell is not there.)
 func test_the_scalp_stays_inside_the_helmet_shell() -> void:
 	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
 	for mesh: ArrayMesh in _scalps():
 		var covered: int = 0
 		var worst: float = INF
 		for v: Vector3 in _verts(mesh):
+			if v.y < SkaterMeshBuilder.helmet_rim_y(atan2(v.x, v.z)):
+				continue
 			var dir: Vector3 = v.normalized()
 			var room: float = INF
 			for i: int in range(0, shell.size(), 3):
