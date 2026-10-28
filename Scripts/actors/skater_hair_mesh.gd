@@ -76,12 +76,13 @@ const _MEDIUM: Array[Vector3] = [
 	Vector3(180.0, 0.074, 0.008),
 ]
 const _MEDIUM_CROWN_M: float = 0.009
-# Short's sides and sideburns, hanging past the helmet over the collar at the
-# back: the drop happens behind the ear.
+# Short's sides and sideburns, and a full tail behind the neck hanging past the
+# helmet to the collar: the drop happens behind the ear.
 const _MULLET: Array[Vector3] = [
-	Vector3(0.0, -0.182, 0.010),
-	Vector3(35.0, -0.176, 0.010),
-	Vector3(62.0, -0.128, 0.006),
+	Vector3(0.0, -0.188, 0.014),
+	Vector3(35.0, -0.182, 0.014),
+	Vector3(52.0, -0.166, 0.012),
+	Vector3(62.0, -0.090, 0.006),
 	Vector3(82.0, -0.062, 0.004),
 	Vector3(108.0, -0.040, 0.003),
 	Vector3(125.0, -0.032, 0.003),
@@ -146,11 +147,12 @@ const _FLOW_ROW_M: float = 0.03
 # wrapping under the skull. Zero hugs the head all the way down.
 const _HUG: float = 0.0
 const _SHAGGY_HANG: float = 0.4
+const _MULLET_HANG: float = 0.3
 const _FLOW_HANG: float = 0.15
 # A style's kick at its ends (HairHelmetFit.drape): (height, how far out),
 # descending, eased between keys and held past the last.
 const _NO_FLARE: Array[Vector2] = []
-const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
+const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.15, 0.0), Vector2(-0.186, 0.018)]
 const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.10, 0.0), Vector2(-0.17, 0.012)]
 const _FLOW_FLARE: Array[Vector2] = [Vector2(-0.04, 0.0), Vector2(-0.082, 0.025),
 		Vector2(-0.135, 0.045)]
@@ -249,7 +251,7 @@ static func shared_hair(style: int) -> ArrayMesh:
 				return _build_scalp(_MEDIUM, _MEDIUM_CROWN_M, _HUG, _NO_FLARE))
 		HairStyleRegistry.HAIR_MULLET:
 			return _shared("hair_mullet", func() -> ArrayMesh:
-				return _build_scalp(_MULLET, _MULLET_CROWN_M, _HUG, _MULLET_FLARE))
+				return _build_scalp(_MULLET, _MULLET_CROWN_M, _MULLET_HANG, _MULLET_FLARE))
 		HairStyleRegistry.HAIR_BUZZ:
 			return _shared("hair_buzz", func() -> ArrayMesh:
 				return _build_scalp(_BUZZ, _BUZZ_CROWN_M, _HUG, _NO_FLARE))
