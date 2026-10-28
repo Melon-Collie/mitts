@@ -29,8 +29,8 @@ extends RefCounted
 # was tuned around the primitive silhouettes.
 const _TORSO_PROFILE: Array[Vector2] = [
 	Vector2(0.275, 0.125),   # collar, around the neck's trapezius flare
-	Vector2(0.262, 0.185),   # trapezius, nearly flat over the shoulder pads
-	Vector2(0.221, 0.222),   # shoulder line — the pads' widest, the arms hang from it
+	Vector2(0.250, 0.185),   # trapezius, sloping off the neck over the shoulder pads
+	Vector2(0.212, 0.222),   # shoulder line — the pads' widest, the arms hang from it
 	Vector2(0.130, 0.222),   # chest — from here the sweater hangs nearly straight,
 	Vector2(0.000, 0.212),   # barely in at the waist
 	Vector2(-0.070, 0.214),  # bunches over a tuck's pad (SkaterJerseyHem.BUNCH_Y_M)
