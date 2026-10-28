@@ -1,14 +1,14 @@
 extends GutTest
 
-# The strip read (AIStripOdds) against a worst-case interceptor
-# (docs/strip-interception-plan.md). tests/unit/ai/data/strip_intercept_truth.txt
-# is a scripted carrier, protecting the puck as a bot does, skating fixed paths
-# past a defender who knows the path and skates flat out to the earliest point of
-# it he can be set on — whether he took the puck — measured by
-# tests/instruments/ai/test_interceptor_truth.gd and written by
+# The carry strip read (AIStripOdds.strip_at) against an interceptor the carrier
+# dodges (docs/strip-interception-plan.md).
+# tests/unit/ai/data/strip_intercept_truth.txt is a scripted carrier skating
+# fixed paths flat out, swerving away from a defender who re-aims every tick at
+# where the carrier's momentum is taking him — whether he took the puck inside
+# AIStripOdds.COMMIT_S — measured by
+# tests/instruments/ai/test_reacting_interceptor_truth.gd and written by
 # test_interception_export.gd. Each run is read from its defender's start along
-# the planned path, as a planner reads a path — the whole of it, since the run
-# watches all of it (the planner's own reads stop at AIStripOdds.COMMIT_S).
+# the carrier's planned path over its first COMMIT_S, as a planner reads it.
 #
 # Two ratchets: how often a run that lost the puck read riskier than one that
 # kept it may not fall; and the losses the read expects, against those that
@@ -18,12 +18,12 @@ const TRUTH_PATH: String = "res://tests/unit/ai/data/strip_intercept_truth.txt"
 const SAMPLE_S: float = 0.1
 
 # The ratchets. Tighten when a change wins by more than BANK_MARGIN.
-const MIN_RANKING: float = 0.79
+const MIN_RANKING: float = 0.92
 const MAX_EXPECTED_RATIO_ERR: float = 0.05
 const BANK_MARGIN: float = 0.02
 
 
-func test_the_strip_read_reads_a_worst_case_interceptor() -> void:
+func test_the_strip_read_reads_an_interceptor_the_carrier_dodges() -> void:
 	var lost_risk: Array[float] = []
 	var kept_risk: Array[float] = []
 	var expected: float = 0.0
@@ -46,9 +46,11 @@ func test_the_strip_read_reads_a_worst_case_interceptor() -> void:
 		var points: Array[Vector3] = []
 		var times: Array[float] = []
 		for k: int in range(3 + nd * 4, t.size(), 2):
+			if SAMPLE_S * (points.size() + 1) > AIStripOdds.COMMIT_S + 1e-6:
+				break
 			points.append(Vector3(float(t[k]), 0, float(t[k + 1])))
 			times.append(SAMPLE_S * points.size())
-		var risk: float = 1.0 - AIStripOdds.path_keep(points, times, defs, vels, [], 0.0, INF)
+		var risk: float = 1.0 - AIStripOdds.path_keep(points, times, defs, vels)
 		expected += risk
 		if t[1] == "1":
 			lost_risk.append(risk)

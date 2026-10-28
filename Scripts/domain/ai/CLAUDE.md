@@ -708,16 +708,19 @@ remains.
   defender reads alike.
   - A carry path's **keep odds** — every carry, rolled move, drive and entry
     skate — are each defender's one chance at it (`AIStripOdds`,
-    `docs/strip-interception-plan.md`): can his stick, from where he is and how
-    he is moving, be set on some point of the path a beat before the puck,
-    graded across the arrival clock's error, over the first second of the path
-    from where its read starts (`COMMIT_S`: how long a stick he sees coming
-    cannot be escaped) and where it is going, when it gets there: a crossing
-    of the line held before he arrives is shut, which is what makes getting
-    there sooner worth more than the time discount. A chase down in between is
-    a later decision's. One chance
-    however long the puck is in his reach, and measured against a worst-case
-    interceptor, never our defending bots. Never read where a defender might be
+    `docs/strip-interception-plan.md`). Over the first second of the path from
+    where its read starts (`COMMIT_S`: how long a stick he sees coming cannot
+    be escaped) the carrier dodges him, so the odds at each point fall with the
+    share of his range — his blade's reach and the ground he skates toward it by
+    then, from where he is and how he is moving — its distance takes
+    (`strip_at`), measured against an interceptor the carrier dodges. Where the
+    path is going is a race, read when it gets there: can his stick be set on it
+    a beat before the puck, across the arrival clock's error (`chance_at`,
+    measured against a worst-case interceptor); a crossing of the line held
+    before he arrives is shut, which is what makes getting there sooner worth
+    more than the time discount. A chase down in between is a later decision's.
+    One chance however long the puck is in his reach; never measured against our
+    defending bots. Never read where a defender might be
     as a spread that thins with how far ahead it looks: an entry read from
     further back then looks easier, and the carrier backs off to re-approach.
   - The **shot on a carry's arrival** reads a man behind the carry, skating its

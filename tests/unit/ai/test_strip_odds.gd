@@ -16,10 +16,43 @@ func test_a_man_who_cannot_get_there_first_takes_nothing() -> void:
 	assert_eq(_keep(far, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0), 1.0)
 
 
-func test_a_set_stick_on_the_path_takes_it_at_the_set_odds() -> void:
+func test_a_stick_on_the_path_takes_it_at_the_dead_on_odds() -> void:
 	var on: Array[Vector3] = [Vector3(0, 0, -6)]
 	assert_almost_eq(_keep(on, _still, Vector3.ZERO, Vector3(0, 0, -6), 1.0),
-			1.0 - AIStripOdds.SET_STRIP, 1e-6)
+			1.0 - AIStripOdds.DEAD_ON_STRIP, 1e-6)
+
+
+func test_through_him_is_surer_than_past_his_stick_and_his_range_takes_nothing() -> void:
+	var him: Array[Vector3] = [Vector3(0, 0, -4)]
+	var prev: float = -1.0
+	for x: float in [0.0, 1.0, 2.0, 3.0]:
+		var k: float = _keep(him, _still, Vector3(x, 0, 0), Vector3(x, 0, -8), 1.0)
+		assert_gt(k, prev, "%.0f m off him" % x)
+		prev = k
+	assert_eq(_keep(him, _still, Vector3(8, 0, 0), Vector3(8, 0, -8), 1.0), 1.0,
+			"outside his range")
+
+
+func test_the_odds_are_gone_at_the_edge_share_of_his_range() -> void:
+	var t: float = 0.5
+	var edge: float = AIStripOdds.EDGE_SHARE * AIStripOdds.range_at(null, Vector3.ZERO,
+			Vector3.RIGHT, t)
+	assert_almost_eq(AIStripOdds.strip_at(Vector3.ZERO, Vector3.ZERO, null,
+			Vector3(edge, 0, 0), t), 0.0, 1e-6)
+	assert_gt(AIStripOdds.strip_at(Vector3.ZERO, Vector3.ZERO, null,
+			Vector3(0.9 * edge, 0, 0), t), 0.0)
+
+
+func test_his_range_grows_with_time_and_his_speed_that_way() -> void:
+	var prev: float = 0.0
+	for t: float in [0.0, 0.2, 0.5, 1.0, 2.0]:
+		var r: float = AIStripOdds.range_at(null, Vector3.ZERO, Vector3.RIGHT, t)
+		assert_gt(r, prev, "%.1f s" % t)
+		prev = r
+	assert_almost_eq(AIStripOdds.range_at(null, Vector3.ZERO, Vector3.RIGHT, 0.0),
+			AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M, 1e-6, "at once, his blade's reach")
+	assert_gt(AIStripOdds.range_at(null, Vector3(4, 0, 0), Vector3.RIGHT, 0.5),
+			AIStripOdds.range_at(null, Vector3(-4, 0, 0), Vector3.RIGHT, 0.5))
 
 
 func test_a_stick_arriving_just_in_time_takes_nothing() -> void:
@@ -91,12 +124,12 @@ func test_defenders_are_separate_chances() -> void:
 
 
 func test_a_man_gets_one_chance_however_long_the_puck_is_in_his_reach() -> void:
-	# Skating past him or straight through him, he has the one chance.
-	var him: Array[Vector3] = [Vector3(0, 0, -5)]
-	var through: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -10), 1.5)
-	var past: float = _keep(him, _still, Vector3(1, 0, 0), Vector3(1, 0, -10), 1.5)
-	assert_almost_eq(through, past, 1e-6)
-	assert_almost_eq(through, 1.0 - AIStripOdds.SET_STRIP, 1e-6)
+	# Skating straight through him slowly or quickly, he has the one chance.
+	var him: Array[Vector3] = [Vector3(0, 0, -4)]
+	var slow: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -5), 1.0)
+	var fast: float = _keep(him, _still, Vector3.ZERO, Vector3(0, 0, -8), 1.0)
+	assert_almost_eq(slow, fast, 1e-6)
+	assert_almost_eq(slow, 1.0 - AIStripOdds.DEAD_ON_STRIP, 1e-6)
 
 
 func test_the_path_keep_reads_as_the_carry_keep() -> void:

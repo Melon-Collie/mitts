@@ -24,13 +24,20 @@ What it leaves out on purpose:
   stick arriving with less strips next to nothing), graded across the clock's
   calibrated error the way `arrival_race` grades a race: `clamp(0.5 + (puck_t −
   arrive − SET_S) / (2 band))`, `band = max(ERROR_FLOOR_S, ERROR_FRAC × arrive)`.
+- **His odds at a point the carrier is dodging him** (`strip_at`): inside the
+  window below the carrier sees him coming and swerves, so what decides it is
+  how much of his range the point's distance takes — his range is his blade's
+  reach plus the ground he skates toward it by then, from his speed that way at
+  his thrust to his top speed (`range_at`). `DEAD_ON_STRIP` (0.86) on his stick,
+  falling in a straight line to nothing at `EDGE_SHARE` (0.70) of his range.
 - **One chance per defender per path** (`path_keep`, `carry_keep`): his best
-  chance anywhere on it, taken with the odds a set stick strips (`SET_STRIP`,
-  0.88). However long the puck stays in his reach, it is the one chance.
-- **Defenders are separate chances:** keep = Π (1 − SET_STRIP × chance_i).
+  odds anywhere on it — `strip_at` over the window, and at the path's end the
+  race, `chance_at` taken with the odds a set stick strips (`SET_STRIP`, 0.88).
+  However long the puck stays in his reach, it is the one chance.
+- **Defenders are separate chances:** keep = Π (1 − best_i).
 - **Where a loss happens** (`carry_strip_point`, the carry search's rolled
-  moves): each defender's first chance — the first point his stick is set on with
-  even odds, else his best — weighted by his odds of taking it.
+  moves): each defender's first chance — the first point his odds pass even,
+  else his best — weighted by his odds of taking it.
 - **A read looks at the first second of its path and where it is going**
   (`COMMIT_S`), from where it starts. The carrier re-plans every 33–75 ms, but a
   stick he sees coming cannot be escaped inside his reaction plus sliding a
@@ -71,10 +78,8 @@ What the 2160 runs measured (`tools/strip_interception_fit.py`):
 - Our defending bots, on the same paths: 30–45% of the paths they can reach.
   Not used.
 
-`tests/unit/ai/test_strip_odds_vs_truth.gd` holds the read against the
-interceptor's runs (`tests/unit/ai/data/strip_intercept_truth.txt`, written by
-`tests/instruments/ai/test_interception_export.gd`): its ranking of lost runs
-over kept ones and its expected losses are ratchets.
+The race at the path's end (`chance_at`, `SET_S`, `SET_STRIP`) is fit to these
+runs.
 
 What sets the carrier's decisions (`tests/instruments/ai/test_carry_value_sources.gd`,
 through the breakout and entry drills): the 1 s move's own end spot in 73% of
@@ -90,6 +95,31 @@ the defender needs — half the runs a single step off the path, 5–20% at mid
 and long range, none at the edge — while losses run down from behind rise to
 40% at long range, all of them about 2.4 s in. The window is what separates the
 two.
+
+Inside the window, flat out (`MITTS_REACT_FLAT_OUT=1`, 2160 runs), the losses
+by the least share of his range the planned path needs:
+
+| share of range | lost inside 1 s |
+|---|---|
+| 0–0.1 | 0.81 |
+| 0.1–0.2 | 0.73 |
+| 0.2–0.3 | 0.60 |
+| 0.3–0.4 | 0.39 |
+| 0.4–0.5 | 0.22 |
+| 0.5–0.6 | 0.18 |
+| 0.6–0.7 | 0.05 |
+| 0.7+ | ~0 |
+
+`strip_at` is that line, fit by likelihood. Graded by the gate below, the race
+read it replaced inside the window ranks a lost run over a kept one 0.903 of the
+time and expects 312 losses where 164 happened; `strip_at` ranks 0.925 and
+expects 167. The race read saturates: every point a defender's stick can be set
+on reads the same 0.88, so a carry straight at him and one curling away read
+alike within about 3 m.
+`tests/unit/ai/test_strip_odds_vs_truth.gd` holds it against these runs
+(`tests/unit/ai/data/strip_intercept_truth.txt`, written by
+`tests/instruments/ai/test_interception_export.gd`): its ranking of lost runs
+over kept ones and its expected losses are ratchets.
 
 ## Passes
 

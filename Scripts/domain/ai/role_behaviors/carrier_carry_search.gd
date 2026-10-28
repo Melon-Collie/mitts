@@ -522,14 +522,14 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int,
 		for k: int in reach:
 			var t: float = AICarryRollout.HORIZON_S * float(k + 1) / AICarryRollout.SAMPLES
 			var p: Vector3 = AICarrierField.puck_pos_at(roll.sample(m, k), goal)
-			var c: float = AIStripOdds.chance_at(opps[i], _field.opponent_vels[i], caps, p,
+			var c: float = AIStripOdds.strip_at(opps[i], _field.opponent_vels[i], caps, p,
 					start_s + t)
 			if not first and (c > best or c >= 0.5):
 				best_p = p
 				best_t = t
 				first = c >= 0.5
 			best = maxf(best, c)
-		keep *= 1.0 - AIStripOdds.SET_STRIP * best
+		keep *= 1.0 - best
 		at += best_p * best
 		when += best_t * best
 		lost += best
