@@ -96,43 +96,54 @@ two.
 A pass is the same question asked of the puck's path instead of the carrier's:
 can a defender get his stick to this point before the puck does?
 `AILaneReach` grades every pass lane with `AIStripOdds.chance_at` — the flat
-feed along its line, the saucer in three stretches (on the blade, in the air
-with only the body radius reaching it, landed), and the rim along the board
-path `AIRimPass` walks. A defender reads the windup
-(`AIPuckLane.LANE_WINDUP_READ_DELAY_S`), so his clock starts before the release.
-The set time is the carry's 0.25 s (the best ranking of the set times tried,
-0.859 overall), but a set stick stops a pass for certain: a pass cannot react,
-so the chance is not scaled by `SET_STRIP`. Defenders are separate chances, as
-on a carry.
+feed along its line, the saucer in two stretches (in the air with only the body
+radius reaching it, landed), and the rim along the board path `AIRimPass`
+walks. A defender reads the windup (`AIPuckLane.LANE_WINDUP_READ_DELAY_S`), so
+his clock starts before the release. The set time is the carry's 0.25 s (the
+best ranking of the set times tried). Defenders are separate chances, as on a
+carry.
+
+A pass cannot react to him, so what stops it is his blade taking it, and that
+is a reception — the receiver's own physics (`AIFeedReception.spill_prob`) at
+the puck's pace in his frame (`AILaneReach.stop_odds`). Measured on his first
+touches: under 14 m/s he catches every one; from 14 m/s, where an edge contact
+starts to bobble, to 18 m/s, where a middle one does, he spills 70% (his blade
+is reached across the lane, so it meets the puck at its end far more often than
+a set receiver's, 35%); past 18 m/s he spills nearly all, and past 22 m/s some
+deflect. A spill is still lost to the passer 55% of the time, flat at every
+pace. So a hard pass is hard for the defender to hold too.
+
+A saucer is seated above the blade plane from the release
+(`GameRules.PUCK_LOFT_SEAT_M`, as `Puck.release` seats it), so no grounded stick
+touches it until it lands, a metre later than a launch from the ice would.
 
 It is measured against a worst-case interceptor who reads the windup and knows
 where the puck is going (`tests/instruments/ai/test_pass_truth.gd`: flat feeds,
 saucers and rims to a bot receiver, in the duel harness with the game's body
-blocks), and held by `tests/unit/ai/test_pass_lane_vs_truth.gd`. A pass is lost
-to the lane when the defender takes it, or nobody catches it and he touched it
-first (a deflection, a body block); one nobody catches that he never touched
-first is the reception's, and left out. Of the flat feeds caught or lost, by
-the defender's spare time at his best point on the path: none lost when he is
-more than a quarter second late, 3% just short, then 13, 39, 53, 67 and 83% as
-he arrives earlier (0–0.1, 0.1–0.25, 0.25–0.5, 0.5–1 and over 1 s).
+blocks; he aims only where the puck is on the ice), and held by
+`tests/unit/ai/test_pass_lane_vs_truth.gd`. A pass is lost to the lane when the
+defender takes it, or nobody catches it and he touched it first (a deflection,
+a body block); one nobody catches that he never touched first is the
+reception's, and left out.
 
-| kind | expected | lost | ranking | the read it replaced |
-|---|---|---|---|---|
-| flat | 531 | 448 | 0.826 | 723 expected, 0.824 |
-| rim | 143 | 141 | 0.815 | 105 expected, 0.725 (a race to a loose puck) |
-| saucer | 142 | 63 | 0.821 | 202 expected, 0.814 |
+| kind | lost | expected | ranking | before the stop odds | the race-era read |
+|---|---|---|---|---|---|
+| flat | 448 | 420 | 0.849 | 531, 0.826 | 723, 0.824 |
+| rim | 141 | 141 | 0.803 | 143, 0.815 | 105, 0.725 |
+| saucer | 67 | 97 | 0.860 | 148, 0.862 | — |
 
 What the data says about a defender close to the release: standing on a flat
 feed's line within 3 m of the passer he takes 6 of 18 — he still has to set his
 stick, and the flat puck slides under his torso. Over a saucer his body is in
-the way: on its line 3–6 m out, 14 of 24 are blocked (8 taken, 6 knocked loose).
+the way only where the puck is inside the game's torso band (0.2–1.2 m), at 18
+m/s from about 1.4 m to 4.8 m out: on its line 3–6 m out, 14 of 24 are blocked.
 
 What it leaves open:
 
-- The saucer's level: the read expects about twice the losses a saucer suffers.
-  Over him it reads his body like a stick that must be set, where the game's
-  block is a torso band (0.2–1.2 m) the puck is inside for only part of its
-  flight.
+- The saucer's level: the read expects about half as many losses again as a
+  saucer suffers. In the air it reads his body like a stick that must be set,
+  at a third of the game's block radius, where the game's block is a torso band
+  the puck is inside for only part of its flight.
 - Reception: of the flat feeds nobody caught, nearly all were the receiver's to
   lose (276 of 286), and most at pace. That says the bots pass too hard.
 - The after-catch read: the receiver's exit odds are read where the pass is

@@ -195,7 +195,7 @@ static func stays_in_zone(k: int, t: float, attacking_goal: Vector3,
 static func lane(k: int, receiver_t: float) -> float:
 	var survival: float = 1.0
 	for i: int in _opp_positions.size():
-		survival *= 1.0 - AILaneReach.path_block(paths[k], STEP_DT, receiver_t,
+		survival *= 1.0 - AILaneReach.path_block(paths[k], STEP_DT, receiver_t, origin,
 				_opp_positions[i], _opp_vels[i] if i < _opp_vels.size() else Vector3.ZERO,
 				_opp_caps[i] if i < _opp_caps.size() else null,
 				AIPuckLane.LANE_WINDUP_READ_DELAY_S)

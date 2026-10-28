@@ -528,7 +528,8 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 			# Survival: the puck must beat this defender too.
 			var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
 			var lane_block: float = AILaneReach.block(from.x, from.z, dirx, dirz, read_len,
-					eff_speed, p.x, p.z, vx, vz, caps_i, LANE_WINDUP_READ_DELAY_S).x
+					eff_speed, speed, GameRules.PUCK_ICE_DECEL_M_S2, p.x, p.z, vx, vz, caps_i,
+					LANE_WINDUP_READ_DELAY_S).x
 			if has_blades:
 				var b: Vector3 = opponent_blades[i]
 				lane_block = maxf(lane_block, _blade_block(from.x, from.z, dirx, dirz, read_len,
@@ -589,12 +590,13 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 		# Over him only his body is in the way; landed, the man it flew over still
 		# plays it sliding off behind him.
 		var block: float = AILaneReach.block(from.x, from.z, dirx, dirz, minf(flown, line_len),
-				speed, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S, 0.0, 0.0,
+				speed, speed, 0.0, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S, 0.0, 0.0,
 				LANE_DEFENDER_BODY_RADIUS_M).x
 		if landed_len > 0.01:
 			block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz,
-					line_len - LANE_RECEIVER_REACH_M, landed_speed, p.x, p.z, v.x, v.z,
-					caps_i, LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
+					line_len - LANE_RECEIVER_REACH_M, landed_speed, speed,
+					GameRules.PUCK_ICE_DECEL_M_S2, p.x, p.z, v.x, v.z, caps_i,
+					LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
 		survival *= 1.0 - block
 		if survival <= 0.0:
 			return 0.0
@@ -646,7 +648,8 @@ static func lane_loss_point(from: Vector3, to: Vector3,
 				hold_reach = caps.max_blade_reach
 		var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
 		var read: Vector2 = AILaneReach.block(from.x, from.z, dirx, dirz, read_len,
-				eff_speed, p.x, p.z, vx, vz, caps_i, LANE_WINDUP_READ_DELAY_S)
+				eff_speed, speed, GameRules.PUCK_ICE_DECEL_M_S2, p.x, p.z, vx, vz, caps_i,
+				LANE_WINDUP_READ_DELAY_S)
 		if has_blades:
 			var b: Vector3 = opponent_blades[i]
 			var blade_read: Vector2 = _blade_block(from.x, from.z, dirx, dirz, read_len,

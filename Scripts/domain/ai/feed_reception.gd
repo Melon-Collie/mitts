@@ -42,12 +42,20 @@ static func receiver_settle_s(closing: float) -> float:
 # Odds a catch closing at `closing` m/s bobbles: a middle contact past the bobble
 # line, or an edge one past its lower line.
 static func receiver_bobble_prob(closing: float) -> float:
+	return spill_prob(closing, RECEIVE_EDGE_CONTACT_SHARE)
+
+
+# Odds a blade meeting a puck closing at `closing` m/s in its frame spills it —
+# bobbles it off the face, or past the catch ceiling deflects it — rather than
+# holding it: always past the bobble line, and past the edge's lower line for the
+# `edge_share` of contacts that meet the blade end-on or past its end.
+static func spill_prob(closing: float, edge_share: float) -> float:
 	var ratio: float = closing / RECEIVE_ANY_ANGLE_CEILING_M_S
 	var catch_load: float = ratio * ratio
 	if catch_load >= BOBBLE_LOAD:
 		return 1.0
 	if catch_load >= PuckReceptionRules.bobble_load_at(1.0, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
-		return RECEIVE_EDGE_CONTACT_SHARE
+		return edge_share
 	return 0.0
 
 

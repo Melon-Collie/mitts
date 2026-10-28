@@ -773,10 +773,13 @@ remains.
   (`AILoosePuckChase.reach_meet_time`, stick out), so a lane the passer reads
   open is one the defender cannot take. Each point is graded as the carry's keep
   odds grade it (`AIStripOdds.chance_at`: his stick set on it `SET_S` before the
-  puck, across the clock's calibrated error), one chance per defender, but a
-  pass cannot react to him, so a stick set on its path stops it — measured
-  against a worst-case interceptor (`tests/instruments/ai/test_pass_truth.gd`,
-  gated by `test_pass_lane_vs_truth.gd`); it ends a blade short of the receiver, whose own stick
+  puck, across the clock's calibrated error), one chance per defender. A pass
+  cannot react to him; what stops it is his blade taking it, which is a
+  reception (`AIFeedReception.spill_prob`) at the puck's pace in his frame there:
+  a hard pass bobbles off a defender's blade as it does off a receiver's, and a
+  spill is only sometimes lost (`AILaneReach.stop_odds`) — measured against a
+  worst-case interceptor (`tests/instruments/ai/test_pass_truth.gd`, gated by
+  `test_pass_lane_vs_truth.gd`); it ends a blade short of the receiver, whose own stick
   takes the puck there (a defender on his back is the reception's
   `catch_safety`). The lane is the one at the release: the carrier braked through
   his windup (`AICarrierField.pass_origin`), the receiver led from where he has
