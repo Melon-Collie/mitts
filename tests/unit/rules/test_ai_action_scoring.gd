@@ -990,15 +990,17 @@ func test_lane_clear_saucer_blocked_by_body_in_lane() -> void:
 	assert_lt(saucer, 0.1, "a body dead in the lane blocks a saucer")
 
 
-func test_lane_clear_saucer_stuffed_by_stick_on_the_release() -> void:
-	# Defender's closest approach is right off the blade (t < t_over — the
-	# puck hasn't climbed above the blade plane yet): full grounded stick
-	# reach applies, so a stick already on the puck stuffs the flip.
+func test_lane_clear_saucer_flies_over_a_stick_on_the_release() -> void:
+	# A lofted release leaves the blade seated above the blade plane
+	# (GameRules.PUCK_LOFT_SEAT_M), so a grounded stick right off the passer's
+	# blade never touches it: the saucer clears the man the flat feed cannot.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 14.0)
 	var on_release: Array[Vector3] = [Vector3(0.4, 0.0, 0.3)]
+	var grounded: float = AIPuckLane.lane_clear(from, to, on_release,
+			AIPuckLane.PASS_CHARGE_SPEED_M_S, [], [], true)
 	var saucer: float = AIPuckLane.lane_clear_saucer(from, to, on_release, AIPuckLane.PASS_CHARGE_SPEED_M_S)
-	assert_lt(saucer, 0.5, "a stick on the puck at release still stuffs a saucer")
+	assert_gt(saucer, grounded, "the saucer flies over the stick that takes the flat feed")
 
 
 func test_lane_clear_saucer_blocked_after_touch_down() -> void:
@@ -1065,15 +1067,17 @@ func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
 
 func test_a_saucer_carries_what_a_charged_low_release_flies() -> void:
 	# The bots' saucer is a charged wrister at LOW loft: the carry the pass
-	# search prices is the one ShotMechanics launches, landing where a puck at
-	# that launch comes back down.
+	# search prices is the one ShotMechanics launches, from the seat Puck.release
+	# gives a lofted puck to where it comes back down to the blade plane.
 	for pace: float in [12.0, 16.0, 20.0]:
 		var cfg := ShotMechanics.WristerConfig.new()
 		var r: ShotMechanics.ShotResult = ShotMechanics.release_wrister(Vector3.ZERO,
 				Vector3(0, 0, -10), Vector3.ZERO, false, ShotMechanics.ELEVATION_LOW, cfg,
 				Vector3(0, 0, -1), false)
 		var v: Vector3 = r.direction * pace
-		var flight_s: float = 2.0 * v.y / GameRules.GRAVITY_M_S2
+		var drop: float = GameRules.PUCK_LOFT_SEAT_M - GameRules.PUCK_AIRBORNE_HEIGHT_M
+		var flight_s: float = (v.y + sqrt(v.y * v.y + 2.0 * GameRules.GRAVITY_M_S2 * drop)) \
+				/ GameRules.GRAVITY_M_S2
 		assert_almost_eq(AIPuckLane.saucer_airborne_distance_m(pace),
 				Vector2(v.x, v.z).length() * flight_s, 0.01, "at %.0f m/s" % pace)
 

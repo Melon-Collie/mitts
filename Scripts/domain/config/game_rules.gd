@@ -411,6 +411,10 @@ const PUCK_ICE_DECEL_M_S2: float = ICE_FRICTION * GRAVITY_M_S2
 # a grounded stick, and where it must land to be receivable) agrees with
 # the live interaction gate.
 const PUCK_AIRBORNE_HEIGHT_M: float = 0.05
+# Height above the ice a lofted release leaves the blade from (Puck.release):
+# above the blade plane, so a lifted puck is over every grounded stick from the
+# moment it is fired.
+const PUCK_LOFT_SEAT_M: float = 0.1
 # Fraction of the frozen puck's rigid-wall COR (PuckRestitution.rigid_wall) the
 # boards keep — sole authority, applied by the analytic carom. 1.0: a dasher board
 # is rigid next to a frozen puck, so the puck's own losses set the rebound. That

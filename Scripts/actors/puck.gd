@@ -744,7 +744,7 @@ func release(direction: Vector3, power: float) -> void:
 	# afterwards: an origin computed by the caller silently un-does the slapshot's
 	# pin and fires from under the raised blade.
 	if direction.y > 0:
-		global_position.y = ice_height + 0.1
+		global_position.y = ice_height + GameRules.PUCK_LOFT_SEAT_M
 	else:
 		global_position.y = ice_height
 	_pending_elevation_vel = direction * power

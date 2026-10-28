@@ -111,8 +111,7 @@ const CONTEST_DEADLOCK_THRESHOLD_M_S: float = 0.5
 const SLAPPER_ZONE_RADIUS_M: float = 0.5
 const ONE_TIMER_LENIENCY_S: float = 0.08
 const ONE_TIMER_RETENTION_TICKS: int = 13
-# Where Puck.release seats a lofted release.
-const LOFT_SEAT_M: float = 0.1
+const LOFT_SEAT_M: float = GameRules.PUCK_LOFT_SEAT_M
 # TeamBrain re-slot cadence (~6 Hz, the production rhythm).
 const BRAIN_PERIOD_TICKS: int = 20
 
@@ -1361,7 +1360,7 @@ static func _carry_momentum(result: ShotMechanics.ShotResult, body_vel: Vector3,
 
 
 # The puck off a blade at `v`: along the ice, and over the sticks for as long as
-# a lofted one (seated at Puck.release's 0.1 m) is above the blade plane, keeping
+# a lofted one (seated at GameRules.PUCK_LOFT_SEAT_M) is above the blade plane, keeping
 # its pace.
 func _launch(v: Vector3) -> void:
 	puck_vel = Vector3(v.x, 0.0, v.z)

@@ -156,17 +156,18 @@ static func pass_launch_speed(distance: float, max_launch: float,
 # lift grows with the pace. Pure kinematics under gravity:
 #
 #   vertical launch vy = v·sin θ                          (~1.2 m/s at 12 m/s)
-#   hang time      T_hang = 2·vy / g
-#   over window    [t_over, t_down] where y(t) exceeds the blade plane
+#   seated at      y0 = GameRules.PUCK_LOFT_SEAT_M, above the blade plane
 #                  (GameRules.PUCK_AIRBORNE_HEIGHT_M — the same gate
-#                  PuckReceptionRules.blade_can_interact uses)
+#                  PuckReceptionRules.blade_can_interact uses), so it is over
+#                  every grounded stick from the release
+#   hang time      T_hang: y(t) = y0 + vy·t − ½·g·t² back down to the blade plane
 #   airborne carry = v·cos θ × T_hang (no ice friction in the air)
 #
 # The quick pass's fixed-vy saucer (GameRules.DEFAULT_LOFT_VY_LOW_M_S) is a
 # human's button; no bot fires it.
 #
-# Inside the over window a defender's reach is LANE_DEFENDER_BODY_RADIUS_M;
-# outside it a stick intercepts normally. An airborne arrival flies over the
+# While it flies a defender's reach is LANE_DEFENDER_BODY_RADIUS_M; landed, a
+# stick intercepts normally. An airborne arrival flies over the
 # receiver's grounded blade too, so the launch is capped by
 # saucer_max_launch_speed. See Scripts/domain/ai/CLAUDE.md → "Pass lanes".
 
@@ -185,6 +186,8 @@ const SAUCER_SKIP_WHEN_LANE_CLEAR: float = 0.85
 # when the lane it clears is worth more than the landing risk.
 const SAUCER_EXTRA_MISS_PROB: float = 0.05
 
+const _SEAT_ABOVE_PLANE_M: float = GameRules.PUCK_LOFT_SEAT_M - GameRules.PUCK_AIRBORNE_HEIGHT_M
+
 
 # The vertical launch speed of a charged LOW release at `launch_speed`.
 static func saucer_launch_vy(launch_speed: float) -> float:
@@ -192,14 +195,16 @@ static func saucer_launch_vy(launch_speed: float) -> float:
 	return launch_speed * tan_low / sqrt(1.0 + tan_low * tan_low)
 
 
-# Time a saucer launched at `launch_speed` spends off the ice (launch to
-# touch-down).
+# Time a saucer launched at `launch_speed` spends over the sticks: from its seat
+# on the release down to the blade plane.
 static func saucer_hang_time_s(launch_speed: float) -> float:
-	return 2.0 * saucer_launch_vy(launch_speed) / GameRules.GRAVITY_M_S2
+	var vy: float = saucer_launch_vy(launch_speed)
+	return (vy + sqrt(vy * vy + 2.0 * GameRules.GRAVITY_M_S2 * _SEAT_ABOVE_PLANE_M)) \
+			/ GameRules.GRAVITY_M_S2
 
 
-# Horizontal distance a saucer launched at `launch_speed` covers before
-# touching back down. No ice friction while airborne.
+# Horizontal distance a saucer launched at `launch_speed` covers before it is
+# back on the blade plane. No ice friction while airborne.
 static func saucer_airborne_distance_m(launch_speed: float) -> float:
 	var tan_low: float = GameRules.DEFAULT_LOFT_TAN_LOW
 	return launch_speed / sqrt(1.0 + tan_low * tan_low) * saucer_hang_time_s(launch_speed)
@@ -209,15 +214,18 @@ static func saucer_airborne_distance_m(launch_speed: float) -> float:
 # slide before a receiver `distance` away — the receivability bound (an
 # airborne arrival flies over the tape). The carry goes as the launch squared.
 # 0 for a feed no longer than the runway; below the softest feed there is no
-# saucer a bot offers, the floor on saucer distance (~4 m at SOFTEST_FEED_M_S).
+# saucer a bot offers, the floor on saucer distance (~4.4 m at SOFTEST_FEED_M_S).
 static func saucer_max_launch_speed(distance: float) -> float:
 	var flight: float = distance - SAUCER_LANDING_RUN_M
 	if flight <= 0.0:
 		return 0.0
-	# carry = v² · 2·sin θ·cos θ / g, and sin θ·cos θ = tan θ / (1 + tan² θ).
+	# carry D = (v·c/g)·(v·s + √(v²·s² + 2·g·h)), h the seat over the plane: with
+	# K = D·g/c, squaring out the root leaves v² = K² / (2·K·s + 2·g·h).
 	var tan_low: float = GameRules.DEFAULT_LOFT_TAN_LOW
-	var sin_cos: float = tan_low / (1.0 + tan_low * tan_low)
-	return sqrt(flight * GameRules.GRAVITY_M_S2 / (2.0 * sin_cos))
+	var c: float = 1.0 / sqrt(1.0 + tan_low * tan_low)
+	var k: float = flight * GameRules.GRAVITY_M_S2 / c
+	return sqrt(k * k / (2.0 * k * tan_low * c
+			+ 2.0 * GameRules.GRAVITY_M_S2 * _SEAT_ABOVE_PLANE_M))
 
 
 # The LAUNCH speed a pass from `shooter` to `receiver` fires at to arrive at
@@ -548,10 +556,9 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 
 
 # Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: the accurate
-# flat lane's read (AILaneReach) stretch by stretch — his stick while it is still
-# on the blade, only his BODY radius while it flies over (the over window, see the
-# saucer doc-block), his stick again from the touch-down on. Every defender must
-# be beaten.
+# flat lane's read (AILaneReach) stretch by stretch — only his BODY radius while
+# it flies (see the saucer doc-block), his stick from the touch-down on. Every
+# defender must be beaten.
 static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
 		opponent_caps: Array = []) -> float:
@@ -567,13 +574,9 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	var dirz: float = dz * inv_len
 	var vel_count: int = opponent_vels.size()
 	var has_caps: bool = opponent_caps.size() == opponents.size()
-	# Over window: y(t) = vy·t − ½·g·t² above the blade plane between its roots.
-	var vy: float = saucer_launch_vy(speed)
-	var root: float = sqrt(maxf(0.0,
-			vy * vy - 2.0 * GameRules.GRAVITY_M_S2 * GameRules.PUCK_AIRBORNE_HEIGHT_M))
-	var t_over: float = (vy - root) / GameRules.GRAVITY_M_S2
-	var t_down: float = (vy + root) / GameRules.GRAVITY_M_S2
-	# From the touch-down on it is a flat pass on the ice for the rest of the lane.
+	# Over every stick from the release to the touch-down; from there on it is a
+	# flat pass on the ice for the rest of the lane.
+	var t_down: float = saucer_hang_time_s(speed)
 	var flown: float = speed * t_down
 	var landed_len: float = line_len - flown
 	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
@@ -583,13 +586,11 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 		var p: Vector3 = opponents[i]
 		var v: Vector3 = opponent_vels[i] if i < vel_count else Vector3.ZERO
 		var caps_i: AISkaterCaps = opponent_caps[i] if has_caps else null
-		# On the blade a stick stuffs the flip; over him only his body is in the way;
-		# landed, the man it flew over still plays it sliding off behind him.
-		var block: float = AILaneReach.block(from.x, from.z, dirx, dirz, minf(speed * t_over,
-				line_len), speed, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S).x
-		block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz, minf(flown, line_len),
-				speed, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S, speed * t_over,
-				t_over, LANE_DEFENDER_BODY_RADIUS_M).x)
+		# Over him only his body is in the way; landed, the man it flew over still
+		# plays it sliding off behind him.
+		var block: float = AILaneReach.block(from.x, from.z, dirx, dirz, minf(flown, line_len),
+				speed, p.x, p.z, v.x, v.z, caps_i, LANE_WINDUP_READ_DELAY_S, 0.0, 0.0,
+				LANE_DEFENDER_BODY_RADIUS_M).x
 		if landed_len > 0.01:
 			block = maxf(block, AILaneReach.block(from.x, from.z, dirx, dirz,
 					line_len - LANE_RECEIVER_REACH_M, landed_speed, p.x, p.z, v.x, v.z,

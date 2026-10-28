@@ -789,14 +789,15 @@ remains.
   past him are his. Only a pick his body can hold the stick at counts
   (`AISkaterCaps.max_blade_reach`). The **saucer** (`lane_clear_saucer`) is the same
   model under the flight a charged LOW release really gets (the shot ladder's
-  set angle, so the lift and the carry grow with pace): during the over window a defender's reach
-  collapses to their body radius (sticks fly under it), a stick stuffs it on the
-  release, and from the touch-down on the rest of the lane is the accurate flat
-  read, so the man it flew over still plays it sliding off behind him. A flip
+  set angle, so the lift and the carry grow with pace), seated above the blade
+  plane from the release (`GameRules.PUCK_LOFT_SEAT_M`): while it flies a
+  defender's reach collapses to their body radius (sticks fly under it), and from
+  the touch-down on the rest of the lane is the accurate flat read, so the man it
+  flew over still plays it sliding off behind him. A flip
   only clears a stick when it lands out of his reach. The flip must land with runway before the tape
   (`saucer_max_launch_speed`), so the carrier scores each receiver flat and
   saucered and lets EV decide (`carrier_pass_search.gd:_pass_variant_ev`, the saucer paying
-  `SAUCER_EXTRA_MISS_PROB`); below ~4 m no legal saucer exists. **Receiver
+  `SAUCER_EXTRA_MISS_PROB`); below ~4.4 m no legal saucer exists. **Receiver
   commitment** enters the completion model as an execution-miss term: a receiver
   mid-cut curves off the straight-line lead by his heading arc's tangent
   deviation (`receiver_heading_uncertainty_m` = R·(1−cos ω·t), from
