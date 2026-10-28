@@ -123,14 +123,15 @@ const _SHAGGY: Array[Vector3] = [
 ]
 const _SHAGGY_CROWN_M: float = 0.012
 # Full over the ears and at the back, falling nearly straight from the helmet
-# and flipping out at the ends into wings. Drawn on coarser rows than the
+# to just under the ears and flipping out at the ends into wings. Drawn on coarser rows than the
 # others, so the curtain and the flip read as a few broad planes.
 const _FLOW: Array[Vector3] = [
-	Vector3(0.0, -0.128, 0.018),
-	Vector3(70.0, -0.122, 0.022),
-	Vector3(95.0, -0.112, 0.020),
-	Vector3(112.0, -0.092, 0.012),
-	Vector3(128.0, -0.055, 0.005),
+	Vector3(0.0, -0.135, 0.018),
+	Vector3(40.0, -0.130, 0.020),
+	Vector3(70.0, -0.112, 0.022),
+	Vector3(95.0, -0.082, 0.020),
+	Vector3(112.0, -0.068, 0.012),
+	Vector3(128.0, -0.050, 0.005),
 	Vector3(131.0, 0.012, 0.006),
 	Vector3(142.0, 0.040, 0.009),
 	Vector3(155.0, 0.058, 0.010),
@@ -153,7 +154,11 @@ const _HANG_FADE_DEG := Vector2(80.0, 100.0)
 const _NO_FLARE: Array[Vector2] = []
 const _MULLET_FLARE: Array[Vector2] = [Vector2(-0.12, 0.0), Vector2(-0.18, 0.024)]
 const _SHAGGY_FLARE: Array[Vector2] = [Vector2(-0.10, 0.0), Vector2(-0.17, 0.012)]
-const _FLOW_FLARE: Array[Vector2] = [Vector2(-0.08, 0.0), Vector2(-0.128, 0.045)]
+const _FLOW_FLARE: Array[Vector2] = [Vector2(-0.04, 0.0), Vector2(-0.082, 0.025),
+		Vector2(-0.135, 0.045)]
+# Hair coming out from under the helmet rim kicks out no faster than this (m out
+# per m below the rim), so the kick grows from the rim instead of starting there.
+const _RIM_SPRING: float = 1.5
 
 # Facial outlines, keyed by azimuth from dead front (degrees, mirrored):
 # (φ, top height, bottom height, lift). The last key's φ is where the sheet
@@ -368,7 +373,8 @@ static func _build_scalp(keys: Array[Vector3], crown: float, hang: float,
 # held out from the head's axis to no less than the point above it less `hang`
 # per metre fallen, then pushed further out by the flare at its height — the
 # kick is the hair's own, so it is measured from where the hair hangs, not from
-# the skin. Neither carries it past the helmet shell or the face gear.
+# the skin — as far as the rim has let it. Neither carries it past the helmet
+# shell or the face gear.
 static func _drape(strip: PackedVector3Array, hang: float, flare: Array[Vector2],
 		shell: PackedVector3Array) -> PackedVector3Array:
 	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
@@ -383,7 +389,9 @@ static func _drape(strip: PackedVector3Array, hang: float, flare: Array[Vector2]
 			var floor_m: float = Vector2(above.x, above.z).length() - rate * (above.y - p.y)
 			strip[i] = _held_out(strip[i], floor_m - Vector2(p.x, p.z).length(), shell)
 	for i: int in strip.size():
-		strip[i] = _held_out(strip[i], _flare(flare, strip[i].y), shell)
+		var p: Vector3 = strip[i]
+		var below_rim: float = SkaterMeshBuilder.helmet_rim_y(atan2(p.x, p.z)) - p.y
+		strip[i] = _held_out(p, minf(_flare(flare, p.y), below_rim * _RIM_SPRING), shell)
 	return strip
 
 
