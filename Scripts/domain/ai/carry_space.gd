@@ -468,7 +468,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		var p: Vector3 = from.lerp(to, f)
 		var m: float = AIStripOdds.escape_margin(p, plan_vel,
 				start_s + arrival_time * f - projected_s, opponents, opponent_vels,
-				opponent_caps, carrier_caps, arrival_time * f)
+				opponent_caps, carrier_caps, arrival_time * f, -INF if covered_only else best_m)
 		if covered_only:
 			if AIStripOdds.strip_odds(m, AIStripOdds.last_dwell_s) > 0.5:
 				return p

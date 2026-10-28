@@ -524,7 +524,7 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 		var t: float = AICarryRollout.HORIZON_S * float(k + 1) / AICarryRollout.SAMPLES
 		var p: Vector3 = AICarrierField.puck_pos_at(roll.sample(m, k), goal)
 		var margin: float = AIStripOdds.escape_margin(p, roll.reach_vel(m, k + 1, from), t,
-				opps, vels, _field.opponent_caps, carrier_caps)
+				opps, vels, _field.opponent_caps, carrier_caps, -1.0, best_m)
 		if not first and (margin > best_m or margin >= AIStripOdds.ESCAPE_SET_M):
 			best_p = p
 			best_t = t

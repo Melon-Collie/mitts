@@ -36,6 +36,11 @@ const DWELL_STEP_S: float = 0.1
 # the last escape_margin: across his reach at their closing speed, to the end of
 # COMMIT_S.
 static var last_dwell_s: float = 0.0
+# Each defender's blade reach, top speed and thrust, filled by escape_margin for
+# its escapes (one AI worker thread reads these).
+static var _d_reach := PackedFloat64Array()
+static var _d_top := PackedFloat64Array()
+static var _d_accel := PackedFloat64Array()
 # How much of a path a keep read looks at, from where the read starts (s): the
 # carrier re-plans many times a second, and inside this he cannot get out of a
 # stick's reach however he re-plans (his reaction, then sliding a blade's reach
@@ -72,56 +77,84 @@ static func chance_at(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vec
 # league build) take him in that time, ramped in by DODGE_FULL_PACE_M_S —
 # against the deepest of `defenders` (index-matched `vels`, and `caps` or empty
 # for the league build) at each. Leaves how long that stick stays on him in
-# last_dwell_s.
+# last_dwell_s. A margin at or under `ignore_below` is only a bound: the read
+# stops at the first escape that puts it there, and leaves no dwell.
 static func escape_margin(point: Vector3, plan_vel: Vector3, t: float,
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
-		carrier_caps: AISkaterCaps = null, on_plan_s: float = -1.0) -> float:
+		carrier_caps: AISkaterCaps = null, on_plan_s: float = -1.0,
+		ignore_below: float = -INF) -> float:
 	t = maxf(t, 0.0)
 	var accel: float = carrier_caps.max_accel if carrier_caps != null \
 			else GameRules.DEFAULT_SKATER_THRUST_M_S2
 	var top: float = carrier_caps.max_speed if carrier_caps != null \
 			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var pace: float = sqrt(plan_vel.x * plan_vel.x + plan_vel.z * plan_vel.z)
-	var dodge: float = _skated(0.0, t if on_plan_s < 0.0 else on_plan_s, top, accel) \
-			* minf(1.0, pace / DODGE_FULL_PACE_M_S)
+	var plan_t: float = t if on_plan_s < 0.0 else on_plan_s
+	var dodge: float = _skated(0.0, plan_t, top, accel) * minf(1.0, pace / DODGE_FULL_PACE_M_S)
 	var side := Vector3(-plan_vel.z / pace, 0.0, plan_vel.x / pace) if pace > 1e-6 \
 			else Vector3.ZERO
-	var has_caps: bool = caps.size() == defenders.size()
-	var plan_t: float = t if on_plan_s < 0.0 else on_plan_s
+	var n: int = defenders.size()
+	var has_caps: bool = caps.size() == n
+	if _d_reach.size() < n:
+		_d_reach.resize(n)
+		_d_top.resize(n)
+		_d_accel.resize(n)
 	# The men who could take it: a stick that cannot get within the odds' floor of
-	# any escape changes nothing, whichever is deepest.
+	# any escape changes nothing, whichever is deepest — his reach at its longest,
+	# whichever way it points.
+	var slack: float = dodge + ESCAPE_BAND_M - ESCAPE_SET_M
 	var near: int = 0
-	for i: int in defenders.size():
-		if _could_reach(defenders[i], vels[i], caps[i] if has_caps else null, point, t,
-				dodge + ESCAPE_BAND_M - ESCAPE_SET_M):
+	for i: int in n:
+		var c: AISkaterCaps = caps[i] if has_caps else null
+		var d_reach: float = c.max_blade_reach if c != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
+		var d_top: float = c.max_speed if c != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+		var d_accel: float = c.max_accel if c != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
+		_d_reach[i] = d_reach
+		_d_top[i] = d_top
+		_d_accel[i] = d_accel
+		var pos: Vector3 = defenders[i]
+		var vel: Vector3 = vels[i]
+		var wx: float = point.x - pos.x - vel.x * t
+		var wz: float = point.z - pos.z - vel.z * t
+		var longest: float = d_reach + _skated(-d_top, t, d_top, d_accel) + slack
+		if wx * wx + wz * wz < longest * longest:
 			near |= 1 << i
 	last_dwell_s = 0.0
 	if near == 0:
 		return -INF
 	# His escapes: either way off his line as far as he gets, or holding it.
+	var escapes: int = 3 if dodge > 0.0 else 1
 	var best: float = INF
 	var at := Vector3.ZERO
 	var by: int = -1
 	var by_reach: float = 0.0
-	for j: int in (3 if dodge > 0.0 else 1):
+	for j: int in escapes:
 		var escape: Vector3 = point + side * (dodge * (j - 1)) if dodge > 0.0 else point
 		var worst: float = -INF
 		var worst_i: int = -1
 		var worst_reach: float = 0.0
-		for i: int in defenders.size():
+		for i: int in n:
 			if near & (1 << i) == 0:
 				continue
-			var rd: Vector2 = _reach(defenders[i], vels[i], caps[i] if has_caps else null,
-					escape, t)
-			if rd.x - rd.y > worst:
-				worst = rd.x - rd.y
+			var pos: Vector3 = defenders[i]
+			var vel: Vector3 = vels[i]
+			var d_top: float = _d_top[i]
+			var wx: float = escape.x - pos.x - vel.x * t
+			var wz: float = escape.z - pos.z - vel.z * t
+			var d: float = sqrt(wx * wx + wz * wz)
+			var toward: float = minf((vel.x * wx + vel.z * wz) / d, d_top) if d > 1e-6 else 0.0
+			var reach: float = _d_reach[i] + _skated(toward, t, d_top, _d_accel[i])
+			if reach - d > worst:
+				worst = reach - d
 				worst_i = i
-				worst_reach = rd.x
+				worst_reach = reach
 		if worst < best:
 			best = worst
 			at = escape
 			by = worst_i
 			by_reach = worst_reach
+		if best <= ignore_below:
+			return best
 	if by >= 0:
 		var rel := Vector3(plan_vel.x - vels[by].x, 0.0, plan_vel.z - vels[by].z)
 		var rel_speed: float = rel.length()
@@ -143,36 +176,6 @@ static func strip_odds(margin: float, dwell_s: float = 0.0) -> float:
 	if poke <= 0.0:
 		return 0.0
 	return 1.0 - pow(1.0 - poke, 1.0 + maxf(dwell_s, 0.0) / POKE_CYCLE_S)
-
-
-# A defender at `pos` moving `vel`, built as `caps`, `t` after his read: how far
-# from where his drift has him by then his stick gets toward `point` — his
-# blade's reach and his own thrust to his top speed that way (x) — and how far
-# the point is from there (y).
-static func _reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
-		t: float) -> Vector2:
-	var reach: float = caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
-	var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-	var accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
-	var wx: float = point.x - pos.x - vel.x * t
-	var wz: float = point.z - pos.z - vel.z * t
-	var d: float = sqrt(wx * wx + wz * wz)
-	var toward: float = minf((vel.x * wx + vel.z * wz) / d, top) if d > 1e-6 else 0.0
-	return Vector2(reach + _skated(toward, t, top, accel), d)
-
-
-# Whether a defender at `pos` moving `vel`, built as `caps`, could have his
-# stick within `slack` of `point` `t` after his read: his reach at its longest,
-# whichever way it points.
-static func _could_reach(pos: Vector3, vel: Vector3, caps: AISkaterCaps, point: Vector3,
-		t: float, slack: float) -> bool:
-	var reach: float = caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M
-	var top: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-	var accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
-	var wx: float = point.x - pos.x - vel.x * t
-	var wz: float = point.z - pos.z - vel.z * t
-	var longest: float = reach + _skated(-top, t, top, accel) + slack
-	return wx * wx + wz * wz < longest * longest
 
 
 # How much further than his drift a skater moving `speed` along a line gets
@@ -207,7 +210,7 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 		var plan_vel: Vector3 = (points[b] - points[a]) / (times[b] - times[a]) if b > a \
 				else Vector3.ZERO
 		var m: float = escape_margin(points[k], plan_vel, times[k] - elapsed_s, defenders, vels,
-				caps, carrier_caps, times[k])
+				caps, carrier_caps, times[k], margin)
 		if m > margin:
 			margin = m
 			dwell = last_dwell_s
@@ -236,7 +239,7 @@ static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 		var f: float = float(k + 1) / steps
 		var m: float = escape_margin(from.lerp(to, f), plan_vel,
 				start_s + arrival_time * f - elapsed_s, defenders, vels, caps, carrier_caps,
-				arrival_time * f)
+				arrival_time * f, margin)
 		if m > margin:
 			margin = m
 			dwell = last_dwell_s
