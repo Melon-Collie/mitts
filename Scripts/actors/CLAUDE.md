@@ -13,7 +13,7 @@ delegates to.
 | holder | class | what it owns |
 |---|---|---|
 | `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
-| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, deltoid caps, both arms by IK, the trunk texture, the gear meshes (the tuck's upper mesh; face gear, hair and brows on one bone attachment) |
+| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, shoulder caps and deltoids, both arms by IK, the trunk texture, the gear meshes (the tuck's upper mesh; face gear, hair and brows on one bone attachment) |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
@@ -92,8 +92,8 @@ HIPS     on LowerBody (which carries the lean's shift): its yaw and pitch, and
     TAIL   the torso's placement hung from the waist: the share of the
            jersey's tail the hips carry
 tail     roots, one pair per torso facet: the jersey's tail below the belt,
-         draped by SkaterHemFlaps (with the jersey's carry above, the one
-         blended-weight surface in the rig — SkaterJerseyHem)
+         draped by SkaterHemFlaps (with the jersey's carry above, blended
+         onto the hips — SkaterJerseyHem)
 arms     roots, solved from the spine's shoulders to the gameplay hands
 ```
 
@@ -174,24 +174,34 @@ takes the same three.
 `test_hem_flaps.gd` holds the drape and `tests/slow/actors/test_hem_stays_out_of_the_legs.gd` the
 tail against the legs across a skated run.
 
-## The joints are stitched, not capped
+## The sleeve is one skin; the knee is stitched
 
-Each knee, elbow and shoulder is a band whose rings ride the bones either side
-(and, at the elbow and shoulder, a bone turned part way between them), every
-vertex still rigid on one bone, so a bend stretches the band instead of opening
-a gap or showing a ball. The shoulder is the top of the sleeve: it flares out
-of the torso from an armhole laid on the torso's surface, and bends at three
-rings round the shoulder's pivot (the torso's, the half-turned deltoid's and the
-cap's, which is the upper arm prism's top ring), as the elbow bends at its
-three.
+Each sleeve is one skin from an armhole in the torso to the wrist
+(`SkaterMeshBuilder._sleeve`; the design is `docs/upper-body-skin-plan.md`).
+It is authored in the TORSO bone's frame at rest and bound to its bones by
+their rest poses, unlike every other part (identity binds, own space), so its
+vertices can blend: across the shoulder between the torso, the deltoid (turned
+half as far as the arm) and the upper arm, with the torso round each shoulder
+taking a share of the deltoid too. The armhole's loop is the torso's own
+corners, and the sleeve's four paint surfaces share their rings exactly, so
+nothing between the chest and the glove is a separate piece. A side's sleeve
+rides the arm on that side, which handedness decides, so the upper skin comes
+in two (`shared_upper_skin(top_on_right)`), worn by the rig and the shadow
+proxy and swapped when `Skater.is_left_handed` changes. The TOP_/BOTTOM_ arm
+surfaces are the left and right sleeves; both are painted alike.
 
-A band only lies flat if ring k is the same facet on every bone it spans, so
-the arm is one frame carried down from the shoulder cap: the cap points down
-the upper arm, the upper arm prism takes its frame, the forearm's is that
-turned through the elbow's bend, the elbow bone's half of it
-(`SkaterArmRig._pose_arm_chain`). Change how any of them is rolled and the
-sleeve twists. `test_shoulder_is_stitched.gd`, `test_elbow_is_stitched.gd` and
-`test_skater_mesh_builder.gd`'s knee test hold the seams.
+The blends only hold if the bones agree on their frames. The cap swings from
+its rest hang with no twist (`SkaterArmRig.swing`, spelled out so the C++ port
+takes the same steps), the deltoid turns halfway to it, and the arm is one
+frame carried down from the cap: the upper arm takes the cap's, the forearm's
+is that turned through the elbow's bend, the elbow bone's half of it
+(`_pose_arm_chain`). Roll any of them its own way and the sleeve wrings.
+`test_sleeve_is_one_piece.gd` holds the binds, the seams and the facing,
+`test_arm_frames_are_carried.gd` the frames.
+
+The knee is still rigid rings stitched across its hinge: the sock carried up
+past the joint on the shin, its top ring on the thigh inside the pants leg
+(`test_skater_mesh_builder.gd`'s knee test).
 
 ## The blades stand on the ice
 

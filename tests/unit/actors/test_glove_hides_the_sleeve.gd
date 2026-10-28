@@ -92,11 +92,20 @@ static func _inside_section(p: Vector3, size: Vector2) -> bool:
 # the cuff nor the fist, and how many the glove reached over.
 func _bare_sleeve(arm: Array) -> Vector2i:
 	var body: Skeleton3D = _skater._arms._skeleton
-	var forearm: Transform3D = body.get_bone_pose(arm[0])
+	# The sleeve's forearm is the one on this arm's side, skinned through its
+	# bind (SkaterMeshBuilder._sleeve).
+	var top_on_right: bool = _skater.shoulder.position.x > 0.0
+	var marker: Marker3D = _skater.shoulder if arm[0] == UpperBone.TOP_FOREARM \
+			else _skater.bottom_shoulder
+	var side_i: int = 1 if marker.position.x > 0.0 else 0
+	var bind: Transform3D = SkaterMeshBuilder.shared_upper_skin(top_on_right).get_bind_pose(
+			SkaterMeshBuilder.sleeve_bind(side_i, SkaterMeshBuilder.SleevePart.FOREARM))
+	var forearm: Transform3D = body.get_bone_pose(arm[0]) * bind
 	var to_cuff: Transform3D = body.get_bone_pose(arm[1]).affine_inverse()
 	var to_fist: Transform3D = body.get_bone_pose(arm[2]).affine_inverse()
-	var verts: PackedVector3Array = SkaterMeshBuilder._forearm_bone_z() \
-			.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var verts: PackedVector3Array = SkaterMeshBuilder.shared_upper_skin_mesh() \
+			.surface_get_arrays(SkaterMeshBuilder.UpperSurface.TOP_FOREARM if side_i == 0
+			else SkaterMeshBuilder.UpperSurface.BOTTOM_FOREARM)[Mesh.ARRAY_VERTEX]
 	var cuff_top: float = SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
 	var covered: int = 0
 	var bare: int = 0

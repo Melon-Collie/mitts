@@ -20,7 +20,7 @@ extends RefCounted
 static var enabled: bool = true
 
 static var _merged: ArrayMesh = null
-static var _skin: Skin = null
+static var _skins: Array[Skin] = [null, null]
 # Every built proxy, so a settings change reaches the skaters already on the ice.
 static var _live: Array[WeakRef] = []
 
@@ -96,8 +96,11 @@ static func shared_mesh() -> ArrayMesh:
 		for bind: int in 2 * SkaterMeshBuilder.TORSO_SIDES:
 			tail[SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE + bind] = \
 					SkaterBodySkeleton.COLUMN_BONE_BASE + bind
-		tail[SkaterMeshBuilder.UPPER_DELTOID_BIND] = SkaterBodySkeleton.DELTOID_L_BONE
-		tail[SkaterMeshBuilder.UPPER_DELTOID_BIND + 1] = SkaterBodySkeleton.DELTOID_R_BONE
+		# The sleeves' binds carry rest poses, so they stay binds of their own,
+		# after the skeleton's identity ones (shared_skin).
+		for bind: int in 2 * SkaterMeshBuilder.SLEEVE_PARTS:
+			tail[SkaterMeshBuilder.UPPER_SLEEVE_BIND + bind] = \
+					SkaterBodySkeleton.BODY_BONE_COUNT + bind
 		_append_mesh(out, SkaterMeshBuilder.shared_upper_skin_mesh(), 0, tail)
 		_append_mesh(out, SkaterMeshBuilder.shared_leg_skin_mesh(),
 				SkaterBodySkeleton.LEG_BONE_OFFSET)
@@ -106,18 +109,31 @@ static func shared_mesh() -> ArrayMesh:
 	return _merged
 
 
-static func shared_skin() -> Skin:
-	if _skin == null:
-		_skin = Skin.new()
+# An identity bind per body bone, then the upper skin's sleeve binds as they are
+# for this handedness (SkaterMeshBuilder.shared_upper_skin).
+static func shared_skin(top_on_right: bool = true) -> Skin:
+	var i: int = 1 if top_on_right else 0
+	if _skins[i] == null:
+		var skin := Skin.new()
 		for bone: int in SkaterBodySkeleton.BODY_BONE_COUNT:
-			_skin.add_bind(bone, Transform3D.IDENTITY)
-	return _skin
+			skin.add_bind(bone, Transform3D.IDENTITY)
+		var upper: Skin = SkaterMeshBuilder.shared_upper_skin(top_on_right)
+		for bind: int in 2 * SkaterMeshBuilder.SLEEVE_PARTS:
+			var source: int = SkaterMeshBuilder.UPPER_SLEEVE_BIND + bind
+			skin.add_bind(upper.get_bind_bone(source), upper.get_bind_pose(source))
+		_skins[i] = skin
+	return _skins[i]
+
+
+# The skin for the side the skater's top arm is on (Skater.is_left_handed).
+func set_top_on_right(top_on_right: bool) -> void:
+	if _proxy != null:
+		_proxy.skin = shared_skin(top_on_right)
 
 
 # `bone_offset` turns a rig skin's bind index into the body skeleton's bone
 # index (the rig skins bind index i to bone offset + i), except the binds in
-# `extra`, which name their own bones (the upper skin's jersey tail and
-# deltoids).
+# `extra`, which name their own (the upper skin's jersey tail and sleeves).
 static func _append_mesh(out: Array, src: ArrayMesh, bone_offset: int,
 		extra: Dictionary = {}) -> void:
 	var verts: PackedVector3Array = out[Mesh.ARRAY_VERTEX]

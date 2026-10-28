@@ -42,36 +42,47 @@ func test_the_figure_casts_through_the_proxy_alone() -> void:
 
 
 func test_the_proxy_is_the_figure_bone_for_bone() -> void:
-	# Every vertex of both rig meshes appears in the proxy, weighted to the same
-	# body-skeleton bone — so the skeleton poses the shadow exactly as it poses
-	# the body, attribute scaling included.
+	# Every vertex of both rig meshes appears in the proxy, each influence bound
+	# to the same body-skeleton bone by the same bind pose as the rig's skin binds
+	# it — so the skeleton poses the shadow exactly as it poses the body,
+	# attribute scaling and either handedness's sleeves included.
 	var merged: Array = SkaterShadowProxy.shared_mesh().surface_get_arrays(0)
 	var verts: PackedVector3Array = merged[Mesh.ARRAY_VERTEX]
 	var bones: PackedInt32Array = merged[Mesh.ARRAY_BONES]
-	var at: int = 0
-	# The upper skin's binds name their bones (the tail's are past the parts');
-	# the leg skin's are offset by LEG_BONE_OFFSET.
-	var upper_skin: Skin = SkaterMeshBuilder.shared_upper_skin()
-	var sources: Array = [
-		[SkaterMeshBuilder.shared_upper_skin_mesh(), -1],
-		[SkaterMeshBuilder.shared_leg_skin_mesh(), SkaterBodySkeleton.LEG_BONE_OFFSET],
-	]
-	for source: Array in sources:
-		var mesh: ArrayMesh = source[0]
-		var offset: int = source[1]
-		for surface: int in mesh.get_surface_count():
-			var arrays: Array = mesh.surface_get_arrays(surface)
-			var src_verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-			var src_bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
-			for i: int in src_verts.size():
-				var bone: int = upper_skin.get_bind_bone(src_bones[i * 4]) if offset < 0 \
-						else src_bones[i * 4] + offset
-				if verts[at + i] != src_verts[i] or bones[(at + i) * 4] != bone:
-					fail_test("vertex %d of a surface diverged from its source" % i)
-					return
-			at += src_verts.size()
-	assert_eq(at, verts.size(), "nothing but the two rig meshes")
-	assert_eq(SkaterShadowProxy.shared_skin().get_bind_count(), SkaterBodySkeleton.BODY_BONE_COUNT)
+	var weights: PackedFloat32Array = merged[Mesh.ARRAY_WEIGHTS]
+	for top_on_right: bool in [true, false]:
+		var proxy_skin: Skin = SkaterShadowProxy.shared_skin(top_on_right)
+		var at: int = 0
+		var sources: Array = [
+			[SkaterMeshBuilder.shared_upper_skin_mesh(),
+					SkaterMeshBuilder.shared_upper_skin(top_on_right)],
+			[SkaterMeshBuilder.shared_leg_skin_mesh(), SkaterMeshBuilder.shared_leg_skin()],
+		]
+		for source: Array in sources:
+			var mesh: ArrayMesh = source[0]
+			var skin: Skin = source[1]
+			for surface: int in mesh.get_surface_count():
+				var arrays: Array = mesh.surface_get_arrays(surface)
+				var src_verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+				var src_bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+				var src_weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+				for i: int in src_verts.size():
+					if verts[at + i] != src_verts[i]:
+						fail_test("vertex %d of a surface diverged from its source" % i)
+						return
+					for j: int in 4:
+						var w: float = src_weights[i * 4 + j]
+						if w == 0.0:
+							continue
+						var mine: int = bones[(at + i) * 4 + j]
+						var theirs: int = src_bones[i * 4 + j]
+						if weights[(at + i) * 4 + j] != w \
+								or proxy_skin.get_bind_bone(mine) != skin.get_bind_bone(theirs) \
+								or proxy_skin.get_bind_pose(mine) != skin.get_bind_pose(theirs):
+							fail_test("vertex %d of a surface is bound apart from its source" % i)
+							return
+				at += src_verts.size()
+		assert_eq(at, verts.size(), "nothing but the two rig meshes")
 
 
 func test_a_ghost_casts_no_shadow() -> void:

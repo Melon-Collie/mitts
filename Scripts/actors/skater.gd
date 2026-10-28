@@ -990,6 +990,7 @@ func _ready() -> void:
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
 	_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
+	_shadow.set_top_on_right(shoulder.position.x > 0.0)
 
 	_uniform = SkaterUniformCoordinator.new()
 	_uniform.setup(self)
@@ -1425,6 +1426,10 @@ func _position_hand_markers() -> void:
 	top_hand.position        = Vector3(shoulder.position.x, 0.0, 0.0)
 	bottom_shoulder.position = Vector3(-top_hand_side_sign * shoulder_offset, shoulder_height, 0.0)
 	bottom_hand.position     = Vector3(bottom_shoulder.position.x, 0.0, 0.0)
+	# Each side's sleeve rides the arm on that side, which this just decided.
+	if _arms != null:
+		_arms.apply_handedness()
+	_shadow.set_top_on_right(shoulder.position.x > 0.0)
 	# The procedural blade mesh bakes the curve direction in, so a handedness
 	# change (including the first call from _ready, when the sign is still 0)
 	# rebuilds it. No-ops on the attribute-reapply path (same sign).

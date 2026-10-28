@@ -269,10 +269,18 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 # because every vertex is RIGID — weight 1.0 on one bone, nothing on the other
 # three. Blended weights would make a bone pose an approximation of the node
 # transform it stands in for, and the pose diff would start reporting drift with
-# no obvious cause. Cheap to check here, invisible in a render. The torso is the
-# one deliberate blend (its tail rides the jersey's own bones), and the knees,
-# elbows and shoulder caps are stitched across their joint's bones; each has its
-# own test (test_elbow_is_stitched.gd, test_shoulder_is_stitched.gd).
+# no obvious cause. Cheap to check here, invisible in a render. The torso and
+# the sleeves are the deliberate blends (the jersey's tail, the shoulders) and
+# the knees are stitched across their joint's two bones; each has its own test
+# (the sleeves' in test_sleeve_is_one_piece.gd).
+const _SLEEVE_SURFACES: Array[int] = [
+	SkaterMeshBuilder.UpperSurface.TOP_UPPER_ARM, SkaterMeshBuilder.UpperSurface.TOP_FOREARM,
+	SkaterMeshBuilder.UpperSurface.BOTTOM_UPPER_ARM, SkaterMeshBuilder.UpperSurface.BOTTOM_FOREARM,
+	SkaterMeshBuilder.UpperSurface.TOP_ELBOW, SkaterMeshBuilder.UpperSurface.BOTTOM_ELBOW,
+	SkaterMeshBuilder.UpperSurface.SHOULDER_L, SkaterMeshBuilder.UpperSurface.SHOULDER_R,
+]
+
+
 func test_skinned_rigs_are_rigidly_weighted() -> void:
 	var rigs: Array = [
 		["upper", SkaterMeshBuilder.shared_upper_skin_mesh(),
@@ -286,7 +294,8 @@ func test_skinned_rigs_are_rigidly_weighted() -> void:
 		assert_eq(mesh.get_surface_count(), int(rig[2]),
 				"%s rig surface count must match its enum" % label)
 		for surface: int in mesh.get_surface_count():
-			if label == "upper" and surface == SkaterMeshBuilder.UpperSurface.TORSO:
+			if label == "upper" and (surface == SkaterMeshBuilder.UpperSurface.TORSO
+					or surface in _SLEEVE_SURFACES):
 				continue
 			var arrays: Array = mesh.surface_get_arrays(surface)
 			var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
@@ -298,11 +307,7 @@ func test_skinned_rigs_are_rigidly_weighted() -> void:
 			assert_between(bone, 0, int(rig[3]) - 1,
 					"%s surface %d bone index in range" % [label, surface])
 			var stitched: bool = label == "leg" and (surface == SkaterMeshBuilder.LegSurface.KNEE_L
-					or surface == SkaterMeshBuilder.LegSurface.KNEE_R) \
-					or label == "upper" and (surface == SkaterMeshBuilder.UpperSurface.TOP_ELBOW
-					or surface == SkaterMeshBuilder.UpperSurface.BOTTOM_ELBOW
-					or surface == SkaterMeshBuilder.UpperSurface.SHOULDER_L
-					or surface == SkaterMeshBuilder.UpperSurface.SHOULDER_R)
+					or surface == SkaterMeshBuilder.LegSurface.KNEE_R)
 			var uniform_bone: bool = true
 			var rigid: bool = true
 			for v: int in verts:
@@ -382,8 +387,17 @@ func test_only_the_jersey_tail_blends() -> void:
 					+ weights[v * 4 + 3], 1.0, 1e-4, "the weights share the whole vertex")
 			if rest[v].y >= SkaterJerseyHem.PIVOT_Y_M:
 				assert_eq(bones[v * 4], SkaterMeshBuilder.UpperBone.TORSO)
-				assert_almost_eq(weights[v * 4], 1.0, 1e-4, "above the pivot the jersey is rigid")
-			elif bones[v * 4] >= SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE:
+				# Rigid on the torso, but for the share the shoulders take
+				# (SkaterMeshBuilder._torso_deltoid_share).
+				if weights[v * 4 + 1] > 0.0:
+					assert_true(bones[v * 4 + 1] == SkaterMeshBuilder.sleeve_bind(0,
+							SkaterMeshBuilder.SleevePart.DELTOID) or bones[v * 4 + 1]
+							== SkaterMeshBuilder.sleeve_bind(1, SkaterMeshBuilder.SleevePart.DELTOID),
+							"above the pivot only a shoulder shares the jersey")
+				else:
+					assert_almost_eq(weights[v * 4], 1.0, 1e-4, "above the pivot the jersey is rigid")
+			elif bones[v * 4] >= SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE \
+					and bones[v * 4] < SkaterMeshBuilder.UPPER_SLEEVE_BIND:
 				assert_lt(rest[v].y, SkaterJerseyHem.BELT_Y_M + 1e-4, "flaps start at the belt")
 				assert_almost_eq(weights[v * 4], 1.0, 1e-4, "on one flap bone")
 				var segment: int = (bones[v * 4] - SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE) % 2

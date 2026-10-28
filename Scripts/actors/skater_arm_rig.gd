@@ -24,8 +24,6 @@ extends RefCounted
 # its seam follows (SkaterMeshBuilder._append_cap_surface).
 const _DELTOID_SHARE: float = 0.5
 # A cap's frame (+Y up the arm) as an arm prism's (+Z up the arm, X shared).
-const _CAP_TO_PRISM := Basis(Vector3(1.0, 0.0, 0.0), Vector3(0.0, 0.0, -1.0),
-		Vector3(0.0, 1.0, 0.0))
 # Each cap's rest basis (left, right), where the deltoid turns from.
 var _cap_rest: Array[Basis] = [SkaterMeshBuilder.shoulder_cap_rest(-1.0),
 		SkaterMeshBuilder.shoulder_cap_rest(1.0)]
@@ -119,7 +117,7 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 	_mesh.name = "UpperMesh"
 	_mesh.mesh = SkaterMeshBuilder.shared_upper_body_mesh()
 	_mesh.set_surface_override_material(0, body_material)
-	_mesh.skin = SkaterMeshBuilder.shared_upper_skin()
+	_mesh.skin = SkaterMeshBuilder.shared_upper_skin(_top_on_right())
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
 
@@ -375,7 +373,7 @@ func _pose_arm_chain(upper: int, forearm: int, elbow_bone: int, cap: Basis,
 # The upper arm's prism frame (local −Z down the arm) from its cap's (local −Y
 # down it), turned the shortest way onto `span` should the cap lag it.
 static func _arm_frame(cap: Basis, span: Vector3) -> Basis:
-	var prism: Basis = cap * _CAP_TO_PRISM
+	var prism: Basis = cap * SkaterMeshBuilder.CAP_TO_PRISM
 	if span.length_squared() < 1e-8:
 		return prism
 	return Basis(Quaternion(-cap.y.normalized(), span.normalized())) * prism
@@ -466,17 +464,11 @@ func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), center))
 
 
-# Points the cap on the anchor's side down that arm's shoulder→elbow direction:
-# it is the top of the sleeve, and the arm's frames are carried down from it
-# (_pose_arm_chain). Two texture constraints shape the roll (the shoulder-number
-# decal was authored against the caps' identity orientation):
-#   - The +Y pole points AWAY from the arm: the equirect texture stays upright —
-#     an along-the-arm (downward) pole renders the number flipped and mirrored.
-#   - Local +X stays near world +X for BOTH caps; each side's decal picks its
-#     outboard face via uv1_offset (±0.25), exactly as at identity. Flipping
-#     +X outboard per side turns the left cap's number to the inside. With the
-#     arm near ±X there is no such X, so the cap keeps its last one, turned onto
-#     the new pole.
+# Points the cap on the anchor's side down that arm's shoulder→elbow direction,
+# swung the shortest way from its rest hang with no twist: the shoulder's sleeve
+# bends between the rest and this frame through the half-turned deltoid, and a
+# twist in it would wring that band (SkaterMeshBuilder._sleeve). The arm's frames
+# are carried down from it (_pose_arm_chain).
 # Writes rotation only — the caps' scale is SkaterAppearanceCoordinator's and
 # their position is the scene's, plus the girdle's give.
 func _orient_shoulder_cap(marker_local: Vector3, anchor_local: Vector3,
@@ -491,12 +483,25 @@ func _orient_shoulder_cap(marker_local: Vector3, anchor_local: Vector3,
 	if arm_dir.length_squared() < 0.0001:
 		repose_bone(bone)
 		return
-	var pole: Vector3 = -arm_dir.normalized()
-	var toward: Vector3 = Vector3.RIGHT
-	if (Vector3.RIGHT - pole * pole.x).length_squared() < 0.01:
-		toward = _basis[bone].x
-	_basis[bone] = SkaterMeshBuilder.shoulder_cap_basis(pole, toward)
+	var rest: Basis = _cap_rest[0 if side < 0.0 else 1]
+	_basis[bone] = swing(-rest.y, arm_dir.normalized()) * rest
 	repose_bone(bone)
+
+
+# The shortest turn from one unit direction to another, as an axis and an angle.
+# Spelled out rather than Quaternion's arc so NativeArmRig can take the same
+# steps: the two disagree by millimetres where the turn nears half a circle.
+# Exactly opposed, it turns about a fixed perpendicular.
+static func swing(from: Vector3, to: Vector3) -> Basis:
+	var axis: Vector3 = from.cross(to)
+	var s: float = axis.length()
+	var c: float = from.dot(to)
+	if s < 1e-6:
+		if c > 0.0:
+			return Basis.IDENTITY
+		axis = from.cross(Vector3.RIGHT if absf(from.x) < 0.9 else Vector3.FORWARD)
+		return Basis(axis.normalized(), PI)
+	return Basis(axis / s, atan2(s, c))
 
 
 # An up vector safely non-colinear with `direction`. Falls back to
@@ -613,6 +618,17 @@ func repose_bone(bone: int) -> void:
 # mesh is a bare head.
 
 enum HeadPiece { FACE_GEAR, SCALP, FACIAL_HAIR, BROWS }
+
+
+# The sleeves' skin for the side the top arm's shoulder is on: each side's
+# sleeve rides that side's arm bones (SkaterMeshBuilder.shared_upper_skin).
+func apply_handedness() -> void:
+	if _mesh != null:
+		_mesh.skin = SkaterMeshBuilder.shared_upper_skin(_top_on_right())
+
+
+func _top_on_right() -> bool:
+	return _skater.shoulder.position.x > 0.0
 
 
 func apply_gear_meshes() -> void:

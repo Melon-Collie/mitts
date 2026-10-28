@@ -64,7 +64,22 @@ Vector3 solve_elbow(const Vector3 &shoulder, const Vector3 &hand, double upper_l
 	return foot + bend_direction(shoulder, hand, pole_world) * (real_t)h;
 }
 
-// SkaterArmRig._CAP_TO_PRISM.
+// SkaterArmRig.swing.
+Basis swing(const Vector3 &from, const Vector3 &to) {
+	Vector3 axis = from.cross(to);
+	const double s = axis.length();
+	const double c = from.dot(to);
+	if (s < 1e-6) {
+		if (c > 0.0) {
+			return Basis();
+		}
+		axis = from.cross(Math::abs(from.x) < 0.9 ? Vector3(1, 0, 0) : Vector3(0, 0, -1));
+		return Basis(axis.normalized(), Math_PI);
+	}
+	return Basis(axis / (real_t)s, (real_t)Math::atan2(s, c));
+}
+
+// SkaterMeshBuilder.CAP_TO_PRISM.
 const Basis CAP_TO_PRISM(Vector3(1, 0, 0), Vector3(0, 0, -1), Vector3(0, 1, 0));
 
 // SkaterArmRig._arm_frame.
@@ -204,17 +219,11 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const Basis to_untextured = trunk_texture.transposed();
 	girdle = to_untextured.xform(spine.basis.inverse().xform(shoulder_s - rooted));
 
-	// _orient_shoulder_cap: a near-±X pole keeps the cap's last X.
+	// _orient_shoulder_cap: swung from the rest hang, no twist.
 	const Transform3D to_spine = spine.affine_inverse();
 	const Vector3 arm_dir = to_untextured.xform(to_spine.xform(elbow_s) - to_spine.xform(shoulder_s));
 	if (arm_dir.length_squared() >= 0.0001) {
-		const Vector3 cap_pole = -arm_dir.normalized();
-		Vector3 toward(1, 0, 0);
-		if ((Vector3(1, 0, 0) - cap_pole * cap_pole.x).length_squared() < 0.01) {
-			toward = cap.get_column(0);
-		}
-		const Vector3 x_axis = (toward - cap_pole * cap_pole.dot(toward)).normalized();
-		cap = Basis(x_axis, cap_pole, x_axis.cross(cap_pole)).orthonormalized();
+		cap = swing(-cap_rest.get_column(1), arm_dir.normalized()) * cap_rest;
 	}
 	// repose_bone for a cap and its deltoid.
 	const Vector3 origin = cap_pos + check_load_offset(lead, SIGN(cap_pos.x), half_width) + girdle;
