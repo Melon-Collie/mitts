@@ -339,17 +339,17 @@ func _caps_of(k: int) -> AISkaterCaps:
 # left in _leg_defence), read from then — the skate is his decision then, not a
 # plan the defence can read now.
 func _skate_keep(from: Vector3, to: Vector3, start_s: float, trip: float,
-		man_caps: AISkaterCaps = null) -> float:
+		man_caps: AISkaterCaps = null, find_cover: bool = false) -> float:
 	if start_s <= 0.0:
 		return AICarrySpace.carry_safety(from, to, trip, _defenders, _defender_vels,
-				_defender_caps, 0.0, 0.0, man_caps)
+				_defender_caps, 0.0, 0.0, man_caps, find_cover)
 	if _leg_gen != _defence_gen or _leg_s != start_s or _leg_from != from:
 		_project(_leg_defence, _leg_vels, start_s, from)
 		_leg_gen = _defence_gen
 		_leg_s = start_s
 		_leg_from = from
 	return AICarrySpace.carry_safety(from, to, trip, _leg_defence, _leg_vels,
-			_defender_caps, 0.0, 0.0, man_caps)
+			_defender_caps, 0.0, 0.0, man_caps, find_cover)
 
 
 # Entry `i`'s shot, drive and pass against the defence `t` from now, into
@@ -607,17 +607,12 @@ func _drive_keep(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO,
 	if AINetObstacle.carry_path_blocked_by_net(from, target):
 		return 0.0
 	var t: float = AIArrival.time_to_arrive_caps(from, target, vel, man_caps)
-	var keep: float = _skate_keep(from, target, start_s, t, man_caps)
+	var keep: float = _skate_keep(from, target, start_s, t, man_caps, true)
 	if keep <= 0.0:
 		return 0.0
-	var reached: Vector3 = target
-	if keep < 1.0:
-		reached = AICarrySpace.carry_strip_point(from, target, t,
-				_leg_defence if start_s > 0.0 else _defenders,
-				_leg_vels if start_s > 0.0 else _defender_vels, _defender_caps, true, 0.0, 0.0,
-				man_caps)
-		if reached != target:
-			t = AIArrival.time_to_arrive_caps(from, reached, vel, man_caps)
+	var reached: Vector3 = AIStripOdds.last_covered_at
+	if reached != target:
+		t = AIArrival.time_to_arrive_caps(from, reached, vel, man_caps)
 	_project(_reached_defence, _reached_vels, start_s + t, from)
 	_drive_reached_value = _shot_vs(reached, _reached_defence) \
 			* AIActionScoring.delay_discount(t)

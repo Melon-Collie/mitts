@@ -429,69 +429,29 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 
 # The odds of keeping the puck on a straight carry from `from` to `to` in
 # `arrival_time` (a stand when they meet) by a man built as `carrier_caps`
-# (AIStripOdds.carry_keep), against `opponents` (index-matched velocities and
-# caps) — read `projected_s` after now when the caller carried them forward, or
-# as they are now for a carry setting off `start_s` from now.
+# (AIStripOdds.carry_keep, which leaves where it is lost), against `opponents`
+# (index-matched velocities and caps) — read `projected_s` after now when the
+# caller carried them forward, or as they are now for a carry setting off
+# `start_s` from now.
 static func carry_safety(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], projected_s: float = 0.0, start_s: float = 0.0,
-		carrier_caps: AISkaterCaps = null) -> float:
+		carrier_caps: AISkaterCaps = null, find_cover: bool = false) -> float:
 	return AIStripOdds.carry_keep(from, to, arrival_time, opponents, opponent_vels,
-			opponent_caps, projected_s, start_s, carrier_caps)
+			opponent_caps, projected_s, start_s, carrier_caps, find_cover)
 
 
-# Where a carry is stripped, if it is: in its first AIStripOdds.COMMIT_S, the
-# first point a poke takes it at with even odds, else the one it comes nearest
-# to; where it ends, each defender's race to it — weighted
-# by the odds of each, so a strip surrenders the puck in the traffic it was
-# skating through, not at the safe spot it was headed for. `covered_only`: how far
-# the carry gets — the first point the defence takes it at with better than even
-# odds, or `to`.
+# Where a carry is stripped, if it is (AIStripOdds.last_strip_at). `covered_only`:
+# how far the carry gets — the first point the defence takes it at with better
+# than even odds, or `to` (AIStripOdds.last_covered_at).
 static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], covered_only: bool = false,
 		projected_s: float = 0.0, start_s: float = 0.0,
 		carrier_caps: AISkaterCaps = null) -> Vector3:
-	if arrival_time <= 0.0 or opponents.is_empty():
-		return to
-	if from.is_equal_approx(to):
-		return from
-	var steps: int = maxi(1, ceili(arrival_time / AIStripOdds.DWELL_STEP_S - 1e-6))
-	var read: int = AIStripOdds.committed_steps(arrival_time, steps)
-	var plan_vel: Vector3 = (to - from) / arrival_time
-	var best_m: float = -INF
-	var dwell: float = 0.0
-	var best_p: Vector3 = to
-	var first: bool = false
-	for k: int in read:
-		var f: float = float(k + 1) / steps
-		var p: Vector3 = from.lerp(to, f)
-		var m: float = AIStripOdds.escape_margin(p, plan_vel,
-				start_s + arrival_time * f - projected_s, opponents, opponent_vels,
-				opponent_caps, carrier_caps, arrival_time * f, -INF if covered_only else best_m)
-		if covered_only:
-			if AIStripOdds.strip_odds(m, AIStripOdds.last_dwell_s) > 0.5:
-				return p
-			continue
-		if not first and (m > best_m or m >= AIStripOdds.ESCAPE_SET_M):
-			best_p = p
-			first = m >= AIStripOdds.ESCAPE_SET_M
-		if m > best_m:
-			best_m = m
-			dwell = AIStripOdds.last_dwell_s
-	if covered_only:
-		return to
-	var lost: float = AIStripOdds.strip_odds(best_m, dwell)
-	var at: Vector3 = best_p * lost
-	if read < steps and not first:
-		var has_caps: bool = opponent_caps.size() == opponents.size()
-		for i: int in opponents.size():
-			var c_end: float = AIStripOdds.SET_STRIP * AIStripOdds.chance_at(opponents[i],
-					opponent_vels[i], opponent_caps[i] if has_caps else null, to,
-					start_s + arrival_time - projected_s)
-			at += to * c_end
-			lost += c_end
-	return at / lost if lost > 1e-4 else to
+	AIStripOdds.carry_keep(from, to, arrival_time, opponents, opponent_vels, opponent_caps,
+			projected_s, start_s, carrier_caps, covered_only)
+	return AIStripOdds.last_covered_at if covered_only else AIStripOdds.last_strip_at
 
 
 # The carrier's best evasion target — the point in his handling envelope (where he

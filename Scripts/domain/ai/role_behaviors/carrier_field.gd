@@ -461,7 +461,7 @@ func _tag_up_time(ctx: RoleContext) -> float:
 
 # The value of a man DRIVING IN from `receiver_spot`: the value he reaches by
 # carrying toward the net, up to RECEIVER_DRIVE_MAX_M and only as far as the path
-# stays clear (carry_strip_point). Value = value_at(reached) × keep × decay(time
+# stays clear (AIStripOdds.last_covered_at). Value = value_at(reached) × keep × decay(time
 # to reach it) − the turnover where it is stripped, on the same reach/clearance
 # machinery and loss pricing as the carrier's own carry,
 # so both sides of a pass are valued alike. One straight drive, no search.
@@ -507,10 +507,8 @@ func receiver_drive_in_value(ctx: RoleContext, receiver_spot: Vector3,
 	project_opponents(start_s, _drive_start_buf, _drive_start_vels, receiver_spot)
 	var keep: float = AICarrySpace.carry_safety(
 			receiver_spot, target, reach_time,
-			_drive_start_buf, _drive_start_vels, opponent_caps, 0.0, 0.0, receiver_caps)
-	var reached: Vector3 = AICarrySpace.carry_strip_point(
-			receiver_spot, target, reach_time,
-			_drive_start_buf, _drive_start_vels, opponent_caps, true, 0.0, 0.0, receiver_caps)
+			_drive_start_buf, _drive_start_vels, opponent_caps, 0.0, 0.0, receiver_caps, true)
+	var reached: Vector3 = AIStripOdds.last_covered_at
 	if keep <= 0.0:
 		drive_in_reached = reached
 		return -turnover_cost(reached, 1.0, _drive_time(ctx, receiver_spot, reached,

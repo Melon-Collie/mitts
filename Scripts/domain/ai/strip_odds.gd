@@ -38,6 +38,15 @@ const DWELL_STEP_S: float = 0.1
 static var last_dwell_s: float = 0.0
 # Each defender's blade reach, top speed and thrust, filled by escape_margin for
 # its escapes (one AI worker thread reads these).
+# Where the last carry_keep expects a loss: in its first COMMIT_S the first
+# point a poke takes it at with even odds, else the one it comes nearest to;
+# where it ends, each defender's race to it — weighted by the odds of each, so a
+# strip surrenders the puck in the traffic it was skating through. `to` when it
+# is safe.
+static var last_strip_at: Vector3 = Vector3.ZERO
+# Where the last carry_keep asked to find_cover is first taken with better than
+# even odds (`to`: nowhere in its first COMMIT_S).
+static var last_covered_at: Vector3 = Vector3.ZERO
 static var _d_reach := PackedFloat64Array()
 static var _d_top := PackedFloat64Array()
 static var _d_accel := PackedFloat64Array()
@@ -223,11 +232,15 @@ static func path_keep(points: Array[Vector3], times: Array[float],
 # The odds the puck is kept on a straight carry from `from` to `to` in
 # `arrival_time` (held, when they meet), sampled every DWELL_STEP_S, setting off
 # `start_s` from now, carried by a man built as `carrier_caps`: his best escape
-# over the carry's first COMMIT_S, and the race to where it ends.
+# over the carry's first COMMIT_S, and the race to where it ends. Leaves where a
+# loss is expected in last_strip_at and, with `find_cover`, where the defence
+# first has it in last_covered_at.
 static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 		defenders: Array[Vector3], vels: Array[Vector3], caps: Array = [],
 		elapsed_s: float = 0.0, start_s: float = 0.0,
-		carrier_caps: AISkaterCaps = null) -> float:
+		carrier_caps: AISkaterCaps = null, find_cover: bool = false) -> float:
+	last_strip_at = to
+	last_covered_at = to
 	if arrival_time <= 0.0 or defenders.is_empty():
 		return 1.0
 	var steps: int = maxi(1, ceili(arrival_time / DWELL_STEP_S - 1e-6))
@@ -235,17 +248,45 @@ static func carry_keep(from: Vector3, to: Vector3, arrival_time: float,
 	var plan_vel: Vector3 = (to - from) / arrival_time
 	var margin: float = -INF
 	var dwell: float = 0.0
+	var worst_at: Vector3 = to
+	var set_on: bool = false
+	var covered: bool = not find_cover
 	for k: int in read:
 		var f: float = float(k + 1) / steps
-		var m: float = escape_margin(from.lerp(to, f), plan_vel,
+		var p: Vector3 = from.lerp(to, f)
+		# Until the cover is found, only a margin no poke lands from is a bound.
+		var m: float = escape_margin(p, plan_vel,
 				start_s + arrival_time * f - elapsed_s, defenders, vels, caps, carrier_caps,
-				arrival_time * f, margin)
+				arrival_time * f, margin if covered
+						else minf(margin, ESCAPE_SET_M - ESCAPE_BAND_M))
+		if not covered and strip_odds(m, last_dwell_s) > 0.5:
+			covered = true
+			last_covered_at = p
 		if m > margin:
+			if not set_on:
+				worst_at = p
+				set_on = m >= ESCAPE_SET_M
 			margin = m
 			dwell = last_dwell_s
-	var keep: float = 1.0 - strip_odds(margin, dwell)
+	var lost: float = strip_odds(margin, dwell)
+	var keep: float = 1.0 - lost
+	var at: Vector3 = worst_at * lost
 	if read < steps:
-		keep *= _race_keep(to, start_s + arrival_time - elapsed_s, defenders, vels, caps)
+		var has_caps: bool = caps.size() == defenders.size()
+		var puck_t: float = start_s + arrival_time - elapsed_s
+		var race: float = 1.0
+		for i: int in defenders.size():
+			var c: float = SET_STRIP * chance_at(defenders[i], vels[i],
+					caps[i] if has_caps else null, to, puck_t)
+			race *= 1.0 - c
+			if not set_on:
+				at += to * c
+				lost += c
+		keep *= race
+	last_strip_at = at / lost if lost > 1e-4 else to
+	if from.is_equal_approx(to):
+		last_strip_at = from
+		last_covered_at = from
 	return keep
 
 

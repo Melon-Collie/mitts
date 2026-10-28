@@ -547,7 +547,7 @@ func _rolled_safety(ctx: RoleContext, roll: AICarryRollout, m: int, from: Vector
 # across the arrival time, so it sees both a defender converging on the ROUTE
 # and one waiting at the DESTINATION; a committed charger whose momentum
 # carries him past reads as clear. 1 − safety is the strip probability, priced
-# at the EARLIEST covered point on the route (carry_strip_point), not the
+# at the EARLIEST covered point on the route (AIStripOdds.last_strip_at), not the
 # destination: a carry that ends in open ice but threads our own slot pays the
 # slot's turnover cost.
 #
@@ -598,6 +598,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			cur_puck_pos, cand_puck_pos, local_time,
 			_field.opponents, _field.opponent_vels, _field.opponent_caps, 0.0, 0.0,
 			ctx.caps_by_peer.get(ctx.peer_id))
+	var strip_point: Vector3 = AIStripOdds.last_strip_at
 	if decay * safety <= best_so_far:
 		return -INF
 	_field.project_opponents(local_time, _scratch_opponents_path, _scratch_vels_path,
@@ -614,13 +615,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	var dest_score: float = _arrival_value(ctx, candidate, arrive_vel, local_time)
 	var keep_prob: float = safety
 	var cost: float = 0.0
-	# A fully safe route (the common open-ice case) skips localizing a strip
-	# that cannot happen.
 	if keep_prob < 1.0:
-		var strip_point: Vector3 = AICarrySpace.carry_strip_point(
-				cur_puck_pos, cand_puck_pos, local_time,
-				_field.opponents, _field.opponent_vels, _field.opponent_caps, false, 0.0, 0.0,
-				ctx.caps_by_peer.get(ctx.peer_id))
 		var cand_len: float = cur_puck_pos.distance_to(cand_puck_pos)
 		cost = _field.turnover_cost(strip_point, 1.0 - keep_prob, local_time
 				* cur_puck_pos.distance_to(strip_point) / cand_len if cand_len > 0.001 else 0.0)
