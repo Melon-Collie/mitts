@@ -1082,7 +1082,7 @@ func _load() -> void:
 				default_bindings[action] = d
 	var cfg := ConfigFile.new()
 	if cfg.load(_get_save_path()) == OK:
-		player_name = cfg.get_value("player", "name", "Player").substr(0, 10)
+		player_name = cfg.get_value("player", "name", "Player").substr(0, NameFilter.MAX_LENGTH)
 		jersey_number = clamp(cfg.get_value("player", "jersey_number", 10), 0, 99)
 		is_left_handed = cfg.get_value("player", "left_handed", true)
 		preferred_position = clampi(int(cfg.get_value("player", "preferred_position", 0)),

@@ -392,9 +392,7 @@ func _build_you(page: VBoxContainer) -> void:
 	var name_col: VBoxContainer = _row(page, &"PLAYER_NAME_LABEL", false, full)
 	_name_field = LineEdit.new()
 	_name_field.placeholder_text = tr(&"PLAYER_NAME_PLACEHOLDER")
-	# 12 fits the jersey nameplate at font 28 without clipping at the back seam,
-	# and the lobby slot cards shrink-to-fit anything up to it.
-	_name_field.max_length = 12
+	_name_field.max_length = NameFilter.MAX_LENGTH
 	_name_field.custom_minimum_size = Vector2(PlayerRowKit.FIELD_W, PlayerRowKit.CONTROL_H)
 	_name_field.add_theme_font_size_override("font_size", 18)
 	_name_field.text_changed.connect(_on_name_text_changed)
