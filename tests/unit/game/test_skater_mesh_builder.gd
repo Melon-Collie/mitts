@@ -270,8 +270,9 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 # three. Blended weights would make a bone pose an approximation of the node
 # transform it stands in for, and the pose diff would start reporting drift with
 # no obvious cause. Cheap to check here, invisible in a render. The torso is the
-# one deliberate blend (its tail rides the jersey's own bones) and the knees the
-# one surface stitched across two bones; each has its own test below.
+# one deliberate blend (its tail rides the jersey's own bones), and the knees and
+# elbows are stitched across their joint's bones; each has its own test
+# (the elbows' in test_elbow_is_stitched.gd).
 func test_skinned_rigs_are_rigidly_weighted() -> void:
 	var rigs: Array = [
 		["upper", SkaterMeshBuilder.shared_upper_skin_mesh(),
@@ -297,7 +298,9 @@ func test_skinned_rigs_are_rigidly_weighted() -> void:
 			assert_between(bone, 0, int(rig[3]) - 1,
 					"%s surface %d bone index in range" % [label, surface])
 			var stitched: bool = label == "leg" and (surface == SkaterMeshBuilder.LegSurface.KNEE_L
-					or surface == SkaterMeshBuilder.LegSurface.KNEE_R)
+					or surface == SkaterMeshBuilder.LegSurface.KNEE_R) \
+					or label == "upper" and (surface == SkaterMeshBuilder.UpperSurface.TOP_ELBOW
+					or surface == SkaterMeshBuilder.UpperSurface.BOTTOM_ELBOW)
 			var uniform_bone: bool = true
 			var rigid: bool = true
 			for v: int in verts:

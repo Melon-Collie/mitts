@@ -167,6 +167,12 @@ const HEAD_FORWARD_M: float = 0.015
 # figures read it. The elbow pad only fills the bend, just proud of it.
 const SLEEVE_RADIUS_M: float = 0.080
 const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
+# The elbow ring the skinned arm's two prisms are stitched through
+# (_append_elbow_surface), in sleeve radii: between the upper arm's tapered end
+# and the forearm's full one, and standing proud by up to _ELBOW_PAD_PROUD at the
+# point of the bend, where the pad under the sleeve shows.
+const _ELBOW_RING_SLEEVES: float = 0.94
+const _ELBOW_PAD_PROUD: float = 0.18
 
 # Shoulder cap: the pad under the sleeve. Its +Y end (SkaterArmRig points it
 # into the trap) is a blunt base tucked under the torso's trapezius slope; the
@@ -769,7 +775,6 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 		var m := ArrayMesh.new()
 		var bone: ArrayMesh = shared_arm_bone_z()
 		var forearm: ArrayMesh = _forearm_bone_z()
-		var ball: ArrayMesh = shared_elbow_pad()
 		var fist: ArrayMesh = shared_glove_fist()
 		var cuff: ArrayMesh = shared_cuff()
 		var helmet: ArrayMesh = shared_helmet_assembly()
@@ -780,8 +785,10 @@ static func shared_upper_skin_mesh(tuck: int = GearModelRegistry.TUCK_NONE) -> A
 		_append_skinned_surface(m, forearm, UpperBone.TOP_FOREARM)
 		_append_skinned_surface(m, bone, UpperBone.BOTTOM_UPPER_ARM)
 		_append_skinned_surface(m, forearm, UpperBone.BOTTOM_FOREARM)
-		_append_skinned_surface(m, ball, UpperBone.TOP_ELBOW)
-		_append_skinned_surface(m, ball, UpperBone.BOTTOM_ELBOW)
+		_append_elbow_surface(m, UpperBone.TOP_UPPER_ARM, UpperBone.TOP_ELBOW,
+				UpperBone.TOP_FOREARM)
+		_append_elbow_surface(m, UpperBone.BOTTOM_UPPER_ARM, UpperBone.BOTTOM_ELBOW,
+				UpperBone.BOTTOM_FOREARM)
 		_append_skinned_surface(m, fist, UpperBone.TOP_HAND, FIST_PART_BACK)
 		_append_skinned_surface(m, fist, UpperBone.BOTTOM_HAND, FIST_PART_BACK)
 		_append_skinned_surface(m, cuff, UpperBone.TOP_CUFF)
@@ -907,15 +914,79 @@ static func _append_skinned_surface(target: ArrayMesh, src: ArrayMesh, bone: int
 		target.surface_set_material(target.get_surface_count() - 1, shared)
 
 
+# The elbow as the skinned arm wears it: a band from the upper arm's elbow-end
+# ring, through a ring on the elbow bone, to the forearm's elbow-end ring, each
+# ring rigid on its own bone in that bone's own frame, so the bend stretches the
+# band instead of opening the sleeve. The prisms' X is the hinge and their +Y
+# points out of the bend (SkaterArmRig._pose_bone), as the elbow bone's Z and +Y
+# do, so ring k is the same facet on all three. Each facet's normal is radial at
+# its middle angle in every vertex's frame: a lit facet like the prisms', and
+# with no axial component for their (r, r, length) scale to skew.
+static func _append_elbow_surface(target: ArrayMesh, upper: int, elbow: int,
+		forearm: int) -> void:
+	var ring_bones: Array[int] = [upper, elbow, forearm]
+	var in_elbow: float = _ELBOW_RING_SLEEVES * SLEEVE_RADIUS_M / ELBOW_PAD_RADIUS_M
+	var verts := PackedVector3Array()
+	var normals := PackedVector3Array()
+	var uvs := PackedVector2Array()
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for ring: int in 2:
+		for k: int in _LEG_SIDES:
+			var mid: float = TAU * (float(k) + 0.5) / float(_LEG_SIDES)
+			var a: Vector3 = _elbow_ring_point(ring, k, in_elbow)
+			var b: Vector3 = _elbow_ring_point(ring, k + 1, in_elbow)
+			var c: Vector3 = _elbow_ring_point(ring + 1, k + 1, in_elbow)
+			var d: Vector3 = _elbow_ring_point(ring + 1, k, in_elbow)
+			var u0: float = float(k) / float(_LEG_SIDES)
+			var u1: float = float(k + 1) / float(_LEG_SIDES)
+			var near: Array = [a, ring, u0, b, ring, u1, c, ring + 1, u1]
+			var far: Array = [a, ring, u0, c, ring + 1, u1, d, ring + 1, u0]
+			for tri: Array in [near, far]:
+				for i: int in 3:
+					var on: int = tri[i * 3 + 1]
+					verts.append(tri[i * 3])
+					normals.append(Vector3(0.0, -cos(mid), sin(mid)) if on == 1
+							else Vector3(sin(mid), -cos(mid), 0.0))
+					uvs.append(Vector2(tri[i * 3 + 2], 0.25 + 0.125 * on))
+					bones.append_array([ring_bones[on], 0, 0, 0])
+					weights.append_array([1.0, 0.0, 0.0, 0.0])
+	var arrays: Array = []
+	arrays.resize(Mesh.ARRAY_MAX)
+	arrays[Mesh.ARRAY_VERTEX] = verts
+	arrays[Mesh.ARRAY_NORMAL] = normals
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
+	arrays[Mesh.ARRAY_BONES] = bones
+	arrays[Mesh.ARRAY_WEIGHTS] = weights
+	target.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+
+
+# Point k of the elbow band's ring 0 (the upper arm's tapered end), 1 (the elbow
+# bone's, `in_elbow` of its unit across, the pad proud out of the bend) or 2 (the
+# forearm's full end), each in its own bone's frame. The angle runs as the
+# prisms' lathe does once laid along Z: +X is sin, −Y is cos.
+static func _elbow_ring_point(ring: int, k: int, in_elbow: float) -> Vector3:
+	var theta: float = TAU * float(k) / float(_LEG_SIDES)
+	var across: float = sin(theta)
+	var out: float = -cos(theta)
+	match ring:
+		0:
+			return Vector3(across * _ARM_TAPER, out * _ARM_TAPER, -0.5)
+		1:
+			var proud: float = 1.0 + _ELBOW_PAD_PROUD * maxf(out, 0.0) * maxf(out, 0.0)
+			return Vector3(0.0, out, across) * in_elbow * proud
+	return Vector3(across, out, 0.5)
+
+
 # Elbow ball, unit radius.
 static func shared_joint_ball() -> ArrayMesh:
 	return _shared("joint_ball", func() -> ArrayMesh:
 		return _build_ball(1.0, 8, 4, 1.0))
 
 
-# Elbow pad, unit radius: a ball drawn out to a soft point at +Y, which the arm
-# rig points out of the bend (SkaterArmRig._pose_elbow) — the pad's shape just
-# showing through a thick sleeve.
+# Elbow pad, unit radius: a ball drawn out to a soft point at +Y, which a placed
+# figure points out of the bend (LockerMannequin) — the pad's shape just showing
+# through a thick sleeve. The skinned arm wears _append_elbow_surface instead.
 const _ELBOW_PAD_PROFILE: Array[Vector2] = [
 	Vector2(1.08, 0.30), Vector2(0.92, 0.74), Vector2(0.56, 0.98), Vector2(0.1, 1.02),
 	Vector2(-0.45, 0.9), Vector2(-0.82, 0.55), Vector2(-0.98, 0.18),

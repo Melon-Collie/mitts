@@ -220,10 +220,11 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
 	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
 			_skater.upper_arm_length, _skater.forearm_length, pole_s)
-	_pose_bone(upper, shoulder_s, elbow_s)
-	_pose_bone(forearm, elbow_s, hand_s)
+	var out: Vector3 = TwoBoneIK.bend_direction(shoulder_s, hand_s, pole_s)
+	_pose_bone(upper, shoulder_s, elbow_s, out)
+	_pose_bone(forearm, elbow_s, hand_s, out)
 	_pose_cuff(cuff, elbow_s, hand_s)
-	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
+	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, out)
 	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
 	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
 			spine.affine_inverse() * elbow_s)
@@ -345,13 +346,15 @@ func _check_load_offset(side_sign: float) -> Vector3:
 # the arm bones are roots, so that is their pose space. Deliberately NOT
 # position/scale/look_at on nodes: that trio costs six transform operations, two
 # of which resolve the global chain, and at ten parts per skater this is the
-# densest such site in the rig. The up vector only has to avoid colinearity,
-# since the bone prism is rotationally symmetric about its long axis (see
-# up_for_look_at).
+# densest such site in the rig.
+#
+# Both arm prisms are rolled to the elbow's bend (`out`, local +Y out of it), so
+# their elbow-end rings and the elbow bone's ring correspond facet for facet and
+# the stitch between them (SkaterMeshBuilder.shared_elbow_bridge) never twists.
 #
 # scaled_local is basis·S throughout. The plain scaled() is S·basis and puts the
 # size on the wrong axes once a part tilts.
-func _pose_bone(part: int, a: Vector3, b: Vector3) -> void:
+func _pose_bone(part: int, a: Vector3, b: Vector3, out: Vector3) -> void:
 	var span: Vector3 = b - a
 	var length: float = span.length()
 	var center: Vector3 = (a + b) * 0.5
@@ -368,15 +371,22 @@ func _pose_bone(part: int, a: Vector3, b: Vector3) -> void:
 	# X/Y are the thickness the sizing seam owns; Z is the live bone length.
 	bone_scale.z = length
 	_skeleton.set_bone_pose(part, Transform3D(
-			Basis.looking_at(dir, up_for_look_at(dir)).scaled_local(bone_scale),
+			Basis.looking_at(dir, _bend_up(dir, out)).scaled_local(bone_scale),
 			center))
 
 
-# The elbow pad (SkaterMeshBuilder.shared_elbow_pad) points its +Y out of the
-# bend, the way the IK pushed the elbow, with its X along the arm.
+# The up an arm prism looks along `dir` with: out of the bend, unless the bend
+# is undefined or runs along the bone.
+static func _bend_up(dir: Vector3, out: Vector3) -> Vector3:
+	if dir.cross(out).length_squared() < 0.0001:
+		return up_for_look_at(dir)
+	return out
+
+
+# The elbow bone points its +Y out of the bend, the way the IK pushed the elbow,
+# with its X along the arm, so its Z is the hinge the prisms' X share.
 func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
-		pole: Vector3) -> void:
-	var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+		out: Vector3) -> void:
 	var along: Vector3 = (hand - shoulder).normalized()
 	var basis := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(_thickness[part]), elbow))
@@ -488,9 +498,9 @@ func _orient_shoulder_cap(marker_local: Vector3, anchor_local: Vector3,
 
 # An up vector safely non-colinear with `direction`. Falls back to
 # Vector3.FORWARD when `direction` is near-vertical so look_at() doesn't warn
-# about colinear basis vectors. Cylindrical meshes (arm bones, cuffs, the stick
-# knob) are rotationally symmetric around their long axis, so the choice of up
-# only matters for the warning — not for the rendered geometry. Public because
+# about colinear basis vectors. Cylindrical meshes (cuffs, the stick knob) are
+# rotationally symmetric around their long axis, so the choice of up only matters
+# for the warning — not for the rendered geometry. Public because
 # SkaterStickRig's knob is composed exactly like the cuffs here.
 static func up_for_look_at(direction: Vector3) -> Vector3:
 	if absf(direction.normalized().y) > 0.99:

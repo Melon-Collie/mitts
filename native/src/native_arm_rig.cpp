@@ -64,15 +64,24 @@ Vector3 solve_elbow(const Vector3 &shoulder, const Vector3 &hand, double upper_l
 	return foot + bend_direction(shoulder, hand, pole_world) * (real_t)h;
 }
 
+// SkaterArmRig._bend_up.
+Vector3 bend_up(const Vector3 &dir, const Vector3 &out) {
+	if (dir.cross(out).length_squared() < 0.0001) {
+		return up_for_look_at(dir);
+	}
+	return out;
+}
+
 // SkaterArmRig._pose_bone, for a non-degenerate span.
-Transform3D pose_bone(const Vector3 &a, const Vector3 &b, const Vector3 &thickness) {
+Transform3D pose_bone(const Vector3 &a, const Vector3 &b, const Vector3 &thickness,
+		const Vector3 &out) {
 	const Vector3 span = b - a;
 	const double length = span.length();
 	const Vector3 center = (a + b) * 0.5;
 	Vector3 bone_scale = thickness;
 	const Vector3 dir = span / (real_t)length;
 	bone_scale.z = (real_t)length;
-	return Transform3D(Basis::looking_at(dir, up_for_look_at(dir)).scaled_local(bone_scale), center);
+	return Transform3D(Basis::looking_at(dir, bend_up(dir, out)).scaled_local(bone_scale), center);
 }
 
 // SkaterArmRig.glove_basis.
@@ -190,8 +199,9 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	}
 	const Basis to_untextured = trunk_texture.transposed();
 	girdle = to_untextured.xform(spine.basis.inverse().xform(shoulder_s - rooted));
-	skeleton->set_bone_pose(bone_upper, pose_bone(shoulder_s, elbow_s, thick_upper));
-	skeleton->set_bone_pose(bone_forearm, pose_bone(elbow_s, hand_s, thick_forearm));
+	const Vector3 out = bend_direction(shoulder_s, hand_s, pole_s);
+	skeleton->set_bone_pose(bone_upper, pose_bone(shoulder_s, elbow_s, thick_upper, out));
+	skeleton->set_bone_pose(bone_forearm, pose_bone(elbow_s, hand_s, thick_forearm, out));
 
 	// _pose_cuff.
 	const Vector3 dir = forearm_span / (real_t)forearm_length;
@@ -200,7 +210,6 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	skeleton->set_bone_pose(bone_cuff,
 			Transform3D(along.scaled_local(thick_cuff), hand_s - dir * (real_t)cuff_back));
 	// _pose_elbow.
-	const Vector3 out = bend_direction(shoulder_s, hand_s, pole_s);
 	const Vector3 arm_axis = (hand_s - shoulder_s).normalized();
 	const Basis pad = out == Vector3() ? Basis() : Basis(arm_axis, out, arm_axis.cross(out));
 	skeleton->set_bone_pose(bone_elbow, Transform3D(pad.scaled_local(thick_elbow), elbow_s));
