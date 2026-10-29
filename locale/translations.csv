@@ -139,6 +139,7 @@ PLAYER_REGION_YOU,YOU,TÚ
 PLAYER_REGION_BODY,BODY,CUERPO
 PLAYER_REGION_HEAD,HEAD,CABEZA
 PLAYER_REGION_STICK,STICK,PALO
+PLAYER_REGION_TAPE,TAPE,CINTA
 PLAYER_REGION_SKATES,SKATES,PATINES
 PLAYER_NAME_LABEL,Name,Nombre
 PLAYER_NAME_PLACEHOLDER,Player,Jugador
@@ -197,6 +198,7 @@ STAT_NOTE_YOU,Your whole build at a glance.,Tu físico entero de un vistazo.
 STAT_NOTE_BODY,Lit rows are what height and weight change.,Las filas iluminadas son lo que cambian la altura y el peso.
 STAT_NOTE_HEAD,Nothing on the head changes play.,Nada en la cabeza cambia el juego.
 STAT_NOTE_STICK,Lit rows are what the stick changes.,Las filas iluminadas son lo que cambia el palo.
+STAT_NOTE_TAPE,Nothing in the tape job changes play.,Nada de la cinta cambia el juego.
 STAT_NOTE_SKATES,Lit rows are what the skates change.,Las filas iluminadas son lo que cambian los patines.
 CLIP_SAVE_PROMPT,%s SAVE GIF,%s GUARDAR GIF
 CLIP_SAVING,SAVING GIF…,GUARDANDO GIF…

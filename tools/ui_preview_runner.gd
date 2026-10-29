@@ -32,6 +32,7 @@ const _SHOTS: Array[Dictionary] = [
 	{"name": "side_player_body", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.BODY},
 	{"name": "side_player_head", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.HEAD},
 	{"name": "side_player_stick", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.STICK},
+	{"name": "side_player_tape", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.TAPE},
 	{"name": "side_player_skates", "stage": _STAGE_FREE_PLAY, "open": "_open_player_region", "arg": PlayerSettingsPopup.Region.SKATES},
 	{"name": "side_career", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_career_pressed"},
 	{"name": "side_tutorials", "stage": _STAGE_FREE_PLAY, "open": "_open_side_menu", "arg": "_on_tutorial_pressed"},

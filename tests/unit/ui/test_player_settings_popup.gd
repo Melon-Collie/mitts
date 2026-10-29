@@ -241,6 +241,32 @@ func test_the_stat_panel_reads_the_draft() -> void:
 	assert_true(top.text.begins_with("+"), "power skates read faster")
 
 
+# The case sets the panel's height; a page taller than it would resize the
+# panel every time a region is switched to or from it.
+func test_every_page_fits_beside_the_case() -> void:
+	var pages: Array = _buttons("_pages")
+	var case_h: float = _case().get_combined_minimum_size().y
+	for r: int in pages.size():
+		_popup.call("_show_region", r)
+		var rows: Control = (pages[r] as Control).get_parent() as Control
+		assert_lte(rows.get_combined_minimum_size().y, case_h, "region %d fits" % r)
+
+
+# The tape job is a page of its own; the stick page keeps the stick itself.
+func test_the_tape_rows_live_on_the_tape_page() -> void:
+	var pages: Array = _buttons("_pages")
+	var tape: Control = pages[R.TAPE]
+	var stick: Control = pages[R.STICK]
+	for field: String in ["_blade_color_dd", "_span_btn", "_strip_color_dd", "_knob_color_dd",
+			"_style_btn"]:
+		assert_true(tape.is_ancestor_of(_popup.get(field) as Node), "%s is tape" % field)
+	for field: String in ["_stick_model_btn", "_stick_shaft_dd", "_stick_primary_dd",
+			"_stick_secondary_dd"]:
+		assert_true(stick.is_ancestor_of(_popup.get(field) as Node), "%s is stick" % field)
+	_popup.call("_show_region", R.TAPE)
+	assert_eq(_case().get("_focus"), F.BLADE, "the tape page frames the blade")
+
+
 # Each region shows its own page, frames its own piece, and lights the stats its
 # dials can move.
 func test_a_region_shows_its_page_frames_its_piece_and_lights_its_stats() -> void:
@@ -268,6 +294,7 @@ func test_a_region_with_a_gameplay_row_stars_its_tab() -> void:
 	assert_true((stars[R.BODY] as Label).visible, "height and weight")
 	assert_false((stars[R.HEAD] as Label).visible, "nothing on the head plays")
 	assert_true((stars[R.STICK] as Label).visible)
+	assert_false((stars[R.TAPE] as Label).visible, "nothing in the tape job plays")
 	assert_true((stars[R.SKATES] as Label).visible)
 
 

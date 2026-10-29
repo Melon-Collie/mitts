@@ -3,7 +3,7 @@ extends Control
 
 # The player screen: who you are and everything you skate with, one region at a
 # time around a live mannequin — YOU (name, number, hand, seat, team), BODY,
-# HEAD, STICK and SKATES. A region's rows are in the order the piece reads, with
+# HEAD, STICK, TAPE and SKATES. A region's rows are in the order the piece reads, with
 # a gold asterisk on each pick that changes play; beside them a stat panel shows
 # what the whole build does, with the stats the current region can move lit.
 #
@@ -17,15 +17,17 @@ signal handedness_changed(is_left: bool)
 signal position_changed(position: int)
 signal preferred_color_changed(color_slot: int)
 
-enum Region { YOU, BODY, HEAD, STICK, SKATES }
+enum Region { YOU, BODY, HEAD, STICK, TAPE, SKATES }
 
 const _REGION_KEYS: Array[StringName] = [&"PLAYER_REGION_YOU", &"PLAYER_REGION_BODY",
-		&"PLAYER_REGION_HEAD", &"PLAYER_REGION_STICK", &"PLAYER_REGION_SKATES"]
+		&"PLAYER_REGION_HEAD", &"PLAYER_REGION_STICK", &"PLAYER_REGION_TAPE",
+		&"PLAYER_REGION_SKATES"]
 const _REGION_NOTE_KEYS: Array[StringName] = [&"STAT_NOTE_YOU", &"STAT_NOTE_BODY",
-		&"STAT_NOTE_HEAD", &"STAT_NOTE_STICK", &"STAT_NOTE_SKATES"]
+		&"STAT_NOTE_HEAD", &"STAT_NOTE_STICK", &"STAT_NOTE_TAPE", &"STAT_NOTE_SKATES"]
 # The shot the case cuts to on landing in a region.
 const _REGION_FOCUS: Array[int] = [LockerMannequin.Focus.FULL, LockerMannequin.Focus.FULL,
-		LockerMannequin.Focus.HELMET, LockerMannequin.Focus.STICK, LockerMannequin.Focus.SKATES]
+		LockerMannequin.Focus.HELMET, LockerMannequin.Focus.STICK, LockerMannequin.Focus.BLADE,
+		LockerMannequin.Focus.SKATES]
 
 # Position buttons in rink order (wings around the C) → PlayerRules.POSITION_NAMES
 # index, with the badge and full-name keys in lockstep.
@@ -74,10 +76,6 @@ const _STYLE_KEYS: Array[StringName] = [
 	&"TAPE_HANDLE_KNOB", &"TAPE_HANDLE_CANDY", &"TAPE_HANDLE_FULL",
 ]
 
-# Tall enough for the stick, the longest region, so switching never resizes the
-# panel.
-const _ROWS_MIN_H: float = 652.0
-
 var _draft: PlayerDraft = PlayerDraft.new()
 var _saved: PlayerDraft = PlayerDraft.new()
 var _region: int = Region.YOU
@@ -104,7 +102,7 @@ var _apply_btn: Button = null
 var _keyboard: ControllerKeyboard = null
 # The region being built, so a starred row can star its tab.
 var _building: int = Region.YOU
-var _tab_gameplay: Array[bool] = [false, false, false, false, false]
+var _tab_gameplay: Array[bool] = [false, false, false, false, false, false]
 
 # YOU.
 var _name_field: LineEdit = null
@@ -266,8 +264,9 @@ func _build() -> void:
 	_case.size_flags_vertical = Control.SIZE_SHRINK_BEGIN
 	body.add_child(_case)
 
+	# No page may stand taller than the case beside it, or switching regions
+	# resizes the panel (test_player_settings_popup holds it).
 	var rows := VBoxContainer.new()
-	rows.custom_minimum_size = Vector2(0, _ROWS_MIN_H)
 	body.add_child(rows)
 	for r: int in Region.size():
 		var page := VBoxContainer.new()
@@ -284,6 +283,8 @@ func _build() -> void:
 	_build_head(_pages[Region.HEAD])
 	_building = Region.STICK
 	_build_stick(_pages[Region.STICK])
+	_building = Region.TAPE
+	_build_tape(_pages[Region.TAPE])
 	_building = Region.SKATES
 	_build_skates(_pages[Region.SKATES])
 	var legend := Label.new()
@@ -513,12 +514,10 @@ func _build_head(page: VBoxContainer) -> void:
 
 
 func _build_stick(page: VBoxContainer) -> void:
-	# Each row asks for the shot its pick shows up in: cut and stiffness are the
-	# whole stick, the pattern and the tape live on the blade, the knob and the
-	# wrap are up at the butt.
+	# Each row asks for the shot its pick shows up in: cut, stiffness and paint
+	# are the whole stick, the pattern lives on the blade.
 	var stick: int = LockerMannequin.Focus.STICK
 	var blade: int = LockerMannequin.Focus.BLADE
-	var grip: int = LockerMannequin.Focus.GRIP
 	_gear_row(page, &"STICK_GEAR_LENGTH", &"length", _LENGTH_KEYS, _LENGTH_HINTS, stick)
 	_gear_row(page, &"STICK_GEAR_CURVE", &"curve", _CURVE_KEYS, _CURVE_HINTS, blade)
 	_flex_row = _gear_row(page, &"STICK_GEAR_FLEX", &"flex", _FLEX_KEYS, _FLEX_HINTS, stick)
@@ -535,6 +534,15 @@ func _build_stick(page: VBoxContainer) -> void:
 			func(i: int) -> void: _edit_gear(&"stick_primary", i), half_w)
 	_stick_secondary_dd = PlayerRowKit.swatch_dropdown(graphic,
 			func(i: int) -> void: _edit_gear(&"stick_secondary", i), half_w)
+	_wire_reach([_stick_model_btn, _stick_shaft_dd, _stick_primary_dd, _stick_secondary_dd],
+			stick)
+
+
+func _build_tape(page: VBoxContainer) -> void:
+	# The wrap and the strip are on the blade, the knob and the handle wrap up at
+	# the butt.
+	var blade: int = LockerMannequin.Focus.BLADE
+	var grip: int = LockerMannequin.Focus.GRIP
 	_blade_color_dd = PlayerRowKit.swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(&"blade_color", i))
 	_span_btn = PlayerRowKit.option_button(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
@@ -549,8 +557,6 @@ func _build_stick(page: VBoxContainer) -> void:
 			func(i: int) -> void: _edit_tape(&"knob_style", _STYLE_OPTIONS[i]))
 	for i: int in _STYLE_KEYS.size():
 		_style_btn.add_item(tr(_STYLE_KEYS[i]), i)
-	_wire_reach([_stick_model_btn, _stick_shaft_dd, _stick_primary_dd, _stick_secondary_dd],
-			stick)
 	_wire_reach([_blade_color_dd, _span_btn, _strip_color_dd], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
 
