@@ -121,7 +121,7 @@ func _fill_side(uv: PackedVector2Array, side_px: Vector2, side_rect: PackedVecto
 	for i: int in uv.size():
 		uv[i] *= side_px
 	for clipped: PackedVector2Array in Geometry2D.intersect_polygons(uv, side_rect):
-		draw_colored_polygon(clipped, color)
+		UniformPaint.fill_smooth(self, clipped, color)
 
 
 # A chest's crest, centred on `center_x` px with its top CREST_YOKE_GAP_M under

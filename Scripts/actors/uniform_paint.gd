@@ -78,6 +78,21 @@ static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
 	return side
 
 
+# A kit polygon filled with its slanted edges anti-aliased, as canvas polygons
+# are not on any renderer: a smooth hairline over each. Over an edge inside a
+# stripe, between two of its pieces, the line is the stripe's own color and
+# vanishes. Level and upright edges do not step and stay hard, which keeps a
+# flat band crisp and a clip's straight cut from bleeding past it.
+static func fill_smooth(canvas: CanvasItem, polygon: PackedVector2Array, color: Color) -> void:
+	canvas.draw_colored_polygon(polygon, color)
+	var n: int = polygon.size()
+	for i: int in n:
+		var a: Vector2 = polygon[i]
+		var b: Vector2 = polygon[(i + 1) % n]
+		if absf(a.x - b.x) > 0.01 and absf(a.y - b.y) > 0.01:
+			canvas.draw_line(a, b, color, 1.0, true)
+
+
 # Horizontal bands across a cylinder's curved side. Each stripe is `pos` (centre,
 # as a fraction of the side region) and `width` (also a fraction), so a uniform
 # authored once lands at the same proportion of every part regardless of its

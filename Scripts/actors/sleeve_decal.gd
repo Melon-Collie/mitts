@@ -27,11 +27,11 @@ func _draw() -> void:
 			var area: PackedVector2Array = StripeOutline.below(s)
 			for i: int in area.size():
 				area[i] *= Vector2(SIZE)
-			draw_colored_polygon(area, s.fill_below)
+			UniformPaint.fill_smooth(self, area, s.fill_below)
 		for piece: PackedVector2Array in SleevePaint.stripe_polygons(s):
 			for i: int in piece.size():
 				piece[i] *= Vector2(SIZE)
-			draw_colored_polygon(piece, s.color)
+			UniformPaint.fill_smooth(self, piece, s.color)
 	var num_str: String = str(jersey_number)
 	# Set at the vertical texel density and stretched to the horizontal one, so
 	# the number keeps the font's shape once it is on the arm.
