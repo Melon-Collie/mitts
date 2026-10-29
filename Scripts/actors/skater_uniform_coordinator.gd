@@ -29,7 +29,8 @@ extends RefCounted
 
 var _skater: Skater
 var _blade_mesh: MeshInstance3D
-var _blade_tape: MeshInstance3D                    # team-colored tape band, child of _blade_mesh
+var _blade_tape: MeshInstance3D                    # tape wraps, child of _blade_mesh
+var _blade_strip: MeshInstance3D                   # bottom tape strip, child of _blade_mesh
 
 # Cached jersey + shoulder decal inputs. Both decals are repainted whenever
 # either the uniform (apply_uniform) or the name/number (apply_jersey_info)
@@ -409,33 +410,41 @@ func _write_grip_uniforms(mat: ShaderMaterial) -> void:
 			TapeColorRegistry.resolve(_skater.tape_config.knob_color, _team_accent))
 
 
-# Dresses the blade in the picked model's weave and (re)builds the tape wrap
-# the skater's tape job describes (Skater.tape_config: palette color +
-# coverage span). The wrap geometry comes from the skater
-# (Skater.build_blade_tape_mesh — overlapping wrap bands of the same
-# procedural curved-blade mesh), so it hugs the curve; on a handedness flip
-# Skater._rebuild_blade_mesh regenerates the band mesh in place. The cosmetic
-# tilt lives on the rig (Skater._apply_blade_tilt); the tape, being a child
-# of the blade mesh, inherits it.
+# Dresses the blade in the picked model's weave and (re)builds the tape wraps
+# and bottom strip the skater's tape job describes (Skater.tape_config). The
+# geometry comes from the skater (Skater.build_blade_tape_mesh /
+# build_blade_strip_mesh — bands of the same procedural curved-blade mesh), so
+# it hugs the curve; on a handedness flip Skater._rebuild_blade_mesh
+# regenerates both in place. The cosmetic tilt lives on the rig
+# (Skater._apply_blade_tilt); the tape, being a child of the blade mesh,
+# inherits it.
 func _rebuild_blade() -> void:
 	_blade_mesh.material_override = StickStyle.make_blade_material(
 			_skater.gear_style.stick_model)
+	var tape: StickTapeConfig = _skater.tape_config
+	_blade_tape = _replace_tape_node(_blade_tape, "BladeTape",
+			_skater.build_blade_tape_mesh(), tape.blade_color)
+	_blade_strip = _replace_tape_node(_blade_strip, "BladeStrip",
+			_skater.build_blade_strip_mesh(), tape.strip_color)
 
-	if _blade_tape != null and is_instance_valid(_blade_tape):
-		_blade_mesh.remove_child(_blade_tape)
-		_blade_tape.queue_free()
-	_blade_tape = null
-	var tape_mesh: ArrayMesh = _skater.build_blade_tape_mesh()
-	if tape_mesh == null:
-		return  # bare blade — no tape node at all
-	_blade_tape = MeshInstance3D.new()
-	_blade_tape.name = "BladeTape"
-	_blade_tape.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_blade_tape.mesh = tape_mesh
-	_blade_tape.material_override = UniformPaint.solid(
-			TapeColorRegistry.resolve(_skater.tape_config.blade_color, _team_accent),
-			UniformPaint.ROUGH_CLOTH)
-	_blade_mesh.add_child(_blade_tape)
+
+# Frees `old` and returns a fresh tape node on the blade for `mesh`, or null
+# (no node at all) when the job leaves that piece off.
+func _replace_tape_node(old: MeshInstance3D, node_name: String, mesh: ArrayMesh,
+		color: int) -> MeshInstance3D:
+	if old != null and is_instance_valid(old):
+		_blade_mesh.remove_child(old)
+		old.queue_free()
+	if mesh == null:
+		return null
+	var node := MeshInstance3D.new()
+	node.name = node_name
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.mesh = mesh
+	node.material_override = UniformPaint.solid(
+			TapeColorRegistry.resolve(color, _team_accent), UniformPaint.ROUGH_CLOTH)
+	_blade_mesh.add_child(node)
+	return node
 
 
 func _skate_zone_color(zone: int) -> Color:
@@ -501,7 +510,7 @@ func refresh_gear_style() -> void:
 		_rebuild_blade()
 
 
-# Re-renders the tape-colored pieces (blade wrap, knob, handle-wrap paint) for
+# Re-renders the tape-colored pieces (blade wrap and strip, knob, handle-wrap paint) for
 # a live tape-job change without touching the rest of the uniform. Safe before
 # the first apply_uniform — the accent default just gets repainted when it
 # lands. The shaft write skips the ghost window (a plain translucent standard
@@ -628,6 +637,7 @@ func apply_ghost(ghost: bool) -> void:
 				_skater.gear_style.stick_model)
 	var meshes: Array[MeshInstance3D] = [
 			_blade_tape,
+			_blade_strip,
 			_skater.stick_knob_mesh,
 		]
 	for mesh: MeshInstance3D in meshes:

@@ -164,6 +164,7 @@ var _stick_root: Node3D = null
 var _shaft: MeshInstance3D = null
 var _blade: MeshInstance3D = null
 var _tape_mesh: MeshInstance3D = null
+var _strip_mesh: MeshInstance3D = null
 var _knob: MeshInstance3D = null
 
 # The parts above are the kit's, aliased for the pose; the kit builds and dresses
@@ -223,6 +224,7 @@ func _build() -> void:
 	_shaft = _kit.shaft
 	_blade = _kit.blade
 	_tape_mesh = _kit.tape_mesh
+	_strip_mesh = _kit.strip_mesh
 	_knob = _kit.knob
 
 
@@ -401,8 +403,10 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3) 
 	tape_p.face_open_deg = p.face_open_deg
 	tape_p.toe_round_m = p.toe_round_m
 	tape_p.curve_sign = p.curve_sign
-	_tape_mesh.mesh = StickBladeMeshBuilder.build_tape(tape_p, tape.span_range()) \
-			if tape.has_blade_tape() else null
+	_tape_mesh.mesh = StickBladeMeshBuilder.build_tape(tape_p, tape.span_range(),
+			tape.wrap_count()) if tape.has_wraps() else null
+	_strip_mesh.mesh = StickBladeMeshBuilder.build_strip(tape_p, tape.strip_range()) \
+			if tape.has_strip() else null
 
 	var stick_len: float = GameRules.DEFAULT_STICK_LENGTH_M * attrs.stick_len_mult() \
 			+ SkaterStickRig.SHAFT_BUTT_EXTEND_M

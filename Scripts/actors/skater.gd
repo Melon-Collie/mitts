@@ -1735,6 +1735,9 @@ func _rebuild_blade_mesh() -> void:
 	var tape: MeshInstance3D = blade_mesh.get_node_or_null("BladeTape") as MeshInstance3D
 	if tape != null:
 		tape.mesh = build_blade_tape_mesh()
+	var strip: MeshInstance3D = blade_mesh.get_node_or_null("BladeStrip") as MeshInstance3D
+	if strip != null:
+		strip.mesh = build_blade_strip_mesh()
 
 
 # Builder params for the current blade geometry — shared by the blade mesh and
@@ -1759,14 +1762,23 @@ func blade_mesh_params(inflate: float, u_start: float, u_end: float,
 	return p
 
 
-# Tape-band mesh for the current blade geometry and tape job, heel-origin like
+# Tape-wrap mesh for the current blade geometry and tape job, heel-origin like
 # the blade mesh itself (the band node sits at the blade mesh's origin,
-# untransformed). Null when the tape job leaves the blade bare.
+# untransformed). Null when the tape job lays no wraps.
 func build_blade_tape_mesh() -> ArrayMesh:
-	if not tape_config.has_blade_tape():
+	if not tape_config.has_wraps():
 		return null
-	return StickBladeMeshBuilder.build_tape(
-			blade_mesh_params(0.0, 0.0, 1.0), tape_config.span_range())
+	return StickBladeMeshBuilder.build_tape(blade_mesh_params(0.0, 0.0, 1.0),
+			tape_config.span_range(), tape_config.wrap_count())
+
+
+# The tape job's bottom strip, framed as build_blade_tape_mesh. Null when the
+# job has none.
+func build_blade_strip_mesh() -> ArrayMesh:
+	if not tape_config.has_strip():
+		return null
+	return StickBladeMeshBuilder.build_strip(
+			blade_mesh_params(0.0, 0.0, 1.0), tape_config.strip_range())
 
 
 # Installs a new tape job and refreshes the rendered tape (geometry here,

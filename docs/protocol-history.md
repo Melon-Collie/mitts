@@ -437,3 +437,10 @@ here whenever you bump, in the same format.
 #      so a v89 peer would decode cleanly and desync; mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: an older replay's stick-check
 #      timing reads a third long, which is cosmetic.
+# v91: tape jobs grow four coverage patterns (StickTapeConfig.Span SPACED,
+#      CENTER, STRIP, STRIP_AND_TOE) and a bottom-strip color. The packed tape
+#      code's existing fields keep their bits; the strip color (bits 15–19)
+#      and the span's 4th bit (bit 20) are appended, so an older code decodes
+#      to the same job. A v90 peer would drop both new fields and draw every
+#      new pattern as another one, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: an older replay's tape codes decode as before.

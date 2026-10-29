@@ -66,6 +66,8 @@ class Params:
 	# this near zero so the wrap hugs the bottom edge instead of hanging the
 	# whole inflate below the blade (the blade would ride on a tape shelf).
 	var sole_inflate_cap: float = INF
+	# Tallest the face may stand above the sole (the bottom tape strip).
+	var face_height_cap: float = INF
 	var u_start: float = 0.0           # span start, fraction heel→toe
 	var u_end: float = 1.0             # span end, fraction heel→toe
 	var segments: int = 16
@@ -180,6 +182,7 @@ static func _emit_band(st: SurfaceTool, p: Params) -> void:
 			var x: float = p.toe_round_m - d_toe
 			top_y -= p.toe_round_m - sqrt(maxf(p.toe_round_m * p.toe_round_m - x * x, 0.0))
 			top_y = maxf(top_y, bottom_y + 0.002)
+		top_y = minf(top_y, bottom_y + p.face_height_cap)
 		# Face-open twist: lean the TOP corners toward the convex side about
 		# the bottom edge (the sole never leaves the ice), growing with the
 		# bow profile so the face rolls open where the pattern bends.
@@ -229,12 +232,23 @@ const _TAPE_INFLATE_PROUD_M: float = 0.0016
 const _TAPE_SOLE_CAP_M: float = 0.0006
 const _TAPE_SEGMENTS: int = 2
 
+# The bottom strip: one length of tape run heel→toe along the bottom edge and
+# folded up both faces. It lies under any wraps crossing it, so it sits nearer
+# the blade than the snug wrap and its sole skin under the wraps' sole cap —
+# the two would z-fight coplanar.
+const TAPE_STRIP_FACE_M: float = 0.010
+const _TAPE_STRIP_INFLATE_M: float = 0.0006
+const _TAPE_STRIP_SOLE_CAP_M: float = 0.0003
+const _TAPE_STRIP_SEGMENTS: int = 16
+
 
 # The wrapped tape band over `span` (heel→toe u range, e.g.
-# StickTapeConfig.span_range()). `p` carries the blade geometry the wraps
-# follow — its inflate/u fields are overwritten per wrap. Returns null for a
-# degenerate span so callers can clear the tape node.
-static func build_tape(p: Params, span: Vector2) -> ArrayMesh:
+# StickTapeConfig.span_range()). `wrap_count` > 0 lays that many wraps evenly
+# over the span with gaps between them (StickTapeConfig.wrap_count); 0 overlaps
+# as many as the span takes. `p` carries the blade geometry the wraps follow —
+# its inflate/u fields are overwritten per wrap. Returns null for a degenerate
+# span so callers can clear the tape node.
+static func build_tape(p: Params, span: Vector2, wrap_count: int = 0) -> ArrayMesh:
 	var span_len: float = span.y - span.x
 	if span_len <= 0.001:
 		return null
@@ -242,11 +256,13 @@ static func build_tape(p: Params, span: Vector2) -> ArrayMesh:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see build()
 	var width_u: float = TAPE_WRAP_WIDTH_M / maxf(p.length, 0.001)
-	var count: int = maxi(1, int(ceilf((span_len - width_u) / (width_u * _TAPE_WRAP_STEP_FRAC))) + 1)
+	var count: int = wrap_count if wrap_count > 0 else maxi(1,
+			int(ceilf((span_len - width_u) / (width_u * _TAPE_WRAP_STEP_FRAC))) + 1)
 	# Even re-spacing so the last wrap ends exactly at span.y.
 	var step: float = (span_len - width_u) / float(count - 1) if count > 1 else 0.0
 	p.segments = _TAPE_SEGMENTS
 	p.sole_inflate_cap = _TAPE_SOLE_CAP_M
+	p.face_height_cap = INF
 	p.hosel_length = 0.0
 	for i in count:
 		p.u_start = span.x + step * float(i)
@@ -255,6 +271,21 @@ static func build_tape(p: Params, span: Vector2) -> ArrayMesh:
 		_emit_band(st, p)
 	st.generate_normals()
 	return st.commit()
+
+
+# The bottom strip over `span` (StickTapeConfig.strip_range()): a skin over the
+# sole and the lowest TAPE_STRIP_FACE_M of both faces. `p` as build_tape.
+static func build_strip(p: Params, span: Vector2) -> ArrayMesh:
+	if span.y - span.x <= 0.001:
+		return null
+	p.segments = _TAPE_STRIP_SEGMENTS
+	p.u_start = span.x
+	p.u_end = span.y
+	p.inflate = _TAPE_STRIP_INFLATE_M
+	p.sole_inflate_cap = _TAPE_STRIP_SOLE_CAP_M
+	p.face_height_cap = TAPE_STRIP_FACE_M
+	p.hosel_length = 0.0
+	return build(p)
 
 
 # Extrudes the hosel from the blade's heel ring up the shaft line. Stations

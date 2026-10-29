@@ -33,9 +33,9 @@ class_name BotIdentityRegistry
 #   }
 #
 # Optional cosmetic fields give a card a signature look (all integer indices):
-#   tape job — "tape_blade" / "tape_knob" (TapeColorRegistry: 0 team, 1 white,
-#     2 black, 3.. the flair colors), "tape_span" (StickTapeConfig.Span),
-#     "knob_style" (StickTapeConfig.KnobStyle);
+#   tape job — "tape_blade" / "tape_knob" / "tape_strip" (TapeColorRegistry:
+#     0 team, 1 white, 2 black, 3.. the flair colors), "tape_span"
+#     (StickTapeConfig.Span), "knob_style" (StickTapeConfig.KnobStyle);
 #   gear     — "skate_model" / "glove_model" (GearModelRegistry),
 #     "lace_color" (TapeColorRegistry), "stick_model" (StickModelRegistry),
 #     "helmet_face" (GearModelRegistry FACE_*: 0 bare / 1 visor / 2 cage /
@@ -60,7 +60,8 @@ class_name BotIdentityRegistry
 const USER_JSON_PATH: String = "user://bot_identities.json"
 const RES_JSON_PATH:  String = "res://data/bot_identities.json"
 
-const _TAPE_KEYS: Array[String] = ["tape_blade", "tape_span", "tape_knob", "knob_style"]
+const _TAPE_KEYS: Array[String] = ["tape_blade", "tape_span", "tape_knob", "knob_style",
+		"tape_strip"]
 const _GEAR_KEYS: Array[String] = ["skate_model", "glove_model", "lace_color",
 		"stick_model", "helmet_face", "jersey_tuck"]
 const _HAIR_KEYS: Array[String] = ["hair_style", "facial_hair", "hair_color"]
@@ -256,7 +257,8 @@ static func normalize_entry(entry: Dictionary) -> Dictionary:
 				int(entry.get("tape_blade", TapeColorRegistry.TEAM_INDEX)),
 				int(entry.get("tape_span", StickTapeConfig.Span.HEEL_TO_MID)),
 				int(entry.get("tape_knob", TapeColorRegistry.TEAM_INDEX)),
-				int(entry.get("knob_style", StickTapeConfig.KnobStyle.KNOB))).to_code()
+				int(entry.get("knob_style", StickTapeConfig.KnobStyle.KNOB)),
+				int(entry.get("tape_strip", TapeColorRegistry.TEAM_INDEX))).to_code()
 	var pins_gear: bool = _has_any(entry, _GEAR_KEYS)
 	var pins_hair: bool = _has_any(entry, _HAIR_KEYS)
 	if pins_gear or pins_hair:

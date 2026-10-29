@@ -57,11 +57,14 @@ const _FRAME_KEYS: Array[StringName] = [
 const _SPAN_OPTIONS: Array[int] = [
 	StickTapeConfig.Span.FULL, StickTapeConfig.Span.HEEL_TO_MID,
 	StickTapeConfig.Span.MID_TO_TOE, StickTapeConfig.Span.MID,
-	StickTapeConfig.Span.TOE, StickTapeConfig.Span.NONE,
+	StickTapeConfig.Span.CENTER, StickTapeConfig.Span.SPACED,
+	StickTapeConfig.Span.TOE, StickTapeConfig.Span.STRIP_AND_TOE,
+	StickTapeConfig.Span.STRIP, StickTapeConfig.Span.NONE,
 ]
 const _SPAN_KEYS: Array[StringName] = [
-	&"TAPE_SPAN_FULL", &"TAPE_SPAN_HEEL_TO_MID", &"TAPE_SPAN_MID_TO_TOE",
-	&"TAPE_SPAN_MID", &"TAPE_SPAN_TOE", &"TAPE_SPAN_NONE",
+	&"TAPE_SPAN_FULL", &"TAPE_SPAN_HEEL_TO_MID", &"TAPE_SPAN_MID_TO_TOE", &"TAPE_SPAN_MID",
+	&"TAPE_SPAN_CENTER", &"TAPE_SPAN_SPACED", &"TAPE_SPAN_TOE", &"TAPE_SPAN_STRIP_AND_TOE",
+	&"TAPE_SPAN_STRIP", &"TAPE_SPAN_NONE",
 ]
 const _STYLE_OPTIONS: Array[int] = [
 	StickTapeConfig.KnobStyle.KNOB, StickTapeConfig.KnobStyle.CANDY_CANE,
@@ -73,7 +76,7 @@ const _STYLE_KEYS: Array[StringName] = [
 
 # Tall enough for the stick, the longest region, so switching never resizes the
 # panel.
-const _ROWS_MIN_H: float = 540.0
+const _ROWS_MIN_H: float = 548.0
 
 var _draft: PlayerDraft = PlayerDraft.new()
 var _saved: PlayerDraft = PlayerDraft.new()
@@ -131,6 +134,7 @@ var _flex_row: _GearRow = null
 var _stick_model_btn: OptionButton = null
 var _blade_color_dd: SwatchDropdown = null
 var _span_btn: OptionButton = null
+var _strip_color_dd: SwatchDropdown = null
 var _knob_color_dd: SwatchDropdown = null
 var _style_btn: OptionButton = null
 var _skate_btn: OptionButton = null
@@ -525,19 +529,21 @@ func _build_stick(page: VBoxContainer) -> void:
 				PlayerRowKit.swatch_strip(StickModelRegistry.swatch_colors(model)),
 				tr(StickModelRegistry.NAME_KEYS[model]), model)
 	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
-			func(i: int) -> void: _edit_tape(i, -1, -1, -1))
+			func(i: int) -> void: _edit_tape(&"blade_color", i))
 	_span_btn = PlayerRowKit.option_button(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
-			func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
+			func(i: int) -> void: _edit_tape(&"span", _SPAN_OPTIONS[i]))
 	for i: int in _SPAN_KEYS.size():
 		_span_btn.add_item(tr(_SPAN_KEYS[i]), i)
+	_strip_color_dd = _swatch_dropdown(_row(page, &"TAPE_STRIP_LABEL", false, blade),
+			func(i: int) -> void: _edit_tape(&"strip_color", i))
 	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
-			func(i: int) -> void: _edit_tape(-1, -1, i, -1))
+			func(i: int) -> void: _edit_tape(&"knob_color", i))
 	_style_btn = PlayerRowKit.option_button(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
-			func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
+			func(i: int) -> void: _edit_tape(&"knob_style", _STYLE_OPTIONS[i]))
 	for i: int in _STYLE_KEYS.size():
 		_style_btn.add_item(tr(_STYLE_KEYS[i]), i)
 	_wire_reach([_stick_model_btn], stick)
-	_wire_reach([_blade_color_dd, _span_btn], blade)
+	_wire_reach([_blade_color_dd, _span_btn, _strip_color_dd], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
 
 
@@ -603,14 +609,10 @@ func _edit_gear(field: StringName, value: int) -> void:
 	_edited()
 
 
-# −1 keeps a field.
-func _edit_tape(blade_color: int, span: int, knob_color: int, knob_style: int) -> void:
+func _edit_tape(field: StringName, value: int) -> void:
 	var t: StickTapeConfig = _draft.tape()
-	_draft.set_tape(StickTapeConfig.new(
-			t.blade_color if blade_color < 0 else blade_color,
-			t.span if span < 0 else span,
-			t.knob_color if knob_color < 0 else knob_color,
-			t.knob_style if knob_style < 0 else knob_style))
+	t.set(field, value)
+	_draft.set_tape(t)
 	_edited()
 
 
@@ -716,6 +718,9 @@ func _refresh() -> void:
 	_glove_btn.select(gear.glove_model)
 	_skate_btn.select(gear.skate_model)
 	_blade_color_dd.set_selected(tape.blade_color)
+	_blade_color_dd.set_disabled(not tape.has_wraps())
+	_strip_color_dd.set_selected(tape.strip_color)
+	_strip_color_dd.set_disabled(not tape.has_strip())
 	_knob_color_dd.set_selected(tape.knob_color)
 	_lace_dd.set_selected(gear.lace_color)
 	_refreshing = false
@@ -761,7 +766,7 @@ func _paint_team_rows() -> void:
 		# The TEAM chip says so — it tracks the kit rather than being one more
 		# fixed colour.
 		chips.append(tr(&"TAPE_COLOR_TEAM_SHORT") if i == TapeColorRegistry.TEAM_INDEX else "")
-	for dd: SwatchDropdown in [_blade_color_dd, _knob_color_dd, _lace_dd]:
+	for dd: SwatchDropdown in [_blade_color_dd, _strip_color_dd, _knob_color_dd, _lace_dd]:
 		dd.set_palette(tape_colors, names, chips)
 
 

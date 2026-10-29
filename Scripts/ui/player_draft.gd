@@ -106,8 +106,9 @@ func tape() -> StickTapeConfig:
 	return StickTapeConfig.from_code(tape_code)
 
 
+# Round-trips like set_gear.
 func set_tape(t: StickTapeConfig) -> void:
-	tape_code = t.to_code()
+	tape_code = StickTapeConfig.from_code(t.to_code()).to_code()
 
 
 func team_colors() -> Dictionary:

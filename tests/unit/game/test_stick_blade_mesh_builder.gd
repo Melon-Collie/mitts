@@ -274,6 +274,72 @@ func test_tape_span_none_returns_null() -> void:
 	assert_null(_tape_mesh(Vector2(0.0, 0.0)), "degenerate span builds nothing")
 
 
+func test_counted_wraps_leave_bare_gaps() -> void:
+	var p := StickBladeMeshBuilder.Params.new()
+	var span := Vector2(0.12, 0.72)
+	var count: int = 3
+	var verts: PackedVector3Array = _verts(StickBladeMeshBuilder.build_tape(p, span, count))
+	var width_u: float = StickBladeMeshBuilder.TAPE_WRAP_WIDTH_M / p.length
+	var step: float = (span.y - span.x - width_u) / float(count - 1)
+	assert_gt(step, width_u * 1.5, "the wraps sit apart, not overlapped")
+	for gap: int in count - 1:
+		var gap_start: float = span.x + step * float(gap) + width_u
+		var gap_end: float = span.x + step * float(gap + 1)
+		var bare: bool = true
+		for v: Vector3 in verts:
+			var u: float = -v.z / p.length
+			if u > gap_start + 0.01 and u < gap_end - 0.01:
+				bare = false
+		assert_true(bare, "no tape between wrap %d and the next" % gap)
+
+
+func test_strip_hugs_the_bottom_edge() -> void:
+	var p := StickBladeMeshBuilder.Params.new()
+	var blade_verts: PackedVector3Array = _verts(StickBladeMeshBuilder.build(p))
+	var strip_verts: PackedVector3Array = _verts(StickBladeMeshBuilder.build_strip(
+			StickBladeMeshBuilder.Params.new(), Vector2(-0.02, 1.0)))
+	var blade_x: float = 0.0
+	for v: Vector3 in blade_verts:
+		if v.z > -0.09:
+			blade_x = maxf(blade_x, v.x)
+	var sole: float = -p.height * 0.5
+	var strip_x: float = 0.0
+	var strip_bottom: float = INF
+	var strip_top: float = -INF
+	var z_min: float = INF
+	var z_max: float = -INF
+	for v: Vector3 in strip_verts:
+		strip_bottom = minf(strip_bottom, v.y)
+		strip_top = maxf(strip_top, v.y)
+		z_min = minf(z_min, v.z)
+		z_max = maxf(z_max, v.z)
+		if v.z > -0.09:
+			strip_x = maxf(strip_x, v.x)
+	assert_gt(strip_x, blade_x + 0.0003, "strip sits proud of the blade face")
+	assert_gt(strip_bottom, sole - 0.0005, "sole projection capped")
+	assert_lt(strip_top, sole + StickBladeMeshBuilder.TAPE_STRIP_FACE_M + p.toe_kick_m + 0.001,
+			"the strip stays down on the bottom edge")
+	assert_gt(strip_top, sole + StickBladeMeshBuilder.TAPE_STRIP_FACE_M * 0.8,
+			"…and shows up the face")
+	assert_gt(z_max, 0.001, "strip overhangs the heel cap")
+	assert_lt(z_min, -p.length + 0.002, "strip runs to the toe")
+
+
+func test_strip_lies_under_the_wraps_it_crosses() -> void:
+	# Where a wrap crosses the strip both are skins over the same face, so the
+	# wrap has to stand proud of it or the two z-fight.
+	var wrap_x: float = 0.0
+	for v: Vector3 in _verts(_tape_mesh(Vector2(0.5, 1.0))):
+		if v.z < -0.17 and v.z > -0.19:
+			wrap_x = maxf(wrap_x, v.x)
+	var strip_x: float = 0.0
+	for v: Vector3 in _verts(StickBladeMeshBuilder.build_strip(
+			StickBladeMeshBuilder.Params.new(), Vector2(-0.02, 1.0))):
+		if v.z < -0.17 and v.z > -0.19:
+			strip_x = maxf(strip_x, v.x)
+	assert_gt(wrap_x, strip_x + 0.0002, "the wrap covers the strip")
+
+
 func test_hosel_extends_up_the_shaft_line() -> void:
 	var p := StickBladeMeshBuilder.Params.new()
 	p.hosel_length = 0.085
@@ -355,9 +421,18 @@ func test_tape_config_drives_the_tape_node() -> void:
 	for v: Vector3 in _verts(tape.mesh as ArrayMesh):
 		z_max = maxf(z_max, v.z)
 	assert_lt(z_max, -0.14, "toe-span tape stays on the toe half")
-	# A bare job removes the node outright.
+	assert_null(blade_mesh.get_node_or_null("BladeStrip"), "no strip node for a wraps-only job")
+	# A strip-only job swaps the wraps for the strip.
+	skater.set_tape_config(StickTapeConfig.new(1, StickTapeConfig.Span.STRIP, 1))
+	assert_null(blade_mesh.get_node_or_null("BladeTape"), "strip-only job lays no wraps")
+	assert_not_null(blade_mesh.get_node_or_null("BladeStrip"), "strip node for a strip job")
+	skater.set_tape_config(StickTapeConfig.new(1, StickTapeConfig.Span.STRIP_AND_TOE, 1))
+	assert_not_null(blade_mesh.get_node_or_null("BladeTape"), "strip-and-toe lays wraps")
+	assert_not_null(blade_mesh.get_node_or_null("BladeStrip"), "…over the strip")
+	# A bare job removes the nodes outright.
 	skater.set_tape_config(StickTapeConfig.new(1, StickTapeConfig.Span.NONE, 1))
 	assert_null(blade_mesh.get_node_or_null("BladeTape"), "bare blade has no tape node")
+	assert_null(blade_mesh.get_node_or_null("BladeStrip"), "bare blade has no strip node")
 
 
 func test_shaft_follow_pitch_tips_blade_with_raised_shaft() -> void:

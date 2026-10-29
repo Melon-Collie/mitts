@@ -87,6 +87,35 @@ func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 
 # The model items are rebuilt when the team changes — their TEAM zones resolve
 # against the kit — so re-opening and re-picking must re-list, not append.
+func test_the_coverage_row_offers_every_span_once() -> void:
+	var offered: Array[int] = []
+	offered.assign(_popup.get("_SPAN_OPTIONS") as Array)
+	assert_eq(_btn("_span_btn").item_count, StickTapeConfig.Span.size())
+	for span: int in StickTapeConfig.Span.size():
+		assert_eq(offered.count(span), 1, "span %d offered once" % span)
+
+
+# Each color row is live only while the coverage lays the piece it paints.
+func test_a_coverage_pick_lights_the_color_rows_it_uses() -> void:
+	var blade_dd: SwatchDropdown = _popup.get("_blade_color_dd") as SwatchDropdown
+	var strip_dd: SwatchDropdown = _popup.get("_strip_color_dd") as SwatchDropdown
+	var offered: Array = _popup.get("_SPAN_OPTIONS") as Array
+	var cases: Dictionary = {
+		StickTapeConfig.Span.FULL: [true, false],
+		StickTapeConfig.Span.STRIP: [false, true],
+		StickTapeConfig.Span.STRIP_AND_TOE: [true, true],
+		StickTapeConfig.Span.NONE: [false, false],
+	}
+	for span: int in cases:
+		_btn("_span_btn").item_selected.emit(offered.find(span))
+		assert_eq(_draft().tape().span, span, "the pick lands in the draft")
+		assert_eq(not blade_dd.get("_disabled"), cases[span][0], "blade row for span %d" % span)
+		assert_eq(not strip_dd.get("_disabled"), cases[span][1], "strip row for span %d" % span)
+	strip_dd.selected.emit(2)
+	assert_eq(_draft().tape().strip_color, 2, "a strip pick lands in the draft")
+	assert_eq(_draft().tape().span, StickTapeConfig.Span.NONE, "…and keeps the coverage")
+
+
 func test_reopening_and_a_team_change_do_not_stack_items() -> void:
 	_popup.call("_cancel")
 	_popup.open()
@@ -241,6 +270,7 @@ func test_a_row_aims_the_case_at_its_own_piece() -> void:
 func test_the_swatch_rows_reframe_the_case_too() -> void:
 	var rows: Dictionary = {
 		"_blade_color_dd": F.BLADE,
+		"_strip_color_dd": F.BLADE,
 		"_knob_color_dd": F.GRIP,
 		"_lace_dd": F.SKATES,
 	}
@@ -263,7 +293,7 @@ func test_every_row_control_is_pad_reachable() -> void:
 		_btn("_hair_btn"), _btn("_facial_btn"), _popup.get("_height_slider") as Control,
 		_popup.get("_weight_slider") as Control, _popup.get("_name_field") as Control,
 		_popup.get("_number_field") as Control]
-	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
+	for field: String in ["_blade_color_dd", "_strip_color_dd", "_knob_color_dd", "_lace_dd"]:
 		controls.append((_popup.get(field) as SwatchDropdown).focus_target())
 	for field: String in ["_face_btns", "_hair_color_buttons", "_skin_buttons",
 			"_shoots_btns", "_position_btns", "_tab_btns"]:

@@ -51,6 +51,11 @@ TAPE_SPAN_HEEL_TO_MID,Heel to mid,Talón a medio
 TAPE_SPAN_MID_TO_TOE,Mid to toe,Medio a puntera
 TAPE_SPAN_MID,Middle,Central
 TAPE_SPAN_TOE,Toe,Puntera
+TAPE_SPAN_CENTER,Center patch,Parche central
+TAPE_SPAN_SPACED,Spaced wraps,Vueltas espaciadas
+TAPE_SPAN_STRIP,Bottom strip,Tira inferior
+TAPE_SPAN_STRIP_AND_TOE,Strip + toe,Tira + puntera
+TAPE_STRIP_LABEL,Strip,Tira
 TAPE_SPAN_NONE,None,Sin cinta
 TAPE_COLOR_TEAM,Team color,Color del equipo
 TAPE_COLOR_WHITE,White,Blanco
