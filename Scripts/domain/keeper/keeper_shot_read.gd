@@ -4,8 +4,8 @@ extends RefCounted
 # What he reads of a shot: nothing until he has watched the puck's own flight
 # for his read's delay, then the flight as it is, carried on — its line, and
 # under gravity its fall. His legs answer after the leg read, his hands after
-# the arm read, or both after the primed read for a release he watched wound
-# up (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
+# the arm read, or both after the primed read for a release off a puck he held
+# in his eyes long enough (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
 # is a new shot he has to read again, cold. No aim before the release: what the
 # shooter's body shows is perception's (docs/goalie-rebuild-plan.md §3.1).
 #

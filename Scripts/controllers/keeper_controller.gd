@@ -207,6 +207,7 @@ func _read_play(delta: float, in_net: Vector3) -> void:
 	# a shot: the wrister's address, the slapper's charge, the one-timer's.
 	var theirs: bool = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id)
 	var winding: bool = theirs and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
+	play.eyes = Vector2(motor.x, motor.z)
 	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder, theirs)
 
 

@@ -14,17 +14,23 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # exactly his read. The motion is the carrier's body when the puck is carried,
 # since a stickhandle swings the puck about a body that holds its line; the
 # puck's own when it is loose. A wind-up is read the same way, late by his
-# read, and how long he has watched it is what primes the save (`primed`).
+# read. How long he has held his eyes on the puck on a stick of theirs is what
+# primes the save (`primed`).
 
 # The longest read any tier has, kept at the physics tick.
 const MOST_S: float = 0.6
 const TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK
 # How close to a pass's lane a defender's stick takes it away: a stick's length.
 const LANE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M
-# A wind-up watched this long has the save programmed before the release: the
-# old goalie's quiet-eye read (Panchuk & Vickers, a save prepared during the
-# fixation and executed ballistically).
+# A puck on a stick of theirs held in his eyes this long has the save
+# programmed before the release: the quiet-eye read (Panchuk & Vickers, a
+# fixation on the puck and stick, the save prepared during it and executed
+# ballistically).
 const PRIME_S: float = 0.40
+# Smooth pursuit holds a moving target to about 60°/s; a puck crossing his
+# view faster (a stickhandle, a deke, a hard cut) breaks the look, and it
+# starts over.
+const PURSUIT_RAD_S: float = deg_to_rad(60.0)
 # A carried puck swings about its carrier faster than his feet can follow it
 # (a stickhandle, a stick's reach either way a few times a second): he reads it
 # where it is on average, its place off the carrier followed over the time his
@@ -47,7 +53,10 @@ var theirs: bool = false
 # while he sees it loose.
 var carrier_at := NO_CARRIER
 var winding_up: bool = false
+# How long he has held the puck on a stick of theirs in his eyes, unbroken.
 var watched_s: float = 0.0
+# Where his eyes are, in the same frame: his own place, set by his controller.
+var eyes := Vector2.ZERO
 # The attackers off the puck it could be passed to, through a lane no defender's
 # stick reaches, in front of the goal line and inside the blue line.
 var receivers := PackedVector2Array()
@@ -66,6 +75,7 @@ var _sticks := PackedVector3Array()
 
 # What he has watched, a tick a sample, oldest overwritten.
 var _at := PackedVector2Array()
+var _raw := PackedVector2Array()
 var _bodies := PackedVector2Array()
 var _moving := PackedVector2Array()
 var _winding := PackedByteArray()
@@ -78,6 +88,7 @@ var _count: int = 0
 func _init() -> void:
 	var ticks: int = ceili(MOST_S * TICK_HZ) + 1
 	_at.resize(ticks)
+	_raw.resize(ticks)
 	_bodies.resize(ticks)
 	_moving.resize(ticks)
 	_winding.resize(ticks)
@@ -105,6 +116,7 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	var size: int = _at.size()
 	_head = (_head + 1) % size
 	_at[_head] = _handled(dt, at, carrier)
+	_raw[_head] = at
 	_bodies[_head] = carrier
 	_moving[_head] = moving
 	_winding[_head] = 1 if winding else 0
@@ -119,7 +131,9 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	loose = _loose[seen] == 1
 	theirs = not loose and _theirs[seen] == 1
 	carrier_at = NO_CARRIER if loose else _bodies[seen] + motion * (lag * dt)
-	watched_s = watched_s + dt if winding_up else 0.0
+	var before: int = (seen - 1 + size) % size
+	var held: bool = theirs and lag + 1 < _count and _sweep(_raw[before], _raw[seen]) <= PURSUIT_RAD_S * dt
+	watched_s = watched_s + dt if held else 0.0
 
 
 # The puck at `at` as his feet follow it: off a carrier at `carrier`, where it
@@ -134,7 +148,17 @@ func _handled(dt: float, at: Vector2, carrier: Vector2) -> Vector2:
 	return carrier + _handle
 
 
-# Whether he has watched the wind-up long enough to have the save programmed.
+# The angle the puck crossed his view by, from `from` to `to`.
+func _sweep(from: Vector2, to: Vector2) -> float:
+	var a: Vector2 = from - eyes
+	var b: Vector2 = to - eyes
+	if a.length_squared() < 1e-6 or b.length_squared() < 1e-6:
+		return 0.0
+	return absf(a.angle_to(b))
+
+
+# Whether he has held the puck in his eyes long enough to have the save
+# programmed.
 func primed() -> bool:
 	return watched_s >= PRIME_S
 

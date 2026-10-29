@@ -70,29 +70,36 @@ func test_a_change_of_direction_is_read_after_his_read() -> void:
 	assert_gt(_flip_seen_after(easy), hard_t, "a slower tier later")
 
 
-# A wind-up is seen his read late, and primes the save once watched for
-# KeeperPlayRead.PRIME_S; a look broken off starts over.
-func test_a_wind_up_watched_long_enough_primes_the_save() -> void:
+# The puck held in his eyes on a stick of theirs, wound up or not, primes the
+# save once he has held it KeeperPlayRead.PRIME_S, seen his read late; a puck
+# swung across his view faster than his eyes follow it (a stickhandle) breaks
+# the look and it starts over, as does a pass; a puck of ours never primes him.
+func test_a_steady_look_at_the_puck_primes_the_save() -> void:
 	var play := KeeperPlayRead.new()
-	var at := Vector2(0.0, -6.0)
-	for i: int in 60:
-		play.step(DT, at, Vector2.ZERO, false)
-	var seen_at: float = -1.0
-	var primed_at: float = -1.0
+	var body := Vector2(0.0, -6.0)
 	var t: float = 0.0
+	var primed_at: float = -1.0
 	while t < 1.0 and primed_at < 0.0:
-		play.step(DT, at, Vector2.ZERO, true)
+		play.step(DT, body + Vector2(0.3, -0.3), Vector2.ZERO, false, body, true)
 		t += DT
-		if play.winding_up and seen_at < 0.0:
-			seen_at = t
 		if play.primed():
 			primed_at = t
-	assert_almost_eq(seen_at, DT + play.delay_s, DT, "seen his read late")
-	assert_almost_eq(primed_at - seen_at, KeeperPlayRead.PRIME_S, DT, "primed once watched long enough")
-	for i: int in 40:
-		play.step(DT, at, Vector2.ZERO, false)
-	play.step(DT, at, Vector2.ZERO, true)
-	assert_false(play.primed(), "a broken look starts over")
+	assert_almost_eq(primed_at, play.delay_s + KeeperPlayRead.PRIME_S, 2.0 * DT, "primed once held long enough, no wind-up")
+	# A stickhandle: the puck swung a stick's reach across his view and back,
+	# for longer than his read takes to see it.
+	var swing: float = GameRules.DEFAULT_STICK_LENGTH_M
+	for i: int in ceili(play.delay_s / DT) + 12:
+		var off: float = swing if i % 6 < 3 else -swing
+		play.step(DT, body + Vector2(off, -0.3), Vector2.ZERO, false, body, true)
+	assert_false(play.primed(), "a stickhandle breaks the look")
+	assert_lt(play.watched_s, KeeperPlayRead.PRIME_S, "and it starts over")
+	for i: int in 60:
+		play.step(DT, body, Vector2(0.0, 12.0))
+	assert_false(play.primed(), "a pass breaks the look")
+	var ours := KeeperPlayRead.new()
+	for i: int in 90:
+		ours.step(DT, body, Vector2.ZERO, false, body, false)
+	assert_false(ours.primed(), "a puck of ours never primes him")
 
 
 func test_receivers_are_the_ones_a_pass_can_reach() -> void:

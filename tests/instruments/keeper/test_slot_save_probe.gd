@@ -176,3 +176,48 @@ func _box(part: int) -> String:
 		z0 = minf(z0, w.z)
 		z1 = maxf(z1, w.z)
 	return "x[%.2f,%.2f] z[%.2f,%.2f] bottom %.3f" % [x0, x1, z0, z1, lo]
+
+
+# Whether deception still pays: the same releases straight from a settled
+# carrier, off a deke across into the spot, and as a one-timer off a pass
+# across, each saves played out. Per kind, the save share over every spot,
+# speed, lift and aim.
+func test_deception_pays() -> void:
+	var kinds: Array[String] = ["straight", "deke 1.5 m", "one-timer off a pass"]
+	var spots: Array[Vector2] = [Vector2(0.0, 5.0), Vector2(1.5, 6.0), Vector2(0.0, 7.0)]
+	var lines: PackedStringArray = ["kind                   | save share (shots) | per spot"]
+	for k: int in kinds.size():
+		var shots: int = 0
+		var goals: int = 0
+		var per: PackedStringArray = []
+		for spot: Vector2 in spots:
+			var s_shots: int = 0
+			var s_goals: int = 0
+			for speed: float in [22.0, 30.0]:
+				for loft: int in Stager.LOFTS:
+					for i: int in range(0, Stager.AIM_POINTS, 2):
+						var at: Vector3 = _stage_kind(k, spot)
+						var aim := Vector3(Stager.aim_x(i), 0.0, GOAL_Z)
+						var r: int = _fire(at, aim, loft, speed, false)
+						var touched: bool = _h.last_part >= 0
+						if not touched and r != Harness.GOAL:
+							continue
+						s_shots += 1
+						if r == Harness.GOAL or _h.rebound_goal:
+							s_goals += 1
+			shots += s_shots
+			goals += s_goals
+			per.append("(%.1f,%.1f) %.2f" % [spot.x, spot.y, 1.0 - float(s_goals) / maxf(s_shots, 1)])
+		lines.append("%-22s | %.3f (%d) | %s" % [kinds[k], 1.0 - float(goals) / maxf(shots, 1), shots, "  ".join(per)])
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+
+
+func _stage_kind(kind: int, spot: Vector2) -> Vector3:
+	var at := Vector3(spot.x, 0.0, GOAL_Z + spot.y)
+	match kind:
+		1:
+			return _s.stage_deke(at, 1.5)
+		2:
+			return _s.stage_feed(at, Vector3(spot.x - 5.0, 0.0, at.z), 16.0)
+	return _s.stage_set(at)
