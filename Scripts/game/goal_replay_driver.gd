@@ -50,6 +50,9 @@ signal replay_stopped
 # at that instant (clock, score, phase) and the team carrying the puck (-1 loose),
 # so the board and the crowd can play the moment as it was.
 signal replay_frame_changed(game_state: Dictionary, carrier_team: int)
+# A recorded body check the replay re-fires, with the live broadcast's force, so
+# the crowd rises to it as it did live.
+signal body_check_replayed(force: float)
 
 var _codec: WorldStateCodec = null
 var _registry: PlayerRegistry = null
@@ -385,5 +388,8 @@ func _pose(sim_delta: float) -> void:
 func _dispatch_due_events() -> void:
 	while _next_event_idx < _events.size() \
 			and _events[_next_event_idx].host_ts <= _virtual_clock:
-		ReplayEventReplayer.dispatch(_events[_next_event_idx].event, _registry)
+		var event: Dictionary = _events[_next_event_idx].event
+		ReplayEventReplayer.dispatch(event, _registry)
+		if event.get("kind", "") == "body_check":
+			body_check_replayed.emit(float(event.get("speed", 0.0)))
 		_next_event_idx += 1

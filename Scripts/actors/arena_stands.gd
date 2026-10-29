@@ -292,6 +292,9 @@ const _REFLECTION_NAME: StringName = &"ArenaReflection"
 
 var _excitement: float = 0.0
 var _excite_tween: Tween = null
+# Whether a replay is on screen, and whether its frame has reached the goal.
+var _replaying: bool = false
+var _replay_after_goal: bool = false
 var _house_lights: ArenaHouseLights = null
 var _reflection: ArenaReflection = null
 var _render_targets_freed: bool = false
@@ -383,8 +386,15 @@ func _wire_game_signals() -> void:
 		gm.goal_scored.connect(_on_goal_scored)
 	if gm.has_signal("phase_changed"):
 		gm.phase_changed.connect(_on_phase_changed)
-	if gm.has_signal("body_check_broadcast"):
-		gm.body_check_broadcast.connect(_on_body_check_broadcast)
+	for check_sig: String in ["body_check_broadcast", "replay_body_check"]:
+		if gm.has_signal(check_sig):
+			gm.connect(check_sig, _on_body_check)
+	for frame_sig: String in ["goal_replay_frame_changed", "highlight_frame_changed"]:
+		if gm.has_signal(frame_sig):
+			gm.connect(frame_sig, _on_replay_frame)
+	for stop_sig: String in ["replay_stopped", "highlight_stopped"]:
+		if gm.has_signal(stop_sig):
+			gm.connect(stop_sig, _on_replay_stopped)
 	if gm.has_signal("faceoff_prep_announced"):
 		# The cue is timed against an announced window, but a skipped intro or a
 		# late joiner never reaches the end of it. Faceoff prep is the intro's
@@ -615,9 +625,36 @@ func _on_phase_changed(new_phase: int) -> void:
 		excite(0.7)
 
 
-# Big hits get a rumble out of the crowd, scaled by the same intensity curve
-# the impact burst/sound use. Soft contact barely registers.
-func _on_body_check_broadcast(force: float) -> void:
+# A replay plays the crowd as it was: idle through the play it re-runs, on its
+# feet from the goal frame. The live goal's burst is still running when the
+# replay takes over, so the first frame before the goal cuts it — under the
+# stinger, which covers the screen when that frame is posed.
+func _on_replay_frame(game_state: Dictionary, _carrier_team: int) -> void:
+	var after_goal: bool = PhaseRules.is_after_goal(
+			int(game_state.get("phase", GamePhase.Phase.PLAYING)))
+	if _replaying and after_goal == _replay_after_goal:
+		return
+	_replaying = true
+	_replay_after_goal = after_goal
+	if after_goal:
+		excite(1.0)
+	else:
+		_calm()
+
+
+func _on_replay_stopped() -> void:
+	_replaying = false
+
+
+func _calm() -> void:
+	if _excite_tween != null and _excite_tween.is_valid():
+		_excite_tween.kill()
+	_set_excitement(0.0)
+
+
+# Big hits, live or replayed, get a rumble out of the crowd, scaled by the same
+# intensity curve the impact burst/sound use. Soft contact barely registers.
+func _on_body_check(force: float) -> void:
 	excite(SkaterVFX.check_intensity(force) * 0.45)
 
 

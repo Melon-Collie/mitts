@@ -386,6 +386,23 @@ static func counter_point_for(our_net: Vector3) -> Vector3:
 	return Vector3(0.0, 0.0, our_net.z - own_dir * GameRules.SLOT_DIST_M)
 
 
+# A body covers a counter when he beats it home WITH TIME TO SET — the same
+# brake-to-arrive margin AIRoleSlots5.assign charges the RUSH_D1 deadline
+# (stride-for-stride beside the rush is chasing, not covering). League-paced,
+# like the mate ETAs it pads.
+const COUNTER_SET_MARGIN_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
+		/ AISteering.ARRIVAL_BRAKE_DECEL_M_S2
+
+
+# Whether a teammate (fill_counter_cover_etas' `mate_etas`) already covers a
+# counter reaching the counter point at `t_counter`.
+static func counter_covered(t_counter: float, mate_etas: Array[float]) -> bool:
+	for eta: float in mate_etas:
+		if eta + COUNTER_SET_MARGIN_S <= t_counter:
+			return true
+	return false
+
+
 static func fill_counter_cover_etas(our_net: Vector3,
 		teammates: Array[Vector3], out_etas: Array[float]) -> void:
 	var cp: Vector3 = counter_point_for(our_net)
@@ -502,13 +519,7 @@ static func counter_rush_cost_at(
 	if t_counter == INF or loss_prob <= 0.0:
 		return 0.0
 	var counter_point: Vector3 = counter_point_for(our_net)
-
-	# Covering set: bodies that beat the counter home WITH TIME TO SET — the
-	# same brake-to-arrive margin AIRoleSlots5.assign charges the RUSH_D1
-	# deadline (stride-for-stride beside the rush is chasing, not covering). League-paced, like the mate
-	# ETAs it pads.
-	var setup_margin: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \
-			/ AISteering.ARRIVAL_BRAKE_DECEL_M_S2
+	var setup_margin: float = COUNTER_SET_MARGIN_S
 	var cover_anchor: Vector3 = AIThreatAssignment.cover_anchor(
 			counter_point, our_net)
 	_scratch_counter_cover.clear()

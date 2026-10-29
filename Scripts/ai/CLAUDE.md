@@ -126,7 +126,9 @@ directly, which is legal because `TeamBrain` *is a* `TeamStrategyView`.
 
 `SkaterAgent.tick` returns the state machine's blade cursor as-is. Its slew — the
 bot's real Hands blade speed — is the one motion limit on it, exactly the limit a
-human's blade plays under. A second smoothing stage in the agent is a trap:
+human's blade plays under. Like the controller's cap, it is relative to the
+skater: the cursor rides the body and slews across it, so skating at speed
+never eats the blade's own. A second smoothing stage in the agent is a trap:
 straight-line world blending chord-cuts the state machine's shaped cursor paths
 (the arc, the reach-cone clamp, the front route) across the body on big flips,
 and can trip the pose IK gate's facing freeze.
@@ -150,6 +152,17 @@ receive in stride by default and brake only when arriving early enough to carry
 the blade past the meet, or when their own skating is what carries a feed past
 the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
 its own bobbles however they skate.
+
+**The stance rides the receiver's own skating.** The meet is a rendezvous, so a
+receiver driving into the feed stands where his skating takes him, a stance off
+the puck's path *in his frame* (the face is square across the shaft), and only
+that correction needs the flight's time. He never steers onto the puck's own
+line, which turns the hips to it before contact. The net-forward catch of a shot
+reception stands him behind the catch point, so it is only taken when he gets
+there first; one driving past it takes the feed in stride. Whose feed it is
+reads the same way: each teammate where his own skating has him when the puck
+reaches his level (`SkaterAgentReception.skating_point`), so a forward driving
+onto a feed is its man however far off its line he is now.
 
 **A feed is a puck that was sent, and who sent it is all a bot knows.** A fast
 loose puck reads as one (`RECEIVE_TRIGGER_PUCK_SPEED_M_S`), and so does a
@@ -177,7 +190,12 @@ once that is enough to set before the feed arrives (`SkaterAgentOneTimer
 .time_to_set`): the hips into the stance at their pivot rate, the circle onto
 the pass's line on the glide he carries and a shuffle. Until then he skates to
 the line; a feed that will arrive before he could set, and before a wind-up
-could open the window, he catches instead. He leads the swing against the
+could open the window, he catches instead, and stays given up on it until
+someone has the puck again (`_one_timer_spent`): re-committing on the next tick
+leaves him neither swinging nor squared to catch. The passer feeds him on his
+tape, the zone his stance sets for the net, when he can set for it in the
+feed's flight (`AIPassLead.feed_point`, on the same `SlapperRules.time_to_set`
+he presses on), and at his body to catch when he cannot. He leads the swing against the
 feed's pull (`swing_for`), so the shot lands where he aimed it.
 `test_bot_one_timer_loop.gd` drives the real controller through it.
 
@@ -187,6 +205,14 @@ feed's pull (`swing_for`), so the shot lands where he aimed it.
 stick-reach toward our own net so the approach arrives on the inside lane and the
 carrier's only escape is outside; a straight-line chase lets them cut to the
 middle. Loose pucks get the raw intercept — there is no carrier to angle off.
+
+**A pass in reach is played where the stick gets on it.** A loose puck whose path
+comes within a stride of the stick is chased to the first point the stick can
+reach in time (`AILoosePuckChase.reach_meet_time`, stick out), not to where the
+body could meet it after settling it: the setup margin prices killing a fast
+puck, and waiting for it chases a pass down the lane past the man it is going
+to. This is what lets a defender play a passing lane, and the carrier's lane
+read prices it on the same clock (`AILaneReach`).
 
 ## Who may play the puck
 

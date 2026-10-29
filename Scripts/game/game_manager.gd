@@ -73,10 +73,14 @@ signal replay_stopped
 signal goal_replay_frame_changed(game_state: Dictionary, carrier_team: int)
 # The same frame feed from every other airing of a stored goal — the
 # intermission and post-game reels and a goal re-aired for its GIF — and the
-# end of each. Separate from the goal cinematic's pair because only the board
-# follows these; the reels play no crowd.
+# end of each. Separate from the goal cinematic's pair because the crowd's
+# sound does not follow these (the reels play silent); the board and the
+# stands do.
 signal highlight_frame_changed(game_state: Dictionary, carrier_team: int)
 signal highlight_stopped
+# A body check re-fired by a goal replay (the cinematic, or a stored goal
+# re-aired for its GIF): body_check_broadcast's counterpart for the stands.
+signal replay_body_check(force: float)
 # Goal-clip GIF export (GoalClipExporter). state is a GoalClipExporter.State —
 # the HUD reads it to swap its prompt between "save", "saving", and gone.
 # finished carries the written path, or "" when the export failed.
@@ -1624,6 +1628,7 @@ func _wire_subsystems() -> void:
 	_goal_replay_store = GoalReplayStore.new()
 	_goal_replay_driver.replay_started.connect(_on_goal_replay_started_capture)
 	_goal_replay_driver.replay_frame_changed.connect(goal_replay_frame_changed.emit)
+	_goal_replay_driver.body_check_replayed.connect(replay_body_check.emit)
 	_post_game_replay_driver = PostGameReplayDriver.new()
 	add_child(_post_game_replay_driver)
 	_post_game_replay_driver.replay_frame_changed.connect(highlight_frame_changed.emit)
@@ -1657,6 +1662,7 @@ func _wire_subsystems() -> void:
 		_goal_clip_exporter.stored_replay_finished.connect(goal_gif_saving_changed.emit)
 		_goal_clip_exporter.stored_replay_frame_changed.connect(highlight_frame_changed.emit)
 		_goal_clip_exporter.stored_replay_stopped.connect(highlight_stopped.emit)
+		_goal_clip_exporter.stored_replay_body_check.connect(replay_body_check.emit)
 		_goal_clip_exporter.state_changed.connect(
 				func(_state: GoalClipExporter.State) -> void: goal_gif_saving_changed.emit())
 		_goal_clip_exporter.set_goal_label_provider(

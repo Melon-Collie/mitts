@@ -215,7 +215,8 @@ static func compute_move_vector(
 			and opponent_velocities.size() == opponent_positions.size():
 		var opp_force: Vector2 = _carrier_threat_repel(
 				self_pos, self_velocity, to_anchor, anchor_dist,
-				opponent_positions, opponent_velocities, opponent_repel_weight)
+				opponent_positions, opponent_velocities, opponent_repel_weight,
+				rink_half_x, rink_half_z)
 		force_x += opp_force.x
 		force_z += opp_force.y
 	else:
@@ -381,7 +382,8 @@ static func _moving_frame_pursuit(to_anchor: Vector3, anchor_dist: float,
 # `anchor_dist` are the anchor pull inputs, passed through.
 static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
 		to_anchor: Vector3, anchor_dist: float, opponent_positions: Array[Vector3],
-		opponent_velocities: Array[Vector3], repel_weight: float) -> Vector2:
+		opponent_velocities: Array[Vector3], repel_weight: float,
+		rink_half_x: float, rink_half_z: float) -> Vector2:
 	# League-default reach off the momentum line — the double-integrator model of
 	# AICarrySpace.reach_clearance (reaction-gated maneuver + stick). No per-peer
 	# caps: the league reach is the right fidelity for a soft field force.
@@ -417,11 +419,18 @@ static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
 			# On or near his sweep line, "away from the closest point" is the
 			# sign of a few centimetres of drift — a full-strength push that
 			# flips every tick. Commit to one side instead: the anchor's, when
-			# the anchor is clearly off his line, else a fixed default; the
-			# actual away direction takes over as the offset reaches the band.
+			# the anchor is clearly off his line, else the side with clearly
+			# more ice before the boards, else a fixed default; the actual away
+			# direction takes over as the offset reaches the band.
 			var inv_sweep: float = 1.0 / sqrt(sweep_len_sq)
 			var perp := Vector2(-sweep_z * inv_sweep, sweep_x * inv_sweep)
-			if perp.x * to_anchor.x + perp.y * to_anchor.z < -THREAT_LINE_BAND_M:
+			var anchor_side: float = perp.x * to_anchor.x + perp.y * to_anchor.z
+			if anchor_side < -THREAT_LINE_BAND_M:
+				perp = -perp
+			elif anchor_side <= THREAT_LINE_BAND_M \
+					and _room_to_boards(self_pos, perp, rink_half_x, rink_half_z) \
+					< _room_to_boards(self_pos, -perp, rink_half_x, rink_half_z) \
+							- THREAT_LINE_BAND_M:
 				perp = -perp
 			var committed: Vector2 = perp.lerp(away, d / THREAT_LINE_BAND_M)
 			away = committed.normalized() if committed.length_squared() > 1e-6 else perp
@@ -436,6 +445,22 @@ static func _carrier_threat_repel(self_pos: Vector3, self_velocity: Vector3,
 		if along < 0.0:
 			force -= a * along
 	return force
+
+
+# Distance from `p` to the boards along the unit direction `dir`, the rink taken
+# as its rectangle (the corner rounding is ignored).
+static func _room_to_boards(p: Vector3, dir: Vector2, rink_half_x: float,
+		rink_half_z: float) -> float:
+	var room: float = INF
+	if dir.x > 0.0001:
+		room = (rink_half_x - p.x) / dir.x
+	elif dir.x < -0.0001:
+		room = (-rink_half_x - p.x) / dir.x
+	if dir.y > 0.0001:
+		room = minf(room, (rink_half_z - p.z) / dir.y)
+	elif dir.y < -0.0001:
+		room = minf(room, (-rink_half_z - p.z) / dir.y)
+	return room
 
 
 # Repel from a line segment. Only applies when the bot's projection onto

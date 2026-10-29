@@ -102,3 +102,26 @@ func test_line_anchor_ignores_non_feeds() -> void:
 	assert_false(ot.line_anchor(
 			_feed_snap(Vector3(-8, 0, -7.0), Vector3(16, 0, 0)), Vector3.ZERO, ATTACKING_GOAL).is_finite(),
 			"a feed crossing far away doesn't drag us off the spot")
+
+
+func test_a_feed_on_the_one_timer_tape_needs_no_shuffle() -> void:
+	# The passer aims a ready one-timer man's feed at AIPassLead.one_timer_tape,
+	# the zone his stance sets for the net, so the feed's line already runs
+	# through it and the settle anchor is where he stands. Either hand.
+	var passer := Vector3(8.0, 0.0, -12.0)
+	for lefty: bool in [false, true]:
+		var caps := AISkaterCaps.new()
+		caps.is_left_handed = lefty
+		ot.setup(SELF_ID, 0, _team_map, lefty)
+		ot.set_caps(caps)
+		for body: Vector3 in [Vector3(-2.5, 0, -24.45), Vector3(-4, 0, -21.65),
+				Vector3(5, 0, -18)]:
+			var tape: Vector3 = AIPassLead.one_timer_tape(body, caps, ATTACKING_GOAL)
+			assert_almost_eq(tape, ot.zone_center(body, ATTACKING_GOAL), Vector3.ONE * 1e-4,
+					"lefty %s at %s: the tape is the zone his stance sets" % [lefty, body])
+			var dir: Vector3 = (tape - passer).normalized()
+			var s := _feed_snap(tape - dir * 6.0, dir * 18.0)
+			_add_skater(s, SELF_ID, body)
+			var anchor: Vector3 = ot.line_anchor(s, body, ATTACKING_GOAL)
+			assert_lt(anchor.distance_to(body), ot.ONE_TIMER_SHUFFLE_ARRIVE_M,
+					"lefty %s at %s: nothing to shuffle" % [lefty, body])

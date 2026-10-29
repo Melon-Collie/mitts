@@ -368,11 +368,12 @@ func test_the_last_man_bound_is_retired_for_a_live_carrier() -> void:
 			"the last man reads the ladder, not a depth bound")
 
 
-func test_a_stand_held_at_his_pace_takes_the_drive_a_standing_one_concedes() -> void:
-	# A carrier at speed out-skates a man standing in his lane, so priced
-	# standing, a body 1.8 m in front of him takes nothing and only the net-front
-	# denies the drive — the argmax walks the pressurer into his crease. The
-	# stand is a moving frame, priced at the ride it is skated at.
+func test_a_body_in_his_lane_takes_the_drive_standing_or_riding() -> void:
+	# A body 1.8 m in front of a carrier at speed takes most of his drive whether
+	# he stands there (the carrier skates into his full reach) or rides it at the
+	# carrier's pace. PRESSURE still prices its stands at the ride it skates them
+	# at (a moving frame); this holds that neither reading lets the carrier
+	# through a man in his lane.
 	var our_net := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 	var keeper := our_net + Vector3(0.0, 0.0, 0.8)
 	# The routing sweep's z -20 / x -6 rush, the tick it went wrong: the stand the
@@ -394,7 +395,8 @@ func test_a_stand_held_at_his_pace_takes_the_drive_a_standing_one_concedes() -> 
 			carrier_vel, null, carrier, carrier_vel, keeper, receivers, bases)
 	gut.p("  open %.3f | standing in his lane %.3f | riding it %.3f"
 			% [bases[0], standing, riding])
-	assert_lt(riding, standing * 0.5, "a body at his pace in his lane takes the drive")
+	assert_lt(riding, bases[0] * 0.5, "a body at his pace in his lane takes the drive")
+	assert_lt(standing, bases[0] * 0.5, "a body standing in his lane takes the drive")
 
 
 func test_a_loose_puck_keeps_the_last_man_bound() -> void:

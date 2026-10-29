@@ -471,6 +471,11 @@ var _one_timer_press_tick: int = 0
 var _one_timer_slap_down: bool = false
 # Seconds wound up since that press.
 var _one_timer_charge_s: float = 0.0
+# A feed ONE_TIMER_PRESSED has played — swung at, or given up on because it
+# arrives before the body could set or a wind-up could open the window — gets no
+# second commit: given up on it is caught instead. No one-timer entry fires until
+# someone has the puck again.
+var _one_timer_spent: bool = false
 # The feed in this body's frame (world XZ) as last seen loose: the swing leads
 # against its pull, and once it is caught the snapshot no longer shows it.
 var _one_timer_feed := Vector2.ZERO
@@ -969,6 +974,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	# tag-up override in _state_off_puck routes us back to the blue line.
 	if snapshot.is_out_of_play(_peer_id) and _state == State.CHASE_PUCK:
 		_set_state(State.OFF_PUCK)
+	if snapshot.real_puck_carrier_peer_id != -1:
+		_one_timer_spent = false
 
 	# Decision throttle (see DISPATCH_PERIOD_TICKS). `_set_state` zeroes
 	# `_dispatch_skip_counter`, so a fresh state dispatches full on its first tick.
@@ -1217,7 +1224,7 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 	# Transitions
 	if have_puck:
 		_set_state(State.CARRY)
-	elif _is_one_timer_ready and _in_attacking_zone(self_pos) \
+	elif _is_one_timer_ready and not _one_timer_spent and _in_attacking_zone(self_pos) \
 			and (_one_timer.line_anchor(snapshot, self_pos, _attacking_goal_pos).is_finite()
 			or _puck_in_one_timer_zone(snapshot, self_pos)):
 		# Commit at feed RELEASE, not contact: the slap wind-up needs the flight
@@ -1225,7 +1232,8 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		# onto the pass's path. The zone-entry check is the fallback for feeds too
 		# soft/close to read as a live line.
 		_set_state(State.ONE_TIMER_PRESSED)
-	elif _is_one_timer_ready and not _loose_puck_in_reach_band(snapshot, self_pos):
+	elif _is_one_timer_ready and not _one_timer_spent \
+			and not _loose_puck_in_reach_band(snapshot, self_pos):
 		# Stay camped + pre-aimed even if the brain says we're closest to a loose
 		# puck: chasing would lose the goal-aim lock. The exception is a puck
 		# coming into the camper's own reach band — he takes it.
@@ -1549,7 +1557,7 @@ func _state_chase_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vec
 	# A ready one-timer with the puck in our zone fires instead of picking up.
 	if have_puck:
 		_set_state(State.CARRY)
-	elif _is_one_timer_ready and _in_attacking_zone(self_pos) \
+	elif _is_one_timer_ready and not _one_timer_spent and _in_attacking_zone(self_pos) \
 			and _puck_in_one_timer_zone(snapshot, self_pos):
 		_set_state(State.ONE_TIMER_PRESSED)
 	elif not _should_chase_loose_puck(snapshot, self_pos) \
@@ -1584,7 +1592,8 @@ func _pass_receive_aim_and_steer(input: InputState, snapshot: WorldSnapshot, sel
 func _try_shot_reception(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3) -> int:
 	if not _reception.read_shot(snapshot, self_pos, _blade_reach, _attacking_goal_pos):
 		return _RECV_NONE
-	if _reception.shot_one_time_geometry and _squared_to_shoot(snapshot, self_pos):
+	if _reception.shot_one_time_geometry and not _one_timer_spent \
+			and _squared_to_shoot(snapshot, self_pos):
 		# One transitional tick of net-aimed steering before ONE_TIMER_PRESSED
 		# takes over next dispatch (it presses slap on its tick 0 and settles
 		# on the live line itself — no latched anchor to hand over).
@@ -2100,6 +2109,7 @@ func _state_shoot_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: 
 		# tracker reads as a direction reversal.
 		_mouse_pos = self_pos + _shoot_wind_up_start
 		_mouse_pos_initialized = true
+		_mouse_body_at = self_pos
 		input.shoot_pressed = true
 
 	# Clamped at 1: during the sampled late-release hold the blade sits at the
@@ -2153,14 +2163,7 @@ func _retarget_release_dir(input: InputState, snapshot: WorldSnapshot,
 		self_pos: Vector3) -> void:
 	if not _shot_aim_locked.is_finite():
 		return
-	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
-	if self_state == null:
-		return
-	var blade: Vector3 = self_state.blade_contact_world
-	if blade == Vector3.ZERO:
-		blade = self_pos
-	var aim_vec := Vector3(
-			_shot_aim_locked.x - blade.x, 0.0, _shot_aim_locked.z - blade.z)
+	var aim_vec: Vector3 = _from_release_blade(snapshot, self_pos, _shot_aim_locked)
 	if aim_vec.length_squared() < 0.0001:
 		return
 	# The SAME committed error the press drew — re-aiming must not re-roll the
@@ -2169,6 +2172,23 @@ func _retarget_release_dir(input: InputState, snapshot: WorldSnapshot,
 		aim_vec = aim_vec.rotated(Vector3.UP, _committed_aim_error_rad)
 	_shoot_aim_dir_locked = aim_vec.normalized()
 	input.bot_wrister_aim_dir = _shoot_aim_dir_locked
+
+
+# `target` off the blade the puck leaves from on this tick's release (world XZ,
+# un-normalized; off the body when the blade is unavailable).
+func _from_release_blade(snapshot: WorldSnapshot, self_pos: Vector3,
+		target: Vector3) -> Vector3:
+	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if self_state == null:
+		return Vector3(target.x - self_pos.x, 0.0, target.z - self_pos.z)
+	var blade: Vector3 = self_state.blade_contact_world
+	if blade == Vector3.ZERO:
+		blade = self_pos
+	# The snapshot's blade is a tick old, and the puck leaves from it a tick on:
+	# through the charge it rides the body, so it has slid by the body's velocity.
+	# On a sharp angle that slide swings the crossing several times over.
+	blade += Vector3(self_state.velocity.x, 0.0, self_state.velocity.z) * _current_delta
+	return Vector3(target.x - blade.x, 0.0, target.z - blade.z)
 
 
 # Pre-tilts aim_dir for the wind-up's lateral release offset: both endpoints sit
@@ -2274,6 +2294,7 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		# Snap the cursor to the wind-up start, as SHOOT_PRESSED does.
 		_mouse_pos = self_pos + endpoints.start
 		_mouse_pos_initialized = true
+		_mouse_body_at = self_pos
 		input.shoot_pressed = true
 
 	# Endpoints are offsets from the current self_pos (see _shoot_wind_up_start).
@@ -2291,7 +2312,13 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 		input.shoot_held = true
 		_pass_charge_tick += 1
 	else:
-		# Release: shoot_held drops and release_wrister fires.
+		# Release: shoot_held drops and release_wrister fires, re-pointed from the
+		# blade the puck leaves from to the lead. Locked off the body, the pass runs
+		# parallel to its lead a blade's offset wide of it.
+		var release_vec: Vector3 = _from_release_blade(snapshot, self_pos, clean_pass_aim)
+		if release_vec.length_squared() > 0.0001:
+			_pass_aim_dir_locked = release_vec.normalized()
+			input.bot_wrister_aim_dir = _pass_aim_dir_locked
 		input.shoot_held = false
 		_pass_target_peer_id = -1
 		_pass_should_saucer = false
@@ -2389,6 +2416,7 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		elif feed_s < _one_timer.min_windup_s():
 			# Nothing was pressed yet, so there's no charge to cancel.
 			debug_last_decision = "ONE_TIMER_ABORT_WIDE"
+			_one_timer_spent = true
 			_set_state(_post_puck_lost_state(snapshot))
 			return
 
@@ -2403,6 +2431,7 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		# On the centre beat but not attached: drop the button and let the
 		# controller's release buffer sweep the leniency zone.
 		input.slap_held = false
+		_one_timer_spent = true
 		_set_state(_post_puck_lost_state(snapshot))
 		return
 
@@ -2528,8 +2557,11 @@ func _pass_aim_point(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	if snapshot.puck_state != null and snapshot.puck_state.carrier_peer_id == _peer_id:
 		origin = Vector3(
 				snapshot.puck_state.position.x, 0.0, snapshot.puck_state.position.z)
-	var lead: Vector3 = AIPassLead.lead_point(
+	var led: Array = AIPassLead.lead(
 			origin, receiver, accel, pass_speed, AICarrierPassSearch.PASS_LEAD_MAX_S, receiver_caps)
+	var lead: Vector3 = AIPassLead.feed_point(receiver, led[0], led[1],
+			_current_strategy != null and _current_strategy.is_one_timer_ready(_pass_target_peer_id),
+			receiver_caps, _attacking_goal_pos)
 	# Net guard on the FIRED lane: the scored lane was net-checked at commit, but
 	# the lead re-solves every tick and a receiver drifting near the net plane can
 	# walk it into the cage (the classic behind-the-net feed that rings off the
@@ -3005,6 +3037,10 @@ const FACE_TRAVEL_TAG_UP_NEAR_M: float = 2.0
 # a legitimate target at the world origin would otherwise re-trigger it.
 var _mouse_pos: Vector3 = Vector3.ZERO
 var _mouse_pos_initialized: bool = false
+# Where the body was when _mouse_pos was last stepped: the controller caps the
+# blade's speed relative to the skater, so the cursor rides the body and only
+# its own slew is capped.
+var _mouse_body_at: Vector3 = Vector3.INF
 
 
 # Cursor-shaping modes for `_step_mouse_internal`, which steps `_mouse_pos` toward
@@ -3102,6 +3138,10 @@ func _step_mouse_internal(target: Vector3, mode: int,
 	_cached_aim_mode = mode
 	_cached_aim_max_speed = max_speed
 	_cached_aim_arc_rate = arc_rate
+	if _mouse_pos_initialized and _mouse_body_at.is_finite():
+		_mouse_pos.x += _current_self_pos.x - _mouse_body_at.x
+		_mouse_pos.z += _current_self_pos.z - _mouse_body_at.z
+	_mouse_body_at = _current_self_pos
 	var step_target: Vector3 = target
 	if mode == _STEP_ARC:
 		step_target = _arc_step_mouse_target(
@@ -3446,6 +3486,11 @@ func _lead_intercept(self_pos: Vector3, self_vel: Vector3, puck_pos: Vector3,
 			traj, step_dt, puck_pos, self_pos, self_vel, cap,
 			AILoosePuckChase.setup_margin(puck_vel), _chase_max_accel, _blade_reach,
 			AILoosePuckChase.race_playable_time(puck_pos, puck_vel))
+	# A puck passing within a stride of our stick is played where the stick first
+	# gets on it: the set-up margin prices settling a fast puck, and waiting for
+	# it chases a pass down the lane past the man it is going to.
+	t = minf(t, AILoosePuckChase.reach_meet_time(traj, puck_pos, puck_vel,
+			self_pos, self_vel, cap, _blade_reach, true, true))
 	# The TIME is reach-aware; the steering target is not pulled back onto the
 	# reach circle. Where the blade can first touch the puck is the right answer
 	# to "am I in this race"; the body should still drive at the meeting point

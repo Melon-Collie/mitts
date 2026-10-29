@@ -3,7 +3,9 @@ class_name AIRoleSupport
 # SUPPORT (3v3 OZONE / TRANS_OFFENSE), TRAILER (5v5 TRANS_OFFENSE), the 5v5
 # spare body while we possess, and a just-released passer still slotted CARRIER.
 # Be a pass option AND recoverable: in the OZ the third man high (point outlet,
-# first man back); in transition, the goal-side trail.
+# first man back); in transition, the goal-side trail. Goal-side only while he
+# would be the last man back: a teammate who beats a counter home frees him to
+# join the attack.
 #
 # Argmax over `score_pass_value(carrier, c) − counter_rush_cost(c)`: the threat a
 # turnover at the carrier generates, surviving only the bodies — this one,
@@ -18,8 +20,10 @@ const SEARCH_RADIUS_M: float = 5.0
 const HIGH_POST_INSET_M: float = 3.0
 
 # Safety-valve slack, about one stick: SUPPORT stays goal-side of the carrier
-# (roughly even at most) so he is never the last man back. A hard filter, since
-# the pass term alone pulls SUPPORT past him on a clean breakout.
+# (roughly even at most) so he is never the last man back. A hard filter while
+# no teammate would beat a counter home, since the pass term alone pulls
+# SUPPORT past him on a clean breakout (the counter cost reads only the
+# carrier's live risk). With one who would, he is not the last man back.
 const GOAL_SIDE_TOLERANCE_M: float = 1.5
 
 # Covering-set exposure scratch, refilled once per decide.
@@ -64,9 +68,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 	var our_goalie: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
 	# Every candidate prices a loss at the carrier, so the counter is one race.
 	var t_counter: float = INF
-	if turnover_prior > 0.0:
+	if not opp_positions.is_empty():
 		t_counter = AIActionScoring.counter_time(carrier_pos, our_net, opp_positions,
 				_scratch_opp_vels, ctx.scratch_opp_caps)
+	var last_back: bool = not AIActionScoring.counter_covered(t_counter, _scratch_mate_etas)
 
 	# Far from the station, skate at the calculated post (STATION_ARGMAX_LOD_M).
 	# In transit it is the goal-side trail a step behind the carrier.
@@ -92,7 +97,7 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 			continue
 		if AIStationSearch.too_close_to_teammate(c, teammate_positions):
 			continue
-		if not is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
+		if last_back and not is_goal_side_of_carrier(c, carrier_pos, ctx.own_goal_dir):
 			continue
 		var pass_speed: float = AIPuckLane.expected_pass_speed(carrier_pos, c)
 		var pass_value: float = AIActionScoring.score_pass_value(

@@ -16,9 +16,7 @@ extends GutTest
 # speed is the defender carrying when the carrier reaches him, and how far off
 # his own net did he wander to arrive that way.
 #
-# WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates THROUGH
-# the defender here, so "did he stop the rush" is not a question this sim can
-# answer and is deliberately not asserted. What it does answer faithfully is
+# "Did he stop the rush" is deliberately not asserted. What this answers is
 # where both bodies are and how fast they are going, which is the whole of the
 # defect.
 #
@@ -58,6 +56,8 @@ const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SECS: float = 4.0
+# The stalled carrier is 20 m off: a set approach and the gap-up after it.
+const STALLED_SECS: float = 6.0
 # A defender is LUNGING if he still carries this much speed away from his own
 # net when the carrier arrives. Sized as the pace at which the reversal costs
 # more than the rush gives you: a skater sheds speed at ARRIVAL_BRAKE_DECEL,
@@ -167,13 +167,16 @@ func test_gap_defender_still_closes_on_a_stalled_carrier() -> void:
 	# anyone with is the gap-up case, and the defender is supposed to take the
 	# ice. Same geometry, carrier scripted to drift at 0.5 m/s: a bot carrier
 	# builds to ~7 m/s inside the window, and the defender rightly contains that.
+	# He closes under the burst the drifting man could still make
+	# (AIRoleRushD.set_advance_cap), so he reaches his stand set, not charging,
+	# and takes the gap-up from there: a longer window than the rush sweep's.
 	var duel := Duel.new()
 	var drift: Array[Vector3] = [Vector3(0.0, 0.0, 2.0), Vector3(0.0, 0.0, -30.0)]
 	duel.add_scripted_attacker(1, 0, drift, 0.5)
 	duel.add_skater(2, 1, Vector3(0.0, 0.0, -18.0), BotSkillProfile.hard())
 	duel.start(1)
 	var closest: float = INF
-	for _t: int in int(SECS / DT):
+	for _t: int in int(STALLED_SECS / DT):
 		duel.step()
 		closest = minf(closest,
 				duel._skater(2).pos.distance_to(duel._skater(1).pos))

@@ -228,17 +228,46 @@ static func settable_stand_depth(ctx: RoleContext, threat_pos: Vector3,
 	return maxf(desired_depth, self_along - brake_lead)
 
 
-# The positive root of settable_stand_depth's `consumed(v) = spare`, clamped to
-# [0, v_max]: with less spare depth than the pivot alone costs, he holds.
+# Halvings of [0, v_max] approach_speed_cap solves to: under a centimetre a second
+# of cap at any body's top speed.
+const APPROACH_CAP_BISECT: int = 16
+
+
+# The fastest approach `v` in [0, v_max] whose consumed depth fits in `spare`:
+# braking it out (v²/2B), the ground the threat covers meanwhile, and the pivot
+# that builds back to the pace he has then. The threat goes at `closing` and,
+# with `threat_accel`, drives up from it along his stride ramp to
+# `threat_vmax` while the defender brakes — a man standing still bursts the
+# moment he sees the defender commit. With less spare depth than the pivot
+# alone costs, he holds.
 static func approach_speed_cap(spare: float, closing: float, v_max: float,
-		max_accel: float) -> float:
-	var brake_decel: float = AISteering.ARRIVAL_BRAKE_DECEL_M_S2
-	var pivot: float = AIStrideRamp.distance_to_speed(closing, max_accel)
-	# v² + 2·closing·v + 2B·(pivot - spare) = 0
-	var disc: float = closing * closing + 2.0 * brake_decel * (spare - pivot)
-	if disc <= 0.0:
+		max_accel: float, threat_vmax: float = 0.0, threat_accel: float = 0.0) -> float:
+	var top: float = maxf(v_max, 0.0)
+	if _consumed_depth(top, closing, max_accel, threat_vmax, threat_accel) <= spare:
+		return top
+	if _consumed_depth(0.0, closing, max_accel, threat_vmax, threat_accel) > spare:
 		return 0.0
-	return clampf(sqrt(disc) - closing, 0.0, maxf(v_max, 0.0))
+	var lo: float = 0.0
+	var hi: float = top
+	for _i: int in APPROACH_CAP_BISECT:
+		var mid: float = (lo + hi) * 0.5
+		if _consumed_depth(mid, closing, max_accel, threat_vmax, threat_accel) <= spare:
+			lo = mid
+		else:
+			hi = mid
+	return lo
+
+
+static func _consumed_depth(v: float, closing: float, max_accel: float,
+		threat_vmax: float, threat_accel: float) -> float:
+	var brake_decel: float = AISteering.ARRIVAL_BRAKE_DECEL_M_S2
+	var t_b: float = v / brake_decel
+	var gone: float = closing * t_b
+	var pace: float = closing
+	if threat_accel > 0.0:
+		gone = AIStrideRamp.distance_in(closing, t_b, maxf(threat_vmax, closing), threat_accel)
+		pace = AIStrideRamp.speed_at(closing, t_b, maxf(threat_vmax, closing), threat_accel)
+	return v * v / (2.0 * brake_decel) + gone + AIStrideRamp.distance_to_speed(pace, max_accel)
 
 
 # How much deeper than the stand a home post must be to count as a retreat — one
