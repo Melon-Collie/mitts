@@ -1189,11 +1189,9 @@ func test_in_motion_toward_slot_scores_higher_than_stationary() -> void:
 	# from — meaning a moving bot OUT of slot range should outscore a
 	# stationary bot at the same current pos.
 	#
-	# Both bots stand at z = -15 (~12 m from opp goal at z = -26.65 —
-	# outside ideal but inside SHOT_RANGE_FALLOFF_M). The moving bot
-	# travels toward the goal at 8 m/s. With BOT_WRISTER_LOOKAHEAD_S
-	# = 0.25, the projected release pos is z ≈ -17 → ~10 m from goal,
-	# noticeably better dist_response than 12 m.
+	# Both bots stand at z = -18 (~8.7 m from the opp goal line at z = -26.65).
+	# The moving bot travels toward the goal at 8 m/s, so over
+	# BOT_WRISTER_LOOKAHEAD_S his release projects ~2 m nearer.
 	var pos := Vector3(0.0, 0.0, -18.0)
 	var stationary_ctx: RoleContext = _make_ctx(pos)
 	stationary_ctx.self_velocity = Vector3.ZERO
