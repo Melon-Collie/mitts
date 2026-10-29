@@ -181,13 +181,22 @@ term is the shot field's (the Hard goalie), as today.
 
 ### 8. How the bots read it
 
+**Agreed.**
+
 - **The carrier**: every option ends somewhere; its worth is the sum in "Why".
-  A pass ends where the receiver catches it (completion × his V there); a carry
-  ends at its rolled move's end; a shot is the shot field.
+  A carry is its keep × V at the rolled move's end, less its strip odds ×
+  V_them at the strip point. A pass is the completion × V where the receiver
+  catches it, less the interception odds × V_them where it is picked off. A shot
+  is the shot field's odds, and ends the possession either way (rebounds are not
+  modelled). The carrier takes the best of them.
 - **The defence**: the threat of their carrier is V at his spot; of a receiver,
   the lane × his V. The same table read from the attacking side, so offence and
   defence price a spot alike, as they price a shot alike today.
 - **Stations**: where the lane to them × V is best.
+
+The carry search reads two moves deep today partly to reach a spot the zone
+currencies can value. With a value everywhere, the second step may not earn its
+cost; the one-move against two-move comparison (2a) answers that too.
 
 ### 9. Generation and checks
 
