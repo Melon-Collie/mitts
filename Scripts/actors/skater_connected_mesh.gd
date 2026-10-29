@@ -99,7 +99,7 @@ const LIMB_SIDES: int = 12
 # 1–3 are the armhole's top, middle and bottom.
 const _CHEST: Array[Vector3] = [
 	Vector3(0.275, 0.125, 0.0),   # collar
-	Vector3(0.258, 0.190, 0.0),   # trapezius: the armhole's top row
+	Vector3(0.262, 0.200, 0.0),   # the shoulders' flat top: the armhole's top row
 	Vector3(0.165, 0.228, 0.0),
 	Vector3(0.075, 0.222, 0.002), # under the arm: its bottom row
 	Vector3(0.025, 0.216, 0.004),
@@ -116,13 +116,13 @@ const _ARMHOLE_TOP: int = 1
 const _ARMHOLE_COLUMN: Array[int] = [14, 4]
 const _ARMHOLE_HALF_WIDTH: int = 2
 # The armhole, bind space (right side): a hockey jersey's, its seam running
-# from beside the collar down to under the arm, so the sleeve's cap is the top
-# of the shoulder and the line from the neck over the pad and down the arm is
-# one round. A loop (centre, half sizes across and along the seam) tipped
-# `_ARMHOLE_TILT` from facing straight out toward facing up.
-const _ARMHOLE_CENTRE := Vector3(0.19, 0.355, 0.0)
+# from the shoulders' flat top down to under the arm, near upright, so the
+# torso carries the shoulder's top out level from the neck and the sleeve
+# leaves it at the side. A loop (centre, half sizes across and along the seam)
+# tipped `_ARMHOLE_TILT` from facing straight out toward facing up.
+const _ARMHOLE_CENTRE := Vector3(0.215, 0.365, 0.0)
 const _ARMHOLE_RADII := Vector2(0.125, 0.100)   # across (z), along the seam
-const _ARMHOLE_TILT: float = 0.4
+const _ARMHOLE_TILT: float = 0.15
 # How far each armhole vertex rides the shoulder girdle, round the loop from the
 # top's back corner (_cut_armhole's order) — all of it, so the loop turns as
 # one ring and the sleeve leaving it cannot fold back over itself — and the
@@ -140,7 +140,7 @@ const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 # arm rather than the shoulder's middle.
 const _FIRST_RING_ARM_SHARE: float = 0.5
 const _UPPER_RINGS: Array[Vector3] = [
-	Vector3(0.12, 0.088, 0.0), Vector3(0.17, 0.084, 0.0), Vector3(0.22, 0.081, 0.0),
+	Vector3(0.12, 0.100, 0.0), Vector3(0.17, 0.091, 0.0), Vector3(0.22, 0.084, 0.0),
 	Vector3(0.27, 0.079, 0.25), Vector3(0.305, 0.080, 0.6),
 ]
 const _ELBOW_RADIUS_M: float = 0.081

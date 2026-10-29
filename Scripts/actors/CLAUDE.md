@@ -55,8 +55,9 @@ draws it beside the current body.
   tail columns on the skeleton): the arm bones roll from world up, and a blended
   elbow needs both halves turning about one hinge. Per side the upper arm, the
   elbow's middle and the forearm share the ELBOW bone's hinge.
-- **The armhole is a jersey's seam**, from beside the collar down to under the
-  arm, so the sleeve's cap is the top of the shoulder, and the seam joins the
+- **The armhole is a jersey's seam**, near upright from the shoulders' flat
+  top down to under the arm, so the torso carries the shoulder's top out level
+  from the neck and the sleeve leaves it at the side; the seam joins the
   upper arm's first ring directly: one tube narrowing from the seam down the
   arm. Any ring between them reads as a separate shoulder part, a kink where
   the sleeve meets it.
