@@ -58,6 +58,9 @@ const COVER_LEAN_M: float = 0.8
 # A hand aims inside this share of the arm's full length, so the arm still
 # bends a little at the save.
 const REACH_SHARE: float = 0.97
+# A flight passing him within this of his middle meets his body where he
+# stands: half his chest's width.
+const SQUARE_M: float = KeeperAnatomy.CHEST_WIDTH_M * 0.5
 # Points a hand's reach is tried at along each piece of the flight.
 const REACH_SAMPLES: int = 6
 
@@ -140,6 +143,25 @@ func active() -> bool:
 # where the motor can cut one in (KeeperMotor.can_save): on his feet or on the
 # way between them and the ice any, down the extension, on a post or mid-slide
 # none (a shot from the seal is held in it).
+# Where a shot he has read leaves him time to get his body onto its line
+# before he sets for the save: the spot at his depth, in the net's frame, that
+# its flight crosses, pushed to across with his drop (`fall_s`) still to come
+# before it gets there. INF when the flight passes him within his chest's
+# width, or there is no time for both.
+static func square_up_spot(read: KeeperShotRead, motor: KeeperMotor, fall_s: float) -> Vector2:
+	if read.velocity.z <= 1e-3 or read.at.z >= motor.z:
+		return Vector2.INF
+	var to_him: float = (motor.z - read.at.z) / read.velocity.z
+	var crosses: Vector3 = read.position_in(to_him)
+	var gap: float = absf(crosses.x - motor.x)
+	if gap <= SQUARE_M:
+		return Vector2.INF
+	var push: float = KeeperFootwork.push_time(gap, motor.footwork.t_push_speed, motor.footwork.accel)
+	if push + fall_s >= to_him:
+		return Vector2.INF
+	return Vector2(crosses.x, motor.z)
+
+
 func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 	# A hand already out on this shot (chosen again once he can go down) stays
 	# the one he saves with.

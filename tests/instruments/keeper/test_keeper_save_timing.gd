@@ -15,6 +15,9 @@ extends GutTest
 #   rebound  a five-hole shot he saves, then a low shot to the far corner
 #            fired at gaps after it, and what he was doing (his mover) as it
 #            left the stick
+#   long     Hard, from the far end, at three speeds, to the low corners and
+#            the five-hole and lobbed in at the pads' height
+#            (test_report_long_range)
 #
 # Run: bash .claude/hooks/run-gut.sh -gdir=res://tests/instruments/keeper
 #      -gselect=test_keeper_save_timing. Asserts nothing.
@@ -86,6 +89,21 @@ func test_report_save_timing() -> void:
 	assert_true(true)
 
 
+# From the far end of the rink: Hard, a carrier set 50 m out (165 ft),
+# straight on and at the far faceoff dot, along the ice and at the pads' height
+# to each corner and the five-hole.
+func test_report_long_range() -> void:
+	_build()
+	var targets: Dictionary = _targets()
+	for spot: Vector3 in [Vector3(0.0, 0.0, GOAL_Z + 50.0), Vector3(-6.7, 0.0, GOAL_Z + 47.0)]:
+		for speed: float in [20.0, 28.0, 36.0]:
+			gut.p("── HARD from (%.1f, %.1f) m off the goal line's centre, %.0f m/s" % [spot.x, spot.z - GOAL_Z, speed])
+			for k: String in ["low glove", "low blocker", "five-hole", "pad glove", "pad blocker"]:
+				_settle(GoalieSkillProfile.Difficulty.HARD, spot)
+				gut.p("  %-12s %s" % [k, _fire(spot, targets[k], speed, 900)])
+	assert_true(true)
+
+
 # Set on a carrier standing at `spot`, on the tier's profile, from a full reset.
 func _settle(tier: int, spot: Vector3) -> void:
 	_ctrl.apply_skill_profile(GoalieSkillProfile.for_difficulty(tier))
@@ -117,7 +135,7 @@ func _rebound(tier: int, gap_s: float) -> String:
 
 # Fires from `spot` on the flight that crosses the goal line at `target` (along
 # the ice for a target on it) and marches it until it is decided.
-func _fire(spot: Vector3, target: Vector3, speed: float) -> String:
+func _fire(spot: Vector3, target: Vector3, speed: float, max_ticks: int = MAX_TICKS) -> String:
 	var flat := Vector2(target.x - spot.x, target.z - spot.z)
 	var flight_s: float = flat.length() / speed
 	var vy: float = 0.0
@@ -132,7 +150,7 @@ func _fire(spot: Vector3, target: Vector3, speed: float) -> String:
 	_puck.puck_released.emit()
 	var chosen: String = "nothing chosen"
 	var hand_from := Vector3.INF
-	for step: int in MAX_TICKS:
+	for step: int in max_ticks:
 		var prev: Vector3 = pos
 		_puck.global_position = pos
 		_puck.linear_velocity = vel
@@ -154,8 +172,9 @@ func _fire(spot: Vector3, target: Vector3, speed: float) -> String:
 		var crossed: bool = pos.z <= GOAL_Z
 		if met or crossed:
 			var verdict: String = "saved, %s" % (_contact.part as Node3D).name if met else _crossing(pos)
-			return "%-46s | hand %s, drop %s | %.3f s | %s" % [chosen, _hand_share(s, hand_from), _drop_share(),
-					step * DT, verdict]
+			return "%-46s | hand %s, drop %s | %.3f s | %s | reading %s, rest %d, x %+.2f" % [chosen,
+					_hand_share(s, hand_from), _drop_share(), step * DT, verdict, _ctrl.read.reading(),
+					_ctrl.motor.rest, _ctrl.motor.x]
 	return "%s | undecided" % chosen
 
 
@@ -182,3 +201,4 @@ func _drop_share() -> String:
 		KeeperSaveMove.State.HELD:
 			return "100%"
 	return "  -"
+

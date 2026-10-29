@@ -223,7 +223,7 @@ func _shot(from: Vector3, to: Vector2, speed: float) -> int:
 	_puck.set_puck_velocity(v)
 	_puck.puck_released.emit()
 	var contact := GoalieContactDetector.Contact.new()
-	for i: int in int(1.5 / DT):
+	for i: int in int(3.0 / DT):
 		var was: Vector3 = _puck.global_position
 		var next: Vector3 = was + v * DT
 		if lifted:
@@ -256,6 +256,19 @@ func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 		var met: int = _shot(from, to, 22.0)
 		assert_eq(_keeper.save.hand, case[1], "%s: the hand he puts there" % case[3])
 		assert_has(case[2], met, "%s: met by it" % case[3])
+
+
+# A shot lobbed from the far end to drop into his low corner, over the half
+# butterfly and under the glove where he stands: he skates onto its line
+# first, and his gear meets it.
+func test_a_long_shot_to_a_corner_is_met_on_its_line() -> void:
+	for side: float in [1.0, -1.0]:
+		_spawn(GameRules.GOAL_LINE_Z)
+		_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 48.0)
+		_run(1.5)
+		var to := Vector2(side * (GameRules.NET_HALF_WIDTH - 0.12), 0.2)
+		var met: int = _shot(Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 48.0), to, 36.0)
+		assert_gte(met, 0, "%+.0f: met by his gear" % side)
 
 
 # A shot in on him before his legs have read it (set for a puck wide of him,

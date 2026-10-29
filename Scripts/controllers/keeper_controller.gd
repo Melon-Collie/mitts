@@ -64,6 +64,8 @@ var _chosen: bool = false
 var _covering: bool = false
 # Whether he is skating to a loose puck to cover it (KeeperFetch).
 var _fetching: bool = false
+# Skating onto the line of a shot he has read before he sets for its save.
+var _squaring: bool = false
 # Seconds into the read the save was chosen, and the shot over; below zero, not
 # yet.
 var _chosen_at: float = -1.0
@@ -129,6 +131,7 @@ func _place_in_crease() -> void:
 	_chosen = false
 	_covering = false
 	_fetching = false
+	_squaring = false
 	_chosen_at = -1.0
 	_over_at = -1.0
 	_felt = false
@@ -171,7 +174,7 @@ func _play(delta: float) -> void:
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
 	_save_the_shot()
 	_cover_the_puck(in_net)
-	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering:
+	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
 		_read_receivers()
 		_fetch_the_puck(in_net)
 		if not _fetching:
@@ -241,9 +244,11 @@ func _read_receivers() -> void:
 # stopped), which he has to see. So one made too late is still seen made. A shot over before he has
 # read it at all he answers once he has: the save for the flight he saw leave
 # the stick, however late. One chosen where he could not go down (mid-slide)
-# is chosen again once he can, while the puck is still coming.
+# is chosen again once he can, while the puck is still coming. One with time to
+# spare he first skates onto the line of (`KeeperSave.square_up_spot`).
 func _save_the_shot() -> void:
 	if not read.reading():
+		_squaring = false
 		return
 	if puck.get_carrier() != null:
 		_end_save()
@@ -266,8 +271,25 @@ func _save_the_shot() -> void:
 	if not read.on_net():
 		read.stop()
 		return
+	if _square_up():
+		return
 	_chosen = true
 	_choose()
+
+
+# Onto the line of a shot with time to spare, on his feet, square to it; false
+# once there, or once there is no time left to move before he sets.
+func _square_up() -> bool:
+	_squaring = false
+	if motor.rest != KeeperRoute.Rest.FEET:
+		return false
+	var spot: Vector2 = KeeperSave.square_up_spot(read, motor, save.drop_s * motor.fall)
+	if spot == Vector2.INF:
+		return false
+	_squaring = true
+	motor.go_to(spot, KeeperPositioning.facing(spot, Vector2(read.at.x, read.at.z)), KeeperRoute.Rest.FEET,
+			Vector2.ZERO, true)
+	return true
 
 
 func _choose() -> void:
@@ -282,6 +304,7 @@ func _choose() -> void:
 
 func _end_save() -> void:
 	read.stop()
+	_squaring = false
 	_chosen = false
 	_chosen_at = -1.0
 	_over_at = -1.0
