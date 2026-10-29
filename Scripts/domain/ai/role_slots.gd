@@ -4,7 +4,7 @@ class_name AIRoleSlots
 # to the peer that would ARRIVE at its reference point soonest
 # (momentum-aware time_to_arrive at its real Speed cap, matching
 # AILoosePuckChase and the threat partition), with arrival-time hysteresis.
-# Never rank by raw DISTANCE — that hands PRESSURE/RUSH_D1 to a nearer bot
+# Never rank by raw DISTANCE — that hands PRESSURE/BACK_STRONG to a nearer bot
 # coasting away over a teammate already skating at the carrier.
 #
 # This file assigns slots and nothing else: every role owns its positional
@@ -30,10 +30,10 @@ enum Slot {
 	# carrier breaking the puck out:
 	BREAKOUT_STRONG,  # strong-side-wall outlet, free to advance up-ice.
 	BREAKOUT_WEAK,    # weak-side reverse valve, stays goal-side of carrier.
-	# FORECHECK (opp possesses in THEIR DZ). Conservative 1-1-1 press:
+	# FORECHECK (their puck in THEIR DZ, and we can get on it): 3v3's 1-1-1.
 	F1_PRESSURE,  # deep puck-pressurer (runs PRESSURE's behavior).
-	F2_MID,       # mid-lane breakout-pass read, high in the zone.
-	F3_HIGH,      # high safety at the opp blue line; first man back.
+	F2_NET,       # reads in front of their net: the reverse, the net-front outlet.
+	F3_HIGH,      # 3v3: high on the near wall at their line; first man back.
 	# NEUTRAL — loose puck, no clear possession. Race + hold shape.
 	CHASE,      # soonest peer races to the puck for retrieval.
 	FLANK_L,    # left flank, defensive support behind puck.
@@ -44,9 +44,8 @@ enum Slot {
 	HIGH_SLOT,      # F: F3 — the soft ice between the dots, above the puck.
 	POINT_STRONG,   # D: strong-side point, sinks down his wall with the cycle.
 	POINT_WEAK,     # D: weak-side point, holds the line shaded central.
-	# FORECHECK: the 1-2-2 (F1 reuses F1_PRESSURE).
-	F2_STRONG,      # F: strong-side wall lane — kills the half-wall outlet.
-	F2_WEAK,        # F: middle lane, circle-tops-to-blue-line height.
+	# FORECHECK: the 1-2-2 (F1_PRESSURE and F2_NET shared with 3v3).
+	F3_WALL,        # F: support on the near wall — kills the half-wall outlet.
 	DP_STRONG,      # D: offensive blue line, strong side, inside the dots.
 	DP_WEAK,        # D: offensive blue line, weak side.
 	# DZONE: hybrid zone with soft-lock (see zone_coverage.gd).
@@ -60,22 +59,20 @@ enum Slot {
 	BREAKOUT_C,       # F: center's low swing — the second outlet.
 	BREAKOUT_STRETCH, # F: weak-side winger — mid-ice cross / stretch option.
 	# TRANS_OFFENSE rush shape (CARRIER fixed).
-	WIDE_L,         # F: left wide lane, paced to the carrier.
-	WIDE_R,         # F: right wide lane.
+	LANE_L,         # F: the left of the two rush lanes the carrier leaves free.
+	LANE_R,         # F: the right of them.
 	TRAILER,        # ANY: high-slot trailer (the activating fourth man).
 	DVALVE,         # D: safety valve trailing the rush.
 	# NEUTRAL back shape (CHASE/FLANK reused).
 	DBACK_L,        # D: left goal-side hold inside the dots.
 	DBACK_R,        # D: right goal-side hold.
-	# TRANS_DEFENSE layered rush defense (docs/transition-defense-plan.md §5).
-	# 3v3 uses RUSH_D1 / TRACK_PUCK / TRACK_MID; 5v5 adds RUSH_D2 and splits the
-	# mid trackers strong/weak.
-	RUSH_D1,          # D: strong-side D. Owns the carrier — gap ladder + angling.
-	RUSH_D2,          # D: weak-side D. Holds mid-ice, takes the mid-lane drive.
-	TRACK_PUCK,       # F: F1 back. Runs the carrier down through mid-ice.
-	TRACK_MID_STRONG, # F: F2. Back through mid-ice, stops at the circle tops.
-	TRACK_MID_WEAK,   # F: F3. Same, weak side.
-	TRACK_MID,        # The single mid tracker (3v3) — centre lane, no side split.
+	# TRANS_DEFENSE: the set neutral-zone shape, filled from the back — 5v5's
+	# 1-1-3, 3v3's 1-2 (NZ_F1 + BACK_STRONG + BACK_MID).
+	NZ_F1,        # the high "1": steers the carrier wide, then backchecks his hip.
+	NZ_MID,       # F (5v5): the middle "1" — mid-ice up the neutral zone, then back.
+	BACK_STRONG,  # our line's strong side: stands the carrier up at it.
+	BACK_MID,     # our line's middle: the mid-lane drive and the pass across.
+	BACK_WEAK,    # F (5v5): our line's weak lane.
 }
 
 # The fixed facts the agent reads per slot, as [debug label, REACTIVE, PRESSURER]:
@@ -94,7 +91,7 @@ const _SLOT_INFO: Dictionary = {
 	Slot.BREAKOUT_STRONG: ["BreakStrong", false, false],
 	Slot.BREAKOUT_WEAK: ["BreakWeak", false, false],
 	Slot.F1_PRESSURE: ["F1", true, true],
-	Slot.F2_MID: ["F2", false, false],
+	Slot.F2_NET: ["F2Net", false, false],
 	Slot.F3_HIGH: ["F3", false, false],
 	Slot.CHASE: ["Chase", true, false],
 	Slot.FLANK_L: ["FlankL", false, false],
@@ -103,8 +100,7 @@ const _SLOT_INFO: Dictionary = {
 	Slot.HIGH_SLOT: ["HighSlot", false, false],
 	Slot.POINT_STRONG: ["PointS", false, false],
 	Slot.POINT_WEAK: ["PointW", false, false],
-	Slot.F2_STRONG: ["F2S", false, false],
-	Slot.F2_WEAK: ["F2W", false, false],
+	Slot.F3_WALL: ["F3Wall", false, false],
 	Slot.DP_STRONG: ["DPointS", false, false],
 	Slot.DP_WEAK: ["DPointW", false, false],
 	Slot.ZONE_D_STRONG: ["ZDS", false, false],
@@ -115,18 +111,17 @@ const _SLOT_INFO: Dictionary = {
 	Slot.BREAKOUT_D2: ["BreakD2", false, false],
 	Slot.BREAKOUT_C: ["BreakC", false, false],
 	Slot.BREAKOUT_STRETCH: ["Stretch", false, false],
-	Slot.WIDE_L: ["WideL", false, false],
-	Slot.WIDE_R: ["WideR", false, false],
+	Slot.LANE_L: ["LaneL", false, false],
+	Slot.LANE_R: ["LaneR", false, false],
 	Slot.TRAILER: ["Trailer", false, false],
 	Slot.DVALVE: ["DValve", false, false],
 	Slot.DBACK_L: ["DBackL", false, false],
 	Slot.DBACK_R: ["DBackR", false, false],
-	Slot.RUSH_D1: ["RushD1", true, true],
-	Slot.RUSH_D2: ["RushD2", true, false],
-	Slot.TRACK_PUCK: ["TrackPuck", true, true],
-	Slot.TRACK_MID_STRONG: ["TrackMid", true, false],
-	Slot.TRACK_MID_WEAK: ["TrackMid", true, false],
-	Slot.TRACK_MID: ["TrackMid", true, false],
+	Slot.NZ_F1: ["NzF1", true, true],
+	Slot.NZ_MID: ["NzMid", true, false],
+	Slot.BACK_STRONG: ["BackS", true, true],
+	Slot.BACK_MID: ["BackM", true, false],
+	Slot.BACK_WEAK: ["BackW", true, false],
 }
 
 
@@ -164,6 +159,20 @@ const HYSTERESIS_PENALTY_S: float = 0.2
 # it drifts this far past it.
 const HYSTERESIS_PENALTY_M: float = 1.0
 
+# Where our line's posts are raced to: the strong and weak lanes, inside the
+# dots (a D's home lane, AIZoneCoverage.D_HOME_U_M).
+const BACK_LANE_X_M: float = AIZoneCoverage.D_HOME_U_M
+
+
+# The back line's post at world-x `x`, as an election target: on our blue line
+# while the puck is outside it, at the puck's depth once it is in, but never
+# deeper than the house gate (the roles own where each really stands).
+static func back_post(own_goal_z: float, puck_pos: Vector3, x: float) -> Vector3:
+	var own_dir: float = signf(own_goal_z)
+	var depth: float = clampf(GameRules.GOAL_LINE_Z - own_dir * puck_pos.z,
+			AIZoneCoverage.HOUSE_TOP_DEPTH_M, GameRules.GOAL_LINE_Z - GameRules.BLUE_LINE_Z)
+	return Vector3(x, 0.0, own_dir * (GameRules.GOAL_LINE_Z - depth))
+
 
 # Assigns each teammate to a slot. Returns Dictionary[peer_id, Slot].
 #
@@ -173,10 +182,10 @@ const HYSTERESIS_PENALTY_M: float = 1.0
 #   TRANS_OFFENSE  CARRIER fixed;  OUTLET = soonest to opp net;  SUPPORT = the rest
 #   BREAKOUT       CARRIER fixed;  BREAKOUT_STRONG = soonest to the strong-side
 #                  wall at our blue line;  BREAKOUT_WEAK = the rest
-#   TRANS_DEFENSE  RUSH_D1 = soonest to OUR net;  TRACK_PUCK = soonest to the
-#                  puck of the rest;  TRACK_MID = the rest
+#   TRANS_DEFENSE  BACK_STRONG = soonest to the strong post of our line;
+#                  BACK_MID = soonest to its middle of the rest;  NZ_F1 = the rest
 #   FORECHECK      F3_HIGH = soonest to their blue line;  F1_PRESSURE = soonest
-#                  to the puck of the rest;  F2_MID = the rest
+#                  to the puck of the rest;  F2_NET = the rest
 #   NEUTRAL        CHASE = soonest to puck;  FLANK_L / FLANK_R = X-axis split
 #
 # `prev_assignments` is last tick's Dictionary[peer_id, Slot]; pass {} on the
@@ -214,7 +223,6 @@ static func assign(
 			fixed_peers[carrier_pid] = true
 
 	var puck_pos: Vector3 = snapshot.puck_state.position if snapshot.puck_state else Vector3.ZERO
-	var our_net := Vector3(0.0, 0.0, own_goal_z)
 	var opp_net := Vector3(0.0, 0.0, -own_goal_z)
 
 	match state:
@@ -228,19 +236,14 @@ static func assign(
 					Slot.MARK, caps_by_peer)
 
 		AIPossessionState.State.TRANS_DEFENSE:
-			# The layered rush defense compressed to three bodies
-			# (docs/transition-defense-plan.md §5.2): with no D pair, RUSH_D2's
-			# mid-ice layer folds into the single mid tracker. RUSH_D1 elects
-			# first — the last man back, in FRONT of the carrier holding a gap —
-			# and TRACK_PUCK runs him down from BEHIND, so exactly one peer stands
-			# in front of him. Two bodies on the puck is affordable because
-			# transition is bounded: a settled three-man threat is in our zone,
-			# where DZONE's coverage takes over.
+			# The 1-2, filled from the back: the two posts of our line first, so
+			# whoever can get there holds it, and the last body is the high one.
 			_assign_pair_then_remainder(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
-					Slot.RUSH_D1, our_net,
-					Slot.TRACK_PUCK, puck_pos,
-					Slot.TRACK_MID, caps_by_peer)
+					Slot.BACK_STRONG, back_post(own_goal_z, puck_pos,
+							_strong_x * BACK_LANE_X_M),
+					Slot.BACK_MID, back_post(own_goal_z, puck_pos, 0.0),
+					Slot.NZ_F1, caps_by_peer)
 
 		AIPossessionState.State.OZONE:
 			_assign_one_then_remainder(
@@ -275,7 +278,7 @@ static func assign(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
 					Slot.F3_HIGH, opp_blue,
 					Slot.F1_PRESSURE, puck_pos,
-					Slot.F2_MID, caps_by_peer)
+					Slot.F2_NET, caps_by_peer)
 
 		AIPossessionState.State.NEUTRAL:
 			_assign_chase_and_flanks(
@@ -318,7 +321,7 @@ static func _pick_soonest_with_hysteresis(
 
 
 # Cross-state hysteresis continuity. A possession-state flip renames the slots
-# (BREAKOUT_STRONG → OUTLET, RUSH_D1 → PRESSURE, ...), and an exact-enum match
+# (BREAKOUT_STRONG → OUTLET, BACK_STRONG → PRESSURE, ...), and an exact-enum match
 # would see no continuity across it, so near-tied peers would swap jobs at the
 # handoff and cross paths. Each slot maps to its continuity CLASS; every slot
 # not listed maps to itself.
@@ -328,10 +331,12 @@ static func _hysteresis_class(slot: int) -> int:
 			return Slot.OUTLET       # up-ice attacking option
 		Slot.BREAKOUT_WEAK, Slot.SUPPORT:
 			return Slot.SUPPORT      # trailing support / reverse valve
-		Slot.RUSH_D1, Slot.PRESSURE:
+		Slot.BACK_STRONG, Slot.PRESSURE:
 			return Slot.PRESSURE     # the body that owns the carrier
-		Slot.TRACK_MID, Slot.MARK:
+		Slot.BACK_MID, Slot.MARK:
 			return Slot.MARK         # off-puck coverage
+		Slot.NZ_F1, Slot.F1_PRESSURE:
+			return Slot.F1_PRESSURE  # the first forechecker, deep or high
 		_:
 			return slot
 

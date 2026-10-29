@@ -177,7 +177,7 @@ static func fill_approach(ctx: RoleContext, subject_pos: Vector3,
 #
 # FALSE: an opponent has already won it, and `d` gets the PRE-CONTAIN stand — the
 # closing verb applied to the puck (ladder gap, ramp cushion at the puck's pace,
-# angled off the middle), so it is exactly the stand RUSH_D1 wants when
+# angled off the middle), so it is exactly the stand BACK_STRONG wants when
 # possession flips.
 static func chase_puck(ctx: RoleContext, d: RoleDecision) -> bool:
 	if ctx.snapshot == null or ctx.snapshot.puck_state == null:
@@ -255,7 +255,7 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 
 # Whether to commit to a body check on the live OPPONENT carrier this tick
 # (AIBodyCheck). No-commit when the puck is loose, ours, or absent. Called by
-# PRESSURE (and F1) and by TRACK_PUCK once goal-side; RUSH_D1 never calls it.
+# PRESSURE (and F1) and by NZ_F1 once goal-side; BACK_STRONG never calls it.
 static func evaluate_body_check(ctx: RoleContext) -> AIBodyCheck.Result:
 	if ctx.snapshot == null or ctx.snapshot.puck_state == null:
 		return AIBodyCheck.Result.new()

@@ -445,6 +445,13 @@ func horizon_value(pos: Vector3, arrive_s: float = 0.0,
 	return _ours.at(pos, arrive_s, arrive_vel) / AIActionScoring.delay_discount(arrive_s)
 
 
+# Our possession of `pos` for a man who reaches it `arrive_s` from now moving at
+# `arrive_vel` (AIPossessionValue.at), discounted for the wait — the worth of a
+# loose puck we win there.
+func possession_at(pos: Vector3, arrive_s: float, arrive_vel: Vector3) -> float:
+	return _ours.at(pos, arrive_s, arrive_vel)
+
+
 # The best zone entry for our man at `pos` `start_s` from now, moving at `vel`
 # (AIPossessionValue.entry_at), or `known` when none beats it.
 func entry_value(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float:

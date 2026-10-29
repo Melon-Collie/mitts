@@ -430,3 +430,48 @@ func test_pressure_calibration_snapshot() -> void:
 			lightest = 0.05 * k
 	snap.record("lightest transfer that commits a head-on check from 2 m", lightest)
 	snap.verify(self)
+
+
+# ── The angle's finish: a lone pressurer the carrier has drawn level with ────
+# The last man (no support behind) at (0, 12) in our zone, the carrier driving
+# our net at `speed` from `carrier`.
+
+func _level_ctx(carrier: Vector3, speed: float, aggression: float = 0.0) -> RoleContext:
+	var ctx: RoleContext = _rush_ctx_at(carrier, speed, false)["ctx"]
+	ctx.check_aggression = aggression
+	return ctx
+
+
+func test_level_with_a_carrier_driving_the_net_he_steps_into_his_path() -> void:
+	var carrier := Vector3(1.5, 0.0, 11.5)
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(carrier, 8.0))
+	assert_true(d.pressures_puck, "the angle's finish plays the man")
+	assert_false(d.face_travel, "still in front of him, he faces him")
+	assert_lt(d.target_position.distance_to(carrier), 1.0,
+			"at contact, in his path; got %s" % d.target_position)
+
+
+func test_beaten_by_a_carrier_driving_the_net_he_skates_onto_his_hip() -> void:
+	var carrier := Vector3(1.5, 0.0, 13.0)
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(carrier, 8.0))
+	assert_true(d.face_travel, "behind him, he turns and skates")
+	assert_lt(d.target_position.distance_to(carrier), 1.0,
+			"onto his hip; got %s" % d.target_position)
+
+
+func test_a_carrier_still_a_gap_away_is_not_finished() -> void:
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.5, 0.0, 8.5), 8.0))
+	assert_false(d.pressures_puck, "with ice to hold, the ladder holds it")
+
+
+func test_a_carrier_standing_level_is_not_finished() -> void:
+	# Not coming at our net: there is time to get goal-side of him instead.
+	var d: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.5, 0.0, 11.5), 0.0))
+	assert_false(d.pressures_puck)
+
+
+func test_the_last_man_checks_a_carrier_drawn_level_but_not_one_a_gap_away() -> void:
+	var level: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 11.0), 8.0, 1.0))
+	assert_true(level.commit_check, "level, the inside is lost: the check is his play")
+	var away: RoleDecision = AIRolePressure.decide(_level_ctx(Vector3(1.0, 0.0, 8.5), 8.0, 1.0))
+	assert_false(away.commit_check, "a gap away, the last man never throws one")

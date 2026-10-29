@@ -173,71 +173,57 @@ func test_assign_forecheck_f1_pressures_puck_f3_is_high() -> void:
 			_resolver(skaters), {})
 	assert_eq(assignments[100], AIRoleSlots.Slot.F3_HIGH, "highest bot is the safety")
 	assert_eq(assignments[110], AIRoleSlots.Slot.F1_PRESSURE, "bot nearest the puck pressures")
-	assert_eq(assignments[120], AIRoleSlots.Slot.F2_MID, "leftover bot reads the mid lane")
+	assert_eq(assignments[120], AIRoleSlots.Slot.F2_NET, "leftover bot reads in front of the net")
 
 
-func test_assign_trans_od_contain_is_last_man_back() -> void:
-	# TRANS_DEFENSE: CONTAIN goes to the LAST MAN BACK — the peer soonest to our
-	# OWN +Z net (momentum-aware), i.e. the deepest line of defense that's
-	# genuinely in front of the rush. Carrier at z=0; peer 120 (z=20) is deepest
-	# and nearest our net, so it contains, while the up-ice peers (100, 110) mark
-	# a man each. This is the fix for the "last man leaves to mark a receiver,
-	# nobody picks up the carrier" failure: the man in front of the rush stays on
-	# the rush, and the peers further up the ice pick up the receivers.
+func test_assign_trans_def_fills_our_line_first() -> void:
+	# TRANS_DEFENSE is the 1-2, filled from the back: the two bodies soonest to
+	# our line's posts hold it, and the one left up the ice is the high "1".
+	# Carrier at centre; 110 and 120 are back, 100 is caught up the ice.
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -8.0)],  # up-ice → MARK
-			[110, 0, Vector3(0.0, 0.0, 5.0)],   # mid, closest to carrier → MARK
-			[120, 0, Vector3(0.0, 0.0, 20.0)],  # deepest / last man back → CONTAIN
+			[100, 0, Vector3(0.0, 0.0, -8.0)],  # up-ice → NZ_F1
+			[110, 0, Vector3(0.0, 0.0, 5.0)],   # at our line
+			[120, 0, Vector3(0.0, 0.0, 20.0)],  # deep in our zone
 			[200, 1, Vector3(0.0, 0.0, 0.0)],   # opp carrier
 	]
 	var snap := _make_snapshot(skaters, 200)
 	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
 			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
 			_resolver(skaters), {})
-	assert_eq(assignments[120], AIRoleSlots.Slot.RUSH_D1,
-			"the last man back (soonest to our net) owns the carrier")
-	# The other two take the recovery jobs — whichever reaches the puck soonest
-	# runs it down, the leftover takes the middle.
-	for pid: int in [100, 110]:
+	assert_eq(assignments[100], AIRoleSlots.Slot.NZ_F1,
+			"the body caught up the ice is the high one")
+	for pid: int in [110, 120]:
 		assert_true(assignments[pid] in [
-				AIRoleSlots.Slot.TRACK_PUCK, AIRoleSlots.Slot.TRACK_MID],
-				"peer %d recovers, it is not the last man back" % pid)
-	# Exactly one body in FRONT of the carrier — the gap is never double-manned.
-	var front_count: int = 0
-	for pid: int in [100, 110, 120]:
-		if assignments[pid] == AIRoleSlots.Slot.RUSH_D1:
-			front_count += 1
-	assert_eq(front_count, 1, "exactly one RUSH_D1")
+				AIRoleSlots.Slot.BACK_STRONG, AIRoleSlots.Slot.BACK_MID],
+				"peer %d is back, so he holds our line" % pid)
+	assert_ne(assignments[110], assignments[120], "one carrier owner, one middle")
 
 
-func test_assign_trans_od_contain_is_momentum_aware() -> void:
-	# "Soonest to our net" folds in momentum, not just raw depth: a peer a touch
-	# further from the net but already skating hard toward it beats a marginally
-	# deeper peer drifting up-ice. Peer 110 is 2 m further from our net than 120
-	# but barrelling home; 120 is nearer but coasting the wrong way.
+func test_assign_trans_def_back_line_is_momentum_aware() -> void:
+	# "Soonest to the post" folds in momentum, not just raw distance: a peer
+	# further from the strong post but skating at it beats a nearer one skating
+	# away from it.
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -6.0)],                       # up-ice → MARK
-			[110, 0, Vector3(0.0, 0.0, 16.0), Vector3(0.0, 0.0, 12.0)], # closing home fast → CONTAIN
-			[120, 0, Vector3(0.0, 0.0, 18.0), Vector3(0.0, 0.0, -12.0)],# nearer but fleeing up-ice
-			[200, 1, Vector3(0.0, 0.0, 0.0)],                        # opp carrier
+			[100, 0, Vector3(0.0, 0.0, -6.0)],
+			[110, 0, Vector3(5.0, 0.0, 0.0), Vector3(0.0, 0.0, 12.0)],   # coming to it
+			[120, 0, Vector3(5.0, 0.0, 11.0), Vector3(0.0, 0.0, 12.0)],  # nearer, leaving it
+			[200, 1, Vector3(0.0, 0.0, -10.0)],
 	]
 	var snap := _make_snapshot(skaters, 200)
 	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
 			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
 			_resolver(skaters), {})
-	assert_eq(assignments[110], AIRoleSlots.Slot.RUSH_D1,
-			"the peer genuinely arriving home soonest (momentum) contains, not the nearer coaster")
+	assert_eq(assignments[110], AIRoleSlots.Slot.BACK_STRONG,
+			"the peer genuinely arriving soonest (momentum) takes the strong post")
 
 
-func test_assign_trans_od_contain_when_whole_team_caught_up_ice() -> void:
-	# The whole team is beaten up the ice on the turnover — every peer is on the
-	# -Z (up-ice) side of the carrier. The race-home election still resolves
-	# cleanly: the peer nearest our +Z net recovers into the gap fastest and
-	# contains, the rest MARK. (No special goal-side fallback needed — "soonest
-	# home" subsumes it.)
+func test_assign_trans_def_when_whole_team_caught_up_ice() -> void:
+	# The whole team is beaten up the ice on the turnover — every peer is
+	# up-ice of the carrier. The line still fills from the back: the two nearest
+	# it race to it, the furthest is the high one.
 	var skaters: Array = [
-			[100, 0, Vector3(0.0, 0.0, -5.0)],  # nearest our net of the caught peers → CONTAIN
-			[110, 0, Vector3(0.0, 0.0, -10.0)],
+			[100, 0, Vector3(0.0, 0.0, -5.0)],
+			[110, 0, Vector3(0.0, 0.0, -10.0)],  # furthest → NZ_F1
 			[120, 0, Vector3(0.0, 0.0, -8.0)],
 			[200, 1, Vector3(0.0, 0.0, 0.0)],   # opp carrier; all peers are up-ice of it
 	]
@@ -245,12 +231,9 @@ func test_assign_trans_od_contain_when_whole_team_caught_up_ice() -> void:
 	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
 			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
 			_resolver(skaters), {})
-	assert_eq(assignments[100], AIRoleSlots.Slot.RUSH_D1,
-			"peer nearest our net recovers as the last man back")
-	for pid: int in [110, 120]:
-		assert_true(assignments[pid] in [
-				AIRoleSlots.Slot.TRACK_PUCK, AIRoleSlots.Slot.TRACK_MID],
-				"peer %d takes a recovery job" % pid)
+	assert_eq(assignments[100], AIRoleSlots.Slot.BACK_STRONG,
+			"peer nearest our line takes the strong post")
+	assert_eq(assignments[110], AIRoleSlots.Slot.NZ_F1, "the furthest is the high one")
 
 
 func test_assign_hysteresis_flips_exactly_past_the_penalty() -> void:

@@ -73,6 +73,9 @@ var _prev_recovery: Dictionary[int, int] = {}
 # Sticky possession for loose-puck handling.
 var _last_carrier_team: int = -1
 var _strong_x: float = 1.0
+# The rush lane our carrier is in (AIRoleRushLane.carrier_lane), held while
+# nobody of ours carries.
+var _carrier_lane: int = 0
 
 var _accumulator: float = 0.0
 
@@ -86,6 +89,21 @@ var _coverage_unready_ticks: int = 0
 # DZONE but the brain held the rush shape because the backcheck wasn't home.
 # Nothing reads it back into a decision.
 var coverage_downgraded: bool = false
+# Their puck in their zone: whether we are forechecking it (AIForecheckRead) —
+# last tick's answer, for the read's hysteresis — and the race margin it read.
+var _forechecking: bool = false
+var forecheck_margin_s: float = -INF
+# Where the puck was last carried, read every batch so a release is placed to
+# within one; INF until it has been.
+var _last_carry_pos: Vector3 = Vector3.INF
+# Who carries the puck (-1 nobody) and how long he has (s), read every batch for
+# the forecheck read's carrier_held_s.
+var _held_by: int = -1
+var _held_s: float = 0.0
+# The release the dump-in read last classified (WorldSnapshot
+# .loose_puck_released_by), and whether it is our dump-in.
+var _seen_release_by: int = -1
+var _dumping_in: bool = false
 # Team 1's natural ticks run half a period out of phase with team 0's (see
 # Scripts/ai/CLAUDE.md → "Two brains, two cadences"). Re-applied at every
 # forced-tick accumulator reset, since both brains are force-reticked together.
@@ -130,6 +148,15 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 	# Ping directives age in real host time, not brain-tick time — advance
 	# before the rate-limit gate so expiry never stretches with the cadence.
 	ping_directives.advance(delta)
+	if snapshot != null and snapshot.puck_state != null:
+		var carrier: int = snapshot.puck_state.carrier_peer_id
+		if carrier != _held_by:
+			_held_by = carrier
+			_held_s = 0.0
+		else:
+			_held_s += delta
+		if carrier != -1:
+			_last_carry_pos = snapshot.puck_state.position
 	_accumulator += delta
 	if _accumulator < TICK_PERIOD and not _force_tick_pending:
 		return
@@ -201,6 +228,28 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		_coverage_unready_ticks = 0
 		coverage_downgraded = false
 
+	# Their puck deep in their zone, carried or loose and slow, or our dump-in on
+	# its way there: forecheck it only while our first forechecker can get on it
+	# before its carrier can move it, else set up in the neutral zone
+	# (Scripts/domain/ai/CLAUDE.md → "Forecheck or set up").
+	_read_dump_in(snapshot)
+	var their_deep_puck: bool = state == AIPossessionState.State.FORECHECK \
+			or (state == AIPossessionState.State.NEUTRAL
+					and AIPossessionState.in_their_zone(snapshot, _own_goal_z))
+	forecheck_margin_s = -INF
+	if their_deep_puck or _dumping_in:
+		forecheck_margin_s = AIForecheckRead.pressure_margin_s(snapshot, team_id,
+				_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
+				team_size >= 5, _held_s)
+	# A dump-in first played outside their zone is no forecheck: the possession
+	# table's shape stands.
+	if not their_deep_puck and forecheck_margin_s == -INF:
+		_forechecking = false
+	else:
+		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking)
+		state = AIPossessionState.State.FORECHECK if _forechecking \
+				else AIPossessionState.State.TRANS_DEFENSE
+
 	# Strong-side X with hysteresis (see STRONG_SIDE_HYSTERESIS_M).
 	if snapshot != null and snapshot.puck_state != null:
 		var puck_x: float = snapshot.puck_state.position.x
@@ -209,11 +258,19 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		elif _strong_x < 0.0 and puck_x > STRONG_SIDE_HYSTERESIS_M:
 			_strong_x = 1.0
 
+	if snapshot != null and snapshot.puck_state != null:
+		var carrier_state: SkaterNetworkState = snapshot.skater_states.get(
+				snapshot.puck_state.carrier_peer_id)
+		if carrier_state != null \
+				and _team_id_by_peer.get(snapshot.puck_state.carrier_peer_id, -1) == team_id:
+			_carrier_lane = AIRoleRushLane.carrier_lane(carrier_state.position.x, _carrier_lane)
+
 	var prev_assignments: Dictionary = slot_assignments
 	if team_size >= 5:
 		slot_assignments = AIRoleSlots5.assign(
 				snapshot, team_id, _own_goal_z, state, _team_id_by_peer,
-				prev_assignments, _strong_x, _caps_by_peer, _position_by_peer)
+				prev_assignments, _strong_x, _caps_by_peer, _position_by_peer,
+				_carrier_lane)
 	else:
 		slot_assignments = AIRoleSlots.assign(
 				snapshot, team_id, _own_goal_z, state, _team_id_by_peer,
@@ -249,6 +306,22 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 # (no defenders in the view). `prev` is last tick's partition, threaded through
 # for switch hysteresis — which is also what carries a marker across a pass
 # without re-shuffling the whole coverage.
+# Whether the loose puck is our dump-in: released by one of ours from a carry
+# outside their zone, and not touched since. Classified once per release. The
+# same release made inside their zone (a pass, a shot gone wide) keeps the
+# offensive shape.
+func _read_dump_in(snapshot: WorldSnapshot) -> void:
+	var released_by: int = snapshot.loose_puck_released_by \
+			if snapshot != null and snapshot.puck_state != null else -1
+	if released_by == _seen_release_by:
+		return
+	_seen_release_by = released_by
+	_dumping_in = released_by != -1 \
+			and _team_id_by_peer.get(released_by, -1) == team_id \
+			and _last_carry_pos.is_finite() \
+			and -signf(_own_goal_z) * _last_carry_pos.z <= GameRules.BLUE_LINE_Z
+
+
 func _compute_threat_assignments(snapshot: WorldSnapshot,
 		prev: Dictionary) -> Dictionary[int, int]:
 	var empty: Dictionary[int, int] = {}
@@ -416,6 +489,10 @@ func strong_x() -> float:
 	return _strong_x
 
 
+func carrier_lane() -> int:
+	return _carrier_lane
+
+
 # This peer's lobby position (team_slot 0–4; see PlayerRules.POSITION_NAMES).
 # 0 (C) when unknown — tests / 3v3, where nothing reads it.
 func position_of(peer_id: int) -> int:
@@ -473,6 +550,10 @@ func get_team_size() -> int:
 	return team_size
 
 
+func icing_enforced() -> bool:
+	return rule_set == GameRules.RuleSet.NHL
+
+
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return threat_shoot_base_by_opp
 
@@ -497,7 +578,9 @@ func build_view() -> void:
 		_view = TeamBrainView.new()
 	var v: TeamBrainView = _view
 	v.strong_x_val = _strong_x
+	v.carrier_lane_val = _carrier_lane
 	v.team_size_val = team_size
+	v.icing_enforced_val = icing_enforced()
 	v.ping_chase_peer_val = ping_directives.chase_peer()
 	_freeze_int_dict(slot_assignments, v.slot_by_peer)
 	_freeze_int_dict(threat_assignments, v.assigned_threat_by_peer)

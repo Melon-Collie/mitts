@@ -164,7 +164,7 @@ static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		var span: float = max_speed * t_set + reach
 		if dx * dx + dz * dz > span * span:
 			continue
-		var eta: float = _reach_eta(
+		var eta: float = reach_eta(
 				skater_pos, traj[i], skater_vel, max_speed, accel, reach)
 		if eta > t_set:
 			continue
@@ -181,13 +181,13 @@ static func path_intercept_time(traj: Array[Vector3], step_dt: float,
 		if playable_from > prev_t:
 			prev_t = playable_from
 			prev_point = path_intercept_point(traj, step_dt, puck_pos, prev_t)
-		var prev_slack: float = (prev_t - margin) - _reach_eta(
+		var prev_slack: float = (prev_t - margin) - reach_eta(
 				skater_pos, prev_point, skater_vel, max_speed, accel, reach)
 		if prev_slack >= 0.0:
 			return prev_t   # already makeable at the left endpoint
 		return prev_t + (t_step - prev_t) * (-prev_slack / (t_set - eta - prev_slack))
 	var horizon: float = maxf(traj.size() * step_dt, playable_from)
-	return maxf(horizon, _reach_eta(
+	return maxf(horizon, reach_eta(
 			skater_pos, traj[-1], skater_vel, max_speed, accel, reach))
 
 
@@ -203,7 +203,7 @@ static func race_playable_time(puck_pos: Vector3, puck_vel: Vector3) -> float:
 # path point pulled `reach` back along the approach line — so the last stick-
 # length is never charged as travel. Already inside reach is 0: the stick is on
 # it now.
-static func _reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
+static func reach_eta(from_pos: Vector3, point: Vector3, vel: Vector3,
 		max_speed: float, accel: float, reach: float) -> float:
 	if reach <= 0.0:
 		return AIArrival.time_to_arrive(from_pos, point, vel, max_speed, accel)

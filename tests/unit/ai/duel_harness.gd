@@ -131,9 +131,10 @@ const PUPPET_GAIN: float = 4.0              # P-control: desired m/s per m of er
 # ── Scripted ATTACKER tuning ─────────────────────────────────────────────────
 # A scripted attacker (add_scripted_attacker) is an agentless skater looping a
 # fixed waypoint path at a set pace, facing the net it attacks. A scripted
-# carrier keeps the puck on its blade for the whole run — no release, no strip
-# — so a defensive fixture measures the defence against a held possession
-# instead of riding on whatever the attack decides to do.
+# carrier keeps the puck on its blade for the whole run — no release, no poke or
+# lift — so a defensive fixture measures the defence against a held possession
+# instead of riding on whatever the attack decides to do; `script_strippable`
+# makes him lose it as a bot carrier would.
 const SCRIPT_ARRIVE_M: float = 0.2
 const SCRIPT_CARRY_REACH_M: float = 0.8
 
@@ -200,6 +201,10 @@ class SimSkater:
 	# (stride ramp, power knee) facing its travel, instead of the flat-accel
 	# P-control — for a fixture whose question is a race against it.
 	var script_skates: bool = false
+	# True: a scripted carrier can be poked and lifted off the puck, and a
+	# knockdown stops his script while he is down — a carrier who simply ignores
+	# the defence, rather than one who cannot lose the puck.
+	var script_strippable: bool = false
 	# The arm the rig places the blade with (duel_rig.gd). A fixture may set
 	# `blade_reach` to place the blade on a plain ring of that radius instead, and
 	# a per-tick write over the decided input (`func(s: SimSkater) -> void`), run
@@ -543,6 +548,9 @@ func step() -> void:
 		if s.agent == null:
 			if s.script_path.is_empty():
 				_puppet_step(s)
+			elif s.script_strippable and _down(s):
+				s.vel = s.vel.move_toward(Vector3.ZERO, _match_body.knockdown_friction * DT)
+				s.pos += s.vel * DT
 			else:
 				_script_step(s)
 			continue
@@ -573,9 +581,9 @@ func step() -> void:
 		puck_vel = c2.vel
 		carry_ticks[carrier_id] += 1
 		# Strips: an opponent's blade sweeping through the carried puck. A
-		# scripted carrier holds possession by construction.
+		# scripted carrier holds possession by construction unless strippable.
 		for s: SimSkater in skaters:
-			if not c2.script_path.is_empty():
+			if not c2.script_path.is_empty() and not c2.script_strippable:
 				break
 			if s.team_id == c2.team_id or not s.puppet_can_strip:
 				continue
