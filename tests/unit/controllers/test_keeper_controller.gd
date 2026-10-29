@@ -6,7 +6,8 @@ extends GutTest
 # at his pad meets a pad box through the puck's own contact test; a shot is
 # saved, the puck meeting what he puts in its way; a catch is held in his
 # glove and covered, then set down and swept out; and a puck at his feet is
-# covered, unless it is poked away before his glove is on it.
+# covered once it is down on the ice, unless it is poked away before his glove
+# is on it.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # How far a save box on a client may lie from the host's: the root's centimetre
@@ -322,6 +323,33 @@ func test_a_shot_read_mid_slide_is_saved_once_he_lands() -> void:
 			break
 	assert_true(blocked, "read while he could not go down")
 	assert_true(reopened, "its low save made once he could")
+
+
+# A save that pops the puck up soft at his feet: he lets the save go as he
+# feels it, and covers the puck once it is down, not while it is in the air.
+func test_a_puck_popped_up_off_a_save_is_covered_once_it_lands() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0)
+	_run(1.5)
+	var part: int = _shot(Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0), Vector2(0.3, 0.0), 20.0)
+	assert_gte(part, 0, "he meets it")
+	_puck.puck_touched_goalie.emit(_goalie)
+	var basis: Basis = _goalie.global_transform.basis
+	var feet: Vector3 = _goalie.global_position - basis.z * 0.6
+	var v := Vector3(0.0, 2.0, 0.0)
+	var at := Vector3(feet.x, 0.25, feet.z)
+	watch_signals(_keeper)
+	while at.y > _puck.ice_height:
+		_puck.global_position = at
+		_puck.set_puck_velocity(v)
+		_keeper._physics_process(DT)
+		assert_false(_keeper._covering, "y %.2f: not in the air" % at.y)
+		at += v * DT
+		v.y -= GameRules.GRAVITY_M_S2 * DT
+	_puck.global_position = Vector3(at.x, _puck.ice_height, at.z)
+	_puck.set_puck_velocity(Vector3.ZERO)
+	_run(0.8)
+	assert_signal_emitted(_keeper, "puck_covered", "covered once down")
 
 
 # A puck that hits him he feels: once his save is there, the shot off him, he

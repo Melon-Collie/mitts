@@ -2,8 +2,8 @@ extends GutTest
 
 # Covering (KeeperCover, through KeeperMotor and KeeperSave's glove): a puck
 # at his feet he can cover, from his feet once his drop lands and sooner when
-# down; one out of his reach, or one going too fast for the glove to stop, he
-# cannot; a puck slowing on the ice is covered where it will be. Played out, he
+# down; one out of his reach, one going too fast for the glove to stop, or one
+# in the air, he cannot; a puck slowing on the ice is covered where it will be. Played out, he
 # goes down, leans on over his pads after the glove and lays it on the puck,
 # every tick unbroken, his gear out of the ice and his arms on their gear.
 
@@ -42,6 +42,17 @@ func test_a_puck_at_his_feet_he_can_cover_and_one_out_of_reach_not() -> void:
 	assert_lt(_cover.land_s, from_feet, "down, sooner")
 	assert_false(_cover.plan(_on_ice(0.0, -1.6), Vector3.ZERO, _motor, false), "out past his reach")
 	assert_false(_cover.plan(_on_ice(1.2, -0.3), Vector3.ZERO, _motor, false), "wide of it")
+
+
+# A puck in the air at his feet, dropping onto him or popped up off him, he
+# leaves until it lands; one on the ice there he covers.
+func test_a_puck_in_the_air_he_waits_out_until_it_lands() -> void:
+	var at: Vector3 = _on_ice(-0.2, -0.6)
+	assert_true(_cover.plan(at, Vector3.ZERO, _motor, false), "on the ice")
+	assert_false(_cover.plan(at + Vector3.UP * 0.3, Vector3.ZERO, _motor, false), "above it")
+	assert_false(_cover.plan(at + Vector3.UP * 0.3, Vector3(0.0, -2.0, 0.0), _motor, false), "dropping onto it")
+	assert_false(_cover.plan(at, Vector3(0.0, 1.5, 0.0), _motor, false), "popped up off it")
+	assert_true(KeeperCover.on_ice(at, Vector3(0.0, -0.5, 0.0)), "landing")
 
 
 func test_a_sliding_puck_is_covered_where_it_will_be_if_it_slows_enough() -> void:

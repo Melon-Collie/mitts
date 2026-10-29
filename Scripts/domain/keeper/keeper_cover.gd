@@ -2,15 +2,17 @@ class_name KeeperCover
 extends RefCounted
 
 # Covering a loose puck he can reach: down over it, the glove laid flat onto
-# it, palm down and fingers out ahead. A puck he can cover (`plan`) is one that, slowing on the ice, will still
-# be where his glove pins it when the glove can land there, slow enough by then
-# for the glove to stop it: from his feet once his drop has landed, down at
-# once, and no sooner than the glove gets there at its tier speed. Where the
-# glove pins it is his own arm's reach in the pose he covers from (the
-# butterfly from his feet, the one he is in when down), leaned on over his pads
-# as far as it takes and no further (`lean`). Pure, in his authored
-# space as KeeperSave's: left-catching, the net frame brought into it by where
-# the motor has him and whether he catches right.
+# it, palm down and fingers out ahead. A puck he can cover (`plan`) is one down
+# on the ice (`on_ice`: one in the air, a save's pop-up, he waits out until it
+# lands) that, slowing on it, will still be where his glove pins it when the
+# glove can land there, slow enough by then for the glove to stop it: from his
+# feet once his drop has landed, down at once, and no sooner than the glove
+# gets there at its tier speed. Where the glove pins it is his own arm's reach
+# in the pose he covers from (the butterfly from his feet, the one he is in
+# when down), leaned on over his pads as far as it takes and no further
+# (`lean`). Pure, in his authored space as KeeperSave's: left-catching, the net
+# frame brought into it by where the motor has him and whether he catches
+# right.
 
 # A puck this near the middle of the glove, across the ice, is under it; and
 # the glove this near resting on it is down on it.
@@ -53,7 +55,7 @@ func plan(puck_at: Vector3, puck_v: Vector3, motor: KeeperMotor, mirrored: bool)
 	if mirrored:
 		p.x = -p.x
 		v.x = -v.x
-	if Vector2(p.x, p.z).length() > LOOK_M:
+	if not on_ice(p, v) or Vector2(p.x, p.z).length() > LOOK_M:
 		return false
 	var legs: float = _legs_s(motor)
 	_base(motor)
@@ -89,6 +91,14 @@ func plan(puck_at: Vector3, puck_v: Vector3, motor: KeeperMotor, mirrored: bool)
 	return false
 
 
+# Whether a puck at `at` going at `v` is down on the ice and staying there:
+# neither off it nor rising off it.
+static func on_ice(at: Vector3, v: Vector3) -> bool:
+	var rising: float = maxf(v.y, 0.0)
+	var apex: float = at.y + rising * rising / (2.0 * GameRules.GRAVITY_M_S2)
+	return apex <= KeeperShotRead.ON_ICE_Y + KeeperShotRead.AIRBORNE_M
+
+
 # Where the middle of the glove `glove` lies resting on top of a puck at `at`.
 static func _on_top(at: Vector3, glove: Transform3D) -> Vector3:
 	var h: Vector3 = KeeperGear.half_extents(KeeperGear.Part.GLOVE)
@@ -115,11 +125,9 @@ func _base(motor: KeeperMotor) -> void:
 	_skel.pose(_pose)
 
 
-# The glove's place over a puck at `at`: on the ice over it, or on it where it
-# lies off the ice (on his pads).
+# The glove's place on the ice over a puck at `at`.
 static func _on_glove(at: Vector3) -> Vector3:
-	var half: float = KeeperGear.half_extents(KeeperGear.Part.GLOVE).y
-	return Vector3(at.x, maxf(at.y, half), at.z)
+	return Vector3(at.x, KeeperGear.half_extents(KeeperGear.Part.GLOVE).y, at.z)
 
 
 # Where a puck at `at` sliding at `v` on the ice is `t` seconds on, its friction
