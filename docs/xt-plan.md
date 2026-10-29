@@ -76,7 +76,22 @@ between here and there but not the ones waiting after.
 - **C. B, checked against bot games**: B builds the table, and an instrument
   compares it with outcomes in bot play. It measures and never fits.
 
-Recommended start: **C**. Its hard part is 2a.
+**Agreed: B**, as a decent approximation to build and then look at. The check
+in C can come later if what we see calls for it. Published hockey work gives
+something to look at it against:
+
+- xT applied to NHL zone entries (LINHAC 2024), which also reads the defensive
+  threat by mirroring the offensive values and negating them, as decision 6
+  does;
+- Routley and Schulte's Markov game model of NHL play-by-play (UAI 2015), which
+  values actions by their effect on scoring with the context and the longer
+  lookahead in.
+
+Both are counted from real NHL events, so they are a check on the shape (where
+the value rises, how flat the neutral zone is), never numbers to fit: our
+skaters, rink and goalie are not the NHL's.
+
+B's hard part is 2a.
 
 #### 2a. Which defence are the moves priced against?
 
