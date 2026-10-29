@@ -37,6 +37,7 @@ const _RIM_FLARE_M: float = 0.035
 const TUCK_BLOUSE_M: float = 0.030
 # How far tucked a column is before the rim under it starts to flare.
 const _RIM_FLARE_FROM: float = 0.6
+const _LOOSE_TOP_INSET_M: float = 0.015
 # The kidney pads, each side of the spine under the belt: how far each ring
 # stands out at their middles, 45° off the back, easing to none at the spine
 # and the hips. They stand only where the jersey is tucked, as the rim does:
@@ -126,7 +127,7 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 						SkaterJerseyHem.tuck_share(tuck, theta))
 			pts.append(Vector3(sin(theta) * (half_w + kidney), s.x,
 					s.w + cos(theta) * (half_d + kidney)))
-		if tuck != GearModelRegistry.TUCK_NONE and i < 2:
+		if i < 2:
 			_stand_rim(pts, s, tuck, _RIM_LIP_RISE_M if i == 0 else _RIM_RISE_M,
 					_RIM_LIP_FLARE_M if i == 0 else _RIM_FLARE_M)
 		var ids := PackedInt32Array()
@@ -191,13 +192,16 @@ static func collider_stations() -> PackedFloat64Array:
 # as far in as the jersey is, so the rim eases up toward a tucked corner rather
 # than standing in a spike at it, and flared only where the jersey is all but
 # tucked — a loose hem lifted toward the belt still hangs outside the flare.
+# Where the jersey is loose it is drawn in instead: no one sees it there, and a
+# fold that pulls the jersey's back taut over the seat would push it through.
 static func _stand_rim(pts: PackedVector3Array, s: Vector4, tuck: int, rise: float,
 		flare: float) -> void:
 	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
 	for k: int in pts.size():
 		var theta: float = TAU * float(k) / float(_SIDES)
 		var t: float = SkaterJerseyHem.tuck_share(tuck, theta)
-		var r: float = s.y + flare * smoothstep(_RIM_FLARE_FROM, 1.0, t)
+		var stood: float = smoothstep(_RIM_FLARE_FROM, 1.0, t)
+		var r: float = s.y + flare * stood - _LOOSE_TOP_INSET_M * (1.0 - stood)
 		pts[k] = Vector3(sin(theta) * r * xz.x, s.x + rise * t, s.w + cos(theta) * r * xz.y)
 
 
