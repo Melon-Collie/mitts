@@ -34,7 +34,10 @@ func setup(skater: Skater, skeleton: Skeleton3D, tuck: int, connected: bool = fa
 		columns = SkaterConnectedMesh.TAIL_COLUMNS
 	bind(skeleton, SkaterMeshBuilder.UpperBone.TORSO, SkaterBodySkeleton.TAIL_BONE,
 			SkaterBodySkeleton.connected_column_bone(0, 0) if connected
-			else SkaterBodySkeleton.COLUMN_BONE_BASE, SkaterHemColliders.new())
+			else SkaterBodySkeleton.COLUMN_BONE_BASE,
+			SkaterHemColliders.new(SkaterConnectedPants.collider_stations(),
+					SkaterConnectedPants.COLLIDER_THIGH_RADIUS_M) if connected
+			else SkaterHemColliders.new())
 	set_tuck(tuck)
 
 

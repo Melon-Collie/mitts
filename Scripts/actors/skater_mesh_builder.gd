@@ -841,19 +841,7 @@ static func torso_ring(station: int, tuck: int) -> PackedVector3Array:
 			_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 
-# The pants at waist-space height `y`: (radius, rear sway), radius < 0 outside
-# their span. Their lathe is wider than deep by PELVIS_XZ_SCALE.
-static func pelvis_ring(y: float) -> Vector2:
-	for i: int in _PELVIS_PROFILE.size() - 1:
-		var hi: Vector2 = _PELVIS_PROFILE[i]
-		var lo: Vector2 = _PELVIS_PROFILE[i + 1]
-		if y <= hi.x and y >= lo.x:
-			var t: float = (hi.x - y) / maxf(hi.x - lo.x, 1e-6)
-			return Vector2(lerpf(hi.y, lo.y, t),
-					lerpf(_PELVIS_REAR_SWAY[i], _PELVIS_REAR_SWAY[i + 1], t))
-	return Vector2(-1.0, 0.0)
-
-
+# The pants' lathe is wider than deep by this.
 const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 

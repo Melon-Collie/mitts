@@ -100,7 +100,7 @@ class NativeHemFlaps : public godot::RefCounted {
 	godot::Vector3 rest_bend(int k, const godot::Basis &drape) const;
 	godot::Vector3 rest_hem(int k, const godot::Basis &drape) const;
 	godot::Vector3 closest_on_thigh(int i, const godot::Vector3 &p) const;
-	// SkaterMeshBuilder.pelvis_ring, as the Vector2 it returns rounds it.
+	// SkaterHemColliders._ring, as the Vector2 it returns rounds it.
 	void pelvis_ring(double y, float &r_radius, float &r_sway) const;
 	// KeeperGearMeshes.section_at, as the Vector3 it returns rounds it.
 	godot::Vector3 section_at(const SectionBox &box, double y) const;

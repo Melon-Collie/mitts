@@ -39,7 +39,8 @@ const TUCK_BLOUSE_M: float = 0.030
 const _RIM_FLARE_FROM: float = 0.6
 # The kidney pads, each side of the spine under the belt: how far each ring
 # stands out at their middles, 45° off the back, easing to none at the spine
-# and the hips.
+# and the hips. They stand only where the jersey is tucked, as the rim does:
+# under a loose jersey they would show only where they poked through it.
 const _KIDNEY_M: Array[float] = [0.0, 0.0, 0.006, 0.016, 0.020, 0.010, 0.0, 0.0, 0.0]
 # How far each ring rides its side's thigh rather than the pelvis: (at the
 # middle, more out at the side by |sin θ|). Over the hips the pants start to go
@@ -48,6 +49,10 @@ const _THIGH_SHARE: Array[Vector2] = [
 	Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO,
 	Vector2(0.0, 0.1), Vector2(0.0, 0.3), Vector2(0.0, 0.5), Vector2(0.35, 0.35),
 ]
+# The thigh as the tail collides with it: round its hip's axis far enough to
+# hold the pants' front at the crotch, which rides the thigh up into the tail
+# in a crouch.
+const COLLIDER_THIGH_RADIUS_M: float = 0.18
 const _SIDES: int = 16
 const _FRONT: int = 8   # the front centre of a ring, which runs from the back centre
 # The inseam, front to back, at the bottom of the crotch's V: each on the pelvis
@@ -115,7 +120,10 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 		var pts := PackedVector3Array()
 		for k: int in _SIDES + 1:
 			var theta: float = TAU * float(k) / float(_SIDES)
-			var kidney: float = _KIDNEY_M[i] * sin(2.0 * theta) ** 2 if cos(theta) > 0.0 else 0.0
+			var kidney: float = 0.0
+			if cos(theta) > 0.0:
+				kidney = _KIDNEY_M[i] * sin(2.0 * theta) ** 2 * smoothstep(_RIM_FLARE_FROM, 1.0,
+						SkaterJerseyHem.tuck_share(tuck, theta))
 			pts.append(Vector3(sin(theta) * (half_w + kidney), s.x,
 					s.w + cos(theta) * (half_d + kidney)))
 		if tuck != GearModelRegistry.TUCK_NONE and i < 2:
@@ -162,6 +170,21 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 		top.append(crotch[_FRONT])
 		top.append_array(inseam)
 		_build_leg(b, side, top)
+
+
+# The pants as the jersey's tail collides with them (SkaterHemColliders):
+# (y, radius, rear sway) per ring, waist-space, a lathe at PELVIS_XZ_SCALE wide
+# enough to hold each ring, kidney pads and all. The legs below the crotch are
+# the thigh capsules', COLLIDER_THIGH_RADIUS_M round.
+static func collider_stations() -> PackedFloat64Array:
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var out := PackedFloat64Array()
+	for i: int in _PANTS.size():
+		var s: Vector4 = _PANTS[i]
+		var r: float = s.y if i < _PANTS_ROUND \
+				else maxf(s.y / xz.x, (s.z + _KIDNEY_M[i]) / xz.y)
+		out.append_array([s.x, r, s.w])
+	return out
 
 
 # A rim ring (`s`, as _PANTS) stood up where `tuck` takes the jersey in: risen
