@@ -1,8 +1,8 @@
 extends GutTest
 
-# AIForecheckRead — can we get on their puck before it is out of their zone?
-# And TeamBrain's use of it: forecheck when we can, set up the neutral zone when
-# we cannot. Team 0 defends +Z and attacks -Z; their zone is z < -BLUE_LINE_Z.
+# AIForecheckRead — can we get a stick on their puck before its carrier can
+# move it? And TeamBrain's use of it: forecheck when we can, set up the neutral
+# zone when we cannot. Team 0 defends +Z and attacks -Z; their zone is z < -BLUE_LINE_Z.
 
 const OUR_NET_Z: float = GameRules.GOAL_LINE_Z
 const TEAM_ID: int = 0
@@ -39,13 +39,52 @@ func _margin(skaters: Array, carrier_pid: int, puck_pos: Vector3 = Vector3.INF,
 			TEAM_ID, OUR_NET_Z, _teams(skaters), {}, {}, false)
 
 
-func test_a_carrier_behind_his_net_with_us_close_is_forechecked() -> void:
+func test_a_carrier_behind_his_net_with_us_on_him_is_forechecked() -> void:
 	var skaters: Array = [
-		[1, 0, Vector3(2.0, 0.0, -18.0)],
+		[1, 0, Vector3(1.0, 0.0, -27.0)],
 		[200, 1, Vector3(0.0, 0.0, -28.0)],
 	]
 	assert_true(AIForecheckRead.can_forecheck(_margin(skaters, 200), false),
-			"we are on him before he is out")
+			"our stick is on the puck before he can move it")
+
+
+func test_a_carrier_with_time_to_make_his_pass_is_not() -> void:
+	# Our man is coming from the circle top, but the D behind his net has the
+	# puck settled: the stretch pass is away before we get there.
+	var skaters: Array = [
+		[1, 0, Vector3(4.0, 0.0, -18.0), Vector3(0.0, 0.0, -6.0)],
+		[200, 1, Vector3(0.0, 0.0, -28.0)],
+	]
+	assert_false(AIForecheckRead.can_forecheck(_margin(skaters, 200), false),
+			"he has the time to move it: set up")
+
+
+func test_a_carrier_who_has_just_got_it_is_pressured_one_who_has_read_it_is_not() -> void:
+	# Our man two metres off: on a carrier still looking up, not on one who has
+	# had the puck long enough to pick his pass.
+	var skaters: Array = [
+		[1, 0, Vector3(1.5, 0.0, -26.5)],
+		[200, 1, Vector3(0.0, 0.0, -28.0)],
+	]
+	var snap: WorldSnapshot = _snap(skaters, 200)
+	var fresh: float = AIForecheckRead.pressure_margin_s(snap, TEAM_ID, OUR_NET_Z,
+			_teams(skaters), {}, {}, false, 0.0)
+	var settled: float = AIForecheckRead.pressure_margin_s(snap, TEAM_ID, OUR_NET_Z,
+			_teams(skaters), {}, {}, false, AIForecheckRead.CARRIER_READ_S)
+	assert_true(AIForecheckRead.can_forecheck(fresh, false), "fresh: %.2f s" % fresh)
+	assert_false(AIForecheckRead.can_forecheck(settled, false), "settled: %.2f s" % settled)
+
+
+func test_a_loose_puck_he_must_still_pick_up_is_forechecked() -> void:
+	# The same two bodies, but the puck is loose in the corner: picking it up and
+	# settling it buys our man the time he lacked against a carried puck.
+	var skaters: Array = [
+		[1, 0, Vector3(4.0, 0.0, -18.0), Vector3(0.0, 0.0, -6.0)],
+		[200, 1, Vector3(0.0, 0.0, -28.0)],
+	]
+	assert_true(AIForecheckRead.can_forecheck(
+			_margin(skaters, -1, Vector3(6.0, 0.0, -26.0)), false),
+			"we are on him as he collects it")
 
 
 func test_a_carrier_already_skating_out_past_us_is_not() -> void:
@@ -162,7 +201,7 @@ func _brain_state(skaters: Array, carrier_pid: int) -> int:
 
 func test_the_brain_forechecks_a_carrier_it_can_get_on() -> void:
 	assert_eq(_brain_state([
-		[1, 0, Vector3(2.0, 0.0, -18.0)],
+		[1, 0, Vector3(1.0, 0.0, -27.0)],
 		[2, 0, Vector3(-2.0, 0.0, -10.0)],
 		[3, 0, Vector3(0.0, 0.0, -4.0)],
 		[200, 1, Vector3(0.0, 0.0, -28.0)],

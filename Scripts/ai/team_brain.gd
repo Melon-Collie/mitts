@@ -96,6 +96,10 @@ var forecheck_margin_s: float = -INF
 # Where the puck was last carried, read every batch so a release is placed to
 # within one; INF until it has been.
 var _last_carry_pos: Vector3 = Vector3.INF
+# Who carries the puck (-1 nobody) and how long he has (s), read every batch for
+# the forecheck read's carrier_held_s.
+var _held_by: int = -1
+var _held_s: float = 0.0
 # The release the dump-in read last classified (WorldSnapshot
 # .loose_puck_released_by), and whether it is our dump-in.
 var _seen_release_by: int = -1
@@ -144,9 +148,15 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 	# Ping directives age in real host time, not brain-tick time — advance
 	# before the rate-limit gate so expiry never stretches with the cadence.
 	ping_directives.advance(delta)
-	if snapshot != null and snapshot.puck_state != null \
-			and snapshot.puck_state.carrier_peer_id != -1:
-		_last_carry_pos = snapshot.puck_state.position
+	if snapshot != null and snapshot.puck_state != null:
+		var carrier: int = snapshot.puck_state.carrier_peer_id
+		if carrier != _held_by:
+			_held_by = carrier
+			_held_s = 0.0
+		else:
+			_held_s += delta
+		if carrier != -1:
+			_last_carry_pos = snapshot.puck_state.position
 	_accumulator += delta
 	if _accumulator < TICK_PERIOD and not _force_tick_pending:
 		return
@@ -220,7 +230,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 
 	# Their puck deep in their zone, carried or loose and slow, or our dump-in on
 	# its way there: forecheck it only while our first forechecker can get on it
-	# before it is out, else set up in the neutral zone
+	# before its carrier can move it, else set up in the neutral zone
 	# (Scripts/domain/ai/CLAUDE.md → "Forecheck or set up").
 	_read_dump_in(snapshot)
 	var their_deep_puck: bool = state == AIPossessionState.State.FORECHECK \
@@ -230,7 +240,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	if their_deep_puck or _dumping_in:
 		forecheck_margin_s = AIForecheckRead.pressure_margin_s(snapshot, team_id,
 				_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
-				team_size >= 5)
+				team_size >= 5, _held_s)
 	# A dump-in first played outside their zone is no forecheck: the possession
 	# table's shape stands.
 	if not their_deep_puck and forecheck_margin_s == -INF:

@@ -198,23 +198,31 @@ pressure the point is not a broken structure.
 
 ## Forecheck or set up
 
-Their puck in their zone is a forecheck only while we can get on it.
-`AIForecheckRead` races our soonest forechecker's stick against the carrier along
-his way out — the straight line to the exit on his blue line that his drift takes
-him to — and the brain runs FORECHECK while we win that race somewhere up to the
-line, TRANS_DEFENSE (the set neutral-zone shape) once we cannot. In 5v5 a D
-counts only as far down the wall as the strong D's pinch goes; F1 is a forward. A
-slow loose puck in their zone reads the same race from the puck, a tie counted as
-ours (a 50/50 in their end is gone after). A loose puck is raced on its path,
-from where it is first played, so a puck still sliding is met where it will be.
-The hysteresis sits on the race (`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the
-shape, for the reason the recovery race's does.
+Their puck in their zone is a forecheck only while we can pressure it: our
+soonest forechecker's blade on the puck before its carrier can make his first
+play. A man with time to look up makes the stretch pass past an aggressive
+forecheck, so `AIForecheckRead` prices exactly that time — the pickup and its
+settle for a loose puck, his read (`CARRIER_READ_S`, a choice reaction, less
+what he has already held it; the brain counts the hold) and the release window —
+and the brain runs FORECHECK while we beat it, TRANS_DEFENSE (the set
+neutral-zone shape) once we cannot. So a dump, a strip or a turnover we are on
+when they collect it is forechecked, and a D who has had the puck settled
+behind his net is not: the 1-1-3 waits for him. In 5v5 a D counts only as far
+down the wall as the strong D's pinch goes; F1 is a forward. A loose puck is
+raced on its path, from where it is first played, a tie counted as ours (a 50/50
+in their end is gone after). The hysteresis sits on the margin
+(`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the shape, for the reason the
+recovery race's does.
+
+Never price it as catching him before he skates the puck out: a retriever deep
+in his corner is a long skate from his line, so that race reads a forechecker
+from our own end as on him, and every stretch pass beats it.
 
 **A dump-in opens the forecheck at the release.** The point of dumping it is the
 forecheck it starts, so our release from a carry outside their zone, untouched
 since, is raced the same way while it flies (`TeamBrain._read_dump_in`): FORECHECK
-when we win it or get on whoever plays it, TRANS_DEFENSE when they play it and
-are gone, and the possession table's shape when it is played before their line
+when we win it or are on whoever plays it before he can move it, TRANS_DEFENSE
+when he has the time, and the possession table's shape when it is played before their line
 (a feed taken in the neutral zone). The same release inside their zone — a pass,
 a shot gone wide — keeps the attack's shape. Who released it and from where is
 all the read uses; whom it was meant for is never published.
