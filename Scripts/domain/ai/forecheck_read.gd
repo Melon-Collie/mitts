@@ -25,7 +25,9 @@ class_name AIForecheckRead
 const ENTER_MARGIN_S: float = 0.2
 const HOLD_MARGIN_S: float = -0.2
 # A carrier's choice reaction: with the puck on his stick, the look up and the
-# pick of his play among his options before he starts it.
+# pick of his play among his options before he starts it. A feel tunable, set by
+# playtest: longer forechecks a fresh carrier from further off, shorter sets up
+# sooner.
 const CARRIER_READ_S: float = 0.5
 
 const _PATH_STEP_S: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)

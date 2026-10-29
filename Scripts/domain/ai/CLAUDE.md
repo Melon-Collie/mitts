@@ -202,7 +202,7 @@ Their puck in their zone is a forecheck only while we can pressure it: our
 soonest forechecker's blade on the puck before its carrier can make his first
 play. A man with time to look up makes the stretch pass past an aggressive
 forecheck, so `AIForecheckRead` prices exactly that time — the pickup and its
-settle for a loose puck, his read (`CARRIER_READ_S`, a choice reaction, less
+settle for a loose puck, his read (`CARRIER_READ_S`, a choice reaction set by feel, less
 what he has already held it; the brain counts the hold) and the release window —
 and the brain runs FORECHECK while we beat it, TRANS_DEFENSE (the set
 neutral-zone shape) once we cannot. So a dump, a strip or a turnover we are on
