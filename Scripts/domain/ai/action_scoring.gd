@@ -387,7 +387,7 @@ static func counter_point_for(our_net: Vector3) -> Vector3:
 
 
 # A body covers a counter when he beats it home WITH TIME TO SET — the same
-# brake-to-arrive margin AIRoleSlots5.assign charges the RUSH_D1 deadline
+# brake-to-arrive margin AIRoleSlots5.assign charges our line's post deadlines
 # (stride-for-stride beside the rush is chasing, not covering). League-paced,
 # like the mate ETAs it pads.
 const COUNTER_SET_MARGIN_S: float = GameRules.DEFAULT_SKATER_MAX_SPEED_M_S \

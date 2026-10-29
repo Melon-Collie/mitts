@@ -86,6 +86,10 @@ var _coverage_unready_ticks: int = 0
 # DZONE but the brain held the rush shape because the backcheck wasn't home.
 # Nothing reads it back into a decision.
 var coverage_downgraded: bool = false
+# Their puck in their zone: whether we are forechecking it (AIForecheckRead) —
+# last tick's answer, for the read's hysteresis — and the race margin it read.
+var _forechecking: bool = false
+var forecheck_margin_s: float = -INF
 # Team 1's natural ticks run half a period out of phase with team 0's (see
 # Scripts/ai/CLAUDE.md → "Two brains, two cadences"). Re-applied at every
 # forced-tick accumulator reset, since both brains are force-reticked together.
@@ -200,6 +204,22 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		_coverage_was_set = false
 		_coverage_unready_ticks = 0
 		coverage_downgraded = false
+
+	# Their puck deep in their zone, carried or loose and slow: forecheck it only
+	# while our first forechecker can get on it before it is out, else set up in
+	# the neutral zone (Scripts/domain/ai/CLAUDE.md → "Forecheck or set up").
+	if state == AIPossessionState.State.FORECHECK \
+			or (state == AIPossessionState.State.NEUTRAL
+					and AIPossessionState.in_their_zone(snapshot, _own_goal_z)):
+		forecheck_margin_s = AIForecheckRead.pressure_margin_s(snapshot, team_id,
+				_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
+				team_size >= 5)
+		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking)
+		state = AIPossessionState.State.FORECHECK if _forechecking \
+				else AIPossessionState.State.TRANS_DEFENSE
+	else:
+		_forechecking = false
+		forecheck_margin_s = -INF
 
 	# Strong-side X with hysteresis (see STRONG_SIDE_HYSTERESIS_M).
 	if snapshot != null and snapshot.puck_state != null:
@@ -473,6 +493,10 @@ func get_team_size() -> int:
 	return team_size
 
 
+func icing_enforced() -> bool:
+	return rule_set == GameRules.RuleSet.NHL
+
+
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return threat_shoot_base_by_opp
 
@@ -498,6 +522,7 @@ func build_view() -> void:
 	var v: TeamBrainView = _view
 	v.strong_x_val = _strong_x
 	v.team_size_val = team_size
+	v.icing_enforced_val = icing_enforced()
 	v.ping_chase_peer_val = ping_directives.chase_peer()
 	_freeze_int_dict(slot_assignments, v.slot_by_peer)
 	_freeze_int_dict(threat_assignments, v.assigned_threat_by_peer)

@@ -18,7 +18,7 @@ class_name AIRoleDefenseman
 #
 # THE ROTATION. While the strong-side D is deeper than any stand his slot takes,
 # the weak D slides to the middle of the line and a forward takes the vacated
-# strong point — HIGH_SLOT in the O-zone, F2_WEAK on the forecheck, via
+# strong point — HIGH_SLOT in the O-zone, F3_WALL on the forecheck, via
 # rotate_up_to_point from his own role.
 
 # How far inside the offensive zone the points stand: a full puck-handling
@@ -66,7 +66,7 @@ const ROTATION_HELD_M: float = 3.0
 # negative entry is the strong side of centre): the middle of the line.
 const POINT_WEAK_COVER_LANES_U: Array[float] = [1.5, 0.0, -1.5]
 # How far down his wall the strong D may pinch, off their blue line: to
-# F2_STRONG's post (AIRoleForecheck.F2_STRONG_DEPTH_OFF_GOAL_M), which owns the
+# F3_WALL's post (AIRoleForecheck.F3_WALL_DEPTH_OFF_GOAL_M), which owns the
 # wall below. test_role_defenseman holds the two together.
 const PINCH_MAX_DEPTH_M: float = 7.36
 
@@ -273,7 +273,7 @@ static func _wall_pinch(ctx: RoleContext, side: float,
 
 
 # The cover half of the pinch: nobody of theirs behind my stand, my partner on
-# the line, and F2_WEAK able to take my point inside `t_engage` + the late-man
+# the line, and F3_WALL able to take my point inside `t_engage` + the late-man
 # window.
 static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 		t_engage: float) -> bool:
@@ -287,7 +287,7 @@ static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
 	if partner == null or _depth_inside_attacked_zone(ctx, partner.position) \
 			> DP_LINE_INSET_M + POINT_VACATED_SLACK_M:
 		return false
-	var filler: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.F2_WEAK)
+	var filler: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.F3_WALL)
 	if filler == null:
 		return false
 	return AIArrival.time_to_arrive(filler.position, line_stand,

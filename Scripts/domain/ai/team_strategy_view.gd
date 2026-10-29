@@ -39,6 +39,10 @@ func ping_chase_peer() -> int:
 func get_team_size() -> int:
 	return GameRules.DEFAULT_TEAM_SIZE
 
+# Whether the match calls icing (the NHL rule set).
+func icing_enforced() -> bool:
+	return false
+
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return {}
 

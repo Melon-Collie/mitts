@@ -60,7 +60,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	else:
 		gap += AIRoleRushD.ladder_gap_m(
 				carrier_pos, ctx.own_goal_dir, ctx.self_blade_reach, cushion)
-	# The stand is angled (AIDefensiveVerbs.carrier_stand), as RUSH_D1's is.
+	# The stand is angled (AIDefensiveVerbs.carrier_stand), as BACK_STRONG's is.
 	var inside_dir := Vector3.ZERO
 	var inside_shade: float = 0.0
 	var search_center: Vector3 = carrier_pos
@@ -76,7 +76,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	# Last man: take the cut-off set, never lunge into it — an ICE-FRAME bound,
 	# so a loose puck only. Never apply it to a live carrier: it would name a
 	# stand wherever the body already is, and a pressurer walked toward his own
-	# net could never close. The gap-up is exempt, as RUSH_D1's is.
+	# net could never close. The gap-up is exempt, as BACK_STRONG's is.
 	var min_depth: float = -INF
 	var depth_dir: Vector3 = Vector3.ZERO
 	if not gapping_up and AIRoleReads.stand_ride_velocity(ctx) == Vector3.ZERO \
@@ -182,13 +182,13 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			found = true
 
 	d.target_position = best_pos
-	# Unlike RUSH_D1, the arrival brake stays ON while gapping up: a carrier
+	# Unlike BACK_STRONG, the arrival brake stays ON while gapping up: a carrier
 	# gapped up on isn't coming at pace, so braking onto the stand settles on him
 	# instead of orbiting him.
 	#
 	# Publish the ride only when a candidate survived: otherwise `best_pos` is our
 	# own feet, a HOLD, and a hold that rides a man matches his velocity forever.
-	# The argmax picks the bearing; the route is RUSH_D1's, so the D who owned the
+	# The argmax picks the bearing; the route is BACK_STRONG's, so the D who owned the
 	# rush skates it the same way after the line. A forecheck (the carrier in
 	# his own zone) has no retreat to manage, so its route stays free.
 	if found:

@@ -112,14 +112,16 @@ func test_evaluator_costs() -> void:
 	memo_brain.tick(1.0, memo_ctx.snapshot)
 	memo_ctx.threat_shoot_base_by_opp = memo_brain.threat_shoot_base_by_opp
 	_bench("MARK (fallback, brain memo)", func() -> void: AIRoleMark.decide(memo_ctx))
-	_bench("RUSH_D1", func() -> void:
-			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.RUSH_D1))
-	_bench("RUSH_D2", func() -> void:
-			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.RUSH_D2))
-	_bench("TRACK_PUCK", func() -> void:
-			AIRoleTrack.decide(d_ctx, AIRoleSlots.Slot.TRACK_PUCK))
-	_bench("TRACK_MID", func() -> void:
-			AIRoleTrack.decide(d_ctx, AIRoleSlots.Slot.TRACK_MID))
+	_bench("BACK_STRONG", func() -> void:
+			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.BACK_STRONG))
+	_bench("BACK_MID", func() -> void:
+			AIRoleRushD.decide(d_ctx, AIRoleSlots.Slot.BACK_MID))
+	_bench("NZ_F1", func() -> void:
+			AIRoleNeutralZone.decide(d_ctx, AIRoleSlots.Slot.NZ_F1))
+	_bench("NZ_MID", func() -> void:
+			AIRoleNeutralZone.decide(d_ctx, AIRoleSlots.Slot.NZ_MID))
+	_bench("BACK_WEAK", func() -> void:
+			AIRoleNeutralZone.decide(d_ctx, AIRoleSlots.Slot.BACK_WEAK))
 
 	# Off-puck offensive reads (our carrier deep in THEIR end).
 	var o_ctx: RoleContext = _make_ctx(Vector3(0.0, 0.0, -17.0), 2)
@@ -137,9 +139,9 @@ func test_evaluator_costs() -> void:
 		AIRoleDefenseman.decide(o_ctx, AIRoleSlots.Slot.DP_STRONG))
 	_bench("DVALVE", func() -> void:
 		AIRoleDefenseman.decide(o_ctx, AIRoleSlots.Slot.DVALVE))
-	_bench("F2 strong lane", func() -> void: AIRoleForecheck.decide_f2(o_ctx, true))
-	_bench("F2 weak lane", func() -> void: AIRoleForecheck.decide_f2(o_ctx, false))
-	_bench("F3 high safety", func() -> void: AIRoleForecheck.decide(o_ctx, true))
+	_bench("F2 net read", func() -> void: AIRoleForecheck.decide_net(o_ctx))
+	_bench("F3 wall", func() -> void: AIRoleForecheck.decide_wall(o_ctx))
+	_bench("F3 high safety", func() -> void: AIRoleForecheck.decide_high(o_ctx))
 	_bench("OUTLET", func() -> void: AIRoleOutlet.decide(o_ctx))
 	_bench("BREAKOUT strong", func() -> void: AIRoleBreakout.decide(o_ctx, true))
 	_bench("BREAKOUT_C", func() -> void: AIRoleBreakoutCenter.decide(o_ctx))
