@@ -106,8 +106,9 @@ func test_3v3_high_forward_keeps_a_wall_clear_in_easy() -> void:
 
 # ── The pinch and the rotation behind it (5v5) ───────────────────────────────
 # Their winger holds the puck on the +x half-wall a few metres inside their
-# line, going nowhere — the bottled carrier a strong-side D pinches on. The
-# whole exchange should happen: the RD steps down the wall onto him, a forward
+# line, going nowhere, with our C on him — the bottled carrier a strong-side D
+# pinches on. Without the C there he has the time to move it, and the team sets
+# up instead (AIForecheckRead). The whole exchange should happen: the RD steps down the wall onto him, a forward
 # rotates up to the RD's point, and the LD slides to the middle of the line.
 # The pinch waits on its cover (a forward able to take the point in time), and
 # F2_WEAK starts on the weak-side breakout lane, so the exchange runs ~4 s: the
@@ -116,7 +117,7 @@ func test_5v5_strong_d_pinches_and_the_rotation_covers_him() -> void:
 	var h = Harness.new()
 	h.team_size = 5
 	h.positions = {1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 11: 0, 12: 1, 13: 2, 14: 3, 15: 4}
-	h.add_skater(1, 0, Vector3(4.0, 0.0, -20.0))      # C, forechecking low
+	h.add_skater(1, 0, Vector3(10.0, 0.0, -14.5))     # C, on him
 	h.add_skater(2, 0, Vector3(-6.0, 0.0, -15.0))     # LW
 	h.add_skater(3, 0, Vector3(1.0, 0.0, -11.0))      # RW, middle lane
 	h.add_skater(4, 0, Vector3(-5.0, 0.0, -8.29))     # LD
