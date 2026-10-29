@@ -30,6 +30,13 @@ static func deform_bone(deform: int) -> int:
 	return BODY_BONE_COUNT + deform
 
 
+# The connected body's own tail columns (SkaterConnectedMesh.TAIL_COLUMNS of
+# them, twice the rig's), past its deform bones: `joint` 0 from the belt to the
+# bend, 1 on to the hem.
+static func connected_column_bone(column: int, joint: int) -> int:
+	return BODY_BONE_COUNT + SkaterConnectedMesh.DEFORM_COUNT + column * 2 + joint
+
+
 # A tail column's segment bone: `joint` 0 from the belt to the bend, 1 on to
 # the hem.
 static func column_bone(column: int, joint: int) -> int:
@@ -84,6 +91,9 @@ static func new_body_skeleton() -> Skeleton3D:
 static func _add_deform_bones(skeleton: Skeleton3D) -> void:
 	for deform: int in SkaterConnectedMesh.DEFORM_COUNT:
 		skeleton.add_bone("Deform%d" % deform)
+	for column: int in SkaterConnectedMesh.TAIL_COLUMNS:
+		skeleton.add_bone("ConnectedTail%d" % column)
+		skeleton.add_bone("ConnectedHem%d" % column)
 	skeleton.set_bone_parent(deform_bone(SkaterConnectedMesh.Deform.KNEE_L),
 			LEG_BONE_OFFSET + SkaterMeshBuilder.LegBone.LEG_L)
 	skeleton.set_bone_parent(deform_bone(SkaterConnectedMesh.Deform.KNEE_R),

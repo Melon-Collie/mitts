@@ -18,23 +18,31 @@ extends HemFlaps
 const FIRST_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
 
 var _skater: Skater = null
+# Draping the connected-body prototype's tail (SkaterConnectedMesh), which has
+# twice the rig's columns on bones of its own.
+var _connected: bool = false
 
 
 func _init() -> void:
 	columns = SkaterMeshBuilder.TORSO_SIDES
 
 
-func setup(skater: Skater, skeleton: Skeleton3D, tuck: int) -> void:
+func setup(skater: Skater, skeleton: Skeleton3D, tuck: int, connected: bool = false) -> void:
 	_skater = skater
+	_connected = connected
+	if connected:
+		columns = SkaterConnectedMesh.TAIL_COLUMNS
 	bind(skeleton, SkaterMeshBuilder.UpperBone.TORSO, SkaterBodySkeleton.TAIL_BONE,
-			SkaterBodySkeleton.COLUMN_BONE_BASE, SkaterHemColliders.new())
+			SkaterBodySkeleton.connected_column_bone(0, 0) if connected
+			else SkaterBodySkeleton.COLUMN_BONE_BASE, SkaterHemColliders.new())
 	set_tuck(tuck)
 
 
 func set_tuck(tuck: int) -> void:
 	rest.clear()
 	for station: int in STATIONS:
-		rest.append(SkaterMeshBuilder.torso_ring(FIRST_STATION + station, tuck))
+		rest.append(SkaterConnectedMesh.tail_ring(FIRST_STATION + station, tuck) if _connected
+				else SkaterMeshBuilder.torso_ring(FIRST_STATION + station, tuck))
 	hips_share.resize(columns)
 	tuck_share.resize(columns)
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE

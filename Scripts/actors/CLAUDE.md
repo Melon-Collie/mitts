@@ -36,12 +36,15 @@ meshes then drop the surfaces it replaces (`SkaterConnectedRigMeshes`), and the 
 own). The head, gloves and skates stay rigid. `.claude/hooks/render-body.sh`
 draws it beside the current body.
 
-- **Its density is spent where it bends.** The jersey has twice the rig's sides
-  above the belt and steps down to the rig's ten there, so the tail's cloth
-  (one flap per side) costs what it did; sleeves and legs have twelve, with
-  extra rings through the shoulder, elbow, hips and knee. Triangles are nearly
-  free here (the figure is ~3.3k against ~1.2 M a frame); bones and tail columns
-  are what cost per frame. The pants and legs are `SkaterConnectedPants`.
+- **Its density is spent where it bends.** The jersey has twice the rig's
+  sides all the way down, and `SkaterHemFlaps` drapes its tail in as many
+  columns (`TAIL_COLUMNS`), on column bones of its own past the deform bones
+  (`SkaterBodySkeleton.connected_column_bone`); sleeves and legs have twelve
+  sides, with extra rings through the shoulder, elbow, hips and knee.
+  Triangles are nearly free here (the figure is ~3.3k against ~1.2 M a frame);
+  bones and tail columns are what cost per frame (the cloth is linear in its
+  columns: ~20 µs a skater natively at 20). The pants and legs are
+  `SkaterConnectedPants`.
 - **It is authored in a bind pose**, the body skeleton with HIPS/WAIST/SPINE at
   identity, the legs straight and the arms out, forward and 35° under level
   (`bind_arm`). Each bind's inverse rest is its bone's global pose there

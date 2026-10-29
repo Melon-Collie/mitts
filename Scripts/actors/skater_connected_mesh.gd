@@ -76,10 +76,11 @@ const _BIND_FORE_DIR := Vector3(0.15, -0.45, -0.88)
 const BIND_ARM_SEGMENT_M: float = 0.33
 const BIND_SLEEVE_RADIUS_M: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
 
-# The tail's columns below the belt are the rig's (SkaterHemFlaps drapes one per
-# side); above the belt the jersey has twice as many, each column split in two.
-const _TORSO_SIDES: int = SkaterMeshBuilder.TORSO_SIDES
+# The jersey has twice the rig's sides all the way down, and SkaterHemFlaps
+# drapes its tail below the belt in as many columns, on bones of their own
+# (SkaterBodySkeleton.connected_column_bone).
 const _CHEST_SIDES: int = 2 * SkaterMeshBuilder.TORSO_SIDES
+const TAIL_COLUMNS: int = _CHEST_SIDES
 const LIMB_SIDES: int = 12
 
 # The jersey above the belt, torso-local (y, radius, rear sway), every ring the
@@ -88,8 +89,8 @@ const LIMB_SIDES: int = 12
 # that is not as a fold. Broad over the pads, in to the waist. Through the
 # waist the rig's own stations take over (`_RIG_STATIONS`, vertex for vertex the
 # rig's rings at every other column, so the jersey's tail and its tuck are the
-# rig's), with a ring between each two. Rings 3–5 are the armhole's top, middle
-# and bottom.
+# rig's), with a ring between each two, and on down the tail to the hem. Rings
+# 3–5 are the armhole's top, middle and bottom.
 const _CHEST: Array[Vector3] = [
 	Vector3(0.275, 0.125, 0.0),   # collar
 	Vector3(0.258, 0.188, 0.0),   # trapezius, onto the pads
@@ -101,8 +102,8 @@ const _CHEST: Array[Vector3] = [
 	Vector3(0.040, 0.216, 0.004),
 ]
 # SkaterMeshBuilder's torso stations the chest runs on through (waist, the
-# ring that bunches over a tuck's pad, the ring under the pad), and the ones from
-# the belt down, which keep the rig's own ten sides.
+# ring that bunches over a tuck's pad, the ring under the pad), then the tail's
+# from the belt to the hem.
 const _RIG_STATIONS: Array[int] = [4, 5, 6]
 const _BELT_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
 const _LAST_TORSO_STATION: int = SkaterMeshBuilder.TORSO_HEM_STATION
@@ -177,9 +178,9 @@ static func bind_bones() -> PackedInt32Array:
 	bones.append(SkaterBodySkeleton.deform_bone(Deform.SHOULDER_R))
 	bones.append(SkaterBodySkeleton.deform_bone(Deform.GIRDLE_L))
 	bones.append(SkaterBodySkeleton.deform_bone(Deform.GIRDLE_R))
-	for column: int in _TORSO_SIDES:
+	for column: int in TAIL_COLUMNS:
 		for joint: int in 2:
-			bones.append(SkaterBodySkeleton.column_bone(column, joint))
+			bones.append(SkaterBodySkeleton.connected_column_bone(column, joint))
 	return bones
 
 
@@ -201,7 +202,7 @@ static func bind_rests() -> Array[Transform3D]:
 			rests.append(Transform3D(Basis.IDENTITY, bind_arm(side)[0]))
 	# The tail's columns hang, at rest, exactly where the torso holds them
 	# (SkaterHemFlaps: the rest drape is the lathe's own rings).
-	for i: int in 2 * _TORSO_SIDES:
+	for i: int in 2 * TAIL_COLUMNS:
 		rests.append(torso)
 	return rests
 
@@ -308,14 +309,13 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 			ids.append(_torso_vertex(b, pts[j] + lift, station.x, theta, tuck, -1))
 		rings.append(ids)
 		ys.append(station.x)
-	var first_tail: int = rings.size()
 	for station: int in range(_BELT_STATION, _LAST_TORSO_STATION + 1):
-		var rest_y: float = SkaterMeshBuilder.torso_ring(station, GearModelRegistry.TUCK_NONE)[0].y
-		var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station, tuck)
+		var rest_y: float = _rig_station(station).x
+		var pts: PackedVector3Array = tail_ring(station, tuck)
 		var ids := PackedInt32Array()
-		for k: int in _TORSO_SIDES:
-			var theta: float = TAU * float(k) / float(_TORSO_SIDES) + phase
-			ids.append(_torso_vertex(b, ring[k] + lift, rest_y, theta, tuck, k))
+		for k: int in TAIL_COLUMNS:
+			var theta: float = TAU * float(k) / float(TAIL_COLUMNS) + phase
+			ids.append(_torso_vertex(b, pts[k] + lift, rest_y, theta, tuck, k))
 		rings.append(ids)
 		ys.append(rest_y)
 	var holes: Array[PackedInt32Array] = []
@@ -327,12 +327,9 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 		var v0: float = 0.5 * (y_top - ys[i]) / span
 		var v1: float = 0.5 * (y_top - ys[i + 1]) / span
 		var inside := Vector3(0.0, (ys[i] + ys[i + 1]) * 0.5, 0.0) + lift
-		if i + 1 == first_tail:
-			_halve(b, rings[i], rings[i + 1], v0, v1, torso_zone, inside)
-			continue
 		var n: int = rings[i].size()
 		for k: int in n:
-			if i < first_tail and _in_armhole(i, k):
+			if _in_armhole(i, k):
 				continue
 			var k1: int = (k + 1) % n
 			var u0: float = float(k) / float(n)
@@ -346,7 +343,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	var hem_y: float = ys[ys.size() - 1]
 	var hem_centre := Vector3.ZERO
 	for id: int in rings[rings.size() - 1]:
-		hem_centre += b.position(id) / float(_TORSO_SIDES)
+		hem_centre += b.position(id) / float(TAIL_COLUMNS)
 	var mean_tuck: float = 0.0
 	for k: int in 36:
 		mean_tuck += SkaterJerseyHem.tuck_share(tuck, TAU * float(k) / 36.0) / 36.0
@@ -363,18 +360,35 @@ static func _chest_profile() -> Array[Vector3]:
 	var out: Array[Vector3] = _CHEST.duplicate()
 	var last := Vector3.INF
 	for station: int in _RIG_STATIONS:
-		var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station, GearModelRegistry.TUCK_NONE)
-		var sway: float = 0.0
-		for k: int in _TORSO_SIDES:
-			sway += ring[k].z / float(_TORSO_SIDES)
-		var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
-		var here := Vector3(ring[0].y,
-				ring[0].x / (sin(phase) * SkaterMeshBuilder.PELVIS_XZ_SCALE.x), sway)
+		var here: Vector3 = _rig_station(station)
 		if last != Vector3.INF:
 			out.append((last + here) * 0.5)
 		out.append(here)
 		last = here
 	return out
+
+
+# One of SkaterMeshBuilder's torso stations as (y, radius, sway), torso-local,
+# read off the rig's own ring.
+static func _rig_station(station: int) -> Vector3:
+	var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station, GearModelRegistry.TUCK_NONE)
+	var sides: int = ring.size() - 1
+	var sway: float = 0.0
+	for k: int in sides:
+		sway += ring[k].z / float(sides)
+	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
+	return Vector3(ring[0].y, ring[0].x / (sin(phase) * SkaterMeshBuilder.PELVIS_XZ_SCALE.x), sway)
+
+
+# A tail ring at one of the rig's torso stations, as `tuck` drapes it, at this
+# jersey's TAIL_COLUMNS sides: SkaterMeshBuilder.torso_ring's layout (sides + 1
+# points, torso-local) with twice its columns, the rig's at every other one.
+# SkaterHemFlaps hangs the connected tail from these.
+static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
+	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
+	var s: Vector3 = _rig_station(station)
+	return SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase), s.x, s.y, s.z, tuck,
+			phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y)
 
 
 # A ring of the rig's section (SkaterMeshBuilder._ring's layout: `sides` + 1
@@ -387,25 +401,6 @@ static func _lathe_ring(station: Vector3, sides: int, phase: float) -> PackedVec
 		pts.append(Vector3(sin(theta) * station.y * xz.x, station.x,
 				station.z + cos(theta) * station.y * xz.y))
 	return pts
-
-
-# The chest meets the tail at the belt, each of the tail's facets under two of
-# the chest's: three triangles a facet.
-static func _halve(b: ConnectedSkinBuilder, upper: PackedInt32Array, lower: PackedInt32Array,
-		v0: float, v1: float, torso_zone: int, inside: Vector3) -> void:
-	var n: int = lower.size()
-	for k: int in n:
-		var u0: float = float(k) / float(n)
-		var u1: float = float(k + 1) / float(n)
-		var um: float = (u0 + u1) * 0.5
-		var a: int = upper[2 * k]
-		var m: int = upper[2 * k + 1]
-		var c: int = upper[(2 * k + 2) % upper.size()]
-		var l0: int = lower[k]
-		var l1: int = lower[(k + 1) % n]
-		b.tri(a, m, l0, Vector2(u0, v0), Vector2(um, v0), Vector2(u0, v1), torso_zone, inside)
-		b.tri(m, l1, l0, Vector2(um, v0), Vector2(u1, v1), Vector2(u0, v1), torso_zone, inside)
-		b.tri(m, c, l1, Vector2(um, v0), Vector2(u1, v0), Vector2(u1, v1), torso_zone, inside)
 
 
 # The armhole round `column`: the chest vertices round its facets, laid on a
@@ -467,7 +462,7 @@ static func _in_armhole(ring: int, column: int) -> bool:
 
 # A torso vertex, weighted as SkaterJerseyHem.append_torso weights the rig's: on
 # the chest above the tail, onto TAIL as the hips carry it, and from the belt
-# down on its facet column's segment (`column`, of the tail's ten).
+# down on its facet column's segment (`column`, of TAIL_COLUMNS).
 static func _torso_vertex(b: ConnectedSkinBuilder, p: Vector3, rest_y: float, theta: float,
 		tuck: int, column: int) -> int:
 	if rest_y <= SkaterJerseyHem.BELT_Y_M + 1e-5:

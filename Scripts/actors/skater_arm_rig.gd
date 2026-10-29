@@ -615,7 +615,7 @@ func apply_gear_meshes() -> void:
 	# One surface on every tuck's mesh, so the body material carries over.
 	_mesh.mesh = _upper_mesh(gear.jersey_tuck)
 	if _hem_tuck < 0:
-		_hem.setup(_skater, _skeleton, gear.jersey_tuck)
+		_hem.setup(_skater, _skeleton, gear.jersey_tuck, SkaterConnectedMesh.enabled)
 	elif gear.jersey_tuck != _hem_tuck:
 		_hem.set_tuck(gear.jersey_tuck)
 	_hem_tuck = gear.jersey_tuck
