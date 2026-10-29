@@ -167,7 +167,7 @@ func test_facial_hair_leaves_the_mouth_bare() -> void:
 # Where the hair shows it must stand off the skin, or the head shows through it.
 # Sampled where each style is fullest: the nape on the scalp, the chin on a beard.
 func test_visible_hair_stands_off_the_head() -> void:
-	var ball: ArrayMesh = SkaterMeshBuilder.shared_head_ball()
+	var ball: ArrayMesh = SkaterMeshBuilder.shared_head()
 	var head_far: float = 0.0
 	for v: Vector3 in _verts(ball):
 		# The ball's own mesh is in head-local space, its centre at the origin.
@@ -246,7 +246,7 @@ func _reach(tris: PackedVector3Array, dir: Vector3) -> float:
 # and fails this as a row of teeth; a chin the beard does not rise over fails it
 # as a bare patch.
 func test_no_skin_shows_through_the_facial_hair() -> void:
-	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head_ball(), _CENTRE)
+	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head(), _CENTRE)
 	var facials: Array[ArrayMesh] = _facials()
 	for style: int in facials.size():
 		var sheet: PackedVector3Array = _tris(facials[style], Vector3.ZERO)
@@ -268,7 +268,7 @@ func test_no_skin_shows_through_the_facial_hair() -> void:
 # Every style but bald is a whole head of hair, as it would be with the helmet
 # off: from the crown down past the rim all round the back and sides.
 func test_no_skin_shows_through_the_scalp() -> void:
-	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head_ball(), _CENTRE)
+	var skin: PackedVector3Array = _tris(SkaterMeshBuilder.shared_head(), _CENTRE)
 	for style: int in HairStyleRegistry.hair_count():
 		var mesh: ArrayMesh = SkaterHairMesh.shared_hair(style)
 		if mesh == null:

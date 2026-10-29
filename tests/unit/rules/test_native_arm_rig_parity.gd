@@ -4,9 +4,8 @@ extends GutTest
 # GDScript reference (SkaterArmRig._update_arm). Seeded RNG over the live rig:
 # hands in and out of reach (the girdle's give and the IK clamp), trunk
 # texture, a twisted and leaned trunk, the balance lean, a check load,
-# per-build arm lengths and part thicknesses, and gloves on and off the shaft. Every arm bone, both deltoid caps
-# and the girdle offsets must agree, and again once a trunk-texture change has
-# reposed the caps from the rig's read-back of the native's cap state.
+# per-build arm lengths and part thicknesses, and gloves on and off the shaft.
+# Every arm bone must agree.
 #
 # Pending without the extension (fresh clone, CI without a native build) — run
 # native/build.sh.
@@ -20,7 +19,6 @@ const _BONES: Array[int] = [
 	UpperBone.TOP_ELBOW, UpperBone.TOP_HAND,
 	UpperBone.BOTTOM_UPPER_ARM, UpperBone.BOTTOM_FOREARM, UpperBone.BOTTOM_CUFF,
 	UpperBone.BOTTOM_ELBOW, UpperBone.BOTTOM_HAND,
-	UpperBone.SHOULDER_L, UpperBone.SHOULDER_R,
 ]
 
 var _rng := RandomNumberGenerator.new()
@@ -36,8 +34,6 @@ func _poses(sk: Skater) -> Array[Transform3D]:
 	var out: Array[Transform3D] = []
 	for bone: int in _BONES:
 		out.append(body.get_bone_pose(bone))
-	out.append(Transform3D(Basis.IDENTITY, sk._arms._girdle[0]))
-	out.append(Transform3D(Basis.IDENTITY, sk._arms._girdle[1]))
 	return out
 
 
@@ -79,7 +75,6 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 		sk.set_balance_tilt(Vector2(_rng.randf_range(-0.3, 0.3), _rng.randf_range(-0.3, 0.3)),
 				Vector2(_rng.randf_range(-1.0, 1.0), _rng.randf_range(-1.0, 1.0)))
 		var texture := Vector2(_rng.randf_range(-0.3, 0.3), _rng.randf_range(-0.3, 0.3))
-		var after := Vector2(_rng.randf_range(-0.3, 0.3), _rng.randf_range(-0.3, 0.3))
 		sk._check_lead = _rng.randf_range(-1.0, 1.0) if _rng.randf() < 0.3 else 0.0
 		# Hands from in tight to well past the arm (the girdle and the IK clamp),
 		# the bottom one on the shaft half the time.
@@ -97,17 +92,10 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 		rig.update_top_arm()
 		rig.update_bottom_arm()
 		var reference: Array[Transform3D] = _poses(sk)
-		# A texture change after the arms reposes the caps from the rig's own
-		# view of them, which the native path has to have handed back.
-		sk.set_trunk_texture(after.x, after.y)
-		reference.append_array(_poses(sk))
-		sk.set_trunk_texture(texture.x, texture.y)
 		rig.native_enabled = true
 		rig.update_top_arm()
 		rig.update_bottom_arm()
 		var native: Array[Transform3D] = _poses(sk)
-		sk.set_trunk_texture(after.x, after.y)
-		native.append_array(_poses(sk))
 		var err: float = _worst(reference, native)
 		if rig._native_update_arm(0, sk.shoulder.position, sk.top_hand.position,
 				sk.stick_grip_axis(sk.drawn_top_hand()), 1.0 if sk.is_left_handed else -1.0):

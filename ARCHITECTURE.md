@@ -208,15 +208,15 @@ The ROM is measured from the shoulder the arm is drawn from (`SkaterIKCoordinato
 
 **Vertical:** Blade Y stays locked at `blade_height`. Hand Y adapts: in the FAR regime (target past rest stick reach) it sits at `hand_rest_y`; in the CLOSE regime (target inside rest stick reach) it rises so `stick_horiz` matches the target distance and the blade lands on the target exactly. The hand hands between the two across `TopHandIK.REGIME_BAND_M` (a quadratic blend of its reach off the shoulder, the height following on the rigid stick), so its path has no corner where they meet. Capped by `hand_y_max` — past that the stick's min horizontal projection causes the blade to overshoot along the aim line.
 
-**Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`, side-mirrored per arm). Both arms are part of the ONE body `Skeleton3D` (`SkaterArmRig.build`), ten bones: upper arm and forearm per arm, elbow ball, gloved fist, and the wrist cuff ring. For those ten, surface index == bone index == `SkaterMeshBuilder.UpperBone`, so painting (`Skater.set_upper_surface_material`), sizing (`set_arm_bone_radius` / `set_arm_ball_radius` / `set_arm_cuff_radius`) and posing (`_pose_arm_bone` / `_pose_arm_ball` / `_pose_arm_glove` / `_pose_arm_cuff`) all key off one number. Bones are flat (no parents) with identity rests and identity skin binds, and every vertex is weighted 1.0 to one bone, so a bone pose IS the local transform the part's node carried — the conversion is exact, not approximate. Radii scale with attribute visual bulk (`SkaterAppearanceCoordinator._apply_arm_thickness`; under attributes v4 all limb bulk rides the weight dial's frame bulk — silhouette = body), and the whole body fades as one material in ghost mode (`BodyZonePaint.set_ghost`).
+**Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`, side-mirrored per arm). Both arms are part of the ONE body `Skeleton3D` (`SkaterArmRig.build`), ten bones: upper arm and forearm per arm, elbow, gloved fist, and the wrist cuff ring. The fist and cuff are rigid parts on their bones (`SkaterRigidParts`); the sleeve is the body's skin, posed through deform bones of its own off the upper arm, the elbow's hinge and the forearm (`SkaterConnectedRig`). For those ten, a paint zone's number and its bone's coincide (`SkaterMeshBuilder.UpperBone` / `UpperSurface`), so sizing (`set_arm_bone_radius` / `set_arm_ball_radius` / `set_arm_cuff_radius`) and posing (`SkaterArmPoses`) key off one number. Bones are flat (no parents) with identity rests, and the rigid parts' binds are identity, so a bone pose IS the part's local transform. Radii scale with attribute visual bulk (`SkaterAppearanceCoordinator._apply_arm_thickness`; under attributes v4 all limb bulk rides the weight dial's frame bulk — silhouette = body), and the whole body fades as one material in ghost mode (`BodyZonePaint.set_ghost`).
 
-One trap this rig has to respect: **Godot skins normals with the bone matrix itself, not its inverse transpose**, so a non-uniform bone scale skews them. The arm bone's `(r, r, length)` is ~4:1, which is why `SkaterMeshBuilder._radial_side_normals` bakes the prism's side normals perpendicular to its axis — a normal with no axial component is invariant under that scale. The fix is only right where the anisotropy is *large*: it trades the taper's true normals for radial ones, and that trade only pays when the correct normal matrix was already flattening them (see the note on that function). The leg parts scale by roughly 1:1, so they keep their true normals and carry a small residual skew instead — measured, bounded, and documented in `docs/skinned-skater-plan.md`.
+One trap the body sidesteps: **Godot skins normals with the bone matrix itself, not its inverse transpose**, so a non-uniform bone scale skews them (the glove cuff's `(r, 1, r)` is ~10:1). The body's shader takes every face's normal from the skinned position's screen derivatives instead (`flat_from_position` in `Shaders/body_zones.gdshaderinc`), so no vertex normal on the body is ever read.
 
-**Upper body:** the arm rig above IS the upper-body rig — the torso, the helmet/head unit and the two deltoid caps are four more bones on the same `Skeleton3D` and four more surfaces (five: the helmet contributes shell + head skin) of the same mesh. They join it rather than getting their own because they are siblings in `UpperBody`'s frame, so one skeleton means one pose array and no extra nodes at all. Their placement is read out of `Scenes/Skater.tscn` at `_ready` and the subtree freed, same as the legs. `set_head_angle` and `_orient_shoulder_cap` write bones; `SkaterMeshBuilder.apply()` is gone, since the skater no longer has a single mesh hanging on a node.
+**Upper body:** the arm rig above IS the upper-body rig — the torso, the helmet/head unit and the pelvis are three more bones on the same `Skeleton3D`. They join it rather than getting their own because they are siblings in `UpperBody`'s frame, so one skeleton means one pose array and no extra nodes at all. The torso's and the helmet's placement is read out of `Scenes/Skater.tscn` at `_ready` and the subtree freed, same as the legs; `set_head_angle` writes the helmet's bone.
 
 **On-ice HUD:** the slot rings, elevation chevrons and the slapper one-timer indicator are drawn by `Shaders/ice.gdshader` from uniforms fed by `IceRingField`, not by meshes. The slapper indicator is self-only, so it is scalar uniforms rather than an array — it was five nodes per skater (reticle, arrow root, arrow, gapped ring) plus an ArrayMesh rebuilt on convergence ticks, so that at most one skater could show it. Its geometry constants are mirrored in the shader; `SkaterHUDCoordinator` and `ice.gdshader` must be kept in sync. What is still a node is the self-beacon, which floats above the head and so cannot be an ice decal — and it is built LAZILY, only on the skater the ring-relation resolver reports as SELF, so exactly one exists in the scene rather than one per skater.
 
-**Leg rendering:** Both legs are one skinned mesh bound into the body skeleton (`SkaterLegRig.build`), fourteen bones chained `Leg → Shin` under the `HIPS` bone (see `Scripts/actors/CLAUDE.md` → *One skeleton, one chain*). Four pivots (`LegL/R`, `ShinL/R`) carry no geometry and exist to be rotated by the gait (`set_leg_swing`); the other ten carry thighs, knees, socks, skate collars and boots. Surfaces are `SkaterMeshBuilder.LegSurface` — twenty, not ten, because the skate collar carries its accent stripe and the boot carries its toe cap, its blade holder, its steel runner and its laces. Each of those is a piece a gear MODEL paints on its own (`GearModelRegistry`); the runner is the exception that stays steel by construction. The segment offsets are **read out of `Scenes/Skater.tscn` at `_ready` and the subtree is then freed**, so the scene stays the place leg proportions are authored while costing nothing at runtime.
+**Leg rendering:** Both legs are one skinned mesh bound into the body skeleton (`SkaterLegRig.build`), fourteen bones chained `Leg → Shin` under the `HIPS` bone (see `Scripts/actors/CLAUDE.md` → *One skeleton, one chain*). Four pivots (`LegL/R`, `ShinL/R`) carry no geometry of their own and exist to be rotated by the gait (`set_leg_swing`); the others carry the skin's thighs, knees and socks and the rigid skate collars and boots. Paint zones are `SkaterMeshBuilder.LegSurface` — twenty, not ten, because the skate collar carries its accent stripe and the boot carries its toe cap, its blade holder, its steel runner and its laces. Each of those is a piece a gear MODEL paints on its own (`GearModelRegistry`); the runner is the exception that stays steel by construction. The segment offsets are **read out of `Scenes/Skater.tscn` at `_ready` and the subtree is then freed**, so the scene stays the place leg proportions are authored while costing nothing at runtime.
 
 **Bottom hand (reactive):** A second hand grips the shaft a short way below the top hand. It is purely reactive — it never influences blade placement. After each top-hand solve, the controller computes the grip target as `top_hand.lerp(blade, bottom_hand_grip_fraction)` (default 0.25, ≈0.33 m down a 1.30 m shaft) and places the hand between it and a free-hand rest hung off the `bottom_shoulder` (blade side of the body) by a release weight: on the grip unless the blade has swung into extreme backhand. Release is angle-based: the controller measures the blade's world direction in the skater's body frame, normalizes it so positive = backhand, and drives a smoothstep from `bh_release_angle_deg` (67°, matching the upper-body rotation clamp) to `+bh_release_angle_band_deg` (15°) — so the hand stays on the stick throughout any swing the upper body can track, and only blends to its rest when the blade genuinely passes the body's rotation limit. The rest (`bh_free_hand_rest_arm`, in arm lengths off the visible shoulder) is tucked ahead of the belly on a bent elbow. The same rest takes the hand when no point of the shaft is within its arm's reach. The weight the geometry asks for is eased by a critically damped spring at render rate (`bh_release_omega`, about a third of a second), because a blade dangling at speed crosses either band in a tick or two; and a let-go hand swings with the stride (`bh_free_hand_swing_arm`), forward and across as its own side's leg pushes. A puck carrier never gets there: carrying, the top hand's solve stops the blade where the bottom hand still holds the shaft and, on the backhand, at the release angle (`Scripts/controllers/CLAUDE.md`, *A carrier keeps both hands on the stick*), so only an empty stick reaching for something goes one-handed. Rendered via the same `TwoBoneIK.solve_elbow` path with a mirrored pole. No network state is added — clients recompute the bottom hand locally from the interpolated top-hand + blade positions.
 
@@ -258,7 +258,7 @@ The reconstruction bounds the arm but leaves stick length free, which is only sa
 
 ## Bot AI
 
-Bots run a per-tick **utility model**. The puck carrier scores every option — SHOOT, QUICK_PASS, PASS (per teammate), CARRY (per candidate spot), HOLD — in one expected-goals-shaped currency and takes the best; off-puck teammates score candidate positions the same way. The scoring is domain-pure and unit-tested (`Scripts/domain/ai/`, chiefly `action_scoring.gd`), driven by per-bot state machines (`Scripts/ai/skater_agent_state_machine.gd`) and a ~6 Hz positional slot assignment (`team_brain.gd`). Role behaviors — carrier, finisher, support, outlet, breakout, pressure, mark, contain, forecheck (F1–F3), chase, flank — live in `domain/ai/role_behaviors/`. **5v5 mode** branches the brain at one seam (`TeamBrain.team_size` → `role_slots_5v5.gd`'s position-gated group election; the 3v3 path is reused verbatim) and adds position-aware roles on the same dispatch rail: `zone_coverage.gd`/`zone_defense.gd` (hybrid D-zone with soft-lock), `defenseman.gd` (points / line pair / valve / back posts), `high_slot.gd`, `breakout_center.gd`, `wide_lane.gd`, plus the 5v5-gated transition-exposure term (`AIActionScoring.counter_rush_cost`) in the carrier's turnover price — design + researched tactics in `docs/5v5-ai-plan.md`. Goalies are separate (see the Goalies note in `CLAUDE.md`).
+Bots run a per-tick **utility model**. The puck carrier scores every option — SHOOT, QUICK_PASS, PASS (per teammate), CARRY (per candidate spot), HOLD — in one expected-goals-shaped currency and takes the best; off-puck teammates score candidate positions the same way. The scoring is domain-pure and unit-tested (`Scripts/domain/ai/`, chiefly `action_scoring.gd`), driven by per-bot state machines (`Scripts/ai/skater_agent_state_machine.gd`) and a ~6 Hz positional slot assignment (`team_brain.gd`). Role behaviors — carrier, finisher, support, outlet, breakout, pressure, mark, contain, forecheck (F1–F3), chase, flank — live in `domain/ai/role_behaviors/`. **5v5 mode** branches the brain at one seam (`TeamBrain.team_size` → `role_slots_5v5.gd`'s position-gated group election; the 3v3 path is reused verbatim) and adds position-aware roles on the same dispatch rail: `zone_coverage.gd`/`zone_defense.gd` (hybrid D-zone with soft-lock), `defenseman.gd` (points / line pair / valve / back posts), `high_slot.gd`, `breakout_center.gd`, `rush_lane.gd`, plus the 5v5-gated transition-exposure term (`AIActionScoring.counter_rush_cost`) in the carrier's turnover price — design + researched tactics in `docs/5v5-ai-plan.md`. Goalies are separate (see the Goalies note in `CLAUDE.md`).
 
 ### Scoring philosophy — perception, not curves
 
@@ -415,19 +415,21 @@ save box (`KeeperBodyRig`, `Scripts/domain/keeper/CLAUDE.md`): the boxes are
 the save geometry the puck meets, so the drawn gear can never sit somewhere
 the saves are not.
 
-## The skater body is two skinned meshes on one skeleton, not a node tree
+## The skater body is one skinned surface on one skeleton, not a node tree
 
-`SkaterMeshBuilder` assembles `shared_upper_skin_mesh` (fifteen `UpperBone`s,
-eighteen `UpperSurface`s) and `shared_leg_skin_mesh` (fourteen `LegBone`s,
-twenty `LegSurface`s). Both are cached and shared by the whole roster, and the
-rigs draw them merged into one surface each (`shared_leg_body_mesh` /
-`shared_upper_body_mesh`, every surface a zone in `UV2.x`): per-skater colour is
-a zone record in the skater's `BodyZonePaint`, one material for the whole body,
-per-build sizing rides the scale inside a bone's pose, and no mesh is ever mutated
-per instance (`docs/body-draw-calls-plan.md`). Both skin one
-`Skeleton3D` (`SkaterBodySkeleton`), the leg mesh binding through
-`LEG_BONE_OFFSET`, with four vertex-less joint bones (hips, waist, spine, neck)
-joining the halves into one chain.
+The body is one connected skin (`SkaterConnectedMesh`: torso, sleeves, pants and
+socks, blended weights over a bind pose) and the rigid parts on their bones
+(`SkaterRigidParts`: helmet and head, gloves, skates; thirteen `UpperBone`s and
+fourteen `LegBone`s), drawn as ONE surface (`SkaterBodyMesh`), so a skater's
+body is one draw in the view and in each shadow map that holds it. It is cached
+and shared by the whole roster, and every part of it is a zone in `UV2.x`: per-skater colour is a zone record in
+the skater's `BodyZonePaint`, one material for the whole body, per-build sizing
+rides the scale inside a bone's pose, and no mesh is ever mutated per instance
+(`docs/body-draw-calls-plan.md`). All of them skin one `Skeleton3D`
+(`SkaterBodySkeleton`), the leg parts binding through `LEG_BONE_OFFSET`, with
+four vertex-less joint bones (hips, waist, spine, neck) joining the halves into
+one chain, and the jersey tail's and the skin's deform bones after them. The
+display figures (`FigureKit`) build the same body on the same skeleton.
 
 `SkaterArmRig.build` / `SkaterLegRig.build` read the scene's authored transforms
 out of `Scenes/Skater.tscn` and then **free those nodes**, so the `.tscn` stays
@@ -436,22 +438,23 @@ transformed. A node renamed in the editor is therefore not a missing-node error 
 it is a bone silently left at identity, which is why
 `test_skater_scene_mirrors.gd` asserts every authored path still resolves.
 
-Four properties make a bone pose mean exactly a node's local transform, and all
-four have to hold: every vertex weighted 1.0 to one bone, identity bone rests,
+For the rigid parts, four properties make a bone pose mean exactly a node's
+local transform, and all four have to hold: every vertex weighted 1.0 to one bone, identity bone rests,
 identity skin binds, and part geometry left in its own local space. Each part
 is posed in its parent bone's frame — the shell under the spine, the pelvis under
 the waist, the legs `Leg` → `Shin` under the hips — and the arms are root bones
-solved in skeleton space. The puck still hangs its mesh on a node.
+solved in skeleton space. The skin is bound in its bind pose instead
+(`SkaterConnectedMesh.bind_rests`; `Scripts/actors/CLAUDE.md`). The puck still
+hangs its mesh on a node.
 
-**Paint the skater body through the `Skater` surface seams, never a material.**
-`set_leg_surface_material` / `set_upper_surface_material` take a
-`StandardMaterial3D` as a zone's RECORD, which `BodyZonePaint` compiles into the
-body material's arrays; editing a record in place does nothing until it is handed
-back. The part meshes outside the rig (the lobby's `FigureKit` dummies) are still
-multi-surface, and there `material_override` overrides every surface at once,
-erasing the boot's steel and laces or the helmet's skin: paint them through
-`SkaterMeshBuilder.surface_override()`, which duplicates the shared default on
-first use — the default lives on the mesh every dummy shares.
+**Paint the skater body through its zones, never a material.** `SkaterKitPaint`
+(the rink's skater and the display figures alike) hands `BodyZonePaint.set_zone`
+a `StandardMaterial3D` as a zone's RECORD, which it compiles into the body
+material's arrays; editing a record in place does nothing until it is handed
+back. The zones whose parts ship a finish of their own (the steel runners, the
+laces, the skin) are seeded from the shared default as a copy
+(`SkaterRigidParts.seed_paint`) — the default lives on the mesh every skater
+shares.
 
 ## Confusing Boundaries
 

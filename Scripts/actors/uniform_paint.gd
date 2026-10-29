@@ -21,8 +21,6 @@ const ROUGH_GLOVE: float = 0.6     # glove leather and nylon
 const CYLINDER_SIDE_V_FRACTION: float = 0.5
 const STRIPE_TEX_HEIGHT_PX: int = 128
 const STRIPE_TEX_WIDTH_PX: int = 4
-# Sphere-convention parts (the shoulder caps) map V over the whole image.
-const CAP_TEX_HEIGHT_PX: int = 128
 
 
 static func solid(color: Color, roughness: float = ROUGH_CLOTH) -> StandardMaterial3D:
@@ -54,16 +52,6 @@ static func collar_color(jersey: Dictionary) -> Color:
 	return collar if collar is Color else yoke_color(jersey)
 
 
-# The jersey's stripes with the yoke band first, over the torso side down to the
-# shoulder line — for h_stripes painters; JerseyDecal paints the same bands.
-static func jersey_stripes(jersey: Dictionary) -> Array:
-	var frac: float = SkaterMeshBuilder.TORSO_YOKE_SIDE_FRACTION
-	var out: Array = [{"pos": frac * 0.5, "width": frac, "color": yoke_color(jersey)}]
-	for stripe: Dictionary in jersey.stripes:
-		out.append(jersey_side_stripe(stripe))
-	return out
-
-
 # The side height the kits' jersey stripe fractions are authored against. A band
 # in its lower half is a hem band and keeps its place above the hem; one in the
 # upper half keeps its place under the collar — so a sweater of another length
@@ -84,25 +72,11 @@ static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
 			"color": stripe.color}
 
 
-# A shoulder cap without its number: the yoke over its top, the cap's own color
-# below. ShoulderDecal paints the same split under the number.
-static func shoulder_cap(jersey: Dictionary, cap_color: Color) -> ImageTexture:
-	var img := Image.create(STRIPE_TEX_WIDTH_PX, CAP_TEX_HEIGHT_PX, false, Image.FORMAT_RGBA8)
-	img.fill(cap_color)
-	img.fill_rect(Rect2i(0, 0, STRIPE_TEX_WIDTH_PX,
-			int(round(SkaterMeshBuilder.SHOULDER_CAP_YOKE_V * float(CAP_TEX_HEIGHT_PX)))),
-			yoke_color(jersey))
-	return ImageTexture.create_from_image(img)
-
-
 # Horizontal bands across a cylinder's curved side. Each stripe is `pos` (centre,
 # as a fraction of the side region) and `width` (also a fraction), so a uniform
 # authored once lands at the same proportion of every part regardless of its
-# real length. `top_cap`, when a Color, fills the cylinder's end-cap half of the
-# atlas — used where a capped part would otherwise show the base colour on its
-# flat end.
-static func h_stripes(base: Color, stripes: Array,
-		top_cap: Variant = null) -> ImageTexture:
+# real length.
+static func h_stripes(base: Color, stripes: Array) -> ImageTexture:
 	var img := Image.create(STRIPE_TEX_WIDTH_PX, STRIPE_TEX_HEIGHT_PX, false, Image.FORMAT_RGBA8)
 	img.fill(base)
 	var side_px: int = int(round(CYLINDER_SIDE_V_FRACTION * float(STRIPE_TEX_HEIGHT_PX)))
@@ -113,7 +87,4 @@ static func h_stripes(base: Color, stripes: Array,
 		var y1: int = clampi(int(round(center_px + half_px)), 0, side_px)
 		if y1 > y0:
 			img.fill_rect(Rect2i(0, y0, STRIPE_TEX_WIDTH_PX, y1 - y0), s.color)
-	if top_cap is Color:
-		img.fill_rect(Rect2i(0, side_px, STRIPE_TEX_WIDTH_PX / 2,
-				STRIPE_TEX_HEIGHT_PX - side_px), top_cap)
 	return ImageTexture.create_from_image(img)

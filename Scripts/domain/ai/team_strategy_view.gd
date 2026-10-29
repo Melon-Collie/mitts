@@ -13,6 +13,9 @@ func get_slot(_peer_id: int) -> int:
 func strong_x() -> float:
 	return 1.0
 
+func carrier_lane() -> int:
+	return 0
+
 func assigned_threat(_peer_id: int) -> int:
 	return -1
 
@@ -38,6 +41,10 @@ func ping_chase_peer() -> int:
 
 func get_team_size() -> int:
 	return GameRules.DEFAULT_TEAM_SIZE
+
+# Whether the match calls icing (the NHL rule set).
+func icing_enforced() -> bool:
+	return false
 
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return {}

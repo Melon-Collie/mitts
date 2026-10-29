@@ -1493,6 +1493,8 @@ func _spawn_world() -> void:
 						_state_machine.team_size, _registry.position_by_peer,
 						_registry.bot_peers),
 		]
+		for brain: TeamBrain in team_brains:
+			brain.rule_set = _state_machine.rule_set
 		_connect_goal_signals()
 
 

@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Dev visualizer: close-ups of a dressed skater's upper body — the jersey, the
-# shoulder caps, the yoke, the sleeves and elbows — in several kits, from the
+# shoulders, the yoke, the sleeves and elbows — in several kits, from the
 # front, back, side, three-quarter and the game camera. One row per kit in one
 # sheet. For judging how a kit sits on the body; kit_capture.gd lays the same
 # paint out flat.

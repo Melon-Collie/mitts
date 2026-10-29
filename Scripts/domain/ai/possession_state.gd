@@ -127,3 +127,10 @@ static func compute(
 			state = State.TRANS_DEFENSE
 
 	return Result.make(state, carrier_team)
+
+
+# Whether the puck is in the zone this team attacks.
+static func in_their_zone(snapshot: WorldSnapshot, own_goal_z: float) -> bool:
+	if snapshot == null or snapshot.puck_state == null:
+		return false
+	return -signf(own_goal_z) * snapshot.puck_state.position.z > GameRules.BLUE_LINE_Z

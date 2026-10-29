@@ -290,18 +290,13 @@ static func _jersey_stripes(stripes: Array, height_m: float) -> Array:
 	return out
 
 
-# The elbow cap's colour: the kit's arms.elbow when it names one, else whatever
-# the forearm's bands put at its elbow end, so the cap disappears into the
-# sleeve.
+# The elbow cap's colour: the kit's arms.elbow when it names one, else the
+# sleeve's own base, so the cap is just sleeve.
 static func _elbow_color(arms: Dictionary) -> Color:
 	var elbow: Variant = arms.get("elbow")
 	if elbow is Color:
 		return elbow
-	var c: Color = arms.lower.base
-	for s: Dictionary in arms.lower.stripes:
-		if absf(float(s.pos)) < float(s.width) * 0.5:
-			c = s.color
-	return c
+	return arms.lower.base
 
 
 static func _set_stripes(m: ShaderMaterial, stripes: Array) -> void:

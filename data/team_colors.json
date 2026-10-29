@@ -1,6 +1,6 @@
 {
   "schema": "mitts.jersey.v2",
-  "description": "Mitts fruit league - one team per slot, each with home and away kits. Stripes are procedural horizontal bands over a UV region: pos = band center (0=top of region, 1=bottom), width = band height as a fraction of the region, both 0..1. Stripes paint in array order (later over earlier). Centered cross-section bands = stack stripes sharing pos with shrinking widths, widest first (Lime, Pomegranate, Pineapple). Stacked bands = adjacent stripes edge to edge (Watermelon's slice edge, Peach's sunset). Asymmetric slices offset a band's pos off-center (Dragonfruit seed-line). For a cross-section to show its outer color, set the region base to that color so it reads as the skin/rind edges. Uniform lettering is text.color, bordered on the sweater by text.stroke when set (optional; absent = no border); shoulders.stroke borders the shoulder numbers the same way. text.outline is a separate color, the outline UI chrome (off-screen indicators) draws around the number. jersey.collar (optional, falls back to yoke) = the ring around the neck; jersey.yoke (optional, falls back to the jersey base) = the top of the shoulders, from the collar over the top of each shoulder cap; shoulders.color = the rest of the cap, the patch at the top of the arm carrying the number. arms.elbow (optional) = the elbow pad, which otherwise takes the forearm's color at the elbow and disappears into the sleeve. primary/secondary/light are the team's UI palette (HUD, lobby cards, scorebug headers): home cards render as primary body + secondary stripe, away cards as light body + primary stripe. light mirrors the away kit's jersey base (the away body color) so the UI away card matches the 3D away sweater. ui_ink (optional) letters both UI sides instead of light/primary, for a team whose primary contrasts with neither white text nor a white card (Lemon, Pineapple, Lime). These drive UI only; the home/away kit blocks below drive the 3D uniform meshes. goalie_pads is the goalie's pads, blocker and trapper, white in every bundled kit; his trim on them is the team's primary, or its secondary where the primary is too faint on the pads.",
+  "description": "Mitts fruit league - one team per slot, each with home and away kits. Stripes are procedural horizontal bands over a UV region: pos = band center (0=top of region, 1=bottom), width = band height as a fraction of the region, both 0..1. Stripes paint in array order (later over earlier). Centered cross-section bands = stack stripes sharing pos with shrinking widths, widest first (Lime, Pomegranate, Pineapple). Stacked bands = adjacent stripes edge to edge (Watermelon's slice edge, Peach's sunset). Asymmetric slices offset a band's pos off-center (Dragonfruit seed-line). For a cross-section to show its outer color, set the region base to that color so it reads as the skin/rind edges. Uniform lettering is text.color, bordered on the sweater by text.stroke when set (optional; absent = no border); shoulders.stroke borders the shoulder numbers the same way. text.outline is a separate color, the outline UI chrome (off-screen indicators) draws around the number. jersey.collar (optional, falls back to yoke) = the ring around the neck; jersey.yoke (optional, falls back to the jersey base) = the top of the shoulders, from the collar over the top of each shoulder cap; sleeve = the whole arm, one base color with stripes laid from the shoulder (pos 0) to the glove's cuff (pos 1), the elbow at 0.62: a shoulder or forearm of another color is a wide band (Pineapple's shoulders, Plum's forearms), and the number sits on the outside of the sleeve near its top, lettered in shoulders.text. primary/secondary/light are the team's UI palette (HUD, lobby cards, scorebug headers): home cards render as primary body + secondary stripe, away cards as light body + primary stripe. light mirrors the away kit's jersey base (the away body color) so the UI away card matches the 3D away sweater. ui_ink (optional) letters both UI sides instead of light/primary, for a team whose primary contrasts with neither white text nor a white card (Lemon, Pineapple, Lime). These drive UI only; the home/away kit blocks below drive the 3D uniform meshes. goalie_pads is the goalie's pads, blocker and trapper, white in every bundled kit; his trim on them is the team's primary, or its secondary where the primary is too faint on the pads.",
   "teams": [
     {
       "name": "Pomegranate",
@@ -10,7 +10,6 @@
       "home": {
         "helmet": "#971829",
         "shoulders": {
-          "color": "#971829",
           "text": "#F5E6D3"
         },
         "jersey": {
@@ -29,36 +28,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#971829",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#971829",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.3,
-                "color": "#E8445A"
-              },
-              {
-                "pos": 0.38,
-                "width": 0.04,
-                "color": "#F5E6D3"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.04,
-                "color": "#F5E6D3"
-              },
-              {
-                "pos": 0.62,
-                "width": 0.04,
-                "color": "#F5E6D3"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#971829",
+          "stripes": [
+            {
+              "pos": 0.679,
+              "width": 0.17,
+              "color": "#E8445A"
+            },
+            {
+              "pos": 0.611,
+              "width": 0.023,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.023,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.747,
+              "width": 0.023,
+              "color": "#F5E6D3"
+            }
+          ]
         },
         "gloves": "#971829",
         "pants": {
@@ -110,7 +103,6 @@
       "away": {
         "helmet": "#F5E6D3",
         "shoulders": {
-          "color": "#971829",
           "text": "#F5E6D3"
         },
         "jersey": {
@@ -134,36 +126,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#971829",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#971829",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.3,
-                "color": "#E8445A"
-              },
-              {
-                "pos": 0.38,
-                "width": 0.04,
-                "color": "#F5E6D3"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.04,
-                "color": "#F5E6D3"
-              },
-              {
-                "pos": 0.62,
-                "width": 0.04,
-                "color": "#F5E6D3"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#971829",
+          "stripes": [
+            {
+              "pos": 0.679,
+              "width": 0.17,
+              "color": "#E8445A"
+            },
+            {
+              "pos": 0.611,
+              "width": 0.023,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.023,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.747,
+              "width": 0.023,
+              "color": "#F5E6D3"
+            }
+          ]
         },
         "gloves": "#971829",
         "pants": {
@@ -226,7 +212,6 @@
       "home": {
         "helmet": "#6B1E4A",
         "shoulders": {
-          "color": "#3B67C4",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -245,26 +230,20 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#3B67C4",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#3B67C4",
-            "stripes": [
-              {
-                "pos": 0.46,
-                "width": 0.14,
-                "color": "#6B1E4A"
-              },
-              {
-                "pos": 0.6,
-                "width": 0.14,
-                "color": "#C8D8F0"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#3B67C4",
+          "stripes": [
+            {
+              "pos": 0.64,
+              "width": 0.079,
+              "color": "#6B1E4A"
+            },
+            {
+              "pos": 0.719,
+              "width": 0.079,
+              "color": "#C8D8F0"
+            }
+          ]
         },
         "gloves": "#6B1E4A",
         "pants": {
@@ -301,7 +280,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#3B67C4",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -320,26 +298,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#C8D8F0",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#C8D8F0",
-            "stripes": [
-              {
-                "pos": 0.46,
-                "width": 0.14,
-                "color": "#3B67C4"
-              },
-              {
-                "pos": 0.6,
-                "width": 0.14,
-                "color": "#6B1E4A"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#C8D8F0",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#3B67C4"
+            },
+            {
+              "pos": 0.64,
+              "width": 0.079,
+              "color": "#3B67C4"
+            },
+            {
+              "pos": 0.719,
+              "width": 0.079,
+              "color": "#6B1E4A"
+            }
+          ]
         },
         "gloves": "#3B67C4",
         "pants": {
@@ -383,7 +360,6 @@
       "home": {
         "helmet": "#2E7A5A",
         "shoulders": {
-          "color": "#2E7A5A",
           "text": "#F7E7A6"
         },
         "jersey": {
@@ -413,31 +389,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#F4AC1C",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#F4AC1C",
-            "stripes": [
-              {
-                "pos": 0.32,
-                "width": 0.3,
-                "color": "#B8691E"
-              },
-              {
-                "pos": 0.32,
-                "width": 0.2,
-                "color": "#F4AC1C"
-              },
-              {
-                "pos": 0.32,
-                "width": 0.1,
-                "color": "#F7E7A6"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#F4AC1C",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#2E7A5A"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.17,
+              "color": "#B8691E"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.113,
+              "color": "#F4AC1C"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.057,
+              "color": "#F7E7A6"
+            }
+          ]
         },
         "gloves": "#2E7A5A",
         "pants": {
@@ -474,7 +449,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#2E7A5A",
           "text": "#F7E7A6"
         },
         "jersey": {
@@ -504,31 +478,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.32,
-                "width": 0.3,
-                "color": "#B8691E"
-              },
-              {
-                "pos": 0.32,
-                "width": 0.2,
-                "color": "#F4AC1C"
-              },
-              {
-                "pos": 0.32,
-                "width": 0.1,
-                "color": "#F7E7A6"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#2E7A5A"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.17,
+              "color": "#B8691E"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.113,
+              "color": "#F4AC1C"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.057,
+              "color": "#F7E7A6"
+            }
+          ]
         },
         "gloves": "#2E7A5A",
         "pants": {
@@ -572,7 +545,6 @@
       "home": {
         "helmet": "#5AB4E0",
         "shoulders": {
-          "color": "#F5D028",
           "text": "#5AB4E0",
           "stroke": "#1F6AA5"
         },
@@ -597,26 +569,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.26,
-                "color": "#1F6AA5"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.2,
-                "color": "#5AB4E0"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#F5D028"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.147,
+              "color": "#1F6AA5"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.113,
+              "color": "#5AB4E0"
+            }
+          ]
         },
         "gloves": "#5AB4E0",
         "pants": {
@@ -653,7 +624,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#FFFFFF",
           "text": "#5AB4E0",
           "stroke": "#1F6AA5"
         },
@@ -678,26 +648,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#F5D028",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#F5D028",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.26,
-                "color": "#1F6AA5"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.2,
-                "color": "#5AB4E0"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#F5D028",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.147,
+              "color": "#1F6AA5"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.113,
+              "color": "#5AB4E0"
+            }
+          ]
         },
         "gloves": "#5AB4E0",
         "pants": {
@@ -740,7 +709,6 @@
       "home": {
         "helmet": "#1A1A1A",
         "shoulders": {
-          "color": "#CC1F93",
           "text": "#FFFFFF",
           "stroke": "#1A1A1A"
         },
@@ -749,26 +717,20 @@
           "collar": "#1A1A1A",
           "stripes": []
         },
-        "arms": {
-          "upper": {
-            "base": "#CC1F93",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#CC1F93",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.62,
-                "color": "#FFFFFF"
-              },
-              {
-                "pos": 0.4,
-                "width": 0.08,
-                "color": "#1A1A1A"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#CC1F93",
+          "stripes": [
+            {
+              "pos": 0.679,
+              "width": 0.351,
+              "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.623,
+              "width": 0.045,
+              "color": "#1A1A1A"
+            }
+          ]
         },
         "gloves": "#1A1A1A",
         "pants": {
@@ -800,7 +762,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#FFFFFF",
           "text": "#CC1F93",
           "stroke": "#1A1A1A"
         },
@@ -809,26 +770,30 @@
           "collar": "#CC1F93",
           "stripes": []
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#CC1F93",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.62,
-                "color": "#FFFFFF"
-              },
-              {
-                "pos": 0.4,
-                "width": 0.08,
-                "color": "#1A1A1A"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.858,
+              "width": 0.472,
+              "color": "#CC1F93"
+            },
+            {
+              "pos": 0.457,
+              "width": 0.094,
+              "color": "#CC1F93"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.351,
+              "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.623,
+              "width": 0.045,
+              "color": "#1A1A1A"
+            }
+          ]
         },
         "gloves": "#1A1A1A",
         "pants": {
@@ -867,7 +832,6 @@
       "home": {
         "helmet": "#3B5511",
         "shoulders": {
-          "color": "#7FB320",
           "text": "#F5E6D3",
           "stroke": "#3B5511"
         },
@@ -892,31 +856,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#7FB320",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#7FB320",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.46,
-                "color": "#3B5511"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.3,
-                "color": "#F5E6D3"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.16,
-                "color": "#7FB320"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#7FB320",
+          "stripes": [
+            {
+              "pos": 0.679,
+              "width": 0.26,
+              "color": "#3B5511"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.17,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.091,
+              "color": "#7FB320"
+            }
+          ]
         },
         "gloves": "#3B5511",
         "pants": {
@@ -953,7 +911,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#FFFFFF",
           "text": "#7FB320",
           "stroke": "#3B5511"
         },
@@ -978,31 +935,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.5,
-                "width": 0.46,
-                "color": "#3B5511"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.3,
-                "color": "#F5E6D3"
-              },
-              {
-                "pos": 0.5,
-                "width": 0.16,
-                "color": "#7FB320"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.679,
+              "width": 0.26,
+              "color": "#3B5511"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.17,
+              "color": "#F5E6D3"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.091,
+              "color": "#7FB320"
+            }
+          ]
         },
         "gloves": "#7FB320",
         "pants": {
@@ -1045,7 +996,6 @@
       "home": {
         "helmet": "#5B2A6E",
         "shoulders": {
-          "color": "#5B2A6E",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -1060,21 +1010,20 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#5B2A6E",
-            "stripes": [
-              {
-                "pos": 0.9,
-                "width": 0.12,
-                "color": "#FFFFFF"
-              }
-            ]
-          },
-          "lower": {
-            "base": "#E8862A",
-            "stripes": []
-          }
+        "sleeve": {
+          "base": "#5B2A6E",
+          "stripes": [
+            {
+              "pos": 0.858,
+              "width": 0.472,
+              "color": "#E8862A"
+            },
+            {
+              "pos": 0.538,
+              "width": 0.068,
+              "color": "#FFFFFF"
+            }
+          ]
         },
         "gloves": "#5B2A6E",
         "pants": {
@@ -1111,7 +1060,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#FFFFFF",
           "text": "#5B2A6E"
         },
         "jersey": {
@@ -1126,21 +1074,20 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.9,
-                "width": 0.12,
-                "color": "#5B2A6E"
-              }
-            ]
-          },
-          "lower": {
-            "base": "#E8862A",
-            "stripes": []
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.858,
+              "width": 0.472,
+              "color": "#E8862A"
+            },
+            {
+              "pos": 0.538,
+              "width": 0.068,
+              "color": "#5B2A6E"
+            }
+          ]
         },
         "gloves": "#FFFFFF",
         "pants": {
@@ -1183,7 +1130,6 @@
       "home": {
         "helmet": "#21643A",
         "shoulders": {
-          "color": "#21643A",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -1202,26 +1148,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#C2405A",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#C2405A",
-            "stripes": [
-              {
-                "pos": 0.55,
-                "width": 0.06,
-                "color": "#CFE3B5"
-              },
-              {
-                "pos": 0.7,
-                "width": 0.24,
-                "color": "#21643A"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#C2405A",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#21643A"
+            },
+            {
+              "pos": 0.611,
+              "width": 0.034,
+              "color": "#CFE3B5"
+            },
+            {
+              "pos": 0.696,
+              "width": 0.136,
+              "color": "#21643A"
+            }
+          ]
         },
         "gloves": "#21643A",
         "pants": {
@@ -1252,7 +1197,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#21643A",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -1276,31 +1220,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.46,
-                "width": 0.12,
-                "color": "#C2405A"
-              },
-              {
-                "pos": 0.55,
-                "width": 0.06,
-                "color": "#CFE3B5"
-              },
-              {
-                "pos": 0.7,
-                "width": 0.24,
-                "color": "#21643A"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#21643A"
+            },
+            {
+              "pos": 0.594,
+              "width": 0.068,
+              "color": "#C2405A"
+            },
+            {
+              "pos": 0.645,
+              "width": 0.034,
+              "color": "#CFE3B5"
+            },
+            {
+              "pos": 0.73,
+              "width": 0.136,
+              "color": "#21643A"
+            }
+          ]
         },
         "gloves": "#21643A",
         "pants": {
@@ -1342,7 +1285,6 @@
       "home": {
         "helmet": "#3FB8AF",
         "shoulders": {
-          "color": "#5C3A21",
           "text": "#F3EAD3"
         },
         "jersey": {
@@ -1361,26 +1303,20 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#5C3A21",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#5C3A21",
-            "stripes": [
-              {
-                "pos": 0.55,
-                "width": 0.26,
-                "color": "#F3EAD3"
-              },
-              {
-                "pos": 0.55,
-                "width": 0.156,
-                "color": "#3FB8AF"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#5C3A21",
+          "stripes": [
+            {
+              "pos": 0.679,
+              "width": 0.147,
+              "color": "#F3EAD3"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.088,
+              "color": "#3FB8AF"
+            }
+          ]
         },
         "gloves": "#3FB8AF",
         "pants": {
@@ -1417,7 +1353,6 @@
       "away": {
         "helmet": "#F3EAD3",
         "shoulders": {
-          "color": "#5C3A21",
           "text": "#F3EAD3"
         },
         "jersey": {
@@ -1437,26 +1372,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#F3EAD3",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#F3EAD3",
-            "stripes": [
-              {
-                "pos": 0.55,
-                "width": 0.26,
-                "color": "#5C3A21"
-              },
-              {
-                "pos": 0.55,
-                "width": 0.156,
-                "color": "#3FB8AF"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#F3EAD3",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#5C3A21"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.147,
+              "color": "#5C3A21"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.088,
+              "color": "#3FB8AF"
+            }
+          ]
         },
         "gloves": "#5C3A21",
         "pants": {
@@ -1499,7 +1433,6 @@
       "home": {
         "helmet": "#2B070F",
         "shoulders": {
-          "color": "#2B070F",
           "text": "#D2142C"
         },
         "jersey": {
@@ -1518,26 +1451,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#D2142C",
-            "stripes": [
-              {
-                "pos": 0.6,
-                "width": 0.11,
-                "color": "#2B070F"
-              },
-              {
-                "pos": 0.84,
-                "width": 0.11,
-                "color": "#2B070F"
-              }
-            ]
-          },
-          "lower": {
-            "base": "#D2142C",
-            "stripes": []
-          }
+        "sleeve": {
+          "base": "#D2142C",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#2B070F"
+            },
+            {
+              "pos": 0.368,
+              "width": 0.062,
+              "color": "#2B070F"
+            },
+            {
+              "pos": 0.504,
+              "width": 0.062,
+              "color": "#2B070F"
+            }
+          ]
         },
         "gloves": "#2B070F",
         "pants": {
@@ -1568,7 +1500,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#D2142C",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -1587,26 +1518,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.6,
-                "width": 0.11,
-                "color": "#D2142C"
-              },
-              {
-                "pos": 0.84,
-                "width": 0.11,
-                "color": "#D2142C"
-              }
-            ]
-          },
-          "lower": {
-            "base": "#FFFFFF",
-            "stripes": []
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#D2142C"
+            },
+            {
+              "pos": 0.368,
+              "width": 0.062,
+              "color": "#D2142C"
+            },
+            {
+              "pos": 0.504,
+              "width": 0.062,
+              "color": "#D2142C"
+            }
+          ]
         },
         "gloves": "#2B070F",
         "pants": {
@@ -1643,7 +1573,6 @@
       "home": {
         "helmet": "#1E2A5A",
         "shoulders": {
-          "color": "#EE7F62",
           "text": "#1E2A5A"
         },
         "jersey": {
@@ -1667,31 +1596,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#EE7F62",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#1E2A5A",
-            "stripes": [
-              {
-                "pos": 0.2,
-                "width": 0.1,
-                "color": "#F6B23F"
-              },
-              {
-                "pos": 0.3,
-                "width": 0.1,
-                "color": "#EE7F62"
-              },
-              {
-                "pos": 0.4,
-                "width": 0.1,
-                "color": "#D44A3C"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#EE7F62",
+          "stripes": [
+            {
+              "pos": 0.858,
+              "width": 0.472,
+              "color": "#1E2A5A"
+            },
+            {
+              "pos": 0.623,
+              "width": 0.057,
+              "color": "#F6B23F"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.057,
+              "color": "#EE7F62"
+            },
+            {
+              "pos": 0.736,
+              "width": 0.057,
+              "color": "#D44A3C"
+            }
+          ]
         },
         "gloves": "#1E2A5A",
         "pants": {
@@ -1727,7 +1655,6 @@
       "away": {
         "helmet": "#F5EBDA",
         "shoulders": {
-          "color": "#F5EBDA",
           "text": "#1E2A5A"
         },
         "jersey": {
@@ -1756,31 +1683,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#F5EBDA",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#F5EBDA",
-            "stripes": [
-              {
-                "pos": 0.2,
-                "width": 0.1,
-                "color": "#F6B23F"
-              },
-              {
-                "pos": 0.3,
-                "width": 0.1,
-                "color": "#EE7F62"
-              },
-              {
-                "pos": 0.4,
-                "width": 0.1,
-                "color": "#D44A3C"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#F5EBDA",
+          "stripes": [
+            {
+              "pos": 0.623,
+              "width": 0.057,
+              "color": "#F6B23F"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.057,
+              "color": "#EE7F62"
+            },
+            {
+              "pos": 0.736,
+              "width": 0.057,
+              "color": "#D44A3C"
+            }
+          ]
         },
         "gloves": "#1E2A5A",
         "pants": {
@@ -1822,7 +1743,6 @@
       "home": {
         "helmet": "#161618",
         "shoulders": {
-          "color": "#5E2457",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -1841,26 +1761,25 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#161618",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#161618",
-            "stripes": [
-              {
-                "pos": 0.245,
-                "width": 0.11,
-                "color": "#B0243A"
-              },
-              {
-                "pos": 0.355,
-                "width": 0.11,
-                "color": "#5E2457"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#161618",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#5E2457"
+            },
+            {
+              "pos": 0.648,
+              "width": 0.062,
+              "color": "#B0243A"
+            },
+            {
+              "pos": 0.71,
+              "width": 0.062,
+              "color": "#5E2457"
+            }
+          ]
         },
         "gloves": "#161618",
         "pants": {
@@ -1891,7 +1810,6 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "color": "#161618",
           "text": "#FFFFFF"
         },
         "jersey": {
@@ -1915,31 +1833,30 @@
             }
           ]
         },
-        "arms": {
-          "upper": {
-            "base": "#FFFFFF",
-            "stripes": []
-          },
-          "lower": {
-            "base": "#FFFFFF",
-            "stripes": [
-              {
-                "pos": 0.19,
-                "width": 0.11,
-                "color": "#B0243A"
-              },
-              {
-                "pos": 0.3,
-                "width": 0.11,
-                "color": "#5E2457"
-              },
-              {
-                "pos": 0.41,
-                "width": 0.11,
-                "color": "#161618"
-              }
-            ]
-          }
+        "sleeve": {
+          "base": "#FFFFFF",
+          "stripes": [
+            {
+              "pos": 0.142,
+              "width": 0.283,
+              "color": "#161618"
+            },
+            {
+              "pos": 0.617,
+              "width": 0.062,
+              "color": "#B0243A"
+            },
+            {
+              "pos": 0.679,
+              "width": 0.062,
+              "color": "#5E2457"
+            },
+            {
+              "pos": 0.742,
+              "width": 0.062,
+              "color": "#161618"
+            }
+          ]
         },
         "gloves": "#161618",
         "pants": {

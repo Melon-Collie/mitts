@@ -245,10 +245,38 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 	var pants_raw:     Dictionary = raw.get("pants",     {})
 	var socks_raw:     Dictionary = raw.get("socks",     {})
 	var text_raw:      Dictionary = raw.get("text",      {})
+	var arms := {
+		"elbow": _parse_optional_color(arms_raw.get("elbow", null)),
+		"upper": {
+			"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
+			"stripes": _parse_stripes(arms_upper.get("stripes", [])),
+		},
+		"lower": {
+			"base":    _parse_color(arms_lower.get("base",    "#FFFFFF")),
+			"stripes": _parse_stripes(arms_lower.get("stripes", [])),
+		},
+	}
+	var shoulder_color: Color = _parse_color(shoulders_raw.get("color", "#FFFFFF"))
+	# The sleeve is the kit's arm (SleevePaint); a kit still in the two-segment
+	# form is read into one, and a sleeve hands the two-segment form back to the
+	# bodies that paint the arm in two.
+	var sleeve: Dictionary
+	if raw.has("sleeve"):
+		var sleeve_raw: Dictionary = raw.sleeve
+		sleeve = {
+			"base":    _parse_color(sleeve_raw.get("base", "#FFFFFF")),
+			"stripes": _parse_stripes(sleeve_raw.get("stripes", [])),
+		}
+		arms.upper = SleevePaint.segment(sleeve, true)
+		arms.lower = SleevePaint.segment(sleeve, false)
+		shoulder_color = SleevePaint.color_at(sleeve,
+				SleevePaint.pos_of(SleevePaint.NUMBER_CENTER_M))
+	else:
+		sleeve = SleevePaint.from_legacy(arms, shoulder_color)
 	return {
 		"helmet":      _parse_color(raw.get("helmet", "#FFFFFF")),
 		"shoulders": {
-			"color":   _parse_color(shoulders_raw.get("color",   "#FFFFFF")),
+			"color":   shoulder_color,
 			"text":    _parse_color(shoulders_raw.get("text",    "#FFFFFF")),
 			"stroke":  _parse_stroke(shoulders_raw.get("stroke", null)),
 		},
@@ -258,17 +286,8 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
 			"stripes": _parse_stripes(jersey_raw.get("stripes", [])),
 		},
-		"arms": {
-			"elbow": _parse_optional_color(arms_raw.get("elbow", null)),
-			"upper": {
-				"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
-				"stripes": _parse_stripes(arms_upper.get("stripes", [])),
-			},
-			"lower": {
-				"base":    _parse_color(arms_lower.get("base",    "#FFFFFF")),
-				"stripes": _parse_stripes(arms_lower.get("stripes", [])),
-			},
-		},
+		"sleeve":      sleeve,
+		"arms":        arms,
 		"gloves":      _parse_color(raw.get("gloves", "#FFFFFF")),
 		"pants": {
 			"base":    _parse_color(pants_raw.get("base",    "#FFFFFF")),

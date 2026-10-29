@@ -276,7 +276,7 @@ var ice_scratches_enabled: bool = true
 # ribbon board in the stands.
 var arena_ads_enabled: bool = true
 var puck_shadow_enabled: bool = true
-# CPU knobs, applied in apply_video: see SkaterShadowProxy and SkaterAnimationLod.
+# Applied in apply_video: see SkaterShadows and SkaterAnimationLod.
 var player_shadows_enabled: bool = true
 var animation_detail: int = SkaterAnimationLod.DETAIL_BALANCED
 # Arena atmosphere effects (applied to the WorldEnvironment in apply_video). The
@@ -849,7 +849,7 @@ func apply_video() -> void:
 	root.scaling_3d_scale = render_scale
 	_apply_anti_aliasing(root)
 	SkaterAnimationLod.detail = animation_detail
-	SkaterShadowProxy.set_enabled(player_shadows_enabled)
+	SkaterShadows.set_enabled(player_shadows_enabled)
 	var scene: Node = Engine.get_main_loop().current_scene
 	if scene == null:
 		return
