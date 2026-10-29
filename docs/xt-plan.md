@@ -54,9 +54,12 @@ a table lookup.
   than the same spot against a set box. One table per state.
 - **C. The full situation**: no longer a table; a learned function.
 
-Recommended start: **A**, with **B** as the first extension if A misprices
-rushes against set defences. The worry with A is exactly that: the keep odds see
-the defenders between here and there, but not the ones waiting after.
+**Agreed: A.** The situation is layered on top, as the carry formula already
+layers it: the table says what a spot is worth, and the live reads (the keep
+odds of getting there against the defence as it is) say how much of that this
+option collects. B stays the extension to reach for if a spot-only value
+misprices rushes against set defences, since the keep odds see the defenders
+between here and there but not the ones waiting after.
 
 ### 2. Where do the numbers come from?
 
