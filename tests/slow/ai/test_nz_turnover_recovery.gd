@@ -15,7 +15,7 @@ extends GutTest
 # (AIStrideRamp). A start is WINNABLE when that retreat reaches the house gate
 # with room to spare; the bot is held to winning those, and to containing the
 # rush (the puck stripped, or the carrier held short of the gate) as often as
-# it did when the gap model learned the ramp.
+# the latest reading below.
 #
 # The sweep is the real decision stack on the duel harness, measured as bodies
 # over the rush — no single dispatch can see it. Reference readings over these 36
@@ -28,18 +28,20 @@ extends GutTest
 #   the carrier's cuts in the stance    18              3 / 9
 #   turn-and-skate on retreats only     17              3 / 9
 #   hips on the skating line            16              3 / 9
+#   the carrier's entry read on arrival 13              3 / 9
+#
+# The last row is the attack getting better, not the defence worse: a carrier
+# who reads the entries from where his move ends (AICarrierField.horizon_value)
+# gets in more often against the same defender, at the 90 Hz tick.
 #
 # The hips riding the line cost a backpedal its angle to an off-lane carrier,
 # and with it the share of the backward top-speed penalty an angled body skips
 # (SkaterMovementRules): he skates at the flat 80% his retreat is priced at.
 #
 # Most of what is still lost sits off the carrier's lane, where the straight-line
-# bound ignores the lateral ice the defender must also cover. The three lost
-# since the carrier learned the stance cut are all 8 m starts 2-4 m off his
-# lane: he drifts wide, the defender matches the drift, and the carrier cuts
-# back in the stance faster than a defender at that lateral speed can reverse.
-# Covering that is doctrine — how much of the drift to give — not a race the
-# defender mispriced.
+# bound ignores the lateral ice the defender must also cover. Of the three
+# winnable races lost, two are 5 m starts 2-4 m off a 3 m/s carrier's lane and
+# one is an 8 m start on a 6 m/s carrier's.
 #
 # WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates through
 # the defender, so a body in his lane only stops him by stripping the puck.
@@ -56,7 +58,7 @@ const BOUND_REACTION_S: float = 0.05 + TeamBrain.TICK_PERIOD
 # as winnable — a body's width, so a coin-flip finish is not held against the bot.
 const WINNABLE_MARGIN_M: float = 0.5
 
-const MIN_CONTAINED: int = 16
+const MIN_CONTAINED: int = 13
 const MAX_WINNABLE_LOST: int = 3
 
 

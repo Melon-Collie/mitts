@@ -2537,7 +2537,6 @@ func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2
 		# than the leniency redirect. Arm the window if the wind-up didn't already,
 		# so the graded centre bonus applies to a catch made during the hold
 		# exactly as to one made during the charge.
-		skater.set_slapper_zone(false)
 		skater.enter_slapshot_pinning(slapper_strike_local())
 		if _aiming.one_timer_window_timer <= 0.0:
 			_aiming.one_timer_window_timer = one_timer_window_duration
@@ -2548,7 +2547,6 @@ func on_puck_picked_up_network(settle_until_ms: int = 0, feed: Vector2 = Vector2
 		# snaps to the overhead wind-up blade) and switch into the with-puck
 		# charge. The centre rather than where this machine's puck happens to be,
 		# so host and client pin the same point.
-		skater.set_slapper_zone(false)
 		skater.enter_slapshot_pinning(slapper_strike_local())
 		if _aiming.slapper_stance_line == Vector2.ZERO:
 			_aiming.slapper_stance_line = _sm.locked_slapper_dir
@@ -2848,7 +2846,6 @@ func _transition_to_skating() -> void:
 	# choreographed the blade directly.
 	if prev_state == State.FOLLOW_THROUGH and not is_replaying:
 		_ik.seed_blade_smoothing(skater.upper_body_to_global(skater.get_blade_position()))
-	skater.set_slapper_zone(false)
 	skater.exit_slapshot_pinning()
 	_hide_slapshot_hud()
 
@@ -2928,9 +2925,9 @@ func _enter_slapper_charge(input: InputState) -> void:
 		_slapper_setup_still_s = 0.0
 		_sm.set_state(State.SLAPPER_CHARGE_WITH_PUCK)
 	else:
-		# Activate the ice-level slapper zone so the puck can be detected at
+		# Centre the ice-level slapper zone on the strike so the puck can be detected at
 		# ground level even though the blade is lifted during wind-up.
-		skater.set_slapper_zone(true, slapper_zone_radius, strike)
+		skater.set_slapper_zone(strike)
 		_sm.set_state(State.SLAPPER_CHARGE_WITHOUT_PUCK)
 		if show_one_timer_indicator:
 			skater.set_slapper_indicator(true, strike, slapper_zone_radius)

@@ -44,9 +44,12 @@ func test_container_duel_resolves_with_possession() -> void:
 	# degenerate case — a container with no momentum trivially mirrors every
 	# lateral step (velocity-matched seek makes that near-perfect), which is not
 	# how containment is ever beaten on the ice.
+	#
+	# They start 8 m apart, ~0.7 s of closing: nearer, the container's poke lands
+	# before anyone has read anything, which is a collision rather than a duel.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -6.0), null, Vector3(0, 0, -7.0))
-	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -8.5), null, Vector3(0, 0, 4.0))
+	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -14.0), null, Vector3(0, 0, 4.0))
 	duel.start(CARRIER)
 	# Resolution is checked live, not on the final frame: the carrier beats
 	# the container (dump-past or carry), collects deep, and can then WRAP
@@ -57,7 +60,7 @@ func test_container_duel_resolves_with_possession() -> void:
 	var resolved: bool = false
 	for _i: int in int(6.0 / DuelHarness.DT):
 		duel.step()
-		if duel.puck_pos.z < -8.5 \
+		if duel.puck_pos.z < -14.0 \
 				and (duel.carrier() == CARRIER or duel.releases.size() > 0):
 			resolved = true
 	assert_true(duel.carrier() == CARRIER or duel.releases.size() > 0,
@@ -70,10 +73,13 @@ func test_cornered_carrier_escapes() -> void:
 	# A patient scripted container holds the line to the net while a real
 	# defender pressures from behind — retreat denied, forward contained. The
 	# carrier must get past: the puck crosses the container's depth floor still
-	# in team-0 hands, or gets released on net once the lane opens.
+	# in team-0 hands, or gets released on net once the lane opens. The
+	# container holds 4 m off, its presented stick a metre and a half short of
+	# the puck carried ahead: any tighter and the box is closed by the carrier's
+	# own read, and the puck rides into the stick.
 	var duel: RefCounted = DuelHarness.new()
 	duel.add_skater(CARRIER, 0, Vector3(0, 0, -9.0))
-	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -11.3), 2.3, -13.0)
+	duel.add_puppet_container(PUPPET, 1, Vector3(0, 0, -13.0), 4.0, -13.0)
 	duel.add_skater(DEFENDER, 1, Vector3(0, 0, -6.5))
 	duel.start(CARRIER)
 	var crossed_carrying: bool = false
@@ -137,3 +143,32 @@ func test_loose_puck_pickup_is_blade_first() -> void:
 					"puck met out FRONT of the facing, not beside or behind")
 			break
 	assert_true(attached, "the bot retrieves the loose puck within 5 s")
+
+
+func test_a_pass_in_flight_is_published_as_its_passers_until_it_is_picked_up() -> void:
+	# The host publishes whose release a loose puck is still on
+	# (WorldSnapshot.loose_puck_released_by), and the harness snapshot must too,
+	# or a soft feed never reads as a pass to the bots it plays. Read over the
+	# feed's flight: until someone picks it up, touches it or releases again.
+	var goal_z: float = -GameRules.GOAL_LINE_Z
+	var duel := DuelHarness.new()
+	duel.add_skater(1, 0, Vector3(7, 0, goal_z + 4), null, Vector3(-2, 0, 0))
+	duel.add_skater(2, 0, Vector3(-2.5, 0, goal_z + 2.2))
+	duel.add_skater(DEFENDER, 1, Vector3(10, 0, goal_z + 7), null, Vector3(-2, 0, 0))
+	duel.start(1)
+	var flight_ticks: int = 0
+	for _t: int in 240:
+		duel.step()
+		var touches: int = duel.bobbles + duel.deflects + duel.contests
+		if duel.releases.size() > 1 or touches > 0:
+			break
+		var published: int = duel._build_snapshot().loose_puck_released_by
+		if duel.releases.is_empty():
+			assert_eq(published, -1, "a carried puck is nobody's release")
+		elif duel.carrier_id == -1:
+			assert_eq(published, 1, "the feed in flight is the passer's")
+			flight_ticks += 1
+		else:
+			assert_eq(published, -1, "a feed picked up is nobody's release")
+			break
+	assert_gt(flight_ticks, 0, "the carrier fed the back door")

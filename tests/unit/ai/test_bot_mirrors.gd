@@ -74,6 +74,56 @@ func test_the_harness_catches_as_the_puck_does() -> void:
 	puck.free()
 
 
+func test_the_harness_swings_a_one_timer_as_the_controller_does() -> void:
+	var ctrl: SkaterController = SkaterControllerScript.new()
+	assert_eq(DuelHarness.SLAPPER_ZONE_RADIUS_M, ctrl.slapper_zone_radius)
+	assert_eq(DuelHarness.ONE_TIMER_LENIENCY_S, ctrl.one_timer_leniency_time)
+	assert_eq(DuelHarness.ONE_TIMER_RETENTION_TICKS,
+			roundi(ctrl.one_timer_retention_time * Constants.PHYSICS_TICK))
+	ctrl.free()
+
+
+func test_the_harness_deflects_and_hops_as_the_puck_does() -> void:
+	var puck: Puck = PuckScript.new()
+	assert_eq(AIFeedReception.DEFLECT_NORMAL_RESTITUTION, puck.deflect_normal_restitution)
+	assert_eq(DuelHarness.DEFLECT_TANGENTIAL_RETAIN, puck.deflect_tangential_retain)
+	assert_eq(DuelHarness.BOBBLE_SPEED_M_S, puck.bobble_speed_threshold)
+	assert_eq(DuelHarness.BOBBLE_COOLDOWN_TICKS,
+			roundi(puck.bobble_cooldown * Constants.PHYSICS_TICK))
+	assert_eq(DuelHarness.DEFLECT_COOLDOWN_TICKS,
+			roundi(puck.deflect_cooldown * Constants.PHYSICS_TICK))
+	assert_eq(DuelHarness.BOBBLE_LIFT_THRESHOLD_M_S, puck.bobble_lift_threshold)
+	assert_eq(DuelHarness.BOBBLE_LIFT_GAIN, puck.bobble_lift_gain)
+	assert_eq(DuelHarness.BOBBLE_LIFT_MAX_M_S, puck.bobble_lift_max_speed)
+	assert_eq(DuelHarness.PINCH_LIFT_THRESHOLD_M_S, puck.pinch_lift_threshold)
+	assert_eq(DuelHarness.PINCH_LIFT_GAIN, puck.pinch_lift_gain)
+	assert_eq(DuelHarness.PINCH_LIFT_MAX_M_S, puck.pinch_lift_max_speed)
+	puck.free()
+
+
+func test_the_harness_contests_a_pickup_as_the_puck_controller_does() -> void:
+	var pc: PuckController = PuckController.new()
+	assert_eq(DuelHarness.CONTEST_MIN_M_S, pc.contest_min_speed)
+	assert_eq(DuelHarness.CONTEST_MAX_M_S, pc.contest_max_speed)
+	assert_eq(DuelHarness.CONTEST_DEADLOCK_M_S, pc.contest_deadlock_speed)
+	assert_eq(DuelHarness.CONTEST_DEADLOCK_THRESHOLD_M_S, pc.contest_deadlock_threshold)
+	pc.free()
+
+
+func test_the_harness_strips_as_the_puck_does() -> void:
+	var puck: Puck = PuckScript.new()
+	assert_eq(DuelHarness.POKE_STRIP_MIN_M_S, puck.poke_strip_min_speed)
+	assert_eq(DuelHarness.POKE_STRIP_MAX_M_S, puck.poke_strip_max_speed)
+	assert_eq(DuelHarness.POKE_CARRIER_VEL_BLEND, puck.poke_carrier_vel_blend)
+	assert_eq(DuelHarness.STRIP_REATTACH_TICKS,
+			roundi(puck.reattach_cooldown * Constants.PHYSICS_TICK))
+	assert_eq(DuelHarness.RELEASE_GRACE_TICKS,
+			roundi(puck.reattach_cooldown * Constants.PHYSICS_TICK))
+	assert_eq(DuelHarness.STRIP_CHECKER_TICKS,
+			roundi(puck.poke_checker_cooldown * Constants.PHYSICS_TICK))
+	puck.free()
+
+
 func test_a_lane_reads_the_stick_the_body_holds() -> void:
 	assert_eq(AIPuckLane.LANE_BLADE_CATCH_M, PuckController.PICKUP_RADIUS,
 			"a pass passing a blade inside the pickup radius is his")

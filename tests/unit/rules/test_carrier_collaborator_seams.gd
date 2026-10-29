@@ -13,6 +13,7 @@ const _SEARCHES: Array[String] = [
 	_DIR + "carrier_pass_search.gd",
 	_DIR + "carrier_carry_search.gd",
 	_DIR + "carrier_destinations.gd",
+	_DIR + "carrier_wheel.gd",
 ]
 # The field's members a search may drive: the hold solver is a tool whose
 # results are read back after each solve.

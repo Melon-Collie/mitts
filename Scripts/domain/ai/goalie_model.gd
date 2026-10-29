@@ -109,26 +109,12 @@ static func goalie_lateral_reach(move_time: float) -> float:
 			GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2, move_time)
 
 
-# Lateral distance he can re-square across in `move_time` (post-reaction) and be
-# SET on — pushed, cruised and stopped, as the live mover does. Positioning
-# before a release reads this one. The inverse of _goalie_set_time.
-static func _goalie_set_reach(move_time: float) -> float:
-	return GoaliePushRules.set_reach(
-			GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2, move_time)
-
-
 # How far along a re-square to a spot `need` away he is `move_time` into it
 # (post-reaction) — where the live mover, braking into the spot, has put him.
 static func goalie_push_progress(need: float, move_time: float) -> float:
 	return GoaliePushRules.push_progress(
 			need, GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2, move_time)
 
-
-# Time a re-square across `dist` takes, stop included (post-reaction) — the
-# inverse of _goalie_set_reach.
-static func _goalie_set_time(dist: float) -> float:
-	return GoaliePushRules.time_to_set(
-			dist, GOALIE_MAX_LATERAL_SPEED_MPS, GOALIE_LATERAL_ACCEL_M_S2)
 
 # How far (m) from the net mouth a keeper still counts as HOME — the crease
 # depth plus a stride. Beyond it (pulled, or out playing the puck) the net is
@@ -138,10 +124,6 @@ const GOALIE_HOME_M: float = 3.0
 # Shadow half-width used by AIShotAim.compute_open_net_aim for the lane-check
 # aim point — picks a point past the goalie for the lane segment check.
 const GOALIE_SHADOW_HALF_M: float = 0.3
-
-# goalie_unsettled() settle reference: how long (s) the goalie must sit stopped
-# at his target before the model treats him as fully re-set.
-const GOALIE_SETTLE_REF_S: float = 0.20
 
 # How long (s) he takes to stand back up out of the butterfly (KeeperDrop's
 # rise; test_ai_goalie_model_mirrors.gd holds the two together): a shot sooner
@@ -316,12 +298,13 @@ static func predict_goalie_pos(
 			based.y, based.z)
 
 
-# Companion to predict_goalie_pos: how UNSETTLED [0, 1] the goalie is AT release.
-#   0 = set and square (already at its arc-match target, no forced motion)
-#   1 = still sliding (positionally behind) or only just arrived — reading late
-# Same react-then-push kinematics as predict_goalie_pos, so the predicted
-# position and this motion estimate agree. The carry search prices the keeper
-# moving across at this fraction of his lateral speed on the release.
+# Companion to predict_goalie_pos: how fast the goalie is moving across AT
+# release, as a share [0, 1] of his top lateral speed — 0 before he reacts and
+# once he is set on his arc-match spot, his push's own speed between. Same
+# react-then-push kinematics as predict_goalie_pos, so the predicted position
+# and this motion agree. The carry search prices the keeper moving across at
+# this share of his lateral speed on the release; a keeper who has not reacted
+# yet is priced standing where he is, off the square by what he has not covered.
 static func goalie_unsettled(
 		goalie_now: Vector3,
 		attacking_goal: Vector3,
@@ -334,13 +317,21 @@ static func goalie_unsettled(
 			release_time_s, closing_speed_m_s))
 	var target_x: float = goalie_arc_match_x(based, attacking_goal, puck_pos_at_release)
 	var need: float = absf(target_x - goalie_now.x)
-	if need < 0.001:
-		return 0.0  # already squared — no forced motion, fully set
 	var move_time: float = maxf(0.0, release_time_s - goalie_leg_delay_s)
-	var max_move: float = _goalie_set_reach(move_time)
-	if need >= max_move:
-		return 1.0  # still sliding at release (or hasn't even reacted) — caught moving
-	# Reached the target with time to spare; ramps back to 0 as it re-sets.
-	var slide_time: float = _goalie_set_time(need)
-	var settled_for: float = move_time - slide_time
-	return clampf(1.0 - settled_for / GOALIE_SETTLE_REF_S, 0.0, 1.0)
+	return _push_speed(need, move_time) / GOALIE_MAX_LATERAL_SPEED_MPS
+
+
+# How fast he is moving `move_time` into a re-square to a spot `need` away: the
+# rate of GoaliePushRules.push_progress, zero before he starts and once he is set.
+static func _push_speed(need: float, move_time: float) -> float:
+	if need <= 0.0 or move_time <= 0.0:
+		return 0.0
+	var accel: float = GOALIE_LATERAL_ACCEL_M_S2
+	var brake: float = accel * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
+	var peak: float = minf(GOALIE_MAX_LATERAL_SPEED_MPS,
+			sqrt(2.0 * need / (1.0 / accel + 1.0 / brake)))
+	var t_up: float = peak / accel
+	if move_time <= t_up:
+		return accel * move_time
+	var t_cruise: float = (need - 0.5 * peak * t_up - peak * peak / (2.0 * brake)) / peak
+	return maxf(peak - brake * maxf(move_time - t_up - t_cruise, 0.0), 0.0)

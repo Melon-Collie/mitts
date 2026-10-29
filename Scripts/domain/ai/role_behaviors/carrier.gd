@@ -42,8 +42,9 @@ const RIM_AIM_STANDOFF_M: float = 20.0
 const SHOT_MIN_VALUE: float = 0.05
 # A PASS that connects keeps possession, and its odds of not connecting are
 # already priced by the lane term, so it is held only to rejecting a release
-# into nothing — a numerical residual on a dead lane. (A receiver at centre ice
-# is worth ~0.017 as a shooter and is still the right play.)
+# into nothing — a numerical residual on a dead lane — by a carrier with the
+# puck worth keeping. One who would lose it where he stands has that loss off
+# the bar (_pick_commit_phase).
 const PASS_MIN_VALUE: float = 0.02
 
 # ── Settle doubt ─────────────────────────────────────────────────────────────
@@ -231,6 +232,10 @@ var _ticks_since_pick: int = 0
 #     would halve their decision cadence).
 var _commit_phase_pending: bool = false
 var _full_eval_pending: bool = true
+# Which plan the carry's stick is on (the rolled move or the drive-in floor),
+# NONE until the possession's first eval.
+enum CarryPlan { NONE, ROLLED, DRIVE_IN }
+var _carry_plan: CarryPlan = CarryPlan.NONE
 # Fire-phase products consumed by the commit phase (instance fields so a
 # sliced eval hands them across the dispatch boundary):
 var _phase_current_safety: float = 0.0
@@ -349,6 +354,7 @@ func reset() -> void:
 	shoot_now_hold = Vector3.ZERO
 	last_carry_anchor = Vector3.ZERO
 	carry_move = -1
+	_carry_plan = CarryPlan.NONE
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	protect_offset = Vector3.ZERO
@@ -643,7 +649,19 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var drive_in_value: float = _field.receiver_drive_in_value(
 			ctx, self_pos, ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity,
 			Vector3.INF, 0.0, true)
-	if drive_in_value > carry_score:
+	# The rolled carry and the drive-in are two plans for the same stick: the one
+	# being skated keeps it unless the other beats it by the hysteresis margin, or
+	# near-equal reads trade the stick every re-eval and the turns between them
+	# spend the speed. The compete below still sees the winner's honest value.
+	var carry_key: float = carry_score
+	var drive_key: float = drive_in_value
+	var keep_margin: float = 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
+	if _carry_plan == CarryPlan.DRIVE_IN and drive_key > 0.0:
+		drive_key *= keep_margin
+	elif _carry_plan == CarryPlan.ROLLED and carry_key > 0.0:
+		carry_key *= keep_margin
+	_carry_plan = CarryPlan.DRIVE_IN if drive_key > carry_key else CarryPlan.ROLLED
+	if _carry_plan == CarryPlan.DRIVE_IN:
 		carry_score = drive_in_value
 		last_carry_anchor = _field.drive_in_reached
 		carry_move = -1
@@ -672,21 +690,39 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 
 	var settle_penalty: float = _settle_penalty(ctx)
 
+	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
+	# where the other sees: the raw carry is one beat ahead and cannot see the
+	# entry a carrier skates into by beating his man; the drive-in sees that but
+	# is one straight line, blind to the carry's other routes. In our own zone the
+	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane,
+	# and would keep a doomed carrier from moving the puck in front of his own net.
+	var in_own_zone: bool = AIActionScoring.in_offensive_zone(
+			self_pos, ctx.defending_goal_pos)
+	var keep_value: float = raw_carry_score if in_own_zone \
+			else maxf(raw_carry_score, drive_in_value)
+	var retention_hopeless: bool = keep_value <= 0.0
+
 	# Best fire option — the best of those that clear their OWN giveaway bar.
 	# Qualify each option before the max, never after: taking the max first lets
 	# a mediocre shot mask a legal outlet pass, so raising the shot's bar would
 	# silently suppress passing too. Nothing qualifying leaves fire at -INF, which
 	# loses every compete below.
 	#
-	# The bar is cleared by the DOUBTED value, the compete is entered at the
-	# HONEST one: the doubt says whether this option is worth the puck yet, not
-	# what it is worth (see _settle_penalty).
+	# The bar is cleared by the DOUBTED value (the pass's bar raised by the same
+	# doubt instead), the compete is entered at the HONEST one: the doubt says
+	# whether this option is worth the puck yet, not what it is worth (see
+	# _settle_penalty).
 	var fire_score: float = -INF
 	var fire_intent: int = best_shot_intent
 	if _settle_handicap(best_shot_score, settle_penalty) > SHOT_MIN_VALUE:
 		fire_score = best_shot_score
-	if _settle_handicap(best_pass_score, settle_penalty) > PASS_MIN_VALUE \
-			and best_pass_score > fire_score:
+	# A pass is weighed against keeping the puck, so a carrier who would lose it
+	# where he stands has that loss off the bar, up to the whole bar: what is left
+	# is his settle doubt's raise, or nothing, which is what a search that found
+	# no pass returns.
+	var pass_bar: float = PASS_MIN_VALUE / maxf(1.0 - settle_penalty, 0.001) \
+			- clampf(-keep_value, 0.0, PASS_MIN_VALUE)
+	if best_pass_score > pass_bar and best_pass_score > fire_score:
 		fire_score = best_pass_score
 		fire_intent = INTENT_PASS
 
@@ -707,16 +743,6 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			* keep_prob * AIActionScoring.delay_discount(_hold_elapsed_s))
 
 	var new_intent: int
-	# Retention is hopeless only when BOTH reads of keeping the puck fail, because each is blind
-	# where the other sees: the raw carry is one beat ahead and cannot see the
-	# entry a carrier skates into by beating his man; the drive-in sees that but
-	# is one straight line, blind to the carry's other routes. In our own zone the
-	# drive-in gets no vote: it is positive for any carrier with a sliver of a lane,
-	# and would keep a doomed carrier from moving the puck in front of his own net.
-	var in_own_zone: bool = AIActionScoring.in_offensive_zone(
-			self_pos, ctx.defending_goal_pos)
-	var retention_hopeless: bool = raw_carry_score <= 0.0 \
-			and (in_own_zone or drive_in_value <= 0.0)
 	# Fire if it beats retention (carrying, or holding for the developing play) —
 	# or, when retention is hopeless, at all: there is nothing to compare it with,
 	# and an unqualified fire arrives as -INF and loses both.

@@ -253,6 +253,9 @@ const INCIDENTAL_STRIDE_M: float = 1.5
 # reach band early enough for him to meet it there. Two physical quantities and
 # nothing else: the band is his blade reach plus one stride, and the timing test
 # is his calibrated ETA against the puck's own time to the crossing point.
+# The body is timed to the crossing itself, not to a blade off it: this read
+# overrides the race-lost decline and the one-timer camp, so it holds out for
+# a puck the body can get onto, and a feed leaving his own blade is never his.
 #
 # Segment-wise (closest approach along each step of the walk, not the sampled
 # endpoints): at rim speeds the puck covers ~3.75 m per 0.25 s step, so a
@@ -271,10 +274,12 @@ static func puck_comes_to_reach(
 # When the puck on `traj` first meets this skater's reach band, by
 # puck_comes_to_reach's rule; INF if it never does. `approaching_only` drops a
 # meeting at the very start of a path the puck is leaving him along — the
-# passer's own blade as the feed goes.
+# passer's own blade as the feed goes. `stick_out` times the body only to
+# within a blade of the meet, the stick taking the rest: whose a feed is, not
+# whether to break off for it.
 static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: Vector3,
 		self_pos: Vector3, self_vel: Vector3, max_speed: float, reach: float,
-		approaching_only: bool) -> float:
+		approaching_only: bool, stick_out: bool = false) -> float:
 	var band: float = reach + INCIDENTAL_STRIDE_M
 	var band2: float = band * band
 	var step_dt: float = RACE_LOOKAHEAD_S / float(RACE_STEPS)
@@ -298,10 +303,17 @@ static func reach_meet_time(traj: Array[Vector3], puck_pos: Vector3, puck_vel: V
 				start.z + (traj[i].z - start.z) * f)
 		var dx: float = meet.x - self_pos.x
 		var dz: float = meet.z - self_pos.z
-		if dx * dx + dz * dz > band2:
+		var d2: float = dx * dx + dz * dz
+		if d2 > band2:
 			continue
 		var t_meet: float = seg_t0 + (t0 + step_dt - seg_t0) * f
-		if AIArrival.time_to_arrive(self_pos, meet, self_vel, max_speed) <= t_meet:
+		var stand: Vector3 = meet
+		if stick_out:
+			var d: float = sqrt(d2)
+			if d <= reach:
+				return t_meet
+			stand = Vector3(meet.x - dx / d * reach, 0.0, meet.z - dz / d * reach)
+		if AIArrival.time_to_arrive(self_pos, stand, self_vel, max_speed) <= t_meet:
 			return t_meet
 	return INF
 
@@ -425,11 +437,11 @@ static func elect(
 		var t: float = path_intercept_time(traj, step_dt, puck_pos,
 				s.position, s.velocity, max_speed, margin,
 				AIArrival.SHED_ACCEL_DEFAULT_M_S2, 0.0, t_play)
-		# A puck coming to his stick is his (puck_comes_to_reach, which the agent
-		# honours over the election): the race counts it, or a pass reaching its
-		# man elects someone else to chase it too.
+		# A puck coming to his stick is his: the race counts it, the stick taking
+		# the last reach, or a pass reaching its man elects someone else to chase
+		# it too.
 		t = minf(t, reach_meet_time(traj, puck_pos, puck_vel, s.position, s.velocity,
-				max_speed, race_reach(caps), true))
+				max_speed, race_reach(caps), true, true))
 		if pid != prev_elected:
 			t += HYSTERESIS_S
 		# Tie-break on the lower peer_id, never iteration order.

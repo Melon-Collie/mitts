@@ -812,6 +812,34 @@ func test_a_feed_reaching_its_man_elects_him() -> void:
 			FEED_VEL, 200), 100)
 
 
+func test_a_receiver_skating_into_the_feed_beside_its_line_is_still_its_man() -> void:
+	# He meets it in stride with his stick, his body a couple of metres off the
+	# line and skating up the ice rather than across: only the gap past his
+	# blade is his to skate, so the race still counts the feed as reaching him.
+	var states: Dictionary = _feed_states()
+	states[100] = _skater(Vector3(5.6, 0, -10.0), Vector3(-1.1, 0, -3.4))
+	assert_eq(AILoosePuckChase.elect(states, [100, 200, 300],
+			Vector3(5.7, 0, -18.8), Vector3(-3.5, 0, 11.9), -1), 100)
+
+
+func test_the_election_times_the_body_to_the_blade_and_the_band_to_the_crossing() -> void:
+	# A slapper crossing 1.5 m off a standing bot: the stick is already there,
+	# so it is his to own, but his body cannot get onto it in its flight. (Down
+	# the length, as above, so the bounce stays past the horizon.)
+	var from := Vector3(0, 0, -25)
+	var vel := Vector3(0, 0, 30)
+	var self_pos := Vector3(1.5, 0, -22)
+	var traj: Array[Vector3] = AILoosePuckChase.walk_race(from, vel)
+	assert_lt(AILoosePuckChase.reach_meet_time(traj, from, vel, self_pos,
+			Vector3.ZERO, REF, 1.8, true, true), INF, "the stick out meets it")
+	assert_false(AILoosePuckChase.puck_comes_to_reach(from, vel, self_pos,
+			Vector3.ZERO, REF, 1.8), "no stride gets the body there")
+
+
+func test_a_feed_leaving_the_blade_is_not_in_its_passers_band() -> void:
+	assert_false(AILoosePuckChase.puck_comes_to_reach(FEED_FROM, FEED_VEL,
+			FEED_FROM + Vector3(0.6, 0, -0.4), Vector3(0, 0, -5), REF, 1.8))
+
 func test_the_passer_does_not_own_his_own_feed() -> void:
 	# The feed starts on his blade, leaving: that is not a puck coming to his stick.
 	assert_ne(AILoosePuckChase.elect(_feed_states(), [200, 300], FEED_FROM,

@@ -32,6 +32,38 @@ static func stance_facing(shot_dir: Vector2, blade_side_sign: float, open_rad: f
 	return (shot_dir * cos(open_rad) + right * (blade_side_sign * sin(open_rad))).normalized()
 
 
+# Within this of the spot its circle sets from, a body's shuffle has put the
+# circle on the line: a fraction of the slapper zone's own radius.
+const SET_ARRIVE_M: float = 0.1
+
+
+# Seconds a body facing `facing` and moving at `velocity` (world XZ) takes to set
+# for a slapshot along `shot_dir` (unit) from the spot `to_anchor` off it (not
+# finite: wherever it is), for a feed arriving in `feed_s`: the hips pivot into
+# the stance at `turn_rad_s` while the feet shuffle across at `shuffle_speed`, so
+# the slower of the two. Loaded, a skater can do nothing else — the stride is
+# gone — so his momentum glides him on across the line meanwhile, and a body
+# still faster than a shuffle steers has to arrive on that glide alone (INF when
+# it would not). An unreadable facing reads as set.
+static func time_to_set(facing: Vector2, velocity: Vector2, to_anchor: Vector2,
+		shot_dir: Vector2, feed_s: float, blade_side_sign: float, open_rad: float,
+		turn_rad_s: float, shuffle_speed: float) -> float:
+	var turn_s: float = 0.0
+	if facing.length_squared() > 0.0001:
+		turn_s = absf(facing.angle_to(stance_facing(shot_dir, blade_side_sign, open_rad))) \
+				/ maxf(turn_rad_s, 0.001)
+	if not to_anchor.is_finite():
+		return turn_s
+	# The anchor lies straight across the line from the body, so only the glide's
+	# share across it moves the circle onto it.
+	var across: Vector2 = to_anchor.normalized() if to_anchor.length_squared() > 0.000001 \
+			else Vector2.ZERO
+	var miss: float = absf(to_anchor.length() - velocity.dot(across) * feed_s)
+	if velocity.length() > SkaterMovementRules.SHUFFLE_MAX_SPEED:
+		return INF if miss > SET_ARRIVE_M else turn_s
+	return maxf(turn_s, maxf(miss - SET_ARRIVE_M, 0.0) / maxf(shuffle_speed, 0.001))
+
+
 # A point in a frame facing `facing` (world XZ, unit), as a world offset.
 static func local_to_world(local: Vector2, facing: Vector2) -> Vector2:
 	var right := Vector2(-facing.y, facing.x)
