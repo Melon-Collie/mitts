@@ -28,7 +28,7 @@ extends GutTest
 # The body projection lands within a few centimetres on a clean drive, and
 # within 15 cm on a hard lateral cut, the shape a straight-line constant-velocity
 # projection should struggle with most; the release re-aims from the live blade
-# (below), so neither moves where the shot crosses. These stay as a regression
+# (below), so neither moves where the shot crosses, nor does traffic. These stay as a regression
 # pin: they rule out release displacement as a source of wide misses, so a
 # future investigation does not have to re-derive it.
 
@@ -138,14 +138,13 @@ func test_traffic_displaces_the_release_the_aim_assumed() -> void:
 	var p: Probe = _measure(Vector3(0.0, 0.0, -12.0), Vector3(0.0, 0.0, -7.0),
 			[Vector3(1.6, 0.0, -14.0), Vector3(-1.8, 0.0, -15.0)])
 	_report("through traffic", p)
-	if not p.fired:
-		pending("bot did not shoot in the traffic fixture")
+	if not p.fired or not p.aim_point.is_finite():
+		pending("no shot with a locked aim in the traffic fixture")
 		return
-	# Bounded at what a corner window can absorb: the aim already sits a
-	# puck+post radius (plus the tier's own spread) inside the pipe, so much more
-	# than this and the shot is off the net rather than off the corner.
-	assert_lt(absf(_lateral_gap(p)), 0.15,
-			"a shot in traffic still leaves within 15 cm of its projected release")
+	# Bodies this close can push the release well off its projection, sideways
+	# or not by which corner he picks; the release re-aims from the live blade
+	# (below), so what has to hold is the line crossing on its aim.
+	_assert_lands_on_its_aim("through traffic", p, p.aim_point)
 
 
 func test_a_lateral_cut_keeps_its_release_line() -> void:

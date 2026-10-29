@@ -355,7 +355,7 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	_move_reach[m] = 0
 	if not _move_legal(ctx, rollout, m, ctx.self_pos):
 		return
-	var reach: int = rollout.reach_short_of_net(m, _max_abs_z(behind_net))
+	var reach: int = _priced_reach(rollout, m, ctx.self_pos, behind_net)
 	if reach == 0:
 		return
 	_move_reach[m] = reach
@@ -409,6 +409,20 @@ func _fan_aim(ctx: RoleContext) -> Vector3:
 # The |z| a move from in front of the goal lines may not pass; none from behind.
 static func _max_abs_z(behind_net: bool) -> float:
 	return INF if behind_net else GameRules.GOAL_LINE_Z - AIStationSearch.GOAL_LINE_BUFFER_M
+
+
+# How many of rolled move `m`'s samples, skated from `from`, are priced: up to
+# its last one short of the net (AICarryRollout.reach_short_of_net) whose shot on
+# arrival still leaves in front of the goal line. The wind-up carries the puck on
+# at his pace, and a release behind the line is no shot.
+static func _priced_reach(roll: AICarryRollout, m: int, from: Vector3,
+		behind_net: bool) -> int:
+	var max_abs_z: float = _max_abs_z(behind_net)
+	var reach: int = roll.reach_short_of_net(m, max_abs_z)
+	while reach > 0 and absf(roll.reach_pos(m, reach).z + roll.reach_vel(m, reach, from).z
+			* AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S) > max_abs_z:
+		reach -= 1
+	return reach
 
 
 # Whether rolled move `m` of `roll`, skated from `from`, is one the carrier may
@@ -479,7 +493,7 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 	for m: int in AICarryRollout.MOVE_COUNT:
 		if not _move_legal(ctx, _rollout2, m, start):
 			continue
-		var reach: int = _rollout2.reach_short_of_net(m, _max_abs_z(behind_net))
+		var reach: int = _priced_reach(_rollout2, m, start, behind_net)
 		if reach == 0:
 			continue
 		var t2: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES

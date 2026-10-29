@@ -39,7 +39,7 @@ fresh entry, finisher driving the house: developing feed	0.9318
 fresh entry, finisher driving the house: shoot-now value	0.0136
 head-on drive at 6 m/s, keeper 1 m out, from 10 m: pick	CARRY to (3.3, -23.1)
 head-on drive at 6 m/s, keeper 1 m out, from 9 m: pick	CARRY to (3.3, -24.1)
-head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (0.0, -20.8)
+head-on drive at 6 m/s, keeper 1 m out, from 8 m: pick	CARRY to (2.0, -22.7)
 head-on drive at 6 m/s, keeper 1 m out, from 7 m: pick	CARRY to (2.0, -23.7)
 head-on drive at 6 m/s, keeper 1 m out, from 6 m: pick	CARRY to (0.0, -22.9)
 head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	SHOOT

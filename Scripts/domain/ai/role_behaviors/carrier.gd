@@ -232,6 +232,10 @@ var _ticks_since_pick: int = 0
 #     would halve their decision cadence).
 var _commit_phase_pending: bool = false
 var _full_eval_pending: bool = true
+# Which plan the carry's stick is on (the rolled move or the drive-in floor),
+# NONE until the possession's first eval.
+enum CarryPlan { NONE, ROLLED, DRIVE_IN }
+var _carry_plan: CarryPlan = CarryPlan.NONE
 # Fire-phase products consumed by the commit phase (instance fields so a
 # sliced eval hands them across the dispatch boundary):
 var _phase_current_safety: float = 0.0
@@ -350,6 +354,7 @@ func reset() -> void:
 	shoot_now_hold = Vector3.ZERO
 	last_carry_anchor = Vector3.ZERO
 	carry_move = -1
+	_carry_plan = CarryPlan.NONE
 	dump_target = Vector3.INF
 	dump_launch_speed = AIPuckLane.PASS_SPEED_M_S
 	protect_offset = Vector3.ZERO
@@ -644,7 +649,19 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 	var drive_in_value: float = _field.receiver_drive_in_value(
 			ctx, self_pos, ctx.caps_by_peer.get(ctx.peer_id), ctx.self_velocity,
 			Vector3.INF, 0.0, true)
-	if drive_in_value > carry_score:
+	# The rolled carry and the drive-in are two plans for the same stick: the one
+	# being skated keeps it unless the other beats it by the hysteresis margin, or
+	# near-equal reads trade the stick every re-eval and the turns between them
+	# spend the speed. The compete below still sees the winner's honest value.
+	var carry_key: float = carry_score
+	var drive_key: float = drive_in_value
+	var keep_margin: float = 1.0 + AIActionScoring.ACTION_HYSTERESIS_MARGIN_FRAC
+	if _carry_plan == CarryPlan.DRIVE_IN and drive_key > 0.0:
+		drive_key *= keep_margin
+	elif _carry_plan == CarryPlan.ROLLED and carry_key > 0.0:
+		carry_key *= keep_margin
+	_carry_plan = CarryPlan.DRIVE_IN if drive_key > carry_key else CarryPlan.ROLLED
+	if _carry_plan == CarryPlan.DRIVE_IN:
 		carry_score = drive_in_value
 		last_carry_anchor = _field.drive_in_reached
 		carry_move = -1
