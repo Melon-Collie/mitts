@@ -8,8 +8,8 @@ extends RefCounted
 # kick, the butterfly after anything down. Pure, stepped at the tick.
 #
 # Each leg goes the way a leg can. From its skate to its knee is the drop's
-# way (KeeperDrop.blend_leg): the knee pinned the shortest way down, the skate
-# kicked out ahead and off the ice so the pad's rigid toe clears it. A knee
+# way (KeeperDrop.blend_leg): the knee pinned the shortest way down and
+# leading, the skate sliding out after it along the ice. A knee
 # on the ice stays on it and slides along it; a skate on the ice slides on
 # the ice. A drop is a fall, eased in and landing at speed; a kick and the
 # gather are pushes, eased both ways.

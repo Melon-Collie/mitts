@@ -390,6 +390,10 @@ tick unbroken to rest where it stops.
 per tier, spot, speed and aim, the save chosen and its margin, how far his hand
 and his drop had got when the shot was decided, and what decided it; and a
 rebound fired at gaps after a save, against what he was doing as it left.
+`tests/instruments/keeper/test_drop_seal_timing.gd` says how soon the
+butterfly covers the low net: tick by tick through the drop, from the ready
+stance and from the low ready, the share of lines across the mouth a puck on
+the ice, at 10 cm and at 20 cm meets his gear on and stays out.
 `tests/instruments/ai/test_goalie_scoreboard.gd` scores him against scripted
 shooters (`test_report_the_keeper`, his numbers in
 `data/keeper_scoreboard.txt`, printed beside the old goalie's last recorded

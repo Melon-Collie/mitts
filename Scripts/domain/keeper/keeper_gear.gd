@@ -51,7 +51,7 @@ const _RISE_FACE_Z: float = -KeeperAnatomy.PAD_FORWARD_OF_SHIN_M \
 # up to this far up its leg, and only on a shin standing up at least this much
 # (its up axis's height): a pad laid flat rests on the ice already.
 const PAD_SETTLE_GIVE_M: float = 0.025
-const PAD_SETTLE_MAX_M: float = 0.08
+const PAD_SETTLE_MAX_M: float = 0.12
 const PAD_SETTLE_MIN_RISE: float = 0.1
 # Settled this much clear of the give, so it rests inside it to the float.
 const PAD_SETTLE_SLACK_M: float = 1.0e-5

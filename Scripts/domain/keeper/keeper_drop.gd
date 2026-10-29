@@ -19,15 +19,22 @@ extends RefCounted
 #
 # Between the stances the knees go the shortest way, pinned from where the ready
 # stance's solve puts them down to the ice, so the drop's first frame is the
-# stance's own. The skates kick out ahead of them and come off the ice as they
-# go, turning into the pads' toes: a knee that came down over a skate still
-# where it stood would pitch the shin over it and drive the pad's rigid toe
-# into the ice.
+# stance's own. The knees lead and the skates slide out after them along the
+# ice, turning into the pads' toes, so each pad's lower edge comes down to the
+# ice early rather than standing on its skate-end corner with open ice under
+# it (tests/instruments/keeper/test_drop_seal_timing.gd measures it). The pads
+# settle on the ice and their toes flex off it (KeeperGear) where a shin
+# pitched over a skate would drive them in.
 
 enum State { UP, DROPPING, DOWN, RISING, RECOVERING }
 
-# How high the skates come off the ice at most, a quarter of the way down.
-const SKATES_OFF_M: float = 0.06
+# How high the skates come off the ice at most, a quarter of the way down: no
+# more than keeps the skate out of it as the foot turns into the pad's toe, or
+# the pads' lower edges rise with them and open the ice.
+const SKATES_OFF_M: float = 0.012
+# How far the knees lead the skates down, as a share of the drop at its middle;
+# more, and a knee falls faster than a bone may move in a tick.
+const KNEE_LEAD: float = 0.6
 # A push leg coming up out of the butterfly onto its skate, to slide off or
 # recover on (the old goalie's coil).
 const PUSH_LOAD_S: float = 0.12
@@ -227,14 +234,14 @@ static func blend_body(p: KeeperPose, up: KeeperPose, low: KeeperPose, t: float)
 
 # A leg `t` of the way from standing on its skate (`up`, whose solve puts the
 # knee at `up_knee`) to kneeling in the butterfly (`low`): the knee pinned the
-# shortest way down, the skate kicked out ahead of it and off the ice by up to
-# `lift`, turning into the pad's toe.
+# shortest way down and ahead of the skate, which slides out after it lifted
+# by up to `lift`, turning into the pad's toe.
 static func blend_leg(leg: KeeperPose.Leg, up: KeeperPose.Leg, up_knee: Vector3,
 		low: KeeperPose.Leg, t: float, lift: float = SKATES_OFF_M) -> void:
 	leg.knee_pinned = true
-	leg.knee = up_knee.lerp(low.knee, t)
-	var kick: float = 1.0 - (1.0 - t) * (1.0 - t)
-	leg.ankle = up.ankle.lerp(low.ankle, kick)
+	var knees_first: float = t + KNEE_LEAD * t * (1.0 - t)
+	leg.knee = up_knee.lerp(low.knee, knees_first)
+	leg.ankle = up.ankle.lerp(low.ankle, t)
 	leg.ankle.y += lift * sin(PI * sqrt(t))
 	leg.thigh_front = up.thigh_front.lerp(low.thigh_front, t).normalized()
 	leg.shin_front = up.shin_front.lerp(low.shin_front, t).normalized()
