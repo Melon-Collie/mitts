@@ -110,6 +110,9 @@ const _CHEST: Array[Vector3] = [
 const _RIG_STATIONS: Array[int] = [4, 5, 6]
 const _BELT_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
 const _LAST_TORSO_STATION: int = SkaterMeshBuilder.TORSO_HEM_STATION
+# How much of its length below the belt the hem beside a tucked corner is taken
+# up by: short of all of it, so a flap keeps some length to swing.
+const _TAIL_LIFT_MAX: float = 0.95
 # The neckline (the chest's first ring): this much higher than the ring's
 # nominal height round the back and sides, scooped this far below that at the
 # front, rounding off over this angle either side of straight ahead — close
@@ -465,8 +468,29 @@ static func _rig_station(station: int) -> Vector3:
 static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	var s: Vector3 = _rig_station(station)
-	return SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase), s.x, s.y, s.z, tuck,
-			phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y)
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var ring: PackedVector3Array = SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase),
+			s.x, s.y, s.z, tuck, phase, xz.x, xz.y)
+	# Beside a tucked corner the jersey is pulled toward the waistband, taut
+	# against the body: its belt ring drawn in toward the tucked ring's girth
+	# (by the square of the share, so it closes on the pants only under the
+	# rim's flare), and the hem below lifted all but up to it, at its girth
+	# rather than holding the hem's flare out, so the hem meets the waistband
+	# where the tucked columns go in.
+	var belt: Vector3 = _rig_station(_BELT_STATION)
+	for k: int in ring.size():
+		var theta: float = TAU * float(k) / float(TAIL_COLUMNS) + phase
+		var share: float = SkaterJerseyHem.tuck_share(tuck, theta)
+		if share <= 0.0 or SkaterJerseyHem.tucked_in(tuck, theta) > 0.0:
+			continue
+		var drawn_in: float = share * share
+		var belt_r: float = lerpf(belt.y, SkaterJerseyHem.BELT_IN_RADIUS_M, drawn_in)
+		var belt_sway: float = lerpf(belt.z, SkaterJerseyHem.TUCKED_REAR_SWAY_M, drawn_in)
+		var lift: float = 1.0 if station == _BELT_STATION else _TAIL_LIFT_MAX * share
+		var r: float = lerpf(s.y, belt_r, lift)
+		ring[k] = Vector3(sin(theta) * r * xz.x, lerpf(s.x, belt.x, lift),
+				lerpf(s.z, belt_sway, lift) + cos(theta) * r * xz.y)
+	return ring
 
 
 # A ring of the rig's section (SkaterMeshBuilder._ring's layout: `sides` + 1

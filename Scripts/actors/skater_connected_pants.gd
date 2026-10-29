@@ -25,11 +25,13 @@ const _PANTS: Array[Vector4] = [
 ]
 const _PANTS_ROUND: int = 4
 # Where the jersey is tucked in, the pants' padded top stands up as a rim: the
-# lip rises this far, the waistband under it this far and out this far, rolling
-# back in to the belt, so the rim is a padded band proud of the jersey going in
-# behind it. Above it the jersey blouses out by TUCK_BLOUSE_M, wider than the
+# lip rises this far and out to just inside the jersey going in over it (no
+# well between them), the waistband under it this far and out this far,
+# rolling back in to the belt, so the rim is a padded band proud of the jersey
+# going in behind it. Above it the jersey blouses out by TUCK_BLOUSE_M, wider than the
 # rim, so it overhangs the rim before it goes in (test_connected_body.gd).
 const _RIM_LIP_RISE_M: float = 0.045
+const _RIM_LIP_FLARE_M: float = 0.026
 const _RIM_RISE_M: float = 0.022
 const _RIM_FLARE_M: float = 0.035
 const TUCK_BLOUSE_M: float = 0.030
@@ -118,7 +120,7 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 					s.w + cos(theta) * (half_d + kidney)))
 		if tuck != GearModelRegistry.TUCK_NONE and i < 2:
 			_stand_rim(pts, s, tuck, _RIM_LIP_RISE_M if i == 0 else _RIM_RISE_M,
-					0.0 if i == 0 else _RIM_FLARE_M)
+					_RIM_LIP_FLARE_M if i == 0 else _RIM_FLARE_M)
 		var ids := PackedInt32Array()
 		for k: int in _SIDES:
 			var across: float = absf(sin(TAU * float(k) / float(_SIDES)))

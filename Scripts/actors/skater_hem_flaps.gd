@@ -48,7 +48,10 @@ func set_tuck(tuck: int) -> void:
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	for k: int in columns:
 		var azimuth: float = TAU * float(k) / float(columns) + phase
-		tuck_share[k] = SkaterJerseyHem.tucked_in(tuck, azimuth)
+		# The connected tail is drawn in taut beside a tucked corner
+		# (SkaterConnectedMesh.tail_ring), so it is held to that drape as far.
+		tuck_share[k] = SkaterJerseyHem.tuck_share(tuck, azimuth) if _connected \
+				else SkaterJerseyHem.tucked_in(tuck, azimuth)
 		hips_share[k] = lerpf(SkaterJerseyHem.carry(azimuth), 1.0,
 				SkaterJerseyHem.tuck_share(tuck, azimuth))
 	restart()

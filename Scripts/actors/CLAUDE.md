@@ -53,7 +53,11 @@ draws it beside the current body.
   `SkaterHemFlaps` work as they do on the rig mesh. Its pants stand their own
   rim up under a tuck rather than the rig's `pad_ring`: a padded band eased up
   as far as each column is tucked (no spike at a half tuck's corner), with the
-  jersey bloused wider above it and kidney pads behind.
+  jersey bloused wider above it and kidney pads behind. Beside a half tuck's
+  corner its tail is drawn in taut (`tail_ring`): the belt ring toward the
+  tucked girth and the hem lifted all but up to it, and the flaps hold those
+  columns to that drape as far, so the hem runs up into the waistband rather
+  than flaring out beside it.
 - **The arms get deform bones of their own** (`SkaterConnectedRig`, past the
   tail columns on the skeleton): the arm bones roll from world up, and a blended
   elbow needs both halves turning about one hinge. Per side the upper arm, the
