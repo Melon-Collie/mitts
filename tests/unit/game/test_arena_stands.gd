@@ -403,6 +403,7 @@ func test_the_next_clip_of_a_reel_starts_idle_again() -> void:
 	_replay_frame(stands, GamePhase.Phase.PLAYING)
 	_replay_frame(stands, GamePhase.Phase.GOAL_CELEBRATION)
 	await wait_seconds(0.3)
+	assert_gt(_shown_excitement(), 0.9, "the first clip's goal brings the bowl up")
 	_replay_frame(stands, GamePhase.Phase.PLAYING)
 	assert_eq(_shown_excitement(), 0.0)
 
