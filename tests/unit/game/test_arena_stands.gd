@@ -405,3 +405,11 @@ func test_the_next_clip_of_a_reel_starts_idle_again() -> void:
 	await wait_seconds(0.3)
 	_replay_frame(stands, GamePhase.Phase.PLAYING)
 	assert_eq(_shown_excitement(), 0.0)
+
+
+func test_a_replayed_hit_rumbles_the_crowd() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	_replay_frame(stands, GamePhase.Phase.PLAYING)
+	GameManager.replay_body_check.emit(1000.0)
+	await wait_seconds(0.3)
+	assert_gt(_shown_excitement(), 0.0)

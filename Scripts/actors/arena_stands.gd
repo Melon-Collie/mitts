@@ -386,8 +386,9 @@ func _wire_game_signals() -> void:
 		gm.goal_scored.connect(_on_goal_scored)
 	if gm.has_signal("phase_changed"):
 		gm.phase_changed.connect(_on_phase_changed)
-	if gm.has_signal("body_check_broadcast"):
-		gm.body_check_broadcast.connect(_on_body_check_broadcast)
+	for check_sig: String in ["body_check_broadcast", "replay_body_check"]:
+		if gm.has_signal(check_sig):
+			gm.connect(check_sig, _on_body_check)
 	for frame_sig: String in ["goal_replay_frame_changed", "highlight_frame_changed"]:
 		if gm.has_signal(frame_sig):
 			gm.connect(frame_sig, _on_replay_frame)
@@ -651,9 +652,9 @@ func _calm() -> void:
 	_set_excitement(0.0)
 
 
-# Big hits get a rumble out of the crowd, scaled by the same intensity curve
-# the impact burst/sound use. Soft contact barely registers.
-func _on_body_check_broadcast(force: float) -> void:
+# Big hits, live or replayed, get a rumble out of the crowd, scaled by the same
+# intensity curve the impact burst/sound use. Soft contact barely registers.
+func _on_body_check(force: float) -> void:
 	excite(SkaterVFX.check_intensity(force) * 0.45)
 
 
