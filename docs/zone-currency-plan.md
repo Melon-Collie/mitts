@@ -36,8 +36,6 @@ option alike and cancels — no floor, nothing measured.
   neutral zone) is the chain: P(out) × P(in from where it gets out).
 - Shots outside their zone are dead and are not a currency there. There is no
   empty net in the game.
-- Their counter after they get out stays the 5v5 counter-exposure cost, in their
-  zone only (elsewhere the turnover cost already is their entry).
 - Every probability comes from the physical reads already in place: the keep
   along the skate (reach model), the line contest, completion and bobble, the
   projected defence.
@@ -55,7 +53,7 @@ option alike and cancels — no floor, nothing measured.
    chain for a man behind it.
 2. **The carrier's compete** (`AICarrierField`): the currency set at `fill` from
    the carrier's zone; `horizon_value` / `value_at` answer in it; the turnover
-   cost per the table; counter exposure in their zone only.
+   cost per the table.
 3. **The stations and the defence reads** (`AIRoleReads.attack_possession` /
    `defence_possession`, the threat reads): the same currency rule — the
    decider is whoever plays the puck for the side (their carrier for the
