@@ -26,13 +26,18 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var carrier_pos: Vector3 = ap.carrier_pos
 
 	# A committed hit loads him on a shoulder at half a stride, so a carrier who
-	# cuts is gone: the last man back never throws one (has_support_behind).
-	if cover_priced or AILastManDiscipline.has_support_behind(ctx):
+	# cuts is gone: the last man back never throws one (has_support_behind) —
+	# until the carrier has drawn level with him in our zone, when the inside he
+	# was keeping is lost or about to be.
+	var level: bool = is_level(ctx, ap)
+	if cover_priced or level or AILastManDiscipline.has_support_behind(ctx):
 		var check: AIBodyCheck.Result = AIDefensiveVerbs.evaluate_body_check(ctx)
 		if check.commit:
 			d.commit_check = true
 			d.target_position = check.target
 			return d
+	if level:
+		return _close_on_him(ctx, ap, d)
 
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var our_goalie_pos: Vector3 = AIRoleReads.resolve_our_goalie_pos(ctx)
@@ -207,6 +212,53 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			if pid != -1 and ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 				d.engaged_peer_id = pid
 	return d
+
+
+# A carrier in our zone coming at our net at pace, within a stick of level with
+# me or past me down his line to it: the gap ladder has nothing left to hold —
+# the angle it took gave him the ice past my outside shoulder, and he is taking
+# it to the net. One who is not coming (AIRoleRushD.GAP_UP_CLOSING_M_S) gives me
+# the time to get goal-side of him instead.
+static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
+	if ap.dir_net == Vector3.ZERO or ctx.snapshot == null or ctx.snapshot.puck_state == null:
+		return false
+	if ap.closing < AIRoleRushD.GAP_UP_CLOSING_M_S:
+		return false
+	var carrier: int = ctx.snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or ctx.team_id_by_peer.get(carrier, -1) == ctx.team_id:
+		return false
+	if AIRoleNeutralZone.depth_of(ctx, ap.carrier_pos) > AIRoleNeutralZone.line_depth_m():
+		return false
+	return _depth_on(ctx, ap) <= AIRoleRushD.stick_m(ctx)
+
+
+# The angle's finish, the level pressurer's last play: still in front of him,
+# step into his path at contact, facing him, so he skates through the body;
+# behind him, skate (not backpedal) onto the hip of my nearer side, riding him,
+# so the body or the reach-in (the jab, or the lift from behind) gets there
+# before he does.
+static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
+		d: RoleDecision) -> RoleDecision:
+	var contact_m: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
+	if _depth_on(ctx, ap) > 0.0:
+		d.target_position = ap.carrier_pos + ap.dir_net * contact_m
+	else:
+		var across := Vector3(-ap.dir_net.z, 0.0, ap.dir_net.x)
+		if (ctx.self_pos - ap.carrier_pos).dot(across) < 0.0:
+			across = -across
+		d.target_position = ap.carrier_pos + across * contact_m
+		d.face_travel = true
+	d.target_velocity = ap.carrier_vel
+	d.arrive_at_speed = true
+	d.pressures_puck = true
+	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
+	return d
+
+
+# How far goal-side of the carrier I stand, down his line to our net.
+static func _depth_on(ctx: RoleContext, ap: AICarrierApproach) -> float:
+	return (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
+			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
 
 
 # True if `c` is on our net's side of the carrier — never lose inside position.

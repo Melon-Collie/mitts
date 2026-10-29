@@ -487,6 +487,18 @@ priced (the pinch's rotation), because a committed hit loads him on
 a shoulder at half a stride, and the last man back who throws one at a carrier
 with speed is skated around (`test_speed_rush_defence.gd`).
 
+**The angle has a finish.** The stand is shaded inside, so a carrier who keeps
+driving at the net — one who ignores the defender rather than respecting the
+angle — comes past the defender's outside shoulder, and a stick's gap off his
+body leaves a puck carried on the far side out of reach. Once a carrier coming
+at our net at pace draws within a stick of level in our zone
+(`AIRolePressure.is_level`), the ladder has nothing left to hold and the
+inside is lost or about to be: the last man may check, and otherwise steps into
+his path at contact (still in front) or skates onto his near hip (behind), so
+the body or the reach-in gets there before he does. A carrier who is not coming
+gets the goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a
+scripted carrier who ignores the defence at the net, alone and two back.
+
 Three things have to be true together, and each is load-bearing:
 
 - **No anticipation lead in the anchor.** The route carries the man's velocity as
