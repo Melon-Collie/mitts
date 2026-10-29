@@ -128,9 +128,11 @@ each defender where he blocks the most value and can still get there.
 
 ### 3. Does the carrier take the best option, or a mix?
 
-Value iteration takes the **best** option from each cell, which is how the
-carrier picks. Counted xT takes what players actually did. Recommended:
-**best**, because B prices what the bots would do, not what they did.
+**Agreed: the best option.** Value iteration takes the best option from each
+cell, which is how the carrier picks; counted xT takes what players actually
+did, mistakes included. The table prices what the bots would do. It is a little
+optimistic, since it assumes every later read is the right one; the move being
+chosen now is priced live, so the optimism touches only the moves after it.
 
 ### 4. The grid
 
