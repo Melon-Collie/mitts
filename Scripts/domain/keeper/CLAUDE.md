@@ -310,7 +310,7 @@ their times, the ready stance to the butterfly, the drop a fall, a change of
 mind going from where he is, the recovery's far leg up first and its skate
 holding its place, and every tick out of the ice, on the stick and without a
 jump. `test_keeper_low_ready.gd` holds the low ready: sunk into its own
-pose when set and asked, and kept skating with the play, a shuffle across made
+pose when set and asked, and kept skating with the play and backing in at full glide, a shuffle across made
 in it still sunk with the trail skate holding the ice and back in under him once
 set, out of it as a move
 starts or a chase, a drop and a low save
@@ -372,7 +372,7 @@ puck the more time he has to follow a pull, and a slower read never nearer it.
 is, a change of direction read after his read (a slower tier later), a
 wind-up seen his read late and priming the save once watched long enough, the
 receivers a pass can reach, a stickhandle read where the puck is on average
-and the carrier's skating as it is, the carrier read as late as the puck, and a pass read to the stick that meets
+and the carrier's skating as it is, the carrier read as late as the puck, a release seen his read late, and a pass read to the stick that meets
 it once seen and until seen caught, none for a line no stick reaches or a
 puck that stops short.
 `test_keeper_body.gd` also holds a grip past reach in every direction, both

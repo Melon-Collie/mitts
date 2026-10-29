@@ -6,8 +6,8 @@ extends GutTest
 # the save once he has watched it long enough; and the receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
 # and inside the blue line. A stickhandle read where the puck is on average
-# about its carrier, the carrier's skating as it is, and the carrier read as
-# late as the puck, none once it is loose; and a loose puck read to
+# about its carrier, the carrier's skating as it is, and the carrier and whose
+# he is read as late as the puck, none once it is loose; and a loose puck read to
 # the first opposing stick its line reaches before it stops.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
