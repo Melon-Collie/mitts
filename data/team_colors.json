@@ -399,34 +399,14 @@
           "base": "#F4AC1C",
           "stripes": [
             {
-              "pos": 0.0,
-              "width": 0.48,
-              "color": "#B8691E",
-              "peak": {
-                "depth": 0.22,
-                "count": 1,
-                "u": 0.5
-              }
+              "pos": 0.1415,
+              "width": 0.283,
+              "color": "#2E7A5A"
             },
             {
-              "pos": 0.0,
-              "width": 0.44,
-              "color": "#F7E7A6",
-              "peak": {
-                "depth": 0.22,
-                "count": 1,
-                "u": 0.5
-              }
-            },
-            {
-              "pos": 0.0,
-              "width": 0.4,
-              "color": "#2E7A5A",
-              "peak": {
-                "depth": 0.22,
-                "count": 1,
-                "u": 0.5
-              }
+              "pos": 0.2944,
+              "width": 0.0228,
+              "color": "#F7E7A6"
             },
             {
               "pos": 0.66,
@@ -525,34 +505,14 @@
           "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.0,
-              "width": 0.48,
-              "color": "#B8691E",
-              "peak": {
-                "depth": 0.22,
-                "count": 1,
-                "u": 0.5
-              }
+              "pos": 0.1415,
+              "width": 0.283,
+              "color": "#2E7A5A"
             },
             {
-              "pos": 0.0,
-              "width": 0.44,
-              "color": "#F7E7A6",
-              "peak": {
-                "depth": 0.22,
-                "count": 1,
-                "u": 0.5
-              }
-            },
-            {
-              "pos": 0.0,
-              "width": 0.4,
-              "color": "#2E7A5A",
-              "peak": {
-                "depth": 0.22,
-                "count": 1,
-                "u": 0.5
-              }
+              "pos": 0.2944,
+              "width": 0.0228,
+              "color": "#F4AC1C"
             },
             {
               "pos": 0.66,
