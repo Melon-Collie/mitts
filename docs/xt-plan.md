@@ -104,7 +104,27 @@ the numbers. Candidates:
   start (reach-based, no coaching);
 - our zone-coverage shape, which is our own defending bot again (rule above).
 
-No recommendation yet: this is the question to settle first.
+**Agreed to try: the real defence for the move being chosen, a set defence
+in the table.** An option has two parts:
+
+1. **Getting there**: the move the carrier is choosing now, priced against
+   the real defenders where they are, on the worst-case reads the keep odds
+   were measured on (the third candidate above, on real positions).
+2. **What the spot is worth once he is there**: the table. The defenders will
+   have moved by then, so it assumes a defence that has had time to set: the
+   mode's defenders goal-side between the puck and the net, covering the
+   lanes. The shot field makes the same assumption of the keeper ("a keeper
+   who tracked the play").
+
+The worry is that one move of real defence is much worse than two, where the
+real defenders, projected forward, also price the move after arriving and the
+table starts there (roughly what the next-line reads do today, and what they
+cost). So the first build keeps the depth switchable, and the two are measured
+against each other on the entry and breakout drills and the advantage
+scenarios before either is kept.
+
+Still open: the rule that places the set defence. The proposal is physical:
+each defender where he blocks the most value and can still get there.
 
 ### 3. Does the carrier take the best option, or a mix?
 
