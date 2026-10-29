@@ -205,9 +205,19 @@ him to — and the brain runs FORECHECK while we win that race somewhere up to t
 line, TRANS_DEFENSE (the set neutral-zone shape) once we cannot. In 5v5 a D
 counts only as far down the wall as the strong D's pinch goes; F1 is a forward. A
 slow loose puck in their zone reads the same race from the puck, a tie counted as
-ours (a 50/50 in their end is gone after). The hysteresis sits on the race
-(`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the shape, for the reason the
-recovery race's does.
+ours (a 50/50 in their end is gone after). A loose puck is raced on its path,
+from where it is first played, so a puck still sliding is met where it will be.
+The hysteresis sits on the race (`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the
+shape, for the reason the recovery race's does.
+
+**A dump-in opens the forecheck at the release.** The point of dumping it is the
+forecheck it starts, so our release from a carry outside their zone, untouched
+since, is raced the same way while it flies (`TeamBrain._read_dump_in`): FORECHECK
+when we win it or get on whoever plays it, TRANS_DEFENSE when they play it and
+are gone, and the possession table's shape when it is played before their line
+(a feed taken in the neutral zone). The same release inside their zone — a pass,
+a shot gone wide — keeps the attack's shape. Who released it and from where is
+all the read uses; whom it was meant for is never published.
 
 **The forecheck is the 1-2-2** (3v3: the 1-1-1). F1 pressures the puck (PRESSURE);
 F2 reacts in front of their net (`F2_NET`: the breakout-feed argmax centred in the
@@ -840,6 +850,8 @@ reaches back into what remains.
   puck with its last carrier's team outside our zone, and the rush read takes
   the same answer (`AIRushRead.fill`'s `possession_team`): read as a loose puck,
   our feed to the point is a puck advancing on our net, and the points bailed.
+  A dump-in is the one release of ours the brain reads as a race instead
+  ("Forecheck or set up").
 
 - **Loose-puck retrieval is two reads, not one** (`AILoosePuckChase`).
   - The **election** names exactly one chaser per team: momentum-aware

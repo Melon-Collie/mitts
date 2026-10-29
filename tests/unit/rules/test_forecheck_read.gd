@@ -9,7 +9,8 @@ const TEAM_ID: int = 0
 
 
 # skaters: [peer, team, position, velocity?]
-func _snap(skaters: Array, carrier_pid: int, puck_pos: Vector3 = Vector3.INF) -> WorldSnapshot:
+func _snap(skaters: Array, carrier_pid: int, puck_pos: Vector3 = Vector3.INF,
+		puck_vel: Vector3 = Vector3.ZERO) -> WorldSnapshot:
 	var snap := WorldSnapshot.new()
 	for e: Array in skaters:
 		var s := SkaterNetworkState.new()
@@ -20,6 +21,7 @@ func _snap(skaters: Array, carrier_pid: int, puck_pos: Vector3 = Vector3.INF) ->
 	puck.carrier_peer_id = carrier_pid
 	puck.position = snap.skater_states[carrier_pid].position \
 			if carrier_pid != -1 else puck_pos
+	puck.velocity = puck_vel
 	snap.puck_state = puck
 	return snap
 
@@ -31,8 +33,9 @@ func _teams(skaters: Array) -> Dictionary:
 	return m
 
 
-func _margin(skaters: Array, carrier_pid: int, puck_pos: Vector3 = Vector3.INF) -> float:
-	return AIForecheckRead.pressure_margin_s(_snap(skaters, carrier_pid, puck_pos),
+func _margin(skaters: Array, carrier_pid: int, puck_pos: Vector3 = Vector3.INF,
+		puck_vel: Vector3 = Vector3.ZERO) -> float:
+	return AIForecheckRead.pressure_margin_s(_snap(skaters, carrier_pid, puck_pos, puck_vel),
 			TEAM_ID, OUR_NET_Z, _teams(skaters), {}, {}, false)
 
 
@@ -116,6 +119,38 @@ func test_a_loose_puck_we_tie_for_is_ours_to_chase() -> void:
 			"a tie for the puck is a forecheck; margin %.2f s" % m)
 
 
+# A dump from the red line into their strong-side corner, our winger flying down
+# that wall from `winger_z` at `winger_vz`; their D at `d_pos`.
+func _dump_race(winger_z: float, winger_vz: float,
+		d_pos: Vector3 = Vector3(-3.0, 0.0, -24.0)) -> float:
+	return _margin([
+		[1, 0, Vector3(9.0, 0.0, winger_z), Vector3(0.0, 0.0, winger_vz)],
+		[200, 1, d_pos],
+	], -1, Vector3(2.0, 0.0, -1.0), Vector3(5.0, 0.0, -16.0))
+
+
+func test_a_dump_is_raced_where_it_is_played_not_where_it_is() -> void:
+	# Still in the neutral zone, but our winger is on it in their corner.
+	assert_true(AIForecheckRead.can_forecheck(_dump_race(-6.0, -8.0), false),
+			"a dump our winger wins is a forecheck from the release")
+
+
+func test_a_dump_into_their_d_with_nobody_following_is_lost() -> void:
+	# Their D stands in its path inside his line; our only man is back in our
+	# zone, standing: the D plays it and is gone.
+	assert_false(AIForecheckRead.can_forecheck(
+			_dump_race(16.0, 0.0, Vector3(6.0, 0.0, -12.0)), false),
+			"nobody gets on their D before he is out: set up")
+
+
+func test_a_pass_we_take_before_their_line_is_no_forecheck() -> void:
+	# A feed up the middle to a man in the neutral zone is played there.
+	assert_eq(_margin([
+		[1, 0, Vector3(0.0, 0.0, -6.0)],
+		[200, 1, Vector3(0.0, 0.0, -24.0)],
+	], -1, Vector3(0.0, 0.0, 6.0), Vector3(0.0, 0.0, -14.0)), -INF)
+
+
 # ── The brain picks the shape ────────────────────────────────────────────────
 
 func _brain_state(skaters: Array, carrier_pid: int) -> int:
@@ -141,3 +176,33 @@ func test_the_brain_sets_up_against_a_carrier_it_cannot() -> void:
 		[3, 0, Vector3(0.0, 0.0, 18.0)],
 		[200, 1, Vector3(0.0, 0.0, -20.0), Vector3(0.0, 0.0, 6.0)],
 	], 200), AIPossessionState.State.TRANS_DEFENSE)
+
+
+# Our carrier releases at `release_z` toward their corner, our winger flying down
+# the wall and their D back at his net; the brain's shape with it in flight.
+func _shape_after_release(release_z: float) -> int:
+	var skaters: Array = [
+		[1, 0, Vector3(2.0, 0.0, release_z)],
+		[2, 0, Vector3(9.0, 0.0, release_z - 4.0), Vector3(0.0, 0.0, -8.0)],
+		[3, 0, Vector3(-4.0, 0.0, release_z + 8.0)],
+		[200, 1, Vector3(-4.0, 0.0, -26.0)],
+	]
+	var brain := TeamBrain.new(TEAM_ID, _teams(skaters), {}, 3)
+	brain.force_retick()
+	brain.tick(0.01, _snap(skaters, 1))
+	var loose: WorldSnapshot = _snap(skaters, -1, Vector3(2.5, 0.0, release_z - 1.0),
+			Vector3(5.0, 0.0, -16.0))
+	loose.loose_puck_released_by = 1
+	brain.force_retick()
+	brain.tick(0.01, loose)
+	return brain.state
+
+
+func test_a_dump_in_opens_the_forecheck_at_the_release() -> void:
+	assert_eq(_shape_after_release(-1.0), AIPossessionState.State.FORECHECK,
+			"the point of a dump is the forecheck it starts")
+
+
+func test_the_same_release_inside_their_zone_keeps_the_attack() -> void:
+	assert_eq(_shape_after_release(-12.0), AIPossessionState.State.OZONE,
+			"a puck moved inside their zone is still our attack")

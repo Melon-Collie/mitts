@@ -90,6 +90,13 @@ var coverage_downgraded: bool = false
 # last tick's answer, for the read's hysteresis — and the race margin it read.
 var _forechecking: bool = false
 var forecheck_margin_s: float = -INF
+# Where the puck was last carried, read every batch so a release is placed to
+# within one; INF until it has been.
+var _last_carry_pos: Vector3 = Vector3.INF
+# The release the dump-in read last classified (WorldSnapshot
+# .loose_puck_released_by), and whether it is our dump-in.
+var _seen_release_by: int = -1
+var _dumping_in: bool = false
 # Team 1's natural ticks run half a period out of phase with team 0's (see
 # Scripts/ai/CLAUDE.md → "Two brains, two cadences"). Re-applied at every
 # forced-tick accumulator reset, since both brains are force-reticked together.
@@ -134,6 +141,9 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 	# Ping directives age in real host time, not brain-tick time — advance
 	# before the rate-limit gate so expiry never stretches with the cadence.
 	ping_directives.advance(delta)
+	if snapshot != null and snapshot.puck_state != null \
+			and snapshot.puck_state.carrier_peer_id != -1:
+		_last_carry_pos = snapshot.puck_state.position
 	_accumulator += delta
 	if _accumulator < TICK_PERIOD and not _force_tick_pending:
 		return
@@ -205,21 +215,27 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		_coverage_unready_ticks = 0
 		coverage_downgraded = false
 
-	# Their puck deep in their zone, carried or loose and slow: forecheck it only
-	# while our first forechecker can get on it before it is out, else set up in
-	# the neutral zone (Scripts/domain/ai/CLAUDE.md → "Forecheck or set up").
-	if state == AIPossessionState.State.FORECHECK \
+	# Their puck deep in their zone, carried or loose and slow, or our dump-in on
+	# its way there: forecheck it only while our first forechecker can get on it
+	# before it is out, else set up in the neutral zone
+	# (Scripts/domain/ai/CLAUDE.md → "Forecheck or set up").
+	_read_dump_in(snapshot)
+	var their_deep_puck: bool = state == AIPossessionState.State.FORECHECK \
 			or (state == AIPossessionState.State.NEUTRAL
-					and AIPossessionState.in_their_zone(snapshot, _own_goal_z)):
+					and AIPossessionState.in_their_zone(snapshot, _own_goal_z))
+	forecheck_margin_s = -INF
+	if their_deep_puck or _dumping_in:
 		forecheck_margin_s = AIForecheckRead.pressure_margin_s(snapshot, team_id,
 				_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
 				team_size >= 5)
+	# A dump-in first played outside their zone is no forecheck: the possession
+	# table's shape stands.
+	if not their_deep_puck and forecheck_margin_s == -INF:
+		_forechecking = false
+	else:
 		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking)
 		state = AIPossessionState.State.FORECHECK if _forechecking \
 				else AIPossessionState.State.TRANS_DEFENSE
-	else:
-		_forechecking = false
-		forecheck_margin_s = -INF
 
 	# Strong-side X with hysteresis (see STRONG_SIDE_HYSTERESIS_M).
 	if snapshot != null and snapshot.puck_state != null:
@@ -269,6 +285,22 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 # (no defenders in the view). `prev` is last tick's partition, threaded through
 # for switch hysteresis — which is also what carries a marker across a pass
 # without re-shuffling the whole coverage.
+# Whether the loose puck is our dump-in: released by one of ours from a carry
+# outside their zone, and not touched since. Classified once per release. The
+# same release made inside their zone (a pass, a shot gone wide) keeps the
+# offensive shape.
+func _read_dump_in(snapshot: WorldSnapshot) -> void:
+	var released_by: int = snapshot.loose_puck_released_by \
+			if snapshot != null and snapshot.puck_state != null else -1
+	if released_by == _seen_release_by:
+		return
+	_seen_release_by = released_by
+	_dumping_in = released_by != -1 \
+			and _team_id_by_peer.get(released_by, -1) == team_id \
+			and _last_carry_pos.is_finite() \
+			and -signf(_own_goal_z) * _last_carry_pos.z <= GameRules.BLUE_LINE_Z
+
+
 func _compute_threat_assignments(snapshot: WorldSnapshot,
 		prev: Dictionary) -> Dictionary[int, int]:
 	var empty: Dictionary[int, int] = {}
