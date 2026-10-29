@@ -75,6 +75,16 @@ func _moves() -> Array:
 			var out: float = maxf(7.0 - 5.0 * t, 2.0)
 			var px: float = 0.5 if out > 3.0 else lerpf(0.5, -0.8, clampf((3.0 - out) / 5.0 / 0.25, 0.0, 1.0))
 			return [_ice(0.0, out), _ice(px, out - 0.3)]],
+		["sell forehand, tuck", 1.1, func(t: float) -> Array:
+			# Driven in from the dots on the backhand, pulled hard across to the
+			# forehand with the body swerving after it, then back across into a
+			# backhand tuck at the crease.
+			var out: float = maxf(6.5 - 6.0 * t, 1.4)
+			var sell: float = smoothstep(0.3, 0.55, t)
+			var tuck: float = smoothstep(0.6, 0.85, t)
+			var px: float = -0.4 + 1.3 * sell - 1.9 * tuck
+			var bx: float = 0.6 * sell - 1.0 * tuck
+			return [_ice(bx, out), _ice(px, out - 0.3)]],
 	]
 
 
@@ -87,7 +97,8 @@ func test_tracking() -> void:
 
 
 func test_trace_drag() -> void:
-	var m: Array = _moves()[3]
+	var which: String = OS.get_environment("CLOSE_PLAY_TRACE")
+	var m: Array = _moves()[int(which) if which != "" else 3]
 	gut.p("\n" + _track(m[0], m[1], m[2], true))
 	assert_true(true)
 
