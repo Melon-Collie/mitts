@@ -152,6 +152,7 @@ const _HELMET_EAR_DIP_POWER: float = 6.0
 # glimpse near the rim.
 const _HELMET_LINER_APEX_FRAC: float = 0.5
 const _HELMET_LON: int = 10
+const _HELMET_LAT: int = 4
 const HEAD_RADIUS: float = 0.135
 # The head ball's facet grid (_build_ball's lon × lat). SkaterFaceMesh and
 # SkaterHairMesh lay their pieces on these same facets.
@@ -575,6 +576,13 @@ static func _build_skate_assembly() -> ArrayMesh:
 # his mask.
 static func shared_head() -> ArrayMesh:
 	return _shared("head", _build_head)
+
+
+# The shell alone at a finer facet grid, for the connected-body prototype
+# (SkaterConnectedRigMeshes).
+static func shared_helmet_shell(lon: int, lat: int) -> ArrayMesh:
+	return _shared("helmet_%d_%d" % [lon, lat], func() -> ArrayMesh:
+		return _build_helmet(lon, lat))
 
 
 static func shared_helmet_assembly() -> ArrayMesh:
@@ -1090,13 +1098,15 @@ static func shared_skate_blade() -> ArrayMesh:
 # center — those closure faces hide inside the head ball, and closing keeps the
 # solid's winding testable. Same ring orientation as _build_ball, so the shared
 # quad ordering stays outward.
-static func _build_helmet() -> ArrayMesh:
+# `lon` × `lat` facets; the rig's shell is the defaults, and everything fitted
+# under a helmet (hair, face gear) is fitted to that one.
+static func _build_helmet(lon: int = _HELMET_LON, lat: int = _HELMET_LAT) -> ArrayMesh:
 	var st := SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_smooth_group(-1)  # flat shading — see class doc block
-	var rings: Array[PackedVector3Array] = _helmet_rings()
+	var rings: Array[PackedVector3Array] = _helmet_rings(lon, lat)
 	for j in rings.size() - 1:
-		for k in _HELMET_LON:
+		for k in lon:
 			var a: Vector3 = rings[j][k]
 			var b: Vector3 = rings[j][k + 1]
 			var c: Vector3 = rings[j + 1][k + 1]
@@ -1141,14 +1151,14 @@ static func _helmet_splits_ac(a: Vector3, b: Vector3, c: Vector3, d: Vector3) ->
 
 # The shell's rings from the crown down to the rim, each closed (its first
 # point repeated at the end).
-static func _helmet_rings() -> Array[PackedVector3Array]:
-	var lat: int = 4
+static func _helmet_rings(lon: int = _HELMET_LON, lat: int = _HELMET_LAT) \
+		-> Array[PackedVector3Array]:
 	var rings: Array[PackedVector3Array] = []
 	for j in lat + 1:
 		var ring := PackedVector3Array()
-		ring.resize(_HELMET_LON + 1)
-		for k in _HELMET_LON + 1:
-			var theta: float = TAU * float(k) / float(_HELMET_LON)
+		ring.resize(lon + 1)
+		for k in lon + 1:
+			var theta: float = TAU * float(k) / float(lon)
 			var v: float = _helmet_cut_v(theta) * float(j) / float(lat)
 			var y: float = _HELMET_RADIUS * cos(PI * v)
 			var ring_r: float = _HELMET_RADIUS * sin(PI * v)
