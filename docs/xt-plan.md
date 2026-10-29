@@ -148,8 +148,13 @@ V is odds per possession: time is not in it. Today's compete also pays a
   keep odds of a later move are worse because the defence has closed);
 - keep it as a separate term.
 
-Recommended: **drop it**, since V and the keep odds together already price
-what waiting costs. Measure before deciding.
+**Agreed: drop it.** The discount is not a fact about the ice: it charges every
+second the same whether the defence closes in it or not. V and the keep odds
+together price what waiting really costs: the defence gets home, and the next
+move's keep is worse. The thing to watch on the test families is a carrier who
+dawdles when nobody is closing on him. That would be a real gap in the model
+(something waiting costs that the keep odds do not see), to be named and added,
+never a discount put back.
 
 ### 6. Turnovers
 
