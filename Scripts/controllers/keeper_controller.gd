@@ -108,7 +108,6 @@ func _tier() -> void:
 	read.primed_delay_s = _profile.prearmed_reaction_delay_s
 	play.primed_delay_s = _profile.prearmed_reaction_delay_s
 	play.delay_s = _profile.reaction_delay_s
-	read.arm_delay_s = _profile.arm_reaction_delay_s
 	save.glove_speed_m_s = _profile.glove_react_max_speed_mps
 	save.blocker_speed_m_s = _profile.blocker_react_max_speed_mps
 	save.drop_s = _profile.butterfly_drop_s
@@ -339,7 +338,7 @@ func _glove_on_puck() -> bool:
 func _place_body() -> void:
 	var dt: float = get_physics_process_delta_time()
 	motor.pose(_keeper_pose)
-	save.step(dt, read.arms_read(), _keeper_pose)
+	save.step(dt, read.legs_read(), _keeper_pose)
 	save.overlay(_keeper_pose)
 	look.step(dt, _keeper_pose, _in_his_space(puck.global_position))
 	goalie.global_transform = _net * Transform3D(Basis(Vector3.UP, motor.yaw), Vector3(motor.x, 0.0, motor.z))

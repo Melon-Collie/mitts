@@ -31,10 +31,14 @@ const LANE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M
 # fixation on the puck and stick, the save prepared during it and executed
 # ballistically).
 const PRIME_S: float = 0.40
-# Smooth pursuit holds a moving target to about 60°/s; a puck crossing his
-# view faster (a stickhandle, a deke, a hard cut) breaks the look, and it
-# starts over.
+# His gaze pursues the puck at up to this (smooth pursuit holds a moving
+# target to about 60°/s), and holds it while the puck stays within the window
+# of its line: the quiet eye's fixation, a gaze held within 3° of its target
+# (Vickers). A puck that gets out of it (a stickhandle, a deke, a hard cut
+# swung across faster for long enough) breaks the look, and it starts over
+# from the saccade that catches it up.
 const PURSUIT_RAD_S: float = deg_to_rad(60.0)
+const LOOK_WINDOW_RAD: float = deg_to_rad(3.0)
 const NO_CARRIER := Vector2(INF, INF)
 
 var delay_s: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
@@ -73,6 +77,8 @@ var _bodies := PackedVector2Array()
 var _winding := PackedByteArray()
 var _loose := PackedByteArray()
 var _theirs := PackedByteArray()
+# Where his gaze is, the bearing from his eyes; NAN with nothing to hold.
+var _gaze: float = NAN
 var _head: int = -1
 var _count: int = 0
 
@@ -88,6 +94,7 @@ func _init() -> void:
 
 
 func reset() -> void:
+	_gaze = NAN
 	_head = -1
 	_count = 0
 	receivers.clear()
@@ -123,18 +130,26 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 		var own: Vector2 = (_at[seen] - _at[before_last]) / (2.0 * dt)
 		var body: Vector2 = _bodies[seen] + motion * (lag * dt)
 		puck = body + (_at[seen] + own * (lag * dt) - body).limit_length(CARRIER_REACH_M)
-	var before: int = (seen - 1 + size) % size
-	var held: bool = theirs and lag + 1 < _count and _sweep(_at[before], _at[seen]) <= PURSUIT_RAD_S * dt
-	watched_s = watched_s + dt if held else 0.0
+	watched_s = watched_s + dt if theirs and lag + 1 < _count and _gaze_holds(_at[seen], dt) else 0.0
+	if not theirs:
+		_gaze = NAN
 
 
-# The angle the puck crossed his view by, from `from` to `to`.
-func _sweep(from: Vector2, to: Vector2) -> float:
-	var a: Vector2 = from - eyes
-	var b: Vector2 = to - eyes
-	if a.length_squared() < 1e-6 or b.length_squared() < 1e-6:
-		return 0.0
-	return absf(a.angle_to(b))
+# His gaze one tick on toward the puck at `at`, at his pursuit's speed;
+# whether it still holds it. Lost, it is caught up again by a saccade.
+func _gaze_holds(at: Vector2, dt: float) -> bool:
+	var line: Vector2 = at - eyes
+	if line.length_squared() < 1e-6:
+		return true
+	var bearing: float = line.angle()
+	if is_nan(_gaze):
+		_gaze = bearing
+	var off: float = angle_difference(_gaze, bearing)
+	_gaze += clampf(off, -PURSUIT_RAD_S * dt, PURSUIT_RAD_S * dt)
+	if absf(angle_difference(_gaze, bearing)) <= LOOK_WINDOW_RAD:
+		return true
+	_gaze = bearing
+	return false
 
 
 # Whether he has held the puck in his eyes long enough to have the save

@@ -3,7 +3,9 @@ extends GutTest
 # What he reads of the play (KeeperPlayRead): a puck holding its line read
 # where it is; a change of direction read going the old way until his read has
 # passed, a slower tier's later; a wind-up seen late by his read and priming
-# the save once he has watched it long enough; and the receivers a pass could
+# the save once he has watched it long enough, an ordinary stickhandle his
+# gaze keeps up with priming him and a hard one in close not; and the
+# receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
 # and inside the blue line. A carried puck read his read late, carried on
 # along its own motion no further from its carrier than he reaches, and whose
@@ -100,6 +102,30 @@ func test_a_steady_look_at_the_puck_primes_the_save() -> void:
 	for i: int in 90:
 		ours.step(DT, body, Vector2.ZERO, false, body, false)
 	assert_false(ours.primed(), "a puck of ours never primes him")
+
+
+# His gaze pursues the puck and holds it within the quiet eye's window: a
+# carrier skating across the slot with an ordinary stickhandle stays in it and
+# primes him; a hard, fast one in close gets out of it and never does.
+func test_a_stickhandle_his_gaze_keeps_up_with_still_primes_him() -> void:
+	assert_true(_primes_against(9.0, 0.5, 1.5), "skating across 9 m out, an ordinary dangle")
+	assert_false(_primes_against(6.0, 0.6, 2.5), "6 m out, a hard dangle")
+
+
+# Whether he is primed after two seconds of a carrier of theirs skating across
+# `out` in front of him at 4 m/s, swinging the puck `amp` either side at `hz`.
+func _primes_against(out: float, amp: float, hz: float) -> bool:
+	var play := KeeperPlayRead.new()
+	play.eyes = Vector2(0.0, -1.2)
+	var v := Vector2(4.0, 0.0)
+	var body := Vector2(-4.0, -out)
+	var ever: bool = false
+	for i: int in int(2.0 / DT):
+		body += v * DT
+		var across := Vector2(-body.y, body.x).normalized()
+		play.step(DT, body + across * amp * sin(TAU * hz * i * DT), v, false, body, true)
+		ever = ever or play.primed()
+	return ever
 
 
 func test_receivers_are_the_ones_a_pass_can_reach() -> void:

@@ -70,17 +70,15 @@ func test_he_reads_a_shot_only_after_his_read() -> void:
 		_read.step(DT, _read.position_in(DT), _read.velocity)
 	assert_false(_read.legs_read(), "not before the leg read")
 	_read.step(DT * 2.0, _read.position_in(DT * 2.0), _read.velocity)
-	assert_true(_read.legs_read())
-	assert_false(_read.arms_read(), "the arms read later")
+	assert_true(_read.legs_read(), "his legs and hands alike")
 
 
-# A release he watched wound up is read on the primed delay, legs and hands
-# alike; touched on its way, it is a new shot read cold.
+# A release he watched wound up is read on the primed delay; touched on its
+# way, it is a new shot read cold.
 func test_a_primed_release_is_read_sooner() -> void:
 	_read.start(true)
 	_read.age = _read.primed_delay_s
-	assert_true(_read.legs_read(), "the legs on the primed read")
-	assert_true(_read.arms_read(), "the hands on the primed read")
+	assert_true(_read.legs_read(), "on the primed read")
 	assert_lt(_read.primed_delay_s, _read.leg_delay_s, "sooner than a cold one")
 	_read.start()
 	_read.age = _read.primed_delay_s
@@ -156,7 +154,7 @@ func _hand_to_the_puck(part: int, what: String) -> void:
 		_fly(DT)
 		t += DT
 		_motor.pose(_pose)
-		_save.step(DT, _read.arms_read(), _pose)
+		_save.step(DT, _read.legs_read(), _pose)
 		_save.overlay(_pose)
 		_skel.pose(_pose)
 		var hand_at: Vector3 = KeeperGear.box(_skel, part).origin
@@ -223,7 +221,7 @@ func test_released_the_hand_goes_back_and_the_save_ends() -> void:
 	for i: int in 40:
 		_fly(DT)
 		_motor.pose(_pose)
-		_save.step(DT, _read.arms_read(), _pose)
+		_save.step(DT, _read.legs_read(), _pose)
 	assert_true(_save.active(), "out")
 	_save.release()
 	var t: float = 0.0
@@ -267,7 +265,7 @@ func test_a_shot_while_a_hand_goes_back_gets_its_hand() -> void:
 
 func _glove_after_step() -> Vector3:
 	_motor.pose(_pose)
-	_save.step(DT, _read.arms_read(), _pose)
+	_save.step(DT, _read.legs_read(), _pose)
 	_save.overlay(_pose)
 	_skel.pose(_pose)
 	return KeeperGear.box(_skel, KeeperGear.Part.GLOVE).origin

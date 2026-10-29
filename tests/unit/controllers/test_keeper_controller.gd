@@ -241,8 +241,11 @@ func _shot(from: Vector3, to: Vector2, speed: float) -> int:
 
 func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 	var cases: Array = [
-		[Vector2(-0.84, 0.4), GoalieSaveRules.SavePart.GLOVE, "to his glove side over the pad"],
-		[Vector2(0.75, KeeperShotRead.ON_ICE_Y), GoalieSaveRules.SavePart.STICK, "along the ice to his blocker side, the blade leading"],
+		[Vector2(-0.84, 0.4), KeeperSave.Hand.GLOVE, [GoalieSaveRules.SavePart.GLOVE],
+				"to his glove side over the pad"],
+		[Vector2(0.75, KeeperShotRead.ON_ICE_Y), KeeperSave.Hand.STICK,
+				[GoalieSaveRules.SavePart.STICK, GoalieSaveRules.SavePart.PAD],
+				"along the ice to his blocker side, the blade leading the pad"],
 	]
 	for case: Array in cases:
 		_spawn(GameRules.GOAL_LINE_Z)
@@ -250,7 +253,9 @@ func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 		_run(1.5)
 		var to: Vector2 = case[0]
 		var from := Vector3(0.0, 0.3 if to.y > 0.1 else _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
-		assert_eq(_shot(from, to, 22.0), case[1], case[2])
+		var met: int = _shot(from, to, 22.0)
+		assert_eq(_keeper.save.hand, case[1], "%s: the hand he puts there" % case[3])
+		assert_has(case[2], met, "%s: met by it" % case[3])
 
 
 # A shot in on him before his legs have read it (set for a puck wide of him,
@@ -442,7 +447,6 @@ func test_a_tier_set_later_reaches_his_saves() -> void:
 	var easy: GoalieSkillProfile = GoalieSkillProfile.easy()
 	_keeper.apply_skill_profile(easy)
 	assert_eq(_keeper.read.leg_delay_s, easy.reaction_delay_s)
-	assert_eq(_keeper.read.arm_delay_s, easy.arm_reaction_delay_s)
 	assert_eq(_keeper.save.glove_speed_m_s, easy.glove_react_max_speed_mps)
 	assert_eq(_keeper.motor.save_move.drop_s, easy.butterfly_drop_s)
 	_keeper.reset_to_crease()

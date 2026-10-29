@@ -118,11 +118,10 @@ var _hit_part: int = -1
 var _hit_v := Vector3.ZERO
 var _contact := GoalieSaveRules.ContactResult.new()
 var _rebound := SweptDiscOBB.Result.new()
-# Seconds until his arms and legs have read the shot, at the choice; the share
-# of a drop's time the fall into it takes; and how well the best candidate yet
-# meets the flight (`_take`).
-var _arm_wait: float = 0.0
-var _leg_wait: float = 0.0
+# Seconds until he has read the shot, at the choice; the share of a drop's
+# time the fall into it takes; and how well the best candidate yet meets the
+# flight (`_take`).
+var _wait: float = 0.0
 var _fall: float = 1.0
 var _best: int = -1
 
@@ -169,8 +168,7 @@ func _choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool, kept: int
 	lows_open = true
 	ready_s = 0.0
 	impact_s = INF
-	_leg_wait = maxf(read.leg_delay_s - read.age, 0.0)
-	_arm_wait = maxf(read.arm_delay_s - read.age, 0.0)
+	_wait = maxf(read.read_s() - read.age, 0.0)
 	_fall = motor.fall
 	_best = -1
 	var side_hand: int = Hand.GLOVE if side < 0.0 else Hand.BLOCKER
@@ -228,9 +226,9 @@ func _take(l: int, side: float, h: int) -> bool:
 	low = l
 	hand = h
 	hand_target = target
-	ready_s = _arm_wait + _hand_travel(h, target) / _speed(h) if h != Hand.NONE else 0.0
+	ready_s = _wait + _hand_travel(h, target) / _speed(h) if h != Hand.NONE else 0.0
 	if l != Low.NONE:
-		ready_s = maxf(ready_s, _leg_wait + drop_s * (_fall if l != Low.KICK else 1.0))
+		ready_s = maxf(ready_s, _wait + drop_s * (_fall if l != Low.KICK else 1.0))
 	impact_s = hit_s if covers else _time_at_depth(_hand_point(h).z if h != Hand.NONE else 0.0)
 	return _best == 2
 
@@ -263,10 +261,10 @@ func _send(h: int) -> void:
 	_returning = false
 
 
-# The hand on its way: still until his arms have read the shot, then toward the
-# target at its speed; back toward where the pose under it holds it once
-# released. `base` is that pose.
-func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
+# The hand on its way: still until he has read the shot (`read_in`), then
+# toward the target at its speed; back toward where the pose under it holds it
+# once released. `base` is that pose.
+func step(dt: float, read_in: bool, base: KeeperPose) -> void:
 	if _back != Hand.NONE:
 		var home: Vector3 = _rest_of(_back, base)
 		_back_at = _back_at.move_toward(home, _speed(_back) * dt)
@@ -279,7 +277,7 @@ func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
 	if hand == Hand.NONE and not _hand_out:
 		return
 	if not _hand_out:
-		if not arms_read and not _watched:
+		if not read_in and not _watched:
 			return
 		_hand_out = true
 		_hand_at = _rest_of(hand, base)
@@ -448,7 +446,7 @@ func _reach_target(h: int) -> Vector3:
 		var target: Vector3 = p - gear
 		var over: float = (target + wrist).distance_to(shoulder) - arm
 		if over <= 0.0:
-			var spare: float = t - (_arm_wait + target.distance_to(rest) / _speed(h))
+			var spare: float = t - (_wait + target.distance_to(rest) / _speed(h))
 			if spare > best_spare:
 				best_spare = spare
 				best = target

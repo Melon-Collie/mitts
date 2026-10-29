@@ -3,9 +3,9 @@ extends RefCounted
 
 # What he reads of a shot: nothing until he has watched the puck's own flight
 # for his read's delay, then the flight as it is, carried on — its line, and
-# under gravity its fall. His legs answer after the leg read, his hands after
-# the arm read, or both after the primed read for a release off a puck he held
-# in his eyes long enough (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
+# under gravity its fall. His legs and his hands answer after his read, or the
+# primed read for a release off a puck he held in his eyes long enough
+# (KeeperPlayRead.primed); a puck touched on the way (a tip, a deflection)
 # is a new shot he has to read again, cold. No aim before the release: what the
 # shooter's body shows is perception's (docs/goalie-rebuild-plan.md §3.1).
 #
@@ -22,7 +22,6 @@ const ON_ICE_Y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
 const AIRBORNE_M: float = 0.002
 
 var leg_delay_s: float = GoalieSkillProfile.hard().reaction_delay_s
-var arm_delay_s: float = GoalieSkillProfile.hard().arm_reaction_delay_s
 var primed_delay_s: float = GoalieSkillProfile.hard().prearmed_reaction_delay_s
 
 # Seconds since the release or the last touch; below zero, no shot.
@@ -56,11 +55,12 @@ func reading() -> bool:
 
 
 func legs_read() -> bool:
-	return age >= (minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s)
+	return age >= read_s()
 
 
-func arms_read() -> bool:
-	return age >= (minf(arm_delay_s, primed_delay_s) if _primed else arm_delay_s)
+# How long after the release or the touch he has read it.
+func read_s() -> float:
+	return minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s
 
 
 func step(dt: float, puck_at: Vector3, puck_velocity: Vector3) -> void:

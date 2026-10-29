@@ -531,7 +531,7 @@ func _record_save(to: Vector2, from_z: float, speed: float) -> Array:
 			motor.end_save()
 		motor.step(DT)
 		motor.pose(p)
-		save.step(DT, read.arms_read(), p)
+		save.step(DT, read.legs_read(), p)
 		if tick % SAVE_FRAME_EVERY == 0:
 			var framed := KeeperPose.new()
 			framed.copy_from(p)

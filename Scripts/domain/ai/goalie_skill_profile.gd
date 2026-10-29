@@ -18,23 +18,23 @@ extends RefCounted
 # bots keep planning against the Hard goalie's version of it.
 
 enum Difficulty {
-	EASY = 0,     # the floor — late reads, slow arms, a slow drop
+	EASY = 0,     # the floor — a late read, slow arms, a slow drop
 	NORMAL = 1,   # the middle — a fair fight, clearly softer than Hard
 	HARD = 2,     # the ceiling
 }
 
-# Glove/blocker read latency (s) before the shot hand reach starts.
-var arm_reaction_delay_s: float
 # Glove / blocker reach speed cap (m/s) during shot hand saves. Lower → can't
 # pull the corner back.
+
 var glove_react_max_speed_mps: float
 var blocker_react_max_speed_mps: float
-# Reflexive leg read latency (s): when his legs, and his drop, start on a shot.
-# The single strongest "reacts, but slower" lever. AI-mirrored
-# (AIGoalieModel.goalie_leg_delay_s).
+# His read's latency (s): when his legs, his drop and his hands start on a shot.
+# One read drives them all: a hand reacts no slower than a foot, and the glove
+# is the lighter limb. The single strongest "reacts, but slower" lever.
+# AI-mirrored (AIGoalieModel.goalie_leg_delay_s).
 var reaction_delay_s: float
 # Primed (quiet-eye) read latency (s) after watching a visible windup — the
-# floor BOTH reads shortcut to when he is primed. Tiering it matters most at
+# floor his read shortcuts to when he is primed. Tiering it matters most at
 # the bottom: beginners telegraph every shot, so an untiered prime makes Easy
 # sharpest against exactly the shots newcomers take.
 var prearmed_reaction_delay_s: float
@@ -42,10 +42,8 @@ var prearmed_reaction_delay_s: float
 var butterfly_drop_s: float
 
 
-func _init(p_arm_reaction_delay_s: float, p_glove_react_max_speed_mps: float,
-		p_blocker_react_max_speed_mps: float, p_reaction_delay_s: float,
-		p_prearmed_reaction_delay_s: float, p_butterfly_drop_s: float) -> void:
-	arm_reaction_delay_s = p_arm_reaction_delay_s
+func _init(p_glove_react_max_speed_mps: float, p_blocker_react_max_speed_mps: float,
+		p_reaction_delay_s: float, p_prearmed_reaction_delay_s: float, p_butterfly_drop_s: float) -> void:
 	glove_react_max_speed_mps = p_glove_react_max_speed_mps
 	blocker_react_max_speed_mps = p_blocker_react_max_speed_mps
 	reaction_delay_s = p_reaction_delay_s
@@ -54,8 +52,7 @@ func _init(p_arm_reaction_delay_s: float, p_glove_react_max_speed_mps: float,
 
 
 static func hard() -> GoalieSkillProfile:
-	return GoalieSkillProfile.new(0.18, 5.0, 5.0,
-			GameRules.DEFAULT_GOALIE_REACTION_DELAY_S, 0.07, 0.20)
+	return GoalieSkillProfile.new(5.0, 5.0, GameRules.DEFAULT_GOALIE_REACTION_DELAY_S, 0.07, 0.20)
 
 
 # Normal is the middle tier: enough goalie to punish a lazy shot, soft enough
@@ -64,15 +61,15 @@ static func hard() -> GoalieSkillProfile:
 # so the anticipation edge Hard keeps is gone), and arms that get most — not
 # all — of the way to the corner.
 static func normal() -> GoalieSkillProfile:
-	return GoalieSkillProfile.new(0.28, 3.8, 3.8, 0.18, 0.10, 0.25)
+	return GoalieSkillProfile.new(3.8, 3.8, 0.18, 0.10, 0.25)
 
 
 # Easy is the newcomer floor, tuned so any decently-aimed shot scores: the leg
 # read and the slow drop leave the five-hole and low corners open from inside
-# the slot, the arms start late and crawl (top corners open), and the primed
+# the slot, the arms crawl (top corners open), and the primed
 # read barely beats the cold one (telegraphed beginner windups still score).
 static func easy() -> GoalieSkillProfile:
-	return GoalieSkillProfile.new(0.45, 2.4, 2.4, 0.30, 0.16, 0.32)
+	return GoalieSkillProfile.new(2.4, 2.4, 0.30, 0.16, 0.32)
 
 
 static func for_difficulty(difficulty: int) -> GoalieSkillProfile:
