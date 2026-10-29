@@ -88,6 +88,16 @@ func _scatter(flaps: HemFlaps) -> PackedVector3Array:
 
 
 func test_the_native_drape_matches_the_gdscript() -> void:
+	_skater_parity(0.0)
+
+
+# The connected body's tail holds its hem's lean round the ring
+# (SkaterHemFlaps.CONNECTED_SHEAR_STIFFNESS), a step the rig's skips.
+func test_the_native_drape_matches_with_the_hem_held_to_its_column() -> void:
+	_skater_parity(SkaterHemFlaps.CONNECTED_SHEAR_STIFFNESS)
+
+
+func _skater_parity(shear: float) -> void:
 	if not ClassDB.class_exists(&"NativeHemFlaps"):
 		NativeParityGuard.report_missing(self, "NativeHemFlaps")
 		return
@@ -99,6 +109,8 @@ func test_the_native_drape_matches_the_gdscript() -> void:
 	var ref: SkaterHemFlaps = sk_a._arms._hem
 	var port: SkaterHemFlaps = sk_b._arms._hem
 	ref.native_enabled = false
+	ref.shear_stiffness = shear
+	port.shear_stiffness = shear
 	var base: Array[Transform3D] = []
 	for bone: int in _POSED:
 		base.append(rig_a.get_bone_pose(bone))
@@ -121,7 +133,8 @@ func test_the_native_drape_matches_the_gdscript() -> void:
 			port.step(dt, g, true)
 		var case_worst: float = _worst(ref, port, rig_a, rig_b, SkaterBodySkeleton.COLUMN_BONE_BASE)
 		if case_worst > TOLERANCE:
-			fail_test("case %d (tuck %d, %d steps) differs by %.6f m" % [c, tuck, steps, case_worst])
+			fail_test("case %d (tuck %d, %d steps, shear %.2f) differs by %.6f m" % [c, tuck, steps,
+					shear, case_worst])
 			return
 		worst = maxf(worst, case_worst)
 	assert_lt(worst, TOLERANCE, "worst over %d cases" % (CASES + RUNS))

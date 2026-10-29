@@ -22,7 +22,7 @@ void NativeHemFlaps::bind(Object *p_skeleton, const PackedInt32Array &p_bones) {
 void NativeHemFlaps::configure(const PackedVector3Array &p_drape, const PackedFloat32Array &p_hips,
 		const PackedFloat32Array &p_tuck, const PackedFloat64Array &p_tunables,
 		const PackedInt32Array &p_counts) {
-	ERR_FAIL_COND(p_tunables.size() != 9 || p_counts.size() != 2);
+	ERR_FAIL_COND(p_tunables.size() != 10 || p_counts.size() != 2);
 	columns = (int)p_hips.size();
 	ERR_FAIL_COND(columns == 0 || p_drape.size() != STATIONS * columns || p_tuck.size() != columns);
 	rest.assign(p_drape.ptr(), p_drape.ptr() + p_drape.size());
@@ -35,6 +35,7 @@ void NativeHemFlaps::configure(const PackedVector3Array &p_drape, const PackedFl
 	margin = p_tunables[4];
 	max_step = p_tunables[5];
 	authored_up = Vector3((real_t)p_tunables[6], (real_t)p_tunables[7], (real_t)p_tunables[8]);
+	shear_stiffness = p_tunables[9];
 	iterations = p_counts[0];
 	colliding_iterations = p_counts[1];
 	anchor.assign(columns, Vector3());
@@ -233,6 +234,17 @@ void NativeHemFlaps::relax(const Basis &drape, bool collide) {
 				* (real_t)0.5 * (real_t)ring_stiffness;
 		hem[k] += fix_hem;
 		hem[n] -= fix_hem;
+	}
+	if (shear_stiffness > 0.0) {
+		for (int k = 0; k < columns; ++k) {
+			const int p = (k + columns - 1) % columns;
+			const int n = (k + 1) % columns;
+			const Vector3 along = (bend[n] - bend[p]).normalized();
+			const Vector3 rest_along = drape.xform(rest_at(BEND, n) - rest_at(BEND, p)).normalized();
+			const double lean = (double)(hem[k] - bend[k]).dot(along)
+					- (double)drape.xform(rest_at(HEM, k) - rest_at(BEND, k)).dot(rest_along);
+			hem[k] -= along * (real_t)lean * (real_t)shear_stiffness;
+		}
 	}
 	if (!collide) {
 		return;

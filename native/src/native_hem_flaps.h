@@ -58,6 +58,7 @@ class NativeHemFlaps : public godot::RefCounted {
 	double gravity = 9.8;
 	double shape_hz = 1.6;
 	double ring_stiffness = 0.35;
+	double shear_stiffness = 0.0;
 	double damping_per_s = 7.0;
 	double margin = 0.012;
 	double max_step = 1.0 / 30.0;
@@ -118,14 +119,14 @@ public:
 	void bind(godot::Object *p_skeleton, const godot::PackedInt32Array &p_bones);
 	// `drape` is HemFlaps.rest station-major (seam points dropped);
 	// `tunables` (gravity, shape_hz, ring_stiffness, damping_per_s, margin,
-	// max_step, authored up x, y, z); `counts` (iterations, colliding
+	// max_step, authored up x, y, z, shear_stiffness); `counts` (iterations, colliding
 	// iterations). Restarts the
 	// drape; the colliders are configured after it.
 	void configure(const godot::PackedVector3Array &p_drape, const godot::PackedFloat32Array &p_hips,
 			const godot::PackedFloat32Array &p_tuck, const godot::PackedFloat64Array &p_tunables,
 			const godot::PackedInt32Array &p_counts);
 	// The skater's: `bones` (pelvis, left leg, right leg, left thigh, right
-	// thigh), SkaterMeshBuilder.pelvis_stations, and `dims` (thigh length,
+	// thigh), the pants' lathe stations (SkaterHemColliders), and `dims` (thigh length,
 	// thigh radius, pants x scale, pants z scale).
 	void collide_skater(const godot::PackedInt32Array &p_bones, const godot::PackedFloat64Array &p_pelvis,
 			const godot::PackedFloat64Array &p_dims);

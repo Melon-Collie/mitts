@@ -16,6 +16,7 @@ extends HemFlaps
 # belt down (SkaterMeshBuilder.TORSO_BELT_STATION and on).
 
 const FIRST_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
+const CONNECTED_SHEAR_STIFFNESS: float = 0.5
 
 var _skater: Skater = null
 # Draping the connected-body prototype's tail (SkaterConnectedMesh), which has
@@ -32,6 +33,8 @@ func setup(skater: Skater, skeleton: Skeleton3D, tuck: int, connected: bool = fa
 	_connected = connected
 	if connected:
 		columns = SkaterConnectedMesh.TAIL_COLUMNS
+		# Its faces are drawn from its columns, so a shingled hem turns them over.
+		shear_stiffness = CONNECTED_SHEAR_STIFFNESS
 	bind(skeleton, SkaterMeshBuilder.UpperBone.TORSO, SkaterBodySkeleton.TAIL_BONE,
 			SkaterBodySkeleton.connected_column_bone(0, 0) if connected
 			else SkaterBodySkeleton.COLUMN_BONE_BASE,
