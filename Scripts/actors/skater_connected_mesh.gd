@@ -497,8 +497,8 @@ static func fan(b: ConnectedSkinBuilder, ring: PackedInt32Array, centre: int,
 				uv_centre + Vector2(sin(t1), cos(t1)) * 0.24, fan_zone, inside)
 
 
-# One sleeve on `side`, grown from its armhole loop: the pad ring standing off
-# the torso, then the arm through the elbow to the wrist inside the glove.
+# One sleeve on `side`, grown from its armhole loop through the elbow to the
+# wrist inside the glove.
 static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt32Array) -> void:
 	var left: bool = side < 0.0
 	var upper_bind: int = Bind.UPPER_L if left else Bind.UPPER_R
@@ -625,7 +625,7 @@ static func _join(b: ConnectedSkinBuilder, a_loop: PackedInt32Array, b_loop: Pac
 # The shoulder's paint is ShoulderDecal's, laid round the upper arm as it was
 # round the cap: U about the arm's axis from the world's +Z toward +X (so each
 # side's material turns the number outboard), V down the arm from the yoke, at
-# the cap's metres per V, with the number's band on the pad ring.
+# the cap's metres per V, with the number's band across the seam.
 const _SHOULDER_V_AT_JOINT: float = 0.28
 
 
