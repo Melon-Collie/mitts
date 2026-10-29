@@ -153,11 +153,12 @@ what waiting costs. Measure before deciding.
 
 ### 6. Turnovers
 
-A loss at spot L costs **V_them(L)**: their odds of scoring from their
-possession at L, the same table read from their side. This brings back a
-turnover cost in their zone (small, since their V deep in their own end is
-small), but it is one cost of one shape in every zone and both modes, which is
-the condition set for ever having one there.
+**Agreed.** A loss at spot L costs **V_them(L)**: their odds of scoring from
+their possession at L, the same table read from their side. It replaces the
+per-zone turnover table. This brings back a turnover cost in their zone (small,
+since their V deep in their own end is small), but it is one cost of one shape
+in every zone and both modes, which is the condition set for ever having one
+there.
 
 ### 7. 3v3 and 5v5
 
@@ -190,6 +191,25 @@ two. Move the defence and the stations over next, then retire the next-line
 reads. Each step runs the default and slow tiers, the drills and the
 benchmarks.
 
+### 11. Testing: the behaviors, re-staged from scratch
+
+Much of the bot suite stands on hand-placed fixtures: one exact staging per
+behavior, some restaged to sit past a threshold, so a pass or a failure can say
+more about the staging than about the bot. xT changes every value the bots read,
+so it is the moment to re-ground the tests too.
+
+- **Inventory first**: what each behavior-level test wants the bot to do, in one
+  plain sentence, with how it is staged and what it asserts.
+- **Re-stage each behavior from scratch** as a family of starts (positions,
+  speeds, the defence's shape, varied over ranges, seeded so it replays), run as
+  play in the duel harness where the behavior takes more than one decision, and
+  assert a rate or a bound over the family, never one pick from one spot.
+- **These families are the bench for xT**: the one-move against two-move
+  comparison (2a), and today's currency against xT, are measured on them as well
+  as on the drills.
+- The hand-placed tests a family covers retire with it; the ones guarding a
+  single physical fact (a reach, a clock) stay.
+
 ## Order of the talk
 
-1, then 2 and 2a (they decide most of the rest), then 6, 5, 4, 7, 3, 8 to 10.
+1, then 2 and 2a (they decide most of the rest), then 6, 5, 4, 7, 3, 8 to 11.
