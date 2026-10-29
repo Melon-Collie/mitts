@@ -170,8 +170,12 @@ there.
 
 ### 7. 3v3 and 5v5
 
-**Separate tables**: the spacing and the numbers back differ too much to share
-one. The shot term is the shot field's (the Hard goalie), as today.
+**Agreed: one table, built for 5v5**, the primary mode for this work: its set
+defence is five skaters, and 3v3 reads the same table. A 3v3 table is added
+only if 3v3 suffers. The likely way it would: with three defenders the ice away
+from the net is worth more than five allow, so a 3v3 carrier would undervalue
+getting somewhere from it. The 3v3 test families are where to look. The shot
+term is the shot field's (the Hard goalie), as today.
 
 ### 8. How the bots read it
 
