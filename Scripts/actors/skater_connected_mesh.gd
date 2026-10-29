@@ -510,10 +510,7 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var elbow_bind: int = Bind.ELBOW_L if left else Bind.ELBOW_R
 	var fore_bind: int = Bind.FORE_L if left else Bind.FORE_R
 	var shoulder_bind: int = Bind.SHOULDER_L if left else Bind.SHOULDER_R
-	var upper_zone: int = zone(_UpperSurface.TOP_UPPER_ARM if left else _UpperSurface.BOTTOM_UPPER_ARM)
-	var fore_zone: int = zone(_UpperSurface.TOP_FOREARM if left else _UpperSurface.BOTTOM_FOREARM)
-	var pad_zone: int = zone(_UpperSurface.TOP_ELBOW if left else _UpperSurface.BOTTOM_ELBOW)
-	var cap_zone: int = zone(_UpperSurface.SHOULDER_L if left else _UpperSurface.SHOULDER_R)
+	var sleeve_zone: int = zone(sleeve_surface(side))
 	var arm: Array[Vector3] = bind_arm(side)
 	var frames: Array[Transform3D] = sleeve_frames(arm)
 	var upper: Transform3D = frames[0]
@@ -522,6 +519,9 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	# The upper arm's first ring is joined straight to the seam, and rides
 	# halfway from the shoulder's middle to the arm so the joint does not pinch.
 	var rings: Array[PackedInt32Array] = []
+	# Each ring's frame (U is laid round its axis) and its place down the
+	# sleeve (V, SleevePaint's fraction of it).
+	var axes: Array[Transform3D] = []
 	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
 		if rings.is_empty():
@@ -532,14 +532,16 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 			rings.append(first)
 		else:
 			rings.append(_limb_ring(b, upper, r.x, r.y, 0.0, upper_bind, elbow_bind, r.z))
-		vs.append(0.5 * r.x / BIND_ARM_SEGMENT_M)
-	var elbow: int = rings.size()
+		axes.append(upper)
+		vs.append(SleevePaint.pos_of(r.x))
 	rings.append(_limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
 			elbow_bind, elbow_bind, 1.0))
-	vs.append(0.5)
+	axes.append(frames[1])
+	vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M))
 	for r: Vector3 in _FORE_RINGS:
 		rings.append(_limb_ring(b, fore, r.x, r.y, 0.0, fore_bind, elbow_bind, r.z))
-		vs.append(0.5 * r.x / BIND_ARM_SEGMENT_M)
+		axes.append(fore)
+		vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M + r.x))
 
 	# Between the seam and the arm's first ring, a ring on the straight line
 	# joining them: no shape of its own at rest, but riding halfway from the
@@ -559,37 +561,49 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 		if under > 0.0:
 			b.reweight(seam[m], [girdle_bind, shoulder_bind],
 					[1.0 - _ARMPIT_SHOULDER * under, _ARMPIT_SHOULDER * under])
-	var uv: Callable = _shoulder_uv.bind(side)
-	_join(b, seam, between, cap_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
-	_join(b, between, rings[0], cap_zone, uv, (b.centroid(between) + b.centroid(rings[0])) * 0.5)
+	# The seam and the ring after it lie across the arm's root: V is how far
+	# each point is down the upper arm, never above the sleeve's top.
+	var uv: Callable = func(p: Vector3) -> Vector2:
+		return Vector2(_sleeve_u(p, upper),
+				SleevePaint.pos_of(maxf((p - arm[0]).dot(upper.basis.y), 0.0)))
+	_join(b, seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
+	_join(b, between, rings[0], sleeve_zone, uv,
+			(b.centroid(between) + b.centroid(rings[0])) * 0.5)
 	for i: int in rings.size() - 1:
 		var inside: Vector3 = (b.centroid(rings[i]) + b.centroid(rings[i + 1])) * 0.5
-		var v0: float = 0.0 if i == elbow else vs[i]
-		var v1: float = vs[i + 1]
-		var band_zone: int = upper_zone if i < elbow else fore_zone
 		for m: int in LIMB_SIDES:
 			var m1: int = (m + 1) % LIMB_SIDES
-			if i == 0:
-				b.quad(rings[0][m], rings[0][m1], rings[1][m1], rings[1][m],
-						_shoulder_uv(b.position(rings[0][m]), side),
-						_shoulder_uv(b.position(rings[0][m1]), side),
-						_shoulder_uv(b.position(rings[1][m1]), side),
-						_shoulder_uv(b.position(rings[1][m]), side), cap_zone, inside, true)
-				continue
-			var face_zone: int = band_zone
-			if (i == elbow - 1 or i == elbow) and (m == 0 or m == LIMB_SIDES - 1):
-				face_zone = pad_zone
-			var u0: float = float(m) / float(LIMB_SIDES)
-			var u1: float = float(m + 1) / float(LIMB_SIDES)
-			b.quad(rings[i][m], rings[i][m1], rings[i + 1][m1], rings[i + 1][m],
-					Vector2(u0, v0), Vector2(u1, v0), Vector2(u1, v1), Vector2(u0, v1),
-					face_zone, inside)
+			var corners: Array[int] = [rings[i][m], rings[i][m1], rings[i + 1][m1], rings[i + 1][m]]
+			var uvs: Array[Vector2] = []
+			for c: int in 4:
+				var ring: int = i if c < 2 else i + 1
+				uvs.append(Vector2(_sleeve_u(b.position(corners[c]), axes[ring]), vs[ring]))
+			b.quad(corners[0], corners[1], corners[2], corners[3], uvs[0], uvs[1], uvs[2], uvs[3],
+					sleeve_zone, inside, true)
 	var tip: int = b.vertex(fore * Vector3(0.0, _FORE_END_M, 0.0), [fore_bind], [1.0])
 	var last: PackedInt32Array = rings[rings.size() - 1]
+	var end_v: float = vs[vs.size() - 1]
 	for m: int in LIMB_SIDES:
-		b.tri(tip, last[m], last[(m + 1) % LIMB_SIDES], Vector2(0.5, 0.45),
-				Vector2(float(m) / LIMB_SIDES, 0.4), Vector2(float(m + 1) / LIMB_SIDES, 0.4),
-				fore_zone, fore * Vector3(0.0, _FORE_END_M - 0.05, 0.0))
+		b.tri(tip, last[m], last[(m + 1) % LIMB_SIDES], Vector2(0.5, end_v),
+				Vector2(float(m) / LIMB_SIDES, end_v), Vector2(float(m + 1) / LIMB_SIDES, end_v),
+				sleeve_zone, fore * Vector3(0.0, _FORE_END_M - 0.05, 0.0))
+
+
+# The paint zone a sleeve wears, the connected body's one per arm: its left
+# sleeve is the rig's top upper arm surface and its right the bottom one.
+static func sleeve_surface(side: float) -> int:
+	return _UpperSurface.TOP_UPPER_ARM if side < 0.0 else _UpperSurface.BOTTOM_UPPER_ARM
+
+
+# U round the arm about `frame`'s Y from the world's +Z toward +X, so the
+# outside of either arm is a quarter turn off U = 0.5 and each side's material
+# turns the number there (SleeveDecal.part_material).
+static func _sleeve_u(p: Vector3, frame: Transform3D) -> float:
+	var axis: Vector3 = frame.basis.y
+	var d: Vector3 = p - frame.origin
+	var across: Vector3 = (Vector3.RIGHT - axis * axis.x).normalized()
+	var back: Vector3 = -across.cross(axis).normalized()
+	return fposmod(atan2(d.dot(across), d.dot(back)) / TAU, 1.0)
 
 
 # A ring round a limb segment `s` down `frame`'s Y, `radius` across, with
@@ -657,22 +671,3 @@ static func _join(b: ConnectedSkinBuilder, a_loop: PackedInt32Array, b_loop: Pac
 		var b1: int = b_loop[(m + 1) % n]
 		b.quad(a0, a1, b1, b0, uv.call(b.position(a0)), uv.call(b.position(a1)),
 				uv.call(b.position(b1)), uv.call(b.position(b0)), join_zone, inside, true)
-
-
-# The shoulder's paint is ShoulderDecal's, laid round the upper arm as it was
-# round the cap: U about the arm's axis from the world's +Z toward +X (so each
-# side's material turns the number outboard), V down the arm from the yoke, at
-# the cap's metres per V, with the number's band across the seam.
-const _SHOULDER_V_AT_JOINT: float = 0.28
-
-
-static func _shoulder_uv(p: Vector3, side: float) -> Vector2:
-	var arm: Array[Vector3] = bind_arm(side)
-	var axis: Vector3 = (arm[1] - arm[0]).normalized()
-	var d: Vector3 = p - arm[0]
-	var s: float = d.dot(axis)
-	var across: Vector3 = Vector3.RIGHT - axis * axis.x
-	var back: Vector3 = across.cross(axis).normalized() * -1.0
-	across = across.normalized()
-	var u: float = fposmod(atan2(d.dot(across), d.dot(back)) / TAU, 1.0)
-	return Vector2(u, _SHOULDER_V_AT_JOINT + s / ShoulderDecal.CAP_M_PER_V)

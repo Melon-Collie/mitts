@@ -69,6 +69,12 @@ draws it beside the current body.
   the twist, the elbow the rest. Blending the chest straight into the arm
   collapses the pad into a fin past ~90°; putting the whole twist on one ring
   pinches the sleeve shut.
+- **Each sleeve is painted whole** (`SleeveDecal`): the kit's `sleeve`
+  (`SleevePaint`, one base and stripes from the shoulder to the cuff) drawn
+  down a texture with the number on the outside near its top, U round the arm
+  and V down its whole length, one paint zone per arm (`sleeve_surface`). The
+  rig's body still paints its arm in two; the registry cuts the sleeve back
+  into `arms.upper` / `arms.lower` for it (`SleevePaint.segment`).
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
 

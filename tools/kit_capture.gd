@@ -553,12 +553,10 @@ func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 			["", "yoke" if kit.jersey.yoke is Color else "yoke (base)",
 			"collar" if kit.jersey.collar is Color else "collar (yoke)"])
 	pen = _stripe_rows(c, pen, kit.jersey.stripes)
-	pen = _legend_row(c, pen, "arms.upper", [kit.arms.upper.base], [""])
-	pen = _stripe_rows(c, pen, kit.arms.upper.stripes)
-	pen = _legend_row(c, pen, "arms.lower", [kit.arms.lower.base], [""])
-	pen = _stripe_rows(c, pen, kit.arms.lower.stripes)
+	pen = _legend_row(c, pen, "sleeve", [kit.sleeve.base], [""])
+	pen = _stripe_rows(c, pen, kit.sleeve.stripes)
 	pen = _legend_row(c, pen, "arms.elbow", [SkaterUniformCoordinator.elbow_color(kit.arms)],
-			["" if kit.arms.elbow is Color else "(forearm at the elbow)"])
+			["" if kit.arms.elbow is Color else "(the sleeve's base)"])
 	pen = _legend_row(c, pen, "gloves", [kit.gloves], [""])
 	pen = _legend_row(c, pen, "pants", [kit.pants.base], ["(stripe pos is across, U)"])
 	pen = _stripe_rows(c, pen, kit.pants.stripes)

@@ -64,6 +64,11 @@ var _jersey_viewport: SubViewport
 var _jersey_decal: JerseyDecal
 var _shoulder_viewport: SubViewport
 var _shoulder_decal: ShoulderDecal
+# The connected body's sleeves (SkaterConnectedMesh), one texture down each
+# whole arm; null on the rig's body, whose arm segments paint apart.
+var _sleeve_viewport: SubViewport = null
+var _sleeve_decal: SleeveDecal = null
+var _sleeve: Dictionary = {}
 # Whether the skater is currently ghost-faded — read by the face-gear repaint,
 # whose design alpha is not 1.0 and so can't be restored by _fade_material.
 var _ghosted: bool = false
@@ -78,6 +83,8 @@ func setup(skater: Skater) -> void:
 	# sides wear is built once and handed to both.
 	_create_jersey_viewport()
 	_create_shoulder_viewport()
+	if SkaterConnectedMesh.enabled:
+		_create_sleeve_viewport()
 
 
 # Spawns the SubViewport + JerseyDecal that renders the procedural jersey
@@ -128,6 +135,39 @@ func _create_shoulder_viewport() -> void:
 			ShoulderDecal.part_material(tex, 1.0))
 
 
+# The connected body's SleeveDecal viewport, sampled by both of its sleeves,
+# each turned to face the number outward.
+func _create_sleeve_viewport() -> void:
+	_sleeve_decal = SleeveDecal.new()
+	_sleeve_decal.name = "SleeveDecal"
+	_sleeve_viewport = SubViewport.new()
+	_sleeve_viewport.name = "SleeveViewport"
+	_sleeve_viewport.size = SleeveDecal.SIZE
+	_sleeve_viewport.transparent_bg = false
+	_sleeve_viewport.disable_3d = true
+	_sleeve_viewport.handle_input_locally = false
+	_sleeve_viewport.gui_disable_input = true
+	_sleeve_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_skater.add_child(_sleeve_viewport)
+	_sleeve_viewport.add_child(_sleeve_decal)
+	_paint_connected_sleeves()
+
+
+func _paint_connected_sleeves() -> void:
+	var tex: ViewportTexture = _sleeve_viewport.get_texture()
+	for side: float in [-1.0, 1.0]:
+		_skater.set_upper_surface_material(SkaterConnectedMesh.sleeve_surface(side),
+				SleeveDecal.part_material(tex, side))
+
+
+func _rebuild_sleeve_texture() -> void:
+	if _sleeve_decal == null or _sleeve.is_empty():
+		return
+	_sleeve_decal.update_sleeve(_sleeve, _jersey_number, _shoulder_text_color,
+			_shoulder_text_stroke)
+	_sleeve_viewport.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
 # Applies the full v2 colors dict (TeamColorRegistry.get_colors output) to
 # every uniform mesh. Reads colors.uniform for kit detail and colors.primary
 # for the stick blade; lettering from colors.text and the kit's strokes.
@@ -162,6 +202,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	_shoulder_text_color = uniform.shoulders.text
 	_shoulder_text_stroke = uniform.shoulders.stroke
 	_rebuild_shoulder_texture()
+	_sleeve = uniform.get("sleeve", {})
 
 	# Helmet — glossy hard plastic.
 	# Shell only — the head/neck skin is its own surface of the same bone.
@@ -209,6 +250,10 @@ func apply_uniform(colors: Dictionary) -> void:
 	_skater.set_upper_surface_material(SkaterMeshBuilder.UpperBone.TOP_ELBOW, elbow_mat)
 	_skater.set_upper_surface_material(
 			SkaterMeshBuilder.UpperBone.BOTTOM_ELBOW, elbow_mat.duplicate())
+	# The connected body wears its sleeves whole, over the segments' paint.
+	if _sleeve_decal != null:
+		_paint_connected_sleeves()
+		_rebuild_sleeve_texture()
 
 	# Pants — vertical side stripes (pants stripe pos is U, width is column
 	# thickness; see make_pants_stripes_texture). The thigh carries the hip joint's
@@ -254,6 +299,7 @@ func apply_jersey_info(p_name: String, number: int) -> void:
 	_jersey_number = number
 	_rebuild_jersey_texture()
 	_rebuild_shoulder_texture()
+	_rebuild_sleeve_texture()
 
 
 func _rebuild_jersey_texture() -> void:
@@ -302,15 +348,15 @@ func _paint_sleeves(top: int, bottom: int, segment: Dictionary) -> void:
 	_skater.set_upper_surface_material(bottom, mat.duplicate() as StandardMaterial3D)
 
 
-# The elbow pad's color: the kit's arms.elbow when it names one, else whatever
-# the forearm's stripes put at its elbow end, so the pad disappears into the
-# sleeve. Public static because the lobby backdrop's dummies wear the same pad.
+# The elbow pad's color: the kit's arms.elbow when it names one, else the
+# sleeve's own base, so the pad is just sleeve — the stripes that run past the
+# elbow would otherwise color it. Public static because the lobby backdrop's
+# dummies wear the same pad.
 static func elbow_color(arms: Dictionary) -> Color:
 	var elbow: Variant = arms.get("elbow")
 	if elbow is Color:
 		return elbow
-	return make_arm_stripes_texture(arms.lower.base, arms.lower.stripes) \
-			.get_image().get_pixel(0, 0)
+	return arms.lower.base
 
 
 # Arm variant of UniformPaint.h_stripes: pre-shrinks the pattern about its
