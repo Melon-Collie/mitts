@@ -98,7 +98,7 @@ const LIMB_SIDES: int = 12
 # rig's), with a ring between each two, and on down the tail to the hem. Rings
 # 1–3 are the armhole's top, middle and bottom.
 const _CHEST: Array[Vector3] = [
-	Vector3(0.275, 0.125, 0.0),   # collar
+	Vector3(0.275, 0.115, 0.0),   # collar
 	Vector3(0.262, 0.200, 0.0),   # the shoulders' flat top: the armhole's top row
 	Vector3(0.165, 0.228, 0.0),
 	Vector3(0.075, 0.222, 0.002), # under the arm: its bottom row
@@ -110,6 +110,25 @@ const _CHEST: Array[Vector3] = [
 const _RIG_STATIONS: Array[int] = [4, 5, 6]
 const _BELT_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
 const _LAST_TORSO_STATION: int = SkaterMeshBuilder.TORSO_HEM_STATION
+# The neckline (the chest's first ring): this much higher than the ring's
+# nominal height round the back and sides, scooped this far below that at the
+# front, rounding off over this angle either side of straight ahead — close
+# round the neck's foot, a crew collar rather than a V.
+const _NECK_RISE_M: float = 0.012
+const _NECK_SCOOP_DEPTH_M: float = 0.024
+const _NECK_SCOOP_HALF_ANGLE: float = deg_to_rad(75.0)
+# The shoulders' ring falls away from the neck at the chest and the back (this
+# much at straight ahead and straight behind), so the top slopes off the neck
+# rather than sitting flat; its sides are the armholes' and keep their place.
+const _UPPER_CHEST_DROP_M: float = 0.035
+const _UPPER_BACK_DROP_M: float = 0.015
+# The collar: a band standing round the neckline, this far in and up from it,
+# painted the kit's collar on the torso texture's top cap; inside it the neck's
+# skin runs down into the V to the neck's foot (torso-local, under the rig's
+# neck where it flares into the traps).
+const _COLLAR_INSET_M: float = 0.008
+const _COLLAR_RISE_M: float = 0.016
+const _NECK_FOOT_Y_M: float = 0.265
 const _ARMHOLE_TOP: int = 1
 # The chest's column under each arm (its vertex at ±90°), left then right; the
 # armhole is the 2 × 4 facets round it.
@@ -325,7 +344,8 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 		var ids := PackedInt32Array()
 		for j: int in _CHEST_SIDES:
 			var theta: float = TAU * float(j) / float(_CHEST_SIDES) + phase
-			ids.append(_torso_vertex(b, pts[j] + lift, station.x, theta, tuck, -1))
+			var shaped: Vector3 = pts[j] + Vector3(0.0, _top_shape(rings.size(), theta), 0.0)
+			ids.append(_torso_vertex(b, shaped + lift, station.x, theta, tuck, -1))
 		rings.append(ids)
 		ys.append(station.x)
 	for station: int in range(_BELT_STATION, _LAST_TORSO_STATION + 1):
@@ -356,9 +376,8 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 			b.quad(rings[i][k], rings[i][k1], rings[i + 1][k1], rings[i + 1][k],
 					Vector2(u0, v0), Vector2(u1, v0), Vector2(u1, v1), Vector2(u0, v1),
 					torso_zone, inside)
-	# The collar and the hem close as the rig's lathe closes them, with its cap UVs.
-	var collar: int = b.vertex(Vector3(0.0, y_top, 0.0) + lift, [Bind.TORSO], [1.0])
-	fan(b, rings[0], collar, Vector2(0.25, 0.75), torso_zone, Vector3(0.0, y_top - 0.1, 0.0) + lift)
+	_build_collar(b, rings[0], lift)
+	# The hem closes as the rig's lathe closes it, with its cap UVs.
 	var hem_y: float = ys[ys.size() - 1]
 	var hem_centre := Vector3.ZERO
 	for id: int in rings[rings.size() - 1]:
@@ -371,6 +390,45 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	fan(b, rings[rings.size() - 1], hem, Vector2(0.75, 0.75), torso_zone,
 			Vector3(0.0, hem_y + 0.1, 0.0) + lift)
 	return holes
+
+
+# How far chest ring `ring` sits off its nominal height at `theta` (0 the back,
+# PI the front): the neckline's scoop and the shoulders sloping off the neck.
+static func _top_shape(ring: int, theta: float) -> float:
+	if ring == 0:
+		var off_front: float = absf(wrapf(theta - PI, -PI, PI))
+		return _NECK_RISE_M - _NECK_SCOOP_DEPTH_M \
+				* maxf(1.0 - (off_front / _NECK_SCOOP_HALF_ANGLE) ** 2, 0.0)
+	if ring == _ARMHOLE_TOP:
+		return -_UPPER_CHEST_DROP_M * maxf(-cos(theta), 0.0) \
+				- _UPPER_BACK_DROP_M * maxf(cos(theta), 0.0)
+	return 0.0
+
+
+# The collar band standing round the neckline, then the neck's skin closing the
+# opening inside it.
+static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, lift: Vector3) -> void:
+	var n: int = neckline.size()
+	var axis := Vector3(0.0, 0.0, _CHEST[0].z) + lift
+	var lip := PackedInt32Array()
+	for id: int in neckline:
+		var p: Vector3 = b.position(id)
+		var out: Vector3 = Vector3(p.x - axis.x, 0.0, p.z - axis.z).normalized()
+		lip.append(b.vertex(p - out * _COLLAR_INSET_M + Vector3.UP * _COLLAR_RISE_M,
+				[Bind.TORSO], [1.0]))
+	# The band on the torso texture's top cap (JerseyDecal.TOP_CAP_RECT, the
+	# kit's collar), laid as the rig's lathe lays its cap.
+	var cap := Vector2(0.25, 0.75)
+	var torso_zone: int = zone(_UpperSurface.TORSO)
+	var below: Vector3 = Vector3(0.0, _CHEST[0].x - 0.1, 0.0) + lift
+	for k: int in n:
+		var k1: int = (k + 1) % n
+		var t0 := Vector2(sin(TAU * float(k) / float(n)), cos(TAU * float(k) / float(n)))
+		var t1 := Vector2(sin(TAU * float(k + 1) / float(n)), cos(TAU * float(k + 1) / float(n)))
+		b.quad(neckline[k], neckline[k1], lip[k1], lip[k], cap + t0 * 0.24, cap + t1 * 0.24,
+				cap + t1 * 0.20, cap + t0 * 0.20, torso_zone, below)
+	var foot: int = b.vertex(axis + Vector3(0.0, _NECK_FOOT_Y_M, 0.0), [Bind.TORSO], [1.0])
+	fan(b, lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
 
 
 # The chest's rings, then the rig's waist stations with a ring halfway between
