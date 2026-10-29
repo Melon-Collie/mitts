@@ -135,7 +135,9 @@ const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 
 # The sleeve, out from the armhole's seam: rings along the arm, each (s along
 # its segment, radius, its share on the elbow's middle). The first is joined to
-# the seam. The elbow folds over five rings.
+# the seam. The elbow's turn is spread over ~25 cm of sleeve, eased in and out,
+# each ring built turned by its share (_round_elbow), so the bend is a curve
+# rather than a crease — a cloth sleeve over a pad, not a hinge.
 # The share of the upper arm's first ring, the one joined to the seam, on the
 # arm rather than the shoulder's middle: over the top of the arm, and under it,
 # where it hangs back as armpit cloth does, so an arm raised overhead does not
@@ -145,15 +147,18 @@ const _FIRST_RING_ARM_SHARE := Vector2(0.55, 0.15)
 # rather than the girdle, easing to none at the seam's middle height.
 const _ARMPIT_SHOULDER: float = 0.5
 const _UPPER_RINGS: Array[Vector3] = [
-	Vector3(0.12, 0.100, 0.0), Vector3(0.17, 0.091, 0.0), Vector3(0.22, 0.084, 0.0),
-	Vector3(0.27, 0.079, 0.25), Vector3(0.305, 0.080, 0.6),
+	Vector3(0.12, 0.100, 0.0), Vector3(0.17, 0.091, 0.0), Vector3(0.205, 0.086, 0.08),
+	Vector3(0.24, 0.084, 0.25), Vector3(0.275, 0.084, 0.5), Vector3(0.305, 0.085, 0.8),
 ]
-const _ELBOW_RADIUS_M: float = 0.081
-# The pad under the sleeve, out the back of the bend, at its point.
-const _ELBOW_PAD_M: float = 0.020
+const _ELBOW_RADIUS_M: float = 0.085
+# The pad under the sleeve, out the back of the bend: this much at the joint,
+# and on the rings either side by their share on the elbow's middle, so it is
+# a rounded swell over the bend rather than a point at it.
+const _ELBOW_PAD_M: float = 0.014
 const _FORE_RINGS: Array[Vector3] = [
-	Vector3(0.03, 0.079, 0.6), Vector3(0.07, 0.077, 0.25), Vector3(0.13, 0.073, 0.0),
-	Vector3(0.20, 0.066, 0.0), Vector3(0.26, 0.050, 0.0),
+	Vector3(0.025, 0.084, 0.8), Vector3(0.055, 0.082, 0.5), Vector3(0.09, 0.079, 0.25),
+	Vector3(0.125, 0.075, 0.08), Vector3(0.17, 0.071, 0.0), Vector3(0.21, 0.065, 0.0),
+	Vector3(0.26, 0.050, 0.0),
 ]
 const _FORE_END_M: float = 0.28
 
@@ -524,6 +529,7 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var axes: Array[Transform3D] = []
 	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
+		var frame: Transform3D = _round_elbow(frames, r.z * 0.5)
 		if rings.is_empty():
 			var first: PackedInt32Array = _limb_ring(b, upper, r.x, r.y, 0.0, shoulder_bind,
 					upper_bind, _FIRST_RING_ARM_SHARE.x)
@@ -531,16 +537,18 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 					_FIRST_RING_ARM_SHARE)
 			rings.append(first)
 		else:
-			rings.append(_limb_ring(b, upper, r.x, r.y, 0.0, upper_bind, elbow_bind, r.z))
-		axes.append(upper)
+			rings.append(_limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
+					upper_bind, elbow_bind, r.z))
+		axes.append(frame)
 		vs.append(SleevePaint.pos_of(r.x))
 	rings.append(_limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
 			elbow_bind, elbow_bind, 1.0))
 	axes.append(frames[1])
 	vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M))
 	for r: Vector3 in _FORE_RINGS:
-		rings.append(_limb_ring(b, fore, r.x, r.y, 0.0, fore_bind, elbow_bind, r.z))
-		axes.append(fore)
+		var frame: Transform3D = _round_elbow(frames, 1.0 - r.z * 0.5)
+		rings.append(_limb_ring(b, frame, r.x, r.y, _ELBOW_PAD_M * r.z, fore_bind, elbow_bind, r.z))
+		axes.append(frame)
 		vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M + r.x))
 
 	# Between the seam and the arm's first ring, a ring on the straight line
@@ -589,6 +597,14 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 				sleeve_zone, fore * Vector3(0.0, _FORE_END_M - 0.05, 0.0))
 
 
+# The elbow's frame turned `f` of the way round its bend from the upper arm (0)
+# to the forearm (1). A ring riding that share of the elbow's bones is built
+# turned that far, so the bind's own bend is the same arc the skin sweeps when
+# posed: a curve at rest, not a corner split over one ring.
+static func _round_elbow(frames: Array[Transform3D], f: float) -> Transform3D:
+	return Transform3D(frames[0].basis.slerp(frames[2].basis, f), frames[1].origin)
+
+
 # The paint zone a sleeve wears, the connected body's one per arm: its left
 # sleeve is the rig's top upper arm surface and its right the bottom one.
 static func sleeve_surface(side: float) -> int:
@@ -621,7 +637,7 @@ static func _limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, ra
 	var ids := PackedInt32Array()
 	for m: int in LIMB_SIDES:
 		var phi: float = TAU * float(m) / float(LIMB_SIDES)
-		var r: float = radius + bulge * maxf(cos(phi), 0.0) ** 3
+		var r: float = radius + bulge * maxf(cos(phi), 0.0) ** 2
 		ids.append(b.vertex(frame * Vector3(sin(phi) * r, s, cos(phi) * r), binds, weights))
 	return ids
 
