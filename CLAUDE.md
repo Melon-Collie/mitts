@@ -117,6 +117,11 @@ the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
 a baseline recorded with `--baseline`. `.claude/hooks/render-keeper-strip.sh`
 draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
 
+**To see the CONNECTED BODY prototype, render it.** `.claude/hooks/render-body.sh
+[--only=a,b] [--new-only]` runs pose_capture's poses on the current body and on
+`SkaterConnectedMesh` (`Scripts/actors/CLAUDE.md`), four sides each, one sheet a
+pose to `.preview/body/` (`tools/body_preview_runner.gd`).
+
 **To see HAIR, render it.** `.claude/hooks/render-hair.sh [shots]` draws every
 hair style against every facial-hair style, one head each, from the front, side,
 back, below and above, to `.preview/hair/` (`tools/hair_capture.gd`).

@@ -115,7 +115,7 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 			_native_arms[arm].bind(skeleton, bones)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "UpperMesh"
-	_mesh.mesh = SkaterMeshBuilder.shared_upper_body_mesh()
+	_mesh.mesh = _upper_mesh(GearModelRegistry.TUCK_NONE)
 	_mesh.set_surface_override_material(0, body_material)
 	_mesh.skin = SkaterMeshBuilder.shared_upper_skin()
 	_mesh.skeleton = NodePath("..")
@@ -613,7 +613,7 @@ func apply_gear_meshes() -> void:
 			_head_pieces.append(piece)
 	var gear: GearStyleConfig = _skater.gear_style
 	# One surface on every tuck's mesh, so the body material carries over.
-	_mesh.mesh = SkaterMeshBuilder.shared_upper_body_mesh(gear.jersey_tuck)
+	_mesh.mesh = _upper_mesh(gear.jersey_tuck)
 	if _hem_tuck < 0:
 		_hem.setup(_skater, _skeleton, gear.jersey_tuck)
 	elif gear.jersey_tuck != _hem_tuck:
@@ -623,6 +623,14 @@ func apply_gear_meshes() -> void:
 	_head_pieces[HeadPiece.SCALP].mesh = SkaterHairMesh.shared_hair(gear.hair_style)
 	_head_pieces[HeadPiece.FACIAL_HAIR].mesh = SkaterHairMesh.shared_facial_hair(gear.facial_hair)
 	_head_pieces[HeadPiece.BROWS].mesh = SkaterHairMesh.shared_brows()
+
+
+# Under the connected-body prototype the torso, sleeves and pants are its mesh,
+# so this one keeps only the head, the gloves and the cuffs.
+static func _upper_mesh(tuck: int) -> ArrayMesh:
+	if SkaterConnectedMesh.enabled:
+		return SkaterConnectedRigMeshes.reduced_upper_body_mesh(tuck)
+	return SkaterMeshBuilder.shared_upper_body_mesh(tuck)
 
 
 # One head piece's render node, for the uniform coordinator's paint and ghost

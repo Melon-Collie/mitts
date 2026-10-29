@@ -24,6 +24,12 @@ const COLUMN_BONE_BASE: int = TAIL_BONE + 1
 const BODY_BONE_COUNT: int = COLUMN_BONE_BASE + 2 * SkaterMeshBuilder.TORSO_SIDES
 
 
+# One of SkaterConnectedMesh's deform bones (SkaterConnectedMesh.Deform), which
+# follow the tail's columns on a skeleton built while that prototype is on.
+static func deform_bone(deform: int) -> int:
+	return BODY_BONE_COUNT + deform
+
+
 # A tail column's segment bone: `joint` 0 from the belt to the bend, 1 on to
 # the hem.
 static func column_bone(column: int, joint: int) -> int:
@@ -68,6 +74,17 @@ static func new_body_skeleton() -> Skeleton3D:
 		var parent: int = SkaterMeshBuilder.LEG_BONE_PARENT[bone]
 		skeleton.set_bone_parent(LEG_BONE_OFFSET + bone,
 				HIPS_BONE if parent < 0 else LEG_BONE_OFFSET + parent)
-	for bone: int in BODY_BONE_COUNT:
+	if SkaterConnectedMesh.enabled:
+		_add_deform_bones(skeleton)
+	for bone: int in skeleton.get_bone_count():
 		skeleton.set_bone_rest(bone, Transform3D.IDENTITY)
 	return skeleton
+
+
+static func _add_deform_bones(skeleton: Skeleton3D) -> void:
+	for deform: int in SkaterConnectedMesh.DEFORM_COUNT:
+		skeleton.add_bone("Deform%d" % deform)
+	skeleton.set_bone_parent(deform_bone(SkaterConnectedMesh.Deform.KNEE_L),
+			LEG_BONE_OFFSET + SkaterMeshBuilder.LegBone.LEG_L)
+	skeleton.set_bone_parent(deform_bone(SkaterConnectedMesh.Deform.KNEE_R),
+			LEG_BONE_OFFSET + SkaterMeshBuilder.LegBone.LEG_R)

@@ -23,6 +23,38 @@ delegates to.
 | `_shadow` | `SkaterShadowProxy` | the figure's shadow: one shadow-only surface on the body skeleton, cast in place of the two rig meshes |
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
+| `_connected` | `SkaterConnectedRig` | PROTOTYPE, null unless `MITTS_CONNECTED_BODY=1`: the connected body mesh and its deform bones (below) |
+
+## The connected body (prototype)
+
+`SkaterConnectedMesh` builds the torso, sleeves, pants and socks as ONE
+connected skin with blended weights, in place of the rig's separate solids
+(the elbow and knee balls, the shoulder caps, the thigh domes). It is off unless
+`MITTS_CONNECTED_BODY=1` is in the environment or `--connected-body` on the
+command line when a skater is built; the rig
+meshes then drop the surfaces it replaces (`SkaterConnectedRigMeshes`), and the shadow proxy is not built (its body casts its
+own). The head, gloves and skates stay rigid. `.claude/hooks/render-body.sh`
+draws it beside the current body.
+
+- **It is authored in a bind pose**, the body skeleton with HIPS/WAIST/SPINE at
+  identity, the legs straight and the arms out, forward and 35° under level
+  (`bind_arm`). Each bind's inverse rest is its bone's global pose there
+  (`bind_rests`), so it rides the rigs' bones untouched; the torso below the
+  waist is the rig's own rings and weights, so the jersey's tail, its tuck and
+  `SkaterHemFlaps` work as they do on the rig mesh.
+- **The arms get deform bones of their own** (`SkaterConnectedRig`, past the
+  tail columns on the skeleton): the arm bones roll from world up, and a blended
+  elbow needs both halves turning about one hinge. Per side the upper arm, the
+  elbow's middle and the forearm share the ELBOW bone's hinge.
+- **The shoulder splits the arm's turn off the chest into swing and twist.** The
+  girdle (the armhole and the top of the shoulder) takes a third of the swing,
+  as the collarbone and shoulder blade do (the scapulohumeral rhythm), the
+  shoulder's middle (the pad ring) two thirds, the upper arm all of it and half
+  the twist, the elbow the rest. Blending the chest straight into the arm
+  collapses the pad into a fin past ~90°; putting the whole twist on one ring
+  pinches the sleeve shut.
+- **The knees** blend through a middle bone at half the shin's turn
+  (`Deform.KNEE_*`), so the back of the knee does not collapse.
 
 ## The puck's tilt and spin are drawn, never simulated
 

@@ -916,6 +916,8 @@ var _legs: SkaterLegRig
 var _arms: SkaterArmRig
 var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
+# The connected-body prototype (SkaterConnectedMesh.enabled), else null.
+var _connected: SkaterConnectedRig = null
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
@@ -989,7 +991,13 @@ func _ready() -> void:
 
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
-	_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
+	if SkaterConnectedMesh.enabled:
+		# Its body casts its own shadow; the proxy is the rig meshes'.
+		_connected = SkaterConnectedRig.new()
+		_connected.setup(self)
+		_connected.build(body, _paint.material)
+	else:
+		_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
 
 	_uniform = SkaterUniformCoordinator.new()
 	_uniform.setup(self)
@@ -1043,6 +1051,8 @@ func _process(delta: float) -> void:
 			update_bottom_arm_mesh()
 		elif not _on_camera:
 			_hold_blade_mesh()
+		if _on_camera and _connected != null:
+			_connected.update()
 		if _on_camera or not seen:
 			_anim_lod.consumed()
 	# World HUD (ring, name, chevrons, beacon) at RENDER rate: ~10 top_level node
@@ -1789,6 +1799,8 @@ func set_gear_style(config: GearStyleConfig) -> void:
 		return
 	gear_style = config
 	_arms.apply_gear_meshes()
+	if _connected != null:
+		_connected.set_tuck(config.jersey_tuck)
 	if _uniform != null:
 		_uniform.refresh_gear_style()
 

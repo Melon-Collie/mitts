@@ -22,6 +22,7 @@ const _COLLABORATORS: Dictionary = {
 	"_arms": "res://Scripts/actors/skater_arm_rig.gd",
 	"_spine": "res://Scripts/actors/skater_spine_rig.gd",
 	"_stick": "res://Scripts/actors/skater_stick_rig.gd",
+	"_connected": "res://Scripts/actors/skater_connected_rig.gd",
 	"_draw": "res://Scripts/actors/skater_draw_tracker.gd",
 	"_uniform": "res://Scripts/actors/skater_uniform_coordinator.gd",
 	"_hud": "res://Scripts/actors/skater_hud_coordinator.gd",
@@ -107,8 +108,8 @@ func test_the_rigs_never_reach_for_each_other() -> void:
 	# look-at helper, which its cuff pose is copied from; it is one-way.
 	const ALLOWED: Dictionary = {"skater_stick_rig.gd": "SkaterArmRig"}
 	var names: Array[String] = ["SkaterLegRig", "SkaterArmRig", "SkaterSpineRig",
-			"SkaterStickRig", "SkaterDrawTracker"]
-	for holder: String in ["_legs", "_arms", "_spine", "_stick", "_draw"]:
+			"SkaterStickRig", "SkaterDrawTracker", "SkaterConnectedRig"]
+	for holder: String in ["_legs", "_arms", "_spine", "_stick", "_draw", "_connected"]:
 		var path: String = _COLLABORATORS[holder]
 		var src: String = _strip(FileAccess.get_file_as_string(path))
 		var own: String = path.get_file()

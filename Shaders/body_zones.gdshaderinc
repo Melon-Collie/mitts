@@ -26,6 +26,13 @@ uniform sampler2D tex7 : source_color, filter_linear_mipmap, repeat_enable;
 uniform float ghost_alpha = 0.3;
 #endif
 
+// 1 on a body whose faces bend as they are skinned (SkaterConnectedMesh): each
+// fragment is then lit by its triangle's own facing as drawn, from the
+// position's screen derivatives, so every face stays flat however the weights
+// across it pull. The vertex normals, set in the bind pose, would be skinned
+// apart from each other and shade a bent face as a smear.
+instance uniform float flat_from_position = 0.0;
+
 // A source_color albedo: linear where the renderer lights in linear space, left as
 // authored on Compatibility, which does not convert one either.
 vec3 albedo_to_light_space(vec3 c) {
@@ -62,6 +69,11 @@ void fragment() {
 		albedo *= COLOR;
 	}
 	vec4 pbr = zone_pbr[zone];
+	if (flat_from_position > 0.5) {
+		vec3 n = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+		// Back faces are culled, so the face looks toward the camera at the origin.
+		NORMAL = dot(n, VERTEX) > 0.0 ? -n : n;
+	}
 	ALBEDO = albedo.rgb;
 	ROUGHNESS = pbr.x;
 	METALLIC = pbr.y;
