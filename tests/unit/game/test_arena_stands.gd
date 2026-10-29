@@ -368,3 +368,40 @@ func test_a_build_with_ads_off_hides_the_ribbon() -> void:
 	assert_not_null(ribbon, "the board is still built, only hidden")
 	assert_false(ribbon.visible)
 	assert_false(stands.is_processing())
+
+
+func _shown_excitement() -> float:
+	return float(ArenaCrowd.shared_material().get_shader_parameter("excitement"))
+
+
+func _replay_frame(stands: ArenaStands, phase: int) -> void:
+	stands._on_replay_frame({"phase": phase}, -1)
+
+
+# The live goal's burst is still running when the replay takes over; the play
+# the replay re-runs happened before anyone cheered.
+func test_a_replay_before_its_goal_shows_the_crowd_idle() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	stands.excite(1.0)
+	await wait_seconds(0.3)
+	assert_gt(_shown_excitement(), 0.9, "the live goal brings the bowl up")
+	_replay_frame(stands, GamePhase.Phase.PLAYING)
+	assert_eq(_shown_excitement(), 0.0)
+
+
+func test_a_replay_brings_the_crowd_up_on_its_goal_frame() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	_replay_frame(stands, GamePhase.Phase.PLAYING)
+	_replay_frame(stands, GamePhase.Phase.GOAL_CELEBRATION)
+	await wait_seconds(0.3)
+	assert_gt(_shown_excitement(), 0.9)
+
+
+# A highlight reel runs clip after clip without stopping between them.
+func test_the_next_clip_of_a_reel_starts_idle_again() -> void:
+	var stands: ArenaStands = _make_stands(3, 2)
+	_replay_frame(stands, GamePhase.Phase.PLAYING)
+	_replay_frame(stands, GamePhase.Phase.GOAL_CELEBRATION)
+	await wait_seconds(0.3)
+	_replay_frame(stands, GamePhase.Phase.PLAYING)
+	assert_eq(_shown_excitement(), 0.0)
