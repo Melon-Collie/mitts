@@ -12,6 +12,7 @@ extends SceneTree
 #   BODY_AUDIT_ZONE=33 ... --audit               # + list one zone's folded faces
 #   .claude/hooks/render-body.sh --head          # framed on the helmet
 #   .claude/hooks/render-body.sh --waist         # framed on the belt: the tuck
+#   BODY_PREVIEW_KIT=1,1 ...                     # in slot 1's away kit
 #
 # Bootstrapped like pose_capture.gd, for the same reason: the runner names
 # classes that need the autoloads up before they compile.

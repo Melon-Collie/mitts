@@ -92,6 +92,7 @@ func _process(_delta: float) -> void:
 				return
 			SkaterConnectedMesh.enabled = _variant == 1
 			_build_actor()
+			_wear_kit_from_env()
 			_step = Step.POSE
 		Step.POSE:
 			_run_pose()
@@ -115,6 +116,14 @@ func _process(_delta: float) -> void:
 				_variant = _first_variant
 				_pose_index += 1
 			_step = Step.BUILD
+
+
+# BODY_PREVIEW_KIT=<slot>,<0 home | 1 away> dresses the skater in that kit
+# instead of pose_capture's.
+func _wear_kit_from_env() -> void:
+	var kit: PackedStringArray = OS.get_environment("BODY_PREVIEW_KIT").split(",")
+	if kit.size() == 2:
+		_skater.set_uniform(TeamColorRegistry.get_colors(kit[0].to_int(), kit[1].to_int()))
 
 
 func _hide_all_but_the_pants() -> void:
