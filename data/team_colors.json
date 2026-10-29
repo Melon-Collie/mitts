@@ -375,7 +375,7 @@
             {
               "pos": 0.86,
               "width": 0.09,
-              "color": "#B8691E",
+              "color": "#F7E7A6",
               "peak": {
                 "depth": -0.1,
                 "count": 4,
@@ -385,7 +385,7 @@
             {
               "pos": 0.86,
               "width": 0.03,
-              "color": "#F7E7A6",
+              "color": "#B8691E",
               "fill_below": "#F4AC1C",
               "peak": {
                 "depth": -0.1,
@@ -431,7 +431,7 @@
             {
               "pos": 0.66,
               "width": 0.09,
-              "color": "#B8691E",
+              "color": "#F7E7A6",
               "peak": {
                 "depth": -0.094,
                 "count": 2,
@@ -441,7 +441,7 @@
             {
               "pos": 0.66,
               "width": 0.03,
-              "color": "#F7E7A6",
+              "color": "#B8691E",
               "fill_below": "#F4AC1C",
               "peak": {
                 "depth": -0.094,
@@ -501,7 +501,7 @@
             {
               "pos": 0.86,
               "width": 0.09,
-              "color": "#B8691E",
+              "color": "#F7E7A6",
               "peak": {
                 "depth": -0.1,
                 "count": 4,
@@ -511,7 +511,7 @@
             {
               "pos": 0.86,
               "width": 0.03,
-              "color": "#F7E7A6",
+              "color": "#B8691E",
               "fill_below": "#F4AC1C",
               "peak": {
                 "depth": -0.1,
@@ -557,7 +557,7 @@
             {
               "pos": 0.66,
               "width": 0.09,
-              "color": "#B8691E",
+              "color": "#F7E7A6",
               "peak": {
                 "depth": -0.094,
                 "count": 2,
@@ -567,7 +567,7 @@
             {
               "pos": 0.66,
               "width": 0.03,
-              "color": "#F7E7A6",
+              "color": "#B8691E",
               "fill_below": "#F4AC1C",
               "peak": {
                 "depth": -0.094,
