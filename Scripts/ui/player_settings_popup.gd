@@ -76,7 +76,7 @@ const _STYLE_KEYS: Array[StringName] = [
 
 # Tall enough for the stick, the longest region, so switching never resizes the
 # panel.
-const _ROWS_MIN_H: float = 548.0
+const _ROWS_MIN_H: float = 652.0
 
 var _draft: PlayerDraft = PlayerDraft.new()
 var _saved: PlayerDraft = PlayerDraft.new()
@@ -132,6 +132,9 @@ var _face_btns: Array[Button] = []
 var _gear_rows: Array[_GearRow] = []
 var _flex_row: _GearRow = null
 var _stick_model_btn: OptionButton = null
+var _stick_shaft_dd: SwatchDropdown = null
+var _stick_primary_dd: SwatchDropdown = null
+var _stick_secondary_dd: SwatchDropdown = null
 var _blade_color_dd: SwatchDropdown = null
 var _span_btn: OptionButton = null
 var _strip_color_dd: SwatchDropdown = null
@@ -520,29 +523,34 @@ func _build_stick(page: VBoxContainer) -> void:
 	_gear_row(page, &"STICK_GEAR_CURVE", &"curve", _CURVE_KEYS, _CURVE_HINTS, blade)
 	_flex_row = _gear_row(page, &"STICK_GEAR_FLEX", &"flex", _FLEX_KEYS, _FLEX_HINTS, stick)
 
-	# Stick colorways are fixed designs with no kit zones, so their items fill once.
 	_stick_model_btn = PlayerRowKit.option_button(
 			_row(page, &"STICK_MODEL_LABEL", false, stick),
-			func(i: int) -> void: _edit_gear(&"stick_model", i))
-	for model: int in StickModelRegistry.count():
-		_stick_model_btn.add_icon_item(
-				PlayerRowKit.swatch_strip(StickModelRegistry.swatch_colors(model)),
-				tr(StickModelRegistry.NAME_KEYS[model]), model)
-	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
+			func(i: int) -> void: _edit_gear(&"stick_model", _stick_model_btn.get_item_id(i)))
+	_stick_shaft_dd = PlayerRowKit.swatch_dropdown(_row(page, &"STICK_SHAFT_LABEL", false, stick),
+			func(i: int) -> void: _edit_gear(&"stick_shaft", i))
+	var graphic := HBoxContainer.new()
+	_row(page, &"STICK_GRAPHIC_LABEL", false, stick).add_child(graphic)
+	var half_w: float = (PlayerRowKit.FIELD_W - graphic.get_theme_constant("separation")) * 0.5
+	_stick_primary_dd = PlayerRowKit.swatch_dropdown(graphic,
+			func(i: int) -> void: _edit_gear(&"stick_primary", i), half_w)
+	_stick_secondary_dd = PlayerRowKit.swatch_dropdown(graphic,
+			func(i: int) -> void: _edit_gear(&"stick_secondary", i), half_w)
+	_blade_color_dd = PlayerRowKit.swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(&"blade_color", i))
 	_span_btn = PlayerRowKit.option_button(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(&"span", _SPAN_OPTIONS[i]))
 	for i: int in _SPAN_KEYS.size():
 		_span_btn.add_item(tr(_SPAN_KEYS[i]), i)
-	_strip_color_dd = _swatch_dropdown(_row(page, &"TAPE_STRIP_LABEL", false, blade),
+	_strip_color_dd = PlayerRowKit.swatch_dropdown(_row(page, &"TAPE_STRIP_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(&"strip_color", i))
-	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
+	_knob_color_dd = PlayerRowKit.swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
 			func(i: int) -> void: _edit_tape(&"knob_color", i))
 	_style_btn = PlayerRowKit.option_button(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
 			func(i: int) -> void: _edit_tape(&"knob_style", _STYLE_OPTIONS[i]))
 	for i: int in _STYLE_KEYS.size():
 		_style_btn.add_item(tr(_STYLE_KEYS[i]), i)
-	_wire_reach([_stick_model_btn], stick)
+	_wire_reach([_stick_model_btn, _stick_shaft_dd, _stick_primary_dd, _stick_secondary_dd],
+			stick)
 	_wire_reach([_blade_color_dd, _span_btn, _strip_color_dd], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
 
@@ -554,7 +562,7 @@ func _build_skates(page: VBoxContainer) -> void:
 	# the kit the player is about to wear.
 	_skate_btn = PlayerRowKit.option_button(_row(page, &"STICK_MODEL_LABEL", false, skates),
 			func(i: int) -> void: _edit_gear(&"skate_model", i))
-	_lace_dd = _swatch_dropdown(_row(page, &"GEAR_LACES_LABEL", false, skates),
+	_lace_dd = PlayerRowKit.swatch_dropdown(_row(page, &"GEAR_LACES_LABEL", false, skates),
 			func(i: int) -> void: _edit_gear(&"lace_color", i))
 	_wire_reach([_skate_btn, _lace_dd], skates)
 
@@ -575,13 +583,6 @@ func _gear_row(page: VBoxContainer, label_key: StringName, field: StringName,
 	_wire_reach(r.buttons, focus)
 	_gear_rows.append(r)
 	return r
-
-
-func _swatch_dropdown(parent: Container, on_pick: Callable) -> SwatchDropdown:
-	var dd := SwatchDropdown.new(Vector2(PlayerRowKit.FIELD_W, PlayerRowKit.CONTROL_H))
-	dd.selected.connect(on_pick)
-	parent.add_child(dd)
-	return dd
 
 
 # ── Editing ──────────────────────────────────────────────────────────────────
@@ -708,7 +709,8 @@ func _refresh() -> void:
 		flex_labels.append(tr(&"STICK_FLEX_ITEM")
 				% [tr(_FLEX_KEYS[i]), PlayerAttributes.flex_number_for(_draft.weight, i)])
 	PlayerRowKit.relabel(_flex_row.buttons, flex_labels)
-	_stick_model_btn.select(clampi(gear.stick_model, 0, StickModelRegistry.count() - 1))
+	KitSwatches.fill_sticks(_stick_model_btn, gear, _draft.team_colors())
+	_stick_model_btn.select(_stick_model_btn.get_item_index(gear.stick_model))
 	_span_btn.select(maxi(_SPAN_OPTIONS.find(tape.span), 0))
 	_style_btn.select(maxi(_STYLE_OPTIONS.find(tape.knob_style), 0))
 
@@ -717,6 +719,10 @@ func _refresh() -> void:
 		_paint_team_rows()
 	_glove_btn.select(gear.glove_model)
 	_skate_btn.select(gear.skate_model)
+	_stick_shaft_dd.set_selected(gear.stick_shaft)
+	_stick_primary_dd.set_selected(gear.stick_primary)
+	_stick_secondary_dd.set_selected(gear.stick_secondary)
+	_stick_secondary_dd.set_disabled(not StickModelRegistry.uses_secondary(gear.stick_model))
 	_blade_color_dd.set_selected(tape.blade_color)
 	_blade_color_dd.set_disabled(not tape.has_wraps())
 	_strip_color_dd.set_selected(tape.strip_color)
@@ -732,42 +738,15 @@ func _refresh() -> void:
 
 
 # The rows whose swatches resolve against the team: the skate and glove models
-# (their TEAM zones) and the tape palettes (the TEAM chip).
+# and the color palettes. The stick models follow the stick colors too, so
+# _refresh fills them.
 func _paint_team_rows() -> void:
 	var colors: Dictionary = _draft.team_colors()
-	var team: Color = colors.get("primary", Color.WHITE)
-	var accent: Color = colors.get("secondary", Color.WHITE)
-	var light: Color = colors.get("light", Color.WHITE)
-	var glove_kit: Color = colors.get("gloves", Color.BLACK)
-	var glove_accent: Color = colors.get("glove_accent", Color.WHITE)
-
-	_skate_btn.clear()
-	for model: int in GearModelRegistry.skate_count():
-		var zones: Array[Color] = []
-		for zone: int in GearModelRegistry.SKATE_ZONE_COUNT:
-			zones.append(GearModelRegistry.skate_color(model, zone, team, accent, light))
-		_skate_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
-				tr(GearModelRegistry.SKATE_NAME_KEYS[model]), model)
-	_glove_btn.clear()
-	for model: int in GearModelRegistry.glove_count():
-		var zones: Array[Color] = []
-		for zone: int in GearModelRegistry.GLOVE_ZONE_COUNT:
-			zones.append(GearModelRegistry.glove_color(model, zone,
-					glove_kit, glove_accent, light))
-		_glove_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
-				tr(GearModelRegistry.GLOVE_NAME_KEYS[model]), model)
-
-	var tape_colors: Array[Color] = []
-	var names: Array[String] = []
-	var chips: Array[String] = []
-	for i: int in TapeColorRegistry.count():
-		tape_colors.append(TapeColorRegistry.resolve(i, team))
-		names.append(tr(TapeColorRegistry.NAME_KEYS[i]))
-		# The TEAM chip says so — it tracks the kit rather than being one more
-		# fixed colour.
-		chips.append(tr(&"TAPE_COLOR_TEAM_SHORT") if i == TapeColorRegistry.TEAM_INDEX else "")
-	for dd: SwatchDropdown in [_blade_color_dd, _strip_color_dd, _knob_color_dd, _lace_dd]:
-		dd.set_palette(tape_colors, names, chips)
+	KitSwatches.fill_skates(_skate_btn, colors)
+	KitSwatches.fill_gloves(_glove_btn, colors)
+	for dd: SwatchDropdown in [_stick_shaft_dd, _stick_primary_dd, _stick_secondary_dd,
+			_blade_color_dd, _strip_color_dd, _knob_color_dd, _lace_dd]:
+		KitSwatches.paint_palette(dd, colors)
 
 
 func _update_apply_state() -> void:

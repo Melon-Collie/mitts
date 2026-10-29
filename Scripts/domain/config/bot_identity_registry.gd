@@ -34,10 +34,11 @@ class_name BotIdentityRegistry
 #
 # Optional cosmetic fields give a card a signature look (all integer indices):
 #   tape job — "tape_blade" / "tape_knob" / "tape_strip" (TapeColorRegistry:
-#     0 team, 1 white, 2 black, 3.. the flair colors), "tape_span"
+#     0 team primary, 1 white, 2 black, 3 team secondary), "tape_span"
 #     (StickTapeConfig.Span), "knob_style" (StickTapeConfig.KnobStyle);
 #   gear     — "skate_model" / "glove_model" (GearModelRegistry),
 #     "lace_color" (TapeColorRegistry), "stick_model" (StickModelRegistry),
+#     "stick_shaft" / "stick_primary" / "stick_secondary" (TapeColorRegistry),
 #     "helmet_face" (GearModelRegistry FACE_*: 0 bare / 1 visor / 2 cage /
 #     3 fishbowl);
 #   hair     — "hair_style" (HairStyleRegistry HAIR_*: 0 short / 1 medium /
@@ -63,22 +64,23 @@ const RES_JSON_PATH:  String = "res://data/bot_identities.json"
 const _TAPE_KEYS: Array[String] = ["tape_blade", "tape_span", "tape_knob", "knob_style",
 		"tape_strip"]
 const _GEAR_KEYS: Array[String] = ["skate_model", "glove_model", "lace_color",
-		"stick_model", "helmet_face", "jersey_tuck"]
+		"stick_model", "helmet_face", "jersey_tuck", "stick_shaft", "stick_primary",
+		"stick_secondary"]
 const _HAIR_KEYS: Array[String] = ["hair_style", "facial_hair", "hair_color"]
 
 # TapeColorRegistry indices the fallback tables reach for by name (same local-
 # constant convention as GearStyleConfig — these are wire values, not lookups).
 const _TAPE_WHITE: int = 1
 const _TAPE_BLACK: int = 2
-const _LACE_YELLOW: int = 5
+const _TAPE_SECONDARY: int = 3
 
 # ── Fallback looks for cards that don't pin cosmetics ────────────────────────
 # Weighted pick tables, one slice of the name hash per field — the same seam
 # spawn_bot uses for an unpinned skin tone — so a bot keeps its look across
 # sessions and any roster shows variety without authoring. Weights lean on the
-# common real-rink looks (black or white tape, stock boots, the house stick);
-# the loud statements (colored tape, a bare blade, the wood stick) are left to
-# curated cards so a hash never dresses a bot in a clown suit.
+# common real-rink looks (black or white tape, stock boots, a black stick);
+# the loud statements (team-colored tape, a bare blade, a team-colored shaft)
+# are left to curated cards so a hash never dresses a bot in a clown suit.
 const _FB_BLADE_TAPE: Array[int] = [_TAPE_BLACK, _TAPE_BLACK, _TAPE_BLACK, _TAPE_WHITE,
 		_TAPE_WHITE, _TAPE_WHITE, TapeColorRegistry.TEAM_INDEX, _TAPE_BLACK]
 const _FB_TAPE_SPAN: Array[int] = [StickTapeConfig.Span.HEEL_TO_MID, StickTapeConfig.Span.FULL,
@@ -100,11 +102,19 @@ const _FB_GLOVE: Array[int] = [GearModelRegistry.GLOVE_TEAM, GearModelRegistry.G
 		GearModelRegistry.GLOVE_VINTAGE, GearModelRegistry.GLOVE_TWO_TONE,
 		GearModelRegistry.GLOVE_TRICOLOR, GearModelRegistry.GLOVE_TEAM]
 const _FB_LACES: Array[int] = [_TAPE_WHITE, _TAPE_WHITE, _TAPE_WHITE, _TAPE_BLACK,
-		_TAPE_WHITE, _LACE_YELLOW, _TAPE_BLACK, _TAPE_WHITE]
+		_TAPE_WHITE, TapeColorRegistry.TEAM_INDEX, _TAPE_BLACK, _TAPE_WHITE]
 const _FB_STICK: Array[int] = [StickModelRegistry.STICK_STEALTH, StickModelRegistry.STICK_REDLINE,
 		StickModelRegistry.STICK_VOLT, StickModelRegistry.STICK_STEALTH,
 		StickModelRegistry.STICK_SPLIT, StickModelRegistry.STICK_STEALTH,
 		StickModelRegistry.STICK_REDLINE, StickModelRegistry.STICK_STEALTH]
+const _FB_STICK_SHAFT: Array[int] = [_TAPE_BLACK, _TAPE_BLACK, _TAPE_BLACK, _TAPE_WHITE,
+		_TAPE_BLACK, _TAPE_BLACK, _TAPE_WHITE, _TAPE_BLACK]
+const _FB_STICK_PRIMARY: Array[int] = [_TAPE_WHITE, TapeColorRegistry.TEAM_INDEX,
+		_TAPE_WHITE, TapeColorRegistry.TEAM_INDEX, _TAPE_SECONDARY, _TAPE_WHITE,
+		TapeColorRegistry.TEAM_INDEX, _TAPE_BLACK]
+const _FB_STICK_SECONDARY: Array[int] = [_TAPE_SECONDARY, _TAPE_WHITE,
+		TapeColorRegistry.TEAM_INDEX, _TAPE_SECONDARY, _TAPE_WHITE, _TAPE_SECONDARY,
+		_TAPE_BLACK, _TAPE_SECONDARY]
 # Visor-heavy like a real pro lineup, with bare heads for the old-school and
 # the occasional cage or fishbowl for flavor.
 const _FB_FACE: Array[int] = [GearModelRegistry.FACE_VISOR, GearModelRegistry.FACE_VISOR,
@@ -276,13 +286,17 @@ static func normalize_entry(entry: Dictionary) -> Dictionary:
 					int(entry.get("stick_model", 0)),
 					int(entry.get("helmet_face", GearModelRegistry.FACE_NONE)),
 					gear.hair_style, gear.facial_hair, gear.hair_color,
-					int(entry.get("jersey_tuck", GearModelRegistry.TUCK_NONE)))
+					int(entry.get("jersey_tuck", GearModelRegistry.TUCK_NONE)),
+					int(entry.get("stick_shaft", GearStyleConfig.STICK_SHAFT_DEFAULT)),
+					int(entry.get("stick_primary", GearStyleConfig.STICK_PRIMARY_DEFAULT)),
+					int(entry.get("stick_secondary", GearStyleConfig.STICK_SECONDARY_DEFAULT)))
 		if pins_hair:
 			gear = GearStyleConfig.new(gear.skate_model, gear.glove_model, gear.lace_color,
 					gear.stick_model, gear.helmet_face,
 					int(entry.get("hair_style", HairStyleRegistry.HAIR_SHORT)),
 					int(entry.get("facial_hair", HairStyleRegistry.FACIAL_NONE)),
-					int(entry.get("hair_color", 0)), gear.jersey_tuck)
+					int(entry.get("hair_color", 0)), gear.jersey_tuck,
+					gear.stick_shaft, gear.stick_primary, gear.stick_secondary)
 		out["gear_style_code"] = gear.to_code()
 	return out
 
@@ -307,8 +321,9 @@ static func fallback_tape_code(bot_name: String) -> int:
 
 
 # Gear/stick/hair counterpart of fallback_tape_code; hash slices are disjoint
-# from the tape ones so the two looks vary independently. The face, the hair and
-# the tuck draw from DERIVED hashes rather than yet-higher slices: String.hash is
+# from the tape ones so the two looks vary independently. The face, the hair, the
+# tuck and the stick colors draw from DERIVED hashes rather than yet-higher
+# slices: String.hash is
 # djb2-style, so names sharing a prefix ("Bot 1".."Bot 12") only vary the low
 # ~25 bits and a bit-26 slice would deal every generic bot the same face.
 static func fallback_gear_style_code(bot_name: String) -> int:
@@ -316,6 +331,7 @@ static func fallback_gear_style_code(bot_name: String) -> int:
 	var hf: int = ("%s/face" % bot_name).hash()
 	var hh: int = ("%s/hair" % bot_name).hash()
 	var ht: int = ("%s/tuck" % bot_name).hash()
+	var hs: int = ("%s/stick" % bot_name).hash()
 	return GearStyleConfig.new(
 			_FB_SKATE[(h >> 14) % _FB_SKATE.size()],
 			_FB_GLOVE[(h >> 17) % _FB_GLOVE.size()],
@@ -325,4 +341,7 @@ static func fallback_gear_style_code(bot_name: String) -> int:
 			_FB_HAIR[(hh >> 2) % _FB_HAIR.size()],
 			_FB_FACIAL[(hh >> 6) % _FB_FACIAL.size()],
 			_FB_HAIR_COLOR[(hh >> 10) % _FB_HAIR_COLOR.size()],
-			_FB_TUCK[(ht >> 2) % _FB_TUCK.size()]).to_code()
+			_FB_TUCK[(ht >> 2) % _FB_TUCK.size()],
+			_FB_STICK_SHAFT[(hs >> 2) % _FB_STICK_SHAFT.size()],
+			_FB_STICK_PRIMARY[(hs >> 6) % _FB_STICK_PRIMARY.size()],
+			_FB_STICK_SECONDARY[(hs >> 10) % _FB_STICK_SECONDARY.size()]).to_code()

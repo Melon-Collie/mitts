@@ -1,65 +1,63 @@
 class_name TapeColorRegistry
 extends RefCounted
 
-# The shared cosmetic color palette: stick tape (blade wrap and butt-end
-# knob) and the gear accent stripes (skate collar band, glove wrist cuff)
-# each index into it independently. Index 0 is the TEAM sentinel — it
-# resolves to a team color at paint time (the accent for tape and skates, the
-# kit's glove color for gloves), which keeps every untouched slot looking
-# exactly like the pre-customization kit.
+# The shared cosmetic color palette: stick tape (blade wrap, bottom strip and
+# butt-end knob), laces and the stick's own colors (shaft and graphic) each
+# index into it independently. Every entry is a kit color or a neutral, never a
+# fixed hue, so whatever a player picks belongs to the team they skate for:
+# the team's primary, its secondary, black, and the team's own white (`light`
+# in the preset — cream for some teams, which their away sweater already
+# wears, so the gear matches it instead of out-whiting it). These are the
+# same four paints GearModelRegistry's skate and glove models draw from.
 #
 # The palette is wire data: indices travel in the packed tape and gear-style
 # codes (StickTapeConfig, GearStyleConfig), so entries must only ever be
 # APPENDED — reordering or removing one silently repaints every player who had
-# picked it.
+# picked it. GearStyleConfig packs its stick colors in 2 bits each, so a fifth
+# entry also means widening those fields.
 
 const TEAM_INDEX: int = 0
+const WHITE_INDEX: int = 1
+const BLACK_INDEX: int = 2
+const SECONDARY_INDEX: int = 3
 
-# Locale keys, indexed in lockstep with _COLORS (TEAM at 0 has no swatch color;
-# resolve() substitutes the live team accent).
+# Locale keys and the short label drawn on a picker chip (empty = color only),
+# indexed in lockstep with the palette. The two team chips are labeled so a
+# player can tell them from fixed colors, and from each other on a kit whose
+# primary and secondary are close.
 const NAME_KEYS: Array[StringName] = [
 	&"TAPE_COLOR_TEAM",
 	&"TAPE_COLOR_WHITE",
 	&"TAPE_COLOR_BLACK",
-	&"TAPE_COLOR_RED",
-	&"TAPE_COLOR_BLUE",
-	&"TAPE_COLOR_YELLOW",
-	&"TAPE_COLOR_GREEN",
-	&"TAPE_COLOR_ORANGE",
-	&"TAPE_COLOR_PURPLE",
-	&"TAPE_COLOR_PINK",
-	&"TAPE_COLOR_TEAL",
+	&"TAPE_COLOR_SECONDARY",
+]
+const CHIP_KEYS: Array[StringName] = [
+	&"TAPE_COLOR_TEAM_SHORT",
+	&"",
+	&"",
+	&"TAPE_COLOR_SECONDARY_SHORT",
 ]
 
-# Cloth-tape albedos. Slot 0 (TEAM) holds a neutral placeholder that only
-# shows if a caller paints without resolving; real paint goes through resolve().
-const _COLORS: Array[Color] = [
-	Color(0.6, 0.6, 0.6),
-	Color(0.92, 0.92, 0.92),   # white — the classic
-	Color(0.07, 0.07, 0.07),   # black
-	Color(0.78, 0.10, 0.12),   # red
-	Color(0.10, 0.22, 0.75),   # royal blue
-	Color(0.95, 0.78, 0.08),   # yellow
-	Color(0.05, 0.45, 0.18),   # green
-	Color(0.95, 0.42, 0.05),   # orange
-	Color(0.40, 0.12, 0.65),   # purple
-	Color(0.95, 0.35, 0.65),   # pink
-	Color(0.05, 0.60, 0.60),   # teal
+const _PAINTS: Array[int] = [
+	GearModelRegistry.Paint.TEAM,
+	GearModelRegistry.Paint.LIGHT,
+	GearModelRegistry.Paint.BLACK,
+	GearModelRegistry.Paint.ACCENT,
 ]
 
 
 static func count() -> int:
-	return _COLORS.size()
+	return _PAINTS.size()
 
 
 static func is_valid(index: int) -> bool:
-	return index >= 0 and index < _COLORS.size()
+	return index >= 0 and index < _PAINTS.size()
 
 
-# The paint color for a palette pick (also what a picker swatch shows). TEAM —
-# and any out-of-range index from a hostile or future wire — resolves to the
-# team accent, matching the pre-pick default look.
-static func resolve(index: int, team_accent: Color) -> Color:
-	if index <= TEAM_INDEX or index >= _COLORS.size():
-		return team_accent
-	return _COLORS[index]
+# The paint color for a palette pick (also what a picker swatch shows), against
+# the kit's primary, secondary and white. An out-of-range index from a hostile
+# or older wire resolves to the primary, matching the pre-pick default look.
+static func resolve(index: int, primary: Color, secondary: Color, light: Color) -> Color:
+	if not is_valid(index):
+		return primary
+	return GearModelRegistry.resolve(_PAINTS[index], primary, secondary, light)

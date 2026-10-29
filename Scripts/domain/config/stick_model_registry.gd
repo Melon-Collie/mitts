@@ -1,31 +1,26 @@
 class_name StickModelRegistry
 extends RefCounted
 
-# The catalogue of stick MODELS — whole shaft/blade colorways, the way a real
-# stick is bought as one design. Unlike the skate and glove catalogue
-# (GearModelRegistry), rows are FIXED colors rather than team-slot paints:
-# a real stick ships in its maker's colorway whoever you play for, and the
-# player's color already rides the tape job.
+# The catalogue of stick MODELS — the graphic a stick carries, not its colors.
+# A model lays out the brand wordmark and up to two BANDS (color spans along
+# the shaft, in real metres from an anchor end — the same object-space metric
+# placement the wordmark uses, so a blade-anchored kick zone stays pinned at
+# the blade whatever the build's cut length), and names which of the player's
+# three stick colors (GearStyleConfig: the shaft, the graphic's primary and
+# its secondary) paints each piece. StickStyle turns a model and those colors
+# into the shader materials; the tape job and grip wrap always paint over a
+# band.
 #
 # Every row past the house Stealth is inspired by a recognizable real-world
 # stick without naming it (same convention as the M88/M92/M28 blade patterns
-# for P88/P92/P28): Redline reads as a Vapor's red kick zone, Volt as a
-# Ribcor's acid graphic, Split as an Alpha's grey upper over a black lower,
-# Whiteout as the custom all-white pro look, Woodie as a varnished-ash wood
-# stick.
-#
-# A model paints: the shaft base, the brand wordmark, up to two BANDS (color
-# spans along the shaft, in real metres from an anchor end — the same
-# object-space metric placement the wordmark uses, so a blade-anchored kick
-# zone stays pinned at the blade whatever the build's cut length), and
-# optionally the blade (base + carbon-weave pair, for wood). StickStyle turns
-# a row into the shader materials; the tape job and grip wrap always paint
-# over a band.
+# for P88/P92/P28): Redline reads as a Vapor's kick zone, Volt as a Ribcor's
+# graphic block, Split as an Alpha's two-tone upper with a seam ring.
 #
 # The catalogue is wire data: the model index travels in the packed
-# GearStyleConfig code, so rows must only ever be APPENDED — reordering or
-# removing one silently re-equips every player who had picked it. Index 0 is
-# the house MITTS stick — the stock look an untouched player carries.
+# GearStyleConfig code, so rows must only ever be APPENDED. A model is retired
+# rather than removed: its index stays, it leaves the picker and the bots'
+# rolls, and GearStyleConfig decodes it to its stand-in from _RETIRED. Index 0
+# is the house MITTS stick — the stock look an untouched player carries.
 
 const ANCHOR_BUTT: int = 0
 const ANCHOR_BLADE: int = 1
@@ -34,8 +29,8 @@ const STICK_STEALTH: int = 0
 const STICK_REDLINE: int = 1
 const STICK_VOLT: int = 2
 const STICK_SPLIT: int = 3
-const STICK_WHITEOUT: int = 4
-const STICK_WOODIE: int = 5
+const STICK_WHITEOUT: int = 4  # retired — a white shaft is now a color pick
+const STICK_WOODIE: int = 5    # retired — wood is not one of the kit colors
 
 const NAME_KEYS: Array[StringName] = [
 	&"STICK_MODEL_STEALTH",
@@ -46,70 +41,47 @@ const NAME_KEYS: Array[StringName] = [
 	&"STICK_MODEL_WOODIE",
 ]
 
-# The classic composite finish (kept off the team palette — modern sticks are
-# near-black) and the matte black a bare blade shows under its weave. Named so
-# rows and the goalie/ghost paths share one value.
-const SHAFT_CLASSIC := Color(0.06, 0.06, 0.07)
-const BLADE_CLASSIC := Color(0.05, 0.05, 0.05)
+# Which of the player's stick colors paints a piece of the graphic.
+enum Slot { PRIMARY, SECONDARY, SHAFT }
 
-# Row fields: `shaft` + `brand` always; `bands` is up to two
-# {color, from_m, to_m, anchor} spans (from < to, metres from the anchor end);
-# `blade` is {base, weave_a, weave_b} and only present when the model departs
-# from the carbon look. Index-aligned with NAME_KEYS.
+# Row fields: `brand` (the wordmark's Slot) always; `bands` is up to two
+# {slot, from_m, to_m, anchor} spans (from < to, metres from the anchor end).
+# Index-aligned with NAME_KEYS.
 const _MODELS: Array[Dictionary] = [
-	# Stealth — the house MITTS stick: near-black composite, white wordmark.
+	# Stealth — the house MITTS stick: a plain shaft and its wordmark.
+	{"brand": Slot.PRIMARY},
+	# Redline — a kick zone flooding up from the blade, the wordmark to match.
 	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(1.0, 1.0, 1.0),
-	},
-	# Redline — black shaft with a red kick zone flooding up from the blade.
-	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(0.72, 0.08, 0.12),
+		"brand": Slot.PRIMARY,
 		"bands": [
-			{"color": Color(0.72, 0.08, 0.12), "from_m": 0.0, "to_m": 0.50,
-					"anchor": ANCHOR_BLADE},
+			{"slot": Slot.PRIMARY, "from_m": 0.0, "to_m": 0.50, "anchor": ANCHOR_BLADE},
 		],
 	},
-	# Volt — black shaft, acid-green graphic block low on the shaft (the heel
-	# stays black so the hosel reads apart from the graphic).
+	# Volt — a graphic block low on the shaft (the heel keeps the shaft color so
+	# the hosel reads apart from the graphic), the wordmark in the second color.
 	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(0.45, 0.82, 0.10),
+		"brand": Slot.SECONDARY,
 		"bands": [
-			{"color": Color(0.45, 0.82, 0.10), "from_m": 0.12, "to_m": 0.55,
-					"anchor": ANCHOR_BLADE},
+			{"slot": Slot.PRIMARY, "from_m": 0.12, "to_m": 0.55, "anchor": ANCHOR_BLADE},
 		],
 	},
-	# Split — grey upper half over a black lower, one orange seam ring. The
-	# wordmark sits inside the grey zone, so it goes black to keep reading.
+	# Split — the upper shaft over a bare lower, one seam ring. The wordmark
+	# sits inside the upper zone, so it takes the shaft color to keep reading.
 	{
-		"shaft": SHAFT_CLASSIC,
-		"brand": Color(0.05, 0.05, 0.05),
+		"brand": Slot.SHAFT,
 		"bands": [
-			{"color": Color(0.60, 0.61, 0.63), "from_m": 0.0, "to_m": 0.78,
-					"anchor": ANCHOR_BUTT},
-			{"color": Color(0.93, 0.42, 0.05), "from_m": 0.44, "to_m": 0.52,
-					"anchor": ANCHOR_BLADE},
+			{"slot": Slot.PRIMARY, "from_m": 0.0, "to_m": 0.78, "anchor": ANCHOR_BUTT},
+			{"slot": Slot.SECONDARY, "from_m": 0.44, "to_m": 0.52, "anchor": ANCHOR_BLADE},
 		],
 	},
-	# Whiteout — the custom all-white pro look, wordmark flipped to black.
-	{
-		"shaft": Color(0.90, 0.90, 0.88),
-		"brand": Color(0.07, 0.07, 0.08),
-	},
-	# Woodie — varnished ash, burnt-in dark wordmark, and the one blade
-	# departure: wood tones instead of carbon weave.
-	{
-		"shaft": Color(0.50, 0.34, 0.16),
-		"brand": Color(0.15, 0.09, 0.04),
-		"blade": {
-			"base": Color(0.45, 0.31, 0.15),
-			"weave_a": Color(0.47, 0.32, 0.15),
-			"weave_b": Color(0.41, 0.27, 0.12),
-		},
-	},
+	{"brand": Slot.PRIMARY},  # Whiteout (retired)
+	{"brand": Slot.PRIMARY},  # Woodie (retired)
 ]
+
+const _RETIRED: Dictionary[int, int] = {
+	STICK_WHITEOUT: STICK_STEALTH,
+	STICK_WOODIE: STICK_STEALTH,
+}
 
 
 static func count() -> int:
@@ -120,6 +92,24 @@ static func is_valid(model: int) -> bool:
 	return model >= 0 and model < _MODELS.size()
 
 
+static func is_retired(model: int) -> bool:
+	return _RETIRED.has(model)
+
+
+# The model a valid index is drawn as: itself, or a retired one's stand-in.
+static func worn(model: int) -> int:
+	return _RETIRED.get(model, model)
+
+
+# Every model the picker offers, in index order. Allocates; menus only.
+static func pickable() -> Array[int]:
+	var out: Array[int] = []
+	for model: int in _MODELS.size():
+		if not is_retired(model):
+			out.append(model)
+	return out
+
+
 # An out-of-range model (a forged wire code, a future catalogue) reads as the
 # house stick, matching GearStyleConfig.from_code's clamp rather than throwing
 # at the paint seam.
@@ -127,42 +117,43 @@ static func _row(model: int) -> Dictionary:
 	return _MODELS[model] if is_valid(model) else _MODELS[STICK_STEALTH]
 
 
-static func shaft_color(model: int) -> Color:
-	return _row(model)["shaft"]
-
-
-static func brand_color(model: int) -> Color:
+static func brand_slot(model: int) -> int:
 	return _row(model)["brand"]
 
 
-# Up to two {color, from_m, to_m, anchor} spans; empty for a plain shaft.
+# Up to two {slot, from_m, to_m, anchor} spans; empty for a plain shaft.
 static func bands(model: int) -> Array:
 	return _row(model).get("bands", [])
 
 
-static func has_blade_override(model: int) -> bool:
-	return _row(model).has("blade")
-
-
-# The matte color a bare blade shows (ghost stand-ins, under-weave).
-static func blade_base_color(model: int) -> Color:
-	var row: Dictionary = _row(model)
-	return row["blade"]["base"] if row.has("blade") else BLADE_CLASSIC
-
-
-# The blade's checker pair; the carbon defaults unless the row overrides.
-static func blade_weave_colors(model: int) -> Array[Color]:
-	var row: Dictionary = _row(model)
-	if row.has("blade"):
-		return [row["blade"]["weave_a"], row["blade"]["weave_b"]]
-	return []
-
-
-# The colors a UI swatch strip shows for one model: shaft, then each band,
-# then the wordmark — the parts of the design that read at chip size.
-static func swatch_colors(model: int) -> Array[Color]:
-	var colors: Array[Color] = [shaft_color(model)]
+# Whether any piece of the graphic paints in the secondary, so a picker can
+# tell the player that pick has nothing to paint.
+static func uses_secondary(model: int) -> bool:
+	if brand_slot(model) == Slot.SECONDARY:
+		return true
 	for band: Dictionary in bands(model):
-		colors.append(band["color"])
-	colors.append(brand_color(model))
+		if int(band["slot"]) == Slot.SECONDARY:
+			return true
+	return false
+
+
+static func slot_color(slot: int, shaft: Color, primary: Color, secondary: Color) -> Color:
+	match slot:
+		Slot.SECONDARY:
+			return secondary
+		Slot.SHAFT:
+			return shaft
+		_:
+			return primary
+
+
+# The colors a UI swatch strip shows for one model in the given stick colors:
+# shaft, then each band, then the wordmark — the parts of the design that read
+# at chip size.
+static func swatch_colors(model: int, shaft: Color, primary: Color,
+		secondary: Color) -> Array[Color]:
+	var colors: Array[Color] = [shaft]
+	for band: Dictionary in bands(model):
+		colors.append(slot_color(int(band["slot"]), shaft, primary, secondary))
+	colors.append(slot_color(brand_slot(model), shaft, primary, secondary))
 	return colors

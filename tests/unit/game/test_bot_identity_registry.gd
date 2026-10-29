@@ -162,14 +162,15 @@ func test_pick_for_slot_prefers_matching_position() -> void:
 
 func test_normalize_packs_pinned_cosmetics() -> void:
 	var norm: Dictionary = BotIdentityRegistry.normalize_entry({
-			"name": "Flash", "tape_blade": 5, "tape_span": StickTapeConfig.Span.STRIP_AND_TOE,
+			"name": "Flash", "tape_blade": 3, "tape_span": StickTapeConfig.Span.STRIP_AND_TOE,
 			"tape_knob": 2, "knob_style": StickTapeConfig.KnobStyle.CANDY_CANE, "tape_strip": 2,
 			"skate_model": GearModelRegistry.SKATE_RETRO,
 			"glove_model": GearModelRegistry.GLOVE_TRICOLOR,
-			"lace_color": 5, "stick_model": StickModelRegistry.STICK_VOLT,
+			"lace_color": 3, "stick_model": StickModelRegistry.STICK_VOLT,
+			"stick_shaft": 1, "stick_primary": 0, "stick_secondary": 2,
 			"helmet_face": GearModelRegistry.FACE_CAGE})
 	var tape: StickTapeConfig = StickTapeConfig.from_code(int(norm.tape_code))
-	assert_eq(tape.blade_color, 5)
+	assert_eq(tape.blade_color, 3)
 	assert_eq(tape.span, StickTapeConfig.Span.STRIP_AND_TOE)
 	assert_eq(tape.knob_color, 2)
 	assert_eq(tape.knob_style, StickTapeConfig.KnobStyle.CANDY_CANE)
@@ -177,7 +178,10 @@ func test_normalize_packs_pinned_cosmetics() -> void:
 	var gear: GearStyleConfig = GearStyleConfig.from_code(int(norm.gear_style_code))
 	assert_eq(gear.skate_model, GearModelRegistry.SKATE_RETRO)
 	assert_eq(gear.glove_model, GearModelRegistry.GLOVE_TRICOLOR)
-	assert_eq(gear.lace_color, 5)
+	assert_eq(gear.lace_color, 3)
+	assert_eq(gear.stick_shaft, 1)
+	assert_eq(gear.stick_primary, 0)
+	assert_eq(gear.stick_secondary, 2)
 	assert_eq(gear.stick_model, StickModelRegistry.STICK_VOLT)
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
 

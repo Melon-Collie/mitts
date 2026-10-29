@@ -20,7 +20,7 @@ func before_each() -> void:
 			PlayerPrefs.attr_curve, PlayerPrefs.attr_flex, PlayerPrefs.attr_length]
 	PlayerPrefs.gear_style_code = GearStyleConfig.new(GearModelRegistry.SKATE_RETRO,
 			GearModelRegistry.GLOVE_CONTRAST, GearStyleConfig.LACE_DEFAULT_INDEX,
-			StickModelRegistry.count() - 1, GearModelRegistry.FACE_VISOR).to_code()
+			StickModelRegistry.STICK_SPLIT, GearModelRegistry.FACE_VISOR).to_code()
 	PlayerPrefs.set_player_attributes(PlayerAttributes.neutral())
 	_popup = PlayerSettingsPopup.new()
 	add_child_autofree(_popup)
@@ -70,7 +70,8 @@ func _picked(buttons: Array) -> int:
 func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_btn("_skate_btn").item_count, GearModelRegistry.skate_count())
 	assert_eq(_btn("_glove_btn").item_count, GearModelRegistry.glove_count())
-	assert_eq(_btn("_stick_model_btn").item_count, StickModelRegistry.count())
+	assert_eq(_btn("_stick_model_btn").item_count, StickModelRegistry.pickable().size(),
+			"a retired stick is not offered")
 	assert_eq(_btn("_tuck_btn").item_count, GearModelRegistry.tuck_count())
 	assert_eq(_btn("_facial_btn").item_count, HairStyleRegistry.facial_count())
 	assert_eq(_buttons("_face_btns").size(), GearModelRegistry.face_count())
@@ -81,7 +82,14 @@ func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_buttons("_skin_buttons").size(), SkinToneRegistry.TONES.size())
 	assert_eq(_btn("_skate_btn").selected, GearModelRegistry.SKATE_RETRO)
 	assert_eq(_btn("_glove_btn").selected, GearModelRegistry.GLOVE_CONTRAST)
-	assert_eq(_btn("_stick_model_btn").selected, StickModelRegistry.count() - 1)
+	assert_eq(_btn("_stick_model_btn").get_selected_id(), StickModelRegistry.STICK_SPLIT)
+	# The color rows show the saved picks, not the palette's first entry.
+	assert_eq((_popup.get("_stick_shaft_dd") as SwatchDropdown).get("_selected_index"),
+			GearStyleConfig.STICK_SHAFT_DEFAULT)
+	assert_eq((_popup.get("_stick_primary_dd") as SwatchDropdown).get("_selected_index"),
+			GearStyleConfig.STICK_PRIMARY_DEFAULT)
+	assert_eq((_popup.get("_lace_dd") as SwatchDropdown).get("_selected_index"),
+			GearStyleConfig.LACE_DEFAULT_INDEX)
 	assert_eq(_picked(_buttons("_face_btns")), GearModelRegistry.FACE_VISOR)
 
 
@@ -114,6 +122,28 @@ func test_a_coverage_pick_lights_the_color_rows_it_uses() -> void:
 	strip_dd.selected.emit(2)
 	assert_eq(_draft().tape().strip_color, 2, "a strip pick lands in the draft")
 	assert_eq(_draft().tape().span, StickTapeConfig.Span.NONE, "…and keeps the coverage")
+
+
+# The stick's colors are the player's; the model only lays out the graphic, so
+# its row redraws in them and the second color goes quiet on a graphic that
+# never shows it.
+func test_stick_color_picks_land_and_redraw_the_models() -> void:
+	var model_btn: OptionButton = _btn("_stick_model_btn")
+	var secondary_dd: SwatchDropdown = _popup.get("_stick_secondary_dd") as SwatchDropdown
+	(_popup.get("_stick_shaft_dd") as SwatchDropdown).selected.emit(TapeColorRegistry.WHITE_INDEX)
+	(_popup.get("_stick_primary_dd") as SwatchDropdown).selected.emit(
+			TapeColorRegistry.BLACK_INDEX)
+	secondary_dd.selected.emit(TapeColorRegistry.TEAM_INDEX)
+	var gear: GearStyleConfig = _draft().gear()
+	assert_eq(gear.stick_shaft, TapeColorRegistry.WHITE_INDEX)
+	assert_eq(gear.stick_primary, TapeColorRegistry.BLACK_INDEX)
+	assert_eq(gear.stick_secondary, TapeColorRegistry.TEAM_INDEX)
+	assert_eq(model_btn.item_count, StickModelRegistry.pickable().size(), "redrawn, not stacked")
+	assert_eq(model_btn.get_selected_id(), StickModelRegistry.STICK_SPLIT, "and still picked")
+	assert_false(secondary_dd.get("_disabled"), "Split's seam ring shows the second color")
+	model_btn.item_selected.emit(model_btn.get_item_index(StickModelRegistry.STICK_STEALTH))
+	assert_eq(_draft().gear().stick_model, StickModelRegistry.STICK_STEALTH)
+	assert_true(secondary_dd.get("_disabled"), "Stealth has no second color to paint")
 
 
 func test_reopening_and_a_team_change_do_not_stack_items() -> void:
@@ -269,6 +299,9 @@ func test_a_row_aims_the_case_at_its_own_piece() -> void:
 # watching the wrapper would connect a signal that never fires.
 func test_the_swatch_rows_reframe_the_case_too() -> void:
 	var rows: Dictionary = {
+		"_stick_shaft_dd": F.STICK,
+		"_stick_primary_dd": F.STICK,
+		"_stick_secondary_dd": F.STICK,
 		"_blade_color_dd": F.BLADE,
 		"_strip_color_dd": F.BLADE,
 		"_knob_color_dd": F.GRIP,
@@ -293,7 +326,8 @@ func test_every_row_control_is_pad_reachable() -> void:
 		_btn("_hair_btn"), _btn("_facial_btn"), _popup.get("_height_slider") as Control,
 		_popup.get("_weight_slider") as Control, _popup.get("_name_field") as Control,
 		_popup.get("_number_field") as Control]
-	for field: String in ["_blade_color_dd", "_strip_color_dd", "_knob_color_dd", "_lace_dd"]:
+	for field: String in ["_stick_shaft_dd", "_stick_primary_dd", "_stick_secondary_dd",
+			"_blade_color_dd", "_strip_color_dd", "_knob_color_dd", "_lace_dd"]:
 		controls.append((_popup.get(field) as SwatchDropdown).focus_target())
 	for field: String in ["_face_btns", "_hair_color_buttons", "_skin_buttons",
 			"_shoots_btns", "_position_btns", "_tab_btns"]:

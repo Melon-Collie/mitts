@@ -49,12 +49,12 @@ func test_the_strip_color_round_trips_beside_every_span() -> void:
 # style 13–14. Saved prefs and recorded replays hold codes packed this way.
 func test_codes_packed_before_the_strip_decode_unchanged() -> void:
 	for span: int in StickTapeConfig.Span.MID_TO_TOE + 1:
-		var legacy: int = 3 | (span << 5) | (7 << 8) \
+		var legacy: int = 3 | (span << 5) | (2 << 8) \
 				| (StickTapeConfig.KnobStyle.CANDY_CANE << 13)
 		var config: StickTapeConfig = StickTapeConfig.from_code(legacy)
 		assert_eq(config.blade_color, 3)
 		assert_eq(config.span, span)
-		assert_eq(config.knob_color, 7)
+		assert_eq(config.knob_color, 2)
 		assert_eq(config.knob_style, StickTapeConfig.KnobStyle.CANDY_CANE)
 		assert_eq(config.strip_color, TapeColorRegistry.TEAM_INDEX)
 		assert_eq(config.to_code(), legacy, "re-packs to the same code")
@@ -108,16 +108,32 @@ func test_counted_wraps_fit_their_span() -> void:
 	assert_gt(counted, 0, "some span lays counted wraps")
 
 
-func test_team_and_invalid_indices_resolve_to_accent() -> void:
-	var accent := Color(0.2, 0.6, 0.9)
-	assert_eq(TapeColorRegistry.resolve(TapeColorRegistry.TEAM_INDEX, accent), accent,
-			"TEAM resolves to the team accent")
-	assert_eq(TapeColorRegistry.resolve(99, accent), accent, "out-of-range falls back")
-	assert_eq(TapeColorRegistry.resolve(-3, accent), accent, "negative falls back")
-	var white: Color = TapeColorRegistry.resolve(1, accent)
-	assert_ne(white, accent, "a real palette pick ignores the accent")
+# Every pick is a kit color or a neutral: the two team colors and the team's
+# own white follow the kit, black never does, and nothing off the palette
+# reaches the paint.
+func test_the_palette_is_the_kit_and_black() -> void:
+	var primary := Color(0.2, 0.6, 0.9)
+	var secondary := Color(0.9, 0.7, 0.1)
+	var light := Color(0.95, 0.92, 0.85)
+	assert_eq(TapeColorRegistry.count(), 4)
+	assert_eq(TapeColorRegistry.resolve(TapeColorRegistry.TEAM_INDEX, primary, secondary, light),
+			primary)
+	assert_eq(TapeColorRegistry.resolve(TapeColorRegistry.SECONDARY_INDEX, primary, secondary,
+			light), secondary)
+	assert_eq(TapeColorRegistry.resolve(TapeColorRegistry.WHITE_INDEX, primary, secondary, light),
+			light, "white is the team's own white")
+	var black: Color = TapeColorRegistry.resolve(TapeColorRegistry.BLACK_INDEX, primary,
+			secondary, light)
+	assert_eq(black, GearModelRegistry.BLACK, "one black, the skates' own")
+	assert_eq(TapeColorRegistry.resolve(TapeColorRegistry.BLACK_INDEX, Color.RED, Color.BLUE,
+			Color.WHITE), black, "black ignores the kit")
+	for index: int in [99, -3, 4]:
+		assert_eq(TapeColorRegistry.resolve(index, primary, secondary, light), primary,
+				"an off-palette index %d falls back to the primary" % index)
 
 
 func test_palette_and_name_keys_stay_in_lockstep() -> void:
 	assert_eq(TapeColorRegistry.NAME_KEYS.size(), TapeColorRegistry.count(),
 			"every palette entry has a display key")
+	assert_eq(TapeColorRegistry.CHIP_KEYS.size(), TapeColorRegistry.count(),
+			"and a chip label, empty or not")

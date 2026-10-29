@@ -1,14 +1,15 @@
 extends SceneTree
 
-# Dev visualizer: renders the whole stick-model catalogue offscreen — every
-# colorway standing on its blade above its name — and saves PNGs from two
-# angles, so stick designs can be SEEN without launching the game. Each stick
-# is built from the rink's own pieces (procedural blade at the M92 pattern,
-# shaft box on the flex shader, butt knob) painted through
-# StickStyle/StickModelRegistry, so the COLORWAY in the PNG is the one the game
-# renders. The lie and the shelf layout are this tool's own — a stick stood up
-# for reading, not the locker mannequin's carried pose. Bare blade and bare grip on purpose: the sheet shows the colorway,
-# not a tape job over it.
+# Dev visualizer: renders every pickable stick model offscreen — each graphic
+# standing on its blade above its name, painted black shaft / team primary /
+# team secondary against a sample kit — and saves PNGs from two angles, so
+# stick designs can be SEEN without launching the game. Each stick is built
+# from the rink's own pieces (procedural blade at the M92 pattern, shaft box on
+# the flex shader, butt knob) painted through StickStyle/StickModelRegistry,
+# so the GRAPHIC in the PNG is the one the game renders. The lie and the shelf
+# layout are this tool's own — a stick stood up for reading, not the locker
+# mannequin's carried pose. Bare blade and bare grip on purpose: the sheet
+# shows the graphic, not a tape job over it.
 #
 # Needs a real (software) renderer, not --headless. On the web container:
 #
@@ -24,9 +25,13 @@ const _HOSEL_LEN_M: float = 0.085
 const _SHAFT_CROSS := Vector2(0.04, 0.05)
 const _KNOB_HEIGHT_M: float = 0.05
 const _KNOB_COLOR := Color(0.88, 0.88, 0.86)
-# The M92 all-rounder — one pattern across the sheet so only the colorway
+# The M92 all-rounder — one pattern across the sheet so only the graphic
 # varies between columns.
 const _PATTERN: int = 1
+# A red-and-blue kit, so primary and secondary read apart.
+const _KIT_PRIMARY := Color(0.72, 0.08, 0.12)
+const _KIT_SECONDARY := Color(0.10, 0.22, 0.75)
+const _KIT_LIGHT := Color(0.95, 0.95, 0.93)
 
 # Heel-to-heel spacing. The sticks lean much further than this, but they lean
 # in parallel, so the columns rack like sticks against the bench wall.
@@ -61,7 +66,8 @@ func _init() -> void:
 	_stick_len = GameRules.DEFAULT_STICK_LENGTH_M \
 			* PlayerAttributes.neutral().stick_len_mult() + SkaterStickRig.SHAFT_BUTT_EXTEND_M
 
-	var count: int = StickModelRegistry.count()
+	var models: Array[int] = StickModelRegistry.pickable()
+	var count: int = models.size()
 	var span: float = _SPACING_M * float(count - 1)
 	# At the side yaw the toe reaches one way and the leaning shaft the other;
 	# the lineup's true extent (and its center) comes from those overhangs.
@@ -90,8 +96,9 @@ func _init() -> void:
 
 	_add_shelf(span + toe_reach + butt_reach, center_x)
 
-	for model: int in count:
-		var x: float = -span * 0.5 + _SPACING_M * float(model)
+	for column: int in count:
+		var model: int = models[column]
+		var x: float = -span * 0.5 + _SPACING_M * float(column)
 		var holder := Node3D.new()
 		holder.position = Vector3(x, 0.0, 0.0)
 		holder.rotation_degrees = Vector3(0.0, _SIDE_DEG, 0.0)
@@ -123,6 +130,9 @@ func _add_shelf(width: float, center_x: float) -> void:
 # from the heel at the lie angle, knob capping the butt. All materials come
 # from the same factories the rink uses.
 func _build_stick(holder: Node3D, model: int) -> void:
+	var gear := GearStyleConfig.new()
+	gear.stick_model = model
+	gear.stick_primary = TapeColorRegistry.TEAM_INDEX
 	var p := StickBladeMeshBuilder.Params.new()
 	p.length = GameRules.DEFAULT_BLADE_LENGTH_M
 	p.curve_depth = Skater.BLADE_PATTERN_DEPTH[_PATTERN]
@@ -134,16 +144,18 @@ func _build_stick(holder: Node3D, model: int) -> void:
 	p.hosel_angle_deg = _LIE_DEG
 	var blade := MeshInstance3D.new()
 	blade.mesh = StickBladeMeshBuilder.build(p)
-	blade.material_override = StickStyle.make_blade_material(model)
+	blade.material_override = StickStyle.make_blade_material(
+			gear, _KIT_PRIMARY, _KIT_SECONDARY, _KIT_LIGHT)
 	holder.add_child(blade)
 
 	var shaft := MeshInstance3D.new()
 	var shaft_box := BoxMesh.new()
 	shaft_box.size = Vector3(_SHAFT_CROSS.x, _SHAFT_CROSS.y, 1.0)
 	shaft.mesh = shaft_box
-	var shaft_mat: ShaderMaterial = StickStyle.make_shaft_material(model)
+	var shaft_mat: ShaderMaterial = StickStyle.make_shaft_material(
+			gear, _KIT_PRIMARY, _KIT_SECONDARY, _KIT_LIGHT)
 	# Live uniforms the rink drives per frame: the real length (band anchoring
-	# reads it) and a bare grip so nothing covers the colorway.
+	# reads it) and a bare grip so nothing covers the graphic.
 	shaft_mat.set_shader_parameter(&"shaft_len_m", _stick_len)
 	shaft_mat.set_shader_parameter(&"grip_mode", 0)
 	shaft.material_override = shaft_mat

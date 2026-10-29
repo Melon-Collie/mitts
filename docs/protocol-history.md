@@ -444,3 +444,13 @@ here whenever you bump, in the same format.
 #      to the same job. A v90 peer would drop both new fields and draw every
 #      new pattern as another one, so mixed builds must be refused. Replay
 #      FORMAT_VERSION unchanged: an older replay's tape codes decode as before.
+# v92: every free color pick is a kit color — TapeColorRegistry shrinks to team
+#      primary / team's white / black / team secondary (indices 0–2 keep their
+#      meaning; 3 was red, 4–10 the other flair colors and now coerce to the
+#      field's default). Stick models become graphics, and the packed
+#      GearStyleConfig code grows the stick's three colors (shaft, graphic
+#      primary, graphic secondary) at bits 45–50, 2 bits each, so the widest
+#      code stays JSON-exact in replay headers. A v91 peer would paint the old
+#      fixed colorways and flair colors, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: an older replay decodes onto the new
+#      palette.

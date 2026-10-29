@@ -152,6 +152,16 @@ static func option_button(parent: Container, on_pick: Callable) -> OptionButton:
 	return btn
 
 
+# A palette color picker; the caller supplies the palette (SwatchDropdown
+# .set_palette).
+static func swatch_dropdown(parent: Container, on_pick: Callable,
+		width: float = FIELD_W) -> SwatchDropdown:
+	var dd := SwatchDropdown.new(Vector2(width, CONTROL_H))
+	dd.selected.connect(on_pick)
+	parent.add_child(dd)
+	return dd
+
+
 # A slider with its value read out beside it; returns [slider, value label].
 static func slider(parent: Container, on_change: Callable) -> Array[Control]:
 	var line := HBoxContainer.new()

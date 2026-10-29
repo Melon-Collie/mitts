@@ -225,11 +225,11 @@ var preferred_team_size: int = GameRules.DEFAULT_TEAM_SIZE
 # the edit-player popup and carried through the join handshake like the rest.
 var skin_tone: int = SkinToneRegistry.DEFAULT_INDEX
 var preferred_color_slot: int = -1  # team color preset slot index; -1 → use team default at lobby join
-# Packed StickTapeConfig code (blade tape color + coverage + knob color +
-# handle style).
+# Packed StickTapeConfig code (blade tape color + coverage + strip color +
+# knob color + handle style).
 var stick_tape_code: int = StickTapeConfig.DEFAULT_CODE
-# Packed GearStyleConfig code (skate/glove/stick models + lace color + helmet
-# face gear + jersey tuck, and the hair) — the gear cosmetics, carried through
+# Packed GearStyleConfig code (skate/glove/stick models + lace color + stick
+# colors + helmet face gear + jersey tuck, and the hair) — the gear cosmetics, carried through
 # the join handshake like the tape job.
 var gear_style_code: int = GearStyleConfig.DEFAULT_CODE
 

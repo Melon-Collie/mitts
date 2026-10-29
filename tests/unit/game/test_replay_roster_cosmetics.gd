@@ -69,7 +69,7 @@ func test_cosmetics_decode_to_the_recorded_look() -> void:
 	var tape := StickTapeConfig.new(3, StickTapeConfig.Span.MID_TO_TOE, 2,
 			StickTapeConfig.KnobStyle.FULL)
 	var gear := GearStyleConfig.new(GearModelRegistry.SKATE_TEAM,
-			GearModelRegistry.GLOVE_CONTRAST, 4, 0, GearModelRegistry.FACE_FISHBOWL)
+			GearModelRegistry.GLOVE_CONTRAST, 3, 0, GearModelRegistry.FACE_FISHBOWL)
 	var look: Dictionary = REPLAY_VIEWER.cosmetics_from_entry({
 		"tape_code": tape.to_code(),
 		"gear_style_code": gear.to_code(),

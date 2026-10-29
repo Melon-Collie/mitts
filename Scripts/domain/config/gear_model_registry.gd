@@ -10,11 +10,14 @@ extends RefCounted
 # Zones paint from four SLOTS, three of which are the wearer's own kit, so a
 # design reads as itself on every team while still belonging to that team:
 #
-#   BLACK   true black, and SKATES ONLY. Boot leather is black whoever you
-#           play for, and the stealth design wants a black that no kit can
-#           tint. Gloves never reach for it: a real glove is made in the
-#           team's colors, and no team here has black among theirs, so a black
-#           glove would belong to nobody.
+#   BLACK   true black, and of the models here, SKATES ONLY. Boot leather is
+#           black whoever you play for, and the stealth design wants a black
+#           that no kit can tint. Gloves never reach for it: a real glove is
+#           made in the team's colors, and no team here has black among
+#           theirs, so a black glove would belong to nobody.
+#
+# The same four paints are the whole TapeColorRegistry palette, which the
+# player's free color picks (tape, laces, the stick) choose from.
 #   LIGHT   the team's own white — `light` in the preset, which is CREAM for
 #           some teams (Pomegranate, Plum) and pure white for the rest. It is
 #           already what their away jersey is painted, so their gear matches

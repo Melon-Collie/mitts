@@ -34,7 +34,7 @@ func test_every_legal_pick_round_trips() -> void:
 						assert_eq(back.skate_model, skate)
 						assert_eq(back.glove_model, glove)
 						assert_eq(back.lace_color, lace)
-						assert_eq(back.stick_model, stick)
+						assert_eq(back.stick_model, StickModelRegistry.worn(stick))
 						assert_eq(back.helmet_face, face)
 
 
@@ -43,7 +43,7 @@ func test_every_hair_pick_round_trips_beside_the_gear() -> void:
 		for facial: int in HairStyleRegistry.facial_count():
 			for color: int in HairStyleRegistry.color_count():
 				var config := GearStyleConfig.new(GearModelRegistry.SKATE_RETRO,
-						GearModelRegistry.GLOVE_PRO, 3, StickModelRegistry.count() - 1,
+						GearModelRegistry.GLOVE_PRO, 3, StickModelRegistry.STICK_SPLIT,
 						GearModelRegistry.FACE_CAGE, hair, facial, color)
 				var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
 				assert_eq(back.hair_style, HairStyleRegistry.worn_hair(hair))
@@ -51,7 +51,7 @@ func test_every_hair_pick_round_trips_beside_the_gear() -> void:
 				assert_eq(back.hair_color, color)
 				assert_eq(back.helmet_face, GearModelRegistry.FACE_CAGE,
 						"the hair fields leave the gear fields alone")
-				assert_eq(back.stick_model, StickModelRegistry.count() - 1)
+				assert_eq(back.stick_model, StickModelRegistry.STICK_SPLIT)
 
 
 # A player who saved a style since retired comes back wearing its stand-in, and
@@ -110,6 +110,68 @@ func test_garbage_codes_coerce_to_legal_looks() -> void:
 		assert_true(HairStyleRegistry.is_valid_facial(config.facial_hair), "facial hair legal")
 		assert_true(HairStyleRegistry.is_valid_color(config.hair_color), "hair colour legal")
 		assert_true(GearModelRegistry.is_valid_tuck(config.jersey_tuck), "tuck option legal")
+		assert_true(TapeColorRegistry.is_valid(config.stick_shaft), "shaft color legal")
+		assert_true(TapeColorRegistry.is_valid(config.stick_primary), "graphic color legal")
+		assert_true(TapeColorRegistry.is_valid(config.stick_secondary), "second color legal")
+		assert_false(StickModelRegistry.is_retired(config.stick_model), "a worn model")
 		# And the coerced look re-packs stably (idempotent coercion).
 		var code2: int = config.to_code()
 		assert_eq(GearStyleConfig.from_code(code2).to_code(), code2)
+
+
+func test_every_stick_color_round_trips_beside_the_rest() -> void:
+	for shaft: int in TapeColorRegistry.count():
+		for primary: int in TapeColorRegistry.count():
+			for secondary: int in TapeColorRegistry.count():
+				var config := GearStyleConfig.new(GearModelRegistry.SKATE_PRO,
+						GearModelRegistry.GLOVE_PRO, 3, StickModelRegistry.STICK_SPLIT,
+						GearModelRegistry.FACE_VISOR, HairStyleRegistry.hair_count() - 1, 1,
+						HairStyleRegistry.color_count() - 1, GearModelRegistry.TUCK_FULL,
+						shaft, primary, secondary)
+				var back: GearStyleConfig = GearStyleConfig.from_code(config.to_code())
+				assert_eq(back.stick_shaft, shaft)
+				assert_eq(back.stick_primary, primary)
+				assert_eq(back.stick_secondary, secondary)
+				assert_eq(back.jersey_tuck, GearModelRegistry.TUCK_FULL,
+						"the stick colors leave the tuck alone")
+				assert_eq(back.stick_model, StickModelRegistry.STICK_SPLIT)
+
+
+# Every code saved before the stick colors existed has zeros above the tuck, and
+# those players carried the stock black stick with its white wordmark.
+func test_a_pre_stick_color_code_decodes_to_the_stock_stick() -> void:
+	var old_code: int = GearStyleConfig.DEFAULT_CODE \
+			| (StickModelRegistry.STICK_REDLINE << 15) | (GearModelRegistry.TUCK_LEFT << 40)
+	var config: GearStyleConfig = GearStyleConfig.from_code(old_code)
+	assert_eq(config.stick_model, StickModelRegistry.STICK_REDLINE)
+	assert_eq(config.jersey_tuck, GearModelRegistry.TUCK_LEFT)
+	assert_eq(config.stick_shaft, TapeColorRegistry.BLACK_INDEX)
+	assert_eq(config.stick_primary, TapeColorRegistry.WHITE_INDEX)
+	assert_eq(config.stick_secondary, GearStyleConfig.STICK_SECONDARY_DEFAULT)
+	assert_eq(config.to_code(), old_code, "and re-packs to the same code")
+
+
+# The all-white stick was a model; it comes back as its colors on the house one.
+func test_a_saved_whiteout_comes_back_as_a_white_stick() -> void:
+	var saved: int = GearStyleConfig.DEFAULT_CODE | (StickModelRegistry.STICK_WHITEOUT << 15)
+	var config: GearStyleConfig = GearStyleConfig.from_code(saved)
+	assert_eq(config.stick_model, StickModelRegistry.STICK_STEALTH)
+	assert_eq(config.stick_shaft, TapeColorRegistry.WHITE_INDEX)
+	assert_eq(config.stick_primary, TapeColorRegistry.BLACK_INDEX)
+	var woodie: GearStyleConfig = GearStyleConfig.from_code(
+			GearStyleConfig.DEFAULT_CODE | (StickModelRegistry.STICK_WOODIE << 15))
+	assert_eq(woodie.stick_model, StickModelRegistry.STICK_STEALTH)
+
+
+# The code rides replay headers as a JSON number, which is exact only to 53 bits.
+func test_the_widest_legal_code_stays_json_exact() -> void:
+	var widest := GearStyleConfig.new(GearModelRegistry.skate_count() - 1,
+			GearModelRegistry.glove_count() - 1, TapeColorRegistry.count() - 1,
+			StickModelRegistry.STICK_SPLIT, GearModelRegistry.face_count() - 1,
+			HairStyleRegistry.hair_count() - 1, HairStyleRegistry.facial_count() - 1,
+			HairStyleRegistry.color_count() - 1, GearModelRegistry.tuck_count() - 1,
+			TapeColorRegistry.count() - 1, 0, 0)
+	assert_lt(widest.to_code(), 1 << 53)
+	for code: int in [widest.to_code(), (1 << 53) - 1]:
+		var through_json: int = int(JSON.parse_string(JSON.stringify(code)))
+		assert_eq(through_json, code, "survives a JSON round trip")

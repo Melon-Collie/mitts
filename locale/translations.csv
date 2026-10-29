@@ -57,24 +57,20 @@ TAPE_SPAN_STRIP,Bottom strip,Tira inferior
 TAPE_SPAN_STRIP_AND_TOE,Strip + toe,Tira + puntera
 TAPE_STRIP_LABEL,Strip,Tira
 TAPE_SPAN_NONE,None,Sin cinta
-TAPE_COLOR_TEAM,Team color,Color del equipo
+TAPE_COLOR_TEAM,Team primary,Principal del equipo
+TAPE_COLOR_SECONDARY,Team secondary,Secundario del equipo
 TAPE_COLOR_WHITE,White,Blanco
 TAPE_COLOR_BLACK,Black,Negro
-TAPE_COLOR_RED,Red,Rojo
-TAPE_COLOR_BLUE,Blue,Azul
-TAPE_COLOR_YELLOW,Yellow,Amarillo
-TAPE_COLOR_GREEN,Green,Verde
-TAPE_COLOR_ORANGE,Orange,Naranja
-TAPE_COLOR_PURPLE,Purple,Morado
-TAPE_COLOR_PINK,Pink,Rosa
-TAPE_COLOR_TEAL,Teal,Turquesa
 TAPE_HANDLE_LABEL,Handle,Mango
 TAPE_HANDLE_KNOB,Knob only,Solo pomo
 TAPE_HANDLE_CANDY,Candy cane,Espiral
 TAPE_HANDLE_FULL,Full grip,Empuñadura completa
 STICK_GAMEPLAY_LEGEND,* affects gameplay,* afecta a la jugabilidad
-TAPE_COLOR_TEAM_SHORT,Team,Equipo
+TAPE_COLOR_TEAM_SHORT,Pri,Pri
+TAPE_COLOR_SECONDARY_SHORT,Sec,Sec
 STICK_MODEL_LABEL,Model,Modelo
+STICK_SHAFT_LABEL,Shaft,Caña
+STICK_GRAPHIC_LABEL,Graphic,Gráfico
 STICK_MODEL_STEALTH,Stealth,Stealth
 STICK_MODEL_REDLINE,Redline,Redline
 STICK_MODEL_VOLT,Volt,Volt
