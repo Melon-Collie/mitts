@@ -525,6 +525,8 @@ func _stripe_rows(c: Node2D, pen: Vector2, stripes: Array) -> Vector2:
 		if s.has("peak"):
 			note += " peak %.2f×%d" % [s.peak.depth, s.peak.count]
 		x = _chip(c, Vector2(x, y), s.color, note)
+		if s.has("fill_below"):
+			x = _chip(c, Vector2(x, y), s.fill_below, "fill below")
 	return Vector2(pen.x, y + _LINE_H)
 
 

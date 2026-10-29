@@ -284,7 +284,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 			"base":    _parse_color(jersey_raw.get("base",    "#FFFFFF")),
 			"yoke":    _parse_optional_color(jersey_raw.get("yoke", null)),
 			"collar":  _parse_optional_color(jersey_raw.get("collar", null)),
-			"stripes": _parse_stripes(jersey_raw.get("stripes", [])),
+			"stripes": _parse_stripes(jersey_raw.get("stripes", []), true),
 		},
 		"sleeve":      sleeve,
 		"arms":        arms,
@@ -308,9 +308,9 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 
 # Parses an array of {pos, width, color} stripes into Dictionaries with
 # real Color values. Bad entries are skipped with a warning.
-# `peaked` reads each stripe's optional `peak` too (SleevePaint.stripe_outline);
-# only the sleeve paints one.
-static func _parse_stripes(raw: Variant, peaked: bool = false) -> Array[Dictionary]:
+# `shaped` reads each stripe's optional `peak` and `fill_below` too
+# (StripeOutline); the sleeve and the jersey paint them.
+static func _parse_stripes(raw: Variant, shaped: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if not raw is Array:
 		return out
@@ -324,7 +324,9 @@ static func _parse_stripes(raw: Variant, peaked: bool = false) -> Array[Dictiona
 			"color": _parse_color(sd.get("color", "#FFFFFF")),
 		}
 		var peak: Variant = sd.get("peak")
-		if peaked and peak is Dictionary:
+		if shaped and sd.has("fill_below"):
+			stripe.fill_below = _parse_color(sd.fill_below)
+		if shaped and peak is Dictionary:
 			stripe.peak = {
 				"depth": float(peak.get("depth", 0.0)),
 				"count": maxi(int(peak.get("count", 1)), 1),

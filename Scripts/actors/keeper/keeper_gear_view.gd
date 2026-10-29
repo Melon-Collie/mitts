@@ -277,7 +277,8 @@ func _decal_view(decal: KeeperJerseyDecal) -> SubViewport:
 
 # The kit's jersey stripes as shares of a jersey `height_m` tall. They are
 # authored against UniformPaint's design height: a hem band keeps its place
-# above the hem, a band in the top half its place under the collar.
+# above the hem, a band in the top half its place under the collar. A peaked
+# stripe is laid flat at its pos, and its fill below with it.
 static func _jersey_stripes(stripes: Array, height_m: float) -> Array:
 	var design: float = UniformPaint.JERSEY_STRIPE_DESIGN_HEIGHT_M
 	var out: Array = []
@@ -285,7 +286,12 @@ static func _jersey_stripes(stripes: Array, height_m: float) -> Array:
 		var centre_m: float = float(s.pos) * design
 		if float(s.pos) > 0.5:
 			centre_m += height_m - design
-		out.append({"pos": centre_m / height_m, "width": float(s.width) * design / height_m,
+		var centre: float = centre_m / height_m
+		if s.has("fill_below"):
+			# Flat, as his stripes are: from the stripe's centre to past the hem.
+			out.append({"pos": (centre + 1.05) * 0.5, "width": 1.05 - centre,
+					"color": s.fill_below})
+		out.append({"pos": centre, "width": float(s.width) * design / height_m,
 				"color": s.color})
 	return out
 

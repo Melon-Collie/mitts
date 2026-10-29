@@ -107,3 +107,15 @@ func test_jersey_stripes_keep_their_place_on_the_edge_they_trim() -> void:
 			{"pos": 0.07, "width": 0.02, "color": Color.GREEN})
 	assert_almost_eq(collar.pos * side, 0.07 * design, 1e-6, "as far under the collar")
 	assert_almost_eq(collar.width * side, 0.02 * design, 1e-6, "as wide")
+
+
+# A peak's depth is a height on the sweater, so it scales as the width does.
+func test_a_jersey_stripes_peak_keeps_its_depth_in_metres() -> void:
+	var design: float = UniformPaint.JERSEY_STRIPE_DESIGN_HEIGHT_M
+	var side: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
+	var hem: Dictionary = UniformPaint.jersey_side_stripe({"pos": 0.9, "width": 0.1,
+			"color": Color.GREEN, "fill_below": Color.RED,
+			"peak": {"depth": -0.1, "count": 2, "u": 0.0}})
+	assert_almost_eq(hem.peak.depth * side, -0.1 * design, 1e-6)
+	assert_eq([hem.peak.count, hem.peak.u], [2, 0.0])
+	assert_eq(hem.fill_below, Color.RED, "and its fill comes with it")

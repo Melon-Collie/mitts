@@ -59,17 +59,23 @@ static func collar_color(jersey: Dictionary) -> Color:
 const JERSEY_STRIPE_DESIGN_HEIGHT_M: float = 0.55
 
 
-# A kit jersey stripe {pos, width, color} as fractions of the torso side it
-# paints on.
+# A kit jersey stripe {pos, width, color, peak?, fill_below?} as fractions of the torso side
+# it paints on; a peak's depth is a height like the width.
 static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
 	var side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
+	var scale: float = JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m
 	var pos: float = float(stripe.pos)
 	var centre_m: float = pos * JERSEY_STRIPE_DESIGN_HEIGHT_M
 	if pos > 0.5:
 		centre_m += side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M
-	return {"pos": centre_m / side_m,
-			"width": float(stripe.width) * JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m,
+	var side := {"pos": centre_m / side_m, "width": float(stripe.width) * scale,
 			"color": stripe.color}
+	if stripe.has("fill_below"):
+		side.fill_below = stripe.fill_below
+	if stripe.has("peak"):
+		var peak: Dictionary = stripe.peak
+		side.peak = {"depth": float(peak.depth) * scale, "count": peak.count, "u": peak.u}
+	return side
 
 
 # Horizontal bands across a cylinder's curved side. Each stripe is `pos` (centre,

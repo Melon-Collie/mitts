@@ -3,7 +3,7 @@ extends RefCounted
 
 # A kit's sleeve: one base color down the whole arm, and stripes laid along it
 # from the shoulder (pos 0) to the glove's cuff (pos 1) — a shoulder or forearm
-# of another color is a wide stripe, and a stripe may peak (stripe_outline). The skater paints it as one piece
+# of another color is a wide stripe, and a stripe may peak (stripe_polygons). The skater paints it as one piece
 # (SleeveDecal); the goalie paints his two arm segments, so `segment` cuts the
 # sleeve at the elbow for him, and `from_legacy` reads a kit written in the
 # older two-segment form (arms.upper / arms.lower and a shoulder color).
@@ -80,45 +80,10 @@ static func _band(from_m: float, to_m: float, color: Color) -> Dictionary:
 			"color": color}
 
 
-# A stripe's outline on the sleeve as (U, V) points: U round the arm 0..1 with
-# the outside at 0.5, V down it as `pos` is. A stripe with a `peak` {depth,
-# count, u} has its centre line zigzag `depth` down the sleeve (up it when
-# negative) at each of `count` peaks spaced evenly round the arm, the first at
-# `u`, and back to `pos` midway between them. Its `width` is held square to
-# that line in metres, so stripes stacked on one pos at shrinking widths
-# outline each other evenly down the slopes as well as across.
-static func stripe_outline(stripe: Dictionary) -> PackedVector2Array:
-	var pos: float = float(stripe.pos)
-	var half: float = float(stripe.width) * 0.5
-	var peak: Dictionary = stripe.get("peak", {})
-	if peak.is_empty() or is_zero_approx(float(peak.depth)):
-		return PackedVector2Array([Vector2(0.0, pos - half), Vector2(1.0, pos - half),
-				Vector2(1.0, pos + half), Vector2(0.0, pos + half)])
-	var depth: float = float(peak.depth)
-	var count: int = int(peak.count)
-	var first_u: float = float(peak.u)
-	var step_u: float = 0.5 / float(count)
-	var slope: float = depth * LENGTH_M / (step_u * GIRTH_M)
-	var half_v: float = half * sqrt(1.0 + slope * slope)
-	var us := PackedFloat32Array([0.0])
-	var u: float = first_u + ceilf(-first_u / step_u + 1e-4) * step_u
-	while u < 1.0 - 1e-4:
-		us.append(u)
-		u += step_u
-	us.append(1.0)
-	var outline := PackedVector2Array()
-	for i: int in us.size():
-		outline.append(Vector2(us[i], pos + _peak_offset(us[i], depth, count, first_u) - half_v))
-	for i: int in range(us.size() - 1, -1, -1):
-		outline.append(Vector2(us[i], pos + _peak_offset(us[i], depth, count, first_u) + half_v))
-	return outline
-
-
-# How far down the sleeve a peaked stripe's centre line sits at `u`: `depth` on
-# a peak, nothing midway between two.
-static func _peak_offset(u: float, depth: float, count: int, first_u: float) -> float:
-	var phase: float = fposmod((u - first_u) * float(count), 1.0)
-	return depth * (1.0 - 2.0 * minf(phase, 1.0 - phase))
+# A stripe on the sleeve as polygons (StripeOutline): U round the arm with the
+# outside, under the number, at 0.5.
+static func stripe_polygons(stripe: Dictionary) -> Array[PackedVector2Array]:
+	return StripeOutline.of(stripe, LENGTH_M, GIRTH_M)
 
 
 # The upper arm's or the forearm's part of the sleeve in the legacy segment
