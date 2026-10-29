@@ -17,7 +17,8 @@ extends RefCounted
 # when the pull on it moves off the body's own axis: a start throws the hem
 # back, a stop forward. Then, a few times a step, they are held to their
 # segment lengths, to their neighbours' spacing round the ring (what makes a
-# ring of flaps one garment), and on the last iterations pushed out of what
+# ring of flaps one garment), each hem to its column's lean round the ring as
+# far as `shear_stiffness` asks, and on the last iterations pushed out of what
 # they hang over (HemColliders) — the segments' midpoints and the faces'
 # between columns too, so nothing can pass between two points. A tucked column
 # is held at its tucked rest.
@@ -45,6 +46,11 @@ var gravity_m_s2: float = 9.8
 var shape_hz: float = 1.6
 var damping_per_s: float = 7.0
 var ring_stiffness: float = 0.35
+# How much of a lower segment's lean round the ring, off its rest lean, each
+# iteration takes back. A hem pushed up toward its bend (a crouch's thighs and
+# seat) then flares out from the body rather than sliding round over its
+# neighbour's, which shingles the flaps and turns the faces between them over.
+var shear_stiffness: float = 0.0
 var iterations: int = 3
 # Iterations, from the last, that also collide: the earlier ones only settle the
 # lengths and spacing the collisions then correct.
@@ -105,7 +111,7 @@ func configure_native() -> void:
 		drape.append_array(rest[station].slice(0, columns))
 	_native.call("configure", drape, hips_share, tuck_share,
 			PackedFloat64Array([gravity_m_s2, shape_hz, ring_stiffness, damping_per_s, margin_m, max_step_s,
-					authored_up.x, authored_up.y, authored_up.z]),
+					authored_up.x, authored_up.y, authored_up.z, shear_stiffness]),
 			PackedInt32Array([iterations, colliding_iterations]))
 	_colliders.configure_native(_native)
 
@@ -244,6 +250,15 @@ func _relax(drape: Basis, collide: bool) -> void:
 				(drape * (rest[HEM][n] - rest[HEM][k])).length())
 		_hem[k] += fix_hem
 		_hem[n] -= fix_hem
+	if shear_stiffness > 0.0:
+		for k: int in columns:
+			var p: int = (k + columns - 1) % columns
+			var n: int = (k + 1) % columns
+			var along: Vector3 = (_bend[n] - _bend[p]).normalized()
+			var rest_along: Vector3 = (drape * (rest[BEND][n] - rest[BEND][p])).normalized()
+			var lean: float = (_hem[k] - _bend[k]).dot(along) \
+					- (drape * (rest[HEM][k] - rest[BEND][k])).dot(rest_along)
+			_hem[k] -= along * lean * shear_stiffness
 	if not collide:
 		return
 	for k: int in columns:
@@ -282,13 +297,19 @@ func _write_bones(drape: Basis) -> void:
 
 
 # A segment's bone: the rest drape turned about its top so its rest direction
-# points along the simulated one, with its top moved to the simulated top.
+# points along the simulated one, with its top moved to the simulated top. The
+# turn is the shortest arc as an axis and an angle, so it goes to nothing as
+# the two line up — Quaternion(from, to) snaps to none under a quarter degree.
 func _write_segment(k: int, joint: int, top: Vector3, bottom: Vector3, rest_top: Vector3,
 		rest_bottom: Vector3, drape: Basis) -> void:
 	var from: Vector3 = (drape * (rest_bottom - rest_top)).normalized()
 	var to: Vector3 = (bottom - top).normalized()
+	var axis: Vector3 = from.cross(to)
+	var sin_a: float = axis.length()
 	var turn := Basis.IDENTITY
-	if from.dot(to) < 0.99999:
+	if sin_a > 1e-9:
+		turn = Basis(axis / sin_a, atan2(sin_a, from.dot(to)))
+	elif from.dot(to) < 0.0:
 		turn = Basis(Quaternion(from, to))
 	var basis: Basis = turn * drape
 	_skeleton.set_bone_pose(_first_column_bone + k * 2 + joint, Transform3D(basis, top - basis * rest_top))

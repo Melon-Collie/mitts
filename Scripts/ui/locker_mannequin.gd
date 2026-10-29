@@ -7,11 +7,11 @@ extends Node3D
 # is worn HERE — skates on the feet, gloves gripping the shaft, face gear and
 # hair on the head — so a pick is judged in the place it will actually be seen.
 #
-# Built from the individual part meshes rather than the skinned rig. That costs
-# nothing in fidelity: the parts are the skinned mesh's own geometry, so the
-# silhouette is identical while the pose stays plain node transforms — no
-# Skeleton3D, no bone poses, no gait. The jersey's tail, the one part the rig
-# drapes, is draped once per pose and baked (FigureKit.drape).
+# It is the rink's own body on the rink's own skeleton, posed by writing its
+# bones as the rigs would (no gait, no IK rig: the pose is solved here). The
+# jersey's tail is the rink's cloth: settled on each pose, and on a standing
+# figure stepped on every frame, carried through the case's turn so it swings
+# as the figure does (_process).
 #
 # Frame: the rest positions below are Scenes/Skater.tscn's, in MeshRoot-local
 # coordinates, so the figure is laid out in the rig's own numbers and faces −Z
@@ -54,18 +54,35 @@ const _KNEE_DY: float = -0.31
 # Boot frame, straight off FootL/R's scene basis: local −Y is the toe and local
 # +Z is down, so this lands the toe on −Z (the way the rig faces) sole-down.
 const _BOOT_ROT := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
+const _UpperBone = SkaterMeshBuilder.UpperBone
+const _LegBone = SkaterMeshBuilder.LegBone
+# Each arm's bones, TOP hand first, then BOTTOM — the grip order on the shaft,
+# not left/right, because that is what the pose is built from: the upper arm,
+# the forearm, the elbow, the hand and the cuff.
+const _ARM_BONES: Array[Array] = [
+	[_UpperBone.TOP_UPPER_ARM, _UpperBone.TOP_FOREARM, _UpperBone.TOP_ELBOW,
+			_UpperBone.TOP_HAND, _UpperBone.TOP_CUFF],
+	[_UpperBone.BOTTOM_UPPER_ARM, _UpperBone.BOTTOM_FOREARM, _UpperBone.BOTTOM_ELBOW,
+			_UpperBone.BOTTOM_HAND, _UpperBone.BOTTOM_CUFF],
+]
 # The runner bottoms out this far below the boot origin.
 const _BLADE_ICE_M: float = SkaterMeshBuilder.BLADE_ICE_Z
 # The ice plane in rig-local coordinates. Everything scales about it.
 const _ICE_Y: float = _LEG_Y + _BOOT_DY - _BLADE_ICE_M
 
-# Part radii for the unit-scale meshes, all the live rig's own, and all scaled by
-# girth together as the rig's are: the forearm's wrist neck is sized to hide
-# inside a fist and cuff of these proportions.
+# Part radii, all the live rig's own defaults (Skater.arm_mesh_thickness and
+# its kin), and all scaled by girth together as the rig's are.
 const _ARM_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
 const _ELBOW_RADIUS: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M
 const _HAND_RADIUS: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
-const _CUFF_RADIUS: float = SkaterMeshBuilder.GLOVE_CUFF_RADIUS_M
+const _CUFF_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M * 1.2
+# Skater.cuff_wrist_offset and wrist_break_max_deg at their defaults.
+const _CUFF_WRIST_OFFSET_M: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
+		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
+const _WRIST_BREAK_MAX_DEG: float = 25.0
+# Seated, the underside of the thighs is this far under the hip pivot (the
+# pants leg's half depth), times the build's girth: what rests on the bench.
+const _SEAT_UNDER_HIP_M: float = 0.14
 # Arm segments at the rig's own lengths (Skater.upper_arm_length /
 # forearm_length), NOT derived from how far the grip happens to be: the two
 # hands sit at very different distances from their shoulders, so a
@@ -139,26 +156,7 @@ const _FOCUS_EXTENT: Array[Vector2] = [
 ]
 
 var _rig: Node3D = null
-var _torso: MeshInstance3D = null
-var _helmet: MeshInstance3D = null
-var _face: MeshInstance3D = null
-var _scalp: MeshInstance3D = null
-var _facial_hair: MeshInstance3D = null
-var _brows: MeshInstance3D = null
-var _shoulders: Array[MeshInstance3D] = []
-var _pelvis: MeshInstance3D = null
-var _thighs: Array[MeshInstance3D] = []
-var _knees: Array[MeshInstance3D] = []
-var _socks: Array[MeshInstance3D] = []
-var _collars: Array[MeshInstance3D] = []
-var _boots: Array[MeshInstance3D] = []
-# Arms are indexed TOP hand first, then BOTTOM — the grip order on the shaft,
-# not left/right, because that is what the pose is built from.
-var _upper_arms: Array[MeshInstance3D] = []
-var _forearms: Array[MeshInstance3D] = []
-var _elbows: Array[MeshInstance3D] = []
-var _hands: Array[MeshInstance3D] = []
-var _cuffs: Array[MeshInstance3D] = []
+var _skeleton: Skeleton3D = null
 
 var _stick_root: Node3D = null
 var _shaft: MeshInstance3D = null
@@ -166,8 +164,8 @@ var _blade: MeshInstance3D = null
 var _tape_mesh: MeshInstance3D = null
 var _knob: MeshInstance3D = null
 
-# The parts above are the kit's, aliased for the pose; the kit builds and dresses
-# them.
+# The skeleton and the stick are the kit's, aliased for the pose; the kit builds
+# and dresses them.
 var _kit := FigureKit.new()
 var _player_name: String = ""
 var _jersey_number: int = 0
@@ -189,10 +187,34 @@ var _blade_side: float = 1.0
 
 # Set before the first apply(): sit on a bench rather than stand on the ice.
 var seated: bool = false
+# The figure's yaw as its hem last saw it, and the frame's step before this
+# one (the cloth's verlet reads the ratio of the two).
+var _hem_yaw: float = 0.0
+var _hem_dt: float = 0.0
 
 
 func _ready() -> void:
 	_build()
+
+
+# The standing figure's jersey tail, stepped as the case turns it: a turn is
+# the world going round the other way in the skeleton's frame, so the cloth's
+# points are carried back through it before the step, and the hem lags and
+# swings. A seated figure's tail stays as it settled.
+func _process(delta: float) -> void:
+	if seated or _skeleton == null or not is_visible_in_tree():
+		return
+	var yaw: float = global_basis.get_euler().y
+	var turn: float = angle_difference(yaw, _hem_yaw)
+	_hem_yaw = yaw
+	if absf(turn) > 1e-6 and _hem_dt > 0.0:
+		var back := Basis(Vector3.UP, -turn)
+		var state: PackedVector3Array = _kit.hem.get_state()
+		for i: int in state.size():
+			state[i] = back * state[i]
+		_kit.hem.set_state(state, _hem_dt)
+	_kit.hem.update(delta, true)
+	_hem_dt = delta
 
 
 # ── Construction ─────────────────────────────────────────────────────────────
@@ -201,24 +223,7 @@ func _build() -> void:
 	_rig = Node3D.new()
 	add_child(_rig)
 	_kit.build(_rig, self)
-	_torso = _kit.torso
-	_pelvis = _kit.pelvis
-	_helmet = _kit.helmet
-	_face = _kit.face
-	_scalp = _kit.scalp
-	_facial_hair = _kit.facial_hair
-	_brows = _kit.brows
-	_shoulders = _kit.shoulders
-	_thighs = _kit.thighs
-	_knees = _kit.knees
-	_socks = _kit.socks
-	_collars = _kit.collars
-	_boots = _kit.boots
-	_upper_arms = _kit.upper_arms
-	_forearms = _kit.forearms
-	_elbows = _kit.elbows
-	_hands = _kit.hands
-	_cuffs = _kit.cuffs
+	_skeleton = _kit.skeleton
 	_stick_root = _kit.stick_root
 	_shaft = _kit.shaft
 	_blade = _kit.blade
@@ -238,6 +243,9 @@ func apply(attrs: PlayerAttributes, gear: GearStyleConfig, tape: StickTapeConfig
 	_blade_side = -1.0 if is_left_handed else 1.0
 	_pose(attrs, tape, is_left_handed)
 	_kit.dress(team_colors, gear, tape, skin_tone, _player_name, _jersey_number)
+	_kit.hem.settle()
+	_hem_yaw = global_basis.get_euler().y if is_inside_tree() else 0.0
+	_hem_dt = 0.0
 
 
 # The name and number the sweater is lettered with. Painted by the next apply().
@@ -281,80 +289,73 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	var m_height: float = attrs.height_mult()
 	var m_girth: float = attrs.girth_mult()
 	var m_head: float = attrs.head_bulk_mult()
+	var bulk := Basis.from_scale(Vector3(m_girth, m_height, m_girth))
 
-	_torso.transform = Transform3D(
-			Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-			Vector3(0.0, _lift(_TORSO_Y, m_height), 0.0))
-	# The pelvis profile is authored in UpperBody's own space, whose origin is
-	# the rig's y 0 — so it needs no station of its own.
-	_pelvis.transform = Transform3D(
-			Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-			Vector3(0.0, _lift(0.0, m_height), 0.0))
+	# The trunk bones under HIPS, WAIST, SPINE and NECK, all at identity: each
+	# bone's pose is its place in the rig's own frame. The jersey's tail hangs
+	# from the torso as the hips hold it (TAIL), which a still figure's are not.
+	var torso := Transform3D(bulk, Vector3(0.0, _lift(_TORSO_Y, m_height), 0.0))
+	_skeleton.set_bone_pose(_UpperBone.TORSO, torso)
+	_skeleton.set_bone_pose(SkaterBodySkeleton.TAIL_BONE, torso)
+	# The pants are authored in the hips' own space, whose origin is the rig's
+	# y 0 — so they need no station of their own.
+	_skeleton.set_bone_pose(_UpperBone.PELVIS,
+			Transform3D(bulk, Vector3(0.0, _lift(0.0, m_height), 0.0)))
 	# The helmet takes its own mild multiplier on all three axes and never
 	# stretches with height: adult heads are near-constant across statures, and
 	# that constancy is what sells a tall build as big rather than zoomed.
-	_helmet.transform = Transform3D(
-			Basis.from_scale(Vector3.ONE * m_head),
+	var helmet := Transform3D(Basis.from_scale(Vector3.ONE * m_head),
 			Vector3(0.0, _lift(_HELMET_Y, m_height), 0.0))
+	_skeleton.set_bone_pose(_UpperBone.HELMET, helmet)
 
 	var shoulder_y: float = _lift(_SHOULDER_Y, m_height)
-	# Deltoid caps ride girth laterally — the pad sits on the chest wall, so
+	# The shoulders ride girth laterally: the arm roots on the chest wall, so
 	# the torso's width pushes it out.
 	var shoulder_x: float = _SHOULDER_X * m_girth
-	# Seated, the thigh swings forward about the hip to lie flat, and the leg
-	# below the knee hangs from where the knee then is: every part below it
-	# moves by the knee's own move.
+	# Seated, the thigh swings forward about the hip to lie flat and the shin
+	# turns back under it, so the leg below the knee hangs straight down.
 	var hip_y: float = _lift(_LEG_Y, m_height)
-	var knee_y: float = _lift(_LEG_Y + _KNEE_DY, m_height)
 	var thigh_swing := Basis(Vector3.RIGHT, PI * 0.5) if seated else Basis.IDENTITY
-	var below_knee := Vector3(0.0, hip_y - knee_y, knee_y - hip_y) if seated else Vector3.ZERO
-	var boot_y: float = _lift(_LEG_Y + _BOOT_DY, m_height) + below_knee.y
-	var legs: Array[Transform3D] = []
+	var knee_dy: float = _KNEE_DY * m_height
 	for i: int in 2:
 		var side: float = -1.0 if i == 0 else 1.0
-		_shoulders[i].transform = Transform3D(
-				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-				Vector3(side * shoulder_x, shoulder_y, 0.0))
-
-		var leg_x: float = side * _LEG_X * m_girth
-		var leg_bulk := Basis.from_scale(Vector3(m_girth, m_height, m_girth))
-		var hip := Vector3(leg_x, hip_y, 0.0)
-		legs.append(Transform3D(thigh_swing * leg_bulk, hip))
-		_thighs[i].transform = Transform3D(thigh_swing * leg_bulk, hip + thigh_swing
-				* Vector3(0.0, _lift(_LEG_Y + _THIGH_DY, m_height) - hip_y, 0.0))
-		_knees[i].transform = Transform3D(leg_bulk,
-				Vector3(leg_x, knee_y, 0.0) + below_knee)
-		_socks[i].transform = Transform3D(
-				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-				Vector3(leg_x, _lift(_LEG_Y + _SOCK_DY, m_height), 0.0) + below_knee)
-		_collars[i].transform = Transform3D(
-				Basis.from_scale(Vector3(m_girth, m_height, m_girth)),
-				Vector3(leg_x, _lift(_LEG_Y + _COLLAR_DY, m_height), 0.0) + below_knee)
+		var leg: int = SkaterBodySkeleton.LEG_BONE_OFFSET \
+				+ (_LegBone.LEG_L if i == 0 else _LegBone.LEG_R)
+		_skeleton.set_bone_pose(leg, Transform3D(thigh_swing,
+				Vector3(side * _LEG_X * m_girth, hip_y, 0.0)))
+		_skeleton.set_bone_pose(leg + 1, Transform3D(bulk, Vector3(0.0, _THIGH_DY * m_height, 0.0)))
+		_skeleton.set_bone_pose(leg + 2, Transform3D(bulk, Vector3(0.0, knee_dy, 0.0)))
+		_skeleton.set_bone_pose(leg + 3, Transform3D(thigh_swing.inverse(),
+				Vector3(0.0, knee_dy, 0.0)))
+		_skeleton.set_bone_pose(leg + 4, Transform3D(bulk,
+				Vector3(0.0, (_SOCK_DY - _KNEE_DY) * m_height, 0.0)))
+		_skeleton.set_bone_pose(leg + 5, Transform3D(bulk,
+				Vector3(0.0, (_COLLAR_DY - _KNEE_DY) * m_height, 0.0)))
 		# The boot itself never scales — a big frame gets a longer leg, not a
 		# longer foot — but its seat rides the lengthened shin like the rig's.
-		_boots[i].transform = Transform3D(_BOOT_ROT,
-				Vector3(leg_x, boot_y, _BOOT_DZ + below_knee.z))
-
-	_kit.drape(_torso.transform, _pelvis.transform, legs)
+		_skeleton.set_bone_pose(leg + 6, Transform3D(_BOOT_ROT,
+				Vector3(0.0, (_BOOT_DY - _KNEE_DY) * m_height, _BOOT_DZ)))
+	var boot: Vector3 = _skeleton.get_bone_global_pose(
+			SkaterBodySkeleton.LEG_BONE_OFFSET + _LegBone.FOOT_L).origin
 
 	# The heel stands on whatever the skates do: the ice, or the bench floor
 	# in front of the knees.
-	var floor_y: float = boot_y - _BLADE_ICE_M if seated else _ICE_Y
-	var heel_fwd: float = below_knee.z + _SEATED_HEEL_FWD_M if seated else _HEEL_FWD_M
+	var floor_y: float = boot.y - _BLADE_ICE_M if seated else _ICE_Y
+	var heel_fwd: float = boot.z - _BOOT_DZ + _SEATED_HEEL_FWD_M if seated else _HEEL_FWD_M
 	_pose_stick(attrs, tape, Vector3(_blade_side * _HEEL_OUT_M, floor_y + _HEEL_LIFT_M,
 			heel_fwd))
 	_pose_arms(is_left_handed, shoulder_x, shoulder_y, m_girth, m_height)
 
 	# Anchors so far are rig-local (the stick and arm passes wrote theirs the
 	# same way); the two body framings join them here.
-	_anchors[Focus.SKATES] = Vector3(0.0, boot_y, _BOOT_DZ)
-	_anchors[Focus.HELMET] = _helmet.position
+	_anchors[Focus.SKATES] = Vector3(0.0, boot.y, boot.z)
+	_anchors[Focus.HELMET] = helmet.origin
 	# The wide shot holds the whole standing figure, so it grows with the build.
 	# Crown comes off the posed helmet's own bounds rather than a copy of the
 	# builder's radius, which would drift the first time the shell changed. The
 	# anchor sits at the midpoint of ice-to-crown so the extent below actually
 	# centres what it measures.
-	var crown: float = (_helmet.transform * _helmet.get_aabb()).end.y
+	var crown: float = (helmet * SkaterMeshBuilder.shared_helmet_assembly().get_aabb()).end.y
 	_anchors[Focus.FULL] = Vector3(0.0, (_ICE_Y + crown) * 0.5, 0.0)
 	_extents[Focus.FULL] = Vector2(
 			maxf(_FOCUS_EXTENT[Focus.FULL].x, _extents[Focus.STICK].x),
@@ -366,9 +367,8 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# height scaling on its own — deriving the seat here is what keeps every
 	# build standing ON the case floor rather than sunk into it or hovering.
 	# Seated, what rests on the origin is the underside of the thighs.
-	var contact_y: float = boot_y - _BLADE_ICE_M
-	if seated:
-		contact_y = (_thighs[0].transform * _thighs[0].get_aabb()).position.y
+	var contact_y: float = hip_y - _SEAT_UNDER_HIP_M * m_girth if seated \
+			else boot.y - _BLADE_ICE_M
 	_rig.position.y = -contact_y
 	# Publish the anchors in THIS node's space, so a caller framing a piece does
 	# not have to know how the rig was seated.
@@ -464,7 +464,9 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 	var wanted: Array[float] = [
 		_shaft_len - _TOP_HAND_DROP_M, _shaft_len * _BOTTOM_HAND_FRAC]
 	var grips: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
+	var arm_r: float = _ARM_RADIUS * m_girth
 	for i: int in 2:
+		var bones: Array = _ARM_BONES[i]
 		var side: float = top_side if i == 0 else -top_side
 		var shoulder := Vector3(side * shoulder_x, shoulder_y, 0.0)
 		var hand: Vector3 = _shaft_heel + _shaft_up \
@@ -472,28 +474,17 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		grips[i] = hand
 		var pole := Vector3(_ARM_POLE.x * side, _ARM_POLE.y, _ARM_POLE.z)
 		var elbow: Vector3 = _solve_elbow(shoulder, hand, pole, upper, fore)
-		_seat_bone(_upper_arms[i], shoulder, elbow, _ARM_RADIUS * m_girth)
-		_seat_bone(_forearms[i], elbow, hand, _ARM_RADIUS * m_girth)
-		# The pad's point out of the bend, as the live rig poses it.
-		var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
-		var along: Vector3 = (hand - shoulder).normalized()
-		var pad := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
-		_elbows[i].transform = Transform3D(
-				pad.scaled_local(Vector3.ONE * _ELBOW_RADIUS * m_girth), elbow)
-		# The fist's local +Y runs back toward the elbow — the live rig's
-		# convention, so the block's faces track the forearm. Both this and the
-		# cuff scale their basis COLUMNS: Basis.scaled() would scale in the
-		# parent frame, which shears a rotated basis into a stretched sheet.
-		var grip: Basis = _basis_along((elbow - hand).normalized())
-		var hand_r: float = _HAND_RADIUS * m_girth
-		_hands[i].transform = Transform3D(
-				Basis(grip.x * hand_r, grip.y * hand_r, grip.z * hand_r), hand)
-		var wrist: Vector3 = hand \
-				+ (elbow - hand).normalized() * SkaterMeshBuilder.GLOVE_CUFF_BACK_M
-		# The cuff mesh carries its real height baked, so only the radius scales.
+		var arm := Vector3(arm_r, arm_r, 1.0)
+		_skeleton.set_bone_pose(bones[0], SkaterArmPoses.segment_pose(shoulder, elbow, arm))
+		_skeleton.set_bone_pose(bones[1], SkaterArmPoses.segment_pose(elbow, hand, arm))
+		_skeleton.set_bone_pose(bones[2], SkaterArmPoses.elbow_pose(shoulder, elbow, hand, pole,
+				Vector3.ONE * _ELBOW_RADIUS * m_girth))
+		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, _shaft_up,
+				deg_to_rad(_WRIST_BREAK_MAX_DEG), Vector3.ONE * _HAND_RADIUS * m_girth))
 		var cuff_r: float = _CUFF_RADIUS * m_girth
-		_cuffs[i].transform = Transform3D(
-				Basis(grip.x * cuff_r, grip.y, grip.z * cuff_r), wrist)
+		_skeleton.set_bone_pose(bones[4], SkaterArmPoses.cuff_pose(elbow, hand,
+				Vector3(cuff_r, 1.0, cuff_r), _CUFF_WRIST_OFFSET_M))
+	_kit.pose_skin(0 if top_side < 0.0 else 1)
 
 	_anchors[Focus.GLOVES] = (grips[0] + grips[1]) * 0.5
 	# Both fists plus the shaft between them — how far apart they sit is solved,
@@ -536,27 +527,3 @@ func _solve_elbow(shoulder: Vector3, hand: Vector3, pole: Vector3,
 	if perp.length_squared() < 1e-8:
 		perp = Vector3.DOWN - dir * dir.dot(Vector3.DOWN)
 	return shoulder + dir * along + perp.normalized() * offset
-
-
-# Stretch a unit bone prism between two joints. +Y (the wide end) lands on the
-# proximal joint to match the mesh's distal taper.
-func _seat_bone(mi: MeshInstance3D, proximal: Vector3, distal: Vector3,
-		radius: float) -> void:
-	var along: Vector3 = proximal - distal
-	var length: float = along.length()
-	if length < 0.001:
-		mi.visible = false
-		return
-	mi.visible = true
-	var b: Basis = _basis_along(along / length)
-	mi.transform = Transform3D(
-			Basis(b.x * radius, b.y * length, b.z * radius),
-			(proximal + distal) * 0.5)
-
-
-# Right-handed orthonormal basis with +Y along `y_axis`.
-static func _basis_along(y_axis: Vector3) -> Basis:
-	var ref: Vector3 = Vector3.FORWARD if absf(y_axis.dot(Vector3.UP)) < 0.99 \
-			else Vector3.RIGHT
-	var x_axis: Vector3 = ref.cross(y_axis).normalized()
-	return Basis(x_axis, y_axis, x_axis.cross(y_axis))

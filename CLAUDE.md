@@ -117,6 +117,14 @@ the mouth as a straight-on shot sees him (seams red), save boxes overlaid, to
 a baseline recorded with `--baseline`. `.claude/hooks/render-keeper-strip.sh`
 draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recovery, the sink into the low ready and the drop from it, the butterfly slide and the rotation on his knees, the RVH's ways in and out and the push off the post, a whole sequence of them through `KeeperMotor`, goals given to it with the moves `KeeperRoute` picks, the first brain tracking a puck round the zone, his saves against a shot read as in a match, and a puck dribbling in to his feet covered) frame by frame (`tools/keeper_strip.gd`).
 
+**To see the BODY's skin, render it.** `.claude/hooks/render-body.sh
+[--only=a,b]` runs pose_capture's poses on the skater's skin
+(`SkaterConnectedMesh`, `Scripts/actors/CLAUDE.md`), four sides each, one sheet a
+pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
+pants alone, and `--audit` skins the body on the CPU per pose and counts the
+faces folded inside out, by paint zone — what shows as a hole; `--head` frames
+the helmet and `--waist` the belt, where a tuck goes in.
+
 **To see HAIR, render it.** `.claude/hooks/render-hair.sh [shots]` draws every
 hair style against every facial-hair style, one head each, from the front, side,
 back, below and above, to `.preview/hair/` (`tools/hair_capture.gd`).
@@ -151,7 +159,7 @@ set takes several minutes. Name only the shots you need.
 
 **To see a KIT, lay it flat.** `.claude/hooks/render-kits.sh [teams]` writes
 one PNG per team to `.preview/kits/`: home and away, jersey front and back with
-sleeves and shoulder caps, pants, the helmet, socks, the default glove, and a legend of every color and stripe
+sleeves, pants, the helmet, socks, the default glove, and a legend of every color and stripe
 keyed by its path in `data/team_colors.json` (`tools/kit_capture.gd`). The
 garments are the rink's meshes flattened and painted by the game's own decals and
 stripe textures, so it is the check for a kit edit. It loads through
@@ -179,10 +187,10 @@ CPU-side performance work: compare runs on the same machine, never a run here
 against a number from someone else's machine.
 
 A render answers *how it reads*; it does not answer *whether two placements
-agree*. When the question is the second one — does the pad still sit on the arm,
-does the mirrored side land where the near side does — measure it in a test
-(`tests/unit/actors/test_check_stance_rig.gd` builds the live rig and compares
-the two code paths' numbers). Eyeballing a 384 px tile is how a 4 cm
+agree*. When the question is the second one — does the sleeve stay inside the
+glove, does the mirrored side land where the near side does — measure it in a
+test (`tests/unit/actors/test_glove_hides_the_sleeve.gd` poses the live rig,
+skins the sleeve on the CPU and measures it against the glove). Eyeballing a 384 px tile is how a 4 cm
 disagreement gets called fine.
 
 Run the suite after touching domain code and report results. **AI perf changes

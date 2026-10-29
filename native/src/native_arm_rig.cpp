@@ -140,21 +140,12 @@ void NativeArmRig::bind(Object *p_skeleton, const PackedInt32Array &p_bones) {
 
 void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thick_forearm,
 		const Vector3 &p_thick_cuff, const Vector3 &p_thick_elbow, const Vector3 &p_thick_glove,
-		const Vector3 &p_cap_rest_pole, double p_cap_follow, int32_t p_cap_bone,
-		const Vector3 &p_cap_pos, const Vector3 &p_cap_scale, const Transform3D &p_cap_state,
 		double p_wrist_break_max) {
 	thick_upper = p_thick_upper;
 	thick_forearm = p_thick_forearm;
 	thick_cuff = p_thick_cuff;
 	thick_elbow = p_thick_elbow;
 	thick_glove = p_thick_glove;
-	cap_rest_pole = p_cap_rest_pole;
-	cap_follow = p_cap_follow;
-	bone_cap = p_cap_bone;
-	cap_pos = p_cap_pos;
-	cap_scale = p_cap_scale;
-	cap = p_cap_state.basis;
-	girdle = p_cap_state.origin;
 	wrist_break_max = p_wrist_break_max;
 }
 
@@ -162,7 +153,7 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 		const Transform3D &frame, const Basis &trunk_texture,
 		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load) {
 	Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(ObjectDB::get_instance(skeleton_id));
-	if (skeleton == nullptr || bone_cap < 0) {
+	if (skeleton == nullptr || bone_upper < 0) {
 		return false;
 	}
 	const double lead = load.x;
@@ -188,8 +179,6 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 			|| forearm_span.length_squared() < 0.0001) {
 		return false;
 	}
-	const Basis to_untextured = trunk_texture.transposed();
-	girdle = to_untextured.xform(spine.basis.inverse().xform(shoulder_s - rooted));
 	skeleton->set_bone_pose(bone_upper, pose_bone(shoulder_s, elbow_s, thick_upper));
 	skeleton->set_bone_pose(bone_forearm, pose_bone(elbow_s, hand_s, thick_forearm));
 
@@ -208,37 +197,17 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const Basis glove = glove_basis(forearm_span.normalized(),
 			frame.basis.xform(grip), wrist_break_max);
 	skeleton->set_bone_pose(bone_glove, Transform3D(glove.scaled_local(thick_glove), hand_s));
-
-	// _orient_shoulder_cap: an invalid direction keeps the last stable roll.
-	const Transform3D to_spine = spine.affine_inverse();
-	const Vector3 arm_dir = to_untextured.xform(to_spine.xform(elbow_s) - to_spine.xform(shoulder_s));
-	if (arm_dir.length_squared() >= 0.0001) {
-		Vector3 rest = cap_rest_pole.normalized();
-		rest.x *= (real_t)side;
-		const Vector3 cap_pole = -rest.slerp(arm_dir.normalized(), (real_t)cap_follow);
-		Vector3 x_axis = Vector3(1, 0, 0) - cap_pole * cap_pole.x;
-		if (x_axis.length_squared() >= 0.01) {
-			x_axis = x_axis.normalized();
-			cap = Basis(x_axis, cap_pole, x_axis.cross(cap_pole)).orthonormalized();
-		}
-	}
-	// repose_bone for a cap.
-	const Vector3 origin = cap_pos + check_load_offset(lead, SIGN(cap_pos.x), half_width) + girdle;
-	skeleton->set_bone_pose(bone_cap,
-			Transform3D(trunk_texture, Vector3()) * Transform3D(cap.scaled_local(cap_scale), origin));
 	return true;
 }
 
 void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("bind", "skeleton", "bones"), &NativeArmRig::bind);
 	ClassDB::bind_method(D_METHOD("configure", "thick_upper", "thick_forearm", "thick_cuff",
-								 "thick_elbow", "thick_glove", "cap_rest_pole", "cap_follow",
-								 "cap_bone", "cap_pos", "cap_scale", "cap_state", "wrist_break_max"),
+								 "thick_elbow", "thick_glove", "wrist_break_max"),
 			&NativeArmRig::configure);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
 								 "lengths", "load"),
 			&NativeArmRig::pose);
-	ClassDB::bind_method(D_METHOD("get_cap_state"), &NativeArmRig::get_cap_state);
 }
 
 } // namespace mitts

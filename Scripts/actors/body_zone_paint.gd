@@ -56,15 +56,14 @@ func set_zone(z: int, mat: StandardMaterial3D) -> void:
 	_push()
 
 
-# Records for `count` zones from `first_zone` on, copied from the shared default
-# each surface of `mesh` ships with (a fresh material where it has none) — what
-# an unpainted body wears.
-func seed_from_mesh(mesh: ArrayMesh, first_zone: int) -> void:
-	for s: int in mesh.get_surface_count():
-		var shared: StandardMaterial3D = mesh.surface_get_material(s) as StandardMaterial3D
-		_records[first_zone + s] = shared.duplicate() as StandardMaterial3D if shared != null \
-				else StandardMaterial3D.new()
-		_compile(first_zone + s)
+# A zone's record copied from the shared default its part ships with — what an
+# unpainted body wears there.
+func seed_zone(z: int, shared: Material) -> void:
+	var mat: StandardMaterial3D = shared as StandardMaterial3D
+	if mat == null:
+		return
+	_records[z] = mat.duplicate() as StandardMaterial3D
+	_compile(z)
 	_push()
 
 

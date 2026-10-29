@@ -124,7 +124,7 @@ while engaged), `shot_hip_yaw` (shot coil and uncoil), and `pivot_hold`
 (authority, which fades the generic facing-lag pump out of the sum). Two writers
 tracking one rotation on different clocks is a wobble, not a pose — hence one
 summing site rather than five writers. The trunk texture in particular goes onto
-the cosmetic torso, helmet and shoulder BONES, never onto the `UpperBody` node,
+the cosmetic torso and helmet BONES, never onto the `UpperBody` node,
 whose rotation carries the blade markers and is therefore gameplay geometry.
 
 ### The legs skate a state, and the state is the physics' decision

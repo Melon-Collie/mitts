@@ -471,6 +471,11 @@ Two things to know before touching this:
   `amount` in every pass**, alive or not. The skaters' 300-instance blade trails
   were two-thirds of all triangles, through eight shadow maps, for dots on the
   ice. `test_particles_cast_no_shadow.gd` holds every effect to casting nothing.
+- **A skater's body is one surface** (`SkaterBodyMesh`: the skin and the rigid
+  parts joined), so it is one draw in each of the 6–8 shadow passes it falls in
+  rather than one per mesh. Drawn as three meshes, the 5v5's shadow passes took
+  506 draws a frame; as one, 382 (a frozen match with every map forced to
+  redraw, the shadow pass's own count). `test_skater_body_mesh.gd` holds it.
 
 What is left is mostly the shadowed spots themselves: ~450 of the 759. The
 Shadow Quality setting already trims them (`PlayerPrefs._apply_shadow_quality`).

@@ -1,16 +1,11 @@
 extends GutTest
 
-# The player screen's mannequin and the lobby's bench figures are not the skinned rig,
-# so their jersey tail is draped once per pose and baked (FigureKit.drape,
-# SkaterHemFlaps.baked_torso). Standing and seated — thighs flat through where
-# the jersey's front hangs — no vertex of the tail's cloth is inside a thigh, as
-# the figure's own thigh parts place it, where the undraped torso would be. The
-# bottom cap's centre is not cloth: it closes the tube at the crotch, inside the
-# pants, between thighs that overlap there.
+# The player screen's mannequin and the lobby's bench figures wear the rink's
+# jersey tail (SkaterHemFlaps), settled once posed. Standing and seated —
+# thighs flat through where the jersey's front hangs — no point of the tail's
+# cloth is inside a thigh or the pants, as the rink's colliders place them off
+# the figure's own bones (SkaterHemColliders).
 
-# The thigh as its part carries it: the hip pivot sits this far above the part's
-# own origin, and the capsule runs down from it (SkaterMeshBuilder's numbers).
-const _HIP_IN_THIGH: float = 0.13
 const _CLIP_M: float = 0.006
 
 
@@ -24,39 +19,32 @@ func _figure(seated: bool) -> LockerMannequin:
 	return figure
 
 
-# The deepest any of `torso`'s cloth vertices (those on a tail column's bone)
-# reaches into a thigh.
-func _worst(figure: LockerMannequin, torso: ArrayMesh) -> float:
-	var at: Transform3D = (figure.get("_torso") as MeshInstance3D).transform
-	var thighs: Array = figure.get("_thighs") as Array
-	var verts: PackedVector3Array = torso.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
-	var bones: PackedInt32Array = SkaterMeshBuilder.shared_upper_skin_mesh().surface_get_arrays(
-			SkaterMeshBuilder.UpperSurface.TORSO)[Mesh.ARRAY_BONES]
+# The deepest any of the figure's tail points reaches into what it drapes over.
+func _worst(figure: LockerMannequin) -> float:
+	var kit: FigureKit = figure.get("_kit") as FigureKit
+	var colliders := SkaterHemColliders.new()
+	colliders.update(kit.skeleton)
 	var worst: float = 0.0
-	for thigh_node: MeshInstance3D in thighs:
-		var thigh: Transform3D = thigh_node.transform
-		var a: Vector3 = thigh * Vector3(0.0, _HIP_IN_THIGH, 0.0)
-		var b: Vector3 = thigh * Vector3(0.0,
-				_HIP_IN_THIGH - SkaterMeshBuilder.THIGH_CAPSULE_LENGTH_M, 0.0)
-		var r: float = SkaterMeshBuilder.THIGH_CAPSULE_RADIUS_M * thigh.basis.x.length()
-		for v: int in verts.size():
-			if bones[v * 4] < SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE:
-				continue
-			var p: Vector3 = at * verts[v]
-			var t: float = clampf((p - a).dot(b - a) / (b - a).length_squared(), 0.0, 1.0)
-			worst = maxf(worst, r - p.distance_to(a + (b - a) * t))
+	for p: Vector3 in kit.hem.hem_points():
+		worst = maxf(worst, colliders.depth(p))
 	return worst
 
 
 func test_a_standing_figure_drapes_over_its_legs() -> void:
-	var figure: LockerMannequin = _figure(false)
-	var torso: ArrayMesh = (figure.get("_torso") as MeshInstance3D).mesh as ArrayMesh
-	assert_lt(_worst(figure, torso), _CLIP_M)
+	assert_lt(_worst(_figure(false)), _CLIP_M)
 
 
 func test_a_seated_figure_drapes_over_its_lap() -> void:
-	var figure: LockerMannequin = _figure(true)
-	var torso: ArrayMesh = (figure.get("_torso") as MeshInstance3D).mesh as ArrayMesh
-	assert_gt(_worst(figure, SkaterMeshBuilder.shared_torso()), 0.03,
-			"the thighs lie through the undraped jersey")
-	assert_lt(_worst(figure, torso), _CLIP_M)
+	assert_lt(_worst(_figure(true)), _CLIP_M)
+
+
+# The tail is hung, not left at the skeleton's origin: every point of it below
+# the torso's origin and within the jersey's length of it.
+func test_the_tail_hangs_from_the_belt() -> void:
+	var kit: FigureKit = _figure(false).get("_kit") as FigureKit
+	var torso: float = kit.skeleton.get_bone_global_pose(SkaterBodySkeleton.TAIL_BONE).origin.y
+	var points: PackedVector3Array = kit.hem.hem_points()
+	assert_gt(points.size(), 0)
+	for p: Vector3 in points:
+		assert_lt(p.y, torso, "the tail hangs below the torso's origin")
+		assert_gt(p.y, torso - 0.5, "and from the belt, not the ice")

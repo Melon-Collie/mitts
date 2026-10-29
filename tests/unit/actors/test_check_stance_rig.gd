@@ -1,14 +1,10 @@
 extends GutTest
 
-# The shoulder PAD and the arm that grows out of it are placed by two different
-# code paths that never read each other: `SkaterArmRig.repose_bone` writes the
-# cap bone, `SkaterArmRig._textured_shoulder` gives the arm its root. When they
-# disagreed the pad walked off the arm, worst at exactly the poses that displace
-# a shoulder most — which is what the check-commit load-up now does on purpose.
-#
-# So this is the "these two must agree" test, on a LIVE rig rather than on the
-# pure geometry (CheckStanceRules has its own suite): it also covers the side
-# plumbing the rule cannot see — handedness → stick side → which cap loads.
+# The check-commit load-up on a LIVE rig rather than on the pure geometry
+# (CheckStanceRules has its own suite): the arm's root on the visible trunk
+# (`SkaterArmRig._textured_shoulder`), which the skin's sleeve grows from, and
+# the side plumbing the rule cannot see — handedness → stick side → which
+# shoulder loads.
 
 const _SCENE: String = "res://Scenes/Skater.tscn"
 const _DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
@@ -34,36 +30,12 @@ func _rig(lefty: bool, committed: bool) -> Skater:
 	return skater
 
 
-# The cap bone's origin and the arm root for the same side.
-func _cap(skater: Skater, side_sign: float) -> Vector3:
-	var bone: int = SkaterMeshBuilder.UpperBone.SHOULDER_R if side_sign > 0.0 \
-			else SkaterMeshBuilder.UpperBone.SHOULDER_L
-	return skater._arms._skeleton.get_bone_pose(bone).origin
-
-
+# The arm root on `side_sign`'s side, in the spine's frame.
 func _root(skater: Skater, side_sign: float) -> Vector3:
 	var marker: Vector3 = skater.shoulder.position
 	if signf(marker.x) != side_sign:
 		marker = skater.bottom_shoulder.position
 	return skater._arms._textured_shoulder(marker)
-
-
-func _assert_pad_sits_on_the_arm(skater: Skater, label: String) -> void:
-	for side_sign: float in [-1.0, 1.0]:
-		var gap: float = _cap(skater, side_sign).distance_to(_root(skater, side_sign))
-		assert_almost_eq(gap, 0.0, 1e-5,
-				"%s: %s cap and arm root must be the same point"
-				% [label, "right" if side_sign > 0.0 else "left"])
-
-
-func test_the_pad_sits_on_the_arm_uncommitted() -> void:
-	_assert_pad_sits_on_the_arm(_rig(true, false), "lefty at rest")
-	_assert_pad_sits_on_the_arm(_rig(false, false), "righty at rest")
-
-
-func test_the_pad_sits_on_the_arm_through_the_load_up() -> void:
-	_assert_pad_sits_on_the_arm(_rig(true, true), "lefty committing")
-	_assert_pad_sits_on_the_arm(_rig(false, true), "righty committing")
 
 
 # Handedness → stick side → lead side, end to end through the real skater. A
@@ -81,21 +53,22 @@ func test_an_uncommitted_skater_has_no_lead_at_all() -> void:
 			"the stance is off until the Hit button commits")
 
 
-# The asymmetry itself, measured on the rig: the trailing cap may only move by
-# whatever the (symmetric) trunk texture does to both of them, while the leading
-# one travels further forward and further down on top of that.
+# The asymmetry itself, measured on the rig: the trailing shoulder may only move
+# by whatever the (symmetric) trunk texture does to both of them, while the
+# leading one travels further forward and further down on top of that.
 func test_only_the_thrown_shoulder_leaves_the_trunk_texture() -> void:
 	var rest: Skater = _rig(false, false)
 	var loaded: Skater = _rig(false, true)
-	# Right-handed: the LEFT cap is thrown, the right one only rides the texture.
-	var trailing_moved: float = _cap(rest, 1.0).distance_to(_cap(loaded, 1.0))
-	var leading_moved: float = _cap(rest, -1.0).distance_to(_cap(loaded, -1.0))
+	# Right-handed: the LEFT shoulder is thrown, the right one only rides the
+	# texture.
+	var trailing_moved: float = _root(rest, 1.0).distance_to(_root(loaded, 1.0))
+	var leading_moved: float = _root(rest, -1.0).distance_to(_root(loaded, -1.0))
 	assert_almost_eq(trailing_moved, 0.0, 1e-5,
-			"the trailing cap holds its place under an unchanged texture")
+			"the trailing shoulder holds its place under an unchanged texture")
 	assert_gt(leading_moved, 0.03,
-			"the thrown cap travels a real distance, not a token one")
-	assert_lt(_cap(loaded, -1.0).z, _cap(rest, -1.0).z,
+			"the thrown shoulder travels a real distance, not a token one")
+	assert_lt(_root(loaded, -1.0).z, _root(rest, -1.0).z,
 			"and it travels FORWARD (−z), which is what loading up looks like")
-	assert_lt(_cap(loaded, -1.0).y, _cap(rest, -1.0).y, "and a little down")
-	assert_gt(_cap(loaded, -1.0).x, _cap(rest, -1.0).x,
+	assert_lt(_root(loaded, -1.0).y, _root(rest, -1.0).y, "and a little down")
+	assert_gt(_root(loaded, -1.0).x, _root(rest, -1.0).x,
 			"and inward across the chest")

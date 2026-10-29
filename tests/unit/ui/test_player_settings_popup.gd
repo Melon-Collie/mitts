@@ -98,13 +98,12 @@ func test_reopening_and_a_team_change_do_not_stack_items() -> void:
 
 func test_a_model_pick_lands_in_the_draft_and_on_the_figure() -> void:
 	var mannequin: LockerMannequin = _case().get("_mannequin") as LockerMannequin
-	var boot: MeshInstance3D = (mannequin.get("_boots") as Array)[0] as MeshInstance3D
-	var before: Color = (boot.get_surface_override_material(SkaterMeshBuilder.BOOT_SURF_SHELL)
-			as StandardMaterial3D).albedo_color
+	var paint: BodyZonePaint = (mannequin.get("_kit") as FigureKit).get("_paint") as BodyZonePaint
+	var boot: int = SkaterMeshBuilder.LegSurface.FOOT_L_SHELL
+	var before: Color = paint.zone(boot).albedo_color
 	_btn("_skate_btn").item_selected.emit(GearModelRegistry.SKATE_WHITEOUT)
 	assert_eq(_draft().gear().skate_model, GearModelRegistry.SKATE_WHITEOUT)
-	assert_ne((boot.get_surface_override_material(SkaterMeshBuilder.BOOT_SURF_SHELL)
-			as StandardMaterial3D).albedo_color, before, "the figure re-dresses")
+	assert_ne(paint.zone(boot).albedo_color, before, "the figure re-dresses")
 
 
 # The hair picker skips retired styles, so its rows are not style indices.
