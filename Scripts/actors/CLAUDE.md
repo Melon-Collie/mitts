@@ -13,7 +13,7 @@ delegates to.
 | holder | class | what it owns |
 |---|---|---|
 | `_legs` | `SkaterLegRig` | the leg bones, the gait written onto them, the ankles' give-back against it, where that puts the blades against the ice (the contact seat), and the ice VFX's two reads (skate mark position, edge load) |
-| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, both arms by IK (their poses in `SkaterArmPoses`), the trunk texture, the upper rigid parts' mesh (`SkaterRigidParts`: gloves, helmet and head) and the head pieces (face gear, hair and brows on one bone attachment) |
+| `_arms` | `SkaterArmRig` | the upper bones: torso, the jersey's tail and its flaps (`SkaterHemFlaps`), pelvis, helmet, both arms by IK (their poses in `SkaterArmPoses`), the trunk texture, the head pieces (face gear, hair and brows on one bone attachment) |
 | `_spine` | `SkaterSpineRig` | the four bones that join them (hips, waist, spine, neck) and the balance lean |
 | `_stick` | `SkaterStickRig` | the shaft pose, the knob, and the cosmetic flex/whip |
 | `_draw` | `SkaterDrawTracker` | the faceoff swipe crest, host-only |
@@ -23,7 +23,7 @@ delegates to.
 | `_shadow` | `SkaterShadows` | the Player Shadows setting: whether the body's meshes and the stick cast, and a ghost never does |
 | `_paint` | `BodyZonePaint` | the body's one material: a zone per leg and upper surface, painted from `StandardMaterial3D` records through `Skater`'s surface seams |
 | `_anim_lod` | `SkaterAnimationLod` | how often the mesh is re-posed, by camera distance and the Animation Detail setting |
-| `_connected` | `SkaterConnectedRig` | the body's skin (`SkaterConnectedMesh`) and its deform bones (below) |
+| `_connected` | `SkaterConnectedRig` | the body's one mesh (`SkaterBodyMesh`: the skin and the rigid parts) and the skin's deform bones (below) |
 
 ## The body's skin
 
@@ -31,7 +31,9 @@ delegates to.
 connected skin with blended weights; the head, gloves and skates are rigid
 parts on their bones (`SkaterRigidParts`). Every part is a zone of the body's
 one paint (`BodyZonePaint`), dressed by `SkaterKitPaint`, which the display
-figures share. `.claude/hooks/render-body.sh` draws it.
+figures share, and the whole body is ONE surface (`SkaterBodyMesh`): a draw a
+pass, which matters because eight shadowed spots each redraw every skater in
+them every frame. `.claude/hooks/render-body.sh` draws it.
 
 - **Its density is spent where it bends.** The jersey has twice the torso
   stations' sides (`SkaterMeshBuilder.TORSO_SIDES`) all the way down, and `SkaterHemFlaps` drapes its tail in as many

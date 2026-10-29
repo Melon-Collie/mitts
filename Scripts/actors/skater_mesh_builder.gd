@@ -272,32 +272,6 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 	return built
 
 
-# Rewrites a Y-axis solid's SIDE normals to be purely radial — no component
-# along the axis — leaving the caps alone. The glove cuff needs this because its
-# pose scale is strongly non-uniform.
-#
-# Godot's skinning transforms a normal by the bone matrix itself, not by its
-# inverse transpose (an ordinary MeshInstance3D gets the proper normal matrix).
-# Under a bone scale of (r, r, length) that skews any normal with an axial
-# component the WRONG way and by the ratio of the scales, so a taper shades
-# black. A normal with no axial component is immune: scaling it by (r, 1, r)
-# multiplies it by r and normalizes back to itself.
-static func _radial_side_normals(src: ArrayMesh) -> ArrayMesh:
-	var arrays: Array = src.surface_get_arrays(0)
-	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
-	for i: int in normals.size():
-		var n: Vector3 = normals[i]
-		# Caps point straight up the axis; flattening them would zero them.
-		if absf(n.y) > 0.99:
-			continue
-		n.y = 0.0
-		normals[i] = n.normalized()
-	arrays[Mesh.ARRAY_NORMAL] = normals
-	var out := ArrayMesh.new()
-	out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
-	return out
-
-
 # ── The leg bones ────────────────────────────────────────────────────────────
 # Unlike the upper bones (UpperBone, flat), the legs are a CHAIN: LegL/R carry
 # hip pitch and roll, ShinL/R hang off them and carry the knee, and the parts
@@ -343,17 +317,6 @@ enum LegSurface {
 	FOOT_R_SHELL, FOOT_R_TOE, FOOT_R_HOLDER, FOOT_R_RUNNER, FOOT_R_LACES,
 }
 const LEG_SURFACE_COUNT: int = 20
-
-
-static func shared_leg_skin() -> Skin:
-	if _leg_skin == null:
-		_leg_skin = Skin.new()
-		for i: int in LEG_BONE_COUNT:
-			_leg_skin.add_bind(SkaterBodySkeleton.LEG_BONE_OFFSET + i, Transform3D.IDENTITY)
-	return _leg_skin
-
-
-static var _leg_skin: Skin = null
 
 
 # ── Merged assemblies ────────────────────────────────────────────────────────
@@ -543,19 +506,6 @@ const UPPER_BONE_NODE: Array[String] = [
 ]
 
 
-# Identity binds, so the skinned vertex is the bone pose alone. Shared by every
-# skater: Godot builds a per-instance SkinReference from one Skin resource.
-static func shared_upper_skin() -> Skin:
-	if _upper_skin == null:
-		_upper_skin = Skin.new()
-		for i: int in UPPER_BONE_COUNT:
-			_upper_skin.add_bind(i, Transform3D.IDENTITY)
-	return _upper_skin
-
-
-static var _upper_skin: Skin = null
-
-
 # ── The torso's rest stations ────────────────────────────────────────────────
 # Stations of _TORSO_PROFILE the jersey's tail hangs by: the belt it hangs from,
 # the bend between its two segments, and the hem.
@@ -602,8 +552,6 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 # are multiples of the cuff radius; its height is real (CUFF_HEIGHT_M), since the
 # along-bone placement offsets by it. Tapered: the open end clears the sleeve
 # going into it, the wrist end closes onto the back of the fist with a lip.
-# Its pose scale is (radius, 1, radius), ~10:1, so its sides need the arm
-# bone's radial normals (_radial_side_normals) or the taper shades them black.
 const _CUFF_STATIONS: Array[Vector3] = [
 	Vector3(0.5, 0.94, 0.875),   # open end, toward the elbow
 	Vector3(-0.5, 0.75, 0.69),   # wrist end, around the back of the fist
@@ -616,7 +564,7 @@ static func shared_cuff() -> ArrayMesh:
 					_GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
 		_commit_sweep_segment(m, loops, 0, loops.size() - 1, _fist_loop_center)
-		return _radial_side_normals(m))
+		return m)
 
 
 # Butt-end knob at its real dimensions (never rescaled).

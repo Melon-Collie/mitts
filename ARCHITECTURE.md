@@ -210,7 +210,7 @@ The ROM is measured from the shoulder the arm is drawn from (`SkaterIKCoordinato
 
 **Arm rendering:** The shoulder and hand drive a 2-bone IK (`TwoBoneIK.solve_elbow`) that places the elbow on the plane perpendicular to the shoulder-hand axis in the pole direction (`arm_pole_local`, side-mirrored per arm). Both arms are part of the ONE body `Skeleton3D` (`SkaterArmRig.build`), ten bones: upper arm and forearm per arm, elbow, gloved fist, and the wrist cuff ring. The fist and cuff are rigid parts on their bones (`SkaterRigidParts`); the sleeve is the body's skin, posed through deform bones of its own off the upper arm, the elbow's hinge and the forearm (`SkaterConnectedRig`). For those ten, a paint zone's number and its bone's coincide (`SkaterMeshBuilder.UpperBone` / `UpperSurface`), so sizing (`set_arm_bone_radius` / `set_arm_ball_radius` / `set_arm_cuff_radius`) and posing (`SkaterArmPoses`) key off one number. Bones are flat (no parents) with identity rests, and the rigid parts' binds are identity, so a bone pose IS the part's local transform. Radii scale with attribute visual bulk (`SkaterAppearanceCoordinator._apply_arm_thickness`; under attributes v4 all limb bulk rides the weight dial's frame bulk — silhouette = body), and the whole body fades as one material in ghost mode (`BodyZonePaint.set_ghost`).
 
-One trap this rig has to respect: **Godot skins normals with the bone matrix itself, not its inverse transpose**, so a non-uniform bone scale skews them. The glove cuff's `(r, 1, r)` is ~10:1, which is why `SkaterMeshBuilder._radial_side_normals` bakes its side normals perpendicular to its axis — a normal with no axial component is invariant under that scale. The skin's deform bones scale by roughly 1:1 (the live arm and girth against the bind arm's), so it keeps its true normals and carries a small residual skew instead.
+One trap the body sidesteps: **Godot skins normals with the bone matrix itself, not its inverse transpose**, so a non-uniform bone scale skews them (the glove cuff's `(r, 1, r)` is ~10:1). The body's shader takes every face's normal from the skinned position's screen derivatives instead (`flat_from_position` in `Shaders/body_zones.gdshaderinc`), so no vertex normal on the body is ever read.
 
 **Upper body:** the arm rig above IS the upper-body rig — the torso, the helmet/head unit and the pelvis are three more bones on the same `Skeleton3D`. They join it rather than getting their own because they are siblings in `UpperBody`'s frame, so one skeleton means one pose array and no extra nodes at all. The torso's and the helmet's placement is read out of `Scenes/Skater.tscn` at `_ready` and the subtree freed, same as the legs; `set_head_angle` writes the helmet's bone.
 
@@ -415,13 +415,14 @@ save box (`KeeperBodyRig`, `Scripts/domain/keeper/CLAUDE.md`): the boxes are
 the save geometry the puck meets, so the drawn gear can never sit somewhere
 the saves are not.
 
-## The skater body is skinned meshes on one skeleton, not a node tree
+## The skater body is one skinned surface on one skeleton, not a node tree
 
 The body is one connected skin (`SkaterConnectedMesh`: torso, sleeves, pants and
 socks, blended weights over a bind pose) and the rigid parts on their bones
 (`SkaterRigidParts`: helmet and head, gloves, skates; thirteen `UpperBone`s and
-fourteen `LegBone`s). Every one is cached and shared by the whole roster, and
-every surface of it is a zone in `UV2.x`: per-skater colour is a zone record in
+fourteen `LegBone`s), drawn as ONE surface (`SkaterBodyMesh`), so a skater's
+body is one draw in the view and in each shadow map that holds it. It is cached
+and shared by the whole roster, and every part of it is a zone in `UV2.x`: per-skater colour is a zone record in
 the skater's `BodyZonePaint`, one material for the whole body, per-build sizing
 rides the scale inside a bone's pose, and no mesh is ever mutated per instance
 (`docs/body-draw-calls-plan.md`). All of them skin one `Skeleton3D`

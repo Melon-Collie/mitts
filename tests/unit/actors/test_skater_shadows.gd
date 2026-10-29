@@ -22,8 +22,7 @@ func _skater() -> Skater:
 
 func _casters(sk: Skater) -> Array[GeometryInstance3D]:
 	var out: Array[GeometryInstance3D] = [sk.stick_mesh]
-	for node_name: String in ["ConnectedBody", "UpperMesh", "LegMesh"]:
-		out.append(sk.mesh_root.get_node("BodyRig/" + node_name) as GeometryInstance3D)
+	out.append(sk.mesh_root.get_node("BodyRig/Body") as GeometryInstance3D)
 	return out
 
 

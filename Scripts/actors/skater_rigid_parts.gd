@@ -2,8 +2,8 @@ class_name SkaterRigidParts
 extends RefCounted
 
 # The skater's rigid parts, beside the skin (SkaterConnectedMesh): the head, the
-# gloves, the cuffs and the skates, as the two meshes the arm and leg rigs draw.
-# Every part is one zone of its mesh (BodyZoneMesh), zone = UPPER_ZONE_BASE +
+# gloves, the cuffs and the skates, as two meshes the body joins to the skin
+# (SkaterBodyMesh). Every part is one zone of its mesh (BodyZoneMesh), zone = UPPER_ZONE_BASE +
 # SkaterMeshBuilder.UpperSurface or SkaterMeshBuilder.LegSurface, rigid to its
 # bone. The helmet's shell is drawn with a hockey helmet's ridge down its crown
 # and a rib either side of it; the hair and face gear fitted under the plain

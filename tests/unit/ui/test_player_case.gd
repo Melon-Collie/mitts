@@ -195,13 +195,13 @@ func test_the_figure_wears_the_pending_hair() -> void:
 # its paint.
 func test_a_tuck_pick_drapes_the_figure() -> void:
 	_open()
-	var body: MeshInstance3D = _kit().skeleton.find_child("ConnectedBody", false, false) \
+	var body: MeshInstance3D = _kit().skeleton.find_child("Body", false, false) \
 			as MeshInstance3D
 	var paint: Material = body.get_surface_override_material(0)
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0, 0,
 			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
 			GearModelRegistry.TUCK_RIGHT))
-	assert_eq(body.mesh, SkaterConnectedMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT),
+	assert_eq(body.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT),
 			"the sweater re-drapes")
 	assert_eq(body.get_surface_override_material(0), paint, "the sweater keeps its paint")
 

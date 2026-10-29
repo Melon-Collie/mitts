@@ -117,7 +117,7 @@ func _wear_kit_from_env() -> void:
 
 
 func _hide_all_but_the_pants() -> void:
-	var keep: Array[String] = ["ConnectedBody", "LegMesh"]
+	var keep: Array[String] = ["Body"]
 	for node: Node in _skater.find_children("*", "GeometryInstance3D", true, false):
 		if not keep.has(String(node.name)):
 			(node as GeometryInstance3D).visible = false

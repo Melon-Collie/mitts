@@ -976,11 +976,11 @@ func _ready() -> void:
 
 	_legs = SkaterLegRig.new()
 	_legs.setup(self)
-	_legs.build(body, _paint.material)
+	_legs.build(body)
 
 	_arms = SkaterArmRig.new()
 	_arms.setup(self)
-	_arms.build(body, _paint.material)
+	_arms.build(body)
 
 	_spine = SkaterSpineRig.new()
 	_spine.setup(self)

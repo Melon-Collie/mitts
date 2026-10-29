@@ -1,7 +1,8 @@
 class_name SkaterConnectedRig
 extends RefCounted
 
-# Draws the skater's skin (SkaterConnectedMesh) and poses its deform bones. It
+# Draws the skater's body (SkaterBodyMesh: the skin, SkaterConnectedMesh, and
+# the rigid parts in one surface) and poses the skin's deform bones. It
 # reads the bones the other rigs posed this frame and writes only its own: per
 # sleeve the girdle, the shoulder's middle, the upper arm, the elbow's middle and
 # the forearm, framed on the elbow's hinge (the ELBOW bone's Z) and scaled by the
@@ -35,8 +36,8 @@ func build(skeleton: Skeleton3D, body_material: Material, tuck: int) -> void:
 	_skeleton = skeleton
 	_rests = SkaterConnectedMesh.bind_rests()
 	_mesh = MeshInstance3D.new()
-	_mesh.name = "ConnectedBody"
-	_mesh.skin = SkaterConnectedMesh.shared_skin()
+	_mesh.name = "Body"
+	_mesh.skin = SkaterBodyMesh.shared_skin()
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
 	_mesh.set_instance_shader_parameter(&"flat_from_position", 1.0)
@@ -50,7 +51,7 @@ func set_tuck(tuck: int) -> void:
 	_tuck = tuck
 	var material: Material = _mesh.get_surface_override_material(0) \
 			if _mesh.mesh != null else null
-	_mesh.mesh = SkaterConnectedMesh.shared_mesh(tuck)
+	_mesh.mesh = SkaterBodyMesh.shared_mesh(tuck)
 	if material != null:
 		_mesh.set_surface_override_material(0, material)
 

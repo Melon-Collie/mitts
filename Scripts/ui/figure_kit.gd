@@ -2,8 +2,8 @@ class_name FigureKit
 extends RefCounted
 
 # A kit-dressed display figure built from the rink's own body: the body
-# skeleton (SkaterBodySkeleton), the skin on it (SkaterConnectedRig) and the
-# rigid parts (SkaterRigidParts), painted by the rink's kit paint
+# skeleton (SkaterBodySkeleton), the body on it (SkaterConnectedRig: the skin and
+# the rigid parts in one mesh), painted by the rink's kit paint
 # (SkaterKitPaint), the head pieces on the helmet bone, the jersey's tail as the
 # rink's cloth (SkaterHemFlaps), and a stick assembly (shaft, blade, tape,
 # knob). It builds and it dresses; the figure holding it poses the skeleton —
@@ -42,8 +42,6 @@ func build(rig: Node3D, viewport_host: Node) -> void:
 	skeleton = SkaterBodySkeleton.new_body_skeleton()
 	rig.add_child(skeleton)
 	SkaterRigidParts.seed_paint(_paint)
-	_skinned(SkaterRigidParts.upper_body_mesh(), SkaterMeshBuilder.shared_upper_skin())
-	_skinned(SkaterRigidParts.leg_body_mesh(), SkaterMeshBuilder.shared_leg_skin())
 	_skin.build(skeleton, _paint.material, _tuck)
 	_kit = SkaterKitPaint.new(_paint, viewport_host)
 	var head := BoneAttachment3D.new()
@@ -79,15 +77,6 @@ func dress(colors: Dictionary, gear: GearStyleConfig, tape: StickTapeConfig,
 		hem.set_tuck(_tuck)
 	_dress_head(gear)
 	_paint_stick(gear, tape, colors)
-
-
-func _skinned(mesh: ArrayMesh, skin: Skin) -> void:
-	var mi := MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.skin = skin
-	mi.skeleton = NodePath("..")
-	mi.set_surface_override_material(0, _paint.material)
-	skeleton.add_child(mi)
 
 
 func _build_stick() -> void:

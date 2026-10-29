@@ -30,7 +30,6 @@ const _ARM_PARTS: Array[Array] = [
 
 var _skater: Skater
 var _skeleton: Skeleton3D = null
-var _mesh: MeshInstance3D = null
 # Per-part pose scale, except a bone's Z, which is its live length.
 var _thickness: PackedVector3Array = PackedVector3Array()
 var _basis: Array[Basis] = []
@@ -76,9 +75,8 @@ func setup(skater: Skater) -> void:
 # Reads the scene-authored placement of the two shell parts out of the
 # UpperBody subtree, seeds the body skeleton's upper bones from it, then frees
 # those nodes — keeping Scenes/Skater.tscn the place the proportions are
-# authored. `body_material` is the skater's BodyZonePaint, which the upper body's
-# one surface wears.
-func build(skeleton: Skeleton3D, body_material: Material) -> void:
+# authored.
+func build(skeleton: Skeleton3D) -> void:
 	var count: int = SkaterMeshBuilder.UPPER_BONE_COUNT
 	var upper_body: Node3D = _skater.upper_body
 	_basis.resize(count)
@@ -95,14 +93,6 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 			var bones := PackedInt32Array(_ARM_PARTS[arm])
 			bones.append(SkaterBodySkeleton.SPINE_BONE)
 			_native_arms[arm].bind(skeleton, bones)
-	_mesh = MeshInstance3D.new()
-	_mesh.name = "UpperMesh"
-	_mesh.mesh = SkaterRigidParts.upper_body_mesh()
-	_mesh.set_surface_override_material(0, body_material)
-	_mesh.skin = SkaterMeshBuilder.shared_upper_skin()
-	_mesh.skeleton = NodePath("..")
-	_skeleton.add_child(_mesh)
-
 	# Torso and helmet: their placement is authored in the scene, so it is read
 	# out and seeded onto their bones, same as the legs.
 	for bone: int in [SkaterMeshBuilder.UpperBone.TORSO,
