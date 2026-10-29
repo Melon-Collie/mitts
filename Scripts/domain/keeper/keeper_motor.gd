@@ -329,6 +329,9 @@ func step(dt: float) -> void:
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
 	fall = maxf(sqrt(1.0 - drop.down), KeeperLowReady.fall_share_at(1.0)) if _mover == Mover.DROP else low_ready.fall_share()
+	# What a slide from his feet would fall from, for the route to price it.
+	if _mover != Mover.SLIDE:
+		slide.fall = low_ready.fall_share()
 
 
 func _step_mover(dt: float) -> void:
@@ -499,7 +502,15 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 			if what == Do.SLIDE:
 				slide.slide_to(spot, top)
 			else:
-				slide.slide_from_feet(spot, top)
+				# Out of the stance he is in, the fall from the low ready the
+				# shorter (KeeperDrop.drop_from).
+				slide.fall = low_ready.fall_share()
+				if low_ready.share > 0.0:
+					pose(_cut)
+					low_ready.cut()
+					slide.slide_from_feet(spot, top, _cut)
+				else:
+					slide.slide_from_feet(spot, top)
 			_mover = Mover.SLIDE
 		Do.ROTATE:
 			if rest != Rest.DOWN:
