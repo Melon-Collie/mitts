@@ -800,9 +800,11 @@ func test_lane_loss_point_follows_the_caps_aware_worst_defender() -> void:
 			"at league reach the near defender is the interceptor")
 	var short_slow := AISkaterCaps.new()
 	short_slow.stick_reach = 1.05
+	short_slow.blade_span = 1.35
 	short_slow.max_speed = 5.0
 	var long_fast := AISkaterCaps.new()
 	long_fast.stick_reach = 1.6
+	long_fast.blade_span = 1.9
 	long_fast.max_speed = 12.0
 	var caps_p: Vector3 = AIPuckLane.lane_loss_point(
 			from, to, opps, AIPuckLane.PASS_SPEED_M_S, vels,
@@ -879,6 +881,23 @@ func test_lane_clear_defender_drifting_away_blocks_less() -> void:
 	assert_gt(drifting, stationary, "a defender drifting off the lane blocks less")
 
 
+func test_the_accurate_lane_reads_a_defenders_momentum() -> void:
+	# The same man the same distance off a pass: skating away from the lane he
+	# has to stop his retreat before he can step to it, standing he steps
+	# straight in, and skating at it he is already on his way.
+	var from := Vector3(0.0, 0.0, 0.0)
+	var to := Vector3(0.0, 0.0, 14.0)
+	var man: Array[Vector3] = [Vector3(3.0, 0.0, 7.0)]
+	var read := func(vel: Vector3) -> float:
+		var vels: Array[Vector3] = [vel]
+		return AIPuckLane.lane_clear(from, to, man, 16.0, vels, [], true)
+	var away: float = read.call(Vector3(4.0, 0.0, 0.0))
+	var still: float = read.call(Vector3.ZERO)
+	var toward: float = read.call(Vector3(-4.0, 0.0, 0.0))
+	assert_gt(away, still, "backing away from the lane leaves it more open")
+	assert_gt(still, toward, "skating at it closes it")
+
+
 func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
 	# The legacy model takes 1 − max(block): two defenders threatening DIFFERENT
 	# segments of a long lane read only as open as the easier gap. The `accurate`
@@ -886,8 +905,8 @@ func test_lane_clear_accurate_compounds_two_separated_defenders() -> void:
 	# compound to a much less clear lane than either alone.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var one_a: Array[Vector3] = [Vector3(3.6, 0.0, 12.0)]     # contests the middle
-	var one_b: Array[Vector3] = [Vector3(-4.2, 0.0, 14.0)]    # contests the receiver end
+	var one_a: Array[Vector3] = [Vector3(5.0, 0.0, 12.0)]     # contests the middle
+	var one_b: Array[Vector3] = [Vector3(-5.6, 0.0, 14.0)]    # contests the receiver end
 	var both: Array[Vector3] = [one_a[0], one_b[0]]
 	var speed: float = 18.0
 	var clear_a: float = AIPuckLane.lane_clear(from, to, one_a, speed, [], [], true)
@@ -1012,7 +1031,10 @@ func test_lane_clear_saucer_soft_flip_lands_earlier() -> void:
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 12.0)
 	var mid_stick: Array[Vector3] = [Vector3(0.5, 0.0, 5.0)]
-	var crisp: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, AIPuckLane.PASS_CHARGE_SPEED_M_S)
+	var crisp_pace: float = 22.0
+	assert_gt(AIPuckLane.saucer_airborne_distance_m(crisp_pace), 8.0,
+			"precondition: the crisp flip lands well past him")
+	var crisp: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, crisp_pace)
 	var soft: float = AIPuckLane.lane_clear_saucer(from, to, mid_stick, 12.0)
 	assert_almost_eq(crisp, 1.0, 0.0001, "the crisp flip lands well past the 5 m defender")
 	assert_lt(soft, crisp, "the soft flip lands beside him — he blocks it")
@@ -1030,9 +1052,9 @@ func test_lane_clear_saucer_the_man_it_flew_over_plays_the_landing() -> void:
 
 
 func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
-	# The receivability bound: launch × hang time + landing run must fit
+	# The receivability bound: the airborne carry + landing run must fit
 	# inside the pass distance. At the bound the flip lands exactly a
-	# landing-run short of the tape; below the softest feed (~6.5 m feeds and
+	# landing-run short of the tape; below the softest feed (~4 m feeds and
 	# shorter) no saucer is offered.
 	var bound: float = AIPuckLane.saucer_max_launch_speed(10.0)
 	assert_almost_eq(
@@ -1040,12 +1062,27 @@ func test_saucer_max_launch_speed_bounds_receivable_flips() -> void:
 					+ AIPuckLane.SAUCER_LANDING_RUN_M,
 			10.0, 0.0001,
 			"at the bound the flip lands exactly a landing-run before the tape")
-	assert_gt(AIPuckLane.saucer_max_launch_speed(7.0),
+	assert_gt(AIPuckLane.saucer_max_launch_speed(5.0),
 			AIPuckLane.SOFTEST_FEED_M_S,
-			"a 7 m feed still admits a soft saucer above the softest feed")
-	assert_lt(AIPuckLane.saucer_max_launch_speed(6.0),
+			"a 5 m feed still admits a soft saucer above the softest feed")
+	assert_lt(AIPuckLane.saucer_max_launch_speed(3.5),
 			AIPuckLane.SOFTEST_FEED_M_S,
-			"a 6 m feed can't be saucered — even the softest flip lands too late")
+			"a 3.5 m feed can't be saucered — even the softest flip lands too late")
+
+
+func test_a_saucer_carries_what_a_charged_low_release_flies() -> void:
+	# The bots' saucer is a charged wrister at LOW loft: the carry the pass
+	# search prices is the one ShotMechanics launches, landing where a puck at
+	# that launch comes back down.
+	for pace: float in [12.0, 16.0, 20.0]:
+		var cfg := ShotMechanics.WristerConfig.new()
+		var r: ShotMechanics.ShotResult = ShotMechanics.release_wrister(Vector3.ZERO,
+				Vector3(0, 0, -10), Vector3.ZERO, false, ShotMechanics.ELEVATION_LOW, cfg,
+				Vector3(0, 0, -1), false)
+		var v: Vector3 = r.direction * pace
+		var flight_s: float = 2.0 * v.y / GameRules.GRAVITY_M_S2
+		assert_almost_eq(AIPuckLane.saucer_airborne_distance_m(pace),
+				Vector2(v.x, v.z).length() * flight_s, 0.01, "at %.0f m/s" % pace)
 
 
 # ── lane_loss_point: interceptor location for the turnover-cost term ──────────

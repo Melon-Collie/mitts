@@ -71,7 +71,7 @@ static func reach_clearance(
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		opponent_caps: Array = [], maneuver_time: float = -1.0,
 		carry_dir: Vector2 = Vector2.ZERO, carry_speed: float = 0.0,
-		abort_below: float = -INF) -> float:
+		abort_below: float = -INF, carried_from: Vector3 = Vector3.INF) -> float:
 	var n: int = opponents.size()
 	if n == 0 or opponent_vels.size() != n:
 		return EVADE_SAFE_MARGIN_M   # nothing to evade — fully clear
@@ -82,7 +82,9 @@ static func reach_clearance(
 	# CARRY_LUNGE_WINDOW_S): the defender isn't credited with committing to the
 	# catch spot for the whole flight — the in-flight interception is the lane
 	# model's ledger, and at a carry's arrival the carrier is established and
-	# protecting.
+	# protecting. A man chasing a carry from `carried_from` to `puck_point`
+	# commits the whole window regardless (_chases): he is after the carrier, not
+	# a spot.
 	var w: float = time if maneuver_time < 0.0 else minf(time, maneuver_time)
 	var has_caps: bool = opponent_caps.size() == n
 	var gated: bool = carry_speed > 0.0
@@ -129,8 +131,11 @@ static func reach_clearance(
 			v_along_carry = opponent_vels[i].x * carry_dir.x \
 					+ opponent_vels[i].z * carry_dir.y
 			accel *= clampf(1.0 - maxf(v_along_carry, 0.0) / carry_speed, 0.0, 1.0)
+		var w_i: float = w
+		if _chases(carried_from, puck_point, opponents[i], opponent_vels[i]):
+			w_i = time
 		var clear: float = _reach_clearance_one(
-				puck_point.x, puck_point.z, time, w,
+				puck_point.x, puck_point.z, time, w_i,
 				opponents[i].x, opponents[i].z,
 				opponent_vels[i].x, opponent_vels[i].z, accel, stick, vmax, grip)
 		if v_along_carry > 0.0 and w < time:
@@ -147,6 +152,19 @@ static func reach_clearance(
 			if worst < abort_below:
 				return worst
 	return worst
+
+
+# Whether a man at `pos` moving at `vel` is chasing a carry from `from` to `to`:
+# behind where it starts along it and skating its way, so where it ends is where
+# he is going and he is on it the whole window, never coasting past it. One
+# level with the carrier or in front of the carry is not: he has to cut across
+# to it, which is the reach the lunge prices.
+static func _chases(from: Vector3, to: Vector3, pos: Vector3, vel: Vector3) -> bool:
+	if not from.is_finite():
+		return false
+	var cx: float = to.x - from.x
+	var cz: float = to.z - from.z
+	return vel.x * cx + vel.z * cz > 0.0 and (pos.x - from.x) * cx + (pos.z - from.z) * cz < 0.0
 
 
 # One defender's nominal reach clearance (see reach_clearance): coast on
@@ -272,8 +290,10 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 # blade / poke rules, across pace, miss distance and closing geometry), the
 # meeting outcome is a pure DISTANCE band on the contact envelope's own radii,
 # not a speed or dwell-time effect:
-#   core = blade_span − POKE_CONTACT_RADIUS_M   → keep 0 (swept at any pace)
-#   edge = blade_span                            → keep 1 (grazed at pace)
+#   core = reach                         → keep 0 (swept at any pace)
+#   edge = reach + POKE_CONTACT_RADIUS_M  → keep 1 (grazed at pace)
+# where reach is his full blade reach (the build's max_blade_reach): the blade
+# sent at the puck, the poke's contact past its tip.
 #
 # A PROTECTING carrier (puck ridden on the handle envelope away from the
 # threat) shifts the whole band by CROSSING_PROTECT_SHIFT_M. The shift is a
@@ -285,7 +305,20 @@ const CARRY_LUNGE_WINDOW_S: float = EVADE_HORIZON_S
 #
 # Slow grazes are stripped by pursuit, not the meeting, and pursuit is what the
 # mid/end transit samples price. Only the window INTERIOR is sampled here.
-const CROSSING_PROTECT_SHIFT_M: float = 0.8
+#
+# Measured by tests/instruments/ai/test_crossing_band.gd: a carrier held past a
+# planted poker who leads the carry keeps the puck once his line passes his
+# full reach + ~0.15 m, at every pace and on either side. The shield rides the
+# puck ~0.3 m off by then (0.8 m only once the stick is already inside it), and
+# the band's half width takes the rest.
+const CROSSING_PROTECT_SHIFT_M: float = 0.1
+
+
+# A defender's crossing span, the band's edge before any shield: his full reach
+# plus the poke's contact.
+static func _crossing_span(caps: AISkaterCaps) -> float:
+	return (caps.max_blade_reach if caps != null else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M) \
+			+ POKE_CONTACT_RADIUS_M
 
 
 static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
@@ -311,11 +344,7 @@ static func carry_crossing_keep(from: Vector3, to: Vector3, arrival_time: float,
 	var worst_l: float = INF
 	var worst_r: float = INF
 	for i: int in n:
-		var span: float = EVADE_STICK_REACH_M
-		if has_caps:
-			var caps: AISkaterCaps = opponent_caps[i]
-			if caps != null:
-				span = caps.blade_span
+		var span: float = _crossing_span(opponent_caps[i] if has_caps else null)
 		var r0x: float = from.x - opponents[i].x
 		var r0z: float = from.z - opponents[i].z
 		# PRESCREEN (exact): the meeting can't come nearer than the current
@@ -471,11 +500,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 				continue
 			var mx: float = r0x + rvx * t_star
 			var mz: float = r0z + rvz * t_star
-			var span: float = EVADE_STICK_REACH_M
-			if has_caps:
-				var caps: AISkaterCaps = opponent_caps[i]
-				if caps != null:
-					span = caps.blade_span
+			var span: float = _crossing_span(opponent_caps[i] if has_caps else null)
 			var margin: float = sqrt(mx * mx + mz * mz) - span
 			if dirx * (-mz) - dirz * (-mx) >= 0.0:
 				worst_l = minf(worst_l, margin)
@@ -504,11 +529,7 @@ static func carry_strip_point(from: Vector3, to: Vector3, arrival_time: float,
 					continue
 				var mx2: float = r0x2 + rvx2 * t_star2
 				var mz2: float = r0z2 + rvz2 * t_star2
-				var span2: float = EVADE_STICK_REACH_M
-				if has_caps:
-					var caps2: AISkaterCaps = opponent_caps[i]
-					if caps2 != null:
-						span2 = caps2.blade_span
+				var span2: float = _crossing_span(opponent_caps[i] if has_caps else null)
 				var margin2: float = sqrt(mx2 * mx2 + mz2 * mz2) - span2
 				var left: bool = dirx * (-mz2) - dirz * (-mx2) >= 0.0
 				var eff: float = margin2 + CROSSING_PROTECT_SHIFT_M

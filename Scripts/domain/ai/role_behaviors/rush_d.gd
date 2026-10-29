@@ -238,7 +238,9 @@ static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 # the route may command no more speed up-ice than the defender can still turn
 # into the carrier's pace before the carrier has eaten the depth he holds past
 # `gap` (AILastManDiscipline.approach_speed_cap, the step-up bound with its
-# pivot), the carrier's pace being his whole speed turned at our net. The stand
+# pivot), the carrier's pace being his whole speed turned at our net and his
+# burst from it while the defender brakes. A stalled carrier is no invitation to
+# charge: he starts the moment the defender commits. The stand
 # keeps its place and the ride its lateral; only the charge is bounded. Without
 # it the moving-frame closing term walks a stepping-up defender up-ice at a
 # carrier who is crossing rather than coming, and the turn down beats him.
@@ -253,8 +255,12 @@ static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 	if pace >= retreat_max_speed(ctx, d.face_travel):
 		d.advance_cap_m_s = 0.0
 		return
+	var threat: AISkaterCaps = ctx.caps_by_peer.get(ctx.rush_read.carrier_peer) \
+			if ctx.rush_read != null else null
 	d.advance_cap_m_s = AILastManDiscipline.approach_speed_cap(depth - gap, pace,
-			ctx.self_max_speed, retreat_max_accel(ctx, d.face_travel))
+			ctx.self_max_speed, retreat_max_accel(ctx, d.face_travel),
+			threat.max_speed if threat != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
+			threat.max_accel if threat != null else GameRules.DEFAULT_SKATER_THRUST_M_S2)
 
 
 # Which way a defender in front of the carrier he owns skates his retreat

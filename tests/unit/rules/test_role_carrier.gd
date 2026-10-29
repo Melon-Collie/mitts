@@ -72,7 +72,7 @@ func _lane_forechecker_ctx(vel: Vector3) -> RoleContext:
 	return _make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos],
 			[2, TEAM_ID, Vector3(4.0, 0.0, -1.0)],
-			[11, 1, Vector3(6.6, 0.0, 13.5), false, vel]])
+			[11, 1, Vector3(7.6, 0.0, 13.5), false, vel]])
 
 
 func test_forechecker_closing_the_breakout_lane_devalues_the_pass() -> void:
@@ -239,6 +239,46 @@ func _impeded_ctx(mate: Vector3, defender: Vector3) -> RoleContext:
 	var carrier := Vector3(0.0, 0.0, 2.0)
 	return _set_keeper(_make_ctx(carrier, [
 			[1, TEAM_ID, carrier], [2, TEAM_ID, mate], [11, 1, defender]]))
+
+
+# A neutral-zone carrier, a mate wide, and a defender standing inside his line
+# (still, so the race's only clock is ours).
+func _entry_race_ctx() -> RoleContext:
+	var self_pos := Vector3(0.0, 0.0, 6.0)
+	return _set_keeper(_make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos], [2, TEAM_ID, Vector3(-6.0, 0.0, 4.0)],
+			[11, 1, Vector3(3.0, 0.0, -9.0)]]))
+
+
+func test_the_zone_entry_leaf_is_read_when_its_man_gets_there() -> void:
+	# Our possession of a spot short of the line is the entries its man races
+	# the defence for, from when he reaches it and at the pace he arrives with
+	# (AICarrierField.horizon_value): later is never easier, and skating away
+	# from the zone is worse than arriving at rest.
+	var ctx := _entry_race_ctx()
+	var c: AIRoleCarrier = _decided(ctx)
+	var spot := Vector3(-6.0, 0.0, -3.0)
+	var now: float = c._field.horizon_value(spot)
+	var later: float = c._field.horizon_value(spot, 0.6)
+	assert_gt(later, 0.0, "the entry is still worth racing for")
+	assert_lt(later, now, "arriving later hands the defence time")
+	assert_lt(c._field.horizon_value(spot, 0.6, Vector3(0.0, 0.0, 5.0)), later,
+			"arriving skating away from the zone is worth less than at rest")
+
+
+func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
+	# A mate far out is worth his drive in from the reception, its end read when
+	# he gets there (receiver_drive_in_value's start): never as if he stood at the
+	# end of it now.
+	var self_pos := Vector3(0.0, 0.0, 6.0)
+	var ctx := _set_keeper(_make_ctx(self_pos, [
+			[1, TEAM_ID, self_pos], [11, 1, Vector3(9.0, 0.0, -14.0)]]))
+	var c: AIRoleCarrier = _decided(ctx)
+	var mate := Vector3(-6.0, 0.0, 8.0)
+	var now: float = c._field.receiver_drive_in_value(ctx, mate, null)
+	assert_gt(now, 0.0, "his drive in is credited")
+	assert_lt(c._field.receiver_drive_in_value(ctx, mate, null, Vector3.ZERO, Vector3.INF,
+			0.8), now, "fed, his drive starts 0.8 s from now")
 
 
 func test_forward_pressure_is_directional_and_the_pass_must_be_earned() -> void:
@@ -962,11 +1002,13 @@ func test_settling_carrier_holds_instead_of_firing() -> void:
 
 # The same pressured breakout, with the outlet in two different situations. Both
 # are legal passes that fire on tick one with no doubt; the strong one is worth
-# ~11x PASS_MIN_VALUE, the weak one ~1.5x — inside the 1x-2.5x window Normal's
-# doubt holds. The weak outlet is still sliding into the far corner, so his drive
-# up the wall has to brake that out first. Both values are future value and so
-# scale with READ_VALIDITY_TAU_S against a fixed bar: re-size the weak one's depth
-# when that moves, never its slide (past 6 m/s the lane dies outright).
+# ~10x PASS_MIN_VALUE, the weak one ~0.9x. Boxed in, the carrier would lose the
+# puck where he stands, so the bar's own PASS_MIN_VALUE is off it and what Normal
+# holds is under its doubt's raise (1.5x). The weak outlet is still sliding into
+# the far corner, so his drive up the wall has to brake that out first. Both
+# values are future value and so scale with READ_VALIDITY_TAU_S against a fixed
+# bar: re-size the weak one's depth when that moves, never its slide (past 6 m/s
+# the lane dies outright).
 func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 	var outlet_vel: Vector3 = _MARGINAL_OUTLET_VEL if outlet == _MARGINAL_OUTLET \
 			else Vector3.ZERO
@@ -979,7 +1021,7 @@ func _settle_skaters(self_pos: Vector3, outlet: Vector3) -> Array:
 
 
 const _STRONG_OUTLET := Vector3(11, 0, 11)    # open, up the strong wall
-const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.0)  # deep below the dot
+const _MARGINAL_OUTLET := Vector3(9.0, 0, 22.5)  # deep below the dot
 const _MARGINAL_OUTLET_VEL := Vector3(0, 0, 0.5)   # …and still drifting into the corner
 
 
@@ -1823,10 +1865,12 @@ func _mid_lane_feed_ctx(receiver_z: float, stick_z: float) -> RoleContext:
 
 
 func test_short_feed_below_saucer_floor_stays_grounded() -> void:
-	# At 5.5 m even the softest legal flip (min wrister pace) can't land with
+	# At 3.5 m even the softest flip a bot offers (SOFTEST_FEED_M_S) can't land with
 	# runway, so no saucer variant exists and the pass stays flat whatever the
 	# lane looks like. (Which variant the 8 m feed takes is the snapshot's row.)
-	assert_false(_best_pass_to_mate(_mid_lane_feed_ctx(4.5, 7.5)).best_is_saucer,
+	assert_lt(AIPuckLane.saucer_max_launch_speed(3.5),
+			AIPuckLane.SOFTEST_FEED_M_S, "precondition: below the saucer floor")
+	assert_false(_best_pass_to_mate(_mid_lane_feed_ctx(6.5, 8.0)).best_is_saucer,
 			"below the physical saucer floor the feed stays grounded")
 
 
@@ -2106,7 +2150,9 @@ func test_pass_option_prefers_the_spot_that_reopens_the_lane() -> void:
 
 const _PINCH_SPOT := Vector3(0.0, 0.0, -18.0)     # OZ, attacking -Z
 const _TIGHT_WALL_HALF_GAP: float = 0.5           # 1.0 m apart: no seam for a body or a puck
-const _SPLITTABLE_HALF_GAP: float = 1.8           # 3.6 m up the middle
+# 6 m up the middle: each man ~3 m off the carrier's line, past his full reach
+# and the poke's contact (AICarrySpace._crossing_span), so the seam is real.
+const _SPLITTABLE_HALF_GAP: float = 3.0
 
 
 # A carrier at _PINCH_SPOT with a teammate open wide and two defenders 1.6 m
@@ -2126,7 +2172,7 @@ func test_a_wider_gap_never_makes_the_carry_worth_less() -> void:
 	# Between the pinch and the split, opening the gap only ever gives the carrier
 	# more room: the carry is never worth less.
 	var prev: float = -INF
-	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.7, 0.9, 1.1, 1.3, 1.5, _SPLITTABLE_HALF_GAP]:
+	for half_gap: float in [_TIGHT_WALL_HALF_GAP, 0.9, 1.3, 1.7, 2.1, 2.5, _SPLITTABLE_HALF_GAP]:
 		var v: float = _pinch(half_gap)._carry.raw_value
 		assert_gte(v, prev - 1e-4,
 				"gap %.1f m: the carry is worth less (%.3f after %.3f)"
@@ -2546,8 +2592,9 @@ func _record_feed_and_pressure_picks(snap: Snapshot) -> void:
 			_intent_name(_decided(_poor_spot_mate_ctx()).intended_action))
 	snap.record("neutral ice, straight lane clogged, close outlet up-ice: pick",
 			_pick(_decided(_close_outlet_ctx())))
+	var mid_lane: AICarrierPassSearch = _best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5))
 	snap.record("8 m feed past a mid-lane stick: variant",
-			_variant(_best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5)).best_is_saucer))
+			_variant(mid_lane.best_is_saucer) if mid_lane.best_score > 0.0 else "NONE")
 	snap.record("pinged ahead man 9 m out behind a mid-lane stick: variant",
 			_variant(_decided(_pinged_saucer_ctx()).pass_should_saucer))
 	snap.record("board pincer closing, open outlet across: pick", _pick(_decided(_pincer_ctx())))
@@ -2656,6 +2703,31 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 			AIShotOdds.Stance.DOWN, "still down for a shot before he could stand up")
 	assert_eq(c._field.keeper_stance_at(AIGoalieModel.GOALIE_RECOVERY_S),
 			AIShotOdds.Stance.UPRIGHT, "after it, his rise is his call: priced upright")
+
+
+
+func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
+	# The keeper a carry arrives at has tracked it, so he faces the puck, as the
+	# shoot-now read sees him there. Read with his facing unknown, the field
+	# blends in keepers turned to a decoy or a feed, and in tight a carry to the
+	# crease promised odds the shot on arrival never had.
+	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
+			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
+		var ctx := _standstill_ctx(2.5)
+		ctx.self_pos = spot
+		ctx.snapshot.skater_states[1].position = spot
+		ctx.snapshot.puck_state.position = spot
+		var g: GoalieNetworkState = _squared_goalie(spot, ctx.attacking_goal_pos, 1.3)
+		ctx.snapshot.goalie_states[1 - TEAM_ID] = g
+		var c := AIRoleCarrier.new()
+		c._field.fill(ctx)
+		c._field.holds.configure_from(ctx)
+		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
+		var shot_there: float = AIShotValue.now(spot, ctx.attacking_goal_pos,
+				Vector3(g.position_x, 0.0, g.position_z), 0.0, AIShotOdds.Stance.UPRIGHT,
+				g.rotation_y)
+		assert_almost_eq(arrival, shot_there, 1e-4,
+				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
 
 
 # ─── pass pace: a hard feed leaves the receiver settling ─────────────────────

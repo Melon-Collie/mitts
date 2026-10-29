@@ -346,3 +346,22 @@ func test_only_the_jersey_tail_blends() -> void:
 	assert_eq(skin.get_bind_bone(SkaterMeshBuilder.UPPER_TAIL_BIND), SkaterBodySkeleton.TAIL_BONE)
 	assert_eq(skin.get_bind_bone(SkaterMeshBuilder.UPPER_COLUMN_BIND_BASE + 3),
 			SkaterBodySkeleton.column_bone(1, 1))
+
+
+# The head sits a centimetre or two inside the shell all round; where the rim's
+# cut twists a shell quad, a fold the wrong way cuts through the temple.
+func test_the_head_stays_inside_the_helmet_shell() -> void:
+	var shell: PackedVector3Array = SkaterMeshBuilder.helmet_shell_triangles()
+	var ball: PackedVector3Array = SkaterMeshBuilder.shared_head_ball() \
+			.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+	var centre := Vector3(0.0, 0.0, -SkaterMeshBuilder.HEAD_FORWARD_M)
+	var crossings: int = 0
+	for i: int in range(0, ball.size(), 3):
+		for e: int in 3:
+			var a: Vector3 = ball[i + e] + centre
+			var b: Vector3 = ball[i + (e + 1) % 3] + centre
+			for t: int in range(0, shell.size(), 3):
+				if Geometry3D.segment_intersects_triangle(a, b, shell[t], shell[t + 1],
+						shell[t + 2]) != null:
+					crossings += 1
+	assert_eq(crossings, 0, "head edges crossing the shell")

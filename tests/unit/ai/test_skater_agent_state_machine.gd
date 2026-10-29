@@ -298,6 +298,21 @@ func test_lead_intercept_receding_fast_puck_is_chased_to_where_he_can_make_it() 
 			"he steers to a point he can make, or to the end of the walk")
 
 
+
+func test_lead_intercept_puts_the_stick_in_a_lane_passing_a_stride_off() -> void:
+	# A 12 m/s cross-ice pass whose line runs 2 m off a backing-in defender: his
+	# stick is on it with a step, half a second out. He steers into the lane
+	# there, not to where his body could catch the puck down by the end boards.
+	var self_pos := Vector3(0, 0, -19.4)
+	var puck_pos := Vector3(-3.9, 0, -14.0)
+	var puck_vel := Vector3(9.9, 0, -7.3)
+	var out: Vector3 = sm._lead_intercept(self_pos, Vector3(0.3, 0, -1.8), puck_pos, puck_vel)
+	assert_lt(out.distance_to(self_pos), sm._blade_reach + AILoosePuckChase.INCIDENTAL_STRIDE_M,
+			"the lane a stride off him, not %s" % out)
+	var dir: Vector3 = puck_vel.normalized()
+	var off: Vector3 = out - puck_pos
+	assert_almost_eq((off - dir * off.dot(dir)).length(), 0.0, 0.1, "on the pass's line")
+
 func test_lead_intercept_moving_with_puck_is_where_a_flying_start_closes() -> void:
 	# Already at top speed right behind a slower puck: he meets it no later than
 	# a body holding top speed closes the gap down to his stick on a puck that
@@ -396,14 +411,17 @@ func test_lead_intercept_agrees_with_the_election() -> void:
 	var traj: Array[Vector3] = AILoosePuckChase.race_trajectory(puck_pos, puck_vel)
 	var step_dt: float = AILoosePuckChase.RACE_LOOKAHEAD_S \
 			/ float(AILoosePuckChase.RACE_STEPS)
-	# Same solver, same walk, same margin, and the body's own stick — the self
-	# read passes reach where the election deliberately does not (see the reach
-	# block in AILoosePuckChase), so the agreement is of MODEL, not of arguments.
-	var elected: Vector3 = AILoosePuckChase.path_intercept_point(
-			traj, step_dt, puck_pos, AILoosePuckChase.path_intercept_time(
+	# Same solver, same walk, same margin, the same stick-out meet, and the
+	# body's own stick — the self read passes reach where the election
+	# deliberately does not (see the reach block in AILoosePuckChase), so the
+	# agreement is of MODEL, not of arguments.
+	var t: float = minf(AILoosePuckChase.path_intercept_time(
 					traj, step_dt, puck_pos, self_pos, self_vel,
 					sm._self_max_speed, AILoosePuckChase.setup_margin(puck_vel),
-					sm._chase_max_accel, sm._blade_reach))
+					sm._chase_max_accel, sm._blade_reach),
+			AILoosePuckChase.reach_meet_time(traj, puck_pos, puck_vel, self_pos,
+					self_vel, sm._self_max_speed, sm._blade_reach, true, true))
+	var elected: Vector3 = AILoosePuckChase.path_intercept_point(traj, step_dt, puck_pos, t)
 	var steered: Vector3 = sm._lead_intercept(
 			self_pos, self_vel, puck_pos, puck_vel)
 	assert_almost_eq(steered.distance_to(elected), 0.0, 0.001,
@@ -502,6 +520,19 @@ func test_step_toward_within_cap_snaps_to_target() -> void:
 	assert_almost_eq(sm._mouse_pos.x, 0.2, 1e-6)
 	assert_almost_eq(sm._mouse_pos.z, 0.1, 1e-6)
 
+
+func test_the_cursor_rides_the_body_and_only_its_own_slew_is_capped() -> void:
+	# The controller caps the blade's speed relative to the skater, so a body
+	# skating at 9 m/s still moves the cursor a full slew step across himself.
+	sm._current_self_pos = Vector3.ZERO
+	sm._mouse_pos = Vector3(-1, 0, 0)
+	sm._mouse_pos_initialized = true
+	sm._step_mouse_toward(Vector3(-1, 0, 0))
+	var travel := Vector3(0, 0, -9.0 * Agent.MOUSE_TICK_DELTA)
+	sm._current_self_pos = travel
+	sm._step_mouse_toward(travel + Vector3(1, 0, 0))
+	assert_almost_eq(sm._mouse_pos.x, -1.0 + STEP_MAX, 1e-5, "a full step across him")
+	assert_almost_eq(sm._mouse_pos.z, travel.z, 1e-6, "carried along with him")
 
 func test_step_aim_projects_target_onto_ring() -> void:
 	sm._current_self_pos = Vector3.ZERO
@@ -1509,6 +1540,74 @@ func test_pass_aim_leads_from_the_puck_not_the_body() -> void:
 			make.call(Vector3(3, 0, 0)), Vector3.ZERO)
 	assert_lt(aim_blade.z, aim_body.z - 0.3,
 			"a puck 3 m out front shortens the flight and the lead follows")
+
+
+func test_pass_aim_feeds_a_ready_one_timer_man_on_his_tape() -> void:
+	# A ready one-timer man takes the feed in his slapper zone, so the fired aim
+	# is his tape — the point the carrier's pass search scored him at — and an
+	# unready receiver is still fed at the body.
+	var receiver_pos := Vector3(-2.5, 0, -24.45)
+	var s := WorldSnapshot.new()
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.carrier_peer_id = SELF_ID
+	s.puck_state.position = Vector3(7, 0, -22.6)
+	_add_skater(s, SELF_ID, Vector3(7, 0, -22.6))
+	_add_skater(s, TEAMMATE_ID, receiver_pos)
+	sm._pass_target_peer_id = TEAMMATE_ID
+	sm._pass_target_speed = 20.0
+	sm._current_strategy = sm._strategy()
+	var at_body: Vector3 = sm._pass_aim_point(s, s.skater_states[SELF_ID].position)
+	assert_almost_eq(at_body, receiver_pos, Vector3.ONE * 0.001, "unready: fed at the body")
+	sm._team_brain.set_one_timer_ready(TEAMMATE_ID, true)
+	var at_tape: Vector3 = sm._pass_aim_point(s, s.skater_states[SELF_ID].position)
+	assert_almost_eq(at_tape, AIPassLead.one_timer_tape(receiver_pos,
+			sm._caps_by_peer.get(TEAMMATE_ID), sm._attacking_goal_pos), Vector3.ONE * 0.001,
+			"ready: fed on his tape")
+	assert_gt(at_tape.distance_to(receiver_pos), 0.5, "which sits off his body")
+
+
+func test_pass_aim_feeds_the_body_of_a_one_timer_man_who_cannot_set() -> void:
+	# Turned square away from the stance he would shoot from, a feed from close
+	# in arrives before his hips can pivot round: he will catch it, so it goes to
+	# his body.
+	var receiver_pos := Vector3(-2.5, 0, -24.45)
+	var s := WorldSnapshot.new()
+	s.puck_state = PuckNetworkState.new()
+	s.puck_state.carrier_peer_id = SELF_ID
+	s.puck_state.position = Vector3(0.5, 0, -24.45)
+	_add_skater(s, SELF_ID, s.puck_state.position)
+	_add_skater(s, TEAMMATE_ID, receiver_pos)
+	var caps := AISkaterCaps.new()
+	var tape: Vector3 = AIPassLead.one_timer_tape(receiver_pos, caps, sm._attacking_goal_pos)
+	s.skater_states[TEAMMATE_ID].facing = -SlapperRules.stance_facing(Vector2(
+			sm._attacking_goal_pos.x - tape.x, sm._attacking_goal_pos.z - tape.z).normalized(),
+			-1.0 if caps.is_left_handed else 1.0, caps.slapper_stance_open_rad)
+	sm._pass_target_peer_id = TEAMMATE_ID
+	sm._pass_target_speed = 20.0
+	sm._current_strategy = sm._strategy()
+	sm._team_brain.set_one_timer_ready(TEAMMATE_ID, true)
+	assert_almost_eq(sm._pass_aim_point(s, s.skater_states[SELF_ID].position), receiver_pos,
+			Vector3.ONE * 0.001, "fed at the body, to catch")
+
+
+func test_a_released_pass_leaves_the_blade_for_the_lead() -> void:
+	# The puck leaves from the blade, not the body: the release direction is the
+	# blade's line to the lead, or the pass runs a blade's offset wide of it.
+	var s := _self_snap(Vector3.ZERO, true)
+	var blade := Vector3(1.0, 0.0, -0.5)
+	s.puck_state.position = blade
+	s.skater_states[SELF_ID].blade_contact_world = blade
+	_add_skater(s, TEAMMATE_ID, Vector3(10, 0, 0))
+	sm._state = Agent.State.PASS_PRESSED
+	sm._pass_target_peer_id = TEAMMATE_ID
+	sm._pass_target_speed = 20.0
+	sm._pass_charge_tick = AIBotMechanics.BOT_WRISTER_CHARGE_TICKS
+	var input := InputState.new()
+	input.delta = 1.0 / 120.0
+	sm.dispatch(input, s)
+	assert_false(input.shoot_held, "the pass releases this tick")
+	assert_almost_eq(input.bot_wrister_aim_dir, Vector3(9.0, 0.0, 0.5).normalized(),
+			Vector3.ONE * 0.001, "from the blade to the receiver")
 
 
 # ── Contest read + live-bot execution error ─────────────────────────────────
