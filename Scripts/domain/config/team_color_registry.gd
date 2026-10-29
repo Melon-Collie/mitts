@@ -386,7 +386,7 @@ static func _hardcoded_pomegranate() -> Dictionary:
 		}),
 		"away":      _parse_kit({
 			"helmet":      "#F5E6D3",
-			"shoulders":   {"color": "#971829", "text": "#F5E6D3"},
+			"shoulders":   {"color": "#F5E6D3", "text": "#971829"},
 			"jersey":      {"base": "#F5E6D3", "stripes": []},
 			"arms":        {"upper": {"base": "#971829", "stripes": []},
 							"lower": {"base": "#971829", "stripes": []}},
