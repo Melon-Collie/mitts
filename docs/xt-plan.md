@@ -137,7 +137,10 @@ carrier picks. Counted xT takes what players actually did. Recommended:
 The rink is 60 m × 26 m. At **2 m cells**, 30 × 13 cells, mirrored left to right
 so that half are stored, with **bilinear interpolation** between cell centres,
 so nearby spots the carrier compares read smoothly rather than in steps.
-Recommended start: 2 m, refined only where V changes fast (the slot).
+**Agreed: 2 m to start**, refined only where V changes fast (the slot). The
+table is generated offline, as the shot field is, so the grid costs nothing in a
+match; 2 m keeps the generation (every move from every cell, each against its
+set defence) manageable.
 
 ### 5. Does time cost anything?
 
