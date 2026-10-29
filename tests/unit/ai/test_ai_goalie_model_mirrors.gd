@@ -69,7 +69,6 @@ func test_the_bots_put_him_at_his_own_depth_against_a_carrier() -> void:
 				var play := KeeperPlayRead.new()
 				play.theirs = true
 				play.loose = false
-				play.carrier_at = at
 				brain.play = play
 				var motor := KeeperMotor.new()
 				brain.decide(at, -at.normalized() * closing, motor)
