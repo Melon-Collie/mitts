@@ -57,14 +57,14 @@ draws it beside the current body.
   elbow's middle and the forearm share the ELBOW bone's hinge.
 - **The armhole is a jersey's seam**, from beside the collar down to under the
   arm, so the sleeve's cap is the top of the shoulder, and the seam joins the
-  sleeve's top ring directly: one tube narrowing from the seam down the arm.
-  A ring between them wider than the sleeve reads as a separate shoulder
-  part.
+  upper arm's first ring directly: one tube narrowing from the seam down the
+  arm. Any ring between them reads as a separate shoulder part, a kink where
+  the sleeve meets it.
 - **The shoulder splits the arm's turn off the chest into swing and twist.** The
   girdle (the armhole and the top of the shoulder) takes a share of the swing
   that rises as the arm lifts, as the collarbone and shoulder blade do (the
-  scapulohumeral rhythm), the shoulder's middle (the sleeve's top ring) two
-  thirds, the upper arm all of it and half
+  scapulohumeral rhythm), the shoulder's middle (half of the upper arm's
+  first ring) two thirds, the upper arm all of it and half
   the twist, the elbow the rest. Blending the chest straight into the arm
   collapses the pad into a fin past ~90°; putting the whole twist on one ring
   pinches the sleeve shut.

@@ -133,12 +133,12 @@ const _ARMHOLE_GIRDLE: Array[float] = [
 const _TRAP_GIRDLE: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
 const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 
-# The sleeve, out from the armhole: rings along the arm, each (s along its
-# segment, radius, its share on the elbow's middle). The elbow folds over five
-# rings.
-# The sleeve's top ring, joined straight to the armhole's seam: (s along the
-# upper arm, radius, its share on the upper arm against the shoulder's middle).
-const _TOP_RING := Vector3(0.06, 0.094, 0.3)
+# The sleeve, out from the armhole's seam: rings along the arm, each (s along
+# its segment, radius, its share on the elbow's middle). The first is joined to
+# the seam. The elbow folds over five rings.
+# The share of the upper arm's first ring, the one joined to the seam, on the
+# arm rather than the shoulder's middle.
+const _FIRST_RING_ARM_SHARE: float = 0.5
 const _UPPER_RINGS: Array[Vector3] = [
 	Vector3(0.12, 0.088, 0.0), Vector3(0.17, 0.084, 0.0), Vector3(0.22, 0.081, 0.0),
 	Vector3(0.27, 0.079, 0.25), Vector3(0.305, 0.080, 0.6),
@@ -514,15 +514,16 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var upper: Transform3D = frames[0]
 	var fore: Transform3D = frames[2]
 
-	# The sleeve's top ring, round the arm just off the joint: the seam joins it
-	# directly, so the sleeve is one tube narrowing from the seam down the arm.
-	var top: PackedInt32Array = _limb_ring(b, upper, _TOP_RING.x, _TOP_RING.y, 0.0,
-			shoulder_bind, upper_bind, _TOP_RING.z)
-
-	var rings: Array[PackedInt32Array] = [top]
-	var vs := PackedFloat32Array([0.5 * _TOP_RING.x / BIND_ARM_SEGMENT_M])
+	# The upper arm's first ring is joined straight to the seam, and rides
+	# halfway from the shoulder's middle to the arm so the joint does not pinch.
+	var rings: Array[PackedInt32Array] = []
+	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
-		rings.append(_limb_ring(b, upper, r.x, r.y, 0.0, upper_bind, elbow_bind, r.z))
+		if rings.is_empty():
+			rings.append(_limb_ring(b, upper, r.x, r.y, 0.0, shoulder_bind, upper_bind,
+					_FIRST_RING_ARM_SHARE))
+		else:
+			rings.append(_limb_ring(b, upper, r.x, r.y, 0.0, upper_bind, elbow_bind, r.z))
 		vs.append(0.5 * r.x / BIND_ARM_SEGMENT_M)
 	var elbow: int = rings.size()
 	rings.append(_limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
@@ -532,9 +533,9 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 		rings.append(_limb_ring(b, fore, r.x, r.y, 0.0, fore_bind, elbow_bind, r.z))
 		vs.append(0.5 * r.x / BIND_ARM_SEGMENT_M)
 
-	var seam: PackedInt32Array = _aligned(b, hole, top)
-	_join(b, seam, top, cap_zone, _shoulder_uv.bind(side),
-			(b.centroid(seam) + b.centroid(top)) * 0.5)
+	var seam: PackedInt32Array = _aligned(b, hole, rings[0])
+	_join(b, seam, rings[0], cap_zone, _shoulder_uv.bind(side),
+			(b.centroid(seam) + b.centroid(rings[0])) * 0.5)
 	for i: int in rings.size() - 1:
 		var inside: Vector3 = (b.centroid(rings[i]) + b.centroid(rings[i + 1])) * 0.5
 		var v0: float = 0.0 if i == elbow else vs[i]
