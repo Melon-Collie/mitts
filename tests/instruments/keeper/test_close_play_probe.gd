@@ -5,9 +5,10 @@ extends GutTest
 # toward the far post, a drive with a late pull. Per tick, against the puck
 # where it is:
 #   lag      — how far his angle from the net's centre is off the puck's, deg
-#   covered  — the share of the mouth a straight shot from the puck now meets
-#              his gear in (no reaction: the shape he presents), with the low
-#              band (under 25 cm) apart
+#   covered  — the share of the mouth a shot from the puck now can reach (no
+#              higher than the steepest pattern lifts it) that a straight shot
+#              meets his gear in (no reaction: the shape he presents), with the
+#              low band (under 25 cm) apart
 #   ideal    — the same, his pose set on the puck's angle line at his depth,
 #              square to it: what is lost to where he is, not to his stance
 # and for the drags, shots released at delays after the puck stops, saves
@@ -79,7 +80,7 @@ func _moves() -> Array:
 			# Driven in from the dots on the backhand, pulled hard across to the
 			# forehand with the body swerving after it, then back across into a
 			# backhand tuck at the crease.
-			var out: float = maxf(6.5 - 6.0 * t, 1.4)
+			var out: float = maxf(6.5 - 6.0 * t, 1.9)
 			var sell: float = smoothstep(0.3, 0.55, t)
 			var tuck: float = smoothstep(0.6, 0.85, t)
 			var px: float = -0.4 + 1.3 * sell - 1.9 * tuck
@@ -130,8 +131,9 @@ func _track(move_name: String, seconds: float, at: Callable, trace: bool) -> Str
 		if trace and i % 3 == 0:
 			var me: Vector3 = _ctrl._net.affine_inverse() * _goalie.global_position
 			var p: Vector3 = _ctrl._net.affine_inverse() * puck
-			rows.append("t %.3f puck x %+.2f z %+.2f | him x %+.2f z %+.2f rest %d lowready %.2f | lag %+5.1f | cov %.2f low %.2f | ideal %.2f low %.2f" % [
-					t, p.x, p.z, me.x, me.z, _ctrl.motor.rest, _ctrl.motor.low_ready.share,
+			rows.append("t %.3f puck x %+.2f z %+.2f | him x %+.2f z %+.2f rest %d mover %d goal %+.2f,%+.2f %d | lag %+5.1f | cov %.2f low %.2f | ideal %.2f low %.2f" % [
+					t, p.x, p.z, me.x, me.z, _ctrl.motor.rest, _ctrl.motor._mover, _ctrl.motor.route.spot.x,
+					_ctrl.motor.route.spot.y, _ctrl.motor.route.rest,
 					lag, c.x, c.y, c_ideal.x, c_ideal.y])
 	var line: String = "%-20s | %6.1f %6.1f | %8.2f %5.2f %5.2f | %6.2f %5.2f" % [move_name, _mean(lags),
 			_max(lags), _mean(cov), _min(cov), _mean(low), _mean(ideal), _mean(ideal_low)]
@@ -166,10 +168,12 @@ func _lag_deg(puck: Vector3) -> float:
 	return rad_to_deg(angle_difference(atan2(p.x, -p.z), atan2(me.x, -me.z)))
 
 
-# The share of the mouth, and of its low band, a straight shot from `puck`
-# meets him in.
+# The share of the mouth a shot from `puck` can reach (no higher than the
+# steepest pattern lifts it over the way there), and of its low band, that a
+# straight shot meets him in.
 func _covered(puck: Vector3) -> Vector2:
 	var from := Vector3(puck.x, GameRules.PUCK_COLLISION_HALF_HEIGHT, puck.z)
+	var lift: float = PlayerAttributes.steepest_loft_tan()
 	var r: float = GameRules.PUCK_COLLISION_RADIUS
 	var half_w: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - r
 	var top: float = GameRules.NET_HEIGHT - GameRules.NET_POST_RADIUS - r
@@ -180,7 +184,8 @@ func _covered(puck: Vector3) -> Vector2:
 	var x: float = -half_w
 	while x <= half_w + 1e-6:
 		var y: float = GameRules.PUCK_COLLISION_HALF_HEIGHT
-		while y <= top + 1e-6:
+		var reach: float = from.y + lift * Vector2(x - from.x, GOAL_Z - from.z).length()
+		while y <= minf(top, reach) + 1e-6:
 			var met: bool = GoalieContactDetector.nearest([_goalie], from, Vector3(x, y, GOAL_Z), r, _sw, _ct)
 			all += 1
 			hit += 1 if met else 0
