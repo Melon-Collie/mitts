@@ -297,13 +297,19 @@ func _write_bones(drape: Basis) -> void:
 
 
 # A segment's bone: the rest drape turned about its top so its rest direction
-# points along the simulated one, with its top moved to the simulated top.
+# points along the simulated one, with its top moved to the simulated top. The
+# turn is the shortest arc as an axis and an angle, so it goes to nothing as
+# the two line up — Quaternion(from, to) snaps to none under a quarter degree.
 func _write_segment(k: int, joint: int, top: Vector3, bottom: Vector3, rest_top: Vector3,
 		rest_bottom: Vector3, drape: Basis) -> void:
 	var from: Vector3 = (drape * (rest_bottom - rest_top)).normalized()
 	var to: Vector3 = (bottom - top).normalized()
+	var axis: Vector3 = from.cross(to)
+	var sin_a: float = axis.length()
 	var turn := Basis.IDENTITY
-	if from.dot(to) < 0.99999:
+	if sin_a > 1e-9:
+		turn = Basis(axis / sin_a, atan2(sin_a, from.dot(to)))
+	elif from.dot(to) < 0.0:
 		turn = Basis(Quaternion(from, to))
 	var basis: Basis = turn * drape
 	_skeleton.set_bone_pose(_first_column_bone + k * 2 + joint, Transform3D(basis, top - basis * rest_top))

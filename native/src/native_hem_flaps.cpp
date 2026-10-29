@@ -344,8 +344,12 @@ void NativeHemFlaps::step(double p_delta, const Vector3 &p_g, bool p_write) {
 			const Vector3 &rest_bottom = rest_at(joint == 0 ? BEND : HEM, k);
 			const Vector3 from = drape.xform(rest_bottom - rest_top).normalized();
 			const Vector3 to = (bottom - top).normalized();
+			const Vector3 axis = from.cross(to);
+			const double sin_a = axis.length();
 			Basis turn;
-			if (from.dot(to) < 0.99999) {
+			if (sin_a > 1e-9) {
+				turn = Basis(axis / (real_t)sin_a, (real_t)Math::atan2(sin_a, (double)from.dot(to)));
+			} else if (from.dot(to) < 0.0f) {
 				turn = Basis(Quaternion(from, to));
 			}
 			const Basis basis = turn * drape;
