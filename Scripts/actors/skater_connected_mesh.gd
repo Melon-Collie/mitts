@@ -133,27 +133,14 @@ const _ARMHOLE_GIRDLE: Array[float] = [
 const _TRAP_GIRDLE: Array[float] = [0.05, 0.1, 0.15, 0.1, 0.05]
 const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 
-# The sleeve, out from the armhole: a ring standing off the torso toward the
-# arm (the pad), then rings along the arm, each (s along its segment, radius,
-# its share on the elbow's middle). The elbow folds over five rings.
-# Its centre stands off the joint down the arm and out from the chest, so the
-# ring surrounds the pivot: a ring round the point it turns about barely moves.
-const _PAD_DOWN_M: float = 0.05
-const _PAD_OUT_M: float = 0.045
-const _PAD_RADIUS_M: float = 0.100
-# How much of the ring's radius its top gives up, so the pad slopes off the
-# trapezius rather than standing above it.
-const _PAD_TOP_FLATTEN: float = 0.2
-# How far the cap ring between the armhole and the pad bows out from the joint.
-const _CAP_BOW_M: float = 0.02
-# The shoulder's dome (right side, bind space): the cap and the pad ring's upper
-# half are laid on this ellipsoid, so the line from the collar rolls over the
-# pad and down the arm as one curve. Its top sits just over the collar's
-# height, so the shoulder slopes off the neck the way a padded jersey does.
-const _DOME_CENTRE := Vector3(0.20, 0.36, 0.0)
-const _DOME_RADII := Vector3(0.125, 0.115, 0.115)
+# The sleeve, out from the armhole: rings along the arm, each (s along its
+# segment, radius, its share on the elbow's middle). The elbow folds over five
+# rings.
+# The sleeve's top ring, joined straight to the armhole's seam: (s along the
+# upper arm, radius, its share on the upper arm against the shoulder's middle).
+const _TOP_RING := Vector3(0.06, 0.094, 0.3)
 const _UPPER_RINGS: Array[Vector3] = [
-	Vector3(0.10, 0.091, 0.0), Vector3(0.16, 0.085, 0.0), Vector3(0.22, 0.081, 0.0),
+	Vector3(0.12, 0.088, 0.0), Vector3(0.17, 0.084, 0.0), Vector3(0.22, 0.081, 0.0),
 	Vector3(0.27, 0.079, 0.25), Vector3(0.305, 0.080, 0.6),
 ]
 const _ELBOW_RADIUS_M: float = 0.081
@@ -518,7 +505,6 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var elbow_bind: int = Bind.ELBOW_L if left else Bind.ELBOW_R
 	var fore_bind: int = Bind.FORE_L if left else Bind.FORE_R
 	var shoulder_bind: int = Bind.SHOULDER_L if left else Bind.SHOULDER_R
-	var girdle_bind: int = Bind.GIRDLE_L if left else Bind.GIRDLE_R
 	var upper_zone: int = zone(_UpperSurface.TOP_UPPER_ARM if left else _UpperSurface.BOTTOM_UPPER_ARM)
 	var fore_zone: int = zone(_UpperSurface.TOP_FOREARM if left else _UpperSurface.BOTTOM_FOREARM)
 	var pad_zone: int = zone(_UpperSurface.TOP_ELBOW if left else _UpperSurface.BOTTOM_ELBOW)
@@ -528,20 +514,13 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var upper: Transform3D = frames[0]
 	var fore: Transform3D = frames[2]
 
-	# The pad ring: off the shoulder down the arm, turned halfway from the arm
-	# toward the side it leaves.
-	var out := Vector3(side, 0.0, 0.0)
-	var pad_centre: Vector3 = arm[0] + upper.basis.y * _PAD_DOWN_M + out * _PAD_OUT_M
-	var pad_turn := Basis(Quaternion(upper.basis.y, (upper.basis.y + out).normalized()))
-	var pad := PackedInt32Array()
-	for m: int in LIMB_SIDES:
-		var phi: float = TAU * float(m) / float(LIMB_SIDES)
-		var dir: Vector3 = pad_turn * (upper.basis * Vector3(sin(phi), 0.0, cos(phi)))
-		var r: float = _PAD_RADIUS_M * (1.0 - _PAD_TOP_FLATTEN * maxf(dir.y, 0.0))
-		pad.append(b.vertex(_on_dome(pad_centre + dir * r, side), [shoulder_bind], [1.0]))
+	# The sleeve's top ring, round the arm just off the joint: the seam joins it
+	# directly, so the sleeve is one tube narrowing from the seam down the arm.
+	var top: PackedInt32Array = _limb_ring(b, upper, _TOP_RING.x, _TOP_RING.y, 0.0,
+			shoulder_bind, upper_bind, _TOP_RING.z)
 
-	var rings: Array[PackedInt32Array] = [pad]
-	var vs := PackedFloat32Array([0.0])
+	var rings: Array[PackedInt32Array] = [top]
+	var vs := PackedFloat32Array([0.5 * _TOP_RING.x / BIND_ARM_SEGMENT_M])
 	for r: Vector3 in _UPPER_RINGS:
 		rings.append(_limb_ring(b, upper, r.x, r.y, 0.0, upper_bind, elbow_bind, r.z))
 		vs.append(0.5 * r.x / BIND_ARM_SEGMENT_M)
@@ -553,18 +532,9 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 		rings.append(_limb_ring(b, fore, r.x, r.y, 0.0, fore_bind, elbow_bind, r.z))
 		vs.append(0.5 * r.x / BIND_ARM_SEGMENT_M)
 
-	# The cap: a ring halfway from the armhole to the pad, bowed out from the
-	# joint, so the shoulder rounds over from the seam into the sleeve rather
-	# than turning one corner; it rides halfway from the girdle to the shoulder.
-	var seam: PackedInt32Array = _aligned(b, hole, pad)
-	var cap := PackedInt32Array()
-	for m: int in LIMB_SIDES:
-		var p: Vector3 = (b.position(seam[m]) + b.position(pad[m])) * 0.5
-		p += (p - arm[0]).normalized() * _CAP_BOW_M
-		cap.append(b.vertex(_on_dome(p, side), [girdle_bind, shoulder_bind], [0.5, 0.5]))
-	var uv: Callable = _shoulder_uv.bind(side)
-	_join(b, seam, cap, cap_zone, uv, (b.centroid(seam) + b.centroid(cap)) * 0.5)
-	_join(b, cap, pad, cap_zone, uv, (b.centroid(cap) + pad_centre) * 0.5)
+	var seam: PackedInt32Array = _aligned(b, hole, top)
+	_join(b, seam, top, cap_zone, _shoulder_uv.bind(side),
+			(b.centroid(seam) + b.centroid(top)) * 0.5)
 	for i: int in rings.size() - 1:
 		var inside: Vector3 = (b.centroid(rings[i]) + b.centroid(rings[i + 1])) * 0.5
 		var v0: float = 0.0 if i == elbow else vs[i]
@@ -613,20 +583,6 @@ static func _limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, ra
 		var r: float = radius + bulge * maxf(cos(phi), 0.0) ** 3
 		ids.append(b.vertex(frame * Vector3(sin(phi) * r, s, cos(phi) * r), binds, weights))
 	return ids
-
-
-# `p` moved onto the shoulder's dome along its direction from the dome's
-# centre, as far as it faces up or out; facing down or in, it stays.
-static func _on_dome(p: Vector3, side: float) -> Vector3:
-	var centre: Vector3 = _DOME_CENTRE * Vector3(side, 1.0, 1.0)
-	var d: Vector3 = p - centre
-	if d.length_squared() < 1e-10:
-		return p
-	var dir: Vector3 = d.normalized()
-	var r: float = 1.0 / Vector3(dir.x / _DOME_RADII.x, dir.y / _DOME_RADII.y,
-			dir.z / _DOME_RADII.z).length()
-	var share: float = smoothstep(-0.2, 0.3, dir.y) * smoothstep(-0.3, 0.2, dir.x * side)
-	return p.lerp(centre + dir * r, share)
 
 
 # `a_loop` turned and run to match `b_loop` vertex for vertex: each of
