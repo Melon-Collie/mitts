@@ -238,7 +238,12 @@ near wall at their line); the D pair holds their line, ready.
 posts elect first, each with a deadline — the carrier's arrival there less the
 brake margin — so whoever can be set there in time holds it whatever his
 position, a body already deeper than the line always can, and a team caught
-short fills the line before it fills anything up the ice. The jobs:
+short fills the line before it fills anything up the ice. When nobody can be
+set on a post in time, it goes to the soonest body goal-side of the carrier,
+from any group: a man behind the play is soonest to the spot only because the
+carrier is already past it, and handing him the carrier leaves nobody on him
+(`test_five_on_five_set_shape.gd` runs the whole shape against a three-man
+break). The jobs:
 
 - `BACK_STRONG` owns the carrier and **stands him up at our line**: while even a
   man standing on the line would make his retreat in time (the stand priced with

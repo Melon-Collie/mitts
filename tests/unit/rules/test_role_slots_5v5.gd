@@ -475,3 +475,31 @@ func test_a_defensive_remainder_still_marks() -> void:
 	var got: Dictionary = _assign(lineup, AIPossessionState.State.DZONE, 90)
 	assert_ne(_slot_of(got, AIRoleSlots.Slot.MARK), -1,
 			"the extra defensive body marks; got %s" % str(got))
+
+
+func test_trans_od_back_post_never_goes_to_a_man_behind_the_carrier() -> void:
+	# A wide carrier has crossed our line, the puck a stride ahead of him. The LD
+	# is goal-side of him but a stride short of the post (at the puck's depth),
+	# the RD level, and the C 10 m behind the play flying back. Nobody makes the
+	# deadline, and the C is the soonest to the spot only because the carrier is
+	# already past it: a man behind the play cannot hold a post in front of him,
+	# so the post stays with the D goal-side of him. (Read off the 5v5 set-shape
+	# duel, mirrored.)
+	var skaters: Array = [
+		[1, 0, Vector3(-3.98, 0, -2.14), Vector3(-1.01, 0, 9.73)],   # C, behind the play
+		[2, 0, Vector3(2.98, 0, 3.25), Vector3(3.16, 0, 9.47)],
+		[3, 0, Vector3(-2.23, 0, -3.77), Vector3(-0.59, 0, 9.47)],
+		[4, 0, Vector3(2.01, 0, 8.4), Vector3(2.92, 0, 5.15)],       # LD, goal-side
+		[5, 0, Vector3(0.15, 0, 7.42), Vector3(2.32, 0, 6.51)],      # RD, level
+		[10, 1, Vector3(-5.06, 0, 7.87), Vector3(3.17, 0, 8.62)],    # the carrier
+	]
+	var snap: WorldSnapshot = _make_snapshot(skaters, 10)
+	snap.puck_state.position = Vector3(-4.79, 0.0, 8.84)
+	var prev: Dictionary = {1: AIRoleSlots.Slot.NZ_MID, 2: AIRoleSlots.Slot.BACK_WEAK,
+			3: AIRoleSlots.Slot.NZ_F1, 4: AIRoleSlots.Slot.BACK_STRONG,
+			5: AIRoleSlots.Slot.BACK_MID}
+	var a: Dictionary = AIRoleSlots5.assign(snap, TEAM_ID, OUR_NET_Z,
+			AIPossessionState.State.TRANS_DEFENSE, _resolver(skaters), prev, -1.0, {},
+			_positions())
+	assert_true(_slot_of(a, AIRoleSlots.Slot.BACK_STRONG) in [4, 5],
+			"BACK_STRONG stays with a D, got peer %d" % _slot_of(a, AIRoleSlots.Slot.BACK_STRONG))

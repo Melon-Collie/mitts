@@ -160,6 +160,9 @@ static func assign(
 	# Pass 1 — group-scoped elections in priority order. A slot whose group
 	# has no free peer left is deferred to the cross-fill pass.
 	var deferred: Array[SlotSpec] = []
+	var carrier_depth_z: float = NAN
+	if carrier_pid != -1 and snapshot.skater_states.has(carrier_pid):
+		carrier_depth_z = snapshot.skater_states[carrier_pid].position.z
 	for spec: SlotSpec in specs:
 		var pid: int = _pick_soonest(snapshot, teammates, assigned,
 				prev_assignments, spec, caps_by_peer, position_by_peer, true)
@@ -170,9 +173,16 @@ static func assign(
 			# cross-fill would let every lower-priority slot consume the forwards
 			# first, and the only peer left for our line would be one of the very
 			# defensemen just ruled out. (Empty-group deferrals still wait for
-			# pass 2: there the slot genuinely wants whoever is spare.)
+			# pass 2: there the slot genuinely wants whoever is spare.) Only a
+			# body goal-side of the carrier can hold a post in front of him, so
+			# the soonest of those, from any group; a man behind the play is the
+			# soonest to the spot only because the carrier is already past it.
 			pid = _pick_soonest(snapshot, teammates, assigned,
-					prev_assignments, spec, caps_by_peer, position_by_peer, false)
+					prev_assignments, spec, caps_by_peer, position_by_peer, false,
+					carrier_depth_z, own_goal_z)
+			if pid == -1:
+				pid = _pick_soonest(snapshot, teammates, assigned,
+						prev_assignments, spec, caps_by_peer, position_by_peer, false)
 		if pid == -1:
 			deferred.append(spec)
 			continue
@@ -412,7 +422,8 @@ static func _side_home_f(side_x: float, own_goal_z: float) -> int:
 
 # Soonest-to-arrive election with hysteresis + home-identity bias, scoped to
 # the spec's group when `group_scoped` (pass 1) and open to everyone
-# otherwise (pass 2 cross-fill).
+# otherwise (pass 2 cross-fill). A finite `goal_side_of_z` admits only bodies
+# nearer our net (`own_goal_z`) than that z.
 static func _pick_soonest(
 		snapshot: WorldSnapshot,
 		teammates: Array[int],
@@ -421,7 +432,9 @@ static func _pick_soonest(
 		spec: SlotSpec,
 		caps_by_peer: Dictionary,
 		position_by_peer: Dictionary,
-		group_scoped: bool) -> int:
+		group_scoped: bool,
+		goal_side_of_z: float = NAN,
+		own_goal_z: float = 0.0) -> int:
 	var best_pid: int = -1
 	var best_score: float = INF
 	for pid: int in teammates:
@@ -431,6 +444,9 @@ static func _pick_soonest(
 				and _group_of(pid, position_by_peer) != spec.group:
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		if not is_nan(goal_side_of_z) \
+				and signf(own_goal_z) * s.position.z <= signf(own_goal_z) * goal_side_of_z:
+			continue
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var speed: float = caps.max_speed if caps != null \
 				else AIArrival.SKATER_REF_SPEED_M_S
