@@ -13,6 +13,9 @@ func get_slot(_peer_id: int) -> int:
 func strong_x() -> float:
 	return 1.0
 
+func carrier_lane() -> int:
+	return 0
+
 func assigned_threat(_peer_id: int) -> int:
 	return -1
 

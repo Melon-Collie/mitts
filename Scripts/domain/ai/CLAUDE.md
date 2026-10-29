@@ -257,6 +257,19 @@ short fills the line before it fills anything up the ice. The jobs:
   `NZ_MID` (5v5) holds mid-ice a layer up from our line, then comes back through
   the middle.
 
+## The rush fills the lanes the carrier leaves
+
+On a 5v5 rush (TRANS_OFFENSE) the two lane slots fill the two of the three
+lanes the carrier is not in: both wings round a carrier up the middle, the
+middle and the far wing round one on a wall. A man driving the middle pushes
+their D off the line and opens the entry; two men outside with the carrier on
+one wall double his lane and leave the middle empty. The carrier's lane is the
+brain's read (`AIRoleRushLane.carrier_lane`, hysteretic, held while the puck is
+loose), so the slot election and the role agree on it. LANE_L is always the
+left of the two, so a lane change swaps where the fillers go, never which of
+them goes. The TRAILER (any group) is the activating fourth man: a D joins
+the rush when a forward carries; DVALVE stays home.
+
 ## The defensive verbs
 
 A defensive role should read as *pick who is mine, call a verb, add my extras*.

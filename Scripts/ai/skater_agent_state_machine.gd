@@ -1303,6 +1303,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.zone_entry_blocked = _teammate_must_tag_up(snapshot)
 	if _current_strategy != null:
 		ctx.strong_x = _current_strategy.strong_x()
+		ctx.carrier_lane = _current_strategy.carrier_lane()
 		ctx.assigned_threat_peer = _current_strategy.assigned_threat(_peer_id)
 		ctx.threat_shoot_base_by_opp = _current_strategy.get_threat_shoot_base_by_opp()
 		ctx.rush_read = _current_strategy.get_rush_read()
@@ -1318,6 +1319,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	else:
 		# RoleContext.new()'s defaults, for no brain (tests).
 		ctx.strong_x = 1.0
+		ctx.carrier_lane = 0
 		ctx.assigned_threat_peer = -1
 		ctx.threat_shoot_base_by_opp = _empty_threat_memo
 		ctx.rush_read = _inert_rush_read
@@ -1403,10 +1405,10 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			decision = AIRoleOutlet.decide(ctx)
 		AIRoleSlots.Slot.BREAKOUT_C:
 			decision = AIRoleBreakoutCenter.decide(ctx)
-		AIRoleSlots.Slot.WIDE_L:
-			decision = AIRoleWideLane.decide(ctx, -1.0)
-		AIRoleSlots.Slot.WIDE_R:
-			decision = AIRoleWideLane.decide(ctx, 1.0)
+		AIRoleSlots.Slot.LANE_L:
+			decision = AIRoleRushLane.decide(ctx, -1.0)
+		AIRoleSlots.Slot.LANE_R:
+			decision = AIRoleRushLane.decide(ctx, 1.0)
 		AIRoleSlots.Slot.TRAILER, AIRoleSlots.Slot.CARRIER:
 			# High-slot trailer — SUPPORT's goal-side trail read. CARRIER lands
 			# here off the puck: the brain slots off the reaction-delayed carrier

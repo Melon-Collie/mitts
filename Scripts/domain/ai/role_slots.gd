@@ -59,8 +59,8 @@ enum Slot {
 	BREAKOUT_C,       # F: center's low swing — the second outlet.
 	BREAKOUT_STRETCH, # F: weak-side winger — mid-ice cross / stretch option.
 	# TRANS_OFFENSE rush shape (CARRIER fixed).
-	WIDE_L,         # F: left wide lane, paced to the carrier.
-	WIDE_R,         # F: right wide lane.
+	LANE_L,         # F: the left of the two rush lanes the carrier leaves free.
+	LANE_R,         # F: the right of them.
 	TRAILER,        # ANY: high-slot trailer (the activating fourth man).
 	DVALVE,         # D: safety valve trailing the rush.
 	# NEUTRAL back shape (CHASE/FLANK reused).
@@ -111,8 +111,8 @@ const _SLOT_INFO: Dictionary = {
 	Slot.BREAKOUT_D2: ["BreakD2", false, false],
 	Slot.BREAKOUT_C: ["BreakC", false, false],
 	Slot.BREAKOUT_STRETCH: ["Stretch", false, false],
-	Slot.WIDE_L: ["WideL", false, false],
-	Slot.WIDE_R: ["WideR", false, false],
+	Slot.LANE_L: ["LaneL", false, false],
+	Slot.LANE_R: ["LaneR", false, false],
 	Slot.TRAILER: ["Trailer", false, false],
 	Slot.DVALVE: ["DValve", false, false],
 	Slot.DBACK_L: ["DBackL", false, false],

@@ -55,7 +55,6 @@ const _ZONE_WEAK_X_M: float = 4.0        # weak winger's high-slot sag
 const _ZONE_WEAK_DEPTH_M: float = 10.0
 const _BREAKOUT_SWING_DEPTH_M: float = 6.0   # C's low-swing race point
 const _STRETCH_WALL_INSET_M: float = 4.0     # weak winger's mid-NZ post
-const _WIDE_LANE_INSET_M: float = 4.0        # rush wide lanes
 const _DBACK_X_M: float = 5.0            # NZ back pair, inside the dots
 const _FLANK_SPREAD_M: float = 6.0       # NEUTRAL flank race offsets
 const _FLANK_TRAIL_M: float = 4.0
@@ -117,7 +116,8 @@ static func assign(
 		prev_assignments: Dictionary,
 		strong_x: float,
 		caps_by_peer: Dictionary,
-		position_by_peer: Dictionary) -> Dictionary[int, int]:
+		position_by_peer: Dictionary,
+		carrier_lane: int = 0) -> Dictionary[int, int]:
 	var result: Dictionary[int, int] = {}
 	if snapshot == null:
 		return result
@@ -142,7 +142,7 @@ static func assign(
 
 	var puck_pos: Vector3 = snapshot.puck_state.position if snapshot.puck_state else Vector3.ZERO
 	var specs: Array[SlotSpec] = _specs_for_state(
-			state, own_goal_z, strong_x, puck_pos)
+			state, own_goal_z, strong_x, puck_pos, carrier_lane)
 
 	# TRANS_DEFENSE: our line's posts are held only by a body that can be SET on
 	# them before the carrier gets there (the brake margin: the seconds a skater
@@ -215,7 +215,7 @@ static func assign(
 # ── Per-state slot specs (priority-ordered) ──────────────────────────────────
 
 static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
-		puck_pos: Vector3) -> Array[SlotSpec]:
+		puck_pos: Vector3, carrier_lane: int) -> Array[SlotSpec]:
 	var own_dir: float = signf(own_goal_z)
 	var our_net := Vector3(0.0, 0.0, own_goal_z)
 	var half_w: float = GameRules.RINK_HALF_WIDTH
@@ -325,11 +325,13 @@ static func _specs_for_state(state: int, own_goal_z: float, strong_x: float,
 		AIPossessionState.State.TRANS_OFFENSE:
 			return [
 				SlotSpec.make(AIRoleSlots.Slot.DVALVE, Group.D, our_net),
-				SlotSpec.make(AIRoleSlots.Slot.WIDE_L, Group.F,
-						Vector3(-(half_w - _WIDE_LANE_INSET_M), 0.0, puck_pos.z),
+				SlotSpec.make(AIRoleSlots.Slot.LANE_L, Group.F,
+						Vector3(AIRoleRushLane.lane_x(
+								AIRoleRushLane.filled_lane(carrier_lane, -1.0)), 0.0, puck_pos.z),
 						_side_home_f(-1.0, own_goal_z)),
-				SlotSpec.make(AIRoleSlots.Slot.WIDE_R, Group.F,
-						Vector3(half_w - _WIDE_LANE_INSET_M, 0.0, puck_pos.z),
+				SlotSpec.make(AIRoleSlots.Slot.LANE_R, Group.F,
+						Vector3(AIRoleRushLane.lane_x(
+								AIRoleRushLane.filled_lane(carrier_lane, 1.0)), 0.0, puck_pos.z),
 						_side_home_f(1.0, own_goal_z)),
 				# The trailer cross-fills by construction: it's the leftover
 				# F when a D carries, the activating D when a forward does.

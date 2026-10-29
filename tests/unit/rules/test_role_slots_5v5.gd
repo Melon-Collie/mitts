@@ -44,11 +44,12 @@ func _positions() -> Dictionary:
 
 func _assign(skaters: Array, state: int, carrier_pid: int = -1,
 		puck_z: float = 0.0, puck_x: float = 0.0, prev: Dictionary = {},
-		strong_x: float = 1.0, positions: Dictionary = {}) -> Dictionary:
+		strong_x: float = 1.0, positions: Dictionary = {},
+		carrier_lane: int = 0) -> Dictionary:
 	var snap: WorldSnapshot = _make_snapshot(skaters, carrier_pid, puck_z, puck_x)
 	var pos: Dictionary = positions if not positions.is_empty() else _positions()
 	return AIRoleSlots5.assign(snap, TEAM_ID, OUR_NET_Z, state,
-			_resolver(skaters), prev, strong_x, {}, pos)
+			_resolver(skaters), prev, strong_x, {}, pos, carrier_lane)
 
 
 func _slot_of(assignments: Dictionary, slot: int) -> int:
@@ -202,13 +203,30 @@ func test_trans_do_trailer_is_the_activating_d_when_a_forward_carries() -> void:
 	]
 	var a: Dictionary = _assign(skaters, AIPossessionState.State.TRANS_OFFENSE, 1)
 	assert_eq(a[1], AIRoleSlots.Slot.CARRIER)
-	assert_eq(a[2], AIRoleSlots.Slot.WIDE_L)
-	assert_eq(a[3], AIRoleSlots.Slot.WIDE_R)
+	assert_eq(a[2], AIRoleSlots.Slot.LANE_L)
+	assert_eq(a[3], AIRoleSlots.Slot.LANE_R)
 	var trailer: int = _slot_of(a, AIRoleSlots.Slot.TRAILER)
 	var valve: int = _slot_of(a, AIRoleSlots.Slot.DVALVE)
 	assert_true(trailer in [4, 5], "the trailer is the activating D")
 	assert_true(valve in [4, 5], "the valve is the other D")
 	assert_ne(trailer, valve)
+
+
+func test_trans_do_lanes_fill_round_a_carrier_on_the_wall() -> void:
+	# The LW carries up his wall: the C nearest the middle drives it and the RW
+	# keeps the far wing, rather than both outside with the LW's lane doubled.
+	var skaters: Array = [
+		[1, 0, Vector3(-1, 0, 0)],
+		[2, 0, Vector3(-9, 0, -2)],    # LW with the puck on the left wall
+		[3, 0, Vector3(8, 0, 0)],
+		[4, 0, Vector3(-3, 0, 8)],
+		[5, 0, Vector3(3, 0, 8)],
+	]
+	var a: Dictionary = _assign(skaters, AIPossessionState.State.TRANS_OFFENSE, 2,
+			0.0, 0.0, {}, 1.0, {}, -1)
+	assert_eq(a[2], AIRoleSlots.Slot.CARRIER)
+	assert_eq(a[1], AIRoleSlots.Slot.LANE_L, "the C drives the middle lane")
+	assert_eq(a[3], AIRoleSlots.Slot.LANE_R, "the RW keeps the far wing")
 
 
 # ── TRANS_DEFENSE: contain from the D group, everyone else marks ──────────────────

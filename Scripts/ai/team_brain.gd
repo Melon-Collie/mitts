@@ -73,6 +73,9 @@ var _prev_recovery: Dictionary[int, int] = {}
 # Sticky possession for loose-puck handling.
 var _last_carrier_team: int = -1
 var _strong_x: float = 1.0
+# The rush lane our carrier is in (AIRoleRushLane.carrier_lane), held while
+# nobody of ours carries.
+var _carrier_lane: int = 0
 
 var _accumulator: float = 0.0
 
@@ -245,11 +248,19 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 		elif _strong_x < 0.0 and puck_x > STRONG_SIDE_HYSTERESIS_M:
 			_strong_x = 1.0
 
+	if snapshot != null and snapshot.puck_state != null:
+		var carrier_state: SkaterNetworkState = snapshot.skater_states.get(
+				snapshot.puck_state.carrier_peer_id)
+		if carrier_state != null \
+				and _team_id_by_peer.get(snapshot.puck_state.carrier_peer_id, -1) == team_id:
+			_carrier_lane = AIRoleRushLane.carrier_lane(carrier_state.position.x, _carrier_lane)
+
 	var prev_assignments: Dictionary = slot_assignments
 	if team_size >= 5:
 		slot_assignments = AIRoleSlots5.assign(
 				snapshot, team_id, _own_goal_z, state, _team_id_by_peer,
-				prev_assignments, _strong_x, _caps_by_peer, _position_by_peer)
+				prev_assignments, _strong_x, _caps_by_peer, _position_by_peer,
+				_carrier_lane)
 	else:
 		slot_assignments = AIRoleSlots.assign(
 				snapshot, team_id, _own_goal_z, state, _team_id_by_peer,
@@ -468,6 +479,10 @@ func strong_x() -> float:
 	return _strong_x
 
 
+func carrier_lane() -> int:
+	return _carrier_lane
+
+
 # This peer's lobby position (team_slot 0–4; see PlayerRules.POSITION_NAMES).
 # 0 (C) when unknown — tests / 3v3, where nothing reads it.
 func position_of(peer_id: int) -> int:
@@ -553,6 +568,7 @@ func build_view() -> void:
 		_view = TeamBrainView.new()
 	var v: TeamBrainView = _view
 	v.strong_x_val = _strong_x
+	v.carrier_lane_val = _carrier_lane
 	v.team_size_val = team_size
 	v.icing_enforced_val = icing_enforced()
 	v.ping_chase_peer_val = ping_directives.chase_peer()

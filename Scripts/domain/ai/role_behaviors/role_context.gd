@@ -22,6 +22,9 @@ var team_brain: TeamStrategyView = null
 # The brain's hysteretic strong-side sign (+1 = +X side), so a role's
 # strong/weak side matches its slot assignment. +1 when no brain is wired.
 var strong_x: float = 1.0
+# The rush lane our carrier is in, by the brain's hysteretic read
+# (AIRoleRushLane.carrier_lane): -1 the −x wing, 0 the middle, 1 the +x wing.
+var carrier_lane: int = 0
 # The man TeamBrain's threat partition assigned this defender (MARK and the 5v5
 # zone roles cover him), or -1 when unassigned — the role then falls back to
 # its own read.

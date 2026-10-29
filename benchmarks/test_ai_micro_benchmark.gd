@@ -145,7 +145,7 @@ func test_evaluator_costs() -> void:
 	_bench("OUTLET", func() -> void: AIRoleOutlet.decide(o_ctx))
 	_bench("BREAKOUT strong", func() -> void: AIRoleBreakout.decide(o_ctx, true))
 	_bench("BREAKOUT_C", func() -> void: AIRoleBreakoutCenter.decide(o_ctx))
-	_bench("WIDE lane", func() -> void: AIRoleWideLane.decide(o_ctx, -1.0))
+	_bench("WIDE lane", func() -> void: AIRoleRushLane.decide(o_ctx, -1.0))
 
 	# The carrier compete — the single biggest per-call evaluator.
 	var c_ctx: RoleContext = _make_ctx(Vector3(8.0, 0.0, -22.0), 1)
