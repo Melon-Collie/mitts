@@ -89,12 +89,20 @@ static func stripe_polygons(stripe: Dictionary) -> Array[PackedVector2Array]:
 # The upper arm's or the forearm's part of the sleeve in the legacy segment
 # form, for the bodies that paint the two apart: its base the sleeve's color at
 # the segment's middle, its stripes those that reach into it, clipped to it. A
-# peaked stripe is painted flat at its pos.
+# peaked stripe is painted flat at its pos, and its fill below as a band from
+# there past the cuff.
 static func segment(sleeve: Dictionary, upper: bool) -> Dictionary:
 	var from_m: float = 0.0 if upper else ELBOW_M
 	var to_m: float = ELBOW_M if upper else ELBOW_M + _SEGMENT_M
-	var stripes: Array[Dictionary] = []
+	var flat: Array[Dictionary] = []
 	for s: Dictionary in sleeve.stripes:
+		if s.has("fill_below"):
+			var past_cuff: float = 2.0
+			flat.append({"pos": (float(s.pos) + past_cuff) * 0.5,
+					"width": past_cuff - float(s.pos), "color": s.fill_below})
+		flat.append(s)
+	var stripes: Array[Dictionary] = []
+	for s: Dictionary in flat:
 		var top_m: float = maxf((float(s.pos) - float(s.width) * 0.5) * LENGTH_M, from_m)
 		var bottom_m: float = minf((float(s.pos) + float(s.width) * 0.5) * LENGTH_M, to_m)
 		if bottom_m <= top_m:

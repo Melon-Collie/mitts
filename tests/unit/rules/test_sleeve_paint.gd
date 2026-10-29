@@ -83,3 +83,16 @@ func test_the_registry_reads_a_jersey_stripes_shape_but_not_a_socks() -> void:
 	assert_eq(kit.jersey.stripes[0].fill_below, Color.RED)
 	assert_false(kit.socks.stripes[0].has("peak"), "nothing paints a sock's peak")
 	assert_false(kit.socks.stripes[0].has("fill_below"), "or its fill")
+
+
+func test_a_fill_below_reaches_the_forearm_as_a_band() -> void:
+	var sleeve := {"base": Color.WHITE, "stripes": [{"pos": SleevePaint.pos_of(0.35),
+			"width": 0.03, "color": Color.BLUE, "fill_below": Color.RED,
+			"peak": {"depth": -0.09, "count": 2, "u": 0.5}}]}
+	var lower: Dictionary = SleevePaint.segment(sleeve, false)
+	assert_eq(lower.stripes.size(), 2, "the fill, then the stripe over it")
+	assert_eq(lower.stripes[0].color, Color.RED)
+	assert_gt(float(lower.stripes[0].pos) + float(lower.stripes[0].width) * 0.5, 1.0,
+			"the fill runs to the segment's end")
+	assert_eq(SleevePaint.segment(sleeve, true).stripes.size(), 0,
+			"and none of it reaches the upper arm")
