@@ -612,3 +612,58 @@ func test_point_walk_snapshot() -> void:
 	snap.record("strong point, stand's lane covered, target x", target.x)
 	snap.record("strong point, stand's lane covered, target z", target.z)
 	snap.verify(self)
+
+
+# ── The point's pinch: a puck we are losing up his wall ──────────────────────
+# O-zone: the puck caroms loose up the +x wall and their winger is coming down
+# to collect it below my point. Me (peer 1) on POINT_STRONG, my partner on
+# POINT_WEAK, a forward on HIGH_SLOT.
+const LOOSE_FROM := Vector3(12.0, 0.0, -20.0)
+const LOOSE_VEL := Vector3(0.0, 0.0, 7.0)
+
+
+func _point_pinch_ctx(self_pos: Vector3 = Vector3(9.5, 0.0, -9.6),
+		filler: bool = true, our_low_man: Vector3 = Vector3(0.0, 0.0, -22.0)) -> RoleContext:
+	var skaters: Array = [
+		[PARTNER, TEAM_ID, Vector3(-4.5, 0.0, -9.6)],
+		[5, TEAM_ID, our_low_man],
+		[WALL_CARRIER, 1, Vector3(10.5, 0.0, -14.0)],
+		[11, 1, Vector3(-3.0, 0.0, -22.0)],
+	]
+	if filler:
+		skaters.append([FILLER, TEAM_ID, Vector3(0.0, 0.0, -13.0)])
+	var ctx: RoleContext = _make_ctx(self_pos, skaters, -1, LOOSE_FROM)
+	ctx.snapshot.puck_state.velocity = LOOSE_VEL
+	var strategy := StubStrategy.new()
+	strategy.slots = {1: AIRoleSlots.Slot.POINT_STRONG,
+			PARTNER: AIRoleSlots.Slot.POINT_WEAK, FILLER: AIRoleSlots.Slot.HIGH_SLOT}
+	ctx.team_brain = strategy
+	return ctx
+
+
+func test_strong_point_pinches_a_puck_we_are_losing_up_his_wall() -> void:
+	var d: RoleDecision = AIRoleDefenseman.decide(_point_pinch_ctx(),
+			AIRoleSlots.Slot.POINT_STRONG)
+	assert_true(d.pressures_puck, "he steps down onto their man as he collects it")
+	assert_lt(d.target_position.z, -(GameRules.BLUE_LINE_Z + AIRoleDefenseman.POINT_INSET_M
+			+ 1.0), "...down the wall, off his point; got %s" % d.target_position)
+
+
+func test_no_point_pinch_without_a_forward_to_take_his_point() -> void:
+	var d: RoleDecision = AIRoleDefenseman.decide(_point_pinch_ctx(Vector3(9.5, 0.0, -9.6),
+			false), AIRoleSlots.Slot.POINT_STRONG)
+	assert_false(d.pressures_puck, "nobody can fill the point: keep it")
+
+
+func test_no_point_pinch_on_a_puck_we_collect_first() -> void:
+	# Our winger is on the wall between the puck and their man: it is his puck.
+	var d: RoleDecision = AIRoleDefenseman.decide(_point_pinch_ctx(Vector3(9.5, 0.0, -9.6),
+			true, Vector3(11.5, 0.0, -15.2)), AIRoleSlots.Slot.POINT_STRONG)
+	assert_false(d.pressures_puck, "ours to collect")
+
+
+func test_no_point_pinch_he_cannot_get_on_before_the_play() -> void:
+	# From across the line he arrives after their man has moved it.
+	var d: RoleDecision = AIRoleDefenseman.decide(_point_pinch_ctx(Vector3(1.0, 0.0, -9.6)),
+			AIRoleSlots.Slot.POINT_STRONG)
+	assert_false(d.pressures_puck, "too far to pressure the pickup")

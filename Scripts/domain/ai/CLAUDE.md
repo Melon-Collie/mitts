@@ -433,10 +433,16 @@ The back layer leaves the line in two ways. A **keep-in**
 (`AIRoleDefenseman.wall_rim_keepin`) costs it nothing — the stand is still the
 line, just out in the wall lane where the puck's predicted path crosses it — so
 every line station runs it: the points, the forecheck pair, 3v3's F3. A **pinch**
-goes down the wall, so it is gated on WINNING it (he is not already on his way
-out; I reach him before his skating gets the puck to the line) and on COVERING it
-(nobody behind my stand, my partner on the line, a forward able to take my point
-inside `LATE_MAN_WINDOW_S`). Only the strong-side D makes it; never both.
+goes down the wall to keep the puck in, onto their man as he plays it between
+the line and the half-wall. It is the O-zone strong point's play on a puck we
+are losing up his wall as much as the forecheck pair's on a carrier bottled
+there, and it is gated on WINNING it and on COVERING it (nobody behind my stand,
+my partner on the line, a forward able to take my point inside
+`LATE_MAN_WINDOW_S`). Winning a carrier is reaching him before his skating gets
+the puck to the line; winning a loose puck is my blade on its collector before
+his first play is away (`AIForecheckRead.read_loose`, the forecheck's own
+pressure read), and a loose puck we collect first is the chase election's, not
+a pinch. Only the strong-side D makes it; never both.
 
 The cover is not the pinching D's to arrange. It is keyed on the one fact every
 teammate can see — the strong D is deeper than any stand his slot takes — and each

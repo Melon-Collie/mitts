@@ -63,25 +63,13 @@ static func pressure_margin_s(snapshot: WorldSnapshot, team_id: int,
 		away_s = maxf(0.0, CARRIER_READ_S - carrier_held_s) + window_s
 		target = cs.position + cs.velocity * away_s
 	else:
-		var vel: Vector3 = snapshot.puck_state.velocity
-		var path: Array[Vector3] = AILoosePuckChase.race_trajectory(puck, vel)
-		var setup_s: float = AILoosePuckChase.setup_margin(vel)
-		var playable_s: float = AILoosePuckChase.race_playable_time(puck, vel)
-		var theirs_s: float = _first_on_path(snapshot, team_id_by_peer, caps_by_peer,
-				path, puck, setup_s, playable_s, team_id, false)
-		if theirs_s == INF:
+		if not read_loose(snapshot, team_id, team_id_by_peer, caps_by_peer, _loose):
 			return INF   # nobody of theirs to move it
-		var ours_s: float = _first_on_path(snapshot, team_id_by_peer, caps_by_peer,
-				path, puck, setup_s, playable_s, team_id, true)
-		if not _in_their_zone(AILoosePuckChase.path_intercept_point(path, _PATH_STEP_S,
-				puck, minf(ours_s, theirs_s)), own_goal_z):
+		if not _in_their_zone(_loose.first_at, own_goal_z):
 			return -INF   # played before it is in their zone
-		target = AILoosePuckChase.path_intercept_point(path, _PATH_STEP_S, puck, theirs_s)
-		var meet_speed: float = target.distance_to(AILoosePuckChase.path_intercept_point(
-				path, _PATH_STEP_S, puck, theirs_s + _PATH_STEP_S)) / _PATH_STEP_S
-		away_s = theirs_s + AIFeedReception.receiver_settle_s(meet_speed) \
-				+ CARRIER_READ_S + window_s
-		best = theirs_s - ours_s
+		target = _loose.meet
+		away_s = _loose.away_s
+		best = _loose.theirs_s - _loose.ours_s
 	var d_reach: bool = not forwards_only \
 			or -signf(own_goal_z) * target.z - GameRules.BLUE_LINE_Z \
 					<= AIRoleDefenseman.PINCH_MAX_DEPTH_M
@@ -94,6 +82,45 @@ static func pressure_margin_s(snapshot: WorldSnapshot, team_id: int,
 	if carrier == -1:
 		best += AIActionScoring.CHASE_CONTEST_MARGIN_S
 	return best
+
+
+# A loose puck as the side that collects it plays it: who touches it first and
+# where, and when their collector's first play is away. Filled by read_loose.
+class LoosePlay:
+	var theirs_s: float = INF   # their soonest body on its path
+	var ours_s: float = INF     # ours
+	var first_at: Vector3 = Vector3.INF   # where it is first touched, by either side
+	var meet: Vector3 = Vector3.INF       # where their collector meets it
+	var away_s: float = INF     # his pickup, its settle, his read and the release
+
+
+# The worker's scratch for pressure_margin_s.
+static var _loose := LoosePlay.new()
+
+
+# Fills `out` for the loose puck in `snapshot`, raced on its path (the chase
+# election's walk). False when none of theirs is on the ice to collect it.
+static func read_loose(snapshot: WorldSnapshot, team_id: int,
+		team_id_by_peer: Dictionary, caps_by_peer: Dictionary, out: LoosePlay) -> bool:
+	var puck: Vector3 = snapshot.puck_state.position
+	var vel: Vector3 = snapshot.puck_state.velocity
+	var path: Array[Vector3] = AILoosePuckChase.race_trajectory(puck, vel)
+	var setup_s: float = AILoosePuckChase.setup_margin(vel)
+	var playable_s: float = AILoosePuckChase.race_playable_time(puck, vel)
+	out.theirs_s = _first_on_path(snapshot, team_id_by_peer, caps_by_peer,
+			path, puck, setup_s, playable_s, team_id, false)
+	if out.theirs_s == INF:
+		return false
+	out.ours_s = _first_on_path(snapshot, team_id_by_peer, caps_by_peer,
+			path, puck, setup_s, playable_s, team_id, true)
+	out.first_at = AILoosePuckChase.path_intercept_point(path, _PATH_STEP_S, puck,
+			minf(out.ours_s, out.theirs_s))
+	out.meet = AILoosePuckChase.path_intercept_point(path, _PATH_STEP_S, puck, out.theirs_s)
+	var meet_speed: float = out.meet.distance_to(AILoosePuckChase.path_intercept_point(
+			path, _PATH_STEP_S, puck, out.theirs_s + _PATH_STEP_S)) / _PATH_STEP_S
+	out.away_s = out.theirs_s + AIFeedReception.receiver_settle_s(meet_speed) \
+			+ CARRIER_READ_S + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	return true
 
 
 # Whether to forecheck, from this tick's margin and last tick's answer.

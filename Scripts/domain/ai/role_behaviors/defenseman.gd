@@ -5,7 +5,7 @@ class_name AIRoleDefenseman
 #
 #   OZONE points (POINT_STRONG / POINT_WEAK) — hold the offensive blue line and
 #     walk it for a shooting lane; the strong point sinks down his wall as the
-#     cycle goes low.
+#     cycle goes low, and PINCHES on a puck we are losing up it.
 #   FORECHECK line pair (DP_STRONG / DP_WEAK) — hold the line per lane, keep
 #     wall clears in, go home once their breakout is under way. The strong D
 #     alone may PINCH.
@@ -69,6 +69,8 @@ const POINT_WEAK_COVER_LANES_U: Array[float] = [1.5, 0.0, -1.5]
 # F3_WALL's post (AIRoleForecheck.F3_WALL_DEPTH_OFF_GOAL_M), which owns the
 # wall below. test_role_defenseman holds the two together.
 const PINCH_MAX_DEPTH_M: float = 7.36
+# The worker's scratch for the pinch's loose-puck read.
+static var _loose := AIForecheckRead.LoosePlay.new()
 
 
 static func decide(ctx: RoleContext, slot: int) -> RoleDecision:
@@ -108,18 +110,25 @@ static func _decide_point(ctx: RoleContext, is_strong: bool) -> RoleDecision:
 		d.target_position = keepin
 		d.arrive_at_speed = true
 		return d
-
-	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
-	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
-	var teammates: Array[Vector3] = ctx.scratch_teammates
-	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 	# Puck depth off the ATTACKED goal line.
 	var puck_depth: float = INF
 	if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 		puck_depth = AIZoneCoverage.depth_of(
 				opp_net.z, ctx.snapshot.puck_state.position)
 	var allow_sink: bool = is_strong and puck_depth < POINT_SINK_PUCK_DEPTH_M
+	if is_strong:
+		var pinch: RoleDecision = _wall_pinch(ctx, side,
+				strong_point_stand(ctx, AIRoleSlots.Slot.POINT_STRONG),
+				_strong_stand_depth_m(ctx, AIRoleSlots.Slot.POINT_STRONG),
+				AIRoleSlots.Slot.POINT_WEAK, POINT_INSET_M, AIRoleSlots.Slot.HIGH_SLOT)
+		if pinch != null:
+			return pinch
+
+	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
+	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states)
+	var teammates: Array[Vector3] = ctx.scratch_teammates
+	AIRoleReads.collect_teammates_excluding_self(ctx, teammates)
 
 	var lanes: Array[float] = POINT_STRONG_LANES_U if is_strong else POINT_WEAK_LANES_U
 	# The rotation's weak-D half: partner down the wall → hold the middle.
@@ -216,7 +225,9 @@ static func _decide_line_hold(ctx: RoleContext, lane_x: float,
 
 	var line_stand := Vector3(lane_x, 0.0, line_z)
 	if is_strong:
-		var pinch: RoleDecision = _wall_pinch(ctx, signf(lane_x), line_stand)
+		var pinch: RoleDecision = _wall_pinch(ctx, signf(lane_x), line_stand,
+				DP_LINE_INSET_M, AIRoleSlots.Slot.DP_WEAK, DP_LINE_INSET_M,
+				AIRoleSlots.Slot.F3_WALL)
 		if pinch != null:
 			return pinch
 	elif _partner_vacated(ctx, AIRoleSlots.Slot.DP_STRONG):
@@ -228,26 +239,41 @@ static func _decide_line_hold(ctx: RoleContext, lane_x: float,
 	return d
 
 
-# The situational pinch: step down my wall onto an opposing carrier bottled
-# between the line and the half-wall, as a pressurer — or null to hold the line.
-# Gated on WINNING it (not already on his way out; I reach him before he skates
-# it to the line) and COVERING it (_pinch_is_covered). A pinch already under way
-# skips the race and cover checks so it finishes rather than flickers, but still
-# bails once the breakout forms.
-static func _wall_pinch(ctx: RoleContext, side: float,
-		line_stand: Vector3) -> RoleDecision:
+# The situational pinch: step down my wall onto their man as he plays a puck
+# between the line and the half-wall — a carrier bottled there, or a loose puck
+# we are losing up it that he will collect — to keep it in; or null to hold the
+# line. Gated on WINNING it and COVERING it (_pinch_is_covered: `partner_slot`
+# on the line, `filler_slot` able to take my point). Winning a carrier is
+# reaching him before he skates it out; winning a loose puck is my blade on its
+# collector before his first play is away (AIForecheckRead.read_loose), and one
+# we collect first is not a pinch but the chase election's. A pinch already
+# under way skips the race and cover checks so it finishes rather than
+# flickers, but still bails once the breakout forms; it is under way once my
+# last target sat deeper than the deepest stand my slot takes now
+# (`stand_depth_m`) by a stick.
+static func _wall_pinch(ctx: RoleContext, side: float, line_stand: Vector3,
+		stand_depth_m: float, partner_slot: int, partner_inset_m: float,
+		filler_slot: int) -> RoleDecision:
 	if ctx.snapshot == null or ctx.snapshot.puck_state == null:
 		return null
 	var carrier_pid: int = ctx.snapshot.puck_state.carrier_peer_id
-	if carrier_pid == -1 or ctx.team_id_by_peer.get(carrier_pid, -1) == ctx.team_id:
+	var subject: Vector3
+	var cs: SkaterNetworkState = null
+	if carrier_pid != -1:
+		if ctx.team_id_by_peer.get(carrier_pid, -1) == ctx.team_id:
+			return null
+		cs = ctx.snapshot.skater_states.get(carrier_pid)
+		if cs == null:
+			return null
+		subject = cs.position
+	else:
+		if not AIForecheckRead.read_loose(ctx.snapshot, ctx.team_id, ctx.team_id_by_peer,
+				ctx.caps_by_peer, _loose) or _loose.ours_s <= _loose.theirs_s:
+			return null
+		subject = _loose.meet
+	if signf(subject.x) != side or absf(subject.x) < GameRules.END_ZONE_FACEOFF_DOT_X:
 		return null
-	var cs: SkaterNetworkState = ctx.snapshot.skater_states.get(carrier_pid)
-	if cs == null:
-		return null
-	if signf(cs.position.x) != side \
-			or absf(cs.position.x) < GameRules.END_ZONE_FACEOFF_DOT_X:
-		return null
-	var depth: float = _depth_inside_attacked_zone(ctx, cs.position)
+	var depth: float = _depth_inside_attacked_zone(ctx, subject)
 	if depth < 0.0 or depth > PINCH_MAX_DEPTH_M:
 		return null
 	if not AILastManDiscipline.may_hold_forward_stand(
@@ -255,39 +281,55 @@ static func _wall_pinch(ctx: RoleContext, side: float,
 		return null
 	var pinching: bool = ctx.prev_role_target.is_finite() \
 			and _depth_inside_attacked_zone(ctx, ctx.prev_role_target) \
-					> DP_LINE_INSET_M + POINT_VACATED_SLACK_M
+					> stand_depth_m + POINT_VACATED_SLACK_M
 	if not pinching:
-		var t_me: float = AIArrival.time_to_arrive(
-				ctx.self_pos, cs.position, ctx.self_velocity,
-				ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
-		var out_speed: float = cs.velocity.z * ctx.own_goal_dir
-		if out_speed > 0.0 and t_me >= depth / out_speed:
+		var t_me: float
+		if cs != null:
+			t_me = AIArrival.time_to_arrive(
+					ctx.self_pos, cs.position, ctx.self_velocity,
+					ctx.self_max_speed, ctx.self_max_accel, ctx.self_lateral_grip)
+			var out_speed: float = cs.velocity.z * ctx.own_goal_dir
+			if out_speed > 0.0 and t_me >= depth / out_speed:
+				return null
+		else:
+			t_me = AILoosePuckChase.reach_eta(ctx.self_pos, subject, ctx.self_velocity,
+					ctx.self_max_speed, ctx.self_max_accel, ctx.self_blade_reach)
+			if t_me > _loose.away_s:
+				return null
+		if not _pinch_is_covered(ctx, line_stand, t_me, partner_slot, partner_inset_m,
+				filler_slot):
 			return null
-		if not _pinch_is_covered(ctx, line_stand, t_me):
-			return null
-	var d: RoleDecision = AIRolePressure.decide(ctx, true)
+	var d: RoleDecision
+	if cs != null:
+		d = AIRolePressure.decide(ctx, true)
+	else:
+		d = RoleDecision.new()
+		d.target_position = subject
+		d.arrive_at_speed = true
 	d.pressures_puck = true
 	# Still the forward posture, so the numbers read keeps its holding hysteresis.
 	d.held_forward_stand = true
 	return d
 
 
-# The cover half of the pinch: nobody of theirs behind my stand, my partner on
-# the line, and F3_WALL able to take my point inside `t_engage` + the late-man
+# The cover half of the pinch: nobody of theirs behind my stand, my partner
+# (`partner_slot`, whose stand is `partner_inset_m` inside the line) on the line,
+# and `filler_slot` able to take my point inside `t_engage` + the late-man
 # window.
 static func _pinch_is_covered(ctx: RoleContext, line_stand: Vector3,
-		t_engage: float) -> bool:
+		t_engage: float, partner_slot: int, partner_inset_m: float,
+		filler_slot: int) -> bool:
 	var our_net: Vector3 = ctx.defending_goal_pos
 	var stand_d: float = AIRoleReads.xz_distance(line_stand, our_net)
 	for lead: Vector3 in ctx.rush_read.attacker_leads:
 		if AIRoleReads.xz_distance(lead, our_net) \
 				< stand_d - AIRushRead.cover_envelope_m():
 			return false
-	var partner: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.DP_WEAK)
+	var partner: SkaterNetworkState = _slot_holder(ctx, partner_slot)
 	if partner == null or _depth_inside_attacked_zone(ctx, partner.position) \
-			> DP_LINE_INSET_M + POINT_VACATED_SLACK_M:
+			> partner_inset_m + POINT_VACATED_SLACK_M:
 		return false
-	var filler: SkaterNetworkState = _slot_holder(ctx, AIRoleSlots.Slot.F3_WALL)
+	var filler: SkaterNetworkState = _slot_holder(ctx, filler_slot)
 	if filler == null:
 		return false
 	return AIArrival.time_to_arrive(filler.position, line_stand,
@@ -321,7 +363,7 @@ static func strong_point_stand(ctx: RoleContext, strong_slot: int) -> Vector3:
 
 
 # Has the teammate holding `strong_slot` gone deeper into the zone we attack than
-# any stand that slot takes, by POINT_VACATED_SLACK_M? `covering` drops the
+# any stand that slot takes now, by POINT_VACATED_SLACK_M? `covering` drops the
 # slack, so a rotation already made holds until he is back. False when nobody
 # holds the slot or no brain is wired.
 static func strong_point_vacated(ctx: RoleContext, strong_slot: int,
@@ -329,11 +371,22 @@ static func strong_point_vacated(ctx: RoleContext, strong_slot: int,
 	var holder: SkaterNetworkState = _slot_holder(ctx, strong_slot)
 	if holder == null:
 		return false
-	var deepest: float = DP_LINE_INSET_M if strong_slot == AIRoleSlots.Slot.DP_STRONG \
-			else POINT_INSET_M + POINT_SINK_M * float(POINT_SINK_ROWS)
+	var deepest: float = _strong_stand_depth_m(ctx, strong_slot)
 	if not covering:
 		deepest += POINT_VACATED_SLACK_M
 	return _depth_inside_attacked_zone(ctx, holder.position) > deepest
+
+
+# The deepest stand `strong_slot` takes now, metres inside the zone we attack:
+# the forecheck line, or the point with its sink rows while the puck is low.
+static func _strong_stand_depth_m(ctx: RoleContext, strong_slot: int) -> float:
+	if strong_slot == AIRoleSlots.Slot.DP_STRONG:
+		return DP_LINE_INSET_M
+	if ctx.snapshot != null and ctx.snapshot.puck_state != null \
+			and AIZoneCoverage.depth_of(ctx.attacking_goal_pos.z,
+					ctx.snapshot.puck_state.position) < POINT_SINK_PUCK_DEPTH_M:
+		return POINT_INSET_M + POINT_SINK_M * float(POINT_SINK_ROWS)
+	return POINT_INSET_M
 
 
 # The weak D's read: his "already covering" is standing in the middle lanes.
