@@ -55,6 +55,10 @@ draws it beside the current body.
   tail columns on the skeleton): the arm bones roll from world up, and a blended
   elbow needs both halves turning about one hinge. Per side the upper arm, the
   elbow's middle and the forearm share the ELBOW bone's hinge.
+- **The armhole is a jersey's seam**, from beside the collar down to under the
+  arm, so the sleeve's cap is the top of the shoulder: the cap ring and the
+  pad ring's top lie on a dome round the joint (`_on_dome`), and the line from
+  the neck rolls over the pad and down the arm as one curve.
 - **The shoulder splits the arm's turn off the chest into swing and twist.** The
   girdle (the armhole and the top of the shoulder) takes a third of the swing,
   as the collarbone and shoulder blade do (the scapulohumeral rhythm), the
