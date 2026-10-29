@@ -200,19 +200,32 @@ cost; the one-move against two-move comparison (2a) answers that too.
 
 ### 9. Generation and checks
 
-As the shot field is (`docs/shot-currency-plan.md`):
+**Agreed.** As the shot field is (`docs/shot-currency-plan.md`):
 
 - a generator writes the table to a generated data file;
-- a staleness test fails when the models it was built from change;
-- a truth instrument compares V with outcomes in bot games.
+- a staleness test fails when the models it was built from change (the shot
+  field, the keep reads, the skating), so the table is regenerated rather than
+  quietly stale;
+- a heat-map render of the rink coloured by V, to look at it (decision 2) and
+  hold its shape against the published hockey work.
+
+The comparison with outcomes in bot games waits, per decision 2, until what we
+see calls for it.
 
 ### 10. Getting there
 
-Build the table beside today's currency. Read it in the carrier first, then
-compare the entry and breakout drills and the advantage scenarios between the
-two. Move the defence and the stations over next, then retire the next-line
-reads. Each step runs the default and slow tiers, the drills and the
-benchmarks.
+**Agreed.**
+
+1. **The test families** (11), so there is a bench before anything changes.
+2. **The set defence's placement rule** (2a), talked through first.
+3. **The generator and the heat map**: the table is looked at together before
+   any bot reads it.
+4. **The carrier reads it**, beside today's currency, with the read depth
+   switchable between one move and two; measured on the families and the drills.
+5. **The defence and the stations move over**; the next-line reads and the
+   per-zone turnover table retire.
+
+Each step runs the default and slow tiers, the drills and the benchmarks.
 
 ### 11. Testing: the behaviors, re-staged from scratch
 
@@ -222,7 +235,12 @@ more about the staging than about the bot. xT changes every value the bots read,
 so it is the moment to re-ground the tests too.
 
 - **Inventory first**: what each behavior-level test wants the bot to do, in one
-  plain sentence, with how it is staged and what it asserts.
+  plain sentence, with how it is staged and what it asserts. Taken: 152
+  behaviours, 127 of them on one hand-placed staging or a few hand-picked
+  variants, 106 checked on a single decision. Many carrier picks are pinned only
+  in the calibration snapshot; several asserted picks are forced by a ping;
+  perception (rush numbers, the assigned man) is often set by hand; three
+  stagings are coordinates lifted from one tick of a simulation.
 - **Re-stage each behavior from scratch** as a family of starts (positions,
   speeds, the defence's shape, varied over ranges, seeded so it replays), run as
   play in the duel harness where the behavior takes more than one decision, and
