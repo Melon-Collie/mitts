@@ -321,8 +321,10 @@ func step(dt: float) -> void:
 		yaw = _frozen_yaw
 	# Sunk while set on his feet, shuffling or skating with the play and asked, out of it
 	# with any other move; a drop or a save goes from where he has sunk to
-	# (KeeperDrop.drop_from, `save`).
-	var with_play: bool = _mover == Mover.GLIDE and glide.velocity.length() <= glide.shuffle_speed \
+	# (KeeperDrop.drop_from, `save`). Skating with the play is across his line no
+	# faster than he shuffles, in depth at any glide: backing in on a rush he
+	# glides back in his stance.
+	var with_play: bool = _mover == Mover.GLIDE and absf(glide.velocity.rotated(yaw).x) <= glide.shuffle_speed \
 			or _mover == Mover.FOOTWORK and footwork.move == KeeperFootwork.Move.SHUFFLE
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)

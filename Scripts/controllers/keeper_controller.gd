@@ -205,9 +205,9 @@ func _read_play(delta: float, in_net: Vector3) -> void:
 		holder = Vector2(body.x, body.z)
 	# A wind-up shows as the opposing carrier holding the puck on his blade for
 	# a shot: the wrister's address, the slapper's charge, the one-timer's.
-	play.theirs = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id)
-	var winding: bool = play.theirs and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
-	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder)
+	var theirs: bool = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id)
+	var winding: bool = theirs and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
+	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder, theirs)
 
 
 # Who an opposing carrier could pass to, through which lanes; and which of

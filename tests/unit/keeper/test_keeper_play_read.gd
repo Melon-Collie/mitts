@@ -13,6 +13,22 @@ extends GutTest
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
 
+# A carrier of theirs releasing: he reads the puck carried by one of theirs
+# until his read has passed, then loose and no one's.
+func test_a_release_is_read_late() -> void:
+	var play := KeeperPlayRead.new()
+	var body := Vector2(0.0, -6.0)
+	for i: int in 30:
+		play.step(DT, body, Vector2.ZERO, false, body, true)
+	assert_true(play.theirs, "carried by one of theirs")
+	var ticks_to_see: int = 0
+	while play.theirs and ticks_to_see < 60:
+		play.step(DT, body, Vector2(0.0, 25.0))
+		ticks_to_see += 1
+	assert_almost_eq(ticks_to_see * DT, play.delay_s, DT * 1.5, "the release seen his read late")
+	assert_true(play.loose, "loose once seen")
+
+
 func test_a_puck_holding_its_line_is_read_where_it_is() -> void:
 	var play := KeeperPlayRead.new()
 	var v := Vector2(3.0, 5.0)

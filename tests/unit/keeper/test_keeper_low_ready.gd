@@ -109,6 +109,24 @@ func test_a_move_takes_him_out_of_it_as_it_starts() -> void:
 	assert_gt(_motor.low_ready.share, 0.0, "set again and still asked, sinking again")
 
 
+# Backing in with a rush at full depth glide, he stays sunk: the speed that
+# takes him out of it is across his line, not in depth.
+func test_backing_in_at_full_glide_he_stays_low() -> void:
+	_motor.z = -1.8
+	_was = _bones()
+	_sink()
+	var spot := Vector2(0.0, -1.8)
+	var v := Vector2(0.0, GameRules.DEFAULT_GOALIE_DEPTH_SPEED_M_S)
+	var fastest: float = 0.0
+	for i: int in int(0.5 / DT):
+		spot += v * DT
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_step_checked("backing in t %.3f" % (i * DT))
+		fastest = maxf(fastest, absf(_motor.glide.velocity.y))
+	assert_gt(fastest, _motor.glide.shuffle_speed, "backing in faster than he shuffles")
+	assert_eq(_motor.low_ready.share, 1.0, "still sunk")
+
+
 # Skating with the play no faster than he shuffles, he stays sunk; skated
 # harder, he comes up out of it.
 func test_skating_with_the_play_he_stays_low() -> void:
