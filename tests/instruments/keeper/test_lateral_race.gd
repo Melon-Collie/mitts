@@ -4,7 +4,8 @@ extends GutTest
 # skated there on his feet (the glide, as the brain asks for a spot on his
 # feet), and the butterfly slide from his feet. Per distance, the time his
 # centre is half way and all the way there, and how far he has got at fixed
-# times after the call.
+# times after the call. And from the butterfly, a down push: when he is
+# there, and when he could push again.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const DISTANCES: Array[float] = [0.3, 0.5, 0.8, 1.2]
@@ -17,8 +18,28 @@ func test_report() -> void:
 	for d: float in DISTANCES:
 		for way: String in ["glide", "slide"]:
 			lines.append(_race(way, d))
+	lines.append("down push  dist | there  again")
+	for d: float in DISTANCES:
+		lines.append(_down_push(d))
 	gut.p("\n" + "\n".join(lines))
 	assert_true(true)
+
+
+func _down_push(d: float) -> String:
+	var motor := KeeperMotor.new()
+	motor.z = -1.0
+	motor.go_to(Vector2(0.0, -1.0), 0.0, KeeperRoute.Rest.DOWN)
+	for _i: int in 120:
+		motor.step(DT)
+	motor.go_to(Vector2(d, -1.0), 0.0, KeeperRoute.Rest.DOWN)
+	var there: float = INF
+	var t: float = 0.0
+	while t < 1.5 and not (motor.rest == KeeperRoute.Rest.DOWN and motor.is_idle() and t > DT):
+		motor.step(DT)
+		t += DT
+		if motor.x >= d - 0.02 and there == INF:
+			there = t
+	return "           %.1f | %.3f  %.3f" % [d, there, t]
 
 
 func _race(way: String, d: float) -> String:

@@ -3,8 +3,10 @@ extends GutTest
 # The keeper's moves strung together (KeeperMotor): a whole sequence across the
 # crease and back, every hand-off from one move to the next leaving nothing on
 # him jumping and his gear out of the ice; the pivot turning him at its rate and
-# stopping on its facing; footwork going in his turned frame; and a move asked
-# for from the wrong rest refused.
+# stopping on its facing; footwork going in his turned frame; a move asked
+# for from the wrong rest refused; asked down while he skates, down at once
+# carrying his speed; and down pushes one after another, the next going as soon
+# as the last stops.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
@@ -176,3 +178,52 @@ func test_a_move_from_the_wrong_rest_is_refused() -> void:
 	_run_checked("down, then a push")
 	assert_eq(_motor.refused, 4, "a push, down")
 	assert_eq(_motor.rest, R.DOWN)
+
+
+# Skating across with a spot that moves, then asked down there: he drops at
+# once, without stopping first, and carries his speed on his pads; every tick
+# unbroken.
+func test_asked_down_while_skating_he_drops_carrying_his_speed() -> void:
+	_motor = KeeperMotor.new()
+	_motor.z = -1.0
+	var spot := Vector2(0.0, -1.0)
+	var v := Vector2(1.5, 0.0)
+	for i: int in int(0.6 / DT):
+		spot += v * DT
+		_motor.go_to(spot, 0.0, R.FEET, v)
+		_motor.step(DT)
+	var moving: float = _motor.glide.velocity.length()
+	assert_gt(moving, 1.0, "skating with it")
+	var was: float = _motor.x
+	_motor.go_to(spot + v * 0.3, 0.0, R.DOWN)
+	_solve()
+	var bones: Array[Vector3] = _bones()
+	var t: float = 0.0
+	while _motor.rest != R.DOWN and t < 1.0:
+		_motor.step(DT)
+		t += DT
+		_solve()
+		var now: Array[Vector3] = _bones()
+		for b: int in KeeperSkeleton.BONE_COUNT:
+			assert_lt(now[b].distance_to(bones[b]), MAX_BONE_STEP_M, "t %.3f bone %d" % [t, b])
+		bones = now
+	assert_eq(_motor.rest, R.DOWN, "down")
+	assert_lte(t, _motor.save_move.drop_s + 2.0 * DT, "down in the drop's time, no stop first")
+	assert_gt(_motor.x - was, 0.5 * moving * t, "his speed carried on")
+
+
+# Down, a push across and another the moment it stops: the second sets out as
+# soon as the first has stopped and the push leg is back down, the lean back
+# against its stop easing out through it; every tick unbroken.
+func test_down_pushes_follow_one_another() -> void:
+	_motor = KeeperMotor.new()
+	_motor.z = -1.0
+	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.DOWN)
+	_run_checked("down")
+	_motor.go_to(Vector2(0.4, -1.0), 0.0, R.DOWN)
+	_run_checked("first push")
+	assert_gt(_motor.slide._stop, 0.0, "still leaning back against the stop")
+	_motor.go_to(Vector2(0.0, -1.0), 0.0, R.DOWN)
+	_motor.step(DT)
+	assert_eq(_motor._mover, KeeperMotor.Mover.SLIDE, "the next push under way at once")
+	_run_checked("second push")

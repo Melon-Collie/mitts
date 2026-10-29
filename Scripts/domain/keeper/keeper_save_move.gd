@@ -16,6 +16,8 @@ extends RefCounted
 #
 # He carries the speed the save caught him at: on his feet his edges stop it
 # as a standing stop does, down the pads' friction on the ice slides him on.
+# Dropped on purpose while he glides (`edges` off), his edges stay out of it
+# and the pads take it.
 
 enum State { NONE, GOING, HELD, GATHERING }
 # The low saves: the butterfly, the half butterfly (the pad on the puck's side
@@ -36,6 +38,7 @@ var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
 # in the drop's whole time.
 var fall: float = 1.0
 var pad_friction: float = 2.6
+var edges: bool = true
 var edge_decel: float = GameRules.DEFAULT_GOALIE_LATERAL_ACCEL_M_S2 * GameRules.GOALIE_EDGE_STOP_DECEL_RATIO
 
 var state: int = State.NONE
@@ -59,6 +62,7 @@ var _skel := KeeperSkeleton.new()
 func start(from: KeeperPose, p_low: int, p_side: float, at: Vector2, speed: Vector2) -> void:
 	low = p_low
 	side = p_side
+	edges = true
 	x = at.x
 	z = at.y
 	velocity = speed
@@ -117,7 +121,7 @@ func step(dt: float) -> void:
 	if state == State.NONE:
 		return
 	var down: bool = rests_down() and (state != State.GOING or _clock > 0.5)
-	var brake: float = (pad_friction if down else edge_decel) * dt
+	var brake: float = (pad_friction if down else (edge_decel if edges else 0.0)) * dt
 	velocity = velocity.move_toward(Vector2.ZERO, brake)
 	x += velocity.x * dt
 	z += velocity.y * dt

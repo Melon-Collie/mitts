@@ -103,6 +103,7 @@ var _clock: float = 0.0
 var _fold: float = 1.0
 var _stop: float = 0.0
 var _stop_from_speed: float = 0.0
+var _stop_side: float = 1.0
 # Where the push skate was planted, across him in his own frame when the push
 # began; and the push leg as it was when its push ended, with the knee its
 # solve put it at, to fold from.
@@ -219,7 +220,6 @@ func _start(spot: Vector2, top: float, from: int) -> Vector2:
 			phase = Phase.LOAD
 	_clock = 0.0
 	_fold = 0.0
-	_stop = 0.0
 	return _origin + _heading * _target
 
 
@@ -244,7 +244,6 @@ func rotate_to(turn: float) -> void:
 	phase = Phase.LOAD
 	_clock = 0.0
 	_fold = 0.0
-	_stop = 0.0
 
 
 # How fast he swivels on his knees: the push's speed carried by the pads' far
@@ -298,8 +297,11 @@ func post_seal_spot(post: Vector2, side: float, turn: float) -> Vector2:
 
 
 # Down on his spot with the stop settled out of him: in the butterfly.
+# Down on his spot with the push leg folded back: the next move can go. The
+# lean back against the stop eases out of him over SETTLE_S whatever comes
+# next.
 func is_settled() -> bool:
-	return phase == Phase.DOWN and _stop <= 0.0
+	return phase == Phase.DOWN
 
 
 func _brake() -> float:
@@ -352,9 +354,9 @@ func _fall_s() -> float:
 func step(dt: float) -> void:
 	if phase == Phase.DOWN or phase == Phase.GLIDE or phase == Phase.STOP:
 		_fold = minf(_fold + dt / FOLD_S, 1.0)
+	if phase != Phase.STOP:
+		_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 	match phase:
-		Phase.DOWN:
-			_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 		Phase.DROP:
 			# The clock in seconds: the fall and the push in it run on their own.
 			_clock += dt
@@ -402,6 +404,7 @@ func step(dt: float) -> void:
 			if phase == Phase.GLIDE and speed >= sqrt(2.0 * _brake() * maxf(left - speed * dt, 0.0)):
 				phase = Phase.STOP
 				_stop_from_speed = speed
+				_stop_side = _side
 				var glide_s: float = clampf(
 						(left - speed * speed / (2.0 * _brake())) / maxf(speed, 1e-6), 0.0, dt)
 				_along += speed * glide_s
@@ -496,10 +499,10 @@ func pose(p: KeeperPose) -> void:
 					# Off the post the foot stays along the shin, as it pushed.
 					if _from == From.POST:
 						p.legs[_push_leg()].along_shin = 1.0
-			# Back against the stop, as far as the speed it stops from asks.
-			var stop: float = _stop * clampf(_stop_from_speed / GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S,
-					0.0, 1.0)
-			p.lumbar_rot.z += _side * KeeperFootwork.STOP_LEAN_RAD * stop
+	# Back against the stop, as far as the speed it stops from asked, easing out
+	# through whatever he does next.
+	var stop: float = _stop * clampf(_stop_from_speed / GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S, 0.0, 1.0)
+	p.lumbar_rot.z += _stop_side * KeeperFootwork.STOP_LEAN_RAD * stop
 
 
 # A kneeling leg (`down`) `t` of the way up onto its planted foot (`up`, its

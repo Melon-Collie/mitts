@@ -94,6 +94,8 @@ var _spot_velocity := Vector2.ZERO
 var _spot_since: float = 0.0
 # Whether the goal on his feet is skated to however far it is.
 var _skate: bool = false
+# A butterfly dropped into from a glide, let go as it lands (`_drop_carrying`).
+var _landing: bool = false
 # Frozen where he is and turned as he is (`freeze`), no move started.
 var _frozen: bool = false
 var _frozen_at := Vector2.ZERO
@@ -245,6 +247,7 @@ func can_save(down: bool) -> bool:
 
 # The low save `low` to `side`, cutting in now.
 func save(low: int, side: float) -> void:
+	_landing = false
 	pose(_cut)
 	save_move.fall = fall
 	low_ready.cut()
@@ -384,10 +387,18 @@ func _step_mover(dt: float) -> void:
 			save_move.step(dt)
 			x = save_move.x
 			z = save_move.z
-			if save_move.is_done():
+			if _landing and save_move.is_set():
+				_landing = false
+				save_move.state = KeeperSaveMove.State.NONE
+				_rest_on(Rest.DOWN)
+			elif save_move.is_done():
 				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
 		Mover.GLIDE:
 			_step_glide(dt)
+		Mover.NONE:
+			# Down at rest, the last slide's stop still easing out of him.
+			if rest == Rest.DOWN:
+				slide.step(dt)
 
 
 # Whether the goal is one he skates to as it moves: on his feet, standing, near
@@ -409,6 +420,9 @@ func _start_glide() -> void:
 # after it; done once he is on a spot at rest, square, his legs settled. A goal
 # that is no longer on his feet, or none, he stops for first where he is.
 func _step_glide(dt: float) -> void:
+	if _goal and route.rest == Rest.DOWN and glide.velocity.length() > MOVING_M_S:
+		_drop_carrying()
+		return
 	if not _goal or route.rest != Rest.FEET:
 		glide.step(dt, Vector2(glide.x, glide.z), Vector2.ZERO, yaw)
 		x = glide.x
@@ -432,6 +446,14 @@ func _step_glide(dt: float) -> void:
 		yaw = route.facing
 		if glide.is_settled():
 			_mover = Mover.NONE
+
+
+# Down from a glide, its speed carried: into the butterfly as a low save drops
+# him, held only until he lands in it.
+func _drop_carrying() -> void:
+	save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
+	save_move.edges = false
+	_landing = true
 
 
 func _rest_on(r: int) -> void:

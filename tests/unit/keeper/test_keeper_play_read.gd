@@ -5,10 +5,10 @@ extends GutTest
 # passed, a slower tier's later; a wind-up seen late by his read and priming
 # the save once he has watched it long enough; and the receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
-# and inside the blue line. A carried puck read where it is, his read late,
-# carried on along the carrier's skating, and whose carrier it is read as late;
-# and a loose puck read to the first opposing stick its line reaches before it
-# stops.
+# and inside the blue line. A carried puck read his read late, carried on
+# along its own motion no further from its carrier than he reaches, and whose
+# carrier it is read as late; and a loose puck
+# read to the first opposing stick its line reaches before it stops.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 
@@ -118,10 +118,11 @@ func test_receivers_are_the_ones_a_pass_can_reach() -> void:
 	assert_eq(play.receivers.size(), 2, "one nowhere near takes none")
 
 
-# A carried puck is read where it is, his read late: a stickhandle swung
-# across followed as it swings, one held to the side read there, and carried on
-# along its carrier's skating.
-func test_a_carried_puck_is_read_where_it_is() -> void:
+# A carried puck is read his read late and carried on along its own motion
+# over it, as a loose one is, but never further from its carrier, carried on
+# along his skating, than he reaches: a stickhandle swung across read where it
+# was heading, and one held to the side read there.
+func test_a_carried_puck_is_read_on_along_its_own_motion() -> void:
 	var play := KeeperPlayRead.new()
 	var body := Vector2(0.0, -6.0)
 	var lag: int = ceili(play.delay_s / DT - 1e-6)
@@ -130,10 +131,17 @@ func test_a_carried_puck_is_read_where_it_is() -> void:
 		var puck := body + Vector2(0.4 * sin(TAU * 1.5 * i * DT), -0.5)
 		swung.append(puck)
 		play.step(DT, puck, Vector2.ZERO, false, body)
-	assert_almost_eq(play.puck, swung[swung.size() - 1 - lag], Vector2.ONE * 1e-4, "a stickhandle, his read late")
+	var seen: Vector2 = swung[swung.size() - 1 - lag]
+	var own: Vector2 = (seen - swung[swung.size() - 3 - lag]) / (2.0 * DT)
+	assert_almost_eq(play.puck, seen + own * lag * DT, Vector2.ONE * 1e-4, "a stickhandle, read on along its motion")
 	for i: int in 60:
 		play.step(DT, body + Vector2(0.5, -0.5), Vector2.ZERO, false, body)
 	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 1e-4, "held to the side, read there")
+	# A pull across read on past the carrier's reach is read at its edge.
+	for i: int in 60:
+		play.step(DT, body + Vector2(-1.1 + 2.2 * minf(i * DT / 0.22, 1.0), -0.3), Vector2.ZERO, false, body)
+		if i == 12 + lag:
+			assert_lte(play.puck.distance_to(body), KeeperPlayRead.CARRIER_REACH_M + 1e-4, "never past his reach")
 	var v := Vector2(5.0, 0.0)
 	for i: int in 120:
 		body += v * DT

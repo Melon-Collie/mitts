@@ -489,7 +489,7 @@ static func _settled(walk: float) -> float:
 
 # Slides one after another to `d` away, each as far as its push carries; the
 # first setting out `from` (KeeperSlide.From). A slide that carries as far as it goes
-# coasts to rest; the last, stopped on its spot by the edge, settles.
+# coasts to rest; the last stops on its spot by the edge.
 func _slides_time(d: float, from: int) -> float:
 	var reach: float = _slide.glide_reach(_slide.push_speed)
 	var t: float = 0.0
@@ -497,7 +497,7 @@ func _slides_time(d: float, from: int) -> float:
 		t += _slide.time_to(reach, INF, from)
 		d -= reach
 		from = KeeperSlide.From.BUTTERFLY
-	return t + _slide.time_to(d, INF, from) + KeeperSlide.SETTLE_S
+	return t + _slide.time_to(d, INF, from)
 
 
 func _push_time(d: float) -> float:

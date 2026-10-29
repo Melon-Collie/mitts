@@ -11,13 +11,16 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # His read of the play lags it by his leg read (`delay_s`, the tier's), so a
 # puck that holds its line is seen where it is, and one that changes direction
 # is seen going the old way until the read catches up: a deke beats him by
-# exactly his read. The puck is read where it is, carried or loose; the motion
-# it is carried on along is the carrier's body when it is carried, since a
-# stickhandle swings the puck about a body that holds its line, and the puck's
-# own when it is loose. A wind-up is read the same way, late by his
+# exactly his read. A loose puck is carried on along its own motion; a carried
+# one along its own motion too, as it moves about its carrier, but no further
+# from the carrier's body, carried on along its skating, than the carrier
+# reaches. A wind-up is read the same way, late by his
 # read. How long he has held his eyes on the puck on a stick of theirs is what
 # primes the save (`primed`).
 
+# How far across from his body a carrier gets the puck either side: the live
+# skater's furthest pull on average (test_keeper_reads_the_carriers_reach.gd).
+const CARRIER_REACH_M: float = 1.2
 # The longest read any tier has, kept at the physics tick.
 const MOST_S: float = 0.6
 const TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK
@@ -66,6 +69,7 @@ var _sticks := PackedVector3Array()
 # What he has watched, a tick a sample, oldest overwritten.
 var _at := PackedVector2Array()
 var _moving := PackedVector2Array()
+var _bodies := PackedVector2Array()
 var _winding := PackedByteArray()
 var _loose := PackedByteArray()
 var _theirs := PackedByteArray()
@@ -76,6 +80,7 @@ var _count: int = 0
 func _init() -> void:
 	var ticks: int = ceili(MOST_S * TICK_HZ) + 1
 	_at.resize(ticks)
+	_bodies.resize(ticks)
 	_moving.resize(ticks)
 	_winding.resize(ticks)
 	_loose.resize(ticks)
@@ -101,6 +106,7 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	_head = (_head + 1) % size
 	_at[_head] = at
 	_moving[_head] = moving
+	_bodies[_head] = carrier
 	_winding[_head] = 1 if winding else 0
 	_loose[_head] = 1 if carrier == NO_CARRIER else 0
 	_theirs[_head] = 1 if carrier_theirs else 0
@@ -112,6 +118,11 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	winding_up = _winding[seen] == 1
 	loose = _loose[seen] == 1
 	theirs = not loose and _theirs[seen] == 1
+	var before_last: int = (seen - 2 + size) % size
+	if not loose and lag + 2 < _count and _loose[before_last] == 0:
+		var own: Vector2 = (_at[seen] - _at[before_last]) / (2.0 * dt)
+		var body: Vector2 = _bodies[seen] + motion * (lag * dt)
+		puck = body + (_at[seen] + own * (lag * dt) - body).limit_length(CARRIER_REACH_M)
 	var before: int = (seen - 1 + size) % size
 	var held: bool = theirs and lag + 1 < _count and _sweep(_at[before], _at[seen]) <= PURSUIT_RAD_S * dt
 	watched_s = watched_s + dt if held else 0.0
