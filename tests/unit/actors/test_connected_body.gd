@@ -1,6 +1,6 @@
 extends GutTest
 
-# The connected-body prototype (SkaterConnectedMesh): one skin with no seams.
+# The body's skin (SkaterConnectedMesh): one skin with no seams.
 # Its whole point is that nothing is stitched, so the mesh is held closed — every
 # edge shared by exactly two faces — and every vertex's weights well formed, in
 # every tuck it is built for.

@@ -52,9 +52,7 @@ func test_the_shorts_and_the_legs_hang_from_the_same_hips() -> void:
 		assert_eq(rig.get_bone_parent(SkaterBodySkeleton.LEG_BONE_OFFSET + leg), hips,
 				"each leg roots on the hips, so the seat cannot turn away from them")
 	assert_eq(rig.get_bone_parent(SkaterBodySkeleton.SPINE_BONE), waist)
-	for shell: int in [SkaterMeshBuilder.UpperBone.TORSO,
-			SkaterMeshBuilder.UpperBone.SHOULDER_L, SkaterMeshBuilder.UpperBone.SHOULDER_R]:
-		assert_eq(rig.get_bone_parent(shell), SkaterBodySkeleton.SPINE_BONE)
+	assert_eq(rig.get_bone_parent(SkaterMeshBuilder.UpperBone.TORSO), SkaterBodySkeleton.SPINE_BONE)
 	assert_eq(rig.get_bone_parent(SkaterMeshBuilder.UpperBone.HELMET), SkaterBodySkeleton.NECK_BONE)
 	assert_eq(rig.get_bone_parent(SkaterBodySkeleton.NECK_BONE), SkaterBodySkeleton.SPINE_BONE)
 

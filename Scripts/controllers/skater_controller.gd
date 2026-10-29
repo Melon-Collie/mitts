@@ -1493,10 +1493,10 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.upper_arm_length   = _base_skater_upper_arm_length   * m_height
 	skater.forearm_length     = _base_skater_forearm_length     * m_height
 	skater.shoulder_reach_m   = _base_skater_shoulder_reach_m   * m_height
-	# Shoulder anchors track the visual shoulder balls, which the appearance
-	# pass repositions from the same multipliers (y rides height, x rides
-	# girth) — the drawn arm and the IK stay rooted at the same point on
-	# every build. Must run BEFORE the hand/ROM derivation below reads
+	# Shoulder anchors track the skin's shoulder, which the appearance pass
+	# carries with the torso's scale and place by the same multipliers (y rides
+	# height, x rides girth) — the drawn arm and the IK stay rooted at the same
+	# point on every build. Must run BEFORE the hand/ROM derivation below reads
 	# shoulder_height.
 	skater.set_shoulder_anchor(
 			_base_skater_shoulder_offset * attrs.girth_mult(),

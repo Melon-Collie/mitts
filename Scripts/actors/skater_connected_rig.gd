@@ -1,13 +1,14 @@
 class_name SkaterConnectedRig
 extends RefCounted
 
-# PROTOTYPE: draws the connected body (SkaterConnectedMesh) and poses its deform
-# bones. It reads the bones the other rigs posed this frame and writes only its
-# own: per sleeve the girdle, the shoulder's middle, the upper arm, the elbow's
-# middle and the forearm, framed on the elbow's hinge (the ELBOW bone's Z) and
-# scaled by the live arm against the bind arm; per knee the middle of the bend,
-# half the shin's turn on its LEG bone. Called after the rigs' render pass, so
-# it reads this frame's poses.
+# Draws the skater's skin (SkaterConnectedMesh) and poses its deform bones. It
+# reads the bones the other rigs posed this frame and writes only its own: per
+# sleeve the girdle, the shoulder's middle, the upper arm, the elbow's middle and
+# the forearm, framed on the elbow's hinge (the ELBOW bone's Z) and scaled by the
+# live arm against the bind arm; per knee the middle of the bend, half the
+# shin's turn on its LEG bone. Called after the rigs' render pass, so it reads
+# this frame's poses. A display figure with no Skater (LockerMannequin) drives it
+# the same way, through build and pose.
 
 const _UpperBone = SkaterMeshBuilder.UpperBone
 const _LegBone = SkaterMeshBuilder.LegBone
@@ -30,7 +31,7 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 
 
-func build(skeleton: Skeleton3D, body_material: Material) -> void:
+func build(skeleton: Skeleton3D, body_material: Material, tuck: int) -> void:
 	_skeleton = skeleton
 	_rests = SkaterConnectedMesh.bind_rests()
 	_mesh = MeshInstance3D.new()
@@ -39,8 +40,7 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
 	_mesh.set_instance_shader_parameter(&"flat_from_position", 1.0)
-	set_tuck(_skater.gear_style.jersey_tuck if _skater.gear_style != null
-			else GearModelRegistry.TUCK_NONE)
+	set_tuck(tuck)
 	_mesh.set_surface_override_material(0, body_material)
 
 
@@ -56,7 +56,12 @@ func set_tuck(tuck: int) -> void:
 
 
 func update() -> void:
-	var top_side: int = 0 if _skater.shoulder.position.x < 0.0 else 1
+	pose(0 if _skater.shoulder.position.x < 0.0 else 1)
+
+
+# The deform bones off the bones posed this frame; `top_side` is the side the
+# top hand's arm hangs from (0 left, 1 right).
+func pose(top_side: int) -> void:
 	for arm: int in 2:
 		_pose_sleeve(_ARM_BONES[arm], top_side if arm == 0 else 1 - top_side)
 	for side: int in 2:

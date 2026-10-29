@@ -48,9 +48,9 @@ const NAME_GAP_M: float = 0.02
 const NAME_EM_M: float = 0.075
 const NUMBER_GAP_M: float = 0.012
 const NUMBER_EM_M: float = 0.25
-# The skater's back between the shoulder caps at the name's height, less a
-# margin: 0.45 m shows on the posed rig, and a name wider than this is cut off
-# by the caps.
+# The skater's back between the armholes at the name's height, less a margin:
+# 0.45 m shows on the posed rig, and a name wider than this runs onto the
+# sleeves.
 const NAME_MAX_WIDTH_M: float = 0.40
 # A long name is set narrower, as a real sweater's is, but no narrower than
 # this; past it the name is set smaller as well, so it stays readable.
@@ -204,8 +204,8 @@ func update_jersey(
 	queue_redraw()
 
 
-# The torso's material over a JerseyDecal viewport's texture. The torso lathe
-# starts U=0 at +Z, turned by its half-facet phase, and runs CCW; UV_OFFSET_X
+# The torso's material over a JerseyDecal viewport's texture. The torso's rings
+# start U=0 at +Z, turned by its half-facet phase, and runs CCW; UV_OFFSET_X
 # lands the decal's back-centre column on the skater's back.
 static func torso_material(tex: Texture2D) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()

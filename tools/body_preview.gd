@@ -1,13 +1,11 @@
 extends SceneTree
 
-# Renders the connected-body prototype (SkaterConnectedMesh) beside the rig's
-# current body, pose by pose, from four sides: one sheet per pose, the current
-# body on the top row and the connected one under it, to .preview/body/.
+# Renders the skater's body (SkaterConnectedMesh) pose by pose from four sides,
+# one sheet per pose, to .preview/body/.
 #
 #   .claude/hooks/render-body.sh                 # every pose in the set
 #   .claude/hooks/render-body.sh --only=stride,rest   # poses whose name contains one
-#   .claude/hooks/render-body.sh --new-only      # skip the current body's row
-#   .claude/hooks/render-body.sh --pants         # the connected pants alone
+#   .claude/hooks/render-body.sh --pants         # the pants alone
 #   .claude/hooks/render-body.sh --audit         # + count faces folded inside out
 #   BODY_AUDIT_ZONE=33 ... --audit               # + list one zone's folded faces
 #   .claude/hooks/render-body.sh --head          # framed on the helmet
@@ -38,5 +36,5 @@ func _on_frame() -> void:
 	for a: String in args:
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
-	runner.call("begin_preview", only, args.has("--new-only"), args.has("--pants"),
+	runner.call("begin_preview", only, args.has("--pants"),
 			args.has("--audit"), args.has("--head"), args.has("--waist"))

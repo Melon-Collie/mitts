@@ -1,15 +1,14 @@
 class_name SkaterConnectedPants
 extends RefCounted
 
-# PROTOTYPE: the connected body's pants and legs (SkaterConnectedMesh builds the
-# rest and owns the binds): the waist and seat round both hips, splitting at the
-# crotch into the legs, each on through the hem and the knee into the sock.
+# The body's pants and legs (SkaterConnectedMesh builds the rest and owns the
+# binds): the waist and seat round both hips, splitting at the crotch into the
+# legs, each on through the hem and the knee into the sock.
 
 # The pants, waist-space (the PELVIS bone's, which rests at bind identity):
-# (y, half width, half depth, rear sway). The top four are round and scaled like
-# the rig's pelvis lathe, which the jersey tucks into
-# (SkaterMeshBuilder._PELVIS_PROFILE: the third value is unused, the width is
-# the radius): its lip and waistband, the belt under them and its waist; below
+# (y, half width, half depth, rear sway). The top four are round, scaled by
+# PELVIS_XZ_SCALE (the third value is unused, the width is the radius): the lip
+# and waistband the jersey tucks into, the belt under them and its waist; below
 # them the hips widen over the hip joints to the seat, and the last ring is the
 # crotch, where the legs split.
 const _PANTS: Array[Vector4] = [
@@ -50,9 +49,11 @@ const _THIGH_SHARE: Array[Vector2] = [
 	Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO,
 	Vector2(0.0, 0.1), Vector2(0.0, 0.3), Vector2(0.0, 0.5), Vector2(0.35, 0.35),
 ]
-# The thigh as the tail collides with it: round its hip's axis far enough to
-# hold the pants' front at the crotch, which rides the thigh up into the tail
-# in a crouch.
+# The thigh as the tail collides with it, a capsule in its LEG bone's frame
+# from the hip pivot down to the pants' hem: round its axis far enough to hold
+# the pants' front at the crotch, which rides the thigh up into the tail in a
+# crouch.
+const COLLIDER_THIGH_LENGTH_M: float = 0.26
 const COLLIDER_THIGH_RADIUS_M: float = 0.18
 const _SIDES: int = 16
 const _FRONT: int = 8   # the front centre of a ring, which runs from the back centre
@@ -101,7 +102,8 @@ const _LEG_BLEND: Array[Vector3] = [
 # The first sock ring: the hem's underside above it is the pants'.
 const _FIRST_SOCK_RING: int = 5
 const _KNEE_ZONE_CAP_M: float = 0.012
-# Where the old sock lathe's top was: the sock's stripes are laid from there.
+# The sock's top, its stripes laid from there down _SOCK_SIDE_M (UniformPaint's
+# cylinder side).
 const _SOCK_TOP_Y_M: float = -0.48
 const _SOCK_SIDE_M: float = 0.30
 
@@ -203,6 +205,21 @@ static func _stand_rim(pts: PackedVector3Array, s: Vector4, tuck: int, rise: flo
 		var stood: float = smoothstep(_RIM_FLARE_FROM, 1.0, t)
 		var r: float = s.y + flare * stood - _LOOSE_TOP_INSET_M * (1.0 - stood)
 		pts[k] = Vector3(sin(theta) * r * xz.x, s.x + rise * t, s.w + cos(theta) * r * xz.y)
+
+
+# A leg's rings as (y, radius, its sock texture's V): the pants' from the
+# crotch down to their hem, or the sock's from under the hem to the skate — what
+# a flat lay of them measures (tools/kit_capture.gd). The radius is the ring's
+# mean, its swell to the outside and the back left out.
+static func leg_stations(sock: bool) -> PackedVector3Array:
+	var out := PackedVector3Array()
+	for i: int in _LEG_RINGS.size():
+		if (i >= _FIRST_SOCK_RING) != sock:
+			continue
+		var s: Vector4 = _LEG_RINGS[i]
+		out.append(Vector3(s.x, s.y,
+				0.5 * clampf((_SOCK_TOP_Y_M - s.x) / _SOCK_SIDE_M, 0.0, 1.0)))
+	return out
 
 
 # The pants' stripe column is laid round each leg (U from +Z toward +X about the

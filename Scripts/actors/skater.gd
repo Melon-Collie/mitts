@@ -54,14 +54,12 @@ const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-s
 # Shoulder anchor offset from body center. The shoulder (top-hand anchor)
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
-# Matches the ShoulderL/R cap origins in Scenes/Skater.tscn (keep in sync)
-# so the drawn arm roots at the deltoid cap. Sits just inside the torso's
-# shoulder line (x extent ~0.23), so the cap's inner half is under the jersey
-# and its outer half reads as the pad.
+# Just inside the torso's shoulder line (x extent ~0.23), where the skin's
+# sleeve leaves the armhole (SkaterConnectedMesh is bound with its arm rooted
+# here, which test_skater_scene_mirrors.gd holds).
 var shoulder_offset: float = 0.22
-# Shoulder Y in upper-body-local space. Matches the ShoulderL/R ball centers
-# in the scene (keep in sync) so the drawn arm hangs from the visible
-# shoulder rather than a point 5 cm below it. Vertical drop from shoulder to
+# Shoulder Y in upper-body-local space, where the skin's sleeve is bound, so
+# the drawn arm hangs from the visible shoulder. Vertical drop from shoulder to
 # hand at rest = shoulder_height − hand_rest_y (mesh-native 0.40 − (−0.10) =
 # 0.50 m; both scale with build height in apply_attributes, so the drop is
 # 0.50 m × height_mult). That drop is subtracted inside the derived ROM
@@ -269,7 +267,7 @@ var carry_contact_high_u: float = 0.70
 # 0.33 per segment ≈ real shoulder→elbow and elbow→fist-center at the mesh's
 # native 5'10" — the distal bone ends at the FIST, so it carries the hand's
 # length too, which is also why the two split evenly. One arm = 0.70 m; with the
-# shoulder caps at ±0.22 that is a wingspan ≈ 1.84 m on a 1.78 m body, ~103% of
+# shoulders at ±0.22 that is a wingspan ≈ 1.84 m on a 1.78 m body, ~103% of
 # height and inside the 100–104% real athletes run.
 var upper_arm_length: float = 0.33
 var forearm_length: float = 0.33
@@ -916,13 +914,12 @@ var _legs: SkaterLegRig
 var _arms: SkaterArmRig
 var _spine: SkaterSpineRig
 var _stick: SkaterStickRig
-# The connected-body prototype (SkaterConnectedMesh.enabled), else null.
-var _connected: SkaterConnectedRig = null
+var _connected: SkaterConnectedRig = SkaterConnectedRig.new()
 var _draw: SkaterDrawTracker = SkaterDrawTracker.new()
 var _uniform: SkaterUniformCoordinator
 var _hud: SkaterHUDCoordinator
 var _appearance: SkaterAppearanceCoordinator
-var _shadow: SkaterShadowProxy = SkaterShadowProxy.new()
+var _shadow := SkaterShadows.new()
 # The body's one material: a zone per leg and upper surface, painted through the
 # surface seams below (BodyZonePaint).
 var _paint: BodyZonePaint = _new_body_paint()
@@ -991,16 +988,13 @@ func _ready() -> void:
 
 	_stick = SkaterStickRig.new()
 	_stick.setup(self)
-	if SkaterConnectedMesh.enabled:
-		# Its body casts its own shadow; the proxy is the rig meshes'.
-		_connected = SkaterConnectedRig.new()
-		_connected.setup(self)
-		_connected.build(body, _paint.material)
-	else:
-		_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
+	_connected.setup(self)
+	_connected.build(body, _paint.material,
+			gear_style.jersey_tuck if gear_style != null else GearModelRegistry.TUCK_NONE)
+	_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
 
 	_uniform = SkaterUniformCoordinator.new()
-	_uniform.setup(self)
+	_uniform.setup(self, _paint)
 
 	_hud = SkaterHUDCoordinator.new()
 	_hud.setup(self)
@@ -1051,7 +1045,7 @@ func _process(delta: float) -> void:
 			update_bottom_arm_mesh()
 		elif not _on_camera:
 			_hold_blade_mesh()
-		if _on_camera and _connected != null:
+		if _on_camera:
 			_connected.update()
 		if _on_camera or not seen:
 			_anim_lod.consumed()
@@ -1799,8 +1793,7 @@ func set_gear_style(config: GearStyleConfig) -> void:
 		return
 	gear_style = config
 	_arms.apply_gear_meshes()
-	if _connected != null:
-		_connected.set_tuck(config.jersey_tuck)
+	_connected.set_tuck(config.jersey_tuck)
 	if _uniform != null:
 		_uniform.refresh_gear_style()
 
@@ -3085,15 +3078,8 @@ func leg_bone_base_position(bone: int) -> Vector3:
 # laces, the skin's vertex-colour read).
 static func _new_body_paint() -> BodyZonePaint:
 	var paint := BodyZonePaint.new(SkaterMeshBuilder.BODY_ZONE_COUNT)
-	paint.seed_from_mesh(SkaterMeshBuilder.shared_leg_skin_mesh(), 0)
-	paint.seed_from_mesh(SkaterMeshBuilder.shared_upper_skin_mesh(),
-			SkaterMeshBuilder.UPPER_ZONE_BASE)
+	SkaterRigidParts.seed_paint(paint)
 	return paint
-
-
-# Paints a leg surface from `mat`, its record in BodyZonePaint.
-func set_leg_surface_material(surface: int, mat: StandardMaterial3D) -> void:
-	_paint.set_zone(surface, mat)
 
 
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
@@ -3123,14 +3109,9 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 	_arms.set_trunk_texture(pitch_add, roll_add)
 
 
-# An upper surface's paint record: read it freely, and hand it back through
-# set_upper_surface_material after editing it in place.
+# An upper surface's paint record, to read.
 func upper_surface_material(surface: int) -> StandardMaterial3D:
 	return _paint.zone(SkaterMeshBuilder.UPPER_ZONE_BASE + surface)
-
-
-func set_upper_surface_material(surface: int, mat: StandardMaterial3D) -> void:
-	_paint.set_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + surface, mat)
 
 
 func set_upper_bone_scale(bone: int, part_scale: Vector3) -> void:
@@ -3304,15 +3285,8 @@ func name_plate_visible() -> bool:
 	return _hud.name_plate_visible()
 
 
-# Repaints the skin to the player's identity tone, albedo only: the record keeps
-# the vertex-colour read the face's features need. Head and neck are one surface
-# of the helmet mesh (they wear the same material), so there is a single target.
 func set_skin_tone(index: int) -> void:
-	var skin: Color = SkinToneRegistry.color_for(index)
-	var mat: StandardMaterial3D = upper_surface_material(
-			SkaterMeshBuilder.UpperSurface.HELMET_SKIN)
-	mat.albedo_color = Color(skin.r, skin.g, skin.b, mat.albedo_color.a)
-	set_upper_surface_material(SkaterMeshBuilder.UpperSurface.HELMET_SKIN, mat)
+	_uniform.set_skin_tone(index)
 
 
 # ── HUD (delegate to SkaterHUDCoordinator) ────────────────────────────────────

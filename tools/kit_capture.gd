@@ -1,20 +1,20 @@
 extends SceneTree
 
 # Dev visualizer: lays each team's home and away kit out FLAT — jersey front and
-# back with both sleeves and shoulder caps, the breezers, the helmet, the socks,
-# the gloves — beside a legend of every color and stripe in the kit, and saves one PNG per team. It is
-# for editing data/team_colors.json: change a kit, re-run, look.
+# back with both sleeves, the breezers, the helmet, the socks, the gloves —
+# beside a legend of every color and stripe in the kit, and saves one PNG per
+# team. It is for editing data/team_colors.json: change a kit, re-run, look.
 #
 #   .claude/hooks/render-kits.sh                # every team, into ./.preview/kits
 #   .claude/hooks/render-kits.sh pineapple,7       # named teams or slot numbers
 #
-# Nothing here re-paints a kit. Each garment is a rink mesh laid flat (a tube
-# flattened is half its perimeter wide, so every width is measured off the shared
-# lathe meshes, ring by ring) and textured by the game's own painters:
-# JerseyDecal and ShoulderDecal, UniformPaint.h_stripes for the socks, and
-# SkaterUniformCoordinator's arm and pants stripe textures. A band in the PNG is
-# the band the game paints, at its part's real proportions — arm stripes come out
-# shorter than sock stripes of the same authored width, as they do on the ice.
+# Nothing here re-paints a kit. Each garment is the skater's skin laid flat (a
+# tube flattened is half its perimeter wide, so every width is measured off the
+# skin's own rings: SkaterConnectedMesh.jersey_stations and sleeve_stations,
+# SkaterConnectedPants.leg_stations) and textured by the game's own painters:
+# JerseyDecal and SleeveDecal, UniformPaint.h_stripes for the socks and
+# SkaterKitPaint's pants stripes. A band in the PNG is the band the game paints,
+# at its part's real proportions.
 #
 # Kits load through TeamColorRegistry, so user://team_colors.json shadows the
 # bundled file exactly as it does in the game; the run prints which one won.
@@ -29,7 +29,7 @@ const _PX_PER_M: float = 420.0
 const _TUBE_COLUMNS: int = 12
 const _SLEEVE_DROP_DEG: float = 40.0
 # Sleeve root: in from the edge of the torso's shoulder line (its widest ring
-# within _SHOULDER_LINE_SPAN_M of the collar), so the shoulder cap covers the join.
+# within _SHOULDER_LINE_SPAN_M of the collar), where the armhole's seam runs.
 const _SLEEVE_INSET_M: float = 0.03
 const _SHOULDER_LINE_SPAN_M: float = 0.10
 # The neck opening cut into the collar station, trimmed in the collar color
@@ -38,10 +38,6 @@ const _COLLAR_WIDTH_M: float = 0.025
 const _NECK_HALF_WIDTH_M: float = 0.08
 const _NECK_DEPTH_FRONT_M: float = 0.06
 const _NECK_DEPTH_BACK_M: float = 0.02
-const _CAP_SEGMENTS: int = 28
-# A thigh is a tube under the hip dome; the dome (buried in the pelvis in game)
-# would flatten into a spike, so the leg starts at the first ring this wide.
-const _THIGH_FULL_WIDTH_SHARE: float = 0.95
 const _WAISTBAND_M: float = 0.10
 
 # Lathe side U, with each part's uv1_offset already added. Front view puts +X on
@@ -53,6 +49,8 @@ const _JERSEY_BACK_U: Vector2 = Vector2(0.0, 0.5)
 const _PANTS_LEFT_U: Vector2 = Vector2(0.375, 0.875)
 const _PANTS_RIGHT_U: Vector2 = Vector2(0.125, 0.625)
 const _FULL_U: Vector2 = Vector2(0.0, 1.0)
+# The outside of a sleeve, its number (at U 0.5) in the middle.
+const _SLEEVE_U: Vector2 = Vector2(0.25, 0.75)
 
 const _MARGIN: float = 32.0
 const _PANEL_GAP: float = 24.0
@@ -82,14 +80,9 @@ const _USER_JSON: String = "user://team_colors.json"
 
 # Flattened parts, as (drop below the first ring m, flat width m, texture V).
 var _torso: Array[Vector3] = []
-var _upper_arm: Array[Vector3] = []
-var _forearm: Array[Vector3] = []
+var _sleeve: Array[Vector3] = []
 var _thigh: Array[Vector3] = []
 var _sock: Array[Vector3] = []
-var _arm_radius_m: float = 0.0
-# The cap is drawn at its projected size, not flattened: laid flat at half its
-# perimeter it would hide the name bar it sits beside on the ice.
-var _cap_half: Vector2 = Vector2.ZERO
 # The helmet as a disc as wide as its shell, between the pants and the socks.
 var _helmet_radius_m: float = 0.0
 # The glove, fingers up, right of the socks: the fist's width and the heights of
@@ -105,12 +98,10 @@ var _sheet: SubViewport
 var _canvas: Node2D
 var _jersey_decals: Array[JerseyDecal] = []
 var _jersey_textures: Array[Texture2D] = []
-var _shoulder_decals: Array[ShoulderDecal] = []
-var _shoulder_textures: Array[Texture2D] = []
+var _sleeve_decals: Array[SleeveDecal] = []
+var _sleeve_textures: Array[Texture2D] = []
 # Per side, the stripe textures the canvas draws with. Held here because a
 # texture made inside _draw is freed before the frame that would show it.
-var _upper_arm_textures: Array[Texture2D] = [null, null]
-var _forearm_textures: Array[Texture2D] = [null, null]
 var _pants_textures: Array[Texture2D] = [null, null]
 var _sock_textures: Array[Texture2D] = [null, null]
 var _preset: Dictionary = {}
@@ -148,14 +139,9 @@ func _render() -> void:
 			_jersey_decals[side].update_jersey(kit.jersey.base,
 					UniformPaint.yoke_color(kit.jersey), UniformPaint.collar_color(kit.jersey),
 					kit.jersey.stripes, _player_name, _number, kit.text.color, kit.text.stroke)
-			_shoulder_decals[side].update_shoulder(kit.shoulders.color,
-					UniformPaint.yoke_color(kit.jersey), _number,
-					kit.shoulders.text, kit.shoulders.stroke)
-			_upper_arm_textures[side] = SkaterUniformCoordinator.make_arm_stripes_texture(
-					kit.arms.upper.base, kit.arms.upper.stripes)
-			_forearm_textures[side] = SkaterUniformCoordinator.make_arm_stripes_texture(
-					kit.arms.lower.base, kit.arms.lower.stripes)
-			_pants_textures[side] = SkaterUniformCoordinator.make_pants_stripes_texture(
+			_sleeve_decals[side].update_sleeve(kit.sleeve, _number, kit.shoulders.text,
+					kit.shoulders.stroke)
+			_pants_textures[side] = SkaterKitPaint.make_pants_stripes_texture(
 					kit.pants.base, kit.pants.stripes)
 			_sock_textures[side] = UniformPaint.h_stripes(kit.socks.base, kit.socks.stripes)
 			var colors: Dictionary = TeamColorRegistry.get_colors(slot, side)
@@ -198,12 +184,9 @@ func _kit(side: int) -> Dictionary:
 
 
 func _measure_parts() -> void:
-	# The skater's own arm defaults (an average build), read off a throwaway
+	# The skater's own glove defaults (an average build), read off a throwaway
 	# instance rather than restated.
 	var skater := Skater.new()
-	_arm_radius_m = skater.arm_mesh_thickness * 0.5
-	var upper_len: float = skater.upper_arm_length
-	var fore_len: float = skater.forearm_length
 	var hand_r: float = skater.hand_sphere_radius
 	_cuff_width_m = 2.0 * skater.arm_mesh_thickness * 0.6
 	skater.free()
@@ -212,51 +195,43 @@ func _measure_parts() -> void:
 	_glove_back_m = _surface_bounds(fist, SkaterMeshBuilder.FIST_PART_BACK).size.y * hand_r
 	_glove_fingers_m = _surface_bounds(fist, SkaterMeshBuilder.FIST_PART_FINGERS).size.y * hand_r
 
-	_torso = _lathe_stations(SkaterMeshBuilder.shared_torso())
-	_upper_arm = _lathe_stations(SkaterMeshBuilder.shared_arm_bone(), _arm_radius_m, upper_len)
-	_forearm = _lathe_stations(SkaterMeshBuilder.shared_arm_bone(), _arm_radius_m, fore_len)
-	_sock = _lathe_stations(SkaterMeshBuilder.shared_sock())
-	_thigh = _below_dome(_lathe_stations(SkaterMeshBuilder.shared_thigh()))
-	var cap: AABB = SkaterMeshBuilder.shared_shoulder_cap().get_aabb()
-	_cap_half = cap.size.x * 0.5 * Vector2.ONE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var stations: Array[Vector3] = SkaterConnectedMesh.jersey_stations()
+	var top_y: float = stations[0].x
+	for st: Vector3 in stations:
+		# The torso's own V: down its side from the collar (SkaterConnectedMesh).
+		_torso.append(Vector3(top_y - st.x, _half_ellipse(st.y * xz.x, st.y * xz.y),
+				0.5 * (top_y - st.x) / SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M))
+	# The sleeve from the seam to where the glove's cuff covers it.
+	var rings: PackedVector2Array = SkaterConnectedMesh.sleeve_stations()
+	_sleeve.append(Vector3(0.0, PI * rings[0].y, 0.0))
+	for k: int in rings.size():
+		var m: float = rings[k].x
+		var r: float = rings[k].y
+		if m >= SleevePaint.LENGTH_M:
+			var prev: Vector2 = rings[k - 1]
+			r = lerpf(prev.y, r, (SleevePaint.LENGTH_M - prev.x) / (m - prev.x))
+			_sleeve.append(Vector3(SleevePaint.LENGTH_M, PI * r, 1.0))
+			break
+		_sleeve.append(Vector3(m, PI * r, SleevePaint.pos_of(m)))
+	_thigh = _leg(SkaterConnectedPants.leg_stations(false))
+	_sock = _leg(SkaterConnectedPants.leg_stations(true))
 	var shell: PackedVector3Array = SkaterMeshBuilder.shared_helmet_assembly().surface_get_arrays(
 			SkaterMeshBuilder.HELMET_SURF_SHELL)[Mesh.ARRAY_VERTEX]
 	for v: Vector3 in shell:
 		_helmet_radius_m = maxf(_helmet_radius_m, absf(v.x))
 
 
-# One station per side ring of a lathe mesh, top to bottom: the ring's V, its
-# drop below the top ring, and half its perimeter — the width of the tube laid
-# flat. Caps are skipped by their UVs, which sit below the side's V range.
-static func _lathe_stations(mesh: ArrayMesh, radius_scale: float = 1.0,
-		length_scale: float = 1.0) -> Array[Vector3]:
-	var arrays: Array = mesh.surface_get_arrays(0)
-	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
-	var uvs: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV]
-	var rings: Dictionary = {}
-	for i: int in verts.size():
-		var uv: Vector2 = uvs[i]
-		if uv.y > UniformPaint.CYLINDER_SIDE_V_FRACTION + 0.001:
-			continue
-		var ring: Dictionary = rings.get_or_add(snappedf(uv.y, 0.0001), {})
-		ring[snappedf(uv.x, 0.0001)] = verts[i]
-	var vs: Array = rings.keys()
-	vs.sort()
+# Half an ellipse's perimeter (Ramanujan's): the width of an oval tube laid flat.
+static func _half_ellipse(a: float, b: float) -> float:
+	return PI * 0.5 * (3.0 * (a + b) - sqrt((3.0 * a + b) * (a + 3.0 * b)))
+
+
+# A leg's rings as flat stations from its first ring down.
+static func _leg(rings: PackedVector3Array) -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	var top_y: float = 0.0
-	for v: float in vs:
-		var ring: Dictionary = rings[v]
-		var us: Array = ring.keys()
-		us.sort()
-		var perimeter: float = 0.0
-		for k: int in us.size() - 1:
-			var a: Vector3 = ring[us[k]]
-			var b: Vector3 = ring[us[k + 1]]
-			perimeter += Vector2(b.x - a.x, b.z - a.z).length()
-		var y: float = (ring[us[0]] as Vector3).y
-		if out.is_empty():
-			top_y = y
-		out.append(Vector3((top_y - y) * length_scale, perimeter * 0.5 * radius_scale, v))
+	for st: Vector3 in rings:
+		out.append(Vector3(rings[0].x - st.x, PI * st.y, st.z))
 	return out
 
 
@@ -276,21 +251,6 @@ static func _surface_bounds(mesh: ArrayMesh, surface: int) -> AABB:
 	return bounds
 
 
-static func _below_dome(stations: Array[Vector3]) -> Array[Vector3]:
-	var widest: float = 0.0
-	for s: Vector3 in stations:
-		widest = maxf(widest, s.y)
-	var out: Array[Vector3] = []
-	for s: Vector3 in stations:
-		if out.is_empty() and s.y < widest * _THIGH_FULL_WIDTH_SHARE:
-			continue
-		out.append(s)
-	var drop0: float = out[0].x
-	for i: int in out.size():
-		out[i].x -= drop0
-	return out
-
-
 # ── The sheet ────────────────────────────────────────────────────────────────
 
 
@@ -301,11 +261,11 @@ func _build_sheet() -> void:
 		jersey_vp.add_child(jersey)
 		_jersey_decals.append(jersey)
 		_jersey_textures.append(jersey_vp.get_texture())
-		var shoulder := ShoulderDecal.new()
-		var shoulder_vp := _decal_viewport(shoulder.size)
-		shoulder_vp.add_child(shoulder)
-		_shoulder_decals.append(shoulder)
-		_shoulder_textures.append(shoulder_vp.get_texture())
+		var sleeve := SleeveDecal.new()
+		var sleeve_vp := _decal_viewport(SleeveDecal.SIZE)
+		sleeve_vp.add_child(sleeve)
+		_sleeve_decals.append(sleeve)
+		_sleeve_textures.append(sleeve_vp.get_texture())
 
 	_sheet = SubViewport.new()
 	_sheet.size = Vector2i(_sheet_size())
@@ -409,28 +369,18 @@ func _draw_jersey(c: Node2D, top_center: Vector2, kit: Dictionary, side: int,
 		roots.append(top_center + Vector2(dir * (line.y * 0.5 - _SLEEVE_INSET_M),
 				line.x) * _PX_PER_M)
 	for i: int in 2:
-		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0,
-				SkaterUniformCoordinator.elbow_color(kit.arms), side)
+		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0, side)
 	_draw_tube(c, top_center, _torso, _jersey_textures[side], u)
 	_draw_collar(c, top_center, UniformPaint.collar_color(kit.jersey), neck_depth_m)
-	for root_px: Vector2 in roots:
-		_draw_shoulder_cap(c, root_px, _shoulder_textures[side])
 
 
-# A sleeve hangs down and out from `root` at _SLEEVE_DROP_DEG: upper arm from
-# the shoulder, the elbow pad in its own color (as the rink paints it), the
-# forearm on. Stripe V 0 is the proximal end of each bone, as on the arm mesh.
-func _draw_sleeve(c: Node2D, root_px: Vector2, outward: float, elbow_color: Color,
-		side: int) -> void:
+# A sleeve hangs down and out from `root` at _SLEEVE_DROP_DEG, its outside
+# toward the viewer, the number on it.
+func _draw_sleeve(c: Node2D, root_px: Vector2, outward: float, side: int) -> void:
 	var drop: float = deg_to_rad(_SLEEVE_DROP_DEG)
 	var dir := Vector2(outward * cos(drop), sin(drop))
 	c.draw_set_transform(root_px, atan2(-dir.x, dir.y))
-	var elbow := Vector2(0.0, _upper_arm[_upper_arm.size() - 1].x * _PX_PER_M)
-	_draw_tube(c, Vector2.ZERO, _upper_arm, _upper_arm_textures[side], _FULL_U)
-	_draw_tube(c, elbow, _forearm, _forearm_textures[side], _FULL_U)
-	var pad_px: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M * _PX_PER_M
-	c.draw_circle(elbow, pad_px, elbow_color)
-	c.draw_arc(elbow, pad_px, 0.0, TAU, 32, _EDGE, 1.5, true)
+	_draw_tube(c, Vector2.ZERO, _sleeve, _sleeve_textures[side], _SLEEVE_U)
 	c.draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -442,24 +392,6 @@ func _draw_collar(c: Node2D, top_center: Vector2, color: Color, neck_depth_m: fl
 				sin(t) * neck_depth_m) * _PX_PER_M)
 	c.draw_colored_polygon(neck, _PANEL_BG)
 	c.draw_polyline(neck, color, _COLLAR_WIDTH_M * _PX_PER_M, true)
-
-
-# The decal window is the patch of the cap facing outward (the per-shoulder
-# uv1_offset puts the number at U 0.5), as wide and tall in metres as the patch
-# is drawn, centred on the number — so the number keeps its shape.
-func _draw_shoulder_cap(c: Node2D, center: Vector2, tex: Texture2D) -> void:
-	var pts := PackedVector2Array()
-	var uvs := PackedVector2Array()
-	var half_px: Vector2 = _cap_half * _PX_PER_M
-	for k: int in _CAP_SEGMENTS:
-		var t: float = TAU * float(k) / float(_CAP_SEGMENTS)
-		var unit := Vector2(cos(t), sin(t))
-		pts.append(center + unit * half_px)
-		uvs.append(Vector2(0.5 + unit.x * _cap_half.x / ShoulderDecal.CAP_GIRTH_M,
-				ShoulderDecal.CAP_NUMBER_CENTER_V + unit.y * _cap_half.y / ShoulderDecal.CAP_M_PER_V))
-	c.draw_polygon(pts, PackedColorArray([Color.WHITE]), uvs, tex)
-	pts.append(pts[0])
-	c.draw_polyline(pts, _EDGE, 1.5, true)
 
 
 # Two legs side by side under a waistband (the pelvis, which the rink paints the
@@ -545,9 +477,8 @@ func _draw_tube(c: Node2D, top_center: Vector2, stations: Array[Vector3],
 func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	var pen: Vector2 = at
 	pen = _legend_row(c, pen, "helmet", [kit.helmet], [""])
-	pen = _legend_row(c, pen, "shoulders",
-			[kit.shoulders.color, kit.shoulders.text, kit.shoulders.stroke],
-			["", "text", _stroke_note(kit.shoulders.stroke)])
+	pen = _legend_row(c, pen, "shoulders", [kit.shoulders.text, kit.shoulders.stroke],
+			["text (the sleeve's number)", _stroke_note(kit.shoulders.stroke)])
 	pen = _legend_row(c, pen, "jersey", [kit.jersey.base, UniformPaint.yoke_color(kit.jersey),
 			UniformPaint.collar_color(kit.jersey)],
 			["", "yoke" if kit.jersey.yoke is Color else "yoke (base)",
@@ -555,8 +486,6 @@ func _draw_legend(c: Node2D, at: Vector2, kit: Dictionary) -> void:
 	pen = _stripe_rows(c, pen, kit.jersey.stripes)
 	pen = _legend_row(c, pen, "sleeve", [kit.sleeve.base], [""])
 	pen = _stripe_rows(c, pen, kit.sleeve.stripes)
-	pen = _legend_row(c, pen, "arms.elbow", [SkaterUniformCoordinator.elbow_color(kit.arms)],
-			["" if kit.arms.elbow is Color else "(the sleeve's base)"])
 	pen = _legend_row(c, pen, "gloves", [kit.gloves], [""])
 	pen = _legend_row(c, pen, "pants", [kit.pants.base], ["(stripe pos is across, U)"])
 	pen = _stripe_rows(c, pen, kit.pants.stripes)

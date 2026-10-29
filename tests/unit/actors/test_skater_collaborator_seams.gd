@@ -27,7 +27,7 @@ const _COLLABORATORS: Dictionary = {
 	"_uniform": "res://Scripts/actors/skater_uniform_coordinator.gd",
 	"_hud": "res://Scripts/actors/skater_hud_coordinator.gd",
 	"_appearance": "res://Scripts/actors/skater_appearance_coordinator.gd",
-	"_shadow": "res://Scripts/actors/skater_shadow_proxy.gd",
+	"_shadow": "res://Scripts/actors/skater_shadows.gd",
 	"_anim_lod": "res://Scripts/actors/skater_animation_lod.gd",
 	"_paint": "res://Scripts/actors/body_zone_paint.gd",
 }
@@ -104,9 +104,7 @@ func test_no_rig_writes_the_skaters_own_state() -> void:
 func test_the_rigs_never_reach_for_each_other() -> void:
 	# A rig naming a sibling is a lateral edge, and a const read across a GDScript
 	# `class_name` cycle fails at PARSE time — taking every file in the cycle down
-	# with it. The one allowed edge is the stick knob reading the arm rig's
-	# look-at helper, which its cuff pose is copied from; it is one-way.
-	const ALLOWED: Dictionary = {"skater_stick_rig.gd": "SkaterArmRig"}
+	# with it.
 	var names: Array[String] = ["SkaterLegRig", "SkaterArmRig", "SkaterSpineRig",
 			"SkaterStickRig", "SkaterDrawTracker", "SkaterConnectedRig"]
 	for holder: String in ["_legs", "_arms", "_spine", "_stick", "_draw", "_connected"]:
@@ -115,8 +113,6 @@ func test_the_rigs_never_reach_for_each_other() -> void:
 		var own: String = path.get_file()
 		for other: String in names:
 			if src.contains("class_name %s" % other):
-				continue
-			if ALLOWED.get(own, "") == other:
 				continue
 			assert_false(RegEx.create_from_string("\\b%s\\b" % other).search(src) != null,
 					"%s names %s. Rigs are siblings; go through Skater." % [own, other])

@@ -1,18 +1,19 @@
 extends GutTest
 
-# The sleeve stops at the glove. The forearm, the cuff and the fist are three
-# meshes posed along one forearm axis, and nothing but their proportions keeps
-# the sleeve inside the other two: a sleeve thicker than the fist runs out
-# through its faces as stripes of jersey across the glove. This poses the live
-# rig at the corners of the build range and holds every sleeve vertex the glove
-# reaches over to being inside the cuff or the fist.
+# The sleeve stops at the glove. The sleeve (the body's skin,
+# SkaterConnectedMesh), the cuff and the fist are posed along one forearm, and
+# nothing but their proportions keeps the sleeve inside the other two: a sleeve
+# thicker than the fist runs out through its faces as stripes of jersey across
+# the glove. This poses the live rig at the corners of the build range, skins
+# the sleeves as drawn, and holds every sleeve vertex the glove reaches over to
+# being inside the cuff or the fist.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const UpperBone = SkaterMeshBuilder.UpperBone
-# [forearm, cuff, fist] per arm.
+# [upper arm, cuff, fist] per arm.
 const _ARMS: Array = [
-	[UpperBone.TOP_FOREARM, UpperBone.TOP_CUFF, UpperBone.TOP_HAND],
-	[UpperBone.BOTTOM_FOREARM, UpperBone.BOTTOM_CUFF, UpperBone.BOTTOM_HAND],
+	[UpperBone.TOP_UPPER_ARM, UpperBone.TOP_CUFF, UpperBone.TOP_HAND],
+	[UpperBone.BOTTOM_UPPER_ARM, UpperBone.BOTTOM_CUFF, UpperBone.BOTTOM_HAND],
 ]
 
 
@@ -88,20 +89,44 @@ static func _inside_section(p: Vector3, size: Vector2) -> bool:
 	return true
 
 
+# The sleeve on the arm whose upper arm is `upper`, skinned as drawn, skeleton
+# space.
+func _skinned_sleeve(body: Skeleton3D, upper: int) -> PackedVector3Array:
+	var shoulder: Vector3 = body.get_bone_pose(upper) * Vector3(0.0, 0.0, 0.5)
+	var zone: int = SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(
+			signf(shoulder.x)))
+	var skin: Skin = SkaterConnectedMesh.shared_skin()
+	var xforms: Array[Transform3D] = []
+	for i: int in skin.get_bind_count():
+		xforms.append(body.get_bone_global_pose(skin.get_bind_bone(i)) * skin.get_bind_pose(i))
+	var arrays: Array = SkaterConnectedMesh.shared_mesh(_skater.gear_style.jersey_tuck) \
+			.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var zones: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
+	var out := PackedVector3Array()
+	for v: int in verts.size():
+		if roundi(zones[v].x) != zone:
+			continue
+		var p := Vector3.ZERO
+		for k: int in 4:
+			if weights[v * 4 + k] > 0.0:
+				p += (xforms[bones[v * 4 + k]] * verts[v]) * weights[v * 4 + k]
+		out.append(p)
+	return out
+
+
 # Sleeve vertices up the arm as far as the cuff's open end that are in neither
 # the cuff nor the fist, and how many the glove reached over.
 func _bare_sleeve(arm: Array) -> Vector2i:
 	var body: Skeleton3D = _skater._arms._skeleton
-	var forearm: Transform3D = body.get_bone_pose(arm[0])
 	var to_cuff: Transform3D = body.get_bone_pose(arm[1]).affine_inverse()
 	var to_fist: Transform3D = body.get_bone_pose(arm[2]).affine_inverse()
-	var verts: PackedVector3Array = SkaterMeshBuilder._forearm_bone_z() \
-			.surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
 	var cuff_top: float = SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
 	var covered: int = 0
 	var bare: int = 0
-	for v: Vector3 in verts:
-		var p: Vector3 = forearm * v
+	for p: Vector3 in _skinned_sleeve(body, arm[0]):
 		var in_cuff: Vector3 = to_cuff * p
 		if in_cuff.y > cuff_top:
 			continue

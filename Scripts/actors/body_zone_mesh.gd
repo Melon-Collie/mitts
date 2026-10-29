@@ -18,15 +18,6 @@ var _indices := PackedInt32Array()
 var _skinned: bool = false
 
 
-# Every surface of `src` as zones first_zone, first_zone + 1, ... in surface
-# order, keeping its own bones and weights.
-static func merge(src: ArrayMesh, first_zone: int) -> ArrayMesh:
-	var b := BodyZoneMesh.new()
-	for s: int in src.get_surface_count():
-		b.add(src.surface_get_arrays(s), first_zone + s)
-	return b.commit()
-
-
 # Adds one surface's arrays as `zone`. With `bone` >= 0 every vertex is made rigid
 # to that bone and `xform` is baked in first (normals by its inverse transpose, so
 # a non-uniform scale shades as it would on a node, and a mirror's winding

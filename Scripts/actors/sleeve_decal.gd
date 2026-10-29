@@ -8,7 +8,10 @@ extends Node2D
 # 0.5, which each sleeve's material turns outward (part_material); V runs down
 # the sleeve's length (SleevePaint.LENGTH_M).
 
+const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf")
 const SIZE := Vector2i(512, 512)
+# A sleeve number a little over half the back name's em.
+const NUMBER_EM_M: float = 0.10
 # Round the sleeve where the number sits, metres: the arm's girth there.
 const _GIRTH_M: float = 0.60
 
@@ -27,16 +30,14 @@ func _draw() -> void:
 	var num_str: String = str(jersey_number)
 	# Set at the vertical texel density and stretched to the horizontal one, so
 	# the number keeps the font's shape once it is on the arm.
-	var font_size: int = roundi(ShoulderDecal.NUMBER_EM_M * _px_per_m.y)
+	var font_size: int = roundi(NUMBER_EM_M * _px_per_m.y)
 	var stretch: float = _px_per_m.x / _px_per_m.y
-	var text: Vector2 = ShoulderDecal.FONT.get_string_size(num_str, HORIZONTAL_ALIGNMENT_LEFT,
-			-1, font_size)
+	var text: Vector2 = FONT.get_string_size(num_str, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size)
 	var pos := Vector2(float(SIZE.x) * 0.5 / stretch - text.x * 0.5,
 			SleevePaint.NUMBER_CENTER_M * _px_per_m.y - text.y * 0.5
-			+ ShoulderDecal.FONT.get_ascent(font_size))
+			+ FONT.get_ascent(font_size))
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(stretch, 1.0))
-	JerseyDecal.draw_lettering(self, ShoulderDecal.FONT, pos, num_str, font_size, text_color,
-			text_stroke)
+	JerseyDecal.draw_lettering(self, FONT, pos, num_str, font_size, text_color, text_stroke)
 	draw_set_transform_matrix(Transform2D.IDENTITY)
 
 
@@ -44,7 +45,12 @@ func _draw() -> void:
 # `side` (-1 the -X arm, +1 the +X one): U = 0 is the arm's back, so a quarter
 # turn each way faces the number outward.
 static func part_material(tex: Texture2D, side: float) -> StandardMaterial3D:
-	return ShoulderDecal.part_material(tex, side)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = tex
+	mat.roughness = UniformPaint.ROUGH_CLOTH
+	mat.uv1_offset = Vector3(0.25 * side, 0.0, 0.0)
+	BodyRim.apply(mat)
+	return mat
 
 
 func update_sleeve(p_sleeve: Dictionary, p_number: int, t_color: Color, t_stroke: Color) -> void:

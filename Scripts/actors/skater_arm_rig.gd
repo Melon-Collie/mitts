@@ -2,8 +2,8 @@ class_name SkaterArmRig
 extends RefCounted
 
 # The upper half of the body skeleton: torso, the jersey's tail (TAIL, and its
-# flaps below the belt, SkaterHemFlaps), pelvis, helmet, the two deltoid caps,
-# and both arms posed by IK from the hand markers.
+# flaps below the belt, SkaterHemFlaps), pelvis, helmet, and both arms posed by
+# IK from the hand markers.
 #
 # The shell parts hang from SPINE and the pelvis from WAIST, and are posed in
 # their parent's frame exactly as they used to be in UpperBody's (see
@@ -18,15 +18,6 @@ extends RefCounted
 # cosmetic — the hand and shoulder MARKERS are gameplay geometry Skater owns, and
 # this file only reads them.
 
-# Fraction of the way the cap's pole leans from its rest hang toward the live
-# upper-arm direction. Full: the cap is the top of the sleeve and turns with it,
-# so the shoulder patch never slides round the arm as it swings. The cap's base
-# tucks under the torso's trapezius slope, which is what keeps a cross-body arm
-# from opening a gap at the trap line.
-const _SHOULDER_CAP_FOLLOW: float = 1.0
-# Rest pole in upper-body space for the RIGHT cap (x mirrors for the left):
-# down, a touch outboard and forward — the deltoid's hang on a relaxed arm.
-const _SHOULDER_CAP_REST_POLE := Vector3(0.32, -0.93, -0.17)
 # Each arm's parts (top, bottom): upper arm, forearm, cuff, elbow, glove.
 const _ARM_PARTS: Array[Array] = [
 	[SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM, SkaterMeshBuilder.UpperBone.TOP_FOREARM,
@@ -61,21 +52,12 @@ var helmet_pitch_follow: float = 0.85
 var helmet_roll_follow: float = 0.4
 
 # The arm's C++ port, one per arm (top, bottom), which writes that arm's bones
-# and its side's cap itself. Absent without the extension; native_enabled lets
-# the parity test take the GDScript path, which stays the reference.
+# itself. Absent without the extension; native_enabled lets the parity test take
+# the GDScript path, which stays the reference.
 var native_enabled: bool = true
 var _native_arms: Array[RefCounted] = []
 var _native_dirty: bool = true
-# Per arm, the cap index (0 left, 1 right) its native was configured for.
-var _native_side: PackedInt32Array = PackedInt32Array([-1, -1])
-# Per cap, the arm whose native posed it last, or -1 when _basis and _girdle
-# are current: the native keeps the cap's state, and the rig reads it back
-# (_sync_cap) only for a repose of its own.
-var _cap_posed_by: PackedInt32Array = PackedInt32Array([-1, -1])
 var _trunk_texture := Basis.IDENTITY
-# Each cap's share of its arm's girdle give (left, right), in the cap's own
-# pose frame — see _update_arm.
-var _girdle: PackedVector3Array = PackedVector3Array([Vector3.ZERO, Vector3.ZERO])
 var _trunk_texture_head := Basis.IDENTITY
 var _trunk_texture_pitch: float = 0.0
 var _trunk_texture_roll: float = 0.0
@@ -91,7 +73,7 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 
 
-# Reads the scene-authored placement of the four shell parts out of the
+# Reads the scene-authored placement of the two shell parts out of the
 # UpperBody subtree, seeds the body skeleton's upper bones from it, then frees
 # those nodes — keeping Scenes/Skater.tscn the place the proportions are
 # authored. `body_material` is the skater's BodyZonePaint, which the upper body's
@@ -115,18 +97,16 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 			_native_arms[arm].bind(skeleton, bones)
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "UpperMesh"
-	_mesh.mesh = _upper_mesh(GearModelRegistry.TUCK_NONE)
+	_mesh.mesh = SkaterRigidParts.upper_body_mesh()
 	_mesh.set_surface_override_material(0, body_material)
 	_mesh.skin = SkaterMeshBuilder.shared_upper_skin()
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
 
-	# Torso, helmet and the two deltoid caps: their placement is authored in the
-	# scene, so it is read out and seeded onto their bones, same as the legs.
+	# Torso and helmet: their placement is authored in the scene, so it is read
+	# out and seeded onto their bones, same as the legs.
 	for bone: int in [SkaterMeshBuilder.UpperBone.TORSO,
-			SkaterMeshBuilder.UpperBone.HELMET,
-			SkaterMeshBuilder.UpperBone.SHOULDER_L,
-			SkaterMeshBuilder.UpperBone.SHOULDER_R]:
+			SkaterMeshBuilder.UpperBone.HELMET]:
 		var node: Node3D = upper_body.get_node(
 				SkaterMeshBuilder.UPPER_BONE_NODE[bone]) as Node3D
 		var xform: Transform3D = node.transform
@@ -139,9 +119,9 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 		node.free()
 	_helmet_base_euler = _basis[SkaterMeshBuilder.UpperBone.HELMET].get_euler()
 
-	# The pelvis has no scene node to read: its profile is authored in the hips'
-	# own space (SkaterMeshBuilder._PELVIS_PROFILE), so it rests at the identity
-	# the sizing seam then scales about.
+	# The pelvis has no scene node to read: the skin's pants are authored in the
+	# waist's own space (SkaterConnectedPants), so it rests at the identity the
+	# sizing seam then scales about.
 	var pelvis: int = SkaterMeshBuilder.UpperBone.PELVIS
 	_basis[pelvis] = Basis.IDENTITY
 	_scale[pelvis] = Vector3.ONE
@@ -205,18 +185,10 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	if native_enabled and not _native_arms.is_empty() \
 			and _native_update_arm(arm, marker_local, hand_local, grip_local, pole_sign):
 		return
-	var side_i: int = 0 if marker_local.x < 0.0 else 1
-	_sync_cap(side_i)
-	if not _native_arms.is_empty():
-		_native_dirty = true  # the native's cap state is behind the one posed here
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	var frame: Transform3D = _skater.drawn_upper_body()
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
-	# The deltoid cap rides the girdle's give with the arm, in the frame it is
-	# posed in (the spine's, before the trunk texture rotates it).
-	_girdle[side_i] = _trunk_texture.transposed() \
-			* (spine.basis.inverse() * (shoulder_s - spine * _textured_shoulder(marker_local)))
 	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
 	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
 			_skater.upper_arm_length, _skater.forearm_length, pole_s)
@@ -225,16 +197,13 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
 	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
-	_orient_shoulder_cap(marker_local, spine.affine_inverse() * shoulder_s,
-			spine.affine_inverse() * elbow_s)
 
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
 # degenerate span, which the GDScript path's held poses answer instead.
 func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 		grip_local: Vector3, pole_sign: float) -> bool:
-	var side_i: int = 0 if marker_local.x < 0.0 else 1
-	if _native_dirty or _native_side[arm] != side_i:
+	if _native_dirty:
 		_configure_native()
 	var pole: Vector3 = _skater.arm_pole_local
 	pole.x *= pole_sign
@@ -246,45 +215,16 @@ func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
 			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset)):
 		return false
-	_cap_posed_by[side_i] = arm
 	return true
 
 
 func _configure_native() -> void:
-	# Both arms take the rig's current cap state, so read back whatever the
-	# natives hold before handing it out again.
-	_sync_cap(0)
-	_sync_cap(1)
 	_native_dirty = false
-	var markers: PackedVector3Array = PackedVector3Array([_skater.shoulder.position,
-			_skater.bottom_shoulder.position])
 	for arm: int in 2:
-		var side_i: int = 0 if markers[arm].x < 0.0 else 1
-		_native_side[arm] = side_i
 		var parts: Array = _ARM_PARTS[arm]
-		var cap: int = _cap_bone(side_i)
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
-				_SHOULDER_CAP_REST_POLE, _SHOULDER_CAP_FOLLOW, cap, _pos[cap], _scale[cap],
-				Transform3D(_basis[cap], _girdle[side_i]),
 				deg_to_rad(_skater.wrist_break_max_deg))
-
-
-# Brings the rig's own view of one cap (_basis, _girdle) up to the native that
-# last posed it.
-func _sync_cap(side_i: int) -> void:
-	var arm: int = _cap_posed_by[side_i]
-	if arm < 0:
-		return
-	_cap_posed_by[side_i] = -1
-	var state: Transform3D = _native_arms[arm].get_cap_state()
-	_basis[_cap_bone(side_i)] = state.basis
-	_girdle[side_i] = state.origin
-
-
-static func _cap_bone(side_i: int) -> int:
-	return SkaterMeshBuilder.UpperBone.SHOULDER_L if side_i == 0 \
-			else SkaterMeshBuilder.UpperBone.SHOULDER_R
 
 
 # The elbow's pole on this arm's side, tucked by a check load.
@@ -318,12 +258,11 @@ func arm_root(marker_local: Vector3, hand_local: Vector3) -> Vector3:
 
 # Where a shoulder MARKER actually sits on the visible trunk, in the spine's
 # frame: once the trunk texture has rolled the shell and the check load-up has
-# driven the leading shoulder forward (see repose_bone, which puts both onto the
-# cap bones but deliberately not onto the arms).
+# driven the leading shoulder forward.
 #
 # The arm has to be rooted here, not at the marker: the marker is gameplay
 # geometry and never moves with the visible body, so an arm grown from it stays
-# put while the shoulder pad it emerges from moves away. The HAND is untouched,
+# put while the shoulder it emerges from moves away. The HAND is untouched,
 # so the blade keeps the position the IK solved and only the elbow re-solves;
 # nothing gameplay reads changes.
 func _textured_shoulder(marker_local: Vector3) -> Vector3:
@@ -331,7 +270,7 @@ func _textured_shoulder(marker_local: Vector3) -> Vector3:
 
 
 # Load-up displacement of the shoulder on `side_sign`, zero on the trailing side
-# and while nobody is committing. The cap bone and the arm root both take it.
+# and while nobody is committing.
 func _check_load_offset(side_sign: float) -> Vector3:
 	var lead: float = _skater.get_check_lead()
 	if lead == 0.0:
@@ -341,16 +280,11 @@ func _check_load_offset(side_sign: float) -> Vector3:
 			side_sign, _skater.shoulder_offset)
 
 
-# One pose write per part, each a whole Transform3D built in skeleton space —
-# the arm bones are roots, so that is their pose space. Deliberately NOT
-# position/scale/look_at on nodes: that trio costs six transform operations, two
-# of which resolve the global chain, and at ten parts per skater this is the
-# densest such site in the rig. The up vector only has to avoid colinearity,
-# since the bone prism is rotationally symmetric about its long axis (see
-# up_for_look_at).
-#
-# scaled_local is basis·S throughout. The plain scaled() is S·basis and puts the
-# size on the wrong axes once a part tilts.
+# One pose write per part, each a whole Transform3D built in skeleton space
+# (SkaterArmPoses) — the arm bones are roots, so that is their pose space.
+# Deliberately NOT position/scale/look_at on nodes: that trio costs six transform
+# operations, two of which resolve the global chain, and at ten parts per skater
+# this is the densest such site in the rig.
 func _pose_bone(part: int, a: Vector3, b: Vector3) -> void:
 	var span: Vector3 = b - a
 	var length: float = span.length()
@@ -364,27 +298,17 @@ func _pose_bone(part: int, a: Vector3, b: Vector3) -> void:
 		held.origin = center
 		_skeleton.set_bone_pose(part, held)
 		return
-	var dir: Vector3 = span / length
-	# X/Y are the thickness the sizing seam owns; Z is the live bone length.
-	bone_scale.z = length
-	_skeleton.set_bone_pose(part, Transform3D(
-			Basis.looking_at(dir, up_for_look_at(dir)).scaled_local(bone_scale),
-			center))
+	_skeleton.set_bone_pose(part, SkaterArmPoses.segment_pose(a, b, bone_scale))
 
 
-# The elbow pad (SkaterMeshBuilder.shared_elbow_pad) points its +Y out of the
-# bend, the way the IK pushed the elbow, with its X along the arm.
 func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 		pole: Vector3) -> void:
-	var out: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
-	var along: Vector3 = (hand - shoulder).normalized()
-	var basis := Basis(along, out, along.cross(out)) if out != Vector3.ZERO else Basis.IDENTITY
-	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(_thickness[part]), elbow))
+	_skeleton.set_bone_pose(part, SkaterArmPoses.elbow_pose(shoulder, elbow, hand, pole,
+			_thickness[part]))
 
 
-# Positions the gloved fist at the hand. Its long (local Y) axis runs wrist →
-# fingers and its knuckle roll across local X; `grip` is the shaft through the
-# fist (skeleton space), ZERO off the stick.
+# Positions the gloved fist at the hand; `grip` is the shaft through the fist
+# (skeleton space), ZERO off the stick.
 func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var dir: Vector3 = hand - elbow
@@ -393,46 +317,11 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> voi
 		held.origin = hand
 		_skeleton.set_bone_pose(part, held)
 		return
-	var basis: Basis = glove_basis(dir.normalized(), grip, deg_to_rad(_skater.wrist_break_max_deg))
+	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
+			deg_to_rad(_skater.wrist_break_max_deg))
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
 
 
-# The fist on a forearm pointing `forearm_dir`. Off the stick it lines up with
-# the forearm, rolled from world up like the cuff. On it, the knuckle roll lies
-# along the shaft and the hand turns toward square across it, bending at the
-# wrist by up to `max_bend` radians: the wrist breaks as the stick swings
-# against the forearm.
-static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
-	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
-			* Basis(Vector3.RIGHT, PI * 0.5)
-	if grip == Vector3.ZERO:
-		return straight
-	var across: float = forearm_dir.dot(grip)
-	var square: Vector3 = forearm_dir - grip * across
-	if square.length_squared() < 0.0001:
-		return straight
-	square = square.normalized()
-	var hand_axis: Vector3 = forearm_dir
-	var hinge: Vector3 = forearm_dir.cross(square)
-	if hinge.length_squared() > 1e-8:
-		hand_axis = forearm_dir.rotated(hinge.normalized(),
-				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
-	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
-	if knuckles.length_squared() < 0.0001:
-		return straight
-	knuckles = knuckles.normalized()
-	if knuckles.dot(straight.x) < 0.0:
-		knuckles = -knuckles
-	return Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis))
-
-
-# Glove cuff ring: its forward end sits at the hand and it extends back toward
-# the elbow by its mesh height (no overlap past the hand). The ring's long axis
-# is local Y: looking_at puts -Z on the bone, and the post-multiplied X(+90°)
-# twist maps local Y onto it. The scale is composed AFTER that rotation
-# (scaled_local, R·S) because the cuff's radius is non-uniform on a unit mesh —
-# composing it the other way lands the radius on the wrong mesh axes and renders
-# metre-wide flickering fins at the wrist.
 func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var bone_dir: Vector3 = hand - elbow
@@ -442,60 +331,8 @@ func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
 		held.origin = hand
 		_skeleton.set_bone_pose(part, held)
 		return
-	var dir: Vector3 = bone_dir / bone_len
-	var center: Vector3 = hand - dir * (SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
-			+ _skater.cuff_wrist_offset)
-	var basis := Basis.looking_at(dir, up_for_look_at(dir)) * Basis(Vector3.RIGHT, PI * 0.5)
-	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), center))
-
-
-# Leans the deltoid cap on the anchor's side toward that arm's shoulder→elbow
-# direction. Two texture constraints shape the basis (the shoulder-number
-# decal was authored against the caps' identity orientation):
-#   - The +Y pole points AWAY from the arm: the cap's blunt torso-side base
-#     leans into the trap while the tapered −Y tail runs down the arm, and
-#     the equirect texture stays upright — an along-the-arm (downward) pole
-#     renders the number flipped and mirrored.
-#   - Local +X stays near world +X for BOTH caps; each side's decal picks its
-#     outboard face via uv1_offset (±0.25), exactly as at identity. Flipping
-#     +X outboard per side turns the left cap's number to the inside.
-# Writes rotation only — the caps' scale is SkaterAppearanceCoordinator's
-# (quaternion assignment preserves it) and their position is the scene's, plus
-# the girdle's give.
-func _orient_shoulder_cap(marker_local: Vector3, anchor_local: Vector3,
-		elbow_local: Vector3) -> void:
-	var side: float = signf(marker_local.x)
-	var bone: int = SkaterMeshBuilder.UpperBone.SHOULDER_L if side < 0.0 \
-			else SkaterMeshBuilder.UpperBone.SHOULDER_R
-	# repose_bone premultiplies this basis by the trunk texture, so the arm
-	# direction has to come back to the UNTEXTURED frame the basis is built in —
-	# transposed is the inverse of that pure rotation.
-	var arm_dir: Vector3 = _trunk_texture.transposed() * (elbow_local - anchor_local)
-	if arm_dir.length_squared() < 0.0001:
-		repose_bone(bone)
-		return
-	var rest: Vector3 = _SHOULDER_CAP_REST_POLE.normalized()
-	rest.x *= side
-	var pole: Vector3 = -rest.slerp(arm_dir.normalized(), _SHOULDER_CAP_FOLLOW)
-	var x_axis: Vector3 = Vector3.RIGHT - pole * pole.x
-	if x_axis.length_squared() < 0.01:
-		repose_bone(bone)  # pole nearly along +X — keep the last stable roll
-		return
-	x_axis = x_axis.normalized()
-	_basis[bone] = Basis(x_axis, pole, x_axis.cross(pole)).orthonormalized()
-	repose_bone(bone)
-
-
-# An up vector safely non-colinear with `direction`. Falls back to
-# Vector3.FORWARD when `direction` is near-vertical so look_at() doesn't warn
-# about colinear basis vectors. Cylindrical meshes (arm bones, cuffs, the stick
-# knob) are rotationally symmetric around their long axis, so the choice of up
-# only matters for the warning — not for the rendered geometry. Public because
-# SkaterStickRig's knob is composed exactly like the cuffs here.
-static func up_for_look_at(direction: Vector3) -> Vector3:
-	if absf(direction.normalized().y) > 0.99:
-		return Vector3.FORWARD
-	return Vector3.UP
+	_skeleton.set_bone_pose(part, SkaterArmPoses.cuff_pose(elbow, hand, scale_v,
+			_skater.cuff_wrist_offset))
 
 
 # ── Trunk texture and head ───────────────────────────────────────────────────
@@ -519,8 +356,6 @@ func set_trunk_texture(pitch_add: float, roll_add: float) -> void:
 			pitch_add * helmet_pitch_follow, 0.0, roll_add * helmet_roll_follow))
 	repose_bone(SkaterMeshBuilder.UpperBone.TORSO)
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
-	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_L)
-	repose_bone(SkaterMeshBuilder.UpperBone.SHOULDER_R)
 
 
 # Drapes the jersey's tail. It steps every frame, so a skater the camera picks
@@ -560,13 +395,6 @@ func set_head_angle(angle: float, nod: float = 0.0) -> void:
 
 func repose_bone(bone: int) -> void:
 	var origin: Vector3 = _pos[bone]
-	# The check load-up displaces one cap before the texture rotates it: the
-	# displacement is authored in the trunk's own frame, so it rides the roll.
-	if bone == SkaterMeshBuilder.UpperBone.SHOULDER_L \
-			or bone == SkaterMeshBuilder.UpperBone.SHOULDER_R:
-		var side_i: int = 0 if bone == SkaterMeshBuilder.UpperBone.SHOULDER_L else 1
-		_sync_cap(side_i)
-		origin += _check_load_offset(signf(origin.x)) + _girdle[side_i]
 	if bone == SkaterMeshBuilder.UpperBone.HELMET:
 		origin += _head_nod_shift
 	var pose := Transform3D(_basis[bone].scaled_local(_scale[bone]), origin)
@@ -578,9 +406,7 @@ func repose_bone(bone: int) -> void:
 	# shell is posed in the spine's frame, so a zero-origin premultiply is that
 	# pivot). Arm bones are excluded — they follow the hands; the helmet takes
 	# the stabilized head share instead of the full texture.
-	if bone == SkaterMeshBuilder.UpperBone.TORSO \
-			or bone == SkaterMeshBuilder.UpperBone.SHOULDER_L \
-			or bone == SkaterMeshBuilder.UpperBone.SHOULDER_R:
+	if bone == SkaterMeshBuilder.UpperBone.TORSO:
 		pose = Transform3D(_trunk_texture, Vector3.ZERO) * pose
 	elif bone == SkaterMeshBuilder.UpperBone.HELMET:
 		pose = Transform3D(_trunk_texture_head, Vector3.ZERO) * pose
@@ -612,10 +438,8 @@ func apply_gear_meshes() -> void:
 			_head_attach.add_child(piece)
 			_head_pieces.append(piece)
 	var gear: GearStyleConfig = _skater.gear_style
-	# One surface on every tuck's mesh, so the body material carries over.
-	_mesh.mesh = _upper_mesh(gear.jersey_tuck)
 	if _hem_tuck < 0:
-		_hem.setup(_skater, _skeleton, gear.jersey_tuck, SkaterConnectedMesh.enabled)
+		_hem.setup(_skater, _skeleton, gear.jersey_tuck)
 	elif gear.jersey_tuck != _hem_tuck:
 		_hem.set_tuck(gear.jersey_tuck)
 	_hem_tuck = gear.jersey_tuck
@@ -625,14 +449,6 @@ func apply_gear_meshes() -> void:
 	_head_pieces[HeadPiece.BROWS].mesh = SkaterHairMesh.shared_brows()
 
 
-# Under the connected-body prototype the torso, sleeves and pants are its mesh,
-# so this one keeps only the head, the gloves and the cuffs.
-static func _upper_mesh(tuck: int) -> ArrayMesh:
-	if SkaterConnectedMesh.enabled:
-		return SkaterConnectedRigMeshes.reduced_upper_body_mesh(tuck)
-	return SkaterMeshBuilder.shared_upper_body_mesh(tuck)
-
-
 # One head piece's render node, for the uniform coordinator's paint and ghost
 # fade. Null before the rig is built; its mesh is null while the piece is bare.
 func head_piece(piece: HeadPiece) -> MeshInstance3D:
@@ -640,7 +456,7 @@ func head_piece(piece: HeadPiece) -> MeshInstance3D:
 
 
 # ── Sizing seams ─────────────────────────────────────────────────────────────
-# The four scene-authored shell parts. Their arm siblings are placed by IK and
+# The scene-authored shell parts. Their arm siblings are placed by IK and
 # sized through the radius seams below instead. Scale and position are applied
 # in separate passes by SkaterAppearanceCoordinator (a part can take one, the
 # other, or both), so each setter writes its own component and recomposes.

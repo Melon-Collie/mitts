@@ -1,7 +1,6 @@
 #!/bin/bash
-# Renders the connected-body prototype (SkaterConnectedMesh) beside the rig's
-# current body, pose by pose, from four sides, to .preview/body/. Wraps
-# tools/body_preview.gd; see that file for the flags.
+# Renders the skater's body (SkaterConnectedMesh) pose by pose from four sides,
+# to .preview/body/. Wraps tools/body_preview.gd; see that file for the flags.
 #
 #   .claude/hooks/render-body.sh                 # the whole set
 #   .claude/hooks/render-body.sh --only=stride   # poses whose name contains it

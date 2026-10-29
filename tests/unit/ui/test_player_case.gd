@@ -15,6 +15,15 @@ const _LIGHT := Color(0.96, 0.93, 0.84)   # cream, like Plum's
 const _KIT_GLOVES := Color(0.75, 0.15, 0.15)
 # Whichever team color the glove body is not — see TeamColorRegistry.
 const _GLOVE_ACCENT := Color(0.20, 0.70, 0.35)
+# Per arm (top, bottom): upper arm, forearm, hand, cuff.
+const _ARMS: Array[Array] = [
+	[SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM, SkaterMeshBuilder.UpperBone.TOP_FOREARM,
+			SkaterMeshBuilder.UpperBone.TOP_HAND, SkaterMeshBuilder.UpperBone.TOP_CUFF],
+	[SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM, SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
+			SkaterMeshBuilder.UpperBone.BOTTOM_HAND, SkaterMeshBuilder.UpperBone.BOTTOM_CUFF],
+]
+const _Leg = SkaterMeshBuilder.LegSurface
+const _Upper = SkaterMeshBuilder.UpperSurface
 
 var _case: PlayerCase = null
 
@@ -44,7 +53,7 @@ func _colors() -> Dictionary:
 			"helmet": Color(0.2, 0.2, 0.2),
 			"shoulders": {"color": _PRIMARY, "text": _LIGHT, "stroke": Color.TRANSPARENT},
 			"jersey": {"base": _PRIMARY, "stripes": stripes, "yoke": _SECONDARY},
-			"arms": {"upper": {"base": _PRIMARY, "stripes": bare}},
+			"sleeve": {"base": _PRIMARY, "stripes": bare},
 			"gloves": _KIT_GLOVES,
 			"pants": {"base": _SECONDARY, "stripes": bare},
 			"socks": {"base": _PRIMARY, "stripes": stripes},
@@ -72,30 +81,43 @@ func _mannequin() -> LockerMannequin:
 	return _case.get("_mannequin") as LockerMannequin
 
 
-# One MeshInstance3D out of the mannequin's paired part arrays.
-func _part(part_name: String, index: int = 0) -> MeshInstance3D:
-	var parts: Array = _mannequin().get(part_name) as Array
-	return parts[index] as MeshInstance3D
+func _kit() -> FigureKit:
+	return _mannequin().get("_kit") as FigureKit
 
 
-func _surface_color(mi: MeshInstance3D, surface: int) -> Color:
-	return (mi.get_surface_override_material(surface) as StandardMaterial3D).albedo_color
+# One paint zone's color on the figure's body.
+func _zone_color(zone: int) -> Color:
+	return (_kit().get("_paint") as BodyZonePaint).zone(zone).albedo_color
+
+
+func _upper(surface: int) -> int:
+	return SkaterMeshBuilder.UPPER_ZONE_BASE + surface
+
+
+# One bone's pose in the figure's rig space (the skeleton rests at its origin).
+func _bone(bone: int) -> Transform3D:
+	return _kit().skeleton.get_bone_global_pose(bone)
+
+
+func _leg(bone: int) -> Transform3D:
+	return _bone(SkaterBodySkeleton.LEG_BONE_OFFSET + bone)
+
 
 
 func test_a_pick_repaints_the_mannequin() -> void:
 	_open(GearStyleConfig.new(GearModelRegistry.SKATE_BLACKOUT,
 			GearModelRegistry.GLOVE_TEAM))
-	assert_eq(_surface_color(_part("_boots"), SkaterMeshBuilder.BOOT_SURF_SHELL),
+	assert_eq(_zone_color(_Leg.FOOT_L_SHELL),
 			GearModelRegistry.BLACK, "the stock skate is on the feet in black")
-	assert_eq(_surface_color(_part("_cuffs"), 0), _KIT_GLOVES,
+	assert_eq(_zone_color(_upper(_Upper.TOP_CUFF)), _KIT_GLOVES,
 			"the stock glove cuff wears the kit")
 
 	# Whiteout's boot is light; Pro's cuff is light. A re-dress must reach both,
 	# and "light" is the TEAM's white — cream here, not a fixed one.
 	_open(GearStyleConfig.new(GearModelRegistry.SKATE_WHITEOUT, GearModelRegistry.GLOVE_PRO))
-	assert_eq(_surface_color(_part("_boots"), SkaterMeshBuilder.BOOT_SURF_SHELL),
+	assert_eq(_zone_color(_Leg.FOOT_L_SHELL),
 			_LIGHT, "the picked boot repaints in the team's own white")
-	assert_eq(_surface_color(_part("_cuffs"), 0), _LIGHT,
+	assert_eq(_zone_color(_upper(_Upper.TOP_CUFF)), _LIGHT,
 			"the picked cuff repaints in the team's own white")
 
 
@@ -103,10 +125,9 @@ func test_a_pick_repaints_the_mannequin() -> void:
 # would leave the figure in mismatched gear and nothing else would catch it.
 func test_a_pick_reaches_both_sides() -> void:
 	_open(GearStyleConfig.new(GearModelRegistry.SKATE_WHITEOUT, GearModelRegistry.GLOVE_PRO))
-	for i: int in 2:
-		assert_eq(_surface_color(_part("_boots", i), SkaterMeshBuilder.BOOT_SURF_SHELL),
-				_LIGHT, "boot %d" % i)
-		assert_eq(_surface_color(_part("_cuffs", i), 0), _LIGHT, "cuff %d" % i)
+	for zone: int in [_Leg.FOOT_L_SHELL, _Leg.FOOT_R_SHELL, _upper(_Upper.TOP_CUFF),
+			_upper(_Upper.BOTTOM_CUFF)]:
+		assert_eq(_zone_color(zone), _LIGHT, "zone %d" % zone)
 
 
 # The zones that only exist because a piece was SPLIT are the ones a wrong
@@ -117,26 +138,25 @@ func test_split_pieces_paint_apart() -> void:
 	# color on the back, the kit's own on the fingers.
 	_open(GearStyleConfig.new(GearModelRegistry.SKATE_TWO_TONE,
 			GearModelRegistry.GLOVE_TWO_TONE))
-	var boot: MeshInstance3D = _part("_boots")
-	assert_eq(_surface_color(_part("_hands"), SkaterMeshBuilder.FIST_PART_BACK),
+	assert_eq(_zone_color(_upper(_Upper.TOP_HAND)),
 			_GLOVE_ACCENT, "Two-Tone's back takes the team's other color")
-	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_SHELL),
-			_LIGHT, "the quarter is the team's white")
-	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_TOE),
-			GearModelRegistry.BLACK, "the toe cap is black")
-	assert_eq(_surface_color(_part("_hands"), SkaterMeshBuilder.FIST_PART_FINGERS),
+	assert_eq(_zone_color(_Leg.FOOT_L_SHELL), _LIGHT, "the quarter is the team's white")
+	assert_eq(_zone_color(_Leg.FOOT_L_TOE), GearModelRegistry.BLACK, "the toe cap is black")
+	assert_eq(_zone_color(_upper(_Upper.TOP_FINGERS)),
 			_KIT_GLOVES, "Two-Tone's fingers keep the kit")
-	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_HOLDER),
-			_LIGHT, "the holder is the team's white")
+	assert_eq(_zone_color(_Leg.FOOT_L_HOLDER), _LIGHT, "the holder is the team's white")
 	_open(GearStyleConfig.new(GearModelRegistry.SKATE_PRO, GearModelRegistry.GLOVE_TWO_TONE))
-	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_TOE),
-			_LIGHT, "Pro's toe cap is the team's white")
-	# The steel runner is never a zone, whatever the model says — and it must
+	assert_eq(_zone_color(_Leg.FOOT_L_TOE), _LIGHT, "Pro's toe cap is the team's white")
+	# The steel runner is never a kit zone, whatever the model says — and it must
 	# stay distinct from the white holder now sitting directly above it.
-	assert_ne(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_RUNNER),
-			_LIGHT, "the runner does not vanish into the holder")
-	assert_eq(_surface_color(boot, SkaterMeshBuilder.BOOT_SURF_RUNNER),
-			SkaterMeshBuilder.BLADE_STEEL_COLOR, "the runner stays steel")
+	assert_ne(_zone_color(_Leg.FOOT_L_RUNNER), _LIGHT,
+			"the runner does not vanish into the holder")
+	assert_eq(_zone_color(_Leg.FOOT_L_RUNNER), SkaterMeshBuilder.BLADE_STEEL_COLOR,
+			"the runner stays steel")
+
+
+func _head_piece(piece: int) -> MeshInstance3D:
+	return (_kit().get("_head_pieces") as Array)[piece] as MeshInstance3D
 
 
 func _face(option: int) -> GearStyleConfig:
@@ -145,7 +165,7 @@ func _face(option: int) -> GearStyleConfig:
 
 func test_face_gear_dresses_the_helmet() -> void:
 	_open(_face(GearModelRegistry.FACE_VISOR))
-	var piece: MeshInstance3D = _mannequin().get("_face") as MeshInstance3D
+	var piece: MeshInstance3D = _head_piece(SkaterArmRig.HeadPiece.FACE_GEAR)
 	assert_not_null(piece.mesh, "the picked visor is in the helmet")
 	var mat: StandardMaterial3D = piece.material_override as StandardMaterial3D
 	assert_lt(mat.albedo_color.a, 1.0, "the visor preview is translucent")
@@ -160,9 +180,9 @@ func test_the_figure_wears_the_pending_hair() -> void:
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0,
 			GearModelRegistry.FACE_NONE, HairStyleRegistry.HAIR_MULLET,
 			HairStyleRegistry.FACIAL_STUBBLE, 6))
-	var scalp: MeshInstance3D = _mannequin().get("_scalp") as MeshInstance3D
-	var facial: MeshInstance3D = _mannequin().get("_facial_hair") as MeshInstance3D
-	var brows: MeshInstance3D = _mannequin().get("_brows") as MeshInstance3D
+	var scalp: MeshInstance3D = _head_piece(SkaterArmRig.HeadPiece.SCALP)
+	var facial: MeshInstance3D = _head_piece(SkaterArmRig.HeadPiece.FACIAL_HAIR)
+	var brows: MeshInstance3D = _head_piece(SkaterArmRig.HeadPiece.BROWS)
 	assert_eq(scalp.mesh, SkaterHairMesh.shared_hair(HairStyleRegistry.HAIR_MULLET))
 	assert_eq(facial.mesh, SkaterHairMesh.shared_facial_hair(HairStyleRegistry.FACIAL_STUBBLE))
 	assert_lt((facial.material_override as StandardMaterial3D).albedo_color.a, 1.0,
@@ -171,21 +191,19 @@ func test_the_figure_wears_the_pending_hair() -> void:
 			HairStyleRegistry.color_for(6), "the brows take the hair colour")
 
 
-# The tuck is the torso's shape: a pick re-drapes the figure's sweater and keeps
+# The tuck is the body's shape: a pick re-drapes the figure's sweater and keeps
 # its paint.
 func test_a_tuck_pick_drapes_the_figure() -> void:
 	_open()
-	var torso: MeshInstance3D = _mannequin().get("_torso") as MeshInstance3D
-	var pelvis: MeshInstance3D = _mannequin().get("_pelvis") as MeshInstance3D
-	var paint: Material = torso.get_surface_override_material(0)
-	var loose: Mesh = torso.mesh
+	var body: MeshInstance3D = _kit().skeleton.find_child("ConnectedBody", false, false) \
+			as MeshInstance3D
+	var paint: Material = body.get_surface_override_material(0)
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0, 0,
 			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
 			GearModelRegistry.TUCK_RIGHT))
-	assert_ne(torso.mesh, loose, "the sweater re-drapes")
-	assert_eq(pelvis.mesh, SkaterMeshBuilder.shared_pelvis(GearModelRegistry.TUCK_RIGHT),
-			"and the pants stand their pad up")
-	assert_eq(torso.get_surface_override_material(0), paint, "the sweater keeps its paint")
+	assert_eq(body.mesh, SkaterConnectedMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT),
+			"the sweater re-drapes")
+	assert_eq(body.get_surface_override_material(0), paint, "the sweater keeps its paint")
 
 
 # A curve pick rebuilds the blade and a length pick moves the butt — the two
@@ -214,19 +232,18 @@ func test_stick_gear_reaches_the_blade_and_the_shaft() -> void:
 # free-floating turntable to avoid.
 func test_the_hands_stay_on_the_shaft_when_the_stick_is_recut() -> void:
 	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(0))
-	var top: MeshInstance3D = _part("_hands", 0)
-	var short_grip: Vector3 = top.position
+	var short_grip: Vector3 = _bone(_ARMS[0][2]).origin
 	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(2))
-	assert_lt(short_grip.y, top.position.y,
+	assert_lt(short_grip.y, _bone(_ARMS[0][2]).origin.y,
 			"a longer stick raises the top hand's grip")
 
 
 # Distance from the shaft line to each fist. The grips are solved onto that
 # line, so anything above a rounding error means a hand is holding thin air.
-func _grip_offset(hand: MeshInstance3D) -> float:
+func _grip_offset(hand: Vector3) -> float:
 	var heel: Vector3 = _mannequin().get("_shaft_heel")
 	var up: Vector3 = _mannequin().get("_shaft_up")
-	var along: Vector3 = hand.position - heel
+	var along: Vector3 = hand - heel
 	return (along - up * along.dot(up)).length()
 
 
@@ -238,8 +255,8 @@ func test_both_arms_are_the_same_length() -> void:
 		_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(length))
 		var spans: Array[float] = []
 		for i: int in 2:
-			var upper: float = _part("_upper_arms", i).transform.basis.y.length()
-			var fore: float = _part("_forearms", i).transform.basis.y.length()
+			var upper: float = _bone(_ARMS[i][0]).basis.z.length()
+			var fore: float = _bone(_ARMS[i][1]).basis.z.length()
 			assert_almost_eq(upper, fore, 0.01,
 					"arm %d bends at its midpoint (cut %d)" % [i, length])
 			spans.append(upper + fore)
@@ -262,48 +279,39 @@ func test_the_grips_stay_on_the_shaft_and_inside_the_arms_reach() -> void:
 					PlayerAttributes.new(height,
 						PlayerAttributes.coerce_weight(height, 190), 1, 1, 1, length))
 			for i: int in 2:
-				var hand: MeshInstance3D = _part("_hands", i)
+				var hand: Vector3 = _bone(_ARMS[i][2]).origin
 				assert_almost_eq(_grip_offset(hand), 0.0, 0.001,
 						"hand %d grips the shaft (height %d, cut %d)" % [i, height, length])
-				var shoulder: Vector3 = _part("_upper_arms", i).position \
-						+ _part("_upper_arms", i).transform.basis.y * 0.5
-				var upper: float = _part("_upper_arms", i).transform.basis.y.length()
-				var fore: float = _part("_forearms", i).transform.basis.y.length()
-				assert_lte(shoulder.distance_to(hand.position), upper + fore + 0.001,
+				# The arm bones are prisms from +Z (the near joint) to −Z.
+				var shoulder: Vector3 = _bone(_ARMS[i][0]) * Vector3(0.0, 0.0, 0.5)
+				var upper: float = _bone(_ARMS[i][0]).basis.z.length()
+				var fore: float = _bone(_ARMS[i][1]).basis.z.length()
+				assert_lte(shoulder.distance_to(hand), upper + fore + 0.001,
 						"hand %d is inside its arm's reach" % i)
 
 
-# Vertical extent of one part in rig space, transform included — the boot's
-# frame is rotated, so its own AABB says nothing on its own.
-func _span(mi: MeshInstance3D) -> Vector2:
-	var box: AABB = mi.transform * mi.get_aabb()
-	return Vector2(box.position.y, box.position.y + box.size.y)
-
-
-# The leg is a CHAIN, and every link has to touch the next one — from the seat
-# it hangs off down to the boot. Building it from thigh and sock alone leaves a
-# hole at each knee: the thigh ends well above where the sock starts, and the
-# joint ball is the only thing that spans it. The top link is the pelvis, which
-# is one part for both legs (the thigh carries the hip joint's own dome now).
-func test_the_leg_chain_has_no_holes() -> void:
+# The leg is a CHAIN: hip, knee and boot stacked down each side at every build,
+# and the skin's knee bone between thigh and shin, so the knee bends there.
+func test_the_legs_chain_from_the_hip_to_the_boot() -> void:
 	for height: int in [PlayerAttributes.HEIGHT_MIN, PlayerAttributes.HEIGHT_MEDIUM,
 			PlayerAttributes.HEIGHT_MAX]:
 		_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE,
 				PlayerAttributes.new(height,
 					PlayerAttributes.coerce_weight(height, 190), 1, 1, 1, 1))
-		# Top-down, the way the rig chains them.
-		var chain: Array[String] = ["_thighs", "_knees", "_socks",
-			"_collars", "_boots"]
-		var seat: Vector2 = _span(_mannequin().get("_pelvis") as MeshInstance3D)
+		var pelvis: Vector3 = _bone(SkaterMeshBuilder.UpperBone.PELVIS).origin
 		for i: int in 2:
-			assert_lte(seat.x, _span(_part("_thighs", i)).y,
-					"the seat meets thigh %d (height %d)" % [i, height])
-			for link: int in chain.size() - 1:
-				var upper: Vector2 = _span(_part(chain[link], i))
-				var lower: Vector2 = _span(_part(chain[link + 1], i))
-				assert_lte(upper.x, lower.y,
-						"%s meets %s (leg %d, height %d)"
-						% [chain[link], chain[link + 1], i, height])
+			var leg: int = SkaterMeshBuilder.LegBone.LEG_L if i == 0 \
+					else SkaterMeshBuilder.LegBone.LEG_R
+			var hip: Vector3 = _leg(leg).origin
+			var knee: Vector3 = _leg(leg + 3).origin
+			var boot: Vector3 = _leg(leg + 6).origin
+			assert_lt(hip.y, pelvis.y, "hip %d under the seat (height %d)" % [i, height])
+			assert_lt(knee.y, hip.y, "knee %d under its hip (height %d)" % [i, height])
+			assert_lt(boot.y, knee.y, "boot %d under its knee (height %d)" % [i, height])
+			var bend: Vector3 = _bone(SkaterBodySkeleton.deform_bone(
+					SkaterConnectedMesh.Deform.KNEE_L + i)).origin
+			assert_almost_eq(bend, knee, Vector3.ONE * 0.001,
+					"the skin's knee %d bends at the knee (height %d)" % [i, height])
 
 
 # The fist and cuff bases scale their COLUMNS. Basis.scaled() scales in the
@@ -312,14 +320,14 @@ func test_the_leg_chain_has_no_holes() -> void:
 func test_the_hand_pieces_are_not_sheared() -> void:
 	_open()
 	for i: int in 2:
-		for part_name: String in ["_hands", "_cuffs"]:
-			var b: Basis = _part(part_name, i).transform.basis
-			assert_almost_eq(b.x.dot(b.y), 0.0, 0.0001, "%s %d x⊥y" % [part_name, i])
-			assert_almost_eq(b.y.dot(b.z), 0.0, 0.0001, "%s %d y⊥z" % [part_name, i])
-			assert_almost_eq(b.z.dot(b.x), 0.0, 0.0001, "%s %d z⊥x" % [part_name, i])
+		for bone: int in [_ARMS[i][2], _ARMS[i][3]]:
+			var b: Basis = _bone(bone).basis
+			assert_almost_eq(b.x.dot(b.y), 0.0, 0.0001, "bone %d x⊥y" % bone)
+			assert_almost_eq(b.y.dot(b.z), 0.0, 0.0001, "bone %d y⊥z" % bone)
+			assert_almost_eq(b.z.dot(b.x), 0.0, 0.0001, "bone %d z⊥x" % bone)
 		# The cuff is a unit-radius ring with its real height baked in, so only
 		# its radius may scale — a stretched Y is the artifact itself.
-		var cuff: Basis = _part("_cuffs", i).transform.basis
+		var cuff: Basis = _bone(_ARMS[i][3]).basis
 		assert_almost_eq(cuff.y.length(), 1.0, 0.001, "cuff %d keeps its height" % i)
 		assert_lt(cuff.x.length(), 0.15, "cuff %d stays a wrist ring" % i)
 		assert_lt(cuff.z.length(), 0.15, "cuff %d stays a wrist ring" % i)
@@ -337,12 +345,13 @@ func test_every_build_stands_on_the_ice() -> void:
 				PlayerAttributes.new(height, weight, PlayerAttributes.GEAR_BALANCED,
 					PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
 					PlayerAttributes.GEAR_BALANCED))
-		var boot: MeshInstance3D = _part("_boots")
 		var rig: Node3D = _mannequin().get("_rig") as Node3D
-		# The runner bottoms out 0.12 m below the boot origin (pre-lift contact
-		# plus the stance lift), and the mannequin's own origin is the ice.
-		var contact: float = rig.position.y + boot.position.y - 0.12
-		assert_almost_eq(contact, 0.0, 0.001, "height %d stands on the disc" % height)
+		# The runner's edge in the boot's frame (+Z down), and the mannequin's own
+		# origin is the ice.
+		var runner: Vector3 = _leg(SkaterMeshBuilder.LegBone.FOOT_L) \
+				* Vector3(0.0, 0.0, SkaterMeshBuilder.BLADE_ICE_Z)
+		assert_almost_eq(rig.position.y + runner.y, 0.0, 0.001,
+				"height %d stands on the disc" % height)
 
 
 # A taller build is visibly taller — the height dial has to reach the figure,
@@ -352,12 +361,12 @@ func test_height_reaches_the_figure() -> void:
 			PlayerAttributes.new(PlayerAttributes.HEIGHT_MIN, 150,
 				PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
 				PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED))
-	var short_head: float = (_mannequin().get("_helmet") as MeshInstance3D).position.y
+	var short_head: float = _bone(SkaterMeshBuilder.UpperBone.HELMET).origin.y
 	_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE,
 			PlayerAttributes.new(PlayerAttributes.HEIGHT_MAX, 220,
 				PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED,
 				PlayerAttributes.GEAR_BALANCED, PlayerAttributes.GEAR_BALANCED))
-	assert_lt(short_head, (_mannequin().get("_helmet") as MeshInstance3D).position.y,
+	assert_lt(short_head, _bone(SkaterMeshBuilder.UpperBone.HELMET).origin.y,
 			"a tall build carries its head higher")
 
 
@@ -481,10 +490,13 @@ func test_the_sweater_is_painted_by_the_rink_decals() -> void:
 	_case.set_jersey_info("Smith", 27)
 	_case.dress(PlayerAttributes.neutral(), GearStyleConfig.new(), StickTapeConfig.new(),
 			colors, SkinToneRegistry.DEFAULT_INDEX, false)
-	var kit: FigureKit = _mannequin().get("_kit") as FigureKit
-	assert_eq(kit.jersey_decal.player_name, "Smith")
-	assert_eq(kit.jersey_decal.jersey_number, 27)
-	assert_eq(kit.jersey_decal.crest_fruit, TeamCrest.fruit_for(colors.preset))
-	assert_eq(kit.shoulder_decal.jersey_number, 27)
-	assert_eq((kit.torso.get_surface_override_material(0) as StandardMaterial3D).albedo_texture,
-			kit.jersey_viewport.get_texture(), "the torso wears the decal's texture")
+	var paint: SkaterKitPaint = _kit().get("_kit") as SkaterKitPaint
+	var jersey: JerseyDecal = paint.get("_jersey_decal") as JerseyDecal
+	assert_eq(jersey.player_name, "Smith")
+	assert_eq(jersey.jersey_number, 27)
+	assert_eq(jersey.crest_fruit, TeamCrest.fruit_for(colors.preset))
+	assert_eq((paint.get("_sleeve_decal") as SleeveDecal).jersey_number, 27)
+	var torso: StandardMaterial3D = (_kit().get("_paint") as BodyZonePaint).zone(
+			_upper(_Upper.TORSO))
+	assert_eq(torso.albedo_texture, (paint.get("_jersey_viewport") as SubViewport).get_texture(),
+			"the torso wears the decal's texture")

@@ -2,12 +2,10 @@ class_name SkaterHemColliders
 extends HemColliders
 
 # What the jersey's tail drapes over, in skeleton space, as of the bones' poses
-# this frame: each thigh as a capsule from its hip pivot (the dome is the
-# capsule's top) down to the leg hem, and the pants as a lathe on the PELVIS
-# bone — the rig's own (SkaterMeshBuilder.pelvis_stations), or another body's
-# pants given as stations of the same form with its thigh's girth. Read by the hem sims that
-# collide on their own (SkaterHemFlaps) and by the comparison's clipping measure;
-# the engine-backed sims build node colliders from the same numbers.
+# this frame: each thigh as a capsule from its hip pivot down to the leg hem,
+# and the pants as a lathe on the PELVIS
+# bone wide enough to hold them (SkaterConnectedPants.collider_stations). Read by
+# the hem sim (SkaterHemFlaps) and by the slow test's clipping measure.
 
 const _LEGS: Array[int] = [SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.LEG_R]
 const _THIGHS: Array[int] = [
@@ -19,15 +17,8 @@ var thigh_radius: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
 var pelvis := Transform3D.IDENTITY
 var _pelvis_inv := Transform3D.IDENTITY
 # The pants' lathe, (y, radius, rear sway) per station top down, waist-space,
-# scaled by PELVIS_XZ_SCALE; and the thigh capsule's radius.
-var _stations: PackedFloat64Array
-var _thigh_radius_m: float
-
-
-func _init(stations := PackedFloat64Array(),
-		thigh_radius_m: float = SkaterMeshBuilder.THIGH_CAPSULE_RADIUS_M) -> void:
-	_stations = stations if not stations.is_empty() else SkaterMeshBuilder.pelvis_stations()
-	_thigh_radius_m = thigh_radius_m
+# scaled by PELVIS_XZ_SCALE.
+var _stations: PackedFloat64Array = SkaterConnectedPants.collider_stations()
 
 
 func update(skeleton: Skeleton3D) -> void:
@@ -37,8 +28,8 @@ func update(skeleton: Skeleton3D) -> void:
 		var thigh: Basis = skeleton.get_bone_global_pose(
 				SkaterBodySkeleton.LEG_BONE_OFFSET + _THIGHS[i]).basis
 		thigh_top[i] = leg.origin
-		thigh_bottom[i] = leg * Vector3(0.0, -SkaterMeshBuilder.THIGH_CAPSULE_LENGTH_M, 0.0)
-		thigh_radius[i] = _thigh_radius_m * thigh.x.length()
+		thigh_bottom[i] = leg * Vector3(0.0, -SkaterConnectedPants.COLLIDER_THIGH_LENGTH_M, 0.0)
+		thigh_radius[i] = SkaterConnectedPants.COLLIDER_THIGH_RADIUS_M * thigh.x.length()
 	pelvis = skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.PELVIS)
 	_pelvis_inv = pelvis.affine_inverse()
 
@@ -48,7 +39,8 @@ func configure_native(native: RefCounted) -> void:
 	native.call("collide_skater", PackedInt32Array([SkaterMeshBuilder.UpperBone.PELVIS,
 			legs + _LEGS[0], legs + _LEGS[1], legs + _THIGHS[0], legs + _THIGHS[1]]),
 			_stations,
-			PackedFloat64Array([SkaterMeshBuilder.THIGH_CAPSULE_LENGTH_M, _thigh_radius_m,
+			PackedFloat64Array([SkaterConnectedPants.COLLIDER_THIGH_LENGTH_M,
+					SkaterConnectedPants.COLLIDER_THIGH_RADIUS_M,
 					SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y]))
 
 

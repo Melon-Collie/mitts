@@ -87,14 +87,13 @@ func _scatter(flaps: HemFlaps) -> PackedVector3Array:
 	return start
 
 
+# Held off, the hem's lean round the ring is the plain solver, the keeper's.
 func test_the_native_drape_matches_the_gdscript() -> void:
 	_skater_parity(0.0)
 
 
-# The connected body's tail holds its hem's lean round the ring
-# (SkaterHemFlaps.CONNECTED_SHEAR_STIFFNESS), a step the rig's skips.
 func test_the_native_drape_matches_with_the_hem_held_to_its_column() -> void:
-	_skater_parity(SkaterHemFlaps.CONNECTED_SHEAR_STIFFNESS)
+	_skater_parity(SkaterHemFlaps.SHEAR_STIFFNESS)
 
 
 func _skater_parity(shear: float) -> void:

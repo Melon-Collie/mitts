@@ -3,9 +3,9 @@ extends RefCounted
 
 # A kit's sleeve: one base color down the whole arm, and stripes laid along it
 # from the shoulder (pos 0) to the glove's cuff (pos 1) — a shoulder or forearm
-# of another color is a wide stripe. The connected body paints it as one piece
-# (SleeveDecal); the rig's body paints its two arm segments, so `segment` cuts
-# the sleeve at the elbow for it, and `from_legacy` reads a kit written in the
+# of another color is a wide stripe. The skater paints it as one piece
+# (SleeveDecal); the goalie paints his two arm segments, so `segment` cuts the
+# sleeve at the elbow for him, and `from_legacy` reads a kit written in the
 # older two-segment form (arms.upper / arms.lower and a shoulder color).
 
 # The sleeve from the shoulder joint to the cuff, and the elbow along it, at the
@@ -17,8 +17,9 @@ const ELBOW_M: float = 0.33
 const SHOULDER_BAND_M: float = 0.15
 # Where the number sits on the sleeve, its centre down from the shoulder.
 const NUMBER_CENTER_M: float = 0.08
-# The legacy segments: each 0.33 m, their stripes shrunk about the segment's
-# centre by the sock-to-arm ratio (SkaterUniformCoordinator._ARM_STRIPE_SCALE).
+# The two-segment form: each segment 0.33 m, its stripes shrunk about its
+# centre by the sock's length (0.30 m) over the segment's, so an authored width
+# paints the same band height on an arm as on a sock.
 const _SEGMENT_M: float = 0.33
 const _SEGMENT_STRIPE_SCALE: float = 0.30 / 0.33
 # A legacy forearm's stripes were laid round mid-forearm; real sleeves carry

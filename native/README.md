@@ -174,13 +174,11 @@ without a built binary, loses performance, never correctness — CI builds it):
 
 - **Arm rig** — `SkaterArmRig._update_arm` (render rate, every drawn skater,
   both arms): `pose` runs the whole arm and **writes the bones itself** — the
-  five arm parts and that side's deltoid cap, on the `Skeleton3D` handed to
-  `bind`. That is the one exception to "results out": the math is cheaper
-  than the crossings, so a port that hands six transforms back for GDScript to
-  write measured 9.2 µs against the GDScript's 10.6; one crossing is ~4. The
-  rig keeps its own view of the caps (`_basis`, `_girdle`) for the reposes it
-  makes itself (trunk texture, sizing) and reads the native's back on demand
-  (`_sync_cap`); a degenerate span returns false and takes the GDScript path.
+  five arm parts, on the `Skeleton3D` handed to `bind`. That is the one
+  exception to "results out": the math is cheaper than the crossings, so a port
+  that hands the transforms back for GDScript to write measured 9.2 µs against
+  the GDScript's 10.6; one crossing is ~4. A degenerate span returns false and
+  takes the GDScript path.
   `tests/unit/rules/test_native_arm_rig_parity.gd`.
 
 - **Carry rollout** — `AICarryRollout.roll_all` (the bot carrier's near moves,

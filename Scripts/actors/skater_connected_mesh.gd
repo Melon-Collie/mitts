@@ -1,17 +1,12 @@
 class_name SkaterConnectedMesh
 extends RefCounted
 
-# PROTOTYPE: the skater's body as one connected skin. The jersey grows its
-# sleeves out of armholes in the torso, the pants split into both legs at the
-# crotch, and each leg runs on through the knee into the sock. Every joint is
-# blended across the bones either side of it instead of hidden under a ball or a
-# cap; the elbow pad and the knee guard are bulges in the fabric. The helmet,
-# the gloves and the skates stay the rigid parts the rig meshes carry
-# (SkaterConnectedRigMeshes leaves out of them what this replaces).
-#
-# Off unless MITTS_CONNECTED_BODY=1 is in the environment or --connected-body is
-# on the command line (or `enabled` is set before a skater is built), so the
-# live game is unchanged while it is judged.
+# The skater's body as one connected skin. The jersey grows its sleeves out of
+# armholes in the torso, the pants split into both legs at the crotch, and each
+# leg runs on through the knee into the sock. Every joint is blended across the
+# bones either side of it; the elbow pad and the knee guard are bulges in the
+# fabric. The helmet, the gloves and the skates are rigid parts on their bones
+# (SkaterRigidParts).
 #
 # The mesh is authored in a BIND POSE, the body as SkaterBodySkeleton holds it
 # with HIPS, WAIST and SPINE at identity (the space the scene authors UpperBody's
@@ -26,10 +21,6 @@ extends RefCounted
 # Preview only (tools/body_preview.gd --pants): the pants alone, the jersey and
 # its sleeves left off so the pants can be seen.
 static var preview_pants_only: bool = false
-
-static var enabled: bool = OS.get_environment("MITTS_CONNECTED_BODY") == "1" \
-		or OS.get_cmdline_args().has("--connected-body") \
-		or OS.get_cmdline_user_args().has("--connected-body")
 
 # Deform bones, appended to the body skeleton past its tail columns
 # (SkaterBodySkeleton.deform_bone). Per side: the upper arm from the shoulder,
@@ -82,9 +73,10 @@ const _BIND_FORE_DIR := Vector3(0.15, -0.45, -0.88)
 const BIND_ARM_SEGMENT_M: float = 0.33
 const BIND_SLEEVE_RADIUS_M: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
 
-# The jersey has twice the rig's sides all the way down, and SkaterHemFlaps
-# drapes its tail below the belt in as many columns, on bones of their own
-# (SkaterBodySkeleton.connected_column_bone).
+# The jersey has twice the torso stations' sides all the way down
+# (SkaterMeshBuilder.TORSO_SIDES, whose stations it runs through at the waist),
+# and SkaterHemFlaps drapes its tail below the belt in as many columns, on bones
+# of their own (SkaterBodySkeleton.column_bone).
 const _CHEST_SIDES: int = 2 * SkaterMeshBuilder.TORSO_SIDES
 const TAIL_COLUMNS: int = _CHEST_SIDES
 const LIMB_SIDES: int = 12
@@ -221,7 +213,7 @@ static func bind_bones() -> PackedInt32Array:
 	bones.append(SkaterBodySkeleton.deform_bone(Deform.GIRDLE_R))
 	for column: int in TAIL_COLUMNS:
 		for joint: int in 2:
-			bones.append(SkaterBodySkeleton.connected_column_bone(column, joint))
+			bones.append(SkaterBodySkeleton.column_bone(column, joint))
 	return bones
 
 
@@ -242,7 +234,7 @@ static func bind_rests() -> Array[Transform3D]:
 		for side: float in [-1.0, 1.0]:
 			rests.append(Transform3D(Basis.IDENTITY, bind_arm(side)[0]))
 	# The tail's columns hang, at rest, exactly where the torso holds them
-	# (SkaterHemFlaps: the rest drape is the lathe's own rings).
+	# (SkaterHemFlaps: the rest drape is the skin's own tail rings).
 	for i: int in 2 * TAIL_COLUMNS:
 		rests.append(torso)
 	return rests
@@ -381,7 +373,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 					Vector2(u0, v0), Vector2(u1, v0), Vector2(u1, v1), Vector2(u0, v1),
 					torso_zone, inside)
 	_build_collar(b, rings[0], lift)
-	# The hem closes as the rig's lathe closes it, with its cap UVs.
+	# The hem closes as a lathe closes it, with its cap UVs.
 	var hem_y: float = ys[ys.size() - 1]
 	var hem_centre := Vector3.ZERO
 	for id: int in rings[rings.size() - 1]:
@@ -421,7 +413,7 @@ static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, l
 		lip.append(b.vertex(p - out * _COLLAR_INSET_M + Vector3.UP * _COLLAR_RISE_M,
 				[Bind.TORSO], [1.0]))
 	# The band on the torso texture's top cap (JerseyDecal.TOP_CAP_RECT, the
-	# kit's collar), laid as the rig's lathe lays its cap.
+	# kit's collar), laid as a lathe lays its cap.
 	var cap := Vector2(0.25, 0.75)
 	var torso_zone: int = zone(_UpperSurface.TORSO)
 	var below: Vector3 = Vector3(0.0, _CHEST[0].x - 0.1, 0.0) + lift
@@ -433,6 +425,28 @@ static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, l
 				cap + t1 * 0.20, cap + t0 * 0.20, torso_zone, below)
 	var foot: int = b.vertex(axis + Vector3(0.0, _NECK_FOOT_Y_M, 0.0), [Bind.TORSO], [1.0])
 	fan(b, lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
+
+
+# The jersey from the collar to the hem as (y, radius, sway), torso-local, its
+# rings as torso_ring lays them before the neckline, the armholes or a tuck shape
+# them: what a flat lay of it measures (tools/kit_capture.gd).
+static func jersey_stations() -> Array[Vector3]:
+	var out: Array[Vector3] = _chest_profile()
+	for station: int in range(_BELT_STATION, _LAST_TORSO_STATION + 1):
+		out.append(_rig_station(station))
+	return out
+
+
+# The sleeve's rings as (metres down it from the shoulder, radius): what a flat
+# lay of it measures (tools/kit_capture.gd).
+static func sleeve_stations() -> PackedVector2Array:
+	var out := PackedVector2Array()
+	for r: Vector3 in _UPPER_RINGS:
+		out.append(Vector2(r.x, r.y))
+	out.append(Vector2(BIND_ARM_SEGMENT_M, _ELBOW_RADIUS_M))
+	for r: Vector3 in _FORE_RINGS:
+		out.append(Vector2(BIND_ARM_SEGMENT_M + r.x, r.y))
+	return out
 
 
 # The chest's rings, then the rig's waist stations with a ring halfway between
@@ -452,7 +466,7 @@ static func _chest_profile() -> Array[Vector3]:
 # One of SkaterMeshBuilder's torso stations as (y, radius, sway), torso-local,
 # read off the rig's own ring.
 static func _rig_station(station: int) -> Vector3:
-	var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station, GearModelRegistry.TUCK_NONE)
+	var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station)
 	var sides: int = ring.size() - 1
 	var sway: float = 0.0
 	for k: int in sides:
@@ -470,7 +484,7 @@ static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 	var s: Vector3 = _rig_station(station)
 	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
 	var ring: PackedVector3Array = SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase),
-			s.x, s.y, s.z, tuck, phase, xz.x, xz.y)
+			s.x, s.y, s.z, tuck, phase, xz.x, xz.y, SkaterConnectedPants.TUCK_BLOUSE_M)
 	# Beside a tucked corner the jersey is pulled toward the waistband, taut
 	# against the body: its belt ring drawn in toward the tucked ring's girth
 	# (by the square of the share, so it closes on the pants only under the
@@ -558,14 +572,13 @@ static func _in_armhole(ring: int, column: int) -> bool:
 	return false
 
 
-# A torso vertex, weighted as SkaterJerseyHem.append_torso weights the rig's: on
-# the chest above the tail, onto TAIL as the hips carry it, and from the belt
-# down on its facet column's segment (`column`, of TAIL_COLUMNS).
+# A torso vertex: on the chest above the tail, onto TAIL as the hips carry it
+# (SkaterJerseyHem), and from the belt down on its column's segment (`column`,
+# of TAIL_COLUMNS).
 static func _torso_vertex(b: ConnectedSkinBuilder, p: Vector3, rest_y: float, theta: float,
 		tuck: int, column: int) -> int:
 	if rest_y <= SkaterJerseyHem.BELT_Y_M + 1e-5:
-		var bend_y: float = SkaterMeshBuilder.torso_ring(
-				SkaterMeshBuilder.TORSO_BEND_STATION, GearModelRegistry.TUCK_NONE)[0].y
+		var bend_y: float = SkaterMeshBuilder.torso_ring(SkaterMeshBuilder.TORSO_BEND_STATION)[0].y
 		var lower: int = 1 if rest_y <= bend_y + 1e-5 else 0
 		return b.vertex(p, [Bind.COLUMN_BASE + column * 2 + lower], [1.0])
 	var t: float = SkaterJerseyHem.tuck_share(tuck, theta) * clampf(

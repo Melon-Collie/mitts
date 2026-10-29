@@ -1,9 +1,8 @@
 extends "res://tools/pose_capture_runner.gd"
 
 # The body of tools/body_preview.gd. Reuses pose_capture's stage, actor and
-# scripted poses; what it changes is the loop: each pose is built and run once
-# per body (the rig's current one, then the connected prototype — the flag is
-# read as the skater is built), then shot from four sides of the skater.
+# scripted poses; what it changes is the loop: each pose is built and run, then
+# shot from four sides of the skater.
 
 const PREVIEW_TILE: int = 448
 const PREVIEW_FOV: float = 30.0
@@ -38,8 +37,6 @@ const PANTS_AIM_Y: float = -0.4
 enum Step { BUILD, POSE, GRAB }
 
 var _step: Step = Step.BUILD
-var _variant: int = 0
-var _first_variant: int = 0
 var _angle: int = 0
 var _tiles: Array[Image] = []
 var _pants: bool = false
@@ -48,20 +45,17 @@ var _head: bool = false
 var _waist: bool = false
 
 
-func begin_preview(only: String, new_only: bool, pants: bool = false,
+func begin_preview(only: String, pants: bool = false,
 		audit: bool = false, head: bool = false, waist: bool = false) -> void:
 	_pants = pants
 	_waist = waist
 	_audit = audit
 	_head = head
 	SkaterConnectedMesh.preview_pants_only = pants
-	new_only = new_only or pants
 	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
 	SkaterCameraCull.enabled = false
 	CosmeticFreeze.vfx = true
 	CosmeticFreeze.hud = true
-	_first_variant = 1 if new_only else 0
-	_variant = _first_variant
 	for spec: Dictionary in POSES:
 		var pose_name: String = spec["name"]
 		var wanted: bool = (PANTS_POSES if pants else PREVIEW_POSES).has(pose_name)
@@ -90,13 +84,12 @@ func _process(_delta: float) -> void:
 						ProjectSettings.globalize_path(PREVIEW_DIR)])
 				get_tree().quit()
 				return
-			SkaterConnectedMesh.enabled = _variant == 1
 			_build_actor()
 			_wear_kit_from_env()
 			_step = Step.POSE
 		Step.POSE:
 			_run_pose()
-			if _audit and SkaterConnectedMesh.enabled:
+			if _audit:
 				_audit_folds()
 			if _pants:
 				_hide_all_but_the_pants()
@@ -110,11 +103,8 @@ func _process(_delta: float) -> void:
 				_place_camera()
 				return
 			_teardown()
-			_variant += 1
-			if _variant > 1:
-				_save_pose_sheet()
-				_variant = _first_variant
-				_pose_index += 1
+			_save_pose_sheet()
+			_pose_index += 1
 			_step = Step.BUILD
 
 
@@ -150,17 +140,14 @@ func _place_camera() -> void:
 
 
 func _save_pose_sheet() -> void:
-	var rows: int = 2 - _first_variant
-	var sheet := Image.create_empty(ANGLES.size() * PREVIEW_TILE, rows * PREVIEW_TILE, false,
+	var sheet := Image.create_empty(ANGLES.size() * PREVIEW_TILE, PREVIEW_TILE, false,
 			Image.FORMAT_RGBA8)
 	sheet.fill(BACKGROUND)
 	for i: int in _tiles.size():
 		var src: Image = _tiles[i]
 		src.convert(Image.FORMAT_RGBA8)
-		@warning_ignore("integer_division")
-		var row: int = i / ANGLES.size()
 		sheet.blit_rect(src, Rect2i(0, 0, PREVIEW_TILE, PREVIEW_TILE),
-				Vector2i((i % ANGLES.size()) * PREVIEW_TILE, row * PREVIEW_TILE))
+				Vector2i(i * PREVIEW_TILE, 0))
 	var path: String = "%s/%s%s.png" % [PREVIEW_DIR,
 			"pants_" if _pants else ("head_" if _head else ("waist_" if _waist else "")),
 			String(_poses[_pose_index]["name"])]

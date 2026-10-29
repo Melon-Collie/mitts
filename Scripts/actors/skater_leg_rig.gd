@@ -186,9 +186,7 @@ func build(skeleton: Skeleton3D, body_material: Material) -> void:
 			SkaterMeshBuilder.shared_skate_assembly().get_aabb()]
 	_mesh = MeshInstance3D.new()
 	_mesh.name = "LegMesh"
-	# Under the connected-body prototype the thighs, knees and socks are its mesh.
-	_mesh.mesh = SkaterConnectedRigMeshes.reduced_leg_body_mesh() if SkaterConnectedMesh.enabled \
-			else SkaterMeshBuilder.shared_leg_body_mesh()
+	_mesh.mesh = SkaterRigidParts.leg_body_mesh()
 	_mesh.set_surface_override_material(0, body_material)
 	_mesh.skin = SkaterMeshBuilder.shared_leg_skin()
 	_mesh.skeleton = NodePath("..")

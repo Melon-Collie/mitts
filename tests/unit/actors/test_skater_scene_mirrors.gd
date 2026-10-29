@@ -33,22 +33,18 @@ func _origin(path: String) -> Vector3:
 	return _origins.get(path, Vector3.ZERO)
 
 
-# The one mirror where a silent drift changes GAMEPLAY rather than the picture.
 # shoulder_offset / shoulder_height feed SkaterController.apply_attributes'
-# backhand reach solve (reach = sqrt(arm_eff² − drop²)), so a shoulder moved in
-# the editor moves how far a skater can actually reach across their body.
-func test_shoulder_anchors_mirror_the_scene() -> void:
-	var left: Vector3 = _origin("./MeshRoot/UpperBody/ShoulderL")
-	var right: Vector3 = _origin("./MeshRoot/UpperBody/ShoulderR")
+# backhand reach solve (reach = sqrt(arm_eff² − drop²)) and root the drawn
+# arm; the skin's sleeve is bound with its arm rooted there, and the display
+# figures root theirs there too. A shoulder moved in one and not the others
+# grows the sleeve from somewhere the arm is not.
+func test_the_skin_and_the_figures_root_the_arm_at_the_shoulder_anchor() -> void:
 	var skater: Skater = Skater.new()
-	assert_almost_eq(skater.shoulder_offset, absf(left.x), 1e-6,
-			"shoulder_offset must equal ShoulderL's lateral offset")
-	assert_almost_eq(skater.shoulder_offset, absf(right.x), 1e-6,
-			"and ShoulderR's — the rig assumes the pair is symmetric")
-	assert_almost_eq(skater.shoulder_height, left.y, 1e-6,
-			"shoulder_height must equal the shoulder ball's height, which is the " +
-			"top of the backhand reach triangle")
-	assert_almost_eq(left.y, right.y, 1e-6, "both shoulders sit at one height")
+	var anchor := Vector3(skater.shoulder_offset, skater.shoulder_height, 0.0)
+	assert_almost_eq(SkaterConnectedMesh._BIND_SHOULDER, anchor, Vector3.ONE * 1e-6,
+			"the skin's bind shoulder")
+	assert_almost_eq(Vector3(LockerMannequin._SHOULDER_X, LockerMannequin._SHOULDER_Y, 0.0),
+			anchor, Vector3.ONE * 1e-6, "the figures' shoulder")
 	skater.free()
 
 
@@ -58,45 +54,49 @@ func test_helmet_and_torso_stations_mirror_the_scene() -> void:
 			"the helmet and the neck stops sinking into the traps")
 	var torso_origin: float = _origin("./MeshRoot/UpperBody/UpperBodyMesh").y
 	assert_almost_eq(torso_origin, 0.195, 1e-6,
-			"the torso lathe is built around this origin")
+			"the torso's stations are built around this origin")
 	assert_almost_eq(torso_origin + 0.275, 0.47, 1e-6,
 			"torso origin plus the trap-line station (_TORSO_PROFILE[0].x) is the " +
 			"shoulder shelf the neck profile is sized against")
 
 
-# The thigh's upper stations are the hip joint: a dome that seals it only while
-# it is centred ON the pivot the leg turns about, because a sphere about the
-# axis of rotation is the one surface that does not move when the leg does. That
-# pivot is the LegL node, and the thigh mesh hangs its own origin below it — so
-# the dome's centre, in the thigh part's frame, IS that offset. Author it a
-# centimetre out and the hip opens as the leg swings, which shows up only at the
-# extremes: the block's abducted leg, the faceoff splay.
-func test_the_thigh_dome_is_centred_on_the_hip_pivot() -> void:
-	var thigh_drop: float = -_origin("./MeshRoot/LowerBody/LegL/ThighL").y
-	assert_almost_eq(SkaterMeshBuilder._HIP_PIVOT_IN_THIGH, thigh_drop, 1e-6,
-			"the dome's centre in thigh-local Y is the pivot the scene authors")
-	var radius: float = SkaterMeshBuilder._THIGH_DOME_RADIUS
-	var stations: int = 0
-	for station: Vector2 in SkaterMeshBuilder._THIGH_PROFILE:
-		var dy: float = station.x - SkaterMeshBuilder._HIP_PIVOT_IN_THIGH
-		if dy < 0.0:
-			continue  # below the equator the thigh's own taper takes over
-		assert_almost_eq(station.y, sqrt(maxf(radius * radius - dy * dy, 0.0)), 0.002,
-				"station y %.3f must lie on the dome" % station.x)
-		stations += 1
-	assert_gt(stations, 2, "the dome must be more than an equator and a pole")
+# The body's skin is bound where the scene authors the parts it rides, so a
+# part moved in the editor and not in SkaterConnectedMesh skins the body off
+# its bones: the pants' seat off the hips, the knee's bend off the knee.
+func test_the_skin_is_bound_where_the_scene_puts_the_legs() -> void:
+	var leg: Vector3 = _origin("./MeshRoot/LowerBody/LegL")
+	assert_almost_eq(SkaterConnectedMesh.hip(-1.0), leg, Vector3.ONE * 1e-6, "the hip pivot")
+	assert_almost_eq(SkaterConnectedMesh._TORSO_Y_M,
+			_origin("./MeshRoot/UpperBody/UpperBodyMesh").y, 1e-6, "the torso")
+	assert_almost_eq(SkaterConnectedMesh._THIGH_DROP_M,
+			-_origin("./MeshRoot/LowerBody/LegL/ThighL").y, 1e-6, "the thigh")
+	assert_almost_eq(SkaterConnectedMesh._KNEE_DROP_M,
+			-_origin("./MeshRoot/LowerBody/LegL/ShinL").y, 1e-6, "the knee")
+	assert_almost_eq(SkaterConnectedMesh._SOCK_DROP_M,
+			-_origin("./MeshRoot/LowerBody/LegL/ShinL/SockL").y, 1e-6, "the sock")
 
 
-# The knee ball has to span the gap the thigh and sock leave between them, or
-# the leg shows daylight at the joint through the whole stride.
-func test_the_knee_ball_covers_the_thigh_to_sock_gap() -> void:
-	var thigh_bottom: float = _origin("./MeshRoot/LowerBody/LegL/ThighL").y + (-0.15)
+# The display figures lay their body out in the scene's own numbers
+# (LockerMannequin, MeshRoot-local), the leg chain relative to its LEG pivot.
+func test_the_figures_rest_where_the_scene_puts_the_parts() -> void:
+	var leg: Vector3 = _origin("./MeshRoot/LowerBody/LegL")
 	var shin: float = _origin("./MeshRoot/LowerBody/LegL/ShinL").y
-	var sock_top: float = shin + _origin("./MeshRoot/LowerBody/LegL/ShinL/SockL").y + 0.150
-	var gap: float = thigh_bottom - sock_top
-	assert_gt(0.095 * 2.0, gap,
-			"_KNEE_RADIUS (0.095) must span the %.3f m the thigh and sock leave " % gap +
-			"between them")
+	assert_almost_eq(Vector2(-LockerMannequin._LEG_X, LockerMannequin._LEG_Y),
+			Vector2(leg.x, leg.y), Vector2.ONE * 1e-6, "the hip pivot")
+	assert_almost_eq(LockerMannequin._TORSO_Y,
+			_origin("./MeshRoot/UpperBody/UpperBodyMesh").y, 1e-6, "the torso")
+	assert_almost_eq(LockerMannequin._HELMET_Y, _origin("./MeshRoot/UpperBody/Helmet").y,
+			1e-6, "the helmet")
+	assert_almost_eq(LockerMannequin._THIGH_DY,
+			_origin("./MeshRoot/LowerBody/LegL/ThighL").y, 1e-6, "the thigh")
+	assert_almost_eq(LockerMannequin._KNEE_DY, shin, 1e-6, "the knee")
+	assert_almost_eq(LockerMannequin._SOCK_DY,
+			shin + _origin("./MeshRoot/LowerBody/LegL/ShinL/SockL").y, 1e-5, "the sock")
+	assert_almost_eq(LockerMannequin._COLLAR_DY,
+			shin + _origin("./MeshRoot/LowerBody/LegL/ShinL/SkateL").y, 1e-5, "the collar")
+	var foot: Vector3 = _origin("./MeshRoot/LowerBody/LegL/ShinL/FootL")
+	assert_almost_eq(Vector2(LockerMannequin._BOOT_DY, LockerMannequin._BOOT_DZ),
+			Vector2(shin + foot.y, foot.z), Vector2.ONE * 1e-5, "the boot")
 
 
 # The skate collar perches ON the boot with an overlap seal rather than dropping
@@ -125,8 +125,7 @@ func test_every_authored_bone_node_still_exists() -> void:
 
 # Every assertion above reads _origins, so an empty or half-built scan would
 # pass them all vacuously. The floor is the rig's own node count less a little
-# slack — it dropped by two when the hip balls were folded into the thighs, and
-# it should drop again the next time the scene loses a part.
+# slack.
 func test_the_scene_scan_actually_saw_the_rig() -> void:
-	assert_gt(_origins.size(), 18, "expected the whole rig — the parser may have broken")
-	assert_true(_origins.has("./MeshRoot/UpperBody/ShoulderL"), "sanity: ShoulderL found")
+	assert_gt(_origins.size(), 16, "expected the whole rig — the parser may have broken")
+	assert_true(_origins.has("./MeshRoot/UpperBody/Helmet"), "sanity: Helmet found")

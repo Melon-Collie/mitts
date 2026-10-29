@@ -252,10 +252,10 @@ func _update_knob(stick_origin: Vector3, to_shaft_end: Vector3,
 	# Post-multiplied X(+90°) maps the cylinder's long axis onto the aim, which
 	# is what rotate_object_local did. Safe to compose directly here because the
 	# knob carries no node scale (SkaterUniformCoordinator._rebuild_stick_knob
-	# never sets one) — with scale present this is the trap SkaterArmRig's
+	# never sets one) — with scale present this is the trap SkaterArmPoses'
 	# cuff pose documents.
 	knob.transform = Transform3D(
-			Basis.looking_at(up_shaft, SkaterArmRig.up_for_look_at(up_shaft))
+			Basis.looking_at(up_shaft, SkaterArmPoses.up_for_look_at(up_shaft))
 					* Basis(Vector3.RIGHT, PI * 0.5),
 			knob_center)
 
