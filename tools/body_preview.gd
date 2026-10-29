@@ -8,6 +8,7 @@ extends SceneTree
 #   .claude/hooks/render-body.sh --only=stride,rest   # poses whose name contains one
 #   .claude/hooks/render-body.sh --new-only      # skip the current body's row
 #   .claude/hooks/render-body.sh --pants         # the connected pants alone
+#   .claude/hooks/render-body.sh --audit         # + count faces folded inside out
 #
 # Bootstrapped like pose_capture.gd, for the same reason: the runner names
 # classes that need the autoloads up before they compile.
@@ -33,4 +34,5 @@ func _on_frame() -> void:
 	for a: String in args:
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
-	runner.call("begin_preview", only, args.has("--new-only"), args.has("--pants"))
+	runner.call("begin_preview", only, args.has("--new-only"), args.has("--pants"),
+			args.has("--audit"))

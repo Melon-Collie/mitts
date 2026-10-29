@@ -120,7 +120,9 @@ draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recover
 **To see the CONNECTED BODY prototype, render it.** `.claude/hooks/render-body.sh
 [--only=a,b] [--new-only]` runs pose_capture's poses on the current body and on
 `SkaterConnectedMesh` (`Scripts/actors/CLAUDE.md`), four sides each, one sheet a
-pose to `.preview/body/` (`tools/body_preview_runner.gd`).
+pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
+pants alone, and `--audit` skins the body on the CPU per pose and counts the
+faces folded inside out, by paint zone — what shows as a hole.
 
 **To see HAIR, render it.** `.claude/hooks/render-hair.sh [shots]` draws every
 hair style against every facial-hair style, one head each, from the front, side,

@@ -113,9 +113,14 @@ func _pose_sleeve(bones: Array, side: int) -> void:
 	var chest_carry: Transform3D = _skeleton.get_bone_global_pose(_UpperBone.TORSO) \
 			* _rests[SkaterConnectedMesh.Bind.TORSO].affine_inverse()
 	var joint: Vector3 = chest_carry * _rests[bind_upper].origin
+	var rise: float = frames[0].basis.y.dot(chest.y) - rest_upper.y.y
+	var span: Vector2 = SkaterConnectedMesh.GIRDLE_RISE_SPAN
+	var girdle_share: float = lerpf(SkaterConnectedMesh.GIRDLE_SWING_SHARE.x,
+			SkaterConnectedMesh.GIRDLE_SWING_SHARE.y,
+			smoothstep(span.x, span.y, rise))
 	for bone: Array in [
 			[SkaterConnectedMesh.Deform.SHOULDER_L, SkaterConnectedMesh.SHOULDER_SWING_SHARE],
-			[SkaterConnectedMesh.Deform.GIRDLE_L, SkaterConnectedMesh.GIRDLE_SWING_SHARE]]:
+			[SkaterConnectedMesh.Deform.GIRDLE_L, girdle_share]]:
 		var share: float = bone[1]
 		var turn := Basis(Quaternion.IDENTITY.slerp(swing, share))
 		_skeleton.set_bone_pose(SkaterBodySkeleton.deform_bone(int(bone[0]) + side),

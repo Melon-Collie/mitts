@@ -44,9 +44,15 @@ enum Deform {
 	GIRDLE_L, GIRDLE_R,
 }
 const DEFORM_COUNT: int = 12
-# The share of the arm's swing off the chest each shoulder bone turns by.
-const GIRDLE_SWING_SHARE: float = 1.0 / 3.0
+# The share of the arm's swing off the chest the shoulder's middle turns by,
+# and the girdle's: little with the arm down, rising as it lifts — the
+# collarbone and shoulder blade only come up with an arm raised, and the
+# armpit's cloth, which rides the girdle, must go up with the arm but never
+# fold into the chest when it comes down. Between the two the girdle eases by
+# how far the arm's direction has risen against the chest from the bind's.
 const SHOULDER_SWING_SHARE: float = 2.0 / 3.0
+const GIRDLE_SWING_SHARE := Vector2(0.1, 0.45)   # arm hanging, arm overhead
+const GIRDLE_RISE_SPAN := Vector2(-0.2, 1.0)
 
 # The skin's binds: the bone and its rest in the bind pose, by index.
 enum Bind {
@@ -90,16 +96,14 @@ const LIMB_SIDES: int = 12
 # waist the rig's own stations take over (`_RIG_STATIONS`, vertex for vertex the
 # rig's rings at every other column, so the jersey's tail and its tuck are the
 # rig's), with a ring between each two, and on down the tail to the hem. Rings
-# 3–5 are the armhole's top, middle and bottom.
+# 2–4 are the armhole's top, middle and bottom, spread apart for it.
 const _CHEST: Array[Vector3] = [
 	Vector3(0.275, 0.125, 0.0),   # collar
 	Vector3(0.258, 0.188, 0.0),   # trapezius, onto the pads
-	Vector3(0.240, 0.212, 0.0),
-	Vector3(0.222, 0.224, 0.0),   # the pads' top
-	Vector3(0.165, 0.228, 0.0),
-	Vector3(0.110, 0.224, 0.0),   # under the arm
-	Vector3(0.075, 0.220, 0.002),
-	Vector3(0.040, 0.216, 0.004),
+	Vector3(0.246, 0.214, 0.0),   # the pads' top
+	Vector3(0.160, 0.228, 0.0),
+	Vector3(0.075, 0.222, 0.002), # under the arm
+	Vector3(0.025, 0.216, 0.004),
 ]
 # SkaterMeshBuilder's torso stations the chest runs on through (waist, the
 # ring that bunches over a tuck's pad, the ring under the pad), then the tail's
@@ -107,31 +111,39 @@ const _CHEST: Array[Vector3] = [
 const _RIG_STATIONS: Array[int] = [4, 5, 6]
 const _BELT_STATION: int = SkaterMeshBuilder.TORSO_BELT_STATION
 const _LAST_TORSO_STATION: int = SkaterMeshBuilder.TORSO_HEM_STATION
-const _ARMHOLE_TOP: int = 3
+const _ARMHOLE_TOP: int = 2
 # The chest's column under each arm (its vertex at ±90°), left then right; the
 # armhole is the 2 × 4 facets round it.
 const _ARMHOLE_COLUMN: Array[int] = [14, 4]
 const _ARMHOLE_HALF_WIDTH: int = 2
-# The armhole, bind space (right side): a round loop on the chest's side the
-# size of the sleeve, centred under the shoulder joint, so the sleeve leaves the
-# chest no wider than it is.
-const _ARMHOLE_CENTRE := Vector3(0.0, 0.365, 0.0)
-const _ARMHOLE_RADII := Vector2(0.084, 0.070)   # across (z), up (y)
+# The armhole, bind space (right side): a hockey jersey's, cut big to go over
+# the shoulder pads, a loop on the chest's side from the pads' top to under the
+# arm, well wider than the sleeve, which narrows from it down the arm.
+const _ARMHOLE_CENTRE := Vector3(0.0, 0.335, 0.0)
+const _ARMHOLE_RADII := Vector2(0.115, 0.095)   # across (z), up (y)
 # How far each armhole vertex rides the shoulder girdle, round the loop from the
-# top's back corner (_cut_armhole's order), and the chest's vertices round it:
-# the ring above (the trapezius) and the one below, column by column.
+# top's back corner (_cut_armhole's order) — all of it, so the loop turns as
+# one ring and the sleeve leaving it cannot fold back over itself — and the
+# chest's vertices round it: the ring above (the trapezius, which takes the
+# shrug) and the one below, column by column.
 const _ARMHOLE_GIRDLE: Array[float] = [
-	0.6, 0.65, 0.7, 0.65, 0.6, 0.85, 0.9, 0.92, 0.95, 0.92, 0.9, 0.85]
-const _TRAP_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
-const _FLANK_GIRDLE: Array[float] = [0.05, 0.15, 0.25, 0.15, 0.05]
+	1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+const _TRAP_GIRDLE: Array[float] = [0.2, 0.4, 0.5, 0.4, 0.2]
+const _FLANK_GIRDLE: Array[float] = [0.1, 0.25, 0.35, 0.25, 0.1]
 
 # The sleeve, out from the armhole: a ring standing off the torso toward the
 # arm (the pad), then rings along the arm, each (s along its segment, radius,
 # its share on the elbow's middle). The elbow folds over five rings.
-const _PAD_DOWN_M: float = 0.07
-const _PAD_RADIUS_M: float = 0.086
+# Its centre stands off the joint down the arm and out from the chest, so the
+# ring surrounds the pivot: a ring round the point it turns about barely moves.
+const _PAD_DOWN_M: float = 0.03
+const _PAD_OUT_M: float = 0.035
+const _PAD_RADIUS_M: float = 0.100
+# How much of the ring's radius its top gives up, so the pad slopes off the
+# trapezius rather than standing above it.
+const _PAD_TOP_FLATTEN: float = 0.3
 const _UPPER_RINGS: Array[Vector3] = [
-	Vector3(0.10, 0.086, 0.0), Vector3(0.16, 0.083, 0.0), Vector3(0.22, 0.080, 0.0),
+	Vector3(0.10, 0.091, 0.0), Vector3(0.16, 0.085, 0.0), Vector3(0.22, 0.081, 0.0),
 	Vector3(0.27, 0.079, 0.25), Vector3(0.305, 0.080, 0.6),
 ]
 const _ELBOW_RADIUS_M: float = 0.081
@@ -512,13 +524,14 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	# The pad ring: off the shoulder down the arm, turned halfway from the arm
 	# toward the side it leaves.
 	var out := Vector3(side, 0.0, 0.0)
-	var pad_centre: Vector3 = arm[0] + upper.basis.y * _PAD_DOWN_M
+	var pad_centre: Vector3 = arm[0] + upper.basis.y * _PAD_DOWN_M + out * _PAD_OUT_M
 	var pad_turn := Basis(Quaternion(upper.basis.y, (upper.basis.y + out).normalized()))
 	var pad := PackedInt32Array()
 	for m: int in LIMB_SIDES:
 		var phi: float = TAU * float(m) / float(LIMB_SIDES)
 		var dir: Vector3 = pad_turn * (upper.basis * Vector3(sin(phi), 0.0, cos(phi)))
-		pad.append(b.vertex(pad_centre + dir * _PAD_RADIUS_M, [shoulder_bind], [1.0]))
+		var r: float = _PAD_RADIUS_M * (1.0 - _PAD_TOP_FLATTEN * maxf(dir.y, 0.0))
+		pad.append(b.vertex(pad_centre + dir * r, [shoulder_bind], [1.0]))
 
 	var rings: Array[PackedInt32Array] = [pad]
 	var vs := PackedFloat32Array([0.0])

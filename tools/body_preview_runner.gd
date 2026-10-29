@@ -38,10 +38,13 @@ var _first_variant: int = 0
 var _angle: int = 0
 var _tiles: Array[Image] = []
 var _pants: bool = false
+var _audit: bool = false
 
 
-func begin_preview(only: String, new_only: bool, pants: bool = false) -> void:
+func begin_preview(only: String, new_only: bool, pants: bool = false,
+		audit: bool = false) -> void:
 	_pants = pants
+	_audit = audit
 	SkaterConnectedMesh.preview_pants_only = pants
 	new_only = new_only or pants
 	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
@@ -83,6 +86,8 @@ func _process(_delta: float) -> void:
 			_step = Step.POSE
 		Step.POSE:
 			_run_pose()
+			if _audit and SkaterConnectedMesh.enabled:
+				_audit_folds()
 			if _pants:
 				_hide_all_but_the_pants()
 			_angle = 0
@@ -135,3 +140,48 @@ func _save_pose_sheet() -> void:
 	sheet.save_png(ProjectSettings.globalize_path(path))
 	print("  ", ProjectSettings.globalize_path(path))
 	_tiles.clear()
+
+
+# Skins the connected body on the CPU as the pose holds it and counts the faces
+# turned inside out against their bind facing, by paint zone: a fold that has
+# gone over shows as a hole (its back is culled), and this says where.
+func _audit_folds() -> void:
+	var body: Skeleton3D = _skater._arms._skeleton
+	var mesh: ArrayMesh = SkaterConnectedMesh.shared_mesh(_skater.gear_style.jersey_tuck)
+	var a: Array = mesh.surface_get_arrays(0)
+	var verts: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var normals: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+	var bones: PackedInt32Array = a[Mesh.ARRAY_BONES]
+	var weights: PackedFloat32Array = a[Mesh.ARRAY_WEIGHTS]
+	var zones: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2]
+	var skin: Skin = SkaterConnectedMesh.shared_skin()
+	var xforms: Array[Transform3D] = []
+	for i: int in skin.get_bind_count():
+		xforms.append(body.get_bone_global_pose(skin.get_bind_bone(i)) * skin.get_bind_pose(i))
+	var flipped: Dictionary = {}
+	var worst: Dictionary = {}
+	for t: int in range(0, verts.size(), 3):
+		var p: Array[Vector3] = []
+		var turn := Basis()
+		var heaviest: float = -1.0
+		for c: int in 3:
+			var v: int = t + c
+			var out := Vector3.ZERO
+			for i: int in 4:
+				var w: float = weights[v * 4 + i]
+				if w > 0.0:
+					out += xforms[bones[v * 4 + i]] * verts[v] * w
+					if w > heaviest:
+						heaviest = w
+						turn = xforms[bones[v * 4 + i]].basis
+			p.append(out)
+		var n: Vector3 = (p[2] - p[0]).cross(p[1] - p[0])
+		if n.length_squared() < 1e-12:
+			continue
+		var expected: Vector3 = (turn * normals[t]).normalized()
+		if n.normalized().dot(expected) < 0.0:
+			var zone: int = int(round(zones[t].x))
+			flipped[zone] = int(flipped.get(zone, 0)) + 1
+			worst[zone] = (p[0] + p[1] + p[2]) / 3.0
+	print("    folds in %s: %s (a face in each: %s)" % [
+			String(_poses[_pose_index]["name"]), flipped, worst])
