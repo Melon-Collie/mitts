@@ -12,21 +12,21 @@ const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf
 const SIZE := Vector2i(512, 512)
 # A sleeve number a little over half the back name's em.
 const NUMBER_EM_M: float = 0.10
-# Round the sleeve where the number sits, metres: the arm's girth there.
-const _GIRTH_M: float = 0.60
 
 var sleeve: Dictionary = {"base": Color.WHITE, "stripes": []}
 var jersey_number: int = 0
 var text_color: Color = Color.BLACK
 var text_stroke: Color = Color.TRANSPARENT
-var _px_per_m := Vector2(SIZE.x / _GIRTH_M, SIZE.y / SleevePaint.LENGTH_M)
+var _px_per_m := Vector2(SIZE.x / SleevePaint.GIRTH_M, SIZE.y / SleevePaint.LENGTH_M)
 
 
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, SIZE), sleeve.base, true)
 	for s: Dictionary in sleeve.stripes:
-		var top: float = (float(s.pos) - float(s.width) * 0.5) * SIZE.y
-		draw_rect(Rect2(0.0, top, SIZE.x, float(s.width) * SIZE.y), s.color, true)
+		var outline: PackedVector2Array = SleevePaint.stripe_outline(s)
+		for i: int in outline.size():
+			outline[i] *= Vector2(SIZE)
+		draw_colored_polygon(outline, s.color)
 	var num_str: String = str(jersey_number)
 	# Set at the vertical texel density and stretched to the horizontal one, so
 	# the number keeps the font's shape once it is on the arm.

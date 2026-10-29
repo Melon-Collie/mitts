@@ -1,6 +1,6 @@
 {
   "schema": "mitts.jersey.v2",
-  "description": "Mitts fruit league - one team per slot, each with home and away kits. Stripes are procedural horizontal bands over a UV region: pos = band center (0=top of region, 1=bottom), width = band height as a fraction of the region, both 0..1. Stripes paint in array order (later over earlier). Centered cross-section bands = stack stripes sharing pos with shrinking widths, widest first (Lime, Pomegranate, Pineapple). Stacked bands = adjacent stripes edge to edge (Watermelon's slice edge, Peach's sunset). Asymmetric slices offset a band's pos off-center (Dragonfruit seed-line). For a cross-section to show its outer color, set the region base to that color so it reads as the skin/rind edges. Uniform lettering is text.color, bordered on the sweater by text.stroke when set (optional; absent = no border); shoulders.stroke borders the shoulder numbers the same way. text.outline is a separate color, the outline UI chrome (off-screen indicators) draws around the number. jersey.collar (optional, falls back to yoke) = the ring around the neck; jersey.yoke (optional, falls back to the jersey base) = the top of the shoulders, from the collar over the top of each shoulder cap; sleeve = the whole arm, one base color with stripes laid from the shoulder (pos 0) to the glove's cuff (pos 1), the elbow at 0.62: a shoulder or forearm of another color is a wide band (Pineapple's shoulders, Plum's forearms), and the number sits on the outside of the sleeve near its top, lettered in shoulders.text. primary/secondary/light are the team's UI palette (HUD, lobby cards, scorebug headers): home cards render as primary body + secondary stripe, away cards as light body + primary stripe. light mirrors the away kit's jersey base (the away body color) so the UI away card matches the 3D away sweater. ui_ink (optional) letters both UI sides instead of light/primary, for a team whose primary contrasts with neither white text nor a white card (Lemon, Pineapple, Lime). These drive UI only; the home/away kit blocks below drive the 3D uniform meshes. goalie_pads is the goalie's pads, blocker and trapper, white in every bundled kit; his trim on them is the team's primary, or its secondary where the primary is too faint on the pads.",
+  "description": "Mitts fruit league - one team per slot, each with home and away kits. Stripes are procedural horizontal bands over a UV region: pos = band center (0=top of region, 1=bottom), width = band height as a fraction of the region, both 0..1. Stripes paint in array order (later over earlier). Centered cross-section bands = stack stripes sharing pos with shrinking widths, widest first (Lime, Pomegranate, Pineapple). Stacked bands = adjacent stripes edge to edge (Watermelon's slice edge, Peach's sunset). Asymmetric slices offset a band's pos off-center (Dragonfruit seed-line). For a cross-section to show its outer color, set the region base to that color so it reads as the skin/rind edges. Uniform lettering is text.color, bordered on the sweater by text.stroke when set (optional; absent = no border); shoulders.stroke borders the shoulder numbers the same way. text.outline is a separate color, the outline UI chrome (off-screen indicators) draws around the number. jersey.collar (optional, falls back to yoke) = the ring around the neck; jersey.yoke (optional, falls back to the jersey base) = the top of the shoulders, from the collar over the top of each shoulder cap; sleeve = the whole arm, one base color with stripes laid from the shoulder (pos 0) to the glove's cuff (pos 1), the elbow at 0.62: a shoulder or forearm of another color is a wide band (Plum's forearms), and a sleeve stripe may peak: peak {depth, count, u} zigzags its center line depth down the sleeve (negative = up it) at count peaks spaced evenly round the arm, the first at u (0.5 = the outside, under the number; count defaults to 1, u to 0.5), with width held square to the line so stacked outlines stay even; a band reaching past the shoulder (pos 0) peaks only at its lower edge (Pineapple's shoulders). The goalie paints a peaked stripe flat at its pos. and the number sits on the outside of the sleeve near its top, lettered in shoulders.text. primary/secondary/light are the team's UI palette (HUD, lobby cards, scorebug headers): home cards render as primary body + secondary stripe, away cards as light body + primary stripe. light mirrors the away kit's jersey base (the away body color) so the UI away card matches the 3D away sweater. ui_ink (optional) letters both UI sides instead of light/primary, for a team whose primary contrasts with neither white text nor a white card (Lemon, Pineapple, Lime). These drive UI only; the home/away kit blocks below drive the 3D uniform meshes. goalie_pads is the goalie's pads, blocker and trapper, white in every bundled kit; his trim on them is the team's primary, or its secondary where the primary is too faint on the pads.",
   "teams": [
     {
       "name": "Pomegranate",
@@ -393,9 +393,34 @@
           "base": "#F4AC1C",
           "stripes": [
             {
-              "pos": 0.142,
-              "width": 0.283,
-              "color": "#2E7A5A"
+              "pos": 0.0,
+              "width": 0.48,
+              "color": "#B8691E",
+              "peak": {
+                "depth": 0.22,
+                "count": 1,
+                "u": 0.5
+              }
+            },
+            {
+              "pos": 0.0,
+              "width": 0.44,
+              "color": "#F7E7A6",
+              "peak": {
+                "depth": 0.22,
+                "count": 1,
+                "u": 0.5
+              }
+            },
+            {
+              "pos": 0.0,
+              "width": 0.4,
+              "color": "#2E7A5A",
+              "peak": {
+                "depth": 0.22,
+                "count": 1,
+                "u": 0.5
+              }
             },
             {
               "pos": 0.679,
@@ -482,9 +507,34 @@
           "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.142,
-              "width": 0.283,
-              "color": "#2E7A5A"
+              "pos": 0.0,
+              "width": 0.48,
+              "color": "#B8691E",
+              "peak": {
+                "depth": 0.22,
+                "count": 1,
+                "u": 0.5
+              }
+            },
+            {
+              "pos": 0.0,
+              "width": 0.44,
+              "color": "#F7E7A6",
+              "peak": {
+                "depth": 0.22,
+                "count": 1,
+                "u": 0.5
+              }
+            },
+            {
+              "pos": 0.0,
+              "width": 0.4,
+              "color": "#2E7A5A",
+              "peak": {
+                "depth": 0.22,
+                "count": 1,
+                "u": 0.5
+              }
             },
             {
               "pos": 0.679,

@@ -265,7 +265,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 		var sleeve_raw: Dictionary = raw.sleeve
 		sleeve = {
 			"base":    _parse_color(sleeve_raw.get("base", "#FFFFFF")),
-			"stripes": _parse_stripes(sleeve_raw.get("stripes", [])),
+			"stripes": _parse_stripes(sleeve_raw.get("stripes", []), true),
 		}
 		arms.upper = SleevePaint.segment(sleeve, true)
 		arms.lower = SleevePaint.segment(sleeve, false)
@@ -308,7 +308,9 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 
 # Parses an array of {pos, width, color} stripes into Dictionaries with
 # real Color values. Bad entries are skipped with a warning.
-static func _parse_stripes(raw: Variant) -> Array[Dictionary]:
+# `peaked` reads each stripe's optional `peak` too (SleevePaint.stripe_outline);
+# only the sleeve paints one.
+static func _parse_stripes(raw: Variant, peaked: bool = false) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []
 	if not raw is Array:
 		return out
@@ -316,11 +318,19 @@ static func _parse_stripes(raw: Variant) -> Array[Dictionary]:
 		if not s is Dictionary:
 			continue
 		var sd: Dictionary = s
-		out.append({
+		var stripe := {
 			"pos":   float(sd.get("pos",   0.5)),
 			"width": float(sd.get("width", 0.0)),
 			"color": _parse_color(sd.get("color", "#FFFFFF")),
-		})
+		}
+		var peak: Variant = sd.get("peak")
+		if peaked and peak is Dictionary:
+			stripe.peak = {
+				"depth": float(peak.get("depth", 0.0)),
+				"count": maxi(int(peak.get("count", 1)), 1),
+				"u":     float(peak.get("u", 0.5)),
+			}
+		out.append(stripe)
 	return out
 
 

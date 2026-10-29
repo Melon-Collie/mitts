@@ -61,3 +61,59 @@ func test_every_bundled_kit_is_a_sleeve() -> void:
 			var kit: Dictionary = team[side]
 			assert_true(kit.has("sleeve"), "%s %s paints its arm as one sleeve" % [team.name, side])
 			assert_false(kit.has("arms"), "%s %s has no two-segment arms left" % [team.name, side])
+
+
+func _peaked(depth: float, count: int, first_u: float) -> Dictionary:
+	return {"pos": 0.3, "width": 0.1, "color": Color.BLUE,
+			"peak": {"depth": depth, "count": count, "u": first_u}}
+
+
+# The outline's top or bottom edge at `u`, by its straight runs.
+func _edge_at(outline: PackedVector2Array, u: float, top: bool) -> float:
+	var half: int = outline.size() / 2
+	var edge: PackedVector2Array = outline.slice(0, half) if top else outline.slice(half)
+	if not top:
+		edge.reverse()
+	for i: int in edge.size() - 1:
+		if u >= edge[i].x and u <= edge[i + 1].x:
+			return lerpf(edge[i].y, edge[i + 1].y, (u - edge[i].x) / (edge[i + 1].x - edge[i].x))
+	return NAN
+
+
+func test_a_flat_stripe_is_a_band_round_the_whole_arm() -> void:
+	var outline: PackedVector2Array = SleevePaint.stripe_outline(
+			{"pos": 0.3, "width": 0.1, "color": Color.BLUE})
+	assert_eq(outline, PackedVector2Array([Vector2(0.0, 0.25), Vector2(1.0, 0.25),
+			Vector2(1.0, 0.35), Vector2(0.0, 0.35)]))
+
+
+func test_a_peaked_stripe_drops_its_depth_at_each_peak_and_none_between() -> void:
+	var outline: PackedVector2Array = SleevePaint.stripe_outline(_peaked(0.2, 2, 0.5))
+	var at_peak: float = (_edge_at(outline, 0.5, true) + _edge_at(outline, 0.5, false)) * 0.5
+	var between: float = (_edge_at(outline, 0.25, true) + _edge_at(outline, 0.25, false)) * 0.5
+	assert_almost_eq(at_peak, 0.5, 1e-4, "the centre line is depth below pos on the outside")
+	assert_almost_eq(between, 0.3, 1e-4, "and back at pos midway to the next peak")
+	var wrapped: float = (_edge_at(outline, 0.0, true) + _edge_at(outline, 0.0, false)) * 0.5
+	assert_almost_eq(wrapped, 0.5, 1e-4, "the second peak sits half way round, on the seam")
+
+
+func test_a_peaked_stripe_holds_its_width_square_to_the_line() -> void:
+	var stripe: Dictionary = _peaked(0.25, 1, 0.5)
+	var outline: PackedVector2Array = SleevePaint.stripe_outline(stripe)
+	# Down a slope, in metres: the vertical gap times the cosine of the slope.
+	var run_m: float = 0.5 * SleevePaint.GIRTH_M
+	var drop_m: float = 0.25 * SleevePaint.LENGTH_M
+	var gap_m: float = (_edge_at(outline, 0.3, false) - _edge_at(outline, 0.3, true)) \
+			* SleevePaint.LENGTH_M
+	assert_almost_eq(gap_m * run_m / sqrt(run_m * run_m + drop_m * drop_m),
+			0.1 * SleevePaint.LENGTH_M, 1e-5)
+
+
+func test_the_registry_reads_a_sleeve_stripes_peak() -> void:
+	var kit: Dictionary = TeamColorRegistry._parse_kit({"sleeve": {"base": "#FFFFFF",
+			"stripes": [{"pos": 0.0, "width": 0.4, "color": "#000000", "peak": {"depth": 0.2}},
+					{"pos": 0.6, "width": 0.1, "color": "#000000"}]}})
+	var stripes: Array = kit.sleeve.stripes
+	assert_eq(stripes[0].peak, {"depth": 0.2, "count": 1, "u": 0.5},
+			"count and u default to one peak on the outside")
+	assert_false(stripes[1].has("peak"), "a flat stripe carries no peak")

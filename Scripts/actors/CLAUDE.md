@@ -76,11 +76,13 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   collapses the pad into a fin past ~90°; putting the whole twist on one ring
   pinches the sleeve shut.
 - **Each sleeve is painted whole** (`SleeveDecal`): the kit's `sleeve`
-  (`SleevePaint`, one base and stripes from the shoulder to the cuff) drawn
+  (`SleevePaint`, one base and stripes from the shoulder to the cuff, each
+  straight round the arm or peaked, `SleevePaint.stripe_outline`) drawn
   down a texture with the number on the outside near its top, U round the arm
   and V down its whole length, one paint zone per arm (`sleeve_surface`). The
-  goalie still paints his arm in two; the registry cuts the sleeve back into
-  `arms.upper` / `arms.lower` for him (`SleevePaint.segment`).
+  goalie still paints his arm in two, in flat bands; the registry cuts the
+  sleeve back into `arms.upper` / `arms.lower` for him (`SleevePaint.segment`),
+  a peaked stripe laid flat at its pos.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
 - **The display figures wear the same body.** `FigureKit` (the player screen's

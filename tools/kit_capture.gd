@@ -521,7 +521,10 @@ func _stripe_rows(c: Node2D, pen: Vector2, stripes: Array) -> Vector2:
 		if x > pen.x + _LEGEND_W - 170.0:
 			x = pen.x + 124.0
 			y += _LINE_H
-		x = _chip(c, Vector2(x, y), s.color, "%.2f / %.2f" % [s.pos, s.width])
+		var note: String = "%.2f / %.2f" % [s.pos, s.width]
+		if s.has("peak"):
+			note += " peak %.2f×%d" % [s.peak.depth, s.peak.count]
+		x = _chip(c, Vector2(x, y), s.color, note)
 	return Vector2(pen.x, y + _LINE_H)
 
 

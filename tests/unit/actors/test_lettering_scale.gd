@@ -143,8 +143,8 @@ func test_the_sleeve_girth_is_the_arm_under_the_number() -> void:
 		for v: float in rings:
 			if (rings[v] as Dictionary).size() > SkaterConnectedMesh.LIMB_SIDES:
 				first = minf(first, v)
-		assert_almost_eq(_perimeter(rings[first]), SleeveDecal._GIRTH_M,
-				SleeveDecal._GIRTH_M * 0.05, "side %d" % side)
+		assert_almost_eq(_perimeter(rings[first]), SleevePaint.GIRTH_M,
+				SleevePaint.GIRTH_M * 0.05, "side %d" % side)
 
 
 # Metres down the arm per unit V: the decal's SleevePaint.LENGTH_M, through
