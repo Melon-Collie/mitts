@@ -23,6 +23,10 @@ extends RefCounted
 # (SkaterConnectedRig), because the arm bones roll from world up and the elbow
 # needs both its halves turning about one hinge.
 
+# Preview only (tools/body_preview.gd --pants): the pants alone, the jersey and
+# its sleeves left off so the pants can be seen.
+static var preview_pants_only: bool = false
+
 static var enabled: bool = OS.get_environment("MITTS_CONNECTED_BODY") == "1" \
 		or OS.get_cmdline_args().has("--connected-body") \
 		or OS.get_cmdline_user_args().has("--connected-body")
@@ -143,9 +147,9 @@ const _PANTS_SWAY: Array[float] = [0.006, 0.006, 0.010, 0.016, 0.028, 0.012]
 const _PANTS_ROUND: int = 3
 # The front centre of a pants ring, which runs from the back centre.
 const _PANTS_FRONT: int = 5
-const _CROTCH_Y_M: float = -0.215
-const _CROTCH_FRONT_Z_M: float = -0.07
-const _CROTCH_BACK_Z_M: float = 0.085
+const _CROTCH_Y_M: float = -0.255
+const _CROTCH_FRONT_Z_M: float = -0.045
+const _CROTCH_BACK_Z_M: float = 0.06
 
 # Each leg below the crotch, bind space: (y, radius, its swell to the outside,
 # its swell to the back) — then the knee's cap and the calf are added by
@@ -153,7 +157,7 @@ const _CROTCH_BACK_Z_M: float = 0.085
 # to the sock; the sock runs over the shin guard's knee cap, down the calf and
 # into the skate's collar.
 const _LEG_RINGS: Array[Vector4] = [
-	Vector4(-0.270, 0.128, 0.024, 0.006),
+	Vector4(-0.290, 0.128, 0.024, 0.006),
 	Vector4(-0.335, 0.132, 0.022, 0.004),
 	Vector4(-0.395, 0.138, 0.018, 0.0),    # the pants' hem
 	Vector4(-0.402, 0.104, 0.0, 0.0),      # under it, the sock's top
@@ -298,11 +302,13 @@ static func _knee(side: float) -> Vector3:
 static func shared_mesh(tuck: int) -> ArrayMesh:
 	if not GearModelRegistry.is_valid_tuck(tuck):
 		tuck = GearModelRegistry.TUCK_NONE
-	return _shared("body_%d" % tuck, func() -> ArrayMesh:
+	var pants_only: bool = preview_pants_only
+	return _shared("body_%d_%s" % [tuck, pants_only], func() -> ArrayMesh:
 		var b := ConnectedSkinBuilder.new()
-		var armholes: Array[PackedInt32Array] = _build_torso(b, tuck)
-		for i: int in 2:
-			_build_sleeve(b, -1.0 if i == 0 else 1.0, armholes[i])
+		if not pants_only:
+			var armholes: Array[PackedInt32Array] = _build_torso(b, tuck)
+			for i: int in 2:
+				_build_sleeve(b, -1.0 if i == 0 else 1.0, armholes[i])
 		_build_pants(b, tuck)
 		return b.commit())
 

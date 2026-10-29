@@ -22,6 +22,14 @@ const PREVIEW_POSES: Array[String] = [
 	"jersey_tuck_full", "celebrate", "knockdown_lying_side",
 ]
 
+# --pants: the connected pants alone, nothing above the belt, framed on them.
+const PANTS_POSES: Array[String] = [
+	"rest", "stride_away", "stride_lateral", "stance_rest", "hit_commit_deep", "shot_block",
+	"jersey_tuck_full",
+]
+const PANTS_FOV: float = 22.0
+const PANTS_AIM_Y: float = -0.4
+
 enum Step { BUILD, POSE, GRAB }
 
 var _step: Step = Step.BUILD
@@ -29,9 +37,13 @@ var _variant: int = 0
 var _first_variant: int = 0
 var _angle: int = 0
 var _tiles: Array[Image] = []
+var _pants: bool = false
 
 
-func begin_preview(only: String, new_only: bool) -> void:
+func begin_preview(only: String, new_only: bool, pants: bool = false) -> void:
+	_pants = pants
+	SkaterConnectedMesh.preview_pants_only = pants
+	new_only = new_only or pants
 	SkaterAnimationLod.detail = SkaterAnimationLod.DETAIL_FULL
 	SkaterCameraCull.enabled = false
 	CosmeticFreeze.vfx = true
@@ -40,7 +52,7 @@ func begin_preview(only: String, new_only: bool) -> void:
 	_variant = _first_variant
 	for spec: Dictionary in POSES:
 		var pose_name: String = spec["name"]
-		var wanted: bool = PREVIEW_POSES.has(pose_name)
+		var wanted: bool = (PANTS_POSES if pants else PREVIEW_POSES).has(pose_name)
 		if only != "":
 			wanted = false
 			for part: String in only.split(","):
@@ -71,6 +83,8 @@ func _process(_delta: float) -> void:
 			_step = Step.POSE
 		Step.POSE:
 			_run_pose()
+			if _pants:
+				_hide_all_but_the_pants()
 			_angle = 0
 			_place_camera()
 			_step = Step.GRAB
@@ -89,10 +103,17 @@ func _process(_delta: float) -> void:
 			_step = Step.BUILD
 
 
+func _hide_all_but_the_pants() -> void:
+	var keep: Array[String] = ["ConnectedBody", "LegMesh"]
+	for node: Node in _skater.find_children("*", "GeometryInstance3D", true, false):
+		if not keep.has(String(node.name)):
+			(node as GeometryInstance3D).visible = false
+
+
 func _place_camera() -> void:
-	_camera.fov = PREVIEW_FOV
+	_camera.fov = PANTS_FOV if _pants else PREVIEW_FOV
 	var basis: Basis = _skater.global_transform.basis.orthonormalized()
-	var aim: Vector3 = _skater.global_position + Vector3(0.0, -0.1, 0.0)
+	var aim: Vector3 = _skater.global_position + Vector3(0.0, PANTS_AIM_Y if _pants else -0.1, 0.0)
 	_camera.global_position = aim + basis * ANGLES[_angle]
 	_camera.look_at(aim, Vector3.UP)
 
@@ -109,7 +130,8 @@ func _save_pose_sheet() -> void:
 		var row: int = i / ANGLES.size()
 		sheet.blit_rect(src, Rect2i(0, 0, PREVIEW_TILE, PREVIEW_TILE),
 				Vector2i((i % ANGLES.size()) * PREVIEW_TILE, row * PREVIEW_TILE))
-	var path: String = "%s/%s.png" % [PREVIEW_DIR, String(_poses[_pose_index]["name"])]
+	var path: String = "%s/%s%s.png" % [PREVIEW_DIR, "pants_" if _pants else "",
+			String(_poses[_pose_index]["name"])]
 	sheet.save_png(ProjectSettings.globalize_path(path))
 	print("  ", ProjectSettings.globalize_path(path))
 	_tiles.clear()
