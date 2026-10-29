@@ -103,7 +103,7 @@
       "away": {
         "helmet": "#F5E6D3",
         "shoulders": {
-          "text": "#F5E6D3"
+          "text": "#971829"
         },
         "jersey": {
           "base": "#F5E6D3",
@@ -129,6 +129,11 @@
         "sleeve": {
           "base": "#971829",
           "stripes": [
+            {
+              "pos": 0.1415,
+              "width": 0.283,
+              "color": "#F5E6D3"
+            },
             {
               "pos": 0.679,
               "width": 0.17,
