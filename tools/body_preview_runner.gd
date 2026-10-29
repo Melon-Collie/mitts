@@ -30,6 +30,9 @@ const PANTS_POSES: Array[String] = [
 const PANTS_FOV: float = 22.0
 # --head: framed on the helmet.
 const HEAD_FOV: float = 7.0
+# --waist: framed on the belt, where a tuck goes in.
+const WAIST_FOV: float = 13.0
+const WAIST_AIM_Y: float = -0.17
 const PANTS_AIM_Y: float = -0.4
 
 enum Step { BUILD, POSE, GRAB }
@@ -42,11 +45,13 @@ var _tiles: Array[Image] = []
 var _pants: bool = false
 var _audit: bool = false
 var _head: bool = false
+var _waist: bool = false
 
 
 func begin_preview(only: String, new_only: bool, pants: bool = false,
-		audit: bool = false, head: bool = false) -> void:
+		audit: bool = false, head: bool = false, waist: bool = false) -> void:
 	_pants = pants
+	_waist = waist
 	_audit = audit
 	_head = head
 	SkaterConnectedMesh.preview_pants_only = pants
@@ -123,6 +128,9 @@ func _place_camera() -> void:
 	_camera.fov = PANTS_FOV if _pants else PREVIEW_FOV
 	var basis: Basis = _skater.global_transform.basis.orthonormalized()
 	var aim: Vector3 = _skater.global_position + Vector3(0.0, PANTS_AIM_Y if _pants else -0.1, 0.0)
+	if _waist:
+		_camera.fov = WAIST_FOV
+		aim = _skater.global_position + Vector3(0.0, WAIST_AIM_Y, 0.0)
 	if _head:
 		var body: Skeleton3D = _skater._arms._skeleton
 		_camera.fov = HEAD_FOV
@@ -145,7 +153,7 @@ func _save_pose_sheet() -> void:
 		sheet.blit_rect(src, Rect2i(0, 0, PREVIEW_TILE, PREVIEW_TILE),
 				Vector2i((i % ANGLES.size()) * PREVIEW_TILE, row * PREVIEW_TILE))
 	var path: String = "%s/%s%s.png" % [PREVIEW_DIR,
-			"pants_" if _pants else ("head_" if _head else ""),
+			"pants_" if _pants else ("head_" if _head else ("waist_" if _waist else "")),
 			String(_poses[_pose_index]["name"])]
 	sheet.save_png(ProjectSettings.globalize_path(path))
 	print("  ", ProjectSettings.globalize_path(path))

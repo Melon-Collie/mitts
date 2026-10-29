@@ -6,14 +6,16 @@ extends RefCounted
 # crotch into the legs, each on through the hem and the knee into the sock.
 
 # The pants, waist-space (the PELVIS bone's, which rests at bind identity):
-# (y, half width, half depth, rear sway). The top three are the rig's own pelvis
-# rings, round and scaled like its lathe, which the jersey tucks into
+# (y, half width, half depth, rear sway). The top four are round and scaled like
+# the rig's pelvis lathe, which the jersey tucks into
 # (SkaterMeshBuilder._PELVIS_PROFILE: the third value is unused, the width is
-# the radius); below them the hips widen over the hip joints to the seat, and
-# the last ring is the crotch, where the legs split.
+# the radius): its lip and waistband, the belt under them and its waist; below
+# them the hips widen over the hip joints to the seat, and the last ring is the
+# crotch, where the legs split.
 const _PANTS: Array[Vector4] = [
 	Vector4(0.056, 0.184, 0.0, 0.006),
 	Vector4(0.050, 0.186, 0.0, 0.006),
+	Vector4(0.030, 0.187, 0.0, 0.007),
 	Vector4(0.000, 0.190, 0.0, 0.010),
 	Vector4(-0.040, 0.214, 0.176, 0.013),
 	Vector4(-0.080, 0.240, 0.183, 0.020),
@@ -21,12 +23,27 @@ const _PANTS: Array[Vector4] = [
 	Vector4(-0.160, 0.266, 0.184, 0.022),
 	Vector4(-0.200, 0.268, 0.176, 0.012),   # the crotch
 ]
-const _PANTS_ROUND: int = 3
+const _PANTS_ROUND: int = 4
+# Where the jersey is tucked in, the pants' padded top stands up as a rim: the
+# lip rises this far, the waistband under it this far and out this far, rolling
+# back in to the belt, so the rim is a padded band proud of the jersey going in
+# behind it. Above it the jersey blouses out by TUCK_BLOUSE_M, wider than the
+# rim, so it overhangs the rim before it goes in (test_connected_body.gd).
+const _RIM_LIP_RISE_M: float = 0.045
+const _RIM_RISE_M: float = 0.022
+const _RIM_FLARE_M: float = 0.035
+const TUCK_BLOUSE_M: float = 0.030
+# How far tucked a column is before the rim under it starts to flare.
+const _RIM_FLARE_FROM: float = 0.6
+# The kidney pads, each side of the spine under the belt: how far each ring
+# stands out at their middles, 45° off the back, easing to none at the spine
+# and the hips.
+const _KIDNEY_M: Array[float] = [0.0, 0.0, 0.006, 0.016, 0.020, 0.010, 0.0, 0.0, 0.0]
 # How far each ring rides its side's thigh rather than the pelvis: (at the
 # middle, more out at the side by |sin θ|). Over the hips the pants start to go
 # with the legs, most at the crotch.
 const _THIGH_SHARE: Array[Vector2] = [
-	Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO,
+	Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO, Vector2.ZERO,
 	Vector2(0.0, 0.1), Vector2(0.0, 0.3), Vector2(0.0, 0.5), Vector2(0.35, 0.35),
 ]
 const _SIDES: int = 16
@@ -96,11 +113,12 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 		var pts := PackedVector3Array()
 		for k: int in _SIDES + 1:
 			var theta: float = TAU * float(k) / float(_SIDES)
-			pts.append(Vector3(sin(theta) * half_w, s.x, s.w + cos(theta) * half_d))
+			var kidney: float = _KIDNEY_M[i] * sin(2.0 * theta) ** 2 if cos(theta) > 0.0 else 0.0
+			pts.append(Vector3(sin(theta) * (half_w + kidney), s.x,
+					s.w + cos(theta) * (half_d + kidney)))
 		if tuck != GearModelRegistry.TUCK_NONE and i < 2:
-			pts = SkaterJerseyHem.pad_ring(pts, s.x, s.y, s.w, tuck, xz.x, xz.y,
-					SkaterJerseyHem.PAD_RISE_M * (1.0 if i == 0 else SkaterJerseyHem.PAD_BULGE_SHARE),
-					0.0 if i == 0 else SkaterJerseyHem.PAD_FLARE_M)
+			_stand_rim(pts, s, tuck, _RIM_LIP_RISE_M if i == 0 else _RIM_RISE_M,
+					0.0 if i == 0 else _RIM_FLARE_M)
 		var ids := PackedInt32Array()
 		for k: int in _SIDES:
 			var across: float = absf(sin(TAU * float(k) / float(_SIDES)))
@@ -142,6 +160,20 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 		top.append(crotch[_FRONT])
 		top.append_array(inseam)
 		_build_leg(b, side, top)
+
+
+# A rim ring (`s`, as _PANTS) stood up where `tuck` takes the jersey in: risen
+# as far in as the jersey is, so the rim eases up toward a tucked corner rather
+# than standing in a spike at it, and flared only where the jersey is all but
+# tucked — a loose hem lifted toward the belt still hangs outside the flare.
+static func _stand_rim(pts: PackedVector3Array, s: Vector4, tuck: int, rise: float,
+		flare: float) -> void:
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	for k: int in pts.size():
+		var theta: float = TAU * float(k) / float(_SIDES)
+		var t: float = SkaterJerseyHem.tuck_share(tuck, theta)
+		var r: float = s.y + flare * smoothstep(_RIM_FLARE_FROM, 1.0, t)
+		pts[k] = Vector3(sin(theta) * r * xz.x, s.x + rise * t, s.w + cos(theta) * r * xz.y)
 
 
 # The pants' stripe column is laid round each leg (U from +Z toward +X about the

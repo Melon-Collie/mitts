@@ -116,9 +116,11 @@ static func _smooth(t: float) -> float:
 # A torso ring at rest height `y`, tucked: each point is moved about the ring's
 # own centre (`z_off` behind the axis) to the radius and height the tuck gives it
 # at its azimuth. `ring` is the lathe's — sides + 1 points from `phase`, the
-# last repeating the first — at profile radius `radius` scaled by `xs` / `zs`.
+# last repeating the first — at profile radius `radius` scaled by `xs` / `zs`;
+# `blouse` is what the ring bunching over the pad stands out by.
 static func tuck_ring(ring: PackedVector3Array, y: float, radius: float, z_off: float,
-		tuck: int, phase: float, xs: float, zs: float) -> PackedVector3Array:
+		tuck: int, phase: float, xs: float, zs: float,
+		blouse: float = BLOUSE_M) -> PackedVector3Array:
 	if tuck == GearModelRegistry.TUCK_NONE or y > BUNCH_Y_M + 1e-5:
 		return ring
 	var sides: int = ring.size() - 1
@@ -132,7 +134,7 @@ static func tuck_ring(ring: PackedVector3Array, y: float, radius: float, z_off: 
 			if y < BELT_Y_M - 1e-5:
 				ty = BELT_Y_M + (y - BELT_Y_M) * (1.0 - LIFT_MAX * tuck_share(tuck, theta))
 		elif y > PAD_Y_M + 1e-5:
-			r += BLOUSE_M
+			r += blouse
 		elif y > BELT_Y_M + 1e-5:
 			r = UNDER_PAD_RADIUS_M
 			tz = TUCKED_REAR_SWAY_M

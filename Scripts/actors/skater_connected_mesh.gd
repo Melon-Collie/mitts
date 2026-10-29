@@ -340,7 +340,8 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	for station: Vector3 in profile:
 		var pts: PackedVector3Array = SkaterJerseyHem.tuck_ring(
 				_lathe_ring(station, _CHEST_SIDES, phase), station.x, station.y, station.z, tuck,
-				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y)
+				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y,
+				SkaterConnectedPants.TUCK_BLOUSE_M)
 		var ids := PackedInt32Array()
 		for j: int in _CHEST_SIDES:
 			var theta: float = TAU * float(j) / float(_CHEST_SIDES) + phase

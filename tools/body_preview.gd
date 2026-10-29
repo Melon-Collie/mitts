@@ -11,6 +11,7 @@ extends SceneTree
 #   .claude/hooks/render-body.sh --audit         # + count faces folded inside out
 #   BODY_AUDIT_ZONE=33 ... --audit               # + list one zone's folded faces
 #   .claude/hooks/render-body.sh --head          # framed on the helmet
+#   .claude/hooks/render-body.sh --waist         # framed on the belt: the tuck
 #
 # Bootstrapped like pose_capture.gd, for the same reason: the runner names
 # classes that need the autoloads up before they compile.
@@ -37,4 +38,4 @@ func _on_frame() -> void:
 		if a.begins_with("--only="):
 			only = a.trim_prefix("--only=")
 	runner.call("begin_preview", only, args.has("--new-only"), args.has("--pants"),
-			args.has("--audit"), args.has("--head"))
+			args.has("--audit"), args.has("--head"), args.has("--waist"))

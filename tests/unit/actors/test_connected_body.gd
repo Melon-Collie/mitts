@@ -61,3 +61,31 @@ func test_the_sleeve_frames_rest_where_the_bind_arm_puts_them() -> void:
 		for i: int in 3:
 			assert_true(frames[i].is_equal_approx(rests[first + i]),
 					"side %d frame %d sits on its rest" % [side, i])
+
+
+# The widest |x| of the full tuck's vertices painted `zones`, between heights
+# `lo` and `hi` (bind space).
+func _widest(zones: Array[int], lo: float, hi: float) -> float:
+	var arrays: Array = SkaterConnectedMesh.shared_mesh(GearModelRegistry.TUCK_FULL) \
+			.surface_get_arrays(0)
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var zone_of: PackedVector2Array = arrays[Mesh.ARRAY_TEX_UV2]
+	var widest: float = 0.0
+	for v: int in verts.size():
+		if zones.has(roundi(zone_of[v].x)) and verts[v].y >= lo and verts[v].y <= hi:
+			widest = maxf(widest, absf(verts[v].x))
+	return widest
+
+
+func test_a_tucked_jersey_blouses_out_over_the_pants_rim() -> void:
+	# The rim stands proud of the jersey going in behind it, and the jersey just
+	# above blouses wider still, so it overhangs the rim rather than the rim
+	# standing out past it.
+	var pants: Array[int] = [SkaterMeshBuilder.LegSurface.THIGH_L,
+			SkaterMeshBuilder.LegSurface.THIGH_R]
+	var rim: float = _widest(pants, 0.04, 1.0)
+	var under_rim: float = _widest(pants, -0.01, 0.01)
+	var blouse: float = _widest([SkaterConnectedMesh.zone(SkaterMeshBuilder.UpperSurface.TORSO)],
+			0.10, 0.15)
+	assert_gt(rim, under_rim, "the rim stands out from the pants below it")
+	assert_gt(blouse, rim, "the jersey blouses out past the rim it tucks behind")
