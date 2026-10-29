@@ -193,5 +193,11 @@ func _audit_folds() -> void:
 			var zone: int = int(round(zones[t].x))
 			flipped[zone] = int(flipped.get(zone, 0)) + 1
 			worst[zone] = (p[0] + p[1] + p[2]) / 3.0
+			if OS.get_environment("BODY_AUDIT_ZONE") == str(zone):
+				for c: int in 3:
+					var v: int = t + c
+					print("      bind %.3v -> %.3v  binds %s w %s" % [verts[v], p[c],
+							bones.slice(v * 4, v * 4 + 4), weights.slice(v * 4, v * 4 + 4)])
+				print("      --")
 	print("    folds in %s: %s (a face in each: %s)" % [
 			String(_poses[_pose_index]["name"]), flipped, worst])

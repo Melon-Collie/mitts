@@ -9,6 +9,7 @@ extends SceneTree
 #   .claude/hooks/render-body.sh --new-only      # skip the current body's row
 #   .claude/hooks/render-body.sh --pants         # the connected pants alone
 #   .claude/hooks/render-body.sh --audit         # + count faces folded inside out
+#   BODY_AUDIT_ZONE=33 ... --audit               # + list one zone's folded faces
 #   .claude/hooks/render-body.sh --head          # framed on the helmet
 #
 # Bootstrapped like pose_capture.gd, for the same reason: the runner names
