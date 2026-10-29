@@ -580,8 +580,12 @@ coming at pace AND cannot build it past us (cushion under a stick) — the regro
 clause too, so a man crossing at speed is not regrouping; pace alone
 steps a standing defender up on a fresh receiver who then bursts past him. And
 when the retreat cannot hold a gap — the cushion eats all but a stick of the ice
-he owns — a defender IN the carrier's lane steps up to meet him rather than be
-reached while turning; off the lane he keeps retreating.
+he owns — or the carrier is steered to the wall with no room outside, a defender
+IN the carrier's lane steps up to meet him rather than be reached while turning;
+off the lane he keeps retreating. A wall carrier with the defender inside him,
+off his line, still has the whole wall to skate down past a step-up, and walked
+onto the crease untouched while the defender stepped across to him
+(`test_one_on_one_to_the_crease.gd`).
 
 Depth comes before width (`depth_first`). A defender short of his stand's depth
 has one speed budget: the pace down the line that keeps up with the carrier and

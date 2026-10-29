@@ -564,12 +564,13 @@ static func _gap_for(ctx: RoleContext, read: AIRushRead, carrier_pos: Vector3,
 # Is his speed advantage gone — close to stick range and attack? True when:
 #   · he is not advancing on our net and cannot build a head start on us (the
 #     ladder has no domain) — a man crossing the ice at speed is not regrouping:
-#     a turn puts that speed at our net (head_start_on_me) — or is steered to
-#     the wall;
+#     a turn puts that speed at our net (head_start_on_me);
 #   · he is not coming at pace AND cannot build it past us (cushion under a
 #     stick);
-#   · the retreat cannot hold a gap (the cushion eats all but a stick of my
-#     depth) and I stand in his lane — off it, I keep retreating.
+#   · I stand in his lane and either he is steered to the wall (no room left
+#     outside me) or the retreat cannot hold a gap (the cushion eats all but a
+#     stick of my depth). Off his lane I keep retreating: a man on the wall
+#     with me inside him still has the whole wall to skate down past me.
 # Shared with AIRolePressure so both carrier-owners agree at the handoff. See
 # Scripts/domain/ai/CLAUDE.md → "Pace enters through the stride ramp".
 static func should_gap_up(ctx: RoleContext, read: AIRushRead,
@@ -580,13 +581,13 @@ static func should_gap_up(ctx: RoleContext, read: AIRushRead,
 	var stick: float = stick_m(ctx)
 	if is_stalled(ctx, ap, cushion_m):
 		return true
-	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
-		return true
 	var dx: float = ctx.self_pos.x - ap.carrier_pos.x
 	var dz: float = ctx.self_pos.z - ap.carrier_pos.z
-	var depth: float = dx * ap.dir_net.x + dz * ap.dir_net.z
-	var off_lane: float = absf(dx * ap.dir_net.z - dz * ap.dir_net.x)
-	return depth < cushion_m + stick and off_lane <= stick
+	if absf(dx * ap.dir_net.z - dz * ap.dir_net.x) > stick:
+		return false
+	if GameRules.INNER_HALF_WIDTH - absf(ap.carrier_pos.x) < GAP_UP_WALL_M:
+		return true
+	return dx * ap.dir_net.x + dz * ap.dir_net.z < cushion_m + stick
 
 
 # He is not coming at pace and cannot build it past us (cushion under a stick).

@@ -359,6 +359,19 @@ func test_gap_up_against_a_carrier_pinned_to_the_wall() -> void:
 			"a carrier with no outside left gets challenged")
 
 
+func test_no_gap_up_on_a_wall_carrier_from_inside_his_lane() -> void:
+	# The same carrier on the wall, but me well inside him, off his line to our
+	# net: he has the whole wall to skate down past a step-up, so I keep my gap.
+	var carrier := Vector3(GameRules.INNER_HALF_WIDTH - 1.0, 0.0, 9.0)
+	var ctx: RoleContext = _ctx(Vector3(3.0, 0.0, 12.0),
+			[[10, 1, carrier, Vector3(0.0, 0.0, 7.0)]], 10,
+			AIRushRead.Numbers.DOWN_ONE, INF, false)
+	var ap := AICarrierApproach.new()
+	assert_true(AIDefensiveVerbs.read_carrier_approach(ctx, ap))
+	assert_false(AIRoleRushD.should_gap_up(ctx, ctx.rush_read, ap,
+			AIRoleRushD.ramp_cushion_m(ctx, ap, 10)), "off his lane, the wall is still his")
+
+
 # ── Angling and floors ───────────────────────────────────────────────────────
 
 func test_stand_shades_inside_to_steer_him_wide() -> void:
