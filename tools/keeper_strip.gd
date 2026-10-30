@@ -62,6 +62,10 @@ const SCENARIOS: Array = [
 	["save_five_hole", Vector2(-0.05, 0.0), SAVE],
 	["save_five_hole_far", Vector2(-0.05, 0.0), SAVE_FAR],
 	["cover", 0.0, COVER],
+	["cover_glove_side", Vector2(-0.7, 0.1), COVER],
+	["cover_behind_glove", Vector2(-0.45, -0.3), COVER],
+	["cover_blocker_side", Vector2(0.7, 0.1), COVER],
+	["cover_behind_blocker", Vector2(0.4, -0.35), COVER],
 	["save_tight_low", Vector2(0.2, 0.0), SAVE_TIGHT],
 ]
 # Not a footwork move: KeeperDrop down into the butterfly, held, and back up,
@@ -141,8 +145,9 @@ const SAVE_TIGHT: int = -13
 const SAVE_FAR: int = -15
 const SAVE_FAR_FROM_Z: float = -14.0
 # A puck dribbling in to die at his feet, covered (KeeperCover, the motor's
-# drop and the save's glove): from COVER_FROM_M ahead of him at COVER_M_S. The
-# bar PUSH while he goes for it, STOP once the glove is on it.
+# drop and the save's glove): from COVER_FROM_M ahead of him at COVER_M_S, or,
+# given a spot (across, ahead of him), lying dead there, beside or behind him.
+# The bar PUSH while he goes for it, STOP once the glove is on it.
 const COVER: int = -16
 const COVER_FROM_M: float = 1.1
 const COVER_M_S: float = 0.9
@@ -261,7 +266,7 @@ func _record(spot: Vector2, kind: int) -> Array:
 	if kind == SEQUENCE:
 		return _record_sequence()
 	if kind == COVER:
-		return _record_cover()
+		return _record_cover(spot if spot != Vector2.ZERO else Vector2.INF)
 	if kind == LOW_READY:
 		return _record_low_ready()
 	if kind == GOALS:
@@ -547,13 +552,16 @@ func _record_save(to: Vector2, from_z: float, speed: float) -> Array:
 	return out
 
 
-func _record_cover() -> Array:
+func _record_cover(lying: Vector2) -> Array:
 	var motor := KeeperMotor.new()
 	motor.z = SAVE_KEEPER_Z
 	var cover := KeeperCover.new()
 	var save := KeeperSave.new()
 	var puck := Vector3(-0.25, KeeperShotRead.ON_ICE_Y, SAVE_KEEPER_Z - COVER_FROM_M)
 	var v := Vector3(0.0, 0.0, COVER_M_S)
+	if lying != Vector2.INF:
+		puck = Vector3(lying.x, KeeperShotRead.ON_ICE_Y, SAVE_KEEPER_Z - lying.y)
+		v = Vector3.ZERO
 	var covering: bool = false
 	var secured: bool = false
 	var out: Array = []
@@ -568,7 +576,7 @@ func _record_cover() -> Array:
 				if not covering:
 					covering = true
 					motor.save(KeeperSaveMove.Low.BUTTERFLY, signf(cover.target.x))
-				save.cover(cover.target, cover.lean)
+				save.cover(cover.target, cover.lean, cover.toward, cover.fingers)
 		motor.step(DT)
 		motor.pose(p)
 		save.step(DT, false, p)

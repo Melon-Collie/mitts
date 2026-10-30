@@ -96,6 +96,11 @@ func release() -> void:
 	_clock = 0.0
 
 
+# The save's stance, where a drop under way lands him.
+func landing(p: KeeperPose) -> void:
+	p.copy_from(_to)
+
+
 # Whether he is in the save's stance, covering what it covers.
 func is_set() -> bool:
 	return state == State.HELD

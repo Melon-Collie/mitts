@@ -13,9 +13,11 @@ extends GutTest
 # no whistle here, sets a covered puck down and sweeps it out (the Off rules).
 #
 # Per speed, how each trial ended: covered (held, then played out), gone (out
-# of his reach), still (at rest near him), and in: untouched (it slid in past
-# him on its own) or off him (something he did), with what last touched it and
-# what he was doing. Prints every goal off him.
+# of his reach), still at rest at his feet uncovered (KeeperCover.at_feet) or
+# near him past them, and in: untouched (it slid in past him on its own) or off
+# him (something he did), with what last touched it and what he was doing. A
+# spot behind the goal line is not laid. Prints every goal off him, and where
+# each puck left lying at his feet lies as he sees it.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const GOAL_SCENE: PackedScene = preload("res://Scenes/Goalie.tscn")
@@ -64,18 +66,20 @@ func _rink(v: Vector3) -> Vector3:
 
 func test_report() -> void:
 	_build()
-	var lines: PackedStringArray = ["set on  speed | in off him / in untouched / covered / gone / still"]
+	var lines: PackedStringArray = ["set on  speed | in off him / in untouched / covered / gone / still at his feet / still near"]
 	var goals: PackedStringArray = []
+	var lying: PackedStringArray = []
 	for set_on: Array in SET_ON:
 		_set_on = set_on[1]
-		_report_set(set_on[0], lines, goals)
-	gut.p("\n" + "\n".join(lines) + "\nGOALS OFF HIM\n" + "\n".join(goals))
+		_report_set(set_on[0], lines, goals, lying)
+	gut.p("\n" + "\n".join(lines) + "\nGOALS OFF HIM\n" + "\n".join(goals) + "\nLEFT LYING AT HIS FEET\n"
+			+ "\n".join(lying))
 	assert_true(true)
 
 
-func _report_set(where: String, lines: PackedStringArray, goals: PackedStringArray) -> void:
+func _report_set(where: String, lines: PackedStringArray, goals: PackedStringArray, lying: PackedStringArray) -> void:
 	for speed: float in SPEEDS:
-		var tally: Dictionary = {"in": 0, "untouched": 0, "covered": 0, "gone": 0, "still": 0}
+		var tally: Dictionary = {"in": 0, "untouched": 0, "covered": 0, "gone": 0, "feet": 0, "near": 0, "skip": 0}
 		var headings: int = 1 if speed == 0.0 else HEADINGS
 		for across: float in ACROSS:
 			for depth: float in DEPTH:
@@ -83,12 +87,17 @@ func _report_set(where: String, lines: PackedStringArray, goals: PackedStringArr
 					var heading: float = TAU * h / HEADINGS
 					var outcome: String = _trial(across, depth, speed, heading)
 					var kind: String = outcome.get_slice(" ", 0)
+					if kind == "still":
+						kind = outcome.get_slice(" ", 1)
+					if kind == "feet:":
+						kind = "feet"
+						lying.append("  %s %.1f m/s: %s" % [where, speed, outcome.substr(12)])
 					tally[kind] = int(tally[kind]) + 1
 					if kind == "in":
 						goals.append("  %s %.1f m/s heading %3.0f° from (%+.2f across, %+.2f deep): %s" % [where,
 								speed, rad_to_deg(heading), across, depth, outcome])
-		lines.append("%-7s %4.1f  | %d / %d / %d / %d / %d" % [where, speed, tally["in"], tally["untouched"],
-				tally["covered"], tally["gone"], tally["still"]])
+		lines.append("%-7s %4.1f  | %d / %d / %d / %d / %d / %d" % [where, speed, tally["in"], tally["untouched"],
+				tally["covered"], tally["gone"], tally["feet"], tally["near"]])
 
 
 # One trial: the puck laid at (across, depth) from him in the net's frame at
@@ -98,7 +107,7 @@ func _trial(across: float, depth: float, speed: float, heading: float) -> String
 	var me := Vector2(_keeper.motor.x, _keeper.motor.z)
 	var at := Vector3(me.x + across, GameRules.PUCK_COLLISION_HALF_HEIGHT, me.y + depth)
 	if at.z >= -GameRules.PUCK_COLLISION_RADIUS:
-		return "still (behind the line)"
+		return "still skip (behind the line)"
 	var v := Vector3(sin(heading), 0.0, cos(heading)) * speed
 	_puck.clear_carrier()
 	_puck.motion_pinned = false
@@ -125,7 +134,13 @@ func _trial(across: float, depth: float, speed: float, heading: float) -> String
 			return "covered" if _covered else "gone"
 	if _covered:
 		return "covered"
-	return "still"
+	var rest: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
+	if not KeeperCover.at_feet(rest, Vector3.ZERO, _keeper.motor):
+		return "still near"
+	var mine: Vector3 = Basis(Vector3.UP, _keeper.motor.yaw).inverse() \
+			* (rest - Vector3(_keeper.motor.x, 0.0, _keeper.motor.z))
+	return "still feet: %+.2f across, %+.2f ahead of him, rest %d, he was %s, covering %s" % [mine.x, -mine.z,
+			_keeper.motor.rest, KeeperMotor.Mover.keys()[_keeper.motor._mover], _keeper._covering]
 
 
 # Set on a puck lying at `_set_on`, from a full reset.
@@ -154,7 +169,7 @@ func test_trace_rvh_dead_puck() -> void:
 	_puck.set_puck_velocity(Vector3.ZERO)
 	_rebase_gear()
 	var lines: PackedStringArray = ["him at %s yaw %.2f rest %d" % [me, _keeper.motor.yaw, _keeper.motor.rest]]
-	for i: int in 40:
+	for i: int in 120:
 		_keeper._physics_process(DT)
 		_tick_puck()
 		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
@@ -167,11 +182,10 @@ func test_trace_rvh_dead_puck() -> void:
 	assert_true(true)
 
 
-const TRACED: Array = [["square", 1.5, 0.0, 0.0, 0.25], ["square", 2.5, 0.0, -0.6, 0.0],
-		["square", 2.5, 0.0, 0.6, 0.0], ["angle", 1.5, 45.0, -0.3, 0.5], ["angle", 1.5, 45.0, 0.0, 0.0],
-		["angle", 1.5, 0.0, 0.6, 0.25], ["angle", 2.5, 45.0, 0.0, -0.25], ["post", 0.6, 45.0, 0.6, 0.25],
-		["post", 0.6, 315.0, 0.9, 0.25], ["post", 1.5, 0.0, 0.9, -0.25], ["post", 2.5, 45.0, -0.3, 0.0],
-		["post", 2.5, 270.0, 0.3, -0.25], ["post", 2.5, 315.0, 0.6, -0.5], ["rvh", 0.0, 0.0, -0.3, -0.25]]
+const TRACED: Array = [["square", 2.5, 0.0, -0.3, 0.0], ["angle", 1.5, 315.0, 0.0, 0.5],
+		["angle", 2.5, 0.0, -0.3, -0.25], ["angle", 2.5, 45.0, 0.0, -0.25], ["post", 2.5, 315.0, 0.0, 0.25],
+		["post", 2.5, 270.0, 0.3, -0.25], ["post", 2.5, 270.0, 0.9, 0.25], ["rvh", 1.5, 45.0, -0.6, -0.5],
+		["rvh", 2.5, 90.0, -0.3, -0.5]]
 
 
 func test_trace_the_goals_off_him() -> void:

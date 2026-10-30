@@ -20,14 +20,27 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # covered, him frozen where he made it; every other contact is the puck's
 # rebound off the box it struck. A loose puck he can reach he covers
 # (KeeperCover): down over it, the glove onto it, live until the glove is on
-# it; one a push away that no opponent can get to first he skates to and
-# covers (KeeperFetch).
+# it or his pads come down on it; one at his feet he plays where he is, never
+# skating about with it under him; one a push away that no opponent can get to
+# first he skates to and covers (KeeperFetch).
 #
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
 
 # Ticks between the planner's runs: 30 Hz.
 const PLANNER_EVERY: int = _PhysicsConstants.PHYSICS_TICK / 30
+# A puck at his feet this near dead ahead of him he steps up to; one further
+# round he turns to.
+const STEP_UP_RAD: float = deg_to_rad(45.0)
+# The turns tried on his feet to bring a puck beside or behind him into his
+# glove's reach, least first; each stops this far short of facing it, so the
+# blade held out ahead of him never sweeps round onto it.
+const COVER_TURNS_RAD: Array[float] = [deg_to_rad(30.0), deg_to_rad(60.0), deg_to_rad(90.0), deg_to_rad(120.0)]
+const BLADE_CLEAR_RAD: float = deg_to_rad(40.0)
+# How long a cover goes on with the puck at his feet but out of the glove's
+# reach before he gives it up and plays it from his feet again: a tick or two
+# of a drop reshaping his reach, not a puck that has got away.
+const COVER_GRACE_S: float = 0.1
 # How long he holds a caught or covered puck before he plays it out, where no
 # whistle has come for it (GameRules.whistles_a_cover).
 const CATCH_HOLD_S: float = 1.0
@@ -60,6 +73,11 @@ var _chosen: bool = false
 var _covering: bool = false
 # Whether he is skating to a loose puck to cover it (KeeperFetch).
 var _fetching: bool = false
+# Whether a loose puck lies at his feet (KeeperCover.at_feet): he plays it where
+# he is rather than skating about with it under him.
+var _at_feet: bool = false
+# Seconds a cover under way has had the puck out of the glove's reach.
+var _out_of_reach_s: float = 0.0
 # Skating onto the line of a shot he has read before he sets for its save.
 var _squaring: bool = false
 # Seconds into the read the save was chosen, and the shot over; below zero, not
@@ -71,6 +89,8 @@ var _felt: bool = false
 # Where a puck caught on his chest is held, in the chest protector's frame;
 # INF none (a glove catch is held in the glove).
 var _chest_held := Vector3.INF
+# Where a puck smothered under his pads is held, in the rink; INF none.
+var _smothered_at := Vector3.INF
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -123,10 +143,13 @@ func _place_in_crease() -> void:
 	save = KeeperSave.new()
 	cover = KeeperCover.new()
 	look.reset()
+	_keeper_pose = KeeperPose.new()
 	_ticks = 0
 	_chosen = false
 	_covering = false
 	_fetching = false
+	_at_feet = false
+	_out_of_reach_s = 0.0
 	_squaring = false
 	_chosen_at = -1.0
 	_over_at = -1.0
@@ -135,6 +158,7 @@ func _place_in_crease() -> void:
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
 	_chest_held = Vector3.INF
+	_smothered_at = Vector3.INF
 	_velocity_x = 0.0
 	_velocity_z = 0.0
 	_last_velocity = Vector3.ZERO
@@ -169,15 +193,32 @@ func _play(delta: float) -> void:
 	_read_play(delta, in_net)
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
 	_save_the_shot()
-	_cover_the_puck(in_net)
+	_cover_the_puck(delta, in_net)
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
 		_read_receivers()
-		_fetch_the_puck(in_net)
-		if not _fetching:
-			brain.decide(play.puck, play.motion, motor)
+		if _at_feet:
+			_play_at_feet(in_net)
+		else:
+			_fetch_the_puck(in_net)
+			if not _fetching:
+				brain.decide(play.puck, play.motion, motor)
 	_ticks += 1
 	motor.step(delta)
 	_place_body()
+	_smother(in_net)
+
+
+# A puck he is going down to cover that his pads come down on: smothered under
+# them where it lies, dead and covered for the whistle as under the glove,
+# rather than kicked away by the pads landing.
+func _smother(in_net: Vector3) -> void:
+	if not _covering:
+		return
+	var mine: Vector3 = Basis(Vector3.UP, motor.yaw).inverse() * (in_net - Vector3(motor.x, 0.0, motor.z))
+	if KeeperCover.under_pads(_keeper.skeleton, mine):
+		_covering = false
+		_smothered_at = puck.global_position
+		_secure()
 
 
 # His velocity from where the node was a tick ago, and his acceleration in his
@@ -311,27 +352,71 @@ func _end_save() -> void:
 
 # A loose puck he can reach, with no shot to save: down over it and the glove
 # onto it, the glove following it as it slides; secured once the glove is on
-# it with the puck under it. Until then it is live, and a puck poked out of his
-# reach ends the cover.
-func _cover_the_puck(in_net: Vector3) -> void:
-	# Skating to one, he stops on his spot before he goes down on it.
-	var coverable: bool = _holding < 0.0 and not read.reading() and puck.get_carrier() == null \
-			and not puck.pickup_locked and (_covering or not _fetching or motor.is_idle()) \
-			and cover.plan(in_net, _net.basis.inverse() * puck.get_puck_velocity(), motor, _keeper.skeleton.mirrored)
+# it with the puck under it. Until then it is live. A puck at his feet he plays
+# where he is, nothing more asked of his skates, and once he has gone down on
+# it he stays at it while it is there, through a moment out of the glove's
+# reach; one poked away from his feet, or out of reach for longer, ends the
+# cover.
+func _cover_the_puck(delta: float, in_net: Vector3) -> void:
+	var v: Vector3 = _net.basis.inverse() * puck.get_puck_velocity()
+	var loose: bool = _holding < 0.0 and not read.reading() and puck.get_carrier() == null and not puck.pickup_locked
+	var was_at_feet: bool = _at_feet
+	_at_feet = loose and KeeperCover.at_feet(in_net, v, motor)
+	if _at_feet and not was_at_feet and not _covering:
+		_fetching = false
+		# Asked to be where he is: a pivot stops where it has turned to, a
+		# glide on its spot. Sealed on a post he already is.
+		if motor.rest != KeeperRoute.Rest.POST:
+			motor.go_to(Vector2(motor.x, motor.z), motor.yaw, motor.rest)
+	# Skating to one further off, he stops on his spot before he goes down on it.
+	var coverable: bool = loose and (_at_feet or _covering or not _fetching or motor.is_idle()) \
+			and cover.plan(in_net, v, motor, _keeper.skeleton.mirrored)
 	if not coverable:
-		if _covering:
+		_out_of_reach_s += delta
+		if _covering and (not _at_feet or _out_of_reach_s > COVER_GRACE_S):
 			_covering = false
 			save.release()
 			motor.end_save()
 		return
+	_out_of_reach_s = 0.0
 	if not _covering:
 		_covering = true
 		if motor.can_save(false):
 			motor.save(KeeperSaveMove.Low.BUTTERFLY, signf(cover.target.x))
-	save.cover(cover.target, cover.lean)
+	save.cover(cover.target, cover.lean, cover.toward, cover.fingers)
 	if save.hand_there() and _glove_on_puck():
 		_covering = false
 		_secure()
+
+
+# A puck at his feet out of his glove's reach: one ahead of him stepped up to,
+# stopping short of it (KeeperFetch); one beside or behind him turned to on his
+# feet, toward it but short of facing it, as far as brings it into reach, up
+# off his knees first.
+func _play_at_feet(in_net: Vector3) -> void:
+	var bearing: float = wrapf(KeeperPositioning.facing(Vector2(motor.x, motor.z), Vector2(in_net.x, in_net.z))
+			- motor.yaw, -PI, PI)
+	if absf(bearing) <= STEP_UP_RAD:
+		_fetch_the_puck(in_net)
+		return
+	_fetching = false
+	if not motor.is_idle():
+		return
+	if motor.rest != KeeperRoute.Rest.FEET:
+		motor.go_to(Vector2(motor.x, motor.z), motor.yaw)
+		return
+	var v: Vector3 = _net.basis.inverse() * puck.get_puck_velocity()
+	var was: float = motor.yaw
+	for turn: float in COVER_TURNS_RAD:
+		if turn > absf(bearing) - BLADE_CLEAR_RAD:
+			break
+		motor.yaw = wrapf(was + signf(bearing) * turn, -PI, PI)
+		var reaches: bool = cover.plan(in_net, v, motor, _keeper.skeleton.mirrored)
+		var to: float = motor.yaw
+		motor.yaw = was
+		if reaches:
+			motor.go_to(Vector2(motor.x, motor.z), to)
+			return
 
 
 # A loose puck near him that no opponent will get to first: skated to, square
@@ -526,8 +611,11 @@ func _on_puck_caught(contacted: Goalie) -> void:
 		save.trap(over)
 
 
-# Where the puck he holds is: in his glove, or on his chest where it was caught.
+# Where the puck he holds is: in his glove, on his chest where it was caught,
+# or under his pads where he smothered it.
 func _held_at() -> Vector3:
+	if _smothered_at != Vector3.INF:
+		return _smothered_at
 	if _chest_held == Vector3.INF:
 		return goalie.get_glove_world_position()
 	return goalie.global_transform * (KeeperGear.box(_keeper.skeleton, KeeperGear.Part.CHEST) * _chest_held)
@@ -553,6 +641,7 @@ func _hold_catch(delta: float) -> void:
 		return
 	_holding = -1.0
 	_chest_held = Vector3.INF
+	_smothered_at = Vector3.INF
 	var glove_side: float = 1.0 if _keeper.skeleton.mirrored else -1.0
 	var way: Vector2 = KeeperCover.play_out_way(motor.yaw, glove_side)
 	var at: Vector2 = KeeperCover.set_down_at(Vector2(motor.x, motor.z), way)

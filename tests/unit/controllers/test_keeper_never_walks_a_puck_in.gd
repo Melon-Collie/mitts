@@ -63,12 +63,12 @@ func _walked_in(set_on: Vector2, spot: Vector2, velocity: Vector2) -> bool:
 	_puck.global_position = _keeper._net * at
 	_puck.set_puck_velocity(_keeper._net.basis * Vector3(velocity.x, 0.0, velocity.y))
 	_touched = false
+	_rebase_gear()
 	var t: float = 0.0
 	while t < SECONDS:
 		_keeper._physics_process(DT)
 		var was: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
-		_puck._physics_process(DT)
-		_puck.drain_contact_events()
+		_tick_puck()
 		t += DT
 		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
 		if p.z >= 0.0 and was.z < 0.0 and absf(p.x) < GameRules.NET_HALF_WIDTH:
@@ -96,13 +96,29 @@ func test_a_puck_he_holds_at_the_post_he_never_plays_out_into_his_net() -> void:
 			var down: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
 			assert_lt(down.z, -GameRules.PUCK_COLLISION_RADIUS, "set down in front of his line, " + what)
 			var went_in: bool = false
+			_rebase_gear()
 			t = 0.0
 			while t < SECONDS and not went_in:
 				var was: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
-				_puck._physics_process(DT)
-				_puck.drain_contact_events()
+				_tick_puck()
 				_keeper._physics_process(DT)
 				t += DT
 				var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
 				went_in = p.z >= 0.0 and was.z < 0.0 and absf(p.x) < GameRules.NET_HALF_WIDTH
 			assert_false(went_in, "never into his net, " + what)
+
+
+# The puck's tick, his gear's velocities sampled from where his boxes were a
+# tick ago: stepped by hand inside one engine frame, Goalie's once-a-frame
+# cache would otherwise hold them at zero, as if his gear never moved.
+func _tick_puck() -> void:
+	_goalie._part_velocity_frame = Engine.get_physics_frames() - 1
+	_goalie.get_collision_part_velocities()
+	_puck._physics_process(DT)
+	_puck.drain_contact_events()
+
+
+# His gear's velocities read from rest where he stands now, before a trial.
+func _rebase_gear() -> void:
+	_goalie._part_velocity_frame = -10
+	_goalie.get_collision_part_velocities()

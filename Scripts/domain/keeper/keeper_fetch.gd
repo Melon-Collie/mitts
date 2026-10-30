@@ -15,9 +15,11 @@ extends RefCounted
 # with his read of the play as the margin to set out (he sees the opponent
 # late). Once he has gone he goes on while he still wins it.
 
-# Where he stands to cover a puck: this far short of it, the glove landing on
-# it out ahead of his knees (KeeperCover's reach from the butterfly).
-const COVER_AHEAD_M: float = 0.6
+# Where he stands to cover a puck: this far short of it, past the front of his
+# blade held out in the low ready with a puck's width to spare (~0.63 m), so
+# he never skates his stick onto it, and inside the glove's reach on the ice
+# ahead of his knees from the butterfly (KeeperCover's, to ~0.8 m).
+const COVER_AHEAD_M: float = 0.7
 # Behind the goal line, a puck this near the cage across is behind it.
 const CAGE_CLEAR_M: float = GameRules.NET_HALF_WIDTH + GameRules.PUCK_COLLISION_RADIUS + 0.1
 

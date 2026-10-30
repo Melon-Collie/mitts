@@ -69,6 +69,16 @@ func test_a_sliding_puck_is_covered_where_it_will_be_if_it_slows_enough() -> voi
 	assert_false(_cover.plan(_on_ice(-1.5, -0.6), Vector3(12.0, 0.0, 0.0), _motor, false), "a pass across: no")
 
 
+# At his feet: down on the ice, slow enough for the glove, inside what his gear
+# sweeps; not one wide of that, in the air or going faster.
+func test_a_puck_at_his_feet_is_one_his_gear_sweeps() -> void:
+	assert_true(KeeperCover.at_feet(_on_ice(0.3, 0.5), Vector3.ZERO, _motor), "behind him")
+	assert_true(KeeperCover.at_feet(_on_ice(-0.8, -0.3), Vector3(0.0, 0.0, 2.0), _motor), "dribbling by")
+	assert_false(KeeperCover.at_feet(_on_ice(0.0, -1.5), Vector3.ZERO, _motor), "past his blade")
+	assert_false(KeeperCover.at_feet(_on_ice(0.0, -0.5) + Vector3.UP * 0.4, Vector3.ZERO, _motor), "in the air")
+	assert_false(KeeperCover.at_feet(_on_ice(0.0, -0.5), Vector3(0.0, 0.0, 6.0), _motor), "a shot")
+
+
 func test_a_puck_slides_to_a_stop_on_the_ice_friction() -> void:
 	var v := Vector3(2.0, 0.0, 0.0)
 	var stop: float = 2.0 * 2.0 * 0.5 / GameRules.PUCK_ICE_DECEL_M_S2
@@ -96,14 +106,26 @@ func _lowest(part: int) -> float:
 # From his feet: down over a puck at his feet, the glove laid on it, every
 # tick unbroken; only a breach is asserted.
 func test_covering_from_his_feet_goes_down_and_lays_the_glove_on_it() -> void:
-	var puck := _on_ice(-0.25, -0.65)
-	assert_true(_cover.plan(puck, Vector3.ZERO, _motor, false))
+	_covers_from_his_feet(_on_ice(-0.25, -0.65))
+
+
+# Beside his pads and behind them, either side: turned on his hips and sunk
+# back between his skates, the glove laid on it the same way.
+func test_he_covers_a_puck_beside_or_behind_him_the_same_way() -> void:
+	for at: Vector3 in [_on_ice(-0.7, -0.1), _on_ice(-0.45, 0.3), _on_ice(0.7, -0.1), _on_ice(0.4, 0.35)]:
+		before_each()
+		_covers_from_his_feet(at)
+
+
+func _covers_from_his_feet(puck: Vector3) -> void:
+	assert_true(_cover.plan(puck, Vector3.ZERO, _motor, false), "%s: his to cover" % puck)
+	var said: float = _cover.land_s
 	_motor.save(KeeperSaveMove.Low.BUTTERFLY, signf(_cover.target.x))
 	var was: Array[Vector3] = _bones()
 	var t: float = 0.0
 	while not _save.hand_there() and t < 1.0:
 		assert_true(_cover.plan(puck, Vector3.ZERO, _motor, false), "t %.3f: still his" % t)
-		_save.cover(_cover.target, _cover.lean)
+		_save.cover(_cover.target, _cover.lean, _cover.toward, _cover.fingers)
 		_motor.step(DT)
 		_motor.pose(_pose)
 		_save.step(DT, false, _pose)
@@ -122,18 +144,18 @@ func test_covering_from_his_feet_goes_down_and_lays_the_glove_on_it() -> void:
 				.distance_to(_skel.xf[B.HAND_G].origin)
 		if gap > 0.002:
 			assert_almost_eq(gap, 0.0, 0.002, "t %.3f: the glove arm reaches its hand" % t)
-	assert_true(_save.hand_there(), "the glove gets there")
-	assert_lte(t, _cover.land_s + 2.0 * DT, "when the plan said")
+	assert_true(_save.hand_there(), "%s: the glove gets there" % puck)
+	assert_lte(t, said + 2.0 * DT, "%s: when the plan said" % puck)
 	for i: int in 30:
 		_motor.step(DT)
 		_motor.pose(_pose)
 		_save.step(DT, false, _pose)
 	_bones()
 	var glove: Vector3 = KeeperGear.box(_skel, KeeperGear.Part.GLOVE).origin
-	assert_lte(Vector2(glove.x - puck.x, glove.z - puck.z).length(), KeeperCover.PIN_M, "on the puck")
+	assert_lte(Vector2(glove.x - puck.x, glove.z - puck.z).length(), KeeperCover.PIN_M, "%s: on the puck" % puck)
 	var h: Vector3 = KeeperGear.half_extents(KeeperGear.Part.GLOVE)
-	assert_lte(glove.y - puck.y, h.length(), "down on it")
-	assert_eq(_motor.save_move.state, KeeperSaveMove.State.HELD, "down")
+	assert_lte(glove.y - puck.y, h.length(), "%s: down on it" % puck)
+	assert_eq(_motor.save_move.state, KeeperSaveMove.State.HELD, "%s: down" % puck)
 
 
 func test_a_held_puck_is_played_out_away_from_his_net_however_he_is_turned() -> void:

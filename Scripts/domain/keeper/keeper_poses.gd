@@ -101,7 +101,13 @@ const BUTTERFLY_BLADE := Vector3(-0.11, 0.0, -0.29)
 const COVER_HIP_FOLD_RAD: float = deg_to_rad(25.0)
 const COVER_TRUNK_FOLD_RAD: float = deg_to_rad(40.0)
 const COVER_CHEST_FOLD_RAD: float = deg_to_rad(25.0)
-const COVER_TURN_MAX_RAD: float = deg_to_rad(40.0)
+# Turned on the hips toward a puck beside or behind him, his glove shoulder
+# coming round and down after it; and sunk back between his skates (the W-sit
+# a butterfly allows) and over toward it, all of it for one beside him or
+# behind, none for one ahead, so the glove reaches the ice off his front.
+const COVER_TURN_MAX_RAD: float = deg_to_rad(90.0)
+const COVER_SIT_M: float = 0.3
+const COVER_SIT_OVER_M: float = 0.10
 const BUTTERFLY_STICK_TILT_RAD: float = deg_to_rad(28.0)
 
 
@@ -359,7 +365,8 @@ static func rvh(p: KeeperPose, side: float) -> void:
 # Leaning on over the pads to cover a puck at his feet at `toward`, `share` of
 # the way: the trunk folding forward from the hips and the chest after it, and
 # turning until the puck is ahead of his glove shoulder, so that shoulder comes
-# down and out over the ice the glove reaches for.
+# down and out over the ice the glove reaches for; for one off his front, his
+# hips sunk back and over toward it as far as it is off his front.
 static func cover_lean(p: KeeperPose, toward: Vector3, share: float) -> void:
 	p.pelvis_rot.x -= COVER_HIP_FOLD_RAD * share
 	p.lumbar_rot.x -= COVER_TRUNK_FOLD_RAD * share
@@ -369,9 +376,19 @@ static func cover_lean(p: KeeperPose, toward: Vector3, share: float) -> void:
 	var fold := Basis(Vector3.RIGHT, -(COVER_HIP_FOLD_RAD + COVER_TRUNK_FOLD_RAD + COVER_CHEST_FOLD_RAD) * share)
 	p.glove_elbow_pole = fold * p.glove_elbow_pole
 	p.blocker_elbow_pole = fold * p.blocker_elbow_pole
-	var turn: float = clampf(atan2(-(toward.x + KeeperAnatomy.SHOULDER_HALF_SPACING_M), -toward.z),
-			-COVER_TURN_MAX_RAD, COVER_TURN_MAX_RAD)
+	var turn: float = cover_turn(toward)
+	var off_front: float = clampf(absf(turn) / (PI * 0.5), 0.0, 1.0)
+	var over := Vector3(toward.x, 0.0, toward.z)
+	p.pelvis += (over.normalized() * COVER_SIT_OVER_M if over.length() > 1e-4 else Vector3.ZERO) * share * off_front \
+			+ Vector3.DOWN * COVER_SIT_M * share * off_front
 	turn_trunk(p, turn * share)
+
+
+# How far a full cover lean turns his trunk toward a puck at `toward`: until
+# it is ahead of his glove shoulder, no further than COVER_TURN_MAX_RAD.
+static func cover_turn(toward: Vector3) -> float:
+	return clampf(atan2(-(toward.x + KeeperAnatomy.SHOULDER_HALF_SPACING_M), -toward.z),
+			-COVER_TURN_MAX_RAD, COVER_TURN_MAX_RAD)
 
 
 # His trunk turned `turn` from the waist, about the vertical through his hips,
