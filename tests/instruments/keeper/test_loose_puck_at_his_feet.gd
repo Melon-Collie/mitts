@@ -106,12 +106,12 @@ func _trial(across: float, depth: float, speed: float, heading: float) -> String
 	_puck.set_puck_velocity(_keeper._net.basis * v)
 	_touched = "-"
 	_covered = false
+	_rebase_gear()
 	var t: float = 0.0
 	while t < SECONDS:
 		_keeper._physics_process(DT)
 		var before: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
-		_puck._physics_process(DT)
-		_puck.drain_contact_events()
+		_tick_puck()
 		t += DT
 		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
 		if p.z >= 0.0 and before.z < 0.0 and absf(p.x) < GameRules.NET_HALF_WIDTH \
@@ -151,11 +151,11 @@ func test_trace_rvh_dead_puck() -> void:
 	_puck.clear_carrier()
 	_puck.global_position = _rink(at)
 	_puck.set_puck_velocity(Vector3.ZERO)
+	_rebase_gear()
 	var lines: PackedStringArray = ["him at %s yaw %.2f rest %d" % [me, _keeper.motor.yaw, _keeper.motor.rest]]
 	for i: int in 40:
 		_keeper._physics_process(DT)
-		_puck._physics_process(DT)
-		_puck.drain_contact_events()
+		_tick_puck()
 		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
 		var v: Vector3 = _keeper._net.basis.inverse() * _puck.get_puck_velocity()
 		lines.append("t %.3f him (%+.2f,%+.2f) yaw %+.2f rest %d mover %-8s goal (%+.2f,%+.2f) r%d cover %s | puck (%+.2f,%+.2f) v (%+.2f,%+.2f) %s" % [
@@ -164,3 +164,102 @@ func test_trace_rvh_dead_puck() -> void:
 				_keeper.motor.route.rest, _keeper._covering, p.x, p.z, v.x, v.z, _touched])
 	gut.p("\n" + "\n".join(lines))
 	assert_true(true)
+
+
+const TRACED: Array = [["square", 1.5, 0.0, 0.0, 0.25], ["square", 2.5, 0.0, -0.6, 0.0],
+		["square", 2.5, 0.0, 0.6, 0.0], ["angle", 1.5, 45.0, -0.3, 0.5], ["angle", 1.5, 45.0, 0.0, 0.0],
+		["angle", 1.5, 0.0, 0.6, 0.25], ["angle", 2.5, 45.0, 0.0, -0.25], ["post", 0.6, 45.0, 0.6, 0.25],
+		["post", 0.6, 315.0, 0.9, 0.25], ["post", 1.5, 0.0, 0.9, -0.25], ["post", 2.5, 45.0, -0.3, 0.0],
+		["post", 2.5, 270.0, 0.3, -0.25], ["post", 2.5, 315.0, 0.6, -0.5], ["rvh", 0.0, 0.0, -0.3, -0.25]]
+
+
+func test_trace_the_goals_off_him() -> void:
+	_build()
+	var lines: PackedStringArray = []
+	for c: Array in TRACED:
+		for s: Array in SET_ON:
+			if s[0] == c[0]:
+				_set_on = s[1]
+		lines.append("== %s %.1f m/s heading %.0f° from (%+.2f, %+.2f)  without him: %s" % [c[0], c[1], c[2], c[3],
+				c[4], _without_him(c)])
+		_trace(c, lines)
+	gut.p("\n" + "\n".join(lines))
+	assert_true(true)
+
+
+func _start(c: Array) -> Array:
+	var at := Vector3(_keeper.motor.x + float(c[3]), GameRules.PUCK_COLLISION_HALF_HEIGHT, _keeper.motor.z + float(c[4]))
+	var h: float = deg_to_rad(float(c[2]))
+	return [at, Vector3(sin(h), 0.0, cos(h)) * float(c[1])]
+
+
+func _without_him(c: Array) -> String:
+	_settle()
+	var s: Array = _start(c)
+	_puck.set_goalie_provider(func() -> Array: return [])
+	_puck.clear_carrier()
+	_puck.global_position = _rink(s[0])
+	_puck.set_puck_velocity(_keeper._net.basis * (s[1] as Vector3))
+	var out: String = "misses"
+	var t: float = 0.0
+	while t < SECONDS:
+		var before: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
+		_puck._physics_process(DT)
+		_puck.drain_contact_events()
+		t += DT
+		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
+		if p.z >= 0.0 and before.z < 0.0 and absf(p.x) < GameRules.NET_HALF_WIDTH:
+			out = "in at x %+.2f, %.2f s" % [p.x, t]
+			break
+	var rest: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
+	_puck.set_goalie_provider(func() -> Array: return [_goalie])
+	return out if out != "misses" else "stops at (%+.2f, %+.2f)" % [rest.x, rest.z]
+
+
+func _trace(c: Array, lines: PackedStringArray) -> void:
+	_settle()
+	var s: Array = _start(c)
+	var inv: Basis = _keeper._net.basis.inverse()
+	lines.append("   him at (%+.2f, %+.2f) yaw %+.0f° rest %d; puck at (%+.2f, %+.2f)" % [_keeper.motor.x,
+			_keeper.motor.z, rad_to_deg(_keeper.motor.yaw), _keeper.motor.rest, (s[0] as Vector3).x, (s[0] as Vector3).z])
+	_puck.clear_carrier()
+	_puck.global_position = _rink(s[0])
+	_puck.set_puck_velocity(_keeper._net.basis * (s[1] as Vector3))
+	_rebase_gear()
+	var t: float = 0.0
+	while t < SECONDS:
+		_keeper._physics_process(DT)
+		var v0: Vector3 = inv * _puck.get_puck_velocity()
+		var before: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
+		_puck._goalie_contact.part = null
+		_tick_puck()
+		t += DT
+		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
+		var v1: Vector3 = inv * _puck.get_puck_velocity()
+		var part: Node = _puck._goalie_contact.part
+		if part != null:
+			var pv: Vector3 = inv * _puck._goalie_contact.part_velocity
+			var n: Vector3 = inv * _puck._goalie_contact.normal
+			lines.append("   t %.2f %-9s gear v (%+.2f,%+.2f) normal (%+.2f,%+.2f) | him (%+.2f,%+.2f) %s | puck (%+.2f,%+.2f) v (%+.2f,%+.2f) -> (%+.2f,%+.2f)" % [
+					t, String(part.name), pv.x, pv.z, n.x, n.z, _keeper.motor.x, _keeper.motor.z,
+					KeeperMotor.Mover.keys()[_keeper.motor._mover], p.x, p.z, v0.x, v0.z, v1.x, v1.z])
+		if p.z >= 0.0 and before.z < 0.0 and absf(p.x) < GameRules.NET_HALF_WIDTH:
+			lines.append("   IN at %.2f s x %+.2f" % [t, p.x])
+			return
+	lines.append("   not in this time")
+
+
+# The puck's tick, his gear's velocities sampled from where his boxes were a
+# tick ago: stepped by hand inside one engine frame, Goalie's once-a-frame
+# cache would otherwise hold them at zero, as if his gear never moved.
+func _tick_puck() -> void:
+	_goalie._part_velocity_frame = Engine.get_physics_frames() - 1
+	_goalie.get_collision_part_velocities()
+	_puck._physics_process(DT)
+	_puck.drain_contact_events()
+
+
+# His gear's velocities read from rest where he stands now, before a trial.
+func _rebase_gear() -> void:
+	_goalie._part_velocity_frame = -10
+	_goalie.get_collision_part_velocities()
