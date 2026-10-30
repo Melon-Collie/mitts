@@ -99,6 +99,8 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	bool ok = true;
 	hand_rest_y = read(t, "hand_rest_y", ok);
 	hand_y_max = read(t, "hand_y_max", ok);
+	hand_pivot_forward = read(t, "hand_pivot_forward", ok);
+	hand_pivot_inward = read(t, "hand_pivot_inward", ok);
 	faceoff_center_hand_rise = read(t, "faceoff_center_hand_rise", ok);
 	faceoff_center_lean_deg = read(t, "faceoff_center_lean_deg", ok);
 	stick_length = read(t, "stick_length", ok);
@@ -412,6 +414,10 @@ NativeBladePass::Cfg NativeBladePass::ik_config(double p_blade_y, double max_rea
 	cfg.max_blade_reach = max_reach;
 	cfg.stick_length = stick_length - s[S_GRIP_CHOKE];
 	cfg.hand_y_max = address_hand_ceiling();
+	// SkaterIKCoordinator._pivot_offset.
+	const double share = 1.0 - s[S_ADDRESS];
+	cfg.pivot_forward = hand_pivot_forward * share;
+	cfg.pivot_inward = hand_pivot_inward * share;
 	return cfg;
 }
 
@@ -438,9 +444,14 @@ double NativeBladePass::lean_corrected_y(double x, double z) const {
 	return numerator / (cp * cr);
 }
 
-// SkaterIKCoordinator._blade_target_for.
+// SkaterIKCoordinator._blade_target_for (the stick's line, _stick_dir_to).
 Vector2 NativeBladePass::blade_target_for(const Vector2 &cursor_xz) const {
-	const Vector2 to_target = cursor_xz - Vector2(v[V_SHOULDER].x, v[V_SHOULDER].z);
+	const double share = 1.0 - s[S_ADDRESS];
+	top->set_pivot_forward(hand_pivot_forward * share);
+	top->set_pivot_inward(hand_pivot_inward * share);
+	const Vector2 hand = top->hand_xz_for(Vector2(v[V_SHOULDER].x, v[V_SHOULDER].z), cursor_xz,
+			blade_y_local, sign, stick_length - s[S_GRIP_CHOKE], hand_rest_y);
+	const Vector2 to_target = cursor_xz - hand;
 	if ((double)to_target.length() <= 0.001) {
 		return cursor_xz;
 	}
@@ -512,6 +523,8 @@ Vector2 NativeBladePass::carry_backhand_stop(const Vector2 &target_xz) const {
 }
 
 void NativeBladePass::apply_cfg(const Cfg &cfg) const {
+	top->set_pivot_forward(cfg.pivot_forward);
+	top->set_pivot_inward(cfg.pivot_inward);
 	top->set_hand_rest_y(cfg.hand_rest_y);
 	top->set_blade_y(cfg.blade_y);
 	top->set_max_blade_reach(cfg.max_blade_reach);
@@ -560,6 +573,8 @@ void NativeBladePass::solve_top_hand(Vector2 desired_xz, double max_reach, bool 
 		cfg.max_blade_reach = max_reach;
 	}
 	top->set_hand_rest_y(cfg.hand_rest_y);
+	top->set_pivot_forward(cfg.pivot_forward);
+	top->set_pivot_inward(cfg.pivot_inward);
 	top->solve_on_ice(shoulder, target_xz, sign, cfg.blade_y, 0.0, 0.0, max_reach,
 			cfg.stick_length, cfg.hand_y_max);
 	const Basis untilt = tilt.transposed();
@@ -687,37 +702,32 @@ double NativeBladePass::max_reach_for_angle(double angle_to_forehand) const {
 // TopHandIK.hand_for_clamped_blade.
 Vector3 NativeBladePass::hand_for_clamped_blade(const Vector3 &shoulder, const Vector2 &blade_xz,
 		double p_blade_y, const Cfg &cfg) const {
+	top->set_pivot_forward(cfg.pivot_forward);
+	top->set_pivot_inward(cfg.pivot_inward);
 	const Vector2 shoulder_xz(shoulder.x, shoulder.z);
 	const Vector2 from_shoulder = blade_xz - shoulder_xz;
 	const double d = from_shoulder.length();
 	const double rest_drop = cfg.hand_rest_y - p_blade_y;
-	const double stick_horiz_at_rest = Math::sqrt(MAX(cfg.stick_length * cfg.stick_length - rest_drop * rest_drop, 0.0001));
-	// TopHandIK.hand_reach.
-	const double x = d - stick_horiz_at_rest;
-	const double band = 0.08;
-	double reach = x;
-	if (x <= -band) {
-		reach = 0.0;
-	} else if (x < band) {
-		reach = (x + band) * (x + band) / (4.0 * band);
-	}
+	const double rest_horiz = Math::sqrt(MAX(cfg.stick_length * cfg.stick_length - rest_drop * rest_drop, 0.0001));
+	const double reach = NativeTopHandIK::hand_reach(d, rest_horiz);
+	const double l2 = cfg.stick_length * cfg.stick_length;
 	if (reach <= 0.0) {
-		const double drop_sq = cfg.stick_length * cfg.stick_length - d * d;
-		const double hand_y = MIN(p_blade_y + Math::sqrt(MAX(drop_sq, 0.0)), cfg.hand_y_max);
-		return Vector3(shoulder_xz.x, hand_y, shoulder_xz.y);
+		const Vector2 pivot = NativeTopHandIK::pivot_at(shoulder_xz, sign, cfg.pivot_forward,
+				cfg.pivot_inward);
+		const double horiz = blade_xz.distance_to(pivot);
+		const double hand_y = MIN(p_blade_y + Math::sqrt(MAX(l2 - horiz * horiz, 0.0)), cfg.hand_y_max);
+		return Vector3(pivot.x, hand_y, pivot.y);
 	}
 	const Vector2 dir = from_shoulder / (real_t)d;
 	const double angle_to_forehand = CLAMP(
 			Math::atan2((double)dir.x, -(double)dir.y) * sign,
 			-top->get_rom_backhand_angle_max(), top->get_rom_forehand_angle_max());
 	const double held = MIN(reach, max_reach_for_angle(angle_to_forehand));
-	const Vector2 hand_xz = shoulder_xz + dir * (real_t)held;
-	// TopHandIK._hand_y_on_stick.
-	const double horiz = d - reach;
-	double hand_y = cfg.hand_rest_y;
-	if (horiz < stick_horiz_at_rest) {
-		hand_y = p_blade_y + Math::sqrt(MAX(cfg.stick_length * cfg.stick_length - horiz * horiz, 0.0));
-	}
+	const Vector2 free_xz = top->hand_xz_for(shoulder_xz, blade_xz, p_blade_y, sign,
+			cfg.stick_length, cfg.hand_rest_y);
+	const Vector2 hand_xz = free_xz - dir * (real_t)(reach - held);
+	const double horiz = blade_xz.distance_to(free_xz);
+	const double hand_y = p_blade_y + Math::sqrt(MAX(l2 - horiz * horiz, 0.0));
 	return Vector3(hand_xz.x, MIN(hand_y, cfg.hand_y_max), hand_xz.y);
 }
 

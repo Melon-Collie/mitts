@@ -67,13 +67,16 @@ func _tick(cursor: Vector3) -> void:
 # on every tick of the drag and the hold; returns the first failure, or "".
 func _press(at: Vector3, facing: Vector2, from: Vector3, to: Vector3, check: Callable) -> String:
 	var sk: Skater = _c.skater
+	# Standing on the ice, as in a game: the stick's pitch, and so how far in to
+	# the body the blade can come, is read off the body's height.
+	at.y = GameRules.FACEOFF_SPAWN_HEIGHT
 	var start: Vector3 = at - Vector3(facing.x, 0.0, facing.y) * 3.0
 	sk.global_position = start
 	sk.velocity = Vector3.ZERO
 	sk.set_facing(facing)
 	_c._ik.reset_blade_smoothing()
 	sk.reseed_blade_history()
-	var hold: Vector3 = from - at
+	var hold: Vector3 = from - Vector3(at.x, 0.0, at.z)
 	for i: int in 30:
 		_tick(start + hold)
 	for i: int in 60:

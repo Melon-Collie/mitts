@@ -357,12 +357,13 @@ blade in tight cannot be authored that way, and the check commit is the worked
 example.
 
 `TopHandIK` has two regimes. Inside the stick's resting horizontal reach it goes
-CLOSE, which pins the hand's XZ **at the shoulder marker** and varies only its
-height — the blade's authored distance stops mattering entirely, and past the
-`hand_y_max` ceiling the blade overshoots along the aim line instead of landing
-where it was put. Meanwhile the rendered arm roots at the shoulder the trunk
-texture has MOVED (`SkaterArmRig._textured_shoulder`), which a lean and a
-load-up carry ~0.16 m forward. Put together, the arm roots in FRONT of its own
+CLOSE, which pins the hand's XZ **at its pivot, a fixed offset off the shoulder
+marker** (`TopHandIK.pivot_xz`) and varies only its height — the blade's
+authored distance stops mattering entirely, and past the `hand_y_max` ceiling
+the blade overshoots along the aim line instead of landing where it was put.
+Meanwhile the rendered arm roots at the shoulder the trunk texture has MOVED
+(`SkaterArmRig._textured_shoulder`), which a lean and a load-up carry ~0.16 m
+forward. Put together, the arm roots in FRONT of its own
 hand: the shoulder→hand chord points down and back, a mostly-downward elbow pole
 projects forward off such a chord, and the forearm folds behind the upper arm.
 
@@ -436,7 +437,7 @@ on the stop flips the pivot on noise and the hips sit between the lines. Capped,
 because a body still turning onto the line from a cursor squared beside it
 reads the same way. `test_facing_follows_travel.gd` holds all of it.
 
-On the forehand the stop is the two-hand reach, ~145° off facing on every
+On the forehand the stop is the two-hand reach, ~150° off facing on every
 build, short of the 157° pivot edge. Hips held on the line through a sweep round
 the forehand park the puck at the stop until the pivot whips it on (~840°/s of
 hips): a release and a repush, two taps. So the carrier's hips yield: past

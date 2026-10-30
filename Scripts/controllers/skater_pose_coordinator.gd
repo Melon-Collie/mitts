@@ -557,14 +557,19 @@ func apply_upper_body(delta: float) -> void:
 	var target_angle: float = 0.0
 	var target_lean: Vector2 = Vector2.ZERO
 	# Measured as the solve measures it (SkaterIKCoordinator._solve_top_hand): off
-	# the shoulder the arm is drawn from, in the arm's level frame — less the
-	# faceoff fold, which the address share zeroes this lean through anyway.
+	# the pivot the hand holds the stick at, ahead of the shoulder the arm is
+	# drawn from, in the arm's level frame — less the faceoff fold, which the
+	# address share zeroes this lean through anyway.
 	var rot: Vector3 = _skater.upper_body.rotation
 	var tilt: Basis = Basis.from_euler(Vector3(rot.x, 0.0, rot.z))
 	var shoulder: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
 			_skater.shoulder.position, rot, 0.0, _skater.trunk_fold())
+	var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
+	var shoulder_xz := Vector2(shoulder.x, shoulder.z)
+	var pivot: Vector2 = TopHandIK.pivot_at(shoulder_xz, rim_side_sign,
+			_controller.hand_pivot_forward, _controller.hand_pivot_inward)
 	var hand: Vector3 = tilt * _skater.top_hand.position
-	var hand_vec := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
+	var hand_vec: Vector2 = Vector2(hand.x, hand.z) - pivot
 	var hand_reach: float = hand_vec.length()
 
 	# Drive twist from the blade's world direction in the skater body frame.
@@ -590,15 +595,13 @@ func apply_upper_body(delta: float) -> void:
 				_controller.wrister_coil)
 
 	if hand_reach > 0.01:
-		# Measured against the rim in the hand's own direction, so the lean commits
-		# at full reach whichever way the arm is extending.
-		var rim_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
+		# Measured against the rim along the hand's own line off the pivot, so the
+		# lean commits at full reach whichever way the arm is extending.
 		target_lean = compute_upper_body_lean_target(
-				Vector2(hand.x, hand.z),
-				Vector2(shoulder.x, shoulder.z),
-				TopHandIK.rim_reach(atan2(hand_vec.x, -hand_vec.y) * rim_side_sign,
-						_controller.rom_forward_reach_max, _controller.rom_forehand_reach_max,
-						_controller.rom_backhand_reach_max),
+				Vector2(hand.x, hand.z), pivot,
+				TopHandIK.rim_exit_of(pivot - shoulder_xz, hand_vec / hand_reach,
+						rim_side_sign, _controller.rom_forward_reach_max,
+						_controller.rom_forehand_reach_max, _controller.rom_backhand_reach_max),
 				_reach_lean_max_deg(hand_vec),
 				_controller.upper_body_lean_engage_power) \
 				* (1.0 - _address_share()) * _controller.reach_purpose()

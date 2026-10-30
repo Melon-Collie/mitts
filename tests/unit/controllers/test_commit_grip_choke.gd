@@ -33,7 +33,9 @@ class GameStateStub:
 		return false
 
 
-func _committed(lefty: bool, hit: bool) -> SkaterController:
+# `reach`: a loose puck down the cursor's line for the stick to reach out for, so
+# it lies at its rest pitch rather than held in at the body.
+func _committed(lefty: bool, hit: bool, reach: bool = false) -> SkaterController:
 	var skater: Skater = SKATER_SCENE.instantiate() as Skater
 	skater.is_left_handed = lefty
 	add_child_autofree(skater)
@@ -63,6 +65,8 @@ func _committed(lefty: bool, hit: bool) -> SkaterController:
 		input.host_timestamp += DT
 		input.move_vector = Vector2(0.0, -1.0)
 		input.mouse_world_pos = skater.global_position + Vector3(0.0, 0.0, -3.0)
+		if reach:
+			puck.global_position = skater.global_position + Vector3(0.0, -skater.global_position.y, -1.5)
 		input.hit_held = hit
 		controller._process_input(input, DT)
 		skater._physics_process(DT)
@@ -131,7 +135,7 @@ func test_the_choke_shortens_the_grip_not_the_stick() -> void:
 	# The shaft is drawn hand→blade plus the butt overhang, so a choke that the
 	# butt did not absorb would render as a shorter STICK. Same skater, same
 	# stick: the drawn length must not move.
-	var loose: SkaterController = _committed(true, false)
+	var loose: SkaterController = _committed(true, false, true)
 	var choked: SkaterController = _committed(true, true)
 	assert_gt(choked.skater.grip_choke(), 0.1,
 			"the commit really is choking up — otherwise this proves nothing")

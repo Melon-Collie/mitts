@@ -3,8 +3,8 @@ extends GutTest
 # A client draws someone else's carry on the host's side. The carrier is the
 # real controller; every other tick it is broadcast as the host does (45 Hz,
 # blade and hand at the wire's centimetre) and a second skater is drawn from the
-# snapshots the way RemoteController draws one: the blade lerped between them
-# some ticks behind, the blade side off the wire. It must change face when the
+# snapshots the way RemoteController draws one: the blade and the torso's lean
+# lerped between them some ticks behind, the blade side off the wire. It must change face when the
 # carrier does — deciding the side itself, off a blade placed with the
 # carrier's, it read the difference as strokes and tapped about twice a stroke —
 # and pin the puck where the carrier has it.
@@ -124,6 +124,11 @@ func _broadcast(half_width_m: float, hz: float, tremor_m: float, fps: float,
 		r.set_facing(from.facing)
 		r.set_balance_tilt(from.balance_tilt, Vector2.ZERO)
 		r.set_upper_body_rotation(lerpf(from.upper_body_rotation_y, to.upper_body_rotation_y, f))
+		# The lean as SkaterPoseCoordinator.apply_wire_lean lays it: the reach lean
+		# and the posture's, the frame the markers hang in.
+		var posture: float = lerpf(from.posture_lean, to.posture_lean, f)
+		var lean: Vector2 = from.torso_lean.lerp(to.torso_lean, f)
+		r.set_upper_body_lean(lean.x + posture, lean.y, posture)
 		r.set_top_hand_position(from.top_hand_position.lerp(to.top_hand_position, f))
 		r.set_blade_position(from.blade_position.lerp(to.blade_position, f))
 		r.current_shot_state = to.shot_state

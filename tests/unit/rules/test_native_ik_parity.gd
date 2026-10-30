@@ -45,6 +45,11 @@ func _random_top_cfg() -> TopHandIK.Config:
 	# cases bind it across the CLOSE/FAR boundary so the capped regime split is
 	# fuzzed on both sides.
 	cfg.max_blade_reach = INF if _rng.randf() < 0.67 else _rng.randf_range(0.2, 2.0)
+	# The hand's pivot in front of the body, off the shoulder in a quarter of the
+	# cases so the shoulder-only solve is fuzzed too.
+	if _rng.randf() < 0.75:
+		cfg.pivot_forward = _rng.randf_range(0.0, 0.35)
+		cfg.pivot_inward = _rng.randf_range(0.0, 0.15)
 	return cfg
 
 
@@ -60,6 +65,8 @@ func _native_top_from(cfg: TopHandIK.Config) -> RefCounted:
 	native.rom_forehand_reach_max = cfg.rom_forehand_reach_max
 	native.rom_backhand_reach_max = cfg.rom_backhand_reach_max
 	native.max_blade_reach = cfg.max_blade_reach
+	native.pivot_forward = cfg.pivot_forward
+	native.pivot_inward = cfg.pivot_inward
 	return native
 
 

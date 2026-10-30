@@ -1552,6 +1552,15 @@ func _apply_blade_tilt() -> void:
 	var rot: Basis = _rigid_blade_basis(hand - heel, twist)
 	heel = _toe_on_ice(heel, rot, hand, twist, marker_global.origin.y, up)
 	rot = _swing_rigid(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel)
+	# The swing turns the blade it started with, which can put the toe where the
+	# solve above kept it out of the ice; the heel rises again for that.
+	for _i: int in _TOE_ICE_PASSES:
+		var toe_height: float = marker_global.origin.y \
+				+ (heel + rot * Vector3(0.0, 0.0, -blade_length)).dot(up)
+		if toe_height >= 0.0:
+			break
+		heel -= up * toe_height
+		rot = _swing_turned(_rigid_blade_basis(hand - heel, twist), marker.basis, hand - heel)
 	var keep_scale: Vector3 = _blade_mesh_instance.transform.basis.get_scale()
 	_blade_mesh_instance.transform = Transform3D(rot.scaled(keep_scale), heel)
 	_blade_drawn = marker * _blade_mesh_instance.transform
@@ -1585,12 +1594,22 @@ func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
 		_swing_anchor_hosel = hosel
 		_swing_anchor_up = upper_body.global_transform.basis.inverse() * Vector3.UP
 		return rot
+	_swing_weight = 1.0 if swinging \
+			else move_toward(_swing_weight, 0.0, _render_delta / SWING_RELEASE_S)
+	return _swing_turned(rot, marker_basis, to_hand)
+
+
+# The swing's blade for this hosel at its current weight: _swing_rigid without
+# advancing the swing, so a frame can turn it again for a heel it moved.
+func _swing_turned(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
+	if _swing_weight <= 0.0:
+		return rot
+	var to_hips: Basis = marker_basis.orthonormalized()
+	var hosel: Vector3 = (to_hips * to_hand).normalized()
 	var arc := Quaternion(_swing_anchor_hosel, hosel)
 	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
 	_swing_up = arc * _swing_anchor_up
-	_swing_weight = 1.0 if swinging \
-			else move_toward(_swing_weight, 0.0, _render_delta / SWING_RELEASE_S)
-	var q: Quaternion = dressed.get_rotation_quaternion().slerp(
+	var q: Quaternion = (to_hips * rot).orthonormalized().get_rotation_quaternion().slerp(
 			_swing_basis.get_rotation_quaternion(), _swing_weight)
 	return to_hips.inverse() * Basis(q)
 

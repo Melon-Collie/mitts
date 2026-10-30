@@ -104,6 +104,8 @@ private:
 	// SkaterController tunables (configure).
 	double hand_rest_y = 0.0;
 	double hand_y_max = 0.0;
+	double hand_pivot_forward = 0.0;
+	double hand_pivot_inward = 0.0;
 	double faceoff_center_hand_rise = 0.0;
 	double faceoff_center_lean_deg = 0.0;
 	double stick_length = 0.0;
@@ -184,6 +186,8 @@ private:
 		double blade_y;
 		double hand_rest_y;
 		double hand_y_max;
+		double pivot_forward;
+		double pivot_inward;
 		double stick_length;
 		double max_blade_reach;
 	};

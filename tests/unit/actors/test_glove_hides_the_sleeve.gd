@@ -89,12 +89,16 @@ static func _inside_section(p: Vector3, size: Vector2) -> bool:
 	return true
 
 
-# The sleeve on the arm whose upper arm is `upper`, skinned as drawn, skeleton
-# space.
+# The forearm's sleeve on the arm whose upper arm is `upper`, skinned as drawn,
+# skeleton space: past the elbow, where the glove can reach over it. With the
+# hand held up in front the cuff sits level with the shoulder, and the sleeve
+# there is beside the glove, not under it.
 func _skinned_sleeve(body: Skeleton3D, upper: int) -> PackedVector3Array:
 	var shoulder: Vector3 = body.get_bone_pose(upper) * Vector3(0.0, 0.0, 0.5)
 	var zone: int = SkaterConnectedMesh.zone(SkaterConnectedMesh.sleeve_surface(
 			signf(shoulder.x)))
+	var bind: Array[Vector3] = SkaterConnectedMesh.bind_arm(signf(shoulder.x))
+	var forearm: Vector3 = bind[2] - bind[1]
 	var skin: Skin = SkaterConnectedMesh.shared_skin()
 	var xforms: Array[Transform3D] = []
 	for i: int in skin.get_bind_count():
@@ -107,7 +111,7 @@ func _skinned_sleeve(body: Skeleton3D, upper: int) -> PackedVector3Array:
 	var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
 	var out := PackedVector3Array()
 	for v: int in verts.size():
-		if roundi(zones[v].x) != zone:
+		if roundi(zones[v].x) != zone or (verts[v] - bind[1]).dot(forearm) <= 0.0:
 			continue
 		var p := Vector3.ZERO
 		for k: int in 4:

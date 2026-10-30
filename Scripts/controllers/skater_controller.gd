@@ -288,15 +288,24 @@ var stick_length: float = GameRules.DEFAULT_STICK_LENGTH_M
 # sideways (derived backhand ROM 0.37 → 0.46 m of hand displacement), so rim reach
 # is roughly preserved and the directional reach lean stays pure bonus on top.
 var hand_rest_y: float = -0.10
-# Ceiling for hand Y in the CLOSE regime. When aiming very close to the
-# skater, the hand rises to shorten the stick's horizontal projection; this
-# cap keeps the pose anatomical (0.30 local = 1.30 m world at L2 — the hand
-# won't climb past chest level). Mesh-native like hand_rest_y; apply_
-# attributes scales it by height_mult so the ceiling stays chest-height on
-# every frame. With default stick_length = 1.30 m and the blade on the ice
-# (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
-# 1.27 → min horizontal stick reach ≈ 0.28 m.
-var hand_y_max: float = 0.30
+# Ceiling for hand Y in the CLOSE regime, and so the blade's floor: when aiming
+# close to the skater the hand rises to shorten the stick's horizontal
+# projection, and no further than this (0.20 local = 1.20 m world at L2, the
+# bottom of the chest). Above it the stick stands near vertical at the skates
+# and the arms fold into the trunk to hold it. Mesh-native like hand_rest_y;
+# apply_attributes scales it by height_mult. With default stick_length = 1.30 m
+# and the blade on the ice (blade_y ≈ -0.97 local at L2), hand_y_max = 0.20 →
+# hand-to-blade drop 1.17 → min horizontal stick reach ≈ 0.57 m off the pivot.
+var hand_y_max: float = 0.20
+# Where the top hand holds the stick when it is not reaching (TopHandIK's
+# pivot): ahead of the shoulder far enough that the shaft starts in front of the
+# body, where the bottom hand holds it without its arm crossing the trunk. In
+# toward the forehand too and a carry's shaft points square down a side-to-side
+# sweep, so a hand's tremor at the end of one reads as the puck leaving the
+# blade. Mesh-native; apply_attributes scales both by girth, as the trunk they
+# clear is scaled.
+var hand_pivot_forward: float = 0.25
+var hand_pivot_inward: float = 0.0
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
@@ -379,7 +388,7 @@ var bh_release_angle_deg: float = 67.0
 # Degrees past bh_release_angle_deg over which the hand blends to full rest.
 var bh_release_angle_band_deg: float = 15.0
 # How far round the forehand a carrier's cursor goes before the hips yield to it
-# (FacingRules.yield_on_forehand). The two-hand reach stops the blade at ~145°
+# (FacingRules.yield_on_forehand). The two-hand reach stops the blade at ~150°
 # on every build; yielding from well inside that spreads the hips' turn over the
 # sweep (test_carry_hips_yield.gd).
 var carry_forehand_yield_deg: float = 110.0
@@ -733,11 +742,12 @@ var head_track_speed: float = 12.0
 var head_track_max_deg: float = 60.0
 # A carrier glances down at the puck (degrees of nod) as the hands work it
 # (the puck's speed off the body over the band, m/s) and as it comes in tight
-# (its distance over the band, m), less as the skater picks up speed: eyes up
-# on open ice.
+# (its distance over the band, m: all the way down by the nearest a carry holds
+# it, hand_y_max's floor ahead of the skates), less as the skater picks up
+# speed: eyes up on open ice.
 var head_puck_nod_deg: float = 28.0
 var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
-var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
+var head_puck_close_band: Vector2 = Vector2(1.05, 0.85)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -1340,6 +1350,8 @@ var loft_tan_mid: float = GameRules.DEFAULT_LOFT_TAN_MID
 var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
+var _base_hand_pivot_forward:           float = 0.0
+var _base_hand_pivot_inward:            float = 0.0
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1510,6 +1522,8 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# almost exactly 1:1, so blade rim reach barely moves.
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
+	hand_pivot_forward = _base_hand_pivot_forward * attrs.girth_mult()
+	hand_pivot_inward = _base_hand_pivot_inward * attrs.girth_mult()
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1592,6 +1606,8 @@ func _capture_attribute_bases() -> void:
 	_base_stick_length                 = stick_length
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
+	_base_hand_pivot_forward           = hand_pivot_forward
+	_base_hand_pivot_inward            = hand_pivot_inward
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m

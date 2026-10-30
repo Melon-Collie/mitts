@@ -135,12 +135,15 @@ func test_the_blade_stands_off_the_free_puck() -> void:
 	assert_gt(share, 0.4, "a hard dangle is mostly a free puck")
 
 
+# Within a few centimetres of the carry offset: the carry's shaft stands steeper
+# than the blade's lie (the top hand is held in front of the body), so the blade
+# stands on its toe beside the puck and its middle sits a little wide of it.
 func test_a_slow_carry_keeps_the_blade_on_the_puck() -> void:
 	var c: SkaterController = _make_carrier()
 	var sk: Skater = c.skater
 	for s: Sample in _dangle(c, 0.25, 0.4, 2.5):
 		assert_false(s.release_hop, "a slow sweep never releases")
-		assert_lt(s.mesh_standoff, sk.carry_blade_offset + 0.01,
+		assert_lt(s.mesh_standoff, sk.carry_blade_offset + 0.025,
 				"a slow sweep keeps the blade on the puck")
 
 

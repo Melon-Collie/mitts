@@ -8,9 +8,12 @@ extends GutTest
 #   FAR   (target ≥ stick_horiz_at_rest): hand stays at hand_rest_y, displaces
 #         in XZ toward target up to ROM; blade sits stick_horiz_at_rest from
 #         clamped hand along the aim line.
-#   CLOSE (target < stick_horiz_at_rest): hand XZ stays at shoulder, hand Y
+#   CLOSE (target < stick_horiz_at_rest): hand XZ stays at the pivot, hand Y
 #         rises so the stick tilts vertical and blade lands on target.
 #         Clamped by hand_y_max; overshoots along aim line when clamped.
+#
+# _cfg() leaves the pivot on the shoulder; the pivot's own tests at the end
+# set one in front of it (_pivot_cfg).
 
 # Baselines chosen to match current game defaults.
 const STICK_LENGTH: float = 1.50
@@ -714,3 +717,170 @@ func test_a_held_target_sets_no_two_hand_limit() -> void:
 	var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, _cfg(),
 			Vector3(-SHOULDER_OFFSET, 0.0, 0.0), 0.25, 0.65, 0.0, TopHandIK.Result.new())
 	assert_eq(limit, INF, "a blade the other hand already reaches is not limited")
+
+
+# ── The pivot in front of the body ───────────────────────────────────────
+
+const PIVOT_FORWARD: float = 0.15
+const PIVOT_INWARD: float = 0.05
+
+
+func _pivot_cfg() -> TopHandIK.Config:
+	var cfg := _cfg()
+	cfg.pivot_forward = PIVOT_FORWARD
+	cfg.pivot_inward = PIVOT_INWARD
+	return cfg
+
+
+# Targets on a polar grid round `shoulder`, in the solve's XZ.
+func _grid(shoulder: Vector3) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for deg: int in range(-180, 180, 15):
+		for dist: float in [0.0, 0.1, 0.3, 0.6, 0.9, 1.16, 1.3, 1.6, 2.0, 4.0]:
+			var rad: float = deg_to_rad(float(deg))
+			out.append(Vector2(shoulder.x, shoulder.z) + Vector2(sin(rad), -cos(rad)) * dist)
+	return out
+
+
+func test_the_pivot_sits_ahead_and_in_toward_the_forehand() -> void:
+	var cfg := _pivot_cfg()
+	var lefty: Vector2 = TopHandIK.pivot_xz(Vector2(SHOULDER_OFFSET, 0.0), -1.0, cfg)
+	assert_almost_eq(lefty.x, SHOULDER_OFFSET - PIVOT_INWARD, 0.000001, "a lefty's forehand is -X")
+	assert_almost_eq(lefty.y, -PIVOT_FORWARD, 0.000001, "ahead is -Z")
+	var righty: Vector2 = TopHandIK.pivot_xz(Vector2(-SHOULDER_OFFSET, 0.0), 1.0, cfg)
+	assert_almost_eq(righty.x, -SHOULDER_OFFSET + PIVOT_INWARD, 0.000001, "a righty's is +X")
+
+
+func test_close_hand_holds_the_stick_at_the_pivot() -> void:
+	var cfg := _pivot_cfg()
+	var shoulder: Vector3 = _lefty_shoulder()
+	var pivot: Vector2 = TopHandIK.pivot_xz(Vector2(shoulder.x, shoulder.z), -1.0, cfg)
+	var r: TopHandIK.Result = TopHandIK.solve(shoulder, pivot + Vector2(-0.3, -0.7), -1.0, cfg)
+	assert_almost_eq(r.hand.x, pivot.x, 0.0005, "hand.x on the pivot")
+	assert_almost_eq(r.hand.z, pivot.y, 0.0005, "hand.z on the pivot")
+	assert_gt(r.hand.y, HAND_REST_Y, "and risen to tilt the stick in")
+
+
+func test_a_reachable_target_is_hit_exactly_with_a_pivot() -> void:
+	var cfg := _pivot_cfg()
+	var shoulder: Vector3 = _lefty_shoulder()
+	var pivot: Vector2 = TopHandIK.pivot_xz(Vector2(shoulder.x, shoulder.z), -1.0, cfg)
+	for deg: int in [-30, 0, 30]:
+		for dist: float in [STICK_HORIZ_AT_MAX + TopHandIK.REGIME_BAND_M + 0.01, 1.0, 1.3]:
+			var rad: float = deg_to_rad(float(deg))
+			var target: Vector2 = pivot + Vector2(-sin(rad), -cos(rad)) * dist
+			var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg)
+			assert_almost_eq(Vector2(r.blade.x, r.blade.z).distance_to(target), 0.0, 0.0005,
+					"%d° / %.2f m off the pivot lands on target" % [deg, dist])
+
+
+func test_the_stick_stays_rigid_about_the_pivot() -> void:
+	var cfg := _pivot_cfg()
+	for sign_i: float in [-1.0, 1.0]:
+		var shoulder: Vector3 = _lefty_shoulder() if sign_i < 0.0 else _righty_shoulder()
+		for target: Vector2 in _grid(shoulder):
+			var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, sign_i, cfg)
+			assert_almost_eq(r.hand.distance_to(r.blade), STICK_LENGTH, 0.0005,
+					"stick length at %s" % target)
+
+
+func test_the_hand_never_leaves_the_rim_about_the_shoulder() -> void:
+	var cfg := _pivot_cfg()
+	for sign_i: float in [-1.0, 1.0]:
+		var shoulder: Vector3 = _lefty_shoulder() if sign_i < 0.0 else _righty_shoulder()
+		for target: Vector2 in _grid(shoulder):
+			var hand: Vector3 = TopHandIK.solve(shoulder, target, sign_i, cfg).hand
+			var off := Vector2(hand.x - shoulder.x, hand.z - shoulder.z)
+			var rim: float = TopHandIK.max_reach_for_angle(atan2(off.x, -off.y) * sign_i, cfg)
+			assert_lte(off.length(), rim + 0.0005, "hand inside its rim for %s" % target)
+
+
+# Deep inside the floor: within REGIME_BAND_M of it the blade eases on.
+func test_a_target_inside_the_floor_goes_out_along_the_shoulders_aim() -> void:
+	var cfg := _pivot_cfg()
+	var shoulder: Vector3 = _lefty_shoulder()
+	var s := Vector2(shoulder.x, shoulder.z)
+	var pivot: Vector2 = TopHandIK.pivot_xz(s, -1.0, cfg)
+	for target: Vector2 in [s + Vector2(0.0, -0.2), s + Vector2(-0.08, -0.15), pivot,
+			s + Vector2(0.1, -0.3)]:
+		var blade: Vector3 = TopHandIK.project_blade(shoulder, target, -1.0, cfg)
+		var b := Vector2(blade.x, blade.z)
+		assert_almost_eq(b.distance_to(pivot), STICK_HORIZ_AT_MAX, 0.0005,
+				"%s: out to the stick's shortest span off the pivot" % target)
+		assert_almost_eq((b - s).normalized().dot((target - s).normalized()), 1.0, 0.0005,
+				"%s: along the aim from the shoulder" % target)
+
+
+func test_the_hand_inverts_with_a_pivot() -> void:
+	var cfg := _pivot_cfg()
+	for sign_i: float in [-1.0, 1.0]:
+		var shoulder: Vector3 = _lefty_shoulder() if sign_i < 0.0 else _righty_shoulder()
+		for target: Vector2 in _grid(shoulder):
+			var res: TopHandIK.Result = TopHandIK.solve(shoulder, target, sign_i, cfg)
+			var hand: Vector3 = TopHandIK.hand_for_clamped_blade(
+					shoulder, Vector2(res.blade.x, res.blade.z), res.blade.y, sign_i, cfg)
+			assert_almost_eq(hand.distance_to(res.hand), 0.0, 0.0005, "hand at %s" % target)
+
+
+# Swept along any aim, the blade and the hand move without a jump: the floor,
+# the regime change and the rim all meet their neighbours.
+func test_the_pose_is_continuous_along_every_aim() -> void:
+	var cfg := _pivot_cfg()
+	var shoulder: Vector3 = _lefty_shoulder()
+	for deg: int in range(-120, 46, 15):
+		var rad: float = deg_to_rad(float(deg))
+		var aim := Vector2(-sin(rad), -cos(rad))
+		var last: TopHandIK.Result = null
+		# From one step out: on the shoulder itself the aim has no direction.
+		for i: int in range(1, 400):
+			var target: Vector2 = Vector2(shoulder.x, shoulder.z) + aim * (float(i) * 0.005)
+			var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg)
+			if last != null:
+				assert_lt(r.blade.distance_to(last.blade), 0.02, "blade at %d°, %d" % [deg, i])
+				assert_lt(r.hand.distance_to(last.hand), 0.02, "hand at %d°, %d" % [deg, i])
+			last = TopHandIK.Result.new()
+			last.hand = r.hand
+			last.blade = r.blade
+
+
+func test_rim_exit_from_the_shoulder_is_the_rim() -> void:
+	var cfg := _cfg()
+	for sign_i: float in [-1.0, 1.0]:
+		# Straight behind is the step between the two sides' reach.
+		for deg: int in range(-170, 180, 10):
+			var a: float = deg_to_rad(float(deg))
+			var dir := Vector2(sin(a) * sign_i, -cos(a))
+			assert_almost_eq(TopHandIK.rim_exit(Vector2.ZERO, dir, sign_i, cfg),
+					TopHandIK.max_reach_for_angle(a, cfg), 0.0005, "%d° off ahead" % deg)
+
+
+func test_rim_exit_lands_on_the_rim_from_inside() -> void:
+	var cfg := _cfg()
+	var from := Vector2(-0.05, -0.15)
+	for deg: int in range(-180, 180, 10):
+		var a: float = deg_to_rad(float(deg))
+		var dir := Vector2(sin(a), -cos(a))
+		var at: Vector2 = from + dir * TopHandIK.rim_exit(from, dir, -1.0, cfg)
+		var rim: float = TopHandIK.max_reach_for_angle(atan2(at.x, -at.y) * -1.0, cfg)
+		# Straight behind the shoulder the rim steps between the two sides' reach.
+		if absf(at.x) > 0.001:
+			assert_almost_eq(at.length(), rim, 0.0005, "exit at %d° is on the rim" % deg)
+
+
+# Once the arm has reached PIVOT_FADE_SHARE of its rim the pivot has handed back
+# to the shoulder: the pose is the shoulder's alone.
+func test_a_reaching_arm_is_solved_from_the_shoulder_alone() -> void:
+	var with_pivot := _pivot_cfg()
+	var without := _cfg()
+	var shoulder: Vector3 = _lefty_shoulder()
+	var reaching: int = 0
+	for target: Vector2 in _grid(shoulder):
+		var a: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, with_pivot)
+		var b: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, without)
+		var off := Vector2(b.blade.x - shoulder.x, b.blade.z - shoulder.z)
+		var reach: float = TopHandIK.hand_reach(off.length(), STICK_HORIZ_AT_REST)
+		if TopHandIK.pivot_share(reach, off.normalized(), -1.0, with_pivot) == 0.0:
+			reaching += 1
+			assert_almost_eq(a.hand.distance_to(b.hand), 0.0, 0.0005, "hand at %s" % target)
+			assert_almost_eq(a.blade.distance_to(b.blade), 0.0, 0.0005, "blade at %s" % target)
+	assert_gt(reaching, 20, "the grid reaches")

@@ -32,20 +32,39 @@ class NativeTopHandIK : public godot::RefCounted {
 	double rom_forehand_reach_max = 0.0;
 	double rom_backhand_reach_max = 0.0;
 	double max_blade_reach = INFINITY;
+	double pivot_forward = 0.0;
+	double pivot_inward = 0.0;
 	// TopHandIK.REGIME_BAND_M.
 	static constexpr double REGIME_BAND_M = 0.08;
+	// TopHandIK.PIVOT_FADE_SHARE.
+	static constexpr double PIVOT_FADE_SHARE = 1.0;
 
 	godot::Vector3 hand;
 	godot::Vector3 blade;
 
 	godot::Vector2 clamp_aim_to_rom(const godot::Vector2 &aim_dir, double blade_side_sign) const;
-	double rim_reach(double angle_to_forehand) const;
 	static double stick_horiz_for(double stick_length, double hand_y, double blade_y);
 
 protected:
 	static void _bind_methods();
 
 public:
+	// TopHandIK.hand_reach.
+	static double hand_reach(double d, double rest_horiz);
+	// TopHandIK.pivot_at.
+	static godot::Vector2 pivot_at(const godot::Vector2 &shoulder_xz, double blade_side_sign,
+			double forward, double inward);
+	godot::Vector2 pivot_xz(const godot::Vector2 &shoulder_xz, double blade_side_sign) const {
+		return pivot_at(shoulder_xz, blade_side_sign, pivot_forward, pivot_inward);
+	}
+	// TopHandIK.max_reach_for_angle, from the instance's reach config.
+	double max_reach_for_angle(double angle_to_forehand) const;
+	// TopHandIK.pivot_share.
+	double pivot_share(double reach, const godot::Vector2 &dir, double blade_side_sign) const;
+	// TopHandIK.hand_xz_for, the stick's length and rest height given.
+	godot::Vector2 hand_xz_for(const godot::Vector2 &shoulder_xz, const godot::Vector2 &blade_xz,
+			double p_blade_y, double blade_side_sign, double p_stick_length, double p_hand_rest_y) const;
+
 	godot::Vector3 project_blade(
 			const godot::Vector3 &shoulder,
 			const godot::Vector2 &desired_blade_xz,
@@ -107,6 +126,10 @@ public:
 	double get_rom_backhand_reach_max() const { return rom_backhand_reach_max; }
 	void set_max_blade_reach(double v) { max_blade_reach = v; }
 	double get_max_blade_reach() const { return max_blade_reach; }
+	void set_pivot_forward(double v) { pivot_forward = v; }
+	double get_pivot_forward() const { return pivot_forward; }
+	void set_pivot_inward(double v) { pivot_inward = v; }
+	double get_pivot_inward() const { return pivot_inward; }
 };
 
 } // namespace mitts

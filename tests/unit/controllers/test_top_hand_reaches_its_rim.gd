@@ -163,9 +163,11 @@ func test_a_skating_backhand_reach_never_outreaches_the_drawn_arm() -> void:
 		assert_lt(worst, 1.0, "%s: the drawn arm spans %.3f of its length" % [what, worst])
 
 
-# In close the hand sits over the shoulder, and skating folds that shoulder out
-# ahead of the hips; the chest still turns to the blade, or a cursor beside the
-# hips lies past the arm's backhand angle and the blade stops ahead of it.
+# In close the hand holds the stick at its pivot, ahead of the shoulder, and
+# skating folds that shoulder out ahead of the hips; the chest still turns to
+# the blade, or a cursor beside the hips lies past the arm's backhand angle and
+# the blade stops ahead of it. The cursor is held just outside the blade's floor
+# (hand_y_max), which would otherwise push it out along the shoulder's aim.
 func test_a_close_skating_reach_still_twists_to_the_blade() -> void:
 	for deg: float in [45.0, -90.0]:
 		var c: SkaterController = _make_controller()
@@ -178,7 +180,7 @@ func test_a_close_skating_reach_still_twists_to_the_blade() -> void:
 				sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 			input.delta = DT
 			input.move_vector = Vector2(0.0, 1.0)
-			var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if i < 40 else dir * 1.0
+			var aim: Vector3 = Vector3(0.0, 0.0, 3.0) if i < 40 else dir * 1.2
 			input.mouse_world_pos = sk.global_position + aim
 			input.mouse_world_pos.y = 0.0
 			c._process_input(input, DT)

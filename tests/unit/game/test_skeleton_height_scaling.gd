@@ -90,7 +90,7 @@ func test_skeleton_scales_about_ice_plane() -> void:
 
 	# Hand heights and the gait's leg scale ride the same multiplier.
 	assert_almost_eq(controller.hand_rest_y, -0.10 * h, 0.0001, "hand rest scales")
-	assert_almost_eq(controller.hand_y_max, 0.30 * h, 0.0001, "hand ceiling scales")
+	assert_almost_eq(controller.hand_y_max, 0.20 * h, 0.0001, "hand ceiling scales")
 	assert_almost_eq(controller._skating.leg_scale, h, 0.0001, "gait leg scale set")
 
 	# Derived backhand ROM: whole chain (arm + drop) scales by h, so the

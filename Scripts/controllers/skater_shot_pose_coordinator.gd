@@ -73,15 +73,16 @@ func apply_slapper_blade_position() -> void:
 	_skater.set_blade_position(rigid.blade)
 
 
-# Where the blade meets the puck, upper-body-local, on the ice: the pinned puck
-# while there is one, else the strike spot. Both are fixed in the hips' frame,
+# Where the blade (its marker, the heel) meets the puck, upper-body-local, on
+# the ice: mid-blade on the pinned puck while there is one, else on the strike
+# spot, as the tracked stick holds it there. Both are fixed in the hips' frame,
 # so this turns against the shoulders as they coil.
 func _contact_local() -> Vector3:
 	var spot: Vector2 = _skater.slapshot_pin_local() if _skater.is_slapshot_pinning() \
 			else _controller.slapper_strike_local()
 	var local: Vector3 = _skater.upper_body_to_local(_skater.to_global(Vector3(spot.x, 0.0, spot.y)))
-	local.y = _ik.blade_y_lean_corrected(local.x, local.z)
-	return local
+	var heel: Vector2 = _ik.heel_for_contact(Vector2(local.x, local.z))
+	return Vector3(heel.x, _ik.blade_y_lean_corrected(heel.x, heel.y), heel.y)
 
 
 # The blade `wind_up_t` (0..1) of the way through the backswing: the XZ eases
@@ -101,14 +102,16 @@ func _wind_up_blade(wind_up_t: float) -> Vector3:
 			lerpf(contact.z, apex.z, eased))
 
 
+# From the hand the tracked stick holds the blade at contact with, where the
+# set-up left it, to the authored grip at the top of the backswing.
 func _wind_up_hand(wind_up_t: float) -> Vector3:
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var eased: float = sqrt(wind_up_t)
-	return Vector3(
-			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_wind_up_hand_inward * eased,
-			_controller.hand_rest_y + _controller.slapper_wind_up_hand_up * eased,
-			_skater.shoulder.position.z + (_controller.slapper_wind_up_hand_back
-				- _controller.slapper_wind_up_hand_forward) * eased)
+	var apex := Vector3(
+			_skater.shoulder.position.x + blade_side_sign * _controller.slapper_wind_up_hand_inward,
+			_controller.hand_rest_y + _controller.slapper_wind_up_hand_up,
+			_skater.shoulder.position.z + _controller.slapper_wind_up_hand_back
+				- _controller.slapper_wind_up_hand_forward)
+	return _ik.hand_for_blade(_contact_local()).lerp(apex, sqrt(wind_up_t))
 
 # ── Shot-Block Pose ───────────────────────────────────────────────────────────
 # Choreographed "stick down" block: the blade lies flat on the ice extended
@@ -257,13 +260,14 @@ func _apply_wrister_whip(t: float, aim_world: Vector3, stick_world: Vector3) -> 
 	var stick_dir: Vector3 = ShotMechanics.whip_local_dir(stick_world, upper_basis)
 	if stick_dir.length_squared() < 0.0001:
 		stick_dir = local_dir
-	# Hand near the shoulder + a carry along the shot, blade one stick-length
+	# Hand from its resting hold out to a carry along the shot, blade one stick-length
 	# along the finish line at ice + lift. This is the shared finish shape — the
 	# slapper's is the same pose reached a different way (see _place_finish).
 	var blade_side_sign: float = -1.0 if _skater.is_left_handed else 1.0
-	var carry: float = env * _controller.wrister_follow_through_reach
-	var hand_pos: Vector3 = _skater.shoulder.position + local_dir * carry
-	hand_pos.y = _controller.hand_rest_y + env * _controller.wrister_follow_through_hand_y
+	var finish: Vector3 = _skater.shoulder.position \
+			+ local_dir * _controller.wrister_follow_through_reach
+	finish.y = _controller.hand_rest_y + _controller.wrister_follow_through_hand_y
+	var hand_pos: Vector3 = _ik.rest_hand().lerp(finish, env)
 	var probe: Vector3 = hand_pos + stick_dir * _ik.stick_horiz()
 	var blade_y: float = _ik.blade_y_lean_corrected(probe.x, probe.z) \
 			+ env * _controller.wrister_follow_through_blade_lift
@@ -300,8 +304,7 @@ func apply_slapper_follow_through() -> void:
 	if dir_local.length_squared() < 0.0001:
 		dir_local = Vector3.FORWARD
 	var contact: Vector3 = _contact_local()
-	var hand_pos := Vector3(
-			_skater.shoulder.position.x, _controller.hand_rest_y, _skater.shoulder.position.z)
+	var hand_pos: Vector3 = _ik.hand_for_blade(contact)
 	var blade_pos: Vector3
 	var cf: float = clampf(_controller.slapper_downswing_time / total, 0.05, 0.9)
 	if t < cf:

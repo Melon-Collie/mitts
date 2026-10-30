@@ -4,8 +4,10 @@ extends GutTest
 # IK lays mid-blade, where the puck pins, on the cursor rather than the heel,
 # and the mesh's carry seat (Skater._seat_on_puck) slides the blade, however
 # the shaft pitches and the wrists roll it, until the part of it on the ice
-# meets the puck's rim. Pulled in close, the heel comes up and the toe holds
-# the puck. Driven through the real controller and render pass.
+# meets the puck's rim. The top hand holds the stick in front of the body
+# (TopHandIK's pivot), so a carry's shaft stands steeper than the blade's lie and
+# the puck rides toward the toe; pulled in close, the heel comes further up and
+# the toe holds it. Driven through the real controller and render pass.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -91,9 +93,11 @@ func _rest(sk: Skater) -> Vector2:
 	return Vector2(nearest - PUCK_R, at_u)
 
 
+# Out of the blade's floor (SkaterController.hand_y_max), which keeps a cursor
+# nearer the body from being reached at all.
 func test_the_puck_sits_on_the_cursor() -> void:
 	for dir: Vector3 in [FOREHAND, BACKHAND]:
-		for radius_m: float in [0.9, 0.75, 0.6]:
+		for radius_m: float in [1.15, 1.05, 0.95]:
 			var c: SkaterController = _make_carrier()
 			var cursor: Vector3 = _pull_in(c, dir, radius_m)
 			var pin: Vector3 = c.skater.get_carry_target_global()
@@ -117,5 +121,7 @@ func test_pulled_in_close_the_toe_holds_it() -> void:
 	_pull_in(flat, FOREHAND, 1.1)
 	var close: SkaterController = _make_carrier()
 	_pull_in(close, FOREHAND, 0.4)
-	assert_between(_rest(flat.skater).y, 0.4, 0.65, "out at the rim, mid-blade on it")
-	assert_gt(_rest(close.skater).y, 0.7, "in tight the heel is up, and the toe on the puck")
+	var rim: float = _rest(flat.skater).y
+	var tight: float = _rest(close.skater).y
+	assert_lt(rim, tight, "out at the rim the puck sits nearer the heel than in tight")
+	assert_gt(tight, 0.7, "in tight the heel is up, and the toe on the puck")

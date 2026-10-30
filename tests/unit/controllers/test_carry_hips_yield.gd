@@ -112,9 +112,9 @@ func test_a_fast_sweep_never_stalls_the_blade_on_any_build() -> void:
 				var attrs := PlayerAttributes.new(build[0], build[1], 1, 1, 1, stick)
 				var label: String = "%d in %d lb, stick %d, cursor %.1f m" % [build[0], build[1],
 						stick, radius_m]
-				var held: Sweep = _sweep(_make_carrier(attrs, true), radius_m, 400.0, 150.0)
+				var held: Sweep = _sweep(_make_carrier(attrs, true), radius_m, 400.0, 160.0)
 				assert_lt(held.stall_deg, 155.0, label + ": hips held on the line, it stalls")
-				var yielded: Sweep = _sweep(_make_carrier(attrs, false), radius_m, 400.0, 150.0)
+				var yielded: Sweep = _sweep(_make_carrier(attrs, false), radius_m, 400.0, 160.0)
 				assert_eq(yielded.stall_deg, INF, label + ": the hips yield first")
 
 

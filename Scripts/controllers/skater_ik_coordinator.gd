@@ -83,6 +83,7 @@ var _net_result := NetBladeCollision.Result.new()
 var _net_side_anchor: Vector3 = Vector3.ZERO
 var _has_net_side_anchor: bool = false
 var _rigid_result := TopHandIK.Result.new()
+var _stick_line_cfg := TopHandIK.Config.new()
 # Native IK solvers (null = extension absent, GDScript fallback). Config
 # properties sync inside the cached-config builders — the same rebuild moment —
 # so invalidate_configs() covers both representations.
@@ -171,6 +172,8 @@ func _sync_pass_config() -> void:
 		"stick_length": c.stick_length, "rom_forward_reach_max": c.rom_forward_reach_max,
 		"rom_forehand_reach_max": c.rom_forehand_reach_max,
 		"rom_backhand_reach_max": c.rom_backhand_reach_max,
+		"hand_pivot_forward": c.hand_pivot_forward,
+		"hand_pivot_inward": c.hand_pivot_inward,
 		"rom_forehand_angle_max": deg_to_rad(c.rom_forehand_angle_max_deg),
 		"rom_backhand_angle_max": deg_to_rad(c.rom_backhand_angle_max_deg),
 		"net_blade_half_thickness": c.net_blade_half_thickness,
@@ -557,14 +560,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 	# Skipped when nothing moved: the reconstruction is an exact inverse of the
 	# solve there, so it would only redo work.
 	if wall_clamped != intended_blade:
-		var tilt: Basis = _level_tilt()
-		var clamped_level: Vector3 = tilt * wall_clamped
-		hand_local = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
-				tilt * arm_shoulder(),
-				Vector2(clamped_level.x, clamped_level.z),
-				clamped_level.y,
-				blade_side_sign,
-				_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
+		hand_local = hand_for_blade(wall_clamped)
 		# The rebuild bounds the ARM but leaves stick length free, so a clamp that
 		# puts the blade past arm + stick has nowhere to put the difference except
 		# the shaft — which is a stretched stick, the one thing a rigid object
@@ -703,16 +699,14 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 
 # The solve places the Blade marker, the heel, but the blade plays the puck at
 # mid-blade (Skater.get_blade_contact_global, where a carried puck pins and every
-# claim measures), so the target steps half a blade back along the shoulder's aim
-# line: the cursor names the contact. While carrying it also steps across, so
-# the blade sits on the forehand or backhand side of the cursor and the puck,
-# pinned the same offset back (Skater.get_carry_target_global), lands on it.
+# claim measures), so the target steps half a blade back along the stick's line:
+# the cursor names the contact. While carrying it also steps across, so the
+# blade sits on the forehand or backhand side of the cursor and the puck, pinned
+# the same offset back (Skater.get_carry_target_global), lands on it.
 func _blade_target_for(cursor_xz: Vector2) -> Vector2:
-	var to_target: Vector2 = cursor_xz - Vector2(
-			_skater.shoulder.position.x, _skater.shoulder.position.z)
-	if to_target.length() <= 0.001:
+	var stick_dir: Vector2 = _stick_dir_to(cursor_xz)
+	if stick_dir == Vector2.ZERO:
 		return cursor_xz
-	var stick_dir: Vector2 = to_target.normalized()
 	var target: Vector2 = cursor_xz - stick_dir * (_skater.blade_length * 0.5)
 	if _controller.has_puck:
 		# 90° rotation in XZ: (X, Z) → (−Z, X). Sign matched in
@@ -720,6 +714,42 @@ func _blade_target_for(cursor_xz: Vector2) -> Vector2:
 		target += Vector2(-stick_dir.y, stick_dir.x) \
 				* _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
 	return target
+
+
+# The heel for mid-blade at `contact_xz` (UpperBody-local): half a blade back
+# along the stick's line.
+func heel_for_contact(contact_xz: Vector2) -> Vector2:
+	return contact_xz - _stick_dir_to(contact_xz) * (_skater.blade_length * 0.5)
+
+
+# The stick's horizontal line to a blade at `blade_xz` (UpperBody-local), from
+# the hand that holds a blade there (TopHandIK.hand_xz_for, off the shoulder
+# marker); ZERO with the blade on the hand.
+func _stick_dir_to(blade_xz: Vector2) -> Vector2:
+	var s: Vector3 = _skater.shoulder.position
+	var hand: Vector2 = TopHandIK.hand_xz_for(Vector2(s.x, s.z), blade_xz, blade_y_local(),
+			-1.0 if _skater.is_left_handed else 1.0, _stick_line_config())
+	var to_blade: Vector2 = blade_xz - hand
+	return to_blade.normalized() if to_blade.length() > 0.001 else Vector2.ZERO
+
+
+# The hand's config for _stick_dir_to: its own, so reading the stick's line
+# between the solve's config writes never moves them.
+func _stick_line_config() -> TopHandIK.Config:
+	var c: SkaterController = _controller
+	var cfg: TopHandIK.Config = _stick_line_cfg
+	cfg.stick_length = solve_stick_length()
+	cfg.hand_rest_y = c.hand_rest_y
+	cfg.rom_forehand_angle_max = deg_to_rad(c.rom_forehand_angle_max_deg)
+	cfg.rom_backhand_angle_max = deg_to_rad(c.rom_backhand_angle_max_deg)
+	cfg.rom_forward_reach_max = c.rom_forward_reach_max
+	cfg.rom_forehand_reach_max = c.rom_forehand_reach_max
+	cfg.rom_backhand_reach_max = c.rom_backhand_reach_max
+	var pivot: Vector2 = _pivot_offset()
+	cfg.pivot_forward = pivot.y
+	cfg.pivot_inward = pivot.x
+	return cfg
+
 
 # The top-hand solve, in the arm's level frame (UpperBody's yaw without its pitch
 # and roll; Scripts/controllers/CLAUDE.md, "The top hand is solved where the arm
@@ -995,6 +1025,35 @@ func address_shoulder(marker: Vector3) -> Vector3:
 	if fold < 0.001:
 		return marker
 	return Basis.from_euler(Vector3(-fold, 0.0, 0.0)) * marker
+
+
+# The top hand the tracked stick holds a blade at `blade_local` (UpperBody-local)
+# with: TopHandIK's inverse, in the solve's level frame.
+func hand_for_blade(blade_local: Vector3) -> Vector3:
+	var tilt: Basis = _level_tilt()
+	var level: Vector3 = tilt * blade_local
+	return tilt.transposed() * TopHandIK.hand_for_clamped_blade(tilt * arm_shoulder(),
+			Vector2(level.x, level.z), level.y, -1.0 if _skater.is_left_handed else 1.0,
+			_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
+
+
+# Where the top hand rests on the stick when it is not reaching, UpperBody-local:
+# TopHandIK's pivot off the shoulder marker, at the rest height. The authored
+# shot poses start and finish here, where the tracked stick hands them over.
+func rest_hand() -> Vector3:
+	var side: float = -1.0 if _skater.is_left_handed else 1.0
+	var s: Vector3 = _skater.shoulder.position
+	var offset: Vector2 = _pivot_offset()
+	var pivot: Vector2 = TopHandIK.pivot_at(Vector2(s.x, s.z), side, offset.y, offset.x)
+	return Vector3(pivot.x, _controller.hand_rest_y, pivot.y)
+
+
+# TopHandIK's pivot off the shoulder as (inward, forward). The faceoff address
+# hands it back to the shoulder as it eases in: its fold already carries the
+# shoulders out over the dot, and the hands with them.
+func _pivot_offset() -> Vector2:
+	var share: float = 1.0 - _address_blend()
+	return Vector2(_controller.hand_pivot_inward, _controller.hand_pivot_forward) * share
 
 
 # The ceiling the top hand may rise to. TopHandIK answers a puck inside the
@@ -1280,7 +1339,12 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	_cached_top_cfg.max_blade_reach = max_blade_reach
 	_cached_top_cfg.stick_length = solve_stick_length()
 	_cached_top_cfg.hand_y_max = _address_hand_ceiling()
+	var pivot: Vector2 = _pivot_offset()
+	_cached_top_cfg.pivot_forward = pivot.y
+	_cached_top_cfg.pivot_inward = pivot.x
 	if _native_top != null:
+		_native_top.pivot_forward = pivot.y
+		_native_top.pivot_inward = pivot.x
 		_native_top.blade_y = blade_y
 		_native_top.max_blade_reach = max_blade_reach
 		_native_top.stick_length = _cached_top_cfg.stick_length

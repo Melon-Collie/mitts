@@ -43,6 +43,8 @@ var rom_backhand_angle: float
 var rom_forward: float
 var rom_forehand: float
 var rom_backhand: float
+var pivot_forward: float
+var pivot_inward: float
 var grip: float
 var bottom_reach: float
 var spacing: float
@@ -88,6 +90,8 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.rom_forward = ctrl.rom_forward_reach_max
 	rig.rom_forehand = ctrl.rom_forehand_reach_max
 	rig.rom_backhand = ctrl.rom_backhand_reach_max
+	rig.pivot_forward = ctrl.hand_pivot_forward
+	rig.pivot_inward = ctrl.hand_pivot_inward
 	rig.grip = ik._grip_fraction()
 	rig.bottom_reach = (skater.upper_arm_length + skater.forearm_length) \
 			* skater.arm_working_extension + skater.shoulder_reach_m
@@ -182,7 +186,9 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 		return arm.heel
 	var mouse_local: Vector3 = ub.affine_inverse() * mouse
 	var aim := Vector2(mouse_local.x, mouse_local.z)
-	var to_target: Vector2 = aim - Vector2(shoulder.x, shoulder.z)
+	_level_config(shoulder.y, INF)
+	var to_target: Vector2 = aim - TopHandIK.hand_xz_for(Vector2(shoulder.x, shoulder.z), aim,
+			blade_y, side, _cfg)
 	if to_target.length() > 0.001:
 		var stick_dir: Vector2 = to_target.normalized()
 		aim -= stick_dir * blade_half
@@ -235,6 +241,8 @@ func _level_config(hang_y: float, max_reach: float) -> void:
 	_cfg.rom_forward_reach_max = rom_forward
 	_cfg.rom_forehand_reach_max = rom_forehand
 	_cfg.rom_backhand_reach_max = rom_backhand
+	_cfg.pivot_forward = pivot_forward
+	_cfg.pivot_inward = pivot_inward
 	_cfg.max_blade_reach = max_reach
 
 
@@ -293,14 +301,16 @@ func _follow(arm: Arm, pos: Vector3, body: Basis, cursor: Vector3, held: bool,
 	var tilt: Basis = Basis.from_euler(Vector3(arm.lean.x, 0.0, arm.lean.y))
 	var sh: Vector3 = tilt * shoulder
 	var hand: Vector3 = tilt * arm.hand_local
-	var hand_vec := Vector2(hand.x - sh.x, hand.z - sh.z)
+	var sh_xz := Vector2(sh.x, sh.z)
+	var pivot: Vector2 = TopHandIK.pivot_at(sh_xz, side, pivot_forward, pivot_inward)
+	var hand_vec: Vector2 = Vector2(hand.x, hand.z) - pivot
 	var target_lean := Vector2.ZERO
 	if hand_vec.length() > 0.01:
 		var dir: Vector3 = Basis(Vector3.UP, arm.rendered) * Vector3(hand_vec.x, 0.0, hand_vec.y)
 		var ahead: float = maxf(-dir.z, 0.0) / maxf(dir.length(), 0.0001)
 		target_lean = SkaterPoseCoordinator.compute_upper_body_lean_target(
-				Vector2(hand.x, hand.z), Vector2(sh.x, sh.z),
-				TopHandIK.rim_reach(atan2(hand_vec.x, -hand_vec.y) * side, rom_forward,
+				Vector2(hand.x, hand.z), pivot,
+				TopHandIK.rim_exit_of(pivot - sh_xz, hand_vec.normalized(), side, rom_forward,
 						rom_forehand, rom_backhand),
 				lerpf(lean_side_max_deg, lean_forward_max_deg, ahead * ahead),
 				lean_power) * purpose
