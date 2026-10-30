@@ -33,7 +33,10 @@ extends RefCounted
 # right.
 
 const Low := KeeperSaveMove.Low
-enum Hand { NONE, STICK, GLOVE, BLOCKER }
+# The stick's two: the blade slid across along the ice to a low shot at its
+# depth (STICK), and thrust out along the ice wherever it is sent, a poke
+# check (POKE).
+enum Hand { NONE, STICK, GLOVE, BLOCKER, POKE }
 
 # The flight is tested as this many straight pieces, from the puck to just past
 # the goal line.
@@ -334,6 +337,16 @@ func cover(target: Vector3, lean: float, toward: Vector3, fingers: Vector3) -> v
 	_watched = true
 
 
+# The stick thrust out along the ice to `target` (his space), a poke check: at
+# once, at his blocker speed, the blade laid where it has got to; back once
+# released.
+func poke(target: Vector3) -> void:
+	_lean_to = 0.0
+	_send(Hand.POKE)
+	hand_target = target
+	_watched = true
+
+
 # The glove over a puck held against his chest at `target` (his space), palm
 # in on it and fingers up, at once.
 func trap(target: Vector3) -> void:
@@ -385,6 +398,8 @@ func _lay_hand(p: KeeperPose, h: int, at: Vector3) -> void:
 			p.blocker_grip = at
 		Hand.STICK:
 			p.blade_center = Vector3(at.x, 0.0, p.blade_center.z)
+		Hand.POKE:
+			p.blade_center = Vector3(at.x, 0.0, at.z)
 
 
 # The flight he believes, in his authored space, from the puck to just past the

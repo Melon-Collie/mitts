@@ -22,7 +22,9 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # (KeeperCover): down over it, the glove onto it, live until the glove is on
 # it or his pads come down on it; one at his feet he plays where he is, never
 # skating about with it under him; one a push away that no opponent can get to
-# first he skates to and covers (KeeperFetch).
+# first he skates to and covers (KeeperFetch). A puck an opposing carrier has
+# out in front of him in reach he pokes off the blade when his read says the
+# stick gets there (KeeperPoke).
 #
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
@@ -44,6 +46,11 @@ const COVER_GRACE_S: float = 0.1
 # How long he holds a caught or covered puck before he plays it out, where no
 # whistle has come for it (GameRules.whistles_a_cover).
 const CATCH_HOLD_S: float = 1.0
+# How long a poke's blade stays out once it has got there before it comes back;
+# and how near it must come to the puck to knock it, on top of the puck's own
+# radius: the carrier's blade the puck lies against stands between them.
+const POKE_HOLD_S: float = 0.15
+const POKE_CONTACT_M: float = 0.02
 
 var motor := KeeperMotor.new()
 var brain := KeeperPositioning.new()
@@ -53,6 +60,7 @@ var save := KeeperSave.new()
 var cover := KeeperCover.new()
 var look := KeeperLook.new()
 var fetch := KeeperFetch.new()
+var poke := KeeperPoke.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
@@ -91,6 +99,11 @@ var _felt: bool = false
 var _chest_held := Vector3.INF
 # Where a puck smothered under his pads is held, in the rink; INF none.
 var _smothered_at := Vector3.INF
+# Seconds into a poke check; below zero, none. Whether it has knocked the puck
+# off, and where its blade was a tick ago in the rink (INF, nowhere yet).
+var _poking: float = -1.0
+var _poke_struck: bool = false
+var _blade_was := Vector3.INF
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -154,6 +167,9 @@ func _place_in_crease() -> void:
 	_chosen_at = -1.0
 	_over_at = -1.0
 	_felt = false
+	_poking = -1.0
+	_poke_struck = false
+	_blade_was = Vector3.INF
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
@@ -194,18 +210,67 @@ func _play(delta: float) -> void:
 	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
 	_save_the_shot()
 	_cover_the_puck(delta, in_net)
-	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
+	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring \
+			and _poking < 0.0:
 		_read_receivers()
 		if _at_feet:
 			_play_at_feet(in_net)
-		else:
+		elif not _poke_check():
 			_fetch_the_puck(in_net)
 			if not _fetching:
 				brain.decide(play.puck, play.motion, motor)
 	_ticks += 1
 	motor.step(delta)
 	_place_body()
+	_poke_step(delta)
 	_smother(in_net)
+
+
+# A poke check at the puck an opposing carrier has out in front of him, started
+# when his read says the blade gets to it (KeeperPoke): set on his feet or down,
+# not sliding or sealed on a post, and no shot coming or wound up.
+func _poke_check() -> bool:
+	if not play.theirs or play.winding_up or read.reading() or puck.get_carrier() == null:
+		return false
+	if motor.rest == KeeperRoute.Rest.POST or not (motor.can_save(false) or motor.can_save(true)):
+		return false
+	if not poke.plan(play.puck, play.motion, play.carrier, motor, _keeper.skeleton.mirrored, save.blocker_speed_m_s):
+		return false
+	save.poke(poke.target)
+	# Planned from where he is: he stops there to thrust.
+	motor.go_to(Vector2(motor.x, motor.z), motor.yaw, motor.rest)
+	_poking = 0.0
+	_poke_struck = false
+	_blade_was = Vector3.INF
+	return true
+
+
+# A poke under way: the blade out to where he read the puck would be, and the
+# puck knocked off its carrier if the blade meets it on the way or while held
+# there; back after the hold. Over once the stick is home, or once a save or a
+# cover takes the hands.
+func _poke_step(delta: float) -> void:
+	if _poking < 0.0:
+		return
+	if save.hand != KeeperSave.Hand.POKE:
+		_poking = -1.0
+		return
+	_poking += delta
+	var box: Transform3D = goalie.global_transform * KeeperGear.box(_keeper.skeleton, KeeperGear.Part.BLADE)
+	var blade_vel: Vector3 = Vector3.ZERO if _blade_was == Vector3.INF else (box.origin - _blade_was) / maxf(delta, 1e-4)
+	_blade_was = box.origin
+	if _poking >= poke.reach_s + POKE_HOLD_S:
+		save.release()
+		return
+	var carrier: Skater = puck.get_carrier()
+	if _poke_struck or carrier == null or (team_id != -1 and carrier.get_team_id() == team_id):
+		return
+	var on_blade: Vector3 = (box.affine_inverse() * puck.global_position).abs()
+	var near: Vector3 = KeeperGear.half_extents(KeeperGear.Part.BLADE) \
+			+ Vector3.ONE * (GameRules.PUCK_COLLISION_RADIUS + POKE_CONTACT_M)
+	if on_blade.x <= near.x and on_blade.y <= near.y and on_blade.z <= near.z:
+		_poke_struck = true
+		puck.apply_goalie_poke_check(box.origin, blade_vel)
 
 
 # A puck he is going down to cover that his pads come down on: smothered under

@@ -50,8 +50,10 @@ var puck := Vector2.ZERO
 var motion := Vector2.ZERO
 # Whether he sees it loose: a pass he has not yet seen caught is still one.
 var loose: bool = true
-# Whether he sees it carried by one of theirs, who can shoot it now.
+# Whether he sees it carried by one of theirs, who can shoot it now; and the
+# carrier's body as he reads it, carried on as the puck is (NO_CARRIER loose).
 var theirs: bool = false
+var carrier := NO_CARRIER
 var winding_up: bool = false
 # How long he has held the puck on a stick of theirs in his eyes, unbroken.
 var watched_s: float = 0.0
@@ -102,20 +104,21 @@ func reset() -> void:
 	watched_s = 0.0
 	meets = false
 	theirs = false
+	carrier = NO_CARRIER
 
 
 # One tick's look at the puck at `at` moving at `moving`, carried by a skater
-# at `carrier` (NO_CARRIER loose), one of theirs (`carrier_theirs`), winding up
-# a shot with it (`winding`), and what he reads from what he has watched.
-func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrier: Vector2 = NO_CARRIER,
+# at `carrier_at` (NO_CARRIER loose), one of theirs (`carrier_theirs`), winding
+# up a shot with it (`winding`), and what he reads from what he has watched.
+func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrier_at: Vector2 = NO_CARRIER,
 		carrier_theirs: bool = false) -> void:
 	var size: int = _at.size()
 	_head = (_head + 1) % size
 	_at[_head] = at
 	_moving[_head] = moving
-	_bodies[_head] = carrier
+	_bodies[_head] = carrier_at
 	_winding[_head] = 1 if winding else 0
-	_loose[_head] = 1 if carrier == NO_CARRIER else 0
+	_loose[_head] = 1 if carrier_at == NO_CARRIER else 0
 	_theirs[_head] = 1 if carrier_theirs else 0
 	_count = mini(_count + 1, size)
 	var lag: int = mini(ceili(delay_s / maxf(dt, 1e-6) - 1e-6), _count - 1)
@@ -125,11 +128,11 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	winding_up = _winding[seen] == 1
 	loose = _loose[seen] == 1
 	theirs = not loose and _theirs[seen] == 1
+	carrier = NO_CARRIER if loose else _bodies[seen] + motion * (lag * dt)
 	var before_last: int = (seen - 2 + size) % size
 	if not loose and lag + 2 < _count and _loose[before_last] == 0:
 		var own: Vector2 = (_at[seen] - _at[before_last]) / (2.0 * dt)
-		var body: Vector2 = _bodies[seen] + motion * (lag * dt)
-		puck = body + (_at[seen] + own * (lag * dt) - body).limit_length(CARRIER_REACH_M)
+		puck = carrier + (_at[seen] + own * (lag * dt) - carrier).limit_length(CARRIER_REACH_M)
 	watched_s = watched_s + dt if theirs and lag + 1 < _count and _gaze_holds(_at[seen], dt) else 0.0
 	if not theirs:
 		_gaze = NAN

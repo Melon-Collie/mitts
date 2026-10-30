@@ -691,6 +691,29 @@ func apply_poke_check(checker_skater: Skater) -> void:
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
 
+# A goalie's poke check (KeeperController): his blade at `blade_pos`, moving at
+# `blade_vel`, knocks the puck off its carrier as a skater's poke does. No skater
+# took it, so nobody is credited and nobody is held off it but the carrier.
+func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
+	var ex_carrier: Skater = carrier
+	var away: Vector3 = ex_carrier.global_position - blade_pos
+	away.y = 0.0
+	clear_carrier()
+	linear_velocity = PuckCollisionRules.poke_strip_velocity(
+			blade_vel,
+			ex_carrier.blade_world_velocity,
+			ex_carrier.global_position,
+			blade_pos,
+			poke_carrier_vel_blend,
+			poke_strip_min_speed,
+			poke_strip_max_speed,
+			away if away.length_squared() > 1e-6 else Vector3.FORWARD)
+	linear_velocity.y = _pinch_lift(blade_vel, ex_carrier.blade_world_velocity,
+			blade_pos, ex_carrier.get_blade_contact_global())
+	_set_cooldown(ex_carrier, reattach_cooldown)
+	puck_stripped.emit(ex_carrier, null)
+	puck_released.emit()
+
 # Stick-lift strip: unlike a poke (which squirts the puck off the blade contact),
 # a lifted stick just leaves the puck where it was being carried — so it keeps
 # travelling in the carrier's direction at the carrier's speed, as if the carry
