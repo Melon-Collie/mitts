@@ -1,27 +1,34 @@
 class_name KeeperPoke
 extends RefCounted
 
-# The poke check: the stick thrust out along the ice at a puck an opposing
-# carrier has in tight, to knock it off his blade. He pokes only when his read
-# says it lands: the puck as he reads it (KeeperPlayRead, his read late,
-# carried on along the carrier's skating) is where his blade can lie on the ice
-# by the time it gets there, thrust at his blocker speed from where the pose he
-# is in holds it; it is out in front of its carrier, nearer him than the
-# carrier's body (a puck held to the side or behind the body has skates
-# between); and it is in front of his goal line. A pull or a deke made after
-# his read has the puck gone when the blade arrives: the poke misses, and he
-# is stretched out until the stick comes back. Pure, in his authored space as
-# KeeperSave's: left-catching, the net frame brought into it by where the motor
-# has him and whether he catches right.
+# The poke check: the stick jabbed out along the ice at a puck an opposing
+# carrier drives at him with, to knock it off his blade. He pokes only at a
+# carrier driving at him (closing on him on a line that passes within his
+# reach; one skating across or stopped he plays with his body), and only when
+# his read says it lands: the puck as he reads it (KeeperPlayRead, his read
+# late, carried on along the carrier's skating) is where his blade can lie on
+# the ice by the time it gets there, thrust at his blocker speed from where the
+# pose he is in holds it; it is out in front of its carrier, nearer him than
+# the carrier's body (a puck held to the side or behind the body has skates
+# between); and it is in front of his goal line. Under way, the blade is sent
+# on after the puck as he reads it (`track`), so a carrier skating on does not
+# outrun it; a pull or a deke after his read beats it. Pure, in his authored
+# space as KeeperSave's: left-catching, the net frame brought into it by where
+# the motor has him and whether he catches right.
 
 # How far from him, across the ice, past which no aim of his stick lies on it
 # (test_keeper_poke.gd holds it), so a puck further off is not tried; and how
 # near, inside which the puck is at his feet and the blade already on it.
 const REACH_M: float = 2.0
 const NEAR_M: float = 0.4
+# Driving at him: closing on him at least this fast. A feel number: a carrier
+# gliding in to set up is not one he jabs at.
+const DRIVING_M_S: float = 2.0
 # Rounds of the guess at when the blade gets there, each from where the puck
-# will have gone by the last.
-const ROUNDS: int = 3
+# will have gone by the last, the blade's centre sent off the puck by what the
+# last aim sent it; and the aims, each from the rounds' answer.
+const ROUNDS: int = 6
+const AIMS: int = 2
 # The stick pivots on its heel to the hand and slides through the grip, so the
 # blade does not land where its centre is sent: rounds of sending it on by what
 # it missed by, until it lies on the puck (within the puck's radius) and on the
@@ -48,24 +55,41 @@ var _skel := KeeperSkeleton.new()
 # the blade thrust at `speed_m_s`. Sets `target` and `reach_s`.
 func plan(puck: Vector2, motion: Vector2, carrier: Vector2, motor: KeeperMotor, mirrored: bool,
 		speed_m_s: float) -> bool:
+	var to_me: Vector2 = Vector2(motor.x, motor.z) - carrier
+	if motion.dot(to_me.normalized()) < DRIVING_M_S or absf(motion.normalized().cross(to_me)) > REACH_M:
+		return false
 	motor.pose(_pose)
-	var rest := Vector3(_pose.blade_center.x, 0.0, _pose.blade_center.z)
+	return _lands(puck, motion, carrier, motor, mirrored, speed_m_s,
+			Vector3(_pose.blade_center.x, 0.0, _pose.blade_center.z))
+
+
+# A poke under way, the blade at `blade` (his space): sent on after the puck as
+# he now reads it (as `plan`'s), from where the blade is; false once it would
+# no longer land.
+func track(puck: Vector2, motion: Vector2, carrier: Vector2, motor: KeeperMotor, mirrored: bool,
+		speed_m_s: float, blade: Vector3) -> bool:
+	motor.pose(_pose)
+	return _lands(puck, motion, carrier, motor, mirrored, speed_m_s, blade)
+
+
+func _lands(puck: Vector2, motion: Vector2, carrier: Vector2, motor: KeeperMotor, mirrored: bool,
+		speed_m_s: float, from: Vector3) -> bool:
 	var at: Vector2 = puck
+	var want := Vector3.ZERO
+	var off := Vector3.ZERO
 	reach_s = 0.0
-	for _i: int in ROUNDS:
-		at = puck + motion * reach_s
-		target = _his(at, motor, mirrored)
-		reach_s = rest.distance_to(target) / speed_m_s
+	for _aimed: int in AIMS:
+		for _i: int in ROUNDS:
+			at = puck + motion * reach_s
+			want = in_his_space(at, motor, mirrored)
+			reach_s = from.distance_to(want + off) / speed_m_s
+		var out: float = Vector2(want.x, want.z).length()
+		if out < NEAR_M or out > REACH_M or want.z >= 0.0 or not aim(want):
+			return false
+		off = target - want
+		reach_s = from.distance_to(target) / speed_m_s
 	var me := Vector2(motor.x, motor.z)
-	var body: Vector2 = carrier + motion * reach_s
-	var out: float = Vector2(target.x, target.z).length()
-	if out < NEAR_M or out > REACH_M or target.z >= 0.0 or at.y >= -GameRules.PUCK_COLLISION_RADIUS \
-			or me.distance_to(at) >= me.distance_to(body):
-		return false
-	if not aim(target):
-		return false
-	reach_s = rest.distance_to(target) / speed_m_s
-	return true
+	return at.y < -GameRules.PUCK_COLLISION_RADIUS and me.distance_to(at) < me.distance_to(carrier + motion * reach_s)
 
 
 # Sends the blade's centre so the blade lies on `want` (his space, on the ice)
@@ -95,7 +119,7 @@ static func lowest(xf: Transform3D, h: Vector3) -> float:
 
 
 # A net-frame point on the ice in his space.
-static func _his(at: Vector2, motor: KeeperMotor, mirrored: bool) -> Vector3:
+static func in_his_space(at: Vector2, motor: KeeperMotor, mirrored: bool) -> Vector3:
 	var p: Vector3 = Basis(Vector3.UP, motor.yaw).inverse() * Vector3(at.x - motor.x, 0.0, at.y - motor.z)
 	if mirrored:
 		p.x = -p.x

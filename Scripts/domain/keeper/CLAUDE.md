@@ -28,7 +28,7 @@ old one's place.
 | `keeper_look.gd` | his eyes on the puck: his face turned to follow it in any stance, the neck turning and the head nodding, no faster than a head turns (`TURN_RAD_S`) and no further than a neck does, then the trunk turning on the hips for a puck behind him (a shot gone by, one round the net), over the shoulder he is already turned to when it is dead behind; laid over the pose last, so through a save he watches the puck into the gear |
 | `keeper_chest_trap.gd` | a shot caught on his chest: only at the logo (between where his arm pads lie on the protector, the middle of its height, on its face), and only when the nearer hand gets onto it before the foam's rebound carries it out of the glove's pocket |
 | `keeper_cover.gd` | covering a loose puck he can reach: whether one lies at his feet (`at_feet`); whether one down on the ice (`on_ice`, never one in the air) and slowing on it will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads, turned and sunk toward it, to get it there (`KeeperPoses.cover_lean`, no further than it takes); a puck his pads come down on (`under_pads`); where a held puck is set down and swept with no whistle for it (`play_out_way`, `set_down_at`), away from his net |
-| `keeper_poke.gd` | the poke check: whether a puck an opposing carrier has out in front of his body, in front of his goal line, is one his blade can lie on, flat on the ice, where his read says it will be when the stick gets there at his blocker speed (`plan`); where the blade's centre is sent so the blade lies on it, the stick pivoting on its heel to his hand (`aim`) |
+| `keeper_poke.gd` | the poke check: whether a carrier of theirs driving at him (closing at `DRIVING_M_S` on a line inside his reach) has the puck out in front of his body, in front of his goal line, where his blade can lie on it, flat on the ice, where his read says it will be when the stick gets there at his blocker speed (`plan`); the blade sent on after it from where it is, under way (`track`); where the blade's centre is sent so the blade lies on it, the stick pivoting on its heel to his hand (`aim`) |
 | `keeper_fetch.gd` | going for a loose puck: one a push from him (in front, or beside the post below the goal line, never behind the cage), skated to where his glove lands on it, stopping short of his blade's reach, when no opponent at full sprint gets a stick on it before he is down on it, his read as the margin to set out |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on (stopped by his edges on his feet unless dropped on purpose as he glides, `edges`, then by the pads' friction) |
 | `controllers/keeper_controller.gd` | him in a match, in the goalie's seat (below) |
@@ -175,19 +175,24 @@ covers; one ahead past the glove's reach he steps up to, stopping short of
 it; one beside or behind him he turns to on his feet, toward it but short of
 facing it (`BLADE_CLEAR_RAD`) so the blade held out ahead never sweeps round
 onto it, as far as brings it into reach, up off his knees first.
-A puck an opposing carrier has out in front of his body he poke checks
-(`KeeperPoke`, `KeeperController._poke_check`) when his read says it lands:
-set on his feet or down, never sliding or sealed on a post, with no shot
-coming or wound up, the blade's lying on the puck as he reads it (late,
+A carrier of theirs driving at him (closing on him at `KeeperPoke.DRIVING_M_S`
+or more, on a line inside his reach) with the puck out in front of his body
+he poke checks (`KeeperPoke`, `KeeperController._poke_check`) when his read
+says it lands; one skating across, stopped or gliding in he plays with his
+body. Set on his feet or down, never sliding or sealed on a post, with no
+shot coming or wound up, the blade's lying on the puck as he reads it (late,
 carried on along the carrier's skating) is checked on his own skeleton, the
-stick pivoting on its heel to his hand, and thrust there at his blocker speed.
-He stops where he is to thrust. The blade box meeting the carried puck, on
-the way out or held there (`POKE_HOLD_S`), knocks it off its carrier as a
-skater's poke does (`Puck.apply_goalie_poke_check`), crediting no skater; a
-pull or a deke after his read has it gone when the blade arrives, and he is
-stretched out until the stick comes back. A save or a cover taking his hands
-ends the poke. His tier reaches it through his read's delay and his blocker
-speed. Holding a puck, caught in
+stick pivoting on its heel to his hand, and it is jabbed there at his blocker
+speed, sent on after the puck as he reads it at the planner's rate
+(`KeeperPoke.track`). It is only his stick: the brain goes on placing him
+throughout, so a miss costs the stick out of the five-hole and away from its
+spot until it is back, not his position. The blade box meeting the carried
+puck on the way out knocks it off its carrier as a skater's poke does
+(`Puck.apply_goalie_poke_check`), crediting no skater; the stick comes back
+at once once it has, once it gets where it was sent, or once his read says
+it no longer lands, so a pull or a deke after his read beats it. A save or a
+cover taking his hands ends the poke. His tier reaches it through his read's
+delay and his blocker speed. Holding a puck, caught in
 the glove, on his chest or covered on the ice, he is frozen where he secured
 it (`KeeperMotor.freeze`): no ground covered and no move started, the move
 under way only settling his pose, until he plays it out. So a rebound dying at his
@@ -236,14 +241,17 @@ puck played out away from his net however he is turned),
 keeper and the real puck: a dead puck beside him, behind him either side or a
 step ahead covered where it lies, not knocked first; and a reset leaving
 nothing of what he did before), `test_keeper_poke.gd` (the poke's plan: a puck
-out in front of its carrier poked with the blade onto it, standing or down, at
-his blocker speed; out of reach, beside him, at his feet, behind the carrier's
-body or behind his line left; a moving puck led; a right-catcher's the mirror;
+driven at him out in front of its carrier poked with the blade onto where it
+will be, standing or down, at his blocker speed; out of reach, beside him, at
+his feet, behind the carrier's body or behind his line left, and so a carrier
+skating across, stopped, gliding in or driving wide of him; under way the
+blade sent on after the puck until it is pulled; a right-catcher's the mirror;
 and `REACH_M` culling nothing his stick could lie on),
 `tests/unit/controllers/test_keeper_poke_check.gd` (the live keeper against a
-real carrier skating in: the puck out in front poked off crediting nobody, one
-held behind the body left, one pulled back once he has thrust missed with the
-stick home),
+real carrier driving in, his gear a wall to the carried puck: the puck out in
+front poked off crediting nobody, one held behind the body left, one pulled
+back once he has thrust missed with the stick home, the brain placing him
+throughout),
 `tests/unit/controllers/test_keeper_never_walks_a_puck_in.gd` (set on the
 near post and in the RVH, the live keeper never puts a slow puck at his feet
 in his net, nor one he holds there and plays out),

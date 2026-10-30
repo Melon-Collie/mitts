@@ -358,6 +358,16 @@ func trap(target: Vector3) -> void:
 	_watched = true
 
 
+# Where the hand out is, his space.
+func hand_out_at() -> Vector3:
+	return _hand_at
+
+
+# Whether the hand out has been let go and is on its way back.
+func returning() -> bool:
+	return _hand_out and _returning
+
+
 # Whether the hand is out on its target.
 func hand_there() -> bool:
 	return _hand_out and not _returning and _hand_at.distance_to(hand_target) < THERE_M

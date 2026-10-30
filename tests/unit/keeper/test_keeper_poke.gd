@@ -1,12 +1,16 @@
 extends GutTest
 
-# The poke check's plan (KeeperPoke): a puck out in front of its carrier, in
-# his reach and in front of his goal line, he pokes, the blade sent to lie on
-# it where it will be when the blade gets there; one out of reach, beside or
-# behind him, behind the carrier's body or behind his line he leaves. REACH_M
-# culls nothing he could reach.
+# The poke check's plan (KeeperPoke): a carrier driving at him with the puck
+# out in front, in his reach and in front of his goal line, he pokes, the blade
+# sent to lie on the puck where it will be when the blade gets there; one out
+# of reach, beside or behind him, behind the carrier's body or behind his line
+# he leaves, and so a carrier skating across, stopped, gliding in or driving
+# wide of him. Under way the blade is sent on after the puck from where it is,
+# until the puck is pulled where it no longer lands. REACH_M culls nothing he
+# could reach.
 
 const SPEED_M_S: float = 5.0
+const DRIVING := 3.0
 const BEARINGS_DEG: Array[float] = [-90.0, -80.0, -70.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0, 10.0,
 		20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]
 const R := KeeperRoute.Rest
@@ -31,57 +35,83 @@ func _blade() -> Vector3:
 	return KeeperGear.box(_skel, KeeperGear.Part.BLADE).origin
 
 
-func _lands(puck: Vector2, carrier: Vector2, motion: Vector2 = Vector2.ZERO, mirrored: bool = false) -> bool:
-	return _poke.plan(puck, motion, carrier, _motor, mirrored, SPEED_M_S)
-
-
-func test_a_puck_out_in_front_of_its_carrier_he_pokes_the_blade_onto() -> void:
-	for rest: int in [R.FEET, R.DOWN]:
-		_motor.rest = rest
-		assert_true(_lands(Vector2(-0.3, -2.3), Vector2(-0.3, -2.9)), "rest %d: in reach" % rest)
-		var blade: Vector3 = _blade()
-		assert_lte(Vector2(blade.x + 0.3, blade.z + 1.3).length(), KeeperPoke.ON_PUCK_M, "rest %d: on it" % rest)
-		assert_almost_eq(_poke.reach_s, Vector3(_pose_rest().x, 0.0, _pose_rest().z).distance_to(_poke.target)
-				/ SPEED_M_S, 1e-5, "rest %d: at his blocker speed" % rest)
-
-
-func _pose_rest() -> Vector3:
+func _rest() -> Vector3:
 	var p := KeeperPose.new()
 	_motor.pose(p)
-	return p.blade_center
+	return Vector3(p.blade_center.x, 0.0, p.blade_center.z)
+
+
+# The carrier skating straight at him at DRIVING.
+func _at_him(carrier: Vector2) -> Vector2:
+	return (Vector2(_motor.x, _motor.z) - carrier).normalized() * DRIVING
+
+
+func _lands(puck: Vector2, carrier: Vector2, mirrored: bool = false) -> bool:
+	return _poke.plan(puck, _at_him(carrier), carrier, _motor, mirrored, SPEED_M_S)
+
+
+func test_a_puck_driven_at_him_he_pokes_the_blade_onto_where_it_will_be() -> void:
+	for rest: int in [R.FEET, R.DOWN]:
+		_motor.rest = rest
+		var puck := Vector2(-0.3, -2.6)
+		var carrier := Vector2(-0.3, -3.2)
+		assert_true(_lands(puck, carrier), "rest %d: in reach" % rest)
+		var reach: float = _poke.reach_s
+		var will_be: Vector2 = puck + _at_him(carrier) * reach
+		var blade: Vector3 = _blade()
+		assert_lte(Vector2(blade.x - will_be.x, blade.z - (will_be.y - _motor.z)).length(), 2.0 * KeeperPoke.ON_PUCK_M,
+				"rest %d: on it where it will be" % rest)
+		assert_almost_eq(reach, _rest().distance_to(_poke.target) / SPEED_M_S, 1e-5, "rest %d: at his blocker speed" % rest)
 
 
 func test_one_he_cannot_get_the_blade_to_he_leaves() -> void:
-	assert_false(_lands(Vector2(0.0, -3.4), Vector2(0.0, -4.0)), "out of his reach")
+	assert_false(_lands(Vector2(0.0, -3.8), Vector2(0.0, -4.4)), "out of his reach")
 	assert_false(_lands(Vector2(-1.0, -0.9), Vector2(-1.6, -0.9)), "beside him")
 	assert_false(_lands(Vector2(0.0, -1.15), Vector2(0.0, -1.8)), "at his feet")
 
 
 func test_one_held_behind_the_carriers_body_he_leaves() -> void:
-	assert_false(_lands(Vector2(0.0, -2.3), Vector2(0.0, -1.9)), "the body between")
+	assert_false(_lands(Vector2(0.0, -2.6), Vector2(0.0, -2.2)), "the body between")
 
 
 func test_one_behind_his_goal_line_he_leaves() -> void:
 	_motor.z = -0.3
 	_motor.yaw = PI * 0.5
-	assert_false(_lands(Vector2(-1.2, 0.1), Vector2(-1.8, 0.2)), "behind the line")
-	assert_true(_lands(Vector2(-1.2, -0.3), Vector2(-1.8, -0.3)), "the same in front of it")
+	assert_false(_lands(Vector2(-1.4, 0.1), Vector2(-2.0, 0.2)), "behind the line")
+	assert_true(_lands(Vector2(-1.4, -0.3), Vector2(-2.0, -0.3)), "the same in front of it")
 
 
-# A carrier skating across: the blade is sent where the puck will be when it
-# gets there.
-func test_a_moving_puck_is_poked_where_it_will_be() -> void:
-	var motion := Vector2(2.0, 0.0)
-	assert_true(_lands(Vector2(-0.6, -2.3), Vector2(-0.6, -2.9), motion), "skating across")
-	var blade: Vector3 = _blade()
-	assert_almost_eq(blade.x, -0.6 + motion.x * _poke.reach_s, 2.0 * KeeperPoke.ON_PUCK_M, "led by its skating")
+# Only a carrier driving at him: not one skating across, stopped, gliding in
+# slower than DRIVING_M_S, or driving on a line wide of his reach.
+func test_only_a_carrier_driving_at_him() -> void:
+	var puck := Vector2(-0.3, -2.6)
+	var carrier := Vector2(-0.3, -3.2)
+	assert_false(_poke.plan(puck, Vector2(DRIVING, 0.0), carrier, _motor, false, SPEED_M_S), "skating across")
+	assert_false(_poke.plan(puck, Vector2.ZERO, carrier, _motor, false, SPEED_M_S), "stopped")
+	assert_false(_poke.plan(puck, _at_him(carrier).normalized() * (KeeperPoke.DRIVING_M_S - 0.5), carrier, _motor,
+			false, SPEED_M_S), "gliding in")
+	assert_false(_poke.plan(Vector2(-2.6, -2.6), Vector2(0.0, DRIVING), Vector2(-2.6, -3.2), _motor, false, SPEED_M_S),
+			"driving down the wing, wide of him")
 
 
 func test_a_right_catcher_pokes_the_mirror() -> void:
-	assert_true(_lands(Vector2(-0.4, -2.3), Vector2(-0.4, -2.9)), "left-catching")
+	assert_true(_lands(Vector2(-0.4, -2.6), Vector2(-0.4, -3.2)), "left-catching")
 	var left: Vector3 = _poke.target
-	assert_true(_lands(Vector2(0.4, -2.3), Vector2(0.4, -2.9), Vector2.ZERO, true), "right-catching, mirrored")
+	assert_true(_lands(Vector2(0.4, -2.6), Vector2(0.4, -3.2), true), "right-catching, mirrored")
 	assert_almost_eq(_poke.target, left, Vector3.ONE * 1e-5, "the same poke in his space")
+
+
+# Under way, the blade is sent from where it is onto the puck as now read; a
+# puck pulled back behind the carrier's body no longer lands.
+func test_under_way_the_blade_follows_the_puck_until_it_is_pulled() -> void:
+	var carrier := Vector2(-0.5, -3.2)
+	var motion: Vector2 = _at_him(carrier)
+	var blade := Vector3(0.1, 0.0, -1.2)
+	assert_true(_poke.track(Vector2(-0.6, -2.6), motion, carrier, _motor, false, SPEED_M_S, blade), "followed")
+	assert_almost_eq(_poke.reach_s, blade.distance_to(_poke.target) / SPEED_M_S, 1e-5, "from where the blade is")
+	assert_lt(_blade().x, -0.3, "across to it")
+	assert_false(_poke.track(Vector2(-0.5, -3.7), motion, carrier, _motor, false, SPEED_M_S, blade),
+			"pulled behind the body")
 
 
 # Standing or down, no aim of his stick at REACH_M or further lies on the puck
