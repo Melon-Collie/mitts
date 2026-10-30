@@ -939,7 +939,18 @@
         "jersey": {
           "base": "#CC1F93",
           "collar": "#1A1A1A",
-          "stripes": []
+          "stripes": [
+            {
+              "pos": 0.425,
+              "width": 0.338,
+              "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.425,
+              "width": 0.0434,
+              "color": "#1A1A1A"
+            }
+          ]
         },
         "sleeve": {
           "base": "#CC1F93",
@@ -950,7 +961,7 @@
               "color": "#FFFFFF"
             },
             {
-              "pos": 0.623,
+              "pos": 0.679,
               "width": 0.045,
               "color": "#1A1A1A"
             }
