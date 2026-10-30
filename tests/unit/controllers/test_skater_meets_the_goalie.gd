@@ -1,12 +1,13 @@
 extends GutTest
 
-# The stick against the goalie through the real controller (SkaterController,
-# SkaterIKCoordinator.resolve_blade_against_goalies, _pinned_puck_off_goalies):
-# a carrier skating at a goalie set in front of his net, the cursor swept
-# across him and driven through him. His gear is a wall: the blade never goes
-# into it, the carried puck is held off it, and touching him strips nothing,
-# however long it is pressed there. Without the puck the blade stops on him
-# the same way.
+# A skater against the goalie through the real controller (SkaterController,
+# SkaterIKCoordinator.resolve_blade_against_goalies, _pinned_puck_off_goalies,
+# Skater.clamp_body_to_goalies): a carrier skating at a goalie set in front of
+# his net, the cursor swept across him and driven through him. His gear is a
+# wall: the blade never goes into it, the carried puck is held off it, and
+# touching him strips nothing, however long it is pressed there. Without the
+# puck the blade stops on him the same way, and the body skated into him stops
+# on his gear and slides along it.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -29,9 +30,6 @@ class GameStateStub:
 
 	func is_movement_locked() -> bool:
 		return false
-
-	func get_goalie_data() -> Array[Dictionary]:
-		return []
 
 	func get_goalie_boxes() -> PackedFloat32Array:
 		return boxes
@@ -99,13 +97,13 @@ func _skate_into_him(carry: bool, down: bool) -> Dictionary:
 		var heel: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 		var mid: Vector3 = skater.get_blade_contact_global()
 		var toe: Vector3 = heel + (mid - heel) * 2.0
-		var held: Vector3 = GoalieBladeCollision.resolve(mid, heel, toe, c.net_blade_half_thickness, gs.boxes)
+		var held: Vector3 = GoalieGearCollision.resolve(mid, heel, toe, c.net_blade_half_thickness, gs.boxes)
 		blade_in = maxf(blade_in, held.length())
-		if GoalieBladeCollision.resolve(mid, heel, toe, c.net_blade_half_thickness + 0.01, gs.boxes) != Vector3.ZERO:
+		if GoalieGearCollision.resolve(mid, heel, toe, c.net_blade_half_thickness + 0.01, gs.boxes) != Vector3.ZERO:
 			touching += 1
 		if carry:
 			var pin: Vector3 = skater.get_carry_target_global()
-			puck_in = maxf(puck_in, GoalieBladeCollision.resolve(pin, pin, pin, 0.0, gs.boxes).length())
+			puck_in = maxf(puck_in, GoalieGearCollision.resolve(pin, pin, pin, 0.0, gs.boxes).length())
 		skater._physics_process(DT)
 	return {"blade_in": blade_in, "puck_in": puck_in, "touching": touching, "releases": releases.size(),
 			"has_puck": c.has_puck}
@@ -129,3 +127,49 @@ func _keeper_boxes(at: Vector3, yaw: float, down: bool) -> PackedFloat32Array:
 		out.append_array([xf.basis.x.x, xf.basis.x.y, xf.basis.x.z, xf.basis.y.x, xf.basis.y.y, xf.basis.y.z,
 				xf.basis.z.x, xf.basis.z.y, xf.basis.z.z, xf.origin.x, xf.origin.y, xf.origin.z, h.x, h.y, h.z])
 	return out
+
+
+# The skater's body against him (Skater.clamp_body_to_goalies): skated into him
+# at an angle, standing and down, it stops on his gear, never in it, and slides
+# along it rather than sticking.
+func test_skating_into_him_the_body_stops_on_his_gear_and_slides_off() -> void:
+	for down: bool in [false, true]:
+		var skater: Skater = SKATER_SCENE.instantiate() as Skater
+		add_child_autofree(skater)
+		skater.set_process(false)
+		skater.set_physics_process(false)
+		var puck: Puck = PUCK_SCENE.instantiate() as Puck
+		add_child_autofree(puck)
+		puck.set_physics_process(false)
+		var gs := GameStateStub.new()
+		var goalie_at := Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 1.2)
+		gs.boxes = _keeper_boxes(goalie_at, PI, down)
+		add_child_autofree(gs)
+		var c := SkaterController.new()
+		add_child_autofree(c)
+		c.setup(skater, puck, gs)
+		c.apply_attributes(PlayerAttributes.neutral())
+		skater.set_goalie_boxes_provider(func() -> PackedFloat32Array: return gs.boxes)
+		skater.global_position = Vector3(-0.9, GameRules.FACEOFF_SPAWN_HEIGHT, GameRules.GOAL_LINE_Z - 4.0)
+		var what: String = "him %s" % ("down" if down else "standing")
+		var deepest: float = 0.0
+		var met: bool = false
+		var slid_from: float = INF
+		var input := InputState.new()
+		for i: int in 240:
+			input.delta = DT
+			input.host_timestamp += DT
+			input.move_vector = Vector2(0.35, 1.0).normalized()
+			input.mouse_world_pos = skater.global_position + Vector3(0.0, 0.0, 1.0)
+			if met and slid_from == INF:
+				slid_from = skater.global_position.x
+			skater.capture_prev_blade_contact()
+			c._process_input(input, DT)
+			skater._physics_process(DT)
+			var into: Vector3 = GoalieGearCollision.body_out(skater.global_position, skater.collision_radius(), gs.boxes)
+			deepest = maxf(deepest, into.length())
+			met = met or into != Vector3.ZERO or GoalieGearCollision.body_out(skater.global_position,
+					skater.collision_radius() + 0.01, gs.boxes) != Vector3.ZERO
+		assert_lt(deepest, SINK_M, what + ": the body never in his gear")
+		assert_true(met, what + ": met him")
+		assert_gt(skater.global_position.x - slid_from, 0.3, what + ": slid along him")

@@ -1121,7 +1121,7 @@ func _blade_toe_for(heel_world: Vector3) -> Vector3:
 
 # ── The goalie ────────────────────────────────────────────────────────────────
 # The translation that holds the blade at `heel_world` out of every goalie's
-# gear (GoalieBladeCollision): a wall it slides along, carrying or not, that
+# gear (GoalieGearCollision): a wall it slides along, carrying or not, that
 # never strips. Swept from the blade's middle at the start of the tick. The
 # blade lies along the shaft from this tick's hand at `hand_world`, as
 # Skater.set_blade_position will turn it, not along last tick's facing: a stick
@@ -1134,7 +1134,7 @@ func resolve_blade_against_goalies(heel_world: Vector3, hand_world: Vector3) -> 
 	along.y = 0.0
 	var toe: Vector3 = heel_world + along.normalized() * _skater.blade_length \
 			if along.length_squared() > 0.000001 else heel_world
-	return GoalieBladeCollision.resolve(_skater.get_prev_blade_contact_global(), heel_world, toe,
+	return GoalieGearCollision.resolve(_skater.get_prev_blade_contact_global(), heel_world, toe,
 			_controller.net_blade_half_thickness, boxes)
 
 

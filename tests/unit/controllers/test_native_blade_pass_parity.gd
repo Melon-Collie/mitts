@@ -28,9 +28,6 @@ class GameStateStub:
 	func is_movement_locked() -> bool:
 		return false
 
-	func get_goalie_data() -> Array[Dictionary]:
-		return []
-
 	func get_goalie_boxes() -> PackedFloat32Array:
 		return goalies
 
@@ -143,7 +140,7 @@ func _against_goalie(skater: Skater, c: SkaterController, boxes: PackedFloat32Ar
 	var heel: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
 	var mid: Vector3 = skater.get_blade_contact_global()
 	var toe: Vector3 = heel + (mid - heel) * 2.0
-	return GoalieBladeCollision.resolve(mid, heel, toe, c.net_blade_half_thickness + 0.005, boxes) != Vector3.ZERO
+	return GoalieGearCollision.resolve(mid, heel, toe, c.net_blade_half_thickness + 0.005, boxes) != Vector3.ZERO
 
 
 # The reference run, for the coverage a scenario is there to give.

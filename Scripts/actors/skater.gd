@@ -638,16 +638,15 @@ func contact_others() -> Array:
 	return others if others != null else _NO_OTHERS
 
 
-# Live (cached) goalie pose list — one Dictionary per goalie with
-# position / rotation_y / is_butterfly — set by GameManager on spawn
-# (get_goalie_data). clamp_body_to_goalies reads it to hold the skater clear of
+# Every goalie's gear but his stick, packed (GameManager.get_goalie_body_boxes),
+# set on spawn. clamp_body_to_goalies reads it to hold the skater clear of
 # each goalie — skater-vs-goalie contact is analytic.
 # Empty Callable (tutorial dummy / test) → no goalie block.
-var _goalie_data_provider: Callable = Callable()
+var _goalie_boxes_provider: Callable = Callable()
 
 
-func set_goalie_data_provider(provider: Callable) -> void:
-	_goalie_data_provider = provider
+func set_goalie_boxes_provider(provider: Callable) -> void:
+	_goalie_boxes_provider = provider
 
 
 # Set true by the analytic containment clamps (rink / net / goalie) on any tick
@@ -1347,59 +1346,35 @@ func clamp_body_to_net() -> void:
 	_touched_boundary = true
 
 
-const _GOALIE_REACH_SLACK_M: float = 0.01
-
-
-# Holds the skater clear of every goalie's footprint so you can't walk through the
-# goalie. Mirrors clamp_body_to_net: push the XZ out of the goalie footprint — a
-# cylinder while standing/RVH, an oriented box in the butterfly (the leg pads
-# spread wide) — and strip any velocity pointing into the goalie so the skater
-# slides along it instead of being re-seated next tick. Reads the same
-# host-refreshed goalie pose cache the blade clamp uses (position / rotation_y /
-# is_butterfly). A ghosted skater (crease-dwell / offside) passes through, matching
-# the is_ghost gate in _resolve_player_collisions. Called live after the rink/net
-# clamps; same replay and allocation contract.
+# Holds the skater clear of every goalie's gear so you can't walk through the
+# goalie. Mirrors clamp_body_to_net: push the body, a disc of collision_radius,
+# out of his gear across the ice (GoalieGearCollision.body_out, his save boxes
+# less his stick) and strip any velocity pointing into him so the skater slides
+# along him instead of being re-seated next tick. A ghosted skater (crease-dwell
+# / offside) passes through, matching the is_ghost gate in
+# _resolve_player_collisions. Called live after the rink/net clamps; same replay
+# and allocation contract.
 func clamp_body_to_goalies() -> void:
-	if is_ghost or not _goalie_data_provider.is_valid():
+	if is_ghost or not _goalie_boxes_provider.is_valid():
 		return
-	var goalie_data: Array = _goalie_data_provider.call()
-	if goalie_data == null:
+	var boxes: PackedFloat32Array = _goalie_boxes_provider.call()
+	if boxes.is_empty():
 		return
-	var radius: float = collision_radius()
-	var xz := Vector2(global_position.x, global_position.z)
-	# Farther than either footprint reaches (the cylinder, or the box's corner),
-	# the push-out returns the body untouched; the slack covers the box's rotation
-	# rounding.
-	var reach: float = maxf(GameRules.GOALIE_BLOCK_RADIUS + radius,
-			Vector2(GameRules.GOALIE_BUTTERFLY_HALF_X + radius,
-			GameRules.GOALIE_BUTTERFLY_HALF_Z + radius).length()) + _GOALIE_REACH_SLACK_M
-	var reach_sq: float = reach * reach
-	for data: Dictionary in goalie_data:
-		var gpos: Vector3 = data["position"]
-		var gpos_xz := Vector2(gpos.x, gpos.z)
-		if xz.distance_squared_to(gpos_xz) > reach_sq:
-			continue
-		var pushed: Vector2 = GameRules.push_out_of_goalie(
-				xz, gpos_xz, data["rotation_y"], data["is_butterfly"],
-				GameRules.GOALIE_BLOCK_RADIUS + radius,
-				GameRules.GOALIE_BUTTERFLY_HALF_X + radius,
-				GameRules.GOALIE_BUTTERFLY_HALF_Z + radius)
-		if xz.distance_squared_to(pushed) <= 1e-6:
-			continue
-		var out_dir: Vector2 = (pushed - xz).normalized()
-		var vel_xz := Vector2(velocity.x, velocity.z)
-		var into_goalie: float = vel_xz.dot(out_dir)
-		if into_goalie < 0.0:
-			# Velocity points into the goalie — strip that component, keep the
-			# tangential slide so the skater brushes past instead of sticking.
-			vel_xz -= into_goalie * out_dir
-			velocity.x = vel_xz.x
-			velocity.z = vel_xz.y
-		global_position.x = pushed.x
-		global_position.z = pushed.y
-		# Re-seat the working XZ so a second goalie is tested from the new spot.
-		xz = pushed
-		_touched_boundary = true
+	var push: Vector3 = GoalieGearCollision.body_out(global_position, collision_radius(), boxes)
+	if push.length_squared() <= 1e-12:
+		return
+	var out_dir := Vector2(push.x, push.z).normalized()
+	var vel_xz := Vector2(velocity.x, velocity.z)
+	var into_goalie: float = vel_xz.dot(out_dir)
+	if into_goalie < 0.0:
+		# Velocity points into him — strip that component, keep the tangential
+		# slide so the skater brushes past instead of sticking.
+		vel_xz -= into_goalie * out_dir
+		velocity.x = vel_xz.x
+		velocity.z = vel_xz.y
+	global_position.x += push.x
+	global_position.z += push.z
+	_touched_boundary = true
 
 
 # Attribute-scaled shoulder anchor placement. Called from

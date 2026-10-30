@@ -1,7 +1,8 @@
-class_name GoalieBladeCollision
+class_name GoalieGearCollision
 
-# The stick's collision with the goalie: his gear is solid to the blade, a wall
-# it cannot reach through, and touching it confiscates nothing. The boxes are
+# The stick's and the skater's collision with the goalie: his gear is solid to
+# the blade and the body, a wall neither goes through, and touching it
+# confiscates nothing. The boxes are
 # his save boxes, the ones a loose puck meets (GoalieContactDetector's packed
 # layout: three basis columns, the origin, the half extents, 15 floats a box),
 # so the stick stops on exactly what the puck stops on. A carried puck pressed
@@ -16,6 +17,11 @@ class_name GoalieBladeCollision
 # net push it, and only what took it into the face is taken off: along the
 # face it slides.
 #
+# The body (`body_out`) is a disc of the skater's radius standing his whole
+# height, so every box meets it at its own height, and it goes out the nearest
+# side across the ice: at a skater's speed his gear is too thick to pass
+# through in a tick.
+#
 # Pure and allocation-free.
 
 const FLOATS_PER_BOX: int = 15
@@ -26,6 +32,9 @@ const SAMPLES: int = 5
 const SIDE_MIN: float = 0.3
 # Rounds of resolution: a push off one box can put the blade into another.
 const ROUNDS: int = 2
+# The body's: his leg gear overlaps itself (pad, boot, skate, thigh rise), so
+# out of one is often into the next.
+const BODY_ROUNDS: int = 3
 
 
 # The translation that holds the blade (`heel` → `toe`, world) out of every box
@@ -92,6 +101,28 @@ static func _out_along(at: Vector3, way: Vector3, radius: float, boxes: PackedFl
 			continue
 		out = minf(out, (signf(wl[i]) * e[i] - ln[i]) / wl[i])
 	return out if out != INF else 0.0
+
+
+# The push across the ice that holds a skater's body, a disc of `radius` at
+# `at` standing his whole height, out of every box in `boxes`. ZERO when it is
+# clear of him.
+static func body_out(at: Vector3, radius: float, boxes: PackedFloat32Array) -> Vector3:
+	var count: int = boxes.size() / FLOATS_PER_BOX
+	var offset := Vector3.ZERO
+	for _round: int in BODY_ROUNDS:
+		var best := Vector3.ZERO
+		for b: int in count:
+			var o := _origin(boxes, b)
+			var p := Vector3(at.x + offset.x, o.y, at.z + offset.z)
+			if Vector2(p.x - o.x, p.z - o.z).length() > _half(boxes, b).length() + radius:
+				continue
+			var push: Vector3 = point_out(p, p, radius, boxes, b)
+			if push.length_squared() > best.length_squared():
+				best = push
+		if best == Vector3.ZERO:
+			break
+		offset += best
+	return offset
 
 
 # The push across the ice that takes a point now at `now` (at `was` a tick ago),

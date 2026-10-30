@@ -343,7 +343,7 @@ markers, the clamps included. The GDScript is the reference and the fallback.
 Change `apply_blade_toward` or anything it calls (`_solve_top_hand` and its
 reach limits, `_board_reach_limit`, `_blade_target_for`,
 `_carry_backhand_stop`, `_commit_hand_pose`, `resolve_blade_against_goalies` (and
-`GoalieBladeCollision` under it),
+`GoalieGearCollision` under it),
 `resolve_blade_against_net`, `Skater.clamp_blade_to_walls`, and the
 `TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
 rink functions under them) and the port changes with it, or

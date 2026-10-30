@@ -62,9 +62,11 @@ goal line wherever he held it, the post or below the line included
 (`KeeperCover.play_out_way`, `set_down_at`).
 A skater's stick meets the same boxes the puck does (`GameManager.get_goalie_boxes`,
 gathered once a tick): his gear is a wall to the blade and to a carried puck,
-which slide along it and are never stripped by it (`GoalieBladeCollision`,
-`tests/unit/rules/test_goalie_blade_collision.gd`,
-`tests/unit/controllers/test_stick_meets_the_goalie.gd`).
+which slide along it and are never stripped by it, and, less his stick, to the
+skater's body (`get_goalie_body_boxes`, `Skater.clamp_body_to_goalies`), a disc
+standing his whole height that slides along it too (`GoalieGearCollision`,
+`tests/unit/rules/test_goalie_gear_collision.gd`,
+`tests/unit/controllers/test_skater_meets_the_goalie.gd`).
 
 He plays on the host only. His pose goes on the wire with his root
 (`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from), so a

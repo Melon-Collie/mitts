@@ -1009,7 +1009,6 @@ var puck: Puck = null
 # Injected at setup. Expected methods:
 #   is_host() -> bool                              — changes only per session; cached in _is_host
 #   is_movement_locked() -> bool                   — polled per frame
-#   get_goalie_data() -> Array[Dictionary]         — position/rotation_y/is_butterfly per goalie (the body clamp)
 #   get_goalie_boxes() -> PackedFloat32Array        — every goalie's save boxes, packed (the stick's wall)
 var _game_state: Node = null
 var _is_host: bool = false
@@ -2489,14 +2488,14 @@ func _collide_pinned_puck_with_net() -> void:
 
 # THE GOALIE — his gear is solid to a carried puck and, like the twine, does not
 # strip: pressed into him it is held at his gear, swept from where it was
-# (GoalieBladeCollision, the stick's own wall, with the puck's radius).
+# (GoalieGearCollision, the stick's own wall, with the puck's radius).
 func _pinned_puck_off_goalies(prev: Vector3, at: Vector3) -> Vector3:
 	if not _game_state.has_method("get_goalie_boxes"):
 		return Vector3.ZERO
 	var boxes: PackedFloat32Array = _game_state.get_goalie_boxes()
 	if boxes.is_empty():
 		return Vector3.ZERO
-	return GoalieBladeCollision.resolve(prev, at, at, GameRules.PUCK_COLLISION_RADIUS, boxes)
+	return GoalieGearCollision.resolve(prev, at, at, GameRules.PUCK_COLLISION_RADIUS, boxes)
 
 
 # Nudge: the carrier taps the puck off the blade as a soft self-pass. The
