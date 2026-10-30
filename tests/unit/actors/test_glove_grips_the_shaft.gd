@@ -1,8 +1,9 @@
 extends GutTest
 
-# A glove on the stick holds it across the knuckle roll and turns the hand
-# square across the shaft, bending at the wrist within the wrist's range;
-# a glove off the stick lines up with its forearm (SkaterArmPoses.glove_basis).
+# A glove on the stick turns the hand toward its grip on the shaft — square
+# across it by default, the top hand's diagonal across the palm — bending at the
+# wrist within the wrist's range; a glove off the stick lines up with its
+# forearm (SkaterArmPoses.glove_basis).
 # The fist's long axis is local −Y (wrist → fingers), its knuckle roll local X.
 
 const MAX_BEND: float = deg_to_rad(25.0)
@@ -50,3 +51,19 @@ func test_which_end_of_the_shaft_is_up_does_not_matter() -> void:
 	var b: Basis = SkaterArmPoses.glove_basis(forearm, -shaft, MAX_BEND)
 	for axis: int in 3:
 		assert_almost_eq((a[axis] - b[axis]).length(), 0.0, 0.0001)
+
+
+func test_the_top_hand_holds_the_shaft_across_its_palm() -> void:
+	var forearm := Vector3(0.0, -1.0, 0.0)
+	var grip_angle: float = deg_to_rad(45.0)
+	for deg: float in [20.0, 45.0, 60.0, 80.0, 90.0, 110.0]:
+		# A shaft whose tip lies `deg` off the forearm.
+		var shaft := Vector3(sin(deg_to_rad(deg)), -cos(deg_to_rad(deg)), 0.0)
+		var b: Basis = SkaterArmPoses.glove_basis(forearm, shaft, MAX_BEND, grip_angle)
+		var hand: Vector3 = _hand_axis(b)
+		var bend: float = clampf(deg_to_rad(deg) - grip_angle, -MAX_BEND, MAX_BEND)
+		assert_almost_eq(hand.angle_to(forearm), absf(bend), 0.0001,
+				"%.0f° off the forearm bends the wrist toward the grip, up to its range" % deg)
+		assert_almost_eq(hand.angle_to(shaft), deg_to_rad(deg) - bend, 0.0001)
+		assert_gt((-shaft).dot(b.y), 0.0, "%.0f°: the butt leaves toward the wrist" % deg)
+		assert_gt(b.determinant(), 0.0, "never mirrored")

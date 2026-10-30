@@ -41,6 +41,8 @@ class NativeArmRig : public godot::RefCounted {
 	godot::Vector3 thick_glove;
 	// Skater.wrist_break_max_deg, in radians.
 	double wrist_break_max = 0.0;
+	// The fist's angle off the shaft (SkaterArmRig._grip_angle), in radians.
+	double grip_angle = Math_PI * 0.5;
 
 protected:
 	static void _bind_methods();
@@ -50,7 +52,7 @@ public:
 	void bind(godot::Object *p_skeleton, const godot::PackedInt32Array &p_bones);
 	void configure(const godot::Vector3 &p_thick_upper, const godot::Vector3 &p_thick_forearm,
 			const godot::Vector3 &p_thick_cuff, const godot::Vector3 &p_thick_elbow,
-			const godot::Vector3 &p_thick_glove, double p_wrist_break_max);
+			const godot::Vector3 &p_thick_glove, double p_wrist_break_max, double p_grip_angle);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off

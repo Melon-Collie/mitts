@@ -186,7 +186,7 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
-	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
+	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local, _grip_angle(arm))
 
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
@@ -214,7 +214,7 @@ func _configure_native() -> void:
 		var parts: Array = _ARM_PARTS[arm]
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
-				deg_to_rad(_skater.wrist_break_max_deg))
+				deg_to_rad(_skater.wrist_break_max_deg), _grip_angle(arm))
 
 
 # The elbow's pole on this arm's side, tucked by a check load.
@@ -299,7 +299,8 @@ func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 
 # Positions the gloved fist at the hand; `grip` is the shaft through the fist
 # (skeleton space), ZERO off the stick.
-func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> void:
+func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3,
+		grip_angle: float) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var dir: Vector3 = hand - elbow
 	if dir.length_squared() < 0.0001:
@@ -308,8 +309,13 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> voi
 		_skeleton.set_bone_pose(part, held)
 		return
 	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
-			deg_to_rad(_skater.wrist_break_max_deg))
+			deg_to_rad(_skater.wrist_break_max_deg), grip_angle)
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
+
+
+# The angle `arm`'s fist holds the shaft at off its long axis (glove_basis).
+func _grip_angle(arm: int) -> float:
+	return deg_to_rad(_skater.top_grip_angle_deg) if arm == 0 else PI * 0.5
 
 
 func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:

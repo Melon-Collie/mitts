@@ -34,32 +34,31 @@ static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: V
 
 # The fist at `hand` on a forearm from `elbow`: glove_basis, scaled.
 static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: float,
-		thickness: Vector3) -> Transform3D:
-	return Transform3D(glove_basis((hand - elbow).normalized(), grip, max_bend)
+		thickness: Vector3, grip_angle: float = PI * 0.5) -> Transform3D:
+	return Transform3D(glove_basis((hand - elbow).normalized(), grip, max_bend, grip_angle)
 			.scaled_local(thickness), hand)
 
 
 # The fist on a forearm pointing `forearm_dir`. Its long (local Y) axis runs
 # wrist → fingers and its knuckle roll across local X. Off the stick (`grip`
 # ZERO) it lines up with the forearm, rolled from world up like the cuff. On it,
-# the knuckle roll lies along the shaft and the hand turns toward square across
-# it, bending at the wrist by up to `max_bend` radians: the wrist breaks as the
-# stick swings against the forearm.
-static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
+# the hand turns toward `grip_angle` radians off the shaft toward its tip
+# (`grip` points butt → tip), bending at the wrist by up to `max_bend` radians:
+# the wrist breaks as the stick swings against the forearm. Square across it
+# (the default) the shaft runs along the knuckle roll and either end may be the
+# tip; under it the shaft crosses the palm diagonally and the butt leaves by
+# the heel of the hand.
+static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float,
+		grip_angle: float = PI * 0.5) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)
 	if grip == Vector3.ZERO:
 		return straight
-	var across: float = forearm_dir.dot(grip)
-	var square: Vector3 = forearm_dir - grip * across
-	if square.length_squared() < 0.0001:
-		return straight
-	square = square.normalized()
 	var hand_axis: Vector3 = forearm_dir
-	var hinge: Vector3 = forearm_dir.cross(square)
+	var hinge: Vector3 = forearm_dir.cross(grip)
 	if hinge.length_squared() > 1e-8:
 		hand_axis = forearm_dir.rotated(hinge.normalized(),
-				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
+				clampf(forearm_dir.angle_to(grip) - grip_angle, -max_bend, max_bend))
 	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
 	if knuckles.length_squared() < 0.0001:
 		return straight
