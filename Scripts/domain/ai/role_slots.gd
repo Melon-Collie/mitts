@@ -238,12 +238,15 @@ static func assign(
 		AIPossessionState.State.TRANS_DEFENSE:
 			# The 1-2, filled from the back: the two posts of our line first, so
 			# whoever can get there holds it, and the last body is the high one.
+			var strong_post: Vector3 = back_post(own_goal_z, puck_pos,
+					_strong_x * BACK_LANE_X_M)
+			var mid_post: Vector3 = back_post(own_goal_z, puck_pos, 0.0)
 			_assign_pair_then_remainder(
 					snapshot, teammates, fixed_peers, prev_assignments, result,
-					Slot.BACK_STRONG, back_post(own_goal_z, puck_pos,
-							_strong_x * BACK_LANE_X_M),
-					Slot.BACK_MID, back_post(own_goal_z, puck_pos, 0.0),
-					Slot.NZ_F1, caps_by_peer)
+					Slot.BACK_STRONG, strong_post, Slot.BACK_MID, mid_post,
+					Slot.NZ_F1, caps_by_peer, signf(own_goal_z),
+					_post_deadline(snapshot, team_id_by_peer, team_id, strong_post, caps_by_peer),
+					_post_deadline(snapshot, team_id_by_peer, team_id, mid_post, caps_by_peer))
 
 		AIPossessionState.State.OZONE:
 			_assign_one_then_remainder(
@@ -292,7 +295,14 @@ static func assign(
 
 # The peer that would ARRIVE at `target_pos` soonest, excluding already-fixed
 # peers, with hysteresis; ties break on the lower peer id. -1 if no eligible
-# peer.
+# peer. `line_dir`, our goal's z-sign for a post on our line, whose `deadline_s`
+# is the carrier's arrival there less the brake margin (_post_deadline): while
+# somebody can be there by then the line is held, and whoever gets there
+# soonest holds it. Once nobody can, the line is lost and the post's holder is
+# riding the rush back, so a body already deeper than it races only his trip
+# across to its lane: raced up to the post, the man riding the carrier back
+# hardest has the most to brake out, and loses the carrier to a slower
+# teammate.
 static func _pick_soonest_with_hysteresis(
 		snapshot: WorldSnapshot,
 		teammates: Array,
@@ -300,7 +310,12 @@ static func _pick_soonest_with_hysteresis(
 		prev_assignments: Dictionary,
 		target_pos: Vector3,
 		slot: Slot,
-		caps_by_peer: Dictionary) -> int:
+		caps_by_peer: Dictionary,
+		line_dir: float = 0.0,
+		deadline_s: float = INF) -> int:
+	var line_lost: bool = line_dir != 0.0 and deadline_s < INF \
+			and not _anyone_in_time(snapshot, teammates, fixed_peers, target_pos,
+					caps_by_peer, deadline_s)
 	var best_pid: int = -1
 	var best_score: float = INF
 	for pid: int in teammates:
@@ -310,14 +325,50 @@ static func _pick_soonest_with_hysteresis(
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var speed: float = caps.max_speed if caps != null \
 				else AIArrival.SKATER_REF_SPEED_M_S
-		var t: float = AIArrival.time_to_arrive(
-				s.position, target_pos, s.velocity, speed)
+		var t: float = AIArrival.time_to_arrive(s.position, target_pos, s.velocity, speed)
+		if line_lost and line_dir * s.position.z > line_dir * target_pos.z:
+			t = AIArrival.time_to_arrive(Vector3(s.position.x, 0.0, 0.0),
+					Vector3(target_pos.x, 0.0, 0.0), Vector3(s.velocity.x, 0.0, 0.0), speed)
 		if _hysteresis_class(prev_assignments.get(pid, Slot.NONE)) != _hysteresis_class(slot):
 			t += HYSTERESIS_PENALTY_S
 		if t < best_score or (t == best_score and (best_pid == -1 or pid < best_pid)):
 			best_score = t
 			best_pid = pid
 	return best_pid
+
+
+# Whether any peer not yet fixed arrives at `target_pos` by `deadline_s`.
+static func _anyone_in_time(snapshot: WorldSnapshot, teammates: Array,
+		fixed_peers: Dictionary, target_pos: Vector3, caps_by_peer: Dictionary,
+		deadline_s: float) -> bool:
+	for pid: int in teammates:
+		if fixed_peers.has(pid):
+			continue
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var speed: float = caps.max_speed if caps != null \
+				else AIArrival.SKATER_REF_SPEED_M_S
+		if AIArrival.time_to_arrive(s.position, target_pos, s.velocity, speed) <= deadline_s:
+			return true
+	return false
+
+
+# A post on our line's deadline: the opposing carrier's arrival there less the
+# brake margin (the seconds a skater at league top speed needs to shed it), as
+# AIRoleSlots5's back line reads it. INF with no opposing carrier.
+static func _post_deadline(snapshot: WorldSnapshot, team_id_by_peer: Dictionary,
+		team_id: int, post: Vector3, caps_by_peer: Dictionary) -> float:
+	if snapshot.puck_state == null:
+		return INF
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or team_id_by_peer.get(carrier, team_id) == team_id \
+			or not snapshot.skater_states.has(carrier):
+		return INF
+	var cs: SkaterNetworkState = snapshot.skater_states[carrier]
+	var caps: AISkaterCaps = caps_by_peer.get(carrier)
+	var speed: float = caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
+	return maxf(AIArrival.time_to_arrive(cs.position, post, cs.velocity, speed)
+			- GameRules.DEFAULT_SKATER_MAX_SPEED_M_S / AISteering.ARRIVAL_BRAKE_DECEL_M_S2, 0.0)
 
 
 # Cross-state hysteresis continuity. A possession-state flip renames the slots
@@ -342,8 +393,9 @@ static func _hysteresis_class(slot: int) -> int:
 
 
 # Assigns slot1 to soonest-to-target1 peer, slot2 to soonest-to-target2
-# peer, then dumps any remainder into slot_remainder. Used by TRANS_DEFENSE and
-# FORECHECK.
+# peer, then dumps any remainder into slot_remainder. Used by TRANS_DEFENSE
+# (both targets posts on our line, `line_dir` its goal's z-sign, each with its
+# deadline) and FORECHECK.
 static func _assign_pair_then_remainder(
 		snapshot: WorldSnapshot,
 		teammates: Array,
@@ -353,17 +405,20 @@ static func _assign_pair_then_remainder(
 		slot1: Slot, target1: Vector3,
 		slot2: Slot, target2: Vector3,
 		slot_remainder: Slot,
-		caps_by_peer: Dictionary) -> void:
+		caps_by_peer: Dictionary,
+		line_dir: float = 0.0,
+		deadline1_s: float = INF,
+		deadline2_s: float = INF) -> void:
 	var pid1: int = _pick_soonest_with_hysteresis(
 			snapshot, teammates, fixed_peers, prev_assignments,
-			target1, slot1, caps_by_peer)
+			target1, slot1, caps_by_peer, line_dir, deadline1_s)
 	if pid1 != -1:
 		result[pid1] = slot1
 		fixed_peers[pid1] = true
 
 	var pid2: int = _pick_soonest_with_hysteresis(
 			snapshot, teammates, fixed_peers, prev_assignments,
-			target2, slot2, caps_by_peer)
+			target2, slot2, caps_by_peer, line_dir, deadline2_s)
 	if pid2 != -1:
 		result[pid2] = slot2
 		fixed_peers[pid2] = true

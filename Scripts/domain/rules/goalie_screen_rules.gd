@@ -1,9 +1,11 @@
 class_name GoalieScreenRules
 
 # How a body in front of the goalie hides a shot from him: the silhouette and
-# the sightline, pure geometry. The bots read it to clear or not make a screen
-# in front of their own goalie (AIShotBlockRead, AIScreenRead), and the shot
-# log records the delay it prices (GoalieController.screen_delay_for).
+# the sightline, pure geometry. The goalie reads a screened shot late by the
+# delay it prices (GoalieController.screen_delay_for, which the shot log
+# records too), loses his look at a puck a body hides, and looks round one
+# (KeeperScreen); the bots read it to clear or not make a screen in front of
+# their own goalie (AIShotBlockRead, AIScreenRead).
 
 # ── Screen occlusion (grounded sightline model) ──────────────────────────────
 # A body between the shooter and the goalie hides the puck: the goalie can't start
@@ -79,6 +81,37 @@ static func screener_half_width_at(sight_y: float, cfg: ScreenConfig) -> float:
 		return cfg.torso_half_width
 	return lerpf(cfg.leg_half_width, cfg.torso_half_width,
 			clampf(sight_y / maxf(cfg.hip_height, 0.001), 0.0, 1.0))
+
+# Whether `body` stands on the sightline from a goalie standing at
+# `goalie_pos` to the puck at `puck_pos`: between his eyes and the puck, clear
+# of both ends (the shooter, and a body on his own eyes), and within the
+# body's half-width at the height the line crosses it.
+static func hides(body: Vector3, goalie_pos: Vector3, puck_pos: Vector3, cfg: ScreenConfig) -> bool:
+	var px: float = puck_pos.x - goalie_pos.x
+	var pz: float = puck_pos.z - goalie_pos.z
+	var p_len: float = sqrt(px * px + pz * pz)
+	if p_len <= cfg.min_along:
+		return false
+	var vhx: float = px / p_len
+	var vhz: float = pz / p_len
+	var wx: float = body.x - goalie_pos.x
+	var wz: float = body.z - goalie_pos.z
+	var along: float = wx * vhx + wz * vhz
+	if along <= cfg.min_along or along >= p_len - cfg.min_along:
+		return false
+	var eye_y: float = goalie_pos.y + cfg.eye_height
+	var sight_y: float = eye_y + along / p_len * (puck_pos.y - eye_y)
+	return absf(wx * -vhz + wz * vhx) < screener_half_width_at(sight_y, cfg)
+
+
+# The first of `bodies` that hides the puck at `puck_pos` from a goalie at
+# `goalie_pos` (`hides`); -1, a clean look.
+static func hidden_by(goalie_pos: Vector3, puck_pos: Vector3, bodies: PackedVector3Array, cfg: ScreenConfig) -> int:
+	for i: int in bodies.size():
+		if hides(bodies[i], goalie_pos, puck_pos, cfg):
+			return i
+	return -1
+
 
 static func screen_occlusion_delay(
 		puck_position: Vector3,

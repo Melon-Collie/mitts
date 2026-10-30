@@ -12,15 +12,17 @@ Four files here hold him in the game:
 | File | Owns |
 |---|---|
 | `goalie_controller.gd` | his seat, which every caller, the puck, the wire and the replays address: his node, puck and net, the puck's signals routed to whoever plays him, the host's snapshots and a client's interpolation of them, the reads the shot log takes of him |
-| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover); played on the host, posed from the wire on a client and in a replay |
+| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover), a puck a carrier of theirs drives at him with jabbed off it (KeeperPoke), one at his feet an opponent beats his cover to swept to the corner (KeeperClear), a screened shot read late and a screen looked round (KeeperScreen); played on the host, posed from the wire on a client and in a replay |
 | `goalie_state_machine.gd` | the stance enum the wire carries (`state_enum`) and the bots and the pad sounds read, and its families |
 | `goalie_world_view.gd` | one scan of the skaters a tick, shared by every read of them |
 
 The goalie's rules in `Scripts/domain/rules/goalie_*.gd` are pure and shared:
 the rebound doctrine (`GoalieSaveRules`), the push kinematics his footwork runs
 on (`GoaliePushRules`), where a pass in flight is shot from (`GoaliePassRead`),
-and how a body hides a shot from him (`GoalieScreenRules`, which the bots read
-to clear or not make a screen in front of their own goalie).
+and how a body hides a shot from him (`GoalieScreenRules`, by which he reads a
+screened shot late, loses his look at a hidden puck and looks round a screen,
+and which the bots read to clear or not make a screen in front of their own
+goalie).
 
 ### Delete the copy, don't correct the number
 
@@ -342,7 +344,8 @@ Where the extension is built, `NativeBladePass` runs the whole of
 markers, the clamps included. The GDScript is the reference and the fallback.
 Change `apply_blade_toward` or anything it calls (`_solve_top_hand` and its
 reach limits, `_board_reach_limit`, `_blade_target_for`,
-`_carry_backhand_stop`, `_commit_hand_pose`, the goalie clamps,
+`_carry_backhand_stop`, `_commit_hand_pose`, `resolve_blade_against_goalies` (and
+`GoalieGearCollision` under it),
 `resolve_blade_against_net`, `Skater.clamp_blade_to_walls`, and the
 `TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
 rink functions under them) and the port changes with it, or

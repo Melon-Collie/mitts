@@ -291,6 +291,9 @@ var _goalie_contact: GoalieContactDetector.Contact = null
 var _vfx: PuckVFX = null
 var _goalie_scratch: SweptDiscOBB.Result = null
 var _save_result: GoalieSaveRules.ContactResult = null
+# The same contact off his gear held still: what his own motion adds is the
+# difference (GoalieSaveRules.keep_out_of_own_net).
+var _save_still: GoalieSaveRules.ContactResult = null
 var _tick_result: PuckAuthorityRules.TickResult = null
 # NativePuckStep (null = extension absent, GDScript step below). Configured in
 # _ready via the shared factory so host drive and client prediction match.
@@ -398,6 +401,7 @@ func set_server_mode(is_server: bool) -> void:
 		_goalie_contact = GoalieContactDetector.Contact.new()
 		_goalie_scratch = SweptDiscOBB.Result.new()
 		_save_result = GoalieSaveRules.ContactResult.new()
+		_save_still = GoalieSaveRules.ContactResult.new()
 		_tick_result = PuckAuthorityRules.TickResult.new()
 		_obstacle_result = PuckObstacleCollision.Result.new()
 		_obstacle_scratch = SweptDiscOBB.Result.new()
@@ -686,6 +690,35 @@ func apply_poke_check(checker_skater: Skater) -> void:
 	_set_cooldown(checker_skater, poke_checker_cooldown)
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
+
+# A goalie's poke check (KeeperController): his blade at `blade_pos`, moving at
+# `blade_vel`, knocks the puck off its carrier as a skater's poke does. No skater
+# took it, so nobody is credited and nobody is held off it but the carrier.
+func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
+	var ex_carrier: Skater = carrier
+	var away: Vector3 = ex_carrier.global_position - blade_pos
+	away.y = 0.0
+	clear_carrier()
+	linear_velocity = PuckCollisionRules.poke_strip_velocity(
+			blade_vel,
+			ex_carrier.blade_world_velocity,
+			ex_carrier.global_position,
+			blade_pos,
+			poke_carrier_vel_blend,
+			poke_strip_min_speed,
+			poke_strip_max_speed,
+			away if away.length_squared() > 1e-6 else Vector3.FORWARD)
+	linear_velocity.y = _pinch_lift(blade_vel, ex_carrier.blade_world_velocity,
+			blade_pos, ex_carrier.get_blade_contact_global())
+	_set_cooldown(ex_carrier, reattach_cooldown)
+	puck_stripped.emit(ex_carrier, null)
+	puck_released.emit()
+
+# A goalie's clear (KeeperController): his stick sweeps the loose puck away
+# along the ice at `velocity`, a touch of his gear as any contact with it is.
+func apply_goalie_clear(goalie: Goalie, velocity: Vector3) -> void:
+	linear_velocity = Vector3(velocity.x, 0.0, velocity.z)
+	_queue_contact_event(ContactEvent.GOALIE_TOUCH, goalie)
 
 # Stick-lift strip: unlike a poke (which squirts the puck off the blade contact),
 # a lifted stick just leaves the puck where it was being carried — so it keeps
@@ -990,6 +1023,14 @@ func _drive_analytic(dt: float) -> void:
 			if part == GoalieSaveRules.SavePart.CHEST and g != null and g.chest_contact.is_valid():
 				g.chest_contact.call(vel, _goalie_contact.point, _goalie_contact.normal,
 						_goalie_contact.part_velocity, _save_result)
+			# Toward the goal line of the end he defends: his own gear never
+			# carries a puck that way.
+			var to_goal := Vector3(0.0, 0.0, signf(sub_prev.z))
+			if not _save_result.caught and not _save_result.trapped \
+					and _goalie_contact.part_velocity != Vector3.ZERO:
+				GoalieSaveRules.resolve_contact(vel, part, _goalie_contact.normal, _save_still, fwd)
+				_save_result.velocity = GoalieSaveRules.keep_out_of_own_net(_save_still.velocity,
+						_save_result.velocity, to_goal)
 			vel = _save_result.velocity
 			# Eject the disc flush off the contacted face. `point` is the sphere
 			# CENTRE at toi — already `radius` off the real face via the
@@ -1003,7 +1044,8 @@ func _drive_analytic(dt: float) -> void:
 				pos = Vector3(_goalie_contact.point.x, ice_height,
 						_goalie_contact.point.z)
 			else:
-				pos = _goalie_contact.point + _goalie_contact.normal * _goalie_contact.depth
+				pos = _goalie_contact.point + GoalieSaveRules.eject_out_of_own_net(
+						_goalie_contact.normal * _goalie_contact.depth, to_goal)
 			if not _contact_latch_goalie and not touched_goalie:
 				emit_goalie = _goalie_contact.goalie as Goalie
 			# The catch is gated on its own occurrence, NOT the touch latch — a

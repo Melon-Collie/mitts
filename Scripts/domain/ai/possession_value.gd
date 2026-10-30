@@ -75,6 +75,7 @@ var _defender_caps: Array = []
 var _entry_spots: Array[Vector3] = []
 var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
 var _projected: Array[Vector3] = []
+var _shot_defence: Array[Vector3] = []
 var _skate_defence: Array[Vector3] = []
 # The entries' worth on empty ice at _open_goal: _worth's bound.
 var _open_goal: Vector3 = Vector3.INF
@@ -313,16 +314,24 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 # net it defends. The keeper is where he stands.
 
 # What a man at `pos`, moving at `vel`, threatens with the puck on his stick:
-# his shot where he stands, or what possession of his spot is worth.
-func threat_of_carrier(pos: Vector3, vel: Vector3, keeper: Vector3) -> float:
+# his shot where he stands, or what possession of his spot is worth; the man
+# there `start_s` from now, against the defence carried on to then.
+func threat_of_carrier(pos: Vector3, vel: Vector3, keeper: Vector3, start_s: float = 0.0) -> float:
 	var shot: float = 0.0
 	# Outside the zone with the keeper home a shot is dead by the hole geometry.
 	if AIActionScoring.in_offensive_zone(pos, _goal) \
 			or keeper.distance_to(_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M:
-		shot = AIActionScoring.score_shoot_value(pos, _goal, keeper, _defenders, 0.0,
+		var defence: Array[Vector3] = _defenders
+		if start_s > 0.0:
+			_shot_defence.clear()
+			for i: int in _defenders.size():
+				_shot_defence.append(AITrajectory.predict_at(_defenders[i], _defender_vels[i], start_s))
+			defence = _shot_defence
+		shot = AIActionScoring.score_shoot_value(pos, _goal, keeper, defence, 0.0,
 				AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-				_defender_caps, _goalie_half(pos, Vector3.INF, keeper, 0.0))
-	return maxf(shot, at(pos, 0.0, vel))
+				_defender_caps, _goalie_half(pos, Vector3.INF, keeper, 0.0)) \
+				* AIActionScoring.delay_discount(start_s)
+	return maxf(shot, at(pos, start_s, vel))
 
 
 # What a feed from `from` to a man at `to`, moving at `to_vel`, threatens: his

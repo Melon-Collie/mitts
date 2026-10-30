@@ -187,6 +187,25 @@ static func rebound_velocity(
 			MATERIALS[base + MAT_FRICTION])
 
 
+# His own gear's motion never carries a puck toward his own goal line. Of the
+# contact's rebound off his moving gear (`moving`) against the same contact off
+# that gear held still (`still`), the difference is his push; its part toward
+# the goal line (`to_goal`, unit, along the rink's length) is taken off. What
+# still gear does to a puck, a shot going in off a pad included, stands.
+static func keep_out_of_own_net(still: Vector3, moving: Vector3, to_goal: Vector3) -> Vector3:
+	var push: Vector3 = moving - still
+	var toward: float = push.dot(to_goal)
+	return still + (push - to_goal * toward if toward > 0.0 else push)
+
+
+# The same for his gear pushed into a puck it overlaps: of the shove that
+# frees the puck (`eject`), the part toward his goal line goes, so gear moving
+# that way rides over a puck rather than walking it in.
+static func eject_out_of_own_net(eject: Vector3, to_goal: Vector3) -> Vector3:
+	var toward: float = eject.dot(to_goal)
+	return eject - to_goal * toward if toward > 0.0 else eject
+
+
 # Is the struck surface one the goalie is actually PRESENTING to the puck?
 #
 # `contact_normal` points outward, from the goalie's surface toward the puck, so

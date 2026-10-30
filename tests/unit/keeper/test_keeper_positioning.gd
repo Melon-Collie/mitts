@@ -11,7 +11,9 @@ extends GutTest
 # of the crease against a still or slow puck, deeper against one coming at him
 # or swinging across him or with an open receiver across the slot, no deeper
 # than the floor. A pass he reads he skates to where its stick meets it, set
-# there, turned to it. In front of the net he sinks into the low ready once a
+# there, turned to it. A carrier of theirs out of tight holding the puck out to
+# one side he squares to the puck, not the body, and one in tight he meets
+# down on the puck's line. In front of the net he sinks into the low ready once a
 # shot could reach him before his legs and his drop could answer it. At a sharp
 # angle his pad seals the near post along the ice; a carrier driving at a post
 # finds it sealed once he is in tight, one who feints at it from range finds
@@ -596,7 +598,7 @@ func test_a_cut_across_from_the_post_is_slid_with_on_his_knees() -> void:
 		var to := Vector2(-0.9 * side, -0.9)
 		var tick: int = 0
 		var t: float = 0.0
-		while t < 2.0:
+		while t < 3.0:
 			var v: Vector2 = (to - puck).normalized() * 3.0 if puck != to else Vector2.ZERO
 			puck = puck.move_toward(to, 3.0 * DT)
 			if tick % PLANNER_EVERY == 0:
@@ -613,42 +615,48 @@ func test_a_cut_across_from_the_post_is_slid_with_on_his_knees() -> void:
 				1.0 - cos(KeeperRoute.DOWN_FACED_RAD), "%s: square to the carrier" % what)
 
 
-# Where his angle line crosses a carrier of theirs at `body` holding the puck
-# `held` across from him, read `read_s` late, the keeper at the top of the
-# crease: how far across the carrier, as the net sees him.
-func _covered_across(body: Vector2, held: float, read_s: float) -> float:
-	_brain = KeeperPositioning.new()
-	_brain.play = KeeperPlayRead.new()
-	_brain.play.delay_s = read_s
-	_brain.play.carrier_at = body
-	_motor = KeeperMotor.new()
-	_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
-	var across := Vector2(-body.y, body.x).normalized()
-	return (_brain._covered(body + across * held, _motor) - body).dot(across)
+# Out of tight, a carrier of theirs holding the puck out to one side: he
+# squares to the puck where it is, its angle line through the net's centre,
+# either side alike, on his feet.
+func test_out_of_tight_he_squares_to_the_puck() -> void:
+	for held: float in [0.9, -0.9, 0.0]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_brain.play.theirs = true
+		_brain.play.loose = false
+		_motor = KeeperMotor.new()
+		var puck := Vector2(held, -6.0)
+		_brain.decide(puck, Vector2.ZERO, _motor)
+		var spot: Vector2 = _motor.route.spot
+		assert_eq(_motor.route.rest, R.FEET, "%+.1f held: on his feet" % held)
+		assert_almost_eq(absf(spot.normalized().cross(puck.normalized())), 0.0, 1e-4,
+				"%+.1f held: on the puck's angle line" % held)
+		assert_gt(spot.dot(puck), 0.0, "%+.1f held: out toward it" % held)
+		assert_almost_eq(_forward(_motor.route.facing).dot((puck - spot).normalized()), 1.0, 1e-4,
+				"%+.1f held: square to the puck" % held)
 
 
-# In tight, a pull across beats his read, so with the puck held out to one
-# side he plays nearer the carrier's body than the puck, the same either side.
-func test_against_a_carrier_in_tight_he_plays_the_reach_not_the_puck() -> void:
-	var hard: float = GoalieSkillProfile.hard().reaction_delay_s
-	for held: float in [0.9, -0.9]:
-		var at: float = _covered_across(Vector2(0.0, -3.0), held, hard)
-		assert_lt(absf(at), absf(held) * 0.5, "%+.1f held: nearer his body than the puck" % held)
-		assert_gte(at * signf(held), 0.0, "%+.1f held: no further off than the middle of his reach" % held)
-	assert_almost_eq(_covered_across(Vector2(0.0, -3.0), 0.9, hard), -_covered_across(Vector2(0.0, -3.0), -0.9, hard),
-			1e-4, "either side alike")
-	assert_almost_eq(_covered_across(Vector2(0.0, -3.0), 0.0, hard), 0.0, 1e-4, "a puck in front of him played there")
-
-
-# Further out his skating follows a pull in time, so he plays nearer the puck;
-# a slower read never nearer it than a quicker one.
-func test_with_time_to_follow_a_pull_he_plays_nearer_the_puck() -> void:
-	var hard: float = GoalieSkillProfile.hard().reaction_delay_s
-	var easy: float = GoalieSkillProfile.easy().reaction_delay_s
-	var was: float = -INF
-	for out: float in [3.0, 6.0, 9.0, 12.0]:
-		var at: float = _covered_across(Vector2(0.0, -out), 0.9, hard)
-		assert_gte(at, was - 1e-6, "%.0f m out: no further from the puck than nearer in" % out)
-		assert_lte(_covered_across(Vector2(0.0, -out), 0.9, easy), at + 1e-6, "%.0f m out: a slower read" % out)
-		was = at
-	assert_gt(was, _covered_across(Vector2(0.0, -3.0), 0.9, hard), "further out, nearer the puck")
+# A carrier of theirs in tight in front of him, the puck held anywhere across
+# him: he goes down on the puck's line, square to it.
+func test_in_tight_he_goes_down_on_the_pucks_line() -> void:
+	for held: float in [0.0, 0.8, -0.8]:
+		_brain = KeeperPositioning.new()
+		_brain.play = KeeperPlayRead.new()
+		_motor = KeeperMotor.new()
+		_motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
+		var body := Vector2(0.0, -2.4)
+		var puck: Vector2 = body + Vector2(held, 0.3)
+		var tick: int = 0
+		for i: int in int(2.5 / DT):
+			_brain.play.step(DT, puck, Vector2.ZERO, false, body, true)
+			if tick % PLANNER_EVERY == 0:
+				_brain.decide(_brain.play.puck, _brain.play.motion, _motor)
+			_motor.step(DT)
+			tick += 1
+		var what: String = "%+.1f held" % held
+		var at := Vector2(_motor.x, _motor.z)
+		assert_eq(_motor.rest, R.DOWN, "%s: down" % what)
+		assert_lte(absf(at.normalized().cross(puck.normalized())) * at.length(), KeeperPositioning.SEAL_NEAR_M,
+				"%s: on the puck's line" % what)
+		assert_almost_eq(_forward(_motor.yaw).dot((puck - at).normalized()), 1.0,
+				1.0 - cos(KeeperRoute.DOWN_FACED_RAD), "%s: square to it" % what)

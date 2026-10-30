@@ -94,6 +94,8 @@ var _spot_velocity := Vector2.ZERO
 var _spot_since: float = 0.0
 # Whether the goal on his feet is skated to however far it is.
 var _skate: bool = false
+# A butterfly dropped into from a glide, let go as it lands (`_drop_carrying`).
+var _landing: bool = false
 # Frozen where he is and turned as he is (`freeze`), no move started.
 var _frozen: bool = false
 var _frozen_at := Vector2.ZERO
@@ -245,6 +247,7 @@ func can_save(down: bool) -> bool:
 
 # The low save `low` to `side`, cutting in now.
 func save(low: int, side: float) -> void:
+	_landing = false
 	pose(_cut)
 	save_move.fall = fall
 	low_ready.cut()
@@ -321,12 +324,17 @@ func step(dt: float) -> void:
 		yaw = _frozen_yaw
 	# Sunk while set on his feet, shuffling or skating with the play and asked, out of it
 	# with any other move; a drop or a save goes from where he has sunk to
-	# (KeeperDrop.drop_from, `save`).
-	var with_play: bool = _mover == Mover.GLIDE and glide.velocity.length() <= glide.shuffle_speed \
+	# (KeeperDrop.drop_from, `save`). Skating with the play is across his line no
+	# faster than he shuffles, in depth at any glide: backing in on a rush he
+	# glides back in his stance.
+	var with_play: bool = _mover == Mover.GLIDE and absf(glide.velocity.rotated(yaw).x) <= glide.shuffle_speed \
 			or _mover == Mover.FOOTWORK and footwork.move == KeeperFootwork.Move.SHUFFLE
 	low_ready.step(dt, rest == Rest.FEET and (_mover == Mover.NONE or with_play))
 	_velocity = (Vector2(x, z) - was) / maxf(dt, 1e-6)
 	fall = maxf(sqrt(1.0 - drop.down), KeeperLowReady.fall_share_at(1.0)) if _mover == Mover.DROP else low_ready.fall_share()
+	# What a slide from his feet would fall from, for the route to price it.
+	if _mover != Mover.SLIDE:
+		slide.fall = low_ready.fall_share()
 
 
 func _step_mover(dt: float) -> void:
@@ -379,10 +387,18 @@ func _step_mover(dt: float) -> void:
 			save_move.step(dt)
 			x = save_move.x
 			z = save_move.z
-			if save_move.is_done():
+			if _landing and save_move.is_set():
+				_landing = false
+				save_move.state = KeeperSaveMove.State.NONE
+				_rest_on(Rest.DOWN)
+			elif save_move.is_done():
 				_rest_on(Rest.DOWN if save_move.rests_down() else Rest.FEET)
 		Mover.GLIDE:
 			_step_glide(dt)
+		Mover.NONE:
+			# Down at rest, the last slide's stop still easing out of him.
+			if rest == Rest.DOWN:
+				slide.step(dt)
 
 
 # Whether the goal is one he skates to as it moves: on his feet, standing, near
@@ -404,6 +420,9 @@ func _start_glide() -> void:
 # after it; done once he is on a spot at rest, square, his legs settled. A goal
 # that is no longer on his feet, or none, he stops for first where he is.
 func _step_glide(dt: float) -> void:
+	if _goal and route.rest == Rest.DOWN and glide.velocity.length() > MOVING_M_S:
+		_drop_carrying()
+		return
 	if not _goal or route.rest != Rest.FEET:
 		glide.step(dt, Vector2(glide.x, glide.z), Vector2.ZERO, yaw)
 		x = glide.x
@@ -427,6 +446,14 @@ func _step_glide(dt: float) -> void:
 		yaw = route.facing
 		if glide.is_settled():
 			_mover = Mover.NONE
+
+
+# Down from a glide, its speed carried: into the butterfly as a low save drops
+# him, held only until he lands in it.
+func _drop_carrying() -> void:
+	save(KeeperSaveMove.Low.BUTTERFLY, 1.0)
+	save_move.edges = false
+	_landing = true
 
 
 func _rest_on(r: int) -> void:
@@ -497,7 +524,15 @@ func _start(what: int, spot: Vector2, side: float, top: float) -> bool:
 			if what == Do.SLIDE:
 				slide.slide_to(spot, top)
 			else:
-				slide.slide_from_feet(spot, top)
+				# Out of the stance he is in, the fall from the low ready the
+				# shorter (KeeperDrop.drop_from).
+				slide.fall = low_ready.fall_share()
+				if low_ready.share > 0.0:
+					pose(_cut)
+					low_ready.cut()
+					slide.slide_from_feet(spot, top, _cut)
+				else:
+					slide.slide_from_feet(spot, top)
 			_mover = Mover.SLIDE
 		Do.ROTATE:
 			if rest != Rest.DOWN:

@@ -11,6 +11,12 @@ class_name AIRolePressure
 # Engaged/closing boundary: inside it the argmax runs the full polar ring,
 # outside it only the calculated closing stands. 1.5 search steps.
 const PRESSURE_INNER_RING_RANGE_M: float = 4.5
+# Rounds of the rendezvous with a stand that rides the carrier: each skates to
+# where the stand will have got to by the last round's arrival.
+const SET_IN_ROUNDS: int = 3
+# The cut-off's walk down the carrier's line to our net: under a stick, so the
+# point taken is within a stick of the first one he can be cut off at.
+const CUT_OFF_STEP_M: float = 1.0
 
 
 # `cover_priced`: the caller has already priced who picks the play up if the
@@ -176,10 +182,12 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 
-		# Higher = better for us, i.e. lower for the carrier.
+		# Higher = better for us, i.e. lower for the carrier: what he can do from
+		# where he is when we are set there.
 		var pressure_score: float = -AIDefensiveVerbs.carrier_best_option(
 				poss, c, ride, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
-				carrier_velocity, our_goalie_pos, opp_teammates, bases) \
+				carrier_velocity, our_goalie_pos, opp_teammates, bases,
+				_set_in(ctx, ap, c, ride)) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if pressure_score > best_score:
 			best_score = pressure_score
@@ -233,26 +241,72 @@ static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
 
 
 # The angle's finish, the level pressurer's last play: still in front of him,
-# step into his path at contact, facing him, so he skates through the body;
-# behind him, skate (not backpedal) onto the hip of my nearer side, riding him,
-# so the body or the reach-in (the jab, or the lift from behind) gets there
-# before he does.
+# step into his path at contact, facing him, so he skates through the body.
+# Behind him, the slot is what is left to deny: skate (not backpedal) to the
+# first ice on his line to our net I get to before he does (_cut_off), riding
+# it as he moves, so whichever way he goes to the net — down the wall and in, or
+# straight across — he meets the body or the reach-in there. Chasing his hip
+# instead, a carrier any faster than me is never caught, and cuts in front.
 static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> RoleDecision:
 	var contact_m: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
 	if _depth_on(ctx, ap) > 0.0:
 		d.target_position = ap.carrier_pos + ap.dir_net * contact_m
+		d.target_velocity = ap.carrier_vel
 	else:
-		var across := Vector3(-ap.dir_net.z, 0.0, ap.dir_net.x)
-		if (ctx.self_pos - ap.carrier_pos).dot(across) < 0.0:
-			across = -across
-		d.target_position = ap.carrier_pos + across * contact_m
+		var f: float = _cut_off(ctx, ap)
+		var to_net: Vector3 = ctx.defending_goal_pos - ap.carrier_pos
+		to_net.y = 0.0
+		d.target_position = ap.carrier_pos + to_net * f
+		# A point a fixed share of the way to a fixed net moves at the rest of
+		# the carrier's velocity.
+		d.target_velocity = ap.carrier_vel * (1.0 - f)
 		d.face_travel = true
-	d.target_velocity = ap.carrier_vel
 	d.arrive_at_speed = true
 	d.pressures_puck = true
 	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
 	return d
+
+
+# The share of the carrier's way to our net at which I first get there before
+# him: each on his arrival clock from where he is and how he is moving (the
+# carrier at his free top speed, a slight over-read in the safe direction), my
+# stick reaching it a stick's length at my top speed before my body does. Where
+# I beat him nowhere short of the crease, the crease's top
+# (AIRoleRushD.RETREAT_FINISH_M).
+static func _cut_off(ctx: RoleContext, ap: AICarrierApproach) -> float:
+	var finish: float = ap.net_dist - AIRoleRushD.RETREAT_FINISH_M
+	if finish <= 0.0:
+		return 0.0
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(ctx.snapshot.puck_state.carrier_peer_id)
+	var his_speed: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var his_accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var reach: float = AIRoleRushD.stick_m(ctx)
+	var s: float = 0.0
+	while s < finish:
+		var at: Vector3 = ap.carrier_pos + ap.dir_net * s
+		var mine: float = AIArrival.time_to_arrive(ctx.self_pos, at, ctx.self_velocity,
+				ctx.self_max_speed, ctx.self_max_accel)
+		var his: float = AIArrival.time_to_arrive(ap.carrier_pos, at, ap.carrier_vel,
+				his_speed, his_accel) + reach / maxf(ctx.self_max_speed, 0.1)
+		if mine <= his:
+			return s / ap.net_dist
+		s += CUT_OFF_STEP_M
+	return finish / ap.net_dist
+
+
+# How long until I am set at `stand`, which rides the carrier at `ride`: the
+# arrival clock from where I am and how I am moving, to where the stand will
+# be by then. No later than the carrier's trip to where a ridden retreat ends
+# (AIRoleRushD.RETREAT_FINISH_M), past which there is no stand left to take.
+static func _set_in(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3, ride: Vector3) -> float:
+	var t: float = 0.0
+	for _i: int in SET_IN_ROUNDS:
+		t = AIArrival.time_to_arrive(ctx.self_pos, stand + ride * t, ctx.self_velocity, ctx.self_max_speed,
+				ctx.self_max_accel)
+	if ap.closing <= 0.0:
+		return t
+	return minf(t, maxf(ap.net_dist - AIRoleRushD.RETREAT_FINISH_M, 0.0) / ap.closing)
 
 
 # How far goal-side of the carrier I stand, down his line to our net.

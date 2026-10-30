@@ -451,12 +451,30 @@ func test_level_with_a_carrier_driving_the_net_he_steps_into_his_path() -> void:
 			"at contact, in his path; got %s" % d.target_position)
 
 
-func test_beaten_by_a_carrier_driving_the_net_he_skates_onto_his_hip() -> void:
+# Beaten, he skates to the first ice on the carrier's line to our net he gets
+# his stick to before the carrier does: on the line, and goal-side of him.
+# Standing, he wins none of it short of the crease, so he goes to its top;
+# skating with him, he cuts him off within a few strides.
+func test_beaten_by_a_carrier_driving_the_net_he_cuts_him_off_short_of_the_slot() -> void:
 	var carrier := Vector3(1.5, 0.0, 13.0)
-	var d: RoleDecision = AIRolePressure.decide(_level_ctx(carrier, 8.0))
-	assert_true(d.face_travel, "behind him, he turns and skates")
-	assert_lt(d.target_position.distance_to(carrier), 1.0,
-			"onto his hip; got %s" % d.target_position)
+	for skating: bool in [false, true]:
+		var ctx: RoleContext = _level_ctx(carrier, 8.0)
+		if skating:
+			ctx.self_velocity = Vector3(0.0, 0.0, 8.0)
+		var d: RoleDecision = AIRolePressure.decide(ctx)
+		var what: String = "skating with him" if skating else "standing"
+		assert_true(d.face_travel, "%s: behind him, he turns and skates" % what)
+		var to_net: Vector3 = ctx.defending_goal_pos - carrier
+		to_net.y = 0.0
+		var along: float = (d.target_position - carrier).dot(to_net.normalized())
+		var off: float = (d.target_position - carrier).cross(to_net.normalized()).length()
+		assert_lt(off, 0.05, "%s: on his line to the net; got %s" % [what, d.target_position])
+		assert_gte(along, 0.0, "%s: goal-side of him" % what)
+		if skating:
+			assert_lt(along, 4.0, "%s: within a few strides of him; got %.2f" % [what, along])
+		else:
+			assert_almost_eq(along, to_net.length() - AIRoleRushD.RETREAT_FINISH_M, 0.01,
+					"%s: at the crease's top" % what)
 
 
 func test_a_carrier_still_a_gap_away_is_not_finished() -> void:

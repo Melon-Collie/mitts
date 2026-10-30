@@ -11,9 +11,11 @@ extends RefCounted
 # goes along his line: to a spot off it, he turns as he loads until his lead
 # side faces it, so a slide back to a post is the same slide, turned.
 #
-#   DROP   from his feet: the lead knee falls to the ice as the butterfly's
-#          drop does, the push leg loading on its skate where it stood, so the
-#          push starts as the knee lands; he turns to the spot as it falls
+#   DROP   from his feet, out of the stance he is in: the lead knee falls to
+#          the ice as the butterfly's drop from it does, and the push leg
+#          drives off its skate where it stood through the last of the fall
+#          (the power push), so he lands on the lead pad at the push's speed;
+#          he turns to the spot as it falls
 #   LOAD   from the butterfly: the push leg's knee comes up off the ice and
 #          in, its skate planted out wide on its inside edge
 #          (KeeperPoses.butterfly_push); he turns to the spot as it comes
@@ -65,8 +67,11 @@ const FOLD_LIFT_M: float = 0.10
 
 # The push's speed, and the pads' friction on the ice (about μ 0.27).
 var push_speed: float = 2.8
-# The lead knee's fall to the ice from his feet: the butterfly drop's.
+# The lead knee's fall to the ice from his feet: the butterfly drop's, and the
+# share of it the fall from the stance he is in takes (KeeperLowReady's
+# `fall_share`: less from the low ready).
 var drop_s: float = GoalieSkillProfile.hard().butterfly_drop_s
+var fall: float = 1.0
 var friction: float = 2.6
 # What the lead skate's edge adds to the pads' friction in the stop: his share
 # of a standing edge stop's brake.
@@ -98,6 +103,7 @@ var _clock: float = 0.0
 var _fold: float = 1.0
 var _stop: float = 0.0
 var _stop_from_speed: float = 0.0
+var _stop_side: float = 1.0
 # Where the push skate was planted, across him in his own frame when the push
 # began; and the push leg as it was when its push ended, with the knee its
 # solve put it at, to fold from.
@@ -110,6 +116,9 @@ var _turn_s: float = 0.0
 
 var _low := KeeperPose.new()
 var _ready := KeeperPose.new()
+# The stance a slide from his feet falls out of, and its knees.
+var _stance := KeeperPose.new()
+var _stance_knees: Array[Vector3] = [Vector3.ZERO, Vector3.ZERO]
 # Loaded to push toward the glove side (index 0) or the blocker side (1), the
 # lead pad down: from the butterfly, and from his feet.
 var _loaded: Array[KeeperPose] = [KeeperPose.new(), KeeperPose.new()]
@@ -161,9 +170,21 @@ func slide_to(spot: Vector2, top: float = INF) -> Vector2:
 	return _start(spot, top, From.BUTTERFLY)
 
 
-# Slide toward `spot` (x, z) from his feet, by the half butterfly; where he
-# will come to rest. He ends in the butterfly.
-func slide_from_feet(spot: Vector2, top: float = INF) -> Vector2:
+# Slide toward `spot` (x, z) from his feet, out of `stance` (the ready stance
+# if none), by the half butterfly; where he will come to rest. He ends in the
+# butterfly.
+func slide_from_feet(spot: Vector2, top: float = INF, stance: KeeperPose = null) -> Vector2:
+	if phase != Phase.DOWN:
+		return Vector2(x, z)
+	if stance == null:
+		_stance.copy_from(_ready)
+		for i: int in 2:
+			_stance_knees[i] = KeeperDrop.ready_knee(i)
+	else:
+		_stance.copy_from(stance)
+		_skel.pose(_stance)
+		for i: int in 2:
+			_stance_knees[i] = _skel.xf[KeeperSkeleton.SHIN[i]].origin
 	return _start(spot, top, From.FEET)
 
 
@@ -199,7 +220,6 @@ func _start(spot: Vector2, top: float, from: int) -> Vector2:
 			phase = Phase.LOAD
 	_clock = 0.0
 	_fold = 0.0
-	_stop = 0.0
 	return _origin + _heading * _target
 
 
@@ -224,7 +244,6 @@ func rotate_to(turn: float) -> void:
 	phase = Phase.LOAD
 	_clock = 0.0
 	_fold = 0.0
-	_stop = 0.0
 
 
 # How fast he swivels on his knees: the push's speed carried by the pads' far
@@ -278,8 +297,11 @@ func post_seal_spot(post: Vector2, side: float, turn: float) -> Vector2:
 
 
 # Down on his spot with the stop settled out of him: in the butterfly.
+# Down on his spot with the push leg folded back: the next move can go. The
+# lean back against the stop eases out of him over SETTLE_S whatever comes
+# next.
 func is_settled() -> bool:
-	return phase == Phase.DOWN and _stop <= 0.0
+	return phase == Phase.DOWN
 
 
 func _brake() -> float:
@@ -314,23 +336,38 @@ func time_to(dist: float, top: float = INF, from: int = From.BUTTERFLY) -> float
 	return lead_in_s(from) + PUSH_S + maxf((v0 - v1) / friction + v1 / b, FOLD_S)
 
 
-# Seconds from the call to the push setting out `from` (From).
+# Seconds from the call to the push setting out `from` (From): from his feet,
+# a push's time before the lead knee lands.
 func lead_in_s(from: int) -> float:
 	match from:
 		From.FEET:
-			return drop_s
+			return maxf(_fall_s() - PUSH_S, 0.0)
 		From.POST:
 			return OFF_POST_S
 	return LOAD_S
 
 
+func _fall_s() -> float:
+	return drop_s * fall
+
+
 func step(dt: float) -> void:
 	if phase == Phase.DOWN or phase == Phase.GLIDE or phase == Phase.STOP:
 		_fold = minf(_fold + dt / FOLD_S, 1.0)
+	if phase != Phase.STOP:
+		_stop = maxf(_stop - dt / SETTLE_S, 0.0)
 	match phase:
-		Phase.DOWN:
-			_stop = maxf(_stop - dt / SETTLE_S, 0.0)
-		Phase.DROP, Phase.LOAD, Phase.OFF_POST:
+		Phase.DROP:
+			# The clock in seconds: the fall and the push in it run on their own.
+			_clock += dt
+			yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, minf(_clock / _fall_s(), 1.0)))
+			var was: float = speed
+			var pushed: float = clampf((_clock - lead_in_s(From.FEET)) / PUSH_S, 0.0, 1.0)
+			speed = _peak * pushed
+			_along += 0.5 * (was + speed) * dt
+			if pushed >= 1.0 and _clock >= _fall_s():
+				_release()
+		Phase.LOAD, Phase.OFF_POST:
 			_clock += dt / lead_in_s(_from)
 			if not _rotating:
 				yaw = lerp_angle(_yaw_from, _yaw_to, smoothstep(0.0, 1.0, minf(_clock, 1.0)))
@@ -367,6 +404,7 @@ func step(dt: float) -> void:
 			if phase == Phase.GLIDE and speed >= sqrt(2.0 * _brake() * maxf(left - speed * dt, 0.0)):
 				phase = Phase.STOP
 				_stop_from_speed = speed
+				_stop_side = _side
 				var glide_s: float = clampf(
 						(left - speed * speed / (2.0 * _brake())) / maxf(speed, 1e-6), 0.0, dt)
 				_along += speed * glide_s
@@ -423,16 +461,8 @@ func _push_leg() -> int:
 func pose(p: KeeperPose) -> void:
 	match phase:
 		Phase.DROP:
-			# A fall, as the butterfly's drop: eased in, landing at speed.
-			var down: float = _clock * _clock
-			var launch: KeeperPose = _launch()
-			KeeperDrop.blend_body(p, _ready, launch, down)
-			KeeperDrop.blend_leg(p.legs[_lead()], _ready.legs[_lead()], KeeperDrop.ready_knee(_lead()),
-					launch.legs[_lead()], down)
-			var push: KeeperPose.Leg = p.legs[_push_leg()]
-			push.copy_from(_ready.legs[_push_leg()])
-			push.knee_pole = push.knee_pole.lerp(launch.legs[_push_leg()].knee_pole, down)
-			push.shin_front = push.shin_front.lerp(launch.legs[_push_leg()].shin_front, down).normalized()
+			var falling: float = minf(_clock / _fall_s(), 1.0)
+			_falling_pose(p, falling * falling)
 		Phase.LOAD:
 			var up: float = smoothstep(0.0, 1.0, _clock)
 			KeeperDrop.blend_body(p, _low, _loaded[_lead()], up)
@@ -469,10 +499,10 @@ func pose(p: KeeperPose) -> void:
 					# Off the post the foot stays along the shin, as it pushed.
 					if _from == From.POST:
 						p.legs[_push_leg()].along_shin = 1.0
-			# Back against the stop, as far as the speed it stops from asks.
-			var stop: float = _stop * clampf(_stop_from_speed / GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S,
-					0.0, 1.0)
-			p.lumbar_rot.z += _side * KeeperFootwork.STOP_LEAN_RAD * stop
+	# Back against the stop, as far as the speed it stops from asked, easing out
+	# through whatever he does next.
+	var stop: float = _stop * clampf(_stop_from_speed / GameRules.DEFAULT_GOALIE_T_PUSH_SPEED_M_S, 0.0, 1.0)
+	p.lumbar_rot.z += _stop_side * KeeperFootwork.STOP_LEAN_RAD * stop
 
 
 # A kneeling leg (`down`) `t` of the way up onto its planted foot (`up`, its
@@ -490,5 +520,23 @@ static func _kneel_up(leg: KeeperPose.Leg, down: KeeperPose.Leg, up: KeeperPose.
 # Driving off the planted skate: the pose he pushes from, its skate held where
 # it was set down.
 func _pushing_pose(p: KeeperPose) -> void:
+	if _from == From.FEET:
+		_falling_pose(p, 1.0)
+		return
 	p.copy_from(_launch())
 	p.legs[_push_leg()].ankle.x = _plant - _side * _along
+
+
+# Falling `down` of the way from the stance onto the lead knee, as the
+# butterfly's drop does (eased in, landing at speed), the push skate held on
+# the ice where it stood as he drives off it.
+func _falling_pose(p: KeeperPose, down: float) -> void:
+	var launch: KeeperPose = _launch()
+	KeeperDrop.blend_body(p, _stance, launch, down)
+	KeeperDrop.blend_leg(p.legs[_lead()], _stance.legs[_lead()], _stance_knees[_lead()], launch.legs[_lead()],
+			down)
+	var push: KeeperPose.Leg = p.legs[_push_leg()]
+	push.copy_from(_stance.legs[_push_leg()])
+	push.knee_pole = push.knee_pole.lerp(launch.legs[_push_leg()].knee_pole, down)
+	push.shin_front = push.shin_front.lerp(launch.legs[_push_leg()].shin_front, down).normalized()
+	push.ankle.x -= _side * _along

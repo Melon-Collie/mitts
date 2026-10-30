@@ -11,25 +11,34 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # His read of the play lags it by his leg read (`delay_s`, the tier's), so a
 # puck that holds its line is seen where it is, and one that changes direction
 # is seen going the old way until the read catches up: a deke beats him by
-# exactly his read. The motion is the carrier's body when the puck is carried,
-# since a stickhandle swings the puck about a body that holds its line; the
-# puck's own when it is loose. A wind-up is read the same way, late by his
-# read, and how long he has watched it is what primes the save (`primed`).
+# exactly his read. A loose puck is carried on along its own motion; a carried
+# one along its own motion too, as it moves about its carrier, but no further
+# from the carrier's body, carried on along its skating, than the carrier
+# reaches. A wind-up is read the same way, late by his
+# read. How long he has held his eyes on the puck on a stick of theirs is what
+# primes the save (`primed`).
 
+# How far across from his body a carrier gets the puck either side: the live
+# skater's furthest pull on average (test_keeper_reads_the_carriers_reach.gd).
+const CARRIER_REACH_M: float = 1.2
 # The longest read any tier has, kept at the physics tick.
 const MOST_S: float = 0.6
 const TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK
 # How close to a pass's lane a defender's stick takes it away: a stick's length.
 const LANE_REACH_M: float = GameRules.DEFAULT_STICK_LENGTH_M
-# A wind-up watched this long has the save programmed before the release: the
-# old goalie's quiet-eye read (Panchuk & Vickers, a save prepared during the
-# fixation and executed ballistically).
+# A puck on a stick of theirs held in his eyes this long has the save
+# programmed before the release: the quiet-eye read (Panchuk & Vickers, a
+# fixation on the puck and stick, the save prepared during it and executed
+# ballistically).
 const PRIME_S: float = 0.40
-# A carried puck swings about its carrier faster than his feet can follow it
-# (a stickhandle, a stick's reach either way a few times a second): he reads it
-# where it is on average, its place off the carrier followed over the time his
-# glide closes a gap in, and the carrier's own skating as it is.
-const HANDLE_S: float = KeeperFootwork.CLOSE_S
+# His gaze pursues the puck at up to this (smooth pursuit holds a moving
+# target to about 60°/s), and holds it while the puck stays within the window
+# of its line: the quiet eye's fixation, a gaze held within 3° of its target
+# (Vickers). A puck that gets out of it (a stickhandle, a deke, a hard cut
+# swung across faster for long enough) breaks the look, and it starts over
+# from the saccade that catches it up.
+const PURSUIT_RAD_S: float = deg_to_rad(60.0)
+const LOOK_WINDOW_RAD: float = deg_to_rad(3.0)
 const NO_CARRIER := Vector2(INF, INF)
 
 var delay_s: float = GameRules.DEFAULT_GOALIE_REACTION_DELAY_S
@@ -41,13 +50,16 @@ var puck := Vector2.ZERO
 var motion := Vector2.ZERO
 # Whether he sees it loose: a pass he has not yet seen caught is still one.
 var loose: bool = true
-# Whether it is carried by one of theirs, who can shoot it now.
+# Whether he sees it carried by one of theirs, who can shoot it now; and the
+# carrier's body as he reads it, carried on as the puck is (NO_CARRIER loose).
 var theirs: bool = false
-# Its carrier's body as he reads it, carried on as the puck is; NO_CARRIER
-# while he sees it loose.
-var carrier_at := NO_CARRIER
+var carrier := NO_CARRIER
 var winding_up: bool = false
+# How long he has held the puck on a stick of theirs in his eyes, unbroken by
+# its getting out of his gaze or behind a body (GoalieScreenRules).
 var watched_s: float = 0.0
+# Where his eyes are, in the same frame: his own place, set by his controller.
+var eyes := Vector2.ZERO
 # The attackers off the puck it could be passed to, through a lane no defender's
 # stick reaches, in front of the goal line and inside the blue line.
 var receivers := PackedVector2Array()
@@ -58,18 +70,19 @@ var meets: bool = false
 var meet := Vector2.ZERO
 var meet_s: float = INF
 
-# The carried puck's place off its carrier as he follows it.
-var _handle := Vector2.ZERO
-var _carried: bool = false
 var _reception := GoaliePassRead.Reception.new()
 var _sticks := PackedVector3Array()
 
 # What he has watched, a tick a sample, oldest overwritten.
 var _at := PackedVector2Array()
-var _bodies := PackedVector2Array()
 var _moving := PackedVector2Array()
+var _bodies := PackedVector2Array()
 var _winding := PackedByteArray()
 var _loose := PackedByteArray()
+var _theirs := PackedByteArray()
+var _hidden := PackedByteArray()
+# Where his gaze is, the bearing from his eyes; NAN with nothing to hold.
+var _gaze: float = NAN
 var _head: int = -1
 var _count: int = 0
 
@@ -81,9 +94,12 @@ func _init() -> void:
 	_moving.resize(ticks)
 	_winding.resize(ticks)
 	_loose.resize(ticks)
+	_theirs.resize(ticks)
+	_hidden.resize(ticks)
 
 
 func reset() -> void:
+	_gaze = NAN
 	_head = -1
 	_count = 0
 	receivers.clear()
@@ -91,21 +107,24 @@ func reset() -> void:
 	watched_s = 0.0
 	meets = false
 	theirs = false
-	carrier_at = NO_CARRIER
-	_carried = false
+	carrier = NO_CARRIER
 
 
 # One tick's look at the puck at `at` moving at `moving`, carried by a skater
-# at `carrier` (NO_CARRIER loose) winding up a shot with it (`winding`), and
+# at `carrier_at` (NO_CARRIER loose), one of theirs (`carrier_theirs`), winding
+# up a shot with it (`winding`), a body between it and his eyes (`hidden`), and
 # what he reads from what he has watched.
-func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrier: Vector2 = NO_CARRIER) -> void:
+func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrier_at: Vector2 = NO_CARRIER,
+		carrier_theirs: bool = false, hidden: bool = false) -> void:
 	var size: int = _at.size()
 	_head = (_head + 1) % size
-	_at[_head] = _handled(dt, at, carrier)
-	_bodies[_head] = carrier
+	_at[_head] = at
 	_moving[_head] = moving
+	_bodies[_head] = carrier_at
 	_winding[_head] = 1 if winding else 0
-	_loose[_head] = 1 if carrier == NO_CARRIER else 0
+	_loose[_head] = 1 if carrier_at == NO_CARRIER else 0
+	_theirs[_head] = 1 if carrier_theirs else 0
+	_hidden[_head] = 1 if hidden else 0
 	_count = mini(_count + 1, size)
 	var lag: int = mini(ceili(delay_s / maxf(dt, 1e-6) - 1e-6), _count - 1)
 	var seen: int = (_head - lag + size) % size
@@ -113,23 +132,37 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	puck = _at[seen] + motion * (lag * dt)
 	winding_up = _winding[seen] == 1
 	loose = _loose[seen] == 1
-	carrier_at = NO_CARRIER if loose else _bodies[seen] + motion * (lag * dt)
-	watched_s = watched_s + dt if winding_up else 0.0
+	theirs = not loose and _theirs[seen] == 1
+	carrier = NO_CARRIER if loose else _bodies[seen] + motion * (lag * dt)
+	var before_last: int = (seen - 2 + size) % size
+	if not loose and lag + 2 < _count and _loose[before_last] == 0:
+		var own: Vector2 = (_at[seen] - _at[before_last]) / (2.0 * dt)
+		puck = carrier + (_at[seen] + own * (lag * dt) - carrier).limit_length(CARRIER_REACH_M)
+	var in_sight: bool = _hidden[seen] == 0
+	watched_s = watched_s + dt if theirs and in_sight and lag + 1 < _count and _gaze_holds(_at[seen], dt) else 0.0
+	if not theirs or not in_sight:
+		_gaze = NAN
 
 
-# The puck at `at` as his feet follow it: off a carrier at `carrier`, where it
-# is on average about him.
-func _handled(dt: float, at: Vector2, carrier: Vector2) -> Vector2:
-	if carrier == NO_CARRIER:
-		_carried = false
-		return at
-	var off: Vector2 = at - carrier
-	_handle = _handle.lerp(off, 1.0 - exp(-dt / HANDLE_S)) if _carried else off
-	_carried = true
-	return carrier + _handle
+# His gaze one tick on toward the puck at `at`, at his pursuit's speed;
+# whether it still holds it. Lost, it is caught up again by a saccade.
+func _gaze_holds(at: Vector2, dt: float) -> bool:
+	var line: Vector2 = at - eyes
+	if line.length_squared() < 1e-6:
+		return true
+	var bearing: float = line.angle()
+	if is_nan(_gaze):
+		_gaze = bearing
+	var off: float = angle_difference(_gaze, bearing)
+	_gaze += clampf(off, -PURSUIT_RAD_S * dt, PURSUIT_RAD_S * dt)
+	if absf(angle_difference(_gaze, bearing)) <= LOOK_WINDOW_RAD:
+		return true
+	_gaze = bearing
+	return false
 
 
-# Whether he has watched the wind-up long enough to have the save programmed.
+# Whether he has held the puck in his eyes long enough to have the save
+# programmed.
 func primed() -> bool:
 	return watched_s >= PRIME_S
 

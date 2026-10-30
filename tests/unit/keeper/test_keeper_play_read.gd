@@ -3,14 +3,33 @@ extends GutTest
 # What he reads of the play (KeeperPlayRead): a puck holding its line read
 # where it is; a change of direction read going the old way until his read has
 # passed, a slower tier's later; a wind-up seen late by his read and priming
-# the save once he has watched it long enough; and the receivers a pass could
+# the save once he has watched it long enough, an ordinary stickhandle his
+# gaze keeps up with priming him and a hard one in close not, nor a puck a
+# body hides from him; and the
+# receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
-# and inside the blue line. A stickhandle read where the puck is on average
-# about its carrier, the carrier's skating as it is, and the carrier read as
-# late as the puck, none once it is loose; and a loose puck read to
-# the first opposing stick its line reaches before it stops.
+# and inside the blue line. A carried puck read his read late, carried on
+# along its own motion no further from its carrier than he reaches, and whose
+# carrier it is read as late; and a loose puck
+# read to the first opposing stick its line reaches before it stops.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
+
+
+# A carrier of theirs releasing: he reads the puck carried by one of theirs
+# until his read has passed, then loose and no one's.
+func test_a_release_is_read_late() -> void:
+	var play := KeeperPlayRead.new()
+	var body := Vector2(0.0, -6.0)
+	for i: int in 30:
+		play.step(DT, body, Vector2.ZERO, false, body, true)
+	assert_true(play.theirs, "carried by one of theirs")
+	var ticks_to_see: int = 0
+	while play.theirs and ticks_to_see < 60:
+		play.step(DT, body, Vector2(0.0, 25.0))
+		ticks_to_see += 1
+	assert_almost_eq(ticks_to_see * DT, play.delay_s, DT * 1.5, "the release seen his read late")
+	assert_true(play.loose, "loose once seen")
 
 
 func test_a_puck_holding_its_line_is_read_where_it_is() -> void:
@@ -54,29 +73,80 @@ func test_a_change_of_direction_is_read_after_his_read() -> void:
 	assert_gt(_flip_seen_after(easy), hard_t, "a slower tier later")
 
 
-# A wind-up is seen his read late, and primes the save once watched for
-# KeeperPlayRead.PRIME_S; a look broken off starts over.
-func test_a_wind_up_watched_long_enough_primes_the_save() -> void:
+# The puck held in his eyes on a stick of theirs, wound up or not, primes the
+# save once he has held it KeeperPlayRead.PRIME_S, seen his read late; a puck
+# swung across his view faster than his eyes follow it (a stickhandle) breaks
+# the look and it starts over, as does a pass; a puck of ours never primes him.
+func test_a_steady_look_at_the_puck_primes_the_save() -> void:
 	var play := KeeperPlayRead.new()
-	var at := Vector2(0.0, -6.0)
-	for i: int in 60:
-		play.step(DT, at, Vector2.ZERO, false)
-	var seen_at: float = -1.0
-	var primed_at: float = -1.0
+	var body := Vector2(0.0, -6.0)
 	var t: float = 0.0
+	var primed_at: float = -1.0
 	while t < 1.0 and primed_at < 0.0:
-		play.step(DT, at, Vector2.ZERO, true)
+		play.step(DT, body + Vector2(0.3, -0.3), Vector2.ZERO, false, body, true)
 		t += DT
-		if play.winding_up and seen_at < 0.0:
-			seen_at = t
 		if play.primed():
 			primed_at = t
-	assert_almost_eq(seen_at, DT + play.delay_s, DT, "seen his read late")
-	assert_almost_eq(primed_at - seen_at, KeeperPlayRead.PRIME_S, DT, "primed once watched long enough")
-	for i: int in 40:
-		play.step(DT, at, Vector2.ZERO, false)
-	play.step(DT, at, Vector2.ZERO, true)
-	assert_false(play.primed(), "a broken look starts over")
+	assert_almost_eq(primed_at, play.delay_s + KeeperPlayRead.PRIME_S, 2.0 * DT, "primed once held long enough, no wind-up")
+	# A stickhandle: the puck swung a stick's reach across his view and back,
+	# for longer than his read takes to see it.
+	var swing: float = GameRules.DEFAULT_STICK_LENGTH_M
+	for i: int in ceili(play.delay_s / DT) + 12:
+		var off: float = swing if i % 6 < 3 else -swing
+		play.step(DT, body + Vector2(off, -0.3), Vector2.ZERO, false, body, true)
+	assert_false(play.primed(), "a stickhandle breaks the look")
+	assert_lt(play.watched_s, KeeperPlayRead.PRIME_S, "and it starts over")
+	for i: int in 60:
+		play.step(DT, body, Vector2(0.0, 12.0))
+	assert_false(play.primed(), "a pass breaks the look")
+	var ours := KeeperPlayRead.new()
+	for i: int in 90:
+		ours.step(DT, body, Vector2.ZERO, false, body, false)
+	assert_false(ours.primed(), "a puck of ours never primes him")
+
+
+# A body between the puck and his eyes breaks the look, seen his read late: he
+# has to hold it for KeeperPlayRead.PRIME_S again once it is back in sight.
+func test_a_puck_behind_a_body_breaks_the_look() -> void:
+	var play := KeeperPlayRead.new()
+	var body := Vector2(0.0, -6.0)
+	var at: Vector2 = body + Vector2(0.3, -0.3)
+	for i: int in ceili((play.delay_s + KeeperPlayRead.PRIME_S) / DT) + 2:
+		play.step(DT, at, Vector2.ZERO, false, body, true)
+	assert_true(play.primed(), "held long enough: primed")
+	for i: int in ceili(play.delay_s / DT) + 2:
+		play.step(DT, at, Vector2.ZERO, false, body, true, true)
+	assert_false(play.primed(), "behind a body: the look broken")
+	assert_eq(play.watched_s, 0.0, "and it starts over")
+	var t: float = 0.0
+	while not play.primed() and t < 2.0:
+		play.step(DT, at, Vector2.ZERO, false, body, true)
+		t += DT
+	assert_almost_eq(t, play.delay_s + KeeperPlayRead.PRIME_S, 2.0 * DT, "held again in sight, his read late")
+
+
+# His gaze pursues the puck and holds it within the quiet eye's window: a
+# carrier skating across the slot with an ordinary stickhandle stays in it and
+# primes him; a hard, fast one in close gets out of it and never does.
+func test_a_stickhandle_his_gaze_keeps_up_with_still_primes_him() -> void:
+	assert_true(_primes_against(9.0, 0.5, 1.5), "skating across 9 m out, an ordinary dangle")
+	assert_false(_primes_against(6.0, 0.6, 2.5), "6 m out, a hard dangle")
+
+
+# Whether he is primed after two seconds of a carrier of theirs skating across
+# `out` in front of him at 4 m/s, swinging the puck `amp` either side at `hz`.
+func _primes_against(out: float, amp: float, hz: float) -> bool:
+	var play := KeeperPlayRead.new()
+	play.eyes = Vector2(0.0, -1.2)
+	var v := Vector2(4.0, 0.0)
+	var body := Vector2(-4.0, -out)
+	var ever: bool = false
+	for i: int in int(2.0 / DT):
+		body += v * DT
+		var across := Vector2(-body.y, body.x).normalized()
+		play.step(DT, body + across * amp * sin(TAU * hz * i * DT), v, false, body, true)
+		ever = ever or play.primed()
+	return ever
 
 
 func test_receivers_are_the_ones_a_pass_can_reach() -> void:
@@ -95,30 +165,35 @@ func test_receivers_are_the_ones_a_pass_can_reach() -> void:
 	assert_eq(play.receivers.size(), 2, "one nowhere near takes none")
 
 
-func test_a_stickhandle_is_read_where_the_puck_is_on_average() -> void:
+# A carried puck is read his read late and carried on along its own motion
+# over it, as a loose one is, but never further from its carrier, carried on
+# along his skating, than he reaches: a stickhandle swung across read where it
+# was heading, and one held to the side read there.
+func test_a_carried_puck_is_read_on_along_its_own_motion() -> void:
 	var play := KeeperPlayRead.new()
 	var body := Vector2(0.0, -6.0)
-	var lo: float = INF
-	var hi: float = -INF
+	var lag: int = ceili(play.delay_s / DT - 1e-6)
+	var swung: Array[Vector2] = []
 	for i: int in 360:
 		var puck := body + Vector2(0.4 * sin(TAU * 1.5 * i * DT), -0.5)
+		swung.append(puck)
 		play.step(DT, puck, Vector2.ZERO, false, body)
-		if i > 180:
-			lo = minf(lo, play.puck.x)
-			hi = maxf(hi, play.puck.x)
-	assert_lt(hi - lo, 0.8 * 0.5, "a stickhandle swings it less than half as far")
-	for i: int in 240:
+	var seen: Vector2 = swung[swung.size() - 1 - lag]
+	var own: Vector2 = (seen - swung[swung.size() - 3 - lag]) / (2.0 * DT)
+	assert_almost_eq(play.puck, seen + own * lag * DT, Vector2.ONE * 1e-4, "a stickhandle, read on along its motion")
+	for i: int in 60:
 		play.step(DT, body + Vector2(0.5, -0.5), Vector2.ZERO, false, body)
-	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 0.01, "held to the side, read there")
+	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 1e-4, "held to the side, read there")
+	# A pull across read on past the carrier's reach is read at its edge.
+	for i: int in 60:
+		play.step(DT, body + Vector2(-1.1 + 2.2 * minf(i * DT / 0.22, 1.0), -0.3), Vector2.ZERO, false, body)
+		if i == 12 + lag:
+			assert_lte(play.puck.distance_to(body), KeeperPlayRead.CARRIER_REACH_M + 1e-4, "never past his reach")
 	var v := Vector2(5.0, 0.0)
 	for i: int in 120:
 		body += v * DT
 		play.step(DT, body + Vector2(0.5, -0.5), v, false, body)
 	assert_almost_eq(play.puck, body + Vector2(0.5, -0.5), Vector2.ONE * 1e-3, "the carrier's skating as it is")
-	assert_almost_eq(play.carrier_at, body, Vector2.ONE * 1e-3, "the carrier where he is, carried on as the puck is")
-	for i: int in 240:
-		play.step(DT, body + Vector2(0.5, -0.5), Vector2.ZERO)
-	assert_eq(play.carrier_at, KeeperPlayRead.NO_CARRIER, "none once he sees it loose")
 
 
 func _loose(play: KeeperPlayRead, from: Vector2, v: Vector2, seconds: float) -> Vector2:
