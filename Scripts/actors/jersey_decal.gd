@@ -10,9 +10,11 @@ extends Node2D
 #
 # Stripes follow the v2 schema convention: each stripe has pos∈[0,1] (band
 # center) and width∈[0,1] (band height), fractions of the side height the kits
-# are authored against (UniformPaint.jersey_side_stripe). Stripes paint in array order; later overpaints earlier, so
-# stacked stripes sharing pos with shrinking widths produce concentric
-# centered bands.
+# are authored against (UniformPaint.jersey_side_stripe), and may peak
+# (StripeOutline) with its `u` from the back's centre, the chest at 0.5, or fill
+# the side below it to the hem in its `fill_below`. Stripes
+# paint in array order; later overpaints earlier, so stacked stripes sharing pos
+# with shrinking widths produce concentric centered bands.
 
 const FONT: Font = preload("res://Assets/Fonts/BarlowSemiCondensed-ExtraBold.ttf")
 const NAME_FONT: Font = preload("res://Assets/Fonts/Manrope-SemiBold.ttf")
@@ -91,11 +93,19 @@ func _draw() -> void:
 	draw_rect(Rect2(0, 0, IMG_W, IMG_H), jersey_color, true)
 	draw_rect(TOP_CAP_RECT, collar_color, true)
 	draw_rect(Rect2(0, 0, IMG_W, YOKE_BOTTOM_PX), yoke_color, true)
-	# Stripes paint in array order over the side region [0, SIDE_V_MAX_PX].
+	# Stripes paint in array order, clipped to the side region so none reaches
+	# the caps below it.
+	var side_px := Vector2(IMG_W, SIDE_V_MAX_PX)
+	var side_rect := PackedVector2Array([Vector2.ZERO, Vector2(side_px.x, 0.0), side_px,
+			Vector2(0.0, side_px.y)])
+	var back_u: float = float(BACK_CENTER_X) / IMG_W
 	for stripe: Dictionary in stripes:
-		var band: Vector2i = _stripe_band(stripe, SIDE_V_MAX_PX)
-		if band.y > band.x:
-			draw_rect(Rect2(0, band.x, IMG_W, band.y - band.x), stripe.color, true)
+		var side: Dictionary = UniformPaint.jersey_side_stripe(stripe)
+		if stripe.has("fill_below"):
+			_fill_side(StripeOutline.below(side, back_u), side_px, side_rect, stripe.fill_below)
+		for piece: PackedVector2Array in StripeOutline.of(side, BACK_HEIGHT_M, BACK_GIRTH_M,
+				back_u):
+			_fill_side(piece, side_px, side_rect, stripe.color)
 
 	var yoke_bottom_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y
 	draw_back_lettering(self, player_name, jersey_number, text_color, text_stroke,
@@ -103,6 +113,15 @@ func _draw() -> void:
 	if not crest_fruit.is_empty():
 		draw_chest_crest(self, crest_fruit, crest_preset, float(FRONT_CENTER_X), PX_PER_M,
 				yoke_bottom_m)
+
+
+# A polygon in side UV, filled where it lies on the side region.
+func _fill_side(uv: PackedVector2Array, side_px: Vector2, side_rect: PackedVector2Array,
+		color: Color) -> void:
+	for i: int in uv.size():
+		uv[i] *= side_px
+	for clipped: PackedVector2Array in Geometry2D.intersect_polygons(uv, side_rect):
+		UniformPaint.fill_smooth(self, clipped, color)
 
 
 # A chest's crest, centred on `center_x` px with its top CREST_YOKE_GAP_M under
@@ -157,17 +176,6 @@ static func draw_lettering(canvas: CanvasItem, font: Font, pos: Vector2, s: Stri
 		canvas.draw_string_outline(font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size,
 				roundi(STROKE_SIZE_EM * font_size), stroke)
 	canvas.draw_string(font, pos, s, HORIZONTAL_ALIGNMENT_LEFT, -1, font_size, color)
-
-
-# Converts a kit stripe {pos, width} into [y_start, y_end] pixel coords on the
-# side, which is `region_px` tall, clamped to it.
-static func _stripe_band(stripe: Dictionary, region_px: int) -> Vector2i:
-	var side: Dictionary = UniformPaint.jersey_side_stripe(stripe)
-	var center: float = float(side.pos) * float(region_px)
-	var half: float   = float(side.width) * float(region_px) * 0.5
-	var y0: int = clampi(int(round(center - half)), 0, region_px)
-	var y1: int = clampi(int(round(center + half)), 0, region_px)
-	return Vector2i(y0, y1)
 
 
 # `em_m` tall with its em box's top `top_m` below the top of the back. The text

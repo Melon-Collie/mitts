@@ -39,7 +39,7 @@ func test_crest_colors_come_from_the_team() -> void:
 		_team_pool(preset, pool)
 		var fruit: String = TeamCrest.fruit_for(preset)
 		for color: Color in TeamCrest.team_colors(fruit, preset):
-			if color == CrestFruits.DRAGONFRUIT_GREEN:
+			if CrestFruits.keeps(color):
 				continue
 			var found: bool = false
 			for have: Color in pool:

@@ -61,3 +61,42 @@ func test_every_bundled_kit_is_a_sleeve() -> void:
 			var kit: Dictionary = team[side]
 			assert_true(kit.has("sleeve"), "%s %s paints its arm as one sleeve" % [team.name, side])
 			assert_false(kit.has("arms"), "%s %s has no two-segment arms left" % [team.name, side])
+
+
+func test_the_registry_reads_a_sleeve_stripes_peak() -> void:
+	var kit: Dictionary = TeamColorRegistry._parse_kit({"sleeve": {"base": "#FFFFFF",
+			"stripes": [{"pos": 0.0, "width": 0.4, "color": "#000000", "peak": {"depth": 0.2}},
+					{"pos": 0.6, "width": 0.1, "color": "#000000"}]}})
+	var stripes: Array = kit.sleeve.stripes
+	assert_eq(stripes[0].peak, {"depth": 0.2, "count": 1, "u": 0.5},
+			"count and u default to one peak on the outside")
+	assert_false(stripes[1].has("peak"), "a flat stripe carries no peak")
+
+
+func test_the_registry_reads_a_jersey_stripes_shape_but_not_a_socks() -> void:
+	var peaked := [{"pos": 0.9, "width": 0.1, "color": "#000000", "fill_below": "#FF0000",
+			"peak": {"depth": -0.1, "count": 2, "u": 0.0}}]
+	var kit: Dictionary = TeamColorRegistry._parse_kit({
+			"jersey": {"base": "#FFFFFF", "stripes": peaked},
+			"socks": {"base": "#FFFFFF", "stripes": peaked}})
+	assert_eq(kit.jersey.stripes[0].peak, {"depth": -0.1, "count": 2, "u": 0.0})
+	assert_eq(kit.jersey.stripes[0].fill_below, Color.RED)
+	assert_false(kit.socks.stripes[0].has("peak"), "nothing paints a sock's peak")
+	assert_false(kit.socks.stripes[0].has("fill_below"), "or its fill")
+	var wave: Dictionary = TeamColorRegistry._parse_kit({"jersey": {"base": "#FFFFFF",
+			"stripes": [{"pos": 0.9, "width": 0.1, "color": "#000000",
+					"peak": {"depth": 0.1, "count": 3, "shape": "sine"}}]}})
+	assert_eq(wave.jersey.stripes[0].peak.shape, "sine")
+
+
+func test_a_fill_below_reaches_the_forearm_as_a_band() -> void:
+	var sleeve := {"base": Color.WHITE, "stripes": [{"pos": SleevePaint.pos_of(0.35),
+			"width": 0.03, "color": Color.BLUE, "fill_below": Color.RED,
+			"peak": {"depth": -0.09, "count": 2, "u": 0.5}}]}
+	var lower: Dictionary = SleevePaint.segment(sleeve, false)
+	assert_eq(lower.stripes.size(), 2, "the fill, then the stripe over it")
+	assert_eq(lower.stripes[0].color, Color.RED)
+	assert_gt(float(lower.stripes[0].pos) + float(lower.stripes[0].width) * 0.5, 1.0,
+			"the fill runs to the segment's end")
+	assert_eq(SleevePaint.segment(sleeve, true).stripes.size(), 0,
+			"and none of it reaches the upper arm")

@@ -53,23 +53,51 @@ static func collar_color(jersey: Dictionary) -> Color:
 
 
 # The side height the kits' jersey stripe fractions are authored against. A band
-# in its lower half is a hem band and keeps its place above the hem; one in the
-# upper half keeps its place under the collar — so a sweater of another length
-# moves each band with the edge it trims, at the same width.
+# above the first of _STRIPE_TRIMS trims the collar and keeps its place under
+# it; one below the second trims the hem and keeps its place above it; between
+# them its place blends from one to the other, so a band across the chest can
+# sit at any height. A sweater of another length moves each band with the edge
+# it trims, at the same width.
 const JERSEY_STRIPE_DESIGN_HEIGHT_M: float = 0.55
+const _STRIPE_TRIMS: Vector2 = Vector2(0.25, 0.75)
 
 
-# A kit jersey stripe {pos, width, color} as fractions of the torso side it
-# paints on.
+# Metres down a jersey side `side_m` tall that a kit stripe's `pos` centres at.
+static func jersey_stripe_centre_m(pos: float, side_m: float) -> float:
+	var hem_share: float = clampf(inverse_lerp(_STRIPE_TRIMS.x, _STRIPE_TRIMS.y, pos), 0.0, 1.0)
+	return pos * JERSEY_STRIPE_DESIGN_HEIGHT_M + hem_share * (side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M)
+
+
+# A kit jersey stripe {pos, width, color, peak?, fill_below?} as fractions of the torso side
+# it paints on; a peak's depth is a height like the width.
 static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
 	var side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
-	var pos: float = float(stripe.pos)
-	var centre_m: float = pos * JERSEY_STRIPE_DESIGN_HEIGHT_M
-	if pos > 0.5:
-		centre_m += side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M
-	return {"pos": centre_m / side_m,
-			"width": float(stripe.width) * JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m,
+	var scale: float = JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m
+	var centre_m: float = jersey_stripe_centre_m(float(stripe.pos), side_m)
+	var side := {"pos": centre_m / side_m, "width": float(stripe.width) * scale,
 			"color": stripe.color}
+	if stripe.has("fill_below"):
+		side.fill_below = stripe.fill_below
+	if stripe.has("peak"):
+		var peak: Dictionary = stripe.peak.duplicate()
+		peak.depth = float(peak.depth) * scale
+		side.peak = peak
+	return side
+
+
+# A kit polygon filled with its slanted edges anti-aliased, as canvas polygons
+# are not on any renderer: a smooth hairline over each. Over an edge inside a
+# stripe, between two of its pieces, the line is the stripe's own color and
+# vanishes. Level and upright edges do not step and stay hard, which keeps a
+# flat band crisp and a clip's straight cut from bleeding past it.
+static func fill_smooth(canvas: CanvasItem, polygon: PackedVector2Array, color: Color) -> void:
+	canvas.draw_colored_polygon(polygon, color)
+	var n: int = polygon.size()
+	for i: int in n:
+		var a: Vector2 = polygon[i]
+		var b: Vector2 = polygon[(i + 1) % n]
+		if absf(a.x - b.x) > 0.01 and absf(a.y - b.y) > 0.01:
+			canvas.draw_line(a, b, color, 1.0, true)
 
 
 # Horizontal bands across a cylinder's curved side. Each stripe is `pos` (centre,
