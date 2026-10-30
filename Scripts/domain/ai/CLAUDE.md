@@ -499,10 +499,16 @@ body leaves a puck carried on the far side out of reach. Once a carrier coming
 at our net at pace draws within a stick of level in our zone
 (`AIRolePressure.is_level`), the ladder has nothing left to hold and the
 inside is lost or about to be: the last man may check, and otherwise steps into
-his path at contact (still in front) or skates onto his near hip (behind), so
-the body or the reach-in gets there before he does. A carrier who is not coming
-gets the goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a
-scripted carrier who ignores the defence at the net, alone and two back.
+his path at contact (still in front), or, behind him, skates to the first ice
+on the carrier's line to our net his stick gets to before the carrier does
+(`_cut_off`, both on the arrival clock; the crease's top when he wins none
+short of it), so the body or the reach-in meets him on his way to the slot.
+Letting him go wide is fine; letting him into the slot is not. Never chase the
+hip: a carrier any faster than the defender is never caught there, and cuts in
+across the slot in front of him. A carrier who is not coming gets the
+goal-side stand instead. `test_one_on_one_to_the_crease.gd` drives a scripted
+carrier who ignores the defence at the net, alone and two back, and a bot
+carrier who goes wide and cuts in.
 
 Three things have to be true together, and each is load-bearing:
 
