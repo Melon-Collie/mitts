@@ -124,6 +124,8 @@ static func upright(p: KeeperPose) -> void:
 		leg.shin_front = _FORWARD
 		leg.foot_mode = KeeperPose.FootMode.FLAT
 		leg.toe = _FORWARD
+		leg.flex = 0.0
+		leg.along_shin = 0.0
 	p.glove_hand = Vector3(-0.38, 0.95, -0.15)
 	p.glove_from_chest = false
 	p.glove_fingers = Vector3(0.0, -1.0, 0.0)
@@ -435,6 +437,8 @@ static func _ready_leg(leg: KeeperPose.Leg, sx: float) -> void:
 	leg.shin_front = Vector3(-sx * 0.15, 0.0, -1.0)
 	leg.foot_mode = KeeperPose.FootMode.FLAT
 	leg.toe = ready_toe(sx)
+	leg.flex = 0.0
+	leg.along_shin = 0.0
 
 
 # The ready stance's skate on side `sx` (+1 his blocker side), toed out.

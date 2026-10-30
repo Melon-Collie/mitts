@@ -429,6 +429,11 @@ receivers a pass can reach, a carried puck read his read late and carried on
 along its own motion, no further from its carrier than he reaches, a release seen his read late, and a pass read to the stick that meets
 it once seen and until seen caught, none for a line no stick reaches or a
 puck that stops short.
+`test_keeper_stances_are_whole.gd` holds that every taught stance writes the
+whole of what the skeleton solves from: written over a pose left anywhere
+else (a foot turned along its shin, a cover's lean, the hands out), it solves
+to the same body and gear as over a fresh one, so his gear never depends on
+what he did before.
 `test_keeper_body.gd` also holds a grip past reach in every direction, both
 catching hands: the fist on the stick, the arm no longer than an arm, the grip
 on the shaft, the lie, and the blade flat on the ice unless it cannot be.
