@@ -45,11 +45,18 @@ func plan(puck: Vector2, velocity: Vector2, motor: KeeperMotor, opponents: Packe
 	facing = KeeperPositioning.facing(spot, rest)
 	var mine: float = KeeperFootwork.push_time(at.distance_to(spot), motor.footwork.t_push_speed, motor.footwork.accel) \
 			+ motor.save_move.drop_s
+	return mine + (0.0 if going else read_s) < their_time(rest, opponents)
+
+
+# How soon the first of `opponents` gets a stick on a puck at `at`: at full
+# sprint from the first instant, straight at it, his stick's length short of
+# it; INF with none.
+static func their_time(at: Vector2, opponents: PackedVector2Array) -> float:
 	var theirs: float = INF
 	for o: Vector2 in opponents:
-		theirs = minf(theirs, maxf(o.distance_to(rest) - GameRules.DEFAULT_STICK_LENGTH_M, 0.0)
+		theirs = minf(theirs, maxf(o.distance_to(at) - GameRules.DEFAULT_STICK_LENGTH_M, 0.0)
 				/ GameRules.DEFAULT_SKATER_MAX_SPEED_M_S)
-	return mine + (0.0 if going else read_s) < theirs
+	return theirs
 
 
 # Where a puck at `at` sliding at `v` comes to rest.

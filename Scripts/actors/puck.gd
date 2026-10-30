@@ -714,6 +714,12 @@ func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
 	puck_stripped.emit(ex_carrier, null)
 	puck_released.emit()
 
+# A goalie's clear (KeeperController): his stick sweeps the loose puck away
+# along the ice at `velocity`, a touch of his gear as any contact with it is.
+func apply_goalie_clear(goalie: Goalie, velocity: Vector3) -> void:
+	linear_velocity = Vector3(velocity.x, 0.0, velocity.z)
+	_queue_contact_event(ContactEvent.GOALIE_TOUCH, goalie)
+
 # Stick-lift strip: unlike a poke (which squirts the puck off the blade contact),
 # a lifted stick just leaves the puck where it was being carried — so it keeps
 # travelling in the carrier's direction at the carrier's speed, as if the carry

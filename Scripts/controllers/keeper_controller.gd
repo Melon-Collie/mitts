@@ -25,7 +25,9 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # first he skates to and covers (KeeperFetch). A puck an opposing carrier
 # drives at him with, out in front of the body, he jabs off the blade with his
 # stick when his read says it gets there, the brain still placing him
-# (KeeperPoke).
+# (KeeperPoke); one at his feet an opponent would get to before his glove he
+# sweeps away to the corner with it, where the stick gets there first
+# (KeeperClear).
 #
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
@@ -61,6 +63,7 @@ var cover := KeeperCover.new()
 var look := KeeperLook.new()
 var fetch := KeeperFetch.new()
 var poke := KeeperPoke.new()
+var clear := KeeperClear.new()
 
 var _keeper: Keeper = null
 var _keeper_pose := KeeperPose.new()
@@ -99,9 +102,10 @@ var _felt: bool = false
 var _chest_held := Vector3.INF
 # Where a puck smothered under his pads is held, in the rink; INF none.
 var _smothered_at := Vector3.INF
-# Whether a poke check is under way, and where its blade was a tick ago in the
-# rink (INF, nowhere yet).
+# Whether a poke check is under way, or a clear, and where the stick's blade
+# was a tick ago in the rink (INF, nowhere yet).
 var _poking: bool = false
+var _clearing: bool = false
 var _blade_was := Vector3.INF
 
 
@@ -167,6 +171,7 @@ func _place_in_crease() -> void:
 	_over_at = -1.0
 	_felt = false
 	_poking = false
+	_clearing = false
 	_blade_was = Vector3.INF
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
@@ -211,7 +216,8 @@ func _play(delta: float) -> void:
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
 		_read_receivers()
 		if _at_feet:
-			_play_at_feet(in_net)
+			if not _clearing:
+				_play_at_feet(in_net)
 		else:
 			_poke_check()
 			_fetch_the_puck(in_net)
@@ -220,7 +226,7 @@ func _play(delta: float) -> void:
 	_ticks += 1
 	motor.step(delta)
 	_place_body()
-	_poke_step(delta)
+	_stick_step(delta)
 	_smother(in_net)
 
 
@@ -230,6 +236,8 @@ func _play(delta: float) -> void:
 # blade sent on after the puck as he reads it, and back once it no longer
 # lands. Only his stick: the brain goes on placing him.
 func _poke_check() -> void:
+	if _clearing:
+		return
 	var theirs: bool = play.theirs and not play.winding_up and not read.reading() and puck.get_carrier() != null
 	if _poking:
 		if save.returning() or not theirs:
@@ -248,15 +256,17 @@ func _poke_check() -> void:
 		_blade_was = Vector3.INF
 
 
-# A poke under way: the puck knocked off its carrier if the blade meets it on
-# the way out, and the stick back at once once it has, or once it gets where it
+# The stick thrust out, a poke or a clear: a carried puck of theirs its blade
+# meets on the way out knocked off its carrier, a loose one it meets on a clear
+# swept away to the corner; back at once once it has, or once it gets where it
 # was sent: a jab, never held out. Over once the stick is home, or once a save
 # or a cover takes the hands.
-func _poke_step(delta: float) -> void:
-	if not _poking:
+func _stick_step(delta: float) -> void:
+	if not _poking and not _clearing:
 		return
 	if save.hand != KeeperSave.Hand.POKE:
 		_poking = false
+		_clearing = false
 		return
 	var box: Transform3D = goalie.global_transform * KeeperGear.box(_keeper.skeleton, KeeperGear.Part.BLADE)
 	var blade_vel: Vector3 = Vector3.ZERO if _blade_was == Vector3.INF else (box.origin - _blade_was) / maxf(delta, 1e-4)
@@ -264,16 +274,28 @@ func _poke_step(delta: float) -> void:
 	if save.returning():
 		return
 	var carrier: Skater = puck.get_carrier()
-	if carrier != null and (team_id == -1 or carrier.get_team_id() != team_id):
-		var on_blade: Vector3 = (box.affine_inverse() * puck.global_position).abs()
-		var near: Vector3 = KeeperGear.half_extents(KeeperGear.Part.BLADE) \
-				+ Vector3.ONE * (GameRules.PUCK_COLLISION_RADIUS + POKE_CONTACT_M)
-		if on_blade.x <= near.x and on_blade.y <= near.y and on_blade.z <= near.z:
-			puck.apply_goalie_poke_check(box.origin, blade_vel)
-			save.release()
-			return
+	if _poking and carrier != null and (team_id == -1 or carrier.get_team_id() != team_id) and _on_blade(box):
+		puck.apply_goalie_poke_check(box.origin, blade_vel)
+		save.release()
+		return
+	# A clear goes off as the blade comes onto the puck, a tick's travel early:
+	# the sweep sends it, not the blade's box arriving on it.
+	if _clearing and carrier == null and not puck.pickup_locked \
+			and _on_blade(box, save.blocker_speed_m_s * delta):
+		puck.apply_goalie_clear(goalie, _net.basis * Vector3(clear.way.x, 0.0, clear.way.y) * KeeperClear.SPEED_M_S)
+		save.release()
+		return
 	if save.hand_there():
 		save.release()
+
+
+# The puck within the blade's box at `box` (the rink), grown by the puck's
+# radius, POKE_CONTACT_M and `ahead`.
+func _on_blade(box: Transform3D, ahead: float = 0.0) -> bool:
+	var on: Vector3 = (box.affine_inverse() * puck.global_position).abs()
+	var near: Vector3 = KeeperGear.half_extents(KeeperGear.Part.BLADE) \
+			+ Vector3.ONE * (GameRules.PUCK_COLLISION_RADIUS + POKE_CONTACT_M + ahead)
+	return on.x <= near.x and on.y <= near.y and on.z <= near.z
 
 
 # A puck he is going down to cover that his pads come down on: smothered under
@@ -323,12 +345,8 @@ func _read_play(delta: float, in_net: Vector3) -> void:
 func _read_receivers() -> void:
 	_attackers.clear()
 	_defenders.clear()
-	_opponents.clear()
-	_ensure_view()
+	_read_opponents()
 	var to_net: Transform3D = _net.affine_inverse()
-	for at: Vector3 in _view.opponents:
-		var mine: Vector3 = to_net * at
-		_opponents.append(Vector2(mine.x, mine.z))
 	var carrier: Skater = puck.get_carrier()
 	if carrier != null and (team_id == -1 or carrier.get_team_id() != team_id):
 		for at: Vector3 in _view.off_puck_opponents:
@@ -418,6 +436,33 @@ func _end_save() -> void:
 	motor.end_save()
 
 
+func _read_opponents() -> void:
+	_opponents.clear()
+	_ensure_view()
+	var to_net: Transform3D = _net.affine_inverse()
+	for at: Vector3 in _view.opponents:
+		var mine: Vector3 = to_net * at
+		_opponents.append(Vector2(mine.x, mine.z))
+
+
+# A puck at his feet (`in_net`) an opponent gets to before his glove would
+# land on it (`cover_s` from now) cleared to the corner with his stick, if the
+# blade gets there first (KeeperClear); set on his feet or down. Only his
+# stick: he stays where he is, as at his feet.
+func _clear(in_net: Vector3, cover_s: float) -> bool:
+	if not (motor.can_save(false) or motor.can_save(true)):
+		return false
+	_read_opponents()
+	if not clear.plan(Vector2(in_net.x, in_net.z), motor, _keeper.skeleton.mirrored, _opponents, play.delay_s,
+			save.blocker_speed_m_s, cover_s):
+		return false
+	save.poke(clear.target, clear.blade_yaw)
+	_clearing = true
+	_fetching = false
+	_blade_was = Vector3.INF
+	return true
+
+
 # A loose puck he can reach, with no shot to save: down over it and the glove
 # onto it, the glove following it as it slides; secured once the glove is on
 # it with the puck under it. Until then it is live. A puck at his feet he plays
@@ -430,6 +475,8 @@ func _cover_the_puck(delta: float, in_net: Vector3) -> void:
 	var loose: bool = _holding < 0.0 and not read.reading() and puck.get_carrier() == null and not puck.pickup_locked
 	var was_at_feet: bool = _at_feet
 	_at_feet = loose and KeeperCover.at_feet(in_net, v, motor)
+	if _clearing:
+		return
 	if _at_feet and not was_at_feet and not _covering:
 		_fetching = false
 		# Asked to be where he is: a pivot stops where it has turned to, a
@@ -439,6 +486,12 @@ func _cover_the_puck(delta: float, in_net: Vector3) -> void:
 	# Skating to one further off, he stops on his spot before he goes down on it.
 	var coverable: bool = loose and (_at_feet or _covering or not _fetching or motor.is_idle()) \
 			and cover.plan(in_net, v, motor, _keeper.skeleton.mirrored)
+	# One he can cover is weighed against the clear once, as the cover would
+	# start; one out of the glove's reach at the planner's rate, the drop the
+	# least a cover of it would take.
+	if _at_feet and not _covering and not _poking and (coverable or _ticks % PLANNER_EVERY == 0) \
+			and _clear(in_net, cover.land_s if coverable else motor.save_move.drop_s):
+		return
 	if not coverable:
 		_out_of_reach_s += delta
 		if _covering and (not _at_feet or _out_of_reach_s > COVER_GRACE_S):

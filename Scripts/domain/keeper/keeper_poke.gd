@@ -45,8 +45,10 @@ const ON_ICE_M: float = 0.01
 var target := Vector3.ZERO
 var reach_s: float = 0.0
 
+# His body as the last aim solved it, the blade where it sent it.
+var skel := KeeperSkeleton.new()
+
 var _pose := KeeperPose.new()
-var _skel := KeeperSkeleton.new()
 
 
 # Whether a poke at a puck read at `puck`, moving with its carrier at `motion`,
@@ -93,14 +95,17 @@ func _lands(puck: Vector2, motion: Vector2, carrier: Vector2, motor: KeeperMotor
 
 
 # Sends the blade's centre so the blade lies on `want` (his space, on the ice)
-# in the pose last planned from; whether it does, flat on the ice. Leaves
-# `target` where it sends it.
-func aim(want: Vector3) -> bool:
+# in the pose last planned from, the blade turned to `yaw` (KeeperPose's
+# blade_yaw) if given; whether it does, flat on the ice. Leaves `target` where
+# it sends it.
+func aim(want: Vector3, yaw: float = NAN) -> bool:
+	if not is_nan(yaw):
+		_pose.blade_yaw = yaw
 	target = want
 	for _i: int in AIM_ROUNDS:
 		_pose.blade_center = target
-		_skel.pose(_pose)
-		var got: Transform3D = KeeperGear.box(_skel, KeeperGear.Part.BLADE)
+		skel.pose(_pose)
+		var got: Transform3D = KeeperGear.box(skel, KeeperGear.Part.BLADE)
 		var miss := Vector3(want.x - got.origin.x, 0.0, want.z - got.origin.z)
 		if miss.length() <= ON_PUCK_M:
 			return lowest(got, KeeperGear.half_extents(KeeperGear.Part.BLADE)) <= ON_ICE_M
@@ -108,9 +113,18 @@ func aim(want: Vector3) -> bool:
 	return false
 
 
-# The motor's pose for `aim` to send the blade from, for a caller with no plan.
+# The motor's pose for `aim` to send the blade from, for a caller with no plan;
+# where it holds the blade, and turned how.
 func pose_from(motor: KeeperMotor) -> void:
 	motor.pose(_pose)
+
+
+func rest_blade() -> Vector3:
+	return Vector3(_pose.blade_center.x, 0.0, _pose.blade_center.z)
+
+
+func rest_yaw() -> float:
+	return _pose.blade_yaw
 
 
 # The lowest point of a box at `xf` of half extents `h`.

@@ -35,7 +35,7 @@ extends RefCounted
 const Low := KeeperSaveMove.Low
 # The stick's two: the blade slid across along the ice to a low shot at its
 # depth (STICK), and thrust out along the ice wherever it is sent, a poke
-# check (POKE).
+# check or a clear (POKE).
 enum Hand { NONE, STICK, GLOVE, BLOCKER, POKE }
 
 # The flight is tested as this many straight pieces, from the puck to just past
@@ -109,6 +109,9 @@ var _watched: bool = false
 var _lean: float = 0.0
 var _lean_to: float = 0.0
 var _lean_toward := Vector3.ZERO
+# Where a thrust stick is sent, and the blade's turn there (NAN, the stance's).
+var _poke_to := Vector3.ZERO
+var _poke_yaw: float = NAN
 
 var _skel := KeeperSkeleton.new()
 var _rest_skel := KeeperSkeleton.new()
@@ -337,13 +340,16 @@ func cover(target: Vector3, lean: float, toward: Vector3, fingers: Vector3) -> v
 	_watched = true
 
 
-# The stick thrust out along the ice to `target` (his space), a poke check: at
-# once, at his blocker speed, the blade laid where it has got to; back once
-# released.
-func poke(target: Vector3) -> void:
+# The stick thrust out along the ice to `target` (his space), a poke check or
+# a clear: at once, at his blocker speed, the blade laid where it has got to
+# and turned toward `yaw` (KeeperPose's blade_yaw; NAN, left as the stance
+# holds it) as far as it has got; back once released.
+func poke(target: Vector3, yaw: float = NAN) -> void:
 	_lean_to = 0.0
 	_send(Hand.POKE)
 	hand_target = target
+	_poke_to = target
+	_poke_yaw = yaw
 	_watched = true
 
 
@@ -409,6 +415,10 @@ func _lay_hand(p: KeeperPose, h: int, at: Vector3) -> void:
 		Hand.STICK:
 			p.blade_center = Vector3(at.x, 0.0, p.blade_center.z)
 		Hand.POKE:
+			if not is_nan(_poke_yaw):
+				var whole: float = p.blade_center.distance_to(_poke_to)
+				var got: float = 1.0 if whole < 1e-4 else clampf(p.blade_center.distance_to(at) / whole, 0.0, 1.0)
+				p.blade_yaw = lerp_angle(p.blade_yaw, _poke_yaw, got)
 			p.blade_center = Vector3(at.x, 0.0, at.z)
 
 

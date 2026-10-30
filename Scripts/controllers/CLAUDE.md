@@ -12,7 +12,7 @@ Four files here hold him in the game:
 | File | Owns |
 |---|---|
 | `goalie_controller.gd` | his seat, which every caller, the puck, the wire and the replays address: his node, puck and net, the puck's signals routed to whoever plays him, the host's snapshots and a client's interpolation of them, the reads the shot log takes of him |
-| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover), a puck a carrier of theirs drives at him with jabbed off it (KeeperPoke); played on the host, posed from the wire on a client and in a replay |
+| `keeper_controller.gd` | the keeper in that seat: KeeperPositioning at the planner's rate, KeeperMotor at the tick, the node placed on him and his gear's save boxes on its part bodies (`Goalie.set_stand_in` / `seat_save_box`), a shot read and saved (KeeperShotRead, KeeperSave), a glove catch held and covered, a loose puck he can reach covered (KeeperCover), a puck a carrier of theirs drives at him with jabbed off it (KeeperPoke), one at his feet an opponent beats his cover to swept to the corner (KeeperClear); played on the host, posed from the wire on a client and in a replay |
 | `goalie_state_machine.gd` | the stance enum the wire carries (`state_enum`) and the bots and the pad sounds read, and its families |
 | `goalie_world_view.gd` | one scan of the skaters a tick, shared by every read of them |
 
