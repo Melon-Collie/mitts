@@ -195,7 +195,7 @@ var carry_repush_margin: float = 1.2
 # What a stroke is, as against a hand's wobble: the speed is read through a
 # filter of carry_stroke_smoothing_s, and no face changes until the puck has
 # gone carry_flip_distance (m) the new way.
-var carry_stroke_smoothing_s: float = 0.04
+var carry_stroke_smoothing_s: float = 0.06
 var carry_flip_distance: float = 0.04
 # A release hop lands as the free puck stops (CarryStrokeState.stop_in_s), the
 # far face there to catch it, within [min, carry_transit_hop_time].
