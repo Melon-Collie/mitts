@@ -100,31 +100,36 @@ const _GRIP_REACH_FRAC: float = 0.88
 const _ARM_POLE := Vector3(0.55, -1.0, 0.1)
 
 # ── Stick pose ───────────────────────────────────────────────────────────────
-# The display LIE — steeper than the rink's 42°, which is a skating-crouch
-# number. A standing player's stick is near-upright, and the hosel is built at
-# this same angle so the blade still sits flat on the ice instead of up on an
-# edge. Steep also keeps the silhouette portrait-shaped: at 68° the blade is
-# only ~0.5 m ahead of the butt instead of ~0.8 m.
-const _SHAFT_LEAN_DEG: float = 68.0
+# The shaft's lean off the ice, and the hosel is built at the same angle so the
+# blade still sits flat instead of up on an edge. Standing, the stick runs
+# across the body from a blade out on the shooting side to a top hand hanging
+# by the other hip, the forearm down into it: the hand holds it like a sword,
+# the shaft out past the thumb toward the blade, as the rink skater does
+# (SkaterArmPoses.glove_basis). A top hand any higher sits above its elbow,
+# and a forearm pointing UP into the fist can only hold the shaft like a
+# dagger. Seated, the stick stands up between the knees, steep as a seated
+# player holds it.
+const _STANDING_LEAN_DEG: float = 44.0
+const _SEATED_LEAN_DEG: float = 68.0
 # Yaw of the whole stick about the heel — the shaft leans back across the body
 # rather than straight out, which is what puts the blade in profile.
-const _STICK_YAW_DEG: float = 30.0
-# Blade heel on the ice: out to the shooting side and ahead of the toes.
-# Deliberately not scaled by height — where a player plants the blade is a
-# stance, not a limb length.
-const _HEEL_OUT_M: float = 0.14
-const _HEEL_FWD_M: float = -0.67
+const _STICK_YAW_DEG: float = 60.0
+# Standing, the stick is laid out from where the top hand holds it, not from
+# the blade: the knob just in front of the hip on the top hand's side (out from
+# the centre line, forward of it), the heel a shaft's span back down the lean.
+const _KNOB_OUT_M: float = 0.10
+const _KNOB_FWD_M: float = -0.22
 # The heel point rides this far above the floor, which rests the blade —
 # tilted with the shaft's lie — with its sole just clear of it (~7 mm).
 const _HEEL_LIFT_M: float = 0.042
 # Seated, the blade rests on the bench floor this far ahead of the knees, the
-# shaft standing up between them.
+# shaft standing up between them, this far out to the shooting side.
 const _SEATED_HEEL_FWD_M: float = -0.22
+const _SEATED_HEEL_OUT_M: float = 0.14
 # Where the grips WANT to sit — the top hand just under the knob, the bottom
-# hand high on the shaft. Both are only hints: the arm pass slides each one
-# along the shaft until its own shoulder can actually reach it. They sit high
-# because a stick standing on the ice in front of a player genuinely is held
-# near its top; the shoulders are only ~1.4 m above a blade planted 0.7 m out.
+# hand a forearm's length or so down the shaft from it. Both are only hints:
+# the arm pass slides each one along the shaft until its own shoulder can
+# actually reach it.
 const _TOP_HAND_DROP_M: float = 0.13
 const _BOTTOM_HAND_FRAC: float = 0.70
 # A grip never rides onto the hosel, and never past the knob.
@@ -343,9 +348,17 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# The heel stands on whatever the skates do: the ice, or the bench floor
 	# in front of the knees.
 	var floor_y: float = boot.y - _BLADE_ICE_M if seated else _ICE_Y
-	var heel_fwd: float = boot.z - _BOOT_DZ + _SEATED_HEEL_FWD_M if seated else _HEEL_FWD_M
-	_pose_stick(attrs, tape, Vector3(_blade_side * _HEEL_OUT_M, floor_y + _HEEL_LIFT_M,
-			heel_fwd))
+	var stick_len: float = GameRules.DEFAULT_STICK_LENGTH_M * attrs.stick_len_mult() \
+			+ SkaterStickRig.SHAFT_BUTT_EXTEND_M
+	var lean_deg: float = _SEATED_LEAN_DEG if seated else _STANDING_LEAN_DEG
+	var heel := Vector3(_blade_side * _SEATED_HEEL_OUT_M, floor_y + _HEEL_LIFT_M,
+			boot.z - _BOOT_DZ + _SEATED_HEEL_FWD_M)
+	if not seated:
+		var span: float = stick_len * cos(deg_to_rad(lean_deg))
+		var yaw: float = deg_to_rad(-_blade_side * _STICK_YAW_DEG)
+		heel = Vector3(-_blade_side * _KNOB_OUT_M - sin(yaw) * span, floor_y + _HEEL_LIFT_M,
+				_KNOB_FWD_M - cos(yaw) * span)
+	_pose_stick(attrs, tape, heel, stick_len, lean_deg)
 	_pose_arms(is_left_handed, shoulder_x, shoulder_y, m_girth, m_height)
 
 	# Anchors so far are rig-local (the stick and arm passes wrote theirs the
@@ -358,9 +371,12 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# anchor sits at the midpoint of ice-to-crown so the extent below actually
 	# centres what it measures.
 	var crown: float = (helmet * SkaterMeshBuilder.shared_helmet_assembly().get_aabb()).end.y
-	_anchors[Focus.FULL] = Vector3(0.0, (_ICE_Y + crown) * 0.5, 0.0)
+	# Across, it holds the figure and the blade out to its side: centred between
+	# them, wide enough for both.
+	var blade_x: float = _anchors[Focus.BLADE].x
+	_anchors[Focus.FULL] = Vector3(blade_x * 0.5, (_ICE_Y + crown) * 0.5, 0.0)
 	_extents[Focus.FULL] = Vector2(
-			maxf(_FOCUS_EXTENT[Focus.FULL].x, _extents[Focus.STICK].x),
+			maxf(_FOCUS_EXTENT[Focus.FULL].x + absf(blade_x) * 0.5, _extents[Focus.STICK].x),
 			(crown - _ICE_Y) * 0.5 + 0.06)
 	_extents[Focus.HELMET] = _FOCUS_EXTENT[Focus.HELMET] * m_head
 
@@ -380,7 +396,8 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 
 # The stick, then the grips derived from it. Placing the assembly first is what
 # lets the hands sit ON the shaft instead of near it.
-func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3) -> void:
+func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3,
+		stick_len: float, lean_deg: float) -> void:
 	var curve: int = attrs.curve
 	var p := StickBladeMeshBuilder.Params.new()
 	p.length = GameRules.DEFAULT_BLADE_LENGTH_M
@@ -392,7 +409,7 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3) 
 	# already the same flag, so the two can never disagree.
 	p.curve_sign = -_blade_side
 	p.hosel_length = _HOSEL_LEN_M
-	p.hosel_angle_deg = _SHAFT_LEAN_DEG
+	p.hosel_angle_deg = lean_deg
 	_blade.mesh = StickBladeMeshBuilder.build(p)
 	_blade.transform = Transform3D.IDENTITY
 
@@ -406,9 +423,7 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3) 
 	_tape_mesh.mesh = StickBladeMeshBuilder.build_tape(tape_p, tape.span_range()) \
 			if tape.has_blade_tape() else null
 
-	var stick_len: float = GameRules.DEFAULT_STICK_LENGTH_M * attrs.stick_len_mult() \
-			+ SkaterStickRig.SHAFT_BUTT_EXTEND_M
-	var lean: float = deg_to_rad(_SHAFT_LEAN_DEG)
+	var lean: float = deg_to_rad(lean_deg)
 	var axis := Vector3(0.0, sin(lean), cos(lean))
 	_shaft.transform = Transform3D(
 			Basis.looking_at(-axis, Vector3.UP)
