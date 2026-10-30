@@ -24,7 +24,7 @@ old one's place.
 | `keeper_motor.gd` | his moves strung together: where he is, his turn and his rest (feet, down, post), each move asked for in order and started from where the last came to rest; the pivot on his feet; footwork in his turned frame; or given where to be (`go_to`, `seal`), making each time he comes to rest the first move of the route there, a new spot or facing taken on by a pivot or footwork under way; footwork toward a goal turning his trunk to its facing as he goes (`lead`), his skates catching up once he is set, and chaining into the next footwork as soon as the push leg is back under him; a goal on his feet that moves, or within `KeeperRoute.GLIDE_REACH_M`, or asked to be skated to (`go_to`'s `skate`), skated to by the glide and held as it moves (`go_to`'s velocity), stopped for where he is before a goal off his feet; a low save cutting any of it, a drop, a rise or the gather after the last save included, falling from as far down as he is (`fall`), but never a slide or the post; sunk into the low ready when asked and set, shuffling or skating with the play, across no faster than he shuffles and in depth at any glide (`low_ready`), a drop or a save from it the shorter fall; a goal down while he skates dropped into at once, his speed carried onto the pads (`_drop_carrying`, the low save's drop with its edges out of it); down, one push after another, the next as soon as the last has stopped and folded its leg; frozen where he is (`freeze`) while he holds the puck |
 | `keeper_route.gd` | where he is asked to be (on his feet or down at a spot and facing, sealed on a post), and the fastest way there from where he is and his rest: its first move and the whole way's time, from the movers' own models, each move's settle included (none after a glide or a slide: nothing waits for its legs or the lean back against its stop); a spot on his feet within `GLIDE_REACH_M` glided to (a T-push's time, `KeeperFootwork.push_time`, at the C-cuts' speed for its share in depth, beside the turn), and a way's second leg within it too when the goal is on his feet; past it footwork's moves, the shuffle where it is no slower than the T-push, a turn before the feet, a spot steeper than a diagonal in depth and across or the steepest diagonal then depth, a slide only within `KeeperSlide.MAX_OFF_LINE_RAD` of his line; in the RVH, a spot or the other post across the crease pushed off the post for (`RVH_PUSH_OFF`), one on the post's side of him folded out for; down, a facing more than `DOWN_FACED_RAD` off taken by a rotation on his knees, or by a pivot on his feet before he drops, and a slide off his line by rotating onto it first, never turned further off the facing than a slide goes, where that beats getting up; the RVH dropped into straight from where he stands when that is the post's overlap at his turn (`ON_POST_M`), as at a sharp angle, or skated onto that overlap still turned first; `time_to_seal`, a way's time into the RVH whatever goal he is given, for the brain's race to a post |
 | `keeper_shot_read.gd` | what he reads of a shot: nothing until he has watched the puck's own flight for his leg read, then its flight carried on under gravity, his legs and hands both answering it; a tip restarts it; the flight as it left the stick (`rewind`), for a shot that beat his read |
-| `keeper_save.gd` | which save he makes: the one taught for where the shot passes him (below his belly button the butterfly, the half butterfly wide of a pad, the extension past it; above it the glove or the blocker on its side, the glove trapping one at the chest), each candidate posed and the flight tested against its own gear, the first in the taught order whose gear meets the flight and holds it, timing deciding only whether he gets there; a save holds only if what comes off the gear it meets stays out), and the hand laid over whatever pose the motor gives him at its tier speed, a hand still going back from the last save going on back by itself as the next goes out; the glove sent onto a puck to cover it (`cover`) and the stick thrust out along the ice to poke or clear one (`poke`, the blade turned as it goes for a clear), without a read, the trunk folding and turning after it no faster than a trunk turns; and where a shot leaves him time to skate onto its line before he sets for it (`square_up_spot`) |
+| `keeper_save.gd` | which save he makes: the one taught for where the shot passes him (below his belly button the butterfly, the half butterfly wide of a pad, the extension past it; above it the glove or the blocker on its side, the glove trapping one at the chest), each candidate posed and the flight tested against its own gear, the first in the taught order whose gear meets the flight and holds it, timing deciding only whether he gets there; a save holds only if what comes off the gear it meets stays out), a stick or blocker save made with the face turned so its rebound goes toward the near corner (`STICK_TURNS_RAD`, `BLOCKER_TURNS_RAD`, `to_corner`), and the hand laid over whatever pose the motor gives him at its tier speed, a hand still going back from the last save going on back by itself as the next goes out; the glove sent onto a puck to cover it (`cover`) and the stick thrust out along the ice to poke or clear one (`poke`, the blade turned as it goes for a clear), without a read, the trunk folding and turning after it no faster than a trunk turns; and where a shot leaves him time to skate onto its line before he sets for it (`square_up_spot`) |
 | `keeper_look.gd` | his eyes on the puck: his face turned to follow it in any stance, the neck turning and the head nodding, no faster than a head turns (`TURN_RAD_S`) and no further than a neck does, then the trunk turning on the hips for a puck behind him (a shot gone by, one round the net), over the shoulder he is already turned to when it is dead behind; laid over the pose last, so through a save he watches the puck into the gear |
 | `keeper_chest_trap.gd` | a shot caught on his chest: only at the logo (between where his arm pads lie on the protector, the middle of its height, on its face), and only when the nearer hand gets onto it before the foam's rebound carries it out of the glove's pocket |
 | `keeper_cover.gd` | covering a loose puck he can reach: whether one lies at his feet (`at_feet`); whether one down on the ice (`on_ice`, never one in the air) and slowing on it will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads, turned and sunk toward it, to get it there (`KeeperPoses.cover_lean`, no further than it takes); a puck his pads come down on (`under_pads`); where a held puck is set down and swept with no whistle for it (`play_out_way`, `set_down_at`), away from his net |
@@ -116,7 +116,19 @@ butterfly is beaten through the hole it opens on the way down. A save holds only
 it meets (`GoalieSaveRules.resolve_contact`, the puck's own contact) is caught,
 smothered, goes away from the net or meets more of him before the mouth: a puck
 that clips the outside of a pad glances on in. A hand goes only where its gear
-stays above the ice, and the blade only for a puck low enough for it. A low save cuts whatever
+stays above the ice, and the blade only for a puck low enough for it.
+A stick or blocker save that holds he makes with its face turned to steer the
+rebound (`KeeperSave._steer`): the blade turned about the ice
+(`STICK_TURNS_RAD`), the blocker's board about the vertical
+(`BLOCKER_TURNS_RAD`), each turn posed and the believed flight tested against
+it through the puck's own contact as every candidate is, and of those whose
+gear still meets it and holds it he takes the one whose rebound goes most
+toward the near corner (`to_corner`: out along the goal line on the side of
+his net it met him, never back across his mouth; from the middle, either way
+out), the straight face where none does better. The face turns no faster than
+its far edge moves at the hand's speed, and back with the hand. It is his
+read's flight he steers, so a shot he misreads comes off as the face it meets
+sends it. A low save cuts whatever
 move is under way (`KeeperMotor.save`): his feet's moves, a drop, a rise or a
 recovery, and the gather after the last save (a rebound takes him back down),
 falling from as far down as he is; mid-slide or on the post none can, and a
@@ -245,7 +257,13 @@ the mask, which turns with the head, is a save box.
 splitting the legs' saves from the hands', the half butterfly wide of a pad
 led by the blade, the glove leading a drop for one off the ice,
 the five-hole down with time and down late without, a shot at the chest
-trapped with the glove, a save holding or not by its rebound, a new shot's hand going out while the last save's goes back, a long shot moved onto the line of first and one at his body or from the slot not), `test_keeper_cover.gd` (a
+trapped with the glove, a save holding or not by its rebound, a new shot's hand going out while the last save's goes back, a long shot moved onto the line of first and one at his body or from the slot not), `test_keeper_rebound_control.gd` (a steered stick
+or blocker save meeting and holding as the unsteered one does and sending its
+rebound no less toward the corner, straight on from the slot the face turned
+and the rebound more toward it, and the face turning at the hand's pace and
+back), `tests/unit/controllers/test_keeper_steers_his_rebounds.gd` (the live
+keeper and the real puck: off his blocker and his stick straight on, more
+toward the corner than unsteered, and out), `test_keeper_cover.gd` (a
 puck at his feet coverable from his feet once his drop lands and sooner down,
 one out of reach, too fast or in the air not, a sliding one covered where it will be,
 the cover played out unbroken with the glove ending flat on it, from in front
@@ -511,6 +529,11 @@ per tier, spot, speed and aim, the save chosen and its margin, how far his hand
 and his drop had got when the shot was decided, and what decided it; a
 rebound fired at gaps after a save, against what he was doing as it left; and
 shots from the far end (`test_report_long_range`).
+`tests/instruments/keeper/test_rebound_control.gd` says how far rebound
+control steers what comes off him: the live keeper and the real puck, shots
+from the slot, the circles and the dots at his blocker and along the ice at
+his stick, each steered and unsteered, the share of the rebound heading for
+the near corner per shot and on the mean, and the goals each way.
 `tests/instruments/keeper/test_priming_look.gd` says how often he gets primed
 against a carrier standing, skating across or driving in, stickhandling softly
 to hard, at 6, 9 and 12 m, and how fast the puck crosses his view.
