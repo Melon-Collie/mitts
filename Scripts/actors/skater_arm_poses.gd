@@ -128,40 +128,37 @@ static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: V
 
 
 # The fist at `hand` on a forearm from `elbow`: glove_basis, scaled.
-static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: float,
-		thickness: Vector3) -> Transform3D:
-	return Transform3D(glove_basis((hand - elbow).normalized(), grip, max_bend)
-			.scaled_local(thickness), hand)
+static func glove_pose(elbow: Vector3, hand: Vector3, shaft: Vector3, grip_angle: float,
+		ulnar_max: float, radial_max: float, thickness: Vector3) -> Transform3D:
+	return Transform3D(glove_basis((hand - elbow).normalized(), shaft, grip_angle, ulnar_max,
+			radial_max).scaled_local(thickness), hand)
 
 
-# The fist on a forearm pointing `forearm_dir`. Its long (local Y) axis runs
-# wrist → fingers and its knuckle roll across local X. Off the stick (`grip`
-# ZERO) it lines up with the forearm, rolled from world up like the cuff. On it,
-# the knuckle roll lies along the shaft and the hand turns toward square across
-# it, bending at the wrist by up to `max_bend` radians: the wrist breaks as the
-# stick swings against the forearm.
-static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
+# The fist on a forearm pointing `forearm_dir`, holding a shaft running
+# `shaft` toward the blade (ZERO off the stick). Its long (local Y) axis runs
+# wrist → fingers and its knuckle roll across local X, +X the thumb's side.
+# Off the stick it lines up with the forearm, rolled from world up like the
+# cuff. On it the hand holds the stick like a sword: the shaft crosses the palm
+# at `grip_angle` to the hand's long axis and leaves past the thumb toward the
+# blade, and the wrist deviates in the plane of the forearm and the shaft to
+# keep it there — toward the thumb up to `radial_max` as the shaft opens past
+# the grip, toward the little finger up to `ulnar_max` as it closes. Past either
+# the wrist stops and the shaft slips off the grip by the rest.
+static func glove_basis(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
+		ulnar_max: float, radial_max: float) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)
-	if grip == Vector3.ZERO:
+	if shaft == Vector3.ZERO:
 		return straight
-	var across: float = forearm_dir.dot(grip)
-	var square: Vector3 = forearm_dir - grip * across
-	if square.length_squared() < 0.0001:
+	var across: Vector3 = forearm_dir - shaft * forearm_dir.dot(shaft)
+	if across.length_squared() < 0.000001:
 		return straight
-	square = square.normalized()
-	var hand_axis: Vector3 = forearm_dir
-	var hinge: Vector3 = forearm_dir.cross(square)
-	if hinge.length_squared() > 1e-8:
-		hand_axis = forearm_dir.rotated(hinge.normalized(),
-				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
-	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
-	if knuckles.length_squared() < 0.0001:
-		return straight
-	knuckles = knuckles.normalized()
-	if knuckles.dot(straight.x) < 0.0:
-		knuckles = -knuckles
-	return Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis))
+	across = across.normalized()
+	var opening: float = forearm_dir.angle_to(shaft)
+	var held: float = opening - clampf(opening - grip_angle, -ulnar_max, radial_max)
+	var hand_axis: Vector3 = shaft * cos(held) + across * sin(held)
+	var thumb: Vector3 = (shaft - hand_axis * shaft.dot(hand_axis)).normalized()
+	return Basis(thumb, -hand_axis, thumb.cross(-hand_axis))
 
 
 # Glove cuff ring from `hand` back toward `elbow`, its near end `wrist_offset`

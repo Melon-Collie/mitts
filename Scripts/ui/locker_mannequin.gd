@@ -76,10 +76,12 @@ const _ARM_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
 const _ELBOW_RADIUS: float = SkaterMeshBuilder.ELBOW_PAD_RADIUS_M
 const _HAND_RADIUS: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 const _CUFF_RADIUS: float = SkaterMeshBuilder.SLEEVE_RADIUS_M * 1.2
-# Skater.cuff_wrist_offset and wrist_break_max_deg at their defaults.
+# Skater.cuff_wrist_offset and its grip and wrist angles at their defaults.
 const _CUFF_WRIST_OFFSET_M: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
 		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
-const _WRIST_BREAK_MAX_DEG: float = 25.0
+const _GRIP_ANGLE_DEG: Array[float] = [65.0, 80.0]
+const _WRIST_ULNAR_MAX_DEG: float = 35.0
+const _WRIST_RADIAL_MAX_DEG: float = 20.0
 # Seated, the underside of the thighs is this far under the hip pivot (the
 # pants leg's half depth), times the build's girth: what rests on the bench.
 const _SEAT_UNDER_HIP_M: float = 0.14
@@ -479,8 +481,9 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		_skeleton.set_bone_pose(bones[1], SkaterArmPoses.segment_pose(elbow, hand, arm))
 		_skeleton.set_bone_pose(bones[2], SkaterArmPoses.elbow_pose(shoulder, elbow, hand, pole,
 				Vector3.ONE * _ELBOW_RADIUS * m_girth))
-		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, _shaft_up,
-				deg_to_rad(_WRIST_BREAK_MAX_DEG), Vector3.ONE * _HAND_RADIUS * m_girth))
+		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, -_shaft_up,
+				deg_to_rad(_GRIP_ANGLE_DEG[i]), deg_to_rad(_WRIST_ULNAR_MAX_DEG),
+				deg_to_rad(_WRIST_RADIAL_MAX_DEG), Vector3.ONE * _HAND_RADIUS * m_girth))
 		var cuff_r: float = _CUFF_RADIUS * m_girth
 		_skeleton.set_bone_pose(bones[4], SkaterArmPoses.cuff_pose(elbow, hand,
 				Vector3(cuff_r, 1.0, cuff_r), _CUFF_WRIST_OFFSET_M))

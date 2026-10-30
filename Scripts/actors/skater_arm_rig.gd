@@ -202,7 +202,8 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, elbow_s - shoulder_s)
-	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
+	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local, _skater.top_grip_angle_deg
+			if arm == 0 else _skater.bottom_grip_angle_deg)
 
 
 func _ease_steer(arm: int, delta: float, target: float) -> float:
@@ -244,13 +245,15 @@ func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 	return true
 
 
+# The port bends the wrist toward square by one symmetric limit, not the sword
+# grip's (glove_basis), so it gets the wider of the two.
 func _configure_native() -> void:
 	_native_dirty = false
 	for arm: int in 2:
 		var parts: Array = _ARM_PARTS[arm]
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
-				deg_to_rad(_skater.wrist_break_max_deg))
+				deg_to_rad(_skater.wrist_ulnar_max_deg))
 
 
 # The elbow's pole on this arm's side, tucked by a check load.
@@ -342,8 +345,9 @@ func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 
 
 # Positions the gloved fist at the hand; `grip` is the shaft through the fist
-# (skeleton space), ZERO off the stick.
-func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> void:
+# toward the blade (skeleton space), ZERO off the stick.
+func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3,
+		grip_angle_deg: float) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var dir: Vector3 = hand - elbow
 	if dir.length_squared() < 0.0001:
@@ -352,7 +356,8 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> voi
 		_skeleton.set_bone_pose(part, held)
 		return
 	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
-			deg_to_rad(_skater.wrist_break_max_deg))
+			deg_to_rad(grip_angle_deg), deg_to_rad(_skater.wrist_ulnar_max_deg),
+			deg_to_rad(_skater.wrist_radial_max_deg))
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
 
 

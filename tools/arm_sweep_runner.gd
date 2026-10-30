@@ -260,16 +260,19 @@ func _arm_clearance(upper: int, forearm: int, hand: int) -> Vector2:
 	return worst
 
 
-# The forearm's angle to the shaft toward the blade, and how far the shaft
-# runs off the fist's knuckle roll, degrees.
-func _grip(forearm: int, hand: int, hand_local: Vector3) -> Vector2:
+# The forearm's angle to the shaft toward the blade, and how far the shaft sits
+# off the hand's grip (SkaterArmPoses.glove_basis) — where the wrist ran out of
+# range — degrees.
+func _grip(forearm: int, hand: int, hand_local: Vector3, grip_deg: float) -> Vector2:
 	var body: Skeleton3D = _skater._arms._skeleton
 	var shaft: Vector3 = (_skater.drawn_upper_body().basis
 			* _skater.stick_grip_axis(hand_local)).normalized()
 	var fist: Transform3D = body.get_bone_global_pose(hand)
 	var along: Vector3 = (fist.origin - body.get_bone_global_pose(forearm).origin).normalized()
+	if shaft == Vector3.ZERO:
+		return Vector2.ZERO
 	return Vector2(rad_to_deg(along.angle_to(shaft)),
-			rad_to_deg(acos(clampf(absf(fist.basis.x.normalized().dot(shaft)), 0.0, 1.0))))
+			absf(rad_to_deg((-fist.basis.y).angle_to(shaft)) - grip_deg))
 
 
 func _report() -> void:
@@ -278,10 +281,12 @@ func _report() -> void:
 	var bottom: Vector2 = _arm_clearance(SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM, SkaterMeshBuilder.UpperBone.BOTTOM_HAND)
 	var top_grip: Vector2 = _grip(SkaterMeshBuilder.UpperBone.TOP_FOREARM,
-			SkaterMeshBuilder.UpperBone.TOP_HAND, _skater.drawn_top_hand())
+			SkaterMeshBuilder.UpperBone.TOP_HAND, _skater.drawn_top_hand(),
+			_skater.top_grip_angle_deg)
 	var bottom_grip: Vector2 = _grip(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
-			SkaterMeshBuilder.UpperBone.BOTTOM_HAND, _skater.bottom_hand.position)
-	print("  f%02d cursor %+5.0f° | twist %+4.0f° hips %+4.0f° | clearance top %+.3f m @%.1f bottom %+.3f m @%.1f | top: forearm∠shaft %3.0f° off knuckles %2.0f° | bottom: %3.0f° %2.0f°" % [
+			SkaterMeshBuilder.UpperBone.BOTTOM_HAND, _skater.bottom_hand.position,
+			_skater.bottom_grip_angle_deg)
+	print("  f%02d cursor %+5.0f° | twist %+4.0f° hips %+4.0f° | clearance top %+.3f m @%.1f bottom %+.3f m @%.1f | top: forearm∠shaft %3.0f° off grip %2.0f° | bottom: %3.0f° %2.0f°" % [
 			_frame, _off_facing(_cursor()), _skater.upper_body.rotation_degrees.y,
 			_skater.lower_body.rotation_degrees.y, top.x, top.y, bottom.x, bottom.y,
 			top_grip.x, top_grip.y, bottom_grip.x, bottom_grip.y])

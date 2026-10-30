@@ -51,6 +51,8 @@ static func upper_body_mesh() -> ArrayMesh:
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_FINGERS),
 					_UpperSurface.TOP_FINGERS if top else _UpperSurface.BOTTOM_FINGERS, hand)
+			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_THUMB),
+					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
 			_add(b, cuff.surface_get_arrays(0),
 					_UpperSurface.TOP_CUFF if top else _UpperSurface.BOTTOM_CUFF,
 					_UpperBone.TOP_CUFF if top else _UpperBone.BOTTOM_CUFF)

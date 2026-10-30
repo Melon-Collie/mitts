@@ -295,10 +295,16 @@ var hand_sphere_radius: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 # Gap along the forearm between the fist's center and the cuff's wrist end.
 var cuff_wrist_offset: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
 		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
-# A glove on the shaft turns its fist square across it, bending the wrist off
-# the forearm by up to this much — inside the wrist's ~20° radial and ~30° ulnar
-# deviation, the plane a stick held across the palm bends it in.
-var wrist_break_max_deg: float = 25.0
+# A glove on the shaft holds it like a sword (SkaterArmPoses.glove_basis): the
+# shaft crosses the palm at the grip angle to the hand's long axis — the top
+# hand's diagonally, the knob in the heel of the hand and the shaft out between
+# thumb and index finger; the bottom hand's nearly square across the fingers —
+# and the wrist deviates to keep it there, within the wrist's ~35° toward the
+# little finger (ulnar) and ~20° toward the thumb (radial).
+var top_grip_angle_deg: float = 65.0
+var bottom_grip_angle_deg: float = 80.0
+var wrist_ulnar_max_deg: float = 35.0
+var wrist_radial_max_deg: float = 20.0
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and

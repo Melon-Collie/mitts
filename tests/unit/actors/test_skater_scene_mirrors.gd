@@ -48,6 +48,16 @@ func test_the_skin_and_the_figures_root_the_arm_at_the_shoulder_anchor() -> void
 	skater.free()
 
 
+# The display figures hold the stick as a skater at his defaults does.
+func test_the_figures_grip_the_stick_as_the_skater_does() -> void:
+	var skater: Skater = Skater.new()
+	assert_eq(LockerMannequin._GRIP_ANGLE_DEG[0], skater.top_grip_angle_deg, "top hand")
+	assert_eq(LockerMannequin._GRIP_ANGLE_DEG[1], skater.bottom_grip_angle_deg, "bottom hand")
+	assert_eq(LockerMannequin._WRIST_ULNAR_MAX_DEG, skater.wrist_ulnar_max_deg, "ulnar")
+	assert_eq(LockerMannequin._WRIST_RADIAL_MAX_DEG, skater.wrist_radial_max_deg, "radial")
+	skater.free()
+
+
 func test_helmet_and_torso_stations_mirror_the_scene() -> void:
 	assert_almost_eq(_origin("./MeshRoot/UpperBody/Helmet").y, 0.65, 1e-6,
 			"the neck profile is built in helmet-local space from this origin — move " +

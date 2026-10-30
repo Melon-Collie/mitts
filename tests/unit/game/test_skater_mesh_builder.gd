@@ -62,6 +62,8 @@ func _parts() -> Array[PartSpec]:
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_BACK),
 		PartSpec.new("glove_fingers", SkaterMeshBuilder.shared_glove_fist(),
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_FINGERS),
+		PartSpec.new("glove_thumb", SkaterMeshBuilder.shared_glove_fist(),
+				Vector3(0.85, 1.15, 1.35), false, SkaterMeshBuilder.FIST_PART_THUMB),
 		PartSpec.new("cuff", SkaterMeshBuilder.shared_cuff(),
 				Vector3(2.0, SkaterMeshBuilder.CUFF_HEIGHT_M, 2.0), false),
 		PartSpec.new("knob", SkaterMeshBuilder.shared_knob(),
