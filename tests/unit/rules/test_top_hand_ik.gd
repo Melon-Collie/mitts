@@ -11,6 +11,8 @@ extends GutTest
 #   CLOSE (target < stick_horiz_at_rest): hand XZ stays at shoulder, hand Y
 #         rises so the stick tilts vertical and blade lands on target.
 #         Clamped by hand_y_max; overshoots along aim line when clamped.
+# These run without a trunk (Config.chest_keep_out ZERO); the hand held out of
+# one is test_top_hand_clears_the_chest.gd.
 
 # Baselines chosen to match current game defaults.
 const STICK_LENGTH: float = 1.50

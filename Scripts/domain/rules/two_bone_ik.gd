@@ -74,6 +74,90 @@ static func reach_root(shoulder: Vector3, hand: Vector3, arm_len: float,
 	return shoulder + d_vec / d * minf(over, slack)
 
 
+# The elbow of an arm beside a trunk: the pole's (solve_elbow), leant round
+# the shoulder→hand axis away from the trunk as far as its arm runs into it. A
+# fixed pole only knows which way is down and out: an arm reaching across the
+# front of the body to a hand on the stick points that elbow back into the belly.
+#
+# The trunk is an upright elliptic cylinder in `trunk`'s frame (which maps it
+# into the arm's space, scale and all): `keep_out` is (half width, half depth,
+# lowest y, highest y) there. The upper arm counts from `root_skip` of the way
+# down it, past the shoulder its root sits in. The pole's bend takes on the
+# trunk's outward normal at that elbow, weighted by _CLEAR_LEAN times the square
+# of how far the arm runs in (a unit is the trunk's own size): the square eases
+# the lean in from nothing, so the elbow neither kinks where it starts nor jumps
+# — a search for the nearest elbow that keeps out jumps across the arm wherever
+# its best answer changes sides. It need not keep the arm out; it takes it out
+# of the trunk's middle.
+const _CLEAR_LEAN: float = 60.0
+
+static func solve_elbow_clear(
+		shoulder: Vector3,
+		hand: Vector3,
+		upper_len: float,
+		forearm_len: float,
+		pole_world: Vector3,
+		trunk: Transform3D,
+		keep_out: Vector4,
+		root_skip: float) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return shoulder
+	var axis: Vector3 = d_vec / d
+	var d_clamped: float = clampf(d, absf(upper_len - forearm_len), upper_len + forearm_len)
+	var foot_t: float = (upper_len * upper_len - forearm_len * forearm_len + d_clamped * d_clamped) / (2.0 * d_clamped)
+	var h: float = sqrt(maxf(upper_len * upper_len - foot_t * foot_t, 0.0))
+	var foot: Vector3 = shoulder + axis * foot_t
+	var bend: Vector3 = bend_direction(shoulder, hand, pole_world)
+	var to_trunk: Transform3D = trunk.affine_inverse()
+	var e: Vector3 = to_trunk * (foot + bend * h)
+	var into: float = _arm_intrusion(to_trunk * shoulder, e, to_trunk * hand, keep_out, root_skip)
+	if into <= 0.0:
+		return foot + bend * h
+	var away: Vector3 = trunk.basis * Vector3(e.x / (keep_out.x * keep_out.x), 0.0,
+			e.z / (keep_out.y * keep_out.y))
+	away -= axis * away.dot(axis)
+	if away.length_squared() < 0.000001:
+		return foot + bend * h
+	var leant: Vector3 = bend + away.normalized() * (_CLEAR_LEAN * into * into)
+	if leant.length_squared() < 0.000001:
+		return foot + bend * h
+	return foot + leant.normalized() * h
+
+
+# How far into the trunk (solve_elbow_clear's, in the trunk's frame) an arm from
+# `s` through elbow `e` to `w` goes, as a fraction of the section's size: 0 when
+# it stays out.
+static func _arm_intrusion(s: Vector3, e: Vector3, w: Vector3, keep_out: Vector4,
+		root_skip: float) -> float:
+	return maxf(_segment_intrusion(s.lerp(e, root_skip), e, keep_out),
+			_segment_intrusion(e, w, keep_out))
+
+
+static func _segment_intrusion(a: Vector3, b: Vector3, keep_out: Vector4) -> float:
+	var t0: float = 0.0
+	var t1: float = 1.0
+	var dy: float = b.y - a.y
+	if absf(dy) < 0.000001:
+		if a.y < keep_out.z or a.y > keep_out.w:
+			return 0.0
+	else:
+		var ta: float = (keep_out.z - a.y) / dy
+		var tb: float = (keep_out.w - a.y) / dy
+		t0 = maxf(t0, minf(ta, tb))
+		t1 = minf(t1, maxf(ta, tb))
+		if t0 > t1:
+			return 0.0
+	var p := Vector2(a.x / keep_out.x, a.z / keep_out.y)
+	var u: Vector2 = Vector2(b.x / keep_out.x, b.z / keep_out.y) - p
+	var len_sq: float = u.length_squared()
+	var t: float = t0
+	if len_sq > 0.000001:
+		t = clampf(-p.dot(u) / len_sq, t0, t1)
+	return maxf(1.0 - (p + u * t).length(), 0.0)
+
+
 # The elbow of an arm that HANGS: of every elbow the two bone lengths allow — a
 # circle around the shoulder→hand axis — the lowest one that stays out of the
 # trunk. It may not fold inside the shoulder (`outward`), and it may not go back

@@ -7,7 +7,7 @@ extends SceneTree
 #       --rendering-driver opengl3 --audio-driver Dummy \
 #       -s res://tools/pose_capture.gd -- --baseline     # record
 #   ... same without --baseline                          # compare
-#   ... --only=faceoff                                   # just the matching tiles
+#   ... --only=faceoff,gloves                            # just the matching tiles
 #
 # Locally any GPU works: drop the env var and xvfb-run. Output paths print on
 # save (user:// — never the repo tree, so captures can't be committed).

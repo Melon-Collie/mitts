@@ -283,6 +283,16 @@ var arm_working_extension: float = 0.97
 # update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
 # and slightly behind the chest line, not pinned against the ribs.
 var arm_pole_local: Vector3 = Vector3(0.55, -1.0, 0.1)
+# The trunk the drawn arms keep out of, in the torso bone's frame
+# (TwoBoneIK.solve_elbow_clear): the chest's section, from the waistband to the
+# shoulder line, which the middle of a sleeve stays outside — a sleeve presses
+# into the jersey by up to its own radius, as cloth on cloth. Below it the
+# jersey's tail is cloth an elbow pushes aside.
+var arm_trunk_keep_out := Vector4(SkaterMeshBuilder.CHEST_HALF_WIDTH_M,
+		SkaterMeshBuilder.CHEST_HALF_DEPTH_M, -0.21, 0.215)
+# The share of the upper arm, from its root, that is the shoulder the trunk's
+# pads hold rather than a sleeve beside it.
+var arm_root_share: float = 0.5
 # Base size of the arm bone meshes (diameter). scale.z is set per tick to the
 # bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a
 # bare arm — see SkaterMeshBuilder.SLEEVE_RADIUS_M.

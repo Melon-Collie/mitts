@@ -193,6 +193,9 @@ func _sync_pass_config() -> void:
 		"bottom_hand_grip_fraction": c.bottom_hand_grip_fraction,
 		"faceoff_center_grip_fraction": c.faceoff_center_grip_fraction,
 		"twist_limit": SkaterSpineRig.TWIST_LIMIT,
+		"chest_keep_out_x": c.hand_chest_keep_out.x, "chest_keep_out_z": c.hand_chest_keep_out.y,
+		"chest_keep_out_from": c.hand_chest_keep_out.z,
+		"chest_keep_out_full": c.hand_chest_keep_out.w,
 	})
 	if not ok:
 		push_warning("NativeBladePass lacks a tunable — using the GDScript blade pass. "
@@ -1263,7 +1266,9 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 		_cached_top_cfg.rom_forward_reach_max = _controller.rom_forward_reach_max
 		_cached_top_cfg.rom_forehand_reach_max = _controller.rom_forehand_reach_max
 		_cached_top_cfg.rom_backhand_reach_max = _controller.rom_backhand_reach_max
+		_cached_top_cfg.chest_keep_out = _controller.hand_chest_keep_out
 		if _native_top != null:
+			_native_top.chest_keep_out = _cached_top_cfg.chest_keep_out
 			_native_top.rom_forward_reach_max = _cached_top_cfg.rom_forward_reach_max
 			_native_top.hand_rest_y = _cached_top_cfg.hand_rest_y
 			_native_top.hand_y_max = _cached_top_cfg.hand_y_max

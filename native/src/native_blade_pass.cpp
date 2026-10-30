@@ -128,7 +128,10 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	const double bh_angle = read(t, "rom_backhand_angle_max", ok);
 	const double fh_reach = read(t, "rom_forehand_reach_max", ok);
 	const double bh_reach = read(t, "rom_backhand_reach_max", ok);
+	const Vector4 chest(read(t, "chest_keep_out_x", ok), read(t, "chest_keep_out_z", ok),
+			read(t, "chest_keep_out_from", ok), read(t, "chest_keep_out_full", ok));
 	if (ok && top.is_valid()) {
+		top->set_chest_keep_out(chest);
 		top->set_rom_forehand_angle_max(fh_angle);
 		top->set_rom_backhand_angle_max(bh_angle);
 		top->set_rom_forward_reach_max(rom_forward_reach_max);
@@ -704,7 +707,8 @@ Vector3 NativeBladePass::hand_for_clamped_blade(const Vector3 &shoulder, const V
 	if (reach <= 0.0) {
 		const double drop_sq = cfg.stick_length * cfg.stick_length - d * d;
 		const double hand_y = MIN(p_blade_y + Math::sqrt(MAX(drop_sq, 0.0)), cfg.hand_y_max);
-		return Vector3(shoulder_xz.x, hand_y, shoulder_xz.y);
+		return top->clear_of_chest(Vector3(shoulder_xz.x, hand_y, shoulder_xz.y),
+				Vector3(blade_xz.x, p_blade_y, blade_xz.y), shoulder, cfg.stick_length, cfg.hand_y_max);
 	}
 	const Vector2 dir = from_shoulder / (real_t)d;
 	const double angle_to_forehand = CLAMP(
@@ -718,7 +722,8 @@ Vector3 NativeBladePass::hand_for_clamped_blade(const Vector3 &shoulder, const V
 	if (horiz < stick_horiz_at_rest) {
 		hand_y = p_blade_y + Math::sqrt(MAX(cfg.stick_length * cfg.stick_length - horiz * horiz, 0.0));
 	}
-	return Vector3(hand_xz.x, MIN(hand_y, cfg.hand_y_max), hand_xz.y);
+	return top->clear_of_chest(Vector3(hand_xz.x, MIN(hand_y, cfg.hand_y_max), hand_xz.y),
+			Vector3(blade_xz.x, p_blade_y, blade_xz.y), shoulder, cfg.stick_length, cfg.hand_y_max);
 }
 
 // TopHandIK.enforce_rigid_stick.

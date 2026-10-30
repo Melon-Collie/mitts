@@ -41,6 +41,12 @@ class PartSpec:
 		surface = p_surface
 
 
+# The glove, in hand radii: a fist GLOVE_FIST_SPAN across the knuckles (the
+# thumb a little past the index), its fingers and thumb curled round the shaft
+# a little over a radius off it.
+const _GLOVE_ENVELOPE := Vector3(2.4, 2.2, 2.4)
+
+
 # Envelopes come from the primitives in Scenes/Skater.tscn: helmet sphere
 # r 0.155, skate r 0.09 h 0.2, foot prolate sphere r 0.08 half-length 0.125.
 # The glove's meshes are unit-sized (the bone's scale is the real dimension),
@@ -58,10 +64,14 @@ func _parts() -> Array[PartSpec]:
 				Vector3(0.02, 0.19, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
 		PartSpec.new("blade_runner", SkaterMeshBuilder._build_skate_blade(),
 				Vector3(0.01, 0.19, 0.04), false, SkaterMeshBuilder.BLADE_PART_RUNNER),
-		PartSpec.new("glove_back", SkaterMeshBuilder.shared_glove_fist(),
-				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_BACK),
-		PartSpec.new("glove_fingers", SkaterMeshBuilder.shared_glove_fist(),
-				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_FINGERS),
+		PartSpec.new("glove_back_right", SkaterMeshBuilder.shared_glove_fist(true),
+				_GLOVE_ENVELOPE, false, SkaterMeshBuilder.FIST_PART_BACK),
+		PartSpec.new("glove_fingers_right", SkaterMeshBuilder.shared_glove_fist(true),
+				_GLOVE_ENVELOPE, false, SkaterMeshBuilder.FIST_PART_FINGERS),
+		PartSpec.new("glove_back_left", SkaterMeshBuilder.shared_glove_fist(false),
+				_GLOVE_ENVELOPE, false, SkaterMeshBuilder.FIST_PART_BACK),
+		PartSpec.new("glove_fingers_left", SkaterMeshBuilder.shared_glove_fist(false),
+				_GLOVE_ENVELOPE, false, SkaterMeshBuilder.FIST_PART_FINGERS),
 		PartSpec.new("cuff", SkaterMeshBuilder.shared_cuff(),
 				Vector3(2.0, SkaterMeshBuilder.CUFF_HEIGHT_M, 2.0), false),
 		PartSpec.new("knob", SkaterMeshBuilder.shared_knob(),
@@ -266,3 +276,13 @@ func test_the_head_stays_inside_the_helmet_shell() -> void:
 						shell[t + 2]) != null:
 					crossings += 1
 	assert_eq(crossings, 0, "head edges crossing the shell")
+
+
+# The bottom hand holds the shaft GLOVE_FIST_SPAN of hand radii below the top
+# one (SkaterIKCoordinator._glove_spacing), so that is the fingers' width.
+func test_the_fingers_span_the_fist() -> void:
+	var fingers: Array[Vector4] = SkaterMeshBuilder._GLOVE_FINGERS
+	var index: Vector4 = fingers[0]
+	var little: Vector4 = fingers[fingers.size() - 1]
+	assert_almost_eq((index.x + index.y) - (little.x - little.y),
+			SkaterMeshBuilder.GLOVE_FIST_SPAN, 0.001, "the knuckle roll is the fist's width")

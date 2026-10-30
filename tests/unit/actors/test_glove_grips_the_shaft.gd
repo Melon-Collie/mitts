@@ -1,9 +1,10 @@
 extends GutTest
 
-# A glove on the stick holds it across the knuckle roll and turns the hand
-# square across the shaft, bending at the wrist within the wrist's range;
-# a glove off the stick lines up with its forearm (SkaterArmPoses.glove_basis).
-# The fist's long axis is local −Y (wrist → fingers), its knuckle roll local X.
+# A glove on the stick holds it across the knuckle roll, index toward the
+# blade, and turns the hand square across the shaft, bending at the wrist
+# within the wrist's range; a glove off the stick lines up with its forearm
+# (SkaterArmPoses.glove_basis). The fist's long axis is local −Y (wrist →
+# fingers), its knuckle roll local X (little finger → index).
 
 const MAX_BEND: float = deg_to_rad(25.0)
 
@@ -43,10 +44,15 @@ func test_the_wrist_breaks_toward_square_within_its_range() -> void:
 		assert_gt(b.determinant(), 0.0, "never mirrored")
 
 
-func test_which_end_of_the_shaft_is_up_does_not_matter() -> void:
+# The index finger points down the shaft to the blade, whichever way the shaft
+# runs: turned end for end, the hand turns half round its own long axis.
+func test_the_index_points_to_the_blade() -> void:
 	var forearm := Vector3(0.2, -0.9, 0.3).normalized()
 	var shaft := Vector3(0.6, -0.7, 0.2).normalized()
 	var a: Basis = SkaterArmPoses.glove_basis(forearm, shaft, MAX_BEND)
 	var b: Basis = SkaterArmPoses.glove_basis(forearm, -shaft, MAX_BEND)
-	for axis: int in 3:
-		assert_almost_eq((a[axis] - b[axis]).length(), 0.0, 0.0001)
+	assert_gt(a.x.dot(shaft), 0.0)
+	assert_gt(b.x.dot(-shaft), 0.0)
+	assert_almost_eq((a.y - b.y).length(), 0.0, 0.0001, "the same hand axis")
+	assert_almost_eq((a.x + b.x).length(), 0.0, 0.0001, "the knuckle roll reversed")
+	assert_almost_eq((a.z + b.z).length(), 0.0, 0.0001, "the back of the hand turned over")

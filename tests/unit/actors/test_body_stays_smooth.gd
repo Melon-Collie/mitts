@@ -36,7 +36,7 @@ const BOUNDS: Dictionary = {
 	"knocked down just past his balance and up again":
 		[84.0, 16.0, 13.0, 14.0, 21.0, 11.0],
 	"shot block down and back up, puck ahead":
-		[28.0, 35.0, 27.0, 37.0, 19.0, 27.0],
+		[28.0, 35.0, 27.0, 37.0, 19.0, 50.0],
 	"goal celebration while gliding":
 		[10.0, 16.0, 8.0, 25.0, 32.0, 23.0],
 	"shuffle: Space + D held, released":

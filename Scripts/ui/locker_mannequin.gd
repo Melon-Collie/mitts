@@ -479,7 +479,7 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		_skeleton.set_bone_pose(bones[1], SkaterArmPoses.segment_pose(elbow, hand, arm))
 		_skeleton.set_bone_pose(bones[2], SkaterArmPoses.elbow_pose(shoulder, elbow, hand, pole,
 				Vector3.ONE * _ELBOW_RADIUS * m_girth))
-		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, _shaft_up,
+		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, -_shaft_up,
 				deg_to_rad(_WRIST_BREAK_MAX_DEG), Vector3.ONE * _HAND_RADIUS * m_girth))
 		var cuff_r: float = _CUFF_RADIUS * m_girth
 		_skeleton.set_bone_pose(bones[4], SkaterArmPoses.cuff_pose(elbow, hand,

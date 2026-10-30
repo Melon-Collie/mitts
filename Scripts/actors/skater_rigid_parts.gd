@@ -40,12 +40,14 @@ const _LENGTH: float = 1.07
 static var _cache: Dictionary = {}
 
 
-static func upper_body_mesh() -> ArrayMesh:
-	return _shared("upper", func() -> ArrayMesh:
+# `right_on_top`: the top hand is the right one (a left shot), so it wears the
+# right glove and the bottom hand the left.
+static func upper_body_mesh(right_on_top: bool = true) -> ArrayMesh:
+	return _shared("upper_r" if right_on_top else "upper_l", func() -> ArrayMesh:
 		var b := BodyZoneMesh.new()
-		var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist()
 		var cuff: ArrayMesh = SkaterMeshBuilder.shared_cuff()
 		for top: bool in [true, false]:
+			var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist(top == right_on_top)
 			var hand: int = _UpperBone.TOP_HAND if top else _UpperBone.BOTTOM_HAND
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_BACK),
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)

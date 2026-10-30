@@ -105,6 +105,31 @@ const POSES: Array = [
 		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[50, {"aim": Vector3(-2.6, 0.0, -0.4)}],
 	]},
+	# The stick pulled in tight: the blade at the skates, ahead, beside and
+	# across, where the shaft stands up and the hands crowd the trunk.
+	{"name": "carry_tight", "puck": true, "steps": [
+		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(0.2, 0.0, -0.45)}],
+	]},
+	{"name": "carry_tight_front", "puck": true, "cam": Vector3(0.6, 0.6, -3.0), "steps": [
+		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(0.2, 0.0, -0.45)}],
+	]},
+	{"name": "carry_tight_side", "puck": true, "cam": Vector3(3.2, 0.5, 0.2), "steps": [
+		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(0.6, 0.0, 0.05)}],
+	]},
+	{"name": "carry_tight_backhand", "puck": true, "cam": Vector3(0.6, 0.6, -3.0), "steps": [
+		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(-0.35, 0.0, -0.4)}],
+	]},
+	{"name": "carry_front", "puck": true, "cam": Vector3(0.6, 0.6, -3.0),
+		"steps": [[40, {"aim": Vector3(0.6, 0.0, -2.2)}]]},
+	{"name": "carry_bottom_side", "puck": true, "cam": Vector3(-3.0, 0.4, -0.6),
+		"steps": [[40, {"aim": Vector3(0.6, 0.0, -2.2)}]]},
+	{"name": "gloves_tight", "puck": true, "cam_hand": "top", "cam": Vector3(0.7, 0.4, -0.9),
+		"steps": [[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(0.2, 0.0, -0.45)}]]},
 	{"name": "wrister_aim", "puck": true, "steps": [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],
@@ -470,8 +495,8 @@ var _state: StubGameState = null
 var _skater_scene: PackedScene = null
 var _puck_scene: PackedScene = null
 var _record_baseline: bool = false
-# POSES, or the subset named by --only=<substring> (iterating on one pose should
-# not cost a full set — software rasterisation makes every tile expensive).
+# POSES, or the subset named by --only=<substring>[,<substring>...] (iterating
+# on one pose should not cost a full set — software rasterisation makes every tile expensive).
 var _poses: Array = []
 var _pose_index: int = -1
 var _posed: bool = false
@@ -491,8 +516,14 @@ func begin(record_baseline: bool, only: String = "") -> void:
 	# posed the camera still frames the last one; the off-camera cull would skip
 	# the rig of any pose placed away from there and the tile would draw it unposed.
 	SkaterCameraCull.enabled = false
+	var wanted: PackedStringArray = only.split(",", false)
 	_poses = POSES.filter(func(p: Dictionary) -> bool:
-			return only == "" or String(p["name"]).contains(only))
+			if wanted.is_empty():
+				return true
+			for w: String in wanted:
+				if String(p["name"]).contains(w):
+					return true
+			return false)
 	if _poses.is_empty():
 		push_error("no pose matches --only=%s" % only)
 		_poses = POSES

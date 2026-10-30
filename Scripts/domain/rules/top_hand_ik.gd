@@ -25,6 +25,8 @@ class_name TopHandIK
 #         Clamped by hand_y_max — if the hand can't rise far enough, the
 #         stick's min horizontal projection overshoots the target along the
 #         aim line.
+# Either way, a hand that lands inside the trunk is then brought out in front
+# of it (clear_of_chest); the blade never moves for that.
 #
 # Blade-first feel: input is treated as a desired blade position, and the
 # hand is solved as a consequence. No per-frame smoothing here — caller owns
@@ -59,6 +61,12 @@ class Config:
 	# real player does when jammed on the boards, rather than a full-reach pose
 	# that a post-hoc clamp then has to drag back. INF = unconstrained.
 	var max_blade_reach: float = INF
+	# The trunk's horizontal section a raised hand may not sit inside, grown by
+	# the glove's own radius: an ellipse about the trunk's axis (the frame's
+	# X = 0) at the shoulder's depth, (half width, half depth, m), held from
+	# none at the first drop below the shoulder (z) to all at the second (w).
+	# ZERO = no trunk.
+	var chest_keep_out: Vector4 = Vector4.ZERO
 
 class Result:
 	var hand: Vector3 = Vector3.ZERO
@@ -167,6 +175,7 @@ static func solve(
 	#         by the rigid stick (drop = sqrt(stick_length² − d²)). This inverts
 	#         exactly even when the close-regime hand_y was clamped, since the
 	#         blade distance already reflects the clamped stick_horiz.
+	#   Then either is held out of the chest (clear_of_chest).
 	var shoulder_xz := Vector2(shoulder.x, shoulder.z)
 	var from_shoulder: Vector2 = Vector2(blade.x, blade.z) - shoulder_xz
 	var d: float = from_shoulder.length()
@@ -174,9 +183,44 @@ static func solve(
 	var reach: float = hand_reach(d, stick_horiz_at_rest)
 	var dir: Vector2 = from_shoulder / d if d > 0.0001 else Vector2(0.0, -1.0)
 	var hand_xz: Vector2 = shoulder_xz + dir * reach
-	out.hand = Vector3(hand_xz.x, _hand_y_on_stick(d - reach, cfg.stick_length,
-			cfg.hand_rest_y, cfg.blade_y, stick_horiz_at_rest), hand_xz.y)
+	out.hand = clear_of_chest(Vector3(hand_xz.x, _hand_y_on_stick(d - reach, cfg.stick_length,
+			cfg.hand_rest_y, cfg.blade_y, stick_horiz_at_rest), hand_xz.y),
+			blade, shoulder, cfg.stick_length, cfg.hand_y_max, cfg.chest_keep_out)
 	return out
+
+
+# A hand the solve raised inside the trunk (`keep_out`, Config.chest_keep_out),
+# brought forward to its front at the hand's own lateral place, its height
+# solved again on the rigid stick to `blade`. The model above holds the hand
+# over the shoulder and raises it as the blade comes in, up the inside of the
+# chest: the stick comes in tight held out in front of the body. The hand comes
+# out as it rises, from none at the keep-out's first drop below the shoulder
+# (its rest height) to all of the way at the second (its ceiling), eased at
+# both, so the rest stance and every reach at rest height are the model's own,
+# and a pose that lowers the ceiling (the faceoff address) keeps its hands
+# where they were. Coming forward toward a blade ahead
+# raises the hand, no further than its ceiling (or where it already was), and
+# the grip chokes the rest; toward one beside it lowers it. A hand behind the
+# trunk's axis is let go of across half its depth, rather than thrown through
+# the body to the front.
+static func clear_of_chest(hand: Vector3, blade: Vector3, shoulder: Vector3,
+		stick_length: float, hand_y_max: float, keep_out: Vector4) -> Vector3:
+	if keep_out.x <= 0.0 or keep_out.y <= 0.0 or keep_out.z <= keep_out.w:
+		return hand
+	var across: float = hand.x / keep_out.x
+	if absf(across) >= 1.0:
+		return hand
+	var front: float = shoulder.z - keep_out.y * sqrt(1.0 - across * across)
+	if hand.z <= front:
+		return hand
+	var ahead: float = clampf(1.0 - (hand.z - shoulder.z) / (keep_out.y * 0.5), 0.0, 1.0) \
+			* smoothstep(shoulder.y - keep_out.z, shoulder.y - keep_out.w, hand.y)
+	if ahead <= 0.0:
+		return hand
+	var z: float = lerpf(hand.z, front, ahead)
+	var horiz: float = Vector2(blade.x - hand.x, blade.z - z).length()
+	var on_stick: float = blade.y + sqrt(maxf(stick_length * stick_length - horiz * horiz, 0.0))
+	return Vector3(hand.x, minf(on_stick, maxf(hand_y_max, hand.y)), z)
 
 
 # How far out from the shoulder the hand sits for a blade `d` off it: none in
@@ -234,20 +278,24 @@ static func hand_for_clamped_blade(
 	var stick_horiz_at_rest: float = _stick_horiz_for(cfg.stick_length, cfg.hand_rest_y, blade_y)
 	var reach: float = hand_reach(d, stick_horiz_at_rest)
 	if reach <= 0.0:
-		# CLOSE: hands come in over the shoulder and rise, tilting the stick
-		# toward vertical. hand_y_max bounds the choke-up; past it the stick
+		# CLOSE: hands rise, tilting the stick toward vertical, held out in
+		# front of the chest. hand_y_max bounds the choke-up; past it the stick
 		# simply reads shorter than it is.
 		var drop_sq: float = cfg.stick_length * cfg.stick_length - d * d
 		var hand_y: float = minf(blade_y + sqrt(maxf(drop_sq, 0.0)), cfg.hand_y_max)
-		return Vector3(shoulder_xz.x, hand_y, shoulder_xz.y)
+		return clear_of_chest(Vector3(shoulder_xz.x, hand_y, shoulder_xz.y),
+				Vector3(blade_xz.x, blade_y, blade_xz.y), shoulder, cfg.stick_length,
+				cfg.hand_y_max, cfg.chest_keep_out)
 	var dir: Vector2 = from_shoulder / d
 	var angle_to_forehand: float = clampf(
 			atan2(dir.x, -dir.y) * blade_side_sign,
 			-cfg.rom_backhand_angle_max, cfg.rom_forehand_angle_max)
 	var held: float = minf(reach, max_reach_for_angle(angle_to_forehand, cfg))
 	var hand_xz: Vector2 = shoulder_xz + dir * held
-	return Vector3(hand_xz.x, minf(_hand_y_on_stick(d - reach, cfg.stick_length,
-			cfg.hand_rest_y, blade_y, stick_horiz_at_rest), cfg.hand_y_max), hand_xz.y)
+	return clear_of_chest(Vector3(hand_xz.x, minf(_hand_y_on_stick(d - reach, cfg.stick_length,
+			cfg.hand_rest_y, blade_y, stick_horiz_at_rest), cfg.hand_y_max), hand_xz.y),
+			Vector3(blade_xz.x, blade_y, blade_xz.y), shoulder, cfg.stick_length,
+			cfg.hand_y_max, cfg.chest_keep_out)
 
 # Enforce the one thing in the chain that has no give: the stick's LENGTH. Takes
 # a pose whose hand and blade have drifted more than a stick apart — an authored

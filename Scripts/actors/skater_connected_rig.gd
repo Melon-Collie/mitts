@@ -23,6 +23,8 @@ var _skater: Skater = null
 var _skeleton: Skeleton3D = null
 var _mesh: MeshInstance3D = null
 var _tuck: int = -1
+# The side the top hand is on (0 left, 1 right), which picks the gloves' hands.
+var _top_side: int = 1
 # SkaterConnectedMesh.bind_rests, and their inverses where a pose is read back
 # against them.
 var _rests: Array[Transform3D] = []
@@ -49,9 +51,13 @@ func set_tuck(tuck: int) -> void:
 	if _mesh == null or tuck == _tuck:
 		return
 	_tuck = tuck
+	_draw_mesh()
+
+
+func _draw_mesh() -> void:
 	var material: Material = _mesh.get_surface_override_material(0) \
 			if _mesh.mesh != null else null
-	_mesh.mesh = SkaterBodyMesh.shared_mesh(tuck)
+	_mesh.mesh = SkaterBodyMesh.shared_mesh(_tuck, _top_side)
 	if material != null:
 		_mesh.set_surface_override_material(0, material)
 
@@ -63,6 +69,10 @@ func update() -> void:
 # The deform bones off the bones posed this frame; `top_side` is the side the
 # top hand's arm hangs from (0 left, 1 right).
 func pose(top_side: int) -> void:
+	if top_side != _top_side:
+		_top_side = top_side
+		if _mesh != null and _tuck >= 0:
+			_draw_mesh()
 	for arm: int in 2:
 		_pose_sleeve(_ARM_BONES[arm], top_side if arm == 0 else 1 - top_side)
 	for side: int in 2:

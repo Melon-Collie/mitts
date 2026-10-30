@@ -64,6 +64,83 @@ Vector3 solve_elbow(const Vector3 &shoulder, const Vector3 &hand, double upper_l
 	return foot + bend_direction(shoulder, hand, pole_world) * (real_t)h;
 }
 
+// TwoBoneIK._segment_intrusion.
+double segment_intrusion(const Vector3 &a, const Vector3 &b, const Vector4 &keep_out) {
+	double t0 = 0.0;
+	double t1 = 1.0;
+	const double dy = (double)b.y - (double)a.y;
+	if (Math::abs(dy) < 0.000001) {
+		if (a.y < keep_out.z || a.y > keep_out.w) {
+			return 0.0;
+		}
+	} else {
+		const double ta = ((double)keep_out.z - (double)a.y) / dy;
+		const double tb = ((double)keep_out.w - (double)a.y) / dy;
+		t0 = Math::max(t0, Math::min(ta, tb));
+		t1 = Math::min(t1, Math::max(ta, tb));
+		if (t0 > t1) {
+			return 0.0;
+		}
+	}
+	const Vector2 p((real_t)((double)a.x / (double)keep_out.x), (real_t)((double)a.z / (double)keep_out.y));
+	const Vector2 u = Vector2((real_t)((double)b.x / (double)keep_out.x),
+							  (real_t)((double)b.z / (double)keep_out.y))
+			- p;
+	const double len_sq = u.length_squared();
+	double t = t0;
+	if (len_sq > 0.000001) {
+		t = Math::clamp(-(double)p.dot(u) / len_sq, t0, t1);
+	}
+	return Math::max(1.0 - (double)(p + u * (real_t)t).length(), 0.0);
+}
+
+// TwoBoneIK._arm_intrusion.
+double arm_intrusion(const Vector3 &s, const Vector3 &e, const Vector3 &w, const Vector4 &keep_out,
+		double root_skip) {
+	return Math::max(segment_intrusion(s.lerp(e, (real_t)root_skip), e, keep_out),
+			segment_intrusion(e, w, keep_out));
+}
+
+// TwoBoneIK._CLEAR_LEAN.
+constexpr double CLEAR_LEAN = 60.0;
+
+// TwoBoneIK.solve_elbow_clear.
+Vector3 solve_elbow_clear(const Vector3 &shoulder, const Vector3 &hand, double upper_len,
+		double forearm_len, const Vector3 &pole_world, const Transform3D &trunk,
+		const Vector4 &keep_out, double root_skip) {
+	const Vector3 d_vec = hand - shoulder;
+	const double d = d_vec.length();
+	if (d < 0.0001) {
+		return shoulder;
+	}
+	const Vector3 axis = d_vec / (real_t)d;
+	const double d_clamped = Math::clamp(d, Math::abs(upper_len - forearm_len), upper_len + forearm_len);
+	const double foot_t = (upper_len * upper_len - forearm_len * forearm_len + d_clamped * d_clamped)
+			/ (2.0 * d_clamped);
+	const double h = Math::sqrt(Math::max(upper_len * upper_len - foot_t * foot_t, 0.0));
+	const Vector3 foot = shoulder + axis * (real_t)foot_t;
+	const Vector3 bend = bend_direction(shoulder, hand, pole_world);
+	const Transform3D to_trunk = trunk.affine_inverse();
+	const Vector3 e = to_trunk.xform(foot + bend * (real_t)h);
+	const double into = arm_intrusion(to_trunk.xform(shoulder), e, to_trunk.xform(hand), keep_out,
+			root_skip);
+	if (into <= 0.0) {
+		return foot + bend * (real_t)h;
+	}
+	Vector3 away = trunk.basis.xform(Vector3(
+			(real_t)((double)e.x / ((double)keep_out.x * (double)keep_out.x)), 0.0,
+			(real_t)((double)e.z / ((double)keep_out.y * (double)keep_out.y))));
+	away -= axis * away.dot(axis);
+	if (away.length_squared() < 0.000001) {
+		return foot + bend * (real_t)h;
+	}
+	const Vector3 leant = bend + away.normalized() * (real_t)(CLEAR_LEAN * into * into);
+	if (leant.length_squared() < 0.000001) {
+		return foot + bend * (real_t)h;
+	}
+	return foot + leant.normalized() * (real_t)h;
+}
+
 // SkaterArmRig._pose_bone, for a non-degenerate span.
 Transform3D pose_bone(const Vector3 &a, const Vector3 &b, const Vector3 &thickness) {
 	const Vector3 span = b - a;
@@ -99,9 +176,6 @@ Basis glove_basis(const Vector3 &forearm_dir, const Vector3 &grip, double max_be
 		return straight;
 	}
 	knuckles = knuckles.normalized();
-	if (knuckles.dot(straight.get_column(0)) < 0.0) {
-		knuckles = -knuckles;
-	}
 	return Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis));
 }
 
@@ -128,7 +202,7 @@ Vector3 tucked_pole(const Vector3 &pole, double lead, double side) {
 } // namespace
 
 void NativeArmRig::bind(Object *p_skeleton, const PackedInt32Array &p_bones) {
-	ERR_FAIL_COND(p_bones.size() != 6);
+	ERR_FAIL_COND(p_bones.size() != 7);
 	skeleton_id = p_skeleton != nullptr ? ObjectID(p_skeleton->get_instance_id()) : ObjectID();
 	bone_upper = p_bones[0];
 	bone_forearm = p_bones[1];
@@ -136,6 +210,12 @@ void NativeArmRig::bind(Object *p_skeleton, const PackedInt32Array &p_bones) {
 	bone_elbow = p_bones[3];
 	bone_glove = p_bones[4];
 	bone_spine = p_bones[5];
+	bone_torso = p_bones[6];
+}
+
+void NativeArmRig::set_trunk(const Vector4 &p_keep_out, double p_root_share) {
+	trunk_keep_out = p_keep_out;
+	root_share = p_root_share;
 }
 
 void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thick_forearm,
@@ -169,8 +249,10 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const Vector3 rooted = spine.xform(
 			trunk_texture.xform(marker + check_load_offset(lead, side, half_width)));
 	const Vector3 shoulder_s = reach_root(rooted, hand_s, lengths.z, lengths.w);
-	const Vector3 pole_s = spine.basis.xform(tucked_pole(pole, lead, side));
-	const Vector3 elbow_s = solve_elbow(shoulder_s, hand_s, upper_len, forearm_len, pole_s);
+	const Vector3 elbow_s = solve_elbow_clear(shoulder_s, hand_s, upper_len, forearm_len,
+			spine.basis.xform(tucked_pole(pole, lead, side)),
+			skeleton->get_bone_global_pose(bone_torso), trunk_keep_out, root_share);
+	const Vector3 pole_s = elbow_s - shoulder_s;
 	const Vector3 forearm_span = hand_s - elbow_s;
 	const double forearm_length = forearm_span.length();
 	// The GDScript path's held-pose branches (any degenerate part) read the
@@ -205,6 +287,7 @@ void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("configure", "thick_upper", "thick_forearm", "thick_cuff",
 								 "thick_elbow", "thick_glove", "wrist_break_max"),
 			&NativeArmRig::configure);
+	ClassDB::bind_method(D_METHOD("set_trunk", "keep_out", "root_share"), &NativeArmRig::set_trunk);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
 								 "lengths", "load"),
 			&NativeArmRig::pose);

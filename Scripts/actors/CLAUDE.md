@@ -90,6 +90,26 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   bones (`SkaterConnectedRig.pose`). Its cloth hangs under gravity alone — there
   is no skater to accelerate — and is carried round with the case's turn.
 
+## The arms keep out of the trunk; the gloves hold the stick
+
+- **The elbow is chosen, not just poled** (`TwoBoneIK.solve_elbow_clear`): of
+  the elbows the two bones allow, the one nearest the pole's whose sleeve stays
+  out of the chest (`Skater.arm_trunk_keep_out`, read in the TORSO bone's frame
+  as drawn). A fixed pole only knows down and out, so the bottom arm, reaching
+  across the front to its hand on the shaft, put its elbow back into the belly.
+  The choice is a continuous minimum, so the elbow slides; the C++ arm rig
+  makes the same one. `test_elbow_clears_the_trunk.gd` holds it, and
+  `tests/instruments/actors/test_arms_clear_the_trunk.gd` measures what is
+  left round the body.
+- **A glove is a hand** (`SkaterMeshBuilder.shared_glove_fist`): finger rolls
+  curled round the shaft and a thumb on the index side, so a left and a right
+  glove. The body mesh is built per hand on top (`SkaterBodyMesh.shared_mesh`),
+  and `SkaterConnectedRig.pose` swaps it when the top hand changes side.
+- **The index points to the blade** (`SkaterArmPoses.glove_basis`): both hands
+  hold the stick like a sword, the shaft leaving the fist by the thumb toward
+  the blade. A glove laid along the shaft the other way reads as a dagger held
+  point down.
+
 ## The puck's tilt and spin are drawn, never simulated
 
 The analytic puck is a flat disc. `PuckSpinRig` gives the drawn one its spin,

@@ -85,7 +85,37 @@ void NativeTopHandIK::solve(
 	if (horiz < stick_horiz_at_rest) {
 		hand_y = blade_y + Math::sqrt(MAX(stick_length * stick_length - horiz * horiz, 0.0));
 	}
-	hand = Vector3(hand_xz.x, hand_y, hand_xz.y);
+	hand = clear_of_chest(Vector3(hand_xz.x, hand_y, hand_xz.y), blade, shoulder, stick_length,
+			hand_y_max);
+}
+
+// TopHandIK.clear_of_chest.
+Vector3 NativeTopHandIK::clear_of_chest(const Vector3 &p_hand, const Vector3 &p_blade,
+		const Vector3 &shoulder, double p_stick_length, double p_hand_y_max) const {
+	const double half_w = chest_keep_out.x;
+	const double half_d = chest_keep_out.y;
+	if (half_w <= 0.0 || half_d <= 0.0 || chest_keep_out.z <= chest_keep_out.w) {
+		return p_hand;
+	}
+	const double across = (double)p_hand.x / half_w;
+	if (Math::abs(across) >= 1.0) {
+		return p_hand;
+	}
+	const double front = (double)shoulder.z - half_d * Math::sqrt(1.0 - across * across);
+	if ((double)p_hand.z <= front) {
+		return p_hand;
+	}
+	const double ahead = CLAMP(1.0 - ((double)p_hand.z - (double)shoulder.z) / (half_d * 0.5), 0.0, 1.0)
+			* Math::smoothstep((double)shoulder.y - (double)chest_keep_out.z,
+					(double)shoulder.y - (double)chest_keep_out.w, (double)p_hand.y);
+	if (ahead <= 0.0) {
+		return p_hand;
+	}
+	const double z = Math::lerp((double)p_hand.z, front, ahead);
+	const double horiz = Vector2(p_blade.x - p_hand.x, (real_t)((double)p_blade.z - z)).length();
+	const double on_stick = (double)p_blade.y
+			+ Math::sqrt(MAX(p_stick_length * p_stick_length - horiz * horiz, 0.0));
+	return Vector3(p_hand.x, (real_t)MIN(on_stick, MAX(p_hand_y_max, (double)p_hand.y)), (real_t)z);
 }
 
 void NativeTopHandIK::solve_on_ice(
@@ -227,6 +257,8 @@ void NativeTopHandIK::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hand_rest_y", "v"), &NativeTopHandIK::set_hand_rest_y);
 	ClassDB::bind_method(D_METHOD("get_hand_rest_y"), &NativeTopHandIK::get_hand_rest_y);
 	ClassDB::bind_method(D_METHOD("set_hand_y_max", "v"), &NativeTopHandIK::set_hand_y_max);
+	ClassDB::bind_method(D_METHOD("set_chest_keep_out", "v"), &NativeTopHandIK::set_chest_keep_out);
+	ClassDB::bind_method(D_METHOD("get_chest_keep_out"), &NativeTopHandIK::get_chest_keep_out);
 	ClassDB::bind_method(D_METHOD("get_hand_y_max"), &NativeTopHandIK::get_hand_y_max);
 	ClassDB::bind_method(D_METHOD("set_rom_forehand_angle_max", "v"),
 			&NativeTopHandIK::set_rom_forehand_angle_max);
@@ -257,6 +289,8 @@ void NativeTopHandIK::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "blade_y"), "set_blade_y", "get_blade_y");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_rest_y"), "set_hand_rest_y", "get_hand_rest_y");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_y_max"), "set_hand_y_max", "get_hand_y_max");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR4, "chest_keep_out"), "set_chest_keep_out",
+			"get_chest_keep_out");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rom_forehand_angle_max"),
 			"set_rom_forehand_angle_max", "get_rom_forehand_angle_max");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "rom_backhand_angle_max"),

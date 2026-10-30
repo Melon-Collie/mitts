@@ -31,6 +31,10 @@ class NativeArmRig : public godot::RefCounted {
 	int32_t bone_elbow = -1;
 	int32_t bone_glove = -1;
 	int32_t bone_spine = -1;
+	int32_t bone_torso = -1;
+	// Skater.arm_trunk_keep_out, arm_root_share (TwoBoneIK.solve_elbow_clear).
+	godot::Vector4 trunk_keep_out;
+	double root_share = 0.0;
 
 	// Per-part pose scale (SkaterArmRig._thickness): X/Y the radius, the
 	// bones' Z is the live length.
@@ -46,11 +50,12 @@ protected:
 	static void _bind_methods();
 
 public:
-	// `bones` is (upper arm, forearm, cuff, elbow, glove, spine).
+	// `bones` is (upper arm, forearm, cuff, elbow, glove, spine, torso).
 	void bind(godot::Object *p_skeleton, const godot::PackedInt32Array &p_bones);
 	void configure(const godot::Vector3 &p_thick_upper, const godot::Vector3 &p_thick_forearm,
 			const godot::Vector3 &p_thick_cuff, const godot::Vector3 &p_thick_elbow,
 			const godot::Vector3 &p_thick_glove, double p_wrist_break_max);
+	void set_trunk(const godot::Vector4 &p_keep_out, double p_root_share);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off

@@ -201,8 +201,8 @@ func test_a_tuck_pick_drapes_the_figure() -> void:
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0, 0,
 			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
 			GearModelRegistry.TUCK_RIGHT))
-	assert_eq(body.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT),
-			"the sweater re-drapes")
+	assert_true(body.mesh in [SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT, 0),
+			SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT, 1)], "the sweater re-drapes")
 	assert_eq(body.get_surface_override_material(0), paint, "the sweater keeps its paint")
 
 

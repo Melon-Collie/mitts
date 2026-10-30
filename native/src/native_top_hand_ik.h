@@ -1,6 +1,7 @@
 #pragma once
 
 #include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/variant/vector4.hpp>
 
 #include <cmath>
 
@@ -32,6 +33,8 @@ class NativeTopHandIK : public godot::RefCounted {
 	double rom_forehand_reach_max = 0.0;
 	double rom_backhand_reach_max = 0.0;
 	double max_blade_reach = INFINITY;
+	// TopHandIK.Config.chest_keep_out; ZERO = none.
+	godot::Vector4 chest_keep_out;
 	// TopHandIK.REGIME_BAND_M.
 	static constexpr double REGIME_BAND_M = 0.08;
 
@@ -80,6 +83,9 @@ public:
 			double grip,
 			double bottom_reach,
 			double spacing);
+	// TopHandIK.clear_of_chest, against this instance's chest_keep_out.
+	godot::Vector3 clear_of_chest(const godot::Vector3 &p_hand, const godot::Vector3 &p_blade,
+			const godot::Vector3 &shoulder, double p_stick_length, double p_hand_y_max) const;
 	// BottomHandIK.reachable_grip: (fraction, overshoot).
 	static godot::Vector2 reachable_grip(const godot::Vector3 &shoulder, const godot::Vector3 &top,
 			const godot::Vector3 &blade, double grip, double reach, double spacing);
@@ -105,6 +111,8 @@ public:
 	double get_rom_forehand_reach_max() const { return rom_forehand_reach_max; }
 	void set_rom_backhand_reach_max(double v) { rom_backhand_reach_max = v; }
 	double get_rom_backhand_reach_max() const { return rom_backhand_reach_max; }
+	void set_chest_keep_out(const godot::Vector4 &v) { chest_keep_out = v; }
+	godot::Vector4 get_chest_keep_out() const { return chest_keep_out; }
 	void set_max_blade_reach(double v) { max_blade_reach = v; }
 	double get_max_blade_reach() const { return max_blade_reach; }
 };

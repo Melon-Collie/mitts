@@ -92,6 +92,7 @@ func build(skeleton: Skeleton3D) -> void:
 		for arm: int in 2:
 			var bones := PackedInt32Array(_ARM_PARTS[arm])
 			bones.append(SkaterBodySkeleton.SPINE_BONE)
+			bones.append(SkaterMeshBuilder.UpperBone.TORSO)
 			_native_arms[arm].bind(skeleton, bones)
 	# Torso and helmet: their placement is authored in the scene, so it is read
 	# out and seeded onto their bones, same as the legs.
@@ -179,9 +180,13 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	var frame: Transform3D = _skater.drawn_upper_body()
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
-	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
-	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length, pole_s)
+	var elbow_s: Vector3 = TwoBoneIK.solve_elbow_clear(shoulder_s, hand_s,
+			_skater.upper_arm_length, _skater.forearm_length,
+			spine.basis * _arm_pole(marker_local, pole_sign),
+			_skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO),
+			_skater.arm_trunk_keep_out, _skater.arm_root_share)
+	# The elbow's own bend, which the trunk may have turned off the pole's.
+	var pole_s: Vector3 = elbow_s - shoulder_s
 	_pose_bone(upper, shoulder_s, elbow_s)
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
@@ -215,6 +220,7 @@ func _configure_native() -> void:
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
 				deg_to_rad(_skater.wrist_break_max_deg))
+		_native_arms[arm].set_trunk(_skater.arm_trunk_keep_out, _skater.arm_root_share)
 
 
 # The elbow's pole on this arm's side, tucked by a check load.

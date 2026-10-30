@@ -357,14 +357,16 @@ blade in tight cannot be authored that way, and the check commit is the worked
 example.
 
 `TopHandIK` has two regimes. Inside the stick's resting horizontal reach it goes
-CLOSE, which pins the hand's XZ **at the shoulder marker** and varies only its
-height — the blade's authored distance stops mattering entirely, and past the
-`hand_y_max` ceiling the blade overshoots along the aim line instead of landing
-where it was put. Meanwhile the rendered arm roots at the shoulder the trunk
-texture has MOVED (`SkaterArmRig._textured_shoulder`), which a lean and a
-load-up carry ~0.16 m forward. Put together, the arm roots in FRONT of its own
-hand: the shoulder→hand chord points down and back, a mostly-downward elbow pole
-projects forward off such a chord, and the forearm folds behind the upper arm.
+CLOSE, which holds the hand's XZ over the shoulder marker — brought out to the
+front of the chest (`clear_of_chest`, `SkaterController.hand_chest_keep_out`),
+since over the shoulder is inside it — and varies its height: the blade's
+authored distance stops mattering, and past the `hand_y_max` ceiling the blade
+overshoots along the aim line instead of landing where it was put. Meanwhile the
+rendered arm roots at the shoulder the trunk texture has MOVED
+(`SkaterArmRig._textured_shoulder`), which a lean and a load-up carry ~0.16 m
+forward. Put together, the arm can root in FRONT of its own hand: the
+shoulder→hand chord points down and back, a mostly-downward elbow pole projects
+forward off such a chord, and the forearm folds behind the upper arm.
 
 So a held pose authors the **hand** — where the player actually holds the stick
 — and derives the blade one `solve_stick_length()` along the intended bearing.

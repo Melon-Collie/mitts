@@ -297,6 +297,15 @@ var hand_rest_y: float = -0.10
 # (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
 # 1.27 → min horizontal stick reach ≈ 0.28 m.
 var hand_y_max: float = 0.30
+# The trunk's section the top hand is held out of as it rises
+# (TopHandIK.Config.chest_keep_out): half width and half depth, glove included,
+# scaled by girth in apply_attributes; and the drops below the shoulder it
+# starts at and is whole at (mesh-native, scaled by height): the hand's rest
+# height and its ceiling at the L2 build, 0.50 and 0.10 m under its shoulder.
+var hand_chest_keep_out := Vector4(
+		SkaterMeshBuilder.CHEST_HALF_WIDTH_M + SkaterMeshBuilder.GLOVE_FIST_RADIUS_M,
+		SkaterMeshBuilder.CHEST_HALF_DEPTH_M + SkaterMeshBuilder.GLOVE_FIST_RADIUS_M,
+		0.50, 0.10)
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
@@ -1340,6 +1349,7 @@ var loft_tan_mid: float = GameRules.DEFAULT_LOFT_TAN_MID
 var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
+var _base_hand_chest_keep_out:          Vector4 = Vector4.ZERO
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1510,6 +1520,8 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# almost exactly 1:1, so blade rim reach barely moves.
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
+	hand_chest_keep_out = _base_hand_chest_keep_out * Vector4(attrs.girth_mult(),
+			attrs.girth_mult(), m_height, m_height)
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1592,6 +1604,7 @@ func _capture_attribute_bases() -> void:
 	_base_stick_length                 = stick_length
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
+	_base_hand_chest_keep_out          = hand_chest_keep_out
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m

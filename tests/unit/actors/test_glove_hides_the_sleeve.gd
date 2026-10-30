@@ -25,6 +25,10 @@ class StubGameState extends Node:
 		return false
 
 
+# Cuff radii off the forearm past which a sleeve vertex is beside the glove,
+# not under it: the sleeve is narrower than the cuff.
+const _BESIDE_CUFF: float = 2.0
+
 var _skater: Skater = null
 var _controller: SkaterController = null
 
@@ -128,18 +132,35 @@ func _bare_sleeve(arm: Array) -> Vector2i:
 	var bare: int = 0
 	for p: Vector3 in _skinned_sleeve(body, arm[0]):
 		var in_cuff: Vector3 = to_cuff * p
-		if in_cuff.y > cuff_top:
+		# Past the cuff's open end, or off beside the forearm altogether: a
+		# folded arm's upper sleeve lies level with the cuff, well out of it.
+		if in_cuff.y > cuff_top or Vector2(in_cuff.x, in_cuff.z).length() > _BESIDE_CUFF:
 			continue
 		covered += 1
 		var in_fist: Vector3 = to_fist * p
 		if _inside_section(in_cuff, _section(SkaterMeshBuilder._CUFF_STATIONS,
 				SkaterMeshBuilder.CUFF_HEIGHT_M, in_cuff.y)):
 			continue
-		if _inside_section(in_fist, _section(SkaterMeshBuilder._GLOVE_FIST_STATIONS,
-				1.0, in_fist.y)):
+		if _inside_hand(in_fist):
 			continue
 		bare += 1
 	return Vector2i(bare, covered)
+
+
+# Whether `p` (the glove's frame) is inside the glove's hand, either hand's: the
+# left glove is the right one mirrored in Z, so its sections sit at −z.
+static func _inside_hand(p: Vector3) -> bool:
+	var stations: Array[Vector4] = SkaterMeshBuilder._GLOVE_HAND_STATIONS
+	for i: int in stations.size() - 1:
+		var a: Vector4 = stations[i]
+		var b: Vector4 = stations[i + 1]
+		if p.y <= a.x and p.y >= b.x:
+			var t: float = (a.x - p.y) / (a.x - b.x)
+			var size := Vector2(lerpf(a.y, b.y, t), lerpf(a.z, b.z, t))
+			var centre: float = lerpf(a.w, b.w, t)
+			return _inside_section(Vector3(p.x, 0.0, p.z - centre), size) \
+					or _inside_section(Vector3(p.x, 0.0, p.z + centre), size)
+	return false
 
 
 func test_no_sleeve_shows_through_the_glove() -> void:

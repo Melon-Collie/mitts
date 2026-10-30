@@ -45,6 +45,10 @@ func _random_top_cfg() -> TopHandIK.Config:
 	# cases bind it across the CLOSE/FAR boundary so the capped regime split is
 	# fuzzed on both sides.
 	cfg.max_blade_reach = INF if _rng.randf() < 0.67 else _rng.randf_range(0.2, 2.0)
+	# The trunk the hand is held out of, in two thirds of the cases.
+	if _rng.randf() < 0.67:
+		cfg.chest_keep_out = Vector4(_rng.randf_range(0.15, 0.45), _rng.randf_range(0.15, 0.4),
+				_rng.randf_range(0.3, 0.7), _rng.randf_range(-0.1, 0.25))
 	return cfg
 
 
@@ -60,6 +64,7 @@ func _native_top_from(cfg: TopHandIK.Config) -> RefCounted:
 	native.rom_forehand_reach_max = cfg.rom_forehand_reach_max
 	native.rom_backhand_reach_max = cfg.rom_backhand_reach_max
 	native.max_blade_reach = cfg.max_blade_reach
+	native.chest_keep_out = cfg.chest_keep_out
 	return native
 
 
