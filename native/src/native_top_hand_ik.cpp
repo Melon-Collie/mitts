@@ -28,14 +28,10 @@ Vector3 NativeTopHandIK::project_blade(
 	if (r < stick_horiz_at_rest) {
 		const Vector2 pivot = pivot_xz(shoulder_xz, blade_side_sign);
 		const double min_horiz = stick_horiz_for(stick_length, hand_y_max, blade_y);
-		const Vector2 w = shoulder_xz - pivot;
-		const double wa = w.dot(aim_dir);
-		const double disc = wa * wa - (double)w.length_squared() + min_horiz * min_horiz;
-		if (disc < 0.0 || r <= -wa - Math::sqrt(disc)) {
-			return Vector3(target.x, blade_y, target.y);
-		}
-		const double floor_k = -wa + Math::sqrt(disc);
-		const Vector2 out_xz = shoulder_xz + aim_dir * (real_t)(floor_k + hand_reach(r, floor_k));
+		const Vector2 out_xz = use_floor_from
+				? out_along(floor_from, floor_bearing(floor_from, target),
+						  target.distance_to(floor_from), pivot, min_horiz)
+				: out_along(shoulder_xz, aim_dir, r, pivot, min_horiz);
 		return Vector3(out_xz.x, blade_y, out_xz.y);
 	}
 
@@ -121,6 +117,30 @@ double NativeTopHandIK::hand_reach(double d, double rest_horiz) {
 		return 0.0;
 	}
 	return (x + REGIME_BAND_M) * (x + REGIME_BAND_M) / (4.0 * REGIME_BAND_M);
+}
+
+Vector2 NativeTopHandIK::floor_bearing(const Vector2 &from, const Vector2 &point) {
+	const Vector2 to_point = point - from;
+	const double k = to_point.length();
+	const Vector2 ahead(0.0, -1.0);
+	if (k <= 0.0001) {
+		return ahead;
+	}
+	const double t = CLAMP(k / FLOOR_DEAD_M, 0.0, 1.0);
+	const Vector2 blended = ahead.lerp(to_point / (real_t)k, (real_t)(t * t * (3.0 - 2.0 * t)));
+	return (double)blended.length() > 0.0001 ? blended.normalized() : ahead;
+}
+
+Vector2 NativeTopHandIK::out_along(const Vector2 &from, const Vector2 &dir, double k,
+		const Vector2 &center, double radius) {
+	const Vector2 w = from - center;
+	const double wa = w.dot(dir);
+	const double disc = wa * wa - (double)w.length_squared() + radius * radius;
+	if (disc < 0.0 || k <= -wa - Math::sqrt(disc)) {
+		return from + dir * (real_t)k;
+	}
+	const double floor_k = -wa + Math::sqrt(disc);
+	return from + dir * (real_t)(floor_k + hand_reach(k, floor_k));
 }
 
 Vector2 NativeTopHandIK::pivot_at(const Vector2 &shoulder_xz, double blade_side_sign,
@@ -281,6 +301,8 @@ void NativeTopHandIK::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_pivot_forward", "v"), &NativeTopHandIK::set_pivot_forward);
 	ClassDB::bind_method(D_METHOD("get_pivot_forward"), &NativeTopHandIK::get_pivot_forward);
 	ClassDB::bind_method(D_METHOD("set_pivot_inward", "v"), &NativeTopHandIK::set_pivot_inward);
+	ClassDB::bind_method(D_METHOD("set_floor_from", "v"), &NativeTopHandIK::set_floor_from);
+	ClassDB::bind_method(D_METHOD("get_floor_from"), &NativeTopHandIK::get_floor_from);
 	ClassDB::bind_method(D_METHOD("get_pivot_inward"), &NativeTopHandIK::get_pivot_inward);
 
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "stick_length"), "set_stick_length", "get_stick_length");
@@ -303,6 +325,7 @@ void NativeTopHandIK::_bind_methods() {
 			"set_pivot_forward", "get_pivot_forward");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "pivot_inward"),
 			"set_pivot_inward", "get_pivot_inward");
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "floor_from"), "set_floor_from", "get_floor_from");
 }
 
 } // namespace mitts

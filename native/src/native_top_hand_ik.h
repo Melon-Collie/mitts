@@ -34,6 +34,9 @@ class NativeTopHandIK : public godot::RefCounted {
 	double max_blade_reach = INFINITY;
 	double pivot_forward = 0.0;
 	double pivot_inward = 0.0;
+	// TopHandIK.Config.floor_from; use_floor_from false is its INF.
+	godot::Vector2 floor_from;
+	bool use_floor_from = false;
 	// TopHandIK.REGIME_BAND_M.
 	static constexpr double REGIME_BAND_M = 0.08;
 	// TopHandIK.PIVOT_FADE_SHARE.
@@ -51,6 +54,13 @@ protected:
 public:
 	// TopHandIK.hand_reach.
 	static double hand_reach(double d, double rest_horiz);
+	// TopHandIK.FLOOR_DEAD_M.
+	static constexpr double FLOOR_DEAD_M = 0.25;
+	// TopHandIK.floor_bearing.
+	static godot::Vector2 floor_bearing(const godot::Vector2 &from, const godot::Vector2 &point);
+	// TopHandIK.out_along.
+	static godot::Vector2 out_along(const godot::Vector2 &from, const godot::Vector2 &dir, double k,
+			const godot::Vector2 &center, double radius);
 	// TopHandIK.pivot_at.
 	static godot::Vector2 pivot_at(const godot::Vector2 &shoulder_xz, double blade_side_sign,
 			double forward, double inward);
@@ -130,6 +140,14 @@ public:
 	double get_pivot_forward() const { return pivot_forward; }
 	void set_pivot_inward(double v) { pivot_inward = v; }
 	double get_pivot_inward() const { return pivot_inward; }
+	// Vector2(INF, INF) is TopHandIK's INF: along the aim from the shoulder.
+	void set_floor_from(const godot::Vector2 &v) {
+		use_floor_from = std::isfinite((double)v.x);
+		floor_from = v;
+	}
+	godot::Vector2 get_floor_from() const {
+		return use_floor_from ? floor_from : godot::Vector2(INFINITY, INFINITY);
+	}
 };
 
 } // namespace mitts

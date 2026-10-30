@@ -50,6 +50,9 @@ func _random_top_cfg() -> TopHandIK.Config:
 	if _rng.randf() < 0.75:
 		cfg.pivot_forward = _rng.randf_range(0.0, 0.35)
 		cfg.pivot_inward = _rng.randf_range(0.0, 0.15)
+		# The floor pushed out from the body's centre, as the game does.
+		if _rng.randf() < 0.75:
+			cfg.floor_from = Vector2.ZERO
 	return cfg
 
 
@@ -67,6 +70,7 @@ func _native_top_from(cfg: TopHandIK.Config) -> RefCounted:
 	native.max_blade_reach = cfg.max_blade_reach
 	native.pivot_forward = cfg.pivot_forward
 	native.pivot_inward = cfg.pivot_inward
+	native.floor_from = cfg.floor_from
 	return native
 
 

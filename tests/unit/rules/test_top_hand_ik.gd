@@ -884,3 +884,28 @@ func test_a_reaching_arm_is_solved_from_the_shoulder_alone() -> void:
 			assert_almost_eq(a.hand.distance_to(b.hand), 0.0, 0.0005, "hand at %s" % target)
 			assert_almost_eq(a.blade.distance_to(b.blade), 0.0, 0.0005, "blade at %s" % target)
 	assert_gt(reaching, 20, "the grid reaches")
+
+
+# With the floor pushed out from the body's centre, a target inside it lands on
+# the floor on its own bearing from there, wherever the shoulder is.
+func test_the_floor_pushes_out_along_the_bearing_from_the_body() -> void:
+	var cfg := _pivot_cfg()
+	cfg.floor_from = Vector2.ZERO
+	var shoulder: Vector3 = _lefty_shoulder()
+	var pivot: Vector2 = TopHandIK.pivot_xz(Vector2(shoulder.x, shoulder.z), -1.0, cfg)
+	for target: Vector2 in [Vector2(0.0, -0.4), Vector2(-0.1, -0.4), Vector2(0.3, -0.35)]:
+		var b3: Vector3 = TopHandIK.project_blade(shoulder, target, -1.0, cfg)
+		var b := Vector2(b3.x, b3.z)
+		assert_almost_eq(b.distance_to(pivot), STICK_HORIZ_AT_MAX, 0.0005,
+				"%s: out to the stick's shortest span off the pivot" % target)
+		assert_almost_eq(b.normalized().dot(target.normalized()), 1.0, 0.0005,
+				"%s: on its bearing from the body's centre" % target)
+
+
+func test_on_the_body_the_floor_pushes_straight_ahead() -> void:
+	assert_eq(TopHandIK.floor_bearing(Vector2.ZERO, Vector2.ZERO), Vector2(0.0, -1.0))
+	var near: Vector2 = TopHandIK.floor_bearing(Vector2.ZERO, Vector2(0.05, 0.0))
+	assert_lt(near.angle_to(Vector2(0.0, -1.0)), deg_to_rad(15.0),
+			"a hair off the centre still goes out ahead, not where noise points")
+	var out: Vector2 = TopHandIK.floor_bearing(Vector2.ZERO, Vector2(0.4, 0.0))
+	assert_almost_eq(out.dot(Vector2(1.0, 0.0)), 1.0, 0.0001, "off the body, its own bearing")

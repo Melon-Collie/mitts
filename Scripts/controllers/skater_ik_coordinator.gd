@@ -704,6 +704,7 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 # blade sits on the forehand or backhand side of the cursor and the puck, pinned
 # the same offset back (Skater.get_carry_target_global), lands on it.
 func _blade_target_for(cursor_xz: Vector2) -> Vector2:
+	cursor_xz = _out_of_floor(cursor_xz)
 	var stick_dir: Vector2 = _stick_dir_to(cursor_xz)
 	if stick_dir == Vector2.ZERO:
 		return cursor_xz
@@ -714,6 +715,25 @@ func _blade_target_for(cursor_xz: Vector2) -> Vector2:
 		target += Vector2(-stick_dir.y, stick_dir.x) \
 				* _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
 	return target
+
+
+# A cursor inside the blade's floor (TopHandIK: the circle hand_y_max leaves
+# round the hand's pivot, half a blade wider for the contact), pushed out along
+# its bearing from the body's centre (TopHandIK.floor_bearing). On the cursor
+# rather than the heel, so where it lands does not turn with the trunk, which
+# turns toward the blade.
+func _out_of_floor(cursor_xz: Vector2) -> Vector2:
+	var cfg: TopHandIK.Config = _stick_line_config()
+	var drop: float = _address_hand_ceiling() - blade_y_local()
+	var floor_r: float = sqrt(maxf(cfg.stick_length * cfg.stick_length - drop * drop, 0.0001)) \
+			+ _skater.blade_length * 0.5
+	var s: Vector3 = _skater.shoulder.position
+	var shoulder_xz := Vector2(s.x, s.z)
+	var pivot: Vector2 = TopHandIK.pivot_xz(shoulder_xz,
+			-1.0 if _skater.is_left_handed else 1.0, cfg)
+	return TopHandIK.out_along(Vector2.ZERO,
+			TopHandIK.floor_bearing(Vector2.ZERO, cursor_xz),
+			cursor_xz.length(), pivot, floor_r)
 
 
 # The heel for mid-blade at `contact_xz` (UpperBody-local): half a blade back
@@ -1342,9 +1362,12 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	var pivot: Vector2 = _pivot_offset()
 	_cached_top_cfg.pivot_forward = pivot.y
 	_cached_top_cfg.pivot_inward = pivot.x
+	# The body's centre: UpperBody's origin, and the level frame's.
+	_cached_top_cfg.floor_from = Vector2.ZERO
 	if _native_top != null:
 		_native_top.pivot_forward = pivot.y
 		_native_top.pivot_inward = pivot.x
+		_native_top.floor_from = Vector2.ZERO
 		_native_top.blade_y = blade_y
 		_native_top.max_blade_reach = max_blade_reach
 		_native_top.stick_length = _cached_top_cfg.stick_length

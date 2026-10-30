@@ -185,8 +185,15 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 	if (mouse - shoulder_world).length() < 0.01:
 		return arm.heel
 	var mouse_local: Vector3 = ub.affine_inverse() * mouse
-	var aim := Vector2(mouse_local.x, mouse_local.z)
 	_level_config(shoulder.y, INF)
+	# SkaterIKCoordinator._out_of_floor.
+	var drop: float = hand_y_max - blade_y
+	var cursor_xz := Vector2(mouse_local.x, mouse_local.z)
+	var sh_xz := Vector2(shoulder.x, shoulder.z)
+	var aim: Vector2 = TopHandIK.out_along(Vector2.ZERO,
+			TopHandIK.floor_bearing(Vector2.ZERO, cursor_xz), cursor_xz.length(),
+			TopHandIK.pivot_xz(sh_xz, side, _cfg),
+			sqrt(maxf(stick_length * stick_length - drop * drop, 0.0001)) + blade_half)
 	var to_target: Vector2 = aim - TopHandIK.hand_xz_for(Vector2(shoulder.x, shoulder.z), aim,
 			blade_y, side, _cfg)
 	if to_target.length() > 0.001:
@@ -243,6 +250,7 @@ func _level_config(hang_y: float, max_reach: float) -> void:
 	_cfg.rom_backhand_reach_max = rom_backhand
 	_cfg.pivot_forward = pivot_forward
 	_cfg.pivot_inward = pivot_inward
+	_cfg.floor_from = Vector2.ZERO
 	_cfg.max_blade_reach = max_reach
 
 

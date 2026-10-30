@@ -445,12 +445,21 @@ double NativeBladePass::lean_corrected_y(double x, double z) const {
 }
 
 // SkaterIKCoordinator._blade_target_for (the stick's line, _stick_dir_to).
-Vector2 NativeBladePass::blade_target_for(const Vector2 &cursor_xz) const {
+Vector2 NativeBladePass::blade_target_for(const Vector2 &p_cursor_xz) const {
 	const double share = 1.0 - s[S_ADDRESS];
 	top->set_pivot_forward(hand_pivot_forward * share);
 	top->set_pivot_inward(hand_pivot_inward * share);
-	const Vector2 hand = top->hand_xz_for(Vector2(v[V_SHOULDER].x, v[V_SHOULDER].z), cursor_xz,
-			blade_y_local, sign, stick_length - s[S_GRIP_CHOKE], hand_rest_y);
+	const double length = stick_length - s[S_GRIP_CHOKE];
+	const Vector2 shoulder_xz(v[V_SHOULDER].x, v[V_SHOULDER].z);
+	// SkaterIKCoordinator._out_of_floor.
+	const double drop = address_hand_ceiling() - blade_y_local;
+	const double floor_r = Math::sqrt(MAX(length * length - drop * drop, 0.0001))
+			+ s[S_BLADE_LENGTH] * 0.5;
+	const Vector2 cursor_xz = NativeTopHandIK::out_along(Vector2(),
+			NativeTopHandIK::floor_bearing(Vector2(), p_cursor_xz),
+			p_cursor_xz.length(), top->pivot_xz(shoulder_xz, sign), floor_r);
+	const Vector2 hand = top->hand_xz_for(shoulder_xz, cursor_xz,
+			blade_y_local, sign, length, hand_rest_y);
 	const Vector2 to_target = cursor_xz - hand;
 	if ((double)to_target.length() <= 0.001) {
 		return cursor_xz;
@@ -523,6 +532,7 @@ Vector2 NativeBladePass::carry_backhand_stop(const Vector2 &target_xz) const {
 }
 
 void NativeBladePass::apply_cfg(const Cfg &cfg) const {
+	top->set_floor_from(Vector2());
 	top->set_pivot_forward(cfg.pivot_forward);
 	top->set_pivot_inward(cfg.pivot_inward);
 	top->set_hand_rest_y(cfg.hand_rest_y);
@@ -575,6 +585,7 @@ void NativeBladePass::solve_top_hand(Vector2 desired_xz, double max_reach, bool 
 	top->set_hand_rest_y(cfg.hand_rest_y);
 	top->set_pivot_forward(cfg.pivot_forward);
 	top->set_pivot_inward(cfg.pivot_inward);
+	top->set_floor_from(Vector2());
 	top->solve_on_ice(shoulder, target_xz, sign, cfg.blade_y, 0.0, 0.0, max_reach,
 			cfg.stick_length, cfg.hand_y_max);
 	const Basis untilt = tilt.transposed();

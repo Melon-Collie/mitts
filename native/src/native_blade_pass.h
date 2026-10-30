@@ -197,7 +197,7 @@ private:
 	Cfg ik_config(double p_blade_y, double max_reach) const;
 	Cfg level_config(double hang_y, double p_blade_y, double max_reach) const;
 	double lean_corrected_y(double x, double z) const;
-	godot::Vector2 blade_target_for(const godot::Vector2 &cursor_xz) const;
+	godot::Vector2 blade_target_for(const godot::Vector2 &p_cursor_xz) const;
 	double board_reach_limit(const godot::Vector2 &target_xz, const godot::Vector3 &shoulder_world) const;
 	double purpose(const godot::Vector3 &skater_pos) const;
 	godot::Vector2 carry_backhand_stop(const godot::Vector2 &target_xz) const;

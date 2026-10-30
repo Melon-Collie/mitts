@@ -30,8 +30,10 @@ class_name TopHandIK
 #         hand along the aim line.
 #   CLOSE (d < stick_horiz_at_rest): hand.xz stays at the pivot; hand.y rises
 #         so the blade lands on target. Clamped by hand_y_max — if the hand
-#         can't rise far enough, the blade is pushed out along the aim line to
-#         the stick's min horizontal projection off the pivot.
+#         can't rise far enough, the blade is pushed out to the stick's min
+#         horizontal projection off the pivot (from cfg.floor_from, the body's
+#         centre, along the target's bearing; or along the aim from the
+#         shoulder).
 #
 # Blade-first feel: input is treated as a desired blade position, and the
 # hand is solved as a consequence. No per-frame smoothing here — caller owns
@@ -59,6 +61,10 @@ class Config:
 	var rom_backhand_reach_max: float = 0.0  # meters; max hand displacement out to the side
 	var pivot_forward: float = 0.0           # meters; the pivot ahead of the shoulder
 	var pivot_inward: float = 0.0            # meters; the pivot in from the shoulder, toward the forehand
+	# Where a blade inside the floor is pushed out from (the solve's XZ): the
+	# body's centre, so it stays on the cursor's bearing from the player. INF
+	# pushes it out along the aim from the shoulder.
+	var floor_from: Vector2 = Vector2.INF
 	# Hard cap on the blade's horizontal distance from the shoulder along the aim
 	# line (meters).
 	# An obstacle the blade cannot reach past — in practice the boards — makes the
@@ -81,6 +87,10 @@ const _TWO_HAND_BISECTIONS: int = 9
 # alone, and as far as that so the hand's path through the hand-back stays
 # gentle.
 const PIVOT_FADE_SHARE: float = 1.0
+# The trunk's own footprint round the body's centre: inside it a cursor's
+# bearing from the centre says nothing, and the floor pushes it out straight
+# ahead instead (floor_bearing).
+const FLOOR_DEAD_M: float = 0.25
 # Half-width of the band about stick_horiz_at_rest over which the hand hands from
 # rising over the shoulder (CLOSE) to reaching out at rest height (FAR). Without
 # it the hand's path turns a corner there: a blade swept across the body at
@@ -124,19 +134,18 @@ static func project_blade(
 	# to hit the target exactly. hand_y_max IS the inner boundary: sqrt(S² −
 	# drop²) grows super-linearly with stick length near the vertical limit, so a
 	# long stick's blade can't work in tight to the body while a short one plays
-	# the phone booth. Inside it the blade goes out along the aim line to the
+	# the phone booth. Inside it the blade goes out (from cfg.floor_from) to the
 	# circle that ceiling leaves round the pivot, eased over REGIME_BAND_M so the
 	# hand comes up to its ceiling rather than stopping dead on it.
 	if r < stick_horiz_at_rest:
 		var pivot: Vector2 = pivot_xz(shoulder_xz, blade_side_sign, cfg)
 		var min_horiz: float = _stick_horiz_for(stick_length, cfg.hand_y_max, blade_y)
-		var w: Vector2 = shoulder_xz - pivot
-		var wa: float = w.dot(aim_dir)
-		var disc: float = wa * wa - w.length_squared() + min_horiz * min_horiz
-		if disc < 0.0 or r <= -wa - sqrt(disc):
-			return Vector3(target.x, blade_y, target.y)
-		var floor_k: float = -wa + sqrt(disc)
-		var out_xz: Vector2 = shoulder_xz + aim_dir * (floor_k + hand_reach(r, floor_k))
+		var out_xz: Vector2
+		if cfg.floor_from == Vector2.INF:
+			out_xz = out_along(shoulder_xz, aim_dir, r, pivot, min_horiz)
+		else:
+			out_xz = out_along(cfg.floor_from, floor_bearing(cfg.floor_from, target),
+					target.distance_to(cfg.floor_from), pivot, min_horiz)
 		return Vector3(out_xz.x, blade_y, out_xz.y)
 
 	# FAR regime: target is beyond the default stick reach. The hand displaces
@@ -146,6 +155,31 @@ static func project_blade(
 			max_reach_for_angle(atan2(aim_dir.x, -aim_dir.y) * blade_side_sign, cfg))
 	var blade_xz: Vector2 = shoulder_xz + aim_dir * (radius + stick_horiz_at_rest)
 	return Vector3(blade_xz.x, blade_y, blade_xz.y)
+
+# Which way a point inside the floor goes out from the body's centre `from`:
+# its bearing from there, eased over FLOOR_DEAD_M toward straight ahead as it
+# comes onto the body, where that bearing is noise.
+static func floor_bearing(from: Vector2, point: Vector2) -> Vector2:
+	var to_point: Vector2 = point - from
+	var k: float = to_point.length()
+	if k <= 0.0001:
+		return Vector2(0.0, -1.0)
+	var blended: Vector2 = Vector2(0.0, -1.0).lerp(to_point / k, smoothstep(0.0, FLOOR_DEAD_M, k))
+	return blended.normalized() if blended.length() > 0.0001 else Vector2(0.0, -1.0)
+
+
+# The point `k` along `dir` from `from`, pushed out of the circle of `radius`
+# round `center` along that line, eased on over REGIME_BAND_M.
+static func out_along(from: Vector2, dir: Vector2, k: float, center: Vector2,
+		radius: float) -> Vector2:
+	var w: Vector2 = from - center
+	var wa: float = w.dot(dir)
+	var disc: float = wa * wa - w.length_squared() + radius * radius
+	if disc < 0.0 or k <= -wa - sqrt(disc):
+		return from + dir * k
+	var floor_k: float = -wa + sqrt(disc)
+	return from + dir * (floor_k + hand_reach(k, floor_k))
+
 
 static func solve(
 		shoulder: Vector3,
