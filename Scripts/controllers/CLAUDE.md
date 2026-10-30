@@ -321,6 +321,16 @@ stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
 which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
 every claim reads never takes it.
 
+**So is the swing in front of the chest.** Skating, the trunk turns only so far
+toward a cursor round on the forehand side, and the hand the solve leaves at the
+rim sits beside the far hip, where the top arm reaches it through the chest. The
+drawn hand swings forward round its shoulder at the same reach to the front of
+the trunk (`TopHandIK.clear_of_trunk`, `SkaterController.hand_trunk_clear`), on
+the same stick, through the same offset. It stays off the marker because the
+marker is gameplay: the carry's two-hand limit and the puck's face read it, and
+on the marker the swing stalls a fast carry sweep before the hips yield
+(`test_carry_hips_yield.gd`).
+
 ### The gait's numeric core is native
 
 Where the extension is built, `NativeSkaterGait` runs `SkaterLocomotion`, the

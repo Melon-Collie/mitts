@@ -91,6 +91,9 @@ const PIVOT_FADE_SHARE: float = 1.0
 # bearing from the centre says nothing, and the floor pushes it out straight
 # ahead instead (floor_bearing).
 const FLOOR_DEAD_M: float = 0.25
+# clear_of_trunk's swings: after three, at most ~1.3 cm of the push is left
+# unmade (the eased push closes slowly near the front).
+const _TRUNK_CLEAR_STEPS: int = 3
 # Half-width of the band about stick_horiz_at_rest over which the hand hands from
 # rising over the shoulder (CLOSE) to reaching out at rest height (FAR). Without
 # it the hand's path turns a corner there: a blade swept across the body at
@@ -255,6 +258,44 @@ static func hand_xz_for(shoulder_xz: Vector2, blade_xz: Vector2, blade_y: float,
 		var eased: float = over if over >= band else (over + band) * (over + band) / (4.0 * band)
 		hand = blade_xz + to_hand * ((span - eased) / span)
 	return hand
+
+
+# `hand` (XZ, round the trunk's centre) held in front of the trunk whose half
+# extents (across, front) are `trunk` — the chest's section plus the forearm's
+# girth: from behind its front the arm runs through the chest to reach it. The
+# chest turns the arm forward about its shoulder, so the hand swings round toward
+# straight ahead at the same reach, which the rim, longest straight ahead,
+# always holds. Each step swings it as far as it then lies behind the front
+# (_trunk_push).
+static func clear_of_trunk(shoulder_xz: Vector2, hand: Vector2, blade_side_sign: float,
+		trunk: Vector2) -> Vector2:
+	if trunk.x <= 0.0:
+		return hand
+	var off: Vector2 = hand - shoulder_xz
+	var r: float = off.length()
+	if r < 0.0001:
+		return hand
+	var across_sign: float = 1.0 if off.x * blade_side_sign >= 0.0 else -1.0
+	for _i: int in _TRUNK_CLEAR_STEPS:
+		var push: float = _trunk_push(hand, trunk)
+		if push <= 0.0:
+			return hand
+		var ahead: float = minf((shoulder_xz.y - hand.y + push) / r, 1.0)
+		hand = shoulder_xz + Vector2(blade_side_sign * across_sign * sqrt(1.0 - ahead * ahead),
+				-ahead) * r
+	return hand
+
+
+# How far `hand` lies behind the front of the trunk's ellipse, eased on over
+# twice REGIME_BAND_M from the front, so the push starts from nothing on it.
+# Beside the trunk there is nothing to push it off; the front meets the sides at
+# the body's plane, which no hand the rim holds is behind.
+static func _trunk_push(hand: Vector2, trunk: Vector2) -> float:
+	var off_centre: float = hand.x / trunk.x
+	if absf(off_centre) >= 1.0:
+		return 0.0
+	var front: float = -trunk.y * sqrt(1.0 - off_centre * off_centre)
+	return hand_reach(hand.y - front - REGIME_BAND_M, 0.0)
 
 
 # How far out from the shoulder the hand sits for a blade `d` off it: none in

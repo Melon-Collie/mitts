@@ -306,6 +306,10 @@ var hand_y_max: float = 0.20
 # clear is scaled.
 var hand_pivot_forward: float = 0.25
 var hand_pivot_inward: float = 0.0
+# The trunk the drawn top hand stays in front of (TopHandIK.clear_of_trunk): the
+# chest's half width and depth with a sleeve's radius on. Scaled by girth with
+# the pivot.
+var hand_trunk_clear: Vector2 = Vector2(0.30, 0.30)
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
@@ -1352,6 +1356,7 @@ var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
 var _base_hand_pivot_forward:           float = 0.0
 var _base_hand_pivot_inward:            float = 0.0
+var _base_hand_trunk_clear:             Vector2 = Vector2.ZERO
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1524,6 +1529,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	hand_y_max  = _base_hand_y_max  * m_height
 	hand_pivot_forward = _base_hand_pivot_forward * attrs.girth_mult()
 	hand_pivot_inward = _base_hand_pivot_inward * attrs.girth_mult()
+	hand_trunk_clear = _base_hand_trunk_clear * attrs.girth_mult()
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1608,6 +1614,7 @@ func _capture_attribute_bases() -> void:
 	_base_hand_y_max                   = hand_y_max
 	_base_hand_pivot_forward           = hand_pivot_forward
 	_base_hand_pivot_inward            = hand_pivot_inward
+	_base_hand_trunk_clear             = hand_trunk_clear
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m

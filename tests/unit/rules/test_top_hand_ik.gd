@@ -909,3 +909,89 @@ func test_on_the_body_the_floor_pushes_straight_ahead() -> void:
 			"a hair off the centre still goes out ahead, not where noise points")
 	var out: Vector2 = TopHandIK.floor_bearing(Vector2.ZERO, Vector2(0.4, 0.0))
 	assert_almost_eq(out.dot(Vector2(1.0, 0.0)), 1.0, 0.0001, "off the body, its own bearing")
+
+
+# ── The drawn hand held in front of the trunk ───────────────────────────────
+
+const TRUNK := Vector2(0.30, 0.30)
+
+
+# The game's pivot and its reach across the body, past the body's centre.
+func _crossing_cfg() -> TopHandIK.Config:
+	var cfg := _cfg()
+	cfg.pivot_forward = 0.25
+	cfg.rom_forehand_angle_max = PI * 0.5
+	cfg.rom_forehand_reach_max = 0.39
+	return cfg
+
+
+# The front of the trunk's ellipse at `x`, the solve's Z.
+func _trunk_front(x: float) -> float:
+	var off: float = x / TRUNK.x
+	return -TRUNK.y * sqrt(maxf(1.0 - off * off, 0.0))
+
+
+# Every hand the solve places round each shoulder, and that hand cleared.
+func _cleared_hands() -> Array[Array]:
+	var out: Array[Array] = []
+	for sign_i: float in [-1.0, 1.0]:
+		var shoulder: Vector3 = _lefty_shoulder() if sign_i < 0.0 else _righty_shoulder()
+		var s := Vector2(shoulder.x, shoulder.z)
+		for target: Vector2 in _grid(shoulder):
+			var free: Vector3 = TopHandIK.solve(shoulder, target, sign_i, _crossing_cfg()).hand
+			var xz := Vector2(free.x, free.z)
+			out.append([s, xz, TopHandIK.clear_of_trunk(s, xz, sign_i, TRUNK), target])
+	return out
+
+
+func test_a_hand_across_the_body_is_held_in_front_of_the_trunk() -> void:
+	var crossed: int = 0
+	for row: Array in _cleared_hands():
+		var free: Vector2 = row[1]
+		var hand: Vector2 = row[2]
+		if free.y > _trunk_front(free.x) + TopHandIK.REGIME_BAND_M and absf(free.x) < TRUNK.x:
+			crossed += 1
+			# Three swings leave up to ~1.3 cm of the push unmade.
+			assert_lte(hand.y, _trunk_front(hand.x) + TopHandIK.REGIME_BAND_M + 0.015,
+					"in front of the trunk for %s" % row[3])
+	assert_gt(crossed, 0, "the grid puts a hand behind the trunk's front")
+
+
+func test_the_hand_swings_round_its_shoulder_and_never_deeper() -> void:
+	for row: Array in _cleared_hands():
+		var s: Vector2 = row[0]
+		var free: Vector2 = row[1]
+		var hand: Vector2 = row[2]
+		assert_almost_eq(hand.distance_to(s), free.distance_to(s), 0.00001,
+				"the same reach for %s" % row[3])
+		if absf(free.x) < TRUNK.x:
+			assert_lte(hand.y - _trunk_front(hand.x), free.y - _trunk_front(free.x) + 0.0001,
+					"no deeper for %s" % row[3])
+
+
+func test_a_hand_in_front_of_the_trunk_is_left_alone() -> void:
+	var untouched: int = 0
+	for row: Array in _cleared_hands():
+		var free: Vector2 = row[1]
+		if free.y <= _trunk_front(free.x):
+			untouched += 1
+			assert_eq(row[2], free, "hand at %s" % row[3])
+	assert_gt(untouched, 0, "the grid holds hands in front of the trunk")
+
+
+# Across the body and back at the rim's reach, the cleared hand moves without a
+# jump: the ease onto the front and the trunk's sides meet their neighbours.
+func test_the_cleared_hand_moves_without_a_jump() -> void:
+	for sign_i: float in [-1.0, 1.0]:
+		var shoulder: Vector3 = _lefty_shoulder() if sign_i < 0.0 else _righty_shoulder()
+		var s := Vector2(shoulder.x, shoulder.z)
+		for r: float in [0.25, 0.39, 0.5]:
+			var last := Vector2.INF
+			for i: int in 181:
+				var a: float = deg_to_rad(float(i) * 0.5)
+				var hand: Vector2 = TopHandIK.clear_of_trunk(s,
+						s + Vector2(sign_i * sin(a), -cos(a)) * r, sign_i, TRUNK)
+				if last != Vector2.INF:
+					assert_lt(hand.distance_to(last), 0.012,
+							"%.2f m, %.1f°" % [r, float(i) * 0.5])
+				last = hand

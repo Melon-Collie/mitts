@@ -941,7 +941,11 @@ const BH_GRIP_SLIDE_BAND: float = 0.08
 
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
-	_skater.set_hand_pump(_stride_pump(delta))
+	var pump: Vector3 = _stride_pump(delta)
+	_skater.set_hand_pump(pump)
+	var pumped: Vector3 = _skater.drawn_top_hand()
+	_skater.set_hand_pump(pump + (_clear_of_trunk(pumped, blade_local) - pumped)
+			* smoothstep(0.0, 1.0, _pump_hold) * (1.0 - _controller.knockdown_pose_weight()))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
@@ -1013,6 +1017,25 @@ func _stride_pump(delta: float) -> Vector3:
 	var drive: float = clampf(_skating.push_strength, 0.0, 1.0) * (1.0 - _bh_release) \
 			* smoothstep(0.0, 1.0, _pump_hold)
 	return _controller.stride_hand_pump_m * (sin(_skating.stride_phase) * drive)
+
+# The drawn top hand swung forward round its shoulder to the front of the chest
+# (TopHandIK.clear_of_trunk), on the same stick: never further across the ice
+# from the blade than it was, so the shaft tips up rather than the hand dropping
+# toward the ice. Drawn only, like the stride's pump, so the hand every claim
+# reads stays where the tick put it, and only while the tracked IK has the stick
+# (the pump's handoff) on his feet (the down pose's weight): the shots and the
+# sprawl pose their own.
+func _clear_of_trunk(hand: Vector3, blade: Vector3) -> Vector3:
+	var s: Vector3 = _skater.visible_shoulder(_skater.shoulder.position)
+	var xz: Vector2 = TopHandIK.clear_of_trunk(Vector2(s.x, s.z), Vector2(hand.x, hand.z),
+			-1.0 if _skater.is_left_handed else 1.0, _controller.hand_trunk_clear)
+	if xz == Vector2(hand.x, hand.z):
+		return hand
+	var blade_xz := Vector2(blade.x, blade.z)
+	var length: float = hand.distance_to(blade)
+	var horiz: float = minf(xz.distance_to(blade_xz), Vector2(hand.x, hand.z).distance_to(blade_xz))
+	xz = blade_xz + (xz - blade_xz).normalized() * horiz
+	return Vector3(xz.x, blade.y + sqrt(maxf(length * length - horiz * horiz, 0.0)), xz.y)
 
 # ── The shoulder the top hand works from ───────────────────────────────────────
 # Where the top arm is drawn from — the trunk's shoulder, then the faceoff

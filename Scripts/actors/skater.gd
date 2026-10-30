@@ -575,7 +575,8 @@ var _rig_last_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_hand: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_check_lead: float = NAN
-# The drawn top hand's render-only offset off its marker (drawn_top_hand).
+# The drawn top hand's render-only offset off its marker (drawn_top_hand): the
+# stride's pump and the swing in front of the chest.
 var _hand_pump := Vector3.ZERO
 # The nodes the rig is drawn from, as the latest tick found them, and that tick
 # (-1: nothing to draw between). Physics interpolation draws each between this

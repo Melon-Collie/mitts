@@ -17,6 +17,7 @@ const _FOREARMS: Array[int] = [UpperBone.TOP_FOREARM, UpperBone.BOTTOM_FOREARM]
 const PAST_PAD_M: float = 0.12
 const SLEEVE_R: float = SkaterMeshBuilder.SLEEVE_RADIUS_M
 const _TICKS: int = 60
+const _SKATING_TICKS: int = 90
 const _CAPSULE_SAMPLES: int = 10
 
 
@@ -91,6 +92,35 @@ func _hold(deg: float, r: float, mode: String) -> void:
 		input.delta = DT
 		input.host_timestamp = float(t) * DT
 		var cursor := Vector3(s.x + sin(a) * r, 0.0, s.z - cos(a) * r)
+		input.mouse_world_pos = cursor
+		if mode == "reach":
+			_puck.global_position = cursor
+		elif mode == "rest":
+			_puck.global_position = Vector3(30.0, 0.0, 30.0)
+		_controller._process_input(input, DT)
+		_skater._physics_process(DT)
+		_skater._process(DT)
+
+
+# Skates the skater straight ahead at `speed` (m/s) with the cursor `r` off his
+# centre at `deg` round toward the forehand, off his facing. `mode` as _hold's.
+func _hold_skating(deg: float, r: float, mode: String, speed: float) -> void:
+	if mode == "carry" and _puck.get_carrier() != _skater:
+		_puck.set_carrier(_skater)
+		_controller.on_puck_picked_up_network()
+	var a: float = deg_to_rad(deg) * _side()
+	var dir := Vector3(sin(a), 0.0, -cos(a))
+	for t: int in _SKATING_TICKS:
+		_skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+		_skater.velocity = Vector3(0.0, 0.0, -speed)
+		_controller._pose.facing = Vector2(0.0, -1.0)
+		_skater.set_facing(_controller._pose.facing)
+		var input := InputState.new()
+		input.delta = DT
+		input.host_timestamp = float(t) * DT
+		input.move_vector = Vector2(0.0, -1.0)
+		var cursor: Vector3 = _skater.global_position + dir * r
+		cursor.y = 0.0
 		input.mouse_world_pos = cursor
 		if mode == "reach":
 			_puck.global_position = cursor

@@ -28,3 +28,18 @@ func test_the_arms_stay_out_of_the_trunk_held_close() -> void:
 					build.weight, pose[0], pose[1], pose[2]]
 			assert_lt(d[0].x, SLEEVE_R, "%s: top arm %.0f cm in" % [label, d[0].x * 100.0])
 			assert_lt(d[1].x, 2.0 * SLEEVE_R, "%s: bottom arm %.0f cm in" % [label, d[1].x * 100.0])
+
+
+# Skating, the upper body twists only so far toward a cursor round on the
+# forehand side, and the blade holds at the rim across the body: the drawn hand
+# swings forward round the shoulder to the front of the chest
+# (TopHandIK.clear_of_trunk). Left beside the far hip, the top arm runs 19–25 cm
+# through it.
+func test_skating_the_top_arm_crosses_in_front_of_the_chest() -> void:
+	_rig(PlayerAttributes.neutral())
+	for mode: String in ["reach", "rest"]:
+		for deg: float in [130.0, 150.0]:
+			_hold_skating(deg, 1.5, mode, 6.0)
+			var top: float = _arm_depths()[0].x
+			assert_lt(top, 2.0 * SLEEVE_R, "skating, %s at %.0f°: top arm %.0f cm in" % [
+					mode, deg, top * 100.0])

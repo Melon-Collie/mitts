@@ -310,9 +310,10 @@ point is the `Blade` marker's, and the rigs only read it.
 Nine rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
-  marker: the marker plus a render-only offset (the stride's pump), so the arm,
-  the stick and the blade's dressing pivot about a blade that has not moved.
-  The rebuild gate compares the drawn hand, or the pump would never redraw.
+  marker: the marker plus a render-only offset (the stride's pump, and the
+  swing that keeps it in front of the chest), so the arm, the stick and the
+  blade's dressing pivot about a blade that has not moved. The rebuild gate
+  compares the drawn hand, or the offset would never redraw.
 - **The rig reads the markers and the frames where the engine draws them**
   (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
   `drawn_lower_body`): between where the latest tick found them and where they
