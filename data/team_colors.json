@@ -1093,7 +1093,7 @@
       "home": {
         "helmet": "#3B5511",
         "shoulders": {
-          "text": "#F5E6D3",
+          "text": "#FFFFFF",
           "stroke": "#3B5511"
         },
         "jersey": {
@@ -1101,19 +1101,10 @@
           "collar": "#3B5511",
           "stripes": [
             {
-              "pos": 0.88,
-              "width": 0.15,
-              "color": "#3B5511"
-            },
-            {
-              "pos": 0.88,
-              "width": 0.098,
-              "color": "#F5E6D3"
-            },
-            {
-              "pos": 0.88,
-              "width": 0.052,
-              "color": "#7FB320"
+              "pos": 0.86,
+              "width": 0.025,
+              "color": "#FFFFFF",
+              "fill_below": "#3B5511"
             }
           ]
         },
@@ -1128,7 +1119,7 @@
             {
               "pos": 0.679,
               "width": 0.17,
-              "color": "#F5E6D3"
+              "color": "#FFFFFF"
             },
             {
               "pos": 0.679,
@@ -1153,7 +1144,7 @@
             {
               "pos": 0.5,
               "width": 0.285,
-              "color": "#F5E6D3"
+              "color": "#FFFFFF"
             },
             {
               "pos": 0.5,
@@ -1164,7 +1155,7 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#F5E6D3",
+          "color": "#FFFFFF",
           "stroke": "#3B5511",
           "outline": "#3B5511"
         }
@@ -1180,19 +1171,10 @@
           "collar": "#3B5511",
           "stripes": [
             {
-              "pos": 0.88,
-              "width": 0.15,
-              "color": "#3B5511"
-            },
-            {
-              "pos": 0.88,
-              "width": 0.098,
-              "color": "#F5E6D3"
-            },
-            {
-              "pos": 0.88,
-              "width": 0.052,
-              "color": "#7FB320"
+              "pos": 0.86,
+              "width": 0.025,
+              "color": "#FFFFFF",
+              "fill_below": "#3B5511"
             }
           ]
         },
@@ -1207,7 +1189,7 @@
             {
               "pos": 0.679,
               "width": 0.17,
-              "color": "#F5E6D3"
+              "color": "#FFFFFF"
             },
             {
               "pos": 0.679,
@@ -1218,7 +1200,7 @@
         },
         "gloves": "#7FB320",
         "pants": {
-          "base": "#7FB320",
+          "base": "#3B5511",
           "stripes": []
         },
         "socks": {
@@ -1232,7 +1214,7 @@
             {
               "pos": 0.5,
               "width": 0.285,
-              "color": "#F5E6D3"
+              "color": "#FFFFFF"
             },
             {
               "pos": 0.5,
