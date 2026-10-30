@@ -39,9 +39,14 @@ var pin_strength: float = 0.0
 var diving: bool = false
 # Skater.is_slapshot_pinning: the carried puck holds its spot on the ice instead
 # of riding the blade — through a slapshot's wind-up, and through the recovery
-# after one is called off, while the blade comes back down to it. A replay
-# follows the recorded puck while it is set and pins to the blade otherwise.
+# after one is called off, while the blade comes back down to it. Remotes and
+# replays hold the puck at slapshot_pin_offset while it is set.
 var slapshot_pinned: bool = false
+# Where the same packet's puck lay off this skater (world XZ). Decoded, never
+# serialized: WorldStateCodec fills it from the puck block, so it costs no
+# bytes. While slapshot_pinned it is the host's pin; otherwise it is only
+# meaningful for the carrier, as the end a pin eases in from.
+var slapshot_pin_offset: Vector2 = Vector2.ZERO
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
 # victim. Replicated so the local player's reconcile can snap it to the host
 # baseline before replay — same treatment as velocity — and it decays
@@ -198,6 +203,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	pin_strength = s.pin_strength
 	diving = s.diving
 	slapshot_pinned = s.slapshot_pinned
+	slapshot_pin_offset = s.slapshot_pin_offset
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world

@@ -124,8 +124,10 @@ static func apply_interpolated_snapshot(
 # On the blade, it pins to the blade, as a live remote carrier's does
 # (PuckController._pin_puck_to_carrier). Held on the ice (slapshot_pinned: a
 # wind-up, or the recovery after one is called off, while the blade is up or
-# coming down to it) it holds the recorded spot off the carrier instead, carried
-# along with him; the raised blade is the wrong thing to follow.
+# coming down to it) it holds the recorded spot off the carrier instead
+# (slapshot_pin_offset), carried along with him, as a live remote's pin does
+# (RemoteController._adopt_slapshot_pin); the raised blade is the wrong thing to
+# follow.
 #
 # Returns false (the caller interpolates the recorded positions) when there is
 # no carrier, the bracket ends disagree on who carries it (pickup and release
@@ -148,11 +150,9 @@ static func _place_carried_puck(
 	if fs == null or ts == null:
 		return false
 	if fs.slapshot_pinned or ts.slapshot_pinned or _winding_up(record.skater):
-		var fp: PuckNetworkState = from_snap.puck
-		var tp: PuckNetworkState = to_snap.puck
-		var held: Vector3 = record.skater.global_position \
-				+ (fp.position - fs.position).lerp(tp.position - ts.position, t)
-		held.y = puck.ice_height
+		var off: Vector2 = fs.slapshot_pin_offset.lerp(ts.slapshot_pin_offset, t)
+		var held := Vector3(record.skater.global_position.x + off.x, puck.ice_height,
+				record.skater.global_position.z + off.y)
 		puck.set_puck_position(held)
 		return true
 	var contact: Vector3 = record.skater.get_blade_contact_global()

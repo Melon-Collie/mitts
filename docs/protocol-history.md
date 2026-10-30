@@ -439,8 +439,9 @@ here whenever you bump, in the same format.
 #      timing reads a third long, which is cosmetic.
 # v91: the skater block's body-lock byte carries slapshot_pinned in bit 3
 #      (Skater.is_slapshot_pinning: the carried puck held on the ice through a
-#      wind-up and through the recovery after one is called off), so a replay
-#      holds the puck where the host did instead of snapping it under the
-#      raised blade. Same size; a v90 peer ignores the bit, but mixed builds
-#      must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
+#      wind-up and through the recovery after one is called off), so a client's
+#      remote carrier and a replay hold the puck where the host did instead of
+#      under the raised blade. The spot rides no bytes: the decoder takes it
+#      from the same packet's puck. Same size; a v90 peer ignores the bit, but
+#      mixed builds must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
 #      the bit as clear, and its wind-ups are still recognized by shot state.

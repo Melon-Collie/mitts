@@ -587,6 +587,7 @@ func _interpolate(delta: float) -> void:
 		interpolated.is_ghost = newest.is_ghost
 		interpolated.elevation_level = newest.elevation_level
 		interpolated.copy_stick_play_from(newest)
+		interpolated.slapshot_pin_offset = newest.slapshot_pin_offset
 		interpolated.shot_state = newest.shot_state
 		interpolated.shot_charge = newest.shot_charge
 		interpolated.stagger_timer = newest.stagger_timer
@@ -625,6 +626,8 @@ func _interpolate(delta: float) -> void:
 		interpolated.is_ghost = to_state.is_ghost
 		interpolated.elevation_level = to_state.elevation_level
 		interpolated.copy_stick_play_from(to_state)
+		interpolated.slapshot_pin_offset = from_state.slapshot_pin_offset.lerp(
+				to_state.slapshot_pin_offset, t)
 		interpolated.shot_state = to_state.shot_state
 		# Charge is a scalar — lerp it so the remote's stick-flex load bow
 		# grows smoothly through the drag instead of stepping per broadcast.
@@ -801,6 +804,7 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	skater.stick_check_phase = state.stick_check_phase
 	skater.stick_tied = state.stick_tied
 	_adopt_pin(state)
+	_adopt_slapshot_pin(state)
 	skater.current_shot_state = state.shot_state
 	# The blade side, applied by state (the wire bit is garbage outside a wrister
 	# aim or a carry): a spectated shooter's frozen blade re-addresses the side
@@ -832,3 +836,17 @@ func _apply_state_to_skater(state: SkaterNetworkState) -> void:
 	# Bottom hand is purely reactive to top_hand + blade and needs no network
 	# state of its own; it's posed once per rendered frame in _render_pose_update
 	# (Skater._process) along with the gait, not here.
+
+
+# The host's slapshot pin, so the puck this machine pins to the carrier
+# (PuckController._pin_puck_to_carrier) holds its spot on the ice instead of
+# following the raised blade. The wire says only that it is set; where comes
+# from the packet's own puck (slapshot_pin_offset), turned into this body's
+# frame as drawn. Needs the facing already applied.
+func _adopt_slapshot_pin(state: SkaterNetworkState) -> void:
+	if not state.slapshot_pinned:
+		skater.exit_slapshot_pinning()
+		return
+	var held: Vector3 = skater.to_local(skater.global_position
+			+ Vector3(state.slapshot_pin_offset.x, 0.0, state.slapshot_pin_offset.y))
+	skater.enter_slapshot_pinning(Vector2(held.x, held.z))

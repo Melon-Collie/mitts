@@ -229,6 +229,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 	# index below. The roster scratch is cleared and refilled per packet.
 	var decoded_peers: Array[int] = _decoded_peers_scratch
 	decoded_peers.clear()
+	var puck_xz: Vector2 = _decode_puck_xz(data, o + num_skaters * SKATER_BLOCK_SIZE)
 	for _i: int in num_skaters:
 		# decode_s32 to match the encoder; negative ids are AI bots.
 		var peer_id: int = data.decode_s32(o); o += 4
@@ -241,6 +242,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 		if record == null:
 			continue
 		var skater_state := _decode_skater_quantized(data, skater_off)
+		_fill_pin_offset(skater_state, puck_xz)
 		if record.is_local and not NetworkManager.is_replay_mode():
 			(record.controller as LocalController).reconcile(skater_state)
 			queue_depth_feedback.emit(depth)
@@ -331,12 +333,15 @@ func decode_for_replay(data: PackedByteArray) -> Dictionary:
 
 	var skaters: Dictionary = {}
 	var decoded_peers: Array[int] = []
+	var puck_xz: Vector2 = _decode_puck_xz(data, o + num_skaters * SKATER_BLOCK_SIZE)
 	for _i: int in num_skaters:
 		var peer_id: int = data.decode_s32(o); o += 4
 		decoded_peers.append(peer_id)
 		var skater_off: int = o; o += SKATER_STATE_BYTES
 		o += 1  # queue_depth (not needed for replay)
-		skaters[peer_id] = _decode_skater_quantized(data, skater_off)
+		var skater_state := _decode_skater_quantized(data, skater_off)
+		_fill_pin_offset(skater_state, puck_xz)
+		skaters[peer_id] = skater_state
 
 	var puck_state := _decode_puck_quantized(data, o); o += 12
 	var carrier_idx: int = data.decode_u8(o); o += 1
@@ -660,6 +665,15 @@ static func _decode_puck_quantized(b: PackedByteArray, offset: int = 0) -> PuckN
 	s.velocity.y = b.decode_s16(o) / 50.0; o += 2
 	s.velocity.z = b.decode_s16(o) / 50.0
 	return s
+
+
+# The puck block's ground position alone, for the skaters decoded ahead of it.
+static func _decode_puck_xz(b: PackedByteArray, offset: int) -> Vector2:
+	return Vector2(b.decode_s16(offset) / 100.0, b.decode_s16(offset + 4) / 100.0)
+
+
+static func _fill_pin_offset(s: SkaterNetworkState, puck_xz: Vector2) -> void:
+	s.slapshot_pin_offset = puck_xz - Vector2(s.position.x, s.position.z)
 
 
 # Goalie: the 12-byte root, then his pose. See top-of-file layout comment.

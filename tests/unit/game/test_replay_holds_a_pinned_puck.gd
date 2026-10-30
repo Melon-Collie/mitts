@@ -61,6 +61,7 @@ func _snap(at: Vector3, pinned: bool) -> Dictionary:
 	s.blade_position = _RAISED_BLADE
 	s.top_hand_position = Vector3(0.2, 0.3, 0.0)
 	s.slapshot_pinned = pinned
+	s.slapshot_pin_offset = Vector2(_HELD.x, _HELD.z)
 	var p := PuckNetworkState.new()
 	p.position = s.position + _HELD
 	p.carrier_peer_id = _PEER
