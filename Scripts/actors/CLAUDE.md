@@ -310,7 +310,7 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Nine rules the rigs sit inside, all easy to break from in here:
+Ten rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
   marker: the marker plus a render-only offset (the stride's pump), so the arm,
@@ -361,10 +361,19 @@ Nine rules the rigs sit inside, all easy to break from in here:
   gameplay frame: whether the host can see a blocker must not move his hands.
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
   off while its own camera records.
-- **The arms are posed in C++ when the extension is built** (`NativeArmRig`,
-  which writes the arm bones itself). Change `_update_arm` or the part poses
-  (`SkaterArmPoses`) and the port changes with it, or
-  `test_native_arm_rig_parity.gd` fails; see `native/README.md`.
+- **The elbow steers round the torso.** Each elbow turns off its pole about
+  the shoulder→hand line just far enough to keep the arm out of the jersey
+  (`SkaterArmPoses.steer_turn`, measured by `SkaterMeshBuilder.torso_clearance`),
+  and that turn is eased per arm (`SkaterArmRig.steer_omega`) so the elbow's
+  speed stays continuous where it engages and where it reaches its stop. The
+  ease is state, so the rebuild gate keeps redrawing while it settles
+  (`SkaterArmRig.take_steering`). `test_elbow_steers_round_the_torso.gd` holds
+  the steer, `test_body_stays_smooth.gd` the jerk.
+- **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones
+  itself), held to `_update_arm` and the part poses (`SkaterArmPoses`) by
+  `test_native_arm_rig_parity.gd`; see `native/README.md`. It does not steer the
+  elbow yet, so the rig takes the GDScript path (`native_enabled` is off) and
+  that parity test fails wherever the extension is built until it is ported.
 - **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):
   the dressed blade is solved from the shaft's bearing, which whips round as
   the blade crosses over the hands, so through the swing the blade and the

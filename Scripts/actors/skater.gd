@@ -1035,11 +1035,11 @@ func _process(delta: float) -> void:
 			_spine.update()
 		_arms.update_hem(delta, _on_camera)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
-				or _blade_tilt_dirty or flexed):
+				or _arms.take_steering() or _blade_tilt_dirty or flexed):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
-			update_arm_mesh()
-			update_bottom_arm_mesh()
+			update_arm_mesh(delta)
+			update_bottom_arm_mesh(delta)
 		elif not _on_camera:
 			_hold_blade_mesh()
 		if _on_camera:
@@ -3082,9 +3082,9 @@ static func _new_body_paint() -> BodyZonePaint:
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
 
 # The spine first: a physics-rate caller would grow arms from a stale shoulder.
-func update_arm_mesh() -> void:
+func update_arm_mesh(delta: float = -1.0) -> void:
 	_spine.update()
-	_arms.update_top_arm()
+	_arms.update_top_arm(delta)
 
 
 # Where the drawn shaft has bowed away from its straight line near `point`
@@ -3097,9 +3097,9 @@ func stick_grip_axis(point: Vector3) -> Vector3:
 	return _stick.grip_axis(point)
 
 
-func update_bottom_arm_mesh() -> void:
+func update_bottom_arm_mesh(delta: float = -1.0) -> void:
 	_spine.update()
-	_arms.update_bottom_arm()
+	_arms.update_bottom_arm(delta)
 
 
 func set_trunk_texture(pitch_add: float, roll_add: float) -> void:

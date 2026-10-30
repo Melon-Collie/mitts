@@ -22,6 +22,101 @@ static func segment_pose(a: Vector3, b: Vector3, thickness: Vector3) -> Transfor
 			(a + b) * 0.5)
 
 
+# How far the elbow turns off the pole's bend, about the shoulder→hand line
+# (radians, signed): of the circle the two bone lengths allow, the turn toward
+# `outward` that keeps the arm out of the torso, as little as that takes — none
+# where the pole's elbow already clears, the whole turn to `outward` where even
+# that intrudes. The turn is the root of the arm's depth into the torso,
+# bracketed by bisection and placed in its last bracket by the depth's line, so
+# it is a continuous function of the pose. `torso` is the TORSO bone's pose, in
+# the space the joints are in. turned_elbow places the elbow it names.
+#
+# What it measures is the elbow's pad and the middle of each segment (past the
+# armhole, which is skinned into the torso), each allowed STEER_CONTACT_M of
+# overlap: a sleeve lying against the ribs is an arm at rest, not a clip. The
+# forearm's last stretch to the hand is not measured — the hand is where it is,
+# and no elbow moves it.
+const STEER_CONTACT_M: float = 0.03
+const _STEER_BISECTIONS: int = 6
+
+static func steer_turn(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, pole: Vector3, outward: Vector3, torso: Transform3D) -> float:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return 0.0
+	var axis: Vector3 = d_vec / d
+	var h: float = _elbow_offset(d, upper_len, forearm_len)
+	var foot: Vector3 = shoulder + axis * _elbow_foot(d, upper_len, forearm_len)
+	var bend: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+	var to_torso: Transform3D = torso.affine_inverse()
+	var unit: float = torso.basis.get_scale().x
+	var depth_lo: float = _arm_depth(shoulder, foot + bend * h, hand, to_torso, unit)
+	if depth_lo <= 0.0:
+		return 0.0
+	var out: Vector3 = outward - axis * outward.dot(axis)
+	if out.length_squared() < 0.000001 or h < 0.0001:
+		return 0.0
+	var full: float = bend.signed_angle_to(out.normalized(), axis)
+	var depth_hi: float = _arm_depth(shoulder, foot + bend.rotated(axis, full) * h, hand,
+			to_torso, unit)
+	if depth_hi > 0.0:
+		return full
+	var lo: float = 0.0
+	var hi: float = 1.0
+	for _i: int in _STEER_BISECTIONS:
+		var mid: float = (lo + hi) * 0.5
+		var depth: float = _arm_depth(shoulder, foot + bend.rotated(axis, full * mid) * h,
+				hand, to_torso, unit)
+		if depth > 0.0:
+			lo = mid
+			depth_lo = depth
+		else:
+			hi = mid
+			depth_hi = depth
+	return full * lerpf(lo, hi, depth_lo / (depth_lo - depth_hi))
+
+
+# The elbow `turn` radians off the pole's bend about the shoulder→hand line
+# (TwoBoneIK.solve_elbow's at 0).
+static func turned_elbow(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, pole: Vector3, turn: float) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return shoulder
+	var axis: Vector3 = d_vec / d
+	return shoulder + axis * _elbow_foot(d, upper_len, forearm_len) \
+			+ TwoBoneIK.bend_direction(shoulder, hand, pole).rotated(axis, turn) \
+			* _elbow_offset(d, upper_len, forearm_len)
+
+
+# Where along the shoulder→hand line the elbow's circle is centred, and its
+# radius, as TwoBoneIK.solve_elbow places them.
+static func _elbow_foot(d: float, upper_len: float, forearm_len: float) -> float:
+	var span: float = clampf(d, absf(upper_len - forearm_len), upper_len + forearm_len)
+	return (upper_len * upper_len - forearm_len * forearm_len + span * span) / (2.0 * span)
+
+
+static func _elbow_offset(d: float, upper_len: float, forearm_len: float) -> float:
+	var foot: float = _elbow_foot(d, upper_len, forearm_len)
+	return sqrt(maxf(upper_len * upper_len - foot * foot, 0.0))
+
+
+# How far the arm with its elbow at `elbow` sinks into the torso past contact
+# (m) at the deepest of the points steer_turn measures; negative, by the
+# narrowest margin, when it clears.
+static func _arm_depth(shoulder: Vector3, elbow: Vector3, hand: Vector3,
+		to_torso: Transform3D, unit: float) -> float:
+	return maxf(_depth(elbow, to_torso, unit), maxf(_depth((shoulder + elbow) * 0.5,
+			to_torso, unit), _depth(elbow.lerp(hand, 0.4), to_torso, unit)))
+
+
+static func _depth(p: Vector3, to_torso: Transform3D, unit: float) -> float:
+	return SkaterMeshBuilder.SLEEVE_RADIUS_M - STEER_CONTACT_M \
+			- SkaterMeshBuilder.torso_clearance(to_torso * p) * unit
+
+
 # The ELBOW bone: its Y out of the bend, the way the IK pushed the elbow, its X
 # along the arm, so its Z is the elbow's hinge.
 static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: Vector3,
