@@ -1007,35 +1007,46 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "text": "#D1157A",
-          "stroke": "#1A1A1A"
+          "text": "#FFFFFF"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#D1157A",
-          "stripes": []
+          "yoke": "#D1157A",
+          "collar": "#1A1A1A",
+          "stripes": [
+            {
+              "pos": 0.85,
+              "width": 0.05,
+              "color": "#1A1A1A"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.05,
+              "color": "#D1157A"
+            }
+          ]
         },
         "sleeve": {
           "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.858,
-              "width": 0.472,
+              "pos": 0.1415,
+              "width": 0.283,
               "color": "#D1157A"
             },
             {
-              "pos": 0.457,
-              "width": 0.094,
-              "color": "#D1157A"
+              "pos": 0.6323,
+              "width": 0.0166,
+              "color": "#1A1A1A"
             },
             {
               "pos": 0.679,
-              "width": 0.351,
-              "color": "#FFFFFF"
+              "width": 0.0166,
+              "color": "#1A1A1A"
             },
             {
-              "pos": 0.623,
-              "width": 0.045,
+              "pos": 0.7257,
+              "width": 0.0166,
               "color": "#1A1A1A"
             }
           ]
@@ -1046,25 +1057,30 @@
           "stripes": []
         },
         "socks": {
-          "base": "#D1157A",
+          "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.5,
-              "width": 0.62,
-              "color": "#FFFFFF"
+              "pos": 0.41,
+              "width": 0.035,
+              "color": "#1A1A1A"
             },
             {
               "pos": 0.5,
-              "width": 0.08,
+              "width": 0.035,
+              "color": "#1A1A1A"
+            },
+            {
+              "pos": 0.59,
+              "width": 0.035,
               "color": "#1A1A1A"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#D1157A",
-          "stroke": "#1A1A1A",
-          "outline": "#1A1A1A"
+          "color": "#1A1A1A",
+          "stroke": "#D1157A",
+          "outline": "#D1157A"
         }
       }
     },
