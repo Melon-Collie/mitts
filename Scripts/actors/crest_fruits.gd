@@ -9,24 +9,22 @@ extends RefCounted
 
 # Greens a crest keeps as drawn rather than snapping to the team's (keeps):
 # they read as the plant, not the team. Dragonfruit's bracts are petals in the
-# skin's pink; the cherry's stems and the peach's leaves would go black or navy
-# in a team without a green.
+# skin's pink; every other leaf and stem would take a team's purple, blue or
+# black when its kit has no green.
 const DRAGONFRUIT_GREEN: Color = Color("#7BBF3A")
 const PLANT_GREEN: Color = Color("#3E8E3A")
 
-const _LEAF: Color = Color("#3E7D3A")
-
 const _COLORS: Dictionary = {
-	"blackberry": [Color("#4A2050"), Color("#1E1420"), _LEAF],
-	"blueberry": [Color("#3B5BA8"), Color("#22355F"), _LEAF],
+	"blackberry": [Color("#4A2050"), Color("#1E1420"), PLANT_GREEN],
+	"blueberry": [Color("#3B5BA8"), Color("#22355F"), PLANT_GREEN],
 	"cherry": [Color("#C8102E"), PLANT_GREEN],
 	"coconut": [Color("#6B4226"), Color("#F5F0E1"), Color("#5A3A22")],
 	"dragonfruit": [Color("#E0306F"), Color("#FFFFFF"), Color("#1A1A1A"), DRAGONFRUIT_GREEN],
-	"lemon": [Color("#F7D52A"), Color("#FFF3A6"), _LEAF],
+	"lemon": [Color("#F7D52A"), Color("#FFF3A6"), PLANT_GREEN],
 	"lime": [Color("#3F7F1F"), Color("#EAF5C8"), Color("#A6D84A")],
 	"peach": [Color("#F08A66"), Color("#D9643F"), PLANT_GREEN],
 	"pineapple": [Color("#F2B233"), Color("#3E8E4A"), Color("#9C6418")],
-	"plum": [Color("#5B2A6E"), Color("#F0A23A"), Color("#6B4A2A"), _LEAF],
+	"plum": [Color("#5B2A6E"), Color("#F0A23A"), Color("#6B4A2A"), PLANT_GREEN],
 	"pomegranate": [Color("#9E1B2C"), Color("#F3E3CF"), Color("#E0405A")],
 	"watermelon": [Color("#2F7D3A"), Color("#EEF6DA"), Color("#E8485C"), Color("#1A1A1A")],
 }
