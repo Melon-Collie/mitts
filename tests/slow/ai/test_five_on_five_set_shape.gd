@@ -20,12 +20,9 @@ extends GutTest
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
 # Reference readings over these 12 starts: the back line is never thinner than
-# two at entry; an odd man stands behind it for 12% of zone ticks; one start
-# ends in a slot shot (KNOWN_SLOT_SHOTS). There their middle man drops it to
-# the left wing at our line and both our D stay in the middle while he comes
-# down the boards, then cuts across in front of them: BACK_STRONG has no answer
-# yet to a wide carrier who gains depth on him outside his reach.
-const KNOWN_SLOT_SHOTS: Array[String] = ["v8.5/z24/c-6"]
+# two at entry; an odd man stands behind it for 10% of zone ticks; no start ends
+# in a slot shot.
+const KNOWN_SLOT_SHOTS: Array[String] = []
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")

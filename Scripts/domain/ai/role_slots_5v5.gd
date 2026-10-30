@@ -423,7 +423,13 @@ static func _side_home_f(side_x: float, own_goal_z: float) -> int:
 # Soonest-to-arrive election with hysteresis + home-identity bias, scoped to
 # the spec's group when `group_scoped` (pass 1) and open to everyone
 # otherwise (pass 2 cross-fill). A finite `goal_side_of_z` admits only bodies
-# nearer our net (`own_goal_z`) than that z.
+# nearer our net (`own_goal_z`) than that z. A post on our line nobody in the
+# running can be on by its deadline is a line already lost: its holder rides the
+# carrier back rather than holding it, so a body already deeper than it races
+# only his trip across to its lane, with no identity bias (POSITION_BIAS_S,
+# the rest state's) to give way to: he is riding the carrier. Raced up to the post, the man riding
+# the carrier back hardest has the most to brake out, and loses the carrier to a
+# slower teammate.
 static func _pick_soonest(
 		snapshot: WorldSnapshot,
 		teammates: Array[int],
@@ -435,29 +441,23 @@ static func _pick_soonest(
 		group_scoped: bool,
 		goal_side_of_z: float = NAN,
 		own_goal_z: float = 0.0) -> int:
+	var line_lost: bool = spec.deadline_own_dir != 0.0 and spec.deadline_s < INF
+	if line_lost:
+		for pid: int in teammates:
+			if _in_running(snapshot, pid, assigned, spec, position_by_peer, group_scoped,
+					goal_side_of_z, own_goal_z) \
+					and _race_time(snapshot.skater_states[pid], spec, caps_by_peer.get(pid)) \
+							<= spec.deadline_s:
+				line_lost = false
+				break
 	var best_pid: int = -1
 	var best_score: float = INF
 	for pid: int in teammates:
-		if assigned.has(pid):
-			continue
-		if group_scoped and spec.group != Group.ANY \
-				and _group_of(pid, position_by_peer) != spec.group:
+		if not _in_running(snapshot, pid, assigned, spec, position_by_peer, group_scoped,
+				goal_side_of_z, own_goal_z):
 			continue
 		var s: SkaterNetworkState = snapshot.skater_states[pid]
-		if not is_nan(goal_side_of_z) \
-				and signf(own_goal_z) * s.position.z <= signf(own_goal_z) * goal_side_of_z:
-			continue
-		var caps: AISkaterCaps = caps_by_peer.get(pid)
-		var speed: float = caps.max_speed if caps != null \
-				else AIArrival.SKATER_REF_SPEED_M_S
-		var t: float
-		if spec.lateral_race:
-			t = AIArrival.time_to_arrive(
-					Vector3(s.position.x, 0.0, 0.0), Vector3(spec.target.x, 0.0, 0.0),
-					Vector3(s.velocity.x, 0.0, 0.0), speed)
-		else:
-			t = AIArrival.time_to_arrive(
-					s.position, spec.target, s.velocity, speed)
+		var t: float = _race_time(s, spec, caps_by_peer.get(pid))
 		# Feasibility deadline (pass 1 only): a candidate who can't make the
 		# race target in time is no candidate — defer to cross-fill rather
 		# than electing a body that can never do the job. Raw kinematic t;
@@ -466,15 +466,53 @@ static func _pick_soonest(
 		if group_scoped and spec.deadline_s < INF \
 				and _deadline_time(s, spec, t) > spec.deadline_s:
 			continue
+		var riding_back: bool = line_lost \
+				and spec.deadline_own_dir * s.position.z > spec.deadline_own_dir * spec.target.z
+		if riding_back:
+			t = _lane_time(s, spec, caps_by_peer.get(pid))
 		if _hysteresis_class(prev_assignments.get(pid, AIRoleSlots.Slot.NONE)) \
 				!= _hysteresis_class(spec.slot):
 			t += HYSTERESIS_PENALTY_S
-		if spec.home_slot != -1 and position_by_peer.get(pid, -1) == spec.home_slot:
+		if spec.home_slot != -1 and position_by_peer.get(pid, -1) == spec.home_slot \
+				and not riding_back:
 			t -= POSITION_BIAS_S
 		if t < best_score or (t == best_score and (best_pid == -1 or pid < best_pid)):
 			best_score = t
 			best_pid = pid
 	return best_pid
+
+
+# Whether `pid` may stand in `spec`'s election: not yet assigned, of its group
+# when `group_scoped`, and goal-side of `goal_side_of_z` when that is finite.
+static func _in_running(snapshot: WorldSnapshot, pid: int, assigned: Dictionary,
+		spec: SlotSpec, position_by_peer: Dictionary, group_scoped: bool,
+		goal_side_of_z: float, own_goal_z: float) -> bool:
+	if assigned.has(pid):
+		return false
+	if group_scoped and spec.group != Group.ANY \
+			and _group_of(pid, position_by_peer) != spec.group:
+		return false
+	return is_nan(goal_side_of_z) or signf(own_goal_z) * snapshot.skater_states[pid].position.z \
+			> signf(own_goal_z) * goal_side_of_z
+
+
+# A body's raw arrival time at `spec`'s race target: the lateral trip alone for
+# a lateral race, else the whole trip.
+static func _race_time(s: SkaterNetworkState, spec: SlotSpec, caps: AISkaterCaps) -> float:
+	if spec.lateral_race:
+		return _lane_time(s, spec, caps)
+	return AIArrival.time_to_arrive(s.position, spec.target, s.velocity, _speed_of(caps))
+
+
+# A body's trip across to `spec`'s target's x, from his x and x velocity.
+static func _lane_time(s: SkaterNetworkState, spec: SlotSpec, caps: AISkaterCaps) -> float:
+	return AIArrival.time_to_arrive(
+			Vector3(s.position.x, 0.0, 0.0), Vector3(spec.target.x, 0.0, 0.0),
+			Vector3(s.velocity.x, 0.0, 0.0), _speed_of(caps))
+
+
+static func _speed_of(caps: AISkaterCaps) -> float:
+	return caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
 
 
 # The raw time a body needs to be set on `spec`'s post for its deadline: `t`, or
