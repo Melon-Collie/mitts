@@ -22,6 +22,9 @@ var team_brain: TeamStrategyView = null
 # The brain's hysteretic strong-side sign (+1 = +X side), so a role's
 # strong/weak side matches its slot assignment. +1 when no brain is wired.
 var strong_x: float = 1.0
+# The rush lane our carrier is in, by the brain's hysteretic read
+# (AIRoleRushLane.carrier_lane): -1 the −x wing, 0 the middle, 1 the +x wing.
+var carrier_lane: int = 0
 # The man TeamBrain's threat partition assigned this defender (MARK and the 5v5
 # zone roles cover him), or -1 when unassigned — the role then falls back to
 # its own read.
@@ -123,7 +126,7 @@ var holds_for_developing_feeds: bool = true
 # COGNITION gate: false = heading_omega reads as 0 in the pass EV, so a feed to
 # a hard-cutting receiver prices like one to a straight-line skater.
 var reads_receiver_commitment: bool = true
-# COGNITION gate: false = RUSH_D1 retreats on the carrier→net line only; true =
+# COGNITION gate: false = BACK_STRONG retreats on the carrier→net line only; true =
 # it splits toward an uncovered receiver's feed lane (AIRoleRushD's lane fan).
 var plays_rush_pass_lanes: bool = true
 # COGNITION gate: true = the carrier shields the puck (protect_offset /
@@ -152,6 +155,10 @@ var prev_role_target: Vector3 = Vector3.INF
 # NHL delayed offside: a teammate owes a tag-up, so the carrier keeps its
 # carries, feeds and rims out of the attacking zone.
 var zone_entry_blocked: bool = false
+
+# The match calls icing (NHL): a dump from our half that crosses their goal line
+# untouched is priced as one (AICarrierDumpSearch).
+var icing_enforced: bool = false
 
 # ── 5v5 position identity ────────────────────────────────────────────────────
 # Latched match team size (TeamBrain.team_size). Gates the 5v5-only reads.

@@ -129,8 +129,9 @@ var reads_receiver_commitment: bool
 var angles_the_chase: bool
 
 # COGNITION: the last man back on a rush reads the carrier's PASSING options and
-# splits toward an uncovered receiver's feed lane — the 2-on-1 "play the pass,
-# the goalie takes the shooter" doctrine. False = RUSH_D1 sees only the carrier
+# splits toward an uncovered receiver's feed lane while nobody holds the middle
+# behind him — the 2-on-1 "play the pass, the goalie takes the shooter"
+# doctrine. False = BACK_STRONG sees only the carrier
 # and retreats on the carrier→net line, so the cross-crease feed connects.
 var plays_rush_pass_lanes: bool
 

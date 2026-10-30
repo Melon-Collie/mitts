@@ -11,7 +11,7 @@ class_name AIBodyCheck
 # fraction.
 #
 # Committing abandons containment, so only roles with support behind them ask:
-# PRESSURE (in-zone pressurer and forecheck F1) and TRACK_PUCK once goal-side of
+# PRESSURE (in-zone pressurer and forecheck F1) and NZ_F1 once goal-side of
 # the carrier — never the last-man gap defender.
 #
 # A heavy build's predicted impulse clears the bar at lower closing speeds, so it

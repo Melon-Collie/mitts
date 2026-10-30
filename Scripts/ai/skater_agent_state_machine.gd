@@ -608,7 +608,7 @@ var _holds_for_developing_feeds: bool = true
 # turning receiver is a riskier feed).
 var _reads_receiver_commitment: bool = true
 var _angles_the_chase: bool = true
-# _plays_rush_pass_lanes rides RoleContext into RUSH_D1's odd-man lane fan.
+# _plays_rush_pass_lanes rides RoleContext into BACK_STRONG's odd-man lane fan.
 var _plays_rush_pass_lanes: bool = true
 # _protects_the_puck gates the carry blade's protect blend. False = naive forward
 # carry, the puck presented ahead of the body.
@@ -1303,10 +1303,12 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	ctx.zone_entry_blocked = _teammate_must_tag_up(snapshot)
 	if _current_strategy != null:
 		ctx.strong_x = _current_strategy.strong_x()
+		ctx.carrier_lane = _current_strategy.carrier_lane()
 		ctx.assigned_threat_peer = _current_strategy.assigned_threat(_peer_id)
 		ctx.threat_shoot_base_by_opp = _current_strategy.get_threat_shoot_base_by_opp()
 		ctx.rush_read = _current_strategy.get_rush_read()
 		ctx.team_size = _current_strategy.get_team_size()
+		ctx.icing_enforced = _current_strategy.icing_enforced()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
 		ctx.self_home_side = PlayerRules.home_side_x(lobby_slot, _own_goal_dir)
@@ -1317,6 +1319,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	else:
 		# RoleContext.new()'s defaults, for no brain (tests).
 		ctx.strong_x = 1.0
+		ctx.carrier_lane = 0
 		ctx.assigned_threat_peer = -1
 		ctx.threat_shoot_base_by_opp = _empty_threat_memo
 		ctx.rush_read = _inert_rush_read
@@ -1324,6 +1327,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.ping_shoot_active = false
 		ctx.ping_pass_target_peer = -1
 		ctx.team_size = GameRules.DEFAULT_TEAM_SIZE
+		ctx.icing_enforced = false
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
 	return ctx
@@ -1357,19 +1361,18 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			# loose-puck-safe; follows the puck out and accepts the tag-up
 			# risk if the opp breaks out.
 			decision = AIRolePressure.decide(ctx)
-		AIRoleSlots.Slot.F2_MID:
-			decision = AIRoleForecheck.decide(ctx, false)
+		AIRoleSlots.Slot.F2_NET:
+			decision = AIRoleForecheck.decide_net(ctx)
 		AIRoleSlots.Slot.F3_HIGH:
-			decision = AIRoleForecheck.decide(ctx, true)
+			decision = AIRoleForecheck.decide_high(ctx)
 		AIRoleSlots.Slot.PRESSURE:
 			decision = AIRolePressure.decide(ctx)
 		AIRoleSlots.Slot.MARK:
 			decision = AIRoleMark.decide(ctx)
-		AIRoleSlots.Slot.RUSH_D1, AIRoleSlots.Slot.RUSH_D2:
+		AIRoleSlots.Slot.BACK_STRONG, AIRoleSlots.Slot.BACK_MID:
 			decision = AIRoleRushD.decide(ctx, slot)
-		AIRoleSlots.Slot.TRACK_PUCK, AIRoleSlots.Slot.TRACK_MID_STRONG, \
-		AIRoleSlots.Slot.TRACK_MID_WEAK, AIRoleSlots.Slot.TRACK_MID:
-			decision = AIRoleTrack.decide(ctx, slot)
+		AIRoleSlots.Slot.NZ_F1, AIRoleSlots.Slot.NZ_MID, AIRoleSlots.Slot.BACK_WEAK:
+			decision = AIRoleNeutralZone.decide(ctx, slot)
 		AIRoleSlots.Slot.CHASE:
 			decision = AIRoleChase.decide(ctx)
 		AIRoleSlots.Slot.FLANK_L:
@@ -1392,10 +1395,8 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 		AIRoleSlots.Slot.ZONE_C, AIRoleSlots.Slot.ZONE_W_STRONG, \
 		AIRoleSlots.Slot.ZONE_W_WEAK:
 			decision = AIRoleZoneDefense.decide(ctx, slot)
-		AIRoleSlots.Slot.F2_STRONG:
-			decision = AIRoleForecheck.decide_f2(ctx, true)
-		AIRoleSlots.Slot.F2_WEAK:
-			decision = AIRoleForecheck.decide_f2(ctx, false)
+		AIRoleSlots.Slot.F3_WALL:
+			decision = AIRoleForecheck.decide_wall(ctx)
 		AIRoleSlots.Slot.BREAKOUT_D2:
 			# Net-front reverse valve — the weak-side breakout outlet's job.
 			decision = AIRoleBreakout.decide(ctx, false)
@@ -1404,10 +1405,10 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			decision = AIRoleOutlet.decide(ctx)
 		AIRoleSlots.Slot.BREAKOUT_C:
 			decision = AIRoleBreakoutCenter.decide(ctx)
-		AIRoleSlots.Slot.WIDE_L:
-			decision = AIRoleWideLane.decide(ctx, -1.0)
-		AIRoleSlots.Slot.WIDE_R:
-			decision = AIRoleWideLane.decide(ctx, 1.0)
+		AIRoleSlots.Slot.LANE_L:
+			decision = AIRoleRushLane.decide(ctx, -1.0)
+		AIRoleSlots.Slot.LANE_R:
+			decision = AIRoleRushLane.decide(ctx, 1.0)
 		AIRoleSlots.Slot.TRAILER, AIRoleSlots.Slot.CARRIER:
 			# High-slot trailer — SUPPORT's goal-side trail read. CARRIER lands
 			# here off the puck: the brain slots off the reaction-delayed carrier
