@@ -419,6 +419,23 @@ func test_decode_for_replay_round_trips_full_packet() -> void:
 	assert_eq(out.game_state.time_remaining, 600.0)
 
 
+# The pin's spot rides no bytes of its own: each skater gets where the same
+# packet's puck lay off him.
+func test_decode_for_replay_derives_each_pin_offset_from_the_puck() -> void:
+	var puck := PuckNetworkState.new()
+	puck.position = Vector3(3.0, 0.0, -4.0)
+	var buf := _build_ws(1.0,
+			[{id = 10, state = _make_skater(2.0)}, {id = 11, state = _make_skater(-6.0)}],
+			puck, 0, [],
+			{score0 = 0, score1 = 0, phase = 0, period = 1, time_remaining = 0})
+	var out: Dictionary = codec.decode_for_replay(buf)
+	for id: int in [10, 11]:
+		var s: SkaterNetworkState = out.skaters[id]
+		assert_almost_eq(s.slapshot_pin_offset,
+				Vector2(3.0 - s.position.x, -4.0 - s.position.z), Vector2(0.001, 0.001),
+				"skater %d: the puck off him, in the world frame" % id)
+
+
 func test_decode_for_replay_no_carrier_sentinel() -> void:
 	var buf := _build_ws(1.0,
 			[{id = 10, state = _make_skater(1.0)}],
@@ -524,6 +541,19 @@ func test_skater_dive_rides_the_body_lock_byte_beside_the_pin() -> void:
 					WorldStateCodec._encode_skater_quantized(s))
 			assert_eq(dec.pin_role, role)
 			assert_eq(dec.diving, diving)
+
+
+func test_skater_slapshot_pin_rides_the_body_lock_byte() -> void:
+	for pinned: bool in [false, true]:
+		var s := SkaterNetworkState.new()
+		s.pin_role = BoardPinRules.Role.PINNED
+		s.diving = true
+		s.slapshot_pinned = pinned
+		var dec: SkaterNetworkState = WorldStateCodec._decode_skater_quantized(
+				WorldStateCodec._encode_skater_quantized(s))
+		assert_eq(dec.slapshot_pinned, pinned)
+		assert_eq(dec.pin_role, BoardPinRules.Role.PINNED, "the pin bit leaves the role alone")
+		assert_true(dec.diving, "the pin bit leaves the dive alone")
 
 
 func test_skater_stagger_round_trips() -> void:

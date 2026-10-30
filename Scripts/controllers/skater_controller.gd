@@ -2235,6 +2235,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
+	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
