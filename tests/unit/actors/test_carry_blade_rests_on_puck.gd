@@ -47,7 +47,7 @@ func _make_carrier() -> SkaterController:
 	return c
 
 
-# Standing, the cursor pulled in from 1.1 m to `radius_m` along `dir` (a lefty's
+# Standing, the cursor moved from 1.1 m to `radius_m` along `dir` (a lefty's
 # side; mirrored for a righty), and held.
 func _pull_in(c: SkaterController, dir: Vector3, radius_m: float) -> Vector3:
 	var sk: Skater = c.skater
@@ -114,7 +114,7 @@ func test_the_blade_rests_on_the_puck() -> void:
 
 func test_pulled_in_close_the_toe_holds_it() -> void:
 	var flat: SkaterController = _make_carrier()
-	_pull_in(flat, FOREHAND, 1.1)
+	_pull_in(flat, FOREHAND, 1.4)
 	var close: SkaterController = _make_carrier()
 	_pull_in(close, FOREHAND, 0.4)
 	assert_between(_rest(flat.skater).y, 0.4, 0.65, "out at the rim, mid-blade on it")

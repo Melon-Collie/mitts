@@ -347,7 +347,10 @@ reach limits, `_board_reach_limit`, `_blade_target_for`,
 `TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
 rink functions under them) and the port changes with it, or
 `test_native_blade_pass_parity.gd` fails. A tunable the pass newly reads goes
-into `_sync_pass_config` too.
+into `_sync_pass_config` too. The port does not fold the shoulders over the
+stick (`chest_fold`, below) yet, so the coordinator takes the GDScript pass
+(`native_pass_enabled` is off) and that parity test fails wherever the
+extension is built until it is ported.
 
 ### Pose the hand, not the blade
 
@@ -376,7 +379,7 @@ only shortens an over-long span; an under-long pair draws a visibly short stick.
 
 The tracked path's ROM (`TopHandIK`) is a disc about the shoulder with the hand
 a fixed drop below it, and `SkaterIKCoordinator._solve_top_hand` solves it
-where the drawn arm actually is. Three things decide "where", each found as a
+where the drawn arm actually is. Four things decide "where", each found as a
 hand the drawn arm could not reach or barely extended toward:
 
 - **The shoulder is the trunk's** (`arm_shoulder`). The skeleton folds the
@@ -399,6 +402,22 @@ hand the drawn arm could not reach or barely extended toward:
   upright blade height while the solve ran at the leaned one, the target sat
   inside the rim and the hand was drawn back to it: 0.24 m of a 0.39 m rim in
   every direction.
+- **A carrier's chest folds over the stick** (`chest_fold`,
+  `CarryPostureRules`), carrying both shoulders forward of the hips, and the
+  top and bottom ones are solved from there (`arm_shoulder`, `_two_hand_reach`).
+  An upright carrier's top hand hangs at his hip, the shaft runs from there,
+  and the bottom hand reaches it only across his belly, so the two-hand reach
+  holds the blade in close with the bottom elbow in the chest. The fold is the chest's, in its own frame after the twist, as
+  the faceoff address's is: never the frame the blade hangs from (pitched, the
+  carry's contact and strokes all move with it) and never through the spine's
+  fold-then-twist (the bottom shoulder then swings with the twist, and the
+  reach limit with it, tick to tick in a dangle). It is a pure function of the
+  blade marker and the posture's own fold, which it tops up rather than adds
+  to, so it needs no wire field: full while the puck is ahead and out, none
+  round beside or behind him, none pulled in tight. A shot or the block,
+  posing their own stick, take none. The gait draws exactly that fold on the
+  trunk texture, with a crouch under it standing (`GaitCarryLayer`).
+  `test_carry_posture_rules.gd`.
 
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).

@@ -6,9 +6,11 @@ extends RefCounted
 # the carry's two hands and backhand stop, and the rest reach without a puck to
 # reach for, then chased at the hands' speed (SkaterIKCoordinator
 # .apply_blade_toward). Every number is read once off a set-up body (capture) and
-# the solves are the controller's own pure ones (TopHandIK); what this leaves out
-# is the skating lean, the trunk's fold and the boards' reach limit, and the
-# carry's side is read off the blade (Skater._update_carry_contact strokes it).
+# the solves are the controller's own pure ones (TopHandIK), the chest folded
+# over a carried stick as the controller folds it (CarryPostureRules, off the
+# blade marker); what this leaves out is the skating lean, the trunk's fold and
+# the boards' reach limit, and the carry's side is read off the blade
+# (Skater._update_carry_contact strokes it).
 # test_duel_rig_mirrors.gd holds the resolved target to the live coordinator.
 
 # Per-skater state the controller keeps across ticks.
@@ -30,6 +32,7 @@ class Arm:
 
 var shoulder: Vector3
 var bottom_shoulder: Vector3
+var carry_fold: float
 var ub_offset: Vector3
 var blade_y: float
 var blade_half: float
@@ -73,8 +76,9 @@ var _scratch := TopHandIK.Result.new()
 static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	var rig: RefCounted = (load("res://tests/unit/ai/duel_rig.gd") as GDScript).new()
 	var ik: SkaterIKCoordinator = ctrl._ik
-	rig.shoulder = ik.arm_shoulder()
+	rig.shoulder = skater.shoulder.position
 	rig.bottom_shoulder = skater.bottom_shoulder.position
+	rig.carry_fold = deg_to_rad(ctrl.carry_fold_deg)
 	rig.ub_offset = skater.upper_body.position
 	rig.blade_y = ctrl.blade_height - (GameRules.FACEOFF_SPAWN_HEIGHT + skater.upper_body.position.y)
 	rig.blade_half = skater.blade_length * 0.5
@@ -153,7 +157,7 @@ func step(arm: Arm, pos: Vector3, facing: Vector2, cursor: Vector3, carrying: bo
 		shaft = facing
 	shaft = shaft.normalized()
 	arm.contact = Vector3(arm.heel.x + shaft.x * blade_half, 0.0, arm.heel.z + shaft.y * blade_half)
-	_follow(arm, pos, body, cursor, held, purpose, side, dt)
+	_follow(arm, pos, body, cursor, held, carrying, purpose, side, dt)
 
 
 func ub_transform(arm: Arm, pos: Vector3, body: Basis) -> Transform3D:
@@ -204,16 +208,18 @@ func _solve(arm: Arm, desired: Vector2, side: float, max_reach: float, limits: b
 	if limits and carrying:
 		desired = _backhand_stop(arm, desired, side, ub, body, pos)
 	var tilt: Basis = Basis.from_euler(Vector3(arm.lean.x, 0.0, arm.lean.y))
-	var sh: Vector3 = tilt * shoulder
+	var fold: float = chest_fold(arm, body, pos, carrying)
+	var sh: Vector3 = tilt * CarryPostureRules.folded_shoulder(shoulder, fold)
+	var bottom: Vector3 = tilt * CarryPostureRules.folded_shoulder(bottom_shoulder, fold)
 	var target: Vector3 = tilt * Vector3(desired.x, _blade_y_at(arm, desired), desired.y)
-	_level_config(sh.y, max_reach)
+	_level_config((tilt * shoulder).y, max_reach)
 	var target_xz := Vector2(target.x, target.z)
 	if limits and carrying:
 		_cfg.max_blade_reach = minf(max_reach, TopHandIK.two_hand_reach(sh, target_xz, side,
-				_cfg, tilt * bottom_shoulder, grip, bottom_reach, spacing, _scratch))
+				_cfg, bottom, grip, bottom_reach, spacing, _scratch))
 	elif limits and purpose < 1.0:
 		var held: float = TopHandIK.two_hand_reach(sh, target_xz, side, _cfg,
-				tilt * bottom_shoulder, grip, bottom_reach, spacing, _scratch)
+				bottom, grip, bottom_reach, spacing, _scratch)
 		if held != INF:
 			TopHandIK.solve(sh, target_xz, side, _cfg, _scratch)
 			var arm_reach: float = Vector2(_scratch.blade.x - sh.x, _scratch.blade.z - sh.z).length()
@@ -223,6 +229,15 @@ func _solve(arm: Arm, desired: Vector2, side: float, max_reach: float, limits: b
 	_ik.hand = untilt * _ik.hand
 	_ik.blade = untilt * _ik.blade
 	return _ik
+
+
+# SkaterIKCoordinator.chest_fold: a carrier's, off the blade marker (the heel the
+# hands chase), the posture's own fold left out with the skating lean.
+func chest_fold(arm: Arm, body: Basis, pos: Vector3, carrying: bool) -> float:
+	if not carrying:
+		return 0.0
+	var rel: Vector3 = body.inverse() * (arm.heel - Vector3(pos.x, 0.0, pos.z))
+	return CarryPostureRules.fold(Vector2(rel.x, rel.z), 0.0, carry_fold)
 
 
 func _level_config(hang_y: float, max_reach: float) -> void:
@@ -282,7 +297,7 @@ func _chase(arm: Arm, target: Vector3, dt: float) -> void:
 # the twist toward it, the reach lean toward the hand's rim by the purpose, and
 # the twist's follow spring, the blade's world point kept across the turn.
 func _follow(arm: Arm, pos: Vector3, body: Basis, cursor: Vector3, held: bool,
-		purpose: float, side: float, dt: float) -> void:
+		carrying: bool, purpose: float, side: float, dt: float) -> void:
 	var source: Vector3 = cursor if held else arm.heel
 	var to_blade := Vector3(source.x - pos.x, 0.0, source.z - pos.z)
 	var target_twist: float = 0.0
@@ -291,7 +306,8 @@ func _follow(arm: Arm, pos: Vector3, body: Basis, cursor: Vector3, held: bool,
 		target_twist = clampf(-atan2(local_dir.x, -local_dir.z) * twist_ratio,
 				-max_twist, max_twist)
 	var tilt: Basis = Basis.from_euler(Vector3(arm.lean.x, 0.0, arm.lean.y))
-	var sh: Vector3 = tilt * shoulder
+	var sh: Vector3 = tilt * CarryPostureRules.folded_shoulder(shoulder,
+			chest_fold(arm, body, pos, carrying))
 	var hand: Vector3 = tilt * arm.hand_local
 	var hand_vec := Vector2(hand.x - sh.x, hand.z - sh.z)
 	var target_lean := Vector2.ZERO

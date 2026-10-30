@@ -418,7 +418,8 @@ var upper_body_follow_damping: float = 18.0     # damping (near-critical — a c
 # far the skater visibly lunges. engage_power > 1 keeps the torso quiet mid-ROM
 # and commits the lean near full extension.
 # The forward cap sits on top of the skating posture's own fold
-# (velocity_lean_forward_max_deg), so the two together stay a reach, not a dive.
+# (velocity_lean_forward_max_deg, or a carrier's carry_fold_deg), so the two
+# together stay a reach, not a dive.
 # Scaled by the stick's purpose (SkaterIKCoordinator.reach_purpose): with nothing
 # to reach for the trunk keeps its posture.
 var upper_body_lean_max_deg: float = 15.0
@@ -443,6 +444,10 @@ var reach_purpose_far_m: float = 1.8
 var velocity_lean_forward_max_deg: float = 20.0
 var velocity_lean_back_max_deg: float = 6.0
 var velocity_lean_speed: float = 6.0
+# How far a carrier's chest folds over a stick held in front of him (CarryPostureRules),
+# standing or skating — its shoulders, and with them his hands, out in front of
+# his hips where both can hold it.
+var carry_fold_deg: float = 22.0
 var lower_body_pitch_follow: float = 0.35
 
 # ── Lower Body Lag Tuning ─────────────────────────────────────────────────────
@@ -665,6 +670,7 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
+var carry_crouch: float = 1.0            # crouch floor under the full chest fold over the stick (× stance_hip_deg)
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -2287,6 +2293,11 @@ func get_shot_state() -> int:
 # Whether the stick has the puck to reach for this tick (ReachPurposeRules).
 func reach_purpose() -> float:
 	return _ik.reach_purpose
+
+
+# How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).
+func chest_fold() -> float:
+	return _ik.chest_fold()
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this

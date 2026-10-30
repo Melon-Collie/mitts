@@ -35,6 +35,13 @@ const SCENARIOS: Array[Dictionary] = [
 		"puck": true, "hold": true},
 	{"name": "tight_sweep", "r": 0.75, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
 		"puck": true, "hold": true},
+	# The forehand arc where the two-hand stop lets the blade go, tick by tick.
+	{"name": "forehand_trace", "r": 1.6, "a0": 40.0, "rate": 20.0, "frames": 1, "step": 1,
+		"puck": true, "hold": true, "trace": true, "trace_ticks": 540},
+	{"name": "front_trace", "r": 1.26, "a0": -30.0, "rate": 20.0, "frames": 1, "step": 1,
+		"puck": true, "hold": true, "trace": true, "trace_ticks": 360},
+	{"name": "stance_sweep", "r": 1.6, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
+		"puck": true, "hold": true, "stance": true},
 	{"name": "empty_sweep", "r": 1.6, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
 		"puck": false, "hold": true},
 	# The body following the cursor round: standing, and skating up-ice with the
@@ -202,6 +209,7 @@ func _drive(ticks: int) -> void:
 	var s: Dictionary = _scenario()
 	for _t: int in ticks:
 		_input.move_vector = Vector2(0.0, -1.0) if bool(s.get("skate", false)) else Vector2.ZERO
+		_input.stance_held = bool(s.get("stance", false))
 		if bool(s.get("hold", false)):
 			_controller._pose.facing = Vector2(0.0, -1.0)
 			_skater.set_facing(Vector2(0.0, -1.0))
@@ -286,6 +294,11 @@ func _report() -> void:
 	var bottom_grip: Vector2 = _grip(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
 			SkaterMeshBuilder.UpperBone.BOTTOM_HAND, _skater.bottom_hand.position,
 			_skater.bottom_grip_angle_deg)
+	var to_blade: Vector3 = _skater.upper_body_to_global(_skater.blade.position) - _skater.global_position
+	var hand_off: Vector3 = _skater.top_hand.position - _skater.shoulder.position
+	print("  f%02d blade %.2f m out, top hand %.2f m ahead of its shoulder, %.2f below | trunk pitch %+3.0f°" % [
+			_frame, Vector2(to_blade.x, to_blade.z).length(), -hand_off.z, -hand_off.y,
+			_skater.upper_body.rotation_degrees.x])
 	print("  f%02d cursor %+5.0f° | twist %+4.0f° hips %+4.0f° | clearance top %+.3f m @%.1f bottom %+.3f m @%.1f | top: forearm∠shaft %3.0f° off grip %2.0f° | bottom: %3.0f° %2.0f°" % [
 			_frame, _off_facing(_cursor()), _skater.upper_body.rotation_degrees.y,
 			_skater.lower_body.rotation_degrees.y, top.x, top.y, bottom.x, bottom.y,
@@ -326,6 +339,8 @@ func _process(_delta: float) -> void:
 		if _frame >= int(_scenario()["frames"]):
 			_next_scenario()
 			return
+		if _frame == 0 and _scenario().has("trace_ticks"):
+			_drive(int(_scenario()["trace_ticks"]))
 		if _frame > 0:
 			_drive(int(_scenario()["step"]))
 		_report()

@@ -96,9 +96,10 @@ var _native_dangle: RefCounted = null
 var _dangle_synced_tied: bool = false
 # The whole blade pass in C++ (null = extension absent or stale: the GDScript
 # below runs). It drives the two kernels above, so they keep one state between
-# the paths. native_pass_enabled routes round it for the parity test.
+# the paths. native_pass_enabled routes round it for the parity test. Off by
+# default: the port does not fold the shoulders over the stick (chest_fold) yet.
 var _native_pass: RefCounted = null
-var native_pass_enabled: bool = true
+var native_pass_enabled: bool = false
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
 var _pass_goalies := PackedFloat64Array()
@@ -766,9 +767,9 @@ func _solve_top_hand(desired_blade_xz: Vector2, blade_side_sign: float,
 # the shaft (TopHandIK.two_hand_reach), in the solve's level frame.
 func _two_hand_reach(tilt: Basis, shoulder: Vector3, target_xz: Vector2,
 		blade_side_sign: float, cfg: TopHandIK.Config) -> float:
-	var bottom: Vector3 = tilt * SkaterSpineRig.shoulder_in_frame(
-			_skater.bottom_shoulder.position, _skater.upper_body.rotation, 0.0,
-			_skater.trunk_fold())
+	var bottom: Vector3 = tilt * CarryPostureRules.folded_shoulder(
+			SkaterSpineRig.shoulder_in_frame(_skater.bottom_shoulder.position,
+			_skater.upper_body.rotation, 0.0, _skater.trunk_fold()), chest_fold())
 	var reach: float = (_skater.upper_arm_length + _skater.forearm_length) \
 			* _skater.arm_working_extension + _skater.shoulder_reach_m
 	if _native_top != null:
@@ -821,7 +822,8 @@ func _reach_purpose(skater_pos: Vector3) -> float:
 func full_blade_reach() -> float:
 	var c: SkaterController = _controller
 	return TopHandIK.full_reach(_skater.shoulder.position,
-			deg_to_rad(c.velocity_lean_forward_max_deg + c.upper_body_lean_forward_max_deg),
+			deg_to_rad(maxf(c.velocity_lean_forward_max_deg, c.carry_fold_deg)
+					+ c.upper_body_lean_forward_max_deg),
 			GameRules.FACEOFF_SPAWN_HEIGHT + _skater.upper_body.position.y,
 			_skater.shoulder.position.y - c.hand_rest_y, c.rom_forward_reach_max, c.stick_length,
 			c.blade_height, _skater.blade_length * 0.5, GameRules.FACEOFF_SPAWN_HEIGHT)
@@ -966,9 +968,24 @@ func _stride_pump(delta: float) -> Vector3:
 
 # ── The shoulder the top hand works from ───────────────────────────────────────
 # Where the top arm is drawn from — the trunk's shoulder, then the faceoff
-# address's fold — from tick state alone (Scripts/controllers/CLAUDE.md).
+# address's fold or the chest's over the stick — from tick state alone
+# (Scripts/controllers/CLAUDE.md).
 func arm_shoulder() -> Vector3:
-	return address_shoulder(_trunk_shoulder())
+	return CarryPostureRules.folded_shoulder(address_shoulder(_trunk_shoulder()), chest_fold())
+
+
+# How far the chest folds over the stick (CarryPostureRules), from the blade
+# marker where the tick has it and the posture's own fold; the centre's address
+# folds it instead, and a shot or the block, which pose their own stick, not at
+# all. The gait draws the same fold (GaitCarryLayer), and the arms root where
+# it puts the shoulders.
+func chest_fold() -> float:
+	if _skater == null or not _controller.has_puck or SkaterPoseBridge.owner_of(_controller.get_shot_state() as State) \
+			!= SkaterPoseBridge.Owner.TRACKED:
+		return 0.0
+	var blade: Vector3 = _skater.upper_body.transform * _skater.blade.position
+	return CarryPostureRules.fold(Vector2(blade.x, blade.z), _skater.trunk_fold(),
+			deg_to_rad(_controller.carry_fold_deg)) * (1.0 - _address_blend())
 
 
 func _trunk_shoulder() -> Vector3:
