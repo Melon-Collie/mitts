@@ -270,7 +270,8 @@ void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thic
 
 bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3 &grip,
 		const Transform3D &frame, const Basis &trunk_texture,
-		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load, double grip_share) {
+		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load, double grip_share,
+		double index_sign) {
 	Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(ObjectDB::get_instance(skeleton_id));
 	if (skeleton == nullptr || bone_upper < 0) {
 		return false;
@@ -323,7 +324,8 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const Basis pad = out == Vector3() ? Basis() : Basis(arm_axis, out, arm_axis.cross(out));
 	skeleton->set_bone_pose(bone_elbow, Transform3D(pad.scaled_local(thick_elbow), elbow_s));
 	// _pose_glove (its direction is normalized(), the same unit vector).
-	const Basis glove = glove_basis(forearm_span.normalized(), grip_s, wrist_break_max);
+	const Basis glove = glove_basis(forearm_span.normalized(), grip_s * (real_t)index_sign,
+			wrist_break_max);
 	skeleton->set_bone_pose(bone_glove, Transform3D(glove.scaled_local(thick_glove), hand_s));
 	return true;
 }
@@ -336,7 +338,7 @@ void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_trunk", "keep_out", "root_share", "grip_min_cos"),
 			&NativeArmRig::set_trunk);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
-								 "lengths", "load", "grip_share"),
+								 "lengths", "load", "grip_share", "index_sign"),
 			&NativeArmRig::pose);
 	ClassDB::bind_method(D_METHOD("get_grip_target"), &NativeArmRig::get_grip_target);
 }

@@ -130,6 +130,9 @@ const POSES: Array = [
 	{"name": "gloves_tight", "puck": true, "cam_hand": "top", "cam": Vector3(0.7, 0.4, -0.9),
 		"steps": [[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[50, {"aim": Vector3(0.2, 0.0, -0.45)}]]},
+	{"name": "gloves_tight_above", "puck": true, "cam_hand": "top", "cam": Vector3(0.15, 0.6, -0.45),
+		"steps": [[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(0.2, 0.0, -0.45)}]]},
 	{"name": "wrister_aim", "puck": true, "steps": [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],

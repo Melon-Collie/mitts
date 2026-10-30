@@ -74,6 +74,12 @@ var grip_eases: bool = true
 var _grip_lean := PackedFloat64Array([0.0, 0.0])
 var _grip_lean_v := PackedFloat64Array([0.0, 0.0])
 var _grip_target := PackedFloat64Array([0.0, 0.0])
+# Which way each glove's index points along the shaft: +1 toward the blade.
+# Turned over by ease_grip when the palm faces away from the body.
+var _index_sign := PackedFloat64Array([1.0, 1.0])
+# How far the palm may face away from the body before the glove turns over
+# (the cosine off square to it), so a palm square to it does not flicker.
+const _PALM_TURN_COS: float = 0.2
 
 
 func setup(skater: Skater) -> void:
@@ -207,7 +213,7 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	_pose_cuff(cuff, elbow_s, hand_s)
 	# The elbow's own bend, which the grip and the trunk may have turned.
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, elbow_s - shoulder_s)
-	_pose_glove(glove, elbow_s, hand_s, grip_s)
+	_pose_glove(glove, elbow_s, hand_s, grip_s * _index_sign[arm])
 
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
@@ -225,7 +231,7 @@ func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
 			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset),
-			_grip_lean[arm] if grip_eases else -1.0):
+			_grip_lean[arm] if grip_eases else -1.0, _index_sign[arm]):
 		return false
 	_grip_target[arm] = _native_arms[arm].get_grip_target()
 	return true
@@ -357,8 +363,17 @@ func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
 # follows the arm's own motion, and a stick swung fast through upright flung the
 # elbow over in a frame or two. Whether it moved, so the arms are drawn again
 # while it settles.
+#
+# It also turns each glove on the shaft so its palm faces the body: a fist
+# grips a shaft with its palm toward the player and its back out, so the end
+# the thumb is on follows the hold — down the shaft to the blade in a stance,
+# up by the knob with the stick held upright in tight and the elbow out. Read
+# off the pose each glove was drawn in last frame, so the turn needs no copy
+# of the arm's solve, and only once the palm faces clearly away.
 func ease_grip(delta: float) -> bool:
 	var moved: bool = false
+	if _skeleton != null and _turn_gloves_to_the_body():
+		moved = true
 	for arm: int in 2:
 		var x: float = _grip_lean[arm]
 		var v: float = _grip_lean_v[arm]
@@ -368,6 +383,30 @@ func ease_grip(delta: float) -> bool:
 		if absf(_grip_lean[arm] - x) > 0.0001:
 			moved = true
 	return moved
+
+
+# Whether a glove turned over on its shaft.
+func _turn_gloves_to_the_body() -> bool:
+	var turned: bool = false
+	var trunk: Transform3D = _skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
+	var up: Vector3 = trunk.basis.y.normalized()
+	var right_on_top: bool = _skater.shoulder.position.x > 0.0
+	for arm: int in 2:
+		var hand: Vector3 = _skater.drawn_top_hand() if arm == 0 else _skater.bottom_hand.position
+		if _skater.stick_grip_axis(hand) == Vector3.ZERO:
+			continue
+		var glove: Transform3D = _skeleton.get_bone_pose(_ARM_PARTS[arm][4])
+		var to_body: Vector3 = trunk.origin - glove.origin
+		to_body -= up * to_body.dot(up)
+		if to_body.length_squared() < 0.000001:
+			continue
+		# The right glove's back is its +Z, the left's (its mirror) its −Z.
+		var right: bool = right_on_top == (arm == 0)
+		var palm: Vector3 = glove.basis.z.normalized() * (-1.0 if right else 1.0)
+		if palm.dot(to_body.normalized()) < -_PALM_TURN_COS:
+			_index_sign[arm] = -_index_sign[arm]
+			turned = true
+	return turned
 
 
 # ── Trunk texture and head ───────────────────────────────────────────────────

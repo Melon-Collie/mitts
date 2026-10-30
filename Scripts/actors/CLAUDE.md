@@ -105,18 +105,22 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   curled round the shaft and a thumb on the index side, so a left and a right
   glove. The body mesh is built per hand on top (`SkaterBodyMesh.shared_mesh`),
   and `SkaterConnectedRig.pose` swaps it when the top hand changes side.
-- **The index points to the blade** (`SkaterArmPoses.glove_basis`): both hands
-  hold the stick like a sword, the shaft leaving the fist by the thumb toward
-  the blade, and the wrist squares the fist across the shaft further toward
-  the little finger than toward the thumb (`Skater.wrist_break_max_deg`).
+- **The palm faces the body** (`SkaterArmRig._index_sign`, turned in
+  `ease_grip`): the knuckle roll lies along the shaft (`SkaterArmPoses.
+  glove_basis`), and which end the thumb is on follows the hold — down the
+  shaft to the blade in a stance, up by the knob with the stick held upright in
+  tight and the elbow out. Read off the pose each glove was last drawn in, and
+  turned only once the palm faces clearly away, so it does not flicker. The
+  wrist squares the fist across the shaft further toward the little finger than
+  toward the thumb (`Skater.wrist_break_max_deg`). `test_palm_faces_the_body.gd`.
 - **The elbow rides on the knob's side of the fist**
   (`TwoBoneIK.grip_lean` / `bend_for_grip`, `Skater.grip_forearm_min_cos`). An
   elbow hanging under a hand that holds the stick upright brings the forearm up
   into the fist with the blade end pointing back at it: a dagger held point
   down, however the glove is turned. So where the pole's elbow does that, the
   bend turns up the shaft and out, and a stick pulled in tight is held with the
-  elbow out level with the fist, the glove pointing across the body and the knob
-  out of its top. How far is eased per arm at render rate
+  elbow out level with the fist, the glove pointing across the body, palm in,
+  and the knob out of its top. How far is eased per arm at render rate
   (`SkaterArmRig.ease_grip`, which keeps the arms redrawing while it settles):
   computed fresh each frame it follows the whole arm's motion, and a stick swung
   fast through upright flung the elbow over in a tick. The C++ arm rig takes the

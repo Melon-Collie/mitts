@@ -43,13 +43,12 @@ static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: V
 # fingers, its knuckle roll lies across local X, little finger to index
 # (SkaterMeshBuilder's glove). Off the stick (`grip` ZERO) it lines up with the
 # forearm, rolled from world up like the cuff. On it, the knuckle roll lies
-# along the shaft with the index toward the blade (`grip` points butt → blade):
-# the shaft leaves the fist by the thumb toward the blade and by the little
-# finger toward the knob, in either hand. The hand turns toward square across
-# the shaft, bending at the wrist by up to `max_bend` radians — x toward the
-# little finger (ulnar), the way a forearm running toward the blade squares it,
-# y toward the thumb (radial): the wrist breaks as the stick swings against the
-# forearm.
+# along the shaft with the index the way `grip` points along it (which end is
+# the caller's: SkaterArmRig turns the palm toward the body). The hand turns
+# toward square across the shaft, bending at the wrist by up to `max_bend`
+# radians — x toward the little finger (ulnar), the way a forearm running toward
+# the index's end squares it, y toward the thumb (radial): the wrist breaks as
+# the stick swings against the forearm.
 static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: Vector2) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)

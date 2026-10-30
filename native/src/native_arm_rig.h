@@ -72,10 +72,12 @@ public:
 	bool pose(const godot::Vector3 &marker, const godot::Vector3 &hand,
 			const godot::Vector3 &grip, const godot::Transform3D &frame,
 			const godot::Basis &trunk_texture, const godot::Vector3 &pole,
-			const godot::Vector4 &lengths, const godot::Vector3 &load, double grip_share);
+			const godot::Vector4 &lengths, const godot::Vector3 &load, double grip_share,
+			double index_sign);
 	// `grip_share` is the turn up the shaft to pose with (SkaterArmRig's eased
 	// one), or below 0 for the one this pose asks for, which get_grip_target
-	// returns either way.
+	// returns either way. `index_sign` is which way along the shaft the glove's
+	// index points (SkaterArmRig._index_sign): +1 toward the blade.
 	double get_grip_target() const { return grip_target; }
 };
 
