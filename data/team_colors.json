@@ -927,7 +927,7 @@
     },
     {
       "name": "Dragonfruit",
-      "primary": "#CC1F93",
+      "primary": "#D1157A",
       "secondary": "#1A1A1A",
       "light": "#FFFFFF",
       "home": {
@@ -937,7 +937,7 @@
           "stroke": "#1A1A1A"
         },
         "jersey": {
-          "base": "#CC1F93",
+          "base": "#D1157A",
           "collar": "#1A1A1A",
           "stripes": [
             {
@@ -949,11 +949,21 @@
               "pos": 0.425,
               "width": 0.0434,
               "color": "#1A1A1A"
+            },
+            {
+              "pos": 0.85,
+              "width": 0.05,
+              "color": "#1A1A1A"
+            },
+            {
+              "pos": 0.9,
+              "width": 0.05,
+              "color": "#FFFFFF"
             }
           ]
         },
         "sleeve": {
-          "base": "#CC1F93",
+          "base": "#D1157A",
           "stripes": [
             {
               "pos": 0.679,
@@ -973,7 +983,7 @@
           "stripes": []
         },
         "socks": {
-          "base": "#CC1F93",
+          "base": "#D1157A",
           "stripes": [
             {
               "pos": 0.5,
@@ -981,7 +991,7 @@
               "color": "#FFFFFF"
             },
             {
-              "pos": 0.4,
+              "pos": 0.5,
               "width": 0.08,
               "color": "#1A1A1A"
             }
@@ -997,12 +1007,12 @@
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "text": "#CC1F93",
+          "text": "#D1157A",
           "stroke": "#1A1A1A"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#CC1F93",
+          "collar": "#D1157A",
           "stripes": []
         },
         "sleeve": {
@@ -1011,12 +1021,12 @@
             {
               "pos": 0.858,
               "width": 0.472,
-              "color": "#CC1F93"
+              "color": "#D1157A"
             },
             {
               "pos": 0.457,
               "width": 0.094,
-              "color": "#CC1F93"
+              "color": "#D1157A"
             },
             {
               "pos": 0.679,
@@ -1036,7 +1046,7 @@
           "stripes": []
         },
         "socks": {
-          "base": "#CC1F93",
+          "base": "#D1157A",
           "stripes": [
             {
               "pos": 0.5,
@@ -1044,7 +1054,7 @@
               "color": "#FFFFFF"
             },
             {
-              "pos": 0.4,
+              "pos": 0.5,
               "width": 0.08,
               "color": "#1A1A1A"
             }
@@ -1052,7 +1062,7 @@
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#CC1F93",
+          "color": "#D1157A",
           "stroke": "#1A1A1A",
           "outline": "#1A1A1A"
         }
