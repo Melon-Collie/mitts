@@ -524,6 +524,33 @@ static func torso_ring(station: int) -> PackedVector3Array:
 	return ring
 
 
+# How far `p` (torso-local) lies outside the torso's rest rings, metres, negative
+# inside: along the ring's ellipse radius at p's height, the circumscribed
+# ellipse of the faceted ring, so a point that clears it clears the faces.
+# Below the hem the tail hangs on at the hem's girth; above the collar is the
+# neck and head, which nothing here measures against, so INF.
+static func torso_clearance(p: Vector3) -> float:
+	if p.y > _TORSO_PROFILE[0].x + 0.0001:
+		return INF
+	var last: int = _TORSO_PROFILE.size() - 1
+	var radius: float = _TORSO_PROFILE[last].y
+	var sway: float = _TORSO_REAR_SWAY[last]
+	for i: int in last:
+		var a: Vector2 = _TORSO_PROFILE[i]
+		var b: Vector2 = _TORSO_PROFILE[i + 1]
+		if p.y >= b.x:
+			var t: float = (a.x - p.y) / (a.x - b.x)
+			radius = lerpf(a.y, b.y, t)
+			sway = lerpf(_TORSO_REAR_SWAY[i], _TORSO_REAR_SWAY[i + 1], t)
+			break
+	var q := Vector2(p.x, p.z - sway)
+	var span: float = q.length()
+	if span < 0.000001:
+		return -radius * _TORSO_Z_SCALE
+	var e: float = Vector2(q.x / (radius * _TORSO_X_SCALE), q.y / (radius * _TORSO_Z_SCALE)).length()
+	return span * (1.0 - 1.0 / e)
+
+
 # The pants are wider than deep by this, as the torso is.
 const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 

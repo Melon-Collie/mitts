@@ -225,6 +225,14 @@ func _arm_pole(marker_local: Vector3, pole_sign: float) -> Vector3:
 			_skater.get_check_lead(), signf(marker_local.x)))
 
 
+# How far a point in skeleton space lies outside the jersey as the torso is
+# posed now, metres, negative inside (SkaterMeshBuilder.torso_clearance).
+func torso_clearance(point: Vector3) -> float:
+	var torso: Transform3D = _skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
+	return SkaterMeshBuilder.torso_clearance(torso.affine_inverse() * point) \
+			* torso.basis.get_scale().x
+
+
 # A shoulder MARKER's place on the visible trunk, in UpperBody's frame — where a
 # reactive hand must stay within reach of. Before the rig is built, the marker.
 func visible_shoulder(marker_local: Vector3) -> Vector3:

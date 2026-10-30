@@ -143,6 +143,29 @@ func test_arm_rig_meshes_keep_their_placement_dimensions() -> void:
 			"knob mesh height must match KNOB_HEIGHT_M")
 
 
+# The torso's clearance query measures the rings the jersey is built on: each
+# ring's corners lie on it, its middle is inside, and a corner pushed out along
+# its radius clears it by the push.
+func test_torso_clearance_measures_the_rest_rings() -> void:
+	for station: int in SkaterMeshBuilder.TORSO_HEM_STATION + 1:
+		var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station)
+		var middle := Vector3.ZERO
+		for k: int in ring.size() - 1:
+			middle += ring[k]
+		middle /= float(ring.size() - 1)
+		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.1,
+				"station %d's middle is inside" % station)
+		for k: int in ring.size() - 1:
+			var corner: Vector3 = ring[k]
+			assert_almost_eq(SkaterMeshBuilder.torso_clearance(corner), 0.0, 0.0005,
+					"station %d corner %d is on the surface" % [station, k])
+			var out: Vector3 = corner - middle
+			out.y = 0.0
+			assert_almost_eq(SkaterMeshBuilder.torso_clearance(
+					corner + out.normalized() * 0.05), 0.05, 0.005,
+					"station %d corner %d pushed out 5 cm clears by 5 cm" % [station, k])
+
+
 func test_helmet_opens_at_the_face() -> void:
 	# The helmet shell's rim must sit brow-high at the front (−Z, exposing
 	# the head ball's face) and reach lower at the back — the asymmetry that
