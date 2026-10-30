@@ -11,6 +11,9 @@ class_name AIRolePressure
 # Engaged/closing boundary: inside it the argmax runs the full polar ring,
 # outside it only the calculated closing stands. 1.5 search steps.
 const PRESSURE_INNER_RING_RANGE_M: float = 4.5
+# Rounds of the rendezvous with a stand that rides the carrier: each skates to
+# where the stand will have got to by the last round's arrival.
+const SET_IN_ROUNDS: int = 3
 
 
 # `cover_priced`: the caller has already priced who picks the play up if the
@@ -176,10 +179,12 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		if AIStationSearch.too_close_to_teammate(c, our_team_excluding_self):
 			continue
 
-		# Higher = better for us, i.e. lower for the carrier.
+		# Higher = better for us, i.e. lower for the carrier: what he can do from
+		# where he is when we are set there.
 		var pressure_score: float = -AIDefensiveVerbs.carrier_best_option(
 				poss, c, ride, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
-				carrier_velocity, our_goalie_pos, opp_teammates, bases) \
+				carrier_velocity, our_goalie_pos, opp_teammates, bases,
+				_set_in(ctx, ap, c, ride)) \
 				+ AIStationSearch.incumbent_bonus(ctx, c)
 		if pressure_score > best_score:
 			best_score = pressure_score
@@ -253,6 +258,20 @@ static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
 	d.pressures_puck = true
 	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
 	return d
+
+
+# How long until I am set at `stand`, which rides the carrier at `ride`: the
+# arrival clock from where I am and how I am moving, to where the stand will
+# be by then. No later than the carrier's trip to where a ridden retreat ends
+# (AIRoleRushD.RETREAT_FINISH_M), past which there is no stand left to take.
+static func _set_in(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3, ride: Vector3) -> float:
+	var t: float = 0.0
+	for _i: int in SET_IN_ROUNDS:
+		t = AIArrival.time_to_arrive(ctx.self_pos, stand + ride * t, ctx.self_velocity, ctx.self_max_speed,
+				ctx.self_max_accel)
+	if ap.closing <= 0.0:
+		return t
+	return minf(t, maxf(ap.net_dist - AIRoleRushD.RETREAT_FINISH_M, 0.0) / ap.closing)
 
 
 # How far goal-side of the carrier I stand, down his line to our net.
