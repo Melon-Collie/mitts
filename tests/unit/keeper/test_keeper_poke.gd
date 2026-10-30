@@ -10,6 +10,8 @@ extends GutTest
 # could reach.
 
 const SPEED_M_S: float = 5.0
+# A skater's body, the default build's.
+const BODY_R: float = 0.35
 const DRIVING := 3.0
 const BEARINGS_DEG: Array[float] = [-90.0, -80.0, -70.0, -60.0, -50.0, -40.0, -30.0, -20.0, -10.0, 0.0, 10.0,
 		20.0, 30.0, 40.0, 50.0, 60.0, 70.0, 80.0, 90.0]
@@ -47,7 +49,7 @@ func _at_him(carrier: Vector2) -> Vector2:
 
 
 func _lands(puck: Vector2, carrier: Vector2, mirrored: bool = false) -> bool:
-	return _poke.plan(puck, _at_him(carrier), carrier, _motor, mirrored, SPEED_M_S)
+	return _poke.plan(puck, _at_him(carrier), carrier, BODY_R, _motor, mirrored, SPEED_M_S)
 
 
 func test_a_puck_driven_at_him_he_pokes_the_blade_onto_where_it_will_be() -> void:
@@ -72,6 +74,7 @@ func test_one_he_cannot_get_the_blade_to_he_leaves() -> void:
 
 func test_one_held_behind_the_carriers_body_he_leaves() -> void:
 	assert_false(_lands(Vector2(0.0, -2.6), Vector2(0.0, -2.2)), "the body between")
+	assert_false(_lands(Vector2(0.0, -2.6), Vector2(0.0, -2.6 - 0.5 * BODY_R)), "inside the body, among the skates")
 
 
 func test_one_behind_his_goal_line_he_leaves() -> void:
@@ -86,11 +89,11 @@ func test_one_behind_his_goal_line_he_leaves() -> void:
 func test_only_a_carrier_driving_at_him() -> void:
 	var puck := Vector2(-0.3, -2.6)
 	var carrier := Vector2(-0.3, -3.2)
-	assert_false(_poke.plan(puck, Vector2(DRIVING, 0.0), carrier, _motor, false, SPEED_M_S), "skating across")
-	assert_false(_poke.plan(puck, Vector2.ZERO, carrier, _motor, false, SPEED_M_S), "stopped")
-	assert_false(_poke.plan(puck, _at_him(carrier).normalized() * (KeeperPoke.DRIVING_M_S - 0.5), carrier, _motor,
+	assert_false(_poke.plan(puck, Vector2(DRIVING, 0.0), carrier, BODY_R, _motor, false, SPEED_M_S), "skating across")
+	assert_false(_poke.plan(puck, Vector2.ZERO, carrier, BODY_R, _motor, false, SPEED_M_S), "stopped")
+	assert_false(_poke.plan(puck, _at_him(carrier).normalized() * (KeeperPoke.DRIVING_M_S - 0.5), carrier, BODY_R, _motor,
 			false, SPEED_M_S), "gliding in")
-	assert_false(_poke.plan(Vector2(-2.6, -2.6), Vector2(0.0, DRIVING), Vector2(-2.6, -3.2), _motor, false, SPEED_M_S),
+	assert_false(_poke.plan(Vector2(-2.6, -2.6), Vector2(0.0, DRIVING), Vector2(-2.6, -3.2), BODY_R, _motor, false, SPEED_M_S),
 			"driving down the wing, wide of him")
 
 
@@ -107,10 +110,10 @@ func test_under_way_the_blade_follows_the_puck_until_it_is_pulled() -> void:
 	var carrier := Vector2(-0.5, -3.2)
 	var motion: Vector2 = _at_him(carrier)
 	var blade := Vector3(0.1, 0.0, -1.2)
-	assert_true(_poke.track(Vector2(-0.6, -2.6), motion, carrier, _motor, false, SPEED_M_S, blade), "followed")
+	assert_true(_poke.track(Vector2(-0.6, -2.6), motion, carrier, BODY_R, _motor, false, SPEED_M_S, blade), "followed")
 	assert_almost_eq(_poke.reach_s, blade.distance_to(_poke.target) / SPEED_M_S, 1e-5, "from where the blade is")
 	assert_lt(_blade().x, -0.3, "across to it")
-	assert_false(_poke.track(Vector2(-0.5, -3.7), motion, carrier, _motor, false, SPEED_M_S, blade),
+	assert_false(_poke.track(Vector2(-0.5, -3.7), motion, carrier, BODY_R, _motor, false, SPEED_M_S, blade),
 			"pulled behind the body")
 
 

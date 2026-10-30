@@ -245,15 +245,16 @@ func _poke_check() -> void:
 	if _poking:
 		if save.returning() or not theirs:
 			return
-		if poke.track(play.puck, play.motion, play.carrier, motor, _keeper.skeleton.mirrored,
-				save.blocker_speed_m_s, save.hand_out_at()):
+		if poke.track(play.puck, play.motion, play.carrier, puck.get_carrier().collision_radius(), motor,
+				_keeper.skeleton.mirrored, save.blocker_speed_m_s, save.hand_out_at()):
 			save.poke(poke.target)
 		else:
 			save.release()
 		return
 	if not theirs or motor.rest == KeeperRoute.Rest.POST or not (motor.can_save(false) or motor.can_save(true)):
 		return
-	if poke.plan(play.puck, play.motion, play.carrier, motor, _keeper.skeleton.mirrored, save.blocker_speed_m_s):
+	if poke.plan(play.puck, play.motion, play.carrier, puck.get_carrier().collision_radius(), motor,
+			_keeper.skeleton.mirrored, save.blocker_speed_m_s):
 		save.poke(poke.target)
 		_poking = true
 		_blade_was = Vector3.INF
