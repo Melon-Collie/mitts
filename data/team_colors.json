@@ -1247,8 +1247,8 @@
           "collar": "#E8862A",
           "stripes": [
             {
-              "pos": 0.95,
-              "width": 0.04,
+              "pos": 0.937,
+              "width": 0.066,
               "color": "#FFFFFF"
             }
           ]
@@ -1311,8 +1311,8 @@
           "collar": "#E8862A",
           "stripes": [
             {
-              "pos": 0.95,
-              "width": 0.04,
+              "pos": 0.937,
+              "width": 0.066,
               "color": "#5B2A6E"
             }
           ]
