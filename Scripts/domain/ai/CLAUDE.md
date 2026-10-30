@@ -243,12 +243,13 @@ set on a post in time, it goes to the soonest body goal-side of the carrier,
 from any group: a man behind the play is soonest to the spot only because the
 carrier is already past it, and handing him the carrier leaves nobody on him
 (`test_five_on_five_set_shape.gd` runs the whole shape against a three-man
-break). In 3v3, a post nobody can be on in time is a line already lost, and its
-holder rides the carrier back rather than holding it: a body already past the
-line races only his trip across to its lane, so the man riding the carrier back
-in the strong lane keeps him. Raced up to the post, he has the most momentum to
-brake out, and the carrier went to the slower man in the middle while he drifted
-off to it (`test_role_slots.gd`). The jobs:
+break). A post nobody can be on in time is a line already lost, and its holder
+rides the carrier back rather than holding it: a body already past the line
+races only his trip across to its lane, so the man riding the carrier back in
+the strong lane keeps him, and in 5v5 such a body takes no home-side bias,
+which decides the rest state. Raced up to the post, he has the most momentum to
+brake out, and the carrier went to the slower man in the middle while he
+drifted off to it (`test_role_slots.gd`, `test_role_slots_5v5.gd`). The jobs:
 
 - `BACK_STRONG` owns the carrier and **stands him up at our line**: while even a
   man standing on the line would make his retreat in time (the stand priced with
