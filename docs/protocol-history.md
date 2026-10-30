@@ -437,3 +437,10 @@ here whenever you bump, in the same format.
 #      so a v89 peer would decode cleanly and desync; mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: an older replay's stick-check
 #      timing reads a third long, which is cosmetic.
+# v91: the skater block's body-lock byte carries slapshot_pinned in bit 3
+#      (Skater.is_slapshot_pinning: the carried puck held on the ice through a
+#      wind-up and through the recovery after one is called off), so a replay
+#      holds the puck where the host did instead of snapping it under the
+#      raised blade. Same size; a v90 peer ignores the bit, but mixed builds
+#      must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
+#      the bit as clear, and its wind-ups are still recognized by shot state.

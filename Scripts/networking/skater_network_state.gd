@@ -37,6 +37,11 @@ var pin_strength: float = 0.0
 # Skater.is_diving: a dive's down window rides knockdown_timer and recoil_dir;
 # this says it is a dive (its stick still plays, its body blocks low).
 var diving: bool = false
+# Skater.is_slapshot_pinning: the carried puck holds its spot on the ice instead
+# of riding the blade — through a slapshot's wind-up, and through the recovery
+# after one is called off, while the blade comes back down to it. A replay
+# follows the recorded puck while it is set and pins to the blade otherwise.
+var slapshot_pinned: bool = false
 # Body-check stagger: seconds of thrust/grip-penalty recovery remaining on the
 # victim. Replicated so the local player's reconcile can snap it to the host
 # baseline before replay — same treatment as velocity — and it decays
@@ -142,6 +147,7 @@ func to_array() -> Array:
 		pin_role,
 		pin_strength,
 		diving,
+		slapshot_pinned,
 	]
 
 # The stick-play, pin and dive fields, which are discrete: a reader between two
@@ -155,6 +161,7 @@ func copy_stick_play_from(s: SkaterNetworkState) -> void:
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
 	diving = s.diving
+	slapshot_pinned = s.slapshot_pinned
 
 
 func copy_from(s: SkaterNetworkState) -> void:
@@ -190,6 +197,7 @@ func copy_from(s: SkaterNetworkState) -> void:
 	pin_role = s.pin_role
 	pin_strength = s.pin_strength
 	diving = s.diving
+	slapshot_pinned = s.slapshot_pinned
 	host_timestamp = s.host_timestamp
 	blade_contact_world = s.blade_contact_world
 	top_hand_world = s.top_hand_world
@@ -244,4 +252,6 @@ static func from_array(data: Array) -> SkaterNetworkState:
 		state.pin_strength = data[30]
 	if data.size() > 31:
 		state.diving = data[31]
+	if data.size() > 32:
+		state.slapshot_pinned = data[32]
 	return state
