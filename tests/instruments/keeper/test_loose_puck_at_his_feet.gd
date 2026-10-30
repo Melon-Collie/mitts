@@ -38,6 +38,7 @@ var _keeper: KeeperController = null
 var _touched: String = "-"
 var _covered: bool = false
 var _set_on := Vector2(0.0, -6.0)
+var _last_status: String = ""
 
 
 func _build() -> void:
@@ -237,6 +238,16 @@ func _trace(c: Array, lines: PackedStringArray) -> void:
 		var p: Vector3 = _keeper._net.affine_inverse() * _puck.global_position
 		var v1: Vector3 = inv * _puck.get_puck_velocity()
 		var part: Node = _puck._goalie_contact.part
+		var inv2: Basis = _keeper._net.basis.inverse()
+		var plan_ok: bool = _keeper.cover.plan(p, inv2 * _puck.get_puck_velocity(), _keeper.motor, _keeper._keeper.skeleton.mirrored)
+		var into := Basis(Vector3.UP, _keeper.motor.yaw).inverse()
+		var mine: Vector3 = into * (p - Vector3(_keeper.motor.x, 0.0, _keeper.motor.z))
+		var st: String = "plan %s reading %s fetching %s covering %s mover %s rest %d" % [plan_ok, _keeper.read.reading(),
+				_keeper._fetching, _keeper._covering, KeeperMotor.Mover.keys()[_keeper.motor._mover], _keeper.motor.rest]
+		if st != _last_status:
+			_last_status = st
+			lines.append("   . t %.2f %s | puck in his frame (%+.2f across, %+.2f ahead) speed %.2f" % [t, st, mine.x, -mine.z,
+					_puck.get_puck_velocity().length()])
 		if part != null:
 			var pv: Vector3 = inv * _puck._goalie_contact.part_velocity
 			var n: Vector3 = inv * _puck._goalie_contact.normal
