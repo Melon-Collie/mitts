@@ -420,6 +420,8 @@ var _swing_basis: Basis = Basis.IDENTITY
 var _swing_up: Vector3 = Vector3.UP
 var _swing_weight: float = 0.0
 var _swing_from_slap: bool = false
+# The delta this render pass was handed, which the swing's release eases by.
+var _render_delta: float = 0.0
 # The params it was built from, read by the carry seat (_seat_on_puck).
 var _blade_params: StickBladeMeshBuilder.Params = null
 # Where a tied blade is drawn toward its partner's (StickTieDraw, world XZ): a
@@ -1015,6 +1017,7 @@ func _process(delta: float) -> void:
 	#
 	# The bow runs first: a bow that moved re-poses the knob and the bottom glove,
 	# which ride it.
+	_render_delta = delta
 	var flexed: bool = _stick.update_flex(delta)
 	# The stick, the knob and the blade mesh are posed from the markers as drawn
 	# this frame (drawn_blade, drawn_top_hand) and are not interpolated again:
@@ -1586,7 +1589,7 @@ func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
 	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
 	_swing_up = arc * _swing_anchor_up
 	_swing_weight = 1.0 if swinging \
-			else move_toward(_swing_weight, 0.0, get_process_delta_time() / SWING_RELEASE_S)
+			else move_toward(_swing_weight, 0.0, _render_delta / SWING_RELEASE_S)
 	var q: Quaternion = dressed.get_rotation_quaternion().slerp(
 			_swing_basis.get_rotation_quaternion(), _swing_weight)
 	return to_hips.inverse() * Basis(q)
