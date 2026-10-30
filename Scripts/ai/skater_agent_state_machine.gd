@@ -2738,11 +2738,10 @@ func _carry_reach_behind_net(self_pos: Vector3) -> float:
 
 
 func _carry_mouse_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
-	# Goalie cradle: within _blade_reach of EITHER goalie, the forward aim drives
-	# the blade through him, and stick-on-goalie contact dislodges the puck — a
-	# feedback loop, since the bot reacquires it and aims forward again. Parking
-	# the cursor on the body holds the blade tight with zero extension; facing is
-	# held (zero direction), so the bot backs out facing the play.
+	# Goalie cradle: within _blade_reach of EITHER goalie, the forward aim would
+	# drive the blade into his gear, which only holds it off (GoalieGearCollision).
+	# Parking the cursor on the body holds the blade tight with zero extension;
+	# facing is held (zero direction), so the bot backs out facing the play.
 	var goalie_pos: Vector3 = _goalie_now(snapshot)
 	if self_pos.distance_to(goalie_pos) < _blade_reach:
 		return self_pos
