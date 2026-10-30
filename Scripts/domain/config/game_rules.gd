@@ -309,9 +309,8 @@ static func net_proximity(pos_xz: Vector2, probe: float) -> Vector2:
 # Base goalie footprint for the analytic skater body-block, like the boards/net.
 # Two footprints by stance: a cylinder while standing/RVH, a wide-
 # but-shallow oriented box in the butterfly (the leg pads spread laterally).
-# These mirror the blade clamp's goalie_block_radius / butterfly_pad_half_* on
-# SkaterController — the goalie is beatable-realism furniture here, not a precise
-# collision hull. The skater's own collision radius is added on top at the call
+# The goalie is beatable-realism furniture here, not a precise collision hull
+# (the stick meets his real gear: GoalieBladeCollision). The skater's own collision radius is added on top at the call
 # site (Skater.clamp_body_to_goalies) so the body EDGE stops at the goalie
 # surface; kept here (not on the actor) so the live tick and the reconcile replay
 # read one shared value.

@@ -272,12 +272,19 @@ var _penalty_goalie: Goalie = null
 var _penalty_goalie_controller: GoalieController = null
 var puck_controller: PuckController = null
 
-# Cached snapshot of goalie pose for skater IK clamping. Refreshed once per
-# physics tick from `goalies` / `goalie_controllers`. Without the cache,
+# Cached snapshot of goalie pose for the skater's body clamp. Refreshed once
+# per physics tick from `goalies` / `goalie_controllers`. Without the cache,
 # `get_goalie_data()` allocates a fresh `Array[Dictionary]` of two dict
-# literals on every call — `SkaterIKCoordinator.clamp_blade_from_goalies`
-# calls it on every skater per tick (~12 calls every physics tick).
+# literals on every call, and every skater calls it every tick.
 var _cached_goalie_data: Array[Dictionary] = []
+# Every goalie's save boxes, in GoalieContactDetector's packed layout, for the
+# stick's collision with him (GoalieBladeCollision); refreshed with the data
+# above, the gather's scratch kept so a tick allocates nothing.
+var _cached_goalie_boxes := PackedFloat32Array()
+var _box_goalies: Array = []
+var _box_parts: Array = []
+var _box_part_goalies: Array = []
+var _box_velocities := PackedVector3Array()
 
 # Tutorial mode gates offsides detection on this flag. Defaults to false so
 # every step except STEP_OFFSIDES has it off; TutorialManager flips it true
@@ -5722,11 +5729,15 @@ func get_goalie_data() -> Array[Dictionary]:
 	return _cached_goalie_data
 
 
+func get_goalie_boxes() -> PackedFloat32Array:
+	return _cached_goalie_boxes
+
+
 # Rebuilds `_cached_goalie_data` from the live goalies array. Reuses each
 # Dictionary in place so the steady-state per-tick cost is three key
 # writes per goalie rather than a full Array+Dictionary allocation. The single-
 # net drill goalies (tutorial / penalty), kept out of the `goalies` array, are
-# appended when present so the analytic blade AND body clamps hold the skater
+# appended when present so the stick's wall and the body clamp hold the skater
 # clear of them too — nothing else would stop a skater walking through the drill
 # goalie into the net.
 func _refresh_goalie_data_cache() -> void:
@@ -5750,6 +5761,15 @@ func _refresh_goalie_data_cache() -> void:
 	if _penalty_goalie != null:
 		_write_goalie_data_entry(_cached_goalie_data[idx], _penalty_goalie, _penalty_goalie_controller)
 		idx += 1
+	_box_goalies.clear()
+	_box_goalies.append_array(goalies)
+	if _tutorial_goalie != null:
+		_box_goalies.append(_tutorial_goalie)
+	if _penalty_goalie != null:
+		_box_goalies.append(_penalty_goalie)
+	var boxes: int = GoalieContactDetector.gather_boxes(_box_goalies, _cached_goalie_boxes, _box_parts,
+			_box_part_goalies, _box_velocities, false)
+	_cached_goalie_boxes.resize(boxes * GoalieBladeCollision.FLOATS_PER_BOX)
 
 
 func _write_goalie_data_entry(entry: Dictionary, g: Goalie, gc: GoalieController) -> void:

@@ -101,7 +101,7 @@ var _native_pass: RefCounted = null
 var native_pass_enabled: bool = true
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
-var _pass_goalies := PackedFloat64Array()
+var _no_goalies := PackedFloat32Array()
 # NativeBladePass.run's inputs, by index (its Scalar and Vec enums).
 enum PassS {
 	DELTA, HOLD_BLADE, HOLD_SEAT, HAS_PUCK, LEFT_HANDED, WRISTER_AIM, TRUNK_FOLD,
@@ -186,10 +186,6 @@ func _sync_pass_config() -> void:
 		"hit_commit_blade_bearing_x": c.hit_commit_blade_bearing_x,
 		"hit_commit_blade_bearing_z": c.hit_commit_blade_bearing_z,
 		"hit_commit_blade_sweep": c.hit_commit_blade_sweep,
-		"goalie_block_radius": c.goalie_block_radius,
-		"butterfly_pad_half_x": c.butterfly_pad_half_x,
-		"butterfly_pad_half_z": c.butterfly_pad_half_z,
-		"goalie_strip_power": c.goalie_strip_power,
 		"bottom_hand_grip_fraction": c.bottom_hand_grip_fraction,
 		"faceoff_center_grip_fraction": c.faceoff_center_grip_fraction,
 		"twist_limit": SkaterSpineRig.TWIST_LIMIT,
@@ -532,12 +528,11 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 					back = -_skater.global_transform.basis.z
 				_controller._do_release(back.normalized(), 3.0)
 
-	# Goalie body clamp (strips puck on contact) + the net.
+	# The goalie, then the net, both pure collision: neither strips.
 	# All work in world space; convert back once at the end.
 	var heel_world: Vector3 = _skater.upper_body_to_global(wall_clamped)
-	var clamped_heel: Vector3 = heel_world
-	if _controller.has_puck:
-		clamped_heel = clamp_blade_from_goalies(clamped_heel)
+	var clamped_heel: Vector3 = heel_world + resolve_blade_against_goalies(heel_world,
+			_skater.upper_body_to_global(hand_local))
 	# The net is pure collision here — no strip, no legality. The blade stops on
 	# iron and sinks into twine; whether the PUCK survives that is the puck's own
 	# collision to resolve (SkaterController._collide_pinned_puck_with_net), which
@@ -634,16 +629,8 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	v[PassV.UB_ROTATION] = _skater.upper_body.rotation
 	v[PassV.LAST_TARGET] = last_target_blade_world
 	v[PassV.NET_ANCHOR] = _net_side_anchor
-	_pass_goalies.clear()
-	if has_puck and _controller._game_state.has_method("get_goalie_data"):
-		for data: Dictionary in _controller._game_state.get_goalie_data():
-			var gpos: Vector3 = data["position"]
-			_pass_goalies.append(gpos.x)
-			_pass_goalies.append(gpos.z)
-			_pass_goalies.append(1.0 if data["is_butterfly"] else 0.0)
-			_pass_goalies.append(data["rotation_y"])
 	_native_pass.run(_skater.global_transform, _skater.upper_body.global_transform,
-			s, v, _pass_goalies)
+			s, v, _goalie_boxes())
 	if _native_pass.get_skipped():
 		return
 	last_target_blade_world = _native_pass.get_last_target()
@@ -1132,64 +1119,29 @@ func _blade_toe_for(heel_world: Vector3) -> Vector3:
 		return heel_world
 	return heel_world + forward.normalized() * _skater.blade_length
 
-# ── Goalie Body / Butterfly Clamp ─────────────────────────────────────────────
-# Pushes blade_world out of every goalie's collision zone and strips the puck
-# on contact. Standing/RVH use an XZ cylinder; butterfly uses an oriented box
-# around the leg pads. Returns the adjusted world position.
-func clamp_blade_from_goalies(blade_world: Vector3) -> Vector3:
-	if not _controller._game_state.has_method("get_goalie_data"):
-		return blade_world
-	var goalie_data: Array[Dictionary] = _controller._game_state.get_goalie_data()
-	var result: Vector3 = blade_world
-	for data: Dictionary in goalie_data:
-		var gpos: Vector3 = data["position"]
-		if data["is_butterfly"]:
-			var prev: Vector3 = result
-			result = _clamp_blade_butterfly_box(result, gpos, data["rotation_y"])
-			if result != prev and _controller.has_puck:
-				break
-		else:
-			var to_blade := Vector2(result.x - gpos.x, result.z - gpos.z)
-			var dist: float = to_blade.length()
-			if dist < _controller.goalie_block_radius:
-				var push_dir: Vector2 = to_blade.normalized() if dist > 0.001 else Vector2(0.0, -sign(gpos.z) if gpos.z != 0.0 else 1.0)
-				result.x = gpos.x + push_dir.x * _controller.goalie_block_radius
-				result.z = gpos.z + push_dir.y * _controller.goalie_block_radius
-				if _controller.has_puck:
-					_controller._do_release(Vector3(push_dir.x, 0.0, push_dir.y), _controller.goalie_strip_power)
-					break
-	return result
+# ── The goalie ────────────────────────────────────────────────────────────────
+# The translation that holds the blade at `heel_world` out of every goalie's
+# gear (GoalieBladeCollision): a wall it slides along, carrying or not, that
+# never strips. Swept from the blade's middle at the start of the tick. The
+# blade lies along the shaft from this tick's hand at `hand_world`, as
+# Skater.set_blade_position will turn it, not along last tick's facing: a stick
+# swept across him turns a long way in a tick, and its toe with it.
+func resolve_blade_against_goalies(heel_world: Vector3, hand_world: Vector3) -> Vector3:
+	var boxes: PackedFloat32Array = _goalie_boxes()
+	if boxes.is_empty():
+		return Vector3.ZERO
+	var along: Vector3 = heel_world - hand_world
+	along.y = 0.0
+	var toe: Vector3 = heel_world + along.normalized() * _skater.blade_length \
+			if along.length_squared() > 0.000001 else heel_world
+	return GoalieBladeCollision.resolve(_skater.get_prev_blade_contact_global(), heel_world, toe,
+			_controller.net_blade_half_thickness, boxes)
 
-# Pushes blade_world out of the goalie's butterfly leg-pad box in goalie local XZ.
-# Strips the puck on contact. Returns the adjusted world position (unchanged if outside).
-func _clamp_blade_butterfly_box(blade_world: Vector3, gpos: Vector3, rot_y: float) -> Vector3:
-	var dx: float = blade_world.x - gpos.x
-	var dz: float = blade_world.z - gpos.z
-	var local_x: float = dx * cos(rot_y) + dz * sin(rot_y)
-	var local_z: float = -dx * sin(rot_y) + dz * cos(rot_y)
-	if abs(local_x) >= _controller.butterfly_pad_half_x or abs(local_z) >= _controller.butterfly_pad_half_z:
-		return blade_world
-	# Inside box — escape along shortest axis.
-	var ox: float = _controller.butterfly_pad_half_x - abs(local_x)
-	var oz: float = _controller.butterfly_pad_half_z - abs(local_z)
-	var escaped_local_x: float
-	var escaped_local_z: float
-	if ox < oz:
-		escaped_local_x = _controller.butterfly_pad_half_x * signf(local_x) if local_x != 0.0 else _controller.butterfly_pad_half_x
-		escaped_local_z = local_z
-	else:
-		escaped_local_x = local_x
-		escaped_local_z = _controller.butterfly_pad_half_z * signf(local_z) if local_z != 0.0 else _controller.butterfly_pad_half_z
-	var world_dx: float = escaped_local_x * cos(rot_y) - escaped_local_z * sin(rot_y)
-	var world_dz: float = escaped_local_x * sin(rot_y) + escaped_local_z * cos(rot_y)
-	var result: Vector3 = blade_world
-	result.x = gpos.x + world_dx
-	result.z = gpos.z + world_dz
-	if _controller.has_puck:
-		var escape := Vector2(world_dx - dx, world_dz - dz)
-		var push_dir: Vector2 = escape.normalized() if escape.length_squared() > 0.0001 else Vector2(world_dx, world_dz).normalized()
-		_controller._do_release(Vector3(push_dir.x, 0.0, push_dir.y), _controller.goalie_strip_power)
-	return result
+
+func _goalie_boxes() -> PackedFloat32Array:
+	if not _controller._game_state.has_method("get_goalie_boxes"):
+		return _no_goalies
+	return _controller._game_state.get_goalie_boxes()
 
 # ── Geometry Helpers ──────────────────────────────────────────────────────────
 # Converts the world-space blade_height to upper-body-local Y.
