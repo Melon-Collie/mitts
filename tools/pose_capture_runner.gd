@@ -105,6 +105,17 @@ const POSES: Array = [
 		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[50, {"aim": Vector3(-2.6, 0.0, -0.4)}],
 	]},
+	# The blade pulled in to the feet on the forehand: the top hand held close
+	# under its shoulder, its fist drawn out of the jersey and bent at the wrist
+	# (SkaterArmRig.torso_push, SkaterArmPoses.place_wrist), from behind and ahead.
+	{"name": "stickhandle_at_feet", "puck": true, "steps": [
+		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(-0.35, 0.0, -0.15)}],
+	]},
+	{"name": "stickhandle_at_feet_front", "puck": true, "cam": Vector3(-1.6, 0.6, -2.0), "steps": [
+		[20, {"aim": Vector3(0.4, 0.0, -2.0)}],
+		[50, {"aim": Vector3(-0.35, 0.0, -0.15)}],
+	]},
 	{"name": "wrister_aim", "puck": true, "steps": [
 		[10, {"aim": Vector3(0.4, 0.0, -2.0)}],
 		[45, {"aim": Vector3(1.4, 0.0, -3.0), "shoot": true}],

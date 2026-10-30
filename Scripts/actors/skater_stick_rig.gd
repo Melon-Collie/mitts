@@ -38,6 +38,9 @@ const FLEX_SEGMENTS: int = 12
 # How far off the straight shaft a hand still counts as holding it, for the bow
 # the drawn glove rides: the glove's own radius plus the bow's own reach.
 const _GRIP_HOLD_RADIUS_M: float = 0.2
+# Within this of the line a hand holds the shaft outright (grip_axis): a fist's
+# width, which the drawn bottom glove rides inside while it grips.
+const _GRIP_FIRM_RADIUS_M: float = 0.1
 
 # ── Flex ─────────────────────────────────────────────────────────────────────
 const _SLAP_SPIKE_SECONDS: float = 0.1  # contact load time before the whip
@@ -175,17 +178,18 @@ func bow_offset(point: Vector3) -> Vector3:
 	return xf.basis.x.normalized() * (_flex_sent * bow_profile(u))
 
 
-# The drawn shaft's butt→tip direction (upper-body space) at a hand holding it —
-# `point` within a grip of its line, as bow_offset reads one — else ZERO.
+# The drawn shaft's butt→tip direction (upper-body space) at a hand holding it,
+# as long as how firmly: whole within _GRIP_FIRM_RADIUS_M of its line, fading to
+# ZERO at the grip's reach (_GRIP_HOLD_RADIUS_M, as bow_offset reads one). A
+# hand letting go turns off the shaft as it leaves it rather than at a line.
 func grip_axis(point: Vector3) -> Vector3:
 	if _shaft_len <= 0.0:
 		return Vector3.ZERO
 	var xf: Transform3D = _skater.stick_mesh.transform
 	var along: Vector3 = -xf.basis.z.normalized()
 	var rel: Vector3 = point - xf.origin
-	if (rel - along * rel.dot(along)).length_squared() > _GRIP_HOLD_RADIUS_M * _GRIP_HOLD_RADIUS_M:
-		return Vector3.ZERO
-	return along
+	var off: float = (rel - along * rel.dot(along)).length()
+	return along * (1.0 - smoothstep(_GRIP_FIRM_RADIUS_M, _GRIP_HOLD_RADIUS_M, off))
 
 
 # Which way "toward the target" points on the shaft's ONE available bow axis,

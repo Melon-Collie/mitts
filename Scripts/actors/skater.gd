@@ -10,6 +10,7 @@ var is_left_handed: bool = true:
 	set(v):
 		is_left_handed = v
 		_position_hand_markers()
+		_connected.set_handedness(v)
 
 # ── Blade Tuning ──────────────────────────────────────────────────────────────
 # Resting blade dressing, applied to the blade *mesh* only — never the Blade
@@ -265,12 +266,19 @@ var carry_contact_high_u: float = 0.70
 # (sqrt(arm_eff² − shoulder-to-hand drop²)), so no reachable hand target ever
 # exceeds the arm's length — the forearm never draws stretched.
 # 0.33 per segment ≈ real shoulder→elbow and elbow→fist-center at the mesh's
-# native 5'10" — the distal bone ends at the FIST, so it carries the hand's
+# native 5'10" — the distal length ends at the FIST, so it carries the hand's
 # length too, which is also why the two split evenly. One arm = 0.70 m; with the
 # shoulders at ±0.22 that is a wingspan ≈ 1.84 m on a 1.78 m body, ~103% of
 # height and inside the 100–104% real athletes run.
 var upper_arm_length: float = 0.33
 var forearm_length: float = 0.33
+# The drawn arm's last joint: the wrist sits this far back from the fist's
+# centre (where the fist's own wrist end is, SkaterMeshBuilder), and the forearm
+# bone is the rest of forearm_length. Straight, the arm is as long as ever.
+var hand_length: float = 0.06
+# The fist's ease out of the jersey (update_hand_clearance), rad/s: settled in
+# about a tenth of a second.
+var hand_clear_omega: float = 30.0
 # How far the shoulder girdle lets an arm's root travel toward a hand past the
 # arm's working length (TwoBoneIK.reach_root): the shoulder blade's protraction
 # and drop, a few centimetres on a real frame.
@@ -283,6 +291,11 @@ var arm_working_extension: float = 0.97
 # update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
 # and slightly behind the chest line, not pinned against the ribs.
 var arm_pole_local: Vector3 = Vector3(0.55, -1.0, 0.1)
+# The second pole, out and back, which takes the elbow where arm_pole_local goes
+# blind: a hand out and down along it, as a fist held off the trunk close under
+# its shoulder is (TwoBoneIK.blended_pole). Its weight against the first.
+var arm_pole_aside_local: Vector3 = Vector3(1.0, 0.0, 0.6)
+var arm_pole_aside_weight: float = 1.0
 # Base size of the arm bone meshes (diameter). scale.z is set per tick to the
 # bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a
 # bare arm — see SkaterMeshBuilder.SLEEVE_RADIUS_M.
@@ -568,8 +581,11 @@ var _rig_last_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_shoulder: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_bottom_hand: Vector3 = Vector3(NAN, NAN, NAN)
 var _rig_last_check_lead: float = NAN
-# The drawn top hand's render-only offset off its marker (drawn_top_hand).
+# The drawn top hand's render-only offsets off its marker (drawn_top_hand): the
+# stride's pump, and the fist drawn out of the jersey (update_hand_clearance).
 var _hand_pump := Vector3.ZERO
+var _hand_clear := Vector3.ZERO
+var _hand_clear_vel := Vector3.ZERO
 # The nodes the rig is drawn from, as the latest tick found them, and that tick
 # (-1: nothing to draw between). Physics interpolation draws each between this
 # and its transform now (_drawn_fraction).
@@ -2818,8 +2834,9 @@ func get_top_hand_position() -> Vector3:
 func drawn_top_hand() -> Vector3:
 	var f: float = _drawn_fraction()
 	if f >= 1.0:
-		return top_hand.position + _hand_pump
-	return _drawn_at_tick_start[_DRAWN_TOP_HAND].origin.lerp(top_hand.position, f) + _hand_pump
+		return top_hand.position + _hand_pump + _hand_clear
+	return _drawn_at_tick_start[_DRAWN_TOP_HAND].origin.lerp(top_hand.position, f) \
+			+ _hand_pump + _hand_clear
 
 
 # The Blade marker where physics interpolation draws it this frame, in
@@ -2892,6 +2909,32 @@ func _note_marker_write() -> void:
 
 func set_hand_pump(offset: Vector3) -> void:
 	_hand_pump = offset
+
+
+# Draws the top fist out of the jersey where the hand sits against the trunk
+# (SkaterArmRig.torso_push); the shaft rides it about the blade, as the pump.
+# Eased on a critically damped spring at render rate (`delta`; below 0 it lands
+# at once): which way is out of the trunk turns as fast as the hand slides round
+# it, and the shaft hangs from the result. `share` is how much of it the pose
+# owner lets through.
+func update_hand_clearance(delta: float = -1.0, share: float = 1.0) -> void:
+	# The trunk as it is drawn this frame, which the mesh pass would otherwise
+	# only pose after the hand has been placed against it.
+	_spine.update()
+	var held: Vector3 = _hand_clear
+	_hand_clear = Vector3.ZERO
+	var target: Vector3 = _arms.torso_push(drawn_top_hand(),
+			_arms.ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND)) * share
+	if delta < 0.0:
+		_hand_clear = target
+		_hand_clear_vel = Vector3.ZERO
+		return
+	var off: Vector3 = held - target
+	var w: float = hand_clear_omega
+	var lead: Vector3 = (_hand_clear_vel + off * w) * delta
+	var fade: float = exp(-w * delta)
+	_hand_clear = target + (off + lead) * fade
+	_hand_clear_vel = (_hand_clear_vel - lead * w) * fade
 
 
 # ── Bottom Hand ───────────────────────────────────────────────────────────────

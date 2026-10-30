@@ -89,6 +89,8 @@ const _SEAT_UNDER_HIP_M: float = 0.14
 # reach-proportional segment builds one long arm and one short one.
 const _UPPER_ARM_M: float = 0.33
 const _FOREARM_M: float = 0.33
+# Skater.hand_length: the forearm's last stretch, from the wrist to the fist.
+const _HAND_M: float = 0.06
 # Grips are solved onto the shaft within this fraction of the arm's full span,
 # so the elbow always has a bend left in it and the fists never float off the
 # hand they belong to.
@@ -460,6 +462,7 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 	var top_side: float = 1.0 if is_left_handed else -1.0
 	var upper: float = _UPPER_ARM_M * m_height
 	var fore: float = _FOREARM_M * m_height
+	var hand_len: float = _HAND_M * m_height
 	var reach_limit: float = (upper + fore) * _GRIP_REACH_FRAC
 	var wanted: Array[float] = [
 		_shaft_len - _TOP_HAND_DROP_M, _shaft_len * _BOTTOM_HAND_FRAC]
@@ -473,17 +476,21 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 				* _grip_along_shaft(shoulder, wanted[i], reach_limit)
 		grips[i] = hand
 		var pole := Vector3(_ARM_POLE.x * side, _ARM_POLE.y, _ARM_POLE.z)
-		var elbow: Vector3 = _solve_elbow(shoulder, hand, pole, upper, fore)
+		# The rig's wrist: the forearm ends a hand short of the fist, which turns
+		# there across the shaft (its butt→tip line, toward the blade).
+		var wrist: Vector3 = SkaterArmPoses.place_wrist(shoulder, hand, -_shaft_up, upper,
+				fore - hand_len, hand_len, pole, deg_to_rad(_WRIST_BREAK_MAX_DEG))
+		var elbow: Vector3 = _solve_elbow(shoulder, wrist, pole, upper, fore - hand_len)
 		var arm := Vector3(arm_r, arm_r, 1.0)
 		_skeleton.set_bone_pose(bones[0], SkaterArmPoses.segment_pose(shoulder, elbow, arm))
-		_skeleton.set_bone_pose(bones[1], SkaterArmPoses.segment_pose(elbow, hand, arm))
-		_skeleton.set_bone_pose(bones[2], SkaterArmPoses.elbow_pose(shoulder, elbow, hand, pole,
+		_skeleton.set_bone_pose(bones[1], SkaterArmPoses.segment_pose(elbow, wrist, arm))
+		_skeleton.set_bone_pose(bones[2], SkaterArmPoses.elbow_pose(shoulder, elbow, wrist, pole,
 				Vector3.ONE * _ELBOW_RADIUS * m_girth))
-		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, _shaft_up,
-				deg_to_rad(_WRIST_BREAK_MAX_DEG), Vector3.ONE * _HAND_RADIUS * m_girth))
+		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(wrist, hand, -_shaft_up,
+				0.0, Vector3.ONE * _HAND_RADIUS * m_girth))
 		var cuff_r: float = _CUFF_RADIUS * m_girth
-		_skeleton.set_bone_pose(bones[4], SkaterArmPoses.cuff_pose(elbow, hand,
-				Vector3(cuff_r, 1.0, cuff_r), _CUFF_WRIST_OFFSET_M))
+		_skeleton.set_bone_pose(bones[4], SkaterArmPoses.cuff_pose(elbow, wrist,
+				Vector3(cuff_r, 1.0, cuff_r), _CUFF_WRIST_OFFSET_M - hand_len))
 	_kit.pose_skin(0 if top_side < 0.0 else 1)
 
 	_anchors[Focus.GLOVES] = (grips[0] + grips[1]) * 0.5

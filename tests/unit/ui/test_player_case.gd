@@ -201,8 +201,9 @@ func test_a_tuck_pick_drapes_the_figure() -> void:
 	_open(GearStyleConfig.new(0, 0, GearStyleConfig.LACE_DEFAULT_INDEX, 0, 0,
 			HairStyleRegistry.HAIR_SHORT, HairStyleRegistry.FACIAL_NONE, 0,
 			GearModelRegistry.TUCK_RIGHT))
-	assert_eq(body.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT),
-			"the sweater re-drapes")
+	assert_true(body.mesh in [SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT, true),
+			SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_RIGHT, false)],
+			"the sweater re-drapes, on whichever hand tops the figure's stick")
 	assert_eq(body.get_surface_override_material(0), paint, "the sweater keeps its paint")
 
 
@@ -253,10 +254,14 @@ func _grip_offset(hand: Vector3) -> float:
 func test_both_arms_are_the_same_length() -> void:
 	for length: int in 3:
 		_open(GearStyleConfig.new(), StickTapeConfig.DEFAULT_CODE, _stick(length))
+		var build := PlayerAttributes.new(PlayerAttributes.HEIGHT_MEDIUM,
+				int(PlayerAttributes.NEUTRAL_WEIGHT_LBS), 1, 1, 1, length)
+		# The forearm bone ends at the wrist, a hand short of the fist.
+		var hand: float = LockerMannequin._HAND_M * build.height_mult()
 		var spans: Array[float] = []
 		for i: int in 2:
 			var upper: float = _bone(_ARMS[i][0]).basis.z.length()
-			var fore: float = _bone(_ARMS[i][1]).basis.z.length()
+			var fore: float = _bone(_ARMS[i][1]).basis.z.length() + hand
 			assert_almost_eq(upper, fore, 0.01,
 					"arm %d bends at its midpoint (cut %d)" % [i, length])
 			spans.append(upper + fore)
@@ -264,8 +269,6 @@ func test_both_arms_are_the_same_length() -> void:
 				"both arms are the same length (cut %d)" % length)
 		# And that length is the rig's own bones riding the build's height, not
 		# whatever distance the grip happened to land at.
-		var build := PlayerAttributes.new(PlayerAttributes.HEIGHT_MEDIUM,
-				int(PlayerAttributes.NEUTRAL_WEIGHT_LBS), 1, 1, 1, length)
 		assert_almost_eq(spans[0], 0.66 * build.height_mult(), 0.01,
 				"arms are the rig's 0.33 m bones, scaled by height")
 

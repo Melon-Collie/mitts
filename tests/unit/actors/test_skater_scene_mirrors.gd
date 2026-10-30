@@ -48,6 +48,18 @@ func test_the_skin_and_the_figures_root_the_arm_at_the_shoulder_anchor() -> void
 	skater.free()
 
 
+# The display figures draw the arm the rig draws: its two segments and the hand
+# its wrist sits back from the fist by, at the defaults the build scales.
+func test_the_figures_draw_the_rigs_arm() -> void:
+	var skater: Skater = Skater.new()
+	assert_almost_eq(LockerMannequin._UPPER_ARM_M, skater.upper_arm_length, 1e-6, "upper arm")
+	assert_almost_eq(LockerMannequin._FOREARM_M, skater.forearm_length, 1e-6, "forearm")
+	assert_almost_eq(LockerMannequin._HAND_M, skater.hand_length, 1e-6, "hand")
+	assert_almost_eq(LockerMannequin._WRIST_BREAK_MAX_DEG, skater.wrist_break_max_deg, 1e-6,
+			"wrist break")
+	skater.free()
+
+
 func test_helmet_and_torso_stations_mirror_the_scene() -> void:
 	assert_almost_eq(_origin("./MeshRoot/UpperBody/Helmet").y, 0.65, 1e-6,
 			"the neck profile is built in helmet-local space from this origin — move " +

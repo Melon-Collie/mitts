@@ -42,16 +42,19 @@ static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: f
 # The fist on a forearm pointing `forearm_dir`. Its long (local Y) axis runs
 # wrist → fingers and its knuckle roll across local X. Off the stick (`grip`
 # ZERO) it lines up with the forearm, rolled from world up like the cuff. On it,
-# the knuckle roll lies along the shaft and the hand turns toward square across
-# it, bending at the wrist by up to `max_bend` radians: the wrist breaks as the
-# stick swings against the forearm.
+# the knuckle roll lies along the shaft, its +X (the thumb's end) toward the
+# blade — `grip` points butt→tip — and the hand turns toward square across it, bending at the wrist by up to `max_bend` radians: the wrist breaks as the
+# stick swings against the forearm. `grip`'s length is how firmly the hand holds
+# (SkaterStickRig.grip_axis): the fist turns from the one to the other with it.
 static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)
-	if grip == Vector3.ZERO:
+	var hold: float = minf(grip.length(), 1.0)
+	if hold < 0.0001:
 		return straight
-	var across: float = forearm_dir.dot(grip)
-	var square: Vector3 = forearm_dir - grip * across
+	var shaft: Vector3 = grip / grip.length()
+	var across: float = forearm_dir.dot(shaft)
+	var square: Vector3 = forearm_dir - shaft * across
 	if square.length_squared() < 0.0001:
 		return straight
 	square = square.normalized()
@@ -60,13 +63,38 @@ static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) ->
 	if hinge.length_squared() > 1e-8:
 		hand_axis = forearm_dir.rotated(hinge.normalized(),
 				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
-	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
+	var knuckles: Vector3 = shaft - hand_axis * shaft.dot(hand_axis)
 	if knuckles.length_squared() < 0.0001:
 		return straight
 	knuckles = knuckles.normalized()
-	if knuckles.dot(straight.x) < 0.0:
-		knuckles = -knuckles
-	return Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis))
+	var held := Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis))
+	if hold >= 1.0:
+		return held
+	return Basis(straight.get_rotation_quaternion().slerp(held.get_rotation_quaternion(), hold))
+
+
+# Where the wrist of a fist at `grip` sits: `hand_len` back from it along the
+# hand, which lies along the forearm the whole arm would reach the fist along
+# (`forearm_len` + `hand_len`, toward `pole`), turned toward square across the
+# shaft by up to `max_bend` (glove_basis; `shaft` ZERO off the stick). The
+# drawn forearm is the rest of the arm, solved to the wrist, so the bend shows
+# at the wrist rather than as a fist turned about its own middle. That forearm
+# lies a few degrees off the line the bend was taken from, so the hand is bent
+# once more off the forearm it gets.
+static func place_wrist(shoulder: Vector3, grip: Vector3, shaft: Vector3, upper_len: float,
+		forearm_len: float, hand_len: float, pole: Vector3, max_bend: float) -> Vector3:
+	var reach_elbow: Vector3 = TwoBoneIK.solve_elbow(shoulder, grip, upper_len,
+			forearm_len + hand_len, pole)
+	var line: Vector3 = grip - reach_elbow
+	if line.length_squared() < 1e-8:
+		return grip
+	var wrist: Vector3 = grip + glove_basis(line.normalized(), shaft, max_bend).y.normalized() \
+			* hand_len
+	var fore: Vector3 = wrist - TwoBoneIK.solve_elbow(shoulder, wrist, upper_len, forearm_len,
+			pole)
+	if fore.length_squared() < 1e-8:
+		return wrist
+	return grip + glove_basis(fore.normalized(), shaft, max_bend).y.normalized() * hand_len
 
 
 # Glove cuff ring from `hand` back toward `elbow`, its near end `wrist_offset`

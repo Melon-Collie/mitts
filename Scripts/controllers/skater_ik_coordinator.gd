@@ -892,6 +892,10 @@ const BH_GRIP_SLIDE_BAND: float = 0.08
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
 	_skater.set_hand_pump(_stride_pump(delta))
+	# The shots and the block pose their own hands (a slapper swings its stick
+	# rigid from where it started), so the fist is drawn out of the jersey only
+	# while the tracked IK holds the stick, handed over as the pump is.
+	_skater.update_hand_clearance(delta, smoothstep(0.0, 1.0, _pump_hold))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length

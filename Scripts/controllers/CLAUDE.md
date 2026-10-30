@@ -319,7 +319,8 @@ rather than zeroing them first.
 swings the top hand across the body (`SkaterIKCoordinator._stride_pump`), the
 stick pivoting about its blade. It is an offset on `Skater.drawn_top_hand()`,
 which the arm, the stick and the bottom hand are drawn to; the `TopHand` marker
-every claim reads never takes it.
+every claim reads never takes it. So is the fist's push out of the jersey
+(`Skater.update_hand_clearance`), which the same handover lets through.
 
 ### The gait's numeric core is native
 

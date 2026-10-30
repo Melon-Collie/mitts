@@ -1326,6 +1326,7 @@ var _base_max_blade_accel:              float = 0.0
 var _base_stick_length:                 float = 0.0
 var _base_skater_upper_arm_length:      float = 0.0
 var _base_skater_forearm_length:        float = 0.0
+var _base_skater_hand_length:           float = 0.0
 var _base_skater_shoulder_reach_m:      float = 0.0
 var _base_skater_shoulder_offset:       float = 0.0
 var _base_skater_shoulder_height:       float = 0.0
@@ -1492,6 +1493,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	skater.apply_blade_pattern(attrs.curve)
 	skater.upper_arm_length   = _base_skater_upper_arm_length   * m_height
 	skater.forearm_length     = _base_skater_forearm_length     * m_height
+	skater.hand_length        = _base_skater_hand_length        * m_height
 	skater.shoulder_reach_m   = _base_skater_shoulder_reach_m   * m_height
 	# Shoulder anchors track the skin's shoulder, which the appearance pass
 	# carries with the torso's scale and place by the same multipliers (y rides
@@ -1594,6 +1596,7 @@ func _capture_attribute_bases() -> void:
 	_base_hand_y_max                   = hand_y_max
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
+	_base_skater_hand_length           = skater.hand_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m
 	_base_skater_shoulder_offset       = skater.shoulder_offset
 	_base_skater_shoulder_height       = skater.shoulder_height

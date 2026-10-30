@@ -180,13 +180,25 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
 	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
-	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length, pole_s)
+	# The top arm's elbow takes the second pole: its fist is the one held in close
+	# under its shoulder, where the first goes blind. The bottom hand's swings free
+	# round the body, which would turn its arm between the two on every pass.
+	var aside_s: Vector3 = spine.basis * Vector3(_skater.arm_pole_aside_local.x * pole_sign,
+			_skater.arm_pole_aside_local.y, _skater.arm_pole_aside_local.z)
+	var aside_weight: float = _skater.arm_pole_aside_weight if arm == 0 else 0.0
+	var grip_s: Vector3 = frame.basis * grip_local
+	var wrist_s: Vector3 = SkaterArmPoses.place_wrist(shoulder_s, hand_s, grip_s,
+			_skater.upper_arm_length, _skater.forearm_length - _skater.hand_length,
+			_skater.hand_length, TwoBoneIK.blended_pole(shoulder_s, hand_s, pole_s, aside_s,
+			aside_weight), deg_to_rad(_skater.wrist_break_max_deg))
+	pole_s = TwoBoneIK.blended_pole(shoulder_s, wrist_s, pole_s, aside_s, aside_weight)
+	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, wrist_s,
+			_skater.upper_arm_length, _skater.forearm_length - _skater.hand_length, pole_s)
 	_pose_bone(upper, shoulder_s, elbow_s)
-	_pose_bone(forearm, elbow_s, hand_s)
-	_pose_cuff(cuff, elbow_s, hand_s)
-	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
-	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
+	_pose_bone(forearm, elbow_s, wrist_s)
+	_pose_cuff(cuff, elbow_s, wrist_s)
+	_pose_elbow(elbow_bone, shoulder_s, elbow_s, wrist_s, pole_s)
+	_pose_glove(glove, wrist_s, hand_s, grip_s)
 
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
@@ -197,13 +209,17 @@ func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 		_configure_native()
 	var pole: Vector3 = _skater.arm_pole_local
 	pole.x *= pole_sign
+	var aside: Vector3 = _skater.arm_pole_aside_local
+	aside.x *= pole_sign
 	var arm_len: float = _skater.upper_arm_length + _skater.forearm_length
 	if not _native_arms[arm].pose(marker_local, hand_local, grip_local, _skater.drawn_upper_body(),
 			_trunk_texture, pole,
+			Vector4(aside.x, aside.y, aside.z, _skater.arm_pole_aside_weight if arm == 0 else 0.0),
 			Vector4(_skater.upper_arm_length, _skater.forearm_length,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
-			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
-			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset)):
+			Vector4(_skater.get_check_lead(), _skater.shoulder_offset,
+			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset - _skater.hand_length,
+			_skater.hand_length)):
 		return false
 	return true
 
@@ -233,6 +249,39 @@ func visible_shoulder(marker_local: Vector3) -> Vector3:
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	return _skater.drawn_upper_body().affine_inverse() \
 			* (spine * _textured_shoulder(marker_local))
+
+
+# How far the push takes to come in (torso_push).
+const _PUSH_EASE_M: float = 0.05
+# How much of the fist's radius the push clears: the rest presses into the
+# jersey, as a glove held in against it does.
+const _PUSH_DEPTH_SHARE: float = 0.75
+# How much forward goes with each unit out: a knob held in close sits in front
+# of the hip and the ribs, not beside them, and straight out sideways the push
+# carries the fist away from the bottom hand on the shaft.
+const _PUSH_FORWARD: float = 2.0
+
+
+# How far to draw a fist of `radius` at `hand_local` (UpperBody's frame) out of
+# the jersey, in that frame: out of the torso's section at its height and
+# forward, against the trunk as last posed.
+func torso_push(hand_local: Vector3, radius: float) -> Vector3:
+	if _skeleton == null:
+		return Vector3.ZERO
+	var frame: Transform3D = _skater.drawn_upper_body()
+	var torso: Transform3D = _skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
+	var p: Vector3 = torso.affine_inverse() * (frame * hand_local)
+	# Eased in over _PUSH_EASE_M, so the push has no corner where it starts: a
+	# corner in a drawn position is a jolt in the shaft.
+	var deficit: float = radius * _PUSH_DEPTH_SHARE - SkaterMeshBuilder.torso_clearance(p)
+	if deficit <= 0.0:
+		return Vector3.ZERO
+	deficit = deficit * deficit / (2.0 * _PUSH_EASE_M) if deficit < _PUSH_EASE_M \
+			else deficit - _PUSH_EASE_M * 0.5
+	var out: Vector3 = (SkaterMeshBuilder.torso_outward(p)
+			+ Vector3.FORWARD * _PUSH_FORWARD).normalized()
+	var out_s: Vector3 = torso.basis.orthonormalized() * out
+	return frame.basis.orthonormalized().inverse() * (out_s * deficit)
 
 
 # Where an arm roots, in skeleton space: the shoulder on the visible trunk,
@@ -297,32 +346,33 @@ func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 			_thickness[part]))
 
 
-# Positions the gloved fist at the hand; `grip` is the shaft through the fist
-# (skeleton space), ZERO off the stick.
-func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> void:
+# Positions the gloved fist at the hand, turned about the wrist; `grip` is the
+# shaft through the fist (skeleton space), ZERO off the stick.
+func _pose_glove(part: int, wrist: Vector3, hand: Vector3, grip: Vector3) -> void:
 	var scale_v: Vector3 = _thickness[part]
-	var dir: Vector3 = hand - elbow
+	var dir: Vector3 = hand - wrist
 	if dir.length_squared() < 0.0001:
 		var held: Transform3D = _skeleton.get_bone_pose(part)
 		held.origin = hand
 		_skeleton.set_bone_pose(part, held)
 		return
-	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
-			deg_to_rad(_skater.wrist_break_max_deg))
+	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip, 0.0)
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
 
 
-func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
+# The cuff rides the forearm up to the wrist, lapping past it by what the fist's
+# centre would have left straight (cuff_wrist_offset is from there).
+func _pose_cuff(part: int, elbow: Vector3, wrist: Vector3) -> void:
 	var scale_v: Vector3 = _thickness[part]
-	var bone_dir: Vector3 = hand - elbow
+	var bone_dir: Vector3 = wrist - elbow
 	var bone_len: float = bone_dir.length()
 	if bone_len < 0.0001:
 		var held: Transform3D = _skeleton.get_bone_pose(part)
-		held.origin = hand
+		held.origin = wrist
 		_skeleton.set_bone_pose(part, held)
 		return
-	_skeleton.set_bone_pose(part, SkaterArmPoses.cuff_pose(elbow, hand, scale_v,
-			_skater.cuff_wrist_offset))
+	_skeleton.set_bone_pose(part, SkaterArmPoses.cuff_pose(elbow, wrist, scale_v,
+			_skater.cuff_wrist_offset - _skater.hand_length))
 
 
 # ── Trunk texture and head ───────────────────────────────────────────────────

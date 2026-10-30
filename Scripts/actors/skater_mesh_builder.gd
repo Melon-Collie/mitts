@@ -514,6 +514,47 @@ const TORSO_BEND_STATION: int = 9
 const TORSO_HEM_STATION: int = 10
 
 
+# How far a torso-local point sits outside the jersey (m, negative inside): the
+# elliptical section at its height, measured along the ray from the ring's
+# centre; above the collar or below the hem, from the end ring, so it runs on
+# without a step past either.
+static func torso_clearance(p: Vector3) -> float:
+	var last: int = _TORSO_PROFILE.size() - 1
+	var y: float = clampf(p.y, _TORSO_PROFILE[last].x, _TORSO_PROFILE[0].x)
+	var past: float = absf(p.y - y)
+	var i: int = 0
+	while i < last - 1 and y < _TORSO_PROFILE[i + 1].x:
+		i += 1
+	var a: Vector2 = _TORSO_PROFILE[i]
+	var b: Vector2 = _TORSO_PROFILE[i + 1]
+	var t: float = (y - a.x) / (b.x - a.x)
+	var r: float = lerpf(a.y, b.y, t)
+	var flat := Vector2(p.x, p.z - lerpf(_TORSO_REAR_SWAY[i], _TORSO_REAR_SWAY[i + 1], t))
+	var n: float = Vector2(flat.x / (r * _TORSO_X_SCALE), flat.y / (r * _TORSO_Z_SCALE)).length()
+	var across: float = flat.length() * (1.0 - 1.0 / n) if n > 0.0001 else -r * _TORSO_Z_SCALE
+	if past <= 0.0:
+		return across
+	return Vector2(maxf(across, 0.0), past).length() + minf(across, 0.0)
+
+
+# The level direction straight out of the torso's section through a
+# torso-local point: the ellipse's normal there.
+static func torso_outward(p: Vector3) -> Vector3:
+	var last: int = _TORSO_PROFILE.size() - 1
+	var y: float = clampf(p.y, _TORSO_PROFILE[last].x, _TORSO_PROFILE[0].x)
+	var i: int = 0
+	while i < last - 1 and y < _TORSO_PROFILE[i + 1].x:
+		i += 1
+	var t: float = (y - _TORSO_PROFILE[i].x) / (_TORSO_PROFILE[i + 1].x - _TORSO_PROFILE[i].x)
+	var sway: float = lerpf(_TORSO_REAR_SWAY[i], _TORSO_REAR_SWAY[i + 1], t)
+	var n := Vector2(p.x / (_TORSO_X_SCALE * _TORSO_X_SCALE),
+			(p.z - sway) / (_TORSO_Z_SCALE * _TORSO_Z_SCALE))
+	if n.length_squared() < 1e-10:
+		return Vector3.BACK
+	n = n.normalized()
+	return Vector3(n.x, 0.0, n.y)
+
+
 # One torso ring (sides + 1 points, the last repeating the first), torso-local.
 static func torso_ring(station: int) -> PackedVector3Array:
 	var s: Vector2 = _TORSO_PROFILE[station]
@@ -540,6 +581,47 @@ static func shared_glove_fist() -> ArrayMesh:
 		_commit_sweep_segment(m, loops, _GLOVE_FINGER_STATION, loops.size() - 1,
 				_fist_loop_center)
 		return m)
+
+
+# The gloved thumb of a RIGHT fist, a short tube in the fist's frame (hand radii):
+# from its root at the heel of the palm by the index end of the knuckle roll
+# (+X, which glove_basis turns toward the blade), over the palm side (−Z; +Z is
+# the back of a right hand once X and the wrist's +Y are set) to its tip laid
+# across the curled fingers, as a thumb closes round a shaft. The tube runs
+# along its own −Y from the root (glove_thumb_xform); stations are
+# (y, half width, half depth) like the fist's.
+const _GLOVE_THUMB_ROOT := Vector3(0.85, 0.45, -0.55)
+const _GLOVE_THUMB_TIP := Vector3(0.7, -0.45, -1.05)
+const _GLOVE_THUMB_STATIONS: Array[Vector3] = [
+	Vector3(0.0, 0.30, 0.28),
+	Vector3(-0.5, 0.33, 0.30),
+	Vector3(-1.0, 0.24, 0.22),
+]
+
+
+static func shared_glove_thumb() -> ArrayMesh:
+	return _shared("glove_thumb", func() -> ArrayMesh:
+		var loops: Array[PackedVector3Array] = []
+		for s: Vector3 in _GLOVE_THUMB_STATIONS:
+			loops.append(_octagon_loop(s.x, s.y, s.z, _GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
+		var m := ArrayMesh.new()
+		_commit_sweep_segment(m, loops, 0, loops.size() - 1, _fist_loop_center)
+		return m)
+
+
+# Lays shared_glove_thumb on a fist: a right one's, or a left one's — placed at
+# the mirror of the right one's root and tip rather than reflected, so its
+# faces keep their winding.
+static func glove_thumb_xform(right: bool) -> Transform3D:
+	var root: Vector3 = _GLOVE_THUMB_ROOT
+	var tip: Vector3 = _GLOVE_THUMB_TIP
+	if not right:
+		root.z = -root.z
+		tip.z = -tip.z
+	var along: Vector3 = tip - root
+	var y_axis: Vector3 = -along.normalized()
+	var x_axis: Vector3 = (Vector3.RIGHT - y_axis * y_axis.x).normalized()
+	return Transform3D(Basis(x_axis, y_axis * along.length(), x_axis.cross(y_axis)), root)
 
 
 # A fist loop's axis point — the sweep runs along local Y, so the caps fan to

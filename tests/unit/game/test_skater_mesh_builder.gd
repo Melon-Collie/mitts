@@ -232,7 +232,9 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 # Cheap to check here, invisible in a render.
 func test_the_rigid_parts_are_rigidly_weighted() -> void:
 	for rig: Array in [
-			["upper", SkaterRigidParts.upper_body_mesh(), SkaterMeshBuilder.UPPER_BONE_COUNT],
+			["upper", SkaterRigidParts.upper_body_mesh(true), SkaterMeshBuilder.UPPER_BONE_COUNT],
+			["upper (left top)", SkaterRigidParts.upper_body_mesh(false),
+					SkaterMeshBuilder.UPPER_BONE_COUNT],
 			["leg", SkaterRigidParts.leg_body_mesh(), SkaterMeshBuilder.LEG_BONE_COUNT]]:
 		var arrays: Array = (rig[1] as ArrayMesh).surface_get_arrays(0)
 		var bones: PackedInt32Array = arrays[Mesh.ARRAY_BONES]

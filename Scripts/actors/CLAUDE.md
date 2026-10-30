@@ -75,6 +75,11 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   the twist, the elbow the rest. Blending the chest straight into the arm
   collapses the pad into a fin past ~90°; putting the whole twist on one ring
   pinches the sleeve shut.
+- **The gloves are a left and a right hand.** Each fist wears a thumb on its
+  palm side at the end of the knuckle roll `SkaterArmPoses.glove_basis` turns
+  toward the blade, so the rigid parts come in two (`SkaterRigidParts.
+  upper_body_mesh`, by whether the top glove is a right hand: a left-handed
+  shot's), and the body's mesh with them, set from `Skater.is_left_handed`.
 - **Each sleeve is painted whole** (`SleeveDecal`): the kit's `sleeve`
   (`SleevePaint`, one base and stripes from the shoulder to the cuff, each
   straight round the arm or peaked, with an optional fill below it,
@@ -310,12 +315,15 @@ Everything in the four rigs is cosmetic and derived. Nothing gameplay reads
 comes out of them, and that is what makes them safe to move: the blade contact
 point is the `Blade` marker's, and the rigs only read it.
 
-Nine rules the rigs sit inside, all easy to break from in here:
+Ten rules the rigs sit inside, all easy to break from in here:
 
 - **The top hand is drawn from `Skater.drawn_top_hand()`**, not the `TopHand`
-  marker: the marker plus a render-only offset (the stride's pump), so the arm,
-  the stick and the blade's dressing pivot about a blade that has not moved.
-  The rebuild gate compares the drawn hand, or the pump would never redraw.
+  marker: the marker plus render-only offsets — the stride's pump, and the
+  fist drawn out of the jersey where the hand sits against the trunk
+  (`SkaterArmRig.torso_push`, out and forward, sprung, and handed over to the
+  shots as the pump is) — so the arm, the stick and the blade's dressing pivot
+  about a blade that has not moved. The rebuild gate compares the drawn hand,
+  or neither would ever redraw.
 - **The rig reads the markers and the frames where the engine draws them**
   (`drawn_top_hand`, `Skater.drawn_blade`, `drawn_upper_body`,
   `drawn_lower_body`): between where the latest tick found them and where they
@@ -361,6 +369,13 @@ Nine rules the rigs sit inside, all easy to break from in here:
   gameplay frame: whether the host can see a blocker must not move his hands.
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
   off while its own camera records.
+- **The arm bends at a wrist.** The forearm bone ends `Skater.hand_length`
+  short of the fist, which turns there toward square across the shaft
+  (`SkaterArmPoses.place_wrist`); straight, the arm is as long as the IK's.
+  The top elbow takes a second pole (`TwoBoneIK.blended_pole`), because its
+  fist is held close under its shoulder, along the first pole's blind line.
+  `test_top_arm_clears_the_trunk.gd` holds the forearm and the fist out of the
+  jersey with the blade at the feet.
 - **The arms are posed in C++ when the extension is built** (`NativeArmRig`,
   which writes the arm bones itself). Change `_update_arm` or the part poses
   (`SkaterArmPoses`) and the port changes with it, or

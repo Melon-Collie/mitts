@@ -11,8 +11,9 @@
 namespace mitts {
 
 // C++ port of one arm in Scripts/actors/skater_arm_rig.gd (SkaterArmRig.
-// _update_arm: the textured, check-loaded shoulder, the tucked pole,
-// TwoBoneIK.reach_root / solve_elbow and the part posing). The GDScript is the
+// _update_arm: the textured, check-loaded shoulder, the tucked and blended
+// poles, TwoBoneIK.reach_root / solve_elbow, the wrist
+// (SkaterArmPoses.place_wrist) and the part posing). The GDScript is the
 // reference; the parity fuzz test
 // (tests/unit/rules/test_native_arm_rig_parity.gd) keeps them identical.
 //
@@ -57,12 +58,15 @@ public:
 	// the stick; `frame` UpperBody as drawn, in skeleton space
 	// (Skater.drawn_upper_body); `pole` the arm's elbow pole mirrored onto its
 	// side, untucked.
+	// `aside` the second pole on its side (Skater.arm_pole_aside_local) and its
+	// weight (TwoBoneIK.blended_pole), zero weight for none.
 	// `lengths` is (upper arm, forearm, working length, girdle slack), `load`
-	// (check lead, shoulder half-width, cuff back of the hand).
+	// (check lead, shoulder half-width, cuff back of the wrist, hand length).
 	bool pose(const godot::Vector3 &marker, const godot::Vector3 &hand,
 			const godot::Vector3 &grip, const godot::Transform3D &frame,
 			const godot::Basis &trunk_texture, const godot::Vector3 &pole,
-			const godot::Vector4 &lengths, const godot::Vector3 &load);
+			const godot::Vector4 &aside, const godot::Vector4 &lengths,
+			const godot::Vector4 &load);
 };
 
 } // namespace mitts

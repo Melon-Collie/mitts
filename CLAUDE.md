@@ -102,7 +102,7 @@ transforms read back empty under `--headless`).
 
 **To see a POSE, render it too.** `.claude/hooks/render-poses.sh [--baseline]`
 drives a real `Skater` + `SkaterController` through a list of held poses (the
-gait, an arm-IK reach at its ROM rim, both shot wind-ups and follow-throughs,
+gait, an arm-IK reach at its ROM rim, the stick pulled in to the feet, both shot wind-ups and follow-throughs,
 the block, the check commit) and pixel-diffs the set against a recorded
 baseline; pose list and framing in `tools/pose_capture.gd`. Same xvfb/software-GL
 constraint as the arena, and the same argument: articulation is the thing a

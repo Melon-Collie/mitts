@@ -58,8 +58,10 @@ func build(rig: Node3D, viewport_host: Node) -> void:
 
 
 # The skin's deform bones off the bones the figure just posed; `top_side` is
-# the side the top hand's arm hangs from (0 left, 1 right).
+# the side the top hand's arm hangs from (0 left, 1 right), which is also which
+# hand the top glove is.
 func pose_skin(top_side: int) -> void:
+	_skin.set_handedness(top_side == 1)
 	_skin.pose(top_side)
 
 

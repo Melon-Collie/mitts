@@ -4,7 +4,8 @@ extends GutTest
 # GDScript reference (SkaterArmRig._update_arm). Seeded RNG over the live rig:
 # hands in and out of reach (the girdle's give and the IK clamp), trunk
 # texture, a twisted and leaned trunk, the balance lean, a check load,
-# per-build arm lengths and part thicknesses, and gloves on and off the shaft.
+# per-build arm and hand lengths and part thicknesses, the top elbow's second
+# pole, and gloves on, off and letting go of the shaft.
 # Every arm bone must agree.
 #
 # Pending without the extension (fresh clone, CI without a native build) — run
@@ -66,6 +67,8 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 	for i: int in CASES:
 		sk.upper_arm_length = _rng.randf_range(0.28, 0.38)
 		sk.forearm_length = _rng.randf_range(0.28, 0.38)
+		sk.hand_length = _rng.randf_range(0.04, 0.08)
+		sk.arm_pole_aside_weight = _rng.randf_range(0.0, 2.0)
 		sk.shoulder_reach_m = _rng.randf_range(0.0, 0.1)
 		sk.set_arm_bone_radius(UpperBone.TOP_FOREARM, _rng.randf_range(0.03, 0.06))
 		sk.set_facing(Vector2.from_angle(_rng.randf() * TAU))

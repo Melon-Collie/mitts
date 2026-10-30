@@ -59,6 +59,27 @@ static func bend_direction(shoulder: Vector3, hand: Vector3, pole_world: Vector3
 	return pole_dir.normalized()
 
 
+# One pole is blind along its own line: a hand straight down the pole from the
+# shoulder leaves nothing of it square to the arm, and the elbow swings round
+# the arm as the hand crosses that line. Two poles blind along different lines,
+# each weighted by how much of it is left square to the arm, never are both at
+# once: `aside` takes over only where `pole` goes blind. The result is already
+# square to the shoulder→hand line, so solve_elbow takes it as it is.
+static func blended_pole(shoulder: Vector3, hand: Vector3, pole: Vector3, aside: Vector3,
+		aside_weight: float) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return pole
+	var axis: Vector3 = d_vec / d
+	var p: Vector3 = pole.normalized()
+	var a: Vector3 = aside.normalized()
+	p -= axis * p.dot(axis)
+	a -= axis * a.dot(axis)
+	var blended: Vector3 = p * p.length() + a * (a.length() * aside_weight)
+	return blended if blended.length_squared() > 1e-10 else pole
+
+
 # Where an arm roots once the shoulder girdle has given: a hand past `arm_len`
 # (the arm's working length) draws the shoulder toward it — the shoulder blade
 # protracting and dropping — by up to `slack`. Past that the arm straightens,

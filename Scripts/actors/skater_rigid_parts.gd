@@ -40,17 +40,21 @@ const _LENGTH: float = 1.07
 static var _cache: Dictionary = {}
 
 
-static func upper_body_mesh() -> ArrayMesh:
-	return _shared("upper", func() -> ArrayMesh:
+# `top_right`: the top glove is a right hand (a left-handed shot's), so it
+# wears the right thumb and the bottom glove the left.
+static func upper_body_mesh(top_right: bool) -> ArrayMesh:
+	return _shared("upper_r" if top_right else "upper_l", func() -> ArrayMesh:
 		var b := BodyZoneMesh.new()
 		var fist: ArrayMesh = SkaterMeshBuilder.shared_glove_fist()
+		var thumb: Array = SkaterMeshBuilder.shared_glove_thumb().surface_get_arrays(0)
 		var cuff: ArrayMesh = SkaterMeshBuilder.shared_cuff()
 		for top: bool in [true, false]:
 			var hand: int = _UpperBone.TOP_HAND if top else _UpperBone.BOTTOM_HAND
+			var fingers: int = _UpperSurface.TOP_FINGERS if top else _UpperSurface.BOTTOM_FINGERS
 			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_BACK),
 					_UpperSurface.TOP_HAND if top else _UpperSurface.BOTTOM_HAND, hand)
-			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_FINGERS),
-					_UpperSurface.TOP_FINGERS if top else _UpperSurface.BOTTOM_FINGERS, hand)
+			_add(b, fist.surface_get_arrays(SkaterMeshBuilder.FIST_PART_FINGERS), fingers, hand)
+			_add(b, thumb, fingers, hand, SkaterMeshBuilder.glove_thumb_xform(top == top_right))
 			_add(b, cuff.surface_get_arrays(0),
 					_UpperSurface.TOP_CUFF if top else _UpperSurface.BOTTOM_CUFF,
 					_UpperBone.TOP_CUFF if top else _UpperBone.BOTTOM_CUFF)
@@ -94,8 +98,9 @@ static func seed_paint(paint: BodyZonePaint) -> void:
 			paint.seed_zone(first + 2 + s, boot.surface_get_material(s))
 
 
-static func _add(b: BodyZoneMesh, arrays: Array, surface: int, bone: int) -> void:
-	b.add(arrays, SkaterMeshBuilder.UPPER_ZONE_BASE + surface, bone)
+static func _add(b: BodyZoneMesh, arrays: Array, surface: int, bone: int,
+		xform: Transform3D = Transform3D.IDENTITY) -> void:
+	b.add(arrays, SkaterMeshBuilder.UPPER_ZONE_BASE + surface, bone, xform)
 
 
 static func _shared(key: String, builder: Callable) -> ArrayMesh:
