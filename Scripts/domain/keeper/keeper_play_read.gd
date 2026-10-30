@@ -55,7 +55,8 @@ var loose: bool = true
 var theirs: bool = false
 var carrier := NO_CARRIER
 var winding_up: bool = false
-# How long he has held the puck on a stick of theirs in his eyes, unbroken.
+# How long he has held the puck on a stick of theirs in his eyes, unbroken by
+# its getting out of his gaze or behind a body (GoalieScreenRules).
 var watched_s: float = 0.0
 # Where his eyes are, in the same frame: his own place, set by his controller.
 var eyes := Vector2.ZERO
@@ -79,6 +80,7 @@ var _bodies := PackedVector2Array()
 var _winding := PackedByteArray()
 var _loose := PackedByteArray()
 var _theirs := PackedByteArray()
+var _hidden := PackedByteArray()
 # Where his gaze is, the bearing from his eyes; NAN with nothing to hold.
 var _gaze: float = NAN
 var _head: int = -1
@@ -93,6 +95,7 @@ func _init() -> void:
 	_winding.resize(ticks)
 	_loose.resize(ticks)
 	_theirs.resize(ticks)
+	_hidden.resize(ticks)
 
 
 func reset() -> void:
@@ -109,9 +112,10 @@ func reset() -> void:
 
 # One tick's look at the puck at `at` moving at `moving`, carried by a skater
 # at `carrier_at` (NO_CARRIER loose), one of theirs (`carrier_theirs`), winding
-# up a shot with it (`winding`), and what he reads from what he has watched.
+# up a shot with it (`winding`), a body between it and his eyes (`hidden`), and
+# what he reads from what he has watched.
 func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrier_at: Vector2 = NO_CARRIER,
-		carrier_theirs: bool = false) -> void:
+		carrier_theirs: bool = false, hidden: bool = false) -> void:
 	var size: int = _at.size()
 	_head = (_head + 1) % size
 	_at[_head] = at
@@ -120,6 +124,7 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	_winding[_head] = 1 if winding else 0
 	_loose[_head] = 1 if carrier_at == NO_CARRIER else 0
 	_theirs[_head] = 1 if carrier_theirs else 0
+	_hidden[_head] = 1 if hidden else 0
 	_count = mini(_count + 1, size)
 	var lag: int = mini(ceili(delay_s / maxf(dt, 1e-6) - 1e-6), _count - 1)
 	var seen: int = (_head - lag + size) % size
@@ -133,8 +138,9 @@ func step(dt: float, at: Vector2, moving: Vector2, winding: bool = false, carrie
 	if not loose and lag + 2 < _count and _loose[before_last] == 0:
 		var own: Vector2 = (_at[seen] - _at[before_last]) / (2.0 * dt)
 		puck = carrier + (_at[seen] + own * (lag * dt) - carrier).limit_length(CARRIER_REACH_M)
-	watched_s = watched_s + dt if theirs and lag + 1 < _count and _gaze_holds(_at[seen], dt) else 0.0
-	if not theirs:
+	var in_sight: bool = _hidden[seen] == 0
+	watched_s = watched_s + dt if theirs and in_sight and lag + 1 < _count and _gaze_holds(_at[seen], dt) else 0.0
+	if not theirs or not in_sight:
 		_gaze = NAN
 
 

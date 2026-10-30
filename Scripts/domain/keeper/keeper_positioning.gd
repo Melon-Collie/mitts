@@ -32,6 +32,10 @@ extends RefCounted
 # low ready covers more of the net than the ready stance, nothing off its gear
 # goes on in, and its drop is the shorter fall.
 #
+# In the zone, a body on his sightline to the puck from his spot he looks
+# round (KeeperScreen): a step across off his angle line, no further than half
+# his chest.
+#
 # A pass he reads to an opposing stick (KeeperPlayRead.meets) he plays from
 # where that stick meets it, in the zone it is in: skated to at once, turning
 # as he goes, and stopped on the one-timer's angle rather than following the
@@ -92,6 +96,10 @@ var post_side: float = 0.0
 # What he reads of the play, for its receivers and his read's time; none, no
 # pass is read.
 var play: KeeperPlayRead = null
+# The skaters on the ice who could hide the puck from him, net frame (his
+# controller's; only where they stand is read); and his look round them.
+var bodies := PackedVector3Array()
+var screen := KeeperScreen.new()
 # The puck's velocity as decided on.
 var _velocity := Vector2.ZERO
 # Sealed on `post_side` for a puck racing him to it (`_race_to_post`).
@@ -146,6 +154,11 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
 	if meeting:
 		ahead = spot
+	if zone == Zone.FRONT:
+		screen.look(spot, Vector3(puck.x, GameRules.PUCK_COLLISION_HALF_HEIGHT, puck.y), bodies,
+				motor.low_ready.asked)
+		spot += screen.step
+		ahead += screen.step
 	motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
 
 

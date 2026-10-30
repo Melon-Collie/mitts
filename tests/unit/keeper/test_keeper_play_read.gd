@@ -4,7 +4,8 @@ extends GutTest
 # where it is; a change of direction read going the old way until his read has
 # passed, a slower tier's later; a wind-up seen late by his read and priming
 # the save once he has watched it long enough, an ordinary stickhandle his
-# gaze keeps up with priming him and a hard one in close not; and the
+# gaze keeps up with priming him and a hard one in close not, nor a puck a
+# body hides from him; and the
 # receivers a pass could
 # reach, through a lane no defender's stick reaches, in front of the goal line
 # and inside the blue line. A carried puck read his read late, carried on
@@ -102,6 +103,26 @@ func test_a_steady_look_at_the_puck_primes_the_save() -> void:
 	for i: int in 90:
 		ours.step(DT, body, Vector2.ZERO, false, body, false)
 	assert_false(ours.primed(), "a puck of ours never primes him")
+
+
+# A body between the puck and his eyes breaks the look, seen his read late: he
+# has to hold it for KeeperPlayRead.PRIME_S again once it is back in sight.
+func test_a_puck_behind_a_body_breaks_the_look() -> void:
+	var play := KeeperPlayRead.new()
+	var body := Vector2(0.0, -6.0)
+	var at: Vector2 = body + Vector2(0.3, -0.3)
+	for i: int in ceili((play.delay_s + KeeperPlayRead.PRIME_S) / DT) + 2:
+		play.step(DT, at, Vector2.ZERO, false, body, true)
+	assert_true(play.primed(), "held long enough: primed")
+	for i: int in ceili(play.delay_s / DT) + 2:
+		play.step(DT, at, Vector2.ZERO, false, body, true, true)
+	assert_false(play.primed(), "behind a body: the look broken")
+	assert_eq(play.watched_s, 0.0, "and it starts over")
+	var t: float = 0.0
+	while not play.primed() and t < 2.0:
+		play.step(DT, at, Vector2.ZERO, false, body, true)
+		t += DT
+	assert_almost_eq(t, play.delay_s + KeeperPlayRead.PRIME_S, 2.0 * DT, "held again in sight, his read late")
 
 
 # His gaze pursues the puck and holds it within the quiet eye's window: a

@@ -27,7 +27,10 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # stick when his read says it gets there, the brain still placing him
 # (KeeperPoke); one at his feet an opponent would get to before his glove he
 # sweeps away to the corner with it, where the stick gets there first
-# (KeeperClear).
+# (KeeperClear). A shot a body hides from his eyes he reads only once it comes
+# out of the body's shadow (GoalieScreenRules, as the shot log prices it), a
+# puck a body hides breaks his look at it, and the brain looks round a screen
+# (KeeperScreen).
 #
 # His frame is the net's: the Goalie node's turn at the goal line's centre, x
 # across (+ his blocker side), z back into the net, as KeeperPositioning reads.
@@ -323,8 +326,9 @@ func _measure_motion(was: Vector3, delta: float) -> void:
 
 
 # His look at the play: the carrier's body moving it, or the loose puck's own
-# motion. A shot's flight reaches the brain no sooner than his legs read it, and
-# by then the brain is resting on the save.
+# motion, and whether a body hides it from his eyes. A shot's flight reaches
+# the brain no sooner than his legs read it, and by then the brain is resting
+# on the save.
 func _read_play(delta: float, in_net: Vector3) -> void:
 	var carrier: Skater = puck.get_carrier()
 	var moving: Vector3 = _net.basis.inverse() * (carrier.velocity if carrier != null else puck.get_puck_velocity())
@@ -337,7 +341,18 @@ func _read_play(delta: float, in_net: Vector3) -> void:
 	var theirs: bool = carrier != null and (team_id == -1 or carrier.get_team_id() != team_id)
 	var winding: bool = theirs and SkaterStateMachine.state_pins_puck(carrier.current_shot_state)
 	play.eyes = Vector2(motor.x, motor.z)
-	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder, theirs)
+	play.step(delta, Vector2(in_net.x, in_net.z), Vector2(moving.x, moving.z), winding, holder, theirs,
+			_puck_hidden())
+
+
+# Whether a skater stands between the puck and his eyes, where his mask is.
+func _puck_hidden() -> bool:
+	_ensure_view()
+	if _view.screeners.is_empty():
+		return false
+	_screen_cfg.eye_height = goalie.get_mask_world_position().y - goalie.global_position.y
+	return GoalieScreenRules.hidden_by(goalie.global_position, puck.global_position, _view.screeners,
+			_screen_cfg) >= 0
 
 
 # Who an opposing carrier could pass to, through which lanes; and which of
@@ -347,6 +362,9 @@ func _read_receivers() -> void:
 	_defenders.clear()
 	_read_opponents()
 	var to_net: Transform3D = _net.affine_inverse()
+	brain.bodies.clear()
+	for at: Vector3 in _view.screeners:
+		brain.bodies.append(to_net * at)
 	var carrier: Skater = puck.get_carrier()
 	if carrier != null and (team_id == -1 or carrier.get_team_id() != team_id):
 		for at: Vector3 in _view.off_puck_opponents:
@@ -666,7 +684,7 @@ func _stance() -> GoalieStateMachine.State:
 # GameManager sets just before it (Scripts/networking/CLAUDE.md, shot lag comp).
 func _on_puck_released() -> void:
 	_end_save()
-	read.start(play.primed(), _pending_reaction_back_date)
+	read.start(play.primed(), _pending_reaction_back_date, screen_delay_for(puck.get_release_velocity()))
 	_pending_reaction_back_date = 0.0
 
 
@@ -674,7 +692,7 @@ func _on_puck_released() -> void:
 func _on_puck_touched_loose(_skater: Skater) -> void:
 	if read.reading():
 		_end_save()
-		read.start()
+		read.start(false, 0.0, screen_delay_for(puck.get_puck_velocity()))
 
 
 # The puck off the boards, a post or the net: the shot is over.

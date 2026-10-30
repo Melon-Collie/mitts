@@ -30,6 +30,7 @@ var age: float = -1.0
 var at := Vector3.ZERO
 var velocity := Vector3.ZERO
 var _primed: bool = false
+var _hidden_s: float = 0.0
 # Whether the next look is his first of this flight.
 var _first: bool = false
 # The flight as he first saw it, at the release or the touch.
@@ -39,10 +40,13 @@ var _from_velocity := Vector3.ZERO
 
 # A shot leaves a stick, or the puck is touched on its way: read from the start,
 # on the primed read if he had the save programmed; `seen_s` ago for a shot
-# whose shooter saw it leave that long before it reached the host (lag comp).
-func start(primed: bool = false, seen_s: float = 0.0) -> void:
+# whose shooter saw it leave that long before it reached the host (lag comp);
+# put off by `hidden_s`, the time a body hides it from him before it comes out
+# of the shadow (GoalieScreenRules).
+func start(primed: bool = false, seen_s: float = 0.0, hidden_s: float = 0.0) -> void:
 	age = maxf(seen_s, 0.0)
 	_primed = primed
+	_hidden_s = maxf(hidden_s, 0.0)
 	_first = true
 
 
@@ -60,7 +64,7 @@ func legs_read() -> bool:
 
 # How long after the release or the touch he has read it.
 func read_s() -> float:
-	return minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s
+	return _hidden_s + (minf(leg_delay_s, primed_delay_s) if _primed else leg_delay_s)
 
 
 func step(dt: float, puck_at: Vector3, puck_velocity: Vector3) -> void:
