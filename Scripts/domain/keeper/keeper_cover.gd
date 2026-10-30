@@ -12,7 +12,7 @@ extends RefCounted
 # when down), leaned on over his pads as far as it takes and no further
 # (`lean`). Pure, in his authored space as KeeperSave's: left-catching, the net
 # frame brought into it by where the motor has him and whether he catches
-# right.
+# right. Where he plays a held puck out is in the net's frame.
 
 # A puck this near the middle of the glove, across the ice, is under it; and
 # the glove this near resting on it is down on it.
@@ -30,6 +30,16 @@ const LOOK_M: float = 3.0
 const ROUNDS: int = 3
 # The leans tried, least first (KeeperPoses.cover_lean's share).
 const LEANS: Array[float] = [0.0, 0.25, 0.5, 0.75, 1.0]
+# Playing a held puck out with no whistle for it: how far out he sets it, and
+# how hard he sweeps it on, out of his own reach so he does not cover it again.
+const SET_DOWN_OUT_M: float = 0.9
+const PLAY_OUT_M_S: float = 6.0
+# The way he sweeps it, his own frame: out from his glove side, a little ahead.
+const SWEEP_WAY := Vector2(1.0, -0.5)
+# The least of the sweep's speed that heads away from his goal line; and the
+# least the puck is set down clear in front of it, a puck's width and more.
+const AWAY_SHARE: float = 0.45
+const CLEAR_OF_LINE_M: float = 0.2
 
 var glove_speed_m_s: float = GoalieSkillProfile.hard().glove_react_max_speed_mps
 
@@ -140,3 +150,26 @@ static func slid(at: Vector3, v: Vector3, t: float) -> Vector3:
 	var decel: float = GameRules.PUCK_ICE_DECEL_M_S2
 	var moving: float = minf(t, speed / decel)
 	return at + flat / speed * (speed * moving - 0.5 * decel * moving * moving)
+
+
+# The way he sweeps a held puck out, net frame (x across, y back into the net):
+# out from his glove side (`glove_side` −1 for his left, a left-catcher's) as
+# he is turned (`yaw`, a Node3D's rotation.y), turned forward as far as it
+# takes for at least AWAY_SHARE of it to head away from his goal line, so a
+# keeper turned to the corner or the boards never sweeps it at his own net.
+static func play_out_way(yaw: float, glove_side: float) -> Vector2:
+	var local := Vector2(SWEEP_WAY.x * glove_side, SWEEP_WAY.y)
+	var way: Vector2 = Vector2(local.x * cos(yaw) + local.y * sin(yaw),
+			-local.x * sin(yaw) + local.y * cos(yaw)).normalized()
+	if way.y <= -AWAY_SHARE:
+		return way
+	var across: float = sqrt(1.0 - AWAY_SHARE * AWAY_SHARE)
+	return Vector2(across if way.x >= 0.0 else -across, -AWAY_SHARE)
+
+
+# Where he sets it down, net frame, from where he stands (`me`): SET_DOWN_OUT_M
+# along the way he sweeps it, never less than CLEAR_OF_LINE_M in front of his
+# goal line, however deep in his crease or below the line he holds it.
+static func set_down_at(me: Vector2, way: Vector2) -> Vector2:
+	var at: Vector2 = me + way * SET_DOWN_OUT_M
+	return Vector2(at.x, minf(at.y, -CLEAR_OF_LINE_M))

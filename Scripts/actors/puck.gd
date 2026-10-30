@@ -291,6 +291,9 @@ var _goalie_contact: GoalieContactDetector.Contact = null
 var _vfx: PuckVFX = null
 var _goalie_scratch: SweptDiscOBB.Result = null
 var _save_result: GoalieSaveRules.ContactResult = null
+# The same contact off his gear held still: what his own motion adds is the
+# difference (GoalieSaveRules.keep_out_of_own_net).
+var _save_still: GoalieSaveRules.ContactResult = null
 var _tick_result: PuckAuthorityRules.TickResult = null
 # NativePuckStep (null = extension absent, GDScript step below). Configured in
 # _ready via the shared factory so host drive and client prediction match.
@@ -398,6 +401,7 @@ func set_server_mode(is_server: bool) -> void:
 		_goalie_contact = GoalieContactDetector.Contact.new()
 		_goalie_scratch = SweptDiscOBB.Result.new()
 		_save_result = GoalieSaveRules.ContactResult.new()
+		_save_still = GoalieSaveRules.ContactResult.new()
 		_tick_result = PuckAuthorityRules.TickResult.new()
 		_obstacle_result = PuckObstacleCollision.Result.new()
 		_obstacle_scratch = SweptDiscOBB.Result.new()
@@ -990,6 +994,14 @@ func _drive_analytic(dt: float) -> void:
 			if part == GoalieSaveRules.SavePart.CHEST and g != null and g.chest_contact.is_valid():
 				g.chest_contact.call(vel, _goalie_contact.point, _goalie_contact.normal,
 						_goalie_contact.part_velocity, _save_result)
+			# Toward the goal line of the end he defends: his own gear never
+			# carries a puck that way.
+			var to_goal := Vector3(0.0, 0.0, signf(sub_prev.z))
+			if not _save_result.caught and not _save_result.trapped \
+					and _goalie_contact.part_velocity != Vector3.ZERO:
+				GoalieSaveRules.resolve_contact(vel, part, _goalie_contact.normal, _save_still, fwd)
+				_save_result.velocity = GoalieSaveRules.keep_out_of_own_net(_save_still.velocity,
+						_save_result.velocity, to_goal)
 			vel = _save_result.velocity
 			# Eject the disc flush off the contacted face. `point` is the sphere
 			# CENTRE at toi — already `radius` off the real face via the
@@ -1003,7 +1015,8 @@ func _drive_analytic(dt: float) -> void:
 				pos = Vector3(_goalie_contact.point.x, ice_height,
 						_goalie_contact.point.z)
 			else:
-				pos = _goalie_contact.point + _goalie_contact.normal * _goalie_contact.depth
+				pos = _goalie_contact.point + GoalieSaveRules.eject_out_of_own_net(
+						_goalie_contact.normal * _goalie_contact.depth, to_goal)
 			if not _contact_latch_goalie and not touched_goalie:
 				emit_goalie = _goalie_contact.goalie as Goalie
 			# The catch is gated on its own occurrence, NOT the touch latch — a

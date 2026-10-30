@@ -31,10 +31,6 @@ const PLANNER_EVERY: int = _PhysicsConstants.PHYSICS_TICK / 30
 # How long he holds a caught or covered puck before he plays it out, where no
 # whistle has come for it (GameRules.whistles_a_cover).
 const CATCH_HOLD_S: float = 1.0
-# Where he sets it: out from his glove side, on the ice; and how hard he sweeps
-# it on toward that corner, out of his own reach so he does not cover it again.
-const SET_DOWN_OUT_M: float = 0.9
-const PLAY_OUT_M_S: float = 6.0
 
 var motor := KeeperMotor.new()
 var brain := KeeperPositioning.new()
@@ -548,8 +544,8 @@ func _secure() -> void:
 	puck_covered.emit(team_id)
 
 
-# Held in the glove or to his chest; with no whistle for it, set down out from
-# his glove side and swept on toward that corner.
+# Held in the glove or to his chest; with no whistle for it, set down and swept
+# out from his glove side, away from his net (KeeperCover.play_out_way).
 func _hold_catch(delta: float) -> void:
 	puck.set_puck_position(_held_at())
 	_holding += delta
@@ -558,9 +554,11 @@ func _hold_catch(delta: float) -> void:
 	_holding = -1.0
 	_chest_held = Vector3.INF
 	var glove_side: float = 1.0 if _keeper.skeleton.mirrored else -1.0
-	var out: Vector3 = _net * Vector3(motor.x + glove_side * SET_DOWN_OUT_M, 0.0, motor.z)
+	var way: Vector2 = KeeperCover.play_out_way(motor.yaw, glove_side)
+	var at: Vector2 = KeeperCover.set_down_at(Vector2(motor.x, motor.z), way)
+	var out: Vector3 = _net * Vector3(at.x, 0.0, at.y)
 	puck.set_puck_position(Vector3(out.x, puck.ice_height, out.z))
-	puck.set_puck_velocity(_net.basis * Vector3(glove_side, 0.0, -0.5).normalized() * PLAY_OUT_M_S)
+	puck.set_puck_velocity(_net.basis * Vector3(way.x, 0.0, way.y) * KeeperCover.PLAY_OUT_M_S)
 	puck.motion_pinned = false
 	puck.pickup_locked = false
 	motor.thaw()

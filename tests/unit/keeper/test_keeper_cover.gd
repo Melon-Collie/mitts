@@ -6,6 +6,8 @@ extends GutTest
 # in the air, he cannot; a puck slowing on the ice is covered where it will be. Played out, he
 # goes down, leans on over his pads after the glove and lays it on the puck,
 # every tick unbroken, his gear out of the ice and his arms on their gear.
+# Played out with no whistle, a held puck is set down in front of his goal line
+# and swept away from it, however he is turned and wherever he holds it.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const PAD_GIVE_M: float = 0.025
@@ -132,3 +134,26 @@ func test_covering_from_his_feet_goes_down_and_lays_the_glove_on_it() -> void:
 	var h: Vector3 = KeeperGear.half_extents(KeeperGear.Part.GLOVE)
 	assert_lte(glove.y - puck.y, h.length(), "down on it")
 	assert_eq(_motor.save_move.state, KeeperSaveMove.State.HELD, "down")
+
+
+func test_a_held_puck_is_played_out_away_from_his_net_however_he_is_turned() -> void:
+	for side: float in [-1.0, 1.0]:
+		for i: int in 36:
+			var yaw: float = -PI + TAU * i / 36.0
+			var way: Vector2 = KeeperCover.play_out_way(yaw, side)
+			var what: String = "glove side %+.0f, turned %.0f°" % [side, rad_to_deg(yaw)]
+			assert_almost_eq(way.length(), 1.0, 1e-5, what)
+			assert_lte(way.y, -KeeperCover.AWAY_SHARE + 1e-5, "away from his goal line, " + what)
+			for me: Vector2 in [Vector2(0.0, -1.2), Vector2(-0.9, 0.0), Vector2(0.9, 0.3), Vector2(2.4, 0.6)]:
+				var at: Vector2 = KeeperCover.set_down_at(me, way)
+				assert_lte(at.y, -KeeperCover.CLEAR_OF_LINE_M, "set down in front of the line, %s at %s" % [what, me])
+
+
+func test_square_on_he_plays_it_out_his_glove_side_and_ahead() -> void:
+	var way: Vector2 = KeeperCover.play_out_way(0.0, -1.0)
+	assert_lt(way.x, 0.0, "his glove side")
+	assert_lt(way.y, 0.0, "ahead of him")
+	var at: Vector2 = KeeperCover.set_down_at(Vector2(0.0, -1.2), way)
+	assert_almost_eq(at.distance_to(Vector2(0.0, -1.2)), KeeperCover.SET_DOWN_OUT_M, 1e-5, "out of his reach")
+	assert_almost_eq(KeeperCover.play_out_way(0.0, 1.0), Vector2(-way.x, way.y), Vector2.ONE * 1e-5,
+			"a right-catcher's the mirror")

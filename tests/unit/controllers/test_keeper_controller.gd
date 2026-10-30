@@ -136,7 +136,7 @@ func test_a_catch_is_held_in_his_glove_and_covered_then_played_out() -> void:
 	_run(KeeperController.CATCH_HOLD_S + 0.1)
 	assert_false(_puck.motion_pinned or _puck.pickup_locked, "set down")
 	assert_almost_eq(_puck.global_position.y, _puck.ice_height, 1e-4, "on the ice")
-	assert_almost_eq(_puck.get_puck_velocity().length(), KeeperController.PLAY_OUT_M_S, 1e-3,
+	assert_almost_eq(_puck.get_puck_velocity().length(), KeeperCover.PLAY_OUT_M_S, 1e-3,
 			"swept out of his reach")
 
 

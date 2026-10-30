@@ -27,7 +27,7 @@ old one's place.
 | `keeper_save.gd` | which save he makes: the one taught for where the shot passes him (below his belly button the butterfly, the half butterfly wide of a pad, the extension past it; above it the glove or the blocker on its side, the glove trapping one at the chest), each candidate posed and the flight tested against its own gear, the first in the taught order whose gear meets the flight and holds it, timing deciding only whether he gets there; a save holds only if what comes off the gear it meets stays out), and the hand laid over whatever pose the motor gives him at its tier speed, a hand still going back from the last save going on back by itself as the next goes out; the glove sent onto a puck to cover it (`cover`), without a read, the trunk folding after it; and where a shot leaves him time to skate onto its line before he sets for it (`square_up_spot`) |
 | `keeper_look.gd` | his eyes on the puck: his face turned to follow it in any stance, the neck turning and the head nodding, no faster than a head turns (`TURN_RAD_S`) and no further than a neck does, then the trunk turning on the hips for a puck behind him (a shot gone by, one round the net), over the shoulder he is already turned to when it is dead behind; laid over the pose last, so through a save he watches the puck into the gear |
 | `keeper_chest_trap.gd` | a shot caught on his chest: only at the logo (between where his arm pads lie on the protector, the middle of its height, on its face), and only when the nearer hand gets onto it before the foam's rebound carries it out of the glove's pocket |
-| `keeper_cover.gd` | covering a loose puck he can reach: whether one down on the ice (`on_ice`, never one in the air) and slowing on it will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes) |
+| `keeper_cover.gd` | covering a loose puck he can reach: whether one down on the ice (`on_ice`, never one in the air) and slowing on it will still be under his glove when the glove can land there (from his feet once his drop lands, down at once, no sooner than the glove gets there) and slow enough for it to stop it; where the hand goes so the glove lies flat on top of it, and how far he leans on over his pads to get it there (`KeeperPoses.cover_lean`, no further than it takes); where a held puck is set down and swept with no whistle for it (`play_out_way`, `set_down_at`), away from his net |
 | `keeper_fetch.gd` | going for a loose puck: one a push from him (in front, or beside the post below the goal line, never behind the cage), skated to where his glove lands on it, when no opponent at full sprint gets a stick on it before he is down on it, his read as the margin to set out |
 | `keeper_save_move.gd` | a low save's body: cut in from whatever pose he is in, into the save's stance in the drop's time, held, gathered into the stance he rests in, the speed it caught him at carried on (stopped by his edges on his feet unless dropped on purpose as he glides, `edges`, then by the pads' friction) |
 | `controllers/keeper_controller.gd` | him in a match, in the goalie's seat (below) |
@@ -56,7 +56,10 @@ stance the bots read and the puck handlers: a release read and saved (below), a
 tip read again, a contact only timed, a glove catch held and covered for the
 whistle, and a loose puck he can reach covered (below); where no whistle
 comes (`GameRules.whistles_a_cover`, Off only) he sets it down out from his
-glove side and sweeps it on toward that corner, out of his reach.
+glove side as he is turned and sweeps it on, out of his reach, turned ahead as
+far as it takes to head away from his net and set down clear in front of his
+goal line wherever he held it, the post or below the line included
+(`KeeperCover.play_out_way`, `set_down_at`).
 
 He plays on the host only. His pose goes on the wire with his root
 (`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from), so a
@@ -149,6 +152,12 @@ it (`KeeperMotor.freeze`): no ground covered and no move started, the move
 under way only settling his pose, until he plays it out. So a rebound dying at his
 feet, a dribble at the crease or a puck caught behind his stick or between his
 pads is smothered rather than dropped on and popped up from.
+Nothing his own gear's motion does carries a puck toward his goal line: a pad,
+skate or stick moving through a puck at his feet pushes it across or out but
+never in (`GoalieSaveRules.keep_out_of_own_net`, on the puck's host tick), and
+one his moving gear ends up overlapping is put back out across or in front,
+never behind (`eject_out_of_own_net`). A puck already sliding at his net, or a
+shot, comes off him as the contact sends it, in off a pad included.
 One a push away that he wins the race to (`KeeperFetch`) he skates to, square
 to it, and once he has stopped on his spot covers the same way: a loose puck
 beside the post below the goal line with nobody near it is his, not left
@@ -177,8 +186,12 @@ led by the blade, the glove leading a drop for one off the ice,
 the five-hole down with time and down late without, a shot at the chest
 trapped with the glove, a save holding or not by its rebound, a new shot's hand going out while the last save's goes back, a long shot moved onto the line of first and one at his body or from the slot not), `test_keeper_cover.gd` (a
 puck at his feet coverable from his feet once his drop lands and sooner down,
-one out of reach, too fast or in the air not, a sliding one covered where it will be, and
-the cover played out unbroken with the glove ending flat on it),
+one out of reach, too fast or in the air not, a sliding one covered where it will be,
+the cover played out unbroken with the glove ending flat on it, and a held
+puck played out away from his net however he is turned),
+`tests/unit/controllers/test_keeper_never_walks_a_puck_in.gd` (set on the
+near post and in the RVH, the live keeper never puts a slow puck at his feet
+in his net, nor one he holds there and plays out),
 `test_keeper_save_move.gd` (cut into a rise and into the gather after a save),
 and the match through the
 puck's own contact test in `test_keeper_controller.gd`.
@@ -417,6 +430,10 @@ drag across, a walk across the slot, a cut in, a drive with a late pull) and
 says per tick how far his angle lags the puck's and how much of the mouth he
 covers where he is against the same stance set on the puck's line, and the
 saves on shots after a drag by delay.
+`tests/instruments/keeper/test_loose_puck_at_his_feet.gd` lays a slow loose
+puck all round his feet, set square, at an angle, on the post and in the RVH,
+and says how each ended: covered, gone, still, slid in untouched, or in off
+him, every one of those printed with what touched it last.
 `tests/instruments/keeper/test_drop_seal_timing.gd` says how soon the
 butterfly covers the low net: tick by tick through the drop, from the ready
 stance and from the low ready, the share of lines across the mouth a puck on
