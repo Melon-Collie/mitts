@@ -119,3 +119,18 @@ func test_a_jersey_stripes_peak_keeps_its_depth_in_metres() -> void:
 	assert_almost_eq(hem.peak.depth * side, -0.1 * design, 1e-6)
 	assert_eq([hem.peak.count, hem.peak.u], [2, 0.0])
 	assert_eq(hem.fill_below, Color.RED, "and its fill comes with it")
+
+
+# Between the collar's bands and the hem's, a band's place blends from one rule
+# to the other: no height on the sweater is out of a kit's reach, and a band
+# never moves up the sweater as its pos grows.
+func test_a_band_across_the_chest_can_sit_at_any_height() -> void:
+	var side: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
+	var step: float = 0.01
+	var last: float = UniformPaint.jersey_stripe_centre_m(0.0, side)
+	for i: int in range(1, 101):
+		var at: float = UniformPaint.jersey_stripe_centre_m(float(i) * step, side)
+		assert_gt(at, last, "pos %.2f" % (float(i) * step))
+		# The old split jumped 7.5 cm at mid-sweater; a blend moves under 1 cm a step.
+		assert_lt(at - last, 0.01, "no gap past pos %.2f" % (float(i) * step))
+		last = at

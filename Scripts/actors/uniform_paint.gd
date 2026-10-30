@@ -53,10 +53,19 @@ static func collar_color(jersey: Dictionary) -> Color:
 
 
 # The side height the kits' jersey stripe fractions are authored against. A band
-# in its lower half is a hem band and keeps its place above the hem; one in the
-# upper half keeps its place under the collar — so a sweater of another length
-# moves each band with the edge it trims, at the same width.
+# above the first of _STRIPE_TRIMS trims the collar and keeps its place under
+# it; one below the second trims the hem and keeps its place above it; between
+# them its place blends from one to the other, so a band across the chest can
+# sit at any height. A sweater of another length moves each band with the edge
+# it trims, at the same width.
 const JERSEY_STRIPE_DESIGN_HEIGHT_M: float = 0.55
+const _STRIPE_TRIMS: Vector2 = Vector2(0.25, 0.75)
+
+
+# Metres down a jersey side `side_m` tall that a kit stripe's `pos` centres at.
+static func jersey_stripe_centre_m(pos: float, side_m: float) -> float:
+	var hem_share: float = clampf(inverse_lerp(_STRIPE_TRIMS.x, _STRIPE_TRIMS.y, pos), 0.0, 1.0)
+	return pos * JERSEY_STRIPE_DESIGN_HEIGHT_M + hem_share * (side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M)
 
 
 # A kit jersey stripe {pos, width, color, peak?, fill_below?} as fractions of the torso side
@@ -64,10 +73,7 @@ const JERSEY_STRIPE_DESIGN_HEIGHT_M: float = 0.55
 static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
 	var side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
 	var scale: float = JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m
-	var pos: float = float(stripe.pos)
-	var centre_m: float = pos * JERSEY_STRIPE_DESIGN_HEIGHT_M
-	if pos > 0.5:
-		centre_m += side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M
+	var centre_m: float = jersey_stripe_centre_m(float(stripe.pos), side_m)
 	var side := {"pos": centre_m / side_m, "width": float(stripe.width) * scale,
 			"color": stripe.color}
 	if stripe.has("fill_below"):

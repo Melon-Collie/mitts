@@ -275,18 +275,14 @@ func _decal_view(decal: KeeperJerseyDecal) -> SubViewport:
 	return view
 
 
-# The kit's jersey stripes as shares of a jersey `height_m` tall. They are
-# authored against UniformPaint's design height: a hem band keeps its place
-# above the hem, a band in the top half its place under the collar. A peaked
+# The kit's jersey stripes as shares of a jersey `height_m` tall, placed as the
+# skater's are (UniformPaint.jersey_stripe_centre_m). A peaked
 # stripe is laid flat at its pos, and its fill below with it.
 static func _jersey_stripes(stripes: Array, height_m: float) -> Array:
 	var design: float = UniformPaint.JERSEY_STRIPE_DESIGN_HEIGHT_M
 	var out: Array = []
 	for s: Dictionary in stripes:
-		var centre_m: float = float(s.pos) * design
-		if float(s.pos) > 0.5:
-			centre_m += height_m - design
-		var centre: float = centre_m / height_m
+		var centre: float = UniformPaint.jersey_stripe_centre_m(float(s.pos), height_m) / height_m
 		if s.has("fill_below"):
 			# Flat, as his stripes are: from the stripe's centre to past the hem.
 			out.append({"pos": (centre + 1.05) * 0.5, "width": 1.05 - centre,

@@ -941,12 +941,12 @@
           "collar": "#1A1A1A",
           "stripes": [
             {
-              "pos": 0.425,
+              "pos": 0.5293,
               "width": 0.338,
               "color": "#FFFFFF"
             },
             {
-              "pos": 0.425,
+              "pos": 0.5293,
               "width": 0.0434,
               "color": "#1A1A1A"
             },
