@@ -1686,26 +1686,37 @@
     {
       "name": "Cherry",
       "primary": "#D2142C",
-      "secondary": "#2B070F",
+      "secondary": "#161616",
       "light": "#FFFFFF",
       "home": {
-        "helmet": "#2B070F",
+        "helmet": "#161616",
         "shoulders": {
-          "text": "#D2142C"
+          "text": "#FFFFFF",
+          "stroke": "#161616"
         },
         "jersey": {
           "base": "#D2142C",
-          "collar": "#2B070F",
+          "collar": "#161616",
           "stripes": [
             {
-              "pos": 0.76,
-              "width": 0.055,
-              "color": "#2B070F"
+              "pos": 0.79,
+              "width": 0.07,
+              "color": "#161616"
             },
             {
-              "pos": 0.88,
-              "width": 0.055,
-              "color": "#2B070F"
+              "pos": 0.79,
+              "width": 0.04,
+              "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.89,
+              "width": 0.07,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.89,
+              "width": 0.04,
+              "color": "#FFFFFF"
             }
           ]
         },
@@ -1713,65 +1724,92 @@
           "base": "#D2142C",
           "stripes": [
             {
-              "pos": 0.142,
-              "width": 0.283,
-              "color": "#2B070F"
+              "pos": 0.6281,
+              "width": 0.0726,
+              "color": "#161616"
             },
             {
-              "pos": 0.368,
-              "width": 0.062,
-              "color": "#2B070F"
+              "pos": 0.6281,
+              "width": 0.0415,
+              "color": "#FFFFFF"
             },
             {
-              "pos": 0.504,
-              "width": 0.062,
-              "color": "#2B070F"
+              "pos": 0.7319,
+              "width": 0.0726,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.7319,
+              "width": 0.0415,
+              "color": "#FFFFFF"
             }
           ]
         },
-        "gloves": "#2B070F",
+        "gloves": "#161616",
         "pants": {
-          "base": "#2B070F",
+          "base": "#161616",
           "stripes": []
         },
         "socks": {
           "base": "#D2142C",
           "stripes": [
             {
-              "pos": 0.42,
-              "width": 0.1,
-              "color": "#2B070F"
+              "pos": 0.4083,
+              "width": 0.1283,
+              "color": "#161616"
             },
             {
-              "pos": 0.6,
-              "width": 0.1,
-              "color": "#2B070F"
+              "pos": 0.4083,
+              "width": 0.0733,
+              "color": "#FFFFFF"
+            },
+            {
+              "pos": 0.5917,
+              "width": 0.1283,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.5917,
+              "width": 0.0733,
+              "color": "#FFFFFF"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#2B070F",
-          "outline": "#D2142C"
+          "color": "#FFFFFF",
+          "stroke": "#161616",
+          "outline": "#161616"
         }
       },
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "text": "#FFFFFF"
+          "text": "#D2142C",
+          "stroke": "#161616"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "collar": "#D2142C",
+          "collar": "#161616",
           "stripes": [
             {
-              "pos": 0.76,
-              "width": 0.055,
+              "pos": 0.79,
+              "width": 0.07,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.79,
+              "width": 0.04,
               "color": "#D2142C"
             },
             {
-              "pos": 0.88,
-              "width": 0.055,
+              "pos": 0.89,
+              "width": 0.07,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.89,
+              "width": 0.04,
               "color": "#D2142C"
             }
           ]
@@ -1780,38 +1818,53 @@
           "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.142,
-              "width": 0.283,
+              "pos": 0.6281,
+              "width": 0.0726,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.6281,
+              "width": 0.0415,
               "color": "#D2142C"
             },
             {
-              "pos": 0.368,
-              "width": 0.062,
-              "color": "#D2142C"
+              "pos": 0.7319,
+              "width": 0.0726,
+              "color": "#161616"
             },
             {
-              "pos": 0.504,
-              "width": 0.062,
+              "pos": 0.7319,
+              "width": 0.0415,
               "color": "#D2142C"
             }
           ]
         },
-        "gloves": "#2B070F",
+        "gloves": "#161616",
         "pants": {
-          "base": "#2B070F",
+          "base": "#161616",
           "stripes": []
         },
         "socks": {
           "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.42,
-              "width": 0.1,
+              "pos": 0.4083,
+              "width": 0.1283,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.4083,
+              "width": 0.0733,
               "color": "#D2142C"
             },
             {
-              "pos": 0.6,
-              "width": 0.1,
+              "pos": 0.5917,
+              "width": 0.1283,
+              "color": "#161616"
+            },
+            {
+              "pos": 0.5917,
+              "width": 0.0733,
               "color": "#D2142C"
             }
           ]
@@ -1819,7 +1872,8 @@
         "goalie_pads": "#FFFFFF",
         "text": {
           "color": "#D2142C",
-          "outline": "#2B070F"
+          "stroke": "#161616",
+          "outline": "#161616"
         }
       }
     },

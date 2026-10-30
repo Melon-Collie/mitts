@@ -7,16 +7,18 @@ extends RefCounted
 # real fruit's, listed in the order they claim a team color (TeamCrest snaps
 # them), and read here by index.
 
-# Dragonfruit's bracts keep this green unsnapped: no team carries a green, and
-# in the skin's pink they read as petals.
+# Greens a crest keeps as drawn rather than snapping to the team's (keeps):
+# they read as the plant, not the team. Dragonfruit's bracts are petals in the
+# skin's pink; the cherry's stems would go black in a team without a green.
 const DRAGONFRUIT_GREEN: Color = Color("#7BBF3A")
+const CHERRY_STEM: Color = Color("#3E8E3A")
 
 const _LEAF: Color = Color("#3E7D3A")
 
 const _COLORS: Dictionary = {
 	"blackberry": [Color("#4A2050"), Color("#1E1420"), _LEAF],
 	"blueberry": [Color("#3B5BA8"), Color("#22355F"), _LEAF],
-	"cherry": [Color("#C8102E"), _LEAF],
+	"cherry": [Color("#C8102E"), CHERRY_STEM],
 	"coconut": [Color("#6B4226"), Color("#F5F0E1"), Color("#5A3A22")],
 	"dragonfruit": [Color("#E0306F"), Color("#FFFFFF"), Color("#1A1A1A"), DRAGONFRUIT_GREEN],
 	"lemon": [Color("#F7D52A"), Color("#FFF3A6"), _LEAF],
@@ -32,6 +34,10 @@ const _COLORS: Dictionary = {
 # silhouette pass, which TeamCrest stacks under the fruit as its keylines.
 static var _grow: float = 0.0
 static var _grow_color: Color = Color.WHITE
+
+
+static func keeps(color: Color) -> bool:
+	return color == DRAGONFRUIT_GREEN or color == CHERRY_STEM
 
 
 static func has(fruit: String) -> bool:
