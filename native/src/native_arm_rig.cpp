@@ -101,6 +101,42 @@ double arm_intrusion(const Vector3 &s, const Vector3 &e, const Vector3 &w, const
 			segment_intrusion(e, w, keep_out));
 }
 
+// TwoBoneIK._GRIP_LEAN, _GRIP_TURN.
+constexpr double GRIP_LEAN = 12.0;
+constexpr double GRIP_TURN = 0.6;
+
+// TwoBoneIK.grip_lean.
+double grip_lean(const Vector3 &shoulder, const Vector3 &hand, double upper_len, double forearm_len,
+		const Vector3 &pole_world, const Vector3 &grip, double min_cos) {
+	const Vector3 elbow = solve_elbow(shoulder, hand, upper_len, forearm_len, pole_world);
+	const double short_by = min_cos - (double)(hand - elbow).dot(grip) / forearm_len;
+	if (short_by <= 0.0) {
+		return 0.0;
+	}
+	return GRIP_TURN * (1.0 - Math::exp(-GRIP_LEAN * short_by * short_by))
+			* Math::smoothstep(0.0, 0.5, -(double)grip.y);
+}
+
+// TwoBoneIK.bend_for_grip.
+Vector3 bend_for_grip(const Vector3 &shoulder, const Vector3 &hand, const Vector3 &pole_world,
+		const Vector3 &grip, const Vector3 &outward, double share) {
+	const Vector3 bend = bend_direction(shoulder, hand, pole_world);
+	if (share <= 0.0 || bend == Vector3()) {
+		return bend;
+	}
+	const Vector3 axis = (hand - shoulder).normalized();
+	Vector3 toward = outward.normalized() - grip;
+	toward -= axis * toward.dot(axis);
+	if (toward.length_squared() < 0.000001) {
+		return bend;
+	}
+	const Vector3 hinge = bend.cross(toward.normalized());
+	if (hinge.length_squared() < 0.000001) {
+		return bend;
+	}
+	return bend.rotated(hinge.normalized(), (real_t)((double)bend.angle_to(toward) * share));
+}
+
 // TwoBoneIK._CLEAR_LEAN.
 constexpr double CLEAR_LEAN = 60.0;
 
@@ -153,7 +189,7 @@ Transform3D pose_bone(const Vector3 &a, const Vector3 &b, const Vector3 &thickne
 }
 
 // SkaterArmRig.glove_basis.
-Basis glove_basis(const Vector3 &forearm_dir, const Vector3 &grip, double max_bend) {
+Basis glove_basis(const Vector3 &forearm_dir, const Vector3 &grip, const Vector2 &max_bend) {
 	const Basis straight = Basis::looking_at(forearm_dir, up_for_look_at(forearm_dir))
 			* Basis(Vector3(1, 0, 0), Math_PI * 0.5);
 	if (grip == Vector3()) {
@@ -169,7 +205,8 @@ Basis glove_basis(const Vector3 &forearm_dir, const Vector3 &grip, double max_be
 	const Vector3 hinge = forearm_dir.cross(square);
 	if (hinge.length_squared() > 1e-8) {
 		hand_axis = forearm_dir.rotated(hinge.normalized(),
-				(real_t)Math::min(Math::asin(Math::clamp(Math::abs(across), 0.0, 1.0)), max_bend));
+				(real_t)Math::min(Math::asin(Math::clamp(Math::abs(across), 0.0, 1.0)),
+						across > 0.0 ? (double)max_bend.x : (double)max_bend.y));
 	}
 	Vector3 knuckles = grip - hand_axis * grip.dot(hand_axis);
 	if (knuckles.length_squared() < 0.0001) {
@@ -213,14 +250,16 @@ void NativeArmRig::bind(Object *p_skeleton, const PackedInt32Array &p_bones) {
 	bone_torso = p_bones[6];
 }
 
-void NativeArmRig::set_trunk(const Vector4 &p_keep_out, double p_root_share) {
+void NativeArmRig::set_trunk(const Vector4 &p_keep_out, double p_root_share,
+		double p_grip_min_cos) {
 	trunk_keep_out = p_keep_out;
 	root_share = p_root_share;
+	grip_min_cos = p_grip_min_cos;
 }
 
 void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thick_forearm,
 		const Vector3 &p_thick_cuff, const Vector3 &p_thick_elbow, const Vector3 &p_thick_glove,
-		double p_wrist_break_max) {
+		const Vector2 &p_wrist_break_max) {
 	thick_upper = p_thick_upper;
 	thick_forearm = p_thick_forearm;
 	thick_cuff = p_thick_cuff;
@@ -231,7 +270,7 @@ void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thic
 
 bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3 &grip,
 		const Transform3D &frame, const Basis &trunk_texture,
-		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load) {
+		const Vector3 &pole, const Vector4 &lengths, const Vector3 &load, double grip_share) {
 	Skeleton3D *skeleton = Object::cast_to<Skeleton3D>(ObjectDB::get_instance(skeleton_id));
 	if (skeleton == nullptr || bone_upper < 0) {
 		return false;
@@ -249,10 +288,18 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const Vector3 rooted = spine.xform(
 			trunk_texture.xform(marker + check_load_offset(lead, side, half_width)));
 	const Vector3 shoulder_s = reach_root(rooted, hand_s, lengths.z, lengths.w);
-	const Vector3 elbow_s = solve_elbow_clear(shoulder_s, hand_s, upper_len, forearm_len,
-			spine.basis.xform(tucked_pole(pole, lead, side)),
+	const Vector3 grip_s = frame.basis.xform(grip);
+	Vector3 pole_s = spine.basis.xform(tucked_pole(pole, lead, side));
+	grip_target = 0.0;
+	if (grip_s != Vector3()) {
+		const Vector3 along = grip_s.normalized();
+		grip_target = grip_lean(shoulder_s, hand_s, upper_len, forearm_len, pole_s, along, grip_min_cos);
+		pole_s = bend_for_grip(shoulder_s, hand_s, pole_s, along,
+				spine.basis.xform(Vector3((real_t)side, 0.0, 0.0)), grip_share < 0.0 ? grip_target : grip_share);
+	}
+	const Vector3 elbow_s = solve_elbow_clear(shoulder_s, hand_s, upper_len, forearm_len, pole_s,
 			skeleton->get_bone_global_pose(bone_torso), trunk_keep_out, root_share);
-	const Vector3 pole_s = elbow_s - shoulder_s;
+	pole_s = elbow_s - shoulder_s;
 	const Vector3 forearm_span = hand_s - elbow_s;
 	const double forearm_length = forearm_span.length();
 	// The GDScript path's held-pose branches (any degenerate part) read the
@@ -276,8 +323,7 @@ bool NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector
 	const Basis pad = out == Vector3() ? Basis() : Basis(arm_axis, out, arm_axis.cross(out));
 	skeleton->set_bone_pose(bone_elbow, Transform3D(pad.scaled_local(thick_elbow), elbow_s));
 	// _pose_glove (its direction is normalized(), the same unit vector).
-	const Basis glove = glove_basis(forearm_span.normalized(),
-			frame.basis.xform(grip), wrist_break_max);
+	const Basis glove = glove_basis(forearm_span.normalized(), grip_s, wrist_break_max);
 	skeleton->set_bone_pose(bone_glove, Transform3D(glove.scaled_local(thick_glove), hand_s));
 	return true;
 }
@@ -287,10 +333,12 @@ void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("configure", "thick_upper", "thick_forearm", "thick_cuff",
 								 "thick_elbow", "thick_glove", "wrist_break_max"),
 			&NativeArmRig::configure);
-	ClassDB::bind_method(D_METHOD("set_trunk", "keep_out", "root_share"), &NativeArmRig::set_trunk);
+	ClassDB::bind_method(D_METHOD("set_trunk", "keep_out", "root_share", "grip_min_cos"),
+			&NativeArmRig::set_trunk);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
-								 "lengths", "load"),
+								 "lengths", "load", "grip_share"),
 			&NativeArmRig::pose);
+	ClassDB::bind_method(D_METHOD("get_grip_target"), &NativeArmRig::get_grip_target);
 }
 
 } // namespace mitts

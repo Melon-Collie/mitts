@@ -57,6 +57,9 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 	sk.set_process(false)
 	sk.set_physics_process(false)
 	var rig: SkaterArmRig = sk._arms
+	# Each pose turns the elbow up the shaft as far as it asks, with no easing
+	# between the two paths' poses of it.
+	rig.grip_eases = false
 	var top: Vector3 = sk.top_hand.position
 	var bottom: Vector3 = sk.bottom_hand.position
 	var worst: float = 0.0

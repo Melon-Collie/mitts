@@ -33,7 +33,7 @@ static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: V
 
 
 # The fist at `hand` on a forearm from `elbow`: glove_basis, scaled.
-static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: float,
+static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: Vector2,
 		thickness: Vector3) -> Transform3D:
 	return Transform3D(glove_basis((hand - elbow).normalized(), grip, max_bend)
 			.scaled_local(thickness), hand)
@@ -46,9 +46,11 @@ static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: f
 # along the shaft with the index toward the blade (`grip` points butt → blade):
 # the shaft leaves the fist by the thumb toward the blade and by the little
 # finger toward the knob, in either hand. The hand turns toward square across
-# the shaft, bending at the wrist by up to `max_bend` radians: the wrist breaks
-# as the stick swings against the forearm.
-static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
+# the shaft, bending at the wrist by up to `max_bend` radians — x toward the
+# little finger (ulnar), the way a forearm running toward the blade squares it,
+# y toward the thumb (radial): the wrist breaks as the stick swings against the
+# forearm.
+static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: Vector2) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)
 	if grip == Vector3.ZERO:
@@ -62,7 +64,8 @@ static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) ->
 	var hinge: Vector3 = forearm_dir.cross(square)
 	if hinge.length_squared() > 1e-8:
 		hand_axis = forearm_dir.rotated(hinge.normalized(),
-				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
+				minf(asin(clampf(absf(across), 0.0, 1.0)),
+				max_bend.x if across > 0.0 else max_bend.y))
 	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
 	if knuckles.length_squared() < 0.0001:
 		return straight

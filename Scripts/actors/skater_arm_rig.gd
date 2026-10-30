@@ -66,6 +66,14 @@ var _retextured: bool = false
 # The jersey tail's drape below the belt, and the tuck it was draped for.
 var _hem := SkaterHemFlaps.new()
 var _hem_tuck: int = -1
+# Each arm's turn of its elbow up the shaft (ease_grip), its rate, and what its
+# last pose asked for. Off, a pose takes what it asks for at once (a single
+# posed frame, the native parity check).
+const GRIP_EASE_OMEGA: float = 18.0
+var grip_eases: bool = true
+var _grip_lean := PackedFloat64Array([0.0, 0.0])
+var _grip_lean_v := PackedFloat64Array([0.0, 0.0])
+var _grip_target := PackedFloat64Array([0.0, 0.0])
 
 
 func setup(skater: Skater) -> void:
@@ -180,18 +188,26 @@ func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_loca
 	var frame: Transform3D = _skater.drawn_upper_body()
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
+	var grip_s: Vector3 = frame.basis * grip_local
+	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
+	_grip_target[arm] = 0.0
+	if grip_s != Vector3.ZERO:
+		var along: Vector3 = grip_s.normalized()
+		_grip_target[arm] = TwoBoneIK.grip_lean(shoulder_s, hand_s, _skater.upper_arm_length,
+				_skater.forearm_length, pole_s, along, _skater.grip_forearm_min_cos)
+		pole_s = TwoBoneIK.bend_for_grip(shoulder_s, hand_s, pole_s, along,
+				spine.basis * Vector3(signf(marker_local.x), 0.0, 0.0),
+				_grip_lean[arm] if grip_eases else _grip_target[arm])
 	var elbow_s: Vector3 = TwoBoneIK.solve_elbow_clear(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length,
-			spine.basis * _arm_pole(marker_local, pole_sign),
+			_skater.upper_arm_length, _skater.forearm_length, pole_s,
 			_skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO),
 			_skater.arm_trunk_keep_out, _skater.arm_root_share)
-	# The elbow's own bend, which the trunk may have turned off the pole's.
-	var pole_s: Vector3 = elbow_s - shoulder_s
 	_pose_bone(upper, shoulder_s, elbow_s)
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
-	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
-	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
+	# The elbow's own bend, which the grip and the trunk may have turned.
+	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, elbow_s - shoulder_s)
+	_pose_glove(glove, elbow_s, hand_s, grip_s)
 
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
@@ -208,8 +224,10 @@ func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
 			Vector4(_skater.upper_arm_length, _skater.forearm_length,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
-			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset)):
+			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset),
+			_grip_lean[arm] if grip_eases else -1.0):
 		return false
+	_grip_target[arm] = _native_arms[arm].get_grip_target()
 	return true
 
 
@@ -219,8 +237,9 @@ func _configure_native() -> void:
 		var parts: Array = _ARM_PARTS[arm]
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
-				deg_to_rad(_skater.wrist_break_max_deg))
-		_native_arms[arm].set_trunk(_skater.arm_trunk_keep_out, _skater.arm_root_share)
+				_skater.wrist_break_max_deg * (PI / 180.0))
+		_native_arms[arm].set_trunk(_skater.arm_trunk_keep_out, _skater.arm_root_share,
+				_skater.grip_forearm_min_cos)
 
 
 # The elbow's pole on this arm's side, tucked by a check load.
@@ -314,7 +333,7 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> voi
 		_skeleton.set_bone_pose(part, held)
 		return
 	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
-			deg_to_rad(_skater.wrist_break_max_deg))
+			_skater.wrist_break_max_deg * (PI / 180.0))
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
 
 
@@ -329,6 +348,26 @@ func _pose_cuff(part: int, elbow: Vector3, hand: Vector3) -> void:
 		return
 	_skeleton.set_bone_pose(part, SkaterArmPoses.cuff_pose(elbow, hand, scale_v,
 			_skater.cuff_wrist_offset))
+
+
+# ── The grip's elbow ─────────────────────────────────────────────────────────
+
+# Steps each arm's turn of its elbow up the shaft (TwoBoneIK.grip_lean) toward
+# what its last pose asked for, at render rate. Asked for fresh each pose, it
+# follows the arm's own motion, and a stick swung fast through upright flung the
+# elbow over in a frame or two. Whether it moved, so the arms are drawn again
+# while it settles.
+func ease_grip(delta: float) -> bool:
+	var moved: bool = false
+	for arm: int in 2:
+		var x: float = _grip_lean[arm]
+		var v: float = _grip_lean_v[arm]
+		var target: float = _grip_target[arm]
+		_grip_lean[arm] = EaseRules.critical_x(x, v, target, GRIP_EASE_OMEGA, delta)
+		_grip_lean_v[arm] = EaseRules.critical_v(x, v, target, GRIP_EASE_OMEGA, delta)
+		if absf(_grip_lean[arm] - x) > 0.0001:
+			moved = true
+	return moved
 
 
 # ── Trunk texture and head ───────────────────────────────────────────────────

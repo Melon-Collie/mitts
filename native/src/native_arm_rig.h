@@ -5,6 +5,7 @@
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
+#include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector3.hpp>
 #include <godot_cpp/variant/vector4.hpp>
 
@@ -32,9 +33,13 @@ class NativeArmRig : public godot::RefCounted {
 	int32_t bone_glove = -1;
 	int32_t bone_spine = -1;
 	int32_t bone_torso = -1;
-	// Skater.arm_trunk_keep_out, arm_root_share (TwoBoneIK.solve_elbow_clear).
+	// Skater.arm_trunk_keep_out, arm_root_share (TwoBoneIK.solve_elbow_clear)
+	// and grip_forearm_min_cos (TwoBoneIK.grip_lean).
 	godot::Vector4 trunk_keep_out;
 	double root_share = 0.0;
+	double grip_min_cos = 0.0;
+	// The elbow's turn up the shaft the last pose asked for (TwoBoneIK.grip_lean).
+	double grip_target = 0.0;
 
 	// Per-part pose scale (SkaterArmRig._thickness): X/Y the radius, the
 	// bones' Z is the live length.
@@ -43,8 +48,8 @@ class NativeArmRig : public godot::RefCounted {
 	godot::Vector3 thick_cuff;
 	godot::Vector3 thick_elbow;
 	godot::Vector3 thick_glove;
-	// Skater.wrist_break_max_deg, in radians.
-	double wrist_break_max = 0.0;
+	// Skater.wrist_break_max_deg (ulnar, radial), in radians.
+	godot::Vector2 wrist_break_max;
 
 protected:
 	static void _bind_methods();
@@ -54,8 +59,8 @@ public:
 	void bind(godot::Object *p_skeleton, const godot::PackedInt32Array &p_bones);
 	void configure(const godot::Vector3 &p_thick_upper, const godot::Vector3 &p_thick_forearm,
 			const godot::Vector3 &p_thick_cuff, const godot::Vector3 &p_thick_elbow,
-			const godot::Vector3 &p_thick_glove, double p_wrist_break_max);
-	void set_trunk(const godot::Vector4 &p_keep_out, double p_root_share);
+			const godot::Vector3 &p_thick_glove, const godot::Vector2 &p_wrist_break_max);
+	void set_trunk(const godot::Vector4 &p_keep_out, double p_root_share, double p_grip_min_cos);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off
@@ -67,7 +72,11 @@ public:
 	bool pose(const godot::Vector3 &marker, const godot::Vector3 &hand,
 			const godot::Vector3 &grip, const godot::Transform3D &frame,
 			const godot::Basis &trunk_texture, const godot::Vector3 &pole,
-			const godot::Vector4 &lengths, const godot::Vector3 &load);
+			const godot::Vector4 &lengths, const godot::Vector3 &load, double grip_share);
+	// `grip_share` is the turn up the shaft to pose with (SkaterArmRig's eased
+	// one), or below 0 for the one this pose asks for, which get_grip_target
+	// returns either way.
+	double get_grip_target() const { return grip_target; }
 };
 
 } // namespace mitts

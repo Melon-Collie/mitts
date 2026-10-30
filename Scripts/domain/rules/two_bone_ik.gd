@@ -74,6 +74,51 @@ static func reach_root(shoulder: Vector3, hand: Vector3, arm_len: float,
 	return shoulder + d_vec / d * minf(over, slack)
 
 
+# How far an arm holding a shaft running `grip` (unit, toward the working end —
+# a stick's blade) wants its elbow turned up the shaft, 0..1 (bend_for_grip).
+# A fist holds a shaft like a sword, the working end leaving by the thumb, and a
+# wrist turns the hand only so far toward the thumb: an elbow on the working
+# end's side of the hand — under a hand holding a stick upright — puts that end
+# back toward the elbow, a dagger held point down. So it is _GRIP_TURN · (1 −
+# exp(−_GRIP_LEAN · shortfall²)), the shortfall (in forearm lengths) by which the pole's elbow
+# brings the forearm in at more than acos(`min_cos`) off the shaft's run: easing
+# in from nothing. Only a shaft running down from the hand (`grip` in a Y-up
+# frame) reads as a dagger, so it fades out as the shaft comes up to level.
+const _GRIP_LEAN: float = 12.0
+# The most of the way round toward up the shaft and out it turns: a stick held
+# upright puts the elbow out level with the fist, not up at the shoulder.
+const _GRIP_TURN: float = 0.6
+
+static func grip_lean(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, pole_world: Vector3, grip: Vector3, min_cos: float) -> float:
+	var elbow: Vector3 = solve_elbow(shoulder, hand, upper_len, forearm_len, pole_world)
+	var short: float = min_cos - (hand - elbow).dot(grip) / forearm_len
+	if short <= 0.0:
+		return 0.0
+	return _GRIP_TURN * (1.0 - exp(-_GRIP_LEAN * short * short)) * smoothstep(0.0, 0.5, -grip.y)
+
+
+# The pole's bend turned `share` of the way round the elbow's circle toward up
+# the shaft (−`grip`) and `outward` (the arm's own side) together, through the
+# arc between them: out and then up, never through the circle's middle, so the
+# elbow cannot jump sides. A unit bend direction, which solve_elbow takes as its
+# pole.
+static func bend_for_grip(shoulder: Vector3, hand: Vector3, pole_world: Vector3,
+		grip: Vector3, outward: Vector3, share: float) -> Vector3:
+	var bend: Vector3 = bend_direction(shoulder, hand, pole_world)
+	if share <= 0.0 or bend == Vector3.ZERO:
+		return bend
+	var axis: Vector3 = (hand - shoulder).normalized()
+	var toward: Vector3 = outward.normalized() - grip
+	toward -= axis * toward.dot(axis)
+	if toward.length_squared() < 0.000001:
+		return bend
+	var hinge: Vector3 = bend.cross(toward.normalized())
+	if hinge.length_squared() < 0.000001:
+		return bend
+	return bend.rotated(hinge.normalized(), bend.angle_to(toward) * share)
+
+
 # The elbow of an arm beside a trunk: the pole's (solve_elbow), leant round
 # the shoulder→hand axis away from the trunk as far as its arm runs into it. A
 # fixed pole only knows which way is down and out: an arm reaching across the

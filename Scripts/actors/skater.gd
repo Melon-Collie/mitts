@@ -293,6 +293,10 @@ var arm_trunk_keep_out := Vector4(SkaterMeshBuilder.CHEST_HALF_WIDTH_M,
 # The share of the upper arm, from its root, that is the shoulder the trunk's
 # pads hold rather than a sleeve beside it.
 var arm_root_share: float = 0.5
+# A hand on the stick meets the shaft with its forearm at most acos() of this
+# off the shaft's run to the blade (TwoBoneIK.bend_for_grip): ~75°, so the elbow
+# rides up on the knob's side and the fist holds the stick like a sword.
+var grip_forearm_min_cos: float = 0.25
 # Base size of the arm bone meshes (diameter). scale.z is set per tick to the
 # bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a
 # bare arm — see SkaterMeshBuilder.SLEEVE_RADIUS_M.
@@ -306,9 +310,10 @@ var hand_sphere_radius: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 var cuff_wrist_offset: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
 		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
 # A glove on the shaft turns its fist square across it, bending the wrist off
-# the forearm by up to this much — inside the wrist's ~20° radial and ~30° ulnar
-# deviation, the plane a stick held across the palm bends it in.
-var wrist_break_max_deg: float = 25.0
+# the forearm by up to this much (degrees): toward the little finger (ulnar)
+# and toward the thumb (radial), the plane a stick held across the palm bends
+# it in. A wrist goes about twice as far the first way.
+var wrist_break_max_deg := Vector2(40.0, 15.0)
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
@@ -1044,8 +1049,9 @@ func _process(delta: float) -> void:
 		if _on_camera:
 			_spine.update()
 		_arms.update_hem(delta, _on_camera)
+		var regripped: bool = _arms.ease_grip(delta)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
-				or _blade_tilt_dirty or flexed):
+				or _blade_tilt_dirty or flexed or regripped):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
 			update_arm_mesh()
