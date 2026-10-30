@@ -52,8 +52,8 @@ double smoothstepd(double from, double to, double x) {
 	return t * t * (3.0 - 2.0 * t);
 }
 
-// ── GoalieBladeCollision ───────────────────────────────────────────────────────
-// The GDScript (Scripts/domain/rules/goalie_blade_collision.gd) is the
+// ── GoalieGearCollision ───────────────────────────────────────────────────────
+// The GDScript (Scripts/domain/rules/goalie_gear_collision.gd) is the
 // reference; this mirrors it statement for statement.
 
 constexpr int GOALIE_FLOATS_PER_BOX = 15;
