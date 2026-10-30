@@ -618,33 +618,64 @@
     {
       "name": "Lemon",
       "primary": "#F5D028",
-      "secondary": "#1F4FA5",
+      "secondary": "#1B3A94",
       "light": "#FFFFFF",
-      "ui_ink": "#1F4FA5",
+      "ui_ink": "#1B3A94",
       "home": {
-        "helmet": "#1F4FA5",
+        "helmet": "#1B3A94",
         "shoulders": {
-          "text": "#FFFFFF"
+          "text": "#1B3A94"
         },
         "jersey": {
           "base": "#F5D028",
-          "yoke": "#1F4FA5",
-          "collar": "#FFFFFF",
+          "collar": "#1B3A94",
           "stripes": [
+            {
+              "pos": 0.098,
+              "width": 0.022,
+              "color": "#F5D028"
+            },
             {
               "pos": 0.12,
               "width": 0.022,
-              "color": "#FFFFFF"
+              "color": "#1B3A94"
             },
             {
-              "pos": 0.86,
-              "width": 0.03,
-              "color": "#FFFFFF",
-              "fill_below": "#1F4FA5",
+              "pos": 0.142,
+              "width": 0.022,
+              "color": "#8FB4E3"
+            },
+            {
+              "pos": 0.818,
+              "width": 0.022,
+              "color": "#F5D028",
               "peak": {
-                "depth": -0.06,
-                "count": 10,
-                "u": 0.0
+                "depth": -0.05,
+                "count": 6,
+                "u": 0.0,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.84,
+              "width": 0.022,
+              "color": "#1B3A94",
+              "peak": {
+                "depth": -0.05,
+                "count": 6,
+                "u": 0.0,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.862,
+              "width": 0.022,
+              "color": "#8FB4E3",
+              "peak": {
+                "depth": -0.05,
+                "count": 6,
+                "u": 0.0,
+                "shape": "sine"
               }
             }
           ]
@@ -653,35 +684,67 @@
           "base": "#F5D028",
           "stripes": [
             {
-              "pos": 0.1415,
-              "width": 0.283,
-              "color": "#1F4FA5"
-            },
-            {
-              "pos": 0.2944,
+              "pos": 0.2972,
               "width": 0.0228,
-              "color": "#FFFFFF"
+              "color": "#F5D028"
             },
             {
-              "pos": 0.7,
-              "width": 0.03,
-              "color": "#FFFFFF",
-              "fill_below": "#1F4FA5",
+              "pos": 0.32,
+              "width": 0.0228,
+              "color": "#1B3A94"
+            },
+            {
+              "pos": 0.3428,
+              "width": 0.0228,
+              "color": "#8FB4E3"
+            },
+            {
+              "pos": 0.6972,
+              "width": 0.0228,
+              "color": "#F5D028",
               "peak": {
-                "depth": -0.065,
-                "count": 4,
-                "u": 0.5
+                "depth": -0.052,
+                "count": 3,
+                "u": 0.5,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.72,
+              "width": 0.0228,
+              "color": "#1B3A94",
+              "peak": {
+                "depth": -0.052,
+                "count": 3,
+                "u": 0.5,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.7428,
+              "width": 0.0228,
+              "color": "#8FB4E3",
+              "peak": {
+                "depth": -0.052,
+                "count": 3,
+                "u": 0.5,
+                "shape": "sine"
               }
             }
           ]
         },
-        "gloves": "#1F4FA5",
+        "gloves": "#1B3A94",
         "pants": {
-          "base": "#1F4FA5",
+          "base": "#1B3A94",
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.09,
+              "width": 0.1,
+              "color": "#8FB4E3"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.05,
               "color": "#F5D028"
             }
           ]
@@ -691,46 +754,77 @@
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.32,
-              "color": "#FFFFFF"
+              "width": 0.26,
+              "color": "#1B3A94"
             },
             {
               "pos": 0.5,
-              "width": 0.26,
-              "color": "#1F4FA5"
+              "width": 0.2,
+              "color": "#8FB4E3"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#1F4FA5",
+          "color": "#1B3A94",
           "outline": "#FFFFFF"
         }
       },
       "away": {
         "helmet": "#FFFFFF",
         "shoulders": {
-          "text": "#FFFFFF"
+          "text": "#1B3A94"
         },
         "jersey": {
           "base": "#FFFFFF",
-          "yoke": "#1F4FA5",
-          "collar": "#F5D028",
+          "collar": "#1B3A94",
           "stripes": [
             {
-              "pos": 0.12,
+              "pos": 0.098,
               "width": 0.022,
               "color": "#F5D028"
             },
             {
-              "pos": 0.86,
-              "width": 0.03,
-              "color": "#1F4FA5",
-              "fill_below": "#F5D028",
+              "pos": 0.12,
+              "width": 0.022,
+              "color": "#1B3A94"
+            },
+            {
+              "pos": 0.142,
+              "width": 0.022,
+              "color": "#8FB4E3"
+            },
+            {
+              "pos": 0.818,
+              "width": 0.022,
+              "color": "#F5D028",
               "peak": {
-                "depth": -0.06,
-                "count": 10,
-                "u": 0.0
+                "depth": -0.05,
+                "count": 6,
+                "u": 0.0,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.84,
+              "width": 0.022,
+              "color": "#1B3A94",
+              "peak": {
+                "depth": -0.05,
+                "count": 6,
+                "u": 0.0,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.862,
+              "width": 0.022,
+              "color": "#8FB4E3",
+              "peak": {
+                "depth": -0.05,
+                "count": 6,
+                "u": 0.0,
+                "shape": "sine"
               }
             }
           ]
@@ -739,35 +833,67 @@
           "base": "#FFFFFF",
           "stripes": [
             {
-              "pos": 0.1415,
-              "width": 0.283,
-              "color": "#1F4FA5"
-            },
-            {
-              "pos": 0.2944,
+              "pos": 0.2972,
               "width": 0.0228,
               "color": "#F5D028"
             },
             {
-              "pos": 0.7,
-              "width": 0.03,
-              "color": "#1F4FA5",
-              "fill_below": "#F5D028",
+              "pos": 0.32,
+              "width": 0.0228,
+              "color": "#1B3A94"
+            },
+            {
+              "pos": 0.3428,
+              "width": 0.0228,
+              "color": "#8FB4E3"
+            },
+            {
+              "pos": 0.6972,
+              "width": 0.0228,
+              "color": "#F5D028",
               "peak": {
-                "depth": -0.065,
-                "count": 4,
-                "u": 0.5
+                "depth": -0.052,
+                "count": 3,
+                "u": 0.5,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.72,
+              "width": 0.0228,
+              "color": "#1B3A94",
+              "peak": {
+                "depth": -0.052,
+                "count": 3,
+                "u": 0.5,
+                "shape": "sine"
+              }
+            },
+            {
+              "pos": 0.7428,
+              "width": 0.0228,
+              "color": "#8FB4E3",
+              "peak": {
+                "depth": -0.052,
+                "count": 3,
+                "u": 0.5,
+                "shape": "sine"
               }
             }
           ]
         },
-        "gloves": "#1F4FA5",
+        "gloves": "#1B3A94",
         "pants": {
-          "base": "#1F4FA5",
+          "base": "#1B3A94",
           "stripes": [
             {
               "pos": 0.5,
-              "width": 0.09,
+              "width": 0.1,
+              "color": "#8FB4E3"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.05,
               "color": "#F5D028"
             }
           ]
@@ -778,18 +904,23 @@
             {
               "pos": 0.5,
               "width": 0.32,
-              "color": "#1F4FA5"
+              "color": "#F5D028"
             },
             {
               "pos": 0.5,
               "width": 0.26,
-              "color": "#F5D028"
+              "color": "#1B3A94"
+            },
+            {
+              "pos": 0.5,
+              "width": 0.2,
+              "color": "#8FB4E3"
             }
           ]
         },
         "goalie_pads": "#FFFFFF",
         "text": {
-          "color": "#1F4FA5",
+          "color": "#1B3A94",
           "outline": "#F5D028"
         }
       }

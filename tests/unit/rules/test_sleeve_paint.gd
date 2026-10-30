@@ -83,6 +83,10 @@ func test_the_registry_reads_a_jersey_stripes_shape_but_not_a_socks() -> void:
 	assert_eq(kit.jersey.stripes[0].fill_below, Color.RED)
 	assert_false(kit.socks.stripes[0].has("peak"), "nothing paints a sock's peak")
 	assert_false(kit.socks.stripes[0].has("fill_below"), "or its fill")
+	var wave: Dictionary = TeamColorRegistry._parse_kit({"jersey": {"base": "#FFFFFF",
+			"stripes": [{"pos": 0.9, "width": 0.1, "color": "#000000",
+					"peak": {"depth": 0.1, "count": 3, "shape": "sine"}}]}})
+	assert_eq(wave.jersey.stripes[0].peak.shape, "sine")
 
 
 func test_a_fill_below_reaches_the_forearm_as_a_band() -> void:

@@ -112,3 +112,30 @@ func test_the_fill_below_runs_from_the_line_down_and_follows_its_peaks() -> void
 			{"pos": 0.3, "width": 0.1, "color": Color.BLUE}, 0.0, 1.0)
 	assert_eq(flat, PackedVector2Array([Vector2(0.0, 0.3), Vector2(1.0, 0.3), Vector2(1.0, 1.0),
 			Vector2(0.0, 1.0)]))
+
+
+func test_a_sine_waves_through_the_same_peaks_and_troughs() -> void:
+	var stripe: Dictionary = _peaked(0.2, 2, 0.5)
+	stripe.peak.shape = "sine"
+	var pieces: Array[PackedVector2Array] = StripeOutline.of(stripe, _LENGTH_M, _GIRTH_M)
+	assert_almost_eq(_centre_at(pieces, 0.5), 0.5, 1e-3, "depth below pos on a peak")
+	assert_almost_eq(_centre_at(pieces, 0.25), 0.3, 1e-3, "at pos in a trough")
+	assert_almost_eq(_centre_at(pieces, 0.375), 0.4, 1e-3, "half way between, as a sine is")
+
+
+func test_a_sine_holds_its_width_square_to_the_line_where_it_is_steepest() -> void:
+	# Thin beside the wave, so the band's vertical cut through the steepest point
+	# is its width over the slope's cosine, the curve's bend aside.
+	var stripe: Dictionary = _peaked(0.2, 2, 0.5)
+	stripe.width = 0.01
+	stripe.peak.shape = "sine"
+	var pieces: Array[PackedVector2Array] = StripeOutline.of(stripe, _LENGTH_M, _GIRTH_M)
+	# The steepest point, midway from trough to peak: dV/dU = depth·π·count.
+	var slope_m: float = 0.2 * PI * 2.0 * _LENGTH_M / _GIRTH_M
+	var band: Vector2 = _band_at(pieces, 0.37)
+	var square_m: float = (band.y - band.x) * _LENGTH_M / sqrt(1.0 + slope_m * slope_m)
+	assert_almost_eq(square_m / (0.01 * _LENGTH_M), 1.0, 0.01)
+	stripe.width = 0.1
+	var area: PackedVector2Array = StripeOutline.below(stripe, 0.0, 1.0)
+	assert_true(Geometry2D.is_point_in_polygon(Vector2(0.375, 0.45), area), "its fill follows it")
+	assert_false(Geometry2D.is_point_in_polygon(Vector2(0.375, 0.35), area))

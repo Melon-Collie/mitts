@@ -332,6 +332,8 @@ static func _parse_stripes(raw: Variant, shaped: bool = false) -> Array[Dictiona
 				"count": maxi(int(peak.get("count", 1)), 1),
 				"u":     float(peak.get("u", 0.5)),
 			}
+			if peak.get("shape") == "sine":
+				stripe.peak.shape = "sine"
 		out.append(stripe)
 	return out
 

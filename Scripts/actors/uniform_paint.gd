@@ -73,8 +73,9 @@ static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
 	if stripe.has("fill_below"):
 		side.fill_below = stripe.fill_below
 	if stripe.has("peak"):
-		var peak: Dictionary = stripe.peak
-		side.peak = {"depth": float(peak.depth) * scale, "count": peak.count, "u": peak.u}
+		var peak: Dictionary = stripe.peak.duplicate()
+		peak.depth = float(peak.depth) * scale
+		side.peak = peak
 	return side
 
 

@@ -2,10 +2,11 @@ class_name StripeOutline
 
 # A kit stripe round a tube's side as polygons in (U, V): U round the tube 0..1,
 # V down it as the stripe's `pos` and `width` are; filled in one color they are
-# the stripe. A stripe with a `peak` {depth, count, u} has its centre line
-# zigzag `depth` down the tube (up it when negative) at each of `count` peaks
-# spaced evenly round it, the first at `u`, and back to `pos` midway between
-# them. The stripe's `width` is held square to that line in metres, its bends
+# the stripe. A stripe with a `peak` {depth, count, u, shape?} has its centre
+# line zigzag `depth` down the tube (up it when negative) at each of `count`
+# peaks spaced evenly round it, the first at `u`, and back to `pos` midway
+# between them; with `shape` "sine" it waves through the same peaks and troughs
+# instead. The stripe's `width` is held square to that line in metres, its bends
 # mitred, so stripes stacked on one pos at shrinking widths outline each other
 # evenly round every bend. A stripe's optional `fill_below` color fills the tube
 # from it to the end (below).
@@ -19,6 +20,9 @@ class_name StripeOutline
 # A bend under this (its sine, ~0.6°) gets no wedge: the gap it leaves is under
 # a texel, and a sliver that thin does not triangulate.
 const _MIN_BEND_SIN: float = 0.01
+# Straight runs a sine wave is drawn in, per wave: a run's sag off the curve is
+# about 1/1000 of its depth, under a texel at any kit's.
+const _SINE_RUNS: int = 48
 
 
 # `length_m` is the tube's length V spans, `girth_m` its girth U spans. `u_shift`
@@ -32,15 +36,12 @@ static func of(stripe: Dictionary, length_m: float, girth_m: float,
 	if peak.is_empty() or is_zero_approx(float(peak.depth)):
 		return [PackedVector2Array([Vector2(0.0, pos - half), Vector2(1.0, pos - half),
 				Vector2(1.0, pos + half), Vector2(0.0, pos + half)])]
-	var depth: float = float(peak.depth)
-	var count: int = int(peak.count)
-	var first_u: float = fposmod(float(peak.u) + u_shift, 1.0)
 	var to_uv := Vector2(1.0 / girth_m, 1.0 / length_m)
 	var h: float = half * length_m
 	# The line in metres, a turn's worth from the seam back round to it.
 	var line := PackedVector2Array()
-	for u: float in _kinks(count, first_u):
-		line.append(Vector2(u * girth_m, (pos + _offset(u, depth, count, first_u)) * length_m))
+	for p: Vector2 in _centre_line(pos, peak, u_shift):
+		line.append(p / to_uv)
 	var n: int = line.size()
 	var turn := Vector2(girth_m, 0.0)
 	var pieces: Array[PackedVector2Array] = []
@@ -70,38 +71,41 @@ static func below(stripe: Dictionary, u_shift: float = 0.0,
 		bottom: float = 2.0) -> PackedVector2Array:
 	var pos: float = float(stripe.pos)
 	var peak: Dictionary = stripe.get("peak", {})
-	var area := PackedVector2Array()
-	if peak.is_empty() or is_zero_approx(float(peak.depth)):
-		area.append_array(PackedVector2Array([Vector2(0.0, pos), Vector2(1.0, pos)]))
-	else:
-		var count: int = int(peak.count)
-		var first_u: float = fposmod(float(peak.u) + u_shift, 1.0)
-		for u: float in _kinks(count, first_u):
-			area.append(Vector2(u, pos + _offset(u, float(peak.depth), count, first_u)))
+	var area := PackedVector2Array([Vector2(0.0, pos), Vector2(1.0, pos)])
+	if not peak.is_empty() and not is_zero_approx(float(peak.depth)):
+		area = _centre_line(pos, peak, u_shift)
 	area.append_array(PackedVector2Array([Vector2(1.0, bottom), Vector2(0.0, bottom)]))
 	return area
 
 
-# How far down the tube the centre line sits at `u`: `depth` on a peak,
-# nothing midway between two.
-static func _offset(u: float, depth: float, count: int, first_u: float) -> float:
-	var phase: float = fposmod((u - first_u) * float(count), 1.0)
-	return depth * (1.0 - 2.0 * minf(phase, 1.0 - phase))
-
-
-# Every U in 0..1 the line bends at, in order: the ends, and each peak and
-# valley between them.
-static func _kinks(count: int, first_u: float) -> PackedFloat64Array:
-	var step: float = 0.5 / float(count)
-	var out := PackedFloat64Array([0.0])
-	var u: float = first_u - floorf(first_u / step) * step
-	if u < 1e-4:
-		u += step
-	while u < 1.0 - 1e-4:
-		out.append(u)
-		u += step
-	out.append(1.0)
-	return out
+# A peaked stripe's centre line in (U, V), from U 0 round to U 1: through each
+# peak and trough of a zigzag, or along a sine wave in short straight runs.
+static func _centre_line(pos: float, peak: Dictionary, u_shift: float) -> PackedVector2Array:
+	var depth: float = float(peak.depth)
+	var count: int = int(peak.count)
+	var first_u: float = fposmod(float(peak.u) + u_shift, 1.0)
+	var sine: bool = peak.get("shape", "zigzag") == "sine"
+	var us := PackedFloat64Array([0.0])
+	if sine:
+		var runs: int = count * _SINE_RUNS
+		for i: int in range(1, runs):
+			us.append(float(i) / float(runs))
+	else:
+		var step: float = 0.5 / float(count)
+		var u: float = first_u - floorf(first_u / step) * step
+		if u < 1e-4:
+			u += step
+		while u < 1.0 - 1e-4:
+			us.append(u)
+			u += step
+	us.append(1.0)
+	var line := PackedVector2Array()
+	for u: float in us:
+		var phase: float = fposmod((u - first_u) * float(count), 1.0)
+		var rise: float = 0.5 + 0.5 * cos(TAU * phase) if sine \
+				else 1.0 - 2.0 * minf(phase, 1.0 - phase)
+		line.append(Vector2(u, pos + depth * rise))
+	return line
 
 
 # The mitre on the outside of the bend at `at`, from the end of one run's strip
