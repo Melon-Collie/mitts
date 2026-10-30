@@ -23,7 +23,7 @@ const _COLORS: Dictionary = {
 	"dragonfruit": [Color("#E0306F"), Color("#FFFFFF"), Color("#1A1A1A"), DRAGONFRUIT_GREEN],
 	"lemon": [Color("#F7D52A"), Color("#FFF3A6"), _LEAF],
 	"lime": [Color("#3F7F1F"), Color("#EAF5C8"), Color("#A6D84A")],
-	"peach": [Color("#F4A06B"), Color("#D9643F"), _LEAF],
+	"peach": [Color("#F08A66"), Color("#D9643F"), _LEAF],
 	"pineapple": [Color("#F2B233"), Color("#3E8E4A"), Color("#9C6418")],
 	"plum": [Color("#5B2A6E"), Color("#F0A23A"), Color("#6B4A2A"), _LEAF],
 	"pomegranate": [Color("#9E1B2C"), Color("#F3E3CF"), Color("#E0405A")],
