@@ -165,6 +165,45 @@ const SKATE_LIFT_M: float = 0.04
 const BLADE_ICE_Z: float = 0.080 + SKATE_LIFT_M
 const RUNNER_TOE_Y: float = -0.088
 const RUNNER_HEEL_Y: float = 0.098
+# The steel's side profile, (y, z) in the same frame, round from its top at the
+# toe: the nose curving up ahead of the holder, the flat the blade stands on
+# from RUNNER_TOE_Y to RUNNER_HEEL_Y, and the tail rising behind the heel tower.
+# Both curves leave the ice at ~30°, so a blade pitched less than that still
+# touches it at the line's ends, where the contact solve stands it.
+const _RUNNER_PROFILE: Array[Vector2] = [
+	Vector2(-0.103, 0.090),
+	Vector2(-0.1055, 0.097),
+	Vector2(-0.1045, 0.104),
+	Vector2(-0.1005, 0.110),
+	Vector2(-0.094, 0.1165),
+	Vector2(RUNNER_TOE_Y, BLADE_ICE_Z),
+	Vector2(RUNNER_HEEL_Y, BLADE_ICE_Z),
+	Vector2(0.1025, 0.1175),
+	Vector2(0.1065, 0.1125),
+	Vector2(0.109, 0.106),
+	Vector2(0.1095, 0.090),
+]
+const _RUNNER_HALF_W: float = 0.0035
+# The holder's side profiles, wound as _RUNNER_PROFILE is: the toe tower, its
+# front sweeping down toward the steel's nose; the heel tower, the two leaning
+# apart toward the rail; and the rail the
+# steel seats into, joining them under the window between, which is what a real
+# holder is recognised by. Their tops tuck up into the boot's sole
+# (test_skate_upper.gd holds the seat). Wide where it bolts to the boot,
+# narrowing to wrap the steel at the rail.
+const _HOLDER_TOE: Array[Vector2] = [
+	Vector2(-0.088, 0.042), Vector2(-0.098, 0.094), Vector2(-0.094, 0.100),
+	Vector2(-0.038, 0.100), Vector2(-0.020, 0.042),
+]
+const _HOLDER_HEEL: Array[Vector2] = [
+	Vector2(0.016, 0.042), Vector2(0.036, 0.100), Vector2(0.100, 0.100),
+	Vector2(0.106, 0.092), Vector2(0.100, 0.042),
+]
+const _HOLDER_RAIL: Array[Vector2] = [
+	Vector2(-0.094, 0.086), Vector2(-0.094, 0.100), Vector2(0.100, 0.100), Vector2(0.100, 0.086),
+]
+const _HOLDER_TOP_HALF_W: float = 0.011
+const _HOLDER_RAIL_HALF_W: float = 0.0055
 # Neck: skin tube from chin to collar, a child of the Helmet node like the
 # head so it rides the same head-bulk scaling and skeleton offsets. Stations
 # are helmet-local (helmet origin y 0.65, torso top 0.47): the top hides
@@ -852,29 +891,22 @@ static func _commit_sweep_segment(target: ArrayMesh, loops: Array[PackedVector3A
 # materials in life — the holder is molded plastic a player picks the color of,
 # the runner is steel and always will be, so it ships steel and an unpainted rig
 # still shows it.
-#
-# The holder is one piece, not two posts: two towers dropping from the sole
-# (they tuck up into it — test_skate_upper.gd holds the seat) bridged along
-# the bottom by the RAIL the runner seats into, so only the steel's last few
-# millimetres show below it. The arch between the towers stays open above the
-# rail, which is the window a real holder is recognised by.
 static func _build_skate_blade() -> ArrayMesh:
 	var m := ArrayMesh.new()
 	var holder := SurfaceTool.new()
 	holder.begin(Mesh.PRIMITIVE_TRIANGLES)
 	holder.set_smooth_group(-1)  # flat shading — see class doc block
-	_box(holder, Vector3(-0.008, 0.036, 0.042), Vector3(0.008, 0.094, 0.098))    # heel tower
-	_box(holder, Vector3(-0.008, -0.080, 0.042), Vector3(0.008, -0.026, 0.098))  # toe tower
-	# Rail: tower to tower along the bottom, ending where the towers do, so the
-	# runner's heel and toe tips still show past it.
-	_box(holder, Vector3(-0.008, -0.080, 0.084), Vector3(0.008, 0.094, 0.098))
+	var taper := Vector4(_HOLDER_TOP_HALF_W, _HOLDER_RAIL_HALF_W,
+			_HOLDER_TOE[0].y, _HOLDER_RAIL[1].y)
+	for piece: Array[Vector2] in [_HOLDER_TOE, _HOLDER_HEEL, _HOLDER_RAIL]:
+		_extrude_profile(holder, piece, taper)
 	holder.generate_normals()
 	holder.commit(m)
 	var runner := SurfaceTool.new()
 	runner.begin(Mesh.PRIMITIVE_TRIANGLES)
 	runner.set_smooth_group(-1)
-	_box(runner, Vector3(-0.0035, RUNNER_TOE_Y, 0.090),
-			Vector3(0.0035, RUNNER_HEEL_Y, BLADE_ICE_Z))
+	_extrude_profile(runner, _RUNNER_PROFILE,
+			Vector4(_RUNNER_HALF_W, _RUNNER_HALF_W, 0.0, 1.0))
 	runner.generate_normals()
 	runner.commit(m)
 	var steel := StandardMaterial3D.new()
@@ -883,6 +915,28 @@ static func _build_skate_blade() -> ArrayMesh:
 	BodyRim.apply(steel)
 	m.surface_set_material(BLADE_PART_RUNNER, steel)
 	return m
+
+
+# A convex side profile, (y, z), stood up across x as a closed solid: its two
+# faces fanned from the first point and the rim between them. `taper` is the
+# half-width at one depth and at another, (x at z1, x at z2, z1, z2), held
+# linear in z between them and flat past them, so each face stays a plane.
+static func _extrude_profile(st: SurfaceTool, profile: Array[Vector2], taper: Vector4) -> void:
+	var z0 := Vector2.ZERO
+	var n: int = profile.size()
+	var near := PackedVector3Array()
+	var far := PackedVector3Array()
+	for p: Vector2 in profile:
+		var half_w: float = lerpf(taper.x, taper.y, clampf((p.y - taper.z) / (taper.w - taper.z),
+				0.0, 1.0))
+		near.append(Vector3(half_w, p.x, p.y))
+		far.append(Vector3(-half_w, p.x, p.y))
+	for k: int in range(1, n - 1):
+		_tri(st, near[0], z0, near[k], z0, near[k + 1], z0)
+		_tri(st, far[0], z0, far[k + 1], z0, far[k], z0)
+	for k: int in n:
+		var k1: int = (k + 1) % n
+		_uv_quad(st, near[k], z0, far[k], z0, far[k1], z0, near[k1], z0)
 
 
 # Band quads between consecutive CLOSED loops (equal point counts, no
