@@ -219,6 +219,23 @@ func test_the_pinned_knee_folds_no_further_than_a_skate_lets_it() -> void:
 				"the pinned knee stops at the limit (speed %.0f)" % speed)
 
 
+func test_the_tip_starts_over_the_skates() -> void:
+	var roll: Vector2 = KnockdownFallRules.bulk_roll(0.2, _cfg)
+	assert_lt(roll.length(), 0.001, "a body just starting to tip has not rolled off its skates")
+	assert_eq(KnockdownFallRules.bulk_roll(0.0, _cfg), Vector2.ZERO, "upright, none")
+
+
+func test_a_lying_body_rests_on_its_bulk() -> void:
+	var roll: Vector2 = KnockdownFallRules.bulk_roll(_cfg.settle_angle, _cfg)
+	assert_gt(roll.y, 0.8 * _cfg.bulk_half_width, "lying, it is held up by about its half-width")
+	assert_lt(roll.y, _cfg.bulk_half_width + 0.0001, "and no more")
+	var last: float = 0.0
+	for i: int in 30:
+		var lift: float = KnockdownFallRules.bulk_roll(_cfg.settle_angle * float(i) / 29.0, _cfg).y
+		assert_gte(lift, last - 0.00001, "the lift rises with the tip (step %d)" % i)
+		last = lift
+
+
 func test_sprawl_side_follows_the_fall_lean() -> void:
 	var t: float = _settled_sprawl_time(3.0)
 	var right_free: KnockdownFallRules.SprawlPose = _sprawl(t, 3.0, Vector2(-1, 0))

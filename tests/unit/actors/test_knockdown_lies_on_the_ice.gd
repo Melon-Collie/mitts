@@ -126,6 +126,10 @@ func test_a_body_shoved_sideways_lies_on_the_ice() -> void:
 	assert_gt(h["helmet"], -0.05, "and not through it")
 	assert_lt(minf(h["skate_l"], h["skate_r"]), upright["skate_l"] + 0.35,
 			"the skates stay near the ice they tipped about")
+	# Shoved toward +X he lands on his right side: that hip lies on its bulk.
+	var hip: float = _bone_height(SkaterBodySkeleton.LEG_BONE_OFFSET + LegBone.LEG_R)
+	gut.p("the hip he lies on: %.3f m above the ice" % hip)
+	assert_gt(hip, 0.08, "the hip he lies on rests on its pads, not through them")
 
 
 # From behind takes more than from the side: half a hit along his blades is

@@ -26,6 +26,7 @@ class Config:
 	var max_entry_omega: float = 4.2  # rad/s cap on the seeded tip rate (a freight-train hit still reads as a fall, not a spin)
 	var sprawl_in_seconds: float = 0.25  # the limbs scatter over this window after first ice contact
 	var sprawl_splay: float = 0.31       # rad — free-leg outward splay of a maximal sprawl
+	var bulk_half_width: float = 0.15    # m — the hips' half-width with their pads: the side the lying body rests on
 
 
 # Tilt (radians, about the skate pivot) after `elapsed` seconds of down-time,
@@ -127,6 +128,18 @@ static func buckle_angles(drop: float, legs: Vector3) -> Vector2:
 	var a: float = (atan2(legs.z, k) + acos(clampf((k - drop) / r, -1.0, 1.0))) \
 			* _ease(drop / BUCKLE_ONSET_M)
 	return Vector2(a, -2.0 * a)
+
+
+# How far the body's tip has rolled it over its own bulk, as (along the fall,
+# up) in metres: the shift on top of the tip about the skates. Tipping, the
+# contact with the ice moves out from the skates to the side the body lands on,
+# `bulk_half_width` out once it lies — taken here as rolling about a pivot that
+# far along the fall times (1 − cos tilt) — so the lying body rests on its hip
+# and thigh rather than through them, and the tip's start, still over the
+# skates, is untouched.
+static func bulk_roll(tilt: float, cfg: Config) -> Vector2:
+	var out: float = cfg.bulk_half_width * (1.0 - cos(tilt))
+	return Vector2(out * (1.0 - cos(tilt)), out * sin(tilt))
 
 
 # Scratch for sprawl_into — caller-owned and refilled per frame (the hot-path

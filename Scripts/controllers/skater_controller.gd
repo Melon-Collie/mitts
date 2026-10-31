@@ -1962,7 +1962,12 @@ func _apply_fall_tilt(kd_t: float) -> bool:
 			Vector2(dir_world.x, dir_world.z), obstacle)
 	var d: Vector3 = skater.global_transform.basis.inverse() \
 			* Vector3(safe_dir.x, 0.0, safe_dir.y)
-	var carry: Vector3 = -d * DiveRules.com_carry_m(tilt) if _diving() else Vector3.ZERO
+	var carry: Vector3
+	if _diving():
+		carry = -d * DiveRules.com_carry_m(tilt)
+	else:
+		var roll: Vector2 = KnockdownFallRules.bulk_roll(tilt, _fall_config())
+		carry = d * roll.x + Vector3.UP * roll.y
 	skater.set_knockdown_fall(Vector3.UP.cross(d), tilt, carry)
 	return true
 
