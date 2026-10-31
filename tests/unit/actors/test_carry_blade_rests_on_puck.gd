@@ -5,7 +5,9 @@ extends GutTest
 # and the mesh's carry seat (Skater._seat_on_puck) slides the blade, however
 # the shaft pitches and the wrists roll it, until the part of it on the ice
 # meets the puck's rim. Pulled in close, the heel comes up and the toe holds
-# the puck. Driven through the real controller and render pass.
+# the puck, which comes no closer than the carry's floor
+# (SkaterController.carry_reach_min_m). Driven through the real controller and
+# render pass.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -93,13 +95,28 @@ func _rest(sk: Skater) -> Vector2:
 
 func test_the_puck_sits_on_the_cursor() -> void:
 	for dir: Vector3 in [FOREHAND, BACKHAND]:
-		for radius_m: float in [0.9, 0.75, 0.6]:
+		for radius_m: float in [1.1, 0.95, 0.85]:
 			var c: SkaterController = _make_carrier()
 			var cursor: Vector3 = _pull_in(c, dir, radius_m)
 			var pin: Vector3 = c.skater.get_carry_target_global()
 			assert_lt(Vector2(pin.x - cursor.x, pin.z - cursor.z).length(), 0.04,
 					"%s, cursor %.2f m out" % ["forehand" if dir == FOREHAND else "backhand",
 					radius_m])
+
+
+func test_pulled_in_past_the_carrys_floor_the_puck_holds_at_it() -> void:
+	for dir: Vector3 in [FOREHAND, BACKHAND]:
+		for radius_m: float in [0.6, 0.3]:
+			var c: SkaterController = _make_carrier()
+			var cursor: Vector3 = _pull_in(c, dir, radius_m)
+			var pin: Vector3 = c.skater.get_carry_target_global() - c.skater.global_position
+			var bearing := Vector2(cursor.x, cursor.z)
+			var what: String = "%s, cursor %.2f m out" % [
+					"forehand" if dir == FOREHAND else "backhand", radius_m]
+			assert_almost_eq(Vector2(pin.x, pin.z).length(), c.carry_reach_min_m, 0.04,
+					"%s: the puck at the floor" % what)
+			assert_lt(rad_to_deg(absf(Vector2(pin.x, pin.z).angle_to(bearing))), 3.0,
+					"%s: on the cursor's bearing" % what)
 
 
 func test_the_blade_rests_on_the_puck() -> void:

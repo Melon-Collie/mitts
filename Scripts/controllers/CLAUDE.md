@@ -348,7 +348,7 @@ reach limits, `_board_reach_limit`, `_blade_target_for`,
 rink functions under them) and the port changes with it, or
 `test_native_blade_pass_parity.gd` fails. A tunable the pass newly reads goes
 into `_sync_pass_config` too. The port does not fold the shoulders over the
-stick (`chest_fold`, below) yet, so the coordinator takes the GDScript pass
+stick (`chest_fold`, below) or hold a carried puck out (`_held_out`) yet, so the coordinator takes the GDScript pass
 (`native_pass_enabled` is off) and that parity test fails wherever the
 extension is built until it is ported. Nor does `NativeTopHandIK` keep the hand
 forward of its shoulder (`TopHandIK.Config.hand_forward`, below), so the
@@ -453,6 +453,19 @@ and is what the limit is measured to keep on the shaft. They are laid on the
 cursor's TARGET, not on the blade the speed cap draws, so a pickup at the rim
 brings the stick in at the dangle's pace instead of in one tick.
 `test_top_hand_reaches_its_rim.gd` holds all of it.
+
+**A carried puck comes no closer than a floor** (`carry_reach_min_m`,
+`CarryPostureRules.held_out`). Pulled in to his skates, the shaft stands up
+beside him, the top hand rises into his armpit and the bottom arm reaches it
+only through his belly — no arm can be drawn there — so that range is gone: the
+cursor is held out to the floor along its bearing from the body's centre,
+across the ice in the facing's frame (the chest's pitches with a skating lean,
+and reads a cursor at his skates as one well out). Never lay the floor from the
+shoulder, where `TopHandIK`'s own inner bound (`hand_y_max`) measures: the
+bearing from a shoulder to a cursor near the body swings with every turn of it,
+and the puck swings round with it. An empty stick keeps the tight range;
+reaching for a loose puck at its skates it goes one-handed and nothing crosses
+the body. `test_carry_blade_rests_on_puck.gd` and `test_carry_posture_rules.gd`.
 
 "Hold the shaft" means a glove's width below the top hand
 (`SkaterIKCoordinator._glove_spacing`, the drawn fist's width), never on it.

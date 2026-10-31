@@ -40,3 +40,18 @@ static func folded_shoulder(marker: Vector3, chest_fold: float) -> Vector3:
 	if chest_fold < 0.00001:
 		return marker
 	return Basis(Vector3.RIGHT, -chest_fold) * marker
+
+
+# Where a carrier reaches for the cursor (`target`, m across the ice from his
+# centre in the facing frame): no closer in than `min_out`, along its bearing
+# from that centre, which turning him does not move — from the shoulder, as the
+# hand solve's own inner bound measures, the bearing to a cursor near his body
+# swings with every turn of it and the puck swung round with it. A cursor on
+# his centre has no bearing, and reaches straight ahead.
+static func held_out(target: Vector2, min_out: float) -> Vector2:
+	var out: float = target.length()
+	if out >= min_out:
+		return target
+	if out < 0.001:
+		return Vector2(0.0, -min_out)
+	return target * (min_out / out)

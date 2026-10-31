@@ -454,6 +454,10 @@ var velocity_lean_speed: float = 6.0
 # standing or skating — its shoulders, and with them his hands, out in front of
 # his hips where both can hold it.
 var carry_fold_deg: float = 22.0
+# The least a carried puck comes off the centre of his body (m; CarryPostureRules
+# .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
+# into his armpit and the bottom arm reaches it only through his belly.
+var carry_reach_min_m: float = 0.8
 var lower_body_pitch_follow: float = 0.35
 
 # ── Lower Body Lag Tuning ─────────────────────────────────────────────────────
@@ -745,11 +749,11 @@ var head_track_speed: float = 12.0
 var head_track_max_deg: float = 60.0
 # A carrier glances down at the puck (degrees of nod) as the hands work it
 # (the puck's speed off the body over the band, m/s) and as it comes in tight
-# (its distance over the band, m), less as the skater picks up speed: eyes up
-# on open ice.
+# (its distance over the band, m; carry_reach_min_m is as close as it comes),
+# less as the skater picks up speed: eyes up on open ice.
 var head_puck_nod_deg: float = 28.0
 var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
-var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
+var head_puck_close_band: Vector2 = Vector2(1.05, 0.85)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -1352,6 +1356,7 @@ var loft_tan_mid: float = GameRules.DEFAULT_LOFT_TAN_MID
 var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
+var _base_carry_reach_min_m:            float = 0.0
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1522,6 +1527,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# almost exactly 1:1, so blade rim reach barely moves.
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
+	carry_reach_min_m = _base_carry_reach_min_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1604,6 +1610,7 @@ func _capture_attribute_bases() -> void:
 	_base_stick_length                 = stick_length
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
+	_base_carry_reach_min_m            = carry_reach_min_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m

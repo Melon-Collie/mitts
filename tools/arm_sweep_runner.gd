@@ -4,7 +4,7 @@ extends Node
 # hand at a fixed DT as tools/gait_strip_runner.gd drives one. The cursor sits
 # `r` metres out at an angle from up-ice (+ toward the forehand: the default
 # skater shoots left, so facing up-ice his forehand is world −X) that turns at
-# `rate` °/s once the skater has settled.
+# `rate` °/s once the skater has settled, and walks out from it at `dr` m/s.
 #
 # `hold` pins the facing up-ice every tick, so the sweep walks the blade round
 # the body instead of the body round the cursor: the arms' whole range at one
@@ -34,6 +34,19 @@ const SCENARIOS: Array[Dictionary] = [
 	{"name": "carry_sweep", "r": 1.6, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
 		"puck": true, "hold": true},
 	{"name": "tight_sweep", "r": 0.75, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
+		"puck": true, "hold": true},
+	# The same at his skates, standing and skating.
+	{"name": "feet_sweep", "r": 0.45, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
+		"puck": true, "hold": true},
+	{"name": "skate_feet", "r": 0.5, "a0": -150.0, "rate": 60.0, "frames": 24, "step": 25,
+		"puck": true, "hold": true, "skate": true},
+	# The cursor walked out from his skates, ahead, round the forehand and the
+	# backhand: where the arms come out of the body.
+	{"name": "radial_ahead", "r": 0.3, "dr": 0.1, "a0": 0.0, "rate": 0.0, "frames": 14, "step": 120,
+		"puck": true, "hold": true},
+	{"name": "radial_forehand", "r": 0.3, "dr": 0.1, "a0": 60.0, "rate": 0.0, "frames": 14, "step": 120,
+		"puck": true, "hold": true},
+	{"name": "radial_backhand", "r": 0.3, "dr": 0.1, "a0": -45.0, "rate": 0.0, "frames": 14, "step": 120,
 		"puck": true, "hold": true},
 	# The forehand arc where the two-hand stop lets the blade go, tick by tick.
 	{"name": "forehand_trace", "r": 1.6, "a0": 40.0, "rate": 20.0, "frames": 1, "step": 1,
@@ -202,7 +215,9 @@ func _cursor_angle() -> float:
 
 func _cursor() -> Vector3:
 	var a: float = _cursor_angle()
-	return _skater.global_position + Vector3(-sin(a), 0.0, -cos(a)) * float(_scenario()["r"])
+	var t: float = maxf(float(_tick - _settle_ticks()), 0.0) * DT
+	var r: float = float(_scenario()["r"]) + float(_scenario().get("dr", 0.0)) * t
+	return _skater.global_position + Vector3(-sin(a), 0.0, -cos(a)) * r
 
 
 func _drive(ticks: int) -> void:

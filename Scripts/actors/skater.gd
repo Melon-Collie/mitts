@@ -39,7 +39,8 @@ const _WIRE_SIDE_LAPSE_TICKS: int = 2
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
 # the factor is identically 0 there. Onset is ~6° past the lie (blade ≈ 0.87 m
 # from the shoulder); full at 18° past it (≈ 0.65 m), holding full from there
-# down to the hand_y_max floor (≈ 0.28 m). Carry-only: the wrists roll the
+# in to the carry's floor (SkaterController.carry_reach_min_m, off the body's
+# centre). Carry-only: the wrists roll the
 # face CLOSED over the puck (signed against the elevation scoop, so a drag
 # visibly cups where a loft opens) and curl the toe in around it (the
 # axial-twist sweep).

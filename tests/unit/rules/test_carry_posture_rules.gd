@@ -2,8 +2,8 @@ extends GutTest
 
 # CarryPostureRules: the chest folds over a stick held out in front, comes up
 # out of it as the blade goes round beside the skater or is pulled in tight,
-# and tops up the posture's own fold rather than adding to it. The facing frame
-# has −y ahead.
+# and tops up the posture's own fold rather than adding to it; a carried puck
+# comes no closer in than a floor off his centre. The facing frame has −y ahead.
 
 const FOLD: float = deg_to_rad(22.0)
 
@@ -57,3 +57,14 @@ func test_the_folded_shoulder_comes_forward_and_down() -> void:
 	assert_lt(folded.y, marker.y, "and lower")
 	assert_almost_eq(folded.x, marker.x, 0.0001, "on its own side")
 	assert_eq(CarryPostureRules.folded_shoulder(marker, 0.0), marker)
+
+
+func test_a_cursor_in_close_is_held_out_along_its_bearing_from_his_centre() -> void:
+	for bearing: float in [0.0, 50.0, -45.0, 120.0, 180.0]:
+		for out_m: float in [0.05, 0.4, 0.79]:
+			var held: Vector2 = CarryPostureRules.held_out(_at(bearing, out_m), 0.8)
+			assert_almost_eq(held.length(), 0.8, 0.0001, "%.0f° %.2f m" % [bearing, out_m])
+			assert_almost_eq(held.angle_to(_at(bearing, 1.0)), 0.0, 0.0001, "on its bearing")
+	assert_eq(CarryPostureRules.held_out(_at(30.0, 1.2), 0.8), _at(30.0, 1.2), "out past it, untouched")
+	assert_eq(CarryPostureRules.held_out(Vector2.ZERO, 0.8), Vector2(0.0, -0.8),
+			"on his centre, straight ahead")

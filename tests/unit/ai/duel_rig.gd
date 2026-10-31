@@ -39,6 +39,7 @@ var hand_forward_full: float
 var ub_offset: Vector3
 var blade_y: float
 var blade_half: float
+var reach_min: float
 var carry_offset: float
 var marker_y: float
 var hand_rest_y: float
@@ -86,6 +87,7 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.blade_y = ctrl.blade_height - (GameRules.FACEOFF_SPAWN_HEIGHT + skater.upper_body.position.y)
 	rig.blade_half = skater.blade_length * 0.5
 	rig.carry_offset = skater.carry_blade_offset
+	rig.reach_min = ctrl.carry_reach_min_m
 	rig.marker_y = skater.shoulder.position.y
 	rig.hand_rest_y = ctrl.hand_rest_y
 	rig.hand_y_max = ctrl.hand_y_max
@@ -186,6 +188,10 @@ func _carry_factor(arm: Arm, pos: Vector3, body: Basis, side: float) -> float:
 func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vector3,
 		carrying: bool, purpose: float, side: float, carry_factor: float) -> Vector3:
 	var mouse := Vector3(cursor.x, 0.0, cursor.z)
+	if carrying:
+		var rel: Vector3 = body.inverse() * (mouse - pos)
+		var held: Vector2 = CarryPostureRules.held_out(Vector2(rel.x, rel.z), reach_min)
+		mouse = pos + body * Vector3(held.x, 0.0, held.y)
 	var shoulder_world: Vector3 = ub * shoulder
 	shoulder_world.y = 0.0
 	if (mouse - shoulder_world).length() < 0.01:

@@ -309,6 +309,8 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
 	else:
+		if _controller.has_puck:
+			mouse_world = _held_out(mouse_world)
 		var shoulder: Vector3 = arm_shoulder()
 		var shoulder_world: Vector3 = _skater.upper_body_to_global(shoulder)
 		shoulder_world.y = 0.0
@@ -704,6 +706,19 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 			NetGeometry.ray_to_net(
 					origin, unit, _controller.blade_height,
 					_controller.net_blade_half_thickness))
+
+# A carrier's cursor (on the ice) no closer in than carry_reach_min_m, measured
+# across the ice in the facing's frame: the chest's pitches with a lean, and
+# reads a cursor at his skates as one well out.
+func _held_out(cursor_world: Vector3) -> Vector3:
+	var facing: Transform3D = _skater.global_transform
+	var local: Vector3 = facing.affine_inverse() * cursor_world
+	var held: Vector2 = CarryPostureRules.held_out(Vector2(local.x, local.z),
+			_controller.carry_reach_min_m)
+	var world: Vector3 = facing * Vector3(held.x, local.y, held.y)
+	world.y = 0.0
+	return world
+
 
 # The solve places the Blade marker, the heel, but the blade plays the puck at
 # mid-blade (Skater.get_blade_contact_global, where a carried puck pins and every
