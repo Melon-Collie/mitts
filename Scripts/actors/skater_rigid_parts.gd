@@ -3,10 +3,11 @@ extends RefCounted
 
 # The skater's rigid parts, beside the skin (SkaterConnectedMesh): the head, the
 # gloves, the cuffs and the skates, as two meshes the body joins to the skin
-# (SkaterBodyMesh). Every part is one zone of its mesh (BodyZoneMesh), zone = UPPER_ZONE_BASE +
-# SkaterMeshBuilder.UpperSurface or SkaterMeshBuilder.LegSurface, rigid to its
-# bone. The helmet's shell is drawn with a hockey helmet's ridge down its crown
-# and a rib either side of it; the hair and face gear fitted under the plain
+# (SkaterBodyMesh). Every part is one zone of its mesh (BodyZoneMesh), zone =
+# UPPER_ZONE_BASE + SkaterMeshBuilder.UpperSurface or SkaterMeshBuilder.LegSurface,
+# rigid to its bone but for the skate's upper (SkateUpperMesh), which bends
+# across the ankle. The helmet's shell is drawn with a hockey helmet's ridge down
+# its crown and a rib either side of it; the hair and face gear fitted under the plain
 # shell still fit, as the crest only ever raises it and stops above the brow
 # the face gear hangs from.
 
@@ -61,20 +62,29 @@ static func upper_body_mesh() -> ArrayMesh:
 		return b.commit())
 
 
+# The skate upper's zones, in SkateUpperMesh.Surface order, from a side's
+# collar zone on; and the blade's two after them.
+const _UPPER_ZONE_OFFSETS: Array[int] = [0, 1, 2, 3, 6]
+const _BLADE_ZONE_OFFSETS: Array[int] = [4, 5]
+# The binds past the leg bones' own (SkaterBodyMesh.shared_skin): per side, the
+# FOOT bone reading the skate upper from the SKATE bone's frame.
+const SKATE_UPPER_FOOT_BIND: int = SkaterMeshBuilder.LEG_BONE_COUNT
+
+
 static func leg_body_mesh() -> ArrayMesh:
 	return _shared("legs", func() -> ArrayMesh:
 		var b := BodyZoneMesh.new()
-		var skate: ArrayMesh = SkaterMeshBuilder.shared_skate_assembly()
-		var boot: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly()
+		var upper: ArrayMesh = SkateUpperMesh.shared()
+		var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
 		for side: int in 2:
 			var first: int = _LegSurface.SKATE_L_COLLAR if side == 0 else _LegSurface.SKATE_R_COLLAR
-			var shin: int = _LegBone.SHIN_L if side == 0 else _LegBone.SHIN_R
-			# The collar and its stripe ride the SKATE bone, the boot's five
-			# parts the FOOT bone, in LegSurface order from the collar on.
-			for s: int in 2:
-				b.add(skate.surface_get_arrays(s), first + s, shin + 2)
-			for s: int in 5:
-				b.add(boot.surface_get_arrays(s), first + 2 + s, shin + 3)
+			var skate: int = _LegBone.SKATE_L if side == 0 else _LegBone.SKATE_R
+			var foot: int = _LegBone.FOOT_L if side == 0 else _LegBone.FOOT_R
+			for s: int in upper.get_surface_count():
+				b.add(_ankle_weighted(upper.surface_get_arrays(s), skate,
+						SKATE_UPPER_FOOT_BIND + side), first + _UPPER_ZONE_OFFSETS[s])
+			for s: int in blade.get_surface_count():
+				b.add(blade.surface_get_arrays(s), first + _BLADE_ZONE_OFFSETS[s], foot)
 		return b.commit())
 
 
@@ -84,14 +94,30 @@ static func seed_paint(paint: BodyZonePaint) -> void:
 	var skin: Material = SkaterMeshBuilder.shared_helmet_assembly().surface_get_material(
 			SkaterMeshBuilder.HELMET_SURF_SKIN)
 	paint.seed_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN, skin)
-	var skate: ArrayMesh = SkaterMeshBuilder.shared_skate_assembly()
-	var boot: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly()
+	var upper: ArrayMesh = SkateUpperMesh.shared()
+	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
 	for side: int in 2:
 		var first: int = _LegSurface.SKATE_L_COLLAR if side == 0 else _LegSurface.SKATE_R_COLLAR
-		paint.seed_zone(first + SkaterMeshBuilder.SKATE_SURF_STRIPE,
-				skate.surface_get_material(SkaterMeshBuilder.SKATE_SURF_STRIPE))
-		for s: int in [SkaterMeshBuilder.BOOT_SURF_RUNNER, SkaterMeshBuilder.BOOT_SURF_LACES]:
-			paint.seed_zone(first + 2 + s, boot.surface_get_material(s))
+		for s: int in [SkateUpperMesh.Surface.STRIPE, SkateUpperMesh.Surface.LACES]:
+			paint.seed_zone(first + _UPPER_ZONE_OFFSETS[s], upper.surface_get_material(s))
+		paint.seed_zone(first + _BLADE_ZONE_OFFSETS[SkaterMeshBuilder.BLADE_PART_RUNNER],
+				blade.surface_get_material(SkaterMeshBuilder.BLADE_PART_RUNNER))
+
+
+# The upper's arrays weighted across the ankle (SkateUpperMesh.foot_share):
+# the SKATE bone at identity, the foot through its own bind.
+static func _ankle_weighted(arrays: Array, skate: int, foot_bind: int) -> Array:
+	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+	var bones := PackedInt32Array()
+	var weights := PackedFloat32Array()
+	for p: Vector3 in verts:
+		var foot: float = SkateUpperMesh.foot_share(p)
+		bones.append_array([skate, foot_bind, 0, 0])
+		weights.append_array([1.0 - foot, foot, 0.0, 0.0])
+	var out: Array = arrays.duplicate()
+	out[Mesh.ARRAY_BONES] = bones
+	out[Mesh.ARRAY_WEIGHTS] = weights
+	return out
 
 
 static func _add(b: BodyZoneMesh, arrays: Array, surface: int, bone: int) -> void:

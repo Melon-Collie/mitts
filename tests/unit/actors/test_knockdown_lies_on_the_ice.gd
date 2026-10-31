@@ -58,22 +58,29 @@ func _bone_height(bone: int) -> float:
 	return (_skater.global_transform * local).y
 
 
-# Lowest point of either skate's mesh — boot, holder, runner and cuff — above
-# the ice, from the vertices themselves.
+# Lowest point of either skate's mesh — upper, holder and runner — above the
+# ice, from the vertices themselves, the upper skinned across the ankle.
 func _lowest_skate() -> float:
 	var body: Skeleton3D = _skater.mesh_root.get_node("BodyRig") as Skeleton3D
 	var to_world: Transform3D = _skater.global_transform * _skater.mesh_root.transform \
 			* body.transform
 	var off: int = SkaterBodySkeleton.LEG_BONE_OFFSET
 	var lowest: float = INF
-	for part: int in 4:
-		var bone: int = [LegBone.FOOT_L, LegBone.SKATE_L, LegBone.FOOT_R, LegBone.SKATE_R][part]
-		var mesh: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly() if part % 2 == 0 \
-				else SkaterMeshBuilder.shared_skate_assembly()
-		var xf: Transform3D = to_world * body.get_bone_global_pose(off + bone)
-		for surface: int in mesh.get_surface_count():
-			for v: Vector3 in mesh.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
-				lowest = minf(lowest, (xf * v).y)
+	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
+	var upper: ArrayMesh = SkateUpperMesh.shared()
+	var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
+	for side: int in 2:
+		var foot: Transform3D = to_world * body.get_bone_global_pose(
+				off + (LegBone.FOOT_L if side == 0 else LegBone.FOOT_R))
+		var skate: Transform3D = to_world * body.get_bone_global_pose(
+				off + (LegBone.SKATE_L if side == 0 else LegBone.SKATE_R))
+		for surface: int in blade.get_surface_count():
+			for v: Vector3 in blade.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+				lowest = minf(lowest, (foot * v).y)
+		for surface: int in upper.get_surface_count():
+			for v: Vector3 in upper.surface_get_arrays(surface)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+				var share: float = SkateUpperMesh.foot_share(v)
+				lowest = minf(lowest, lerpf((skate * v).y, (foot * foot_from_skate * v).y, share))
 	return lowest
 
 

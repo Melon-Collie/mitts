@@ -42,7 +42,7 @@ class PartSpec:
 
 
 # Envelopes come from the primitives in Scenes/Skater.tscn: helmet sphere
-# r 0.155, skate r 0.09 h 0.2, foot prolate sphere r 0.08 half-length 0.125.
+# r 0.155. The skate's upper has its own test (test_skate_upper.gd).
 # The glove's meshes are unit-sized (the bone's scale is the real dimension),
 # so their bounds are the nominal unit envelopes.
 func _parts() -> Array[PartSpec]:
@@ -66,17 +66,6 @@ func _parts() -> Array[PartSpec]:
 				Vector3(2.0, SkaterMeshBuilder.CUFF_HEIGHT_M, 2.0), false),
 		PartSpec.new("knob", SkaterMeshBuilder.shared_knob(),
 				Vector3(0.07, SkaterMeshBuilder.KNOB_HEIGHT_M, 0.07), true),
-		PartSpec.new("skate", SkaterMeshBuilder._build_skate(),
-				Vector3(0.18, 0.20, 0.18), true),
-		# Boot length re-pinned +0.02 over the replaced prolate sphere: the
-		# heel counter deliberately runs the quarter back under the skate
-		# collar's footprint. Heel-ward only — toward the shin column, with
-		# the extension's sole tucked above the tread line — so the tuned
-		# ice/board contact silhouette is unchanged.
-		PartSpec.new("boot_quarter", SkaterMeshBuilder._build_boot(),
-				Vector3(0.16, 0.21, 0.16), false, SkaterMeshBuilder.BOOT_PART_QUARTER),
-		PartSpec.new("boot_toe", SkaterMeshBuilder._build_boot(),
-				Vector3(0.13, 0.08, 0.13), false, SkaterMeshBuilder.BOOT_PART_TOE),
 	]
 
 
@@ -171,9 +160,13 @@ func test_skate_blade_reaches_the_lifted_ice_depth() -> void:
 			0.08 + SkaterMeshBuilder.SKATE_LIFT_M, 0.002,
 			"the steel runner should bottom out at the lifted ice-contact depth")
 	# The boot itself must stay well above the ice — the blade carries it.
-	var boot: AABB = SkaterMeshBuilder._build_boot().get_aabb()
-	assert_lt(boot.position.z + boot.size.z, 0.05,
-			"the boot sole should ride on the blade, clear of the ice")
+	var upper: ArrayMesh = SkateUpperMesh.shared()
+	var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
+	var sole: float = -INF
+	for s: int in upper.get_surface_count():
+		for v: Vector3 in upper.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+			sole = maxf(sole, (foot_from_skate * v).z)
+	assert_lt(sole, 0.05, "the boot sole should ride on the blade, clear of the ice")
 
 
 # Face gear is the one open-sheet family (millimetre glazing and cage wire —
@@ -229,6 +222,9 @@ func _signed_volume(mesh: ArrayMesh, surface: int = 0) -> float:
 
 # The rigid parts (SkaterRigidParts) are rigid: every vertex weight 1.0 on one
 # bone and nothing on the other three, so a bone pose places its part exactly.
+# The skate's upper is the exception: its weight is split between its side's
+# SKATE bone and the foot's bind (SKATE_UPPER_FOOT_BIND), summing to 1.0, in
+# whichever order the mesh keeps them.
 # Cheap to check here, invisible in a render.
 func test_the_rigid_parts_are_rigidly_weighted() -> void:
 	for rig: Array in [
@@ -240,13 +236,32 @@ func test_the_rigid_parts_are_rigidly_weighted() -> void:
 		var verts: int = (arrays[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
 		assert_eq(bones.size(), verts * 4, "%s: four influences per vertex" % rig[0])
 		var bad: int = 0
+		var bent: int = 0
 		for v: int in verts:
-			if bones[v * 4] < 0 or bones[v * 4] >= int(rig[2]) \
-					or not is_equal_approx(weights[v * 4], 1.0) \
-					or weights[v * 4 + 1] != 0.0 or weights[v * 4 + 2] != 0.0 \
-					or weights[v * 4 + 3] != 0.0:
+			if weights[v * 4 + 2] != 0.0 or weights[v * 4 + 3] != 0.0:
+				bad += 1
+			elif rig[0] == "leg" and _ankle_weighted(bones, weights, v):
+				bent += 1
+			elif bones[v * 4] < 0 or bones[v * 4] >= int(rig[2]) \
+					or not is_equal_approx(weights[v * 4], 1.0) or weights[v * 4 + 1] != 0.0:
 				bad += 1
 		assert_eq(bad, 0, "%s: every vertex weight 1.0 on one bone in range" % rig[0])
+		if rig[0] == "leg":
+			assert_gt(bent, 0, "the skate uppers bend across the ankle")
+
+
+func _ankle_weighted(bones: PackedInt32Array, weights: PackedFloat32Array, v: int) -> bool:
+	for side: int in 2:
+		var skate: int = SkaterMeshBuilder.LegBone.SKATE_L if side == 0 \
+				else SkaterMeshBuilder.LegBone.SKATE_R
+		var foot: int = SkaterRigidParts.SKATE_UPPER_FOOT_BIND + side
+		var pair: Array[int] = [bones[v * 4], bones[v * 4 + 1]]
+		var named: bool = pair == [skate, foot] or pair == [foot, skate] \
+				or (weights[v * 4 + 1] == 0.0 and (pair[0] == skate or pair[0] == foot))
+		if named:
+			# Stored at 16 bits a weight.
+			return absf(weights[v * 4] + weights[v * 4 + 1] - 1.0) < 1e-3
+	return false
 
 
 # The head sits a centimetre or two inside the shell all round; where the rim's

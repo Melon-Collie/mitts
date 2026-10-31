@@ -35,8 +35,8 @@ const _SPACING_M: float = 0.42
 # Total horizontal margin around the lineup, in metres of world space.
 const _ORTHO_MARGIN_M: float = 0.44
 # The gloves stand on their own shelf above the skates; the helmets above both.
-const _GLOVE_ROW_Y: float = 0.42
-const _FACE_ROW_Y: float = 0.84
+const _GLOVE_ROW_Y: float = 0.47
+const _FACE_ROW_Y: float = 0.88
 const _LABEL_DROP_M: float = 0.055
 # Glove display scale — larger than the live rig's GLOVE_FIST_RADIUS_M, so a
 # glove reads at about the scale of the skate under it; the cuff scales with it.
@@ -142,53 +142,32 @@ func _add_shelf(span: float, y: float) -> void:
 	root.add_child(mi)
 
 
-# One skate under `holder`, painted from the model's zones. The boot rides a
-# rotated boot frame seated so the runner stands on the shelf with the toe
-# facing the camera, and the collar takes the appearance rig's neutral-build
-# scaling (calf girth laterally, height vertically — the boot deliberately
-# never scales) with the accent band seated on it.
+# One skate under `holder`, painted from the model's zones: the blade in the
+# foot's rotated frame, seated so the runner stands on the shelf with the toe
+# facing the camera, and the upper in the skate bone's frame above it.
 func _build_skate(holder: Node3D, model: int) -> void:
-	var skate_at := Vector3(0.0, _BLADE_ICE_M, 0.0)
-	# Boot and blade are multi-surface pieces (quarter/toe, holder/runner), so
-	# they paint per SURFACE — a material_override would flatten each pair.
-	var boot := MeshInstance3D.new()
-	boot.mesh = SkaterMeshBuilder.shared_boot()
-	boot.transform = Transform3D(_BOOT_ROT, skate_at)
-	boot.set_surface_override_material(SkaterMeshBuilder.BOOT_PART_QUARTER,
-			_mat(_skate_zone(model, GearModelRegistry.SKATE_QUARTER), 0.42))
-	boot.set_surface_override_material(SkaterMeshBuilder.BOOT_PART_TOE,
-			_mat(_skate_zone(model, GearModelRegistry.SKATE_TOE), 0.42))
-	holder.add_child(boot)
-
+	var foot := Transform3D(_BOOT_ROT, Vector3(0.0, _BLADE_ICE_M, 0.0))
+	# Multi-surface pieces paint per SURFACE — a material_override would
+	# flatten them.
 	var blade := MeshInstance3D.new()
 	blade.mesh = SkaterMeshBuilder.shared_skate_blade()
-	blade.transform = Transform3D(_BOOT_ROT, skate_at)
+	blade.transform = foot
 	blade.set_surface_override_material(SkaterMeshBuilder.BLADE_PART_HOLDER,
 			_mat(_skate_zone(model, GearModelRegistry.SKATE_HOLDER), 0.42))
 	blade.set_surface_override_material(SkaterMeshBuilder.BLADE_PART_RUNNER,
 			_mat(SkaterMeshBuilder.BLADE_STEEL_COLOR, 0.25))
 	holder.add_child(blade)
 
-	var laces := MeshInstance3D.new()
-	laces.mesh = SkaterMeshBuilder.shared_laces()
-	laces.transform = Transform3D(_BOOT_ROT, skate_at)
-	laces.material_override = _mat(_LACE_COLOR, 0.9)
-	holder.add_child(laces)
-
-	var attrs := PlayerAttributes.neutral()
-	var collar := MeshInstance3D.new()
-	collar.mesh = SkaterMeshBuilder.shared_skate_collar()
-	collar.scale = Vector3(attrs.girth_mult(), attrs.height_mult(), attrs.girth_mult())
-	collar.position = skate_at + Vector3(0.10, 0.04 * attrs.height_mult(), 0.0)
-	collar.material_override = _mat(_skate_zone(model, GearModelRegistry.SKATE_COLLAR), 0.42)
-	holder.add_child(collar)
-
-	var stripe := MeshInstance3D.new()
-	stripe.mesh = SkaterMeshBuilder.shared_skate_stripe()
-	stripe.position = Vector3(0.0, 0.045, 0.0)
-	stripe.scale = Vector3(0.092, 1.0, 0.092)
-	stripe.material_override = _mat(_skate_zone(model, GearModelRegistry.SKATE_STRIPE), 0.42)
-	collar.add_child(stripe)
+	var upper := MeshInstance3D.new()
+	upper.mesh = SkateUpperMesh.shared()
+	upper.transform = foot * SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
+	for zone: Array in [[SkateUpperMesh.Surface.COLLAR, GearModelRegistry.SKATE_COLLAR],
+			[SkateUpperMesh.Surface.STRIPE, GearModelRegistry.SKATE_STRIPE],
+			[SkateUpperMesh.Surface.QUARTER, GearModelRegistry.SKATE_QUARTER],
+			[SkateUpperMesh.Surface.TOE, GearModelRegistry.SKATE_TOE]]:
+		upper.set_surface_override_material(zone[0], _mat(_skate_zone(model, zone[1]), 0.42))
+	upper.set_surface_override_material(SkateUpperMesh.Surface.LACES, _mat(_LACE_COLOR, 0.9))
+	holder.add_child(upper)
 
 
 # One glove under `holder`: the fist stands fingers-down (station order runs

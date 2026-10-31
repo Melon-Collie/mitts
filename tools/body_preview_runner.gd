@@ -32,6 +32,8 @@ const HEAD_FOV: float = 7.0
 # --waist: framed on the belt, where a tuck goes in.
 const WAIST_FOV: float = 13.0
 const WAIST_AIM_Y: float = -0.17
+# --skate: framed on the near (left) skate, where the upper meets the leg.
+const SKATE_FOV: float = 8.0
 const PANTS_AIM_Y: float = -0.4
 
 enum Step { BUILD, POSE, GRAB }
@@ -43,11 +45,14 @@ var _pants: bool = false
 var _audit: bool = false
 var _head: bool = false
 var _waist: bool = false
+var _skate: bool = false
 
 
 func begin_preview(only: String, pants: bool = false,
-		audit: bool = false, head: bool = false, waist: bool = false) -> void:
+		audit: bool = false, head: bool = false, waist: bool = false,
+		skate: bool = false) -> void:
 	_pants = pants
+	_skate = skate
 	_waist = waist
 	_audit = audit
 	_head = head
@@ -135,6 +140,11 @@ func _place_camera() -> void:
 		_camera.fov = HEAD_FOV
 		aim = body.global_transform * body.get_bone_global_pose(
 				SkaterMeshBuilder.UpperBone.HELMET).origin
+	if _skate:
+		var legs: Skeleton3D = _skater._arms._skeleton
+		_camera.fov = SKATE_FOV
+		aim = legs.global_transform * legs.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET
+				+ SkaterMeshBuilder.LegBone.FOOT_L).origin
 	_camera.global_position = aim + basis * ANGLES[_angle]
 	_camera.look_at(aim, Vector3.UP)
 
@@ -149,11 +159,21 @@ func _save_pose_sheet() -> void:
 		sheet.blit_rect(src, Rect2i(0, 0, PREVIEW_TILE, PREVIEW_TILE),
 				Vector2i(i * PREVIEW_TILE, 0))
 	var path: String = "%s/%s%s.png" % [PREVIEW_DIR,
-			"pants_" if _pants else ("head_" if _head else ("waist_" if _waist else "")),
+			_sheet_prefix(),
 			String(_poses[_pose_index]["name"])]
 	sheet.save_png(ProjectSettings.globalize_path(path))
 	print("  ", ProjectSettings.globalize_path(path))
 	_tiles.clear()
+
+
+func _sheet_prefix() -> String:
+	if _pants:
+		return "pants_"
+	if _head:
+		return "head_"
+	if _waist:
+		return "waist_"
+	return "skate_" if _skate else ""
 
 
 # Skins the connected body on the CPU as the pose holds it and counts the faces

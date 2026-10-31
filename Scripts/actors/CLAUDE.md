@@ -28,8 +28,12 @@ delegates to.
 ## The body's skin
 
 `SkaterConnectedMesh` builds the torso, sleeves, pants and socks as ONE
-connected skin with blended weights; the head, gloves and skates are rigid
-parts on their bones (`SkaterRigidParts`). Every part is a zone of the body's
+connected skin with blended weights; the head, gloves and skate blades are rigid
+parts on their bones (`SkaterRigidParts`). Each skate's upper is one closed
+shell (`SkateUpperMesh`, `test_skate_upper.gd`) whose cuff rides the SKATE bone
+and whose foot rides the FOOT bone, blended across the ankle through a bind of
+its own on the foot, so the ankle's give-back flexes the boot rather than
+parting it. Every part is a zone of the body's
 one paint (`BodyZonePaint`), dressed by `SkaterKitPaint`, which the display
 figures share, and the whole body is ONE surface (`SkaterBodyMesh`): a draw a
 pass, which matters because eight shadowed spots each redraw every skater in

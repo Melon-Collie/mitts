@@ -74,11 +74,11 @@ func test_ghost_swaps_the_shader_and_keeps_the_paint() -> void:
 
 
 func test_a_seed_is_a_copy_of_the_parts_default() -> void:
-	var boot: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly()
+	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
 	var paint := BodyZonePaint.new(SkaterMeshBuilder.BODY_ZONE_COUNT)
 	SkaterRigidParts.seed_paint(paint)
 	var runner := SkaterMeshBuilder.LegSurface.FOOT_L_RUNNER
-	var shared: StandardMaterial3D = boot.surface_get_material(
-			SkaterMeshBuilder.BOOT_SURF_RUNNER) as StandardMaterial3D
+	var shared: StandardMaterial3D = blade.surface_get_material(
+			SkaterMeshBuilder.BLADE_PART_RUNNER) as StandardMaterial3D
 	assert_eq(paint.zone(runner).albedo_color, shared.albedo_color, "the steel ships as steel")
 	assert_ne(paint.zone(runner), shared, "a copy — painting it must not repaint the roster")
