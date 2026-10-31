@@ -378,10 +378,20 @@ Ten rules the rigs sit inside, all easy to break from in here:
   ease is state, so the rebuild gate keeps redrawing while it settles
   (`SkaterArmRig.take_steering`). `test_elbow_steers_round_the_torso.gd` holds
   the steer, `test_body_stays_smooth.gd` the jerk.
+- **The fist rolls round the shaft.** A glove holds the stick like a sword
+  (`SkaterArmPoses.glove_basis`), the wrist deviating in the plane of the
+  forearm and the shaft; a shaft running down and away from a forearm across
+  the body leaves the thumb turned half round from where a forearm can put it
+  (`neutral_thumb`, away from the elbow's point). The wrist's flexion rolls
+  the fist round the shaft (`grip_roll`, up to `Skater.wrist_flex_max_deg`)
+  until the forearm's twist is back inside `forearm_twist_max_deg`, eased per
+  arm like the elbow's turn, since half round the way it rolls changes sides.
+  Most carries need more than the wrist has, so the roll sits at its limit
+  there. `test_glove_grips_the_shaft.gd`.
 - **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones
   itself), held to `_update_arm` and the part poses (`SkaterArmPoses`) by
   `test_native_arm_rig_parity.gd`; see `native/README.md`. It does not steer the
-  elbow yet, so the rig takes the GDScript path (`native_enabled` is off) and
+  elbow or roll the fist yet, so the rig takes the GDScript path (`native_enabled` is off) and
   that parity test fails wherever the extension is built until it is ported.
 - **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):
   the dressed blade is solved from the shaft's bearing, which whips round as

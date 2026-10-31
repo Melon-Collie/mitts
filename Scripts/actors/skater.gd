@@ -306,6 +306,11 @@ var top_grip_angle_deg: float = 65.0
 var bottom_grip_angle_deg: float = 80.0
 var wrist_ulnar_max_deg: float = 35.0
 var wrist_radial_max_deg: float = 20.0
+# And the wrist flexes, rolling the fist round the shaft, up to
+# wrist_flex_max_deg, so the forearm need not twist more than
+# forearm_twist_max_deg off its neutral (SkaterArmPoses.grip_roll).
+var wrist_flex_max_deg: float = 70.0
+var forearm_twist_max_deg: float = 80.0
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and

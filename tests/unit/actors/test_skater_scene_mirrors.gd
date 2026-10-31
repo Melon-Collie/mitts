@@ -55,6 +55,8 @@ func test_the_figures_grip_the_stick_as_the_skater_does() -> void:
 	assert_eq(LockerMannequin._GRIP_ANGLE_DEG[1], skater.bottom_grip_angle_deg, "bottom hand")
 	assert_eq(LockerMannequin._WRIST_ULNAR_MAX_DEG, skater.wrist_ulnar_max_deg, "ulnar")
 	assert_eq(LockerMannequin._WRIST_RADIAL_MAX_DEG, skater.wrist_radial_max_deg, "radial")
+	assert_eq(LockerMannequin._WRIST_FLEX_MAX_DEG, skater.wrist_flex_max_deg, "flexion")
+	assert_eq(LockerMannequin._FOREARM_TWIST_MAX_DEG, skater.forearm_twist_max_deg, "twist")
 	skater.free()
 
 

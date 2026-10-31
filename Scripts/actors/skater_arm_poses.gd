@@ -129,9 +129,10 @@ static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: V
 
 # The fist at `hand` on a forearm from `elbow`: glove_basis, scaled.
 static func glove_pose(elbow: Vector3, hand: Vector3, shaft: Vector3, grip_angle: float,
-		ulnar_max: float, radial_max: float, thickness: Vector3) -> Transform3D:
+		ulnar_max: float, radial_max: float, thickness: Vector3,
+		roll: float = 0.0) -> Transform3D:
 	return Transform3D(glove_basis((hand - elbow).normalized(), shaft, grip_angle, ulnar_max,
-			radial_max).scaled_local(thickness), hand)
+			radial_max, roll).scaled_local(thickness), hand)
 
 
 # The fist on a forearm pointing `forearm_dir`, holding a shaft running
@@ -144,8 +145,12 @@ static func glove_pose(elbow: Vector3, hand: Vector3, shaft: Vector3, grip_angle
 # keep it there — toward the thumb up to `radial_max` as the shaft opens past
 # the grip, toward the little finger up to `ulnar_max` as it closes. Past either
 # the wrist stops and the shaft slips off the grip by the rest.
+#
+# `roll` turns the fist round the shaft off that (grip_roll): the wrist's
+# flexion, which carries the hand's long axis out of the forearm and shaft's
+# plane while the shaft stays across the palm at the same angle.
 static func glove_basis(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
-		ulnar_max: float, radial_max: float) -> Basis:
+		ulnar_max: float, radial_max: float, roll: float = 0.0) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)
 	if shaft == Vector3.ZERO:
@@ -158,7 +163,80 @@ static func glove_basis(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
 	var held: float = opening - clampf(opening - grip_angle, -ulnar_max, radial_max)
 	var hand_axis: Vector3 = shaft * cos(held) + across * sin(held)
 	var thumb: Vector3 = (shaft - hand_axis * shaft.dot(hand_axis)).normalized()
+	if roll != 0.0:
+		hand_axis = hand_axis.rotated(shaft, roll)
+		thumb = thumb.rotated(shaft, roll)
 	return Basis(thumb, -hand_axis, thumb.cross(-hand_axis))
+
+
+# How far the fist on the shaft rolls round it off glove_basis's grip (radians,
+# about `shaft`), so the forearm holding it need not twist further than
+# `twist_max` off its neutral (`neutral`, neutral_thumb): held in the forearm and
+# shaft's plane, a shaft running down and away from a forearm across the body
+# leaves the thumb turned half round from where the forearm can put it. The
+# wrist's flexion rolls the hand, as far as `flex_max` of its long axis out of
+# that plane; it rolls the way that untwists the forearm soonest, and no
+# further than brings the twist inside its range. A continuous function of the
+# pose except where the two ways tie, half round, which the caller eases over.
+const _ROLL_BISECTIONS: int = 8
+
+static func grip_roll(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
+		ulnar_max: float, radial_max: float, neutral: Vector3, twist_max: float,
+		flex_max: float) -> float:
+	if shaft == Vector3.ZERO or neutral == Vector3.ZERO:
+		return 0.0
+	var base: Basis = glove_basis(forearm_dir, shaft, grip_angle, ulnar_max, radial_max)
+	var thumb: Vector3 = base.x
+	var twist: float = forearm_twist(forearm_dir, thumb, neutral)
+	if twist <= twist_max:
+		return 0.0
+	var off_plane: float = sin((-base.y).angle_to(shaft))
+	var reach: float = PI * 0.5 if off_plane <= sin(flex_max) \
+			else asin(sin(flex_max) / off_plane)
+	var ahead: float = forearm_twist(forearm_dir, thumb.rotated(shaft, reach), neutral)
+	var back: float = forearm_twist(forearm_dir, thumb.rotated(shaft, -reach), neutral)
+	var way: float = 1.0 if ahead <= back else -1.0
+	var at_reach: float = minf(ahead, back)
+	if at_reach > twist_max:
+		return way * reach
+	var lo: float = 0.0
+	var hi: float = reach
+	var twist_hi: float = at_reach
+	for _i: int in _ROLL_BISECTIONS:
+		var mid: float = (lo + hi) * 0.5
+		var t: float = forearm_twist(forearm_dir, thumb.rotated(shaft, way * mid), neutral)
+		if t > twist_max:
+			lo = mid
+			twist = t
+		else:
+			hi = mid
+			twist_hi = t
+	return way * lerpf(lo, hi, (twist - twist_max) / maxf(twist - twist_hi, 0.000001))
+
+
+# How far (radians) the forearm pointing `forearm_dir` turns a thumb off its
+# neutral, about the forearm.
+static func forearm_twist(forearm_dir: Vector3, thumb: Vector3, neutral: Vector3) -> float:
+	var across: Vector3 = thumb - forearm_dir * thumb.dot(forearm_dir)
+	if across.length_squared() < 0.000001:
+		return 0.0
+	return across.angle_to(neutral)
+
+
+# Where a forearm from `elbow` to `hand` points its thumb untwisted, the arm
+# from `shoulder`: away from the elbow's point, square to the forearm — an arm
+# bent in front of the chest holds its thumb up. ZERO for an arm too straight
+# to have a point.
+static func neutral_thumb(shoulder: Vector3, elbow: Vector3, hand: Vector3) -> Vector3:
+	var line: Vector3 = hand - shoulder
+	var fore: Vector3 = hand - elbow
+	if line.length_squared() < 0.000001 or fore.length_squared() < 0.000001:
+		return Vector3.ZERO
+	line = line.normalized()
+	fore = fore.normalized()
+	var bend: Vector3 = (elbow - shoulder) - line * (elbow - shoulder).dot(line)
+	var away: Vector3 = -(bend - fore * bend.dot(fore))
+	return away.normalized() if away.length_squared() > 0.000001 else Vector3.ZERO
 
 
 # Glove cuff ring from `hand` back toward `elbow`, its near end `wrist_offset`

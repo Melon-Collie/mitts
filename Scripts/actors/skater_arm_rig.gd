@@ -71,6 +71,9 @@ var _retextured: bool = false
 # rebuild gate (take_steering).
 var steer_omega: float = 20.0
 var _steer := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
+# Each fist's roll round the shaft (SkaterArmPoses.grip_roll), eased the same
+# way: half round, the way it rolls changes sides.
+var _roll := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
 var _steering: bool = false
 # The jersey tail's drape below the belt, and the tuck it was draped for.
 var _hem := SkaterHemFlaps.new()
@@ -202,21 +205,46 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, elbow_s - shoulder_s)
-	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local, _skater.top_grip_angle_deg
-			if arm == 0 else _skater.bottom_grip_angle_deg)
+	var shaft_s: Vector3 = frame.basis * grip_local
+	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
+			else _skater.bottom_grip_angle_deg
+	var roll: float = _ease_roll(arm, delta, _grip_roll(shoulder_s, elbow_s, hand_s, shaft_s,
+			grip_deg))
+	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
 
 
 func _ease_steer(arm: int, delta: float, target: float) -> float:
+	return _ease(_steer, arm, delta, target)
+
+
+func _ease_roll(arm: int, delta: float, target: float) -> float:
+	return _ease(_roll, arm, delta, target)
+
+
+# One of an arm's eased angles (turn, rate) toward `target`; landed at once with
+# no clock.
+func _ease(held_by_arm: PackedVector2Array, arm: int, delta: float, target: float) -> float:
 	if delta < 0.0:
-		_steer[arm] = Vector2(target, 0.0)
+		held_by_arm[arm] = Vector2(target, 0.0)
 		return target
-	var held: Vector2 = _steer[arm]
+	var held: Vector2 = held_by_arm[arm]
 	var eased: Vector4 = BalanceRules.spring_step(Vector2(held.x, 0.0), Vector2(held.y, 0.0),
 			Vector2(target, 0.0), steer_omega, delta)
-	_steer[arm] = Vector2(eased.x, eased.z)
+	held_by_arm[arm] = Vector2(eased.x, eased.z)
 	if absf(eased.x - target) > 0.0001 or absf(eased.z) > 0.001:
 		_steering = true
 	return eased.x
+
+
+func _grip_roll(shoulder: Vector3, elbow: Vector3, hand: Vector3, shaft: Vector3,
+		grip_deg: float) -> float:
+	var forearm: Vector3 = hand - elbow
+	if shaft == Vector3.ZERO or forearm.length_squared() < 0.0001:
+		return 0.0
+	return SkaterArmPoses.grip_roll(forearm.normalized(), shaft, deg_to_rad(grip_deg),
+			deg_to_rad(_skater.wrist_ulnar_max_deg), deg_to_rad(_skater.wrist_radial_max_deg),
+			SkaterArmPoses.neutral_thumb(shoulder, elbow, hand),
+			deg_to_rad(_skater.forearm_twist_max_deg), deg_to_rad(_skater.wrist_flex_max_deg))
 
 
 # Whether an elbow's turn was still easing at the last rebuild.
@@ -347,7 +375,7 @@ func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 # Positions the gloved fist at the hand; `grip` is the shaft through the fist
 # toward the blade (skeleton space), ZERO off the stick.
 func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3,
-		grip_angle_deg: float) -> void:
+		grip_angle_deg: float, roll: float = 0.0) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var dir: Vector3 = hand - elbow
 	if dir.length_squared() < 0.0001:
@@ -357,7 +385,7 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3,
 		return
 	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
 			deg_to_rad(grip_angle_deg), deg_to_rad(_skater.wrist_ulnar_max_deg),
-			deg_to_rad(_skater.wrist_radial_max_deg))
+			deg_to_rad(_skater.wrist_radial_max_deg), roll)
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
 
 

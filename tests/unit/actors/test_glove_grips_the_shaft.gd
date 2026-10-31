@@ -79,3 +79,41 @@ func test_the_hand_is_a_proper_frame_with_the_shaft_across_its_palm() -> void:
 			"the knuckle roll is square to the hand")
 	assert_almost_eq(b.z.normalized().dot(shaft), 0.0, 0.0001,
 			"the shaft lies in the knuckle roll's plane with the hand")
+
+
+# The wrist's flexion rolls the fist round the shaft (SkaterArmPoses.grip_roll):
+# none while the forearm's twist is in its range, else as far as brings it there,
+# never past the flexion, and the shaft stays across the palm at the grip.
+const TWIST_MAX: float = deg_to_rad(80.0)
+const FLEX_MAX: float = deg_to_rad(70.0)
+
+
+func _roll(forearm: Vector3, shaft: Vector3, neutral: Vector3) -> float:
+	return SkaterArmPoses.grip_roll(forearm, shaft, GRIP, ULNAR, RADIAL, neutral, TWIST_MAX,
+			FLEX_MAX)
+
+
+func test_a_forearm_in_its_range_leaves_the_fist_unrolled() -> void:
+	var forearm := Vector3(0.0, -1.0, 0.0)
+	var shaft: Vector3 = _shaft_off(65.0)
+	var thumb: Vector3 = _basis(forearm, shaft).x
+	assert_eq(_roll(forearm, shaft, thumb), 0.0, "the forearm untwisted")
+	assert_eq(_roll(forearm, shaft, thumb.rotated(forearm, deg_to_rad(60.0))), 0.0,
+			"twisted inside its range")
+
+
+func test_a_twisted_forearm_rolls_the_fist_back_into_its_range() -> void:
+	var forearm := Vector3(0.0, -1.0, 0.0)
+	var shaft: Vector3 = _shaft_off(65.0)
+	var thumb: Vector3 = _basis(forearm, shaft).x
+	for twist_deg: float in [100.0, 130.0, 170.0]:
+		var neutral: Vector3 = thumb.rotated(forearm, deg_to_rad(twist_deg))
+		var roll: float = _roll(forearm, shaft, neutral)
+		var b: Basis = SkaterArmPoses.glove_basis(forearm, shaft, GRIP, ULNAR, RADIAL, roll)
+		var after: float = SkaterArmPoses.forearm_twist(forearm, b.x, neutral)
+		assert_lt(after, deg_to_rad(twist_deg) - 0.01, "%.0f°: it untwists" % twist_deg)
+		assert_gte(after, TWIST_MAX - 0.01, "%.0f°: and no further than its range" % twist_deg)
+		var flex: float = asin(absf(_hand_axis(b).dot(forearm.cross(shaft).normalized())))
+		assert_lte(flex, FLEX_MAX + 0.001, "%.0f°: within the wrist's flexion" % twist_deg)
+		assert_almost_eq(_hand_axis(b).angle_to(shaft), _hand_axis(_basis(forearm, shaft))
+				.angle_to(shaft), 0.0001, "%.0f°: the shaft still across the palm" % twist_deg)
