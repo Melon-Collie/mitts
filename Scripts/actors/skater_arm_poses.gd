@@ -175,14 +175,15 @@ static func glove_basis(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
 # shaft's plane, a shaft running down and away from a forearm across the body
 # leaves the thumb turned half round from where the forearm can put it. The
 # wrist's flexion rolls the hand, as far as `flex_max` of its long axis out of
-# that plane; it rolls the way that untwists the forearm soonest, and no
-# further than brings the twist inside its range. A continuous function of the
-# pose except where the two ways tie, half round, which the caller eases over.
+# that plane, and no further than brings the twist inside its range. `way`
+# (±1) is the way it rolls: always the same one for a hand, since choosing
+# the way that untwists sooner turns the fist over the shaft where the two
+# tie; 0 chooses it anyway.
 const _ROLL_BISECTIONS: int = 8
 
 static func grip_roll(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
 		ulnar_max: float, radial_max: float, neutral: Vector3, twist_max: float,
-		flex_max: float) -> float:
+		flex_max: float, way: float = 0.0) -> float:
 	if shaft == Vector3.ZERO or neutral == Vector3.ZERO:
 		return 0.0
 	var base: Basis = glove_basis(forearm_dir, shaft, grip_angle, ulnar_max, radial_max)
@@ -193,10 +194,10 @@ static func grip_roll(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
 	var off_plane: float = sin((-base.y).angle_to(shaft))
 	var reach: float = PI * 0.5 if off_plane <= sin(flex_max) \
 			else asin(sin(flex_max) / off_plane)
-	var ahead: float = forearm_twist(forearm_dir, thumb.rotated(shaft, reach), neutral)
-	var back: float = forearm_twist(forearm_dir, thumb.rotated(shaft, -reach), neutral)
-	var way: float = 1.0 if ahead <= back else -1.0
-	var at_reach: float = minf(ahead, back)
+	if way == 0.0:
+		way = 1.0 if forearm_twist(forearm_dir, thumb.rotated(shaft, reach), neutral) \
+				<= forearm_twist(forearm_dir, thumb.rotated(shaft, -reach), neutral) else -1.0
+	var at_reach: float = forearm_twist(forearm_dir, thumb.rotated(shaft, way * reach), neutral)
 	if at_reach > twist_max:
 		return way * reach
 	var lo: float = 0.0
@@ -212,6 +213,12 @@ static func grip_roll(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
 			hi = mid
 			twist_hi = t
 	return way * lerpf(lo, hi, (twist - twist_max) / maxf(twist - twist_hi, 0.000001))
+
+
+# The way (grip_roll's `way`) a top fist rolls to turn its knuckles forward,
+# for a left shot (whose top hand is his right) or a right one.
+static func knuckles_forward(left_shot: bool) -> float:
+	return -1.0 if left_shot else 1.0
 
 
 # How far (radians) the forearm pointing `forearm_dir` turns a thumb off its

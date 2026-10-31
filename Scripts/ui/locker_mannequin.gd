@@ -503,7 +503,8 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 				deg_to_rad(_GRIP_ANGLE_DEG[i]), deg_to_rad(_WRIST_ULNAR_MAX_DEG),
 				deg_to_rad(_WRIST_RADIAL_MAX_DEG),
 				SkaterArmPoses.neutral_thumb(shoulder, elbow, hand),
-				deg_to_rad(_FOREARM_TWIST_MAX_DEG), deg_to_rad(_WRIST_FLEX_MAX_DEG))
+				deg_to_rad(_FOREARM_TWIST_MAX_DEG), deg_to_rad(_WRIST_FLEX_MAX_DEG),
+				SkaterArmPoses.knuckles_forward(is_left_handed))
 		_skeleton.set_bone_pose(bones[3], SkaterArmPoses.glove_pose(elbow, hand, -_shaft_up,
 				deg_to_rad(_GRIP_ANGLE_DEG[i]), deg_to_rad(_WRIST_ULNAR_MAX_DEG),
 				deg_to_rad(_WRIST_RADIAL_MAX_DEG), Vector3.ONE * _HAND_RADIUS * m_girth, roll))

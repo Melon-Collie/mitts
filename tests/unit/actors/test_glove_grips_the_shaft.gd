@@ -117,3 +117,16 @@ func test_a_twisted_forearm_rolls_the_fist_back_into_its_range() -> void:
 		assert_lte(flex, FLEX_MAX + 0.001, "%.0f°: within the wrist's flexion" % twist_deg)
 		assert_almost_eq(_hand_axis(b).angle_to(shaft), _hand_axis(_basis(forearm, shaft))
 				.angle_to(shaft), 0.0001, "%.0f°: the shaft still across the palm" % twist_deg)
+
+
+func test_a_fist_given_its_way_never_rolls_the_other() -> void:
+	var forearm := Vector3(0.0, -1.0, 0.0)
+	var shaft: Vector3 = _shaft_off(65.0)
+	var thumb: Vector3 = _basis(forearm, shaft).x
+	for twist_deg: float in [100.0, 150.0, 179.0, -179.0, -150.0, -100.0]:
+		var neutral: Vector3 = thumb.rotated(forearm, deg_to_rad(twist_deg))
+		for way: float in [1.0, -1.0]:
+			var roll: float = SkaterArmPoses.grip_roll(forearm, shaft, GRIP, ULNAR, RADIAL,
+					neutral, TWIST_MAX, FLEX_MAX, way)
+			assert_true(roll * way >= 0.0, "%.0f°, way %+.0f: rolled %+.1f°" % [
+					twist_deg, way, rad_to_deg(roll)])

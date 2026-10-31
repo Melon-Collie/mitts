@@ -212,7 +212,8 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	# The bottom hand holds the shaft from underneath, palm up, as the plane grip
 	# already has it; only the top fist rolls.
 	var roll: float = 0.0 if arm != 0 else _ease_roll(arm, delta,
-			_grip_roll(shoulder_s, elbow_s, hand_s, shaft_s, grip_deg))
+			_grip_roll(shoulder_s, elbow_s, hand_s, shaft_s, grip_deg,
+			SkaterArmPoses.knuckles_forward(_skater.is_left_handed)))
 	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
 
 
@@ -240,14 +241,15 @@ func _ease(held_by_arm: PackedVector2Array, arm: int, delta: float, target: floa
 
 
 func _grip_roll(shoulder: Vector3, elbow: Vector3, hand: Vector3, shaft: Vector3,
-		grip_deg: float) -> float:
+		grip_deg: float, way: float) -> float:
 	var forearm: Vector3 = hand - elbow
 	if shaft == Vector3.ZERO or forearm.length_squared() < 0.0001:
 		return 0.0
 	return SkaterArmPoses.grip_roll(forearm.normalized(), shaft, deg_to_rad(grip_deg),
 			deg_to_rad(_skater.wrist_ulnar_max_deg), deg_to_rad(_skater.wrist_radial_max_deg),
 			SkaterArmPoses.neutral_thumb(shoulder, elbow, hand),
-			deg_to_rad(_skater.forearm_twist_max_deg), deg_to_rad(_skater.wrist_flex_max_deg))
+			deg_to_rad(_skater.forearm_twist_max_deg), deg_to_rad(_skater.wrist_flex_max_deg),
+			way)
 
 
 # Whether an elbow's turn was still easing at the last rebuild.

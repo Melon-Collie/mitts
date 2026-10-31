@@ -386,8 +386,10 @@ Ten rules the rigs sit inside, all easy to break from in here:
   forearm can put it (`neutral_thumb`, away from the elbow's point) and the
   palm facing forward. The wrist's flexion rolls the top fist round the shaft
   (`grip_roll`, up to `Skater.wrist_flex_max_deg`) until the forearm's twist is
-  back inside `forearm_twist_max_deg`, eased like the elbow's turn, since half
-  round the way it rolls changes sides; the back of the glove then shows to the
+  back inside `forearm_twist_max_deg`, always the way that turns its knuckles
+  forward (`knuckles_forward`): chosen per pose, the way that untwists sooner
+  changes sides half round, and the fist turned over the shaft mid-sweep. The
+  roll is eased like the elbow's turn, and the back of the glove shows to the
   front. The bottom hand does not roll: the plane grip already holds the shaft
   from underneath, palm up, as a bottom hand does, which that twist measure
   reads as out of range. `test_glove_grips_the_shaft.gd`.
