@@ -347,13 +347,11 @@ reach limits, `_board_reach_limit`, `_blade_target_for`,
 `TopHandIK`, `NetGeometry`, `NetBladeCollision`, `ReachPurposeRules` and
 rink functions under them) and the port changes with it, or
 `test_native_blade_pass_parity.gd` fails. A tunable the pass newly reads goes
-into `_sync_pass_config` too. The port does not fold the shoulders over the
-stick (`chest_fold`, below) or hold a carried puck out (`_held_out`) yet, so the coordinator takes the GDScript pass
-(`native_pass_enabled` is off) and that parity test fails wherever the
-extension is built until it is ported. Nor does `NativeTopHandIK` keep the hand
-forward of its shoulder (`TopHandIK.Config.hand_forward`, below), so the
-coordinator does not build it (`native_top_enabled` is off) and
-`test_native_ik_parity.gd` fails there too.
+into `_sync_pass_config` too. What the pass reads live from the controller
+and the skater mid-tick comes in as a scalar the GDScript computes
+(`chest_fold`, `carry_reach_floor`, `_hand_forward`), so the two paths share
+one definition; the one the GDScript re-reads after a release — the chest's
+fold, on `has_puck` — the port drops when it resumes without the puck.
 
 ### Pose the hand, not the blade
 

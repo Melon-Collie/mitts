@@ -394,10 +394,10 @@ Ten rules the rigs sit inside, all easy to break from in here:
   from underneath, palm up, as a bottom hand does, which that twist measure
   reads as out of range. `test_glove_grips_the_shaft.gd`.
 - **The arms have a C++ port** (`NativeArmRig`, which writes the arm bones
-  itself), held to `_update_arm` and the part poses (`SkaterArmPoses`) by
-  `test_native_arm_rig_parity.gd`; see `native/README.md`. It does not steer the
-  elbow or roll the fist yet, so the rig takes the GDScript path (`native_enabled` is off) and
-  that parity test fails wherever the extension is built until it is ported.
+  itself and eases its own elbow turn and fist roll), held to `_update_arm` and
+  the part poses (`SkaterArmPoses`) by `test_native_arm_rig_parity.gd`, landed
+  and eased frame by frame; see `native/README.md`. The torso's section reaches
+  it from `SkaterMeshBuilder` (`TORSO_PROFILE`), never as a copy.
 - **Through a slapshot the stick is one rigid piece** (`Skater._swing_rigid`):
   the dressed blade is solved from the shaft's bearing, which whips round as
   the blade crosses over the hands, so through the swing the blade and the

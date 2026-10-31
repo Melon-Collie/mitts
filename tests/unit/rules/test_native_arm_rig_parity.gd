@@ -4,12 +4,14 @@ extends GutTest
 # GDScript reference (SkaterArmRig._update_arm). Seeded RNG over the live rig:
 # hands in and out of reach (the girdle's give and the IK clamp), trunk
 # texture, a twisted and leaned trunk, the balance lean, a check load,
-# per-build arm lengths and part thicknesses, and gloves on and off the shaft.
-# Every arm bone must agree.
+# per-build arm lengths and part thicknesses, and gloves on and off the shaft —
+# the elbow steered round the torso, the sword grip and the top fist's roll
+# with them. Every arm bone must agree.
 #
 # Pending without the extension (fresh clone, CI without a native build) — run
 # native/build.sh.
 
+const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const TOLERANCE: float = 0.0001
 const CASES: int = 600
 const SEED: int = 0x41524D53  # "ARMS" — fixed so failures reproduce.
@@ -51,7 +53,7 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 		NativeParityGuard.report_missing(self, "NativeArmRig")
 		return
 	_rng.seed = SEED
-	var sk: Skater = load("res://Scenes/Skater.tscn").instantiate() as Skater
+	var sk: Skater = SKATER_SCENE.instantiate() as Skater
 	add_child_autofree(sk)
 	sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	sk.set_process(false)
@@ -97,7 +99,7 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 		rig.update_bottom_arm()
 		var native: Array[Transform3D] = _poses(sk)
 		var err: float = _worst(reference, native)
-		if rig._native_update_arm(0, sk.shoulder.position, sk.top_hand.position,
+		if rig._native_update_arm(0, -1.0, sk.shoulder.position, sk.top_hand.position,
 				sk.stick_grip_axis(sk.drawn_top_hand()), 1.0 if sk.is_left_handed else -1.0):
 			native_ran += 1
 		if err > worst:
@@ -108,3 +110,45 @@ func test_the_native_arm_solve_matches_the_gdscript() -> void:
 	assert_gt(float(native_ran), CASES * 0.95, "and it ran, rather than falling back (%d/%d)" % [native_ran, CASES])
 	assert_between(gripped, int(CASES * 0.3), int(CASES * 0.7),
 			"both glove paths ran: the bottom hand on the shaft in %d/%d" % [gripped, CASES])
+
+
+# The eased angles (the elbow's turn, the top fist's roll) frame by frame: two
+# skaters, one on each path, given the same hands swept round the body at a
+# real frame time, so each spring runs from its own state.
+func test_the_native_arm_eases_as_the_gdscript() -> void:
+	if not ClassDB.class_exists(&"NativeArmRig"):
+		NativeParityGuard.report_missing(self, "NativeArmRig")
+		return
+	_rng.seed = SEED
+	var skaters: Array[Skater] = []
+	for native: bool in [false, true]:
+		var sk: Skater = SKATER_SCENE.instantiate() as Skater
+		add_child_autofree(sk)
+		sk.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
+		sk.set_process(false)
+		sk.set_physics_process(false)
+		sk._arms.native_enabled = native
+		skaters.append(sk)
+	var top: Vector3 = skaters[0].top_hand.position
+	var worst: float = 0.0
+	var settling: int = 0
+	for frame: int in 240:
+		var a: float = TAU * frame / 240.0
+		var reach := Vector3(sin(a) * 0.45, -0.05 + 0.1 * sin(a * 3.0), -absf(cos(a)) * 0.35)
+		var poses: Array = []
+		for sk: Skater in skaters:
+			sk.set_upper_body_rotation(0.6 * sin(a * 2.0))
+			sk.set_top_hand_position(top + reach)
+			sk.update_stick_mesh()
+			sk.set_bottom_hand_position(sk.drawn_top_hand().lerp(sk.blade.position, 0.3))
+			sk._spine.update()
+			sk._arms.update_top_arm(1.0 / 60.0)
+			sk._arms.update_bottom_arm(1.0 / 60.0)
+			poses.append(_poses(sk))
+		if skaters[1]._arms.take_steering():
+			settling += 1
+		skaters[0]._arms.take_steering()
+		worst = maxf(worst, _worst(poses[0], poses[1]))
+	gut.p("arm rig eased: worst |Δ| %s, %d frames settling" % [String.num_scientific(worst), settling])
+	assert_lt(worst, TOLERANCE, "the native arm eases as the GDScript does")
+	assert_gt(settling, 0, "and the eases ran")

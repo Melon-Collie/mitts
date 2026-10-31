@@ -32,8 +32,15 @@ class NativeTopHandIK : public godot::RefCounted {
 	double rom_forehand_reach_max = 0.0;
 	double rom_backhand_reach_max = 0.0;
 	double max_blade_reach = INFINITY;
-	// TopHandIK.REGIME_BAND_M.
+	// TopHandIK.Config.hand_forward and its bands (forward_floor).
+	double hand_forward = 0.0;
+	double hand_forward_none = 0.3;
+	double hand_forward_full = 0.9;
+	double hand_forward_none_angle = 0.17453292519943295; // deg_to_rad(10)
+	double hand_forward_full_angle = 0.9599310885968813; // deg_to_rad(55)
+	// TopHandIK.REGIME_BAND_M and _FLOOR_ITERATIONS.
 	static constexpr double REGIME_BAND_M = 0.08;
+	static constexpr int FLOOR_ITERATIONS = 12;
 
 	godot::Vector3 hand;
 	godot::Vector3 blade;
@@ -41,6 +48,7 @@ class NativeTopHandIK : public godot::RefCounted {
 	godot::Vector2 clamp_aim_to_rom(const godot::Vector2 &aim_dir, double blade_side_sign) const;
 	double rim_reach(double angle_to_forehand) const;
 	static double stick_horiz_for(double stick_length, double hand_y, double blade_y);
+	double blade_for_span(double span, double to_forehand) const;
 
 protected:
 	static void _bind_methods();
@@ -80,6 +88,12 @@ public:
 			double grip,
 			double bottom_reach,
 			double spacing);
+	// TopHandIK.forward_floor / floored_reach / hand_reach / _to_forehand.
+	double forward_floor(double d, double to_forehand) const;
+	double floored_reach(double d, double rest_horiz, double to_forehand) const;
+	static double hand_reach(double d, double rest_horiz);
+	static double to_forehand(const godot::Vector2 &dir, double blade_side_sign);
+
 	// BottomHandIK.reachable_grip: (fraction, overshoot).
 	static godot::Vector2 reachable_grip(const godot::Vector3 &shoulder, const godot::Vector3 &top,
 			const godot::Vector3 &blade, double grip, double reach, double spacing);
@@ -107,6 +121,16 @@ public:
 	double get_rom_backhand_reach_max() const { return rom_backhand_reach_max; }
 	void set_max_blade_reach(double v) { max_blade_reach = v; }
 	double get_max_blade_reach() const { return max_blade_reach; }
+	void set_hand_forward(double v) { hand_forward = v; }
+	double get_hand_forward() const { return hand_forward; }
+	void set_hand_forward_none(double v) { hand_forward_none = v; }
+	double get_hand_forward_none() const { return hand_forward_none; }
+	void set_hand_forward_full(double v) { hand_forward_full = v; }
+	double get_hand_forward_full() const { return hand_forward_full; }
+	void set_hand_forward_none_angle(double v) { hand_forward_none_angle = v; }
+	double get_hand_forward_none_angle() const { return hand_forward_none_angle; }
+	void set_hand_forward_full_angle(double v) { hand_forward_full_angle = v; }
+	double get_hand_forward_full_angle() const { return hand_forward_full_angle; }
 };
 
 } // namespace mitts

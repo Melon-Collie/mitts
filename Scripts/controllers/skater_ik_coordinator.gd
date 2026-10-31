@@ -87,9 +87,6 @@ var _rigid_result := TopHandIK.Result.new()
 # properties sync inside the cached-config builders — the same rebuild moment —
 # so invalidate_configs() covers both representations.
 var _native_top: RefCounted = null
-# Off by default: the port does not keep the hand forward of its shoulder
-# (TopHandIK.Config.hand_forward) yet. Read once, at setup.
-var native_top_enabled: bool = false
 # Native blade-dangle smoother (null = extension absent, GDScript fallback).
 # In native mode it OWNS the cross-tick smoothing state (_prev_skater_pos,
 # _blade_dangle_vel, the init flag) — only _smoothed_blade_world is mirrored
@@ -99,10 +96,9 @@ var _native_dangle: RefCounted = null
 var _dangle_synced_tied: bool = false
 # The whole blade pass in C++ (null = extension absent or stale: the GDScript
 # below runs). It drives the two kernels above, so they keep one state between
-# the paths. native_pass_enabled routes round it for the parity test. Off by
-# default: the port does not fold the shoulders over the stick (chest_fold) yet.
+# the paths. native_pass_enabled routes round it for the parity test.
 var _native_pass: RefCounted = null
-var native_pass_enabled: bool = false
+var native_pass_enabled: bool = true
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
 var _pass_goalies := PackedFloat64Array()
@@ -112,7 +108,8 @@ enum PassS {
 	ADDRESS, FOREHAND_FACTOR, TRANSIT_FACTOR, LIFT_BLEND, COMMIT_BLEND, GRIP_CHOKE,
 	CHECK_LEAD, HAS_PUCK_NODE, PURPOSE_RIM, BLADE_LENGTH, CARRY_BLADE_OFFSET,
 	CARRY_TRANSIT_LIFT, WALL_SQUEEZE_THRESHOLD, WALL_PIN_INWARD_BIAS, BOTTOM_REACH,
-	GLOVE_SPACING, HAS_NET_ANCHOR, REACH_PURPOSE, COUNT,
+	GLOVE_SPACING, HAS_NET_ANCHOR, REACH_PURPOSE, CHEST_FOLD, CARRY_FLOOR, HAND_FORWARD,
+	COUNT,
 }
 enum PassV {
 	TARGET, SHOULDER, BOTTOM_SHOULDER, BLADE_MARKER, BLADE_FORWARD, PREV_CONTACT,
@@ -124,15 +121,15 @@ func setup(skater: Skater, controller: SkaterController,
 	_skater = skater
 	_controller = controller
 	_skating = skating
-	if native_top_enabled and ClassDB.class_exists(&"NativeTopHandIK"):
+	if ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
-		# two_hand_reach is the newest thing ADDED to an existing kernel, so a
-		# binary predating it still registers the class and passes that check. Fall
-		# back to GDScript, which is slower and correct, rather than call a method
-		# the binary does not have.
-		if not _native_top.has_method(&"two_hand_reach"):
-			push_warning("NativeTopHandIK predates two_hand_reach — "
+		# the forehand floor (set_hand_forward) is the newest thing ADDED to an
+		# existing kernel, so a binary predating it still registers the class and
+		# passes that check. Fall back to GDScript, which is slower and correct,
+		# rather than solve without it.
+		if not _native_top.has_method(&"set_hand_forward"):
+			push_warning("NativeTopHandIK predates the forehand floor — "
 					+ "using the GDScript solver. Rebuild native/ (bash native/build.sh).")
 			_native_top = null
 	if ClassDB.class_exists(&"NativeBladeDangle"):
@@ -197,6 +194,8 @@ func _sync_pass_config() -> void:
 		"bottom_hand_grip_fraction": c.bottom_hand_grip_fraction,
 		"faceoff_center_grip_fraction": c.faceoff_center_grip_fraction,
 		"twist_limit": SkaterSpineRig.TWIST_LIMIT,
+		"top_hand_forward_none_m": c.top_hand_forward_none_m,
+		"top_hand_forward_full_m": c.top_hand_forward_full_m,
 	})
 	if not ok:
 		push_warning("NativeBladePass lacks a tunable — using the GDScript blade pass. "
@@ -626,6 +625,9 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	s[PassS.GLOVE_SPACING] = _glove_spacing()
 	s[PassS.HAS_NET_ANCHOR] = 1.0 if _has_net_side_anchor else 0.0
 	s[PassS.REACH_PURPOSE] = reach_purpose
+	s[PassS.CHEST_FOLD] = chest_fold()
+	s[PassS.CARRY_FLOOR] = carry_reach_floor() if has_puck else 0.0
+	s[PassS.HAND_FORWARD] = _hand_forward()
 	var v: PackedVector3Array = _pass_vectors
 	v[PassV.TARGET] = target_world
 	v[PassV.SHOULDER] = _skater.shoulder.position
@@ -1323,11 +1325,7 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	_cached_top_cfg.max_blade_reach = max_blade_reach
 	_cached_top_cfg.stick_length = solve_stick_length()
 	_cached_top_cfg.hand_y_max = _address_hand_ceiling()
-	# The centre's address holds its own hands (its ceiling, its fold), and a
-	# shot or the block, posing their own stick, keep the floorless solve.
-	_cached_top_cfg.hand_forward = 0.0 if SkaterPoseBridge.owner_of(
-			_controller.get_shot_state() as State) != SkaterPoseBridge.Owner.TRACKED \
-			else _controller.top_hand_forward_m * (1.0 - _address_blend())
+	_cached_top_cfg.hand_forward = _hand_forward()
 	_cached_top_cfg.hand_forward_none = _controller.top_hand_forward_none_m
 	_cached_top_cfg.hand_forward_full = _controller.top_hand_forward_full_m
 	if _native_top != null:
@@ -1335,7 +1333,20 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 		_native_top.max_blade_reach = max_blade_reach
 		_native_top.stick_length = _cached_top_cfg.stick_length
 		_native_top.hand_y_max = _cached_top_cfg.hand_y_max
+		_native_top.hand_forward = _cached_top_cfg.hand_forward
+		_native_top.hand_forward_none = _cached_top_cfg.hand_forward_none
+		_native_top.hand_forward_full = _cached_top_cfg.hand_forward_full
 	return _cached_top_cfg
+
+# The forehand floor's strength (TopHandIK.Config.hand_forward): the centre's
+# address holds its own hands (its ceiling, its fold), and a shot or the block,
+# posing their own stick, keep the floorless solve.
+func _hand_forward() -> float:
+	if SkaterPoseBridge.owner_of(_controller.get_shot_state() as State) \
+			!= SkaterPoseBridge.Owner.TRACKED:
+		return 0.0
+	return _controller.top_hand_forward_m * (1.0 - _address_blend())
+
 
 func _bottom_hand_ik_config() -> BottomHandIK.Config:
 	if _cached_bottom_cfg == null:

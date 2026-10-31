@@ -51,11 +51,14 @@ var helmet_pitch_follow: float = 0.85
 var helmet_roll_follow: float = 0.4
 
 # The arm's C++ port, one per arm (top, bottom), which writes that arm's bones
-# itself. Absent without the extension; native_enabled lets the parity test take
-# the GDScript path, which stays the reference. Off by default: the port does
-# not steer the elbow round the torso (SkaterArmPoses.steer_elbow) yet.
-var native_enabled: bool = false
+# itself and eases its own elbow turn and fist roll. Absent without the
+# extension; native_enabled lets the parity test take the GDScript path, which
+# stays the reference.
+var native_enabled: bool = true
 var _native_arms: Array[RefCounted] = []
+# NativeArmRig.pose's answers (its Result enum).
+const _NATIVE_DEGENERATE: int = 0
+const _NATIVE_SETTLING: int = 2
 var _native_dirty: bool = true
 var _trunk_texture := Basis.IDENTITY
 var _trunk_texture_head := Basis.IDENTITY
@@ -99,13 +102,20 @@ func build(skeleton: Skeleton3D) -> void:
 	_base_pos.resize(count)
 	_skeleton = skeleton
 
-	if ClassDB.class_exists(&"NativeArmRig"):
+	if ClassDB.class_exists(&"NativeArmRig") \
+			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso"):
 		_native_arms = [ClassDB.instantiate(&"NativeArmRig") as RefCounted,
 				ClassDB.instantiate(&"NativeArmRig") as RefCounted]
 		for arm: int in 2:
 			var bones := PackedInt32Array(_ARM_PARTS[arm])
 			bones.append(SkaterBodySkeleton.SPINE_BONE)
+			bones.append(SkaterMeshBuilder.UpperBone.TORSO)
 			_native_arms[arm].bind(skeleton, bones)
+			_native_arms[arm].configure_torso(
+					PackedVector2Array(SkaterMeshBuilder.TORSO_PROFILE),
+					PackedFloat64Array(SkaterMeshBuilder.TORSO_REAR_SWAY),
+					SkaterMeshBuilder.TORSO_XZ_SCALE.x, SkaterMeshBuilder.TORSO_XZ_SCALE.y,
+					SkaterMeshBuilder.SLEEVE_RADIUS_M, SkaterArmPoses.STEER_CONTACT_M)
 	# Torso and helmet: their placement is authored in the scene, so it is read
 	# out and seeded onto their bones, same as the legs.
 	for bone: int in [SkaterMeshBuilder.UpperBone.TORSO,
@@ -189,7 +199,7 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 		pole_sign: float, upper: int, forearm: int, cuff: int, elbow_bone: int,
 		glove: int) -> void:
 	if native_enabled and not _native_arms.is_empty() \
-			and _native_update_arm(arm, marker_local, hand_local, grip_local, pole_sign):
+			and _native_update_arm(arm, delta, marker_local, hand_local, grip_local, pole_sign):
 		return
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	var frame: Transform3D = _skater.drawn_upper_body()
@@ -261,32 +271,37 @@ func take_steering() -> bool:
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
 # degenerate span, which the GDScript path's held poses answer instead.
-func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
+func _native_update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vector3,
 		grip_local: Vector3, pole_sign: float) -> bool:
 	if _native_dirty:
 		_configure_native()
 	var pole: Vector3 = _skater.arm_pole_local
 	pole.x *= pole_sign
 	var arm_len: float = _skater.upper_arm_length + _skater.forearm_length
-	if not _native_arms[arm].pose(marker_local, hand_local, grip_local, _skater.drawn_upper_body(),
-			_trunk_texture, pole,
+	var result: int = _native_arms[arm].pose(marker_local, hand_local, grip_local,
+			_skater.drawn_upper_body(), _trunk_texture, pole,
 			Vector4(_skater.upper_arm_length, _skater.forearm_length,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
-			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset)):
-		return false
-	return true
+			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset),
+			Vector3(delta, SkaterArmPoses.knuckles_forward(_skater.is_left_handed)
+			if arm == 0 else 0.0, pole_sign))
+	if result == _NATIVE_SETTLING:
+		_steering = true
+	return result != _NATIVE_DEGENERATE
 
 
-# The port bends the wrist toward square by one symmetric limit, not the sword
-# grip's (glove_basis), so it gets the wider of the two.
 func _configure_native() -> void:
 	_native_dirty = false
+	var wrist := Vector4(deg_to_rad(_skater.wrist_ulnar_max_deg),
+			deg_to_rad(_skater.wrist_radial_max_deg), deg_to_rad(_skater.wrist_flex_max_deg),
+			deg_to_rad(_skater.forearm_twist_max_deg))
 	for arm: int in 2:
 		var parts: Array = _ARM_PARTS[arm]
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
-				deg_to_rad(_skater.wrist_ulnar_max_deg))
+				deg_to_rad(_skater.top_grip_angle_deg if arm == 0 else _skater.bottom_grip_angle_deg),
+				wrist, steer_omega)
 
 
 # The elbow's pole on this arm's side, tucked by a check load.

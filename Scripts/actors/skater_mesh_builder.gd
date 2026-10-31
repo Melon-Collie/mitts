@@ -594,6 +594,10 @@ static func torso_clearance(p: Vector3) -> float:
 
 # The pants are wider than deep by this, as the torso is.
 const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# torso_clearance's section, for the arms' C++ port (NativeArmRig.configure_torso).
+const TORSO_PROFILE: Array[Vector2] = _TORSO_PROFILE
+const TORSO_REAR_SWAY: Array[float] = _TORSO_REAR_SWAY
+const TORSO_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 
 # Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the
