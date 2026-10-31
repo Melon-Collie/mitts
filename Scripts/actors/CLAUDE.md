@@ -86,8 +86,10 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   a peaked stripe laid flat at its pos and its fill below flat with it.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
-- **The gloves are a right and a left.** The thumb wraps round the shaft on
-  the palm's side (`SkaterMeshBuilder.shared_glove_fist`), and which side that
+- **The gloves are a right and a left.** The back of the hand is padded and
+  the fingers are four rolls with grooves between them, so the flat palm side
+  reads as one; the thumb wraps round the shaft on the palm's side
+  (`SkaterMeshBuilder.shared_glove_fist`), and which side that
   is in the glove's frame depends on the hand, so the body mesh is one per tuck
   and per pair (`SkaterBodyMesh.shared_mesh`): a left shot's top hand is his
   right. `SkaterConnectedRig.pose` changes the pair when the top arm changes

@@ -145,6 +145,22 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 # right or a left one: the glove's +Z (its +X across its +Y, the wrist) is the
 # back of a right hand and the palm of a left.
 const _GLOVE_THUMB_PALM: float = 0.5
+# The back of the hand's pad, standing off the back of the fist: (y, half
+# width, half depth, how far toward the back its middle sits), in hand radii.
+const _GLOVE_BACK_PAD_STATIONS: Array[Vector4] = [
+	Vector4(0.80, 0.70, 0.12, 0.92),
+	Vector4(0.55, 0.86, 0.18, 1.00),
+	Vector4(0.20, 0.86, 0.18, 1.00),
+	Vector4(0.02, 0.70, 0.12, 0.94),
+]
+# The fingers as their own padded rolls, the fist's finger stations split four
+# ways across its width with a groove between them (half its width, in hand
+# radii) and their faces chamfered further than the fist's, so the grooves show;
+# their tips curl toward the palm by _GLOVE_FINGER_CURL at the last station.
+const _GLOVE_FINGERS: int = 4
+const _GLOVE_FINGER_GROOVE: float = 0.035
+const _GLOVE_FINGER_FACE_FRAC: float = 0.45
+const _GLOVE_FINGER_CURL: float = 0.25
 const _GLOVE_THUMB_STATIONS: Array[Vector4] = [
 	Vector4(0.60, 0.20, 0.55, 0.95),
 	Vector4(0.30, 0.34, 0.66, 1.12),
@@ -570,28 +586,79 @@ const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 
 # Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the
-# hand on surface 0 and the FINGERS on surface 1, each closed at the knuckle
-# ring they share, and the THUMB on surface 2.
+# hand, closed at the seam, and its pad on surface 0, the FINGERS' four rolls on
+# surface 1, and the THUMB on surface 2.
 static func shared_glove_fist(right: bool = true) -> ArrayMesh:
-	var palm_z: float = -_GLOVE_THUMB_PALM if right else _GLOVE_THUMB_PALM
+	# The palm's side of the glove's Z: the thumb wraps toward it, the back of
+	# the hand's pad stands off the other.
+	var palm: float = -1.0 if right else 1.0
 	return _shared("glove_fist_r" if right else "glove_fist_l", func() -> ArrayMesh:
 		var loops: Array[PackedVector3Array] = []
 		for s: Vector3 in _GLOVE_FIST_STATIONS:
 			loops.append(_octagon_loop(s.x, s.y, s.z, _GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
-		_commit_sweep_segment(m, loops, 0, _GLOVE_FINGER_STATION, _fist_loop_center)
-		_commit_sweep_segment(m, loops, _GLOVE_FINGER_STATION, loops.size() - 1,
-				_fist_loop_center)
+		var back: SurfaceTool = _flat_surface()
+		_add_sweep(back, loops.slice(0, _GLOVE_FINGER_STATION + 1), _fist_loop_center)
+		var pad: Array[PackedVector3Array] = []
+		for t: Vector4 in _GLOVE_BACK_PAD_STATIONS:
+			pad.append(_shifted(_octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
+					_GLOVE_SIDE_FRAC), Vector3(0.0, 0.0, -palm * t.w)))
+		_add_sweep(back, pad, _loop_centroid)
+		_commit_flat(back, m)
+		var fingers: SurfaceTool = _flat_surface()
+		for f: int in _GLOVE_FINGERS:
+			_add_sweep(fingers, _finger_roll(f, palm), _loop_centroid)
+		_commit_flat(fingers, m)
 		var thumb: Array[PackedVector3Array] = []
 		for t: Vector4 in _GLOVE_THUMB_STATIONS:
-			var loop: PackedVector3Array = _octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
-					_GLOVE_SIDE_FRAC)
-			for k: int in loop.size():
-				loop[k].x += t.w
-				loop[k].z += palm_z
-			thumb.append(loop)
-		_commit_sweep_segment(m, thumb, 0, thumb.size() - 1, _thumb_loop_center)
+			thumb.append(_shifted(_octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
+					_GLOVE_SIDE_FRAC), Vector3(t.w, 0.0, palm * _GLOVE_THUMB_PALM)))
+		var thumb_st: SurfaceTool = _flat_surface()
+		_add_sweep(thumb_st, thumb, _loop_centroid)
+		_commit_flat(thumb_st, m)
 		return m)
+
+
+# Finger `f` of the fist's _GLOVE_FINGERS rolls, counted from the little
+# finger (−X) to the index (+X, the thumb's side): its share of each finger
+# station's width less the groove between rolls, its tip curled toward the palm.
+static func _finger_roll(f: int, palm: float) -> Array[PackedVector3Array]:
+	var roll: Array[PackedVector3Array] = []
+	var last: int = _GLOVE_FIST_STATIONS.size() - 1
+	for i: int in range(_GLOVE_FINGER_STATION, last + 1):
+		var s: Vector3 = _GLOVE_FIST_STATIONS[i]
+		var share: float = 2.0 * s.y / _GLOVE_FINGERS
+		var curl: float = float(i - _GLOVE_FINGER_STATION) / float(last - _GLOVE_FINGER_STATION)
+		roll.append(_shifted(_octagon_loop(s.x, share * 0.5 - _GLOVE_FINGER_GROOVE, s.z,
+				_GLOVE_FINGER_FACE_FRAC, _GLOVE_SIDE_FRAC),
+				Vector3(-s.y + share * (f + 0.5), 0.0, palm * _GLOVE_FINGER_CURL * curl * curl)))
+	return roll
+
+
+static func _shifted(loop: PackedVector3Array, by: Vector3) -> PackedVector3Array:
+	for k: int in loop.size():
+		loop[k] += by
+	return loop
+
+
+static func _flat_surface() -> SurfaceTool:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)  # flat shading — see class doc block
+	return st
+
+
+static func _commit_flat(st: SurfaceTool, target: ArrayMesh) -> void:
+	st.generate_normals()
+	st.commit(target)
+
+
+# A closed sweep through `loops`, capped at both ends, onto `st`.
+static func _add_sweep(st: SurfaceTool, loops: Array[PackedVector3Array],
+		center_of: Callable) -> void:
+	_sweep_loops(st, loops)
+	_loop_cap(st, loops[0], center_of.call(loops[0]), true)
+	_loop_cap(st, loops[-1], center_of.call(loops[-1]), false)
 
 
 # A fist loop's axis point — the sweep runs along local Y, so the caps fan to
@@ -600,7 +667,7 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 	return Vector3(0.0, loop[0].y, 0.0)
 
 
-static func _thumb_loop_center(loop: PackedVector3Array) -> Vector3:
+static func _loop_centroid(loop: PackedVector3Array) -> Vector3:
 	var sum := Vector3.ZERO
 	for p: Vector3 in loop:
 		sum += p

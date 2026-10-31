@@ -58,8 +58,9 @@ func _parts() -> Array[PartSpec]:
 				Vector3(0.02, 0.19, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
 		PartSpec.new("blade_runner", SkaterMeshBuilder._build_skate_blade(),
 				Vector3(0.01, 0.19, 0.04), false, SkaterMeshBuilder.BLADE_PART_RUNNER),
+		# Its depth takes the back of the hand's pad, as deep as the fist is wide.
 		PartSpec.new("glove_back", SkaterMeshBuilder.shared_glove_fist(),
-				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_BACK),
+				Vector3(2.2, 1.0, 2.2), false, SkaterMeshBuilder.FIST_PART_BACK),
 		PartSpec.new("glove_fingers", SkaterMeshBuilder.shared_glove_fist(),
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_FINGERS),
 		PartSpec.new("glove_thumb", SkaterMeshBuilder.shared_glove_fist(),
