@@ -87,7 +87,8 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
 - **The gloves are a right and a left.** The back of the hand is padded and
-  the fingers are four rolls with grooves between them, so the flat palm side
+  the fingers are four chunky rolls with grooves between them, each bent over
+  round the shaft toward the palm as a closed fist's are, so the flat palm side
   reads as one; the thumb wraps round the shaft on the palm's side
   (`SkaterMeshBuilder.shared_glove_fist`), and which side that
   is in the glove's frame depends on the hand, so the body mesh is one per tuck

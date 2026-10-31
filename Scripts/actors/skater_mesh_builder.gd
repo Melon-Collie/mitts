@@ -153,14 +153,25 @@ const _GLOVE_BACK_PAD_STATIONS: Array[Vector4] = [
 	Vector4(0.20, 0.86, 0.18, 1.00),
 	Vector4(0.02, 0.70, 0.12, 0.94),
 ]
-# The fingers as their own padded rolls, the fist's finger stations split four
-# ways across its width with a groove between them (half its width, in hand
-# radii) and their faces chamfered further than the fist's, so the grooves show;
-# their tips curl toward the palm by _GLOVE_FINGER_CURL at the last station.
+# The fingers as their own padded rolls, the fist's span split four ways with
+# a groove between them (half its width, in hand radii). Each leaves the knuckle
+# pointing down the fist and bends over round the shaft toward the palm, as a
+# closed fist's do: swept along an arc of _GLOVE_FINGER_BEND_R about a hinge
+# that far palm-ward of the knuckle (_GLOVE_FINGER_KNUCKLE: y, and how far
+# toward the back of the hand), through _GLOVE_FINGER_CURL_DEG in as many
+# segments, its section _GLOVE_FINGER_HALF_DEPTH deep either side of the arc and
+# narrowing to _GLOVE_FINGER_TIP at the tip. The back of the knuckle stands
+# level with the back of the hand, and the bottom of the bend with the fist's
+# own bottom.
 const _GLOVE_FINGERS: int = 4
-const _GLOVE_FINGER_GROOVE: float = 0.035
-const _GLOVE_FINGER_FACE_FRAC: float = 0.45
-const _GLOVE_FINGER_CURL: float = 0.25
+const _GLOVE_FINGER_GROOVE: float = 0.02
+const _GLOVE_FINGER_FACE_FRAC: float = 0.6
+const _GLOVE_FINGER_KNUCKLE := Vector2(-0.05, 0.53)
+const _GLOVE_FINGER_BEND_R: float = 0.5
+const _GLOVE_FINGER_HALF_DEPTH: float = 0.45
+const _GLOVE_FINGER_CURL_DEG: float = 150.0
+const _GLOVE_FINGER_SEGMENTS: int = 6
+const _GLOVE_FINGER_TIP: float = 0.8
 const _GLOVE_THUMB_STATIONS: Array[Vector4] = [
 	Vector4(0.60, 0.20, 0.55, 0.95),
 	Vector4(0.30, 0.34, 0.66, 1.12),
@@ -620,18 +631,33 @@ static func shared_glove_fist(right: bool = true) -> ArrayMesh:
 
 
 # Finger `f` of the fist's _GLOVE_FINGERS rolls, counted from the little
-# finger (−X) to the index (+X, the thumb's side): its share of each finger
-# station's width less the groove between rolls, its tip curled toward the palm.
+# finger (−X) to the index (+X, the thumb's side), its loops square to its arc.
 static func _finger_roll(f: int, palm: float) -> Array[PackedVector3Array]:
+	var share: float = GLOVE_FIST_SPAN / _GLOVE_FINGERS
+	var x: float = -GLOVE_FIST_SPAN * 0.5 + share * (f + 0.5)
+	# The arc in the fist's (y, z): down the fist, then round toward the palm.
+	var down := Vector2(-1.0, 0.0)
+	var palm_way := Vector2(0.0, palm)
+	var knuckle := Vector2(_GLOVE_FINGER_KNUCKLE.x, -palm * _GLOVE_FINGER_KNUCKLE.y)
+	var hinge: Vector2 = knuckle + palm_way * _GLOVE_FINGER_BEND_R
 	var roll: Array[PackedVector3Array] = []
-	var last: int = _GLOVE_FIST_STATIONS.size() - 1
-	for i: int in range(_GLOVE_FINGER_STATION, last + 1):
-		var s: Vector3 = _GLOVE_FIST_STATIONS[i]
-		var share: float = 2.0 * s.y / _GLOVE_FINGERS
-		var curl: float = float(i - _GLOVE_FINGER_STATION) / float(last - _GLOVE_FINGER_STATION)
-		roll.append(_shifted(_octagon_loop(s.x, share * 0.5 - _GLOVE_FINGER_GROOVE, s.z,
-				_GLOVE_FINGER_FACE_FRAC, _GLOVE_SIDE_FRAC),
-				Vector3(-s.y + share * (f + 0.5), 0.0, palm * _GLOVE_FINGER_CURL * curl * curl)))
+	for k: int in _GLOVE_FINGER_SEGMENTS + 1:
+		var u: float = float(k) / _GLOVE_FINGER_SEGMENTS
+		var a: float = deg_to_rad(_GLOVE_FINGER_CURL_DEG) * u
+		var out: Vector2 = -palm_way * cos(a) + down * sin(a)
+		var at: Vector2 = hinge + out * _GLOVE_FINGER_BEND_R
+		var taper: float = lerpf(1.0, _GLOVE_FINGER_TIP, u * u)
+		var flat: PackedVector3Array = _octagon_loop(0.0,
+				(share * 0.5 - _GLOVE_FINGER_GROOVE) * taper, _GLOVE_FINGER_HALF_DEPTH * taper,
+				_GLOVE_FINGER_FACE_FRAC, _GLOVE_SIDE_FRAC)
+		var loop := PackedVector3Array()
+		loop.resize(flat.size())
+		for i: int in flat.size():
+			# The flat loop's z is its depth, outward (the back of the hand's way
+			# at the knuckle) round the bend.
+			var depth: Vector2 = at + out * flat[i].z * -palm
+			loop[i] = Vector3(x + flat[i].x, depth.x, depth.y)
+		roll.append(loop)
 	return roll
 
 
