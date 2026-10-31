@@ -228,6 +228,14 @@ Each phase is its own branch and PR.
 
 ## 11. Open questions
 
+- The tick side takes the hips square to the **facing**
+  (`SkaterSpineRig.shoulder_in_frame`), because their drawn yaw carries the
+  render-rate gait; with the hips on the **travel**, the spine's twist budget is
+  measured from the travel, so whenever the facing and the travel differ the
+  arms have more or less turn than the tick assumes. Phase 1 measures how far
+  apart they get in play; the derivation then either takes the hips from a tick
+  quantity that follows the travel, or bounds the gap.
+
 - Does the top hand's forehand floor survive once the elbow comes from the solve,
   or does the solve make it redundant?
 - How rich does the envelope need to be — is a per-angle table enough, or does
