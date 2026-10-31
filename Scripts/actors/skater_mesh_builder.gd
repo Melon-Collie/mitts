@@ -121,8 +121,7 @@ const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
 # curled fingertips, its knuckle roll across local X; SkaterArmPoses.glove_basis
 # aims it. UNIT-scale (stations are y, half_w, half_d multiples of
 # hand_sphere_radius). A fist off the stick takes its roll from world up, so the
-# section stays near-square: no face of it can be the back of the hand or carry
-# a thumb.
+# section stays near-square: no face of it can be the back of the hand.
 const _GLOVE_FINGER_STATION: int = 3
 # The fist's width across the knuckle roll, in hand radii.
 const GLOVE_FIST_SPAN: float = 2.2
@@ -141,8 +140,11 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 # The thumb's pad on the fist's +X end of the knuckle roll, where a shaft held
 # like a sword leaves the hand toward the blade (SkaterArmPoses.glove_basis):
 # (y, half width, half depth, x of its middle), in hand radii as the fist's,
-# from its root by the back of the hand to its tip beside the fingers. Square
-# across the palm and the back, so the one mesh is either hand's.
+# from its root by the back of the hand to its tip beside the fingers. It sits
+# _GLOVE_THUMB_PALM toward the palm, wrapped round the shaft, so the fist is a
+# right or a left one: the glove's +Z (its +X across its +Y, the wrist) is the
+# back of a right hand and the palm of a left.
+const _GLOVE_THUMB_PALM: float = 0.5
 const _GLOVE_THUMB_STATIONS: Array[Vector4] = [
 	Vector4(0.60, 0.20, 0.55, 0.95),
 	Vector4(0.30, 0.34, 0.66, 1.12),
@@ -567,11 +569,12 @@ static func torso_clearance(p: Vector3) -> float:
 const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 
-# Gloved fist (see _GLOVE_FIST_STATIONS): the BACK of the hand on surface 0
-# and the FINGERS on surface 1, each closed at the knuckle ring they share, and
-# the THUMB on surface 2.
-static func shared_glove_fist() -> ArrayMesh:
-	return _shared("glove_fist", func() -> ArrayMesh:
+# Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the
+# hand on surface 0 and the FINGERS on surface 1, each closed at the knuckle
+# ring they share, and the THUMB on surface 2.
+static func shared_glove_fist(right: bool = true) -> ArrayMesh:
+	var palm_z: float = -_GLOVE_THUMB_PALM if right else _GLOVE_THUMB_PALM
+	return _shared("glove_fist_r" if right else "glove_fist_l", func() -> ArrayMesh:
 		var loops: Array[PackedVector3Array] = []
 		for s: Vector3 in _GLOVE_FIST_STATIONS:
 			loops.append(_octagon_loop(s.x, s.y, s.z, _GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
@@ -585,6 +588,7 @@ static func shared_glove_fist() -> ArrayMesh:
 					_GLOVE_SIDE_FRAC)
 			for k: int in loop.size():
 				loop[k].x += t.w
+				loop[k].z += palm_z
 			thumb.append(loop)
 		_commit_sweep_segment(m, thumb, 0, thumb.size() - 1, _thumb_loop_center)
 		return m)
@@ -597,7 +601,10 @@ static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 
 
 static func _thumb_loop_center(loop: PackedVector3Array) -> Vector3:
-	return Vector3((loop[0].x + loop[4].x) * 0.5, loop[0].y, 0.0)
+	var sum := Vector3.ZERO
+	for p: Vector3 in loop:
+		sum += p
+	return sum / loop.size()
 
 
 # Glove cuff: the fist's chamfered box section, posed in the fist's frame. x/z

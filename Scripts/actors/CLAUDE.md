@@ -86,6 +86,13 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   a peaked stripe laid flat at its pos and its fill below flat with it.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
+- **The gloves are a right and a left.** The thumb wraps round the shaft on
+  the palm's side (`SkaterMeshBuilder.shared_glove_fist`), and which side that
+  is in the glove's frame depends on the hand, so the body mesh is one per tuck
+  and per pair (`SkaterBodyMesh.shared_mesh`): a left shot's top hand is his
+  right. `SkaterConnectedRig.pose` changes the pair when the top arm changes
+  side, so a figure's shot picks its gloves with no call of its own.
+  `test_glove_thumb_wraps_the_palm.gd`.
 - **The display figures wear the same body.** `FigureKit` (the player screen's
   case, the lobby's bench) builds the body skeleton, the skin, the rigid parts,
   the kit paint and the jersey's cloth; `LockerMannequin` poses the skeleton's
