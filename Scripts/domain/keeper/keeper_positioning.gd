@@ -23,14 +23,18 @@ extends RefCounted
 #
 # A carrier of theirs he would race to a post for the RVH (`_race_to_post`)
 # in front of the goal line he meets planted in the butterfly on it instead
-# (`_plant`), where a wrap across has to go round him; down with the carrier
-# still in tight in front of him, he stays down and slides with him
-# (`_stay_down`).
+# (`_plant`), where a wrap across has to go round him. One in tight in front
+# of him he plays down: on his spot on his feet he drops there, and down he
+# pushes with the carrier on the puck's line (`_stay_down`).
 #
 # In the zone he sinks into the low ready once a shot could reach him sooner
 # than his legs could answer it from the ready stance (`_cannot_react`): the
-# low ready covers more of the net than the butterfly from anywhere in front
-# of him, and its drop is the shorter fall.
+# low ready covers more of the net than the ready stance, nothing off its gear
+# goes on in, and its drop is the shorter fall.
+#
+# In the zone, a body on his sightline to the puck from his spot he looks
+# round (KeeperScreen): a step across off his angle line, no further than half
+# his chest.
 #
 # A pass he reads to an opposing stick (KeeperPlayRead.meets) he plays from
 # where that stick meets it, in the zone it is in: skated to at once, turning
@@ -72,11 +76,11 @@ const SHOT_M_S: float = GameRules.DEFAULT_WRISTER_POWER_MAX_M_S
 # time, so a puck on the boundary does not bob him up and down.
 const SINK_MARGIN_S: float = 0.05
 # A carrier of theirs in tight: planted on a post, he stays planted while the
-# carrier is within this of it, wide of it in front of the goal line; and once
-# down, within this of him, he stays down and pushes across with the carrier
-# rather than standing up into the play, which he would lose the race to.
-# About two stick lengths, the close range Hockey Canada gives the blocking
-# butterfly; out of it a margin further off.
+# carrier is within this of it, wide of it in front of the goal line; and in
+# front of the net, within this of it, he plays it down and pushes across with
+# the carrier rather than standing up into the play, which he would lose the
+# race to. About two stick lengths, the close range Hockey Canada gives the
+# blocking butterfly; out of it a margin further off.
 const TIGHT_M: float = 2.0 * GameRules.DEFAULT_STICK_LENGTH_M
 # Rounds of solving a spot that hangs on itself: the seal squared to the
 # carrier from where it puts him, the slide led by its own time.
@@ -85,11 +89,6 @@ const SEAL_ROUNDS: int = 4
 # still meets the post. Down, he pushes again only once his spot has moved on
 # by as much.
 const SEAL_NEAR_M: float = KeeperAnatomy.PAD_WIDTH_M * 0.5
-# How far a carrier gets the puck out across from his body either side, and
-# how fast he pulls it across: the live skater's, carrying at a dangle's pace
-# or at speed (test_keeper_reads_the_carriers_reach.gd).
-const CARRIER_REACH_M: float = 1.2
-const PULL_M_S: float = AISkaterCaps.LEAGUE_BLADE_SPEED_M_S
 
 var zone: int = Zone.AWAY
 # The post he holds below the goal line (+1 his blocker side), 0 none yet.
@@ -97,6 +96,10 @@ var post_side: float = 0.0
 # What he reads of the play, for its receivers and his read's time; none, no
 # pass is read.
 var play: KeeperPlayRead = null
+# The skaters on the ice who could hide the puck from him, net frame (his
+# controller's; only where they stand is read); and his look round them.
+var bodies := PackedVector3Array()
+var screen := KeeperScreen.new()
 # The puck's velocity as decided on.
 var _velocity := Vector2.ZERO
 # Sealed on `post_side` for a puck racing him to it (`_race_to_post`).
@@ -124,8 +127,11 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var near_post := Vector2(signf(puck.x) * GameRules.NET_HALF_WIDTH, 0.0)
 	planted = tight and absf(puck.x) > GameRules.NET_HALF_WIDTH \
 			and (puck.distance_to(near_post) <= TIGHT_M + MARGIN_M if planted else _racing)
-	kept_down = tight and not planted and (kept_down or _down(motor)) \
-			and puck.distance_to(Vector2(motor.x, motor.z)) <= TIGHT_M + (MARGIN_M if kept_down else 0.0)
+	# In tight he goes down once he is on the spot he skates to, and stays down
+	# while the carrier stays in tight.
+	var me := Vector2(motor.x, motor.z)
+	kept_down = tight and not planted and puck.length() <= TIGHT_M + (MARGIN_M if kept_down else 0.0) \
+			and (kept_down or motor.rest != KeeperRoute.Rest.FEET or me.distance_to(_spot(puck, motor)) <= SEAL_NEAR_M)
 	if planted or kept_down:
 		_racing = false
 		post_side = 0.0
@@ -144,46 +150,16 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		return
 	# His spot moves with the puck: the same spot a look ahead along its
 	# motion, which the motor skates him with.
-	var on: Vector2 = puck
-	if zone == Zone.FRONT and tight:
-		on = _covered(puck, motor)
-	var spot: Vector2 = _spot(on, motor)
-	var ahead: Vector2 = _spot(on + velocity * LOOK_AHEAD_S, motor)
+	var spot: Vector2 = _spot(puck, motor)
+	var ahead: Vector2 = _spot(puck + velocity * LOOK_AHEAD_S, motor)
 	if meeting:
 		ahead = spot
-	motor.go_to(spot, facing(spot, on), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
-
-
-# Where his angle line goes for a carrier of theirs with the puck at `puck`:
-# not the puck, but what it can still do. Across the carrier, as the net sees
-# him, the puck can be anywhere within his reach, and a pull to the far side
-# of it beats his read; while it goes he follows it once read, from a
-# standstill, his skating turning his angle at the puck's distance. So he takes the line between
-# the shot from where the puck is and the shot after a pull to either edge of
-# the reach, less what he makes up on the pull, at which the worst of them
-# leaves him least off it.
-func _covered(puck: Vector2, motor: KeeperMotor) -> Vector2:
-	var body: Vector2 = play.carrier_at
-	var d: float = body.length()
-	if d < 1e-3:
-		return puck
-	var across := Vector2(-body.y, body.x) / d
-	var u: float = (puck - body).dot(across)
-	var lo: float = minf(-CARRIER_REACH_M, u)
-	var hi: float = maxf(CARRIER_REACH_M, u)
-	var lever: float = d / maxf(Vector2(motor.x, motor.z).length(), 0.1)
-	var lo_made_up: float = lever * _skated(maxf((u - lo) / PULL_M_S - play.delay_s, 0.0), motor.footwork)
-	var hi_made_up: float = lever * _skated(maxf((hi - u) / PULL_M_S - play.delay_s, 0.0), motor.footwork)
-	return body + across * clampf(0.5 * (lo + hi + lo_made_up - hi_made_up), lo, hi)
-
-
-# How far he skates across in `t` seconds from a standstill, pushing up to his
-# T-push's speed.
-static func _skated(t: float, skates: KeeperFootwork) -> float:
-	var to_top: float = skates.t_push_speed / skates.accel
-	if t <= to_top:
-		return 0.5 * skates.accel * t * t
-	return 0.5 * skates.t_push_speed * to_top + skates.t_push_speed * (t - to_top)
+	if zone == Zone.FRONT:
+		screen.look(spot, Vector3(puck.x, GameRules.PUCK_COLLISION_HALF_HEIGHT, puck.y), bodies,
+				motor.low_ready.asked)
+		spot += screen.step
+		ahead += screen.step
+	motor.go_to(spot, facing(spot, puck), KeeperRoute.Rest.FEET, (ahead - spot) / LOOK_AHEAD_S, meeting)
 
 
 # Planted in the butterfly on the post at `post` (on `side`), square to the
@@ -202,38 +178,29 @@ func _plant(post: Vector2, side: float, puck: Vector2, velocity: Vector2, motor:
 	motor.go_to(at if near else spot, _seal_turn, KeeperRoute.Rest.DOWN)
 
 
-# Down, dropping, or asked down and on his way there; not on his way up from
-# it, since a rise is not cut short.
-static func _down(motor: KeeperMotor) -> bool:
-	match motor.drop.state:
-		KeeperDrop.State.RISING, KeeperDrop.State.RECOVERING:
-			return false
-		KeeperDrop.State.DROPPING:
-			return true
-	return motor.rest != KeeperRoute.Rest.FEET or motor.route.rest == KeeperRoute.Rest.DOWN
-
-
-# Down with the carrier in tight in front of him: slid across at his depth to
-# the carrier's angle where the carrier will be when the slide lands, square to
-# him there and then, or onto the plant on a post the carrier will be wide of;
-# a move under SEAL_NEAR_M he leaves to the rotation, a slide being a
-# commitment he cannot cut short.
+# Down with the carrier in tight in front of him: pushed across at his depth
+# to the puck's line where the carrier will be when the push lands, square to
+# him there; a move under SEAL_NEAR_M he leaves to the rotation, a push being
+# a commitment he cannot cut short.
 func _stay_down(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	var at := Vector2(motor.x, motor.z)
 	var depth: float = at.length()
 	var to: Vector2 = puck.normalized() * depth
 	var lands: Vector2 = puck
-	var sealing: bool = false
 	for i: int in SEAL_ROUNDS:
 		lands = puck + velocity * motor.slide.time_to(at.distance_to(to))
-		sealing = absf(lands.x) > GameRules.NET_HALF_WIDTH
-		if sealing:
-			to = _seal(Vector2(signf(lands.x) * GameRules.NET_HALF_WIDTH, 0.0), signf(lands.x), lands, motor)
-		else:
-			to = lands.normalized() * depth
-	if at.distance_to(to) <= SEAL_NEAR_M:
+		# A carrier driving at him stops on him, not past him.
+		if lands.y > -depth - GameRules.DEFAULT_STICK_LENGTH_M * 0.5:
+			lands = puck
+		to = lands.normalized() * depth
+	# A spot as near as half a pad's width to the one he is still pushing for,
+	# or to where he has stopped, is no new push.
+	var pushing: bool = motor.route.rest == KeeperRoute.Rest.DOWN and not motor.is_idle()
+	if pushing and to.distance_to(motor.route.spot) <= SEAL_NEAR_M:
+		to = motor.route.spot
+	elif at.distance_to(to) <= SEAL_NEAR_M:
 		to = at
-	motor.go_to(to, _seal_turn if sealing else facing(to, lands), KeeperRoute.Rest.DOWN)
+	motor.go_to(to, facing(to, lands), KeeperRoute.Rest.DOWN)
 
 
 # The spot that seals the post at `post` with his `side` pad, down square to a

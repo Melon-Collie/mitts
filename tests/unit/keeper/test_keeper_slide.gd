@@ -163,7 +163,8 @@ func test_the_push_skate_holds_its_place_while_it_drives() -> void:
 
 # From his feet the push skate is where his push comes from from the start:
 # it holds its place on the ice from the drop's first frame to the push's last,
-# while the lead knee falls; and he starts from the ready stance.
+# the push driving through the last of the lead knee's fall; and he starts from
+# the ready stance.
 func test_from_his_feet_the_push_skate_never_leaves_its_spot() -> void:
 	var ready_pose := KeeperPose.new()
 	KeeperPoses.ready(ready_pose)
@@ -184,7 +185,37 @@ func test_from_his_feet_the_push_skate_never_leaves_its_spot() -> void:
 		assert_almost_eq(_world(_skel.xf[KeeperSkeleton.FOOT[0]].origin).x, planted, 0.001,
 				"%s at x %.3f it holds" % [KeeperSlide.Phase.keys()[_slide.phase], _slide.x])
 		ticks += 1
-	assert_gt(ticks, roundi(0.25 / DT), "the drop and the push")
+	assert_gte(ticks, roundi(_slide.drop_s / DT) - 1, "the fall, the push through its end")
+
+
+# From his feet he drives off the push skate as the lead knee falls (the power
+# push), landing on the pad at the push's speed: moving before the knee is
+# down, and from the low ready, whose fall is the shorter, sooner still.
+func test_from_his_feet_he_pushes_as_the_knee_falls() -> void:
+	var stance := KeeperPose.new()
+	KeeperPoses.low_ready(stance)
+	var arrived: Array[float] = []
+	for sunk: bool in [false, true]:
+		_slide = KeeperSlide.new()
+		if sunk:
+			_slide.fall = KeeperLowReady.fall_share_at(1.0)
+			_slide.slide_from_feet(Vector2(0.8, 0.0), INF, stance)
+		else:
+			_slide.slide_from_feet(Vector2(0.8, 0.0))
+		var t: float = 0.0
+		var landed_at: float = NAN
+		while _slide.phase == KeeperSlide.Phase.DROP:
+			_slide.step(DT)
+			t += DT
+		landed_at = t
+		assert_almost_eq(_slide.speed, _slide.push_speed, 1e-4, "%s: on the pad at the push's speed" % sunk)
+		assert_almost_eq(landed_at, maxf(_slide.drop_s * _slide.fall, KeeperSlide.PUSH_S), 1.5 * DT,
+				"%s: landed as the fall and the push end" % sunk)
+		while _slide.x < 0.4:
+			_slide.step(DT)
+			t += DT
+		arrived.append(t)
+	assert_lt(arrived[1], arrived[0], "half way sooner from the low ready")
 
 
 # The lead pad seals the ice it slides along: down on it every tick, from the

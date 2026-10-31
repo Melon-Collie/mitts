@@ -21,7 +21,7 @@ const TOLERANCE: float = 0.001
 class GameStateStub:
 	extends Node
 
-	var goalies: Array[Dictionary] = []
+	var goalies := PackedFloat32Array()
 
 	func is_host() -> bool:
 		return true
@@ -29,7 +29,7 @@ class GameStateStub:
 	func is_movement_locked() -> bool:
 		return false
 
-	func get_goalie_data() -> Array[Dictionary]:
+	func get_goalie_boxes() -> PackedFloat32Array:
 		return goalies
 
 
@@ -48,9 +48,8 @@ class Scenario:
 	var sweep: float = 2.6
 	# The bearing the sweep centres on, radians from -Z toward +X.
 	var aim: float = 0.0
-	var goalies: Array[Dictionary] = []
-	# Whether a release takes the puck off him, as the host's listener does.
-	var release_clears: bool = false
+	# Every goalie's save boxes, packed (GameManager.get_goalie_boxes).
+	var goalies := PackedFloat32Array()
 	# The wall pin's squeeze (Skater.wall_squeeze_threshold); the board reach
 	# limit keeps a sweep well under the shipped one.
 	var squeeze_threshold: float = -1.0
@@ -95,12 +94,11 @@ func _run(native: bool, sc: Scenario) -> Dictionary:
 	c.puck_release_requested.connect(
 			func(dir: Vector3, power: float, _slapper: bool) -> void:
 				releases.append(dir)
-				releases.append(Vector3(power, tick, 0.0))
-				if sc.release_clears:
-					c.has_puck = false)
+				releases.append(Vector3(power, tick, 0.0)))
 	var out := PackedVector3Array()
 	var walls: int = 0
 	var nets: int = 0
+	var goalie_hits: int = 0
 	var input := InputState.new()
 	for i: int in TICKS:
 		tick = i
@@ -118,6 +116,7 @@ func _run(native: bool, sc: Scenario) -> Dictionary:
 		if sc.puck_on_line:
 			puck.global_position = skater.global_position + dir * 1.8
 			puck.global_position.y = 0.0
+		skater.capture_prev_blade_contact()
 		c._process_input(input, DT)
 		skater._physics_process(DT)
 		out.append(skater.get_top_hand_position())
@@ -128,8 +127,21 @@ func _run(native: bool, sc: Scenario) -> Dictionary:
 			walls += 1
 		if not native and c._ik._net_result.hit():
 			nets += 1
+		if not native and _against_goalie(skater, c, sc.goalies):
+			goalie_hits += 1
 	skater.free()
-	return {"ticks": out, "releases": releases, "walls": walls, "nets": nets}
+	return {"ticks": out, "releases": releases, "walls": walls, "nets": nets, "goalie_hits": goalie_hits}
+
+
+# Whether the blade lies against the goalie's gear: within a few millimetres of
+# a box the wall holds it out of.
+func _against_goalie(skater: Skater, c: SkaterController, boxes: PackedFloat32Array) -> bool:
+	if boxes.is_empty():
+		return false
+	var heel: Vector3 = skater.upper_body_to_global(skater.get_blade_position())
+	var mid: Vector3 = skater.get_blade_contact_global()
+	var toe: Vector3 = heel + (mid - heel) * 2.0
+	return GoalieGearCollision.resolve(mid, heel, toe, c.net_blade_half_thickness + 0.005, boxes) != Vector3.ZERO
 
 
 # The reference run, for the coverage a scenario is there to give.
@@ -214,19 +226,37 @@ func test_round_the_net() -> void:
 
 
 func test_into_the_goalies_reach() -> void:
-	for clears: bool in [false, true]:
+	for carry: bool in [false, true]:
 		var sc := Scenario.new()
 		sc.start = Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 3.0)
 		sc.move = Vector2(0.0, 0.6)
-		sc.carry = true
-		sc.release_clears = clears
-		sc.goalies = [
-			{"position": Vector3(0.6, 0.0, GameRules.GOAL_LINE_Z - 1.2), "is_butterfly": true,
-				"rotation_y": 0.3},
-			{"position": Vector3(-0.4, 0.0, GameRules.GOAL_LINE_Z - 0.9), "is_butterfly": false,
-				"rotation_y": 0.0},
-		]
-		_assert_parity(sc, "goalies, release clears %s" % clears)
+		sc.carry = carry
+		sc.goalies = _keeper_boxes(Vector3(0.6, 0.0, GameRules.GOAL_LINE_Z - 1.2), PI + 0.3, true)
+		sc.goalies.append_array(_keeper_boxes(Vector3(-0.4, 0.0, GameRules.GOAL_LINE_Z - 0.9), PI, false))
+		var ref: Dictionary = _assert_parity(sc, "goalies, carrying %s" % carry)
+		if not ref.is_empty():
+			assert_gt(ref["goalie_hits"], 0, "the blade met the goalie, carrying %s" % carry)
+			assert_eq((ref["releases"] as PackedVector3Array).size(), 0, "he stripped nothing")
+
+
+# The keeper's save boxes standing ready or down in the butterfly, at `at`
+# turned `yaw`, packed as GameManager gathers them.
+func _keeper_boxes(at: Vector3, yaw: float, down: bool) -> PackedFloat32Array:
+	var p := KeeperPose.new()
+	if down:
+		KeeperPoses.butterfly(p)
+	else:
+		KeeperPoses.ready(p)
+	var skel := KeeperSkeleton.new()
+	skel.pose(p)
+	var place := Transform3D(Basis(Vector3.UP, yaw), at)
+	var out := PackedFloat32Array()
+	for part: int in KeeperGear.PART_COUNT:
+		var xf: Transform3D = place * KeeperGear.box(skel, part)
+		var h: Vector3 = KeeperGear.half_extents(part)
+		out.append_array([xf.basis.x.x, xf.basis.x.y, xf.basis.x.z, xf.basis.y.x, xf.basis.y.y, xf.basis.y.z,
+				xf.basis.z.x, xf.basis.z.y, xf.basis.z.z, xf.origin.x, xf.origin.y, xf.origin.z, h.x, h.y, h.z])
+	return out
 
 
 func test_a_commit_stance() -> void:

@@ -52,6 +52,171 @@ double smoothstepd(double from, double to, double x) {
 	return t * t * (3.0 - 2.0 * t);
 }
 
+// ── GoalieGearCollision ───────────────────────────────────────────────────────
+// The GDScript (Scripts/domain/rules/goalie_gear_collision.gd) is the
+// reference; this mirrors it statement for statement.
+
+constexpr int GOALIE_FLOATS_PER_BOX = 15;
+constexpr int GOALIE_SAMPLES = 5;
+constexpr double GOALIE_SIDE_MIN = 0.3;
+constexpr int GOALIE_ROUNDS = 2;
+
+Vector3 goalie_axis(const float *box, int i) {
+	return Vector3(box[i * 3], box[i * 3 + 1], box[i * 3 + 2]);
+}
+
+Vector3 goalie_origin(const float *box) {
+	return Vector3(box[9], box[10], box[11]);
+}
+
+Vector3 goalie_half(const float *box) {
+	return Vector3(box[12], box[13], box[14]);
+}
+
+Vector3 goalie_local(const Vector3 &p, const float *box) {
+	return Vector3(p.dot(goalie_axis(box, 0)), p.dot(goalie_axis(box, 1)), p.dot(goalie_axis(box, 2)));
+}
+
+double goalie_across(const Vector3 &axis) {
+	return Vector2(axis.x, axis.z).length();
+}
+
+int goalie_entered(const Vector3 &lw, const Vector3 &ln, const Vector3 &e) {
+	if (Math::abs((double)lw.x) < (double)e.x && Math::abs((double)lw.y) < (double)e.y
+			&& Math::abs((double)lw.z) < (double)e.z) {
+		return -1;
+	}
+	int face = -1;
+	double last = -INFINITY;
+	for (int i = 0; i < 3; i++) {
+		const double d = (double)ln[i] - (double)lw[i];
+		if (Math::abs((double)lw[i]) < (double)e[i] || Math::abs(d) < 1e-9) {
+			continue;
+		}
+		const double t = (sgn(lw[i]) * (double)e[i] - (double)lw[i]) / d;
+		if (t > last) {
+			last = t;
+			face = i;
+		}
+	}
+	return face;
+}
+
+int goalie_nearest_side(const Vector3 &ln, const Vector3 &e, const float *box) {
+	int face = -1;
+	double least = INFINITY;
+	for (int i = 0; i < 3; i++) {
+		const double across = goalie_across(goalie_axis(box, i));
+		if (across < GOALIE_SIDE_MIN) {
+			continue;
+		}
+		const double go = ((double)e[i] - Math::abs((double)ln[i])) / across;
+		if (go < least) {
+			least = go;
+			face = i;
+		}
+	}
+	return face;
+}
+
+Vector3 goalie_point_out(const Vector3 &was, const Vector3 &now, double radius, const float *box) {
+	const Vector3 o = goalie_origin(box);
+	const Vector3 e = goalie_half(box) + Vector3(1, 1, 1) * radius;
+	const Vector3 ln = goalie_local(now - o, box);
+	if (Math::abs((double)ln.x) >= (double)e.x || Math::abs((double)ln.y) >= (double)e.y
+			|| Math::abs((double)ln.z) >= (double)e.z) {
+		return Vector3();
+	}
+	const Vector3 lw = goalie_local(was - o, box);
+	int face = goalie_entered(lw, ln, e);
+	double side = 0.0;
+	if (face >= 0 && goalie_across(goalie_axis(box, face)) >= GOALIE_SIDE_MIN) {
+		side = sgn(lw[face]);
+	} else {
+		face = goalie_nearest_side(ln, e, box);
+		if (face < 0) {
+			return Vector3();
+		}
+		side = (double)ln[face] != 0.0 ? sgn(ln[face]) : 1.0;
+	}
+	const Vector3 axis = goalie_axis(box, face);
+	const Vector3 flat(axis.x, 0.0, axis.z);
+	const double across = flat.length();
+	return flat / across * side * ((double)e[face] - side * (double)ln[face]) / across;
+}
+
+double goalie_out_along(const Vector3 &at, const Vector3 &way, double radius, const float *box) {
+	const Vector3 o = goalie_origin(box);
+	const Vector3 e = goalie_half(box) + Vector3(1, 1, 1) * radius;
+	const Vector3 ln = goalie_local(at - o, box);
+	if (Math::abs((double)ln.x) >= (double)e.x || Math::abs((double)ln.y) >= (double)e.y
+			|| Math::abs((double)ln.z) >= (double)e.z) {
+		return 0.0;
+	}
+	const Vector3 wl = goalie_local(way, box);
+	double out = INFINITY;
+	for (int i = 0; i < 3; i++) {
+		if (Math::abs((double)wl[i]) < 1e-6) {
+			continue;
+		}
+		out = MIN(out, (sgn(wl[i]) * (double)e[i] - (double)ln[i]) / (double)wl[i]);
+	}
+	return out != INFINITY ? out : 0.0;
+}
+
+Vector3 goalie_blade_out(const Vector3 &heel, const Vector3 &toe, const Vector3 &moved, double half_thickness,
+		const float *box) {
+	Vector3 lead;
+	double nearest = INFINITY;
+	for (int k = 0; k < GOALIE_SAMPLES; k++) {
+		const double f = (double)k / (double)(GOALIE_SAMPLES - 1);
+		const Vector3 now = heel.lerp(toe, f);
+		const Vector3 push = goalie_point_out(now - moved, now, half_thickness, box);
+		if (push != Vector3() && Math::abs(f - 0.5) < nearest) {
+			nearest = Math::abs(f - 0.5);
+			lead = push;
+		}
+	}
+	if (lead == Vector3()) {
+		return Vector3();
+	}
+	const Vector3 way = lead.normalized();
+	double far = 0.0;
+	for (int k = 0; k < GOALIE_SAMPLES; k++) {
+		far = MAX(far, goalie_out_along(heel.lerp(toe, (double)k / (double)(GOALIE_SAMPLES - 1)), way,
+				half_thickness, box));
+	}
+	return way * far;
+}
+
+Vector3 goalie_blade_resolve(const Vector3 &prev_mid, const Vector3 &heel, const Vector3 &toe,
+		double half_thickness, const PackedFloat32Array &boxes) {
+	const int count = boxes.size() / GOALIE_FLOATS_PER_BOX;
+	const float *data = boxes.ptr();
+	const Vector3 moved = (heel + toe) * 0.5 - prev_mid;
+	const double reach = (double)heel.distance_to(toe) * 0.5 + (double)moved.length() + half_thickness;
+	Vector3 offset;
+	for (int round = 0; round < GOALIE_ROUNDS; round++) {
+		Vector3 best;
+		for (int b = 0; b < count; b++) {
+			const float *box = data + b * GOALIE_FLOATS_PER_BOX;
+			const Vector3 mid = (heel + toe) * 0.5 + offset;
+			if ((double)mid.distance_to(goalie_origin(box)) > (double)goalie_half(box).length() + reach) {
+				continue;
+			}
+			const Vector3 push = goalie_blade_out(heel + offset, toe + offset, moved, half_thickness, box);
+			if (push.length_squared() > best.length_squared()) {
+				best = push;
+			}
+		}
+		if (best == Vector3()) {
+			break;
+		}
+		offset += best;
+	}
+	return offset;
+}
+
 double read(const Dictionary &d, const char *key, bool &ok) {
 	if (!d.has(key)) {
 		ok = false;
@@ -117,10 +282,6 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	hit_commit_blade_bearing_x = read(t, "hit_commit_blade_bearing_x", ok);
 	hit_commit_blade_bearing_z = read(t, "hit_commit_blade_bearing_z", ok);
 	hit_commit_blade_sweep = read(t, "hit_commit_blade_sweep", ok);
-	goalie_block_radius = read(t, "goalie_block_radius", ok);
-	butterfly_pad_half_x = read(t, "butterfly_pad_half_x", ok);
-	butterfly_pad_half_z = read(t, "butterfly_pad_half_z", ok);
-	goalie_strip_power = read(t, "goalie_strip_power", ok);
 	bottom_hand_grip_fraction = read(t, "bottom_hand_grip_fraction", ok);
 	faceoff_center_grip_fraction = read(t, "faceoff_center_grip_fraction", ok);
 	twist_limit = read(t, "twist_limit", ok);
@@ -146,7 +307,7 @@ bool NativeBladePass::configure(const Dictionary &t) {
 
 void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_ub_xf,
 		const PackedFloat64Array &scalars, const PackedVector3Array &vectors,
-		const PackedFloat64Array &goalies) {
+		const PackedFloat32Array &goalies) {
 	ERR_FAIL_COND(top.is_null() || dangle.is_null());
 	ERR_FAIL_COND(scalars.size() < S_COUNT || vectors.size() < V_COUNT);
 	for (int i = 0; i < S_COUNT; i++) {
@@ -155,7 +316,7 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 	for (int i = 0; i < V_COUNT; i++) {
 		v[i] = vectors[i];
 	}
-	goalie_data = goalies;
+	goalie_boxes = goalies;
 	skater_xf = p_skater_xf;
 	ub_xf = p_ub_xf;
 	ub_inv = ub_xf.affine_inverse();
@@ -326,57 +487,9 @@ void NativeBladePass::release(const Vector3 &dir, double power) {
 }
 
 void NativeBladePass::continue_pass() {
-	// The goalies (clamp_blade_from_goalies), only while carrying; each strip is
-	// a release the GDScript fires mid-loop, and the loop then reads has_puck.
-	if (stage == STAGE_AFTER_WALL_RELEASE) {
-		heel_world = ub_xf.xform(wall_clamped);
-		clamped_heel = heel_world;
-		goalie_index = 0;
-		if (!has_puck) {
-			finish();
-			return;
-		}
-	} else if (stage == STAGE_AFTER_CYLINDER_RELEASE) {
-		finish();
-		return;
-	} else if (stage == STAGE_AFTER_BUTTERFLY_RELEASE) {
-		if (clamped_heel != goalie_prev && has_puck) {
-			finish();
-			return;
-		}
-		goalie_index++;
-	}
-	const int count = goalie_data.size() / 4;
-	for (; goalie_index < count; goalie_index++) {
-		const double *g = goalie_data.ptr() + goalie_index * 4;
-		const Vector3 gpos(g[0], 0.0, g[1]);
-		if (g[2] != 0.0) {
-			goalie_prev = clamped_heel;
-			clamped_heel = clamp_butterfly_box(clamped_heel, gpos, g[3]);
-			if (pending) {
-				stage = STAGE_AFTER_BUTTERFLY_RELEASE;
-				return;
-			}
-			if (clamped_heel != goalie_prev && has_puck) {
-				break;
-			}
-		} else {
-			const Vector2 to_blade(clamped_heel.x - gpos.x, clamped_heel.z - gpos.z);
-			const double dist = to_blade.length();
-			if (dist < goalie_block_radius) {
-				const Vector2 push_dir = dist > 0.001
-						? to_blade.normalized()
-						: Vector2(0.0, gpos.z != 0.0 ? -sgn(gpos.z) : 1.0);
-				clamped_heel.x = (double)gpos.x + (double)push_dir.x * goalie_block_radius;
-				clamped_heel.z = (double)gpos.z + (double)push_dir.y * goalie_block_radius;
-				if (has_puck) {
-					release(Vector3(push_dir.x, 0.0, push_dir.y), goalie_strip_power);
-					stage = STAGE_AFTER_CYLINDER_RELEASE;
-					return;
-				}
-			}
-		}
-	}
+	// The goalie (resolve_blade_against_goalies), a wall that never strips.
+	heel_world = ub_xf.xform(wall_clamped);
+	clamped_heel = heel_world + resolve_goalies(heel_world);
 	finish();
 }
 
@@ -657,41 +770,17 @@ Vector3 NativeBladePass::clamp_blade_to_walls(const Vector3 &local_pos) {
 	return ub_inv.xform(Vector3(heel.x + offset.x, heel.y, heel.z + offset.y));
 }
 
-// SkaterIKCoordinator._clamp_blade_butterfly_box.
-Vector3 NativeBladePass::clamp_butterfly_box(const Vector3 &blade_world, const Vector3 &gpos, double rot_y) {
-	const double dx = (double)blade_world.x - (double)gpos.x;
-	const double dz = (double)blade_world.z - (double)gpos.z;
-	const double c = Math::cos(rot_y);
-	const double sn = Math::sin(rot_y);
-	const double local_x = dx * c + dz * sn;
-	const double local_z = -dx * sn + dz * c;
-	if (Math::abs(local_x) >= butterfly_pad_half_x || Math::abs(local_z) >= butterfly_pad_half_z) {
-		return blade_world;
+// SkaterIKCoordinator.resolve_blade_against_goalies.
+Vector3 NativeBladePass::resolve_goalies(const Vector3 &heel) const {
+	if (goalie_boxes.is_empty()) {
+		return Vector3();
 	}
-	const double ox = butterfly_pad_half_x - Math::abs(local_x);
-	const double oz = butterfly_pad_half_z - Math::abs(local_z);
-	double ex;
-	double ez;
-	if (ox < oz) {
-		ex = local_x != 0.0 ? butterfly_pad_half_x * sgn(local_x) : butterfly_pad_half_x;
-		ez = local_z;
-	} else {
-		ex = local_x;
-		ez = local_z != 0.0 ? butterfly_pad_half_z * sgn(local_z) : butterfly_pad_half_z;
-	}
-	const double world_dx = ex * c - ez * sn;
-	const double world_dz = ex * sn + ez * c;
-	Vector3 result = blade_world;
-	result.x = (double)gpos.x + world_dx;
-	result.z = (double)gpos.z + world_dz;
-	if (has_puck) {
-		const Vector2 escape(world_dx - dx, world_dz - dz);
-		const Vector2 push_dir = escape.length_squared() > 0.0001
-				? escape.normalized()
-				: Vector2(world_dx, world_dz).normalized();
-		release(Vector3(push_dir.x, 0.0, push_dir.y), goalie_strip_power);
-	}
-	return result;
+	Vector3 along = heel - ub_xf.xform(hand);
+	along.y = 0.0;
+	const Vector3 toe = along.length_squared() > 0.000001
+			? heel + along.normalized() * (real_t)s[S_BLADE_LENGTH]
+			: heel;
+	return goalie_blade_resolve(v[V_PREV_CONTACT], heel, toe, net_blade_half_thickness, goalie_boxes);
 }
 
 // SkaterIKCoordinator.resolve_blade_against_net: the correction, and the side

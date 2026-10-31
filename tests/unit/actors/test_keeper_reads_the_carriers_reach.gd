@@ -1,6 +1,6 @@
 extends GutTest
 
-# The keeper plays a carrier's reach (KeeperPositioning.CARRIER_REACH_M): how
+# The keeper reads a carrier's reach (KeeperPlayRead.CARRIER_REACH_M): how
 # far across from his body the live skater gets the puck pulling it from one
 # side to the other, either hand, at a dangle's pace and at speed. Driven
 # through the real controller, the blade's contact point read off the rig.
@@ -85,7 +85,7 @@ func test_a_pull_across_gets_the_puck_the_reach_he_plays() -> void:
 					furthest = maxf(furthest, -side * _across(c))
 				total += furthest
 				pulls += 1
-				assert_almost_eq(furthest, KeeperPositioning.CARRIER_REACH_M, SPREAD_M,
+				assert_almost_eq(furthest, KeeperPlayRead.CARRIER_REACH_M, SPREAD_M,
 						"%s, %.1f m/s, pulled to %+.0f" % ["left" if left else "right", c.skater.velocity.length(),
 						-side])
-	assert_almost_eq(total / pulls, KeeperPositioning.CARRIER_REACH_M, MEAN_TOLERANCE_M, "on average")
+	assert_almost_eq(total / pulls, KeeperPlayRead.CARRIER_REACH_M, MEAN_TOLERANCE_M, "on average")

@@ -33,7 +33,10 @@ extends RefCounted
 # right.
 
 const Low := KeeperSaveMove.Low
-enum Hand { NONE, STICK, GLOVE, BLOCKER }
+# The stick's two: the blade slid across along the ice to a low shot at its
+# depth (STICK), and thrust out along the ice wherever it is sent, a poke
+# check or a clear (POKE).
+enum Hand { NONE, STICK, GLOVE, BLOCKER, POKE }
 
 # The flight is tested as this many straight pieces, from the puck to just past
 # the goal line.
@@ -55,11 +58,28 @@ const GEAR_REACH_M: float = 2.5
 # The reach a covering glove goes out over the ice, which the trunk folds over
 # in the glove's time.
 const COVER_LEAN_M: float = 0.8
+# The fastest his trunk turns on his hips into a cover's lean, about a head's
+# turn (KeeperLook.TURN_RAD_S) but carrying the whole upper body round.
+const COVER_TURN_RAD_S: float = 6.0
 # A hand aims inside this share of the arm's full length, so the arm still
 # bends a little at the save.
 const REACH_SHARE: float = 0.97
+# A flight passing him within this of his middle meets his body where he
+# stands: half his chest's width.
+const SQUARE_M: float = KeeperAnatomy.CHEST_WIDTH_M * 0.5
 # Points a hand's reach is tried at along each piece of the flight.
 const REACH_SAMPLES: int = 6
+# Rebound control: the turns tried of the face a stick or blocker save meets
+# the puck with (the blade about the ice, the blocker's board about the
+# vertical), least first. Of those whose gear still meets the flight and holds
+# it, he takes the one whose rebound goes most toward the near corner rather
+# than back out at the shooters or across his mouth, as goalies angle the
+# blade and the board to steer a rebound to the corners.
+# A rebound met within this of the middle of his goal line has no near corner.
+const MIDDLE_M: float = 0.1
+const STICK_TURNS_RAD: Array[float] = [0.0, deg_to_rad(15.0), deg_to_rad(-15.0), deg_to_rad(30.0), deg_to_rad(-30.0)]
+const BLOCKER_TURNS_RAD: Array[float] = [0.0, deg_to_rad(20.0), deg_to_rad(-20.0), deg_to_rad(40.0),
+		deg_to_rad(-40.0)]
 
 var glove_speed_m_s: float = GoalieSkillProfile.hard().glove_react_max_speed_mps
 var blocker_speed_m_s: float = GoalieSkillProfile.hard().blocker_react_max_speed_mps
@@ -74,6 +94,9 @@ var low: int = Low.NONE
 var low_side: float = 0.0
 var hand: int = Hand.NONE
 var hand_target := Vector3.ZERO
+# The turn of the hand's face the save steers its rebound with (STICK_TURNS_RAD,
+# BLOCKER_TURNS_RAD); 0 for every other hand.
+var face_turn: float = 0.0
 var covers: bool = false
 var ready_s: float = 0.0
 var impact_s: float = INF
@@ -83,6 +106,11 @@ var lows_open: bool = true
 
 # Whether a hand is out (reaching, held, or on its way back), and where.
 var _hand_out: bool = false
+# How far the hand out's face has turned toward `face_turn`, and the hand
+# going back's back from where it was; the turn a candidate is posed with.
+var _face: float = 0.0
+var _back_face: float = 0.0
+var _trial_turn: float = 0.0
 var _hand_at := Vector3.ZERO
 var _returning: bool = false
 # A hand still on its way back from the last save when another went out for
@@ -90,14 +118,19 @@ var _returning: bool = false
 var _back: int = Hand.NONE
 var _back_at := Vector3.ZERO
 var _palm := Vector3.FORWARD
-# The glove's fingers sent onto a puck he watches: out ahead laid flat on one
-# on the ice, up over one held to his chest.
+# The glove's fingers sent onto a puck he watches: out toward one on the ice,
+# laid flat on it, up over one held to his chest.
 var _fingers := Vector3.FORWARD
 # The glove sent to cover a puck he is watching: it goes without a read, and
-# how far he has leaned on over the pads after it (KeeperPoses.cover_lean).
+# how far he has leaned on over the pads after it, and toward where
+# (KeeperPoses.cover_lean).
 var _watched: bool = false
 var _lean: float = 0.0
 var _lean_to: float = 0.0
+var _lean_toward := Vector3.ZERO
+# Where a thrust stick is sent, and the blade's turn there (NAN, the stance's).
+var _poke_to := Vector3.ZERO
+var _poke_yaw: float = NAN
 
 var _skel := KeeperSkeleton.new()
 var _rest_skel := KeeperSkeleton.new()
@@ -118,11 +151,10 @@ var _hit_part: int = -1
 var _hit_v := Vector3.ZERO
 var _contact := GoalieSaveRules.ContactResult.new()
 var _rebound := SweptDiscOBB.Result.new()
-# Seconds until his arms and legs have read the shot, at the choice; the share
-# of a drop's time the fall into it takes; and how well the best candidate yet
-# meets the flight (`_take`).
-var _arm_wait: float = 0.0
-var _leg_wait: float = 0.0
+# Seconds until he has read the shot, at the choice; the share of a drop's
+# time the fall into it takes; and how well the best candidate yet meets the
+# flight (`_take`).
+var _wait: float = 0.0
 var _fall: float = 1.0
 var _best: int = -1
 
@@ -141,6 +173,25 @@ func active() -> bool:
 # where the motor can cut one in (KeeperMotor.can_save): on his feet or on the
 # way between them and the ice any, down the extension, on a post or mid-slide
 # none (a shot from the seal is held in it).
+# Where a shot he has read leaves him time to get his body onto its line
+# before he sets for the save: the spot at his depth, in the net's frame, that
+# its flight crosses, pushed to across with his drop (`fall_s`) still to come
+# before it gets there. INF when the flight passes him within his chest's
+# width, or there is no time for both.
+static func square_up_spot(read: KeeperShotRead, motor: KeeperMotor, fall_s: float) -> Vector2:
+	if read.velocity.z <= 1e-3 or read.at.z >= motor.z:
+		return Vector2.INF
+	var to_him: float = (motor.z - read.at.z) / read.velocity.z
+	var crosses: Vector3 = read.position_in(to_him)
+	var gap: float = absf(crosses.x - motor.x)
+	if gap <= SQUARE_M:
+		return Vector2.INF
+	var push: float = KeeperFootwork.push_time(gap, motor.footwork.t_push_speed, motor.footwork.accel)
+	if push + fall_s >= to_him:
+		return Vector2.INF
+	return Vector2(crosses.x, motor.z)
+
+
 func choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool) -> void:
 	# A hand already out on this shot (chosen again once he can go down) stays
 	# the one he saves with.
@@ -169,8 +220,7 @@ func _choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool, kept: int
 	lows_open = true
 	ready_s = 0.0
 	impact_s = INF
-	_leg_wait = maxf(read.leg_delay_s - read.age, 0.0)
-	_arm_wait = maxf(read.arm_delay_s - read.age, 0.0)
+	_wait = maxf(read.read_s() - read.age, 0.0)
 	_fall = motor.fall
 	_best = -1
 	var side_hand: int = Hand.GLOVE if side < 0.0 else Hand.BLOCKER
@@ -216,6 +266,7 @@ func _choose(read: KeeperShotRead, motor: KeeperMotor, mirrored: bool, kept: int
 # better than the best so far (2 met and held, 1 met, 0 neither); true once one
 # meets and holds it.
 func _take(l: int, side: float, h: int) -> bool:
+	_trial_turn = 0.0
 	var target: Vector3 = _pose_candidate(l, side, h)
 	var hit_s: float = _hit_s(_path)
 	var kind: int = 0
@@ -223,16 +274,59 @@ func _take(l: int, side: float, h: int) -> bool:
 		kind = 2 if _holds() else 1
 	if kind <= _best:
 		return false
+	var turn: float = 0.0
+	if kind == 2 and (h == Hand.STICK or h == Hand.BLOCKER):
+		turn = _steer(l, side, h)
+		_trial_turn = turn
+		target = _pose_candidate(l, side, h)
+		hit_s = _hit_s(_path)
+		_holds()
+		_trial_turn = 0.0
+	face_turn = turn
 	_best = kind
 	covers = hit_s < INF
 	low = l
 	hand = h
 	hand_target = target
-	ready_s = _arm_wait + _hand_travel(h, target) / _speed(h) if h != Hand.NONE else 0.0
+	ready_s = _wait + _hand_travel(h, target) / _speed(h) if h != Hand.NONE else 0.0
 	if l != Low.NONE:
-		ready_s = maxf(ready_s, _leg_wait + drop_s * (_fall if l != Low.KICK else 1.0))
+		ready_s = maxf(ready_s, _wait + drop_s * (_fall if l != Low.KICK else 1.0))
 	impact_s = hit_s if covers else _time_at_depth(_hand_point(h).z if h != Hand.NONE else 0.0)
 	return _best == 2
+
+
+# Of the face turns `h` tries, the one whose gear still meets the flight and
+# holds it with its rebound going most toward the near corner (`to_corner`),
+# the candidate posed with no turn having held it; 0 where none does better.
+func _steer(l: int, side: float, h: int) -> float:
+	var turns: Array[float] = STICK_TURNS_RAD if h == Hand.STICK else BLOCKER_TURNS_RAD
+	var best: float = 0.0
+	var most: float = to_corner()
+	for turn: float in turns:
+		if turn == 0.0:
+			continue
+		_trial_turn = turn
+		_pose_candidate(l, side, h)
+		if _hit_s(_path) < INF and _holds() and to_corner() > most + 1e-4:
+			most = to_corner()
+			best = turn
+	_trial_turn = 0.0
+	return best
+
+
+# The share of the last held contact's rebound, across the ice, going out
+# toward the corner on the side of his net it met him: 1 along the goal line
+# that way, 0 straight back at the shooters, below 0 back across his mouth; met
+# in the middle, either way out. 1 for one caught or smothered.
+func to_corner() -> float:
+	if _hit_part < 0 or _contact.caught or _contact.trapped:
+		return 1.0
+	var v := Vector3(_contact.velocity.x, 0.0, _contact.velocity.z)
+	if v.length_squared() < 1e-8:
+		return 1.0
+	var off: float = (_out.point - _line_at).dot(_across)
+	var out: float = v.dot(_across) / v.length()
+	return absf(out) if absf(off) < MIDDLE_M else out * signf(off)
 
 
 # The hand out goes on back by itself (`_back`) while another goes out; one
@@ -242,6 +336,7 @@ func _park() -> void:
 		return
 	_back = hand
 	_back_at = _hand_at
+	_back_face = _face
 	_hand_out = false
 	_returning = false
 
@@ -251,6 +346,7 @@ func _resume() -> void:
 		return
 	_hand_out = true
 	_hand_at = _back_at
+	_face = _back_face
 	_back = Hand.NONE
 
 
@@ -258,33 +354,40 @@ func _resume() -> void:
 func _send(h: int) -> void:
 	if _hand_out and hand != h:
 		_park()
+	if hand != h:
+		_face = 0.0
 	hand = h
 	_resume()
 	_returning = false
 
 
-# The hand on its way: still until his arms have read the shot, then toward the
-# target at its speed; back toward where the pose under it holds it once
-# released. `base` is that pose.
-func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
+# The hand on its way: still until he has read the shot (`read_in`), then
+# toward the target at its speed; back toward where the pose under it holds it
+# once released. `base` is that pose.
+func step(dt: float, read_in: bool, base: KeeperPose) -> void:
 	if _back != Hand.NONE:
 		var home: Vector3 = _rest_of(_back, base)
 		_back_at = _back_at.move_toward(home, _speed(_back) * dt)
+		_back_face = move_toward(_back_face, 0.0, _face_rate(_back) * dt)
 		if _back_at.distance_to(home) < THERE_M:
 			_back = Hand.NONE
 	# The trunk folds after a covering glove as fast as the glove goes out the
-	# cover's reach, and comes back up as it returns.
+	# cover's reach, no faster than it turns on his hips to get there, and
+	# comes back up as it returns.
 	var leaning: bool = _watched and _hand_out and not _returning
-	_lean = move_toward(_lean, _lean_to if leaning else 0.0, dt * glove_speed_m_s / COVER_LEAN_M)
+	var turn: float = absf(KeeperPoses.cover_turn(_lean_toward))
+	_lean = move_toward(_lean, _lean_to if leaning else 0.0,
+			dt * minf(glove_speed_m_s / COVER_LEAN_M, COVER_TURN_RAD_S / maxf(turn, 1e-3)))
 	if hand == Hand.NONE and not _hand_out:
 		return
 	if not _hand_out:
-		if not arms_read and not _watched:
+		if not read_in and not _watched:
 			return
 		_hand_out = true
 		_hand_at = _rest_of(hand, base)
 	var to: Vector3 = _rest_of(hand, base) if _returning else hand_target
 	_hand_at = _hand_at.move_toward(to, _speed(hand) * dt)
+	_face = move_toward(_face, 0.0 if _returning else face_turn, _face_rate(hand) * dt)
 	if _returning and _hand_at.distance_to(to) < THERE_M:
 		_hand_out = false
 		_returning = false
@@ -292,15 +395,32 @@ func step(dt: float, arms_read: bool, base: KeeperPose) -> void:
 		hand = Hand.NONE
 
 
-# The glove onto `target` (his space), palm down, to cover a puck, leaned
-# `lean` of the way on over his pads (KeeperPoses.cover_lean): at once, since
-# he is watching it, and on to a new target as the puck moves.
-func cover(target: Vector3, lean: float) -> void:
+# The glove onto `target` (his space), palm down and fingers along `fingers`,
+# to cover a puck, leaned `lean` of the way on over his pads toward it at
+# `toward` (KeeperPoses.cover_lean): at once, since he is watching it, and on
+# to a new target as the puck moves.
+func cover(target: Vector3, lean: float, toward: Vector3, fingers: Vector3) -> void:
 	_lean_to = lean
+	_lean_toward = toward
+	face_turn = 0.0
 	_send(Hand.GLOVE)
 	hand_target = target
 	_palm = Vector3.DOWN
-	_fingers = Vector3.FORWARD
+	_fingers = fingers
+	_watched = true
+
+
+# The stick thrust out along the ice to `target` (his space), a poke check or
+# a clear: at once, at his blocker speed, the blade laid where it has got to
+# and turned toward `yaw` (KeeperPose's blade_yaw; NAN, left as the stance
+# holds it) as far as it has got; back once released.
+func poke(target: Vector3, yaw: float = NAN) -> void:
+	_lean_to = 0.0
+	face_turn = 0.0
+	_send(Hand.POKE)
+	hand_target = target
+	_poke_to = target
+	_poke_yaw = yaw
 	_watched = true
 
 
@@ -308,11 +428,22 @@ func cover(target: Vector3, lean: float) -> void:
 # in on it and fingers up, at once.
 func trap(target: Vector3) -> void:
 	_lean_to = 0.0
+	face_turn = 0.0
 	_send(Hand.GLOVE)
 	hand_target = target
 	_palm = Vector3.BACK
 	_fingers = Vector3.UP
 	_watched = true
+
+
+# Where the hand out is, his space.
+func hand_out_at() -> Vector3:
+	return _hand_at
+
+
+# Whether the hand out has been let go and is on its way back.
+func returning() -> bool:
+	return _hand_out and _returning
 
 
 # Whether the hand is out on its target.
@@ -334,15 +465,16 @@ func release() -> void:
 # cover.
 func overlay(p: KeeperPose) -> void:
 	if _lean > 0.0:
-		KeeperPoses.cover_lean(p, hand_target, _lean)
+		KeeperPoses.cover_lean(p, _lean_toward, _lean)
 	if _back != Hand.NONE:
-		_lay_hand(p, _back, _back_at)
+		_lay_hand(p, _back, _back_at, _back_face)
 	if not _hand_out:
 		return
-	_lay_hand(p, hand, _hand_at)
+	_lay_hand(p, hand, _hand_at, _face)
 
 
-func _lay_hand(p: KeeperPose, h: int, at: Vector3) -> void:
+# The hand `h` laid at `at` over `p`, its face turned `turn`.
+func _lay_hand(p: KeeperPose, h: int, at: Vector3, turn: float = 0.0) -> void:
 	match h:
 		Hand.GLOVE:
 			p.glove_from_chest = false
@@ -353,8 +485,16 @@ func _lay_hand(p: KeeperPose, h: int, at: Vector3) -> void:
 		Hand.BLOCKER:
 			p.blocker_reach = true
 			p.blocker_grip = at
+			p.blocker_face = Basis(Vector3.UP, turn) * p.blocker_face
 		Hand.STICK:
 			p.blade_center = Vector3(at.x, 0.0, p.blade_center.z)
+			p.blade_yaw += turn
+		Hand.POKE:
+			if not is_nan(_poke_yaw):
+				var whole: float = p.blade_center.distance_to(_poke_to)
+				var got: float = 1.0 if whole < 1e-4 else clampf(p.blade_center.distance_to(at) / whole, 0.0, 1.0)
+				p.blade_yaw = lerp_angle(p.blade_yaw, _poke_yaw, got)
+			p.blade_center = Vector3(at.x, 0.0, at.z)
 
 
 # The flight he believes, in his authored space, from the puck to just past the
@@ -405,7 +545,7 @@ func _pose_candidate(l: int, side: float, h: int) -> Vector3:
 	if h == Hand.NONE:
 		return Vector3.ZERO
 	var target: Vector3 = _reach_target(h)
-	_lay_hand(_try, h, target)
+	_lay_hand(_try, h, target, _trial_turn)
 	if h == Hand.GLOVE:
 		_try.glove_palm = _palm
 	_solve()
@@ -448,7 +588,7 @@ func _reach_target(h: int) -> Vector3:
 		var target: Vector3 = p - gear
 		var over: float = (target + wrist).distance_to(shoulder) - arm
 		if over <= 0.0:
-			var spare: float = t - (_arm_wait + target.distance_to(rest) / _speed(h))
+			var spare: float = t - (_wait + target.distance_to(rest) / _speed(h))
 			if spare > best_spare:
 				best_spare = spare
 				best = target
@@ -586,3 +726,9 @@ func _rest_of(h: int, base: KeeperPose) -> Vector3:
 
 func _speed(h: int) -> float:
 	return glove_speed_m_s if h == Hand.GLOVE else blocker_speed_m_s
+
+
+# How fast a hand's face turns: its far edge moving at the hand's speed, a
+# blade's length from where it is held.
+func _face_rate(h: int) -> float:
+	return _speed(h) / KeeperAnatomy.BLADE_LENGTH_M

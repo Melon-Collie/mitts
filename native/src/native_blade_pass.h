@@ -3,6 +3,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -127,10 +128,6 @@ private:
 	double hit_commit_blade_bearing_x = 0.0;
 	double hit_commit_blade_bearing_z = 0.0;
 	double hit_commit_blade_sweep = 0.0;
-	double goalie_block_radius = 0.0;
-	double butterfly_pad_half_x = 0.0;
-	double butterfly_pad_half_z = 0.0;
-	double goalie_strip_power = 0.0;
 	double bottom_hand_grip_fraction = 0.0;
 	double faceoff_center_grip_fraction = 0.0;
 	double twist_limit = 0.0;
@@ -161,13 +158,10 @@ private:
 	enum Stage {
 		STAGE_DONE,
 		STAGE_AFTER_WALL_RELEASE,
-		STAGE_AFTER_BUTTERFLY_RELEASE,
-		STAGE_AFTER_CYLINDER_RELEASE,
 	};
 	Stage stage = STAGE_DONE;
-	godot::PackedFloat64Array goalie_data;
-	int goalie_index = 0;
-	godot::Vector3 goalie_prev;
+	// Every goalie's save boxes, GoalieContactDetector's packed layout.
+	godot::PackedFloat32Array goalie_boxes;
 	godot::Vector3 hand;
 	godot::Vector3 intended_blade;
 	godot::Vector3 wall_clamped;
@@ -212,13 +206,11 @@ private:
 			godot::Vector3 &r_hand, godot::Vector3 &r_blade);
 	void commit_hand_pose(godot::Vector3 &r_hand, godot::Vector3 &r_blade, double commit_t) const;
 	godot::Vector3 clamp_blade_to_walls(const godot::Vector3 &local_pos);
-	godot::Vector3 clamp_butterfly_box(const godot::Vector3 &blade_world,
-			const godot::Vector3 &gpos, double rot_y);
+	godot::Vector3 resolve_goalies(const godot::Vector3 &heel) const;
 	godot::Vector3 resolve_net(const godot::Vector3 &heel_world);
 	godot::Vector3 blade_toe_for(const godot::Vector3 &heel_world) const;
 	void release(const godot::Vector3 &dir, double power);
 	// The pass from the wall-pin release on: the goalies, the net, the rebuild.
-	// Returns at a release, to be resumed, as the GDScript fires one mid-pass.
 	void continue_pass();
 	void finish();
 
@@ -282,7 +274,7 @@ public:
 	// the skater still has the puck; outputs are ready once nothing is pending.
 	void run(const godot::Transform3D &p_skater_xf, const godot::Transform3D &p_ub_xf,
 			const godot::PackedFloat64Array &scalars, const godot::PackedVector3Array &vectors,
-			const godot::PackedFloat64Array &goalies);
+			const godot::PackedFloat32Array &goalies);
 	void resume(bool p_has_puck);
 	bool get_pending() const { return pending; }
 	godot::Vector3 get_pending_dir() const { return pending_dir; }

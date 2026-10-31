@@ -217,6 +217,28 @@ func test_assign_trans_def_back_line_is_momentum_aware() -> void:
 			"the peer genuinely arriving soonest (momentum) takes the strong post")
 
 
+# Once nobody can be on our line before the carrier is (a carrier at speed a
+# couple of metres off it, both D already back past it), the line is lost and
+# BACK_STRONG rides him back: the man in the strong lane keeps him, though he is
+# riding back hardest and so has the most to brake out to get back up to the
+# post. Raced up to it, the carrier went to the slower man in the middle, and
+# the strong-lane D drifted off him to the middle while he drove in.
+func test_assign_trans_def_a_lost_line_keeps_the_man_riding_the_strong_lane() -> void:
+	var skaters: Array = [
+			[100, 0, Vector3(0.0, 0.0, -6.0)],
+			[110, 0, Vector3(2.0, 0.0, 8.9), Vector3(-0.9, 0.0, 6.6)],   # strong lane, riding back
+			[120, 0, Vector3(-0.4, 0.0, 7.6), Vector3(0.2, 0.0, 4.9)],   # the middle, slower
+			[200, 1, Vector3(4.9, 0.0, 4.9), Vector3(-2.2, 0.0, 8.9)],
+	]
+	var snap := _make_snapshot(skaters, 200)
+	var assignments: Dictionary[int, int] = AIRoleSlots.assign(
+			snap, TEAM_ID, OUR_NET_Z, AIPossessionState.State.TRANS_DEFENSE,
+			_resolver(skaters), {})
+	assert_eq(assignments[110], AIRoleSlots.Slot.BACK_STRONG,
+			"the strong-lane D riding him back keeps the carrier")
+	assert_eq(assignments[120], AIRoleSlots.Slot.BACK_MID, "the middle man the middle")
+
+
 func test_assign_trans_def_when_whole_team_caught_up_ice() -> void:
 	# The whole team is beaten up the ice on the turnover — every peer is
 	# up-ice of the carrier. The line still fills from the back: the two nearest

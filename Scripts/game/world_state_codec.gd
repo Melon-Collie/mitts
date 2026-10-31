@@ -34,7 +34,8 @@ extends RefCounted
 #                      torso_lean 2×s16 + posture_lean s16, all @π/32767 rad (v62),
 #                      recoil_dir u8 (bearing 0–TAU→0–256, 0 = backward) (v63),
 #                      stick_check u8 (phase[2:0] + ticks elapsed[7:3]) (v70),
-#                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)),
+#                      body lock u8 (pin_role[1:0] BoardPinRules.Role (v74) + diving[2] (v75)
+#                                    + slapshot_pinned[3] (v91)),
 #                      pin_strength u8@1/255 (v74)
 #      Puck    (13 B): pos s16/s16/s16@1cm, vel 3×s16@0.02m/s, carrier_idx u8 (0xFF=none)
 #      Goalie (142 B): root (12 B) + the keeper's pose (KeeperPoseCodec, 130 B).
@@ -228,6 +229,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 	# index below. The roster scratch is cleared and refilled per packet.
 	var decoded_peers: Array[int] = _decoded_peers_scratch
 	decoded_peers.clear()
+	var puck_xz: Vector2 = _decode_puck_xz(data, o + num_skaters * SKATER_BLOCK_SIZE)
 	for _i: int in num_skaters:
 		# decode_s32 to match the encoder; negative ids are AI bots.
 		var peer_id: int = data.decode_s32(o); o += 4
@@ -240,6 +242,7 @@ func decode_world_state(data: PackedByteArray) -> void:
 		if record == null:
 			continue
 		var skater_state := _decode_skater_quantized(data, skater_off)
+		_fill_pin_offset(skater_state, puck_xz)
 		if record.is_local and not NetworkManager.is_replay_mode():
 			(record.controller as LocalController).reconcile(skater_state)
 			queue_depth_feedback.emit(depth)
@@ -330,12 +333,15 @@ func decode_for_replay(data: PackedByteArray) -> Dictionary:
 
 	var skaters: Dictionary = {}
 	var decoded_peers: Array[int] = []
+	var puck_xz: Vector2 = _decode_puck_xz(data, o + num_skaters * SKATER_BLOCK_SIZE)
 	for _i: int in num_skaters:
 		var peer_id: int = data.decode_s32(o); o += 4
 		decoded_peers.append(peer_id)
 		var skater_off: int = o; o += SKATER_STATE_BYTES
 		o += 1  # queue_depth (not needed for replay)
-		skaters[peer_id] = _decode_skater_quantized(data, skater_off)
+		var skater_state := _decode_skater_quantized(data, skater_off)
+		_fill_pin_offset(skater_state, puck_xz)
+		skaters[peer_id] = skater_state
 
 	var puck_state := _decode_puck_quantized(data, o); o += 12
 	var carrier_idx: int = data.decode_u8(o); o += 1
@@ -526,7 +532,8 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 	# peaks near 13°, so a half step tilts the torso by well under 0.2°.
 	b.encode_u8(o, posmod(roundi(atan2(s.recoil_dir.x, s.recoil_dir.y) / TAU * 256.0), 256)); o += 1
 	b.encode_u8(o, StickCheckRules.pack(s.stick_check_phase, s.stick_check_elapsed)); o += 1
-	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)); o += 1
+	b.encode_u8(o, (s.pin_role & 0x03) | (0x04 if s.diving else 0)
+			| (0x08 if s.slapshot_pinned else 0)); o += 1
 	b.encode_u8(o, clampi(roundi(s.pin_strength * 255.0), 0, 255)); o += 1
 	return o
 
@@ -616,6 +623,7 @@ static func _decode_skater_quantized(b: PackedByteArray, offset: int = 0) -> Ska
 	var lock: int = b.decode_u8(o); o += 1
 	s.pin_role = lock & 0x03 if (lock & 0x03) <= BoardPinRules.Role.PINNED else 0
 	s.diving = (lock & 0x04) != 0
+	s.slapshot_pinned = (lock & 0x08) != 0
 	s.pin_strength = b.decode_u8(o) / 255.0
 	return s
 
@@ -657,6 +665,15 @@ static func _decode_puck_quantized(b: PackedByteArray, offset: int = 0) -> PuckN
 	s.velocity.y = b.decode_s16(o) / 50.0; o += 2
 	s.velocity.z = b.decode_s16(o) / 50.0
 	return s
+
+
+# The puck block's ground position alone, for the skaters decoded ahead of it.
+static func _decode_puck_xz(b: PackedByteArray, offset: int) -> Vector2:
+	return Vector2(b.decode_s16(offset) / 100.0, b.decode_s16(offset + 4) / 100.0)
+
+
+static func _fill_pin_offset(s: SkaterNetworkState, puck_xz: Vector2) -> void:
+	s.slapshot_pin_offset = puck_xz - Vector2(s.position.x, s.position.z)
 
 
 # Goalie: the 12-byte root, then his pose. See top-of-file layout comment.

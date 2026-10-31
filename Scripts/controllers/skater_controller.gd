@@ -1024,23 +1024,13 @@ var net_blade_half_thickness: float = 0.012
 # rather than ride along with a stick the post is holding back.
 var post_catch_release_speed: float = 1.5
 
-# ── Goalie Body Block ─────────────────────────────────────────────────────────
-# XZ cylinder radius used to push the blade (and carried puck) away from a
-# goalie's body center. Tunable in the editor — matches roughly the goalie's
-# padded chest width. The hand moves with the blade to keep stick length intact.
-var goalie_block_radius: float = 0.50
-var goalie_strip_power: float = 1.5
-# Half-extents of the butterfly leg-pad strip box in goalie local XZ space.
-var butterfly_pad_half_x: float = 0.84
-var butterfly_pad_half_z: float = 0.25
-
 # ── References ────────────────────────────────────────────────────────────────
 var skater: Skater = null
 var puck: Puck = null
 # Injected at setup. Expected methods:
 #   is_host() -> bool                              — changes only per session; cached in _is_host
 #   is_movement_locked() -> bool                   — polled per frame
-#   get_goalie_data() -> Array[Dictionary]         — position/rotation_y/is_butterfly per goalie
+#   get_goalie_boxes() -> PackedFloat32Array        — every goalie's save boxes, packed (the stick's wall)
 var _game_state: Node = null
 var _is_host: bool = false
 
@@ -2262,6 +2252,7 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.pin_role = skater.pin_role
 	state.pin_strength = skater.pin_strength
 	state.diving = skater.is_diving
+	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
 	# blade_contact_world). World-space grip point — the wire top_hand_position
 	# is upper-body-local and can't be used for host-side world geometry.
@@ -2522,9 +2513,22 @@ func _collide_pinned_puck_with_net() -> void:
 	if PuckGeometryCollision.resolve_net_panels(
 			prev, raw, skater.velocity, GameRules.PUCK_COLLISION_RADIUS, _net_pin_result):
 		resolved = _net_pin_result.position
+	resolved += _pinned_puck_off_goalies(prev, resolved)
 	skater.carry_pin_correction = resolved - raw
 	_prev_carry_pin = resolved
 	_has_prev_carry_pin = true
+
+
+# THE GOALIE — his gear is solid to a carried puck and, like the twine, does not
+# strip: pressed into him it is held at his gear, swept from where it was
+# (GoalieGearCollision, the stick's own wall, with the puck's radius).
+func _pinned_puck_off_goalies(prev: Vector3, at: Vector3) -> Vector3:
+	if not _game_state.has_method("get_goalie_boxes"):
+		return Vector3.ZERO
+	var boxes: PackedFloat32Array = _game_state.get_goalie_boxes()
+	if boxes.is_empty():
+		return Vector3.ZERO
+	return GoalieGearCollision.resolve(prev, at, at, GameRules.PUCK_COLLISION_RADIUS, boxes)
 
 
 # Nudge: the carrier taps the puck off the blade as a soft self-pass. The

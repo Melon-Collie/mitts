@@ -6,7 +6,8 @@ extends GutTest
 # at his pad meets a pad box through the puck's own contact test; a shot is
 # saved, the puck meeting what he puts in its way; a catch is held in his
 # glove and covered, then set down and swept out; and a puck at his feet is
-# covered, unless it is poked away before his glove is on it.
+# covered once it is down on the ice, unless it is poked away before his glove
+# is on it.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # How far a save box on a client may lie from the host's: the root's centimetre
@@ -135,7 +136,7 @@ func test_a_catch_is_held_in_his_glove_and_covered_then_played_out() -> void:
 	_run(KeeperController.CATCH_HOLD_S + 0.1)
 	assert_false(_puck.motion_pinned or _puck.pickup_locked, "set down")
 	assert_almost_eq(_puck.global_position.y, _puck.ice_height, 1e-4, "on the ice")
-	assert_almost_eq(_puck.get_puck_velocity().length(), KeeperController.PLAY_OUT_M_S, 1e-3,
+	assert_almost_eq(_puck.get_puck_velocity().length(), KeeperCover.PLAY_OUT_M_S, 1e-3,
 			"swept out of his reach")
 
 
@@ -222,7 +223,7 @@ func _shot(from: Vector3, to: Vector2, speed: float) -> int:
 	_puck.set_puck_velocity(v)
 	_puck.puck_released.emit()
 	var contact := GoalieContactDetector.Contact.new()
-	for i: int in int(1.5 / DT):
+	for i: int in int(3.0 / DT):
 		var was: Vector3 = _puck.global_position
 		var next: Vector3 = was + v * DT
 		if lifted:
@@ -240,8 +241,11 @@ func _shot(from: Vector3, to: Vector2, speed: float) -> int:
 
 func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 	var cases: Array = [
-		[Vector2(-0.84, 0.4), GoalieSaveRules.SavePart.GLOVE, "to his glove side over the pad"],
-		[Vector2(0.75, KeeperShotRead.ON_ICE_Y), GoalieSaveRules.SavePart.STICK, "along the ice to his blocker side, the blade leading"],
+		[Vector2(-0.84, 0.4), KeeperSave.Hand.GLOVE, [GoalieSaveRules.SavePart.GLOVE],
+				"to his glove side over the pad"],
+		[Vector2(0.75, KeeperShotRead.ON_ICE_Y), KeeperSave.Hand.STICK,
+				[GoalieSaveRules.SavePart.STICK, GoalieSaveRules.SavePart.PAD],
+				"along the ice to his blocker side, the blade leading the pad"],
 	]
 	for case: Array in cases:
 		_spawn(GameRules.GOAL_LINE_Z)
@@ -249,7 +253,22 @@ func test_a_shot_is_met_by_what_he_puts_in_its_way() -> void:
 		_run(1.5)
 		var to: Vector2 = case[0]
 		var from := Vector3(0.0, 0.3 if to.y > 0.1 else _puck.ice_height, GameRules.GOAL_LINE_Z - 9.0)
-		assert_eq(_shot(from, to, 22.0), case[1], case[2])
+		var met: int = _shot(from, to, 22.0)
+		assert_eq(_keeper.save.hand, case[1], "%s: the hand he puts there" % case[3])
+		assert_has(case[2], met, "%s: met by it" % case[3])
+
+
+# A shot lobbed from the far end to drop into his low corner, over the half
+# butterfly and under the glove where he stands: he skates onto its line
+# first, and his gear meets it.
+func test_a_long_shot_to_a_corner_is_met_on_its_line() -> void:
+	for side: float in [1.0, -1.0]:
+		_spawn(GameRules.GOAL_LINE_Z)
+		_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 48.0)
+		_run(1.5)
+		var to := Vector2(side * (GameRules.NET_HALF_WIDTH - 0.12), 0.2)
+		var met: int = _shot(Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 48.0), to, 36.0)
+		assert_gte(met, 0, "%+.0f: met by his gear" % side)
 
 
 # A shot in on him before his legs have read it (set for a puck wide of him,
@@ -322,6 +341,33 @@ func test_a_shot_read_mid_slide_is_saved_once_he_lands() -> void:
 			break
 	assert_true(blocked, "read while he could not go down")
 	assert_true(reopened, "its low save made once he could")
+
+
+# A save that pops the puck up soft at his feet: he lets the save go as he
+# feels it, and covers the puck once it is down, not while it is in the air.
+func test_a_puck_popped_up_off_a_save_is_covered_once_it_lands() -> void:
+	_spawn(GameRules.GOAL_LINE_Z)
+	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0)
+	_run(1.5)
+	var part: int = _shot(Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 12.0), Vector2(0.3, 0.0), 20.0)
+	assert_gte(part, 0, "he meets it")
+	_puck.puck_touched_goalie.emit(_goalie)
+	var basis: Basis = _goalie.global_transform.basis
+	var feet: Vector3 = _goalie.global_position - basis.z * 0.6
+	var v := Vector3(0.0, 2.0, 0.0)
+	var at := Vector3(feet.x, 0.25, feet.z)
+	watch_signals(_keeper)
+	while at.y > _puck.ice_height:
+		_puck.global_position = at
+		_puck.set_puck_velocity(v)
+		_keeper._physics_process(DT)
+		assert_false(_keeper._covering, "y %.2f: not in the air" % at.y)
+		at += v * DT
+		v.y -= GameRules.GRAVITY_M_S2 * DT
+	_puck.global_position = Vector3(at.x, _puck.ice_height, at.z)
+	_puck.set_puck_velocity(Vector3.ZERO)
+	_run(0.8)
+	assert_signal_emitted(_keeper, "puck_covered", "covered once down")
 
 
 # A puck that hits him he feels: once his save is there, the shot off him, he
@@ -414,7 +460,6 @@ func test_a_tier_set_later_reaches_his_saves() -> void:
 	var easy: GoalieSkillProfile = GoalieSkillProfile.easy()
 	_keeper.apply_skill_profile(easy)
 	assert_eq(_keeper.read.leg_delay_s, easy.reaction_delay_s)
-	assert_eq(_keeper.read.arm_delay_s, easy.arm_reaction_delay_s)
 	assert_eq(_keeper.save.glove_speed_m_s, easy.glove_react_max_speed_mps)
 	assert_eq(_keeper.motor.save_move.drop_s, easy.butterfly_drop_s)
 	_keeper.reset_to_crease()

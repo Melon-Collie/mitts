@@ -228,13 +228,23 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 #
 # `bases` (carrier_option_bases) prunes exactly: options are evaluated in
 # descending-bound order and stop when no remaining bound beats the running max.
+#
+# `set_in_s`: the defender is set at `candidate` that long from now, and until
+# then the carrier skates on. His own option is read from where his skating has
+# him by then, against the defence carried on to then (the candidate with it,
+# at `candidate_vel`); always evaluated, since its bound was read where he is
+# now. His feeds are read as now.
 static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 		candidate_vel: Vector3, self_caps: AISkaterCaps, carrier_pos: Vector3,
 		carrier_vel: Vector3, our_goalie_pos: Vector3, opp_teammates: Array[Vector3],
-		bases: Array[float]) -> float:
+		bases: Array[float], set_in_s: float = 0.0) -> float:
 	poss.push_defender(candidate, candidate_vel, self_caps)
 	var best: float = 0.0
 	var used: int = 0
+	if set_in_s > 0.0:
+		best = poss.threat_of_carrier(carrier_pos + carrier_vel * set_in_s, carrier_vel, our_goalie_pos,
+				set_in_s)
+		used = 1
 	while true:
 		var bi: int = -1
 		var bound: float = -1.0

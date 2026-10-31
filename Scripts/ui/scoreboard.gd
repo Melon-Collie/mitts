@@ -317,8 +317,7 @@ func _refresh() -> void:
 		var display_name: String = record.display_name()
 		var ping_str: String = _ping_label(record.peer_id)
 		var is_5v5: bool = int(team_counts.get(record.team.team_id, 0)) >= 5
-		var pos_str: String = tr(PositionLabels.badge_key(
-				record.team.team_id, record.team_slot, is_5v5))
+		var pos_str: String = tr(PositionLabels.badge_key(record.team_slot, is_5v5))
 		var num_str: String = str(record.jersey_number)
 		_fill_row(row,
 			[ping_str, num_str, pos_str, display_name, str(s.goals), str(s.assists), str(pts), str(s.shots_on_goal), str(s.hits), str(s.shots_blocked)],

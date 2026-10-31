@@ -11,7 +11,8 @@ extends GutTest
 # the flight, and goes back once it is over. With no time, he still makes it
 # and is beaten. A save holds only if what comes off his gear stays out: a puck
 # square on a pad comes back out, one that clips the outside of it glances on
-# in.
+# in. A shot from far enough to leave him the time he first moves onto the
+# line of.
 
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # On his angle, at the top of the crease, square to a shot from the slot.
@@ -70,17 +71,15 @@ func test_he_reads_a_shot_only_after_his_read() -> void:
 		_read.step(DT, _read.position_in(DT), _read.velocity)
 	assert_false(_read.legs_read(), "not before the leg read")
 	_read.step(DT * 2.0, _read.position_in(DT * 2.0), _read.velocity)
-	assert_true(_read.legs_read())
-	assert_false(_read.arms_read(), "the arms read later")
+	assert_true(_read.legs_read(), "his legs and hands alike")
 
 
-# A release he watched wound up is read on the primed delay, legs and hands
-# alike; touched on its way, it is a new shot read cold.
+# A release he watched wound up is read on the primed delay; touched on its
+# way, it is a new shot read cold.
 func test_a_primed_release_is_read_sooner() -> void:
 	_read.start(true)
 	_read.age = _read.primed_delay_s
-	assert_true(_read.legs_read(), "the legs on the primed read")
-	assert_true(_read.arms_read(), "the hands on the primed read")
+	assert_true(_read.legs_read(), "on the primed read")
 	assert_lt(_read.primed_delay_s, _read.leg_delay_s, "sooner than a cold one")
 	_read.start()
 	_read.age = _read.primed_delay_s
@@ -156,7 +155,7 @@ func _hand_to_the_puck(part: int, what: String) -> void:
 		_fly(DT)
 		t += DT
 		_motor.pose(_pose)
-		_save.step(DT, _read.arms_read(), _pose)
+		_save.step(DT, _read.legs_read(), _pose)
 		_save.overlay(_pose)
 		_skel.pose(_pose)
 		var hand_at: Vector3 = KeeperGear.box(_skel, part).origin
@@ -223,7 +222,7 @@ func test_released_the_hand_goes_back_and_the_save_ends() -> void:
 	for i: int in 40:
 		_fly(DT)
 		_motor.pose(_pose)
-		_save.step(DT, _read.arms_read(), _pose)
+		_save.step(DT, _read.legs_read(), _pose)
 	assert_true(_save.active(), "out")
 	_save.release()
 	var t: float = 0.0
@@ -267,7 +266,7 @@ func test_a_shot_while_a_hand_goes_back_gets_its_hand() -> void:
 
 func _glove_after_step() -> Vector3:
 	_motor.pose(_pose)
-	_save.step(DT, _read.arms_read(), _pose)
+	_save.step(DT, _read.legs_read(), _pose)
 	_save.overlay(_pose)
 	_skel.pose(_pose)
 	return KeeperGear.box(_skel, KeeperGear.Part.GLOVE).origin
@@ -299,3 +298,22 @@ func _holds_on(from: Vector3, to: Vector3) -> bool:
 func test_a_save_holds_only_if_what_comes_off_him_stays_out() -> void:
 	assert_true(_holds_on(Vector3(0.31, 0.15, -1.5), Vector3(0.31, 0.15, 1.5)), "square on the pad: back out")
 	assert_false(_holds_on(Vector3(0.8, 0.15, -1.5), Vector3(0.0, 0.15, 1.5)), "clipping its outside: on in")
+
+
+# A shot from the far end with time to spare he first skates onto the line of:
+# the spot at his depth its flight crosses. One at his body, or one from the
+# slot with no time for the push and the drop, he saves from where he stands.
+func test_a_long_shot_he_moves_onto_the_line_of() -> void:
+	var corner := Vector2(GameRules.NET_HALF_WIDTH - 0.12, KeeperShotRead.ON_ICE_Y)
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -48.0), corner, 30.0)
+	var spot: Vector2 = KeeperSave.square_up_spot(_read, _motor, _save.drop_s)
+	assert_ne(spot, Vector2.INF, "from the far end: time to move")
+	assert_almost_eq(spot.y, _motor.z, 1e-6, "at his depth")
+	var crosses: Vector3 = _read.position_in((_motor.z - _read.at.z) / _read.velocity.z)
+	assert_almost_eq(spot.x, crosses.x, 1e-4, "on the flight's line")
+	_read = KeeperShotRead.new()
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -48.0), Vector2(0.05, KeeperShotRead.ON_ICE_Y), 30.0)
+	assert_eq(KeeperSave.square_up_spot(_read, _motor, _save.drop_s), Vector2.INF, "at his body: none")
+	_read = KeeperShotRead.new()
+	_shoot(Vector3(0.0, KeeperShotRead.ON_ICE_Y, -9.0), corner, 30.0)
+	assert_eq(KeeperSave.square_up_spot(_read, _motor, _save.drop_s), Vector2.INF, "from the slot: no time")

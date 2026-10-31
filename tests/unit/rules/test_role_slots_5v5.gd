@@ -317,6 +317,27 @@ func test_trans_od_back_line_stays_d_scoped_when_a_d_can_beat_the_rush_home() ->
 			"a feasible D keeps the front layer over a deeper forward")
 
 
+# Once nobody can be on our line before the carrier is (a carrier at speed a
+# couple of metres off it, both D already back past it), the line is lost and
+# BACK_STRONG rides him back: the D in the strong lane keeps him, though he is
+# riding back hardest and so has the most to brake out to get back up to the
+# post — whichever D he is.
+func test_trans_od_a_lost_line_keeps_the_d_riding_the_strong_lane() -> void:
+	for rider: int in [4, 5]:
+		var other: int = 9 - rider
+		var skaters: Array = [
+			[1, 0, Vector3(0, 0, -6)],
+			[2, 0, Vector3(-6, 0, -8)],
+			[3, 0, Vector3(6, 0, -8)],
+			[rider, 0, Vector3(2.0, 0, 8.9), Vector3(-0.9, 0, 6.6)],   # strong lane, riding back
+			[other, 0, Vector3(-0.4, 0, 7.6), Vector3(0.2, 0, 4.9)],   # the middle, slower
+			[10, 1, Vector3(4.9, 0, 4.9), Vector3(-2.2, 0, 8.9)],
+		]
+		var a: Dictionary = _assign(skaters, AIPossessionState.State.TRANS_DEFENSE, 10)
+		assert_eq(a[rider], AIRoleSlots.Slot.BACK_STRONG,
+				"D %d riding him back in the strong lane keeps the carrier" % rider)
+
+
 # ── NEUTRAL: global chase, D shape behind ────────────────────────────────────
 
 func test_neutral_chase_is_global_but_shape_is_grouped() -> void:
