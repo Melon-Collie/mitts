@@ -71,8 +71,9 @@ var _retextured: bool = false
 # rebuild gate (take_steering).
 var steer_omega: float = 20.0
 var _steer := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
-# Each fist's roll round the shaft (SkaterArmPoses.grip_roll), eased the same
-# way: half round, the way it rolls changes sides.
+# The top fist's roll round the shaft (SkaterArmPoses.grip_roll), eased the
+# same way: half round, the way it rolls changes sides. Indexed by arm as the
+# steer is; the bottom's stays at rest.
 var _roll := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
 var _steering: bool = false
 # The jersey tail's drape below the belt, and the tuck it was draped for.
@@ -208,8 +209,10 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	var shaft_s: Vector3 = frame.basis * grip_local
 	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
 			else _skater.bottom_grip_angle_deg
-	var roll: float = _ease_roll(arm, delta, _grip_roll(shoulder_s, elbow_s, hand_s, shaft_s,
-			grip_deg))
+	# The bottom hand holds the shaft from underneath, palm up, as the plane grip
+	# already has it; only the top fist rolls.
+	var roll: float = 0.0 if arm != 0 else _ease_roll(arm, delta,
+			_grip_roll(shoulder_s, elbow_s, hand_s, shaft_s, grip_deg))
 	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
 
 

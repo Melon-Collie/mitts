@@ -498,7 +498,8 @@ func _pose_arms(is_left_handed: bool, shoulder_x: float, shoulder_y: float,
 		_skeleton.set_bone_pose(bones[1], SkaterArmPoses.segment_pose(elbow, hand, arm))
 		_skeleton.set_bone_pose(bones[2], SkaterArmPoses.elbow_pose(shoulder, elbow, hand, pole,
 				Vector3.ONE * _ELBOW_RADIUS * m_girth))
-		var roll: float = SkaterArmPoses.grip_roll((hand - elbow).normalized(), -_shaft_up,
+		var roll: float = 0.0 if i != 0 else SkaterArmPoses.grip_roll(
+				(hand - elbow).normalized(), -_shaft_up,
 				deg_to_rad(_GRIP_ANGLE_DEG[i]), deg_to_rad(_WRIST_ULNAR_MAX_DEG),
 				deg_to_rad(_WRIST_RADIAL_MAX_DEG),
 				SkaterArmPoses.neutral_thumb(shoulder, elbow, hand),
