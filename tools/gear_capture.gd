@@ -27,6 +27,9 @@ const _BOOT_ROT := Basis(Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(0, -1, 0))
 const _BLADE_ICE_M: float = 0.080 + SkaterMeshBuilder.SKATE_LIFT_M
 const _LACE_COLOR := Color(0.88, 0.88, 0.86)
 const _TEAM_SLOT_ENV: String = "MITTS_TEAM_SLOT"
+# MITTS_SKATE_TONGUE picks how the skates wear their tongues (a
+# GearModelRegistry TONGUE_* option, default tucked).
+const _TONGUE_ENV: String = "MITTS_SKATE_TONGUE"
 
 # Both rows are shot with an ORTHOGONAL camera: perspective across a two-metre
 # lineup would frame the outer pieces differently from the middle ones, which
@@ -159,7 +162,7 @@ func _build_skate(holder: Node3D, model: int) -> void:
 	holder.add_child(blade)
 
 	var upper := MeshInstance3D.new()
-	upper.mesh = SkateUpperMesh.shared()
+	upper.mesh = SkateUpperMesh.shared(int(OS.get_environment(_TONGUE_ENV)))
 	upper.transform = foot * SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
 	for zone: Array in [[SkateUpperMesh.Surface.COLLAR, GearModelRegistry.SKATE_COLLAR],
 			[SkateUpperMesh.Surface.STRIPE, GearModelRegistry.SKATE_STRIPE],

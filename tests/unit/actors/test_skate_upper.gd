@@ -57,10 +57,24 @@ func test_the_shell_the_laces_and_the_tongue_are_wound_outward() -> void:
 	for tri: Array in _triangles(_Surface.LACES):
 		laces += _signed(tri)
 	assert_lt(laces, -1e-8, "the lace rungs are outward-wound solids")
-	var tongue: float = 0.0
-	for tri: Array in _triangles(_Surface.TONGUE):
-		tongue += _signed(tri)
-	assert_lt(tongue, -1e-8, "the tongue is an outward-wound solid")
+	for worn: int in GearModelRegistry.tongue_count():
+		var tongue: float = 0.0
+		for tri: Array in _triangles(_Surface.TONGUE, worn):
+			tongue += _signed(tri)
+		assert_lt(tongue, -1e-8, "the tongue is an outward-wound solid (worn %d)" % worn)
+
+
+# Worn out, the tongue folds forward over the laces: its top is in front of the
+# boot's rim and lower than it stands tucked, and its shell is the same.
+func test_a_tongue_worn_out_flops_forward_over_the_laces() -> void:
+	var tucked: AABB = _surface_box(_Surface.TONGUE, GearModelRegistry.TONGUE_TUCKED)
+	var out: AABB = _surface_box(_Surface.TONGUE, GearModelRegistry.TONGUE_OUT)
+	var rim: AABB = _surface_box(_Surface.COLLAR, GearModelRegistry.TONGUE_TUCKED)
+	assert_lt(out.position.z, rim.position.z - 0.02, "the flap hangs in front of the rim")
+	assert_lt(out.end.y, tucked.end.y, "folded, it stands lower than tucked")
+	for s: int in _SHELL:
+		assert_eq(SkateUpperMesh.shared(GearModelRegistry.TONGUE_OUT).surface_get_arrays(s),
+				SkateUpperMesh.shared().surface_get_arrays(s), "the shell is the same (surface %d)" % s)
 
 
 func test_the_foot_frame_is_the_scenes() -> void:
@@ -137,6 +151,37 @@ func test_the_ankle_blends_from_the_foot_to_the_leg() -> void:
 				"the sole is the foot's")
 
 
+# Under the sock, none of the tongue shows: it stops below the rim's lining,
+# inside the cuff.
+func test_a_tongue_worn_under_the_sock_stays_in_the_boot() -> void:
+	var under: AABB = _surface_box(_Surface.TONGUE, GearModelRegistry.TONGUE_UNDER)
+	var rim: AABB = _surface_box(_Surface.COLLAR, GearModelRegistry.TONGUE_TUCKED)
+	var lining_y: float = SkateUpperMesh.loops()[0][0].y - 0.008
+	assert_lt(under.end.y, lining_y, "its top is under the rim's lining")
+	assert_gt(under.position.z, rim.position.z, "and behind the boot's front")
+
+
+# The tongue is which body mesh the skater wears, beside the tuck, and a gear
+# change swaps it with the body's paint kept on.
+func test_a_gear_change_wears_the_tongue() -> void:
+	var skater: Skater = (load(_SCENE) as PackedScene).instantiate() as Skater
+	add_child_autofree(skater)
+	skater.set_process(false)
+	skater.set_physics_process(false)
+	var body_mesh: MeshInstance3D = skater.mesh_root.find_child("Body", true, false) \
+			as MeshInstance3D
+	var paint: Material = body_mesh.get_surface_override_material(0)
+	var gear := GearStyleConfig.new()
+	gear.jersey_tuck = GearModelRegistry.TUCK_LEFT
+	gear.skate_tongue = GearModelRegistry.TONGUE_OUT
+	skater.set_gear_style(gear)
+	assert_eq(body_mesh.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_LEFT,
+			GearModelRegistry.TONGUE_OUT))
+	assert_ne(body_mesh.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_LEFT),
+			"out is not the tucked tongue's body")
+	assert_eq(body_mesh.get_surface_override_material(0), paint, "the body's paint stays on")
+
+
 func _shell_triangles() -> Array:
 	var out: Array = []
 	for s: int in _SHELL:
@@ -144,8 +189,17 @@ func _shell_triangles() -> Array:
 	return out
 
 
-func _triangles(surface: int) -> Array:
-	var arrays: Array = SkateUpperMesh.shared().surface_get_arrays(surface)
+func _surface_box(surface: int, tongue: int) -> AABB:
+	var verts: PackedVector3Array = SkateUpperMesh.shared(tongue).surface_get_arrays(
+			surface)[Mesh.ARRAY_VERTEX]
+	var box := AABB(verts[0], Vector3.ZERO)
+	for v: Vector3 in verts:
+		box = box.expand(v)
+	return box
+
+
+func _triangles(surface: int, tongue: int = GearModelRegistry.TONGUE_TUCKED) -> Array:
+	var arrays: Array = SkateUpperMesh.shared(tongue).surface_get_arrays(surface)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
 	var indices := PackedInt32Array()
 	if arrays[Mesh.ARRAY_INDEX] != null:

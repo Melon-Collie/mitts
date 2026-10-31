@@ -117,6 +117,28 @@ const _TONGUE_STATIONS: Array[Vector4] = [
 ]
 const _TONGUE_LEAN_M: float = 0.006
 const _TONGUE_ARC_POINTS: int = 7
+# Worn out (GearModelRegistry.TONGUE_OUT) the tongue stands taller and its top
+# folds forward over the laces: folded _TONGUE_FLOP_RAD about the line across its
+# front at _TONGUE_HINGE_Y, the fold taken over _TONGUE_FOLD_M of its height. The
+# flap above the fold is flatter across, as a flopped tongue lies.
+const _TONGUE_OUT_STATIONS: Array[Vector4] = [
+	Vector4(0.050, 0.086, 0.008, 55.0),
+	Vector4(0.100, 0.087, 0.010, 52.0),
+	Vector4(0.125, 0.089, 0.011, 48.0),
+	Vector4(0.140, 0.090, 0.011, 42.0),
+	Vector4(0.160, 0.096, 0.011, 34.0),
+	Vector4(0.180, 0.100, 0.010, 30.0),
+	Vector4(0.195, 0.102, 0.007, 20.0),
+]
+# Worn under the sock (TONGUE_UNDER) it stops below the lining the rim turns in
+# over, all of it inside the boot behind the sock.
+const _TONGUE_UNDER_STATIONS: Array[Vector4] = [
+	Vector4(0.050, 0.086, 0.008, 55.0),
+	Vector4(0.085, 0.087, 0.008, 52.0),
+]
+const _TONGUE_HINGE_Y: float = 0.132
+const _TONGUE_FOLD_M: float = 0.02
+const _TONGUE_FLOP_RAD: float = 2.18   # 125°
 
 # The padded rim: the top loop turned in over the lining, down this far.
 const _RIM_INSET: float = 0.86
@@ -140,13 +162,18 @@ const _LACE_SINK: float = 0.006
 const _LACE_COLOR := Color(0.88, 0.88, 0.86)
 const _STRIPE_COLOR := Color(0.08, 0.08, 0.08)
 
-static var _mesh: ArrayMesh = null
+static var _meshes: Dictionary = {}
 
 
-static func shared() -> ArrayMesh:
-	if _mesh == null:
-		_mesh = _build()
-	return _mesh
+# One per GearModelRegistry TONGUE_* option.
+static func shared(tongue: int = GearModelRegistry.TONGUE_TUCKED) -> ArrayMesh:
+	if not GearModelRegistry.is_valid_tongue(tongue):
+		tongue = GearModelRegistry.TONGUE_TUCKED
+	var built: ArrayMesh = _meshes.get(tongue)
+	if built == null:
+		built = _build(tongue)
+		_meshes[tongue] = built
+	return built
 
 
 # How much of a point (this frame) rides the FOOT bone; the rest rides the
@@ -163,7 +190,7 @@ static func loops() -> Array[PackedVector3Array]:
 	return out
 
 
-static func _build() -> ArrayMesh:
+static func _build(tongue: int) -> ArrayMesh:
 	var cut_loops: Array[PackedVector3Array] = loops()
 	cut_loops[0] = _with_tendon_guard(cut_loops[0])
 	var top: PackedVector3Array = cut_loops[0]
@@ -185,7 +212,7 @@ static func _build() -> ArrayMesh:
 	var toe: PackedVector3Array = cut_loops[cut_loops.size() - 1]
 	_cap(tools[Surface.TOE], toe, _center(toe), false)
 	_add_laces(tools[Surface.LACES], cut_loops)
-	_add_tongue(tools[Surface.TONGUE])
+	_add_tongue(tools[Surface.TONGUE], tongue)
 	var m := ArrayMesh.new()
 	for st: SurfaceTool in tools:
 		st.generate_normals()
@@ -207,11 +234,18 @@ static func _with_tendon_guard(top: PackedVector3Array) -> PackedVector3Array:
 # The tongue's cross-section at each station is an arc band round the front of
 # the leg: its outer arc across, then its inner arc back. Swept station to
 # station, closed across each end.
-static func _add_tongue(st: SurfaceTool) -> void:
+static func _add_tongue(st: SurfaceTool, tongue: int) -> void:
+	var tongue_out: bool = tongue == GearModelRegistry.TONGUE_OUT
+	var stations: Array[Vector4] = _TONGUE_STATIONS
+	if tongue_out:
+		stations = _TONGUE_OUT_STATIONS
+	elif tongue == GearModelRegistry.TONGUE_UNDER:
+		stations = _TONGUE_UNDER_STATIONS
 	var sections: Array[PackedVector3Array] = []
-	var y0: float = _TONGUE_STATIONS[1].x
-	var y1: float = _TONGUE_STATIONS[_TONGUE_STATIONS.size() - 1].x
-	for station: Vector4 in _TONGUE_STATIONS:
+	var y0: float = stations[1].x
+	var y1: float = stations[stations.size() - 1].x
+	var hinge := Vector2(_TONGUE_HINGE_Y, 0.0)
+	for station: Vector4 in stations:
 		var lean: float = -_TONGUE_LEAN_M * smoothstep(y0, y1, station.x)
 		var half: float = deg_to_rad(station.w)
 		var section := PackedVector3Array()
@@ -221,11 +255,29 @@ static func _add_tongue(st: SurfaceTool) -> void:
 				var t: float = float(j) / float(_TONGUE_ARC_POINTS - 1)
 				var phi: float = lerpf(-half, half, t if side == 0 else 1.0 - t)
 				section.append(Vector3(sin(phi) * r, station.x, -cos(phi) * r + lean))
+		if tongue_out and station.x <= _TONGUE_HINGE_Y:
+			hinge.y = -(station.y + station.z)
 		sections.append(section)
+	if tongue_out:
+		for section: PackedVector3Array in sections:
+			_fold(section, hinge)
 	for i: int in sections.size() - 1:
 		_band(st, sections[i + 1], sections[i])
 	_close_band(st, sections[0], true)
 	_close_band(st, sections[sections.size() - 1], false)
+
+
+# Folds a section above the hinge (y, z) forward about the line across x
+# through it, by as much of _TONGUE_FLOP_RAD as its height is through the fold.
+static func _fold(section: PackedVector3Array, hinge: Vector2) -> void:
+	for i: int in section.size():
+		var p: Vector3 = section[i]
+		var a: float = -_TONGUE_FLOP_RAD * smoothstep(
+				hinge.x, hinge.x + _TONGUE_FOLD_M, p.y)
+		var dy: float = p.y - hinge.x
+		var dz: float = p.z - hinge.y
+		section[i] = Vector3(p.x, hinge.x + dy * cos(a) - dz * sin(a),
+				hinge.y + dy * sin(a) + dz * cos(a))
 
 
 # Closes an arc-band section (outer arc, then inner arc back) with the strip

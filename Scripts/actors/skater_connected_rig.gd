@@ -23,6 +23,7 @@ var _skater: Skater = null
 var _skeleton: Skeleton3D = null
 var _mesh: MeshInstance3D = null
 var _tuck: int = -1
+var _tongue: int = GearModelRegistry.TONGUE_TUCKED
 # SkaterConnectedMesh.bind_rests, and their inverses where a pose is read back
 # against them.
 var _rests: Array[Transform3D] = []
@@ -32,7 +33,8 @@ func setup(skater: Skater) -> void:
 	_skater = skater
 
 
-func build(skeleton: Skeleton3D, body_material: Material, tuck: int) -> void:
+func build(skeleton: Skeleton3D, body_material: Material, tuck: int,
+		tongue: int = GearModelRegistry.TONGUE_TUCKED) -> void:
 	_skeleton = skeleton
 	_rests = SkaterConnectedMesh.bind_rests()
 	_mesh = MeshInstance3D.new()
@@ -41,6 +43,7 @@ func build(skeleton: Skeleton3D, body_material: Material, tuck: int) -> void:
 	_mesh.skeleton = NodePath("..")
 	_skeleton.add_child(_mesh)
 	_mesh.set_instance_shader_parameter(&"flat_from_position", 1.0)
+	_tongue = tongue
 	set_tuck(tuck)
 	_mesh.set_surface_override_material(0, body_material)
 
@@ -49,9 +52,20 @@ func set_tuck(tuck: int) -> void:
 	if _mesh == null or tuck == _tuck:
 		return
 	_tuck = tuck
+	_wear()
+
+
+func set_tongue(tongue: int) -> void:
+	if _mesh == null or tongue == _tongue:
+		return
+	_tongue = tongue
+	_wear()
+
+
+func _wear() -> void:
 	var material: Material = _mesh.get_surface_override_material(0) \
 			if _mesh.mesh != null else null
-	_mesh.mesh = SkaterBodyMesh.shared_mesh(tuck)
+	_mesh.mesh = SkaterBodyMesh.shared_mesh(_tuck, _tongue)
 	if material != null:
 		_mesh.set_surface_override_material(0, material)
 

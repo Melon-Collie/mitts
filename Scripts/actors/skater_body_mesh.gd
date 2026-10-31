@@ -12,15 +12,17 @@ static var _cache: Dictionary = {}
 static var _skin: Skin = null
 
 
-# One per GearModelRegistry TUCK_* option, as the skin is.
-static func shared_mesh(tuck: int) -> ArrayMesh:
+# One per GearModelRegistry TUCK_* option, as the skin is, and per TONGUE_*
+# option, as the skates' uppers are.
+static func shared_mesh(tuck: int, tongue: int = GearModelRegistry.TONGUE_TUCKED) -> ArrayMesh:
 	var skin_mesh: ArrayMesh = SkaterConnectedMesh.shared_mesh(tuck)
 	if SkaterConnectedMesh.preview_pants_only:
 		return skin_mesh
-	var key: int = skin_mesh.get_instance_id()
+	var legs: ArrayMesh = SkaterRigidParts.leg_body_mesh(tongue)
+	var key: Vector2i = Vector2i(skin_mesh.get_instance_id(), legs.get_instance_id())
 	var built: ArrayMesh = _cache.get(key)
 	if built == null:
-		built = _build(skin_mesh)
+		built = _build(skin_mesh, legs)
 		_cache[key] = built
 	return built
 
@@ -44,7 +46,7 @@ static func upper_bind_base() -> int:
 	return SkaterConnectedMesh.shared_skin().get_bind_count()
 
 
-static func _build(skin_mesh: ArrayMesh) -> ArrayMesh:
+static func _build(skin_mesh: ArrayMesh, legs: ArrayMesh) -> ArrayMesh:
 	var out: Array = []
 	out.resize(Mesh.ARRAY_MAX)
 	for a: int in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL]:
@@ -58,7 +60,7 @@ static func _build(skin_mesh: ArrayMesh) -> ArrayMesh:
 	var upper: int = upper_bind_base()
 	_append(out, skin_mesh.surface_get_arrays(0), 0)
 	_append(out, SkaterRigidParts.upper_body_mesh().surface_get_arrays(0), upper)
-	_append(out, SkaterRigidParts.leg_body_mesh().surface_get_arrays(0),
+	_append(out, legs.surface_get_arrays(0),
 			upper + SkaterMeshBuilder.UPPER_BONE_COUNT)
 	var mesh := ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, out)

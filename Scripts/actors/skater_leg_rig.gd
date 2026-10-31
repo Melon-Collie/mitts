@@ -183,8 +183,9 @@ func build(skeleton: Skeleton3D) -> void:
 	_skate_boxes = _skate_part_boxes()
 
 
-# The upper's points each go to the bone carrying most of them
-# (SkateUpperMesh.foot_share), in that bone's frame; the blade is the foot's. A
+# The upper's points, either way its tongue is worn, each go to the bone carrying
+# most of them (SkateUpperMesh.foot_share), in that bone's frame; the blade is
+# the foot's. A
 # point blended across the ankle is drawn between where the two would carry it,
 # so these bound it only loosely; test_knockdown_lies_on_the_ice.gd holds the
 # skinned skates above the ice.
@@ -193,16 +194,17 @@ static func _skate_part_boxes() -> Array[AABB]:
 	var cuff := AABB()
 	var cuff_empty: bool = true
 	var foot_from_skate: Transform3D = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
-	var upper: ArrayMesh = SkateUpperMesh.shared()
-	for s: int in upper.get_surface_count():
-		for p: Vector3 in upper.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
-			if SkateUpperMesh.foot_share(p) >= 0.5:
-				foot = foot.expand(foot_from_skate * p)
-			elif cuff_empty:
-				cuff = AABB(p, Vector3.ZERO)
-				cuff_empty = false
-			else:
-				cuff = cuff.expand(p)
+	for tongue: int in GearModelRegistry.tongue_count():
+		var upper: ArrayMesh = SkateUpperMesh.shared(tongue)
+		for s: int in upper.get_surface_count():
+			for p: Vector3 in upper.surface_get_arrays(s)[Mesh.ARRAY_VERTEX] as PackedVector3Array:
+				if SkateUpperMesh.foot_share(p) >= 0.5:
+					foot = foot.expand(foot_from_skate * p)
+				elif cuff_empty:
+					cuff = AABB(p, Vector3.ZERO)
+					cuff_empty = false
+				else:
+					cuff = cuff.expand(p)
 	return [foot, cuff]
 
 

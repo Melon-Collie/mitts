@@ -107,6 +107,10 @@ GEAR_TUCK_NONE,Untucked,Por fuera
 GEAR_TUCK_LEFT,Left corner,Esquina izquierda
 GEAR_TUCK_RIGHT,Right corner,Esquina derecha
 GEAR_TUCK_FULL,Full tuck,Por dentro
+GEAR_TONGUE_LABEL,Tongue,Lengüeta
+GEAR_TONGUE_TUCKED,Tucked,Metida
+GEAR_TONGUE_OUT,Out,Por fuera
+GEAR_TONGUE_UNDER,Under sock,Bajo la media
 PLAYER_HAIR_LABEL,Hair,Pelo
 PLAYER_BEARD_LABEL,Beard,Barba
 PLAYER_HAIR_COLOR_LABEL,Hair color,Color de pelo

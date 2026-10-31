@@ -72,10 +72,13 @@ const _BLADE_ZONE_OFFSETS: Array[int] = [4, 5]
 const SKATE_UPPER_FOOT_BIND: int = SkaterMeshBuilder.LEG_BONE_COUNT
 
 
-static func leg_body_mesh() -> ArrayMesh:
-	return _shared("legs", func() -> ArrayMesh:
+# One per GearModelRegistry TONGUE_* option (SkateUpperMesh.shared).
+static func leg_body_mesh(tongue: int = GearModelRegistry.TONGUE_TUCKED) -> ArrayMesh:
+	if not GearModelRegistry.is_valid_tongue(tongue):
+		tongue = GearModelRegistry.TONGUE_TUCKED
+	return _shared("legs_%d" % tongue, func() -> ArrayMesh:
 		var b := BodyZoneMesh.new()
-		var upper: ArrayMesh = SkateUpperMesh.shared()
+		var upper: ArrayMesh = SkateUpperMesh.shared(tongue)
 		var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
 		for side: int in 2:
 			var first: int = _LegSurface.SKATE_L_COLLAR if side == 0 else _LegSurface.SKATE_R_COLLAR

@@ -986,7 +986,8 @@ func _ready() -> void:
 	_stick.setup(self)
 	_connected.setup(self)
 	_connected.build(body, _paint.material,
-			gear_style.jersey_tuck if gear_style != null else GearModelRegistry.TUCK_NONE)
+			gear_style.jersey_tuck if gear_style != null else GearModelRegistry.TUCK_NONE,
+			gear_style.skate_tongue if gear_style != null else GearModelRegistry.TONGUE_TUCKED)
 	_shadow.build(body, stick_mesh, blade.get_node_or_null("MeshInstance3D") as MeshInstance3D)
 
 	_uniform = SkaterUniformCoordinator.new()
@@ -1758,7 +1759,7 @@ func set_tape_config(config: StickTapeConfig) -> void:
 		_uniform.refresh_tape()
 
 
-# Installs a new gear look (models, laces, face gear, hair, tuck) and repaints the
+# Installs a new gear look (models, laces, face gear, hair, tuck, tongue) and repaints the
 # affected parts. Same live-cosmetic contract as set_tape_config.
 func set_gear_style(config: GearStyleConfig) -> void:
 	if config == null:
@@ -1766,6 +1767,7 @@ func set_gear_style(config: GearStyleConfig) -> void:
 	gear_style = config
 	_arms.apply_gear_meshes()
 	_connected.set_tuck(config.jersey_tuck)
+	_connected.set_tongue(config.skate_tongue)
 	if _uniform != null:
 		_uniform.refresh_gear_style()
 

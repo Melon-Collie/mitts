@@ -33,6 +33,7 @@ var _paint := BodyZonePaint.new(SkaterMeshBuilder.BODY_ZONE_COUNT)
 var _kit: SkaterKitPaint = null
 var _head_pieces: Array[MeshInstance3D] = []
 var _tuck: int = GearModelRegistry.TUCK_NONE
+var _tongue: int = GearModelRegistry.TONGUE_TUCKED
 
 
 # The skeleton and its meshes under `rig`; the decal viewports under
@@ -42,7 +43,7 @@ func build(rig: Node3D, viewport_host: Node) -> void:
 	skeleton = SkaterBodySkeleton.new_body_skeleton()
 	rig.add_child(skeleton)
 	SkaterRigidParts.seed_paint(_paint)
-	_skin.build(skeleton, _paint.material, _tuck)
+	_skin.build(skeleton, _paint.material, _tuck, _tongue)
 	_kit = SkaterKitPaint.new(_paint, viewport_host)
 	var head := BoneAttachment3D.new()
 	skeleton.add_child(head)
@@ -63,7 +64,7 @@ func pose_skin(top_side: int) -> void:
 	_skin.pose(top_side)
 
 
-# Paints every part, and puts on the jersey's tuck. After the pose: the shaft's
+# Paints every part, and puts on the jersey's tuck and the skates' tongues. After the pose: the shaft's
 # grip wrap is laid along the length the pose gave it.
 func dress(colors: Dictionary, gear: GearStyleConfig, tape: StickTapeConfig,
 		skin_tone: int, player_name: String, jersey_number: int) -> void:
@@ -75,6 +76,9 @@ func dress(colors: Dictionary, gear: GearStyleConfig, tape: StickTapeConfig,
 		_tuck = gear.jersey_tuck
 		_skin.set_tuck(_tuck)
 		hem.set_tuck(_tuck)
+	if gear.skate_tongue != _tongue:
+		_tongue = gear.skate_tongue
+		_skin.set_tongue(_tongue)
 	_dress_head(gear)
 	_paint_stick(gear, tape, colors)
 

@@ -135,6 +135,7 @@ var _knob_color_dd: SwatchDropdown = null
 var _style_btn: OptionButton = null
 var _skate_btn: OptionButton = null
 var _lace_dd: SwatchDropdown = null
+var _tongue_btn: OptionButton = null
 
 
 # One three-way gear dial: its buttons, the draft field it sets, and the hint
@@ -470,10 +471,8 @@ func _build_body(page: VBoxContainer) -> void:
 	var gloves: int = LockerMannequin.Focus.GLOVES
 	_glove_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_GLOVES_LABEL", false, gloves),
 			func(i: int) -> void: _edit_gear(&"glove_model", i))
-	_tuck_btn = PlayerRowKit.option_button(_row(page, &"GEAR_TUCK_LABEL", false, full),
-			func(i: int) -> void: _edit_gear(&"jersey_tuck", i))
-	for i: int in GearModelRegistry.tuck_count():
-		_tuck_btn.add_item(tr(GearModelRegistry.TUCK_NAME_KEYS[i]), i)
+	_tuck_btn = PlayerRowKit.option_list(_row(page, &"GEAR_TUCK_LABEL", false, full),
+			GearModelRegistry.TUCK_NAME_KEYS, func(i: int) -> void: _edit_gear(&"jersey_tuck", i))
 	_wire_reach([_glove_btn], gloves)
 	_wire_reach([_tuck_btn], full)
 
@@ -484,10 +483,9 @@ func _build_head(page: VBoxContainer) -> void:
 			func(i: int) -> void: _edit_gear(&"hair_style", _hair_btn.get_item_id(i)))
 	for style: int in HairStyleRegistry.pickable_hair():
 		_hair_btn.add_item(tr(HairStyleRegistry.HAIR_NAME_KEYS[style]), style)
-	_facial_btn = PlayerRowKit.option_button(_row(page, &"PLAYER_BEARD_LABEL", false, head),
+	_facial_btn = PlayerRowKit.option_list(_row(page, &"PLAYER_BEARD_LABEL", false, head),
+			HairStyleRegistry.FACIAL_NAME_KEYS,
 			func(i: int) -> void: _edit_gear(&"facial_hair", i))
-	for i: int in HairStyleRegistry.facial_count():
-		_facial_btn.add_item(tr(HairStyleRegistry.FACIAL_NAME_KEYS[i]), i)
 	var color_names: Array[String] = []
 	for key: StringName in HairStyleRegistry.COLOR_NAME_KEYS:
 		color_names.append(tr(key))
@@ -526,16 +524,12 @@ func _build_stick(page: VBoxContainer) -> void:
 				tr(StickModelRegistry.NAME_KEYS[model]), model)
 	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(i, -1, -1, -1))
-	_span_btn = PlayerRowKit.option_button(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
-			func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
-	for i: int in _SPAN_KEYS.size():
-		_span_btn.add_item(tr(_SPAN_KEYS[i]), i)
+	_span_btn = PlayerRowKit.option_list(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
+			_SPAN_KEYS, func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
 	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
 			func(i: int) -> void: _edit_tape(-1, -1, i, -1))
-	_style_btn = PlayerRowKit.option_button(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
-			func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
-	for i: int in _STYLE_KEYS.size():
-		_style_btn.add_item(tr(_STYLE_KEYS[i]), i)
+	_style_btn = PlayerRowKit.option_list(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
+			_STYLE_KEYS, func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
 	_wire_reach([_stick_model_btn], stick)
 	_wire_reach([_blade_color_dd, _span_btn], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
@@ -550,7 +544,10 @@ func _build_skates(page: VBoxContainer) -> void:
 			func(i: int) -> void: _edit_gear(&"skate_model", i))
 	_lace_dd = _swatch_dropdown(_row(page, &"GEAR_LACES_LABEL", false, skates),
 			func(i: int) -> void: _edit_gear(&"lace_color", i))
-	_wire_reach([_skate_btn, _lace_dd], skates)
+	_tongue_btn = PlayerRowKit.option_list(_row(page, &"GEAR_TONGUE_LABEL", false, skates),
+			GearModelRegistry.TONGUE_NAME_KEYS,
+			func(i: int) -> void: _edit_gear(&"skate_tongue", i))
+	_wire_reach([_skate_btn, _lace_dd, _tongue_btn], skates)
 
 
 func _gear_row(page: VBoxContainer, label_key: StringName, field: StringName,
@@ -718,6 +715,7 @@ func _refresh() -> void:
 	_blade_color_dd.set_selected(tape.blade_color)
 	_knob_color_dd.set_selected(tape.knob_color)
 	_lace_dd.set_selected(gear.lace_color)
+	_tongue_btn.select(gear.skate_tongue)
 	_refreshing = false
 
 	var attrs: PlayerAttributes = _draft.attributes()
