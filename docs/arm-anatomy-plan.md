@@ -63,10 +63,15 @@ The branch that introduced most of those knobs measured what the split costs:
 
 ### 3.1 Bodies
 
-- **Trunk:** pelvis (the hips' yaw and pitch, from the gait and the facing),
-  lumbar and thoracic spine as one twist, one fold and one side-bend about the
-  pelvis, then the shoulder girdle. The shoulders' positions come from the
-  trunk, not from fixed markers.
+- **Trunk:** pelvis (the hips' yaw and pitch), lumbar and thoracic spine as one
+  twist, one fold and one side-bend about the pelvis, then the shoulder girdle.
+  The shoulders' positions come from the trunk, not from fixed markers.
+- **The hips stay with the travel; the twist is the spine's.** Skating, the
+  pelvis points along the direction of travel (the gait's `travel_align_yaw`,
+  the pivot), so every degree the chest turns toward the stick past that is
+  thoracolumbar rotation, bounded by the spine's own range (§3.3) — the hips
+  give the arms no extra turn. Standing still there is no travel, and the hips
+  are where the feet left them (the facing).
 - **Arms:** shoulder (three rotations: flexion/extension, abduction/adduction,
   internal/external rotation) with the scapula's protraction as the existing
   `shoulder_reach_m`; elbow (flexion only); forearm (pronation/supination);
@@ -114,8 +119,15 @@ Clinical active range-of-motion norms (AAOS / AMA tables), adult:
 | | lateral flexion each way | ~35° |
 
 The model uses these as hard limits. Today's numbers that disagree are flagged
-for review, not changed blindly: the spine's twist limit is 55° and the
-gameplay twist cap 67°; the wrist's ulnar range here is 35°.
+for review, not changed blindly: the wrist's ulnar range here is 35°; and the
+trunk's twist, which with the hips on the travel is all spine — the skeleton's
+limit (`SkaterSpineRig.TWIST_LIMIT`) is 55° and gameplay's cap
+(`upper_body_max_twist_deg`) 67°, against ~45°. The twist cap is one of the
+derived numbers (§6), so expect it to come down toward the spine's range; every
+reach that leans on it moves with it — the facing rules' edges
+(`forehand_edge_rad`, `backhand_edge_rad`, rim angle plus twist), the backhand
+release, and how far round the body the blade goes before the hips have to
+pivot. That shift lands in phase 3 and is reviewed there.
 
 ## 4. Hockey technique layer
 
@@ -216,8 +228,6 @@ Each phase is its own branch and PR.
 
 ## 11. Open questions
 
-- How far does the trunk's twist come from the hips versus the spine while
-  skating, given the gait already turns the hips (`travel_align_yaw`, the pivot)?
 - Does the top hand's forehand floor survive once the elbow comes from the solve,
   or does the solve make it redundant?
 - How rich does the envelope need to be — is a per-angle table enough, or does
