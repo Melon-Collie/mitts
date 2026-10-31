@@ -87,6 +87,9 @@ var _rigid_result := TopHandIK.Result.new()
 # properties sync inside the cached-config builders — the same rebuild moment —
 # so invalidate_configs() covers both representations.
 var _native_top: RefCounted = null
+# Off by default: the port does not keep the hand forward of its shoulder
+# (TopHandIK.Config.hand_forward) yet. Read once, at setup.
+var native_top_enabled: bool = false
 # Native blade-dangle smoother (null = extension absent, GDScript fallback).
 # In native mode it OWNS the cross-tick smoothing state (_prev_skater_pos,
 # _blade_dangle_vel, the init flag) — only _smoothed_blade_world is mirrored
@@ -121,7 +124,7 @@ func setup(skater: Skater, controller: SkaterController,
 	_skater = skater
 	_controller = controller
 	_skating = skating
-	if ClassDB.class_exists(&"NativeTopHandIK"):
+	if native_top_enabled and ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
 		# two_hand_reach is the newest thing ADDED to an existing kernel, so a
@@ -1297,6 +1300,13 @@ func _ik_config(blade_y: float, max_blade_reach: float = INF) -> TopHandIK.Confi
 	_cached_top_cfg.max_blade_reach = max_blade_reach
 	_cached_top_cfg.stick_length = solve_stick_length()
 	_cached_top_cfg.hand_y_max = _address_hand_ceiling()
+	# The centre's address holds its own hands (its ceiling, its fold), and a
+	# shot or the block, posing their own stick, keep the floorless solve.
+	_cached_top_cfg.hand_forward = 0.0 if SkaterPoseBridge.owner_of(
+			_controller.get_shot_state() as State) != SkaterPoseBridge.Owner.TRACKED \
+			else _controller.top_hand_forward_m * (1.0 - _address_blend())
+	_cached_top_cfg.hand_forward_none = _controller.top_hand_forward_none_m
+	_cached_top_cfg.hand_forward_full = _controller.top_hand_forward_full_m
 	if _native_top != null:
 		_native_top.blade_y = blade_y
 		_native_top.max_blade_reach = max_blade_reach

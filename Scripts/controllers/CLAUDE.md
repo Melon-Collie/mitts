@@ -350,7 +350,10 @@ rink functions under them) and the port changes with it, or
 into `_sync_pass_config` too. The port does not fold the shoulders over the
 stick (`chest_fold`, below) yet, so the coordinator takes the GDScript pass
 (`native_pass_enabled` is off) and that parity test fails wherever the
-extension is built until it is ported.
+extension is built until it is ported. Nor does `NativeTopHandIK` keep the hand
+forward of its shoulder (`TopHandIK.Config.hand_forward`, below), so the
+coordinator does not build it (`native_top_enabled` is off) and
+`test_native_ik_parity.gd` fails there too.
 
 ### Pose the hand, not the blade
 
@@ -360,8 +363,10 @@ blade in tight cannot be authored that way, and the check commit is the worked
 example.
 
 `TopHandIK` has two regimes. Inside the stick's resting horizontal reach it goes
-CLOSE, which pins the hand's XZ **at the shoulder marker** and varies only its
-height — the blade's authored distance stops mattering entirely, and past the
+CLOSE, which pins the hand's XZ **at the shoulder marker** (or, round the
+forehand, its floor out from it along the aim, `Config.hand_forward`) and
+varies only its height —
+the blade's authored distance stops mattering entirely, and past the
 `hand_y_max` ceiling the blade overshoots along the aim line instead of landing
 where it was put. Meanwhile the rendered arm roots at the shoulder the trunk
 texture has MOVED (`SkaterArmRig._textured_shoulder`), which a lean and a
@@ -379,7 +384,7 @@ only shortens an over-long span; an under-long pair draws a visibly short stick.
 
 The tracked path's ROM (`TopHandIK`) is a disc about the shoulder with the hand
 a fixed drop below it, and `SkaterIKCoordinator._solve_top_hand` solves it
-where the drawn arm actually is. Four things decide "where", each found as a
+where the drawn arm actually is. Five things decide "where", each found as a
 hand the drawn arm could not reach or barely extended toward:
 
 - **The shoulder is the trunk's** (`arm_shoulder`). The skeleton folds the
@@ -418,6 +423,20 @@ hand the drawn arm could not reach or barely extended toward:
   posing their own stick, take none. The gait draws exactly that fold on the
   trunk texture, with a crouch under it standing (`GaitCarryLayer`).
   `test_carry_posture_rules.gd`.
+- **Round the forehand the hand comes across the body**
+  (`top_hand_forward_m`, `TopHandIK.Config.hand_forward`). Held at its own
+  shoulder, on the backhand side, the top hand of a stick swept round the
+  forehand sits at the far hip once the two-hand stop draws the blade into
+  CLOSE, and the bottom arm reaches the shaft only across the whole chest, at
+  any skating fold. So CLOSE keeps the hand a floor out along the bearing to
+  the blade: none from straight ahead round the backhand, where a top hand
+  holds its stick at its side, all of it from ~55° round the forehand, and
+  gone as the blade comes in tight, where the hand comes back to the hip. It
+  follows the blade's bearing alone, so it is the same with the puck or
+  without and a pickup or a lost puck moves nothing; it sits under the regime
+  blend, so the FAR regime, the rim and the claim clamp are untouched. A shot,
+  the block and the centre's address keep the floorless solve.
+  `test_top_hand_ik.gd` holds it.
 
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).

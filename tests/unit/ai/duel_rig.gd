@@ -33,6 +33,9 @@ class Arm:
 var shoulder: Vector3
 var bottom_shoulder: Vector3
 var carry_fold: float
+var hand_forward: float
+var hand_forward_none: float
+var hand_forward_full: float
 var ub_offset: Vector3
 var blade_y: float
 var blade_half: float
@@ -86,6 +89,9 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.marker_y = skater.shoulder.position.y
 	rig.hand_rest_y = ctrl.hand_rest_y
 	rig.hand_y_max = ctrl.hand_y_max
+	rig.hand_forward = ctrl.top_hand_forward_m
+	rig.hand_forward_none = ctrl.top_hand_forward_none_m
+	rig.hand_forward_full = ctrl.top_hand_forward_full_m
 	rig.stick_length = ik.solve_stick_length()
 	rig.rom_forehand_angle = deg_to_rad(ctrl.rom_forehand_angle_max_deg)
 	rig.rom_backhand_angle = deg_to_rad(ctrl.rom_backhand_angle_max_deg)
@@ -251,6 +257,9 @@ func _level_config(hang_y: float, max_reach: float) -> void:
 	_cfg.rom_forehand_reach_max = rom_forehand
 	_cfg.rom_backhand_reach_max = rom_backhand
 	_cfg.max_blade_reach = max_reach
+	_cfg.hand_forward = hand_forward
+	_cfg.hand_forward_none = hand_forward_none
+	_cfg.hand_forward_full = hand_forward_full
 
 
 # SkaterIKCoordinator.blade_y_lean_corrected under the reach lean.

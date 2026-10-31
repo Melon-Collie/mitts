@@ -297,6 +297,12 @@ var hand_rest_y: float = -0.10
 # (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
 # 1.27 → min horizontal stick reach ≈ 0.28 m.
 var hand_y_max: float = 0.30
+# The least the top hand reaches off its shoulder toward a blade held round the
+# forehand, gone as the blade comes in tight (TopHandIK.Config.hand_forward):
+# the stick runs from in front of the belly, not the far hip.
+var top_hand_forward_m: float = 0.22
+var top_hand_forward_none_m: float = 0.3
+var top_hand_forward_full_m: float = 0.9
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
