@@ -213,6 +213,7 @@ private:
 	// The pass from the wall-pin release on: the goalies, the net, the rebuild.
 	void continue_pass();
 	void finish();
+	void arm_for_clamped_blade();
 
 	// TopHandIK.
 	double max_reach_for_angle(double angle_to_forehand) const;

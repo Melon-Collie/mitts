@@ -20,6 +20,9 @@ const State = SkaterStateMachine.State
 const _OPEN_ICE_MARGIN_M: float = 0.05
 # Seconds the stride's pump takes to hand the drawn hand to a shot and back.
 const PUMP_HANDOFF_S: float = 0.15
+# Times the goalie is resolved again against the arm rebuilt for a clamped
+# blade: each rebuild turns the toe, so the hold settles over a few.
+const GOALIE_SETTLE_PASSES: int = 4
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -557,25 +560,19 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 	# Skipped when nothing moved: the reconstruction is an exact inverse of the
 	# solve there, so it would only redo work.
 	if wall_clamped != intended_blade:
-		var tilt: Basis = _level_tilt()
-		var clamped_level: Vector3 = tilt * wall_clamped
-		hand_local = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
-				tilt * arm_shoulder(),
-				Vector2(clamped_level.x, clamped_level.z),
-				clamped_level.y,
-				blade_side_sign,
-				_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
-		# The rebuild bounds the ARM but leaves stick length free, so a clamp that
-		# puts the blade past arm + stick has nowhere to put the difference except
-		# the shaft — which is a stretched stick, the one thing a rigid object
-		# cannot do. Reaching in through the open mouth is where that bites here:
-		# the reach limit deliberately leaves the mouth unbounded (net-front play
-		# depends on it), so the twine is free to move the blade a long way. Inert
-		# whenever the blade is reachable, which is every ordinary tick.
-		var rigid: TopHandIK.Result = rigid_stick(
-				hand_local, wall_clamped, blade_side_sign)
-		hand_local = rigid.hand
-		wall_clamped = rigid.blade
+		var arm: TopHandIK.Result = _arm_for_clamped_blade(wall_clamped, blade_side_sign)
+		# The rebuilt hand turns the blade along its new shaft, and the toe with it,
+		# which can swing it into the goalie the first resolve held it off.
+		for _settle: int in GOALIE_SETTLE_PASSES:
+			var settled_heel: Vector3 = _skater.upper_body_to_global(arm.blade)
+			var more: Vector3 = resolve_blade_against_goalies(settled_heel,
+					_skater.upper_body_to_global(arm.hand))
+			if more == Vector3.ZERO:
+				break
+			arm = _arm_for_clamped_blade(_skater.upper_body_to_local(settled_heel + more),
+					blade_side_sign)
+		hand_local = arm.hand
+		wall_clamped = arm.blade
 
 	_skater.set_top_hand_position(hand_local)
 	_skater.set_blade_position(wall_clamped)
@@ -1121,6 +1118,26 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 #
 # The tracked path does not need it — it authors its pose through TopHandIK, which
 # is rigid by construction, and rebuilds through the exact inverse.
+# The arm rebuilt to reach a blade a clamp put at `blade_local`. The rebuild
+# bounds the ARM but leaves stick length free, so a clamp that puts the blade
+# past arm + stick has nowhere to put the difference except the shaft — a
+# stretched stick, the one thing a rigid object cannot do. Reaching in through
+# the open mouth is where that bites: the reach limit deliberately leaves the
+# mouth unbounded (net-front play depends on it), so the twine is free to move
+# the blade a long way. The rigid pass is inert whenever the blade is reachable.
+# Returns the shared rigid_stick Result.
+func _arm_for_clamped_blade(blade_local: Vector3, blade_side_sign: float) -> TopHandIK.Result:
+	var tilt: Basis = _level_tilt()
+	var clamped_level: Vector3 = tilt * blade_local
+	var hand_local: Vector3 = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
+			tilt * arm_shoulder(),
+			Vector2(clamped_level.x, clamped_level.z),
+			clamped_level.y,
+			blade_side_sign,
+			_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
+	return rigid_stick(hand_local, blade_local, blade_side_sign)
+
+
 func rigid_stick(hand_local: Vector3, blade_local: Vector3,
 		blade_side_sign: float) -> TopHandIK.Result:
 	TopHandIK.enforce_rigid_stick(

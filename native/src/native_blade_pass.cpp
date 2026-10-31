@@ -24,6 +24,8 @@ constexpr double SIDE_EPS_M = 0.001;
 constexpr double TELEPORT_M = 1.0;
 // The wall-pin release's power (SkaterIKCoordinator's literal).
 constexpr double WALL_PIN_POWER = 3.0;
+// SkaterIKCoordinator.GOALIE_SETTLE_PASSES.
+constexpr int GOALIE_SETTLE_PASSES = 4;
 
 // GDScript's sign() and signf(): 0 at 0.
 double sgn(double x) {
@@ -501,17 +503,32 @@ void NativeBladePass::finish() {
 	}
 	// Rebuild the arm for a blade a clamp moved: the blade is authoritative.
 	if (wall_clamped != intended_blade) {
-		const Vector3 clamped_level = tilt.xform(wall_clamped);
-		hand = tilt.transposed().xform(hand_for_clamped_blade(
-				tilt.xform(arm_shoulder),
-				Vector2(clamped_level.x, clamped_level.z),
-				clamped_level.y,
-				level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY)));
-		enforce_rigid_stick(arm_shoulder, hand, wall_clamped,
-				ik_config(wall_clamped.y, INFINITY));
+		arm_for_clamped_blade();
+		// The rebuilt hand turns the toe: hold it off the goalie again.
+		for (int k = 0; k < GOALIE_SETTLE_PASSES; k++) {
+			const Vector3 settled_heel = ub_xf.xform(wall_clamped);
+			const Vector3 more = resolve_goalies(settled_heel);
+			if (more == Vector3()) {
+				break;
+			}
+			wall_clamped = ub_inv.xform(settled_heel + more);
+			arm_for_clamped_blade();
+		}
 	}
 	out_hand = hand;
 	out_blade = wall_clamped;
+}
+
+// SkaterIKCoordinator._arm_for_clamped_blade, onto hand and wall_clamped.
+void NativeBladePass::arm_for_clamped_blade() {
+	const Vector3 clamped_level = tilt.xform(wall_clamped);
+	hand = tilt.transposed().xform(hand_for_clamped_blade(
+			tilt.xform(arm_shoulder),
+			Vector2(clamped_level.x, clamped_level.z),
+			clamped_level.y,
+			level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY)));
+	enforce_rigid_stick(arm_shoulder, hand, wall_clamped,
+			ik_config(wall_clamped.y, INFINITY));
 }
 
 // ── The body ───────────────────────────────────────────────────────────────────
