@@ -48,7 +48,7 @@ func test_the_shell_is_one_piece() -> void:
 	assert_eq(seen.size(), tris.size(), "one connected shell")
 
 
-func test_the_shell_and_the_laces_are_wound_outward() -> void:
+func test_the_shell_the_laces_and_the_tongue_are_wound_outward() -> void:
 	var shell: float = 0.0
 	for tri: Array in _shell_triangles():
 		shell += _signed(tri)
@@ -57,6 +57,10 @@ func test_the_shell_and_the_laces_are_wound_outward() -> void:
 	for tri: Array in _triangles(_Surface.LACES):
 		laces += _signed(tri)
 	assert_lt(laces, -1e-8, "the lace rungs are outward-wound solids")
+	var tongue: float = 0.0
+	for tri: Array in _triangles(_Surface.TONGUE):
+		tongue += _signed(tri)
+	assert_lt(tongue, -1e-8, "the tongue is an outward-wound solid")
 
 
 func test_the_foot_frame_is_the_scenes() -> void:

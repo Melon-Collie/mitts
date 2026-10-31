@@ -63,8 +63,9 @@ static func upper_body_mesh() -> ArrayMesh:
 
 
 # The skate upper's zones, in SkateUpperMesh.Surface order, from a side's
-# collar zone on; and the blade's two after them.
-const _UPPER_ZONE_OFFSETS: Array[int] = [0, 1, 2, 3, 6]
+# collar zone on (the tongue is painted as the collar); and the blade's two
+# after them.
+const _UPPER_ZONE_OFFSETS: Array[int] = [0, 1, 2, 3, 6, 0]
 const _BLADE_ZONE_OFFSETS: Array[int] = [4, 5]
 # The binds past the leg bones' own (SkaterBodyMesh.shared_skin): per side, the
 # FOOT bone reading the skate upper from the SKATE bone's frame.

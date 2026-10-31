@@ -164,7 +164,8 @@ func _build_skate(holder: Node3D, model: int) -> void:
 	for zone: Array in [[SkateUpperMesh.Surface.COLLAR, GearModelRegistry.SKATE_COLLAR],
 			[SkateUpperMesh.Surface.STRIPE, GearModelRegistry.SKATE_STRIPE],
 			[SkateUpperMesh.Surface.QUARTER, GearModelRegistry.SKATE_QUARTER],
-			[SkateUpperMesh.Surface.TOE, GearModelRegistry.SKATE_TOE]]:
+			[SkateUpperMesh.Surface.TOE, GearModelRegistry.SKATE_TOE],
+			[SkateUpperMesh.Surface.TONGUE, GearModelRegistry.SKATE_COLLAR]]:
 		upper.set_surface_override_material(zone[0], _mat(_skate_zone(model, zone[1]), 0.42))
 	upper.set_surface_override_material(SkateUpperMesh.Surface.LACES, _mat(_LACE_COLOR, 0.9))
 	holder.add_child(upper)

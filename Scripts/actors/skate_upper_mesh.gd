@@ -16,7 +16,7 @@ extends RefCounted
 # upright along the foot. Lines that never cross inside the outline give loops
 # that never cross, so the loft cannot fold.
 
-enum Surface { COLLAR, STRIPE, QUARTER, TOE, LACES }
+enum Surface { COLLAR, STRIPE, QUARTER, TOE, LACES, TONGUE }
 
 # The FOOT bone's rest frame in the SKATE bone's (both hang from the shin in
 # Scenes/Skater.tscn): toe along the foot's −Y, its +Z down.
@@ -97,6 +97,27 @@ const _FOOT_FAR_EXPONENT: float = 3.5
 # the half-depth are pressed onto it.
 const _SOLE_FLAT: float = 0.15
 
+# The tendon guard: the rim's back point raised this far and leaned back by
+# _GUARD_LEAN of it, its neighbours by the falloff (cos of their angle off the
+# back, to this power).
+const _GUARD_RISE_M: float = 0.03
+const _GUARD_LEAN: float = 0.3
+const _GUARD_FALLOFF: float = 6.0
+
+# The tongue: a padded flap rising out of the front of the boot over the sock,
+# on the leg's axis. Stations bottom to top (y, inner radius, thickness, half
+# its arc round the leg in degrees); the bottom one is hidden in the boot. Its
+# top leans forward off the shin by _TONGUE_LEAN_M.
+const _TONGUE_STATIONS: Array[Vector4] = [
+	Vector4(0.050, 0.086, 0.008, 55.0),
+	Vector4(0.100, 0.087, 0.010, 52.0),
+	Vector4(0.130, 0.089, 0.011, 46.0),
+	Vector4(0.152, 0.091, 0.010, 38.0),
+	Vector4(0.163, 0.093, 0.007, 24.0),
+]
+const _TONGUE_LEAN_M: float = 0.006
+const _TONGUE_ARC_POINTS: int = 7
+
 # The padded rim: the top loop turned in over the lining, down this far.
 const _RIM_INSET: float = 0.86
 const _RIM_DROP_M: float = 0.008
@@ -144,6 +165,7 @@ static func loops() -> Array[PackedVector3Array]:
 
 static func _build() -> ArrayMesh:
 	var cut_loops: Array[PackedVector3Array] = loops()
+	cut_loops[0] = _with_tendon_guard(cut_loops[0])
 	var top: PackedVector3Array = cut_loops[0]
 	var top_center: Vector3 = _center(top)
 	var rim := PackedVector3Array()
@@ -163,6 +185,7 @@ static func _build() -> ArrayMesh:
 	var toe: PackedVector3Array = cut_loops[cut_loops.size() - 1]
 	_cap(tools[Surface.TOE], toe, _center(toe), false)
 	_add_laces(tools[Surface.LACES], cut_loops)
+	_add_tongue(tools[Surface.TONGUE])
 	var m := ArrayMesh.new()
 	for st: SurfaceTool in tools:
 		st.generate_normals()
@@ -170,6 +193,56 @@ static func _build() -> ArrayMesh:
 	m.surface_set_material(Surface.STRIPE, _material(_STRIPE_COLOR, 0.42))
 	m.surface_set_material(Surface.LACES, _material(_LACE_COLOR, 0.9))
 	return m
+
+
+static func _with_tendon_guard(top: PackedVector3Array) -> PackedVector3Array:
+	var out := top.duplicate()
+	for k: int in POINTS:
+		var off_back: float = TAU * float(k) / float(POINTS) - PI
+		var rise: float = _GUARD_RISE_M * pow(maxf(cos(off_back), 0.0), _GUARD_FALLOFF)
+		out[k] += Vector3(0.0, rise, rise * _GUARD_LEAN)
+	return out
+
+
+# The tongue's cross-section at each station is an arc band round the front of
+# the leg: its outer arc across, then its inner arc back. Swept station to
+# station, closed across each end.
+static func _add_tongue(st: SurfaceTool) -> void:
+	var sections: Array[PackedVector3Array] = []
+	var y0: float = _TONGUE_STATIONS[1].x
+	var y1: float = _TONGUE_STATIONS[_TONGUE_STATIONS.size() - 1].x
+	for station: Vector4 in _TONGUE_STATIONS:
+		var lean: float = -_TONGUE_LEAN_M * smoothstep(y0, y1, station.x)
+		var half: float = deg_to_rad(station.w)
+		var section := PackedVector3Array()
+		for side: int in 2:
+			var r: float = station.y + station.z if side == 0 else station.y
+			for j: int in _TONGUE_ARC_POINTS:
+				var t: float = float(j) / float(_TONGUE_ARC_POINTS - 1)
+				var phi: float = lerpf(-half, half, t if side == 0 else 1.0 - t)
+				section.append(Vector3(sin(phi) * r, station.x, -cos(phi) * r + lean))
+		sections.append(section)
+	for i: int in sections.size() - 1:
+		_band(st, sections[i + 1], sections[i])
+	_close_band(st, sections[0], true)
+	_close_band(st, sections[sections.size() - 1], false)
+
+
+# Closes an arc-band section (outer arc, then inner arc back) with the strip
+# across it, facing down the sweep at its start or up it at its end.
+static func _close_band(st: SurfaceTool, section: PackedVector3Array, start: bool) -> void:
+	var n: int = _TONGUE_ARC_POINTS
+	for j: int in n - 1:
+		var a: Vector3 = section[j]
+		var b: Vector3 = section[j + 1]
+		var c: Vector3 = section[2 * n - 2 - j]
+		var d: Vector3 = section[2 * n - 1 - j]
+		if start:
+			_tri(st, a, b, c)
+			_tri(st, a, c, d)
+		else:
+			_tri(st, a, c, b)
+			_tri(st, a, d, c)
 
 
 # A cut's line in the side view: a point on it and its direction from the near

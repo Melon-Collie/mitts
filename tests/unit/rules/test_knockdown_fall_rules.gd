@@ -211,6 +211,14 @@ func test_sprawl_scatters_after_impact_and_frees_the_top_leg() -> void:
 	assert_true(p.l_roll < -0.01, "the free left leg splays outward (−X)")
 
 
+func test_the_pinned_knee_folds_no_further_than_a_skate_lets_it() -> void:
+	for speed in [1.0, 3.0, 6.0]:
+		var p: KnockdownFallRules.SprawlPose = _sprawl(_settled_sprawl_time(speed), speed,
+				Vector2(1, 0))
+		assert_gte(p.r_knee, -KnockdownFallRules.PIN_FOLD_LIMIT_RAD - 0.0001,
+				"the pinned knee stops at the limit (speed %.0f)" % speed)
+
+
 func test_sprawl_side_follows_the_fall_lean() -> void:
 	var t: float = _settled_sprawl_time(3.0)
 	var right_free: KnockdownFallRules.SprawlPose = _sprawl(t, 3.0, Vector2(-1, 0))

@@ -146,6 +146,9 @@ class SprawlPose:
 const _SCATTER_FLOOR: float = 0.35  # even the softest fall scatters this fraction
 const _FREE_EXTEND: float = 0.75    # how far out of the buckle the free leg straightens
 const _PIN_FOLD: float = 0.3        # extra knee fold the pinned leg takes
+# How far the pinned knee folds at most (130°): the skate's cuff meets the back
+# of the thigh there, and past it the boot is drawn into the seat it lies under.
+const PIN_FOLD_LIMIT_RAD: float = 2.27
 const _PIN_SPLAY: float = 0.35      # pinned-leg outward roll, as a fraction of the free splay
 
 
@@ -184,7 +187,8 @@ static func sprawl_into(out: SprawlPose, elapsed: float, entry_speed: float,
 	var scatter: float = (_SCATTER_FLOOR + (1.0 - _SCATTER_FLOOR) * omega_t) * w * scatter_scale
 	var free_pitch: float = buckle.x * (1.0 - _FREE_EXTEND * scatter)
 	var free_knee: float = buckle.y * (1.0 - _FREE_EXTEND * scatter)
-	var pin_knee: float = buckle.y * (1.0 + _PIN_FOLD * scatter)
+	var pin_knee: float = maxf(buckle.y * (1.0 + _PIN_FOLD * scatter),
+			minf(buckle.y, -PIN_FOLD_LIMIT_RAD))
 	var splay: float = cfg.sprawl_splay * scatter
 	if fall_dir.x > 0.0:
 		out.l_pitch = free_pitch
