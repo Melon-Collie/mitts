@@ -463,7 +463,14 @@ across the ice in the facing's frame (the chest's pitches with a skating lean,
 and reads a cursor at his skates as one well out). Never lay the floor from the
 shoulder, where `TopHandIK`'s own inner bound (`hand_y_max`) measures: the
 bearing from a shoulder to a cursor near the body swings with every turn of it,
-and the puck swings round with it. An empty stick keeps the tight range;
+and the puck swings round with it. Skating, the floor moves out with the
+chest's fold over the stride (`carry_reach_fold_m`, `carry_reach_floor`): the
+fold brings the shoulder down to the hands, and held as close as standing the
+top hand rises level with it, the elbow hangs below the fist and the shaft
+leaves it past the little finger — a dagger, not a sword. Never answer that
+with a lower hand ceiling on the carrier's target: a ceiling lands the target
+past the cursor along the shoulder's aim, the shoulder twists toward the blade,
+and the puck creeps on its own for seconds. An empty stick keeps the tight range;
 reaching for a loose puck at its skates it goes one-handed and nothing crosses
 the body. `test_carry_blade_rests_on_puck.gd` and `test_carry_posture_rules.gd`.
 

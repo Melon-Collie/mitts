@@ -707,17 +707,25 @@ func _board_reach_limit(target_blade_xz: Vector2, shoulder_world: Vector3) -> fl
 					origin, unit, _controller.blade_height,
 					_controller.net_blade_half_thickness))
 
-# A carrier's cursor (on the ice) no closer in than carry_reach_min_m, measured
+# A carrier's cursor (on the ice) no closer in than carry_reach_floor, measured
 # across the ice in the facing's frame: the chest's pitches with a lean, and
 # reads a cursor at his skates as one well out.
 func _held_out(cursor_world: Vector3) -> Vector3:
 	var facing: Transform3D = _skater.global_transform
 	var local: Vector3 = facing.affine_inverse() * cursor_world
 	var held: Vector2 = CarryPostureRules.held_out(Vector2(local.x, local.z),
-			_controller.carry_reach_min_m)
+			carry_reach_floor())
 	var world: Vector3 = facing * Vector3(held.x, local.y, held.y)
 	world.y = 0.0
 	return world
+
+
+# How close in a carried puck comes (m off his centre), from his skating fold:
+# tick state on every peer, so the floor needs no wire field.
+func carry_reach_floor() -> float:
+	var folded: float = clampf(-_skater.trunk_fold()
+			/ deg_to_rad(_controller.velocity_lean_forward_max_deg), 0.0, 1.0)
+	return _controller.carry_reach_min_m + _controller.carry_reach_fold_m * folded
 
 
 # The solve places the Blade marker, the heel, but the blade plays the puck at

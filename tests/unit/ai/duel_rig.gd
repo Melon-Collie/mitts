@@ -188,6 +188,8 @@ func _carry_factor(arm: Arm, pos: Vector3, body: Basis, side: float) -> float:
 func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vector3,
 		carrying: bool, purpose: float, side: float, carry_factor: float) -> Vector3:
 	var mouse := Vector3(cursor.x, 0.0, cursor.z)
+	# SkaterIKCoordinator._held_out, the skating fold's share left out with the
+	# skating lean.
 	if carrying:
 		var rel: Vector3 = body.inverse() * (mouse - pos)
 		var held: Vector2 = CarryPostureRules.held_out(Vector2(rel.x, rel.z), reach_min)

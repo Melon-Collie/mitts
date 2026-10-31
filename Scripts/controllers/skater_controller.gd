@@ -458,6 +458,11 @@ var carry_fold_deg: float = 22.0
 # .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
 # into his armpit and the bottom arm reaches it only through his belly.
 var carry_reach_min_m: float = 0.8
+# And this much further out with his chest folded over his skating by
+# velocity_lean_forward_max_deg: the fold brings his shoulder down to the
+# hands, and held as close as standing, the top hand rises level with it, the
+# elbow hangs below the fist and the shaft leaves it past the little finger.
+var carry_reach_fold_m: float = 0.15
 var lower_body_pitch_follow: float = 0.35
 
 # ── Lower Body Lag Tuning ─────────────────────────────────────────────────────
@@ -1357,6 +1362,7 @@ var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
 var _base_carry_reach_min_m:            float = 0.0
+var _base_carry_reach_fold_m:           float = 0.0
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1528,6 +1534,7 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
 	carry_reach_min_m = _base_carry_reach_min_m * m_height
+	carry_reach_fold_m = _base_carry_reach_fold_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1611,6 +1618,7 @@ func _capture_attribute_bases() -> void:
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
 	_base_carry_reach_min_m            = carry_reach_min_m
+	_base_carry_reach_fold_m           = carry_reach_fold_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m

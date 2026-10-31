@@ -136,3 +136,19 @@ func test_pulled_in_close_the_toe_holds_it() -> void:
 	_pull_in(close, FOREHAND, 0.4)
 	assert_between(_rest(flat.skater).y, 0.4, 0.65, "out at the rim, mid-blade on it")
 	assert_gt(_rest(close.skater).y, 0.7, "in tight the heel is up, and the toe on the puck")
+
+
+func test_folded_over_his_skating_the_floor_moves_out() -> void:
+	var c: SkaterController = _make_carrier()
+	var full: float = deg_to_rad(c.velocity_lean_forward_max_deg)
+	c.skater.set_upper_body_lean(0.0, 0.0, 0.0)
+	assert_almost_eq(c._ik.carry_reach_floor(), c.carry_reach_min_m, 0.0001, "upright")
+	c.skater.set_upper_body_lean(-full * 0.5, 0.0, -full * 0.5)
+	assert_almost_eq(c._ik.carry_reach_floor(), c.carry_reach_min_m + c.carry_reach_fold_m * 0.5,
+			0.0001, "half folded")
+	c.skater.set_upper_body_lean(-full, 0.0, -full * 1.5)
+	assert_almost_eq(c._ik.carry_reach_floor(), c.carry_reach_min_m + c.carry_reach_fold_m,
+			0.0001, "and no further past the full fold")
+	c.skater.set_upper_body_lean(0.1, 0.0, 0.1)
+	assert_almost_eq(c._ik.carry_reach_floor(), c.carry_reach_min_m, 0.0001,
+			"sitting back takes none off")
