@@ -1,7 +1,7 @@
 # Arm anatomy — every stick pose a body can hold, and the reach that follows
 
-Status: PROPOSED. Not started. Treat it as the agreed design once approved; ask
-before deviating from it.
+Status: APPROVED. Phase 1 (the model and its instruments) built; its record is
+§12. Treat it as the agreed design; ask before deviating from it.
 
 One-line summary: **one anatomical model of the trunk, both arms and the grip
 decides whether a stick pose is possible and how it is held; hockey technique
@@ -240,3 +240,59 @@ Each phase is its own branch and PR.
   or does the solve make it redundant?
 - How rich does the envelope need to be — is a per-angle table enough, or does
   the reach depend on the fold strongly enough to need a second axis?
+
+## 12. Phase 1 record
+
+### What was built
+
+- **The model** (`Scripts/domain/rules/`): `ArmAnatomy` reads one arm's joint
+  angles off where its joints are and holds them to §3.3's ranges, measures it
+  against the jersey (`TorsoSection`, the section `SkaterMeshBuilder` already
+  drew it from), and solves the arm's own freedoms, the elbow round its circle
+  and the fist round the shaft. `ArmAnatomySearch` solves a whole pose for a
+  blade on the ice: the trunk's twist, the stick standing from the blade, its
+  face's tilt, the bottom hand's place down it. `ArmAnatomyBody` holds the
+  numbers, read off a built skater by `SkaterAnatomyCapture`, which also reads
+  the trunk as the skater holds it now.
+- **Tests**: `test_arm_anatomy.gd` (every motion on a known pose, a left arm as
+  the right one's mirror); `test_skater_anatomy_capture.gd` (the model's trunk
+  puts the shoulders and the jersey where the rig draws them, within 5 mm,
+  standing and skating; the search holds a carry and names the arms' reach
+  past one).
+- **Instruments**: `tests/instruments/actors/test_arm_anatomy_map.gd` (the map,
+  to `.preview/arm_anatomy.md`) and `test_facing_travel_gap.gd` (§11's open
+  question).
+
+### Decisions taken
+
+With the user:
+
+- **The grip.** The top hand's grip is fixed to the shaft; the shaft turns
+  about its own length, which opens and closes the blade's face, within
+  `ArmAnatomySearch.FACE_TILT_MAX` (40°, provisional) of square. The bottom
+  hand's cradling grip turns round the shaft freely. Square is the roll a
+  relaxed top fist takes at a reference forehand carry
+  (`SkaterAnatomyCapture.SQUARE_*`).
+- **The lie is free.** Anatomy puts the top hand at any height a body allows;
+  the map reports the lie each pose implies, and a lie window is phase 2's.
+
+In building:
+
+- **The jersey check** samples the elbow, the forearm 40% of the way to the
+  hand and the upper arm three quarters of the way down
+  (`ArmAnatomy.UPPER_ARM_SAMPLE`): the shoulder joints sit inside the jersey's
+  ring by ~1 cm, its top half rides under the shoulder pad, and measured at
+  its middle the upper arm of an arm hanging at the side read as in the chest.
+  Each point keeps the drawn sleeve's radius less its 3 cm of contact out. The
+  fist and the shaft are measured too; the pelvis and legs are not.
+- **The fist's roll** is searched from the roll that lays the hand's long axis
+  along the forearm, scored on the full cost: the wrist's deviation (20°/30°)
+  is the arm's narrowest range and the forearm's twist (80°/85°) one of its
+  widest, so the roll that turns the hand least overall lands in impossible
+  wrists.
+- **The reach is the drawn arm's**: the girdle's give and the working
+  extension through `TwoBoneIK.reach_root`, as `SkaterArmRig.arm_root` has
+  them.
+- **Comfort**: each angle's squared share of its range off rest (the elbow's
+  rest 80°, the rest 0), the trunk's twist the same; violations weigh 100 per
+  radian, a metre of depth or reach as 5 radians.
