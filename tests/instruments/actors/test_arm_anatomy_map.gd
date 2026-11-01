@@ -1,13 +1,14 @@
 extends GutTest
 
-# Phase 1 of docs/arm-anatomy-plan.md: where on the ice a body can hold a carried
-# blade (ArmAnatomySearch), against where today's gameplay puts it and how
-# today's drawn arms hold it. Per build and trunk state, the cursor is held on a
+# docs/arm-anatomy-plan.md phases 1 and 2: where on the ice a body can hold a
+# carried blade as players hold one (ArmAnatomySearch with ArmTechnique),
+# against where today's gameplay puts it and how today's drawn arms hold it. Per build and trunk state, the cursor is held on a
 # polar grid round the carrier through the real controller, and each cell reads:
 #
 #   today   the arms the rig draws, re-solved with only their own freedoms (the
 #           elbow round its circle, the fist round the shaft): can a body hold
-#           the hands where gameplay put them, and if not, what stops it;
+#           the hands where gameplay put them, and if not, what stops it; and
+#           the drawn stick against technique's rules;
 #   any     the whole search at the blade gameplay landed: does any pose hold it;
 #   target  where gameplay did not reach the cursor, the search there.
 #
@@ -27,6 +28,15 @@ const REACHED_M: float = 0.1
 const SKATE_SPEED_STICK: float = 1.0
 const OUT_PATH: String = "res://.preview/arm_anatomy.md"
 
+const TECHNIQUE_MARKS := {
+	ArmTechnique.Limit.TOP_HAND_LOW: "1",
+	ArmTechnique.Limit.TOP_HAND_HIGH: "2",
+	ArmTechnique.Limit.TOP_HAND_BEHIND: "3",
+	ArmTechnique.Limit.HANDS_APART: "4",
+	ArmTechnique.Limit.KNOB_IN_BODY: "5",
+	ArmTechnique.Limit.PUCK_UNDER_BODY: "6",
+	ArmTechnique.Limit.LIE: "7",
+}
 const LETTERS := {
 	ArmAnatomy.Limit.REACH: "R",
 	ArmAnatomy.Limit.SHOULDER_ELEVATION: "E",
@@ -61,6 +71,7 @@ class Cell:
 	var today_top := ArmAnatomy.ArmPose.new()
 	var today_bottom := ArmAnatomy.ArmPose.new()
 	var today_twist: float = 0.0
+	var today_technique := ArmTechnique.Verdict.new()
 	var any := ArmAnatomySearch.Pose.new()
 	var target := ArmAnatomySearch.Pose.new()
 	var reached: bool = true
@@ -84,6 +95,7 @@ func _map(build_name: String, attrs: PlayerAttributes, state: String) -> void:
 	var c: SkaterController = _make(attrs)
 	var body: ArmAnatomyBody = SkaterAnatomyCapture.capture(c)
 	var search := ArmAnatomySearch.new(body)
+	search.technique = _with_technique()
 	c.has_puck = true
 	c._sm.set_state(SkaterStateMachine.State.SKATING_WITH_PUCK)
 	var forehand: float = signf(body.bottom_shoulder.x)
@@ -198,19 +210,37 @@ func _today(skater: Skater, body: ArmAnatomyBody, cell: Cell) -> void:
 		st.roll_hi = body.top_roll_square + ArmAnatomySearch.FACE_TILT_MAX
 		ArmAnatomy.solve(st, cell.today_top if arm == 0 else cell.today_bottom,
 				ArmAnatomy.ArmPose.new())
+	# The drawn stick against how players hold one.
+	var to_hips: Transform3D = SkaterAnatomyCapture.hips_frame(skater).affine_inverse() \
+			* skel.global_transform
+	var hold := ArmTechnique.Hold.new()
+	hold.top_hand = to_hips * top_hand
+	hold.shaft = (to_hips.basis * shaft).normalized()
+	hold.spacing = (skel.get_bone_global_pose(SkaterMeshBuilder.UpperBone.BOTTOM_HAND).origin
+			- top_hand).dot(shaft)
+	hold.heel = to_hips * blade
+	hold.blade_dir = Vector3(hold.shaft.x, 0.0, hold.shaft.z).normalized()
+	var top_upper: Transform3D = skel.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM)
+	hold.top_shoulder = to_hips * (top_upper.origin + top_upper.basis.z * 0.5)
+	hold.torso = to_hips * torso
+	ArmTechnique.assess(body, hold, cell.today_technique)
 
 
 # One letter per cell, the cursor's grid (rows out from the body, columns round
 # it from the backhand to the forehand):
-#   .  today's arms hold it
+#   .  today's arms hold it, as players do
 #   a letter  today's arms cannot (upper case the top arm, lower the bottom),
 #      the range that stops them; a body can hold the blade some other way
+#   a digit  today's arms can, but not as players do: the technique rule
+#      (TECHNIQUE_MARKS) that today's stick breaks
 #   #  no pose holds the blade gameplay landed there
 #   +  gameplay stops short of the cursor, and a body could reach it
 #   (space)  gameplay stops short, and no body could
+# With technique on (the default), "a pose holds" means anatomy's and
+# technique's both; ARM_MAP_ANATOMY_ONLY=1 maps anatomy's alone.
 func _print_map(title: String, body: ArmAnatomyBody, cells: Array[Cell]) -> void:
 	var lines: PackedStringArray = []
-	lines.append("### %s" % title)
+	lines.append("### %s%s" % [title, "" if _with_technique() else " (anatomy only)"])
 	lines.append("stick %.2f m, shoulders %.2f m apart, arms %.2f + %.2f m" % [body.stick_length,
 			body.top_shoulder.distance_to(body.bottom_shoulder), body.upper_len, body.fore_len])
 	lines.append("```")
@@ -235,11 +265,13 @@ func _print_map(title: String, body: ArmAnatomyBody, cells: Array[Cell]) -> void
 		tally.append("`%s` %d" % [k, counts[k]])
 	lines.append("Cells: " + ", ".join(tally))
 	lines.append("")
-	lines.append("| cursor | landed off | today top | today bottom | twist | any pose | at target |")
-	lines.append("|---|---|---|---|---|---|---|")
+	lines.append("| cursor | landed off | today top | today bottom | today technique | twist "
+			+ "| any pose | at target |")
+	lines.append("|---|---|---|---|---|---|---|---|")
 	for cell: Cell in cells:
-		lines.append("| %+.0f° %.1f m | %.2f | %s | %s | %.0f° | %s | %s |" % [cell.angle, cell.radius,
-				cell.landed_off_target, _arm_text(cell.today_top), _arm_text(cell.today_bottom),
+		lines.append("| %+.0f° %.1f m | %.2f | %s | %s | %s | %.0f° | %s | %s |" % [cell.angle,
+				cell.radius, cell.landed_off_target, _arm_text(cell.today_top),
+				_arm_text(cell.today_bottom), _technique_text(cell.today_technique),
 				rad_to_deg(cell.today_twist), _pose_text(cell.any),
 				"" if cell.reached else _pose_text(cell.target)])
 	lines.append("")
@@ -257,6 +289,8 @@ func _mark(cell: Cell) -> String:
 		return LETTERS[cell.today_top.binding]
 	if not cell.today_bottom.feasible():
 		return String(LETTERS[cell.today_bottom.binding]).to_lower()
+	if not cell.today_technique.holds():
+		return TECHNIQUE_MARKS[cell.today_technique.binding]
 	return "."
 
 
@@ -274,9 +308,22 @@ func _pose_text(p: ArmAnatomySearch.Pose) -> String:
 		return "ok (tw %.0f° lie %.0f° tilt %.0f° grip %.2f)" % [rad_to_deg(p.twist),
 				rad_to_deg(p.lie), rad_to_deg(p.face_tilt), p.spacing]
 	var what: String = ArmAnatomySearch.Limit.keys()[p.trunk_binding] if p.binding_arm < 0 \
+			and p.trunk_binding != ArmAnatomySearch.Limit.TECHNIQUE \
+			else _technique_text(p.technique) if p.binding_arm < 0 \
 			else "%s %s" % ["top" if p.binding_arm == 0 else "bottom",
 			ArmAnatomy.Limit.keys()[p.arm_binding]]
 	return "%s +%.0f°" % [what, rad_to_deg(p.violation)]
+
+
+func _technique_text(v: ArmTechnique.Verdict) -> String:
+	if v.holds():
+		return "ok"
+	return "%s +%.2f" % [ArmTechnique.Limit.keys()[v.binding],
+			v.violation / ArmAnatomy.METRE_AS_RADIANS]
+
+
+func _with_technique() -> bool:
+	return OS.get_environment("ARM_MAP_ANATOMY_ONLY") != "1"
 
 
 func _write() -> void:

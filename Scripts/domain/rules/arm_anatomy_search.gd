@@ -31,8 +31,9 @@ const _AZIMUTHS: int = 16
 const _SPACING_STEPS: int = 2
 const _SPACING_STEP_M: float = 0.1
 const _REFINE_LEVELS: int = 3
+const _SEEDS: int = 3
 
-enum Limit { NONE, TRUNK_TWIST, SHAFT_IN_TORSO }
+enum Limit { NONE, TRUNK_TWIST, SHAFT_IN_TORSO, TECHNIQUE }
 
 
 # The trunk as the frame holds it: tipped toward the body's acceleration
@@ -61,10 +62,12 @@ class Pose:
 	var top := ArmAnatomy.ArmPose.new()
 	var bottom := ArmAnatomy.ArmPose.new()
 	var shaft_depth: float = 0.0
+	var technique := ArmTechnique.Verdict.new()
 	var cost: float = INF
 	var violation: float = INF
 	# Which arm (0 top, 1 bottom, -1 neither) breaks a range, and the range: the
-	# arm's ArmAnatomy.Limit, else this file's Limit.
+	# arm's ArmAnatomy.Limit, else this file's Limit, else technique's
+	# (`technique.binding`, when `trunk_binding` is TECHNIQUE).
 	var binding_arm: int = -1
 	var arm_binding: ArmAnatomy.Limit = ArmAnatomy.Limit.NONE
 	var trunk_binding: Limit = Limit.NONE
@@ -84,6 +87,8 @@ class Pose:
 		top.copy_from(o.top)
 		bottom.copy_from(o.bottom)
 		shaft_depth = o.shaft_depth
+		technique.violation = o.technique.violation
+		technique.binding = o.technique.binding
 		cost = o.cost
 		violation = o.violation
 		binding_arm = o.binding_arm
@@ -91,11 +96,16 @@ class Pose:
 		trunk_binding = o.trunk_binding
 
 
+# Hold every pose to how players carry too (ArmTechnique), not anatomy alone.
+var technique: bool = false
 var _body: ArmAnatomyBody
+var _hold := ArmTechnique.Hold.new()
 var _top := ArmAnatomy.ArmSetup.new()
 var _bottom := ArmAnatomy.ArmSetup.new()
 var _scratch := ArmAnatomy.ArmPose.new()
 var _trial := Pose.new()
+var _seeded := Pose.new()
+var _seeds: Array[Vector4] = []
 
 
 func _init(body: ArmAnatomyBody) -> void:
@@ -122,6 +132,7 @@ static func spine_basis(trunk: TrunkState, twist: float) -> Basis:
 func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	out.cost = INF
 	out.violation = INF
+	_seeds.clear()
 	var twist_step: float = 2.0 * TRUNK_TWIST_MAX / float(_TWISTS - 1)
 	for i: int in _TWISTS:
 		var twist: float = -TRUNK_TWIST_MAX + twist_step * float(i)
@@ -130,14 +141,36 @@ func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 				var heading: float = TAU * float(j) / float(_AZIMUTHS)
 				if not _in_reach(trunk, heel, twist, deg_to_rad(elevation), heading):
 					continue
-				_try(trunk, heel, twist, deg_to_rad(elevation), heading, -1.0, out)
+				var score: float = _try(trunk, heel, twist, deg_to_rad(elevation), heading,
+						-1.0, out)
+				_keep_seed(Vector4(score, twist, deg_to_rad(elevation), heading))
 	if out.cost == INF:
 		_fail_reach(trunk, heel, out)
 		return
-	var steps := Vector3(twist_step, deg_to_rad(10.0), TAU / float(_AZIMUTHS))
-	for _level: int in _REFINE_LEVELS:
-		steps *= 0.5
-		_refine(trunk, heel, steps, out)
+	# The best few of the grid each refined: the best one alone settles in its
+	# own basin, often not the deepest.
+	for seed_at: Vector4 in _seeds:
+		hold(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
+		var steps := Vector3(twist_step, deg_to_rad(10.0), TAU / float(_AZIMUTHS))
+		for _level: int in _REFINE_LEVELS:
+			steps *= 0.5
+			_refine(trunk, heel, steps, _seeded)
+		if _seeded.score() < out.score():
+			out.copy_from(_seeded)
+
+
+# Holds the grid's _SEEDS best stick poses, (score, twist, lie, heading).
+func _keep_seed(at: Vector4) -> void:
+	if _seeds.size() < _SEEDS:
+		_seeds.append(at)
+	else:
+		var worst: int = 0
+		for k: int in _seeds.size():
+			if _seeds[k].x > _seeds[worst].x:
+				worst = k
+		if at.x >= _seeds[worst].x:
+			return
+		_seeds[worst] = at
 
 
 # The pose of a given trunk twist and stick (out.twist, .lie, .heading,
@@ -169,13 +202,14 @@ func _in_reach(trunk: TrunkState, heel: Vector3, twist: float, lie: float,
 		return false
 	var shaft: Vector3 = _shaft(lie, heading)
 	var near: Vector3 = Geometry3D.get_closest_point_to_segment(spine * _body.bottom_shoulder,
-			hand + shaft * _body.spacing_min, hand + shaft * _body.spacing_max)
+			hand + shaft * _body.spacing_min, hand + shaft * _spacing_max())
 	return near.distance_to(spine * _body.bottom_shoulder) <= most
 
 
-# Scores one stick pose into `_trial` and keeps it in `best` if it beats it.
+# Scores one stick pose into `_trial`, keeps it in `best` if it beats it, and
+# returns its score.
 func _try(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: float,
-		spacing: float, best: Pose) -> void:
+		spacing: float, best: Pose) -> float:
 	var t: Pose = _trial
 	var spine := Transform3D(spine_basis(trunk, twist), Vector3.ZERO)
 	var shaft: Vector3 = _shaft(lie, heading)
@@ -197,9 +231,21 @@ func _try(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: f
 	t.face_tilt = t.top.roll - _body.top_roll_square
 	_hold_bottom(hand, shaft, spacing, t)
 	t.shaft_depth = _shaft_depth(_top.torso, hand, heel)
+	t.technique.violation = 0.0
+	t.technique.binding = ArmTechnique.Limit.NONE
+	if technique:
+		_hold.top_hand = hand
+		_hold.shaft = shaft
+		_hold.spacing = t.spacing
+		_hold.heel = heel
+		_hold.blade_dir = Vector3(shaft.x, 0.0, shaft.z).normalized()
+		_hold.top_shoulder = _top.shoulder
+		_hold.torso = _top.torso
+		ArmTechnique.assess(_body, _hold, t.technique)
 	_total(t)
 	if t.score() < best.score():
 		best.copy_from(t)
+	return t.score()
 
 
 # The bottom hand where it holds best down the shaft from `hand`, or at
@@ -212,12 +258,12 @@ func _hold_bottom(hand: Vector3, shaft: Vector3, spacing: float, t: Pose) -> voi
 		return
 	# From the place on the shaft nearest the bottom shoulder, either way.
 	var nearest: float = clampf((_bottom.shoulder - hand).dot(shaft), _body.spacing_min,
-			_body.spacing_max)
+			_spacing_max())
 	var best_score: float = INF
 	var best_spacing: float = nearest
 	for k: int in range(-_SPACING_STEPS, _SPACING_STEPS + 1):
 		var d: float = clampf(nearest + _SPACING_STEP_M * float(k), _body.spacing_min,
-				_body.spacing_max)
+				_spacing_max())
 		_bottom.hand = hand + shaft * d
 		ArmAnatomy.solve(_bottom, _scratch, t.bottom)
 		var score: float = _scratch.cost + ArmAnatomy.VIOLATION_WEIGHT * _scratch.violation
@@ -268,6 +314,11 @@ func _total(t: Pose) -> void:
 		t.binding_arm = -1
 		t.arm_binding = ArmAnatomy.Limit.NONE
 		t.trunk_binding = Limit.SHAFT_IN_TORSO
+	if t.technique.violation > t.violation:
+		t.violation = t.technique.violation
+		t.binding_arm = -1
+		t.arm_binding = ArmAnatomy.Limit.NONE
+		t.trunk_binding = Limit.TECHNIQUE
 
 
 # Coordinate descent about the best pose so far, each of the twist, the lie and
@@ -300,6 +351,15 @@ func _fail_reach(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 				nearest = d
 				at = Vector3(0.0, deg_to_rad(elevation), heading)
 	_try(trunk, heel, at.x, at.y, at.z, -1.0, out)
+
+
+# How far down the shaft the bottom hand may hold: as far as a body reaches, or
+# with technique, no wider apart than its rule.
+func _spacing_max() -> float:
+	if not technique:
+		return _body.spacing_max
+	return minf(_body.spacing_max, _body.top_shoulder.distance_to(_body.bottom_shoulder)
+			* ArmTechnique.HANDS_APART_SHOULDERS)
 
 
 static func _sq(x: float) -> float:

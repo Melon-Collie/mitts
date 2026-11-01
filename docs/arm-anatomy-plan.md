@@ -131,20 +131,29 @@ pivot. That shift lands in phase 3 and is reviewed there.
 
 ## 4. Hockey technique layer
 
-Limits players observe inside what anatomy allows. Proposed first set, each a
-rule with a test, each to be confirmed against footage before it binds:
+Limits players observe inside what anatomy allows (`ArmTechnique`, used by the
+search when its `technique` is on). Each is a rule with a test
+(`test_arm_technique.gd`) and a named, PROVISIONAL number, to be confirmed
+against footage before it binds gameplay:
 
 - **The top hand is the pivot and stays in front of the body** — between the
-  hips and the chest, not behind the hip or above the shoulder, outside a shot.
+  hips and the chest, not behind the hip or above the shoulder, outside a shot:
+  no lower than 0.15 m under the hip joints, no higher than 0.2 m under the top
+  shoulder, no more than 0.05 m behind the hips.
 - **Both hands on the stick while carrying** (already a rule:
-  `TopHandIK.two_hand_reach`, the backhand release).
+  `TopHandIK.two_hand_reach`, the backhand release; the model always holds both).
 - **The bottom hand slides, the top hand does not** — reach changes the bottom
-  hand's grip along the shaft first (already the model's freedom), within a
-  hands-apart band (a glove's width to roughly shoulder width).
+  hand's grip along the shaft (the model's freedom), within a hands-apart band
+  from a glove's width to the shoulders' width.
 - **The knob stays clear of the body** — a stick pulled in so tight the knob
-  digs into the stomach is not a carry.
-- **The blade stays ahead of the skates in a carry** — toe drags in tight are
-  allowed, the puck under the body is not.
+  digs into the stomach is not a carry: the butt (`SkaterStickRig
+  .SHAFT_BUTT_EXTEND_M` past the top hand) 2 cm clear of the jersey.
+- **The puck is not carried under the body** — toe drags in tight are allowed:
+  the blade's middle stays out of the skates' footprint (0.3 m either side,
+  0.25 m behind to 0.2 m ahead of the hips).
+- **The blade rides flat** — on its heel or its toe a little: the shaft within
+  15° of the stick's lie (`Skater.blade_lie_deg`, 42°). Phase 1 left the lie
+  free and reported it; this is that window.
 - **Shots keep their own technique** — the wrister's weight transfer, the
   slapper's wind-up height — but on top of anatomy, not instead of it (§5).
 
