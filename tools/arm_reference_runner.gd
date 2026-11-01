@@ -4,8 +4,9 @@ extends Node
 # (tests/harness/arm_reference_carries.gd): the jersey's rings as the trunk
 # holds them, both arms (green inside their ranges, red past one), the hands,
 # the stick from its knob to its blade, the reference's puck, from the front,
-# the top hand's side, above and three quarters. One sheet a carry, with what
-# binds printed. tools/arm_reference_capture.gd boots it; the hook is
+# the top hand's side, above and three quarters; under it the carry the model
+# finds for the same puck on its own (ArmAnatomySearch.solve). One sheet a
+# carry, with what binds printed. tools/arm_reference_capture.gd boots it; the hook is
 # .claude/hooks/render-references.sh.
 
 const Carries := preload("res://tests/harness/arm_reference_carries.gd")
@@ -29,6 +30,9 @@ var _view: int = 0
 var _wait: int = 0
 var _images: Array[Image] = []
 var _figure: Node3D = null
+# 0 the reference's carry, 1 the model's own.
+var _row: int = 0
+var _setup: Dictionary = {}
 var _camera: Camera3D
 var _body: ArmAnatomyBody
 var _trunk: ArmAnatomySearch.TrunkState
@@ -119,24 +123,45 @@ func _build_stage() -> void:
 
 func _next_carry() -> void:
 	if _figure != null:
-		_save_sheet()
 		_figure.queue_free()
 		_figure = null
+		if _row == 0:
+			_row = 1
+			_draw_own()
+			return
+		_save_sheet()
 	_index += 1
 	if _index >= _carries.size():
 		_write_report()
 		get_tree().quit()
 		return
 	var carry: Dictionary = _carries[_index]
-	var s: Dictionary = Carries.setup(carry, _body, _pivot_m, _blade_m)
+	_setup = Carries.setup(carry, _body, _pivot_m, _blade_m)
 	var pose := ArmAnatomySearch.Pose.new()
-	_search.hold(_trunk, s["heel"], s["twist"], s["lie"], s["heading"], s["spacing"], pose,
-			s["lean"], s["crouch"])
-	_figure = _draw_pose(pose, s)
+	_search.hold(_trunk, _setup["heel"], _setup["twist"], _setup["lie"], _setup["heading"],
+			_setup["spacing"], pose, _setup["lean"], _setup["crouch"])
+	_figure = _draw_pose(pose, _setup)
 	add_child(_figure)
-	_report(carry, pose, s)
+	_report(carry, pose, _setup)
+	_row = 0
 	_view = 0
 	_images.clear()
+
+
+# The model's own carry for the reference's puck: its hands, stance and spacing.
+func _draw_own() -> void:
+	var pose := ArmAnatomySearch.Pose.new()
+	_search.solve(_trunk, _setup["heel"], pose)
+	_figure = _draw_pose(pose, _setup)
+	add_child(_figure)
+	var top_side: float = signf(_body.top_shoulder.x)
+	var hand: Vector3 = pose.top.hand - Vector3.UP * pose.crouch
+	_lines.append("    the model's own: %s, top hand %.2f %.2f %.2f, twist %+.0f°, fold %.0f° lean %+.0f° (+forehand), crouch %.2f m, spacing %.2f m" % [
+			"held" if pose.feasible() else "not held", hand.x * top_side, hand.y + _pivot_m,
+			-hand.z, rad_to_deg(pose.twist) * top_side, rad_to_deg(pose.lean.x),
+			rad_to_deg(pose.lean.y) * -top_side, pose.crouch, pose.spacing])
+	print(_lines[_lines.size() - 1])
+	_view = 0
 
 
 # get_texture() returns the last PRESENTED frame, so a view is grabbed two
@@ -255,16 +280,16 @@ func _report(carry: Dictionary, pose: ArmAnatomySearch.Pose, s: Dictionary) -> v
 		else:
 			why = "%s +%.0f°" % [ArmAnatomySearch.Limit.keys()[pose.trunk_binding],
 					rad_to_deg(pose.violation)]
-	var off: float = Vector2(Vector3(s["heel"]).x - Vector3(s["puck"]).x,
-			Vector3(s["heel"]).z - Vector3(s["puck"]).z).length()
-	_lines.append("%s: %s (blade %.2f m off the reference's puck; lie %.0f°)" % [carry["name"], why,
-			off, rad_to_deg(float(s["lie"]))])
+	var off: float = Vector3(s["puck"]).distance_to(Carries.blade_middle(s, _body))
+	_lines.append("%s: %s (blade's middle %.2f m off the reference's puck; lie %.0f°)" % [
+			carry["name"], why, off, rad_to_deg(float(s["lie"]))])
 	for arm_name: String in ["top", "bottom"]:
 		var a: ArmAnatomy.ArmPose = pose.top if arm_name == "top" else pose.bottom
-		_lines.append("    %s: shoulder raised %.0f° (plane %.0f°) turned %+.0f°, elbow %.0f°, forearm %+.0f°, wrist %+.0f°/%+.0f°, in the jersey %.0f cm%s" % [
+		_lines.append("    %s: shoulder raised %.0f° (plane %.0f°) turned %+.0f°, elbow %.0f°, forearm %+.0f°, wrist %+.0f°/%+.0f° (grip slid %+.0f°), in the jersey %.0f cm%s" % [
 				arm_name, rad_to_deg(a.elevation), rad_to_deg(a.plane), rad_to_deg(a.axial),
 				rad_to_deg(a.elbow_flexion), rad_to_deg(a.pronation), rad_to_deg(a.wrist_flexion),
-				rad_to_deg(a.wrist_deviation), maxf(a.torso_depth, 0.0) * 100.0,
+				rad_to_deg(a.wrist_deviation), rad_to_deg(a.grip_slide),
+				maxf(a.torso_depth, 0.0) * 100.0,
 				"" if a.feasible() else "  <- " + ArmAnatomy.Limit.keys()[a.binding]])
 	print(_lines[_lines.size() - 3])
 	print(_lines[_lines.size() - 2])
@@ -272,12 +297,13 @@ func _report(carry: Dictionary, pose: ArmAnatomySearch.Pose, s: Dictionary) -> v
 
 
 func _save_sheet() -> void:
-	var sheet := Image.create(TILE.x * VIEWS.size(), TILE.y, false, Image.FORMAT_RGBA8)
+	var sheet := Image.create(TILE.x * VIEWS.size(), TILE.y * 2, false, Image.FORMAT_RGBA8)
 	for i: int in _images.size():
 		var img: Image = _images[i]
 		img.convert(Image.FORMAT_RGBA8)
 		img.resize(TILE.x, TILE.y)
-		sheet.blit_rect(img, Rect2i(Vector2i.ZERO, TILE), Vector2i(i * TILE.x, 0))
+		sheet.blit_rect(img, Rect2i(Vector2i.ZERO, TILE),
+				Vector2i((i % VIEWS.size()) * TILE.x, floori(float(i) / VIEWS.size()) * TILE.y))
 	var dir: String = ProjectSettings.globalize_path(_out_dir)
 	DirAccess.make_dir_recursive_absolute(dir)
 	var path: String = dir.path_join("%s.png" % String(_carries[_index]["name"]))

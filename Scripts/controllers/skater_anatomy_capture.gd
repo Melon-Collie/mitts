@@ -35,7 +35,7 @@ static func capture(controller: SkaterController) -> ArmAnatomyBody:
 	body.torso_sway = SkaterMeshBuilder.TORSO_REAR_SWAY
 	body.torso_xz_scale = SkaterMeshBuilder.TORSO_XZ_SCALE
 	body.sleeve_radius = SkaterMeshBuilder.SLEEVE_RADIUS_M
-	body.sleeve_contact = SkaterArmPoses.STEER_CONTACT_M
+	body.gear_press = SkaterArmPoses.STEER_CONTACT_M
 	body.hand_radius = skater.arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND)
 	body.stick_length = controller._ik.solve_stick_length()
 	body.spacing_min = controller._ik._glove_spacing()

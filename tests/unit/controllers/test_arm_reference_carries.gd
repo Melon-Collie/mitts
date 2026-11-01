@@ -16,6 +16,8 @@ const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const Carries := preload("res://tests/harness/arm_reference_carries.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
+# A reference's puck lies on its blade: its stick from the top hand lands there.
+const PUCK_ON_BLADE_M: float = 0.05
 
 
 class GameStateStub:
@@ -53,6 +55,10 @@ func test_the_model_holds_every_reference_carry() -> void:
 	for carry: Dictionary in Carries.CARRIES:
 		var s: Dictionary = Carries.setup(carry, body, SkaterAnatomyCapture.pivot_height(skater),
 				c.blade_height)
+		var lands: Vector2 = Carries.landing(s, body)
+		assert_lt(Vector3(s["puck"]).distance_to(Carries.blade_middle(s, body)), PUCK_ON_BLADE_M,
+				"%s: the puck where its stick lands, %.0f° %.2f m" % [carry["name"], lands.x,
+				lands.y])
 		search.hold(trunk, s["heel"], s["twist"], s["lie"], s["heading"], s["spacing"], pose,
 				s["lean"], s["crouch"])
 		var why: String = ArmAnatomySearch.Limit.keys()[pose.trunk_binding] \

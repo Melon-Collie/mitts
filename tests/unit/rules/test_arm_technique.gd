@@ -72,7 +72,7 @@ func test_each_rule_stops_the_hold_that_breaks_it() -> void:
 		ArmTechnique.Limit.HANDS_APART: func(h: ArmTechnique.Hold) -> void:
 			h.spacing = 0.6,
 		ArmTechnique.Limit.KNOB_IN_BODY: func(h: ArmTechnique.Hold) -> void:
-			h.top_hand = Vector3(0.05, 0.05, -0.25)
+			h.top_hand = Vector3(0.05, 0.05, -0.15)
 			_aim(h, h.blade_dir, body.blade_lie),
 		ArmTechnique.Limit.PUCK_UNDER_BODY: func(h: ArmTechnique.Hold) -> void:
 			h.heel = Vector3(0.05, -1.0, -0.1)

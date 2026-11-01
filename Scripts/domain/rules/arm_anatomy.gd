@@ -69,6 +69,9 @@ class ArmPose:
 	var hand := Vector3.ZERO
 	var swivel: float = 0.0
 	var roll: float = 0.0
+	# How far the shaft slid round in the palm off its drawn angle (+ toward
+	# square across it, ArmAnatomyBody.grip_min_angle).
+	var grip_slide: float = 0.0
 	# The shoulder: how far the arm is raised off hanging, toward which side
 	# (0 out to the side, +PI/2 ahead, PI across the body, -PI/2 behind), and its
 	# turn about its own length (+ internal).
@@ -101,6 +104,7 @@ class ArmPose:
 		hand = o.hand
 		swivel = o.swivel
 		roll = o.roll
+		grip_slide = o.grip_slide
 		elevation = o.elevation
 		plane = o.plane
 		axial = o.axial
@@ -324,6 +328,7 @@ static func measure(setup: ArmSetup, root: Vector3, elbow: Vector3, thumb: Vecto
 	out.root = root
 	out.elbow = elbow
 	out.hand = setup.hand
+	out.grip_slide = 0.0
 	out.reach_over = maxf(setup.hand.distance_to(root) - (setup.body.upper_len
 			+ setup.body.fore_len), 0.0)
 	var u: Vector3 = (elbow - root).normalized()
@@ -386,8 +391,16 @@ static func _forearm_rest(setup: ArmSetup, pose: ArmPose) -> Basis:
 	return Basis(thumb, w, thumb.cross(w))
 
 
+# The palm slides round the shaft between the diagonal grip and square, which
+# turns the hand about the palm's normal: the wrist's deviation, by exactly the
+# slide (the hand's YXZ Euler's last turn). So the slide takes the deviation
+# toward straight.
 static func _angles(setup: ArmSetup, out: ArmPose, hinge_world: Vector3, roll: float) -> void:
 	_angles_with(setup, out, hinge_world, _hand_frame(setup, roll))
+	out.grip_slide = clampf(-out.wrist_deviation,
+			minf(setup.body.grip_min_angle - setup.grip_angle, 0.0),
+			maxf(PI * 0.5 - setup.grip_angle, 0.0))
+	out.wrist_deviation += out.grip_slide
 
 
 # `hand` is the hand's frame in the side frame (grip_frame's layout).
@@ -419,12 +432,13 @@ static func _depths(setup: ArmSetup, out: ArmPose) -> void:
 	var body: ArmAnatomyBody = setup.body
 	var to_torso: Transform3D = setup.torso.affine_inverse()
 	var unit: float = setup.torso.basis.get_scale().x
-	var allowed: float = body.sleeve_radius - body.sleeve_contact
+	var allowed: float = body.sleeve_radius - body.gear_press
 	var elbow: float = _clearance(body, to_torso * out.elbow)
 	var upper: float = _clearance(body, to_torso * out.root.lerp(out.elbow, UPPER_ARM_SAMPLE))
 	var fore: float = _clearance(body, to_torso * out.elbow.lerp(out.hand, 0.4))
 	out.torso_depth = allowed - minf(elbow, minf(upper, fore)) * unit
-	out.hand_depth = body.hand_radius - _clearance(body, to_torso * out.hand) * unit
+	out.hand_depth = body.hand_radius - body.gear_press \
+			- _clearance(body, to_torso * out.hand) * unit
 
 
 static func _clearance(body: ArmAnatomyBody, p: Vector3) -> float:
