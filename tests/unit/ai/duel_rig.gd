@@ -40,6 +40,11 @@ var ub_offset: Vector3
 var blade_y: float
 var blade_half: float
 var reach_min: float
+# The derived carry (ArmEnvelope), its build's height and forehand side; null
+# keeps the closed-form carry.
+var envelope: ArmEnvelope = null
+var height_in: float = 73.0
+var forehand_sign: float = 1.0
 var carry_offset: float
 var marker_y: float
 var hand_rest_y: float
@@ -88,6 +93,9 @@ static func capture(skater: Skater, ctrl: SkaterController) -> RefCounted:
 	rig.blade_half = skater.blade_length * 0.5
 	rig.carry_offset = skater.carry_blade_offset
 	rig.reach_min = ctrl.carry_reach_min_m
+	rig.envelope = ik._envelope if ik.derived_carry_enabled else null
+	rig.height_in = ctrl.build_height_in
+	rig.forehand_sign = signf(skater.bottom_shoulder.position.x)
 	rig.marker_y = skater.shoulder.position.y
 	rig.hand_rest_y = ctrl.hand_rest_y
 	rig.hand_y_max = ctrl.hand_y_max
@@ -190,7 +198,8 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 	var mouse := Vector3(cursor.x, 0.0, cursor.z)
 	# SkaterIKCoordinator._held_out, the skating fold's share left out with the
 	# skating lean.
-	if carrying:
+	var derived: bool = carrying and envelope != null
+	if carrying and not derived:
 		var rel: Vector3 = body.inverse() * (mouse - pos)
 		var held: Vector2 = CarryPostureRules.held_out(Vector2(rel.x, rel.z), reach_min)
 		mouse = pos + body * Vector3(held.x, 0.0, held.y)
@@ -206,11 +215,25 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 		aim -= stick_dir * blade_half
 		if carrying:
 			aim += Vector2(-stick_dir.y, stick_dir.x) * carry_factor * carry_offset
+	if derived:
+		return _envelope_target(ub * Vector3(aim.x, 0.0, aim.y), body, pos)
 	var blade: Vector3 = _solve(arm, aim, side, INF, true, carrying, purpose, ub, body, pos).blade
 	if carrying:
 		blade = _solve(arm, Vector2(blade.x, blade.z), side, INF, true, carrying, purpose,
 				ub, body, pos).blade
 	var world: Vector3 = ub * blade
+	world.y = 0.0
+	return world
+
+
+# SkaterIKCoordinator._envelope_target, the skating fold's share left out with
+# the skating lean.
+func _envelope_target(heel: Vector3, body: Basis, pos: Vector3) -> Vector3:
+	var rel: Vector3 = body.inverse() * (heel - pos)
+	var held: Vector2 = envelope.held_blade(height_in, 0.0, atan2(rel.x * forehand_sign, -rel.z),
+			Vector2(rel.x, rel.z).length())
+	var world: Vector3 = Vector3(pos.x, 0.0, pos.z) + body * Vector3(sin(held.x) * held.y * forehand_sign,
+			0.0, -cos(held.x) * held.y)
 	world.y = 0.0
 	return world
 
