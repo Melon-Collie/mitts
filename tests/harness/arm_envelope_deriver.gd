@@ -14,6 +14,15 @@ const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SETTLE_TICKS: int = 120
+# How far below the carry's own stance a standing carrier may sink on his knees
+# (m): a hockey stance's sit past it.
+const CROUCH_MAX_M: float = 0.2
+# The carry's crouch floors (SkaterController.carry_crouch) the stance is
+# measured at for crouch_curve, and where along a carry 1.2 m ahead the fold is
+# full.
+const CURVE_FLOORS: Array[float] = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0]
+const FULL_FOLD_CURSOR := Vector2(0.0, -1.2)
+const TIGHT_CURSOR := Vector2(0.0, -0.4)
 
 
 class GameStateStub:
@@ -75,16 +84,42 @@ func cell(angle_deg: float, radius: float) -> Array:
 	_settle(Vector2(sin(a) * radius * _forehand, -cos(a) * radius))
 	var skater: Skater = controller.skater
 	_trunk = SkaterAnatomyCapture.trunk_state(skater, _body)
+	_trunk.crouch_max = 0.0 if _skating else CROUCH_MAX_M
 	_hips = SkaterAnatomyCapture.hips_frame(skater)
 	_root = skater.global_transform
 	var heel: Vector3 = _root * Vector3(sin(a) * radius * _forehand, 0.0, -cos(a) * radius)
 	heel.y = controller.blade_height
 	_search.solve(_trunk, _hips.affine_inverse() * heel, _pose)
 	if not _pose.feasible():
-		return [0, 0.0, 0.0, 0.0, 0.0]
-	var hand: Vector3 = _root.affine_inverse() * (_hips * _pose.top.hand)
+		return [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+	# The pose's frame sank with the hips; the hand back in the standing one.
+	var hand: Vector3 = _root.affine_inverse() * (_hips * (_pose.top.hand
+			- Vector3.UP * _pose.crouch))
 	return [1, snappedf(hand.x * _forehand, 0.0001), snappedf(hand.y, 0.0001),
-			snappedf(hand.z, 0.0001), snappedf(_pose.spacing, 0.0001)]
+			snappedf(hand.z, 0.0001), snappedf(_pose.spacing, 0.0001),
+			snappedf(_pose.lean.x, 0.0001), snappedf(_pose.lean.y * _forehand, 0.0001),
+			snappedf(_pose.crouch, 0.0001)]
+
+
+# How far a standing carry's stance sinks the hips (m) at each of CURVE_FLOORS,
+# the fold full: [[floor, drop], ...], for the carry to sink by a cell's crouch.
+func crouch_curve() -> Array:
+	var c: SkaterController = controller
+	var kept: float = c.carry_crouch
+	var rest: float = -1.0
+	var out: Array = []
+	for floor_value: float in CURVE_FLOORS:
+		c.carry_crouch = floor_value
+		# Pulled in tight and back out, so the fold moves and the carry's layer,
+		# quiet while its fold holds, draws the new floor.
+		_settle(TIGHT_CURSOR)
+		_settle(FULL_FOLD_CURSOR)
+		var pivot: float = SkaterAnatomyCapture.pivot_height(c.skater)
+		if rest < 0.0:
+			rest = pivot
+		out.append([floor_value, snappedf(rest - pivot, 0.0001)])
+	c.carry_crouch = kept
+	return out
 
 
 # The carry settled with the cursor `cursor` off him (facing frame, m).

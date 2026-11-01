@@ -5,14 +5,19 @@ extends RefCounted
 # it (docs/arm-anatomy-plan.md §6): per build height and trunk state, on a grid
 # of blade positions round the carrier, whether a body holds the blade as
 # players hold it, and where that pose has the top hand and the bottom hand's
-# grip down the shaft. Written by tests/instruments/actors/
+# grip down the shaft, and the stance it takes: the chest leaned on past the
+# carry's own and, standing, the hips sunk on the knees. Written by
+# tests/instruments/actors/
 # test_derive_arm_envelope.gd; read through SkaterArmEnvelope.
 #
 # The skater's root frame (his facing, -Z ahead, m off his origin), +X toward
 # his forehand: the caller mirrors for a left or right shot. Angles are off the
 # facing, + round the forehand.
 
-const VERSION: int = 1
+const VERSION: int = 2
+# Floats a cell: held, hand x, y, z, spacing, lean forward, lean toward the
+# forehand, crouch.
+const CELL_FLOATS: int = 8
 const PATH: String = "res://data/arm_envelope.json"
 const HEIGHTS: Array[int] = [67, 73, 80]
 const STATES: Array[String] = ["stand", "skate"]
@@ -25,15 +30,21 @@ const RADII_M: Array[float] = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4,
 # toward straight ahead (degrees a step).
 const _ANGLE_SEARCH_STEP_DEG: float = 5.0
 
-# A blade held: the top hand (root frame, +X forehand) and the bottom hand's
-# place down the shaft from it (m).
+# A blade held: the top hand (root frame, +X forehand), the bottom hand's
+# place down the shaft from it (m), the chest's lean past the carry's own
+# (radians: forward, toward the forehand) and the hips' sink past it (m).
 class Hold:
 	var hand := Vector3.ZERO
 	var spacing: float = 0.0
+	var lean := Vector2.ZERO
+	var crouch: float = 0.0
 
-# [height index][state index] -> PackedFloat32Array of 5 per cell: held, hand
-# x, y, z, spacing; angle-major.
+# [height index][state index] -> PackedFloat32Array of CELL_FLOATS per cell,
+# angle-major.
 var _cells: Array = []
+# [height index] -> PackedVector2Array of (carry crouch floor, hips' drop m),
+# the standing carry's stance at its full fold, the drop rising with the floor.
+var _crouch_curves: Array = []
 # _corners' answer, refilled each call (the carry reads it on the tick): four
 # floats a corner, up to eight corners.
 var _corner_buf := PackedFloat32Array()
@@ -47,6 +58,12 @@ static func from_dict(d: Dictionary) -> ArmEnvelope:
 	if builds.size() != HEIGHTS.size():
 		return null
 	for b: Dictionary in builds:
+		var curve := PackedVector2Array()
+		for pair: Array in b.get("crouch_curve", []):
+			curve.append(Vector2(float(pair[0]), float(pair[1])))
+		if curve.size() < 2:
+			return null
+		env._crouch_curves.append(curve)
 		var per_state: Array = []
 		for state: String in STATES:
 			var rows: Array = (b["states"] as Dictionary)[state]
@@ -54,7 +71,7 @@ static func from_dict(d: Dictionary) -> ArmEnvelope:
 			for row: Array in rows:
 				for v: Variant in row:
 					flat.append(float(v))
-			if flat.size() != ANGLES_DEG.size() * RADII_M.size() * 5:
+			if flat.size() != ANGLES_DEG.size() * RADII_M.size() * CELL_FLOATS:
 				return null
 			per_state.append(flat)
 		env._cells.append(per_state)
@@ -94,7 +111,7 @@ func band_at(height: float, skating: float, deg: float) -> Vector2:
 		var first: int = -1
 		var last: int = -1
 		for ri: int in RADII_M.size():
-			if cells[(ai * RADII_M.size() + ri) * 5] > 0.5:
+			if cells[(ai * RADII_M.size() + ri) * CELL_FLOATS] > 0.5:
 				if first < 0:
 					first = ri
 				last = ri
@@ -118,6 +135,8 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 	var rt: float = r - float(r0)
 	var hand := Vector3.ZERO
 	var spacing: float = 0.0
+	var lean := Vector2.ZERO
+	var crouch: float = 0.0
 	var weight: float = 0.0
 	for c: int in _corners(height, skating, deg):
 		var corner := Vector4(_corner_buf[c * 4], _corner_buf[c * 4 + 1], _corner_buf[c * 4 + 2],
@@ -126,17 +145,54 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 		var ai: int = int(corner.z)
 		for k: int in 2:
 			var w: float = corner.w * (rt if k == 1 else 1.0 - rt)
-			var i: int = (ai * RADII_M.size() + r0 + k) * 5
+			var i: int = (ai * RADII_M.size() + r0 + k) * CELL_FLOATS
 			if w <= 0.0 or cells[i] < 0.5:
 				continue
 			hand += Vector3(cells[i + 1], cells[i + 2], cells[i + 3]) * w
 			spacing += cells[i + 4] * w
+			lean += Vector2(cells[i + 5], cells[i + 6]) * w
+			crouch += cells[i + 7] * w
 			weight += w
 	if weight <= 0.0:
 		return false
 	out.hand = hand / weight
 	out.spacing = spacing / weight
+	out.lean = lean / weight
+	out.crouch = crouch / weight
 	return true
+
+
+# The carry crouch floor that sinks a standing carrier `height` inches tall
+# `drop` metres at his full fold (the curve read backward, its last segment
+# carried on past its end).
+func floor_for_drop(height: float, drop: float) -> float:
+	var h: Vector2 = _bracket_heights(height)
+	return lerpf(_curve_floor(_crouch_curves[int(h.x)], drop),
+			_curve_floor(_crouch_curves[int(h.x) + 1], drop), h.y)
+
+
+# How far the standing carry's stance sinks a carrier `height` inches tall at
+# the crouch floor `floor_value`.
+func drop_for_floor(height: float, floor_value: float) -> float:
+	var h: Vector2 = _bracket_heights(height)
+	return lerpf(_curve_drop(_crouch_curves[int(h.x)], floor_value),
+			_curve_drop(_crouch_curves[int(h.x) + 1], floor_value), h.y)
+
+
+static func _curve_floor(curve: PackedVector2Array, drop: float) -> float:
+	for i: int in curve.size() - 1:
+		if drop <= curve[i + 1].y or i == curve.size() - 2:
+			var span: float = maxf(curve[i + 1].y - curve[i].y, 0.00001)
+			return maxf(lerpf(curve[i].x, curve[i + 1].x, (drop - curve[i].y) / span), 0.0)
+	return curve[0].x
+
+
+static func _curve_drop(curve: PackedVector2Array, floor_value: float) -> float:
+	for i: int in curve.size() - 1:
+		if floor_value <= curve[i + 1].x or i == curve.size() - 2:
+			var span: float = maxf(curve[i + 1].x - curve[i].x, 0.00001)
+			return lerpf(curve[i].y, curve[i + 1].y, (floor_value - curve[i].x) / span)
+	return curve[0].y
 
 
 # The grid's corners round a query and their shares, into _corner_buf as

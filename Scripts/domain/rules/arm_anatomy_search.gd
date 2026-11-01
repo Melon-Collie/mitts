@@ -37,6 +37,13 @@ const _SEEDS: int = 3
 const _LEAN_SEEDS: Array[Vector2] = [Vector2(15.0, 0.0), Vector2(30.0, 0.0),
 		Vector2(15.0, 15.0), Vector2(15.0, -15.0)]
 const _LEAN_STEP: float = deg_to_rad(10.0)
+# The crouches each seed is tried at, as shares of the trunk's crouch_max, and
+# the refinement's first step in it (m).
+const _CROUCH_SEEDS: Array[float] = [0.5, 1.0]
+const _CROUCH_STEP_M: float = 0.06
+# A crouch's comfort cost runs from none to as much as a joint at its range's
+# end over this (m): a hockey stance's whole sit.
+const CROUCH_COMFORT_M: float = 0.3
 # How much further a hand reaches with the trunk leaned into it (m): the
 # reach test's allowance for the leans the search tries.
 const _LEAN_REACH_M: float = 0.3
@@ -51,6 +58,9 @@ enum Limit { NONE, TRUNK_TWIST, TRUNK_FLEXION, TRUNK_SIDE, SHAFT_IN_TORSO, TECHN
 # texture: the carry's fold over the stick), which carries the shoulders and
 # the jersey.
 class TrunkState:
+	# How far the search may sink the hips toward the ice on the knees (m): a
+	# standing carrier's stance, which the stride owns once he skates.
+	var crouch_max: float = 0.0
 	var tilt := Basis.IDENTITY
 	var fold: float = 0.0
 	var pitch: float = 0.0
@@ -63,8 +73,10 @@ class TrunkState:
 # bottom hand's place down it, both arms, and how it scores.
 class Pose:
 	var twist: float = 0.0
-	# The chest leaned on past the trunk's own (radians; forward, toward +X).
+	# The chest leaned on past the trunk's own (radians; forward, toward +X), and
+	# the hips sunk on the knees past the trunk's own (m).
 	var lean := Vector2.ZERO
+	var crouch: float = 0.0
 	var lie: float = 0.0
 	var heading: float = 0.0
 	var face_tilt: float = 0.0
@@ -91,6 +103,7 @@ class Pose:
 	func copy_from(o: Pose) -> void:
 		twist = o.twist
 		lean = o.lean
+		crouch = o.crouch
 		lie = o.lie
 		heading = o.heading
 		face_tilt = o.face_tilt
@@ -118,6 +131,7 @@ var _trial := Pose.new()
 var _seeded := Pose.new()
 # The lean _try poses the chest at, and the trunk it last scored.
 var _lean := Vector2.ZERO
+var _crouch: float = 0.0
 var _trunk_now := TrunkState.new()
 var _seeds: Array[Vector4] = []
 
@@ -151,6 +165,7 @@ func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	out.cost = INF
 	out.violation = INF
 	_lean = Vector2.ZERO
+	_crouch = 0.0
 	_seeds.clear()
 	var twist_step: float = 2.0 * TRUNK_TWIST_MAX / float(_TWISTS - 1)
 	for i: int in _TWISTS:
@@ -172,13 +187,18 @@ func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 		hold(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
 		for lean_deg: Vector2 in _LEAN_SEEDS:
 			_lean = lean_deg * (PI / 180.0)
-			_try(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
+			for crouch_share: float in [0.0] + _CROUCH_SEEDS if trunk.crouch_max > 0.0 else [0.0]:
+				_crouch = trunk.crouch_max * crouch_share
+				_try(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
+		_crouch = _seeded.crouch
 		var steps := Vector3(twist_step, deg_to_rad(10.0), TAU / float(_AZIMUTHS))
 		var lean_step: float = _LEAN_STEP
+		var crouch_step: float = _CROUCH_STEP_M
 		for _level: int in _REFINE_LEVELS:
 			steps *= 0.5
 			lean_step *= 0.5
-			_refine(trunk, heel, steps, lean_step, _seeded)
+			crouch_step *= 0.5
+			_refine(trunk, heel, steps, lean_step, crouch_step, _seeded)
 		if _seeded.score() < out.score():
 			out.copy_from(_seeded)
 
@@ -201,10 +221,11 @@ func _keep_seed(at: Vector4) -> void:
 # .spacing) with only the arms' own freedoms solved: how a body holds the pose
 # gameplay chose. `spacing` < 0 searches the bottom hand's place too.
 func hold(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: float,
-		spacing: float, out: Pose, lean: Vector2 = Vector2.ZERO) -> void:
+		spacing: float, out: Pose, lean: Vector2 = Vector2.ZERO, crouch: float = 0.0) -> void:
 	out.cost = INF
 	out.violation = INF
 	_lean = lean
+	_crouch = crouch
 	_try(trunk, heel, twist, lie, heading, spacing, out)
 
 
@@ -240,6 +261,9 @@ func _try(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: f
 	var spine := Transform3D(spine_basis(trunk, twist, _lean), Vector3.ZERO)
 	_trunk_now = trunk
 	t.lean = _lean
+	t.crouch = _crouch
+	# The hips sunk on the knees: the blade, on the ice, rises toward them.
+	heel.y += _crouch
 	var shaft: Vector3 = _shaft(lie, heading)
 	var hand: Vector3 = heel - shaft * _body.stick_length
 	t.twist = twist
@@ -318,7 +342,8 @@ func _shaft_depth(torso: Transform3D, hand: Vector3, heel: Vector3) -> float:
 
 func _total(t: Pose) -> void:
 	t.cost = t.top.cost + t.bottom.cost + _sq(t.twist / TRUNK_TWIST_MAX) \
-			+ _sq(t.lean.x / TRUNK_FLEXION_MAX) + _sq(t.lean.y / TRUNK_SIDE_MAX)
+			+ _sq(t.lean.x / TRUNK_FLEXION_MAX) + _sq(t.lean.y / TRUNK_SIDE_MAX) \
+			+ _sq(t.crouch / CROUCH_COMFORT_M)
 	t.violation = 0.0
 	t.binding_arm = -1
 	t.arm_binding = ArmAnatomy.Limit.NONE
@@ -369,22 +394,28 @@ func _total(t: Pose) -> void:
 # Coordinate descent about the best pose so far, each of the twist, the lie and
 # the heading stepped both ways by `steps`, and the lean's two by `lean_step`.
 func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, lean_step: float,
-		best: Pose) -> void:
+		crouch_step: float, best: Pose) -> void:
 	var twist: float = best.twist
 	var lie: float = best.lie
 	var heading: float = best.heading
 	var lean: Vector2 = best.lean
-	for axis: int in 5:
+	var crouch: float = best.crouch
+	for axis: int in 6:
+		if axis == 5 and trunk.crouch_max <= 0.0:
+			continue
 		for sgn: float in [-1.0, 1.0]:
 			var tw: float = twist + (steps.x * sgn if axis == 0 else 0.0)
 			var li: float = lie + (steps.y * sgn if axis == 1 else 0.0)
 			var he: float = heading + (steps.z * sgn if axis == 2 else 0.0)
 			_lean = lean + Vector2(lean_step * sgn if axis == 3 else 0.0,
 					lean_step * sgn if axis == 4 else 0.0)
-			if absf(tw) > TRUNK_TWIST_MAX or li <= 0.0 or li >= PI * 0.5 or _lean.x < 0.0:
+			_crouch = crouch + (crouch_step * sgn if axis == 5 else 0.0)
+			if absf(tw) > TRUNK_TWIST_MAX or li <= 0.0 or li >= PI * 0.5 or _lean.x < 0.0 \
+					or _crouch < 0.0 or _crouch > trunk.crouch_max:
 				continue
 			_try(trunk, heel, tw, li, he, -1.0, best)
 	_lean = best.lean
+	_crouch = best.crouch
 
 
 # No stick pose puts the top hand in reach: the nearest one, scored, so it
@@ -393,6 +424,7 @@ func _fail_reach(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	var nearest: float = INF
 	var at := Vector3.ZERO
 	_lean = Vector2.ZERO
+	_crouch = 0.0
 	for elevation: float in _ELEVATIONS:
 		for j: int in _AZIMUTHS:
 			var heading: float = TAU * float(j) / float(_AZIMUTHS)

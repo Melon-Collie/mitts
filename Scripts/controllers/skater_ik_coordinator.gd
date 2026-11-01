@@ -109,8 +109,12 @@ var derived_carry_enabled: bool = true
 var _envelope: ArmEnvelope = null
 var _envelope_hold := ArmEnvelope.Hold.new()
 var _envelope_hand_local := Vector3.ZERO
-# The bottom hand's place down the shaft the envelope last held a carry with (m).
+# The bottom hand's place down the shaft the envelope last held a carry with (m),
+# and the stance it took: the chest's lean past the carry's own (radians:
+# forward, toward the skater's +X) and the hips' sink past it (m).
 var _carry_spacing: float = -1.0
+var _carry_lean := Vector2.ZERO
+var _carry_sink: float = 0.0
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
 var _no_goalies := PackedFloat32Array()
@@ -774,7 +778,26 @@ func _envelope_hand(blade_local: Vector3) -> bool:
 			_envelope_hold.hand.x * fh, _envelope_hold.hand.y, _envelope_hold.hand.z))
 	_envelope_hand_local = blade_local + (hand - blade_local).normalized() * solve_stick_length()
 	_carry_spacing = _envelope_hold.spacing
+	_carry_lean = Vector2(_envelope_hold.lean.x, _envelope_hold.lean.y * fh)
+	_carry_sink = _envelope_hold.crouch
 	return true
+
+
+# The stance the derived carry holds its blade in (the chest's lean, forward and
+# toward the skater's +X; radians), zero off it. Tick state the gait draws.
+func carry_lean() -> Vector2:
+	return _carry_lean if _envelope_carry() else Vector2.ZERO
+
+
+# The carry's crouch floor (SkaterController.carry_crouch's units) once the
+# derived carry's sink is laid under `floor_value`, the stance it already has:
+# the floor that sinks the hips that much further.
+func carry_crouch_floor(floor_value: float) -> float:
+	if not _envelope_carry() or _carry_sink <= 0.0:
+		return floor_value
+	var height: float = _controller.build_height_in
+	return _envelope.floor_for_drop(height, _envelope.drop_for_floor(height, floor_value)
+			+ _carry_sink)
 
 
 # How close in a carried puck comes (m off his centre), from his skating fold:
