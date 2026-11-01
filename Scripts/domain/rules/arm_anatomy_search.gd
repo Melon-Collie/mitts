@@ -32,8 +32,16 @@ const _SPACING_STEPS: int = 2
 const _SPACING_STEP_M: float = 0.1
 const _REFINE_LEVELS: int = 3
 const _SEEDS: int = 3
+# The leans each seed is tried at before refining (forward, toward +X; deg):
+# reaching out, a body leans into it.
+const _LEAN_SEEDS: Array[Vector2] = [Vector2(15.0, 0.0), Vector2(30.0, 0.0),
+		Vector2(15.0, 15.0), Vector2(15.0, -15.0)]
+const _LEAN_STEP: float = deg_to_rad(10.0)
+# How much further a hand reaches with the trunk leaned into it (m): the
+# reach test's allowance for the leans the search tries.
+const _LEAN_REACH_M: float = 0.3
 
-enum Limit { NONE, TRUNK_TWIST, SHAFT_IN_TORSO, TECHNIQUE }
+enum Limit { NONE, TRUNK_TWIST, TRUNK_FLEXION, TRUNK_SIDE, SHAFT_IN_TORSO, TECHNIQUE }
 
 
 # The trunk as the frame holds it: tipped toward the body's acceleration
@@ -55,6 +63,8 @@ class TrunkState:
 # bottom hand's place down it, both arms, and how it scores.
 class Pose:
 	var twist: float = 0.0
+	# The chest leaned on past the trunk's own (radians; forward, toward +X).
+	var lean := Vector2.ZERO
 	var lie: float = 0.0
 	var heading: float = 0.0
 	var face_tilt: float = 0.0
@@ -80,6 +90,7 @@ class Pose:
 
 	func copy_from(o: Pose) -> void:
 		twist = o.twist
+		lean = o.lean
 		lie = o.lie
 		heading = o.heading
 		face_tilt = o.face_tilt
@@ -105,6 +116,9 @@ var _bottom := ArmAnatomy.ArmSetup.new()
 var _scratch := ArmAnatomy.ArmPose.new()
 var _trial := Pose.new()
 var _seeded := Pose.new()
+# The lean _try poses the chest at, and the trunk it last scored.
+var _lean := Vector2.ZERO
+var _trunk_now := TrunkState.new()
 var _seeds: Array[Vector4] = []
 
 
@@ -122,16 +136,21 @@ func _init(body: ArmAnatomyBody) -> void:
 
 # The chest's frame in the hips' at `twist`, as SkaterSpineRig and the trunk
 # texture build it: the tilt, the fold about the hips, then the twist, then the
-# lean and the side bend, then the chest's own turn.
-static func spine_basis(trunk: TrunkState, twist: float) -> Basis:
+# lean and the side bend, then the chest's own turn with `lean` (forward,
+# toward +X) laid on it, as the carry lays it on the trunk texture.
+static func spine_basis(trunk: TrunkState, twist: float, lean: Vector2 = Vector2.ZERO) -> Basis:
+	var chest: Basis = trunk.chest
+	if lean != Vector2.ZERO:
+		chest = Basis.from_euler(chest.get_euler() + Vector3(-lean.x, 0.0, -lean.y))
 	return trunk.tilt * Basis(Vector3.RIGHT, -trunk.fold) * Basis(Vector3.UP, twist) \
-			* Basis.from_euler(Vector3(-trunk.pitch, 0.0, -trunk.side)) * trunk.chest
+			* Basis.from_euler(Vector3(-trunk.pitch, 0.0, -trunk.side)) * chest
 
 
 # The best pose holding the blade's heel at `heel` (hips frame, on the ice).
 func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	out.cost = INF
 	out.violation = INF
+	_lean = Vector2.ZERO
 	_seeds.clear()
 	var twist_step: float = 2.0 * TRUNK_TWIST_MAX / float(_TWISTS - 1)
 	for i: int in _TWISTS:
@@ -151,10 +170,15 @@ func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	# own basin, often not the deepest.
 	for seed_at: Vector4 in _seeds:
 		hold(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
+		for lean_deg: Vector2 in _LEAN_SEEDS:
+			_lean = lean_deg * (PI / 180.0)
+			_try(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
 		var steps := Vector3(twist_step, deg_to_rad(10.0), TAU / float(_AZIMUTHS))
+		var lean_step: float = _LEAN_STEP
 		for _level: int in _REFINE_LEVELS:
 			steps *= 0.5
-			_refine(trunk, heel, steps, _seeded)
+			lean_step *= 0.5
+			_refine(trunk, heel, steps, lean_step, _seeded)
 		if _seeded.score() < out.score():
 			out.copy_from(_seeded)
 
@@ -177,9 +201,10 @@ func _keep_seed(at: Vector4) -> void:
 # .spacing) with only the arms' own freedoms solved: how a body holds the pose
 # gameplay chose. `spacing` < 0 searches the bottom hand's place too.
 func hold(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: float,
-		spacing: float, out: Pose) -> void:
+		spacing: float, out: Pose, lean: Vector2 = Vector2.ZERO) -> void:
 	out.cost = INF
 	out.violation = INF
+	_lean = lean
 	_try(trunk, heel, twist, lie, heading, spacing, out)
 
 
@@ -197,7 +222,8 @@ func _in_reach(trunk: TrunkState, heel: Vector3, twist: float, lie: float,
 		heading: float) -> bool:
 	var spine: Basis = spine_basis(trunk, twist)
 	var hand: Vector3 = top_hand(heel, lie, heading)
-	var most: float = _body.upper_len + _body.fore_len + _body.girdle_slack + 0.05
+	var most: float = _body.upper_len + _body.fore_len + _body.girdle_slack + 0.05 \
+			+ _LEAN_REACH_M
 	if hand.distance_to(spine * _body.top_shoulder) > most:
 		return false
 	var shaft: Vector3 = _shaft(lie, heading)
@@ -211,7 +237,9 @@ func _in_reach(trunk: TrunkState, heel: Vector3, twist: float, lie: float,
 func _try(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: float,
 		spacing: float, best: Pose) -> float:
 	var t: Pose = _trial
-	var spine := Transform3D(spine_basis(trunk, twist), Vector3.ZERO)
+	var spine := Transform3D(spine_basis(trunk, twist, _lean), Vector3.ZERO)
+	_trunk_now = trunk
+	t.lean = _lean
 	var shaft: Vector3 = _shaft(lie, heading)
 	var hand: Vector3 = heel - shaft * _body.stick_length
 	t.twist = twist
@@ -289,7 +317,8 @@ func _shaft_depth(torso: Transform3D, hand: Vector3, heel: Vector3) -> float:
 
 
 func _total(t: Pose) -> void:
-	t.cost = t.top.cost + t.bottom.cost + _sq(t.twist / TRUNK_TWIST_MAX)
+	t.cost = t.top.cost + t.bottom.cost + _sq(t.twist / TRUNK_TWIST_MAX) \
+			+ _sq(t.lean.x / TRUNK_FLEXION_MAX) + _sq(t.lean.y / TRUNK_SIDE_MAX)
 	t.violation = 0.0
 	t.binding_arm = -1
 	t.arm_binding = ArmAnatomy.Limit.NONE
@@ -308,6 +337,22 @@ func _total(t: Pose) -> void:
 		t.binding_arm = -1
 		t.arm_binding = ArmAnatomy.Limit.NONE
 		t.trunk_binding = Limit.TRUNK_TWIST
+	# The whole trunk's bend against its ranges: the fold, the lean and the
+	# chest's own turn (forward), the side bend and the chest's roll.
+	var chest: Vector3 = _trunk_now.chest.get_euler()
+	var flexion_over: float = _trunk_now.fold + _trunk_now.pitch - chest.x + t.lean.x \
+			- TRUNK_FLEXION_MAX
+	if flexion_over > t.violation:
+		t.violation = flexion_over
+		t.binding_arm = -1
+		t.arm_binding = ArmAnatomy.Limit.NONE
+		t.trunk_binding = Limit.TRUNK_FLEXION
+	var side_over: float = absf(_trunk_now.side - chest.z + t.lean.y) - TRUNK_SIDE_MAX
+	if side_over > t.violation:
+		t.violation = side_over
+		t.binding_arm = -1
+		t.arm_binding = ArmAnatomy.Limit.NONE
+		t.trunk_binding = Limit.TRUNK_SIDE
 	var shaft_over: float = t.shaft_depth * ArmAnatomy.METRE_AS_RADIANS
 	if shaft_over > t.violation:
 		t.violation = shaft_over
@@ -322,19 +367,24 @@ func _total(t: Pose) -> void:
 
 
 # Coordinate descent about the best pose so far, each of the twist, the lie and
-# the heading stepped both ways by `steps`.
-func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, best: Pose) -> void:
+# the heading stepped both ways by `steps`, and the lean's two by `lean_step`.
+func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, lean_step: float,
+		best: Pose) -> void:
 	var twist: float = best.twist
 	var lie: float = best.lie
 	var heading: float = best.heading
-	for axis: int in 3:
+	var lean: Vector2 = best.lean
+	for axis: int in 5:
 		for sgn: float in [-1.0, 1.0]:
 			var tw: float = twist + (steps.x * sgn if axis == 0 else 0.0)
 			var li: float = lie + (steps.y * sgn if axis == 1 else 0.0)
 			var he: float = heading + (steps.z * sgn if axis == 2 else 0.0)
-			if absf(tw) > TRUNK_TWIST_MAX or li <= 0.0 or li >= PI * 0.5:
+			_lean = lean + Vector2(lean_step * sgn if axis == 3 else 0.0,
+					lean_step * sgn if axis == 4 else 0.0)
+			if absf(tw) > TRUNK_TWIST_MAX or li <= 0.0 or li >= PI * 0.5 or _lean.x < 0.0:
 				continue
 			_try(trunk, heel, tw, li, he, -1.0, best)
+	_lean = best.lean
 
 
 # No stick pose puts the top hand in reach: the nearest one, scored, so it
@@ -342,6 +392,7 @@ func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, best: Pose) -> vo
 func _fail_reach(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	var nearest: float = INF
 	var at := Vector3.ZERO
+	_lean = Vector2.ZERO
 	for elevation: float in _ELEVATIONS:
 		for j: int in _AZIMUTHS:
 			var heading: float = TAU * float(j) / float(_AZIMUTHS)

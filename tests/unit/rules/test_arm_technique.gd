@@ -63,6 +63,12 @@ func test_each_rule_stops_the_hold_that_breaks_it() -> void:
 		ArmTechnique.Limit.TOP_HAND_BEHIND: func(h: ArmTechnique.Hold) -> void:
 			h.top_hand = Vector3(0.35, 0.0, 0.2)
 			_aim(h, h.blade_dir, body.blade_lie),
+		ArmTechnique.Limit.TOP_HAND_OUT: func(h: ArmTechnique.Hold) -> void:
+			h.top_hand.x = 0.5
+			_aim(h, h.blade_dir, body.blade_lie),
+		ArmTechnique.Limit.TOP_HAND_ACROSS: func(h: ArmTechnique.Hold) -> void:
+			h.top_hand.x = -0.3
+			_aim(h, h.blade_dir, body.blade_lie),
 		ArmTechnique.Limit.HANDS_APART: func(h: ArmTechnique.Hold) -> void:
 			h.spacing = 0.6,
 		ArmTechnique.Limit.KNOB_IN_BODY: func(h: ArmTechnique.Hold) -> void:

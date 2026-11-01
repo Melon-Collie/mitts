@@ -17,6 +17,11 @@ extends RefCounted
 const TOP_HAND_BELOW_HIP_M: float = 0.15
 const TOP_HAND_BELOW_SHOULDER_M: float = 0.2
 const TOP_HAND_BEHIND_HIP_M: float = 0.05
+# And held in front of the body across it: out on its own side no further than
+# the hip and a fist, across the body no further than this past the middle
+# (round the forehand it comes across to there).
+const TOP_HAND_OUT_M: float = 0.3
+const TOP_HAND_ACROSS_M: float = 0.15
 # The hands are held apart no wider than the shoulders.
 const HANDS_APART_SHOULDERS: float = 1.0
 # The knob stands this far clear of the jersey: a stick pulled in until the
@@ -37,6 +42,8 @@ enum Limit {
 	TOP_HAND_LOW,
 	TOP_HAND_HIGH,
 	TOP_HAND_BEHIND,
+	TOP_HAND_OUT,
+	TOP_HAND_ACROSS,
 	HANDS_APART,
 	KNOB_IN_BODY,
 	PUCK_UNDER_BODY,
@@ -75,6 +82,9 @@ static func assess(body: ArmAnatomyBody, hold: Hold, out: Verdict) -> void:
 	_over(out, Limit.TOP_HAND_LOW, -TOP_HAND_BELOW_HIP_M - hand.y)
 	_over(out, Limit.TOP_HAND_HIGH, hand.y - (hold.top_shoulder.y - TOP_HAND_BELOW_SHOULDER_M))
 	_over(out, Limit.TOP_HAND_BEHIND, hand.z - TOP_HAND_BEHIND_HIP_M)
+	var own_side: float = hand.x * signf(body.top_shoulder.x)
+	_over(out, Limit.TOP_HAND_OUT, own_side - TOP_HAND_OUT_M)
+	_over(out, Limit.TOP_HAND_ACROSS, -own_side - TOP_HAND_ACROSS_M)
 	var apart: float = body.top_shoulder.distance_to(body.bottom_shoulder) * HANDS_APART_SHOULDERS
 	_over(out, Limit.HANDS_APART, hold.spacing - apart)
 	var knob: Vector3 = hand - hold.shaft * body.knob_extend
