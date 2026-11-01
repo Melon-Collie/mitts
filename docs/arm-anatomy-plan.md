@@ -113,13 +113,13 @@ Clinical active range-of-motion norms (AAOS / AMA tables), adult:
 | Elbow | flexion | 0–145° |
 | Forearm | pronation / supination | 80° / 85° |
 | Wrist | flexion / extension | 80° / 70° |
-| | radial / ulnar deviation | 20° / 30° |
+| | radial / ulnar deviation | 20° / 35° (ulnar at the top of its published 30–35°) |
 | Trunk (thoracolumbar, pelvis fixed) | rotation each way | ~45° |
 | | flexion | ~80° (with the hips, more) |
 | | lateral flexion each way | ~35° |
 
 The model uses these as hard limits. Today's numbers that disagree are flagged
-for review, not changed blindly: the wrist's ulnar range here is 35°; and the
+for review, not changed blindly: the
 trunk's twist, which with the hips on the travel is all spine — the skeleton's
 limit (`SkaterSpineRig.TWIST_LIMIT`) is 55° and gameplay's cap
 (`upper_body_max_twist_deg`) 67°, against ~45°. The twist cap is one of the

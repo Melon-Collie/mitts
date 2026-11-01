@@ -89,7 +89,7 @@ func test_the_fingers_bent_toward_the_palm_is_flexion_and_toward_the_little_fing
 			Vector3.FORWARD.rotated(Vector3.RIGHT, -a), Vector3.UP.rotated(Vector3.RIGHT, -a))
 	assert_almost_eq(ulnar.wrist_deviation, a, TOL, "ulnar")
 	assert_almost_eq(ulnar.wrist_flexion, 0.0, TOL, "no flexion")
-	assert_eq(ulnar.binding, ArmAnatomy.Limit.NONE, "inside its 30°")
+	assert_eq(ulnar.binding, ArmAnatomy.Limit.NONE, "inside its range")
 
 
 func test_the_arm_raised_ahead_is_flexion_and_out_to_the_side_abduction() -> void:

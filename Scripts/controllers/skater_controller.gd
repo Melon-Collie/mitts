@@ -685,7 +685,7 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
-var carry_crouch: float = 1.0            # crouch floor under the full chest fold over the stick (× stance_hip_deg)
+var carry_crouch: float = 1.7            # crouch floor under the full chest fold over the stick (× stance_hip_deg), the loaded stance's
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
