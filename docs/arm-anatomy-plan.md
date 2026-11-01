@@ -372,3 +372,15 @@ whose blades a carry lands.
   rest): with the hands near the hips, the bottom arm only just reaches the
   shaft, at full stretch, in most of the best poses the search finds. A deeper
   crouch or fold is a phase 3 question, alongside the wrist's range.
+
+### After the wrist's range and the standing crouch
+
+With ulnar deviation at 35° (§3.3) and the standing carry's crouch floor at
+1.7 × `stance_hip_deg` (the hips ~7 cm under rest at the full fold, 1.6 cm
+before), 62 of the 98 landed blades are held as players hold them, against 49.
+The wrist no longer decides the region: what stops the other 36 is the top arm
+in the jersey (11), the arms' reach to the shaft (8), the bottom arm in the
+jersey (5) and the top hand under its hip band (5). Standing gains least —
+neutral standing goes from 13 cells no pose holds to 10 — because the carry at
+its 0.8 m floor folds the chest, and so crouches, only partway. Today's drawn
+arms still hold none; their knob is in the jersey in 54.
