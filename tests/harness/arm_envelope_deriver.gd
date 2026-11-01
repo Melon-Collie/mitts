@@ -1,9 +1,11 @@
 extends RefCounted
 
 # How the carry's envelope (ArmEnvelope) is derived from the model, one build
-# and trunk state at a time: a real skater of that height settled into a carry
-# standing or skating, his body and trunk read into the model, and any blade
-# position round him asked of ArmAnatomySearch with technique on. The
+# and trunk state at a time: a real skater of that height carrying, standing or
+# skating, his body read into the model, and each blade position round him asked
+# of ArmAnatomySearch with technique on, his trunk read as gameplay holds it
+# with the puck there (the fold, the crouch, the lean toward the hand that
+# buys a far reach its reach). The
 # derivation instrument (tests/instruments/actors/test_derive_arm_envelope.gd)
 # writes the table with it; test_arm_envelope_is_current.gd re-derives a few
 # cells with it to hold the table to the model.
@@ -11,10 +13,7 @@ extends RefCounted
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
-const SETTLE_TICKS: int = 150
-# Where the carry the trunk is read in holds its puck (facing frame, m, +x
-# forehand): ahead on the forehand, the fold full.
-const SETTLE_CURSOR := Vector2(0.3, -1.0)
+const SETTLE_TICKS: int = 120
 
 
 class GameStateStub:
@@ -33,6 +32,7 @@ var _trunk: ArmAnatomySearch.TrunkState
 var _hips: Transform3D
 var _root: Transform3D
 var _forehand: float = 1.0
+var _skating: bool = false
 var _search: ArmAnatomySearch
 var _pose := ArmAnatomySearch.Pose.new()
 
@@ -60,10 +60,9 @@ func _init(height: int, skating: bool, add: Callable) -> void:
 	skater._process(DT)
 	_body = SkaterAnatomyCapture.capture(controller)
 	_forehand = signf(_body.bottom_shoulder.x)
-	_settle(skating)
-	_trunk = SkaterAnatomyCapture.trunk_state(skater, _body)
-	_hips = SkaterAnatomyCapture.hips_frame(skater)
-	_root = skater.global_transform
+	_skating = skating
+	controller.has_puck = true
+	controller._sm.set_state(SkaterStateMachine.State.SKATING_WITH_PUCK)
 	_search = ArmAnatomySearch.new(_body)
 	_search.technique = true
 
@@ -73,6 +72,11 @@ func _init(height: int, skating: bool, add: Callable) -> void:
 # hand in the skater's root frame.
 func cell(angle_deg: float, radius: float) -> Array:
 	var a: float = deg_to_rad(angle_deg)
+	_settle(Vector2(sin(a) * radius * _forehand, -cos(a) * radius))
+	var skater: Skater = controller.skater
+	_trunk = SkaterAnatomyCapture.trunk_state(skater, _body)
+	_hips = SkaterAnatomyCapture.hips_frame(skater)
+	_root = skater.global_transform
 	var heel: Vector3 = _root * Vector3(sin(a) * radius * _forehand, 0.0, -cos(a) * radius)
 	heel.y = controller.blade_height
 	_search.solve(_trunk, _hips.affine_inverse() * heel, _pose)
@@ -83,12 +87,11 @@ func cell(angle_deg: float, radius: float) -> Array:
 			snappedf(hand.z, 0.0001), snappedf(_pose.spacing, 0.0001)]
 
 
-func _settle(skating: bool) -> void:
+# The carry settled with the cursor `cursor` off him (facing frame, m).
+func _settle(cursor: Vector2) -> void:
 	var c: SkaterController = controller
 	var skater: Skater = c.skater
-	c.has_puck = true
-	c._sm.set_state(SkaterStateMachine.State.SKATING_WITH_PUCK)
-	var cursor := Vector2(SETTLE_CURSOR.x * _forehand, SETTLE_CURSOR.y)
+	var skating: bool = _skating
 	for _i: int in SETTLE_TICKS:
 		skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 		if not skating:
