@@ -17,7 +17,8 @@ extends RefCounted
 # keeper races it too, for any of the path in front of his goal line he can push
 # and reach out to), ours the
 # possession of the spot on arrival (AIPossessionValue) or the feed it opens to
-# the support arriving with the dump (_support_from), theirs a turnover there
+# the support arriving with the dump, its reception raced (_support_from),
+# theirs a turnover there
 # (AICarrierField.turnover_cost + the 5v5 counter exposure). An iced puck (NHL,
 # released from our half, untouched past their goal line) whose dot race their
 # side wins is a faceoff at our end, a coin flip there.
@@ -227,7 +228,7 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void
 func _value(ctx: RoleContext, k: int) -> float:
 	var lost: float = 1.0 - _p[k]
 	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k]),
-			_support_from(ctx, _meet_ours[k], _retriever[k]) \
+			_support_from(ctx, _meet_ours[k], _retriever[k], _t_ours[k]) \
 					* AIActionScoring.delay_discount(_t_ours[k]))
 	return _p[k] * ours \
 			- _field.turnover_cost(_meet_theirs[k], lost) \
@@ -310,10 +311,12 @@ func _fill_support(ctx: RoleContext) -> void:
 
 
 # The best feed the retriever (`retriever`, an index into _our_pos) has from
-# `meet` to the support (_fill_support): its shot × the lane against the
-# defence then × the pass landing × the flight, as a future action
-# (AICarrierField.PASS_OPTION_DISCOUNT, the carry's pass option).
-func _support_from(ctx: RoleContext, meet: Vector3, retriever: int) -> float:
+# `meet`, played `meet_s` from now, to the support (_fill_support): its shot ×
+# the lane against the defence then × the pass landing × the flight × the race
+# for the reception, as a future action (AICarrierField.PASS_OPTION_DISCOUNT,
+# the carry's pass option). The reception's race is their first body from the
+# release against the feed arriving with our man there.
+func _support_from(ctx: RoleContext, meet: Vector3, retriever: int, meet_s: float) -> float:
 	var best: float = 0.0
 	for i: int in _our_then.size():
 		if i == retriever or _our_then_val[i] * AICarrierField.PASS_OPTION_DISCOUNT <= best:
@@ -323,11 +326,19 @@ func _support_from(ctx: RoleContext, meet: Vector3, retriever: int) -> float:
 			continue
 		var dist: float = meet.distance_to(to)
 		var speed: float = AIPuckLane.expected_pass_speed(meet, to)
+		var flight: float = dist / maxf(speed, 1.0)
+		var received_s: float = maxf(meet_s + flight,
+				AIArrival.time_to_arrive(_our_pos[i], to, _our_vel[i]))
 		var option: float = _our_then_val[i] \
-				* AIPuckLane.lane_clear(meet, to, _opp_then, speed, [], _field.opponent_caps) \
+				* AIPuckLane.lane_clear(meet, to, _opp_then, speed,
+						AIActionScoring.EMPTY_VEC3, _field.opponent_caps) \
 				* (1.0 - AIPuckLane.pass_miss_prob(dist, ctx.self_pass_aim_error_rad)) \
-				* AIActionScoring.delay_discount(dist / maxf(speed, 1.0)) \
+				* AIActionScoring.delay_discount(flight) \
 				* AICarrierField.PASS_OPTION_DISCOUNT
+		if option <= best:
+			continue
+		option *= AIActionScoring.arrival_race(to, received_s, _field.opponents_release,
+				_field.opponent_vels, true)
 		best = maxf(best, option)
 	return best
 

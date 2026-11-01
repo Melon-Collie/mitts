@@ -981,9 +981,13 @@ reaches back into what remains.
   unless their keeper decides it (he is no skate mis-timed seconds out), theirs
   the turnover there plus the 5v5 counter exposure. Ours is our possession of
   the spot on arrival or the feed it opens to our support dead-reckoned to the
-  race's horizon (each man's shot there × the lane against the defence then):
+  race's horizon (each man's shot there × the lane against the defence then ×
+  the race for its reception, as the pass search races a catch: their first
+  body from the release against the feed arriving with our man there):
   in the shot currency one man behind their goal line has no shot, so without
-  the support a won dump reads as worthless. So a dump is a 50/50 or better
+  the support a won dump reads as worthless. Never leave that reception
+  unraced: the dump's seconds of flight are when a lone D gets back to his
+  house, and a feed priced to a man alone at the post dumps away every 2-on-1. So a dump is a 50/50 or better
   exactly when our side gets there first, and it is worth what the spot is worth
   with the men arriving. Under NHL rules a release from our half that crosses
   their goal line untouched, without our side first to the dots by the clear
