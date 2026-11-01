@@ -71,8 +71,8 @@ func before_each() -> void:
 	# that freezes facing (SkaterPoseCoordinator.apply_facing).
 	_controller._pose.facing = Vector2(0.0, -1.0)
 	_skater.set_facing(Vector2(0.0, -1.0))
-	var boot: ArrayMesh = SkaterMeshBuilder.shared_boot_assembly()
-	_runner = boot.surface_get_arrays(SkaterMeshBuilder.BOOT_SURF_RUNNER)[Mesh.ARRAY_VERTEX] \
+	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
+	_runner = blade.surface_get_arrays(SkaterMeshBuilder.BLADE_PART_RUNNER)[Mesh.ARRAY_VERTEX] \
 			as PackedVector3Array
 
 

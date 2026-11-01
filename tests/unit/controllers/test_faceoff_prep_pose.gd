@@ -352,8 +352,8 @@ func _runner_height(c: SkaterController, left: bool) -> float:
 			+ (SkaterMeshBuilder.LegBone.FOOT_L if left else SkaterMeshBuilder.LegBone.FOOT_R)
 	var xf: Transform3D = c.skater.global_transform * c.skater.mesh_root.transform \
 			* rig.transform * rig.get_bone_global_pose(bone)
-	var runner := SkaterMeshBuilder.shared_boot_assembly().surface_get_arrays(
-			SkaterMeshBuilder.BOOT_SURF_RUNNER)[Mesh.ARRAY_VERTEX] as PackedVector3Array
+	var runner := SkaterMeshBuilder.shared_skate_blade().surface_get_arrays(
+			SkaterMeshBuilder.BLADE_PART_RUNNER)[Mesh.ARRAY_VERTEX] as PackedVector3Array
 	var lowest: float = INF
 	for v: Vector3 in runner:
 		lowest = minf(lowest, (xf * v).y)

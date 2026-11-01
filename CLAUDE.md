@@ -123,7 +123,8 @@ draws his moves (the T-push, the shuffle, the C-cuts, the drop, rise and recover
 pose to `.preview/body/` (`tools/body_preview_runner.gd`); `--pants` draws the
 pants alone, and `--audit` skins the body on the CPU per pose and counts the
 faces folded inside out, by paint zone — what shows as a hole; `--head` frames
-the helmet and `--waist` the belt, where a tuck goes in.
+the helmet, `--waist` the belt, where a tuck goes in, and `--skate` the near
+skate.
 
 **To see HAIR, render it.** `.claude/hooks/render-hair.sh [shots]` draws every
 hair style against every facial-hair style, one head each, from the front, side,

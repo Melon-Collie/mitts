@@ -152,6 +152,15 @@ static func option_button(parent: Container, on_pick: Callable) -> OptionButton:
 	return btn
 
 
+# An option button listing `keys`, translated, each item's id its index.
+static func option_list(parent: Container, keys: Array[StringName],
+		on_pick: Callable) -> OptionButton:
+	var btn: OptionButton = option_button(parent, on_pick)
+	for i: int in keys.size():
+		btn.add_item(TranslationServer.translate(keys[i]), i)
+	return btn
+
+
 # A slider with its value read out beside it; returns [slider, value label].
 static func slider(parent: Container, on_change: Callable) -> Array[Control]:
 	var line := HBoxContainer.new()

@@ -49,14 +49,6 @@ const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2]
 # over it, while the chest rings stay centered so the belly keeps its line.
 const _TORSO_REAR_SWAY: Array[float] = [
 	0.0, 0.0, 0.0, 0.0, 0.006, 0.012, 0.018, 0.020, 0.026, 0.032, 0.036]
-# The collar ENDS just below its node origin: the scene seats that origin at
-# the boot's heel-top line, so the cuff perches ON the boot with ~1 cm of
-# overlap seal instead of dropping past the heel as a column.
-const _SKATE_PROFILE: Array[Vector2] = [
-	Vector2(0.100, 0.090),   # boot collar
-	Vector2(0.020, 0.082),
-	Vector2(-0.010, 0.078),
-]
 
 # Chest reads wider than deep — lateral/depth scale on the torso's rings.
 const _TORSO_X_SCALE: float = 1.05
@@ -194,38 +186,7 @@ const KNOB_HEIGHT_M: float = 0.05
 const _KNOB_TOP_RADIUS: float = 0.035
 const _KNOB_BOTTOM_RADIUS: float = 0.03
 
-# Boot stations heel→toe in the Foot node's local frame. That node's scene
-# transform is rotated: local −Y is the toe direction, local +Z is DOWN, X is
-# lateral (see the FootL/R note in SkaterAppearanceCoordinator). Each station
-# is (y, half_width, top_z, sole_z) — top_z is negative (up), sole_z positive
-# (down). Envelope matches the prolate foot sphere it replaces (r 0.08, half
-# length 0.125).
-# Station the toe cap starts at — the boot sweep commits stations 0..N as the
-# quarter and N..last as the cap, so the two pieces share this ring and meet
-# with no gap. The front band is the whole cap, which is the proportion a real
-# toe cap covers.
-const _BOOT_TOE_STATION: int = 3
-const _BOOT_STATIONS: Array[Vector4] = [
-	# Heel top rises toward the collar like a real boot's quarter, meeting the
-	# collar's bottom so ankle and boot read as one piece from the side. The
-	# rearmost station runs the quarter back UNDER the collar's footprint (the
-	# cuff seats 0.10 heel-ward of this frame's origin, so its underside
-	# otherwise hangs bare behind the heel) — sole tucked well up so the
-	# stride's heel-kick arc can't drag it through the ice.
-	Vector4(0.155, 0.042, -0.062, 0.030),   # heel counter, under the cuff
-	Vector4(0.115, 0.052, -0.070, 0.045),   # heel
-	Vector4(0.045, 0.060, -0.072, 0.046),   # instep rise
-	Vector4(-0.045, 0.058, -0.048, 0.046),  # forefoot
-	Vector4(-0.115, 0.040, -0.012, 0.040),  # toe
-]
-# Skate blade — its own steel-colored child mesh under each Foot node (the
-# boot paints dark, so a fused same-color fin never read as a blade). Same
-# rotated frame as _BOOT_STATIONS: toe −Y, +Z down. The holder's two towers
-# drop from the sole and are bridged by a bottom rail, leaving the arch open
-# between them; the thin runner spans the length and bottoms out at the
-# replaced sphere's ice-contact depth (z = 0.080).
-#
-# A MID gray: the holder is a paintable zone, so a near-white runner under a
+# The runner's steel. A MID gray: the holder is a paintable zone, so a near-white runner under a
 # white holder would lose the skate's bottom edge entirely. Dark enough to
 # separate from GearModelRegistry.WHITE, bright enough to read against a black
 # boot. Public so the display figures (FigureKit) and the gear capture tool
@@ -244,33 +205,45 @@ const SKATE_LIFT_M: float = 0.04
 const BLADE_ICE_Z: float = 0.080 + SKATE_LIFT_M
 const RUNNER_TOE_Y: float = -0.088
 const RUNNER_HEEL_Y: float = 0.098
-# Skate accent stripe (see shared_skate_stripe): band height, its center on
-# the collar's local Y, and a radius just proud of the collar's sidewall at
-# that height (~0.085) so the band never z-fights the lathe under it.
-const SKATE_STRIPE_HEIGHT_M: float = 0.04
-const _SKATE_STRIPE_Y: float = 0.045
-const _SKATE_STRIPE_RADIUS: float = 0.092
-# Skate laces, drawn-on as geometry: thin rungs laid across the instep, each
-# (y, z) pair the rung's center on the boot's top line — z interpolated from
-# the _BOOT_STATIONS top_z at that y, so every rung seats on the surface it
-# crosses (ankle → forefoot). _LACE_COLOR is only the pre-uniform placeholder;
-# the gear style's lace pick repaints them (SkaterKitPaint).
-const _LACE_RUNGS: Array[Vector2] = [
-	Vector2(0.070, -0.0711),
-	Vector2(0.035, -0.0693),
-	Vector2(0.000, -0.0600),
-	Vector2(-0.035, -0.0507),
+# The steel's side profile, (y, z) in the same frame, round from its top at the
+# toe: the nose curving up ahead of the holder, the flat the blade stands on
+# from RUNNER_TOE_Y to RUNNER_HEEL_Y, and the tail rising behind the heel tower.
+# Both curves leave the ice at ~30°, so a blade pitched less than that still
+# touches it at the line's ends, where the contact solve stands it.
+const _RUNNER_PROFILE: Array[Vector2] = [
+	Vector2(-0.103, 0.090),
+	Vector2(-0.1055, 0.097),
+	Vector2(-0.1045, 0.104),
+	Vector2(-0.1005, 0.110),
+	Vector2(-0.094, 0.1165),
+	Vector2(RUNNER_TOE_Y, BLADE_ICE_Z),
+	Vector2(RUNNER_HEEL_Y, BLADE_ICE_Z),
+	Vector2(0.1025, 0.1175),
+	Vector2(0.1065, 0.1125),
+	Vector2(0.109, 0.106),
+	Vector2(0.1095, 0.090),
 ]
-const _LACE_HALF_W: float = 0.030
-const _LACE_HALF_T: float = 0.006   # rung thickness along the instep (local Y)
-# Rung depth is biased PROUD of the surface rather than centered on it: the
-# top line slopes ~0.46 across the heel→instep segment, so a surface-centered
-# box leaves barely 2 mm showing there. Sink keeps the underside buried so no
-# gap opens as the slope crosses the rung.
-const _LACE_PROUD: float = 0.008    # rise above the top surface
-const _LACE_SINK: float = 0.003     # burial below it
-const _LACE_COLOR := Color(0.88, 0.88, 0.86)
-
+const _RUNNER_HALF_W: float = 0.0035
+# The holder's side profiles, wound as _RUNNER_PROFILE is: the toe tower, its
+# front sweeping down toward the steel's nose; the heel tower, the two leaning
+# apart toward the rail; and the rail the
+# steel seats into, joining them under the window between, which is what a real
+# holder is recognised by. Their tops tuck up into the boot's sole
+# (test_skate_upper.gd holds the seat). Wide where it bolts to the boot,
+# narrowing to wrap the steel at the rail.
+const _HOLDER_TOE: Array[Vector2] = [
+	Vector2(-0.088, 0.042), Vector2(-0.098, 0.094), Vector2(-0.094, 0.100),
+	Vector2(-0.038, 0.100), Vector2(-0.020, 0.042),
+]
+const _HOLDER_HEEL: Array[Vector2] = [
+	Vector2(0.016, 0.042), Vector2(0.036, 0.100), Vector2(0.100, 0.100),
+	Vector2(0.106, 0.092), Vector2(0.100, 0.042),
+]
+const _HOLDER_RAIL: Array[Vector2] = [
+	Vector2(-0.094, 0.086), Vector2(-0.094, 0.100), Vector2(0.100, 0.100), Vector2(0.100, 0.086),
+]
+const _HOLDER_TOP_HALF_W: float = 0.011
+const _HOLDER_RAIL_HALF_W: float = 0.0055
 # Neck: skin tube from chin to collar, a child of the Helmet node like the
 # head so it rides the same head-bulk scaling and skeleton offsets. Stations
 # are helmet-local (helmet origin y 0.65, torso top 0.47): the top hides
@@ -343,11 +316,12 @@ const LEG_BONE_NODE: Array[String] = [
 	"LegR/ShinR", "LegR/ShinR/SockR", "LegR/ShinR/SkateR", "LegR/ShinR/FootR",
 ]
 
-# The legs' paint zones (zone = LegSurface). Not one per bone: the skate collar
-# carries its accent stripe, and the boot carries its toe cap, its blade holder,
-# its steel runner and its laces — each a piece a gear MODEL paints on its own
-# (GearModelRegistry); the runner stays steel by construction. The thigh, knee
-# and sock zones are the connected skin's (SkaterConnectedPants).
+# The legs' paint zones (zone = LegSurface). Not one per bone: the skate's one
+# upper (SkateUpperMesh) is painted in its collar, accent stripe, quarter (SHELL),
+# toe cap and laces, and the blade in its holder and steel runner — each a piece
+# a gear MODEL paints on its own (GearModelRegistry); the runner stays steel by
+# construction. The thigh, knee and sock zones are the connected skin's
+# (SkaterConnectedPants).
 enum LegSurface {
 	THIGH_L, KNEE_L, SOCK_L,
 	SKATE_L_COLLAR, SKATE_L_STRIPE,
@@ -361,22 +335,8 @@ const LEG_SURFACE_COUNT: int = 20
 
 # ── Merged assemblies ────────────────────────────────────────────────────────
 # A part that never moves relative to its parent is a SURFACE, not a node, even
-# when it needs its own material (the steel runner, the gear-coloured laces).
-# These hang under a foot the gait moves every frame, so a node would cost a
-# transform propagation and a global recompute, per skater, per frame.
-#
-const BOOT_SURF_SHELL: int = 0
-const BOOT_SURF_TOE: int = 1
-const BOOT_SURF_HOLDER: int = 2
-const BOOT_SURF_RUNNER: int = 3
-const BOOT_SURF_LACES: int = 4
-const SKATE_SURF_COLLAR: int = 0
-const SKATE_SURF_STRIPE: int = 1
-# Surfaces WITHIN a part mesh, for the three parts that split into pieces a
-# gear model paints separately (see _build_boot / _build_skate_blade /
-# shared_glove_fist).
-const BOOT_PART_QUARTER: int = 0
-const BOOT_PART_TOE: int = 1
+# when it needs its own material (the steel runner). Surfaces within a part
+# mesh, for the parts that split into pieces a gear model paints separately.
 const BLADE_PART_HOLDER: int = 0
 const BLADE_PART_RUNNER: int = 1
 const FIST_PART_BACK: int = 0
@@ -384,28 +344,6 @@ const FIST_PART_FINGERS: int = 1
 const FIST_PART_THUMB: int = 2
 const HELMET_SURF_SHELL: int = 0
 const HELMET_SURF_SKIN: int = 1
-
-
-static func shared_skate_assembly() -> ArrayMesh:
-	return _shared("skate_assembly", _build_skate_assembly)
-
-
-static func _build_skate_assembly() -> ArrayMesh:
-	var m := ArrayMesh.new()
-	_append_surface(m, _shared("skate", _build_skate))
-	# The stripe carried its offset and radius as node transform, so unlike the
-	# boot's parts it has to be baked. Safe because the collar's own scaling is
-	# axis-aligned and the stripe has no rotation — diagonal scales commute, so
-	# baking cannot shear it the way a rotated child would.
-	_append_surface(m, shared_skate_stripe(), Transform3D(
-			Basis.IDENTITY.scaled(Vector3(_SKATE_STRIPE_RADIUS, 1.0, _SKATE_STRIPE_RADIUS)),
-			Vector3(0.0, _SKATE_STRIPE_Y, 0.0)))
-	var stripe := StandardMaterial3D.new()
-	stripe.albedo_color = Color(0.08, 0.08, 0.08)
-	stripe.roughness = 0.42
-	BodyRim.apply(stripe)
-	m.surface_set_material(SKATE_SURF_STRIPE, stripe)
-	return m
 
 
 # The head ball and its face, centred on the origin, face toward −Z, white but
@@ -439,37 +377,6 @@ static func _build_helmet_assembly() -> ArrayMesh:
 	st.append_from(SkaterFaceMesh.untinted(_shared("neck", _build_neck)), 0, Transform3D.IDENTITY)
 	st.commit(m)
 	m.surface_set_material(HELMET_SURF_SKIN, _make_skin_mat())
-	return m
-
-
-static func shared_boot_assembly() -> ArrayMesh:
-	return _shared("boot_assembly", _build_boot_assembly)
-
-
-static func _build_boot_assembly() -> ArrayMesh:
-	var m := ArrayMesh.new()
-	var boot: ArrayMesh = _shared("boot", _build_boot)
-	var blade: ArrayMesh = _shared("skate_blade", _build_skate_blade)
-	_append_surface(m, boot, Transform3D.IDENTITY, BOOT_PART_QUARTER)
-	_append_surface(m, boot, Transform3D.IDENTITY, BOOT_PART_TOE)
-	_append_surface(m, blade, Transform3D.IDENTITY, BLADE_PART_HOLDER)
-	_append_surface(m, blade, Transform3D.IDENTITY, BLADE_PART_RUNNER)
-	_append_surface(m, shared_laces())
-	# Defaults for the merged surfaces, standing in for the material_override
-	# their child nodes used to carry — so an unpainted rig (a spawn before the
-	# uniform pass) still shows steel and white laces rather
-	# than untextured white. Surface 0 is left null on purpose: _swap_instance
-	# carries the scene primitive's material onto it, exactly as before.
-	var steel := StandardMaterial3D.new()
-	steel.albedo_color = BLADE_STEEL_COLOR
-	steel.roughness = 0.25
-	BodyRim.apply(steel)
-	m.surface_set_material(BOOT_SURF_RUNNER, steel)
-	var lace := StandardMaterial3D.new()
-	lace.albedo_color = _LACE_COLOR
-	lace.roughness = 0.9
-	BodyRim.apply(lace)
-	m.surface_set_material(BOOT_SURF_LACES, lace)
 	return m
 
 
@@ -745,40 +652,6 @@ static func _build_head() -> ArrayMesh:
 	st.append_from(SkaterFaceMesh.build(HEAD_RADIUS, HEAD_LON, HEAD_LAT), 0, Transform3D.IDENTITY)
 	return st.commit()
 
-static func shared_boot() -> ArrayMesh:
-	return _shared("boot", _build_boot)
-
-
-static func shared_skate_collar() -> ArrayMesh:
-	return _shared("skate", _build_skate)
-
-
-# Skate accent stripe: a thin unit-radius band that rings the collar proud of
-# its sidewall — the one piece the skate-color cosmetic paints (the boot and
-# collar themselves stay dark). Unit radius like the glove cuff; the creation
-# site scales it to sit just off the collar.
-static func shared_skate_stripe() -> ArrayMesh:
-	return _shared("skate_stripe", func() -> ArrayMesh:
-		var h: float = SKATE_STRIPE_HEIGHT_M * 0.5
-		var profile: Array[Vector2] = [Vector2(h, 1.0), Vector2(-h, 1.0)]
-		return _build_lathe(profile, _LEG_SIDES, 1.0, 1.0))
-
-
-# Drawn-on skate laces (see _LACE_RUNGS): one mesh of instep rungs in the
-# boot's rotated frame, shared like every other part.
-static func shared_laces() -> ArrayMesh:
-	return _shared("laces", func() -> ArrayMesh:
-		var st := SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		st.set_smooth_group(-1)  # flat shading — see class doc block
-		for rung: Vector2 in _LACE_RUNGS:
-			_box(st,
-					Vector3(-_LACE_HALF_W, rung.x - _LACE_HALF_T, rung.y - _LACE_PROUD),
-					Vector3(_LACE_HALF_W, rung.x + _LACE_HALF_T, rung.y + _LACE_SINK))
-		st.generate_normals()
-		return st.commit())
-
-
 static func shared_skate_blade() -> ArrayMesh:
 	return _shared("skate_blade", _build_skate_blade)
 
@@ -1041,10 +914,6 @@ static func _make_skin_mat() -> StandardMaterial3D:
 	return mat
 
 
-static func _build_skate() -> ArrayMesh:
-	return _build_lathe(_SKATE_PROFILE, _LEG_SIDES, 1.0, 1.0)
-
-
 # ── Lathe (cylinder-convention) parts ─────────────────────────────────────────
 
 
@@ -1153,29 +1022,7 @@ static func _build_ball(radius: float, lon: int, lat: int, v_end: float,
 	return st.commit()
 
 
-# ── Boot ──────────────────────────────────────────────────────────────────────
-
-
-# The boot in the Foot node's rotated local frame (see _BOOT_STATIONS): a
-# 6-point chamfered cross-section swept heel→toe, emitted as its two paintable
-# pieces — the QUARTER (heel through instep) on surface 0 and the TOE cap on
-# surface 1. Both are closed solids: each caps the ring they share, so the
-# junction faces are interior and the winding stays testable (same reasoning as
-# the helmet's liner closure). Solid-painted, so UVs are nominal.
-static func _build_boot() -> ArrayMesh:
-	var loops: Array[PackedVector3Array] = []
-	for s: Vector4 in _BOOT_STATIONS:
-		loops.append(_boot_loop(s.x, s.y, s.z, s.w))
-	var m := ArrayMesh.new()
-	_commit_sweep_segment(m, loops, 0, _BOOT_TOE_STATION, _boot_loop_center)
-	_commit_sweep_segment(m, loops, _BOOT_TOE_STATION, loops.size() - 1, _boot_loop_center)
-	return m
-
-
-# A boot loop's axis point, midway between its top and sole edges — the apex
-# each end cap fans to.
-static func _boot_loop_center(loop: PackedVector3Array) -> Vector3:
-	return Vector3(0.0, loop[0].y, (loop[0].z + loop[2].z) * 0.5)
+# ── Blade ──────────────────────────────────────────────────────────────────────
 
 
 # Sweeps `loops[first..last]` into a new closed surface of `target`, capping
@@ -1194,59 +1041,64 @@ static func _commit_sweep_segment(target: ArrayMesh, loops: Array[PackedVector3A
 	st.commit(target)
 
 
-# The blade as its two pieces: the HOLDER on surface 0 and the steel RUNNER on
-# surface 1 (see the _BLADE_* constants' doc). They are separate surfaces
-# because they are separate materials in life — the holder is molded plastic a
-# player picks the color of, the runner is steel and always will be.
-#
-# The holder is one piece, not two posts: two towers dropping from the sole
-# (they tuck up into it — z 0.042 < the boot's 0.045 sole line) bridged along
-# the bottom by the RAIL the runner seats into, so only the steel's last few
-# millimetres show below it. The arch between the towers stays open above the
-# rail, which is the window a real holder is recognised by.
+# The blade on the FOOT bone, in its rotated frame (SkateUpperMesh.SKATE_FROM_FOOT:
+# toe −Y, +Z down), as its two pieces: the HOLDER on surface 0 and the steel
+# RUNNER on surface 1. They are separate surfaces because they are separate
+# materials in life — the holder is molded plastic a player picks the color of,
+# the runner is steel and always will be, so it ships steel and an unpainted rig
+# still shows it.
 static func _build_skate_blade() -> ArrayMesh:
 	var m := ArrayMesh.new()
 	var holder := SurfaceTool.new()
 	holder.begin(Mesh.PRIMITIVE_TRIANGLES)
 	holder.set_smooth_group(-1)  # flat shading — see class doc block
-	_box(holder, Vector3(-0.008, 0.036, 0.042), Vector3(0.008, 0.094, 0.098))    # heel tower
-	_box(holder, Vector3(-0.008, -0.080, 0.042), Vector3(0.008, -0.026, 0.098))  # toe tower
-	# Rail: tower to tower along the bottom, ending where the towers do, so the
-	# runner's heel and toe tips still show past it.
-	_box(holder, Vector3(-0.008, -0.080, 0.084), Vector3(0.008, 0.094, 0.098))
+	var taper := Vector4(_HOLDER_TOP_HALF_W, _HOLDER_RAIL_HALF_W,
+			_HOLDER_TOE[0].y, _HOLDER_RAIL[1].y)
+	for piece: Array[Vector2] in [_HOLDER_TOE, _HOLDER_HEEL, _HOLDER_RAIL]:
+		_extrude_profile(holder, piece, taper)
 	holder.generate_normals()
 	holder.commit(m)
 	var runner := SurfaceTool.new()
 	runner.begin(Mesh.PRIMITIVE_TRIANGLES)
 	runner.set_smooth_group(-1)
-	_box(runner, Vector3(-0.0035, RUNNER_TOE_Y, 0.090),
-			Vector3(0.0035, RUNNER_HEEL_Y, BLADE_ICE_Z))
+	_extrude_profile(runner, _RUNNER_PROFILE,
+			Vector4(_RUNNER_HALF_W, _RUNNER_HALF_W, 0.0, 1.0))
 	runner.generate_normals()
 	runner.commit(m)
+	var steel := StandardMaterial3D.new()
+	steel.albedo_color = BLADE_STEEL_COLOR
+	steel.roughness = 0.25
+	BodyRim.apply(steel)
+	m.surface_set_material(BLADE_PART_RUNNER, steel)
 	return m
 
 
-# Boot cross-section at one station: narrowed top, full-width sidewall, tucked
-# sole edge. Wound counter-clockwise as seen from +Y (the heel side) to match
-# the lathe rings' winding sense, so the shared band-quad ordering stays
-# outward-facing. Local +Z is DOWN in this frame, so top_z < sole_z.
-static func _boot_loop(y: float, half_w: float, top_z: float, sole_z: float) -> PackedVector3Array:
-	var mid_z: float = lerpf(top_z, sole_z, 0.55)
-	var pts := PackedVector3Array()
-	pts.resize(6)
-	pts[0] = Vector3(-half_w * 0.62, y, top_z)
-	pts[1] = Vector3(-half_w, y, mid_z)
-	pts[2] = Vector3(-half_w * 0.72, y, sole_z)
-	pts[3] = Vector3(half_w * 0.72, y, sole_z)
-	pts[4] = Vector3(half_w, y, mid_z)
-	pts[5] = Vector3(half_w * 0.62, y, top_z)
-	return pts
+# A convex side profile, (y, z), stood up across x as a closed solid: its two
+# faces fanned from the first point and the rim between them. `taper` is the
+# half-width at one depth and at another, (x at z1, x at z2, z1, z2), held
+# linear in z between them and flat past them, so each face stays a plane.
+static func _extrude_profile(st: SurfaceTool, profile: Array[Vector2], taper: Vector4) -> void:
+	var z0 := Vector2.ZERO
+	var n: int = profile.size()
+	var near := PackedVector3Array()
+	var far := PackedVector3Array()
+	for p: Vector2 in profile:
+		var half_w: float = lerpf(taper.x, taper.y, clampf((p.y - taper.z) / (taper.w - taper.z),
+				0.0, 1.0))
+		near.append(Vector3(half_w, p.x, p.y))
+		far.append(Vector3(-half_w, p.x, p.y))
+	for k: int in range(1, n - 1):
+		_tri(st, near[0], z0, near[k], z0, near[k + 1], z0)
+		_tri(st, far[0], z0, far[k + 1], z0, far[k], z0)
+	for k: int in n:
+		var k1: int = (k + 1) % n
+		_uv_quad(st, near[k], z0, far[k], z0, far[k1], z0, near[k1], z0)
 
 
 # Band quads between consecutive CLOSED loops (equal point counts, no
 # duplicated seam point — unlike _ring). Contract: loops are wound counter-
 # clockwise as seen from the sweep's START side (the side loops[0] faces) and
-# advance away from it, matching _ring/_boot_loop — the shared quad ordering
+# advance away from it, matching _ring — the shared quad ordering
 # then keeps every face outward. UVs are nominal; sweep parts paint solid.
 # A closed sweep (torus) just appends its first loop again as the last.
 static func _sweep_loops(st: SurfaceTool, loops: Array[PackedVector3Array]) -> void:

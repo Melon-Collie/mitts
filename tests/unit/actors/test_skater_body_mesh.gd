@@ -32,7 +32,8 @@ func test_the_body_holds_the_skin_and_every_rigid_part() -> void:
 
 
 # Each rigid vertex's bind names the bone its own mesh's skin bound it to, at
-# identity; the skin's vertices keep the skin's binds.
+# identity, but for the skate upper's feet, which read it from the SKATE bone's
+# frame; the skin's vertices keep the skin's binds.
 func test_the_rigid_parts_bind_to_their_own_bones() -> void:
 	var skin: Skin = SkaterBodyMesh.shared_skin()
 	var arrays: Array = SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_NONE).surface_get_arrays(0)
@@ -62,6 +63,13 @@ func test_the_rigid_parts_bind_to_their_own_bones() -> void:
 			var own: int = upper_bones[(v - skin_verts) * 4 + k] if v < skin_verts + upper_verts \
 					else SkaterBodySkeleton.LEG_BONE_OFFSET \
 					+ leg_bones[(v - skin_verts - upper_verts) * 4 + k]
-			if skin.get_bind_bone(bind) != own or skin.get_bind_pose(bind) != Transform3D.IDENTITY:
+			var pose := Transform3D.IDENTITY
+			var ankle: int = own - SkaterBodySkeleton.LEG_BONE_OFFSET \
+					- SkaterRigidParts.SKATE_UPPER_FOOT_BIND
+			if v >= skin_verts + upper_verts and ankle >= 0:
+				own = SkaterBodySkeleton.LEG_BONE_OFFSET + (SkaterMeshBuilder.LegBone.FOOT_L
+						if ankle == 0 else SkaterMeshBuilder.LegBone.FOOT_R)
+				pose = SkateUpperMesh.SKATE_FROM_FOOT.affine_inverse()
+			if skin.get_bind_bone(bind) != own or not skin.get_bind_pose(bind).is_equal_approx(pose):
 				bad += 1
 	assert_eq(bad, 0, "every weighted influence binds where its part's own mesh bound it")

@@ -28,8 +28,12 @@ delegates to.
 ## The body's skin
 
 `SkaterConnectedMesh` builds the torso, sleeves, pants and socks as ONE
-connected skin with blended weights; the head, gloves and skates are rigid
-parts on their bones (`SkaterRigidParts`). Every part is a zone of the body's
+connected skin with blended weights; the head, gloves and skate blades are rigid
+parts on their bones (`SkaterRigidParts`). Each skate's upper is one closed
+shell (`SkateUpperMesh`, `test_skate_upper.gd`) whose cuff rides the SKATE bone
+and whose foot rides the FOOT bone, blended across the ankle through a bind of
+its own on the foot, so the ankle's give-back flexes the boot rather than
+parting it. Every part is a zone of the body's
 one paint (`BodyZonePaint`), dressed by `SkaterKitPaint`, which the display
 figures share, and the whole body is ONE surface (`SkaterBodyMesh`): a draw a
 pass, which matters because eight shadowed spots each redraw every skater in
@@ -91,9 +95,9 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   round the shaft toward the palm as a closed fist's are, so the flat palm side
   reads as one; the thumb wraps round the shaft on the palm's side
   (`SkaterMeshBuilder.shared_glove_fist`), and which side that
-  is in the glove's frame depends on the hand, so the body mesh is one per tuck
-  and per pair (`SkaterBodyMesh.shared_mesh`): a left shot's top hand is his
-  right. `SkaterConnectedRig.pose` changes the pair when the top arm changes
+  is in the glove's frame depends on the hand, so the body mesh is one per tuck,
+  per pair and per skate tongue (`SkaterBodyMesh.shared_mesh`): a left shot's
+  top hand is his right. `SkaterConnectedRig.pose` changes the pair when the top arm changes
   side, so a figure's shot picks its gloves with no call of its own.
   `test_glove_thumb_wraps_the_palm.gd`.
 - **The display figures wear the same body.** `FigureKit` (the player screen's
