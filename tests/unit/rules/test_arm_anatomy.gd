@@ -21,21 +21,25 @@ func _body() -> ArmAnatomyBody:
 	body.torso_profile = SkaterMeshBuilder.TORSO_PROFILE
 	body.torso_sway = SkaterMeshBuilder.TORSO_REAR_SWAY
 	body.torso_xz_scale = SkaterMeshBuilder.TORSO_XZ_SCALE
+	# An ulnar wrist reads as the hand is posed (no slide below GRIP); the grip's
+	# own slide is its test's.
+	body.grip_min_angle = GRIP
 	return body
 
 
 # A right arm from the origin, the trunk square, the jersey far away, its hand
 # at `hand` with its long axis `axis` and its thumb toward `thumb`: the shaft
-# that grip_frame puts across that palm at roll 0.
-func _setup(hand: Vector3, axis: Vector3, thumb: Vector3, side: float = 1.0) -> ArmAnatomy.ArmSetup:
+# that grip_frame puts across that palm at roll 0 at `grip`.
+func _setup(hand: Vector3, axis: Vector3, thumb: Vector3, side: float = 1.0,
+		grip: float = GRIP) -> ArmAnatomy.ArmSetup:
 	var s := ArmAnatomy.ArmSetup.new()
 	s.body = _body()
 	s.side = side
 	s.torso = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.0, 50.0))
 	s.hand = hand
-	s.shaft = axis * cos(GRIP) + thumb * sin(GRIP)
-	s.roll_up = axis * sin(GRIP) - thumb * cos(GRIP)
-	s.grip_angle = GRIP
+	s.shaft = axis * cos(grip) + thumb * sin(grip)
+	s.roll_up = axis * sin(grip) - thumb * cos(grip)
+	s.grip_angle = grip
 	return s
 
 
@@ -128,6 +132,26 @@ func test_a_left_arm_reads_as_the_right_arm_mirrored() -> void:
 		for f: String in ["elevation", "plane", "axial", "elbow_flexion", "pronation",
 				"wrist_flexion", "wrist_deviation"]:
 			assert_almost_eq(float(l.get(f)), float(r.get(f)), 0.0001, f)
+
+
+# A palm held to a shaft crossing it 10° nearer square than the hand lies is a
+# wrist cocked 10° ulnar; the shaft let slide round in the palm straightens it,
+# down to the diagonal grip and up to square across the palm.
+func test_the_grip_slides_round_the_shaft_and_straightens_the_wrist() -> void:
+	var at: Vector3 = Vector3(0.0, -UPPER, -FORE)
+	var s: ArmAnatomy.ArmSetup = _setup(at, Vector3.FORWARD, Vector3.UP)
+	s.grip_angle = GRIP + 10.0 * DEG
+	s.body.grip_min_angle = s.grip_angle
+	assert_almost_eq(_eval(s).wrist_deviation, 10.0 * DEG, TOL, "ulnar by the angle")
+	s.body.grip_min_angle = 45.0 * DEG
+	var p: ArmAnatomy.ArmPose = _eval(s)
+	assert_almost_eq(p.wrist_deviation, 0.0, TOL, "slid straight")
+	assert_almost_eq(p.grip_slide, -10.0 * DEG, TOL, "by the angle back")
+	s.body.grip_min_angle = GRIP + 5.0 * DEG
+	assert_almost_eq(_eval(s).wrist_deviation, 5.0 * DEG, TOL, "slid only to the diagonal")
+	var square: ArmAnatomy.ArmSetup = _setup(at, Vector3.FORWARD, Vector3.UP, 1.0, 100.0 * DEG)
+	square.grip_angle = 85.0 * DEG
+	assert_almost_eq(_eval(square).wrist_deviation, -10.0 * DEG, TOL, "slid only to square")
 
 
 func test_the_hand_rolls_round_the_shaft_to_where_the_forearm_holds_it_at_rest() -> void:

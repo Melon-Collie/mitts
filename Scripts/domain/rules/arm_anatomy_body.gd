@@ -22,11 +22,13 @@ var torso_in_spine := Transform3D.IDENTITY
 var torso_profile: Array[Vector2] = []
 var torso_sway: Array[float] = []
 var torso_xz_scale := Vector2.ONE
-# How far a sleeve's surface stands off its bone, and how much of it may lie
-# against the jersey (SkaterArmPoses.STEER_CONTACT_M); the fist's half depth.
+# How far a sleeve's surface stands off its bone, the fist's half depth, and how
+# far a sleeve, a fist or the knob may press into the jersey: arms and jersey
+# are drawn oversized, so gear pressed against gear overlaps
+# (SkaterArmPoses.STEER_CONTACT_M).
 var sleeve_radius: float = 0.08
-var sleeve_contact: float = 0.03
 var hand_radius: float = 0.04
+var gear_press: float = 0.03
 # The stick: the top hand's centre to the blade's heel (m), how close below it
 # and how far down the shaft the bottom hand may hold, the angles the shaft
 # crosses each palm at (SkaterArmPoses.glove_basis), and the top fist's roll
@@ -37,6 +39,11 @@ var spacing_max: float = 1.0
 var top_grip_angle: float = deg_to_rad(65.0)
 var bottom_grip_angle: float = deg_to_rad(80.0)
 var top_roll_square: float = 0.0
+# The least angle a shaft may cross a palm at: held diagonally in the fingers,
+# from the index finger's root to the heel of the hand. From there to square
+# the palm slides round the shaft, which is the wrist's deviation
+# (ArmAnatomy._angles).
+var grip_min_angle: float = deg_to_rad(45.0)
 # The shaft past the top hand to its butt (m), the blade's length and the angle
 # the stick is built to stand at from the ice when its blade lies flat.
 var knob_extend: float = 0.13

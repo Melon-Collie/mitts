@@ -1,7 +1,7 @@
 extends RefCounted
 
 # Carries we know players hold, the ground truth the arm anatomy model is
-# calibrated on (docs/arm-anatomy-plan.md §12): for a 6'1" player, where the
+# calibrated on (docs/arm-anatomy-plan.md §14): for a 6'1" player, where the
 # puck is, where the top hand is, how far down the shaft the bottom hand holds,
 # and how the body sits. Agreed with the user, adjustable by eye against
 # .claude/hooks/render-references.sh. test_arm_reference_carries.gd holds the
@@ -12,22 +12,22 @@ extends RefCounted
 # from straight ahead, + toward the forehand.
 
 const CARRIES: Array[Dictionary] = [
-	{"name": "forehand", "puck_deg": 30.0, "puck_m": 0.9, "fold_deg": 30.0,
+	{"name": "forehand", "puck_deg": 35.0, "puck_m": 1.25, "fold_deg": 30.0,
 		"crouch_m": 0.1, "twist_deg": 15.0, "top_hand": Vector3(0.1, 0.95, 0.25),
 		"spacing_m": 0.35},
-	{"name": "ahead", "puck_deg": 0.0, "puck_m": 1.0, "fold_deg": 30.0,
+	{"name": "ahead", "puck_deg": 0.0, "puck_m": 1.42, "fold_deg": 30.0,
 		"crouch_m": 0.1, "twist_deg": 0.0, "top_hand": Vector3(0.0, 0.95, 0.3),
 		"spacing_m": 0.35},
-	{"name": "backhand", "puck_deg": -60.0, "puck_m": 0.8, "fold_deg": 30.0,
+	{"name": "backhand", "puck_deg": -57.0, "puck_m": 1.42, "fold_deg": 30.0,
 		"crouch_m": 0.1, "twist_deg": -30.0, "top_hand": Vector3(0.3, 0.95, 0.1),
 		"spacing_m": 0.3},
-	{"name": "wide_forehand", "puck_deg": 60.0, "puck_m": 1.3, "fold_deg": 40.0,
+	{"name": "wide_forehand", "puck_deg": 58.0, "puck_m": 1.14, "fold_deg": 40.0,
 		"crouch_m": 0.1, "twist_deg": 30.0, "top_hand": Vector3(0.0, 1.05, 0.3),
 		"spacing_m": 0.45},
-	{"name": "tight", "puck_deg": 20.0, "puck_m": 0.6, "fold_deg": 20.0,
+	{"name": "tight", "puck_deg": 29.0, "puck_m": 1.05, "fold_deg": 20.0,
 		"crouch_m": 0.1, "twist_deg": 10.0, "top_hand": Vector3(0.15, 1.05, 0.15),
 		"spacing_m": 0.2},
-	{"name": "long_reach", "puck_deg": 0.0, "puck_m": 1.5, "fold_deg": 45.0,
+	{"name": "long_reach", "puck_deg": 0.0, "puck_m": 1.69, "fold_deg": 45.0,
 		"crouch_m": 0.15, "twist_deg": 0.0, "top_hand": Vector3(0.0, 0.8, 0.45),
 		"spacing_m": 0.4},
 ]
@@ -37,7 +37,7 @@ const CARRIES: Array[Dictionary] = [
 # standing with its trunk's pivot `pivot_m` above the ice and its blade
 # `blade_m` above it: the heel (hips frame), the stick's lie and heading, the
 # twist, the lean (the whole fold, from upright), the crouch, the spacing, and
-# where the puck the reference names is, for the heel's distance off it. The
+# where the puck the reference names is (on the blade, blade_middle). The
 # stick runs from the top hand toward the puck at its own length, so the heel
 # lands where a rigid stick from that hand puts it.
 static func setup(carry: Dictionary, body: ArmAnatomyBody, pivot_m: float,
@@ -60,3 +60,19 @@ static func setup(carry: Dictionary, body: ArmAnatomyBody, pivot_m: float,
 		"lean": Vector2(deg_to_rad(float(carry["fold_deg"])), 0.0),
 		"crouch": float(carry["crouch_m"]), "spacing": float(carry["spacing_m"]),
 		"puck": puck, "hand": hand}
+
+
+# The middle of the blade of setup `s` (setup's frame), where its puck rides.
+static func blade_middle(s: Dictionary, body: ArmAnatomyBody) -> Vector3:
+	var heel: Vector3 = s["heel"]
+	var hand: Vector3 = s["hand"]
+	var along := Vector3(heel.x - hand.x, 0.0, heel.z - hand.z).normalized()
+	return heel + along * body.blade_length * 0.5
+
+
+# Where the blade of setup `s` puts its puck, as CARRIES names it: (puck_deg,
+# puck_m).
+static func landing(s: Dictionary, body: ArmAnatomyBody) -> Vector2:
+	var mid: Vector3 = blade_middle(s, body)
+	var top_side: float = signf(body.top_shoulder.x)
+	return Vector2(rad_to_deg(atan2(-mid.x * top_side, -mid.z)), Vector2(mid.x, mid.z).length())

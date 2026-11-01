@@ -79,7 +79,10 @@ The branch that introduced most of those knobs measured what the split costs:
 - **Grip:** the top hand on the knob holding the shaft like a sword
   (`top_grip_angle_deg`), the bottom hand under the shaft at its own angle and
   free to slide along it (`_grip_fraction`, `_glove_spacing`); one-handed when
-  the bottom hand lets go (`ReachPurposeRules`).
+  the bottom hand lets go (`ReachPurposeRules`). The drawn angle is not the only
+  one a palm holds: the shaft slides round in it, from diagonally across the
+  fingers (45°, `ArmAnatomyBody.grip_min_angle`) to square, and that slide is
+  exactly the wrist's deviation, so the model takes it toward a straight wrist.
 - **Stick:** rigid, its length the build's (`solve_stick_length`, chokes
   included), the blade on the ice.
 
@@ -146,9 +149,10 @@ against footage before it binds gameplay:
 - **The bottom hand slides, the top hand does not** — reach changes the bottom
   hand's grip along the shaft (the model's freedom), within a hands-apart band
   from a glove's width to the shoulders' width.
-- **The knob stays clear of the body** — a stick pulled in so tight the knob
+- **The knob stays out of the body** — a stick pulled in so tight the knob
   digs into the stomach is not a carry: the butt (`SkaterStickRig
-  .SHAFT_BUTT_EXTEND_M` past the top hand) 2 cm clear of the jersey.
+  .SHAFT_BUTT_EXTEND_M` past the top hand) no deeper in the jersey than gear
+  presses into gear (§8).
 - **The puck is not carried under the body** — toe drags in tight are allowed:
   the blade's middle stays out of the skates' footprint (0.3 m either side,
   0.25 m behind to 0.2 m ahead of the hips).
@@ -208,6 +212,11 @@ grip's own geometry. The locker figure poses through the same model.
 
 Allowed or drawn although a body cannot, each with its reason. Starts empty;
 entries get added with the user's sign-off.
+
+- **Gear presses into gear by up to 3 cm** (`ArmAnatomyBody.gear_press`,
+  `SkaterArmPoses.STEER_CONTACT_M`): a sleeve, a fist or the knob may sink that
+  far into the jersey. Arms and jersey are drawn oversized, so two pieces
+  pressed together overlap where real padding would squash.
 
 ## 9. Phases
 
@@ -385,3 +394,45 @@ jersey (5) and the top hand under its hip band (5). Standing gains least —
 neutral standing goes from 13 cells no pose holds to 10 — because the carry at
 its 0.8 m floor folds the chest, and so crouches, only partway. Today's drawn
 arms still hold none; their knob is in the jersey in 54.
+
+## 14. Calibration on reference carries
+
+Six carries a 6'1" player holds (`tests/harness/arm_reference_carries.gd`),
+each its puck, top hand, spacing, twist, fold and crouch, are held to the
+model by `test_arm_reference_carries.gd` (pending until calibrated) and drawn
+by `.claude/hooks/render-references.sh`. Each sheet shows the reference's carry
+on top and, under it, the carry the model finds on its own for the same puck.
+
+### Changes so far
+
+- **Gear press** (§8): the fist and the knob now get the 3 cm the sleeve
+  already had.
+- **The grip slides** (§3.1): every hand slid its full give at ±15° and still
+  read 20–44° ulnar, so the drawn angles (65° top, 80° bottom) are too square
+  for a carry. The model now holds the shaft anywhere from 45° to square. No
+  wrist binds in any reference.
+- **Each reference's puck sits where its stick lands**, the blade's middle at
+  the stick's length from the reference's hand (checked by the test). A stick
+  is long, so they moved out: forehand 1.25 m, ahead 1.42, backhand 1.42, wide
+  forehand 1.14, tight 1.05, long reach 1.69. With the hand at the hip, no
+  puck sits much nearer than a metre.
+
+### What it found
+
+None of the six holds yet; what stops each is placement, not a joint's range:
+
+| Carry | Binds | By |
+|---|---|---|
+| forehand | bottom arm in the jersey | 1 cm |
+| ahead | knob in the jersey | 1 cm |
+| backhand | bottom arm's reach | 5 cm |
+| wide forehand | bottom arm in the jersey | 3.5 cm |
+| tight | bottom arm in the jersey | 10 cm |
+| long reach | bottom arm's reach | 7 cm |
+
+The model's own carry holds every one of those pucks. It holds the top hand
+0.1–0.35 m further ahead of the body than the references do, and the hands
+0.14–0.24 m apart, closer than the references' 0.3–0.45. Changing one
+reference number at a time leaves most within a few degrees: long reach holds at a 0.25 m
+spacing, backhand is 1° short at 45° of twist, and forehand is 1° short at a
+0.4 m spacing.

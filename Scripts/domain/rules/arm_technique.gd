@@ -25,9 +25,9 @@ const TOP_HAND_OUT_M: float = 0.4
 const TOP_HAND_ACROSS_M: float = 0.15
 # The hands are held apart no wider than the shoulders.
 const HANDS_APART_SHOULDERS: float = 1.0
-# The knob stands this far clear of the jersey: a stick pulled in until the
-# knob digs into the stomach is not a carry.
-const KNOB_CLEAR_M: float = 0.02
+# The knob may press into the jersey no deeper than gear presses into gear
+# (ArmAnatomyBody.gear_press): a stick pulled in until the knob digs into the
+# stomach is not a carry.
 # The puck is not carried under the body: the blade's middle stays out of the
 # skates' footprint, this far either side of the hips and from this far behind
 # them to this far ahead (toe drags reach just past it).
@@ -92,7 +92,7 @@ static func assess(body: ArmAnatomyBody, hold: Hold, out: Verdict) -> void:
 	var clear: float = TorsoSection.clearance(hold.torso.affine_inverse() * knob,
 			body.torso_profile, body.torso_sway, body.torso_xz_scale) \
 			* hold.torso.basis.get_scale().x
-	_over(out, Limit.KNOB_IN_BODY, KNOB_CLEAR_M - clear)
+	_over(out, Limit.KNOB_IN_BODY, -body.gear_press - clear)
 	var mid: Vector3 = hold.heel + hold.blade_dir * (body.blade_length * 0.5)
 	var into_x: float = FOOTPRINT_HALF_WIDTH_M - absf(mid.x)
 	var into_z: float = minf(mid.z + FOOTPRINT_AHEAD_M, FOOTPRINT_BACK_M - mid.z)
