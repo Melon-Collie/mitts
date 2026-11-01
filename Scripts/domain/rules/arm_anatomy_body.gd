@@ -37,6 +37,11 @@ var spacing_max: float = 1.0
 var top_grip_angle: float = deg_to_rad(65.0)
 var bottom_grip_angle: float = deg_to_rad(80.0)
 var top_roll_square: float = 0.0
+# The shaft past the top hand to its butt (m), the blade's length and the angle
+# the stick is built to stand at from the ice when its blade lies flat.
+var knob_extend: float = 0.13
+var blade_length: float = 0.3
+var blade_lie: float = deg_to_rad(42.0)
 # The top hand is the left for a right shot.
 var left_shot: bool = false
 

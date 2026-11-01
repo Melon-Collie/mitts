@@ -3,8 +3,8 @@ extends GutTest
 # The anatomy model read off a built skater (SkaterAnatomyCapture) holds the
 # body the rig draws: its trunk, folded, leaned and twisted as a settled carry
 # has it, puts both shoulders and the jersey where the skeleton does. And the
-# search over it holds a carry a body can and names the arm's reach for a blade
-# no arm reaches.
+# search over it holds a carry a body can, as players hold it too, and names the
+# arm's reach for a blade no arm reaches.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -105,6 +105,9 @@ func test_the_search_holds_a_carry_and_names_the_arms_reach_past_every_one() -> 
 	assert_true(pose.feasible(), "a blade low on the forehand is held")
 	assert_lte(pose.top.violation, 0.0, "both arms in their ranges")
 	assert_lte(pose.bottom.violation, 0.0, "both arms in their ranges")
+	search.technique = true
+	search.solve(trunk, Vector3(0.8 * forehand, ice, -0.6), pose)
+	assert_true(pose.feasible(), "and as players hold it")
 	search.solve(trunk, Vector3(0.0, ice, -3.0), pose)
 	assert_false(pose.feasible(), "three metres out is not")
 	assert_eq(pose.arm_binding, ArmAnatomy.Limit.REACH, "the arms' reach stops it")

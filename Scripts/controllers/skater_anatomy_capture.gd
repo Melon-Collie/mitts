@@ -42,6 +42,9 @@ static func capture(controller: SkaterController) -> ArmAnatomyBody:
 	body.spacing_max = body.stick_length * SPACING_MAX_SHARE
 	body.top_grip_angle = deg_to_rad(skater.top_grip_angle_deg)
 	body.bottom_grip_angle = deg_to_rad(skater.bottom_grip_angle_deg)
+	body.knob_extend = SkaterStickRig.SHAFT_BUTT_EXTEND_M
+	body.blade_length = skater.blade_length
+	body.blade_lie = deg_to_rad(skater.blade_lie_deg)
 	body.left_shot = skater.is_left_handed
 	body.top_roll_square = _square_roll(body, pivot_height(skater) - controller.blade_height)
 	return body
