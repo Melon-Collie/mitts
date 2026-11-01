@@ -339,3 +339,36 @@ turned all the way to the travel, and the bots' facing stands in for a
 player's cursor. The gap is the size of the spine's whole twist budget a
 quarter of the time, so phase 3 takes the hips from a tick quantity that
 follows the travel rather than bounding it.
+
+## 13. Phase 2 record
+
+`ArmTechnique` (§4) and the search's `technique` switch; the map runs with it
+on (`ARM_MAP_ANATOMY_ONLY=1` gives phase 1's). The search now refines the
+grid's best three stick poses, not just its best: a dense brute force over one
+carry found a near miss the single refinement had settled 0.18 rad short of.
+It is still a search: a marginal cell's "no pose" can be a pose it did not
+find, and the map prints how far each miss is.
+
+### What it found
+
+The same 330 cells as phase 1 (three builds, standing and skating), 98 of
+whose blades a carry lands.
+
+- **Technique costs little where gameplay carries.** 49 of the 98 landed
+  blades are held as players hold them, against 54 by anatomy alone. What it
+  removes is mostly inside the carry's floor: at 0.6 m out, where anatomy held
+  most blades with a stick near vertical and the arms raised, almost none now
+  hold — the lie and the footprint rule them out. The floor is technique's,
+  not just the drawing's.
+- **What stops the other 49 is mostly the wrist.** Ulnar deviation binds in
+  20 (the top hand 12, the bottom 8), then the bottom hand's reach to the shaft
+  (8), the top arm in the jersey (4) and the lie (4). §3.3's 30° against the
+  rig's 35° decides more of the region than any other single number.
+- **Today's drawn stick breaks technique as well as anatomy.** Its knob digs
+  into the jersey in 49 of the 98 carries; the top hand is behind the hips in 8
+  and above the chest in 3. (The map's digits never show, because the drawn
+  arms already fail anatomy first in every cell.)
+- **The standing carry's trunk is nearly upright** (the pivot 1.6 cm under
+  rest): with the hands near the hips, the bottom arm only just reaches the
+  shaft, at full stretch, in most of the best poses the search finds. A deeper
+  crouch or fold is a phase 3 question, alongside the wrist's range.
