@@ -175,10 +175,13 @@ func test_a_gear_change_wears_the_tongue() -> void:
 	gear.jersey_tuck = GearModelRegistry.TUCK_LEFT
 	gear.skate_tongue = GearModelRegistry.TONGUE_OUT
 	skater.set_gear_style(gear)
-	assert_eq(body_mesh.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_LEFT,
-			GearModelRegistry.TONGUE_OUT))
-	assert_ne(body_mesh.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_LEFT),
-			"out is not the tucked tongue's body")
+	var worn: Array = []
+	for top_right: bool in [true, false]:
+		worn.append(SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_LEFT, top_right,
+				GearModelRegistry.TONGUE_OUT))
+		assert_ne(body_mesh.mesh, SkaterBodyMesh.shared_mesh(GearModelRegistry.TUCK_LEFT,
+				top_right), "out is not the tucked tongue's body")
+	assert_has(worn, body_mesh.mesh, "the tongue worn out, with either pair of gloves")
 	assert_eq(body_mesh.get_surface_override_material(0), paint, "the body's paint stays on")
 
 

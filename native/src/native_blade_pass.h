@@ -60,6 +60,11 @@ public:
 		S_GLOVE_SPACING,
 		S_HAS_NET_ANCHOR,
 		S_REACH_PURPOSE,
+		// SkaterIKCoordinator.chest_fold, carry_reach_floor (0 without the puck)
+		// and the forehand floor's strength (TopHandIK.Config.hand_forward).
+		S_CHEST_FOLD,
+		S_CARRY_FLOOR,
+		S_HAND_FORWARD,
 		S_COUNT,
 	};
 	// run()'s vector inputs, by index.
@@ -188,6 +193,9 @@ private:
 	Cfg level_config(double hang_y, double p_blade_y, double max_reach) const;
 	double lean_corrected_y(double x, double z) const;
 	godot::Vector2 blade_target_for(const godot::Vector2 &cursor_xz) const;
+	godot::Vector3 held_out(const godot::Vector3 &cursor_world) const;
+	godot::Vector3 folded(const godot::Vector3 &marker) const;
+	void place_arm_shoulder();
 	double board_reach_limit(const godot::Vector2 &target_xz, const godot::Vector3 &shoulder_world) const;
 	double purpose(const godot::Vector3 &skater_pos) const;
 	godot::Vector2 carry_backhand_stop(const godot::Vector2 &target_xz) const;
@@ -205,6 +213,7 @@ private:
 	// The pass from the wall-pin release on: the goalies, the net, the rebuild.
 	void continue_pass();
 	void finish();
+	void arm_for_clamped_blade();
 
 	// TopHandIK.
 	double max_reach_for_angle(double angle_to_forehand) const;

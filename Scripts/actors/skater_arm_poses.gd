@@ -22,6 +22,101 @@ static func segment_pose(a: Vector3, b: Vector3, thickness: Vector3) -> Transfor
 			(a + b) * 0.5)
 
 
+# How far the elbow turns off the pole's bend, about the shoulder→hand line
+# (radians, signed): of the circle the two bone lengths allow, the turn toward
+# `outward` that keeps the arm out of the torso, as little as that takes — none
+# where the pole's elbow already clears, the whole turn to `outward` where even
+# that intrudes. The turn is the root of the arm's depth into the torso,
+# bracketed by bisection and placed in its last bracket by the depth's line, so
+# it is a continuous function of the pose. `torso` is the TORSO bone's pose, in
+# the space the joints are in. turned_elbow places the elbow it names.
+#
+# What it measures is the elbow's pad and the middle of each segment (past the
+# armhole, which is skinned into the torso), each allowed STEER_CONTACT_M of
+# overlap: a sleeve lying against the ribs is an arm at rest, not a clip. The
+# forearm's last stretch to the hand is not measured — the hand is where it is,
+# and no elbow moves it.
+const STEER_CONTACT_M: float = 0.03
+const _STEER_BISECTIONS: int = 6
+
+static func steer_turn(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, pole: Vector3, outward: Vector3, torso: Transform3D) -> float:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return 0.0
+	var axis: Vector3 = d_vec / d
+	var h: float = _elbow_offset(d, upper_len, forearm_len)
+	var foot: Vector3 = shoulder + axis * _elbow_foot(d, upper_len, forearm_len)
+	var bend: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+	var to_torso: Transform3D = torso.affine_inverse()
+	var unit: float = torso.basis.get_scale().x
+	var depth_lo: float = _arm_depth(shoulder, foot + bend * h, hand, to_torso, unit)
+	if depth_lo <= 0.0:
+		return 0.0
+	var out: Vector3 = outward - axis * outward.dot(axis)
+	if out.length_squared() < 0.000001 or h < 0.0001:
+		return 0.0
+	var full: float = bend.signed_angle_to(out.normalized(), axis)
+	var depth_hi: float = _arm_depth(shoulder, foot + bend.rotated(axis, full) * h, hand,
+			to_torso, unit)
+	if depth_hi > 0.0:
+		return full
+	var lo: float = 0.0
+	var hi: float = 1.0
+	for _i: int in _STEER_BISECTIONS:
+		var mid: float = (lo + hi) * 0.5
+		var depth: float = _arm_depth(shoulder, foot + bend.rotated(axis, full * mid) * h,
+				hand, to_torso, unit)
+		if depth > 0.0:
+			lo = mid
+			depth_lo = depth
+		else:
+			hi = mid
+			depth_hi = depth
+	return full * lerpf(lo, hi, depth_lo / (depth_lo - depth_hi))
+
+
+# The elbow `turn` radians off the pole's bend about the shoulder→hand line
+# (TwoBoneIK.solve_elbow's at 0).
+static func turned_elbow(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, pole: Vector3, turn: float) -> Vector3:
+	var d_vec: Vector3 = hand - shoulder
+	var d: float = d_vec.length()
+	if d < 0.0001:
+		return shoulder
+	var axis: Vector3 = d_vec / d
+	return shoulder + axis * _elbow_foot(d, upper_len, forearm_len) \
+			+ TwoBoneIK.bend_direction(shoulder, hand, pole).rotated(axis, turn) \
+			* _elbow_offset(d, upper_len, forearm_len)
+
+
+# Where along the shoulder→hand line the elbow's circle is centred, and its
+# radius, as TwoBoneIK.solve_elbow places them.
+static func _elbow_foot(d: float, upper_len: float, forearm_len: float) -> float:
+	var span: float = clampf(d, absf(upper_len - forearm_len), upper_len + forearm_len)
+	return (upper_len * upper_len - forearm_len * forearm_len + span * span) / (2.0 * span)
+
+
+static func _elbow_offset(d: float, upper_len: float, forearm_len: float) -> float:
+	var foot: float = _elbow_foot(d, upper_len, forearm_len)
+	return sqrt(maxf(upper_len * upper_len - foot * foot, 0.0))
+
+
+# How far the arm with its elbow at `elbow` sinks into the torso past contact
+# (m) at the deepest of the points steer_turn measures; negative, by the
+# narrowest margin, when it clears.
+static func _arm_depth(shoulder: Vector3, elbow: Vector3, hand: Vector3,
+		to_torso: Transform3D, unit: float) -> float:
+	return maxf(_depth(elbow, to_torso, unit), maxf(_depth((shoulder + elbow) * 0.5,
+			to_torso, unit), _depth(elbow.lerp(hand, 0.4), to_torso, unit)))
+
+
+static func _depth(p: Vector3, to_torso: Transform3D, unit: float) -> float:
+	return SkaterMeshBuilder.SLEEVE_RADIUS_M - STEER_CONTACT_M \
+			- SkaterMeshBuilder.torso_clearance(to_torso * p) * unit
+
+
 # The ELBOW bone: its Y out of the bend, the way the IK pushed the elbow, its X
 # along the arm, so its Z is the elbow's hinge.
 static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: Vector3,
@@ -33,40 +128,122 @@ static func elbow_pose(shoulder: Vector3, elbow: Vector3, hand: Vector3, pole: V
 
 
 # The fist at `hand` on a forearm from `elbow`: glove_basis, scaled.
-static func glove_pose(elbow: Vector3, hand: Vector3, grip: Vector3, max_bend: float,
-		thickness: Vector3) -> Transform3D:
-	return Transform3D(glove_basis((hand - elbow).normalized(), grip, max_bend)
-			.scaled_local(thickness), hand)
+static func glove_pose(elbow: Vector3, hand: Vector3, shaft: Vector3, grip_angle: float,
+		ulnar_max: float, radial_max: float, thickness: Vector3,
+		roll: float = 0.0) -> Transform3D:
+	return Transform3D(glove_basis((hand - elbow).normalized(), shaft, grip_angle, ulnar_max,
+			radial_max, roll).scaled_local(thickness), hand)
 
 
-# The fist on a forearm pointing `forearm_dir`. Its long (local Y) axis runs
-# wrist → fingers and its knuckle roll across local X. Off the stick (`grip`
-# ZERO) it lines up with the forearm, rolled from world up like the cuff. On it,
-# the knuckle roll lies along the shaft and the hand turns toward square across
-# it, bending at the wrist by up to `max_bend` radians: the wrist breaks as the
-# stick swings against the forearm.
-static func glove_basis(forearm_dir: Vector3, grip: Vector3, max_bend: float) -> Basis:
+# The fist on a forearm pointing `forearm_dir`, holding a shaft running
+# `shaft` toward the blade (ZERO off the stick). Its long (local Y) axis runs
+# wrist → fingers and its knuckle roll across local X, +X the thumb's side.
+# Off the stick it lines up with the forearm, rolled from world up like the
+# cuff. On it the hand holds the stick like a sword: the shaft crosses the palm
+# at `grip_angle` to the hand's long axis and leaves past the thumb toward the
+# blade, and the wrist deviates in the plane of the forearm and the shaft to
+# keep it there — toward the thumb up to `radial_max` as the shaft opens past
+# the grip, toward the little finger up to `ulnar_max` as it closes. Past either
+# the wrist stops and the shaft slips off the grip by the rest.
+#
+# `roll` turns the fist round the shaft off that (grip_roll): the wrist's
+# flexion, which carries the hand's long axis out of the forearm and shaft's
+# plane while the shaft stays across the palm at the same angle.
+static func glove_basis(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
+		ulnar_max: float, radial_max: float, roll: float = 0.0) -> Basis:
 	var straight := Basis.looking_at(forearm_dir, up_for_look_at(forearm_dir)) \
 			* Basis(Vector3.RIGHT, PI * 0.5)
-	if grip == Vector3.ZERO:
+	if shaft == Vector3.ZERO:
 		return straight
-	var across: float = forearm_dir.dot(grip)
-	var square: Vector3 = forearm_dir - grip * across
-	if square.length_squared() < 0.0001:
+	var across: Vector3 = forearm_dir - shaft * forearm_dir.dot(shaft)
+	if across.length_squared() < 0.000001:
 		return straight
-	square = square.normalized()
-	var hand_axis: Vector3 = forearm_dir
-	var hinge: Vector3 = forearm_dir.cross(square)
-	if hinge.length_squared() > 1e-8:
-		hand_axis = forearm_dir.rotated(hinge.normalized(),
-				minf(asin(clampf(absf(across), 0.0, 1.0)), max_bend))
-	var knuckles: Vector3 = grip - hand_axis * grip.dot(hand_axis)
-	if knuckles.length_squared() < 0.0001:
-		return straight
-	knuckles = knuckles.normalized()
-	if knuckles.dot(straight.x) < 0.0:
-		knuckles = -knuckles
-	return Basis(knuckles, -hand_axis, knuckles.cross(-hand_axis))
+	across = across.normalized()
+	var opening: float = forearm_dir.angle_to(shaft)
+	var held: float = opening - clampf(opening - grip_angle, -ulnar_max, radial_max)
+	var hand_axis: Vector3 = shaft * cos(held) + across * sin(held)
+	var thumb: Vector3 = (shaft - hand_axis * shaft.dot(hand_axis)).normalized()
+	if roll != 0.0:
+		hand_axis = hand_axis.rotated(shaft, roll)
+		thumb = thumb.rotated(shaft, roll)
+	return Basis(thumb, -hand_axis, thumb.cross(-hand_axis))
+
+
+# How far the fist on the shaft rolls round it off glove_basis's grip (radians,
+# about `shaft`), so the forearm holding it need not twist further than
+# `twist_max` off its neutral (`neutral`, neutral_thumb): held in the forearm and
+# shaft's plane, a shaft running down and away from a forearm across the body
+# leaves the thumb turned half round from where the forearm can put it. The
+# wrist's flexion rolls the hand, as far as `flex_max` of its long axis out of
+# that plane, and no further than brings the twist inside its range. `way`
+# (±1) is the way it rolls: always the same one for a hand, since choosing
+# the way that untwists sooner turns the fist over the shaft where the two
+# tie; 0 chooses it anyway.
+const _ROLL_BISECTIONS: int = 8
+
+static func grip_roll(forearm_dir: Vector3, shaft: Vector3, grip_angle: float,
+		ulnar_max: float, radial_max: float, neutral: Vector3, twist_max: float,
+		flex_max: float, way: float = 0.0) -> float:
+	if shaft == Vector3.ZERO or neutral == Vector3.ZERO:
+		return 0.0
+	var base: Basis = glove_basis(forearm_dir, shaft, grip_angle, ulnar_max, radial_max)
+	var thumb: Vector3 = base.x
+	var twist: float = forearm_twist(forearm_dir, thumb, neutral)
+	if twist <= twist_max:
+		return 0.0
+	var off_plane: float = sin((-base.y).angle_to(shaft))
+	var reach: float = PI * 0.5 if off_plane <= sin(flex_max) \
+			else asin(sin(flex_max) / off_plane)
+	if way == 0.0:
+		way = 1.0 if forearm_twist(forearm_dir, thumb.rotated(shaft, reach), neutral) \
+				<= forearm_twist(forearm_dir, thumb.rotated(shaft, -reach), neutral) else -1.0
+	var at_reach: float = forearm_twist(forearm_dir, thumb.rotated(shaft, way * reach), neutral)
+	if at_reach > twist_max:
+		return way * reach
+	var lo: float = 0.0
+	var hi: float = reach
+	var twist_hi: float = at_reach
+	for _i: int in _ROLL_BISECTIONS:
+		var mid: float = (lo + hi) * 0.5
+		var t: float = forearm_twist(forearm_dir, thumb.rotated(shaft, way * mid), neutral)
+		if t > twist_max:
+			lo = mid
+			twist = t
+		else:
+			hi = mid
+			twist_hi = t
+	return way * lerpf(lo, hi, (twist - twist_max) / maxf(twist - twist_hi, 0.000001))
+
+
+# The way (grip_roll's `way`) a top fist rolls to turn its knuckles forward,
+# for a left shot (whose top hand is his right) or a right one.
+static func knuckles_forward(left_shot: bool) -> float:
+	return -1.0 if left_shot else 1.0
+
+
+# How far (radians) the forearm pointing `forearm_dir` turns a thumb off its
+# neutral, about the forearm.
+static func forearm_twist(forearm_dir: Vector3, thumb: Vector3, neutral: Vector3) -> float:
+	var across: Vector3 = thumb - forearm_dir * thumb.dot(forearm_dir)
+	if across.length_squared() < 0.000001:
+		return 0.0
+	return across.angle_to(neutral)
+
+
+# Where a forearm from `elbow` to `hand` points its thumb untwisted, the arm
+# from `shoulder`: away from the elbow's point, square to the forearm — an arm
+# bent in front of the chest holds its thumb up. ZERO for an arm too straight
+# to have a point.
+static func neutral_thumb(shoulder: Vector3, elbow: Vector3, hand: Vector3) -> Vector3:
+	var line: Vector3 = hand - shoulder
+	var fore: Vector3 = hand - elbow
+	if line.length_squared() < 0.000001 or fore.length_squared() < 0.000001:
+		return Vector3.ZERO
+	line = line.normalized()
+	fore = fore.normalized()
+	var bend: Vector3 = (elbow - shoulder) - line * (elbow - shoulder).dot(line)
+	var away: Vector3 = -(bend - fore * bend.dot(fore))
+	return away.normalized() if away.length_squared() > 0.000001 else Vector3.ZERO
 
 
 # Glove cuff ring from `hand` back toward `elbow`, its near end `wrist_offset`

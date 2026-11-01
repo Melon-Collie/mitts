@@ -58,10 +58,13 @@ func _parts() -> Array[PartSpec]:
 				Vector3(0.023, 0.21, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
 		PartSpec.new("blade_runner", SkaterMeshBuilder._build_skate_blade(),
 				Vector3(0.01, 0.22, 0.04), false, SkaterMeshBuilder.BLADE_PART_RUNNER),
+		# Its depth takes the back of the hand's pad, as deep as the fist is wide.
 		PartSpec.new("glove_back", SkaterMeshBuilder.shared_glove_fist(),
-				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_BACK),
+				Vector3(2.2, 1.0, 2.2), false, SkaterMeshBuilder.FIST_PART_BACK),
 		PartSpec.new("glove_fingers", SkaterMeshBuilder.shared_glove_fist(),
 				Vector3(2.2, 1.0, 2.0), false, SkaterMeshBuilder.FIST_PART_FINGERS),
+		PartSpec.new("glove_thumb", SkaterMeshBuilder.shared_glove_fist(),
+				Vector3(0.85, 1.15, 1.35), false, SkaterMeshBuilder.FIST_PART_THUMB),
 		PartSpec.new("cuff", SkaterMeshBuilder.shared_cuff(),
 				Vector3(2.0, SkaterMeshBuilder.CUFF_HEIGHT_M, 2.0), false),
 		PartSpec.new("knob", SkaterMeshBuilder.shared_knob(),
@@ -130,6 +133,29 @@ func test_arm_rig_meshes_keep_their_placement_dimensions() -> void:
 	assert_almost_eq(SkaterMeshBuilder.shared_knob().get_aabb().size.y,
 			SkaterMeshBuilder.KNOB_HEIGHT_M, 0.001,
 			"knob mesh height must match KNOB_HEIGHT_M")
+
+
+# The torso's clearance query measures the rings the jersey is built on: each
+# ring's corners lie on it, its middle is inside, and a corner pushed out along
+# its radius clears it by the push.
+func test_torso_clearance_measures_the_rest_rings() -> void:
+	for station: int in SkaterMeshBuilder.TORSO_HEM_STATION + 1:
+		var ring: PackedVector3Array = SkaterMeshBuilder.torso_ring(station)
+		var middle := Vector3.ZERO
+		for k: int in ring.size() - 1:
+			middle += ring[k]
+		middle /= float(ring.size() - 1)
+		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.1,
+				"station %d's middle is inside" % station)
+		for k: int in ring.size() - 1:
+			var corner: Vector3 = ring[k]
+			assert_almost_eq(SkaterMeshBuilder.torso_clearance(corner), 0.0, 0.0005,
+					"station %d corner %d is on the surface" % [station, k])
+			var out: Vector3 = corner - middle
+			out.y = 0.0
+			assert_almost_eq(SkaterMeshBuilder.torso_clearance(
+					corner + out.normalized() * 0.05), 0.05, 0.005,
+					"station %d corner %d pushed out 5 cm clears by 5 cm" % [station, k])
 
 
 func test_helmet_opens_at_the_face() -> void:

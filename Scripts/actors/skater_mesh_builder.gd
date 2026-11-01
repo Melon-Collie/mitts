@@ -113,8 +113,7 @@ const ELBOW_PAD_RADIUS_M: float = SLEEVE_RADIUS_M * 1.04
 # curled fingertips, its knuckle roll across local X; SkaterArmPoses.glove_basis
 # aims it. UNIT-scale (stations are y, half_w, half_d multiples of
 # hand_sphere_radius). A fist off the stick takes its roll from world up, so the
-# section stays near-square: no face of it can be the back of the hand or carry
-# a thumb.
+# section stays near-square: no face of it can be the back of the hand.
 const _GLOVE_FINGER_STATION: int = 3
 # The fist's width across the knuckle roll, in hand radii.
 const GLOVE_FIST_SPAN: float = 2.2
@@ -129,6 +128,47 @@ const _GLOVE_FIST_STATIONS: Array[Vector3] = [
 	Vector3(-0.38, 1.06, 0.98),   # finger roll
 	Vector3(-0.78, 0.96, 0.90),
 	Vector3(-1.0, 0.70, 0.66),    # fingertips, turned under
+]
+# The thumb's pad on the fist's +X end of the knuckle roll, where a shaft held
+# like a sword leaves the hand toward the blade (SkaterArmPoses.glove_basis):
+# (y, half width, half depth, x of its middle), in hand radii as the fist's,
+# from its root by the back of the hand to its tip beside the fingers. It sits
+# _GLOVE_THUMB_PALM toward the palm, wrapped round the shaft, so the fist is a
+# right or a left one: the glove's +Z (its +X across its +Y, the wrist) is the
+# back of a right hand and the palm of a left.
+const _GLOVE_THUMB_PALM: float = 0.5
+# The back of the hand's pad, standing off the back of the fist: (y, half
+# width, half depth, how far toward the back its middle sits), in hand radii.
+const _GLOVE_BACK_PAD_STATIONS: Array[Vector4] = [
+	Vector4(0.80, 0.70, 0.12, 0.92),
+	Vector4(0.55, 0.86, 0.18, 1.00),
+	Vector4(0.20, 0.86, 0.18, 1.00),
+	Vector4(0.02, 0.70, 0.12, 0.94),
+]
+# The fingers as their own padded rolls, the fist's span split four ways with
+# a groove between them (half its width, in hand radii). Each leaves the knuckle
+# pointing down the fist and bends over round the shaft toward the palm, as a
+# closed fist's do: swept along an arc of _GLOVE_FINGER_BEND_R about a hinge
+# that far palm-ward of the knuckle (_GLOVE_FINGER_KNUCKLE: y, and how far
+# toward the back of the hand), through _GLOVE_FINGER_CURL_DEG in as many
+# segments, its section _GLOVE_FINGER_HALF_DEPTH deep either side of the arc and
+# narrowing to _GLOVE_FINGER_TIP at the tip. The back of the knuckle stands
+# level with the back of the hand, and the bottom of the bend with the fist's
+# own bottom.
+const _GLOVE_FINGERS: int = 4
+const _GLOVE_FINGER_GROOVE: float = 0.02
+const _GLOVE_FINGER_FACE_FRAC: float = 0.6
+const _GLOVE_FINGER_KNUCKLE := Vector2(-0.05, 0.53)
+const _GLOVE_FINGER_BEND_R: float = 0.5
+const _GLOVE_FINGER_HALF_DEPTH: float = 0.45
+const _GLOVE_FINGER_CURL_DEG: float = 150.0
+const _GLOVE_FINGER_SEGMENTS: int = 6
+const _GLOVE_FINGER_TIP: float = 0.8
+const _GLOVE_THUMB_STATIONS: Array[Vector4] = [
+	Vector4(0.60, 0.20, 0.55, 0.95),
+	Vector4(0.30, 0.34, 0.66, 1.12),
+	Vector4(-0.15, 0.34, 0.62, 1.22),
+	Vector4(-0.50, 0.24, 0.44, 1.16),
 ]
 
 # The glove on the arm, for every placer of it (the live rig through Skater's
@@ -301,6 +341,7 @@ const BLADE_PART_HOLDER: int = 0
 const BLADE_PART_RUNNER: int = 1
 const FIST_PART_BACK: int = 0
 const FIST_PART_FINGERS: int = 1
+const FIST_PART_THUMB: int = 2
 const HELMET_SURF_SHELL: int = 0
 const HELMET_SURF_SKIN: int = 1
 
@@ -431,28 +472,143 @@ static func torso_ring(station: int) -> PackedVector3Array:
 	return ring
 
 
+# How far `p` (torso-local) lies outside the torso's rest rings, metres, negative
+# inside: along the ring's ellipse radius at p's height, the circumscribed
+# ellipse of the faceted ring, so a point that clears it clears the faces.
+# Below the hem the tail hangs on at the hem's girth; above the collar is the
+# neck and head, which nothing here measures against, so INF.
+static func torso_clearance(p: Vector3) -> float:
+	if p.y > _TORSO_PROFILE[0].x + 0.0001:
+		return INF
+	var last: int = _TORSO_PROFILE.size() - 1
+	var radius: float = _TORSO_PROFILE[last].y
+	var sway: float = _TORSO_REAR_SWAY[last]
+	for i: int in last:
+		var a: Vector2 = _TORSO_PROFILE[i]
+		var b: Vector2 = _TORSO_PROFILE[i + 1]
+		if p.y >= b.x:
+			var t: float = (a.x - p.y) / (a.x - b.x)
+			radius = lerpf(a.y, b.y, t)
+			sway = lerpf(_TORSO_REAR_SWAY[i], _TORSO_REAR_SWAY[i + 1], t)
+			break
+	var q := Vector2(p.x, p.z - sway)
+	var span: float = q.length()
+	if span < 0.000001:
+		return -radius * _TORSO_Z_SCALE
+	var e: float = Vector2(q.x / (radius * _TORSO_X_SCALE), q.y / (radius * _TORSO_Z_SCALE)).length()
+	return span * (1.0 - 1.0 / e)
+
+
 # The pants are wider than deep by this, as the torso is.
 const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# torso_clearance's section, for the arms' C++ port (NativeArmRig.configure_torso).
+const TORSO_PROFILE: Array[Vector2] = _TORSO_PROFILE
+const TORSO_REAR_SWAY: Array[float] = _TORSO_REAR_SWAY
+const TORSO_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 
-# Gloved fist (see _GLOVE_FIST_STATIONS): the BACK of the hand on surface 0
-# and the FINGERS on surface 1, each closed at the knuckle ring they share.
-static func shared_glove_fist() -> ArrayMesh:
-	return _shared("glove_fist", func() -> ArrayMesh:
+# Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the
+# hand, closed at the seam, and its pad on surface 0, the FINGERS' four rolls on
+# surface 1, and the THUMB on surface 2.
+static func shared_glove_fist(right: bool = true) -> ArrayMesh:
+	# The palm's side of the glove's Z: the thumb wraps toward it, the back of
+	# the hand's pad stands off the other.
+	var palm: float = -1.0 if right else 1.0
+	return _shared("glove_fist_r" if right else "glove_fist_l", func() -> ArrayMesh:
 		var loops: Array[PackedVector3Array] = []
 		for s: Vector3 in _GLOVE_FIST_STATIONS:
 			loops.append(_octagon_loop(s.x, s.y, s.z, _GLOVE_FACE_FRAC, _GLOVE_SIDE_FRAC))
 		var m := ArrayMesh.new()
-		_commit_sweep_segment(m, loops, 0, _GLOVE_FINGER_STATION, _fist_loop_center)
-		_commit_sweep_segment(m, loops, _GLOVE_FINGER_STATION, loops.size() - 1,
-				_fist_loop_center)
+		var back: SurfaceTool = _flat_surface()
+		_add_sweep(back, loops.slice(0, _GLOVE_FINGER_STATION + 1), _fist_loop_center)
+		var pad: Array[PackedVector3Array] = []
+		for t: Vector4 in _GLOVE_BACK_PAD_STATIONS:
+			pad.append(_shifted(_octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
+					_GLOVE_SIDE_FRAC), Vector3(0.0, 0.0, -palm * t.w)))
+		_add_sweep(back, pad, _loop_centroid)
+		_commit_flat(back, m)
+		var fingers: SurfaceTool = _flat_surface()
+		for f: int in _GLOVE_FINGERS:
+			_add_sweep(fingers, _finger_roll(f, palm), _loop_centroid)
+		_commit_flat(fingers, m)
+		var thumb: Array[PackedVector3Array] = []
+		for t: Vector4 in _GLOVE_THUMB_STATIONS:
+			thumb.append(_shifted(_octagon_loop(t.x, t.y, t.z, _GLOVE_FACE_FRAC,
+					_GLOVE_SIDE_FRAC), Vector3(t.w, 0.0, palm * _GLOVE_THUMB_PALM)))
+		var thumb_st: SurfaceTool = _flat_surface()
+		_add_sweep(thumb_st, thumb, _loop_centroid)
+		_commit_flat(thumb_st, m)
 		return m)
+
+
+# Finger `f` of the fist's _GLOVE_FINGERS rolls, counted from the little
+# finger (−X) to the index (+X, the thumb's side), its loops square to its arc.
+static func _finger_roll(f: int, palm: float) -> Array[PackedVector3Array]:
+	var share: float = GLOVE_FIST_SPAN / _GLOVE_FINGERS
+	var x: float = -GLOVE_FIST_SPAN * 0.5 + share * (f + 0.5)
+	# The arc in the fist's (y, z): down the fist, then round toward the palm.
+	var down := Vector2(-1.0, 0.0)
+	var palm_way := Vector2(0.0, palm)
+	var knuckle := Vector2(_GLOVE_FINGER_KNUCKLE.x, -palm * _GLOVE_FINGER_KNUCKLE.y)
+	var hinge: Vector2 = knuckle + palm_way * _GLOVE_FINGER_BEND_R
+	var roll: Array[PackedVector3Array] = []
+	for k: int in _GLOVE_FINGER_SEGMENTS + 1:
+		var u: float = float(k) / _GLOVE_FINGER_SEGMENTS
+		var a: float = deg_to_rad(_GLOVE_FINGER_CURL_DEG) * u
+		var out: Vector2 = -palm_way * cos(a) + down * sin(a)
+		var at: Vector2 = hinge + out * _GLOVE_FINGER_BEND_R
+		var taper: float = lerpf(1.0, _GLOVE_FINGER_TIP, u * u)
+		var flat: PackedVector3Array = _octagon_loop(0.0,
+				(share * 0.5 - _GLOVE_FINGER_GROOVE) * taper, _GLOVE_FINGER_HALF_DEPTH * taper,
+				_GLOVE_FINGER_FACE_FRAC, _GLOVE_SIDE_FRAC)
+		var loop := PackedVector3Array()
+		loop.resize(flat.size())
+		for i: int in flat.size():
+			# The flat loop's z is its depth, outward (the back of the hand's way
+			# at the knuckle) round the bend.
+			var depth: Vector2 = at + out * flat[i].z * -palm
+			loop[i] = Vector3(x + flat[i].x, depth.x, depth.y)
+		roll.append(loop)
+	return roll
+
+
+static func _shifted(loop: PackedVector3Array, by: Vector3) -> PackedVector3Array:
+	for k: int in loop.size():
+		loop[k] += by
+	return loop
+
+
+static func _flat_surface() -> SurfaceTool:
+	var st := SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)  # flat shading — see class doc block
+	return st
+
+
+static func _commit_flat(st: SurfaceTool, target: ArrayMesh) -> void:
+	st.generate_normals()
+	st.commit(target)
+
+
+# A closed sweep through `loops`, capped at both ends, onto `st`.
+static func _add_sweep(st: SurfaceTool, loops: Array[PackedVector3Array],
+		center_of: Callable) -> void:
+	_sweep_loops(st, loops)
+	_loop_cap(st, loops[0], center_of.call(loops[0]), true)
+	_loop_cap(st, loops[-1], center_of.call(loops[-1]), false)
 
 
 # A fist loop's axis point — the sweep runs along local Y, so the caps fan to
 # the loop's own height on that axis.
 static func _fist_loop_center(loop: PackedVector3Array) -> Vector3:
 	return Vector3(0.0, loop[0].y, 0.0)
+
+
+static func _loop_centroid(loop: PackedVector3Array) -> Vector3:
+	var sum := Vector3.ZERO
+	for p: Vector3 in loop:
+		sum += p
+	return sum / loop.size()
 
 
 # Glove cuff: the fist's chamfered box section, posed in the fist's frame. x/z

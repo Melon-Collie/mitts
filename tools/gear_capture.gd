@@ -177,8 +177,8 @@ func _build_skate(holder: Node3D, model: int) -> void:
 # One glove under `holder`: the fist stands fingers-down (station order runs
 # wrist → fingers along −Y) with the cuff over its wrist, the live rig's
 # assembly blown up by one factor so the cuff keeps its place and proportion.
-# The fist is a multi-surface piece (back of the hand / fingers), so it paints
-# per surface.
+# The fist is a multi-surface piece (back of the hand / fingers / thumb), so it
+# paints per surface; the thumb takes the back's.
 func _build_glove(holder: Node3D, model: int) -> void:
 	var k: float = _FIST_SCALE / SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 	var center: float = _FIST_SCALE + 0.001  # fingertips (y −1) on the floor
@@ -190,6 +190,8 @@ func _build_glove(holder: Node3D, model: int) -> void:
 			_mat(_glove_zone(model, GearModelRegistry.GLOVE_BODY), 0.9))
 	fist.set_surface_override_material(SkaterMeshBuilder.FIST_PART_FINGERS,
 			_mat(_glove_zone(model, GearModelRegistry.GLOVE_FINGERS), 0.9))
+	fist.set_surface_override_material(SkaterMeshBuilder.FIST_PART_THUMB,
+			_mat(_glove_zone(model, GearModelRegistry.GLOVE_BODY), 0.9))
 	holder.add_child(fist)
 
 	var cuff := MeshInstance3D.new()

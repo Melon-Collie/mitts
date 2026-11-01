@@ -124,6 +124,11 @@ func _broadcast(half_width_m: float, hz: float, tremor_m: float, fps: float,
 		r.set_facing(from.facing)
 		r.set_balance_tilt(from.balance_tilt, Vector2.ZERO)
 		r.set_upper_body_rotation(lerpf(from.upper_body_rotation_y, to.upper_body_rotation_y, f))
+		# The wire's lean before its blade, which is local to the tilted frame
+		# (SkaterPoseCoordinator.apply_wire_lean): a carrier folds over the puck.
+		var posture: float = lerpf(from.posture_lean, to.posture_lean, f)
+		var torso: Vector2 = from.torso_lean.lerp(to.torso_lean, f)
+		r.set_upper_body_lean(torso.x + posture, torso.y, posture)
 		r.set_top_hand_position(from.top_hand_position.lerp(to.top_hand_position, f))
 		r.set_blade_position(from.blade_position.lerp(to.blade_position, f))
 		r.current_shot_state = to.shot_state

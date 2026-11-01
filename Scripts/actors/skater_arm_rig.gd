@@ -51,10 +51,14 @@ var helmet_pitch_follow: float = 0.85
 var helmet_roll_follow: float = 0.4
 
 # The arm's C++ port, one per arm (top, bottom), which writes that arm's bones
-# itself. Absent without the extension; native_enabled lets the parity test take
-# the GDScript path, which stays the reference.
+# itself and eases its own elbow turn and fist roll. Absent without the
+# extension; native_enabled lets the parity test take the GDScript path, which
+# stays the reference.
 var native_enabled: bool = true
 var _native_arms: Array[RefCounted] = []
+# NativeArmRig.pose's answers (its Result enum).
+const _NATIVE_DEGENERATE: int = 0
+const _NATIVE_SETTLING: int = 2
 var _native_dirty: bool = true
 var _trunk_texture := Basis.IDENTITY
 var _trunk_texture_head := Basis.IDENTITY
@@ -63,6 +67,18 @@ var _trunk_texture_roll: float = 0.0
 # The texture moved the shoulders the arms root on since the mesh pass last
 # asked (take_retextured).
 var _retextured: bool = false
+# Each arm's elbow turn off its pole round the torso (SkaterArmPoses.steer_turn),
+# as (turn, rate) in radians, eased so the elbow's speed stays continuous where
+# the turn engages and where it reaches its stop — snapped there, an arm swept
+# across the body jerked at both. Whether the ease is still moving, for the
+# rebuild gate (take_steering).
+var steer_omega: float = 20.0
+var _steer := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
+# The top fist's roll round the shaft (SkaterArmPoses.grip_roll), eased the
+# same way: half round, the way it rolls changes sides. Indexed by arm as the
+# steer is; the bottom's stays at rest.
+var _roll := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
+var _steering: bool = false
 # The jersey tail's drape below the belt, and the tuck it was draped for.
 var _hem := SkaterHemFlaps.new()
 var _hem_tuck: int = -1
@@ -86,13 +102,20 @@ func build(skeleton: Skeleton3D) -> void:
 	_base_pos.resize(count)
 	_skeleton = skeleton
 
-	if ClassDB.class_exists(&"NativeArmRig"):
+	if ClassDB.class_exists(&"NativeArmRig") \
+			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso"):
 		_native_arms = [ClassDB.instantiate(&"NativeArmRig") as RefCounted,
 				ClassDB.instantiate(&"NativeArmRig") as RefCounted]
 		for arm: int in 2:
 			var bones := PackedInt32Array(_ARM_PARTS[arm])
 			bones.append(SkaterBodySkeleton.SPINE_BONE)
+			bones.append(SkaterMeshBuilder.UpperBone.TORSO)
 			_native_arms[arm].bind(skeleton, bones)
+			_native_arms[arm].configure_torso(
+					PackedVector2Array(SkaterMeshBuilder.TORSO_PROFILE),
+					PackedFloat64Array(SkaterMeshBuilder.TORSO_REAR_SWAY),
+					SkaterMeshBuilder.TORSO_XZ_SCALE.x, SkaterMeshBuilder.TORSO_XZ_SCALE.y,
+					SkaterMeshBuilder.SLEEVE_RADIUS_M, SkaterArmPoses.STEER_CONTACT_M)
 	# Torso and helmet: their placement is authored in the scene, so it is read
 	# out and seeded onto their bones, same as the legs.
 	for bone: int in [SkaterMeshBuilder.UpperBone.TORSO,
@@ -141,9 +164,11 @@ func build(skeleton: Skeleton3D) -> void:
 
 # ── Arm pose ─────────────────────────────────────────────────────────────────
 
-func update_top_arm() -> void:
+# `delta` is the frame's, which the elbow's turn eases over; below 0 it lands at
+# once, for the callers with no clock.
+func update_top_arm(delta: float = -1.0) -> void:
 	var hand: Vector3 = _skater.drawn_top_hand()
-	_update_arm(0, _skater.shoulder.position, hand, _skater.stick_grip_axis(hand),
+	_update_arm(0, delta, _skater.shoulder.position, hand, _skater.stick_grip_axis(hand),
 			1.0 if _skater.is_left_handed else -1.0,
 			SkaterMeshBuilder.UpperBone.TOP_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.TOP_FOREARM,
@@ -154,11 +179,11 @@ func update_top_arm() -> void:
 
 # The bottom glove rides the drawn shaft's bow: the marker stays on the straight
 # gameplay stick, the hand goes where the bent shaft actually is.
-func update_bottom_arm() -> void:
+func update_bottom_arm(delta: float = -1.0) -> void:
 	var hand: Vector3 = _skater.bottom_hand.position
 	var grip: Vector3 = _skater.stick_grip_axis(hand)
 	hand += _skater.stick_bow_offset(hand)
-	_update_arm(1, _skater.bottom_shoulder.position, hand, grip,
+	_update_arm(1, delta, _skater.bottom_shoulder.position, hand, grip,
 			-1.0 if _skater.is_left_handed else 1.0,
 			SkaterMeshBuilder.UpperBone.BOTTOM_UPPER_ARM,
 			SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
@@ -169,52 +194,114 @@ func update_bottom_arm() -> void:
 
 # `grip_local` is the shaft's direction at this hand (upper-body space), ZERO for
 # a hand off the stick.
-func _update_arm(arm: int, marker_local: Vector3, hand_local: Vector3, grip_local: Vector3,
+func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vector3,
+		grip_local: Vector3,
 		pole_sign: float, upper: int, forearm: int, cuff: int, elbow_bone: int,
 		glove: int) -> void:
 	if native_enabled and not _native_arms.is_empty() \
-			and _native_update_arm(arm, marker_local, hand_local, grip_local, pole_sign):
+			and _native_update_arm(arm, delta, marker_local, hand_local, grip_local, pole_sign):
 		return
 	var spine: Transform3D = _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	var frame: Transform3D = _skater.drawn_upper_body()
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
 	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
-	var elbow_s: Vector3 = TwoBoneIK.solve_elbow(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length, pole_s)
+	var turn: float = _ease_steer(arm, delta, SkaterArmPoses.steer_turn(shoulder_s, hand_s,
+			_skater.upper_arm_length, _skater.forearm_length, pole_s,
+			spine.basis * Vector3(pole_sign, 0.0, 0.0),
+			_skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)))
+	var elbow_s: Vector3 = SkaterArmPoses.turned_elbow(shoulder_s, hand_s,
+			_skater.upper_arm_length, _skater.forearm_length, pole_s, turn)
 	_pose_bone(upper, shoulder_s, elbow_s)
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
-	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, pole_s)
-	_pose_glove(glove, elbow_s, hand_s, frame.basis * grip_local)
+	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, elbow_s - shoulder_s)
+	var shaft_s: Vector3 = frame.basis * grip_local
+	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
+			else _skater.bottom_grip_angle_deg
+	# The bottom hand holds the shaft from underneath, palm up, as the plane grip
+	# already has it; only the top fist rolls.
+	var roll: float = 0.0 if arm != 0 else _ease_roll(arm, delta,
+			_grip_roll(shoulder_s, elbow_s, hand_s, shaft_s, grip_deg,
+			SkaterArmPoses.knuckles_forward(_skater.is_left_handed)))
+	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
+
+
+func _ease_steer(arm: int, delta: float, target: float) -> float:
+	return _ease(_steer, arm, delta, target)
+
+
+func _ease_roll(arm: int, delta: float, target: float) -> float:
+	return _ease(_roll, arm, delta, target)
+
+
+# One of an arm's eased angles (turn, rate) toward `target`; landed at once with
+# no clock.
+func _ease(held_by_arm: PackedVector2Array, arm: int, delta: float, target: float) -> float:
+	if delta < 0.0:
+		held_by_arm[arm] = Vector2(target, 0.0)
+		return target
+	var held: Vector2 = held_by_arm[arm]
+	var eased: Vector4 = BalanceRules.spring_step(Vector2(held.x, 0.0), Vector2(held.y, 0.0),
+			Vector2(target, 0.0), steer_omega, delta)
+	held_by_arm[arm] = Vector2(eased.x, eased.z)
+	if absf(eased.x - target) > 0.0001 or absf(eased.z) > 0.001:
+		_steering = true
+	return eased.x
+
+
+func _grip_roll(shoulder: Vector3, elbow: Vector3, hand: Vector3, shaft: Vector3,
+		grip_deg: float, way: float) -> float:
+	var forearm: Vector3 = hand - elbow
+	if shaft == Vector3.ZERO or forearm.length_squared() < 0.0001:
+		return 0.0
+	return SkaterArmPoses.grip_roll(forearm.normalized(), shaft, deg_to_rad(grip_deg),
+			deg_to_rad(_skater.wrist_ulnar_max_deg), deg_to_rad(_skater.wrist_radial_max_deg),
+			SkaterArmPoses.neutral_thumb(shoulder, elbow, hand),
+			deg_to_rad(_skater.forearm_twist_max_deg), deg_to_rad(_skater.wrist_flex_max_deg),
+			way)
+
+
+# Whether an elbow's turn was still easing at the last rebuild.
+func take_steering() -> bool:
+	var moving: bool = _steering
+	_steering = false
+	return moving
 
 
 # _update_arm in C++ (NativeArmRig), bone writes included. False on a
 # degenerate span, which the GDScript path's held poses answer instead.
-func _native_update_arm(arm: int, marker_local: Vector3, hand_local: Vector3,
+func _native_update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vector3,
 		grip_local: Vector3, pole_sign: float) -> bool:
 	if _native_dirty:
 		_configure_native()
 	var pole: Vector3 = _skater.arm_pole_local
 	pole.x *= pole_sign
 	var arm_len: float = _skater.upper_arm_length + _skater.forearm_length
-	if not _native_arms[arm].pose(marker_local, hand_local, grip_local, _skater.drawn_upper_body(),
-			_trunk_texture, pole,
+	var result: int = _native_arms[arm].pose(marker_local, hand_local, grip_local,
+			_skater.drawn_upper_body(), _trunk_texture, pole,
 			Vector4(_skater.upper_arm_length, _skater.forearm_length,
 			arm_len * _skater.arm_working_extension, _skater.shoulder_reach_m),
 			Vector3(_skater.get_check_lead(), _skater.shoulder_offset,
-			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset)):
-		return false
-	return true
+			SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5 + _skater.cuff_wrist_offset),
+			Vector3(delta, SkaterArmPoses.knuckles_forward(_skater.is_left_handed)
+			if arm == 0 else 0.0, pole_sign))
+	if result == _NATIVE_SETTLING:
+		_steering = true
+	return result != _NATIVE_DEGENERATE
 
 
 func _configure_native() -> void:
 	_native_dirty = false
+	var wrist := Vector4(deg_to_rad(_skater.wrist_ulnar_max_deg),
+			deg_to_rad(_skater.wrist_radial_max_deg), deg_to_rad(_skater.wrist_flex_max_deg),
+			deg_to_rad(_skater.forearm_twist_max_deg))
 	for arm: int in 2:
 		var parts: Array = _ARM_PARTS[arm]
 		_native_arms[arm].configure(_thickness[parts[0]], _thickness[parts[1]],
 				_thickness[parts[2]], _thickness[parts[3]], _thickness[parts[4]],
-				deg_to_rad(_skater.wrist_break_max_deg))
+				deg_to_rad(_skater.top_grip_angle_deg if arm == 0 else _skater.bottom_grip_angle_deg),
+				wrist, steer_omega)
 
 
 # The elbow's pole on this arm's side, tucked by a check load.
@@ -223,6 +310,14 @@ func _arm_pole(marker_local: Vector3, pole_sign: float) -> Vector3:
 	pole_local.x *= pole_sign
 	return CheckStanceRules.tucked_pole(pole_local, CheckStanceRules.side_load(
 			_skater.get_check_lead(), signf(marker_local.x)))
+
+
+# How far a point in skeleton space lies outside the jersey as the torso is
+# posed now, metres, negative inside (SkaterMeshBuilder.torso_clearance).
+func torso_clearance(point: Vector3) -> float:
+	var torso: Transform3D = _skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
+	return SkaterMeshBuilder.torso_clearance(torso.affine_inverse() * point) \
+			* torso.basis.get_scale().x
 
 
 # A shoulder MARKER's place on the visible trunk, in UpperBody's frame — where a
@@ -298,8 +393,9 @@ func _pose_elbow(part: int, shoulder: Vector3, elbow: Vector3, hand: Vector3,
 
 
 # Positions the gloved fist at the hand; `grip` is the shaft through the fist
-# (skeleton space), ZERO off the stick.
-func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> void:
+# toward the blade (skeleton space), ZERO off the stick.
+func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3,
+		grip_angle_deg: float, roll: float = 0.0) -> void:
 	var scale_v: Vector3 = _thickness[part]
 	var dir: Vector3 = hand - elbow
 	if dir.length_squared() < 0.0001:
@@ -308,7 +404,8 @@ func _pose_glove(part: int, elbow: Vector3, hand: Vector3, grip: Vector3) -> voi
 		_skeleton.set_bone_pose(part, held)
 		return
 	var basis: Basis = SkaterArmPoses.glove_basis(dir.normalized(), grip,
-			deg_to_rad(_skater.wrist_break_max_deg))
+			deg_to_rad(grip_angle_deg), deg_to_rad(_skater.wrist_ulnar_max_deg),
+			deg_to_rad(_skater.wrist_radial_max_deg), roll)
 	_skeleton.set_bone_pose(part, Transform3D(basis.scaled_local(scale_v), hand))
 
 

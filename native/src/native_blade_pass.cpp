@@ -24,6 +24,8 @@ constexpr double SIDE_EPS_M = 0.001;
 constexpr double TELEPORT_M = 1.0;
 // The wall-pin release's power (SkaterIKCoordinator's literal).
 constexpr double WALL_PIN_POWER = 3.0;
+// SkaterIKCoordinator.GOALIE_SETTLE_PASSES.
+constexpr int GOALIE_SETTLE_PASSES = 4;
 
 // GDScript's sign() and signf(): 0 at 0.
 double sgn(double x) {
@@ -285,6 +287,8 @@ bool NativeBladePass::configure(const Dictionary &t) {
 	bottom_hand_grip_fraction = read(t, "bottom_hand_grip_fraction", ok);
 	faceoff_center_grip_fraction = read(t, "faceoff_center_grip_fraction", ok);
 	twist_limit = read(t, "twist_limit", ok);
+	const double forward_none = read(t, "top_hand_forward_none_m", ok);
+	const double forward_full = read(t, "top_hand_forward_full_m", ok);
 	const double fh_angle = read(t, "rom_forehand_angle_max", ok);
 	const double bh_angle = read(t, "rom_backhand_angle_max", ok);
 	const double fh_reach = read(t, "rom_forehand_reach_max", ok);
@@ -295,6 +299,8 @@ bool NativeBladePass::configure(const Dictionary &t) {
 		top->set_rom_forward_reach_max(rom_forward_reach_max);
 		top->set_rom_forehand_reach_max(fh_reach);
 		top->set_rom_backhand_reach_max(bh_reach);
+		top->set_hand_forward_none(forward_none);
+		top->set_hand_forward_full(forward_full);
 	}
 	return ok;
 }
@@ -333,10 +339,9 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 	blade_y_local = (blade_height + lift) - (double)ub_xf.origin.y;
 	const Vector3 rot = v[V_UB_ROTATION];
 	tilt = Basis::from_euler(Vector3(rot.x, 0.0, rot.z));
+	top->set_hand_forward(s[S_HAND_FORWARD]);
 	trunk_shoulder = shoulder_in_frame(v[V_SHOULDER]);
-	const double fold = Math::deg_to_rad(faceoff_center_lean_deg) * s[S_ADDRESS];
-	arm_shoulder = fold < 0.001 ? trunk_shoulder
-								: Basis::from_euler(Vector3(-fold, 0.0, 0.0)).xform(trunk_shoulder);
+	place_arm_shoulder();
 	bottom_trunk_shoulder = shoulder_in_frame(v[V_BOTTOM_SHOULDER]);
 
 	// 1. The reach target.
@@ -360,6 +365,9 @@ void NativeBladePass::run(const Transform3D &p_skater_xf, const Transform3D &p_u
 		target_blade_world.y = 0.0;
 		out_last_target = target_blade_world;
 	} else {
+		if (has_puck) {
+			mouse_world = held_out(mouse_world);
+		}
 		Vector3 shoulder_world = ub_xf.xform(arm_shoulder);
 		shoulder_world.y = 0.0;
 		if ((double)(mouse_world - shoulder_world).length() < 0.01) {
@@ -456,7 +464,22 @@ void NativeBladePass::resume(bool p_has_puck) {
 	ERR_FAIL_COND(!pending);
 	pending = false;
 	has_puck = p_has_puck;
+	// The GDScript reads the chest's fold live (chest_fold, on has_puck), so the
+	// rest of a pass whose release took the puck rebuilds the hand from a
+	// shoulder no longer folded over the stick.
+	if (!has_puck && s[S_CHEST_FOLD] != 0.0) {
+		s[S_CHEST_FOLD] = 0.0;
+		place_arm_shoulder();
+	}
 	continue_pass();
+}
+
+// SkaterIKCoordinator.arm_shoulder: the trunk's shoulder, the centre's address
+// fold, then the chest's over the stick.
+void NativeBladePass::place_arm_shoulder() {
+	const double fold = Math::deg_to_rad(faceoff_center_lean_deg) * s[S_ADDRESS];
+	arm_shoulder = folded(fold < 0.001 ? trunk_shoulder
+									   : Basis::from_euler(Vector3(-fold, 0.0, 0.0)).xform(trunk_shoulder));
 }
 
 void NativeBladePass::release(const Vector3 &dir, double power) {
@@ -480,17 +503,32 @@ void NativeBladePass::finish() {
 	}
 	// Rebuild the arm for a blade a clamp moved: the blade is authoritative.
 	if (wall_clamped != intended_blade) {
-		const Vector3 clamped_level = tilt.xform(wall_clamped);
-		hand = tilt.transposed().xform(hand_for_clamped_blade(
-				tilt.xform(arm_shoulder),
-				Vector2(clamped_level.x, clamped_level.z),
-				clamped_level.y,
-				level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY)));
-		enforce_rigid_stick(arm_shoulder, hand, wall_clamped,
-				ik_config(wall_clamped.y, INFINITY));
+		arm_for_clamped_blade();
+		// The rebuilt hand turns the toe: hold it off the goalie again.
+		for (int k = 0; k < GOALIE_SETTLE_PASSES; k++) {
+			const Vector3 settled_heel = ub_xf.xform(wall_clamped);
+			const Vector3 more = resolve_goalies(settled_heel);
+			if (more == Vector3()) {
+				break;
+			}
+			wall_clamped = ub_inv.xform(settled_heel + more);
+			arm_for_clamped_blade();
+		}
 	}
 	out_hand = hand;
 	out_blade = wall_clamped;
+}
+
+// SkaterIKCoordinator._arm_for_clamped_blade, onto hand and wall_clamped.
+void NativeBladePass::arm_for_clamped_blade() {
+	const Vector3 clamped_level = tilt.xform(wall_clamped);
+	hand = tilt.transposed().xform(hand_for_clamped_blade(
+			tilt.xform(arm_shoulder),
+			Vector2(clamped_level.x, clamped_level.z),
+			clamped_level.y,
+			level_config(tilt.xform(trunk_shoulder).y, blade_y_local, INFINITY)));
+	enforce_rigid_stick(arm_shoulder, hand, wall_clamped,
+			ik_config(wall_clamped.y, INFINITY));
 }
 
 // ── The body ───────────────────────────────────────────────────────────────────
@@ -566,6 +604,31 @@ Vector2 NativeBladePass::blade_target_for(const Vector2 &cursor_xz) const {
 	return target;
 }
 
+// SkaterIKCoordinator._held_out through CarryPostureRules.held_out: a carrier's
+// cursor no closer than the floor off his centre, across the ice in the
+// facing's frame.
+Vector3 NativeBladePass::held_out(const Vector3 &cursor_world) const {
+	const Vector3 local = skater_xf.affine_inverse().xform(cursor_world);
+	const double min_out = s[S_CARRY_FLOOR];
+	Vector2 held(local.x, local.z);
+	const double out = held.length();
+	if (out < min_out) {
+		held = out < 0.001 ? Vector2(0.0, -min_out) : held * (real_t)(min_out / out);
+	}
+	Vector3 world = skater_xf.xform(Vector3(held.x, local.y, held.y));
+	world.y = 0.0;
+	return world;
+}
+
+// CarryPostureRules.folded_shoulder by the chest's fold over the stick.
+Vector3 NativeBladePass::folded(const Vector3 &marker) const {
+	const double fold = s[S_CHEST_FOLD];
+	if (fold < 0.00001) {
+		return marker;
+	}
+	return Basis(Vector3(1.0, 0.0, 0.0), -fold).xform(marker);
+}
+
 // SkaterIKCoordinator._board_reach_limit.
 double NativeBladePass::board_reach_limit(const Vector2 &target_xz, const Vector3 &shoulder_world) const {
 	const Vector2 origin(shoulder_world.x, shoulder_world.z);
@@ -634,7 +697,7 @@ void NativeBladePass::apply_cfg(const Cfg &cfg) const {
 
 // SkaterIKCoordinator._two_hand_reach.
 double NativeBladePass::two_hand_reach(const Vector3 &shoulder, const Vector2 &target_xz, const Cfg &cfg) {
-	const Vector3 bottom = tilt.xform(bottom_trunk_shoulder);
+	const Vector3 bottom = tilt.xform(folded(bottom_trunk_shoulder));
 	apply_cfg(cfg);
 	const double grip = lerpd(bottom_hand_grip_fraction, faceoff_center_grip_fraction, s[S_ADDRESS]);
 	return top->two_hand_reach(shoulder, target_xz, sign, bottom, grip, s[S_BOTTOM_REACH],
@@ -781,19 +844,15 @@ Vector3 NativeBladePass::hand_for_clamped_blade(const Vector3 &shoulder, const V
 	const double d = from_shoulder.length();
 	const double rest_drop = cfg.hand_rest_y - p_blade_y;
 	const double stick_horiz_at_rest = Math::sqrt(MAX(cfg.stick_length * cfg.stick_length - rest_drop * rest_drop, 0.0001));
-	// TopHandIK.hand_reach.
-	const double x = d - stick_horiz_at_rest;
-	const double band = 0.08;
-	double reach = x;
-	if (x <= -band) {
-		reach = 0.0;
-	} else if (x < band) {
-		reach = (x + band) * (x + band) / (4.0 * band);
-	}
-	if (reach <= 0.0) {
-		const double drop_sq = cfg.stick_length * cfg.stick_length - d * d;
+	const Vector2 bearing = d > 0.0001 ? from_shoulder / (real_t)d : Vector2(0.0, -1.0);
+	const double floor_m = top->forward_floor(d, NativeTopHandIK::to_forehand(bearing, sign));
+	const double reach = floor_m + NativeTopHandIK::hand_reach(d - floor_m, stick_horiz_at_rest);
+	if (reach <= floor_m) {
+		const double span = d - floor_m;
+		const double drop_sq = cfg.stick_length * cfg.stick_length - span * span;
 		const double hand_y = MIN(p_blade_y + Math::sqrt(MAX(drop_sq, 0.0)), cfg.hand_y_max);
-		return Vector3(shoulder_xz.x, hand_y, shoulder_xz.y);
+		const Vector2 close_xz = shoulder_xz + bearing * (real_t)floor_m;
+		return Vector3(close_xz.x, hand_y, close_xz.y);
 	}
 	const Vector2 dir = from_shoulder / (real_t)d;
 	const double angle_to_forehand = CLAMP(

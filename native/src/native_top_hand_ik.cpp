@@ -23,14 +23,16 @@ Vector3 NativeTopHandIK::project_blade(
 
 	// CLOSE regime: see top_hand_ik.gd for why the aim is clamped to the same
 	// angular ROM the FAR regime enforces, and why hand_y_max is the inner
-	// boundary of a long stick's reachable region.
-	if (r < stick_horiz_at_rest) {
+	// boundary of a long stick's reachable region. The hand sits its floor out
+	// along the aim (forward_floor), so the stick spans what is left.
+	double floor_m = forward_floor(r, to_forehand(aim_dir, blade_side_sign));
+	if (r - floor_m < stick_horiz_at_rest) {
 		aim_dir = clamp_aim_to_rom(aim_dir, blade_side_sign);
-		const double ideal_drop_sq = stick_length * stick_length - r * r;
-		const double ideal_hand_y = blade_y + Math::sqrt(MAX(ideal_drop_sq, 0.0));
-		const double hand_y = MIN(ideal_hand_y, hand_y_max);
-		const double stick_horiz = stick_horiz_for(stick_length, hand_y, blade_y);
-		const Vector2 close_blade_xz = shoulder_xz + aim_dir * (real_t)stick_horiz;
+		const double tf = to_forehand(aim_dir, blade_side_sign);
+		floor_m = forward_floor(r, tf);
+		const double span_min = stick_horiz_for(stick_length, hand_y_max, blade_y);
+		const double d = r - floor_m >= span_min ? r : blade_for_span(span_min, tf);
+		const Vector2 close_blade_xz = shoulder_xz + aim_dir * (real_t)d;
 		return Vector3(close_blade_xz.x, blade_y, close_blade_xz.y);
 	}
 
@@ -70,16 +72,10 @@ void NativeTopHandIK::solve(
 	const Vector2 from_shoulder = Vector2(blade.x, blade.z) - shoulder_xz;
 	const double d = from_shoulder.length();
 	const double stick_horiz_at_rest = stick_horiz_for(stick_length, hand_rest_y, blade_y);
-	// TopHandIK.hand_reach: the regime change rounded across REGIME_BAND_M.
-	const double x = d - stick_horiz_at_rest;
-	double reach = x;
-	if (x <= -REGIME_BAND_M) {
-		reach = 0.0;
-	} else if (x < REGIME_BAND_M) {
-		reach = (x + REGIME_BAND_M) * (x + REGIME_BAND_M) / (4.0 * REGIME_BAND_M);
-	}
 	const Vector2 dir = d > 0.0001 ? from_shoulder / (real_t)d : Vector2(0.0, -1.0);
+	const double reach = floored_reach(d, stick_horiz_at_rest, to_forehand(dir, blade_side_sign));
 	const Vector2 hand_xz = shoulder_xz + dir * (real_t)reach;
+	// TopHandIK._hand_y_on_stick.
 	const double horiz = d - reach;
 	double hand_y = hand_rest_y;
 	if (horiz < stick_horiz_at_rest) {
@@ -200,6 +196,55 @@ double NativeTopHandIK::two_hand_reach(
 	return lo;
 }
 
+// The engine's smoothstep, which GDScript calls (godot-cpp's differs at equal
+// bounds).
+static double smoothstep_gd(double from, double to, double x) {
+	if (Math::is_equal_approx(from, to)) {
+		if (from <= to) {
+			return x <= from ? 0.0 : 1.0;
+		}
+		return x <= to ? 1.0 : 0.0;
+	}
+	const double t = CLAMP((x - from) / (to - from), 0.0, 1.0);
+	return t * t * (3.0 - 2.0 * t);
+}
+
+double NativeTopHandIK::forward_floor(double d, double tf) const {
+	if (hand_forward <= 0.0) {
+		return 0.0;
+	}
+	return hand_forward * smoothstep_gd(hand_forward_none, hand_forward_full, d)
+			* smoothstep_gd(hand_forward_none_angle, hand_forward_full_angle, tf);
+}
+
+double NativeTopHandIK::hand_reach(double d, double rest_horiz) {
+	const double x = d - rest_horiz;
+	if (x >= REGIME_BAND_M) {
+		return x;
+	}
+	if (x <= -REGIME_BAND_M) {
+		return 0.0;
+	}
+	return (x + REGIME_BAND_M) * (x + REGIME_BAND_M) / (4.0 * REGIME_BAND_M);
+}
+
+double NativeTopHandIK::floored_reach(double d, double rest_horiz, double tf) const {
+	const double floor_m = forward_floor(d, tf);
+	return floor_m + hand_reach(d - floor_m, rest_horiz);
+}
+
+double NativeTopHandIK::blade_for_span(double span, double tf) const {
+	double d = span + hand_forward;
+	for (int i = 0; i < FLOOR_ITERATIONS; i++) {
+		d = span + forward_floor(d, tf);
+	}
+	return d;
+}
+
+double NativeTopHandIK::to_forehand(const Vector2 &dir, double blade_side_sign) {
+	return Math::atan2((double)dir.x, -(double)dir.y) * blade_side_sign;
+}
+
 double NativeTopHandIK::stick_horiz_for(double stick_length, double hand_y, double blade_y) {
 	const double drop = hand_y - blade_y;
 	const double sq = stick_length * stick_length - drop * drop;
@@ -269,6 +314,29 @@ void NativeTopHandIK::_bind_methods() {
 			"set_rom_backhand_reach_max", "get_rom_backhand_reach_max");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "max_blade_reach"),
 			"set_max_blade_reach", "get_max_blade_reach");
+	ClassDB::bind_method(D_METHOD("set_hand_forward", "v"), &NativeTopHandIK::set_hand_forward);
+	ClassDB::bind_method(D_METHOD("get_hand_forward"), &NativeTopHandIK::get_hand_forward);
+	ClassDB::bind_method(D_METHOD("set_hand_forward_none", "v"), &NativeTopHandIK::set_hand_forward_none);
+	ClassDB::bind_method(D_METHOD("get_hand_forward_none"), &NativeTopHandIK::get_hand_forward_none);
+	ClassDB::bind_method(D_METHOD("set_hand_forward_full", "v"), &NativeTopHandIK::set_hand_forward_full);
+	ClassDB::bind_method(D_METHOD("get_hand_forward_full"), &NativeTopHandIK::get_hand_forward_full);
+	ClassDB::bind_method(D_METHOD("set_hand_forward_none_angle", "v"),
+			&NativeTopHandIK::set_hand_forward_none_angle);
+	ClassDB::bind_method(D_METHOD("get_hand_forward_none_angle"),
+			&NativeTopHandIK::get_hand_forward_none_angle);
+	ClassDB::bind_method(D_METHOD("set_hand_forward_full_angle", "v"),
+			&NativeTopHandIK::set_hand_forward_full_angle);
+	ClassDB::bind_method(D_METHOD("get_hand_forward_full_angle"),
+			&NativeTopHandIK::get_hand_forward_full_angle);
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward"), "set_hand_forward", "get_hand_forward");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward_none"),
+			"set_hand_forward_none", "get_hand_forward_none");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward_full"),
+			"set_hand_forward_full", "get_hand_forward_full");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward_none_angle"),
+			"set_hand_forward_none_angle", "get_hand_forward_none_angle");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "hand_forward_full_angle"),
+			"set_hand_forward_full_angle", "get_hand_forward_full_angle");
 }
 
 } // namespace mitts

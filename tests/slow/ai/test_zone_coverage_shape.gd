@@ -85,8 +85,8 @@ extends GutTest
 #
 # The point-shot and crossing-cutter fixtures' attacks are now SCRIPTED (see the
 # tests), so their readings are not rollouts of the bot attack and no longer
-# belong to the table above: they read 0.63 and 0.35 unattended/tick and carry
-# their own pins. Only low cycle still runs the bot attack.
+# belong to the table above; each carries its own pin, below. Only low cycle
+# still runs the bot attack.
 #
 # Low cycle then read 2.02 unattended and 0.027 open danger, and moved to 2.21 and
 # 0.180 when the duel harness started holding the blade at the shot origin
@@ -161,8 +161,14 @@ const UNCOVERED_CARRIED_CEILING: float = 1.22
 const UNCOVERED_CEILING_CROSSING_CUTTER: float = 1.28
 # Share of the D-zone ticks the cutter may go unattended (measured 0 of 480).
 const CUTTER_DROPPED_CEILING: float = 0.05
-# The scripted point shot (measured 0.63), pinned at the same ~0.28 margin.
-const UNCOVERED_CEILING_POINT_SHOT: float = 0.9
+# The scripted point shot (measured 0.91), pinned at the same ~0.28 margin. Half
+# its D-zone ticks are a loose puck: the point man is knocked off it at tick 127
+# and a defender gathers it at 135, and every attacker counts as a man to cover
+# while it is loose. It read 0.82 until the carry's floor
+# (SkaterController.carry_reach_min_m) held that defender's blade out to 0.8 m for
+# the two ticks he had it, and the puck squirted off along another line —
+# another rollout, not a coverage change: the floor moves nothing else here.
+const UNCOVERED_CEILING_POINT_SHOT: float = 1.19
 # The man nobody has should not routinely be a prime scoring threat. A loose
 # guard — it separated the two models weakly — against a collapse.
 const OPEN_DANGER_CEILING: float = 0.25

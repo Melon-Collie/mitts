@@ -297,6 +297,12 @@ var hand_rest_y: float = -0.10
 # (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
 # 1.27 → min horizontal stick reach ≈ 0.28 m.
 var hand_y_max: float = 0.30
+# The least the top hand reaches off its shoulder toward a blade held round the
+# forehand, gone as the blade comes in tight (TopHandIK.Config.hand_forward):
+# the stick runs from in front of the belly, not the far hip.
+var top_hand_forward_m: float = 0.22
+var top_hand_forward_none_m: float = 0.3
+var top_hand_forward_full_m: float = 0.9
 # Asymmetric ROM for the top hand (measured from shoulder in upper-body-local
 # horizontal plane, expressed in "forehand side = positive angle" convention).
 # The rim is a half-ellipse (TopHandIK.rim_reach): longest straight ahead,
@@ -418,7 +424,8 @@ var upper_body_follow_damping: float = 18.0     # damping (near-critical — a c
 # far the skater visibly lunges. engage_power > 1 keeps the torso quiet mid-ROM
 # and commits the lean near full extension.
 # The forward cap sits on top of the skating posture's own fold
-# (velocity_lean_forward_max_deg), so the two together stay a reach, not a dive.
+# (velocity_lean_forward_max_deg, or a carrier's carry_fold_deg), so the two
+# together stay a reach, not a dive.
 # Scaled by the stick's purpose (SkaterIKCoordinator.reach_purpose): with nothing
 # to reach for the trunk keeps its posture.
 var upper_body_lean_max_deg: float = 15.0
@@ -443,6 +450,19 @@ var reach_purpose_far_m: float = 1.8
 var velocity_lean_forward_max_deg: float = 20.0
 var velocity_lean_back_max_deg: float = 6.0
 var velocity_lean_speed: float = 6.0
+# How far a carrier's chest folds over a stick held in front of him (CarryPostureRules),
+# standing or skating — its shoulders, and with them his hands, out in front of
+# his hips where both can hold it.
+var carry_fold_deg: float = 22.0
+# The least a carried puck comes off the centre of his body (m; CarryPostureRules
+# .held_out): pulled in closer, the shaft stands up beside him, the top hand rises
+# into his armpit and the bottom arm reaches it only through his belly.
+var carry_reach_min_m: float = 0.8
+# And this much further out with his chest folded over his skating by
+# velocity_lean_forward_max_deg: the fold brings his shoulder down to the
+# hands, and held as close as standing, the top hand rises level with it, the
+# elbow hangs below the fist and the shaft leaves it past the little finger.
+var carry_reach_fold_m: float = 0.15
 var lower_body_pitch_follow: float = 0.35
 
 # ── Lower Body Lag Tuning ─────────────────────────────────────────────────────
@@ -665,6 +685,7 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
+var carry_crouch: float = 1.0            # crouch floor under the full chest fold over the stick (× stance_hip_deg)
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND
@@ -733,11 +754,11 @@ var head_track_speed: float = 12.0
 var head_track_max_deg: float = 60.0
 # A carrier glances down at the puck (degrees of nod) as the hands work it
 # (the puck's speed off the body over the band, m/s) and as it comes in tight
-# (its distance over the band, m), less as the skater picks up speed: eyes up
-# on open ice.
+# (its distance over the band, m; carry_reach_min_m is as close as it comes),
+# less as the skater picks up speed: eyes up on open ice.
 var head_puck_nod_deg: float = 28.0
 var head_puck_hands_band: Vector2 = Vector2(1.0, 3.5)
-var head_puck_close_band: Vector2 = Vector2(0.9, 0.45)
+var head_puck_close_band: Vector2 = Vector2(1.05, 0.85)
 var head_puck_skate_band: Vector2 = Vector2(3.0, 7.0)
 
 # ── Slapper Tuning ────────────────────────────────────────────────────────────
@@ -1330,6 +1351,8 @@ var loft_tan_mid: float = GameRules.DEFAULT_LOFT_TAN_MID
 var loft_tan_high: float = GameRules.DEFAULT_LOFT_TAN_HIGH
 var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
+var _base_carry_reach_min_m:            float = 0.0
+var _base_carry_reach_fold_m:           float = 0.0
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1500,6 +1523,8 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	# almost exactly 1:1, so blade rim reach barely moves.
 	hand_rest_y = _base_hand_rest_y * m_height
 	hand_y_max  = _base_hand_y_max  * m_height
+	carry_reach_min_m = _base_carry_reach_min_m * m_height
+	carry_reach_fold_m = _base_carry_reach_fold_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1582,6 +1607,8 @@ func _capture_attribute_bases() -> void:
 	_base_stick_length                 = stick_length
 	_base_hand_rest_y                  = hand_rest_y
 	_base_hand_y_max                   = hand_y_max
+	_base_carry_reach_min_m            = carry_reach_min_m
+	_base_carry_reach_fold_m           = carry_reach_fold_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m
@@ -2283,6 +2310,11 @@ func get_shot_state() -> int:
 # Whether the stick has the puck to reach for this tick (ReachPurposeRules).
 func reach_purpose() -> float:
 	return _ik.reach_purpose
+
+
+# How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).
+func chest_fold() -> float:
+	return _ik.chest_fold()
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this
