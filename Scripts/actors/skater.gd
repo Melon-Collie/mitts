@@ -39,7 +39,8 @@ const _WIRE_SIDE_LAPSE_TICKS: int = 2
 # regime the hand rides at rest height and the shaft holds the lie exactly, so
 # the factor is identically 0 there. Onset is ~6° past the lie (blade ≈ 0.87 m
 # from the shoulder); full at 18° past it (≈ 0.65 m), holding full from there
-# down to the hand_y_max floor (≈ 0.28 m). Carry-only: the wrists roll the
+# in to the carry's floor (SkaterController.carry_reach_min_m, off the body's
+# centre). Carry-only: the wrists roll the
 # face CLOSED over the puck (signed against the elevation scoop, so a drag
 # visibly cups where a loft opens) and curl the toe in around it (the
 # axial-twist sweep).
@@ -195,7 +196,7 @@ var carry_repush_margin: float = 1.2
 # What a stroke is, as against a hand's wobble: the speed is read through a
 # filter of carry_stroke_smoothing_s, and no face changes until the puck has
 # gone carry_flip_distance (m) the new way.
-var carry_stroke_smoothing_s: float = 0.04
+var carry_stroke_smoothing_s: float = 0.06
 var carry_flip_distance: float = 0.04
 # A release hop lands as the free puck stops (CarryStrokeState.stop_in_s), the
 # far face there to catch it, within [min, carry_transit_hop_time].
@@ -295,10 +296,21 @@ var hand_sphere_radius: float = SkaterMeshBuilder.GLOVE_FIST_RADIUS_M
 # Gap along the forearm between the fist's center and the cuff's wrist end.
 var cuff_wrist_offset: float = SkaterMeshBuilder.GLOVE_CUFF_BACK_M \
 		- SkaterMeshBuilder.CUFF_HEIGHT_M * 0.5
-# A glove on the shaft turns its fist square across it, bending the wrist off
-# the forearm by up to this much — inside the wrist's ~20° radial and ~30° ulnar
-# deviation, the plane a stick held across the palm bends it in.
-var wrist_break_max_deg: float = 25.0
+# A glove on the shaft holds it like a sword (SkaterArmPoses.glove_basis): the
+# shaft crosses the palm at the grip angle to the hand's long axis — the top
+# hand's diagonally, the knob in the heel of the hand and the shaft out between
+# thumb and index finger; the bottom hand's nearly square across the fingers —
+# and the wrist deviates to keep it there, within the wrist's ~35° toward the
+# little finger (ulnar) and ~20° toward the thumb (radial).
+var top_grip_angle_deg: float = 65.0
+var bottom_grip_angle_deg: float = 80.0
+var wrist_ulnar_max_deg: float = 35.0
+var wrist_radial_max_deg: float = 20.0
+# And the wrist flexes, rolling the fist round the shaft, up to
+# wrist_flex_max_deg, so the forearm need not twist more than
+# forearm_twist_max_deg off its neutral (SkaterArmPoses.grip_roll).
+var wrist_flex_max_deg: float = 70.0
+var forearm_twist_max_deg: float = 80.0
 
 # ── Balance posture (SkaterController steps it; BalanceRules) ────────────────
 # Natural frequency of the lean's spring: a held lean arrives in ~1 s, and
@@ -1034,11 +1046,11 @@ func _process(delta: float) -> void:
 			_spine.update()
 		_arms.update_hem(delta, _on_camera)
 		if _on_camera and (_rig_pose_changed() or _spine.take_moved() or _arms.take_retextured() \
-				or _blade_tilt_dirty or flexed):
+				or _arms.take_steering() or _blade_tilt_dirty or flexed):
 			_blade_tilt_dirty = false
 			update_stick_mesh()
-			update_arm_mesh()
-			update_bottom_arm_mesh()
+			update_arm_mesh(delta)
+			update_bottom_arm_mesh(delta)
 		elif not _on_camera:
 			_hold_blade_mesh()
 		if _on_camera:
@@ -3057,9 +3069,9 @@ static func _new_body_paint() -> BodyZonePaint:
 # ── Arm rig (delegate to SkaterArmRig) ────────────────────────────────────────
 
 # The spine first: a physics-rate caller would grow arms from a stale shoulder.
-func update_arm_mesh() -> void:
+func update_arm_mesh(delta: float = -1.0) -> void:
 	_spine.update()
-	_arms.update_top_arm()
+	_arms.update_top_arm(delta)
 
 
 # Where the drawn shaft has bowed away from its straight line near `point`
@@ -3072,9 +3084,9 @@ func stick_grip_axis(point: Vector3) -> Vector3:
 	return _stick.grip_axis(point)
 
 
-func update_bottom_arm_mesh() -> void:
+func update_bottom_arm_mesh(delta: float = -1.0) -> void:
 	_spine.update()
-	_arms.update_bottom_arm()
+	_arms.update_bottom_arm(delta)
 
 
 func set_trunk_texture(pitch_add: float, roll_add: float) -> void:

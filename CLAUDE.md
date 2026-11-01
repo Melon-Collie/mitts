@@ -140,6 +140,15 @@ beside and ahead, printing the locomotion mix per frame — which state the legs
 skated, and when it came on (`tools/gait_strip_runner.gd`). A held pose cannot
 show a stroke or a state firing at the wrong time.
 
+**To see the ARMS round the body, sweep them.** `.claude/hooks/render-arms.sh
+[scenarios]` walks the cursor round a carrier (the facing held, so the blade
+goes round the body; standing; skating with the puck round each side) and draws
+each step from the chest, both sides and overhead to `user://arm_sweep`,
+printing per frame each arm's closest approach to the torso
+(`SkaterArmRig.torso_clearance`) and how the shaft sits in each glove, and for
+the moving scenarios the blade against the cursor tick by tick — where a turn
+that catches shows (`tools/arm_sweep_runner.gd`; `--list` prints the names).
+
 **To see the PUCK's tilt and spin, render a strip.** `.claude/hooks/render-puck.sh
 [scenarios]` drives the real `Puck` through the host's analytic drive (a board
 glance, a square hit, a landing, the faceoff drop, a mid-air deflection, a saucer

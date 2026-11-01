@@ -40,12 +40,15 @@ func _resolves_alike(carrying: bool, puck_at: Vector3) -> void:
 	var worst: float = 0.0
 	var worst_at := Vector3.ZERO
 	for deg: int in range(-170, 171, 20):
-		for dist: float in [0.8, 1.5, 3.0]:
+		for dist: float in [0.3, 0.8, 1.5, 3.0]:
 			var a: float = deg_to_rad(float(deg))
 			var cursor: Vector3 = pos + Vector3(sin(a), 0.0, -cos(a)) * dist
+			# The chest's fold reads the blade marker the solve starts from.
+			var marker: Vector3 = _skater.upper_body_to_global(_skater.blade.position)
 			_ctrl._ik.apply_blade_toward(cursor, DT)
 			var live: Vector3 = _ctrl._ik.last_target_blade_world
 			var arm: DuelRig.Arm = DuelRig.Arm.new()
+			arm.heel = Vector3(marker.x, 0.0, marker.z)
 			var ub: Transform3D = _rig.ub_transform(arm, pos, body)
 			var purpose: float = 1.0 if carrying else _ctrl._ik.reach_purpose
 			var mine: Vector3 = _rig.resolve(arm, ub, body, pos, cursor, carrying, purpose,

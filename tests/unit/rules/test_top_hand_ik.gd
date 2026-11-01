@@ -714,3 +714,142 @@ func test_a_held_target_sets_no_two_hand_limit() -> void:
 	var limit: float = TopHandIK.two_hand_reach(shoulder, target, -1.0, _cfg(),
 			Vector3(-SHOULDER_OFFSET, 0.0, 0.0), 0.25, 0.65, 0.0, TopHandIK.Result.new())
 	assert_eq(limit, INF, "a blade the other hand already reaches is not limited")
+
+
+# ── The hand's forward floor (Config.hand_forward) ──────────────────────────
+# On the game's own geometry: a 1.30 m stick, the hand a metre off the ice, the
+# range of motion square either side.
+
+const FLOOR: float = 0.22
+const GAME_STICK: float = 1.30
+const GAME_BLADE_Y: float = -0.97
+const GAME_HAND_REST_Y: float = -0.10
+# sqrt(1.30² − 0.87²): the stick's span with the hand at rest.
+const GAME_REST_SPAN: float = 0.966
+
+
+func _floored(floor_m: float = FLOOR) -> TopHandIK.Config:
+	var cfg := TopHandIK.Config.new()
+	cfg.stick_length = GAME_STICK
+	cfg.blade_y = GAME_BLADE_Y
+	cfg.hand_rest_y = GAME_HAND_REST_Y
+	cfg.hand_y_max = HAND_Y_MAX
+	cfg.rom_forehand_angle_max = PI * 0.5
+	cfg.rom_backhand_angle_max = PI * 0.5
+	cfg.rom_forward_reach_max = 0.51
+	cfg.rom_forehand_reach_max = 0.39
+	cfg.rom_backhand_reach_max = 0.42
+	cfg.hand_forward = floor_m
+	cfg.hand_forward_none = 0.3
+	cfg.hand_forward_full = 0.9
+	return cfg
+
+
+func _target_at(shoulder: Vector3, bearing_deg: float, d: float) -> Vector2:
+	var a: float = deg_to_rad(bearing_deg)
+	return Vector2(shoulder.x, shoulder.z) + Vector2(sin(a), -cos(a)) * d
+
+
+# A lefty's forehand is −X, so his forehand bearings here are negative.
+func test_round_the_forehand_the_hand_holds_its_floor_along_the_bearing() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var cfg: TopHandIK.Config = _floored()
+	for bearing: float in [-60.0, -70.0, -85.0]:
+		var target: Vector2 = _target_at(shoulder, bearing, 1.0)
+		var r: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, cfg)
+		var hand := Vector2(r.hand.x - shoulder.x, r.hand.z - shoulder.z)
+		assert_almost_eq(hand.length(), FLOOR, 0.001, "%.0f°: the hand its floor out" % bearing)
+		assert_almost_eq(hand.angle_to(target - Vector2(shoulder.x, shoulder.z)), 0.0, 0.001,
+				"%.0f°: toward the blade" % bearing)
+		assert_almost_eq(Vector2(r.blade.x, r.blade.z).distance_to(target), 0.0, 0.001,
+				"%.0f°: and the blade on the target" % bearing)
+		assert_almost_eq(r.blade.distance_to(r.hand), GAME_STICK, 0.0001, "a rigid stick")
+
+
+func test_ahead_and_round_the_backhand_the_hand_holds_at_its_side() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	for bearing: float in [0.0, 30.0, 70.0]:
+		var target: Vector2 = _target_at(shoulder, bearing, 0.9)
+		var a: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(0.0),
+				TopHandIK.Result.new())
+		var b: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(),
+				TopHandIK.Result.new())
+		assert_lt((a.hand - b.hand).length(), 0.01, "%.0f°" % bearing)
+
+
+func test_round_the_forehand_the_hand_comes_across_the_body() -> void:
+	# His top shoulder is on +X.
+	var shoulder: Vector3 = _lefty_shoulder()
+	var target: Vector2 = _target_at(shoulder, -65.0, 0.9)
+	var floorless: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(0.0),
+			TopHandIK.Result.new())
+	var floored: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(),
+			TopHandIK.Result.new())
+	assert_almost_eq(floorless.hand.x, shoulder.x, 0.001, "floorless, at the far hip")
+	assert_lt(floored.hand.x, shoulder.x - 0.15, "floored, in front of the belly")
+	assert_lt(floored.hand.z, -0.05, "and out in front")
+
+
+func test_far_out_the_floor_changes_nothing() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	for bearing: float in [0.0, 60.0]:
+		var target: Vector2 = _target_at(shoulder, bearing, GAME_REST_SPAN + 0.6)
+		var a: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(0.0),
+				TopHandIK.Result.new())
+		var b: TopHandIK.Result = TopHandIK.solve(shoulder, target, -1.0, _floored(),
+				TopHandIK.Result.new())
+		assert_almost_eq((a.hand - b.hand).length(), 0.0, 0.0001, "%.0f°: the hand" % bearing)
+		assert_almost_eq((a.blade - b.blade).length(), 0.0, 0.0001, "%.0f°: the blade" % bearing)
+
+
+func test_pulled_in_tight_the_hand_comes_back_to_the_shoulder() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var r: TopHandIK.Result = TopHandIK.solve(shoulder, _target_at(shoulder, -70.0, 0.3),
+			-1.0, _floored())
+	assert_almost_eq(Vector2(r.hand.x - shoulder.x, r.hand.z - shoulder.z).length(), 0.0, 0.001)
+
+
+func test_the_floored_hand_and_blade_move_without_a_corner() -> void:
+	# Swept out along the aim from in tight to past the regime change, and round
+	# from the forehand to the backhand: the hand's step stays proportional to
+	# the target's.
+	var shoulder: Vector3 = _lefty_shoulder()
+	var cfg: TopHandIK.Config = _floored()
+	var prev: TopHandIK.Result = TopHandIK.solve(shoulder, _target_at(shoulder, -70.0, 0.2),
+			-1.0, cfg, TopHandIK.Result.new())
+	for i: int in range(1, 401):
+		var d: float = 0.2 + 1.6 * float(i) / 400.0
+		var now: TopHandIK.Result = TopHandIK.solve(shoulder, _target_at(shoulder, -70.0, d),
+				-1.0, cfg, TopHandIK.Result.new())
+		assert_lt((now.hand - prev.hand).length(), 0.02, "out to %.2f m" % d)
+		prev = now
+	prev = TopHandIK.solve(shoulder, _target_at(shoulder, -80.0, 1.0), -1.0, cfg,
+			TopHandIK.Result.new())
+	for i: int in range(-79, 81):
+		var now: TopHandIK.Result = TopHandIK.solve(shoulder, _target_at(shoulder, float(i), 1.0),
+				-1.0, cfg, TopHandIK.Result.new())
+		assert_lt((now.hand - prev.hand).length(), 0.02, "round to %d°" % i)
+		prev = now
+
+
+func test_the_floored_ceiling_overshoot_still_holds_a_rigid_stick() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var r: TopHandIK.Result = TopHandIK.solve(shoulder, _target_at(shoulder, -70.0, 0.15),
+			-1.0, _floored())
+	assert_almost_eq(r.hand.y, HAND_Y_MAX, 0.0001, "at its ceiling")
+	assert_almost_eq(r.blade.distance_to(r.hand), GAME_STICK, 0.001, "on a rigid stick")
+	var blade_d: float = Vector2(r.blade.x - shoulder.x, r.blade.z - shoulder.z).length()
+	assert_gt(blade_d, 0.2, "overshooting along the aim")
+
+
+func test_the_floored_reconstruction_inverts_the_solve() -> void:
+	var shoulder: Vector3 = _lefty_shoulder()
+	var cfg: TopHandIK.Config = _floored()
+	for bearing: float in [-70.0, -35.0, 0.0, 40.0]:
+		for d: float in [0.3, 0.6, 0.9, 1.2, 1.6]:
+			var r: TopHandIK.Result = TopHandIK.solve(shoulder, _target_at(shoulder, bearing, d),
+					-1.0, cfg)
+			var hand: Vector3 = TopHandIK.hand_for_clamped_blade(shoulder,
+					Vector2(r.blade.x, r.blade.z), r.blade.y, -1.0, cfg)
+			assert_almost_eq((hand - r.hand).length(), 0.0, 0.002,
+					"%.0f° at %.1f m" % [bearing, d])

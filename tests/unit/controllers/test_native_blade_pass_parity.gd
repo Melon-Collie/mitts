@@ -4,8 +4,9 @@ extends GutTest
 # (SkaterIKCoordinator.apply_blade_toward), skated side by side through the real
 # controller. Every tick's top hand, blade, reach target and reach purpose, and
 # every puck released mid-pass, must agree: across open ice, a reach for a loose
-# puck, a carry swept round both sides with a wrister wound up, the boards, the
-# net, the goalies, and a commit stance.
+# puck, a carry swept round both sides with a wrister wound up, a carry pulled
+# in to the skates (the carrier's floor and the chest's fold, standing and
+# skating), the boards, the net, the goalies, and a commit stance.
 #
 # Tolerance is the native kernels' (test_native_ik_parity.gd): both sides keep
 # GDScript's precision model, so they part only by roundoff.
@@ -188,6 +189,15 @@ func test_a_carry_round_both_sides_with_a_wrister() -> void:
 	sc.shoot_from = 150
 	sc.shoot_to = 200
 	_assert_parity(sc, "carry")
+
+
+func test_a_carry_pulled_in_to_the_skates() -> void:
+	for move: Vector2 in [Vector2.ZERO, Vector2(0.0, -1.0)]:
+		var sc := Scenario.new()
+		sc.move = move
+		sc.carry = true
+		sc.reach = 0.4
+		_assert_parity(sc, "tight carry, %s" % ("skating" if move != Vector2.ZERO else "standing"))
 
 
 func test_carrying_into_the_boards() -> void:
