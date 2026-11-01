@@ -10,7 +10,8 @@ extends RefCounted
 # arms read as a right arm: +X out to that side, +Y up, -Z ahead. At zero the
 # arm hangs, the elbow bends straight ahead and the palm faces in, thumb up.
 
-# Clinical active ranges, adult (AAOS), radians.
+# Clinical active ranges, adult (AAOS), radians. Ulnar deviation takes the top
+# of its published 30–35°: a closed fist grips with the wrist cocked that way.
 const SHOULDER_EXTENSION_MAX: float = deg_to_rad(50.0)
 const SHOULDER_ELEVATION_MAX: float = deg_to_rad(180.0)
 const SHOULDER_ADDUCTION_MAX: float = deg_to_rad(40.0)
@@ -23,7 +24,7 @@ const SUPINATION_MAX: float = deg_to_rad(85.0)
 const WRIST_FLEXION_MAX: float = deg_to_rad(80.0)
 const WRIST_EXTENSION_MAX: float = deg_to_rad(70.0)
 const WRIST_RADIAL_MAX: float = deg_to_rad(20.0)
-const WRIST_ULNAR_MAX: float = deg_to_rad(30.0)
+const WRIST_ULNAR_MAX: float = deg_to_rad(35.0)
 
 # The limit a pose is held to, or the one it breaks.
 enum Limit {
