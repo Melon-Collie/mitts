@@ -20,10 +20,11 @@ func _table(version: int = ArmEnvelope.VERSION) -> Dictionary:
 				for radius: float in ArmEnvelope.RADII_M:
 					var held: bool = absf(angle) <= 90.0 and radius >= 0.8 - 0.001 \
 							and radius <= 1.3 + 0.001
-					rows.append([1 if held else 0, 0.1, -0.05, -0.2, radius * 0.25] if held
-							else [0, 0.0, 0.0, 0.0, 0.0])
+					rows.append([1, 0.1, -0.05, -0.2, radius * 0.25, 0.2, 0.0, 0.05] if held
+							else [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 			states[state] = rows
-		builds.append({"height": height, "states": states})
+		builds.append({"height": height, "states": states,
+				"crouch_curve": [[0.0, 0.0], [1.0, 0.02], [2.0, 0.08]]})
 	return {"version": version, "builds": builds}
 
 
@@ -56,7 +57,16 @@ func test_the_hands_are_the_cells_round_the_blade_between_them() -> void:
 	assert_almost_eq(hold.spacing, 1.05 * 0.25, 0.0001, "the grip between its radii's")
 	assert_true(env.hold_at(73.0, 0.5, 20.0, 0.75, hold), "half a cell in")
 	assert_almost_eq(hold.spacing, 0.8 * 0.25, 0.0001, "only the cell that holds counts")
+	assert_almost_eq(hold.lean, Vector2(0.2, 0.0), Vector2.ONE * 0.0001, "its lean")
+	assert_almost_eq(hold.crouch, 0.05, 0.0001, "its crouch")
 	assert_false(env.hold_at(73.0, 0.5, 140.0, 1.0, hold), "nothing round 140°")
+
+
+func test_a_crouch_is_read_off_the_stances_curve_either_way() -> void:
+	var env: ArmEnvelope = ArmEnvelope.from_dict(_table())
+	assert_almost_eq(env.drop_for_floor(73.0, 1.5), 0.05, 0.0001, "between its points")
+	assert_almost_eq(env.floor_for_drop(73.0, 0.05), 1.5, 0.0001, "and back")
+	assert_almost_eq(env.floor_for_drop(73.0, 0.14), 3.0, 0.0001, "past its end, along its last stretch")
 
 
 func test_a_table_of_another_version_is_refused() -> void:

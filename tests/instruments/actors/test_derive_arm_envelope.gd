@@ -19,8 +19,12 @@ func test_derive() -> void:
 	var builds: Array = []
 	for height: int in ArmEnvelope.HEIGHTS:
 		var states := {}
+		var curve: Array = []
 		for state: String in ArmEnvelope.STATES:
 			var d: RefCounted = Deriver.new(height, state == "skate", add_child_autofree)
+			if state == "stand":
+				curve = d.crouch_curve()
+				gut.p("%d\" stance: %s" % [height, str(curve)])
 			var cells: Array = []
 			var held: int = 0
 			for angle: float in ArmEnvelope.ANGLES_DEG:
@@ -30,7 +34,7 @@ func test_derive() -> void:
 					cells.append(cell)
 			gut.p("%d\" %s: %d of %d held" % [height, state, held, cells.size()])
 			states[state] = cells
-		builds.append({"height": height, "states": states})
+		builds.append({"height": height, "crouch_curve": curve, "states": states})
 	var out := {"version": ArmEnvelope.VERSION, "angles_deg": ArmEnvelope.ANGLES_DEG,
 			"radii_m": ArmEnvelope.RADII_M, "builds": builds}
 	var f: FileAccess = FileAccess.open(ArmEnvelope.PATH, FileAccess.WRITE)

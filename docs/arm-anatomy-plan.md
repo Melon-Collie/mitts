@@ -139,7 +139,8 @@ against footage before it binds gameplay:
 - **The top hand is the pivot and stays in front of the body** — between the
   hips and the chest, not behind the hip or above the shoulder, outside a shot:
   no lower than 0.15 m under the hip joints, no higher than 0.2 m under the top
-  shoulder, no more than 0.05 m behind the hips.
+  shoulder, no more than 0.05 m behind the hips; across the body no further
+  than 0.15 m past its middle, and out on its own side no further than 0.4 m.
 - **Both hands on the stick while carrying** (already a rule:
   `TopHandIK.two_hand_reach`, the backhand release; the model always holds both).
 - **The bottom hand slides, the top hand does not** — reach changes the bottom

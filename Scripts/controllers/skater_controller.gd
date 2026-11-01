@@ -2320,6 +2320,15 @@ func chest_fold() -> float:
 	return _ik.chest_fold()
 
 
+# The derived carry's stance (SkaterIKCoordinator.carry_lean, carry_crouch_floor).
+func carry_lean() -> Vector2:
+	return _ik.carry_lean()
+
+
+func carry_crouch_floor(floor_value: float) -> float:
+	return _ik.carry_crouch_floor(floor_value)
+
+
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this
 # render pass.
 func skate_sound() -> Vector3:

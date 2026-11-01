@@ -18,9 +18,10 @@ const TOP_HAND_BELOW_HIP_M: float = 0.15
 const TOP_HAND_BELOW_SHOULDER_M: float = 0.2
 const TOP_HAND_BEHIND_HIP_M: float = 0.05
 # And held in front of the body across it: out on its own side no further than
-# the hip and a fist, across the body no further than this past the middle
-# (round the forehand it comes across to there).
-const TOP_HAND_OUT_M: float = 0.3
+# beside the hip (reaching round the backhand it comes out there), across the
+# body no further than this past the middle (round the forehand it comes across
+# to there).
+const TOP_HAND_OUT_M: float = 0.4
 const TOP_HAND_ACROSS_M: float = 0.15
 # The hands are held apart no wider than the shoulders.
 const HANDS_APART_SHOULDERS: float = 1.0
