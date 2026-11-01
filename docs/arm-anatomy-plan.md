@@ -296,3 +296,37 @@ In building:
 - **Comfort**: each angle's squared share of its range off rest (the elbow's
   rest 80°, the rest 0), the trunk's twist the same; violations weigh 100 per
   radian, a metre of depth or reach as 5 radians.
+
+### What it found
+
+The map (`test_arm_anatomy_map.gd`, ~25 min): three builds (5'7", 6'1",
+6'8"), standing and skating carries, the cursor on 55 points round the body
+(0.6–1.8 m out, ±150° off the facing), 98 of whose blades a carry reaches.
+
+- **Today's drawn arms hold none of the 98.** The top arm: the fist in the
+  jersey (34) or past ulnar deviation (34), then the shoulder's internal
+  rotation (12); its elbow is bent 114° at the median (38–150°), the hand held
+  up by the chest. The bottom arm: in the jersey in 66, at full stretch (its
+  elbow at 28°, the girdle's give taken) in nearly every one.
+- **No pose holds 44 of the 98 blades gameplay lands.** Most often the top arm
+  cannot clear the jersey (12) or the bottom hand cannot reach the shaft (8),
+  then the wrist's ulnar range. These are mostly far round the forehand or the
+  backhand, and out at 1.2–1.5 m: gameplay's envelope is too wide there.
+- **Inside the carry's floor a body could hold a blade** at most points 0.6 m
+  out (gameplay holds it out to 0.8 m and more) — but the poses that do are the
+  ones below.
+- **Anatomy alone allows poses no player uses**: a stick near vertical with
+  both arms raised past the shoulder holds many blades the natural carries
+  cannot. The technique layer (phase 2) is what removes them.
+- **The natural carry misses by a few degrees**, mostly the wrist's ulnar
+  range: §3.3's 30° against the 35° the rig draws to. That review lands in
+  phase 3, with the map to decide it against.
+
+Facing against travel (`test_facing_travel_gap.gd`, bots on bots, 60 s each of
+3v3 and 5v5): moving skaters' drawn hips sit on average 19–21° off the facing
+the tick assumes, and at the gait's 50° cap (`hip_align_max_deg`) 20–25% of
+the time; carriers in 5v5 12° and 9%. An upper bound: it reads the hips as
+turned all the way to the travel, and the bots' facing stands in for a
+player's cursor. The gap is the size of the spine's whole twist budget a
+quarter of the time, so phase 3 takes the hips from a tick quantity that
+follows the travel rather than bounding it.
