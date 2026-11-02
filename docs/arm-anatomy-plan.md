@@ -451,3 +451,44 @@ The model's own carry holds every one of those pucks. It holds the top hand
 reference number at a time leaves most within a few degrees: long reach holds at a 0.25 m
 spacing, backhand is 1° short at 45° of twist, and forehand is 1° short at a
 0.4 m spacing.
+
+### How far allowances go
+
+Raising the gear press (§8) from 30 mm, the six held as they are otherwise:
+
+| Press | Held | What stops the rest |
+|---|---|---|
+| 30 mm | none | forehand bottom arm +9 mm, ahead knob +15 mm |
+| 40 mm | forehand | ahead knob +5 mm |
+| 50 mm | forehand, ahead | |
+| 60 mm | ahead | forehand moves to another elbow pose and misses by 9 mm |
+
+Past 50 mm nothing more holds. Backhand and long reach are the bottom arm 50
+and 71 mm short of the shaft at the references' spacing; tight and wide
+forehand put an arm or a fist 3.5–10 cm into the chest. Those are where the
+references put the hands, not slack the gear can give.
+
+### Proportions (neutral build, 6'1")
+
+Measured off the built skater against textbook segment ratios of stature
+(estimates; the skate taken to raise the body ~7 cm):
+
+| | Model | A 6'1" man on skates |
+|---|---|---|
+| top of helmet | 1.95 m | ~1.95 m |
+| shoulder joints above ice | 1.47 m | ~1.54 m |
+| shoulder joints apart | 0.44 m | ~0.35–0.37 m |
+| trunk pivot to shoulder joints | 0.42 m | ~0.48–0.50 m |
+| hip joints above ice | 0.92 m | ~1.05 m |
+| thigh (hip to knee) | 0.32 m | ~0.44 m |
+| shin (knee to ankle) | 0.43 m | ~0.44 m |
+| upper arm | 0.34 m | ~0.34 m |
+| elbow to the grip | 0.34 m | ~0.34 m |
+| jersey at the chest, wide × deep | 0.47 × 0.39 m | ~0.35 × 0.26 m bare, plus pads |
+| stick, butt to heel | 1.47 m | ~1.52–1.60 m |
+| butt past the top hand | 0.13 m | ~0.05–0.07 m |
+
+The arms are right. Narrowing the shoulders, a shallower chest and a short
+knob, each alone or together, hold no more references than the gear press
+does: the narrower shoulders bring the bottom arm further across the chest,
+and shorten the hands-apart rule (§4), which is measured joint to joint.

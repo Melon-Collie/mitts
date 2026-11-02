@@ -2,12 +2,13 @@ extends Node
 
 # Draws what the arm anatomy model makes of each reference carry
 # (tests/harness/arm_reference_carries.gd): the jersey's rings as the trunk
-# holds them, both arms (green inside their ranges, red past one), the hands,
-# the stick from its knob to its blade, the reference's puck, the legs on
-# their skates, from the front,
-# the top hand's side, above and three quarters; under it the carry the model
-# finds for the same puck on its own (ArmAnatomySearch.solve). One sheet a
-# carry, with what binds printed. tools/arm_reference_capture.gd boots it; the hook is
+# holds them, both arms (green inside their ranges, amber a near miss past one,
+# red past it further), the hands, the stick from its knob to its blade (gold
+# as players hold it, else amber or red the same way), the reference's puck and
+# the legs on their skates, from the front, the top hand's side, above and three
+# quarters; under it the carry the model finds for the same puck on its own
+# (ArmAnatomySearch.solve). One sheet a carry, with what binds printed in mm or
+# degrees. tools/arm_reference_capture.gd boots it; the hook is
 # .claude/hooks/render-references.sh.
 
 const Carries := preload("res://tests/harness/arm_reference_carries.gd")
@@ -23,6 +24,16 @@ const VIEWS: Array[Dictionary] = [
 	{"name": "three_quarter", "eye": Vector3(3.0, 2.0, -3.4), "at": Vector3(0.0, 0.6, -0.5)},
 ]
 const ARM_RADIUS: float = 0.05
+# A pose past a limit by no more than this is a near miss, drawn amber: inside
+# the oversized gear's slack, or a joint's measuring error.
+const NEAR_M: float = 0.01
+const NEAR_RAD: float = deg_to_rad(2.0)
+const HELD := Color(0.2, 0.75, 0.3)
+const NEAR := Color(0.95, 0.65, 0.1)
+const PAST := Color(0.85, 0.2, 0.2)
+const STICK := Color(0.9, 0.75, 0.3)
+const METRE_LIMITS: Array[ArmAnatomy.Limit] = [ArmAnatomy.Limit.REACH,
+		ArmAnatomy.Limit.ARM_IN_TORSO, ArmAnatomy.Limit.HAND_IN_TORSO]
 const SHAFT_RADIUS: float = 0.015
 
 var _carries: Array[Dictionary] = []
@@ -171,7 +182,7 @@ func _draw_own() -> void:
 	var top_side: float = signf(_body.top_shoulder.x)
 	var hand: Vector3 = pose.top.hand - Vector3.UP * pose.crouch
 	_lines.append("    the model's own: %s, top hand %.2f %.2f %.2f, twist %+.0f°, fold %.0f° lean %+.0f° (+forehand), crouch %.2f m, spacing %.2f m" % [
-			"held" if pose.feasible() else "not held", hand.x * top_side, hand.y + _pivot_m,
+			_verdict(pose), hand.x * top_side, hand.y + _pivot_m,
 			-hand.z, rad_to_deg(pose.twist) * top_side, rad_to_deg(pose.lean.x),
 			rad_to_deg(pose.lean.y) * -top_side, pose.crouch, pose.spacing])
 	print(_lines[_lines.size() - 1])
@@ -214,7 +225,7 @@ func _draw_pose(pose: ArmAnatomySearch.Pose, s: Dictionary) -> Node3D:
 					sin(t) * ring.y * _body.torso_xz_scale.y + _body.torso_sway[i]))
 		_strip(root, pts, Color(0.2, 0.25, 0.6))
 	for arm: ArmAnatomy.ArmPose in [pose.top, pose.bottom]:
-		var color := Color(0.2, 0.75, 0.3) if arm.feasible() else Color(0.85, 0.2, 0.2)
+		var color: Color = _shade(arm.violation, METRE_LIMITS.has(arm.binding), HELD)
 		_segment(root, arm.root, arm.elbow, ARM_RADIUS, color)
 		_segment(root, arm.elbow, arm.hand, ARM_RADIUS * 0.8, color)
 		_ball(root, arm.root, ARM_RADIUS * 1.3, Color(0.3, 0.3, 0.35))
@@ -222,7 +233,8 @@ func _draw_pose(pose: ArmAnatomySearch.Pose, s: Dictionary) -> Node3D:
 	var shaft: Vector3 = (pose.top.hand - pose.bottom.hand).normalized() * -1.0
 	var heel: Vector3 = Vector3(s["heel"]) + Vector3.UP * pose.crouch
 	var knob: Vector3 = pose.top.hand - shaft * _body.knob_extend
-	_segment(root, knob, heel, SHAFT_RADIUS, Color(0.9, 0.75, 0.3))
+	_segment(root, knob, heel, SHAFT_RADIUS, _shade(pose.technique.violation,
+			pose.technique.binding != ArmTechnique.Limit.LIE, STICK))
 	var blade_dir: Vector3 = Vector3(shaft.x, 0.0, shaft.z).normalized()
 	_segment(root, heel, heel + blade_dir * _body.blade_length, SHAFT_RADIUS * 2.0,
 			Color(0.1, 0.1, 0.1))
@@ -309,29 +321,76 @@ func _flat(color: Color) -> StandardMaterial3D:
 	return mat
 
 
+# `held` inside its limit, amber a near miss past it, red past that: `violation`
+# in radians, or ArmAnatomy.METRE_AS_RADIANS a metre when `metres`.
+func _shade(violation: float, metres: bool, held: Color) -> Color:
+	if violation <= 0.0:
+		return held
+	var near: float = NEAR_M * ArmAnatomy.METRE_AS_RADIANS if metres else NEAR_RAD
+	return NEAR if violation <= near else PAST
+
+
+func _excess(violation: float, metres: bool) -> String:
+	if metres:
+		return "+%d mm" % roundi(violation / ArmAnatomy.METRE_AS_RADIANS * 1000.0)
+	return "+%.1f°" % rad_to_deg(violation)
+
+
+# What stops `pose` and by how much, a near miss said so.
+func _verdict(pose: ArmAnatomySearch.Pose) -> String:
+	if pose.feasible():
+		return "held"
+	var what: String
+	var metres: bool
+	if pose.binding_arm >= 0:
+		what = "%s arm %s" % ["top" if pose.binding_arm == 0 else "bottom",
+				ArmAnatomy.Limit.keys()[pose.arm_binding]]
+		metres = METRE_LIMITS.has(pose.arm_binding)
+	elif pose.trunk_binding == ArmAnatomySearch.Limit.TECHNIQUE:
+		what = "technique %s" % ArmTechnique.Limit.keys()[pose.technique.binding]
+		metres = pose.technique.binding != ArmTechnique.Limit.LIE
+	else:
+		what = ArmAnatomySearch.Limit.keys()[pose.trunk_binding]
+		metres = pose.trunk_binding == ArmAnatomySearch.Limit.SHAFT_IN_TORSO
+	var near: bool = _shade(pose.violation, metres, HELD) == NEAR
+	return "%s: %s %s" % ["near miss" if near else "fails", what, _excess(pose.violation, metres)]
+
+
+# How deep `at` sits in the jersey of `pose`, past its surface (m).
+func _press(pose: ArmAnatomySearch.Pose, at: Vector3) -> float:
+	var torso: Transform3D = Transform3D(ArmAnatomySearch.spine_basis(_trunk, pose.twist,
+			pose.lean), Vector3.ZERO) * _body.torso_in_spine
+	return -TorsoSection.clearance(torso.affine_inverse() * at, _body.torso_profile,
+			_body.torso_sway, _body.torso_xz_scale) * torso.basis.get_scale().x
+
+
+# A depth in the jersey (m) as "N mm in" or "N mm clear".
+func _depth(metres: float) -> String:
+	var mm: int = roundi(metres * 1000.0)
+	return "%d mm in" % mm if mm > 0 else "%d mm clear" % -mm
+
+
 func _report(carry: Dictionary, pose: ArmAnatomySearch.Pose, s: Dictionary) -> void:
-	var why: String = "held"
-	if not pose.feasible():
-		if pose.binding_arm >= 0:
-			why = "%s arm: %s +%.0f°" % ["top" if pose.binding_arm == 0 else "bottom",
-					ArmAnatomy.Limit.keys()[pose.arm_binding], rad_to_deg(pose.violation)]
-		elif pose.trunk_binding == ArmAnatomySearch.Limit.TECHNIQUE:
-			why = "technique: %s +%.2f m" % [ArmTechnique.Limit.keys()[pose.technique.binding],
-					pose.technique.violation / ArmAnatomy.METRE_AS_RADIANS]
-		else:
-			why = "%s +%.0f°" % [ArmAnatomySearch.Limit.keys()[pose.trunk_binding],
-					rad_to_deg(pose.violation)]
 	var off: float = Vector3(s["puck"]).distance_to(Carries.blade_middle(s, _body))
-	_lines.append("%s: %s (blade's middle %.2f m off the reference's puck; lie %.0f°)" % [
-			carry["name"], why, off, rad_to_deg(float(s["lie"]))])
+	var shaft: Vector3 = (Vector3(s["heel"]) + Vector3.UP * pose.crouch - pose.top.hand) \
+			.normalized()
+	var allows: int = roundi(_body.gear_press * 1000.0)
+	_lines.append("%s: %s (blade's middle %.2f m off the reference's puck; lie %.0f°; knob %s, %d mm allowed)" % [
+			carry["name"], _verdict(pose), off, rad_to_deg(float(s["lie"])),
+			_depth(_press(pose, pose.top.hand - shaft * _body.knob_extend)), allows])
 	for arm_name: String in ["top", "bottom"]:
 		var a: ArmAnatomy.ArmPose = pose.top if arm_name == "top" else pose.bottom
-		_lines.append("    %s: shoulder raised %.0f° (plane %.0f°) turned %+.0f°, elbow %.0f°, forearm %+.0f°, wrist %+.0f°/%+.0f° (grip slid %+.0f°), in the jersey %.0f cm%s" % [
+		var past: String = ""
+		if not a.feasible():
+			past = "  <- %s %s" % [ArmAnatomy.Limit.keys()[a.binding],
+					_excess(a.violation, METRE_LIMITS.has(a.binding))]
+		_lines.append("    %s: shoulder raised %.0f° (plane %.0f°) turned %+.0f°, elbow %.0f°, forearm %+.0f°, wrist %+.0f°/%+.0f° (grip slid %+.0f°), sleeve %s and fist %s the jersey (%d mm allowed), %d mm past reach%s" % [
 				arm_name, rad_to_deg(a.elevation), rad_to_deg(a.plane), rad_to_deg(a.axial),
 				rad_to_deg(a.elbow_flexion), rad_to_deg(a.pronation), rad_to_deg(a.wrist_flexion),
 				rad_to_deg(a.wrist_deviation), rad_to_deg(a.grip_slide),
-				maxf(a.torso_depth, 0.0) * 100.0,
-				"" if a.feasible() else "  <- " + ArmAnatomy.Limit.keys()[a.binding]])
+				_depth(a.torso_depth + _body.gear_press), _depth(a.hand_depth + _body.gear_press),
+				allows,
+				roundi(a.reach_over * 1000.0), past])
 	print(_lines[_lines.size() - 3])
 	print(_lines[_lines.size() - 2])
 	print(_lines[_lines.size() - 1])
