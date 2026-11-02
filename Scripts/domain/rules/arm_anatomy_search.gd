@@ -37,13 +37,17 @@ const _SEEDS: int = 3
 const _LEAN_SEEDS: Array[Vector2] = [Vector2(15.0, 0.0), Vector2(30.0, 0.0),
 		Vector2(15.0, 15.0), Vector2(15.0, -15.0)]
 const _LEAN_STEP: float = deg_to_rad(10.0)
-# The crouches each seed is tried at, as shares of the trunk's crouch_max, and
-# the refinement's first step in it (m).
-const _CROUCH_SEEDS: Array[float] = [0.5, 1.0]
+# The refinement's first step in the crouch (m).
 const _CROUCH_STEP_M: float = 0.06
-# A crouch's comfort cost runs from none to as much as a joint at its range's
-# end over this (m): a hockey stance's whole sit.
-const CROUCH_COMFORT_M: float = 0.3
+# A crouch's comfort cost runs from none, at a hockey ready stance this far
+# under standing (m), to as much as a joint at its range's end this far off it
+# (m): standing straight or sitting deep is as far from a carry's stance as a
+# joint at its end is from rest.
+const READY_STANCE_M: float = 0.1
+const CROUCH_COMFORT_M: float = 0.15
+# A hockey stance's deepest sit under standing (m), for callers bounding
+# TrunkState.crouch_max.
+const DEEPEST_STANCE_M: float = 0.25
 # How much further a hand reaches with the trunk leaned into it (m): the
 # reach test's allowance for the leans the search tries.
 const _LEAN_REACH_M: float = 0.3
@@ -61,6 +65,8 @@ class TrunkState:
 	# How far the search may sink the hips toward the ice on the knees (m): a
 	# standing carrier's stance, which the stride owns once he skates.
 	var crouch_max: float = 0.0
+	# How far the hips already sit under standing (m), which a crouch adds to.
+	var sunk: float = 0.0
 	var tilt := Basis.IDENTITY
 	var fold: float = 0.0
 	var pitch: float = 0.0
@@ -120,7 +126,8 @@ class Pose:
 		trunk_binding = o.trunk_binding
 
 
-# Hold every pose to how players carry too (ArmTechnique), not anatomy alone.
+# Hold every pose to how players carry too (ArmTechnique), not anatomy alone,
+# and carry on bent knees (solve).
 var technique: bool = false
 var _body: ArmAnatomyBody
 var _hold := ArmTechnique.Hold.new()
@@ -134,6 +141,9 @@ var _lean := Vector2.ZERO
 var _crouch: float = 0.0
 var _trunk_now := TrunkState.new()
 var _seeds: Array[Vector4] = []
+# The crouches this solve may hold (m).
+var _crouch_floor: float = 0.0
+var _crouch_ceiling: float = 0.0
 
 
 func _init(body: ArmAnatomyBody) -> void:
@@ -161,11 +171,27 @@ static func spine_basis(trunk: TrunkState, twist: float, lean: Vector2 = Vector2
 
 
 # The best pose holding the blade's heel at `heel` (hips frame, on the ice).
+# A carrier stands up straight only for a blade no pose on bent knees holds
+# (under technique, never shallower than the ready stance): the arms favour
+# standing tall, so a search free to crouch settles part way down and misses it.
 func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
+	var ready: float = clampf(READY_STANCE_M - trunk.sunk, 0.0, trunk.crouch_max)
+	_solve_within(trunk, heel, out, ready if technique else 0.0, trunk.crouch_max)
+	if not out.feasible() and trunk.crouch_max > 0.0:
+		_solve_within(trunk, heel, out, 0.0, 0.0)
+
+
+# The solve with the crouch held in [crouch_lo, crouch_hi], its grid at the
+# ready stance within that.
+func _solve_within(trunk: TrunkState, heel: Vector3, out: Pose, crouch_lo: float,
+		crouch_hi: float) -> void:
 	out.cost = INF
 	out.violation = INF
 	_lean = Vector2.ZERO
-	_crouch = 0.0
+	var ready: float = clampf(READY_STANCE_M - trunk.sunk, crouch_lo, crouch_hi)
+	_crouch_floor = crouch_lo
+	_crouch_ceiling = crouch_hi
+	_crouch = ready
 	_seeds.clear()
 	var twist_step: float = 2.0 * TRUNK_TWIST_MAX / float(_TWISTS - 1)
 	for i: int in _TWISTS:
@@ -184,11 +210,12 @@ func solve(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 	# The best few of the grid each refined: the best one alone settles in its
 	# own basin, often not the deepest.
 	for seed_at: Vector4 in _seeds:
-		hold(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
+		hold(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded, Vector2.ZERO, ready)
 		for lean_deg: Vector2 in _LEAN_SEEDS:
 			_lean = lean_deg * (PI / 180.0)
-			for crouch_share: float in [0.0] + _CROUCH_SEEDS if trunk.crouch_max > 0.0 else [0.0]:
-				_crouch = trunk.crouch_max * crouch_share
+			# The ready stance, as tall as it may stand and the deepest sit.
+			for crouch: float in [ready, _crouch_floor, _crouch_ceiling]:
+				_crouch = crouch
 				_try(trunk, heel, seed_at.y, seed_at.z, seed_at.w, -1.0, _seeded)
 		_crouch = _seeded.crouch
 		var steps := Vector3(twist_step, deg_to_rad(10.0), TAU / float(_AZIMUTHS))
@@ -343,7 +370,7 @@ func _shaft_depth(torso: Transform3D, hand: Vector3, heel: Vector3) -> float:
 func _total(t: Pose) -> void:
 	t.cost = t.top.cost + t.bottom.cost + _sq(t.twist / TRUNK_TWIST_MAX) \
 			+ _sq(t.lean.x / TRUNK_FLEXION_MAX) + _sq(t.lean.y / TRUNK_SIDE_MAX) \
-			+ _sq(t.crouch / CROUCH_COMFORT_M)
+			+ _sq((_trunk_now.sunk + t.crouch - READY_STANCE_M) / CROUCH_COMFORT_M)
 	t.violation = 0.0
 	t.binding_arm = -1
 	t.arm_binding = ArmAnatomy.Limit.NONE
@@ -401,7 +428,7 @@ func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, lean_step: float,
 	var lean: Vector2 = best.lean
 	var crouch: float = best.crouch
 	for axis: int in 6:
-		if axis == 5 and trunk.crouch_max <= 0.0:
+		if axis == 5 and _crouch_ceiling <= _crouch_floor:
 			continue
 		for sgn: float in [-1.0, 1.0]:
 			var tw: float = twist + (steps.x * sgn if axis == 0 else 0.0)
@@ -411,7 +438,7 @@ func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, lean_step: float,
 					lean_step * sgn if axis == 4 else 0.0)
 			_crouch = crouch + (crouch_step * sgn if axis == 5 else 0.0)
 			if absf(tw) > TRUNK_TWIST_MAX or li <= 0.0 or li >= PI * 0.5 or _lean.x < 0.0 \
-					or _crouch < 0.0 or _crouch > trunk.crouch_max:
+					or _crouch < _crouch_floor - 0.0001 or _crouch > _crouch_ceiling + 0.0001:
 				continue
 			_try(trunk, heel, tw, li, he, -1.0, best)
 	_lean = best.lean

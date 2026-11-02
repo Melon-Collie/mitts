@@ -111,3 +111,25 @@ func test_the_search_holds_a_carry_and_names_the_arms_reach_past_every_one() -> 
 	search.solve(trunk, Vector3(0.0, ice, -3.0), pose)
 	assert_false(pose.feasible(), "three metres out is not")
 	assert_eq(pose.arm_binding, ArmAnatomy.Limit.REACH, "the arms' reach stops it")
+
+
+# A carrier holds the stick on bent knees, and nothing in a comfortable carry
+# asks them for more: the search sits his hips a ready stance under standing,
+# less what they already sit under it.
+func test_the_search_stands_a_carry_in_a_ready_stance() -> void:
+	var c: SkaterController = _make()
+	var body: ArmAnatomyBody = SkaterAnatomyCapture.capture(c)
+	var trunk: ArmAnatomySearch.TrunkState = SkaterAnatomyCapture.trunk_state(c.skater, body)
+	assert_almost_eq(trunk.sunk, 0.0, 0.001, "captured standing")
+	trunk.crouch_max = ArmAnatomySearch.DEEPEST_STANCE_M
+	var forehand: float = signf(body.bottom_shoulder.x)
+	var ice: float = c.blade_height - SkaterAnatomyCapture.pivot_height(c.skater)
+	var search := ArmAnatomySearch.new(body)
+	search.technique = true
+	var pose := ArmAnatomySearch.Pose.new()
+	for sunk: float in [0.0, 0.04]:
+		trunk.sunk = sunk
+		search.solve(trunk, Vector3(0.8 * forehand, ice, -0.8), pose)
+		assert_true(pose.feasible(), "held")
+		assert_almost_eq(pose.crouch + sunk, ArmAnatomySearch.READY_STANCE_M, 0.02,
+				"sunk %.2f: the hips a ready stance under standing" % sunk)

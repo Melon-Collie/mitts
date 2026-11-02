@@ -46,6 +46,7 @@ static func capture(controller: SkaterController) -> ArmAnatomyBody:
 	body.blade_length = skater.blade_length
 	body.blade_lie = deg_to_rad(skater.blade_lie_deg)
 	body.left_shot = skater.is_left_handed
+	body.standing_pivot = pivot_height(skater)
 	body.top_roll_square = _square_roll(body, pivot_height(skater) - controller.blade_height)
 	return body
 
@@ -74,10 +75,12 @@ static func hips_frame(skater: Skater) -> Transform3D:
 
 # The trunk as the skater holds it now (ArmAnatomySearch.TrunkState), its twist
 # left to the search: the tilt, fold, lean and side bend off the skater and
-# the two frames as SkaterSpineRig reads them, and the chest's own turn off the
-# torso bone against where `body` has it at rest.
+# the two frames as SkaterSpineRig reads them, the chest's own turn off the
+# torso bone against where `body` has it at rest, and how far the hips sit
+# under `body`'s standing.
 static func trunk_state(skater: Skater, body: ArmAnatomyBody) -> ArmAnatomySearch.TrunkState:
 	var trunk := ArmAnatomySearch.TrunkState.new()
+	trunk.sunk = body.standing_pivot - pivot_height(skater)
 	var rig_fold: float = skater.trunk_fold()
 	var frame: Vector3 = skater.drawn_upper_body_rotation()
 	trunk.fold = -rig_fold

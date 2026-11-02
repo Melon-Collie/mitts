@@ -159,6 +159,12 @@ against footage before it binds gameplay:
 - **The blade rides flat** — on its heel or its toe a little: the shaft within
   15° of the stick's lie (`Skater.blade_lie_deg`, 42°). Phase 1 left the lie
   free and reported it; this is that window.
+- **Carry on bent knees** — a standing carrier's hips sit at least a ready
+  stance (10 cm, `ArmAnatomySearch.READY_STANCE_M`) under standing, deeper at
+  a cost, to a hockey stance's deepest sit (25 cm). He stands straight only for
+  a blade nothing on bent knees holds. Standing is measured off the body
+  standing at rest (`TrunkState.sunk`), so a trunk the gait has already sunk
+  counts what it has.
 - **Shots keep their own technique** — the wrister's weight transfer, the
   slapper's wind-up height — but on top of anatomy, not instead of it (§5).
 
@@ -416,6 +422,15 @@ on top and, under it, the carry the model finds on its own for the same puck.
   is long, so they moved out: forehand 1.25 m, ahead 1.42, backhand 1.42, wide
   forehand 1.14, tight 1.05, long reach 1.69. With the hand at the hip, no
   puck sits much nearer than a metre.
+
+- **A ready stance** (§4): the arms are most comfortable with the body
+  standing tall, so the model's own carries all stood straight. Under
+  technique the hips now sit a ready stance down. Lowering the references
+  themselves changes nothing they hold: with the hands kept at the same height
+  off the ice the arms end up in the chest, and with the hands lowered too the
+  arms sit as before and only the stick lies flatter.
+- **The sheets draw the legs**, the skates planted and the knees bent over
+  them as the hips sink.
 
 ### What it found
 

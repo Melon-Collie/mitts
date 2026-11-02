@@ -48,7 +48,7 @@ func test_the_model_holds_every_reference_carry() -> void:
 	skater._process(DT)
 	var body: ArmAnatomyBody = SkaterAnatomyCapture.capture(c)
 	var trunk: ArmAnatomySearch.TrunkState = SkaterAnatomyCapture.trunk_state(skater, body)
-	trunk.crouch_max = 1.0
+	trunk.crouch_max = ArmAnatomySearch.DEEPEST_STANCE_M
 	var search := ArmAnatomySearch.new(body)
 	search.technique = true
 	var pose := ArmAnatomySearch.Pose.new()

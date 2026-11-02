@@ -14,9 +14,6 @@ const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const SETTLE_TICKS: int = 120
-# How far below the carry's own stance a standing carrier may sink on his knees
-# (m): a hockey stance's sit past it.
-const CROUCH_MAX_M: float = 0.2
 # The carry's crouch floors (SkaterController.carry_crouch) the stance is
 # measured at for crouch_curve, and where along a carry 1.2 m ahead the fold is
 # full.
@@ -84,7 +81,8 @@ func cell(angle_deg: float, radius: float) -> Array:
 	_settle(Vector2(sin(a) * radius * _forehand, -cos(a) * radius))
 	var skater: Skater = controller.skater
 	_trunk = SkaterAnatomyCapture.trunk_state(skater, _body)
-	_trunk.crouch_max = 0.0 if _skating else CROUCH_MAX_M
+	_trunk.crouch_max = 0.0 if _skating \
+			else maxf(ArmAnatomySearch.DEEPEST_STANCE_M - _trunk.sunk, 0.0)
 	_hips = SkaterAnatomyCapture.hips_frame(skater)
 	_root = skater.global_transform
 	var heel: Vector3 = _root * Vector3(sin(a) * radius * _forehand, 0.0, -cos(a) * radius)
