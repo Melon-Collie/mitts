@@ -4,7 +4,7 @@ extends GutTest
 # sample of its cells, re-derived now from the model and the body as they are
 # (tests/harness/arm_envelope_deriver.gd), read the same. Fails when the model,
 # the body or the carry posture moved since the table was written; rerun
-# tests/instruments/actors/test_derive_arm_envelope.gd.
+# .claude/hooks/derive-arm-envelope.sh.
 
 const Deriver := preload("res://tests/harness/arm_envelope_deriver.gd")
 # A hand within this of the table's (m), a grip within this down the shaft: the

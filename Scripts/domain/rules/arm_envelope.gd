@@ -7,8 +7,7 @@ extends RefCounted
 # players hold it, and where that pose has the top hand and the bottom hand's
 # grip down the shaft, and the stance it takes: the chest leaned on past the
 # carry's own and, standing, the hips sunk on the knees. Written by
-# tests/instruments/actors/
-# test_derive_arm_envelope.gd; read through SkaterArmEnvelope.
+# .claude/hooks/derive-arm-envelope.sh; read through SkaterArmEnvelope.
 #
 # The skater's root frame (his facing, -Z ahead, m off his origin), +X toward
 # his forehand: the caller mirrors for a left or right shot. Angles are off the
