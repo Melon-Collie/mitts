@@ -501,3 +501,18 @@ The arms are right. Narrowing the shoulders, a shallower chest and a short
 knob, each alone or together, hold no more references than the gear press
 does: the narrower shoulders bring the bottom arm further across the chest,
 and shorten the hands-apart rule (§4), which is measured joint to joint.
+
+### The solver's misses
+
+Changing the chest showed the arm's solve picking an elbow 2 mm past its
+allowance where one that held was there: its first pass tried each sampled
+swivel at one roll, the one laying the hand along the forearm, and at that
+elbow the held roll was 45° round. Each sample now tries five rolls 40° apart
+(`ArmAnatomy._SAMPLE_ROLLS`), about 1.7× the time. A pose that holds also
+always ranks above one that misses (`ArmAnatomy.INFEASIBLE_STEP`): at 100 per
+radian, a millimetre over weighed less than a comfort difference.
+
+The better search then moved the top fist's square roll, which had been read
+as the roll the solve preferred at a reference carry — a poor pose's roll,
+−181°. It is now geometry (`ArmAnatomy.roll_backing`): the back of the glove
+turned ahead and out to its own side, 166°, as a top hand holds a stick.

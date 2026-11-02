@@ -20,6 +20,7 @@ func _body() -> ArmAnatomyBody:
 	body.working_extension = 1.0
 	body.torso_profile = SkaterMeshBuilder.TORSO_PROFILE
 	body.torso_sway = SkaterMeshBuilder.TORSO_REAR_SWAY
+	body.torso_depth = SkaterMeshBuilder.TORSO_DEPTH
 	body.torso_xz_scale = SkaterMeshBuilder.TORSO_XZ_SCALE
 	# An ulnar wrist reads as the hand is posed (no slide below GRIP); the grip's
 	# own slide is its test's.

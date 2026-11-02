@@ -50,8 +50,12 @@ const ELBOW_COMFORT: float = deg_to_rad(80.0)
 # A metre of reach or depth weighs as this many radians of joint past its range.
 const METRE_AS_RADIANS: float = 5.0
 # How much worse a pose past a range is than any comfortable one, per radian:
-# the swivel search follows the violation down to the feasible poses.
+# the swivel search follows the violation down to the feasible poses. And a
+# step on top for being past one at all, more than a body's whole comfort cost
+# (each term reaches 1 at its range's end), so a pose that holds always beats
+# one that misses by a millimetre.
 const VIOLATION_WEIGHT: float = 100.0
+const INFEASIBLE_STEP: float = 20.0
 # Where down the upper arm its depth in the jersey is measured, of its length:
 # its top half rides under the shoulder pad, which the skin joins into the
 # torso, so only its lower part can be in the chest.
@@ -59,6 +63,10 @@ const UPPER_ARM_SAMPLE: float = 0.75
 const _SWIVEL_SAMPLES: int = 16
 const _SWIVEL_REFINES: int = 8
 const _ROLL_STEP: float = deg_to_rad(30.0)
+# The rolls each sampled swivel is tried at, this far apart about the aligned
+# one: an elbow that holds may hold only with the hand turned well round.
+const _SAMPLE_ROLLS: int = 5
+const _SAMPLE_ROLL_STEP: float = deg_to_rad(40.0)
 const _ROLL_NEIGHBOURS: int = 3
 
 
@@ -209,21 +217,27 @@ static func evaluate(setup: ArmSetup, swivel: float, roll: float, out: ArmPose) 
 
 # The best pose of an arm in `setup`: the elbow round its circle and the hand
 # round the shaft, the one nearest rest of those that hold, else the one that
-# breaks its ranges least. The swivel is searched with the hand laid along the
-# forearm, then the roll about that, then each once more about the other.
+# breaks its ranges least. Each sampled swivel is tried at a few rolls about
+# the one that lays the hand along the forearm (_SAMPLE_ROLLS), then the best
+# of them searched in roll, and the swivel and the roll refined once more each
+# about the other.
 static func solve(setup: ArmSetup, out: ArmPose, scratch: ArmPose) -> void:
 	var best_swivel: float = 0.0
+	var best_roll: float = 0.0
 	var best: float = INF
 	for i: int in _SWIVEL_SAMPLES:
 		var swivel: float = TAU * float(i) / float(_SWIVEL_SAMPLES)
 		evaluate(setup, swivel, 0.0, scratch)
-		var score: float = _score_at(setup, swivel, _clamp_roll(setup,
-				_aligned_roll(setup, scratch)), scratch)
-		if score < best:
-			best = score
-			best_swivel = swivel
-	evaluate(setup, best_swivel, 0.0, scratch)
-	var roll: float = _roll_search(setup, best_swivel, _aligned_roll(setup, scratch), scratch)
+		var aligned: float = _aligned_roll(setup, scratch)
+		for k: int in _SAMPLE_ROLLS:
+			var roll_at: float = _clamp_roll(setup, aligned + _SAMPLE_ROLL_STEP * float(k)
+					- _SAMPLE_ROLL_STEP * float(_SAMPLE_ROLLS - 1) * 0.5)
+			var score: float = _score_at(setup, swivel, roll_at, scratch)
+			if score < best:
+				best = score
+				best_swivel = swivel
+				best_roll = roll_at
+	var roll: float = _roll_search(setup, best_swivel, best_roll, scratch)
 	var swivel_end: float = _golden(setup, true, best_swivel, TAU / float(_SWIVEL_SAMPLES),
 			roll, scratch)
 	roll = _golden(setup, false, roll, _ROLL_STEP, swivel_end, scratch)
@@ -280,9 +294,15 @@ static func _roll_search(setup: ArmSetup, swivel: float, centre: float, out: Arm
 	return best_roll
 
 
+# A pose's cost and violation as the searches rank it (VIOLATION_WEIGHT,
+# INFEASIBLE_STEP).
+static func ranking(cost: float, violation: float) -> float:
+	return cost + VIOLATION_WEIGHT * violation + (INFEASIBLE_STEP if violation > 0.0 else 0.0)
+
+
 static func _score_at(setup: ArmSetup, swivel: float, roll: float, out: ArmPose) -> float:
 	evaluate(setup, swivel, roll, out)
-	return out.cost + VIOLATION_WEIGHT * out.violation
+	return ranking(out.cost, out.violation)
 
 
 # Golden-section search of the swivel (`on_swivel`) or the roll within `half`
@@ -355,6 +375,18 @@ static func _trace_roll(setup: ArmSetup, pose: ArmPose) -> float:
 	var b: float = (t0 - t2) * 0.5
 	var c: float = t1 - a
 	return atan2(c, b)
+
+
+# The roll round the shaft that turns the back of the hand most toward `dir`
+# (world frame): the hand's back is A + B cos(roll) + C sin(roll) along it,
+# greatest at atan2(C, B).
+static func roll_backing(setup: ArmSetup, dir: Vector3) -> float:
+	var d: Vector3 = _side(setup, dir)
+	var t0: float = -_hand_frame(setup, 0.0).z.dot(d)
+	var t1: float = -_hand_frame(setup, PI * 0.5).z.dot(d)
+	var t2: float = -_hand_frame(setup, PI).z.dot(d)
+	var a: float = (t0 + t2) * 0.5
+	return atan2(t1 - a, (t0 - t2) * 0.5)
 
 
 static func _trace(m: Basis, n: Basis) -> float:
@@ -442,7 +474,8 @@ static func _depths(setup: ArmSetup, out: ArmPose) -> void:
 
 
 static func _clearance(body: ArmAnatomyBody, p: Vector3) -> float:
-	return TorsoSection.clearance(p, body.torso_profile, body.torso_sway, body.torso_xz_scale)
+	return TorsoSection.clearance(p, body.torso_profile, body.torso_sway, body.torso_depth,
+			body.torso_xz_scale)
 
 
 static func _score(out: ArmPose) -> void:

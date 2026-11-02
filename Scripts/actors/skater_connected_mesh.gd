@@ -82,7 +82,7 @@ const TAIL_COLUMNS: int = _CHEST_SIDES
 const LIMB_SIDES: int = 12
 
 # The jersey above the belt, torso-local (y, radius, rear sway), every ring the
-# rig's own 1.05 : 0.88 section at its own size: rings of one shape make planar
+# rig's own section (SkaterMeshBuilder.TORSO_XZ_SCALE, TORSO_DEPTH) at its own size: rings of one shape make planar
 # quads between them, and a skin shaded flat by its drawn faces shows every quad
 # that is not as a fold. Broad over the pads, in to the waist. Through the
 # waist the rig's own stations take over (`_RIG_STATIONS`, vertex for vertex the
@@ -335,8 +335,8 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	for station: Vector3 in profile:
 		var pts: PackedVector3Array = SkaterJerseyHem.tuck_ring(
 				_lathe_ring(station, _CHEST_SIDES, phase), station.x, station.y, station.z, tuck,
-				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y,
-				SkaterConnectedPants.TUCK_BLOUSE_M)
+				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y
+				* SkaterMeshBuilder.torso_depth_at(station.x), SkaterConnectedPants.TUCK_BLOUSE_M)
 		var ids := PackedInt32Array()
 		for j: int in _CHEST_SIDES:
 			var theta: float = TAU * float(j) / float(_CHEST_SIDES) + phase
@@ -482,7 +482,8 @@ static func _rig_station(station: int) -> Vector3:
 static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	var s: Vector3 = _rig_station(station)
-	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE \
+			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(s.x))
 	var ring: PackedVector3Array = SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase),
 			s.x, s.y, s.z, tuck, phase, xz.x, xz.y, SkaterConnectedPants.TUCK_BLOUSE_M)
 	# Beside a tucked corner the jersey is pulled toward the waistband, taut
@@ -508,9 +509,11 @@ static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 
 
 # A ring of the rig's section (SkaterMeshBuilder._ring's layout: `sides` + 1
-# points from `phase`, the last repeating the first) at (y, radius, sway).
+# points from `phase`, the last repeating the first) at (y, radius, sway), as
+# deep as the torso is there.
 static func _lathe_ring(station: Vector3, sides: int, phase: float) -> PackedVector3Array:
-	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE \
+			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(station.x))
 	var pts := PackedVector3Array()
 	for j: int in sides + 1:
 		var theta: float = TAU * float(j) / float(sides) + phase

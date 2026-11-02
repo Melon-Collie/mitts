@@ -49,8 +49,15 @@ const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2]
 # over it, while the chest rings stay centered so the belly keeps its line.
 const _TORSO_REAR_SWAY: Array[float] = [
 	0.0, 0.0, 0.0, 0.0, 0.006, 0.012, 0.018, 0.020, 0.026, 0.032, 0.036]
+# Each ring's share of _TORSO_Z_SCALE: the chest 0.34 m deep, a 6'1" man's
+# ~0.26 m under his pads and sweater, easing at the waist into the hockey pants'
+# full depth, which the tail hangs over.
+const _TORSO_DEPTH: Array[float] = [
+	0.875, 0.875, 0.875, 0.875, 0.94, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
-# Chest reads wider than deep — lateral/depth scale on the torso's rings.
+# Chest reads wider than deep — lateral/depth scale on the torso's rings: 0.47 m
+# across the shoulder pads by 0.34 m deep at the chest, a 6'1" man's ~0.26 m
+# chest under his pads and sweater.
 const _TORSO_X_SCALE: float = 1.05
 const _TORSO_Z_SCALE: float = 0.88
 
@@ -465,8 +472,8 @@ const TORSO_HEM_STATION: int = 10
 # One torso ring (sides + 1 points, the last repeating the first), torso-local.
 static func torso_ring(station: int) -> PackedVector3Array:
 	var s: Vector2 = _TORSO_PROFILE[station]
-	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_SIDES, TAU * TORSO_U_PHASE)
+	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE,
+			_TORSO_Z_SCALE * _TORSO_DEPTH[station], _TORSO_SIDES, TAU * TORSO_U_PHASE)
 	for k: int in ring.size():
 		ring[k].z += _TORSO_REAR_SWAY[station]
 	return ring
@@ -475,8 +482,21 @@ static func torso_ring(station: int) -> PackedVector3Array:
 # How far `p` (torso-local) lies outside the torso's rest rings, metres, negative
 # inside (TorsoSection.clearance on this torso's section).
 static func torso_clearance(p: Vector3) -> float:
-	return TorsoSection.clearance(p, _TORSO_PROFILE, _TORSO_REAR_SWAY,
+	return TorsoSection.clearance(p, _TORSO_PROFILE, _TORSO_REAR_SWAY, _TORSO_DEPTH,
 			Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE))
+
+
+# The torso's share of its depth scale at height `y` (torso-local), between its
+# stations (_TORSO_DEPTH): 1 at and below the waist's last station.
+static func torso_depth_at(y: float) -> float:
+	if y >= _TORSO_PROFILE[0].x:
+		return _TORSO_DEPTH[0]
+	for i: int in _TORSO_PROFILE.size() - 1:
+		var a: Vector2 = _TORSO_PROFILE[i]
+		var b: Vector2 = _TORSO_PROFILE[i + 1]
+		if y >= b.x:
+			return lerpf(_TORSO_DEPTH[i], _TORSO_DEPTH[i + 1], (a.x - y) / (a.x - b.x))
+	return _TORSO_DEPTH[_TORSO_DEPTH.size() - 1]
 
 
 # The pants are wider than deep by this, as the torso is.
@@ -484,6 +504,7 @@ const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 # torso_clearance's section, for the arms' C++ port (NativeArmRig.configure_torso).
 const TORSO_PROFILE: Array[Vector2] = _TORSO_PROFILE
 const TORSO_REAR_SWAY: Array[float] = _TORSO_REAR_SWAY
+const TORSO_DEPTH: Array[float] = _TORSO_DEPTH
 const TORSO_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 
 

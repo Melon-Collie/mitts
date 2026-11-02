@@ -104,7 +104,7 @@ class Pose:
 		return violation <= 0.0
 
 	func score() -> float:
-		return cost + ArmAnatomy.VIOLATION_WEIGHT * violation
+		return ArmAnatomy.ranking(cost, violation)
 
 	func copy_from(o: Pose) -> void:
 		twist = o.twist
@@ -345,7 +345,7 @@ func _hold_bottom(hand: Vector3, shaft: Vector3, spacing: float, t: Pose) -> voi
 				_spacing_max())
 		_bottom.hand = hand + shaft * d
 		ArmAnatomy.solve(_bottom, _scratch, t.bottom)
-		var score: float = _scratch.cost + ArmAnatomy.VIOLATION_WEIGHT * _scratch.violation
+		var score: float = ArmAnatomy.ranking(_scratch.cost, _scratch.violation)
 		if score < best_score:
 			best_score = score
 			best_spacing = d
@@ -362,7 +362,7 @@ func _shaft_depth(torso: Transform3D, hand: Vector3, heel: Vector3) -> float:
 	for k: int in _SHAFT_SAMPLES:
 		var p: Vector3 = hand.lerp(heel, float(k + 1) / float(_SHAFT_SAMPLES + 1))
 		var clear: float = TorsoSection.clearance(to_torso * p, _body.torso_profile,
-				_body.torso_sway, _body.torso_xz_scale) * unit
+				_body.torso_sway, _body.torso_depth, _body.torso_xz_scale) * unit
 		deepest = maxf(deepest, SHAFT_RADIUS - clear)
 	return deepest
 

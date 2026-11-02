@@ -40,7 +40,7 @@ const TOP_CAP_RECT: Rect2 = Rect2(UV_OFFSET_X * IMG_W, SIDE_V_MAX_PX, IMG_W / 2,
 # in metres and drawn through PX_PER_M so it lands undistorted.
 # test_lettering_scale.gd measures both against the mesh.
 const BACK_HEIGHT_M: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
-const BACK_GIRTH_M: float = 1.32
+const BACK_GIRTH_M: float = 1.31
 const PX_PER_M: Vector2 = Vector2(IMG_W / BACK_GIRTH_M, SIDE_V_MAX_PX / BACK_HEIGHT_M)
 
 # Layout down the back, in metres: the name hangs just under the yoke, as it

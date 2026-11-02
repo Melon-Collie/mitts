@@ -145,7 +145,7 @@ func test_torso_clearance_measures_the_rest_rings() -> void:
 		for k: int in ring.size() - 1:
 			middle += ring[k]
 		middle /= float(ring.size() - 1)
-		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.1,
+		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.05,
 				"station %d's middle is inside" % station)
 		for k: int in ring.size() - 1:
 			var corner: Vector3 = ring[k]

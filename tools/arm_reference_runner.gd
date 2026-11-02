@@ -222,7 +222,8 @@ func _draw_pose(pose: ArmAnatomySearch.Pose, s: Dictionary) -> Node3D:
 		for k: int in 25:
 			var t: float = TAU * float(k) / 24.0
 			pts.append(torso * Vector3(cos(t) * ring.y * _body.torso_xz_scale.x, ring.x,
-					sin(t) * ring.y * _body.torso_xz_scale.y + _body.torso_sway[i]))
+					sin(t) * ring.y * _body.torso_xz_scale.y * _body.torso_depth[i]
+					+ _body.torso_sway[i]))
 		_strip(root, pts, Color(0.2, 0.25, 0.6))
 	for arm: ArmAnatomy.ArmPose in [pose.top, pose.bottom]:
 		var color: Color = _shade(arm.violation, METRE_LIMITS.has(arm.binding), HELD)
@@ -361,7 +362,7 @@ func _press(pose: ArmAnatomySearch.Pose, at: Vector3) -> float:
 	var torso: Transform3D = Transform3D(ArmAnatomySearch.spine_basis(_trunk, pose.twist,
 			pose.lean), Vector3.ZERO) * _body.torso_in_spine
 	return -TorsoSection.clearance(torso.affine_inverse() * at, _body.torso_profile,
-			_body.torso_sway, _body.torso_xz_scale) * torso.basis.get_scale().x
+			_body.torso_sway, _body.torso_depth, _body.torso_xz_scale) * torso.basis.get_scale().x
 
 
 # A depth in the jersey (m) as "N mm in" or "N mm clear".

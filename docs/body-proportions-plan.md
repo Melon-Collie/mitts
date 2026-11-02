@@ -83,7 +83,10 @@ In order, each its own commit, each rendered (`render-body.sh`,
    reach, or re-derive the reach constants so the blade's envelope stays
    where it is and only the body changes. Needs a playtest.
 3. **A shallower chest.** The visible jersey's rings and the measured profile
-   together, ~5 cm off its depth. Cosmetic.
+   together, ~5 cm off its depth. Cosmetic. DONE: each torso ring has its
+   share of the depth scale (`SkaterMeshBuilder.TORSO_DEPTH`), the chest's
+   0.875 easing to the pants' full depth at the waist. Thinning them all
+   brought a seated figure's thighs through the jersey's tail.
 4. **Shaft past the hand** 13 → 9 cm, the knob on the glove. Cosmetic. DONE.
 5. **Stick length** — leave as tuned. It is a reach decision, not anatomy.
 

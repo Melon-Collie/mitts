@@ -10,7 +10,7 @@ extends RefCounted
 # How far down the shaft the bottom hand can hold, of the stick's length: a
 # body reaches that far; how far a player does is technique's to say.
 const SPACING_MAX_SHARE: float = 0.7
-# The carry the top fist's square roll is read at (ArmAnatomyBody
+# The stick the top fist's square roll is read on (ArmAnatomyBody
 # .top_roll_square), in the trunk's frame off the top shoulder: the hand low in
 # front of its hip, the blade ahead on the forehand side.
 const SQUARE_HAND_OFF_SHOULDER := Vector3(-0.08, -0.45, -0.3)
@@ -33,6 +33,7 @@ static func capture(controller: SkaterController) -> ArmAnatomyBody:
 			* skel.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
 	body.torso_profile = SkaterMeshBuilder.TORSO_PROFILE
 	body.torso_sway = SkaterMeshBuilder.TORSO_REAR_SWAY
+	body.torso_depth = SkaterMeshBuilder.TORSO_DEPTH
 	body.torso_xz_scale = SkaterMeshBuilder.TORSO_XZ_SCALE
 	body.sleeve_radius = SkaterMeshBuilder.SLEEVE_RADIUS_M
 	body.hand_radius = skater.arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND)
@@ -107,20 +108,16 @@ static func pivot_height(skater: Skater) -> float:
 	return hips_frame(skater).origin.y
 
 
-# The top fist's roll on the shaft at the reference carry, the hand free to roll
-# to where its forearm holds it at rest: the roll the face is square at.
+# The top fist's roll on the shaft of a stick held ahead with the face square:
+# the back of the glove ahead and out to its own side, as a top hand holds a
+# stick.
 static func _square_roll(body: ArmAnatomyBody, pivot_above_blade: float) -> float:
 	var setup := ArmAnatomy.ArmSetup.new()
 	setup.body = body
 	setup.side = signf(body.top_shoulder.x)
-	setup.shoulder = body.top_shoulder
-	setup.torso = body.torso_in_spine
-	setup.hand = body.top_shoulder + Vector3(SQUARE_HAND_OFF_SHOULDER.x * setup.side,
+	var hand: Vector3 = body.top_shoulder + Vector3(SQUARE_HAND_OFF_SHOULDER.x * setup.side,
 			SQUARE_HAND_OFF_SHOULDER.y, SQUARE_HAND_OFF_SHOULDER.z)
 	var heel := Vector3(body.bottom_shoulder.x, -pivot_above_blade, -SQUARE_HEEL_AHEAD_M)
-	setup.shaft = (heel - setup.hand).normalized()
+	setup.shaft = (heel - hand).normalized()
 	setup.grip_angle = body.top_grip_angle
-	setup.roll_free = true
-	var pose := ArmAnatomy.ArmPose.new()
-	ArmAnatomy.solve(setup, pose, ArmAnatomy.ArmPose.new())
-	return pose.roll
+	return ArmAnatomy.roll_backing(setup, Vector3(setup.side, 0.0, -1.0).normalized())

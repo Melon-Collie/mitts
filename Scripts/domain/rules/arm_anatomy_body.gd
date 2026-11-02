@@ -21,6 +21,7 @@ var girdle_slack: float = 0.06
 var torso_in_spine := Transform3D.IDENTITY
 var torso_profile: Array[Vector2] = []
 var torso_sway: Array[float] = []
+var torso_depth: Array[float] = []
 var torso_xz_scale := Vector2.ONE
 # How far a sleeve's surface stands off its bone, the fist's half depth, and how
 # far a sleeve, a fist or the knob may press into the jersey: arms and jersey

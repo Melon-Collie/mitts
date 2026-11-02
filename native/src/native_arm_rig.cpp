@@ -229,9 +229,11 @@ void NativeArmRig::configure(const Vector3 &p_thick_upper, const Vector3 &p_thic
 }
 
 void NativeArmRig::configure_torso(const PackedVector2Array &profile, const PackedFloat64Array &sway,
-		double x_scale, double z_scale, double p_sleeve_radius, double p_steer_contact) {
+		const PackedFloat64Array &depth, double x_scale, double z_scale, double p_sleeve_radius,
+		double p_steer_contact) {
 	torso_profile = profile;
 	torso_sway = sway;
+	torso_depth = depth;
 	torso_x_scale = x_scale;
 	torso_z_scale = z_scale;
 	sleeve_radius = p_sleeve_radius;
@@ -247,6 +249,7 @@ double NativeArmRig::torso_clearance(const Vector3 &p) const {
 	const int last = count - 1;
 	double radius = torso_profile[last].y;
 	double sway = torso_sway[last];
+	double deep = torso_depth[last];
 	for (int i = 0; i < last; i++) {
 		const Vector2 a = torso_profile[i];
 		const Vector2 b = torso_profile[i + 1];
@@ -254,16 +257,18 @@ double NativeArmRig::torso_clearance(const Vector3 &p) const {
 			const double t = ((double)a.x - (double)p.y) / ((double)a.x - (double)b.x);
 			radius = Math::lerp((double)a.y, (double)b.y, t);
 			sway = Math::lerp(torso_sway[i], torso_sway[i + 1], t);
+			deep = Math::lerp(torso_depth[i], torso_depth[i + 1], t);
 			break;
 		}
 	}
 	const Vector2 q(p.x, (real_t)((double)p.z - sway));
 	const double span = q.length();
+	const double z_radius = radius * torso_z_scale * deep;
 	if (span < 0.000001) {
-		return -radius * torso_z_scale;
+		return -MIN(radius * torso_x_scale, z_radius);
 	}
 	const double e = Vector2((real_t)((double)q.x / (radius * torso_x_scale)),
-			(real_t)((double)q.y / (radius * torso_z_scale)))
+			(real_t)((double)q.y / z_radius))
 							 .length();
 	return span * (1.0 - 1.0 / e);
 }
@@ -419,8 +424,8 @@ void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("configure", "thick_upper", "thick_forearm", "thick_cuff",
 								 "thick_elbow", "thick_glove", "grip_angle", "wrist", "steer_omega"),
 			&NativeArmRig::configure);
-	ClassDB::bind_method(D_METHOD("configure_torso", "profile", "sway", "x_scale", "z_scale",
-								 "sleeve_radius", "steer_contact"),
+	ClassDB::bind_method(D_METHOD("configure_torso", "profile", "sway", "depth", "x_scale",
+								 "z_scale", "sleeve_radius", "steer_contact"),
 			&NativeArmRig::configure_torso);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
 								 "lengths", "load", "motion"),

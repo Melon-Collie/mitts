@@ -90,7 +90,7 @@ static func assess(body: ArmAnatomyBody, hold: Hold, out: Verdict) -> void:
 	_over(out, Limit.HANDS_APART, hold.spacing - apart)
 	var knob: Vector3 = hand - hold.shaft * body.knob_extend
 	var clear: float = TorsoSection.clearance(hold.torso.affine_inverse() * knob,
-			body.torso_profile, body.torso_sway, body.torso_xz_scale) \
+			body.torso_profile, body.torso_sway, body.torso_depth, body.torso_xz_scale) \
 			* hold.torso.basis.get_scale().x
 	_over(out, Limit.KNOB_IN_BODY, -body.gear_press - clear)
 	var mid: Vector3 = hold.heel + hold.blade_dir * (body.blade_length * 0.5)

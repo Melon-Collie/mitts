@@ -448,12 +448,13 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3,
 	_shaft_len = stick_len
 
 	# Three shots down the stick. The blade lies flat on the ice half a blade
-	# ahead of the heel; the grip sits at the butt, where the knob and the top
-	# of the wrap are; the whole-stick shot splits the difference.
+	# ahead of the heel; the grip shot centres on the knob, which rides on the
+	# top fist, so it frames the knob and the wrap above the gloves' own shot;
+	# the whole-stick shot splits the difference.
 	var blade_len: float = GameRules.DEFAULT_BLADE_LENGTH_M
 	_anchors[Focus.BLADE] = heel \
 			+ _stick_root.basis * Vector3(0.0, 0.0, -blade_len * 0.5)
-	_anchors[Focus.GRIP] = heel + _shaft_up * (stick_len - FigureKit.KNOB_HEIGHT_M)
+	_anchors[Focus.GRIP] = heel + _shaft_up * (stick_len - FigureKit.KNOB_HEIGHT_M * 0.5)
 	_anchors[Focus.STICK] = (_anchors[Focus.BLADE] + _anchors[Focus.GRIP]) * 0.5
 	# What the whole-stick shot has to contain. Measuring it rather than fixing
 	# it is what keeps a LONG cut on a tall build from hanging out of frame:

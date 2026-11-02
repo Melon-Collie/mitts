@@ -114,6 +114,7 @@ func build(skeleton: Skeleton3D) -> void:
 			_native_arms[arm].configure_torso(
 					PackedVector2Array(SkaterMeshBuilder.TORSO_PROFILE),
 					PackedFloat64Array(SkaterMeshBuilder.TORSO_REAR_SWAY),
+					PackedFloat64Array(SkaterMeshBuilder.TORSO_DEPTH),
 					SkaterMeshBuilder.TORSO_XZ_SCALE.x, SkaterMeshBuilder.TORSO_XZ_SCALE.y,
 					SkaterMeshBuilder.SLEEVE_RADIUS_M, SkaterArmPoses.STEER_CONTACT_M)
 	# Torso and helmet: their placement is authored in the scene, so it is read

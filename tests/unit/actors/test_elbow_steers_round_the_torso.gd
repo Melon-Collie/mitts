@@ -37,7 +37,7 @@ func test_a_clear_elbow_keeps_the_poles_bend() -> void:
 
 func test_an_elbow_the_pole_sinks_into_the_chest_turns_out_of_it() -> void:
 	# A hand drawn in across the belly: the pole drops the elbow into the chest.
-	var hand := Vector3(-0.02, -0.12, -0.36)
+	var hand := Vector3(0.05, -0.12, -0.36)
 	var plain: Vector3 = TwoBoneIK.solve_elbow(SHOULDER, hand, UPPER, FOREARM, POLE)
 	assert_gt(_sunk(SHOULDER, plain, hand), 0.02, "the pole's elbow is in the chest")
 	var elbow: Vector3 = _steer(hand)
