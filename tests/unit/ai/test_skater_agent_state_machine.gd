@@ -1499,13 +1499,16 @@ func test_receive_takes_the_feed_in_stride_when_roughly_synced() -> void:
 
 
 func test_receive_settles_only_when_genuinely_early() -> void:
-	# Bot already sitting ON the anchor at 4 m/s with the puck still a full
-	# second away — far outside the blade window its motion covers, so waiting
-	# is forced and it brakes to hold the gate.
+	# Bot already sitting ON the anchor, drifting off it away from the line at
+	# 4 m/s with the puck still a full second away: skating on carries the blade
+	# out of reach before the puck gets there, so waiting is forced and it
+	# brakes to hold the gate. (Drifting INTO the line it would take the feed in
+	# stride on the far side, the side its skating takes it to.)
 	# (In-rink coordinates — see the in-stride test above.)
-	var self_pos := Vector3(0, 0, 1.4)
+	var self_pos := Vector3(0, 0, GameRules.DEFAULT_STICK_LENGTH_M
+			+ GameRules.DEFAULT_BLADE_LENGTH_M - SkaterAgentReception.RECEIVE_BODY_INSET_M)
 	var s := _receive_snap(Vector3(-20, 0, 0), Vector3(20, 0, 0),
-			self_pos, Vector3(0, 0, -4))
+			self_pos, Vector3(0, 0, 4))
 	var input := InputState.new()
 	assert_true(sm._pass_receive_aim_and_steer(input, s, self_pos),
 			"scenario commits the reception")

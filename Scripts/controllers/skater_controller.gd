@@ -265,8 +265,8 @@ var blade_height: float = 0.03
 # (0.0675 above the ice), or some pucks are touchable by neither plane. 0.52 sits
 # at the top, so a deflect reaches a net-front feed arriving at 0.9–1.1 m.
 var blade_lift_height: float = 0.52
-# Fixed, rigid shaft length (hand to blade heel). Baseline 1.30 m ≈ adult
-# senior stick shaft (butt-to-heel). The blade mesh extends forward from the
+# Fixed, rigid shaft length (top hand to blade heel). Baseline 1.40 m, a
+# senior stick on a 6'1" player (docs/body-proportions-plan.md). The blade mesh extends forward from the
 # heel; see Skater.blade_length. Total hand-to-toe is stick_length + blade_length.
 var stick_length: float = GameRules.DEFAULT_STICK_LENGTH_M
 # Hand Y in upper-body-local space. Baseline resting position (used in the FAR
@@ -275,17 +275,17 @@ var stick_length: float = GameRules.DEFAULT_STICK_LENGTH_M
 #
 # Mesh-native (5'10"), scaled by height_mult as the skeleton is: the top hand at
 # the hips' height (~0.95 m × height on skates), half the height below the
-# shoulder, and the stick at rest ~44° from the ice, near a real lie-5 address.
+# shoulder, and the stick at rest ~43° from the ice, near a real lie-5 address.
 var hand_rest_y: float = -0.05
 # Ceiling for hand Y in the CLOSE regime. When aiming very close to the
 # skater, the hand rises to shorten the stick's horizontal projection; this
-# cap keeps the pose anatomical (0.30 local = 1.30 m world at L2 — the hand
-# won't climb past chest level). Mesh-native like hand_rest_y; apply_
-# attributes scales it by height_mult so the ceiling stays chest-height on
-# every frame. With default stick_length = 1.30 m and the blade on the ice
-# (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
-# 1.27 → min horizontal stick reach ≈ 0.28 m.
-var hand_y_max: float = 0.30
+# cap keeps the pose anatomical (chest level, under the shoulder at 0.45).
+# Mesh-native like hand_rest_y; apply_attributes scales it by height_mult so
+# the ceiling stays chest-height on every frame. With the default 1.40 m stick
+# and the blade on the ice (blade_y ≈ -0.97 local at L2), 0.40 → hand-to-blade
+# drop 1.37 → min horizontal stick reach ≈ 0.29 m: a longer stick needs the
+# hands higher to bring the blade in as tight.
+var hand_y_max: float = 0.40
 # The least the top hand reaches off its shoulder toward a blade held round the
 # forehand, gone as the blade comes in tight (TopHandIK.Config.hand_forward):
 # the stick runs from in front of the belly, not the far hip.
@@ -361,7 +361,7 @@ var nudge_velocity_retain: float = 0.85
 # rotation limit — ensuring the hand stays connected during any normal swing.
 # Never influences blade placement. See domain/rules/bottom_hand_ik.gd.
 # Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
-# grips. ~0.25 on a 1.30 m shaft ≈ a typical hockey grip width.
+# grips. ~0.25 on a 1.40 m shaft ≈ a typical hockey grip width.
 var bottom_hand_grip_fraction: float = 0.25
 # Fine-tune Y offset added to the bottom hand's shaft-derived grip height
 # (SkaterIKCoordinator.update_bottom_hand lerps top-hand Y toward blade Y at

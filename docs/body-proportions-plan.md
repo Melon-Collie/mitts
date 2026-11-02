@@ -102,7 +102,17 @@ In order, each its own commit, each rendered (`render-body.sh`,
    0.875 easing to the pants' full depth at the waist. Thinning them all
    brought a seated figure's thighs through the jersey's tail.
 4. **Shaft past the hand** 13 → 9 cm, the knob on the glove. Cosmetic. DONE.
-5. **Stick length** — leave as tuned. It is a reach decision, not anatomy.
+5. **Stick length** — DONE: `DEFAULT_STICK_LENGTH_M` 1.30 → 1.40 (top hand to
+   heel ~1.44 m with the knob, against ~1.45 m), taken after the body change
+   left two slow bot scenarios short of reach. The lie follows the rest pose
+   (`blade_lie_deg` 47.5 → 43.3°, a lie 5), and the close-in ceiling
+   (`hand_y_max` 0.30 → 0.40) lets the longer stick still tuck the blade in
+   tight. The bots' reach and strike constants, the keeper's carrier reach and
+   the AI snapshots moved with it, and the shot field was regenerated. The
+   bots' one-timer zone now follows the swing the bot committed to, not the
+   net, and the keeper racing for a post from within a glide of its overlap
+   skates on onto it rather than stopping first: the longer stick exposed
+   both.
 
 Then re-render the arm references (their hand heights are measured from the
 ice, so they stand), re-run the calibration and re-derive the carry envelope.

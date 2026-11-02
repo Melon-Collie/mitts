@@ -7,8 +7,8 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # (GameRules, the physics tick and the movement rules only).
 
 # CARRY blade aim distance (m forward in goal direction) — the cursor ring the
-# carry dangle, the pre-aim targets, and the arc-step all live on. 1.3 m is ~80%
-# of the league blade orbit (stick + blade = 1.6 m), INSIDE reach, so the blade
+# carry dangle, the pre-aim targets, and the arc-step all live on. 1.3 m is ~75%
+# of the league blade orbit (stick + blade = 1.7 m), INSIDE reach, so the blade
 # holds AT the cursor with slack in every direction, and the model's assumed
 # carried-puck position (self + this × forward) is where the blade can really
 # hold it.

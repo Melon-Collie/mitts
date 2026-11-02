@@ -341,7 +341,7 @@ func test_finisher_stages_the_open_backdoor() -> void:
 const TIP_CARRIER := Vector3(6.0, 0.0, -9.0)
 
 
-func _dead_offices_target() -> Vector3:
+func _dead_offices_ctx() -> RoleContext:
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -21.0),
 			TIP_CARRIER, Vector3.ZERO,
@@ -355,20 +355,36 @@ func _dead_offices_target() -> Vector3:
 	ctx.snapshot.puck_state.carrier_peer_id = 2
 	ctx.strong_x = 1.0
 	_add_opp_goalie(ctx, TIP_CARRIER, 0.4)
-	return AIRoleFinisher.decide(ctx).target_position
+	return ctx
 
 
-func test_finisher_parks_the_tip_station_when_offices_die_and_goalie_sits_deep() -> void:
-	# Every one-timer feed is dead, so the staging argmax takes the TIP/SCREEN
-	# station: ON the carrier→net shot line at crease-edge depth, where the body
-	# screens the goalie and the blade tips the point blast (tip_ev). With the
-	# same crowd but a CHALLENGING goalie the tip through him is worthless and
-	# the finisher stays at a feed office — the station is a read, not a post.
-	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+func _dead_offices_target() -> Vector3:
+	return AIRoleFinisher.decide(_dead_offices_ctx()).target_position
+
+
+func test_finisher_stages_for_a_tip_when_offices_die_and_goalie_sits_deep() -> void:
+	# Every one-timer feed is dead, so the staging argmax stages for the tip of
+	# the point blast (tip_ev): where he stands is worth its tip, not its feed,
+	# and no less a tip than the TIP/SCREEN station on the carrier→net line at
+	# crease-edge depth. Which spot wins is the shot field's read.
+	var ctx: RoleContext = _dead_offices_ctx()
+	var target: Vector3 = AIRoleFinisher.decide(ctx).target_position
+	var goal: Vector3 = ctx.attacking_goal_pos
 	var to_c: Vector3 = TIP_CARRIER - goal
+	to_c.y = 0.0
 	var station: Vector3 = goal + to_c * (AIRoleFinisher.TIP_STATION_DIST_M / to_c.length())
-	var target: Vector3 = _dead_offices_target()
-	assert_lt(target.distance_to(station), 0.5, "parks the shot-line tip post; got %s" % target)
+	var goalie: Vector3 = AIRoleReads.resolve_opp_goalie_pos(ctx)
+	var opps: Array[Vector3] = ctx.scratch_opp_positions
+	AIRoleReads.collect_opponents(ctx, opps, ctx.scratch_opp_states)
+	var release: Vector3 = AIPuckLane.release_point_toward(TIP_CARRIER, goal)
+	var tip := func(at: Vector3) -> float:
+		return AIActionScoring.tip_ev(release, at, goal, goalie, opps,
+				AIBotMechanics.WRISTER_SHOT_SPEED_M_S, ctx.scratch_opp_caps, ctx.caps_by_peer.get(ctx.peer_id))
+	var feed: float = AIActionScoring.score_pass_value(TIP_CARRIER, target, goal, goalie, opps,
+			AIPuckLane.expected_pass_speed(TIP_CARRIER, target), ctx.scratch_opp_caps, true)
+	assert_gt(tip.call(target), feed, "staged for the tip, not a feed; got %s" % target)
+	assert_gte(tip.call(target), tip.call(station) - 1e-6,
+			"no worse a tip than the shot-line post; got %s" % target)
 
 
 func test_finisher_stays_off_a_covered_feed_lane() -> void:

@@ -466,7 +466,7 @@ const DEFAULT_SKATER_STOP_DECEL_M_S2: float = 9.0
 const DEFAULT_SKATER_REVERSE_SKID_FRACTION: float = 0.75
 const DEFAULT_SKATER_TURN_ACCEL_M_S2: float = 9.0
 const DEFAULT_SKATER_MAX_TURN_RATE_RAD_S: float = 6.0
-const DEFAULT_STICK_LENGTH_M: float = 1.30
+const DEFAULT_STICK_LENGTH_M: float = 1.40
 const DEFAULT_BLADE_LENGTH_M: float = 0.30
 
 # Swept-segment hit radius for poke checks (puck-segment vs blade-segment).

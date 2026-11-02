@@ -96,10 +96,10 @@ var blade_face_twist_deg: float = 7.0
 var blade_hosel_length: float = 0.085
 # The stick's built-in lie: the shaft↔ice angle at which the blade sits flat.
 # Derived from the rest pose at the base build (hand 0.96 m above the heel over
-# a sqrt(1.30² − 0.96²) ≈ 0.88 m run → atan ≈ 47.5°, about a real lie 6). A
+# a sqrt(1.40² − 0.96²) ≈ 1.02 m run → atan ≈ 43.3°, about a real lie 5). A
 # shaft off this angle pitches the rigid blade by the difference
 # (_apply_blade_tilt).
-var blade_lie_deg: float = 47.5
+var blade_lie_deg: float = 43.3
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
 # reception decision sites scale the puck's league deflect ceiling + squared
 # bonus by this — a flatter pattern soaks a harder feed. Set by
@@ -431,6 +431,10 @@ var _swing_anchor_up: Vector3 = Vector3.UP
 var _swing_basis: Basis = Basis.IDENTITY
 var _swing_up: Vector3 = Vector3.UP
 var _swing_weight: float = 0.0
+# The render frame's delta, as _process was handed it: the mesh pass's eases
+# step by it rather than the engine's own, which is not the frame being drawn
+# when the pass is driven by hand.
+var _frame_dt: float = 0.0
 var _swing_from_slap: bool = false
 # The params it was built from, read by the carry seat (_seat_on_puck).
 var _blade_params: StickBladeMeshBuilder.Params = null
@@ -1017,6 +1021,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_frame_dt = delta
 	# Cosmetic mesh pass at render rate. The stick and arm meshes are pure
 	# write-only functions of the marker positions (top_hand, blade, shoulder,
 	# bottom_hand) the physics-rate controllers and interpolators maintain, so one
@@ -1574,7 +1579,7 @@ func _swing_rigid(rot: Basis, marker_basis: Basis, to_hand: Vector3) -> Basis:
 	_swing_basis = (Basis(arc) * _swing_anchor_basis).orthonormalized()
 	_swing_up = arc * _swing_anchor_up
 	_swing_weight = 1.0 if swinging \
-			else move_toward(_swing_weight, 0.0, get_process_delta_time() / SWING_RELEASE_S)
+			else move_toward(_swing_weight, 0.0, _frame_dt / SWING_RELEASE_S)
 	var q: Quaternion = dressed.get_rotation_quaternion().slerp(
 			_swing_basis.get_rotation_quaternion(), _swing_weight)
 	return to_hips.inverse() * Basis(q)
@@ -1698,7 +1703,7 @@ func set_tie_draw_offset(world_offset: Vector3) -> void:
 # The tie's draw slide in the Blade marker's frame, which the mesh hangs in.
 func _tie_draw_local() -> Vector3:
 	_tie_draw_offset = _tie_draw_offset.move_toward(_tie_draw_target,
-			_TIE_DRAW_EASE_M_S * get_process_delta_time())
+			_TIE_DRAW_EASE_M_S * _frame_dt)
 	if _tie_draw_offset == Vector3.ZERO:
 		return Vector3.ZERO
 	return blade.global_transform.basis.inverse() * _tie_draw_offset

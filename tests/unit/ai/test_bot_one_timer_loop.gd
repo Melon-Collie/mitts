@@ -278,6 +278,6 @@ func test_a_body_turned_away_pivots_into_the_one_timer() -> void:
 # blade instead of swung at.
 func test_a_feed_out_of_reach_of_the_circle_is_caught() -> void:
 	var spot: Vector3 = _argmax_spot()
-	var o: Outcome = _feed(spot, _to_net(spot), _beside(spot, 1.0))
+	var o: Outcome = _feed(spot, _to_net(spot), _beside(spot, 1.2))
 	assert_false(o.pressed, _describe(o))
 	assert_true(_controller.has_puck or o.fired, "caught: " + _describe(o))

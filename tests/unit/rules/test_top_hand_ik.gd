@@ -717,7 +717,7 @@ func test_a_held_target_sets_no_two_hand_limit() -> void:
 
 
 # ── The hand's forward floor (Config.hand_forward) ──────────────────────────
-# On the game's own geometry: a 1.30 m stick, the hand a metre off the ice, the
+# On a fixed geometry near the game's: a 1.30 m stick, the hand a metre off the ice, the
 # range of motion square either side.
 
 const FLOOR: float = 0.22

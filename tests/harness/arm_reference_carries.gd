@@ -12,22 +12,22 @@ extends RefCounted
 # from straight ahead, + toward the forehand.
 
 const CARRIES: Array[Dictionary] = [
-	{"name": "forehand", "puck_deg": 35.0, "puck_m": 1.25, "fold_deg": 30.0,
+	{"name": "forehand", "puck_deg": 36.0, "puck_m": 1.38, "fold_deg": 30.0,
 		"crouch_m": 0.1, "twist_deg": 15.0, "top_hand": Vector3(0.1, 0.95, 0.25),
 		"spacing_m": 0.35},
-	{"name": "ahead", "puck_deg": 0.0, "puck_m": 1.42, "fold_deg": 30.0,
+	{"name": "ahead", "puck_deg": 0.0, "puck_m": 1.56, "fold_deg": 30.0,
 		"crouch_m": 0.1, "twist_deg": 0.0, "top_hand": Vector3(0.0, 0.95, 0.3),
 		"spacing_m": 0.3},
-	{"name": "backhand", "puck_deg": -57.0, "puck_m": 1.42, "fold_deg": 30.0,
+	{"name": "backhand", "puck_deg": -57.0, "puck_m": 1.56, "fold_deg": 30.0,
 		"crouch_m": 0.1, "twist_deg": -30.0, "top_hand": Vector3(0.3, 0.95, 0.1),
 		"spacing_m": 0.3},
-	{"name": "wide_forehand", "puck_deg": 58.0, "puck_m": 1.14, "fold_deg": 40.0,
+	{"name": "wide_forehand", "puck_deg": 60.0, "puck_m": 1.29, "fold_deg": 40.0,
 		"crouch_m": 0.1, "twist_deg": 30.0, "top_hand": Vector3(0.0, 1.05, 0.3),
 		"spacing_m": 0.45},
-	{"name": "tight", "puck_deg": 29.0, "puck_m": 1.05, "fold_deg": 20.0,
+	{"name": "tight", "puck_deg": 30.0, "puck_m": 1.20, "fold_deg": 20.0,
 		"crouch_m": 0.1, "twist_deg": 10.0, "top_hand": Vector3(0.15, 1.05, 0.15),
 		"spacing_m": 0.2},
-	{"name": "long_reach", "puck_deg": 0.0, "puck_m": 1.69, "fold_deg": 45.0,
+	{"name": "long_reach", "puck_deg": 0.0, "puck_m": 1.82, "fold_deg": 45.0,
 		"crouch_m": 0.15, "twist_deg": 0.0, "top_hand": Vector3(0.0, 0.8, 0.45),
 		"spacing_m": 0.25},
 ]

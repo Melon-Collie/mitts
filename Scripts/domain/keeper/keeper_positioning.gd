@@ -146,7 +146,10 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 	motor.low_ready.asked = zone == Zone.FRONT and _cannot_react(puck, meeting, motor)
 	if zone == Zone.BELOW or _racing:
 		var side: float = post_side if _racing else _post_below(puck, velocity, motor)
-		motor.seal(Vector2(side * GameRules.NET_HALF_WIDTH, 0.0), side)
+		var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
+		if _racing and _skates_onto_post(post, side, puck, motor):
+			return
+		motor.seal(post, side)
 		return
 	# His spot moves with the puck: the same spot a look ahead along its
 	# motion, which the motor skates him with.
@@ -243,10 +246,10 @@ static func _at_post_in(puck: Vector2, velocity: Vector2) -> float:
 # toward the post as the puck goes wide, is what covers the shot it can still
 # take, and going for the post sooner gives the rest of the net away to a
 # feint. On the post, standing, he drops into the RVH once the drop-in only
-# just beats the puck there; off it with the puck in tight, his fastest way in,
-# the butterfly slide across. Sealed for it, he holds it while the puck still
-# heads there or is at a sharp angle: a puck that turns back out beats him back
-# up.
+# just beats the puck there; off it with the puck in tight, his fastest way in
+# (`_skates_onto_post` within a glide of it, else the butterfly slide across).
+# Sealed for it, he holds it while the puck still heads there or is at a sharp
+# angle: a puck that turns back out beats him back up.
 func _race_to_post(puck: Vector2, arrives: float, motor: KeeperMotor) -> void:
 	var was: bool = _racing
 	_racing = false
@@ -257,14 +260,34 @@ func _race_to_post(puck: Vector2, arrives: float, motor: KeeperMotor) -> void:
 	if was and (arrives < INF or zone == Zone.SHARP):
 		_racing = true
 	elif arrives < INF:
-		var on_post: bool = motor.rest == KeeperRoute.Rest.FEET and Vector2(motor.x, motor.z).distance_to(
-				motor.post.overlap_spot(post, side, motor.yaw)) <= KeeperRoute.ON_POST_M
-		if on_post:
+		if _on_post(post, side, motor):
 			_racing = arrives <= motor.post.drop_in_s(motor.yaw)
 		elif zone == Zone.SHARP or puck.distance_to(post) <= GameRules.DEFAULT_STICK_LENGTH_M:
 			_racing = arrives <= motor.time_to_seal(post, side)
 	if _racing:
 		post_side = side
+
+
+# Whether he stands on his edge on the post at `post` (on `side`) as he is
+# turned, where KeeperRoute drops him straight into the RVH.
+static func _on_post(post: Vector2, side: float, motor: KeeperMotor) -> bool:
+	return motor.rest == KeeperRoute.Rest.FEET and Vector2(motor.x, motor.z).distance_to(
+			motor.post.overlap_spot(post, side, motor.yaw)) <= KeeperRoute.ON_POST_M
+
+
+# Racing on his feet for the post at `post` (on `side`) from within a glide of
+# its overlap, he skates on onto it, turning square to the puck at `puck` as
+# he goes, and seals once on it: a seal goal would stop him where he is first,
+# turned as the race found him. Whether he skates.
+func _skates_onto_post(post: Vector2, side: float, puck: Vector2, motor: KeeperMotor) -> bool:
+	if motor.rest != KeeperRoute.Rest.FEET or _on_post(post, side, motor):
+		return false
+	var turn: float = motor.post.overlap_facing(post, side, puck)
+	var spot: Vector2 = motor.post.overlap_spot(post, side, turn)
+	if Vector2(motor.x, motor.z).distance_to(spot) > KeeperRoute.GLIDE_REACH_M:
+		return false
+	motor.go_to(spot, turn, KeeperRoute.Rest.FEET, Vector2.ZERO, true)
+	return true
 
 
 # His spot on his feet for the puck at `puck`, in its zone.

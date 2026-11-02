@@ -9,8 +9,8 @@ const TO := Vector3(0.0, 0.0, -12.0)
 const SPEED: float = 20.0
 # Off the lane by more than his blade reach and the step he takes before the
 # puck passes; a stick out over the lane a stride from here is inside the arm,
-# stick and blade a reaching defender holds out (2.06 m).
-const BODY := Vector3(2.4, 0.0, -3.0)
+# stick and blade a reaching defender holds out (~2.2 m).
+const BODY := Vector3(2.55, 0.0, -3.0)
 
 var _opps: Array[Vector3] = [BODY]
 var _vels: Array[Vector3] = [Vector3.ZERO]
