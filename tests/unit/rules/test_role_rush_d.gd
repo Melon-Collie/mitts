@@ -696,6 +696,38 @@ func test_a_defender_carrying_width_keeps_it() -> void:
 	assert_gt(sliding[0], standing[0] + 0.5, "and so does the stand")
 
 
+# ── Never give up the middle ─────────────────────────────────────────────────
+
+# A carrier coming straight down the middle at 9 m/s, a standing D out on the
+# dot lane at `d_x`, short of his stand's depth.
+func _middle(d_x: float) -> RoleDecision:
+	var ctx: RoleContext = _ctx(Vector3(d_x, 0.0, 6.0),
+			[[10, 1, Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 9.0)]], 10,
+			AIRushRead.Numbers.DOWN_ONE)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
+
+
+func test_a_d_wide_of_a_middle_carrier_takes_the_middle() -> void:
+	# Depth before width would hold him in his own lane, goal-side of nobody.
+	for d_x: float in [6.0, -6.0]:
+		var d: RoleDecision = _middle(d_x)
+		assert_almost_eq(d.target_position.x, 0.0, 0.5,
+				"from x %+.0f: onto his line, not down my lane" % d_x)
+		assert_gt(d.target_position.z, 0.0, "goal-side of him")
+		assert_true(d.face_travel, "skating to it, not backpedalling")
+
+
+func test_a_d_already_in_the_middle_is_not_open_on() -> void:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var vel := Vector3(0.0, 0.0, 9.0)
+	for d_x: float in [1.0, -1.0, 6.0]:
+		var ctx: RoleContext = _ctx(Vector3(d_x, 0.0, 6.0), [[10, 1, carrier, vel]], 10)
+		var ap := AICarrierApproach.new()
+		AIDefensiveVerbs.fill_approach(ctx, carrier, vel, ap)
+		assert_eq(AIDefensiveVerbs.middle_open(ctx, ap), absf(d_x) > STICK,
+				"D at x %+.0f against a carrier down the middle" % d_x)
+
+
 # ── A step-up never outruns the turn ─────────────────────────────────────────
 
 func _step_up(carrier_vel: Vector3) -> RoleDecision:

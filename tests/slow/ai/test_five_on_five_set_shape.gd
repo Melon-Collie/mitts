@@ -19,18 +19,15 @@ extends GutTest
 #
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
-# Reference readings over the other 10 starts: the back line is never thinner
-# than two at entry; an odd man stands behind it for 3% of zone ticks; no start
-# ends in a slot shot.
+# Reference readings over the 12 starts: the back line is never thinner than
+# two at entry, nobody of theirs stands behind it, and no start ends in a slot
+# shot.
 #
 # Starts whose back line is beaten at entry today, each with its issue: they
 # count against neither the line nor the open share, and their slot shots are
-# known. In both, the centre takes the cross-ice feed in stride at ~8 m/s with
-# our D standing 6 m ahead of him, and no one is goal-side at our line: #890.
-# (They passed while the duel rig left the carrier's chest fold out, when he
-# fumbled that feed.)
-const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6"]
-const KNOWN_SLOT_SHOTS: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6"]
+# known.
+const KNOWN_THIN: Array[String] = []
+const KNOWN_SLOT_SHOTS: Array[String] = []
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
@@ -76,12 +73,15 @@ func _rush(cx: float, fwd_z: float, speed: float) -> Rush:
 			continue
 		duel.add_skater(wing, 0, Vector3(lane, 0.0, RUSH_Z - 1.5), BotSkillProfile.hard(), vel)
 		wing += 1
+	# Each on his own side: the team defending -Z has its left on +X.
 	duel.add_skater(11, 1, Vector3(0.0, 0.0, fwd_z), BotSkillProfile.hard())
-	duel.add_skater(12, 1, Vector3(-6.0, 0.0, fwd_z - 2.0), BotSkillProfile.hard())
-	duel.add_skater(13, 1, Vector3(6.0, 0.0, fwd_z + 2.0), BotSkillProfile.hard())
-	duel.add_skater(14, 1, Vector3(-6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
+	duel.add_skater(12, 1, Vector3(_side(duel, 12) * 6.0, 0.0, fwd_z - 2.0),
 			BotSkillProfile.hard())
-	duel.add_skater(15, 1, Vector3(6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
+	duel.add_skater(13, 1, Vector3(_side(duel, 13) * 6.0, 0.0, fwd_z + 2.0),
+			BotSkillProfile.hard())
+	duel.add_skater(14, 1, Vector3(_side(duel, 14) * 6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
+			BotSkillProfile.hard())
+	duel.add_skater(15, 1, Vector3(_side(duel, 15) * 6.0, 0.0, GameRules.BLUE_LINE_Z + 1.0),
 			BotSkillProfile.hard())
 	duel.start(1)
 	for pid: int in THEM:
@@ -121,6 +121,12 @@ func _rush(cx: float, fwd_z: float, speed: float) -> Rush:
 			if open:
 				r.open_ticks += 1
 	return r
+
+
+# The world-X side our player `pid` plays (PlayerRules.home_side_x), for the
+# team defending -Z.
+static func _side(duel: Object, pid: int) -> float:
+	return PlayerRules.home_side_x(duel.positions[pid], NET.z)
 
 
 # How many of ours stand nearer our net than `pos`.

@@ -524,7 +524,7 @@ at our net at pace draws within a stick of level in our zone
 inside is lost or about to be: the last man may check, and otherwise steps into
 his path at contact (still in front), or, behind him, skates to the first ice
 on the carrier's line to our net his stick gets to before the carrier does
-(`_cut_off`, both on the arrival clock; the crease's top when he wins none
+(`AIDefensiveVerbs.cut_off`, both on the arrival clock; the crease's top when he wins none
 short of it), so the body or the reach-in meets him on his way to the slot.
 Letting him go wide is fine; letting him into the slot is not. Never chase the
 hip: a carrier any faster than the defender is never caught there, and cuts in
@@ -664,6 +664,18 @@ carries across, the way he is sent, he keeps, because braking it spends the push
 the depth needs.
 `tests/slow/ai/test_nz_turnover_recovery.gd` scores this against the best a body
 could do: a straight-line retreat on the same ramp.
+
+**But never the middle.** Depth before width is for a defender already between
+the carrier's line to our net and the middle of the ice. One the middle is open
+on (`AIDefensiveVerbs.middle_open`: outside that band by more than a stick —
+wide of a carrier down the middle, or across the middle from a wide one) holds
+depth in a lane the carrier is not in, and the slot is his: from the dots, a
+standing D against a carrier down the middle at 9 m/s kept his depth to our line
+and was 6 m wide of him the whole way. He takes the first ice on the carrier's
+line his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
+same cut-off the level pressurer skates), facing travel, and the ladder takes
+over once he is on it. `test_five_on_five_set_shape.gd` runs it against a
+three-man break.
 
 ### The ladder has a domain: the carrier has to be coming at us
 

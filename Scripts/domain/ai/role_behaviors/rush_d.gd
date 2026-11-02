@@ -218,6 +218,8 @@ static func depth_first(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3,
 	var short: float = to_stand.x * dir_net.x + to_stand.z * dir_net.z
 	if short <= 0.0:
 		return stand
+	if AIDefensiveVerbs.middle_open(ctx, ap):
+		return AIDefensiveVerbs.cut_off(ctx, ap, d)
 	var time_s: float = maxf(_carrier_time_to(ctx, ap,
 			maxf(_depth_along(ctx, ap.carrier_pos, dir_net), stick_m(ctx))), 0.05)
 	var pace: float = maxf(ap.closing, 0.0) + short / time_s
