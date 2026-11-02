@@ -468,8 +468,7 @@ func _fail_reach(trunk: TrunkState, heel: Vector3, out: Pose) -> void:
 func _spacing_max() -> float:
 	if not technique:
 		return _body.spacing_max
-	return minf(_body.spacing_max, _body.top_shoulder.distance_to(_body.bottom_shoulder)
-			* ArmTechnique.HANDS_APART_SHOULDERS)
+	return minf(_body.spacing_max, _body.shoulder_width * ArmTechnique.HANDS_APART_SHOULDERS)
 
 
 static func _sq(x: float) -> float:

@@ -55,10 +55,10 @@ const _BLADE_CRADLE_CUP_DEG: float = 8.0             # axial twist (handedness-s
 # Shoulder anchor offset from body center. The shoulder (top-hand anchor)
 # sits on the OPPOSITE side of the body from the blade: a left-handed shooter
 # (blade on −X) has the top hand on the right shoulder (+X), and vice versa.
-# Just inside the torso's shoulder line (x extent ~0.23), where the skin's
-# sleeve leaves the armhole (SkaterConnectedMesh is bound with its arm rooted
-# here, which test_skater_scene_mirrors.gd holds).
-var shoulder_offset: float = 0.22
+# The joint, 0.36 m apart (a 6'1" man's), ~5 cm inside the shoulder pads'
+# line (x extent ~0.23), under the skin's armhole (SkaterConnectedMesh is bound
+# with its arm rooted here, which test_skater_scene_mirrors.gd holds).
+var shoulder_offset: float = 0.18
 # Shoulder Y in upper-body-local space, where the skin's sleeve is bound, so
 # the drawn arm hangs from the visible shoulder. Vertical drop from shoulder to
 # hand at rest = shoulder_height − hand_rest_y (mesh-native 0.40 − (−0.10) =

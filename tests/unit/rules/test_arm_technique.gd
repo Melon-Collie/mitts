@@ -9,13 +9,14 @@ const STICK_M: float = 1.34
 
 func _body() -> ArmAnatomyBody:
 	var body := ArmAnatomyBody.new()
-	body.top_shoulder = Vector3(0.22, 0.42, 0.0)
-	body.bottom_shoulder = Vector3(-0.22, 0.42, 0.0)
+	body.top_shoulder = Vector3(0.18, 0.42, 0.0)
+	body.bottom_shoulder = Vector3(-0.18, 0.42, 0.0)
 	body.torso_in_spine = Transform3D(Basis.IDENTITY, Vector3(0.0, 0.2, 0.0))
 	body.torso_profile = SkaterMeshBuilder.TORSO_PROFILE
 	body.torso_sway = SkaterMeshBuilder.TORSO_REAR_SWAY
 	body.torso_depth = SkaterMeshBuilder.TORSO_DEPTH
 	body.torso_xz_scale = SkaterMeshBuilder.TORSO_XZ_SCALE
+	body.shoulder_width = 2.0 * SkaterMeshBuilder.SHOULDER_HALF_WIDTH_M
 	body.knob_extend = 0.13
 	body.blade_length = 0.3
 	body.blade_lie = 42.0 * DEG

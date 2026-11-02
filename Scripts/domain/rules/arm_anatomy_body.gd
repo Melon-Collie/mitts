@@ -23,6 +23,8 @@ var torso_profile: Array[Vector2] = []
 var torso_sway: Array[float] = []
 var torso_depth: Array[float] = []
 var torso_xz_scale := Vector2.ONE
+# The shoulders' width outside, across the pads (m).
+var shoulder_width: float = 0.47
 # How far a sleeve's surface stands off its bone, the fist's half depth, and how
 # far a sleeve, a fist or the knob may press into the jersey: arms and jersey
 # are drawn oversized, so gear pressed against gear overlaps (a liberty,

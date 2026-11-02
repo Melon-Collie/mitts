@@ -23,7 +23,8 @@ const TOP_HAND_BEHIND_HIP_M: float = 0.05
 # to there).
 const TOP_HAND_OUT_M: float = 0.4
 const TOP_HAND_ACROSS_M: float = 0.15
-# The hands are held apart no wider than the shoulders.
+# The hands are held apart no wider than the shoulders, outside the pads
+# (ArmAnatomyBody.shoulder_width).
 const HANDS_APART_SHOULDERS: float = 1.0
 # The knob may press into the jersey no deeper than gear presses into gear
 # (ArmAnatomyBody.gear_press): a stick pulled in until the knob digs into the
@@ -86,7 +87,7 @@ static func assess(body: ArmAnatomyBody, hold: Hold, out: Verdict) -> void:
 	var own_side: float = hand.x * signf(body.top_shoulder.x)
 	_over(out, Limit.TOP_HAND_OUT, own_side - TOP_HAND_OUT_M)
 	_over(out, Limit.TOP_HAND_ACROSS, -own_side - TOP_HAND_ACROSS_M)
-	var apart: float = body.top_shoulder.distance_to(body.bottom_shoulder) * HANDS_APART_SHOULDERS
+	var apart: float = body.shoulder_width * HANDS_APART_SHOULDERS
 	_over(out, Limit.HANDS_APART, hold.spacing - apart)
 	var knob: Vector3 = hand - hold.shaft * body.knob_extend
 	var clear: float = TorsoSection.clearance(hold.torso.affine_inverse() * knob,

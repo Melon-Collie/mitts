@@ -148,7 +148,8 @@ against footage before it binds gameplay:
   `TopHandIK.two_hand_reach`, the backhand release; the model always holds both).
 - **The bottom hand slides, the top hand does not** — reach changes the bottom
   hand's grip along the shaft (the model's freedom), within a hands-apart band
-  from a glove's width to the shoulders' width.
+  from a glove's width to the shoulders' width, outside the pads
+  (`ArmAnatomyBody.shoulder_width`).
 - **The knob stays out of the body** — a stick pulled in so tight the knob
   digs into the stomach is not a carry: the butt (`SkaterStickRig
   .SHAFT_BUTT_EXTEND_M` past the top hand) no deeper in the jersey than gear
@@ -500,7 +501,9 @@ Measured off the built skater against textbook segment ratios of stature
 The arms are right. Narrowing the shoulders, a shallower chest and a short
 knob, each alone or together, hold no more references than the gear press
 does: the narrower shoulders bring the bottom arm further across the chest,
-and shorten the hands-apart rule (§4), which is measured joint to joint.
+and would shorten the hands-apart rule (§4) were it measured joint to joint;
+it is measured across the pads instead, which the narrower joints leave as
+they were.
 
 ### The solver's misses
 

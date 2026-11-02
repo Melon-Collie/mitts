@@ -42,7 +42,7 @@ enum Focus { FULL, STICK, BLADE, GRIP, SKATES, GLOVES, HELMET }
 const _TORSO_Y: float = 0.245
 const _HELMET_Y: float = 0.7
 const _HELMET_SCALE: float = 0.75
-const _SHOULDER_X: float = 0.22
+const _SHOULDER_X: float = 0.18
 const _SHOULDER_Y: float = 0.45
 const _LEG_X: float = 0.13
 const _LEG_Y: float = -0.02

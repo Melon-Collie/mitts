@@ -506,6 +506,8 @@ const TORSO_PROFILE: Array[Vector2] = _TORSO_PROFILE
 const TORSO_REAR_SWAY: Array[float] = _TORSO_REAR_SWAY
 const TORSO_DEPTH: Array[float] = _TORSO_DEPTH
 const TORSO_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# The shoulder pads' half-width outside at rest, at the shoulder line.
+const SHOULDER_HALF_WIDTH_M: float = _TORSO_PROFILE[2].y * _TORSO_X_SCALE
 
 
 # Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the

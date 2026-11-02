@@ -52,7 +52,7 @@ nothing is on the wire, but every change ships to all peers together.
   (`FACEOFF_SPAWN_HEIGHT` + `SKATE_LIFT_M`); the drawn hips are seated on the
   ice. Gameplay reads leg length only in the held poses' frame drop (block,
   faceoff, knockdown) and `faceoff_address_drop`, which places the dot.
-- **Shoulder joints** (height 0.40, half-width 0.22, × build) — gameplay.
+- **Shoulder joints** (height 0.45, half-width 0.18, × build) — gameplay.
   `Skater.shoulder_height` / `shoulder_offset`, scaled in `apply_attributes`;
   read by the reach (ROM) derivation, `TopHandIK`, the two-hand reach, the
   host's claim clamp and the bots' reach, shots, the reach lean, the dive and
@@ -84,7 +84,7 @@ In order, each its own commit, each rendered (`render-body.sh`,
    the leg solve eases the knee into straight (`LegIK.SOFT_REACH`) instead of
    stopping it dead. The thigh's collider starts where the hip was, or it
    fills the jersey's tail.
-2. **Upper body up, head smaller.** DONE for the height: torso, shoulders
+2. **Upper body up, head smaller.** DONE: torso, shoulders
    (`Skater.shoulder_height` 0.40 → 0.45), helmet and pants 5 cm up, the head
    and helmet drawn at 0.75 (the Helmet node's scale) so the top stays at
    1.95 m, and the neck stretched to reach the collar. The resting hands stay
@@ -94,8 +94,13 @@ In order, each its own commit, each rendered (`render-body.sh`,
    slapper's strike drives the toe into the ice. A seated figure sits down
    under its jersey (`LockerMannequin._settle_hem`). Four smoothness bounds
    were re-set a quarter over the new measure: the same frames, scaled by the
-   longer lever. Still to do: the shoulders ~4 cm in each side, and the
-   hands-apart rule (ArmTechnique) on the shoulders' outside.
+   longer lever. The shoulder joints came 4 cm in each side
+   (`shoulder_offset` 0.22 → 0.18, 0.36 m apart), inside the pads, whose width
+   the jersey keeps; the hands-apart rule (ArmTechnique) is measured across the
+   pads (`ArmAnatomyBody.shoulder_width`), not joint to joint. The neutral
+   build's reach came in with them (`LEAGUE_MAX_BLADE_REACH_M` 2.47 → 2.43),
+   and a skating wrister's whip peaks 4% higher at the stick, its bound
+   re-set a quarter over that.
 3. **A shallower chest.** The visible jersey's rings and the measured profile
    together, ~5 cm off its depth. Cosmetic. DONE: each torso ring has its
    share of the depth scale (`SkaterMeshBuilder.TORSO_DEPTH`), the chest's
