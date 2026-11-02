@@ -571,10 +571,7 @@ at ~3 m/s², so the defender rode a carrier at 9 m/s at 5–6 m/s and was caught
 flat. The stand is untouched; only the command is bounded. A gap-up
 and the line hold are exempt, and so is a defender inside the gate with a gap:
 the floor holds him where he stands, re-read each decision, so a least retreat
-would ratchet him into his net. For the same reason the agent never carves such a
-ridden retreat in the stance (`SkaterAgentSteering`): the arc-through-the-anchor
-read fires on any move off travel when the anchor is at the body, and the
-stance gives up 40% of the stride.
+would ratchet him into his net.
 
 The same route is capped the other way (`AIRoleRushD.set_advance_cap`): no more
 speed up-ice than he can still turn into the carrier's pace before the carrier
