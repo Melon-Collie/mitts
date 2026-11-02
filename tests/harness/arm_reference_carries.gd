@@ -29,7 +29,7 @@ const CARRIES: Array[Dictionary] = [
 		"spacing_m": 0.2},
 	{"name": "long_reach", "puck_deg": 0.0, "puck_m": 1.69, "fold_deg": 45.0,
 		"crouch_m": 0.15, "twist_deg": 0.0, "top_hand": Vector3(0.0, 0.8, 0.45),
-		"spacing_m": 0.4},
+		"spacing_m": 0.25},
 ]
 
 

@@ -219,10 +219,11 @@ grip's own geometry. The locker figure poses through the same model.
 Allowed or drawn although a body cannot, each with its reason. Starts empty;
 entries get added with the user's sign-off.
 
-- **Gear presses into gear by up to 3 cm** (`ArmAnatomyBody.gear_press`,
-  `SkaterArmPoses.STEER_CONTACT_M`): a sleeve, a fist or the knob may sink that
-  far into the jersey. Arms and jersey are drawn oversized, so two pieces
-  pressed together overlap where real padding would squash.
+- **Gear presses into gear by up to 5 cm** (`ArmAnatomyBody.gear_press`): a
+  sleeve, a fist or the knob may sink that far into the jersey. Arms and
+  jersey are drawn oversized, so two pieces pressed together overlap where
+  real padding would squash. The rig steers its drawn elbows to 3 cm
+  (`SkaterArmPoses.STEER_CONTACT_M`), inside it.
 
 ## 9. Phases
 
@@ -467,6 +468,14 @@ Past 50 mm nothing more holds. Backhand and long reach are the bottom arm 50
 and 71 mm short of the shaft at the references' spacing; tight and wide
 forehand put an arm or a fist 3.5–10 cm into the chest. Those are where the
 references put the hands, not slack the gear can give.
+
+Taken: the press is 50 mm, and long reach's hands 25 cm apart (it holds from
+20 to 30 cm; at 35 the bottom arm is short). Forehand (35–40 cm) and ahead
+(30–35 cm) hold at their own spacing, so those three are calibrated. A hand
+spacing helps the others only so far: closer, the bottom arm comes across the
+chest; wider, it falls short. Backhand is best at 25 cm and still 32 mm in the
+chest, wide forehand 14 mm, tight 32 mm at its widest — their hands want
+moving.
 
 ### Proportions (neutral build, 6'1")
 

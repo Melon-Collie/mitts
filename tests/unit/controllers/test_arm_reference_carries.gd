@@ -10,7 +10,7 @@ extends GutTest
 # The model is being calibrated against them (docs/arm-anatomy-plan.md §14): a
 # carry is held to it once it is in CALIBRATED, and until then reports what
 # stops it as pending.
-const CALIBRATED: Array[String] = []
+const CALIBRATED: Array[String] = ["forehand", "ahead", "long_reach"]
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")

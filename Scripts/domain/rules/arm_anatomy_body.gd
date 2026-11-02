@@ -24,11 +24,12 @@ var torso_sway: Array[float] = []
 var torso_xz_scale := Vector2.ONE
 # How far a sleeve's surface stands off its bone, the fist's half depth, and how
 # far a sleeve, a fist or the knob may press into the jersey: arms and jersey
-# are drawn oversized, so gear pressed against gear overlaps
+# are drawn oversized, so gear pressed against gear overlaps (a liberty,
+# docs/arm-anatomy-plan.md §8). The rig steers its drawn elbows inside it
 # (SkaterArmPoses.STEER_CONTACT_M).
 var sleeve_radius: float = 0.08
 var hand_radius: float = 0.04
-var gear_press: float = 0.03
+var gear_press: float = 0.05
 # The stick: the top hand's centre to the blade's heel (m), how close below it
 # and how far down the shaft the bottom hand may hold, the angles the shaft
 # crosses each palm at (SkaterArmPoses.glove_basis), and the top fist's roll
