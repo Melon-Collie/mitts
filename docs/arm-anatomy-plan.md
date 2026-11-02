@@ -421,9 +421,9 @@ on top and, under it, the carry the model finds on its own for the same puck.
   wrist binds in any reference.
 - **Each reference's puck sits where its stick lands**, the blade's middle at
   the stick's length from the reference's hand (checked by the test). A stick
-  is long, so they moved out: forehand 1.25 m, ahead 1.42, backhand 1.42, wide
-  forehand 1.14, tight 1.05, long reach 1.69. With the hand at the hip, no
-  puck sits much nearer than a metre.
+  is long, so they moved out: on the 1.40 m stick forehand 1.38 m, ahead 1.56,
+  backhand 1.56, wide forehand 1.29, tight 1.22, long reach 1.82. With the
+  hand at the hip, no puck sits much nearer than a metre.
 
 - **A ready stance** (§4): the arms are most comfortable with the body
   standing tall, so the model's own carries all stood straight. Under
@@ -477,6 +477,14 @@ spacing helps the others only so far: closer, the bottom arm comes across the
 chest; wider, it falls short. Backhand is best at 25 cm and still 32 mm in the
 chest, wide forehand 14 mm, tight 32 mm at its widest — their hands want
 moving.
+
+On the corrected body (docs/body-proportions-plan.md, the 1.40 m stick) the
+other three were moved by the least that holds, searched round each and
+checked on the sheets: backhand's top hand 5 cm higher and its twist 35°;
+wide forehand's twist 35°; tight's top hand 5 cm higher and 10 cm further
+ahead with the hands 30 cm apart, its puck 1.22 m out (a hand further ahead
+alone carries the puck out with it, to 1.36 m, no longer tight). All six are
+calibrated.
 
 ### Proportions (neutral build, 6'1")
 
