@@ -47,8 +47,8 @@ const _PLANT_WALK_STEPS: int = 7
 # stop's hips turn across, and a reaching leg finds the ice past the hump its
 # blade's tilt makes — so the correction eases rather than popping a leg. Well
 # above the stroke's own knee speeds (the stride's thigh peaks near 2 rad/s), so
-# it binds only on those jumps.
-const _PLANT_RATE_RAD_S: float = 8.0
+# it binds only on those jumps; ~2.5 m/s at the knee on the thigh's length.
+const _PLANT_RATE_RAD_S: float = 6.0
 # How much higher than the lowest corner of a downed skate another may sit and
 # still share in where its leg swings to the ice (_soft_low).
 const _REST_SOFT_M: float = 0.02

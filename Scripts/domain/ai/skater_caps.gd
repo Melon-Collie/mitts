@@ -91,7 +91,7 @@ var is_left_handed: bool = true
 # slapper_stance_open_deg): where it strikes the puck in its own frame — x
 # toward the stick side, so one value serves either hand — and how far its hips
 # open off the shot line.
-var slapper_strike_local: Vector2 = Vector2(-0.08, -1.07)
+var slapper_strike_local: Vector2 = Vector2(-0.08, -1.02)
 var slapper_stance_open_rad: float = PI * 0.5
 # The rate the hips pivot into that stance once wound up
 # (SkaterController.slapper_stance_turn_deg_s).

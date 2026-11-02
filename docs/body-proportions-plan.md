@@ -1,7 +1,8 @@
 # Body proportions — a 6'1" skater built like one
 
 Status: APPROVED — all four changes, the new body's reach taken as it comes
-(no re-derived constants), the body before the arm envelope.
+(no re-derived constants), the body before the arm envelope; the head may
+shrink to keep the overall height.
 
 ## 1. Why
 
@@ -71,17 +72,30 @@ nothing is on the wire, but every change ships to all peers together.
 In order, each its own commit, each rendered (`render-body.sh`,
 `skater_matrix.gd`, `render-poses.sh`) and run through the suite:
 
-1. **Legs from the hips.** Raise the hip joints to just under the pivot and
-   lengthen the thigh to match (~0.42 m × build), knees and skates where they
-   are. Cosmetic, plus the held poses' drops and the faceoff dot, which follow
-   from the same constants. The pants and pelvis mesh must fill the new hip.
-2. **Shoulders up and in.** Shoulder joints ~7 cm higher and ~4 cm in on each
-   side; the torso mesh, neck and skin bind with them; the hands-apart rule
-   (ArmTechnique) measured on the shoulders' outside, not joint to joint.
-   GAMEPLAY: a higher, narrower shoulder moves every reach — the ROM rim, the
-   two-hand stop, the claim clamp, the bots' caps. Either accept the new
-   reach, or re-derive the reach constants so the blade's envelope stays
-   where it is and only the body changes. Needs a playtest.
+1. **Legs from the hips.** DONE: the hip joints 11 cm up, just under the
+   pivot (`GaitPose.HIP_DROP` 0.02), the thigh 0.42 m (`THIGH_LEN`), knees and
+   skates where they were. The gait is tuned in angles, so it was retuned to
+   move the body as it did: `stance_hip_deg` 22 → 17.5 and `stride_sit_max_deg`
+   45 → 35 keep every crouch floor's drop within a few millimetres, and the
+   plant's knee rate 8 → 6 rad/s keeps its speed at the knee. Two pops the
+   longer lever showed were fixed rather than re-bounded: the plant now holds
+   the feet as soon as no stroke places them (`SkaterLocomotion
+   .plant_intensity`), so a shuffle no longer leaves a skate off the ice, and
+   the leg solve eases the knee into straight (`LegIK.SOFT_REACH`) instead of
+   stopping it dead. The thigh's collider starts where the hip was, or it
+   fills the jersey's tail.
+2. **Upper body up, head smaller.** DONE for the height: torso, shoulders
+   (`Skater.shoulder_height` 0.40 → 0.45), helmet and pants 5 cm up, the head
+   and helmet drawn at 0.75 (the Helmet node's scale) so the top stays at
+   1.95 m, and the neck stretched to reach the collar. The resting hands stay
+   at the hips (`hand_rest_y` −0.10 → −0.05), so the shoulder-to-hand drop and
+   the reach it gives are unchanged; the stick at rest is steeper, and the
+   blade's lie follows it (`blade_lie_deg` 42 → 47.5°, a real lie 6), or the
+   slapper's strike drives the toe into the ice. A seated figure sits down
+   under its jersey (`LockerMannequin._settle_hem`). Four smoothness bounds
+   were re-set a quarter over the new measure: the same frames, scaled by the
+   longer lever. Still to do: the shoulders ~4 cm in each side, and the
+   hands-apart rule (ArmTechnique) on the shoulders' outside.
 3. **A shallower chest.** The visible jersey's rings and the measured profile
    together, ~5 cm off its depth. Cosmetic. DONE: each torso ring has its
    share of the depth scale (`SkaterMeshBuilder.TORSO_DEPTH`), the chest's

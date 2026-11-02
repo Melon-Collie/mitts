@@ -17,6 +17,7 @@ extends GutTest
 const _SCENE: String = "res://Scenes/Skater.tscn"
 
 var _origins: Dictionary = {}
+var _helmet_basis := Basis.IDENTITY
 
 
 func before_all() -> void:
@@ -25,7 +26,10 @@ func before_all() -> void:
 		var path: String = "%s/%s" % [st.get_node_path(i, true), st.get_node_name(i)]
 		for p: int in st.get_node_property_count(i):
 			if st.get_node_property_name(i, p) == "transform":
-				_origins[path] = (st.get_node_property_value(i, p) as Transform3D).origin
+				var xform: Transform3D = st.get_node_property_value(i, p)
+				_origins[path] = xform.origin
+				if path == "./MeshRoot/UpperBody/Helmet":
+					_helmet_basis = xform.basis
 
 
 func _origin(path: String) -> Vector3:
@@ -61,13 +65,13 @@ func test_the_figures_grip_the_stick_as_the_skater_does() -> void:
 
 
 func test_helmet_and_torso_stations_mirror_the_scene() -> void:
-	assert_almost_eq(_origin("./MeshRoot/UpperBody/Helmet").y, 0.65, 1e-6,
+	assert_almost_eq(_origin("./MeshRoot/UpperBody/Helmet").y, 0.7, 1e-6,
 			"the neck profile is built in helmet-local space from this origin — move " +
 			"the helmet and the neck stops sinking into the traps")
 	var torso_origin: float = _origin("./MeshRoot/UpperBody/UpperBodyMesh").y
-	assert_almost_eq(torso_origin, 0.195, 1e-6,
+	assert_almost_eq(torso_origin, 0.245, 1e-6,
 			"the torso's stations are built around this origin")
-	assert_almost_eq(torso_origin + 0.275, 0.47, 1e-6,
+	assert_almost_eq(torso_origin + 0.275, 0.52, 1e-6,
 			"torso origin plus the trap-line station (_TORSO_PROFILE[0].x) is the " +
 			"shoulder shelf the neck profile is sized against")
 
@@ -99,6 +103,7 @@ func test_the_figures_rest_where_the_scene_puts_the_parts() -> void:
 			_origin("./MeshRoot/UpperBody/UpperBodyMesh").y, 1e-6, "the torso")
 	assert_almost_eq(LockerMannequin._HELMET_Y, _origin("./MeshRoot/UpperBody/Helmet").y,
 			1e-6, "the helmet")
+	assert_almost_eq(LockerMannequin._HELMET_SCALE, _helmet_scale(), 1e-6, "the head's size")
 	assert_almost_eq(LockerMannequin._THIGH_DY,
 			_origin("./MeshRoot/LowerBody/LegL/ThighL").y, 1e-6, "the thigh")
 	assert_almost_eq(LockerMannequin._KNEE_DY, shin, 1e-6, "the knee")
@@ -141,3 +146,8 @@ func test_every_authored_bone_node_still_exists() -> void:
 func test_the_scene_scan_actually_saw_the_rig() -> void:
 	assert_gt(_origins.size(), 16, "expected the whole rig — the parser may have broken")
 	assert_true(_origins.has("./MeshRoot/UpperBody/Helmet"), "sanity: Helmet found")
+
+
+# The head and helmet's uniform scale as the scene draws them.
+func _helmet_scale() -> float:
+	return _helmet_basis.get_scale().x

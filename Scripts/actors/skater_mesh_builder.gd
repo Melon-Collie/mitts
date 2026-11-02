@@ -253,13 +253,13 @@ const _HOLDER_TOP_HALF_W: float = 0.011
 const _HOLDER_RAIL_HALF_W: float = 0.0055
 # Neck: skin tube from chin to collar, a child of the Helmet node like the
 # head so it rides the same head-bulk scaling and skeleton offsets. Stations
-# are helmet-local (helmet origin y 0.65, torso top 0.47): the top hides
-# inside the head ball, the bottom flares into the traps where it sinks
-# into the torso.
+# are helmet-local (the helmet at y 0.7 drawn at 0.75 scale, the torso's top
+# at 0.52, so 0.24 local reaches it): the top hides inside the head ball, the
+# bottom flares into the traps where it sinks into the torso.
 const NECK_PROFILE: Array[Vector2] = [
-	Vector2(-0.095, 0.064),
-	Vector2(-0.155, 0.070),
-	Vector2(-0.190, 0.092),  # trapezius flare into the collar
+	Vector2(-0.095, 0.085),
+	Vector2(-0.175, 0.093),
+	Vector2(-0.245, 0.123),  # trapezius flare into the collar
 ]
 
 static var _cache: Dictionary = {}

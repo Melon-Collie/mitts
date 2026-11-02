@@ -226,7 +226,7 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	# The start: first strides from a standstill are short, quick chops, fading
 	# out as the body gets moving.
 	_start = clampf(1.0 - _ground_speed / maxf(c.dig_in_fade_speed, 0.001), 0.0, 1.0)
-	var stroking: float = mix.stride + mix.crossover + mix.backward + mix.shuffle
+	var stroked: float = stroking()
 	var target_intensity: float = 0.0
 	if _target.stride + _target.crossover + _target.backward + _target.shuffle > 0.01:
 		target_intensity = maxf(_speed_t, maxf(c.dig_in_intensity * _start * (mix.stride + mix.backward),
@@ -254,14 +254,14 @@ func sense(delta: float, planted: bool, hold: float) -> void:
 	# Averaged over the stroking states alone: a crossover sharing the mix with a
 	# carve, or a stride with a glide, fades in amplitude, never in tempo.
 	var rate: float = 0.0
-	if stroking > 0.001:
+	if stroked > 0.001:
 		rate = ((mix.stride + mix.backward) * stride_rate + mix.crossover * cross_rate
 				+ mix.shuffle * TAU * _ground_speed / maxf(c.shuffle_step_distance, 0.001)) \
-				/ stroking
+				/ stroked
 	stride_phase = wrapf(stride_phase + rate * (1.0 - hold) * delta, 0.0, TAU)
 	if mix.glide > 0.01:
 		_glide_phase = wrapf(_glide_phase + TAU * c.glide_sway_hz * mix.glide * delta, 0.0, TAU)
-	if stroking < 0.001:
+	if stroked < 0.001:
 		intensity = minf(intensity, 1.0)
 
 
@@ -642,7 +642,20 @@ func _sense_step(facing: Vector2) -> void:
 # How hard the stroking states push, for the push sounds: the stroke's amplitude
 # by their share of the mix (0 coasting, ~1 striding flat out, more driving hard).
 func push_strength() -> float:
-	return intensity * push_scale * (mix.stride + mix.crossover + mix.backward + mix.shuffle)
+	return intensity * push_scale * stroking()
+
+
+# The share of the mix in the states that put the feet with each stroke.
+func stroking() -> float:
+	return mix.stride + mix.crossover + mix.backward + mix.shuffle
+
+
+# How much the legs are moving the feet, for whether the plant holds them
+# (GaitPose.plant_share): the speed, or the stroke by its share of the mix. The
+# stroke's own intensity eases down well after a stroke hands the legs back to
+# a standing glide, whose legs are posed off the hips, not the ice.
+func plant_intensity() -> float:
+	return maxf(_speed_t, intensity * stroking())
 
 
 # How hard a start digs in, for its chop: the acceleration the physics is making

@@ -157,7 +157,7 @@ against footage before it binds gameplay:
   the blade's middle stays out of the skates' footprint (0.3 m either side,
   0.25 m behind to 0.2 m ahead of the hips).
 - **The blade rides flat** — on its heel or its toe a little: the shaft within
-  15° of the stick's lie (`Skater.blade_lie_deg`, 42°). Phase 1 left the lie
+  15° of the stick's lie (`Skater.blade_lie_deg`, 47.5°). Phase 1 left the lie
   free and reported it; this is that window.
 - **Carry on bent knees** — a standing carrier's hips sit at least a ready
   stance (10 cm, `ArmAnatomySearch.READY_STANCE_M`) under standing, deeper at

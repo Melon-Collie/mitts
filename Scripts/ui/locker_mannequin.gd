@@ -39,18 +39,19 @@ enum Focus { FULL, STICK, BLADE, GRIP, SKATES, GLOVES, HELMET }
 # ── Rig rest pose (Scenes/Skater.tscn, MeshRoot-local) ───────────────────────
 # Leg offsets are relative to the LEG pivot so the chain reads as the scene's
 # parenting does (Leg → Shin → Sock/Skate/Foot) without the intermediate nodes.
-const _TORSO_Y: float = 0.195
-const _HELMET_Y: float = 0.65
+const _TORSO_Y: float = 0.245
+const _HELMET_Y: float = 0.7
+const _HELMET_SCALE: float = 0.75
 const _SHOULDER_X: float = 0.22
-const _SHOULDER_Y: float = 0.40
+const _SHOULDER_Y: float = 0.45
 const _LEG_X: float = 0.13
-const _LEG_Y: float = -0.13
-const _SOCK_DY: float = -0.50
-const _COLLAR_DY: float = -0.72
-const _BOOT_DY: float = -0.76
+const _LEG_Y: float = -0.02
+const _SOCK_DY: float = -0.61
+const _COLLAR_DY: float = -0.83
+const _BOOT_DY: float = -0.87
 const _BOOT_DZ: float = -0.10
-const _THIGH_DY: float = -0.13
-const _KNEE_DY: float = -0.31
+const _THIGH_DY: float = -0.24
+const _KNEE_DY: float = -0.42
 # Boot frame, straight off FootL/R's scene basis: local −Y is the toe and local
 # +Z is down, so this lands the toe on −Z (the way the rig faces) sole-down.
 const _BOOT_ROT := Basis(Vector3(1, 0, 0), Vector3(0, 0, 1), Vector3(0, -1, 0))
@@ -84,9 +85,10 @@ const _WRIST_ULNAR_MAX_DEG: float = 35.0
 const _WRIST_RADIAL_MAX_DEG: float = 20.0
 const _WRIST_FLEX_MAX_DEG: float = 70.0
 const _FOREARM_TWIST_MAX_DEG: float = 80.0
-# Seated, the underside of the thighs is this far under the hip pivot (the
-# pants leg's half depth), times the build's girth: what rests on the bench.
-const _SEAT_UNDER_HIP_M: float = 0.14
+# Seated, the pants' seat is this far under the hip pivot, times the build's
+# girth: what rests on the bench, just below the thighs' underside (the pants
+# leg's half depth, 0.14 m).
+const _SEAT_UNDER_HIP_M: float = 0.153
 # Arm segments at the rig's own lengths (Skater.upper_arm_length /
 # forearm_length), NOT derived from how far the grip happens to be: the two
 # hands sit at very different distances from their shoulders, so a
@@ -113,6 +115,9 @@ const _ARM_POLE := Vector3(0.55, -1.0, 0.1)
 # player holds it.
 const _STANDING_LEAN_DEG: float = 44.0
 const _SEATED_LEAN_DEG: float = 68.0
+# Frames (at 60 Hz) a seated figure's thighs swing up through, its jersey's
+# tail stepping on them.
+const _SIT_STEPS: int = 30
 # Yaw of the whole stick about the heel — the shaft leans back across the body
 # rather than straight out, which is what puts the blade in profile.
 const _STICK_YAW_DEG: float = 60.0
@@ -252,9 +257,35 @@ func apply(attrs: PlayerAttributes, gear: GearStyleConfig, tape: StickTapeConfig
 	_blade_side = -1.0 if is_left_handed else 1.0
 	_pose(attrs, tape, is_left_handed)
 	_kit.dress(team_colors, gear, tape, skin_tone, _player_name, _jersey_number)
-	_kit.hem.settle()
+	_settle_hem()
 	_hem_yaw = global_basis.get_euler().y if is_inside_tree() else 0.0
 	_hem_dt = 0.0
+
+
+# The jersey's tail settled on the pose. Seated, it is settled standing and the
+# thighs swung up under it, as a player sits down: dropped straight onto a
+# seated pose, a tail that hangs into the lap is pushed out the nearest way,
+# under the thighs rather than over them.
+func _settle_hem() -> void:
+	if not seated:
+		_kit.hem.settle()
+		return
+	_swing_thighs(0.0)
+	_kit.hem.settle()
+	for i: int in _SIT_STEPS:
+		_swing_thighs(float(i + 1) / float(_SIT_STEPS))
+		_kit.hem.step(1.0 / 60.0, Vector3(0.0, -_kit.hem.gravity_m_s2, 0.0), i == _SIT_STEPS - 1)
+
+
+# Both thighs swung forward about their hips by `sit` of the way to flat, each
+# shin turned back under its thigh to hang straight down.
+func _swing_thighs(sit: float) -> void:
+	var swing := Basis(Vector3.RIGHT, PI * 0.5 * sit)
+	for bone: int in [_LegBone.LEG_L, _LegBone.LEG_R]:
+		var leg: int = SkaterBodySkeleton.LEG_BONE_OFFSET + bone
+		_skeleton.set_bone_pose(leg, Transform3D(swing, _skeleton.get_bone_pose(leg).origin))
+		_skeleton.set_bone_pose(leg + 3, Transform3D(swing.inverse(),
+				_skeleton.get_bone_pose(leg + 3).origin))
 
 
 # The name and number the sweater is lettered with. Painted by the next apply().
@@ -313,7 +344,7 @@ func _pose(attrs: PlayerAttributes, tape: StickTapeConfig,
 	# The helmet takes its own mild multiplier on all three axes and never
 	# stretches with height: adult heads are near-constant across statures, and
 	# that constancy is what sells a tall build as big rather than zoomed.
-	var helmet := Transform3D(Basis.from_scale(Vector3.ONE * m_head),
+	var helmet := Transform3D(Basis.from_scale(Vector3.ONE * m_head * _HELMET_SCALE),
 			Vector3(0.0, _lift(_HELMET_Y, m_height), 0.0))
 	_skeleton.set_bone_pose(_UpperBone.HELMET, helmet)
 
@@ -448,13 +479,14 @@ func _pose_stick(attrs: PlayerAttributes, tape: StickTapeConfig, heel: Vector3,
 	_shaft_len = stick_len
 
 	# Three shots down the stick. The blade lies flat on the ice half a blade
-	# ahead of the heel; the grip shot centres on the knob, which rides on the
-	# top fist, so it frames the knob and the wrap above the gloves' own shot;
+	# ahead of the heel; the grip shot centres on the butt's end, the knob that
+	# rides on the top fist, so it frames the knob and the wrap above the gloves'
+	# own shot;
 	# the whole-stick shot splits the difference.
 	var blade_len: float = GameRules.DEFAULT_BLADE_LENGTH_M
 	_anchors[Focus.BLADE] = heel \
 			+ _stick_root.basis * Vector3(0.0, 0.0, -blade_len * 0.5)
-	_anchors[Focus.GRIP] = heel + _shaft_up * (stick_len - FigureKit.KNOB_HEIGHT_M * 0.5)
+	_anchors[Focus.GRIP] = heel + _shaft_up * stick_len
 	_anchors[Focus.STICK] = (_anchors[Focus.BLADE] + _anchors[Focus.GRIP]) * 0.5
 	# What the whole-stick shot has to contain. Measuring it rather than fixing
 	# it is what keeps a LONG cut on a tall build from hanging out of frame:

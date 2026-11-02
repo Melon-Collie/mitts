@@ -86,7 +86,8 @@ func test_the_feet_and_the_blade_share_one_floor() -> void:
 		assert_almost_eq(right.y, floor_y, 0.001)
 		assert_lt(left.z, _bone(SkaterMeshBuilder.UpperBone.TORSO).origin.z,
 				"the feet are out in front of the body")
-		assert_lt(_leg(SkaterMeshBuilder.LegBone.KNEE_L).origin.y, 0.2, "knees at seat height")
+		assert_lt(_leg(SkaterMeshBuilder.LegBone.KNEE_L).origin.y,
+				_leg(SkaterMeshBuilder.LegBone.LEG_L).origin.y + 0.01, "knees no higher than the hips")
 		var stick: Node3D = _figure.get("_stick_root") as Node3D
 		var rig: Node3D = _figure.get("_rig") as Node3D
 		var heel_y: float = (rig.transform * stick.transform).origin.y

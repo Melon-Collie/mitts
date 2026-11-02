@@ -68,7 +68,7 @@ var shoulder_offset: float = 0.22
 # hand can never be placed beyond the arm's length — raising this shrinks
 # flat-footed reach; the directional reach lean (SkaterPoseCoordinator) buys
 # it back by tilting the whole frame toward the target.
-var shoulder_height: float = 0.40
+var shoulder_height: float = 0.45
 # Blade length (heel to toe). The Blade Marker3D represents the heel (where
 # the shaft meets the blade); the blade mesh extends forward by this distance.
 # The puck plays at the contact point, which is blade_length * 0.5 forward
@@ -95,11 +95,11 @@ var blade_face_twist_deg: float = 7.0
 # its flat heel cap.
 var blade_hosel_length: float = 0.085
 # The stick's built-in lie: the shaft↔ice angle at which the blade sits flat.
-# Derived from the rest pose (hand ~0.87 m above the heel over a
-# sqrt(1.30² − 0.87²) ≈ 0.97 m horizontal run → atan ≈ 42°, i.e. about a
-# real lie 5.5). A shaft off this angle pitches the rigid blade by the
-# difference (_apply_blade_tilt).
-var blade_lie_deg: float = 42.0
+# Derived from the rest pose at the base build (hand 0.96 m above the heel over
+# a sqrt(1.30² − 0.96²) ≈ 0.88 m run → atan ≈ 47.5°, about a real lie 6). A
+# shaft off this angle pitches the rigid blade by the difference
+# (_apply_blade_tilt).
+var blade_lie_deg: float = 47.5
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
 # reception decision sites scale the puck's league deflect ceiling + squared
 # bonus by this — a flatter pattern soaks a harder feed. Set by
