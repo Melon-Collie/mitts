@@ -51,6 +51,9 @@ var _puck: Puck = null
 # arrow that hovers on it); read once by _step_cues for both the gate and the
 # halo.
 var _puck_at: Vector3 = Vector3.ZERO
+# The faceoff countdown: the puck waits over the dot (or is thrown down onto
+# it) and is not in play, so it gets no loose halo until the drop.
+var _faceoff_countdown: bool = false
 
 
 func _init() -> void:
@@ -158,6 +161,10 @@ func _process(delta: float) -> void:
 		_material.set_shader_parameter(&"slapper_arrow", false)
 
 
+func on_phase_changed(phase: GamePhase.Phase) -> void:
+	_faceoff_countdown = phase == GamePhase.Phase.FACEOFF_PREP
+
+
 # Steps the cue model from the puck as this peer draws it, and returns the
 # skater whose ring it thickens (null while loose or with the cues off).
 func _step_cues(delta: float) -> Skater:
@@ -172,7 +179,7 @@ func _step_cues(delta: float) -> Skater:
 				Vector2(at.x, at.z), carrier.ring_field_color(), false)
 		return carrier
 	_cues.step(delta, PuckFollowCues.NO_CARRIER, PuckFollowCues.NO_TEAM,
-			Vector2.ZERO, Color(), _puck_on_ice())
+			Vector2.ZERO, Color(), _puck_on_ice() and not _faceoff_countdown)
 	return null
 
 

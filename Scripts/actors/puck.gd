@@ -211,7 +211,7 @@ func set_team_resolver(resolver: Callable) -> void:
 
 # The skater this peer draws carrying the puck (null while loose) — the host's
 # carrier, or a client's pin. Only cosmetics read it (the spin, the on-ice
-# cues); unset, it is `carrier`.
+# cues, the minimap); unset, it is `carrier`.
 var _carrier_view: Callable = Callable()
 var _spin: PuckSpinRig = null
 
