@@ -24,13 +24,12 @@ extends RefCounted
 # is one rigid piece (test_stick_is_rigid.gd). A small overrun keeps the
 # hosel's tip cap buried inside the shaft.
 const _SHAFT_TIP_OVERRUN_M: float = 0.03
-# The butt end extends past the TOP HAND so the knob rides visibly above the
-# fist — a real grip holds the shaft just below the knob, not on top of it.
-# Sized so the whole knob clears the fist (~7 cm half-width at the knuckle roll)
-# with a finger's width of wrapped shaft showing between fist and knob.
+# The butt end extends past the TOP HAND so the knob rides on the top of the
+# fist, as a gloved grip holds a stick: the fist is ~7 cm across from its middle
+# at the knuckle roll, more along a shaft crossing it at the grip's angle.
 # Public: the display mannequin and the stick capture tool extend their shafts
 # to match.
-const SHAFT_BUTT_EXTEND_M: float = 0.13
+const SHAFT_BUTT_EXTEND_M: float = 0.09
 # The knob's cap sits slightly proud of the shaft's butt end (wrapped tape).
 const _KNOB_PROUD_M: float = 0.01
 # Shaft subdivisions the bend shader needs along the length.

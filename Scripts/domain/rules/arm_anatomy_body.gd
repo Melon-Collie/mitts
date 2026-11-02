@@ -47,7 +47,7 @@ var top_roll_square: float = 0.0
 var grip_min_angle: float = deg_to_rad(45.0)
 # The shaft past the top hand to its butt (m), the blade's length and the angle
 # the stick is built to stand at from the ice when its blade lies flat.
-var knob_extend: float = 0.13
+var knob_extend: float = 0.09
 var blade_length: float = 0.3
 var blade_lie: float = deg_to_rad(42.0)
 # The trunk's pivot above the ice standing at rest (m).

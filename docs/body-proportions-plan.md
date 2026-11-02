@@ -1,6 +1,7 @@
 # Body proportions — a 6'1" skater built like one
 
-Status: PROPOSED. Each change below waits on the user's call.
+Status: APPROVED — all four changes, the new body's reach taken as it comes
+(no re-derived constants), the body before the arm envelope.
 
 ## 1. Why
 
@@ -83,8 +84,7 @@ In order, each its own commit, each rendered (`render-body.sh`,
    where it is and only the body changes. Needs a playtest.
 3. **A shallower chest.** The visible jersey's rings and the measured profile
    together, ~5 cm off its depth. Cosmetic.
-4. **Shaft past the hand** 13 → ~9 cm, if the knob should sit on the glove
-   rather than a finger above it. Cosmetic.
+4. **Shaft past the hand** 13 → 9 cm, the knob on the glove. Cosmetic. DONE.
 5. **Stick length** — leave as tuned. It is a reach decision, not anatomy.
 
 Then re-render the arm references (their hand heights are measured from the
