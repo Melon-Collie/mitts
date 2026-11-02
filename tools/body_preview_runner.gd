@@ -15,6 +15,15 @@ const ANGLES: Array[Vector3] = [
 	Vector3(2.0, 0.65, 3.0),
 	Vector3(0.0, 0.5, 3.6),
 ]
+# --head: straight on, the front three-quarter, the side and the back
+# three-quarter, a little above the brow, where a helmet's shape and its
+# lettering read.
+const HEAD_ANGLES: Array[Vector3] = [
+	Vector3(0.0, 0.6, -3.6),
+	Vector3(-2.4, 0.9, -2.7),
+	Vector3(3.6, 0.5, 0.0),
+	Vector3(2.4, 0.9, 2.7),
+]
 const PREVIEW_POSES: Array[String] = [
 	"rest", "carry", "stride_away", "stride_lateral", "stance_rest", "cross_body_reach",
 	"wrister_loaded", "slapper_coil", "one_timer_loaded", "hit_commit_deep", "shot_block",
@@ -145,7 +154,7 @@ func _place_camera() -> void:
 		_camera.fov = SKATE_FOV
 		aim = legs.global_transform * legs.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET
 				+ SkaterMeshBuilder.LegBone.FOOT_L).origin
-	_camera.global_position = aim + basis * ANGLES[_angle]
+	_camera.global_position = aim + basis * (HEAD_ANGLES if _head else ANGLES)[_angle]
 	_camera.look_at(aim, Vector3.UP)
 
 

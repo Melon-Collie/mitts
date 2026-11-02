@@ -5,8 +5,8 @@ extends SceneTree
 # across the columns — and saves a PNG per shot (front three-quarter, side,
 # back three-quarter, from below in front and behind, from above), so a hair
 # edit can be SEEN without launching the game. Each head is the rink's own
-# helmet assembly wearing the rink's own hair shells and material, so what the
-# sheet shows is what the ice shows.
+# head and helmet shell (HelmetShellMesh) wearing the rink's own hair shells and
+# material, so what the sheet shows is what the ice shows.
 #
 #   .claude/hooks/render-hair.sh                      # helmeted, into .preview/hair
 #   HAIR_PREVIEW_BARE=1 .claude/hooks/render-hair.sh  # the helmet shell left off
@@ -129,21 +129,22 @@ func _place(at: Vector3, hair: int, facial: int) -> void:
 	head.basis = Basis(Vector3.UP, PI)
 	holder.add_child(head)
 
-	var helmet := MeshInstance3D.new()
-	helmet.mesh = SkaterMeshBuilder.shared_helmet_assembly()
-	var shell := StandardMaterial3D.new()
-	shell.albedo_color = _HELMET_COLOR
-	shell.roughness = 0.28
-	if _bare:
-		shell.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		shell.albedo_color.a = 0.0
-	helmet.set_surface_override_material(SkaterMeshBuilder.HELMET_SURF_SHELL, shell)
 	var skin := StandardMaterial3D.new()
 	skin.albedo_color = SkinToneRegistry.color_for(_skin)
 	skin.roughness = 0.85
 	skin.vertex_color_use_as_albedo = true
-	helmet.set_surface_override_material(SkaterMeshBuilder.HELMET_SURF_SKIN, skin)
-	head.add_child(helmet)
+	var skin_mesh := ArrayMesh.new()
+	skin_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES,
+			SkaterMeshBuilder.shared_helmet_assembly().surface_get_arrays(
+			SkaterMeshBuilder.HELMET_SURF_SKIN))
+	_add_piece(head, skin_mesh, skin)
+	if not _bare:
+		var shell := StandardMaterial3D.new()
+		shell.albedo_color = _HELMET_COLOR
+		shell.roughness = UniformPaint.ROUGH_HELMET
+		var shell_mesh := ArrayMesh.new()
+		shell_mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, HelmetShellMesh.shared())
+		_add_piece(head, shell_mesh, shell)
 
 	_add_piece(head, SkaterHairMesh.shared_hair(hair),
 			SkaterHairMesh.make_material(_hair_color, SkaterHairMesh.is_scalp_translucent(hair)))

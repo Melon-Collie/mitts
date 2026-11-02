@@ -88,6 +88,14 @@ them every frame. `.claude/hooks/render-body.sh` draws it.
   goalie still paints his arm in two, in flat bands; the registry cuts the
   sleeve back into `arms.upper` / `arms.lower` for him (`SleevePaint.segment`),
   a peaked stripe laid flat at its pos and its fill below flat with it.
+- **The helmet is the plain shell made a hockey helmet** (`HelmetShellMesh`):
+  `SkaterMeshBuilder`'s shell, which the hair and face gear are fitted under,
+  drawn toward a rounded box, crested, and given a lip round its rim — a brim
+  across the brow that the visor tucks under, a rolled edge round the rest —
+  every term only raising it. It is painted through `HelmetDecal`, U round the
+  shell and V down it: the kit's helmet color, and the number on the brow and
+  either side of the back in whichever of the kit's lettering colors stands
+  out most on it. `test_helmet_shell.gd`.
 - **The knees** blend through a middle bone at half the shin's turn
   (`Deform.KNEE_*`), so the back of the knee does not collapse.
 - **The gloves are a right and a left.** The back of the hand is padded and

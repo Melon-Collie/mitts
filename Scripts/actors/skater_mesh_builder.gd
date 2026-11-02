@@ -722,12 +722,20 @@ static func _helmet_rings(lon: int = _HELMET_LON, lat: int = _HELMET_LAT) \
 		ring.resize(lon + 1)
 		for k in lon + 1:
 			var theta: float = TAU * float(k) / float(lon)
-			var v: float = _helmet_cut_v(theta) * float(j) / float(lat)
-			var y: float = _HELMET_RADIUS * cos(PI * v)
-			var ring_r: float = _HELMET_RADIUS * sin(PI * v)
-			ring[k] = Vector3(sin(theta) * ring_r, y, cos(theta) * ring_r)
+			ring[k] = helmet_shell_point(theta, _helmet_cut_v(theta) * float(j) / float(lat))
 		rings.append(ring)
 	return rings
+
+
+# The plain shell's point at azimuth θ (θ = 0 the back) and latitude fraction
+# `v` (0 the crown); the rim is at v = helmet_cut_v(θ).
+static func helmet_shell_point(theta: float, v: float) -> Vector3:
+	var ring_r: float = _HELMET_RADIUS * sin(PI * v)
+	return Vector3(sin(theta) * ring_r, _HELMET_RADIUS * cos(PI * v), cos(theta) * ring_r)
+
+
+static func helmet_cut_v(theta: float) -> float:
+	return _helmet_cut_v(theta)
 
 
 # The rim's latitude fraction at azimuth θ (helmet-local, θ = 0 the back).
