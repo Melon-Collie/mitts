@@ -418,6 +418,19 @@ func test_the_advance_cap_keeps_the_lateral_ride() -> void:
 	assert_gt(held.x, 0.1, "he still tracks the carrier across the ice")
 
 
+func test_a_negative_cap_is_a_least_retreat() -> void:
+	# The step-up's closing term asks for up-ice speed; a carrier gaining on him
+	# forbids it, and the route retreats at least at the cap's pace instead.
+	var held := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, FLOOR_RADIUS, -1.0)
+	assert_gt(held.y, 0.1, "he keeps retreating")
+
+
+func test_the_floor_outranks_a_least_retreat() -> void:
+	var self_pos := FLOOR_NET - Vector3(0, 0, 6.7)
+	var held := _ride_move(self_pos, self_pos - Vector3(0, 0, 5.7), RUSH, FLOOR_RADIUS, -5.0)
+	assert_lt(held.y, 0.001, "no net-ward thrust inside the floor, whatever the cap asks")
+
+
 func test_the_advance_cap_is_read_only_with_a_floor() -> void:
 	var free := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, 0.0)
 	var capped := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, 0.0, 0.0)
@@ -790,3 +803,31 @@ func test_board_repel_yields_to_a_deliberate_wall_anchor() -> void:
 	var v_leave := _move(stance, Vector3(0, 0, 0))
 	assert_lt(v_leave.x, -0.9,
 			"mid-ice anchor from the same spot: full inward pull + repel")
+
+
+# The agent's stance read on a stand that rides a man. The arc through the
+# anchor prices a turn onto a point; a ridden anchor is at the body, so that read
+# fires on any move off travel, and the stance's stride cost is what loses the
+# retreat (#889). The pursuit already turns the velocity.
+func _agent_stance(anchor_vel: Vector3) -> bool:
+	var snap := WorldSnapshot.new()
+	var me := SkaterNetworkState.new()
+	me.velocity = Vector3(0.0, 0.0, 5.0)
+	snap.skater_states[1] = me
+	snap.puck_state = PuckNetworkState.new()
+	snap.puck_state.carrier_peer_id = -1
+	var steering := SkaterAgentSteering.new()
+	steering.setup(1, 0, {1: 0})
+	var input := InputState.new()
+	steering.steer(input, snap, Vector3.ZERO, Vector3(1.0, 0.0, 0.2), true,
+			MATCH_SPEED if anchor_vel != Vector3.ZERO else 0.0, anchor_vel, -1,
+			Vector3.ZERO, 0.0, Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z), UPRIGHT_A, 1.8)
+	return input.stance_held
+
+
+func test_a_point_beside_him_is_carved_in_the_stance() -> void:
+	assert_true(_agent_stance(Vector3.ZERO))
+
+
+func test_a_ridden_stand_beside_him_is_not() -> void:
+	assert_false(_agent_stance(Vector3(0.0, 0.0, 5.0)))

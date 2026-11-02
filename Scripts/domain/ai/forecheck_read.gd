@@ -5,12 +5,12 @@ class_name AIForecheckRead
 # our first forechecker gets a stick on the puck before its carrier can move it,
 # else the set neutral-zone shape (TRANS_DEFENSE, the 1-1-3 / 3v3 1-2). A man
 # with time to make his first play makes the stretch pass past an aggressive
-# forecheck, so the forecheck is priced on that time and nothing else. See
+# forecheck, so a forecheck is started on that time and nothing else. See
 # Scripts/domain/ai/CLAUDE.md → "Forecheck or set up".
 #
 # His first play is away a release window (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
-# decision to puck off the blade) after he has read it (CARRIER_READ_S from the
-# moment the puck is his, less what he has already held it); a man picking up a
+# decision to puck off the blade) after he has read it (CARRIER_READ_S, less what
+# he has already had of it free); a man picking up a
 # loose puck also has to reach it and settle it (AIFeedReception.receiver_settle_s
 # at the pace it meets him). Our soonest forechecker's blade
 # (AILoosePuckChase.reach_eta, momentum-aware, at his own build) must be on the
@@ -18,6 +18,11 @@ class_name AIForecheckRead
 # puck is raced on its path (the chase election's walk), so a dump in flight is
 # met where it is played, not where it is now, and winning it outright is a
 # forecheck too. It is no forecheck unless that first touch is in their zone.
+#
+# His read runs only while he is free (carrier_pressured): a carrier protecting
+# the puck from a stick is not reading the ice, and once free he looks up again.
+# A forecheck we are running is also held while dropping into the set shape buys
+# nothing yet (depth_margin_s).
 
 # Hysteresis on the continuous margin, not on the shape it picks (the same reason
 # AIRushRead.TRACK_ENTER_MARGIN_S sits on the recovery race): a forecheck starts
@@ -42,16 +47,16 @@ const _PATH_STEP_S: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuc
 # `forwards_only`: the 5v5 D pair holds the line in a forecheck, so a D gets on
 # him only as far down the wall as the strong D's pinch goes
 # (AIRoleDefenseman.PINCH_MAX_DEPTH_M); `position_by_peer` names who is a D.
-# `carrier_held_s`: how long their carrier has had the puck.
+# `carrier_free_s`: how long their carrier has had the puck with nobody of ours
+# on him (carrier_pressured).
 static func pressure_margin_s(snapshot: WorldSnapshot, team_id: int,
 		own_goal_z: float, team_id_by_peer: Dictionary, caps_by_peer: Dictionary,
 		position_by_peer: Dictionary, forwards_only: bool,
-		carrier_held_s: float = 0.0) -> float:
+		carrier_free_s: float = 0.0) -> float:
 	if snapshot == null or snapshot.puck_state == null:
 		return -INF
 	var puck: Vector3 = snapshot.puck_state.position
 	var carrier: int = snapshot.puck_state.carrier_peer_id
-	var window_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
 	# Where his first play leaves from, and when it is away.
 	var target: Vector3
 	var away_s: float
@@ -62,7 +67,7 @@ static func pressure_margin_s(snapshot: WorldSnapshot, team_id: int,
 				or not snapshot.skater_states.has(carrier):
 			return -INF   # out of their zone, or ours
 		var cs: SkaterNetworkState = snapshot.skater_states[carrier]
-		away_s = maxf(0.0, CARRIER_READ_S - carrier_held_s) + window_s
+		away_s = _carrier_away_s(carrier_free_s)
 		target = cs.position + cs.velocity * away_s
 	else:
 		if not read_loose(snapshot, team_id, team_id_by_peer, caps_by_peer, _loose):
@@ -125,9 +130,115 @@ static func read_loose(snapshot: WorldSnapshot, team_id: int,
 	return true
 
 
-# Whether to forecheck, from this tick's margin and last tick's answer.
-static func can_forecheck(margin_s: float, was_forechecking: bool) -> bool:
-	return margin_s > (HOLD_MARGIN_S if was_forechecking else ENTER_MARGIN_S)
+# When their carrier's first play is away: his read less the time he has had
+# free to make it, then the release window.
+static func _carrier_away_s(carrier_free_s: float) -> float:
+	return maxf(0.0, CARRIER_READ_S - carrier_free_s) + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+
+
+# Whether to forecheck, from this tick's margins and last tick's answer. Only
+# the pressure race starts one; a running one is held by either.
+static func can_forecheck(margin_s: float, was_forechecking: bool,
+		depth_margin: float = -INF) -> bool:
+	if was_forechecking:
+		return maxf(margin_s, depth_margin) > HOLD_MARGIN_S
+	return margin_s > ENTER_MARGIN_S
+
+
+# Whether a man of ours is on their carrier: his blade on him
+# (AILoosePuckChase.reach_eta) inside a release window, so a play the carrier
+# starts now is contested before it is away. Any position counts: a D on him is
+# on him.
+static func carrier_pressured(snapshot: WorldSnapshot, team_id: int,
+		team_id_by_peer: Dictionary, caps_by_peer: Dictionary) -> bool:
+	if snapshot == null or snapshot.puck_state == null:
+		return false
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or team_id_by_peer.get(carrier, team_id) == team_id \
+			or not snapshot.skater_states.has(carrier):
+		return false
+	var at: Vector3 = snapshot.skater_states[carrier].position
+	var window_s: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+	for pid: int in snapshot.skater_states:
+		if team_id_by_peer.get(pid, -1) != team_id or snapshot.is_out_of_play(pid):
+			continue
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		var caps: AISkaterCaps = caps_by_peer.get(pid)
+		var speed: float = caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S
+		var reach: float = caps.max_blade_reach if caps != null else AIBotMechanics.BLADE_REACH_M
+		# reach_eta only adds to distance / top speed: an exact prune.
+		if s.position.distance_to(at) - reach >= window_s * speed:
+			continue
+		if AILoosePuckChase.reach_eta(s.position, at, s.velocity, speed,
+				caps.max_accel if caps != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+				reach) <= window_s:
+			return true
+	return false
+
+
+# The time (s) our back line is set on our blue line before their soonest play
+# can reach it: positive, the set shape has nothing to protect yet. -INF unless
+# their carrier holds the puck in their zone.
+#
+# Their play is a skate to our line: the carrier's own, or a teammate's once a
+# pass can reach him — his first play away (as pressure_margin_s reads it) and
+# the puck's flight at its launch speed — at the line no sooner than both. Our
+# back line is set when its last man is on the line (or already inside it): the
+# 5v5 D pair (`position_by_peer`), else the second of ours there, the two of the
+# 3v3 1-2. Both sides at their own build, momentum-aware (AIArrival).
+static func depth_margin_s(snapshot: WorldSnapshot, team_id: int, own_goal_z: float,
+		team_id_by_peer: Dictionary, caps_by_peer: Dictionary,
+		position_by_peer: Dictionary, five_a_side: bool,
+		carrier_free_s: float = 0.0) -> float:
+	if snapshot == null or snapshot.puck_state == null:
+		return -INF
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == -1 or team_id_by_peer.get(carrier, team_id) == team_id \
+			or not snapshot.skater_states.has(carrier) \
+			or not _in_their_zone(snapshot.puck_state.position, own_goal_z):
+		return -INF
+	var own_dir: float = signf(own_goal_z)
+	var line_z: float = own_dir * GameRules.BLUE_LINE_Z
+	var from: Vector3 = snapshot.skater_states[carrier].position
+	var away_s: float = _carrier_away_s(carrier_free_s)
+	var theirs: float = INF
+	var first: float = INF
+	var second: float = INF
+	var d_last: float = -INF
+	var d_count: int = 0
+	for pid: int in snapshot.skater_states:
+		var t: int = team_id_by_peer.get(pid, -1)
+		if t == -1 or snapshot.is_out_of_play(pid):
+			continue
+		var s: SkaterNetworkState = snapshot.skater_states[pid]
+		var to_line: float = _time_to_line(s, line_z, own_dir, caps_by_peer.get(pid))
+		if t != team_id:
+			if pid != carrier:
+				to_line = maxf(to_line, away_s + from.distance_to(s.position)
+						/ AIPuckLane.expected_pass_speed(from, s.position))
+			theirs = minf(theirs, to_line)
+		elif five_a_side and PlayerRules.is_defense_slot(position_by_peer.get(pid, 0)):
+			d_last = maxf(d_last, to_line)
+			d_count += 1
+		else:
+			if to_line < first:
+				second = first
+				first = to_line
+			elif to_line < second:
+				second = to_line
+	var ours: float = d_last if d_count >= 2 else (second if second < INF else first)
+	return theirs - ours
+
+
+# A skater's soonest arrival on our blue line, straight back to it; zero for one
+# already on our side of it.
+static func _time_to_line(s: SkaterNetworkState, line_z: float, own_dir: float,
+		caps: AISkaterCaps) -> float:
+	if own_dir * s.position.z >= own_dir * line_z:
+		return 0.0
+	return AIArrival.time_to_arrive(s.position, Vector3(s.position.x, 0.0, line_z),
+			s.velocity, caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S,
+			caps.max_accel if caps != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2)
 
 
 # Our soonest forechecker's blade to `p`. Stops early once nobody can beat

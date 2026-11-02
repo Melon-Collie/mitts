@@ -203,7 +203,7 @@ soonest forechecker's blade on the puck before its carrier can make his first
 play. A man with time to look up makes the stretch pass past an aggressive
 forecheck, so `AIForecheckRead` prices exactly that time — the pickup and its
 settle for a loose puck, his read (`CARRIER_READ_S`, a choice reaction set by feel, less
-what he has already held it; the brain counts the hold) and the release window —
+what he has already had of it free; the brain counts that) and the release window —
 and the brain runs FORECHECK while we beat it, TRANS_DEFENSE (the set
 neutral-zone shape) once we cannot. So a dump, a strip or a turnover we are on
 when they collect it is forechecked, and a D who has had the puck settled
@@ -213,6 +213,23 @@ raced on its path, from where it is first played, a tie counted as ours (a 50/50
 in their end is gone after). The hysteresis sits on the margin
 (`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the shape, for the reason the
 recovery race's does.
+
+**His read runs only while he is free.** A carrier protecting the puck from a
+stick is not reading the ice, so a man of ours on him — his blade on the carrier
+inside a release window (`carrier_pressured`) — restarts it, and once free he
+has to look up again. Counting the whole hold instead, a settled carrier was
+never forechecked again: past `CARRIER_READ_S` the margin is the release window
+alone, under `ENTER_MARGIN_S` with our stick already on him.
+
+**A forecheck we are running is held while dropping back buys nothing yet.** The
+set shape is there so their first play cannot beat our back line, and deep in
+their end it may not be able to: their soonest play to our blue line (a carry,
+or a pass to a man once his first play is away, the puck at its launch speed,
+and the man's skate there, at the line no sooner than both) against our back
+line set on it (5v5 the D pair; 3v3 our second man, the two of the 1-2). While
+our line is set first (`depth_margin_s` over `HOLD_MARGIN_S`), the forecheck
+stands. It never starts one: with nobody near the puck it would send F1 the
+length of their zone after a man he cannot reach.
 
 Never price it as catching him before he skates the puck out: a retriever deep
 in his corner is a long skate from his line, so that race reads a forechecker
@@ -543,6 +560,16 @@ there (the ramp cushion, below), so he is at speed when they meet rather than
 reached flat-footed. It caps only the route's speed toward our net (lateral ride
 untouched), and level or beaten it lifts and he chases.
 
+**A carrier gaining on him buys no step-up.** While the carrier's pace down his
+line beats the defender's, the advance cap below turns into a floor on the
+retreat: the route commands at least that pace toward our net (or his retreat's
+top speed), under the floor's own allowance. The closing term spends spare
+depth by slowing the retreat, sized as if it could be won back at the brake's
+rate, but the stride is power-limited at speed: a backpedal from 5 m/s builds
+at ~3 m/s², so the defender rode a carrier at 9 m/s at 5–6 m/s and was caught
+flat (#889, #890). The stand is untouched; only the command is bounded. A gap-up
+and the line hold are exempt.
+
 The same route is capped the other way (`AIRoleRushD.set_advance_cap`): no more
 speed up-ice than he can still turn into the carrier's pace before the carrier
 eats the depth he holds past his gap — `approach_speed_cap`, the step-up bound
@@ -556,7 +583,7 @@ is closed on at a pace the defender can turn out of, never charged.
 
 ### Facing the play, or turned to skate with him
 
-A skater backward has 80% of his stride and 80% of his top speed
+A skater backward has 90% of his stride and 90% of his top speed
 (`SkaterMovementRules`), so a carrier at speed outruns any backpedal. The
 defender in front of him skates one of two retreats (`AIRoleRushD.retreat_gains`):
 backpedalling facing the play, or turned to skate down the ice — each priced as

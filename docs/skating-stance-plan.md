@@ -334,7 +334,9 @@ low-speed mirroring. Design it against `Scripts/domain/ai/CLAUDE.md`.
 Implemented as a read on `AISteering`. `stance_carves_to` takes the arc tangent
 to travel through the steering anchor (radius d / 2 sin θ) and holds the stance
 while its turn rate beats the upright edges' `turn_accel × grip / v`; every
-steered route reads it, short of a pivot. It stands down below
+steered route reads it, short of a pivot, except a stand that rides a man: its
+anchor sits at the body, so the arc read fires on any move off travel, and the
+moving-frame pursuit already turns the velocity. It stands down below
 `turn_accel × grip / max_turn_rate`, where the turn is rate-bound and doubling
 the grip turns no faster. A carrier's stop (the carry's rolled BRAKE) stays a
 pure stop. The carry's rolled cuts hold it by the anchorless form of the same

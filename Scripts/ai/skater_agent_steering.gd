@@ -169,7 +169,9 @@ func steer(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 	# genuine cut or a genuine stop into a dig-in restart. The stride resumes
 	# toward the exit once the pivot releases (hysteresis + speed floor in
 	# AISteering.should_brake). Short of a pivot, any turn onto the anchor the
-	# upright edges can't make is carved in the stance (stance_carves_to).
+	# upright edges can't make is carved in the stance (stance_carves_to) — never
+	# onto a ridden stand: its anchor is at the body, so the arc read fires on
+	# any move off travel, and the stance's stride cost loses the retreat.
 	var self_state: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
 	if self_state != null:
 		var v: Vector3 = self_state.velocity
@@ -188,7 +190,7 @@ func steer(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		var pivot_cut: bool = _pivot_braking \
 				and AISteering.pivot_cuts_in_stance(desired, Vector2(v.x, v.z))
 		input.brake = (_pivot_braking and not pivot_cut) or _arrival_braking
-		_stance_turning = not input.brake and AISteering.stance_carves_to(
+		_stance_turning = not input.brake and not moving_anchor and AISteering.stance_carves_to(
 				self_pos, anchor, desired, Vector2(v.x, v.z), upright_lateral_accel,
 				blade_reach, _stance_turning)
 		input.stance_held = pivot_cut or _stance_turning

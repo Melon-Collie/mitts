@@ -90,16 +90,17 @@ var _coverage_unready_ticks: int = 0
 # Nothing reads it back into a decision.
 var coverage_downgraded: bool = false
 # Their puck in their zone: whether we are forechecking it (AIForecheckRead) —
-# last tick's answer, for the read's hysteresis — and the race margin it read.
+# last tick's answer, for the read's hysteresis — and the two margins it read.
 var _forechecking: bool = false
 var forecheck_margin_s: float = -INF
+var forecheck_depth_margin_s: float = -INF
 # Where the puck was last carried, read every batch so a release is placed to
 # within one; INF until it has been.
 var _last_carry_pos: Vector3 = Vector3.INF
-# Who carries the puck (-1 nobody) and how long he has (s), read every batch for
-# the forecheck read's carrier_held_s.
+# Who carries the puck (-1 nobody) and how long he has had it with nobody of
+# ours on him (s), read every batch for the forecheck read's carrier_free_s.
 var _held_by: int = -1
-var _held_s: float = 0.0
+var _free_s: float = 0.0
 # The release the dump-in read last classified (WorldSnapshot
 # .loose_puck_released_by), and whether it is our dump-in.
 var _seen_release_by: int = -1
@@ -152,9 +153,12 @@ func tick(delta: float, snapshot: WorldSnapshot) -> void:
 		var carrier: int = snapshot.puck_state.carrier_peer_id
 		if carrier != _held_by:
 			_held_by = carrier
-			_held_s = 0.0
+			_free_s = 0.0
+		elif AIForecheckRead.carrier_pressured(snapshot, team_id, _team_id_by_peer,
+				_caps_by_peer):
+			_free_s = 0.0
 		else:
-			_held_s += delta
+			_free_s += delta
 		if carrier != -1:
 			_last_carry_pos = snapshot.puck_state.position
 	_accumulator += delta
@@ -237,16 +241,22 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 			or (state == AIPossessionState.State.NEUTRAL
 					and AIPossessionState.in_their_zone(snapshot, _own_goal_z))
 	forecheck_margin_s = -INF
+	forecheck_depth_margin_s = -INF
 	if their_deep_puck or _dumping_in:
 		forecheck_margin_s = AIForecheckRead.pressure_margin_s(snapshot, team_id,
 				_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
-				team_size >= 5, _held_s)
+				team_size >= 5, _free_s)
+		if _forechecking:
+			forecheck_depth_margin_s = AIForecheckRead.depth_margin_s(snapshot, team_id,
+					_own_goal_z, _team_id_by_peer, _caps_by_peer, _position_by_peer,
+					team_size >= 5, _free_s)
 	# A dump-in first played outside their zone is no forecheck: the possession
 	# table's shape stands.
 	if not their_deep_puck and forecheck_margin_s == -INF:
 		_forechecking = false
 	else:
-		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking)
+		_forechecking = AIForecheckRead.can_forecheck(forecheck_margin_s, _forechecking,
+				forecheck_depth_margin_s)
 		state = AIPossessionState.State.FORECHECK if _forechecking \
 				else AIPossessionState.State.TRANS_DEFENSE
 

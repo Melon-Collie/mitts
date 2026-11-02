@@ -213,7 +213,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 			d.target_position = AIRoleRushD.depth_first(ctx, ap, best_pos, d)
 		AIRoleRushD.set_retreat_floor(ctx, ap, d)
 		if retreating:
-			AIRoleRushD.set_advance_cap(ctx, ap, d, gap)
+			AIRoleRushD.set_advance_cap(ctx, ap, d, gap, not gapping_up)
 		# The gap we just sized is ours to hold (RoleDecision.engaged_peer_id).
 		if ctx.snapshot != null and ctx.snapshot.puck_state != null:
 			var pid: int = ctx.snapshot.puck_state.carrier_peer_id

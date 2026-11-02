@@ -717,6 +717,30 @@ func test_a_step_up_on_a_stalled_carrier_may_attack() -> void:
 	assert_gt(d.advance_cap_m_s, 2.0, "a carrier with no speed is attacked")
 
 
+# ── A carrier gaining on him buys no step-up ─────────────────────────────────
+
+# A D 12 m goal-side of a carrier coming straight down the middle at 9 m/s,
+# backpedalling at `self_speed`.
+func _caught(self_speed: float) -> RoleDecision:
+	var carrier := Vector3(0.0, 0.0, 2.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 14.0),
+			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10, AIRushRead.Numbers.DOWN_ONE)
+	ctx.self_velocity = Vector3(0.0, 0.0, self_speed)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
+
+
+func test_a_defender_slower_than_the_carrier_may_not_slow_his_retreat() -> void:
+	var d: RoleDecision = _caught(4.0)
+	assert_lt(d.advance_cap_m_s, 0.0, "a floor on the retreat, not a cap on the step")
+	assert_almost_eq(-d.advance_cap_m_s, minf(9.0, AIRoleRushD.retreat_max_speed(
+			_ctx(Vector3.ZERO, [], -1), d.face_travel)), 0.01,
+			"no slower than the carrier's pace, or the retreat's top speed")
+
+
+func test_at_the_carriers_pace_the_step_up_bound_is_back() -> void:
+	assert_gt(_caught(9.0).advance_cap_m_s, -0.001)
+
+
 # ── Turn and skate ───────────────────────────────────────────────────────────
 
 # A rush D `depth` m goal-side of a carrier coming straight at our net at
