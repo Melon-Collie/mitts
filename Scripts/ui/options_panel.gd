@@ -122,6 +122,7 @@ func _snapshot() -> Dictionary:
 		"ring_color_team": PlayerPrefs.ring_color_team,
 		"ring_color_enemy": PlayerPrefs.ring_color_enemy,
 		"self_beacon_mode": PlayerPrefs.self_beacon_mode,
+		"puck_cues_enabled": PlayerPrefs.puck_cues_enabled,
 		"freeplay_goalie_difficulty": PlayerPrefs.freeplay_goalie_difficulty,
 		"locale": PlayerPrefs.locale,
 		"screen_flash": PlayerPrefs.screen_flash,
@@ -311,6 +312,7 @@ func _on_apply_pressed() -> void:
 	PlayerPrefs.ring_color_team = c.ring_color_team
 	PlayerPrefs.ring_color_enemy = c.ring_color_enemy
 	PlayerPrefs.self_beacon_mode = c.self_beacon_mode
+	PlayerPrefs.puck_cues_enabled = c.puck_cues_enabled
 	PlayerPrefs.freeplay_goalie_difficulty = c.freeplay_goalie_difficulty
 	PlayerPrefs.locale = c.locale
 	PlayerPrefs.screen_flash = c.screen_flash
@@ -415,6 +417,7 @@ func _defaults() -> Dictionary:
 		"ring_color_team": MenuStyle.HUD_RING_TEAM,
 		"ring_color_enemy": MenuStyle.HUD_RING_ENEMY,
 		"self_beacon_mode": PlayerPrefs.BEACON_MODE_SMART,
+		"puck_cues_enabled": true,
 		"freeplay_goalie_difficulty": GoalieSkillProfile.Difficulty.EASY,
 		"screen_flash": true,
 		"screen_shake": true,

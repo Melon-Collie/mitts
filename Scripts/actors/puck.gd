@@ -1,6 +1,10 @@
 class_name Puck
 extends Node3D
 
+# The live puck's group — how the ice's cue field finds it without a reference
+# handed down from the orchestrator (the replay viewer spawns its own).
+const GROUP: StringName = &"puck"
+
 signal puck_released()
 # `checker` is the defender who took the puck (poke / stick-lift / body-check),
 # or null when no skater caused it (a goalie poke — no skater takeaway credit).
@@ -206,13 +210,17 @@ func set_team_resolver(resolver: Callable) -> void:
 	_team_resolver = resolver
 
 # The skater this peer draws carrying the puck (null while loose) — the host's
-# carrier, or a client's pin. Only the cosmetic spin reads it; unset, it is
-# `carrier`.
+# carrier, or a client's pin. Only cosmetics read it (the spin, the on-ice
+# cues); unset, it is `carrier`.
 var _carrier_view: Callable = Callable()
 var _spin: PuckSpinRig = null
 
 func set_carrier_view(view: Callable) -> void:
 	_carrier_view = view
+
+func drawn_carrier() -> Skater:
+	var holder: Variant = _carrier_view.call() if _carrier_view.is_valid() else carrier
+	return holder as Skater if is_instance_valid(holder) else null
 
 # _init (not _ready) so a bare Puck.new() in tests has a working queue without
 # entering the tree.
@@ -372,6 +380,7 @@ func set_goalie_provider(provider: Callable) -> void:
 	_goalie_provider = provider
 
 func _ready() -> void:
+	add_to_group(GROUP)
 	process_physics_priority = 1  # Run after Skater's integration so blade world pos is current
 	_native_step = NativePuckStepFactory.make_configured()
 
@@ -1129,8 +1138,8 @@ func _physics_process(delta: float) -> void:
 func _step_spin(delta: float) -> void:
 	if _spin == null:
 		return
-	var holder: Variant = _carrier_view.call() if _carrier_view.is_valid() else carrier
-	var carrier_pos: Vector3 = (holder as Node3D).global_position if is_instance_valid(holder) else Vector3.INF
+	var holder: Skater = drawn_carrier()
+	var carrier_pos: Vector3 = holder.global_position if holder != null else Vector3.INF
 	var pos: Vector3 = global_position
 	_spin.step(delta, pos, is_airborne(), pos.y - ice_height, carrier_pos)
 
