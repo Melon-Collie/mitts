@@ -562,14 +562,16 @@ untouched), and level or beaten it lifts and he chases.
 
 **A carrier gaining on him buys no step-up.** While a carrier coming at pace
 (`GAP_UP_CLOSING_M_S`) beats the defender's pace down his line and the defender
-still holds a gap (not draped), the advance cap below turns into a floor on the
+still holds a gap outside the house gate, the advance cap below turns into a floor on the
 retreat: the route commands at least that pace toward our net (or his retreat's
 top speed), under the floor's own allowance. The closing term spends spare
 depth by slowing the retreat, sized as if it could be won back at the brake's
 rate, but the stride is power-limited at speed: a backpedal from 5 m/s builds
 at ~3 m/s², so the defender rode a carrier at 9 m/s at 5–6 m/s and was caught
 flat (#889, #890). The stand is untouched; only the command is bounded. A gap-up
-and the line hold are exempt. For the same reason the agent never carves such a
+and the line hold are exempt, and so is a defender inside the gate with a gap:
+the floor holds him where he stands, re-read each decision, so a least retreat
+would ratchet him into his net. For the same reason the agent never carves such a
 ridden retreat in the stance (`SkaterAgentSteering`): the arc-through-the-anchor
 read fires on any move off travel when the anchor is at the body, and the
 stance gives up 40% of the stride.
