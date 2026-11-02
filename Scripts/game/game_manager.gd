@@ -2792,6 +2792,7 @@ func _build_replay_footer() -> Dictionary:
 				"shots_blocked": r.stats.shots_blocked,
 				"hits_taken": r.stats.hits_taken,
 				"takeaways": r.stats.takeaways,
+				"interceptions": r.stats.interceptions,
 				"giveaways": r.stats.giveaways,
 				"faceoff_wins": r.stats.faceoff_wins,
 				"faceoff_losses": r.stats.faceoff_losses,
@@ -3305,15 +3306,20 @@ func _on_server_puck_released_by_carrier(peer_id: int) -> void:
 			and _state_machine.current_phase == GamePhase.Phase.PLAYING:
 		_hit_tracker.note_possession_released(peer_id)
 	# A non-shot release with no teammate in its flight corridor is a dump / clear
-	# / rim, not a pass — mark the dump window so recovering it reads as a
-	# concession, not a giveaway (mirrors the shot window). Gated to live play (a
-	# whistle drop lands here too); shots already opened the window via note_shot,
-	# so skip when a shot is pending to keep the pass/dump geometry off them.
+	# / rim — mark the dump window so recovering it reads as a concession, not a
+	# giveaway (mirrors the shot window). Otherwise it is a pass, and an opponent
+	# picking it off is an interception. Gated to live play (a whistle drop lands
+	# here too); shots already opened the window via note_shot, so skip when a
+	# shot is pending to keep the pass/dump geometry off them.
 	if _turnover_tracker != null and _state_machine != null \
 			and _state_machine.current_phase == GamePhase.Phase.PLAYING \
-			and (_shot_tracker == null or not _shot_tracker.has_pending_shot()) \
-			and _is_dump_release(peer_id):
-		_turnover_tracker.note_dump(peer_id)
+			and (_shot_tracker == null or not _shot_tracker.has_pending_shot()):
+		var launch: Vector3 = puck.get_release_velocity() if puck != null else Vector3.ZERO
+		if _is_dump_release(peer_id):
+			_turnover_tracker.note_dump(peer_id)
+		elif Vector2(launch.x, launch.z).length() >= 0.001:
+			# A puck dropped dead (a ghosted or departing carrier) was never passed.
+			_turnover_tracker.note_pass(peer_id)
 	if _possession_tracker != null:
 		_possession_tracker.on_puck_lost(peer_id)
 	record.controller.on_puck_released_network()

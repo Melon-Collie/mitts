@@ -266,6 +266,7 @@ TAPE_FACEOFF_PCT,Faceoff %,% de saques ganados
 TAPE_HITS,Hits,Cargas
 TAPE_BLOCKED_SHOTS,Blocked shots,Tiros bloqueados
 TAPE_TAKEAWAYS,Takeaways,Robos
+TAPE_INTERCEPTIONS,Interceptions,Intercepciones
 TAPE_GIVEAWAYS,Giveaways,Pérdidas
 TAPE_ADVANCED,Advanced,Avanzadas
 TAPE_CORSI,Shot attempts (Corsi),Intentos de tiro (Corsi)
@@ -294,6 +295,8 @@ STAT_FEED_SHOT_ON_GOAL,SHOT ON GOAL,TIRO A PUERTA
 STAT_FEED_BLOCKED_SHOT,BLOCKED SHOT,TIRO BLOQUEADO
 STAT_FEED_HIT,HIT,CARGA
 STAT_FEED_TAKEAWAY,TAKEAWAY,ROBO
+STAT_FEED_INTERCEPTION,INTERCEPTION,INTERCEPCIÓN
+CAREER_INTERCEPTIONS,Interceptions,Intercepciones
 STAT_FEED_FACEOFF_WIN,FACEOFF WON,SAQUE GANADO
 CONFIRM_RETURN_FREE_PLAY,Return to free play?,¿Volver al juego libre?
 CONFIRM_RETURN_FREE_PLAY_HOST,Return to free play? This ends the match for everyone.,¿Volver al juego libre? Esto termina el partido para todos.

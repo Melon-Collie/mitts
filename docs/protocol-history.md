@@ -445,3 +445,5 @@ here whenever you bump, in the same format.
 #      from the same packet's puck. Same size; a v90 peer ignores the bit, but
 #      mixed builds must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
 #      the bit as clear, and its wind-ups are still recognized by shot state.
+# v92: PlayerStats gained `interceptions` (appended to to_array), so the stats
+#      player record is 20 values (peer_id + 19).

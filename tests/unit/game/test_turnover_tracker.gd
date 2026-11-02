@@ -11,12 +11,15 @@ extends GutTest
 
 var tracker: TurnoverTracker
 var registry: PlayerRegistry
+var now_s: float = 0.0
 
 
 func before_each() -> void:
 	registry = PlayerRegistry.new()
 	tracker = TurnoverTracker.new()
 	tracker.setup(registry)
+	now_s = 100.0
+	tracker.set_clock(func() -> float: return now_s)
 
 
 func _add_player(peer_id: int, team_id: int, team_slot: int = 1) -> PlayerRecord:
@@ -176,12 +179,12 @@ func test_dump_recovery_is_neither_giveaway_nor_takeaway() -> void:
 	tracker.on_possession_established(20)
 	assert_eq(dumper.stats.giveaways, 0, "a dump is never a giveaway")
 	assert_eq(recoverer.stats.takeaways, 0, "retrieving a dump is not a takeaway")
+	assert_eq(recoverer.stats.interceptions, 0, "nor an interception")
 
 
 func test_decayed_strip_still_credits_a_takeaway_not_a_giveaway() -> void:
-	# A poke whose loose puck skitters a beat before the opponent recovers still
-	# credits the defender a takeaway (wide window + establishment consumption) —
-	# the stripped victim is never charged a giveaway for it.
+	# A poke whose loose puck the opponent recovers credits the defender a
+	# takeaway — the stripped victim is never charged a giveaway for it.
 	var victim := _add_player(10, 0)
 	var stripper := _add_player(20, 1)
 	_gain_and_establish(10)
@@ -192,8 +195,22 @@ func test_decayed_strip_still_credits_a_takeaway_not_a_giveaway() -> void:
 	assert_eq(victim.stats.giveaways, 0, "the stripped victim is never charged")
 
 
+func test_strip_stays_live_however_long_the_puck_is_loose() -> void:
+	# A poke that sends the puck skittering the length of the ice is still the
+	# stripper's play when their side finally corrals it.
+	var victim := _add_player(10, 0)
+	var stripper := _add_player(20, 1)
+	_gain_and_establish(10)
+	tracker.note_strip(10, 20)
+	now_s += 10.0
+	tracker.on_carrier_gained(20, false)
+	assert_true(tracker.on_possession_established(20))
+	assert_eq(stripper.stats.takeaways, 1)
+	assert_eq(victim.stats.giveaways, 0, "the stripped victim is never charged")
+
+
 func test_strip_is_consumed_at_establishment() -> void:
-	# The wide strip window must not bleed a stale takeaway onto a later, clean
+	# A live strip must not bleed a stale takeaway onto a later, clean
 	# loss. After the victim's own team re-establishes, a subsequent clean cough
 	# is a giveaway, not a takeaway off the old strip.
 	var owner_player := _add_player(10, 0)
@@ -235,6 +252,77 @@ func test_clean_interception_after_an_own_retouch_is_still_a_giveaway() -> void:
 	tracker.on_carrier_gained(20, false)  # opponent picks it off cleanly
 	assert_true(tracker.on_possession_established(20))
 	assert_eq(owner_player.stats.giveaways, 1, "an own re-touch is not a contest")
+
+
+# ── Interceptions ────────────────────────────────────────────────────────────
+
+func test_picked_off_pass_credits_the_interceptor() -> void:
+	var passer := _add_player(10, 0)
+	var picker := _add_player(20, 1)
+	_gain_and_establish(10)
+	tracker.note_pass(10)
+	tracker.on_carrier_gained(20, false)
+	assert_eq(picker.stats.interceptions, 0, "waits for the establishment")
+	assert_true(tracker.on_possession_established(20))
+	assert_eq(passer.stats.giveaways, 1)
+	assert_eq(picker.stats.interceptions, 1)
+	assert_eq(picker.stats.takeaways, 0, "a pick-off is not a strip")
+
+
+func test_interception_credits_the_first_opponent_touch() -> void:
+	# 20 gets a blade on the pass and it squirts to linemate 21, who establishes.
+	_add_player(10, 0)
+	var picker := _add_player(20, 1)
+	var linemate := _add_player(21, 1)
+	_gain_and_establish(10)
+	tracker.note_pass(10)
+	tracker.on_carrier_gained(20, false)
+	tracker.on_carrier_gained(21, false)
+	assert_true(tracker.on_possession_established(21))
+	assert_eq(picker.stats.interceptions, 1)
+	assert_eq(linemate.stats.interceptions, 0)
+
+
+func test_a_pass_that_reached_a_teammate_was_not_intercepted() -> void:
+	# The receiver touched it before the opponent got it: a completion and then
+	# a loss, so the giveaway stands but nobody picked a pass off.
+	var passer := _add_player(10, 0)
+	_add_player(11, 0)
+	var opp := _add_player(20, 1)
+	_gain_and_establish(10)
+	tracker.note_pass(10)
+	tracker.on_carrier_gained(11, false)
+	tracker.on_carrier_gained(20, false)
+	assert_true(tracker.on_possession_established(20))
+	assert_eq(passer.stats.giveaways, 1)
+	assert_eq(opp.stats.interceptions, 0)
+
+
+func test_a_contested_pick_credits_no_interception() -> void:
+	# The passing side fought the loose puck back before losing it: no giveaway,
+	# so no interception either.
+	_add_player(10, 0)
+	_add_player(11, 0)
+	var picker := _add_player(20, 1)
+	_gain_and_establish(10)
+	tracker.note_pass(10)
+	tracker.on_carrier_gained(20, false)
+	tracker.on_carrier_gained(11, false)
+	tracker.on_carrier_gained(20, false)
+	assert_false(tracker.on_possession_established(20))
+	assert_eq(picker.stats.interceptions, 0)
+
+
+func test_a_stray_pass_recovered_late_is_not_an_interception() -> void:
+	var passer := _add_player(10, 0)
+	var recoverer := _add_player(20, 1)
+	_gain_and_establish(10)
+	tracker.note_pass(10)
+	now_s += TurnoverTracker.PASS_WINDOW_S + 0.1
+	tracker.on_carrier_gained(20, false)
+	assert_true(tracker.on_possession_established(20))
+	assert_eq(passer.stats.giveaways, 1, "still a giveaway")
+	assert_eq(recoverer.stats.interceptions, 0, "a loose-puck recovery, not a pick-off")
 
 
 func test_no_stats_before_any_established_owner() -> void:

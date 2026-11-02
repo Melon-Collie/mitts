@@ -18,6 +18,9 @@ var shots_blocked: int = 0
 #                    faceoff win % has a real denominator.
 var hits_taken: int = 0
 var takeaways: int = 0
+# A pass picked off: credited to the opponent whose pickup first ended its flight,
+# when the passer's giveaway lands (TurnoverTracker). Takeaways stay strips only.
+var interceptions: int = 0
 var giveaways: int = 0
 var faceoff_wins: int = 0
 var faceoff_losses: int = 0
@@ -79,7 +82,7 @@ func to_array() -> Array:
 	return [goals, assists, shots_on_goal, hits, shots_blocked,
 			hits_taken, takeaways, giveaways, faceoff_wins, faceoff_losses,
 			game_winning_goals, one_timer_goals, tip_goals, ot_goals,
-			shot_attempts, shot_attempts_blocked, xg_for, icings]
+			shot_attempts, shot_attempts_blocked, xg_for, icings, interceptions]
 
 static func from_array(a: Array) -> PlayerStats:
 	var s := PlayerStats.new()
@@ -110,6 +113,7 @@ func update_from_array(a: Array) -> void:
 	shot_attempts_blocked = a[15]
 	xg_for = a[16]
 	icings = a[17]
+	interceptions = a[18]
 
 func to_dict() -> Dictionary:
 	return {
@@ -120,6 +124,7 @@ func to_dict() -> Dictionary:
 		"shots_blocked": shots_blocked,
 		"hits_taken": hits_taken,
 		"takeaways": takeaways,
+		"interceptions": interceptions,
 		"giveaways": giveaways,
 		"faceoff_wins": faceoff_wins,
 		"faceoff_losses": faceoff_losses,
