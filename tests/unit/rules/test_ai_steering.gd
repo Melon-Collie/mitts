@@ -808,7 +808,7 @@ func test_board_repel_yields_to_a_deliberate_wall_anchor() -> void:
 # The agent's stance read on a stand that rides a man in a retreat (a retreat
 # floor set). The arc through the anchor prices a turn onto a point; a ridden
 # anchor is at the body, so that read fires on any move off travel, and the
-# stance's stride cost is what loses the retreat (#889). The pursuit already
+# stance's stride cost is what loses the retreat. The pursuit already
 # turns the velocity.
 func _agent_stance(anchor_vel: Vector3, floor_radius: float = FLOOR_RADIUS) -> bool:
 	var snap := WorldSnapshot.new()
