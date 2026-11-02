@@ -342,18 +342,21 @@ static func set_retreat_floor(ctx: RoleContext, ap: AICarrierApproach,
 # it the moving-frame closing term walks a stepping-up defender up-ice at a
 # carrier who is crossing rather than coming, and the turn down beats him.
 #
-# While the carrier is gaining on him down his line, the cap turns into a floor
-# on the retreat (`may_give_ice`: the route is a retreat at all, not a gap-up or
-# a held line): no slower than the carrier's pace there, or his retreat's top
-# speed. The closing term spends depth by slowing the retreat, and the stride,
+# While a carrier coming at pace gains on him down his line and he still holds
+# a gap (not draped: set_retreat_floor), the cap turns into a floor on the
+# retreat (`may_give_ice`: the route is a retreat at all, not a gap-up or a held
+# line): no slower than the carrier's pace there, or his retreat's top speed.
+# The closing term spends depth by slowing the retreat, and the stride,
 # power-limited at speed, rebuilds that pace far slower than the carrier eats the
 # depth it gave away.
 static func set_advance_cap(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision, gap: float, may_give_ice: bool = true) -> void:
 	if d.retreat_floor_radius_m <= 0.0:
 		return
-	if may_give_ice and ctx.self_velocity.x * ap.dir_net.x \
-			+ ctx.self_velocity.z * ap.dir_net.z < ap.closing:
+	var draped: bool = d.retreat_floor_radius_m <= RETREAT_FINISH_M
+	if may_give_ice and not draped and ap.closing >= GAP_UP_CLOSING_M_S \
+			and ctx.self_velocity.x * ap.dir_net.x \
+					+ ctx.self_velocity.z * ap.dir_net.z < ap.closing:
 		d.advance_cap_m_s = -minf(ap.closing, retreat_max_speed(ctx, d.face_travel))
 		return
 	var depth: float = _depth_along(ctx, ap.carrier_pos, ap.dir_net)

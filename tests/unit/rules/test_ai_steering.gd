@@ -805,11 +805,12 @@ func test_board_repel_yields_to_a_deliberate_wall_anchor() -> void:
 			"mid-ice anchor from the same spot: full inward pull + repel")
 
 
-# The agent's stance read on a stand that rides a man. The arc through the
-# anchor prices a turn onto a point; a ridden anchor is at the body, so that read
-# fires on any move off travel, and the stance's stride cost is what loses the
-# retreat (#889). The pursuit already turns the velocity.
-func _agent_stance(anchor_vel: Vector3) -> bool:
+# The agent's stance read on a stand that rides a man in a retreat (a retreat
+# floor set). The arc through the anchor prices a turn onto a point; a ridden
+# anchor is at the body, so that read fires on any move off travel, and the
+# stance's stride cost is what loses the retreat (#889). The pursuit already
+# turns the velocity.
+func _agent_stance(anchor_vel: Vector3, floor_radius: float = FLOOR_RADIUS) -> bool:
 	var snap := WorldSnapshot.new()
 	var me := SkaterNetworkState.new()
 	me.velocity = Vector3(0.0, 0.0, 5.0)
@@ -821,7 +822,7 @@ func _agent_stance(anchor_vel: Vector3) -> bool:
 	var input := InputState.new()
 	steering.steer(input, snap, Vector3.ZERO, Vector3(1.0, 0.0, 0.2), true,
 			MATCH_SPEED if anchor_vel != Vector3.ZERO else 0.0, anchor_vel, -1,
-			Vector3.ZERO, 0.0, Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z), UPRIGHT_A, 1.8)
+			FLOOR_NET, floor_radius, Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z), UPRIGHT_A, 1.8)
 	return input.stance_held
 
 
@@ -829,5 +830,10 @@ func test_a_point_beside_him_is_carved_in_the_stance() -> void:
 	assert_true(_agent_stance(Vector3.ZERO))
 
 
-func test_a_ridden_stand_beside_him_is_not() -> void:
+func test_a_ridden_retreat_beside_him_is_not() -> void:
 	assert_false(_agent_stance(Vector3(0.0, 0.0, 5.0)))
+
+
+func test_a_ridden_stand_with_no_retreat_still_carves() -> void:
+	# A backchecker's hip: the carve is his to keep until it is priced on its own.
+	assert_true(_agent_stance(Vector3(0.0, 0.0, 5.0), 0.0))
