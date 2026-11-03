@@ -1,7 +1,7 @@
 class_name SteamStatRecorder extends RefCounted
 ## Mirrors a finished game's stats into Steam User Stats (the SteamStats registry)
 ## and reads the running career totals back out. Owned by GameManager, called at
-## game-over for online games. The increment math is pure + static (testable
+## game-over for every real match, online or against bots. The increment math is pure + static (testable
 ## without Steam); the read-modify-write and totals read go through SteamManager,
 ## which no-ops when Steam is unavailable.
 

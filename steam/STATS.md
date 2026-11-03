@@ -11,10 +11,11 @@ earnable offline / opted-out / while the backend is paused. Supabase remains the
 source for cross-machine history and dev telemetry; these stats are purely the
 progression counter (and the future basis for leaderboards).
 
-When they update: at game-over for **online games** (same games as the Supabase
-career row). They are **not** gated on the "Share Gameplay Stats" toggle — that
-toggle is about uploading to *our* Supabase; Steam Stats are the player's own
-data on their own Steam account.
+When they update: at game-over for every real match — online or a game against
+bots, never free play, the tutorial or drills (`GameManager._achievements_active`),
+the same games as the Supabase career row. They are **not** gated on the "Share
+Gameplay Stats" toggle — that toggle is about uploading to *our* Supabase; Steam
+Stats are the player's own data on their own Steam account.
 
 > **Two apps.** Like achievements, stats are per-app. Define these on the main
 > app **4892600** and the **Playtest** child app **4893650** (same API Names),
@@ -28,7 +29,7 @@ For each app: **Stats & Achievements → Stats**, create each stat below as type
 **Integer (INT)**, default `0`, with **Increment Only** off (we write absolute
 values via read-modify-write, not increments) — then **publish**.
 
-| API Name (`id`)        | Type | Tracks (lifetime, online games) |
+| API Name (`id`)        | Type | Tracks (lifetime, real matches) |
 |------------------------|------|---------------------------------|
 | `STAT_GOALS`           | INT  | goals scored                    |
 | `STAT_ASSISTS`         | INT  | assists                         |

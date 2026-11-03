@@ -46,7 +46,7 @@ for that checklist.
   editing your build) — those bypass the game-over sweep and its mode gate.
 - **roster** — earned by playing an online game whose lobby includes a specific
   person, and never by that person themselves.
-- **career** — a lifetime total backed by **Steam User Stats** (online games;
+- **career** — a lifetime total backed by **Steam User Stats** (every real match, bots included;
   NOT gated on stat-sharing, and no Supabase dependency). The mirrored stats must
   be defined too — see STATS.md.
 
