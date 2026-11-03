@@ -7,6 +7,8 @@
 #   .claude/hooks/render-references.sh                  # every carry, into ./.preview/arm_reference
 #   .claude/hooks/render-references.sh forehand,tight   # named carries only
 #   .claude/hooks/render-references.sh --list           # the carry names
+#   ARM_REFERENCE_CELLS="-45:0.7;60:1.5" .claude/hooks/render-references.sh
+#                       # the model's own carry for each blade (deg, + forehand; m)
 #
 # Same xvfb / software-GL constraint as render-strip.sh: Godot's --headless
 # draws nothing. Seconds for the set.

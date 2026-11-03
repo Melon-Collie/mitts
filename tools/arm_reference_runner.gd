@@ -14,6 +14,9 @@ extends Node
 const Carries := preload("res://tests/harness/arm_reference_carries.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const OUT_ENV: String = "ARM_REFERENCE_OUT"
+# "angle:radius;..." (degrees off the facing, + forehand; m): instead of the
+# references, the model's own carry for the blade at each, one row a sheet.
+const CELLS_ENV: String = "ARM_REFERENCE_CELLS"
 const DEFAULT_OUT: String = "user://arm_reference"
 const TILE := Vector2i(360, 360)
 # Off the body's middle, looking at its chest (the body faces -Z).
@@ -66,6 +69,12 @@ func begin(only: String, list: bool) -> void:
 	for c: Dictionary in Carries.CARRIES:
 		if only == "" or only.split(",").has(String(c["name"])):
 			_carries.append(c)
+	if OS.get_environment(CELLS_ENV) != "":
+		_carries.clear()
+		for spec: String in OS.get_environment(CELLS_ENV).split(";", false):
+			var at: PackedStringArray = spec.split(":")
+			_carries.append({"name": "cell_%+d_%.2f" % [int(float(at[0])), float(at[1])],
+				"cell": true, "puck_deg": float(at[0]), "puck_m": float(at[1])})
 	if OS.get_environment(OUT_ENV) != "":
 		_out_dir = OS.get_environment(OUT_ENV)
 	_build_model()
@@ -161,6 +170,17 @@ func _next_carry() -> void:
 		get_tree().quit()
 		return
 	var carry: Dictionary = _carries[_index]
+	_images.clear()
+	if carry.has("cell"):
+		var a: float = deg_to_rad(float(carry["puck_deg"]))
+		var top_side: float = signf(_body.top_shoulder.x)
+		var heel := Vector3(-sin(a) * float(carry["puck_m"]) * top_side, _blade_m - _pivot_m,
+				-cos(a) * float(carry["puck_m"]))
+		_setup = {"heel": heel, "puck": heel}
+		_lines.append("%s:" % carry["name"])
+		_row = 1
+		_draw_own()
+		return
 	_setup = Carries.setup(carry, _body, _pivot_m, _blade_m)
 	var pose := ArmAnatomySearch.Pose.new()
 	_search.hold(_trunk, _setup["heel"], _setup["twist"], _setup["lie"], _setup["heading"],
@@ -389,7 +409,8 @@ func _report(carry: Dictionary, pose: ArmAnatomySearch.Pose, s: Dictionary) -> v
 
 
 func _save_sheet() -> void:
-	var sheet := Image.create(TILE.x * VIEWS.size(), TILE.y * 2, false, Image.FORMAT_RGBA8)
+	var rows: int = ceili(float(_images.size()) / VIEWS.size())
+	var sheet := Image.create(TILE.x * VIEWS.size(), TILE.y * rows, false, Image.FORMAT_RGBA8)
 	for i: int in _images.size():
 		var img: Image = _images[i]
 		img.convert(Image.FORMAT_RGBA8)
