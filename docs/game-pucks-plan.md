@@ -54,6 +54,14 @@ rafters for something bigger.
   when its registry row is flagged for it. The existing 20 are flagged; nothing
   new is until it is worth the Steamworks setup (below). Puck, banner and title
   names are `locale/translations.csv` rows, never Steamworks strings.
+- **No anti-cheat.** Pucks are evaluated on the player's own machine and anyone
+  can set a Steam achievement directly, so a determined player can unlock any
+  reward. For cosmetics and titles that is accepted. The host does not check
+  that a peer owns the title or cosmetic it wears; it only clamps an unknown id
+  to none, as `GearStyleConfig.from_code` does for gear codes.
+- **Bots wear anything.** A bot's look may use reward cosmetics as freely as the
+  free ones. Hand-tailored bot identities come later, once the cosmetics are
+  stable.
 
 ## Steamworks work
 
@@ -68,21 +76,11 @@ Everything the code cannot do, per phase. Each item is done on both apps
 
 Pucks, tiers, banners, titles and cosmetic rewards need no Steamworks work.
 
-## Open questions
+## Open question
 
-Each has a recommendation; none is settled.
-
-1. **Where a title shows.** *Recommendation:* the lobby bench card, the
-   scoreboard, the Three Stars and the post-game screen. The on-ice nameplate
-   stays name-only, since it is read at speed.
-2. **Cheating.** Pucks are evaluated on the player's own machine and anyone can
-   set a Steam achievement directly, so a determined player can unlock any
-   reward. *Recommendation:* accept it for cosmetics and titles, and build no
-   anti-cheat. The host does not check that a peer owns the title or cosmetic it
-   wears; it only clamps an unknown id to none, as `GearStyleConfig.from_code`
-   does for gear codes.
-3. **Do bots wear reward cosmetics?** *Recommendation:* no. A bot's look draws
-   from the free options only, so a reward stays something a human earned.
+**Where a title shows.** *Recommendation:* the lobby bench card, the scoreboard,
+the Three Stars and the post-game screen. The on-ice nameplate stays name-only,
+since it is read at speed. Settled by Phase 2, which builds the surfaces.
 
 ## The model
 
@@ -172,7 +170,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - Locked cosmetics. A cosmetic registry option (`GearModelRegistry`,
   `StickModelRegistry`, the tape palette) may carry the banner that unlocks it.
   The picker shows a locked option with what earns it; the lobby relays what a
-  player wears whether or not it is earned (question 2).
+  player wears whether or not it is earned (*No anti-cheat*).
 
 **Wire.** The title id joins `PlayerLook.cosmetics_to_wire()` (Phase 2) and
 `notify_feat` adds an RPC (Phase 3); each bumps the protocol in its phase.
