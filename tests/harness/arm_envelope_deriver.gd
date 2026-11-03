@@ -19,6 +19,9 @@ const SETTLE_TICKS: int = 120
 # full.
 const CURVE_FLOORS: Array[float] = [0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 5.0]
 const FULL_FOLD_CURSOR := Vector2(0.0, -1.2)
+# Skating, a fresh carrier is skated this long with the puck ahead before a
+# cell's settle, so he is at his carrying speed and fold, not just starting.
+const SKATE_WARMUP_TICKS: int = 360
 const TIGHT_CURSOR := Vector2(0.0, -0.4)
 
 
@@ -39,44 +42,63 @@ var _hips: Transform3D
 var _root: Transform3D
 var _forehand: float = 1.0
 var _skating: bool = false
+var _height: int = 0
+var _add: Callable
+var _nodes: Array[Node] = []
 var _search: ArmAnatomySearch
 var _pose := ArmAnatomySearch.Pose.new()
 
 
-# A skater `height` inches tall settled into a carry, standing or skating, his
-# nodes added under `parent` through `add` (a GutTest's add_child_autofree).
+# A skater `height` inches tall carrying, standing or skating, his nodes added
+# under `parent` through `add` (a GutTest's add_child_autofree).
 func _init(height: int, skating: bool, add: Callable) -> void:
+	_height = height
+	_add = add
+	_skating = skating
+	_build()
+	_body = SkaterAnatomyCapture.capture(controller)
+	_forehand = signf(_body.bottom_shoulder.x)
+	_search = ArmAnatomySearch.new(_body)
+	_search.technique = true
+
+
+# A fresh carrier in place of the last, so a cell's trunk is the same whatever
+# was derived before it: skating, the stride's phase at the end of a settle is
+# the ticks skated since he was built.
+func _build() -> void:
+	for n: Node in _nodes:
+		n.free()
+	_nodes.clear()
 	var skater: Skater = SKATER_SCENE.instantiate() as Skater
-	add.call(skater)
+	_add.call(skater)
 	skater.set_process(false)
 	skater.set_physics_process(false)
 	var puck: Puck = PUCK_SCENE.instantiate() as Puck
-	add.call(puck)
+	_add.call(puck)
 	puck.set_physics_process(false)
 	var gs := GameStateStub.new()
-	add.call(gs)
+	_add.call(gs)
 	controller = SkaterController.new()
-	add.call(controller)
+	_add.call(controller)
 	controller.setup(skater, puck, gs)
-	controller.apply_attributes(PlayerAttributes.new(height))
+	controller.apply_attributes(PlayerAttributes.new(_height))
 	# The closed-form carry: the trunk the table is derived in must not depend on
 	# the table.
 	controller._ik.derived_carry_enabled = false
 	skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 	skater._process(DT)
-	_body = SkaterAnatomyCapture.capture(controller)
-	_forehand = signf(_body.bottom_shoulder.x)
-	_skating = skating
 	controller.has_puck = true
 	controller._sm.set_state(SkaterStateMachine.State.SKATING_WITH_PUCK)
-	_search = ArmAnatomySearch.new(_body)
-	_search.technique = true
+	_nodes = [controller, skater, puck, gs]
+	if _skating:
+		_settle(FULL_FOLD_CURSOR, SKATE_WARMUP_TICKS)
 
 
 # The table's cell for the blade `radius` m out at `angle_deg` off the facing (+
 # forehand): [held, top hand x (+ forehand), y, z, bottom hand spacing], the
-# hand in the skater's root frame.
+# hand in the skater's root frame, from a fresh carrier settled on it.
 func cell(angle_deg: float, radius: float) -> Array:
+	_build()
 	var a: float = deg_to_rad(angle_deg)
 	_settle(Vector2(sin(a) * radius * _forehand, -cos(a) * radius))
 	var skater: Skater = controller.skater
@@ -120,12 +142,13 @@ func crouch_curve() -> Array:
 	return out
 
 
-# The carry settled with the cursor `cursor` off him (facing frame, m).
-func _settle(cursor: Vector2) -> void:
+# The carry settled with the cursor `cursor` off him (facing frame, m), over
+# `ticks`.
+func _settle(cursor: Vector2, ticks: int = SETTLE_TICKS) -> void:
 	var c: SkaterController = controller
 	var skater: Skater = c.skater
 	var skating: bool = _skating
-	for _i: int in SETTLE_TICKS:
+	for _i: int in ticks:
 		skater.global_position = Vector3(0.0, GameRules.FACEOFF_SPAWN_HEIGHT, 0.0)
 		if not skating:
 			skater.velocity = Vector3.ZERO

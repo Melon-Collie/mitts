@@ -30,8 +30,8 @@ func test_the_table_reads_as_the_model_now_does() -> void:
 				add_child_autofree)
 		var rows: Array = (table["builds"][neutral]["states"] as Dictionary)[state]
 		for s: Vector2 in SAMPLES:
-			var ai: int = ArmEnvelope.ANGLES_DEG.find(s.x)
-			var ri: int = ArmEnvelope.RADII_M.find(s.y)
+			var ai: int = _nearest(ArmEnvelope.ANGLES_DEG, s.x)
+			var ri: int = _nearest(ArmEnvelope.RADII_M, s.y)
 			var stored: Array = rows[ai * ArmEnvelope.RADII_M.size() + ri]
 			var now: Array = d.cell(s.x, s.y)
 			var what: String = "%s %+.0f° %.1f m" % [state, s.x, s.y]
@@ -42,3 +42,13 @@ func test_the_table_reads_as_the_model_now_does() -> void:
 				assert_lt(a.distance_to(b), HAND_M, what + ": the hand where it was")
 				assert_almost_eq(float(now[4]), float(stored[4]), SPACING_M,
 						what + ": the grip where it was")
+
+
+# The grid entry nearest `v`: a Vector2's float32 reads 0.9 as 0.8999999762,
+# which an exact find misses.
+static func _nearest(grid: Array[float], v: float) -> int:
+	var best: int = 0
+	for i: int in grid.size():
+		if absf(grid[i] - v) < absf(grid[best] - v):
+			best = i
+	return best
