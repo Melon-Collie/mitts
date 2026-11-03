@@ -11,6 +11,9 @@ const HOME: int = 0
 const AWAY: int = 1
 const ALLY: Color = Color(0.2, 0.4, 1.0, 1.0)
 const ENEMY: Color = Color(1.0, 0.2, 0.2, 1.0)
+# Well past the longest pulse. The loops that wait a pulse out stop here, so a
+# pulse that never ends fails the test instead of hanging the suite.
+const MAX_PULSE_FRAMES: int = 600
 
 var _cues: PuckFollowCues
 
@@ -37,9 +40,12 @@ func _loose(seconds: float, on_ice: bool = true) -> void:
 
 func _pulse_end_r_after_full_growth() -> float:
 	var max_r: float = 0.0
-	while _cues.pulse_active:
+	var frames: int = 0
+	while _cues.pulse_active and frames < MAX_PULSE_FRAMES:
 		max_r = maxf(max_r, _cues.pulse_outer_r)
 		_cues.step(DT, _cues.carrier_id, PuckFollowCues.NO_TEAM, Vector2.ZERO, ALLY, false)
+		frames += 1
+	assert_false(_cues.pulse_active, "the pulse ends")
 	return max_r
 
 
@@ -110,7 +116,7 @@ func test_the_pulse_grows_fades_and_ends() -> void:
 	var last_r: float = _cues.pulse_outer_r
 	var last_a: float = _cues.pulse_color.a
 	var frames: int = 0
-	while _cues.pulse_active:
+	while _cues.pulse_active and frames < MAX_PULSE_FRAMES:
 		_carry(A, HOME)
 		if _cues.pulse_active:
 			assert_gt(_cues.pulse_outer_r, last_r)
