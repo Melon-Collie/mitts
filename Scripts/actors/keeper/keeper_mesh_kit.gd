@@ -172,27 +172,6 @@ static func rounded(y: float, hx: float, front: float, back: float, n: int,
 	return out
 
 
-# A low-poly ellipsoid: `rings` bands from pole to pole, its meridians from
-# `phase` (match a sleeve's, and the sleeve leaves it on a clean ring).
-func ellipsoid(slot: int, center: Vector3, r: Vector3, rings: int = 6, segs: int = 10,
-		phase: float = 0.0) -> void:
-	var loops: Array[PackedVector3Array] = []
-	for i: int in range(1, rings):
-		var a: float = PI * float(i) / float(rings)
-		loops.append(ellipse(1, center + Vector3(0.0, -cos(a) * r.y, 0.0),
-				sin(a) * r.x, sin(a) * r.z, segs, phase))
-	var bottom: Vector3 = center - Vector3(0.0, r.y, 0.0)
-	var top: Vector3 = center + Vector3(0.0, r.y, 0.0)
-	for i: int in segs:
-		var j: int = (i + 1) % segs
-		tri(slot, bottom, loops[0][i], loops[0][j], center)
-		tri(slot, top, loops[loops.size() - 1][i], loops[loops.size() - 1][j], center)
-	for k: int in loops.size() - 1:
-		for i: int in segs:
-			var j: int = (i + 1) % segs
-			quad(slot, loops[k][i], loops[k][j], loops[k + 1][j], loops[k + 1][i], center)
-
-
 # A flat outline in X-Y, extruded from z0 to z1 (a convex outline).
 func slab(slot: int, outline: PackedVector2Array, z0: float, z1: float) -> void:
 	var a := PackedVector3Array()

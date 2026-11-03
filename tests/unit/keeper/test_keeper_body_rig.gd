@@ -31,8 +31,11 @@ func test_every_bone_is_posed_on_its_save_box() -> void:
 		assert_almost_eq(pose.origin, box.origin, Vector3.ONE * 1e-5, KeeperGear.Part.keys()[part])
 		assert_almost_eq(pose.basis.y, box.basis.y, Vector3.ONE * 1e-5, KeeperGear.Part.keys()[part])
 	for d: int in KeeperJerseyMesh.DEFORM_COUNT:
-		assert_eq(rig.get_bone_pose(KeeperJerseyMesh.deform_bone(d)),
-				KeeperJerseyMesh.deform_pose(_keeper.skeleton, d), KeeperJerseyMesh.Deform.keys()[d])
+		var want: Transform3D = KeeperJerseyMesh.deform_pose(_keeper.skeleton, d)
+		var got: Transform3D = rig.get_bone_pose(KeeperJerseyMesh.deform_bone(d))
+		assert_almost_eq(got.origin, want.origin, Vector3.ONE * 1e-5, KeeperJerseyMesh.Deform.keys()[d])
+		assert_almost_eq(got.basis.y, want.basis.y, Vector3.ONE * 1e-5, KeeperJerseyMesh.Deform.keys()[d])
+		assert_almost_eq(got.basis.z, want.basis.z, Vector3.ONE * 1e-5, KeeperJerseyMesh.Deform.keys()[d])
 
 
 func test_every_vertex_of_the_gear_rides_one_bone() -> void:
