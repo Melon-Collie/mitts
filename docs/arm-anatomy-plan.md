@@ -535,7 +535,8 @@ holds a stick in front of him (§16).
 
 `data/arm_envelope.json`, derived on the corrected body
 (docs/body-proportions-plan.md) by `.claude/hooks/derive-arm-envelope.sh`
-in resumable parts, each cell from a freshly built carrier (skated to his
+in resumable parts (since re-derived from the model of §16, which holds fewer
+cells), each cell from a freshly built carrier (skated to his
 carrying speed and fold first), so a cell's trunk does not depend on the
 cells derived before it (skating, the stride's phase at the end of a settle
 did). Of 273 cells, standing and skating: 67" 165 and 159, 73" 179 and 174,
@@ -602,6 +603,14 @@ thumb (the fist then turns palm down and reads more strained), and a square
 top grip (the grip's slide takes it back).
 
 The user accepted all six model carries on the sheets.
+
+The table re-derived from this model holds fewer cells (of 273, standing and
+skating: 67" 133 and 115, 73" 132 and 111, 80" 135 and 96). What it lost is
+mostly the backhand side in close (-30 to -90 deg, under about a metre) and
+the forehand past 1.5 m: those blades held only with the top hand 0.6-0.7 m
+out in front of the body, the pose the sheets rejected (relaxing
+TOP_HAND_AHEAD gives them back at once). Whether the carry should keep a puck
+there regardless is phase 3's call.
 `tests/slow/controllers/test_model_carries_like_the_references.gd` holds them
 to it (the top hand within 0.35 m of the reference's, the hands 0.2 m apart
 or more and within 0.15 m of its spacing, the bottom elbow back and not
