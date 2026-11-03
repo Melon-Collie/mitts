@@ -25,8 +25,16 @@ rafters for something bigger.
   chasing a puck spends their teammates' and opponents' game, not only their
   own (Darktide is co-op against AI, where it mostly costs the player's own
   run). So no puck pays for losing, for padding a stat in a blowout, or for
-  playing badly on purpose. Goals, assists, interceptions, blocks and wins are
-  safe to count. A raw hit count is the borderline case (see *Open questions*).
+  playing badly on purpose. Goals, assists, interceptions, blocks, wins and
+  hits are all safe to count.
+- **Games against bots count for everything**, every tier and every banner,
+  exactly as Steam career stats and achievements already count them
+  (`GameManager._achievements_active`: any real match, never free play, the
+  tutorial or drills). A player who wants to grind a banner out offline may.
+- **Hits count as credited.** `HitTracker` already credits a hit only where the
+  NHL would: on the puck carrier when the contact costs them the puck, or on a
+  player finished just after they released it. So a hit puck counts the existing
+  `hits` stat. Hit hunting within that definition is a real way to play.
 - **Banners are named for how a player plays.** Power Forward is the model:
   50 goals and 50 hits raise it, and it unlocks the Power Forward title. The
   catalogue's banners are hockey archetypes, so the title a player wears says
@@ -39,43 +47,27 @@ rafters for something bigger.
 
 Each has a recommendation; none is settled.
 
-1. **Do games against bots count?** Today Steam career stats and achievements
-   count every real match (`GameManager._achievements_active`), bots included,
-   and most play is against bots. But bot games inflate numbers — a 55%
-   shooting percentage over 22 games is the reference case. Options:
-   - count every real match (accessible; farmable);
-   - count bot games only at the top difficulty;
-   - count everything for the lower tiers, and require games against humans for
-     the top tiers and the banners.
-
-   *Recommendation:* the third. It needs the Steam counters split by whether the
-   match had human opponents (`career_stats.human_players` already records the
-   headcount), so it is decided before Phase 1 fixes the counter set.
-2. **Where unlocks are stored.** *Recommendation:* lifetime counters stay in
+1. **Where unlocks are stored.** *Recommendation:* lifetime counters stay in
    Steam User Stats (`SteamStats`, already cross-machine and independent of
    Supabase). The set of earned pucks and banners lives in a local ledger file
    mirrored to Steam Cloud the way `PlayerPrefs` already is; the equipped title
    is a pref. Supabase is the alternative, but it needs stat sharing on and a
    reachable backend.
-3. **Which pucks are also Steam achievements.** Every Steam achievement is hand
+2. **Which pucks are also Steam achievements.** Every Steam achievement is hand
    set up in Steamworks for both apps, with two icons each (`steam/ACHIEVEMENTS.md`);
    a catalogue of a hundred-plus pucks makes that a burden. *Recommendation:* the
    catalogue is in-game, and a curated subset — the existing 20, the milestone
    tiers, the best feats — mirrors to Steam.
-4. **Where a title shows.** *Recommendation:* the lobby bench card, the
+3. **Where a title shows.** *Recommendation:* the lobby bench card, the
    scoreboard, the Three Stars and the post-game screen. The on-ice nameplate
    stays name-only, since it is read at speed.
-5. **Cheating.** Pucks are evaluated on the player's own machine and anyone can
+4. **Cheating.** Pucks are evaluated on the player's own machine and anyone can
    set a Steam achievement directly, so a determined player can unlock any
    reward. *Recommendation:* accept it for cosmetics and titles, and build no
    anti-cheat. The host does not check that a peer owns the title or cosmetic it
    wears; it only clamps an unknown id to none, as `GearStyleConfig.from_code`
    does for gear codes.
-6. **What a hit puck counts.** Raw hits invite running around for contact.
-   *Recommendation:* count hits that strip the puck (`HitTracker` already credits
-   a hit through the strip path) or that land in the defensive zone, which needs
-   a counter of its own.
-7. **Do bots wear reward cosmetics?** *Recommendation:* no. A bot's look draws
+5. **Do bots wear reward cosmetics?** *Recommendation:* no. A bot's look draws
    from the free options only, so a reward stays something a human earned.
 
 ## The model
@@ -120,7 +112,7 @@ from a banner.
 | Iron Man | Games III | Iron Man |
 
 Count pucks for the ladders: goals, assists, points, wins, games, interceptions,
-takeaways, blocks, faceoff wins, hits (see question 6). `SteamStats` has most of
+takeaways, blocks, faceoff wins, hits. `SteamStats` has most of
 these already; interceptions and points need rows.
 
 Feats are where Mitts can stand out, since the mechanics are deep enough to
@@ -165,7 +157,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - Locked cosmetics. A cosmetic registry option (`GearModelRegistry`,
   `StickModelRegistry`, the tape palette) may carry the banner that unlocks it.
   The picker shows a locked option with what earns it; the lobby relays what a
-  player wears whether or not it is earned (question 5).
+  player wears whether or not it is earned (question 4).
 
 **Wire.** The title id joins `PlayerLook.cosmetics_to_wire()`, and
 `notify_feat` adds an RPC; one protocol bump covers both, in Phase 2.
@@ -174,8 +166,8 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 
 1. **Catalogue and Trophy Case.** The registries, rules, ledger and
    `TrophyService`; the 20 achievements migrated as pucks; count ladders on the
-   Steam counters (with the human-game split if question 1 lands that way); a
-   read-only Trophy Case with progress; the earn toast. No rewards yet.
+   Steam counters; a read-only Trophy Case with progress; the earn toast. No
+   rewards yet.
 2. **Titles.** The title registry, banners that award them, the title picker,
    the title on the wire and on screen. Protocol bump.
 3. **Feats.** The `notify_feat` channel and the first feats, with their banners.
