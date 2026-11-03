@@ -186,6 +186,9 @@ func _draw_own() -> void:
 			-hand.z, rad_to_deg(pose.twist) * top_side, rad_to_deg(pose.lean.x),
 			rad_to_deg(pose.lean.y) * -top_side, pose.crouch, pose.spacing])
 	print(_lines[_lines.size() - 1])
+	_arm_lines(pose)
+	print(_lines[_lines.size() - 2])
+	print(_lines[_lines.size() - 1])
 	_view = 0
 
 
@@ -379,19 +382,7 @@ func _report(carry: Dictionary, pose: ArmAnatomySearch.Pose, s: Dictionary) -> v
 	_lines.append("%s: %s (blade's middle %.2f m off the reference's puck; lie %.0f°; knob %s, %d mm allowed)" % [
 			carry["name"], _verdict(pose), off, rad_to_deg(float(s["lie"])),
 			_depth(_press(pose, pose.top.hand - shaft * _body.knob_extend)), allows])
-	for arm_name: String in ["top", "bottom"]:
-		var a: ArmAnatomy.ArmPose = pose.top if arm_name == "top" else pose.bottom
-		var past: String = ""
-		if not a.feasible():
-			past = "  <- %s %s" % [ArmAnatomy.Limit.keys()[a.binding],
-					_excess(a.violation, METRE_LIMITS.has(a.binding))]
-		_lines.append("    %s: shoulder raised %.0f° (plane %.0f°) turned %+.0f°, elbow %.0f°, forearm %+.0f°, wrist %+.0f°/%+.0f° (grip slid %+.0f°), sleeve %s and fist %s the jersey (%d mm allowed), %d mm past reach%s" % [
-				arm_name, rad_to_deg(a.elevation), rad_to_deg(a.plane), rad_to_deg(a.axial),
-				rad_to_deg(a.elbow_flexion), rad_to_deg(a.pronation), rad_to_deg(a.wrist_flexion),
-				rad_to_deg(a.wrist_deviation), rad_to_deg(a.grip_slide),
-				_depth(a.torso_depth + _body.gear_press), _depth(a.hand_depth + _body.gear_press),
-				allows,
-				roundi(a.reach_over * 1000.0), past])
+	_arm_lines(pose)
 	print(_lines[_lines.size() - 3])
 	print(_lines[_lines.size() - 2])
 	print(_lines[_lines.size() - 1])
@@ -418,3 +409,27 @@ func _write_report() -> void:
 	if f != null:
 		f.store_string("\n".join(_lines) + "\n")
 		f.close()
+
+# Each arm of `pose`, its joints (turned: + internal; forearm: + pronated) and
+# which way its elbow points off the shoulder-to-hand line: out to its own
+# side, up, ahead.
+func _arm_lines(pose: ArmAnatomySearch.Pose) -> void:
+	var allows: int = roundi(_body.gear_press * 1000.0)
+	for arm_name: String in ["top", "bottom"]:
+		var a: ArmAnatomy.ArmPose = pose.top if arm_name == "top" else pose.bottom
+		var past: String = ""
+		if not a.feasible():
+			past = "  <- %s %s" % [ArmAnatomy.Limit.keys()[a.binding],
+					_excess(a.violation, METRE_LIMITS.has(a.binding))]
+		var chord: Vector3 = (a.hand - a.root).normalized()
+		var bend: Vector3 = a.elbow - a.root
+		bend = (bend - chord * bend.dot(chord)).normalized()
+		var side: float = signf(a.root.x)
+		_lines.append("    %s: shoulder raised %.0f° (plane %.0f°) turned %+.0f°, elbow %.0f° pointing out %+.1f up %+.1f ahead %+.1f, forearm %+.0f°, wrist %+.0f°/%+.0f° (grip slid %+.0f°), sleeve %s and fist %s the jersey (%d mm allowed), %d mm past reach%s" % [
+				arm_name, rad_to_deg(a.elevation), rad_to_deg(a.plane), rad_to_deg(a.axial),
+				rad_to_deg(a.elbow_flexion), bend.x * side, bend.y, -bend.z,
+				rad_to_deg(a.pronation), rad_to_deg(a.wrist_flexion),
+				rad_to_deg(a.wrist_deviation), rad_to_deg(a.grip_slide),
+				_depth(a.torso_depth + _body.gear_press), _depth(a.hand_depth + _body.gear_press),
+				allows,
+				roundi(a.reach_over * 1000.0), past])
