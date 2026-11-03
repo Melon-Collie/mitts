@@ -565,6 +565,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.local_tape_changed.connect(_on_local_tape_changed)
 	NetworkManager.local_skin_changed.connect(_on_local_skin_changed)
 	NetworkManager.local_gear_style_changed.connect(_on_local_gear_style_changed)
+	NetworkManager.local_title_changed.connect(_on_local_title_changed)
 	NetworkManager.local_preferred_color_changed.connect(_on_local_preferred_color_changed)
 	NetworkManager.pickup_claim_received.connect(_on_pickup_claim_received)
 	NetworkManager.pickup_claim_rejected_received.connect(_on_pickup_claim_rejected)
@@ -1412,6 +1413,8 @@ func sync_existing_players(player_data: Array) -> void:
 		NetworkManager.set_peer_skin_tone(peer_id, skin_tone)
 		var gear_style: int = int(entry[17]) if entry.size() > 17 else GearStyleConfig.DEFAULT_CODE
 		NetworkManager.set_peer_gear_style(peer_id, gear_style)
+		NetworkManager.set_peer_title(peer_id,
+				String(entry[18]) if entry.size() > 18 and entry[18] is String else "")
 		var colors: Dictionary = TeamColorRegistry.get_colors(teams[team_id].color_slot, team_id)
 		_state_machine.register_remote_assigned_player(peer_id, team_slot, team_id)
 		_registry.spawn(peer_id, team_slot, teams[team_id],
@@ -5008,6 +5011,12 @@ func _on_local_skin_changed(skin_tone: int) -> void:
 
 # Repaints the local skater's gear (skate/glove color) live. Same
 # cosmetic-and-local-only contract as the tape and skin handlers above.
+func _on_local_title_changed(title_id: String) -> void:
+	var record: PlayerRecord = _registry.get_local() if _registry != null else null
+	if record != null:
+		record.title_id = title_id
+
+
 func _on_local_gear_style_changed(gear_style_code: int) -> void:
 	if _registry == null:
 		return
@@ -5442,7 +5451,7 @@ func _collect_existing_player_data() -> Array[Array]:
 				r.is_left_handed, r.player_name, r.jersey_number,
 				attrs.height, attrs.weight, attrs.profile,
 				attrs.curve, attrs.flex, attrs.length,
-				r.tape_code, r.skin_tone, r.gear_style_code])
+				r.tape_code, r.skin_tone, r.gear_style_code, r.title_id])
 	return existing
 
 

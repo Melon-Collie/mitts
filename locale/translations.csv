@@ -474,3 +474,12 @@ TOAST_GAME_PUCK,GAME PUCK · %s,DISCO · %s
 TOAST_BANNER_RAISED,BANNER RAISED · %s,ESTANDARTE IZADO · %s
 TROPHY_SUMMARY,%d / %d game pucks · %d / %d banners,%d / %d discos · %d / %d estandartes
 TROPHY_REQUIREMENT_PROGRESS,%s  ·  %d / %d,%s  ·  %d / %d
+TITLE_POWER_FORWARD,Power Forward,Delantero de potencia
+TITLE_SHUTDOWN,Shutdown,Cerrojo
+TITLE_TWO_WAY,Two-Way,Ida y vuelta
+TITLE_IRON_MAN,Iron Man,Hombre de hierro
+PLAYER_TITLE_LABEL,Title,Título
+PLAYER_TITLE_NONE,None,Ninguno
+PLAYER_TITLE_HINT,Raise a banner in the Trophy Case to earn a title.,Iza un estandarte en la vitrina para conseguir un título.
+TROPHY_BANNER_TITLE,Unlocks the %s title,Desbloquea el título %s
+SCOREBOARD_NAME_TITLE,%s  ·  %s,%s  ·  %s

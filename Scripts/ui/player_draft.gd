@@ -26,6 +26,8 @@ var length: int = PlayerAttributes.GEAR_BALANCED
 var tape_code: int = StickTapeConfig.DEFAULT_CODE
 # Packed GearStyleConfig: equipment models, face, tuck, and the hair.
 var gear_code: int = GearStyleConfig.DEFAULT_CODE
+# Titles id worn, "" for none.
+var title_id: String = ""
 
 
 static func from_prefs() -> PlayerDraft:
@@ -43,6 +45,7 @@ static func from_prefs() -> PlayerDraft:
 	d.set_attributes(attrs)
 	d.tape_code = PlayerPrefs.stick_tape_code
 	d.gear_code = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	d.title_id = Titles.coerce(PlayerPrefs.equipped_title)
 	return d
 
 
@@ -62,6 +65,7 @@ func copy() -> PlayerDraft:
 	d.length = length
 	d.tape_code = tape_code
 	d.gear_code = gear_code
+	d.title_id = title_id
 	return d
 
 
@@ -123,7 +127,8 @@ func differs(other: PlayerDraft) -> bool:
 	return build_differs(other) or player_name != other.player_name \
 			or jersey_number != other.jersey_number or is_left_handed != other.is_left_handed \
 			or position != other.position or color_slot != other.color_slot \
-			or skin != other.skin or tape_code != other.tape_code or gear_code != other.gear_code
+			or skin != other.skin or tape_code != other.tape_code or gear_code != other.gear_code \
+			or title_id != other.title_id
 
 
 # Saves and applies every field that differs from `since`.
@@ -162,4 +167,7 @@ func commit(since: PlayerDraft) -> void:
 	if gear_code != since.gear_code:
 		PlayerPrefs.gear_style_code = gear_code
 		NetworkManager.apply_local_gear_style(gear_code)
+	if title_id != since.title_id:
+		PlayerPrefs.equipped_title = title_id
+		NetworkManager.apply_local_title(title_id)
 	PlayerPrefs.save()

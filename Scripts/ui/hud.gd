@@ -706,8 +706,11 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	var star_names: Array[String] = []
 	var star_lines: Array[String] = []
 	var star_stripes: Array[Color] = []
+	var star_titles: Array[String] = []
 	for star: PlayerRecord in GameManager.get_stars_of_game():
 		star_names.append(star.display_name())
+		star_titles.append(TrophyCopy.title_name(star.title_id)
+				if Titles.is_known(star.title_id) else "")
 		if star.is_goalie:
 			var opp: int = 1 - star.team.team_id
 			star_lines.append(_goalie_star_line(GameManager.get_team_shots(opp),
@@ -718,7 +721,7 @@ func _present_game_over_screen(result_text: String, result_color: Color) -> void
 	_game_over_popup.present(_scorebug.home_score(), _scorebug.away_score(),
 			HudChrome.team_stripe(0), HudChrome.team_stripe(1),
 			result_text, result_color,
-			star_names, star_lines, star_stripes)
+			star_names, star_lines, star_stripes, star_titles)
 	_refresh_goal_saving()
 
 # Compact stat line for a star row. Scorers show goals/assists (plus the GWG

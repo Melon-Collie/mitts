@@ -149,6 +149,16 @@ static func raised_banners(totals: Dictionary, ledger: TrophyLedger) -> Array[St
 	return out
 
 
+# The titles the raised banners unlock, in catalogue order.
+static func earned_titles(totals: Dictionary, ledger: TrophyLedger) -> Array[String]:
+	var out: Array[String] = []
+	for banner: Dictionary in Banners.ALL:
+		var title: String = Banners.title_of(banner)
+		if not title.is_empty() and not out.has(title) and is_raised(banner, totals, ledger):
+			out.append(title)
+	return out
+
+
 static func _special_met(key: String, ctx: Dictionary) -> bool:
 	match key:
 		"win":

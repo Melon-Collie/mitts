@@ -111,6 +111,7 @@ var _number_warning: Label = null
 var _shoots_btns: Array[Button] = []
 var _position_btns: Array[Button] = []
 var _color_dropdown: PaletteDropdown = null
+var _title_row: PlayerTitleRow = null
 # BODY.
 var _height_slider: HSlider = null
 var _height_value: Label = null
@@ -163,6 +164,7 @@ func _ready() -> void:
 func open() -> void:
 	_saved = PlayerDraft.from_prefs()
 	_draft = _saved.copy()
+	_title_row.reload()
 	_painted_slot = -1
 	_sync_text_fields()
 	_refresh()
@@ -434,6 +436,10 @@ func _build_you(page: VBoxContainer) -> void:
 		_draft.color_slot = slot
 		_edited())
 	team_col.add_child(_color_dropdown)
+	_title_row = PlayerTitleRow.new(_row(page, &"PLAYER_TITLE_LABEL", false, full),
+			func(id: String) -> void:
+				_draft.title_id = id
+				_edited())
 
 
 func _warning(parent: Container) -> Label:
@@ -672,6 +678,7 @@ func _refresh() -> void:
 	PlayerRowKit.select(_shoots_btns, 0 if _draft.is_left_handed else 1)
 	PlayerRowKit.select(_position_btns, _POSITION_ORDER.find(_draft.position))
 	_color_dropdown.set_selected(_draft.color_slot)
+	_title_row.select(_draft.title_id)
 
 	_height_slider.set_value_no_signal(_draft.height)
 	_height_value.text = PlayerAttributes.inches_label(_draft.height)

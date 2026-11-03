@@ -298,6 +298,13 @@ func test_an_unknown_requirement_is_never_met() -> void:
 	assert_false(GamePuckRules.requirement_met("nope@5", {"nope": 99}, TrophyLedger.new()))
 
 
+func test_a_raised_banner_earns_its_title() -> void:
+	var ledger := TrophyLedger.new()
+	assert_eq(GamePuckRules.earned_titles({"goals": 50, "hits": 49}, ledger).size(), 0)
+	assert_eq(GamePuckRules.earned_titles({"goals": 50, "hits": 50}, ledger),
+			["power_forward"] as Array[String])
+
+
 func _banner(id: String) -> Dictionary:
 	for banner: Dictionary in Banners.ALL:
 		if String(banner["id"]) == id:

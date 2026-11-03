@@ -435,6 +435,8 @@ var tutorial_completion: Dictionary = {}
 # The stored part of the Game Pucks (TrophyLedger). Reconciled with Steam Cloud
 # as a union rather than newest-wins, since an earned puck is never un-earned.
 var trophy_ledger: TrophyLedger = TrophyLedger.new()
+# The Titles id the player wears, "" for none.
+var equipped_title: String = ""
 
 func _get_save_path() -> String:
 	for arg: String in OS.get_cmdline_user_args():
@@ -590,6 +592,7 @@ func save() -> void:
 	cfg.set_value("tutorials", "completion", tutorial_completion)
 	cfg.set_value("tutorials", "course_version", TUTORIAL_COURSE_VERSION)
 	cfg.set_value("trophies", "pucks", trophy_ledger.to_dict())
+	cfg.set_value("trophies", "title", equipped_title)
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -1203,6 +1206,7 @@ func _load() -> void:
 		if int(cfg.get_value("tutorials", "course_version", 1)) < TUTORIAL_COURSE_VERSION:
 			tutorial_completion = {}
 		trophy_ledger = TrophyLedger.from_variant(cfg.get_value("trophies", "pucks", {}))
+		equipped_title = Titles.coerce(str(cfg.get_value("trophies", "title", "")))
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

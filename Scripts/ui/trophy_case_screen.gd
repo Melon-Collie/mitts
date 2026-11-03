@@ -147,6 +147,10 @@ func _banner_card(banner: Dictionary, totals: Dictionary, ledger: TrophyLedger) 
 	var status: String = tr(&"TROPHY_RAISED") if is_up else tr(&"TROPHY_PROGRESS") % [
 		GamePuckRules.banner_progress(banner, totals, ledger), needs.size()]
 	col.add_child(_label(status, 12, _EARNED if is_up else MenuStyle.TEXT_MUTED, false))
+	var title: String = Banners.title_of(banner)
+	if not title.is_empty():
+		col.add_child(_label(tr(&"TROPHY_BANNER_TITLE") % TrophyCopy.title_name(title), 13,
+				_EARNED if is_up else MenuStyle.TEXT_DIM, false))
 	for req: String in needs:
 		var met: bool = GamePuckRules.requirement_met(req, totals, ledger)
 		var puck: String = Banners.requirement_puck(req)

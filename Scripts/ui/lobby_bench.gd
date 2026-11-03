@@ -28,6 +28,7 @@ func look_for(entry: Dictionary) -> PlayerLook:
 		look.skin_tone = NetworkManager.get_peer_skin_tone(peer_id)
 		look.tape_code = NetworkManager.get_peer_tape_code(peer_id)
 		look.gear_style_code = NetworkManager.get_peer_gear_style(peer_id)
+		look.title_id = NetworkManager.get_peer_title(peer_id)
 	look.player_name = entry.player_name
 	look.jersey_number = entry.get("jersey_number", 10)
 	look.is_left_handed = entry.is_left_handed

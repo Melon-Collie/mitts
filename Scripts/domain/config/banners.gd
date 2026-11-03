@@ -4,13 +4,16 @@ class_name Banners
 ##
 ## A requirement is a puck id ("hat_trick") or a ladder tier named by its target
 ## ("goals@50"). Banners are flat: one needs pucks, never other banners. BANNER_<ID>
-## in the locale catalogue names it. Rewards (titles) arrive in Phase 2.
+## in the locale catalogue names it, and `title` is the Titles id raising it
+## unlocks.
 
 const ALL: Array[Dictionary] = [
-	{"id": "power_forward", "needs": ["goals@50", "hits@50"]},
-	{"id": "shutdown", "needs": ["interceptions@50", "takeaways@50", "shots_blocked@50"]},
-	{"id": "two_way", "needs": ["goals@50", "assists@50", "interceptions@50", "takeaways@50"]},
-	{"id": "iron_man", "needs": ["games_played@100"]},
+	{"id": "power_forward", "needs": ["goals@50", "hits@50"], "title": "power_forward"},
+	{"id": "shutdown", "needs": ["interceptions@50", "takeaways@50", "shots_blocked@50"],
+		"title": "shutdown"},
+	{"id": "two_way", "needs": ["goals@50", "assists@50", "interceptions@50", "takeaways@50"],
+		"title": "two_way"},
+	{"id": "iron_man", "needs": ["games_played@100"], "title": "iron_man"},
 ]
 
 
@@ -29,6 +32,10 @@ static func requirement_puck(req: String) -> String:
 
 static func requirement_target(req: String) -> int:
 	return int(req.get_slice("@", 1)) if req.contains("@") else 0
+
+
+static func title_of(banner: Dictionary) -> String:
+	return String(banner.get("title", ""))
 
 
 static func name_key(id: String) -> StringName:

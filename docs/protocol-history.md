@@ -447,3 +447,10 @@ here whenever you bump, in the same format.
 #      the bit as clear, and its wind-ups are still recognized by shot state.
 # v92: PlayerStats gained `interceptions` (appended to to_array), so the stats
 #      player record is 20 values (peer_id + 19).
+# v93: titles (docs/game-pucks-plan.md, Phase 2). request_join and
+#      spawn_remote_skater carry the Titles id the player wears as a trailing
+#      String; the lobby roster entry's look (PlayerLook.cosmetics_to_wire)
+#      appends it, and the existing-player sync carries it at index 18. An
+#      older peer would send none and read none, but mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: the header's roster gains an
+#      optional "title_id" that an older replay simply lacks.

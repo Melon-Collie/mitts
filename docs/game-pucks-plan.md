@@ -1,7 +1,7 @@
 # Game Pucks and Banners — progression design record
 
-Status: **Phase 1 built** (the catalogue, the ledger and the Trophy Case);
-Phases 2–4 not started. Each phase ships as its own PR.
+Status: **Phases 1–2 built** (the catalogue, the ledger, the Trophy Case and
+titles); Phases 3–4 not started. Each phase ships as its own PR.
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done. Completing a named
@@ -69,6 +69,10 @@ rafters for something bigger.
 - **Bots wear anything.** A bot's look may use reward cosmetics as freely as the
   free ones. Hand-tailored bot identities come later, once the cosmetics are
   stable.
+- **Bots wear no title.** A title says what a player earned, so a bot's look
+  never carries one.
+- **The automatic career style is not a title yet.** The play-style label that
+  would update itself from a player's career waits on its own plan.
 
 ## Steamworks work
 
@@ -110,9 +114,14 @@ of its pucks are earned.
 
 ### Titles
 
-A title is an id plus a locale key. A player wears at most one, picked from the
-titles they have earned, and it travels with their look. In v1 every title comes
-from a banner.
+A title is an id plus a locale key (`Titles`, `TITLE_<ID>`). A player wears at
+most one, picked from the titles their raised banners have earned
+(`GamePuckRules.earned_titles`) on the player screen's Title row, saved as a
+pref, and it travels with their look: the join and spawn handshakes, the lobby
+roster, the existing-player sync and the replay header. In v1 every title comes
+from a banner. It shows under the name on the lobby slot card, after the name on
+the scoreboard (`SCOREBOARD_NAME_TITLE`) and beside the name in the Three Stars
+on the game-over screen.
 
 ### Catalogue
 
@@ -173,9 +182,9 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   banners with their pucks and progress, the ladders, and the single pucks.
   `TrophyCopy` holds the words it and the toast share.
 - An earn toast on the HUD's toast stack, at game-over and live for moments.
-- A title row in the player screen's YOU region.
-- The title on the lobby bench card, scoreboard, Three Stars and post-game
-  screen.
+- A title row in the player screen's YOU region (`PlayerTitleRow`).
+- The title on the lobby slot card, the scoreboard and the Three Stars on the
+  game-over screen.
 - Locked cosmetics. A cosmetic registry option (`GearModelRegistry`,
   `StickModelRegistry`, the tape palette) may carry the banner that unlocks it.
   The picker shows a locked option with what earns it; the lobby relays what a

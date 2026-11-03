@@ -31,6 +31,11 @@ static func banner_name(id: String) -> String:
 	return t(Banners.name_key(id))
 
 
+# A title's name; "" reads as the "None" choice.
+static func title_name(id: String) -> String:
+	return t(Titles.name_key(id)) if Titles.is_known(id) else t(&"PLAYER_TITLE_NONE")
+
+
 # The tier `target` is on its ladder, 0-based; -1 for a single puck or a target
 # that is not one of the ladder's tiers.
 static func tier_index(id: String, target: int) -> int:

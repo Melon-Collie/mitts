@@ -73,6 +73,28 @@ func test_every_banner_requirement_names_a_real_puck_and_tier() -> void:
 				assert_eq(target, 0, "%s names a tier on a single puck: %s" % [banner["id"], req])
 
 
+func test_every_banner_title_is_a_title_and_every_title_is_awarded() -> void:
+	var awarded: Dictionary = {}
+	for banner: Dictionary in Banners.ALL:
+		var title: String = Banners.title_of(banner)
+		if title.is_empty():
+			continue
+		assert_true(Titles.is_known(title), "%s awards unknown title %s" % [banner["id"], title])
+		awarded[title] = true
+	var seen: Dictionary = {}
+	for title: String in Titles.ALL:
+		assert_false(seen.has(title), "duplicate title %s" % title)
+		seen[title] = true
+		assert_true(awarded.has(title), "no banner awards the %s title" % title)
+		assert_ne(title, "", "\"\" is reserved for no title")
+
+
+func test_titles_coerce_to_none_when_unknown() -> void:
+	assert_eq(Titles.coerce("power_forward"), "power_forward")
+	assert_eq(Titles.coerce("grand_poobah"), "")
+	assert_eq(Titles.coerce(""), "")
+
+
 func test_every_puck_and_banner_is_named_in_the_locale_catalogue() -> void:
 	var keys: Dictionary = _catalogue_keys()
 	var missing: Array[String] = []
@@ -83,6 +105,10 @@ func test_every_puck_and_banner_is_named_in_the_locale_catalogue() -> void:
 				missing.append(String(key))
 	for banner: Dictionary in Banners.ALL:
 		var key: String = String(Banners.name_key(String(banner["id"])))
+		if not keys.has(key):
+			missing.append(key)
+	for title: String in Titles.ALL:
+		var key: String = String(Titles.name_key(title))
 		if not keys.has(key):
 			missing.append(key)
 	assert_true(missing.is_empty(), "missing locale rows: " + ", ".join(missing))
