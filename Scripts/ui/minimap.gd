@@ -289,7 +289,7 @@ func _paint_dynamic(ci: Control) -> void:
 	var puck: Puck = GameManager.puck
 	var carrier: Skater = null
 	if puck != null and is_instance_valid(puck):
-		carrier = puck.get_carrier()
+		carrier = puck.drawn_carrier()
 
 	# The local skater draws last among the skaters so a pile-up never hides it.
 	var local_record: PlayerRecord = null

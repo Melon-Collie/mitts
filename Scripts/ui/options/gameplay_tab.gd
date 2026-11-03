@@ -8,6 +8,7 @@ extends OptionsTab
 var _locale_btn: OptionButton = null
 var _attack_up_check: CheckButton = null
 var _self_beacon_mode_btn: OptionButton = null
+var _puck_cues_check: CheckButton = null
 var _freeplay_goalie_btn: OptionButton = null
 var _share_stats_check: CheckButton = null
 var _colors_file: CustomDataFile = null
@@ -49,6 +50,13 @@ func _build_content() -> void:
 	_self_beacon_mode_btn.selected = PlayerPrefs.self_beacon_mode
 	_self_beacon_mode_btn.item_selected.connect(func(_i: int) -> void: _notify_changed())
 	add_child(_field_row("Self Marker", _self_beacon_mode_btn))
+
+	_puck_cues_check = CheckButton.new()
+	_puck_cues_check.set_pressed_no_signal(PlayerPrefs.puck_cues_enabled)
+	SoundManager.wire_button(_puck_cues_check)
+	_puck_cues_check.toggled.connect(func(_p: bool) -> void: _notify_changed())
+	add_child(_field_row(tr("OPTIONS_PUCK_CUES"), _puck_cues_check))
+	add_child(_row_note(tr("OPTIONS_PUCK_CUES_NOTE")))
 
 	# Free-play goalie difficulty — a personal-sandbox knob, separate from the
 	# hosted/lobby goalie setting (which lives in the lobby settings panel).
@@ -104,6 +112,7 @@ func read_controls() -> Dictionary:
 	return {
 		"attack_up": _attack_up_check.button_pressed,
 		"self_beacon_mode": _self_beacon_mode_btn.selected,
+		"puck_cues_enabled": _puck_cues_check.button_pressed,
 		"freeplay_goalie_difficulty": _freeplay_goalie_btn.selected,
 		"locale": _selected_locale(),
 		"share_gameplay_stats": _share_stats_check.button_pressed,
@@ -116,5 +125,6 @@ func read_controls() -> Dictionary:
 func apply_values(v: Dictionary) -> void:
 	_attack_up_check.set_pressed_no_signal(v.attack_up)
 	_self_beacon_mode_btn.selected = v.self_beacon_mode
+	_puck_cues_check.set_pressed_no_signal(v.puck_cues_enabled)
 	_freeplay_goalie_btn.selected = v.freeplay_goalie_difficulty
 	_share_stats_check.set_pressed_no_signal(v.share_gameplay_stats)
