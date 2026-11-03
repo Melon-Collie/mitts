@@ -527,3 +527,38 @@ The better search then moved the top fist's square roll, which had been read
 as the roll the solve preferred at a reference carry — a poor pose's roll,
 −181°. It is now geometry (`ArmAnatomy.roll_backing`): the back of the glove
 turned ahead and out to its own side, 166°, as a top hand holds a stick.
+
+## 15. Phase 3 record
+
+### The table
+
+`data/arm_envelope.json`, derived on the corrected body
+(docs/body-proportions-plan.md) by `.claude/hooks/derive-arm-envelope.sh`
+in resumable parts, each cell from a freshly built carrier (skated to his
+carrying speed and fold first), so a cell's trunk does not depend on the
+cells derived before it (skating, the stride's phase at the end of a settle
+did). Of 273 cells, standing and skating: 67" 165 and 159, 73" 179 and 174,
+80" 190 and 173. Ahead
+nothing nearer than about a metre holds; round either side the blade holds in
+tight, its reach falling off round behind.
+`test_arm_envelope_is_current.gd` re-derives a sample against it.
+
+### Switched on, what it found
+
+The carry reads it only with `SkaterIKCoordinator.derived_carry_enabled`, off
+by default. On, the default tier fails 18 tests, the work this phase has left:
+
+- the drawn arm stretched to 1.06–1.30 of itself in the held poses
+  (`test_arms_reach_their_hands.gd`: the carry, the cross-body reach, the wide
+  forehand, the wrister's aim and the slapper's coil), and the
+  bottom hand 0.85 m off the shaft in a carry: the envelope's hands are placed
+  in a frame the drawn arm does not reach them in;
+- the pickup and the drop jump (top arm 253, stick 270 mm/tick² against 47
+  and 43): the envelope's hands come in or go out in a tick;
+- a puck pulled in sits at the band's floor, ~1.26 m ahead, where the carry's
+  own floor is 0.83 m, so the in-tight reads (the toe on the puck, the head
+  nodding down to it, 8° against 15°, the steep shaft) never arise;
+- the dangle's face changes (a wobble three times a stroke, an uneven sweep
+  round the body) and the carried reach's average (1.59 against 1.33 m);
+- in the bots' duels, the points hold the zone while a teammate carries 87%
+  of the time against 95%.
