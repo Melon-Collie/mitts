@@ -94,6 +94,11 @@ var coverage_downgraded: bool = false
 var _forechecking: bool = false
 var forecheck_margin_s: float = -INF
 var forecheck_depth_margin_s: float = -INF
+# 5v5 DZONE: the zone role, and its holder, that owns a carrier coming at our net
+# at pace (AIRoleSlots.carrier_owner); NONE / -1 when the area rule stands.
+var _pressure_slot_override: int = AIRoleSlots.Slot.NONE
+var _pressure_owner_peer: int = -1
+var _zone_peers: Array[int] = []
 # Where the puck was last carried, read every batch so a release is placed to
 # within one; INF until it has been.
 var _last_carry_pos: Vector3 = Vector3.INF
@@ -290,6 +295,7 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	# given them a slot.
 	for excluded_pid: int in _excluded_peers:
 		slot_assignments.erase(excluded_pid)
+	_elect_zone_carrier_owner(snapshot, prev_assignments)
 
 	# Excluded peers are already absent from slot_assignments, so they are never
 	# picked as defenders here.
@@ -304,6 +310,31 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	if snapshot != null and snapshot.puck_state != null:
 		ping_carrier = snapshot.puck_state.carrier_peer_id
 	ping_directives.apply_overrides(slot_assignments, threat_assignments, ping_carrier)
+
+
+# 5v5 DZONE: which zone role owns a carrier coming at our net at pace — the
+# soonest goal-side holder (AIRoleSlots.carrier_owner), the D who rode him in
+# keeping him across the line (last tick's owner, else BACK_STRONG's holder,
+# takes the hysteresis).
+func _elect_zone_carrier_owner(snapshot: WorldSnapshot, prev_assignments: Dictionary) -> void:
+	var prev_owner: int = _pressure_owner_peer if _pressure_owner_peer != -1 \
+			else AIRoleSlots.prev_holder(prev_assignments, AIRoleSlots.Slot.PRESSURE)
+	_pressure_slot_override = AIRoleSlots.Slot.NONE
+	_pressure_owner_peer = -1
+	if team_size < 5 or state != AIPossessionState.State.DZONE:
+		return
+	_zone_peers.clear()
+	for pid: int in slot_assignments:
+		if AIRoleSlots5.is_zone_slot(slot_assignments[pid]):
+			_zone_peers.append(pid)
+	_pressure_owner_peer = AIRoleSlots.carrier_owner(snapshot, team_id, _own_goal_z,
+			_team_id_by_peer, _zone_peers, _caps_by_peer, prev_owner)
+	if _pressure_owner_peer != -1:
+		_pressure_slot_override = slot_assignments[_pressure_owner_peer]
+
+
+func pressure_slot_override() -> int:
+	return _pressure_slot_override
 
 
 # The man-on-threat partition for the current tick. DZONE and TRANS_DEFENSE
@@ -355,8 +386,8 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 	# The defenders are every body whose job is a man: MARK and, in 5v5 D-zone
 	# coverage, the four zone roles not on the puck. A zone role's area enters as
 	# ELIGIBILITY (Scripts/domain/ai/CLAUDE.md → "Covering a man is one behavior").
-	var pressure_slot: int = AIZoneCoverage.pressure_owner(
-			_strong_x, _own_goal_z, snapshot.puck_state.position)
+	var pressure_slot: int = AIZoneCoverage.pressure_slot(self, _strong_x, _own_goal_z,
+			snapshot.puck_state.position)
 	var defenders: Array[int] = []
 	var defender_pos: Dictionary = {}
 	var defender_vel: Dictionary = {}
@@ -399,6 +430,9 @@ func _compute_threat_assignments(snapshot: WorldSnapshot,
 		if pid == carrier_pid:
 			continue
 		var mp: Vector3 = snapshot.skater_states[pid].position
+		if state == AIPossessionState.State.DZONE \
+				and not AIZoneCoverage.in_coverage_ice(_own_goal_z, mp):
+			continue
 		men.append(pid)
 		man_pos[pid] = mp
 		# Area eligibility, built as the men are collected. The incumbent gets a
@@ -592,6 +626,7 @@ func build_view() -> void:
 	v.team_size_val = team_size
 	v.icing_enforced_val = icing_enforced()
 	v.ping_chase_peer_val = ping_directives.chase_peer()
+	v.pressure_slot_override_val = _pressure_slot_override
 	_freeze_int_dict(slot_assignments, v.slot_by_peer)
 	_freeze_int_dict(threat_assignments, v.assigned_threat_by_peer)
 	_freeze_int_dict(_position_by_peer, v.position_by_peer)

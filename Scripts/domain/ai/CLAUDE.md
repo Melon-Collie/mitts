@@ -491,6 +491,11 @@ new coverage scheme is a new answer to "who is mine", never new positioning code
 Position and velocity come from one snapshot entry, so a stand cannot ride a body
 its geometry isn't built on.
 
+Zone coverage picks a man up on its own ice (`AIZoneCoverage.in_coverage_ice`:
+our zone, out to a cover envelope past the line), in the partition and in
+MARK's no-man fallback alike. A man still up the ice is the rush's trailer, and
+escorting him walks the coverage out of its zone while the carrier is in it.
+
 `TeamBrain` matches every man-covering body at once, and a zone role's AREA
 enters as ELIGIBILITY — which men it may be handed — rather than as a private
 search. Do not give the zone roles private argmaxes over their areas: the areas
@@ -508,7 +513,16 @@ lengths at their blue line, 2 at the red line, 1 stick at ours, and inside our o
 zone "1 stick / contact: you are on him" (`docs/transition-defense-plan.md` §6).
 So the TRANS_DEFENSE → DZONE re-election is not a geometry discontinuity: *the D
 who gapped a carrier through the neutral zone keeps him into the zone; there is
-no handoff at the line.* The same holds for the route (above) and for the hit:
+no handoff at the line.* The election keeps him too: while a carrier comes at
+our net at pace, the puck is owned by the body goal-side of him whose stick gets
+onto his line farthest from our net (`AIRoleSlots.carrier_owner`, the cut-off
+race, last tick's owner or BACK_STRONG's holder taking the hysteresis) — 3v3's
+PRESSURE, and in 5v5 the zone role that body holds, published as
+`TeamStrategyView.pressure_slot_override` over the area rule
+(`AIZoneCoverage.pressure_slot`). Raced to where the puck is, the backchecker
+he has just passed wins it and never catches him, and the D who rode him back
+pays a reversal his line never asks of him: a lone carrier at speed walked to
+the net front past five defenders (`test_lone_carrier_entry.gd`). The same holds for the route (above) and for the hit:
 the pressurer commits a body check only with support behind
 (`AILastManDiscipline.has_support_behind`) or a cover its caller has already
 priced (the pinch's rotation), because a committed hit loads him on

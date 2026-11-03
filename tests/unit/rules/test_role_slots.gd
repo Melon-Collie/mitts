@@ -41,6 +41,34 @@ func _resolver(skaters: Array) -> Dictionary:
 	return team_map
 
 
+# A carrier on the wing coming at our net at `carrier_vel`; our D riding back
+# goal-side of him (100), our backchecker a stride behind him and nearer the
+# puck (110), the third man at the net (120).
+func _entry_pressure(carrier_vel: Vector3) -> int:
+	var skaters: Array = [
+			[100, 0, Vector3(-4.0, 0.0, 17.0), Vector3(0.0, 0.0, 6.0)],
+			[110, 0, Vector3(-7.0, 0.0, 8.5), Vector3(0.0, 0.0, 6.0)],
+			[120, 0, Vector3(3.0, 0.0, 22.0)],
+			[200, 1, Vector3(-8.0, 0.0, 10.0), carrier_vel],
+	]
+	var a: Dictionary[int, int] = AIRoleSlots.assign(_make_snapshot(skaters, 200),
+			TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE, _resolver(skaters), {})
+	for pid: int in a:
+		if a[pid] == AIRoleSlots.Slot.PRESSURE:
+			return pid
+	return -1
+
+
+func test_a_carrier_at_pace_is_kept_by_the_body_goal_side_of_him() -> void:
+	# Raced to where the puck is, the backchecker wins it, but he is a stride
+	# behind a man coming at our net faster than he is and never catches him.
+	assert_eq(_entry_pressure(Vector3(0.0, 0.0, 9.0)), 100)
+
+
+func test_a_stalled_carrier_goes_to_the_soonest_body() -> void:
+	assert_eq(_entry_pressure(Vector3.ZERO), 110)
+
+
 func test_assign_dzone_distributes_slots() -> void:
 	# PRESSURE = closest to the puck; the other two MARK a man each. Which
 	# marker ends up net-front vs. weak-side is decided downstream by the threat

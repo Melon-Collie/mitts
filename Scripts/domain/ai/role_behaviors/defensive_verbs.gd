@@ -177,10 +177,7 @@ static func cut_off(ctx: RoleContext, ap: AICarrierApproach, d: RoleDecision) ->
 
 
 # The share of the carrier's way to our net at which I first get there before
-# him: each on his arrival clock from where he is and how he is moving (the
-# carrier at his free top speed, a slight over-read in the safe direction), my
-# stick reaching it a stick's length at my top speed before my body does. Where
-# I beat him nowhere short of the crease, the crease's top (AIRoleRushD.RETREAT_FINISH_M).
+# him (cut_off_m over his ice to the net).
 static func cut_off_share(ctx: RoleContext, ap: AICarrierApproach) -> float:
 	var finish: float = ap.net_dist - AIRoleRushD.RETREAT_FINISH_M
 	if finish <= 0.0:
@@ -188,20 +185,34 @@ static func cut_off_share(ctx: RoleContext, ap: AICarrierApproach) -> float:
 	var peer: int = ctx.snapshot.puck_state.carrier_peer_id \
 			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
 	var caps: AISkaterCaps = ctx.caps_by_peer.get(peer) if peer != -1 else null
-	var his_speed: float = caps.max_speed if caps != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
-	var his_accel: float = caps.max_accel if caps != null else GameRules.DEFAULT_SKATER_THRUST_M_S2
-	var reach: float = AIRoleRushD.stick_m(ctx)
+	return cut_off_m(ctx.self_pos, ctx.self_velocity, ctx.self_max_speed,
+			ctx.self_max_accel, AIRoleRushD.stick_m(ctx), ap.carrier_pos, ap.carrier_vel,
+			ap.dir_net, finish, caps) / ap.net_dist
+
+
+# How far down the carrier's line to our net (`dir_net`, out to `finish_m`) the
+# first ice is that a body at `self_pos` gets his stick to before the carrier:
+# each on his arrival clock from where he is and how he is moving (the carrier at
+# his free top speed, `his_caps` or the league's, a slight over-read in the safe
+# direction), the stick reaching it `reach_m` at the body's top speed before the
+# body does. `finish_m` (the crease's top) where he beats him nowhere short of it.
+static func cut_off_m(self_pos: Vector3, self_vel: Vector3, self_vmax: float,
+		self_accel: float, reach_m: float, carrier_pos: Vector3, carrier_vel: Vector3,
+		dir_net: Vector3, finish_m: float, his_caps: AISkaterCaps) -> float:
+	var his_speed: float = his_caps.max_speed if his_caps != null \
+			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var his_accel: float = his_caps.max_accel if his_caps != null \
+			else GameRules.DEFAULT_SKATER_THRUST_M_S2
 	var s: float = 0.0
-	while s < finish:
-		var at: Vector3 = ap.carrier_pos + ap.dir_net * s
-		var mine: float = AIArrival.time_to_arrive(ctx.self_pos, at, ctx.self_velocity,
-				ctx.self_max_speed, ctx.self_max_accel)
-		var his: float = AIArrival.time_to_arrive(ap.carrier_pos, at, ap.carrier_vel,
-				his_speed, his_accel) + reach / maxf(ctx.self_max_speed, 0.1)
+	while s < finish_m:
+		var at: Vector3 = carrier_pos + dir_net * s
+		var mine: float = AIArrival.time_to_arrive(self_pos, at, self_vel, self_vmax, self_accel)
+		var his: float = AIArrival.time_to_arrive(carrier_pos, at, carrier_vel,
+				his_speed, his_accel) + reach_m / maxf(self_vmax, 0.1)
 		if mine <= his:
-			return s / ap.net_dist
+			return s
 		s += CUT_OFF_STEP_M
-	return finish / ap.net_dist
+	return finish_m
 
 
 # Fills `out` with the carrier a defender owns; false only when there is no puck

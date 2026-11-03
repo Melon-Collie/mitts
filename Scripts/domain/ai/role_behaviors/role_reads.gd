@@ -193,11 +193,12 @@ static func defence_possession(ctx: RoleContext,
 
 
 # Fills parallel arrays of opponent positions (led by lead_threat when
-# `anticipate`) and raw states, plus ctx.scratch_opp_caps / scratch_opp_ids.
+# `anticipate`) and raw states, plus ctx.scratch_opp_caps / scratch_opp_ids;
+# `coverage_ice_only` skips those not on AIZoneCoverage.in_coverage_ice.
 static func collect_opponents(ctx: RoleContext,
 		out_positions: Array[Vector3],
 		out_states: Array[SkaterNetworkState],
-		anticipate: bool = false) -> void:
+		anticipate: bool = false, coverage_ice_only: bool = false) -> void:
 	out_positions.clear()
 	out_states.clear()
 	ctx.scratch_opp_caps.clear()
@@ -206,6 +207,9 @@ static func collect_opponents(ctx: RoleContext,
 	for pid: int in ctx.snapshot.skater_states:
 		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id:
 			var s: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+			if coverage_ice_only and not AIZoneCoverage.in_coverage_ice(
+					ctx.defending_goal_pos.z, s.position):
+				continue
 			out_positions.append(lead_threat(s.position, s.velocity, ctx.defensive_anticipation_scale) \
 					if anticipate else s.position)
 			out_states.append(s)

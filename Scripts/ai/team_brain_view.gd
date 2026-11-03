@@ -14,6 +14,7 @@ var carrier_lane_val: int = 0
 var team_size_val: int = GameRules.DEFAULT_TEAM_SIZE
 var icing_enforced_val: bool = false
 var ping_chase_peer_val: int = -1
+var pressure_slot_override_val: int = AIRoleSlots.Slot.NONE
 var slot_by_peer: Dictionary[int, int] = {}
 var assigned_threat_by_peer: Dictionary[int, int] = {}
 var position_by_peer: Dictionary[int, int] = {}
@@ -64,6 +65,10 @@ func ping_pass_target(peer_id: int) -> int:
 
 func ping_chase_peer() -> int:
 	return ping_chase_peer_val
+
+
+func pressure_slot_override() -> int:
+	return pressure_slot_override_val
 
 
 func get_team_size() -> int:

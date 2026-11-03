@@ -2956,7 +2956,7 @@ func apply_stick_lift_input(input: InputState) -> void:
 # True if our current role is on the puck defensively — the only roles that jab:
 # the PRESSURER slots (AIRoleSlots.pressures_puck), a station role pressuring
 # this beat, and in the 5v5 zone the one area role that owns the puck
-# (AIZoneCoverage.pressure_owner).
+# (AIZoneCoverage.pressure_slot).
 func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	if _current_strategy == null:
 		return false
@@ -2966,8 +2966,8 @@ func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	return AIRoleSlots.pressures_puck(slot) or _owns_zone_pressure(slot, snapshot)
 
 
-# Whether `slot` is the 5v5 zone area that owns the puck this tick
-# (AIZoneCoverage.pressure_owner). Ownership moves with the puck, so it is
+# Whether `slot` is the 5v5 zone role that owns the puck this tick
+# (AIZoneCoverage.pressure_slot). Ownership moves with the puck, so it is
 # resolved per call, never fixed to a slot.
 func _owns_zone_pressure(slot: int, snapshot: WorldSnapshot) -> bool:
 	if not AIRoleSlots5.is_zone_slot(slot) or snapshot == null \
@@ -2975,8 +2975,8 @@ func _owns_zone_pressure(slot: int, snapshot: WorldSnapshot) -> bool:
 		return false
 	var strong_x: float = _current_strategy.strong_x() if _current_strategy != null \
 			else 1.0
-	return AIZoneCoverage.pressure_owner(strong_x, _own_goal_dir * GameRules.GOAL_LINE_Z,
-			snapshot.puck_state.position) == slot
+	return AIZoneCoverage.pressure_slot(_current_strategy, strong_x,
+			_own_goal_dir * GameRules.GOAL_LINE_Z, snapshot.puck_state.position) == slot
 
 
 # The carried puck's position (the jab aim point), or INF with no carrier.

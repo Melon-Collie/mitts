@@ -399,3 +399,71 @@ func test_the_area_owning_the_puck_covers_nobody() -> void:
 	for def_pid: int in brain.threat_assignments:
 		assert_ne(brain.get_slot(def_pid), owner_slot,
 				"the pressure owner (slot %d) was also assigned a man" % owner_slot)
+
+
+# ── A carrier at pace across our line ────────────────────────────────────────
+
+# 5v5: their carrier just across our line on the left wall at `carrier_vel`, his
+# two trailers still in the neutral zone; our D who rode him back (130) goal-side
+# of him, our backchecker (110) a stride behind him.
+func _entry_snapshot(carrier_vel: Vector3) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	for entry: Array in [
+			[100, 0, Vector3(1.0, 0.0, 16.0), Vector3(0.0, 0.0, 4.0)],
+			[110, 0, Vector3(-7.5, 0.0, 6.5), Vector3(0.0, 0.0, 6.0)],
+			[120, 0, Vector3(5.0, 0.0, 15.0), Vector3(0.0, 0.0, 4.0)],
+			[130, 0, Vector3(-4.0, 0.0, 15.5), Vector3(0.0, 0.0, 6.5)],
+			[140, 0, Vector3(1.5, 0.0, 12.0), Vector3(0.0, 0.0, 5.0)],
+			[200, 1, Vector3(-8.0, 0.0, 9.0), carrier_vel],
+			[210, 1, Vector3(-1.0, 0.0, -4.0), Vector3(0.0, 0.0, 9.0)],
+			[220, 1, Vector3(1.0, 0.0, -7.0), Vector3(0.0, 0.0, 9.0)]]:
+		var s := SkaterNetworkState.new()
+		s.position = entry[2]
+		s.velocity = entry[3]
+		snap.skater_states[entry[0]] = s
+	var puck := PuckNetworkState.new()
+	puck.carrier_peer_id = 200
+	puck.position = Vector3(-8.0, 0.0, 9.0)
+	snap.puck_state = puck
+	return snap
+
+
+func _entry_brain() -> TeamBrain:
+	var team_map: Dictionary = {100: 0, 110: 0, 120: 0, 130: 0, 140: 0,
+			200: 1, 210: 1, 220: 1}
+	return TeamBrain.new(TEAM_ID, team_map, {}, 5,
+			{100: 0, 110: 1, 120: 2, 130: 3, 140: 4})
+
+
+func test_a_carrier_at_pace_is_kept_by_the_zone_role_goal_side_of_him() -> void:
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _entry_snapshot(Vector3(0.0, 0.0, 9.0)))
+	assert_eq(brain.state, AIPossessionState.State.DZONE, "fixture sanity: DZONE")
+	var owner_slot: int = brain.pressure_slot_override()
+	assert_ne(owner_slot, AIRoleSlots.Slot.NONE, "a carrier at pace has an owner")
+	var holder: int = -1
+	for pid: int in brain.slot_assignments:
+		if brain.slot_assignments[pid] == owner_slot:
+			holder = pid
+	assert_ne(holder, 110, "not the backchecker he has already passed")
+	brain.build_view()
+	assert_eq(brain.get_view().pressure_slot_override(), owner_slot, "the view carries it")
+
+
+func test_a_stalled_carrier_leaves_the_puck_to_its_area() -> void:
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _entry_snapshot(Vector3.ZERO))
+	assert_eq(brain.pressure_slot_override(), AIRoleSlots.Slot.NONE)
+
+
+func test_zone_coverage_takes_no_man_still_up_the_ice() -> void:
+	# His trailers are in the neutral zone: escorting them walks the coverage
+	# away from the puck.
+	var brain: TeamBrain = _entry_brain()
+	brain.force_retick()
+	brain.tick(0.001, _entry_snapshot(Vector3(0.0, 0.0, 9.0)))
+	for def_pid: int in brain.threat_assignments:
+		assert_false(brain.threat_assignments[def_pid] in [210, 220],
+				"peer %d covers a man up the ice" % def_pid)

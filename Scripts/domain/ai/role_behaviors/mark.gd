@@ -10,7 +10,9 @@ class_name AIRoleMark
 #
 #     -max over opps of AIPossessionValue.threat_of_carrier(opp)
 #
-# against our team with us at the candidate.
+# against our team with us at the candidate — with the puck in our zone, over
+# the opponents on coverage ice (AIZoneCoverage.in_coverage_ice), as the
+# partition reads them.
 
 
 static func decide(ctx: RoleContext) -> RoleDecision:
@@ -23,7 +25,10 @@ static func decide(ctx: RoleContext) -> RoleDecision:
 
 	var opp_positions: Array[Vector3] = ctx.scratch_opp_positions
 	var opp_states: Array[SkaterNetworkState] = ctx.scratch_opp_states
-	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states, true)
+	var puck_in_zone: bool = ctx.snapshot != null and ctx.snapshot.puck_state != null \
+			and AIZoneCoverage.in_coverage_ice(ctx.defending_goal_pos.z,
+					ctx.snapshot.puck_state.position)
+	AIRoleReads.collect_opponents(ctx, opp_positions, opp_states, true, puck_in_zone)
 	if opp_positions.is_empty():
 		d.target_position = ctx.self_pos
 		return d
