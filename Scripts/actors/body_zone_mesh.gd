@@ -18,7 +18,8 @@ var _indices := PackedInt32Array()
 var _skinned: bool = false
 
 
-# Adds one surface's arrays as `zone`. With `bone` >= 0 every vertex is made rigid
+# Adds one surface's arrays as `zone`, or with `zone` < 0 as the zones its UV2.x
+# already names (a ConnectedSkinBuilder's). With `bone` >= 0 every vertex is made rigid
 # to that bone and `xform` is baked in first (normals by its inverse transpose, so
 # a non-uniform scale shades as it would on a node, and a mirror's winding
 # reversed, as a node's would be); otherwise the surface keeps the bones and
@@ -35,8 +36,11 @@ func add(arrays: Array, zone: int, bone: int = -1,
 		var nrm: Vector3 = (normals as PackedVector3Array)[i] if normals != null else Vector3.UP
 		_normals.append((normal_basis * nrm).normalized())
 	_append_or_fill_v2(_uvs, arrays[Mesh.ARRAY_TEX_UV], n, Vector2.ZERO)
-	for i: int in n:
-		_uv2s.append(Vector2(float(zone), 0.0))
+	if zone < 0:
+		_uv2s.append_array(arrays[Mesh.ARRAY_TEX_UV2] as PackedVector2Array)
+	else:
+		for i: int in n:
+			_uv2s.append(Vector2(float(zone), 0.0))
 	var colors: Variant = arrays[Mesh.ARRAY_COLOR]
 	if colors != null:
 		_colors.append_array(colors as PackedColorArray)

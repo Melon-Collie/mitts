@@ -383,7 +383,7 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 		mean_tuck += SkaterJerseyHem.tuck_share(tuck, TAU * float(k) / 36.0) / 36.0
 	var hips: float = lerpf((1.0 + SkaterJerseyHem.CARRY_BACK) * 0.5, 1.0, mean_tuck)
 	var hem: int = b.vertex(hem_centre, [Bind.TORSO, Bind.TAIL], [1.0 - hips, hips])
-	fan(b, rings[rings.size() - 1], hem, Vector2(0.75, 0.75), torso_zone,
+	b.fan(rings[rings.size() - 1], hem, Vector2(0.75, 0.75), torso_zone,
 			Vector3(0.0, hem_y + 0.1, 0.0) + lift)
 	return holes
 
@@ -424,7 +424,7 @@ static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, l
 		b.quad(neckline[k], neckline[k1], lip[k1], lip[k], cap + t0 * 0.24, cap + t1 * 0.24,
 				cap + t1 * 0.20, cap + t0 * 0.20, torso_zone, below)
 	var foot: int = b.vertex(axis + Vector3(0.0, _NECK_FOOT_Y_M, 0.0), [Bind.TORSO], [1.0])
-	fan(b, lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
+	b.fan(lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
 
 
 # The jersey from the collar to the hem as (y, radius, sway), torso-local, its
@@ -590,19 +590,6 @@ static func _torso_vertex(b: ConnectedSkinBuilder, p: Vector3, rest_y: float, th
 	return b.vertex(p, [Bind.TORSO, Bind.TAIL], [1.0 - hips, hips])
 
 
-# A fan from `centre` over a closed ring of vertex ids, cap UVs round `uv_centre`
-# as SkaterMeshBuilder._cap lays them.
-static func fan(b: ConnectedSkinBuilder, ring: PackedInt32Array, centre: int,
-		uv_centre: Vector2, fan_zone: int, inside: Vector3) -> void:
-	var n: int = ring.size()
-	for k: int in n:
-		var t0: float = TAU * float(k) / float(n)
-		var t1: float = TAU * float(k + 1) / float(n)
-		b.tri(centre, ring[k], ring[(k + 1) % n], uv_centre,
-				uv_centre + Vector2(sin(t0), cos(t0)) * 0.24,
-				uv_centre + Vector2(sin(t1), cos(t1)) * 0.24, fan_zone, inside)
-
-
 # One sleeve on `side`, grown from its armhole loop through the elbow to the
 # wrist inside the glove.
 static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt32Array) -> void:
@@ -625,25 +612,25 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var axes: Array[Transform3D] = []
 	var vs := PackedFloat32Array()
 	for r: Vector3 in _UPPER_RINGS:
-		var frame: Transform3D = _round_elbow(frames, r.z * 0.5)
+		var frame: Transform3D = round_elbow(frames, r.z * 0.5)
 		if rings.is_empty():
-			var first: PackedInt32Array = _limb_ring(b, upper, r.x, r.y, 0.0, shoulder_bind,
+			var first: PackedInt32Array = limb_ring(b, upper, r.x, r.y, 0.0, shoulder_bind,
 					upper_bind, _FIRST_RING_ARM_SHARE.x)
-			_hang_underside(b, first, arm[0], [shoulder_bind, upper_bind],
+			hang_underside(b, first, arm[0], [shoulder_bind, upper_bind],
 					_FIRST_RING_ARM_SHARE)
 			rings.append(first)
 		else:
-			rings.append(_limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
+			rings.append(limb_ring(b, frame, r.x - BIND_ARM_SEGMENT_M, r.y, _ELBOW_PAD_M * r.z,
 					upper_bind, elbow_bind, r.z))
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(r.x))
-	rings.append(_limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
+	rings.append(limb_ring(b, frames[1], 0.0, _ELBOW_RADIUS_M, _ELBOW_PAD_M,
 			elbow_bind, elbow_bind, 1.0))
 	axes.append(frames[1])
 	vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M))
 	for r: Vector3 in _FORE_RINGS:
-		var frame: Transform3D = _round_elbow(frames, 1.0 - r.z * 0.5)
-		rings.append(_limb_ring(b, frame, r.x, r.y, _ELBOW_PAD_M * r.z, fore_bind, elbow_bind, r.z))
+		var frame: Transform3D = round_elbow(frames, 1.0 - r.z * 0.5)
+		rings.append(limb_ring(b, frame, r.x, r.y, _ELBOW_PAD_M * r.z, fore_bind, elbow_bind, r.z))
 		axes.append(frame)
 		vs.append(SleevePaint.pos_of(BIND_ARM_SEGMENT_M + r.x))
 
@@ -651,7 +638,7 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	# joining them: no shape of its own at rest, but riding halfway from the
 	# girdle to the shoulder's middle, so the turn between the chest and the arm
 	# bends over two bands, not one that stretches flat or turns inside out.
-	var seam: PackedInt32Array = _aligned(b, hole, rings[0])
+	var seam: PackedInt32Array = b.aligned(hole, rings[0])
 	var girdle_bind: int = Bind.GIRDLE_L if left else Bind.GIRDLE_R
 	var between := PackedInt32Array()
 	for m: int in LIMB_SIDES:
@@ -670,8 +657,8 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 	var uv: Callable = func(p: Vector3) -> Vector2:
 		return Vector2(_sleeve_u(p, upper),
 				SleevePaint.pos_of(maxf((p - arm[0]).dot(upper.basis.y), 0.0)))
-	_join(b, seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
-	_join(b, between, rings[0], sleeve_zone, uv,
+	b.join(seam, between, sleeve_zone, uv, (b.centroid(seam) + b.centroid(between)) * 0.5)
+	b.join(between, rings[0], sleeve_zone, uv,
 			(b.centroid(between) + b.centroid(rings[0])) * 0.5)
 	for i: int in rings.size() - 1:
 		var inside: Vector3 = (b.centroid(rings[i]) + b.centroid(rings[i + 1])) * 0.5
@@ -694,10 +681,11 @@ static func _build_sleeve(b: ConnectedSkinBuilder, side: float, hole: PackedInt3
 
 
 # The elbow's frame turned `f` of the way round its bend from the upper arm (0)
-# to the forearm (1). A ring riding that share of the elbow's bones is built
+# to the forearm (1), over sleeve_frames' three. The keeper's sleeves
+# (KeeperJerseyMesh) are laid with this and the two below too. A ring riding that share of the elbow's bones is built
 # turned that far, so the bind's own bend is the same arc the skin sweeps when
 # posed: a curve at rest, not a corner split over one ring.
-static func _round_elbow(frames: Array[Transform3D], f: float) -> Transform3D:
+static func round_elbow(frames: Array[Transform3D], f: float) -> Transform3D:
 	return Transform3D(frames[0].basis.slerp(frames[2].basis, f), frames[1].origin)
 
 
@@ -721,7 +709,7 @@ static func _sleeve_u(p: Vector3, frame: Transform3D) -> float:
 # A ring round a limb segment `s` down `frame`'s Y, `radius` across, with
 # `bulge` more at its +Z point falling off round it, riding `own` and
 # `elbow_share` of it on `elbow`.
-static func _limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, radius: float,
+static func limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, radius: float,
 		bulge: float, own: int, elbow: int, elbow_share: float) -> PackedInt32Array:
 	var binds: Array = [own]
 	var weights: Array = [1.0]
@@ -740,46 +728,9 @@ static func _limb_ring(b: ConnectedSkinBuilder, frame: Transform3D, s: float, ra
 
 # Re-weights `ring` from `shares.x` on its second bind over the top of it to
 # `shares.y` under it — facing down from `joint` in the bind pose.
-static func _hang_underside(b: ConnectedSkinBuilder, ring: PackedInt32Array, joint: Vector3,
+static func hang_underside(b: ConnectedSkinBuilder, ring: PackedInt32Array, joint: Vector3,
 		binds: Array, shares: Vector2) -> void:
 	for id: int in ring:
 		var under: float = smoothstep(0.1, -0.9, (b.position(id) - joint).normalized().y)
 		var share: float = lerpf(shares.x, shares.y, under)
 		b.reweight(id, binds, [1.0 - share, share])
-
-
-# `a_loop` turned and run to match `b_loop` vertex for vertex: each of
-# `b_loop`'s against the one of `a_loop` that turns with it least.
-static func _aligned(b: ConnectedSkinBuilder, a_loop: PackedInt32Array,
-		b_loop: PackedInt32Array) -> PackedInt32Array:
-	var n: int = a_loop.size()
-	var best_cost: float = INF
-	var best_shift: int = 0
-	var best_dir: int = 1
-	for dir: int in [1, -1]:
-		for shift: int in n:
-			var cost: float = 0.0
-			for m: int in n:
-				cost += b.position(a_loop[posmod(shift + dir * m, n)]) \
-						.distance_squared_to(b.position(b_loop[m]))
-			if cost < best_cost:
-				best_cost = cost
-				best_shift = shift
-				best_dir = dir
-	var out := PackedInt32Array()
-	for m: int in n:
-		out.append(a_loop[posmod(best_shift + best_dir * m, n)])
-	return out
-
-
-# Joins two closed loops already run vertex for vertex with quads.
-static func _join(b: ConnectedSkinBuilder, a_loop: PackedInt32Array, b_loop: PackedInt32Array,
-		join_zone: int, uv: Callable, inside: Vector3) -> void:
-	var n: int = a_loop.size()
-	for m: int in n:
-		var a0: int = a_loop[m]
-		var a1: int = a_loop[(m + 1) % n]
-		var b0: int = b_loop[m]
-		var b1: int = b_loop[(m + 1) % n]
-		b.quad(a0, a1, b1, b0, uv.call(b.position(a0)), uv.call(b.position(a1)),
-				uv.call(b.position(b1)), uv.call(b.position(b0)), join_zone, inside, true)

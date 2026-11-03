@@ -10,7 +10,7 @@ extends Object
 # lit volumes from the top-down camera rather than flat blobs. rim_tint leans the
 # edge mostly white with a hint of the part's own color. Cheap — built into the
 # standard shader. (The keeper's kit-shader parts carry a Fresnel emission term
-# of their own in keeper_jersey.gdshader, since a ShaderMaterial can't use the
+# of their own in keeper_kit.gdshader, since a ShaderMaterial can't use the
 # StandardMaterial3D rim.)
 
 const STRENGTH: float = 0.4

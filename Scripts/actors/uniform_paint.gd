@@ -68,10 +68,10 @@ static func jersey_stripe_centre_m(pos: float, side_m: float) -> float:
 	return pos * JERSEY_STRIPE_DESIGN_HEIGHT_M + hem_share * (side_m - JERSEY_STRIPE_DESIGN_HEIGHT_M)
 
 
-# A kit jersey stripe {pos, width, color, peak?, fill_below?} as fractions of the torso side
-# it paints on; a peak's depth is a height like the width.
-static func jersey_side_stripe(stripe: Dictionary) -> Dictionary:
-	var side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M
+# A kit jersey stripe {pos, width, color, peak?, fill_below?} as fractions of a torso side
+# `side_m` tall, the skater's by default; a peak's depth is a height like the width.
+static func jersey_side_stripe(stripe: Dictionary,
+		side_m: float = SkaterMeshBuilder.TORSO_SIDE_HEIGHT_M) -> Dictionary:
 	var scale: float = JERSEY_STRIPE_DESIGN_HEIGHT_M / side_m
 	var centre_m: float = jersey_stripe_centre_m(float(stripe.pos), side_m)
 	var side := {"pos": centre_m / side_m, "width": float(stripe.width) * scale,
