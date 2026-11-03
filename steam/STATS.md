@@ -5,9 +5,10 @@ integers stored on Steam's servers, synced across the player's machines, with no
 backend of ours involved. Registry: `Scripts/domain/config/steam_stats.gd`;
 read-modify-write: `Scripts/game/steam_stat_recorder.gd`.
 
-**Why they exist:** they back the *career-threshold achievements* (`ACH_SNIPER`,
-`ACH_ENFORCER`, …) without depending on a reachable Supabase. Achievements stay
-earnable offline / opted-out / while the backend is paused. Supabase remains the
+**Why they exist:** they back the Game Puck ladders and banners
+(`docs/game-pucks-plan.md`) and the Steam achievements on ladder tiers
+(`ACH_SNIPER`, `ACH_ENFORCER`, …) without depending on a reachable Supabase. They
+stay earnable offline / opted-out / while the backend is paused. Supabase remains the
 source for cross-machine history and dev telemetry; these stats are purely the
 progression counter (and the future basis for leaderboards).
 
@@ -42,11 +43,11 @@ values via read-modify-write, not increments) — then **publish**.
 | `STAT_TAKEAWAYS`       | INT  | pucks stripped from opponents   |
 | `STAT_GIVEAWAYS`       | INT  | self-inflicted turnovers        |
 | `STAT_FACEOFF_WINS`    | INT  | faceoffs won (as centre)        |
+| `STAT_INTERCEPTIONS`   | INT  | passes picked off               |
 
 These names must match `SteamStats.ALL` exactly. The GUT test
-`test_every_career_achievement_has_a_backing_stat` fails the build if a career
-achievement ever targets a field with no stat here, so the two registries can't
-silently drift.
+`test_every_ladder_has_a_backing_stat` fails the build if a Game Puck ladder ever
+counts a field with no stat here, so the two registries can't silently drift.
 
 ---
 
@@ -57,8 +58,8 @@ silently drift.
 2. Create the matching INT stat in Steamworks (both apps) and publish.
 3. Add the row to the table above.
 
-A new career achievement on that counter is then just a `cond: {kind: "career",
-field: <key>, min: N}` row in `Achievements.ALL` — no code.
+A ladder on that counter is then just a `cond: {kind: "count", field: <key>}`
+row with its `tiers` in `GamePucks.ALL` — no code.
 
 ## Testing on a dev machine
 

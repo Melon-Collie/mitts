@@ -134,6 +134,10 @@ signal offside_called()
 # (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
 # from the RPC handler.
 signal icing_race_changed(icing_team_id: int, waved_off: bool)
+# The local player earned a Game Puck (a ladder tier when `target` > 0) or raised
+# a banner (TrophyService). HUD toasts them.
+signal game_puck_earned(puck_id: String, target: int)
+signal banner_raised(banner_id: String)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -373,7 +377,7 @@ var _net_session_reporter: NetworkSessionReporter = null
 # "host_lost", …) — whichever fires first wins. Re-armed at world spawn and on
 # rematch reset (each game posts its own row).
 var _net_session_reported: bool = false
-var _achievements: AchievementService = null
+var _trophies: TrophyService = null
 var _stat_recorder: SteamStatRecorder = null
 # Streams broadcast frames and events to user://replays/<game_id>.mreplay on a
 # worker thread. Lives on every peer (host + client + spectator) for any session
@@ -503,8 +507,10 @@ func _ready() -> void:
 	ThemeDB.fallback_font = MenuStyle.UI_FONT
 	_career_reporter = CareerStatsReporter.new()
 	_net_session_reporter = NetworkSessionReporter.new()
-	_achievements = AchievementService.new()
 	_stat_recorder = SteamStatRecorder.new()
+	_trophies = TrophyService.new(_stat_recorder.totals)
+	_trophies.puck_earned.connect(game_puck_earned.emit)
+	_trophies.banner_raised.connect(banner_raised.emit)
 	# End-of-tick capture + broadcast (physics priority 2, after all actor
 	# integration). The callback body carries all the session gates, so the hook
 	# is safe to run from boot.
@@ -4281,9 +4287,9 @@ func _on_hit_landed(hitter_peer_id: int, victim: Skater, impulse_magnitude: floa
 		const KICK_FULL_SPAN: float = 4.0
 		local_player_impact.emit(hit_dir, clampf(
 				(impulse_magnitude - HitRules.MIN_HIT_IMPULSE) / KICK_FULL_SPAN, 0.0, 1.0))
-		# Live achievement — excluded in free play / drills (no achievements there).
-		if _achievements != null and _achievements_active():
-			_achievements.on_local_hit(impulse_magnitude)
+		# Live Game Puck — excluded in free play / drills (no pucks there).
+		if _trophies != null and _achievements_active():
+			_trophies.on_local_hit(impulse_magnitude)
 
 
 # Host-only (impact_landed fires only on the host, from the deduped contact
@@ -4562,23 +4568,20 @@ func _finalize_game_stats() -> void:
 			outcome = "win"
 		elif gf < ga:
 			outcome = "loss"
-		# Achievements + Steam career stats count any real match — online OR a
+		# Game Pucks + Steam career stats count any real match — online OR a
 		# configured "Play vs Bots" game — but never free play or tutorial/drill
 		# practice (see _achievements_active). Steam Stats are the player's own
-		# account data, so they're NOT gated on share_gameplay_stats or online;
-		# increment first, then evaluate against the updated totals so a threshold
-		# unlocks on the game that crosses it. No Supabase dependency.
-		if _achievements_active():
-			if _achievements != null:
-				_achievements.evaluate_single_game(local.stats, outcome, gf, ga)
-				# Roster achievements — read the live Steam lobby membership so any
-				# machine (host or client) can award "played a game with X".
-				_achievements.evaluate_roster(
-						SteamManager.lobby_member_steam_ids(), SteamManager.steam_id)
-			if _stat_recorder != null:
-				_stat_recorder.record_game(local.stats, outcome)
-				if _achievements != null:
-					_achievements.evaluate_career(_stat_recorder.totals())
+		# account data, so they're NOT gated on share_gameplay_stats or online.
+		# The totals are read before this game is recorded so a ladder tier lands
+		# on the game that crosses it. No Supabase dependency.
+		if _achievements_active() and _trophies != null and _stat_recorder != null:
+			var totals_before: Dictionary = _stat_recorder.totals()
+			_stat_recorder.record_game(local.stats, outcome)
+			# The roster comes from the live Steam lobby membership, so any machine
+			# (host or client) can award "played a game with X".
+			_trophies.evaluate_game_over(local.stats,
+					{"outcome": outcome, "goals_for": gf, "goals_against": ga},
+					SteamManager.lobby_member_steam_ids(), SteamManager.steam_id, totals_before)
 	# Supabase career row: EVERY real match counts, offline vs bots exactly like
 	# online. Most play happens offline, and a career page that ignores it isn't
 	# the player's career. The online/offline distinction is preserved as a column
@@ -4653,17 +4656,17 @@ func _achievements_active() -> bool:
 
 
 # Called from the tutorial-completion paths (TutorialManager / TutorialHUD) each
-# time a tutorial is marked complete. Fires the "Student of the Game" achievement
-# once the whole course is done. Deliberately outside _achievements_active — the
+# time a tutorial is marked complete. Earns the "Student of the Game" puck once
+# the whole course is done. Deliberately outside _achievements_active — the
 # course runs in tutorial mode, where that gate is closed, so the meta hook is
-# called directly. Idempotent downstream (AchievementService de-dupes).
+# called directly. Idempotent downstream (the ledger earns a puck once).
 func notify_tutorial_completed() -> void:
-	if _achievements == null:
+	if _trophies == null:
 		return
 	for id: String in TutorialRegistry.ALL_IDS:
 		if not PlayerPrefs.is_tutorial_complete(id):
 			return
-	_achievements.on_tutorials_complete()
+	_trophies.on_tutorials_complete()
 
 
 # Latches _ranked_match (see its doc) once two humans share the match, and tracks
@@ -5028,10 +5031,10 @@ func _on_local_attributes_changed(attrs: PlayerAttributes) -> void:
 	if record == null:
 		return
 	record.attributes = attrs
-	# Customized your build — a meta achievement, fired directly (this signal only
+	# Customized your build — a moment puck, fired directly (this signal only
 	# fires from the free-play picker Apply, where the game-over sweep never runs).
-	if _achievements != null:
-		_achievements.on_build_edited()
+	if _trophies != null:
+		_trophies.on_build_edited()
 	if NetworkManager.is_in_online_match():
 		return
 	if record.controller != null:

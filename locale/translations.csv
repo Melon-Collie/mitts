@@ -394,3 +394,83 @@ CUSTOM_FILE_CONFIRM_USE_BUILT_IN,Delete your edited copy?,¿Borrar tu copia edit
 CUSTOM_FILE_ERROR_NO_BUILT_IN,Error: the built-in file is missing.,Error: falta el archivo original.
 CUSTOM_FILE_ERROR_WRITE,Error: couldn't write to your user data folder.,Error: no se pudo escribir en tu carpeta de datos.
 CUSTOM_FILE_ERROR_DELETE,Error: couldn't delete your edited copy.,Error: no se pudo borrar tu copia editada.
+PUCK_GOALS,Goal Scorer,Goleador
+PUCK_GOALS_DESC,Score %d goals.,Marca %d goles.
+PUCK_ASSISTS,Setup Man,Pasador
+PUCK_ASSISTS_DESC,Record %d assists.,Da %d asistencias.
+PUCK_POINTS,Point Producer,Productor de puntos
+PUCK_POINTS_DESC,Put up %d points.,Suma %d puntos.
+PUCK_HITS,Hitter,Pegador
+PUCK_HITS_DESC,Land %d hits.,Da %d cargas.
+PUCK_INTERCEPTIONS,Lane Reader,Lector de pases
+PUCK_INTERCEPTIONS_DESC,Intercept %d passes.,Intercepta %d pases.
+PUCK_TAKEAWAYS,Thief,Ladrón
+PUCK_TAKEAWAYS_DESC,Record %d takeaways.,Consigue %d robos.
+PUCK_SHOTS_BLOCKED,Shot Blocker,Bloqueador
+PUCK_SHOTS_BLOCKED_DESC,Block %d shots.,Bloquea %d tiros.
+PUCK_FACEOFF_WINS,Faceoff Ace,As del saque
+PUCK_FACEOFF_WINS_DESC,Win %d faceoffs.,Gana %d saques.
+PUCK_WINS,Winner,Ganador
+PUCK_WINS_DESC,Win %d games.,Gana %d partidos.
+PUCK_GAMES_PLAYED,Veteran,Veterano
+PUCK_GAMES_PLAYED_DESC,Play %d games.,Juega %d partidos.
+PUCK_FIRST_GOAL,Lamp Lighter,Enciende la luz
+PUCK_FIRST_GOAL_DESC,Score your first goal.,Marca tu primer gol.
+PUCK_HAT_TRICK,Hat Trick,Hat trick
+PUCK_HAT_TRICK_DESC,Score 3 goals in a single game.,Marca 3 goles en un partido.
+PUCK_PLAYMAKER,Playmaker,Organizador
+PUCK_PLAYMAKER_DESC,Record 3 assists in a single game.,Da 3 asistencias en un partido.
+PUCK_BIG_NIGHT,Big Night,Gran noche
+PUCK_BIG_NIGHT_DESC,Put up 5 points in a single game.,Suma 5 puntos en un partido.
+PUCK_BRICK_WALL,Brick Wall,Muro de ladrillo
+PUCK_BRICK_WALL_DESC,Block 3 shots in a single game.,Bloquea 3 tiros en un partido.
+PUCK_ONE_TIMER,One-Timer,Tiro a la primera
+PUCK_ONE_TIMER_DESC,Score off a one-timer.,Marca con un tiro a la primera.
+PUCK_TIP_IN,Redirect,Desvío
+PUCK_TIP_IN_DESC,Tip a teammate's shot into the net.,Desvía a la red el tiro de un compañero.
+PUCK_OVERTIME_HERO,Overtime Hero,Héroe de la prórroga
+PUCK_OVERTIME_HERO_DESC,Score the overtime winner.,Marca el gol de la victoria en la prórroga.
+PUCK_FACEOFF_BOSS,Master of the Dot,Amo del círculo
+PUCK_FACEOFF_BOSS_DESC,Win 5 faceoffs in a single game.,Gana 5 saques en un partido.
+PUCK_PICKPOCKET,Pickpocket,Carterista
+PUCK_PICKPOCKET_DESC,Record 5 takeaways in a single game.,Consigue 5 robos en un partido.
+PUCK_SHUTOUT,Shutout,Portería a cero
+PUCK_SHUTOUT_DESC,Win a game without conceding a goal.,Gana un partido sin encajar goles.
+PUCK_FIRST_WIN,W,V
+PUCK_FIRST_WIN_DESC,Win your first game.,Gana tu primer partido.
+PUCK_FREIGHT_TRAIN,Freight Train,Tren de mercancías
+PUCK_FREIGHT_TRAIN_DESC,Land a bone-rattling body check.,Da una carga demoledora.
+PUCK_STUDENT,Student of the Game,Estudiante del juego
+PUCK_STUDENT_DESC,Complete every tutorial.,Completa todos los tutoriales.
+PUCK_CUSTOM_BUILD,Make It Yours,Hazlo tuyo
+PUCK_CUSTOM_BUILD_DESC,Edit your player's build.,Edita el físico de tu jugador.
+PUCK_PLAY_WITH_BUUKIE,Buukie's Buddy,Colega de Buukie
+PUCK_PLAY_WITH_BUUKIE_DESC,Play an online game with Buukie.,Juega un partido online con Buukie.
+BANNER_POWER_FORWARD,Power Forward,Delantero de potencia
+BANNER_SHUTDOWN,Shutdown,Cerrojo
+BANNER_TWO_WAY,Two-Way,Ida y vuelta
+BANNER_IRON_MAN,Iron Man,Hombre de hierro
+MENU_TROPHY_CASE,Trophy Case,Vitrina
+TROPHY_CASE_TITLE,TROPHY CASE,VITRINA
+TROPHY_BANNERS,Banners,Estandartes
+TROPHY_LADDERS,Career pucks,Discos de carrera
+TROPHY_GAME_PUCKS,Game pucks,Discos de partido
+TROPHY_PROGRESS,%d / %d,%d / %d
+TROPHY_RAISED,Raised,Izado
+TROPHY_LADDER_DONE,Every tier earned,Todos los niveles conseguidos
+TROPHY_EARNED_ON,Earned %s,Conseguido el %s
+TROPHY_EARNED,Earned,Conseguido
+TROPHY_NOT_YET,Not yet,Aún no
+TROPHY_HIDDEN,Hidden puck,Disco oculto
+TROPHY_HIDDEN_DESC,Keep playing to find out.,Sigue jugando para descubrirlo.
+TROPHY_TIER_NAME,%s %s,%s %s
+TROPHY_TIER_1,I,I
+TROPHY_TIER_2,II,II
+TROPHY_TIER_3,III,III
+TROPHY_TIER_4,IV,IV
+TROPHY_TIER_5,V,V
+TROPHY_NEEDS_STEAM,Career pucks count through Steam. Launch Mitts from Steam to track them.,Los discos de carrera se cuentan a través de Steam. Abre Mitts desde Steam para seguirlos.
+TOAST_GAME_PUCK,GAME PUCK · %s,DISCO · %s
+TOAST_BANNER_RAISED,BANNER RAISED · %s,ESTANDARTE IZADO · %s
+TROPHY_SUMMARY,%d / %d game pucks · %d / %d banners,%d / %d discos · %d / %d estandartes
+TROPHY_REQUIREMENT_PROGRESS,%s  ·  %d / %d,%s  ·  %d / %d

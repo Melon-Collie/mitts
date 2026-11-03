@@ -1,14 +1,17 @@
 # Steam achievements
 
-Mitts' achievements are **code-driven from a single registry**:
-`Scripts/domain/config/achievements.gd`. Each entry's `id` is the Steamworks
-**API Name**; `AchievementRules` decides what's earned (pure, unit-tested) and
-`AchievementService` (owned by `GameManager`) asks `SteamManager` to unlock it.
+Mitts' achievements are the Steam mirror of its **Game Pucks**
+(`docs/game-pucks-plan.md`). The catalogue is `Scripts/domain/config/game_pucks.gd`;
+a puck row's `steam` (or a ladder's `steam_tiers`) is the Steamworks **API Name**
+it mirrors. `GamePuckRules` decides what's earned (pure, unit-tested) and
+`TrophyService` (owned by `GameManager`) asks `SteamManager` to unlock it. A puck
+with no Steam id stays in-game and needs nothing here.
 
 This file is the bridge to the part the code **can't** do: the achievement
-definitions live in the Steamworks partner site, one per `id` below. Keep this
-list in sync with the registry (`Achievements.ALL`) — if an `id` here has no
-matching, *published* achievement in Steamworks, its unlock silently no-ops.
+definitions live in the Steamworks partner site, one per API Name below.
+`test_game_puck_catalogue.gd` fails when a mirrored id is missing from this
+table — and if an id has no matching, *published* achievement in Steamworks, its
+unlock silently no-ops.
 
 > **Two apps.** Achievements are configured per-app. The closed beta runs under
 > the **Playtest** child app **4893650** as well as the main app **4892600**
@@ -26,19 +29,19 @@ For each app (4892600 and, for the playtest, 4893650):
    Steamworks, *not* from the registry — the names/desc here are just our notes).
 2. Upload a **locked** and **unlocked** icon for each (Steamworks requires both;
    64×64 PNG). Placeholder art is fine for the beta.
-3. Leave **"Hidden"** off unless the row below says hidden (none are, currently).
+3. Leave **"Hidden"** off unless the row below says hidden.
 4. **Publish** the changes (Stats & Achievements changes need an explicit
    publish, like Store/build changes).
 
-The **game / special / event** achievements unlock directly from code. The
-**career** ones read Steam User Stats, which you must also define — see STATS.md
-for that checklist.
+The **game / special / event / roster** achievements unlock directly from code.
+The **ladder** ones read Steam User Stats, which you must also define — see
+STATS.md for that checklist.
 
 ---
 
 ## The achievements
 
-`when` = how it's evaluated (see the registry header for the `cond` kinds):
+`when` = how it's evaluated (see the catalogue header for the `cond` kinds):
 - **game** — a single game's stat reached the bar (any mode, incl. vs bots).
 - **special** — a compound game-over condition.
 - **event** — fired live the moment it happens (a big hit mid-match), or from a
@@ -46,9 +49,9 @@ for that checklist.
   editing your build) — those bypass the game-over sweep and its mode gate.
 - **roster** — earned by playing an online game whose lobby includes a specific
   person, and never by that person themselves.
-- **career** — a lifetime total backed by **Steam User Stats** (every real match, bots included;
-  NOT gated on stat-sharing, and no Supabase dependency). The mirrored stats must
-  be defined too — see STATS.md.
+- **ladder** — a tier of a career ladder, a lifetime total backed by **Steam
+  User Stats** (every real match, bots included; NOT gated on stat-sharing, and
+  no Supabase dependency). The mirrored stats must be defined too — see STATS.md.
 
 | API Name (`id`)     | Name              | When    | Unlocks when…                                  |
 |---------------------|-------------------|---------|------------------------------------------------|
@@ -68,22 +71,23 @@ for that checklist.
 | `ACH_STUDENT`       | Student of the Game| event  | complete every tutorial                        |
 | `ACH_CUSTOM_BUILD`  | Make It Yours     | event   | edit your player's build                       |
 | `ACH_PLAY_WITH_BUUKIE` | Buukie's Buddy | roster  | play an online game with Buukie (hidden)       |
-| `ACH_SNIPER`        | Sniper            | career  | 50 career goals                                |
-| `ACH_SETUP_ARTIST`  | Setup Artist      | career  | 50 career assists                              |
-| `ACH_ENFORCER`      | Enforcer          | career  | 100 career hits                                |
-| `ACH_VETERAN`       | Veteran           | career  | 25 career games                                |
+| `ACH_SNIPER`        | Sniper            | ladder  | 50 career goals                                |
+| `ACH_SETUP_ARTIST`  | Setup Artist      | ladder  | 50 career assists                              |
+| `ACH_ENFORCER`      | Enforcer          | ladder  | 100 career hits                                |
+| `ACH_VETERAN`       | Veteran           | ladder  | 25 career games                                |
 
 ---
 
 ## Adding / changing an achievement
 
-1. Add (or edit) a row in `Achievements.ALL` — pick the `cond` kind. A typical
-   threshold needs *only* this; a new compound condition also needs a branch in
-   `AchievementRules._special_met()`.
-2. Create the achievement in Steamworks under the same `id` (both apps) and
-   publish.
-3. Add the row to the table above so this doc stays the source of truth for the
-   backend side.
+A new puck is a row in `GamePucks.ALL` plus its `PUCK_<ID>` and `PUCK_<ID>_DESC`
+rows in `locale/translations.csv` — no Steamworks work. A new compound condition
+also needs a branch in `GamePuckRules._special_met()`. To mirror a puck to Steam
+as well:
+
+1. Give its row a `steam` API Name (or a ladder tier a `steam_tiers` entry).
+2. Create the achievement in Steamworks under that name (both apps) and publish.
+3. Add the row to the table above; the catalogue test holds the two together.
 4. Run the rule tests: `bash .claude/hooks/run-gut.sh -gdir=res://tests/unit/rules`.
 
 Changing a threshold is a one-line edit to a row's `min` — no Steamworks change

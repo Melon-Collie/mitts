@@ -11,7 +11,7 @@ static func increments(stats: PlayerStats, outcome: String) -> Dictionary:
 	var out: Dictionary = {}
 	if stats == null:
 		return out
-	var game: Dictionary = AchievementRules.game_dict(stats)
+	var game: Dictionary = GamePuckRules.game_dict(stats)
 	for entry in SteamStats.ALL:
 		var inc: Dictionary = entry["inc"]
 		var delta: int = 0
@@ -40,9 +40,9 @@ func record_game(stats: PlayerStats, outcome: String) -> void:
 
 
 # Current career totals from Steam, keyed by career-totals column name (goals,
-# assists, hits, wins, games_played, …) — the shape AchievementRules.earned_career
-# expects. `points` is derived for parity with the Supabase view. Empty without
-# Steam (caller then unlocks nothing, which is correct).
+# assists, hits, wins, games_played, …) — the shape GamePuckRules reads. `points`
+# is derived for parity with the Supabase view. Empty without Steam (every ladder
+# then reads zero).
 func totals() -> Dictionary:
 	var out: Dictionary = {}
 	if not SteamManager.is_available:

@@ -4,9 +4,9 @@ class_name SteamStats
 ## domain data; SteamStatRecorder does the read-modify-write via SteamManager.
 ##
 ## Why mirror at all when career_stats already lives in Supabase: Steam Stats
-## back the career-threshold achievements (Achievements.ALL with cond.kind ==
-## "career") WITHOUT depending on a reachable Supabase — so those achievements
-## keep working stat-sharing-opted-out / while the backend is paused. Counted for
+## back the Game Puck ladders (GamePucks rows with cond.kind == "count") WITHOUT
+## depending on a reachable Supabase — so they keep climbing
+## stat-sharing-opted-out / while the backend is paused. Counted for
 ## the same games as the Supabase career row (see the gate in GameManager
 ## _on_game_over). Supabase stays the source for cross-machine history + dev
 ## telemetry; Steam Stats are the progression counter.
@@ -16,13 +16,13 @@ class_name SteamStats
 ## get/set silently no-op. See steam/STATS.md.
 ##
 ## Adding a counter: add a row here (`id`, the career-totals `key` it maps to,
-## and how a finished game increments it via `inc`). If a new career achievement
-## targets it, that's the same `key` AchievementRules reads — see the consistency
-## test in tests/unit/game/test_steam_stat_recorder.gd, which fails if a career
-## achievement references a field no stat backs.
+## and how a finished game increments it via `inc`). A ladder that counts it
+## names the same `key` — see the consistency test in
+## tests/unit/game/test_steam_stat_recorder.gd, which fails if a ladder counts a
+## field no stat backs.
 ##
 ## `inc.kind`:
-##   "stat" — add a per-game PlayerStats field (`inc.field`, an AchievementRules
+##   "stat" — add a per-game PlayerStats field (`inc.field`, a GamePuckRules
 ##            .game_dict key) to the running total.
 ##   "win"  — add 1 when the game's outcome is a win.
 ##   "game" — add 1 for every game (games played).
@@ -39,10 +39,11 @@ const HITS_TAKEN := "STAT_HITS_TAKEN"
 const TAKEAWAYS := "STAT_TAKEAWAYS"
 const GIVEAWAYS := "STAT_GIVEAWAYS"
 const FACEOFF_WINS := "STAT_FACEOFF_WINS"
+const INTERCEPTIONS := "STAT_INTERCEPTIONS"
 
-# `key` is the career-totals column name these map to — the SAME names
-# AchievementRules.earned_career reads, so a "career" achievement on `goals`
-# is backed by the stat whose key is "goals".
+# `key` is the career-totals column name these map to — the SAME names a Game
+# Puck ladder's `field` reads, so the goals ladder is backed by the stat whose
+# key is "goals".
 const ALL: Array[Dictionary] = [
 	{"id": GOALS, "key": "goals", "inc": {"kind": "stat", "field": "goals"}},
 	{"id": ASSISTS, "key": "assists", "inc": {"kind": "stat", "field": "assists"}},
@@ -55,4 +56,5 @@ const ALL: Array[Dictionary] = [
 	{"id": TAKEAWAYS, "key": "takeaways", "inc": {"kind": "stat", "field": "takeaways"}},
 	{"id": GIVEAWAYS, "key": "giveaways", "inc": {"kind": "stat", "field": "giveaways"}},
 	{"id": FACEOFF_WINS, "key": "faceoff_wins", "inc": {"kind": "stat", "field": "faceoff_wins"}},
+	{"id": INTERCEPTIONS, "key": "interceptions", "inc": {"kind": "stat", "field": "interceptions"}},
 ]

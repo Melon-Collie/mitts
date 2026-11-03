@@ -1,8 +1,8 @@
 extends GutTest
 
 # SteamStatRecorder.increments() — pure per-game deltas for the Steam User Stats
-# mirror — plus a consistency check that every "career" achievement is backed by
-# a mirrored stat (otherwise it could never unlock without a reachable backend).
+# mirror — plus a consistency check that every Game Puck ladder is backed by a
+# mirrored stat (otherwise it could never climb without a reachable backend).
 
 func _stats(goals: int, assists: int, sog: int, hits: int, blocks: int) -> PlayerStats:
 	var s := PlayerStats.new()
@@ -29,11 +29,13 @@ func test_increments_map_extended_stat_fields() -> void:
 	s.takeaways = 6
 	s.giveaways = 7
 	s.faceoff_wins = 8
+	s.interceptions = 9
 	var d := SteamStatRecorder.increments(s, "loss")
 	assert_eq(d[SteamStats.HITS_TAKEN], 5)
 	assert_eq(d[SteamStats.TAKEAWAYS], 6)
 	assert_eq(d[SteamStats.GIVEAWAYS], 7)
 	assert_eq(d[SteamStats.FACEOFF_WINS], 8)
+	assert_eq(d[SteamStats.INTERCEPTIONS], 9)
 
 
 func test_games_played_always_increments_by_one() -> void:
@@ -59,17 +61,15 @@ func test_stat_ids_are_unique() -> void:
 		seen[id] = true
 
 
-# Every career achievement's threshold field must be backed by a mirrored stat,
-# or it can only unlock from a (possibly-unreachable) backend — defeating the
-# point of the mirror. This guards the two registries staying in sync.
-func test_every_career_achievement_has_a_backing_stat() -> void:
-	var stat_keys: Dictionary = {}
+# Every ladder's counter must be backed by a mirrored stat (or derive from them,
+# as points do), or it can never climb without a reachable backend.
+func test_every_ladder_has_a_backing_stat() -> void:
+	var stat_keys: Dictionary = {"points": true}
 	for entry in SteamStats.ALL:
 		stat_keys[String(entry["key"])] = true
-	for ach in Achievements.ALL:
-		var cond: Dictionary = ach["cond"]
-		if String(cond.get("kind", "")) != "career":
+	for puck: Dictionary in GamePucks.ALL:
+		if not GamePucks.is_ladder(puck):
 			continue
-		var field: String = String(cond["field"])
+		var field: String = String((puck["cond"] as Dictionary)["field"])
 		assert_true(stat_keys.has(field),
-				"career achievement %s targets '%s' with no backing Steam stat" % [ach["id"], field])
+				"ladder %s counts '%s' with no backing Steam stat" % [puck["id"], field])

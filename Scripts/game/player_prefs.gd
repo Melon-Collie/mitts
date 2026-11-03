@@ -432,6 +432,9 @@ const REPLAY_KEEP_MAX: int = 100
 # version, and boot.gd routes an untouched course into its first part.
 const TUTORIAL_COURSE_VERSION: int = 4
 var tutorial_completion: Dictionary = {}
+# The stored part of the Game Pucks (TrophyLedger). Reconciled with Steam Cloud
+# as a union rather than newest-wins, since an earned puck is never un-earned.
+var trophy_ledger: TrophyLedger = TrophyLedger.new()
 
 func _get_save_path() -> String:
 	for arg: String in OS.get_cmdline_user_args():
@@ -586,6 +589,7 @@ func save() -> void:
 	cfg.set_value("replay", "keep_count", replay_keep_count)
 	cfg.set_value("tutorials", "completion", tutorial_completion)
 	cfg.set_value("tutorials", "course_version", TUTORIAL_COURSE_VERSION)
+	cfg.set_value("trophies", "pucks", trophy_ledger.to_dict())
 	for action: String in REBINDABLE_ACTIONS:
 		if not bindings.has(action):
 			continue
@@ -655,18 +659,35 @@ func _sync_from_cloud() -> void:
 			return  # already in sync — nothing to do
 		# Conflict: a copy was changed on another machine (cloud) and/or offline
 		# here (local). Keep whichever store was written most recently, and push
-		# a newer local back up so the other machine converges next launch.
+		# a newer local back up so the other machine converges next launch —
+		# except the trophy ledger, which keeps the pucks of both.
 		if FileAccess.get_modified_time(local_path) > SteamManager.cloud_file_timestamp(cloud_name):
-			_push_to_cloud()
+			if trophy_ledger.merge(ledger_from_prefs_text(cloud_bytes.get_string_from_utf8())):
+				save()
+			else:
+				_push_to_cloud()
 			return
-	# Adopt the cloud copy: write it to the local file and re-load from it.
+	# Adopt the cloud copy: write it to the local file and re-load from it, then
+	# fold back any pucks only this machine had.
+	var local_ledger: TrophyLedger = trophy_ledger
 	var f := FileAccess.open(local_path, FileAccess.WRITE)
 	if f == null:
 		return
 	f.store_buffer(cloud_bytes)
 	f = null
 	_load()
+	if trophy_ledger.merge(local_ledger):
+		save()
 	cloud_prefs_adopted.emit()
+
+
+# The trophy ledger a prefs file's text holds; empty when it holds none or does
+# not parse.
+static func ledger_from_prefs_text(text: String) -> TrophyLedger:
+	var cfg := ConfigFile.new()
+	if cfg.parse(text) != OK:
+		return TrophyLedger.new()
+	return TrophyLedger.from_variant(cfg.get_value("trophies", "pucks", {}))
 
 func apply_locale() -> void:
 	LocaleManager.apply(locale)
@@ -1181,6 +1202,7 @@ func _load() -> void:
 		# Course-version gate (see TUTORIAL_COURSE_VERSION).
 		if int(cfg.get_value("tutorials", "course_version", 1)) < TUTORIAL_COURSE_VERSION:
 			tutorial_completion = {}
+		trophy_ledger = TrophyLedger.from_variant(cfg.get_value("trophies", "pucks", {}))
 		for action: String in REBINDABLE_ACTIONS:
 			var t: String = cfg.get_value("bindings", action + "_type", "")
 			if t == "key":

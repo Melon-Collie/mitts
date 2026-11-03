@@ -1,6 +1,7 @@
 # Game Pucks and Banners — progression design record
 
-Status: **proposed**, nothing built. Each phase below ships as its own PR.
+Status: **Phase 1 built** (the catalogue, the ledger and the Trophy Case);
+Phases 2–4 not started. Each phase ships as its own PR.
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done. Completing a named
@@ -39,9 +40,15 @@ rafters for something bigger.
   50 goals and 50 hits raise it, and it unlocks the Power Forward title. The
   catalogue's banners are hockey archetypes, so the title a player wears says
   something true about their game.
-- **Existing achievements fold into the catalogue.** The 20 rows in
-  `Achievements.ALL` become Game Pucks and keep their ids, so nothing already
-  unlocked on Steam is lost.
+- **Existing achievements fold into the catalogue.** The 20 achievements that
+  shipped before it are Game Pucks now and keep their Steam ids, so nothing
+  already unlocked on Steam is lost. The four career ones (Sniper, Setup Artist,
+  Enforcer, Veteran) are tiers on the goals, assists, hits and games ladders.
+  A puck already unlocked on Steam is imported into the ledger, with an unknown
+  date, the next time the Trophy Case opens or a game ends.
+- **Titles show on the lobby bench card, the scoreboard, the Three Stars and
+  the post-game screen.** The on-ice nameplate stays name-only, since it is read
+  at speed.
 - **Store only what cannot be derived.** Count tiers are read off the Steam
   User Stats totals (`SteamStats`, cross-machine and independent of Supabase)
   every time, and banners off the pucks, so neither is stored. What is stored —
@@ -76,11 +83,6 @@ Everything the code cannot do, per phase. Each item is done on both apps
 
 Pucks, tiers, banners, titles and cosmetic rewards need no Steamworks work.
 
-## Open question
-
-**Where a title shows.** *Recommendation:* the lobby bench card, the scoreboard,
-the Three Stars and the post-game screen. The on-ice nameplate stays name-only,
-since it is read at speed. Settled by Phase 2, which builds the surfaces.
 
 ## The model
 
@@ -91,14 +93,14 @@ One registry row per puck. Kinds:
 | kind | earned when | evaluated |
 |---|---|---|
 | **count** | a lifetime counter reaches a tier | game-over, from `SteamStatRecorder.totals()` |
-| **game** | one game's stat reaches a bar (3 goals in a game) | game-over (`AchievementRules.earned_game`) |
+| **game** | one game's stat reaches a bar (3 goals in a game) | game-over (`GamePuckRules.earned_game`) |
 | **feat** | a specific play happens (below) | the moment it happens, host-detected |
-| **event** | a moment outside a match (finish the tutorial course) | its hook (`AchievementService.on_*`) |
-| **roster** | a match whose lobby includes a named person | game-over (`AchievementRules.earned_roster`) |
+| **event** | a moment (a big hit, finishing the tutorial course) | its hook (`TrophyService.on_*`) |
+| **roster** | a match whose lobby includes a named person | game-over (`GamePuckRules.earned_roster`) |
 
 A count puck is a ladder: one row with tiers (10 / 50 / 250 / 1000 goals), each
 tier its own puck to earn. Tiers ascend strictly, and a banner names the tier it
-needs (`goals@2`).
+needs by its target (`goals@50`).
 
 ### Banners
 
@@ -112,20 +114,25 @@ A title is an id plus a locale key. A player wears at most one, picked from the
 titles they have earned, and it travels with their look. In v1 every title comes
 from a banner.
 
-### Starter catalogue (illustrative, not final)
+### Catalogue
 
-| banner | needs | title |
+The rows live in `GamePucks.ALL` and `Banners.ALL`; Phase 1 shipped:
+
+| banner | needs | title (Phase 2) |
 |---|---|---|
-| Power Forward | Goals II (50) + Hits II (50) | Power Forward |
-| Playmaker | Assists III (250) + one-timer assist feat | Playmaker |
-| Sniper | Goals III (250) + Snipe feat (HIGH loft from beyond the dots) | Sniper |
-| Shutdown | Interceptions II + Takeaways II + Blocks II | Shutdown |
-| Two-Way | Goals II + Assists II + Interceptions II + Takeaways II | Two-Way |
-| Iron Man | Games III | Iron Man |
+| Power Forward | `goals@50` + `hits@50` | Power Forward |
+| Shutdown | `interceptions@50` + `takeaways@50` + `shots_blocked@50` | Shutdown |
+| Two-Way | `goals@50` + `assists@50` + `interceptions@50` + `takeaways@50` | Two-Way |
+| Iron Man | `games_played@100` | Iron Man |
 
-Count pucks for the ladders: goals, assists, points, wins, games, interceptions,
-takeaways, blocks, faceoff wins, hits. `SteamStats` has all of these but
-interceptions, which needs `STAT_INTERCEPTIONS`; points are goals + assists.
+Planned with Phase 3, since each needs a feat: Playmaker (`assists@250` + a
+one-timer assist feat) and Sniper (`goals@250` + a HIGH-loft goal from beyond
+the dots).
+
+Ladders: goals, assists, points, hits, interceptions, takeaways, blocks, faceoff
+wins, wins and games, four or five tiers each. Every counter is a `SteamStats`
+row (`STAT_INTERCEPTIONS` was added for this); points are goals + assists. A
+ladder has at most as many tiers as `TrophyCopy.TIER_KEYS` has numerals.
 
 Feats are where Mitts can stand out, since the mechanics are deep enough to
 name specific plays: a backhand roof goal, a HIGH-loft goal from beyond the
@@ -138,10 +145,11 @@ a carried-zone-entry counter, which nothing records yet.
 Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 
 **Domain** — pure, unit-tested:
-- `domain/config/game_pucks.gd`: the puck registry. Replaces `Achievements.ALL`
-  and keeps its condition kinds, adding `count` ladders and `feat`.
-- `domain/config/banners.gd` and `domain/config/titles.gd`: banner
-  requirements and rewards; title ids and their locale keys.
+- `domain/config/game_pucks.gd`: the puck registry. It replaced the old
+  achievement registry and keeps its condition kinds, adding `count` ladders
+  (and `feat` in Phase 3).
+- `domain/config/banners.gd`: banner requirements (and, from Phase 2, rewards).
+  `domain/config/titles.gd` arrives in Phase 2: title ids and their locale keys.
 - `domain/state/trophy_ledger.gd`: the stored part only — the earned game,
   feat, event and roster pucks, and the equipped title — with its serialization
   and the union merge.
@@ -150,7 +158,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   progress. Earning is idempotent: evaluating twice earns nothing new.
 
 **Application:**
-- `TrophyService` grows out of `AchievementService`: it evaluates at game-over
+- `TrophyService` replaced the old achievement service: it evaluates at game-over
   and on events, writes the ledger into `PlayerPrefs`, unlocks the pucks flagged
   for Steam through `SteamManager`, and emits a signal for the earn toast.
 - The feat channel. A feat is detected on the host, where the authoritative
@@ -161,9 +169,10 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   each goal flavour is a `PlayerStats` field, which bumps the protocol per feat.
 
 **Infrastructure and UI:**
-- The Trophy Case screen, beside Career on the side menu: banners with their
-  pucks and progress, the ladders, and what each banner unlocks.
-- An earn toast at game-over, and live for feats.
+- The Trophy Case screen (`TrophyCaseScreen`), beside Career on the side menu:
+  banners with their pucks and progress, the ladders, and the single pucks.
+  `TrophyCopy` holds the words it and the toast share.
+- An earn toast on the HUD's toast stack, at game-over and live for moments.
 - A title row in the player screen's YOU region.
 - The title on the lobby bench card, scoreboard, Three Stars and post-game
   screen.
@@ -197,7 +206,8 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - **Rules properties:** a puck earned stays earned; a higher counter never earns
   fewer tiers; a banner is earned exactly when its last requirement is.
 - **Ledger round-trip:** serialize, reload, compare; an unknown id in a saved
-  ledger is dropped rather than failing the load.
+  ledger is kept (a newer build's puck survives a round trip through an older
+  one), and a malformed entry is skipped rather than failing the load.
 - **Ledger merge:** merging two ledgers keeps every puck either holds, whichever
   copy is newer, so a Steam Cloud adopt never loses one.
 - **Steam mirror:** every puck flagged for Steam is listed in

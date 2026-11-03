@@ -156,6 +156,8 @@ func _ready() -> void:
 	GameManager.shots_on_goal_changed.connect(_scorebug.set_shots)
 	GameManager.stats_updated.connect(_stat_feed.poll)
 	GameManager.roster_announced.connect(func(n: String, key: StringName, c: Dictionary) -> void: _toast_stack.push_pair(n, tr(key), c))
+	GameManager.game_puck_earned.connect(func(id: String, target: int) -> void: _toast_stack.push(TrophyCopy.puck_toast(id, target), MenuStyle.GOLD))
+	GameManager.banner_raised.connect(func(id: String) -> void: _toast_stack.push(TrophyCopy.banner_toast(id), MenuStyle.GOLD))
 	GameManager.puck_out_of_play.connect(_on_puck_out_of_play)
 	GameManager.icing_called.connect(_on_icing_called)
 	GameManager.icing_race_changed.connect(_icing_race.on_icing_race_changed)
