@@ -111,8 +111,8 @@ static func pivot_height(skater: Skater) -> float:
 
 
 # The top fist's roll on the shaft of a stick held ahead with the face square:
-# the back of the glove ahead and out to its own side, as a top hand holds a
-# stick.
+# the back of the glove out to its own side, the palm in toward the body's
+# middle, as a top hand holds a stick in front of him.
 static func _square_roll(body: ArmAnatomyBody, pivot_above_blade: float) -> float:
 	var setup := ArmAnatomy.ArmSetup.new()
 	setup.body = body
@@ -122,4 +122,4 @@ static func _square_roll(body: ArmAnatomyBody, pivot_above_blade: float) -> floa
 	var heel := Vector3(body.bottom_shoulder.x, -pivot_above_blade, -SQUARE_HEEL_AHEAD_M)
 	setup.shaft = (heel - hand).normalized()
 	setup.grip_angle = body.top_grip_angle
-	return ArmAnatomy.roll_backing(setup, Vector3(setup.side, 0.0, -1.0).normalized())
+	return ArmAnatomy.roll_backing(setup, Vector3(setup.side, 0.0, 0.0))

@@ -105,12 +105,14 @@ func test_the_search_holds_a_carry_and_names_the_arms_reach_past_every_one() -> 
 	assert_true(pose.feasible(), "a blade low on the forehand is held")
 	assert_lte(pose.top.violation, 0.0, "both arms in their ranges")
 	assert_lte(pose.bottom.violation, 0.0, "both arms in their ranges")
+	search.solve(trunk, Vector3(0.0, ice, -3.0), pose)
+	assert_false(pose.feasible(), "three metres out is not")
+	assert_eq(pose.arm_binding, ArmAnatomy.Limit.REACH, "the arms' reach stops it")
 	search.technique = true
 	search.solve(trunk, Vector3(0.8 * forehand, ice, -0.6), pose)
 	assert_true(pose.feasible(), "and as players hold it")
 	search.solve(trunk, Vector3(0.0, ice, -3.0), pose)
-	assert_false(pose.feasible(), "three metres out is not")
-	assert_eq(pose.arm_binding, ArmAnatomy.Limit.REACH, "the arms' reach stops it")
+	assert_false(pose.feasible(), "three metres out still is not")
 
 
 # A carrier holds the stick on bent knees, and nothing in a comfortable carry

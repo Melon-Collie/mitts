@@ -47,6 +47,13 @@ enum Limit {
 # How far the elbow's bend is from rest in the comfort cost: a hand held in front
 # of the body is held with the elbow bent, not straight.
 const ELBOW_COMFORT: float = deg_to_rad(80.0)
+# The plane the shoulder blade faces, forward of straight out to the side: an
+# arm raised in it is the shoulder's rest; swung across the chest past it, the
+# arm works against the blade, more the higher it is raised.
+const SCAPULAR_PLANE: float = deg_to_rad(30.0)
+# The upper arm's turn it rests at: in, so a bent elbow lays the forearm across
+# the belly (arms folded, a hand on the stomach).
+const AXIAL_REST: float = deg_to_rad(40.0)
 # A metre of reach or depth weighs as this many radians of joint past its range.
 const METRE_AS_RADIANS: float = 5.0
 # How much worse a pose past a range is than any comfortable one, per radian:
@@ -497,8 +504,15 @@ static func _score(out: ArmPose) -> void:
 	_hold(out, Limit.ARM_IN_TORSO, out.torso_depth * METRE_AS_RADIANS, 0.0)
 	_hold(out, Limit.HAND_IN_TORSO, out.hand_depth * METRE_AS_RADIANS, 0.0)
 	var c: float = 0.0
-	c += _sq(out.elevation / SHOULDER_ELEVATION_MAX)
-	c += _sq(out.axial / (SHOULDER_INTERNAL_MAX if out.axial > 0.0 else SHOULDER_EXTERNAL_MAX))
+	# The shoulder holds the arm up against gravity: its effort grows with how far
+	# the upper arm stands out from the body, full at horizontal.
+	var raised: float = sin(minf(out.elevation, PI * 0.5))
+	c += _sq(raised)
+	c += _sq(raised * maxf(out.plane - SCAPULAR_PLANE, 0.0)
+			/ (SHOULDER_HORIZONTAL_ADDUCTION_MAX - SCAPULAR_PLANE))
+	var turned: float = out.axial - AXIAL_REST
+	c += _sq(turned / (SHOULDER_INTERNAL_MAX - AXIAL_REST if turned > 0.0
+			else SHOULDER_EXTERNAL_MAX + AXIAL_REST))
 	c += _sq((out.elbow_flexion - ELBOW_COMFORT) / ELBOW_FLEXION_MAX)
 	c += _sq(out.pronation / (PRONATION_MAX if out.pronation > 0.0 else SUPINATION_MAX))
 	c += _sq(out.wrist_flexion

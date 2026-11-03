@@ -14,6 +14,9 @@ extends RefCounted
 
 # Thoracolumbar ranges with the pelvis held (AAOS), radians.
 const TRUNK_TWIST_MAX: float = deg_to_rad(45.0)
+# Carrying, the chest turns toward the puck by this share of its bearing, as
+# the eyes on it bring it round: the twist's comfort is measured from there.
+const TWIST_TOWARD_PUCK: float = 0.5
 const TRUNK_FLEXION_MAX: float = deg_to_rad(80.0)
 const TRUNK_SIDE_MAX: float = deg_to_rad(35.0)
 # How far the stick may turn about its own length off a square face: the
@@ -25,18 +28,21 @@ const SHAFT_RADIUS: float = 0.015
 const _SHAFT_SAMPLES: int = 12
 
 # The coarse grid the search starts from, then refines about its best.
-const _TWISTS: int = 5
+const _TWISTS: int = 7
 const _ELEVATIONS: Array[float] = [15.0, 25.0, 35.0, 45.0, 55.0, 65.0, 75.0]
 const _AZIMUTHS: int = 16
-const _SPACING_STEPS: int = 2
-const _SPACING_STEP_M: float = 0.1
+const _SPACING_STEPS: int = 4
+const _SPACING_STEP_M: float = 0.05
 const _REFINE_LEVELS: int = 3
 const _SEEDS: int = 3
 # The leans each seed is tried at before refining (forward, toward +X; deg):
 # reaching out, a body leans into it.
 const _LEAN_SEEDS: Array[Vector2] = [Vector2(15.0, 0.0), Vector2(30.0, 0.0),
-		Vector2(15.0, 15.0), Vector2(15.0, -15.0)]
+		Vector2(45.0, 0.0), Vector2(15.0, 15.0), Vector2(15.0, -15.0)]
 const _LEAN_STEP: float = deg_to_rad(10.0)
+# The leans the coarse grid is scored at (deg): a stick held out where only a
+# fold reaches reads as out of reach upright, and would never be seeded.
+const _GRID_LEANS: Array[Vector2] = [Vector2.ZERO, Vector2(30.0, 0.0)]
 # The refinement's first step in the crouch (m).
 const _CROUCH_STEP_M: float = 0.06
 # A crouch's comfort cost runs from none, at a hockey ready stance this far
@@ -138,6 +144,8 @@ var _trial := Pose.new()
 var _seeded := Pose.new()
 # The lean _try poses the chest at, and the trunk it last scored.
 var _lean := Vector2.ZERO
+# The twist the trunk rests at for the blade being held (TWIST_TOWARD_PUCK).
+var _twist_rest: float = 0.0
 var _crouch: float = 0.0
 var _trunk_now := TrunkState.new()
 var _seeds: Array[Vector4] = []
@@ -194,16 +202,19 @@ func _solve_within(trunk: TrunkState, heel: Vector3, out: Pose, crouch_lo: float
 	_crouch = ready
 	_seeds.clear()
 	var twist_step: float = 2.0 * TRUNK_TWIST_MAX / float(_TWISTS - 1)
-	for i: int in _TWISTS:
-		var twist: float = -TRUNK_TWIST_MAX + twist_step * float(i)
-		for elevation: float in _ELEVATIONS:
-			for j: int in _AZIMUTHS:
-				var heading: float = TAU * float(j) / float(_AZIMUTHS)
-				if not _in_reach(trunk, heel, twist, deg_to_rad(elevation), heading):
-					continue
-				var score: float = _try(trunk, heel, twist, deg_to_rad(elevation), heading,
-						-1.0, out)
-				_keep_seed(Vector4(score, twist, deg_to_rad(elevation), heading))
+	for grid_lean: Vector2 in _GRID_LEANS:
+		_lean = grid_lean * (PI / 180.0)
+		for i: int in _TWISTS:
+			var twist: float = -TRUNK_TWIST_MAX + twist_step * float(i)
+			for elevation: float in _ELEVATIONS:
+				for j: int in _AZIMUTHS:
+					var heading: float = TAU * float(j) / float(_AZIMUTHS)
+					if not _in_reach(trunk, heel, twist, deg_to_rad(elevation), heading):
+						continue
+					var score: float = _try(trunk, heel, twist, deg_to_rad(elevation), heading,
+							-1.0, out)
+					_keep_seed(Vector4(score, twist, deg_to_rad(elevation), heading))
+	_lean = Vector2.ZERO
 	if out.cost == INF:
 		_fail_reach(trunk, heel, out)
 		return
@@ -230,8 +241,16 @@ func _solve_within(trunk: TrunkState, heel: Vector3, out: Pose, crouch_lo: float
 			out.copy_from(_seeded)
 
 
-# Holds the grid's _SEEDS best stick poses, (score, twist, lie, heading).
+# Holds the grid's _SEEDS best stick poses, (score, twist, lie, heading), each
+# in a basin of its own: a pose within a grid step of a better seed is that
+# seed's basin, so a narrow pocket of held poses beside a broad one is still
+# refined.
 func _keep_seed(at: Vector4) -> void:
+	for k: int in _seeds.size():
+		if _same_basin(_seeds[k], at):
+			if at.x < _seeds[k].x:
+				_seeds[k] = at
+			return
 	if _seeds.size() < _SEEDS:
 		_seeds.append(at)
 	else:
@@ -242,6 +261,14 @@ func _keep_seed(at: Vector4) -> void:
 		if at.x >= _seeds[worst].x:
 			return
 		_seeds[worst] = at
+
+
+# Whether two grid poses (score, twist, lie, heading) are a grid step apart or
+# less on every axis.
+static func _same_basin(a: Vector4, b: Vector4) -> bool:
+	var twist_step: float = 2.0 * TRUNK_TWIST_MAX / float(_TWISTS - 1)
+	return absf(a.y - b.y) <= twist_step * 1.01 and absf(a.z - b.z) <= deg_to_rad(10.01) \
+			and absf(angle_difference(a.w, b.w)) <= TAU / float(_AZIMUTHS) * 1.01
 
 
 # The pose of a given trunk twist and stick (out.twist, .lie, .heading,
@@ -293,6 +320,8 @@ func _try(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: f
 	heel.y += _crouch
 	var shaft: Vector3 = _shaft(lie, heading)
 	var hand: Vector3 = heel - shaft * _body.stick_length
+	_twist_rest = clampf(TWIST_TOWARD_PUCK * atan2(-heel.x, -heel.z), -TRUNK_TWIST_MAX,
+			TRUNK_TWIST_MAX) if technique else 0.0
 	t.twist = twist
 	t.lie = lie
 	t.heading = heading
@@ -345,7 +374,10 @@ func _hold_bottom(hand: Vector3, shaft: Vector3, spacing: float, t: Pose) -> voi
 				_spacing_max())
 		_bottom.hand = hand + shaft * d
 		ArmAnatomy.solve(_bottom, _scratch, t.bottom)
-		var score: float = ArmAnatomy.ranking(_scratch.cost, _scratch.violation)
+		var cost: float = _scratch.cost
+		if technique:
+			cost += ArmTechnique.spacing_cost(_body, d)
+		var score: float = ArmAnatomy.ranking(cost, _scratch.violation)
 		if score < best_score:
 			best_score = score
 			best_spacing = d
@@ -368,9 +400,11 @@ func _shaft_depth(torso: Transform3D, hand: Vector3, heel: Vector3) -> float:
 
 
 func _total(t: Pose) -> void:
-	t.cost = t.top.cost + t.bottom.cost + _sq(t.twist / TRUNK_TWIST_MAX) \
+	t.cost = t.top.cost + t.bottom.cost + _sq((t.twist - _twist_rest) / TRUNK_TWIST_MAX) \
 			+ _sq(t.lean.x / TRUNK_FLEXION_MAX) + _sq(t.lean.y / TRUNK_SIDE_MAX) \
 			+ _sq((_trunk_now.sunk + t.crouch - READY_STANCE_M) / CROUCH_COMFORT_M)
+	if technique:
+		t.cost += ArmTechnique.spacing_cost(_body, t.spacing)
 	t.violation = 0.0
 	t.binding_arm = -1
 	t.arm_binding = ArmAnatomy.Limit.NONE

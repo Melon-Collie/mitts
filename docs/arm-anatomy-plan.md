@@ -526,7 +526,8 @@ radian, a millimetre over weighed less than a comfort difference.
 The better search then moved the top fist's square roll, which had been read
 as the roll the solve preferred at a reference carry — a poor pose's roll,
 −181°. It is now geometry (`ArmAnatomy.roll_backing`): the back of the glove
-turned ahead and out to its own side, 166°, as a top hand holds a stick.
+turned out to its own side, the palm in toward the body's middle, as a top hand
+holds a stick in front of him (§16).
 
 ## 15. Phase 3 record
 
@@ -562,3 +563,47 @@ by default. On, the default tier fails 18 tests, the work this phase has left:
   round the body) and the carried reach's average (1.59 against 1.33 m);
 - in the bots' duels, the points hold the zone while a teammate carries 87%
   of the time against 95%.
+
+## 16. The model's own carries
+
+The table is the model's own pick at each blade position, so its picks are
+what the carry draws. On the reference sheets the user found three of six
+wrong: the bottom arm raised and swung across the chest with its elbow
+pointing the same way as the top's, the bottom hand turned in rather than
+cradling the shaft from below, the hands glove to glove (0.14 m), and the top
+hand shoved 0.6 m out in front. Every reference cost about twice the model's
+pick. What changed, each against the sheets and footage (Patrick Kane
+carrying: top glove's back out, forearm across the belly, the bottom arm come
+down to the shaft, the hands about a forearm apart):
+
+- **The shoulder holds the arm up against gravity**: its comfort grows with
+  sin² of the elevation, full at horizontal, where it was a share of a 180°
+  range (raising the arm 70° cost 0.15).
+- **Swinging the raised arm across the chest costs**, past the shoulder
+  blade's plane (`ArmAnatomy.SCAPULAR_PLANE`, 30° forward of straight out),
+  weighted by how far it is raised. Nothing charged it.
+- **The upper arm rests turned in** (`AXIAL_REST`, 40°): a forearm across the
+  belly is how arms rest, folded or on the stomach. Scored from hanging, a top
+  hand in front of the body read as nearly at its range's end, and the model
+  moved it to the hip.
+- **The top glove's square roll faces its back out**, not ahead and out.
+- **Technique**: the top hand no further than 0.5 m ahead of the hips
+  (`TOP_HAND_AHEAD`), the hands preferably a forearm apart
+  (`ArmTechnique.spacing_cost`), and the trunk's twist at rest turned toward
+  the puck by half its bearing (`ArmAnatomySearch.TWIST_TOWARD_PUCK`), as in
+  every reference.
+- **The search** scores its coarse grid at a 30° fold as well as upright,
+  tries twists every 15°, seeds from distinct basins, tries a 45° lean, and
+  places the bottom hand in 5 cm steps: it was missing poses cheaper than its
+  own picks, a narrow pocket beside a broad one.
+
+Tried and dropped: flipping the top fist's grip so the knob leaves past the
+thumb (the fist then turns palm down and reads more strained), and a square
+top grip (the grip's slide takes it back).
+
+The user accepted all six model carries on the sheets.
+`tests/slow/controllers/test_model_carries_like_the_references.gd` holds them
+to it (the top hand within 0.35 m of the reference's, the hands 0.2 m apart
+or more and within 0.15 m of its spacing, the bottom elbow back and not
+raised); the model before this fails it on wide forehand, tight and long
+reach.

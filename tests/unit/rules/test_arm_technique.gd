@@ -65,6 +65,9 @@ func test_each_rule_stops_the_hold_that_breaks_it() -> void:
 		ArmTechnique.Limit.TOP_HAND_BEHIND: func(h: ArmTechnique.Hold) -> void:
 			h.top_hand = Vector3(0.35, 0.0, 0.2)
 			_aim(h, h.blade_dir, body.blade_lie),
+		ArmTechnique.Limit.TOP_HAND_AHEAD: func(h: ArmTechnique.Hold) -> void:
+			h.top_hand.z = -0.65
+			_aim(h, h.blade_dir, body.blade_lie),
 		ArmTechnique.Limit.TOP_HAND_OUT: func(h: ArmTechnique.Hold) -> void:
 			h.top_hand.x = 0.55
 			_aim(h, h.blade_dir, body.blade_lie),
@@ -89,3 +92,14 @@ func test_each_rule_stops_the_hold_that_breaks_it() -> void:
 		assert_eq(ArmTechnique.Limit.keys()[v.binding], ArmTechnique.Limit.keys()[limit],
 				"the rule that stops it")
 		assert_gt(v.violation, 0.0, "and by how much")
+
+
+func test_the_hands_rest_about_a_forearm_apart() -> void:
+	var body: ArmAnatomyBody = _body()
+	var forearm: float = body.fore_len
+	assert_almost_eq(ArmTechnique.spacing_cost(body, forearm), 0.0, 1e-6, "none a forearm apart")
+	assert_almost_eq(ArmTechnique.spacing_cost(body, forearm * 0.5), 1.0, 1e-6,
+			"half a forearm closer costs a joint at its range's end")
+	assert_almost_eq(ArmTechnique.spacing_cost(body, forearm * 1.5), 1.0, 1e-6, "and wider")
+	assert_gt(ArmTechnique.spacing_cost(body, body.spacing_min),
+			ArmTechnique.spacing_cost(body, 0.25), "glove to glove is no rest")

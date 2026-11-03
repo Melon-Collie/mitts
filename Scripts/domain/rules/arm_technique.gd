@@ -12,11 +12,13 @@ extends RefCounted
 
 # The top hand is the pivot and is held in front of the body, between the hips
 # and the chest: no lower than this under the hip joints (the top of the
-# thigh), no higher than this under the top shoulder (the chest), and no
-# further behind the hips than this.
+# thigh), no higher than this under the top shoulder (the chest), no further
+# behind the hips than this, and no further ahead of them than this (it stays
+# in close; the stick reaches).
 const TOP_HAND_BELOW_HIP_M: float = 0.15
 const TOP_HAND_BELOW_SHOULDER_M: float = 0.2
 const TOP_HAND_BEHIND_HIP_M: float = 0.05
+const TOP_HAND_AHEAD_M: float = 0.5
 # And held in front of the body across it: out on its own side no further than
 # beside the hip (reaching round the backhand it comes out there), across the
 # body no further than this past the middle (round the forehand it comes across
@@ -26,6 +28,11 @@ const TOP_HAND_ACROSS_M: float = 0.15
 # The hands are held apart no wider than the shoulders, outside the pads
 # (ArmAnatomyBody.shoulder_width).
 const HANDS_APART_SHOULDERS: float = 1.0
+# And, by preference, about a forearm apart, the bottom hand low enough on the
+# shaft for leverage: off it by half a forearm costs what a joint at its range's
+# end does (spacing_cost).
+const HANDS_APART_FOREARMS: float = 1.0
+const HANDS_APART_BAND_FOREARMS: float = 0.5
 # The knob may press into the jersey no deeper than gear presses into gear
 # (ArmAnatomyBody.gear_press): a stick pulled in until the knob digs into the
 # stomach is not a carry.
@@ -44,6 +51,7 @@ enum Limit {
 	TOP_HAND_LOW,
 	TOP_HAND_HIGH,
 	TOP_HAND_BEHIND,
+	TOP_HAND_AHEAD,
 	TOP_HAND_OUT,
 	TOP_HAND_ACROSS,
 	HANDS_APART,
@@ -84,6 +92,7 @@ static func assess(body: ArmAnatomyBody, hold: Hold, out: Verdict) -> void:
 	_over(out, Limit.TOP_HAND_LOW, -TOP_HAND_BELOW_HIP_M - hand.y)
 	_over(out, Limit.TOP_HAND_HIGH, hand.y - (hold.top_shoulder.y - TOP_HAND_BELOW_SHOULDER_M))
 	_over(out, Limit.TOP_HAND_BEHIND, hand.z - TOP_HAND_BEHIND_HIP_M)
+	_over(out, Limit.TOP_HAND_AHEAD, -hand.z - TOP_HAND_AHEAD_M)
 	var own_side: float = hand.x * signf(body.top_shoulder.x)
 	_over(out, Limit.TOP_HAND_OUT, own_side - TOP_HAND_OUT_M)
 	_over(out, Limit.TOP_HAND_ACROSS, -own_side - TOP_HAND_ACROSS_M)
@@ -111,3 +120,11 @@ static func _over(out: Verdict, limit: Limit, metres: float) -> void:
 	if v > out.violation:
 		out.violation = v
 		out.binding = limit
+
+
+# The comfort cost of holding the hands `spacing` apart down the shaft, for
+# `body`: none at about a forearm apart.
+static func spacing_cost(body: ArmAnatomyBody, spacing: float) -> float:
+	var x: float = (spacing - body.fore_len * HANDS_APART_FOREARMS) \
+			/ (body.fore_len * HANDS_APART_BAND_FOREARMS)
+	return x * x
