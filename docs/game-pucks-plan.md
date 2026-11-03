@@ -42,32 +42,46 @@ rafters for something bigger.
 - **Existing achievements fold into the catalogue.** The 20 rows in
   `Achievements.ALL` become Game Pucks and keep their ids, so nothing already
   unlocked on Steam is lost.
+- **Store only what cannot be derived.** Count tiers are read off the Steam
+  User Stats totals (`SteamStats`, cross-machine and independent of Supabase)
+  every time, and banners off the pucks, so neither is stored. What is stored —
+  the earned game, feat, event and roster pucks, and the equipped title — is a
+  section of the preferences file Steam Cloud already syncs (`PlayerPrefs`), so
+  no new Cloud file or Steamworks Cloud setting is involved. That file
+  reconciles newest-write-wins; the ledger section merges as a union instead,
+  since an earned puck is never un-earned.
+- **Steam achievements are opt-in per puck.** A puck is mirrored to Steam only
+  when its registry row is flagged for it. The existing 20 are flagged; nothing
+  new is until it is worth the Steamworks setup (below). Puck, banner and title
+  names are `locale/translations.csv` rows, never Steamworks strings.
+
+## Steamworks work
+
+Everything the code cannot do, per phase. Each item is done on both apps
+(4892600 and the Playtest 4893650) and then published.
+
+| when | item |
+|---|---|
+| Phase 1 | Define one INT stat, `STAT_INTERCEPTIONS` (`steam/STATS.md`). Points are goals + assists, so they need no stat. |
+| any new counter | One INT stat per counter a ladder reads. |
+| any puck flagged for Steam | One achievement: name, description, locked and unlocked icons (`steam/ACHIEVEMENTS.md`). Optional, so as many or as few as wanted. |
+
+Pucks, tiers, banners, titles and cosmetic rewards need no Steamworks work.
 
 ## Open questions
 
 Each has a recommendation; none is settled.
 
-1. **Where unlocks are stored.** *Recommendation:* lifetime counters stay in
-   Steam User Stats (`SteamStats`, already cross-machine and independent of
-   Supabase). The set of earned pucks and banners lives in a local ledger file
-   mirrored to Steam Cloud the way `PlayerPrefs` already is; the equipped title
-   is a pref. Supabase is the alternative, but it needs stat sharing on and a
-   reachable backend.
-2. **Which pucks are also Steam achievements.** Every Steam achievement is hand
-   set up in Steamworks for both apps, with two icons each (`steam/ACHIEVEMENTS.md`);
-   a catalogue of a hundred-plus pucks makes that a burden. *Recommendation:* the
-   catalogue is in-game, and a curated subset — the existing 20, the milestone
-   tiers, the best feats — mirrors to Steam.
-3. **Where a title shows.** *Recommendation:* the lobby bench card, the
+1. **Where a title shows.** *Recommendation:* the lobby bench card, the
    scoreboard, the Three Stars and the post-game screen. The on-ice nameplate
    stays name-only, since it is read at speed.
-4. **Cheating.** Pucks are evaluated on the player's own machine and anyone can
+2. **Cheating.** Pucks are evaluated on the player's own machine and anyone can
    set a Steam achievement directly, so a determined player can unlock any
    reward. *Recommendation:* accept it for cosmetics and titles, and build no
    anti-cheat. The host does not check that a peer owns the title or cosmetic it
    wears; it only clamps an unknown id to none, as `GearStyleConfig.from_code`
    does for gear codes.
-5. **Do bots wear reward cosmetics?** *Recommendation:* no. A bot's look draws
+3. **Do bots wear reward cosmetics?** *Recommendation:* no. A bot's look draws
    from the free options only, so a reward stays something a human earned.
 
 ## The model
@@ -112,8 +126,8 @@ from a banner.
 | Iron Man | Games III | Iron Man |
 
 Count pucks for the ladders: goals, assists, points, wins, games, interceptions,
-takeaways, blocks, faceoff wins, hits. `SteamStats` has most of
-these already; interceptions and points need rows.
+takeaways, blocks, faceoff wins, hits. `SteamStats` has all of these but
+interceptions, which needs `STAT_INTERCEPTIONS`; points are goals + assists.
 
 Feats are where Mitts can stand out, since the mechanics are deep enough to
 name specific plays: a backhand roof goal, a HIGH-loft goal from beyond the
@@ -130,16 +144,17 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   and keeps its condition kinds, adding `count` ladders and `feat`.
 - `domain/config/banners.gd` and `domain/config/titles.gd`: banner
   requirements and rewards; title ids and their locale keys.
-- `domain/state/trophy_ledger.gd`: the earned set (pucks, tiers, banners) and
-  the equipped title, with its serialization.
-- `domain/rules/game_puck_rules.gd`: given counters, one game's stats and the
-  ledger, which pucks and banners are newly earned, and each one's progress.
-  Earning is idempotent: evaluating twice earns nothing new.
+- `domain/state/trophy_ledger.gd`: the stored part only — the earned game,
+  feat, event and roster pucks, and the equipped title — with its serialization
+  and the union merge.
+- `domain/rules/game_puck_rules.gd`: given the Steam counters, one game's stats
+  and the ledger, which pucks, tiers and banners are earned, and each one's
+  progress. Earning is idempotent: evaluating twice earns nothing new.
 
 **Application:**
 - `TrophyService` grows out of `AchievementService`: it evaluates at game-over
-  and on events, writes the ledger, mirrors the curated subset to Steam through
-  `SteamManager`, and emits a signal for the earn toast.
+  and on events, writes the ledger into `PlayerPrefs`, unlocks the pucks flagged
+  for Steam through `SteamManager`, and emits a signal for the earn toast.
 - The feat channel. A feat is detected on the host, where the authoritative
   events are, and only the earning player records it. One RPC,
   `notify_feat(feat_id)`, carries every feat (CLAUDE.md → *New RPC*:
@@ -157,17 +172,17 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - Locked cosmetics. A cosmetic registry option (`GearModelRegistry`,
   `StickModelRegistry`, the tape palette) may carry the banner that unlocks it.
   The picker shows a locked option with what earns it; the lobby relays what a
-  player wears whether or not it is earned (question 4).
+  player wears whether or not it is earned (question 2).
 
-**Wire.** The title id joins `PlayerLook.cosmetics_to_wire()`, and
-`notify_feat` adds an RPC; one protocol bump covers both, in Phase 2.
+**Wire.** The title id joins `PlayerLook.cosmetics_to_wire()` (Phase 2) and
+`notify_feat` adds an RPC (Phase 3); each bumps the protocol in its phase.
 
 ## Phases
 
 1. **Catalogue and Trophy Case.** The registries, rules, ledger and
    `TrophyService`; the 20 achievements migrated as pucks; count ladders on the
-   Steam counters; a read-only Trophy Case with progress; the earn toast. No
-   rewards yet.
+   Steam counters, with `STAT_INTERCEPTIONS` added; a read-only Trophy Case with
+   progress; the earn toast. No rewards yet.
 2. **Titles.** The title registry, banners that award them, the title picker,
    the title on the wire and on screen. Protocol bump.
 3. **Feats.** The `notify_feat` channel and the first feats, with their banners.
@@ -185,6 +200,8 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   fewer tiers; a banner is earned exactly when its last requirement is.
 - **Ledger round-trip:** serialize, reload, compare; an unknown id in a saved
   ledger is dropped rather than failing the load.
+- **Ledger merge:** merging two ledgers keeps every puck either holds, whichever
+  copy is newer, so a Steam Cloud adopt never loses one.
 - **Steam mirror:** every puck flagged for Steam is listed in
   `steam/ACHIEVEMENTS.md`, held by a test, not a comment.
 
