@@ -22,10 +22,10 @@ class_name Achievements
 ##   "game"    — a single game's stat reached `min`. `field` is one of the keys
 ##               in AchievementRules.game_dict (goals/assists/points/shots_on_goal
 ##               /hits/shots_blocked). Evaluated at game-over, any mode.
-##   "career"  — a lifetime total reached `min`. `field` is a career_totals column
-##               (goals/assists/points/hits/shots_blocked/games_played/wins/...).
-##               Evaluated at game-over in online shared-stats sessions only
-##               (the totals live in Supabase).
+##   "career"  — a lifetime total reached `min`. `field` is a SteamStats `key`
+##               (goals/assists/hits/shots_blocked/games_played/wins/...).
+##               Evaluated at game-over of every real match against the Steam
+##               User Stats totals (SteamStatRecorder), bots included.
 ##   "special" — a compound game-over condition keyed by `key`; AchievementRules
 ##               hard-codes the predicate. Evaluated alongside "game".
 ##   "event"   — fired live from a gameplay moment, not from the game-over sweep.
@@ -190,7 +190,7 @@ const ALL: Array[Dictionary] = [
 		"desc": "Play an online game with Buukie.",
 		"cond": {"kind": "roster", "steam_id": BUUKIE_STEAM_ID},
 	},
-	# ── Career milestones (competitive games only — see game_manager gate) ────
+	# ── Career milestones (every real match — see game_manager gate) ─────────
 	{
 		"id": SNIPER, "name": "Sniper", "hidden": false,
 		"desc": "Score 50 career goals.",
