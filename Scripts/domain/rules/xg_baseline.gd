@@ -60,12 +60,9 @@ static func for_shot(x: float, z: float, team_id: int, shot_type: int) -> float:
 	return sigmoid(logit_for_shot(x, z, team_id, shot_type))
 
 
-# The LOG-ODDS behind for_shot, exposed so a model can extend this form with
-# extra features instead of re-declaring its coefficients. AIShotValue adds a
-# keeper-displacement term to exactly this logit, which is what makes "the
-# public form plus one feature" a structural fact rather than a comment: at
-# zero displacement the two are identical by construction, and the unit tests
-# assert it.
+# The LOG-ODDS behind for_shot, exposed so a caller can read danger on this
+# scale without re-declaring its coefficients (CrowdEnergyRules.chance maps it
+# onto the crowd's swell).
 static func logit_for_shot(x: float, z: float, team_id: int,
 		shot_type: int) -> float:
 	var goal_z: float = attacking_goal_z(team_id)
