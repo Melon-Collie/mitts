@@ -10,9 +10,8 @@ extends RefCounted
 # paint every zone of the piece (boot / collar / accent band; glove body /
 # cuff) out of black, white and the team's own colors, rather than a single
 # accent color the player tints.
-# The stick pick is an index into StickModelRegistry — a fixed shaft/blade
-# colorway, because real sticks ship in their maker's colors whoever you play
-# for. The lace pick stays an index into the shared TapeColorRegistry palette,
+# The stick pick is a StickModelRegistry pattern; the colours its zones are
+# painted ride the tape code (StickTapeConfig). The lace pick stays an index into the shared TapeColorRegistry palette,
 # because laces are chosen apart from the skate. The face pick is a
 # GearModelRegistry FACE_* option (bare / visor / cage / fishbowl) — a fixed
 # look, like the stick. The tuck is a GearModelRegistry TUCK_* option, the
@@ -27,7 +26,7 @@ extends RefCounted
 # forged code lands on a legal look instead of being rejected.
 #
 # Defaults — skate model 0 (all-black boot), glove model 0 (kit-colored body
-# and cuff), laces WHITE, stick model 0 (the house MITTS stick), face 0 (bare),
+# and cuff), laces WHITE, stick pattern 0 (Solid, the house MITTS stick), face 0 (bare),
 # short dark-brown hair, no facial hair, the jersey worn loose, the tongue tucked
 # — are the stock look an untouched player wears. Zero in every hair, tuck and
 # tongue field is that

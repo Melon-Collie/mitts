@@ -14,9 +14,10 @@ const TAPE_BLADE := "tape_blade"
 const TAPE_KNOB := "tape_knob"
 const TAPE_TOE := "tape_toe"
 const LACES := "laces"
+const STICK_PAINT := "stick_paint"
 const TAPE_SPAN := "tape_span"
-const COLOR_SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, TAPE_TOE, LACES]
-const SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, TAPE_TOE, LACES, TAPE_SPAN]
+const COLOR_SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, TAPE_TOE, LACES, STICK_PAINT]
+const SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, TAPE_TOE, LACES, STICK_PAINT, TAPE_SPAN]
 
 const FREE_COLORS: Array[int] = [
 	TapeColorRegistry.TEAM_INDEX, TapeColorRegistry.TEAM_SECOND_INDEX,
@@ -109,6 +110,11 @@ static func worn_tape_code(code: int, raised: Array[String]) -> int:
 	tape.toe_color = _worn(TAPE_TOE, tape.toe_color, raised)
 	if not is_available(TAPE_SPAN, tape.span, raised):
 		tape.span = StickTapeConfig.Span.HEEL_TO_MID
+	if tape.paint_custom:
+		var colors: Array[int] = []
+		for zone: int in StickModelRegistry.ZONE_COUNT:
+			colors.append(_worn(STICK_PAINT, tape.paint[zone], raised))
+		tape.set_paint(colors)
 	return tape.to_code()
 
 

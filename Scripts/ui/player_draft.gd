@@ -114,6 +114,25 @@ func set_tape(t: StickTapeConfig) -> void:
 	tape_code = t.to_code()
 
 
+# A new pattern starts in its own default colours.
+func set_stick_pattern(pattern: int) -> void:
+	var g: GearStyleConfig = gear()
+	g.stick_model = pattern
+	set_gear(g)
+	var t: StickTapeConfig = tape()
+	t.clear_paint()
+	set_tape(t)
+
+
+# Paints one zone of the stick, the others keeping the colours they wear now.
+func set_stick_zone(zone: int, color: int) -> void:
+	var t: StickTapeConfig = tape()
+	var colors: Array[int] = StickModelRegistry.zone_colors(gear().stick_model, t)
+	colors[zone] = color
+	t.set_paint(colors)
+	set_tape(t)
+
+
 func team_colors() -> Dictionary:
 	return TeamColorRegistry.get_colors(maxi(color_slot, 0), 0)
 

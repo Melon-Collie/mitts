@@ -1,8 +1,8 @@
 # Game Pucks and Banners — progression design record
 
 Status: **Phases 1–3 built** (the catalogue, the ledger, the Trophy Case,
-titles and feats); Phase 4 steps 1–2 built, step 3 (sticks as patterns) not
-started.
+titles and feats) and Phase 4 (cosmetic rewards: free colours, signature tape
+jobs, sticks as patterns).
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done. Completing a named
@@ -21,7 +21,7 @@ rafters for something bigger.
   this system's first rule: a gear option with a tradeoff on a mechanic is never
   a reward, and a cosmetic that is a reward changes nothing gameplay reads.
 - **Colour picks are team, team 2, white and black.** The shared tape palette
-  (blade tape, knob, laces, and the stick paint to come) offers only the kit's
+  (blade tape, knob, laces, and the stick's paint) offers only the kit's
   primary and secondary colours, white and black. The other colours leave the
   picker but stay in the data, so old codes and bots still decode them; one
   comes back only as a specific reward where it makes sense. A saved pick that
@@ -239,11 +239,17 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       Playmaker banner's. Homages to two players' real tape jobs, never naming
       them. The player screen lists a locked job greyed with its banner; an
       unearned one is worn heel-to-mid.
-   3. **Sticks as patterns.** A stick model becomes a pattern whose zones (shaft,
-      wordmark, bands, blade) the player paints from the palette under the same
-      rules; the current models become patterns with near defaults. The stick's
-      paint moves out of the full gear code into the tape code, which becomes
-      the whole stick's look. Saved sticks migrate to their nearest pattern.
+   3. **Sticks as patterns** (built). A stick is a pattern
+      (`StickModelRegistry`) — Solid, Kick, Block, Split, Wood — whose zones
+      (shaft, up to two bands, wordmark, blade) the player paints from the
+      palette under the same rules; Wood's shaft and blade stay varnished ash.
+      The pattern stays in the gear code's `stick_model` field, so a saved
+      stick keeps its index; the old colourways became patterns whose defaults
+      put the team colour where the accent was. The zone colours ride the tape
+      code behind a paint flag, so an unpainted stick, a bot and an older code
+      draw the pattern's defaults, and picking a new pattern drops the paint.
+      The old white colourway is an unlisted alias, rewritten on load as Solid
+      painted white. Protocol bump.
    Later rewards (helmet stickers, a spray-painted stick, signature laces) are
    new content on the same machinery.
 

@@ -228,7 +228,7 @@ var preferred_color_slot: int = -1  # team color preset slot index; -1 → use t
 # Packed StickTapeConfig code (blade tape color + coverage + knob color +
 # handle style).
 var stick_tape_code: int = StickTapeConfig.DEFAULT_CODE
-# Packed GearStyleConfig code (skate/glove/stick models + lace color + helmet
+# Packed GearStyleConfig code (skate/glove models, stick pattern, lace color + helmet
 # face gear + jersey tuck, and the hair) — the gear cosmetics, carried through
 # the join handshake like the tape job.
 var gear_style_code: int = GearStyleConfig.DEFAULT_CODE
@@ -1141,6 +1141,11 @@ func _load() -> void:
 		gear_style_code = CosmeticUnlocks.worn_gear_code(int(cfg.get_value(
 				"player", "gear_style", GearStyleConfig.DEFAULT_CODE)),
 				CosmeticUnlocks.every_banner())
+		var stick_gear: GearStyleConfig = GearStyleConfig.from_code(gear_style_code)
+		var stick_tape: StickTapeConfig = StickTapeConfig.from_code(stick_tape_code)
+		StickModelRegistry.unalias(stick_gear, stick_tape)
+		gear_style_code = stick_gear.to_code()
+		stick_tape_code = stick_tape.to_code()
 		skin_tone = SkinToneRegistry.clamp_index(int(cfg.get_value(
 				"player", "skin_tone", SkinToneRegistry.DEFAULT_INDEX)))
 		# Only the v5 body+gear build loads; an older save keeps the neutral build

@@ -111,3 +111,19 @@ func test_an_unearned_tape_job_is_worn_heel_to_mid() -> void:
 	job.toe_color = 3
 	assert_eq(StickTapeConfig.from_code(CosmeticUnlocks.worn_tape_code(job.to_code(),
 			playmaker)).toe_color, TapeColorRegistry.TEAM_INDEX, "the toe follows the colour rules")
+
+
+func test_unavailable_stick_paint_is_worn_as_the_team_colour() -> void:
+	var none: Array[String] = []
+	var tape := StickTapeConfig.new()
+	tape.set_paint([_RED, TapeColorRegistry.WHITE_INDEX, TapeColorRegistry.TEAM_SECOND_INDEX,
+			_RED, TapeColorRegistry.BLACK_INDEX])
+	var worn := StickTapeConfig.from_code(CosmeticUnlocks.worn_tape_code(tape.to_code(), none))
+	var expected: Array[int] = [TapeColorRegistry.TEAM_INDEX, TapeColorRegistry.WHITE_INDEX,
+			TapeColorRegistry.TEAM_SECOND_INDEX, TapeColorRegistry.TEAM_INDEX,
+			TapeColorRegistry.BLACK_INDEX]
+	assert_true(worn.paint_custom)
+	assert_eq(worn.paint, expected)
+	var unpainted := StickTapeConfig.new()
+	assert_eq(CosmeticUnlocks.worn_tape_code(unpainted.to_code(), none), unpainted.to_code(),
+			"an unpainted stick stays on its pattern's defaults")

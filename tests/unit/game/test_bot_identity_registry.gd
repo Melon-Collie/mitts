@@ -166,7 +166,7 @@ func test_normalize_packs_pinned_cosmetics() -> void:
 			"tape_knob": 2, "knob_style": StickTapeConfig.KnobStyle.CANDY_CANE,
 			"skate_model": GearModelRegistry.SKATE_RETRO,
 			"glove_model": GearModelRegistry.GLOVE_TRICOLOR,
-			"lace_color": 5, "stick_model": StickModelRegistry.STICK_VOLT,
+			"lace_color": 5, "stick_model": StickModelRegistry.PATTERN_BLOCK,
 			"helmet_face": GearModelRegistry.FACE_CAGE})
 	var tape: StickTapeConfig = StickTapeConfig.from_code(int(norm.tape_code))
 	assert_eq(tape.blade_color, 5)
@@ -177,7 +177,7 @@ func test_normalize_packs_pinned_cosmetics() -> void:
 	assert_eq(gear.skate_model, GearModelRegistry.SKATE_RETRO)
 	assert_eq(gear.glove_model, GearModelRegistry.GLOVE_TRICOLOR)
 	assert_eq(gear.lace_color, 5)
-	assert_eq(gear.stick_model, StickModelRegistry.STICK_VOLT)
+	assert_eq(gear.stick_model, StickModelRegistry.PATTERN_BLOCK)
 	assert_eq(gear.helmet_face, GearModelRegistry.FACE_CAGE)
 
 

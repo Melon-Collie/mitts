@@ -470,3 +470,10 @@ here whenever you bump, in the same format.
 #      peer clamps the new spans and drops the toe colour; mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: an older replay's codes decode
 #      as before.
+# v97: sticks as patterns (docs/game-pucks-plan.md, Phase 4 step 3). The gear
+#      code's stick_model is now a StickModelRegistry pattern, and the tape
+#      code grows a paint flag and five 5-bit zone colours above the toe
+#      colour (46 bits in all). An older peer drops the paint and draws the
+#      old fixed colourways; mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: an older replay's tape code has no paint flag
+#      and draws its pattern's defaults.

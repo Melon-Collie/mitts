@@ -141,9 +141,10 @@ func _paint_stick(gear: GearStyleConfig, tape: StickTapeConfig,
 	# Fresh materials from the same factories the rink uses, so the figure's
 	# stick IS the in-game stick. The shaft material comes back with default
 	# uniforms, so the pose's shaft length has to be re-sent after it.
-	shaft_mat = StickStyle.make_shaft_material(gear.stick_model)
+	var zones: Array[int] = StickModelRegistry.zone_colors(gear.stick_model, tape)
+	shaft_mat = StickStyle.make_shaft_material(gear.stick_model, zones, accent, second)
 	shaft.material_override = shaft_mat
-	blade.material_override = StickStyle.make_blade_material(gear.stick_model)
+	blade.material_override = StickStyle.make_blade_material(gear.stick_model, zones, accent, second)
 
 	var knob_color: Color = TapeColorRegistry.resolve(tape.knob_color, accent, second)
 	shaft_mat.set_shader_parameter(&"grip_mode", tape.knob_style)

@@ -70,12 +70,6 @@ TAPE_HANDLE_FULL,Full grip,Empuñadura completa
 STICK_GAMEPLAY_LEGEND,* affects gameplay,* afecta a la jugabilidad
 TAPE_COLOR_TEAM_SHORT,Team,Equipo
 STICK_MODEL_LABEL,Model,Modelo
-STICK_MODEL_STEALTH,Stealth,Stealth
-STICK_MODEL_REDLINE,Redline,Redline
-STICK_MODEL_VOLT,Volt,Volt
-STICK_MODEL_SPLIT,Split,Dividido
-STICK_MODEL_WHITEOUT,Whiteout,Todo blanco
-STICK_MODEL_WOODIE,Woodie,Madera
 EDIT_PENDING_NOTE,Unapplied changes,Cambios sin aplicar
 PLAYER_SKIN_LABEL,Skin,Piel
 PLAYER_POSITION_LABEL,Position,Posición
@@ -504,3 +498,14 @@ TAPE_SPAN_BOTTOM_STRIP,Bottom strip,Tira inferior
 TAPE_SPAN_LOCKED,%s · %s banner,%s · estandarte %s
 TAPE_TOE_LABEL,Toe cap,Puntera
 TROPHY_BANNER_TAPE,Unlocks the %s tape job,Desbloquea el encintado %s
+STICK_PATTERN_LABEL,Pattern,Diseño
+STICK_PATTERN_SOLID,Solid,Liso
+STICK_PATTERN_KICK,Kick zone,Zona de flexión
+STICK_PATTERN_BLOCK,Block,Bloque
+STICK_PATTERN_SPLIT,Split,Dividido
+STICK_PATTERN_WOOD,Wood,Madera
+STICK_ZONE_SHAFT,Shaft,Caña
+STICK_ZONE_BAND1,Band,Franja
+STICK_ZONE_BAND2,Second band,Segunda franja
+STICK_ZONE_WORDMARK,Wordmark,Logotipo
+STICK_ZONE_BLADE,Blade,Pala

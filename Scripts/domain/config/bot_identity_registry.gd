@@ -37,7 +37,7 @@ class_name BotIdentityRegistry
 #     2 black, 3.. the flair colors), "tape_span" (StickTapeConfig.Span),
 #     "knob_style" (StickTapeConfig.KnobStyle);
 #   gear     — "skate_model" / "glove_model" (GearModelRegistry),
-#     "lace_color" (TapeColorRegistry), "stick_model" (StickModelRegistry),
+#     "lace_color" (TapeColorRegistry), "stick_model" (StickModelRegistry pattern, in its default colours),
 #     "helmet_face" (GearModelRegistry FACE_*: 0 bare / 1 visor / 2 cage /
 #     3 fishbowl), "jersey_tuck" (TUCK_*: 0 loose / 1 left / 2 right / 3 full),
 #     "skate_tongue" (TONGUE_*: 0 tucked / 1 out / 2 under the sock);
@@ -101,10 +101,10 @@ const _FB_GLOVE: Array[int] = [GearModelRegistry.GLOVE_TEAM, GearModelRegistry.G
 		GearModelRegistry.GLOVE_TRICOLOR, GearModelRegistry.GLOVE_TEAM]
 const _FB_LACES: Array[int] = [_TAPE_WHITE, _TAPE_WHITE, _TAPE_WHITE, _TAPE_BLACK,
 		_TAPE_WHITE, _LACE_YELLOW, _TAPE_BLACK, _TAPE_WHITE]
-const _FB_STICK: Array[int] = [StickModelRegistry.STICK_STEALTH, StickModelRegistry.STICK_REDLINE,
-		StickModelRegistry.STICK_VOLT, StickModelRegistry.STICK_STEALTH,
-		StickModelRegistry.STICK_SPLIT, StickModelRegistry.STICK_STEALTH,
-		StickModelRegistry.STICK_REDLINE, StickModelRegistry.STICK_STEALTH]
+const _FB_STICK: Array[int] = [StickModelRegistry.PATTERN_SOLID, StickModelRegistry.PATTERN_KICK,
+		StickModelRegistry.PATTERN_BLOCK, StickModelRegistry.PATTERN_SOLID,
+		StickModelRegistry.PATTERN_SPLIT, StickModelRegistry.PATTERN_SOLID,
+		StickModelRegistry.PATTERN_KICK, StickModelRegistry.PATTERN_SOLID]
 # Visor-heavy like a real pro lineup, with bare heads for the old-school and
 # the occasional cage or fishbowl for flavor.
 const _FB_FACE: Array[int] = [GearModelRegistry.FACE_VISOR, GearModelRegistry.FACE_VISOR,
