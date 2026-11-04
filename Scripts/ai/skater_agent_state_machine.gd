@@ -2895,7 +2895,8 @@ func _upright_lateral_accel() -> float:
 # Stick play (SkaterAgentStickPlay): these gather the bot's role, gates and reaches.
 func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	return _stick_play.jab_aim(snapshot, self_pos, _is_puck_pressurer_slot(snapshot),
-			_lifts_sticks, _stick_lift_reach, _poke_jab_reach, _dispatch_period_ticks)
+			_lifts_sticks, _stick_lift_reach, _poke_jab_reach, _dispatch_period_ticks,
+			_self_blade_speed)
 
 
 func _jab_target(snapshot: WorldSnapshot) -> Vector3:
