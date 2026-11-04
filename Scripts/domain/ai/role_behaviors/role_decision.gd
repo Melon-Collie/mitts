@@ -23,7 +23,9 @@ var retreat_floor_center: Vector3 = Vector3.ZERO
 var retreat_floor_radius_m: float = 0.0
 
 # The other side of the same route: most speed, m/s, a stand riding a man may
-# command AWAY from `retreat_floor_center` (INF = no cap). Read only with a floor.
+# command AWAY from `retreat_floor_center` (INF = no cap); negative, the least
+# it must command TOWARD it, never past what the floor allows. Read only with a
+# floor.
 var advance_cap_m_s: float = INF
 
 # Skate the route facing where it goes rather than facing the play: a defender

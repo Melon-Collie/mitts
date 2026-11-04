@@ -70,11 +70,12 @@ func drop_tie() -> void:
 # INF. Runs the jab lifecycle — active, then cooldown, then a fresh trigger when
 # within reach of an opposing carrier's puck. Only the puck-pressurer slots jab,
 # so the team doesn't collapse two bots onto the puck.
-# `is_pressurer` is whether our role owns the carrier this beat; the reaches are
-# this bot's own; the window counts down by `dispatch_period_ticks`.
+# `is_pressurer` is whether our role owns the carrier this beat; the reaches and
+# `blade_speed` are this bot's own; the window counts down by
+# `dispatch_period_ticks`.
 func jab_aim(snapshot: WorldSnapshot, self_pos: Vector3, is_pressurer: bool,
 		lifts_sticks: bool, stick_lift_reach: float, jab_reach: float,
-		dispatch_period_ticks: int) -> Vector3:
+		dispatch_period_ticks: int, blade_speed: float) -> Vector3:
 	if _poke_jab_active_ticks > 0:
 		# Dispatch-span decrement: the window is in physics ticks.
 		_poke_jab_active_ticks -= dispatch_period_ticks
@@ -111,6 +112,19 @@ func jab_aim(snapshot: WorldSnapshot, self_pos: Vector3, is_pressurer: bool,
 	var dz: float = puck_pos.z - self_pos.z
 	if dx * dx + dz * dz > jab_reach * jab_reach:
 		return Vector3.INF
+	# In reach is not on it: the jab commits the blade for its window and the
+	# cooldown after, so it waits until the blade, at its own speed, can be on
+	# the puck inside the window. Fired at the rim, it sweeps short and the
+	# cooldown holds the stick through the moment the carrier comes into easy
+	# reach. A blade the snapshot does not carry (ZERO) skips the read.
+	var me: SkaterNetworkState = snapshot.skater_states.get(_peer_id)
+	if me != null and me.blade_contact_world != Vector3.ZERO:
+		var in_window_m: float = blade_speed * float(POKE_JAB_ACTIVE_TICKS) \
+				/ float(_PhysicsConstants.PHYSICS_TICK) + GameRules.POKE_RADIUS_M
+		var bx: float = puck_pos.x - me.blade_contact_world.x
+		var bz: float = puck_pos.z - me.blade_contact_world.z
+		if bx * bx + bz * bz > in_window_m * in_window_m:
+			return Vector3.INF
 	_poke_jab_active_ticks = POKE_JAB_ACTIVE_TICKS
 	return puck_pos
 

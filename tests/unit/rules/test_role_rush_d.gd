@@ -696,6 +696,38 @@ func test_a_defender_carrying_width_keeps_it() -> void:
 	assert_gt(sliding[0], standing[0] + 0.5, "and so does the stand")
 
 
+# ── Never give up the middle ─────────────────────────────────────────────────
+
+# A carrier coming straight down the middle at 9 m/s, a standing D out on the
+# dot lane at `d_x`, short of his stand's depth.
+func _middle(d_x: float) -> RoleDecision:
+	var ctx: RoleContext = _ctx(Vector3(d_x, 0.0, 6.0),
+			[[10, 1, Vector3(0.0, 0.0, 0.0), Vector3(0.0, 0.0, 9.0)]], 10,
+			AIRushRead.Numbers.DOWN_ONE)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
+
+
+func test_a_d_wide_of_a_middle_carrier_takes_the_middle() -> void:
+	# Depth before width would hold him in his own lane, goal-side of nobody.
+	for d_x: float in [6.0, -6.0]:
+		var d: RoleDecision = _middle(d_x)
+		assert_almost_eq(d.target_position.x, 0.0, 0.5,
+				"from x %+.0f: onto his line, not down my lane" % d_x)
+		assert_gt(d.target_position.z, 0.0, "goal-side of him")
+		assert_true(d.face_travel, "skating to it, not backpedalling")
+
+
+func test_a_d_already_in_the_middle_is_not_open_on() -> void:
+	var carrier := Vector3(0.0, 0.0, 0.0)
+	var vel := Vector3(0.0, 0.0, 9.0)
+	for d_x: float in [1.0, -1.0, 6.0]:
+		var ctx: RoleContext = _ctx(Vector3(d_x, 0.0, 6.0), [[10, 1, carrier, vel]], 10)
+		var ap := AICarrierApproach.new()
+		AIDefensiveVerbs.fill_approach(ctx, carrier, vel, ap)
+		assert_eq(AIDefensiveVerbs.middle_open(ctx, ap), absf(d_x) > STICK,
+				"D at x %+.0f against a carrier down the middle" % d_x)
+
+
 # ── A step-up never outruns the turn ─────────────────────────────────────────
 
 func _step_up(carrier_vel: Vector3) -> RoleDecision:
@@ -715,6 +747,30 @@ func test_a_step_up_on_a_carrier_crossing_at_speed_holds_its_ice() -> void:
 func test_a_step_up_on_a_stalled_carrier_may_attack() -> void:
 	var d: RoleDecision = _step_up(Vector3(0.0, 0.0, 0.3))
 	assert_gt(d.advance_cap_m_s, 2.0, "a carrier with no speed is attacked")
+
+
+# ── A carrier gaining on him buys no step-up ─────────────────────────────────
+
+# A D 12 m goal-side of a carrier coming straight down the middle at 9 m/s,
+# backpedalling at `self_speed`.
+func _caught(self_speed: float) -> RoleDecision:
+	var carrier := Vector3(0.0, 0.0, 2.0)
+	var ctx: RoleContext = _ctx(Vector3(0.0, 0.0, 14.0),
+			[[10, 1, carrier, Vector3(0.0, 0.0, 9.0)]], 10, AIRushRead.Numbers.DOWN_ONE)
+	ctx.self_velocity = Vector3(0.0, 0.0, self_speed)
+	return AIRoleRushD.decide(ctx, AIRoleSlots.Slot.BACK_STRONG)
+
+
+func test_a_defender_slower_than_the_carrier_may_not_slow_his_retreat() -> void:
+	var d: RoleDecision = _caught(4.0)
+	assert_lt(d.advance_cap_m_s, 0.0, "a floor on the retreat, not a cap on the step")
+	assert_almost_eq(-d.advance_cap_m_s, minf(9.0, AIRoleRushD.retreat_max_speed(
+			_ctx(Vector3.ZERO, [], -1), d.face_travel)), 0.01,
+			"no slower than the carrier's pace, or the retreat's top speed")
+
+
+func test_at_the_carriers_pace_the_step_up_bound_is_back() -> void:
+	assert_gt(_caught(9.0).advance_cap_m_s, -0.001)
 
 
 # ── Turn and skate ───────────────────────────────────────────────────────────

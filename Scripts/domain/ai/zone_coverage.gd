@@ -98,6 +98,25 @@ static func pressure_owner(strong_x: float, own_goal_z: float,
 	return AIRoleSlots.Slot.ZONE_W_WEAK
 
 
+# Whether `pos` is ice zone coverage picks a man up on: our zone, out to a cover
+# envelope past our blue line (AIRushRead.cover_envelope_m). Escorting a man
+# still up the ice walks the coverage away from the puck.
+static func in_coverage_ice(own_goal_z: float, pos: Vector3) -> bool:
+	return signf(own_goal_z) * pos.z >= GameRules.BLUE_LINE_Z - AIRushRead.cover_envelope_m()
+
+
+# The zone role on the puck: the brain's carrier owner while a carrier comes at
+# our net at pace (TeamStrategyView.pressure_slot_override), else the area that
+# holds the puck (pressure_owner). `view` may be null (no brain).
+static func pressure_slot(view: TeamStrategyView, strong_x: float, own_goal_z: float,
+		puck_pos: Vector3) -> int:
+	var owner: int = view.pressure_slot_override() if view != null \
+			else AIRoleSlots.Slot.NONE
+	if owner != AIRoleSlots.Slot.NONE:
+		return owner
+	return pressure_owner(strong_x, own_goal_z, puck_pos)
+
+
 # Whether `pos` is inside `slot`'s responsibility area, expanded by `margin`
 # metres (pass AREA_RELEASE_MARGIN_M for the incumbent-man hysteresis).
 # Areas deliberately overlap a little at the seams — a man on a boundary is

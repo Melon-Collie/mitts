@@ -1,8 +1,8 @@
 class_name AIDefensiveVerbs
 
 # The defensive verbs every defending role is composed of — cover a threat, take
-# the angle on a carrier, read his approach, chase the puck, price his best
-# option, deliver a check. See Scripts/domain/ai/CLAUDE.md → "The defensive
+# the angle on a carrier, cut him off from the middle, read his approach, chase
+# the puck, price his best option, deliver a check. See Scripts/domain/ai/CLAUDE.md → "The defensive
 # verbs".
 
 
@@ -139,6 +139,103 @@ static func carrier_stand(ap: AICarrierApproach, gap: float) -> Vector3:
 		return stand
 	var shaded: Vector3 = stand + inside_dir(ap.carrier_pos, ap.dir_net) * depth
 	return shaded if AIStationSearch.is_legal_position(shaded) else stand
+
+
+# The cut-off's walk down the carrier's line to our net: under a stick, so the
+# point taken is within a stick of the first one he can be cut off at.
+const CUT_OFF_STEP_M: float = 1.0
+# Bisections of the exact cut-off's last step: 1/64 of a metre.
+const CUT_OFF_BISECTIONS: int = 6
+
+
+# Whether the middle is open on me: I do not stand between the carrier's line to
+# our net, where it passes my depth, and the middle of the ice, give or take a
+# stick. Depth before width is for a defender already inside him; one outside
+# him, or across the middle from him, holds depth in a lane the carrier is not
+# in, and the slot is his.
+static func middle_open(ctx: RoleContext, ap: AICarrierApproach) -> bool:
+	var my_depth: float = (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
+			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
+	var line_x: float = ap.carrier_pos.x + ap.dir_net.x * my_depth
+	var mid_x: float = ctx.defending_goal_pos.x
+	var reach: float = AIRoleRushD.stick_m(ctx)
+	return ctx.self_pos.x < minf(line_x, mid_x) - reach \
+			or ctx.self_pos.x > maxf(line_x, mid_x) + reach
+
+
+# The first ice on the carrier's line to our net my stick gets to before he does
+# (cut_off_share), skated to facing travel and ridden as he moves: `d`'s
+# velocity and facing, and the point. Whichever way he goes to the net from
+# there, he meets the body or the reach-in.
+static func cut_off(ctx: RoleContext, ap: AICarrierApproach, d: RoleDecision) -> Vector3:
+	var f: float = cut_off_share(ctx, ap)
+	var to_net: Vector3 = ctx.defending_goal_pos - ap.carrier_pos
+	to_net.y = 0.0
+	# A point a fixed share of the way to a fixed net moves at the rest of the
+	# carrier's velocity.
+	d.target_velocity = ap.carrier_vel * (1.0 - f)
+	d.face_travel = true
+	return ap.carrier_pos + to_net * f
+
+
+# The share of the carrier's way to our net at which I first get there before
+# him (cut_off_m over his ice to the net).
+static func cut_off_share(ctx: RoleContext, ap: AICarrierApproach) -> float:
+	var finish: float = ap.net_dist - AIRoleRushD.RETREAT_FINISH_M
+	if finish <= 0.0:
+		return 0.0
+	var peer: int = ctx.snapshot.puck_state.carrier_peer_id \
+			if ctx.snapshot != null and ctx.snapshot.puck_state != null else -1
+	var caps: AISkaterCaps = ctx.caps_by_peer.get(peer) if peer != -1 else null
+	return cut_off_m(ctx.self_pos, ctx.self_velocity, ctx.self_max_speed,
+			ctx.self_max_accel, AIRoleRushD.stick_m(ctx), ap.carrier_pos, ap.carrier_vel,
+			ap.dir_net, finish, caps) / ap.net_dist
+
+
+# How far down the carrier's line to our net (`dir_net`, out to `finish_m`) the
+# first ice is that a body at `self_pos` gets his stick to before the carrier:
+# each on his arrival clock from where he is and how he is moving (the carrier at
+# his free top speed, `his_caps` or the league's, a slight over-read in the safe
+# direction), the stick reaching it `reach_m` at the body's top speed before the
+# body does. `finish_m` (the crease's top) where he beats him nowhere short of it.
+# Walked in CUT_OFF_STEP_M steps; `exact` bisects the last one, for a race
+# between bodies, where the step would tie men a step's width apart.
+static func cut_off_m(self_pos: Vector3, self_vel: Vector3, self_vmax: float,
+		self_accel: float, reach_m: float, carrier_pos: Vector3, carrier_vel: Vector3,
+		dir_net: Vector3, finish_m: float, his_caps: AISkaterCaps,
+		exact: bool = false) -> float:
+	var his_speed: float = his_caps.max_speed if his_caps != null \
+			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
+	var his_accel: float = his_caps.max_accel if his_caps != null \
+			else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var stick_s: float = reach_m / maxf(self_vmax, 0.1)
+	var s: float = 0.0
+	while s < finish_m:
+		if _cuts_off_at(carrier_pos + dir_net * s, self_pos, self_vel, self_vmax,
+				self_accel, stick_s, carrier_pos, carrier_vel, his_speed, his_accel):
+			break
+		s += CUT_OFF_STEP_M
+	if s >= finish_m:
+		return finish_m
+	if not exact or s <= 0.0:
+		return s
+	var lost: float = s - CUT_OFF_STEP_M
+	for _i: int in CUT_OFF_BISECTIONS:
+		var mid: float = 0.5 * (lost + s)
+		if _cuts_off_at(carrier_pos + dir_net * mid, self_pos, self_vel, self_vmax,
+				self_accel, stick_s, carrier_pos, carrier_vel, his_speed, his_accel):
+			s = mid
+		else:
+			lost = mid
+	return s
+
+
+static func _cuts_off_at(at: Vector3, self_pos: Vector3, self_vel: Vector3,
+		self_vmax: float, self_accel: float, stick_s: float, carrier_pos: Vector3,
+		carrier_vel: Vector3, his_speed: float, his_accel: float) -> bool:
+	return AIArrival.time_to_arrive(self_pos, at, self_vel, self_vmax, self_accel) \
+			<= AIArrival.time_to_arrive(carrier_pos, at, carrier_vel, his_speed,
+					his_accel) + stick_s
 
 
 # Fills `out` with the carrier a defender owns; false only when there is no puck
