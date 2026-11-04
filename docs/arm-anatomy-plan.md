@@ -608,8 +608,8 @@ The table re-derived from this model first held fewer cells: the backhand
 side in close and the forehand past 1.5 m held only with the top hand
 0.6-0.7 m out in front of the body, the pose the sheets rejected
 (TOP_HAND_AHEAD). The carries in close and the carried arc below brought the
-close-in ice back: of 273 cells, standing and skating, 67" 133 and 130, 73"
-137 and 132, 80" 143 and 130, all inside the arc.
+close-in ice back: of 273 cells, standing and skating, 67" 145 and 141, 73"
+150 and 145, 80" 157 and 138, all inside the arc.
 `tests/slow/controllers/test_model_carries_like_the_references.gd` holds them
 to it (the top hand within 0.4 m of the reference's, the user accepting tight's
 pick out at hip height, the hands 0.2 m apart
@@ -630,8 +630,8 @@ wrong and stays out. The search keeps the trunk's twist inside its range
 when it refines. Eight carries in close are held by
 `test_model_carries_like_the_references.gd`.
 
-The puck is carried from eight o'clock to three (`ArmEnvelope.in_arc`, 120
-deg round the forehand to 90 round the backhand): the poses behind the hip
-either side held only twisted to the limit with the stick run back past the
-hip. The deriver marks blades outside the arc as not held without solving
-them.
+The puck is carried round the backhand only to three o'clock
+(`ArmEnvelope.in_arc`, 90 deg off the facing): the poses behind the hip there
+held only twisted to the limit with the stick run back past the hip. Round
+the forehand it goes as far back as a body holds it, the user's call. The
+deriver marks blades outside the arc as not held without solving them.
