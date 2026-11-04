@@ -465,7 +465,8 @@ func _refine(trunk: TrunkState, heel: Vector3, steps: Vector3, lean_step: float,
 		if axis == 5 and _crouch_ceiling <= _crouch_floor:
 			continue
 		for sgn: float in [-1.0, 1.0]:
-			var tw: float = twist + (steps.x * sgn if axis == 0 else 0.0)
+			var tw: float = clampf(twist + (steps.x * sgn if axis == 0 else 0.0),
+					-TRUNK_TWIST_MAX, TRUNK_TWIST_MAX)
 			var li: float = lie + (steps.y * sgn if axis == 1 else 0.0)
 			var he: float = heading + (steps.z * sgn if axis == 2 else 0.0)
 			_lean = lean + Vector2(lean_step * sgn if axis == 3 else 0.0,

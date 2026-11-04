@@ -96,8 +96,11 @@ func _build() -> void:
 
 # The table's cell for the blade `radius` m out at `angle_deg` off the facing (+
 # forehand): [held, top hand x (+ forehand), y, z, bottom hand spacing], the
-# hand in the skater's root frame, from a fresh carrier settled on it.
+# hand in the skater's root frame, from a fresh carrier settled on it; none
+# outside the carried arc (ArmEnvelope.in_arc).
 func cell(angle_deg: float, radius: float) -> Array:
+	if not ArmEnvelope.in_arc(angle_deg):
+		return [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	_build()
 	var a: float = deg_to_rad(angle_deg)
 	_settle(Vector2(sin(a) * radius * _forehand, -cos(a) * radius))

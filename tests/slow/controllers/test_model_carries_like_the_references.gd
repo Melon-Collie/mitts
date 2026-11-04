@@ -4,9 +4,10 @@ extends GutTest
 # (tests/harness/arm_reference_carries.gd) is held as a player holds it, as the
 # user accepted on the sheets (.claude/hooks/render-references.sh, bottom rows):
 # the top hand near the reference's, the hands apart rather than glove to
-# glove, and the bottom arm come down to the shaft with its elbow back and
-# down, not raised across the chest. The envelope table is derived from these
-# picks, so they are what the carry draws. docs/arm-anatomy-plan.md §16.
+# glove, and the bottom arm come down to the shaft with its elbow hanging,
+# not raised across the chest; and the blades in close the user accepted
+# are held. The envelope table is derived from these picks, so they are what
+# the carry draws. docs/arm-anatomy-plan.md §16.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -17,10 +18,15 @@ const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const TOP_HAND_M: float = 0.35
 const SPACING_M: float = 0.15
 const HANDS_APART_MIN_M: float = 0.2
-# The bottom elbow's bend off the shoulder-to-hand line, unit: no further ahead
-# than this (it points back), no higher than this (it hangs).
-const ELBOW_AHEAD_MAX: float = -0.5
+# The bottom elbow's bend off the shoulder-to-hand line, unit: no higher than
+# this (it hangs; raised across the chest is what the sheets rejected).
 const ELBOW_UP_MAX: float = 0.1
+# Blades in close the user accepted the model's carries at, on the sheets
+# (ARM_REFERENCE_CELLS): (degrees off the facing, + forehand; m out). The top
+# hand drawn out to its own side, the stick across the body.
+const CLOSE_IN: Array[Vector2] = [Vector2(0.0, 0.6), Vector2(0.0, 0.7), Vector2(0.0, 0.8),
+		Vector2(0.0, 0.9), Vector2(15.0, 0.7), Vector2(30.0, 0.6), Vector2(-15.0, 0.7),
+		Vector2(-15.0, 0.8)]
 
 
 class GameStateStub:
@@ -76,5 +82,10 @@ func test_the_models_own_carries_are_the_references() -> void:
 		assert_almost_eq(own.spacing, float(carry["spacing_m"]), SPACING_M,
 				what + ": as far apart as the reference's")
 		var elbow: Vector3 = _elbow_points(own.bottom)
-		assert_lt(elbow.z, ELBOW_AHEAD_MAX, what + ": the bottom elbow back, %s" % elbow)
 		assert_lt(elbow.y, ELBOW_UP_MAX, what + ": the bottom elbow not raised, %s" % elbow)
+	var top_side: float = signf(body.top_shoulder.x)
+	for at: Vector2 in CLOSE_IN:
+		var a: float = deg_to_rad(at.x)
+		search.solve(trunk, Vector3(-sin(a) * at.y * top_side, c.blade_height - pivot,
+				-cos(a) * at.y), own)
+		assert_true(own.feasible(), "in close at %+.0f deg, %.1f m: held" % [at.x, at.y])

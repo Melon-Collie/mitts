@@ -616,3 +616,22 @@ to it (the top hand within 0.35 m of the reference's, the hands 0.2 m apart
 or more and within 0.15 m of its spacing, the bottom elbow back and not
 raised); the model before this fails it on wide forehand, tight and long
 reach.
+
+### Getting in close, and the carried arc
+
+The user wanted the puck carryable in close. What stopped it was not the
+blade's lie: a 1.40 m stick to a blade 0.6-0.8 m ahead stands nearly upright,
+which put the stick through the jersey or the top hand above the chest. Of the
+ways a player gets in tight, the sheets (`ARM_REFERENCE_CELLS`) chose the top
+hand drawn out to its own side, the stick across the body
+(`ArmTechnique.TOP_HAND_OUT_M` 0.4 -> 0.65 m), with the blade riding up to 22
+deg onto its heel or toe (`LIE_RIDE`); drawing it back past the hip read as
+wrong and stays out. The search keeps the trunk's twist inside its range
+when it refines. Eight carries in close are held by
+`test_model_carries_like_the_references.gd`.
+
+The puck is carried from eight o'clock to three (`ArmEnvelope.in_arc`, 120
+deg round the forehand to 90 round the backhand): the poses behind the hip
+either side held only twisted to the limit with the stick run back past the
+hip. The deriver marks blades outside the arc as not held without solving
+them.

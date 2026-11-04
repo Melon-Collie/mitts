@@ -23,7 +23,7 @@ const TOP_HAND_AHEAD_M: float = 0.5
 # beside the hip (reaching round the backhand it comes out there), across the
 # body no further than this past the middle (round the forehand it comes across
 # to there).
-const TOP_HAND_OUT_M: float = 0.4
+const TOP_HAND_OUT_M: float = 0.65
 const TOP_HAND_ACROSS_M: float = 0.15
 # The hands are held apart no wider than the shoulders, outside the pads
 # (ArmAnatomyBody.shoulder_width).
@@ -44,7 +44,7 @@ const FOOTPRINT_BACK_M: float = 0.25
 const FOOTPRINT_AHEAD_M: float = 0.2
 # The blade rides flat, or a little on its heel or its toe: the shaft's angle
 # to the ice within this of the stick's lie.
-const LIE_RIDE: float = deg_to_rad(15.0)
+const LIE_RIDE: float = deg_to_rad(22.0)
 
 enum Limit {
 	NONE,
