@@ -255,11 +255,11 @@ const _HOLDER_RAIL_HALF_W: float = 0.0055
 # head so it rides the same head-bulk scaling and skeleton offsets. Stations
 # are helmet-local (the helmet at y 0.7 drawn at 0.75 scale, the torso's top
 # at 0.52, so 0.24 local reaches it): the top hides inside the head ball, the
-# bottom flares into the traps where it sinks into the torso.
+# bottom sinks into the collar barely wider than the throat.
 const NECK_PROFILE: Array[Vector2] = [
 	Vector2(-0.095, 0.085),
 	Vector2(-0.175, 0.093),
-	Vector2(-0.245, 0.123),  # trapezius flare into the collar
+	Vector2(-0.245, 0.100),  # into the collar, a column rather than a cone
 ]
 
 static var _cache: Dictionary = {}

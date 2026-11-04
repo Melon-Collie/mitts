@@ -118,9 +118,9 @@ const _NECK_SCOOP_HALF_ANGLE: float = deg_to_rad(75.0)
 const _UPPER_CHEST_DROP_M: float = 0.035
 const _UPPER_BACK_DROP_M: float = 0.015
 # The collar: a band standing round the neckline, this far in and up from it,
-# painted the kit's collar on the torso texture's top cap; inside it the neck's
-# skin runs down into the V to the neck's foot (torso-local, under the rig's
-# neck where it flares into the traps).
+# painted the kit's collar on the torso texture's top cap; inside it the
+# collar's colour runs down into the V to the neck's foot (torso-local, under
+# the rig's neck), so only the neck's own column shows skin.
 const _COLLAR_INSET_M: float = 0.008
 const _COLLAR_RISE_M: float = 0.016
 const _NECK_FOOT_Y_M: float = 0.265
@@ -403,8 +403,8 @@ static func _top_shape(ring: int, theta: float) -> float:
 	return 0.0
 
 
-# The collar band standing round the neckline, then the neck's skin closing the
-# opening inside it.
+# The collar band standing round the neckline, then the collar closing the
+# opening inside it down to the neck.
 static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, lift: Vector3) -> void:
 	var n: int = neckline.size()
 	var axis := Vector3(0.0, 0.0, _CHEST[0].z) + lift
@@ -426,7 +426,7 @@ static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, l
 		b.quad(neckline[k], neckline[k1], lip[k1], lip[k], cap + t0 * 0.24, cap + t1 * 0.24,
 				cap + t1 * 0.20, cap + t0 * 0.20, torso_zone, below)
 	var foot: int = b.vertex(axis + Vector3(0.0, _NECK_FOOT_Y_M, 0.0), [Bind.TORSO], [1.0])
-	b.fan(lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
+	b.fan(lip, foot, cap, torso_zone, below)
 
 
 # The jersey from the collar to the hem as (y, radius, sway), torso-local, its
