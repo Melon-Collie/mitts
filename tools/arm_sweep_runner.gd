@@ -65,6 +65,15 @@ const SCENARIOS: Array[Dictionary] = [
 		"puck": true, "skate": true, "trace": true},
 	{"name": "skate_backhand", "r": 2.0, "a0": 0.0, "rate": -45.0, "frames": 12, "step": 40,
 		"puck": true, "skate": true, "trace": true},
+	# Held where tests/instruments/actors/test_carry_clipping.gd finds the shaft
+	# in the body: skating with the puck behind on the forehand and in close on
+	# the backhand, and pulled in tight standing.
+	{"name": "clip_skate_forehand_behind", "r": 1.1, "a0": 140.0, "rate": 0.0, "frames": 4,
+		"step": 40, "puck": true, "skate": true},
+	{"name": "clip_skate_backhand_close", "r": 0.8, "a0": -90.0, "rate": 0.0, "frames": 4,
+		"step": 40, "puck": true, "skate": true},
+	{"name": "clip_stand_tight", "r": 0.5, "a0": -150.0, "rate": 60.0, "frames": 6, "step": 75,
+		"puck": true, "hold": true},
 ]
 
 
