@@ -62,6 +62,11 @@ static func upper_body_mesh(top_right: bool = true) -> ArrayMesh:
 				SkaterMeshBuilder.HELMET_SURF_SKIN), _UpperSurface.HELMET_SKIN, _UpperBone.HELMET)
 		_add(b, _crested(SkaterMeshBuilder.shared_helmet_shell(_HELMET_LON, _HELMET_LAT)),
 				_UpperSurface.HELMET_SHELL, _UpperBone.HELMET)
+		var hardware: ArrayMesh = SkaterMeshBuilder.shared_helmet_hardware()
+		_add(b, hardware.surface_get_arrays(SkaterMeshBuilder.HELMET_HARDWARE_STRAP),
+				_UpperSurface.HELMET_STRAP, _UpperBone.HELMET)
+		_add(b, hardware.surface_get_arrays(SkaterMeshBuilder.HELMET_HARDWARE_GUARD),
+				_UpperSurface.HELMET_GUARD, _UpperBone.HELMET)
 		return b.commit())
 
 
@@ -95,12 +100,18 @@ static func leg_body_mesh(tongue: int = GearModelRegistry.TONGUE_TUCKED) -> Arra
 		return b.commit())
 
 
-# The zones whose parts ship a default finish (the skin, the steel runners, the
-# laces, the skate's stripe), seeded into a body's paint before any kit lands.
+# The zones whose parts ship a default finish (the skin, the helmet's strap and
+# ear guards, the steel runners, the laces, the skate's stripe), seeded into a
+# body's paint before any kit lands.
 static func seed_paint(paint: BodyZonePaint) -> void:
 	var skin: Material = SkaterMeshBuilder.shared_helmet_assembly().surface_get_material(
 			SkaterMeshBuilder.HELMET_SURF_SKIN)
 	paint.seed_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN, skin)
+	var hardware: ArrayMesh = SkaterMeshBuilder.shared_helmet_hardware()
+	paint.seed_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_STRAP,
+			hardware.surface_get_material(SkaterMeshBuilder.HELMET_HARDWARE_STRAP))
+	paint.seed_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_GUARD,
+			hardware.surface_get_material(SkaterMeshBuilder.HELMET_HARDWARE_GUARD))
 	var upper: ArrayMesh = SkateUpperMesh.shared()
 	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
 	for side: int in 2:
