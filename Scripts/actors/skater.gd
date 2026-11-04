@@ -2888,6 +2888,21 @@ func set_hand_pump(offset: Vector3) -> void:
 	_hand_pump = offset
 
 
+# The drawn body a stick is held out of, in the skeleton's space: how far
+# `point` is outside the jersey (m, negative inside), each leg's hip, knee and
+# ankle (SkaterLegRig.drawn_joints), and the legs' girth (SkaterLegRig.girth).
+func torso_clearance(point: Vector3) -> float:
+	return _arms.torso_clearance(point)
+
+
+func drawn_leg_joints(out: PackedVector3Array) -> void:
+	_legs.drawn_joints(out)
+
+
+func leg_girth() -> Vector2:
+	return _legs.girth()
+
+
 # ── Bottom Hand ───────────────────────────────────────────────────────────────
 # Where a shoulder marker sits on the visible trunk, in UpperBody's frame
 # (SkaterArmRig.visible_shoulder).

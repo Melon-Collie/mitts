@@ -69,6 +69,12 @@ var _bh_release_vel: float = 0.0
 var _held_free_hand := Vector3.ZERO
 var _held_free_weight: float = 0.0
 var _pump_hold: float = 1.0
+# The drawn top hand's swing round the blade that holds the drawn shaft out of
+# the body (_shaft_clearance; UpperBody's frame), its rate, and the legs' joints
+# it reads.
+var _clear_offset := Vector3.ZERO
+var _clear_vel := Vector3.ZERO
+var _leg_joints := PackedVector3Array()
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
@@ -997,10 +1003,25 @@ func _level_config(hang_y: float, blade_y: float, max_blade_reach: float) -> Top
 # crosses the release bands in a tick or two and the hand jumped ~0.4 m between
 # shaft and rest. A let-go hand swings with the stride.
 const BH_GRIP_SLIDE_BAND: float = 0.08
+# The drawn shaft held out of the body: where along it from the top hand it is
+# measured (below the top fist, which sits on it, to above the blade, which the
+# hand's swing barely moves), at how many points, over how many passes, how
+# far clear of the pants and the jersey (m), the swing's most (m) and its
+# spring (rad/s).
+const _CLEAR_FROM: float = 0.12
+const _CLEAR_TO: float = 0.85
+const _CLEAR_SAMPLES: int = 10
+const _CLEAR_PASSES: int = 4
+const _CLEAR_MARGIN_M: float = 0.01
+const _CLEAR_MAX_M: float = 0.4
+const _CLEAR_OMEGA: float = 12.0
+const _SHAFT_RADIUS_M: float = 0.015
 
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
-	_skater.set_hand_pump(_stride_pump(delta))
+	var pump: Vector3 = _stride_pump(delta)
+	_skater.set_hand_pump(pump)
+	_skater.set_hand_pump(pump + _shaft_clearance(_skater.drawn_top_hand(), blade_local, delta))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
 	var shoulder: Vector3 = _skater.visible_shoulder(_skater.bottom_shoulder.position)
 	var arm: float = _skater.upper_arm_length + _skater.forearm_length
@@ -1072,6 +1093,80 @@ func _stride_pump(delta: float) -> Vector3:
 	var drive: float = clampf(_skating.push_strength, 0.0, 1.0) * (1.0 - _bh_release) \
 			* smoothstep(0.0, 1.0, _pump_hold)
 	return _controller.stride_hand_pump_m * (sin(_skating.stride_phase) * drive)
+
+# The drawn top hand (`hand_local`, UpperBody's frame, the pump on it) swung
+# round the drawn blade, the stick keeping its length, until the drawn shaft is
+# out of the jersey and the legs: the offset that takes it there, eased on a critically
+# damped spring (`delta` below 0 lands at once). Mesh only: the markers, the
+# blade and the puck stay where the tick put them. Each pass moves the hand by
+# what lifts the deepest point clear, more the nearer that point is to the
+# blade, the pivot.
+func _shaft_clearance(hand_local: Vector3, blade_local: Vector3, delta: float) -> Vector3:
+	var ub: Transform3D = _skater.drawn_upper_body()
+	var blade: Vector3 = ub * blade_local
+	var start: Vector3 = ub * hand_local
+	var hand: Vector3 = start
+	var length: float = hand.distance_to(blade)
+	if length > 0.001:
+		_skater.drawn_leg_joints(_leg_joints)
+		var girth: Vector2 = _skater.leg_girth()
+		for _pass: int in _CLEAR_PASSES:
+			var worst: float = 0.0
+			var push := Vector3.ZERO
+			var at: float = 0.0
+			for k: int in _CLEAR_SAMPLES:
+				var t: float = lerpf(_CLEAR_FROM, _CLEAR_TO, float(k) / float(_CLEAR_SAMPLES - 1))
+				var out: Vector4 = _into_body(hand.lerp(blade, t), girth)
+				if out.w > worst:
+					worst = out.w
+					push = Vector3(out.x, out.y, out.z)
+					at = t
+			if worst <= 0.0:
+				break
+			hand += push * (worst / (1.0 - at))
+			hand = blade + (hand - blade).normalized() * length
+	var target: Vector3 = (ub.affine_inverse() * hand - ub.affine_inverse() * start) \
+			.limit_length(_CLEAR_MAX_M)
+	if delta < 0.0:
+		_clear_offset = target
+		_clear_vel = Vector3.ZERO
+	elif delta > 0.0:
+		var x: Vector3 = _clear_offset - target
+		var decay: float = exp(-_CLEAR_OMEGA * delta)
+		var kick: Vector3 = _clear_vel + x * _CLEAR_OMEGA
+		_clear_offset = target + (x + kick * delta) * decay
+		_clear_vel = (_clear_vel - kick * (_CLEAR_OMEGA * delta)) * decay
+	return _clear_offset
+
+
+# How deep `point` (the skeleton's space) sits in the jersey or the legs past
+# the shaft's thickness and the margin (w, m), and the way out (xyz): the
+# deepest of the jersey and each thigh and shin.
+func _into_body(point: Vector3, girth: Vector2) -> Vector4:
+	var reach: float = _SHAFT_RADIUS_M + _CLEAR_MARGIN_M
+	var clear: float = _skater.torso_clearance(point)
+	var best := Vector4(0.0, 0.0, 0.0, reach - clear)
+	if best.w > 0.0:
+		var e: float = 0.01
+		var grad := Vector3(
+				_skater.torso_clearance(point + Vector3(e, 0.0, 0.0)) - clear,
+				_skater.torso_clearance(point + Vector3(0.0, e, 0.0)) - clear,
+				_skater.torso_clearance(point + Vector3(0.0, 0.0, e)) - clear)
+		grad = grad.normalized() if grad.length_squared() > 1e-12 else Vector3.BACK
+		best = Vector4(grad.x, grad.y, grad.z, best.w)
+	for leg: int in 2:
+		for seg: int in 2:
+			var a: Vector3 = _leg_joints[leg * 3 + seg]
+			var b: Vector3 = _leg_joints[leg * 3 + seg + 1]
+			var q: Vector3 = Geometry3D.get_closest_point_to_segment(point, a, b)
+			var off: Vector3 = point - q
+			var d: float = off.length()
+			var depth: float = (girth.x if seg == 0 else girth.y) + reach - d
+			if depth > best.w:
+				var n: Vector3 = off / d if d > 1e-5 else Vector3.BACK
+				best = Vector4(n.x, n.y, n.z, depth)
+	return best
+
 
 # ── The shoulder the top hand works from ───────────────────────────────────────
 # Where the top arm is drawn from — the trunk's shoulder, then the faceoff
