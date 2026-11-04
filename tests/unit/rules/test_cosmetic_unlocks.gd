@@ -45,6 +45,7 @@ func test_reward_rows_name_a_slot_a_colour_and_a_banner() -> void:
 		var key: String = "%s/%d" % [slot, option]
 		assert_false(seen.has(key), "two rewards for %s" % key)
 		seen[key] = true
+	assert_eq(seen.size(), CosmeticUnlocks.REWARDS.size(), "every reward row was checked")
 
 
 func test_an_unavailable_tape_pick_is_worn_as_the_team_colour() -> void:
