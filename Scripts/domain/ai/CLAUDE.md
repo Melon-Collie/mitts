@@ -516,7 +516,8 @@ who gapped a carrier through the neutral zone keeps him into the zone; there is
 no handoff at the line.* The election keeps him too: while a carrier comes at
 our net at pace, the puck is owned by the body goal-side of him whose stick gets
 onto his line farthest from our net (`AIRoleSlots.carrier_owner`, the cut-off
-race, last tick's owner or BACK_STRONG's holder taking the hysteresis) — 3v3's
+race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
+taking the hysteresis, a dead heat to the man nearest his line) — 3v3's
 PRESSURE, and in 5v5 the zone role that body holds, published as
 `TeamStrategyView.pressure_slot_override` over the area rule
 (`AIZoneCoverage.pressure_slot`). Raced to where the puck is, the backchecker

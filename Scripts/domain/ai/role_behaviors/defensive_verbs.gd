@@ -144,6 +144,8 @@ static func carrier_stand(ap: AICarrierApproach, gap: float) -> Vector3:
 # The cut-off's walk down the carrier's line to our net: under a stick, so the
 # point taken is within a stick of the first one he can be cut off at.
 const CUT_OFF_STEP_M: float = 1.0
+# Bisections of the exact cut-off's last step: 1/64 of a metre.
+const CUT_OFF_BISECTIONS: int = 6
 
 
 # Whether the middle is open on me: I do not stand between the carrier's line to
@@ -196,23 +198,44 @@ static func cut_off_share(ctx: RoleContext, ap: AICarrierApproach) -> float:
 # his free top speed, `his_caps` or the league's, a slight over-read in the safe
 # direction), the stick reaching it `reach_m` at the body's top speed before the
 # body does. `finish_m` (the crease's top) where he beats him nowhere short of it.
+# Walked in CUT_OFF_STEP_M steps; `exact` bisects the last one, for a race
+# between bodies, where the step would tie men a step's width apart.
 static func cut_off_m(self_pos: Vector3, self_vel: Vector3, self_vmax: float,
 		self_accel: float, reach_m: float, carrier_pos: Vector3, carrier_vel: Vector3,
-		dir_net: Vector3, finish_m: float, his_caps: AISkaterCaps) -> float:
+		dir_net: Vector3, finish_m: float, his_caps: AISkaterCaps,
+		exact: bool = false) -> float:
 	var his_speed: float = his_caps.max_speed if his_caps != null \
 			else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S
 	var his_accel: float = his_caps.max_accel if his_caps != null \
 			else GameRules.DEFAULT_SKATER_THRUST_M_S2
+	var stick_s: float = reach_m / maxf(self_vmax, 0.1)
 	var s: float = 0.0
 	while s < finish_m:
-		var at: Vector3 = carrier_pos + dir_net * s
-		var mine: float = AIArrival.time_to_arrive(self_pos, at, self_vel, self_vmax, self_accel)
-		var his: float = AIArrival.time_to_arrive(carrier_pos, at, carrier_vel,
-				his_speed, his_accel) + reach_m / maxf(self_vmax, 0.1)
-		if mine <= his:
-			return s
+		if _cuts_off_at(carrier_pos + dir_net * s, self_pos, self_vel, self_vmax,
+				self_accel, stick_s, carrier_pos, carrier_vel, his_speed, his_accel):
+			break
 		s += CUT_OFF_STEP_M
-	return finish_m
+	if s >= finish_m:
+		return finish_m
+	if not exact or s <= 0.0:
+		return s
+	var lost: float = s - CUT_OFF_STEP_M
+	for _i: int in CUT_OFF_BISECTIONS:
+		var mid: float = 0.5 * (lost + s)
+		if _cuts_off_at(carrier_pos + dir_net * mid, self_pos, self_vel, self_vmax,
+				self_accel, stick_s, carrier_pos, carrier_vel, his_speed, his_accel):
+			s = mid
+		else:
+			lost = mid
+	return s
+
+
+static func _cuts_off_at(at: Vector3, self_pos: Vector3, self_vel: Vector3,
+		self_vmax: float, self_accel: float, stick_s: float, carrier_pos: Vector3,
+		carrier_vel: Vector3, his_speed: float, his_accel: float) -> bool:
+	return AIArrival.time_to_arrive(self_pos, at, self_vel, self_vmax, self_accel) \
+			<= AIArrival.time_to_arrive(carrier_pos, at, carrier_vel, his_speed,
+					his_accel) + stick_s
 
 
 # Fills `out` with the carrier a defender owns; false only when there is no puck

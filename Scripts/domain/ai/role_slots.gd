@@ -306,7 +306,7 @@ static func assign(
 # The body that owns an opposing carrier coming at our net at pace (closing at
 # AIRoleRushD.GAP_UP_CLOSING_M_S or more): of `peers` goal-side of him down his
 # line to our net, the one whose stick gets onto that line farthest from our net
-# (AIDefensiveVerbs.cut_off_m), `prev_owner` taking HYSTERESIS_PENALTY_M. A
+# (AIDefensiveVerbs.cut_off_m, exact), `prev_owner` taking HYSTERESIS_PENALTY_M. A
 # body behind such a carrier is soonest to where the puck is only because the
 # carrier is past him, and never catches him; and raced to where the puck is,
 # the D riding him back pays a reversal his line never asks of him. -1 when no
@@ -332,21 +332,27 @@ static func carrier_owner(snapshot: WorldSnapshot, team_id: int, own_goal_z: flo
 	var his_caps: AISkaterCaps = caps_by_peer.get(carrier)
 	var best_pid: int = -1
 	var best: float = INF
+	var best_off_line: float = INF
 	for pid: int in peers:
 		var s: SkaterNetworkState = snapshot.skater_states.get(pid)
-		if s == null or (s.position.x - cs.position.x) * dir.x \
-				+ (s.position.z - cs.position.z) * dir.z <= 0.0:
+		var rel: Vector3 = s.position - cs.position if s != null else Vector3.ZERO
+		if s == null or rel.x * dir.x + rel.z * dir.z <= 0.0:
 			continue
 		var caps: AISkaterCaps = caps_by_peer.get(pid)
 		var m: float = AIDefensiveVerbs.cut_off_m(s.position, s.velocity,
 				caps.max_speed if caps != null else AIArrival.SKATER_REF_SPEED_M_S,
 				caps.max_accel if caps != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2,
 				caps.max_blade_reach if caps != null else AIBotMechanics.BLADE_REACH_M,
-				cs.position, cs.velocity, dir, finish, his_caps)
+				cs.position, cs.velocity, dir, finish, his_caps, true)
 		if pid != prev_owner:
 			m += HYSTERESIS_PENALTY_M
-		if m < best or (m == best and pid < best_pid):
+		# A tie (two men on him at once, or none short of the crease) goes to the
+		# man in his lane.
+		var off_line: float = absf(rel.x * dir.z - rel.z * dir.x)
+		if m < best or (m == best and (off_line < best_off_line
+				or (off_line == best_off_line and pid < best_pid))):
 			best = m
+			best_off_line = off_line
 			best_pid = pid
 	return best_pid
 
