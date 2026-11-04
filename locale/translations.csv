@@ -483,3 +483,17 @@ PLAYER_TITLE_NONE,None,Ninguno
 PLAYER_TITLE_HINT,Raise a banner in the Trophy Case to earn a title.,Iza un estandarte en la vitrina para conseguir un título.
 TROPHY_BANNER_TITLE,Unlocks the %s title,Desbloquea el título %s
 SCOREBOARD_NAME_TITLE,%s  ·  %s,%s  ·  %s
+PUCK_SNIPE,Snipe,Tiro certero
+PUCK_SNIPE_DESC,Score a high-loft shot from beyond the faceoff dots.,Marca con un tiro alto desde más allá de los puntos de saque.
+PUCK_BACKHAND_SHELF,Backhand Shelf,Revés a la escuadra
+PUCK_BACKHAND_SHELF_DESC,Score a lofted backhand.,Marca de revés con el disco elevado.
+PUCK_ONE_TIMER_FEED,One-Timer Feed,Pase al tiro a la primera
+PUCK_ONE_TIMER_FEED_DESC,Set up a one-timer goal with the primary assist.,Da la primera asistencia de un gol con tiro a la primera.
+PUCK_PICK_AND_FINISH,Pick and Finish,Intercepta y remata
+PUCK_PICK_AND_FINISH_DESC,Score on the possession your own interception started.,Marca en la posesión que empezó tu propia intercepción.
+PUCK_STRIP_AND_FINISH,Strip and Finish,Roba y remata
+PUCK_STRIP_AND_FINISH_DESC,Score on the possession your own takeaway started.,Marca en la posesión que empezó tu propio robo.
+BANNER_PLAYMAKER,Playmaker,Organizador
+BANNER_SNIPER,Sniper,Francotirador
+TITLE_PLAYMAKER,Playmaker,Organizador
+TITLE_SNIPER,Sniper,Francotirador

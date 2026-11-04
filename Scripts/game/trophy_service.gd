@@ -68,6 +68,13 @@ func on_tutorials_complete() -> void:
 	_earn_now(GamePucks.event_puck("tutorials_done"))
 
 
+# The host saw this player make a feat play (FeatRules); anything not a feat
+# puck is ignored, so a forged id earns nothing.
+func on_feat(puck_id: String) -> void:
+	if GamePucks.kind_of(GamePucks.find(puck_id)) == "feat":
+		_earn_now(puck_id)
+
+
 # The player applied a custom build in free play.
 func on_build_edited() -> void:
 	_earn_now(GamePucks.event_puck("build_edited"))

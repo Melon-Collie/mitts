@@ -1,7 +1,7 @@
 # Game Pucks and Banners — progression design record
 
-Status: **Phases 1–2 built** (the catalogue, the ledger, the Trophy Case and
-titles); Phases 3–4 not started. Each phase ships as its own PR.
+Status: **Phases 1–3 built** (the catalogue, the ledger, the Trophy Case,
+titles and feats); Phase 4 not started. Each phase ships as its own PR.
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done. Completing a named
@@ -134,9 +134,10 @@ The rows live in `GamePucks.ALL` and `Banners.ALL`; Phase 1 shipped:
 | Two-Way | `goals@50` + `assists@50` + `interceptions@50` + `takeaways@50` | Two-Way |
 | Iron Man | `games_played@100` | Iron Man |
 
-Planned with Phase 3, since each needs a feat: Playmaker (`assists@250` + a
-one-timer assist feat) and Sniper (`goals@250` + a HIGH-loft goal from beyond
-the dots).
+| Playmaker | `assists@250` + `one_timer_feed` | Playmaker |
+| Sniper | `goals@250` + `snipe` | Sniper |
+
+The last two arrived with the feats in Phase 3.
 
 Ladders: goals, assists, points, hits, interceptions, takeaways, blocks, faceoff
 wins, wins and games, four or five tiers each. Every counter is a `SteamStats`
@@ -144,9 +145,21 @@ row (`STAT_INTERCEPTIONS` was added for this); points are goals + assists. A
 ladder has at most as many tiers as `TrophyCopy.TIER_KEYS` has numerals.
 
 Feats are where Mitts can stand out, since the mechanics are deep enough to
-name specific plays: a backhand roof goal, a HIGH-loft goal from beyond the
-dots, a one-timer goal off your own interception, a pin then a takeaway then a
-goal inside 10 s, a stick lift leading to a goal. A Transition banner waits on
+name specific plays. Phase 3 shipped five, all read off a credited goal
+(`FeatRules`, from the host's `GoalFeatContext`):
+
+| feat | the play | earned by |
+|---|---|---|
+| `snipe` | a HIGH-loft shot released beyond the end-zone faceoff dots (6.1 m off the goal line) | the scorer |
+| `backhand_shelf` | a backhand at MID or HIGH loft | the scorer |
+| `one_timer_feed` | the primary assist on a one-timer goal | the passer |
+| `pick_and_finish` | a goal on the possession your own interception started | the scorer |
+| `strip_and_finish` | the same, after your own takeaway (poke, lift, check or pin) | the scorer |
+
+The shot's loft level and hand are recorded on the host at release
+(`ShotOnGoalTracker.note_release_style`); a tipped goal earns no shot-style feat,
+since the shot was not the scorer's. A won possession (`FeatTracker`) lasts
+until the other team establishes one or play stops. A Transition banner waits on
 a carried-zone-entry counter, which nothing records yet.
 
 ## Architecture
@@ -156,7 +169,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 **Domain** — pure, unit-tested:
 - `domain/config/game_pucks.gd`: the puck registry. It replaced the old
   achievement registry and keeps its condition kinds, adding `count` ladders
-  (and `feat` in Phase 3).
+  and `feat` pucks.
 - `domain/config/banners.gd`: banner requirements (and, from Phase 2, rewards).
   `domain/config/titles.gd` arrives in Phase 2: title ids and their locale keys.
 - `domain/state/trophy_ledger.gd`: the stored part only — the earned game,
@@ -174,8 +187,11 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   events are, and only the earning player records it. One RPC,
   `notify_feat(feat_id)`, carries every feat (CLAUDE.md → *New RPC*:
   `NetworkManager` → signal → `GameManager._wire_network_signals()`). Adding a
-  feat is then a registry row and a host detector, never a wire change. Today
-  each goal flavour is a `PlayerStats` field, which bumps the protocol per feat.
+  feat is then a registry row and a host detector, never a wire change.
+  `PhaseCoordinator.goal_credited` fires before the shot tracker's pending state
+  clears; `GameManager` builds the context, and earns each feat itself for the
+  local player, sends it to a remote one and drops it for a bot. A peer earns
+  only an id that is a feat puck.
 
 **Infrastructure and UI:**
 - The Trophy Case screen (`TrophyCaseScreen`), beside Career on the side menu:

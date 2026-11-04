@@ -80,3 +80,13 @@ func test_the_meta_hooks_earn_their_pucks() -> void:
 	_service.on_build_edited()
 	assert_true(_ledger.has(GamePucks.STUDENT))
 	assert_true(_ledger.has(GamePucks.CUSTOM_BUILD))
+
+
+func test_a_feat_from_the_host_earns_its_puck_and_nothing_else_does() -> void:
+	_service.on_feat(FeatRules.SNIPE)
+	assert_true(_ledger.has(FeatRules.SNIPE))
+	assert_has(_pucks, [FeatRules.SNIPE, 0])
+	_service.on_feat("hat_trick")
+	assert_false(_ledger.has("hat_trick"), "a non-feat puck is not earned by a feat message")
+	_service.on_feat("not_a_puck")
+	assert_eq(_ledger.size(), 1)

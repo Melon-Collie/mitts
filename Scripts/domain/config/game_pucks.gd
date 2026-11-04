@@ -22,6 +22,9 @@ class_name GamePucks
 ##               when present, is its threshold.
 ##   "roster"  — a match whose lobby holds `steam_id`, never earned by that
 ##               player themselves.
+##   "feat"    — a specific play, detected on the host when a goal is credited
+##               (FeatRules, which names every one) and sent to the player who
+##               made it.
 
 const FREIGHT_TRAIN := "freight_train"
 const STUDENT := "student"
@@ -89,6 +92,12 @@ const ALL: Array[Dictionary] = [
 		"cond": {"kind": "event", "key": "tutorials_done"}},
 	{"id": CUSTOM_BUILD, "steam": "ACH_CUSTOM_BUILD",
 		"cond": {"kind": "event", "key": "build_edited"}},
+	# ── Plays (FeatRules) ────────────────────────────────────────────────────
+	{"id": "snipe", "cond": {"kind": "feat"}},
+	{"id": "backhand_shelf", "cond": {"kind": "feat"}},
+	{"id": "one_timer_feed", "cond": {"kind": "feat"}},
+	{"id": "pick_and_finish", "cond": {"kind": "feat"}},
+	{"id": "strip_and_finish", "cond": {"kind": "feat"}},
 	# ── Who you played with ──────────────────────────────────────────────────
 	{"id": PLAY_WITH_BUUKIE, "steam": "ACH_PLAY_WITH_BUUKIE", "hidden": true,
 		"cond": {"kind": "roster", "steam_id": BUUKIE_STEAM_ID}},
@@ -102,8 +111,9 @@ static func find(id: String) -> Dictionary:
 	return {}
 
 
+# "" for an empty entry (GamePucks.find on an unknown id).
 static func kind_of(entry: Dictionary) -> String:
-	return String((entry["cond"] as Dictionary).get("kind", ""))
+	return String((entry.get("cond", {}) as Dictionary).get("kind", ""))
 
 
 static func is_ladder(entry: Dictionary) -> bool:

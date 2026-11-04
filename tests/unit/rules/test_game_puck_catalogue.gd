@@ -89,6 +89,17 @@ func test_every_banner_title_is_a_title_and_every_title_is_awarded() -> void:
 		assert_ne(title, "", "\"\" is reserved for no title")
 
 
+func test_every_feat_puck_has_a_rule_and_every_rule_a_puck() -> void:
+	var rows: Array[String] = []
+	for entry: Dictionary in GamePucks.ALL:
+		if GamePucks.kind_of(entry) == "feat":
+			rows.append(String(entry["id"]))
+	for feat: String in FeatRules.ALL:
+		assert_has(rows, feat, "FeatRules detects %s but no puck awards it" % feat)
+	for id: String in rows:
+		assert_has(FeatRules.ALL, id, "puck %s is a feat nothing detects" % id)
+
+
 func test_titles_coerce_to_none_when_unknown() -> void:
 	assert_eq(Titles.coerce("power_forward"), "power_forward")
 	assert_eq(Titles.coerce("grand_poobah"), "")

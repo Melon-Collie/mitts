@@ -454,3 +454,8 @@ here whenever you bump, in the same format.
 #      older peer would send none and read none, but mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: the header's roster gains an
 #      optional "title_id" that an older replay simply lacks.
+# v94: feats (docs/game-pucks-plan.md, Phase 3). A new host→peer RPC,
+#      notify_feat(puck_id), tells a player the host saw them make a feat play.
+#      Godot routes RPCs by their index in the name-sorted method list, so the
+#      addition shifts every index after it; mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged.

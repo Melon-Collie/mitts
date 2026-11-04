@@ -35,6 +35,11 @@ class_name TurnoverTracker extends RefCounted
 ## Only ever constructed/called on the host (like HitTracker), so the stats
 ## it writes are authoritative and ride the normal stats broadcast.
 
+# A takeaway or interception just landed for `peer_id` (`kind` is
+# FeatRules.WON_TAKEAWAY or WON_INTERCEPTION): the possession their team now
+# holds is one they won.
+signal possession_won(peer_id: int, kind: String)
+
 # A recovery within a shot / dump window counts as a deliberate surrender (no
 # turnover). The dump window covers the chase to a dumped puck. A strip has no
 # window: it stays live until the next establishment consumes it, so a poked
@@ -174,6 +179,7 @@ func on_possession_established(peer_id: int) -> bool:
 				if taker != null and taker.stats != null:
 					taker.stats.takeaways += 1
 					credited = true
+					possession_won.emit(_candidate_credit_peer, FeatRules.WON_TAKEAWAY)
 			TurnoverRules.GIVEAWAY:
 				# Veto a giveaway the losing team fought back for and still lost —
 				# a contested board battle is not a clean cough-up (see the flag
@@ -286,6 +292,7 @@ func _credit_interception(establishing_team: int) -> bool:
 			or interceptor.team.team_id != establishing_team:
 		return false
 	interceptor.stats.interceptions += 1
+	possession_won.emit(_interceptor_peer, FeatRules.WON_INTERCEPTION)
 	return true
 
 

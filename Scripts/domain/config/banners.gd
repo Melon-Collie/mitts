@@ -14,6 +14,8 @@ const ALL: Array[Dictionary] = [
 	{"id": "two_way", "needs": ["goals@50", "assists@50", "interceptions@50", "takeaways@50"],
 		"title": "two_way"},
 	{"id": "iron_man", "needs": ["games_played@100"], "title": "iron_man"},
+	{"id": "playmaker", "needs": ["assists@250", "one_timer_feed"], "title": "playmaker"},
+	{"id": "sniper", "needs": ["goals@250", "snipe"], "title": "sniper"},
 ]
 
 

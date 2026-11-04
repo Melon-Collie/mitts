@@ -177,6 +177,8 @@ signal local_skin_changed(skin_tone: int)
 # map (apply_local_gear_style). Cosmetic — carries the packed GearStyleConfig
 # code.
 signal local_gear_style_changed(gear_style_code: int)
+# The host saw the local player make a feat play (a FeatRules id).
+signal feat_received(puck_id: String)
 # Fires after a local title pick lands in the peer map (apply_local_title).
 signal local_title_changed(title_id: String)
 
@@ -2098,6 +2100,18 @@ func notify_puck_stolen(event_seq: int, forced_lift_ms: int) -> void:
 func notify_goal_to_all(scoring_team_id: int, score0: int, score1: int, scorer_name: String, assist1_name: String, assist2_name: String) -> void:
 	for peer_id in connected_peer_ids():
 		notify_goal.rpc_id(peer_id, scoring_team_id, score0, score1, scorer_name, assist1_name, assist2_name)
+
+func send_feat(peer_id: int, puck_id: String) -> void:
+	if is_offline_mode or not is_real_peer(peer_id):
+		return
+	notify_feat.rpc_id(peer_id, puck_id)
+
+@rpc("authority", "reliable")
+func notify_feat(puck_id: String) -> void:
+	NetworkSimManager.send(
+		func(id: String) -> void:
+			feat_received.emit(id),
+		[puck_id], true)
 
 func notify_puck_dropped_to_carrier(carrier_peer_id: int) -> void:
 	if not is_real_peer(carrier_peer_id):

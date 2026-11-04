@@ -4,7 +4,8 @@ class_name Titles
 ## (Banners.ALL), and TITLE_<ID> in the locale catalogue names it. An id travels
 ## the wire with a player's look; "" is no title.
 
-const ALL: Array[String] = ["power_forward", "shutdown", "two_way", "iron_man"]
+const ALL: Array[String] = ["power_forward", "shutdown", "two_way", "iron_man", "playmaker",
+		"sniper"]
 
 
 static func is_known(id: String) -> bool:

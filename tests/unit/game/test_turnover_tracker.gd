@@ -422,3 +422,22 @@ func test_reset_clears_owner_and_pending_draw() -> void:
 	tracker.on_possession_established(20)
 	assert_eq(owner_player.stats.giveaways, 0, "reset forgot the previous owner")
 	assert_eq(stealer.stats.takeaways, 0)
+
+
+# ── Won possessions (the goal feats' memory) ─────────────────────────────────
+
+func test_a_landed_takeaway_or_interception_reports_who_won_the_puck() -> void:
+	_add_player(10, 0)
+	_add_player(20, 1)
+	_add_player(21, 1)
+	var won: Array[Array] = []
+	tracker.possession_won.connect(func(peer: int, kind: String) -> void: won.append([peer, kind]))
+	_gain_and_establish(10)
+	tracker.note_strip(10, 20)
+	_gain_and_establish(21)
+	assert_eq(won, [[20, FeatRules.WON_TAKEAWAY]] as Array[Array], "the stripper won it")
+	_gain_and_establish(10)
+	won.clear()
+	tracker.note_pass(10)
+	_gain_and_establish(21)
+	assert_eq(won, [[21, FeatRules.WON_INTERCEPTION]] as Array[Array])
