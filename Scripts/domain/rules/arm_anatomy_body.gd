@@ -33,6 +33,10 @@ var shoulder_width: float = 0.47
 var sleeve_radius: float = 0.08
 var hand_radius: float = 0.04
 var gear_press: float = 0.05
+# How far the pants stand off the thigh's bone and the sock, over its shin
+# guard, off the shin's (m): the legs the shaft is held out of.
+var thigh_radius: float = 0.13
+var shin_radius: float = 0.1
 # The stick: the top hand's centre to the blade's heel (m), how close below it
 # and how far down the shaft the bottom hand may hold, the angles the shaft
 # crosses each palm at (SkaterArmPoses.glove_basis), and the top fist's roll

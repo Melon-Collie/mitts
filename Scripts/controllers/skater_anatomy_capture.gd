@@ -15,6 +15,13 @@ const SPACING_MAX_SHARE: float = 0.7
 # front of its hip, the blade ahead on the forehand side.
 const SQUARE_HAND_OFF_SHOULDER := Vector3(-0.08, -0.45, -0.3)
 const SQUARE_HEEL_AHEAD_M: float = 1.0
+# Each leg's hip, knee and ankle bones (TrunkState.legs).
+const LEGS: Array[Array] = [
+	[SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.KNEE_L,
+			SkaterMeshBuilder.LegBone.SKATE_L],
+	[SkaterMeshBuilder.LegBone.LEG_R, SkaterMeshBuilder.LegBone.KNEE_R,
+			SkaterMeshBuilder.LegBone.SKATE_R],
+]
 
 
 static func capture(controller: SkaterController) -> ArmAnatomyBody:
@@ -38,6 +45,10 @@ static func capture(controller: SkaterController) -> ArmAnatomyBody:
 	body.shoulder_width = 2.0 * SkaterMeshBuilder.SHOULDER_HALF_WIDTH_M \
 			* body.torso_in_spine.basis.get_scale().x
 	body.sleeve_radius = SkaterMeshBuilder.SLEEVE_RADIUS_M
+	body.thigh_radius = _girth(SkaterConnectedPants.leg_stations(false)) \
+			* _girth_scale(skater, SkaterMeshBuilder.LegBone.THIGH_L)
+	body.shin_radius = _girth(SkaterConnectedPants.leg_stations(true)) \
+			* _girth_scale(skater, SkaterMeshBuilder.LegBone.SOCK_L)
 	body.hand_radius = skater.arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND)
 	body.stick_length = controller._ik.solve_stick_length()
 	body.spacing_min = controller._ik._glove_spacing()
@@ -79,7 +90,7 @@ static func hips_frame(skater: Skater) -> Transform3D:
 # left to the search: the tilt, fold, lean and side bend off the skater and
 # the two frames as SkaterSpineRig reads them, the chest's own turn off the
 # torso bone against where `body` has it at rest, and how far the hips sit
-# under `body`'s standing.
+# under `body`'s standing, and his legs where the skeleton stands them.
 static func trunk_state(skater: Skater, body: ArmAnatomyBody) -> ArmAnatomySearch.TrunkState:
 	var trunk := ArmAnatomySearch.TrunkState.new()
 	trunk.sunk = body.standing_pivot - pivot_height(skater)
@@ -102,7 +113,29 @@ static func trunk_state(skater: Skater, body: ArmAnatomyBody) -> ArmAnatomySearc
 	var torso: Transform3D = skel.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
 	trunk.chest = (spine.affine_inverse() * torso * body.torso_in_spine.affine_inverse()) \
 			.basis.orthonormalized()
+	var to_hips: Transform3D = hips_frame(skater).affine_inverse() * skel.global_transform
+	for leg: Array in LEGS:
+		var joints := PackedVector3Array()
+		for bone: int in leg:
+			joints.append(to_hips * skel.get_bone_global_pose(
+					SkaterBodySkeleton.LEG_BONE_OFFSET + bone).origin)
+		trunk.legs.append(joints)
 	return trunk
+
+
+# The widest of a leg's rings (SkaterConnectedPants.leg_stations) about its bone.
+static func _girth(stations: PackedVector3Array) -> float:
+	var widest: float = 0.0
+	for s: Vector3 in stations:
+		widest = maxf(widest, s.y)
+	return widest
+
+
+# How much the build widens the leg bone `bone` across.
+static func _girth_scale(skater: Skater, bone: int) -> float:
+	var skel: Skeleton3D = skeleton(skater)
+	return skel.get_bone_pose_scale(SkaterBodySkeleton.LEG_BONE_OFFSET + bone).x \
+			/ skater.leg_bone_base_scale(bone).x
 
 
 # The trunk's pivot above the ice (m).

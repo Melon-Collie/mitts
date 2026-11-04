@@ -55,7 +55,6 @@ var _pivot_m: float = 0.0
 var _blade_m: float = 0.0
 var _search: ArmAnatomySearch
 # Each leg's hip, knee and ankle standing at rest (hips frame).
-var _legs: Array[PackedVector3Array] = []
 var _out_dir: String = DEFAULT_OUT
 var _lines: PackedStringArray = []
 
@@ -106,17 +105,6 @@ func _build_model() -> void:
 	_blade_m = c.blade_height
 	_search = ArmAnatomySearch.new(_body)
 	_search.technique = true
-	var skel: Skeleton3D = SkaterAnatomyCapture.skeleton(skater)
-	var to_hips: Transform3D = SkaterAnatomyCapture.hips_frame(skater).affine_inverse() \
-			* skel.global_transform
-	for leg: Array in [[SkaterMeshBuilder.LegBone.LEG_L, SkaterMeshBuilder.LegBone.KNEE_L,
-			SkaterMeshBuilder.LegBone.SKATE_L], [SkaterMeshBuilder.LegBone.LEG_R,
-			SkaterMeshBuilder.LegBone.KNEE_R, SkaterMeshBuilder.LegBone.SKATE_R]]:
-		var joints := PackedVector3Array()
-		for bone: int in leg:
-			joints.append(to_hips * skel.get_bone_global_pose(
-					SkaterBodySkeleton.LEG_BONE_OFFSET + bone).origin)
-		_legs.append(joints)
 	skater.visible = false
 	puck.visible = false
 
@@ -268,28 +256,17 @@ func _draw_pose(pose: ArmAnatomySearch.Pose, s: Dictionary) -> Node3D:
 	return root
 
 
-# The legs with the skates planted where they stand and the hips sunk by
-# `crouch`, each knee bent forward over its skate.
+# The legs as the model holds the shaft out of them, the skates planted where
+# they stand and the hips sunk by `crouch`.
 func _draw_legs(root: Node3D, crouch: float) -> void:
 	var color := Color(0.35, 0.35, 0.4)
-	for leg: PackedVector3Array in _legs:
+	for leg: PackedVector3Array in _trunk.legs:
 		var hip: Vector3 = leg[0]
 		var ankle: Vector3 = leg[2] + Vector3.UP * crouch
-		var thigh: float = leg[0].distance_to(leg[1])
-		var shin: float = leg[1].distance_to(leg[2])
-		var d := Vector2(ankle.z - hip.z, ankle.y - hip.y)
-		var span: float = minf(d.length(), thigh + shin - 0.0001)
-		var along: Vector2 = d.normalized()
-		var foot: float = (thigh * thigh - shin * shin + span * span) / (2.0 * span)
-		var rise: float = sqrt(maxf(thigh * thigh - foot * foot, 0.0))
-		var ahead := Vector2(-along.y, along.x)
-		if ahead.x > 0.0:
-			ahead = -ahead
-		var k: Vector2 = Vector2(hip.z, hip.y) + along * foot + ahead * rise
-		var knee := Vector3(hip.x, k.y, k.x)
-		_segment(root, hip, knee, ARM_RADIUS * 1.2, color)
-		_segment(root, knee, ankle, ARM_RADIUS, color)
-		_ball(root, knee, ARM_RADIUS * 1.2, color)
+		var knee: Vector3 = ArmAnatomySearch.bent_knee(leg, ankle)
+		_segment(root, hip, knee, _body.thigh_radius, color)
+		_segment(root, knee, ankle, _body.shin_radius, color)
+		_ball(root, knee, _body.shin_radius, color)
 		var ice: float = -_pivot_m + crouch + 0.02
 		_segment(root, ankle, Vector3(ankle.x, ice + 0.05, ankle.z - 0.08), ARM_RADIUS,
 				Color(0.15, 0.15, 0.15))
@@ -375,7 +352,8 @@ func _verdict(pose: ArmAnatomySearch.Pose) -> String:
 		metres = pose.technique.binding != ArmTechnique.Limit.LIE
 	else:
 		what = ArmAnatomySearch.Limit.keys()[pose.trunk_binding]
-		metres = pose.trunk_binding == ArmAnatomySearch.Limit.SHAFT_IN_TORSO
+		metres = pose.trunk_binding in [ArmAnatomySearch.Limit.SHAFT_IN_TORSO,
+				ArmAnatomySearch.Limit.SHAFT_IN_LEGS]
 	var near: bool = _shade(pose.violation, metres, HELD) == NEAR
 	return "%s: %s %s" % ["near miss" if near else "fails", what, _excess(pose.violation, metres)]
 

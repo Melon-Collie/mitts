@@ -23,7 +23,7 @@ const TRUNK_SIDE_MAX: float = deg_to_rad(35.0)
 # blade's face opens and closes this far and still plays the puck. Provisional,
 # for review against the map (the stick's, not the body's).
 const FACE_TILT_MAX: float = deg_to_rad(40.0)
-# The shaft's half thickness (m), held out of the jersey.
+# The shaft's half thickness (m), held out of the jersey and the legs.
 const SHAFT_RADIUS: float = 0.015
 const _SHAFT_SAMPLES: int = 12
 
@@ -58,7 +58,8 @@ const DEEPEST_STANCE_M: float = 0.25
 # reach test's allowance for the leans the search tries.
 const _LEAN_REACH_M: float = 0.3
 
-enum Limit { NONE, TRUNK_TWIST, TRUNK_FLEXION, TRUNK_SIDE, SHAFT_IN_TORSO, TECHNIQUE }
+enum Limit { NONE, TRUNK_TWIST, TRUNK_FLEXION, TRUNK_SIDE, SHAFT_IN_TORSO, SHAFT_IN_LEGS,
+		TECHNIQUE }
 
 
 # The trunk as the frame holds it: tipped toward the body's acceleration
@@ -78,6 +79,9 @@ class TrunkState:
 	var pitch: float = 0.0
 	var side: float = 0.0
 	var chest := Basis.IDENTITY
+	# Each leg's hip, knee and ankle as the skater stands them, which a crouch
+	# bends with the skate kept on the ice.
+	var legs: Array[PackedVector3Array] = []
 
 
 # A whole pose: the trunk's twist, the stick standing from the blade (its angle
@@ -96,6 +100,7 @@ class Pose:
 	var top := ArmAnatomy.ArmPose.new()
 	var bottom := ArmAnatomy.ArmPose.new()
 	var shaft_depth: float = 0.0
+	var legs_depth: float = 0.0
 	var technique := ArmTechnique.Verdict.new()
 	var cost: float = INF
 	var violation: float = INF
@@ -123,6 +128,7 @@ class Pose:
 		top.copy_from(o.top)
 		bottom.copy_from(o.bottom)
 		shaft_depth = o.shaft_depth
+		legs_depth = o.legs_depth
 		technique.violation = o.technique.violation
 		technique.binding = o.technique.binding
 		cost = o.cost
@@ -339,6 +345,7 @@ func _try(trunk: TrunkState, heel: Vector3, twist: float, lie: float, heading: f
 	t.face_tilt = t.top.roll - _body.top_roll_square
 	_hold_bottom(hand, shaft, spacing, t)
 	t.shaft_depth = _shaft_depth(_top.torso, hand, heel)
+	t.legs_depth = _legs_depth(trunk, hand, heel)
 	t.technique.violation = 0.0
 	t.technique.binding = ArmTechnique.Limit.NONE
 	if technique:
@@ -399,6 +406,36 @@ func _shaft_depth(torso: Transform3D, hand: Vector3, heel: Vector3) -> float:
 	return deepest
 
 
+# How deep the shaft sits in the legs past its thickness (m), deepest point.
+func _legs_depth(trunk: TrunkState, hand: Vector3, heel: Vector3) -> float:
+	var deepest: float = -1.0
+	for leg: PackedVector3Array in trunk.legs:
+		var ankle: Vector3 = leg[2] + Vector3.UP * _crouch
+		var knee: Vector3 = bent_knee(leg, ankle)
+		deepest = maxf(deepest, _body.thigh_radius + SHAFT_RADIUS
+				- sqrt(SegmentDistance.dist_sq(hand, heel, leg[0], knee)))
+		deepest = maxf(deepest, _body.shin_radius + SHAFT_RADIUS
+				- sqrt(SegmentDistance.dist_sq(hand, heel, knee, ankle)))
+	return deepest
+
+
+# The knee of `leg` (hip, knee, ankle) with its ankle moved to `ankle`, the hip
+# held and the knee bent the way it was.
+static func bent_knee(leg: PackedVector3Array, ankle: Vector3) -> Vector3:
+	if ankle.is_equal_approx(leg[2]):
+		return leg[1]
+	var thigh: float = leg[0].distance_to(leg[1])
+	var shin: float = leg[1].distance_to(leg[2])
+	var along: Vector3 = (ankle - leg[0]).normalized()
+	var span: float = clampf(leg[0].distance_to(ankle), 0.0001, thigh + shin - 0.0001)
+	var bend: Vector3 = leg[1] - leg[0]
+	bend -= along * bend.dot(along)
+	if bend.length_squared() < 1e-8:
+		bend = Vector3.FORWARD - along * Vector3.FORWARD.dot(along)
+	var foot: float = (thigh * thigh - shin * shin + span * span) / (2.0 * span)
+	return leg[0] + along * foot + bend.normalized() * sqrt(maxf(thigh * thigh - foot * foot, 0.0))
+
+
 func _total(t: Pose) -> void:
 	t.cost = t.top.cost + t.bottom.cost + _sq((t.twist - _twist_rest) / TRUNK_TWIST_MAX) \
 			+ _sq(t.lean.x / TRUNK_FLEXION_MAX) + _sq(t.lean.y / TRUNK_SIDE_MAX) \
@@ -445,6 +482,12 @@ func _total(t: Pose) -> void:
 		t.binding_arm = -1
 		t.arm_binding = ArmAnatomy.Limit.NONE
 		t.trunk_binding = Limit.SHAFT_IN_TORSO
+	var legs_over: float = t.legs_depth * ArmAnatomy.METRE_AS_RADIANS
+	if legs_over > t.violation:
+		t.violation = legs_over
+		t.binding_arm = -1
+		t.arm_binding = ArmAnatomy.Limit.NONE
+		t.trunk_binding = Limit.SHAFT_IN_LEGS
 	if t.technique.violation > t.violation:
 		t.violation = t.technique.violation
 		t.binding_arm = -1

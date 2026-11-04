@@ -135,3 +135,34 @@ func test_the_search_stands_a_carry_in_a_ready_stance() -> void:
 		assert_true(pose.feasible(), "held")
 		assert_almost_eq(pose.crouch + sunk, ArmAnatomySearch.READY_STANCE_M, 0.02,
 				"sunk %.2f: the hips a ready stance under standing" % sunk)
+
+
+# The search holds the shaft out of the legs as it holds it out of the jersey:
+# a blade planted beside a skate stands its shaft in the leg, a carry ahead
+# clears both, and a crouch bends each knee with its skate kept on the ice.
+func test_the_search_holds_the_shaft_out_of_the_legs() -> void:
+	var c: SkaterController = _make()
+	var body: ArmAnatomyBody = SkaterAnatomyCapture.capture(c)
+	var trunk: ArmAnatomySearch.TrunkState = SkaterAnatomyCapture.trunk_state(c.skater, body)
+	assert_eq(trunk.legs.size(), 2, "both legs")
+	var forehand: float = signf(body.bottom_shoulder.x)
+	var ice: float = c.blade_height - SkaterAnatomyCapture.pivot_height(c.skater)
+	var search := ArmAnatomySearch.new(body)
+	var pose := ArmAnatomySearch.Pose.new()
+	search.hold(trunk, Vector3(0.8 * forehand, ice, -0.6), 0.0, deg_to_rad(40.0),
+			atan2(0.8 * forehand, -0.6), -1.0, pose)
+	assert_lt(pose.legs_depth, 0.0, "a carry ahead clears the legs")
+	var leg: PackedVector3Array = trunk.legs[0]
+	var by_skate := Vector3(leg[2].x, ice, leg[2].z)
+	var deepest: float = -INF
+	for k: int in 8:
+		search.hold(trunk, by_skate, 0.0, deg_to_rad(75.0), TAU * float(k) / 8.0, -1.0, pose)
+		deepest = maxf(deepest, pose.legs_depth)
+	assert_gt(deepest, 0.0, "a shaft stood up from the skate is in the leg")
+	var sunk: Vector3 = leg[2] + Vector3.UP * 0.1
+	var knee: Vector3 = ArmAnatomySearch.bent_knee(leg, sunk)
+	assert_almost_eq(knee.distance_to(leg[0]), leg[0].distance_to(leg[1]), 0.001,
+			"the thigh keeps its length")
+	assert_almost_eq(knee.distance_to(sunk), leg[1].distance_to(leg[2]), 0.001,
+			"the shin keeps its length")
+	assert_lt(knee.z, leg[1].z, "the knee comes forward over the skate")
