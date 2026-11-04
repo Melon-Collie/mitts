@@ -23,6 +23,10 @@ const PUMP_HANDOFF_S: float = 0.15
 # Times the goalie is resolved again against the arm rebuilt for a clamped
 # blade: each rebuild turns the toe, so the hold settles over a few.
 const GOALIE_SETTLE_PASSES: int = 4
+# How far the carry looks along the cursor's bearing for a puck the band holds,
+# each way (m a step, and steps).
+const ENVELOPE_RAY_STEP_M: float = 0.05
+const ENVELOPE_RAY_STEPS: int = 30
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -352,8 +356,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
 		reach_purpose = _reach_purpose(skater_pos)
 		if _envelope_carry():
-			target_blade_world = _envelope_target(_skater.upper_body_to_global(
-					Vector3(target_blade_xz.x, 0.0, target_blade_xz.y)))
+			target_blade_world = _envelope_target(mouse_world)
 		else:
 			var target_blade_local: Vector3 = _solve_top_hand(
 					target_blade_xz, blade_side_sign, target_reach, true).blade
@@ -748,18 +751,66 @@ func _forehand_sign() -> float:
 	return signf(_skater.bottom_shoulder.position.x)
 
 
-# The heel a carry aims at (`heel_world`, on the ice) held into the band, the
-# bearing turned toward straight ahead where nothing holds at it.
-func _envelope_target(heel_world: Vector3) -> Vector3:
+# The heel a carry aims at for the cursor at `cursor_world`, on the ice: the puck
+# kept on the cursor's bearing off his centre and moved in or out along it to the
+# nearest place whose heel the band holds. The heel sits half a blade and the
+# carry's offset off the puck, along and across the stick the envelope's hand
+# holds, so in close its own bearing swings well off the cursor's; held out
+# along that, the puck went with it. Where nothing on the bearing holds, the
+# heel's bearing is turned toward straight ahead (ArmEnvelope.held_blade). In
+# his level frame throughout: UpperBody's pitches with the carry's lean.
+func _envelope_target(cursor_world: Vector3) -> Vector3:
 	var root: Transform3D = _skater.global_transform
-	var local: Vector3 = root.affine_inverse() * heel_world
+	var to_root: Transform3D = root.affine_inverse()
+	var cursor3: Vector3 = to_root * cursor_world
+	var cursor := Vector2(cursor3.x, cursor3.z)
+	var shoulder3: Vector3 = to_root * _skater.upper_body_to_global(_skater.shoulder.position)
+	var shoulder := Vector2(shoulder3.x, shoulder3.z)
+	var reach: float = minf(cursor.length(), ArmEnvelope.RADII_M[ArmEnvelope.RADII_M.size() - 1]
+			+ ENVELOPE_RAY_STEP_M)
+	var along: Vector2 = cursor.normalized() if reach > 0.001 else Vector2(0.0, -1.0)
 	var fh: float = _forehand_sign()
-	var held: Vector2 = _envelope.held_blade(_controller.build_height_in, _skating_share(),
-			atan2(local.x * fh, -local.z), Vector2(local.x, local.z).length())
-	var world: Vector3 = root * Vector3(sin(held.x) * held.y * fh, local.y,
-			-cos(held.x) * held.y)
-	world.y = 0.0
-	return world
+	var height: float = _controller.build_height_in
+	var share: float = _skating_share()
+	var offset: float = _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
+	for k: int in 2 * ENVELOPE_RAY_STEPS + 1:
+		var t: float = reach + ENVELOPE_RAY_STEP_M * float((k + 1) / 2) \
+				* (1.0 if k % 2 == 1 else -1.0)
+		if t < ENVELOPE_RAY_STEP_M:
+			continue
+		var puck: Vector2 = along * t
+		var heel: Vector2 = _heel_off(puck, shoulder, offset)
+		# The blade lies along the stick the envelope's hand holds, not the one from
+		# the shoulder the first guess assumed, and the puck sits off it that way.
+		if _envelope.hold_at(height, share, rad_to_deg(atan2(heel.x * fh, -heel.y)),
+				heel.length(), _envelope_hold):
+			heel = _heel_off(puck, Vector2(_envelope_hold.hand.x * fh, _envelope_hold.hand.z),
+					offset)
+		var band: Vector2 = _envelope.band_at(height, share,
+				rad_to_deg(atan2(heel.x * fh, -heel.y)))
+		var radius: float = heel.length()
+		if band.x <= band.y and radius >= band.x - 0.0001 and radius <= band.y + 0.0001:
+			return _on_ice(root * Vector3(heel.x, 0.0, heel.y))
+	var at: Vector2 = _heel_off(cursor, shoulder, offset)
+	var turned: Vector2 = _envelope.held_blade(height, share, atan2(at.x * fh, -at.y),
+			at.length())
+	return _on_ice(root * Vector3(sin(turned.x) * turned.y * fh, 0.0,
+			-cos(turned.x) * turned.y))
+
+
+# The heel under a puck at `puck` held by a stick from `from` (both on the ice,
+# any level frame): half a blade back along the stick, and the carry's
+# `offset` across it (_blade_target_for, Skater.get_carry_target_global).
+func _heel_off(puck: Vector2, from: Vector2, offset: float) -> Vector2:
+	var to_puck: Vector2 = puck - from
+	if to_puck.length() <= 0.001:
+		return puck
+	var dir: Vector2 = to_puck.normalized()
+	return puck - dir * (_skater.blade_length * 0.5) + Vector2(-dir.y, dir.x) * offset
+
+
+static func _on_ice(world: Vector3) -> Vector3:
+	return Vector3(world.x, 0.0, world.z)
 
 
 # The top hand holding a carried blade at `blade_local` (UpperBody's frame) as

@@ -51,6 +51,7 @@ var reach_min: float
 # The derived carry (ArmEnvelope), its build's height and forehand side; null
 # keeps the closed-form carry.
 var envelope: ArmEnvelope = null
+var _hold := ArmEnvelope.Hold.new()
 var height_in: float = 73.0
 var forehand_sign: float = 1.0
 var carry_offset: float
@@ -249,6 +250,8 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 	shoulder_world.y = 0.0
 	if (mouse - shoulder_world).length() < 0.01:
 		return arm.heel
+	if derived:
+		return _envelope_target(mouse, ub, body, pos, carry_factor)
 	var mouse_local: Vector3 = ub.affine_inverse() * mouse
 	var aim := Vector2(mouse_local.x, mouse_local.z)
 	var to_target: Vector2 = aim - Vector2(shoulder.x, shoulder.z)
@@ -257,8 +260,6 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 		aim -= stick_dir * blade_half
 		if carrying:
 			aim += Vector2(-stick_dir.y, stick_dir.x) * carry_factor * carry_offset
-	if derived:
-		return _envelope_target(ub * Vector3(aim.x, 0.0, aim.y), body, pos)
 	var blade: Vector3 = _solve(arm, aim, side, INF, true, carrying, purpose, ub, body, pos).blade
 	if carrying:
 		blade = _solve(arm, Vector2(blade.x, blade.z), side, INF, true, carrying, purpose,
@@ -270,14 +271,51 @@ func resolve(arm: Arm, ub: Transform3D, body: Basis, pos: Vector3, cursor: Vecto
 
 # SkaterIKCoordinator._envelope_target, the skating fold's share left out with
 # the skating lean.
-func _envelope_target(heel: Vector3, body: Basis, pos: Vector3) -> Vector3:
-	var rel: Vector3 = body.inverse() * (heel - pos)
-	var held: Vector2 = envelope.held_blade(height_in, 0.0, atan2(rel.x * forehand_sign, -rel.z),
-			Vector2(rel.x, rel.z).length())
-	var world: Vector3 = Vector3(pos.x, 0.0, pos.z) + body * Vector3(sin(held.x) * held.y * forehand_sign,
-			0.0, -cos(held.x) * held.y)
+func _envelope_target(cursor_world: Vector3, ub: Transform3D, body: Basis, pos: Vector3,
+		carry_factor: float) -> Vector3:
+	var root := Transform3D(body, Vector3(pos.x, 0.0, pos.z))
+	var to_root: Transform3D = root.affine_inverse()
+	var cursor3: Vector3 = to_root * cursor_world
+	var cursor := Vector2(cursor3.x, cursor3.z)
+	var shoulder3: Vector3 = to_root * (ub * shoulder)
+	var from := Vector2(shoulder3.x, shoulder3.z)
+	var reach: float = minf(cursor.length(), ArmEnvelope.RADII_M[ArmEnvelope.RADII_M.size() - 1]
+			+ SkaterIKCoordinator.ENVELOPE_RAY_STEP_M)
+	var along: Vector2 = cursor.normalized() if reach > 0.001 else Vector2(0.0, -1.0)
+	var offset: float = carry_factor * carry_offset
+	for k: int in 2 * SkaterIKCoordinator.ENVELOPE_RAY_STEPS + 1:
+		var t: float = reach + SkaterIKCoordinator.ENVELOPE_RAY_STEP_M * float((k + 1) / 2) \
+				* (1.0 if k % 2 == 1 else -1.0)
+		if t < SkaterIKCoordinator.ENVELOPE_RAY_STEP_M:
+			continue
+		var puck: Vector2 = along * t
+		var heel: Vector2 = _heel_off(puck, from, offset)
+		if envelope.hold_at(height_in, 0.0, rad_to_deg(atan2(heel.x * forehand_sign, -heel.y)),
+				heel.length(), _hold):
+			heel = _heel_off(puck, Vector2(_hold.hand.x * forehand_sign, _hold.hand.z), offset)
+		var band: Vector2 = envelope.band_at(height_in, 0.0,
+				rad_to_deg(atan2(heel.x * forehand_sign, -heel.y)))
+		var radius: float = heel.length()
+		if band.x <= band.y and radius >= band.x - 0.0001 and radius <= band.y + 0.0001:
+			var held: Vector3 = root * Vector3(heel.x, 0.0, heel.y)
+			held.y = 0.0
+			return held
+	var at: Vector2 = _heel_off(cursor, from, offset)
+	var turned: Vector2 = envelope.held_blade(height_in, 0.0, atan2(at.x * forehand_sign, -at.y),
+			at.length())
+	var world: Vector3 = root * Vector3(sin(turned.x) * turned.y * forehand_sign, 0.0,
+			-cos(turned.x) * turned.y)
 	world.y = 0.0
 	return world
+
+
+# SkaterIKCoordinator._heel_off.
+func _heel_off(puck: Vector2, from_xz: Vector2, offset: float) -> Vector2:
+	var to_puck: Vector2 = puck - from_xz
+	if to_puck.length() <= 0.001:
+		return puck
+	var dir: Vector2 = to_puck.normalized()
+	return puck - dir * blade_half + Vector2(-dir.y, dir.x) * offset
 
 
 # SkaterIKCoordinator._solve_top_hand, in the arm's level frame.
