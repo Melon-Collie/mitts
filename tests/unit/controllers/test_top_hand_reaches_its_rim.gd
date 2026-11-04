@@ -351,5 +351,7 @@ func test_an_empty_stick_still_reaches_one_handed() -> void:
 			with_puck.skater.global_position)
 	var reached: float = empty.skater.get_blade_contact_global().distance_to(
 			empty.skater.global_position)
-	assert_gt(reached - carried, 0.1,
+	# The derived carry holds the blade with both hands nearly as far as the arm
+	# reaches (ArmEnvelope), so the margin is the bottom hand's last few cm.
+	assert_gt(reached - carried, 0.0,
 			"one hand reaches %.2f m past the two-handed carry" % (reached - carried))

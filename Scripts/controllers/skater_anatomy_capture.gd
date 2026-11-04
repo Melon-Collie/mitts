@@ -79,6 +79,7 @@ static func hips_frame(skater: Skater) -> Transform3D:
 	var spine: Transform3D = skel.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 	var hip: Vector3 = skater.drawn_lower_body_rotation()
 	var trunk: Vector3 = skater.drawn_upper_body_rotation()
+	trunk.y = skater.drawn_chest_yaw(trunk.y)
 	var twist: float = clampf(angle_difference(hip.y, trunk.y), -SkaterSpineRig.TWIST_LIMIT,
 			SkaterSpineRig.TWIST_LIMIT)
 	var world: Transform3D = skel.global_transform * Transform3D(

@@ -10,7 +10,8 @@ extends GaitLayer
 # floor across the middle of its sit would clip every stroke's bottom: the
 # crouch is gone by CROUCH_GONE_SPEED. The derived carry (ArmEnvelope) lays
 # its own stance on top: the chest leaned on past the fold and, standing, the
-# hips sunk past the crouch, as the pose that holds the blade there has them.
+# hips sunk past the crouch, as the pose that holds the blade there has them;
+# that sink stays at speed (a carrier skating backward reads the standing pose).
 # The layer is quiet while the fold and the stance it last drew are still
 # theirs, so a skater settled with his stick out holds the pose that has it.
 
@@ -46,9 +47,11 @@ func stance_floor() -> float:
 	if _controller.carry_fold_deg <= 0.0:
 		return 0.0
 	var speed: float = Vector2(_skater.velocity.x, _skater.velocity.z).length()
+	# The derived carry's sink goes under whatever is left: its hands are placed
+	# for a body that far down, at any speed.
 	return _controller.carry_crouch_floor(_controller.carry_crouch * _fold
-			/ deg_to_rad(_controller.carry_fold_deg)) \
-			* (1.0 - smoothstep(CROUCH_FULL_SPEED, CROUCH_GONE_SPEED, speed))
+			/ deg_to_rad(_controller.carry_fold_deg)
+			* (1.0 - smoothstep(CROUCH_FULL_SPEED, CROUCH_GONE_SPEED, speed)))
 
 
 func shape_trunk(p: GaitPose) -> void:

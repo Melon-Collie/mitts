@@ -87,6 +87,7 @@ static func from_dict(d: Dictionary) -> ArmEnvelope:
 					flat.append(float(v))
 			if flat.size() != ANGLES_DEG.size() * RADII_M.size() * CELL_FLOATS:
 				return null
+			_fill_unheld(flat)
 			per_state.append(flat)
 		env._cells.append(per_state)
 	return env
@@ -140,8 +141,9 @@ func band_at(height: float, skating: float, deg: float) -> Vector2:
 
 
 # How a body holds the blade at `deg` off the facing and `radius` out, into
-# `out`: the held cells round it, each weighted by its share. False when none
-# round it holds.
+# `out`: the cells round it, each weighted by its share, an unheld one as its
+# nearest held one holds (_fill_unheld), so the pose moves on smoothly where
+# the held cells end. False when none round it holds.
 func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold) -> bool:
 	var r: float = clampf((radius - RADII_M[0]) / (RADII_M[1] - RADII_M[0]), 0.0,
 			float(RADII_M.size() - 1))
@@ -153,6 +155,7 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 	var crouch: float = 0.0
 	var turn: float = 0.0
 	var weight: float = 0.0
+	var held: float = 0.0
 	for c: int in _corners(height, skating, deg):
 		var corner := Vector4(_corner_buf[c * 4], _corner_buf[c * 4 + 1], _corner_buf[c * 4 + 2],
 				_corner_buf[c * 4 + 3])
@@ -161,7 +164,7 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 		for k: int in 2:
 			var w: float = corner.w * (rt if k == 1 else 1.0 - rt)
 			var i: int = (ai * RADII_M.size() + r0 + k) * CELL_FLOATS
-			if w <= 0.0 or cells[i] < 0.5:
+			if w <= 0.0:
 				continue
 			hand += Vector3(cells[i + 1], cells[i + 2], cells[i + 3]) * w
 			spacing += cells[i + 4] * w
@@ -169,7 +172,8 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 			crouch += cells[i + 7] * w
 			turn += cells[i + 8] * w
 			weight += w
-	if weight <= 0.0:
+			held += w if cells[i] > 0.5 else 0.0
+	if held <= 0.0:
 		return false
 	out.hand = hand / weight
 	out.spacing = spacing / weight
@@ -177,6 +181,32 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 	out.crouch = crouch / weight
 	out.turn = turn / weight
 	return true
+
+
+# Each unheld cell of `cells` given the pose of the held cell nearest it on the
+# grid, its held flag left off: weighting the held cells alone, a pose jumped
+# wherever a neighbour went from held to not.
+static func _fill_unheld(cells: PackedFloat32Array) -> void:
+	var n: int = RADII_M.size()
+	var count: int = ANGLES_DEG.size() * n
+	for c: int in count:
+		if cells[c * CELL_FLOATS] > 0.5:
+			continue
+		var best: int = -1
+		var best_d: int = 1 << 30
+		for o: int in count:
+			if cells[o * CELL_FLOATS] < 0.5:
+				continue
+			var da: int = c / n - o / n
+			var dr: int = c % n - o % n
+			var d: int = da * da + dr * dr
+			if d < best_d:
+				best_d = d
+				best = o
+		if best < 0:
+			return
+		for f: int in range(1, CELL_FLOATS):
+			cells[c * CELL_FLOATS + f] = cells[best * CELL_FLOATS + f]
 
 
 # The carry crouch floor that sinks a standing carrier `height` inches tall

@@ -20,7 +20,7 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 
 # How far across from his body a carrier gets the puck either side: the live
 # skater's furthest pull on average (test_keeper_reads_the_carriers_reach.gd).
-const CARRIER_REACH_M: float = 1.33
+const CARRIER_REACH_M: float = 1.52
 # The longest read any tier has, kept at the physics tick.
 const MOST_S: float = 0.6
 const TICK_HZ: float = _PhysicsConstants.PHYSICS_TICK

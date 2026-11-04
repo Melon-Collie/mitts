@@ -70,20 +70,22 @@ func test_the_models_trunk_puts_the_shoulders_and_jersey_where_the_rig_draws_the
 	assert_almost_eq(body.top_shoulder.x, -body.bottom_shoulder.x, 0.001, "shoulders either side")
 	var forehand: float = signf(body.bottom_shoulder.x)
 	for skating: bool in [false, true]:
-		# Round the forehand far enough to twist the trunk.
-		_carry(c, Vector2(1.0 * forehand, -0.6), skating)
+		# Out round the backhand, where the chest turns well off the hips.
+		_carry(c, Vector2(-0.5 * forehand, -1.0), skating)
 		var what: String = "skating" if skating else "standing"
 		var trunk: ArmAnatomySearch.TrunkState = SkaterAnatomyCapture.trunk_state(skater, body)
 		var twist: float = clampf(angle_difference(skater.drawn_lower_body_rotation().y,
-				skater.drawn_upper_body_rotation().y), -SkaterSpineRig.TWIST_LIMIT,
-				SkaterSpineRig.TWIST_LIMIT)
+				skater.drawn_chest_yaw(skater.drawn_upper_body_rotation().y)),
+				-SkaterSpineRig.TWIST_LIMIT, SkaterSpineRig.TWIST_LIMIT)
 		assert_gt(absf(twist), deg_to_rad(10.0), what + ": the trunk is twisted")
 		var chest: Basis = ArmAnatomySearch.spine_basis(trunk, twist)
 		var skel: Skeleton3D = SkaterAnatomyCapture.skeleton(skater)
 		var to_hips: Transform3D = SkaterAnatomyCapture.hips_frame(skater).affine_inverse() \
 				* skel.global_transform
+		# The shoulders where the rig roots the arms (SkaterArmRig.arm_root).
+		var spine: Transform3D = to_hips * skel.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE)
 		for marker: Vector3 in [skater.shoulder.position, skater.bottom_shoulder.position]:
-			var drawn: Vector3 = to_hips * (skater.drawn_upper_body() * skater.visible_shoulder(marker))
+			var drawn: Vector3 = spine * skater._arms._textured_shoulder(marker)
 			var modelled: Vector3 = chest * (body.top_shoulder if marker == skater.shoulder.position
 					else body.bottom_shoulder)
 			assert_almost_eq(modelled, drawn, Vector3.ONE * NEAR_M, what + ": shoulder")
