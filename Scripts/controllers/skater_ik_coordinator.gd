@@ -119,6 +119,11 @@ var _envelope_hand_local := Vector3.ZERO
 var _carry_spacing: float = -1.0
 var _carry_lean := Vector2.ZERO
 var _carry_sink: float = 0.0
+# The chest's yaw the envelope's pose holds its hands from (radians off the
+# facing, the root's frame), and how far into the derived carry he is (0..1),
+# eased in on a pickup and out on a drop (advance_carry_stance).
+var _carry_turn: float = 0.0
+var _envelope_weight: float = 0.0
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
 var _no_goalies := PackedFloat32Array()
@@ -831,24 +836,39 @@ func _envelope_hand(blade_local: Vector3) -> bool:
 	_carry_spacing = _envelope_hold.spacing
 	_carry_lean = Vector2(_envelope_hold.lean.x, _envelope_hold.lean.y * fh)
 	_carry_sink = _envelope_hold.crouch
+	_carry_turn = _envelope_hold.turn * fh
 	return true
 
 
 # The stance the derived carry holds its blade in (the chest's lean, forward and
 # toward the skater's +X; radians), zero off it. Tick state the gait draws.
 func carry_lean() -> Vector2:
-	return _carry_lean if _envelope_carry() else Vector2.ZERO
+	return _carry_lean * _carry_share()
+
+
+# Eases the derived carry's stance in on a pickup and out on a drop over the
+# span the pose bridge eases its stick (live ticks only, as the bridge runs),
+# and hands the drawn chest its turn.
+func advance_carry_stance(delta: float) -> void:
+	_envelope_weight = move_toward(_envelope_weight, 1.0 if _envelope_carry() else 0.0,
+			delta / SkaterPoseBridge.SPAN_S)
+	_skater.set_carry_chest(_carry_turn, _carry_share())
+
+
+func _carry_share() -> float:
+	return smoothstep(0.0, 1.0, _envelope_weight)
 
 
 # The carry's crouch floor (SkaterController.carry_crouch's units) once the
 # derived carry's sink is laid under `floor_value`, the stance it already has:
 # the floor that sinks the hips that much further.
 func carry_crouch_floor(floor_value: float) -> float:
-	if not _envelope_carry() or _carry_sink <= 0.0:
+	var sink: float = _carry_sink * _carry_share()
+	if _envelope == null or sink <= 0.0:
 		return floor_value
 	var height: float = _controller.build_height_in
 	return _envelope.floor_for_drop(height, _envelope.drop_for_floor(height, floor_value)
-			+ _carry_sink)
+			+ sink)
 
 
 # How close in a carried puck comes (m off his centre), from his skating fold:
@@ -1065,7 +1085,9 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	# of pitch lean or reach. bh_hand_y offsets for fine-tuning.
 	var grip_y: float = lerpf(hand_local.y, blade_local.y, grip) + _controller.bh_hand_y
 	var cfg: BottomHandIK.Config = _bottom_hand_ik_config()
-	var release: float = BottomHandIK.release_weight(cfg)
+	# A derived carry's blade is where a pose holds it with both hands
+	# (ArmEnvelope), so the backhand angle lets go of none of it.
+	var release: float = BottomHandIK.release_weight(cfg) * (1.0 - _carry_share())
 	if held.y > 0.0:
 		release = 1.0 - (1.0 - release) \
 				* (1.0 - smoothstep(0.0, _controller.bh_reach_release_band_m, held.y))

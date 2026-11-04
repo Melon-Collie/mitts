@@ -6,17 +6,18 @@ extends RefCounted
 # of blade positions round the carrier, whether a body holds the blade as
 # players hold it, and where that pose has the top hand and the bottom hand's
 # grip down the shaft, and the stance it takes: the chest leaned on past the
-# carry's own and, standing, the hips sunk on the knees. Written by
+# carry's own and turned to where the pose has it, and, standing, the hips sunk
+# on the knees. Written by
 # .claude/hooks/derive-arm-envelope.sh; read through SkaterArmEnvelope.
 #
 # The skater's root frame (his facing, -Z ahead, m off his origin), +X toward
 # his forehand: the caller mirrors for a left or right shot. Angles are off the
 # facing, + round the forehand.
 
-const VERSION: int = 2
+const VERSION: int = 3
 # Floats a cell: held, hand x, y, z, spacing, lean forward, lean toward the
-# forehand, crouch.
-const CELL_FLOATS: int = 8
+# forehand, crouch, the chest's yaw.
+const CELL_FLOATS: int = 9
 const PATH: String = "res://data/arm_envelope.json"
 const HEIGHTS: Array[int] = [67, 73, 80]
 const STATES: Array[String] = ["stand", "skate"]
@@ -40,12 +41,15 @@ static func in_arc(deg: float) -> bool:
 
 # A blade held: the top hand (root frame, +X forehand), the bottom hand's
 # place down the shaft from it (m), the chest's lean past the carry's own
-# (radians: forward, toward the forehand) and the hips' sink past it (m).
+# (radians: forward, toward the forehand), the hips' sink past it (m), and the
+# chest's yaw off the facing (radians, + toward the forehand), which its
+# shoulders hold the hands from.
 class Hold:
 	var hand := Vector3.ZERO
 	var spacing: float = 0.0
 	var lean := Vector2.ZERO
 	var crouch: float = 0.0
+	var turn: float = 0.0
 
 # [height index][state index] -> PackedFloat32Array of CELL_FLOATS per cell,
 # angle-major.
@@ -145,6 +149,7 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 	var spacing: float = 0.0
 	var lean := Vector2.ZERO
 	var crouch: float = 0.0
+	var turn: float = 0.0
 	var weight: float = 0.0
 	for c: int in _corners(height, skating, deg):
 		var corner := Vector4(_corner_buf[c * 4], _corner_buf[c * 4 + 1], _corner_buf[c * 4 + 2],
@@ -160,6 +165,7 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 			spacing += cells[i + 4] * w
 			lean += Vector2(cells[i + 5], cells[i + 6]) * w
 			crouch += cells[i + 7] * w
+			turn += cells[i + 8] * w
 			weight += w
 	if weight <= 0.0:
 		return false
@@ -167,6 +173,7 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 	out.spacing = spacing / weight
 	out.lean = lean / weight
 	out.crouch = crouch / weight
+	out.turn = turn / weight
 	return true
 
 

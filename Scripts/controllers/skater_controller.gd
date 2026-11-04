@@ -1891,8 +1891,9 @@ func _process_input(input: InputState, delta: float) -> void:
 					_celebration_timer)
 		else:
 			_ik.hold_free_hand(Vector3.ZERO, 0.0)
+		_ik.advance_carry_stance(delta)
 		_pose_bridge.settle(skater, _sm.get_state(), delta, _aiming.slapper_setup_done,
-				_sm.follow_through_is_slapper)
+				_sm.follow_through_is_slapper, _ik._envelope_carry())
 	# Replay too: down with block held, nothing re-solves the stick, so the next
 	# tick's twist follows the one this leaves (Scripts/networking/CLAUDE.md).
 	_apply_down_pose()
