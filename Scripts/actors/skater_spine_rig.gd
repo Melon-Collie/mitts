@@ -8,8 +8,7 @@ extends RefCounted
 #
 # All four are built from the two gameplay-side frames, read and never written:
 # `LowerBody` carries the hip yaw and pitch the gait and pose coordinator sum,
-# `UpperBody` the facing twist and lean the blade hangs from, the chest turned
-# from it toward a derived carry's (Skater.drawn_chest_yaw). What this adds is
+# `UpperBody` the facing twist and lean the blade hangs from. What this adds is
 # the ORDER a body is built in. The trunk folds forward about the hips' own
 # axis and then twists on top of the fold, so turning the shoulders toward the
 # stick turns a leaned torso about its spine rather than tipping it sideways
@@ -92,7 +91,6 @@ func update() -> bool:
 	# The frames as drawn, which the stick and the markers hang from.
 	var hip: Vector3 = _skater.drawn_lower_body_rotation()
 	var trunk: Vector3 = _skater.drawn_upper_body_rotation()
-	trunk.y = _skater.drawn_chest_yaw(trunk.y)
 	var lower_pos: Vector3 = _skater.drawn_lower_body().origin
 	var fold: float = _skater.trunk_fold()
 	var skater_basis: Basis = _skater.global_transform.basis

@@ -20,8 +20,8 @@ func _table(version: int = ArmEnvelope.VERSION) -> Dictionary:
 				for radius: float in ArmEnvelope.RADII_M:
 					var held: bool = absf(angle) <= 90.0 and radius >= 0.8 - 0.001 \
 							and radius <= 1.3 + 0.001
-					rows.append([1, 0.1, -0.05, -0.2, radius * 0.25, 0.2, 0.0, 0.05, 0.3] if held
-							else [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
+					rows.append([1, 0.1, -0.05, -0.2, radius * 0.25, 0.2, 0.0, 0.05] if held
+							else [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0])
 			states[state] = rows
 		builds.append({"height": height, "states": states,
 				"crouch_curve": [[0.0, 0.0], [1.0, 0.02], [2.0, 0.08]]})
@@ -59,7 +59,6 @@ func test_the_hands_are_the_cells_round_the_blade_between_them() -> void:
 	assert_almost_eq(hold.spacing, 0.8 * 0.25, 0.0001, "only the cell that holds counts")
 	assert_almost_eq(hold.lean, Vector2(0.2, 0.0), Vector2.ONE * 0.0001, "its lean")
 	assert_almost_eq(hold.crouch, 0.05, 0.0001, "its crouch")
-	assert_almost_eq(hold.turn, 0.3, 0.0001, "its chest's turn")
 	assert_false(env.hold_at(73.0, 0.5, 140.0, 1.0, hold), "nothing round 140°")
 
 
@@ -74,9 +73,9 @@ func test_a_table_of_another_version_is_refused() -> void:
 	assert_null(ArmEnvelope.from_dict(_table(ArmEnvelope.VERSION + 1)), "refused")
 
 
-func test_the_puck_is_carried_from_eight_oclock_to_a_quarter_past_two() -> void:
+func test_the_puck_is_carried_from_eight_oclock_to_three() -> void:
 	assert_true(ArmEnvelope.in_arc(0.0), "straight ahead")
 	assert_true(ArmEnvelope.in_arc(120.0), "round the forehand to eight o'clock")
 	assert_false(ArmEnvelope.in_arc(135.0), "not behind the hip on the forehand")
-	assert_true(ArmEnvelope.in_arc(-60.0), "round the backhand to two o'clock")
-	assert_false(ArmEnvelope.in_arc(-75.0), "not past a quarter past two on the backhand")
+	assert_true(ArmEnvelope.in_arc(-90.0), "round the backhand to three o'clock")
+	assert_false(ArmEnvelope.in_arc(-105.0), "not behind the hip on the backhand")

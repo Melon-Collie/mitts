@@ -937,11 +937,6 @@ var _shadow := SkaterShadows.new()
 var _paint: BodyZonePaint = _new_body_paint()
 var _anim_lod := SkaterAnimationLod.new(fposmod(float(get_instance_id()) * 0.618034, 1.0))
 var _trunk_fold: float = 0.0
-# The chest's yaw a derived carry holds its hands from (radians off the facing,
-# the root's frame) and how far the drawn chest is turned to it (0..1): mesh
-# only, the frame the blade hangs from keeps its own (SkaterSpineRig).
-var _carry_chest_yaw: float = 0.0
-var _carry_chest_share: float = 0.0
 
 
 func _ready() -> void:
@@ -2924,19 +2919,6 @@ func set_upper_body_lean(lean_x: float, lean_z: float = 0.0, fold: float = 0.0) 
 
 func trunk_fold() -> float:
 	return _trunk_fold
-
-
-func set_carry_chest(yaw: float, share: float) -> void:
-	_carry_chest_yaw = yaw
-	_carry_chest_share = share
-
-
-# The drawn chest's yaw (radians, the root's frame): the frame's, turned
-# toward a derived carry's by its share.
-func drawn_chest_yaw(frame_yaw: float) -> float:
-	if _carry_chest_share <= 0.0:
-		return frame_yaw
-	return lerp_angle(frame_yaw, _carry_chest_yaw, _carry_chest_share)
 
 
 func set_lower_body_lean(lean_x: float) -> void:

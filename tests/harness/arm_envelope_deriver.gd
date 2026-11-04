@@ -95,12 +95,12 @@ func _build() -> void:
 
 
 # The table's cell for the blade `radius` m out at `angle_deg` off the facing (+
-# forehand), ArmEnvelope.CELL_FLOATS: the hand in the skater's root frame and
-# the chest's yaw off his facing, + toward the forehand, from a fresh carrier
-# settled on it; none outside the carried arc (ArmEnvelope.in_arc).
+# forehand): [held, top hand x (+ forehand), y, z, bottom hand spacing], the
+# hand in the skater's root frame, from a fresh carrier settled on it; none
+# outside the carried arc (ArmEnvelope.in_arc).
 func cell(angle_deg: float, radius: float) -> Array:
 	if not ArmEnvelope.in_arc(angle_deg):
-		return [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+		return [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	_build()
 	var a: float = deg_to_rad(angle_deg)
 	_settle(Vector2(sin(a) * radius * _forehand, -cos(a) * radius))
@@ -114,16 +114,14 @@ func cell(angle_deg: float, radius: float) -> Array:
 	heel.y = controller.blade_height
 	_search.solve(_trunk, _hips.affine_inverse() * heel, _pose)
 	if not _pose.feasible():
-		return [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+		return [0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 	# The pose's frame sank with the hips; the hand back in the standing one.
 	var hand: Vector3 = _root.affine_inverse() * (_hips * (_pose.top.hand
 			- Vector3.UP * _pose.crouch))
-	# The chest's yaw: the hips' off the facing, and the pose's twist on them.
-	var turn: float = (_root.basis.inverse() * _hips.basis).get_euler().y + _pose.twist
 	return [1, snappedf(hand.x * _forehand, 0.0001), snappedf(hand.y, 0.0001),
 			snappedf(hand.z, 0.0001), snappedf(_pose.spacing, 0.0001),
 			snappedf(_pose.lean.x, 0.0001), snappedf(_pose.lean.y * _forehand, 0.0001),
-			snappedf(_pose.crouch, 0.0001), snappedf(turn * _forehand, 0.0001)]
+			snappedf(_pose.crouch, 0.0001)]
 
 
 # How far a standing carry's stance sinks the hips (m) at each of CURVE_FLOORS,

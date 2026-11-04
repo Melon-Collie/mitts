@@ -231,10 +231,6 @@ func test_into_the_goalies_reach() -> void:
 		sc.start = Vector3(0.0, 0.0, GameRules.GOAL_LINE_Z - 3.0)
 		sc.move = Vector2(0.0, 0.6)
 		sc.carry = carry
-		# Carried, a cursor reaching as far as the puck goes takes it onto the
-		# iron, which catches it off whoever is carrying; this is the goalie's.
-		if carry:
-			sc.reach = 1.2
 		sc.goalies = _keeper_boxes(Vector3(0.6, 0.0, GameRules.GOAL_LINE_Z - 1.2), PI + 0.3, true)
 		sc.goalies.append_array(_keeper_boxes(Vector3(-0.4, 0.0, GameRules.GOAL_LINE_Z - 0.9), PI, false))
 		var ref: Dictionary = _assert_parity(sc, "goalies, carrying %s" % carry)

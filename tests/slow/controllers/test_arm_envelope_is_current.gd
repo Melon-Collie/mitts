@@ -11,7 +11,6 @@ const Deriver := preload("res://tests/harness/arm_envelope_deriver.gd")
 # search's own repeatability, and room for the float format.
 const HAND_M: float = 0.02
 const SPACING_M: float = 0.03
-const TURN_RAD: float = deg_to_rad(3.0)
 # (angle off the facing, + forehand; radius) across the band and past it.
 const SAMPLES: Array[Vector2] = [Vector2(0.0, 1.0), Vector2(45.0, 0.9), Vector2(90.0, 1.2),
 		Vector2(-45.0, 1.1), Vector2(-120.0, 0.8), Vector2(0.0, 1.7)]
@@ -43,8 +42,6 @@ func test_the_table_reads_as_the_model_now_does() -> void:
 				assert_lt(a.distance_to(b), HAND_M, what + ": the hand where it was")
 				assert_almost_eq(float(now[4]), float(stored[4]), SPACING_M,
 						what + ": the grip where it was")
-				assert_almost_eq(float(now[8]), float(stored[8]), TURN_RAD,
-						what + ": the chest turned as it was")
 
 
 # The grid entry nearest `v`: a Vector2's float32 reads 0.9 as 0.8999999762,

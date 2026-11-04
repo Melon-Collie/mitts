@@ -545,36 +545,32 @@ nothing nearer than about a metre holds; round either side the blade holds in
 tight, its reach falling off round behind.
 `test_arm_envelope_is_current.gd` re-derives a sample against it.
 
-### Switched on
+### Switched on, and switched back off
 
-`SkaterIKCoordinator.derived_carry_enabled` is on. What switching it on took:
+The user played the derived carry (the table with the chest's turn in it, eased
+in and out) and judged it jerky and bizarre at a number of angles, far from
+the closed-form carry's smoothness; the goal had only been to take out the
+closed-form carry's clipping. It is off, and the work goes into the
+closed-form carry instead. What switching it on first found, with the flag
+still off by default:
 
-- **The chest's turn is in the table** (`ArmEnvelope` v3, a ninth float a
-  cell): the model's hands are held from shoulders the search twisted, and the
-  drawn chest stayed on the frame's yaw, so the arms stretched to 1.1-1.4 of
-  themselves and the bottom hand came off the shaft. The spine rig turns the
-  drawn chest to it (`Skater.drawn_chest_yaw`), mesh only, as the fold is.
-- **The puck stays on the cursor's bearing.** The band is read at the heel,
-  half a blade and the carry's offset off the puck along the stick the table's
-  hand holds; held out along the heel's own bearing, a puck pulled in went 1.2 m
-  out and 25 deg off the cursor. The carry moves the puck along the cursor's
-  bearing to the nearest place the band holds its heel, in the level root frame.
-- **It eases in and out by blending**: the hand from the arms' own solve to the
-  table's, the blade with it on a pickup, the stance and turn on the same
-  weight over a stick hand-off's span; out, from the last pose held. Freezing
-  the stick and easing from there stopped a dangle dead. The GDScript pass runs
-  until it is out; the native pass knows none of it (phase 6).
-- **The table's unheld cells take their nearest held cell's pose** on load, so
-  its pose is continuous where the held cells end.
-- **The derived sink stays at speed**, and the backhand angle releases none of
-  the bottom hand under it.
-- **The keeper reads the carrier's reach at the live 1.52 m**: the user chose
-  the model's reach (1.33 m before).
+The carry reads it only with `SkaterIKCoordinator.derived_carry_enabled`, off
+by default. On, the default tier fails 18 tests, the work this phase has left:
 
-Open: carrying backward with the puck at the forehand rim the bottom hand
-comes off the shaft (backward skating is neither of the table's trunks); a
-pickup's face flips and the wrister's follow-through run over their
-smoothness bounds; remote skaters draw none of the derived stance.
+- the drawn arm stretched to 1.06–1.30 of itself in the held poses
+  (`test_arms_reach_their_hands.gd`: the carry, the cross-body reach, the wide
+  forehand, the wrister's aim and the slapper's coil), and the
+  bottom hand 0.85 m off the shaft in a carry: the envelope's hands are placed
+  in a frame the drawn arm does not reach them in;
+- the pickup and the drop jump (top arm 253, stick 270 mm/tick² against 47
+  and 43): the envelope's hands come in or go out in a tick;
+- a puck pulled in sits at the band's floor, ~1.26 m ahead, where the carry's
+  own floor is 0.83 m, so the in-tight reads (the toe on the puck, the head
+  nodding down to it, 8° against 15°, the steep shaft) never arise;
+- the dangle's face changes (a wobble three times a stroke, an uneven sweep
+  round the body) and the carried reach's average (1.59 against 1.33 m);
+- in the bots' duels, the points hold the zone while a teammate carries 87%
+  of the time against 95%.
 
 ## 16. The model's own carries
 
@@ -641,15 +637,8 @@ wrong and stays out. The search keeps the trunk's twist inside its range
 when it refines. Eight carries in close are held by
 `test_model_carries_like_the_references.gd`.
 
-The puck is carried from eight o'clock to a quarter past two
-(`ArmEnvelope.in_arc`, 120 deg round the forehand to 67.5 round the backhand):
-the poses behind the hip either side held only twisted to the limit with the
-stick run back past the hip, and on the backhand past 67.5 deg, where the
-closed-form carry's bottom hand let go too, they bunched both hands up at the
-shoulder with the arms bent the same way. Carried forehand back as far as a
-body holds it, the stick ran between the legs (below). The
-deriver marks blades outside the arc as not held without solving them.
-
-The model holds the shaft out of the legs as it does the jersey
-(`ArmAnatomySearch.Limit.SHAFT_IN_LEGS`): each leg as the skeleton stands it,
-the knee bent over its skate by a crouch, the pants and the sock as its girth.
+The puck is carried from eight o'clock to three (`ArmEnvelope.in_arc`, 120
+deg round the forehand to 90 round the backhand): the poses behind the hip
+either side held only twisted to the limit with the stick run back past the
+hip. The deriver marks blades outside the arc as not held without solving
+them.

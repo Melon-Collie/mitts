@@ -442,18 +442,6 @@ hand the drawn arm could not reach or barely extended toward:
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
 
-**A carrier's pose is the derived carry's** (`derived_carry_enabled`,
-`docs/arm-anatomy-plan.md` §15-16). Carrying, the blade is held into the band
-the arm anatomy model holds it in (`ArmEnvelope`, read at the heel, the puck
-kept on the cursor's bearing), and the top hand, the bottom hand's grip, the
-chest's lean, its sink and its turn are the model's pose there; the drawn
-chest turns to that pose (`Skater.drawn_chest_yaw`), mesh only. It eases in on
-a pickup and out on a drop by blending from the arms' own solve below, which
-is what an empty stick, a shot and the block use, and what the floor, the
-two-hand reach and the backhand stop below describe; the native blade pass
-does not carry it. The band's ends are the model's: its floor in close, its
-reach, and the carried arc (`ArmEnvelope.in_arc`).
-
 **A carrier keeps both hands on the stick.** An empty stick reaches one-handed
 to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
 both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer

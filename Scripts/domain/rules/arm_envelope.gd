@@ -6,18 +6,17 @@ extends RefCounted
 # of blade positions round the carrier, whether a body holds the blade as
 # players hold it, and where that pose has the top hand and the bottom hand's
 # grip down the shaft, and the stance it takes: the chest leaned on past the
-# carry's own and turned to where the pose has it, and, standing, the hips sunk
-# on the knees. Written by
+# carry's own and, standing, the hips sunk on the knees. Written by
 # .claude/hooks/derive-arm-envelope.sh; read through SkaterArmEnvelope.
 #
 # The skater's root frame (his facing, -Z ahead, m off his origin), +X toward
 # his forehand: the caller mirrors for a left or right shot. Angles are off the
 # facing, + round the forehand.
 
-const VERSION: int = 3
+const VERSION: int = 2
 # Floats a cell: held, hand x, y, z, spacing, lean forward, lean toward the
-# forehand, crouch, the chest's yaw.
-const CELL_FLOATS: int = 9
+# forehand, crouch.
+const CELL_FLOATS: int = 8
 const PATH: String = "res://data/arm_envelope.json"
 const HEIGHTS: Array[int] = [67, 73, 80]
 const STATES: Array[String] = ["stand", "skate"]
@@ -30,11 +29,9 @@ const RADII_M: Array[float] = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4,
 # toward straight ahead (degrees a step).
 const _ANGLE_SEARCH_STEP_DEG: float = 5.0
 # The arc a puck is carried in, off the facing: round the forehand to eight
-# o'clock, round the backhand to a quarter past two, past which the poses bunch
-# both hands up at the shoulder; nothing behind the hip either side. Halfway
-# between two of ANGLES_DEG, so the band read between them stops on it.
+# o'clock, round the backhand to three, nothing behind the hip either side.
 const FOREHAND_ARC_DEG: float = 120.0
-const BACKHAND_ARC_DEG: float = -67.5
+const BACKHAND_ARC_DEG: float = -90.0
 
 
 # Whether a blade at `deg` off the facing (+ forehand) is in the carried arc.
@@ -43,15 +40,12 @@ static func in_arc(deg: float) -> bool:
 
 # A blade held: the top hand (root frame, +X forehand), the bottom hand's
 # place down the shaft from it (m), the chest's lean past the carry's own
-# (radians: forward, toward the forehand), the hips' sink past it (m), and the
-# chest's yaw off the facing (radians, + toward the forehand), which its
-# shoulders hold the hands from.
+# (radians: forward, toward the forehand) and the hips' sink past it (m).
 class Hold:
 	var hand := Vector3.ZERO
 	var spacing: float = 0.0
 	var lean := Vector2.ZERO
 	var crouch: float = 0.0
-	var turn: float = 0.0
 
 # [height index][state index] -> PackedFloat32Array of CELL_FLOATS per cell,
 # angle-major.
@@ -87,7 +81,6 @@ static func from_dict(d: Dictionary) -> ArmEnvelope:
 					flat.append(float(v))
 			if flat.size() != ANGLES_DEG.size() * RADII_M.size() * CELL_FLOATS:
 				return null
-			_fill_unheld(flat)
 			per_state.append(flat)
 		env._cells.append(per_state)
 	return env
@@ -141,9 +134,8 @@ func band_at(height: float, skating: float, deg: float) -> Vector2:
 
 
 # How a body holds the blade at `deg` off the facing and `radius` out, into
-# `out`: the cells round it, each weighted by its share, an unheld one as its
-# nearest held one holds (_fill_unheld), so the pose moves on smoothly where
-# the held cells end. False when none round it holds.
+# `out`: the held cells round it, each weighted by its share. False when none
+# round it holds.
 func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold) -> bool:
 	var r: float = clampf((radius - RADII_M[0]) / (RADII_M[1] - RADII_M[0]), 0.0,
 			float(RADII_M.size() - 1))
@@ -153,9 +145,7 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 	var spacing: float = 0.0
 	var lean := Vector2.ZERO
 	var crouch: float = 0.0
-	var turn: float = 0.0
 	var weight: float = 0.0
-	var held: float = 0.0
 	for c: int in _corners(height, skating, deg):
 		var corner := Vector4(_corner_buf[c * 4], _corner_buf[c * 4 + 1], _corner_buf[c * 4 + 2],
 				_corner_buf[c * 4 + 3])
@@ -164,49 +154,20 @@ func hold_at(height: float, skating: float, deg: float, radius: float, out: Hold
 		for k: int in 2:
 			var w: float = corner.w * (rt if k == 1 else 1.0 - rt)
 			var i: int = (ai * RADII_M.size() + r0 + k) * CELL_FLOATS
-			if w <= 0.0:
+			if w <= 0.0 or cells[i] < 0.5:
 				continue
 			hand += Vector3(cells[i + 1], cells[i + 2], cells[i + 3]) * w
 			spacing += cells[i + 4] * w
 			lean += Vector2(cells[i + 5], cells[i + 6]) * w
 			crouch += cells[i + 7] * w
-			turn += cells[i + 8] * w
 			weight += w
-			held += w if cells[i] > 0.5 else 0.0
-	if held <= 0.0:
+	if weight <= 0.0:
 		return false
 	out.hand = hand / weight
 	out.spacing = spacing / weight
 	out.lean = lean / weight
 	out.crouch = crouch / weight
-	out.turn = turn / weight
 	return true
-
-
-# Each unheld cell of `cells` given the pose of the held cell nearest it on the
-# grid, its held flag left off: weighting the held cells alone, a pose jumped
-# wherever a neighbour went from held to not.
-static func _fill_unheld(cells: PackedFloat32Array) -> void:
-	var n: int = RADII_M.size()
-	var count: int = ANGLES_DEG.size() * n
-	for c: int in count:
-		if cells[c * CELL_FLOATS] > 0.5:
-			continue
-		var best: int = -1
-		var best_d: int = 1 << 30
-		for o: int in count:
-			if cells[o * CELL_FLOATS] < 0.5:
-				continue
-			var da: int = c / n - o / n
-			var dr: int = c % n - o % n
-			var d: int = da * da + dr * dr
-			if d < best_d:
-				best_d = d
-				best = o
-		if best < 0:
-			return
-		for f: int in range(1, CELL_FLOATS):
-			cells[c * CELL_FLOATS + f] = cells[best * CELL_FLOATS + f]
 
 
 # The carry crouch floor that sinks a standing carrier `height` inches tall

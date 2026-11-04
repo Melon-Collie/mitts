@@ -23,10 +23,6 @@ const PUMP_HANDOFF_S: float = 0.15
 # Times the goalie is resolved again against the arm rebuilt for a clamped
 # blade: each rebuild turns the toe, so the hold settles over a few.
 const GOALIE_SETTLE_PASSES: int = 4
-# How far the carry looks along the cursor's bearing for a puck the band holds,
-# each way (m a step, and steps).
-const ENVELOPE_RAY_STEP_M: float = 0.05
-const ENVELOPE_RAY_STEPS: int = 30
 
 # ── References ────────────────────────────────────────────────────────────────
 var _skater: Skater = null
@@ -107,9 +103,10 @@ var _dangle_synced_tied: bool = false
 var _native_pass: RefCounted = null
 var native_pass_enabled: bool = true
 # A carrier's band and hands from the derived envelope (ArmEnvelope); off, or
-# with no envelope, the closed-form solve. A carry runs the GDScript pass,
-# which the envelope is not ported into (docs/arm-anatomy-plan.md, phase 6).
-var derived_carry_enabled: bool = true
+# with no envelope, the closed-form solve. Off by default until the derived
+# carry is brought into play (docs/arm-anatomy-plan.md, phase 3). A carry runs
+# the GDScript pass, which the envelope is not ported into (phase 6).
+var derived_carry_enabled: bool = false
 var _envelope: ArmEnvelope = null
 var _envelope_hold := ArmEnvelope.Hold.new()
 var _envelope_hand_local := Vector3.ZERO
@@ -119,11 +116,6 @@ var _envelope_hand_local := Vector3.ZERO
 var _carry_spacing: float = -1.0
 var _carry_lean := Vector2.ZERO
 var _carry_sink: float = 0.0
-# The chest's yaw the envelope's pose holds its hands from (radians off the
-# facing, the root's frame), and how far into the derived carry he is (0..1),
-# eased in on a pickup and out on a drop (advance_carry_weight).
-var _carry_turn: float = 0.0
-var _carry_weight: float = 0.0
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
 var _no_goalies := PackedFloat32Array()
@@ -284,10 +276,9 @@ func apply_blade_from_mouse(input: InputState, delta: float, hold_blade: bool = 
 func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = false,
 		hold_seat: bool = false) -> void:
 	# The pass drives the two kernels it was bound to; with either taken away it
-	# would keep driving the stale one. The derived carry, and its ease out, are
-	# not ported.
+	# would keep driving the stale one.
 	if _native_pass != null and native_pass_enabled and _native_top != null \
-			and _native_dangle != null and not _envelope_carry() and _carry_share() <= 0.0:
+			and _native_dangle != null and not _envelope_carry():
 		_native_blade_toward(target_world, delta, hold_blade, hold_seat)
 		return
 	var mouse_world: Vector3 = target_world
@@ -362,7 +353,8 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
 		reach_purpose = _reach_purpose(skater_pos)
 		if _envelope_carry():
-			target_blade_world = _envelope_target(mouse_world)
+			target_blade_world = _envelope_target(_skater.upper_body_to_global(
+					Vector3(target_blade_xz.x, 0.0, target_blade_xz.y)))
 		else:
 			var target_blade_local: Vector3 = _solve_top_hand(
 					target_blade_xz, blade_side_sign, target_reach, true).blade
@@ -512,15 +504,12 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(arm_shoulder())))
 	var hand_local: Vector3 = ik.hand
 	var blade_local: Vector3 = ik.blade
-	if _carry_share() > 0.0:
-		var held: Vector3 = blade_local
-		if _envelope_carry():
-			held = blade_local.lerp(Vector3(capped_blade_xz.x,
-					blade_y_lean_corrected(capped_blade_xz.x, capped_blade_xz.y),
-					capped_blade_xz.y), _carry_share())
-		if not _envelope_carry() or _envelope_hand(held):
+	if _envelope_carry():
+		var held: Vector3 = Vector3(capped_blade_xz.x, blade_y_lean_corrected(capped_blade_xz.x,
+				capped_blade_xz.y), capped_blade_xz.y)
+		if _envelope_hand(held):
 			blade_local = held
-			hand_local = _blend_hand(hand_local, blade_local)
+			hand_local = _envelope_hand_local
 	if commit_t > 0.0:
 		var posed: TopHandIK.Result = _commit_hand_pose(
 				hand_local, blade_local, blade_side_sign, commit_t)
@@ -760,66 +749,18 @@ func _forehand_sign() -> float:
 	return signf(_skater.bottom_shoulder.position.x)
 
 
-# The heel a carry aims at for the cursor at `cursor_world`, on the ice: the puck
-# kept on the cursor's bearing off his centre and moved in or out along it to the
-# nearest place whose heel the band holds. The heel sits half a blade and the
-# carry's offset off the puck, along and across the stick the envelope's hand
-# holds, so in close its own bearing swings well off the cursor's; held out
-# along that, the puck went with it. Where nothing on the bearing holds, the
-# heel's bearing is turned toward straight ahead (ArmEnvelope.held_blade). In
-# his level frame throughout: UpperBody's pitches with the carry's lean.
-func _envelope_target(cursor_world: Vector3) -> Vector3:
+# The heel a carry aims at (`heel_world`, on the ice) held into the band, the
+# bearing turned toward straight ahead where nothing holds at it.
+func _envelope_target(heel_world: Vector3) -> Vector3:
 	var root: Transform3D = _skater.global_transform
-	var to_root: Transform3D = root.affine_inverse()
-	var cursor3: Vector3 = to_root * cursor_world
-	var cursor := Vector2(cursor3.x, cursor3.z)
-	var shoulder3: Vector3 = to_root * _skater.upper_body_to_global(_skater.shoulder.position)
-	var shoulder := Vector2(shoulder3.x, shoulder3.z)
-	var reach: float = minf(cursor.length(), ArmEnvelope.RADII_M[ArmEnvelope.RADII_M.size() - 1]
-			+ ENVELOPE_RAY_STEP_M)
-	var along: Vector2 = cursor.normalized() if reach > 0.001 else Vector2(0.0, -1.0)
+	var local: Vector3 = root.affine_inverse() * heel_world
 	var fh: float = _forehand_sign()
-	var height: float = _controller.build_height_in
-	var share: float = _skating_share()
-	var offset: float = _skater.get_carry_forehand_factor() * _skater.carry_blade_offset
-	for k: int in 2 * ENVELOPE_RAY_STEPS + 1:
-		var t: float = reach + ENVELOPE_RAY_STEP_M * float((k + 1) / 2) \
-				* (1.0 if k % 2 == 1 else -1.0)
-		if t < ENVELOPE_RAY_STEP_M:
-			continue
-		var puck: Vector2 = along * t
-		var heel: Vector2 = _heel_off(puck, shoulder, offset)
-		# The blade lies along the stick the envelope's hand holds, not the one from
-		# the shoulder the first guess assumed, and the puck sits off it that way.
-		if _envelope.hold_at(height, share, rad_to_deg(atan2(heel.x * fh, -heel.y)),
-				heel.length(), _envelope_hold):
-			heel = _heel_off(puck, Vector2(_envelope_hold.hand.x * fh, _envelope_hold.hand.z),
-					offset)
-		var band: Vector2 = _envelope.band_at(height, share,
-				rad_to_deg(atan2(heel.x * fh, -heel.y)))
-		var radius: float = heel.length()
-		if band.x <= band.y and radius >= band.x - 0.0001 and radius <= band.y + 0.0001:
-			return _on_ice(root * Vector3(heel.x, 0.0, heel.y))
-	var at: Vector2 = _heel_off(cursor, shoulder, offset)
-	var turned: Vector2 = _envelope.held_blade(height, share, atan2(at.x * fh, -at.y),
-			at.length())
-	return _on_ice(root * Vector3(sin(turned.x) * turned.y * fh, 0.0,
-			-cos(turned.x) * turned.y))
-
-
-# The heel under a puck at `puck` held by a stick from `from` (both on the ice,
-# any level frame): half a blade back along the stick, and the carry's
-# `offset` across it (_blade_target_for, Skater.get_carry_target_global).
-func _heel_off(puck: Vector2, from: Vector2, offset: float) -> Vector2:
-	var to_puck: Vector2 = puck - from
-	if to_puck.length() <= 0.001:
-		return puck
-	var dir: Vector2 = to_puck.normalized()
-	return puck - dir * (_skater.blade_length * 0.5) + Vector2(-dir.y, dir.x) * offset
-
-
-static func _on_ice(world: Vector3) -> Vector3:
-	return Vector3(world.x, 0.0, world.z)
+	var held: Vector2 = _envelope.held_blade(_controller.build_height_in, _skating_share(),
+			atan2(local.x * fh, -local.z), Vector2(local.x, local.z).length())
+	var world: Vector3 = root * Vector3(sin(held.x) * held.y * fh, local.y,
+			-cos(held.x) * held.y)
+	world.y = 0.0
+	return world
 
 
 # The top hand holding a carried blade at `blade_local` (UpperBody's frame) as
@@ -840,52 +781,24 @@ func _envelope_hand(blade_local: Vector3) -> bool:
 	_carry_spacing = _envelope_hold.spacing
 	_carry_lean = Vector2(_envelope_hold.lean.x, _envelope_hold.lean.y * fh)
 	_carry_sink = _envelope_hold.crouch
-	_carry_turn = _envelope_hold.turn * fh
 	return true
 
 
 # The stance the derived carry holds its blade in (the chest's lean, forward and
 # toward the skater's +X; radians), zero off it. Tick state the gait draws.
 func carry_lean() -> Vector2:
-	return _carry_lean * _carry_share()
-
-
-# Eases the derived carry in on a pickup and out on a drop or a release over a
-# stick hand-off's span (SkaterPoseBridge.SPAN_S), live ticks only as the bridge
-# runs: the hand is blended from the arms' own solve to the envelope's
-# (_blend_hand), both moving, and the stance and the drawn chest's turn with it.
-# A stick held where it was and eased from there stopped a dangle dead.
-func advance_carry_weight(delta: float) -> void:
-	_carry_weight = move_toward(_carry_weight, 1.0 if _envelope_carry() else 0.0,
-			delta / SkaterPoseBridge.SPAN_S)
-	_skater.set_carry_chest(_carry_turn, _carry_share())
-
-
-func _carry_share() -> float:
-	return smoothstep(0.0, 1.0, _carry_weight) if derived_carry_enabled and _envelope != null \
-			else 0.0
-
-
-# The top hand `own` (the arms' solve) blended toward the envelope's
-# (_envelope_hand_local) by the carry's share, a stick's length off `blade`.
-# Easing out, it blends from the last pose the carry held, read no more: the
-# blade the arms send out is soon where the table's cells thin out, and its
-# hand and stance jump between them.
-func _blend_hand(own: Vector3, blade: Vector3) -> Vector3:
-	var hand: Vector3 = own.lerp(_envelope_hand_local, _carry_share())
-	return blade + (hand - blade).normalized() * solve_stick_length()
+	return _carry_lean if _envelope_carry() else Vector2.ZERO
 
 
 # The carry's crouch floor (SkaterController.carry_crouch's units) once the
 # derived carry's sink is laid under `floor_value`, the stance it already has:
 # the floor that sinks the hips that much further.
 func carry_crouch_floor(floor_value: float) -> float:
-	var sink: float = _carry_sink * _carry_share()
-	if _envelope == null or sink <= 0.0:
+	if not _envelope_carry() or _carry_sink <= 0.0:
 		return floor_value
 	var height: float = _controller.build_height_in
 	return _envelope.floor_for_drop(height, _envelope.drop_for_floor(height, floor_value)
-			+ sink)
+			+ _carry_sink)
 
 
 # How close in a carried puck comes (m off his centre), from his skating fold:
@@ -1102,9 +1015,7 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	# of pitch lean or reach. bh_hand_y offsets for fine-tuning.
 	var grip_y: float = lerpf(hand_local.y, blade_local.y, grip) + _controller.bh_hand_y
 	var cfg: BottomHandIK.Config = _bottom_hand_ik_config()
-	# A derived carry's blade is where a pose holds it with both hands
-	# (ArmEnvelope), so the backhand angle lets go of none of it.
-	var release: float = BottomHandIK.release_weight(cfg) * (1.0 - _carry_share())
+	var release: float = BottomHandIK.release_weight(cfg)
 	if held.y > 0.0:
 		release = 1.0 - (1.0 - release) \
 				* (1.0 - smoothstep(0.0, _controller.bh_reach_release_band_m, held.y))
@@ -1246,11 +1157,10 @@ func address_stick_horiz() -> float:
 # How far down the shaft the bottom hand holds: the short lever a draw is won
 # with, walked down over the countdown rather than jumped to.
 func _grip_fraction() -> float:
-	var own: float = lerpf(_controller.bottom_hand_grip_fraction,
+	if _envelope_carry() and _carry_spacing > 0.0:
+		return _carry_spacing / solve_stick_length()
+	return lerpf(_controller.bottom_hand_grip_fraction,
 			_controller.faceoff_center_grip_fraction, _address_blend())
-	if _carry_share() > 0.0 and _carry_spacing > 0.0:
-		return lerpf(own, _carry_spacing / solve_stick_length(), _carry_share())
-	return own
 
 
 func _address_blend() -> float:
@@ -1314,6 +1224,8 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 # the blade a long way. The rigid pass is inert whenever the blade is reachable.
 # Returns the shared rigid_stick Result.
 func _arm_for_clamped_blade(blade_local: Vector3, blade_side_sign: float) -> TopHandIK.Result:
+	if _envelope_carry() and _envelope_hand(blade_local):
+		return rigid_stick(_envelope_hand_local, blade_local, blade_side_sign)
 	var tilt: Basis = _level_tilt()
 	var clamped_level: Vector3 = tilt * blade_local
 	var hand_local: Vector3 = tilt.transposed() * TopHandIK.hand_for_clamped_blade(
@@ -1322,8 +1234,6 @@ func _arm_for_clamped_blade(blade_local: Vector3, blade_side_sign: float) -> Top
 			clamped_level.y,
 			blade_side_sign,
 			_level_config((tilt * _trunk_shoulder()).y, blade_y_local(), INF))
-	if _carry_share() > 0.0 and (not _envelope_carry() or _envelope_hand(blade_local)):
-		hand_local = _blend_hand(hand_local, blade_local)
 	return rigid_stick(hand_local, blade_local, blade_side_sign)
 
 
