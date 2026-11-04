@@ -103,10 +103,9 @@ var _dangle_synced_tied: bool = false
 var _native_pass: RefCounted = null
 var native_pass_enabled: bool = true
 # A carrier's band and hands from the derived envelope (ArmEnvelope); off, or
-# with no envelope, the closed-form solve. Off by default until the derived
-# carry is brought into play (docs/arm-anatomy-plan.md, phase 3). A carry runs
-# the GDScript pass, which the envelope is not ported into (phase 6).
-var derived_carry_enabled: bool = false
+# with no envelope, the closed-form solve. A carry runs the GDScript pass,
+# which the envelope is not ported into (docs/arm-anatomy-plan.md, phase 6).
+var derived_carry_enabled: bool = true
 var _envelope: ArmEnvelope = null
 var _envelope_hold := ArmEnvelope.Hold.new()
 var _envelope_hand_local := Vector3.ZERO
