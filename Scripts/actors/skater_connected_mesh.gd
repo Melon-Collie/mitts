@@ -133,8 +133,10 @@ const _ARMHOLE_HALF_WIDTH: int = 2
 # from the shoulders' flat top down to under the arm, near upright, so the
 # torso carries the shoulder's top out level from the neck and the sleeve
 # leaves it at the side. A loop (centre, half sizes across and along the seam)
-# tipped `_ARMHOLE_TILT` from facing straight out toward facing up.
-const _ARMHOLE_CENTRE := Vector3(0.215, 0.365, 0.0)
+# tipped `_ARMHOLE_TILT` from facing straight out toward facing up. Its centre
+# is out at the pads' edge and just under the shoulder joint, so the seam's top
+# meets the shoulders' flat top wherever the joint is.
+const _ARMHOLE_CENTRE := Vector3(0.215, _BIND_SHOULDER.y - 0.035, 0.0)
 const _ARMHOLE_RADII := Vector2(0.125, 0.100)   # across (z), along the seam
 const _ARMHOLE_TILT: float = 0.15
 # How far each armhole vertex rides the shoulder girdle, round the loop from the

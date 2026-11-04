@@ -32,6 +32,13 @@ const HEAD_FOV: float = 7.0
 # --waist: framed on the belt, where a tuck goes in.
 const WAIST_FOV: float = 13.0
 const WAIST_AIM_Y: float = -0.17
+# --shoulders: framed on the yoke, square on from the front, the side, the back
+# and from above behind: where the shoulders meet the trunk.
+const SHOULDERS_FOV: float = 13.0
+const SHOULDER_ANGLES: Array[Vector3] = [
+	Vector3(0.0, 0.2, -3.6), Vector3(3.6, 0.2, 0.0), Vector3(0.0, 0.2, 3.6),
+	Vector3(1.2, 2.4, 2.4),
+]
 # --skate: framed on the near (left) skate, where the upper meets the leg.
 const SKATE_FOV: float = 8.0
 const PANTS_AIM_Y: float = -0.4
@@ -46,12 +53,14 @@ var _audit: bool = false
 var _head: bool = false
 var _waist: bool = false
 var _skate: bool = false
+var _shoulders: bool = false
 
 
 func begin_preview(only: String, pants: bool = false,
 		audit: bool = false, head: bool = false, waist: bool = false,
-		skate: bool = false) -> void:
+		skate: bool = false, shoulders: bool = false) -> void:
 	_pants = pants
+	_shoulders = shoulders
 	_skate = skate
 	_waist = waist
 	_audit = audit
@@ -145,7 +154,18 @@ func _place_camera() -> void:
 		_camera.fov = SKATE_FOV
 		aim = legs.global_transform * legs.get_bone_global_pose(SkaterBodySkeleton.LEG_BONE_OFFSET
 				+ SkaterMeshBuilder.LegBone.FOOT_L).origin
-	_camera.global_position = aim + basis * ANGLES[_angle]
+	var offset: Vector3 = ANGLES[_angle]
+	if _shoulders:
+		var spine: Skeleton3D = _skater._arms._skeleton
+		_camera.fov = SHOULDERS_FOV
+		var torso: Transform3D = spine.global_transform * spine.get_bone_global_pose(
+				SkaterMeshBuilder.UpperBone.TORSO)
+		aim = torso.origin + Vector3(0.0, 0.18, 0.0)
+		# Square to the chest, which a pose may turn off the facing.
+		var ahead: Vector3 = torso.basis.z
+		basis = Basis(Vector3.UP, atan2(ahead.x, ahead.z))
+		offset = SHOULDER_ANGLES[_angle]
+	_camera.global_position = aim + basis * offset
 	_camera.look_at(aim, Vector3.UP)
 
 
@@ -173,6 +193,8 @@ func _sheet_prefix() -> String:
 		return "head_"
 	if _waist:
 		return "waist_"
+	if _shoulders:
+		return "shoulders_"
 	return "skate_" if _skate else ""
 
 
