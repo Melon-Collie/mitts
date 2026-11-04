@@ -21,6 +21,7 @@ var _blade_tape: MeshInstance3D                    # team-colored tape band, chi
 # colors.primary, cached from the last apply_uniform so a live tape pick
 # repaints without one: TEAM for tape.
 var _team_accent: Color = Color.WHITE
+var _team_secondary: Color = Color.WHITE
 # Whether the skater is currently ghost-faded — read by the face-gear repaint,
 # whose design alpha is not 1.0 and so can't be restored by _fade_material.
 var _ghosted: bool = false
@@ -34,6 +35,7 @@ func setup(skater: Skater, paint: BodyZonePaint) -> void:
 
 func apply_uniform(colors: Dictionary) -> void:
 	_team_accent = colors.primary
+	_team_secondary = colors.secondary
 	_kit.apply_uniform(colors)
 	_kit.apply_gear(_skater.gear_style)
 	_resize_cuffs()
@@ -86,7 +88,7 @@ func _make_stick_shaft_mat() -> ShaderMaterial:
 func _write_grip_uniforms(mat: ShaderMaterial) -> void:
 	mat.set_shader_parameter(&"grip_mode", _skater.tape_config.knob_style)
 	mat.set_shader_parameter(&"grip_color",
-			TapeColorRegistry.resolve(_skater.tape_config.knob_color, _team_accent))
+			TapeColorRegistry.resolve(_skater.tape_config.knob_color, _team_accent, _team_secondary))
 
 
 # Dresses the blade in the picked model's weave and (re)builds the tape wrap
@@ -113,7 +115,7 @@ func _rebuild_blade() -> void:
 	_blade_tape.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_blade_tape.mesh = tape_mesh
 	_blade_tape.material_override = UniformPaint.solid(
-			TapeColorRegistry.resolve(_skater.tape_config.blade_color, _team_accent),
+			TapeColorRegistry.resolve(_skater.tape_config.blade_color, _team_accent, _team_secondary),
 			UniformPaint.ROUGH_CLOTH)
 	_blade_mesh.add_child(_blade_tape)
 
@@ -151,7 +153,7 @@ func refresh_tape() -> void:
 # tracks kit changes — same pattern as the glove cuffs.
 func _rebuild_stick_knob() -> void:
 	var color: Color = TapeColorRegistry.resolve(
-			_skater.tape_config.knob_color, _team_accent)
+			_skater.tape_config.knob_color, _team_accent, _team_secondary)
 	if _skater.stick_knob_mesh != null and is_instance_valid(_skater.stick_knob_mesh):
 		_skater.upper_body.remove_child(_skater.stick_knob_mesh)
 		_skater.stick_knob_mesh.queue_free()

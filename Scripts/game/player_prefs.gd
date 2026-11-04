@@ -513,6 +513,20 @@ func _release_custom_cursor() -> void:
 	Input.set_custom_mouse_cursor(null)
 
 
+# The saved tape and gear codes as the local player may wear them: a reward
+# option whose banner is not raised is worn as the team colour.
+func worn_tape_code() -> int:
+	return CosmeticUnlocks.worn_tape_code(stick_tape_code, raised_banners())
+
+
+func worn_gear_style_code() -> int:
+	return CosmeticUnlocks.worn_gear_code(gear_style_code, raised_banners())
+
+
+func raised_banners() -> Array[String]:
+	return GamePuckRules.raised_banners(SteamStatRecorder.new().totals(), trophy_ledger)
+
+
 func save() -> void:
 	var cfg := ConfigFile.new()
 	cfg.set_value("player", "name", player_name)
@@ -1118,11 +1132,15 @@ func _load() -> void:
 		preferred_team_size = 5 if stored_size == 5 else GameRules.DEFAULT_TEAM_SIZE
 		preferred_color_slot = int(cfg.get_value("player", "preferred_color_slot", -1))
 		# Round-trip through the config type so a hand-edited or future-version
-		# code coerces to a legal tape job instead of riding raw into the wire.
-		stick_tape_code = StickTapeConfig.from_code(int(cfg.get_value(
-				"player", "stick_tape", StickTapeConfig.DEFAULT_CODE))).to_code()
-		gear_style_code = GearStyleConfig.from_code(int(cfg.get_value(
-				"player", "gear_style", GearStyleConfig.DEFAULT_CODE))).to_code()
+		# code coerces to a legal tape job instead of riding raw into the wire. A
+		# colour no reward could ever unlock switches to the team colour here; one
+		# a banner unlocks is kept, and worn_* decide once Steam says what is raised.
+		stick_tape_code = CosmeticUnlocks.worn_tape_code(int(cfg.get_value(
+				"player", "stick_tape", StickTapeConfig.DEFAULT_CODE)),
+				CosmeticUnlocks.every_banner())
+		gear_style_code = CosmeticUnlocks.worn_gear_code(int(cfg.get_value(
+				"player", "gear_style", GearStyleConfig.DEFAULT_CODE)),
+				CosmeticUnlocks.every_banner())
 		skin_tone = SkinToneRegistry.clamp_index(int(cfg.get_value(
 				"player", "skin_tone", SkinToneRegistry.DEFAULT_INDEX)))
 		# Only the v5 body+gear build loads; an older save keeps the neutral build

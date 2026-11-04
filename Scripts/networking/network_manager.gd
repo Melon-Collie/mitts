@@ -448,9 +448,9 @@ func _ready() -> void:
 	local_is_left_handed = PlayerPrefs.is_left_handed
 	PlayerPrefs.cloud_prefs_adopted.connect(_on_cloud_prefs_adopted)
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
 	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 
@@ -476,9 +476,9 @@ func start_offline() -> void:
 	_peer_names[1] = local_player_name
 	_peer_numbers[1] = local_jersey_number
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_positions[1] = PlayerPrefs.preferred_position
 	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 	pending_game_config = {"num_periods": 1, "period_duration": 0.0, "ot_enabled": false, "ot_duration": 0.0,
@@ -787,10 +787,9 @@ func _on_connected_to_server() -> void:
 	# all-medium. Valid here — the unique id is assigned before
 	# connected_to_server.
 	_peer_attributes[local_peer_id()] = local_attrs
-	_peer_tape_codes[local_peer_id()] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[local_peer_id()] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones[local_peer_id()] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
-	_peer_gear_styles[local_peer_id()] = GearStyleConfig.from_code(
-			PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[local_peer_id()] = PlayerPrefs.worn_gear_style_code()
 	_peer_titles[local_peer_id()] = Titles.coerce(PlayerPrefs.equipped_title)
 	_peer_positions[local_peer_id()] = PlayerPrefs.preferred_position
 	request_join.rpc_id(1, local_is_left_handed, local_player_name, local_jersey_number,
@@ -798,8 +797,8 @@ func _on_connected_to_server() -> void:
 			local_attrs.curve, local_attrs.flex, local_attrs.length,
 			SteamManager.steam_id, BuildInfo.PROTOCOL_VERSION,
 			SteamManager.get_app_build_id(), PlayerPrefs.shot_power_sensitivity,
-			PlayerPrefs.stick_tape_code, PlayerPrefs.skin_tone,
-			PlayerPrefs.gear_style_code, PlayerPrefs.preferred_position,
+			PlayerPrefs.worn_tape_code(), PlayerPrefs.skin_tone,
+			PlayerPrefs.worn_gear_style_code(), PlayerPrefs.preferred_position,
 			Titles.coerce(PlayerPrefs.equipped_title))
 	client_connected.emit()
 
@@ -905,11 +904,11 @@ func reset() -> void:
 	_peer_attributes.clear()
 	_peer_attributes[1] = PlayerPrefs.get_player_attributes()
 	_peer_tape_codes.clear()
-	_peer_tape_codes[1] = PlayerPrefs.stick_tape_code
+	_peer_tape_codes[1] = PlayerPrefs.worn_tape_code()
 	_peer_skin_tones.clear()
 	_peer_skin_tones[1] = SkinToneRegistry.clamp_index(PlayerPrefs.skin_tone)
 	_peer_gear_styles.clear()
-	_peer_gear_styles[1] = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	_peer_gear_styles[1] = PlayerPrefs.worn_gear_style_code()
 	_peer_titles.clear()
 	_peer_titles[1] = Titles.coerce(PlayerPrefs.equipped_title)
 	_peer_positions.clear()

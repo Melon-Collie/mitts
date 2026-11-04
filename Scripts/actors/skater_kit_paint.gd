@@ -98,7 +98,7 @@ func apply_gear(gear: GearStyleConfig) -> void:
 				gear.skate_model, zone[0], _team_accent, _team_secondary, _team_light),
 				UniformPaint.ROUGH_SKATE))
 	_leg_pair(_Leg.FOOT_L_LACES, _Leg.FOOT_R_LACES, UniformPaint.solid(
-			TapeColorRegistry.resolve(gear.lace_color, _team_accent)))
+			TapeColorRegistry.resolve(gear.lace_color, _team_accent, _team_secondary)))
 
 
 # The name and number the sweater and its sleeves are lettered with.

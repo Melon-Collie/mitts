@@ -757,17 +757,10 @@ func _paint_team_rows() -> void:
 		_glove_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
 				tr(GearModelRegistry.GLOVE_NAME_KEYS[model]), model)
 
-	var tape_colors: Array[Color] = []
-	var names: Array[String] = []
-	var chips: Array[String] = []
-	for i: int in TapeColorRegistry.count():
-		tape_colors.append(TapeColorRegistry.resolve(i, team))
-		names.append(tr(TapeColorRegistry.NAME_KEYS[i]))
-		# The TEAM chip says so — it tracks the kit rather than being one more
-		# fixed colour.
-		chips.append(tr(&"TAPE_COLOR_TEAM_SHORT") if i == TapeColorRegistry.TEAM_INDEX else "")
-	for dd: SwatchDropdown in [_blade_color_dd, _knob_color_dd, _lace_dd]:
-		dd.set_palette(tape_colors, names, chips)
+	var raised: Array[String] = PlayerPrefs.raised_banners()
+	CosmeticSwatches.fill(_blade_color_dd, CosmeticUnlocks.TAPE_BLADE, team, accent, raised)
+	CosmeticSwatches.fill(_knob_color_dd, CosmeticUnlocks.TAPE_KNOB, team, accent, raised)
+	CosmeticSwatches.fill(_lace_dd, CosmeticUnlocks.LACES, team, accent, raised)
 
 
 func _update_apply_state() -> void:

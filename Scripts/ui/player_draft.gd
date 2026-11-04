@@ -43,8 +43,8 @@ static func from_prefs() -> PlayerDraft:
 			PlayerPrefs.attr_profile, PlayerPrefs.attr_curve, PlayerPrefs.attr_flex,
 			PlayerPrefs.attr_length)
 	d.set_attributes(attrs)
-	d.tape_code = PlayerPrefs.stick_tape_code
-	d.gear_code = GearStyleConfig.from_code(PlayerPrefs.gear_style_code).to_code()
+	d.tape_code = PlayerPrefs.worn_tape_code()
+	d.gear_code = PlayerPrefs.worn_gear_style_code()
 	d.title_id = Titles.coerce(PlayerPrefs.equipped_title)
 	return d
 

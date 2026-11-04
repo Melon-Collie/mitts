@@ -459,3 +459,8 @@ here whenever you bump, in the same format.
 #      Godot routes RPCs by their index in the name-sorted method list, so the
 #      addition shifts every index after it; mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged.
+# v95: the tape palette (TapeColorRegistry) gains TEAM_SECOND at index 11, the
+#      kit's secondary colour, for the tape and lace codes (docs/game-pucks-
+#      plan.md, Phase 4). Same widths, but an older peer clamps index 11 back
+#      to the team primary and paints a different stick; mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: an older replay never holds 11.

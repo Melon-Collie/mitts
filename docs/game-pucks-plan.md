@@ -19,9 +19,16 @@ rafters for something bigger.
   ever" for gear; cosmetics are "orthogonal, zero balance cost"). That line is
   this system's first rule: a gear option with a tradeoff on a mechanic is never
   a reward, and a cosmetic that is a reward changes nothing gameplay reads.
-- **Nothing anyone has today gets locked.** Every cosmetic in the player screen
-  now stays free. Rewards are new content: titles, and new cosmetic options
-  added for the purpose.
+- **Colour picks are team, team 2, white and black.** The shared tape palette
+  (blade tape, knob, laces, and the stick paint to come) offers only the kit's
+  primary and secondary colours, white and black. The other colours leave the
+  picker but stay in the data, so old codes and bots still decode them; one
+  comes back only as a specific reward where it makes sense. A saved pick that
+  is no longer available switches to the team colour. (This replaces an
+  earlier "nothing anyone has today gets locked" rule: the other colours looked
+  wrong against most kits, and players were not using them.)
+- **An unlock is one item and one option** — yellow *laces*, not yellow
+  everywhere — so a reward never leaks into a slot it was not meant for.
 - **Counting pucks reward play that wins hockey games.** Mitts is PvP; a player
   chasing a puck spends their teammates' and opponents' game, not only their
   own (Darktide is co-op against AI, where it mostly costs the player's own
@@ -201,9 +208,10 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - A title row in the player screen's YOU region (`PlayerTitleRow`).
 - The title on the lobby slot card, the scoreboard and the Three Stars on the
   game-over screen.
-- Locked cosmetics. A cosmetic registry option (`GearModelRegistry`,
-  `StickModelRegistry`, the tape palette) may carry the banner that unlocks it.
-  The picker shows a locked option with what earns it; the lobby relays what a
+- Locked cosmetics (Phase 4): `CosmeticUnlocks` holds what is free in each slot
+  and the reward rows, each a slot, an option and the banner that unlocks it.
+  The picker shows only what the player may wear; a pick that is not available
+  is worn as the team colour (`CosmeticUnlocks.worn_*`). The lobby relays what a
   player wears whether or not it is earned (*No anti-cheat*).
 
 **Wire.** The title id joins `PlayerLook.cosmetics_to_wire()` (Phase 2) and
@@ -218,8 +226,22 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 2. **Titles.** The title registry, banners that award them, the title picker,
    the title on the wire and on screen. Protocol bump.
 3. **Feats.** The `notify_feat` channel and the first feats, with their banners.
-4. **Cosmetic rewards.** Lock flags on new cosmetic options and the art for
-   them: helmet stickers, special stick colorways, tape patterns, glove designs.
+4. **Cosmetic rewards**, in three steps, each its own commit:
+   1. **Free colours and the unlock machinery.** The second team colour joins
+      the palette; `CosmeticUnlocks` and the coercion to the team colour; the
+      player screen's swatches show only what is available. Protocol bump.
+   2. **Signature tape jobs**, as new entries in the existing tape-coverage list
+      and banner rewards: *Spaced* (four narrow wraps spread from mid-blade to
+      the toe) and *Bottom strip* (a strip along the blade's bottom edge, heel
+      to toe, with a toe cap in its own colour — a new toe-colour pick shows for
+      it). Homages to two players' real tape jobs, never naming them.
+   3. **Sticks as patterns.** A stick model becomes a pattern whose zones (shaft,
+      wordmark, bands, blade) the player paints from the palette under the same
+      rules; the current models become patterns with near defaults. The stick's
+      paint moves out of the full gear code into the tape code, which becomes
+      the whole stick's look. Saved sticks migrate to their nearest pattern.
+   Later rewards (helmet stickers, a spray-painted stick, signature laces) are
+   new content on the same machinery.
 
 ## Tests
 
