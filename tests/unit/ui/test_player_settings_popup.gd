@@ -222,7 +222,7 @@ func test_a_row_aims_the_case_at_its_own_piece() -> void:
 		(_gear_row(&"flex").get("buttons") as Array)[0]: F.STICK,
 		_btn("_stick_model_btn"): F.STICK,
 		(_gear_row(&"curve").get("buttons") as Array)[0]: F.BLADE,
-		_btn("_span_btn"): F.BLADE,
+		(_popup.get("_coverage") as TapeCoverageList).button(): F.BLADE,
 		_btn("_style_btn"): F.GRIP,
 		(_popup.get("_height_slider") as Control): F.FULL,
 	}
@@ -242,6 +242,7 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 		"_blade_color_dd": F.BLADE,
 		"_knob_color_dd": F.GRIP,
 		"_lace_dd": F.SKATES,
+		"_toe_color_dd": F.BLADE,
 	}
 	for field: String in rows:
 		var dd: SwatchDropdown = _popup.get(field) as SwatchDropdown
@@ -258,11 +259,12 @@ func test_the_swatch_rows_reframe_the_case_too() -> void:
 # A control the focus search skips is a pick a controller player cannot make.
 func test_every_row_control_is_pad_reachable() -> void:
 	var controls: Array[Control] = [_btn("_skate_btn"), _btn("_glove_btn"),
-		_btn("_stick_model_btn"), _btn("_span_btn"), _btn("_style_btn"), _btn("_tuck_btn"),
+		_btn("_stick_model_btn"), (_popup.get("_coverage") as TapeCoverageList).button(),
+		_btn("_style_btn"), _btn("_tuck_btn"),
 		_btn("_hair_btn"), _btn("_facial_btn"), _popup.get("_height_slider") as Control,
 		_popup.get("_weight_slider") as Control, _popup.get("_name_field") as Control,
 		_popup.get("_number_field") as Control]
-	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd"]:
+	for field: String in ["_blade_color_dd", "_knob_color_dd", "_lace_dd", "_toe_color_dd"]:
 		controls.append((_popup.get(field) as SwatchDropdown).focus_target())
 	for field: String in ["_face_btns", "_hair_color_buttons", "_skin_buttons",
 			"_shoots_btns", "_position_btns", "_tab_btns"]:
