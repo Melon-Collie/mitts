@@ -88,12 +88,10 @@ const LIMB_SIDES: int = 12
 # waist the rig's own stations take over (`_RIG_STATIONS`, vertex for vertex the
 # rig's rings at every other column, so the jersey's tail and its tuck are the
 # rig's), with a ring between each two, and on down the tail to the hem. Rings
-# 2–4 are the armhole's top, middle and bottom. From the collar the pads round
-# over in two rings, so the yoke domes up to the neck rather than lying flat.
+# 1–3 are the armhole's top, middle and bottom.
 const _CHEST: Array[Vector3] = [
-	Vector3(0.305, 0.112, 0.0),   # collar, up the neck over the pads' rise
-	Vector3(0.290, 0.165, 0.0),   # the trapezius, rounding over the pads
-	Vector3(0.262, 0.200, 0.0),   # the shoulders' top: the armhole's top row
+	Vector3(0.275, 0.115, 0.0),   # collar
+	Vector3(0.262, 0.200, 0.0),   # the shoulders' flat top: the armhole's top row
 	Vector3(0.165, 0.228, 0.0),
 	Vector3(0.075, 0.222, 0.002), # under the arm: its bottom row
 	Vector3(0.025, 0.216, 0.004),
@@ -119,16 +117,14 @@ const _NECK_SCOOP_HALF_ANGLE: float = deg_to_rad(75.0)
 # rather than sitting flat; its sides are the armholes' and keep their place.
 const _UPPER_CHEST_DROP_M: float = 0.035
 const _UPPER_BACK_DROP_M: float = 0.015
-# The trapezius ring's share of that fall, so the dome rounds into it.
-const _TRAP_DROP_SHARE: float = 0.5
 # The collar: a band standing round the neckline, this far in and up from it,
 # painted the kit's collar on the torso texture's top cap; inside it the neck's
 # skin runs down into the V to the neck's foot (torso-local, under the rig's
 # neck where it flares into the traps).
 const _COLLAR_INSET_M: float = 0.008
-const _COLLAR_RISE_M: float = 0.035
-const _NECK_FOOT_Y_M: float = 0.30
-const _ARMHOLE_TOP: int = 2
+const _COLLAR_RISE_M: float = 0.016
+const _NECK_FOOT_Y_M: float = 0.265
+const _ARMHOLE_TOP: int = 1
 # The chest's column under each arm (its vertex at ±90°), left then right; the
 # armhole is the 2 × 4 facets round it.
 const _ARMHOLE_COLUMN: Array[int] = [14, 4]
@@ -399,10 +395,9 @@ static func _top_shape(ring: int, theta: float) -> float:
 		var off_front: float = absf(wrapf(theta - PI, -PI, PI))
 		return _NECK_RISE_M - _NECK_SCOOP_DEPTH_M \
 				* maxf(1.0 - (off_front / _NECK_SCOOP_HALF_ANGLE) ** 2, 0.0)
-	if ring == _ARMHOLE_TOP or ring == _ARMHOLE_TOP - 1:
-		var share: float = 1.0 if ring == _ARMHOLE_TOP else _TRAP_DROP_SHARE
-		return -share * (_UPPER_CHEST_DROP_M * maxf(-cos(theta), 0.0)
-				+ _UPPER_BACK_DROP_M * maxf(cos(theta), 0.0))
+	if ring == _ARMHOLE_TOP:
+		return -_UPPER_CHEST_DROP_M * maxf(-cos(theta), 0.0) \
+				- _UPPER_BACK_DROP_M * maxf(cos(theta), 0.0)
 	return 0.0
 
 
