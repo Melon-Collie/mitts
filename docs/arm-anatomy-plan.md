@@ -604,13 +604,12 @@ top grip (the grip's slide takes it back).
 
 The user accepted all six model carries on the sheets.
 
-The table re-derived from this model holds fewer cells (of 273, standing and
-skating: 67" 133 and 115, 73" 132 and 111, 80" 135 and 96). What it lost is
-mostly the backhand side in close (-30 to -90 deg, under about a metre) and
-the forehand past 1.5 m: those blades held only with the top hand 0.6-0.7 m
-out in front of the body, the pose the sheets rejected (relaxing
-TOP_HAND_AHEAD gives them back at once). Whether the carry should keep a puck
-there regardless is phase 3's call.
+The table re-derived from this model first held fewer cells: the backhand
+side in close and the forehand past 1.5 m held only with the top hand
+0.6-0.7 m out in front of the body, the pose the sheets rejected
+(TOP_HAND_AHEAD). The carries in close and the carried arc below brought the
+close-in ice back: of 273 cells, standing and skating, 67" 133 and 130, 73"
+137 and 132, 80" 143 and 130, all inside the arc.
 `tests/slow/controllers/test_model_carries_like_the_references.gd` holds them
 to it (the top hand within 0.4 m of the reference's, the user accepting tight's
 pick out at hip height, the hands 0.2 m apart
