@@ -15,7 +15,7 @@ const Carries := preload("res://tests/harness/arm_reference_carries.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 # How far the model's top hand may sit from the reference's (m), how far its
 # hands' spacing from the reference's, and the closest its hands may come.
-const TOP_HAND_M: float = 0.35
+const TOP_HAND_M: float = 0.4
 const SPACING_M: float = 0.15
 const HANDS_APART_MIN_M: float = 0.2
 # The bottom elbow's bend off the shoulder-to-hand line, unit: no higher than

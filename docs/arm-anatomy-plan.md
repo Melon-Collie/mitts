@@ -612,7 +612,8 @@ out in front of the body, the pose the sheets rejected (relaxing
 TOP_HAND_AHEAD gives them back at once). Whether the carry should keep a puck
 there regardless is phase 3's call.
 `tests/slow/controllers/test_model_carries_like_the_references.gd` holds them
-to it (the top hand within 0.35 m of the reference's, the hands 0.2 m apart
+to it (the top hand within 0.4 m of the reference's, the user accepting tight's
+pick out at hip height, the hands 0.2 m apart
 or more and within 0.15 m of its spacing, the bottom elbow back and not
 raised); the model before this fails it on wide forehand, tight and long
 reach.
