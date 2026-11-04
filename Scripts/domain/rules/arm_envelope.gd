@@ -30,9 +30,11 @@ const RADII_M: Array[float] = [0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 1.3, 1.4,
 # toward straight ahead (degrees a step).
 const _ANGLE_SEARCH_STEP_DEG: float = 5.0
 # The arc a puck is carried in, off the facing: round the forehand to eight
-# o'clock, round the backhand to three, nothing behind the hip either side.
+# o'clock, round the backhand to a quarter past two, past which the poses bunch
+# both hands up at the shoulder; nothing behind the hip either side. Halfway
+# between two of ANGLES_DEG, so the band read between them stops on it.
 const FOREHAND_ARC_DEG: float = 120.0
-const BACKHAND_ARC_DEG: float = -90.0
+const BACKHAND_ARC_DEG: float = -67.5
 
 
 # Whether a blade at `deg` off the facing (+ forehand) is in the carried arc.

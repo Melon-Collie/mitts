@@ -74,9 +74,9 @@ func test_a_table_of_another_version_is_refused() -> void:
 	assert_null(ArmEnvelope.from_dict(_table(ArmEnvelope.VERSION + 1)), "refused")
 
 
-func test_the_puck_is_carried_from_eight_oclock_to_three() -> void:
+func test_the_puck_is_carried_from_eight_oclock_to_a_quarter_past_two() -> void:
 	assert_true(ArmEnvelope.in_arc(0.0), "straight ahead")
 	assert_true(ArmEnvelope.in_arc(120.0), "round the forehand to eight o'clock")
 	assert_false(ArmEnvelope.in_arc(135.0), "not behind the hip on the forehand")
-	assert_true(ArmEnvelope.in_arc(-90.0), "round the backhand to three o'clock")
-	assert_false(ArmEnvelope.in_arc(-105.0), "not behind the hip on the backhand")
+	assert_true(ArmEnvelope.in_arc(-60.0), "round the backhand to two o'clock")
+	assert_false(ArmEnvelope.in_arc(-75.0), "not past a quarter past two on the backhand")

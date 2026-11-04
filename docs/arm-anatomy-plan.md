@@ -630,8 +630,15 @@ wrong and stays out. The search keeps the trunk's twist inside its range
 when it refines. Eight carries in close are held by
 `test_model_carries_like_the_references.gd`.
 
-The puck is carried from eight o'clock to three (`ArmEnvelope.in_arc`, 120
-deg round the forehand to 90 round the backhand): the poses behind the hip
-either side held only twisted to the limit with the stick run back past the
-hip. The deriver marks blades outside the arc as not held without solving
-them.
+The puck is carried from eight o'clock to a quarter past two
+(`ArmEnvelope.in_arc`, 120 deg round the forehand to 67.5 round the backhand):
+the poses behind the hip either side held only twisted to the limit with the
+stick run back past the hip, and on the backhand past 67.5 deg, where the
+closed-form carry's bottom hand let go too, they bunched both hands up at the
+shoulder with the arms bent the same way. Carried forehand back as far as a
+body holds it, the stick ran between the legs (below). The
+deriver marks blades outside the arc as not held without solving them.
+
+The model holds the shaft out of the legs as it does the jersey
+(`ArmAnatomySearch.Limit.SHAFT_IN_LEGS`): each leg as the skeleton stands it,
+the knee bent over its skate by a crouch, the pants and the sock as its girth.
