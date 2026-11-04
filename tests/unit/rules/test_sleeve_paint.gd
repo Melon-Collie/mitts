@@ -2,8 +2,7 @@ extends GutTest
 
 # A kit's sleeve (SleevePaint) is the one place an arm's paint is authored. The
 # two-segment form older kits wrote is read into it with every stripe where it
-# physically sat (the forearm's group brought up to the elbow), and the sleeve
-# is cut back into segments for the bodies that paint the arm in two.
+# physically sat (the forearm's group brought up to the elbow).
 
 
 func _legacy() -> Dictionary:
@@ -40,19 +39,6 @@ func test_a_shoulder_of_its_own_color_is_a_band_under_the_number() -> void:
 			Color.RED, "a shoulder the sleeve's color adds no band")
 
 
-func test_segments_paint_each_stripe_where_the_sleeve_has_it() -> void:
-	# A stripe straddling the elbow shows on both segments, each its own part.
-	var sleeve := {"base": Color.RED, "stripes": [{
-		"pos": SleevePaint.pos_of(SleevePaint.ELBOW_M), "width": 0.1, "color": Color.BLUE}]}
-	var upper: Dictionary = SleevePaint.segment(sleeve, true)
-	var lower: Dictionary = SleevePaint.segment(sleeve, false)
-	assert_eq(upper.stripes.size(), 1)
-	assert_eq(lower.stripes.size(), 1)
-	assert_gt(float(upper.stripes[0].pos), 0.5, "the upper arm's part is at its elbow end")
-	assert_lt(float(lower.stripes[0].pos), 0.5, "the forearm's part is at its elbow end")
-	assert_eq(upper.base, Color.RED)
-
-
 func test_every_bundled_kit_is_a_sleeve() -> void:
 	var data: Dictionary = JSON.parse_string(
 			FileAccess.get_file_as_string("res://data/team_colors.json"))
@@ -87,16 +73,3 @@ func test_the_registry_reads_a_jersey_stripes_shape_but_not_a_socks() -> void:
 			"stripes": [{"pos": 0.9, "width": 0.1, "color": "#000000",
 					"peak": {"depth": 0.1, "count": 3, "shape": "sine"}}]}})
 	assert_eq(wave.jersey.stripes[0].peak.shape, "sine")
-
-
-func test_a_fill_below_reaches_the_forearm_as_a_band() -> void:
-	var sleeve := {"base": Color.WHITE, "stripes": [{"pos": SleevePaint.pos_of(0.35),
-			"width": 0.03, "color": Color.BLUE, "fill_below": Color.RED,
-			"peak": {"depth": -0.09, "count": 2, "u": 0.5}}]}
-	var lower: Dictionary = SleevePaint.segment(sleeve, false)
-	assert_eq(lower.stripes.size(), 2, "the fill, then the stripe over it")
-	assert_eq(lower.stripes[0].color, Color.RED)
-	assert_gt(float(lower.stripes[0].pos) + float(lower.stripes[0].width) * 0.5, 1.0,
-			"the fill runs to the segment's end")
-	assert_eq(SleevePaint.segment(sleeve, true).stripes.size(), 0,
-			"and none of it reaches the upper arm")

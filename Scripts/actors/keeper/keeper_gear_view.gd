@@ -2,17 +2,20 @@ class_name KeeperGearView
 extends Node3D
 
 # The keeper's gear drawn on his skeleton: each piece's mesh on its save box
-# (KeeperGearMeshes builds them inside the boxes), all of them one skinned mesh
-# (KeeperBodyRig), and the break above each knee joining the pad to its thigh
-# rise, and the jersey's tail hanging over the pants, painted from the team kit.
-# One material record per paint slot is shared by every piece that wears it;
-# the jersey and its sleeves wear keeper_jersey.gdshader instead, which paints
-# the kit's yoke, collar, shoulder caps, stripes, crest and lettering by height,
-# and the kit's pants stripes down the sides of the pants.
+# (KeeperGearMeshes builds them inside the boxes) and his jersey skinned over
+# them (KeeperJerseyMesh), all of it one skinned mesh (KeeperBodyRig), and the
+# break above each knee joining the pad to its thigh rise, and the jersey's
+# tail hanging over the pants, painted from the team kit. One material record
+# per paint slot is shared by every piece that wears it. The jersey wears the
+# skaters' paint: its body and tail a JerseyDecal laid out for him (yoke,
+# collar, stripes, crest, name and number), its sleeves a SleeveDecal (stripes
+# and the number from the shoulder to the cuff). The pants and socks wear
+# keeper_kit.gdshader, which paints the kit's stripes down the side of the
+# pants and round the socks.
 
 const S := KeeperMeshKit.Slot
 const P := KeeperGear.Part
-const _JERSEY_SHADER: Shader = preload("res://Assets/Shaders/keeper_jersey.gdshader")
+const _KIT_SHADER: Shader = preload("res://Assets/Shaders/keeper_kit.gdshader")
 const _MAX_STRIPES: int = 5
 
 # The slots no kit colours: skate steel and boot, the stick, tape, straps, cage
@@ -25,30 +28,24 @@ const _FIXED: Dictionary = {
 	S.STRAP: Color(0.15, 0.15, 0.16),
 	S.CAGE: Color(0.86, 0.86, 0.88),
 }
-# The collar ring on the jersey's top face, in its box frame.
-const _COLLAR_RADIUS_M: float = 0.085
 
 var _rig: KeeperBodyRig = null
+# A record per zone of his paint: the slots, then the jersey's (the body's on
+# the JERSEY slot).
 var _materials: Array[StandardMaterial3D] = []
 var _knees: Array[KeeperKneeBreak] = []
 var _tail: KeeperJerseyTail = null
-var _jersey: ShaderMaterial = null
-var _tail_paint: ShaderMaterial = null
-var _upper_arm: ShaderMaterial = null
-var _forearm: ShaderMaterial = null
 # The pants' legs and their shell, each with its stripe down its outer side
 # (the shell on both).
 var _pants_paint: Dictionary = {}
 var _sock: ShaderMaterial = null
 var _mirrored: bool = false
-var _front: KeeperJerseyDecal = null
-var _back: KeeperJerseyDecal = null
-var _shoulder: KeeperJerseyDecal = null
-var _front_view: SubViewport = null
-var _back_view: SubViewport = null
-var _shoulder_view: SubViewport = null
+var _jersey: JerseyDecal = null
+var _jersey_view: SubViewport = null
+var _sleeve: SleeveDecal = null
+var _sleeve_view: SubViewport = null
+var _uniform: Dictionary = {}
 var _text_color: Color = Color.WHITE
-var _text_stroke: Color = Color.TRANSPARENT
 var _player_name: String = ""
 var _jersey_number: int = 0
 
@@ -66,7 +63,14 @@ func _ready() -> void:
 	_materials[S.SKIN].albedo_color = SkinToneRegistry.color_for(SkinToneRegistry.DEFAULT_INDEX)
 	_materials[S.SKIN].roughness = 0.85
 	_materials[S.HELMET].roughness = UniformPaint.ROUGH_HELMET
-	_build_jersey_materials()
+	_build_jersey_paint()
+	_build_pants_paint()
+	# The sock's bands run down the shin from its top at the knee, as the
+	# skaters' do down theirs.
+	_sock = _kit_shader(P.PAD_G)
+	var pad: Vector3 = KeeperGear.half_extents(P.PAD_G)
+	_sock.set_shader_parameter("half_size", Vector2(pad.x, KeeperGearMeshes.sock_top_in_pad(pad)))
+	_sock.set_shader_parameter("height_m", KeeperAnatomy.SHIN_M)
 	_rig = KeeperBodyRig.new()
 	add_child(_rig)
 	_rig.build(_materials, _kit_material, _mirrored)
@@ -75,7 +79,7 @@ func _ready() -> void:
 				KeeperGear.Part.RISE_G + side, _materials[S.PADS])
 		add_child(knee)
 		_knees.append(knee)
-	_tail = KeeperJerseyTail.new(_tail_paint)
+	_tail = KeeperJerseyTail.new(_materials[S.JERSEY])
 	_rig.add_child(_tail)
 	_tail.build(_rig, _mirrored)
 	apply_uniform(TeamColorRegistry.get_colors(TeamColorRegistry.DEFAULT_HOME_SLOT, 0))
@@ -84,26 +88,8 @@ func _ready() -> void:
 # A team's kit, as TeamColorRegistry.get_colors returns it.
 func apply_uniform(colors: Dictionary) -> void:
 	var kit: Dictionary = colors.uniform
-	var jersey: Dictionary = kit.jersey
-	var h: Vector3 = KeeperGear.half_extents(P.CHEST)
-	var length: float = 2.0 * h.y + KeeperJerseyTail.length_m()
-	for m: ShaderMaterial in [_jersey, _tail_paint]:
-		m.set_shader_parameter("base_color", jersey.base)
-		m.set_shader_parameter("yoke_color", UniformPaint.yoke_color(jersey))
-		m.set_shader_parameter("collar_color", UniformPaint.collar_color(jersey))
-		m.set_shader_parameter("height_m", length)
-		_set_stripes(m, _jersey_stripes(jersey.stripes, length))
-	var arms: Dictionary = kit.arms
-	_upper_arm.set_shader_parameter("base_color", arms.upper.base)
-	_upper_arm.set_shader_parameter("yoke_color", UniformPaint.yoke_color(jersey))
-	_upper_arm.set_shader_parameter("cap_color", kit.shoulders.color)
-	_shoulder.text_color = kit.shoulders.text
-	_shoulder.text_stroke = kit.shoulders.stroke
-	_set_stripes(_upper_arm, arms.upper.stripes)
-	_forearm.set_shader_parameter("base_color", arms.lower.base)
-	_forearm.set_shader_parameter("cap_color", _elbow_color(arms))
-	_set_stripes(_forearm, arms.lower.stripes)
-	_paint_slot(S.JERSEY, jersey.base)
+	_uniform = kit
+	_text_color = colors.text
 	_paint_slot(S.HELMET, kit.helmet)
 	# The blocker and trapper are a set with the pads, trimmed alike.
 	_paint_slot(S.GLOVES, colors.goalie_pads)
@@ -116,10 +102,7 @@ func apply_uniform(colors: Dictionary) -> void:
 	_sock.set_shader_parameter("base_color", kit.socks.base)
 	_set_stripes(_sock, kit.socks.stripes)
 	var preset: Dictionary = colors.get("preset", {})
-	_front.set_crest(TeamCrest.fruit_for(preset), preset)
-	_front_view.render_target_update_mode = SubViewport.UPDATE_ONCE
-	_text_color = colors.text
-	_text_stroke = kit.text.stroke
+	_jersey.update_crest(TeamCrest.fruit_for(preset), preset)
 	_letter()
 
 
@@ -145,12 +128,10 @@ func step_tail(delta: float, down: Vector3, acceleration: Vector3, write: bool) 
 
 # A right-catcher's bones are the left-catcher's reflected, each box on its own
 # x too; his pieces are built turned over on that x, so each is the true mirror
-# of the left-catcher's, its glove's thumb on the other side, and his lettering
-# is read the other way across.
+# of the left-catcher's, its glove's thumb on the other side. His jersey is the
+# same, its arms' binds on the other hand's bones.
 func _set_mirrored(mirrored: bool) -> void:
 	_mirrored = mirrored
-	for m: ShaderMaterial in [_jersey, _upper_arm]:
-		m.set_shader_parameter("flip_decals", mirrored)
 	_rig.build(_materials, _kit_material, mirrored)
 	_tail.build(_rig, mirrored)
 
@@ -161,83 +142,51 @@ func _paint_slot(slot: int, c: Variant) -> void:
 		_rig.paint.set_zone(slot, _materials[slot])
 
 
+# The kit, name and number into the jersey's and the sleeves' decals.
 func _letter() -> void:
-	_back.set_lettering(_player_name, _jersey_number, _text_color, _text_stroke)
-	_back_view.render_target_update_mode = SubViewport.UPDATE_ONCE
-	_shoulder.set_lettering("", _jersey_number, _shoulder.text_color, _shoulder.text_stroke)
-	_shoulder_view.render_target_update_mode = SubViewport.UPDATE_ONCE
+	if _uniform.is_empty():
+		return
+	var jersey: Dictionary = _uniform.jersey
+	_jersey.update_jersey(jersey.base, UniformPaint.yoke_color(jersey),
+			UniformPaint.collar_color(jersey), jersey.stripes, _player_name, _jersey_number,
+			_text_color, _uniform.text.stroke)
+	_jersey_view.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var shoulders: Dictionary = _uniform.shoulders
+	_sleeve.update_sleeve(_uniform.sleeve, _jersey_number, shoulders.text, shoulders.stroke)
+	_sleeve_view.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
 # The kit-shader material a piece's surface wears, or null for its slot's own:
-# the jersey and its sleeves, and the pants with the kit's side stripes.
+# the pants with the kit's side stripes, and the socks.
 func _kit_material(part: int, slot: int) -> Material:
 	if slot == S.PANTS:
 		return _pants_paint.get(part)
 	if slot == S.SOCK:
 		return _sock
-	if slot != S.JERSEY:
-		return null
-	match part:
-		P.CHEST:
-			return _jersey
-		P.UPPER_ARM_G, P.UPPER_ARM_B:
-			return _upper_arm
-		P.FOREARM_G, P.FOREARM_B:
-			return _forearm
 	return null
 
 
-func _build_jersey_materials() -> void:
-	var h: Vector3 = KeeperGear.half_extents(P.CHEST)
-	_jersey = _jersey_shader(P.CHEST)
-	_jersey.set_shader_parameter("yoke_depth", KeeperJerseyDecal.YOKE_DEPTH_M / (2.0 * h.y))
-	_jersey.set_shader_parameter("collar_radius", _COLLAR_RADIUS_M)
-	_jersey.set_shader_parameter("decals", true)
-	_front = KeeperJerseyDecal.new()
-	_front_view = _decal_view(_front)
-	_back = KeeperJerseyDecal.new()
-	_back.face = KeeperJerseyDecal.Face.BACK
-	_back_view = _decal_view(_back)
-	_shoulder = KeeperJerseyDecal.new()
-	_shoulder.face = KeeperJerseyDecal.Face.SHOULDER
-	_shoulder_view = _decal_view(_shoulder)
-	_jersey.set_shader_parameter("crest_decal", _front_view.get_texture())
-	_jersey.set_shader_parameter("text_decal", _back_view.get_texture())
-	_tail_paint = _jersey_shader(P.CHEST)
-	_tail_paint.set_shader_parameter("depth_in_uv", true)
-	_tail_paint.set_shader_parameter("skinned", true)
-	_upper_arm = _jersey_shader(P.UPPER_ARM_G)
-	_build_shoulder_paint()
-	_build_pants_paint()
-	# The sock's bands run down the shin from its top at the knee, as the
-	# skaters' do down theirs.
-	_sock = _jersey_shader(P.PAD_G)
-	var pad: Vector3 = KeeperGear.half_extents(P.PAD_G)
-	_sock.set_shader_parameter("half_size", Vector2(pad.x, KeeperGearMeshes.sock_top_in_pad(pad)))
-	_sock.set_shader_parameter("height_m", KeeperAnatomy.SHIN_M)
-	_forearm = _jersey_shader(P.FOREARM_G)
-	# The sleeve's bands run from the elbow joint, above which is the pad.
-	var elbow: Vector3 = KeeperGearMeshes.elbow_in_forearm(KeeperGear.half_extents(P.FOREARM_G))
-	_forearm.set_shader_parameter("half_size", Vector2(KeeperGear.FOREARM_PAD_RADIUS_M, elbow.y))
-	_forearm.set_shader_parameter("height_m", KeeperAnatomy.FOREARM_M)
-	_forearm.set_shader_parameter("cap_center", elbow)
-	_forearm.set_shader_parameter("cap_radii", Vector3.ONE * KeeperGear.ELBOW_PAD_RADIUS_M)
+# The jersey's two decals and the records that wear them: the body's (the
+# tail's material too) on the JERSEY slot, the sleeves' one past the slots.
+# Each mesh lays its U so the decal reads forwards on either hand, so neither
+# record is turned.
+func _build_jersey_paint() -> void:
+	_jersey = JerseyDecal.new()
+	KeeperJerseyMesh.lay_out(_jersey)
+	_jersey_view = _decal_view(_jersey, Vector2i(JerseyDecal.IMG_W, JerseyDecal.IMG_H))
+	_sleeve = SleeveDecal.new()
+	_sleeve_view = _decal_view(_sleeve, SleeveDecal.SIZE)
+	_materials[S.JERSEY] = _decal_record(_jersey_view.get_texture())
+	_materials.append(_decal_record(_sleeve_view.get_texture()))
+	assert(_materials.size() == KeeperJerseyMesh.ZONE_COUNT)
 
 
-# The shoulder cap over the top of each sleeve: the yoke over its top, the
-# kit's shoulder colour down to its bottom, the number on its outer face.
-func _build_shoulder_paint() -> void:
-	var h: Vector3 = KeeperGear.half_extents(P.UPPER_ARM_G)
-	var joint: float = h.y - KeeperGear.SHOULDER_CAP_ABOVE_JOINT_M
-	_upper_arm.set_shader_parameter("yoke_depth",
-			(h.y - joint - KeeperGearMeshes.SHOULDER_CAP_YOKE_M) / (2.0 * h.y))
-	_upper_arm.set_shader_parameter("cap_until",
-			(h.y - joint - KeeperGearMeshes.SHOULDER_CAP_BOTTOM_M) / (2.0 * h.y))
-	_upper_arm.set_shader_parameter("shoulder_number", true)
-	_upper_arm.set_shader_parameter("number_decal", _shoulder_view.get_texture())
-	_upper_arm.set_shader_parameter("number_band", Vector2(
-			joint + KeeperGearMeshes.SHOULDER_CAP_PROFILE[2].x, KeeperJerseyDecal.SHOULDER_BAND.y))
-	_upper_arm.set_shader_parameter("number_width", KeeperJerseyDecal.SHOULDER_BAND.x)
+static func _decal_record(tex: Texture2D) -> StandardMaterial3D:
+	var m := StandardMaterial3D.new()
+	m.albedo_texture = tex
+	m.roughness = UniformPaint.ROUGH_CLOTH
+	BodyRim.apply(m)
+	return m
 
 
 # The stripe's width is the kit's share of a leg's girth, the same on the
@@ -245,7 +194,7 @@ func _build_shoulder_paint() -> void:
 func _build_pants_paint() -> void:
 	var around: float = KeeperGearMeshes.thigh_girth_m()
 	for part: int in [P.THIGH_G, P.THIGH_B, P.PANTS]:
-		var m: ShaderMaterial = _jersey_shader(part)
+		var m: ShaderMaterial = _kit_shader(part)
 		m.set_shader_parameter("side_stripes", true)
 		m.set_shader_parameter("around_m", around)
 		_pants_paint[part] = m
@@ -253,19 +202,18 @@ func _build_pants_paint() -> void:
 	_pants_paint[P.THIGH_B].set_shader_parameter("stripe_side", 1.0)
 
 
-func _jersey_shader(part: int) -> ShaderMaterial:
+func _kit_shader(part: int) -> ShaderMaterial:
 	var m := ShaderMaterial.new()
-	m.shader = _JERSEY_SHADER
+	m.shader = _KIT_SHADER
 	var h: Vector3 = KeeperGear.half_extents(part)
 	m.set_shader_parameter("half_size", Vector2(h.x, h.y))
 	m.set_shader_parameter("height_m", 2.0 * h.y)
 	return m
 
 
-func _decal_view(decal: KeeperJerseyDecal) -> SubViewport:
+func _decal_view(decal: Node2D, size: Vector2i) -> SubViewport:
 	var view := SubViewport.new()
-	view.size = KeeperJerseyDecal.image_size(decal.face)
-	view.transparent_bg = true
+	view.size = size
 	view.disable_3d = true
 	view.handle_input_locally = false
 	view.gui_disable_input = true
@@ -273,32 +221,6 @@ func _decal_view(decal: KeeperJerseyDecal) -> SubViewport:
 	add_child(view)
 	view.add_child(decal)
 	return view
-
-
-# The kit's jersey stripes as shares of a jersey `height_m` tall, placed as the
-# skater's are (UniformPaint.jersey_stripe_centre_m). A peaked
-# stripe is laid flat at its pos, and its fill below with it.
-static func _jersey_stripes(stripes: Array, height_m: float) -> Array:
-	var design: float = UniformPaint.JERSEY_STRIPE_DESIGN_HEIGHT_M
-	var out: Array = []
-	for s: Dictionary in stripes:
-		var centre: float = UniformPaint.jersey_stripe_centre_m(float(s.pos), height_m) / height_m
-		if s.has("fill_below"):
-			# Flat, as his stripes are: from the stripe's centre to past the hem.
-			out.append({"pos": (centre + 1.05) * 0.5, "width": 1.05 - centre,
-					"color": s.fill_below})
-		out.append({"pos": centre, "width": float(s.width) * design / height_m,
-				"color": s.color})
-	return out
-
-
-# The elbow cap's colour: the kit's arms.elbow when it names one, else the
-# sleeve's own base, so the cap is just sleeve.
-static func _elbow_color(arms: Dictionary) -> Color:
-	var elbow: Variant = arms.get("elbow")
-	if elbow is Color:
-		return elbow
-	return arms.lower.base
 
 
 static func _set_stripes(m: ShaderMaterial, stripes: Array) -> void:

@@ -87,12 +87,23 @@ var text_stroke: Color = Color.TRANSPARENT
 var crest_fruit: String = ""
 var crest_preset: Dictionary = {}
 
+# The body this sweater is laid out for, in metres: the side's height and its
+# girth (what the texture's side region spans), how far the yoke comes down it
+# and how wide a name may run across the back. A skater's by default; the
+# goalie's bigger sweater sets its own (KeeperJerseyMesh), so its lettering and
+# crest keep their size in metres on him.
+var side_height_m: float = BACK_HEIGHT_M
+var girth_m: float = BACK_GIRTH_M
+var yoke_depth_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y
+var name_max_width_m: float = NAME_MAX_WIDTH_M
+
 
 func _draw() -> void:
 	# Base fill across the whole texture so cap disks aren't transparent.
 	draw_rect(Rect2(0, 0, IMG_W, IMG_H), jersey_color, true)
 	draw_rect(TOP_CAP_RECT, collar_color, true)
-	draw_rect(Rect2(0, 0, IMG_W, YOKE_BOTTOM_PX), yoke_color, true)
+	var px_per_m := Vector2(IMG_W / girth_m, SIDE_V_MAX_PX / side_height_m)
+	draw_rect(Rect2(0.0, 0.0, IMG_W, yoke_depth_m * px_per_m.y), yoke_color, true)
 	# Stripes paint in array order, clipped to the side region so none reaches
 	# the caps below it.
 	var side_px := Vector2(IMG_W, SIDE_V_MAX_PX)
@@ -100,19 +111,18 @@ func _draw() -> void:
 			Vector2(0.0, side_px.y)])
 	var back_u: float = float(BACK_CENTER_X) / IMG_W
 	for stripe: Dictionary in stripes:
-		var side: Dictionary = UniformPaint.jersey_side_stripe(stripe)
+		var side: Dictionary = UniformPaint.jersey_side_stripe(stripe, side_height_m)
 		if stripe.has("fill_below"):
 			_fill_side(StripeOutline.below(side, back_u), side_px, side_rect, stripe.fill_below)
-		for piece: PackedVector2Array in StripeOutline.of(side, BACK_HEIGHT_M, BACK_GIRTH_M,
+		for piece: PackedVector2Array in StripeOutline.of(side, side_height_m, girth_m,
 				back_u):
 			_fill_side(piece, side_px, side_rect, stripe.color)
 
-	var yoke_bottom_m: float = float(YOKE_BOTTOM_PX) / PX_PER_M.y
 	draw_back_lettering(self, player_name, jersey_number, text_color, text_stroke,
-			float(BACK_CENTER_X), PX_PER_M, yoke_bottom_m, NAME_MAX_WIDTH_M)
+			float(BACK_CENTER_X), px_per_m, yoke_depth_m, name_max_width_m)
 	if not crest_fruit.is_empty():
-		draw_chest_crest(self, crest_fruit, crest_preset, float(FRONT_CENTER_X), PX_PER_M,
-				yoke_bottom_m)
+		draw_chest_crest(self, crest_fruit, crest_preset, float(FRONT_CENTER_X), px_per_m,
+				yoke_depth_m)
 
 
 # A polygon in side UV, filled where it lies on the side region.
@@ -126,8 +136,7 @@ func _fill_side(uv: PackedVector2Array, side_px: Vector2, side_rect: PackedVecto
 
 # A chest's crest, centred on `center_x` px with its top CREST_YOKE_GAP_M under
 # the yoke line (`yoke_bottom_m` down from the top), drawn in metres through
-# `px_per_m` so it lands round on a texture whose texels are not square. The
-# goalie's chest draws through this too.
+# `px_per_m` so it lands round on a texture whose texels are not square.
 static func draw_chest_crest(canvas: CanvasItem, fruit: String, preset: Dictionary,
 		center_x: float, px_per_m: Vector2, yoke_bottom_m: float) -> void:
 	var r: Vector2 = px_per_m * CREST_RADIUS_M
@@ -138,8 +147,7 @@ static func draw_chest_crest(canvas: CanvasItem, fruit: String, preset: Dictiona
 
 # A back's name and number, laid out in metres down from the top of the back
 # (`yoke_bottom_m` is where the yoke ends) and centred on `center_x` px, the name
-# fitted to `name_max_m` across. The goalie's back letters through this too, so
-# every player's back reads alike.
+# fitted to `name_max_m` across.
 static func draw_back_lettering(canvas: CanvasItem, p_name: String, number: int, color: Color,
 		stroke: Color, center_x: float, px_per_m: Vector2, yoke_bottom_m: float,
 		name_max_m: float) -> void:

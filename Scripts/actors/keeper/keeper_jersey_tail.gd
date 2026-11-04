@@ -51,6 +51,9 @@ var _top := PackedVector3Array()
 var _facet := PackedVector3Array()
 var _seg := PackedFloat32Array()
 var _top_from_collar_m: float
+# Each column's U round the jersey's paint (JerseyDecal), the last a turn on
+# from the first.
+var _u := PackedFloat32Array()
 var _material: Material = null
 var _colliders := KeeperTailColliders.new()
 # The rest drape, chest frame (the last column repeats the first, closing it
@@ -79,6 +82,11 @@ func _init(material: Material) -> void:
 			# Front (−Z) to back, eased round the sides.
 			var back: float = 0.5 - 0.5 * cos(atan2(p.x, -p.z))
 			_seg.append(lerpf(FRONT_LENGTH_M, BACK_LENGTH_M, back) / float(_ROWS - 1))
+	var hem_ring: PackedVector3Array = KeeperGearMeshes.jersey_ring(h, 0, 2)
+	var back_u: float = float(JerseyDecal.BACK_CENTER_X) / float(JerseyDecal.IMG_W)
+	for c: int in FLAPS:
+		_u.append(back_u + KeeperGearMeshes.round_share(hem_ring, _top[c]))
+	_u.append(_u[0] + 1.0)
 	_top_from_collar_m = 2.0 * h.y
 	for r: int in _ROWS:
 		var row := PackedVector3Array()
@@ -99,9 +107,16 @@ static func length_m() -> float:
 	return (FRONT_LENGTH_M + BACK_LENGTH_M) * 0.5
 
 
-# The first of the flaps' bones in his body rig: after a bone per gear piece.
+# The jersey's length from the collar to the hem: the protector's and this.
+# Its paint is laid down that (KeeperJerseyMesh).
+static func jersey_length_m() -> float:
+	return 2.0 * KeeperGear.half_extents(KeeperGear.Part.CHEST).y + length_m()
+
+
+# The first of the flaps' bones in his body rig: after a bone per gear piece and
+# the jersey's deform bones.
 static func first_flap_bone() -> int:
-	return KeeperGear.PART_COUNT
+	return KeeperGear.PART_COUNT + KeeperJerseyMesh.DEFORM_COUNT
 
 
 # Hangs it on `rig` (its child) as a left- or right-catcher wears it: the flap
@@ -214,11 +229,10 @@ func _smooth_normals() -> void:
 		_normals[r][FLAPS] = _normals[r][0]
 
 
-# The cloth between its rows, both faces, each vertex carrying its depth below
-# the collar in UV.y, which is what the jersey paint bands it by, and its rest
-# place and normal in CUSTOM0 and CUSTOM1, which is what it paints by
-# otherwise. Along its top it takes the protector's facet normals, so the light
-# runs on across the hem.
+# The cloth between its rows, both faces, in the jersey's paint (JerseyDecal):
+# U its column's way round him and V its depth below the collar, so the kit's
+# bands run on down from the body. Along its top it takes the protector's facet
+# normals, so the light runs on across the hem.
 func _build_mesh() -> void:
 	var b := _Built.new()
 	var hem_y: float = _top_from_collar_m + length_m()
@@ -248,7 +262,8 @@ func _build_mesh() -> void:
 				var turn: float = 1.0 if side == 0 else -1.0
 				var order: PackedInt32Array = _WIND_FLAT if (side == 0) == flat_out else _WIND_BACK
 				for i: int in order:
-					b.add(qp[i], qn[i] * turn, depths[i], corners[i])
+					b.add(qp[i], qn[i] * turn,
+							Vector2(_u[corners[i].x], 0.5 * depths[i] / jersey_length_m()), corners[i])
 	mesh = b.commit()
 	mesh.surface_set_material(0, _material)
 	var s := Skin.new()
@@ -269,15 +284,11 @@ class _Built:
 	var _uvs := PackedVector2Array()
 	var _bones := PackedInt32Array()
 	var _weights := PackedFloat32Array()
-	var _place := PackedFloat32Array()
-	var _facing := PackedFloat32Array()
 
-	func add(p: Vector3, n: Vector3, depth: float, at: Vector2i) -> void:
+	func add(p: Vector3, n: Vector3, uv: Vector2, at: Vector2i) -> void:
 		_verts.append(p)
 		_normals.append(n)
-		_uvs.append(Vector2(0.0, depth))
-		_place.append_array([p.x, p.y, p.z])
-		_facing.append_array([n.x, n.y, n.z])
+		_uvs.append(uv)
 		if at.y == 0:
 			_bones.append_array([0, 0, 0, 0])
 			_weights.append_array([1.0, 0.0, 0.0, 0.0])
@@ -293,10 +304,6 @@ class _Built:
 		arrays[Mesh.ARRAY_TEX_UV] = _uvs
 		arrays[Mesh.ARRAY_BONES] = _bones
 		arrays[Mesh.ARRAY_WEIGHTS] = _weights
-		arrays[Mesh.ARRAY_CUSTOM0] = _place
-		arrays[Mesh.ARRAY_CUSTOM1] = _facing
-		var format: int = (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) \
-				| (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
 		var out := ArrayMesh.new()
-		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, format)
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
 		return out

@@ -3,10 +3,10 @@ extends RefCounted
 
 # A kit's sleeve: one base color down the whole arm, and stripes laid along it
 # from the shoulder (pos 0) to the glove's cuff (pos 1) — a shoulder or forearm
-# of another color is a wide stripe, and a stripe may peak (stripe_polygons). The skater paints it as one piece
-# (SleeveDecal); the goalie paints his two arm segments, so `segment` cuts the
-# sleeve at the elbow for him, and `from_legacy` reads a kit written in the
-# older two-segment form (arms.upper / arms.lower and a shoulder color).
+# of another color is a wide stripe, and a stripe may peak (stripe_polygons).
+# Every body paints it as one piece (SleeveDecal); `from_legacy` reads a kit
+# written in the older two-segment form (arms.upper / arms.lower and a shoulder
+# color).
 
 # The sleeve from the shoulder joint to the cuff, and the elbow along it, at the
 # default build (Skater.upper_arm_length; the cuff sits ~0.13 m up the 0.33 m
@@ -86,38 +86,8 @@ static func stripe_polygons(stripe: Dictionary) -> Array[PackedVector2Array]:
 	return StripeOutline.of(stripe, LENGTH_M, GIRTH_M)
 
 
-# The upper arm's or the forearm's part of the sleeve in the legacy segment
-# form, for the bodies that paint the two apart: its base the sleeve's color at
-# the segment's middle, its stripes those that reach into it, clipped to it. A
-# peaked stripe is painted flat at its pos, and its fill below as a band from
-# there past the cuff.
-static func segment(sleeve: Dictionary, upper: bool) -> Dictionary:
-	var from_m: float = 0.0 if upper else ELBOW_M
-	var to_m: float = ELBOW_M if upper else ELBOW_M + _SEGMENT_M
-	var flat: Array[Dictionary] = []
-	for s: Dictionary in sleeve.stripes:
-		if s.has("fill_below"):
-			var past_cuff: float = 2.0
-			flat.append({"pos": (float(s.pos) + past_cuff) * 0.5,
-					"width": past_cuff - float(s.pos), "color": s.fill_below})
-		flat.append(s)
-	var stripes: Array[Dictionary] = []
-	for s: Dictionary in flat:
-		var top_m: float = maxf((float(s.pos) - float(s.width) * 0.5) * LENGTH_M, from_m)
-		var bottom_m: float = minf((float(s.pos) + float(s.width) * 0.5) * LENGTH_M, to_m)
-		if bottom_m <= top_m:
-			continue
-		var centre: float = ((top_m + bottom_m) * 0.5 - from_m) / _SEGMENT_M
-		stripes.append({
-			"pos": 0.5 + (centre - 0.5) / _SEGMENT_STRIPE_SCALE,
-			"width": (bottom_m - top_m) / _SEGMENT_M / _SEGMENT_STRIPE_SCALE,
-			"color": s.color,
-		})
-	return {"base": sleeve.base, "stripes": stripes}
-
-
 # The color showing at `pos` down the sleeve: the last stripe over it, else the
-# base. A peaked stripe counts as flat at its pos, as the segments paint it.
+# base. A peaked stripe counts as flat at its pos.
 static func color_at(sleeve: Dictionary, pos: float) -> Color:
 	var c: Color = sleeve.base
 	for s: Dictionary in sleeve.stripes:
