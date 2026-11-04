@@ -44,16 +44,18 @@ static func grab_focus(control: Control) -> void:
 		return
 	_pending_focus = weakref(control)
 	if active():
-		_grab_deferred.call_deferred(control)
+		_grab_deferred.call_deferred(weakref(control))
 
 
 # The actual grab, one frame later. Re-checked against the live focus state
 # because the world can change in between: a modal opening walls the target's
 # subtree off (see open_modal), and grab_focus on a walled control is a no-op the
 # engine warns about. Remembering it in _pending_focus is still right — the wall
-# lifts when the modal closes.
-static func _grab_deferred(control: Control) -> void:
-	if control == null or not is_instance_valid(control) or not control.is_inside_tree():
+# lifts when the modal closes. The target rides a WeakRef: a control freed
+# before the deferred call runs cannot be passed to a typed parameter at all.
+static func _grab_deferred(target: WeakRef) -> void:
+	var control: Control = target.get_ref() as Control
+	if control == null or not control.is_inside_tree():
 		return
 	if control.get_focus_mode_with_override() == Control.FOCUS_NONE:
 		return
@@ -64,10 +66,14 @@ static func _grab_deferred(control: Control) -> void:
 # calls in its open() to take control off the menu behind it. Remembered for a
 # later device switch; only grabs now while the pad drives.
 static func focus_first(root: Node) -> void:
-	_focus_first_deferred.call_deferred(root)
+	_focus_first_deferred.call_deferred(weakref(root))
 
 
-static func _focus_first_deferred(root: Node) -> void:
+# `target` is a WeakRef for the same reason as _grab_deferred's.
+static func _focus_first_deferred(target: WeakRef) -> void:
+	var root: Node = target.get_ref() as Node
+	if root == null:
+		return
 	var c: Control = _first_focusable(root)
 	if c != null:
 		_pending_focus = weakref(c)
@@ -84,7 +90,7 @@ static func on_gamepad_activated() -> void:
 		return
 	var c: Control = _pending_focus.get_ref() as Control
 	if c != null and c.is_inside_tree() and c.is_visible_in_tree():
-		_grab_deferred.call_deferred(c)
+		_grab_deferred.call_deferred(weakref(c))
 
 
 static func _first_focusable(node: Node) -> Control:
