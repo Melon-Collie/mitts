@@ -1,9 +1,10 @@
 class_name CosmeticUnlocks
 ## Which cosmetic options a player may pick (docs/game-pucks-plan.md, Phase 4).
-## A colour slot offers the team's two colours, white and black for free; any
-## other option is offered only as a reward row — one slot, one option and the
-## banner that unlocks it — so a reward never reaches a slot it was not meant
-## for. A pick the player may not wear is worn as the team colour.
+## A colour slot offers the team's two colours, white and black for free, and
+## the tape-coverage slot its six original spans; any other option is offered
+## only as a reward row — one slot, one option and the banner that unlocks it —
+## so a reward never reaches a slot it was not meant for. A pick the player may
+## not wear is worn as the slot's default: the team colour, or heel-to-mid tape.
 ##
 ## The palette keeps every colour it ever had, so old codes and bots still
 ## decode; this file decides only what the player screen offers and what the
@@ -11,20 +12,39 @@ class_name CosmeticUnlocks
 
 const TAPE_BLADE := "tape_blade"
 const TAPE_KNOB := "tape_knob"
+const TAPE_TOE := "tape_toe"
 const LACES := "laces"
-const COLOR_SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, LACES]
+const TAPE_SPAN := "tape_span"
+const COLOR_SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, TAPE_TOE, LACES]
+const SLOTS: Array[String] = [TAPE_BLADE, TAPE_KNOB, TAPE_TOE, LACES, TAPE_SPAN]
 
 const FREE_COLORS: Array[int] = [
 	TapeColorRegistry.TEAM_INDEX, TapeColorRegistry.TEAM_SECOND_INDEX,
 	TapeColorRegistry.WHITE_INDEX, TapeColorRegistry.BLACK_INDEX,
 ]
 
-# { "slot", "option", "banner" } — a Banners id raises it.
-const REWARDS: Array[Dictionary] = []
+const FREE_SPANS: Array[int] = [
+	StickTapeConfig.Span.HEEL_TO_MID, StickTapeConfig.Span.TOE, StickTapeConfig.Span.MID,
+	StickTapeConfig.Span.FULL, StickTapeConfig.Span.NONE, StickTapeConfig.Span.MID_TO_TOE,
+]
+
+# { "slot", "option", "banner" } — a Banners id raises it. The two signature
+# tape jobs are homages to two players' real ones, never named.
+const REWARDS: Array[Dictionary] = [
+	{"slot": TAPE_SPAN, "option": StickTapeConfig.Span.SPACED, "banner": "sniper"},
+	{"slot": TAPE_SPAN, "option": StickTapeConfig.Span.BOTTOM_STRIP, "banner": "playmaker"},
+]
 
 
 static func is_free(slot: String, option: int) -> bool:
+	if slot == TAPE_SPAN:
+		return FREE_SPANS.has(option)
 	return COLOR_SLOTS.has(slot) and FREE_COLORS.has(option)
+
+
+# How many options a slot has: the palette's colours, or the spans.
+static func option_count(slot: String) -> int:
+	return StickTapeConfig.Span.size() if slot == TAPE_SPAN else TapeColorRegistry.count()
 
 
 # The banner whose raising unlocks `option` in `slot`, "" when none does.
@@ -47,9 +67,28 @@ static func is_available(slot: String, option: int, raised: Array[String]) -> bo
 # palette order.
 static func available(slot: String, raised: Array[String]) -> Array[int]:
 	var out: Array[int] = []
-	for option: int in TapeColorRegistry.count():
+	for option: int in option_count(slot):
 		if is_available(slot, option, raised):
 			out.append(option)
+	return out
+
+
+# The reward options of `slot` the player has not unlocked, for a picker that
+# shows what is still to earn.
+static func locked(slot: String, raised: Array[String]) -> Array[int]:
+	var out: Array[int] = []
+	for row: Dictionary in REWARDS:
+		if String(row["slot"]) == slot and not raised.has(String(row["banner"])):
+			out.append(int(row["option"]))
+	return out
+
+
+# The reward rows a banner unlocks.
+static func rewards_of(banner: String) -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	for row: Dictionary in REWARDS:
+		if String(row["banner"]) == banner:
+			out.append(row)
 	return out
 
 
@@ -67,6 +106,9 @@ static func worn_tape_code(code: int, raised: Array[String]) -> int:
 	var tape: StickTapeConfig = StickTapeConfig.from_code(code)
 	tape.blade_color = _worn(TAPE_BLADE, tape.blade_color, raised)
 	tape.knob_color = _worn(TAPE_KNOB, tape.knob_color, raised)
+	tape.toe_color = _worn(TAPE_TOE, tape.toe_color, raised)
+	if not is_available(TAPE_SPAN, tape.span, raised):
+		tape.span = StickTapeConfig.Span.HEEL_TO_MID
 	return tape.to_code()
 
 

@@ -67,3 +67,23 @@ func test_team_and_invalid_indices_resolve_to_accent() -> void:
 func test_palette_and_name_keys_stay_in_lockstep() -> void:
 	assert_eq(TapeColorRegistry.NAME_KEYS.size(), TapeColorRegistry.count(),
 			"every palette entry has a display key")
+
+
+func test_the_toe_color_round_trips_beside_every_other_field() -> void:
+	for toe: int in TapeColorRegistry.count():
+		var config := StickTapeConfig.new(TapeColorRegistry.BLACK_INDEX,
+				StickTapeConfig.Span.BOTTOM_STRIP, TapeColorRegistry.WHITE_INDEX,
+				StickTapeConfig.KnobStyle.FULL, toe)
+		var back: StickTapeConfig = StickTapeConfig.from_code(config.to_code())
+		assert_eq(back.toe_color, toe)
+		assert_eq(back.span, StickTapeConfig.Span.BOTTOM_STRIP)
+		assert_eq(back.knob_style, StickTapeConfig.KnobStyle.FULL)
+	assert_eq(StickTapeConfig.new().to_code(), StickTapeConfig.DEFAULT_CODE,
+			"a team toe keeps the untouched job at code 0")
+
+
+func test_only_the_bottom_strip_has_a_toe_cap() -> void:
+	for span: int in StickTapeConfig.Span.size():
+		assert_eq(StickTapeConfig.new(0, span).has_toe_cap(),
+				span == StickTapeConfig.Span.BOTTOM_STRIP)
+	assert_eq(StickTapeConfig.SPAN_NAME_KEYS.size(), StickTapeConfig.Span.size())

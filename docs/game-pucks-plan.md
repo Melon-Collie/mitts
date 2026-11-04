@@ -1,7 +1,8 @@
 # Game Pucks and Banners — progression design record
 
 Status: **Phases 1–3 built** (the catalogue, the ledger, the Trophy Case,
-titles and feats); Phase 4 not started. Each phase ships as its own PR.
+titles and feats); Phase 4 steps 1–2 built, step 3 (sticks as patterns) not
+started.
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done. Completing a named
@@ -230,11 +231,14 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
    1. **Free colours and the unlock machinery.** The second team colour joins
       the palette; `CosmeticUnlocks` and the coercion to the team colour; the
       player screen's swatches show only what is available. Protocol bump.
-   2. **Signature tape jobs**, as new entries in the existing tape-coverage list
-      and banner rewards: *Spaced* (four narrow wraps spread from mid-blade to
-      the toe) and *Bottom strip* (a strip along the blade's bottom edge, heel
-      to toe, with a toe cap in its own colour — a new toe-colour pick shows for
-      it). Homages to two players' real tape jobs, never naming them.
+   2. **Signature tape jobs** (built), as new entries in the existing
+      tape-coverage list: *Spaced* (four 1 cm wraps spread from mid-blade to
+      the toe), the Sniper banner's reward, and *Bottom strip* (one tape width
+      laid along the blade's bottom edge, heel to toe, ending at a 4 cm toe cap
+      in its own colour — the toe-colour pick shows only for it), the
+      Playmaker banner's. Homages to two players' real tape jobs, never naming
+      them. The player screen lists a locked job greyed with its banner; an
+      unearned one is worn heel-to-mid.
    3. **Sticks as patterns.** A stick model becomes a pattern whose zones (shaft,
       wordmark, bands, blade) the player paints from the palette under the same
       rules; the current models become patterns with near defaults. The stick's

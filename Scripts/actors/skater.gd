@@ -1727,6 +1727,9 @@ func _rebuild_blade_mesh() -> void:
 	var tape: MeshInstance3D = blade_mesh.get_node_or_null("BladeTape") as MeshInstance3D
 	if tape != null:
 		tape.mesh = build_blade_tape_mesh()
+	var toe: MeshInstance3D = blade_mesh.get_node_or_null("BladeToeTape") as MeshInstance3D
+	if toe != null:
+		toe.mesh = build_blade_toe_cap_mesh()
 
 
 # Builder params for the current blade geometry — shared by the blade mesh and
@@ -1755,10 +1758,12 @@ func blade_mesh_params(inflate: float, u_start: float, u_end: float,
 # the blade mesh itself (the band node sits at the blade mesh's origin,
 # untransformed). Null when the tape job leaves the blade bare.
 func build_blade_tape_mesh() -> ArrayMesh:
-	if not tape_config.has_blade_tape():
-		return null
-	return StickBladeMeshBuilder.build_tape(
-			blade_mesh_params(0.0, 0.0, 1.0), tape_config.span_range())
+	return StickBladeMeshBuilder.build_tape_job(blade_mesh_params(0.0, 0.0, 1.0), tape_config)
+
+
+# The tape job's toe cap, in the same frame; null when it has none.
+func build_blade_toe_cap_mesh() -> ArrayMesh:
+	return StickBladeMeshBuilder.build_toe_cap(blade_mesh_params(0.0, 0.0, 1.0), tape_config)
 
 
 # Installs a new tape job and refreshes the rendered tape (geometry here,

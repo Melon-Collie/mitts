@@ -464,3 +464,9 @@ here whenever you bump, in the same format.
 #      plan.md, Phase 4). Same widths, but an older peer clamps index 11 back
 #      to the team primary and paints a different stick; mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: an older replay never holds 11.
+# v96: two tape spans (StickTapeConfig.Span.SPACED, BOTTOM_STRIP) fill the
+#      span's 3 bits, and the tape code grows a toe-cap colour (5 bits above
+#      the handle style) — docs/game-pucks-plan.md, Phase 4 step 2. An older
+#      peer clamps the new spans and drops the toe colour; mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: an older replay's codes decode
+#      as before.

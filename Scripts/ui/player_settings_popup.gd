@@ -54,15 +54,6 @@ const _FLEX_HINTS: Array[StringName] = [
 const _FRAME_KEYS: Array[StringName] = [
 	&"FRAME_LEAN", &"FRAME_LIGHT", &"FRAME_MEDIUM", &"FRAME_SOLID", &"FRAME_HEAVY"]
 
-const _SPAN_OPTIONS: Array[int] = [
-	StickTapeConfig.Span.FULL, StickTapeConfig.Span.HEEL_TO_MID,
-	StickTapeConfig.Span.MID_TO_TOE, StickTapeConfig.Span.MID,
-	StickTapeConfig.Span.TOE, StickTapeConfig.Span.NONE,
-]
-const _SPAN_KEYS: Array[StringName] = [
-	&"TAPE_SPAN_FULL", &"TAPE_SPAN_HEEL_TO_MID", &"TAPE_SPAN_MID_TO_TOE",
-	&"TAPE_SPAN_MID", &"TAPE_SPAN_TOE", &"TAPE_SPAN_NONE",
-]
 const _STYLE_OPTIONS: Array[int] = [
 	StickTapeConfig.KnobStyle.KNOB, StickTapeConfig.KnobStyle.CANDY_CANE,
 	StickTapeConfig.KnobStyle.FULL,
@@ -131,7 +122,8 @@ var _gear_rows: Array[_GearRow] = []
 var _flex_row: _GearRow = null
 var _stick_model_btn: OptionButton = null
 var _blade_color_dd: SwatchDropdown = null
-var _span_btn: OptionButton = null
+var _coverage: TapeCoverageList = null
+var _toe_color_dd: SwatchDropdown = null
 var _knob_color_dd: SwatchDropdown = null
 var _style_btn: OptionButton = null
 var _skate_btn: OptionButton = null
@@ -530,14 +522,16 @@ func _build_stick(page: VBoxContainer) -> void:
 				tr(StickModelRegistry.NAME_KEYS[model]), model)
 	_blade_color_dd = _swatch_dropdown(_row(page, &"TAPE_BLADE_LABEL", false, blade),
 			func(i: int) -> void: _edit_tape(i, -1, -1, -1))
-	_span_btn = PlayerRowKit.option_list(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
-			_SPAN_KEYS, func(i: int) -> void: _edit_tape(-1, _SPAN_OPTIONS[i], -1, -1))
+	_coverage = TapeCoverageList.new(_row(page, &"TAPE_COVERAGE_LABEL", false, blade),
+			func(span: int) -> void: _edit_tape(-1, span, -1, -1))
+	_toe_color_dd = _swatch_dropdown(_row(page, &"TAPE_TOE_LABEL", false, blade),
+			func(i: int) -> void: _edit_tape(-1, -1, -1, -1, i))
 	_knob_color_dd = _swatch_dropdown(_row(page, &"TAPE_KNOB_LABEL", false, grip),
 			func(i: int) -> void: _edit_tape(-1, -1, i, -1))
 	_style_btn = PlayerRowKit.option_list(_row(page, &"TAPE_HANDLE_LABEL", false, grip),
 			_STYLE_KEYS, func(i: int) -> void: _edit_tape(-1, -1, -1, _STYLE_OPTIONS[i]))
 	_wire_reach([_stick_model_btn], stick)
-	_wire_reach([_blade_color_dd, _span_btn], blade)
+	_wire_reach([_blade_color_dd, _coverage.button(), _toe_color_dd], blade)
 	_wire_reach([_knob_color_dd, _style_btn], grip)
 
 
@@ -607,13 +601,15 @@ func _edit_gear(field: StringName, value: int) -> void:
 
 
 # −1 keeps a field.
-func _edit_tape(blade_color: int, span: int, knob_color: int, knob_style: int) -> void:
+func _edit_tape(blade_color: int, span: int, knob_color: int, knob_style: int,
+		toe_color: int = -1) -> void:
 	var t: StickTapeConfig = _draft.tape()
 	_draft.set_tape(StickTapeConfig.new(
 			t.blade_color if blade_color < 0 else blade_color,
 			t.span if span < 0 else span,
 			t.knob_color if knob_color < 0 else knob_color,
-			t.knob_style if knob_style < 0 else knob_style))
+			t.knob_style if knob_style < 0 else knob_style,
+			t.toe_color if toe_color < 0 else toe_color))
 	_edited()
 
 
@@ -711,7 +707,6 @@ func _refresh() -> void:
 				% [tr(_FLEX_KEYS[i]), PlayerAttributes.flex_number_for(_draft.weight, i)])
 	PlayerRowKit.relabel(_flex_row.buttons, flex_labels)
 	_stick_model_btn.select(clampi(gear.stick_model, 0, StickModelRegistry.count() - 1))
-	_span_btn.select(maxi(_SPAN_OPTIONS.find(tape.span), 0))
 	_style_btn.select(maxi(_STYLE_OPTIONS.find(tape.knob_style), 0))
 
 	if _painted_slot != _draft.color_slot:
@@ -722,6 +717,9 @@ func _refresh() -> void:
 	_blade_color_dd.set_selected(tape.blade_color)
 	_knob_color_dd.set_selected(tape.knob_color)
 	_lace_dd.set_selected(gear.lace_color)
+	_coverage.select(tape.span)
+	_toe_color_dd.set_selected(tape.toe_color)
+	_toe_color_dd.get_parent().get_parent().visible = tape.has_toe_cap()
 	_tongue_btn.select(gear.skate_tongue)
 	_refreshing = false
 
@@ -761,6 +759,8 @@ func _paint_team_rows() -> void:
 	CosmeticSwatches.fill(_blade_color_dd, CosmeticUnlocks.TAPE_BLADE, team, accent, raised)
 	CosmeticSwatches.fill(_knob_color_dd, CosmeticUnlocks.TAPE_KNOB, team, accent, raised)
 	CosmeticSwatches.fill(_lace_dd, CosmeticUnlocks.LACES, team, accent, raised)
+	CosmeticSwatches.fill(_toe_color_dd, CosmeticUnlocks.TAPE_TOE, team, accent, raised)
+	_coverage.reload(raised)
 
 
 func _update_apply_state() -> void:

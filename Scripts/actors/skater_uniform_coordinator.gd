@@ -18,6 +18,7 @@ var _skater: Skater
 var _kit: SkaterKitPaint
 var _blade_mesh: MeshInstance3D
 var _blade_tape: MeshInstance3D                    # team-colored tape band, child of _blade_mesh
+var _blade_toe_tape: MeshInstance3D                # a bottom strip's toe cap, child of _blade_mesh
 # colors.primary, cached from the last apply_uniform so a live tape pick
 # repaints without one: TEAM for tape.
 var _team_accent: Color = Color.WHITE
@@ -103,21 +104,30 @@ func _rebuild_blade() -> void:
 	_blade_mesh.material_override = StickStyle.make_blade_material(
 			_skater.gear_style.stick_model)
 
-	if _blade_tape != null and is_instance_valid(_blade_tape):
-		_blade_mesh.remove_child(_blade_tape)
-		_blade_tape.queue_free()
-	_blade_tape = null
-	var tape_mesh: ArrayMesh = _skater.build_blade_tape_mesh()
-	if tape_mesh == null:
-		return  # bare blade — no tape node at all
-	_blade_tape = MeshInstance3D.new()
-	_blade_tape.name = "BladeTape"
-	_blade_tape.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_blade_tape.mesh = tape_mesh
-	_blade_tape.material_override = UniformPaint.solid(
-			TapeColorRegistry.resolve(_skater.tape_config.blade_color, _team_accent, _team_secondary),
+	_blade_tape = _replace_tape_node(_blade_tape, "BladeTape", _skater.build_blade_tape_mesh(),
+			_skater.tape_config.blade_color)
+	_blade_toe_tape = _replace_tape_node(_blade_toe_tape, "BladeToeTape",
+			_skater.build_blade_toe_cap_mesh(), _skater.tape_config.toe_color)
+
+
+# Swaps `old` for a node drawing `mesh` in palette color `color`; null (and no
+# node at all) when the tape job draws nothing there.
+func _replace_tape_node(old: MeshInstance3D, node_name: String, mesh: ArrayMesh,
+		color: int) -> MeshInstance3D:
+	if old != null and is_instance_valid(old):
+		_blade_mesh.remove_child(old)
+		old.queue_free()
+	if mesh == null:
+		return null
+	var node := MeshInstance3D.new()
+	node.name = node_name
+	node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	node.mesh = mesh
+	node.material_override = UniformPaint.solid(
+			TapeColorRegistry.resolve(color, _team_accent, _team_secondary),
 			UniformPaint.ROUGH_CLOTH)
-	_blade_mesh.add_child(_blade_tape)
+	_blade_mesh.add_child(node)
+	return node
 
 
 # Repaints the gear-style pieces (both skates, both gloves, the laces, the
@@ -227,6 +237,7 @@ func apply_ghost(ghost: bool) -> void:
 				_skater.gear_style.stick_model)
 	var meshes: Array[MeshInstance3D] = [
 			_blade_tape,
+			_blade_toe_tape,
 			_skater.stick_knob_mesh,
 		]
 	for mesh: MeshInstance3D in meshes:

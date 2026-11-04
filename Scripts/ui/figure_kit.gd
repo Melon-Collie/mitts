@@ -25,6 +25,7 @@ var shaft: MeshInstance3D = null
 var shaft_mat: ShaderMaterial = null
 var blade: MeshInstance3D = null
 var tape_mesh: MeshInstance3D = null
+var toe_mesh: MeshInstance3D = null
 var knob: MeshInstance3D = null
 
 var _rig: Node3D = null
@@ -101,6 +102,8 @@ func _build_stick() -> void:
 
 	tape_mesh = MeshInstance3D.new()
 	blade.add_child(tape_mesh)
+	toe_mesh = MeshInstance3D.new()
+	blade.add_child(toe_mesh)
 
 	knob = MeshInstance3D.new()
 	var knob_cyl := CylinderMesh.new()
@@ -149,6 +152,8 @@ func _paint_stick(gear: GearStyleConfig, tape: StickTapeConfig,
 			shaft.transform.basis.get_scale().z)
 	tape_mesh.material_override = _flat(
 			TapeColorRegistry.resolve(tape.blade_color, accent, second), _CLOTH_ROUGH)
+	toe_mesh.material_override = _flat(
+			TapeColorRegistry.resolve(tape.toe_color, accent, second), _CLOTH_ROUGH)
 	knob.material_override = _flat(knob_color, _CLOTH_ROUGH)
 
 

@@ -151,6 +151,11 @@ func _banner_card(banner: Dictionary, totals: Dictionary, ledger: TrophyLedger) 
 	if not title.is_empty():
 		col.add_child(_label(tr(&"TROPHY_BANNER_TITLE") % TrophyCopy.title_name(title), 13,
 				_EARNED if is_up else MenuStyle.TEXT_DIM, false))
+	for reward: Dictionary in CosmeticUnlocks.rewards_of(id):
+		if String(reward["slot"]) == CosmeticUnlocks.TAPE_SPAN:
+			col.add_child(_label(tr(&"TROPHY_BANNER_TAPE") % tr(
+					StickTapeConfig.SPAN_NAME_KEYS[int(reward["option"])]), 13,
+					_EARNED if is_up else MenuStyle.TEXT_DIM, false))
 	for req: String in needs:
 		var met: bool = GamePuckRules.requirement_met(req, totals, ledger)
 		var puck: String = Banners.requirement_puck(req)

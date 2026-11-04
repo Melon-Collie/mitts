@@ -11,15 +11,12 @@ const _RED: int = 3
 
 func test_every_colour_slot_offers_exactly_the_free_four_without_rewards() -> void:
 	var none: Array[String] = []
+	var want: Array[int] = _FREE.duplicate()
+	want.sort()
 	for slot: String in CosmeticUnlocks.COLOR_SLOTS:
 		var listed: Array[int] = CosmeticUnlocks.available(slot, none)
 		listed.sort()
-		var want: Array[int] = _FREE.duplicate()
-		want.sort()
-		if CosmeticUnlocks.REWARDS.is_empty():
-			assert_eq(listed, want, "%s offers the free four" % slot)
-		for option: int in _FREE:
-			assert_true(CosmeticUnlocks.is_available(slot, option, none))
+		assert_eq(listed, want, "%s offers the free four" % slot)
 
 
 func test_a_colour_without_a_reward_is_never_available() -> void:
@@ -38,8 +35,9 @@ func test_reward_rows_name_a_slot_a_colour_and_a_banner() -> void:
 	for row: Dictionary in CosmeticUnlocks.REWARDS:
 		var slot: String = String(row["slot"])
 		var option: int = int(row["option"])
-		assert_has(CosmeticUnlocks.COLOR_SLOTS, slot)
-		assert_true(TapeColorRegistry.is_valid(option), "%s option %d" % [slot, option])
+		assert_has(CosmeticUnlocks.SLOTS, slot)
+		assert_between(option, 0, CosmeticUnlocks.option_count(slot) - 1,
+				"%s option %d" % [slot, option])
 		assert_false(CosmeticUnlocks.is_free(slot, option), "a reward must not already be free")
 		assert_has(banners, String(row["banner"]))
 		var key: String = "%s/%d" % [slot, option]
@@ -79,3 +77,37 @@ func test_the_second_team_slot_resolves_to_the_kit_secondary() -> void:
 	assert_eq(TapeColorRegistry.resolve(TapeColorRegistry.TEAM_INDEX, primary, secondary), primary)
 	assert_eq(TapeColorRegistry.resolve(999, primary, secondary), primary, "out of range reads as team")
 	assert_eq(TapeColorRegistry.NAME_KEYS.size(), TapeColorRegistry.count())
+
+
+func test_the_signature_tape_jobs_are_banner_rewards() -> void:
+	var none: Array[String] = []
+	var spans: Array[int] = CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, none)
+	assert_eq(spans.size(), CosmeticUnlocks.FREE_SPANS.size(), "the original six are free")
+	assert_does_not_have(spans, StickTapeConfig.Span.SPACED)
+	assert_eq(CosmeticUnlocks.reward_banner(CosmeticUnlocks.TAPE_SPAN,
+			StickTapeConfig.Span.SPACED), "sniper")
+	assert_eq(CosmeticUnlocks.reward_banner(CosmeticUnlocks.TAPE_SPAN,
+			StickTapeConfig.Span.BOTTOM_STRIP), "playmaker")
+	var sniper: Array[String] = ["sniper"]
+	assert_has(CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, sniper),
+			StickTapeConfig.Span.SPACED)
+	assert_eq(CosmeticUnlocks.locked(CosmeticUnlocks.TAPE_SPAN, sniper),
+			[StickTapeConfig.Span.BOTTOM_STRIP] as Array[int])
+
+
+func test_an_unearned_tape_job_is_worn_heel_to_mid() -> void:
+	var job := StickTapeConfig.new(TapeColorRegistry.BLACK_INDEX,
+			StickTapeConfig.Span.BOTTOM_STRIP, TapeColorRegistry.TEAM_INDEX,
+			StickTapeConfig.KnobStyle.KNOB, TapeColorRegistry.WHITE_INDEX)
+	var none: Array[String] = []
+	var worn := StickTapeConfig.from_code(CosmeticUnlocks.worn_tape_code(job.to_code(), none))
+	assert_eq(worn.span, StickTapeConfig.Span.HEEL_TO_MID)
+	assert_eq(worn.blade_color, TapeColorRegistry.BLACK_INDEX)
+	var playmaker: Array[String] = ["playmaker"]
+	var earned := StickTapeConfig.from_code(
+			CosmeticUnlocks.worn_tape_code(job.to_code(), playmaker))
+	assert_eq(earned.span, StickTapeConfig.Span.BOTTOM_STRIP)
+	assert_eq(earned.toe_color, TapeColorRegistry.WHITE_INDEX)
+	job.toe_color = 3
+	assert_eq(StickTapeConfig.from_code(CosmeticUnlocks.worn_tape_code(job.to_code(),
+			playmaker)).toe_color, TapeColorRegistry.TEAM_INDEX, "the toe follows the colour rules")
