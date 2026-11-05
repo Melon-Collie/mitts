@@ -33,8 +33,8 @@ class ShotResult:
 #              cannot roof the doorstep but also can never sail — its worst
 #              outcome at any charge is a crossbar ping — while the M28 roofs
 #              from the crease and pays for it everywhere else.
-# The levels double as DEFLECT MODES (blade lift height + redirect sign follow
-# the level — see PuckCollisionRules.deflect_loft_speed).
+# The levels double as TIP heights (a deflect's vertical launch follows the
+# level — see PuckCollisionRules.deflect_loft_speed).
 # QUICK PASSES keep the fixed vertical-speed table (loft_vy_low/high — LOW at
 # pass power IS the saucer pass, MID/HIGH the flip), position- and gear-free.
 const ELEVATION_FLAT: int = 0

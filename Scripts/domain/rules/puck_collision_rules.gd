@@ -11,8 +11,10 @@ static func can_poke_check(carrier_team_id: int, checker_team_id: int) -> bool:
 # Passive-blade deflection via a NORMAL/TANGENTIAL decomposition of the incoming
 # velocity against the blade face. contact_normal is the blade face normal
 # (unit, points against the incoming puck). Returns new horizontal velocity (no
-# Y). Drives BOTH the natural too-fast-to-catch deflect and the deliberate
-# redirect (hold LMB without the puck) — one model, so they always feel identical.
+# Y). Drives BOTH the natural too-fast-to-catch deflect and the deliberate tip
+# (Q held without the puck) — one model, so they always feel identical. The tip
+# differs only in which face it presents: one turned to the player's aim
+# (aimed_face_normal), where a natural deflect takes the shaft's.
 #
 # The incoming velocity is split into the component INTO the face (normal) and the
 # component ALONG the face (tangential). The normal part rebounds with restitution
@@ -59,11 +61,65 @@ static func deflect_velocity(
 	# sends the rebounded part back out along +n.
 	var v_normal: Vector3 = horiz.dot(n) * n
 	var v_tangent: Vector3 = horiz - v_normal
-	var hard: float = clampf(speed / speed_ref, 0.0, 1.0) if speed_ref > 0.0001 else 0.0
-	var e: float = normal_restitution
-	if normal_restitution_min >= 0.0:
-		e = lerpf(normal_restitution, normal_restitution_min, hard)
+	var e: float = deflect_restitution(speed, normal_restitution, normal_restitution_min, speed_ref)
 	return v_tangent * tangential_retain - v_normal * e
+
+
+# The face's restitution into its normal for a puck at `speed` (see deflect_velocity).
+static func deflect_restitution(speed: float, normal_restitution: float,
+		normal_restitution_min: float, speed_ref: float) -> float:
+	if normal_restitution_min < 0.0:
+		return normal_restitution
+	var hard: float = clampf(speed / speed_ref, 0.0, 1.0) if speed_ref > 0.0001 else 0.0
+	return lerpf(normal_restitution, normal_restitution_min, hard)
+
+
+# The turn (radians, + counterclockwise in XZ seen as Vector2(x, z)) a deliberate
+# tip asks for: `max_turn` toward the side of the puck's line the blade is held
+# on, scaled by how far to that side it is from the body. Blade straight up the
+# puck's line toward it, or straight down it behind the body: no turn; square
+# beside the body: the whole of it. The player's stated aim, as the loft level
+# is for height.
+static func tip_turn(incoming_velocity: Vector3, body_to_blade: Vector3,
+		max_turn: float) -> float:
+	var travel := Vector2(incoming_velocity.x, incoming_velocity.z)
+	var bearing := Vector2(body_to_blade.x, body_to_blade.z)
+	if travel.length_squared() < 1e-8 or bearing.length_squared() < 1e-8:
+		return 0.0
+	return max_turn * clampf(travel.normalized().cross(bearing.normalized()), -1.0, 1.0)
+
+
+# The blade face (horizontal unit normal, against the puck) whose deflect_velocity
+# turns `incoming_velocity` by `turn` radians. A glance off a blade at θ to the
+# puck's line leaves turned θ + atan(e·tanθ / tangential_retain) — along the
+# blade, plus the face's rebound — so θ is solved for the turn and the face is
+# that blade's. The pace is then deflect_velocity's: the sharper the turn, the
+# more of the puck goes into the face and dies there.
+static func aimed_face_normal(incoming_velocity: Vector3, turn: float,
+		normal_restitution: float, normal_restitution_min: float,
+		tangential_retain: float, speed_ref: float) -> Vector3:
+	var travel := Vector2(incoming_velocity.x, incoming_velocity.z)
+	var speed: float = travel.length()
+	if speed < 0.0001:
+		return Vector3.ZERO
+	travel /= speed
+	var e: float = deflect_restitution(speed, normal_restitution, normal_restitution_min, speed_ref)
+	var want: float = absf(turn)
+	var lo: float = 0.0
+	var hi: float = minf(want, PI * 0.5 - 0.001)
+	# Bisection: the turn rises monotonically with θ and is never under θ.
+	for _i: int in 24:
+		var mid: float = 0.5 * (lo + hi)
+		if mid + atan(e * tan(mid) / maxf(tangential_retain, 0.0001)) < want:
+			lo = mid
+		else:
+			hi = mid
+	var side: float = 1.0 if turn >= 0.0 else -1.0
+	var blade: Vector2 = travel.rotated(side * 0.5 * (lo + hi))
+	var n := Vector2(-blade.y, blade.x)
+	if n.dot(travel) > 0.0:
+		n = -n
+	return Vector3(n.x, 0.0, n.y)
 
 # A catch the hands nearly held, in the receiver's frame (`relative_velocity`,
 # puck − receiver): the face takes it as a deflect does, but a blade reaching to
@@ -140,18 +196,25 @@ static func reflect_with_friction(
 # ShotMechanics.loft_y by Puck.apply_blade_deflect). Positive lifts, negative
 # drives the puck down, zero keeps it flat.
 #
-# The loft level names the direction, as it does for a shot: FLAT and LOW tip
-# DOWN, MID and HIGH tip UP. A puck already on the ice has no down to go, so a
-# down tip there stays flat. The sign is the player's stated intent, never
-# puck-vs-blade geometry at the contact, so two identical contacts cannot flip
-# outcome on a centimetre of height.
+# The loft level names the tip as it names a shot: FLAT tips DOWN (a puck
+# already on the ice has no down to go, so it stays flat), and LOW, MID and HIGH
+# tip UP at their own launch speed, lowest to highest. The level is the
+# player's stated intent, never puck-vs-blade geometry at the contact, so two
+# identical contacts cannot flip outcome on a centimetre of height.
 static func deflect_loft_speed(
 		elevation_level: int,
-		up_speed: float,
+		low_speed: float,
+		mid_speed: float,
+		high_speed: float,
 		down_speed: float,
 		puck_airborne: bool) -> float:
-	if elevation_level >= ShotMechanics.ELEVATION_MID:
-		return up_speed
+	match elevation_level:
+		ShotMechanics.ELEVATION_LOW:
+			return low_speed
+		ShotMechanics.ELEVATION_MID:
+			return mid_speed
+		ShotMechanics.ELEVATION_HIGH:
+			return high_speed
 	return -down_speed if puck_airborne else 0.0
 
 # Analytic board-containment rescue: the velocity for a puck the engine let
