@@ -320,15 +320,14 @@ func _step_tick(delta: float) -> void:
 				# stale-view rewind makes a legit grab miss. Poke / stick-lift / hit
 				# claims report the same adapted delay for the same reason.
 				# Send the blade geometry WE reached with (client-authoritative aim):
-				# curr + one-tick-prior blade for the host's swept test, plus the
-				# top-hand grip for the reception face-normal. The host reach-clamps
-				# them to our server-authoritative body. blade_pos_for_claim is this
-				# frame's blade contact; get_prev_blade_contact_global is last tick's.
+				# curr + one-tick-prior blade for the host's swept test and its
+				# catch read. The host reach-clamps them to our server-authoritative
+				# body. blade_pos_for_claim is this frame's blade contact;
+				# get_prev_blade_contact_global is last tick's.
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
 					NetworkManager.get_interpolation_delay() * 1000.0,
-					blade_pos_for_claim, skater.get_prev_blade_contact_global(),
-					skater.upper_body_to_global(skater.get_top_hand_position()))
+					blade_pos_for_claim, skater.get_prev_blade_contact_global())
 				# Optimistic visual-only attach for uncontested pickups: pins the
 				# puck to our blade immediately so the grab feels instant, rolling
 				# back if the host doesn't confirm. Idempotent + self-gating, so

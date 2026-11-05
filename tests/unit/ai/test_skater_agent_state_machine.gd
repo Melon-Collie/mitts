@@ -1154,9 +1154,9 @@ func test_receiver_gives_with_a_hot_incoming_feed() -> void:
 	# (Mode B) never engages — this pins the plain reception path.
 	sm._state = Agent.State.CHASE_PUCK
 	var s := _loose_puck_snap(Vector3(-10, 0, 15))
-	s.puck_state.velocity = Vector3(18, 0, 0)
+	s.puck_state.velocity = Vector3(23, 0, 0)
 	_add_skater(s, SELF_ID, Vector3(0, 0, 15))
-	s.skater_states[SELF_ID].velocity = Vector3(-4, 0, 0)   # charging the feed
+	s.skater_states[SELF_ID].velocity = Vector3(-5, 0, 0)   # charging the feed
 	s.skater_states[SELF_ID].facing = Vector2(-1, 0)
 	var i := InputState.new()
 	sm.dispatch(i, s)

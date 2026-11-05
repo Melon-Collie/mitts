@@ -627,10 +627,12 @@ var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
 var _reception := SkaterAgentReception.new()
 var _one_timer := SkaterAgentOneTimer.new()
-# The FINISHER's raised blade (stick_lift_held, to tip an elevated shot) is set
-# only on dispatch ticks, so it is replayed on skipped ticks — otherwise it strobes
-# 1-in-dispatch_period and the lift blend never leaves ~0 on the slower tiers.
+# The FINISHER's tip (stick_lift_held, the deflect, and the loft level that signs
+# it) is set only on dispatch ticks, so it is replayed on skipped ticks —
+# otherwise it strobes 1-in-dispatch_period, re-pressing the deflect each
+# dispatch and tipping a contact on a skipped tick the wrong way.
 var _cached_stick_lift_held: bool = false
+var _cached_elevation_level: int = 0
 # Same for the brake (pivot / arrival stops), the stance (pivot cuts) and the
 # body-check commit: set only on dispatch ticks, so without the replay a
 # lower tier — dispatching every 6–9 ticks — would hold them for one tick in N.
@@ -985,6 +987,8 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 		_dispatch_skip_counter -= 1
 		input.move_vector = _cached_move_vector
 		input.stick_lift_held = _cached_stick_lift_held
+		if _cached_stick_lift_held:
+			input.elevation_level = _cached_elevation_level
 		input.brake = _cached_brake
 		input.stance_held = _cached_stance_held
 		input.hit_held = _cached_hit_held
@@ -1048,6 +1052,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 
 	_cached_move_vector = input.move_vector
 	_cached_stick_lift_held = input.stick_lift_held
+	_cached_elevation_level = input.elevation_level
 	_cached_brake = input.brake
 	_cached_stance_held = input.stance_held
 	_cached_hit_held = input.hit_held
@@ -1156,12 +1161,13 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# Hit held delivers the FULL transfer AIBodyCheck's predicted_impulse
 			# assumed (an uncommitted drive lands only the passive fraction).
 			input.hit_held = true
-		# FINISHER raises its blade to tip an incoming ELEVATED on-net shot; the
-		# press takes the blade to the puck's height. Met in the air already, it
-		# needs only LOW's lift to stay under the bar.
-		input.stick_lift_held = decision.lift_blade
-		if decision.lift_blade:
-			input.elevation_level = ShotMechanics.ELEVATION_LOW
+		# FINISHER holds the deflect to tip an incoming shot; the loft level names
+		# the tip (Puck.apply_blade_deflect): LOW lifts a shot on the ice over the
+		# pad, FLAT knocks a raised one down.
+		input.stick_lift_held = decision.deflect
+		if decision.deflect:
+			input.elevation_level = ShotMechanics.ELEVATION_LOW if decision.deflect_up \
+					else ShotMechanics.ELEVATION_FLAT
 		# Preserve one-timer readiness through pass flights: with no carrier,
 		# FINISHER can't score the feed and reports "not ready", though the stance
 		# hasn't moved — dropping the flag there would stop the trigger firing when

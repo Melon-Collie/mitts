@@ -418,7 +418,8 @@ func _cushion_from_rendered(skater: Skater, hold_s: float) -> void:
 		return
 	var relative_vel: Vector3 = rendered_loose_velocity - skater.velocity
 	var catch_load: float = PuckReceptionRules.reception_load(rendered_loose_velocity,
-			skater.velocity, skater.get_blade_face_normal(relative_vel),
+			skater.velocity, path_offset_for(skater, puck.get_puck_position(), relative_vel,
+					skater.get_blade_contact_global()),
 			puck.deflect_min_speed * skater.reception_ceiling_mult,
 			puck.alignment_receive_bonus * skater.reception_ceiling_mult)
 	if hold_s < 0.0:
@@ -458,18 +459,15 @@ func stage_scripted(pos: Vector3) -> void:
 	_prev_puck_pos = puck.get_puck_position()
 
 
-# The reception load past which `skater`'s catch of a puck at `puck_pos`, coming
-# at `relative_velocity` in his frame, bobbles: by where its path meets the
-# blade between `blade_mid` and the shaft's `top_hand`. The claim resolver
-# passes the claim's own blade, so both verdicts read one blade.
-func bobble_load_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vector3,
-		blade_mid: Vector3, top_hand: Vector3) -> float:
-	var axis: Vector3 = PuckReceptionRules.blade_axis(blade_mid, top_hand,
-			-skater.global_transform.basis.z)
-	return PuckReceptionRules.bobble_load_at(
-			PuckReceptionRules.blade_contact_offset(puck_pos, relative_velocity,
-					blade_mid, axis, skater.blade_length * 0.5),
-			puck.bobble_load, puck.bobble_edge_share)
+# How far off the path of a puck at `puck_pos`, coming at `relative_velocity` in
+# `skater`'s frame, his blade's middle `blade_mid` sits
+# (PuckReceptionRules.path_offset) — what his catch, its load and its bobble line
+# are read off. The claim resolver passes the claim's own blade, so every
+# verdict reads one blade.
+func path_offset_for(skater: Skater, puck_pos: Vector3, relative_velocity: Vector3,
+		blade_mid: Vector3) -> float:
+	return PuckReceptionRules.path_offset(puck_pos, relative_velocity, blade_mid,
+			skater.blade_length * 0.5, PICKUP_RADIUS)
 
 
 # Lag-comp counterpart for the bobble verdict: idempotent as the deflect's
@@ -618,7 +616,7 @@ func _contest_blade_velocity(skater: Skater, raw_blade_vel: Vector3) -> Vector3:
 # other half of a contest. Returns the first such skater (excluding `first`), or
 # null. Same eligibility gauntlet as the main pickup loop, minus the deflect
 # branches: a blade that would only tip the puck (lifted / deflect intent /
-# too-fast-or-poorly-angled) isn't corralling, so it isn't a possession contest.
+# too fast for how near the line it is) isn't corralling, so it isn't a possession contest.
 # Host present-time only, and only invoked at the rare instant a pickup is about
 # to be granted, so it adds no per-tick cost on the common no-pickup path.
 func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector3,
@@ -644,13 +642,11 @@ func _find_contesting_corraller(first: Skater, skaters: Array, puck_curr: Vector
 				blade_prev, blade_curr, PICKUP_RADIUS):
 			continue
 		var puck_vel: Vector3 = puck.get_puck_velocity()
-		# Face normal opposes the approach in the RECEIVER'S frame — same
-		# relative velocity the receive decision judges (see should_receive).
-		var relative_vel: Vector3 = puck_vel - skater.velocity
-		var blade_face_normal: Vector3 = skater.get_blade_face_normal(relative_vel)
-		# Deflect ceiling + squared bonus lean with the RECEIVER's blade curve
+		var offset: float = path_offset_for(skater, puck_curr, puck_vel - skater.velocity,
+				blade_curr)
+		# Deflect ceiling + on-the-line bonus lean with the RECEIVER's blade curve
 		# (Skater.reception_ceiling_mult); the always-catches floor does not.
-		if PuckReceptionRules.should_receive(puck_vel, skater.velocity, blade_face_normal,
+		if PuckReceptionRules.should_receive(puck_vel, skater.velocity, offset,
 				puck.pickup_max_speed,
 				puck.deflect_min_speed * skater.reception_ceiling_mult,
 				puck.alignment_receive_bonus * skater.reception_ceiling_mult):
@@ -781,25 +777,24 @@ func _check_interactions() -> void:
 					puck.apply_blade_deflect(skater)
 					break
 				var puck_vel: Vector3 = puck.get_puck_velocity()
-				# Face normal opposes the approach in the RECEIVER'S frame — the
-				# same relative velocity the receive decision judges.
+				# Judged in the RECEIVER'S frame, by how near his blade is to the
+				# puck's path there.
 				var relative_vel: Vector3 = puck_vel - skater.velocity
-				var blade_face_normal: Vector3 = skater.get_blade_face_normal(relative_vel)
+				var offset: float = path_offset_for(skater, puck_curr, relative_vel, blade_curr)
 				if PuckReceptionRules.should_receive(
 						puck_vel,
 						skater.velocity,
-						blade_face_normal,
+						offset,
 						puck.pickup_max_speed,
 						puck.deflect_min_speed * skater.reception_ceiling_mult,
 						puck.alignment_receive_bonus * skater.reception_ceiling_mult):
 					var catch_load: float = PuckReceptionRules.reception_load(
-							puck_vel, skater.velocity, blade_face_normal,
+							puck_vel, skater.velocity, offset,
 							puck.deflect_min_speed * skater.reception_ceiling_mult,
 							puck.alignment_receive_bonus * skater.reception_ceiling_mult)
 					# Nearly held: it bobbles by his stick, nobody's yet.
-					var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
-							skater.get_blade_contact_global(), skater.top_hand.global_position)
-					if catch_load >= bobble_at:
+					if catch_load >= PuckReceptionRules.bobble_load_at(
+							offset, puck.bobble_load, puck.bobble_edge_share):
 						puck.apply_reception_bobble(skater)
 						break
 					# If a second blade would ALSO corral this same tick (a faceoff

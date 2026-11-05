@@ -1369,12 +1369,17 @@ func test_tip_needs_a_blade_the_shot_line_actually_crosses() -> void:
 			"an unreachable flight is not tippable")
 
 
-func test_tip_needs_deflect_pace() -> void:
-	# Below the deflect threshold (Puck.deflect_min_speed mirror) the puck
-	# lands on the tape as a catch — a pass, not a tip.
+func test_tip_needs_shot_pace() -> void:
+	# The tipper holds the deflect, so any pace tips — but under the pace the
+	# finisher reads as a shot (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S) he never
+	# goes to tip it.
 	var none: Array[Vector3] = []
-	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
+	var gate: float = AIActionScoring.TIP_MIN_SPEED_M_S
+	assert_eq(AIRoleFinisher.INCOMING_SHOT_SPEED_M_S, gate, "the tip is priced where it is played")
+	assert_eq(_tip_fixture(Vector3(0.0, 0.0, 24.0), gate - 1.0, none), 0.0,
 			"a soft feed is a pass, not a tip")
+	assert_gt(_tip_fixture(Vector3(0.0, 0.0, 24.0), 18.0, none), 0.0,
+			"a wrister under the old catch ceiling is tipped all the same")
 
 
 func test_lane_clear_accurate_never_reads_a_crossing_defender_clearer() -> void:

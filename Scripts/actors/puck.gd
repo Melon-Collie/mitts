@@ -25,19 +25,20 @@ signal puck_hit_goal_body  # uncarried puck struck net panel or skirt (non-pipe 
 @export var ice_height: float = GameRules.PUCK_COLLISION_HALF_HEIGHT  # disc bottom rests on y=0
 @export var pickup_max_speed: float = 8.0
 # Catch ceiling in the RECEIVER'S frame (puck velocity − skater velocity): 22 ≈
-# 49 mph closing catches at any blade angle, and alignment_receive_bonus lifts
-# it to 30 for a squared blade. Calibrated to real reception, not to game pass
-# speeds — force math on PuckReceptionRules.should_receive.
+# 49 mph closing catches with the blade at the rim of its reach, and
+# alignment_receive_bonus lifts it to 30 with the blade on the puck's line
+# (PuckReceptionRules.path_offset). Calibrated to real reception, not to game
+# pass speeds — force math on PuckReceptionRules.should_receive.
 @export var deflect_min_speed: float = 22.0
 # A catch whose reception load is above settle_clean_load leaves the receiver
 # settling — no on-puck action — for up to settle_max_s at the ceiling. 0.30 is
-# clean to ~12 m/s on a poorly angled blade (docs/stick-settling-plan.md).
+# clean to ~12 m/s at the rim, ~16 on the line (docs/stick-settling-plan.md).
 var settle_clean_load: float = 0.30
 var settle_max_s: float = 0.40
-# Past bobble_load (less bobble_edge_share of it at the toe or heel —
+# Past bobble_load (less bobble_edge_share of it at the rim of the reach —
 # PuckReceptionRules.bobble_load_at) the catch fails softly instead
-# (apply_reception_bobble). 0.67 is ~18 m/s on a poorly angled blade at the
-# middle, ~14 at the toe — the spread of the NHL failed-reception means
+# (apply_reception_bobble). 0.67 is ~24.6 m/s with the blade on the puck's line,
+# ~14 at the rim — the NHL failed-reception means (13–22) fall between
 # (docs/stick-settling-plan.md).
 var bobble_load: float = 0.67
 var bobble_edge_share: float = 0.4

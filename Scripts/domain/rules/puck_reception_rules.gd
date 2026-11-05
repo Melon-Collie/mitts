@@ -13,59 +13,58 @@ class_name PuckReceptionRules
 # instead of a stick gesture.
 #
 #   pickup_max_speed:    relative speed below which pickup always succeeds
-#   deflect_min_speed:   relative-speed threshold for a poorly-angled blade
-#   alignment_bonus:     extra m/s tolerated when the blade face is square to
-#                        the incoming line (in the receiver's frame) — squaring
-#                        up is what lets a blade corral a hard puck.
+#   deflect_min_speed:   relative-speed threshold for a blade reaching off the line
+#   offset:              how far off the puck's path in the receiver's frame
+#                        the blade sits (path_offset: 0 on it, 1 at the rim)
+#   alignment_bonus:     extra m/s tolerated at offset 0 — getting the blade
+#                        onto the line is what lets it corral a hard puck,
+#                        whichever way the face happens to point.
 #
 # Calibration (relative frame, grounded in real reception, not game constants):
 # a catch means the blade isn't blown open while the hands absorb ~m·v²/2d over
 # d ≈ 0.25 m of natural give against the ~150–250 N a wrist-held blade can
 # resist (170 g puck: ~136 N at 22 m/s, ~267 N at 28 — blown open). That force
 # ceiling matches observed hockey: pros routinely handle ~45–50 mph feeds
-# (20–22 m/s) and treat ~60+ mph contact as a knock-down even when squared, and
+# (20–22 m/s) and treat ~60+ mph contact as a knock-down even on the line, and
 # real receivers usually close a few m/s on the pass, so the world-frame
 # anecdotes sit slightly BELOW the relative-frame capability. Hence the
-# defaults: deflect_min 22 (any-angle ceiling ≈ 49 mph closing) + bonus 8
-# (squared ceiling 30 ≈ 67 mph closing).
+# defaults: deflect_min 22 (a blade at the rim of its reach ≈ 49 mph closing) +
+# bonus 8 (on the line, 30 ≈ 67 mph closing).
 #
-# Reception is still REACTIVE: relative speed and blade angle at contact,
-# nothing else — deliberately no blade-velocity / cushion term (a preemptive
-# backswing gesture felt fiddly and unintuitive). The skater's own velocity is
-# a frame correction, not a gesture: it changes what "incoming speed" means,
-# it doesn't reward stick wind-up.
+# Reception is still REACTIVE: relative speed and where the blade sits against
+# the puck's path at contact, nothing else — deliberately no blade-velocity /
+# cushion term (a preemptive backswing gesture felt fiddly and unintuitive). The
+# skater's own velocity is a frame correction, not a gesture: it changes what
+# "incoming speed" means, it doesn't reward stick wind-up.
 static func should_receive(
 		puck_velocity: Vector3,
 		receiver_velocity: Vector3,
-		blade_normal: Vector3,
+		offset: float,
 		pickup_max_speed: float,
 		deflect_min_speed: float,
 		alignment_bonus: float) -> bool:
 	if (puck_velocity - receiver_velocity).length() <= pickup_max_speed:
 		return true
-	return reception_load(puck_velocity, receiver_velocity, blade_normal,
+	return reception_load(puck_velocity, receiver_velocity, offset,
 			deflect_min_speed, alignment_bonus) < 1.0
 
 
 # Pure: the share of the blade's catch capacity this contact uses —
 # (relative speed / catch ceiling)², squared because the hands soak the puck's
 # energy (the model should_receive is calibrated on). Below 1 the blade holds
-# it; 1 is the ceiling. The ceiling is should_receive's: the any-angle floor
-# plus the alignment bonus for a blade squared to the relative incoming line.
+# it; 1 is the ceiling. The ceiling is should_receive's: the floor plus the
+# alignment bonus by how near the blade is to the puck's path (`offset`).
 static func reception_load(
 		puck_velocity: Vector3,
 		receiver_velocity: Vector3,
-		blade_normal: Vector3,
+		offset: float,
 		deflect_min_speed: float,
 		alignment_bonus: float) -> float:
-	var relative_velocity: Vector3 = puck_velocity - receiver_velocity
-	var relative_speed: float = relative_velocity.length()
+	var relative_speed: float = (puck_velocity - receiver_velocity).length()
 	if relative_speed < 0.001:
 		return 0.0
-	# -relative_dir points from puck toward the blade; dot with the face normal =
-	# squareness. Negative (puck moving away from the face) clamps to 0, no bonus.
-	var alignment: float = maxf(0.0, -(relative_velocity / relative_speed).dot(blade_normal))
-	var threshold: float = deflect_min_speed + alignment_bonus * alignment
+	var threshold: float = deflect_min_speed \
+			+ alignment_bonus * (1.0 - clampf(offset, 0.0, 1.0))
 	if threshold <= 0.0:
 		return INF
 	var ratio: float = relative_speed / threshold
@@ -84,11 +83,9 @@ static func settle_time(catch_load: float, clean_load: float, max_s: float) -> f
 # Pure: horizontal unit vector perpendicular to the stick shaft (top_hand →
 # blade_contact), picking the face that opposes reference_velocity (i.e. faces
 # an incoming puck). `fallback_stick_dir` is used as the shaft direction when the
-# hand and blade are coincident (degenerate). Shared by Skater.get_blade_face_normal
-# (live geometry) and the lag-comp pickup resolver (rewound snapshot geometry) so
-# the catch-vs-deflect decision judges against ONE definition of "blade face".
-# For the receive decision, pass the RELATIVE velocity (puck − receiver) as the
-# reference so the face opposes the approach in the receiver's frame.
+# hand and blade are coincident (degenerate). The face a deflect or a bobble
+# comes off (Skater.get_blade_face_normal); whether the blade catches is read
+# off the path instead (path_offset).
 static func blade_face_normal(
 		blade_contact: Vector3,
 		top_hand: Vector3,
@@ -115,39 +112,29 @@ static func blade_axis(blade_contact: Vector3, top_hand: Vector3,
 	return stick_horiz.normalized()
 
 
-# A path within this sine of the blade's own line comes in end-on, onto the
-# toe or heel, however near the middle its line passes (~11.5°).
-const END_ON_SIN: float = 0.2
-
-
-# Pure: where along the blade the puck's path meets it, as a share of the half
-# blade from its middle — 0 dead centre, 1 at (or past) the toe or heel. Read
-# off where the path's line crosses the blade's line in the receiver's frame,
-# never off the contact point: the pickup sweep registers at the rim of its
-# radius, which is twice the blade's length across.
-static func blade_contact_offset(puck_pos: Vector3, relative_velocity: Vector3,
-		blade_mid: Vector3, axis: Vector3, half_length: float) -> float:
+# Pure: how far the puck's path passes from the blade's middle, as a share of
+# the reach past the blade — 0 while the path, in the receiver's frame, passes
+# within `half_length` of the middle (it meets the blade, whichever way the
+# blade lies), rising linearly to 1 at `reach` (the pickup radius: the blade only
+# just got to it). Read off the path's line, never off the contact point: the
+# pickup sweep registers at the rim of its radius, wherever the blade was aimed.
+static func path_offset(puck_pos: Vector3, relative_velocity: Vector3,
+		blade_mid: Vector3, half_length: float, reach: float) -> float:
 	var speed: float = Vector2(relative_velocity.x, relative_velocity.z).length()
-	if speed < 0.001 or half_length <= 0.0:
+	if speed < 0.001 or reach <= half_length:
 		return 0.0
-	var dx: float = relative_velocity.x / speed
-	var dz: float = relative_velocity.z / speed
-	var sin_cross: float = axis.x * dz - axis.z * dx
-	if absf(sin_cross) < END_ON_SIN:
-		return 1.0
-	var wx: float = puck_pos.x - blade_mid.x
-	var wz: float = puck_pos.z - blade_mid.z
-	var along: float = (wx * dz - wz * dx) / sin_cross
-	return clampf(absf(along) / half_length, 0.0, 1.0)
+	var miss: float = absf((puck_pos.x - blade_mid.x) * relative_velocity.z
+			- (puck_pos.z - blade_mid.z) * relative_velocity.x) / speed
+	return clampf((miss - half_length) / (reach - half_length), 0.0, 1.0)
 
 
-# Pure: the reception load past which a catch whose path meets the blade at
-# `contact_offset` bobbles instead of holding. Off centre the impact twists the
-# blade in the hands (the puck "slides off the toe"), so the edge holds less:
-# `bobble_load` at the middle, less `edge_share` of it at the toe or heel.
-static func bobble_load_at(contact_offset: float, bobble_load: float,
+# Pure: the reception load past which a catch at `offset` (path_offset) bobbles
+# instead of holding. A blade reaching off the line meets the puck on its toe or heel,
+# where the impact twists it in the hands, so a reach holds less: `bobble_load`
+# on the line, less `edge_share` of it at the rim of the reach.
+static func bobble_load_at(offset: float, bobble_load: float,
 		edge_share: float) -> float:
-	return bobble_load * (1.0 - edge_share * contact_offset * contact_offset)
+	return bobble_load * (1.0 - edge_share * offset * offset)
 
 
 # Pure on-ice/off-ice gate: a blade only interacts with pucks on its own

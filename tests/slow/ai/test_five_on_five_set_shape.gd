@@ -28,10 +28,10 @@ extends GutTest
 # known.
 #   v8.5/z20/c6, v8.5/z24/c6 — the 3-on-2 carried in down the middle: a straight
 #   retreat makes our line 1.7 m goal-side, the far D arrives 1.1 m short: #899.
-#   v8.5/z20/c-6 — the same rush from the other side: one back at entry, the
-#   shot from 18.6 m, nobody behind the line: #899.
-const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6", "v8.5/z20/c-6"]
-const KNOWN_SLOT_SHOTS: Array[String] = []
+#   In v8.5/z24/c6 the odd man left behind it takes his feed clean and shoots
+#   from the slot.
+const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6"]
+const KNOWN_SLOT_SHOTS: Array[String] = ["v8.5/z24/c6"]
 const MAX_OPEN_SHARE: float = 0.15
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")

@@ -3246,14 +3246,14 @@ func _on_pickup_claim_rejected() -> void:
 
 
 func _on_pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,
-		input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3, top_hand: Vector3) -> void:
+		input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3) -> void:
 	if not NetworkManager.is_host:
 		return
 	_deferred_claims.submit(
 			LagCompRewind.self_view_time(host_timestamp, input_lead_ms),
 			_state_buffer_manager.newest_host_timestamp(),
 			_pickup_claim.receive_claim,
-			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev, top_hand])
+			[peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev])
 
 
 func _on_poke_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float,

@@ -494,7 +494,7 @@ const STICK_LIFT_RADIUS_M: float = 0.45
 #   wrister 33 m/s ≈ 74 mph  (~36.4 ≈ 81 mph strongest, ~29.0 ≈ 65 mph weakest)
 #   slapper 40 m/s ≈ 89 mph  (~48.2 ≈ 108 mph / ~32.1 ≈ 72 mph)
 # Reception already gates hard shots (above deflect_min_speed ~22 m/s
-# receiver-relative needs a squared blade), so most of the wrister band is
+# receiver-relative needs the blade on the puck's line), so most of the wrister band is
 # catch-with-care territory.
 # The slapper min is a hurried, barely-wound release — still a heavy shot
 # (~45 mph); one-timers always fire at max regardless of charge.

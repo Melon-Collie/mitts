@@ -101,7 +101,7 @@ var blade_hosel_length: float = 0.085
 # (_apply_blade_tilt).
 var blade_lie_deg: float = 43.3
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
-# reception decision sites scale the puck's league deflect ceiling + squared
+# reception decision sites scale the puck's league deflect ceiling + on-the-line
 # bonus by this — a flatter pattern soaks a harder feed. Set by
 # SkaterController.apply_attributes; never touches pickup_max_speed (the
 # always-catches floor stays build-independent, which keeps the client's
@@ -730,10 +730,10 @@ var pin_strength: float = 0.0
 var is_diving: bool = false
 var dive_laid_out: bool = false
 var dive_layout: Vector2 = Vector2(0.0, -1.0)
-# Deliberate-deflect intent: a human holding the deflect button (stick_lift, Q)
-# WITHOUT the puck — "redirect this, don't catch it." Set each tick by the
-# controller (SkaterController._wants_deflect) and read host-side by PuckController's
-# loose-puck gate. Recomputed from replayed inputs, so never replicated; bots never set it.
+# Deliberate-deflect intent: holding the deflect button (stick_lift, Q) WITHOUT
+# the puck — "redirect this, don't catch it." Set each tick by the controller
+# (SkaterController._wants_deflect) and read host-side by PuckController's
+# loose-puck gate. Recomputed from replayed inputs, so never replicated.
 var deflect_intent: bool = false
 # Share of blade_lift_height a deflect's press read the puck at (DeflectReachRules).
 var deflect_lift_share: float = 0.0
