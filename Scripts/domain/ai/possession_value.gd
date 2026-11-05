@@ -2,26 +2,29 @@ class_name AIPossessionValue
 extends RefCounted
 
 # What the puck at a spot is worth to the side attacking `goal`, in the shot
-# field's unit — the odds of the first shot that side gets to from it, against
-# the defence as it stands:
+# field's unit: the better of the continuation — keeping it there
+# (base_at, docs/possession-floor-plan.md §2.2) — and the first shot that side
+# gets to from it, against the defence as it stands:
 #
-#   in the zone   the best of the shot from here, one straight drive in, and
-#                 the best zone entry, as outside it
-#   outside it    the best zone entry × the skate there × the race to it
+#   in the zone   the shot from here, one straight drive in, and the best zone
+#                 entry, as outside it
+#   outside it    the best zone entry
 #
-# A drive is worth the shot where it ends × the odds of keeping the puck that
-# far × the delay discount of the skate. An entry is worth the better of its
-# shot and the drive in from it, × the skate there — its delay discount, and the
-# odds he keeps the puck on it (_skate_keep) — × the race to it: the side's man
-# from the spot against the defence's first arrival (AIActionScoring
-# .arrival_race, its band widened by the arrival clock's error). Entry worths
-# depend only on fill()'s defence, so each is priced once per fill, and only
-# when a read could use it: its worth on empty ice, which a defence only lowers,
-# bounds it until then.
+# A drive is the odds of keeping the puck to where it ends × the shot there. An
+# entry is the better of its shot and the drive in from it, × the skate there —
+# the odds he keeps the puck on it (_skate_keep) — × the race to it: the side's
+# man from the spot against the defence's first arrival (AIActionScoring
+# .arrival_race, its band widened by the arrival clock's error). A read that
+# does not come off leaves him the continuation where he stands (_taken); one
+# that does is worth the continuation where it ends plus a premium that decays
+# with the time it takes (_toward), so standing still never pays. Entry
+# worths depend only on fill()'s defence, so each is priced once per fill, and
+# only when a read could use it: its worth on empty ice, which a defence only
+# lowers, bounds it until then.
 #
 # Every shot is against a keeper who tracked the play: set and square
 # (AIShotValue.set_keeper). Not modelled: passes — one man carries — and where
-# the defence will be by the time he gets anywhere.
+# the defence will be by the time he gets anywhere, beyond dead reckoning.
 
 # Where a side enters: a stride past the line, in the middle and in each wall lane.
 const ENTRY_LEAD_M: float = 3.0
@@ -38,10 +41,11 @@ const GOALIE_MEMO_CAP: int = 32
 # the same entries against the same defence in one AI batch. Round-robin past
 # this many defences.
 const SHARED_ENTRY_SLOTS: int = 4
-# The least at() returns, for either side. A turnover hands the other side its
-# possession, so this is the most a turnover can ever pay the side that loses
-# the puck: the bound the searches' exact prunes add to a total's gains.
-const LEAST_VALUE: float = 0.0
+# The least at() returns, for either side: losing the puck where the other side's
+# continuation is at its most. A turnover hands the other side its possession,
+# so this is the most a turnover can ever pay the side that loses the puck: the
+# bound the searches' exact prunes add to a total's gains.
+const LEAST_VALUE: float = -AIPossessionFloor.MOST_CONTINUATION
 
 
 # One defence's entry worths, keyed on the exact ice they were priced against.
@@ -73,14 +77,27 @@ static var _shared: Array[_SharedEntries] = []
 static var _shared_next: int = 0
 
 var _goal: Vector3 = Vector3.ZERO
+# The goal the other side attacks: its continuation is read for it (a puck lost).
+var _opp_goal: Vector3 = Vector3.ZERO
 var _defenders: Array[Vector3] = []
 var _defender_vels: Array[Vector3] = []
 var _defender_caps: Array = []
 var _entry_spots: Array[Vector3] = []
 var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
+# The most each entry's continuation can read (base_ceiling), its bound until
+# the read is made.
+var _entry_base_max: Array[float] = []
 var _projected: Array[Vector3] = []
 var _shot_defence: Array[Vector3] = []
 var _skate_defence: Array[Vector3] = []
+var _base_defence: Array[Vector3] = []
+# The last _drive: where it ends, when and how fast he gets there, the odds he
+# keeps the puck that far, and the shot there (0 kept: no drive).
+var _drive_end: Vector3 = Vector3.ZERO
+var _drive_end_s: float = 0.0
+var _drive_end_vel: Vector3 = Vector3.ZERO
+var _drive_keep: float = 0.0
+var _drive_shot: float = 0.0
 # The entries' worth on empty ice at _open_goal: _worth's bound.
 var _open_goal: Vector3 = Vector3.INF
 var _open_worth: Array[float] = []
@@ -113,6 +130,7 @@ var _slot_generation: int = -1
 func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3],
 		defender_caps: Array, in_zone_only: bool = false) -> void:
 	_goal = goal
+	_opp_goal = Vector3(-goal.x, goal.y, -goal.z)
 	_defenders = defenders
 	_defender_vels = defender_vels
 	_defender_caps = defender_caps
@@ -124,14 +142,17 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_memo_next = 0
 	_entry_spots.clear()
 	_entry_worth.clear()
+	_entry_base_max.clear()
 	_slot = null
 	if in_zone_only:
 		return
 	var z: float = signf(goal.z) * (GameRules.BLUE_LINE_Z + ENTRY_LEAD_M)
 	var wide_x: float = GameRules.RINK_HALF_WIDTH - ENTRY_WALL_INSET_M
 	for x: float in [-wide_x, 0.0, wide_x]:
-		_entry_spots.append(Vector3(x, 0.0, z))
+		var spot := Vector3(x, 0.0, z)
+		_entry_spots.append(spot)
 		_entry_worth.append(-1.0)
+		_entry_base_max.append(base_ceiling(spot))
 	if goal != _open_goal:
 		_price_open()
 
@@ -139,28 +160,40 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 # The puck at `pos` for the side fill() priced, its man there `start_s` from now
 # and moving at `vel` (his skate to an entry or down the drive starts from it).
 func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> float:
-	var best: float = 0.0
+	var base: float = base_at(pos, start_s, vel)
+	var best: float = base
 	if AIActionScoring.in_offensive_zone(pos, _goal):
-		best = maxf(_shot(pos) * AIActionScoring.delay_discount(start_s),
-				_drive(pos, start_s, vel))
-	return entry_at(pos, start_s, vel, best)
+		best = maxf(best, _toward(base, _shot(pos), start_s))
+		_drive(pos, start_s, vel)
+		if _drive_keep > 0.0 and _taken(base, _drive_keep,
+				_toward(base_ceiling(_drive_end), _drive_shot, _drive_end_s)) > best:
+			best = maxf(best, _taken(base, _drive_keep, _toward(
+					base_at(_drive_end, _drive_end_s, _drive_end_vel), _drive_shot, _drive_end_s)))
+	return entry_at(pos, start_s, vel, best, base)
 
 
 # The best zone entry for the man at `pos` (as at() reads him), or `known` when
-# none is worth more: a value already known prunes the entries it beats.
-func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float:
+# none is worth more: a value already known prunes the entries it beats. `base`
+# is his continuation there (base_at; NAN: read it here). An entry's own
+# continuation is only bounded (_entry_base_max) until it could win.
+func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
+		base: float = NAN) -> float:
 	var best: float = known
 	for i: int in _entry_spots.size():
-		var t: float = start_s + AIArrival.time_to_arrive(pos, _entry_spots[i], vel)
-		var discount: float = AIActionScoring.delay_discount(t)
-		if _open_worth[i] * discount <= best:
+		var skate_s: float = AIArrival.time_to_arrive(pos, _entry_spots[i], vel)
+		var t: float = start_s + skate_s
+		var base_max: float = _entry_base_max[i]
+		if _toward(base_max, _open_worth[i], t) <= best:
 			continue
-		var timed: float = _worth(i) * discount
+		var worth: float = _worth(i)
+		var timed: float = _toward(base_max, worth, t)
 		if timed <= best:
 			continue
-		timed *= AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
+		if is_nan(base):
+			base = base_at(pos, start_s, vel)
+		var race: float = AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
 				_defender_vels, true)
-		if timed <= best:
+		if _taken(base, race, timed) <= best:
 			continue
 		var defence: Array[Vector3] = _defenders
 		if start_s > 0.0:
@@ -169,8 +202,67 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float) -> float
 				_skate_defence.append(AITrajectory.predict_at(_defenders[k],
 						_defender_vels[k], start_s))
 			defence = _skate_defence
-		best = maxf(best, timed * _skate_keep(pos, _entry_spots[i], vel, defence))
+		var kept: float = race * _skate_keep(pos, _entry_spots[i], vel, defence)
+		if _taken(base, kept, timed) <= best:
+			continue
+		best = maxf(best, _taken(base, kept, _toward(base_at(_entry_spots[i], t,
+				_arrive_vel(pos, _entry_spots[i], skate_s)), worth, t)))
 	return best
+
+
+# ── The continuation (docs/possession-floor-plan.md §2.2) ────────────────────
+
+# Keeping the puck at `pos`, the man there `start_s` from now moving at `vel`:
+#
+#   keep · C(pos) − (1 − keep) · C_opp(pos)
+#
+# C the side's continuation (AIPossessionFloor), C_opp the other side's for a
+# puck lost where he holds it, keep his evadability there (AICarrySpace
+# .evade_safety, the league carry-handle) against the defence carried on to then.
+func base_at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> float:
+	var c: float = AIPossessionFloor.continuation(pos, _goal)
+	var c_opp: float = AIPossessionFloor.continuation(pos, _opp_goal)
+	var defence: Array[Vector3] = _defenders
+	if start_s > 0.0:
+		_base_defence.clear()
+		for k: int in _defenders.size():
+			_base_defence.append(AITrajectory.predict_at(_defenders[k], _defender_vels[k],
+					start_s))
+		defence = _base_defence
+	var keep: float = AICarrySpace.evade_safety(pos, vel, defence, _defender_vels,
+			AIBotMechanics.EVADE_CARRY_HANDLE_M, _defender_caps)
+	return keep * c - (1.0 - keep) * c_opp
+
+
+# The most base_at can read at `pos`, whatever the defence: kept, or lost.
+func base_ceiling(pos: Vector3) -> float:
+	return maxf(AIPossessionFloor.continuation(pos, _goal),
+			-AIPossessionFloor.continuation(pos, _opp_goal))
+
+
+# A play that comes off with odds `odds` and is worth `read` when it does, made
+# from where the continuation is `base`: when it does not come off he is left
+# with the puck as the continuation prices it (its own keep odds price losing
+# it). Never above the larger of the two, which is what the prunes bound it by.
+static func _taken(base: float, odds: float, read: float) -> float:
+	return base + odds * (read - base) if read > base else base
+
+
+# A read worth `read` `t` from now of a spot whose continuation is `base`: the
+# premium over the continuation goes stale with the read (delay_discount); the
+# continuation does not. Non-decreasing in `base`.
+static func _toward(base: float, read: float, t: float) -> float:
+	return base + maxf(0.0, read - base) * AIActionScoring.delay_discount(t)
+
+
+# A skate from `from` to `to` in `skate_s`, as it arrives: straight there at the
+# pace that takes, never past the reference skater's top speed.
+static func _arrive_vel(from: Vector3, to: Vector3, skate_s: float) -> Vector3:
+	var leg := Vector3(to.x - from.x, 0.0, to.z - from.z)
+	var d: float = leg.length()
+	if d < 0.001 or skate_s <= 0.0:
+		return Vector3.ZERO
+	return leg * (minf(d / skate_s, AIArrival.SKATER_REF_SPEED_M_S) / d)
 
 
 # The odds the man at `from`, moving at `vel`, keeps the puck on his skate toward
@@ -284,8 +376,11 @@ func _goalie_half(from: Vector3, to: Vector3, keeper: Vector3, speed: float) -> 
 # `vel`:
 # credited as far as the path stays clear and at the odds it is kept that far
 # (AICarrySpace's reachable sets, a man he out-skates beaten — as the carrier's
-# own drive-in is), against the defence carried on to when he sets off.
+# own drive-in is), against the defence carried on to when he sets off. Returns
+# the shot where it ends × those odds × the delay discount of the skate, and
+# leaves the pieces in _drive_* (_drive_keep 0: no drive).
 func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float:
+	_drive_keep = 0.0
 	var to_net := Vector3(_goal.x - from.x, 0.0, _goal.z - from.z)
 	var d: float = to_net.length()
 	if d <= DRIVE_MIN_NET_DIST_M + 0.1:
@@ -310,7 +405,12 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 				_defender_vels, _defender_caps, true, true)
 		if reached != target:
 			t = AIArrival.time_to_arrive(from, reached, vel)
-	return _shot(reached) * keep * AIActionScoring.delay_discount(start_s + t)
+	_drive_end = reached
+	_drive_end_s = start_s + t
+	_drive_end_vel = _arrive_vel(from, reached, t)
+	_drive_keep = keep
+	_drive_shot = _shot(reached)
+	return _drive_shot * keep * AIActionScoring.delay_discount(start_s + t)
 
 
 # ── The defence's read of a man ──────────────────────────────────────────────

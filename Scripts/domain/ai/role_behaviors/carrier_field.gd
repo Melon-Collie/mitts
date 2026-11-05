@@ -447,13 +447,22 @@ func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # what the carrier searches: our possession there (AIPossessionValue), on
 # arrival — its man reaches it `arrive_s` from now moving at `arrive_vel`, and
 # races the defence for the zone from then. The caller discounts the trip there,
-# so the read's own discount of it is divided back out (delay_discount is
-# exponential, so that is exact).
+# so the read's own discount of it is divided back out: delay_discount is
+# exponential, so the caller's restores the read exactly, a look's premium
+# decayed over the whole time and the continuation not at all.
 func horizon_value(pos: Vector3, arrive_s: float = 0.0,
 		arrive_vel: Vector3 = Vector3.ZERO) -> float:
 	if arrive_s <= 0.0:
 		return _ours.at(pos, 0.0, arrive_vel)
 	return _ours.at(pos, arrive_s, arrive_vel) / AIActionScoring.delay_discount(arrive_s)
+
+
+# Keeping the puck at `pos` for our man who reaches it `arrive_s` from now moving
+# at `arrive_vel`, against the defence carried on to then
+# (AIPossessionValue.base_at): no look, no clock.
+func continuation_at(pos: Vector3, arrive_s: float = 0.0,
+		arrive_vel: Vector3 = Vector3.ZERO) -> float:
+	return _ours.base_at(pos, arrive_s, arrive_vel)
 
 
 # Our possession of `pos` for a man who reaches it `arrive_s` from now moving at
@@ -469,14 +478,15 @@ func entry_value(pos: Vector3, start_s: float, vel: Vector3, known: float) -> fl
 	return _ours.entry_at(pos, start_s, vel, known)
 
 
-# The two cases of value_at: `shoot_s` is the shot's odds at `pos`.
+# The two cases of value_at: `shoot_s` is the shot's odds at `pos`. In the zone
+# the shot, or keeping the puck there (continuation_at) when that is worth more.
 func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		shoot_s: float, arrive_s: float = 0.0, arrive_vel: Vector3 = Vector3.ZERO) -> float:
 	if AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
 			or AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos):
-		# Pure odds, with no possession floor: the field's surface does not go flat
-		# where no shot is available right now.
-		return shoot_s
+		if shoot_s >= _ours.base_ceiling(pos):
+			return shoot_s
+		return maxf(shoot_s, continuation_at(pos, arrive_s, arrive_vel))
 	return maxf(shoot_s, horizon_value(pos, arrive_s, arrive_vel))
 
 

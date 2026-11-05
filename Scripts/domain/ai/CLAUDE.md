@@ -37,7 +37,13 @@ The carrier's gains are odds of scoring wherever he stands, so
 `AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
 spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
 with no shot right now is worth — a turnover there, the carrier's search
-horizon — is that one read, for either side. The defence reads
+horizon — is that one read, for either side. It is the better of the live
+reads and the continuation (`AIPossessionValue.base_at`,
+`docs/possession-floor-plan.md`): keeping the puck at a spot is worth a floor
+by position plus a slot bonus, at the odds he can keep it at all, so it reads
+below zero in our own end and a turnover deep in theirs costs nothing. A live
+read's premium over the continuation where it ends goes stale with its time;
+the continuation does not. The defence reads
 a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
 and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
 body pushed onto the read's defence for the one call. The outlet and breakout
@@ -1048,8 +1054,8 @@ reaches back into what remains.
   race's horizon (each man's shot there × the lane against the defence then ×
   the race for its reception, as the pass search races a catch: their first
   body from the release against the feed arriving with our man there):
-  in the shot currency one man behind their goal line has no shot, so without
-  the support a won dump reads as worthless. Never leave that reception
+  the continuation prices a won corner at the zone's floor, and the support
+  is the live, defence-aware half on top of it. Never leave that reception
   unraced: the dump's seconds of flight are when a lone D gets back to his
   house, and a feed priced to a man alone at the post dumps away every 2-on-1.
   **With the numbers there is no dump-in at all** (`RoleContext.numbers_up`):
@@ -1125,10 +1131,10 @@ reaches back into what remains.
   something concrete, and only values a spot where the search stops. One unit
   on both sides of the line: the odds of scoring.
   - *In the zone* (the spot or the carrier) every candidate is priced through
-    the value seam. There is no possession floor: the seam is smooth, so a spot
-    with no shot right now still scores by its distance and angle. Behind the
-    goal line every shot is 0, so a candidate there is worth only the pass
-    OPTION it opens.
+    the value seam, or worth keeping the puck there when that is more
+    (`AICarrierField.continuation_at`, against the defence carried on to his
+    arrival). Behind the goal line every shot is 0, so a candidate there is
+    worth the continuation and the pass OPTION it opens.
   - *Outside it* the carry searches two steps (a rolled move, then each move
     again from where it ends, for the `CARRY_PLY2_WIDTH` best: shoot, pass or
     carry on), pricing the defence it meets on each. Where a line stops outside
@@ -1137,7 +1143,8 @@ reaches back into what remains.
     (the better of the shot and one straight drive in from it, kept as far as
     the carry-safety read allows) × the skate there × the race to it
     (`arrival_race`, its band widened by the arrival clock's own error over the
-    trip). In the zone the same read is the better of the shot and the drive.
+    trip), or the continuation of the spot when no entry beats it. In the zone
+    the same read is the best of those, the shot and the drive.
     The leaf is read on arrival: its man reaches the spot when the line does,
     at the pace he arrives with, and races the defence for the entries from
     then (`horizon_value`'s `arrive_s` / `arrive_vel`). The carry's moves and

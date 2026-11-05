@@ -280,9 +280,9 @@ func _icing_value(ctx: RoleContext, origin: Vector3) -> float:
 
 # Our side and the defence dead-reckoned to the race's horizon, and the shot each
 # of ours who is in their zone by then would get there (0 for one who is not).
-# A won dump is worth the support that arrives with it: in the shot currency a
-# puck behind their goal line is otherwise worth nothing, as one man there
-# carrying has no shot.
+# A won dump is worth the support that arrives with it when that beats our
+# possession of the meet, which a puck behind their goal line holds at the
+# zone's floor.
 func _fill_support(ctx: RoleContext) -> void:
 	var horizon: float = float(STEPS) * STEP_DT
 	_field.project_opponents(horizon, _opp_then)
