@@ -327,6 +327,31 @@ func _report() -> void:
 			_frame, _off_facing(_cursor()), _skater.upper_body.rotation_degrees.y,
 			_skater.lower_body.rotation_degrees.y, top.x, top.y, bottom.x, bottom.y,
 			top_grip.x, top_grip.y, bottom_grip.x, bottom_grip.y])
+	var ub_inv: Basis = _skater.drawn_upper_body().basis.inverse()
+	var body: Skeleton3D = _skater._arms._skeleton
+	var top_back: Vector3 = ub_inv * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.TOP_HAND).basis.z.normalized()
+	var bottom_back: Vector3 = ub_inv * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.BOTTOM_HAND).basis.z.normalized()
+	print("  f%02d elbow ahead of its hand: top %+.2f m bottom %+.2f m | back of glove (fwd, out, up): top %+.1f %+.1f %+.1f bottom %+.1f %+.1f %+.1f" % [
+			_frame, _elbow_ahead(SkaterMeshBuilder.UpperBone.TOP_FOREARM,
+					SkaterMeshBuilder.UpperBone.TOP_HAND),
+			_elbow_ahead(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
+					SkaterMeshBuilder.UpperBone.BOTTOM_HAND),
+			-top_back.z, top_back.x * signf(_skater.shoulder.position.x), top_back.y,
+			-bottom_back.z, bottom_back.x * signf(_skater.bottom_shoulder.position.x),
+			bottom_back.y])
+
+
+# How far the elbow sits ahead of its hand along the chest's facing (m,
+# UpperBody's frame as drawn).
+func _elbow_ahead(forearm: int, hand: int) -> float:
+	var body: Skeleton3D = _skater._arms._skeleton
+	var ub_inv: Transform3D = _skater.drawn_upper_body().affine_inverse()
+	var fore: Transform3D = body.get_bone_global_pose(forearm)
+	var elbow: Vector3 = ub_inv * (fore.origin + fore.basis.z * 0.5)
+	var fist: Vector3 = ub_inv * body.get_bone_global_pose(hand).origin
+	return fist.z - elbow.z
 
 
 func _place_camera(view: int) -> void:
