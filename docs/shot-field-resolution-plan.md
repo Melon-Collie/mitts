@@ -1,6 +1,6 @@
 # Shot field resolution — measured edges and a grid that reaches the boards
 
-Status: **proposal, not yet agreed.** Follows `docs/shot-currency-plan.md`; that
+Status: **step 0 done; steps 1–5 proposed, not yet agreed.** Follows `docs/shot-currency-plan.md`; that
 doc's decisions (odds against today's goalie, measured not modelled, 0.04 rad
 reference scatter applied at lookup) all stand. This one changes how finely the
 goalie's open set is measured and how much of the zone is measured at all.
@@ -74,7 +74,7 @@ read does not, because `_build` prices each aim at the measured spot's range.
 
 Each step ships with the suite green.
 
-### Step 0 — clip the post bands (no regeneration)
+### Step 0 — clip the post bands (no regeneration) (done)
 
 In `AIShotOdds.aim_odds`, the outer band at each end spans only from the post
 inward (`[-reach, -reach + step/2]` and its mirror). One function, no data

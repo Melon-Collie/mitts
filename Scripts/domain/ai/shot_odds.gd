@@ -552,7 +552,7 @@ static func _new_native() -> RefCounted:
 
 # The best aim's goal fraction over `patterns` (FLAT / LOW / HIGH outcome strings
 # post to post) when the crossing scatters by `sigma_m` about the aim, a crossing
-# scoring as the nearest measured aim did.
+# between the posts scoring as the nearest measured aim did.
 static func best_odds(patterns: PackedStringArray, sigma_m: float) -> float:
 	var best: float = 0.0
 	for p: String in patterns:
@@ -573,7 +573,11 @@ static func aim_odds(pattern: String, i: int, sigma_m: float) -> float:
 		if pattern[j] != "G":
 			continue
 		var x: float = -reach + step * float(j)
-		p += 0.5 * (_erf((x + 0.5 * step - aim) / s) - _erf((x - 0.5 * step - aim) / s))
+		# The end aims sit at the posts: their bands stop there, since a crossing
+		# further out meets the post.
+		var hi: float = minf(x + 0.5 * step, reach)
+		var lo: float = maxf(x - 0.5 * step, -reach)
+		p += 0.5 * (_erf((hi - aim) / s) - _erf((lo - aim) / s))
 	return p
 
 
