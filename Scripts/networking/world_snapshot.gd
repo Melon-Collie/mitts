@@ -46,6 +46,10 @@ var real_puck_carrier_peer_id: int = -1
 # watching sees; who it was meant for is never here. AI-only, host-filled
 # (GameManager._enrich_snapshot_for_ai).
 var loose_puck_released_by: int = -1
+# The team that last played the loose puck (Puck.last_touch_team), −1 when it is
+# nobody's or carried: whose puck it is, as anyone watching sees. AI-only,
+# host-filled (GameManager._enrich_snapshot_for_ai).
+var loose_puck_touch_team: int = -1
 
 func get_skater_state(peer_id: int) -> SkaterNetworkState:
 	return skater_states.get(peer_id)

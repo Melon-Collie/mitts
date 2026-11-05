@@ -622,6 +622,7 @@ var _blocks_shots: bool = true
 var _shot_block := SkaterAgentShotBlock.new()
 var _board_play := SkaterAgentBoardPlay.new()
 var _stand_up := SkaterAgentStandUp.new()
+var _skate_kick := SkaterAgentSkateKick.new()
 var _press := SkaterAgentPress.new()
 var _stick_play := SkaterAgentStickPlay.new()
 var _steering := SkaterAgentSteering.new()
@@ -763,6 +764,7 @@ func setup(peer_id: int, team_id: int, brain: TeamBrain, team_id_by_peer: Dictio
 	_shot_block.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_board_play.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stand_up.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
+	_skate_kick.setup(peer_id, team_id)
 	_press.setup(peer_id, team_id, team_id_by_peer, caps_by_peer)
 	_stick_play.setup(peer_id, team_id, team_id_by_peer)
 	_steering.setup(peer_id, team_id, team_id_by_peer)
@@ -2922,6 +2924,13 @@ func _tie_yank_aim(snapshot: WorldSnapshot, self_pos: Vector3,
 # play, which may turn that check at the wall into a pin.
 func apply_stand_up(input: InputState, snapshot: WorldSnapshot) -> void:
 	_stand_up.apply(input, snapshot, _check_aggression)
+
+
+# The skate kick to the stick (SkaterAgentSkateKick), every physics tick after
+# the body passes: it only adds the brake.
+func apply_skate_kick(input: InputState, snapshot: WorldSnapshot) -> void:
+	if snapshot != null:
+		_skate_kick.apply(input, snapshot, _opponent_ids(snapshot))
 
 
 # The boards, every physics tick after dispatch (SkaterAgentBoardPlay).

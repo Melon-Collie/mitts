@@ -114,12 +114,13 @@ static func approaching(relative_velocity: Vector2, normal: Vector2) -> bool:
 	return relative_velocity.dot(normal) < 0.0
 
 
-# The skate turned to the stick: a puck the skater's own team last played
+# The skate turned to the stick: the skater asks for it by braking (the stop
+# turns the skate across the puck's line), on a puck his own team last played
 # (`puck_team` −1 is nobody's), slow enough for a boot, with the stick free to
 # take it and no opponent on him.
 static func can_kick(relative_speed: float, puck_team: int, kicker_team: int,
-		stick_free: bool, pressured: bool) -> bool:
-	if not stick_free or pressured or relative_speed > KICK_MAX_SPEED_M_S:
+		braking: bool, stick_free: bool, pressured: bool) -> bool:
+	if not braking or not stick_free or pressured or relative_speed > KICK_MAX_SPEED_M_S:
 		return false
 	return puck_team == -1 or puck_team == kicker_team
 

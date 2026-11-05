@@ -855,7 +855,7 @@ func _check_blade_plays(skaters: Array, puck_curr: Vector3, now: float) -> bool:
 
 
 # A loose puck on the ice no blade played this tick, against the skaters' boots
-# (SkateContactRules): the skater whose team's puck it is, with his stick free
+# (SkateContactRules): the skater braking on his team's puck, with his stick free
 # and no opponent on him, turns his skate and kicks it to his blade; any other
 # boot it bounces off. Swept in the skater's frame, so he skating onto a still
 # puck meets it as surely as a pass meets him. The first boot met takes it.
@@ -892,7 +892,8 @@ func _check_skate_contacts(skaters: Array, puck_curr: Vector3, now: float) -> vo
 			continue
 		var team: int = skater.get_team_id()
 		var kick: bool = SkateContactRules.can_kick(rel_vel.length(), puck.last_touch_team,
-				team, _stick_free_for_kick(skater, now), _pressured(skater, team, skaters))
+				team, skater.brake_intent, _stick_free_for_kick(skater, now),
+				_pressured(skater, team, skaters))
 		var out: Vector3
 		if kick:
 			var blade: Vector3 = skater.get_blade_contact_global()

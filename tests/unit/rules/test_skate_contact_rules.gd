@@ -94,28 +94,32 @@ func test_a_puck_above_the_boot_clears_it() -> void:
 # ── Who kicks ─────────────────────────────────────────────────────────────────
 
 func test_own_teams_slow_puck_is_kicked() -> void:
-	assert_true(SkateContactRules.can_kick(5.0, 0, 0, true, false))
+	assert_true(SkateContactRules.can_kick(5.0, 0, 0, true, true, false))
 
 
 func test_nobodys_puck_is_kicked() -> void:
-	assert_true(SkateContactRules.can_kick(5.0, -1, 1, true, false))
+	assert_true(SkateContactRules.can_kick(5.0, -1, 1, true, true, false))
 
 
 func test_an_opponents_puck_is_not_kicked() -> void:
-	assert_false(SkateContactRules.can_kick(5.0, 1, 0, true, false))
+	assert_false(SkateContactRules.can_kick(5.0, 1, 0, true, true, false))
+
+
+func test_no_brake_no_kick() -> void:
+	assert_false(SkateContactRules.can_kick(5.0, 0, 0, false, true, false))
 
 
 func test_a_puck_too_fast_for_a_boot_is_not_kicked() -> void:
 	assert_false(SkateContactRules.can_kick(
-			SkateContactRules.KICK_MAX_SPEED_M_S + 0.5, 0, 0, true, false))
+			SkateContactRules.KICK_MAX_SPEED_M_S + 0.5, 0, 0, true, true, false))
 
 
 func test_a_busy_stick_takes_no_kick() -> void:
-	assert_false(SkateContactRules.can_kick(5.0, 0, 0, false, false))
+	assert_false(SkateContactRules.can_kick(5.0, 0, 0, true, false, false))
 
 
 func test_an_opponent_on_him_takes_the_kick_away() -> void:
-	assert_false(SkateContactRules.can_kick(5.0, 0, 0, true, true))
+	assert_false(SkateContactRules.can_kick(5.0, 0, 0, true, true, true))
 
 
 func test_pressure_is_an_opponent_within_reach() -> void:

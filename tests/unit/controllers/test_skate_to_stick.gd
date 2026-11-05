@@ -1,10 +1,10 @@
 extends GutTest
 
 # A slow puck that misses the stick and meets a skate, through the host's real
-# present-time detection (PuckController._check_interactions): his own team's
-# puck on open ice is kicked to his blade and costs the catch a settle; an
-# opponent's puck, or his own with an opponent on him, bounces off the boot; a
-# puck between the boots goes through.
+# present-time detection (PuckController._check_interactions): braking on his
+# own team's puck on open ice, he kicks it to his blade and the catch costs a
+# settle; without the brake, on an opponent's puck, or with an opponent on him,
+# it bounces off the boot; a puck between the boots goes through.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -62,6 +62,7 @@ func _right_boot() -> float:
 
 func test_his_teams_pass_into_his_skate_is_kicked_to_his_blade() -> void:
 	_puck.last_touch_team = HOME
+	_receiver.brake_intent = true
 	_slide_into_feet(6.0, _right_boot())
 	var v: Vector3 = _puck.get_puck_velocity()
 	var blade: Vector3 = _receiver.get_blade_contact_global()
@@ -75,6 +76,7 @@ func test_his_teams_pass_into_his_skate_is_kicked_to_his_blade() -> void:
 
 func test_the_catch_after_a_kick_settles() -> void:
 	_puck.last_touch_team = HOME
+	_receiver.brake_intent = true
 	_slide_into_feet(6.0, _right_boot())
 	watch_signals(_pc)
 	_pc.apply_lag_comp_pickup(_receiver, 0.0)
@@ -91,7 +93,14 @@ func test_a_catch_with_no_kick_is_clean() -> void:
 	assert_eq(args[1] as float, 0.0)
 
 
+func test_without_the_brake_his_teams_pass_bounces() -> void:
+	_puck.last_touch_team = HOME
+	_slide_into_feet(6.0, _right_boot())
+	assert_gt(_puck.get_puck_velocity().z, 0.0, "a skate he didn't turn just bounces it")
+
+
 func test_an_opponents_pass_bounces_off_his_skate() -> void:
+	_receiver.brake_intent = true
 	_puck.last_touch_team = AWAY
 	_slide_into_feet(6.0, _right_boot())
 	var v: Vector3 = _puck.get_puck_velocity()
@@ -103,6 +112,7 @@ func test_an_opponents_pass_bounces_off_his_skate() -> void:
 func test_an_opponent_on_him_takes_the_kick_away() -> void:
 	_opponent.global_position = _receiver.global_position + Vector3(1.0, 0.0, 0.5)
 	_puck.last_touch_team = HOME
+	_receiver.brake_intent = true
 	_slide_into_feet(6.0, _right_boot())
 	assert_gt(_puck.get_puck_velocity().z, 0.0, "crowded, the boot just bounces it")
 
@@ -111,12 +121,14 @@ func test_a_teammate_beside_him_is_no_pressure() -> void:
 	_opponent.set_team_id_resolver(func() -> int: return HOME)
 	_opponent.global_position = _receiver.global_position + Vector3(1.0, 0.0, 0.5)
 	_puck.last_touch_team = HOME
+	_receiver.brake_intent = true
 	_slide_into_feet(6.0, _right_boot())
 	assert_lt(_puck.get_puck_velocity().z, 0.0, "kicked on toward the blade")
 
 
 func test_a_pass_too_hard_for_a_boot_bounces() -> void:
 	_puck.last_touch_team = HOME
+	_receiver.brake_intent = true
 	_slide_into_feet(SkateContactRules.KICK_MAX_SPEED_M_S + 2.0, _right_boot())
 	assert_gt(_puck.get_puck_velocity().z, 0.0)
 
