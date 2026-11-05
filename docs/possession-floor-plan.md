@@ -465,3 +465,32 @@ carry in, every aim at three lofts).
 So the shot side of the compete is not on the scale of goals per shot yet, and
 the floor's values cannot be set against it until it is.
 
+### The live read with the keeper moving
+
+`test_shot_field_live_read.gd`: the live read against the measured open set for
+eight stagings (the truth table's own), at spots on the field's grid, between
+its points and beyond it; six spots each, measured best aim at the reference
+scatter. Bias is live minus measured.
+
+| staging | on the grid | between | beyond |
+|---|---|---|---|
+| set | +0.105 (live 0.17, measured 0.07, set read 0.07) | +0.094 | +0.048 |
+| 3 m feed, one-timed | −0.172 | −0.192 | +0.042 |
+| 3 m feed, caught | −0.001, every pair ranked right | −0.136 | +0.035 |
+| 6 m feed, one-timed | −0.079 | −0.034 | +0.082 |
+| 6 m feed, caught | +0.068 | −0.020 | +0.002 |
+| decoy (set on another man) | −0.362 | −0.050 | −0.235 |
+| deke across | +0.059 | +0.004 | +0.039 |
+| wrap (sealed on the post) | +0.163 | +0.397 | +0.302 |
+
+- **It overprices the keeper who is where he should be**: set (+0.10, and
+  the aim it picks scores 0.03 where the best aim gets 0.07) and sealed on
+  the post after a wrap (+0.16 to +0.40, where he concedes nothing). These are
+  the sharp-angle shots from section 7: the bots fire because of them.
+- **It underprices the keeper caught out of position**: set on a decoy
+  (−0.36 on the grid; one cell reads 0.000 where 61 of 72 shots score) and
+  the 3 m one-timer (−0.17). Bots undervalue the plays that beat him.
+- **It is right for a caught feed** on the grid, and close at 6 m.
+- **The set read reproduces the set keeper on the grid** (0.069 against
+  0.069), as the truth table says it should.
+
