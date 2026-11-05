@@ -39,9 +39,9 @@ const _CHASE_LOOK_HEIGHT: float = 1.0
 
 # The sim runs without drawing until the moment is found, as fast as it will go.
 const _STEPS_PER_FRAME: int = 60
-const _WARMUP_TIME_SCALE: float = 8.0
+const _WARMUP_TIME_SCALE: float = 1.0
 const _UNDRAWN_MAX_FPS: int = 240
-const _HUNT_TIME_SCALE: float = 2.0
+const _HUNT_TIME_SCALE: float = 1.0
 # Frames the study viewports draw before the capture, so the first draw's
 # shader compiles are behind them.
 const _DRAW_FRAMES: int = 2
@@ -353,11 +353,14 @@ func _diagnose() -> void:
 		var skel: Skeleton3D = _first_skeleton(sk)
 		var nan_bones: int = 0
 		var far_bones: int = 0
+		var nan_names: PackedStringArray = []
 		if skel != null:
 			for b: int in skel.get_bone_count():
 				var o: Vector3 = skel.get_bone_global_pose(b).origin
 				if is_nan(o.x) or is_nan(o.y) or is_nan(o.z):
 					nan_bones += 1
+					if nan_names.size() < 30:
+						nan_names.append(skel.get_bone_name(b))
 				elif o.length() > 5.0:
 					far_bones += 1
 		var meshes: PackedStringArray = []
@@ -365,6 +368,8 @@ func _diagnose() -> void:
 		print("[diag] %s local=%s skel=%s bones=%d nan=%d far=%d scale=%s meshes=%s" % [sk.name,
 				sk.is_local_skater, skel != null, skel.get_bone_count() if skel else 0, nan_bones,
 				far_bones, str(skel.global_basis.get_scale()) if skel else "", ",".join(meshes)])
+		if not nan_names.is_empty():
+			print("[diag]   nan bones: " + ",".join(nan_names))
 
 
 func _first_skeleton(n: Node) -> Skeleton3D:
