@@ -37,11 +37,9 @@ const _CHASE_HEIGHT: float = 2.5
 const _CHASE_LOOK_AHEAD: float = 3.0
 const _CHASE_LOOK_HEIGHT: float = 1.0
 
-# The sim runs without drawing until the moment is found, as fast as it will go.
+# The sim runs without drawing until the moment is found.
 const _STEPS_PER_FRAME: int = 60
-const _WARMUP_TIME_SCALE: float = 1.0
 const _UNDRAWN_MAX_FPS: int = 240
-const _HUNT_TIME_SCALE: float = 1.0
 # Frames the study viewports draw before the capture, so the first draw's
 # shader compiles are behind them.
 const _DRAW_FRAMES: int = 2
@@ -135,7 +133,6 @@ func begin(only: String, out_dir: String, list_only: bool) -> void:
 	for i: int in _DRAW_FRAMES:
 		await get_tree().process_frame
 	await RenderingServer.frame_post_draw
-	_diagnose()
 	for i: int in all.size():
 		_save(all[i], views[i], cams[i], carrier_pos, attack_dir)
 		views[i].render_target_update_mode = SubViewport.UPDATE_DISABLED
@@ -163,11 +160,11 @@ func _start_match() -> bool:
 	lobby.call("_fill_open_slots_with_bots")
 	lobby.call("_on_start_pressed")
 	RenderingServer.render_loop_enabled = false
-	# Undrawn frames otherwise run at thousands of fps, and a near-zero
-	# render-rate delta leaves NaN in the bots' skeleton poses.
+	# Real time, frame-capped: a faster clock (time_scale 8, or uncapped
+	# undrawn frames) leaves NaN in the bots' skeleton poses on the GDScript
+	# rigs, and their bodies vanish from every shot.
 	Engine.max_fps = _UNDRAWN_MAX_FPS
 	Engine.max_physics_steps_per_frame = _STEPS_PER_FRAME
-	Engine.time_scale = _WARMUP_TIME_SCALE
 	var waited: int = 0
 	while tree.current_scene == null \
 			or tree.current_scene.scene_file_path != Constants.SCENE_HOCKEY \
@@ -193,7 +190,6 @@ func _find_moment() -> Skater:
 		if carrier == null:
 			return null
 		RenderingServer.render_loop_enabled = true
-		Engine.time_scale = 1.0
 		Engine.max_physics_steps_per_frame = 1
 		for i: int in _CATCH_UP_FRAMES:
 			await get_tree().process_frame
@@ -210,7 +206,6 @@ func _hunt_carry() -> Skater:
 	var live: GameCamera = _find(tree.current_scene, GameCamera) as GameCamera
 	RenderingServer.render_loop_enabled = false
 	Engine.max_physics_steps_per_frame = 4
-	Engine.time_scale = _HUNT_TIME_SCALE
 	while Engine.get_physics_frames() < deadline:
 		await tree.process_frame
 		var puck: Puck = GameManager.puck
@@ -345,50 +340,6 @@ func _add_rings(center: Vector3) -> void:
 	mi.mesh = mesh
 	mi.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	get_tree().current_scene.add_child(mi)
-
-
-func _diagnose() -> void:
-	var registry: PlayerRegistry = GameManager.get("_registry") as PlayerRegistry
-	for sk: Skater in registry.skaters():
-		var skel: Skeleton3D = _first_skeleton(sk)
-		var nan_bones: int = 0
-		var far_bones: int = 0
-		var nan_names: PackedStringArray = []
-		if skel != null:
-			for b: int in skel.get_bone_count():
-				var o: Vector3 = skel.get_bone_global_pose(b).origin
-				if is_nan(o.x) or is_nan(o.y) or is_nan(o.z):
-					nan_bones += 1
-					if nan_names.size() < 30:
-						nan_names.append(skel.get_bone_name(b))
-				elif o.length() > 5.0:
-					far_bones += 1
-		var meshes: PackedStringArray = []
-		_collect_meshes(sk, meshes)
-		print("[diag] %s local=%s skel=%s bones=%d nan=%d far=%d scale=%s meshes=%s" % [sk.name,
-				sk.is_local_skater, skel != null, skel.get_bone_count() if skel else 0, nan_bones,
-				far_bones, str(skel.global_basis.get_scale()) if skel else "", ",".join(meshes)])
-		if not nan_names.is_empty():
-			print("[diag]   nan bones: " + ",".join(nan_names))
-
-
-func _first_skeleton(n: Node) -> Skeleton3D:
-	for c: Node in n.get_children():
-		if c is Skeleton3D:
-			return c as Skeleton3D
-		var hit: Skeleton3D = _first_skeleton(c)
-		if hit != null:
-			return hit
-	return null
-
-
-func _collect_meshes(n: Node, out: PackedStringArray) -> void:
-	for c: Node in n.get_children():
-		if c is MeshInstance3D:
-			var mi: MeshInstance3D = c
-			out.append("%s:%s%s" % [mi.name, "V" if mi.is_visible_in_tree() else "h",
-					"" if mi.mesh != null else "(nomesh)"])
-		_collect_meshes(c, out)
 
 
 func _find(node: Node, cls: Script) -> Node:
