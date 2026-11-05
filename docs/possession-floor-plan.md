@@ -1,6 +1,6 @@
 # Possession floor — what keeping the puck is worth
 
-Status: **agreed design, steps 0–4 in progress.** The CLAUDE.md workflow applies: this
+Status: **steps 0–4 landed; steps 5–6 open, and host AI cost open (§6).** The CLAUDE.md workflow applies: this
 doc is the plan, deviations get discussed first. Supersedes an earlier
 data-driven draft: no external data, no generator, no generated file.
 
@@ -389,3 +389,27 @@ never park at the blue line waiting.
   all-or-nothing (§Decisions). That is out of this plan's scope, but worth
   checking against real outcomes: `shot_events` records xG and goals, and the
   two should agree on average.
+
+## 6. As built (steps 0–4)
+
+- **A read that does not come off leaves the continuation where he stands**
+  (`AIPossessionValue._taken`): an entry raced and lost, a skate or a drive
+  stripped. Priced as zero, a lost race read above a negative continuation, so
+  possession behind our own net could never read below nothing.
+- **The rebound is credited on the odds of reaching the net**, before the lane
+  and the release contest (`score_shoot_value`'s `rebound`), so a blocked shot
+  earns none.
+- **The keep odds are the seam's own safety**, read by `AIEvadeRead.evade_safety`
+  under exact bounds (~45 µs a read in traffic against ~190 µs for the full
+  sweep), and held to `best_evade_point` by `test_evade_safety.gd`.
+- **Host AI cost is up.** `benchmarks/` (GDScript fallback, this container),
+  AI µs per second of play, before → after: ozone-cycle 3v3 322k → 347k, 5v5
+  299k → 457k; nz-rush 3v3 200k → 367k, 5v5 206k → 488k; loose-neutral 3v3
+  185k → 346k, 5v5 365k → 497k. Per call, the possession read is 1.5–3×: every
+  read adds a keep read, and an entry a defender stands on is no longer pruned
+  on its dead live worth, since it still carries the zone's floor. The options
+  are a decision, not an implementation detail: read each entry's and each
+  drive's end continuation as kept (their race and keep odds already price
+  getting there with the puck), memoize the keep read across the defence's
+  candidate pushes, or port the sweep to `native/`.
+
