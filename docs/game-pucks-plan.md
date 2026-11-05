@@ -294,18 +294,20 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       | reward | unlocked by |
       |---|---|
       | *Spaced* tape | `hat_trick` — a player's first hat trick |
-      | *Bottom strip* tape | *Breadman*, a combo: `assists@50` + `playmaker` (3 assists in a game) |
+      | *Bottom strip* tape | *Breadman*, a combo: `assists@50` + the 3-assist game puck |
       | Yellow laces | `one_timer_dot`, a new feat: a one-timer goal released inside any offensive-zone faceoff circle |
 
       The new feat needs the release point on the host's goal context
       (`GoalFeatContext`), beside the release distance the snipe reads.
       Titles stay on their combos.
 
-   **Open: names.** Flat, two pucks would both read *Playmaker* — the 3-assist
-   game (Steam's `ACH_PLAYMAKER`, so its display name stays) and the combo
-   that unlocks the Playmaker title — and the Sniper combo sits beside Steam's
-   *Sniper*, the 50-goal tier. A title combo needs a name of its own (the
-   title it unlocks can keep its name).
+   **Names.** A combo that unlocks a title carries the title's name
+   (Playmaker, Sniper). Where an existing puck already had that name, the
+   existing puck is renamed and so is its Steam achievement — only the
+   Playtest app's achievements are live, and losing or changing them there is
+   accepted. A Steam achievement's display name is its puck's in-game name, a
+   ladder tier's included ("Goal Scorer II", not "Sniper"). Open: the new name
+   for the 3-assist game puck, now `playmaker`.
 
    Later rewards (helmet stickers, a spray-painted stick, signature laces) are
    new content on the same machinery.
