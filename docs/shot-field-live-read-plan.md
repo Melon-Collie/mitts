@@ -88,10 +88,32 @@ Each is measured with the instrument before and after, and
    not history: its own cells disagree with it (both sides' wraps are sampled,
    and the far post's concede what the near post's do not), so it gets its own
    diagnosis before step 2 lands.
-3. **Widen coverage and regenerate.** Spots out to x = ±11 m and 19 m out;
-   decoys out to 12 m across. A regeneration (`generate-shot-field.sh`, tens of
-   minutes).
-4. **One-timers.** Diagnose the 3 m underpricing on the regenerated field.
+   **On the resolution branch's field** (`claude/keen-gates-o9wmar`,
+   `docs/shot-field-resolution-plan.md`: goal intervals bisected to ~5 mm, the
+   grid out to the boards and the blue line), the same instrument reads, bias
+   against the measured best aim:
+
+   | staging | live | steps 1+2 | what its pick scores |
+   |---|---|---|---|
+   | set, on the grid | +0.130 (says 0.148, measured 0.018) | **+0.026** | 0.017 (live's pick: 0.000) |
+   | set, between | +0.125 | −0.042, every pair ranked right | 0.011 |
+   | set, the new spots (±9–10 m wide, 17–18 m out) | +0.023 | +0.004 | 0.005 |
+   | caught feed 3 m / 6 m, on the grid | +0.005 / +0.078 | −0.102 / +0.045 | 0.426 / 0.316 |
+   | decoy, on the grid / the new spots | −0.360 / −0.437 | −0.373 / −0.438 | |
+   | wrap | +0.21 to +0.41 | +0.17 to +0.21 | 0.000 |
+   | 3 m feed, one-timed | −0.15 to −0.21 | | |
+
+   It fixes the grid's edges and leaves the live read's own errors as they were,
+   and steps 1–2 work on it as on the old field. So this plan builds on that
+   branch once it is on `main`.
+3. **Far decoys, and density.** The resolution branch measures the zone to the
+   boards; what it leaves is the keeper pulled further than 6 m across (decoys
+   are still sampled at ±3 and ±6 m: a cross-ice play reads 0.00 where most shots
+   score) and the interpolation between spots. Decoys out to 12 m across, then a
+   regeneration (`generate-shot-field.sh`, about 70 minutes on four processes).
+4. **The wrap, and one-timers.** Diagnose the wrap first (its own cells
+   disagree: which post each sealed keeper is on against the release's side),
+   then the 3 m one-timer's underpricing.
 
 Done when every staging's bias is within ±0.05 on and between the grid, the
 pick scores what the value says, and `test_ozone_possession.gd` no longer shows
