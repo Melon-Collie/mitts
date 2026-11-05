@@ -37,10 +37,11 @@ old one's place.
 | `actors/keeper/keeper.gd` | the node: solves a pose on the tick, draws it at render rate when it moved |
 | `actors/keeper/keeper_gear_meshes.gd` | each gear piece's mesh, built inside its save box |
 | `actors/keeper/keeper_gear_view.gd`, `keeper_box_view.gd` | the gear drawn on the bones and painted from the team kit; the boxes drawn for debugging |
-| `actors/keeper/keeper_body_rig.gd` | the gear drawn as one skinned mesh, a bone per piece posed on its save box: the plain slots one surface (BodyZonePaint), each kit-shader material one more, its pieces' box-frame places in CUSTOM0/1 since skinning moves VERTEX |
-| `actors/keeper/keeper_jersey_decal.gd`, `Assets/Shaders/keeper_jersey.gdshader` | the jersey's crest and lettering, and the shader painting the kit onto the jersey, sleeves and pants (whose stripes run down the side, as the skaters' do) |
+| `actors/keeper/keeper_body_rig.gd` | the gear drawn as one skinned mesh, a bone per piece posed on its save box and a deform bone at each shoulder and elbow: the plain slots and the jersey one surface (BodyZonePaint), each kit-shader material one more, its pieces' box-frame places in CUSTOM0 since skinning moves VERTEX |
+| `actors/keeper/keeper_jersey_mesh.gd` | the jersey as one connected skin, as the skaters' is (`SkaterConnectedMesh`): the body over the protector with an armhole each side, each sleeve grown from it over the floater and the pads into the glove's cuff, blended across the shoulder and the elbow through their deform bones; authored in a symmetric bind in the chest box's frame, so a right-catcher wears the same mesh with his arms' binds on the other hand's bones; painted by the skaters' decals, the body and tail by a `JerseyDecal` laid out for his size (`lay_out`), the sleeves by `SleeveDecal` |
+| `Assets/Shaders/keeper_kit.gdshader` | the kit on the pants (its stripes down the side, as the skaters' are) and the socks (round them) |
 | `actors/keeper/keeper_knee_break.gd` | the break above each knee, lofted between the knee stack and the thigh rise |
-| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, all the way round: cloth (`HemFlaps`, the skater's solver), a flap down each column, skinned onto the body rig from the protector's own hem and shaded on from its facets so the two read as one jersey; its rest the cloth settled on him standing ready |
+| `actors/keeper/keeper_jersey_tail.gd` | the jersey's untucked tail, all the way round: cloth (`HemFlaps`, the skater's solver), a flap down each column, skinned onto the body rig from the protector's own hem and shaded and painted on from it (the jersey's `JerseyDecal`, its U and V run on from the body's) so the two read as one jersey; its rest the cloth settled on him standing ready |
 | `actors/keeper/keeper_tail_colliders.gd` | what the tail drapes over: the pants and thigh guards as their rounded sections |
 
 ## In a match
@@ -595,6 +596,8 @@ reflected on both sides, so every save box is the reflected box, and the stick's
 boxes are turned to the same frame. A stance's `side` stays his own (the glove
 side is his right); `KeeperSkeleton.world_side` turns it into keeper space's,
 which is what `KeeperGear.post_contact` and `post_pad_contact` take. The drawn gear, which is not
-symmetric, is turned over on each piece's own x (`KeeperGearView`), and the
-jersey's lettering and crest read the other way across so they still read
-forwards. `KEEPER_CAPTURE_RIGHT=1` renders him.
+symmetric, is turned over on each piece's own x (`KeeperGearView`); the jersey,
+which is, keeps its mesh and paint and only swaps which hand's bones each arm
+rides (`KeeperJerseyMesh.bind_bones`), so its lettering reads forwards on
+either (`test_keeper_jersey.gd` holds him the left-catcher's reflection, corner for
+corner). `KEEPER_CAPTURE_RIGHT=1` renders him.

@@ -103,6 +103,55 @@ func quad(a: int, b: int, c: int, d: int, uva: Vector2, uvb: Vector2, uvc: Vecto
 	tri(a, c, d, uva, uvc, uvd, zone, inside)
 
 
+# `a_loop` turned and run to match `b_loop` vertex for vertex: each of
+# `b_loop`'s against the one of `a_loop` that turns with it least.
+func aligned(a_loop: PackedInt32Array, b_loop: PackedInt32Array) -> PackedInt32Array:
+	var n: int = a_loop.size()
+	var best_cost: float = INF
+	var best_shift: int = 0
+	var best_dir: int = 1
+	for dir: int in [1, -1]:
+		for shift: int in n:
+			var cost: float = 0.0
+			for m: int in n:
+				cost += _pos[a_loop[posmod(shift + dir * m, n)]].distance_squared_to(_pos[b_loop[m]])
+			if cost < best_cost:
+				best_cost = cost
+				best_shift = shift
+				best_dir = dir
+	var out := PackedInt32Array()
+	for m: int in n:
+		out.append(a_loop[posmod(best_shift + best_dir * m, n)])
+	return out
+
+
+# Joins two closed loops already run vertex for vertex with quads, each corner's
+# UV `uv` of its position; U wraps round the loops.
+func join(a_loop: PackedInt32Array, b_loop: PackedInt32Array, join_zone: int, uv: Callable,
+		inside: Vector3) -> void:
+	var n: int = a_loop.size()
+	for m: int in n:
+		var a0: int = a_loop[m]
+		var a1: int = a_loop[(m + 1) % n]
+		var b0: int = b_loop[m]
+		var b1: int = b_loop[(m + 1) % n]
+		quad(a0, a1, b1, b0, uv.call(_pos[a0]), uv.call(_pos[a1]), uv.call(_pos[b1]),
+				uv.call(_pos[b0]), join_zone, inside, true)
+
+
+# A fan from `centre` over a closed ring of vertex ids, cap UVs round `uv_centre`
+# as SkaterMeshBuilder._cap lays them.
+func fan(ring: PackedInt32Array, centre: int, uv_centre: Vector2, fan_zone: int,
+		inside: Vector3) -> void:
+	var n: int = ring.size()
+	for k: int in n:
+		var t0: float = TAU * float(k) / float(n)
+		var t1: float = TAU * float(k + 1) / float(n)
+		tri(centre, ring[k], ring[(k + 1) % n], uv_centre,
+				uv_centre + Vector2(sin(t0), cos(t0)) * 0.24,
+				uv_centre + Vector2(sin(t1), cos(t1)) * 0.24, fan_zone, inside)
+
+
 func commit() -> ArrayMesh:
 	var verts := PackedVector3Array()
 	var normals := PackedVector3Array()

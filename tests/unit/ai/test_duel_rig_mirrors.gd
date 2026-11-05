@@ -3,8 +3,10 @@ extends GutTest
 # The duel harness's arm (duel_rig.gd) resolves a cursor to the blade it reaches
 # for as the live SkaterIKCoordinator does, on the same set-up body: the range of
 # motion, the carry's two hands and backhand stop, and the rest reach without a
-# puck to reach for. At rest, so the twist and lean are the coordinator's own
-# zeros. Its release keeps the skater's motion as the controller's does.
+# puck to reach for — at rest, so the twist and reach lean are the coordinator's
+# own zeros, and leaned into a skating stride, where the trunk's fold carries the
+# shoulders out over the stick. Its release keeps the skater's motion as the
+# controller's does.
 
 const DuelRig := preload("res://tests/unit/ai/duel_rig.gd")
 const DuelHarness := preload("res://tests/unit/ai/duel_harness.gd")
@@ -32,9 +34,12 @@ func before_each() -> void:
 	_rig = DuelRig.capture(_skater, _ctrl)
 
 
-func _resolves_alike(carrying: bool, puck_at: Vector3) -> void:
+func _resolves_alike(carrying: bool, puck_at: Vector3, posture: float = 0.0) -> void:
 	_ctrl.has_puck = carrying
 	_puck.global_position = puck_at
+	# The skating lean through the pose coordinator's one torso writer.
+	_ctrl._pose.velocity_lean_x = posture
+	_ctrl._pose._apply_lean()
 	var pos := Vector3(_skater.global_position.x, 0.0, _skater.global_position.z)
 	var body := Basis.IDENTITY
 	var worst: float = 0.0
@@ -49,6 +54,7 @@ func _resolves_alike(carrying: bool, puck_at: Vector3) -> void:
 			var live: Vector3 = _ctrl._ik.last_target_blade_world
 			var arm: DuelRig.Arm = DuelRig.Arm.new()
 			arm.heel = Vector3(marker.x, 0.0, marker.z)
+			arm.posture = posture
 			var ub: Transform3D = _rig.ub_transform(arm, pos, body)
 			var purpose: float = 1.0 if carrying else _ctrl._ik.reach_purpose
 			var mine: Vector3 = _rig.resolve(arm, ub, body, pos, cursor, carrying, purpose,
@@ -57,8 +63,8 @@ func _resolves_alike(carrying: bool, puck_at: Vector3) -> void:
 			if gap > worst:
 				worst = gap
 				worst_at = cursor
-	assert_lt(worst, 0.01, "carrying %s, puck at %s: worst %.3f m at cursor %s" % [
-			carrying, puck_at, worst, worst_at])
+	assert_lt(worst, 0.01, "carrying %s, puck at %s, posture %.2f: worst %.3f m at cursor %s"
+			% [carrying, puck_at, posture, worst, worst_at])
 
 
 func test_an_empty_stick_reaching_for_a_puck_resolves_as_the_coordinator_does() -> void:
@@ -71,6 +77,33 @@ func test_an_empty_stick_at_rest_resolves_as_the_coordinator_does() -> void:
 
 func test_a_carried_blade_resolves_as_the_coordinator_does() -> void:
 	_resolves_alike(true, Vector3.ZERO)
+
+
+# A skater at full stride leans his trunk forward its whole skating lean.
+func _full_stride() -> float:
+	return -deg_to_rad(_ctrl.velocity_lean_forward_max_deg)
+
+
+func test_a_skating_empty_stick_reaching_for_a_puck_resolves_as_the_coordinator_does() -> void:
+	_resolves_alike(false, Vector3(0.5, 0.0, -1.0), _full_stride())
+
+
+func test_a_skating_carrier_resolves_as_the_coordinator_does() -> void:
+	_resolves_alike(true, Vector3.ZERO, _full_stride())
+
+
+func test_the_skating_fold_reaches_further() -> void:
+	# What the fold is for: leaned into the stride, the rig's arm puts an empty
+	# stick reaching for a puck further out ahead than it can standing.
+	var pos := Vector3.ZERO
+	var far := Vector3(0.0, 0.0, -4.0)
+	var reach: Array[float] = []
+	for posture: float in [0.0, _full_stride()]:
+		var arm: DuelRig.Arm = DuelRig.Arm.new()
+		arm.posture = posture
+		var ub: Transform3D = _rig.ub_transform(arm, pos, Basis.IDENTITY)
+		reach.append(-_rig.resolve(arm, ub, Basis.IDENTITY, pos, far, false, 1.0, 1.0, 0.0).z)
+	assert_gt(reach[1], reach[0] + 0.05, "standing %.2f m, skating %.2f m" % reach)
 
 
 func test_a_release_keeps_the_skaters_motion_as_the_controller_does() -> void:

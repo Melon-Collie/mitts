@@ -1,9 +1,10 @@
 extends GutTest
 
 # The keeper draws as one skinned mesh (KeeperBodyRig): a bone per gear piece
-# posed on its save box, so what is drawn stays what saves, then the jersey
-# tail's flap bones; every vertex of the gear rides its own piece's bone alone;
-# and the pieces' surfaces are merged down to one per material.
+# posed on its save box, so what is drawn stays what saves, the jersey's deform
+# bones, then the jersey tail's flap bones; every vertex of the gear rides its
+# own piece's bone alone (the jersey's are blended, test_keeper_jersey.gd); and
+# the pieces' surfaces are merged down to one per material.
 
 var _keeper: Keeper = null
 var _pose := KeeperPose.new()
@@ -29,16 +30,26 @@ func test_every_bone_is_posed_on_its_save_box() -> void:
 		var pose: Transform3D = rig.get_bone_pose(part)
 		assert_almost_eq(pose.origin, box.origin, Vector3.ONE * 1e-5, KeeperGear.Part.keys()[part])
 		assert_almost_eq(pose.basis.y, box.basis.y, Vector3.ONE * 1e-5, KeeperGear.Part.keys()[part])
+	for d: int in KeeperJerseyMesh.DEFORM_COUNT:
+		var want: Transform3D = KeeperJerseyMesh.deform_pose(_keeper.skeleton, d)
+		var got: Transform3D = rig.get_bone_pose(KeeperJerseyMesh.deform_bone(d))
+		assert_almost_eq(got.origin, want.origin, Vector3.ONE * 1e-5, KeeperJerseyMesh.Deform.keys()[d])
+		assert_almost_eq(got.basis.y, want.basis.y, Vector3.ONE * 1e-5, KeeperJerseyMesh.Deform.keys()[d])
+		assert_almost_eq(got.basis.z, want.basis.z, Vector3.ONE * 1e-5, KeeperJerseyMesh.Deform.keys()[d])
 
 
-func test_every_vertex_rides_one_bone() -> void:
+func test_every_vertex_of_the_gear_rides_one_bone() -> void:
 	var mesh: ArrayMesh = _rig().body_mesh().mesh as ArrayMesh
 	for s: int in mesh.get_surface_count():
 		var arrays: Array = mesh.surface_get_arrays(s)
 		var weights: PackedFloat32Array = arrays[Mesh.ARRAY_WEIGHTS]
 		var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
+		var zones: Variant = arrays[Mesh.ARRAY_TEX_UV2]
 		assert_eq(weights.size(), verts.size() * 4, "surface %d is skinned" % s)
 		for i: int in verts.size():
+			if zones != null and roundi((zones as PackedVector2Array)[i].x) in [
+					KeeperJerseyMesh.ZONE_TORSO, KeeperJerseyMesh.ZONE_SLEEVE]:
+				continue
 			if not is_equal_approx(weights[i * 4], 1.0):
 				fail_test("surface %d vertex %d is not rigid to one bone" % [s, i])
 				return

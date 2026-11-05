@@ -130,12 +130,11 @@ const CARRY_PROTECT_SMOOTH_RATE: float = 8.0
 # reaches through it. Within reach, a pressurer briefly aims its blade tip AT the
 # puck. Discrete (jab + cooldown), so it commits and can miss.
 #
-# Reach: stick + blade + poke radius, rescaled per build in apply_capabilities;
-# the default is the league baseline.
-var _poke_jab_reach: float = (
-		GameRules.DEFAULT_STICK_LENGTH_M
-		+ GameRules.DEFAULT_BLADE_LENGTH_M
-		+ GameRules.POKE_RADIUS_M)
+# Reach: the body's full blade reach (AISkaterCaps.max_blade_reach: arm out,
+# trunk folded, stick down) plus the poke radius, per build in
+# apply_capabilities; the default is the league baseline. Never the stick alone:
+# a reach-in is the arm's, and hand-to-toe falls the arm's length short.
+var _poke_jab_reach: float = AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M + GameRules.POKE_RADIUS_M
 var _stick_lift_reach: float = (
 		GameRules.DEFAULT_STICK_LENGTH_M
 		+ GameRules.DEFAULT_BLADE_LENGTH_M
@@ -715,7 +714,7 @@ func apply_capabilities(caps: AISkaterCaps) -> void:
 	_chase_max_accel = caps.max_accel
 	_blade_reach = caps.blade_span + AIBotMechanics.BLADE_REACH_BUFFER_M
 	_receive_body_offset = caps.blade_span - SkaterAgentReception.RECEIVE_BODY_INSET_M
-	_poke_jab_reach = caps.blade_span + GameRules.POKE_RADIUS_M
+	_poke_jab_reach = caps.max_blade_reach + GameRules.POKE_RADIUS_M
 	_stick_lift_reach = caps.blade_span + GameRules.STICK_LIFT_RADIUS_M
 	_self_wrister_shot_speed = caps.wrister_shot_speed
 	_self_lateral_grip = caps.lateral_grip
@@ -2896,7 +2895,8 @@ func _upright_lateral_accel() -> float:
 # Stick play (SkaterAgentStickPlay): these gather the bot's role, gates and reaches.
 func _poke_jab_aim(snapshot: WorldSnapshot, self_pos: Vector3) -> Vector3:
 	return _stick_play.jab_aim(snapshot, self_pos, _is_puck_pressurer_slot(snapshot),
-			_lifts_sticks, _stick_lift_reach, _poke_jab_reach, _dispatch_period_ticks)
+			_lifts_sticks, _stick_lift_reach, _poke_jab_reach, _dispatch_period_ticks,
+			_self_blade_speed)
 
 
 func _jab_target(snapshot: WorldSnapshot) -> Vector3:
@@ -2956,7 +2956,7 @@ func apply_stick_lift_input(input: InputState) -> void:
 # True if our current role is on the puck defensively — the only roles that jab:
 # the PRESSURER slots (AIRoleSlots.pressures_puck), a station role pressuring
 # this beat, and in the 5v5 zone the one area role that owns the puck
-# (AIZoneCoverage.pressure_owner).
+# (AIZoneCoverage.pressure_slot).
 func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	if _current_strategy == null:
 		return false
@@ -2966,8 +2966,8 @@ func _is_puck_pressurer_slot(snapshot: WorldSnapshot) -> bool:
 	return AIRoleSlots.pressures_puck(slot) or _owns_zone_pressure(slot, snapshot)
 
 
-# Whether `slot` is the 5v5 zone area that owns the puck this tick
-# (AIZoneCoverage.pressure_owner). Ownership moves with the puck, so it is
+# Whether `slot` is the 5v5 zone role that owns the puck this tick
+# (AIZoneCoverage.pressure_slot). Ownership moves with the puck, so it is
 # resolved per call, never fixed to a slot.
 func _owns_zone_pressure(slot: int, snapshot: WorldSnapshot) -> bool:
 	if not AIRoleSlots5.is_zone_slot(slot) or snapshot == null \
@@ -2975,8 +2975,8 @@ func _owns_zone_pressure(slot: int, snapshot: WorldSnapshot) -> bool:
 		return false
 	var strong_x: float = _current_strategy.strong_x() if _current_strategy != null \
 			else 1.0
-	return AIZoneCoverage.pressure_owner(strong_x, _own_goal_dir * GameRules.GOAL_LINE_Z,
-			snapshot.puck_state.position) == slot
+	return AIZoneCoverage.pressure_slot(_current_strategy, strong_x,
+			_own_goal_dir * GameRules.GOAL_LINE_Z, snapshot.puck_state.position) == slot
 
 
 # The carried puck's position (the jab aim point), or INF with no carrier.

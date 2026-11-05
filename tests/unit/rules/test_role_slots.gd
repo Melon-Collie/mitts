@@ -41,6 +41,80 @@ func _resolver(skaters: Array) -> Dictionary:
 	return team_map
 
 
+# A carrier on the wing coming at our net at `carrier_vel`; our D riding back
+# goal-side of him (100), our backchecker a stride behind him and nearer the
+# puck (110), the third man at the net (120).
+func _entry_pressure(carrier_vel: Vector3) -> int:
+	var skaters: Array = [
+			[100, 0, Vector3(-4.0, 0.0, 17.0), Vector3(0.0, 0.0, 6.0)],
+			[110, 0, Vector3(-7.0, 0.0, 8.5), Vector3(0.0, 0.0, 6.0)],
+			[120, 0, Vector3(3.0, 0.0, 22.0)],
+			[200, 1, Vector3(-8.0, 0.0, 10.0), carrier_vel],
+	]
+	var a: Dictionary[int, int] = AIRoleSlots.assign(_make_snapshot(skaters, 200),
+			TEAM_ID, OUR_NET_Z, AIPossessionState.State.DZONE, _resolver(skaters), {})
+	for pid: int in a:
+		if a[pid] == AIRoleSlots.Slot.PRESSURE:
+			return pid
+	return -1
+
+
+func test_a_carrier_at_pace_is_kept_by_the_body_goal_side_of_him() -> void:
+	# Raced to where the puck is, the backchecker wins it, but he is a stride
+	# behind a man coming at our net faster than he is and never catches him.
+	assert_eq(_entry_pressure(Vector3(0.0, 0.0, 9.0)), 100)
+
+
+func test_a_stalled_carrier_goes_to_the_soonest_body() -> void:
+	assert_eq(_entry_pressure(Vector3.ZERO), 110)
+
+
+func _cut_off(self_pos: Vector3, exact: bool) -> float:
+	return AIDefensiveVerbs.cut_off_m(self_pos, Vector3.ZERO,
+			AIArrival.SKATER_REF_SPEED_M_S, AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+			AIBotMechanics.BLADE_REACH_M, Vector3(-8.0, 0.0, 6.0), Vector3(0.0, 0.0, 9.0),
+			Vector3(0.0, 0.0, 1.0), 16.0, null, exact)
+
+
+func test_the_exact_cut_off_is_inside_the_walked_step() -> void:
+	# The walk takes the first whole step he beats the carrier to; the exact
+	# read is the crossing inside it, so men a fraction of a step apart differ.
+	var exact_seen: Dictionary = {}
+	for x: float in [-5.0, -4.5, -4.0, -3.0]:
+		var walked: float = _cut_off(Vector3(x, 0.0, 14.0), false)
+		var exact: float = _cut_off(Vector3(x, 0.0, 14.0), true)
+		assert_true(exact <= walked and exact > walked - AIDefensiveVerbs.CUT_OFF_STEP_M,
+				"x %.1f: exact %.3f inside (%.0f - step, %.0f]" % [x, exact, walked, walked])
+		exact_seen[exact] = true
+	assert_eq(exact_seen.size(), 4, "every start reads its own crossing")
+
+
+# Two of ours goal-side of a carrier coming up the middle at pace, both a few
+# metres in front of him and skating off to the left wall at his speed, so
+# neither gets back onto his line short of the crease: one a stick off it, one
+# out by the dots.
+func _two_back_owner(lane_pid: int, wide_pid: int, prev: int) -> int:
+	var skaters: Array = [
+			[lane_pid, 0, Vector3(-1.5, 0.0, 9.0), Vector3(-9.0, 0.0, 0.0)],
+			[wide_pid, 0, Vector3(-6.0, 0.0, 9.0), Vector3(-9.0, 0.0, 0.0)],
+			[200, 1, Vector3(0.0, 0.0, 6.0), Vector3(0.0, 0.0, 9.0)],
+	]
+	var snap := _make_snapshot(skaters, 200)
+	return AIRoleSlots.carrier_owner(snap, TEAM_ID, OUR_NET_Z, _resolver(skaters),
+			[wide_pid, lane_pid], {}, prev)
+
+
+func test_a_carrier_owner_tie_goes_to_the_man_in_his_lane() -> void:
+	# Neither cuts him off short of the crease, so the race ties; whoever
+	# registered first must not decide it.
+	assert_eq(_two_back_owner(100, 110, -1), 100)
+	assert_eq(_two_back_owner(110, 100, -1), 110)
+
+
+func test_the_incumbent_owner_keeps_a_tie_he_holds() -> void:
+	assert_eq(_two_back_owner(100, 110, 110), 110)
+
+
 func test_assign_dzone_distributes_slots() -> void:
 	# PRESSURE = closest to the puck; the other two MARK a man each. Which
 	# marker ends up net-front vs. weak-side is decided downstream by the threat

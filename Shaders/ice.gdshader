@@ -59,6 +59,12 @@ uniform vec2 rink_size = vec2(26.0, 60.0);
 uniform vec4 ring_pos[12];
 uniform vec4 ring_col[12];
 uniform int ring_count = 0;
+// Puck-following cues (PuckFollowCues, fed by IceRingField): the possession
+// pulse and the loose-puck halo. Same layout as the rings; drawn beneath them,
+// so a pulse sweeping out under a skater never cuts through his ring.
+uniform vec4 cue_pos[2];
+uniform vec4 cue_col[2];
+uniform int cue_count = 0;
 // Elevation chevrons — the stacked "^" marks beside a skater. Same deal as the
 // rings: xy = world (x, z) of the FIRST apex, z = how many are stacked (1-3).
 // They share hud_stroke_col rather than carrying their own.
@@ -215,6 +221,15 @@ void fragment() {
 	vec3 hud_rgb = vec3(0.0);
 	float hud_cover = 0.0;
 	vec2 ice_xz = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xz;
+	for (int i = 0; i < cue_count; i++) {
+		float d = distance(ice_xz, cue_pos[i].xy);
+		float aa = max(fwidth(d), 0.0001);
+		float band = smoothstep(cue_pos[i].w - aa, cue_pos[i].w + aa, d)
+				* (1.0 - smoothstep(cue_pos[i].z - aa, cue_pos[i].z + aa, d));
+		float a = band * cue_col[i].a;
+		hud_rgb = hud_rgb * (1.0 - a) + cue_col[i].rgb * a;
+		hud_cover = hud_cover * (1.0 - a) + a;
+	}
 	for (int i = 0; i < ring_count; i++) {
 		float d = distance(ice_xz, ring_pos[i].xy);
 		// Screen-space derivative of the distance field: one pixel of feather at

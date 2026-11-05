@@ -4,12 +4,15 @@ extends Skeleton3D
 # Draws the keeper's gear as ONE skinned mesh: a bone per gear piece, posed on
 # its save box each update, so the pieces' fifty-odd surfaces cost a draw per
 # material instead of one each. The plain slots are zones of one surface that
-# BodyZonePaint draws (zone = slot). A surface the kit shader paints keeps its
-# material on a surface of its own, each vertex carrying its place and normal in
-# its piece's box frame in CUSTOM0 and CUSTOM1: the shader paints by those, and
-# skinning moves VERTEX. A right-catcher's pieces are built turned over on their
-# own x with their winding reversed, since skinning will not flip it
-# (KeeperSkeleton.mirrored).
+# BodyZonePaint draws (zone = slot), and the jersey (KeeperJerseyMesh), a skin
+# blended across the chest's and the arms' bones and a deform bone at each
+# shoulder and elbow, joins that surface in zones of its own. A surface the kit
+# shader paints (the pants and socks) keeps its material on a surface of its
+# own, each vertex carrying its place in its piece's box frame in CUSTOM0: the
+# shader paints by that, and skinning moves VERTEX. A
+# right-catcher's pieces are built turned over on their own x with their winding
+# reversed, since skinning will not flip it (KeeperSkeleton.mirrored); the
+# jersey is symmetric, and only its arms' binds change hands.
 
 # Round him in any stance: the skinned mesh is culled by this, not by its rest.
 const _BOUNDS := AABB(Vector3(-1.6, -0.1, -1.6), Vector3(3.2, 2.4, 3.2))
@@ -22,9 +25,12 @@ func _init() -> void:
 	name = "BodyRig"
 	for part: int in KeeperGear.PART_COUNT:
 		add_bone(KeeperGear.Part.keys()[part])
+	for d: int in KeeperJerseyMesh.DEFORM_COUNT:
+		add_bone(KeeperJerseyMesh.Deform.keys()[d])
 
 
-# Builds the body from the plain slots' material records (`slots`, a zone each)
+# Builds the body from the zones' material records (`slots`, the plain slots
+# and the jersey's zones, KeeperJerseyMesh.ZONE_COUNT)
 # and `kit_material`, (part, slot) -> the kit-shader material that surface
 # wears, or null for its slot's.
 func build(slots: Array[StandardMaterial3D], kit_material: Callable, mirrored: bool) -> void:
@@ -46,6 +52,12 @@ func build(slots: Array[StandardMaterial3D], kit_material: Callable, mirrored: b
 				painted[kit] = _Painted.new()
 				order.append(kit)
 			(painted[kit] as _Painted).add(arrays, part, mirrored)
+	var jersey: Array = KeeperJerseyMesh.shared_mesh().surface_get_arrays(0)
+	var bones: PackedInt32Array = (jersey[Mesh.ARRAY_BONES] as PackedInt32Array).duplicate()
+	for i: int in bones.size():
+		bones[i] += KeeperGear.PART_COUNT
+	jersey[Mesh.ARRAY_BONES] = bones
+	zones.add(jersey, -1)
 	var mesh: ArrayMesh = zones.commit()
 	paint = BodyZonePaint.new(slots.size())
 	for z: int in slots.size():
@@ -58,6 +70,10 @@ func build(slots: Array[StandardMaterial3D], kit_material: Callable, mirrored: b
 	var skin := Skin.new()
 	for part: int in KeeperGear.PART_COUNT:
 		skin.add_bind(part, Transform3D.IDENTITY)
+	var jersey_bones: PackedInt32Array = KeeperJerseyMesh.bind_bones(mirrored)
+	var rests: Array[Transform3D] = KeeperJerseyMesh.bind_rests()
+	for i: int in KeeperJerseyMesh.BIND_COUNT:
+		skin.add_bind(jersey_bones[i], rests[i].affine_inverse())
 	if _mesh != null:
 		_mesh.free()
 	_mesh = MeshInstance3D.new()
@@ -65,6 +81,9 @@ func build(slots: Array[StandardMaterial3D], kit_material: Callable, mirrored: b
 	_mesh.mesh = mesh
 	_mesh.skin = skin
 	_mesh.custom_aabb = _BOUNDS
+	# The jersey's faces bend as they are skinned: each is lit by its facing as
+	# drawn (body_zones.gdshaderinc), and the rigid pieces' are flat already.
+	_mesh.set_instance_shader_parameter(&"flat_from_position", 1.0)
 	add_child(_mesh)
 	_mesh.skeleton = NodePath("..")
 
@@ -72,6 +91,8 @@ func build(slots: Array[StandardMaterial3D], kit_material: Callable, mirrored: b
 func update(skel: KeeperSkeleton) -> void:
 	for part: int in KeeperGear.PART_COUNT:
 		set_bone_pose(part, KeeperGear.box(skel, part))
+	for d: int in KeeperJerseyMesh.DEFORM_COUNT:
+		set_bone_pose(KeeperJerseyMesh.deform_bone(d), KeeperJerseyMesh.deform_pose(skel, d))
 
 
 func body_mesh() -> MeshInstance3D:
@@ -88,7 +109,6 @@ class _Painted:
 	var _bones := PackedInt32Array()
 	var _weights := PackedFloat32Array()
 	var _place := PackedFloat32Array()
-	var _facing := PackedFloat32Array()
 	var _indices := PackedInt32Array()
 
 	func add(arrays: Array, bone: int, mirrored: bool) -> void:
@@ -104,7 +124,6 @@ class _Painted:
 			_bones.append_array([bone, 0, 0, 0])
 			_weights.append_array([1.0, 0.0, 0.0, 0.0])
 			_place.append_array([verts[i].x, verts[i].y, verts[i].z])
-			_facing.append_array([normals[i].x, normals[i].y, normals[i].z])
 		for t: int in range(0, verts.size(), 3):
 			_indices.append(base + t)
 			_indices.append(base + t + (2 if mirrored else 1))
@@ -119,8 +138,6 @@ class _Painted:
 		arrays[Mesh.ARRAY_BONES] = _bones
 		arrays[Mesh.ARRAY_WEIGHTS] = _weights
 		arrays[Mesh.ARRAY_CUSTOM0] = _place
-		arrays[Mesh.ARRAY_CUSTOM1] = _facing
 		arrays[Mesh.ARRAY_INDEX] = _indices
-		var format: int = (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT) \
-				| (Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM1_SHIFT)
+		var format: int = Mesh.ARRAY_CUSTOM_RGB_FLOAT << Mesh.ARRAY_FORMAT_CUSTOM0_SHIFT
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays, [], {}, format)

@@ -235,3 +235,27 @@ func test_a_bot_holding_a_tie_follows_the_mans_stick_late() -> void:
 		moved = now
 	assert_almost_eq(moved, 1.0 - exp(-1.0), 0.01,
 			"one lag budget closes 1 - 1/e of the step: a bot reads a pull as late as a human holder")
+
+
+# The jab commits the blade for its window, so in reach is not enough: it waits
+# until the blade, at its own speed, can be on the puck inside the window.
+func _jab_with_blade_at(blade: Vector3) -> Vector3:
+	before_each()   # a fresh agent: no jab window or cooldown carried over
+	sm._lifts_sticks = false
+	var s: WorldSnapshot = _carrier_snap()
+	var me := SkaterNetworkState.new()
+	me.position = Vector3(2.0, 0.0, -1.2)
+	me.blade_contact_world = blade
+	s.skater_states[SELF_ID] = me
+	return sm._poke_jab_aim(s, me.position)
+
+
+func test_a_jab_waits_for_a_blade_that_can_get_there() -> void:
+	var window_m: float = sm._self_blade_speed \
+			* float(SkaterAgentStickPlay.POKE_JAB_ACTIVE_TICKS) \
+			/ float(_PhysicsConstants.PHYSICS_TICK) + GameRules.POKE_RADIUS_M
+	# The puck is in reach of the body either way; only the blade differs.
+	assert_true(_jab_with_blade_at(Vector3(window_m - 0.1, 0.0, -1.2)).is_finite(),
+			"a blade inside the window jabs")
+	assert_false(_jab_with_blade_at(Vector3(2.0, 0.0, 0.8)).is_finite(),
+			"a blade at his hip holds the jab for a better one")

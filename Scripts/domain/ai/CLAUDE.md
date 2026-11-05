@@ -203,7 +203,7 @@ soonest forechecker's blade on the puck before its carrier can make his first
 play. A man with time to look up makes the stretch pass past an aggressive
 forecheck, so `AIForecheckRead` prices exactly that time — the pickup and its
 settle for a loose puck, his read (`CARRIER_READ_S`, a choice reaction set by feel, less
-what he has already held it; the brain counts the hold) and the release window —
+what he has already had of it free; the brain counts that) and the release window —
 and the brain runs FORECHECK while we beat it, TRANS_DEFENSE (the set
 neutral-zone shape) once we cannot. So a dump, a strip or a turnover we are on
 when they collect it is forechecked, and a D who has had the puck settled
@@ -213,6 +213,23 @@ raced on its path, from where it is first played, a tie counted as ours (a 50/50
 in their end is gone after). The hysteresis sits on the margin
 (`ENTER_MARGIN_S` / `HOLD_MARGIN_S`), not on the shape, for the reason the
 recovery race's does.
+
+**His read runs only while he is free.** A carrier protecting the puck from a
+stick is not reading the ice, so a man of ours on him — his blade on the carrier
+inside a release window (`carrier_pressured`) — restarts it, and once free he
+has to look up again. Counting the whole hold instead, a settled carrier was
+never forechecked again: past `CARRIER_READ_S` the margin is the release window
+alone, under `ENTER_MARGIN_S` with our stick already on him.
+
+**A forecheck we are running is held while dropping back buys nothing yet.** The
+set shape is there so their first play cannot beat our back line, and deep in
+their end it may not be able to: their soonest play to our blue line (a carry,
+or a pass to a man once his first play is away, the puck at its launch speed,
+and the man's skate there, at the line no sooner than both) against our back
+line set on it (5v5 the D pair; 3v3 our second man, the two of the 1-2). While
+our line is set first (`depth_margin_s` over `HOLD_MARGIN_S`), the forecheck
+stands. It never starts one: with nobody near the puck it would send F1 the
+length of their zone after a man he cannot reach.
 
 Never price it as catching him before he skates the puck out: a retriever deep
 in his corner is a long skate from his line, so that race reads a forechecker
@@ -474,6 +491,11 @@ new coverage scheme is a new answer to "who is mine", never new positioning code
 Position and velocity come from one snapshot entry, so a stand cannot ride a body
 its geometry isn't built on.
 
+Zone coverage picks a man up on its own ice (`AIZoneCoverage.in_coverage_ice`:
+our zone, out to a cover envelope past the line), in the partition and in
+MARK's no-man fallback alike. A man still up the ice is the rush's trailer, and
+escorting him walks the coverage out of its zone while the carrier is in it.
+
 `TeamBrain` matches every man-covering body at once, and a zone role's AREA
 enters as ELIGIBILITY — which men it may be handed — rather than as a private
 search. Do not give the zone roles private argmaxes over their areas: the areas
@@ -491,7 +513,17 @@ lengths at their blue line, 2 at the red line, 1 stick at ours, and inside our o
 zone "1 stick / contact: you are on him" (`docs/transition-defense-plan.md` §6).
 So the TRANS_DEFENSE → DZONE re-election is not a geometry discontinuity: *the D
 who gapped a carrier through the neutral zone keeps him into the zone; there is
-no handoff at the line.* The same holds for the route (above) and for the hit:
+no handoff at the line.* The election keeps him too: while a carrier comes at
+our net at pace, the puck is owned by the body goal-side of him whose stick gets
+onto his line farthest from our net (`AIRoleSlots.carrier_owner`, the cut-off
+race solved inside its walk's step, last tick's owner or BACK_STRONG's holder
+taking the hysteresis, a dead heat to the man nearest his line) — 3v3's
+PRESSURE, and in 5v5 the zone role that body holds, published as
+`TeamStrategyView.pressure_slot_override` over the area rule
+(`AIZoneCoverage.pressure_slot`). Raced to where the puck is, the backchecker
+he has just passed wins it and never catches him, and the D who rode him back
+pays a reversal his line never asks of him: a lone carrier at speed walked to
+the net front past five defenders (`test_lone_carrier_entry.gd`). The same holds for the route (above) and for the hit:
 the pressurer commits a body check only with support behind
 (`AILastManDiscipline.has_support_behind`) or a cover its caller has already
 priced (the pinch's rotation), because a committed hit loads him on
@@ -507,7 +539,7 @@ at our net at pace draws within a stick of level in our zone
 inside is lost or about to be: the last man may check, and otherwise steps into
 his path at contact (still in front), or, behind him, skates to the first ice
 on the carrier's line to our net his stick gets to before the carrier does
-(`_cut_off`, both on the arrival clock; the crease's top when he wins none
+(`AIDefensiveVerbs.cut_off`, both on the arrival clock; the crease's top when he wins none
 short of it), so the body or the reach-in meets him on his way to the slot.
 Letting him go wide is fine; letting him into the slot is not. Never chase the
 hip: a carrier any faster than the defender is never caught there, and cuts in
@@ -543,6 +575,19 @@ there (the ramp cushion, below), so he is at speed when they meet rather than
 reached flat-footed. It caps only the route's speed toward our net (lateral ride
 untouched), and level or beaten it lifts and he chases.
 
+**A carrier gaining on him buys no step-up.** While a carrier coming at pace
+(`GAP_UP_CLOSING_M_S`) beats the defender's pace down his line and the defender
+still holds a gap outside the house gate, the advance cap below turns into a floor on the
+retreat: the route commands at least that pace toward our net (or his retreat's
+top speed), under the floor's own allowance. The closing term spends spare
+depth by slowing the retreat, sized as if it could be won back at the brake's
+rate, but the stride is power-limited at speed: a backpedal from 5 m/s builds
+at ~3 m/s², so the defender rode a carrier at 9 m/s at 5–6 m/s and was caught
+flat. The stand is untouched; only the command is bounded. A gap-up
+and the line hold are exempt, and so is a defender inside the gate with a gap:
+the floor holds him where he stands, re-read each decision, so a least retreat
+would ratchet him into his net.
+
 The same route is capped the other way (`AIRoleRushD.set_advance_cap`): no more
 speed up-ice than he can still turn into the carrier's pace before the carrier
 eats the depth he holds past his gap — `approach_speed_cap`, the step-up bound
@@ -556,7 +601,7 @@ is closed on at a pace the defender can turn out of, never charged.
 
 ### Facing the play, or turned to skate with him
 
-A skater backward has 80% of his stride and 80% of his top speed
+A skater backward has 90% of his stride and 90% of his top speed
 (`SkaterMovementRules`), so a carrier at speed outruns any backpedal. The
 defender in front of him skates one of two retreats (`AIRoleRushD.retreat_gains`):
 backpedalling facing the play, or turned to skate down the ice — each priced as
@@ -634,6 +679,18 @@ carries across, the way he is sent, he keeps, because braking it spends the push
 the depth needs.
 `tests/slow/ai/test_nz_turnover_recovery.gd` scores this against the best a body
 could do: a straight-line retreat on the same ramp.
+
+**But never the middle.** Depth before width is for a defender already between
+the carrier's line to our net and the middle of the ice. One the middle is open
+on (`AIDefensiveVerbs.middle_open`: outside that band by more than a stick —
+wide of a carrier down the middle, or across the middle from a wide one) holds
+depth in a lane the carrier is not in, and the slot is his: from the dots, a
+standing D against a carrier down the middle at 9 m/s kept his depth to our line
+and was 6 m wide of him the whole way. He takes the first ice on the carrier's
+line his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`, the
+same cut-off the level pressurer skates), facing travel, and the ladder takes
+over once he is on it. `test_five_on_five_set_shape.gd` runs it against a
+three-man break.
 
 ### The ladder has a domain: the carrier has to be coming at us
 

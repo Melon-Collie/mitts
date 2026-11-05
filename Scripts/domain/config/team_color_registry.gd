@@ -22,9 +22,9 @@ class_name TeamColorRegistry
 #     the jersey/* keys (those mirror the 3D uniform mesh and look muddy in
 #     flat UI panels).
 #   - A nested "uniform" sub-dict carrying the full v2 detail
-#     (shoulders, jersey-with-yoke-and-stripes, arms.upper/lower,
-#     pants-with-stripes, socks-with-stripes). The skater painter
-#     consumes this; UI accent code doesn't need to touch it.
+#     (shoulders, jersey-with-yoke-and-stripes, the sleeve,
+#     pants-with-stripes, socks-with-stripes). The skaters' and the goalie's
+#     painters consume this; UI accent code doesn't need to touch it.
 #
 # Color identity is an integer slot: the team's index in the loaded array.
 # Out-of-range slots return a fallback and log a warning; they never crash.
@@ -246,7 +246,6 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 	var socks_raw:     Dictionary = raw.get("socks",     {})
 	var text_raw:      Dictionary = raw.get("text",      {})
 	var arms := {
-		"elbow": _parse_optional_color(arms_raw.get("elbow", null)),
 		"upper": {
 			"base":    _parse_color(arms_upper.get("base",    "#FFFFFF")),
 			"stripes": _parse_stripes(arms_upper.get("stripes", [])),
@@ -258,8 +257,7 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 	}
 	var shoulder_color: Color = _parse_color(shoulders_raw.get("color", "#FFFFFF"))
 	# The sleeve is the kit's arm (SleevePaint); a kit still in the two-segment
-	# form is read into one, and a sleeve hands the two-segment form back to the
-	# bodies that paint the arm in two.
+	# form is read into one.
 	var sleeve: Dictionary
 	if raw.has("sleeve"):
 		var sleeve_raw: Dictionary = raw.sleeve
@@ -267,8 +265,6 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 			"base":    _parse_color(sleeve_raw.get("base", "#FFFFFF")),
 			"stripes": _parse_stripes(sleeve_raw.get("stripes", []), true),
 		}
-		arms.upper = SleevePaint.segment(sleeve, true)
-		arms.lower = SleevePaint.segment(sleeve, false)
 		shoulder_color = SleevePaint.color_at(sleeve,
 				SleevePaint.pos_of(SleevePaint.NUMBER_CENTER_M))
 	else:
@@ -287,7 +283,6 @@ static func _parse_kit(raw: Dictionary) -> Dictionary:
 			"stripes": _parse_stripes(jersey_raw.get("stripes", []), true),
 		},
 		"sleeve":      sleeve,
-		"arms":        arms,
 		"gloves":      _parse_color(raw.get("gloves", "#FFFFFF")),
 		"pants": {
 			"base":    _parse_color(pants_raw.get("base",    "#FFFFFF")),
@@ -344,9 +339,8 @@ static func _parse_color(hex: Variant) -> Color:
 	return Color.WHITE
 
 
-# yoke, collar, arms.elbow and ui_ink are optional — null falls back: the collar
-# to the yoke, the yoke to the jersey body, the elbow to the sleeve under it,
-# the ink to the side's usual lettering.
+# yoke, collar and ui_ink are optional — null falls back: the collar to the
+# yoke, the yoke to the jersey body, the ink to the side's usual lettering.
 static func _parse_optional_color(hex: Variant) -> Variant:
 	if hex == null:
 		return null

@@ -418,6 +418,19 @@ func test_the_advance_cap_keeps_the_lateral_ride() -> void:
 	assert_gt(held.x, 0.1, "he still tracks the carrier across the ice")
 
 
+func test_a_negative_cap_is_a_least_retreat() -> void:
+	# The step-up's closing term asks for up-ice speed; a carrier gaining on him
+	# forbids it, and the route retreats at least at the cap's pace instead.
+	var held := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, FLOOR_RADIUS, -1.0)
+	assert_gt(held.y, 0.1, "he keeps retreating")
+
+
+func test_the_floor_outranks_a_least_retreat() -> void:
+	var self_pos := FLOOR_NET - Vector3(0, 0, 6.7)
+	var held := _ride_move(self_pos, self_pos - Vector3(0, 0, 5.7), RUSH, FLOOR_RADIUS, -5.0)
+	assert_lt(held.y, 0.001, "no net-ward thrust inside the floor, whatever the cap asks")
+
+
 func test_the_advance_cap_is_read_only_with_a_floor() -> void:
 	var free := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, 0.0)
 	var capped := _ride_move(STEP_UP_SELF, STEP_UP_STAND, SLOW_RUSH, 0.0, 0.0)

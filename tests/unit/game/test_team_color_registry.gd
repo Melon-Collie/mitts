@@ -170,8 +170,7 @@ func test_hardcoded_fallback_mirrors_the_bundled_first_slots() -> void:
 			assert_eq(kit.text.color, bundled.text.color, label + " lettering")
 			for region: String in ["jersey", "pants", "socks"]:
 				assert_eq(kit[region].base, bundled[region].base, "%s %s" % [label, region])
-			for part: String in ["upper", "lower"]:
-				assert_eq(kit.arms[part].base, bundled.arms[part].base, "%s arms.%s" % [label, part])
+			assert_eq(kit.sleeve.base, bundled.sleeve.base, label + " sleeve")
 
 
 # Every shipped kit dresses its goalie in white pads; a user file may change

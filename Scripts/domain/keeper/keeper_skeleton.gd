@@ -81,12 +81,12 @@ func pose(p: KeeperPose) -> void:
 	if glove_shoulder.distance_to(glove_at) > arm:
 		glove_at = glove_shoulder + (glove_at - glove_shoulder).normalized() * arm
 	_pose_arm(Bone.UPPER_ARM_G, glove_shoulder, glove_at, p.glove_elbow_pole, fwd)
-	xf[Bone.HAND_G] = Transform3D(_limb_basis(-p.glove_fingers, p.glove_palm), glove_at)
+	xf[Bone.HAND_G] = Transform3D(limb_basis(-p.glove_fingers, p.glove_palm), glove_at)
 	# The blocker's board stands upright on the back of the hand whatever the
 	# stick's lean, face to the shooter. The fist holds the stick, so the arm
 	# reaches the wrist on the back of it rather than the stick itself; a grip
 	# past the arm's reach brings the stick to the hand.
-	var blocker_hand: Basis = _limb_basis(Vector3.UP, p.blocker_face)
+	var blocker_hand: Basis = limb_basis(Vector3.UP, p.blocker_face)
 	var wrist_off: Vector3 = blocker_hand * KeeperAnatomy.BLOCKER_WRIST
 	if p.blocker_reach:
 		var reach: Vector3 = p.blocker_grip + wrist_off - blocker_shoulder
@@ -123,7 +123,7 @@ func _mirror() -> void:
 
 # A limb bone's basis: +Y along `up_bone` (toward the parent joint), −Z the
 # component of `front` square to it.
-static func _limb_basis(up_bone: Vector3, front: Vector3) -> Basis:
+static func limb_basis(up_bone: Vector3, front: Vector3) -> Basis:
 	var y: Vector3 = up_bone.normalized()
 	var f: Vector3 = front - y * front.dot(y)
 	if f.length_squared() < 1e-8:
@@ -145,8 +145,8 @@ func _pose_leg(side: int, hip: Vector3, leg: KeeperPose.Leg) -> void:
 	else:
 		knee = TwoBoneIK.solve_elbow(hip, leg.ankle, thigh_len, shin_len, leg.knee_pole)
 		ankle = knee + (leg.ankle - knee).normalized() * shin_len
-	xf[THIGH[side]] = Transform3D(_limb_basis(hip - knee, leg.thigh_front), hip)
-	var shin_basis: Basis = _limb_basis(knee - ankle, leg.shin_front)
+	xf[THIGH[side]] = Transform3D(limb_basis(hip - knee, leg.thigh_front), hip)
+	var shin_basis: Basis = limb_basis(knee - ankle, leg.shin_front)
 	xf[SHIN[side]] = Transform3D(shin_basis, knee)
 	var foot_basis: Basis
 	if leg.foot_mode == KeeperPose.FootMode.FLAT:
@@ -178,9 +178,9 @@ func _pose_arm(upper: int, shoulder: Vector3, hand: Vector3, pole: Vector3,
 		fwd: Vector3) -> void:
 	var elbow: Vector3 = TwoBoneIK.solve_elbow(shoulder, hand,
 			KeeperAnatomy.UPPER_ARM_M, KeeperAnatomy.FOREARM_M, pole)
-	xf[upper] = Transform3D(_limb_basis(shoulder - elbow, fwd), shoulder)
+	xf[upper] = Transform3D(limb_basis(shoulder - elbow, fwd), shoulder)
 	var wrist: Vector3 = elbow + (hand - elbow).normalized() * KeeperAnatomy.FOREARM_M
-	xf[upper + 1] = Transform3D(_limb_basis(elbow - wrist, fwd), elbow)
+	xf[upper + 1] = Transform3D(limb_basis(elbow - wrist, fwd), elbow)
 
 
 # The stick is rigid and its blade lies flat, so the blade's centre, its yaw

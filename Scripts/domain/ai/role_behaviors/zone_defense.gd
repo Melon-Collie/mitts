@@ -5,7 +5,8 @@ class_name AIRoleZoneDefense
 # docs/5v5-ai-plan.md §3.
 #
 # Per dispatch, in priority order:
-#   1. PRESSURE — my area owns the puck (AIZoneCoverage.pressure_owner).
+#   1. PRESSURE — I own the puck (AIZoneCoverage.pressure_slot): my area holds it,
+#      or I am goal-side of a carrier coming at pace.
 #   2. COVER — the man TeamBrain's matching gave me; my area is his eligibility,
 #      so when he leaves my ice the neighbour whose ice he enters picks him up.
 #   3. BREATHE — the area's rest anchor, which slides with the puck.
@@ -22,7 +23,8 @@ static func decide(ctx: RoleContext, role_slot: int) -> RoleDecision:
 
 	var puck_pos: Vector3 = ctx.snapshot.puck_state.position
 
-	if AIZoneCoverage.pressure_owner(strong_x, own_goal_z, puck_pos) == role_slot:
+	if AIZoneCoverage.pressure_slot(ctx.team_brain, strong_x, own_goal_z, puck_pos) \
+			== role_slot:
 		return AIRolePressure.decide(ctx)
 
 	var man_pid: int = ctx.assigned_threat_peer

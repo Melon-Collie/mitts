@@ -156,7 +156,7 @@ static func build(b: ConnectedSkinBuilder, tuck: int) -> void:
 					_pants_uv(side, b.position(ids[1])), _pants_uv(side, b.position(ids[2])),
 					_pants_uv(side, b.position(ids[3])), zone, inside, true)
 	var waist: int = b.vertex(Vector3(0.0, _PANTS[0].x, _PANTS[0].w), [bind_pelvis], [1.0])
-	SkaterConnectedMesh.fan(b, rings[0], waist, Vector2(0.25, 0.75),
+	b.fan(rings[0], waist, Vector2(0.25, 0.75),
 			SkaterConnectedMesh.zone(SkaterMeshBuilder.UpperSurface.PELVIS),
 			Vector3(0.0, _PANTS[0].x - 0.1, 0.0))
 
