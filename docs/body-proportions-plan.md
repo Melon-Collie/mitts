@@ -118,8 +118,8 @@ In order, each its own commit, each rendered (`render-body.sh`,
    skates on onto it rather than stopping first: the longer stick exposed
    both.
 
-Then re-render the arm references (their hand heights are measured from the
-ice, so they stand), re-run the calibration and re-derive the carry envelope.
+The arm model these proportions were measured for, and the carry envelope it
+derived, were later removed (docs/arm-anatomy-plan.md); the body stays.
 
 ## 5. Decisions for the user
 
