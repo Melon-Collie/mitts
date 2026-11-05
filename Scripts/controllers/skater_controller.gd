@@ -674,8 +674,6 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
-# The build's height (inches), which the derived carry (ArmEnvelope) is read at.
-var build_height_in: float = float(PlayerAttributes.HEIGHT_MEDIUM)
 var carry_crouch: float = 1.7            # crouch floor under the full chest fold over the stick (× stance_hip_deg), the loaded stance's
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
@@ -1425,7 +1423,6 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 		_capture_attribute_bases()
 	var m_height:  float = attrs.height_mult()
 	var m_agility: float = attrs.agility_mult()
-	build_height_in = float(attrs.height)
 	_build_height_mult = m_height / PlayerAttributes.neutral().height_mult()
 	max_speed = _base_max_speed * attrs.top_speed_mult()
 	thrust    = _base_thrust    * attrs.accel_mult()
@@ -2307,15 +2304,6 @@ func reach_purpose() -> float:
 # How far the chest folds over the stick (SkaterIKCoordinator.chest_fold).
 func chest_fold() -> float:
 	return _ik.chest_fold()
-
-
-# The derived carry's stance (SkaterIKCoordinator.carry_lean, carry_crouch_floor).
-func carry_lean() -> Vector2:
-	return _ik.carry_lean()
-
-
-func carry_crouch_floor(floor_value: float) -> float:
-	return _ik.carry_crouch_floor(floor_value)
 
 
 # The gait's (stop weight as the scrape hears it, skid weight, turn load) this

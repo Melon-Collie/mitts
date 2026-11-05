@@ -1,7 +1,11 @@
 # Arm anatomy — every stick pose a body can hold, and the reach that follows
 
-Status: APPROVED. Phase 1 (the model and its instruments) built; its record is
-§12. Treat it as the agreed design; ask before deviating from it.
+Status: WITHDRAWN. The model, its derived envelope, the reference sheets and
+every tool built on them are removed: the derived carry played jerky and read
+wrong at many bearings, and nothing else in the game used the model. The
+closed-form carry (`TopHandIK`, `CarryPostureRules`) is the carry. This file
+records what was designed and what the work measured; `git log --diff-filter=D
+-- Scripts/domain/rules/arm_anatomy.gd` finds the code.
 
 One-line summary: **one anatomical model of the trunk, both arms and the grip
 decides whether a stick pose is possible and how it is held; hockey technique

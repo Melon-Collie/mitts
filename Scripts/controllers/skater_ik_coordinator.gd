@@ -108,20 +108,6 @@ var _dangle_synced_tied: bool = false
 # the paths. native_pass_enabled routes round it for the parity test.
 var _native_pass: RefCounted = null
 var native_pass_enabled: bool = true
-# A carrier's band and hands from the derived envelope (ArmEnvelope); off, or
-# with no envelope, the closed-form solve. Off by default until the derived
-# carry is brought into play (docs/arm-anatomy-plan.md, phase 3). A carry runs
-# the GDScript pass, which the envelope is not ported into (phase 6).
-var derived_carry_enabled: bool = false
-var _envelope: ArmEnvelope = null
-var _envelope_hold := ArmEnvelope.Hold.new()
-var _envelope_hand_local := Vector3.ZERO
-# The bottom hand's place down the shaft the envelope last held a carry with (m),
-# and the stance it took: the chest's lean past the carry's own (radians:
-# forward, toward the skater's +X) and the hips' sink past it (m).
-var _carry_spacing: float = -1.0
-var _carry_lean := Vector2.ZERO
-var _carry_sink: float = 0.0
 var _pass_scalars := PackedFloat64Array()
 var _pass_vectors := PackedVector3Array()
 var _no_goalies := PackedFloat32Array()
@@ -144,7 +130,6 @@ func setup(skater: Skater, controller: SkaterController,
 	_skater = skater
 	_controller = controller
 	_skating = skating
-	_envelope = SkaterArmEnvelope.shared()
 	if ClassDB.class_exists(&"NativeTopHandIK"):
 		_native_top = ClassDB.instantiate(&"NativeTopHandIK")
 		# Stale-binary guard, one level finer than NativeKernels' class census:
@@ -284,7 +269,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 	# The pass drives the two kernels it was bound to; with either taken away it
 	# would keep driving the stale one.
 	if _native_pass != null and native_pass_enabled and _native_top != null \
-			and _native_dangle != null and not _envelope_carry():
+			and _native_dangle != null:
 		_native_blade_toward(target_world, delta, hold_blade, hold_seat)
 		return
 	var mouse_world: Vector3 = target_world
@@ -328,7 +313,7 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
 	else:
-		if _controller.has_puck and not _envelope_carry():
+		if _controller.has_puck:
 			mouse_world = _held_out(mouse_world)
 		var shoulder: Vector3 = arm_shoulder()
 		var shoulder_world: Vector3 = _skater.upper_body_to_global(shoulder)
@@ -358,19 +343,15 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 		# where the arm is").
 		var target_reach: float = _board_reach_limit(target_blade_xz, shoulder_world)
 		reach_purpose = _reach_purpose(skater_pos)
-		if _envelope_carry():
-			target_blade_world = _envelope_target(_skater.upper_body_to_global(
-					Vector3(target_blade_xz.x, 0.0, target_blade_xz.y)))
-		else:
-			var target_blade_local: Vector3 = _solve_top_hand(
-					target_blade_xz, blade_side_sign, target_reach, true).blade
-			if _controller.has_puck:
-				# The backhand stop is an angle about the hips, and the solve slides the
-				# blade along the shoulder's aim line off it: stopped again from where
-				# it landed, it holds the stop.
-				target_blade_local = _solve_top_hand(Vector2(target_blade_local.x,
-						target_blade_local.z), blade_side_sign, target_reach, true).blade
-			target_blade_world = _skater.upper_body_to_global(target_blade_local)
+		var target_blade_local: Vector3 = _solve_top_hand(
+				target_blade_xz, blade_side_sign, target_reach, true).blade
+		if _controller.has_puck:
+			# The backhand stop is an angle about the hips, and the solve slides the
+			# blade along the shoulder's aim line off it: stopped again from where
+			# it landed, it holds the stop.
+			target_blade_local = _solve_top_hand(Vector2(target_blade_local.x,
+					target_blade_local.z), blade_side_sign, target_reach, true).blade
+		target_blade_world = _skater.upper_body_to_global(target_blade_local)
 		target_blade_world.y = 0.0
 		last_target_blade_world = target_blade_world
 
@@ -510,12 +491,6 @@ func apply_blade_toward(target_world: Vector3, delta: float, hold_blade: bool = 
 			_board_reach_limit(capped_blade_xz, _skater.upper_body_to_global(arm_shoulder())))
 	var hand_local: Vector3 = ik.hand
 	var blade_local: Vector3 = ik.blade
-	if _envelope_carry():
-		var held: Vector3 = Vector3(capped_blade_xz.x, blade_y_lean_corrected(capped_blade_xz.x,
-				capped_blade_xz.y), capped_blade_xz.y)
-		if _envelope_hand(held):
-			blade_local = held
-			hand_local = _envelope_hand_local
 	if commit_t > 0.0:
 		var posed: TopHandIK.Result = _commit_hand_pose(
 				hand_local, blade_local, blade_side_sign, commit_t)
@@ -735,76 +710,6 @@ func _held_out(cursor_world: Vector3) -> Vector3:
 	var world: Vector3 = facing * Vector3(held.x, local.y, held.y)
 	world.y = 0.0
 	return world
-
-
-# ── The derived carry ─────────────────────────────────────────────────────────
-# A carrier's blade held into the band a body holds it in, and his hands placed
-# as the model's pose has them (ArmEnvelope), read at his height and his skating
-# fold, in his own frame with +X mirrored onto his forehand.
-func _envelope_carry() -> bool:
-	return derived_carry_enabled and _envelope != null and _controller.has_puck
-
-
-# How far into his skating fold he is: 0 standing, 1 the full fold.
-func _skating_share() -> float:
-	return clampf(-_skater.trunk_fold()
-			/ deg_to_rad(_controller.velocity_lean_forward_max_deg), 0.0, 1.0)
-
-
-func _forehand_sign() -> float:
-	return signf(_skater.bottom_shoulder.position.x)
-
-
-# The heel a carry aims at (`heel_world`, on the ice) held into the band, the
-# bearing turned toward straight ahead where nothing holds at it.
-func _envelope_target(heel_world: Vector3) -> Vector3:
-	var root: Transform3D = _skater.global_transform
-	var local: Vector3 = root.affine_inverse() * heel_world
-	var fh: float = _forehand_sign()
-	var held: Vector2 = _envelope.held_blade(_controller.build_height_in, _skating_share(),
-			atan2(local.x * fh, -local.z), Vector2(local.x, local.z).length())
-	var world: Vector3 = root * Vector3(sin(held.x) * held.y * fh, local.y,
-			-cos(held.x) * held.y)
-	world.y = 0.0
-	return world
-
-
-# The top hand holding a carried blade at `blade_local` (UpperBody's frame) as
-# the envelope's pose has it, a stick's length off the blade, into
-# _envelope_hand_local, and the bottom hand's place into _carry_spacing. False
-# where no pose round the blade holds it.
-func _envelope_hand(blade_local: Vector3) -> bool:
-	var root: Transform3D = _skater.global_transform
-	var local: Vector3 = root.affine_inverse() * _skater.upper_body_to_global(blade_local)
-	var fh: float = _forehand_sign()
-	if not _envelope.hold_at(_controller.build_height_in, _skating_share(),
-			rad_to_deg(atan2(local.x * fh, -local.z)), Vector2(local.x, local.z).length(),
-			_envelope_hold):
-		return false
-	var hand: Vector3 = _skater.upper_body_to_local(root * Vector3(
-			_envelope_hold.hand.x * fh, _envelope_hold.hand.y, _envelope_hold.hand.z))
-	_envelope_hand_local = blade_local + (hand - blade_local).normalized() * solve_stick_length()
-	_carry_spacing = _envelope_hold.spacing
-	_carry_lean = Vector2(_envelope_hold.lean.x, _envelope_hold.lean.y * fh)
-	_carry_sink = _envelope_hold.crouch
-	return true
-
-
-# The stance the derived carry holds its blade in (the chest's lean, forward and
-# toward the skater's +X; radians), zero off it. Tick state the gait draws.
-func carry_lean() -> Vector2:
-	return _carry_lean if _envelope_carry() else Vector2.ZERO
-
-
-# The carry's crouch floor (SkaterController.carry_crouch's units) once the
-# derived carry's sink is laid under `floor_value`, the stance it already has:
-# the floor that sinks the hips that much further.
-func carry_crouch_floor(floor_value: float) -> float:
-	if not _envelope_carry() or _carry_sink <= 0.0:
-		return floor_value
-	var height: float = _controller.build_height_in
-	return _envelope.floor_for_drop(height, _envelope.drop_for_floor(height, floor_value)
-			+ _carry_sink)
 
 
 # How close in a carried puck comes (m off his centre), from his skating fold:
@@ -1252,8 +1157,6 @@ func address_stick_horiz() -> float:
 # How far down the shaft the bottom hand holds: the short lever a draw is won
 # with, walked down over the countdown rather than jumped to.
 func _grip_fraction() -> float:
-	if _envelope_carry() and _carry_spacing > 0.0:
-		return _carry_spacing / solve_stick_length()
 	return lerpf(_controller.bottom_hand_grip_fraction,
 			_controller.faceoff_center_grip_fraction, _address_blend())
 
@@ -1319,8 +1222,6 @@ func _commit_hand_pose(hand_local: Vector3, blade_local: Vector3,
 # the blade a long way. The rigid pass is inert whenever the blade is reachable.
 # Returns the shared rigid_stick Result.
 func _arm_for_clamped_blade(blade_local: Vector3, blade_side_sign: float) -> TopHandIK.Result:
-	if _envelope_carry() and _envelope_hand(blade_local):
-		return rigid_stick(_envelope_hand_local, blade_local, blade_side_sign)
 	var tilt: Basis = _level_tilt()
 	var clamped_level: Vector3 = tilt * blade_local
 	var hand_local: Vector3 = tilt.transposed() * TopHandIK.hand_for_clamped_blade(

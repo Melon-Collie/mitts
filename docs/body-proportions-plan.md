@@ -96,8 +96,7 @@ In order, each its own commit, each rendered (`render-body.sh`,
    were re-set a quarter over the new measure: the same frames, scaled by the
    longer lever. The shoulder joints came 4 cm in each side
    (`shoulder_offset` 0.22 → 0.18, 0.36 m apart), inside the pads, whose width
-   the jersey keeps; the hands-apart rule (ArmTechnique) is measured across the
-   pads (`ArmAnatomyBody.shoulder_width`), not joint to joint. The neutral
+   the jersey keeps. The neutral
    build's reach came in with them (`LEAGUE_MAX_BLADE_REACH_M` 2.47 → 2.43),
    and a skating wrister's whip peaks 4% higher at the stick, its bound
    re-set a quarter over that.
