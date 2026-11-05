@@ -138,7 +138,7 @@ The carrier is `carrier.gd` (the compete: intents, phases, argmax, commitment) o
 | drive-in floor | `carrier_field.gd:receiver_drive_in_value` (self) floors carry | — | — | `test_role_carrier.gd` |
 | HOLD for a developing feed | `carrier_pass_search.gd:developing_feed_value`, `carrier_pass_search.gd:_developing_outlet_feed` × current safety × `delay_discount(_hold_elapsed_s)` | FINISHER or NET_FRONT spot projected `OUTLET_DEVELOP_WINDOW_S` (`score_pass_value`); OUTLET / BREAKOUT_STRONG / BREAKOUT_D2 skating ≥ `OUTLET_DEVELOP_MIN_SPEED_M_S` | `holds_for_developing_feeds`; one-timer-ready finisher skipped | `test_role_carrier.gd` |
 | protect (blade) | `_pick_fire_phase`: `carry_space.gd:best_handle_protect_point` → `protect_gain`/`protect_offset`; `_fill_protect_opponents` | non-beaten defenders (`PROTECT_SCREEN_BEHIND_M`) | `protects_the_puck` (`forward_puck_clearance` always computed) | `test_role_carrier.gd`, `test_reach_safety.gd` |
-| evade seam | `carry_space.gd:best_evade_point` (current safety) | momentum-projected reach | — | `test_reach_safety.gd` |
+| evade seam | `carry_space.gd:best_evade_point` (current safety); `evade_read.gd:evade_safety` (the same seam's safety, swept under exact bounds: the continuation's keep odds) | momentum-projected reach | — | `test_reach_safety.gd`, `test_evade_safety.gd` |
 
 **Argmax / commitment** — `decide` (throttle `PICK_ACTION_PERIOD_TICKS`, open-ice LOD `_arm_pick_cooldown`, slicing `_pick_fire_phase` → next dispatch `_pick_commit_phase`; full eval on `reset`/`clear_intent`) → `_pick_commit_phase`:
 1. each fire option qualifies against its **own** bar using `_settle_handicap(value, _settle_penalty(ctx))`; best qualified = `fire_score` (−INF if none);

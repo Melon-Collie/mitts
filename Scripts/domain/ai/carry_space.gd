@@ -576,39 +576,6 @@ static func best_evade_point(
 			env, opponents, opponent_vels, opponent_caps)
 
 
-# The carrier's evadability, clearance_to_safety at the max-clearance seam
-# (best_evade_point): "can he keep the puck at all", in whatever direction. The
-# same number as reading reach_clearance at best_evade_point's answer, but the
-# sweep stops at the first sample the dwell map already reads as fully safe.
-static func evade_safety(
-		carrier_pos: Vector3, carrier_vel: Vector3,
-		opponents: Array[Vector3], opponent_vels: Array[Vector3],
-		handle_reach: float, opponent_caps: Array = []) -> float:
-	var saturated: float = POKE_CONTACT_RADIUS_M + DWELL_HALF_BAND_M
-	var proj_x: float = carrier_pos.x + carrier_vel.x * EVADE_HORIZON_S
-	var proj_z: float = carrier_pos.z + carrier_vel.z * EVADE_HORIZON_S
-	var best_clear: float = reach_clearance(Vector3(proj_x, 0.0, proj_z), EVADE_HORIZON_S,
-			opponents, opponent_vels, opponent_caps)
-	if best_clear >= saturated:
-		return 1.0
-	var env: float = 0.5 * MANEUVER_ACCEL_M_S2 * EVADE_HORIZON_S * EVADE_HORIZON_S \
-			+ handle_reach
-	for ring: float in EVADE_SAMPLE_RINGS:
-		var radius: float = env * ring
-		for k: int in EVADE_SAMPLE_ANGLES:
-			var ang: float = TAU * float(k) / float(EVADE_SAMPLE_ANGLES)
-			var p := Vector3(proj_x + cos(ang) * radius, 0.0, proj_z + sin(ang) * radius)
-			if board_gap_m(p) < 0.0:
-				continue
-			var c: float = reach_clearance(p, EVADE_HORIZON_S, opponents,
-					opponent_vels, opponent_caps, -1.0, Vector2.ZERO, 0.0, best_clear)
-			if c > best_clear:
-				best_clear = c
-				if best_clear >= saturated:
-					return 1.0
-	return clearance_to_safety(best_clear)
-
-
 # WHERE ON THE BLADE to hold the puck under pressure: a point in the carrier's
 # handling envelope ALONE (no body-maneuver term — the body keeps doing whatever
 # steering wants; this is pure stick work), safe from every defender's

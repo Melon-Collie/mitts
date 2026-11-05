@@ -217,7 +217,7 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 #   keep · C(pos) − (1 − keep) · C_opp(pos)
 #
 # C the side's continuation (AIPossessionFloor), C_opp the other side's for a
-# puck lost where he holds it, keep his evadability there (AICarrySpace
+# puck lost where he holds it, keep his evadability there (AIEvadeRead
 # .evade_safety, the league carry-handle) against the defence carried on to then.
 func base_at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> float:
 	var c: float = AIPossessionFloor.continuation(pos, _goal)
@@ -229,7 +229,7 @@ func base_at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) ->
 			_base_defence.append(AITrajectory.predict_at(_defenders[k], _defender_vels[k],
 					start_s))
 		defence = _base_defence
-	var keep: float = AICarrySpace.evade_safety(pos, vel, defence, _defender_vels,
+	var keep: float = AIEvadeRead.evade_safety(pos, vel, defence, _defender_vels,
 			AIBotMechanics.EVADE_CARRY_HANDLE_M, _defender_caps)
 	return keep * c - (1.0 - keep) * c_opp
 
