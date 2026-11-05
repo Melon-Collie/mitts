@@ -41,12 +41,18 @@ const _CHASE_LOOK_HEIGHT: float = 1.0
 const _STEPS_PER_FRAME: int = 60
 const _WARMUP_TIME_SCALE: float = 8.0
 const _HUNT_TIME_SCALE: float = 2.0
+# At the software rasterizer's ~1 fps the whole shot list advances the match by
+# well under a tick.
+const _FREEZE_TIME_SCALE: float = 0.0002
+const _CATCH_UP_FRAMES: int = 3
+const _MOMENT_ATTEMPTS: int = 8
 const _START_TIMEOUT_FRAMES: int = 2400
 const _WARMUP_SEC: float = 4.0
 const _HUNT_TIMEOUT_SEC: float = 90.0
 # A carry worth framing: moving with the puck, up-ice, out of the end zones.
 const _MIN_CARRY_SPEED: float = 4.0
-const _MAX_CARRY_ABS_Z: float = 18.0
+const _MAX_CARRY_ABS_Z: float = 9.0
+const _MAX_CARRY_ABS_X: float = 9.0
 const _LIVE_SETTLE_STEPS: int = 80
 const _LIVE_SETTLE_DT: float = 0.1
 const _RING_RADII: Array[float] = [1.0, 2.0]
@@ -64,24 +70,27 @@ func begin(only: String, out_dir: String, list_only: bool) -> void:
 		return
 	_out_dir = out_dir
 	DirAccess.make_dir_recursive_absolute(_out_dir)
-	process_mode = Node.PROCESS_MODE_ALWAYS
 	var setups: Array[Dictionary] = []
 	for s: Dictionary in _SETUPS:
 		if only.is_empty() or only.split(",").has(s.name):
 			setups.append(s)
+	# The study cameras frame skaters the live camera may not, and with distance
+	# -1 every skater's animation LOD is due each frame (SkaterAnimationLod), so
+	# the bodies are posed even though the match is near-frozen.
+	SkaterCameraCull.enabled = false
 	PlayerPrefs.attack_up = true
 	PlayerPrefs.camera_mode = PlayerPrefs.CAMERA_MODE_DYNAMIC
 	if not await _start_match():
 		get_tree().quit(1)
 		return
-	var carrier: Skater = await _hunt_carry()
+	var carrier: Skater = await _find_moment()
 	if carrier == null:
 		push_error("[camera-study] nobody carried the puck through open ice")
 		get_tree().quit(1)
 		return
-	get_tree().paused = true
-	Engine.time_scale = 1.0
-	RenderingServer.render_loop_enabled = true
+	# Near-frozen rather than paused: pausing stops every _process, which is
+	# where the rigs pose the bodies and the puck rides the blade.
+	Engine.time_scale = _FREEZE_TIME_SCALE
 
 	var live: GameCamera = _find(get_tree().current_scene, GameCamera) as GameCamera
 	var team_id: int = _team_of(carrier)
@@ -154,11 +163,31 @@ func _start_match() -> bool:
 	return true
 
 
+# A carry that survives the catch-up: a few drawn ticks, because with the render
+# loop off the interpolated transforms and the render-rate rigs never caught up
+# with the sim, and a carry that ends in them is no carry to frame.
+func _find_moment() -> Skater:
+	for attempt: int in _MOMENT_ATTEMPTS:
+		var carrier: Skater = await _hunt_carry()
+		if carrier == null:
+			return null
+		RenderingServer.render_loop_enabled = true
+		Engine.time_scale = 1.0
+		Engine.max_physics_steps_per_frame = 1
+		for i: int in _CATCH_UP_FRAMES:
+			await get_tree().process_frame
+		if GameManager.puck.carrier == carrier:
+			return carrier
+		print("[camera-study] the carry ended during catch-up; hunting again")
+	return null
+
+
 func _hunt_carry() -> Skater:
 	var tree: SceneTree = get_tree()
 	var deadline: int = Engine.get_physics_frames() \
 			+ int(_HUNT_TIMEOUT_SEC * Engine.physics_ticks_per_second)
 	var live: GameCamera = _find(tree.current_scene, GameCamera) as GameCamera
+	RenderingServer.render_loop_enabled = false
 	Engine.max_physics_steps_per_frame = 4
 	Engine.time_scale = _HUNT_TIME_SCALE
 	while Engine.get_physics_frames() < deadline:
@@ -170,6 +199,7 @@ func _hunt_carry() -> Skater:
 		var v: Vector2 = Vector2(c.velocity.x, c.velocity.z)
 		var dir: int = live.call("_get_attacking_direction")
 		if v.length() >= _MIN_CARRY_SPEED and absf(c.global_position.z) <= _MAX_CARRY_ABS_Z \
+				and absf(c.global_position.x) <= _MAX_CARRY_ABS_X \
 				and c.velocity.z * float(dir) > 0.5 * v.length():
 			print("[camera-study] carrier at (%.1f, %.1f) %.1f m/s" % [
 					c.global_position.x, c.global_position.z, v.length()])
