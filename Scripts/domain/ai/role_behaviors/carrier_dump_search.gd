@@ -45,9 +45,9 @@ const STEPS: int = AILoosePuckChase.RACE_STEPS
 const STEP_DT: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChase.RACE_STEPS)
 
 # Never priced (each price is a possession read on both sides): a launch we
-# never win (its value is at most p · ours, so it cannot clear the bar), or one
-# we would play before it is in their zone — a chip to ourselves is a carry's
-# business, not a dump-in.
+# never win while their possession never pays us (see _race), or one we would
+# play before it is in their zone — a chip to ourselves is a carry's business,
+# not a dump-in.
 const _MAX_LAUNCHES: int = 10   # AIM_POINTS × PACE_FRACS (test_carrier_dump_search.gd)
 
 # ── Results (valid after search) ─────────────────────────────────────────────
@@ -221,7 +221,9 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void
 	_t_ours[k] = t_ours
 	_ours_vel[k] = ours_vel
 	_iced[k] = ctx.icing_enforced and _ices(ctx, origin, minf(t_ours, t_theirs))
-	_skip[k] = _p[k] <= 0.0
+	# A launch we never win is worth only what their puck at the meet pays us,
+	# which is nothing while no possession reads below zero.
+	_skip[k] = _p[k] <= 0.0 and AIPossessionValue.LEAST_VALUE >= 0.0
 
 
 # Launch `k`'s value (see the header).

@@ -363,10 +363,10 @@ func _score_move(ctx: RoleContext, m: int, our_goalie: Vector3, behind_net: bool
 	var t0: float = AICarryRollout.HORIZON_S * reach / AICarryRollout.SAMPLES
 	var decay: float = AIActionScoring.delay_discount(t0)
 	var bound: float = _prune_bound_for(m, _beam_prune_bound)
-	if decay <= bound:
+	if AICarrierField.kept_ceiling(decay) <= bound:
 		return
 	var safety: float = _rolled_safety(ctx, rollout, m, ctx.self_pos, _field.opponents, reach)
-	if decay * safety <= bound:
+	if AICarrierField.kept_ceiling(decay, safety) <= bound:
 		return
 	_field.project_opponents(t0, _scratch_opponents_path)
 	var worth: float = _end_worth(ctx, end, rollout.reach_vel(m, reach, ctx.self_pos), t0,
@@ -467,8 +467,8 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 # each rolled move again, from the end's position, pace and facing, against the
 # defence projected a first move's horizon on, priced as a first move is —
 # its end's worth × the decay of the step × its keep odds − its strip cost.
-# Returns `floor_value` when no second move beats it (exact: a move whose worth ×
-# decay cannot clear it is not read for safety, nor costed when × keep odds cannot).
+# Returns `floor_value` when no second move beats it (exact: a move whose kept_ceiling
+# cannot clear it is not read for safety, nor costed when it cannot at its keep odds).
 func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		caps: AISkaterCaps, floor_value: float = -INF) -> float:
 	var t1: float = AICarryRollout.HORIZON_S
@@ -503,13 +503,13 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		var worth: float = _end_worth(ctx, _rollout2.reach_pos(m, reach),
 				_rollout2.reach_vel(m, reach, start), t1 + t2, caps, dest_arrival) \
 				* AIActionScoring.delay_discount(t2)
-		if worth <= best:
+		if AICarrierField.kept_ceiling(worth) <= best:
 			continue
 		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2,
 				reach)
-		var move_value: float = worth * safety
-		if move_value <= best:
+		if AICarrierField.kept_ceiling(worth, safety) <= best:
 			continue
+		var move_value: float = worth * safety
 		if safety < 1.0 and _strip_point.is_finite():
 			move_value -= _field.turnover_cost(_strip_point, 1.0 - safety)
 			move_value -= _field.counter_exposure_cost(ctx, _strip_point, 1.0 - safety,
@@ -610,13 +610,13 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 	var local_time: float = AIArrival.time_to_arrive(
 			self_pos, candidate, ctx.self_velocity, ctx.self_max_speed,
 			ctx.self_max_accel, ctx.self_lateral_grip)
-	# CEILING PRUNES (exact): with dest_score ≤ 1 and cost ≥ 0, each partial
-	# product of the ≤ 1 factors is a hard upper bound, checked in cost order —
-	# decay alone before the opponent projection, × lane before the safety read,
-	# × safety before the arrival-shot / strip machinery. Under pressure SAFETY
-	# is the killer, so a swarmed carrier doesn't pay full price for doomed spots.
+	# CEILING PRUNES (exact): with dest_score ≤ 1, each partial product of the ≤ 1
+	# factors bounds the total (kept_ceiling), checked in cost order — decay alone
+	# before the opponent projection, × lane before the safety read, × safety before
+	# the arrival-shot / strip machinery. Under pressure SAFETY is the killer, so a
+	# swarmed carrier doesn't pay full price for doomed spots.
 	var decay: float = AIActionScoring.delay_discount(local_time)
-	if decay <= best_so_far:
+	if AICarrierField.kept_ceiling(decay) <= best_so_far:
 		return -INF
 	_field.project_opponents(local_time, _scratch_opponents_path)
 	var lane: float = AICarrySpace.carry_lane_clearance(
@@ -624,7 +624,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			ctx.self_max_speed)
 	if lane <= 0.0:
 		return -INF
-	if lane * decay <= best_so_far:
+	if AICarrierField.kept_ceiling(lane * decay) <= best_so_far:
 		return -INF
 	var cand_puck_pos: Vector3 = AICarrierField.puck_pos_at(candidate, ctx.attacking_goal_pos)
 	var cur_puck_pos: Vector3 = AICarrierField.puck_pos_at(self_pos, ctx.attacking_goal_pos)
@@ -634,7 +634,7 @@ func _score_move_candidate_base(ctx: RoleContext, candidate: Vector3,
 			cur_puck_pos, cand_puck_pos, local_time,
 			_field.opponents, _field.opponent_vels, _field.opponent_caps,
 			true)
-	if lane * decay * safety <= best_so_far:
+	if AICarrierField.kept_ceiling(lane * decay, safety) <= best_so_far:
 		return -INF
 	var to_cand: Vector3 = candidate - self_pos
 	to_cand.y = 0.0
@@ -757,8 +757,8 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 #
 # With `carry_on`, the row's move is also searched a second step deep, for a
 # step that lifts the row past `best_so_far` (exact: a step's worth is odds, at
-# most 1, so it is worth at most its own decay; one that cannot win the argmax
-# is not priced).
+# most 1, so it is worth at most its own decay's kept_ceiling; one that cannot
+# win the argmax is not priced).
 func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false,
 		our_goalie: Vector3 = Vector3.ZERO, caps: AISkaterCaps = null,
 		best_so_far: float = -INF) -> float:
@@ -773,7 +773,7 @@ func _upgrade_candidate_two_ply(ctx: RoleContext, i: int, carry_on: bool = false
 		step_needs = maxf(step_needs, (best_so_far + _beam_cost[i]) / row_scale)
 	if carry_on and _beam_move[i] >= 0 \
 			and _move_reach[_beam_move[i]] == AICarryRollout.SAMPLES \
-			and AIActionScoring.delay_discount(AICarryRollout.HORIZON_S) > step_needs:
+			and AICarrierField.kept_ceiling(AIActionScoring.delay_discount(AICarryRollout.HORIZON_S)) > step_needs:
 		var step: float = _carry_on_value(ctx, _beam_move[i], our_goalie, caps, step_needs)
 		if step > step_needs:
 			dest_score = step

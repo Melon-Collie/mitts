@@ -38,6 +38,10 @@ const GOALIE_MEMO_CAP: int = 32
 # the same entries against the same defence in one AI batch. Round-robin past
 # this many defences.
 const SHARED_ENTRY_SLOTS: int = 4
+# The least at() returns, for either side. A turnover hands the other side its
+# possession, so this is the most a turnover can ever pay the side that loses
+# the puck: the bound the searches' exact prunes add to a total's gains.
+const LEAST_VALUE: float = 0.0
 
 
 # One defence's entry worths, keyed on the exact ice they were priced against.

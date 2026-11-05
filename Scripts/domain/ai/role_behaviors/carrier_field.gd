@@ -218,6 +218,17 @@ func turnover_cost(loss_point: Vector3, loss_prob: float) -> float:
 	return loss_prob * _theirs.at(loss_point)
 
 
+# The most `gain × keep − the turnover the rest costs` can be worth when its gain
+# is at most `gain`: a turnover pays the loser at most the opponent's least
+# possession (AIPossessionValue.LEAST_VALUE). The exact ceiling the searches
+# prune by. `keep` < 0: not read yet, so whichever end of [0, 1] is larger.
+static func kept_ceiling(gain: float, keep: float = -1.0) -> float:
+	var paid: float = -AIPossessionValue.LEAST_VALUE
+	if keep < 0.0:
+		return maxf(gain, paid)
+	return gain * keep + (1.0 - keep) * paid
+
+
 # Transition-exposure cost of losing the puck at `loss_point` with
 # probability `loss_prob`, while this carrier would be recovering from
 # `recover_from` — the additive counter-rush half of the turnover price
