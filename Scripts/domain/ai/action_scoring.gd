@@ -98,10 +98,10 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 
 # ── Shoot-for-tip EV ──────────────────────────────────────────────────────────
 # The value of ripping a shot AT THE NET through a net-front teammate's blade.
-# Above the deflect threshold the puck redirects off his angled blade at
-# near-full pace (PuckCollisionRules.deflect_velocity; the finisher's reactive
-# TIP mode steps onto the shot path), so the outcome is a NEW release from the
-# tip point. Three independent events compose:
+# The finisher's reactive TIP mode steps onto the shot path holding the
+# deliberate deflect, so the puck redirects off his blade at near-full pace
+# whatever its pace (PuckCollisionRules.deflect_velocity), and the outcome is a
+# NEW release from the tip point. Three independent events compose:
 #   P(rip reaches the tipper)   — lane_clear over release→tip vs the DEFENDERS
 # × P(blade contacts the puck)  — the same reach/reaction race a lane defender
 #                                 runs (_lane_block_at)
@@ -110,10 +110,10 @@ static func expected_goals(shooter: Vector3, attacking_goal: Vector3,
 # max() against the direct read at the call site, never additive — the two are
 # different aims of the same rip.
 
-# Puck.deflect_min_speed (test_bot_mirrors.gd), the receiver-relative pace above
-# which a blade deflects instead of catching: a rip below it lands on the
-# tape as a pass — no tip outcome exists.
-const TIP_DEFLECT_MIN_SPEED_M_S: float = 22.0
+# The pace from which the finisher reads a loose puck heading at the net as a
+# shot and goes to tip it (AIRoleFinisher.INCOMING_SHOT_SPEED_M_S): a rip below
+# it draws no tip.
+const TIP_MIN_SPEED_M_S: float = 12.0
 # A tip point closer to the release than this is still on the shooter's own
 # handle, not a mid-flight contact.
 const TIP_MIN_ALONG_M: float = 0.6
@@ -128,7 +128,7 @@ static func tip_ev(
 		shot_speed_m_s: float,
 		opponent_caps: Array = [],
 		tip_caps: AISkaterCaps = null) -> float:
-	if shot_speed_m_s < TIP_DEFLECT_MIN_SPEED_M_S:
+	if shot_speed_m_s < TIP_MIN_SPEED_M_S:
 		return 0.0
 	# Shot line: release → net centre (the reactive tip steps ONTO this line,
 	# so planning against it is self-consistent with the execution).

@@ -1726,17 +1726,10 @@ func _sync_knockdown_meta(prev_timer: float) -> void:
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
-# Whether this skater is committing to a deliberate deflect this tick. Base
-# behaviour (human players, local and remote-on-host): holding the DEFLECT button
-# (stick_lift / Q) without the puck. The loft level (scroll) then shapes it —
-# FLAT grounded redirect, LOW grounded tip up, HIGH knock an airborne puck down
-# (reach follows blade_can_interact; direction from Puck.apply_blade_deflect).
-# AIController
-# overrides this to always-false — bots don't deliberate-deflect; their
-# one-timers hold the SLAP button off-puck (the real slapper charge + pickup
-# zone — the only one-timer path on_puck_picked_up_network supports: a held
-# wrister's state is force-reset to SKATING_WITH_PUCK on pickup, so a wrister
-# release edge can never fire on a caught feed).
+# Whether this skater is committing to a deliberate deflect this tick: holding
+# the DEFLECT button (stick_lift / Q) without the puck, a human's or a bot's (the
+# finisher's tip, AIRoleFinisher). The loft level signs the redirect — FLAT and
+# LOW down, MID and HIGH up (PuckCollisionRules.deflect_loft_speed).
 func _wants_deflect(input: InputState) -> bool:
 	return input.stick_lift_held and not has_puck
 

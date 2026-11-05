@@ -131,11 +131,11 @@ func test_tip_shifts_anchor_onto_puck_path_and_aims_at_goal() -> void:
 
 # ─── TIP + LIFT: elevated shot ────────────────────────────────────────────
 
-func test_lift_and_tip_when_shooter_is_elevated() -> void:
+func test_an_elevated_shot_is_tipped_down() -> void:
 	# Same geometry as the TIP test but the shooting teammate has
 	# is_elevated = true. Finisher should still move ONTO the path and aim
-	# at net (a tip), and additionally raise its blade so it can reach the
-	# airborne puck — not step out of the way.
+	# at net (a tip), holding the deflect — whose press takes the blade up to
+	# the airborne puck — and tip it down, off the plane the keeper read.
 	var teammate_pos := Vector3(4.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -148,15 +148,16 @@ func test_lift_and_tip_when_shooter_is_elevated() -> void:
 	# Target moves onto the puck path (same as the ground tip), x ≈ 2.6.
 	assert_almost_eq(d.target_position.x, 2.6, 0.1)
 	assert_almost_eq(d.target_position.z, -22.0, 0.001)
-	# Aim override toward opp net, and the blade is lifted to reach the air.
+	# Aim override toward opp net, deflecting.
 	assert_true(d.has_aim_override)
 	assert_almost_eq(d.aim_world_pos.z, OPP_NET_Z, 0.001)
-	assert_true(d.lift_blade, "elevated incoming shot → lift to tip it")
+	assert_true(d.deflect, "an incoming shot is tipped, not caught")
+	assert_false(d.deflect_up, "a raised shot is tipped down")
 
 
-func test_ground_tip_does_not_lift_blade() -> void:
-	# A fast GROUND shot is tipped with the blade down — lifting would
-	# make the grounded blade unable to touch the on-ice puck.
+func test_a_ground_shot_is_tipped_up() -> void:
+	# A fast GROUND shot is deflected too — the press keeps the blade on the
+	# ice for a puck met there — and tipped up.
 	var teammate_pos := Vector3(4.0, 0.0, -15.0)
 	var ctx: RoleContext = _make_ctx(
 			Vector3(-2.0, 0.0, -22.0),
@@ -166,7 +167,25 @@ func test_ground_tip_does_not_lift_blade() -> void:
 				_make_skater(2, TEAM_ID, teammate_pos, false),  # NOT elevated
 			])
 	var d: RoleDecision = AIRoleFinisher.decide(ctx)
-	assert_false(d.lift_blade, "a ground shot is tipped with a grounded blade")
+	assert_true(d.deflect, "an incoming shot is tipped, not caught")
+	assert_true(d.deflect_up, "a shot on the ice is tipped up")
+
+
+func test_the_deflect_waits_for_the_press_to_read_the_shot() -> void:
+	# The same ground shot from twice as far: it reaches our z-plane past the
+	# press's read horizon, so the finisher steps onto the path without the
+	# deflect yet — held from there, the press would read nothing.
+	var teammate_pos := Vector3(4.0, 0.0, -1.0)
+	var ctx: RoleContext = _make_ctx(
+			Vector3(-2.0, 0.0, -22.0),
+			teammate_pos, Vector3(-3.0, 0.0, -15.0),
+			[
+				_make_skater(1, TEAM_ID, Vector3(-2.0, 0.0, -22.0), false),
+				_make_skater(2, TEAM_ID, teammate_pos, false),
+			])
+	var d: RoleDecision = AIRoleFinisher.decide(ctx)
+	assert_true(d.has_aim_override, "still a tip: onto the path, aimed at the net")
+	assert_false(d.deflect, "too early to press")
 
 
 # ─── HOLD: puck won't reach our z-plane ───────────────────────────────────

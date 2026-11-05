@@ -5,8 +5,9 @@ class_name AIRoleFinisher
 # active; POSITIONING stages for the next one. No exposure factor: crashing the
 # net is the role, and defensive recovery is SUPPORT's job.
 
-# Speed gate: pucks slower than this are passes / rolling, not shots.
-const INCOMING_SHOT_SPEED_M_S: float = 12.0
+# Speed gate: pucks slower than this are passes / rolling, not shots. The tip
+# pricing reads the same gate.
+const INCOMING_SHOT_SPEED_M_S: float = AIActionScoring.TIP_MIN_SPEED_M_S
 
 # Weak-side staging bias for the SET CYCLE, where the cross-seam feed is the
 # highest-value look. Feel tunable; 0 = centered.
@@ -86,10 +87,13 @@ static func _try_reactive_decision(ctx: RoleContext) -> RoleDecision:
 	d.target_position = Vector3(path_x_at_my_z, 0.0, ctx.self_pos.z)
 	d.aim_world_pos = Vector3(0.0, 0.0, opp_goal_z)
 	d.has_aim_override = true
-	# A grounded blade flies under an elevated puck, so an airborne incoming shot
-	# has to be met with the blade raised.
-	if _last_shooter_is_elevated(ctx):
-		d.lift_blade = true
+	# Hold the deflect, so the blade redirects the shot rather than catching it,
+	# from when the press can read the puck: it reads it once, and takes the
+	# blade to its height (DeflectReachRules.lift_to_meet). The tip changes the
+	# plane the keeper read: a shot on the ice goes up, a raised one down.
+	if t_to_my_z <= DeflectReachRules.TRACK_HORIZON_S:
+		d.deflect = true
+		d.deflect_up = not _last_shooter_is_elevated(ctx)
 	return d
 
 
