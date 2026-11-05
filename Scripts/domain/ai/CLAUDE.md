@@ -1047,7 +1047,15 @@ reaches back into what remains.
   in the shot currency one man behind their goal line has no shot, so without
   the support a won dump reads as worthless. Never leave that reception
   unraced: the dump's seconds of flight are when a lone D gets back to his
-  house, and a feed priced to a man alone at the post dumps away every 2-on-1. So a dump is a 50/50 or better
+  house, and a feed priced to a man alone at the post dumps away every 2-on-1.
+  **With the numbers there is no dump-in at all** (`RoleContext.numbers_up`):
+  a tactical rule, as the one-way valve is, read off their own rush read of our
+  attack (`TeamBrain.their_rush_read`, `AIRushRead` filled from their side, so
+  a backchecker on our hip counts as a man back exactly as he does for our D).
+  It stands in for what the possession read cannot price yet: a man taking a
+  feed at their line is valued as one man carrying in, blind to the defender
+  having to choose, so an odd-man rush reads as cheap as an even one (#892).
+  Once that read prices the pass option, the rule should never bind. So a dump is a 50/50 or better
   exactly when our side gets there first, and it is worth what the spot is worth
   with the men arriving. Under NHL rules a release from our half that crosses
   their goal line untouched, without our side first to the dots by the clear

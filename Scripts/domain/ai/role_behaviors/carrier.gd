@@ -611,10 +611,18 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 	_phase_best_pass_rim_dir = _pass.best_rim_dir
 	_phase_best_pass_rim_pace = _pass.best_rim_pace
 	_phase_best_pass_frac = _pass.best_pace_frac
-	_dump.search(ctx)
-	_phase_dump_score = _dump.best_score
-	_phase_dump_dir = _dump.best_dir
-	_phase_dump_pace = _dump.best_pace
+	# A numbers advantage is not dumped away: a tactical rule, as the one-way
+	# valve is, standing in for the pass option the possession read cannot
+	# price yet (#892).
+	if ctx.numbers_up:
+		_phase_dump_score = -INF
+		_phase_dump_dir = Vector3.ZERO
+		_phase_dump_pace = 0.0
+	else:
+		_dump.search(ctx)
+		_phase_dump_score = _dump.best_score
+		_phase_dump_dir = _dump.best_dir
+		_phase_dump_pace = _dump.best_pace
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, and the

@@ -165,6 +165,18 @@ func _two_on_one(body_z: float, gap: float, d_x: float) -> RoleContext:
 	return ctx
 
 
+func test_with_the_numbers_there_is_no_dump_in() -> void:
+	# The stand-up line he dumps against, read as ours on numbers: the dump-in
+	# leaves the compete (a tactical rule, ctx.numbers_up).
+	var ctx: RoleContext = _stand_up_line(true)
+	ctx.numbers_up = true
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	assert_eq(c._phase_dump_score, -INF, "not searched")
+	assert_false(c.intended_action == AIRoleCarrier.INTENT_DUMP and c._dumping_in,
+			"nor fired")
+
+
 func test_a_two_on_one_is_not_dumped_away() -> void:
 	# The lone D gets back to his house long before a dump's feed out of the
 	# corner reaches either of us, so the numbers are not given up for a race.

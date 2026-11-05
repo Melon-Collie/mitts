@@ -467,3 +467,52 @@ func test_zone_coverage_takes_no_man_still_up_the_ice() -> void:
 	for def_pid: int in brain.threat_assignments:
 		assert_false(brain.threat_assignments[def_pid] in [210, 220],
 				"peer %d covers a man up the ice" % def_pid)
+
+
+# ── Whether we have the numbers (their rush read of our attack) ─────────────
+# Our three a stride short of their line at speed; their lone D backing in
+# ahead, and `backcheckers` of theirs on our hip. Team 0 attacks -Z.
+func _three_on_one(backcheckers: int, carrier: int = 100) -> WorldSnapshot:
+	var snap := WorldSnapshot.new()
+	var v := Vector3(0.0, 0.0, -7.0)
+	var rows: Array = [[100, 0, Vector3(-6.0, 0.0, -1.5), v],
+			[110, 0, Vector3(-1.0, 0.0, -1.0), v],
+			[120, 0, Vector3(4.0, 0.0, -1.0), v],
+			[200, 1, Vector3(0.0, 0.0, -7.5), Vector3(0.0, 0.0, -3.0)]]
+	for i: int in backcheckers:
+		rows.append([210 + i, 1, Vector3(-4.0 + 5.0 * i, 0.0, 1.5), Vector3(0.0, 0.0, -7.5)])
+	for r: Array in rows:
+		var s := SkaterNetworkState.new()
+		s.position = r[2]
+		s.velocity = r[3]
+		snap.skater_states[r[0]] = s
+	var puck := PuckNetworkState.new()
+	puck.carrier_peer_id = carrier
+	puck.position = snap.skater_states[carrier].position
+	snap.puck_state = puck
+	return snap
+
+
+func _numbers_up(snap: WorldSnapshot) -> bool:
+	var team_map: Dictionary = {}
+	for pid: int in snap.skater_states:
+		team_map[pid] = 0 if pid < 200 else 1
+	var brain := TeamBrain.new(TEAM_ID, team_map)
+	brain._compute_tick(snap)
+	return brain.numbers_up()
+
+
+func test_a_three_on_one_is_numbers_up() -> void:
+	assert_true(_numbers_up(_three_on_one(0)))
+
+
+func test_a_backchecker_on_the_hip_is_a_man_back() -> void:
+	# Their own read counts him (AIRushRead.BACKCHECK_WINDOW_S): one makes it a
+	# 3-on-2, still ours; two make it even.
+	assert_true(_numbers_up(_three_on_one(1)), "3-on-2")
+	assert_false(_numbers_up(_three_on_one(2)), "3-on-3")
+
+
+func test_never_numbers_up_on_their_puck() -> void:
+	assert_false(_numbers_up(_three_on_one(0, 200)))
+

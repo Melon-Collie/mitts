@@ -1308,6 +1308,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.rush_read = _current_strategy.get_rush_read()
 		ctx.team_size = _current_strategy.get_team_size()
 		ctx.icing_enforced = _current_strategy.icing_enforced()
+		ctx.numbers_up = _current_strategy.numbers_up()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
 		ctx.self_home_side = PlayerRules.home_side_x(lobby_slot, _own_goal_dir)
@@ -1327,6 +1328,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.ping_pass_target_peer = -1
 		ctx.team_size = GameRules.DEFAULT_TEAM_SIZE
 		ctx.icing_enforced = false
+		ctx.numbers_up = false
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
 	return ctx

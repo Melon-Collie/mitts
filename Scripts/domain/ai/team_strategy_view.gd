@@ -52,6 +52,11 @@ func get_team_size() -> int:
 func icing_enforced() -> bool:
 	return false
 
+# Whether we have the numbers on their defence: their own rush read of our
+# attack (AIRushRead from their side) has them short.
+func numbers_up() -> bool:
+	return false
+
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return {}
 
