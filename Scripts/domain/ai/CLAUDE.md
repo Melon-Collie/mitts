@@ -839,6 +839,20 @@ reaches back into what remains.
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it
     (#785), so a clean shot from range against a set keeper is worth ~0.
+  - **The open set is goal intervals, not aim samples.** The generator sweeps
+    24 aims per loft and bisects every edge of a goal run to ~5 mm
+    (`tests/unit/ai/open_set_edges.gd`); a run reaching a post ends at the post.
+    A crossing is priced by the interval it lands in, so a gap a millimetre wide
+    is worth a millimetre. Never price an aim sample as standing for its whole
+    band: a gap narrower than the aim step then reads as either nothing or the
+    full step, and the field flickers between neighbouring spots
+    (`docs/shot-field-resolution-plan.md`). The 24 aims are only the candidates
+    the pick chooses among.
+  - **The grid reaches the boards and the blue line.** Spots run to ±12 m
+    across and 19.5 m out; a spot whose carrier would stand in the boards has no
+    cells, and its bilinear share goes to its neighbours. A release past the
+    grid reads the edge spot's value unchanged, so only releases off the ice or
+    out of the zone ever do.
   - Held against measured cells it was not generated at by
     `test_shot_odds_vs_truth.gd`, whose error, concordance and pick-share
     bounds are ratchets.

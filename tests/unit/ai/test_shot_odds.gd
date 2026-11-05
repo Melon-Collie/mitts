@@ -238,3 +238,17 @@ func test_interval_odds_grow_with_the_open_net_and_add_over_disjoint_gaps() -> v
 	assert_almost_eq(AIShotOdds.interval_odds(a, -0.15, 1e-4), 1.0, 1e-4,
 			"a perfect hand aimed inside a gap scores")
 
+
+func test_no_cell_scores_outside_the_posts() -> void:
+	AIShotOdds.prepare()
+	var reach: float = AIShotOdds.post_reach()
+	for c: int in AIShotFieldData.ROWS.size():
+		for li: int in AIShotOdds.LOFTS.size():
+			var edges: PackedFloat32Array = AIShotOdds._cell_edges(c, li)
+			for k: int in range(0, edges.size(), 2):
+				if edges[k] < -reach - 0.0005 or edges[k + 1] > reach + 0.0005 \
+						or edges[k] > edges[k + 1]:
+					fail_test("cell %d loft %d has goal interval %.4f..%.4f outside the posts"
+							% [c, li, edges[k], edges[k + 1]])
+					return
+	pass_test("every goal interval lies between the posts")
