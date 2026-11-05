@@ -46,7 +46,7 @@ void NativeHemFlaps::configure(const PackedVector3Array &p_drape, const PackedFl
 
 void NativeHemFlaps::collide_skater(const PackedInt32Array &p_bones, const PackedFloat64Array &p_pelvis,
 		const PackedFloat64Array &p_dims) {
-	ERR_FAIL_COND(p_bones.size() != 5 || p_dims.size() != 4 || p_pelvis.size() % 3 != 0);
+	ERR_FAIL_COND(p_bones.size() != 5 || p_dims.size() != 5 || p_pelvis.size() % 3 != 0);
 	skater = true;
 	bone_pelvis = p_bones[0];
 	bone_leg[0] = p_bones[1];
@@ -54,10 +54,11 @@ void NativeHemFlaps::collide_skater(const PackedInt32Array &p_bones, const Packe
 	bone_thigh[0] = p_bones[3];
 	bone_thigh[1] = p_bones[4];
 	pelvis_profile.assign(p_pelvis.ptr(), p_pelvis.ptr() + p_pelvis.size());
-	thigh_length = p_dims[0];
-	thigh_radius_m = p_dims[1];
-	pelvis_xs = p_dims[2];
-	pelvis_zs = p_dims[3];
+	thigh_from = p_dims[0];
+	thigh_length = p_dims[1];
+	thigh_radius_m = p_dims[2];
+	pelvis_xs = p_dims[3];
+	pelvis_zs = p_dims[4];
 }
 
 void NativeHemFlaps::collide_sections(const PackedInt32Array &p_bones, const PackedVector3Array &p_half_extents,
@@ -289,7 +290,7 @@ void NativeHemFlaps::step(double p_delta, const Vector3 &p_g, bool p_write) {
 		for (int i = 0; i < 2; ++i) {
 			const Transform3D leg = skeleton->get_bone_global_pose(bone_leg[i]);
 			const Basis thigh = skeleton->get_bone_global_pose(bone_thigh[i]).basis;
-			thigh_top[i] = leg.origin;
+			thigh_top[i] = leg.xform(Vector3(0, (real_t)-thigh_from, 0));
 			thigh_bottom[i] = leg.xform(Vector3(0, (real_t)-thigh_length, 0));
 			thigh_radius[i] = (float)(thigh_radius_m * (double)thigh.get_column(0).length());
 		}

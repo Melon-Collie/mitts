@@ -145,10 +145,10 @@ func test_carrier_not_pushed_backwards_by_defender_on_the_line() -> void:
 
 
 func test_carrier_ignores_defender_outside_swept_reach() -> void:
-	# A defender well outside his momentum-reach (stationary, ~3.6 m off) is no
+	# A defender well outside his momentum-reach (stationary, ~3.8 m off) is no
 	# threat to the puck this horizon — zero repel, pure anchor pull.
 	var anchor := Vector3(0, 0, 8)
-	var opps: Array[Vector3] = [Vector3(3.6, 0, 0)]
+	var opps: Array[Vector3] = [Vector3(3.8, 0, 0)]
 	var vels: Array[Vector3] = [Vector3.ZERO]
 	var v := _carrier_move(Vector3.ZERO, anchor, opps, vels)
 	assert_almost_eq(v.x, 0.0, 0.01, "out of reach → no repel at all")

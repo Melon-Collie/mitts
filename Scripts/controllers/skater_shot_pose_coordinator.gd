@@ -136,7 +136,7 @@ func apply_block_blade_position() -> void:
 	_skater.set_blade_position(rigid.blade)
 
 # Seconds the celebration's raised stick eases in and back out over: the shaft
-# swings ~150° on a 1.3 m lever, and quicker than this its tip's turn alone
+# swings ~150° on a 1.4 m lever, and quicker than this its tip's turn alone
 # outruns the body's smoothness bounds (test_body_stays_smooth.gd).
 const CELEBRATION_EASE_S: float = 0.4
 

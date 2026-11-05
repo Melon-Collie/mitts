@@ -132,6 +132,17 @@ func test_blade_gate_parks_on_the_line_at_the_entry_point() -> void:
 			"gate sits at the blade's comfortable extension")
 
 
+func test_a_saucer_is_priced_to_the_gate_the_receiver_plays_it_at() -> void:
+	# The carrier's saucer runway ends where the receiver's stick takes the feed;
+	# a gate priced nearer his body lets the flip land past his blade.
+	for span: float in [1.5, AISkaterCaps.new().blade_span, 1.9]:
+		var caps := AISkaterCaps.new()
+		caps.blade_span = span
+		assert_almost_eq(AICarrierPassSearch.receiver_gate_m(caps),
+				SkaterAgentReception.gate_reach(span + AIBotMechanics.BLADE_REACH_BUFFER_M),
+				0.0001, "blade span %.2f: the pass search's gate is the reception's" % span)
+
+
 func test_blade_gate_head_on_parks_in_front() -> void:
 	# Bot standing exactly on the line: the gate is a full comfortable reach IN
 	# FRONT of the body, toward the incoming puck — blade out to meet it.

@@ -1875,10 +1875,10 @@ func test_short_feed_below_saucer_floor_stays_grounded() -> void:
 
 
 const _SAUCER_PASSER := Vector3(3.0, 0.0, 5.0)
-const _SAUCER_RECEIVER := Vector3(3.0, 0.0, -4.0)
+const _SAUCER_RECEIVER := Vector3(3.0, 0.0, -7.0)
 
 
-# Neutral ice, a 9 m ahead-man behind a mid-lane stick, two forecheckers
+# Neutral ice, a 12 m ahead-man behind a mid-lane stick, two forecheckers
 # pressuring the carry, and the receiver's PASS_TO_ME ping.
 func _pinged_saucer_ctx() -> RoleContext:
 	var ctx := _make_ctx(_SAUCER_PASSER, [
@@ -1904,9 +1904,10 @@ func test_committed_saucer_pass_caps_launch_at_the_receivability_bound() -> void
 		pending("the fixture no longer commits the saucer (see the snapshot); the cap is untested")
 		return
 	var bound: float = AIPuckLane.saucer_max_launch_speed(
-			_SAUCER_PASSER.distance_to(_SAUCER_RECEIVER))
+			_SAUCER_PASSER.distance_to(_SAUCER_RECEIVER)
+			- AICarrierPassSearch.receiver_gate_m(AISkaterCaps.new()))
 	assert_lt(c.pass_target_speed, bound + 0.01,
-			"committed saucer launch is capped so the flip lands before the tape")
+			"committed saucer launch is capped so the flip lands before his stick takes it")
 	assert_gt(c.pass_target_speed,
 			AIPuckLane.SOFTEST_FEED_M_S - 0.01,
 			"committed saucer launch stays at/above the softest feed")
@@ -2663,7 +2664,7 @@ func _record_feed_and_pressure_picks(snap: Snapshot) -> void:
 	var mid_lane: AICarrierPassSearch = _best_pass_to_mate(_mid_lane_feed_ctx(2.0, 6.5))
 	snap.record("8 m feed past a mid-lane stick: variant",
 			_variant(mid_lane.best_is_saucer) if mid_lane.best_score > 0.0 else "NONE")
-	snap.record("pinged ahead man 9 m out behind a mid-lane stick: variant",
+	snap.record("pinged ahead man 12 m out behind a mid-lane stick: variant",
 			_variant(_decided(_pinged_saucer_ctx()).pass_should_saucer))
 	snap.record("board pincer closing, open outlet across: pick", _pick(_decided(_pincer_ctx())))
 	snap.record("light pressure, only a covered mate behind: intent",

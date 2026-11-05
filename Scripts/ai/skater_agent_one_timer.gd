@@ -40,6 +40,10 @@ var _is_left_handed: bool = false
 var _strike_local: Vector2 = AISkaterCaps.new().slapper_strike_local
 var _stance_open_rad: float = PI * 0.5
 var _caps: AISkaterCaps = AISkaterCaps.new()
+# The line the press last committed its swing along (world XZ, unit; ZERO
+# before one): the hips set for the swing, led off the net against the feed's
+# pull, and the zone with them.
+var _swing_line := Vector2.ZERO
 
 
 func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
@@ -56,6 +60,12 @@ func set_caps(caps: AISkaterCaps) -> void:
 	_caps = caps
 	_strike_local = caps.slapper_strike_local
 	_stance_open_rad = caps.slapper_stance_open_rad
+
+
+# The swing the press commits (`line`, unit world XZ), or ZERO once there is
+# none: the zone is placed for its stance rather than the net's.
+func commit_swing(line: Vector2) -> void:
+	_swing_line = line
 
 
 # Seconds this body takes, wound up now, to set for a shot along `shot_dir`
@@ -228,10 +238,13 @@ func puck_at_zone(snapshot: WorldSnapshot, self_pos: Vector3,
 	return dx * dx + dz * dz <= ONE_TIMER_RELEASE_RADIUS_M * ONE_TIMER_RELEASE_RADIUS_M
 
 
-# The zone's offset off the body once its hips have set for a shot along the
-# unit `net_dir`.
+# The zone's offset off the body once its hips have set: for the committed
+# swing, else for a shot along the unit `net_dir`.
 func _zone_offset(net_dir: Vector3) -> Vector3:
-	var off: Vector2 = SlapperRules.strike_offset(Vector2(net_dir.x, net_dir.z),
+	var line := Vector2(net_dir.x, net_dir.z)
+	if _swing_line != Vector2.ZERO:
+		line = _swing_line
+	var off: Vector2 = SlapperRules.strike_offset(line,
 			Vector2(_strike_local.x * _side(), _strike_local.y), _side(), _stance_open_rad)
 	return Vector3(off.x, 0.0, off.y)
 

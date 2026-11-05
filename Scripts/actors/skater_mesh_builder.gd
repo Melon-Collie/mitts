@@ -49,8 +49,15 @@ const TORSO_YOKE_SIDE_FRACTION: float = (_TORSO_PROFILE[0].x - _TORSO_PROFILE[2]
 # over it, while the chest rings stay centered so the belly keeps its line.
 const _TORSO_REAR_SWAY: Array[float] = [
 	0.0, 0.0, 0.0, 0.0, 0.006, 0.012, 0.018, 0.020, 0.026, 0.032, 0.036]
+# Each ring's share of _TORSO_Z_SCALE: the chest 0.34 m deep, a 6'1" man's
+# ~0.26 m under his pads and sweater, easing at the waist into the hockey pants'
+# full depth, which the tail hangs over.
+const _TORSO_DEPTH: Array[float] = [
+	0.875, 0.875, 0.875, 0.875, 0.94, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
 
-# Chest reads wider than deep — lateral/depth scale on the torso's rings.
+# Chest reads wider than deep — lateral/depth scale on the torso's rings: 0.47 m
+# across the shoulder pads by 0.34 m deep at the chest, a 6'1" man's ~0.26 m
+# chest under his pads and sweater.
 const _TORSO_X_SCALE: float = 1.05
 const _TORSO_Z_SCALE: float = 0.88
 
@@ -79,11 +86,10 @@ const _HELMET_RADIUS: float = 0.155
 const _HELMET_FRONT_CUT: float = 0.40
 const _HELMET_BACK_CUT: float = 0.76
 const _HELMET_DROP_START_C: float = 0.34
-# Ear loops: a localized rim dip centered on each side (|sin θ| = 1),
-# narrowed by the exponent so it reads as an ear cover, not a lower brim.
-# At the nearest sampled azimuths the dip reaches ear-top depth (y ≈ −0.03);
-# it fades to nothing at the face and inside the nape drop.
-const _HELMET_EAR_DIP: float = 0.22
+# Over the ears: a shallow, narrow rim dip centered on each side
+# (|sin θ| = 1), the shell stopping above the ear; it fades to nothing at the
+# face and inside the nape drop.
+const _HELMET_EAR_DIP: float = 0.08
 const _HELMET_EAR_DIP_POWER: float = 6.0
 # The shell closes with a fan to an apex HIGH inside the dome (this fraction
 # of the radius up), not a floor at rim height — a low floor reads as a
@@ -246,13 +252,13 @@ const _HOLDER_TOP_HALF_W: float = 0.011
 const _HOLDER_RAIL_HALF_W: float = 0.0055
 # Neck: skin tube from chin to collar, a child of the Helmet node like the
 # head so it rides the same head-bulk scaling and skeleton offsets. Stations
-# are helmet-local (helmet origin y 0.65, torso top 0.47): the top hides
-# inside the head ball, the bottom flares into the traps where it sinks
-# into the torso.
+# are helmet-local (the helmet at y 0.7 drawn at 0.75 scale, the torso's top
+# at 0.52, so 0.24 local reaches it): the top hides inside the head ball, the
+# bottom sinks into the collar barely wider than the throat.
 const NECK_PROFILE: Array[Vector2] = [
-	Vector2(-0.095, 0.064),
-	Vector2(-0.155, 0.070),
-	Vector2(-0.190, 0.092),  # trapezius flare into the collar
+	Vector2(-0.095, 0.085),
+	Vector2(-0.175, 0.093),
+	Vector2(-0.245, 0.100),  # into the collar, a column rather than a cone
 ]
 
 static var _cache: Dictionary = {}
@@ -344,6 +350,19 @@ const FIST_PART_FINGERS: int = 1
 const FIST_PART_THUMB: int = 2
 const HELMET_SURF_SHELL: int = 0
 const HELMET_SURF_SKIN: int = 1
+# The helmet's hardware (shared_helmet_hardware): the chin strap.
+const HELMET_HARDWARE_STRAP: int = 0
+# The chin strap: a band from under the shell's rim in front of each ear,
+# along the jaw to under the chin, just off the skin (the head ball's side is
+# at 0.135 from the helmet's centre), from this azimuth (rad, +X side) and
+# latitude to this one under the chin, this wide (half, as latitude), in
+# `_STRAP_STEPS` pieces a side.
+const _STRAP_HALF_V: float = 0.022
+const _STRAP_STEPS: int = 6
+const _STRAP_RADIUS: float = 0.146
+const _STRAP_FROM: float = PI * 0.5 + 0.2
+const _STRAP_V := Vector2(0.5, 0.86)
+const _STRAP_COLOR := Color(0.07, 0.07, 0.08)
 
 
 # The head ball and its face, centred on the origin, face toward −Z, white but
@@ -362,6 +381,49 @@ static func shared_helmet_shell(lon: int, lat: int) -> ArrayMesh:
 
 static func shared_helmet_assembly() -> ArrayMesh:
 	return _shared("helmet_assembly", _build_helmet_assembly)
+
+
+# The chin strap, helmet-local, a surface wearing its own fixed finish (black
+# webbing whatever the kit), which SkaterRigidParts seeds into the body's paint.
+static func shared_helmet_hardware() -> ArrayMesh:
+	return _shared("helmet_hardware", _build_helmet_hardware)
+
+
+static func _build_helmet_hardware() -> ArrayMesh:
+	var m := ArrayMesh.new()
+	var strap := SurfaceTool.new()
+	strap.begin(Mesh.PRIMITIVE_TRIANGLES)
+	strap.set_smooth_group(-1)  # flat shading — see class doc block
+	# θ = PI is the face; each side runs from its guard's front foot round to it.
+	for side: float in [1.0, -1.0]:
+		var from: float = _STRAP_FROM
+		var th0: float = from if side > 0.0 else PI
+		var th1: float = PI if side > 0.0 else TAU - from
+		for k: int in _STRAP_STEPS:
+			var ta: float = lerpf(th0, th1, float(k) / float(_STRAP_STEPS))
+			var tb: float = lerpf(th0, th1, float(k + 1) / float(_STRAP_STEPS))
+			var va: float = _strap_v(ta, from)
+			var vb: float = _strap_v(tb, from)
+			_uv_quad(strap,
+					_sphere_point(_STRAP_RADIUS, va - _STRAP_HALF_V, ta), Vector2.ZERO,
+					_sphere_point(_STRAP_RADIUS, vb - _STRAP_HALF_V, tb), Vector2(0.1, 0.0),
+					_sphere_point(_STRAP_RADIUS, vb + _STRAP_HALF_V, tb), Vector2(0.1, 0.1),
+					_sphere_point(_STRAP_RADIUS, va + _STRAP_HALF_V, ta), Vector2(0.0, 0.1))
+	strap.generate_normals()
+	strap.commit(m)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = _STRAP_COLOR
+	mat.roughness = 0.8
+	BodyRim.apply(mat)
+	m.surface_set_material(HELMET_HARDWARE_STRAP, mat)
+	return m
+
+
+# The strap's latitude at azimuth `theta`: from under the rim (`from`, or its
+# mirror) down along the jaw to under the chin at the face (θ = PI).
+static func _strap_v(theta: float, from: float) -> float:
+	var t: float = clampf(1.0 - absf(theta - PI) / (PI - from), 0.0, 1.0)
+	return lerpf(_STRAP_V.x, _STRAP_V.y, t)
 
 
 static func _build_helmet_assembly() -> ArrayMesh:
@@ -421,7 +483,7 @@ const UPPER_BONE_COUNT: int = 13
 # ten a zone and its bone share a number, which the arm's surface seams rely on,
 # so new zones go at the end. The connected skin paints TORSO, PELVIS and the
 # two sleeves (SkaterConnectedMesh.sleeve_surface); the helmet's bone carries
-# two zones, its shell and the head/neck skin.
+# three zones, its shell, the head/neck skin and the chin strap.
 enum UpperSurface {
 	TOP_UPPER_ARM,
 	TOP_FOREARM,
@@ -439,8 +501,9 @@ enum UpperSurface {
 	TOP_FINGERS,
 	BOTTOM_FINGERS,
 	PELVIS,
+	HELMET_STRAP,
 }
-const UPPER_SURFACE_COUNT: int = 16
+const UPPER_SURFACE_COUNT: int = 17
 # The body's paint zones: the leg surfaces, then the upper ones.
 const UPPER_ZONE_BASE: int = LEG_SURFACE_COUNT
 const BODY_ZONE_COUNT: int = LEG_SURFACE_COUNT + UPPER_SURFACE_COUNT
@@ -465,38 +528,31 @@ const TORSO_HEM_STATION: int = 10
 # One torso ring (sides + 1 points, the last repeating the first), torso-local.
 static func torso_ring(station: int) -> PackedVector3Array:
 	var s: Vector2 = _TORSO_PROFILE[station]
-	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE, _TORSO_Z_SCALE,
-			_TORSO_SIDES, TAU * TORSO_U_PHASE)
+	var ring: PackedVector3Array = _ring(s.x, s.y, _TORSO_X_SCALE,
+			_TORSO_Z_SCALE * _TORSO_DEPTH[station], _TORSO_SIDES, TAU * TORSO_U_PHASE)
 	for k: int in ring.size():
 		ring[k].z += _TORSO_REAR_SWAY[station]
 	return ring
 
 
 # How far `p` (torso-local) lies outside the torso's rest rings, metres, negative
-# inside: along the ring's ellipse radius at p's height, the circumscribed
-# ellipse of the faceted ring, so a point that clears it clears the faces.
-# Below the hem the tail hangs on at the hem's girth; above the collar is the
-# neck and head, which nothing here measures against, so INF.
+# inside (TorsoSection.clearance on this torso's section).
 static func torso_clearance(p: Vector3) -> float:
-	if p.y > _TORSO_PROFILE[0].x + 0.0001:
-		return INF
-	var last: int = _TORSO_PROFILE.size() - 1
-	var radius: float = _TORSO_PROFILE[last].y
-	var sway: float = _TORSO_REAR_SWAY[last]
-	for i: int in last:
+	return TorsoSection.clearance(p, _TORSO_PROFILE, _TORSO_REAR_SWAY, _TORSO_DEPTH,
+			Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE))
+
+
+# The torso's share of its depth scale at height `y` (torso-local), between its
+# stations (_TORSO_DEPTH): 1 at and below the waist's last station.
+static func torso_depth_at(y: float) -> float:
+	if y >= _TORSO_PROFILE[0].x:
+		return _TORSO_DEPTH[0]
+	for i: int in _TORSO_PROFILE.size() - 1:
 		var a: Vector2 = _TORSO_PROFILE[i]
 		var b: Vector2 = _TORSO_PROFILE[i + 1]
-		if p.y >= b.x:
-			var t: float = (a.x - p.y) / (a.x - b.x)
-			radius = lerpf(a.y, b.y, t)
-			sway = lerpf(_TORSO_REAR_SWAY[i], _TORSO_REAR_SWAY[i + 1], t)
-			break
-	var q := Vector2(p.x, p.z - sway)
-	var span: float = q.length()
-	if span < 0.000001:
-		return -radius * _TORSO_Z_SCALE
-	var e: float = Vector2(q.x / (radius * _TORSO_X_SCALE), q.y / (radius * _TORSO_Z_SCALE)).length()
-	return span * (1.0 - 1.0 / e)
+		if y >= b.x:
+			return lerpf(_TORSO_DEPTH[i], _TORSO_DEPTH[i + 1], (a.x - y) / (a.x - b.x))
+	return _TORSO_DEPTH[_TORSO_DEPTH.size() - 1]
 
 
 # The pants are wider than deep by this, as the torso is.
@@ -504,7 +560,10 @@ const PELVIS_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
 # torso_clearance's section, for the arms' C++ port (NativeArmRig.configure_torso).
 const TORSO_PROFILE: Array[Vector2] = _TORSO_PROFILE
 const TORSO_REAR_SWAY: Array[float] = _TORSO_REAR_SWAY
+const TORSO_DEPTH: Array[float] = _TORSO_DEPTH
 const TORSO_XZ_SCALE := Vector2(_TORSO_X_SCALE, _TORSO_Z_SCALE)
+# The shoulder pads' half-width outside at rest, at the shoulder line.
+const SHOULDER_HALF_WIDTH_M: float = _TORSO_PROFILE[2].y * _TORSO_X_SCALE
 
 
 # Gloved fist (see _GLOVE_FIST_STATIONS), a right or a left one: the BACK of the

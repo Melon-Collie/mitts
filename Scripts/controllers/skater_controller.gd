@@ -265,38 +265,27 @@ var blade_height: float = 0.03
 # (0.0675 above the ice), or some pucks are touchable by neither plane. 0.52 sits
 # at the top, so a deflect reaches a net-front feed arriving at 0.9–1.1 m.
 var blade_lift_height: float = 0.52
-# Fixed, rigid shaft length (hand to blade heel). Baseline 1.30 m ≈ adult
-# senior stick shaft (butt-to-heel). The blade mesh extends forward from the
+# Fixed, rigid shaft length (top hand to blade heel). Baseline 1.40 m, a
+# senior stick on a 6'1" player (docs/body-proportions-plan.md). The blade mesh extends forward from the
 # heel; see Skater.blade_length. Total hand-to-toe is stick_length + blade_length.
 var stick_length: float = GameRules.DEFAULT_STICK_LENGTH_M
 # Hand Y in upper-body-local space. Baseline resting position (used in the FAR
 # regime); in the CLOSE regime the hand rises toward `hand_y_max` so the stick
 # tilts more vertical and the blade can tuck in close to the body.
 #
-# This export is the MESH-NATIVE (Size L2, 5'10") value; apply_attributes scales it
-# by height_mult, matching the appearance pass scaling the whole skeleton about the
-# ice plane — so the hand sits at the same body point (0.50 m × height below the
-# shoulder) on every build instead of pinning to one absolute height.
-#
-# The upper body rides at height_mult × 1.0 m world Y (FACEOFF_SPAWN_HEIGHT is the
-# physics origin for every build — only the mesh skeleton scales; the cosmetic
-# skating crouch lowers it up to ~7 cm at speed) and the blade at blade_height
-# (~ice), so -0.10 gives a hand world Y of 0.90 m × height (hip height on each
-# frame) and a rest stick angle of ~42° at L2, approaching a real lie-5 address
-# (~45°). The steeper stick pulls the rest carry circle in ~6 cm (stick_horiz
-# 1.03 → 0.97), but the shallower shoulder-to-hand drop re-aims the arm budget
-# sideways (derived backhand ROM 0.37 → 0.46 m of hand displacement), so rim reach
-# is roughly preserved and the directional reach lean stays pure bonus on top.
-var hand_rest_y: float = -0.10
+# Mesh-native (5'10"), scaled by height_mult as the skeleton is: the top hand at
+# the hips' height (~0.95 m × height on skates), half the height below the
+# shoulder, and the stick at rest ~43° from the ice, near a real lie-5 address.
+var hand_rest_y: float = -0.05
 # Ceiling for hand Y in the CLOSE regime. When aiming very close to the
 # skater, the hand rises to shorten the stick's horizontal projection; this
-# cap keeps the pose anatomical (0.30 local = 1.30 m world at L2 — the hand
-# won't climb past chest level). Mesh-native like hand_rest_y; apply_
-# attributes scales it by height_mult so the ceiling stays chest-height on
-# every frame. With default stick_length = 1.30 m and the blade on the ice
-# (blade_y ≈ -0.97 local at L2), hand_y_max = 0.30 → hand-to-blade drop
-# 1.27 → min horizontal stick reach ≈ 0.28 m.
-var hand_y_max: float = 0.30
+# cap keeps the pose anatomical (chest level, under the shoulder at 0.45).
+# Mesh-native like hand_rest_y; apply_attributes scales it by height_mult so
+# the ceiling stays chest-height on every frame. With the default 1.40 m stick
+# and the blade on the ice (blade_y ≈ -0.97 local at L2), 0.40 → hand-to-blade
+# drop 1.37 → min horizontal stick reach ≈ 0.29 m: a longer stick needs the
+# hands higher to bring the blade in as tight.
+var hand_y_max: float = 0.40
 # The least the top hand reaches off its shoulder toward a blade held round the
 # forehand, gone as the blade comes in tight (TopHandIK.Config.hand_forward):
 # the stick runs from in front of the belly, not the far hip.
@@ -372,7 +361,7 @@ var nudge_velocity_retain: float = 0.85
 # rotation limit — ensuring the hand stays connected during any normal swing.
 # Never influences blade placement. See domain/rules/bottom_hand_ik.gd.
 # Fraction along the shaft (0 = top hand, 1 = blade heel) that the bottom hand
-# grips. ~0.25 on a 1.30 m shaft ≈ a typical hockey grip width.
+# grips. ~0.25 on a 1.40 m shaft ≈ a typical hockey grip width.
 var bottom_hand_grip_fraction: float = 0.25
 # Fine-tune Y offset added to the bottom hand's shaft-derived grip height
 # (SkaterIKCoordinator.update_bottom_hand lerps top-hand Y toward blade Y at
@@ -520,7 +509,7 @@ var vee_push_speed: float = 2.5           # m/s the leg drives a skate out: with
 var vee_toe_max_deg: float = 50.0         # the V's toe-out at a standstill
 var stride_rock_m: float = 0.04           # both skates shift under the body toward the support leg
 var stride_toe_out_deg: float = 25.0      # push skate turned out at full extension
-var stride_sit_max_deg: float = 45.0      # deepest hip flex the stride sits to for its push's reach
+var stride_sit_max_deg: float = 35.0      # deepest hip flex the stride sits to for its push's reach
 var stride_bob_m: float = 0.02            # vertical body bob per half-stride (weight transfer)
 var stride_sway_deg: float = 2.1          # torso weight-shift roll oscillating with the stride
 # Trunk inertia at the texture seam: the trunk texture sums many reads and
@@ -540,7 +529,7 @@ var stride_push_ceiling: float = 1.5      # max amplitude scale when driving har
 # soon as they're moving with intent; SkaterSkatingCoordinator derives the
 # matching knee flex and body drop from the leg geometry so one export drives
 # an anatomically consistent crouch that keeps the skates planted on the ice.
-var stance_hip_deg: float = 22.0            # static hip flex at full stance
+var stance_hip_deg: float = 17.5            # static hip flex at full stance
 var stance_full_speed_fraction: float = 0.45  # fraction of full gait pace at which the crouch fully engages
 var stance_push_gain: float = 0.35          # effort deepens (push) / shallows (glide) the stance
 # Faceoff ready stance — during the FACEOFF_PREP countdown the speed-driven
@@ -685,7 +674,7 @@ var stance_sit_gain: float = 0.35        # extra stroke crouch in the stance
 var stance_crouch: float = 1.7           # crouch floor in the stance (× stance_hip_deg)
 var stance_width_m: float = 0.125        # each skate set out from under its hip
 var stance_chest_deg: float = 26.0       # chest folded over the knees (trunk texture)
-var carry_crouch: float = 1.0            # crouch floor under the full chest fold over the stick (× stance_hip_deg)
+var carry_crouch: float = 1.7            # crouch floor under the full chest fold over the stick (× stance_hip_deg), the loaded stance's
 # Cadence "gears" — grounded in on-ice biomechanics: from acceleration to
 # sustained max velocity real skaters DROP stride frequency and lengthen the
 # glide (speed is power per stride, not faster turnover). cruise_gear (fast AND

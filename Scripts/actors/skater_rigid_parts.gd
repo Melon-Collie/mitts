@@ -23,7 +23,8 @@ const _HELMET_LAT: int = 8
 # plane), running out down the back toward the nape and at the front just
 # above the brow; a brow ledge flaring the front rim, which the visor tucks
 # under; the step across the back where the rear shell laps the front one;
-# and the whole shell drawn out front to back, as a helmet is longer than wide.
+# the shell squared off toward a rounded box above the ears; and the whole
+# shell drawn out front to back, as a helmet is longer than wide.
 const _RIDGE_M: float = 0.010
 const _RIDGE_HALF_WIDTH: float = 0.22
 const _RIB_M: float = 0.007
@@ -37,6 +38,13 @@ const _STEP_M: float = 0.008
 const _STEP_HEIGHT: float = 0.05
 const _STEP_HALF_HEIGHT: float = 0.09
 const _LENGTH: float = 1.07
+# The shell squared off toward a rounded box: each point pushed out to a
+# superellipsoid of this exponent (an axis stays put, a diagonal goes out),
+# by this share, from the ear line up (fading in between these heights of its
+# direction), so its sides flatten and its upper corners fill.
+const _BOX_EXPONENT: float = 4.0
+const _BOX_SHARE: float = 0.5
+const _BOX_FADE := Vector2(-0.25, 0.15)
 
 static var _cache: Dictionary = {}
 
@@ -62,6 +70,9 @@ static func upper_body_mesh(top_right: bool = true) -> ArrayMesh:
 				SkaterMeshBuilder.HELMET_SURF_SKIN), _UpperSurface.HELMET_SKIN, _UpperBone.HELMET)
 		_add(b, _crested(SkaterMeshBuilder.shared_helmet_shell(_HELMET_LON, _HELMET_LAT)),
 				_UpperSurface.HELMET_SHELL, _UpperBone.HELMET)
+		var hardware: ArrayMesh = SkaterMeshBuilder.shared_helmet_hardware()
+		_add(b, hardware.surface_get_arrays(SkaterMeshBuilder.HELMET_HARDWARE_STRAP),
+				_UpperSurface.HELMET_STRAP, _UpperBone.HELMET)
 		return b.commit())
 
 
@@ -95,12 +106,16 @@ static func leg_body_mesh(tongue: int = GearModelRegistry.TONGUE_TUCKED) -> Arra
 		return b.commit())
 
 
-# The zones whose parts ship a default finish (the skin, the steel runners, the
-# laces, the skate's stripe), seeded into a body's paint before any kit lands.
+# The zones whose parts ship a default finish (the skin, the helmet's strap, the
+# steel runners, the laces, the skate's stripe), seeded into a body's paint
+# before any kit lands.
 static func seed_paint(paint: BodyZonePaint) -> void:
 	var skin: Material = SkaterMeshBuilder.shared_helmet_assembly().surface_get_material(
 			SkaterMeshBuilder.HELMET_SURF_SKIN)
 	paint.seed_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_SKIN, skin)
+	var hardware: ArrayMesh = SkaterMeshBuilder.shared_helmet_hardware()
+	paint.seed_zone(SkaterMeshBuilder.UPPER_ZONE_BASE + _UpperSurface.HELMET_STRAP,
+			hardware.surface_get_material(SkaterMeshBuilder.HELMET_HARDWARE_STRAP))
 	var upper: ArrayMesh = SkateUpperMesh.shared()
 	var blade: ArrayMesh = SkaterMeshBuilder.shared_skate_blade()
 	for side: int in 2:
@@ -141,6 +156,14 @@ static func _shared(key: String, builder: Callable) -> ArrayMesh:
 
 # The shell's arrays with its ridge and ribs raised, each face's normal its
 # own facing again.
+# How far out (a share of the radius) the boxed shell lies along unit `d`
+# beyond the sphere.
+static func _boxed(d: Vector3) -> float:
+	var norm: float = pow(pow(absf(d.x), _BOX_EXPONENT) + pow(absf(d.y), _BOX_EXPONENT)
+			+ pow(absf(d.z), _BOX_EXPONENT), 1.0 / _BOX_EXPONENT)
+	return (1.0 / norm - 1.0) * _BOX_SHARE * smoothstep(_BOX_FADE.x, _BOX_FADE.y, d.y)
+
+
 static func _crested(shell: ArrayMesh) -> Array:
 	var arrays: Array = shell.surface_get_arrays(0)
 	var verts: PackedVector3Array = arrays[Mesh.ARRAY_VERTEX]
@@ -154,9 +177,15 @@ static func _crested(shell: ArrayMesh) -> Array:
 		raise += _BROW_M * front * smoothstep(_BROW_FADE.x, _BROW_FADE.y, d.y)
 		raise += _STEP_M * smoothstep(0.2, 0.5, d.z) \
 				* exp(-((d.y - _STEP_HEIGHT) / _STEP_HALF_HEIGHT) ** 2)
+		raise += verts[i].length() * _boxed(d)
 		var p: Vector3 = verts[i] + d * raise
 		p.z *= _LENGTH
 		verts[i] = p
+	# Laid on the helmet's paint from straight ahead, the number on the front.
+	var uvs := PackedVector2Array()
+	uvs.resize(verts.size())
+	for i: int in verts.size():
+		uvs[i] = HelmetDecal.shell_uv(verts[i])
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 	var indices := PackedInt32Array()
 	if arrays[Mesh.ARRAY_INDEX] != null:
@@ -164,6 +193,10 @@ static func _crested(shell: ArrayMesh) -> Array:
 	if indices.is_empty():
 		for i: int in verts.size():
 			indices.append(i)
+		# Unindexed, each face has its own corners, so its seam unwraps alone.
+		for t: int in range(0, verts.size(), 3):
+			HelmetDecal.unwrap_face(uvs, t)
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	for t: int in range(0, indices.size(), 3):
 		var a: Vector3 = verts[indices[t]]
 		var n: Vector3 = (verts[indices[t + 2]] - a).cross(verts[indices[t + 1]] - a).normalized()

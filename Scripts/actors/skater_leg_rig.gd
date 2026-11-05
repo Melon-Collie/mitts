@@ -18,6 +18,11 @@ extends RefCounted
 # of nothing else.
 
 const _OFFSET: int = SkaterBodySkeleton.LEG_BONE_OFFSET
+# Each leg's hip, knee and ankle bones, left then right (drawn_joints).
+const _JOINT_BONES: Array[int] = [SkaterMeshBuilder.LegBone.LEG_L,
+		SkaterMeshBuilder.LegBone.KNEE_L, SkaterMeshBuilder.LegBone.SKATE_L,
+		SkaterMeshBuilder.LegBone.LEG_R, SkaterMeshBuilder.LegBone.KNEE_R,
+		SkaterMeshBuilder.LegBone.SKATE_R]
 # Ice height in the skater's own frame: the origin rides FACEOFF_SPAWN_HEIGHT
 # above it (Y-axis locked), so this holds wherever the skater stands — a preview
 # placed off the rink included — and the height attribute's scaling about the
@@ -47,8 +52,8 @@ const _PLANT_WALK_STEPS: int = 7
 # stop's hips turn across, and a reaching leg finds the ice past the hump its
 # blade's tilt makes — so the correction eases rather than popping a leg. Well
 # above the stroke's own knee speeds (the stride's thigh peaks near 2 rad/s), so
-# it binds only on those jumps.
-const _PLANT_RATE_RAD_S: float = 8.0
+# it binds only on those jumps; ~2.5 m/s at the knee on the thigh's length.
+const _PLANT_RATE_RAD_S: float = 6.0
 # How much higher than the lowest corner of a downed skate another may sit and
 # still share in where its leg swings to the ice (_soft_low).
 const _REST_SOFT_M: float = 0.02
@@ -745,6 +750,33 @@ func bone_position(bone: int) -> Vector3:
 
 func bone_base_scale(bone: int) -> Vector3:
 	return _base_scale[bone]
+
+
+# Each leg's hip, knee and ankle as drawn, in the skeleton's space, into `out`
+# (left then right).
+func drawn_joints(out: PackedVector3Array) -> void:
+	out.resize(_JOINT_BONES.size())
+	for i: int in _JOINT_BONES.size():
+		out[i] = _skeleton.get_bone_global_pose(_OFFSET + _JOINT_BONES[i]).origin
+
+
+# How far the pants stand off the thigh's bone (x) and the sock off the shin's
+# (y), m: their rings' mean (SkaterConnectedPants.leg_stations), as wide as the
+# build makes them.
+func girth() -> Vector2:
+	var thigh: float = _mean_radius(SkaterConnectedPants.leg_stations(false))
+	var shin: float = _mean_radius(SkaterConnectedPants.leg_stations(true))
+	return Vector2(thigh * _scale[SkaterMeshBuilder.LegBone.THIGH_L].x
+			/ _base_scale[SkaterMeshBuilder.LegBone.THIGH_L].x,
+			shin * _scale[SkaterMeshBuilder.LegBone.SOCK_L].x
+			/ _base_scale[SkaterMeshBuilder.LegBone.SOCK_L].x)
+
+
+static func _mean_radius(stations: PackedVector3Array) -> float:
+	var sum: float = 0.0
+	for s: Vector3 in stations:
+		sum += s.y
+	return sum / maxf(float(stations.size()), 1.0)
 
 
 func bone_base_position(bone: int) -> Vector3:

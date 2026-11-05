@@ -89,3 +89,18 @@ func test_a_tucked_jersey_blouses_out_over_the_pants_rim() -> void:
 			0.10, 0.15)
 	assert_gt(rim, under_rim, "the rim stands out from the pants below it")
 	assert_gt(blouse, rim, "the jersey blouses out past the rim it tucks behind")
+
+
+# The armhole's seam runs from the shoulders' flat top: its loop's top meets
+# the jersey's top row of the armhole, just over the bind arm's joint, so the
+# sleeve leaves the shoulder level with it. Below it, the sleeve hangs off a
+# dent down the trunk and the shoulders slope off the collar.
+func test_the_armhole_starts_at_the_shoulders_top() -> void:
+	var loop_top: float = SkaterConnectedMesh._ARMHOLE_CENTRE.y \
+			+ SkaterConnectedMesh._ARMHOLE_RADII.y * cos(SkaterConnectedMesh._ARMHOLE_TILT)
+	var shoulders_top: float = SkaterConnectedMesh._TORSO_Y_M \
+			+ SkaterConnectedMesh._CHEST[SkaterConnectedMesh._ARMHOLE_TOP].x
+	assert_almost_eq(loop_top, shoulders_top, 0.015,
+			"the armhole's top on the shoulders' top row")
+	assert_between(SkaterConnectedMesh._BIND_SHOULDER.y, loop_top - 0.1, loop_top,
+			"the bind arm's joint just under it")

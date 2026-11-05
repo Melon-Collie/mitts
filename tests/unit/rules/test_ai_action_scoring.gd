@@ -1133,13 +1133,13 @@ func test_lane_loss_point_finite_for_close_release_defender() -> void:
 
 
 func test_lane_loss_point_prices_a_lane_only_the_planted_interceptor_blocks() -> void:
-	# 4.5 m off a 16 m lane at z = 10: coasting, he never reaches the puck, but
+	# 4.65 m off a 16 m lane at z = 10: coasting, he never reaches the puck, but
 	# he can skate down the lane and plant on it ahead of the feed. The accurate
 	# lane prices that pick, so the loss point must be that planted spot — not
 	# INF, which turnover_cost reads as a free interception.
 	var from := Vector3(0.0, 0.0, 0.0)
 	var to := Vector3(0.0, 0.0, 16.0)
-	var planter: Array[Vector3] = [Vector3(4.5, 0.0, 10.0)]
+	var planter: Array[Vector3] = [Vector3(4.65, 0.0, 10.0)]
 	var speed: float = AIPuckLane.PASS_SPEED_M_S
 	assert_eq(AIPuckLane.lane_clear(from, to, planter, speed), 1.0,
 			"precondition: the coasting read sees no block")

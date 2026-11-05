@@ -65,6 +65,15 @@ const SCENARIOS: Array[Dictionary] = [
 		"puck": true, "skate": true, "trace": true},
 	{"name": "skate_backhand", "r": 2.0, "a0": 0.0, "rate": -45.0, "frames": 12, "step": 40,
 		"puck": true, "skate": true, "trace": true},
+	# Held where tests/instruments/actors/test_carry_clipping.gd finds the shaft
+	# in the body: skating with the puck behind on the forehand and in close on
+	# the backhand, and pulled in tight standing.
+	{"name": "clip_skate_forehand_behind", "r": 1.1, "a0": 140.0, "rate": 0.0, "frames": 4,
+		"step": 40, "puck": true, "skate": true},
+	{"name": "clip_skate_backhand_close", "r": 0.8, "a0": -90.0, "rate": 0.0, "frames": 4,
+		"step": 40, "puck": true, "skate": true},
+	{"name": "clip_stand_tight", "r": 0.5, "a0": -150.0, "rate": 60.0, "frames": 6, "step": 75,
+		"puck": true, "hold": true},
 ]
 
 
@@ -318,6 +327,35 @@ func _report() -> void:
 			_frame, _off_facing(_cursor()), _skater.upper_body.rotation_degrees.y,
 			_skater.lower_body.rotation_degrees.y, top.x, top.y, bottom.x, bottom.y,
 			top_grip.x, top_grip.y, bottom_grip.x, bottom_grip.y])
+	var ub_inv: Basis = _skater.drawn_upper_body().basis.inverse()
+	var body: Skeleton3D = _skater._arms._skeleton
+	var top_back: Vector3 = ub_inv * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.TOP_HAND).basis.z.normalized()
+	var bottom_back: Vector3 = ub_inv * body.get_bone_global_pose(
+			SkaterMeshBuilder.UpperBone.BOTTOM_HAND).basis.z.normalized()
+	var drawn_off: Vector3 = _skater.drawn_top_hand() - _skater.top_hand.position
+	var clear_off: Vector3 = _controller._ik._clear_offset
+	print("  f%02d   of it, the shaft's clearance %+.2f up %+.2f ahead" % [
+			_frame, clear_off.y, -clear_off.z])
+	print("  f%02d top hand drawn %+.2f m up %+.2f m ahead of its marker | elbow ahead of its hand: top %+.2f m bottom %+.2f m | back of glove (fwd, out, up): top %+.1f %+.1f %+.1f bottom %+.1f %+.1f %+.1f" % [
+			_frame, drawn_off.y, -drawn_off.z, _elbow_ahead(SkaterMeshBuilder.UpperBone.TOP_FOREARM,
+					SkaterMeshBuilder.UpperBone.TOP_HAND),
+			_elbow_ahead(SkaterMeshBuilder.UpperBone.BOTTOM_FOREARM,
+					SkaterMeshBuilder.UpperBone.BOTTOM_HAND),
+			-top_back.z, top_back.x * signf(_skater.shoulder.position.x), top_back.y,
+			-bottom_back.z, bottom_back.x * signf(_skater.bottom_shoulder.position.x),
+			bottom_back.y])
+
+
+# How far the elbow sits ahead of its hand along the chest's facing (m,
+# UpperBody's frame as drawn).
+func _elbow_ahead(forearm: int, hand: int) -> float:
+	var body: Skeleton3D = _skater._arms._skeleton
+	var ub_inv: Transform3D = _skater.drawn_upper_body().affine_inverse()
+	var fore: Transform3D = body.get_bone_global_pose(forearm)
+	var elbow: Vector3 = ub_inv * (fore.origin + fore.basis.z * 0.5)
+	var fist: Vector3 = ub_inv * body.get_bone_global_pose(hand).origin
+	return fist.z - elbow.z
 
 
 func _place_camera(view: int) -> void:

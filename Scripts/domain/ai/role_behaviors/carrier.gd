@@ -820,13 +820,16 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			else:
 				pass_target_speed = AIPuckLane.PASS_SPEED_M_S * ctx.pass_speed_scale
 			# A saucer's launch is capped at the receivability bound for the
-			# distance — a flip still airborne at the tape flies over the
-			# receiver's grounded blade — even after the receiver-relative solve.
+			# distance to where his stick takes it — a flip still airborne at the
+			# tape flies over the receiver's grounded blade — even after the
+			# receiver-relative solve.
 			pass_should_saucer = best_pass_saucer
 			if best_pass_saucer and receiver != null:
 				pass_target_speed = clampf(
 						AIPuckLane.saucer_max_launch_speed(
-								puck_now.distance_to(receiver.position)),
+								puck_now.distance_to(receiver.position)
+								- AICarrierPassSearch.receiver_gate_m(
+										ctx.caps_by_peer.get(best_pass_peer))),
 						AIPuckLane.SOFTEST_FEED_M_S,
 						pass_target_speed)
 		elif new_intent == INTENT_SHOOT and _shot_sample_is_tip:

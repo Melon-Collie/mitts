@@ -19,9 +19,10 @@ const _SHIN_L: int = SkaterMeshBuilder.LegBone.SHIN_L
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 
-# Mesh-native scene geometry (keep in sync with Scenes/Skater.tscn).
-const LEG_PIVOT_Y: float = -0.13
-const SHIN_PIVOT_Y: float = -0.31
+# Mesh-native scene geometry, as the gait models it (test_leg_ik_mirrors_the_rig
+# holds it to the scene).
+const LEG_PIVOT_Y: float = -GaitPose.HIP_DROP
+const SHIN_PIVOT_Y: float = -GaitPose.THIGH_LEN
 
 
 class GameStateStub:
@@ -89,8 +90,8 @@ func test_skeleton_scales_about_ice_plane() -> void:
 			0.0001, "knee height proportional")
 
 	# Hand heights and the gait's leg scale ride the same multiplier.
-	assert_almost_eq(controller.hand_rest_y, -0.10 * h, 0.0001, "hand rest scales")
-	assert_almost_eq(controller.hand_y_max, 0.30 * h, 0.0001, "hand ceiling scales")
+	assert_almost_eq(controller.hand_rest_y, -0.05 * h, 0.0001, "hand rest scales")
+	assert_almost_eq(controller.hand_y_max, 0.40 * h, 0.0001, "hand ceiling scales")
 	assert_almost_eq(controller._skating.leg_scale, h, 0.0001, "gait leg scale set")
 
 	# Derived backhand ROM: whole chain (arm + drop) scales by h, so the

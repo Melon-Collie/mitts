@@ -2404,6 +2404,7 @@ func _state_one_timer_pressed(input: InputState, snapshot: WorldSnapshot, self_p
 		var swing: Vector2 = _one_timer.swing_for(shot_line, _one_timer_feed,
 				_one_timer.power_after(charge_at_contact))
 		input.bot_slapper_aim_dir = Vector3(swing.x, 0.0, swing.y)
+		_one_timer.commit_swing(swing)
 		var stance: Vector2 = _one_timer.stance_facing(shot_line)
 		var reach: float = committed_dir.length()
 		input.mouse_world_pos = _step_mouse_face(
@@ -3728,6 +3729,8 @@ func _update_engagement_cooldown(snapshot: WorldSnapshot, self_state: SkaterNetw
 
 func _set_state(s: State) -> void:
 	if s != _state:
+		# A swing is committed only through a press.
+		_one_timer.commit_swing(Vector2.ZERO)
 		if s != State.OFF_PUCK:
 			_prev_locked_man_pid = -1
 			_stick_play.drop_tie()

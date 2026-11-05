@@ -54,10 +54,10 @@ enum Bind {
 
 # Where the scene authors the parts this skin rides, at rest (Scenes/Skater.tscn:
 # UpperBodyMesh, LegL/R, ThighL/R, ShinL/R, SockL/R), bind space.
-const _TORSO_Y_M: float = 0.195
-const _HIP := Vector3(0.13, -0.13, 0.0)
-const _THIGH_DROP_M: float = 0.13
-const _KNEE_DROP_M: float = 0.31
+const _TORSO_Y_M: float = 0.245
+const _HIP := Vector3(0.13, -0.02, 0.0)
+const _THIGH_DROP_M: float = 0.24
+const _KNEE_DROP_M: float = 0.42
 const _SOCK_DROP_M: float = 0.19
 
 # The arms' bind hang, right side (the left mirrors it): from the shoulder
@@ -65,7 +65,7 @@ const _SOCK_DROP_M: float = 0.19
 # out, forward and 35° under level, the forearm bent on toward the front. The
 # middle of the range the IK asks for — hanging at the sides, reaching for the
 # stick, up over the head for a slapshot — so none of it is far from the bind.
-const _BIND_SHOULDER := Vector3(0.22, 0.40, 0.0)
+const _BIND_SHOULDER := Vector3(0.18, 0.45, 0.0)
 const _BIND_UPPER_DIR := Vector3(0.55, -0.85, -0.3)
 const _BIND_FORE_DIR := Vector3(0.15, -0.45, -0.88)
 # Skater.upper_arm_length / forearm_length and the sleeve's radius at their
@@ -82,7 +82,7 @@ const TAIL_COLUMNS: int = _CHEST_SIDES
 const LIMB_SIDES: int = 12
 
 # The jersey above the belt, torso-local (y, radius, rear sway), every ring the
-# rig's own 1.05 : 0.88 section at its own size: rings of one shape make planar
+# rig's own section (SkaterMeshBuilder.TORSO_XZ_SCALE, TORSO_DEPTH) at its own size: rings of one shape make planar
 # quads between them, and a skin shaded flat by its drawn faces shows every quad
 # that is not as a fold. Broad over the pads, in to the waist. Through the
 # waist the rig's own stations take over (`_RIG_STATIONS`, vertex for vertex the
@@ -118,9 +118,9 @@ const _NECK_SCOOP_HALF_ANGLE: float = deg_to_rad(75.0)
 const _UPPER_CHEST_DROP_M: float = 0.035
 const _UPPER_BACK_DROP_M: float = 0.015
 # The collar: a band standing round the neckline, this far in and up from it,
-# painted the kit's collar on the torso texture's top cap; inside it the neck's
-# skin runs down into the V to the neck's foot (torso-local, under the rig's
-# neck where it flares into the traps).
+# painted the kit's collar on the torso texture's top cap; inside it the
+# collar's colour runs down into the V to the neck's foot (torso-local, under
+# the rig's neck), so only the neck's own column shows skin.
 const _COLLAR_INSET_M: float = 0.008
 const _COLLAR_RISE_M: float = 0.016
 const _NECK_FOOT_Y_M: float = 0.265
@@ -133,8 +133,10 @@ const _ARMHOLE_HALF_WIDTH: int = 2
 # from the shoulders' flat top down to under the arm, near upright, so the
 # torso carries the shoulder's top out level from the neck and the sleeve
 # leaves it at the side. A loop (centre, half sizes across and along the seam)
-# tipped `_ARMHOLE_TILT` from facing straight out toward facing up.
-const _ARMHOLE_CENTRE := Vector3(0.215, 0.365, 0.0)
+# tipped `_ARMHOLE_TILT` from facing straight out toward facing up. Its centre
+# is out at the pads' edge and just under the shoulder joint, so the seam's top
+# meets the shoulders' flat top wherever the joint is.
+const _ARMHOLE_CENTRE := Vector3(0.215, _BIND_SHOULDER.y - 0.035, 0.0)
 const _ARMHOLE_RADII := Vector2(0.125, 0.100)   # across (z), along the seam
 const _ARMHOLE_TILT: float = 0.15
 # How far each armhole vertex rides the shoulder girdle, round the loop from the
@@ -335,8 +337,8 @@ static func _build_torso(b: ConnectedSkinBuilder, tuck: int) -> Array[PackedInt3
 	for station: Vector3 in profile:
 		var pts: PackedVector3Array = SkaterJerseyHem.tuck_ring(
 				_lathe_ring(station, _CHEST_SIDES, phase), station.x, station.y, station.z, tuck,
-				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y,
-				SkaterConnectedPants.TUCK_BLOUSE_M)
+				phase, SkaterMeshBuilder.PELVIS_XZ_SCALE.x, SkaterMeshBuilder.PELVIS_XZ_SCALE.y
+				* SkaterMeshBuilder.torso_depth_at(station.x), SkaterConnectedPants.TUCK_BLOUSE_M)
 		var ids := PackedInt32Array()
 		for j: int in _CHEST_SIDES:
 			var theta: float = TAU * float(j) / float(_CHEST_SIDES) + phase
@@ -401,8 +403,8 @@ static func _top_shape(ring: int, theta: float) -> float:
 	return 0.0
 
 
-# The collar band standing round the neckline, then the neck's skin closing the
-# opening inside it.
+# The collar band standing round the neckline, then the collar closing the
+# opening inside it down to the neck.
 static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, lift: Vector3) -> void:
 	var n: int = neckline.size()
 	var axis := Vector3(0.0, 0.0, _CHEST[0].z) + lift
@@ -424,7 +426,7 @@ static func _build_collar(b: ConnectedSkinBuilder, neckline: PackedInt32Array, l
 		b.quad(neckline[k], neckline[k1], lip[k1], lip[k], cap + t0 * 0.24, cap + t1 * 0.24,
 				cap + t1 * 0.20, cap + t0 * 0.20, torso_zone, below)
 	var foot: int = b.vertex(axis + Vector3(0.0, _NECK_FOOT_Y_M, 0.0), [Bind.TORSO], [1.0])
-	b.fan(lip, foot, cap, zone(_UpperSurface.HELMET_SKIN), below)
+	b.fan(lip, foot, cap, torso_zone, below)
 
 
 # The jersey from the collar to the hem as (y, radius, sway), torso-local, its
@@ -482,7 +484,8 @@ static func _rig_station(station: int) -> Vector3:
 static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 	var phase: float = TAU * SkaterMeshBuilder.TORSO_U_PHASE
 	var s: Vector3 = _rig_station(station)
-	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE \
+			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(s.x))
 	var ring: PackedVector3Array = SkaterJerseyHem.tuck_ring(_lathe_ring(s, TAIL_COLUMNS, phase),
 			s.x, s.y, s.z, tuck, phase, xz.x, xz.y, SkaterConnectedPants.TUCK_BLOUSE_M)
 	# Beside a tucked corner the jersey is pulled toward the waistband, taut
@@ -508,9 +511,11 @@ static func tail_ring(station: int, tuck: int) -> PackedVector3Array:
 
 
 # A ring of the rig's section (SkaterMeshBuilder._ring's layout: `sides` + 1
-# points from `phase`, the last repeating the first) at (y, radius, sway).
+# points from `phase`, the last repeating the first) at (y, radius, sway), as
+# deep as the torso is there.
 static func _lathe_ring(station: Vector3, sides: int, phase: float) -> PackedVector3Array:
-	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE
+	var xz: Vector2 = SkaterMeshBuilder.PELVIS_XZ_SCALE \
+			* Vector2(1.0, SkaterMeshBuilder.torso_depth_at(station.x))
 	var pts := PackedVector3Array()
 	for j: int in sides + 1:
 		var theta: float = TAU * float(j) / float(sides) + phase

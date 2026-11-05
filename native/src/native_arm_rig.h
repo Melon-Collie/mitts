@@ -61,6 +61,7 @@ class NativeArmRig : public godot::RefCounted {
 	// allowance (SkaterArmPoses._depth).
 	godot::PackedVector2Array torso_profile;
 	godot::PackedFloat64Array torso_sway;
+	godot::PackedFloat64Array torso_depth;
 	double torso_x_scale = 1.0;
 	double torso_z_scale = 1.0;
 	double sleeve_radius = 0.0;
@@ -98,7 +99,8 @@ public:
 			const godot::Vector3 &p_thick_glove, double p_grip_angle, const godot::Vector4 &wrist,
 			double p_steer_omega);
 	void configure_torso(const godot::PackedVector2Array &profile, const godot::PackedFloat64Array &sway,
-			double x_scale, double z_scale, double p_sleeve_radius, double p_steer_contact);
+			const godot::PackedFloat64Array &depth, double x_scale, double z_scale,
+			double p_sleeve_radius, double p_steer_contact);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off

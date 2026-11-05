@@ -29,22 +29,24 @@ extends GutTest
 #   turn-and-skate on retreats only     17              3 / 9
 #   hips on the skating line            16              3 / 9
 #   the carrier's entry read on arrival 13              3 / 9
+#   the stick at its real length        13              5 / 9
 #
-# The last row is the attack getting better, not the defence worse: a carrier
-# who reads the entries from where his move ends (AICarrierField.horizon_value)
-# gets in more often against the same defender, at the 90 Hz tick.
+# The last two rows are the attack getting better, not the defence worse: a
+# carrier who reads the entries from where his move ends
+# (AICarrierField.horizon_value) gets in more often against the same defender,
+# at the 90 Hz tick; and with the 1.40 m stick and the shot field measured
+# with it, a carrier from the 8 m starts off his lane turns down ~2 m further
+# inside and reaches the gate 0.2-0.5 s sooner, the defender's path unchanged
+# until he turns.
 #
 # The hips riding the line cost a backpedal its angle to an off-lane carrier,
 # and with it the share of the backward top-speed penalty an angled body skips
 # (SkaterMovementRules): he skates at the flat 80% his retreat is priced at.
 #
-# Most of what is still lost sits off the carrier's lane, where the straight-line
-# bound ignores the lateral ice the defender must also cover. Of the four
-# winnable races lost, two are 5 m starts 2-4 m off a 3 m/s carrier's lane and
-# two are 8 m starts 4 m off it, on a 3 m/s and a 6 m/s carrier's. The 3 m/s
-# one is lost by 0.3 m and is the carrier's chest fold over his stick
-# (CarryPostureRules.fold, in the duel rig): with the fold left out it is won by
-# 0.3 m, and nothing the defender decides moved.
+# What is still lost sits off the carrier's lane, where the straight-line bound
+# ignores the lateral ice the defender must also cover. Of the five winnable
+# races lost, two are 5 m starts 2-4 m off a 3 m/s carrier's lane and three are
+# 8 m starts 2-4 m off it, on a 3 m/s and a 6 m/s carrier's.
 #
 # WHAT THE HARNESS DOES NOT MODEL: body collisions. The carrier skates through
 # the defender, so a body in his lane only stops him by stripping the puck.
@@ -62,7 +64,7 @@ const BOUND_REACTION_S: float = 0.05 + TeamBrain.TICK_PERIOD
 const WINNABLE_MARGIN_M: float = 0.5
 
 const MIN_CONTAINED: int = 13
-const MAX_WINNABLE_LOST: int = 4
+const MAX_WINNABLE_LOST: int = 5
 
 
 func _gate_z() -> float:

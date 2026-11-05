@@ -52,8 +52,9 @@ func _parts() -> Array[PartSpec]:
 		PartSpec.new("head", SkaterMeshBuilder._build_ball(
 				SkaterMeshBuilder.HEAD_RADIUS, 10, 5, 1.0),
 				Vector3(0.27, 0.27, 0.27), false),
+		# Helmet-local, drawn at the helmet's 0.75 scale.
 		PartSpec.new("neck", SkaterMeshBuilder._build_neck(),
-				Vector3(0.19, 0.10, 0.19), true),
+				Vector3(0.25, 0.155, 0.25), true),
 		PartSpec.new("blade_holder", SkaterMeshBuilder._build_skate_blade(),
 				Vector3(0.023, 0.21, 0.06), false, SkaterMeshBuilder.BLADE_PART_HOLDER),
 		PartSpec.new("blade_runner", SkaterMeshBuilder._build_skate_blade(),
@@ -145,7 +146,7 @@ func test_torso_clearance_measures_the_rest_rings() -> void:
 		for k: int in ring.size() - 1:
 			middle += ring[k]
 		middle /= float(ring.size() - 1)
-		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.1,
+		assert_lt(SkaterMeshBuilder.torso_clearance(middle), -0.05,
 				"station %d's middle is inside" % station)
 		for k: int in ring.size() - 1:
 			var corner: Vector3 = ring[k]

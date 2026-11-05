@@ -13,7 +13,7 @@ extends RefCounted
 # pivot (LegL → ShinL) and knee pivot to skate sole (ShinL → FootL). The knee
 # solve reads only their RATIO, so it is build-independent; every vertical
 # length rides `leg_scale`.
-const THIGH_LEN: float = 0.31
+const THIGH_LEN: float = 0.42
 const SHIN_LEN: float = 0.45
 # Forward offset from the shin's end to the FOOT pivot (ShinL → FootL local −Z):
 # the boot's centre sits ahead of the ankle, not under it. Folding the shin
@@ -26,7 +26,7 @@ const FOOT_FWD: float = 0.10
 # origin (LegL / LegR in the scene), metres; the build lengthens the drop, not
 # the width.
 const HIP_HALF_WIDTH: float = 0.13
-const HIP_DROP: float = 0.13
+const HIP_DROP: float = 0.02
 # Stroke engagement over which the feet hand from the ice to the stroke: below
 # it the stance is two-footed (rest, glide, the held poses), above it the
 # stroke's push and recovery put the feet. A smoothstep band rather than a
@@ -159,7 +159,7 @@ func seed_legs(loco: SkaterLocomotion, yaw_l: float, yaw_r: float, width: float 
 	r_yaw = leg_r.yaw
 	frame_share = 0.0
 	plant = 1.0
-	plant_l = plant_share(loco.intensity, loco.edge_floor)
+	plant_l = plant_share(loco.plant_intensity(), loco.edge_floor)
 	plant_r = plant_l
 	knee_extend_l = 0.0
 	knee_extend_r = 0.0
@@ -360,7 +360,7 @@ func seed_trunk(loco: SkaterLocomotion) -> void:
 
 # Both feet on the ice while the stroke is idle, and through the dug-edge
 # states (the stop and the tight turn, `edge_floor`) however hard it was
-# working going in.
+# working going in. `intensity` is SkaterLocomotion.plant_intensity.
 static func plant_share(intensity: float, edge_floor: float) -> float:
 	return maxf(smoothstep(0.0, 1.0, 1.0 - intensity / PLANT_STROKE_BAND),
 			clampf(edge_floor, 0.0, 1.0))

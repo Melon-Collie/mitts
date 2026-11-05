@@ -10,6 +10,7 @@ extends SceneTree
 #   BODY_AUDIT_ZONE=33 ... --audit               # + list one zone's folded faces
 #   .claude/hooks/render-body.sh --head          # framed on the helmet
 #   .claude/hooks/render-body.sh --waist         # framed on the belt: the tuck
+#   .claude/hooks/render-body.sh --shoulders     # the yoke square on: front, side, back
 #   .claude/hooks/render-body.sh --skate         # framed on the near skate
 #   BODY_PREVIEW_KIT=1,1 ...                     # in slot 1's away kit
 #
@@ -39,4 +40,4 @@ func _on_frame() -> void:
 			only = a.trim_prefix("--only=")
 	runner.call("begin_preview", only, args.has("--pants"),
 			args.has("--audit"), args.has("--head"), args.has("--waist"),
-			args.has("--skate"))
+			args.has("--skate"), args.has("--shoulders"))

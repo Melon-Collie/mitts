@@ -7,8 +7,8 @@ const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 # (GameRules, the physics tick and the movement rules only).
 
 # CARRY blade aim distance (m forward in goal direction) — the cursor ring the
-# carry dangle, the pre-aim targets, and the arc-step all live on. 1.3 m is ~80%
-# of the league blade orbit (stick + blade = 1.6 m), INSIDE reach, so the blade
+# carry dangle, the pre-aim targets, and the arc-step all live on. 1.3 m is ~75%
+# of the league blade orbit (stick + blade = 1.7 m), INSIDE reach, so the blade
 # holds AT the cursor with slack in every direction, and the model's assumed
 # carried-puck position (self + this × forward) is where the blade can really
 # hold it.
@@ -31,6 +31,16 @@ const BLADE_REACH_M: float = (
 		GameRules.DEFAULT_STICK_LENGTH_M
 		+ GameRules.DEFAULT_BLADE_LENGTH_M
 		+ BLADE_REACH_BUFFER_M)
+
+# A receiver parks his blade for a feed his blade span out from the body less
+# this inset (the side stand), so the arm is not at its ROM clamp.
+const RECEIVE_BODY_INSET_M: float = 0.2
+
+
+# How far out from his body a receiver with `blade_span` (stick + blade) takes a
+# feed: where the puck first comes onto his stick (SkaterAgentReception's gate).
+static func reception_gate_reach(blade_span: float) -> float:
+	return maxf(blade_span - RECEIVE_BODY_INSET_M, 0.4)
 
 # The agent's SHOOT_PRESSED and charged PASS_PRESSED hold shoot_held for this many
 # ticks while the blade sweeps from wind_up_start to aim_target, then release.
