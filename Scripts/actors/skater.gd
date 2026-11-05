@@ -399,7 +399,7 @@ var block_seal_height: float = 1.45
 # Vertical center of the body-block sphere, in skater-local space (origin sits at
 # the hips). Raised to torso height so the PASSIVE sphere (body_block_radius)
 # clears a grounded puck (top ≈ ice_height + radius ≈ 0.12) — loose pucks on the
-# ice slip under/between the legs, enabling nutmegs. The WIDER explicit-block
+# ice slip under it to the skates (SkateContactRules), whose gap is the nutmeg's. The WIDER explicit-block
 # sphere (block_body_radius, Ctrl) is what stops a low puck: set_block_stance
 # rebases it to seal from the ice up (the hip-height origin puts this local
 # offset at the torso, so without the rebase a flat shot slid under the block).
@@ -3170,7 +3170,7 @@ func set_block_stance(active: bool) -> void:
 
 # The body-block CYLINDER the analytic detector tests against (PuckController) — a vertical
 # cylinder at the skater's XZ axis matching the torso. PASSIVE: radius body_block_radius over a
-# torso band raised off the ice, so a grounded puck slides UNDER (a flat shot passes clean).
+# torso band raised off the ice, so a grounded puck slides UNDER it, to the skates (SkateContactRules).
 # SHOT-BLOCK: the wider block_body_radius, banded from the ice up to block_seal_height so a
 # low shot is sealed. Both dimensions are the one-knee pose's — the leg extended along the
 # ice on one side and the stick flat on the other earn the width; the kneeling head caps the

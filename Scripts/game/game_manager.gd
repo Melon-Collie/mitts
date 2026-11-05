@@ -1867,12 +1867,8 @@ func _wire_sound_signals() -> void:
 			NetworkManager.send_deflection_to_all(puck.get_puck_position(), spd)
 			_record_replay_audio_event("puck_deflection", puck.get_puck_position(), spd,
 					{"team": s.get_team_id()}))
-		puck.puck_body_blocked.connect(func(s: Skater) -> void:
-			var spd: float = puck.linear_velocity.length()
-			SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, puck.get_puck_position(), _puck_speed_volume(spd), 0.07)
-			NetworkManager.send_body_block_to_all(puck.get_puck_position(), spd)
-			_record_replay_audio_event("puck_body_block", puck.get_puck_position(), spd,
-					{"team": s.get_team_id()}))
+		puck.puck_body_blocked.connect(_on_puck_body_contact)
+		puck.puck_skate_touched.connect(_on_puck_body_contact)
 		puck_controller.puck_stripped_from.connect(func(_pid: int, stripper: int) -> void:
 			var spd: float = puck.linear_velocity.length()
 			var pos: Vector3 = puck.get_puck_position()
@@ -3453,10 +3449,20 @@ func _on_server_puck_touched_while_loose(peer_id: int) -> void:
 	_note_shot_trajectory()
 
 
+# A loose puck off a skater's body or his skates: one cue for both.
+func _on_puck_body_contact(s: Skater) -> void:
+	var spd: float = puck.linear_velocity.length()
+	SoundManager.play_world(SoundManager.Sound.PUCK_BODY_BLOCK, puck.get_puck_position(), _puck_speed_volume(spd), 0.07)
+	NetworkManager.send_body_block_to_all(puck.get_puck_position(), spd)
+	_record_replay_audio_event("puck_body_block", puck.get_puck_position(), spd,
+			{"team": s.get_team_id()})
+
+
 func _on_puck_touched_by_goalie(goalie: Goalie) -> void:
 	if not NetworkManager.is_host:
 		return
 	var defending_team_id: int = _defending_team_id_for_goalie(goalie)
+	puck.last_touch_team = defending_team_id
 	_loose_puck_released_by = -1
 	_shot_tracker.on_goalie_touch(defending_team_id)
 	_stats_sync_gate.mark_dirty()

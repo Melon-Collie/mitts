@@ -167,6 +167,13 @@ static func _closest_point_on_segment(p: Vector3, a: Vector3, b: Vector3) -> Vec
 	return a + ab * t
 
 
+# The closest-approach solve below, for rules sweeping a shape of their own.
+static func segment_closest_params(
+		p0: Vector3, p1: Vector3,
+		q0: Vector3, q1: Vector3) -> Vector2:
+	return _segment_segment_params(p0, p1, q0, q1)
+
+
 # Minimum squared distance between two line segments.
 static func _segment_segment_dist_sq(
 		p0: Vector3, p1: Vector3,

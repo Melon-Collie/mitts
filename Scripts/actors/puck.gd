@@ -11,6 +11,7 @@ signal puck_released()
 signal puck_stripped(ex_carrier: Skater, checker: Skater)
 signal puck_touched_loose(skater: Skater)  # blade redirect (deflection, tip-in)
 signal puck_body_blocked(skater: Skater)   # puck absorbed by a player's body
+signal puck_skate_touched(skater: Skater)   # puck off a skater's skate: a kick to his stick or a bounce
 signal puck_touched_goalie(goalie: Goalie)  # puck contacted a goalie StaticBody3D part while uncarried
 # He closed his hand on it — the one save outcome that ends the play.
 # Host-only; the goalie controller answers by pinning the puck in the glove.
@@ -168,6 +169,10 @@ var carrier: Skater = null
 # has run, so the puck is pinned once before the collision first sees it.
 var picked_up_from: Vector3 = Vector3.ZERO
 var pickup_locked: bool = false
+# Team of whoever last played the puck (host), −1 for nobody's: since a reset,
+# or after a scramble two blades touched at once. A goalie's touches are
+# stamped by GameManager, which knows his team.
+var last_touch_team: int = -1
 # Host time of the last release/nudge — the last moment this puck was teleported
 # onto a blade and given a wholesale new velocity. Host-side only; it exists so a
 # lag-comped claim can ask "has the puck been played since the instant I saw it?"
@@ -288,6 +293,9 @@ func drain_contact_events() -> void:
 			ContactEvent.BODY_BLOCK:
 				if is_instance_valid(obj):
 					puck_body_blocked.emit(obj as Skater)
+			ContactEvent.SKATE_TOUCH:
+				if is_instance_valid(obj):
+					puck_skate_touched.emit(obj as Skater)
 		i += 1
 	for j: int in _event_count:
 		_event_objs_a[j] = null
@@ -362,7 +370,7 @@ var _contact_latch_goalie: bool = false
 # capacity covers every emitter's per-tick maximum several times over, so overflow
 # means a runaway emitter, and dropping the newest keeps the already-queued
 # (older) events and their ordering intact.
-enum ContactEvent { BOARDS, POST, NET, GOALIE_TOUCH, GOALIE_CATCH, LOOSE_TOUCH, BODY_BLOCK }
+enum ContactEvent { BOARDS, POST, NET, GOALIE_TOUCH, GOALIE_CATCH, LOOSE_TOUCH, BODY_BLOCK, SKATE_TOUCH }
 const CONTACT_QUEUE_CAPACITY: int = 16
 var _event_types := PackedInt32Array()
 var _event_objs_a: Array = []
@@ -474,6 +482,7 @@ func stage_at(pos: Vector3) -> void:
 	linear_velocity = Vector3.ZERO
 	_pending_elevation_vel = Vector3.ZERO
 	_held = false
+	last_touch_team = -1
 	# Drop the interpolation history so the restage isn't drawn as a smear from
 	# wherever the puck was (see SkaterController.teleport_to).
 	reset_physics_interpolation()
@@ -501,6 +510,12 @@ func get_release_velocity() -> Vector3:
 func set_carrier(skater: Skater) -> void:
 	carrier = skater
 	picked_up_from = global_position
+	_note_touch(skater)
+
+
+func _note_touch(skater: Skater) -> void:
+	if skater != null:
+		last_touch_team = skater.get_team_id()
 
 
 # Where a carried puck is pinned this tick: the carry target, inverse-offset from
@@ -578,6 +593,7 @@ func apply_blade_deflect(skater: Skater) -> void:
 	linear_velocity = new_vel
 	var is_bobble: bool = new_vel.length() < bobble_speed_threshold
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
+	_note_touch(skater)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
 # The face the puck comes off. A deliberate tip (Q) presents the face that turns
@@ -611,6 +627,7 @@ func apply_reception_bobble(skater: Skater) -> void:
 			bobble_lift_threshold, bobble_lift_gain, bobble_lift_max_speed)
 	linear_velocity = Vector3(skater.velocity.x, 0.0, skater.velocity.z) + out
 	_set_cooldown(skater, settle_max_s)
+	_note_touch(skater)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
 # A tied blade's touch: the same deflect off the face, laid flat and cut to
@@ -623,6 +640,7 @@ func apply_tied_bobble(skater: Skater) -> void:
 			deflect_tangential_retain, deflect_speed_ref)
 	linear_velocity = Vector3(v.x, 0.0, v.z) * StickCheckRules.TIE_BOBBLE_RETAIN
 	_set_cooldown(skater, bobble_cooldown)
+	_note_touch(skater)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
 
 # `contact_normal` is the outward horizontal normal at the swept contact —
@@ -648,7 +666,16 @@ func on_body_block(blocker: Skater, contact_normal: Vector3) -> void:
 	linear_velocity = PuckCollisionRules.body_block_velocity(
 			linear_velocity, contact_normal, cor_scale, body_block_friction)
 	_set_cooldown(blocker, body_block_cooldown)
+	_note_touch(blocker)
 	_queue_contact_event(ContactEvent.BODY_BLOCK, blocker)
+
+
+# A loose puck off a skate (SkateContactRules): `velocity` is the kick to his
+# stick or the bounce off the boot, which the caller chose from the contact.
+func apply_skate_contact(skater: Skater, velocity: Vector3) -> void:
+	linear_velocity = velocity
+	_note_touch(skater)
+	_queue_contact_event(ContactEvent.SKATE_TOUCH, skater)
 
 func on_body_check(checker: Skater, victim: Skater, impact_force: float, hit_direction: Vector3) -> void:
 	if not _is_server:
@@ -697,6 +724,7 @@ func _body_check_strip(checker: Skater, hit_direction: Vector3, strip_intensity:
 			hit_direction, body_check_puck_speed, body_check_loose_speed, strip_intensity)
 	_set_cooldown(ex_carrier, reattach_cooldown)
 	_set_cooldown(checker, poke_checker_cooldown)
+	_note_touch(checker)
 	puck_stripped.emit(ex_carrier, checker)
 	puck_released.emit()
 
@@ -721,12 +749,14 @@ func apply_poke_check(checker_skater: Skater) -> void:
 			ex_carrier.get_blade_contact_global())
 	_set_cooldown(ex_carrier, reattach_cooldown)
 	_set_cooldown(checker_skater, poke_checker_cooldown)
+	_note_touch(checker_skater)
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
 
 # A goalie's poke check (KeeperController): his blade at `blade_pos`, moving at
 # `blade_vel`, knocks the puck off its carrier as a skater's poke does. No skater
-# took it, so nobody is credited and nobody is held off it but the carrier.
+# took it, so nobody is credited and nobody is held off it but the carrier, and
+# the loose puck is nobody's.
 func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
 	var ex_carrier: Skater = carrier
 	var away: Vector3 = ex_carrier.global_position - blade_pos
@@ -744,6 +774,7 @@ func apply_goalie_poke_check(blade_pos: Vector3, blade_vel: Vector3) -> void:
 	linear_velocity.y = _pinch_lift(blade_vel, ex_carrier.blade_world_velocity,
 			blade_pos, ex_carrier.get_blade_contact_global())
 	_set_cooldown(ex_carrier, reattach_cooldown)
+	last_touch_team = -1
 	puck_stripped.emit(ex_carrier, null)
 	puck_released.emit()
 
@@ -769,6 +800,7 @@ func apply_pin_strip(pinner: Skater) -> void:
 	clear_carrier()
 	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
 	_set_cooldown(ex_carrier, reattach_cooldown)
+	_note_touch(pinner)
 	puck_stripped.emit(ex_carrier, pinner)
 	puck_released.emit()
 
@@ -778,6 +810,7 @@ func apply_stick_lift_strip(checker_skater: Skater, regrab_cooldown: float) -> v
 	clear_carrier()
 	linear_velocity = Vector3(ex_carrier.velocity.x, 0.0, ex_carrier.velocity.z)
 	_set_cooldown(ex_carrier, maxf(reattach_cooldown, regrab_cooldown))
+	_note_touch(checker_skater)
 	puck_stripped.emit(ex_carrier, checker_skater)
 	puck_released.emit()
 
@@ -860,6 +893,7 @@ func reset(at_xz: Vector2 = Vector2.ZERO, hold_height: float = 0.0) -> void:
 	_pending_reset_height = maxf(hold_height, 0.0)
 	_held = hold_height > 0.0
 	_cooldown_timers.clear()
+	last_touch_team = -1
 	linear_velocity = Vector3.ZERO
 	# Discard any release velocity queued this frame — a faceoff / whistle reset
 	# must not inherit a shot fired on the same tick (would launch the dot puck).

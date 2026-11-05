@@ -265,6 +265,7 @@ func setup(assigned_puck: Puck, assigned_is_server: bool) -> void:
 		puck.puck_stripped.connect(_on_puck_stripped)
 		puck.puck_touched_loose.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
 		puck.puck_body_blocked.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
+		puck.puck_skate_touched.connect(func(s: Skater) -> void: puck_touched_while_loose.emit(_peer_id_resolver.call(s)))
 		puck.puck_touched_goalie.connect(func(g: Goalie) -> void: puck_touched_by_goalie.emit(g))
 		# The analytic sim IS the authority for the loose puck on every host —
 		# the puck's own _physics_process drives it (the goalie provider is
@@ -377,6 +378,15 @@ var rendered_loose_velocity: Vector3 = Vector3.ZERO
 # Host: who caught last and the receiver-relative speed it arrived at (sound).
 var _granted_arrival_skater: Skater = null
 var _granted_arrival_speed: float = 0.0
+# Host: the last skate kick, whose catch pays SkateContactRules.KICK_SETTLE_S.
+var _kick_skater: Skater = null
+var _kick_until: float = -1.0
+# Host: the boot the puck last came off. A puck kicked toward a blade on the far
+# side of the boot can still be inside it next tick, and must not meet it again.
+var _skate_touch_skater: Skater = null
+var _skate_touch_until: float = -1.0
+const SKATE_TOUCH_COOLDOWN_S: float = 0.15
+var _skate_contact := SkateContactRules.Contact.new()
 
 
 func _track_loose_velocity(delta: float) -> void:
@@ -402,6 +412,9 @@ func apply_lag_comp_pickup(skater: Skater, catch_load: float = 0.0) -> void:
 func _grant_catch(skater: Skater, relative_velocity: Vector3, catch_load: float) -> void:
 	var settle_s: float = PuckReceptionRules.settle_time(
 			catch_load, puck.settle_clean_load, puck.settle_max_s)
+	if skater == _kick_skater and NetworkManager.local_time() < _kick_until:
+		settle_s = maxf(settle_s, SkateContactRules.KICK_SETTLE_S)
+	_kick_skater = null
 	_granted_arrival_skater = skater
 	_granted_arrival_speed = relative_velocity.length()
 	skater.trigger_reception_cushion(relative_velocity, catch_load, settle_s)
@@ -588,6 +601,9 @@ func apply_contested_pickup(
 			blade_pos_a, blade_pos_b, puck.pinch_lift_threshold,
 			puck.pinch_lift_gain, puck.pinch_lift_max_speed)
 	puck.set_puck_velocity(exit)
+	# Both blades played it: a team's puck only when they were teammates.
+	var team_a: int = skater_a.get_team_id()
+	puck.last_touch_team = team_a if team_a == skater_b.get_team_id() else -1
 	puck.set_skater_cooldown(skater_a, puck.reattach_cooldown)
 	puck.set_skater_cooldown(skater_b, puck.reattach_cooldown)
 	# The draw is resolved — stop retaining the swipe crest so it can't leak into a
@@ -726,108 +742,197 @@ func _check_interactions() -> void:
 			# any stick play. If one lands, the velocity changed this tick — skip the pickup pass.
 			if _check_body_blocks(skaters, puck_curr, now):
 				return
-			# On-ice/off-ice gate is invariant across skaters this tick.
-			var puck_airborne: bool = puck.is_airborne()
-			for skater: Skater in skaters:
-				if skater.is_ghost or (skater.is_knocked_down and not skater.dive_laid_out) \
-						or puck.is_on_cooldown_at(skater, now):
-					continue
-				# Committed to a body check — the stick is off the ice, so no
-				# corral/receive (mirrors the poke + claim + provisional gates).
-				if skater.hit_committed:
-					continue
-				# A crouched shot-blocker can't corral the puck with their stick —
-				# the blade is committed to the block. Same for a shooter mid
-				# follow-through: the stick is whipping through a finish, not
-				# playing the puck (also closes the instant self-rebound
-				# re-attach right after a shot). Let it ride past (body-block
-				# dampening still applies via the body collision path).
-				if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
-						or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
-					continue
-				# Mid-lift the stick is hooking, not playing the puck; locked in a
-				# pin, it is out of the play altogether.
-				if StickCheckRules.is_stick_busy(skater.stick_check_phase) \
-						or skater.pin_role != BoardPinRules.Role.NONE:
-					continue
-				# Reach gate — grounded blade ↔ grounded puck, lifted ↔ airborne, so a
-				# saucer flies over a grounded blade; a deflect rises to the puck instead.
-				var deflect_reach: bool = skater.deflect_intent and not skater.stick_tied \
-						and not skater.is_forced_lift_active()
-				if not deflect_reach and not PuckReceptionRules.blade_can_interact(
-						skater.blade_up or skater.stick_tied, puck_airborne):
-					continue
-				var blade_curr: Vector3 = skater.get_blade_contact_global()
-				var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
-				if not (PuckInteractionRules.check_deflect(_prev_puck_pos, puck_curr,
-						blade_prev, blade_curr, PICKUP_RADIUS, DeflectReachRules.VERTICAL_REACH_M)
-						if deflect_reach else PuckInteractionRules.check_pickup(_prev_puck_pos,
-						puck_curr, blade_prev, blade_curr, PICKUP_RADIUS)):
-					continue
-				# A diver's stick knocks the puck away; he catches nothing from the ice.
-				if skater.dive_laid_out:
-					puck.apply_blade_deflect(skater)
-					break
-				# A tied blade receives nothing: whatever reaches it bobbles off.
-				if skater.stick_tied:
-					puck.apply_tied_bobble(skater)
-					break
-				# A committed deflect (Q held, any reachable level) or a forced-up
-				# blade (opponent stick-lift meeting an airborne puck) tips the puck
-				# off the blade face — the SAME path a too-fast puck takes naturally,
-				# bypassing the catch decision so even an otherwise-catchable puck is
-				# redirected. The loft level signs the redirect (flat / up / down).
-				if skater.deflect_intent or skater.blade_up:
-					puck.apply_blade_deflect(skater)
-					break
-				var puck_vel: Vector3 = puck.get_puck_velocity()
-				# Face normal opposes the approach in the RECEIVER'S frame — the
-				# same relative velocity the receive decision judges.
-				var relative_vel: Vector3 = puck_vel - skater.velocity
-				var blade_face_normal: Vector3 = skater.get_blade_face_normal(relative_vel)
-				if PuckReceptionRules.should_receive(
-						puck_vel,
-						skater.velocity,
-						blade_face_normal,
-						puck.pickup_max_speed,
-						puck.deflect_min_speed * skater.reception_ceiling_mult,
-						puck.alignment_receive_bonus * skater.reception_ceiling_mult):
-					var catch_load: float = PuckReceptionRules.reception_load(
-							puck_vel, skater.velocity, blade_face_normal,
-							puck.deflect_min_speed * skater.reception_ceiling_mult,
-							puck.alignment_receive_bonus * skater.reception_ceiling_mult)
-					# Nearly held: it bobbles by his stick, nobody's yet.
-					var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
-							skater.get_blade_contact_global(), skater.top_hand.global_position)
-					if catch_load >= bobble_at:
-						puck.apply_reception_bobble(skater)
-						break
-					# If a second blade would ALSO corral this same tick (a faceoff
-					# draw or a board scramble), it's a contest - nobody gets it, the
-					# puck squirts free biased toward the stronger blade. Otherwise this
-					# skater takes it. Mirrors the client-claim contest window; the scan
-					# only runs at the rare moment a pickup would actually happen.
-					var contender: Skater = _find_contesting_corraller(
-							skater, skaters, puck_curr, puck_airborne, now)
-					if contender != null:
-						# Present-time contest — both blades are host-live this tick, so
-						# feed their live kinematics (the claim path feeds rewound ones).
-						apply_contested_pickup(skater, contender,
-								skater.blade_world_velocity, contender.blade_world_velocity,
-								skater.get_blade_contact_global(), contender.get_blade_contact_global())
-					elif _present_grab_arbiter.is_valid() and _present_grab_arbiter.call(
-							skater,
-							_peer_id_resolver.call(skater) if _peer_id_resolver.is_valid() else -1,
-							skater.get_blade_contact_global(), skater.blade_world_velocity,
-							NetworkManager.local_time()):
-						# A pending lag-comp claim contested (or won) this grab by
-						# stamp — the resolver applied the outcome; no carrier here.
-						pass
-					else:
-						_grant_catch(skater, relative_vel, catch_load)
-				else:
-					puck.apply_blade_deflect(skater)
-				break
+			if not _check_blade_plays(skaters, puck_curr, now):
+				_check_skate_contacts(skaters, puck_curr, now)
+
+
+# The blade pass over a loose puck: the first stick that plays it this tick —
+# a catch, a deflect, a bobble — and true when one did.
+func _check_blade_plays(skaters: Array, puck_curr: Vector3, now: float) -> bool:
+	# On-ice/off-ice gate is invariant across skaters this tick.
+	var puck_airborne: bool = puck.is_airborne()
+	for skater: Skater in skaters:
+		if skater.is_ghost or (skater.is_knocked_down and not skater.dive_laid_out) \
+				or puck.is_on_cooldown_at(skater, now):
+			continue
+		# Committed to a body check — the stick is off the ice, so no
+		# corral/receive (mirrors the poke + claim + provisional gates).
+		if skater.hit_committed:
+			continue
+		# A crouched shot-blocker can't corral the puck with their stick —
+		# the blade is committed to the block. Same for a shooter mid
+		# follow-through: the stick is whipping through a finish, not
+		# playing the puck (also closes the instant self-rebound
+		# re-attach right after a shot). Let it ride past (body-block
+		# dampening still applies via the body collision path).
+		if skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
+				or skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
+			continue
+		# Mid-lift the stick is hooking, not playing the puck; locked in a
+		# pin, it is out of the play altogether.
+		if StickCheckRules.is_stick_busy(skater.stick_check_phase) \
+				or skater.pin_role != BoardPinRules.Role.NONE:
+			continue
+		# Reach gate — grounded blade ↔ grounded puck, lifted ↔ airborne, so a
+		# saucer flies over a grounded blade; a deflect rises to the puck instead.
+		var deflect_reach: bool = skater.deflect_intent and not skater.stick_tied \
+				and not skater.is_forced_lift_active()
+		if not deflect_reach and not PuckReceptionRules.blade_can_interact(
+				skater.blade_up or skater.stick_tied, puck_airborne):
+			continue
+		var blade_curr: Vector3 = skater.get_blade_contact_global()
+		var blade_prev: Vector3 = skater.get_prev_blade_contact_global()
+		if not (PuckInteractionRules.check_deflect(_prev_puck_pos, puck_curr,
+				blade_prev, blade_curr, PICKUP_RADIUS, DeflectReachRules.VERTICAL_REACH_M)
+				if deflect_reach else PuckInteractionRules.check_pickup(_prev_puck_pos,
+				puck_curr, blade_prev, blade_curr, PICKUP_RADIUS)):
+			continue
+		# A diver's stick knocks the puck away; he catches nothing from the ice.
+		if skater.dive_laid_out:
+			puck.apply_blade_deflect(skater)
+			return true
+		# A tied blade receives nothing: whatever reaches it bobbles off.
+		if skater.stick_tied:
+			puck.apply_tied_bobble(skater)
+			return true
+		# A committed deflect (Q held, any reachable level) or a forced-up
+		# blade (opponent stick-lift meeting an airborne puck) tips the puck
+		# off the blade face — the SAME path a too-fast puck takes naturally,
+		# bypassing the catch decision so even an otherwise-catchable puck is
+		# redirected. The loft level signs the redirect (flat / up / down).
+		if skater.deflect_intent or skater.blade_up:
+			puck.apply_blade_deflect(skater)
+			return true
+		var puck_vel: Vector3 = puck.get_puck_velocity()
+		# Face normal opposes the approach in the RECEIVER'S frame — the
+		# same relative velocity the receive decision judges.
+		var relative_vel: Vector3 = puck_vel - skater.velocity
+		var blade_face_normal: Vector3 = skater.get_blade_face_normal(relative_vel)
+		if PuckReceptionRules.should_receive(
+				puck_vel,
+				skater.velocity,
+				blade_face_normal,
+				puck.pickup_max_speed,
+				puck.deflect_min_speed * skater.reception_ceiling_mult,
+				puck.alignment_receive_bonus * skater.reception_ceiling_mult):
+			var catch_load: float = PuckReceptionRules.reception_load(
+					puck_vel, skater.velocity, blade_face_normal,
+					puck.deflect_min_speed * skater.reception_ceiling_mult,
+					puck.alignment_receive_bonus * skater.reception_ceiling_mult)
+			# Nearly held: it bobbles by his stick, nobody's yet.
+			var bobble_at: float = bobble_load_for(skater, puck_curr, relative_vel,
+					skater.get_blade_contact_global(), skater.top_hand.global_position)
+			if catch_load >= bobble_at:
+				puck.apply_reception_bobble(skater)
+				return true
+			# If a second blade would ALSO corral this same tick (a faceoff
+			# draw or a board scramble), it's a contest - nobody gets it, the
+			# puck squirts free biased toward the stronger blade. Otherwise this
+			# skater takes it. Mirrors the client-claim contest window; the scan
+			# only runs at the rare moment a pickup would actually happen.
+			var contender: Skater = _find_contesting_corraller(
+					skater, skaters, puck_curr, puck_airborne, now)
+			if contender != null:
+				# Present-time contest — both blades are host-live this tick, so
+				# feed their live kinematics (the claim path feeds rewound ones).
+				apply_contested_pickup(skater, contender,
+						skater.blade_world_velocity, contender.blade_world_velocity,
+						skater.get_blade_contact_global(), contender.get_blade_contact_global())
+			elif _present_grab_arbiter.is_valid() and _present_grab_arbiter.call(
+					skater,
+					_peer_id_resolver.call(skater) if _peer_id_resolver.is_valid() else -1,
+					skater.get_blade_contact_global(), skater.blade_world_velocity,
+					NetworkManager.local_time()):
+				# A pending lag-comp claim contested (or won) this grab by
+				# stamp — the resolver applied the outcome; no carrier here.
+				pass
+			else:
+				_grant_catch(skater, relative_vel, catch_load)
+		else:
+			puck.apply_blade_deflect(skater)
+		return true
+	return false
+
+
+# A loose puck on the ice no blade played this tick, against the skaters' boots
+# (SkateContactRules): the skater whose team's puck it is, with his stick free
+# and no opponent on him, turns his skate and kicks it to his blade; any other
+# boot it bounces off. Swept in the skater's frame, so he skating onto a still
+# puck meets it as surely as a pass meets him. The first boot met takes it.
+func _check_skate_contacts(skaters: Array, puck_curr: Vector3, now: float) -> void:
+	if not SkateContactRules.puck_below_boot_top(puck_curr.y):
+		return
+	var dt: float = Constants.TICK_DURATION
+	var puck_prev := Vector2(_prev_puck_pos.x, _prev_puck_pos.z)
+	var puck_now := Vector2(puck_curr.x, puck_curr.z)
+	var puck_vel: Vector3 = puck.get_puck_velocity()
+	# Boots sit within a metre of the skater, and the puck's travel in a tick is
+	# under half of one, so a path with both ends a metre off misses them.
+	var near_sq: float = 1.0
+	for skater: Skater in skaters:
+		# A downed body and a committed block are their own contacts
+		# (_check_body_blocks): their feet are not under them.
+		if skater.is_ghost or skater.is_knocked_down or skater.dive_laid_out \
+				or skater.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING:
+			continue
+		if skater == _skate_touch_skater and now < _skate_touch_until:
+			continue
+		var origin := Vector2(skater.global_position.x, skater.global_position.z)
+		var vel := Vector2(skater.velocity.x, skater.velocity.z)
+		var rel_prev: Vector2 = puck_prev - (origin - vel * dt)
+		var rel_curr: Vector2 = puck_now - origin
+		if rel_prev.length_squared() > near_sq and rel_curr.length_squared() > near_sq:
+			continue
+		var forward: Vector2 = skater.get_facing().normalized()
+		if not SkateContactRules.find_contact(rel_prev, rel_curr, forward,
+				SkateContactRules.half_spacing(skater.in_stance), _skate_contact):
+			continue
+		var rel_vel := Vector2(puck_vel.x, puck_vel.z) - vel
+		if not SkateContactRules.approaching(rel_vel, _skate_contact.normal):
+			continue
+		var team: int = skater.get_team_id()
+		var kick: bool = SkateContactRules.can_kick(rel_vel.length(), puck.last_touch_team,
+				team, _stick_free_for_kick(skater, now), _pressured(skater, team, skaters))
+		var out: Vector3
+		if kick:
+			var blade: Vector3 = skater.get_blade_contact_global()
+			out = SkateContactRules.kick_velocity(skater.velocity, _skate_contact.point,
+					Vector2(blade.x, blade.z) - origin, forward)
+			_kick_skater = skater
+			_kick_until = now + SkateContactRules.KICK_CATCH_WINDOW_S
+		else:
+			out = SkateContactRules.bounce_velocity(puck_vel, skater.velocity, _skate_contact.normal)
+		puck.apply_skate_contact(skater, out)
+		_skate_touch_skater = skater
+		_skate_touch_until = now + SKATE_TOUCH_COOLDOWN_S
+		return
+
+
+# The stick could take a puck off his skate: the gates the blade pass plays by,
+# with the blade down on the ice where a grounded puck can reach it.
+func _stick_free_for_kick(skater: Skater, now: float) -> bool:
+	if puck.is_on_cooldown_at(skater, now) or skater.hit_committed:
+		return false
+	if skater.current_shot_state == SkaterStateMachine.State.FOLLOW_THROUGH:
+		return false
+	if StickCheckRules.is_stick_busy(skater.stick_check_phase) \
+			or skater.pin_role != BoardPinRules.Role.NONE:
+		return false
+	return not (skater.blade_up or skater.stick_tied or skater.deflect_intent
+			or skater.is_forced_lift_active())
+
+
+# An opponent close enough to have his stick on the puck before the kick lands.
+func _pressured(kicker: Skater, kicker_team: int, skaters: Array) -> bool:
+	for other: Skater in skaters:
+		if other == kicker or other.is_ghost or other.is_knocked_down:
+			continue
+		var team: int = other.get_team_id()
+		if team != -1 and team == kicker_team:
+			continue
+		if SkateContactRules.pressures(kicker.global_position, other.global_position):
+			return true
+	return false
 
 
 # Analytic body-block: a loose puck driven into a player's body CYLINDER is absorbed/dampened.
