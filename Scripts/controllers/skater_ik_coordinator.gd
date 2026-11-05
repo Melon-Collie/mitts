@@ -74,9 +74,6 @@ var _pump_hold: float = 1.0
 # it reads.
 var _clear_offset := Vector3.ZERO
 var _clear_vel := Vector3.ZERO
-# The drawn top hand's swing in close (_close_hand), and its rate.
-var _close_offset := Vector3.ZERO
-var _close_vel := Vector3.ZERO
 var _leg_joints := PackedVector3Array()
 
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
@@ -1019,24 +1016,10 @@ const _CLEAR_MARGIN_M: float = 0.01
 const _CLEAR_MAX_M: float = 0.4
 const _CLEAR_OMEGA: float = 12.0
 const _SHAFT_RADIUS_M: float = 0.015
-# The drawn top hand in close (_close_hand): no higher than this over its rest
-# height once all of it is taken, swung out toward its own side round the
-# blade by up to this much (rad); taken from the hand risen this far over its
-# rest (m) to that far, and from straight ahead (this far round the forehand,
-# rad) round the backhand, gone by that far round the forehand, where the hand
-# already comes out along the stick (TopHandIK.Config.hand_forward).
-const _CLOSE_HAND_RISE_M: float = 0.21
-const _CLOSE_HAND_OUT_TURN: float = deg_to_rad(25.0)
-const _CLOSE_HAND_FROM := Vector2(0.08, 0.22)
-const _CLOSE_HAND_FOREHAND := Vector2(deg_to_rad(10.0), deg_to_rad(55.0))
-# Halvings of the interval the most of the swing both arms reach lies in.
-const _CLOSE_HAND_BISECTIONS: int = 7
 
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
 	var pump: Vector3 = _stride_pump(delta)
-	_skater.set_hand_pump(pump)
-	pump += _close_hand(_skater.drawn_top_hand(), blade_local, delta)
 	_skater.set_hand_pump(pump)
 	_skater.set_hand_pump(pump + _shaft_clearance(_skater.drawn_top_hand(), blade_local, delta))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
@@ -1110,78 +1093,6 @@ func _stride_pump(delta: float) -> Vector3:
 	var drive: float = clampf(_skating.push_strength, 0.0, 1.0) * (1.0 - _bh_release) \
 			* smoothstep(0.0, 1.0, _pump_hold)
 	return _controller.stride_hand_pump_m * (sin(_skating.stride_phase) * drive)
-
-# The drawn top hand (`hand_local`, UpperBody's frame) in close, where the
-# tracked solve holds it over its shoulder and raises it until the stick
-# reaches down to the blade, which bunches both hands up at the chest: swung
-# round the drawn blade, the stick keeping its length, down toward its rest and
-# out to its own side, as a player holds a puck in tight; the offset that takes
-# it there, mesh only, eased on the clearance's spring (`delta` below 0 lands
-# at once). As far as both arms still reach (_close_hand_reached), by the
-# tracked stick's share (a shot, the block and the centre's address hold
-# their own hands), and not on the ice in a knockdown.
-func _close_hand(hand_local: Vector3, blade_local: Vector3, delta: float) -> Vector3:
-	var target := Vector3.ZERO
-	var rest_y: float = _controller.hand_rest_y
-	var share: float = smoothstep(rest_y + _CLOSE_HAND_FROM.x, rest_y + _CLOSE_HAND_FROM.y,
-			hand_local.y) * smoothstep(0.0, 1.0, _pump_hold) * (1.0 - _address_blend()) \
-			* (1.0 - _controller.knockdown_pose_weight())
-	var fh: float = _forehand_sign()
-	var round_forehand: float = atan2(blade_local.x * fh, -blade_local.z)
-	share *= 1.0 - smoothstep(_CLOSE_HAND_FOREHAND.x, _CLOSE_HAND_FOREHAND.y, round_forehand)
-	if share > 0.0 and hand_local.distance_to(blade_local) > 0.001:
-		# The most of it both arms reach, found by halving the interval it lies
-		# in, so it moves on smoothly as the pose does.
-		var lo: float = 0.0
-		var hi: float = share
-		if _close_hand_reached(hand_local, blade_local, hi):
-			lo = hi
-		else:
-			for _step: int in _CLOSE_HAND_BISECTIONS:
-				var mid: float = (lo + hi) * 0.5
-				if _close_hand_reached(hand_local, blade_local, mid):
-					lo = mid
-				else:
-					hi = mid
-		target = _close_hand_at(hand_local, blade_local, lo) - hand_local
-	if delta < 0.0:
-		_close_offset = target
-		_close_vel = Vector3.ZERO
-	elif delta > 0.0:
-		var x: Vector3 = _close_offset - target
-		var decay: float = exp(-_CLEAR_OMEGA * delta)
-		var kick: Vector3 = _close_vel + x * _CLEAR_OMEGA
-		_close_offset = target + (x + kick * delta) * decay
-		_close_vel = (_close_vel - kick * (_CLEAR_OMEGA * delta)) * decay
-	return _close_offset
-
-
-# The drawn top hand `share` of the way to its pose in close: down toward its
-# rest and turned out round the blade, the stick keeping its length.
-func _close_hand_at(hand_local: Vector3, blade_local: Vector3, share: float) -> Vector3:
-	var length: float = hand_local.distance_to(blade_local)
-	var y: float = lerpf(hand_local.y,
-			minf(hand_local.y, _controller.hand_rest_y + _CLOSE_HAND_RISE_M), share)
-	var drop: float = y - blade_local.y
-	var span: float = sqrt(maxf(length * length - drop * drop, 0.0))
-	var angle: float = Vector2(hand_local.x - blade_local.x, hand_local.z - blade_local.z).angle()
-	angle += clampf(angle_difference(angle, atan2(0.0, -_forehand_sign())),
-			-_CLOSE_HAND_OUT_TURN, _CLOSE_HAND_OUT_TURN) * share
-	return Vector3(blade_local.x + cos(angle) * span, y, blade_local.z + sin(angle) * span)
-
-
-# Whether both arms reach the drawn top hand `share` of the way to its pose in
-# close: the top arm the hand, the bottom one the shaft a glove below it (as
-# high as its grip slides, BottomHandIK.soft_reachable_grip).
-func _close_hand_reached(hand_local: Vector3, blade_local: Vector3, share: float) -> bool:
-	var hand: Vector3 = _close_hand_at(hand_local, blade_local, share)
-	var arm: float = (_skater.upper_arm_length + _skater.forearm_length) \
-			* _skater.arm_working_extension
-	var highest_grip: Vector3 = hand + (blade_local - hand).normalized() * _glove_spacing()
-	return hand.distance_to(_skater.visible_shoulder(_skater.shoulder.position)) <= arm \
-			and highest_grip.distance_to(_skater.visible_shoulder(_skater.bottom_shoulder.position)) \
-			<= arm + _skater.shoulder_reach_m
-
 
 # The drawn top hand (`hand_local`, UpperBody's frame, the pump on it) swung
 # round the drawn blade, the stick keeping its length, until the drawn shaft is
