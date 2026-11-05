@@ -104,6 +104,7 @@ const ALL: Array[Dictionary] = [
 	{"id": "one_timer_feed", "cond": {"kind": "feat"}},
 	{"id": "pick_and_finish", "cond": {"kind": "feat"}},
 	{"id": "strip_and_finish", "cond": {"kind": "feat"}},
+	{"id": "one_timer_dot", "cond": {"kind": "feat"}},
 	# ── Who you played with ──────────────────────────────────────────────────
 	{"id": PLAY_WITH_BUUKIE, "steam": "ACH_PLAY_WITH_BUUKIE", "hidden": true,
 		"cond": {"kind": "roster", "steam_id": BUUKIE_STEAM_ID}},
@@ -117,6 +118,7 @@ const ALL: Array[Dictionary] = [
 	{"id": "iron_man", "cond": {"kind": COMBO, "needs": ["games_played@100"]}},
 	{"id": "playmaker", "cond": {"kind": COMBO, "needs": ["assists@250", "one_timer_feed"]}},
 	{"id": "sniper", "cond": {"kind": COMBO, "needs": ["goals@250", "snipe"]}},
+	{"id": "breadman", "cond": {"kind": COMBO, "needs": ["assists@50", "three_helpers"]}},
 ]
 
 

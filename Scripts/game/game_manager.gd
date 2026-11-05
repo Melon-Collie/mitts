@@ -3456,7 +3456,9 @@ func _on_goal_credited(scorer_id: int, is_own_goal: bool, goal_line_z: float) ->
 		ctx.is_one_timer = _shot_tracker.pending_is_one_timer()
 		ctx.loft_level = _shot_tracker.pending_loft_level()
 		ctx.is_backhand = _shot_tracker.pending_is_backhand()
-		ctx.release_distance_m = absf(_shot_tracker.pending_origin().z - goal_line_z)
+		var origin: Vector3 = _shot_tracker.pending_origin()
+		ctx.release_distance_m = absf(origin.z - goal_line_z)
+		ctx.release_xz = Vector2(origin.x, origin.z * signf(goal_line_z))
 	if _feat_tracker != null:
 		_feat_tracker.fill(ctx, _registry.resolve_team_id_for_peer(scorer_id))
 	for earned: Dictionary in FeatRules.goal_feats(ctx):

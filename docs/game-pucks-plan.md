@@ -2,9 +2,8 @@
 
 Status: **Phases 1–4 built** (the catalogue, the ledger, the Trophy Case,
 titles, feats, and cosmetic rewards: free colours, signature tape jobs, sticks
-as patterns), and Phase 5 step 1 (one kind of puck: banners became combo
-pucks, and any puck or tier can unlock something). Phase 5 step 2 (pricing
-the cosmetics) is next.
+as patterns), and Phase 5 (one kind of puck: banners became combo pucks, any
+puck or tier can unlock something, and the cosmetics are priced on them).
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done, and a puck can
@@ -174,8 +173,8 @@ row (`STAT_INTERCEPTIONS` was added for this); points are goals + assists. A
 ladder has at most as many tiers as `TrophyCopy.TIER_KEYS` has numerals.
 
 Feats are where Mitts can stand out, since the mechanics are deep enough to
-name specific plays. Phase 3 shipped five, all read off a credited goal
-(`FeatRules`, from the host's `GoalFeatContext`):
+name specific plays. All are read off a credited goal (`FeatRules`, from the
+host's `GoalFeatContext`):
 
 | feat | the play | earned by |
 |---|---|---|
@@ -184,6 +183,7 @@ name specific plays. Phase 3 shipped five, all read off a credited goal
 | `one_timer_feed` | the primary assist on a one-timer goal | the passer |
 | `pick_and_finish` | a goal on the possession your own interception started | the scorer |
 | `strip_and_finish` | the same, after your own takeaway (poke, lift, check or pin) | the scorer |
+| `one_timer_dot` (*The Office*) | a one-timer released inside either faceoff circle in the zone scored on (4.572 m round the dot) | the scorer |
 
 The shot's loft level and hand are recorded on the host at release
 (`ShotOnGoalTracker.note_release_style`); a tipped goal earns no shot-style feat,
@@ -282,25 +282,26 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       list whose cards show prerequisites and unlocks; the earn toast fires for
       a combo like any puck. No wire change: titles and cosmetics travel as
       before, and nothing is on `main` yet, so no saved progress moves.
-   2. **Price the cosmetics** on single pucks, tiers and combos:
+   2. **Price the cosmetics** (built) on single pucks, tiers and combos:
 
       | reward | unlocked by |
       |---|---|
       | *Spaced* tape | `hat_trick` — a player's first hat trick |
-      | *Bottom strip* tape | *Breadman*, a combo: `assists@50` + the 3-assist game puck |
-      | Yellow laces | `one_timer_dot`, a new feat: a one-timer goal released inside any offensive-zone faceoff circle |
+      | *Bottom strip* tape | *Breadman*, a combo: `assists@50` + `three_helpers` (3 assists in a game) |
+      | Yellow laces | *The Office* (`one_timer_dot`), a feat: a one-timer goal released inside any offensive-zone faceoff circle |
 
-      The new feat needs the release point on the host's goal context
-      (`GoalFeatContext`), beside the release distance the snipe reads.
-      Titles stay on their combos.
+      The host's goal context carries the release point (`release_xz`, the
+      goal scored on at +z) beside the release distance the snipe reads.
+      Titles stay on their combos. A locked colour is not listed in its
+      picker (only a locked tape job is, greyed with its puck).
 
    **Names.** A combo that unlocks a title carries the title's name
    (Playmaker, Sniper). Where an existing puck already had that name, the
    existing puck is renamed and so is its Steam achievement — only the
    Playtest app's achievements are live, and losing or changing them there is
    accepted. A Steam achievement's display name is its puck's in-game name, a
-   ladder tier's included ("Goal Scorer II", not "Sniper"). Open: the new name
-   for the 3-assist game puck, now `playmaker`.
+   ladder tier's included ("Goal Scorer II", not "Sniper"); the 3-assist game
+   puck is *Three Helpers* (`three_helpers`, `ACH_THREE_HELPERS`).
 
    Later rewards (helmet stickers, a spray-painted stick, signature laces) are
    new content on the same machinery.

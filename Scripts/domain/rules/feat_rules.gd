@@ -8,8 +8,9 @@ const BACKHAND_SHELF := "backhand_shelf"
 const ONE_TIMER_FEED := "one_timer_feed"
 const PICK_AND_FINISH := "pick_and_finish"
 const STRIP_AND_FINISH := "strip_and_finish"
+const ONE_TIMER_DOT := "one_timer_dot"
 const ALL: Array[String] = [SNIPE, BACKHAND_SHELF, ONE_TIMER_FEED, PICK_AND_FINISH,
-		STRIP_AND_FINISH]
+		STRIP_AND_FINISH, ONE_TIMER_DOT]
 
 const WON_INTERCEPTION := "interception"
 const WON_TAKEAWAY := "takeaway"
@@ -31,6 +32,9 @@ static func goal_feats(ctx: GoalFeatContext) -> Array[Dictionary]:
 		out.append({"peer": ctx.scorer, "feat": BACKHAND_SHELF})
 	if own_shot and ctx.is_one_timer and ctx.primary_assist != -1:
 		out.append({"peer": ctx.primary_assist, "feat": ONE_TIMER_FEED})
+	if own_shot and ctx.is_one_timer and ctx.release_distance_m >= 0.0 \
+			and in_offensive_circle(ctx.release_xz):
+		out.append({"peer": ctx.scorer, "feat": ONE_TIMER_DOT})
 	if ctx.won_by == ctx.scorer:
 		match ctx.won_kind:
 			WON_INTERCEPTION:
@@ -38,3 +42,13 @@ static func goal_feats(ctx: GoalFeatContext) -> Array[Dictionary]:
 			WON_TAKEAWAY:
 				out.append({"peer": ctx.scorer, "feat": STRIP_AND_FINISH})
 	return out
+
+
+# Whether a release point (GoalFeatContext.release_xz, the goal scored on at
+# +z) is inside either faceoff circle in the zone of that goal.
+static func in_offensive_circle(release_xz: Vector2) -> bool:
+	for x: float in [-GameRules.END_ZONE_FACEOFF_DOT_X, GameRules.END_ZONE_FACEOFF_DOT_X]:
+		if release_xz.distance_to(Vector2(x, GameRules.ICING_FACEOFF_DOT_Z)) \
+				<= GameRules.FACEOFF_CIRCLE_RADIUS_M:
+			return true
+	return false

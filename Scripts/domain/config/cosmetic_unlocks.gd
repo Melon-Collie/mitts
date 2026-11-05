@@ -32,11 +32,12 @@ const FREE_SPANS: Array[int] = [
 	StickTapeConfig.Span.FULL, StickTapeConfig.Span.NONE, StickTapeConfig.Span.MID_TO_TOE,
 ]
 
-# { "slot", "option", "puck" }. The two signature tape jobs are homages to two
-# players' real ones, never named.
+# { "slot", "option", "puck" }. The signature tape jobs and the yellow laces
+# are homages to real players' looks, never named.
 const REWARDS: Array[Dictionary] = [
-	{"slot": TAPE_SPAN, "option": StickTapeConfig.Span.SPACED, "puck": "sniper"},
-	{"slot": TAPE_SPAN, "option": StickTapeConfig.Span.BOTTOM_STRIP, "puck": "playmaker"},
+	{"slot": TAPE_SPAN, "option": StickTapeConfig.Span.SPACED, "puck": "hat_trick"},
+	{"slot": TAPE_SPAN, "option": StickTapeConfig.Span.BOTTOM_STRIP, "puck": "breadman"},
+	{"slot": LACES, "option": TapeColorRegistry.YELLOW_INDEX, "puck": "one_timer_dot"},
 ]
 
 

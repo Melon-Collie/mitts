@@ -15,6 +15,9 @@ var loft_level: int = ShotMechanics.ELEVATION_FLAT
 var is_backhand: bool = false
 # Metres from the goal line to the release point, -1 when unknown.
 var release_distance_m: float = -1.0
+# The release point on the ice (x, z), z signed so the goal scored on is at
+# +z. Read only when release_distance_m says the release is known.
+var release_xz: Vector2 = Vector2.ZERO
 # The player whose interception or takeaway started the scoring team's
 # possession, and which it was: FeatRules.WON_INTERCEPTION or WON_TAKEAWAY.
 var won_by: int = -1

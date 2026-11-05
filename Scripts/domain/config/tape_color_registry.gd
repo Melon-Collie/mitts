@@ -16,6 +16,7 @@ extends RefCounted
 const TEAM_INDEX: int = 0
 const WHITE_INDEX: int = 1
 const BLACK_INDEX: int = 2
+const YELLOW_INDEX: int = 5
 const TEAM_SECOND_INDEX: int = 11
 
 # Locale keys, indexed in lockstep with _COLORS (TEAM at 0 has no swatch color;

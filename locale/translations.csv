@@ -476,6 +476,9 @@ PUCK_PICK_AND_FINISH,Pick and Finish,Intercepta y remata
 PUCK_PICK_AND_FINISH_DESC,Score on the possession your own interception started.,Marca en la posesión que empezó tu propia intercepción.
 PUCK_STRIP_AND_FINISH,Strip and Finish,Roba y remata
 PUCK_STRIP_AND_FINISH_DESC,Score on the possession your own takeaway started.,Marca en la posesión que empezó tu propio robo.
+PUCK_ONE_TIMER_DOT,The Office,La oficina
+PUCK_ONE_TIMER_DOT_DESC,Score a one-timer from inside an offensive-zone faceoff circle.,Marca con un tiro a la primera desde dentro de un círculo de saque ofensivo.
+PUCK_BREADMAN,Breadman,Breadman
 PUCK_THREE_HELPERS,Three Helpers,Tres asistencias
 PUCK_THREE_HELPERS_DESC,Record 3 assists in a single game.,Da 3 asistencias en un partido.
 PUCK_POWER_FORWARD,Power Forward,Delantero de potencia

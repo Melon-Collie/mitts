@@ -85,14 +85,28 @@ func test_the_signature_tape_jobs_are_game_puck_rewards() -> void:
 	assert_eq(spans.size(), CosmeticUnlocks.FREE_SPANS.size(), "the original six are free")
 	assert_does_not_have(spans, StickTapeConfig.Span.SPACED)
 	assert_eq(CosmeticUnlocks.reward_puck(CosmeticUnlocks.TAPE_SPAN,
-			StickTapeConfig.Span.SPACED), "sniper")
+			StickTapeConfig.Span.SPACED), "hat_trick")
 	assert_eq(CosmeticUnlocks.reward_puck(CosmeticUnlocks.TAPE_SPAN,
-			StickTapeConfig.Span.BOTTOM_STRIP), "playmaker")
-	var sniper: Array[String] = ["sniper"]
-	assert_has(CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, sniper),
+			StickTapeConfig.Span.BOTTOM_STRIP), "breadman")
+	var hat_trick: Array[String] = ["hat_trick"]
+	assert_has(CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, hat_trick),
 			StickTapeConfig.Span.SPACED)
-	assert_eq(CosmeticUnlocks.locked(CosmeticUnlocks.TAPE_SPAN, sniper),
+	assert_eq(CosmeticUnlocks.locked(CosmeticUnlocks.TAPE_SPAN, hat_trick),
 			[StickTapeConfig.Span.BOTTOM_STRIP] as Array[int])
+
+
+func test_yellow_laces_come_from_the_dot_and_nowhere_else() -> void:
+	assert_eq(TapeColorRegistry.NAME_KEYS[TapeColorRegistry.YELLOW_INDEX], &"TAPE_COLOR_YELLOW")
+	var dot: Array[String] = ["one_timer_dot"]
+	assert_has(CosmeticUnlocks.available(CosmeticUnlocks.LACES, dot),
+			TapeColorRegistry.YELLOW_INDEX)
+	for slot: String in [CosmeticUnlocks.TAPE_BLADE, CosmeticUnlocks.TAPE_KNOB,
+			CosmeticUnlocks.STICK_PAINT]:
+		assert_does_not_have(CosmeticUnlocks.available(slot, dot),
+				TapeColorRegistry.YELLOW_INDEX, "%s stays without yellow" % slot)
+	var none: Array[String] = []
+	assert_does_not_have(CosmeticUnlocks.available(CosmeticUnlocks.LACES, none),
+			TapeColorRegistry.YELLOW_INDEX)
 
 
 func test_an_unearned_tape_job_is_worn_heel_to_mid() -> void:
@@ -103,14 +117,14 @@ func test_an_unearned_tape_job_is_worn_heel_to_mid() -> void:
 	var worn := StickTapeConfig.from_code(CosmeticUnlocks.worn_tape_code(job.to_code(), none))
 	assert_eq(worn.span, StickTapeConfig.Span.HEEL_TO_MID)
 	assert_eq(worn.blade_color, TapeColorRegistry.BLACK_INDEX)
-	var playmaker: Array[String] = ["playmaker"]
+	var breadman: Array[String] = ["breadman"]
 	var earned := StickTapeConfig.from_code(
-			CosmeticUnlocks.worn_tape_code(job.to_code(), playmaker))
+			CosmeticUnlocks.worn_tape_code(job.to_code(), breadman))
 	assert_eq(earned.span, StickTapeConfig.Span.BOTTOM_STRIP)
 	assert_eq(earned.toe_color, TapeColorRegistry.WHITE_INDEX)
 	job.toe_color = 3
 	assert_eq(StickTapeConfig.from_code(CosmeticUnlocks.worn_tape_code(job.to_code(),
-			playmaker)).toe_color, TapeColorRegistry.TEAM_INDEX, "the toe follows the colour rules")
+			breadman)).toe_color, TapeColorRegistry.TEAM_INDEX, "the toe follows the colour rules")
 
 
 func test_unavailable_stick_paint_is_worn_as_the_team_colour() -> void:
