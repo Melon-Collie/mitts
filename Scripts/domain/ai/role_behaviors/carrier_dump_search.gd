@@ -257,32 +257,23 @@ func _keeper_time(ctx: RoleContext) -> float:
 	return INF
 
 
-# Whether the release just walked ices: from our half and across their goal line
-# before anyone plays it (`touched_s`), with our side not first to the end-zone
-# dots by the clear margin.
+# Whether the release just walked ices (AIIcingRead), first played at
+# `touched_s`.
 func _ices(ctx: RoleContext, origin: Vector3, touched_s: float) -> bool:
 	var attack_z: float = signf(ctx.attacking_goal_pos.z)
-	if not InfractionRules.behind_red_line(origin.z, attack_z):
-		return false
-	var crossed_s: float = INF
-	for i: int in STEPS:
-		if _path[i].z * attack_z > GameRules.GOAL_LINE_Z:
-			crossed_s = float(i + 1) * STEP_DT
-			break
+	var crossed_s: float = AIIcingRead.crossing_s(_path, STEP_DT, attack_z)
 	if crossed_s >= touched_s:
 		return false
-	var dot_z: float = attack_z * GameRules.ICING_FACEOFF_DOT_Z
-	var ours: float = _first_to_line(dot_z, _our_pos, _our_vel, _our_caps)
-	var theirs: float = _first_to_line(dot_z, _field.opponents_release,
-			_field.opponent_vels, _field.opponent_caps)
-	return ours + GameRules.ICING_RACE_CLEAR_MARGIN_S > theirs
+	return AIIcingRead.ices(origin.z, attack_z, crossed_s, touched_s,
+			AIIcingRead.first_to_dots(attack_z, _our_pos, _our_vel, _our_caps),
+			AIIcingRead.first_to_dots(attack_z, _field.opponents_release,
+					_field.opponent_vels, _field.opponent_caps))
 
 
-# An icing called: a faceoff at our end's dot — a coin flip for a possession
-# that is theirs there.
+# An icing called: a faceoff at our end's dot.
 func _icing_value(ctx: RoleContext, origin: Vector3) -> float:
-	var dot2: Vector2 = GameRules.icing_faceoff_dot(ctx.team_id, origin.x)
-	return -_field.turnover_cost(Vector3(dot2.x, 0.0, dot2.y), 0.5)
+	return -_field.turnover_cost(AIIcingRead.faceoff_spot(ctx.team_id, origin.x),
+			AIIcingRead.FACEOFF_LOSS_SHARE)
 
 
 # Our side and the defence dead-reckoned to the race's horizon, and the shot each
@@ -383,15 +374,4 @@ static func _first_to(target: Vector3, pos: Array[Vector3], vel: Array[Vector3],
 		var c: AISkaterCaps = caps[i]
 		best = minf(best, AIArrival.time_to_arrive(pos[i], target, vel[i],
 				c.max_speed if c != null else AIArrival.SKATER_REF_SPEED_M_S))
-	return best
-
-
-# Soonest of `pos` to the line z = `line_z`, straight down the ice.
-static func _first_to_line(line_z: float, pos: Array[Vector3], vel: Array[Vector3],
-		caps: Array[AISkaterCaps]) -> float:
-	var best: float = INF
-	for i: int in pos.size():
-		var c: AISkaterCaps = caps[i]
-		best = minf(best, AIArrival.time_to_arrive(pos[i], Vector3(pos[i].x, 0.0, line_z),
-				vel[i], c.max_speed if c != null else AIArrival.SKATER_REF_SPEED_M_S))
 	return best

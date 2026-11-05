@@ -65,6 +65,10 @@ var _rim_lane_by_k: PackedFloat64Array = PackedFloat64Array()
 var _rim_miss_by_k: PackedFloat64Array = PackedFloat64Array()
 # Opponents projected to a feed's arrival (and a developing feed's flight).
 var _proj_buf: Array[Vector3] = []
+# Our side at the release, for the icing race to the dots (_rim_ices).
+var _ours_pos: Array[Vector3] = []
+var _ours_vel: Array[Vector3] = []
+var _ours_caps: Array[AISkaterCaps] = []
 # Lane of the last FLAT _pass_variant_ev (0.0 when the variant filtered out
 # before its lane solve). The saucer gate reads it — see search.
 var _last_flat_variant_lane: float = 0.0
@@ -260,7 +264,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				rim_t + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S,
 				rim_t + rotation_time, our_goalie, rim_caps, rim_lane, rim_miss,
 				rim_state.velocity, floor_ev,
-				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k])
+				AIRimPass.dirs[rim_k], AIRimPass.opp_meet[rim_k], 0.0,
+				ctx.icing_enforced and _rim_ices(ctx, pass_origin, rim_k))
 		if rim_peer == ctx.ping_pass_target_peer and s_rim > 0.0:
 			s_rim *= PING_PASS_EV_MULT
 		if s_rim > best_pass_score:
@@ -355,6 +360,33 @@ func _rim_launch_for(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	_rim_lane = _rim_lane_by_k[pick]
 	_rim_miss = _rim_miss_by_k[pick]
 	return _rim_sure_by_k[pick]
+
+
+# Whether rim launch `k` from `origin` ices when it gets by our receiver
+# (AIIcingRead): its path across their goal line before their soonest man meets
+# it, the next stick on it once ours has missed it.
+func _rim_ices(ctx: RoleContext, origin: Vector3, k: int) -> bool:
+	var attack_z: float = signf(ctx.attacking_goal_pos.z)
+	var path: Array[Vector3] = AIRimPass.paths[k]
+	var crossed_s: float = AIIcingRead.crossing_s(path, AIRimPass.STEP_DT, attack_z)
+	var touched_s: float = AIRimPass.opp_time(k)
+	if crossed_s >= touched_s:
+		return false
+	_ours_pos.clear()
+	_ours_vel.clear()
+	_ours_caps.clear()
+	for pid: int in ctx.snapshot.skater_states:
+		if ctx.team_id_by_peer.get(pid, -1) != ctx.team_id \
+				or (pid != ctx.peer_id and ctx.snapshot.is_out_of_play(pid)):
+			continue
+		var st: SkaterNetworkState = ctx.snapshot.skater_states[pid]
+		_ours_pos.append(st.position)
+		_ours_vel.append(st.velocity)
+		_ours_caps.append(ctx.caps_by_peer.get(pid))
+	return AIIcingRead.ices(origin.z, attack_z, crossed_s, touched_s,
+			AIIcingRead.first_to_dots(attack_z, _ours_pos, _ours_vel, _ours_caps),
+			AIIcingRead.first_to_dots(attack_z, _field.opponents_release,
+					_field.opponent_vels, _field.opponent_caps))
 
 
 # EV of ONE pass variant (flat, or saucer at a possibly-reduced launch
@@ -480,7 +512,8 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # the caller decides), so a cross-seam feed is scored against a keeper caught
 # mid-slide. The receiver shoots at his own build's speed and loft when
 # `receiver_caps` is given, the league default otherwise. A rim passes
-# `rim_dir` and the point its path is lost at (`rim_loss_point`). `closing` is
+# `rim_dir` and the point its path is lost at (`rim_loss_point`), or `rim_iced`
+# when what gets by our receiver ices instead (_rim_ices). `closing` is
 # the feed's speed in the receiver's frame as it reaches him (0 for a one-timer
 # or a rim: no reception to price). By its odds it is caught, and he settles
 # (AIFeedReception.receiver_settle_s) with the puck on his stick for the defence to
@@ -495,7 +528,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		useless_below: float = -INF,
 		rim_dir: Vector3 = Vector3.ZERO,
 		rim_loss_point: Vector3 = Vector3.INF,
-		closing: float = 0.0) -> float:
+		closing: float = 0.0,
+		rim_iced: bool = false) -> float:
 	var self_pos: Vector3 = ctx.self_pos
 	# The pass flies from the PUCK, not the body: behind the net the two differ
 	# by up to a stick's reach. The lane and its loss points are the puck's;
@@ -590,10 +624,15 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 					origin, receiver_spot, _field.opponents_release, pass_speed,
 					_field.opponent_vels, _field.opponent_caps,
 					_field.opponent_blades_release)
-	cost += _field.turnover_cost(loss_point,
-			release_clean * (1.0 - lane))
-	cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
-			release_clean * lane * miss_prob)
+	if rim_iced:
+		# Beaten to it or missed, it ices: a faceoff at our dot, no counter-rush.
+		cost += _field.turnover_cost(AIIcingRead.faceoff_spot(ctx.team_id, origin.x),
+				AIIcingRead.FACEOFF_LOSS_SHARE * release_clean * (1.0 - clean_lane))
+	else:
+		cost += _field.turnover_cost(loss_point,
+				release_clean * (1.0 - lane))
+		cost += _field.turnover_cost(AIPuckLane.pass_miss_loss_point(origin, receiver_spot),
+				release_clean * lane * miss_prob)
 	# Lost on reception: the puck dies AT the receiver, in whatever traffic he was
 	# about to catch it in.
 	cost += _field.turnover_cost(receiver_spot,
@@ -601,8 +640,9 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	# Transition exposure (5v5): each loss mode also prices the COUNTER-RUSH
 	# it hands over — the carrier stays at self_pos through a pass, so his
 	# own recovery race starts from here (plan §6).
-	cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
-			self_pos, our_goalie)
+	if not rim_iced:
+		cost += _field.counter_exposure_cost(ctx, loss_point, 1.0 - lane,
+				self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
 			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	return benefit - cost

@@ -777,7 +777,10 @@ takes the whole class down and every static call on it from every file at once.
     carry-cursor ring, the wrister charge and its lookahead);
   - `goalie_model.gd` (`AIGoalieModel`) — the keeper the bots plan against: his
     body's cover numbers, the difficulty-synced reads, planned depth, lateral
-    push, post seal and predicted position.
+    push, post seal and predicted position;
+  - `icing_read.gd` (`AIIcingRead`) — NHL hybrid icing read off a walked
+    release: the crossing, the touch, the dot race (held to
+    `InfractionRules.judge_icing_race`) and the faceoff it hands over.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -1072,7 +1075,12 @@ reaches back into what remains.
   LANE is a race along that path in `arrival_race`'s contest band — the
   receiver against the soonest opponent, and against their keeper behind his own
   net by the live goalie's trip gates. Arrivals over the receiver's catch
-  threshold are dropped. Zone rules mirror the straight feed's. A winner is
+  threshold are dropped. Zone rules mirror the straight feed's. Under NHL rules
+  a rim that gets by our receiver, or that their man reaches first, goes on down
+  its path: from our half and across their goal line before their soonest man
+  meets it, with their side first to the dots, it is an icing, and both loss
+  modes are priced as the faceoff at our dot (`AIIcingRead`, as the dump's is)
+  rather than as their puck where it dies. A winner is
   released as a FLAT charged dump along its bearing at its pace. In the O-zone
   the currency prices a rim to a man low in the corner near zero; the breakout
   rim up the wall past a forechecker is where it wins.

@@ -2504,6 +2504,74 @@ func test_an_open_breakout_lane_is_passed_straight() -> void:
 			"an open lane takes the tape-to-tape feed")
 
 
+# ── A rim that gets by everybody (NHL icing) ─────────────────────────────────
+# Our D on the left wall in our half with a forechecker on his hip, his winger
+# up the wall, their deepest man on the far side of their zone: the harder rims
+# up the wall run past their goal line with nobody of theirs on the way.
+
+func _wall_rim_ctx(self_z: float, extra: Array = []) -> RoleContext:
+	var self_pos := Vector3(-10.5, 0, self_z)
+	var skaters: Array = [
+		[1, TEAM_ID, self_pos],
+		[2, TEAM_ID, Vector3(-11.5, 0, self_z - 10.0)],
+		[3, 1, self_pos + Vector3(1.2, 0, 0.8)],
+		[5, 1, Vector3(8.0, 0, OPP_NET_Z + 5.5)],
+	]
+	skaters.append_array(extra)
+	var ctx: RoleContext = _make_ctx(self_pos, skaters)
+	ctx.icing_enforced = true
+	return ctx
+
+
+# Every rim launch from the carrier's puck (raced as the pass search races
+# them), and whether each ices; `c` is left holding the field they were read on.
+func _rim_icings(ctx: RoleContext, c: AIRoleCarrier) -> Array[bool]:
+	c._pick_fire_phase(ctx)
+	var origin: Vector3 = AICarrierField.pass_origin(ctx)
+	var n: int = AIRimPass.build(origin, ctx.self_wrister_shot_speed,
+			ctx.defending_goal_pos.z, c._field.opponents, c._field.opponent_vels,
+			c._field.opponent_caps)
+	var out: Array[bool] = []
+	for k: int in n:
+		out.append(c._pass._rim_ices(ctx, origin, k))
+	return out
+
+
+func test_a_rim_from_our_half_that_runs_past_their_goal_line_untouched_ices() -> void:
+	assert_true(_rim_icings(_wall_rim_ctx(12.0), AIRoleCarrier.new()).has(true),
+			"a hard rim up the empty wall is an icing once it gets by the winger")
+
+
+func test_a_man_of_theirs_up_the_wall_plays_the_rim_before_it_can_ice() -> void:
+	# Deep enough on the wall to get a stick on even the hardest rim: one nearer
+	# the red line is beaten by it and only catches it behind his net.
+	var ctx: RoleContext = _wall_rim_ctx(12.0, [[6, 1, Vector3(-12.0, 0, -16.0)]])
+	assert_false(_rim_icings(ctx, AIRoleCarrier.new()).has(true),
+			"his touch comes first: a turnover where he meets it, not an icing")
+
+
+func test_a_rim_released_past_centre_never_ices() -> void:
+	assert_false(_rim_icings(_wall_rim_ctx(-3.0), AIRoleCarrier.new()).has(true))
+
+
+func test_a_rim_that_would_ice_costs_more_than_losing_it_behind_their_net() -> void:
+	# What gets by the winger is a faceoff at our dot, not their puck behind their
+	# own net — the cheap turnover the loss would otherwise be priced as.
+	var ctx: RoleContext = _wall_rim_ctx(12.0)
+	var c := AIRoleCarrier.new()
+	var icings: Array[bool] = _rim_icings(ctx, c)
+	var k: int = icings.find(true)
+	assert_ne(k, -1)
+	var winger: Vector3 = ctx.snapshot.skater_states[2].position
+	var behind_their_net := Vector3(0.0, 0.0, OPP_NET_Z - 2.0)
+	var ev: Array[float] = []
+	for iced: bool in [false, true]:
+		ev.append(c._pass._pass_ev(ctx, winger, AIRimPass.paces[k], 1.0, 1.135, 1.0,
+				Vector3(0.0, 0.0, OUR_NET_Z), null, 0.6, 0.1, Vector3.ZERO, -INF,
+				AIRimPass.dirs[k], behind_their_net, 0.0, iced))
+	assert_lt(ev[1], ev[0])
+
+
 # ── The reviewed calibration ─────────────────────────────────────────────────
 # What the current calibration decides and measures at the fixtures above whose
 # outcome is tuning, not doctrine. Rewrite with MITTS_UPDATE_SNAPSHOTS=1
