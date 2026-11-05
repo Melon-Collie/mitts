@@ -17,12 +17,12 @@ tight-wall pinch, open man wide: carry anchor	(0.0, -22.1)
 spun-off carrier, beaten man behind: pick	CARRY to (1.7, -19.8)
 pressured deep in our zone, open outlet up the strong wall: pick	PASS to 2
 outlet straight up the wall, forechecker standing off the lane: pick	PASS to 2
-wide in the zone, open man at the far-post backdoor: pick	CARRY to (2.2, -21.1)
+wide in the zone, open man at the far-post backdoor: pick	PASS to 2
 our end, middle clogged, winger ahead with a clear path: pick	PASS to 2
 central in the zone, open mate wide at a poor angle: intent	CARRY
 neutral ice, straight lane clogged, close outlet up-ice: pick	PASS to 2
 8 m feed past a mid-lane stick: variant	NONE
-pinged ahead man 9 m out behind a mid-lane stick: variant	SAUCER
+pinged ahead man 12 m out behind a mid-lane stick: variant	SAUCER
 board pincer closing, open outlet across: pick	PASS to 2
 light pressure, only a covered mate behind: intent	CARRY
 deep in our zone, forechecker charging, only a deeper mate: intent	CARRY
@@ -31,7 +31,7 @@ pressured deep, outlet en route, deeper valve as bait: pick	PASS to 2
 alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -10.6)
 rush up the wall 4.3 m short of the line, room to enter: intent	CARRY
 rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-2.9, -9.5)
-rush up the wall, smothered at the line, trailer open: pick	PASS to 2
+rush up the wall, smothered at the line, trailer open: pick	DUMP
 level with a mate at the blue line, symmetric set D: intent	CARRY
 2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -13.1)
 fresh entry, finisher driving the house: intent	PASS

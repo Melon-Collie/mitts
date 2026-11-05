@@ -25,9 +25,8 @@ const RECEIVE_FEED_MOVING_M_S: float = 0.5
 # isn't ours; sized generously to cover any pass that would realistically end up
 # at this bot.
 const RECEIVE_TRIGGER_LATERAL_M: float = 5.0
-# Sideways stand-off from the path: stick + blade reach less this inset, so the
-# IK isn't at the ROM clamp.
-const RECEIVE_BODY_INSET_M: float = 0.2
+# Sideways stand-off from the path (AIBotMechanics.reception_gate_reach).
+const RECEIVE_BODY_INSET_M: float = AIBotMechanics.RECEIVE_BODY_INSET_M
 # Bot must reach the body anchor within this fraction of the puck's flight time,
 # else the plain lead-intercept (faster, at a worse angle) wins.
 const RECEIVE_TIMING_MARGIN: float = 0.9
@@ -120,10 +119,10 @@ func setup(peer_id: int, team_id: int, team_id_by_peer: Dictionary,
 	_is_left_handed = is_left_handed
 
 
-# Comfortable blade extension for a parked reception: the blade span (`blade_reach`
-# less its outward buffer) minus the side-stand inset, off the IK ROM clamp.
+# Comfortable blade extension for a parked reception, from the blade span
+# (`blade_reach` less its outward buffer).
 static func gate_reach(blade_reach: float) -> float:
-	return maxf(blade_reach - AIBotMechanics.BLADE_REACH_BUFFER_M - RECEIVE_BODY_INSET_M, 0.4)
+	return AIBotMechanics.reception_gate_reach(blade_reach - AIBotMechanics.BLADE_REACH_BUFFER_M)
 
 
 # Pass-receive stance (the RECEIVE_TRIGGER_* read) into the pass_* results. False

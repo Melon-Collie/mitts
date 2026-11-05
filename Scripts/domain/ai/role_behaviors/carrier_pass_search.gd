@@ -207,7 +207,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		# wrister floor no legal saucer exists (the physical minimum saucer
 		# distance, ~6.5 m).
 		var saucer_speed: float = minf(
-				pass_speed, AIPuckLane.saucer_max_launch_speed(dist))
+				pass_speed, AIPuckLane.saucer_max_launch_speed(dist - receiver_gate_m(receiver_caps)))
 		# Saucer competes only when the FLAT feed is contested
 		# (SAUCER_SKIP_WHEN_LANE_CLEAR), read off the flat variant's solved lane so
 		# a clear-lane receiver skips the second solve. A flat variant filtered
@@ -389,6 +389,13 @@ func _rim_ices(ctx: RoleContext, origin: Vector3, k: int) -> bool:
 					_field.opponent_vels, _field.opponent_caps))
 
 
+# How far out from his body `caps`' receiver takes a feed: where a saucer has to
+# be down and settled by, so its runway is measured to it, not to his body.
+static func receiver_gate_m(caps: AISkaterCaps) -> float:
+	return AIBotMechanics.reception_gate_reach(caps.blade_span if caps != null
+			else GameRules.DEFAULT_STICK_LENGTH_M + GameRules.DEFAULT_BLADE_LENGTH_M)
+
+
 # EV of ONE pass variant (flat, or saucer at a possibly-reduced launch
 # speed) to `receiver_state`. Solves the intercept lead at the variant's
 # actual speed, applies the per-variant filters, then prices it through
@@ -396,8 +403,9 @@ func _rim_ices(ctx: RoleContext, origin: Vector3, k: int) -> bool:
 #   - Lead past our own goal line (own-goal risk).
 #   - Carrier in OZ → lead must sit AICarrierField.OZ_RECEIVE_LINE_BUFFER_M inside the line.
 #   - Carrier outside with a delayed offside up → lead must stay outside.
-#   - Saucer only: the lead must leave the flip landing runway (airborne carry
-#     + SAUCER_LANDING_RUN_M — a closing receiver can shrink the solved lead
+#   - Saucer only: the lead must leave the flip landing runway before his gate
+#     (airborne carry + SAUCER_LANDING_RUN_M + receiver_gate_m — a closing
+#     receiver can shrink the solved lead
 #     under what the current distance allowed), the flat lane must be contested
 #     (SAUCER_SKIP_WHEN_LANE_CLEAR), and the loft must clear MORE of the lane
 #     than staying flat.
@@ -457,7 +465,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 	if saucer:
 		# Small tolerance: a speed sitting exactly on the receivability
 		# bound round-trips through the kinematics to the exact distance.
-		if pass_origin.distance_to(receiver) \
+		if pass_origin.distance_to(receiver) - receiver_gate_m(receiver_caps) \
 				< AIPuckLane.saucer_airborne_distance_m(pass_speed) \
 				+ AIPuckLane.SAUCER_LANDING_RUN_M - 0.01:
 			return 0.0

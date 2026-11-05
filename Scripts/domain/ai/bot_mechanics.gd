@@ -32,6 +32,16 @@ const BLADE_REACH_M: float = (
 		+ GameRules.DEFAULT_BLADE_LENGTH_M
 		+ BLADE_REACH_BUFFER_M)
 
+# A receiver parks his blade for a feed his blade span out from the body less
+# this inset (the side stand), so the arm is not at its ROM clamp.
+const RECEIVE_BODY_INSET_M: float = 0.2
+
+
+# How far out from his body a receiver with `blade_span` (stick + blade) takes a
+# feed: where the puck first comes onto his stick (SkaterAgentReception's gate).
+static func reception_gate_reach(blade_span: float) -> float:
+	return maxf(blade_span - RECEIVE_BODY_INSET_M, 0.4)
+
 # The agent's SHOOT_PRESSED and charged PASS_PRESSED hold shoot_held for this many
 # ticks while the blade sweeps from wind_up_start to aim_target, then release.
 # Power rides input.bot_wrister_power_t, so the sweep is cosmetic, but the

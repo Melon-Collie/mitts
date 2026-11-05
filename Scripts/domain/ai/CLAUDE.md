@@ -941,8 +941,9 @@ reaches back into what remains.
   collapses to their body radius (sticks fly under it), a stick stuffs it on the
   release, and from the touch-down on the rest of the lane is the accurate flat
   read, so the man it flew over still plays it sliding off behind him. A flip
-  only clears a stick when it lands out of his reach. The flip must land with runway before the tape
-  (`saucer_max_launch_speed`), so the carrier scores each receiver flat and
+  only clears a stick when it lands out of his reach. The flip must land with
+  runway before the receiver's stick takes it (`saucer_max_launch_speed` to his
+  reception gate, `receiver_gate_m`), so the carrier scores each receiver flat and
   saucered and lets EV decide (`carrier_pass_search.gd:_pass_variant_ev`, the saucer paying
   `SAUCER_EXTRA_MISS_PROB`); below ~4 m no legal saucer exists. **Receiver
   commitment** enters the completion model as an execution-miss term: a receiver
