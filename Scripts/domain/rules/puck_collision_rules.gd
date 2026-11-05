@@ -140,18 +140,25 @@ static func reflect_with_friction(
 # ShotMechanics.loft_y by Puck.apply_blade_deflect). Positive lifts, negative
 # drives the puck down, zero keeps it flat.
 #
-# The loft level names the direction, as it does for a shot: FLAT and LOW tip
-# DOWN, MID and HIGH tip UP. A puck already on the ice has no down to go, so a
-# down tip there stays flat. The sign is the player's stated intent, never
-# puck-vs-blade geometry at the contact, so two identical contacts cannot flip
-# outcome on a centimetre of height.
+# The loft level names the tip as it names a shot: FLAT tips DOWN (a puck
+# already on the ice has no down to go, so it stays flat), and LOW, MID and HIGH
+# tip UP at their own launch speed, lowest to highest. The level is the
+# player's stated intent, never puck-vs-blade geometry at the contact, so two
+# identical contacts cannot flip outcome on a centimetre of height.
 static func deflect_loft_speed(
 		elevation_level: int,
-		up_speed: float,
+		low_speed: float,
+		mid_speed: float,
+		high_speed: float,
 		down_speed: float,
 		puck_airborne: bool) -> float:
-	if elevation_level >= ShotMechanics.ELEVATION_MID:
-		return up_speed
+	match elevation_level:
+		ShotMechanics.ELEVATION_LOW:
+			return low_speed
+		ShotMechanics.ELEVATION_MID:
+			return mid_speed
+		ShotMechanics.ELEVATION_HIGH:
+			return high_speed
 	return -down_speed if puck_airborne else 0.0
 
 # Analytic board-containment rescue: the velocity for a puck the engine let

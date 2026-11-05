@@ -42,7 +42,9 @@ const SHOOTERS: Array[Vector2] = [Vector2(0.0, 18.0), Vector2(5.0, 16.0)]
 const TIPPERS: Array[Vector2] = [Vector2(1.5, 4.0), Vector2(-1.5, 4.0), Vector2(1.0, 5.5),
 		Vector2(0.0, 3.0)]
 const SPEEDS: Array[float] = [24.0, 32.0]
-const TIP_LEVELS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_MID]
+const TIP_LEVELS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
+		ShotMechanics.ELEVATION_MID, ShotMechanics.ELEVATION_HIGH]
+const LEVEL_NAMES: Array[String] = ["FLAT", "LOW", "MID", "HIGH"]
 
 
 class GameStateStub:
@@ -269,6 +271,8 @@ func test_the_aim_window() -> void:
 func test_tip_conversion() -> void:
 	var lines: PackedStringArray = ["shooter  tipper      tip   speed | tips  on net  goals  conv"]
 	var by_level: Dictionary = {}
+	var height_sum: Dictionary = {}
+	var height_n: Dictionary = {}
 	for shooter_spot: Vector2 in SHOOTERS:
 		var shooter: Vector3 = _world(shooter_spot)
 		for tip_spot: Vector2 in TIPPERS:
@@ -285,16 +289,22 @@ func test_tip_conversion() -> void:
 								t.y += 1
 							if out == "G":
 								t.z += 1
+						if _cross != Vector3.INF and absf(_cross.x) <= GameRules.NET_HALF_WIDTH:
+							height_sum[level] = height_sum.get(level, 0.0) + _cross.y
+							height_n[level] = height_n.get(level, 0) + 1
 						c += CURSOR_STEP_M
-					var lv: String = "UP" if level >= ShotMechanics.ELEVATION_MID else "FLAT"
+					var lv: String = LEVEL_NAMES[level]
 					by_level[lv] = by_level.get(lv, Vector3i.ZERO) + t
 					lines.append("(%2.0f,%2.0f)  (%+.1f,%.1f)  %-4s  %3.0f   | %4d  %5d  %5d  %3.0f%%" % [
 							shooter_spot.x, shooter_spot.y, tip_spot.x, tip_spot.y, lv, speed,
 							t.x, t.y, t.z, 100.0 * t.z / maxf(t.y, 1)])
-	for lv: String in by_level:
-		var t: Vector3i = by_level[lv]
-		lines.append("ALL %-4s tips %d, on net %d (%.0f%%), goals %d (%.0f%% of those on net)" % [
-				lv, t.x, t.y, 100.0 * t.y / maxf(t.x, 1), t.z, 100.0 * t.z / maxf(t.y, 1)])
+	for level: int in TIP_LEVELS:
+		var lv: String = LEVEL_NAMES[level]
+		var t: Vector3i = by_level.get(lv, Vector3i.ZERO)
+		lines.append("ALL %-4s tips %d, on net %d (%.0f%%), goals %d (%.0f%% of those on net),"
+				% [lv, t.x, t.y, 100.0 * t.y / maxf(t.x, 1), t.z, 100.0 * t.z / maxf(t.y, 1)]
+				+ " mean height at the line %.2f m" % [
+				height_sum.get(level, 0.0) / maxf(height_n.get(level, 0), 1)])
 	gut.p("\n" + "\n".join(lines))
 	assert_true(true)
 

@@ -1156,11 +1156,12 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# Hit held delivers the FULL transfer AIBodyCheck's predicted_impulse
 			# assumed (an uncommitted drive lands only the passive fraction).
 			input.hit_held = true
-		# FINISHER raises its blade to tip an incoming ELEVATED on-net shot. HIGH
-		# is the deflect mode and puts the lifted blade on the high-air plane.
+		# FINISHER raises its blade to tip an incoming ELEVATED on-net shot; the
+		# press takes the blade to the puck's height. Met in the air already, it
+		# needs only LOW's lift to stay under the bar.
 		input.stick_lift_held = decision.lift_blade
 		if decision.lift_blade:
-			input.elevation_level = ShotMechanics.ELEVATION_HIGH
+			input.elevation_level = ShotMechanics.ELEVATION_LOW
 		# Preserve one-timer readiness through pass flights: with no carrier,
 		# FINISHER can't score the feed and reports "not ready", though the stance
 		# hasn't moved — dropping the flag there would stop the trigger firing when

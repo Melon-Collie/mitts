@@ -81,8 +81,16 @@ var bobble_lift_max_speed: float = 1.9
 # (apex ∝ pace²), so a hard tip sails over the net; a fixed launch speed gives a
 # CONSISTENT apex regardless of pace, and the redirect keeps its horizontal pace
 # minus what's carved into the lift (energy-conserving, like a lofted shot).
-# The loft level picks which one (PuckCollisionRules.deflect_loft_speed).
-@export var deflect_up_loft_speed: float = 3.8     # tip up and in (apex ≈ 0.74 m)
+# The loft level picks which one (PuckCollisionRules.deflect_loft_speed). The
+# three up-tips are sized to put a tip off the ice 5 m from the goal line (a man
+# 4 m out, his blade a metre ahead of him), at the ~23 m/s a typical tip keeps of
+# a point shot, on the shot ladder's targets at the goal line: over the
+# butterfly pad (0.41 m), the armpit (0.70 m), upstairs (0.99 m).
+# Farther or slower tips arrive higher, a puck met in the air higher still, so a
+# HIGH tip from the top of the slot can clear the bar.
+@export var deflect_low_loft_speed: float = 2.9
+@export var deflect_mid_loft_speed: float = 4.2
+@export var deflect_high_loft_speed: float = 5.5
 @export var deflect_down_loft_speed: float = 3.5   # drive an airborne puck down to the ice
 # A deflect whose resulting speed lands below this reads as a BOBBLE — the blade
 # smothered the puck (knocked it down) rather than redirecting it. The deflector
@@ -556,7 +564,8 @@ func apply_blade_deflect(skater: Skater) -> void:
 	# lift there — a smothered puck shouldn't pop off the ice.
 	var loft_vy: float = PuckCollisionRules.deflect_loft_speed(
 			skater.elevation_level,
-			deflect_up_loft_speed, deflect_down_loft_speed, is_airborne())
+			deflect_low_loft_speed, deflect_mid_loft_speed, deflect_high_loft_speed,
+			deflect_down_loft_speed, is_airborne())
 	var horiz_speed: float = new_vel.length()
 	if not is_zero_approx(loft_vy) and horiz_speed > 0.001:
 		# loft_y gives the Y/XZ ratio that yields launch speed |loft_vy| at this

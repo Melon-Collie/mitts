@@ -117,10 +117,10 @@ func test_a_press_held_from_before_the_release_does_not_follow() -> void:
 
 
 func test_pressing_again_reads_again() -> void:
-	_tick(true, ShotMechanics.ELEVATION_LOW, 5)
+	_tick(true, ShotMechanics.ELEVATION_FLAT, 5)
 	_launch(0.3, 8.0)
-	_tick(false, ShotMechanics.ELEVATION_LOW, 1)
-	_tip(ShotMechanics.ELEVATION_LOW, 0.3, 8.0, false)
+	_tick(false, ShotMechanics.ELEVATION_FLAT, 1)
+	_tip(ShotMechanics.ELEVATION_FLAT, 0.3, 8.0, false)
 	assert_lt(_vel.y, 0.0, "re-pressed after the release, it knocks the puck down")
 
 
@@ -157,9 +157,19 @@ func test_mid_tips_an_air_puck_up() -> void:
 	assert_gt(_vel.y, 0.0)
 
 
-func test_low_knocks_an_air_puck_down() -> void:
-	_tip(ShotMechanics.ELEVATION_LOW)
+func test_flat_knocks_an_air_puck_down() -> void:
+	_tip(ShotMechanics.ELEVATION_FLAT)
 	assert_lt(_vel.y, 0.0)
+
+
+func test_low_tips_an_air_puck_up_under_mid() -> void:
+	_tip(ShotMechanics.ELEVATION_LOW)
+	var low_vy: float = _vel.y
+	assert_gt(low_vy, 0.0)
+	_tick(false, ShotMechanics.ELEVATION_MID, 30)
+	_puck.remove_skater_cooldown(_c.skater)
+	_tip(ShotMechanics.ELEVATION_MID)
+	assert_gt(_vel.y, low_vy, "a MID tip leaves steeper than a LOW one")
 
 
 func test_a_puck_over_the_full_lift_goes_past() -> void:
