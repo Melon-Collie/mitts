@@ -31,6 +31,9 @@ first goal, the hundredth point — taped and dated.
   wrong against most kits, and players were not using them.)
 - **An unlock is one item and one option** — yellow *laces*, not yellow
   everywhere — so a reward never leaks into a slot it was not meant for.
+- **A picker lists only what the player may wear.** A reward option appears in
+  the player screen once its puck is earned, never before; the Trophy Case is
+  where a player sees what is still to earn.
 - **Counting pucks reward play that wins hockey games.** Mitts is PvP; a player
   chasing a puck spends their teammates' and opponents' game, not only their
   own (Darktide is co-op against AI, where it mostly costs the player's own
@@ -262,8 +265,8 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       laid along the blade's bottom edge, heel to toe, ending at a 4 cm toe cap
       in its own colour — the toe-colour pick shows only for it), the
       Playmaker banner's. Homages to two players' real tape jobs, never naming
-      them. The player screen lists a locked job greyed with its banner; an
-      unearned one is worn heel-to-mid.
+      them. The player screen lists a job once it is earned; an unearned one is
+      worn heel-to-mid.
    3. **Sticks as patterns** (built). A stick is a pattern
       (`StickModelRegistry`) — Solid, Kick, Block, Split, Wood — whose zones
       (shaft, up to two bands, wordmark, blade) the player paints from the
@@ -292,8 +295,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 
       The host's goal context carries the release point (`release_xz`, the
       goal scored on at +z) beside the release distance the snipe reads.
-      Titles stay on their combos. A locked colour is not listed in its
-      picker (only a locked tape job is, greyed with its puck).
+      Titles stay on their combos.
 
    **Names.** A combo that unlocks a title carries the title's name
    (Playmaker, Sniper). Where an existing puck already had that name, the

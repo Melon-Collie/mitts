@@ -497,7 +497,6 @@ TAPE_COLOR_TEAM_SECOND,Team color 2,Color del equipo 2
 TAPE_COLOR_TEAM_SECOND_SHORT,Team 2,Equipo 2
 TAPE_SPAN_SPACED,Spaced,Espaciada
 TAPE_SPAN_BOTTOM_STRIP,Bottom strip,Tira inferior
-TAPE_SPAN_LOCKED,%s · %s,%s · %s
 TAPE_TOE_LABEL,Toe cap,Puntera
 STICK_PATTERN_LABEL,Pattern,Diseño
 STICK_PATTERN_SOLID,Solid,Liso

@@ -78,16 +78,6 @@ static func available(slot: String, earned: Array[String]) -> Array[int]:
 	return out
 
 
-# The reward options of `slot` the player has not unlocked, for a picker that
-# shows what is still to earn.
-static func locked(slot: String, earned: Array[String]) -> Array[int]:
-	var out: Array[int] = []
-	for row: Dictionary in REWARDS:
-		if String(row["slot"]) == slot and not earned.has(String(row["puck"])):
-			out.append(int(row["option"]))
-	return out
-
-
 # The reward rows a requirement unlocks.
 static func unlocked_by(req: String) -> Array[Dictionary]:
 	var out: Array[Dictionary] = []

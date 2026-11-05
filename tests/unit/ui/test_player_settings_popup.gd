@@ -90,6 +90,17 @@ func test_every_row_lists_its_catalogue_with_the_saved_picks() -> void:
 	assert_eq(_picked(_buttons("_face_btns")), GearModelRegistry.FACE_VISOR)
 
 
+# A reward is listed once its Game Puck is earned and never before; headless
+# there is no Steam, so nothing is earned and the list is the free spans.
+func test_the_coverage_list_offers_only_what_the_player_may_wear() -> void:
+	var btn: OptionButton = (_popup.get("_coverage") as TapeCoverageList).button()
+	var earned: Array[String] = PlayerPrefs.earned_rewards()
+	var open: Array[int] = CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, earned)
+	assert_eq(btn.item_count, open.size())
+	for i: int in btn.item_count:
+		assert_has(open, btn.get_item_id(i))
+
+
 # The model items are rebuilt when the team changes — their TEAM zones resolve
 # against the kit — so re-opening and re-picking must re-list, not append.
 func test_reopening_and_a_team_change_do_not_stack_items() -> void:

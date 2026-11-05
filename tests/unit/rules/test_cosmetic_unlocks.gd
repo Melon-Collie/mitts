@@ -91,8 +91,8 @@ func test_the_signature_tape_jobs_are_game_puck_rewards() -> void:
 	var hat_trick: Array[String] = ["hat_trick"]
 	assert_has(CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, hat_trick),
 			StickTapeConfig.Span.SPACED)
-	assert_eq(CosmeticUnlocks.locked(CosmeticUnlocks.TAPE_SPAN, hat_trick),
-			[StickTapeConfig.Span.BOTTOM_STRIP] as Array[int])
+	assert_does_not_have(CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, hat_trick),
+			StickTapeConfig.Span.BOTTOM_STRIP)
 
 
 func test_yellow_laces_come_from_the_dot_and_nowhere_else() -> void:
