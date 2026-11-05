@@ -41,14 +41,11 @@ class Result:
 	var shots: PackedInt32Array = PackedInt32Array([0, 0])
 
 
-# One net: its keeper, the puck node he reads, and a stand-in carrier he sees
-# holding it.
+# One net: its keeper and the puck node he reads.
 class Net:
 	var goalie: Goalie
 	var puck: Puck
 	var ctrl: KeeperController
-	var proxy: Skater
-	var proxy_team: int = 0
 	var goal_z: float
 	var team: int
 	var part_origins := PackedVector3Array()
@@ -56,6 +53,12 @@ class Net:
 
 
 var nets: Array[Net] = []
+# A Skater node standing in for each harness skater (peer → node), placed on it
+# every tick with its velocity, team and shot state, so a keeper sees the
+# bodies on the ice (screens, a carrier's wind-up, who races a loose puck).
+var _bodies: Dictionary = {}
+var _body_team: Dictionary = {}
+var _host: Node = null
 
 var _managed: bool = false
 var _flight: bool = false
@@ -68,29 +71,43 @@ var _step := PuckAuthorityRules.TickResult.new()
 var _scratch := SweptDiscOBB.Result.new()
 var _contact := GoalieContactDetector.Contact.new()
 var _save := GoalieSaveRules.ContactResult.new()
+# Each body's last block (peer → seconds into the rollout), for the puck's
+# body-block cooldown; and the clock.
+var _blocked_at: Dictionary = {}
+var _clock: float = 0.0
 
 
 # Builds a keeper for each net under `host` (a test node that frees them).
 func _init(host: Node) -> void:
+	_host = host
 	for team: int in [1, 0]:
 		var n := Net.new()
 		n.team = team
 		n.goal_z = (-1.0 if team == 1 else 1.0) * GameRules.GOAL_LINE_Z
 		n.goalie = load("res://Scenes/Goalie.tscn").instantiate() as Goalie
 		n.puck = load("res://Scenes/Puck.tscn").instantiate() as Puck
-		n.proxy = load("res://Scenes/Skater.tscn").instantiate() as Skater
 		n.ctrl = KeeperController.new()
-		for node: Node in [n.goalie, n.puck, n.proxy, n.ctrl]:
+		for node: Node in [n.goalie, n.puck, n.ctrl]:
 			host.add_child(node)
-		n.proxy.set_physics_process(false)
-		n.proxy.set_process(false)
 		n.puck.set_physics_process(false)
-		var net: Net = n
-		n.proxy.set_team_id_resolver(func() -> int: return net.proxy_team)
 		n.ctrl.team_id = team
-		n.ctrl.set_skater_getter(func() -> Array: return [])
+		n.ctrl.set_skater_getter(func() -> Array: return _bodies.values())
 		n.ctrl.setup(n.goalie, n.puck, n.goal_z, true)
 		nets.append(n)
+
+
+# The stand-in for `peer` on `team`, made the first time it is asked for.
+func _body(peer: int, team: int) -> Skater:
+	if not _bodies.has(peer):
+		var b := load("res://Scenes/Skater.tscn").instantiate() as Skater
+		_host.add_child(b)
+		b.set_physics_process(false)
+		b.set_process(false)
+		var p: int = peer
+		b.set_team_id_resolver(func() -> int: return int(_body_team[p]))
+		_bodies[peer] = b
+	_body_team[peer] = team
+	return _bodies[peer]
 
 
 # The net team `team` defends.
@@ -176,15 +193,25 @@ func run_macro(duel: RefCounted, move_s: float, cap_s: float) -> MacroResult:
 
 
 func _begin(duel: RefCounted) -> void:
+	for p: int in _bodies:
+		(_bodies[p] as Skater).is_ghost = not duel.team_map.has(p)
+	for p: int in duel.team_map:
+		_body(p, duel.team_map[p]).is_ghost = false
 	_managed = false
 	_flight = false
 	_net = null
+	_blocked_at.clear()
+	_clock = 0.0
 	for n: Net in nets:
 		n.puck.pickup_locked = false
 		n.puck.motion_pinned = false
 		n.ctrl.reset_to_crease()
 	duel.goalie_provider = func(team_id: int, _puck_pos: Vector3) -> Variant:
 		return net_of(team_id).goalie.global_position
+	# One tick of play first, so the carrier's blade has the puck where he holds
+	# it: settled on it at his body, a keeper sees it jump to the blade as a
+	# stickhandle that breaks his look.
+	duel.step()
 	for _i: int in SETTLE_TICKS:
 		_feed_keepers(duel)
 
@@ -193,6 +220,7 @@ func _begin(duel: RefCounted) -> void:
 # the keepers, and the marched puck. Returns End.GOAL, End.HELD, or End.HORIZON
 # to play on; `shots` counts each side's shots.
 func _tick(duel: RefCounted, shots: PackedInt32Array) -> int:
+	_clock += DT
 	var before: int = duel.releases.size()
 	if _managed:
 		_hand_to_harness(duel)
@@ -203,6 +231,8 @@ func _tick(duel: RefCounted, shots: PackedInt32Array) -> int:
 		var d: String = rec.get("decision", "")
 		if d == "SHOOT" or d == "ONE_TIMER":
 			shot_team = rec["team"]
+			# The shooter's own body is on the puck's release cooldown.
+			_blocked_at[rec["peer"]] = _clock + _net_puck_reattach_s() - nets[0].puck.body_block_cooldown
 	if shot_team >= 0:
 		shots[shot_team] += 1
 		_start_flight(duel, net_of(1 - shot_team))
@@ -255,25 +285,30 @@ func _hand_to_harness(duel: RefCounted) -> void:
 	duel.airborne_ticks = 1 if _pos.y > GameRules.PUCK_AIRBORNE_HEIGHT_M else 0
 
 
-# Each keeper's puck node as he should see it, and his tick. The net the marched
-# puck is in sees it in three dimensions; the other sees the harness's.
+# The bodies where the harness has them, then each keeper's puck node as he
+# should see it, and his tick. The net the marched puck is in sees it in three
+# dimensions; the other sees the harness's.
 func _feed_keepers(duel: RefCounted) -> void:
+	for sim: RefCounted in duel.skaters:
+		var b: Skater = _body(sim.peer_id, sim.team_id)
+		b.global_position = sim.pos
+		b.velocity = sim.vel
+		b.current_shot_state = duel._shot_state(sim)
+	var carrier: Skater = _bodies[duel.carrier_id] if duel.carrier_id != -1 else null
 	for n: Net in nets:
 		if _managed and n == _net:
 			n.puck.clear_carrier()
 			n.puck.global_position = _pos
 			n.puck.linear_velocity = _vel
 		else:
-			var held: bool = duel.carrier_id != -1
-			if held:
-				n.proxy_team = duel.team_map[duel.carrier_id]
-				n.proxy.global_position = duel.skater_pos(duel.carrier_id)
-				if n.puck.get_carrier() != n.proxy:
-					n.puck.set_carrier(n.proxy)
-			elif n.puck.get_carrier() != null:
-				n.puck.clear_carrier()
+			if carrier == null:
+				if n.puck.get_carrier() != null:
+					n.puck.clear_carrier()
+			elif n.puck.get_carrier() != carrier:
+				n.puck.set_carrier(carrier)
 			n.puck.global_position = Vector3(duel.puck_pos.x, n.puck.ice_height, duel.puck_pos.z)
 			n.puck.linear_velocity = Vector3(duel.puck_vel.x, 0.0, duel.puck_vel.z)
+		n.ctrl._view.invalidate()
 		_tick_keeper(n)
 
 
@@ -304,7 +339,9 @@ func _march(duel: RefCounted) -> int:
 			n.puck.ice_height, n.puck.max_height, _frame, _step)
 	_pos = _step.position
 	_vel = _step.velocity
-	if GoalieContactDetector.nearest([n.goalie], prev, _pos, RADIUS, _scratch, _contact):
+	if _body_block(prev):
+		_flight = false
+	elif GoalieContactDetector.nearest([n.goalie], prev, _pos, RADIUS, _scratch, _contact):
 		_touched = true
 		_flight = false
 		var fwd: Vector3 = -n.goalie.global_transform.basis.z
@@ -330,6 +367,36 @@ func _march(duel: RefCounted) -> int:
 		_managed = false
 	_hand_to_harness(duel)
 	return End.HORIZON
+
+
+func _net_puck_reattach_s() -> float:
+	return nets[0].puck.reattach_cooldown
+
+
+# A body the marched puck's step passes through, as the host's puck meets one
+# (PuckController._check_body_blocks, Puck.on_body_block): the skater's body
+# cylinder at his height band, the first one hit, each on the puck's cooldown;
+# the puck comes off him at the padding's restitution. True on a block.
+func _body_block(prev: Vector3) -> bool:
+	var puck: Puck = _net.puck
+	for p: int in _bodies:
+		var b: Skater = _bodies[p]
+		if b.is_ghost or _clock - float(_blocked_at.get(p, -INF)) < puck.body_block_cooldown:
+			continue
+		var axis := Vector2(b.global_position.x, b.global_position.z)
+		var band: Vector2 = b.get_body_block_y_range()
+		if not PuckInteractionRules.check_body_block(prev, _pos, axis,
+				b.get_body_block_radius() + RADIUS, band.x, band.y):
+			continue
+		var normal: Vector3 = PuckInteractionRules.body_block_contact_normal(prev, _pos, axis)
+		var cor: float = puck.body_block_active_cor_scale \
+				if b.current_shot_state == SkaterStateMachine.State.SHOT_BLOCKING \
+				else puck.body_block_cor_scale
+		_vel = PuckCollisionRules.body_block_velocity(_vel, normal, cor, puck.body_block_friction)
+		_pos = prev
+		_blocked_at[p] = _clock
+		return true
+	return false
 
 
 func _crossed_in(prev: Vector3, pos: Vector3, n: Net) -> bool:
