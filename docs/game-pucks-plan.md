@@ -294,7 +294,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       | reward | unlocked by |
       |---|---|
       | *Spaced* tape | `hat_trick` — a player's first hat trick |
-      | *Bottom strip* tape | a combo: `assists@50` + `playmaker` (3 assists in a game) |
+      | *Bottom strip* tape | *Breadman*, a combo: `assists@50` + `playmaker` (3 assists in a game) |
       | Yellow laces | `one_timer_dot`, a new feat: a one-timer goal released inside any offensive-zone faceoff circle |
 
       The new feat needs the release point on the host's goal context
@@ -305,7 +305,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
    game (Steam's `ACH_PLAYMAKER`, so its display name stays) and the combo
    that unlocks the Playmaker title — and the Sniper combo sits beside Steam's
    *Sniper*, the 50-goal tier. A title combo needs a name of its own (the
-   title it unlocks can keep its name), and so does the Bottom strip combo.
+   title it unlocks can keep its name).
 
    Later rewards (helmet stickers, a spray-painted stick, signature laces) are
    new content on the same machinery.
