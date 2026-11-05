@@ -218,6 +218,17 @@ func turnover_cost(loss_point: Vector3, loss_prob: float) -> float:
 	return loss_prob * _theirs.at(loss_point)
 
 
+# The most `gain × keep − the turnover the rest costs` can be worth when its gain
+# is at most `gain`: a turnover pays the loser at most the opponent's least
+# possession (AIPossessionValue.LEAST_VALUE). The exact ceiling the searches
+# prune by. `keep` < 0: not read yet, so whichever end of [0, 1] is larger.
+static func kept_ceiling(gain: float, keep: float = -1.0) -> float:
+	var paid: float = -AIPossessionValue.LEAST_VALUE
+	if keep < 0.0:
+		return maxf(gain, paid)
+	return gain * keep + (1.0 - keep) * paid
+
+
 # Transition-exposure cost of losing the puck at `loss_point` with
 # probability `loss_prob`, while this carrier would be recovering from
 # `recover_from` — the additive counter-rush half of the turnover price
@@ -390,7 +401,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			opponent_caps, -1.0, keeper_yaw) * shot_keep
+			opponent_caps, -1.0, keeper_yaw, true) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -404,9 +415,9 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 		arrive_vel: Vector3 = Vector3.ZERO) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
 		return horizon_value(pos, arrive_s, arrive_vel)
-	var shoot_s: float = AIShotValue.feed(passer, pos, pass_speed, ctx.attacking_goal_pos,
-			goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
-			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
+	var shoot_s: float = AIActionScoring.with_rebound(AIShotValue.feed(passer, pos, pass_speed,
+			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion
+			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos))
 	if shoot_s > 0.0:
 		var aim: Vector3 = AIShotAim.compute_open_net_aim(pos, goalie_now(ctx),
 				ctx.attacking_goal_pos.z, GameRules.NET_HALF_WIDTH,
@@ -436,13 +447,22 @@ func _shot_is_dead_from_here(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 # what the carrier searches: our possession there (AIPossessionValue), on
 # arrival — its man reaches it `arrive_s` from now moving at `arrive_vel`, and
 # races the defence for the zone from then. The caller discounts the trip there,
-# so the read's own discount of it is divided back out (delay_discount is
-# exponential, so that is exact).
+# so the read's own discount of it is divided back out: delay_discount is
+# exponential, so the caller's restores the read exactly, a look's premium
+# decayed over the whole time and the continuation not at all.
 func horizon_value(pos: Vector3, arrive_s: float = 0.0,
 		arrive_vel: Vector3 = Vector3.ZERO) -> float:
 	if arrive_s <= 0.0:
 		return _ours.at(pos, 0.0, arrive_vel)
 	return _ours.at(pos, arrive_s, arrive_vel) / AIActionScoring.delay_discount(arrive_s)
+
+
+# Keeping the puck at `pos` for our man who reaches it `arrive_s` from now moving
+# at `arrive_vel`, against the defence carried on to then
+# (AIPossessionValue.base_at): no look, no clock.
+func continuation_at(pos: Vector3, arrive_s: float = 0.0,
+		arrive_vel: Vector3 = Vector3.ZERO) -> float:
+	return _ours.base_at(pos, arrive_s, arrive_vel)
 
 
 # Our possession of `pos` for a man who reaches it `arrive_s` from now moving at
@@ -458,14 +478,15 @@ func entry_value(pos: Vector3, start_s: float, vel: Vector3, known: float) -> fl
 	return _ours.entry_at(pos, start_s, vel, known)
 
 
-# The two cases of value_at: `shoot_s` is the shot's odds at `pos`.
+# The two cases of value_at: `shoot_s` is the shot's odds at `pos`. In the zone
+# the shot, or keeping the puck there (continuation_at) when that is worth more.
 func _regime_value(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		shoot_s: float, arrive_s: float = 0.0, arrive_vel: Vector3 = Vector3.ZERO) -> float:
 	if AIActionScoring.in_offensive_zone(from_pos, ctx.attacking_goal_pos) \
 			or AIActionScoring.in_offensive_zone(pos, ctx.attacking_goal_pos):
-		# Pure odds, with no possession floor: the field's surface does not go flat
-		# where no shot is available right now.
-		return shoot_s
+		if shoot_s >= _ours.base_ceiling(pos):
+			return shoot_s
+		return maxf(shoot_s, continuation_at(pos, arrive_s, arrive_vel))
 	return maxf(shoot_s, horizon_value(pos, arrive_s, arrive_vel))
 
 

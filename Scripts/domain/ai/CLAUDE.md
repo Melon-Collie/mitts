@@ -37,7 +37,13 @@ The carrier's gains are odds of scoring wherever he stands, so
 `AICarrierField.turnover_cost` prices a loss as the opponent's possession of the
 spot (`AIPossessionValue`), and passes `in_xg` to `counter_rush_cost`. What a spot
 with no shot right now is worth — a turnover there, the carrier's search
-horizon — is that one read, for either side. The defence reads
+horizon — is that one read, for either side. It is the better of the live
+reads and the continuation (`AIPossessionValue.base_at`,
+`docs/possession-floor-plan.md`): keeping the puck at a spot is worth a floor
+by position plus a slot bonus, at the odds he can keep it at all, so it reads
+below zero in our own end and a turnover deep in theirs costs nothing. A live
+read's premium over the continuation where it ends goes stale with its time;
+the continuation does not. The defence reads
 a man on it too: `threat_of_carrier` (his shot, or his possession of the spot)
 and `threat_of_feed` (his one-timer, or the lane × his possession), a candidate's
 body pushed onto the read's defence for the one call. The outlet and breakout
@@ -780,7 +786,10 @@ takes the whole class down and every static call on it from every file at once.
     push, post seal and predicted position;
   - `icing_read.gd` (`AIIcingRead`) — NHL hybrid icing read off a walked
     release: the crossing, the touch, the dot race (held to
-    `InfractionRules.judge_icing_race`) and the faceoff it hands over.
+    `InfractionRules.judge_icing_race`) and the faceoff it hands over;
+  - `possession_floor.gd` (`AIPossessionFloor`) — the continuation: what
+    keeping the puck at a spot is worth by position alone, a floor up the ice
+    plus the slot bonus (`docs/possession-floor-plan.md`).
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -788,7 +797,8 @@ takes the whole class down and every static call on it from every file at once.
 
 Both evaluators read the leaves and never each other. `possession_value.gd`
 (`AIPossessionValue`, what possession of a spot is worth) reads both from above,
-so neither may read it. `test_scoring_split_stays_acyclic.gd` holds that. A
+so neither may read it; so does `evade_read.gd` (`AIEvadeRead`, the
+evadability it keeps the puck at). `test_scoring_split_stays_acyclic.gd` holds that. A
 primitive both need goes in a leaf; an extraction is cut where nothing in the cut
 reaches back into what remains.
 
@@ -838,7 +848,10 @@ reaches back into what remains.
   - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it
-    (#785), so a clean shot from range against a set keeper is worth ~0.
+    (#785), so a clean shot from range against a set keeper is worth ~0. The
+    carrier's compete credits a shot that reaches the net with its rebound
+    (`score_shoot_value`'s `rebound`: `AIActionScoring.with_rebound`), so a
+    point shot is weighed against keeping the puck at more than nothing.
   - **The open set is goal intervals, not aim samples.** The generator sweeps
     24 aims per loft and bisects every edge of a goal run to ~5 mm
     (`tests/unit/ai/open_set_edges.gd`); a run reaching a post ends at the post.
@@ -1059,8 +1072,8 @@ reaches back into what remains.
   race's horizon (each man's shot there × the lane against the defence then ×
   the race for its reception, as the pass search races a catch: their first
   body from the release against the feed arriving with our man there):
-  in the shot currency one man behind their goal line has no shot, so without
-  the support a won dump reads as worthless. Never leave that reception
+  the continuation prices a won corner at the zone's floor, and the support
+  is the live, defence-aware half on top of it. Never leave that reception
   unraced: the dump's seconds of flight are when a lone D gets back to his
   house, and a feed priced to a man alone at the post dumps away every 2-on-1.
   **With the numbers there is no dump-in at all** (`RoleContext.numbers_up`):
@@ -1136,10 +1149,10 @@ reaches back into what remains.
   something concrete, and only values a spot where the search stops. One unit
   on both sides of the line: the odds of scoring.
   - *In the zone* (the spot or the carrier) every candidate is priced through
-    the value seam. There is no possession floor: the seam is smooth, so a spot
-    with no shot right now still scores by its distance and angle. Behind the
-    goal line every shot is 0, so a candidate there is worth only the pass
-    OPTION it opens.
+    the value seam, or worth keeping the puck there when that is more
+    (`AICarrierField.continuation_at`, against the defence carried on to his
+    arrival). Behind the goal line every shot is 0, so a candidate there is
+    worth the continuation and the pass OPTION it opens.
   - *Outside it* the carry searches two steps (a rolled move, then each move
     again from where it ends, for the `CARRY_PLY2_WIDTH` best: shoot, pass or
     carry on), pricing the defence it meets on each. Where a line stops outside
@@ -1148,7 +1161,8 @@ reaches back into what remains.
     (the better of the shot and one straight drive in from it, kept as far as
     the carry-safety read allows) × the skate there × the race to it
     (`arrival_race`, its band widened by the arrival clock's own error over the
-    trip). In the zone the same read is the better of the shot and the drive.
+    trip), or the continuation of the spot when no entry beats it. In the zone
+    the same read is the best of those, the shot and the drive.
     The leaf is read on arrival: its man reaches the spot when the line does,
     at the pace he arrives with, and races the defence for the entries from
     then (`horizon_value`'s `arrive_s` / `arrive_vel`). The carry's moves and
@@ -1164,8 +1178,9 @@ reaches back into what remains.
     how far the zone is and whether a defender gets to the entry first. The
     race is what keeps the leaf honest against the searched lines — without it
     a line that stays outside reads better than one that crosses into the
-    defence, and the carrier stalls at the line. Standing still outside pays the
-    step's decay like every move. A straight carry on to a destination across
+    defence, and the carrier stalls at the line. Standing still pays the
+    horizon's decay like every move, and in the zone it is read as the
+    continuation against the defence at the horizon's end. A straight carry on to a destination across
     the attacking line is not credited from outside: the race prices getting
     in.
   - Candidates also price the **pass option** they open

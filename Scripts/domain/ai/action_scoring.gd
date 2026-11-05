@@ -175,6 +175,19 @@ static func tip_ev(
 			opponent_caps)
 
 
+# ── The rebound ──────────────────────────────────────────────────────────────
+# A shot that reaches the net and is saved or missed still leaves a puck in their
+# zone, and our side gets this share of those back, credited at the zone's floor
+# rather than as a second shot (docs/possession-floor-plan.md §2.3). A feel
+# tunable until it is measured.
+const REBOUND_RECOVER_SHARE: float = 0.3
+
+
+# A shot reaching the net with first-contact odds `p`, worth its rebound too.
+static func with_rebound(p: float) -> float:
+	return p + (1.0 - p) * REBOUND_RECOVER_SHARE * AIPossessionFloor.FLOOR_THEIR_GOAL_LINE
+
+
 # ── The shot, priced on the field ────────────────────────────────────────────
 # AIShotValue supplies the shot's odds against today's goalie; the lane and the
 # release contest are facts about DEFENDERS, not the goalie, so they are priced
@@ -184,7 +197,9 @@ static func tip_ev(
 # AIShotOdds.Stance, facing `keeper_yaw` (AIShotValue.now); `keeper_pos` INF
 # means square and set on the release (AIShotValue.set_keeper).
 # `precomputed_quality` (>= 0) hands in the shot_quality a caller already has
-# for these arguments.
+# for these arguments. `rebound`: the odds of reaching the net carry their
+# rebound (with_rebound) — the carrier's compete, weighing the shot against
+# keeping the puck.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -195,7 +210,8 @@ static func score_shoot_value(
 		shot_speed_m_s: float = AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
 		opponent_caps: Array = [],
 		precomputed_quality: float = -1.0,
-		keeper_yaw: float = NAN) -> float:
+		keeper_yaw: float = NAN,
+		rebound: bool = false) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -211,6 +227,8 @@ static func score_shoot_value(
 		keeper = AIGoalieModel.goalie_squared_pos(
 				attacking_goal - Vector3(0.0, 0.0, signf(attacking_goal.z)
 						* AIGoalieModel.GOALIE_RESTING_DEPTH_M), attacking_goal, shooter)
+	if rebound:
+		quality = with_rebound(maxf(quality, 0.0))
 	if quality <= 0.0:
 		return 0.0
 	return quality * _shot_defender_terms(shooter, attacking_goal, keeper, opponents,

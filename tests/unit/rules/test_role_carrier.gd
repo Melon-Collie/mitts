@@ -269,7 +269,8 @@ func test_the_zone_entry_leaf_is_read_when_its_man_gets_there() -> void:
 func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 	# A mate far out is worth his drive in from the reception, its end read when
 	# he gets there (receiver_drive_in_value's start): never as if he stood at the
-	# end of it now.
+	# end of it now. A drive that starts later is read at its start, which its
+	# caller discounts (the continuation it reaches never goes stale).
 	var self_pos := Vector3(0.0, 0.0, 6.0)
 	var ctx := _set_keeper(_make_ctx(self_pos, [
 			[1, TEAM_ID, self_pos], [11, 1, Vector3(9.0, 0.0, -14.0)]]))
@@ -278,7 +279,8 @@ func test_a_receivers_drive_in_starts_when_the_feed_reaches_him() -> void:
 	var now: float = c._field.receiver_drive_in_value(ctx, mate, null)
 	assert_gt(now, 0.0, "his drive in is credited")
 	assert_lt(c._field.receiver_drive_in_value(ctx, mate, null, Vector3.ZERO, Vector3.INF,
-			0.8), now, "fed, his drive starts 0.8 s from now")
+			0.8) * AIActionScoring.delay_discount(0.8), now,
+			"fed, his drive starts 0.8 s from now")
 
 
 func test_forward_pressure_is_directional_and_the_pass_must_be_earned() -> void:
@@ -2779,7 +2781,8 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 	# The keeper a carry arrives at has tracked it, so he faces the puck, as the
 	# shoot-now read sees him there. Read with his facing unknown, the field
 	# blends in keepers turned to a decoy or a feed, and in tight a carry to the
-	# crease promised odds the shot on arrival never had.
+	# crease promised odds the shot on arrival never had. The arrival is the
+	# better of that shot and keeping the puck there.
 	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
 			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
 		var ctx := _standstill_ctx(2.5)
@@ -2792,10 +2795,11 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		c._field.fill(ctx)
 		c._field.holds.configure_from(ctx)
 		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
-		var shot_there: float = AIShotValue.now(spot, ctx.attacking_goal_pos,
-				Vector3(g.position_x, 0.0, g.position_z), 0.0, AIShotOdds.Stance.UPRIGHT,
-				g.rotation_y)
-		assert_almost_eq(arrival, shot_there, 1e-4,
+		var keeper := Vector3(g.position_x, 0.0, g.position_z)
+		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(spot,
+				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y))
+		var kept: float = c._field.continuation_at(spot)
+		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
 
 

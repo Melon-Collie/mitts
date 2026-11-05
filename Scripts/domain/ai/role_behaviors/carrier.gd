@@ -570,7 +570,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, keeper_now, _field.opponents_release,
 				keeper_vel_x, keeper_stance, sample_speed,
-				_field.opponent_caps, -1.0, keeper_yaw) * _field.holds.keep[k]
+				_field.opponent_caps, -1.0, keeper_yaw, true) * _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share

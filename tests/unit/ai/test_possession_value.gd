@@ -243,3 +243,86 @@ func test_a_body_on_the_lane_takes_the_feed() -> void:
 	assert_lt(covered, open * 0.5, "a stick in the lane")
 	assert_almost_eq(v.threat_of_feed(carrier, receiver, Vector3.ZERO, OUR_KEEPER), open,
 			1e-6, "and off again, the read is as it was")
+
+
+# ── The continuation (docs/possession-floor-plan.md §2.2) ────────────────────
+
+# A defence that wins every entry race: three men standing on the entries.
+func _line() -> Array[Vector3]:
+	return [Vector3(-10.0, 0, -9.0), Vector3(0.0, 0, -9.0), Vector3(10.0, 0, -9.0)]
+
+
+func test_a_won_corner_with_the_defence_home_is_worth_the_floor() -> void:
+	# Below their goal line beside the cage: no shot, no drive round it, and the
+	# entries are theirs. Nobody near him, so he keeps it: the zone's floor.
+	var d: Array[Vector3] = _line()
+	d.append(Vector3(-3.0, 0.0, -20.0))
+	d.append(Vector3(3.0, 0.0, -20.0))
+	var corner := Vector3(-4.0, 0.0, -28.0)
+	assert_almost_eq(_read(d).at(corner), AIPossessionFloor.FLOOR_THEIR_GOAL_LINE, 0.002)
+
+
+func test_behind_our_net_with_the_entries_shut_it_is_worth_less_than_nothing() -> void:
+	var v: float = _read(_line()).at(Vector3(0.0, 0.0, 28.5))
+	assert_lt(v, 0.0)
+	assert_almost_eq(v, AIPossessionFloor.FLOOR_OWN_GOAL_LINE, 0.002)
+
+
+func test_a_man_on_his_puck_costs_him_the_continuation() -> void:
+	var spot := Vector3(-9.0, 0.0, -18.0)
+	var c: float = AIPossessionFloor.continuation(spot, GOAL)
+	assert_almost_eq(_read(_none).base_at(spot), c, 1e-6, "kept on empty ice")
+	var on_him: Array[Vector3] = [spot + Vector3(0.7, 0.0, 0.3), spot + Vector3(-0.5, 0.0, -0.6)]
+	assert_lt(_read(on_him).base_at(spot), c * 0.5, "two men on the puck")
+
+
+func test_a_defender_closing_shows_where_he_will_be() -> void:
+	# Read later, a man closing on the spot is on it by then (closing slowly
+	# enough to stop there: one charging through it overshoots it).
+	var spot := Vector3(-9.0, 0.0, -18.0)
+	var d: Array[Vector3] = [spot + Vector3(4.0, 0.0, 0.0)]
+	var v := AIPossessionValue.new()
+	var vels: Array[Vector3] = [Vector3(-2.5, 0.0, 0.0)]
+	v.fill(GOAL, d, vels, [])
+	assert_lt(v.base_at(spot, 1.0), v.base_at(spot), "he gets there")
+
+
+# The other side's read of a puck it wins: a turnover.
+func test_a_turnover_deep_in_their_end_costs_nothing_and_in_our_slot_the_most() -> void:
+	var ours_on_our_line: Array[Vector3] = [Vector3(-10.0, 0, 9.0), Vector3(0.0, 0, 9.0),
+			Vector3(10.0, 0, 9.0)]
+	var theirs: AIPossessionValue = _read(ours_on_our_line, -GOAL)
+	assert_lte(theirs.at(Vector3(-8.0, 0.0, -24.0)), 0.0, "deep in their own end")
+	var their_view: AIPossessionValue = _read(_none, -GOAL)
+	assert_gt(their_view.at(Vector3(0.0, 0.0, 20.0)), their_view.at(Vector3(-12.0, 0.0, 18.0)),
+			"our slot against our wall")
+
+
+func test_no_read_falls_below_the_least_value_nor_below_keeping_the_puck() -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 5
+	for trial: int in 40:
+		var defenders: Array[Vector3] = []
+		for _k: int in rng.randi_range(0, 5):
+			defenders.append(Vector3(rng.randf_range(-12.0, 12.0), 0.0,
+					rng.randf_range(-28.0, 28.0)))
+		var v: AIPossessionValue = _read(defenders, GOAL if trial % 2 == 0 else -GOAL)
+		for _s: int in 6:
+			var spot := Vector3(rng.randf_range(-12.0, 12.0), 0.0, rng.randf_range(-29.0, 29.0))
+			var start_s: float = rng.randf_range(0.0, 2.0)
+			var read: float = v.at(spot, start_s)
+			assert_gte(read, AIPossessionValue.LEAST_VALUE - 1e-9, "trial %d at %s" % [trial, spot])
+			assert_gte(read, v.base_at(spot, start_s) - 1e-9, "trial %d at %s" % [trial, spot])
+
+
+func test_waiting_never_costs_the_continuation() -> void:
+	# The premium of a look goes stale; keeping the puck does not.
+	var d: Array[Vector3] = _line()
+	d.append(Vector3(-3.0, 0.0, -20.0))
+	var v: AIPossessionValue = _read(d)
+	var corner := Vector3(-4.0, 0.0, -28.0)
+	assert_almost_eq(v.at(corner, 3.0), v.at(corner), 1e-6, "nothing but keeping it is on")
+	var slot := Vector3(0.0, 0.0, -20.0)
+	var open: AIPossessionValue = _read(_none)
+	assert_gte(open.at(slot, 30.0), open.base_at(slot) - 1e-6,
+			"a look long gone leaves the continuation")

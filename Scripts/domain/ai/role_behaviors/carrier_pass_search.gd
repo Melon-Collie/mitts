@@ -617,9 +617,11 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	var benefit: float = receiver_value * release_clean * clean_lane * (
 			(1.0 - p_bobble) * catch_safety * AIActionScoring.delay_discount(delay_s + settle_s)
 			+ p_bobble * bobble_won * bobble_decay)
-	# CEILING PRUNE (exact): every turnover cost below can only LOWER this EV,
-	# so the benefit is a hard upper bound.
-	if benefit <= useless_below:
+	# CEILING PRUNE (exact): the turnovers below pay the passer at most the
+	# opponent's least possession (AIPossessionValue.LEAST_VALUE) over the loss
+	# modes' share, so that on top of the benefit bounds the EV.
+	if benefit - AIPossessionValue.LEAST_VALUE \
+			* (1.0 - release_clean * clean_lane * reception_kept) <= useless_below:
 		return 0.0
 	# No separate "escape" bonus for a pressured carrier: the pressure is
 	# already priced by the carry/hold alternatives' own strip cost.
