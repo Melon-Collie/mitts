@@ -41,10 +41,12 @@ const DEKE_ACROSS_M: float = 2.0
 # Signed lateral offsets of the passer from the receiver, and feed paces.
 const FEED_OFFSETS_M: Array[float] = [-6.0, -3.5, -1.5, 1.5, 3.5, 6.0]
 const FEED_SPEEDS_M_S: Array[float] = [12.0, 20.0]
-# Decoy carriers: lateral offsets from the spot, and distances from the net
-# along the spot's own bearing (in tight leaves him deep, far out leaves him
-# challenging). A range decoy nearer the spot than DECOY_MIN_SHIFT_M is the SET.
-const DECOY_ACROSS_M: Array[float] = [-6.0, -3.0, 3.0, 6.0]
+# Decoy carriers: lateral offsets from the spot, out to a cross-ice play's (a
+# keeper pulled further than the field samples reads as the nearest cell, set on
+# the shot), and distances from the net along the spot's own bearing (in tight
+# leaves him deep, far out leaves him challenging). A range decoy nearer the spot
+# than DECOY_MIN_SHIFT_M is the SET.
+const DECOY_ACROSS_M: Array[float] = [-12.0, -9.0, -6.0, -3.0, 3.0, 6.0, 9.0, 12.0]
 const DECOY_RANGES_M: Array[float] = [2.0, 15.0]
 const DECOY_MIN_SHIFT_M: float = 1.5
 # Wraps: spots this close in, the carrier behind the net this far across and
