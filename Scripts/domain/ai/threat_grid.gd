@@ -39,6 +39,10 @@ const RUSH_BAND_M: float = 3.0
 static var _row_edges := PackedFloat32Array()
 static var _row_columns := PackedInt32Array()
 static var _row_first := PackedInt32Array()
+# Each row's stretch of ice (rows between the same two lines share one), so the
+# value is read smoothly within a stretch and never across a line.
+static var _row_stretch := PackedInt32Array()
+static var _stretches: int = 0
 static var _cells: int = 0
 
 
@@ -47,6 +51,8 @@ static func _build() -> void:
 		return
 	_row_edges.clear()
 	_row_columns.clear()
+	_row_stretch.clear()
+	_stretches = 0
 	_add_stretch(-_BEHIND_M, _GOAL_LINE_OUT, _BEHIND_M, FINE_COLUMNS)
 	_add_stretch(_GOAL_LINE_OUT, _THEIR_BLUE_OUT, FINE_ROW_M, FINE_COLUMNS)
 	_add_stretch(_THEIR_BLUE_OUT, _OUR_BLUE_OUT, COARSE_ROW_M, COARSE_COLUMNS)
@@ -67,6 +73,8 @@ static func _add_stretch(from: float, to: float, row_m: float, columns: int) -> 
 	for i: int in rows:
 		_row_edges.append(lerpf(from, to, float(i) / float(rows)))
 		_row_columns.append(columns)
+		_row_stretch.append(_stretches)
+	_stretches += 1
 
 
 static func cell_count() -> int:
@@ -86,15 +94,44 @@ static func state(cell: int, context: int) -> int:
 # onto the ice.
 static func cell_of(local_pos: Vector2) -> int:
 	_build()
-	var rows: int = _row_columns.size()
-	var r: int = rows - 1
-	for i: int in rows:
-		if local_pos.y < _row_edges[i + 1]:
-			r = i
-			break
+	var r: int = _row_of(local_pos.y)
 	var cols: int = _row_columns[r]
 	var c: int = clampi(int(floor((local_pos.x + _HALF_W) / (2.0 * _HALF_W) * cols)), 0, cols - 1)
 	return _row_first[r] + c
+
+
+# The row holding `out`, clamped onto the ice.
+static func _row_of(out: float) -> int:
+	var rows: int = _row_columns.size()
+	for i: int in rows:
+		if out < _row_edges[i + 1]:
+			return i
+	return rows - 1
+
+
+# The attacking side's possession at `local_pos` in `context`, from the
+# generated grid: linear between cell centres along a row and between rows,
+# never across a goal line or blue line (a stretch's edge), so the value is
+# smooth inside each stretch of ice and steps only where the rules do.
+static func value(local_pos: Vector2, context: int) -> float:
+	_build()
+	var r: int = _row_of(local_pos.y)
+	var mid: float = 0.5 * (_row_edges[r] + _row_edges[r + 1])
+	var r2: int = r + (1 if local_pos.y > mid else -1)
+	if r2 < 0 or r2 >= _row_columns.size() or _row_stretch[r2] != _row_stretch[r]:
+		return _row_value(r, local_pos.x, context)
+	var mid2: float = 0.5 * (_row_edges[r2] + _row_edges[r2 + 1])
+	var w: float = clampf((local_pos.y - mid) / (mid2 - mid), 0.0, 1.0)
+	return lerpf(_row_value(r, local_pos.x, context), _row_value(r2, local_pos.x, context), w)
+
+
+static func _row_value(r: int, x: float, context: int) -> float:
+	var cols: int = _row_columns[r]
+	var u: float = clampf((x + _HALF_W) / (2.0 * _HALF_W) * cols - 0.5, 0.0, cols - 1.0)
+	var c: int = mini(int(floor(u)), cols - 2)
+	var a: float = AIThreatGridData.VALUES[state(_row_first[r] + c, context)]
+	var b: float = AIThreatGridData.VALUES[state(_row_first[r] + c + 1, context)]
+	return lerpf(a, b, u - c)
 
 
 # The centre of `cell`, in the attacking frame.

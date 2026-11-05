@@ -5,8 +5,9 @@ extends GutTest
 # per staged state, the next-goal value the real bots and the live keepers
 # play out from it (tests/instruments/ai/test_threat_truth.gd). Each state is
 # rebuilt here without the jitter (threat_stager.gd) and the model is read on
-# it: today, AIPossessionValue.at for the staged attack against the staged
-# defence, the carrier's read of the spot.
+# it: today's AIPossessionValue.at for the staged attack against the staged
+# defence (the carrier's read of the spot), and the threat grid
+# (AIThreatGrid.value) at the carrier's cell in the context the state reads as.
 #
 # The truth is signed (their goals count against) and today's model is not, so
 # what is held is order, not scale: concordance over the pairs the truth tells
@@ -21,6 +22,10 @@ const GOAL := Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z)
 # The ratchets. Tighten when a model wins by more than BANK_MARGIN.
 const MIN_CONCORDANCE: float = 0.62
 const MIN_RANK_CORRELATION: float = 0.27
+# The threat grid's, which shares the truth's unit, so its error is held too.
+const GRID_MIN_CONCORDANCE: float = 0.80
+const GRID_MIN_RANK_CORRELATION: float = 0.51
+const GRID_MAX_MEAN_ABS_ERR: float = 0.054
 const BANK_MARGIN: float = 0.02
 
 
@@ -128,6 +133,53 @@ static func _ranks(v: PackedFloat32Array) -> PackedFloat32Array:
 			out[idx[k]] = 0.5 * float(i + j)
 		i = j + 1
 	return out
+
+
+# The threat grid on the row's state: the carrier's spot in the context the
+# canonical staging reads as.
+func _grid(r: Row) -> float:
+	var staged: Array = Stager.stage(Stager.spot(r.x, r.out), r.context, r.team_size)
+	var attackers: Array[Vector3] = []
+	var defenders: Array[Vector3] = []
+	for s: Array in staged:
+		if s[1] == 0:
+			attackers.append(s[2])
+		else:
+			defenders.append(s[2])
+	var at: Vector3 = staged[0][2]
+	return AIThreatGrid.value(AIThreatGrid.local(at, GOAL),
+			AIThreatGrid.context_of(at, attackers, defenders, GOAL))
+
+
+func test_the_threat_grid_against_the_truth() -> void:
+	var rows: Array[Row] = _rows()
+	if rows.is_empty():
+		return
+	var model := PackedFloat32Array()
+	var truth := PackedFloat32Array()
+	var err: float = 0.0
+	for r: Row in rows:
+		var m: float = _grid(r)
+		model.append(m)
+		truth.append(r.mean)
+		err += absf(m - r.mean)
+	var conc: float = concordance(rows, model)
+	var rho: float = rank_correlation(model, truth)
+	err /= rows.size()
+	gut.p("threat grid: concordance %.3f, rank correlation %.3f, mean |model − truth| %.3f over %d states"
+			% [conc, rho, err, rows.size()])
+	assert_gte(conc, GRID_MIN_CONCORDANCE, "the grid orders states worse than it did")
+	assert_gte(rho, GRID_MIN_RANK_CORRELATION, "the grid ranks states worse than it did")
+	assert_lte(err, GRID_MAX_MEAN_ABS_ERR, "the grid drifted further from the truth")
+	assert_false(conc > GRID_MIN_CONCORDANCE + BANK_MARGIN,
+			"concordance is up to %.3f from %.3f: bank it in GRID_MIN_CONCORDANCE"
+			% [conc, GRID_MIN_CONCORDANCE])
+	assert_false(rho > GRID_MIN_RANK_CORRELATION + BANK_MARGIN,
+			"rank correlation is up to %.3f from %.3f: bank it in GRID_MIN_RANK_CORRELATION"
+			% [rho, GRID_MIN_RANK_CORRELATION])
+	assert_false(err < GRID_MAX_MEAN_ABS_ERR - BANK_MARGIN,
+			"mean error is down to %.3f from %.3f: bank it in GRID_MAX_MEAN_ABS_ERR"
+			% [err, GRID_MAX_MEAN_ABS_ERR])
 
 
 func test_todays_possession_read_against_the_truth() -> void:
