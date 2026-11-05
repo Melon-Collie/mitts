@@ -1,5 +1,5 @@
 #!/bin/bash
-# Renders one frozen instant of a match against bots from the live GameCamera
+# Renders one instant of a match against bots from the live GameCamera
 # and a grid of pitch / FOV / scale setups around the puck carrier, one PNG
 # each plus metrics.json (tools/camera_study_runner.gd has the setups).
 #

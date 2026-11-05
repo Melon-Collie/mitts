@@ -1,7 +1,7 @@
 extends SceneTree
 
 # Offscreen camera study: plays an offline match against bots until someone
-# carries the puck through open ice, freezes that instant, and renders it from
+# carries the puck through open ice and renders that instant from
 # the live GameCamera and from a grid of pitch / FOV / scale setups, one PNG
 # each, plus a metrics JSON.
 #
@@ -33,6 +33,11 @@ func _on_frame() -> void:
 			only = a.trim_prefix("--only=")
 		elif a == "--list":
 			list_only = true
-	var runner: Node = (load(RUNNER) as GDScript).new() as Node
+	var script: GDScript = load(RUNNER) as GDScript
+	if script == null or not script.can_instantiate():
+		push_error("[camera-study] %s failed to load" % RUNNER)
+		quit(1)
+		return
+	var runner: Node = script.new() as Node
 	root.add_child(runner)
 	runner.call("begin", only, out_dir, list_only)

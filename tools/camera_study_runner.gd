@@ -2,7 +2,7 @@ extends Node
 
 # The work behind tools/camera_study.gd.
 #
-# Every study setup frames the same frozen instant around the puck carrier, with
+# Every study setup frames the same instant around the puck carrier, with
 # the carrier's attack direction up the screen. A setup names a pitch (degrees
 # below horizontal), a vertical FOV, and a scale: the carrier's ice scale in
 # pixels per lateral metre, as a multiple of the live GameCamera's at that
@@ -40,11 +40,12 @@ const _CHASE_LOOK_HEIGHT: float = 1.0
 # The sim runs without drawing until the moment is found, as fast as it will go.
 const _STEPS_PER_FRAME: int = 60
 const _WARMUP_TIME_SCALE: float = 8.0
+const _UNDRAWN_MAX_FPS: int = 240
 const _HUNT_TIME_SCALE: float = 2.0
-# At the software rasterizer's ~1 fps the whole shot list advances the match by
-# well under a tick.
-const _FREEZE_TIME_SCALE: float = 0.0002
-const _CATCH_UP_FRAMES: int = 3
+# Frames the study viewports draw before the capture, so the first draw's
+# shader compiles are behind them.
+const _DRAW_FRAMES: int = 2
+const _CATCH_UP_FRAMES: int = 6
 const _MOMENT_ATTEMPTS: int = 8
 const _START_TIMEOUT_FRAMES: int = 2400
 const _WARMUP_SEC: float = 4.0
@@ -74,9 +75,8 @@ func begin(only: String, out_dir: String, list_only: bool) -> void:
 	for s: Dictionary in _SETUPS:
 		if only.is_empty() or only.split(",").has(s.name):
 			setups.append(s)
-	# The study cameras frame skaters the live camera may not, and with distance
-	# -1 every skater's animation LOD is due each frame (SkaterAnimationLod), so
-	# the bodies are posed even though the match is near-frozen.
+	# The study cameras frame skaters the live camera may not; with culling off
+	# every skater is posed every frame (SkaterAnimationLod reads distance -1).
 	SkaterCameraCull.enabled = false
 	PlayerPrefs.attack_up = true
 	PlayerPrefs.camera_mode = PlayerPrefs.CAMERA_MODE_DYNAMIC
@@ -88,10 +88,6 @@ func begin(only: String, out_dir: String, list_only: bool) -> void:
 		push_error("[camera-study] nobody carried the puck through open ice")
 		get_tree().quit(1)
 		return
-	# Near-frozen rather than paused: pausing stops every _process, which is
-	# where the rigs pose the bodies and the puck rides the blade.
-	Engine.time_scale = _FREEZE_TIME_SCALE
-
 	var live: GameCamera = _find(get_tree().current_scene, GameCamera) as GameCamera
 	var team_id: int = _team_of(carrier)
 	live.skater = carrier
@@ -104,23 +100,45 @@ func begin(only: String, out_dir: String, list_only: bool) -> void:
 	var carrier_pos: Vector3 = carrier.global_position
 	carrier_pos.y = 0.0
 	_add_rings(carrier_pos)
-
 	var ref_scale: float = _lateral_px_per_m(live, carrier_pos)
-	await _shoot("live", live, carrier_pos, attack_dir, {"pitch": -live.rotation_degrees.x,
-			"fov": live.fov, "scale": 1.0})
 
-	var study := Camera3D.new()
-	study.cull_mask = live.cull_mask
-	study.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
-	get_tree().current_scene.add_child(study)
-	for s: Dictionary in setups:
-		study.fov = s.fov
-		if s.get("chase", false):
-			_place_chase(study, carrier)
+	# One SubViewport a setup, all sharing the match's world and drawn in the
+	# same frame, so every shot is the same instant with the match running at
+	# normal speed (the rigs pose on render-rate deltas; a frozen clock starves
+	# them). No HUD: that lives on the main viewport's canvas.
+	var size: Vector2i = Vector2i(get_viewport().get_visible_rect().size)
+	var live_setup: Dictionary = {"name": "live", "pitch": -live.rotation_degrees.x,
+			"fov": live.fov, "scale": 1.0}
+	var all: Array[Dictionary] = [live_setup]
+	all.append_array(setups)
+	var views: Array[SubViewport] = []
+	var cams: Array[Camera3D] = []
+	for s: Dictionary in all:
+		var vp := SubViewport.new()
+		vp.size = size
+		vp.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+		var cam := Camera3D.new()
+		cam.cull_mask = live.cull_mask
+		cam.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
+		cam.fov = s.fov
+		vp.add_child(cam)
+		add_child(vp)
+		if s.name == "live":
+			cam.global_transform = live.global_transform
+		elif s.get("chase", false):
+			_place_chase(cam, carrier)
 		else:
-			_place_study(study, carrier_pos, attack_dir, s.pitch, s.fov, s.scale * ref_scale)
-		study.make_current()
-		await _shoot(s.name, study, carrier_pos, attack_dir, s)
+			_place_study(cam, carrier_pos, attack_dir, s.pitch, s.fov, s.scale * ref_scale)
+		cam.make_current()
+		views.append(vp)
+		cams.append(cam)
+	for i: int in _DRAW_FRAMES:
+		await get_tree().process_frame
+	await RenderingServer.frame_post_draw
+	_diagnose()
+	for i: int in all.size():
+		_save(all[i], views[i], cams[i], carrier_pos, attack_dir)
+		views[i].render_target_update_mode = SubViewport.UPDATE_DISABLED
 
 	var f := FileAccess.open(_out_dir.path_join("metrics.json"), FileAccess.WRITE)
 	f.store_string(JSON.stringify({"carrier_speed": Vector2(carrier.velocity.x,
@@ -145,6 +163,9 @@ func _start_match() -> bool:
 	lobby.call("_fill_open_slots_with_bots")
 	lobby.call("_on_start_pressed")
 	RenderingServer.render_loop_enabled = false
+	# Undrawn frames otherwise run at thousands of fps, and a near-zero
+	# render-rate delta leaves NaN in the bots' skeleton poses.
+	Engine.max_fps = _UNDRAWN_MAX_FPS
 	Engine.max_physics_steps_per_frame = _STEPS_PER_FRAME
 	Engine.time_scale = _WARMUP_TIME_SCALE
 	var waited: int = 0
@@ -239,21 +260,17 @@ func _place_chase(cam: Camera3D, carrier: Skater) -> void:
 	cam.look_at(base + facing * _CHASE_LOOK_AHEAD + Vector3.UP * _CHASE_LOOK_HEIGHT, Vector3.UP)
 
 
-func _shoot(shot_name: String, cam: Camera3D, carrier: Vector3, attack_dir: int,
-		setup: Dictionary) -> void:
-	for i: int in 3:
-		await get_tree().process_frame
-	await RenderingServer.frame_post_draw
-	var img: Image = get_viewport().get_texture().get_image()
-	var path: String = _out_dir.path_join(shot_name + ".png")
-	img.save_png(path)
+func _save(setup: Dictionary, vp: SubViewport, cam: Camera3D, carrier: Vector3,
+		attack_dir: int) -> void:
+	var path: String = _out_dir.path_join(String(setup.name) + ".png")
+	vp.get_texture().get_image().save_png(path)
 	var m: Dictionary = _measure(cam, carrier, attack_dir)
-	m["name"] = shot_name
+	m["name"] = setup.name
 	m["pitch"] = setup.get("pitch", -1.0)
 	m["fov"] = setup.fov
 	m["scale"] = setup.get("scale", -1.0)
 	_metrics.append(m)
-	print("[camera-study] %s -> %s  %s" % [shot_name, ProjectSettings.globalize_path(path),
+	print("[camera-study] %s -> %s  %s" % [setup.name, ProjectSettings.globalize_path(path),
 			JSON.stringify(m)])
 
 
@@ -271,7 +288,7 @@ func _lateral_px_per_m(cam: Camera3D, p: Vector3) -> float:
 #   the stickhandling circle is drawn);
 # - how far up-ice the top of the screen reaches, or where the horizon sits.
 func _measure(cam: Camera3D, carrier: Vector3, attack_dir: int) -> Dictionary:
-	var size: Vector2 = get_viewport().get_visible_rect().size
+	var size: Vector2 = Vector2(cam.get_viewport().get_visible_rect().size)
 	var fwd: Vector3 = Vector3(0.0, 0.0, float(attack_dir))
 	var lat: float = _lateral_px_per_m(cam, carrier)
 	var depth_at: Callable = func(p: Vector3) -> float:
@@ -328,6 +345,45 @@ func _add_rings(center: Vector3) -> void:
 	mi.mesh = mesh
 	mi.physics_interpolation_mode = Node.PHYSICS_INTERPOLATION_MODE_OFF
 	get_tree().current_scene.add_child(mi)
+
+
+func _diagnose() -> void:
+	var registry: PlayerRegistry = GameManager.get("_registry") as PlayerRegistry
+	for sk: Skater in registry.skaters():
+		var skel: Skeleton3D = _first_skeleton(sk)
+		var nan_bones: int = 0
+		var far_bones: int = 0
+		if skel != null:
+			for b: int in skel.get_bone_count():
+				var o: Vector3 = skel.get_bone_global_pose(b).origin
+				if is_nan(o.x) or is_nan(o.y) or is_nan(o.z):
+					nan_bones += 1
+				elif o.length() > 5.0:
+					far_bones += 1
+		var meshes: PackedStringArray = []
+		_collect_meshes(sk, meshes)
+		print("[diag] %s local=%s skel=%s bones=%d nan=%d far=%d scale=%s meshes=%s" % [sk.name,
+				sk.is_local_skater, skel != null, skel.get_bone_count() if skel else 0, nan_bones,
+				far_bones, str(skel.global_basis.get_scale()) if skel else "", ",".join(meshes)])
+
+
+func _first_skeleton(n: Node) -> Skeleton3D:
+	for c: Node in n.get_children():
+		if c is Skeleton3D:
+			return c as Skeleton3D
+		var hit: Skeleton3D = _first_skeleton(c)
+		if hit != null:
+			return hit
+	return null
+
+
+func _collect_meshes(n: Node, out: PackedStringArray) -> void:
+	for c: Node in n.get_children():
+		if c is MeshInstance3D:
+			var mi: MeshInstance3D = c
+			out.append("%s:%s%s" % [mi.name, "V" if mi.is_visible_in_tree() else "h",
+					"" if mi.mesh != null else "(nomesh)"])
+		_collect_meshes(c, out)
 
 
 func _find(node: Node, cls: Script) -> Node:
