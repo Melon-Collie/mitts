@@ -2796,8 +2796,8 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		c._field.holds.configure_from(ctx)
 		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
 		var keeper := Vector3(g.position_x, 0.0, g.position_z)
-		var shot_there: float = AIShotValue.now(spot, ctx.attacking_goal_pos, keeper, 0.0,
-				AIShotOdds.Stance.UPRIGHT, g.rotation_y)
+		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(spot,
+				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y))
 		var kept: float = c._field.continuation_at(spot)
 		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)

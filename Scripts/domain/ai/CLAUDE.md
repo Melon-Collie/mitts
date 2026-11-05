@@ -847,7 +847,10 @@ reaches back into what remains.
   - **Odds are at one placement scatter** (`REFERENCE_SPREAD_RAD`): a property
     of the chance, not the shooter (a wobblier tier misses more of the same
     shots). First contact is the outcome: rebounds and screens are not in it
-    (#785), so a clean shot from range against a set keeper is worth ~0.
+    (#785), so a clean shot from range against a set keeper is worth ~0. The
+    carrier's compete credits a shot that reaches the net with its rebound
+    (`score_shoot_value`'s `rebound`: `AIActionScoring.with_rebound`), so a
+    point shot is weighed against keeping the puck at more than nothing.
   - Held against measured cells it was not generated at by
     `test_shot_odds_vs_truth.gd`, whose error, concordance and pick-share
     bounds are ratchets.

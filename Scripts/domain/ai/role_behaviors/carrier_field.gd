@@ -401,7 +401,7 @@ func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			opponent_caps, -1.0, keeper_yaw) * shot_keep
+			opponent_caps, -1.0, keeper_yaw, true) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
@@ -415,9 +415,9 @@ func feed_value_at(ctx: RoleContext, passer: Vector3, pos: Vector3, pass_speed: 
 		arrive_vel: Vector3 = Vector3.ZERO) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, 0.0):
 		return horizon_value(pos, arrive_s, arrive_vel)
-	var shoot_s: float = AIShotValue.feed(passer, pos, pass_speed, ctx.attacking_goal_pos,
-			goalie_now(ctx), one_timer) if ctx.reads_goalie_motion \
-			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos)
+	var shoot_s: float = AIActionScoring.with_rebound(AIShotValue.feed(passer, pos, pass_speed,
+			ctx.attacking_goal_pos, goalie_now(ctx), one_timer) if ctx.reads_goalie_motion
+			else AIShotValue.set_keeper(pos, ctx.attacking_goal_pos))
 	if shoot_s > 0.0:
 		var aim: Vector3 = AIShotAim.compute_open_net_aim(pos, goalie_now(ctx),
 				ctx.attacking_goal_pos.z, GameRules.NET_HALF_WIDTH,
