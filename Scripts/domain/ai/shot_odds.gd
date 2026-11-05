@@ -7,9 +7,10 @@ extends RefCounted
 # here models the goalie: a goalie change is a regeneration, never an edit here.
 #
 # A cell is one measured situation: a release spot, the keeper's read, and his
-# open set (FLAT / LOW / HIGH × aims post to post). Each aim's odds are its goal
-# fraction under REFERENCE_SPREAD_RAD of placement scatter; the cell's odds are
-# its best aim's. A query is bilinear over the release-spot grid; within a spot
+# open set (FLAT / LOW / HIGH, each the goal intervals across the mouth). Each
+# candidate aim's odds are the share of its crossings, scattered by
+# REFERENCE_SPREAD_RAD, that land in a goal interval; the cell's odds are its
+# best aim's. A query is bilinear over the release-spot grid; within a spot
 # it is a kernel over the cells' keeper state, so the answer leans on the
 # situations most like this one.
 #
@@ -120,6 +121,13 @@ static var _flight := PackedFloat32Array()
 # Per cell × loft × aim, at REFERENCE_SPREAD_RAD.
 static var _aim_odds := PackedFloat32Array()
 static var _aims_per_cell: int = 0
+# Per cell × loft: where its goal intervals start in _edges, and how many floats
+# (two an interval).
+static var _edge_first := PackedInt32Array()
+static var _edge_count := PackedInt32Array()
+static var _edges := PackedFloat32Array()
+# The row column of FLAT's goal intervals; LOW and HIGH follow.
+const _INTERVAL_COLUMN: int = 26
 
 
 # The odds of a shot from `release` at the net at `goal`, against the keeper at
@@ -207,8 +215,8 @@ static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 
 # shot_now's odds from the best aim when the crossing scatters by `spread_rad`
 # instead of REFERENCE_SPREAD_RAD: the measured open sets re-read at that spread.
-# Re-parses the cells it weighs, so it is for a once-per-shot read (the xG stat),
-# never a per-tick one.
+# Allocates and re-integrates every cell it weighs, so it is for a once-per-shot
+# read (the xG stat), never a per-tick one.
 static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, spread_rad: float,
 		keeper_yaw: float = NAN, query: Query = null) -> float:
@@ -221,13 +229,12 @@ static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vect
 	var blend := PackedFloat32Array()
 	blend.resize(_aims_per_cell)
 	blend.fill(0.0)
+	var n: int = AIShotFieldData.AIM_POINTS
 	for j: int in q.cells.size():
-		var t: PackedStringArray = AIShotFieldData.ROWS[q.cells[j]].split("\t")
 		for li: int in LOFTS.size():
-			var pattern: String = t[23 + li]
-			for i: int in pattern.length():
-				blend[li * AIShotFieldData.AIM_POINTS + i] += \
-						q.weights[j] * aim_odds(pattern, i, sigma_m)
+			var edges: PackedFloat32Array = _cell_edges(q.cells[j], li)
+			for i: int in n:
+				blend[li * n + i] += q.weights[j] * interval_odds(edges, aim_x(i), sigma_m)
 	var best: float = 0.0
 	for v: float in blend:
 		best = maxf(best, v)
@@ -243,16 +250,20 @@ static func empty_net(release: Vector3, goal: Vector3,
 	var range_m: float = Vector2(release.x - goal.x, release.z - goal.z).length()
 	if (release.z - goal.z) * mirror <= 0.0:
 		return 0.0
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	var sigma_m: float = spread_rad * maxf(range_m, 0.5)
 	return _erf(reach / (sigma_m * sqrt(2.0)))
 
 
+# How far from the net's centre a puck's centre can cross and still pass inside
+# the posts (m).
+static func post_reach() -> float:
+	return GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
+
+
 # Lateral aim (m, in the net's own frame) of aim sample `i` post to post.
 static func aim_x(i: int) -> float:
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	return lerpf(-reach, reach, float(i) / float(AIShotFieldData.AIM_POINTS - 1))
 
 
@@ -478,6 +489,9 @@ static func _build() -> void:
 	_stance.resize(n)
 	_in_seal_zone.resize(n)
 	_aim_odds.resize(n * _aims_per_cell)
+	_edge_first.resize(n * LOFTS.size())
+	_edge_count.resize(n * LOFTS.size())
+	_edges.clear()
 	for c: int in n:
 		var t: PackedStringArray = AIShotFieldData.ROWS[c].split("\t")
 		var spot: int = AIShotFieldData.SPOT_FWD.find(float(t[2])) * AIShotFieldData.SPOT_X.size() \
@@ -512,9 +526,12 @@ static func _build() -> void:
 				* maxf(Vector2(release.x, release.z - _FIELD_GOAL.z).length(), 0.5)
 		var best: float = 0.0
 		for li: int in LOFTS.size():
-			var pattern: String = t[23 + li]
-			for i: int in pattern.length():
-				var p: float = aim_odds(pattern, i, sigma_m)
+			var edges: PackedFloat32Array = decode_intervals(t[_INTERVAL_COLUMN + li])
+			_edge_first[c * LOFTS.size() + li] = _edges.size()
+			_edge_count[c * LOFTS.size() + li] = edges.size()
+			_edges.append_array(edges)
+			for i: int in AIShotFieldData.AIM_POINTS:
+				var p: float = interval_odds(edges, aim_x(i), sigma_m)
 				_aim_odds[c * _aims_per_cell + li * AIShotFieldData.AIM_POINTS + i] = p
 				best = maxf(best, p)
 		_odds[c] = best
@@ -550,30 +567,41 @@ static func _new_native() -> RefCounted:
 	return native
 
 
-# The best aim's goal fraction over `patterns` (FLAT / LOW / HIGH outcome strings
-# post to post) when the crossing scatters by `sigma_m` about the aim, a crossing
-# scoring as the nearest measured aim did.
-static func best_odds(patterns: PackedStringArray, sigma_m: float) -> float:
+# The best candidate aim's goal fraction over `intervals` (FLAT / LOW / HIGH,
+# each goal intervals as decode_intervals reads them) when the crossing scatters
+# by `sigma_m` about the aim.
+static func best_odds(intervals: Array[PackedFloat32Array], sigma_m: float) -> float:
 	var best: float = 0.0
-	for p: String in patterns:
-		for i: int in p.length():
-			best = maxf(best, aim_odds(p, i, sigma_m))
+	for edges: PackedFloat32Array in intervals:
+		for i: int in AIShotFieldData.AIM_POINTS:
+			best = maxf(best, interval_odds(edges, aim_x(i), sigma_m))
 	return best
 
 
-static func aim_odds(pattern: String, i: int, sigma_m: float) -> float:
-	var n: int = pattern.length()
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
-	var step: float = 2.0 * reach / float(n - 1)
-	var aim: float = -reach + step * float(i)
+# A loft's goal intervals as the generator writes them, "-847:-803;312:398"
+# (millimetres across the net's frame, "" for none), into metres [start, end, …].
+static func decode_intervals(text: String) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	if text.is_empty():
+		return out
+	for part: String in text.split(";"):
+		out.append(float(part.get_slice(":", 0)) / 1000.0)
+		out.append(float(part.get_slice(":", 1)) / 1000.0)
+	return out
+
+
+static func _cell_edges(cell: int, loft_index: int) -> PackedFloat32Array:
+	var k: int = cell * LOFTS.size() + loft_index
+	return _edges.slice(_edge_first[k], _edge_first[k] + _edge_count[k])
+
+
+# The goal fraction of a shot aimed at `aim` (m, the net's frame) whose crossing
+# scatters by `sigma_m`, over goal intervals `edges` (flat [start, end, …], m).
+static func interval_odds(edges: PackedFloat32Array, aim: float, sigma_m: float) -> float:
 	var s: float = maxf(sigma_m, 1e-4) * sqrt(2.0)
 	var p: float = 0.0
-	for j: int in n:
-		if pattern[j] != "G":
-			continue
-		var x: float = -reach + step * float(j)
-		p += 0.5 * (_erf((x + 0.5 * step - aim) / s) - _erf((x - 0.5 * step - aim) / s))
+	for k: int in range(0, edges.size(), 2):
+		p += 0.5 * (_erf((edges[k + 1] - aim) / s) - _erf((edges[k] - aim) / s))
 	return p
 
 

@@ -65,30 +65,42 @@ func test_the_far_net_reads_as_the_measured_net_seen_from_the_other_end() -> voi
 
 func test_a_set_keeper_reads_the_measured_set_cell() -> void:
 	# "Square and set on it" is a measured situation, so at every measured spot
-	# the set read IS that spot's SET cell.
+	# the set read IS that spot's SET cell. A spot in the boards has none.
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), goal)
 	for fwd: float in AIShotFieldData.SPOT_FWD:
 		for x: float in AIShotFieldData.SPOT_X:
 			var spot: int = AIShotFieldData.SPOT_FWD.find(fwd) * AIShotFieldData.SPOT_X.size() \
 					+ AIShotFieldData.SPOT_X.find(x)
+			if AIShotOdds._set_cell[spot] < 0:
+				continue
 			assert_almost_eq(AIShotOdds.shot_set(Vector3(x, 0.0, GOAL_Z + fwd), goal),
 					AIShotOdds._odds[AIShotOdds._set_cell[spot]], 1e-6,
 					"the set read at (%.1f, %.1f) is the SET cell" % [x, fwd])
 
 
+# A keeper drifting across slower than this has stopped.
+const STOPPED_M_S: float = 0.05
+
+
 func test_the_set_cells_read_square_on_the_shot() -> void:
 	# squareness() and the generator's reads share a facing convention: a keeper
 	# settled on the carrier faces him. Within a couple of metres of the line he
-	# sets on the post rather than square; out from there every SET cell faces
-	# the shot.
+	# sets on the post rather than square; out from there every SET cell whose
+	# keeper has stopped faces the shot. Far out by the boards the harness reads
+	# him while he still drifts across (under its per-tick settle tolerance) and
+	# still turning, so those cells are not this convention's evidence.
 	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), Vector3(0.0, 0.0, GOAL_Z))
+	var checked: int = 0
 	for spot: int in AIShotOdds._set_cell.size():
-		if AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] < 2.5:
-			continue
 		var c: int = AIShotOdds._set_cell[spot]
+		if c < 0 or AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] < 2.5 \
+				or absf(AIShotOdds._velocity[c]) > STOPPED_M_S:
+			continue
+		checked += 1
 		assert_lt(absf(AIShotOdds._square[c]), deg_to_rad(5.0),
 				"SET cell %d faces the shot" % c)
+	assert_gt(checked, 0, "the field has settled SET cells to check")
 
 
 # The cells at `c`'s spot, weighed by a query with `c`'s own read; returns the
@@ -221,3 +233,34 @@ func test_the_main_thread_reads_the_field_through_its_own_query() -> void:
 			assert_true(args.contains("_xg_query"), "%s reads xG through its own query" % f)
 			call_at = src.find("expected_goals(", call_at + 1)
 	assert_gt(checked, 0, "the xG call was found")
+
+
+func test_interval_odds_grow_with_the_open_net_and_add_over_disjoint_gaps() -> void:
+	var sigma: float = 0.3
+	var a := PackedFloat32Array([-0.2, -0.1])
+	var b := PackedFloat32Array([0.2, 0.35])
+	var both := PackedFloat32Array([-0.2, -0.1, 0.2, 0.35])
+	var wider := PackedFloat32Array([-0.25, -0.1])
+	assert_eq(AIShotOdds.interval_odds(PackedFloat32Array(), 0.0, sigma), 0.0, "a closed net")
+	assert_gt(AIShotOdds.interval_odds(wider, -0.15, sigma),
+			AIShotOdds.interval_odds(a, -0.15, sigma), "a wider gap is a better shot")
+	assert_almost_eq(AIShotOdds.interval_odds(both, 0.0, sigma),
+			AIShotOdds.interval_odds(a, 0.0, sigma) + AIShotOdds.interval_odds(b, 0.0, sigma),
+			1e-5, "two gaps are worth what each is")
+	assert_almost_eq(AIShotOdds.interval_odds(a, -0.15, 1e-4), 1.0, 1e-4,
+			"a perfect hand aimed inside a gap scores")
+
+
+func test_no_cell_scores_outside_the_posts() -> void:
+	AIShotOdds.prepare()
+	var reach: float = AIShotOdds.post_reach()
+	for c: int in AIShotFieldData.ROWS.size():
+		for li: int in AIShotOdds.LOFTS.size():
+			var edges: PackedFloat32Array = AIShotOdds._cell_edges(c, li)
+			for k: int in range(0, edges.size(), 2):
+				if edges[k] < -reach - 0.0005 or edges[k + 1] > reach + 0.0005 \
+						or edges[k] > edges[k + 1]:
+					fail_test("cell %d loft %d has goal interval %.4f..%.4f outside the posts"
+							% [c, li, edges[k], edges[k + 1]])
+					return
+	pass_test("every goal interval lies between the posts")

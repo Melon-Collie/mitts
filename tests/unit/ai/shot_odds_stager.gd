@@ -6,6 +6,7 @@ extends RefCounted
 # (test infra stays out of the global namespace).
 
 const Harness := preload("res://tests/unit/ai/real_goalie_shot_harness.gd")
+const Edges := preload("res://tests/unit/ai/open_set_edges.gd")
 
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
@@ -119,18 +120,22 @@ func release(release_pos: Vector3, one_timer: bool, caught: bool, aim: Vector3,
 
 
 # The goalie's open set for a staged state: FLAT / LOW / HIGH, each AIM_POINTS
-# outcome characters post to post. `stage` re-stages the keeper and returns the
-# release point; it runs before every shot.
+# outcome characters post to post, then the same three lofts' goal intervals
+# with their edges bisected (open_set_edges.gd, encoded). `stage` re-stages the
+# keeper and returns the release point; it runs before every shot.
 func open_set(stage: Callable, one_timer: bool, caught: bool) -> PackedStringArray:
-	var out: PackedStringArray = []
+	var sweeps: PackedStringArray = []
+	var intervals: PackedStringArray = []
 	for loft: int in LOFTS:
+		var shoot: Callable = func(aim: float) -> String:
+			var at: Vector3 = stage.call()
+			return OUTCOME_CHARS[release(at, one_timer, caught, Vector3(aim, 0.0, GOAL_Z), loft)]
 		var p: String = ""
 		for i: int in AIM_POINTS:
-			var at: Vector3 = stage.call()
-			p += OUTCOME_CHARS[release(at, one_timer, caught,
-					Vector3(aim_x(i), 0.0, GOAL_Z), loft)]
-		out.append(p)
-	return out
+			p += shoot.call(aim_x(i))
+		sweeps.append(p)
+		intervals.append(Edges.encode(Edges.refine(p, shoot)))
+	return sweeps + intervals
 
 
 # One shot from a staged state, as its outcome character.
@@ -147,9 +152,7 @@ func read() -> GoalieNetworkState:
 
 
 static func aim_x(i: int) -> float:
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
-	return lerpf(-reach, reach, float(i) / float(AIM_POINTS - 1))
+	return Edges.aim_x(i, AIM_POINTS)
 
 
 static func read_fields(gs: GoalieNetworkState) -> String:

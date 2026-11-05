@@ -15,7 +15,8 @@ extends GutTest
 # keeper sealed in the RVH on a carrier behind the net on either side before a
 # charged release from the spot. Every cell records the
 # keeper's read before the feed left and at decision time, and the open set
-# (FLAT / LOW / HIGH × the stager's aims). Reads are stored raw; AIShotOdds
+# (FLAT / LOW / HIGH × the stager's aims, then each loft's goal intervals with
+# their edges bisected). Reads are stored raw; AIShotOdds
 # derives its features from them, so a feature change needs no re-measurement.
 #
 #   MITTS_FIELD_SHARD=i MITTS_FIELD_SHARDS=n   measure every n-th cell from i
@@ -27,17 +28,19 @@ const Fingerprint := preload("res://tests/unit/ai/shot_field_fingerprint.gd")
 const OUT_PATH: String = "res://Scripts/domain/ai/generated/shot_field_data.gd"
 const SHARD_PATH: String = "user://shot_field_shard_%d.txt"
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
-# Lateral and metres-out release grid, in the frame of the net at GOAL_Z.
-# Densest near the net, where the goalie's open set changes fastest. The first
-# row is on the goal line's doorstep, where he seals the post at a sharp angle.
-const SPOT_X: Array[float] = [-8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0]
-const SPOT_FWD: Array[float] = [0.6, 1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0]
+# Lateral and metres-out release grid, in the frame of the net at GOAL_Z, out
+# to the boards and the blue line's far edge (19.51 m), so a release on the ice
+# in the zone reads measured spots. Densest near the net, where the goalie's
+# open set changes fastest. The first row is on the goal line's doorstep, where
+# he seals the post at a sharp angle. A spot whose carrier would stand in the
+# boards measures nothing.
+const SPOT_X: Array[float] = [-12.0, -10.0, -8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.0, 6.0, 8.0,
+		10.0, 12.0]
+const SPOT_FWD: Array[float] = [0.6, 1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0, 17.5, 19.5]
 const DEKE_ACROSS_M: float = 2.0
 # Signed lateral offsets of the passer from the receiver, and feed paces.
 const FEED_OFFSETS_M: Array[float] = [-6.0, -3.5, -1.5, 1.5, 3.5, 6.0]
 const FEED_SPEEDS_M_S: Array[float] = [12.0, 20.0]
-# A passer or deke start past this is off the ice.
-const MAX_ABS_X_M: float = 11.0
 # Decoy carriers: lateral offsets from the spot, and distances from the net
 # along the spot's own bearing (in tight leaves him deep, far out leaves him
 # challenging). A range decoy nearer the spot than DECOY_MIN_SHIFT_M is the SET.
@@ -51,6 +54,7 @@ const WRAP_BEHIND_X_M: float = 1.2
 const WRAP_BEHIND_M: float = 1.6
 
 var _s: RefCounted = null
+var _body_radius: float = 0.0
 
 
 func before_each() -> void:
@@ -63,6 +67,7 @@ func before_each() -> void:
 	add_child_autofree(shooter)
 	add_child_autofree(ctrl)
 	_s = Stager.new(goalie, puck, ctrl, shooter)
+	_body_radius = shooter.collision_radius()
 
 
 # Every cell, in a fixed order: [spot_x, spot_fwd, kind, mode, passer_x,
@@ -74,29 +79,38 @@ func _cells() -> Array:
 	var out: Array = []
 	for fwd: float in SPOT_FWD:
 		for x: float in SPOT_X:
+			if not _on_ice(x, fwd):
+				continue
 			out.append([x, fwd, "SET", "C", x, 0.0])
 			for side: float in [-1.0, 1.0]:
 				var from: float = x + side * DEKE_ACROSS_M
-				if absf(from) <= MAX_ABS_X_M:
+				if _on_ice(from, fwd + Stager.DEKE_FORWARD_M_S * Stager.DEKE_S):
 					out.append([x, fwd, "DEKE", "C", from, 0.0])
 			for off: float in FEED_OFFSETS_M:
-				if absf(x + off) > MAX_ABS_X_M:
+				if not _on_ice(x + off, fwd):
 					continue
 				for speed: float in FEED_SPEEDS_M_S:
 					for mode: String in ["O", "K"]:
 						out.append([x, fwd, "FEED", mode, x + off, speed])
 			for across: float in DECOY_ACROSS_M:
-				if absf(x + across) <= MAX_ABS_X_M:
+				if _on_ice(x + across, fwd):
 					out.append([x, fwd, "DECOY", "C", x + across, fwd])
 			var spot_range: float = Vector2(x, fwd).length()
 			for r: float in DECOY_RANGES_M:
-				if absf(r - spot_range) >= DECOY_MIN_SHIFT_M:
-					var at: Vector2 = Vector2(x, fwd) * (r / spot_range)
+				var at: Vector2 = Vector2(x, fwd) * (r / spot_range)
+				if absf(r - spot_range) >= DECOY_MIN_SHIFT_M and _on_ice(at.x, at.y):
 					out.append([x, fwd, "DECOY", "C", at.x, at.y])
 			if fwd <= WRAP_MAX_FWD_M:
 				for side: float in [-1.0, 1.0]:
 					out.append([x, fwd, "WRAP", "C", side * WRAP_BEHIND_X_M, -WRAP_BEHIND_M])
 	return out
+
+
+# Whether a skater at `x`, `fwd` metres out from the goal line stands clear of
+# the boards.
+func _on_ice(x: float, fwd: float) -> bool:
+	var at := Vector2(x, GOAL_Z + fwd)
+	return GameRules.clamp_to_rink_inner(at, _body_radius).distance_to(at) < 1e-4
 
 
 func _stage_for(cell: Array) -> Callable:
@@ -126,10 +140,9 @@ func _row(index: int, cell: Array) -> String:
 	var pre_fields: String = Stager.read_fields(pre)
 	var decision_fields: String = Stager.read_fields(decision)
 	var patterns: PackedStringArray = _s.open_set(stage, cell[3] == "O", cell[3] == "K")
-	return "%d\t%.2f\t%.2f\t%s\t%s\t%.2f\t%.2f\t%.3f\t%.3f\t%s\t%s\t%s\t%s\t%s" % [
+	return "%d\t%.2f\t%.2f\t%s\t%s\t%.2f\t%.2f\t%.3f\t%.3f\t%s\t%s\t%s" % [
 			index, cell[0], cell[1], cell[2], cell[3], cell[4], cell[5],
-			release.x, release.z - GOAL_Z, pre_fields, decision_fields,
-			patterns[0], patterns[1], patterns[2]]
+			release.x, release.z - GOAL_Z, pre_fields, decision_fields, "\t".join(patterns)]
 
 
 func test_measure_a_shard() -> void:
@@ -173,7 +186,9 @@ func test_merge_the_shards() -> void:
 		"# metres out, kind, mode, passer x (a deke's start, a decoy's or a wrap's",
 		"# x), feed pace (a decoy's or a wrap's metres out), release x, release",
 		"# metres out, the 7-field read before the feed, the 7-field read at decision",
-		"# (shot_odds_stager.gd read_fields), then FLAT / LOW / HIGH outcomes.",
+		"# (shot_odds_stager.gd read_fields), then FLAT / LOW / HIGH outcomes at",
+		"# AIM_POINTS aims post to post, then FLAT / LOW / HIGH goal intervals",
+		"# (open_set_edges.gd: millimetres across the net, edges bisected).",
 		"",
 		"const FINGERPRINT: String = \"%s\"" % Fingerprint.compute(),
 		"const SPOT_X: Array[float] = %s" % str(SPOT_X),
