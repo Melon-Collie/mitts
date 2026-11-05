@@ -413,3 +413,34 @@ never park at the blue line waiting.
   getting there with the puck), memoize the keep read across the defence's
   candidate pushes, or port the sweep to `native/`.
 
+## 7. Step 5, first readings
+
+Instruments in `tests/instruments/ai/` (duel harness, real bot brains; the
+O-zone one against the real keeper, settled on the puck before each run), each
+run on `main` before this plan and on the branch, with `point_odds_off.gd`
+zeroing the shot field's 15 m row for the regression. Small samples: read
+differences under a few runs as noise.
+
+| measure | main | branch |
+|---|---|---|
+| entries carried in, `test_nz_entry_drill` (30 runs) | 25 | 25 |
+| … with point shots worth nothing | 24 | 22 |
+| stall time at their line, both | 0.0 s | 0.0–0.1 s |
+| breakout exits, `test_breakout_drill` (20 runs) | 19, 1.91 s | 19, 2.05 s |
+| stacked line: carried / dumped / turnover, `test_dump_in_drill` (12) | 9 / 2 / 1 | 10 / 1 / 1 |
+| low O-zone possessions ending in a shot, `test_ozone_possession` (48) | 37, at 1.6 s | 36, at 1.5 s |
+| … of those shots from the slot / point / elsewhere | 7 / 0 / 30 | 5 / 0 / 31 |
+| slot holds: count, median | 10, 0.16 s | 9, 0.24 s |
+
+- **The regression does not reproduce in the entry drill**, on `main` either:
+  with the point row zeroed, bots still carry the zone. Whatever stopped them
+  in play is not staged by two defenders standing up at their line.
+- **Low in their zone, the carrier shoots within about a second from a sharp
+  angle**, on both, against a keeper settled on the near post: the field prices
+  a release 10 m wide and 2 m out at ~19% there, well over the giveaway bar, so
+  keeping the puck never gets to compete. Its spots stop at x = ±8 m. That is
+  the shot field's own shape (§5), and it decides what "hold it low and cycle"
+  can show before this plan's values do.
+- `test_carrier_never_stands_still.gd` (unit) holds the outside-the-zone half
+  of the no-stand-still check.
+
