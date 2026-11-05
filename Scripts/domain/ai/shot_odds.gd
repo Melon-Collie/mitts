@@ -243,16 +243,20 @@ static func empty_net(release: Vector3, goal: Vector3,
 	var range_m: float = Vector2(release.x - goal.x, release.z - goal.z).length()
 	if (release.z - goal.z) * mirror <= 0.0:
 		return 0.0
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	var sigma_m: float = spread_rad * maxf(range_m, 0.5)
 	return _erf(reach / (sigma_m * sqrt(2.0)))
 
 
+# How far from the net's centre a puck's centre can cross and still pass inside
+# the posts (m).
+static func post_reach() -> float:
+	return GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS - GameRules.PUCK_COLLISION_RADIUS
+
+
 # Lateral aim (m, in the net's own frame) of aim sample `i` post to post.
 static func aim_x(i: int) -> float:
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	return lerpf(-reach, reach, float(i) / float(AIShotFieldData.AIM_POINTS - 1))
 
 
@@ -563,8 +567,7 @@ static func best_odds(patterns: PackedStringArray, sigma_m: float) -> float:
 
 static func aim_odds(pattern: String, i: int, sigma_m: float) -> float:
 	var n: int = pattern.length()
-	var reach: float = GameRules.NET_HALF_WIDTH - GameRules.NET_POST_RADIUS \
-			- GameRules.PUCK_COLLISION_RADIUS
+	var reach: float = post_reach()
 	var step: float = 2.0 * reach / float(n - 1)
 	var aim: float = -reach + step * float(i)
 	var s: float = maxf(sigma_m, 1e-4) * sqrt(2.0)
@@ -579,6 +582,28 @@ static func aim_odds(pattern: String, i: int, sigma_m: float) -> float:
 		var lo: float = maxf(x - 0.5 * step, -reach)
 		p += 0.5 * (_erf((hi - aim) / s) - _erf((lo - aim) / s))
 	return p
+
+
+# The goal fraction of a shot aimed at `aim` (m, the net's frame) whose crossing
+# scatters by `sigma_m`, over goal intervals `edges` (flat [start, end, …], m).
+static func interval_odds(edges: PackedFloat32Array, aim: float, sigma_m: float) -> float:
+	var s: float = maxf(sigma_m, 1e-4) * sqrt(2.0)
+	var p: float = 0.0
+	for k: int in range(0, edges.size(), 2):
+		p += 0.5 * (_erf((edges[k + 1] - aim) / s) - _erf((edges[k] - aim) / s))
+	return p
+
+
+# A loft's goal intervals as the generator writes them, "-847:-803;312:398"
+# (millimetres across the net's frame, "" for none), into metres [start, end, …].
+static func decode_intervals(text: String) -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	if text.is_empty():
+		return out
+	for part: String in text.split(";"):
+		out.append(float(part.get_slice(":", 0)) / 1000.0)
+		out.append(float(part.get_slice(":", 1)) / 1000.0)
+	return out
 
 
 # erf via Abramowitz & Stegun 7.1.26 (|error| < 1.5e-7). Its own copy: this file is

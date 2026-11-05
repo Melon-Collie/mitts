@@ -221,3 +221,20 @@ func test_the_main_thread_reads_the_field_through_its_own_query() -> void:
 			assert_true(args.contains("_xg_query"), "%s reads xG through its own query" % f)
 			call_at = src.find("expected_goals(", call_at + 1)
 	assert_gt(checked, 0, "the xG call was found")
+
+
+func test_interval_odds_grow_with_the_open_net_and_add_over_disjoint_gaps() -> void:
+	var sigma: float = 0.3
+	var a := PackedFloat32Array([-0.2, -0.1])
+	var b := PackedFloat32Array([0.2, 0.35])
+	var both := PackedFloat32Array([-0.2, -0.1, 0.2, 0.35])
+	var wider := PackedFloat32Array([-0.25, -0.1])
+	assert_eq(AIShotOdds.interval_odds(PackedFloat32Array(), 0.0, sigma), 0.0, "a closed net")
+	assert_gt(AIShotOdds.interval_odds(wider, -0.15, sigma),
+			AIShotOdds.interval_odds(a, -0.15, sigma), "a wider gap is a better shot")
+	assert_almost_eq(AIShotOdds.interval_odds(both, 0.0, sigma),
+			AIShotOdds.interval_odds(a, 0.0, sigma) + AIShotOdds.interval_odds(b, 0.0, sigma),
+			1e-5, "two gaps are worth what each is")
+	assert_almost_eq(AIShotOdds.interval_odds(a, -0.15, 1e-4), 1.0, 1e-4,
+			"a perfect hand aimed inside a gap scores")
+

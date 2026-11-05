@@ -1,6 +1,6 @@
 # Shot field resolution — measured edges and a grid that reaches the boards
 
-Status: **step 0 done; steps 1–5 proposed, not yet agreed.** Follows `docs/shot-currency-plan.md`; that
+Status: **steps 0–1 done; steps 2–5 agreed, in progress.** Follows `docs/shot-currency-plan.md`; that
 doc's decisions (odds against today's goalie, measured not modelled, 0.04 rad
 reference scatter applied at lookup) all stand. This one changes how finely the
 goalie's open set is measured and how much of the zone is measured at all.
@@ -67,8 +67,8 @@ read does not, because `_build` prices each aim at the measured spot's range.
   GDScript and in `native_shot_odds.cpp` alike).
 - **Find out whether the sweep misses whole gaps before paying to look.**
   Bisection only sharpens transitions the sweep saw. A gap narrower than 7.4 cm
-  between two saves is still invisible. One instrument run decides whether that
-  matters (§3, step 1).
+  between two saves is still invisible. Step 1 measured it: it does not matter
+  (§3, step 1).
 
 ## 3. Steps
 
@@ -84,14 +84,29 @@ three ratchets in `test_shot_odds_vs_truth.gd` if they move past `BANK_MARGIN`,
 and say so in the commit. This removes the phantom half of every post-side goal
 today and stands on its own whether or not the rest lands.
 
-### Step 1 — how much does the sweep miss? (instrument)
+### Step 1 — how much does the sweep miss? (instrument) (done)
 
-`tests/instruments/ai/test_open_set_resolution.gd`: for the SET and one DECOY
-cell at ~30 spots (the dots, the slot, the posts in tight, the point), fire 96
-aims per loft and compare against 24 aims + bisection. Report the goal width the
-coarse sweep missed per cell, and the odds error at 0.04 rad that it causes. If
-interior gaps carry real odds, step 2 adds a midpoint probe between saves next
-to a body edge; if not, it does not.
+`tests/instruments/ai/test_open_set_resolution.gd`: the SET cell and a DECOY
+cell (the keeper set on a carrier 3 m inward) at 30 spots off the field's grid
+(x −8, −6.7, −4, 0, 2.5 × 0.6, 2.5, 4.5, 6.1, 9.5, 15 m out). Per loft it fires
+93 aims (every fourth is the field's 24) with their edges bisected twice as the
+reference, and prices three readings at the field's 24 candidate aims and
+0.04 rad. 17,176 shots, about 8 minutes on four processes.
+
+| reading | mean \|odds − ref\| | worst |
+|---|---|---|
+| 24-aim bands (today, after step 0) | 0.018 | 0.10 (2.5 m right, 4.5 m out, SET) |
+| 24 aims + edges bisected 4× | 0.0002 | 0.009 |
+
+Five cells hold a goal gap the 24-aim sweep never sees (up to 5.5 cm wide), but
+none of them is the cell's best shot, so none moves its odds by more than the
+0.009 above. **Step 2 adds no probes between saves.**
+
+What the bands got most wrong is the post gap from mid-range against a set
+keeper: 0 m, 6.1 m out reads 6.0% as bands and 0.4% measured; −8, 9.5 m reads
+2.9% and 0.2%. Those gaps are about a millimetre wide. Bands also read some real
+gaps low: −4, 15 m out with the keeper drawn off reads 4.7% as bands and 8.6%
+measured.
 
 ### Step 2 — goal intervals from the stager
 
@@ -166,7 +181,7 @@ value (the "spot × how he was beaten" description and where the field ends).
 
 - **Refinement depth.** 4 bisections gives ~4.6 mm, under the puck's 3.8 cm
   radius by a wide margin. 3 may be enough; step 1 can measure it.
-- **Interior gaps.** Decided by step 1's numbers.
+- **Interior gaps.** Settled by step 1: no probes between saves.
 - **A row at 0.25 m out.** Releases between the goal line and 0.6 m still clamp
   to the 0.6 row. Inside the crease that does not matter; wide of it, it is a
   sharp-angle shot the field has not seen. Cheap to add with step 3.
