@@ -139,7 +139,8 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 			"rebound_goal": false, "rebound_held": false, "part": -1,
 			"decision": "", "goalie_x": 0.0, "lat_speed": 0.0, "shoot_ev": 0.0,
 			"body": Vector3.INF, "goalie_pos": Vector3.INF,
-			"release_offset": Vector3.ZERO}
+			"release_offset": Vector3.ZERO, "priced": -1.0, "keeper_stance": -1,
+			"shooter_speed": 0.0}
 	# LATCH THE DECISION, because `duel.step()` consumes the release inside the
 	# same call: by the time a new entry appears in `releases` the bot has
 	# already stopped carrying, its carrier role has moved on, and
@@ -160,6 +161,12 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 	var l_gx: float = 0.0
 	var l_lat: float = 0.0
 	var l_ev: float = 0.0
+	# What the compete priced the shot at, raw (the value seam at the winning hold,
+	# before any hysteresis or ping), the keeper's stance as the carrier read it,
+	# and the shooter's pace: what a calibration of the priced odds needs.
+	var l_priced: float = -1.0
+	var l_kstance: int = -1
+	var l_pace: float = 0.0
 	# FIRE FROM THE POINT THE BOT SCORED, NOT FROM ITS BODY.
 	# The carrier prices the holds the blade can put the puck in before the
 	# press (AIRoleCarrier "Where the shot is held") — where it is, the loaded
@@ -193,6 +200,9 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 				l_gx = _goalie.global_position.x
 				l_lat = s0.vel.x   # SIGNED — the mode split needs the direction
 				l_ev = s0.agent.debug_shoot_score
+				l_priced = c0._phase_shoot_score
+				l_kstance = c0._field.keeper_stance
+				l_pace = Vector2(s0.vel.x, s0.vel.z).length()
 				l_blade = s0.pos + c0.shoot_now_hold
 				l_gpos = _goalie.global_position
 				l_offset = c0.shoot_now_hold \
@@ -224,6 +234,9 @@ func run_rush(start: Vector3, vel: Vector3, profile: BotSkillProfile,
 		rec["body"] = l_pos
 		rec["goalie_pos"] = l_gpos
 		rec["release_offset"] = l_offset
+		rec["priced"] = l_priced
+		rec["keeper_stance"] = l_kstance
+		rec["shooter_speed"] = l_pace
 		rec["release"] = l_blade
 		# Fire it through the real release path so the keeper's read resolves
 		# off the true shot, then march it against his posed collision.

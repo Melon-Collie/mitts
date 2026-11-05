@@ -444,3 +444,24 @@ differences under a few runs as noise.
 - `test_carrier_never_stands_still.gd` (unit) holds the outside-the-zone half
   of the no-stand-still check.
 
+### The shot's price against the keeper
+
+`test_shot_value_calibration.gd`: real bots rushing the real keeper (140 shots a
+tier, mostly in tight with no defence), and the open set measured from each spot
+the O-zone bots fired from (the truth table's staging: a keeper who tracked the
+carry in, every aim at three lofts).
+
+- **The compete's price runs well above what goes in.** Rush shots it priced at
+  0.85 on average scored 0.45–0.49. The xG stat (0.35 on average) is on the
+  scale but barely ranks shots.
+- **The live read is what overprices; the set read reproduces the
+  measurements.** From the corner and the sharp angles the field's live read
+  of the settled keeper said 0.12–0.23 where the keeper conceded nothing, or
+  one aim in 72; at (−4, 2.5) it said 0.57 and the aim it picks scores 0. The
+  set read (SET cells only) matched the measured best aim wherever there was a
+  goal to find. The live read blends in feed and decoy cells whose keeper
+  looked the same and conceded more, and past x = ±8 m it has no cells.
+
+So the shot side of the compete is not on the scale of goals per shot yet, and
+the floor's values cannot be set against it until it is.
+
