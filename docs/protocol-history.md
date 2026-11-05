@@ -445,3 +445,8 @@ here whenever you bump, in the same format.
 #      from the same packet's puck. Same size; a v90 peer ignores the bit, but
 #      mixed builds must be refused. Replay FORMAT_VERSION unchanged: an older replay reads
 #      the bit as clear, and its wind-ups are still recognized by shot state.
+# v92: receive_pickup_claim drops its trailing top_hand Vector3 (the client's
+#      top-hand grip). The host's catch read is the blade's distance off the
+#      puck's path (PuckReceptionRules.path_offset), which never read the shaft.
+#      The RPC's argument count changed, so mixed builds must be refused.
+#      Replay FORMAT_VERSION unchanged: claims are not recorded.

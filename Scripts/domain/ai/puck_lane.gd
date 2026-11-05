@@ -67,8 +67,8 @@ const PASS_SPEED_M_S: float = GameRules.DEFAULT_QUICK_PASS_POWER_M_S
 
 # Full-pace target CLOSING speed at reception — the puck's speed in the
 # RECEIVER'S frame, which is what PuckReceptionRules judges. Under its ceilings
-# (any-angle catch ≤ deflect_min 22, squared ≤ 30), 20 catches at ANY blade
-# angle with margin, though it settles (AIFeedReception.receiver_settle_s); the carrier prices
+# (blade at the rim of its reach ≤ deflect_min 22, on the puck's line ≤ 30), 20
+# catches wherever the blade meets it with margin, though it settles (AIFeedReception.receiver_settle_s); the carrier prices
 # softer steps of it (PASS_PACE_FRACS). pass_launch_speed holds it across
 # distance and receiver motion.
 const PASS_TARGET_CLOSING_M_S: float = 20.0
@@ -90,9 +90,9 @@ const PASS_PACE_FRACS: Array[float] = [0.6, 0.8, 1.0]
 # Hardest receiver-frame arrival we'll allow a pass to land at — the cap on how
 # much the receiver-motion solve may SOFTEN the world launch for a receiver
 # curling back, which would otherwise floor at a min-wrister floater. A bot
-# receiver sets up SQUARE (_pass_receive_aim_and_steer), so its ceiling sits
-# above the any-angle bar (22); 26 credits that squaring with margin below the
-# squared ceiling (30) for an imperfect setup.
+# receiver parks its blade on the puck's line (SkaterAgentReception), so its
+# ceiling sits above the rim's bar (22); 26 credits that with margin below the
+# on-the-line ceiling (30) for an imperfect setup.
 const PASS_RECEIVE_CEILING_M_S: float = 26.0
 
 # Reference charged-pass speed (~mid-ramp) for callers that want one typical

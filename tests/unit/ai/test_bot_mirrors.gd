@@ -38,19 +38,20 @@ func test_the_one_timer_salvage_sits_inside_the_controllers_zone() -> void:
 
 func test_the_puck_thresholds_the_bots_price() -> void:
 	var puck: Puck = PuckScript.new()
-	assert_eq(AIActionScoring.TIP_DEFLECT_MIN_SPEED_M_S, puck.deflect_min_speed,
-			"a tip is priced only above the pace a blade deflects at")
+	assert_almost_eq(AIRoleFinisher.TIP_MAX_TURN_RAD, deg_to_rad(puck.deflect_max_turn_deg), 0.0001,
+			"the finisher aims his tip by the turn a tip has")
 	# Every clean bot feed arrives at PASS_TARGET_CLOSING_M_S; only a hotter
 	# arrival, still short of a deflection, makes the receiver give with it.
-	assert_almost_eq(SkaterAgentReception.RECEIVE_GIVE_CEILING_M_S,
-			sqrt(puck.bobble_load) * puck.deflect_min_speed, 0.05,
-			"a receiver gives from the bobble line at the blade's middle")
+	assert_almost_eq(AIFeedReception.RECEIVE_HOLD_CEILING_M_S,
+			sqrt(puck.bobble_load) * (puck.deflect_min_speed + puck.alignment_receive_bonus), 0.0001,
+			"a receiver gives from the bobble line with the blade on the feed's line")
 	puck.free()
 
 
 func test_the_settle_a_feed_is_priced_at_is_the_pucks() -> void:
 	var puck: Puck = PuckScript.new()
-	assert_eq(AIFeedReception.RECEIVE_ANY_ANGLE_CEILING_M_S, puck.deflect_min_speed)
+	assert_eq(AIFeedReception.RECEIVE_DEFLECT_MIN_M_S, puck.deflect_min_speed)
+	assert_eq(AIFeedReception.RECEIVE_ALIGNMENT_BONUS_M_S, puck.alignment_receive_bonus)
 	assert_eq(AIFeedReception.SETTLE_CLEAN_LOAD, puck.settle_clean_load)
 	assert_eq(AIFeedReception.SETTLE_MAX_S, puck.settle_max_s)
 	assert_eq(AIFeedReception.BOBBLE_LOAD, puck.bobble_load)
