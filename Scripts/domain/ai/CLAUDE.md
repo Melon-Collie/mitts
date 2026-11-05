@@ -1163,8 +1163,9 @@ reaches back into what remains.
     how far the zone is and whether a defender gets to the entry first. The
     race is what keeps the leaf honest against the searched lines — without it
     a line that stays outside reads better than one that crosses into the
-    defence, and the carrier stalls at the line. Standing still outside pays the
-    step's decay like every move. A straight carry on to a destination across
+    defence, and the carrier stalls at the line. Standing still pays the
+    horizon's decay like every move, and in the zone it is read as the
+    continuation against the defence at the horizon's end. A straight carry on to a destination across
     the attacking line is not credited from outside: the race prices getting
     in.
   - Candidates also price the **pass option** they open

@@ -156,12 +156,16 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 	# Stand-still is COMPUTED up front because it doubles as an exact pruning
 	# floor: it always participates in this argmax, so a movement candidate whose
 	# ceiling can't strictly beat stand_total can't affect the outcome.
+	# Standing still lasts the horizon and ends where it started, paying its decay
+	# as every move does: outside the zone the entry comes no closer; inside it he
+	# keeps the puck against the defence carried on to the horizon's end.
 	var stand_score: float = shoot_now_score
-	# Outside the zone the plan is still to get in, and standing a step brings
-	# the entry no closer: it pays the step's time as every move does.
+	var horizon_decay: float = AIActionScoring.delay_discount(AICarryRollout.HORIZON_S)
 	if not AIActionScoring.in_offensive_zone(self_pos, attacking_goal):
-		stand_score = maxf(stand_score, _field.horizon_value(self_pos)
-				* AIActionScoring.delay_discount(AICarryRollout.HORIZON_S))
+		stand_score = maxf(stand_score, _field.horizon_value(self_pos) * horizon_decay)
+	else:
+		stand_score = maxf(stand_score, _field.continuation_at(self_pos, AICarryRollout.HORIZON_S)
+				* horizon_decay)
 	var stand_puck_pos: Vector3 = AICarrierField.puck_pos_at(self_pos, attacking_goal)
 	var stand_safety: float = AICarrySpace.carry_safety(
 			stand_puck_pos, stand_puck_pos, AICarrySpace.EVADE_HORIZON_S,
@@ -282,13 +286,10 @@ func search(ctx: RoleContext, shoot_now_score: float) -> void:
 
 	# Stand-still last, winning only on STRICTLY greater. Its shot branch is the
 	# shoot-now score verbatim because "hold and fire from here" and SHOOT are the
-	# same physical act; priced separately at the CURRENT spot, a mid-cut hold
-	# would read richer than the fire from the same instant and the bot would
-	# hold exactly when the window is open. Sharing it makes fire-wins-ties hold
-	# by definition: stand_total = shoot_now × safety − cost ≤ shoot_now ≤ fire.
-	# Stand pays the strip cost like every candidate; without it freezing would be
-	# the one option that never prices losing the puck, and a bot under a
-	# converging forechecker would plant itself exactly when it should skate clear.
+	# same physical act; priced separately, a mid-cut hold would read richer than
+	# the fire from the same instant, so wherever the shot is the better read fire
+	# wins the tie. Stand pays the strip cost like every candidate, or a bot under
+	# a converging forechecker would plant itself when it should skate clear.
 	if stand_total > best_key:
 		best_score = stand_total
 		best_pos = self_pos
