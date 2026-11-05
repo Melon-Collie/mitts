@@ -160,6 +160,51 @@ func test_each_up_level_tips_at_its_own_speed_on_the_ice_and_in_the_air() -> voi
 		assert_almost_eq(_loft(level, true), speeds[level], 0.001,
 				"level %d lifts an air puck" % level)
 
+# ── tip_turn / aimed_face_normal ─────────────────────────────────────────────
+
+const _MAX_TURN: float = deg_to_rad(25.0)
+# A puck coming down -Z at a skater facing it: +Z is behind him, -Z ahead.
+const _IN := Vector3(0.0, 0.0, 25.0)
+
+func _turn(blade: Vector3) -> float:
+	return PuckCollisionRules.tip_turn(_IN, blade, _MAX_TURN)
+
+func test_a_blade_straight_ahead_or_behind_asks_no_turn() -> void:
+	assert_almost_eq(_turn(Vector3(0.0, 0.0, -1.0)), 0.0, 1e-6, "straight up the puck's line")
+	assert_almost_eq(_turn(Vector3(0.0, 0.0, 1.0)), 0.0, 1e-6, "straight down it, behind")
+
+func test_a_blade_square_beside_asks_the_whole_turn_toward_its_side() -> void:
+	var left: float = _turn(Vector3(-1.0, 0.0, 0.0))
+	var right: float = _turn(Vector3(1.0, 0.0, 0.0))
+	assert_almost_eq(absf(left), _MAX_TURN, 1e-6)
+	assert_almost_eq(right, -left, 1e-6, "the two sides mirror")
+	var out: Vector2 = Vector2(_IN.x, _IN.z).rotated(right)
+	assert_gt(out.x, 0.0, "a blade on the +x side turns the puck toward +x")
+
+func test_the_turn_grows_smoothly_off_the_line() -> void:
+	var prev: float = 0.0
+	for deg: float in [10.0, 30.0, 60.0, 90.0]:
+		var b: Vector2 = Vector2(0.0, -1.0).rotated(deg_to_rad(deg))
+		var t: float = absf(_turn(Vector3(b.x, 0.0, b.y)))
+		assert_gt(t, prev, "%.0f° off the line turns more" % deg)
+		prev = t
+
+func _aimed_exit(turn: float) -> Vector3:
+	var n: Vector3 = PuckCollisionRules.aimed_face_normal(_IN, turn, 0.6, 0.15, 0.85, 30.0)
+	return PuckCollisionRules.deflect_velocity(_IN, n, 0.6, 0.15, 0.85, 30.0)
+
+func test_the_aimed_face_turns_the_puck_by_the_asked_turn() -> void:
+	for deg: float in [-25.0, -10.0, 0.0, 5.0, 25.0]:
+		var out: Vector3 = _aimed_exit(deg_to_rad(deg))
+		var got: float = rad_to_deg(Vector2(_IN.x, _IN.z).angle_to(Vector2(out.x, out.z)))
+		assert_almost_eq(got, deg, 0.1, "asked %.0f°" % deg)
+
+func test_a_sharper_turn_keeps_less_pace() -> void:
+	var straight: float = _aimed_exit(0.0).length()
+	assert_almost_eq(straight, _IN.length() * 0.85, 1e-3, "straight on keeps the glance's share")
+	assert_gt(straight, _aimed_exit(deg_to_rad(10.0)).length())
+	assert_gt(_aimed_exit(deg_to_rad(10.0)).length(), _aimed_exit(deg_to_rad(25.0)).length())
+
 # ── body_block_velocity ──────────────────────────────────────────────────────
 
 func test_body_block_square_hit_rebounds_at_the_padding_cor() -> void:

@@ -75,6 +75,9 @@ var bobble_lift_max_speed: float = 1.9
 @export var deflect_tangential_retain: float = 0.85       # glancing slide is largely kept (a redirect keeps pace)
 @export var deflect_speed_ref: float = 30.0               # speed (m/s) at which restitution bottoms out
 @export var deflect_cooldown: float = 0.3
+# The most a deliberate tip turns the puck, with the blade held square beside
+# the body (PuckCollisionRules.tip_turn): about the most a real redirect takes.
+var deflect_max_turn_deg: float = 25.0
 # Signed per-loft-level redirect for a deliberate deflect, expressed as a fixed
 # VERTICAL LAUNCH SPEED (m/s) — the SAME loft model shots use (ShotMechanics.loft_y),
 # not a fixed angle. Fixed-angle ties the tip's apex to the incoming puck's pace
@@ -546,9 +549,7 @@ func remove_skater_cooldown(skater: Skater) -> void:
 
 # ── Physics ───────────────────────────────────────────────────────────────────
 func apply_blade_deflect(skater: Skater) -> void:
-	# Reflect off the blade face — angle depends on how the player has angled
-	# their stick, not just where the puck contacted.
-	var contact_normal: Vector3 = skater.get_blade_face_normal(linear_velocity)
+	var contact_normal: Vector3 = _tip_face(skater)
 
 	var new_vel: Vector3 = PuckCollisionRules.deflect_velocity(
 			linear_velocity, contact_normal,
@@ -578,6 +579,20 @@ func apply_blade_deflect(skater: Skater) -> void:
 	var is_bobble: bool = new_vel.length() < bobble_speed_threshold
 	_set_cooldown(skater, bobble_cooldown if is_bobble else deflect_cooldown)
 	_queue_contact_event(ContactEvent.LOOSE_TOUCH, skater)
+
+# The face the puck comes off. A deliberate tip (Q) presents the face that turns
+# it toward the side the blade is held on (PuckCollisionRules.tip_turn); any
+# other touch takes the face square across the shaft.
+func _tip_face(skater: Skater) -> Vector3:
+	if not skater.deflect_intent:
+		return skater.get_blade_face_normal(linear_velocity)
+	var turn: float = PuckCollisionRules.tip_turn(linear_velocity,
+			skater.get_blade_contact_global() - skater.global_position,
+			deg_to_rad(deflect_max_turn_deg))
+	return PuckCollisionRules.aimed_face_normal(linear_velocity, turn,
+			deflect_normal_restitution, deflect_normal_restitution_min,
+			deflect_tangential_retain, deflect_speed_ref)
+
 
 # A catch the hands nearly held (PuckReceptionRules.bobble_load_at): the face
 # takes the impact in the RECEIVER'S frame and the puck leaves mostly off its

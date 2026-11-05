@@ -176,3 +176,18 @@ func test_a_puck_over_the_full_lift_goes_past() -> void:
 	_launch(1.0, 8.0)
 	_tick(true, ShotMechanics.ELEVATION_MID, 80, true)
 	assert_almost_eq(_vel.x, -SPEED, 0.01, "a blade at full lift cannot reach up to it")
+
+
+# The puck crosses in front of him, the blade held up the ice square to its
+# line: the whole of the tip's turn, toward the blade's side, at a glance's pace.
+func test_a_tip_turns_toward_the_side_the_blade_is_held() -> void:
+	_launch(0.3, 8.0)
+	var incoming := Vector2(_vel.x, _vel.z)
+	_tip(ShotMechanics.ELEVATION_MID, 0.3, 8.0, false)
+	var out := Vector2(_vel.x, _vel.z)
+	var blade: Vector3 = _c.skater.get_blade_contact_global() - _c.skater.global_position
+	var expected: float = PuckCollisionRules.tip_turn(Vector3(incoming.x, 0.0, incoming.y),
+			blade, deg_to_rad(_puck.deflect_max_turn_deg))
+	assert_gt(absf(rad_to_deg(expected)), 20.0, "the blade is well off the puck's line")
+	assert_almost_eq(incoming.angle_to(out), expected, deg_to_rad(0.5))
+	assert_lt(out.length(), incoming.length(), "a turned tip gives up pace")
