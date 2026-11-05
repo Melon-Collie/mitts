@@ -249,6 +249,9 @@ var loose_released_by: int = -1
 # bounce/skid loss). Scenario harnesses set this to hang_time / DT when
 # staging a lofted dump; 0 (the default) is the ordinary ice puck.
 var airborne_ticks: int = 0
+# The last release's launch velocity with its loft (the harness's own puck is
+# flat): for a rollout that marches a shot in three dimensions itself.
+var last_launch_velocity: Vector3 = Vector3.ZERO
 const LANDING_SPEED_KEEP: float = 0.6
 # The share of pace the airborne puck lands with: LANDING_SPEED_KEEP for a staged
 # chip, all of it for a saucer (the bots' own saucer model).
@@ -1254,6 +1257,7 @@ static func _carry_momentum(result: ShotMechanics.ShotResult, body_vel: Vector3,
 # a lofted one (seated at Puck.release's 0.1 m) is above the blade plane, keeping
 # its pace.
 func _launch(v: Vector3) -> void:
+	last_launch_velocity = v
 	puck_vel = Vector3(v.x, 0.0, v.z)
 	if v.y <= 0.0:
 		return
