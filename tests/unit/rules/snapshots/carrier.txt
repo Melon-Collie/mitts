@@ -31,8 +31,8 @@ pressured deep, outlet en route, deeper valve as bait: pick	PASS to 2
 alone at rest 0.8 m short of the blue line: pick	CARRY to (0.0, -10.6)
 rush up the wall 4.3 m short of the line, room to enter: intent	CARRY
 rush up the wall 5.8 m short of the line, room to enter: pick	CARRY to (-2.9, -9.5)
-rush up the wall, smothered at the line, trailer open: pick	DUMP
-level with a mate at the blue line, symmetric set D: intent	DUMP
+rush up the wall, smothered at the line, trailer open: pick	PASS to 2
+level with a mate at the blue line, symmetric set D: intent	CARRY
 2 m inside the blue line, open, keeper 2 m out: pick	CARRY to (0.0, -13.1)
 fresh entry, finisher driving the house: intent	PASS
 fresh entry, finisher driving the house: developing feed	0.4600

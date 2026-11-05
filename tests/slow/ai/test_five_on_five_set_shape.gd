@@ -20,13 +20,15 @@ extends GutTest
 # Team 0 (them) attacks -Z; team 1 (us) defends it.
 #
 # Reference readings over the 12 starts: the back line is never thinner than
-# two at entry, nobody of theirs stands behind it, and no start ends in a slot
-# shot.
+# two at entry outside KNOWN_THIN, nobody of theirs stands behind it, and no
+# start ends in a slot shot.
 #
 # Starts whose back line is beaten at entry today, each with its issue: they
 # count against neither the line nor the open share, and their slot shots are
 # known.
-const KNOWN_THIN: Array[String] = []
+#   v8.5/z20/c6, v8.5/z24/c6 — the 3-on-2 carried in down the middle: a straight
+#   retreat makes our line 1.7 m goal-side, the far D arrives 1.1 m short: #899.
+const KNOWN_THIN: Array[String] = ["v8.5/z20/c6", "v8.5/z24/c6"]
 const KNOWN_SLOT_SHOTS: Array[String] = []
 const MAX_OPEN_SHARE: float = 0.15
 

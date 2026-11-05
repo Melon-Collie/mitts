@@ -1161,12 +1161,13 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 			# Hit held delivers the FULL transfer AIBodyCheck's predicted_impulse
 			# assumed (an uncommitted drive lands only the passive fraction).
 			input.hit_held = true
-		# FINISHER holds the deflect to tip an incoming shot; the loft level signs
-		# the tip (MID up, LOW down: Puck.apply_blade_deflect).
+		# FINISHER holds the deflect to tip an incoming shot; the loft level names
+		# the tip (Puck.apply_blade_deflect): LOW lifts a shot on the ice over the
+		# pad, FLAT knocks a raised one down.
 		input.stick_lift_held = decision.deflect
 		if decision.deflect:
-			input.elevation_level = ShotMechanics.ELEVATION_MID if decision.deflect_up \
-					else ShotMechanics.ELEVATION_LOW
+			input.elevation_level = ShotMechanics.ELEVATION_LOW if decision.deflect_up \
+					else ShotMechanics.ELEVATION_FLAT
 		# Preserve one-timer readiness through pass flights: with no carrier,
 		# FINISHER can't score the feed and reports "not ready", though the stance
 		# hasn't moved — dropping the flag there would stop the trigger firing when
@@ -1314,6 +1315,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.rush_read = _current_strategy.get_rush_read()
 		ctx.team_size = _current_strategy.get_team_size()
 		ctx.icing_enforced = _current_strategy.icing_enforced()
+		ctx.numbers_up = _current_strategy.numbers_up()
 		var lobby_slot: int = _current_strategy.position_of(_peer_id)
 		ctx.self_is_defense = PlayerRules.is_defense_slot(lobby_slot)
 		ctx.self_home_side = PlayerRules.home_side_x(lobby_slot, _own_goal_dir)
@@ -1333,6 +1335,7 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 		ctx.ping_pass_target_peer = -1
 		ctx.team_size = GameRules.DEFAULT_TEAM_SIZE
 		ctx.icing_enforced = false
+		ctx.numbers_up = false
 		ctx.self_is_defense = false
 		ctx.self_home_side = 0.0
 	return ctx

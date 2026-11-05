@@ -17,7 +17,8 @@ extends RefCounted
 # keeper races it too, for any of the path in front of his goal line he can push
 # and reach out to), ours the
 # possession of the spot on arrival (AIPossessionValue) or the feed it opens to
-# the support arriving with the dump (_support_from), theirs a turnover there
+# the support arriving with the dump, its reception raced (_support_from),
+# theirs a turnover there
 # (AICarrierField.turnover_cost + the 5v5 counter exposure). An iced puck (NHL,
 # released from our half, untouched past their goal line) whose dot race their
 # side wins is a faceoff at our end, a coin flip there.
@@ -227,7 +228,7 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void
 func _value(ctx: RoleContext, k: int) -> float:
 	var lost: float = 1.0 - _p[k]
 	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k]),
-			_support_from(ctx, _meet_ours[k], _retriever[k]) \
+			_support_from(ctx, _meet_ours[k], _retriever[k], _t_ours[k]) \
 					* AIActionScoring.delay_discount(_t_ours[k]))
 	return _p[k] * ours \
 			- _field.turnover_cost(_meet_theirs[k], lost) \
@@ -256,32 +257,23 @@ func _keeper_time(ctx: RoleContext) -> float:
 	return INF
 
 
-# Whether the release just walked ices: from our half and across their goal line
-# before anyone plays it (`touched_s`), with our side not first to the end-zone
-# dots by the clear margin.
+# Whether the release just walked ices (AIIcingRead), first played at
+# `touched_s`.
 func _ices(ctx: RoleContext, origin: Vector3, touched_s: float) -> bool:
 	var attack_z: float = signf(ctx.attacking_goal_pos.z)
-	if not InfractionRules.behind_red_line(origin.z, attack_z):
-		return false
-	var crossed_s: float = INF
-	for i: int in STEPS:
-		if _path[i].z * attack_z > GameRules.GOAL_LINE_Z:
-			crossed_s = float(i + 1) * STEP_DT
-			break
+	var crossed_s: float = AIIcingRead.crossing_s(_path, STEP_DT, attack_z)
 	if crossed_s >= touched_s:
 		return false
-	var dot_z: float = attack_z * GameRules.ICING_FACEOFF_DOT_Z
-	var ours: float = _first_to_line(dot_z, _our_pos, _our_vel, _our_caps)
-	var theirs: float = _first_to_line(dot_z, _field.opponents_release,
-			_field.opponent_vels, _field.opponent_caps)
-	return ours + GameRules.ICING_RACE_CLEAR_MARGIN_S > theirs
+	return AIIcingRead.ices(origin.z, attack_z, crossed_s, touched_s,
+			AIIcingRead.first_to_dots(attack_z, _our_pos, _our_vel, _our_caps),
+			AIIcingRead.first_to_dots(attack_z, _field.opponents_release,
+					_field.opponent_vels, _field.opponent_caps))
 
 
-# An icing called: a faceoff at our end's dot — a coin flip for a possession
-# that is theirs there.
+# An icing called: a faceoff at our end's dot.
 func _icing_value(ctx: RoleContext, origin: Vector3) -> float:
-	var dot2: Vector2 = GameRules.icing_faceoff_dot(ctx.team_id, origin.x)
-	return -_field.turnover_cost(Vector3(dot2.x, 0.0, dot2.y), 0.5)
+	return -_field.turnover_cost(AIIcingRead.faceoff_spot(ctx.team_id, origin.x),
+			AIIcingRead.FACEOFF_LOSS_SHARE)
 
 
 # Our side and the defence dead-reckoned to the race's horizon, and the shot each
@@ -310,10 +302,12 @@ func _fill_support(ctx: RoleContext) -> void:
 
 
 # The best feed the retriever (`retriever`, an index into _our_pos) has from
-# `meet` to the support (_fill_support): its shot × the lane against the
-# defence then × the pass landing × the flight, as a future action
-# (AICarrierField.PASS_OPTION_DISCOUNT, the carry's pass option).
-func _support_from(ctx: RoleContext, meet: Vector3, retriever: int) -> float:
+# `meet`, played `meet_s` from now, to the support (_fill_support): its shot ×
+# the lane against the defence then × the pass landing × the flight × the race
+# for the reception, as a future action (AICarrierField.PASS_OPTION_DISCOUNT,
+# the carry's pass option). The reception's race is their first body from the
+# release against the feed arriving with our man there.
+func _support_from(ctx: RoleContext, meet: Vector3, retriever: int, meet_s: float) -> float:
 	var best: float = 0.0
 	for i: int in _our_then.size():
 		if i == retriever or _our_then_val[i] * AICarrierField.PASS_OPTION_DISCOUNT <= best:
@@ -323,11 +317,19 @@ func _support_from(ctx: RoleContext, meet: Vector3, retriever: int) -> float:
 			continue
 		var dist: float = meet.distance_to(to)
 		var speed: float = AIPuckLane.expected_pass_speed(meet, to)
+		var flight: float = dist / maxf(speed, 1.0)
+		var received_s: float = maxf(meet_s + flight,
+				AIArrival.time_to_arrive(_our_pos[i], to, _our_vel[i]))
 		var option: float = _our_then_val[i] \
-				* AIPuckLane.lane_clear(meet, to, _opp_then, speed, [], _field.opponent_caps) \
+				* AIPuckLane.lane_clear(meet, to, _opp_then, speed,
+						AIActionScoring.EMPTY_VEC3, _field.opponent_caps) \
 				* (1.0 - AIPuckLane.pass_miss_prob(dist, ctx.self_pass_aim_error_rad)) \
-				* AIActionScoring.delay_discount(dist / maxf(speed, 1.0)) \
+				* AIActionScoring.delay_discount(flight) \
 				* AICarrierField.PASS_OPTION_DISCOUNT
+		if option <= best:
+			continue
+		option *= AIActionScoring.arrival_race(to, received_s, _field.opponents_release,
+				_field.opponent_vels, true)
 		best = maxf(best, option)
 	return best
 
@@ -372,15 +374,4 @@ static func _first_to(target: Vector3, pos: Array[Vector3], vel: Array[Vector3],
 		var c: AISkaterCaps = caps[i]
 		best = minf(best, AIArrival.time_to_arrive(pos[i], target, vel[i],
 				c.max_speed if c != null else AIArrival.SKATER_REF_SPEED_M_S))
-	return best
-
-
-# Soonest of `pos` to the line z = `line_z`, straight down the ice.
-static func _first_to_line(line_z: float, pos: Array[Vector3], vel: Array[Vector3],
-		caps: Array[AISkaterCaps]) -> float:
-	var best: float = INF
-	for i: int in pos.size():
-		var c: AISkaterCaps = caps[i]
-		best = minf(best, AIArrival.time_to_arrive(pos[i], Vector3(pos[i].x, 0.0, line_z),
-				vel[i], c.max_speed if c != null else AIArrival.SKATER_REF_SPEED_M_S))
 	return best

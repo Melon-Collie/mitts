@@ -777,7 +777,10 @@ takes the whole class down and every static call on it from every file at once.
     carry-cursor ring, the wrister charge and its lookahead);
   - `goalie_model.gd` (`AIGoalieModel`) — the keeper the bots plan against: his
     body's cover numbers, the difficulty-synced reads, planned depth, lateral
-    push, post seal and predicted position.
+    push, post seal and predicted position;
+  - `icing_read.gd` (`AIIcingRead`) — NHL hybrid icing read off a walked
+    release: the crossing, the touch, the dot race (held to
+    `InfractionRules.judge_icing_race`) and the faceoff it hands over.
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
@@ -1038,9 +1041,21 @@ reaches back into what remains.
   unless their keeper decides it (he is no skate mis-timed seconds out), theirs
   the turnover there plus the 5v5 counter exposure. Ours is our possession of
   the spot on arrival or the feed it opens to our support dead-reckoned to the
-  race's horizon (each man's shot there × the lane against the defence then):
+  race's horizon (each man's shot there × the lane against the defence then ×
+  the race for its reception, as the pass search races a catch: their first
+  body from the release against the feed arriving with our man there):
   in the shot currency one man behind their goal line has no shot, so without
-  the support a won dump reads as worthless. So a dump is a 50/50 or better
+  the support a won dump reads as worthless. Never leave that reception
+  unraced: the dump's seconds of flight are when a lone D gets back to his
+  house, and a feed priced to a man alone at the post dumps away every 2-on-1.
+  **With the numbers there is no dump-in at all** (`RoleContext.numbers_up`):
+  a tactical rule, as the one-way valve is, read off their own rush read of our
+  attack (`TeamBrain.their_rush_read`, `AIRushRead` filled from their side, so
+  a backchecker on our hip counts as a man back exactly as he does for our D).
+  It stands in for what the possession read cannot price yet: a man taking a
+  feed at their line is valued as one man carrying in, blind to the defender
+  having to choose, so an odd-man rush reads as cheap as an even one (#892).
+  Once that read prices the pass option, the rule should never bind. So a dump is a 50/50 or better
   exactly when our side gets there first, and it is worth what the spot is worth
   with the men arriving. Under NHL rules a release from our half that crosses
   their goal line untouched, without our side first to the dots by the clear
@@ -1068,7 +1083,12 @@ reaches back into what remains.
   LANE is a race along that path in `arrival_race`'s contest band — the
   receiver against the soonest opponent, and against their keeper behind his own
   net by the live goalie's trip gates. Arrivals over the receiver's catch
-  threshold are dropped. Zone rules mirror the straight feed's. A winner is
+  threshold are dropped. Zone rules mirror the straight feed's. Under NHL rules
+  a rim that gets by our receiver, or that their man reaches first, goes on down
+  its path: from our half and across their goal line before their soonest man
+  meets it, with their side first to the dots, it is an icing, and both loss
+  modes are priced as the faceoff at our dot (`AIIcingRead`, as the dump's is)
+  rather than as their puck where it dies. A winner is
   released as a FLAT charged dump along its bearing at its pace. In the O-zone
   the currency prices a rim to a man low in the corner near zero; the breakout
   rim up the wall past a forechecker is where it wins.

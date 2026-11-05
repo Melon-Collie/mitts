@@ -1728,8 +1728,9 @@ func _sync_knockdown_meta(prev_timer: float) -> void:
 # ── Entry Point ───────────────────────────────────────────────────────────────
 # Whether this skater is committing to a deliberate deflect this tick: holding
 # the DEFLECT button (stick_lift / Q) without the puck, a human's or a bot's (the
-# finisher's tip, AIRoleFinisher). The loft level signs the redirect — FLAT and
-# LOW down, MID and HIGH up (PuckCollisionRules.deflect_loft_speed).
+# finisher's tip, AIRoleFinisher). The loft level sets the redirect's lift — FLAT
+# down, LOW, MID and HIGH up (PuckCollisionRules.deflect_loft_speed) — and the
+# side the blade is held on its turn (PuckCollisionRules.tip_turn).
 func _wants_deflect(input: InputState) -> bool:
 	return input.stick_lift_held and not has_puck
 

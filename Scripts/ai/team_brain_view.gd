@@ -13,6 +13,7 @@ var strong_x_val: float = 1.0
 var carrier_lane_val: int = 0
 var team_size_val: int = GameRules.DEFAULT_TEAM_SIZE
 var icing_enforced_val: bool = false
+var numbers_up_val: bool = false
 var ping_chase_peer_val: int = -1
 var pressure_slot_override_val: int = AIRoleSlots.Slot.NONE
 var slot_by_peer: Dictionary[int, int] = {}
@@ -77,6 +78,10 @@ func get_team_size() -> int:
 
 func icing_enforced() -> bool:
 	return icing_enforced_val
+
+
+func numbers_up() -> bool:
+	return numbers_up_val
 
 
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
