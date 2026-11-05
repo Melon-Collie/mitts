@@ -87,9 +87,8 @@ const _HELMET_FRONT_CUT: float = 0.40
 const _HELMET_BACK_CUT: float = 0.76
 const _HELMET_DROP_START_C: float = 0.34
 # Over the ears: a shallow, narrow rim dip centered on each side
-# (|sin θ| = 1), the shell stopping above the ear, which the ear guard
-# (shared_helmet_hardware) covers; it fades to nothing at the face and inside
-# the nape drop.
+# (|sin θ| = 1), the shell stopping above the ear; it fades to nothing at the
+# face and inside the nape drop.
 const _HELMET_EAR_DIP: float = 0.08
 const _HELMET_EAR_DIP_POWER: float = 6.0
 # The shell closes with a fan to an apex HIGH inside the dome (this fraction
@@ -351,29 +350,19 @@ const FIST_PART_FINGERS: int = 1
 const FIST_PART_THUMB: int = 2
 const HELMET_SURF_SHELL: int = 0
 const HELMET_SURF_SKIN: int = 1
-# The helmet's hardware (shared_helmet_hardware): the chin strap, the ear guards.
+# The helmet's hardware (shared_helmet_hardware): the chin strap.
 const HELMET_HARDWARE_STRAP: int = 0
-const HELMET_HARDWARE_GUARD: int = 1
-# The ear guards: a horseshoe clip round each ear, open at the top where its
-# ends run up under the shell's rim, on a sphere this far out from the
-# helmet's centre (the head ball's side is at 0.135): centred on the ear (its
-# direction, +X side), its band between these distances from the ear's centre
-# (m), from straight down this far round either way (rad), in these many
-# pieces. The chin strap: a band from each guard's front foot along the jaw
-# to under the chin, just off the skin, this wide (half, as latitude), in
+# The chin strap: a band from under the shell's rim in front of each ear,
+# along the jaw to under the chin, just off the skin (the head ball's side is
+# at 0.135 from the helmet's centre), from this azimuth (rad, +X side) and
+# latitude to this one under the chin, this wide (half, as latitude), in
 # `_STRAP_STEPS` pieces a side.
-const _GUARD_RADIUS: float = 0.150
-const _GUARD_EAR := Vector3(1.0, -0.06, 0.06)
-const _GUARD_BAND := Vector2(0.022, 0.046)
-const _GUARD_REACH: float = deg_to_rad(150.0)
-const _GUARD_STEPS: int = 12
-const _STRAP_RADIUS: float = 0.146
-const _STRAP_FROM: float = PI * 0.5 + 0.25
-const _STRAP_V := Vector2(0.58, 0.86)
 const _STRAP_HALF_V: float = 0.022
 const _STRAP_STEPS: int = 6
+const _STRAP_RADIUS: float = 0.146
+const _STRAP_FROM: float = PI * 0.5 + 0.2
+const _STRAP_V := Vector2(0.5, 0.86)
 const _STRAP_COLOR := Color(0.07, 0.07, 0.08)
-const _GUARD_COLOR := Color(0.82, 0.86, 0.9)
 
 
 # The head ball and its face, centred on the origin, face toward −Z, white but
@@ -394,9 +383,8 @@ static func shared_helmet_assembly() -> ArrayMesh:
 	return _shared("helmet_assembly", _build_helmet_assembly)
 
 
-# The chin strap and the ear guards, helmet-local, each a surface wearing its
-# own fixed finish (a strap is black webbing and a guard clear plastic,
-# whatever the kit), which SkaterRigidParts seeds into the body's paint.
+# The chin strap, helmet-local, a surface wearing its own fixed finish (black
+# webbing whatever the kit), which SkaterRigidParts seeds into the body's paint.
 static func shared_helmet_hardware() -> ArrayMesh:
 	return _shared("helmet_hardware", _build_helmet_hardware)
 
@@ -423,55 +411,16 @@ static func _build_helmet_hardware() -> ArrayMesh:
 					_sphere_point(_STRAP_RADIUS, va + _STRAP_HALF_V, ta), Vector2(0.0, 0.1))
 	strap.generate_normals()
 	strap.commit(m)
-	var guard := SurfaceTool.new()
-	guard.begin(Mesh.PRIMITIVE_TRIANGLES)
-	guard.set_smooth_group(-1)
-	for side: float in [1.0, -1.0]:
-		_ear_guard(guard, side)
-	guard.generate_normals()
-	guard.commit(m)
-	for part: int in [HELMET_HARDWARE_STRAP, HELMET_HARDWARE_GUARD]:
-		var mat := StandardMaterial3D.new()
-		mat.albedo_color = _STRAP_COLOR if part == HELMET_HARDWARE_STRAP else _GUARD_COLOR
-		mat.roughness = 0.8 if part == HELMET_HARDWARE_STRAP else 0.25
-		BodyRim.apply(mat)
-		m.surface_set_material(part, mat)
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = _STRAP_COLOR
+	mat.roughness = 0.8
+	BodyRim.apply(mat)
+	m.surface_set_material(HELMET_HARDWARE_STRAP, mat)
 	return m
 
 
-# One ear guard on `side` (+1 the +X side): the horseshoe band round the ear,
-# laid on the guard's sphere, its outer face out.
-static func _ear_guard(st: SurfaceTool, side: float) -> void:
-	var ear: Vector3 = (_GUARD_EAR * Vector3(side, 1.0, 1.0)).normalized()
-	# Down the head at the ear, and toward the face (-Z), both along the sphere.
-	var down: Vector3 = (Vector3.DOWN - ear * ear.dot(Vector3.DOWN)).normalized()
-	var ahead: Vector3 = ear.cross(down) * side
-	for k: int in _GUARD_STEPS:
-		var pa: float = lerpf(-_GUARD_REACH, _GUARD_REACH, float(k) / float(_GUARD_STEPS))
-		var pb: float = lerpf(-_GUARD_REACH, _GUARD_REACH, float(k + 1) / float(_GUARD_STEPS))
-		var ia: Vector3 = _on_guard(ear, down, ahead, pa, _GUARD_BAND.x)
-		var oa: Vector3 = _on_guard(ear, down, ahead, pa, _GUARD_BAND.y)
-		var ib: Vector3 = _on_guard(ear, down, ahead, pb, _GUARD_BAND.x)
-		var ob: Vector3 = _on_guard(ear, down, ahead, pb, _GUARD_BAND.y)
-		# Wound so the face points out of the sphere whichever side it is on.
-		if (ob - oa).cross(ia - oa).dot(oa) < 0.0:
-			_uv_quad(st, oa, Vector2.ZERO, ob, Vector2(0.1, 0.0), ib, Vector2(0.1, 0.1),
-					ia, Vector2(0.0, 0.1))
-		else:
-			_uv_quad(st, oa, Vector2.ZERO, ia, Vector2(0.0, 0.1), ib, Vector2(0.1, 0.1),
-					ob, Vector2(0.1, 0.0))
-
-
-# A point of the guard: `phi` round from straight down (+ toward the face), `r`
-# out from the ear's centre, put back on the guard's sphere.
-static func _on_guard(ear: Vector3, down: Vector3, ahead: Vector3, phi: float,
-		r: float) -> Vector3:
-	var p: Vector3 = ear * _GUARD_RADIUS + (down * cos(phi) + ahead * sin(phi)) * r
-	return p.normalized() * _GUARD_RADIUS
-
-
-# The strap's latitude at azimuth `theta`: from its guard's foot (`from`, or
-# its mirror) down along the jaw to under the chin at the face (θ = PI).
+# The strap's latitude at azimuth `theta`: from under the rim (`from`, or its
+# mirror) down along the jaw to under the chin at the face (θ = PI).
 static func _strap_v(theta: float, from: float) -> float:
 	var t: float = clampf(1.0 - absf(theta - PI) / (PI - from), 0.0, 1.0)
 	return lerpf(_STRAP_V.x, _STRAP_V.y, t)
@@ -534,7 +483,7 @@ const UPPER_BONE_COUNT: int = 13
 # ten a zone and its bone share a number, which the arm's surface seams rely on,
 # so new zones go at the end. The connected skin paints TORSO, PELVIS and the
 # two sleeves (SkaterConnectedMesh.sleeve_surface); the helmet's bone carries
-# four zones, its shell, the head/neck skin, the chin strap and the ear guards.
+# three zones, its shell, the head/neck skin and the chin strap.
 enum UpperSurface {
 	TOP_UPPER_ARM,
 	TOP_FOREARM,
@@ -553,9 +502,8 @@ enum UpperSurface {
 	BOTTOM_FINGERS,
 	PELVIS,
 	HELMET_STRAP,
-	HELMET_GUARD,
 }
-const UPPER_SURFACE_COUNT: int = 18
+const UPPER_SURFACE_COUNT: int = 17
 # The body's paint zones: the leg surfaces, then the upper ones.
 const UPPER_ZONE_BASE: int = LEG_SURFACE_COUNT
 const BODY_ZONE_COUNT: int = LEG_SURFACE_COUNT + UPPER_SURFACE_COUNT
