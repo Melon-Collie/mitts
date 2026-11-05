@@ -47,6 +47,18 @@ func test_view_mirrors_slots_and_flags() -> void:
 			"threat memo frozen")
 
 
+func test_view_mirrors_numbers_up() -> void:
+	var brain := _make_brain()
+	brain.their_rush_read.is_live = true
+	brain.their_rush_read.numbers = AIRushRead.Numbers.DOWN_ONE
+	brain.build_view()
+	assert_true(brain.numbers_up(), "their read short a man is our numbers")
+	assert_eq(brain.get_view().numbers_up(), brain.numbers_up(), "numbers frozen")
+	brain.their_rush_read.numbers = AIRushRead.Numbers.EVEN_OR_UP
+	brain.build_view()
+	assert_false(brain.get_view().numbers_up(), "even refrozen")
+
+
 func test_view_is_reused_across_builds() -> void:
 	# The view object is reused (refilled), not reallocated, each build.
 	var brain := _make_brain()

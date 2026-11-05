@@ -160,6 +160,10 @@ var zone_entry_blocked: bool = false
 # untouched is priced as one (AICarrierDumpSearch).
 var icing_enforced: bool = false
 
+# We have the numbers on their defence (TeamStrategyView.numbers_up): the
+# carrier does not dump it in.
+var numbers_up: bool = false
+
 # ── 5v5 position identity ────────────────────────────────────────────────────
 # Latched match team size (TeamBrain.team_size). Gates the 5v5-only reads.
 var team_size: int = GameRules.DEFAULT_TEAM_SIZE

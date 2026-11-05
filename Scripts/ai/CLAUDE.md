@@ -91,7 +91,8 @@ decide) at ~6 Hz. Each tick it publishes a blackboard the agents read: `state`
 (the `AIPossessionState` shape), `slot_assignments` (peer id →
 `AIRoleSlots.Slot`), `threat_assignments` (the man-on-threat partition) and
 `threat_shoot_base_by_opp`, `rush_read` (the shared transition-defence
-perception), the one-timer readiness and the ping directives, plus
+perception), `their_rush_read` (the same read from their side, of our attack:
+whether we have the numbers), the one-timer readiness and the ping directives, plus
 `coverage_downgraded` for instrumentation.
 
 **Nothing is locked or sticky.** Every slot is re-elected each tick by a

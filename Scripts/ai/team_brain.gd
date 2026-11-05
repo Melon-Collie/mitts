@@ -11,6 +11,7 @@ extends TeamStrategyView
 #   threat_assignments       — defender peer → the opponent it covers.
 #   threat_shoot_base_by_opp — opp peer → shoot-threat base for MARK's fallback.
 #   rush_read                — the shared transition-defence read.
+#   their_rush_read          — the same read from their side, of our rush.
 #   coverage_downgraded      — instrumentation only.
 #   one-timer readiness and the live ping directives, through the query methods.
 # build_view freezes the agents' reads into a TeamBrainView; AICoordinator
@@ -69,6 +70,11 @@ var rush_read := AIRushRead.new()
 # Last tick's recovery classification, threaded back in for the enter/hold
 # hysteresis on the recovery race (see AIRushRead.TRACK_ENTER_MARGIN_S).
 var _prev_recovery: Dictionary[int, int] = {}
+# The same read from their side: their bodies racing back on our rush, so its
+# `numbers` is whether we have the numbers on them (numbers_up).
+var their_rush_read := AIRushRead.new()
+var _their_prev_recovery: Dictionary[int, int] = {}
+var _no_bot_peers: Dictionary = {}
 
 # Sticky possession for loose-puck handling.
 var _last_carrier_team: int = -1
@@ -211,6 +217,12 @@ func _compute_tick(snapshot: WorldSnapshot) -> void:
 	rush_read.fill(snapshot, team_id, _own_goal_z, _team_id_by_peer,
 			_caps_by_peer, _prev_recovery, rule_set != GameRules.RuleSet.OFF,
 			_bot_peers, _last_carrier_team)
+	_their_prev_recovery.clear()
+	for pid: int in their_rush_read.recovery_by_peer:
+		_their_prev_recovery[pid] = their_rush_read.recovery_by_peer[pid]
+	their_rush_read.fill(snapshot, 1 - team_id, -_own_goal_z, _team_id_by_peer,
+			_caps_by_peer, _their_prev_recovery, rule_set != GameRules.RuleSet.OFF,
+			_no_bot_peers, _last_carrier_team)
 
 	# Coverage readiness: hold the rush/recovery shape until the backcheck is
 	# home (Scripts/domain/ai/CLAUDE.md → "DZONE is a shape, not a location").
@@ -598,6 +610,11 @@ func icing_enforced() -> bool:
 	return rule_set == GameRules.RuleSet.NHL
 
 
+func numbers_up() -> bool:
+	return their_rush_read.is_live \
+			and their_rush_read.numbers != AIRushRead.Numbers.EVEN_OR_UP
+
+
 func get_threat_shoot_base_by_opp() -> Dictionary[int, float]:
 	return threat_shoot_base_by_opp
 
@@ -625,6 +642,7 @@ func build_view() -> void:
 	v.carrier_lane_val = _carrier_lane
 	v.team_size_val = team_size
 	v.icing_enforced_val = icing_enforced()
+	v.numbers_up_val = numbers_up()
 	v.ping_chase_peer_val = ping_directives.chase_peer()
 	v.pressure_slot_override_val = _pressure_slot_override
 	_freeze_int_dict(slot_assignments, v.slot_by_peer)
