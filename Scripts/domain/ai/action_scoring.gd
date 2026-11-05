@@ -139,7 +139,7 @@ static func tip_ev(
 		return 0.0
 	var hx: float = dx / line_len
 	var hz: float = dz / line_len
-	# Tip point: the tipper's foot on the line — where blade meets puck. Must
+	# Tip point: where the tipper's blade meets the puck on the line. Must
 	# be a real mid-flight contact: past the shooter's own handle, short of
 	# the goal mouth.
 	var relx: float = tip_man.x - release.x

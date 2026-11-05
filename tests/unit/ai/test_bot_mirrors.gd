@@ -38,6 +38,8 @@ func test_the_one_timer_salvage_sits_inside_the_controllers_zone() -> void:
 
 func test_the_puck_thresholds_the_bots_price() -> void:
 	var puck: Puck = PuckScript.new()
+	assert_almost_eq(AIRoleFinisher.TIP_MAX_TURN_RAD, deg_to_rad(puck.deflect_max_turn_deg), 0.0001,
+			"the finisher aims his tip by the turn a tip has")
 	# Every clean bot feed arrives at PASS_TARGET_CLOSING_M_S; only a hotter
 	# arrival, still short of a deflection, makes the receiver give with it.
 	assert_almost_eq(AIFeedReception.RECEIVE_HOLD_CEILING_M_S,
