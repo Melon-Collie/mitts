@@ -259,11 +259,11 @@ func test_board_normal_points_into_the_rink() -> void:
 # ── Give with the puck ───────────────────────────────────────────────────────
 
 func test_a_receiver_gives_when_his_own_skating_would_bobble_the_feed() -> void:
-	assert_true(SkaterAgentReception.gives_with(Vector3(16, 0, 0), Vector3(-3, 0, 0)),
-			"16 m/s met at 19: stopping brings it back under the bobble line")
-	assert_false(SkaterAgentReception.gives_with(Vector3(16, 0, 0), Vector3.ZERO),
+	assert_true(SkaterAgentReception.gives_with(Vector3(22, 0, 0), Vector3(-4, 0, 0)),
+			"22 m/s met at 26: stopping brings it back under the bobble line")
+	assert_false(SkaterAgentReception.gives_with(Vector3(22, 0, 0), Vector3.ZERO),
 			"standing, it arrives under the line")
-	assert_false(SkaterAgentReception.gives_with(Vector3(20, 0, 0), Vector3(0, 0, -6)),
+	assert_false(SkaterAgentReception.gives_with(Vector3(26, 0, 0), Vector3(0, 0, -6)),
 			"a feed past the line on its own bobbles however he skates: in stride")
 
 

@@ -6,9 +6,10 @@ As built, these differ from the design below:
 - Phase 1: the settle's held blade holds its reach *target* in the skater's
   frame (`hold_seat`), not the wrister freeze's re-read of the solved blade,
   which walks outward in tight.
-- Phase 2: the settle is priced at the any-angle ceiling: in the duel
-  harness's reception sweep, bot catches arrive with a mean blade alignment of
-  0.2–0.4. A softer pace is only priced where its flight fits `PASS_LEAD_MAX_S`,
+- Phase 2: the settle and the bobble are priced at where a receiver's blade
+  sits against the feed's path (`AIFeedReception`): measured on bot receptions
+  in the duel harness, 93.5% on the line and the rest at a mean offset of 0.38,
+  each contact by its share. A softer pace is only priced where its flight fits `PASS_LEAD_MAX_S`,
   which Phase 3 raised to 1.0 s (with the finisher's feed horizon).
 - Phase 3: the bobble is decided by load and by how far the puck's path passes
   from the blade's middle (decided: the blade position, not a probability). It
@@ -307,9 +308,9 @@ hands let `bobble_pace_retain` (0.45) of the result through
 the face's normal, hopping by its into-face speed (`bobble_lift_*`). He is locked out of it for `settle_max_s`; anyone else
 can take it. All three host verdict paths run it. Bots price it as the
 receiver's expected hold (`AIFeedReception.reception_hold_s`: the settle by the odds
-of a catch, the lockout by the odds of a bobble, from a measured split of
-on-the-line and rim contacts, conservative since the path read) in the reception read and the time discount, and the
-duel harness mirrors it.
+of a catch, the lockout by the odds of a bobble, from the measured split of
+contacts on the feed's line and off it) in the reception read and the time
+discount, and the duel harness mirrors it.
 
 ## Open questions
 

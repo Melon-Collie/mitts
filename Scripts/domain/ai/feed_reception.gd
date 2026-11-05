@@ -5,27 +5,28 @@ class_name AIFeedReception
 # (GameRules, the puck rules and AISkaterCaps only).
 
 
-# The receiver's settle (PuckReceptionRules.settle_time) priced at the catch
-# ceiling of a blade at the rim of its reach, the one every catch gets. It is a
-# conservative price for a bot: in the duel harness ~93% of bot catches arrive
-# with the blade on the puck's line (path_offset 0, the higher ceiling), since
-# a bot parks it at the gate; a human's blade is his own. test_bot_mirrors.gd
-# holds the three to Puck.
-const RECEIVE_ANY_ANGLE_CEILING_M_S: float = 22.0
+# The catch ceiling's two terms (PuckReceptionRules.reception_load), the settle
+# and the bobble line: Puck's, held there by test_bot_mirrors.gd.
+const RECEIVE_DEFLECT_MIN_M_S: float = 22.0
+const RECEIVE_ALIGNMENT_BONUS_M_S: float = 8.0
 const SETTLE_CLEAN_LOAD: float = 0.30
 const SETTLE_MAX_S: float = 0.40
-
-
-# Past the bobble line (PuckReceptionRules.bobble_load_at) a catch bobbles
-# instead; a blade reaching off the puck's line holds less. test_bot_mirrors.gd
-# holds the two to Puck. The share of catches priced at the rim of the reach is
-# the one measured when the bobble was read off where the path crossed the
-# blade's line; read off the path's distance from the blade's middle, ~7% of
-# bot catches in the duel harness come off the line at all, so it is
-# conservative too.
 const BOBBLE_LOAD: float = 0.67
 const BOBBLE_EDGE_SHARE: float = 0.4
-const RECEIVE_EDGE_CONTACT_SHARE: float = 0.35
+# The catch ceiling of a blade on the feed's line, where a receiver parks it,
+# and the pace under which it holds the catch there rather than bobbling it.
+const RECEIVE_ON_LINE_CEILING_M_S: float = RECEIVE_DEFLECT_MIN_M_S + RECEIVE_ALIGNMENT_BONUS_M_S
+const RECEIVE_HOLD_CEILING_M_S: float = RECEIVE_ON_LINE_CEILING_M_S * sqrt(BOBBLE_LOAD)
+
+# Where a receiver's blade sits against a feed's path when it arrives
+# (PuckReceptionRules.path_offset), measured on 107 bot receptions at feed pace
+# across the duel harness's reception, rush and odd-man scenarios: 93.5% on the
+# line (offset 0), the rest off it at a mean offset of 0.38. A catch is priced
+# as one of those two contacts by their shares. A human's blade is his own; it
+# is priced as a bot's.
+const RECEIVE_OFF_LINE_SHARE: float = 0.065
+const RECEIVE_OFF_LINE_OFFSET: float = 0.38
+
 # The bobble's exit off the face (Puck.apply_reception_bobble, through
 # PuckCollisionRules.bobble_velocity): Puck's deflect restitution and the
 # bobble's two retains. test_bot_mirrors.gd holds the five to Puck.
@@ -36,22 +37,34 @@ const BOBBLE_TANGENTIAL_RETAIN: float = 0.35
 const BOBBLE_PACE_RETAIN: float = 0.45
 
 
-# Seconds a receiver settles a catch closing at `closing` m/s in his frame.
+# The reception load of a catch closing at `closing` m/s with the blade at
+# `offset` off the feed's path.
+static func _catch_load(closing: float, offset: float) -> float:
+	return PuckReceptionRules.reception_load(Vector3(closing, 0.0, 0.0), Vector3.ZERO,
+			offset, RECEIVE_DEFLECT_MIN_M_S, RECEIVE_ALIGNMENT_BONUS_M_S)
+
+
+# Seconds a receiver settles a catch closing at `closing` m/s in his frame: the
+# settle of each contact by its share.
 static func receiver_settle_s(closing: float) -> float:
-	var ratio: float = closing / RECEIVE_ANY_ANGLE_CEILING_M_S
-	return PuckReceptionRules.settle_time(ratio * ratio, SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
+	var on_line: float = PuckReceptionRules.settle_time(_catch_load(closing, 0.0),
+			SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
+	var off_line: float = PuckReceptionRules.settle_time(
+			_catch_load(closing, RECEIVE_OFF_LINE_OFFSET), SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
+	return (1.0 - RECEIVE_OFF_LINE_SHARE) * on_line + RECEIVE_OFF_LINE_SHARE * off_line
 
 
-# Odds a catch closing at `closing` m/s bobbles: one on the line past the bobble
-# line, or one at the rim of the reach past its lower line.
+# Odds a catch closing at `closing` m/s bobbles: the share of contacts whose load
+# is past their own bobble line.
 static func receiver_bobble_prob(closing: float) -> float:
-	var ratio: float = closing / RECEIVE_ANY_ANGLE_CEILING_M_S
-	var catch_load: float = ratio * ratio
-	if catch_load >= BOBBLE_LOAD:
-		return 1.0
-	if catch_load >= PuckReceptionRules.bobble_load_at(1.0, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
-		return RECEIVE_EDGE_CONTACT_SHARE
-	return 0.0
+	var p: float = 0.0
+	if _catch_load(closing, 0.0) >= PuckReceptionRules.bobble_load_at(
+			0.0, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
+		p += 1.0 - RECEIVE_OFF_LINE_SHARE
+	if _catch_load(closing, RECEIVE_OFF_LINE_OFFSET) >= PuckReceptionRules.bobble_load_at(
+			RECEIVE_OFF_LINE_OFFSET, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
+		p += RECEIVE_OFF_LINE_SHARE
+	return p
 
 
 # Speed (m/s, his frame) a feed closing at `closing` bobbles off his blade at,

@@ -44,11 +44,10 @@ const RECEIVE_PATH_STEPS: int = 20
 # the glass, body rink-side); outside it the ordinary side-stand runs.
 const WALL_KILL_BAND_M: float = 1.0
 # "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed
-# (gives_with). It is the bobble line on the puck's line at the rim's catch
-# ceiling (AIFeedReception.BOBBLE_LOAD of that ceiling's load,
-# test_bot_mirrors.gd), the price the passer put on the feed, so a receiver
-# never skates a feed the passer priced as a catch into one that bobbles.
-const RECEIVE_GIVE_CEILING_M_S: float = 18.0
+# (gives_with): the bobble line with the blade on the feed's line, where the
+# passer prices the catch, so a receiver never skates a feed the passer priced
+# as a catch into one that bobbles.
+const RECEIVE_GIVE_CEILING_M_S: float = AIFeedReception.RECEIVE_HOLD_CEILING_M_S
 
 # ── Shot-aware reception (read_shot) ─────────────────────────────────────────
 # When a pass is incoming and a shot from the reception area is on, the bot

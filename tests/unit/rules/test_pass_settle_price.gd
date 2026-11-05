@@ -8,10 +8,26 @@ func test_a_soft_arrival_settles_nothing_and_a_hard_one_does() -> void:
 	assert_eq(AIFeedReception.receiver_settle_s(11.0), 0.0, "the NHL short-pass received mean")
 	var s16: float = AIFeedReception.receiver_settle_s(16.0)
 	var s20: float = AIFeedReception.receiver_settle_s(20.0)
-	assert_gt(s16, 0.0)
+	assert_gt(s16, 0.0, "the share off the line settles a 16 m/s feed")
 	assert_gt(s20, s16)
-	assert_almost_eq(AIFeedReception.receiver_settle_s(AIFeedReception.RECEIVE_ANY_ANGLE_CEILING_M_S),
-			AIFeedReception.SETTLE_MAX_S, 0.0001, "the full settle at the catch ceiling")
+	assert_almost_eq(AIFeedReception.receiver_settle_s(AIFeedReception.RECEIVE_ON_LINE_CEILING_M_S),
+			AIFeedReception.SETTLE_MAX_S, 0.0001, "the full settle at the on-line ceiling")
+
+
+func test_the_settle_is_each_contact_by_its_share() -> void:
+	var closing: float = 20.0
+	var share: float = AIFeedReception.RECEIVE_OFF_LINE_SHARE
+	var on_line: float = PuckReceptionRules.settle_time(PuckReceptionRules.reception_load(
+			Vector3(closing, 0, 0), Vector3.ZERO, 0.0, AIFeedReception.RECEIVE_DEFLECT_MIN_M_S,
+			AIFeedReception.RECEIVE_ALIGNMENT_BONUS_M_S),
+			AIFeedReception.SETTLE_CLEAN_LOAD, AIFeedReception.SETTLE_MAX_S)
+	var off_line: float = PuckReceptionRules.settle_time(PuckReceptionRules.reception_load(
+			Vector3(closing, 0, 0), Vector3.ZERO, AIFeedReception.RECEIVE_OFF_LINE_OFFSET,
+			AIFeedReception.RECEIVE_DEFLECT_MIN_M_S, AIFeedReception.RECEIVE_ALIGNMENT_BONUS_M_S),
+			AIFeedReception.SETTLE_CLEAN_LOAD, AIFeedReception.SETTLE_MAX_S)
+	assert_gt(off_line, on_line, "off the line the same feed settles longer")
+	assert_almost_eq(AIFeedReception.receiver_settle_s(closing),
+			(1.0 - share) * on_line + share * off_line, 0.0001)
 
 
 func test_the_paces_end_at_full_pace_and_soften_monotonically() -> void:
@@ -32,11 +48,19 @@ func test_arrival_closing_speed_sheds_friction_and_the_receivers_motion() -> voi
 			"one skating into it catches it harder")
 
 
-func test_bobble_odds_rise_from_none_through_the_edge_to_all() -> void:
-	assert_eq(AIFeedReception.receiver_bobble_prob(12.0), 0.0, "soft: holds anywhere")
-	assert_eq(AIFeedReception.receiver_bobble_prob(16.0), AIFeedReception.RECEIVE_EDGE_CONTACT_SHARE,
-			"past the edge's line only")
-	assert_eq(AIFeedReception.receiver_bobble_prob(20.0), 1.0, "past the middle's line too")
+func test_bobble_odds_rise_from_none_through_the_off_line_share_to_all() -> void:
+	var hold: float = AIFeedReception.RECEIVE_HOLD_CEILING_M_S
+	assert_eq(AIFeedReception.receiver_bobble_prob(16.0), 0.0, "a 16 m/s feed holds on and off the line")
+	assert_almost_eq(AIFeedReception.receiver_bobble_prob(hold - 0.1),
+			AIFeedReception.RECEIVE_OFF_LINE_SHARE, 0.0001,
+			"just under the line's bobble pace, only the contacts off it bobble")
+	assert_almost_eq(AIFeedReception.receiver_bobble_prob(hold + 0.1), 1.0, 0.0001,
+			"past the line's bobble pace, every contact does")
+
+
+func test_the_full_pace_feed_holds_on_the_line() -> void:
+	assert_lt(AIPuckLane.PASS_TARGET_CLOSING_M_S, AIFeedReception.RECEIVE_HOLD_CEILING_M_S,
+			"a bot's full-pace feed is held by a blade parked on its line")
 
 
 func test_a_bobble_is_regathered_after_the_lockout_and_a_chase() -> void:
@@ -50,8 +74,9 @@ func test_a_bobble_is_regathered_after_the_lockout_and_a_chase() -> void:
 
 func test_the_hold_is_the_settle_or_the_regather_by_their_odds() -> void:
 	assert_eq(AIFeedReception.reception_hold_s(10.0), 0.0, "a clean catch ties him up for nothing")
-	var p: float = AIFeedReception.receiver_bobble_prob(16.0)
-	assert_almost_eq(AIFeedReception.reception_hold_s(16.0),
-			(1.0 - p) * AIFeedReception.receiver_settle_s(16.0) + p * AIFeedReception.bobble_regather_s(16.0),
+	var p: float = AIFeedReception.receiver_bobble_prob(22.0)
+	assert_almost_eq(AIFeedReception.reception_hold_s(22.0),
+			(1.0 - p) * AIFeedReception.receiver_settle_s(22.0) + p * AIFeedReception.bobble_regather_s(22.0),
 			0.0001)
-	assert_almost_eq(AIFeedReception.reception_hold_s(20.0), AIFeedReception.bobble_regather_s(20.0), 0.0001)
+	assert_almost_eq(AIFeedReception.reception_hold_s(26.0), AIFeedReception.bobble_regather_s(26.0), 0.0001,
+			"past the bobble pace everywhere, the hold is the regather")
