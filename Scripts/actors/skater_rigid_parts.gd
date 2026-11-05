@@ -181,6 +181,11 @@ static func _crested(shell: ArrayMesh) -> Array:
 		var p: Vector3 = verts[i] + d * raise
 		p.z *= _LENGTH
 		verts[i] = p
+	# Laid on the helmet's paint from straight ahead, the number on the front.
+	var uvs := PackedVector2Array()
+	uvs.resize(verts.size())
+	for i: int in verts.size():
+		uvs[i] = HelmetDecal.shell_uv(verts[i])
 	var normals: PackedVector3Array = arrays[Mesh.ARRAY_NORMAL]
 	var indices := PackedInt32Array()
 	if arrays[Mesh.ARRAY_INDEX] != null:
@@ -188,6 +193,10 @@ static func _crested(shell: ArrayMesh) -> Array:
 	if indices.is_empty():
 		for i: int in verts.size():
 			indices.append(i)
+		# Unindexed, each face has its own corners, so its seam unwraps alone.
+		for t: int in range(0, verts.size(), 3):
+			HelmetDecal.unwrap_face(uvs, t)
+	arrays[Mesh.ARRAY_TEX_UV] = uvs
 	for t: int in range(0, indices.size(), 3):
 		var a: Vector3 = verts[indices[t]]
 		var n: Vector3 = (verts[indices[t + 2]] - a).cross(verts[indices[t + 1]] - a).normalized()
