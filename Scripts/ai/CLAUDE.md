@@ -145,9 +145,10 @@ prices is the path the cursor walks.
 
 ## Reception doctrine
 
-**A feed is a reception, not a race.** The catch is decided by blade
-squareness plus the puck's speed *in the receiver's frame*, so squaring on the
-line is what collects it and stopping is a wait rather than a technique. Bots
+**A feed is a reception, not a race.** The catch is decided by how near the
+blade is to the puck's path plus the puck's speed *in the receiver's frame*, so
+parking the blade on the line is what collects it and stopping is a wait rather
+than a technique. Bots
 receive in stride by default and brake only when arriving early enough to carry
 the blade past the meet, or when their own skating is what carries a feed past
 the bobble line (`SkaterAgentReception.gives_with`) — a feed already past it on
@@ -155,8 +156,9 @@ its own bobbles however they skate.
 
 **The stance rides the receiver's own skating.** The meet is a rendezvous, so a
 receiver driving into the feed stands where his skating takes him, a stance off
-the puck's path *in his frame* (the face is square across the shaft), and only
-that correction needs the flight's time. He never steers onto the puck's own
+the puck's path *in his frame* with the blade on it (the face, square across the
+shaft, is what a bobble comes back off), and only that correction needs the
+flight's time. He never steers onto the puck's own
 line, which turns the hips to it before contact. The net-forward catch of a shot
 reception stands him behind the catch point, so it is only taken when he gets
 there first; one driving past it takes the feed in stride. Whose feed it is

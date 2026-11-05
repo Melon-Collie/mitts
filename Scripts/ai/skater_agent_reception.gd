@@ -8,9 +8,11 @@ extends RefCounted
 # catch it facing the net. Reads only: the state machine steers, aims and changes
 # state on the results. Owns nothing but its result fields and scratch.
 
-# Pass-receive setup: stand to the SIDE of a fast puck's path so the blade face
-# is square to the incoming line, maximizing PuckReceptionRules' alignment bonus
-# (up to +8 m/s head-on), which lifts the catch ceiling and shortens the settle.
+# Pass-receive setup: stand to the SIDE of a fast puck's path with the blade
+# parked on it, so the face is square to the incoming line. The blade on the
+# line is what earns PuckReceptionRules' alignment bonus (up to +8 m/s), which
+# lifts the catch ceiling and shortens the settle; the square face is what a
+# bobble or a deflect comes back off.
 # The trigger is what reads as a pass at all: under the softest feed a bot
 # fires (AIPuckLane.SOFTEST_FEED_M_S), less a margin for the pace it sheds on the
 # way.
@@ -42,10 +44,10 @@ const RECEIVE_PATH_STEPS: int = 20
 # the glass, body rink-side); outside it the ordinary side-stand runs.
 const WALL_KILL_BAND_M: float = 1.0
 # "Give with the puck" ceiling on an incoming feed's RECEIVER-FRAME speed
-# (gives_with). It is the bobble line at the blade's middle on a poorly angled
-# blade (AIFeedReception.BOBBLE_LOAD of the any-angle ceiling's load,
-# test_bot_mirrors.gd), so a receiver never skates a feed the passer priced as a
-# catch into one that bobbles.
+# (gives_with). It is the bobble line on the puck's line at the rim's catch
+# ceiling (AIFeedReception.BOBBLE_LOAD of that ceiling's load,
+# test_bot_mirrors.gd), the price the passer put on the feed, so a receiver
+# never skates a feed the passer priced as a catch into one that bobbles.
 const RECEIVE_GIVE_CEILING_M_S: float = 18.0
 
 # ── Shot-aware reception (read_shot) ─────────────────────────────────────────
@@ -61,17 +63,14 @@ const RECEIVE_GIVE_CEILING_M_S: float = 18.0
 #
 # Mode A needs a LATERAL forehand-side cross-pass, far enough out that skating in
 # buys nothing, with the bot not already driving net-ward, and squared up (the
-# state machine's check, ONE_TIME_MAX_SQUARE_UP_RAD). Lateral is mechanical: the
-# puck must still be RECEIVED for the fire to trigger, and a net-aimed blade is
-# only square to it (alignment ≈ sin(redirect angle)) when it arrives across the
-# body. Mode B otherwise: catch facing the net and let CARRY shoot.
+# state machine's check, ONE_TIME_MAX_SQUARE_UP_RAD). The puck must still be
+# RECEIVED for the fire to trigger, which a feed does on any line with the blade
+# on it. Mode B otherwise: catch facing the net and let CARRY shoot.
 const SHOT_RECEPTION_SCORE_GATE: float = 0.30
 # Redirect angle = turn from puck-travel direction to net direction at the
-# catch point. The band brackets "lateral enough that a net-aimed blade catches
-# it" — at the 50° edge, alignment = sin(50°) = 0.77 → deflect threshold
-# 14 + 8·0.77 ≈ 20 m/s, comfortably above the charged-pass speed (~19), so a
-# one-timer across the whole band actually receives before it fires; peak is a
-# square cross-seam at 90°.
+# catch point. The band brackets a lateral cross-pass; peak is a square
+# cross-seam at 90°. A charged pass (~19 m/s) sits under even the rim's catch
+# ceiling (22), so a one-timer across the whole band receives before it fires.
 const ONE_TIME_MIN_REDIRECT_RAD: float = 0.873      # deg_to_rad(50)
 const ONE_TIME_MAX_REDIRECT_RAD: float = 2.269      # deg_to_rad(130)
 const ONE_TIME_MIN_NET_DIST_M: float = 6.0

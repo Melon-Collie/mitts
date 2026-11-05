@@ -10,9 +10,12 @@ As built, these differ from the design below:
   harness's reception sweep, bot catches arrive with a mean blade alignment of
   0.2–0.4. A softer pace is only priced where its flight fits `PASS_LEAD_MAX_S`,
   which Phase 3 raised to 1.0 s (with the finisher's feed horizon).
-- Phase 3: the bobble is decided by load and by where on the blade the puck
-  lands — read off where its path crosses the blade's line, end-on counting as
-  the edge (decided: the blade position, not a probability). The bobbler is
+- Phase 3: the bobble is decided by load and by how far the puck's path passes
+  from the blade's middle (decided: the blade position, not a probability). It
+  was first read off where the path crossed the blade's line, end-on counting
+  as the edge; that put every catch more than 15 cm off the middle of a 0.5 m
+  pickup at the toe, so it moved to the path's distance, which the catch
+  ceiling's alignment bonus reads too. The bobbler is
   locked out for the full `settle_max_s`, not the 0.12 s deflect-bobble
   cooldown: measured, a 0.12 s bobble was regathered in ~0.13 s, cheaper than
   holding the catch, and bots priced it that way and fired hard on purpose.
@@ -287,14 +290,15 @@ The full checklist for where bot perception and decisions plug in is
 ## Phase 3 — near-miss bobble (as built)
 
 Past the bobble line the catch fails softly. The line is `bobble_load` (0.67)
-at the middle of the blade, less `bobble_edge_share` (0.4) of it at the toe or
-heel, quadratic between (`PuckReceptionRules.bobble_load_at`): ~18 m/s on a
-poorly angled blade at the middle, ~14 at the edge — the spread of the NHL
-failed-reception means. Where on the blade is read off where the puck's path
-crosses the blade's line in the receiver's frame (`blade_contact_offset`); a
-path within ~11.5° of the blade's own line comes in end-on, at the edge. The
-contact point at pickup is useless for this: the sweep registers at the rim of
-the 0.5 m pickup radius, twice the blade's length across.
+with the blade on the puck's line, less `bobble_edge_share` (0.4) of it at the
+rim of the reach, quadratic between (`PuckReceptionRules.bobble_load_at`).
+How near the line is read off the puck's path in the receiver's frame
+(`path_offset`): 0 while it passes within the blade's half-length of its
+middle, whichever way the blade lies, rising to 1 at the 0.5 m pickup radius.
+The same offset sets the catch ceiling (22 at the rim, 30 on the line), so the
+line holds to ~24.6 m/s and the rim to ~14 — the NHL failed-reception means
+(13–22) fall between. The contact point at pickup is useless for this: the sweep
+registers at the rim of the pickup radius, wherever the blade was aimed.
 
 The face takes the impact as a deflect does, in the receiver's frame, but the
 cupped face keeps only `bobble_tangential_retain` (0.35) of the glance and the
@@ -303,8 +307,8 @@ hands let `bobble_pace_retain` (0.45) of the result through
 the face's normal, hopping by its into-face speed (`bobble_lift_*`). He is locked out of it for `settle_max_s`; anyone else
 can take it. All three host verdict paths run it. Bots price it as the
 receiver's expected hold (`AIFeedReception.reception_hold_s`: the settle by the odds
-of a catch, the lockout by the odds of a bobble, from the measured split of
-middle and edge contacts) in the reception read and the time discount, and the
+of a catch, the lockout by the odds of a bobble, from a measured split of
+on-the-line and rim contacts, conservative since the path read) in the reception read and the time discount, and the
 duel harness mirrors it.
 
 ## Open questions

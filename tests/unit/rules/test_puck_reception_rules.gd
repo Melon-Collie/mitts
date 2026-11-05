@@ -3,96 +3,82 @@ extends GutTest
 # PuckReceptionRules — receive-vs-deflect decision.
 #
 # Reactive, RELATIVE-frame model: catch depends on the puck's speed in the
-# receiver's frame (puck velocity − receiver velocity) and the blade angle at
-# contact. Still no blade-velocity / cushion term — the receiver's SKATING
-# velocity is a frame correction, not a stick gesture.
+# receiver's frame (puck velocity − receiver velocity) and how far the blade's
+# middle sits off the puck's path there (path_offset). Still no blade-velocity /
+# cushion term — the receiver's SKATING velocity is a frame correction, not a
+# stick gesture.
 
 const PICKUP_MAX: float = 8.0
 const DEFLECT_MIN: float = 22.0  # mirrors Puck.deflect_min_speed default
 const ALIGN_BONUS: float = 8.0
 const STILL := Vector3.ZERO  # stationary receiver — collapses to the old absolute model
+const ON_LINE: float = 0.0   # the path runs across the blade
+const AT_RIM: float = 1.0    # the blade only just reached it
 
 
 func test_slow_puck_always_received() -> void:
-	# Below pickup_max_speed, alignment doesn't matter.
-	var puck_vel := Vector3(5, 0, 0)
-	var bad_normal := Vector3(0, 0, 1)  # perpendicular to puck travel
+	# Below pickup_max_speed, where the blade sits doesn't matter.
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, STILL, bad_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		Vector3(5, 0, 0), STILL, AT_RIM, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 
 
-func test_quick_pass_received_at_any_angle() -> void:
-	# A snap pass (14 m/s) lands on a blade angled the worst possible way
-	# (perpendicular, alignment 0). 14 < threshold 22 → receive, regardless of
-	# angle. Passes are not angle-gated.
-	var puck_vel := Vector3(14, 0, 0)
-	var perp_normal := Vector3(0, 0, 1)
+func test_quick_pass_received_at_the_rim() -> void:
+	# A snap pass (14 m/s) taken with the blade at the very rim of its reach:
+	# 14 < threshold 22 → receive. Passes are not placement-gated.
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, STILL, perp_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"a 14 m/s pass should receive even on a perpendicular blade")
+		Vector3(14, 0, 0), STILL, AT_RIM, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		"a 14 m/s pass should receive even at the rim of the reach")
 
 
-func test_bot_arrival_pace_received_at_any_angle_when_static() -> void:
+func test_bot_arrival_pace_received_anywhere_when_static() -> void:
 	# The bot pass magnet (PASS_TARGET_CLOSING_M_S) is the puck's CLOSING speed in
 	# the receiver's frame; for a stationary receiver that equals its world speed,
-	# and it catches at any angle because the target sits under the any-angle
-	# ceiling (deflect_min 22).
-	var puck_vel := Vector3(AIPuckLane.PASS_TARGET_CLOSING_M_S, 0, 0)
-	var perp_normal := Vector3(0, 0, 1)
+	# and it catches wherever the blade meets it because the target sits under
+	# the rim's ceiling (deflect_min 22).
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, STILL, perp_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"a magnet-pace bot feed should receive on a static receiver at any angle")
+		Vector3(AIPuckLane.PASS_TARGET_CLOSING_M_S, 0, 0), STILL, AT_RIM,
+		PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		"a magnet-pace bot feed should receive on a static receiver anywhere")
 	assert_lt(AIPuckLane.PASS_TARGET_CLOSING_M_S, DEFLECT_MIN,
-		"the magnet closing pace sits under the any-angle catch ceiling")
+		"the magnet closing pace sits under the rim's catch ceiling")
 
 
-func test_hard_shot_glancing_alignment_deflected() -> void:
-	# A hard shot (26 m/s) at a glancing blade (alignment 0). Threshold stays 22 →
-	# 26 >= 22, deflect. Fast pucks still need a square blade.
-	var puck_vel := Vector3(26, 0, 0)
-	var face_normal := Vector3(0, 0, 1)
+func test_hard_shot_reached_at_the_rim_deflected() -> void:
+	# A hard shot (26 m/s) the blade only just reaches. Threshold stays 22 →
+	# 26 >= 22, deflect. Fast pucks still need the blade on their line.
 	assert_false(PuckReceptionRules.should_receive(
-		puck_vel, STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		Vector3(26, 0, 0), STILL, AT_RIM, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 
 
-func test_hard_shot_dead_on_alignment_received() -> void:
-	# Same 26 m/s shot, but the blade face is pointed dead-on (alignment 1.0):
-	# threshold = 22 + 8 = 30 → 26 < 30, a clean square reception of a hard shot.
-	var puck_vel := Vector3(26, 0, 0)
-	var face_normal := Vector3(-1, 0, 0)
+func test_hard_shot_on_the_line_received() -> void:
+	# Same 26 m/s shot, the blade on its line: threshold = 22 + 8 = 30 → 26 < 30.
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		Vector3(26, 0, 0), STILL, ON_LINE, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 
 
-func test_hard_slapshot_at_square_blade_still_deflects() -> void:
-	# 34 m/s slapshot, face pointed dead-on. Even with the full alignment bonus
-	# the threshold is 30 m/s — 34 > 30, deflect. Guards against the change
-	# making everything sticky: a rocket can't be corralled, square or not.
-	var puck_vel := Vector3(34, 0, 0)
-	var face_normal := Vector3(-1, 0, 0)
+func test_hard_slapshot_on_the_line_still_deflects() -> void:
+	# 34 m/s slapshot, blade on its line. Even with the full bonus the threshold
+	# is 30 m/s — a rocket can't be corralled wherever the blade is.
 	assert_false(PuckReceptionRules.should_receive(
-		puck_vel, STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		Vector3(34, 0, 0), STILL, ON_LINE, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 
 
-func test_partial_alignment_scales_threshold() -> void:
-	# Blade ~45° to the incoming puck → alignment ≈ 0.707, threshold ≈ 27.7.
-	# A 26 m/s puck catches (26 < 27.7); a 29 m/s puck deflects (29 > 27.7).
-	var face_normal := Vector3(-1, 0, 1).normalized()  # 45° off the -X incoming line
+func test_partial_offset_scales_threshold() -> void:
+	# Halfway out to the rim → threshold 22 + 8·0.5 = 26.
 	assert_true(PuckReceptionRules.should_receive(
-		Vector3(26, 0, 0), STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		Vector3(25.5, 0, 0), STILL, 0.5, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 	assert_false(PuckReceptionRules.should_receive(
-		Vector3(29, 0, 0), STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		Vector3(26.5, 0, 0), STILL, 0.5, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 
 
 func test_zero_alignment_bonus_is_flat_speed_gate() -> void:
 	# With alignment_bonus = 0, behavior collapses to a flat relative-speed check
-	# at deflect_min_speed regardless of angle.
-	var face_normal := Vector3(-1, 0, 0)
+	# at deflect_min_speed wherever the blade sits.
 	assert_false(PuckReceptionRules.should_receive(
-		Vector3(24, 0, 0), STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, 0.0),
-		"24 m/s puck with no alignment bonus should deflect at threshold 22")
+		Vector3(24, 0, 0), STILL, ON_LINE, PICKUP_MAX, DEFLECT_MIN, 0.0),
+		"24 m/s puck with no bonus should deflect at threshold 22")
 	assert_true(PuckReceptionRules.should_receive(
-		Vector3(20, 0, 0), STILL, face_normal, PICKUP_MAX, DEFLECT_MIN, 0.0),
+		Vector3(20, 0, 0), STILL, ON_LINE, PICKUP_MAX, DEFLECT_MIN, 0.0),
 		"20 m/s puck under baseline threshold should still receive")
 
 
@@ -100,76 +86,48 @@ func test_zero_alignment_bonus_is_flat_speed_gate() -> void:
 
 func test_stretch_pass_to_streaking_receiver_received() -> void:
 	# The headline case: a hard 24 m/s stretch pass would deflect off a static
-	# perpendicular blade (24 > 22), but the receiver is streaking WITH the pass
-	# at 8 m/s — in their frame it arrives at 16 m/s. Easy catch at any angle.
+	# blade at the rim (24 > 22), but the receiver is streaking WITH the pass
+	# at 8 m/s — in their frame it arrives at 16 m/s. Easy catch anywhere.
 	var puck_vel := Vector3(24, 0, 0)
-	var receiver_vel := Vector3(8, 0, 0)
-	var perp_normal := Vector3(0, 0, 1)
 	assert_false(PuckReceptionRules.should_receive(
-		puck_vel, STILL, perp_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"the same pass deflects off a static badly-angled blade")
+		puck_vel, STILL, AT_RIM, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		"the same pass deflects off a static blade at the rim")
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, receiver_vel, perp_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		puck_vel, Vector3(8, 0, 0), AT_RIM, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
 		"a streaking receiver sees the stretch pass arrive soft")
 
 
 func test_closing_hard_on_a_feed_steepens_it() -> void:
-	# A 20 m/s feed a static receiver catches at any angle (20 < 22) becomes a
+	# A 20 m/s feed a static receiver catches anywhere (20 < 22) becomes a
 	# 30.6 m/s contact for a receiver sprinting head-on into it — above even the
-	# fully-squared ceiling (30) → bobble/deflect. Don't charge the pass.
+	# on-the-line ceiling (30) → deflect. Don't charge the pass.
 	var puck_vel := Vector3(20, 0, 0)
 	var sprint_at_pass := Vector3(-10.6, 0, 0)
-	var square_normal := Vector3(-1, 0, 0)
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, STILL, square_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
+		puck_vel, STILL, ON_LINE, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 	assert_false(PuckReceptionRules.should_receive(
-		puck_vel, sprint_at_pass, square_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"sprinting head-on into a hard feed pushes past the squared ceiling")
+		puck_vel, sprint_at_pass, ON_LINE, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		"sprinting head-on into a hard feed pushes past the on-the-line ceiling")
 
 
 func test_retreating_with_a_wrister_cushions_it() -> void:
 	# Emergent "give with the puck": a max wrister (33 m/s) deflects off a static
-	# squared blade (33 > 30), but a receiver skating backward with it at 4 m/s
-	# reads it at 29 — squared, that's a catch. Cushioning is a skating read.
+	# blade on its line (33 > 30), but a receiver skating backward with it at
+	# 4 m/s reads it at 29 — a catch. Cushioning is a skating read.
 	var puck_vel := Vector3(33, 0, 0)
-	var retreat := Vector3(4, 0, 0)
-	var square_normal := Vector3(-1, 0, 0)
 	assert_false(PuckReceptionRules.should_receive(
-		puck_vel, STILL, square_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"a max wrister into a static squared blade still deflects")
+		puck_vel, STILL, ON_LINE, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		"a max wrister into a static blade on its line still deflects")
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, retreat, square_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"retreating with the shot cushions it under the squared ceiling")
+		puck_vel, Vector3(4, 0, 0), ON_LINE, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+		"retreating with the shot cushions it under the on-the-line ceiling")
 
 
 func test_skating_onto_a_dying_pass_is_instant_pickup() -> void:
 	# Receiver overtaking a slow puck from behind: relative speed is the
-	# difference (|9 − 5| = 4 ≤ pickup_max) → unconditional pickup, any angle.
-	var puck_vel := Vector3(5, 0, 0)
-	var receiver_vel := Vector3(9, 0, 0)
-	var perp_normal := Vector3(0, 0, 1)
+	# difference (|9 − 5| = 4 ≤ pickup_max) → unconditional pickup, anywhere.
 	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, receiver_vel, perp_normal, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
-
-
-func test_alignment_is_judged_in_the_receiver_frame() -> void:
-	# A lateral receiver changes the approach LINE, not just the speed. Puck
-	# flies +X at 26; receiver strafes 14 m/s along -Z, so in their frame it
-	# approaches along (26, 0, 14) at ≈29.5 m/s. A blade squared to the WORLD
-	# line (-X face) reads alignment 26/29.5 ≈ 0.88 → threshold ≈29.0 < 29.5 →
-	# deflect; squaring to the RELATIVE line (alignment 1.0 → threshold 30)
-	# restores the catch. Squareness must track the relative approach.
-	var puck_vel := Vector3(26, 0, 0)
-	var world_square := Vector3(-1, 0, 0)
-	var strafe_fast := Vector3(0, 0, -14)
-	assert_false(PuckReceptionRules.should_receive(
-		puck_vel, strafe_fast, world_square, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"a hard strafe steepens the relative line past a world-squared blade")
-	var rel := puck_vel - strafe_fast
-	var rel_square: Vector3 = -rel.normalized()
-	assert_true(PuckReceptionRules.should_receive(
-		puck_vel, strafe_fast, rel_square, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-		"squaring to the relative approach line restores the catch")
+		Vector3(5, 0, 0), Vector3(9, 0, 0), AT_RIM, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS))
 
 
 # ── reception_load / settle_time — how hard the catch was ────────────────────
@@ -179,32 +137,29 @@ const SETTLE_MAX_S: float = 0.40
 
 
 func test_load_agrees_with_the_catch_decision() -> void:
-	# should_receive above pickup_max is exactly load < 1, across speeds and angles.
-	var normals: Array[Vector3] = [Vector3(0, 0, 1), Vector3(-1, 0, 0),
-			Vector3(-1, 0, 1).normalized()]
-	for n: Vector3 in normals:
+	# should_receive above pickup_max is exactly load < 1, across speeds and offsets.
+	for offset: float in [AT_RIM, ON_LINE, 0.4]:
 		for speed: float in [9.0, 15.0, 21.9, 22.1, 27.0, 29.9, 30.1, 35.0]:
 			var v := Vector3(speed, 0, 0)
-			var catch_load: float = PuckReceptionRules.reception_load(v, STILL, n, DEFLECT_MIN, ALIGN_BONUS)
-			assert_eq(PuckReceptionRules.should_receive(v, STILL, n, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
-					catch_load < 1.0, "speed %.1f normal %s" % [speed, n])
+			var catch_load: float = PuckReceptionRules.reception_load(v, STILL, offset, DEFLECT_MIN, ALIGN_BONUS)
+			assert_eq(PuckReceptionRules.should_receive(v, STILL, offset, PICKUP_MAX, DEFLECT_MIN, ALIGN_BONUS),
+					catch_load < 1.0, "speed %.1f offset %.1f" % [speed, offset])
 
 
 func test_load_is_relative_speed_over_ceiling_squared() -> void:
-	var perp := Vector3(0, 0, 1)
 	assert_almost_eq(PuckReceptionRules.reception_load(
-			Vector3(11, 0, 0), STILL, perp, DEFLECT_MIN, ALIGN_BONUS), 0.25, 0.0001)
+			Vector3(11, 0, 0), STILL, AT_RIM, DEFLECT_MIN, ALIGN_BONUS), 0.25, 0.0001)
 	# A receiver skating with the pass halves the relative speed — a quarter of the load.
 	assert_almost_eq(PuckReceptionRules.reception_load(
-			Vector3(22, 0, 0), Vector3(11, 0, 0), perp, DEFLECT_MIN, ALIGN_BONUS), 0.25, 0.0001)
+			Vector3(22, 0, 0), Vector3(11, 0, 0), AT_RIM, DEFLECT_MIN, ALIGN_BONUS), 0.25, 0.0001)
 
 
-func test_squared_blade_carries_less_load() -> void:
+func test_a_blade_on_the_line_carries_less_load() -> void:
 	var v := Vector3(18, 0, 0)
-	var perp: float = PuckReceptionRules.reception_load(v, STILL, Vector3(0, 0, 1), DEFLECT_MIN, ALIGN_BONUS)
-	var square: float = PuckReceptionRules.reception_load(v, STILL, Vector3(-1, 0, 0), DEFLECT_MIN, ALIGN_BONUS)
-	assert_lt(square, perp)
-	assert_almost_eq(square, 0.36, 0.0001, "18 / 30 squared")
+	var rim: float = PuckReceptionRules.reception_load(v, STILL, AT_RIM, DEFLECT_MIN, ALIGN_BONUS)
+	var on_line: float = PuckReceptionRules.reception_load(v, STILL, ON_LINE, DEFLECT_MIN, ALIGN_BONUS)
+	assert_lt(on_line, rim)
+	assert_almost_eq(on_line, 0.36, 0.0001, "18 / 30 squared")
 
 
 func test_settle_is_zero_up_to_the_clean_load() -> void:
@@ -225,11 +180,10 @@ func test_settle_rises_monotonically_to_the_max_at_the_ceiling() -> void:
 
 func test_short_pass_pace_catches_clean_and_hard_feed_settles() -> void:
 	# NHL short passes are received at ~11 m/s on average; failed receptions sit
-	# at 13–22 (docs/stick-settling-plan.md). On a poorly angled blade the first
+	# at 13–22 (docs/stick-settling-plan.md). With the blade at the rim the first
 	# is clean and an 18 m/s feed settles for ~0.2 s.
-	var perp := Vector3(0, 0, 1)
-	var soft: float = PuckReceptionRules.reception_load(Vector3(11, 0, 0), STILL, perp, DEFLECT_MIN, ALIGN_BONUS)
-	var hard: float = PuckReceptionRules.reception_load(Vector3(18, 0, 0), STILL, perp, DEFLECT_MIN, ALIGN_BONUS)
+	var soft: float = PuckReceptionRules.reception_load(Vector3(11, 0, 0), STILL, AT_RIM, DEFLECT_MIN, ALIGN_BONUS)
+	var hard: float = PuckReceptionRules.reception_load(Vector3(18, 0, 0), STILL, AT_RIM, DEFLECT_MIN, ALIGN_BONUS)
 	assert_eq(PuckReceptionRules.settle_time(soft, CLEAN_LOAD, SETTLE_MAX_S), 0.0)
 	assert_almost_eq(PuckReceptionRules.settle_time(hard, CLEAN_LOAD, SETTLE_MAX_S), 0.21, 0.01)
 
@@ -239,52 +193,62 @@ func test_disabled_settle_never_locks() -> void:
 	assert_eq(PuckReceptionRules.settle_time(0.99, CLEAN_LOAD, 0.0), 0.0)
 
 
-# ── the bobble: where on the blade, and how hard ────────────────────────────
+# ── path_offset: how near the blade is to the puck's path ───────────────────
 
-const AXIS := Vector3(1, 0, 0)       # heel → toe along +X
 const MID := Vector3.ZERO
 const HALF: float = 0.15
+const REACH: float = 0.5
 
 
-func test_a_path_across_the_middle_meets_it_dead_centre() -> void:
-	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
-			Vector3(0, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 0.0, 0.0001)
+func test_a_path_through_the_middle_is_on_the_line() -> void:
+	assert_almost_eq(PuckReceptionRules.path_offset(
+			Vector3(0, 0, 2), Vector3(0, 0, -20), MID, HALF, REACH), 0.0, 0.0001)
 
 
-func test_the_offset_runs_out_to_the_toe_and_heel() -> void:
-	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
-			Vector3(0.075, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 0.5, 0.0001)
-	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
-			Vector3(-0.15, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 1.0, 0.0001,
-			"the heel")
-	assert_eq(PuckReceptionRules.blade_contact_offset(
-			Vector3(0.4, 0, 2), Vector3(0, 0, -20), MID, AXIS, HALF), 1.0,
-			"past the toe, inside the pickup radius, reads as the toe")
+func test_a_path_anywhere_across_the_blades_length_is_on_the_line() -> void:
+	assert_eq(PuckReceptionRules.path_offset(
+			Vector3(0.14, 0, 2), Vector3(0, 0, -20), MID, HALF, REACH), 0.0)
+	assert_eq(PuckReceptionRules.path_offset(
+			Vector3(-0.149, 0, 2), Vector3(0, 0, -20), MID, HALF, REACH), 0.0)
 
 
-func test_an_angled_path_is_read_where_its_line_crosses_the_blade() -> void:
-	# From (−1, 2) heading (+1, −2): its line crosses z = 0 at x = 0.
-	assert_almost_eq(PuckReceptionRules.blade_contact_offset(
-			Vector3(-1, 0, 2), Vector3(5, 0, -10), MID, AXIS, HALF), 0.0, 0.0001)
+func test_the_offset_runs_out_to_the_rim_of_the_reach() -> void:
+	assert_almost_eq(PuckReceptionRules.path_offset(
+			Vector3(0.325, 0, 2), Vector3(0, 0, -20), MID, HALF, REACH), 0.5, 0.0001)
+	assert_almost_eq(PuckReceptionRules.path_offset(
+			Vector3(-0.5, 0, 2), Vector3(0, 0, -20), MID, HALF, REACH), 1.0, 0.0001)
+	assert_eq(PuckReceptionRules.path_offset(
+			Vector3(0.8, 0, 2), Vector3(0, 0, -20), MID, HALF, REACH), 1.0, "clamped past it")
 
 
-func test_an_end_on_path_meets_the_toe_or_heel() -> void:
-	assert_eq(PuckReceptionRules.blade_contact_offset(
-			Vector3(-2, 0, 0.01), Vector3(20, 0, 0), MID, AXIS, HALF), 1.0)
+func test_the_offset_reads_the_line_not_the_puck() -> void:
+	# From (−1, 2) heading (+1, −2): its line runs through the middle, however
+	# far along it the puck is.
+	assert_almost_eq(PuckReceptionRules.path_offset(
+			Vector3(-1, 0, 2), Vector3(5, 0, -10), MID, HALF, REACH), 0.0, 0.0001)
+	assert_almost_eq(PuckReceptionRules.path_offset(
+			Vector3(1, 0, -2), Vector3(5, 0, -10), MID, HALF, REACH), 0.0, 0.0001)
 
 
-func test_the_crossing_is_read_in_the_receivers_frame() -> void:
-	# World path straight down onto the middle; the receiver skating along the
-	# blade sees it come in angled, crossing his blade off centre.
-	var still: float = PuckReceptionRules.blade_contact_offset(
-			Vector3(0, 0, 1), Vector3(0, 0, -10) - Vector3.ZERO, MID, AXIS, HALF)
-	var skating: float = PuckReceptionRules.blade_contact_offset(
-			Vector3(0, 0, 1), Vector3(0, 0, -10) - Vector3(1.0, 0, 0), MID, AXIS, HALF)
+func test_the_offset_is_read_in_the_receivers_frame() -> void:
+	# World path straight down onto the middle; the receiver skating across it
+	# sees it come in angled, passing his blade off the line.
+	var still: float = PuckReceptionRules.path_offset(
+			Vector3(0, 0, 1), Vector3(0, 0, -10) - Vector3.ZERO, MID, HALF, REACH)
+	var skating: float = PuckReceptionRules.path_offset(
+			Vector3(0, 0, 1), Vector3(0, 0, -10) - Vector3(5.0, 0, 0), MID, HALF, REACH)
 	assert_almost_eq(still, 0.0, 0.0001)
 	assert_gt(skating, 0.5)
 
 
-func test_the_edge_bobbles_sooner_than_the_middle() -> void:
+func test_a_still_puck_is_on_the_line() -> void:
+	assert_eq(PuckReceptionRules.path_offset(
+			Vector3(0.4, 0, 0), Vector3.ZERO, MID, HALF, REACH), 0.0)
+
+
+# ── the bobble: how near the line, and how hard ─────────────────────────────
+
+func test_a_reach_bobbles_sooner_than_the_line() -> void:
 	assert_almost_eq(PuckReceptionRules.bobble_load_at(0.0, 0.67, 0.4), 0.67, 0.0001)
 	assert_almost_eq(PuckReceptionRules.bobble_load_at(1.0, 0.67, 0.4), 0.402, 0.0001)
 	assert_lt(PuckReceptionRules.bobble_load_at(0.6, 0.67, 0.4),

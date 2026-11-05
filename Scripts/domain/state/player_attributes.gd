@@ -424,7 +424,7 @@ func curve_backhand_mult() -> float:
 	return _CURVE_BACKHAND_LEAN[curve]
 
 
-# Scales the deflect ceiling + squared-up bonus a receiver's blade can soak —
+# Scales the deflect ceiling + on-the-line bonus a receiver's blade can soak —
 # the blade shape's force limit, read at the reception decision sites.
 func reception_ceiling_mult() -> float:
 	return _CURVE_RECEPTION_LEAN[curve]

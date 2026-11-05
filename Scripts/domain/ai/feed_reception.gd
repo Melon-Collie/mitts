@@ -5,21 +5,24 @@ class_name AIFeedReception
 # (GameRules, the puck rules and AISkaterCaps only).
 
 
-# The receiver's settle (PuckReceptionRules.settle_time) priced at the any-angle
-# catch ceiling, the one every catch gets: bot catches rarely arrive square
-# (in the duel harness's reception sweep the blade's mean alignment at the
-# catch is 0.2–0.4), and a human's blade is his own. test_bot_mirrors.gd holds
-# the three to Puck.
+# The receiver's settle (PuckReceptionRules.settle_time) priced at the catch
+# ceiling of a blade at the rim of its reach, the one every catch gets. It is a
+# conservative price for a bot: in the duel harness ~93% of bot catches arrive
+# with the blade on the puck's line (path_offset 0, the higher ceiling), since
+# a bot parks it at the gate; a human's blade is his own. test_bot_mirrors.gd
+# holds the three to Puck.
 const RECEIVE_ANY_ANGLE_CEILING_M_S: float = 22.0
 const SETTLE_CLEAN_LOAD: float = 0.30
 const SETTLE_MAX_S: float = 0.40
 
 
 # Past the bobble line (PuckReceptionRules.bobble_load_at) a catch bobbles
-# instead; at the toe or heel the line is lower. test_bot_mirrors.gd holds the
-# two to Puck. Measured on bot catches in the duel harness's reception sweep:
-# the share whose path meets the blade end-on or past its end (the rest cross
-# near the middle, where the blade parks on the line).
+# instead; a blade reaching off the puck's line holds less. test_bot_mirrors.gd
+# holds the two to Puck. The share of catches priced at the rim of the reach is
+# the one measured when the bobble was read off where the path crossed the
+# blade's line; read off the path's distance from the blade's middle, ~7% of
+# bot catches in the duel harness come off the line at all, so it is
+# conservative too.
 const BOBBLE_LOAD: float = 0.67
 const BOBBLE_EDGE_SHARE: float = 0.4
 const RECEIVE_EDGE_CONTACT_SHARE: float = 0.35
@@ -39,8 +42,8 @@ static func receiver_settle_s(closing: float) -> float:
 	return PuckReceptionRules.settle_time(ratio * ratio, SETTLE_CLEAN_LOAD, SETTLE_MAX_S)
 
 
-# Odds a catch closing at `closing` m/s bobbles: a middle contact past the bobble
-# line, or an edge one past its lower line.
+# Odds a catch closing at `closing` m/s bobbles: one on the line past the bobble
+# line, or one at the rim of the reach past its lower line.
 static func receiver_bobble_prob(closing: float) -> float:
 	var ratio: float = closing / RECEIVE_ANY_ANGLE_CEILING_M_S
 	var catch_load: float = ratio * ratio

@@ -320,10 +320,11 @@ func _step_tick(delta: float) -> void:
 				# stale-view rewind makes a legit grab miss. Poke / stick-lift / hit
 				# claims report the same adapted delay for the same reason.
 				# Send the blade geometry WE reached with (client-authoritative aim):
-				# curr + one-tick-prior blade for the host's swept test, plus the
-				# top-hand grip for the reception face-normal. The host reach-clamps
-				# them to our server-authoritative body. blade_pos_for_claim is this
-				# frame's blade contact; get_prev_blade_contact_global is last tick's.
+				# curr + one-tick-prior blade for the host's swept test and its
+				# catch read. The host reach-clamps them to our server-authoritative
+				# body. The top-hand grip still rides the wire but the host reads
+				# nothing off it. blade_pos_for_claim is this frame's blade contact;
+				# get_prev_blade_contact_global is last tick's.
 				NetworkManager.send_pickup_claim(
 					NetworkManager.estimated_host_time(),
 					NetworkManager.get_interpolation_delay() * 1000.0,

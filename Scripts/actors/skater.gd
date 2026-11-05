@@ -101,7 +101,7 @@ var blade_hosel_length: float = 0.085
 # difference (_apply_blade_tilt).
 var blade_lie_deg: float = 42.0
 # Reception ceiling lean from the blade-curve gear (attributes v4): the
-# reception decision sites scale the puck's league deflect ceiling + squared
+# reception decision sites scale the puck's league deflect ceiling + on-the-line
 # bonus by this — a flatter pattern soaks a harder feed. Set by
 # SkaterController.apply_attributes; never touches pickup_max_speed (the
 # always-catches floor stays build-independent, which keeps the client's

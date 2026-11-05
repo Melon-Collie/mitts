@@ -658,10 +658,11 @@ func step() -> void:
 			var rel: Vector3 = puck_vel - s.vel
 			rel.y = 0.0
 			var face: Vector3 = _face_normal(s, rel)
+			var offset: float = _path_offset(s, rel)
 			var catch_load: float = PuckReceptionRules.reception_load(
 					Vector3(puck_vel.x, 0.0, puck_vel.z), Vector3(s.vel.x, 0.0, s.vel.z),
-					face, DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
-			if not _receives(s, face):
+					offset, DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
+			if not _receives(s, offset):
 				# Too fast to hold: it comes off the face (Puck.apply_blade_deflect).
 				puck_vel = PuckCollisionRules.deflect_velocity(puck_vel,
 						_face_normal(s, puck_vel), AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
@@ -673,13 +674,8 @@ func step() -> void:
 				deflects += 1
 				loose_released_by = -1
 				break
-			var axis: Vector3 = PuckReceptionRules.blade_axis(s.blade, _hand(s),
-					Vector3(s.facing.x, 0.0, s.facing.y))
-			var bobble_at: float = PuckReceptionRules.bobble_load_at(
-					PuckReceptionRules.blade_contact_offset(puck_pos, rel, s.blade, axis,
-							GameRules.DEFAULT_BLADE_LENGTH_M * 0.5),
-					BOBBLE_LOAD, BOBBLE_EDGE_SHARE)
-			if catch_load >= bobble_at:
+			if catch_load >= PuckReceptionRules.bobble_load_at(
+					offset, BOBBLE_LOAD, BOBBLE_EDGE_SHARE):
 				var out: Vector3 = PuckCollisionRules.bobble_velocity(
 						rel, face, AIFeedReception.DEFLECT_NORMAL_RESTITUTION,
 						AIFeedReception.DEFLECT_NORMAL_RESTITUTION_MIN,
@@ -1116,9 +1112,16 @@ func _face_normal(s: SimSkater, toward: Vector3) -> Vector3:
 			Vector3(s.facing.x, 0.0, s.facing.y))
 
 
-func _receives(s: SimSkater, face: Vector3) -> bool:
+# PuckController.path_offset_for: how far off the puck's path in `s`'s frame
+# (`rel`) his blade's middle sits.
+func _path_offset(s: SimSkater, rel: Vector3) -> float:
+	return PuckReceptionRules.path_offset(puck_pos, rel, s.blade,
+			GameRules.DEFAULT_BLADE_LENGTH_M * 0.5, PICKUP_RADIUS)
+
+
+func _receives(s: SimSkater, offset: float) -> bool:
 	return PuckReceptionRules.should_receive(Vector3(puck_vel.x, 0.0, puck_vel.z),
-			Vector3(s.vel.x, 0.0, s.vel.z), face, PICKUP_MAX_REL_SPEED,
+			Vector3(s.vel.x, 0.0, s.vel.z), offset, PICKUP_MAX_REL_SPEED,
 			DEFLECT_MIN_REL_SPEED, RECEIVE_ALIGNMENT_BONUS)
 
 
@@ -1130,7 +1133,7 @@ func _contesting(s: SimSkater, prev_puck: Vector3) -> SimSkater:
 			continue
 		var rel: Vector3 = puck_vel - o.vel
 		rel.y = 0.0
-		if _receives(o, _face_normal(o, rel)):
+		if _receives(o, _path_offset(o, rel)):
 			return o
 	return null
 
