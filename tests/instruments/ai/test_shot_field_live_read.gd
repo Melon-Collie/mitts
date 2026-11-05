@@ -25,8 +25,19 @@ const WRAP_MAX_OUT_M: float = 3.5
 const SCENARIOS: Array[String] = ["SET", "FEED3_OT", "FEED3_CS", "FEED6_OT", "FEED6_CS",
 		"DECOY", "DEKE", "WRAP"]
 
+# The play a shooter saw before each staging, as the field's cell kinds that
+# share it (plan step 2): he carried it in (set, deke), took a feed and caught it
+# (a caught feed; a decoy is the limit of one), or came round the net.
+const HISTORY: Dictionary = {
+	"SET": ["SET", "DEKE"], "DEKE": ["SET", "DEKE"],
+	"FEED3_CS": ["FEED"], "FEED6_CS": ["FEED"], "DECOY": ["FEED", "DECOY"],
+	"WRAP": ["WRAP"],
+}
+
 var _goal := Vector3(0.0, 0.0, GOAL_Z)
 var _s: RefCounted = null
+# Each field cell's kind (SET, DEKE, FEED, DECOY, WRAP), read once.
+var _kinds: PackedStringArray = []
 
 
 func before_all() -> void:
@@ -87,13 +98,50 @@ func _stager_for(spot: Vector3, scenario: String) -> Callable:
 	return func() -> Vector3: return _s.stage_set(spot)
 
 
+func _kind(c: int) -> String:
+	if _kinds.is_empty():
+		for row: String in AIShotFieldData.ROWS:
+			_kinds.append(row.get_slice("\t", 3))
+	return _kinds[c]
+
+
+# The pick a read of the last query's matched cells makes when it keeps only the
+# cells of `kinds`: [its odds (the best aim of their blend), the aim's index
+# loft-major], or [-1, -1] when none of them matched.
+func _restricted_pick(kinds: Array) -> Array:
+	var q: AIShotOdds.Query = AIShotOdds._worker
+	AIShotOdds._sync_cells(q)
+	var per: int = AIShotOdds._aims_per_cell
+	var blend := PackedFloat32Array()
+	blend.resize(per)
+	blend.fill(0.0)
+	var total: float = 0.0
+	for j: int in q.cells.size():
+		var c: int = q.cells[j]
+		if not kinds.has(_kind(c)):
+			continue
+		var w: float = q.weights[j]
+		total += w
+		for i: int in per:
+			blend[i] += w * AIShotOdds._aim_odds[c * per + i]
+	if total <= 0.0:
+		return [-1.0, -1]
+	var best: int = 0
+	for i: int in per:
+		if blend[i] > blend[best]:
+			best = i
+	return [blend[best] / total, best]
+
+
 static func _sigma_m(release: Vector3) -> float:
 	return AIShotOdds.REFERENCE_SPREAD_RAD \
 			* maxf(Vector2(release.x, release.z - GOAL_Z).length(), 0.5)
 
 
-# One cell: { live, set, best, pick (-1 for a one-timer), goals }, or {} when the
-# scenario does not apply at `spot`.
+# One cell: { live, set, best, pick (-1 for a one-timer), blend (the pick's own
+# odds: the best aim of the cells' blended open sets; -1 for a one-timer),
+# stance, seal (release inside the seal zone), matched (cells weighed), goals },
+# or {} when the scenario does not apply at `spot`.
 func _cell(spot: Vector3, scenario: String) -> Dictionary:
 	var stage: Callable = _stager_for(spot, scenario)
 	if not stage.is_valid():
@@ -105,6 +153,7 @@ func _cell(spot: Vector3, scenario: String) -> Dictionary:
 	var keeper := Vector3(gs.position_x, 0.0, gs.position_z)
 	var stance: int = AIShotOdds.stance_of(gs, _goal)
 	var live: float
+	var matched: int = 0
 	var pick := AIShotOdds.Pick.new()
 	if one_timer:
 		var pre: GoalieNetworkState = _s.pre_feed_read
@@ -115,6 +164,10 @@ func _cell(spot: Vector3, scenario: String) -> Dictionary:
 		live = AIShotValue.now(release, _goal, keeper, gs.velocity_x, stance, gs.rotation_y)
 		AIShotOdds.pick_shot_now(release, _goal, keeper, gs.velocity_x, stance, pick,
 				gs.rotation_y)
+		matched = AIShotOdds._worker.count
+	var hist: Array = [-1.0, -1]
+	if not one_timer and HISTORY.has(scenario):
+		hist = _restricted_pick(HISTORY[scenario])
 	var patterns: PackedStringArray = _s.open_set(stage, one_timer, caught)
 	var sigma: float = _sigma_m(release)
 	var goals: int = 0
@@ -128,8 +181,15 @@ func _cell(spot: Vector3, scenario: String) -> Dictionary:
 				pi = i
 		at_pick = AIShotOdds.aim_odds(patterns[maxi(AIShotOdds.LOFTS.find(pick.loft), 0)],
 				pi, sigma)
-	return {"live": live, "set": AIShotValue.set_keeper(release, _goal),
-			"best": AIShotOdds.best_odds(patterns, sigma), "pick": at_pick, "goals": goals}
+	var hist_at: float = -1.0
+	if int(hist[1]) >= 0:
+		hist_at = AIShotOdds.aim_odds(patterns[int(hist[1]) / AIShotFieldData.AIM_POINTS],
+				int(hist[1]) % AIShotFieldData.AIM_POINTS, sigma)
+	return {"hist": hist[0], "hist_at": hist_at,
+			"live": live, "set": AIShotValue.set_keeper(release, _goal),
+			"best": AIShotOdds.best_odds(patterns, sigma), "pick": at_pick, "goals": goals,
+			"blend": pick.odds if not one_timer else -1.0, "stance": stance,
+			"seal": AIGoalieModel.in_post_seal_zone(release, _goal), "matched": matched}
 
 
 static func _concordance(model: Array[float], truth: Array[float]) -> float:
@@ -145,16 +205,37 @@ static func _concordance(model: Array[float], truth: Array[float]) -> float:
 	return float(ok) / maxf(float(total), 1.0)
 
 
+# The history-restricted read's columns: its mean value, what its pick scores,
+# its bias against the measured best aim, and how it ranks the cells.
+static func _hist_cols(hists: Array[float], hist_ats: Array[float],
+		meas: Array[float]) -> String:
+	if hists.is_empty():
+		return " -"
+	var v: float = 0.0
+	var a: float = 0.0
+	var bias: float = 0.0
+	for i: int in hists.size():
+		v += hists[i]
+		a += hist_ats[i]
+		bias += hists[i] - meas[i]
+	var n: float = hists.size()
+	return "%5.3f  %5.3f  %+5.3f   %4.2f" % [v / n, a / n, bias / n, _concordance(hists, meas)]
+
+
 func test_report_the_live_read_against_the_measured_keeper() -> void:
 	var spots: Dictionary = _spots()
 	var worst: Array = []
-	gut.p("   scenario  where     cells  live   meas  |err|   bias   conc | at-pick  set")
+	gut.p("   scenario  where     cells  live   meas  |err|   bias   conc | at-pick  blend  set | hist  hist@  h-bias  h-conc")
 	for scenario: String in SCENARIOS:
 		for where: String in ["on", "between", "beyond"]:
 			var live: Array[float] = []
 			var meas: Array[float] = []
 			var picks: Array[float] = []
 			var sets: Array[float] = []
+			var blends: Array[float] = []
+			var hists: Array[float] = []
+			var hist_ats: Array[float] = []
+			var hist_meas: Array[float] = []
 			for p: Vector2 in spots[where]:
 				var spot := Vector3(p.x, 0.0, GOAL_Z + p.y)
 				var c: Dictionary = _cell(spot, scenario)
@@ -165,6 +246,11 @@ func test_report_the_live_read_against_the_measured_keeper() -> void:
 				sets.append(c["set"])
 				if c["pick"] >= 0.0:
 					picks.append(c["pick"])
+					blends.append(c["blend"])
+				if c["hist"] >= 0.0:
+					hists.append(c["hist"])
+					hist_ats.append(c["hist_at"])
+					hist_meas.append(c["best"])
 				worst.append([absf(c["live"] - c["best"]), scenario, where, p, c])
 			if live.is_empty():
 				continue
@@ -178,15 +264,17 @@ func test_report_the_live_read_against_the_measured_keeper() -> void:
 				for v: float in a:
 					t += v
 				return t / maxf(a.size(), 1)
-			gut.p("   %-9s %-8s  %3d   %5.3f  %5.3f  %5.3f  %+5.3f  %4.2f |  %s   %5.3f" % [
+			gut.p("   %-9s %-8s  %3d   %5.3f  %5.3f  %5.3f  %+5.3f  %4.2f |  %s   %s  %5.3f | %s" % [
 					scenario, where, live.size(), mean.call(live), mean.call(meas),
 					err / live.size(), bias / live.size(), _concordance(live, meas),
 					"%5.3f" % mean.call(picks) if not picks.is_empty() else "  -  ",
-					mean.call(sets)])
+					"%5.3f" % mean.call(blends) if not blends.is_empty() else "  -  ",
+					mean.call(sets), _hist_cols(hists, hist_ats, hist_meas)])
 	worst.sort_custom(func(a: Array, b: Array) -> bool: return a[0] > b[0])
 	gut.p("   worst cells (|live - measured best|):")
 	for w: Array in worst.slice(0, 12):
 		var c: Dictionary = w[4]
-		gut.p("     %-9s %-8s (%5.1f, %4.1f)  live %5.3f  measured %5.3f  at pick %5.3f  goals %2d/72" % [
-				w[1], w[2], w[3].x, w[3].y, c["live"], c["best"], c["pick"], c["goals"]])
+		gut.p("     %-9s %-8s (%5.1f, %4.1f)  live %5.3f  measured %5.3f  at pick %5.3f  blend %5.3f  goals %2d/72  stance %d seal %s cells %d" % [
+				w[1], w[2], w[3].x, w[3].y, c["live"], c["best"], c["pick"], c["blend"],
+				c["goals"], c["stance"], str(c["seal"]), c["matched"]])
 	assert_true(true)
