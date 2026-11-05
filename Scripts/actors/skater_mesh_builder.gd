@@ -354,17 +354,22 @@ const HELMET_SURF_SKIN: int = 1
 # The helmet's hardware (shared_helmet_hardware): the chin strap, the ear guards.
 const HELMET_HARDWARE_STRAP: int = 0
 const HELMET_HARDWARE_GUARD: int = 1
-# The ear guards: a plate under the shell's rim over each ear, on a sphere this
-# far out from the helmet's centre (the head ball's side is at 0.135), from
-# tucked under the rim down past the ear lobe, this far (rad) either side of
-# the ear. The chin strap: a band from each guard's front foot along the jaw to
-# under the chin, just off the skin, this wide (half, as latitude), in
+# The ear guards: a horseshoe clip round each ear, open at the top where its
+# ends run up under the shell's rim, on a sphere this far out from the
+# helmet's centre (the head ball's side is at 0.135): centred on the ear (its
+# direction, +X side), its band between these distances from the ear's centre
+# (m), from straight down this far round either way (rad), in these many
+# pieces. The chin strap: a band from each guard's front foot along the jaw
+# to under the chin, just off the skin, this wide (half, as latitude), in
 # `_STRAP_STEPS` pieces a side.
 const _GUARD_RADIUS: float = 0.150
-const _GUARD_V := Vector2(0.46, 0.68)
-const _GUARD_HALF_ARC: float = 0.32
+const _GUARD_EAR := Vector3(1.0, -0.06, 0.06)
+const _GUARD_BAND := Vector2(0.022, 0.046)
+const _GUARD_REACH: float = deg_to_rad(150.0)
+const _GUARD_STEPS: int = 12
 const _STRAP_RADIUS: float = 0.146
-const _STRAP_V := Vector2(0.71, 0.86)
+const _STRAP_FROM: float = PI * 0.5 + 0.25
+const _STRAP_V := Vector2(0.58, 0.86)
 const _STRAP_HALF_V: float = 0.022
 const _STRAP_STEPS: int = 6
 const _STRAP_COLOR := Color(0.07, 0.07, 0.08)
@@ -403,7 +408,7 @@ static func _build_helmet_hardware() -> ArrayMesh:
 	strap.set_smooth_group(-1)  # flat shading — see class doc block
 	# θ = PI is the face; each side runs from its guard's front foot round to it.
 	for side: float in [1.0, -1.0]:
-		var from: float = PI * 0.5 + _GUARD_HALF_ARC * 0.6
+		var from: float = _STRAP_FROM
 		var th0: float = from if side > 0.0 else PI
 		var th1: float = PI if side > 0.0 else TAU - from
 		for k: int in _STRAP_STEPS:
@@ -421,9 +426,8 @@ static func _build_helmet_hardware() -> ArrayMesh:
 	var guard := SurfaceTool.new()
 	guard.begin(Mesh.PRIMITIVE_TRIANGLES)
 	guard.set_smooth_group(-1)
-	for centre: float in [PI * 0.5, PI * 1.5]:
-		_sphere_patch(guard, _GUARD_RADIUS, _GUARD_V.x, _GUARD_V.y,
-				centre - _GUARD_HALF_ARC, centre + _GUARD_HALF_ARC, 2, 4)
+	for side: float in [1.0, -1.0]:
+		_ear_guard(guard, side)
 	guard.generate_normals()
 	guard.commit(m)
 	for part: int in [HELMET_HARDWARE_STRAP, HELMET_HARDWARE_GUARD]:
@@ -433,6 +437,37 @@ static func _build_helmet_hardware() -> ArrayMesh:
 		BodyRim.apply(mat)
 		m.surface_set_material(part, mat)
 	return m
+
+
+# One ear guard on `side` (+1 the +X side): the horseshoe band round the ear,
+# laid on the guard's sphere, its outer face out.
+static func _ear_guard(st: SurfaceTool, side: float) -> void:
+	var ear: Vector3 = (_GUARD_EAR * Vector3(side, 1.0, 1.0)).normalized()
+	# Down the head at the ear, and toward the face (-Z), both along the sphere.
+	var down: Vector3 = (Vector3.DOWN - ear * ear.dot(Vector3.DOWN)).normalized()
+	var ahead: Vector3 = ear.cross(down) * side
+	for k: int in _GUARD_STEPS:
+		var pa: float = lerpf(-_GUARD_REACH, _GUARD_REACH, float(k) / float(_GUARD_STEPS))
+		var pb: float = lerpf(-_GUARD_REACH, _GUARD_REACH, float(k + 1) / float(_GUARD_STEPS))
+		var ia: Vector3 = _on_guard(ear, down, ahead, pa, _GUARD_BAND.x)
+		var oa: Vector3 = _on_guard(ear, down, ahead, pa, _GUARD_BAND.y)
+		var ib: Vector3 = _on_guard(ear, down, ahead, pb, _GUARD_BAND.x)
+		var ob: Vector3 = _on_guard(ear, down, ahead, pb, _GUARD_BAND.y)
+		# Wound so the face points out of the sphere whichever side it is on.
+		if (ob - oa).cross(ia - oa).dot(oa) < 0.0:
+			_uv_quad(st, oa, Vector2.ZERO, ob, Vector2(0.1, 0.0), ib, Vector2(0.1, 0.1),
+					ia, Vector2(0.0, 0.1))
+		else:
+			_uv_quad(st, oa, Vector2.ZERO, ia, Vector2(0.0, 0.1), ib, Vector2(0.1, 0.1),
+					ob, Vector2(0.1, 0.0))
+
+
+# A point of the guard: `phi` round from straight down (+ toward the face), `r`
+# out from the ear's centre, put back on the guard's sphere.
+static func _on_guard(ear: Vector3, down: Vector3, ahead: Vector3, phi: float,
+		r: float) -> Vector3:
+	var p: Vector3 = ear * _GUARD_RADIUS + (down * cos(phi) + ahead * sin(phi)) * r
+	return p.normalized() * _GUARD_RADIUS
 
 
 # The strap's latitude at azimuth `theta`: from its guard's foot (`from`, or
