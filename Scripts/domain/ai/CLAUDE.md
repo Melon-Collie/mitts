@@ -780,7 +780,10 @@ takes the whole class down and every static call on it from every file at once.
     push, post seal and predicted position;
   - `icing_read.gd` (`AIIcingRead`) — NHL hybrid icing read off a walked
     release: the crossing, the touch, the dot race (held to
-    `InfractionRules.judge_icing_race`) and the faceoff it hands over.
+    `InfractionRules.judge_icing_race`) and the faceoff it hands over;
+  - `possession_floor.gd` (`AIPossessionFloor`) — the continuation: what
+    keeping the puck at a spot is worth by position alone, a floor up the ice
+    plus the slot bonus (`docs/possession-floor-plan.md`).
 - `action_scoring.gd` (`AIActionScoring`) holds the shot and pass reads on the
   value seam, the xG stat, position value, the races and turnover pricing.
 - `carry_space.gd` (`AICarrySpace`) holds the carrier's room to operate:
