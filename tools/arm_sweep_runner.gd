@@ -334,10 +334,9 @@ func _report() -> void:
 	var bottom_back: Vector3 = ub_inv * body.get_bone_global_pose(
 			SkaterMeshBuilder.UpperBone.BOTTOM_HAND).basis.z.normalized()
 	var drawn_off: Vector3 = _skater.drawn_top_hand() - _skater.top_hand.position
-	var close_off: Vector3 = _controller._ik._close_offset
 	var clear_off: Vector3 = _controller._ik._clear_offset
-	print("  f%02d   of it, in close %+.2f up %+.2f ahead, the shaft's clearance %+.2f up %+.2f ahead" % [
-			_frame, close_off.y, -close_off.z, clear_off.y, -clear_off.z])
+	print("  f%02d   of it, the shaft's clearance %+.2f up %+.2f ahead" % [
+			_frame, clear_off.y, -clear_off.z])
 	print("  f%02d top hand drawn %+.2f m up %+.2f m ahead of its marker | elbow ahead of its hand: top %+.2f m bottom %+.2f m | back of glove (fwd, out, up): top %+.1f %+.1f %+.1f bottom %+.1f %+.1f %+.1f" % [
 			_frame, drawn_off.y, -drawn_off.z, _elbow_ahead(SkaterMeshBuilder.UpperBone.TOP_FOREARM,
 					SkaterMeshBuilder.UpperBone.TOP_HAND),
