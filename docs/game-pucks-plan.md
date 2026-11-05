@@ -1,17 +1,22 @@
-# Game Pucks and Banners — progression design record
+# Game Pucks — progression design record
 
-Status: **Phases 1–3 built** (the catalogue, the ledger, the Trophy Case,
-titles and feats) and Phase 4 (cosmetic rewards: free colours, signature tape
-jobs, sticks as patterns).
+Status: **Phases 1–4 built** (the catalogue, the ledger, the Trophy Case,
+titles, feats, and cosmetic rewards: free colours, signature tape jobs, sticks
+as patterns). **Phase 5 planned:** one kind of puck — banners become combo
+pucks, and any puck can unlock something.
 
 A progression system on the model of Darktide's Penances. A long catalogue of
-achievements (**Game Pucks**) records what a player has done. Completing a named
-set of them raises a **Banner**, and a banner unlocks a reward: a **title**
-(new feature) or a cosmetic. Both live on one screen, the **Trophy Case**.
+achievements (**Game Pucks**) records what a player has done, and a puck can
+unlock a reward: a **title** or a cosmetic. Some pucks are a single play or a
+single game, some a career milestone, and some are earned by earning other
+pucks. They all live on one screen, the **Trophy Case**.
 
-The names come from hockey. A player keeps the puck from a milestone — the
-first goal, the hundredth point — taped and dated; a team raises a banner to the
-rafters for something bigger.
+The name comes from hockey: a player keeps the puck from a milestone — the
+first goal, the hundredth point — taped and dated.
+
+(Phases 1–4 built a second concept, the **Banner**: a named set of pucks that
+unlocked the reward. Phase 5 folds it into the puck catalogue as the combo
+kind; until it lands, the code still says banner.)
 
 ## Decisions banked
 
@@ -36,18 +41,28 @@ rafters for something bigger.
   run). So no puck pays for losing, for padding a stat in a blowout, or for
   playing badly on purpose. Goals, assists, interceptions, blocks, wins and
   hits are all safe to count.
-- **Games against bots count for everything**, every tier and every banner,
+- **Games against bots count for everything**, every tier and every combo,
   exactly as Steam career stats and achievements already count them
   (`GameManager._achievements_active`: any real match, never free play, the
-  tutorial or drills). A player who wants to grind a banner out offline may.
+  tutorial or drills). A player who wants to grind a reward out offline may.
 - **Hits count as credited.** `HitTracker` already credits a hit only where the
   NHL would: on the puck carrier when the contact costs them the puck, or on a
   player finished just after they released it. So a hit puck counts the existing
   `hits` stat. Hit hunting within that definition is a real way to play.
-- **Banners are named for how a player plays.** Power Forward is the model:
-  50 goals and 50 hits raise it, and it unlocks the Power Forward title. The
-  catalogue's banners are hockey archetypes, so the title a player wears says
-  something true about their game.
+- **Everything is a Game Puck.** A puck is one of three things: a single play
+  or a single game (a snipe, a hat trick), a career milestone (a ladder of
+  tiers: 10 / 50 / 250 / 1000 goals), or a **combo** of other pucks — all of
+  them, and a combo may name other combos (*nesting is allowed*). There is no
+  separate banner concept and no separate section for combos: a combo is a
+  puck that lists the pucks it needs.
+- **Any puck or tier can unlock something.** A reward names the puck that
+  unlocks it — a single puck (`hat_trick`), a ladder tier (`goals@250`) or a
+  combo — so pricing a reward is choosing its puck, and a hard reward is a hard
+  puck rather than a long list.
+- **Title combos are named for how a player plays.** Power Forward is the
+  model: 50 goals and 50 hits, unlocking the Power Forward title. They are
+  hockey archetypes, so the title a player wears says something true about
+  their game.
 - **Existing achievements fold into the catalogue.** The 20 achievements that
   shipped before it are Game Pucks now and keep their Steam ids, so nothing
   already unlocked on Steam is lost. The four career ones (Sniper, Setup Artist,
@@ -59,7 +74,7 @@ rafters for something bigger.
   at speed.
 - **Store only what cannot be derived.** Count tiers are read off the Steam
   User Stats totals (`SteamStats`, cross-machine and independent of Supabase)
-  every time, and banners off the pucks, so neither is stored. What is stored —
+  every time, and combos off the pucks they need, so neither is stored. What is stored —
   the earned game, feat, event and roster pucks, and the equipped title — is a
   section of the preferences file Steam Cloud already syncs (`PlayerPrefs`), so
   no new Cloud file or Steamworks Cloud setting is involved. That file
@@ -67,7 +82,7 @@ rafters for something bigger.
   since an earned puck is never un-earned.
 - **Steam achievements are opt-in per puck.** A puck is mirrored to Steam only
   when its registry row is flagged for it. The existing 20 are flagged; nothing
-  new is until it is worth the Steamworks setup (below). Puck, banner and title
+  new is until it is worth the Steamworks setup (below). Puck and title
   names are `locale/translations.csv` rows, never Steamworks strings.
 - **No anti-cheat.** Pucks are evaluated on the player's own machine and anyone
   can set a Steam achievement directly, so a determined player can unlock any
@@ -93,7 +108,7 @@ Everything the code cannot do, per phase. Each item is done on both apps
 | any new counter | One INT stat per counter a ladder reads. |
 | any puck flagged for Steam | One achievement: name, description, locked and unlocked icons (`steam/ACHIEVEMENTS.md`). Optional, so as many or as few as wanted. |
 
-Pucks, tiers, banners, titles and cosmetic rewards need no Steamworks work.
+Pucks, tiers, combos, titles and cosmetic rewards need no Steamworks work.
 
 
 ## The model
@@ -109,33 +124,42 @@ One registry row per puck. Kinds:
 | **feat** | a specific play happens (below) | the moment it happens, host-detected |
 | **event** | a moment (a big hit, finishing the tutorial course) | its hook (`TrophyService.on_*`) |
 | **roster** | a match whose lobby includes a named person | game-over (`GamePuckRules.earned_roster`) |
+| **combo** (Phase 5) | every puck or tier it names is earned | whenever one of them is |
 
 A count puck is a ladder: one row with tiers (10 / 50 / 250 / 1000 goals), each
-tier its own puck to earn. Tiers ascend strictly, and a banner names the tier it
-needs by its target (`goals@50`).
+tier its own puck to earn. Tiers ascend strictly, and anything that needs a
+tier names it by its target (`goals@50`).
 
-### Banners
+A combo names the pucks, tiers or other combos it needs, all of them. It is
+derived from what it names every time, never stored, so changing a combo's
+list re-decides it for everyone. Its progress is how many of what it names are
+earned. The chain must never come back to the combo itself: a test walks every
+combo and fails on a cycle.
 
-A banner names the pucks (or puck tiers) it needs, all of them, and its reward.
-Flat in v1: a banner needs pucks, never other banners. Its progress is how many
-of its pucks are earned.
+### Rewards
+
+A reward row names its unlock and the puck requirement that unlocks it (`id` or
+`id@tier`). Cosmetics are `CosmeticUnlocks.REWARDS` rows (a slot, an option, a
+puck); a title is a `Titles.ALL` row naming its puck. A puck may unlock several
+things, and the Trophy Case shows each puck's unlocks on its card.
 
 ### Titles
 
 A title is an id plus a locale key (`Titles`, `TITLE_<ID>`). A player wears at
-most one, picked from the titles their raised banners have earned
+most one, picked from the titles their earned pucks have unlocked
 (`GamePuckRules.earned_titles`) on the player screen's Title row, saved as a
 pref, and it travels with their look: the join and spawn handshakes, the lobby
 roster, the existing-player sync and the replay header. In v1 every title comes
-from a banner. It shows under the name on the lobby slot card, after the name on
+from a combo. It shows under the name on the lobby slot card, after the name on
 the scoreboard (`SCOREBOARD_NAME_TITLE`) and beside the name in the Three Stars
 on the game-over screen.
 
 ### Catalogue
 
-The rows live in `GamePucks.ALL` and `Banners.ALL`; Phase 1 shipped:
+The rows live in `GamePucks.ALL` (and, until Phase 5, `Banners.ALL`). The
+title combos:
 
-| banner | needs | title (Phase 2) |
+| combo | needs | title |
 |---|---|---|
 | Power Forward | `goals@50` + `hits@50` | Power Forward |
 | Shutdown | `interceptions@50` + `takeaways@50` + `shots_blocked@50` | Shutdown |
@@ -145,7 +169,8 @@ The rows live in `GamePucks.ALL` and `Banners.ALL`; Phase 1 shipped:
 | Playmaker | `assists@250` + `one_timer_feed` | Playmaker |
 | Sniper | `goals@250` + `snipe` | Sniper |
 
-The last two arrived with the feats in Phase 3.
+The last two arrived with the feats in Phase 3. Phase 5's cosmetic pricing is
+below, under *Phases*.
 
 Ladders: goals, assists, points, hits, interceptions, takeaways, blocks, faceoff
 wins, wins and games, four or five tiers each. Every counter is a `SteamStats`
@@ -167,7 +192,7 @@ name specific plays. Phase 3 shipped five, all read off a credited goal
 The shot's loft level and hand are recorded on the host at release
 (`ShotOnGoalTracker.note_release_style`); a tipped goal earns no shot-style feat,
 since the shot was not the scorer's. A won possession (`FeatTracker`) lasts
-until the other team establishes one or play stops. A Transition banner waits on
+until the other team establishes one or play stops. A Transition title waits on
 a carried-zone-entry counter, which nothing records yet.
 
 ## Architecture
@@ -178,14 +203,17 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - `domain/config/game_pucks.gd`: the puck registry. It replaced the old
   achievement registry and keeps its condition kinds, adding `count` ladders
   and `feat` pucks.
-- `domain/config/banners.gd`: banner requirements (and, from Phase 2, rewards).
-  `domain/config/titles.gd` arrives in Phase 2: title ids and their locale keys.
+- `domain/config/banners.gd`: banner requirements and the title each unlocks.
+  Phase 5 folds its rows into `game_pucks.gd` as combos and deletes it.
+- `domain/config/titles.gd`: title ids and their locale keys (from Phase 5, the
+  puck each is unlocked by).
 - `domain/state/trophy_ledger.gd`: the stored part only — the earned game,
   feat, event and roster pucks, and the equipped title — with its serialization
   and the union merge.
 - `domain/rules/game_puck_rules.gd`: given the Steam counters, one game's stats
   and the ledger, which pucks, tiers and banners are earned, and each one's
   progress. Earning is idempotent: evaluating twice earns nothing new.
+  From Phase 5 it resolves combos recursively, each once per evaluation.
 
 **Application:**
 - `TrophyService` replaced the old achievement service: it evaluates at game-over
@@ -202,15 +230,19 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   only an id that is a feat puck.
 
 **Infrastructure and UI:**
-- The Trophy Case screen (`TrophyCaseScreen`), beside Career on the side menu:
-  banners with their pucks and progress, the ladders, and the single pucks.
+- The Trophy Case screen (`TrophyCaseScreen`), beside Career on the side menu.
+  Through Phase 4: banners with their pucks and progress, the ladders, and the
+  single pucks. From Phase 5: one list of pucks, each card showing what earns
+  it (its description, its tiers, or a combo's prerequisite pucks, each ticked
+  when earned) and what it unlocks.
   `TrophyCopy` holds the words it and the toast share.
 - An earn toast on the HUD's toast stack, at game-over and live for moments.
 - A title row in the player screen's YOU region (`PlayerTitleRow`).
 - The title on the lobby slot card, the scoreboard and the Three Stars on the
   game-over screen.
 - Locked cosmetics (Phase 4): `CosmeticUnlocks` holds what is free in each slot
-  and the reward rows, each a slot, an option and the banner that unlocks it.
+  and the reward rows, each a slot, an option and the banner (from Phase 5, the
+  puck) that unlocks it.
   The picker shows only what the player may wear; a pick that is not available
   is worn as the team colour (`CosmeticUnlocks.worn_*`). The lobby relays what a
   player wears whether or not it is earned (*No anti-cheat*).
@@ -250,18 +282,44 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       draw the pattern's defaults, and picking a new pattern drops the paint.
       The old white colourway is an unlisted alias, rewritten on load as Solid
       painted white. Protocol bump.
+5. **One kind of puck** (planned), in two steps:
+   1. **Flatten.** `Banners.ALL` rows become `combo` rows in `GamePucks.ALL`
+      (nesting allowed, cycles failed by a test); titles and cosmetic rewards
+      name a puck requirement instead of a banner; the Trophy Case becomes one
+      list whose cards show prerequisites and unlocks; the earn toast fires for
+      a combo like any puck. No wire change: titles and cosmetics travel as
+      before, and nothing is on `main` yet, so no saved progress moves.
+   2. **Price the cosmetics** on single pucks, tiers and combos:
+
+      | reward | unlocked by |
+      |---|---|
+      | *Spaced* tape | `hat_trick` — a player's first hat trick |
+      | *Bottom strip* tape | a combo: `assists@50` + `playmaker` (3 assists in a game) |
+      | Yellow laces | `one_timer_dot`, a new feat: a one-timer goal released inside any offensive-zone faceoff circle |
+
+      The new feat needs the release point on the host's goal context
+      (`GoalFeatContext`), beside the release distance the snipe reads.
+      Titles stay on their combos.
+
+   **Open: names.** Flat, two pucks would both read *Playmaker* — the 3-assist
+   game (Steam's `ACH_PLAYMAKER`, so its display name stays) and the combo
+   that unlocks the Playmaker title — and the Sniper combo sits beside Steam's
+   *Sniper*, the 50-goal tier. A title combo needs a name of its own (the
+   title it unlocks can keep its name), and so does the Bottom strip combo.
+
    Later rewards (helmet stickers, a spray-painted stick, signature laces) are
    new content on the same machinery.
 
 ## Tests
 
-- **Registry integrity:** every banner requirement names a real puck and an
-  existing tier; tiers ascend; every count puck's counter is backed by a
+- **Registry integrity:** every combo requirement and every reward names a real
+  puck and an existing tier; no combo reaches itself through its chain; tiers ascend; every count puck's counter is backed by a
   `SteamStats` row (extending the consistency test in
   `tests/unit/game/test_steam_stat_recorder.gd`); every title and puck has its
   locale rows.
 - **Rules properties:** a puck earned stays earned; a higher counter never earns
-  fewer tiers; a banner is earned exactly when its last requirement is.
+  fewer tiers; a combo is earned exactly when its last requirement is, through
+  any depth of nesting.
 - **Ledger round-trip:** serialize, reload, compare; an unknown id in a saved
   ledger is kept (a newer build's puck survives a round trip through an older
   one), and a malformed entry is skipped rather than failing the load.
@@ -273,7 +331,7 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 ## Not in scope
 
 - The automatic play-style label (career and recent form) discussed alongside
-  this. It can coexist — the label says how you play now, a banner says what you
+  this. It can coexist — the label says how you play now, a title says what you
   have done — and is its own plan.
 - Drill medals and personal bests, which would become event pucks once drills
   record them.
