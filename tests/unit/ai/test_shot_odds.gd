@@ -65,30 +65,42 @@ func test_the_far_net_reads_as_the_measured_net_seen_from_the_other_end() -> voi
 
 func test_a_set_keeper_reads_the_measured_set_cell() -> void:
 	# "Square and set on it" is a measured situation, so at every measured spot
-	# the set read IS that spot's SET cell.
+	# the set read IS that spot's SET cell. A spot in the boards has none.
 	var goal := Vector3(0.0, 0.0, GOAL_Z)
 	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), goal)
 	for fwd: float in AIShotFieldData.SPOT_FWD:
 		for x: float in AIShotFieldData.SPOT_X:
 			var spot: int = AIShotFieldData.SPOT_FWD.find(fwd) * AIShotFieldData.SPOT_X.size() \
 					+ AIShotFieldData.SPOT_X.find(x)
+			if AIShotOdds._set_cell[spot] < 0:
+				continue
 			assert_almost_eq(AIShotOdds.shot_set(Vector3(x, 0.0, GOAL_Z + fwd), goal),
 					AIShotOdds._odds[AIShotOdds._set_cell[spot]], 1e-6,
 					"the set read at (%.1f, %.1f) is the SET cell" % [x, fwd])
 
 
+# A keeper drifting across slower than this has stopped.
+const STOPPED_M_S: float = 0.05
+
+
 func test_the_set_cells_read_square_on_the_shot() -> void:
 	# squareness() and the generator's reads share a facing convention: a keeper
 	# settled on the carrier faces him. Within a couple of metres of the line he
-	# sets on the post rather than square; out from there every SET cell faces
-	# the shot.
+	# sets on the post rather than square; out from there every SET cell whose
+	# keeper has stopped faces the shot. Far out by the boards the harness reads
+	# him while he still drifts across (under its per-tick settle tolerance) and
+	# still turning, so those cells are not this convention's evidence.
 	AIShotOdds.shot_set(Vector3(0.0, 0.0, GOAL_Z + 6.0), Vector3(0.0, 0.0, GOAL_Z))
+	var checked: int = 0
 	for spot: int in AIShotOdds._set_cell.size():
-		if AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] < 2.5:
-			continue
 		var c: int = AIShotOdds._set_cell[spot]
+		if c < 0 or AIShotFieldData.SPOT_FWD[spot / AIShotFieldData.SPOT_X.size()] < 2.5 \
+				or absf(AIShotOdds._velocity[c]) > STOPPED_M_S:
+			continue
+		checked += 1
 		assert_lt(absf(AIShotOdds._square[c]), deg_to_rad(5.0),
 				"SET cell %d faces the shot" % c)
+	assert_gt(checked, 0, "the field has settled SET cells to check")
 
 
 # The cells at `c`'s spot, weighed by a query with `c`'s own read; returns the

@@ -1,6 +1,6 @@
 # Shot field resolution — measured edges and a grid that reaches the boards
 
-Status: **steps 0–1 done; steps 2–5 agreed, in progress.** Follows `docs/shot-currency-plan.md`; that
+Status: **done (steps 0–5).** Follows `docs/shot-currency-plan.md`; that
 doc's decisions (odds against today's goalie, measured not modelled, 0.04 rad
 reference scatter applied at lookup) all stand. This one changes how finely the
 goalie's open set is measured and how much of the zone is measured at all.
@@ -108,7 +108,7 @@ keeper: 0 m, 6.1 m out reads 6.0% as bands and 0.4% measured; −8, 9.5 m reads
 gaps low: −4, 15 m out with the keeper drawn off reads 4.7% as bands and 8.6%
 measured.
 
-### Step 2 — goal intervals from the stager
+### Step 2 — goal intervals from the stager (done)
 
 `shot_odds_stager.gd`:
 
@@ -126,7 +126,7 @@ Both readers of the stager change with it: the field generator and
 columns after the sweeps (field rows 26–28, truth rows after the reads), so
 every reader that indexes by column keeps working.
 
-### Step 3 — the grid
+### Step 3 — the grid (done)
 
 `test_generate_shot_field.gd`:
 
@@ -135,20 +135,21 @@ every reader that indexes by column keeps working.
 - A spot whose carrier is not on the ice (`GameRules.clamp_to_rink_inner` with
   a skater's collision radius moves it) emits no cells. With these spots that is
   ±12 in the two or three rows nearest the goal line, where the corners curve in.
-- `MAX_ABS_X_M` (passers and deke starts) becomes the same on-ice test. A flat
-  11 m lets a passer stand in the corner arc at the goal line.
+- `MAX_ABS_X_M` (passers and deke starts) becomes the same on-ice test, and so
+  do the decoys. A flat 11 m let a passer stand in the corner arc at the goal
+  line, and a far decoy on a wide spot's bearing lands in the boards.
 
-About 150 spots against today's 90. Wide spots carry fewer feeds and decoys (only the
-inward ones fit), so cells grow by roughly 60%.
+150 spots against the old 90, 4,342 cells against 2,744.
 
-### Step 4 — read the intervals
+### Step 4 — read the intervals (done)
 
 `AIShotOdds`:
 
 - `_build` parses each loft's interval list into packed arrays (per cell: a
   start into a flat `PackedFloat32Array` of edges and a count per loft).
-- `aim_odds` becomes `Σ ½·[erf((b − aim)/(σ√2)) − erf((a − aim)/(σ√2))]` over the
-  loft's goal intervals. `_aim_odds` is still filled per cell × loft × candidate
+- Each candidate aim's odds are `interval_odds`:
+  `Σ ½·[erf((b − aim)/(σ√2)) − erf((a − aim)/(σ√2))]` over the loft's goal
+  intervals. `_aim_odds` is still filled per cell × loft × candidate
   aim at build, so the per-query cost does not change.
 - `shot_now_at_spread` reads the parsed intervals instead of re-splitting the
   row strings.
@@ -159,13 +160,30 @@ inward ones fit), so cells grow by roughly 60%.
 `test_shot_odds_vs_truth.gd` reads truth through the same intervals.
 `AIShotOdds.best_odds` takes the intervals instead of the pattern strings.
 
-### Step 5 — regenerate and re-bank
+### Step 5 — regenerate and re-bank (done)
 
-Truth table (~16 min), then the field. Today's full grid is ~1–2 h on four
-processes; with ~60% more cells and ~14% more shots per cell (6,941 goal edges
-in today's field × 4 probes, against 197,568 sweep shots), expect about
-1.85×. Re-bank the truth ratchets. Update `Scripts/domain/ai/CLAUDE.md` → Shot
-value (the "spot × how he was beaten" description and where the field ends).
+The field first (71 minutes on four processes), then the truth table (about
+20 minutes): the truth instrument records the field's own pick, so it must read
+the new field.
+
+The truth ratchets were re-baselined, because the truth itself was re-measured
+as goal gaps and lost the same phantom band width the field did:
+
+| | before | after |
+|---|---|---|
+| mean \|field − truth\| | 0.103 | 0.111 |
+| concordance | 93.7% | 93.6% |
+| pick share | 0.753 | 0.745 |
+
+The field's own SET mean at the held-out cells barely moved (0.263 → 0.260)
+while the truth's fell (0.177 → 0.156). What is left is a bias the truth test
+already had: it queries `shot_now` without the keeper's facing, so feed and
+decoy keepers average in.
+
+Snapshots moved by a few percent. Two carrier picks flipped on close margins:
+the far-post backdoor carries a step before feeding (the one-timer there is
+still worth 0.96, from 0.97), and the head-on drive at 6 m/s now shoots from 6 m out (it
+still carries at 5 and 4 m and shoots at 3 m, as before).
 
 ## 4. What it should change
 
@@ -177,10 +195,19 @@ value (the "spot × how he was beaten" description and where the field ends).
   of copied, so the 43% from the boards goes away (or is confirmed, if the keeper
   really leaves that line).
 
+What it did: 4 m left 7.5 m out went 9% (bands) → 4.3% (step 0) → 0.2%; 8 m
+left 9.5 m out 6% → 2.9% → 0.2%. The goal line from 10 m out to the boards
+reads 0% where it held 43%. 8 m left on the goal line is measured at 48%, so
+that gap is the keeper's. The top of the zone reads 0.2–1.7%.
+
 ## 5. Open questions
 
 - **Refinement depth.** 4 bisections gives ~4.6 mm, under the puck's 3.8 cm
-  radius by a wide margin. 3 may be enough; step 1 can measure it.
+  radius by a wide margin. 3 may be enough.
+- **The harness's settle.** `real_goalie_shot_harness.gd` calls a keeper
+  settled when he moves under 1.5 mm a tick, so one drifting at 0.1 m/s passes.
+  The SET cells at 12 m wide, 15 m out read him still drifting and 6.6° off
+  square.
 - **Interior gaps.** Settled by step 1: no probes between saves.
 - **A row at 0.25 m out.** Releases between the goal line and 0.6 m still clamp
   to the 0.6 row. Inside the crease that does not matter; wide of it, it is a
