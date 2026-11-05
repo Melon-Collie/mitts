@@ -134,10 +134,9 @@ signal offside_called()
 # (-1, waved_off saying how). Hosts emit from _announce_icing_race; clients
 # from the RPC handler.
 signal icing_race_changed(icing_team_id: int, waved_off: bool)
-# The local player earned a Game Puck (a ladder tier when `target` > 0) or raised
-# a banner (TrophyService). HUD toasts them.
+# The local player earned a Game Puck (a ladder tier when `target` > 0;
+# TrophyService). HUD toasts it.
 signal game_puck_earned(puck_id: String, target: int)
-signal banner_raised(banner_id: String)
 
 # ── Domain state ──────────────────────────────────────────────────────────────
 var _state_machine: GameStateMachine = null
@@ -512,7 +511,6 @@ func _ready() -> void:
 	_stat_recorder = SteamStatRecorder.new()
 	_trophies = TrophyService.new(_stat_recorder.totals)
 	_trophies.puck_earned.connect(game_puck_earned.emit)
-	_trophies.banner_raised.connect(banner_raised.emit)
 	# End-of-tick capture + broadcast (physics priority 2, after all actor
 	# integration). The callback body carries all the session gates, so the hook
 	# is safe to run from boot.

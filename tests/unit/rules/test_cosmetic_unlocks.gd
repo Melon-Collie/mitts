@@ -20,17 +20,17 @@ func test_every_colour_slot_offers_exactly_the_free_four_without_rewards() -> vo
 
 
 func test_a_colour_without_a_reward_is_never_available() -> void:
-	var every: Array[String] = CosmeticUnlocks.every_banner()
+	var every: Array[String] = CosmeticUnlocks.reward_pucks()
 	for slot: String in CosmeticUnlocks.COLOR_SLOTS:
 		for option: int in TapeColorRegistry.count():
-			if _FREE.has(option) or not CosmeticUnlocks.reward_banner(slot, option).is_empty():
+			if _FREE.has(option) or not CosmeticUnlocks.reward_puck(slot, option).is_empty():
 				continue
 			assert_false(CosmeticUnlocks.is_available(slot, option, every),
 					"%s %d has no reward and is not free" % [slot, option])
 
 
-func test_reward_rows_name_a_slot_a_colour_and_a_banner() -> void:
-	var banners: Array[String] = CosmeticUnlocks.every_banner()
+func test_reward_rows_name_a_slot_an_option_and_a_puck() -> void:
+	var pucks: Array[String] = CosmeticUnlocks.reward_pucks()
 	var seen: Dictionary = {}
 	for row: Dictionary in CosmeticUnlocks.REWARDS:
 		var slot: String = String(row["slot"])
@@ -39,7 +39,7 @@ func test_reward_rows_name_a_slot_a_colour_and_a_banner() -> void:
 		assert_between(option, 0, CosmeticUnlocks.option_count(slot) - 1,
 				"%s option %d" % [slot, option])
 		assert_false(CosmeticUnlocks.is_free(slot, option), "a reward must not already be free")
-		assert_has(banners, String(row["banner"]))
+		assert_has(pucks, String(row["puck"]))
 		var key: String = "%s/%d" % [slot, option]
 		assert_false(seen.has(key), "two rewards for %s" % key)
 		seen[key] = true
@@ -79,14 +79,14 @@ func test_the_second_team_slot_resolves_to_the_kit_secondary() -> void:
 	assert_eq(TapeColorRegistry.NAME_KEYS.size(), TapeColorRegistry.count())
 
 
-func test_the_signature_tape_jobs_are_banner_rewards() -> void:
+func test_the_signature_tape_jobs_are_game_puck_rewards() -> void:
 	var none: Array[String] = []
 	var spans: Array[int] = CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, none)
 	assert_eq(spans.size(), CosmeticUnlocks.FREE_SPANS.size(), "the original six are free")
 	assert_does_not_have(spans, StickTapeConfig.Span.SPACED)
-	assert_eq(CosmeticUnlocks.reward_banner(CosmeticUnlocks.TAPE_SPAN,
+	assert_eq(CosmeticUnlocks.reward_puck(CosmeticUnlocks.TAPE_SPAN,
 			StickTapeConfig.Span.SPACED), "sniper")
-	assert_eq(CosmeticUnlocks.reward_banner(CosmeticUnlocks.TAPE_SPAN,
+	assert_eq(CosmeticUnlocks.reward_puck(CosmeticUnlocks.TAPE_SPAN,
 			StickTapeConfig.Span.BOTTOM_STRIP), "playmaker")
 	var sniper: Array[String] = ["sniper"]
 	assert_has(CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, sniper),

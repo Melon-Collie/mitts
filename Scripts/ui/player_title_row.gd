@@ -1,8 +1,8 @@
 class_name PlayerTitleRow
 extends RefCounted
 
-# The player screen's title pick: "None" and the titles the player's raised
-# banners have earned (GamePuckRules.earned_titles), re-read each time the screen
+# The player screen's title pick: "None" and the titles the player's Game Pucks
+# have unlocked (GamePuckRules.earned_titles), re-read each time the screen
 # opens. A worn title the list no longer holds — a prefs file carried from
 # another machine — is listed too rather than silently dropped.
 

@@ -1,11 +1,14 @@
 class_name GamePucks
 ## The Game Puck catalogue (docs/game-pucks-plan.md). Pure data: GamePuckRules
 ## decides what is earned, TrophyService records it and mirrors the pucks
-## flagged for Steam.
+## flagged for Steam. A reward (a Titles row, a CosmeticUnlocks reward) names
+## the puck that unlocks it by a requirement: a puck id ("hat_trick") or a
+## ladder tier named by its target ("goals@50").
 ##
 ## A row's `id` is the puck's own id, stored in the ledger and keyed into the
 ## locale catalogue: PUCK_<ID> names it and PUCK_<ID>_DESC describes it (a
-## ladder's description takes the tier's target as %d). `steam` is the
+## ladder's description takes the tier's target as %d; a combo has none, its
+## requirements are its description). `steam` is the
 ## Steamworks API Name of the achievement it mirrors; a ladder's `steam_tiers`
 ## maps a tier's target to one. A puck with neither stays in-game, which costs
 ## no Steamworks setup (steam/ACHIEVEMENTS.md lists every mirrored id).
@@ -25,18 +28,21 @@ class_name GamePucks
 ##   "feat"    — a specific play, detected on the host when a goal is credited
 ##               (FeatRules, which names every one) and sent to the player who
 ##               made it.
+##   "combo"   — every requirement in `needs` met: pucks, ladder tiers or other
+##               combos, never itself through the chain. Derived, never stored.
 
 const FREIGHT_TRAIN := "freight_train"
 const STUDENT := "student"
 const CUSTOM_BUILD := "custom_build"
 const PLAY_WITH_BUUKIE := "play_with_buukie"
+const COMBO := "combo"
 
 const BUUKIE_STEAM_ID := 76561198027551159
 
 const ALL: Array[Dictionary] = [
 	# ── Ladders ──────────────────────────────────────────────────────────────
 	{"id": "goals", "cond": {"kind": "count", "field": "goals"},
-		"tiers": [10, 50, 250, 1000], "steam_tiers": {50: "ACH_SNIPER"}},
+		"tiers": [10, 50, 250, 1000], "steam_tiers": {50: "ACH_GOALS_50"}},
 	{"id": "assists", "cond": {"kind": "count", "field": "assists"},
 		"tiers": [10, 50, 250, 1000], "steam_tiers": {50: "ACH_SETUP_ARTIST"}},
 	{"id": "points", "cond": {"kind": "count", "field": "points"},
@@ -60,7 +66,7 @@ const ALL: Array[Dictionary] = [
 		"cond": {"kind": "game", "field": "goals", "min": 1}},
 	{"id": "hat_trick", "steam": "ACH_HAT_TRICK",
 		"cond": {"kind": "game", "field": "goals", "min": 3}},
-	{"id": "playmaker", "steam": "ACH_PLAYMAKER",
+	{"id": "three_helpers", "steam": "ACH_THREE_HELPERS",
 		"cond": {"kind": "game", "field": "assists", "min": 3}},
 	{"id": "big_night", "steam": "ACH_BIG_NIGHT",
 		"cond": {"kind": "game", "field": "points", "min": 5}},
@@ -101,6 +107,16 @@ const ALL: Array[Dictionary] = [
 	# ── Who you played with ──────────────────────────────────────────────────
 	{"id": PLAY_WITH_BUUKIE, "steam": "ACH_PLAY_WITH_BUUKIE", "hidden": true,
 		"cond": {"kind": "roster", "steam_id": BUUKIE_STEAM_ID}},
+	# ── Combos ───────────────────────────────────────────────────────────────
+	# One that unlocks a title carries the title's name.
+	{"id": "power_forward", "cond": {"kind": COMBO, "needs": ["goals@50", "hits@50"]}},
+	{"id": "shutdown", "cond": {"kind": COMBO,
+		"needs": ["interceptions@50", "takeaways@50", "shots_blocked@50"]}},
+	{"id": "two_way", "cond": {"kind": COMBO,
+		"needs": ["goals@50", "assists@50", "interceptions@50", "takeaways@50"]}},
+	{"id": "iron_man", "cond": {"kind": COMBO, "needs": ["games_played@100"]}},
+	{"id": "playmaker", "cond": {"kind": COMBO, "needs": ["assists@250", "one_timer_feed"]}},
+	{"id": "sniper", "cond": {"kind": COMBO, "needs": ["goals@250", "snipe"]}},
 ]
 
 
@@ -118,6 +134,28 @@ static func kind_of(entry: Dictionary) -> String:
 
 static func is_ladder(entry: Dictionary) -> bool:
 	return kind_of(entry) == "count"
+
+
+static func is_combo(entry: Dictionary) -> bool:
+	return kind_of(entry) == COMBO
+
+
+# A combo's requirements; empty for anything else.
+static func needs_of(entry: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	for req: Variant in (entry.get("cond", {}) as Dictionary).get("needs", []):
+		out.append(String(req))
+	return out
+
+
+# The puck id a requirement names, and the ladder target it asks for (0 for a
+# whole puck).
+static func requirement_puck(req: String) -> String:
+	return req.get_slice("@", 0)
+
+
+static func requirement_target(req: String) -> int:
+	return int(req.get_slice("@", 1)) if req.contains("@") else 0
 
 
 static func tiers_of(entry: Dictionary) -> Array[int]:

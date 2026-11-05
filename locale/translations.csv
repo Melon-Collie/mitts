@@ -413,7 +413,6 @@ PUCK_FIRST_GOAL_DESC,Score your first goal.,Marca tu primer gol.
 PUCK_HAT_TRICK,Hat Trick,Hat trick
 PUCK_HAT_TRICK_DESC,Score 3 goals in a single game.,Marca 3 goles en un partido.
 PUCK_PLAYMAKER,Playmaker,Organizador
-PUCK_PLAYMAKER_DESC,Record 3 assists in a single game.,Da 3 asistencias en un partido.
 PUCK_BIG_NIGHT,Big Night,Gran noche
 PUCK_BIG_NIGHT_DESC,Put up 5 points in a single game.,Suma 5 puntos en un partido.
 PUCK_BRICK_WALL,Brick Wall,Muro de ladrillo
@@ -440,17 +439,9 @@ PUCK_CUSTOM_BUILD,Make It Yours,Hazlo tuyo
 PUCK_CUSTOM_BUILD_DESC,Edit your player's build.,Edita el físico de tu jugador.
 PUCK_PLAY_WITH_BUUKIE,Buukie's Buddy,Colega de Buukie
 PUCK_PLAY_WITH_BUUKIE_DESC,Play an online game with Buukie.,Juega un partido online con Buukie.
-BANNER_POWER_FORWARD,Power Forward,Delantero de potencia
-BANNER_SHUTDOWN,Shutdown,Cerrojo
-BANNER_TWO_WAY,Two-Way,Ida y vuelta
-BANNER_IRON_MAN,Iron Man,Hombre de hierro
 MENU_TROPHY_CASE,Trophy Case,Vitrina
 TROPHY_CASE_TITLE,TROPHY CASE,VITRINA
-TROPHY_BANNERS,Banners,Estandartes
-TROPHY_LADDERS,Career pucks,Discos de carrera
-TROPHY_GAME_PUCKS,Game pucks,Discos de partido
 TROPHY_PROGRESS,%d / %d,%d / %d
-TROPHY_RAISED,Raised,Izado
 TROPHY_LADDER_DONE,Every tier earned,Todos los niveles conseguidos
 TROPHY_EARNED_ON,Earned %s,Conseguido el %s
 TROPHY_EARNED,Earned,Conseguido
@@ -465,8 +456,7 @@ TROPHY_TIER_4,IV,IV
 TROPHY_TIER_5,V,V
 TROPHY_NEEDS_STEAM,Career pucks count through Steam. Launch Mitts from Steam to track them.,Los discos de carrera se cuentan a través de Steam. Abre Mitts desde Steam para seguirlos.
 TOAST_GAME_PUCK,GAME PUCK · %s,DISCO · %s
-TOAST_BANNER_RAISED,BANNER RAISED · %s,ESTANDARTE IZADO · %s
-TROPHY_SUMMARY,%d / %d game pucks · %d / %d banners,%d / %d discos · %d / %d estandartes
+TROPHY_SUMMARY,%d / %d game pucks,%d / %d discos
 TROPHY_REQUIREMENT_PROGRESS,%s  ·  %d / %d,%s  ·  %d / %d
 TITLE_POWER_FORWARD,Power Forward,Delantero de potencia
 TITLE_SHUTDOWN,Shutdown,Cerrojo
@@ -474,8 +464,7 @@ TITLE_TWO_WAY,Two-Way,Ida y vuelta
 TITLE_IRON_MAN,Iron Man,Hombre de hierro
 PLAYER_TITLE_LABEL,Title,Título
 PLAYER_TITLE_NONE,None,Ninguno
-PLAYER_TITLE_HINT,Raise a banner in the Trophy Case to earn a title.,Iza un estandarte en la vitrina para conseguir un título.
-TROPHY_BANNER_TITLE,Unlocks the %s title,Desbloquea el título %s
+PLAYER_TITLE_HINT,Earn Game Pucks in the Trophy Case to unlock a title.,Consigue discos en la vitrina para desbloquear un título.
 SCOREBOARD_NAME_TITLE,%s  ·  %s,%s  ·  %s
 PUCK_SNIPE,Snipe,Tiro certero
 PUCK_SNIPE_DESC,Score a high-loft shot from beyond the faceoff dots.,Marca con un tiro alto desde más allá de los puntos de saque.
@@ -487,17 +476,26 @@ PUCK_PICK_AND_FINISH,Pick and Finish,Intercepta y remata
 PUCK_PICK_AND_FINISH_DESC,Score on the possession your own interception started.,Marca en la posesión que empezó tu propia intercepción.
 PUCK_STRIP_AND_FINISH,Strip and Finish,Roba y remata
 PUCK_STRIP_AND_FINISH_DESC,Score on the possession your own takeaway started.,Marca en la posesión que empezó tu propio robo.
-BANNER_PLAYMAKER,Playmaker,Organizador
-BANNER_SNIPER,Sniper,Francotirador
+PUCK_THREE_HELPERS,Three Helpers,Tres asistencias
+PUCK_THREE_HELPERS_DESC,Record 3 assists in a single game.,Da 3 asistencias en un partido.
+PUCK_POWER_FORWARD,Power Forward,Delantero de potencia
+PUCK_SHUTDOWN,Shutdown,Cerrojo
+PUCK_TWO_WAY,Two-Way,Ida y vuelta
+PUCK_IRON_MAN,Iron Man,Hombre de hierro
+PUCK_SNIPER,Sniper,Francotirador
+TROPHY_UNLOCKS_TITLE,Unlocks the %s title,Desbloquea el título %s
+TROPHY_UNLOCKS_TAPE,Unlocks the %s tape job,Desbloquea el encintado %s
+TROPHY_UNLOCKS_LACES,Unlocks %s laces,Desbloquea cordones: %s
+TROPHY_UNLOCKS_COLOR,Unlocks %s,Desbloquea %s
+TROPHY_TIER_UNLOCK,%s: %s,%s: %s
 TITLE_PLAYMAKER,Playmaker,Organizador
 TITLE_SNIPER,Sniper,Francotirador
 TAPE_COLOR_TEAM_SECOND,Team color 2,Color del equipo 2
 TAPE_COLOR_TEAM_SECOND_SHORT,Team 2,Equipo 2
 TAPE_SPAN_SPACED,Spaced,Espaciada
 TAPE_SPAN_BOTTOM_STRIP,Bottom strip,Tira inferior
-TAPE_SPAN_LOCKED,%s · %s banner,%s · estandarte %s
+TAPE_SPAN_LOCKED,%s · %s,%s · %s
 TAPE_TOE_LABEL,Toe cap,Puntera
-TROPHY_BANNER_TAPE,Unlocks the %s tape job,Desbloquea el encintado %s
 STICK_PATTERN_LABEL,Pattern,Diseño
 STICK_PATTERN_SOLID,Solid,Liso
 STICK_PATTERN_KICK,Kick zone,Zona de flexión

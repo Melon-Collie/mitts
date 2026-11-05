@@ -5,9 +5,9 @@ integers stored on Steam's servers, synced across the player's machines, with no
 backend of ours involved. Registry: `Scripts/domain/config/steam_stats.gd`;
 read-modify-write: `Scripts/game/steam_stat_recorder.gd`.
 
-**Why they exist:** they back the Game Puck ladders and banners
+**Why they exist:** they back the Game Puck ladders and the combos built on them
 (`docs/game-pucks-plan.md`) and the Steam achievements on ladder tiers
-(`ACH_SNIPER`, `ACH_ENFORCER`, …) without depending on a reachable Supabase. They
+(`ACH_GOALS_50`, `ACH_ENFORCER`, …) without depending on a reachable Supabase. They
 stay earnable offline / opted-out / while the backend is paused. Supabase remains the
 source for cross-machine history and dev telemetry; these stats are purely the
 progression counter (and the future basis for leaderboards).

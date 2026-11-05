@@ -26,7 +26,8 @@ For each app (4892600 and, for the playtest, 4893650):
 
 1. **Stats & Achievements → Achievements**: create one achievement per `id`
    below. Set its display **name** and **description** (these come from
-   Steamworks, *not* from the registry — the names/desc here are just our notes).
+   Steamworks, *not* from the registry). The name is the puck's in-game name,
+   a ladder tier's numeral included, so the two never disagree.
 2. Upload a **locked** and **unlocked** icon for each (Steamworks requires both;
    64×64 PNG). Placeholder art is fine for the beta.
 3. Leave **"Hidden"** off unless the row below says hidden.
@@ -56,7 +57,7 @@ STATS.md for that checklist.
 | API Name (`id`)     | Name              | When    | Unlocks when…                                  |
 |---------------------|-------------------|---------|------------------------------------------------|
 | `ACH_HAT_TRICK`     | Hat Trick         | game    | 3 goals in a single game                       |
-| `ACH_PLAYMAKER`     | Playmaker         | game    | 3 assists in a single game                     |
+| `ACH_THREE_HELPERS` | Three Helpers     | game    | 3 assists in a single game                     |
 | `ACH_BIG_NIGHT`     | Big Night         | game    | 5 points (G+A) in a single game                |
 | `ACH_BRICK_WALL`    | Brick Wall        | game    | 3 blocked shots in a single game               |
 | `ACH_FIRST_GOAL`    | Lamp Lighter      | game    | score your first goal (any mode)               |
@@ -71,10 +72,10 @@ STATS.md for that checklist.
 | `ACH_STUDENT`       | Student of the Game| event  | complete every tutorial                        |
 | `ACH_CUSTOM_BUILD`  | Make It Yours     | event   | edit your player's build                       |
 | `ACH_PLAY_WITH_BUUKIE` | Buukie's Buddy | roster  | play an online game with Buukie (hidden)       |
-| `ACH_SNIPER`        | Sniper            | ladder  | 50 career goals                                |
-| `ACH_SETUP_ARTIST`  | Setup Artist      | ladder  | 50 career assists                              |
-| `ACH_ENFORCER`      | Enforcer          | ladder  | 100 career hits                                |
-| `ACH_VETERAN`       | Veteran           | ladder  | 25 career games                                |
+| `ACH_GOALS_50`      | Goal Scorer II    | ladder  | 50 career goals                                |
+| `ACH_SETUP_ARTIST`  | Setup Man II      | ladder  | 50 career assists                              |
+| `ACH_ENFORCER`      | Hitter III        | ladder  | 100 career hits                                |
+| `ACH_VETERAN`       | Veteran II        | ladder  | 25 career games                                |
 
 ---
 

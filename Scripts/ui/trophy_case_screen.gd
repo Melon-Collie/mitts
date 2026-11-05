@@ -1,11 +1,12 @@
 class_name TrophyCaseScreen extends Control
 
-# The Trophy Case (docs/game-pucks-plan.md): the banners and how close each is,
-# the career ladders with their tiers, and the single Game Pucks. Read-only — it
-# shows what TrophyService and the Steam counters already hold, rebuilt on open.
+# The Trophy Case (docs/game-pucks-plan.md): every Game Puck, in catalogue
+# order, one card each showing what earns it — its description, a ladder's
+# tiers, or a combo's prerequisite pucks ticked as they are earned — and what it
+# unlocks. Read-only — it shows what TrophyService and the Steam counters
+# already hold, rebuilt on open.
 
-const _CARD_WIDTH: float = 300.0
-const _PUCK_CARD_WIDTH: float = 250.0
+const _CARD_WIDTH: float = 290.0
 const _SCROLL_STEP_PX: int = 90
 const _EARNED := MenuStyle.GOLD
 const _CHECK: String = "✓"
@@ -98,27 +99,10 @@ func _rebuild(totals: Dictionary, ledger: TrophyLedger) -> void:
 		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 		_body.add_child(note)
 
-	_body.add_child(_section_label(tr(&"TROPHY_BANNERS")))
-	var banners := HFlowContainer.new()
-	banners.add_theme_constant_override("h_separation", 12)
-	banners.add_theme_constant_override("v_separation", 12)
-	_body.add_child(banners)
-	var raised: int = 0
-	for banner: Dictionary in Banners.ALL:
-		if GamePuckRules.is_raised(banner, totals, ledger):
-			raised += 1
-		banners.add_child(_banner_card(banner, totals, ledger))
-
-	_body.add_child(_section_label(tr(&"TROPHY_LADDERS")))
-	var ladders := HFlowContainer.new()
-	ladders.add_theme_constant_override("h_separation", 12)
-	ladders.add_theme_constant_override("v_separation", 12)
-	_body.add_child(ladders)
-	_body.add_child(_section_label(tr(&"TROPHY_GAME_PUCKS")))
-	var singles := HFlowContainer.new()
-	singles.add_theme_constant_override("h_separation", 12)
-	singles.add_theme_constant_override("v_separation", 12)
-	_body.add_child(singles)
+	var cards := HFlowContainer.new()
+	cards.add_theme_constant_override("h_separation", 12)
+	cards.add_theme_constant_override("v_separation", 12)
+	_body.add_child(cards)
 
 	var earned: int = 0
 	var total: int = 0
@@ -128,51 +112,47 @@ func _rebuild(totals: Dictionary, ledger: TrophyLedger) -> void:
 			var reached: int = GamePuckRules.tiers_reached(entry, totals)
 			earned += reached
 			total += GamePucks.tiers_of(entry).size()
-			ladders.add_child(_ladder_card(entry, totals, reached))
+			cards.add_child(_ladder_card(entry, totals, reached))
+			continue
+		total += 1
+		if GamePucks.is_combo(entry):
+			if GamePuckRules.requirement_met(id, totals, ledger):
+				earned += 1
+			cards.add_child(_combo_card(entry, totals, ledger))
 		else:
-			total += 1
 			if ledger.has(id):
 				earned += 1
-			singles.add_child(_puck_card(entry, ledger))
-	_summary.text = tr(&"TROPHY_SUMMARY") % [earned, total, raised, Banners.ALL.size()]
+			cards.add_child(_puck_card(entry, ledger))
+	_summary.text = tr(&"TROPHY_SUMMARY") % [earned, total]
 
 
-func _banner_card(banner: Dictionary, totals: Dictionary, ledger: TrophyLedger) -> Control:
-	var is_up: bool = GamePuckRules.is_raised(banner, totals, ledger)
-	var col := _card(_CARD_WIDTH, is_up)
-	var id: String = banner["id"]
-	col.add_child(_label(TrophyCopy.banner_name(id).to_upper(), 22,
-			_EARNED if is_up else MenuStyle.BROADCAST_CREAM, true))
-	var needs: Array[String] = Banners.needs_of(banner)
-	var status: String = tr(&"TROPHY_RAISED") if is_up else tr(&"TROPHY_PROGRESS") % [
-		GamePuckRules.banner_progress(banner, totals, ledger), needs.size()]
-	col.add_child(_label(status, 12, _EARNED if is_up else MenuStyle.TEXT_MUTED, false))
-	var title: String = Banners.title_of(banner)
-	if not title.is_empty():
-		col.add_child(_label(tr(&"TROPHY_BANNER_TITLE") % TrophyCopy.title_name(title), 13,
-				_EARNED if is_up else MenuStyle.TEXT_DIM, false))
-	for reward: Dictionary in CosmeticUnlocks.rewards_of(id):
-		if String(reward["slot"]) == CosmeticUnlocks.TAPE_SPAN:
-			col.add_child(_label(tr(&"TROPHY_BANNER_TAPE") % tr(
-					StickTapeConfig.SPAN_NAME_KEYS[int(reward["option"])]), 13,
-					_EARNED if is_up else MenuStyle.TEXT_DIM, false))
+func _combo_card(entry: Dictionary, totals: Dictionary, ledger: TrophyLedger) -> Control:
+	var id: String = entry["id"]
+	var has_it: bool = GamePuckRules.requirement_met(id, totals, ledger)
+	var col := _card(has_it)
+	col.add_child(_head(TrophyCopy.puck_name(id), has_it))
+	var needs: Array[String] = GamePucks.needs_of(entry)
+	var status: String = tr(&"TROPHY_EARNED") if has_it else tr(&"TROPHY_PROGRESS") % [
+		GamePuckRules.combo_progress(entry, totals, ledger), needs.size()]
+	col.add_child(_label(status, 12, _EARNED if has_it else MenuStyle.TEXT_MUTED, false))
 	for req: String in needs:
 		var met: bool = GamePuckRules.requirement_met(req, totals, ledger)
-		var puck: String = Banners.requirement_puck(req)
-		var target: int = Banners.requirement_target(req)
-		var line: String = "%s %s" % [_CHECK if met else _OPEN, TrophyCopy.puck_name(puck, target)]
-		if target > 0 and not met:
-			var field: String = String((GamePucks.find(puck)["cond"] as Dictionary)["field"])
+		var line: String = "%s %s" % [_CHECK if met else _OPEN, TrophyCopy.requirement_name(req)]
+		var need: Dictionary = GamePucks.find(GamePucks.requirement_puck(req))
+		var target: int = GamePucks.requirement_target(req)
+		if target > 0 and not met and GamePucks.is_ladder(need):
+			var field: String = String((need["cond"] as Dictionary)["field"])
 			line = tr(&"TROPHY_REQUIREMENT_PROGRESS") % [
 				line, GamePuckRules.counter(totals, field), target]
 		col.add_child(_label(line, 14, MenuStyle.TEXT_BODY if met else MenuStyle.TEXT_DIM, false))
+	_add_unlocks(col, TrophyCopy.unlock_lines(id), has_it)
 	return col.get_parent() as Control
 
 
 func _ladder_card(entry: Dictionary, totals: Dictionary, reached: int) -> Control:
 	var tiers: Array[int] = GamePucks.tiers_of(entry)
 	var done: bool = reached == tiers.size()
-	var col := _card(_CARD_WIDTH, done)
+	var col := _card(done)
 	var id: String = entry["id"]
 	var field: String = String((entry["cond"] as Dictionary)["field"])
 	var value: int = GamePuckRules.counter(totals, field)
@@ -191,20 +171,20 @@ func _ladder_card(entry: Dictionary, totals: Dictionary, reached: int) -> Contro
 	var next: String = tr(&"TROPHY_LADDER_DONE") if done \
 			else TrophyCopy.puck_desc(id, tiers[reached])
 	col.add_child(_label(next, 13, _EARNED if done else MenuStyle.TEXT_DIM, false))
+	for i: int in tiers.size():
+		var lines: Array[String] = []
+		for line: String in TrophyCopy.unlock_lines("%s@%d" % [id, tiers[i]]):
+			lines.append(tr(&"TROPHY_TIER_UNLOCK") % [TrophyCopy.puck_name(id, tiers[i]), line])
+		_add_unlocks(col, lines, i < reached)
 	return col.get_parent() as Control
 
 
 func _puck_card(entry: Dictionary, ledger: TrophyLedger) -> Control:
 	var id: String = entry["id"]
 	var has_it: bool = ledger.has(id)
-	var col := _card(_PUCK_CARD_WIDTH, has_it)
+	var col := _card(has_it)
 	var secret: bool = bool(entry.get("hidden", false)) and not has_it
-	var head := HBoxContainer.new()
-	head.add_theme_constant_override("separation", 8)
-	head.add_child(_PuckMark.new(has_it))
-	head.add_child(_label(tr(&"TROPHY_HIDDEN") if secret else TrophyCopy.puck_name(id),
-			16, _EARNED if has_it else MenuStyle.BROADCAST_CREAM, true))
-	col.add_child(head)
+	col.add_child(_head(tr(&"TROPHY_HIDDEN") if secret else TrophyCopy.puck_name(id), has_it))
 	var desc := _label(tr(&"TROPHY_HIDDEN_DESC") if secret else TrophyCopy.puck_desc(id),
 			13, MenuStyle.TEXT_DIM, false)
 	desc.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
@@ -215,7 +195,25 @@ func _puck_card(entry: Dictionary, ledger: TrophyLedger) -> Control:
 		when = tr(&"TROPHY_EARNED_ON") % Time.get_date_string_from_unix_time(at) \
 				if at > 0 else tr(&"TROPHY_EARNED")
 	col.add_child(_label(when, 12, _EARNED if has_it else MenuStyle.TEXT_MUTED, false))
+	if not secret:
+		_add_unlocks(col, TrophyCopy.unlock_lines(id), has_it)
 	return col.get_parent() as Control
+
+
+# A single puck's or a combo's head: its mark and its name.
+func _head(text: String, has_it: bool) -> HBoxContainer:
+	var head := HBoxContainer.new()
+	head.add_theme_constant_override("separation", 8)
+	head.add_child(_PuckMark.new(has_it))
+	head.add_child(_label(text, 16, _EARNED if has_it else MenuStyle.BROADCAST_CREAM, true))
+	return head
+
+
+func _add_unlocks(col: VBoxContainer, lines: Array[String], unlocked: bool) -> void:
+	for line: String in lines:
+		var l := _label(line, 13, _EARNED if unlocked else MenuStyle.TEXT_BODY, false)
+		l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		col.add_child(l)
 
 
 # A tier: its puck, filled when reached, over its target.
@@ -231,11 +229,11 @@ func _tier_mark(target: int, reached: bool) -> Control:
 	return col
 
 
-# A broadcast panel of `width` holding a column; returns the column; the panel is
-# its parent.
-func _card(width: float, lit: bool) -> VBoxContainer:
+# A broadcast panel holding a column; returns the column; the panel is its
+# parent.
+func _card(lit: bool) -> VBoxContainer:
 	var panel := PanelContainer.new()
-	panel.custom_minimum_size = Vector2(width, 0)
+	panel.custom_minimum_size = Vector2(_CARD_WIDTH, 0)
 	var style := StyleBoxFlat.new()
 	style.bg_color = MenuStyle.BROADCAST_BG
 	style.set_corner_radius_all(8)
@@ -247,10 +245,6 @@ func _card(width: float, lit: bool) -> VBoxContainer:
 	col.add_theme_constant_override("separation", 6)
 	panel.add_child(col)
 	return col
-
-
-func _section_label(text: String) -> Label:
-	return _label(text.to_upper(), 13, MenuStyle.BROADCAST_DIM, false)
 
 
 func _label(text: String, font_size: int, color: Color, display: bool) -> Label:

@@ -1,12 +1,15 @@
 class_name GamePuckRules
-## Pure evaluation of the Game Puck catalogue (GamePucks) and the banners
-## (Banners). No engine, no Steam, no state: given a finished game's stats, the
-## lifetime counters and the ledger, it says what is earned and how far along
-## everything is. Earning is idempotent, so callers may evaluate every game-over
+## Pure evaluation of the Game Puck catalogue (GamePucks). No engine, no Steam,
+## no state: given a finished game's stats, the lifetime counters and the ledger,
+## it says what is earned, what that unlocks and how far along everything is. Earning is idempotent, so callers may evaluate every game-over
 ## without bookkeeping.
 ##
 ## `totals` throughout is the Steam User Stats totals keyed by SteamStats `key`
 ## (SteamStatRecorder.totals): empty without Steam, which simply reads as zero.
+
+# Deeper than any combo chain the catalogue holds (its test forbids cycles); it
+# only stops a malformed chain from recursing without end.
+const _MAX_COMBO_DEPTH: int = 16
 
 
 # One game's stats in the shape "game" conditions and SteamStats increments read.
@@ -99,12 +102,12 @@ static func crossed_tiers(before: Dictionary, after: Dictionary) -> Array[Dictio
 	return out
 
 
-# Every Steamworks id `totals` and `ledger` have earned: the single pucks the
-# ledger holds and the ladder tiers reached, wherever a row is flagged.
+# Every Steamworks id `totals` and `ledger` have earned: the pucks earned and
+# the ladder tiers reached, wherever a row is flagged.
 static func earned_steam_ids(totals: Dictionary, ledger: TrophyLedger) -> Array[String]:
 	var out: Array[String] = []
 	for entry: Dictionary in GamePucks.ALL:
-		if entry.has("steam") and ledger != null and ledger.has(String(entry["id"])):
+		if entry.has("steam") and requirement_met(String(entry["id"]), totals, ledger):
 			out.append(String(entry["steam"]))
 		var steam_tiers: Dictionary = entry.get("steam_tiers", {})
 		if steam_tiers.is_empty():
@@ -116,47 +119,66 @@ static func earned_steam_ids(totals: Dictionary, ledger: TrophyLedger) -> Array[
 	return out
 
 
+# Whether a requirement — a puck id or a ladder tier ("goals@50") — is met. A
+# combo is met when every requirement it names is, through any depth of combos.
 static func requirement_met(req: String, totals: Dictionary, ledger: TrophyLedger) -> bool:
-	var puck: String = Banners.requirement_puck(req)
-	var target: int = Banners.requirement_target(req)
-	if target > 0:
-		var entry: Dictionary = GamePucks.find(puck)
-		if entry.is_empty():
-			return false
-		return counter(totals, String((entry["cond"] as Dictionary)["field"])) >= target
-	return ledger != null and ledger.has(puck)
+	return _met(req, totals, ledger, 0)
 
 
-# How many of a banner's requirements are met.
-static func banner_progress(banner: Dictionary, totals: Dictionary, ledger: TrophyLedger) -> int:
+# How many of a combo's requirements are met.
+static func combo_progress(entry: Dictionary, totals: Dictionary, ledger: TrophyLedger) -> int:
 	var met: int = 0
-	for req: String in Banners.needs_of(banner):
+	for req: String in GamePucks.needs_of(entry):
 		if requirement_met(req, totals, ledger):
 			met += 1
 	return met
 
 
-static func is_raised(banner: Dictionary, totals: Dictionary, ledger: TrophyLedger) -> bool:
-	var needs: Array[String] = Banners.needs_of(banner)
-	return not needs.is_empty() and banner_progress(banner, totals, ledger) == needs.size()
-
-
-static func raised_banners(totals: Dictionary, ledger: TrophyLedger) -> Array[String]:
+# The combo pucks earned, in catalogue order.
+static func earned_combos(totals: Dictionary, ledger: TrophyLedger) -> Array[String]:
 	var out: Array[String] = []
-	for banner: Dictionary in Banners.ALL:
-		if is_raised(banner, totals, ledger):
-			out.append(String(banner["id"]))
+	for entry: Dictionary in GamePucks.ALL:
+		if GamePucks.is_combo(entry) and requirement_met(String(entry["id"]), totals, ledger):
+			out.append(String(entry["id"]))
 	return out
 
 
-# The titles the raised banners unlock, in catalogue order.
+# The members of `reqs` that are met — what a reward table asks of a player.
+static func met_requirements(reqs: Array[String], totals: Dictionary,
+		ledger: TrophyLedger) -> Array[String]:
+	var out: Array[String] = []
+	for req: String in reqs:
+		if requirement_met(req, totals, ledger):
+			out.append(req)
+	return out
+
+
+# The titles the earned pucks unlock, in catalogue order.
 static func earned_titles(totals: Dictionary, ledger: TrophyLedger) -> Array[String]:
 	var out: Array[String] = []
-	for banner: Dictionary in Banners.ALL:
-		var title: String = Banners.title_of(banner)
-		if not title.is_empty() and not out.has(title) and is_raised(banner, totals, ledger):
-			out.append(title)
+	for row: Dictionary in Titles.ALL:
+		if requirement_met(String(row["puck"]), totals, ledger):
+			out.append(String(row["id"]))
 	return out
+
+
+static func _met(req: String, totals: Dictionary, ledger: TrophyLedger, depth: int) -> bool:
+	if depth > _MAX_COMBO_DEPTH:
+		return false
+	var entry: Dictionary = GamePucks.find(GamePucks.requirement_puck(req))
+	var target: int = GamePucks.requirement_target(req)
+	if target > 0:
+		return GamePucks.is_ladder(entry) and counter(
+				totals, String((entry["cond"] as Dictionary)["field"])) >= target
+	if GamePucks.is_combo(entry):
+		var needs: Array[String] = GamePucks.needs_of(entry)
+		if needs.is_empty():
+			return false
+		for need: String in needs:
+			if not _met(need, totals, ledger, depth + 1):
+				return false
+		return true
+	return not entry.is_empty() and ledger != null and ledger.has(String(entry["id"]))
 
 
 static func _special_met(key: String, ctx: Dictionary) -> bool:

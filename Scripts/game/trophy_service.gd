@@ -1,18 +1,17 @@
 class_name TrophyService extends RefCounted
-## Application glue between the Game Puck domain (GamePucks, Banners,
-## GamePuckRules) and its two stores: the ledger in PlayerPrefs, synced through
+## Application glue between the Game Puck domain (GamePucks, GamePuckRules) and its two stores: the ledger in PlayerPrefs, synced through
 ## Steam Cloud, and the Steam achievements a puck is flagged to mirror. Owned by
 ## GameManager: evaluated at game-over and poked from live hooks. The domain
 ## decides what is earned; this records it, announces it and tells Steam.
 ##
 ## `totals_provider` returns the Steam User Stats totals
-## (SteamStatRecorder.totals): ladders and banners are read off them.
+## (SteamStatRecorder.totals): ladders and the combos that need them are read
+## off them.
 ## `ledger_provider` returns the ledger to write and `persist` saves it; both
 ## default to PlayerPrefs, whose ledger is a fresh object after a Steam Cloud
 ## adopt, so it is fetched on every use rather than held.
 
 signal puck_earned(puck_id: String, target: int)  # target 0 for a single puck
-signal banner_raised(banner_id: String)
 
 var _totals_provider: Callable = Callable()
 var _ledger_provider: Callable = Callable()
@@ -37,7 +36,7 @@ func evaluate_game_over(stats: PlayerStats, ctx: Dictionary, present_steam_ids: 
 		local_steam_id: int, totals_before: Dictionary) -> void:
 	var ledger: TrophyLedger = _ledger_provider.call()
 	var changed: bool = import_steam_unlocks(ledger)
-	var raised_before: Array[String] = GamePuckRules.raised_banners(totals_before, ledger)
+	var combos_before: Array[String] = GamePuckRules.earned_combos(totals_before, ledger)
 	var earned: Array[String] = GamePuckRules.earned_roster(present_steam_ids, local_steam_id)
 	if stats != null:
 		earned.append_array(GamePuckRules.earned_game(GamePuckRules.game_dict(stats), ctx))
@@ -49,7 +48,7 @@ func evaluate_game_over(stats: PlayerStats, ctx: Dictionary, present_steam_ids: 
 	var totals_after: Dictionary = _totals()
 	for crossed: Dictionary in GamePuckRules.crossed_tiers(totals_before, totals_after):
 		puck_earned.emit(String(crossed["id"]), int(crossed["target"]))
-	_announce_banners(raised_before, totals_after, ledger)
+	_announce_combos(combos_before, totals_after, ledger)
 	if changed:
 		_persist.call()
 	_mirror(totals_after, ledger)
@@ -80,7 +79,7 @@ func on_build_edited() -> void:
 	_earn_now(GamePucks.event_puck("build_edited"))
 
 
-# Records in `ledger` every mirrored single puck Steam already shows unlocked —
+# Records in `ledger` every mirrored stored puck Steam already shows unlocked —
 # an achievement earned before the ledger existed, or on a machine whose prefs
 # never synced — with an unknown date. Returns true when the ledger grew.
 static func import_steam_unlocks(ledger: TrophyLedger) -> bool:
@@ -88,7 +87,8 @@ static func import_steam_unlocks(ledger: TrophyLedger) -> bool:
 		return false
 	var changed: bool = false
 	for entry: Dictionary in GamePucks.ALL:
-		if not entry.has("steam") or ledger.has(String(entry["id"])):
+		if not entry.has("steam") or GamePucks.is_combo(entry) \
+				or ledger.has(String(entry["id"])):
 			continue
 		if SteamManager.is_achievement_unlocked(String(entry["steam"])):
 			changed = ledger.earn(String(entry["id"]), 0) or changed
@@ -100,19 +100,20 @@ func _earn_now(id: String) -> void:
 	if id.is_empty() or ledger.has(id):
 		return
 	var totals: Dictionary = _totals()
-	var raised_before: Array[String] = GamePuckRules.raised_banners(totals, ledger)
+	var combos_before: Array[String] = GamePuckRules.earned_combos(totals, ledger)
 	ledger.earn(id, int(Time.get_unix_time_from_system()))
 	puck_earned.emit(id, 0)
-	_announce_banners(raised_before, totals, ledger)
+	_announce_combos(combos_before, totals, ledger)
 	_persist.call()
 	_mirror(totals, ledger)
 
 
-func _announce_banners(raised_before: Array[String], totals: Dictionary,
+# A combo is announced like any puck, once the last thing it needs is earned.
+func _announce_combos(combos_before: Array[String], totals: Dictionary,
 		ledger: TrophyLedger) -> void:
-	for id: String in GamePuckRules.raised_banners(totals, ledger):
-		if not raised_before.has(id):
-			banner_raised.emit(id)
+	for id: String in GamePuckRules.earned_combos(totals, ledger):
+		if not combos_before.has(id):
+			puck_earned.emit(id, 0)
 
 
 # Unlocks every flagged Steam achievement the ledger and totals have earned that

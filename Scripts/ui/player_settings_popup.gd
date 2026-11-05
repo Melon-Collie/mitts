@@ -749,7 +749,7 @@ func _paint_team_rows() -> void:
 		_glove_btn.add_icon_item(PlayerRowKit.swatch_strip(zones),
 				tr(GearModelRegistry.GLOVE_NAME_KEYS[model]), model)
 
-	var raised: Array[String] = PlayerPrefs.raised_banners()
+	var raised: Array[String] = PlayerPrefs.earned_rewards()
 	CosmeticSwatches.fill(_blade_color_dd, CosmeticUnlocks.TAPE_BLADE, team, accent, raised)
 	CosmeticSwatches.fill(_knob_color_dd, CosmeticUnlocks.TAPE_KNOB, team, accent, raised)
 	CosmeticSwatches.fill(_lace_dd, CosmeticUnlocks.LACES, team, accent, raised)

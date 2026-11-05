@@ -8,7 +8,6 @@ var _totals: Dictionary = {}
 var _ledger: TrophyLedger = null
 var _saves: int = 0
 var _pucks: Array[Array] = []
-var _banners: Array[String] = []
 var _service: TrophyService = null
 
 
@@ -17,11 +16,9 @@ func before_each() -> void:
 	_ledger = TrophyLedger.new()
 	_saves = 0
 	_pucks.clear()
-	_banners.clear()
 	_service = TrophyService.new(func() -> Dictionary: return _totals,
 			func() -> TrophyLedger: return _ledger, func() -> void: _saves += 1)
 	_service.puck_earned.connect(func(id: String, target: int) -> void: _pucks.append([id, target]))
-	_service.banner_raised.connect(func(id: String) -> void: _banners.append(id))
 
 
 func _game(goals: int) -> PlayerStats:
@@ -49,19 +46,26 @@ func test_a_repeat_earns_nothing_and_saves_nothing() -> void:
 	assert_eq(_saves, 1)
 
 
-func test_crossing_a_ladder_tier_and_raising_a_banner_are_announced() -> void:
+func test_crossing_a_ladder_tier_and_completing_a_combo_are_announced() -> void:
 	var before: Dictionary = {"goals": 49, "hits": 50}
 	_totals = {"goals": 50, "hits": 50}
 	_service.evaluate_game_over(_game(0), {"outcome": "loss"}, [], 0, before)
 	assert_has(_pucks, ["goals", 50])
-	assert_eq(_banners, ["power_forward"] as Array[String])
-	assert_eq(_saves, 0, "a ladder tier is derived, never stored")
+	assert_has(_pucks, ["power_forward", 0])
+	assert_eq(_saves, 0, "a ladder tier and a combo are derived, never stored")
 
 
-func test_a_banner_already_raised_is_not_announced_again() -> void:
+func test_a_combo_already_earned_is_not_announced_again() -> void:
 	_totals = {"goals": 60, "hits": 60}
 	_service.evaluate_game_over(_game(0), {"outcome": "loss"}, [], 0, _totals)
-	assert_eq(_banners.size(), 0)
+	assert_does_not_have(_pucks, ["power_forward", 0])
+
+
+# A feat that completes a combo announces both, the feat first.
+func test_a_live_puck_that_completes_a_combo_announces_it() -> void:
+	_totals = {"goals": 250}
+	_service.on_feat("snipe")
+	assert_eq(_pucks, [["snipe", 0], ["sniper", 0]] as Array[Array])
 
 
 func test_a_big_hit_earns_its_puck_once() -> void:

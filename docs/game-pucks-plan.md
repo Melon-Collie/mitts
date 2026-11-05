@@ -2,8 +2,9 @@
 
 Status: **Phases 1–4 built** (the catalogue, the ledger, the Trophy Case,
 titles, feats, and cosmetic rewards: free colours, signature tape jobs, sticks
-as patterns). **Phase 5 planned:** one kind of puck — banners become combo
-pucks, and any puck can unlock something.
+as patterns), and Phase 5 step 1 (one kind of puck: banners became combo
+pucks, and any puck or tier can unlock something). Phase 5 step 2 (pricing
+the cosmetics) is next.
 
 A progression system on the model of Darktide's Penances. A long catalogue of
 achievements (**Game Pucks**) records what a player has done, and a puck can
@@ -13,10 +14,6 @@ pucks. They all live on one screen, the **Trophy Case**.
 
 The name comes from hockey: a player keeps the puck from a milestone — the
 first goal, the hundredth point — taped and dated.
-
-(Phases 1–4 built a second concept, the **Banner**: a named set of pucks that
-unlocked the reward. Phase 5 folds it into the puck catalogue as the combo
-kind; until it lands, the code still says banner.)
 
 ## Decisions banked
 
@@ -124,7 +121,7 @@ One registry row per puck. Kinds:
 | **feat** | a specific play happens (below) | the moment it happens, host-detected |
 | **event** | a moment (a big hit, finishing the tutorial course) | its hook (`TrophyService.on_*`) |
 | **roster** | a match whose lobby includes a named person | game-over (`GamePuckRules.earned_roster`) |
-| **combo** (Phase 5) | every puck or tier it names is earned | whenever one of them is |
+| **combo** | every puck, tier or combo it names is earned | whenever one of them is (`GamePuckRules.requirement_met`) |
 
 A count puck is a ladder: one row with tiers (10 / 50 / 250 / 1000 goals), each
 tier its own puck to earn. Tiers ascend strictly, and anything that needs a
@@ -156,8 +153,7 @@ on the game-over screen.
 
 ### Catalogue
 
-The rows live in `GamePucks.ALL` (and, until Phase 5, `Banners.ALL`). The
-title combos:
+The rows live in `GamePucks.ALL`. The title combos:
 
 | combo | needs | title |
 |---|---|---|
@@ -203,17 +199,15 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
 - `domain/config/game_pucks.gd`: the puck registry. It replaced the old
   achievement registry and keeps its condition kinds, adding `count` ladders
   and `feat` pucks.
-- `domain/config/banners.gd`: banner requirements and the title each unlocks.
-  Phase 5 folds its rows into `game_pucks.gd` as combos and deletes it.
-- `domain/config/titles.gd`: title ids and their locale keys (from Phase 5, the
-  puck each is unlocked by).
+- `domain/config/titles.gd`: title ids, the puck requirement each is unlocked
+  by, and their locale keys.
 - `domain/state/trophy_ledger.gd`: the stored part only — the earned game,
   feat, event and roster pucks, and the equipped title — with its serialization
   and the union merge.
 - `domain/rules/game_puck_rules.gd`: given the Steam counters, one game's stats
   and the ledger, which pucks, tiers and banners are earned, and each one's
   progress. Earning is idempotent: evaluating twice earns nothing new.
-  From Phase 5 it resolves combos recursively, each once per evaluation.
+  It resolves combos recursively, so a combo may name other combos.
 
 **Application:**
 - `TrophyService` replaced the old achievement service: it evaluates at game-over
@@ -230,19 +224,18 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
   only an id that is a feat puck.
 
 **Infrastructure and UI:**
-- The Trophy Case screen (`TrophyCaseScreen`), beside Career on the side menu.
-  Through Phase 4: banners with their pucks and progress, the ladders, and the
-  single pucks. From Phase 5: one list of pucks, each card showing what earns
-  it (its description, its tiers, or a combo's prerequisite pucks, each ticked
-  when earned) and what it unlocks.
+- The Trophy Case screen (`TrophyCaseScreen`), beside Career on the side menu:
+  one list of pucks in catalogue order, each card showing what earns it (its
+  description, its tiers, or a combo's prerequisite pucks, each ticked when
+  earned) and what it unlocks (`TrophyCopy.unlock_lines`).
   `TrophyCopy` holds the words it and the toast share.
 - An earn toast on the HUD's toast stack, at game-over and live for moments.
 - A title row in the player screen's YOU region (`PlayerTitleRow`).
 - The title on the lobby slot card, the scoreboard and the Three Stars on the
   game-over screen.
 - Locked cosmetics (Phase 4): `CosmeticUnlocks` holds what is free in each slot
-  and the reward rows, each a slot, an option and the banner (from Phase 5, the
-  puck) that unlocks it.
+  and the reward rows, each a slot, an option and the puck requirement that
+  unlocks it.
   The picker shows only what the player may wear; a pick that is not available
   is worn as the team colour (`CosmeticUnlocks.worn_*`). The lobby relays what a
   player wears whether or not it is earned (*No anti-cheat*).
@@ -282,8 +275,8 @@ Lower layers never reach up (CLAUDE.md → *Layer Architecture*).
       draw the pattern's defaults, and picking a new pattern drops the paint.
       The old white colourway is an unlisted alias, rewritten on load as Solid
       painted white. Protocol bump.
-5. **One kind of puck** (planned), in two steps:
-   1. **Flatten.** `Banners.ALL` rows become `combo` rows in `GamePucks.ALL`
+5. **One kind of puck**, in two steps:
+   1. **Flatten** (built). The banners became `combo` rows in `GamePucks.ALL`
       (nesting allowed, cycles failed by a test); titles and cosmetic rewards
       name a puck requirement instead of a banner; the Trophy Case becomes one
       list whose cards show prerequisites and unlocks; the earn toast fires for

@@ -3,7 +3,7 @@ extends RefCounted
 
 # The player screen's tape-coverage pick: the spans the player may wear in the
 # list's reading order, then the reward spans still to earn, greyed and naming
-# the banner that unlocks them (CosmeticUnlocks).
+# the Game Puck that unlocks them (CosmeticUnlocks).
 
 const _ORDER: Array[int] = [
 	StickTapeConfig.Span.FULL, StickTapeConfig.Span.HEEL_TO_MID,
@@ -24,20 +24,20 @@ func button() -> OptionButton:
 	return _btn
 
 
-func reload(raised: Array[String]) -> void:
+func reload(earned: Array[String]) -> void:
 	_btn.clear()
 	_ids.clear()
-	var open: Array[int] = CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, raised)
-	var locked: Array[int] = CosmeticUnlocks.locked(CosmeticUnlocks.TAPE_SPAN, raised)
+	var open: Array[int] = CosmeticUnlocks.available(CosmeticUnlocks.TAPE_SPAN, earned)
+	var locked: Array[int] = CosmeticUnlocks.locked(CosmeticUnlocks.TAPE_SPAN, earned)
 	for span: int in _ORDER:
 		if open.has(span):
 			_add(span, TrophyCopy.t(StickTapeConfig.SPAN_NAME_KEYS[span]), false)
 	for span: int in _ORDER:
 		if locked.has(span):
-			var banner: String = CosmeticUnlocks.reward_banner(CosmeticUnlocks.TAPE_SPAN, span)
+			var req: String = CosmeticUnlocks.reward_puck(CosmeticUnlocks.TAPE_SPAN, span)
 			_add(span, TrophyCopy.t(&"TAPE_SPAN_LOCKED") % [
 					TrophyCopy.t(StickTapeConfig.SPAN_NAME_KEYS[span]),
-					TrophyCopy.banner_name(banner)], true)
+					TrophyCopy.requirement_name(req)], true)
 
 
 func select(span: int) -> void:

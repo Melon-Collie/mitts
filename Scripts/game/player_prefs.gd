@@ -514,17 +514,19 @@ func _release_custom_cursor() -> void:
 
 
 # The saved tape and gear codes as the local player may wear them: a reward
-# option whose banner is not raised is worn as the team colour.
+# option whose Game Puck is not earned is worn as the slot's default.
 func worn_tape_code() -> int:
-	return CosmeticUnlocks.worn_tape_code(stick_tape_code, raised_banners())
+	return CosmeticUnlocks.worn_tape_code(stick_tape_code, earned_rewards())
 
 
 func worn_gear_style_code() -> int:
-	return CosmeticUnlocks.worn_gear_code(gear_style_code, raised_banners())
+	return CosmeticUnlocks.worn_gear_code(gear_style_code, earned_rewards())
 
 
-func raised_banners() -> Array[String]:
-	return GamePuckRules.raised_banners(SteamStatRecorder.new().totals(), trophy_ledger)
+# The reward requirements (CosmeticUnlocks.reward_pucks) the player has met.
+func earned_rewards() -> Array[String]:
+	return GamePuckRules.met_requirements(CosmeticUnlocks.reward_pucks(),
+			SteamStatRecorder.new().totals(), trophy_ledger)
 
 
 func save() -> void:
@@ -1134,13 +1136,14 @@ func _load() -> void:
 		# Round-trip through the config type so a hand-edited or future-version
 		# code coerces to a legal tape job instead of riding raw into the wire. A
 		# colour no reward could ever unlock switches to the team colour here; one
-		# a banner unlocks is kept, and worn_* decide once Steam says what is raised.
+		# a Game Puck unlocks is kept, and worn_* decide once Steam says what is
+		# earned.
 		stick_tape_code = CosmeticUnlocks.worn_tape_code(int(cfg.get_value(
 				"player", "stick_tape", StickTapeConfig.DEFAULT_CODE)),
-				CosmeticUnlocks.every_banner())
+				CosmeticUnlocks.reward_pucks())
 		gear_style_code = CosmeticUnlocks.worn_gear_code(int(cfg.get_value(
 				"player", "gear_style", GearStyleConfig.DEFAULT_CODE)),
-				CosmeticUnlocks.every_banner())
+				CosmeticUnlocks.reward_pucks())
 		var stick_gear: GearStyleConfig = GearStyleConfig.from_code(gear_style_code)
 		var stick_tape: StickTapeConfig = StickTapeConfig.from_code(stick_tape_code)
 		StickModelRegistry.unalias(stick_gear, stick_tape)

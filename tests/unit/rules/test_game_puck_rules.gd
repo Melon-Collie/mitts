@@ -39,10 +39,10 @@ func test_two_goals_is_no_hat_trick() -> void:
 	assert_does_not_have(ids, "hat_trick")
 
 
-func test_playmaker_unlocks_at_three_assists() -> void:
+func test_three_helpers_unlocks_at_three_assists() -> void:
 	var ids := GamePuckRules.earned_game(
 			GamePuckRules.game_dict(_stats(0, 3, 0, 0, 0)), _ctx("draw", 3, 3))
-	assert_has(ids, "playmaker")
+	assert_has(ids, "three_helpers")
 
 
 func test_big_night_counts_goals_plus_assists() -> void:
@@ -266,7 +266,7 @@ func test_empty_totals_earn_no_tier() -> void:
 func test_the_old_career_achievements_ride_their_ladder_tiers() -> void:
 	var ids := GamePuckRules.earned_steam_ids(
 			{"goals": 50, "assists": 50, "hits": 100, "games_played": 25}, TrophyLedger.new())
-	for id: String in ["ACH_SNIPER", "ACH_SETUP_ARTIST", "ACH_ENFORCER", "ACH_VETERAN"]:
+	for id: String in ["ACH_GOALS_50", "ACH_SETUP_ARTIST", "ACH_ENFORCER", "ACH_VETERAN"]:
 		assert_has(ids, id)
 	assert_eq(GamePuckRules.earned_steam_ids({"goals": 49}, TrophyLedger.new()).size(), 0)
 
@@ -277,14 +277,29 @@ func test_ledger_pucks_mirror_their_steam_id() -> void:
 	assert_eq(GamePuckRules.earned_steam_ids({}, ledger), ["ACH_HAT_TRICK"] as Array[String])
 
 
-# ── banners ──────────────────────────────────────────────────────────────────
-func test_power_forward_rises_on_its_last_requirement() -> void:
-	var banner: Dictionary = _banner("power_forward")
+# ── combos ───────────────────────────────────────────────────────────────────
+func test_power_forward_is_earned_on_its_last_requirement() -> void:
+	var combo: Dictionary = GamePucks.find("power_forward")
 	var ledger := TrophyLedger.new()
-	assert_eq(GamePuckRules.banner_progress(banner, {"goals": 50, "hits": 49}, ledger), 1)
-	assert_false(GamePuckRules.is_raised(banner, {"goals": 50, "hits": 49}, ledger))
-	assert_true(GamePuckRules.is_raised(banner, {"goals": 50, "hits": 50}, ledger))
-	assert_has(GamePuckRules.raised_banners({"goals": 50, "hits": 50}, ledger), "power_forward")
+	assert_eq(GamePuckRules.combo_progress(combo, {"goals": 50, "hits": 49}, ledger), 1)
+	assert_false(GamePuckRules.requirement_met("power_forward", {"goals": 50, "hits": 49}, ledger))
+	assert_true(GamePuckRules.requirement_met("power_forward", {"goals": 50, "hits": 50}, ledger))
+	assert_has(GamePuckRules.earned_combos({"goals": 50, "hits": 50}, ledger), "power_forward")
+
+
+# Every combo in the catalogue is earned exactly when everything it names is,
+# whatever those are — pucks, tiers or other combos.
+func test_every_combo_is_earned_exactly_when_its_requirements_are() -> void:
+	var ledger := TrophyLedger.new()
+	var totals: Dictionary = {}
+	for entry: Dictionary in GamePucks.ALL:
+		if GamePucks.is_combo(entry):
+			var id: String = entry["id"]
+			assert_false(GamePuckRules.requirement_met(id, totals, ledger), "%s from nothing" % id)
+			_meet_all(GamePucks.needs_of(entry), totals, ledger)
+			assert_true(GamePuckRules.requirement_met(id, totals, ledger), "%s once met" % id)
+			ledger = TrophyLedger.new()
+			totals = {}
 
 
 func test_a_single_puck_requirement_reads_the_ledger() -> void:
@@ -296,17 +311,40 @@ func test_a_single_puck_requirement_reads_the_ledger() -> void:
 
 func test_an_unknown_requirement_is_never_met() -> void:
 	assert_false(GamePuckRules.requirement_met("nope@5", {"nope": 99}, TrophyLedger.new()))
+	assert_false(GamePuckRules.requirement_met("hat_trick@3", {"hat_trick": 9},
+			TrophyLedger.new()), "a tier on a single puck is not a requirement")
 
 
-func test_a_raised_banner_earns_its_title() -> void:
+# A combo is derived, never stored: an id in the ledger does not earn it.
+func test_a_stored_combo_id_earns_nothing() -> void:
+	var ledger := TrophyLedger.new()
+	ledger.earn("power_forward", 1)
+	assert_false(GamePuckRules.requirement_met("power_forward", {}, ledger))
+
+
+func test_an_earned_combo_earns_its_title() -> void:
 	var ledger := TrophyLedger.new()
 	assert_eq(GamePuckRules.earned_titles({"goals": 50, "hits": 49}, ledger).size(), 0)
 	assert_eq(GamePuckRules.earned_titles({"goals": 50, "hits": 50}, ledger),
 			["power_forward"] as Array[String])
 
 
-func _banner(id: String) -> Dictionary:
-	for banner: Dictionary in Banners.ALL:
-		if String(banner["id"]) == id:
-			return banner
-	return {}
+func test_met_requirements_keeps_only_those_met() -> void:
+	var ledger := TrophyLedger.new()
+	ledger.earn("hat_trick", 1)
+	var reqs: Array[String] = ["hat_trick", "goals@50", "power_forward"]
+	assert_eq(GamePuckRules.met_requirements(reqs, {"goals": 50}, ledger),
+			["hat_trick", "goals@50"] as Array[String])
+
+
+func _meet_all(reqs: Array[String], totals: Dictionary, ledger: TrophyLedger) -> void:
+	for req: String in reqs:
+		var entry: Dictionary = GamePucks.find(GamePucks.requirement_puck(req))
+		var target: int = GamePucks.requirement_target(req)
+		if target > 0:
+			var field: String = String((entry["cond"] as Dictionary)["field"])
+			totals[field] = maxi(int(totals.get(field, 0)), target)
+		elif GamePucks.is_combo(entry):
+			_meet_all(GamePucks.needs_of(entry), totals, ledger)
+		else:
+			ledger.earn(req, 1)

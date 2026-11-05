@@ -3,7 +3,8 @@ extends RefCounted
 ## The stored part of a player's Game Pucks: the single pucks earned (one-game,
 ## moment and roster pucks), each with the unix second it was earned (0 when
 ## unknown, as for a puck imported from an older Steam unlock). Ladder tiers and
-## banners are derived from the Steam totals and never stored here.
+## combos are derived from the Steam totals and the stored pucks, never stored
+## here.
 ##
 ## A ledger only grows: merging two copies keeps every puck either holds, so a
 ## Steam Cloud copy from another machine can never take one away. An id this
