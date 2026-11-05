@@ -99,7 +99,7 @@ signal bot_slots_synced(bot_slots: Dictionary)
 signal rematch_vote_changed(peer_id: int, vote: int)
 signal rematch_voters_changed(total: int)
 signal clock_ready
-signal pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3, top_hand: Vector3)
+signal pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3)
 # Client: the host resolved our pickup claim to no-grant (stamp reject,
 # geometry miss, deflect verdict, contest loss). Rolls the optimistic pin
 # back immediately instead of waiting out the RTT-scaled timeout.
@@ -1628,15 +1628,15 @@ func _rate_ok(peer_id: int, cap: int, window_start: Dictionary[int, float],
 
 
 func send_pickup_claim(host_timestamp: float, interp_delay_ms: float,
-		blade_curr: Vector3, blade_prev: Vector3, top_hand: Vector3) -> void:
+		blade_curr: Vector3, blade_prev: Vector3) -> void:
 	NetworkSimManager.send(
-		func(ts: float, idms: float, ilms: float, bc: Vector3, bp: Vector3, th: Vector3) -> void:
-			receive_pickup_claim.rpc_id(1, ts, idms, ilms, bc, bp, th),
-		[host_timestamp, interp_delay_ms, get_input_lead_ms(), blade_curr, blade_prev, top_hand], true)
+		func(ts: float, idms: float, ilms: float, bc: Vector3, bp: Vector3) -> void:
+			receive_pickup_claim.rpc_id(1, ts, idms, ilms, bc, bp),
+		[host_timestamp, interp_delay_ms, get_input_lead_ms(), blade_curr, blade_prev], true)
 
 @rpc("any_peer", "reliable")
 func receive_pickup_claim(host_timestamp: float, interp_delay_ms: float, input_lead_ms: float,
-		blade_curr: Vector3, blade_prev: Vector3, top_hand: Vector3) -> void:
+		blade_curr: Vector3, blade_prev: Vector3) -> void:
 	if not is_host:
 		return
 	var peer_id: int = multiplayer.get_remote_sender_id()
@@ -1650,7 +1650,7 @@ func receive_pickup_claim(host_timestamp: float, interp_delay_ms: float, input_l
 		NetworkTelemetry.record_claim_stamp_reject()
 		send_pickup_claim_nack(peer_id)
 		return
-	pickup_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev, top_hand)
+	pickup_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev)
 
 func send_poke_claim(host_timestamp: float, interp_delay_ms: float, expected_carrier_peer_id: int,
 		blade_curr: Vector3, blade_prev: Vector3) -> void:

@@ -209,11 +209,8 @@ func arbitrate_present_grab(grabber: Skater, grabber_peer_id: int,
 # _interp_delay_ms rides the shared claim wire shape but is unused here since
 # the loose-puck rewind reads the claim stamp itself (puck_view_time) and the
 # blade rewind is self-view — nothing in a pickup claim renders remote-view.
-# _client_top_hand still rides the wire but judges nothing: the catch is read
-# off the blade's middle against the puck's path, not off the shaft's angle.
 func receive_claim(peer_id: int, host_timestamp: float, _interp_delay_ms: float,
-		input_lead_ms: float, client_blade_curr: Vector3, client_blade_prev: Vector3,
-		_client_top_hand: Vector3) -> void:
+		input_lead_ms: float, client_blade_curr: Vector3, client_blade_prev: Vector3) -> void:
 	if not _puck_getter.is_valid() or not _puck_controller_getter.is_valid():
 		return
 	var puck: Puck = _puck_getter.call() as Puck
