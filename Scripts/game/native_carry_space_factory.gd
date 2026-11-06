@@ -1,21 +1,21 @@
-class_name NativeEvadeReadFactory
+class_name NativeCarrySpaceFactory
 
-# Builds a NativeEvadeRead (C++ GDExtension, native/src/) configured from the
+# Builds a NativeCarrySpace (C++ GDExtension, native/src/) configured from the
 # live GDScript constants it ports (AICarrySpace, AIArrival, AIStrideRamp, the
-# rink) and installs it as AIEvadeRead.native. A read keeps nothing between
-# calls, so one instance serves every caller.
+# rink) and installs it as AICarrySpace.native, which AIEvadeRead reads too. A
+# read keeps nothing between calls, so one instance serves every caller.
 #
-# Leaves AIEvadeRead on GDScript when the extension isn't loaded.
+# Leaves the carry-space reads on GDScript when the extension isn't loaded.
 
 
 static func install() -> void:
-	AIEvadeRead.native = make()
+	AICarrySpace.native = make()
 
 
 static func make() -> RefCounted:
-	if not ClassDB.class_exists(&"NativeEvadeRead"):
+	if not ClassDB.class_exists(&"NativeCarrySpace"):
 		return null
-	var native: RefCounted = ClassDB.instantiate(&"NativeEvadeRead")
+	var native: RefCounted = ClassDB.instantiate(&"NativeCarrySpace")
 	native.set_kinematics(AICarrySpace.MANEUVER_ACCEL_M_S2, AICarrySpace.EVADE_STICK_REACH_M,
 			AIArrival.SKATER_REF_SPEED_M_S, AICarrySpace.EVADE_REACTION_S,
 			AIArrival.VM_FREE_SHED_M_S, AIArrival.VM_SHED_DECEL_M_S2,
@@ -27,4 +27,7 @@ static func make() -> RefCounted:
 			PackedFloat64Array(AICarrySpace.EVADE_SAMPLE_RINGS),
 			AICarrySpace.POKE_CONTACT_RADIUS_M + AICarrySpace.DWELL_HALF_BAND_M,
 			AICarrySpace.POKE_CONTACT_RADIUS_M, AICarrySpace.DWELL_HALF_BAND_M)
+	native.set_carry(AICarrySpace.TRANSIT_STRIP_CLEAR_M, AICarrySpace.TRANSIT_SAFE_CLEAR_M,
+			AICarrySpace.CARRY_LUNGE_WINDOW_S, AICarrySpace.CROSSING_PROTECT_SHIFT_M,
+			AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M)
 	return native

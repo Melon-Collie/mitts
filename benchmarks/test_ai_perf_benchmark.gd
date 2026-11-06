@@ -177,18 +177,18 @@ func before_all() -> void:
 		return
 	NativeShotOddsFactory.install()
 	NativeCarryRolloutFactory.install()
-	NativeEvadeReadFactory.install()
+	NativeCarrySpaceFactory.install()
 
 
 func after_all() -> void:
 	AIShotOdds.native_factory = Callable()
 	AIShotOdds.attach_native()
 	AICarryRollout.native_factory = Callable()
-	AIEvadeRead.native = null
+	AICarrySpace.native = null
 
 
 func test_ai_host_cost_matrix() -> void:
-	gut.p("AI kernels: %s" % ("native" if AIEvadeRead.native != null else "GDScript"))
+	gut.p("AI kernels: %s" % ("native" if AICarrySpace.native != null else "GDScript"))
 	# O-zone cycle: team 0's carrier deep in team 1's end.
 	_run_case("ozone-cycle", 3, 10002, Vector3(0, 0, -24), Vector3(0, 0, -14))
 	_run_case("ozone-cycle", 5, 10002, Vector3(0, 0, -24), Vector3(0, 0, -14))

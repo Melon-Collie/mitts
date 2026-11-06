@@ -4,9 +4,9 @@ class_name AIEvadeRead
 # what possession of a spot keeps (AIPossessionValue.base_at). Reads AICarrySpace
 # from above; AICarrySpace never reads it.
 #
-# Where the application layer installs `native` (NativeEvadeReadFactory, the
-# extension built), evade_safety runs in NativeEvadeRead, held to this file by
-# test_native_evade_read_parity.gd; the GDScript below is the reference.
+# Where the application layer installs AICarrySpace.native (NativeCarrySpaceFactory,
+# the extension built), evade_safety runs in NativeCarrySpace, held to this file by
+# test_native_carry_space_parity.gd; the GDScript below is the reference.
 
 const _HORIZON_S: float = AICarrySpace.EVADE_HORIZON_S
 const _ANGLES: int = AICarrySpace.EVADE_SAMPLE_ANGLES
@@ -19,9 +19,6 @@ static var _evade_bound: PackedFloat64Array = PackedFloat64Array()
 static var _bound_x: PackedFloat64Array = PackedFloat64Array()
 static var _bound_z: PackedFloat64Array = PackedFloat64Array()
 static var _bound_slack: PackedFloat64Array = PackedFloat64Array()
-# NativeEvadeRead, or null for the GDScript; and its caps, four per opponent.
-static var native: RefCounted = null
-static var _native_caps: PackedFloat64Array = PackedFloat64Array()
 
 
 # clearance_to_safety at the max-clearance seam (AICarrySpace.best_evade_point):
@@ -35,9 +32,9 @@ static func evade_safety(
 		carrier_pos: Vector3, carrier_vel: Vector3,
 		opponents: Array[Vector3], opponent_vels: Array[Vector3],
 		handle_reach: float, opponent_caps: Array = []) -> float:
-	if native != null:
-		return native.evade_safety(carrier_pos, carrier_vel, opponents, opponent_vels,
-				handle_reach, _pack_caps(opponent_caps, opponents.size()))
+	if AICarrySpace.native != null:
+		return AICarrySpace.native.evade_safety(carrier_pos, carrier_vel, opponents,
+				opponent_vels, handle_reach, AICarrySpace.pack_caps(opponent_caps, opponents.size()))
 	return evade_safety_reference(carrier_pos, carrier_vel, opponents, opponent_vels,
 			handle_reach, opponent_caps)
 
@@ -84,29 +81,6 @@ static func evade_safety_reference(
 					if best_clear >= _SATURATED_M:
 						return 1.0
 	return AICarrySpace.clearance_to_safety(best_clear)
-
-
-# `opponent_caps` as NativeEvadeRead takes them: max_accel, blade_span, max_speed
-# and lateral_grip per opponent, a null one at the league's; empty when the caps
-# do not index-match (every opponent at the league's).
-static func _pack_caps(opponent_caps: Array, n: int) -> PackedFloat64Array:
-	if opponent_caps.size() != n:
-		_native_caps.resize(0)
-		return _native_caps
-	_native_caps.resize(n * 4)
-	for i: int in n:
-		var caps: AISkaterCaps = opponent_caps[i]
-		if caps == null:
-			_native_caps[i * 4] = AICarrySpace.MANEUVER_ACCEL_M_S2
-			_native_caps[i * 4 + 1] = AICarrySpace.EVADE_STICK_REACH_M
-			_native_caps[i * 4 + 2] = AIArrival.SKATER_REF_SPEED_M_S
-			_native_caps[i * 4 + 3] = 1.0
-		else:
-			_native_caps[i * 4] = caps.max_accel
-			_native_caps[i * 4 + 1] = caps.blade_span
-			_native_caps[i * 4 + 2] = caps.max_speed
-			_native_caps[i * 4 + 3] = caps.lateral_grip
-	return _native_caps
 
 
 # Envelope sample `k` of the ring at `radius` round the projected centre, at
