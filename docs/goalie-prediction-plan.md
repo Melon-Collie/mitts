@@ -42,14 +42,36 @@ the host's keeper from the host's state, not an AI of the client's own.
 
 ## Phases
 
-1. **The wire set on the wire.** `KeeperWire` (writer/reader, Q16 scales), each
-   keeper class's `write_wire` / `read_wire`, the host snapping on broadcast
-   ticks, the blobs appended after the snapshot body in `_broadcast_state`
-   (inside the delta), `WirePacking.SNAPSHOT_MAX_RAW` raised, protocol bump.
-   Clients decode and keep the newest state but still draw the interpolated
-   pose. Tests: round trip; a client keeper rebuilt from the bytes steps
-   identically to the snapped host through a scripted play; the field list
-   matches the instrument's wire set; encode cost.
+1. **The wire set on the wire. Done (protocol v96).** `KeeperWire`
+   (`Scripts/domain/keeper/keeper_wire.gd`) is one writer-or-reader, and each
+   keeper class hands it its own fields in a fixed order through one method,
+   `wire(w)`, so the write and the read walk one list; `KeeperController.wire`
+   is the walk from the top. Writing snaps: each value is stored back as a
+   reader decodes it, so writing his blob on a broadcast tick is the host's
+   snap, his node and boxes re-placed on the snapped pose. A field whose range
+   a 16-bit step count cannot hold is written in 32 bits at the same scale: the
+   play read's and the shot read's places (the puck anywhere on the rink),
+   every clock (some run on: `_out_of_reach_s`, `_spot_since`), every angle
+   that can wind past π, the spot's and the motor's velocities. The blob rides
+   behind the raw snapshot inside the delta (`KeeperWireTail`), split back off
+   before any decoder on a client and kept per goalie with its host time
+   (`GoalieController.receive_wire_state`); the recorders' frames never hold it,
+   so replay FORMAT_VERSION is unchanged; `SNAPSHOT_MAX_RAW` 4096 → 8192.
+   Measured (`benchmarks/test_keeper_wire_benchmark.gd`, the keeper facing a
+   slot wrister and a carry across and a shot, this container's debug binary):
+   **2,452 B raw a keeper**, fixed; zstd alone 565 B mean; **XOR against the
+   blob 1 / 3 broadcasts back then zstd: 114 / 142 B mean, 200 / 268 B p95**,
+   each with ~19 B of zstd frame a real snapshot shares. Host, per keeper per
+   broadcast: the write ~220 µs p50 (~305 p95), the write and the re-placing
+   ~330 µs p50 (~430 p95), ~110 µs of it seating his 22 boxes on the snapped
+   pose; a client's read ~210 µs, read and placed ~310 µs. Exact:
+   `tests/slow/controllers/test_keeper_wire_is_exact.gd` rebuilds a keeper from
+   the host's blob every 12 ticks through both plays and steps it on in a world
+   of its own, snapping on the host's ticks; 0.0 m box gap, the same save and
+   the same puck on every tick, the same blob on every broadcast tick, and the
+   host's first contact and its outcome the same with the snap as without.
+   `tests/unit/controllers/test_keeper_wire_set.gd` holds the wire set against
+   the instrument's: every reachable field not on its `NOT_ON_WIRE` round-trips.
 2. **The client predicts.** A predictor keeper per goalie on clients, re-seeded
    on each snapshot, stepped to the render instant every frame against a
    shadow world: a shadow puck placed from the client's own puck prediction at
