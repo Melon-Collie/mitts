@@ -67,16 +67,18 @@ var _trunk_texture_roll: float = 0.0
 # The texture moved the shoulders the arms root on since the mesh pass last
 # asked (take_retextured).
 var _retextured: bool = false
-# Each arm's elbow turn off its pole round the torso (SkaterArmPoses.steer_turn),
-# as (turn, rate) in radians, eased so the elbow's speed stays continuous where
-# the turn engages and where it reaches its stop — snapped there, an arm swept
-# across the body jerked at both. Whether the ease is still moving, for the
-# rebuild gate (take_steering).
+# Each arm's elbow swivel (SkaterArmPoses.swivel_bend): the bend the solve
+# chose last frame, which it holds to when two tie, and the bend drawn, eased
+# toward it at `steer_omega` (with its rate, rad/s, about the shoulder→hand
+# line) so the elbow's speed stays continuous where the choice moves fast.
+# Whether the ease is still moving, for the rebuild gate (take_steering).
 var steer_omega: float = 20.0
-var _steer := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
-# The top fist's roll round the shaft (SkaterArmPoses.grip_roll), eased the
-# same way: half round, the way it rolls changes sides. Indexed by arm as the
-# steer is; the bottom's stays at rest.
+var _swivel_target := PackedVector3Array([Vector3.ZERO, Vector3.ZERO])
+var _swivel_held := PackedVector3Array([Vector3.ZERO, Vector3.ZERO])
+var _swivel_rate := PackedFloat64Array([0.0, 0.0])
+# The top fist's roll round the shaft (SkaterArmPoses.grip_roll), as (angle,
+# rate), eased at the same rate: half round, the way it rolls changes sides.
+# Indexed by arm; the bottom's stays at rest.
 var _roll := PackedVector2Array([Vector2.ZERO, Vector2.ZERO])
 var _steering: bool = false
 # The jersey tail's drape below the belt, and the tuck it was draped for.
@@ -103,7 +105,7 @@ func build(skeleton: Skeleton3D) -> void:
 	_skeleton = skeleton
 
 	if ClassDB.class_exists(&"NativeArmRig") \
-			and ClassDB.class_has_method(&"NativeArmRig", &"configure_torso"):
+			and ClassDB.class_has_method(&"NativeArmRig", &"configure_swivel"):
 		_native_arms = [ClassDB.instantiate(&"NativeArmRig") as RefCounted,
 				ClassDB.instantiate(&"NativeArmRig") as RefCounted]
 		for arm: int in 2:
@@ -116,7 +118,13 @@ func build(skeleton: Skeleton3D) -> void:
 					PackedFloat64Array(SkaterMeshBuilder.TORSO_REAR_SWAY),
 					PackedFloat64Array(SkaterMeshBuilder.TORSO_DEPTH),
 					SkaterMeshBuilder.TORSO_XZ_SCALE.x, SkaterMeshBuilder.TORSO_XZ_SCALE.y,
-					SkaterMeshBuilder.SLEEVE_RADIUS_M, SkaterArmPoses.STEER_CONTACT_M)
+					SkaterMeshBuilder.SLEEVE_RADIUS_M, SkaterArmPoses.SWIVEL_CONTACT_M)
+			_native_arms[arm].configure_swivel(PackedFloat64Array([
+					SkaterArmPoses.SWIVEL_TORSO, SkaterArmPoses.SWIVEL_REST,
+					SkaterArmPoses.SWIVEL_SHOULDER, SkaterArmPoses.SWIVEL_EXTENSION_MAX,
+					SkaterArmPoses.SWIVEL_WRIST, SkaterArmPoses.SWIVEL_HOLD,
+					SkaterArmPoses.SWIVEL_UPPER_SAMPLE, SkaterArmPoses.SWIVEL_SAMPLES,
+					SkaterArmPoses.SWIVEL_GOLDEN_STEPS, SkaterArmPoses.SWIVEL_FREE_DOT]))
 	# Torso and helmet: their placement is authored in the scene, so it is read
 	# out and seeded onto their bones, same as the legs.
 	for bone: int in [SkaterMeshBuilder.UpperBone.TORSO,
@@ -206,20 +214,25 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	var frame: Transform3D = _skater.drawn_upper_body()
 	var hand_s: Vector3 = frame * hand_local
 	var shoulder_s: Vector3 = arm_root(marker_local, hand_local)
-	var pole_s: Vector3 = spine.basis * _arm_pole(marker_local, pole_sign)
-	var turn: float = _ease_steer(arm, delta, SkaterArmPoses.steer_turn(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length, pole_s,
-			spine.basis * Vector3(pole_sign, 0.0, 0.0),
-			_skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)))
-	var elbow_s: Vector3 = SkaterArmPoses.turned_elbow(shoulder_s, hand_s,
-			_skater.upper_arm_length, _skater.forearm_length, pole_s, turn)
+	var shaft_s: Vector3 = frame.basis * grip_local
+	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
+			else _skater.bottom_grip_angle_deg
+	var target: Vector3 = SkaterArmPoses.swivel_bend(shoulder_s, hand_s,
+			_skater.upper_arm_length, _skater.forearm_length,
+			spine.basis * _arm_pole(marker_local, pole_sign),
+			_swivel_target[arm] if delta >= 0.0 else Vector3.ZERO,
+			(spine.basis * Vector3(pole_sign, 0.0, 0.0)).normalized(),
+			(spine.basis * Vector3.BACK).normalized(),
+			_skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO), shaft_s,
+			Vector3(deg_to_rad(grip_deg), deg_to_rad(_skater.wrist_ulnar_max_deg),
+			deg_to_rad(_skater.wrist_radial_max_deg)))
+	var elbow_s: Vector3 = SkaterArmPoses.elbow_on_circle(shoulder_s, hand_s,
+			_skater.upper_arm_length, _skater.forearm_length,
+			_ease_swivel(arm, delta, (hand_s - shoulder_s).normalized(), target))
 	_pose_bone(upper, shoulder_s, elbow_s)
 	_pose_bone(forearm, elbow_s, hand_s)
 	_pose_cuff(cuff, elbow_s, hand_s)
 	_pose_elbow(elbow_bone, shoulder_s, elbow_s, hand_s, elbow_s - shoulder_s)
-	var shaft_s: Vector3 = frame.basis * grip_local
-	var grip_deg: float = _skater.top_grip_angle_deg if arm == 0 \
-			else _skater.bottom_grip_angle_deg
 	# The bottom hand holds the shaft from underneath, palm up, as the plane grip
 	# already has it; only the top fist rolls.
 	var roll: float = 0.0 if arm != 0 else _ease_roll(arm, delta,
@@ -228,8 +241,30 @@ func _update_arm(arm: int, delta: float, marker_local: Vector3, hand_local: Vect
 	_pose_glove(glove, elbow_s, hand_s, shaft_s, grip_deg, roll)
 
 
-func _ease_steer(arm: int, delta: float, target: float) -> float:
-	return _ease(_steer, arm, delta, target)
+# The bend drawn: the held one carried onto this frame's circle (square to
+# `axis`, the shoulder→hand line) and eased toward `target` by the angle
+# between them about that line, so it turns the short way round and never
+# wraps. Landed at once with no clock, or with nothing held. A non-finite frame
+# is drawn as it is and kept out of the state, so it costs that frame alone.
+func _ease_swivel(arm: int, delta: float, axis: Vector3, target: Vector3) -> Vector3:
+	if not target.is_finite() or not axis.is_finite():
+		return target
+	_swivel_target[arm] = target
+	var held: Vector3 = _swivel_held[arm]
+	held -= axis * held.dot(axis)
+	if delta < 0.0 or target == Vector3.ZERO or held.length_squared() < 0.000001:
+		_swivel_held[arm] = target
+		_swivel_rate[arm] = 0.0
+		return target
+	var off: float = target.signed_angle_to(held.normalized(), axis)
+	var eased: Vector4 = BalanceRules.spring_step(Vector2(off, 0.0),
+			Vector2(_swivel_rate[arm], 0.0), Vector2.ZERO, steer_omega, delta)
+	var bend: Vector3 = target.rotated(axis, eased.x)
+	_swivel_held[arm] = bend
+	_swivel_rate[arm] = eased.z
+	if absf(eased.x) > 0.0001 or absf(eased.z) > 0.001:
+		_steering = true
+	return bend
 
 
 func _ease_roll(arm: int, delta: float, target: float) -> float:
@@ -263,7 +298,8 @@ func _grip_roll(shoulder: Vector3, elbow: Vector3, hand: Vector3, shaft: Vector3
 			way)
 
 
-# Whether an elbow's turn was still easing at the last rebuild.
+# Whether an elbow's swivel or a fist's roll was still easing at the last
+# rebuild.
 func take_steering() -> bool:
 	var moving: bool = _steering
 	_steering = false

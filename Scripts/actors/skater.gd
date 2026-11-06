@@ -279,10 +279,11 @@ var shoulder_reach_m: float = 0.06
 # The share of its full length an arm works at before the girdle gives: a
 # reaching arm keeps ~28° of elbow bend rather than locking straight.
 var arm_working_extension: float = 0.97
-# Pole direction for the elbow (upper-body local). Mostly down with a real
-# outward flare (+X is away from the body; the sign flips per side in
-# update_arm_mesh) and a touch backward — a hockey top-hand elbow rides out
-# and slightly behind the chest line, not pinned against the ribs.
+# The elbow's rest direction (upper-body local), where it points when nothing
+# else decides (SkaterArmPoses.swivel_bend). Mostly down with a real outward
+# flare (+X is away from the body; the sign flips per side in SkaterArmRig) and
+# a touch backward — a hockey top-hand elbow rides out and slightly behind the
+# chest line, not pinned against the ribs.
 var arm_pole_local: Vector3 = Vector3(0.55, -1.0, 0.1)
 # Base size of the arm bone meshes (diameter). scale.z is set per tick to the
 # bone's actual length; X/Y control arm thickness. A loose jersey sleeve, not a

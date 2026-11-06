@@ -106,9 +106,9 @@ Vector3 neutral_thumb(const Vector3 &shoulder, const Vector3 &elbow, const Vecto
 	return away.length_squared() > 0.000001 ? away.normalized() : Vector3();
 }
 
-// SkaterArmPoses._ROLL_BISECTIONS / _STEER_BISECTIONS.
+// SkaterArmPoses._ROLL_BISECTIONS / _GOLDEN.
 constexpr int ROLL_BISECTIONS = 8;
-constexpr int STEER_BISECTIONS = 6;
+constexpr double GOLDEN = 0.6180339887;
 
 // SkaterArmPoses.grip_roll.
 double grip_roll(const Vector3 &forearm_dir, const Vector3 &shaft, double grip_angle,
@@ -164,18 +164,27 @@ double elbow_offset(double d, double upper_len, double forearm_len) {
 	return Math::sqrt(Math::max(upper_len * upper_len - foot * foot, 0.0));
 }
 
-// SkaterArmPoses.turned_elbow.
-Vector3 turned_elbow(const Vector3 &shoulder, const Vector3 &hand, double upper_len,
-		double forearm_len, const Vector3 &pole, double turn) {
+// SkaterArmPoses._parabola_floor.
+double parabola_floor(double x0, double y0, double x1, double y1, double x2, double y2) {
+	const double d0 = (y1 - y0) / (x1 - x0);
+	const double d1 = (y2 - y1) / (x2 - x1);
+	const double curve = (d1 - d0) / (x2 - x0);
+	if (curve <= 0.0) {
+		return x1;
+	}
+	return Math::clamp((x0 + x1) * 0.5 - d0 / (2.0 * curve), x0, x2);
+}
+
+// SkaterArmPoses.elbow_on_circle.
+Vector3 elbow_on_circle(const Vector3 &shoulder, const Vector3 &hand, double upper_len,
+		double forearm_len, const Vector3 &bend) {
 	const Vector3 d_vec = hand - shoulder;
 	const double d = d_vec.length();
 	if (d < 0.0001) {
 		return shoulder;
 	}
-	const Vector3 axis = d_vec / (real_t)d;
-	return shoulder + axis * (real_t)elbow_foot(d, upper_len, forearm_len)
-			+ bend_direction(shoulder, hand, pole).rotated(axis, (real_t)turn)
-			* (real_t)elbow_offset(d, upper_len, forearm_len);
+	return shoulder + d_vec / (real_t)d * (real_t)elbow_foot(d, upper_len, forearm_len)
+			+ bend * (real_t)elbow_offset(d, upper_len, forearm_len);
 }
 
 // CheckStanceRules.load_offset(side_load(lead, side), side, half_width).
@@ -240,6 +249,20 @@ void NativeArmRig::configure_torso(const PackedVector2Array &profile, const Pack
 	steer_contact = p_steer_contact;
 }
 
+void NativeArmRig::configure_swivel(const PackedFloat64Array &weights) {
+	ERR_FAIL_COND(weights.size() != 10);
+	swivel_torso = weights[0];
+	swivel_rest = weights[1];
+	swivel_shoulder = weights[2];
+	swivel_extension_max = weights[3];
+	swivel_wrist = weights[4];
+	swivel_hold = weights[5];
+	swivel_upper_sample = weights[6];
+	swivel_samples = MAX((int)weights[7], 1);
+	swivel_golden_steps = (int)weights[8];
+	swivel_free_dot = weights[9];
+}
+
 // SkaterMeshBuilder.torso_clearance.
 double NativeArmRig::torso_clearance(const Vector3 &p) const {
 	const int count = torso_profile.size();
@@ -280,53 +303,137 @@ double NativeArmRig::depth(const Vector3 &p, const Transform3D &to_torso, double
 
 double NativeArmRig::arm_depth(const Vector3 &shoulder, const Vector3 &elbow, const Vector3 &hand,
 		const Transform3D &to_torso, double unit) const {
-	return Math::max(depth(elbow, to_torso, unit), Math::max(depth((shoulder + elbow) * 0.5, to_torso, unit),
-														   depth(elbow.lerp(hand, 0.4), to_torso, unit)));
+	return Math::max(depth(elbow, to_torso, unit),
+			Math::max(depth(shoulder.lerp(elbow, (real_t)swivel_upper_sample), to_torso, unit),
+					depth(elbow.lerp(hand, 0.4), to_torso, unit)));
 }
 
-// SkaterArmPoses.steer_turn.
-double NativeArmRig::steer_turn(const Vector3 &shoulder, const Vector3 &hand, double upper_len,
-		double forearm_len, const Vector3 &pole, const Vector3 &outward, const Transform3D &torso) const {
+// SkaterArmPoses.swivel_cost.
+double NativeArmRig::swivel_cost(const Vector3 &shoulder, const Vector3 &elbow, const Vector3 &hand,
+		const Vector3 &bend, double upper_len, const Vector3 &rest_n, const Vector3 &hold,
+		const Vector3 &outward, const Vector3 &back, const Transform3D &to_torso, double unit,
+		const Vector3 &shaft, const Vector3 &wrist) const {
+	double cost = swivel_torso * Math::max(arm_depth(shoulder, elbow, hand, to_torso, unit), 0.0);
+	cost += swivel_rest * (1.0 - (double)bend.dot(rest_n));
+	const Vector3 upper = (elbow - shoulder) / (real_t)upper_len;
+	const double behind = upper.dot(back);
+	cost += swivel_shoulder * (Math::max(Math::asin(Math::clamp(behind, -1.0, 1.0)) - swivel_extension_max, 0.0)
+			+ Math::max(behind, 0.0) * Math::max(-(double)upper.dot(outward), 0.0));
+	if (shaft != Vector3()) {
+		const Vector3 fore = hand - elbow;
+		if (fore.length_squared() > 0.000001) {
+			const double deviation = (double)fore.angle_to(shaft) - (double)wrist.x;
+			cost += swivel_wrist * (Math::max(deviation - (double)wrist.z, 0.0)
+					+ Math::max(-(double)wrist.y - deviation, 0.0));
+		}
+	}
+	if (hold != Vector3()) {
+		cost += swivel_hold * (1.0 - (double)bend.dot(hold));
+	}
+	return cost;
+}
+
+// SkaterArmPoses.swivel_bend.
+Vector3 NativeArmRig::swivel_bend(const Vector3 &shoulder, const Vector3 &hand, double upper_len,
+		double forearm_len, const Vector3 &rest, const Vector3 &held, const Vector3 &outward,
+		const Vector3 &back, const Transform3D &torso, const Vector3 &shaft,
+		const Vector3 &wrist) const {
 	const Vector3 d_vec = hand - shoulder;
 	const double d = d_vec.length();
 	if (d < 0.0001) {
-		return 0.0;
+		return Vector3();
 	}
 	const Vector3 axis = d_vec / (real_t)d;
 	const double h = elbow_offset(d, upper_len, forearm_len);
 	const Vector3 foot = shoulder + axis * (real_t)elbow_foot(d, upper_len, forearm_len);
-	const Vector3 bend = bend_direction(shoulder, hand, pole);
+	Vector3 hold = held - axis * held.dot(axis);
+	hold = hold.length_squared() > 0.000001 ? hold.normalized() : Vector3();
+	const Vector3 ref = bend_direction(shoulder, hand, rest);
 	const Transform3D to_torso = torso.affine_inverse();
 	const double unit = torso.basis.get_scale().x;
-	double depth_lo = arm_depth(shoulder, foot + bend * (real_t)h, hand, to_torso, unit);
-	if (depth_lo <= 0.0) {
-		return 0.0;
+	const Vector3 rest_n = rest.normalized();
+	const double rest_cost = swivel_rest * (1.0 - (double)ref.dot(rest_n));
+	if (swivel_cost(shoulder, foot + ref * (real_t)h, hand, ref, upper_len, rest_n, Vector3(), outward,
+				back, to_torso, unit, shaft, wrist) <= rest_cost
+			&& Math::abs((double)rest_n.dot(axis)) <= swivel_free_dot) {
+		return ref;
 	}
-	const Vector3 out = outward - axis * outward.dot(axis);
-	if (out.length_squared() < 0.000001 || h < 0.0001) {
-		return 0.0;
-	}
-	const double full = bend.signed_angle_to(out.normalized(), axis);
-	double depth_hi = arm_depth(shoulder, foot + bend.rotated(axis, (real_t)full) * (real_t)h, hand,
-			to_torso, unit);
-	if (depth_hi > 0.0) {
-		return full;
-	}
-	double lo = 0.0;
-	double hi = 1.0;
-	for (int i = 0; i < STEER_BISECTIONS; i++) {
-		const double mid = (lo + hi) * 0.5;
-		const double dep = arm_depth(shoulder, foot + bend.rotated(axis, (real_t)(full * mid)) * (real_t)h,
-				hand, to_torso, unit);
-		if (dep > 0.0) {
-			lo = mid;
-			depth_lo = dep;
-		} else {
-			hi = mid;
-			depth_hi = dep;
+	const double step = Math_TAU / swivel_samples;
+	int best = 0;
+	double best_cost = INFINITY;
+	for (int k = 0; k < swivel_samples; k++) {
+		const Vector3 bend = ref.rotated(axis, (real_t)(step * k));
+		const double cost = swivel_cost(shoulder, foot + bend * (real_t)h, hand, bend, upper_len, rest_n,
+				hold, outward, back, to_torso, unit, shaft, wrist);
+		if (cost < best_cost) {
+			best_cost = cost;
+			best = k;
 		}
 	}
-	return full * Math::lerp(lo, hi, depth_lo / (depth_lo - depth_hi));
+	double a = step * (best - 1);
+	double b = step * (best + 1);
+	double c = b - GOLDEN * (b - a);
+	double e = a + GOLDEN * (b - a);
+	Vector3 bend_c = ref.rotated(axis, (real_t)c);
+	Vector3 bend_e = ref.rotated(axis, (real_t)e);
+	double cost_c = swivel_cost(shoulder, foot + bend_c * (real_t)h, hand, bend_c, upper_len, rest_n,
+			Vector3(), outward, back, to_torso, unit, shaft, wrist);
+	double cost_e = swivel_cost(shoulder, foot + bend_e * (real_t)h, hand, bend_e, upper_len, rest_n,
+			Vector3(), outward, back, to_torso, unit, shaft, wrist);
+	for (int i = 0; i < swivel_golden_steps; i++) {
+		if (cost_c < cost_e) {
+			b = e;
+			e = c;
+			cost_e = cost_c;
+			c = b - GOLDEN * (b - a);
+			bend_c = ref.rotated(axis, (real_t)c);
+			cost_c = swivel_cost(shoulder, foot + bend_c * (real_t)h, hand, bend_c, upper_len, rest_n,
+					Vector3(), outward, back, to_torso, unit, shaft, wrist);
+		} else {
+			a = c;
+			c = e;
+			cost_c = cost_e;
+			e = a + GOLDEN * (b - a);
+			bend_e = ref.rotated(axis, (real_t)e);
+			cost_e = swivel_cost(shoulder, foot + bend_e * (real_t)h, hand, bend_e, upper_len, rest_n,
+					Vector3(), outward, back, to_torso, unit, shaft, wrist);
+		}
+	}
+	const double m = (a + b) * 0.5;
+	const Vector3 bend_m = ref.rotated(axis, (real_t)m);
+	const double cost_m = swivel_cost(shoulder, foot + bend_m * (real_t)h, hand, bend_m, upper_len, rest_n,
+			Vector3(), outward, back, to_torso, unit, shaft, wrist);
+	return ref.rotated(axis, (real_t)parabola_floor(c, cost_c, m, cost_m, e, cost_e));
+}
+
+// SkaterArmRig._ease_swivel.
+Vector3 NativeArmRig::ease_swivel(double delta, const Vector3 &axis, const Vector3 &target) {
+	if (!target.is_finite() || !axis.is_finite()) {
+		return target;
+	}
+	swivel_target = target;
+	Vector3 held = swivel_held;
+	held -= axis * held.dot(axis);
+	if (delta < 0.0 || target == Vector3() || held.length_squared() < 0.000001) {
+		swivel_held = target;
+		swivel_rate = 0.0;
+		return target;
+	}
+	const double off = target.signed_angle_to(held.normalized(), axis);
+	// BalanceRules.spring_step toward zero, in GDScript's Vector2.
+	const Vector2 x((real_t)off, 0.0);
+	const Vector2 v((real_t)swivel_rate, 0.0);
+	const Vector2 c = v + x * (real_t)steer_omega;
+	const double ex = Math::exp(-steer_omega * delta);
+	const Vector2 x1 = (x + c * (real_t)delta) * (real_t)ex;
+	const Vector2 v1 = (v - c * (real_t)(steer_omega * delta)) * (real_t)ex;
+	const Vector3 bend = target.rotated(axis, x1.x);
+	swivel_held = bend;
+	swivel_rate = v1.x;
+	if (Math::abs((double)x1.x) > 0.0001 || Math::abs((double)v1.x) > 0.001) {
+		settling = true;
+	}
+	return bend;
 }
 
 // SkaterArmRig._ease through BalanceRules.spring_step, in GDScript's Vector2.
@@ -374,11 +481,16 @@ int NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3
 	const Vector3 rooted = spine.xform(
 			trunk_texture.xform(marker + check_load_offset(lead, side, half_width)));
 	const Vector3 shoulder_s = reach_root(rooted, hand_s, lengths.z, lengths.w);
-	const Vector3 pole_s = spine.basis.xform(tucked_pole(pole, lead, side));
-	const double turn = ease(steer, delta, steer_turn(shoulder_s, hand_s, upper_len, forearm_len, pole_s,
-			spine.basis.xform(Vector3((real_t)pole_sign, 0.0, 0.0)),
-			skeleton->get_bone_global_pose(bone_torso)));
-	const Vector3 elbow_s = turned_elbow(shoulder_s, hand_s, upper_len, forearm_len, pole_s, turn);
+	const Vector3 shaft_s = frame.basis.xform(grip);
+	const Vector3 target = swivel_bend(shoulder_s, hand_s, upper_len, forearm_len,
+			spine.basis.xform(tucked_pole(pole, lead, side)),
+			delta >= 0.0 ? swivel_target : Vector3(),
+			spine.basis.xform(Vector3((real_t)pole_sign, 0.0, 0.0)).normalized(),
+			spine.basis.xform(Vector3(0.0, 0.0, 1.0)).normalized(),
+			skeleton->get_bone_global_pose(bone_torso), shaft_s,
+			Vector3((real_t)grip_angle, (real_t)ulnar_max, (real_t)radial_max));
+	const Vector3 elbow_s = elbow_on_circle(shoulder_s, hand_s, upper_len, forearm_len,
+			ease_swivel(delta, (hand_s - shoulder_s).normalized(), target));
 	const Vector3 forearm_span = hand_s - elbow_s;
 	const double forearm_length = forearm_span.length();
 	// The GDScript path's held-pose branches (any degenerate part) read the
@@ -403,7 +515,6 @@ int NativeArmRig::pose(const Vector3 &marker, const Vector3 &hand, const Vector3
 	skeleton->set_bone_pose(bone_elbow, Transform3D(pad.scaled_local(thick_elbow), elbow_s));
 	// _pose_glove, the top fist rolled (its direction is normalized(), the same
 	// unit vector).
-	const Vector3 shaft_s = frame.basis.xform(grip);
 	const Vector3 forearm_dir = forearm_span.normalized();
 	double roll_angle = 0.0;
 	if (roll_way != 0.0) {
@@ -427,6 +538,7 @@ void NativeArmRig::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("configure_torso", "profile", "sway", "depth", "x_scale",
 								 "z_scale", "sleeve_radius", "steer_contact"),
 			&NativeArmRig::configure_torso);
+	ClassDB::bind_method(D_METHOD("configure_swivel", "weights"), &NativeArmRig::configure_swivel);
 	ClassDB::bind_method(D_METHOD("pose", "marker", "hand", "grip", "frame", "trunk_texture", "pole",
 								 "lengths", "load", "motion"),
 			&NativeArmRig::pose);

@@ -5,14 +5,19 @@ extends GutTest
 # hands in and out of reach (the girdle's give and the IK clamp), trunk
 # texture, a twisted and leaned trunk, the balance lean, a check load,
 # per-build arm lengths and part thicknesses, and gloves on and off the shaft —
-# the elbow steered round the torso, the sword grip and the top fist's roll
+# the elbow's swivel round the torso, the sword grip and the top fist's roll
 # with them. Every arm bone must agree.
 #
 # Pending without the extension (fresh clone, CI without a native build) — run
 # native/build.sh.
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
-const TOLERANCE: float = 0.0001
+# Looser than the other kernels' 1e-4: the swivel is the bottom of a cost
+# (SkaterArmPoses.swivel_bend), and a minimum's place is only as well defined as
+# the cost is flat there — two float paths whose costs agree to ~1e-7 can put a
+# smooth one ~1e-3 rad apart (√ε). A slip in the port is orders past it; this
+# is well under a millimetre at the elbow.
+const TOLERANCE: float = 0.001
 const CASES: int = 600
 const SEED: int = 0x41524D53  # "ARMS" — fixed so failures reproduce.
 const UpperBone = SkaterMeshBuilder.UpperBone

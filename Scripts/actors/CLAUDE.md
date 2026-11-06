@@ -374,14 +374,25 @@ Ten rules the rigs sit inside, all easy to break from in here:
   gameplay frame: whether the host can see a blocker must not move his hands.
   `test_off_camera_culling.gd` holds that, and `ClipFrameCapture` turns culling
   off while its own camera records.
-- **The elbow steers round the torso.** Each elbow turns off its pole about
-  the shoulder→hand line just far enough to keep the arm out of the jersey
-  (`SkaterArmPoses.steer_turn`, measured by `SkaterMeshBuilder.torso_clearance`),
-  and that turn is eased per arm (`SkaterArmRig.steer_omega`) so the elbow's
-  speed stays continuous where it engages and where it reaches its stop. The
+- **The elbow swivels to the cheapest place on its circle.** Of the elbows the
+  two bone lengths allow — a circle round the shoulder→hand line — each arm
+  takes the one whose arm costs least (`SkaterArmPoses.swivel_bend`): the
+  sleeve in the jersey past contact (`SkaterMeshBuilder.torso_clearance`)
+  first, then the rest pole (`Skater.arm_pole_local`, the shoulder's least
+  effort), the shoulder's extension (no elbow behind the back) and the wrist's
+  range against the shaft. The circle is searched whole, so no hand position
+  flips the elbow through the pole's projection, and a rest bend that breaks
+  no limit is taken outright. The bend held last frame chooses between minima
+  that tie, and the drawn bend eases toward the chosen one about the
+  shoulder→hand line (`SkaterArmRig.steer_omega`), the short way round. The
   ease is state, so the rebuild gate keeps redrawing while it settles
-  (`SkaterArmRig.take_steering`). `test_elbow_steers_round_the_torso.gd` holds
-  the steer, `test_body_stays_smooth.gd` the jerk.
+  (`SkaterArmRig.take_steering`); a still pose solves to the same bend every
+  frame, so it rests. What no elbow fixes is a hand gameplay put in or against
+  the jersey: the instrument separates the two.
+  `test_elbow_swivels_round_the_torso.gd` holds the swivel,
+  `test_body_stays_smooth.gd` the jerk, and
+  `tests/instruments/actors/test_arm_pose_quality.gd` measures it round the
+  body (`avd` is the share of a clip another elbow would have kept out).
 - **The top fist rolls round the shaft.** A glove holds the stick like a sword
   (`SkaterArmPoses.glove_basis`), the wrist deviating in the plane of the
   forearm and the shaft; for the top hand, a shaft running down and away from a

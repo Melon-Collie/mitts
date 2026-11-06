@@ -3,7 +3,9 @@
 Status: WITHDRAWN. The model, its derived envelope, the reference sheets and
 every tool built on them are removed: the derived carry played jerky and read
 wrong at many bearings, and nothing else in the game used the model. The
-closed-form carry (`TopHandIK`, `CarryPostureRules`) is the carry. This file
+closed-form carry (`TopHandIK`, `CarryPostureRules`) is the carry. §7's idea
+survives narrowed to the drawn elbow alone: it is chosen round its circle by a
+comfort cost (`SkaterArmPoses.swivel_bend`), retiring the steer. This file
 records what was designed and what the work measured; `git log --diff-filter=D
 -- Scripts/domain/rules/arm_anatomy.gd` finds the code.
 
@@ -227,8 +229,8 @@ entries get added with the user's sign-off.
 - **Gear presses into gear by up to 5 cm** (`ArmAnatomyBody.gear_press`): a
   sleeve, a fist or the knob may sink that far into the jersey. Arms and
   jersey are drawn oversized, so two pieces pressed together overlap where
-  real padding would squash. The rig steers its drawn elbows to 3 cm
-  (`SkaterArmPoses.STEER_CONTACT_M`), inside it.
+  real padding would squash. The rig swivels its drawn elbows to 3 cm
+  (`SkaterArmPoses.SWIVEL_CONTACT_M`), inside it.
 
 ## 9. Phases
 

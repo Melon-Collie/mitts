@@ -14,16 +14,16 @@
 namespace mitts {
 
 // C++ port of one arm in Scripts/actors/skater_arm_rig.gd (SkaterArmRig.
-// _update_arm: the textured, check-loaded shoulder, the tucked pole, the elbow
-// steered round the torso and eased (SkaterArmPoses.steer_turn), the part
-// posing, and the glove's sword grip with the top fist's roll eased
+// _update_arm: the textured, check-loaded shoulder, the tucked pole, the elbow's
+// swivel chosen round its circle and eased (SkaterArmPoses.swivel_bend), the
+// part posing, and the glove's sword grip with the top fist's roll eased
 // (glove_basis, grip_roll). The GDScript is the reference; the parity fuzz test
 // (tests/unit/rules/test_native_arm_rig_parity.gd) keeps them identical.
 //
 // One call per arm, and it writes the five bones itself: the math is cheaper
 // than the crossings, so a kernel that hands values back for GDScript to write
-// saves almost nothing. It owns the arm's two eased angles (the elbow's turn
-// and the fist's roll), as the rig's _steer and _roll do on its own path.
+// saves almost nothing. It owns the arm's eased state (the elbow's swivel and
+// the fist's roll), as the rig's _swivel_* and _roll do on its own path.
 // pose() answers DEGENERATE on a degenerate span (hand on the elbow) and writes
 // nothing; the rig takes its GDScript path for that arm, whose held-pose
 // branches read the skeleton's current poses. SETTLING says an eased angle has
@@ -57,7 +57,7 @@ class NativeArmRig : public godot::RefCounted {
 	// SkaterArmRig.steer_omega.
 	double steer_omega = 0.0;
 
-	// SkaterMeshBuilder's torso (torso_clearance) and the steer's contact
+	// SkaterMeshBuilder's torso (torso_clearance) and the swivel's contact
 	// allowance (SkaterArmPoses._depth).
 	godot::PackedVector2Array torso_profile;
 	godot::PackedFloat64Array torso_sway;
@@ -67,8 +67,24 @@ class NativeArmRig : public godot::RefCounted {
 	double sleeve_radius = 0.0;
 	double steer_contact = 0.0;
 
-	// The eased angles, (angle, rate), as GDScript's PackedVector2Array holds them.
-	godot::Vector2 steer;
+	// SkaterArmPoses' swivel weights and search (configure_swivel).
+	double swivel_torso = 0.0;
+	double swivel_rest = 0.0;
+	double swivel_shoulder = 0.0;
+	double swivel_extension_max = 0.0;
+	double swivel_wrist = 0.0;
+	double swivel_hold = 0.0;
+	double swivel_upper_sample = 0.0;
+	int swivel_samples = 12;
+	int swivel_golden_steps = 0;
+	double swivel_free_dot = 1.0;
+
+	// The swivel's last choice, the bend drawn and its rate (SkaterArmRig.
+	// _swivel_target / _swivel_held / _swivel_rate), and the fist's roll as
+	// (angle, rate), as GDScript's PackedVector2Array holds it.
+	godot::Vector3 swivel_target;
+	godot::Vector3 swivel_held;
+	double swivel_rate = 0.0;
 	godot::Vector2 roll;
 	bool settling = false;
 
@@ -76,9 +92,17 @@ class NativeArmRig : public godot::RefCounted {
 	double depth(const godot::Vector3 &p, const godot::Transform3D &to_torso, double unit) const;
 	double arm_depth(const godot::Vector3 &shoulder, const godot::Vector3 &elbow,
 			const godot::Vector3 &hand, const godot::Transform3D &to_torso, double unit) const;
-	double steer_turn(const godot::Vector3 &shoulder, const godot::Vector3 &hand, double upper_len,
-			double forearm_len, const godot::Vector3 &pole, const godot::Vector3 &outward,
-			const godot::Transform3D &torso) const;
+	double swivel_cost(const godot::Vector3 &shoulder, const godot::Vector3 &elbow,
+			const godot::Vector3 &hand, const godot::Vector3 &bend, double upper_len,
+			const godot::Vector3 &rest_n, const godot::Vector3 &hold, const godot::Vector3 &outward,
+			const godot::Vector3 &back, const godot::Transform3D &to_torso, double unit,
+			const godot::Vector3 &shaft, const godot::Vector3 &wrist) const;
+	godot::Vector3 swivel_bend(const godot::Vector3 &shoulder, const godot::Vector3 &hand,
+			double upper_len, double forearm_len, const godot::Vector3 &rest,
+			const godot::Vector3 &held, const godot::Vector3 &outward, const godot::Vector3 &back,
+			const godot::Transform3D &torso, const godot::Vector3 &shaft,
+			const godot::Vector3 &wrist) const;
+	godot::Vector3 ease_swivel(double delta, const godot::Vector3 &axis, const godot::Vector3 &target);
 	double ease(godot::Vector2 &held, double delta, double target);
 
 protected:
@@ -101,6 +125,10 @@ public:
 	void configure_torso(const godot::PackedVector2Array &profile, const godot::PackedFloat64Array &sway,
 			const godot::PackedFloat64Array &depth, double x_scale, double z_scale,
 			double p_sleeve_radius, double p_steer_contact);
+	// (jersey, rest, shoulder, extension limit, wrist, hold, upper-arm sample,
+	// samples, golden-section steps, the free rest bend's |cos| off the arm):
+	// SkaterArmPoses.SWIVEL_* and SWIVEL_FREE_DOT.
+	void configure_swivel(const godot::PackedFloat64Array &weights);
 
 	// `marker` and `hand` are the shoulder and hand markers in UpperBody's
 	// frame; `grip` the shaft's direction at the hand in that frame, zero off

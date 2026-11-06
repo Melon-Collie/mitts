@@ -178,11 +178,13 @@ without a built binary, loses performance, never correctness — CI builds it):
   exception to "results out": the math is cheaper than the crossings, so a port
   that hands the transforms back for GDScript to write measured 9.2 µs against
   the GDScript's 10.6; one crossing is ~4. A degenerate span returns false and
-  takes the GDScript path. It also steers the elbow round the torso, holds
-  the glove's sword grip and rolls the top fist, and owns the two eased angles
-  (the turn and the roll) per arm, reporting through `pose`'s result whether
-  they are still settling, for the rig's rebuild gate.
-  `tests/unit/rules/test_native_arm_rig_parity.gd`.
+  takes the GDScript path. It also swivels the elbow round the torso, holds
+  the glove's sword grip and rolls the top fist, and owns the eased state
+  (the swivel and the roll) per arm, reporting through `pose`'s result whether
+  they are still settling, for the rig's rebuild gate. Its weights come from
+  `SkaterArmPoses` through `configure_swivel`, never as copies.
+  `tests/unit/rules/test_native_arm_rig_parity.gd`, whose tolerance is looser
+  than the other kernels' because the swivel is a minimum rather than a root.
 
 - **Carry rollout** — `AICarryRollout.roll_all` (the bot carrier's near moves,
   four rolls a carry search on the AI worker): every move skated in one call,

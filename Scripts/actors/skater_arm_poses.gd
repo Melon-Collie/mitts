@@ -22,73 +22,166 @@ static func segment_pose(a: Vector3, b: Vector3, thickness: Vector3) -> Transfor
 			(a + b) * 0.5)
 
 
-# How far the elbow turns off the pole's bend, about the shoulder→hand line
-# (radians, signed): of the circle the two bone lengths allow, the turn toward
-# `outward` that keeps the arm out of the torso, as little as that takes — none
-# where the pole's elbow already clears, the whole turn to `outward` where even
-# that intrudes. The turn is the root of the arm's depth into the torso,
-# bracketed by bisection and placed in its last bracket by the depth's line, so
-# it is a continuous function of the pose. `torso` is the TORSO bone's pose, in
-# the space the joints are in. turned_elbow places the elbow it names.
+# The elbow's swivel: of the circle round the shoulder→hand line the two bone
+# lengths allow, the bend (unit, square to that line, the way the elbow points)
+# whose arm costs least (swivel_cost). Sampled all round the circle from the
+# rest pole's bend, then the least sample's bracket narrowed by golden section
+# — the minimum usually sits on the jersey's contact, a kink no parabola through
+# the coarse samples places — and the last three points' parabola placed in
+# what is left, so the bend follows its minimum continuously as the pose moves
+# rather than in steps of the search's last interval.
 #
-# What it measures is the elbow's pad and the middle of each segment (past the
-# armhole, which is skinned into the torso), each allowed STEER_CONTACT_M of
-# overlap: a sleeve lying against the ribs is an arm at rest, not a clip. The
-# forearm's last stretch to the hand is not measured — the hand is where it is,
-# and no elbow moves it.
-const STEER_CONTACT_M: float = 0.03
-const _STEER_BISECTIONS: int = 6
+# A rest bend that breaks no limit is taken without the search
+# (SWIVEL_FREE_OFF_AXIS).
+#
+# `held` is the bend chosen last frame (ZERO with no history). It weighs only in
+# choosing which sample's bracket to search, so the elbow stays in the minimum
+# it is in when two tie rather than flipping between them; the search inside the
+# bracket leaves it out, and the samples are laid from the rest pole rather than
+# from `held`, so a still pose gives the same bend frame after frame and the
+# rebuild gate rests.
+#
+# `outward` and `back` are the spine's directions (outward on this arm's side)
+# in the joints' space; `shaft` the stick's direction at this hand toward the
+# blade, ZERO off the stick; `wrist` the grip angle and the wrist's ulnar and
+# radial range; `torso` the TORSO bone's pose. elbow_on_circle places the elbow.
+const SWIVEL_SAMPLES: int = 12
+const SWIVEL_GOLDEN_STEPS: int = 8
+const _GOLDEN: float = 0.6180339887
+# Where the rest pole's own bend breaks no limit it is the answer outright —
+# every other term is zero there and the rest's is least — as long as the pole
+# points this far off the arm (sin), so that the bend it names is well defined.
+const SWIVEL_FREE_OFF_AXIS: float = 0.1
+const SWIVEL_FREE_DOT: float = sqrt(1.0 - SWIVEL_FREE_OFF_AXIS * SWIVEL_FREE_OFF_AXIS)
 
-static func steer_turn(shoulder: Vector3, hand: Vector3, upper_len: float,
-		forearm_len: float, pole: Vector3, outward: Vector3, torso: Transform3D) -> float:
+static func swivel_bend(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, rest: Vector3, held: Vector3, outward: Vector3,
+		back: Vector3, torso: Transform3D, shaft: Vector3, wrist: Vector3) -> Vector3:
 	var d_vec: Vector3 = hand - shoulder
 	var d: float = d_vec.length()
 	if d < 0.0001:
-		return 0.0
+		return Vector3.ZERO
 	var axis: Vector3 = d_vec / d
 	var h: float = _elbow_offset(d, upper_len, forearm_len)
 	var foot: Vector3 = shoulder + axis * _elbow_foot(d, upper_len, forearm_len)
-	var bend: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, pole)
+	var hold: Vector3 = held - axis * held.dot(axis)
+	hold = hold.normalized() if hold.length_squared() > 0.000001 else Vector3.ZERO
+	var ref: Vector3 = TwoBoneIK.bend_direction(shoulder, hand, rest)
 	var to_torso: Transform3D = torso.affine_inverse()
 	var unit: float = torso.basis.get_scale().x
-	var depth_lo: float = _arm_depth(shoulder, foot + bend * h, hand, to_torso, unit)
-	if depth_lo <= 0.0:
-		return 0.0
-	var out: Vector3 = outward - axis * outward.dot(axis)
-	if out.length_squared() < 0.000001 or h < 0.0001:
-		return 0.0
-	var full: float = bend.signed_angle_to(out.normalized(), axis)
-	var depth_hi: float = _arm_depth(shoulder, foot + bend.rotated(axis, full) * h, hand,
-			to_torso, unit)
-	if depth_hi > 0.0:
-		return full
-	var lo: float = 0.0
-	var hi: float = 1.0
-	for _i: int in _STEER_BISECTIONS:
-		var mid: float = (lo + hi) * 0.5
-		var depth: float = _arm_depth(shoulder, foot + bend.rotated(axis, full * mid) * h,
-				hand, to_torso, unit)
-		if depth > 0.0:
-			lo = mid
-			depth_lo = depth
+	var rest_n: Vector3 = rest.normalized()
+	var rest_cost: float = SWIVEL_REST * (1.0 - ref.dot(rest_n))
+	if swivel_cost(shoulder, foot + ref * h, hand, ref, upper_len, rest_n, Vector3.ZERO,
+			outward, back, to_torso, unit, shaft, wrist) <= rest_cost \
+			and absf(rest_n.dot(axis)) <= SWIVEL_FREE_DOT:
+		return ref
+	var step: float = TAU / SWIVEL_SAMPLES
+	var best: int = 0
+	var best_cost: float = INF
+	for k: int in SWIVEL_SAMPLES:
+		var bend: Vector3 = ref.rotated(axis, step * k)
+		var cost: float = swivel_cost(shoulder, foot + bend * h, hand, bend, upper_len, rest_n,
+				hold, outward, back, to_torso, unit, shaft, wrist)
+		if cost < best_cost:
+			best_cost = cost
+			best = k
+	var a: float = step * (best - 1)
+	var b: float = step * (best + 1)
+	var c: float = b - _GOLDEN * (b - a)
+	var e: float = a + _GOLDEN * (b - a)
+	var bend_c: Vector3 = ref.rotated(axis, c)
+	var bend_e: Vector3 = ref.rotated(axis, e)
+	var cost_c: float = swivel_cost(shoulder, foot + bend_c * h, hand, bend_c, upper_len, rest_n,
+			Vector3.ZERO, outward, back, to_torso, unit, shaft, wrist)
+	var cost_e: float = swivel_cost(shoulder, foot + bend_e * h, hand, bend_e, upper_len, rest_n,
+			Vector3.ZERO, outward, back, to_torso, unit, shaft, wrist)
+	for _i: int in SWIVEL_GOLDEN_STEPS:
+		if cost_c < cost_e:
+			b = e
+			e = c
+			cost_e = cost_c
+			c = b - _GOLDEN * (b - a)
+			bend_c = ref.rotated(axis, c)
+			cost_c = swivel_cost(shoulder, foot + bend_c * h, hand, bend_c, upper_len, rest_n,
+					Vector3.ZERO, outward, back, to_torso, unit, shaft, wrist)
 		else:
-			hi = mid
-			depth_hi = depth
-	return full * lerpf(lo, hi, depth_lo / (depth_lo - depth_hi))
+			a = c
+			c = e
+			cost_c = cost_e
+			e = a + _GOLDEN * (b - a)
+			bend_e = ref.rotated(axis, e)
+			cost_e = swivel_cost(shoulder, foot + bend_e * h, hand, bend_e, upper_len, rest_n,
+					Vector3.ZERO, outward, back, to_torso, unit, shaft, wrist)
+	var m: float = (a + b) * 0.5
+	var bend_m: Vector3 = ref.rotated(axis, m)
+	var cost_m: float = swivel_cost(shoulder, foot + bend_m * h, hand, bend_m, upper_len, rest_n,
+			Vector3.ZERO, outward, back, to_torso, unit, shaft, wrist)
+	return ref.rotated(axis, _parabola_floor(c, cost_c, m, cost_m, e, cost_e))
 
 
-# The elbow `turn` radians off the pole's bend about the shoulder→hand line
-# (TwoBoneIK.solve_elbow's at 0).
-static func turned_elbow(shoulder: Vector3, hand: Vector3, upper_len: float,
-		forearm_len: float, pole: Vector3, turn: float) -> Vector3:
+# Where the parabola through three points (x ascending) bottoms out, kept
+# between the outer two; the middle one where the three are not a bowl.
+static func _parabola_floor(x0: float, y0: float, x1: float, y1: float, x2: float,
+		y2: float) -> float:
+	var d0: float = (y1 - y0) / (x1 - x0)
+	var d1: float = (y2 - y1) / (x2 - x1)
+	var curve: float = (d1 - d0) / (x2 - x0)
+	if curve <= 0.0:
+		return x1
+	return clampf((x0 + x1) * 0.5 - d0 / (2.0 * curve), x0, x2)
+
+
+# The elbow whose bend off the shoulder→hand line is `bend` (swivel_bend's).
+static func elbow_on_circle(shoulder: Vector3, hand: Vector3, upper_len: float,
+		forearm_len: float, bend: Vector3) -> Vector3:
 	var d_vec: Vector3 = hand - shoulder
 	var d: float = d_vec.length()
 	if d < 0.0001:
 		return shoulder
-	var axis: Vector3 = d_vec / d
-	return shoulder + axis * _elbow_foot(d, upper_len, forearm_len) \
-			+ TwoBoneIK.bend_direction(shoulder, hand, pole).rotated(axis, turn) \
-			* _elbow_offset(d, upper_len, forearm_len)
+	return shoulder + d_vec / d * _elbow_foot(d, upper_len, forearm_len) \
+			+ bend * _elbow_offset(d, upper_len, forearm_len)
+
+
+# What an elbow at `elbow` costs the arm, each term in the units of a radian of
+# the joint it names:
+#   the jersey   how far the sleeve sinks past contact, SWIVEL_TORSO per metre —
+#                first, so an elbow that can clear the body does;
+#   the rest     how far the bend points off the rest pole (1 − cos), the
+#                shoulder's least effort — the elbow hangs down and out. Over
+#                the circle it varies only by the pole's share square to the
+#                arm, so it fades rather than flips as the arm comes round to
+#                the pole;
+#   the shoulder how far the upper arm reaches behind the chest past
+#                SWIVEL_EXTENSION_MAX (its extension), and any reach behind it
+#                toward the spine, which a shoulder cannot make with the hand in
+#                front;
+#   the wrist    how far the shaft sits past the wrist's deviation (`wrist`:
+#                grip angle, ulnar and radial range), where the glove would slip;
+#   the hold     how far the bend has left `hold` (1 − cos), ZERO for none.
+const SWIVEL_TORSO: float = 200.0
+const SWIVEL_REST: float = 1.0
+const SWIVEL_SHOULDER: float = 10.0
+const SWIVEL_EXTENSION_MAX: float = deg_to_rad(45.0)
+const SWIVEL_WRIST: float = 4.0
+const SWIVEL_HOLD: float = 1.0
+
+static func swivel_cost(shoulder: Vector3, elbow: Vector3, hand: Vector3, bend: Vector3,
+		upper_len: float, rest_n: Vector3, hold: Vector3, outward: Vector3, back: Vector3,
+		to_torso: Transform3D, unit: float, shaft: Vector3, wrist: Vector3) -> float:
+	var cost: float = SWIVEL_TORSO * maxf(_arm_depth(shoulder, elbow, hand, to_torso, unit), 0.0)
+	cost += SWIVEL_REST * (1.0 - bend.dot(rest_n))
+	var upper: Vector3 = (elbow - shoulder) / upper_len
+	var behind: float = upper.dot(back)
+	cost += SWIVEL_SHOULDER * (maxf(asin(clampf(behind, -1.0, 1.0)) - SWIVEL_EXTENSION_MAX, 0.0)
+			+ maxf(behind, 0.0) * maxf(-upper.dot(outward), 0.0))
+	if shaft != Vector3.ZERO:
+		var fore: Vector3 = hand - elbow
+		if fore.length_squared() > 0.000001:
+			var deviation: float = fore.angle_to(shaft) - wrist.x
+			cost += SWIVEL_WRIST * (maxf(deviation - wrist.z, 0.0) + maxf(-wrist.y - deviation, 0.0))
+	if hold != Vector3.ZERO:
+		cost += SWIVEL_HOLD * (1.0 - bend.dot(hold))
+	return cost
 
 
 # Where along the shoulder→hand line the elbow's circle is centred, and its
@@ -104,16 +197,24 @@ static func _elbow_offset(d: float, upper_len: float, forearm_len: float) -> flo
 
 
 # How far the arm with its elbow at `elbow` sinks into the torso past contact
-# (m) at the deepest of the points steer_turn measures; negative, by the
+# (m) at the deepest of the elbow, the upper arm SWIVEL_UPPER_SAMPLE of the way
+# down to it and the forearm 40% of the way to the hand, each allowed
+# SWIVEL_CONTACT_M of overlap: a sleeve lying against the ribs is an arm at
+# rest, not a clip. The upper arm's half by the armpit lies against the
+# jersey's side even hanging, where the skin blends the two, and the forearm's
+# last stretch is where the hand is, which no elbow moves. Negative, by the
 # narrowest margin, when it clears.
+const SWIVEL_CONTACT_M: float = 0.03
+const SWIVEL_UPPER_SAMPLE: float = 0.75
+
 static func _arm_depth(shoulder: Vector3, elbow: Vector3, hand: Vector3,
 		to_torso: Transform3D, unit: float) -> float:
-	return maxf(_depth(elbow, to_torso, unit), maxf(_depth((shoulder + elbow) * 0.5,
-			to_torso, unit), _depth(elbow.lerp(hand, 0.4), to_torso, unit)))
+	return maxf(_depth(elbow, to_torso, unit), maxf(_depth(shoulder.lerp(elbow,
+			SWIVEL_UPPER_SAMPLE), to_torso, unit), _depth(elbow.lerp(hand, 0.4), to_torso, unit)))
 
 
 static func _depth(p: Vector3, to_torso: Transform3D, unit: float) -> float:
-	return SkaterMeshBuilder.SLEEVE_RADIUS_M - STEER_CONTACT_M \
+	return SkaterMeshBuilder.SLEEVE_RADIUS_M - SWIVEL_CONTACT_M \
 			- SkaterMeshBuilder.torso_clearance(to_torso * p) * unit
 
 
