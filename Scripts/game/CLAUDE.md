@@ -155,7 +155,8 @@ The rest is judgement the seams can't make for you:
   RELEASE, not arrival** — write resolvers accordingly, and don't cache anything
   at the signal boundary. The queue is dropped on rematch reset; a claim parked
   across a faceoff is otherwise caught by the resolvers' own `pickup_locked` /
-  ghost / carrier-changed gates. With the queue in front, `ClaimantView`'s
+  ghost / carrier-changed gates, and a stick tie by `StickTieTracker` refusing
+  to link while play is stopped (the queue drains after the tracker's tick). With the queue in front, `ClaimantView`'s
   catch-up normally returns `Vector3.ZERO`; it stays the backstop for the queue's
   `MAX_HOLD_S` clamp and for any future path reaching a resolver undeferred.
 - **Never bound the blade by `rtt/2`.** The blade is client-authoritative aim, so

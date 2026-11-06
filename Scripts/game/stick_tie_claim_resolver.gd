@@ -18,7 +18,7 @@ extends RefCounted
 #     → rewind the claimant to self_view_time; reject a ghost, one not in TIE, or
 #       one already tied
 #     → ClaimantView-clamp the client blade, and reject unless the claimant's
-#       stick (rewound top hand → clamped blade) is within
+#       stick (caught-up top hand → clamped blade) is within
 #       StickCheckRules.TIE_CONTACT_M of the rewound stick
 #     → StickTieTracker.try_engage, which re-checks the present, the shared
 #       cooldown among it (idempotent)
@@ -135,7 +135,14 @@ func receive_claim(peer_id: int, host_timestamp: float, interp_delay_ms: float,
 			blade_rewind_time, _state_buffer.newest_host_timestamp()):
 		return
 	var attacker_blade: Vector3 = _claimant.clamp_blade(client_blade_curr, attacker_snap)
-	if StickCheckRules.stick_gap(attacker_snap.top_hand_world, attacker_blade,
+	# The hand rides the body like the blade: both caught up, or the stick is
+	# measured skewed between two instants.
+	var attacker_top: Vector3 = attacker_snap.top_hand_world + _claimant.catch_up()
+	# Host-only claim-outcome telemetry: the claim reached the rewound geometry
+	# test, and a gap past contact is the lag-comp miss.
+	NetworkTelemetry.record_stick_tie_claim()
+	if StickCheckRules.stick_gap(attacker_top, attacker_blade,
 			shaft_top, shaft_blade) > StickCheckRules.TIE_CONTACT_M:
+		NetworkTelemetry.record_stick_tie_claim_miss()
 		return
 	ties.try_engage(record.skater, target.skater)

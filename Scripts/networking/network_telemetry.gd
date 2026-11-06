@@ -113,13 +113,15 @@ var _delay_clamp_excess_max_ms: float = 0.0
 var _pickup_claim_count: int = 0
 var _pickup_claim_miss_count: int = 0
 var _pickup_claim_deflect_count: int = 0
-# Poke / stick-lift lag-comp claim outcomes: the same denominator-and-miss shape
-# as the pickup counters, for the other two client-authoritative blade actions.
-# Folded as session totals.
+# Poke / stick-lift / stick-tie lag-comp claim outcomes: the same
+# denominator-and-miss shape as the pickup counters, for the other
+# client-authoritative stick actions. Folded as session totals.
 var _poke_claim_count: int = 0
 var _poke_claim_miss_count: int = 0
 var _stick_lift_claim_count: int = 0
 var _stick_lift_claim_miss_count: int = 0
+var _stick_tie_claim_count: int = 0
+var _stick_tie_claim_miss_count: int = 0
 # ── Why a claim missed ───────────────────────────────────────────────────────
 # A miss fraction on its own conflates three unrelated things: the rewind
 # failing to reproduce the client's view, the two sides running different tests
@@ -527,7 +529,13 @@ static func record_stick_lift_claim() -> void:
 static func record_stick_lift_claim_miss() -> void:
 	if instance: instance._stick_lift_claim_miss_count += 1
 
-# One counter across all four claim types.
+static func record_stick_tie_claim() -> void:
+	if instance: instance._stick_tie_claim_count += 1
+
+static func record_stick_tie_claim_miss() -> void:
+	if instance: instance._stick_tie_claim_miss_count += 1
+
+# One counter across every claim type.
 static func record_claim_stamp_reject() -> void:
 	if instance: instance._claim_stamp_reject_count += 1
 
@@ -731,6 +739,8 @@ func tick(delta: float) -> void:
 	_poke_claim_miss_count = 0
 	_stick_lift_claim_count = 0
 	_stick_lift_claim_miss_count = 0
+	_stick_tie_claim_count = 0
+	_stick_tie_claim_miss_count = 0
 	_claim_stamp_reject_count = 0
 	_provisional_pin_count = 0
 	_provisional_confirmed_count = 0
@@ -829,6 +839,8 @@ func _fold_session_sample() -> void:
 		"poke_claim_misses": float(_poke_claim_miss_count),
 		"stick_lift_claims": float(_stick_lift_claim_count),
 		"stick_lift_claim_misses": float(_stick_lift_claim_miss_count),
+		"stick_tie_claims": float(_stick_tie_claim_count),
+		"stick_tie_claim_misses": float(_stick_tie_claim_miss_count),
 		# TOTAL_KEY; clients fold 0s.
 		"claim_stamp_rejects": float(_claim_stamp_reject_count),
 		# TOTAL_KEYS; host rows fold 0s.

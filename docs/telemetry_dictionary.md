@@ -38,7 +38,8 @@ Each per-second metric `<key>` appears as:
 - `<key>_total` — only for **rare-event / event counters** (`puck_hard_snaps`,
   `blade_jumps`, the host-side lag-comp claim counters `pickup_claims` /
   `pickup_claim_misses` / `pickup_claim_deflects` / `poke_claims` /
-  `poke_claim_misses` / `stick_lift_claims` / `stick_lift_claim_misses`, the
+  `poke_claim_misses` / `stick_lift_claims` / `stick_lift_claim_misses` /
+  `stick_tie_claims` / `stick_tie_claim_misses`, the
   client-side `provisional_*`, and the host-side `host_stalls`): the session sum.
   These are events-per-game, not rates — 3 hard snaps in a 10-minute game matters
   and would average to ~0/s.
@@ -127,7 +128,9 @@ grab-then-lose bug. A miss fraction that stays high after v28 points at the
 | `poke_claim_misses_total` | Of those, how many failed the swept `check_poke` against the rewound carried puck. Read as `poke_claim_misses / poke_claims`. |
 | `stick_lift_claims_total` | Client stick-lift claims that reached the rewound geometry test (blade hooked under an opposing carrier's shaft). The denominator for lifts. |
 | `stick_lift_claim_misses_total` | Of those, how many failed `check_blade_under_stick` against the rewound shaft. Read as `stick_lift_claim_misses / stick_lift_claims`. |
-| `claim_stamp_rejects_total` | Claims (any of the four types) dropped at the RPC boundary by the stamp-plausibility gate (`LagCompRewind.is_claim_stamp_plausible`) — before any resolver ran, so they appear in no other claim counter above. Expect 0. Sustained non-zero = legit claims silently eaten because an RTT spike outran the host's ping EMA (felt as "reached the puck, nothing happened"), or a client shopping timestamps. |
+| `stick_tie_claims_total` | Client stick-tie claims that reached the rewound geometry test (claimant in TIE, untied; target an untied, non-carrying opponent). The denominator for ties. Only in the row's `metrics`; the views do not extract it yet. |
+| `stick_tie_claim_misses_total` | Of those, how many found the claimant's stick farther than `TIE_CONTACT_M` from the rewound target stick. Read as `stick_tie_claim_misses / stick_tie_claims`. |
+| `claim_stamp_rejects_total` | Claims (any type) dropped at the RPC boundary by the stamp-plausibility gate (`LagCompRewind.is_claim_stamp_plausible`) — before any resolver ran, so they appear in no other claim counter above. Expect 0. Sustained non-zero = legit claims silently eaten because an RTT spike outran the host's ping EMA (felt as "reached the puck, nothing happened"), or a client shopping timestamps. |
 
 ### Why a claim missed — read these before trusting a miss rate
 
