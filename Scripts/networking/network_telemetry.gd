@@ -234,6 +234,10 @@ var input_queue_depth_median: int = 0
 # of its pending client inputs — input_queue_depth above is the client's echo and
 # folds 0 on host rows).
 var host_input_queue_depth_max: int = 0
+# How many samples that maximum is over: 0 when no remote skater was broadcast
+# this window (a spectator-only lobby, a goal replay), where the 0 above is no
+# reading at all rather than a starving queue.
+var host_input_queue_depth_samples: int = 0
 var input_lead_avg_ms: float = 0.0
 var input_starvations_per_sec: float = 0.0
 var input_drains_per_sec: float = 0.0
@@ -243,6 +247,7 @@ var remote_correction_avg_m: float = 0.0
 var remote_correction_max_m: float = 0.0
 var _queue_depth_window: Array[int] = []
 var _host_queue_depth_window_max: int = 0
+var _host_queue_depth_window_samples: int = 0
 var packet_loss_pct: float = 0.0
 var jitter_p95_ms: float = 0.0
 var puck_mode: String = "—"
@@ -311,6 +316,7 @@ static func record_queue_depth(depth: int) -> void:
 static func record_host_queue_depth(depth: int) -> void:
 	if instance == null:
 		return
+	instance._host_queue_depth_window_samples += 1
 	if depth > instance._host_queue_depth_window_max:
 		instance._host_queue_depth_window_max = depth
 
@@ -650,6 +656,7 @@ func tick(delta: float) -> void:
 			if _remote_correction_n > 0 else 0.0
 	remote_correction_max_m = _remote_correction_max
 	host_input_queue_depth_max = _host_queue_depth_window_max
+	host_input_queue_depth_samples = _host_queue_depth_window_samples
 	if not _queue_depth_window.is_empty():
 		var sorted := _queue_depth_window.duplicate()
 		sorted.sort()
@@ -729,6 +736,7 @@ func tick(delta: float) -> void:
 	_starvation_count = 0
 	_input_drain_count = 0
 	_host_queue_depth_window_max = 0
+	_host_queue_depth_window_samples = 0
 	_puck_predict_residual_sum = 0.0
 	_puck_predict_residual_n = 0
 	_puck_predict_residual_max = 0.0

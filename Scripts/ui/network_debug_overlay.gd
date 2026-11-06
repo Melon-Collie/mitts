@@ -537,6 +537,8 @@ func _render_client(t: NetworkTelemetry) -> void:
 	_context(_band(pdv, 8.0, 20.0), "Delay spread", "%.1f ms (floor %.0f)" % [pdv, NetworkManager.get_packet_delay_floor_ms()],
 		"jitter measured vs the host CLOCK, ignores clumping; if Jitter is high but this is low, packets are clumping, not the path being jittery")
 	_info("Updates in", "%.0f/s" % t.world_state_hz, "world snapshots received; matches host send rate")
+	_info("Your input queue", "%d frames at the host" % t.input_queue_depth_median,
+		"how many of your inputs the host held waiting, echoed back; the host's own row judges it")
 	_sim_line(t)
 
 	# End-to-end latency decomposed into its named terms, so a netcode change
@@ -601,10 +603,11 @@ func _render_host(t: NetworkTelemetry) -> void:
 		"world states broadcast per second, counted once per broadcast rather than per recipient (Bandwidth below is the per-peer total); constant at the send rate in every phase")
 	_sim_line(t)
 
-	if not peers.is_empty():
+	if t.host_input_queue_depth_samples > 0:
 		_section("Client input queue")
-		_metric(_queue_health(t.input_queue_depth_median), "Queue depth", "%d frames" % t.input_queue_depth_median,
-			"client inputs waiting to apply; ~1-3 healthy, 0 = starving, high = backed up")
+		_metric(queue_health(t.host_input_queue_depth_max), "Queue depth",
+			"peak %d frames (healthy ~%.0f)" % [t.host_input_queue_depth_max, _queue_margin_ticks()],
+			"the deepest client input queue this second: the input lead's margin holds it at ~%.1f; 0 = starving, high = backed up" % _queue_margin_ticks())
 		_metric(_band(t.input_lead_avg_ms, 10.0, 30.0), "Input lead", "%.1f ms" % t.input_lead_avg_ms,
 			"how late inputs arrive vs schedule; want near 0")
 		_metric(_band(t.input_starvations_per_sec, NetworkTelemetry.STARVATION_WARN_PER_SEC,
@@ -953,11 +956,21 @@ func _when_positive(value: float, bad: float) -> Health:
 		return Health.WARN
 	return Health.OK
 
-# Input queue: starving (0) and backed up (high) are both bad; ~1-3 is healthy.
-func _queue_health(depth: int) -> Health:
-	if depth == 0 or depth > 12:
+# The depth the input lead's margin holds a client's queue at, in ticks: the lead
+# pays the trip, so only the margin queues.
+static func _queue_margin_ticks() -> float:
+	return NetworkManager.INPUT_LEAD_SEC * float(Constants.PHYSICS_TICK)
+
+
+# The host's peak client input queue this window, judged against the margin:
+# empty at every sample is starving; ~45 ms of extra input latency past the
+# margin is backing up, ~100 ms is backed up.
+static func queue_health(peak: int) -> Health:
+	var margin: float = _queue_margin_ticks()
+	var extra: float = float(peak) - margin
+	if peak == 0 or extra > 0.1 * float(Constants.PHYSICS_TICK):
 		return Health.BAD
-	if depth > 6:
+	if extra > 0.045 * float(Constants.PHYSICS_TICK):
 		return Health.WARN
 	return Health.OK
 
