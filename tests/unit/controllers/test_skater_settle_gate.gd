@@ -110,3 +110,17 @@ func test_a_read_past_the_deadline_releases_the_queue_once() -> void:
 	input.host_timestamp = 1.01
 	gate.read(input, true)
 	assert_eq(gate.unqueued, Press.NONE)
+
+
+# Reconcile replay walks the same inputs through the gate, and a called-off
+# slapshot re-arms it from the replay's charge rather than the live one: what
+# the replay writes must not survive it.
+func test_restore_undoes_what_a_replay_wrote() -> void:
+	var gate := SkaterSettleGate.new()
+	gate.arm_local(10.40)
+	gate.save()
+	gate.arm_local(10.12)
+	gate.queued = SkaterSettleGate.Press.PASS
+	gate.restore()
+	assert_true(gate.is_settling(10.30), "the live deadline is back")
+	assert_eq(gate.queued, SkaterSettleGate.Press.NONE)

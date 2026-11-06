@@ -580,9 +580,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# tick recomputes it — otherwise the local player's stick-flex pose reads a
 	# stale charge for one frame after a reconcile (cosmetic; completes the set).
 	var pre_shot_charge: float = skater.shot_charge
-	# The settle queue notes and releases presses as the replay walks the
-	# deadline, the live inputs having already done so.
-	var pre_settle_queued: SkaterSettleGate.Press = _settle.queued
+	_settle.save()
 	skater.global_position = server_state.position
 	skater.velocity = server_state.velocity
 	# Body-check stagger is deterministic from the host baseline + tick decay,
@@ -687,6 +685,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			replay_snap.was_replay_rerecorded = true
 			replay_hist_i += 1
 	is_replaying = false
+	var replayed_state: State = _sm.get_state()
 	# Restore shot-state fields that replay must not transition past.
 	_sm.set_state(pre_state)
 	_sm.follow_through_timer = pre_follow_through_timer
@@ -711,62 +710,12 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	_aiming.wrister_origin_world = pre_charge_origin_world
 	_aiming.wrister_origin_skater_pos = pre_charge_origin_skater_pos
 	skater.shot_charge = pre_shot_charge
-	_settle.queued = pre_settle_queued
-	# Server authority on shot state — but never revert past a release transition.
-	# If the client is in FOLLOW_THROUGH and the server is still in an aim state,
-	# the host just hasn't processed the release input yet; the reliable RPC already
-	# fired it. Reverting would loop the follow-through animation every reconcile cycle.
-	var apply_server_shot_state: bool = server_state.shot_state != pre_state
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.FOLLOW_THROUGH:
-		var server_still_aiming: bool = \
-				server_state.shot_state == SkaterStateMachine.State.WRISTER_AIM or \
-				server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK or \
-				server_state.shot_state == SkaterStateMachine.State.ONE_TIMER_RETENTION
-		if server_still_aiming:
-			apply_server_shot_state = false
-	# The one-timer's committed hold is CLIENT-OWNED outright — the server never
-	# overrides it in either direction. Safe as a blanket (every other guard here
-	# enumerates) because the hold SELF-TERMINATES within one_timer_retention_time,
-	# so a wrong local state survives a fraction of a second at worst. Both
-	# directions are wrong to apply: a lagged pre-release state re-arms a wind-up
-	# the player already released, and a server FOLLOW_THROUGH skips the client's
-	# own release so it never seeds its shot prediction. Real progressions are
-	# unaffected — a stoppage cancels the swing through teleport_to ->
-	# _cancel_active_charge, which does not route through here.
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.ONE_TIMER_RETENTION:
-		apply_server_shot_state = false
-	# Symmetric guard for the reverse direction: don't revert from an aiming state
-	# back to skating when we have the puck. The server hasn't processed the shoot
-	# input yet (it's still in-flight or queued); letting the server override here
-	# ejects the client from WRISTER_AIM every reconcile cycle, so shoot_pressed
-	# never re-fires and the release has no puck to dispatch.
-	if apply_server_shot_state and has_puck:
-		var client_aiming: bool = \
-				pre_state == SkaterStateMachine.State.WRISTER_AIM or \
-				pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK
-		var server_skating: bool = \
-				server_state.shot_state == SkaterStateMachine.State.SKATING_WITH_PUCK or \
-				server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK
-		if client_aiming and server_skating:
-			apply_server_shot_state = false
-	# Same protection for the puckless one-timer wind-up, which has no puck so the
-	# has_puck guard above never covers it: the server's lagged
-	# SKATING_WITHOUT_PUCK (slap press not processed there yet) ejects the wind-up,
-	# and the held RMB can't re-fire the rising-edge entry — the aim arrow strands
-	# on screen with no reticle. Real progressions still apply: the puck arriving
-	# flips the server to SLAPPER_CHARGE_WITH_PUCK, a release to FOLLOW_THROUGH.
-	if apply_server_shot_state \
-			and pre_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITHOUT_PUCK \
-			and server_state.shot_state == SkaterStateMachine.State.SKATING_WITHOUT_PUCK:
-		apply_server_shot_state = false
-	# A slapshot called off is the client's to have called: through the recovery
-	# that follows (the puck held at its pin, the settle lock running) the host's
-	# lagged wind-up must not re-arm it — the button is already up, so it would
-	# release a zero-charge slapshot. Bounded by the recovery, like the hold above.
-	if apply_server_shot_state and pre_state == SkaterStateMachine.State.SKATING_WITH_PUCK \
-			and skater.is_slapshot_pinning() \
-			and server_state.shot_state == SkaterStateMachine.State.SLAPPER_CHARGE_WITH_PUCK:
-		apply_server_shot_state = false
+	_settle.restore()
+	# Server authority on shot state, judged against where the replay landed
+	# (ShotStateAuthority holds the in-flight guards).
+	var apply_server_shot_state: bool = ShotStateAuthority.server_applies(
+			server_state.shot_state as SkaterStateMachine.State, pre_state, replayed_state,
+			has_puck, skater.is_slapshot_pinning())
 	if apply_server_shot_state:
 		_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
 	# Wrister charge is a local control input (the player's precision sweep), not a
