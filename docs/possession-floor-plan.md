@@ -421,8 +421,9 @@ never park at the blue line waiting.
 Instruments in `tests/instruments/ai/` (duel harness, real bot brains; the
 O-zone one against the real keeper, settled on the puck before each run), each
 run on `main` before this plan and on the branch, with `point_odds_off.gd`
-zeroing the shot field's 15 m row for the regression. Small samples: read
-differences under a few runs as noise.
+zeroing the shot field's 15 m row for the regression, on the duel harness's
+old boards (see below). Small samples: read differences under a few runs as
+noise.
 
 | measure | main | branch |
 |---|---|---|
@@ -500,38 +501,38 @@ scatter. Bias is live minus measured.
 
 ### Step 5 on the integration branch
 
-`claude/shot-field-integration` (the floor, the shot field's live read fixed:
-the pick's own odds, each read naming the play its keeper saw, carried wraps,
-dense feeds, #896's keeper) against `main` (d93cbf2b), the same instruments,
-both with the native kernels, run back to back on one machine.
+`claude/shot-field-integration` (the floor; the shot field's live read fixed:
+the pick's own odds, each read naming the play its keeper saw, a feed being one
+across the royal road, carried wraps, dense feeds, #896's keeper; the saucer
+lane reading the stick where it lands; the pressurer's incumbent riding its
+stand and the gap ladder as its ring) against `main` (d93cbf2b), the same
+instruments. Both on the duel harness as it now stands, whose sliding puck
+steps with the host's own drive (`AITrajectory.step_puck`): on its old boards a
+rim or a dump flew metres off the path the bots price it on, so earlier
+readings of dumps and rims do not compare.
 
-| measure | main | integration | integration, shot read forced CARRIED |
-|---|---|---|---|
-| entries carried in (30) | 25, 2.99 s | 22, 2.72 s | |
-| … dumped in, won back | 2, 1 | 6, 3 | |
-| breakout exits (20) | 19, 1.91 s | 18, 2.01 s | |
-| stacked line: carried / dumped / turnover (12) | 9 / 2 / 1 | 8 / 4 / 0 | |
-| low O-zone possessions ending in a shot (48) | 37, at 1.6 s | 34, at 1.2 s | 28, at 1.9 s |
-| … from the slot / elsewhere | 7 / 30 | 2 / 32 | 7 / 21 |
-| … passes | 28 | 34 | 48 |
-| slot holds: count, median | 10, 0.16 s | 9, 0.32 s | 10, 0.36 s |
+| measure | main | integration |
+|---|---|---|
+| entries carried in (30) | 25, 2.99 s | 22, 2.72 s |
+| … dumped in, won back | 2, 0 | 6, 0 |
+| breakout exits (20) | 19, 1.91 s | 19, 2.13 s |
+| stacked line: carried / dumped / turnover (12) | 9 / 2 / 1 | 8 / 4 / 0 |
+| … dumps won back | 0 of 2 | 2 of 4 |
+| low O-zone possessions ending in a shot (48) | 39, at 1.8 s | 35, at 2.0 s |
+| … from the slot / point / elsewhere | 6 / 1 / 32 | 10 / 0 / 25 |
+| … passes | 26 | 40 |
+| below the dots, a possession | 0.9 s | 1.3 s |
+| slot holds: count, median | 10, 0.19 s | 13, 0.28 s |
 
-Point shots priced at nothing change none of these, on either branch.
+Point shots priced at nothing change none of the integration's readings.
 
-- **As built, the integration branch fires sooner low in their zone, not
-  later**, and from the slot less. The cause is the carrier's FED read: it
-  reads every possession's first `goalie_reset_s` as off a feed, so its shot is
-  priced against the feed and decoy cells, which concede more than a keeper
-  who watched the carry. In this drill the carrier starts with the puck and the
-  keeper settled on him: the keeper saw a carry, and the age of the possession
-  says nothing about that.
-- **With the read the keeper actually had (CARRIED), the floor does what the
-  plan meant it to**: fewer shots, later, a quarter of them from the slot
-  against one in seventeen, and the puck moved 48 times against 28 on `main`.
-  So the floor is not refuted; the FED rule is wrong. What a feed is has to come
-  from how the puck arrived (a pass caught, `self_settle_s` and the pickup's
-  feed vector already carry it), not from the possession's age.
-- **Host cost, AI µs per game-second, mean of two runs**: ozone-cycle 3v3
-  193k → 212k, 5v5 214k → 275k; nz-rush 3v3 130k → 196k, 5v5 148k → 353k;
-  loose-neutral 3v3 115k → 238k, 5v5 220k → 338k. Tick p95 1.4–3×. Most of it is
-  the floor's (§6), the rest the shot blend and the denser feed field.
+- **Low in their zone the floor does what the plan meant it to**: fewer shots,
+  later, half again as many from the slot, and the puck moved 40 times against
+  26. The shot read the carrier names (a feed only when the pass crossed the
+  royal road) is what let it: read as off a feed for the first `goalie_reset_s`
+  of every possession, the carrier fired sooner than on `main`.
+- **The entry drill dumps three times as often and wins none back.** Six of its
+  30 entries are dumps, and their man is first to every one. With the puck now
+  flying the path the dump search walks, what is left between the price and the
+  outcome is the race for it: the dump's read of who gets there first.
+- **Host cost** is §6's.
