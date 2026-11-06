@@ -23,6 +23,9 @@ var shooter: Skater = null
 # The tick the puck first met him on, -1 none yet, and whether he caught it.
 var first_contact: int = -1
 var caught: bool = false
+# Seconds his read of the shot is started back from its release, as the host's
+# lag comp once did for a remote shooter; 0, as it does now.
+var release_back_date: float = 0.0
 var _t: int = 0
 
 
@@ -146,6 +149,8 @@ func _release(at: Vector3, target: Vector3, speed: float) -> void:
 	puck.clear_carrier()
 	puck.apply_release_velocity(_flight(from, target, speed))
 	puck.puck_released.emit()
+	if release_back_date > 0.0:
+		ctrl.read.start(ctrl.play.primed(), release_back_date, ctrl.screen_delay_for(puck.get_release_velocity()))
 
 
 # The flight from `from` crossing the goal line at `target` at `speed`.

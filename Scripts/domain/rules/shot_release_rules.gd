@@ -9,49 +9,21 @@ class_name ShotReleaseRules
 # PokeClaimResolver / HitClaimResolver) lives here as pure rules, and one-timer
 # eligibility is gated on server-visible puck state.
 #
-# Design rule: lag compensation is a privilege, the shot itself is not. A
-# stale or forged timestamp earns zero back-date rather
-# than rejecting the shot — a legit client during NTP warmup stamps 0 and must
-# still be able to shoot. Only the one-timer contact test can refuse a shot
-# outright, because firing one requires the swing to actually have met the puck.
+# Design rule: the shot itself is never refused for its timing — a legit client
+# during NTP warmup stamps 0 and must still be able to shoot. Only the one-timer
+# contact test can refuse a shot outright, because firing one requires the swing
+# to actually have met the puck.
 
 # The absolute age bound on any client-stamped claim, and the single source for
 # it: LagCompRewind.claim_is_fresh reads this constant, and the four claim
-# resolvers go through that. A release timestamp older than this earns no
-# lag-comp benefits.
+# resolvers go through that.
 const MAX_CLAIM_AGE_S: float = 0.2
-
-# Float-rounding slack on the age boundary. 0.2 isn't representable, so
-# `now - host_timestamp` for a stamp at exactly MAX_CLAIM_AGE_S can land an ULP
-# above it and wrongly reject an at-boundary claim. 1 µs is negligible against
-# the 200 ms window. Applied to both age comparisons so they agree at the edge.
-const _AGE_EPSILON_S: float = 0.000001
 
 # Legit lofted shots cap the pre-normalization Y/XZ ratio at
 # ShotMechanics.MAX_LOFT_RATIO (1.0 = 45°), i.e. a normalized direction y of
 # ~0.707. 0.75 leaves headroom for float noise while still blocking
 # near-vertical forged directions.
 const MAX_DIRECTION_Y: float = 0.75
-
-
-# Goalie-reaction back-date for a release stamped `host_timestamp`, evaluated
-# at host time `now`. Future stamps and stamps older than MAX_CLAIM_AGE_S
-# (forged, or the pre-warmup zero stamp) earn zero back-date.
-static func clamp_back_date(now: float, host_timestamp: float) -> float:
-	if not is_finite(host_timestamp):
-		return 0.0
-	var elapsed: float = now - host_timestamp
-	if elapsed < 0.0 or elapsed > MAX_CLAIM_AGE_S + _AGE_EPSILON_S:
-		return 0.0
-	return elapsed
-
-
-# Whether a release timestamp is fresh enough to drive a state-buffer rewind.
-static func is_timestamp_fresh(now: float, host_timestamp: float) -> bool:
-	if not is_finite(host_timestamp):
-		return false
-	var elapsed: float = now - host_timestamp
-	return elapsed >= 0.0 and elapsed <= MAX_CLAIM_AGE_S + _AGE_EPSILON_S
 
 
 # Normalize a client-supplied shot direction and clamp its elevation angle.

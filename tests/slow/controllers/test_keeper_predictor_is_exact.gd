@@ -33,8 +33,9 @@ class Run:
 	var resteps: int = 0
 
 
-func _host(play: int) -> TruthWorld:
+func _host(play: int, back_date: float = 0.0) -> TruthWorld:
 	var host := Harness.new(add_child_autofree)
+	host.release_back_date = back_date
 	var world := TruthWorld.new(host)
 	for t: int in Harness.length(play):
 		world.record(play, t)
@@ -137,3 +138,22 @@ func test_a_release_he_could_not_see_is_corrected_by_the_next_snapshot() -> void
 	assert_gte(run.resteps, 1, "the release's snapshot re-stepped him")
 	assert_between(run.first_exact_after_release, release, release + 2,
 			"drawn as the host has him from the first snapshot that carries the release")
+
+
+# The shooter's own client knows his release on its tick and predicts the
+# keeper reading it from there. Were the host to read it back-dated by the
+# shooter's input lead (its lag comp before the goalie was predicted), the
+# keeper the shooter draws would part from the host's at the shot.
+func test_the_shooter_draws_the_keeper_only_a_read_from_the_release_tick_gives() -> void:
+	var play: int = Harness.Play.SLOT_SHOT
+	var release: int = _release_tick(play)
+	var lead_s: float = float(LEAD) * Harness.DT
+	var exact: Run = _client(_host(play), release, Harness.SETTLE_TICKS - 40)
+	var back_dated: Run = _client(_host(play, lead_s), release, Harness.SETTLE_TICKS - 40)
+	gut.p("read from the release tick: worst gap %.6f m, %d re-stepped; back-dated %.0f ms: worst gap %.4f m, %d off, %d re-stepped"
+			% [exact.worst_gap, exact.resteps, lead_s * 1000.0, back_dated.worst_gap, back_dated.off_ticks,
+			back_dated.resteps])
+	assert_lt(exact.worst_gap, SAME_M, "read from its tick, the host's keeper is the one the shooter draws")
+	assert_eq(exact.resteps, 0)
+	assert_gt(back_dated.off_ticks, 0, "back-dated, the host's keeper is not the one the shooter drew")
+	assert_gte(back_dated.resteps, 1, "and the release's snapshot re-steps the shooter's")

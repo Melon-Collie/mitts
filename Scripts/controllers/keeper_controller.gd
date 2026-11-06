@@ -244,7 +244,6 @@ func _physics_process(delta: float) -> void:
 	if is_server:
 		step_sim(delta)
 	else:
-		_pending_reaction_back_date = 0.0
 		var was: Vector3 = goalie.global_position
 		if not _draw_predicted():
 			if _rejoin_blend_elapsed >= 0.0:
@@ -257,8 +256,6 @@ func _physics_process(delta: float) -> void:
 # One tick of him where he plays: the host's, and a client's predictor
 # (KeeperPredictor) stepping its own keeper in its shadow world.
 func step_sim(delta: float) -> void:
-	# A back-date is for the release it was set before, never a later one.
-	_pending_reaction_back_date = 0.0
 	var was: Vector3 = goalie.global_position
 	_play(delta)
 	_measure_motion(was, delta)
@@ -802,12 +799,12 @@ func _stance() -> GoalieStateMachine.State:
 	return GoalieStateMachine.State.READY
 
 
-# A remote shooter's release is read from when he saw it leave, the back-date
-# GameManager sets just before it (Scripts/networking/CLAUDE.md, shot lag comp).
+# A release is read from the tick it is fired on, a remote shooter's too: that
+# tick is the one his own client drew it on (Scripts/networking/CLAUDE.md, shot
+# lag compensation).
 func _on_puck_released() -> void:
 	_end_save()
-	read.start(play.primed(), _pending_reaction_back_date, screen_delay_for(puck.get_release_velocity()))
-	_pending_reaction_back_date = 0.0
+	read.start(play.primed(), 0.0, screen_delay_for(puck.get_release_velocity()))
 
 
 # A tip or a deflection: a new shot to read from the start.

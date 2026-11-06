@@ -33,7 +33,6 @@ var _current_depth: float = 0.0
 var _velocity_x: float = 0.0
 var _velocity_z: float = 0.0
 var _last_save_time: float = -1.0
-var _pending_reaction_back_date: float = 0.0
 
 # The longest a screen hides a shot from him, for the shot log's read; and the
 # speed he counts as fully on the move, for its unset share.
@@ -90,12 +89,6 @@ func apply_skill_profile(_profile: GoalieSkillProfile) -> void:
 # The skaters he reads (GameManager's, so the controller knows no registry).
 func set_skater_getter(getter: Callable) -> void:
 	_skater_getter = getter
-
-
-# The back-date for the next puck_released, set just before the release so its
-# synchronous handler takes it.
-func set_pending_reaction_back_date(seconds: float) -> void:
-	_pending_reaction_back_date = maxf(seconds, 0.0)
 
 
 func _ensure_view() -> void:

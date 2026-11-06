@@ -5,36 +5,6 @@ extends GutTest
 # itself is not (only the one-timer contact test refuses one outright).
 
 
-# ── clamp_back_date ───────────────────────────────────────────────────────────
-
-func test_back_date_fresh_stamp_returns_elapsed() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_back_date(100.0, 99.95), 0.05, 0.0001,
-			"legit one-way delay back-dates by elapsed time")
-
-func test_back_date_stale_stamp_earns_nothing() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_back_date(100.0, 0.0), 0.0, 0.0001,
-			"pre-warmup zero stamp (or forged old stamp) → no back-date")
-
-func test_back_date_future_stamp_earns_nothing() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_back_date(100.0, 100.5), 0.0, 0.0001)
-
-func test_back_date_at_max_age_boundary() -> void:
-	assert_almost_eq(
-			ShotReleaseRules.clamp_back_date(100.0, 100.0 - ShotReleaseRules.MAX_CLAIM_AGE_S),
-			ShotReleaseRules.MAX_CLAIM_AGE_S, 0.0001)
-
-
-# ── is_timestamp_fresh ────────────────────────────────────────────────────────
-
-func test_fresh_timestamp_accepted() -> void:
-	assert_true(ShotReleaseRules.is_timestamp_fresh(100.0, 99.9))
-
-func test_stale_and_future_timestamps_rejected() -> void:
-	assert_false(ShotReleaseRules.is_timestamp_fresh(100.0, 99.0), "stale")
-	assert_false(ShotReleaseRules.is_timestamp_fresh(100.0, 101.0), "future")
-	assert_false(ShotReleaseRules.is_timestamp_fresh(100.0, NAN), "nan")
-
-
 # ── sanitize_direction ────────────────────────────────────────────────────────
 
 func test_direction_flat_shot_unchanged() -> void:

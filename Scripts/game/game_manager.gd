@@ -3590,11 +3590,8 @@ func _on_one_timer_release_requested(direction: Vector3, power: float, skater: S
 		if puck_controller != null:
 			puck_controller.notify_local_release(direction, power, skater)
 		return
-	# Host's own one-timer: shooter is local, so its sim and its puck view share
-	# a clock and there is nothing to rewind. interp_delay_ms = 0 short-circuits
-	# the goalie rewind branch entirely.
 	NetworkManager.send_shot_to_all(puck.get_puck_position(), true, power)
-	_host_release_one_timer(direction, power, skater, 0.0, 0.0)
+	_host_release_one_timer(direction, power, skater)
 
 
 # Host-authoritative remote ONE-TIMER, the possession-less sibling of
@@ -3624,9 +3621,8 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			skater.is_ghost, puck.is_on_cooldown(skater)):
 		return
 	# The instant the SHOOTER perceived this release at: they applied the input
-	# one lead before the host replays it. Everything lag-comp'd off this swing
-	# (the staleness check, the goalie's reaction back-date and position rewind)
-	# is anchored there rather than at the host's own tick.
+	# one lead before the host replays it. The staleness check is anchored there
+	# rather than at the host's own tick.
 	var shooter_view_ts: float = record.controller.last_processed_host_timestamp \
 			- NetworkManager.peer_input_lead_s(shooter_peer_id)
 	# Somebody else played the puck after this shooter committed, so the loose
@@ -3650,13 +3646,7 @@ func _on_remote_derived_one_timer(direction: Vector3, power: float,
 			{"is_slapper": true, "team": skater.get_team_id()})
 	# Fan the cue out to the other clients (the shooter already played it locally).
 	NetworkManager.send_shot_to_all(shot_pos, true, power, shooter_peer_id)
-	# Same interp-delay approximation _on_remote_derived_release uses — the
-	# shooter's render delay reconstructed from the ping the host already
-	# measures, so nothing extra rides the wire.
-	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
-	var interp_delay_ms: float = clampf(
-			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
-	_host_release_one_timer(direction, power, skater, shooter_view_ts, interp_delay_ms)
+	_host_release_one_timer(direction, power, skater)
 
 
 # The host's world-state buffer, sampled as a loose-puck view. Leaves `out`
@@ -3673,14 +3663,12 @@ func _sample_puck_at(host_time: float, out: SkaterController.PuckView) -> void:
 	out.velocity = snap.puck_state.velocity
 
 
-# `host_timestamp` is the instant the SHOOTER perceived the release at (0.0 for
-# the host's own player / a bot — no rewind), `interp_delay_ms` their render
-# delay; both drive the goalie lag comp only. The fire point is always the host's
-# own blade: puck.release() snaps to the carrier's blade contact, and the host
-# reaches this on the same sim tick the shooter did, so its blade already IS the
-# release pose.
-func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
-		host_timestamp: float, interp_delay_ms: float) -> void:
+# The fire point is always the host's own blade: puck.release() snaps to the
+# carrier's blade contact, and the host reaches this on the same sim tick the
+# shooter did, so its blade already IS the release pose. Nothing rewinds the
+# goalie: the one on this tick is the one the shooter drew
+# (Scripts/networking/CLAUDE.md, shot lag compensation).
+func _host_release_one_timer(direction: Vector3, power: float, skater: Skater) -> void:
 	# A one-timer is a possession-less engagement — if it fires during FACEOFF it
 	# makes the puck live, so end the faceoff or the resulting goal is voided (P2-2).
 	_phase_coord.on_puck_touched_live()
@@ -3692,54 +3680,21 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 	_shot_tracker.on_deflection(pid)
 	_shot_tracker.on_shot_started(pid, true)  # one-timer tag → One-Timer achievement
 	_loose_puck_released_by = pid
-	# Lag-comp the goalie reaction trigger (see _fire_remote_shot). clamp_back_date
-	# also zeroes the host's own path (host_timestamp = 0 → stale → 0); without it
-	# `now - 0` back-dates the goalie by the whole session.
-	var release_back_date: float = ShotReleaseRules.clamp_back_date(
-			NetworkManager.estimated_host_time(), host_timestamp)
-	for gc: GoalieController in goalie_controllers:
-		gc.set_pending_reaction_back_date(release_back_date)
-	var saved_goalie_positions: Array[Vector3] = []
-	var saved_goalie_rotations: Array[float] = []
-	if _state_buffer_manager != null and _state_buffer_manager.is_ready() and interp_delay_ms > 0.0 \
-			and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
-		# Goalie was REMOTE-view from the shooter — clients render the goalie
-		# from buffered host snapshots at host_time - interp_delay, so the
-		# shooter saw the goalie at that earlier moment. Rewound to that snapshot
-		# for the release, so the shot's xG is read against the goalie the
-		# shooter saw. See LagCompRewind.
-		# Anti-cheat: delay bounded against the shooter's measured link first.
-		interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
-				interp_delay_ms, float(NetworkManager.get_peer_ping_ms(pid)))
-		var rewind_time: float = LagCompRewind.remote_view_time(host_timestamp, interp_delay_ms)
-		var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-		for gc: GoalieController in goalie_controllers:
-			saved_goalie_positions.append(gc.goalie.global_position)
-			saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
-			var gs: GoalieNetworkState = snap.goalie_states.get(gc.team_id)
-			if gs != null:
-				gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
-				gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 	puck.set_carrier(skater)
 	puck.release(direction, power)
 	_note_shot_trajectory()
-	if not saved_goalie_positions.is_empty():
-		for i: int in goalie_controllers.size():
-			goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-			goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 
 
 # Fires a remote human's authoritative shot on the host. Called only from
 # _on_remote_derived_release (the input-stream release) — there is no shot RPC.
-# Every parameter is host-derived; interp_delay drives the goalie lag-comp
-# rewind, and is 0 only for a shooter whose sim is the host's own. The carrier guard and the sanitize/clamp calls stay as defense-in-depth
-# even though nothing here is client-supplied.
+# Every parameter is host-derived. The carrier guard and the sanitize/clamp
+# calls stay as defense-in-depth even though nothing here is client-supplied.
 #
 # The fire POINT is not a parameter: puck.release() seats the puck itself, and it
 # is the only code that knows a slapper's puck sits on its ice pin rather than at
 # the blade lifted over the shoulder. Never reposition the puck after release() —
 # see the note there.
-func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
+func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int) -> void:
 	# Sender must be the current carrier on the host.
 	# A `puck.carrier == null` here means a different code path already released the
 	# puck; ignore the duplicate. The shot sound stays below the validation.
@@ -3779,50 +3734,17 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 		NetworkManager.send_shot_to_all(shot_pos, is_slapper, power, shooter_peer_id)
 	if NetworkManager.is_host:
 		_start_pending_shot_from_carrier()
-		# Lag-comp the goalie reaction trigger: back-date the reaction timers to
-		# the instant the shooter perceived the release (now - host_timestamp) so
-		# the goalie gets the same effective reaction window they did. Off the
-		# input stream that gap is one input lead. Clamped so a stale stamp (or
-		# the pre-warmup zero stamp) earns no back-date.
-		var release_back_date: float = ShotReleaseRules.clamp_back_date(
-				NetworkManager.estimated_host_time(), host_timestamp)
-		for gc: GoalieController in goalie_controllers:
-			gc.set_pending_reaction_back_date(release_back_date)
-		var saved_goalie_positions: Array[Vector3] = []
-		var saved_goalie_rotations: Array[float] = []
-		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and interp_delay_ms > 0.0 \
-				and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
-			# Goalie is REMOTE-view from the shooter — the shooter saw the goalie at
-			# host_time - interp_delay (the buffered render path); rewound to that
-			# snapshot for the release, so the shot's xG is read against him.
-			# Anti-cheat: delay bounded against the shooter's measured link first.
-			interp_delay_ms = LagCompRewind.plausible_interp_delay_ms(
-					interp_delay_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
-			var rewind_time: float = LagCompRewind.remote_view_time(host_timestamp, interp_delay_ms)
-			var snap: WorldSnapshot = _state_buffer_manager.get_state_at(rewind_time)
-			for gc: GoalieController in goalie_controllers:
-				saved_goalie_positions.append(gc.goalie.global_position)
-				saved_goalie_rotations.append(gc.goalie.get_goalie_rotation_y())
-				var gs: GoalieNetworkState = snap.goalie_states.get(gc.team_id)
-				if gs != null:
-					gc.goalie.set_goalie_position(gs.position_x, gs.position_z)
-					gc.goalie.set_goalie_rotation_y(gs.rotation_y)
 		puck.release(direction, power)
 		_note_shot_trajectory()
-		if not saved_goalie_positions.is_empty():
-			for i: int in goalie_controllers.size():
-				goalie_controllers[i].goalie.global_position = saved_goalie_positions[i]
-				goalie_controllers[i].goalie.set_goalie_rotation_y(saved_goalie_rotations[i])
 		return
 	puck.release(direction, power)
 
 
 # Host-authoritative remote shot. The host's RemoteController reached the shooter's
 # release input and computed its OWN dir/power via _release_wrister, emitting
-# puck_release_requested. Fire the authoritative puck from that — host-derived
-# params, the release input's host_timestamp, and an rtt-derived interp_delay for
-# the goalie rewind. This is the only path that fires a remote human's shot (no
-# shot RPC).
+# puck_release_requested. Fire the authoritative puck from that, on the tick the
+# host replays the release input — host-derived params only. This is the only
+# path that fires a remote human's shot (no shot RPC).
 func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int) -> void:
 	if not NetworkManager.is_host:
 		return
@@ -3833,25 +3755,7 @@ func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bo
 		return
 	if _registry.resolve_peer_id(puck.carrier) != shooter_peer_id:
 		return
-	# Timestamp: the instant the SHOOTER perceived the release at, which is one
-	# input lead before the tick the host replays it on — the client applies an
-	# input immediately and stamps it a lead ahead, and the host holds it until
-	# that stamp comes round. Never anchor at the host's own tick: the goalie's
-	# back-date then comes out ~0 and its rewind stops a lead short of what the
-	# shooter rendered. Same anchor as the one-timer path.
-	var release_ts: float = record.controller.last_processed_host_timestamp \
-			- NetworkManager.peer_input_lead_s(shooter_peer_id)
-	var rtt_ms: float = float(NetworkManager.get_peer_ping_ms(shooter_peer_id))
-	# Approximate the shooter's interpolation delay from the rtt the host already
-	# measures plus one broadcast interval — the two dominant terms of the client's
-	# get_target_interpolation_delay. The dropped term is the client's adaptive jitter
-	# cushion (small except on jittery links); for beatable goalies it's close enough,
-	# and it keeps the host-derived release purely input-driven (nothing extra on the
-	# wire). Bounds mirror _compute_target_interpolation_delay's clamp.
-	var interp_delay_ms: float = clampf(
-			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
-	_fire_remote_shot(
-			direction, power, is_slapper, shooter_peer_id, release_ts, interp_delay_ms)
+	_fire_remote_shot(direction, power, is_slapper, shooter_peer_id)
 
 
 func _start_pending_shot_from_carrier() -> void:

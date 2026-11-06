@@ -84,19 +84,19 @@ the prediction instrument found a client needs,
 `tests/slow/controllers/test_keeper_wire_is_exact.gd` the exactness). A new
 field on a keeper class goes into its class's `wire`, or onto the
 instrument's `NOT_ON_WIRE` once it is shown a client does without it. His pose goes on the wire with his root
-(`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from), so a
-client buffers the snapshots and draws him at the interpolated past
-(`GoalieController._interpolate_and_apply`), root and pose
-blended between them (`KeeperPose.blend`), his skeleton solved and his save
-boxes seated on it: its puck prediction stops against the gear the host saves
-with, to about a centimetre. A replay (the goal cinematic, the post-game reel,
-a replay file) poses him the same way (`apply_replay_state`). A remote
-shooter's release he reads from when its shooter saw it leave the stick (the
-back-date GameManager sets just before the release, `KeeperShotRead.start`'s
-`seen_s`), as the networking doc's shot lag comp asks. The release's rewind of
-the goalie to where its shooter saw him moves his root only, which is all that
-reads him at that instant (the shot's xG): his read starts from the flight, not
-from his body, and his gear meets the puck only on the ticks after, live.
+(`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from). A
+client draws him as a keeper of its own predicts him on the render clock
+(`KeeperPredictor`: re-seeded from each snapshot's blob, stepped by this same
+code against the client's world; the rules are the networking doc's goalie
+invariant), posed through the same path a snapshot's pose takes, his skeleton
+solved and his save boxes seated on it, so its puck prediction stops against
+the gear the host saves with. With nothing predicted to draw it buffers the
+snapshots and draws him at the interpolated past
+(`GoalieController._interpolate_and_apply`, root and pose blended,
+`KeeperPose.blend`). A replay (the goal cinematic, the post-game reel, a replay
+file) poses him from the snapshots (`apply_replay_state`). Every release he
+reads from the tick it is fired on, a remote shooter's too: that is the tick
+the shooter's own client drew it on (the networking doc's shot lag comp).
 
 ## Saves
 
