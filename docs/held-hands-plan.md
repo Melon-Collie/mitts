@@ -378,3 +378,40 @@ What it costs and breaks, with the switch on:
   tick, or let the standing carry's crouch move the gameplay frame as the held
   poses already do.
 - **F. The native port,** before the switch can be on in a match.
+
+## 13. How close in a held blade can come
+
+`tests/instruments/actors/test_tight_room.gd`: per bearing, standing and
+skating, the cursor walked in from 1.6 m to the skates. Each blade is
+searched for any top hand that holds it, with the shaft at the blade's own
+lie (43.3°) ± a window, rather than round today's hand.
+
+"Lost" is the closest blade a body holds against the closest the carry
+brings it today (0.67–0.70 m from the body's centre), mean over bearings:
+
+| lie window | standing | skating | worst bearing |
+|---|---|---|---|
+| ±15° | 0.16 m | 0.27 m | 0.37 m, skating in front |
+| ±22° | 0.01 m | 0.09 m | 0.17 m, skating in front and round the forehand |
+| ±30° | 0.05 m | 0.08 m | 0.26 m, skating straight ahead |
+
+- **The height rule** (the top hand 0.2 m under its shoulder) costs nothing
+  at ±15° or ±22°: at a flat-ish blade the hand already rides under the
+  chest. The hand climbed in §12's projection because its window followed
+  today's tight hand, whose stick already stands steeper than a flat blade
+  allows.
+- **At ±30°, without the rule,** a hand holds every blade today's carry
+  reaches, but only by standing the stick at up to 73° with the hand at the
+  chest. With the rule it loses more than ±22°.
+- **Skating with the puck behind the forehand** (cursor at +120° or further
+  round) no hand holds at any window. Today's blade there sits 0.05–0.62 m
+  from the body's centre, partly under the skater.
+
+Proposed, waiting on the user:
+- **The held hand** keeps the shaft within ±22° of the blade's lie and the
+  top hand under the chest.
+- **The skating carry floor** becomes per bearing, about 0.15 m further out
+  in front and round the forehand to about 75°. The standing floor is
+  unchanged but for a few centimetres in front.
+- **Skating, the carry** stops short of the forehand side behind the hip,
+  where no hold exists.
