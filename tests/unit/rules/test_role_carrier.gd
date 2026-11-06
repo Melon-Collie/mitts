@@ -2779,10 +2779,10 @@ func test_a_down_keeper_is_priced_down_only_for_a_shot_before_he_can_rise() -> v
 
 func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 	# The keeper a carry arrives at has tracked it, so he faces the puck, as the
-	# shoot-now read sees him there. Read with his facing unknown, the field
-	# blends in keepers turned to a decoy or a feed, and in tight a carry to the
-	# crease promised odds the shot on arrival never had. The arrival is the
-	# better of that shot and keeping the puck there.
+	# shoot-now read after a carry (History.CARRIED) sees him there. Read with
+	# his facing unknown, the field blends in keepers turned to a decoy or a feed,
+	# and in tight a carry to the crease promised odds the shot on arrival never
+	# had. The arrival is the better of that shot and keeping the puck there.
 	for spot: Vector3 in [Vector3(0.0, 0.0, -GameRules.GOAL_LINE_Z + 2.5),
 			Vector3(-1.2, 0.0, -GameRules.GOAL_LINE_Z + 2.2)]:
 		var ctx := _standstill_ctx(2.5)
@@ -2797,7 +2797,8 @@ func test_a_carry_prices_the_keeper_it_tracks_facing_the_shot() -> void:
 		var arrival: float = c._carry._arrival_value(ctx, spot, Vector3.ZERO, 0.0)
 		var keeper := Vector3(g.position_x, 0.0, g.position_z)
 		var shot_there: float = AIActionScoring.with_rebound(AIShotValue.now(spot,
-				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y))
+				ctx.attacking_goal_pos, keeper, 0.0, AIShotOdds.Stance.UPRIGHT, g.rotation_y,
+				AIShotOdds.History.CARRIED))
 		var kept: float = c._field.continuation_at(spot)
 		assert_almost_eq(arrival, maxf(shot_there, kept), 1e-4,
 				"arriving at rest at %s prices the shot the keeper facing it gives" % spot)
