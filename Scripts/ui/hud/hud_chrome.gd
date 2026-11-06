@@ -45,9 +45,14 @@ static func team_stripe(team_id: int) -> Color:
 		return pair.home if team_id == 0 else pair.away
 	return _UNRESOLVED
 
-static func team_primary(team_id: int) -> Color:
-	if GameManager.teams.size() > team_id:
-		return TeamColorRegistry.get_colors(GameManager.teams[team_id].color_slot, team_id).primary
+# The team's colour as text on the broadcast background — the stripe lifted
+# until it reads (TeamColorRegistry.get_score_ink_pair).
+static func team_ink(team_id: int) -> Color:
+	if GameManager.teams.size() > 1:
+		var pair: Dictionary = TeamColorRegistry.get_score_ink_pair(
+				GameManager.teams[0].color_slot, GameManager.teams[1].color_slot,
+				MenuStyle.BROADCAST_BG)
+		return pair.home if team_id == 0 else pair.away
 	return _UNRESOLVED
 
 # The locale seam for this file's text helpers. They are static, and tr() is an
