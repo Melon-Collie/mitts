@@ -50,14 +50,9 @@ var best_rim_pace: float = 0.0
 # scale (1.0 for a rim or no feed): what the commit fires it at.
 var best_pace_frac: float = 1.0
 # The completion read of the search's highest-EV pass, for instruments (nothing
-# decides on it): the odds it reaches the receiver and he keeps it, and each loss
-# mode's survival (not poked at the release, the lane, no execution miss, kept on
-# reception). -1 when no pass was priced.
-var debug_kept: float = -1.0
-var debug_release_clean: float = -1.0
-var debug_lane: float = -1.0
-var debug_miss: float = -1.0
-var debug_reception: float = -1.0
+# decides on it): not poked at the release, the lane, the execution miss, kept on
+# reception (kept = x · y · (1 − z) · w). x < 0: no pass was priced.
+var debug_completion := Vector4(-1.0, 0.0, 0.0, 0.0)
 var _debug_best_ev: float = -INF
 
 
@@ -108,7 +103,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	var snapshot: WorldSnapshot = ctx.snapshot
 	var self_pos: Vector3 = ctx.self_pos
 	_debug_best_ev = -INF
-	debug_kept = -1.0
+	debug_completion.x = -1.0
 	var best_pass_peer: int = 0
 	var best_pass_score: float = 0.0
 	var best_pass_saucer: bool = false
@@ -520,12 +515,6 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # creating" and "the pass I can fire now" are priced identically — the hold
 # self-terminates the instant the real pass matches it (fire wins ties).
 #
-# Benefit = P(complete) × the receiver's value at the spot, decayed by
-# `delay_s` (flight + any facing rotation). Cost = the opponent's value at each
-# loss mode's location (release poke, lane interception, execution miss,
-# reception strip), so a low-upside backpass deep in our own end loses to
-# skating: its miss mode surrenders the ice in front of our net.
-#
 # `lane` < 0 has the flat lane computed here; `miss_prob` is this variant's
 # execution-miss probability. The goalie is predicted at `receiver_release_t`
 # (flight + the receiver's wrister charge, or flight alone for a one-timer —
@@ -535,10 +524,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 # `rim_dir` and the point its path is lost at (`rim_loss_point`), or `rim_iced`
 # when what gets by our receiver ices instead (_rim_ices). `closing` is
 # the feed's speed in the receiver's frame as it reaches him (0 for a one-timer
-# or a rim: no reception to price). By its odds it is caught, and he settles
-# (AIFeedReception.receiver_settle_s) with the puck on his stick for the defence to
-# poke at, or it bobbles, and lies loose until he regathers it
-# (AIFeedReception.bobble_regather_s) — his only if he wins that race.
+# or a rim: no reception to price).
 func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 		flight_t: float, receiver_release_t: float, delay_s: float,
 		our_goalie: Vector3, receiver_caps: AISkaterCaps = null,
@@ -669,11 +655,7 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
 	if benefit - cost > _debug_best_ev:
 		_debug_best_ev = benefit - cost
-		debug_kept = release_clean * clean_lane * reception_kept
-		debug_release_clean = release_clean
-		debug_lane = lane
-		debug_miss = miss_prob
-		debug_reception = reception_kept
+		debug_completion = Vector4(release_clean, lane, miss_prob, reception_kept)
 	return benefit - cost
 
 
