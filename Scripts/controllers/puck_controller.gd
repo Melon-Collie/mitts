@@ -388,11 +388,12 @@ func _track_loose_velocity(delta: float) -> void:
 # ── Lag Compensation ─────────────────────────────────────────────────────────
 # Called by GameManager after validating a client pickup claim against the
 # state buffer. Re-checks carrier == null so a concurrent _check_interactions
-# detection (which needs no validation) is never double-applied.
+# detection (which needs no validation) is never double-applied, and the lock so
+# a claim resolving after a goal or a goalie's cover can't take the puck back.
 # `catch_load` is the claim's reception load, judged on the rewound contact like its
 # catch verdict; scripted grants pass 0 (no settle).
 func apply_lag_comp_pickup(skater: Skater, catch_load: float = 0.0) -> void:
-	if not is_instance_valid(skater) or puck.carrier != null:
+	if not is_instance_valid(skater) or puck.carrier != null or puck.pickup_locked:
 		return
 	_grant_catch(skater, puck.get_puck_velocity() - skater.velocity, catch_load)
 
