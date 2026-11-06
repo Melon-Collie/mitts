@@ -5,7 +5,7 @@ extends GutTest
 # skating up-ice, the cursor walked in from well out to the skates and the
 # blade carried there settled at each step. Each blade is then searched for any
 # top hand that holds it (SkaterHoldModel.search_lie: the shaft at the blade's
-# lie ± LIE_WINDOW_DEG, against the trunk the tick sees), with the top hand
+# lie ± its window (15°, TIGHT_LIE_WINDOW), against the trunk the tick sees), with the top hand
 # free to ride anywhere and held HAND_BELOW_SHOULDER_M under its shoulder.
 # Per bearing (where the blade went, m from the body's centre):
 #   today   the closest the carry brings the blade
@@ -16,6 +16,7 @@ extends GutTest
 #
 # Asserts nothing: run it when the question is "what does the rule cost in tight".
 #   bash .claude/hooks/run-gut.sh -gdir=res://tests/instruments/actors -gselect=test_tight_room
+# TIGHT_LIE_WINDOW=<deg> widens the lie window (default 15).
 
 const SKATER_SCENE: PackedScene = preload("res://Scenes/Skater.tscn")
 const PUCK_SCENE: PackedScene = preload("res://Scenes/Puck.tscn")
@@ -26,7 +27,7 @@ const REACHES_M: Array[float] = [1.6, 1.4, 1.2, 1.1, 1.0, 0.9, 0.8, 0.7, 0.6, 0.
 const SETTLE_TICKS: int = 120
 const SKATE_WARMUP_TICKS: int = 180
 const SKATE_START_Z: float = 26.0
-const LIE_WINDOW_DEG: float = 15.0
+var _lie_window_deg: float = float(OS.get_environment("TIGHT_LIE_WINDOW")) if OS.has_environment("TIGHT_LIE_WINDOW") else 15.0
 const HAND_BELOW_SHOULDER_M: float = 0.2
 
 
@@ -101,7 +102,7 @@ func _held() -> Vector2:
 	var blade: Vector3 = _skater.blade.position
 	var length: float = hand.distance_to(blade)
 	var lie: float = deg_to_rad(_skater.blade_lie_deg)
-	var window: float = deg_to_rad(LIE_WINDOW_DEG)
+	var window: float = deg_to_rad(_lie_window_deg)
 	_body.hand_below_shoulder = INF
 	SkaterHoldModel.search_lie(_body, blade, length, lie, window, _scratch, _search)
 	var free: float = 1.0 if _search.held_found else 0.0
