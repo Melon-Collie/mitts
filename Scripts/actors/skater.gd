@@ -2900,6 +2900,18 @@ func drawn_leg_joints(out: PackedVector3Array) -> void:
 	_legs.drawn_joints(out)
 
 
+# The torso's pose on the spine before the trunk texture, the build's sizing in
+# it (SkaterArmRig.torso_rest): what a tick-state copy of the trunk places the
+# jersey with (SkaterHoldModel).
+func torso_rest_pose() -> Transform3D:
+	return _arms.torso_rest()
+
+
+# The trunk as drawn into a hold model's body (SkaterArmRig.fill_drawn_trunk).
+func fill_drawn_trunk(out: SkaterHoldModel.Body) -> void:
+	_arms.fill_drawn_trunk(out)
+
+
 func leg_girth() -> Vector2:
 	return _legs.girth()
 

@@ -1,6 +1,6 @@
 # Held hands — gameplay hands a body can hold, drawn as checked
 
-Status: PROPOSED.
+Status: PHASE 1 DONE (measured, nothing in play changed). Phase 2 next.
 
 One line: **the blade stays where gameplay puts it today; the hand that holds
 the stick is moved, by the least that makes it holdable, by one pure body
@@ -207,3 +207,75 @@ Per skater-tick, and again per replayed input on the local skater: one
 evaluation of §6 when the anchor holds (expected to be the common case) and a
 few steps when it does not, on every peer for every skater. The budget is set
 from phase 1's frequencies and phase 4's benchmark.
+
+## 11. Phase 1 record
+
+### What was built
+
+- **The model**: `SkaterHoldModel` (`Scripts/actors/`), a pure scorer of §6
+  for a hand and a blade against a `Body`, and its brute-force sphere search
+  (`search`), the reference phase 2's projection will be measured against.
+  `SkaterIKCoordinator.fill_hold_body` fills the body from tick state;
+  `SkaterArmRig.fill_drawn_trunk` replaces its trunk with the one drawn. The
+  spine's turn in UpperBody's frame is `SkaterSpineRig.spine_in_frame`, which
+  `shoulder_in_frame` now composes.
+- **Tests**: `test_hold_model_mirrors_the_rig.gd` (the tick body against the
+  drawn one) and `test_skater_hold_model.gd` (the model's properties).
+- **Instruments**: `tests/instruments/actors/test_hold_map.gd` (bearing ×
+  reach, standing and skating, and the swept carries), and
+  `tools/hold_sample.gd` (a live 5v5 of bots, every skater every 30 ticks).
+
+### What it found
+
+**Nearly every hand gameplay places is one the drawn body cannot hold.**
+
+| Where | Not held | Violation, median / 90% | Held hand on the sphere exists | Move to it, median / 90% / max |
+|---|---|---|---|---|
+| Map, standing (44 cells) | 33 | — | all 33 | 8 / 20 / 20 cm |
+| Map, skating (44 cells) | 36 | — | all 36 | 16 / 40 / 40 cm |
+| Live bots, carriers | 95 of 112 | 135 / 246 mm | all 95 | 10 / 20 / 40 cm |
+| Live bots, everyone else | 1,309 of 1,418 | 167 / 291 mm | 1,258 (51 none) | 13 / 25 / 50 cm |
+
+What binds, in live play:
+- **Carriers:** the knob in the jersey (45), the top hand nearer its shoulder
+  than an elbow folds (31), the fist in the jersey (18).
+- **Everyone else:** the fist (676), the knob (280), the bottom arm's sleeve
+  (229) and the fold (91).
+- **Map, standing:** the fist through every close carry. Far round the
+  backhand at 1.4–1.8 m, the bottom arm's sleeve.
+
+What this settles:
+
+- **Hands alone suffice.** With the blade fixed and the stick's lie kept
+  within 15°, a held hand exists for every carrier sample and 96% of the rest.
+  Decision B (§7) is close to moot. It matters only for the few non-carrier
+  poses (the hand-first ones: shots, the block, the down poses) that no
+  search reached.
+- **The moves are large.** A median of 10–13 cm, and up to 40–50 cm, is a
+  visible change in how the stick is held, not a nudge. Phase 2's smoothness
+  is the whole question, and it is played, not just measured.
+- **Letting the gloves push the jersey's cloth is not the fix.** The fist or
+  knob is in the tail below the belt, with the rest of the pose held, in 1 of
+  95 carrier samples and 18 of 1,309 others. The hands have to move.
+
+**The tick's trunk is not the drawn one: it sits 3–10 cm too high.** Standing,
+the model's shoulders and jersey are the drawn ones to 0.0 mm once a single
+offset is taken out, and that offset is vertical: 3 cm standing upright, 8–10 cm
+under the carry's chest fold. The gait's crouch and the hips' seat on the
+blades lower the drawn trunk at render rate, and the tick never sees either.
+Skating adds about 4 cm fore and aft, and the stride's texture turns the
+jersey up to 3 cm further. So today's gameplay already places every hand
+against shoulders a few centimetres above the drawn ones. Phase 2 needs a
+trunk height the tick can derive (the posture's mean crouch and seat as a
+function of tick state); without it, the projection would hold poses the
+drawing does not.
+
+### What changes for phase 2
+
+- **A first step:** the tick-state trunk height, held to the drawn one by
+  `test_hold_model_mirrors_the_rig.gd` with the offset brought inside its
+  bound rather than taken out.
+- **Then the projection,** judged by the jerk harness and a playtest before
+  anything else. The brute-force search is its reference: the projection
+  must reach a held hand wherever the search does, and move no further than
+  it.

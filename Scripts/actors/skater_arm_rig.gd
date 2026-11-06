@@ -517,6 +517,30 @@ func set_head_angle(angle: float, nod: float = 0.0) -> void:
 	repose_bone(SkaterMeshBuilder.UpperBone.HELMET)
 
 
+# The trunk as drawn, in UpperBody's frame as drawn, into a hold model's body
+# (SkaterHoldModel.Body): both shoulders, their rest poles and axes, and the
+# jersey. The rest of the body is the tick's (SkaterIKCoordinator.fill_hold_body).
+func fill_drawn_trunk(out: SkaterHoldModel.Body) -> void:
+	var to_frame: Transform3D = _skater.drawn_upper_body().affine_inverse()
+	var spine: Basis = to_frame.basis \
+			* _skeleton.get_bone_global_pose(SkaterBodySkeleton.SPINE_BONE).basis
+	var top_sign: float = 1.0 if _skater.is_left_handed else -1.0
+	var markers: Array[Vector3] = [_skater.shoulder.position, _skater.bottom_shoulder.position]
+	for arm: int in 2:
+		var pole_sign: float = top_sign if arm == 0 else -top_sign
+		out.shoulders[arm] = visible_shoulder(markers[arm])
+		out.rest_poles[arm] = spine * _arm_pole(markers[arm], pole_sign)
+		out.outward[arm] = (spine * Vector3(pole_sign, 0.0, 0.0)).normalized()
+	out.back = (spine * Vector3.BACK).normalized()
+	out.torso = to_frame * _skeleton.get_bone_global_pose(SkaterMeshBuilder.UpperBone.TORSO)
+
+
+# The torso's pose in the spine's frame with no trunk texture on it.
+func torso_rest() -> Transform3D:
+	var torso: int = SkaterMeshBuilder.UpperBone.TORSO
+	return Transform3D(_basis[torso].scaled_local(_scale[torso]), _pos[torso])
+
+
 func repose_bone(bone: int) -> void:
 	var origin: Vector3 = _pos[bone]
 	if bone == SkaterMeshBuilder.UpperBone.HELMET:

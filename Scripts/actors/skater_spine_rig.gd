@@ -73,10 +73,19 @@ static func shoulder_in_frame(marker: Vector3, trunk: Vector3, hip_yaw: float,
 		fold: float) -> Vector3:
 	if absf(fold) < 0.00001:
 		return marker
+	return spine_in_frame(trunk, hip_yaw, fold) * marker
+
+
+# The trunk update() builds, turned about the pivot it shares with UpperBody,
+# in UpperBody's frame: what carries a shoulder marker (shoulder_in_frame) and
+# the torso the jersey is drawn on. The identity unfolded.
+static func spine_in_frame(trunk: Vector3, hip_yaw: float, fold: float) -> Basis:
+	if absf(fold) < 0.00001:
+		return Basis.IDENTITY
 	var twist: float = clampf(angle_difference(hip_yaw, trunk.y), -TWIST_LIMIT, TWIST_LIMIT)
 	var built: Basis = Basis(Vector3.UP, trunk.y - twist) * Basis(Vector3.RIGHT, fold) \
 			* Basis(Vector3.UP, twist) * Basis.from_euler(Vector3(trunk.x - fold, 0.0, trunk.z))
-	return Basis.from_euler(trunk).inverse() * (built * marker)
+	return Basis.from_euler(trunk).inverse() * built
 
 
 func build(skeleton: Skeleton3D) -> void:

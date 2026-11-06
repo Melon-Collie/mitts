@@ -1100,6 +1100,45 @@ func chest_fold() -> float:
 			deg_to_rad(_controller.carry_fold_deg)) * (1.0 - _address_blend())
 
 
+# The body a stick is held by, from tick state alone, in UpperBody's frame
+# (SkaterHoldModel): both shoulders as arm_shoulder places the top one (the
+# trunk's fold-then-twist, the check's load-up, the address's and the carry's
+# chest fold), the jersey turned with them, and the arms and grip the rig draws.
+func fill_hold_body(out: SkaterHoldModel.Body) -> void:
+	var trunk: Vector3 = _skater.upper_body.rotation
+	var spine: Basis = SkaterSpineRig.spine_in_frame(trunk, 0.0, _skater.trunk_fold())
+	var fold: float = chest_fold() + deg_to_rad(_controller.faceoff_center_lean_deg) \
+			* _address_blend()
+	var chest: Basis = Basis(Vector3.RIGHT, -fold) * spine
+	var lead: float = _skater.get_check_lead()
+	var top_sign: float = 1.0 if _skater.is_left_handed else -1.0
+	var markers: Array[Vector3] = [_skater.shoulder.position, _skater.bottom_shoulder.position]
+	for arm: int in 2:
+		var marker: Vector3 = markers[arm]
+		var side: float = signf(marker.x)
+		var side_load: float = CheckStanceRules.side_load(lead, side)
+		out.shoulders[arm] = chest * (marker + CheckStanceRules.load_offset(side_load, side,
+				_skater.shoulder_offset))
+		var pole: Vector3 = _skater.arm_pole_local
+		pole.x *= top_sign if arm == 0 else -top_sign
+		out.rest_poles[arm] = spine * CheckStanceRules.tucked_pole(pole, side_load)
+		out.outward[arm] = spine * Vector3(top_sign if arm == 0 else -top_sign, 0.0, 0.0)
+		var grip: float = _skater.top_grip_angle_deg if arm == 0 else _skater.bottom_grip_angle_deg
+		out.wrists[arm] = Vector3(deg_to_rad(grip), deg_to_rad(_skater.wrist_ulnar_max_deg),
+				deg_to_rad(_skater.wrist_radial_max_deg))
+	out.back = spine * Vector3.BACK
+	out.torso = Transform3D(chest, Vector3.ZERO) * _skater.torso_rest_pose()
+	out.upper_len = _skater.upper_arm_length
+	out.forearm_len = _skater.forearm_length
+	out.reach = (_skater.upper_arm_length + _skater.forearm_length) \
+			* _skater.arm_working_extension
+	out.slack = _skater.shoulder_reach_m
+	out.fist_radius = _skater.arm_ball_radius(SkaterMeshBuilder.UpperBone.TOP_HAND)
+	out.knob_extend = SkaterStickRig.SHAFT_BUTT_EXTEND_M + _skater.grip_choke()
+	out.spacing = _glove_spacing()
+	out.grip = _grip_fraction()
+
+
 func _trunk_shoulder() -> Vector3:
 	return SkaterSpineRig.shoulder_in_frame(_skater.shoulder.position,
 			_skater.upper_body.rotation, 0.0, _skater.trunk_fold())
