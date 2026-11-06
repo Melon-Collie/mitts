@@ -58,8 +58,9 @@ signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal world_state_received(data: PackedByteArray)
 # Client: the goalies' whole sim states a snapshot carried (KeeperWireTail),
-# with its host capture time; emitted just before world_state_received.
-signal keeper_wire_received(tail: PackedByteArray, host_ts: float)
+# with its host capture time and sequence; emitted just before
+# world_state_received.
+signal keeper_wire_received(tail: PackedByteArray, host_ts: float, seq: int)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes, from_spectator: bool)
 signal existing_players_synced(player_data: Array)
@@ -1606,7 +1607,7 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 	NetworkTelemetry.record_bytes_received(packed.size())
 	if s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
 		keeper_wire_received.emit(keepers, float(s.decode_u32(WorldStateCodec.WS_HOST_TIME_OFFSET))
-				/ Constants.TIME_WIRE_SCALE)
+				/ Constants.TIME_WIRE_SCALE, s.decode_u16(WorldStateCodec.WS_SEQUENCE_OFFSET))
 	world_state_received.emit(s)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────

@@ -20,7 +20,8 @@ extends RefCounted
 const WORLD: Array[String] = ["goalie", "puck", "is_server", "team_id", "_keeper", "_view", "_skater_getter",
 		"_state_buffer", "_scratch_bracket", "_scratch_state", "is_extrapolating", "_rejoin_blend_elapsed",
 		"_rejoin_blend_from_x", "_rejoin_blend_from_z", "extrapolation_max_ms", "rejoin_blend_duration",
-		"_goal_line_z", "_goal_center_x", "_profile", "_wire", "wire_state", "wire_state_time"]
+		"_goal_line_z", "_goal_center_x", "_profile", "_wire", "wire_state", "wire_state_time",
+		"seat_places_only", "_predictor"]
 # The Keeper node's own state: the skeleton solved from his pose, the last one
 # it drew (whether the next pose moved him), and the acceleration his tail
 # swings to.

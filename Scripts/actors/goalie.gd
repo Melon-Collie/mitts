@@ -87,6 +87,11 @@ func seat_save_box(i: int, xf: Transform3D) -> void:
 	cs.transform = _in_own_frame(cs.get_parent() as Node3D).affine_inverse() * xf
 
 
+# Whether seating box `i` places a part body (the first box added to each).
+func places_save_box(i: int) -> bool:
+	return _save_box_places[i] != null
+
+
 # `node`'s transform in this node's frame (identity for this node itself).
 func _in_own_frame(node: Node3D) -> Transform3D:
 	var xf := Transform3D.IDENTITY

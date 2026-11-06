@@ -64,8 +64,9 @@ static func without(s: PackedByteArray, at: Vector2i) -> PackedByteArray:
 
 
 # Client: each goalie's blob from the tail `tail` (`s.slice(at.x, at.y)`) to
-# its controller, captured at `host_ts`.
-static func dispatch(tail: PackedByteArray, goalies: Array[GoalieController], host_ts: float) -> void:
+# its controller, captured at `host_ts` in the snapshot of sequence `seq`.
+static func dispatch(tail: PackedByteArray, goalies: Array[GoalieController], host_ts: float,
+		seq: int) -> void:
 	if tail.is_empty():
 		return
 	var n: int = tail.decode_u8(tail.size() - _COUNT)
@@ -74,5 +75,5 @@ static func dispatch(tail: PackedByteArray, goalies: Array[GoalieController], ho
 	for i: int in n:
 		var length: int = tail.decode_u16(lengths + i * _LENGTH)
 		if i < goalies.size() and length > 0:
-			goalies[i].receive_wire_state(tail.slice(o, o + length), host_ts)
+			goalies[i].receive_wire_state(tail.slice(o, o + length), host_ts, seq)
 		o += length

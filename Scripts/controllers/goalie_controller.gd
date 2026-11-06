@@ -106,6 +106,12 @@ func _ensure_view() -> void:
 			team_id, puck.global_position, puck.get_carrier())
 
 
+# The skaters read afresh on the next read of them, whatever the frame: a
+# predictor steps several ticks inside one.
+func invalidate_world_view() -> void:
+	_view.invalidate()
+
+
 func get_buffer_depth() -> int:
 	return _state_buffer.size()
 
@@ -197,9 +203,9 @@ func append_wire_state(_out: PackedByteArray) -> void:
 	pass
 
 
-# Client: the blob a snapshot captured at `host_ts` carried, kept if it is the
-# newest.
-func receive_wire_state(blob: PackedByteArray, host_ts: float) -> void:
+# Client: the blob a snapshot captured at `host_ts` carried (its world state's
+# sequence `seq`), kept if it is the newest.
+func receive_wire_state(blob: PackedByteArray, host_ts: float, _seq: int) -> void:
 	if host_ts < wire_state_time:
 		return
 	wire_state = blob

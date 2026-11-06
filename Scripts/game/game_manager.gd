@@ -4120,8 +4120,8 @@ func _append_keeper_wire(body: PackedByteArray) -> void:
 	KeeperWireTail.append(body, goalie_controllers)
 
 
-func _on_keeper_wire_received(tail: PackedByteArray, host_ts: float) -> void:
-	KeeperWireTail.dispatch(tail, goalie_controllers, host_ts)
+func _on_keeper_wire_received(tail: PackedByteArray, host_ts: float, seq: int) -> void:
+	KeeperWireTail.dispatch(tail, goalie_controllers, host_ts, seq)
 
 
 func _on_world_state_received(data: PackedByteArray) -> void:

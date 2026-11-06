@@ -64,7 +64,7 @@ func test_the_tail_splits_back_off_and_reaches_each_goalie() -> void:
 		expected.append_array(_events(events))
 		assert_eq(KeeperWireTail.without(s, at), expected, "the decoders see the old snapshot exactly")
 		var into: Array[GoalieController] = _seats([PackedByteArray(), PackedByteArray(), PackedByteArray()])
-		KeeperWireTail.dispatch(s.slice(at.x, at.y), into, 12.5)
+		KeeperWireTail.dispatch(s.slice(at.x, at.y), into, 12.5, 0)
 		assert_eq(into[0].wire_state, _blob(300, 1))
 		assert_eq(into[1].wire_state, PackedByteArray(), "an empty blob leaves a seat as it was")
 		assert_eq(into[2].wire_state, _blob(17, 2))
@@ -73,10 +73,10 @@ func test_the_tail_splits_back_off_and_reaches_each_goalie() -> void:
 
 func test_a_goalie_keeps_the_newest() -> void:
 	var seat: GoalieController = _seats([PackedByteArray()])[0]
-	seat.receive_wire_state(_blob(4, 1), 2.0)
-	seat.receive_wire_state(_blob(4, 2), 1.0)
+	seat.receive_wire_state(_blob(4, 1), 2.0, 1)
+	seat.receive_wire_state(_blob(4, 2), 1.0, 0)
 	assert_eq(seat.wire_state, _blob(4, 1), "an older snapshot's left")
-	seat.receive_wire_state(_blob(4, 3), 2.0)
+	seat.receive_wire_state(_blob(4, 3), 2.0, 1)
 	assert_eq(seat.wire_state, _blob(4, 3), "the same instant's later tick taken")
 
 

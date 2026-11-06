@@ -53,14 +53,29 @@ static func length(play: int) -> int:
 # Tick `t` of `play`: the skater and the puck, his tick, the puck's own tick
 # while it is loose.
 func tick(play: int, t: int) -> void:
+	drive(play, t)
+	ctrl._physics_process(DT)
+	puck_tick()
+
+
+# The skater and the puck as tick `t` of `play` has them before his tick.
+func drive(play: int, t: int) -> void:
 	_t = t
 	ctrl._view.invalidate()
 	_drive(play, t)
-	ctrl._physics_process(DT)
-	if puck.get_carrier() == null:
+
+
+# The puck's own tick while it is loose; `before_events`, if valid, called
+# between the tick and the contacts it heard.
+func puck_tick(before_events: Callable = Callable()) -> void:
+	var loose: bool = puck.get_carrier() == null
+	if loose:
 		goalie._part_velocity_frame = Engine.get_physics_frames() - 1
 		goalie.get_collision_part_velocities()
 		puck._physics_process(DT)
+	if before_events.is_valid():
+		before_events.call()
+	if loose:
 		puck.drain_contact_events()
 
 
