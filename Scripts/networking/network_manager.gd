@@ -1653,6 +1653,8 @@ func receive_pickup_claim(host_timestamp: float, interp_delay_ms: float, input_l
 		NetworkTelemetry.record_claim_stamp_reject()
 		send_pickup_claim_nack(peer_id)
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	pickup_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, blade_curr, blade_prev)
 
 func send_poke_claim(host_timestamp: float, interp_delay_ms: float, expected_carrier_peer_id: int,
@@ -1673,6 +1675,8 @@ func receive_poke_claim(host_timestamp: float, interp_delay_ms: float, input_lea
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	poke_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr, blade_prev)
 
 func send_stick_lift_claim(host_timestamp: float, interp_delay_ms: float, expected_carrier_peer_id: int,
@@ -1693,6 +1697,8 @@ func receive_stick_lift_claim(host_timestamp: float, interp_delay_ms: float, inp
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	stick_lift_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, expected_carrier_peer_id, blade_curr)
 
 func send_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, target_peer_id: int,
@@ -1713,6 +1719,8 @@ func receive_stick_tie_claim(host_timestamp: float, interp_delay_ms: float, inpu
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(peer_id)))
 	stick_tie_claim_received.emit(peer_id, host_timestamp, interp_delay_ms, input_lead_ms, target_peer_id, blade_curr)
 
 func send_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
@@ -1732,6 +1740,8 @@ func receive_hit_claim(victim_peer_id: int, host_timestamp: float, interp_delay_
 	if not LagCompRewind.is_claim_stamp_plausible(local_time(), host_timestamp, float(get_peer_ping_ms(hitter_peer_id))):
 		NetworkTelemetry.record_claim_stamp_reject()
 		return
+	input_lead_ms = LagCompRewind.plausible_input_lead_ms(input_lead_ms,
+			float(get_peer_ping_ms(hitter_peer_id)))
 	hit_claim_received.emit(hitter_peer_id, victim_peer_id, host_timestamp, interp_delay_ms, input_lead_ms)
 
 func start_replay_mode(initial_ts: float) -> void:

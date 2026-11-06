@@ -6,6 +6,7 @@ class_name LagCompRewind
 # interpolated — is per-claim doctrine in `Scripts/networking/CLAUDE.md`. Every
 # resolver goes through these helpers instead of shifting a raw timestamp.
 
+const _ClockSyncScript: GDScript = preload("res://Scripts/networking/clock_sync.gd")
 const _INTERP_DELAY_CLAMP_MS_MAX: float = 200.0
 
 # The outer age fence every claim resolver shares, single-sourced from the domain
@@ -86,6 +87,28 @@ static func plausible_interp_delay_ms(reported_ms: float, peer_rtt_ms: float) ->
 # claims) uses the base constant.
 static func self_view_time(host_timestamp: float, input_lead_ms: float = -1.0) -> float:
 	return host_timestamp + clamped_lead_s(input_lead_ms)
+
+
+# Allowance for the client's own RTT estimate disagreeing with the host's ping
+# of the same link: the lead pays rtt/2, so this admits 50 ms of RTT
+# disagreement either way.
+const _INPUT_LEAD_ALLOWANCE_MS: float = 25.0
+
+
+# Anti-cheat bound on the claim-carried input_lead_ms, applied at the RPC
+# boundary. The stamp is bounded against the host's ping, but the arbitration
+# instant is stamp + lead: reporting the minimum lead with a backdated stamp
+# moved a reach ~rtt/2 + 100 ms earlier than an honest one and won contested
+# pickups. The lead the client SHOULD stamp with is the host's own
+# reconstruction (ClockSync.input_lead_for_rtt on its ping, as
+# NetworkManager.peer_input_lead_s), so the report is held within the allowance
+# of it. No ping sample yet → only clamped_lead_s's absolute range.
+static func plausible_input_lead_ms(reported_ms: float, peer_rtt_ms: float) -> float:
+	if not is_finite(reported_ms) or peer_rtt_ms <= 0.0:
+		return reported_ms
+	var expected_ms: float = _ClockSyncScript.input_lead_for_rtt(peer_rtt_ms) * 1000.0
+	return clampf(reported_ms, expected_ms - _INPUT_LEAD_ALLOWANCE_MS,
+			expected_ms + _INPUT_LEAD_ALLOWANCE_MS)
 
 
 # The claim-carried input lead, in seconds, bounded to the range a legitimate
