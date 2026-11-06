@@ -350,3 +350,33 @@ func test_a_pushed_body_reads_as_one_in_the_defence() -> void:
 				"trial %d: %s pushed, the man at %s" % [trial, body, spot])
 		pushed.pop_defender()
 		assert_almost_eq(pushed.at(spot), before, 1e-6, "trial %d: taken off again" % trial)
+
+
+func test_a_body_never_raises_a_feeds_possession_and_its_bound_changes_nothing() -> void:
+	# The cover search bounds every candidate's feed possession by the one with no
+	# candidate on the ice: a defender added never raises it, so the bounded read
+	# is the read.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 23
+	for trial: int in 40:
+		var defenders: Array[Vector3] = []
+		var vels: Array[Vector3] = []
+		for _k: int in rng.randi_range(0, 4):
+			defenders.append(Vector3(rng.randf_range(-12.0, 12.0), 0.0,
+					rng.randf_range(10.0, 28.0)))
+			vels.append(Vector3(rng.randf_range(-4.0, 4.0), 0.0, rng.randf_range(-4.0, 4.0)))
+		var v := AIPossessionValue.new()
+		v.fill(OUR_NET, defenders, vels, [])
+		var from := Vector3(rng.randf_range(-10.0, 10.0), 0.0, rng.randf_range(8.0, 20.0))
+		var to := Vector3(rng.randf_range(-10.0, 10.0), 0.0, rng.randf_range(12.0, 25.0))
+		var to_vel := Vector3(rng.randf_range(-5.0, 5.0), 0.0, rng.randf_range(-5.0, 5.0))
+		var bound: float = v.feed_possession(from, to, to_vel)
+		for _c: int in 6:
+			var body := Vector3(rng.randf_range(-10.0, 10.0), 0.0, rng.randf_range(10.0, 26.0))
+			v.push_defender(body, Vector3.ZERO, null)
+			assert_lte(v.feed_possession(from, to, to_vel), bound + 1e-12,
+					"trial %d: a body at %s raised the possession" % [trial, body])
+			assert_eq(v.threat_of_feed(from, to, to_vel, OUR_KEEPER, bound),
+					v.threat_of_feed(from, to, to_vel, OUR_KEEPER),
+					"trial %d: the bound changed the read" % trial)
+			v.pop_defender()

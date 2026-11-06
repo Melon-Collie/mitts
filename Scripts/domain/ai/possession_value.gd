@@ -444,9 +444,13 @@ func threat_of_carrier(pos: Vector3, vel: Vector3, keeper: Vector3, start_s: flo
 
 
 # What a feed from `from` to a man at `to`, moving at `to_vel`, threatens: his
-# one-timer off it, or the lane × his possession of the spot once it gets there.
+# one-timer off it, or the lane × his possession of the spot once it gets there
+# (feed_possession). `possession_bound` is an upper bound the caller holds on that
+# possession, read against fewer defenders (more never raise it): when even the
+# lane times it cannot beat the one-timer, the possession is not read, and the
+# answer is the same.
 func threat_of_feed(from: Vector3, to: Vector3, to_vel: Vector3,
-		keeper: Vector3) -> float:
+		keeper: Vector3, possession_bound: float = INF) -> float:
 	if AINetObstacle.pass_lane_blocked_by_net(from, to):
 		return 0.0
 	var speed: float = AIPuckLane.expected_pass_speed(from, to)
@@ -455,7 +459,19 @@ func threat_of_feed(from: Vector3, to: Vector3, to_vel: Vector3,
 	var odds: float = _goalie_half(from, to, keeper, speed) if lane > 0.0 else 0.0
 	var one_timer: float = AIActionScoring.score_pass_value(from, to, _goal, keeper,
 			_defenders, speed, _defender_caps, true, lane, odds)
-	return maxf(one_timer, lane * at(to, from.distance_to(to) / maxf(speed, 0.1), to_vel))
+	if lane <= 0.0:
+		return maxf(one_timer, 0.0)
+	if lane * possession_bound <= one_timer:
+		return one_timer
+	return maxf(one_timer, lane * feed_possession(from, to, to_vel, speed))
+
+
+# The possession threat_of_feed weighs: the man at `to` on the puck when a feed
+# from `from` at `speed` (NAN: the pass the carrier would throw) gets there.
+func feed_possession(from: Vector3, to: Vector3, to_vel: Vector3, speed: float = NAN) -> float:
+	if is_nan(speed):
+		speed = AIPuckLane.expected_pass_speed(from, to)
+	return at(to, from.distance_to(to) / maxf(speed, 0.1), to_vel)
 
 
 # A hypothetical defender added to the read's (the caller's) arrays for a read,

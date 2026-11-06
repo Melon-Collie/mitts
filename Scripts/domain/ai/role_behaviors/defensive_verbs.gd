@@ -55,6 +55,9 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 	# our goal line, where the buffer and crease leave no legal goal-side spot.
 	var fallback_pos: Vector3 = ctx.self_pos
 	var fallback_score: float = -INF
+	# The man's possession with nobody of ours at a candidate: no candidate raises
+	# it, so a candidate whose lane times it cannot beat the one-timer skips it.
+	var possession_bound: float = poss.feed_possession(carrier_pos, man_pos, man_vel)
 	for c: Vector3 in candidates:
 		if not AIStationSearch.is_legal_position(c):
 			continue
@@ -62,7 +65,7 @@ static func cover_man_target(ctx: RoleContext, man_pos: Vector3, man_vel: Vector
 			continue
 		poss.push_defender(c, Vector3.ZERO, self_caps)
 		var threat: float = poss.threat_of_feed(carrier_pos, man_pos, man_vel,
-				our_goalie_pos)
+				our_goalie_pos, possession_bound)
 		poss.pop_defender()
 		var score: float = -threat + AIStationSearch.incumbent_bonus(ctx, c)
 		# A man on the net (no lane) disables the goal-side filter.
