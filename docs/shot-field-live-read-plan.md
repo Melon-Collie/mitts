@@ -115,9 +115,9 @@ Each is measured with the instrument before and after, and
    `AICarrierField.value_at`. A history no matching cell shares falls back to
    every cell. The carrier reads FED until the keeper has had
    `AIGoalieModel.goalie_reset_s` (his read plus a push the width of the mouth)
-   since it took the puck, CARRIED after; a carry's arrival is CARRIED. Nothing
-   yet tells the bot it came round the net, so WRAPPED is the instrument's until
-   step 4. The other bot readers name their play too: the counter-rush threat
+   since it took the puck, CARRIED after; a carry's arrival is CARRIED; within
+   the same time of being behind the goal line it attacks, WRAPPED (step 4).
+   The other bot readers name their play too: the counter-rush threat
    and the defence's `threat_of_carrier` read CARRIED, the dump search's support
    shots FED. History-blind, a deep keeper matches the in-tight range decoys (a
    keeper set on a carrier 2 m out, then beaten from the spot): a slot shot
@@ -137,7 +137,7 @@ Each is measured with the instrument before and after, and
    | one-timer 6 m | −0.091 / −0.003 / +0.033 | |
    | decoy | −0.065 / −0.055 / −0.141 | 0.935 |
    | deke | −0.027 / **−0.146** / −0.005 | 0.193 |
-   | wrap | **+0.214 / +0.170 / +0.205** | 0.000 |
+   | wrap (step 4, carried round the post) | −0.024 / −0.042 / 0.000 (teleported: +0.214 / +0.170 / +0.205) | 0.050, the measured 0.053 (was 0.000) |
 
    The truth table: mean error 0.104 (was 0.112), concordance 0.943 (0.919), the
    pick keeps 0.757 of the best odds (0.744). Cost, native kernel: a shot-now
@@ -149,9 +149,22 @@ Each is measured with the instrument before and after, and
    are still sampled at ±3 and ±6 m: a cross-ice play reads 0.00 where most shots
    score) and the interpolation between spots. Decoys out to 12 m across, then a
    regeneration (`generate-shot-field.sh`, about 70 minutes on four processes).
-4. **The wrap, and one-timers.** Diagnose the wrap first (its own cells
-   disagree: which post each sealed keeper is on against the release's side),
-   then the 3 m one-timer's underpricing.
+4. **The wrap, and one-timers.** *Wrap done; one-timers open.* The kernel
+   matched the right post: what was wrong is what the wrap cells measured. They
+   teleported the puck from behind the net to the spot, and what the keeper did
+   next turned on where it jumped from, which no read of him shows: the same
+   sealed keeper at (−8, 1.5) conceded 0.000 to 0.419 as the carrier stood
+   20–40 cm apart behind the net. `shot_odds_stager.stage_wrap` now carries it
+   round the post on the carrier's side to the spot at 4 m/s, the keeper
+   tracking him throughout, and the wraps come from the spot's own side (or
+   either side between the posts). Read history-blind, the wrap still reads
+   +0.11 to +0.12: the WRAPPED read is what prices it.
+
+   The 3 m one-timer: the feed kernel weighs the keeper's lateral travel and the
+   flight time only, and at a sharp angle a feed in from the slot and one along
+   the goal line from the boards move him about as far (at (−6, 2.5), +0.21
+   against −0.09 to −0.25), so the read blends feeds that concede 0 to 0.35 into
+   one that concedes 0.65. To be confirmed against the live keeper.
 
 Done when every staging's bias is within ±0.05 on and between the grid, the
 pick scores what the value says, and `test_ozone_possession.gd` no longer shows
