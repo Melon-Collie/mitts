@@ -155,3 +155,46 @@ func test_the_input_history_covers_the_unacked_window() -> void:
 				+ 1.0 / float(Constants.STATE_RATE) + 0.067
 		assert_gt(float(LocalController.input_history_cap(rtt_ms)) * DT, window_s,
 				"the history must outlast the unacked window at %d ms" % int(rtt_ms))
+
+
+# A carrier dangling side to side through a reconcile. His blade is
+# speed-capped and trails the cursor, and his carry contact (the side factor
+# placing the blade marker, the hop lifting it) is stepped by Skater's physics
+# tick, which the replay does not run. Restarting the blade smoother on the
+# first input's target snapped the replayed blade onto the cursor and the twist
+# that follows it went up to 0.21 rad off the live one — past the reconcile's
+# own threshold, so every ack while dangling fired another. Seeded from the
+# host's blade moving as this client's was, with the carry reads played back,
+# it stays inside a few hundredths.
+func test_a_replay_through_a_carry_dangle_twists_as_the_live_ticks_did() -> void:
+	for ack_at: int in [20, 35, 50, 65]:
+		before_each()
+		_c.on_puck_picked_up_network()
+		var server := SkaterNetworkState.new()
+		for i: int in 90:
+			var input := InputState.new()
+			input.delta = DT
+			input.host_timestamp = T0 + float(i) * DT
+			input.move_vector = Vector2(0.0, -1.0)
+			var a: float = float(i) * 0.35
+			input.mouse_world_pos = _c.skater.global_position + Vector3(0.9 * sin(a), 0.0, -1.4)
+			_c._current_input = input
+			_c._snapshot_pending = true
+			_c._process_input(input, DT)
+			_c.skater._physics_process(DT)
+			_c._input_history.append(input)
+			if i == ack_at:
+				_c.fill_network_state(server)
+		assert_true(_c.has_puck, "the control: still carrying")
+		var live: Dictionary = {}
+		for p: PredictedState in _c._prediction_history:
+			live[p.host_timestamp] = p.upper_body_rotation_y
+		server.last_processed_host_timestamp = T0 + float(ack_at) * DT
+		server.position += Vector3(0.0, 0.06, 0.0)
+		_c.reconcile(server)
+		var worst: float = 0.0
+		for p: PredictedState in _c._prediction_history:
+			if p.was_replay_rerecorded and live.has(p.host_timestamp):
+				worst = maxf(worst, absf(angle_difference(p.upper_body_rotation_y,
+						live[p.host_timestamp] as float)))
+		assert_lt(worst, 0.06, "ack at %d: replayed twist within %.3f rad of live" % [ack_at, worst])

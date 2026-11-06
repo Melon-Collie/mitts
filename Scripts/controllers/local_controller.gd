@@ -411,6 +411,9 @@ func _append_prediction_snapshot() -> void:
 	snap.shot_state = _sm.get_state() as int
 	_pose.record_twist(snap)
 	snap.record_tick_state(skater)
+	snap.carry_side_smoothed = skater.carry_read_side()
+	snap.carry_hop = skater.carry_read_hop()
+	snap.blade_dangle_vel = _ik.blade_dangle_velocity()
 	_prediction_history.append(snap)
 	if _prediction_history.size() > _PREDICTION_HISTORY_CAP:
 		_prediction_history.pop_front()
@@ -627,10 +630,15 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# The host's frame yaw at the ack, with the tracked angle and twist spring
 	# rebuilt under it — the replay's first tick reads the blade in this frame.
 	_pose.adopt_wire_twist(server_state.upper_body_rotation_y, predicted)
-	# Drop the IK blade smoother's baseline so it re-seeds deterministically from
-	# the first replayed input's ROM-clamped target — the live smoothed value
-	# would otherwise bias the replay's first tick.
-	_ik.reset_blade_smoothing()
+	# The blade smoother starts where the host's blade was at the ack, moving as
+	# this client's was then. A carrier's blade is speed-capped and trails the
+	# cursor, so restarting it on the first input's target snapped it onto the
+	# cursor, and the twist that follows it went up to 0.2 rad off the live one.
+	if predicted != null:
+		_ik.seed_blade_smoothing(skater.upper_body_to_global(server_state.blade_position),
+				predicted.blade_dangle_vel)
+	else:
+		_ik.reset_blade_smoothing()
 	# Replay under the ACK-TIME baseline: the host evolved these same inputs
 	# starting from server_state.shot_state, so seed the state machine there
 	# rather than replaying under the LIVE state (which post-dates the whole
@@ -646,12 +654,19 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# their live values and are not stepped, which would advance them twice.
 	if predicted != null:
 		predicted.adopt_tick_state(skater)
+	# The carry contact is played back rather than stepped (see the loop), and
+	# its live values come back after the replay.
+	var live_carry_side: float = skater.carry_read_side()
+	var live_carry_hop: float = skater.carry_read_hop()
+	var carry_from: PredictedState = predicted
 	is_replaying = true
 	# Walk the (already ack-trimmed, chronological) prediction history alongside
 	# the replayed inputs so each entry can be RE-RECORDED from the corrected
 	# trajectory below — see the re-record comment inside the loop.
 	var replay_hist_i: int = 0
 	for input in _input_history:
+		if carry_from != null:
+			skater.adopt_carry_read(carry_from.carry_side_smoothed, carry_from.carry_hop)
 		_process_input(input, input.delta)
 		skater.global_position += skater.velocity * input.delta
 		# Re-resolve skater-vs-skater body checks against where the host actually had
@@ -699,8 +714,10 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			_pose.record_twist(replay_snap)
 			replay_snap.record_tick_state(skater)
 			replay_snap.was_replay_rerecorded = true
+			carry_from = replay_snap
 			replay_hist_i += 1
 	is_replaying = false
+	skater.adopt_carry_read(live_carry_side, live_carry_hop)
 	var replayed_state: State = _sm.get_state()
 	# Restore shot-state fields that replay must not transition past.
 	_sm.set_state(pre_state)

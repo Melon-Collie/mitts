@@ -2323,6 +2323,23 @@ func get_carry_transit_factor() -> float:
 	return sin(PI * _transit_hop)
 
 
+# The two carry-contact values the controller's next tick reads (the side factor
+# places the blade marker, the hop lifts it). _update_carry_contact advances them
+# on the physics tick, which a reconcile replay does not run, so the replay plays
+# back the values each live tick left (LocalController, PredictedState).
+func carry_read_side() -> float:
+	return _carry_side_smoothed
+
+
+func carry_read_hop() -> float:
+	return _transit_hop
+
+
+func adopt_carry_read(side_smoothed: float, hop: float) -> void:
+	_carry_side_smoothed = side_smoothed
+	_transit_hop = hop
+
+
 # Push the wrister's live aim line onto the skater — called every WRISTER_AIM
 # tick by SkaterController._apply_wrister_aim_blade with _wrister_aim_dir's
 # answer (origin→cursor for humans, the committed direction for bots). The

@@ -40,6 +40,14 @@ var stick_check_cooldown_s: float
 var blade_lift_blend: float
 var commit_lift_blend: float
 var check_lead: float
+# The carry contact's two reads as this live tick left them (Skater.carry_read_*).
+# Recorded live only: the replay plays them back rather than re-deriving them.
+var carry_side_smoothed: float
+var carry_hop: float
+# The blade smoother's dangle velocity after this input: the reconcile seeds the
+# smoother from the host's blade at the ack moving at this, since the wire
+# carries the blade's place but not its motion.
+var blade_dangle_vel: Vector3
 
 
 func record_tick_state(skater: Skater) -> void:
