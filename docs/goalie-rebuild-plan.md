@@ -592,12 +592,17 @@ The option is to predict him as the loose puck is predicted:
   snapshots. Client-side goalie AI with soft correction is what caused the
   ghost saves and phantom goals, and stays banned.
 - **Why it can be exact.** He acts on the play one read delay ago (Hard
-  0.13 s, Easy 0.30 s). While the input lead plus the one-way trip is inside
-  that delay, everything he reacts to at the render instant is already in
-  snapshots the client holds, a shot's release included (the shooter's own
-  from its release seed). The predicted keeper is then the host's, save choice
-  and all: with a 25 ms lead, up to about 105 ms one-way on Hard. Past that he
-  reads the predicted puck and skaters, no worse than the skaters are drawn.
+  0.13 s, Easy 0.30 s; primed, after a puck held in his eyes, 0.07 s and
+  0.16 s). While the input lead plus the one-way trip is inside that delay,
+  everything he reacts to at the render instant is already in snapshots the
+  client holds, a shot's release included (the shooter's own from its release
+  seed). The predicted keeper is then the host's, save choice and all. The
+  input lead carries the one-way trip itself (`ClockSync.input_lead_for_rtt`),
+  so the span is twice the one-way plus the ~28 ms margin: inside Hard's cold
+  read up to about 50 ms one-way, inside his primed read only below about
+  20 ms. Past that he reads the predicted puck and skaters, no worse than the
+  skaters are drawn. His eyes, his cover of a loose puck and a release's start
+  of his read act on the puck as it is now, not one read ago.
 - **What makes it possible is already decided.** He reads only what a remote
   client can draw (§3.1), and the keeper's domain is pure and deterministic.
 - **What it changes here.** The wire carries the keeper's sim state at the
@@ -611,6 +616,9 @@ The option is to predict him as the loose puck is predicted:
     choice (every candidate posed) included;
   - how often, and how far, a predicted save disagrees with the host's. The
     client's puck stops at a predicted save, so a disagreement snaps the puck.
+
+  Both measured: `docs/goalie-prediction-measurements.md`
+  (`tests/instruments/keeper/test_keeper_prediction.gd`).
 
 **After:** tune on the new goalie, offline and online, against the scoreboard
 and playtests.
