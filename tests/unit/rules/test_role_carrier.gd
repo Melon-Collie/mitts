@@ -2826,3 +2826,26 @@ func test_a_long_feed_goes_at_full_pace() -> void:
 	var c := _decided(_feed_ctx(Vector3(10, 0, -16)))
 	assert_eq(c._pass.best_peer, 2, "the feed is priced")
 	assert_eq(c._pass.best_pace_frac, 1.0)
+
+
+# ─── the play the keeper saw ─────────────────────────────────────────────────
+
+func test_the_keeper_read_names_the_play_he_saw() -> void:
+	# Each read holds until the keeper has had time to set on the shooter again.
+	var reset_ticks: int = ceili(AIGoalieModel.goalie_reset_s()
+			* float(AIRoleCarrier._PhysicsConstants.PHYSICS_TICK)) + 1
+	var slot := Vector3(0.0, 0.0, OPP_NET_Z + 6.0)
+	var c := AIRoleCarrier.new()
+	c.decide(_make_ctx(slot))
+	assert_eq(c._shot_history(), AIShotOdds.History.FED, "a puck just taken")
+	var later: RoleContext = _make_ctx(slot)
+	later.dispatch_period_ticks = reset_ticks
+	c.decide(later)
+	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED, "held: he tracked the carry")
+	c.decide(_make_ctx(Vector3(-1.2, 0.0, OPP_NET_Z - 1.0)))
+	c.decide(_make_ctx(Vector3(-2.0, 0.0, OPP_NET_Z + 1.5)))
+	assert_eq(c._shot_history(), AIShotOdds.History.WRAPPED, "out from behind the net")
+	var out: RoleContext = _make_ctx(Vector3(-2.0, 0.0, OPP_NET_Z + 2.5))
+	out.dispatch_period_ticks = reset_ticks
+	c.decide(out)
+	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED, "the wrap long over")

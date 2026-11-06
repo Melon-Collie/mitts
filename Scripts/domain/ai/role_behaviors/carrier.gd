@@ -62,12 +62,16 @@ func _settle_penalty(ctx: RoleContext) -> float:
 			-_settle_elapsed_s / maxf(ctx.settle_penalty_tau_s, 0.001))
 
 
-# The play this shooter's keeper last saw (AIShotOdds.History): a puck just
-# taken leaves him set on the play before, until he has had time to set on the
-# new shooter (AIGoalieModel.goalie_reset_s); held longer, he has tracked the
-# carry.
+# The play this shooter's keeper last saw (AIShotOdds.History), each until he
+# has had time to set on the shooter again (AIGoalieModel.goalie_reset_s): come
+# out from behind the net, he is sealed on the post the carrier came round; a
+# puck just taken leaves him set on the play before; held longer, he has tracked
+# the carry.
 func _shot_history() -> int:
-	return AIShotOdds.History.FED if _settle_elapsed_s < AIGoalieModel.goalie_reset_s() \
+	var reset_s: float = AIGoalieModel.goalie_reset_s()
+	if _since_behind_s < reset_s:
+		return AIShotOdds.History.WRAPPED
+	return AIShotOdds.History.FED if _settle_elapsed_s < reset_s \
 			else AIShotOdds.History.CARRIED
 
 
@@ -142,6 +146,9 @@ var _hold_elapsed_s: float = 0.0
 # press-state bail back to CARRY is the same possession.
 var _settle_arm_pending: bool = true
 var _settle_elapsed_s: float = 0.0
+# Seconds since he was last behind the goal line he attacks, this possession
+# (INF: not yet): a shot out of a wrap (_shot_history).
+var _since_behind_s: float = INF
 
 # Set when intent commits to PASS (or to a rim, released as a DUMP). Consumed by
 # the state machine entering PASS_PRESSED. -1 = no current pass target.
@@ -307,11 +314,15 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	# Each call spans this many physics ticks; draining the cooldown by the real
 	# span keeps the re-eval cadence in wall time at every difficulty tier.
 	var step_ticks: int = maxi(1, ctx.dispatch_period_ticks)
+	var step_s: float = float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
 	if _settle_arm_pending:
 		_settle_arm_pending = false
 		_settle_elapsed_s = 0.0
 	else:
-		_settle_elapsed_s += float(step_ticks) / float(_PhysicsConstants.PHYSICS_TICK)
+		_settle_elapsed_s += step_s
+	_since_behind_s += step_s
+	if (ctx.self_pos.z - ctx.attacking_goal_pos.z) * signf(ctx.attacking_goal_pos.z) > 0.0:
+		_since_behind_s = 0.0
 	_ticks_since_pick += step_ticks
 	if _commit_phase_pending:
 		# Second dispatch of a sliced re-eval (see _commit_phase_pending). The
@@ -386,6 +397,7 @@ func reset() -> void:
 	_full_eval_pending = true
 	_settle_arm_pending = true
 	_settle_elapsed_s = 0.0
+	_since_behind_s = INF
 	_carry.reset()
 
 
