@@ -1413,6 +1413,12 @@ func sync_existing_players(player_data: Array) -> void:
 				colors.jersey_stripe, colors.gloves, colors.pants_stripe, colors.socks, colors.socks_stripe,
 				colors.secondary, colors.text, colors.text_outline,
 				is_left, p_name, false, p_number, attrs)
+	# A puck already carried when we joined: install the carrier view the events
+	# before our world existed could not, unless an event since has.
+	var roster_carrier: int = roster_carrier_peer_id(player_data)
+	if roster_carrier != -1 and puck_controller != null \
+			and puck_controller.get_client_carrier_peer_id() == -1:
+		_on_remote_carrier_changed(roster_carrier)
 	# Client / spectator: registry is now populated with all players the host
 	# knew about at the moment we joined. Open the replay file so subsequent
 	# world-state broadcasts get recorded. Idempotent — short-circuits if a
@@ -5424,6 +5430,7 @@ func _apply_bot_carrier_reaction_delay(snap: WorldSnapshot, delta: float) -> voi
 
 
 func _collect_existing_player_data() -> Array[Array]:
+	var carrier: Skater = puck.get_carrier() if puck != null else null
 	var existing: Array[Array] = []
 	for peer_id: int in _registry.all():
 		var r: PlayerRecord = _registry.get_record(peer_id)
@@ -5433,8 +5440,21 @@ func _collect_existing_player_data() -> Array[Array]:
 				r.is_left_handed, r.player_name, r.jersey_number,
 				attrs.height, attrs.weight, attrs.profile,
 				attrs.curve, attrs.flex, attrs.length,
-				r.tape_code, r.skin_tone, r.gear_style_code])
+				r.tape_code, r.skin_tone, r.gear_style_code,
+				carrier != null and r.skater == carrier])
 	return existing
+
+# The roster entry's carrier flag: a joiner's only word of who holds the puck,
+# since carrier events outlive the snapshot block by a second at most and the
+# carrier view is never read off world state. -1 when nobody carries.
+const ROSTER_CARRIES_PUCK: int = 18
+
+static func roster_carrier_peer_id(player_data: Array) -> int:
+	for entry: Array in player_data:
+		if entry.size() > ROSTER_CARRIES_PUCK and bool(entry[ROSTER_CARRIES_PUCK]):
+			return int(entry[0])
+	return -1
+
 
 
 # ── Getters passed as Callables to collaborators ─────────────────────────────
