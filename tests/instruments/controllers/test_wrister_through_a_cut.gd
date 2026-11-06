@@ -91,7 +91,7 @@ func _run(label: String, move_in: Vector2, move_aim: Vector2, cursor_rel: Vector
 	var true_aim := Vector3(_input.mouse_world_pos.x - puck_now.x, 0.0, _input.mouse_world_pos.z - puck_now.z)
 	var aim_err: float = rad_to_deg(Vector2(aim.x, aim.z).angle_to(Vector2(true_aim.x, true_aim.z)))
 	var drift: float = Vector2(puck_now.x - _controller._aiming.wrister_origin_world.x, puck_now.z - _controller._aiming.wrister_origin_world.z).length()
-	gut.p("    origin left %.2f m behind the puck; aim off puck->cursor by %.1f deg" % [drift, aim_err])
+	gut.p("    skated %.2f m since the press; aim off puck->cursor by %.1f deg" % [drift, aim_err])
 	_input.shoot_held = false
 	_tick(move_aim, cursor_rel, 0.0)
 	var out: float = _released[0].length() if not _released.is_empty() else -1.0

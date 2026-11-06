@@ -16,17 +16,16 @@ var prev_intent_pos: Vector3 = Vector3.ZERO
 # like the rest of the charge state.
 var cursor_speed_ema: float = 0.0
 # World position of the blade/puck at the MOMENT the wrister charge began (mouse
-# down), captured in reset_wrister. This is a human shot's aim ORIGIN: the
-# release fires along origin→cursor, so the
-# aim is anchored where the stroke STARTED, not on the live blade (which has
-# swung to an extreme by release — a leading, arcing point that made the aim
-# whip at tight angles / a close cursor). Pinned at stroke start so it doesn't
-# move as the stick sweeps. Saved/restored across reconcile like the rest of the
-# charge state (set once on the entry edge; restored so replay can't re-perturb).
+# down), captured in reset_wrister. A human shot's aim ORIGIN is this point
+# carried along with the body (wrister_origin_at): the frozen puck rides with the
+# skater, and the release fires from where it sits. Pinned at stroke start rather
+# than read off the live blade, which swings with the address and the coil.
+# Saved/restored across reconcile like the rest of the charge state (set once on
+# the entry edge; restored so replay can't re-perturb).
 var wrister_origin_world: Vector3 = Vector3.ZERO
 # Skater world position (XZ, y = 0) at that same charge-start moment — the
-# reference WristerLoad reads the frozen puck against. Saved/restored across
-# reconcile alongside wrister_origin_world.
+# reference the frozen puck rides along from. Saved/restored across reconcile
+# alongside wrister_origin_world.
 var wrister_origin_skater_pos: Vector3 = Vector3.ZERO
 
 # ── Slapper charge state ──────────────────────────────────────────────────────
@@ -55,6 +54,14 @@ func reset_wrister(initial_intent_pos: Vector3,
 	prev_intent_pos = initial_intent_pos
 	wrister_origin_world = initial_origin_world
 	wrister_origin_skater_pos = initial_origin_skater_pos
+
+
+# Where the frozen puck sits now, for a skater at `skater_pos`: the pin carried
+# by the body's travel since the charge began. Translation only — the facing is
+# frozen through the wind-up.
+func wrister_origin_at(skater_pos: Vector3) -> Vector3:
+	return wrister_origin_world + Vector3(skater_pos.x - wrister_origin_skater_pos.x, 0.0,
+			skater_pos.z - wrister_origin_skater_pos.z)
 
 
 # Raw screen-space cursor speed (px/s), EMA-smoothed — THE wrister power signal.
