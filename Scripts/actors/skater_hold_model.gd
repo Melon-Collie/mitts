@@ -35,6 +35,10 @@ class Body:
 	# top hand).
 	var spacing: float = 0.12
 	var grip: float = 0.25
+	# How far under its own shoulder the top hand must ride (m); INF for no such
+	# limit. A body can hold the stick higher, but a player carrying the puck
+	# does not (docs/arm-anatomy-plan.md §4, docs/held-hands-plan.md §13).
+	var hand_below_shoulder: float = INF
 
 
 # One arm holding the shaft at a point: its reach past full length and its
@@ -49,8 +53,10 @@ class ArmHold:
 
 class Report:
 	var fist: float = 0.0
-	# The top hand nearer its own shoulder than the elbow's flexion allows.
+	# The top hand nearer its own shoulder than the elbow's flexion allows, and
+	# above Body.hand_below_shoulder under it.
 	var fold: float = 0.0
+	var high: float = 0.0
 	var knob: float = 0.0
 	var shaft: float = 0.0
 	var top := ArmHold.new()
@@ -63,14 +69,14 @@ class Report:
 
 	# Metres past every limit, summed: zero is a pose a body holds.
 	func total() -> float:
-		return fist + fold + knob + shaft + top.reach_past + top.sleeve \
+		return fist + fold + high + knob + shaft + top.reach_past + top.sleeve \
 				+ bottom.reach_past + bottom.sleeve
 
 	# The limit furthest past, by name, or "" when held.
 	func binding() -> String:
-		var names: Array[String] = ["fist", "fold", "knob", "shaft", "reach", "sleeve",
+		var names: Array[String] = ["fist", "fold", "high", "knob", "shaft", "reach", "sleeve",
 				"b.reach", "b.sleeve"]
-		var values: Array[float] = [fist, fold, knob, shaft, top.reach_past, top.sleeve,
+		var values: Array[float] = [fist, fold, high, knob, shaft, top.reach_past, top.sleeve,
 				bottom.reach_past, bottom.sleeve]
 		var worst: int = -1
 		for i: int in values.size():
@@ -109,6 +115,8 @@ static func evaluate(body: Body, hand: Vector3, blade: Vector3, out: Report) -> 
 			+ body.forearm_len * body.forearm_len
 			- 2.0 * body.upper_len * body.forearm_len * cos(PI - body.elbow_flex_max))
 	out.fold = maxf(folded - top.distance_to(hand), 0.0)
+	out.high = 0.0 if is_inf(body.hand_below_shoulder) \
+			else maxf(hand.y - (top.y - body.hand_below_shoulder), 0.0)
 	_arm(body, 0, hand, shaft, to_torso, unit, out.top)
 
 	# The bottom hand where the drawing puts it (SkaterIKCoordinator.
@@ -320,3 +328,33 @@ static func search(body: Body, hand: Vector3, blade: Vector3, scratch: Report,
 				out.held_hand = h
 		if out.held_found:
 			return
+
+
+# Whether any hand holds the stick on this blade: every hand on the sphere of
+# `length` round `blade` whose shaft rises at `lie` ± `window` (radians) off the
+# ice, so the blade sits flat or near it. Into `out` as search() fills it, the
+# held hand the one nearest `lie`.
+const LIE_AZIMUTHS: int = 36
+const LIE_STEPS: int = 7
+
+
+static func search_lie(body: Body, blade: Vector3, length: float, lie: float, window: float,
+		scratch: Report, out: Search) -> void:
+	out.best_total = INF
+	out.held_found = false
+	var nearest: float = INF
+	for i: int in LIE_STEPS:
+		var elevation: float = lie + window * (2.0 * i / (LIE_STEPS - 1) - 1.0)
+		for k: int in LIE_AZIMUTHS:
+			var heading: float = TAU * k / LIE_AZIMUTHS
+			var h: Vector3 = blade + Vector3(cos(elevation) * sin(heading), sin(elevation),
+					cos(elevation) * cos(heading)) * length
+			evaluate(body, h, blade, scratch)
+			var total: float = scratch.total()
+			if total < out.best_total:
+				out.best_total = total
+				out.best_hand = h
+			if total < HELD_M and absf(elevation - lie) < nearest:
+				nearest = absf(elevation - lie)
+				out.held_found = true
+				out.held_hand = h
