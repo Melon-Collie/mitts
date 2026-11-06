@@ -672,7 +672,7 @@ func _check_interactions() -> void:
 			# Carrier pose is likewise invariant across checkers this tick (a
 			# strip/poke breaks the loop) — hoisted out of the stick-lift test.
 			var carrier_hand: Vector3 = carrier_skater.upper_body_to_global(
-					carrier_skater.get_top_hand_position())
+					carrier_skater.shaft_hand())
 			var carrier_blade: Vector3 = carrier_skater.get_blade_contact_global()
 			for skater: Skater in skaters:
 				# Down plays no puck — except a diver's stick, laid out to knock it away.

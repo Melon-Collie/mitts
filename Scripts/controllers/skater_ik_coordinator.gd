@@ -76,6 +76,22 @@ var _clear_offset := Vector3.ZERO
 var _clear_vel := Vector3.ZERO
 var _leg_joints := PackedVector3Array()
 
+# Held hands (docs/held-hands-plan.md): the top hand a body holds, the marker
+# moved by SkaterHoldModel.project, for the drawing and every read of the shaft.
+# Off unless the run asks for it (MITTS_HELD_HANDS=1, or --held-hands after the
+# engine's own arguments) until the playtest signs it off.
+static var held_hands: bool = OS.get_environment("MITTS_HELD_HANDS") == "1" \
+		or OS.get_cmdline_user_args().has("--held-hands")
+var _hold_body := SkaterHoldModel.Body.new()
+var _hold_report := SkaterHoldModel.Report.new()
+# The held hand for the tick state it was solved from (held_top_hand), and the
+# drawn offset off the marker eased toward it, with its rate.
+var _held_key := Transform3D(Basis(Vector3.INF, Vector3.INF, Vector3.INF), Vector3.INF)
+var _held_fold: float = INF
+var _held_hand := Vector3.ZERO
+var _held_offset := Vector3.ZERO
+var _held_offset_vel := Vector3.ZERO
+
 # ── Cached Solver Objects ─────────────────────────────────────────────────────
 # The IK configs read only controller @exports, which change exclusively in
 # SkaterController.apply_attributes — so they're built once and invalidated
@@ -924,7 +940,7 @@ const _SHAFT_RADIUS_M: float = 0.015
 
 func update_bottom_hand(delta: float = -1.0) -> void:
 	var blade_local: Vector3 = _skater.drawn_blade().origin
-	var pump: Vector3 = _stride_pump(delta)
+	var pump: Vector3 = _stride_pump(delta) + _drawn_held_offset(delta)
 	_skater.set_hand_pump(pump)
 	_skater.set_hand_pump(pump + _shaft_clearance(_skater.drawn_top_hand(), blade_local, delta))
 	var hand_local: Vector3 = _skater.drawn_top_hand()
@@ -965,6 +981,54 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	if span.length() > reach:
 		bh = shoulder + span.normalized() * reach
 	_skater.set_bottom_hand_position(bh)
+
+# The top hand a body holds the stick with, UpperBody-local: the marker moved
+# over the sphere the stick allows round the blade by the least that holds it
+# (SkaterHoldModel.project, against fill_hold_body's body), or the marker itself
+# with held hands off, while a shot or the block has the stick, which pose
+# their own hands, and while he is down or diving, a body the model's upright
+# trunk is not. A function of tick state, solved once per state.
+func held_top_hand() -> Vector3:
+	var marker: Vector3 = _skater.top_hand.position
+	if not held_hands or _skater.is_knocked_down or _skater.is_diving \
+			or SkaterPoseBridge.owner_of(_controller.get_shot_state() as State) \
+			!= SkaterPoseBridge.Owner.TRACKED:
+		return marker
+	var key := Transform3D(Basis(marker, _skater.blade.position, _skater.upper_body.rotation),
+			Vector3(_skater.trunk_fold(), _skater.get_check_lead(),
+			1.0 if _controller.has_puck else 0.0))
+	var fold: float = chest_fold()
+	if key == _held_key and fold == _held_fold:
+		return _held_hand
+	_held_key = key
+	_held_fold = fold
+	fill_hold_body(_hold_body)
+	_held_hand = SkaterHoldModel.project(_hold_body, marker, _skater.blade.position, _hold_report)
+	return _held_hand
+
+
+# The held hand's offset off the marker as drawn, eased on the shaft
+# clearance's spring (`delta` below 0 lands at once): the held hand steps where
+# the tick state does — the chest folding over the stick at a pickup, a shot
+# taking the stick — and the drawn arms follow it rather than jumping. A
+# non-finite frame holds the last offset, so it costs that frame alone.
+func _drawn_held_offset(delta: float) -> Vector3:
+	if not held_hands:
+		return Vector3.ZERO
+	var target: Vector3 = held_top_hand() - _skater.top_hand.position
+	if not target.is_finite():
+		return _held_offset if _held_offset.is_finite() else Vector3.ZERO
+	if delta < 0.0 or not (_held_offset.is_finite() and _held_offset_vel.is_finite()):
+		_held_offset = target
+		_held_offset_vel = Vector3.ZERO
+	elif delta > 0.0:
+		var x: Vector3 = _held_offset - target
+		var decay: float = exp(-_CLEAR_OMEGA * delta)
+		var kick: Vector3 = _held_offset_vel + x * _CLEAR_OMEGA
+		_held_offset = target + (x + kick * delta) * decay
+		_held_offset_vel = (_held_offset_vel - kick * (_CLEAR_OMEGA * delta)) * decay
+	return _held_offset
+
 
 # Takes the free hand to `pos` (upper-body local) by `weight`; 0 hands it back.
 func hold_free_hand(pos: Vector3, weight: float) -> void:

@@ -44,14 +44,23 @@ func before_each() -> void:
 	controller._ik.fill_hold_body(_body)
 
 
-# A top hand out in front of its own hip and the blade a stick away ahead of it
-# across the body — not held as it stands: the bottom arm falls short.
+# A carry a body holds: the top hand in front of its hip, the blade a stick away
+# ahead of it across the body.
 func _carry_pose() -> Array[Vector3]:
 	var top: Vector3 = _body.shoulders[0]
-	var hand := Vector3(top.x * 0.6, top.y - 0.45, -0.42)
-	var blade := Vector3(-top.x * 1.5, -0.9, -1.45)
+	var hand := Vector3(top.x * 0.6, top.y - 0.35, -0.35)
+	var blade := Vector3(-top.x * 3.3, -0.95, -1.2)
 	blade = hand + (blade - hand).normalized() * 1.4
 	return [hand, blade]
+
+
+# That carry's hand swung round the same blade into the front of the chest.
+func _pressed() -> Array[Vector3]:
+	var pose: Array[Vector3] = _carry_pose()
+	var top: Vector3 = _body.shoulders[0]
+	var length: float = pose[0].distance_to(pose[1])
+	var into := Vector3(top.x * 0.2, top.y - 0.3, -0.12)
+	return [pose[1] + (into - pose[1]).normalized() * length, pose[1]]
 
 
 func test_a_fist_in_the_chest_reads_by_how_far_it_is_in() -> void:
@@ -77,20 +86,16 @@ func test_the_score_is_a_function_of_its_inputs() -> void:
 
 
 func test_the_search_finds_a_held_hand_round_the_same_blade() -> void:
-	# The held pose's hand swung in against the jersey's side about the blade.
-	var pose: Array[Vector3] = _carry_pose()
-	var blade: Vector3 = pose[1]
-	var length: float = pose[0].distance_to(blade)
-	var pressed: Vector3 = blade + (Vector3(_body.shoulders[0].x * 1.05,
-			_body.shoulders[0].y - 0.45, -0.08) - blade).normalized() * length
-	SkaterHoldModel.evaluate(_body, pressed, blade, _report)
+	var pose: Array[Vector3] = _pressed()
+	var length: float = pose[0].distance_to(pose[1])
+	SkaterHoldModel.evaluate(_body, pose[0], pose[1], _report)
 	assert_gt(_report.total(), 0.01, "the pressed hand is not held")
 	var search := SkaterHoldModel.Search.new()
-	SkaterHoldModel.search(_body, pressed, blade, SkaterHoldModel.Report.new(), search)
+	SkaterHoldModel.search(_body, pose[0], pose[1], SkaterHoldModel.Report.new(), search)
 	assert_true(search.held_found, "a held hand is on the sphere")
-	assert_almost_eq(search.held_hand.distance_to(blade), length, 0.0005,
+	assert_almost_eq(search.held_hand.distance_to(pose[1]), length, 0.0005,
 			"a stick's length from the same blade")
-	SkaterHoldModel.evaluate(_body, search.held_hand, blade, _report)
+	SkaterHoldModel.evaluate(_body, search.held_hand, pose[1], _report)
 	assert_lt(_report.total(), SkaterHoldModel.HELD_M)
 
 
@@ -103,3 +108,46 @@ func test_the_search_leaves_a_held_hand_where_it_is() -> void:
 	var held: Vector3 = search.held_hand
 	SkaterHoldModel.search(_body, held, pose[1], scratch, search)
 	assert_eq(search.held_hand, held)
+
+
+func test_the_projection_leaves_a_held_hand_where_it_is() -> void:
+	var pose: Array[Vector3] = _carry_pose()
+	var search := SkaterHoldModel.Search.new()
+	SkaterHoldModel.search(_body, pose[0], pose[1], SkaterHoldModel.Report.new(), search)
+	var held: Vector3 = search.held_hand
+	assert_eq(SkaterHoldModel.project(_body, held, pose[1], _report), held)
+
+
+func test_the_projection_holds_the_pressed_hand_on_the_same_sphere() -> void:
+	var pose: Array[Vector3] = _pressed()
+	var length: float = pose[0].distance_to(pose[1])
+	var hand: Vector3 = SkaterHoldModel.project(_body, pose[0], pose[1], _report)
+	assert_almost_eq(hand.distance_to(pose[1]), length, 0.0005, "a stick's length from the blade")
+	var lie0: float = asin((pose[0].y - pose[1].y) / length)
+	var lie: float = asin((hand.y - pose[1].y) / length)
+	assert_lt(absf(lie - lie0), deg_to_rad(SkaterHoldModel.PROJECT_LIE_DEG) + 0.001,
+			"its lie within the window")
+	SkaterHoldModel.evaluate(_body, hand, pose[1], _report)
+	assert_lt(_report.total(), 0.005, "held, to within 5 mm (binding %s)" % _report.binding())
+	var search := SkaterHoldModel.Search.new()
+	SkaterHoldModel.search(_body, pose[0], pose[1], SkaterHoldModel.Report.new(), search)
+	assert_lt(hand.distance_to(pose[0]), search.held_hand.distance_to(pose[0]) * 1.5 + 0.02,
+			"moved about as far as the nearest held hand lies")
+
+
+func test_the_projection_moves_with_the_anchor_without_a_jump() -> void:
+	# The anchor swung from the held carry in to the pressed one, a millimetre a
+	# step: the held hand never moves more than a few times what the anchor did.
+	var from: Vector3 = _carry_pose()[0]
+	var to: Vector3 = _pressed()[0]
+	var blade: Vector3 = _carry_pose()[1]
+	var length: float = from.distance_to(blade)
+	var steps: int = int(from.distance_to(to) / 0.001)
+	var prev: Vector3 = SkaterHoldModel.project(_body, from, blade, _report)
+	var worst: float = 0.0
+	for i: int in range(1, steps + 1):
+		var anchor: Vector3 = blade + (from.lerp(to, float(i) / steps) - blade).normalized() * length
+		var hand: Vector3 = SkaterHoldModel.project(_body, anchor, blade, _report)
+		worst = maxf(worst, hand.distance_to(prev))
+		prev = hand
+	assert_lt(worst, 0.005, "the held hand's largest step for 1 mm of anchor")

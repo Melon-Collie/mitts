@@ -140,5 +140,5 @@ func _drop(skater: Skater) -> void:
 
 static func _stick_gap(a: Skater, b: Skater) -> float:
 	return StickCheckRules.stick_gap(
-			a.upper_body_to_global(a.get_top_hand_position()), a.get_blade_contact_global(),
-			b.upper_body_to_global(b.get_top_hand_position()), b.get_blade_contact_global())
+			a.upper_body_to_global(a.shaft_hand()), a.get_blade_contact_global(),
+			b.upper_body_to_global(b.shaft_hand()), b.get_blade_contact_global())

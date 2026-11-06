@@ -2806,6 +2806,23 @@ func get_top_hand_position() -> Vector3:
 	return top_hand.position
 
 
+# Where the hand holding the top of the stick is, UpperBody-local, for every
+# read of the shaft (stick lifts and ties, the bots' stick play): the held hand
+# its controller provides (SkaterIKCoordinator.held_top_hand), or the marker.
+# The blade's heading, its contact and the carry's pin stay on the marker.
+var _shaft_hand_provider := Callable()
+
+
+func set_shaft_hand_provider(provider: Callable) -> void:
+	_shaft_hand_provider = provider
+
+
+func shaft_hand() -> Vector3:
+	if _shaft_hand_provider.is_valid():
+		return _shaft_hand_provider.call()
+	return top_hand.position
+
+
 # Where the arm and the stick are drawn to: the marker where physics
 # interpolation draws it this frame (_drawn_fraction), plus a render-only offset
 # (the stride's pump, SkaterIKCoordinator), which the marker every claim reads

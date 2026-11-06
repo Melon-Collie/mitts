@@ -65,7 +65,7 @@ func maybe_send_claim() -> void:
 	var carrier_pid: int = pc.get_client_carrier_peer_id() if pc != null else -1
 	var my_team: int = _registry.team_id_by_skater.get(me, -1)
 	var blade: Vector3 = me.get_blade_contact_global()
-	var hand: Vector3 = me.upper_body_to_global(me.get_top_hand_position())
+	var hand: Vector3 = me.upper_body_to_global(me.shaft_hand())
 	var players: Dictionary[int, PlayerRecord] = _registry.all()
 	for pid: int in players:
 		var rec: PlayerRecord = players[pid]
@@ -74,7 +74,7 @@ func maybe_send_claim() -> void:
 		if _registry.team_id_by_skater.get(rec.skater, -1) == my_team:
 			continue
 		var d: float = StickCheckRules.stick_gap(hand, blade,
-				rec.skater.upper_body_to_global(rec.skater.get_top_hand_position()),
+				rec.skater.upper_body_to_global(rec.skater.shaft_hand()),
 				rec.skater.get_blade_contact_global())
 		if d <= StickCheckRules.TIE_CONTACT_M:
 			_last_sent_at = now

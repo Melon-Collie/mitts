@@ -1,6 +1,6 @@
 # Held hands — gameplay hands a body can hold, drawn as checked
 
-Status: PHASE 1 DONE (measured, nothing in play changed). Phase 2 next.
+Status: PHASE 2 BUILT BEHIND A SWITCH (off). Waiting on decisions in §12 and a playtest.
 
 One line: **the blade stays where gameplay puts it today; the hand that holds
 the stick is moved, by the least that makes it holdable, by one pure body
@@ -279,3 +279,102 @@ drawing does not.
   anything else. The brute-force search is its reference: the projection
   must reach a held hand wherever the search does, and move no further than
   it.
+
+## 12. Phase 2 record
+
+### The trunk's height: measured, deferred
+
+The drawn trunk's height comes from the gait. `GaitPose.solve_stance` turns
+the stance (the largest of the locomotion's eased stance, the pivot's, the
+stride's reach sit and the layers' floors, among them the carry's crouch)
+into a drop by the leg's geometry. `SkaterLegRig.seat_on_ice` then re-seats
+the hips on the blades.
+
+Measured against the tick's trunk, the offset is:
+- **Standing:** a flat 3.0 cm lower with no carry, growing with the carry's
+  crouch to 10 cm at the full 22° fold.
+- **Skating:** 5.5–8.4 cm lower and 3.5–4 cm back, ±1.5 cm with the stride.
+
+What it costs, with the held hand found on the tick's trunk and scored on the
+drawn one:
+
+| | as is | the tick's trunk lowered by the measured offset |
+|---|---|---|
+| standing | median 0, 90% 12, max 60 mm | median 0, 90% 1, max 2 mm |
+| skating | median 0, 90% 22, max 26 mm | median 6, 90% 26, max 46 mm |
+
+Standing, the height is the whole mismatch (the carry's crouch). Skating, it
+is not a translation (the stride's texture and the trunk's lean), and
+lowering the trunk makes it worse.
+
+A faithful tick height means mirroring the gait's stance and the leg chain's
+seat, which is native-ported code, to take a 90th percentile of 1–2 cm to
+zero against violations of ~15 cm today. So the projection is built on the
+tick's trunk as it is, and this is revisited if the playtest shows clipping
+on standing carries (the carry crouch is its worst case).
+
+### The projection, built behind a switch
+
+`SkaterHoldModel.project` steps from the anchor. Each step moves the hand by
+every limit it breaks, along the way out of that limit, by how far past it the
+pose is, then puts it back on the sphere with the lie held within 15°. It
+stops when a step moves the hand under 0.5 mm, at most 24 steps. It is the
+position-based pattern `SkaterIKCoordinator._shaft_clearance` already used
+for the drawn shaft alone.
+
+Its tuning was measured, not chosen:
+- **Iterations.** Six fixed steps chattered on the long moves (a 134 mm pop
+  in a tick). Settled steps track the true answer.
+- **No relaxation factor.** A move of exactly how far past each limit
+  converges in about 7 steps, to 0.1 mm. At 0.7 it took 10 steps; at 1.3 it
+  overshot to an 11–19 mm residual.
+- **The bottom arm is scored where the drawing puts it**
+  (`BottomHandIK.reachable_grip`), not at the best point of a band: one elbow
+  solve, and the hand the eye sees.
+
+It is wired in (`SkaterIKCoordinator.held_top_hand`, `Skater.shaft_hand`; see
+`Scripts/controllers/CLAUDE.md`):
+- **Drawing:** the held hand is an offset on the drawn hand, eased on the
+  shaft clearance's spring.
+- **Gameplay:** stick lifts and ties, the host's `top_hand_world`, the bots'
+  stick reads and the tie's drawing take it.
+- **Unchanged:** the marker keeps the blade's heading and everything derived
+  from it.
+- **Not applied:** shots, the block, down and diving skaters.
+
+What it does (`test_hold_map.gd`, scored on the drawn trunk): violations go
+from 150–200 mm to a median of 8 mm standing and 15 mm skating, 90th
+percentile 22 mm. The rest is the trunk's height (§12, the carry's crouch,
+up to 55 mm straight ahead at 1.1 m) and a few corners. Live, a plain close
+carry's hand moves 27 cm.
+
+What it costs and breaks, with the switch on:
+- **Cost.** About 1 ms a call median and 5–9 ms at the 90th percentile in
+  GDScript. A 6-skater match's tick went from 4.2 to 20.6 ms. Free play is
+  fine; a match needs the native port.
+- **Smoothness.** `test_body_stays_smooth.gd` passes every scenario but one:
+  the forward→backward pivot with the cursor flipped, where the arm's jerk is
+  18% over its gate and the stick's 4%. That pivot crosses the corner where
+  the anchor is the hand on its own shoulder (skating, the puck behind the
+  forehand), and the held hand there moves 3–7× the anchor's step: it is
+  travelling 30–45 cm to somewhere holdable.
+- **The look.** In tight carries the held hand clears the jersey by riding up
+  the stick's sphere toward the chest, so the stick stands steeper and the
+  top elbow can wing out (renders of `tight_sweep`). A limit holding the hand
+  0.2 m under its shoulder (the withdrawn plan's technique) leaves no holdable
+  hand in many tight carries, and conflicting limits made the projection pop
+  (to 260 mm a tick), so it is not in. With the blade fixed close in and a
+  full-length stick, "out of the jersey", "both hands on" and "the hand below
+  the chest" cannot all hold. Something has to give.
+
+### Decisions this needs
+
+- **D. Tight carries.** Which gives: the hand rises and the stick stands up
+  (what the switch does now); the stick is choked in close (the grip slides
+  down the shaft, the knob past the hand grows, as the faceoff's choke does);
+  or the in-tight reach floor moves out (gameplay, as the withdrawn work
+  found).
+- **E. The trunk's height** (above): mirror the gait's crouch and seat in the
+  tick, or let the standing carry's crouch move the gameplay frame as the held
+  poses already do.
+- **F. The native port,** before the switch can be on in a match.

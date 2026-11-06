@@ -442,6 +442,20 @@ hand the drawn arm could not reach or barely extended toward:
 The reach lean measures the hand the same way, and the host's claim clamp
 bounds the result (`TopHandIK.full_reach`, the trunk at its deepest fold).
 
+**Held hands are behind a switch** (`SkaterIKCoordinator.held_hands`, off;
+`MITTS_HELD_HANDS=1` or `--held-hands` turns it on; `docs/held-hands-plan.md`).
+On, the top hand the body holds is the marker moved over the sphere the stick
+allows round the blade by the least that clears the jersey and lets both arms
+reach (`held_top_hand`, `SkaterHoldModel.project` against `fill_hold_body`'s
+body), solved once per tick state. The drawing takes it as an eased offset on
+the drawn hand, and every read of the shaft — stick lifts and ties, the host's
+`top_hand_world`, the bots' stick play — goes through `Skater.shaft_hand`. The
+marker keeps everything that orients the blade (its heading, contact, the
+carry's pin, the reach lean): those cancel only while the hand stays on the
+shoulder→blade line. Shots, the block and a skater who is down keep the
+marker. It costs ~2.7 ms a skater a tick in GDScript, so it needs its native
+port before it can be on in a match.
+
 **A carrier keeps both hands on the stick.** An empty stick reaches one-handed
 to the rim when there is a puck to reach for (`ReachPurposeRules`) and rests in
 both hands, where a carry would, when there is not; with the puck the blade stops where the bottom hand could no longer

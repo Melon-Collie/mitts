@@ -30,8 +30,9 @@ class Body:
 	# The knob past the top hand, and its radius.
 	var knob_extend: float = SkaterStickRig.SHAFT_BUTT_EXTEND_M
 	var knob_radius: float = 0.035
-	# The bottom hand's grip: no nearer the top hand than `spacing` (m), and
-	# preferring `grip` (fraction of the shaft from the top hand).
+	# The bottom hand's grip (BottomHandIK.reachable_grip): no nearer the top
+	# hand than `spacing` (m), preferring `grip` (fraction of the shaft from the
+	# top hand).
 	var spacing: float = 0.12
 	var grip: float = 0.25
 
@@ -45,12 +46,6 @@ class ArmHold:
 	var slip: float = 0.0
 	var elbow := Vector3.ZERO
 
-	func copy_from(other: ArmHold) -> void:
-		reach_past = other.reach_past
-		sleeve = other.sleeve
-		slip = other.slip
-		elbow = other.elbow
-
 
 class Report:
 	var fist: float = 0.0
@@ -59,12 +54,12 @@ class Report:
 	var knob: float = 0.0
 	var shaft: float = 0.0
 	var top := ArmHold.new()
-	# The bottom arm at its best place on the shaft, the fraction from the top
-	# hand it held at, and that place.
+	# The bottom arm where it holds the shaft, the fraction of the shaft from the
+	# top hand that is, and the place; its reach is how far that place lies past
+	# the arm's reach with the girdle's give.
 	var bottom := ArmHold.new()
 	var bottom_grip: float = 0.0
 	var bottom_hand := Vector3.ZERO
-	var _try := ArmHold.new()
 
 	# Metres past every limit, summed: zero is a pose a body holds.
 	func total() -> float:
@@ -84,10 +79,6 @@ class Report:
 		return "" if worst < 0 else names[worst]
 
 
-# Where along the shaft the bottom hand is tried, from a glove's width below the
-# top hand down to past its preferred grip.
-const BOTTOM_SAMPLES: int = 7
-const BOTTOM_PAST_GRIP: float = 0.15
 # The shaft is measured from the top glove down this far toward the blade:
 # below it the shaft is past the jersey's hem.
 const SHAFT_SAMPLES: int = 8
@@ -120,20 +111,16 @@ static func evaluate(body: Body, hand: Vector3, blade: Vector3, out: Report) -> 
 	out.fold = maxf(folded - top.distance_to(hand), 0.0)
 	_arm(body, 0, hand, shaft, to_torso, unit, out.top)
 
-	var floor_g: float = minf(body.spacing / maxf(length, 0.0001), 1.0)
-	var deepest: float = maxf(minf(body.grip + BOTTOM_PAST_GRIP, 1.0), floor_g)
-	var best: float = INF
-	for k: int in BOTTOM_SAMPLES:
-		var g: float = lerpf(floor_g, deepest, float(k) / (BOTTOM_SAMPLES - 1))
-		var at: Vector3 = hand + span * g
-		_arm(body, 1, at, shaft, to_torso, unit, out._try)
-		# Held at its least violation, and among those nearest its grip.
-		var score: float = out._try.reach_past + out._try.sleeve + absf(g - body.grip) * 0.0001
-		if score < best:
-			best = score
-			out.bottom.copy_from(out._try)
-			out.bottom_grip = g
-			out.bottom_hand = at
+	# The bottom hand where the drawing puts it (SkaterIKCoordinator.
+	# update_bottom_hand): the preferred grip, slid up the shaft as far as its arm
+	# needs, no nearer the top hand than a glove's width.
+	var bottom: int = 1
+	var grip: Vector2 = BottomHandIK.reachable_grip(body.shoulders[bottom], hand, blade,
+			body.grip, body.reach + body.slack, body.spacing)
+	out.bottom_grip = grip.x
+	out.bottom_hand = hand + span * grip.x
+	_arm(body, bottom, out.bottom_hand, shaft, to_torso, unit, out.bottom)
+	out.bottom.reach_past = grip.y
 
 
 # One arm reaching `hand` on the shaft running `shaft`, into `out`.
@@ -156,6 +143,119 @@ static func _arm(body: Body, arm: int, hand: Vector3, shaft: Vector3, to_torso: 
 
 static func _clearance(p: Vector3, to_torso: Transform3D, unit: float) -> float:
 	return SkaterMeshBuilder.torso_clearance(to_torso * p) * unit
+
+
+# The held hand: `anchor` moved over the sphere the rigid stick allows round
+# `blade` by the least that holds it, in a fixed number of steps from the
+# anchor, so it is a function of its inputs alone. Each step moves the hand by
+# every limit it breaks, each along the way out of it, as far as it is past —
+# the fist, the knob and a point of the shaft out of the jersey along its
+# normal (a shaft point moving 1/(1−t) of the hand, the blade the pivot), the
+# hand off its own shoulder or toward it for the top arm's fold and reach, the
+# hand out of the jersey with the elbow sunk in it, and the shaft toward the
+# bottom shoulder with the bottom arm short or sunk — and back onto the
+# sphere, its lie held within PROJECT_LIE_DEG of the anchor's. A move is as
+# large as how far past its
+# limit the pose is, so the correction grows from nothing where a limit starts
+# to bind and the hand is the anchor wherever it holds. It steps until a step
+# moves the hand less than PROJECT_SETTLED_M, at most PROJECT_STEPS times: a
+# partial solve of a long move lands wherever its last step left it, which
+# differs tick to tick, where the settled one moves with its inputs.
+const PROJECT_STEPS: int = 24
+const PROJECT_SETTLED_M: float = 0.0005
+const PROJECT_LIE_DEG: float = 15.0
+const _NORMAL_STEP_M: float = 0.01
+
+
+static func project(body: Body, anchor: Vector3, blade: Vector3, scratch: Report) -> Vector3:
+	var span: Vector3 = anchor - blade
+	var length: float = span.length()
+	if length < 0.0001:
+		return anchor
+	var lie0: float = asin(clampf(span.y / length, -1.0, 1.0))
+	var to_torso: Transform3D = body.torso.affine_inverse()
+	var unit: float = body.torso.basis.get_scale().x
+	var hand: Vector3 = anchor
+	for _i: int in PROJECT_STEPS:
+		evaluate(body, hand, blade, scratch)
+		if scratch.total() <= 0.0:
+			break
+		var push: Vector3 = _push(body, hand, blade, scratch, to_torso, unit)
+		var next: Vector3 = _on_sphere(blade, hand + push, length, lie0)
+		if not next.is_finite():
+			return anchor
+		var moved: float = next.distance_to(hand)
+		hand = next
+		if moved < PROJECT_SETTLED_M:
+			break
+	return hand
+
+
+static func _push(body: Body, hand: Vector3, blade: Vector3, held: Report,
+		to_torso: Transform3D, unit: float) -> Vector3:
+	var span: Vector3 = blade - hand
+	var shaft: Vector3 = span.normalized()
+	var push := Vector3.ZERO
+	if held.fist > 0.0:
+		push += _out_of_jersey(hand, to_torso, unit) * held.fist
+	if held.knob > 0.0:
+		push += _out_of_jersey(hand - shaft * body.knob_extend, to_torso, unit) * held.knob
+	if held.shaft > 0.0:
+		var contact: float = SkaterArmPoses.SWIVEL_CONTACT_M
+		var worst: float = 0.0
+		var at: float = SHAFT_FROM
+		for k: int in SHAFT_SAMPLES:
+			var t: float = lerpf(SHAFT_FROM, SHAFT_TO, float(k) / (SHAFT_SAMPLES - 1))
+			var depth: float = SHAFT_RADIUS_M - contact - _clearance(hand + span * t, to_torso, unit)
+			if depth > worst:
+				worst = depth
+				at = t
+		push += _out_of_jersey(hand + span * at, to_torso, unit) * (worst / (1.0 - at))
+	var off_shoulder: Vector3 = (hand - body.shoulders[0]).normalized()
+	push += off_shoulder * (held.fold - held.top.reach_past)
+	if held.top.sleeve > 0.0:
+		push += _out_of_jersey(held.top.elbow, to_torso, unit) * held.top.sleeve
+	var lever: float = maxf(1.0 - held.bottom_grip, 0.2)
+	if held.bottom.reach_past > 0.0:
+		push += (body.shoulders[1] - held.bottom_hand).normalized() \
+				* (held.bottom.reach_past / lever)
+	if held.bottom.sleeve > 0.0:
+		push += _out_of_jersey(held.bottom.elbow, to_torso, unit) * (held.bottom.sleeve / lever)
+	return push
+
+
+# The way out of the jersey at `p`: its clearance's gradient, by central
+# differences. The clearance is infinite above the collar, so it is capped
+# first, or a point at the collar differences infinity with itself.
+const _CLEARANCE_CAP_M: float = 1.0
+
+static func _out_of_jersey(p: Vector3, to_torso: Transform3D, unit: float) -> Vector3:
+	var e: float = _NORMAL_STEP_M
+	var g := Vector3(
+			_capped(p + Vector3(e, 0.0, 0.0), to_torso, unit)
+					- _capped(p - Vector3(e, 0.0, 0.0), to_torso, unit),
+			_capped(p + Vector3(0.0, e, 0.0), to_torso, unit)
+					- _capped(p - Vector3(0.0, e, 0.0), to_torso, unit),
+			_capped(p + Vector3(0.0, 0.0, e), to_torso, unit)
+					- _capped(p - Vector3(0.0, 0.0, e), to_torso, unit))
+	return g.normalized() if g.length_squared() > 0.0 else Vector3.ZERO
+
+
+static func _capped(p: Vector3, to_torso: Transform3D, unit: float) -> float:
+	return minf(_clearance(p, to_torso, unit), _CLEARANCE_CAP_M)
+
+
+# `p` put back on the sphere of `length` round `blade`, its lie held within
+# PROJECT_LIE_DEG of `lie0`.
+static func _on_sphere(blade: Vector3, p: Vector3, length: float, lie0: float) -> Vector3:
+	var dir: Vector3 = p - blade
+	var flat := Vector2(dir.x, dir.z)
+	if flat.length_squared() < 0.000001:
+		return blade + dir.normalized() * length
+	var lie: float = clampf(atan2(dir.y, flat.length()), lie0 - deg_to_rad(PROJECT_LIE_DEG),
+			lie0 + deg_to_rad(PROJECT_LIE_DEG))
+	flat = flat.normalized() * cos(lie)
+	return blade + Vector3(flat.x, sin(lie), flat.y) * length
 
 
 # The best hands on the sphere a rigid stick allows round the blade's heel, by

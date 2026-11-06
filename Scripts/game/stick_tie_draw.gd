@@ -106,7 +106,7 @@ func _clack(at: Vector3, latched: bool) -> void:
 
 
 static func _hand(s: Skater) -> Vector3:
-	return s.upper_body_to_global(s.get_top_hand_position())
+	return s.upper_body_to_global(s.shaft_hand())
 
 
 static func _xz(v: Vector3) -> Vector2:

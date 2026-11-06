@@ -16,6 +16,8 @@ extends GutTest
 #   best    the least any hand on the sphere reaches (mm)
 #   move    how far the nearest hand the body holds outright lies from the
 #           anchor (cm), "--" where none does within the search
+#   prj     the held hand SkaterHoldModel.project finds on the tick's trunk,
+#           scored on the drawn one (mm), and how far it moved (cm)
 # Then the cursor swept round at a carry's pace, sampled every third tick.
 #
 # Asserts nothing: run it when the question is "can the hands be held".
@@ -75,6 +77,7 @@ func _map(skating: bool) -> String:
 	var broken: int = 0
 	var unheld: int = 0
 	var moves := PackedFloat64Array()
+	var prj := PackedFloat64Array()
 	var binds: Dictionary = {}
 	for a: float in ANGLES_DEG:
 		var row: String = "  %+5.0f° " % a
@@ -85,6 +88,7 @@ func _map(skating: bool) -> String:
 				_step(input, _aim(a, r), skating)
 			var cell: Dictionary = _cell()
 			row += "%s | " % _fmt_cell(cell)
+			prj.append(cell["prj"])
 			if cell["anchor"] > BROKEN_M:
 				broken += 1
 				binds[cell["bind"]] = int(binds.get(cell["bind"], 0)) + 1
@@ -95,11 +99,13 @@ func _map(skating: bool) -> String:
 			_free()
 		rows.append(row)
 	moves.sort()
-	var head: String = "\n══ %s: anchor/tick mm, best mm, move cm per reach %s" % [
+	prj.sort()
+	var head: String = "\n══ %s: anchor/tick mm, best mm, move cm, projected mm and cm, per reach %s" % [
 			"skating up-ice" if skating else "standing, facing held", RADII_M]
 	var tail: String = "\n  %d of %d cells not held (by %s); of those %d held by a hand on the sphere, moved %s cm, %d by none" % [
 			broken, ANGLES_DEG.size() * RADII_M.size(), binds, moves.size(), _quantiles(moves),
 			unheld]
+	tail += "\n  projected, scored on the drawn trunk: %s mm" % _quantiles_mm(prj)
 	return head + "\n" + "\n".join(rows) + tail
 
 
@@ -115,6 +121,11 @@ func _cell() -> Dictionary:
 	SkaterHoldModel.evaluate(_drawn, hand, blade, _report)
 	var cell: Dictionary = {"anchor": _report.total(), "bind": _report.binding(),
 			"tick": tick_total, "best": 0.0, "move": 0.0}
+	var held: Vector3 = SkaterHoldModel.project(_tick, hand, blade, _scratch)
+	SkaterHoldModel.evaluate(_drawn, held, blade, _scratch)
+	cell["prj"] = _scratch.total()
+	cell["prj_move"] = held.distance_to(hand)
+	cell["held"] = held
 	if _report.total() > BROKEN_M:
 		SkaterHoldModel.search(_drawn, hand, blade, _scratch, _search)
 		cell["best"] = _search.best_total
@@ -123,11 +134,12 @@ func _cell() -> Dictionary:
 
 
 func _fmt_cell(cell: Dictionary) -> String:
+	var prj: String = " %3.0f %3.0f" % [cell["prj"] * 1000.0, cell["prj_move"] * 100.0]
 	if cell["anchor"] <= BROKEN_M:
-		return "   .  %4.0f           " % (cell["tick"] * 1000.0)
-	return "%4.0f%s %4.0f %4.0f %5s" % [cell["anchor"] * 1000.0, CODES[cell["bind"]],
+		return "   .  %4.0f           %s" % [cell["tick"] * 1000.0, prj]
+	return "%4.0f%s %4.0f %4.0f %5s%s" % [cell["anchor"] * 1000.0, CODES[cell["bind"]],
 			cell["tick"] * 1000.0, cell["best"] * 1000.0,
-			"--" if cell["move"] < 0.0 else "%.0f" % (cell["move"] * 100.0)]
+			"--" if cell["move"] < 0.0 else "%.0f" % (cell["move"] * 100.0), prj]
 
 
 func _quantiles(sorted: PackedFloat64Array) -> String:
@@ -135,6 +147,14 @@ func _quantiles(sorted: PackedFloat64Array) -> String:
 		return "-"
 	var at := func(q: float) -> float: return sorted[mini(int(q * sorted.size()), sorted.size() - 1)] * 100.0
 	return "median %.0f, 90%% %.0f, max %.0f" % [at.call(0.5), at.call(0.9), sorted[sorted.size() - 1] * 100.0]
+
+
+func _quantiles_mm(sorted: PackedFloat64Array) -> String:
+	if sorted.is_empty():
+		return "-"
+	return "median %.0f, 90%% %.0f, max %.0f" % [sorted[sorted.size() / 2] * 1000.0,
+			sorted[mini(int(0.9 * sorted.size()), sorted.size() - 1)] * 1000.0,
+			sorted[sorted.size() - 1] * 1000.0]
 
 
 func _sweep(r: float, skating: bool) -> String:
@@ -147,12 +167,28 @@ func _sweep(r: float, skating: bool) -> String:
 	var unheld: int = 0
 	var moves := PackedFloat64Array()
 	var binds: Dictionary = {}
+	var prj := PackedFloat64Array()
+	var prev_anchor := Vector3.INF
+	var prev_held := Vector3.INF
+	var worst_step := 0.0
+	var worst_ratio := 0.0
 	for i: int in SWEEP_TICKS:
 		_step(input, _aim(-150.0 + SWEEP_RATE_DEG_S * DT * i, r), skating)
+		# Every tick: how far the held hand steps against the anchor's step.
+		_controller._ik.fill_hold_body(_tick)
+		var anchor: Vector3 = _skater.top_hand.position
+		var held: Vector3 = SkaterHoldModel.project(_tick, anchor, _skater.blade.position, _scratch)
+		if prev_held != Vector3.INF:
+			var step: float = held.distance_to(prev_held)
+			worst_step = maxf(worst_step, step)
+			worst_ratio = maxf(worst_ratio, step / maxf(anchor.distance_to(prev_anchor), 0.002))
+		prev_anchor = anchor
+		prev_held = held
 		if i % SWEEP_EVERY != 0:
 			continue
 		samples += 1
 		var cell: Dictionary = _cell()
+		prj.append(cell["prj"])
 		if cell["anchor"] > BROKEN_M:
 			broken += 1
 			binds[cell["bind"]] = int(binds.get(cell["bind"], 0)) + 1
@@ -162,9 +198,10 @@ func _sweep(r: float, skating: bool) -> String:
 				moves.append(cell["move"])
 	_free()
 	moves.sort()
-	return "\n══ sweep at %.1f m, %s: %d of %d samples not held (by %s); of those %d held by a hand on the sphere, moved %s cm, %d by none" % [
+	prj.sort()
+	return "\n══ sweep at %.1f m, %s: %d of %d samples not held (by %s); of those %d held by a hand on the sphere, moved %s cm, %d by none\n  projected, scored on the drawn trunk: %s mm; held hand's largest tick %.0f mm, %.1f× the anchor's" % [
 			r, "skating" if skating else "standing", broken, samples, binds, moves.size(),
-			_quantiles(moves), unheld]
+			_quantiles(moves), unheld, _quantiles_mm(prj), worst_step * 1000.0, worst_ratio]
 
 
 func _aim(deg: float, r: float) -> Vector3:

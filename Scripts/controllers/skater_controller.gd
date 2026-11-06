@@ -1251,6 +1251,7 @@ func setup(assigned_skater: Skater, assigned_puck: Puck, game_state: Node) -> vo
 	if game_state.has_method("is_movement_locked"):
 		skater.contact_suspended_provider = game_state.is_movement_locked
 	_ik.setup(skater, self, _skating)
+	skater.set_shaft_hand_provider(_ik.held_top_hand)
 	_shot_pose.setup(skater, _sm, _aiming, _ik, self)
 	var _cb := SkaterStateMachine.Callbacks.new()
 	_cb.apply_blade_from_mouse = _ik.apply_blade_from_mouse
@@ -2242,9 +2243,10 @@ func fill_network_state(state: SkaterNetworkState) -> void:
 	state.diving = skater.is_diving
 	state.slapshot_pinned = skater.is_slapshot_pinning()
 	# Host-only shaft segment for stick-lift claim resolution (paired with
-	# blade_contact_world). World-space grip point — the wire top_hand_position
-	# is upper-body-local and can't be used for host-side world geometry.
-	state.top_hand_world = skater.upper_body_to_global(skater.get_top_hand_position())
+	# blade_contact_world): the held hand, world-space — the wire
+	# top_hand_position is upper-body-local and can't be used for host-side
+	# world geometry.
+	state.top_hand_world = skater.upper_body_to_global(skater.shaft_hand())
 	state.shot_state = _sm.get_state() as int
 	# One bit, read by the shot_state it rides with (no validity flag).
 	state.blade_side = skater.wire_blade_side(state.shot_state)

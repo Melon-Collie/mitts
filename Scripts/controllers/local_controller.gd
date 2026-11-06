@@ -354,7 +354,7 @@ func _step_tick(delta: float) -> void:
 				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
 					# Hooking — under the carrier's shaft for a stick lift.
 					is_lift = true
-					var c_hand: Vector3 = view_carrier.upper_body_to_global(view_carrier.get_top_hand_position())
+					var c_hand: Vector3 = view_carrier.upper_body_to_global(view_carrier.shaft_hand())
 					var c_blade: Vector3 = view_carrier.get_blade_contact_global()
 					in_poke_range = PuckInteractionRules.check_blade_under_stick(
 							blade_pos_for_claim, c_hand, c_blade,
