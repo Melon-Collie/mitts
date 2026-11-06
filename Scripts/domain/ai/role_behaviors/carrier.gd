@@ -65,14 +65,16 @@ func _settle_penalty(ctx: RoleContext) -> float:
 # The play this shooter's keeper last saw (AIShotOdds.History), each until he
 # has had time to set on the shooter again (AIGoalieModel.goalie_reset_s): come
 # out from behind the net, he is sealed on the post the carrier came round; a
-# puck just taken leaves him set on the play before; held longer, he has tracked
-# the carry.
+# pass just taken leaves him set on the passer, across the royal road or on the
+# shooter's side of it; otherwise, and held longer, he has tracked the carry.
 func _shot_history() -> int:
 	var reset_s: float = AIGoalieModel.goalie_reset_s()
 	if _since_behind_s < reset_s:
 		return AIShotOdds.History.WRAPPED
-	return AIShotOdds.History.FED if _settle_elapsed_s < reset_s \
-			else AIShotOdds.History.CARRIED
+	if _settle_elapsed_s >= reset_s or not _fed_from.is_finite():
+		return AIShotOdds.History.CARRIED
+	return AIShotOdds.History.FED_ACROSS if AIShotOdds.crosses_royal_road(_fed_from.x, _self_x) \
+			else AIShotOdds.History.FED_SAME
 
 
 # Move `value` away from being chosen by `penalty` of its own magnitude: a
@@ -149,6 +151,10 @@ var _settle_elapsed_s: float = 0.0
 # Seconds since he was last behind the goal line he attacks, this possession
 # (INF: not yet): a shot out of a wrap (_shot_history).
 var _since_behind_s: float = INF
+# Where the pass he took this possession left from (RoleContext.fed_from; INF:
+# none), and where he is (_shot_history).
+var _fed_from: Vector3 = Vector3.INF
+var _self_x: float = 0.0
 
 # Set when intent commits to PASS (or to a rim, released as a DUMP). Consumed by
 # the state machine entering PASS_PRESSED. -1 = no current pass target.
@@ -323,6 +329,8 @@ func decide(ctx: RoleContext) -> RoleDecision:
 	_since_behind_s += step_s
 	if (ctx.self_pos.z - ctx.attacking_goal_pos.z) * signf(ctx.attacking_goal_pos.z) > 0.0:
 		_since_behind_s = 0.0
+	_fed_from = ctx.fed_from
+	_self_x = ctx.self_pos.x - ctx.attacking_goal_pos.x
 	_ticks_since_pick += step_ticks
 	if _commit_phase_pending:
 		# Second dispatch of a sliced re-eval (see _commit_phase_pending). The
@@ -398,6 +406,7 @@ func reset() -> void:
 	_settle_arm_pending = true
 	_settle_elapsed_s = 0.0
 	_since_behind_s = INF
+	_fed_from = Vector3.INF
 	_carry.reset()
 
 

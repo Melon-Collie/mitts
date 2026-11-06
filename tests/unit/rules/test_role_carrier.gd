@@ -2834,14 +2834,27 @@ func test_the_keeper_read_names_the_play_he_saw() -> void:
 	# Each read holds until the keeper has had time to set on the shooter again.
 	var reset_ticks: int = ceili(AIGoalieModel.goalie_reset_s()
 			* float(AIRoleCarrier._PhysicsConstants.PHYSICS_TICK)) + 1
-	var slot := Vector3(0.0, 0.0, OPP_NET_Z + 6.0)
+	var slot := Vector3(-2.0, 0.0, OPP_NET_Z + 6.0)
 	var c := AIRoleCarrier.new()
 	c.decide(_make_ctx(slot))
-	assert_eq(c._shot_history(), AIShotOdds.History.FED, "a puck just taken")
+	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED,
+			"a puck he started with: the keeper watched him have it")
+	c.reset()
+	var across: RoleContext = _make_ctx(slot)
+	across.fed_from = Vector3(4.0, 0.0, OPP_NET_Z + 7.0)
+	c.decide(across)
+	assert_eq(c._shot_history(), AIShotOdds.History.FED_ACROSS,
+			"a pass across the royal road just taken")
 	var later: RoleContext = _make_ctx(slot)
+	later.fed_from = across.fed_from
 	later.dispatch_period_ticks = reset_ticks
 	c.decide(later)
 	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED, "held: he tracked the carry")
+	c.reset()
+	var same: RoleContext = _make_ctx(slot)
+	same.fed_from = Vector3(-7.0, 0.0, OPP_NET_Z + 8.0)
+	c.decide(same)
+	assert_eq(c._shot_history(), AIShotOdds.History.FED_SAME, "a pass from his own side")
 	c.decide(_make_ctx(Vector3(-1.2, 0.0, OPP_NET_Z - 1.0)))
 	c.decide(_make_ctx(Vector3(-2.0, 0.0, OPP_NET_Z + 1.5)))
 	assert_eq(c._shot_history(), AIShotOdds.History.WRAPPED, "out from behind the net")

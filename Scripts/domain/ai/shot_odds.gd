@@ -63,20 +63,32 @@ const _MIN_WEIGHT: float = 1e-4
 enum Stance { UPRIGHT, DOWN, POST_SEAL }
 # The play the shooter saw before he shot, which the keeper's read alone does
 # not tell apart: he carried the puck in, so the keeper tracked him (the SET and
-# DEKE cells); he has just taken it from a pass, so the keeper was set on
-# someone else (the caught feeds, and the decoys, a feed's limit); he came out
-# from behind the net (WRAP). ANY: not known, every cell. A shot now weighs only
-# the cells of its history: keepers who look alike and conceded differently,
-# because of how the play got there, are not one keeper.
-enum History { ANY, CARRIED, FED, WRAPPED }
-# Each cell's kind (_kind) and each History's kinds as a mask over them.
-enum CellKind { SET, DEKE, FEED, DECOY, WRAP }
+# DEKE cells); he has just taken a pass, so the keeper was set on someone else
+# (the caught feeds, and the decoys, a feed's limit), across the royal road
+# (FED_ACROSS: he had to push across his crease) or from the shooter's own side
+# of it (FED_SAME), or either (FED: the pass's side not known); he came out from
+# behind the net (WRAP). ANY: not known, every cell. A shot now weighs only the
+# cells of its history: keepers who look alike and conceded differently, because
+# of how the play got there, are not one keeper.
+enum History { ANY, CARRIED, FED, WRAPPED, FED_ACROSS, FED_SAME }
+# Each cell's kind (_kind) and each History's kinds as a mask over them. A feed
+# or a decoy crosses the royal road when its passer (the decoy carrier) and the
+# release are on different sides of it (crosses_royal_road).
+enum CellKind { SET, DEKE, FEED_ACROSS, FEED_SAME, DECOY_ACROSS, DECOY_SAME, WRAP }
+const _ACROSS: int = (1 << CellKind.FEED_ACROSS) | (1 << CellKind.DECOY_ACROSS)
+const _SAME_SIDE: int = (1 << CellKind.FEED_SAME) | (1 << CellKind.DECOY_SAME)
 const _HISTORY_KINDS: Array[int] = [
-	0b11111,
+	0b1111111,
 	(1 << CellKind.SET) | (1 << CellKind.DEKE),
-	(1 << CellKind.FEED) | (1 << CellKind.DECOY),
+	_ACROSS | _SAME_SIDE,
 	1 << CellKind.WRAP,
+	_ACROSS,
+	_SAME_SIDE,
 ]
+# Half the width of the royal road, the line straight out from the middle of the
+# net (m): a puck inside it is on neither side, and a pass into or out of it
+# crosses.
+const ROYAL_ROAD_HALF_M: float = 0.5
 
 # The field's lofts, in the order its outcome strings are stored.
 const LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
@@ -261,6 +273,36 @@ static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vect
 	for v: float in blend:
 		best = maxf(best, v)
 	return best
+
+
+# Whether a pass from lateral `from_x` to `to_x` (each from the middle of the
+# net) crosses the royal road: they lie on different sides of it, the road
+# itself a side of its own.
+static func crosses_royal_road(from_x: float, to_x: float) -> bool:
+	return _royal_road_side(from_x) != _royal_road_side(to_x)
+
+
+static func _royal_road_side(x: float) -> int:
+	if absf(x) <= ROYAL_ROAD_HALF_M:
+		return 0
+	return 1 if x > 0.0 else -1
+
+
+# A field row's CellKind: a feed's and a decoy's by whether its passer (the
+# decoy carrier) at `from_x` and the release spot at `spot_x` straddle the road.
+static func _cell_kind(kind: String, from_x: float, spot_x: float) -> int:
+	match kind:
+		"FEED":
+			return CellKind.FEED_ACROSS if crosses_royal_road(from_x, spot_x) \
+					else CellKind.FEED_SAME
+		"DECOY":
+			return CellKind.DECOY_ACROSS if crosses_royal_road(from_x, spot_x) \
+					else CellKind.DECOY_SAME
+		"DEKE":
+			return CellKind.DEKE
+		"WRAP":
+			return CellKind.WRAP
+	return CellKind.SET
 
 
 # The odds a shot from `release` at an EMPTY net at `goal` goes in: aimed at the
@@ -550,7 +592,7 @@ static func _build() -> void:
 		var pre := Vector3(float(t[9]), 0.0, float(t[10]))
 		var now := Vector3(float(t[16]), 0.0, float(t[17]))
 		_is_feed[c] = 1 if kind == "FEED" else 0
-		_kind[c] = CellKind.get(kind, CellKind.SET)
+		_kind[c] = _cell_kind(kind, float(t[5]), float(t[1]))
 		_one_timer[c] = 1 if mode == "O" else 0
 		# A feed caught and charged is also the keeper as the receiver finds him.
 		_is_shot_sample[c] = 1 if kind != "FEED" or mode == "K" else 0

@@ -228,6 +228,10 @@ var _state: State = State.OFF_PUCK
 # Identity / orientation
 var _peer_id: int = 0
 var _team_id: int = 0
+# The pass this bot is on: who released the puck it is chasing or holds, and
+# where he stood (RoleContext.fed_from). -1 / INF: not a teammate's release.
+var _fed_by: int = -1
+var _fed_from: Vector3 = Vector3.INF
 # +1 if own goal is at +GOAL_LINE_Z (Team 0), -1 for Team 1.
 # See GameManager._assign_goals_to_teams for the source of truth.
 var _own_goal_dir: float = 1.0
@@ -1252,6 +1256,27 @@ func _state_off_puck(input: InputState, snapshot: WorldSnapshot, self_pos: Vecto
 		_set_state(State.CHASE_PUCK)
 
 
+# Holds where a teammate's release left from while the puck is loose off him and
+# through this bot's own possession of it; anyone else's puck clears it.
+func _track_feed(snapshot: WorldSnapshot) -> void:
+	if snapshot == null or snapshot.puck_state == null:
+		return
+	var carrier: int = snapshot.puck_state.carrier_peer_id
+	if carrier == _peer_id:
+		return
+	var releaser: int = snapshot.loose_puck_released_by if carrier == -1 else -1
+	if releaser == -1 or releaser == _peer_id \
+			or _team_id_by_peer.get(releaser, -1) != _team_id:
+		_fed_by = -1
+		_fed_from = Vector3.INF
+		return
+	if releaser == _fed_by:
+		return
+	var passer: SkaterNetworkState = snapshot.skater_states.get(releaser)
+	_fed_by = releaser
+	_fed_from = passer.position if passer != null else snapshot.puck_state.position
+
+
 # Fills the reused RoleContext (_role_ctx — never a fresh allocation, this runs per
 # dispatch per bot) with the read-only inputs every role-behavior decide() needs.
 func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
@@ -1290,6 +1315,8 @@ func _build_role_context(snapshot: WorldSnapshot, self_pos: Vector3,
 	_holds.configure_from(ctx)
 	ctx.self_stagger_timer = self_state.stagger_timer if self_state != null else 0.0
 	ctx.self_settle_s = self_state.settle_left_s if self_state != null else 0.0
+	_track_feed(snapshot)
+	ctx.fed_from = _fed_from
 	ctx.pursuit_standoff_m = _pursuit_standoff_m
 	ctx.pass_speed_scale = _pass_speed_scale
 	ctx.check_aggression = _check_aggression

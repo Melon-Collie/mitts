@@ -210,6 +210,7 @@ func test_a_query_of_its_own_leaves_the_workers_untouched() -> void:
 # reads it too: the main-thread game code reaches it only through its own query.
 func test_the_main_thread_reads_the_field_through_its_own_query() -> void:
 	var allowed: Array[String] = ["AIShotOdds.Query", "AIShotOdds.Stance", "AIShotOdds.History",
+			"AIShotOdds.crosses_royal_road",
 			"AIShotOdds.prepare", "AIShotOdds.native_factory", "AIShotOdds.attach_native"]
 	var checked: int = 0
 	for f: String in DirAccess.get_files_at("res://Scripts/game"):

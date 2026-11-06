@@ -128,7 +128,7 @@ const GOALIE_SHADOW_HALF_M: float = 0.3
 # How long a keeper needs, from a shooter taking the puck, to have read him and
 # set on him from anywhere across the crease: his read, then a push the width of
 # the mouth. A shooter who has had the puck no longer than this faces a keeper
-# still set on the play before (AIShotOdds.History.FED).
+# still set on the play before (AIShotOdds.History).
 static func goalie_reset_s() -> float:
 	return goalie_leg_delay_s + 2.0 * GameRules.NET_HALF_WIDTH / GOALIE_MAX_LATERAL_SPEED_MPS
 

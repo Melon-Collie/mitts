@@ -32,11 +32,11 @@ const WRAP_MAX_OUT_M: float = 3.5
 const SCENARIOS: Array[String] = ["SET", "FEED3_OT", "FEED3_CS", "FEED6_OT", "FEED6_CS",
 		"DECOY", "DEKE", "WRAP"]
 
-# The play a shooter saw before each staging (AIShotOdds.History).
+# The play a shooter saw before each carried staging (AIShotOdds.History); a
+# feed's and a decoy's are by whether the pass crossed the royal road (_history).
 const HISTORY: Dictionary = {
 	"SET": AIShotOdds.History.CARRIED, "DEKE": AIShotOdds.History.CARRIED,
-	"FEED3_CS": AIShotOdds.History.FED, "FEED6_CS": AIShotOdds.History.FED,
-	"DECOY": AIShotOdds.History.FED, "WRAP": AIShotOdds.History.WRAPPED,
+	"WRAP": AIShotOdds.History.WRAPPED,
 }
 
 var _goal := Vector3(0.0, 0.0, GOAL_Z)
@@ -101,6 +101,20 @@ func _stager_for(spot: Vector3, scenario: String) -> Callable:
 	return func() -> Vector3: return _s.stage_set(spot)
 
 
+# The play the shooter at `spot` saw in `scenario`: a feed or a decoy across the
+# royal road or from his own side of it, as the bot reads it.
+static func _history(spot: Vector3, scenario: String) -> int:
+	var from_x: float
+	if _feed_m(scenario) > 0.0:
+		from_x = spot.x + _inward(spot) * _feed_m(scenario)
+	elif scenario == "DECOY":
+		from_x = -spot.x if absf(spot.x) > 1.5 else spot.x + 4.0
+	else:
+		return HISTORY[scenario]
+	return AIShotOdds.History.FED_ACROSS if AIShotOdds.crosses_royal_road(from_x, spot.x) \
+			else AIShotOdds.History.FED_SAME
+
+
 static func _sigma_m(release: Vector3) -> float:
 	return AIShotOdds.REFERENCE_SPREAD_RAD \
 			* maxf(Vector2(release.x, release.z - GOAL_Z).length(), 0.5)
@@ -131,7 +145,7 @@ func _cell(spot: Vector3, scenario: String) -> Dictionary:
 				Vector3(pre.position_x, 0.0, pre.position_z), true)
 		blind = live
 	else:
-		var history: int = HISTORY[scenario]
+		var history: int = _history(spot, scenario)
 		live = AIShotValue.now(release, _goal, keeper, gs.velocity_x, stance, gs.rotation_y,
 				history)
 		blind = AIShotValue.now(release, _goal, keeper, gs.velocity_x, stance, gs.rotation_y)

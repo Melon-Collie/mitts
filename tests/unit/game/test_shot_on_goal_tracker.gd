@@ -1020,14 +1020,28 @@ func test_shots_on_goal_changed_signal_fires() -> void:
 
 # ── The play the keeper saw (the xG stat's history) ──────────────────────────
 
-func test_a_shot_off_a_fresh_pickup_reads_as_fed_then_carried() -> void:
+func test_a_shot_off_a_pass_reads_its_side_until_the_keeper_resets() -> void:
 	_add_player(10, 0)
+	_add_player(11, 0)
 	var reset: float = AIGoalieModel.goalie_reset_s()
 	tracker.on_pickup(10)
 	tracker.tick(reset * 0.5)
 	tracker.on_shot_started(10)
-	assert_eq(tracker.release_history(), AIShotOdds.History.FED,
-			"the keeper is still set on the play before")
+	tracker.note_shot_origin(Vector3(3.0, 0.0, -20.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.CARRIED,
+			"a puck nobody passed him: the keeper watched him have it")
+	tracker.on_pickup(11)
+	tracker.tick(reset * 0.5)
+	tracker.on_shot_started(11)
+	tracker.note_shot_origin(Vector3(-4.0, 0.0, -22.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED_ACROSS,
+			"10's pass from x 3 to x -4 crossed the royal road")
+	tracker.on_pickup(10)
+	tracker.tick(reset * 0.5)
+	tracker.on_shot_started(10)
+	tracker.note_shot_origin(Vector3(-6.0, 0.0, -23.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED_SAME,
+			"11's pass from x -4 to x -6 stayed on his side")
 	tracker.on_pickup(10)
 	tracker.tick(reset + 0.1)
 	tracker.on_shot_started(10)
@@ -1040,8 +1054,12 @@ func test_one_timers_and_tips_read_as_fed() -> void:
 	_add_player(11, 0)
 	tracker.on_pickup(10)
 	tracker.tick(5.0)
+	tracker.on_shot_started(10)
+	tracker.note_shot_origin(Vector3(5.0, 0.0, -21.0))
 	tracker.on_shot_started(11, true)
-	assert_eq(tracker.release_history(), AIShotOdds.History.FED, "a one-timer off a feed")
+	tracker.note_shot_origin(Vector3(-3.0, 0.0, -22.0))
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED_ACROSS,
+			"a one-timer off a feed across the royal road")
 	tracker.on_pickup(10)
 	tracker.tick(5.0)
 	tracker.on_shot_started(10)
