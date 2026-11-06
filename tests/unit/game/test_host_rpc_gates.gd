@@ -79,3 +79,17 @@ func test_a_client_ignores_a_snapshot_ack() -> void:
 	NetworkManager._peer_snapshot_acks.erase(0)
 	NetworkManager.receive_snapshot_ack(41)
 	assert_false(NetworkManager._peer_snapshot_acks.has(0))
+
+
+func test_a_peer_told_to_load_is_not_dropped_while_it_loads() -> void:
+	# Scene changes load synchronously; a slow machine sends nothing for longer
+	# than the 5 s liveness timeout. Traffic already in flight when the grace is
+	# granted (here an input batch, from sender 0 outside an RPC) must not wipe it.
+	var now: float = NetworkManager.local_time()
+	NetworkManager.is_host = true
+	NetworkManager._peer_last_seen[0] = now
+	NetworkManager._grant_load_grace(0)
+	NetworkManager.receive_input_batch(_one_input_batch())
+	assert_gt(NetworkManager._peer_last_seen[0] - now,
+			NetworkManager._PEER_LIVENESS_TIMEOUT_S, "the grace outlasts the timeout")
+	NetworkManager._peer_last_seen.erase(0)

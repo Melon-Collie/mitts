@@ -312,6 +312,13 @@ const _KICK_FLUSH_DELAY_S: float = 0.5
 # flowing. Bots never enter here (no real connection); offline mode stays empty.
 var _peer_last_seen: Dictionary[int, float] = {}
 const _PEER_LIVENESS_TIMEOUT_S: float = 5.0
+# A peer told to change scene loads it synchronously and sends nothing until it
+# is done, which a slow machine can take longer than the timeout to do. Its
+# liveness clock is pushed this far ahead when it is told, and traffic only ever
+# moves the clock forward — packets already in flight when the grace is granted
+# would otherwise wipe it before the load began. A peer that dies mid-load is
+# still dropped once the grace runs out.
+const _PEER_LOAD_GRACE_S: float = 30.0
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
@@ -1441,7 +1448,7 @@ func receive_input_batch(data: PackedByteArray) -> void:
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	# Liveness: stamp actual receipt time (before any NetworkSimManager delay).
 	if _peer_last_seen.has(sender_id):
-		_peer_last_seen[sender_id] = local_time()
+		_peer_last_seen[sender_id] = maxf(_peer_last_seen[sender_id], local_time())
 	if not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
 			_input_rate_window_start, _input_rate_count):
 		return
@@ -1583,7 +1590,7 @@ func send_ping(client_send_time: float) -> void:
 		return
 	var peer_id := multiplayer.get_remote_sender_id()
 	if _peer_last_seen.has(peer_id):
-		_peer_last_seen[peer_id] = local_time()
+		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id], local_time())
 	NetworkSimManager.send(
 		func(cst: float, pid: int) -> void:
 			receive_pong.rpc_id(pid, cst, local_time()),
@@ -2433,6 +2440,7 @@ func send_join_in_progress(peer_id: int, config: Dictionary) -> void:
 	var rs: int = config.get("rule_set", pending_rule_set)
 	var gid: String = config.get("game_id", "")
 	var ts: int = config.get("team_size", pending_team_size)
+	_grant_load_grace(peer_id)
 	notify_join_in_progress.rpc_id(peer_id,
 		config.num_periods, config.period_duration,
 		config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts)
@@ -2468,6 +2476,12 @@ func sync_lobby_roster(roster: Array) -> void:
 	pending_lobby_roster = roster
 	lobby_roster_synced.emit(roster)
 
+func _grant_load_grace(peer_id: int) -> void:
+	if _peer_last_seen.has(peer_id):
+		_peer_last_seen[peer_id] = maxf(_peer_last_seen[peer_id],
+				local_time() + _PEER_LOAD_GRACE_S)
+
+
 func send_game_start(config: Dictionary) -> void:
 	var hslot: int = int(config.get("home_color_slot", TeamColorRegistry.DEFAULT_HOME_SLOT))
 	var aslot: int = int(config.get("away_color_slot", TeamColorRegistry.DEFAULT_AWAY_SLOT))
@@ -2479,6 +2493,7 @@ func send_game_start(config: Dictionary) -> void:
 	pending_rule_set = rs
 	pending_team_size = ts
 	for peer_id: int in connected_peer_ids():
+		_grant_load_grace(peer_id)
 		notify_game_start.rpc_id(peer_id,
 			config.num_periods, config.period_duration,
 			config.ot_enabled, config.ot_duration, hslot, aslot, rs, gid, ts)
@@ -2637,6 +2652,7 @@ func notify_return_to_lobby(roster: Array) -> void:
 
 func send_return_to_lobby_to_all(roster: Array) -> void:
 	for peer_id: int in connected_peer_ids():
+		_grant_load_grace(peer_id)
 		notify_return_to_lobby.rpc_id(peer_id, roster)
 	pending_lobby_roster = roster
 	return_to_lobby_received.emit(roster)
