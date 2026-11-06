@@ -3446,9 +3446,8 @@ var _live_puck_view := PuckView.new()
 
 # Live puck: for a local player and for a bot, the sim and the puck view share
 # one clock, so "what the shooter saw" is simply the puck. RemoteController
-# overrides this — on the host a remote shooter's sim runs one input lead behind
-# the puck they aimed at, and judging the swing against the host's live puck
-# would slide their timing window by that lead.
+# reads the same instant out of the host's buffer, since a remote's input can be
+# applied a frame or more after its stamp.
 func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
 	_sample_live_puck_view(out)
 

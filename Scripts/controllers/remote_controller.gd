@@ -16,24 +16,19 @@ func set_puck_history_provider(provider: Callable) -> void:
 	_puck_history_provider = provider
 
 
-# The puck this remote shooter was aiming at, one INPUT LEAD before the tick the
-# host replays their swing on.
-#
-# The client applied this input at its own estimate of host time one lead
-# before `host_timestamp`, and the host replays it at `host_timestamp` — so the
-# host's live puck is a whole lead further down the feed than the one the player
-# swung at. That offset is the ONLY lag compensation the one-timer needs now
-# that the shot fires off the input stream instead of an arrival-timed claim RPC.
-#
-# The lead never rides the per-input wire, so it is rebuilt from the host's own
-# ping to this peer. Falls back to the live puck whenever the buffer has no
-# sample (warmup, or a stamp older than the buffer).
+# The puck this remote shooter was aiming at. Its client draws the loose puck on
+# the render clock — host time plus its input lead, its input stamp — and its
+# tick reads the puck the previous tick drew, so the swing stamped `S` was judged
+# against the puck at `S` less one tick. That is the puck the host's own player
+# reads off the live puck at the same point of a tick; it comes out of the buffer
+# here because a remote's input can pop a frame or more overdue. Falls back to
+# the live puck whenever the buffer has no sample (warmup, or a stamp older than
+# the buffer).
 func sample_shooter_puck_view(input: InputState, out: SkaterController.PuckView) -> void:
 	super(input, out)
 	if not _is_host or _puck_history_provider.is_null():
 		return
-	_puck_history_provider.call(
-			input.host_timestamp - NetworkManager.peer_input_lead_s(net_peer_id), out)
+	_puck_history_provider.call(input.host_timestamp - Constants.TICK_DURATION, out)
 
 
 # The host arms this carrier's caught-one-timer window on the tick it grants the
