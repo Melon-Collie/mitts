@@ -38,9 +38,13 @@ const SPOT_X: Array[float] = [-12.0, -10.0, -8.0, -6.0, -4.0, -2.0, 0.0, 2.0, 4.
 		10.0, 12.0]
 const SPOT_FWD: Array[float] = [0.6, 1.5, 2.5, 3.5, 4.5, 6.0, 7.5, 9.5, 12.0, 15.0, 17.5, 19.5]
 const DEKE_ACROSS_M: float = 2.0
-# Signed lateral offsets of the passer from the receiver, and feed paces.
-const FEED_OFFSETS_M: Array[float] = [-6.0, -3.5, -1.5, 1.5, 3.5, 6.0]
-const FEED_SPEEDS_M_S: Array[float] = [12.0, 20.0]
+# Signed lateral offsets of the passer from the receiver, and feed paces. At a
+# sharp angle what the keeper concedes to a one-timer jumps with a metre of feed
+# or a few m/s of pace (whether his push beats the shot turns on when he
+# commits), so the samples are dense enough for the kernel to average over
+# several of them: a feed is priced at what feeds like it concede.
+const FEED_OFFSETS_M: Array[float] = [-6.0, -4.5, -3.5, -2.5, -1.5, 1.5, 2.5, 3.5, 4.5, 6.0]
+const FEED_SPEEDS_M_S: Array[float] = [12.0, 16.0, 20.0]
 # Decoy carriers: lateral offsets from the spot, out to a cross-ice play's (a
 # keeper pulled further than the field samples reads as the nearest cell, set on
 # the shot), and distances from the net along the spot's own bearing (in tight
