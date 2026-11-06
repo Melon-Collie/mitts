@@ -373,7 +373,7 @@ batch below goes through deflate, 291 B to ~119 B (~11 KB/s per client at 90 Hz)
 The delta row sends each client its snapshot XOR the newest one it acked
 (`SnapshotDelta`), then compresses: ~344 B a snapshot on the same capture, with
 10% loss and acks three broadcasts late, every rebuilt snapshot byte-exact.
-Spectators send no acks and still get whole snapshots.
+Spectators ack through their own 15 Hz message, since they send no input batches.
 
 The other direction is the input batch: 3 B + 12 × 24 B inputs (24 when the
 client measures >10% loss), sent at `INPUT_RATE`: 35 KB/s per client at 120 Hz,

@@ -459,3 +459,5 @@ here whenever you bump, in the same format.
 #      the u16 baseline seq, before the body), and the input batch header grows
 #      to 6 B to carry that ack (u8 has-ack, u16 seq). Mixed builds must be
 #      refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
+# v95: receive_snapshot_ack RPC added — a spectator's delta ack, since it sends
+#      no input batches. The RPC set changed, so mixed builds must be refused.

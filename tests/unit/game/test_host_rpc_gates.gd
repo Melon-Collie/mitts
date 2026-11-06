@@ -60,3 +60,22 @@ func test_a_new_match_keeps_the_hosts_ping() -> void:
 	assert_eq(NetworkManager.get_peer_ping_ms(peer), 40)
 	NetworkManager._peer_ping_ms.erase(peer)
 	NetworkManager._peer_rtt_ema_ms.erase(peer)
+
+
+func test_a_spectators_snapshot_ack_sets_its_baseline() -> void:
+	# A spectator sends no input batches; without its own ack it got whole
+	# snapshots every broadcast.
+	NetworkManager.is_host = true
+	NetworkManager._peer_snapshot_acks.erase(0)
+	NetworkManager.receive_snapshot_ack(41)
+	assert_eq(NetworkManager._peer_snapshot_acks.get(0, -1), 41)
+	NetworkManager.receive_snapshot_ack(40)
+	assert_eq(NetworkManager._peer_snapshot_acks.get(0, -1), 41, "an older ack never shrinks the baseline")
+	NetworkManager._peer_snapshot_acks.erase(0)
+
+
+func test_a_client_ignores_a_snapshot_ack() -> void:
+	NetworkManager.is_host = false
+	NetworkManager._peer_snapshot_acks.erase(0)
+	NetworkManager.receive_snapshot_ack(41)
+	assert_false(NetworkManager._peer_snapshot_acks.has(0))

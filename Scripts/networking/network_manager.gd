@@ -408,6 +408,10 @@ var pending_reconnect_lobby_id: int = 0
 var pending_session_end_reason: String = ""
 
 var _input_timer: float = 0.0
+var _snapshot_ack_timer: float = 0.0
+# A third of a broadcast-window ack lag (SnapshotDelta.MAX_BASELINE_AGE at 45 Hz
+# is ~0.7 s).
+const _SNAPSHOT_ACK_INTERVAL_S: float = 1.0 / 15.0
 # Broadcast cadence. Counter ticks here every physics frame (see
 # `_physics_process`); the broadcast call itself fires from `try_broadcast`,
 # invoked end-of-tick by GameManager._capture_and_broadcast_post_physics
@@ -1078,6 +1082,14 @@ func _process(delta: float) -> void:
 				batch[i].write_bytes(buf, INPUT_BATCH_HEADER + i * InputState.BYTES_SIZE)
 			NetworkTelemetry.record_input_sent()
 			receive_input_batch.rpc_id(1, WirePacking.pack(buf, WirePacking.INPUT_MODE))
+	# A spectator sends no input batches, so its snapshot ack (the host's delta
+	# baseline) rides its own message, often enough to stay well inside the
+	# host's baseline window.
+	elif not is_host and _delta_receiver.newest_seq >= 0:
+		_snapshot_ack_timer += capped_delta
+		if _snapshot_ack_timer >= _SNAPSHOT_ACK_INTERVAL_S:
+			_snapshot_ack_timer = 0.0
+			receive_snapshot_ack.rpc_id(1, _delta_receiver.newest_seq)
 
 	if not is_host:
 		_ws_loss_window_timer += capped_delta
@@ -1474,6 +1486,17 @@ func _apply_input_batch(packed: PackedByteArray, sid: int) -> void:
 			continue
 		inputs.append(InputState.from_bytes(d, off))
 	input_batch_received.emit(sid, inputs)
+
+
+# A spectator's newest rebuilt snapshot: what an input batch carries for a player.
+@rpc("any_peer", "unreliable")
+func receive_snapshot_ack(seq: int) -> void:
+	if not is_host:
+		return
+	var sid: int = multiplayer.get_remote_sender_id()
+	if not _rate_ok(sid, _INPUT_BATCH_RATE_CAP_PER_S, _input_rate_window_start, _input_rate_count):
+		return
+	_note_snapshot_ack(sid, seq & SnapshotDelta.SEQ_MASK)
 
 
 # A peer's newest rebuilt snapshot, from its input batch. Kept only if newer:
