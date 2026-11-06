@@ -350,7 +350,9 @@ func _step_tick(delta: float) -> void:
 			var carrier_pid: int = view_carrier_pid
 			var in_poke_range: bool = false
 			var is_lift: bool = false
-			if carrier_team != _team_id and carrier_team != -1:
+			# Committed to a body check, the stick is off the ice: the host refuses
+			# both, so send neither.
+			if carrier_team != _team_id and carrier_team != -1 and not skater.hit_committed:
 				if skater.stick_check_phase == StickCheckRules.Phase.HOOK:
 					# Hooking — under the carrier's shaft for a stick lift.
 					is_lift = true

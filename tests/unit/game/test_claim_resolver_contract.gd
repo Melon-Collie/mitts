@@ -139,3 +139,15 @@ func _claim_handlers(src: String) -> PackedStringArray:
 	if inside:
 		out.append(body)
 	return out
+
+
+# A skater committed to a body check has his stick off the ice: the host's
+# present-time loop (PuckController._check_interactions) refuses him a pickup, a
+# poke and a stick lift. The claim paths must refuse the same, judged on the
+# rewound snapshot, or only a remote player can strip a carrier mid-check.
+func test_the_stick_play_resolvers_refuse_a_committed_checker() -> void:
+	for file: String in ["pickup_claim_resolver.gd", "poke_claim_resolver.gd",
+			"stick_lift_claim_resolver.gd"]:
+		var src: String = _sources.get(file, "")
+		assert_true(src.contains(".hit_committed:"),
+				"%s must refuse a claimant committed to a body check" % file)
