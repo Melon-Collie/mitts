@@ -17,10 +17,11 @@ extends RefCounted
 # .arrival_race, its band widened by the arrival clock's error). A read that
 # does not come off leaves him the continuation where he stands (_taken); one
 # that does is worth the continuation where it ends plus a premium that decays
-# with the time it takes (_toward), so standing still never pays. Entry
-# worths depend only on fill()'s defence, so each is priced once per fill, and
-# only when a read could use it: its worth on empty ice, which a defence only
-# lowers, bounds it until then.
+# with the time it takes (_toward), so standing still never pays. An entry's
+# worth against fill()'s defence is priced once per fill, and only when a read
+# could use it: its worth on empty ice, which a defence only lowers, bounds it
+# until then. With a body pushed it is priced again with him on the ice, when
+# that bound still lets it win.
 #
 # Every shot is against a keeper who tracked the play: set and square
 # (AIShotValue.set_keeper). Not modelled: passes — one man carries — and where
@@ -205,6 +206,8 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 		var kept: float = race * _skate_keep(pos, _entry_spots[i], vel, defence)
 		if _taken(base, kept, timed) <= best:
 			continue
+		if _pushed > 0:
+			worth = _price_entry(_entry_spots[i])
 		best = maxf(best, _taken(base, kept, _toward(base_at(_entry_spots[i], t,
 				_arrive_vel(pos, _entry_spots[i], skate_s)), worth, t)))
 	return best
@@ -351,12 +354,14 @@ func _shot(pos: Vector3) -> float:
 
 # The defence-free half of a shot from `from` (`to` INF: AIActionScoring
 # .shot_quality) or of a one-timer off a feed from `from` to `to` at `speed`
-# (AIShotValue.feed), against the keeper at `keeper`.
+# (AIShotValue.feed), against the keeper at `keeper`, who has tracked the man
+# with the puck (History.CARRIED).
 func _goalie_half(from: Vector3, to: Vector3, keeper: Vector3, speed: float) -> float:
 	for i: int in _memo_value.size():
 		if _memo_from[i] == from and _memo_to[i] == to and _memo_keeper[i] == keeper:
 			return _memo_value[i]
-	var v: float = AIActionScoring.shot_quality(from, _goal, keeper) if not to.is_finite() \
+	var v: float = AIActionScoring.shot_quality(from, _goal, keeper, 0.0,
+			AIShotOdds.Stance.UPRIGHT, AIShotOdds.History.CARRIED) if not to.is_finite() \
 			else AIShotValue.feed(from, to, speed, _goal, keeper, true)
 	if _memo_value.size() < GOALIE_MEMO_CAP:
 		_memo_from.append(from)
@@ -454,8 +459,8 @@ func threat_of_feed(from: Vector3, to: Vector3, to_vel: Vector3,
 
 
 # A hypothetical defender added to the read's (the caller's) arrays for a read,
-# and taken off again: a candidate spot priced with our body on it. The entries
-# keep their worth against fill()'s defence; the races and the zone read see him.
+# and taken off again: a candidate spot priced with our body on it, the entries'
+# worth included (entry_at).
 # Caps ride along only when the read's caps were index-matched.
 func push_defender(pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> void:
 	if _defender_caps.size() == _defenders.size():

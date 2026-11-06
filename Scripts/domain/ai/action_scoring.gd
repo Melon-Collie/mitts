@@ -239,13 +239,14 @@ static func score_shoot_value(
 
 # score_shoot_value's goalie half: the odds the shot beats the keeper, before
 # any defender. Reads no defender, so one spot's is good against any defence
-# (test_shot_quality_is_the_seams_goalie_half).
+# (test_shot_quality_is_the_seams_goalie_half). `history` as score_shoot_value's.
 static func shot_quality(shooter: Vector3, attacking_goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float = 0.0, stance: int = AIShotOdds.Stance.UPRIGHT) -> float:
+		keeper_vel_x: float = 0.0, stance: int = AIShotOdds.Stance.UPRIGHT,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if keeper_pos.is_finite():
 		return AIShotValue.now(
 				AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper_pos),
-				attacking_goal, keeper_pos, keeper_vel_x, stance)
+				attacking_goal, keeper_pos, keeper_vel_x, stance, NAN, history)
 	return AIShotValue.set_keeper(shooter, attacking_goal)
 
 
@@ -570,6 +571,7 @@ static func counter_rush_cost_at(
 	#
 	# `in_xg` is the carrier's unit: the shot against a keeper set and square,
 	# as AIPossessionValue prices every shot. A memo must only ever hold one.
+	# Otherwise our keeper as he stands, who has watched the counter carried in.
 	var cover_count: int = _scratch_counter_cover.size()
 	var threat: float = -1.0
 	if cover_count < threat_by_cover.size():
@@ -580,7 +582,9 @@ static func counter_rush_cost_at(
 					counter_point, our_net, Vector3.INF, _scratch_counter_cover)
 		else:
 			threat = score_shoot_value(
-					counter_point, our_net, our_goalie_pos, _scratch_counter_cover)
+					counter_point, our_net, our_goalie_pos, _scratch_counter_cover, 0.0,
+					AIShotOdds.Stance.UPRIGHT, AIBotMechanics.WRISTER_SHOT_SPEED_M_S, [],
+					-1.0, NAN, false, AIShotOdds.History.CARRIED)
 		if cover_count < threat_by_cover.size():
 			threat_by_cover[cover_count] = threat
 	return loss_prob * threat * delay_discount(t_counter)

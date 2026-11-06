@@ -27,6 +27,7 @@ func _ctx(self_pos: Vector3, self_vel: Vector3, skaters: Array) -> RoleContext:
 	puck.carrier_peer_id = 1
 	puck.position = self_pos
 	snap.puck_state = puck
+	snap.goalie_states[1 - TEAM_ID] = _keeper_on(Vector3(0.0, 0.0, -OUR_NET_Z), self_pos)
 	var ctx := RoleContext.new()
 	ctx.snapshot = snap
 	ctx.self_pos = self_pos
@@ -38,6 +39,21 @@ func _ctx(self_pos: Vector3, self_vel: Vector3, skaters: Array) -> RoleContext:
 	ctx.own_goal_dir = 1.0
 	ctx.team_id_by_peer = team_map
 	return ctx
+
+
+# A keeper where the live one stands for a puck at `puck`: his depth
+# (AIGoalieModel.keeper_depth) along the puck's line, facing it. A puck on or
+# behind the goal line leaves him at the back of the paint, centred.
+func _keeper_on(goal: Vector3, puck: Vector3) -> GoalieNetworkState:
+	var g := GoalieNetworkState.new()
+	var forward: float = (puck.z - goal.z) * -signf(goal.z)
+	var depth: float = AIGoalieModel.keeper_depth(goal, puck)
+	var at: Vector3 = goal + (puck - goal) * (depth / forward) if is_finite(depth) \
+			else AIGoalieModel.at_depth(goal, goal, KeeperPositioning.DEPTH_FLOOR_M)
+	g.position_x = at.x
+	g.position_z = at.z
+	g.rotation_y = atan2(-(puck.x - at.x), -(puck.z - at.z))
+	return g
 
 
 func _best(ctx: RoleContext) -> float:

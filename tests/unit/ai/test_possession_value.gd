@@ -326,3 +326,27 @@ func test_waiting_never_costs_the_continuation() -> void:
 	var open: AIPossessionValue = _read(_none)
 	assert_gte(open.at(slot, 30.0), open.base_at(slot) - 1e-6,
 			"a look long gone leaves the continuation")
+
+
+func test_a_pushed_body_reads_as_one_in_the_defence() -> void:
+	# A candidate pushed onto a read is a man on the ice for every part of it, the
+	# entries a man in the zone could skate back out to included: a body goal-side
+	# of a carrier deep in the zone shuts his way back in as well as his drive.
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 11
+	for trial: int in 30:
+		var defenders: Array[Vector3] = []
+		for _k: int in rng.randi_range(0, 3):
+			defenders.append(Vector3(rng.randf_range(-12.0, 12.0), 0.0,
+					rng.randf_range(-28.0, 28.0)))
+		var body := Vector3(rng.randf_range(-12.0, 12.0), 0.0, rng.randf_range(-28.0, 0.0))
+		var spot := Vector3(rng.randf_range(-12.0, 12.0), 0.0, rng.randf_range(-28.0, 0.0))
+		var pushed: AIPossessionValue = _read(defenders.duplicate())
+		var before: float = pushed.at(spot)
+		pushed.push_defender(body, Vector3.ZERO, null)
+		var with_him: Array[Vector3] = defenders.duplicate()
+		with_him.append(body)
+		assert_almost_eq(pushed.at(spot), _read(with_him).at(spot), 1e-6,
+				"trial %d: %s pushed, the man at %s" % [trial, body, spot])
+		pushed.pop_defender()
+		assert_almost_eq(pushed.at(spot), before, 1e-6, "trial %d: taken off again" % trial)
