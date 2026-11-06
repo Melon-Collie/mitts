@@ -124,6 +124,10 @@ var _peers_scratch: Array[int] = []
 var _decoded_peers_scratch: Array[int] = []
 
 
+# The local skater's block, held until the rest of the packet is buffered.
+var _local_controller: LocalController = null
+var _local_state: SkaterNetworkState = null
+var _local_depth: int = 0
 # The packet is sized ONCE and written at offsets — one allocation per
 # broadcast. Assembling it by appending a block at a time (header, per-skater id
 # and state, puck, per-goalie, game state) is ~26 throwaway PackedByteArrays per
@@ -244,8 +248,9 @@ func decode_world_state(data: PackedByteArray) -> void:
 		var skater_state := _decode_skater_quantized(data, skater_off)
 		_fill_pin_offset(skater_state, puck_xz)
 		if record.is_local and not NetworkManager.is_replay_mode():
-			(record.controller as LocalController).reconcile(skater_state)
-			queue_depth_feedback.emit(depth)
+			_local_controller = record.controller as LocalController
+			_local_state = skater_state
+			_local_depth = depth
 		else:
 			record.controller.apply_network_state(skater_state, host_ts)
 	# Puck: 12B pos+vel + 1B carrier index. 0xFF is the "no carrier"
@@ -265,11 +270,13 @@ func decode_world_state(data: PackedByteArray) -> void:
 			push_warning("WorldStateCodec: truncated goalie block %d" % gi)
 			return
 		if not skip_actors:
+			_reconcile_local()
 			goalie_controllers[gi].apply_state(_decode_goalie_quantized(data, o), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE
 	# Game state
 	if data.size() < o + GAME_STATE_BLOCK_SIZE:
+	_reconcile_local()
 		return
 	var score0: int = data.decode_u8(o)
 	var score1: int = data.decode_u8(o + 1)
@@ -281,6 +288,22 @@ func decode_world_state(data: PackedByteArray) -> void:
 
 func _apply_game_state(score0: int, score1: int, new_phase: GamePhase.Phase,
 		period: int, t_remaining: float) -> void:
+# The local reconcile runs once every remote, the puck and the goalies of this
+# packet are buffered: its replay samples remotes (contacts, the press) out of
+# their buffers, and a remote decoded after the local block would otherwise be
+# read a broadcast stale, by packet order.
+func _reconcile_local() -> void:
+	if _local_controller == null:
+		return
+	var controller: LocalController = _local_controller
+	var state: SkaterNetworkState = _local_state
+	_local_controller = null
+	_local_state = null
+	if is_instance_valid(controller):
+		controller.reconcile(state)
+		queue_depth_feedback.emit(_local_depth)
+
+
 	var phase_changed_this_tick: bool = _state_machine.apply_remote_state(
 			score0, score1, new_phase, period, t_remaining)
 	if phase_changed_this_tick:
