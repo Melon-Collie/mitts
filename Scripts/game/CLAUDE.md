@@ -170,8 +170,9 @@ The rest is judgement the seams can't make for you:
   self or a teammate.
 
 There is no contest window on poke / stick-lift / stick-tie / hit —
-first valid claim wins, and simultaneous claims are arbitrated by RPC arrival
-order (the loser sees `carrier == null` or a tie already held, and skips). Contested *pickups* are the exception and resolve
+first valid claim wins, and `DeferredClaimQueue` releases simultaneous claims in
+order of their self-view instant (the loser sees `carrier == null` or a tie
+already held, and skips). Contested *pickups* are the exception and resolve
 through `PuckCollisionRules.contested_pickup_velocity` instead.
 
 Full rewind and prediction rules: `Scripts/networking/CLAUDE.md`.

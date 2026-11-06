@@ -3736,11 +3736,10 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 			return
 		if _registry.resolve_peer_id(puck.carrier) != shooter_peer_id:
 			return
-	# Clamp every client-supplied parameter before it touches the sim
-	# (ShotReleaseRules): direction normalized + elevation-capped, power capped
-	# to the shooter's attribute-scaled maximum, rtt capped against the host's
-	# own ping measurement (an unclamped rtt forward-teleports the puck tens of
-	# meters via the release advance below).
+	# Defense in depth — nothing here is client-supplied, but every parameter is
+	# bounded before it touches the sim (ShotReleaseRules): direction normalized
+	# and elevation-capped, power capped to the shooter's attribute-scaled
+	# maximum, rtt capped against the host's own ping measurement.
 	if NetworkManager.is_host:
 		direction = ShotReleaseRules.sanitize_direction(direction)
 		if direction == Vector3.ZERO:
@@ -5430,8 +5429,8 @@ func _apply_bot_carrier_reaction_delay(snap: WorldSnapshot, delta: float) -> voi
 
 
 func _collect_existing_player_data() -> Array[Array]:
-	var carrier: Skater = puck.get_carrier() if puck != null else null
 	var existing: Array[Array] = []
+	var carrier: Skater = puck.get_carrier() if puck != null else null
 	for peer_id: int in _registry.all():
 		var r: PlayerRecord = _registry.get_record(peer_id)
 		var attrs: PlayerAttributes = r.attributes if r.attributes != null else PlayerAttributes.neutral()
@@ -5444,6 +5443,7 @@ func _collect_existing_player_data() -> Array[Array]:
 				carrier != null and r.skater == carrier])
 	return existing
 
+
 # The roster entry's carrier flag: a joiner's only word of who holds the puck,
 # since carrier events outlive the snapshot block by a second at most and the
 # carrier view is never read off world state. -1 when nobody carries.
@@ -5454,7 +5454,6 @@ static func roster_carrier_peer_id(player_data: Array) -> int:
 		if entry.size() > ROSTER_CARRIES_PUCK and bool(entry[ROSTER_CARRIES_PUCK]):
 			return int(entry[0])
 	return -1
-
 
 
 # ── Getters passed as Callables to collaborators ─────────────────────────────

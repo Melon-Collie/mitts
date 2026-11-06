@@ -16,7 +16,7 @@ extends RefCounted
 #             contact facts from rewound snapshots on receipt.
 #   receive_claim(hitter, victim, host_ts, interp_delay_ms) [host]
 #     → reject if claim stale, peers unknown, or rewound positions out of range
-#     → rewind hitter to host_ts + INPUT_LEAD_SEC (their own predicted body)
+#     → rewind hitter to self_view_time (host_ts + the claim's lead: their own predicted body)
 #       and victim to host_ts - interp_delay (the remote body they saw)
 #     → re-derive impulse from rewound velocities along hitter→victim normal,
 #       scaled by the hitter's weight (the same magnitude the host-observed
@@ -170,7 +170,7 @@ func receive_claim(hitter_peer_id: int, victim_peer_id: int, host_timestamp: flo
 	# The hitter is SELF-view, and that instant is past the newest capture on any
 	# link whose one-way is shorter than their input lead, so hitter_snap is
 	# silently the newest rather than the requested instant. Unlike the other
-	# three resolvers this feeds the CONTACT GEOMETRY directly rather than only a
+	# resolvers this feeds the CONTACT GEOMETRY directly rather than only a
 	# clamp: an under-caught hitter reads short on range and skews the contact
 	# normal. Velocity is deliberately left at the snapshot's — over a window
 	# bounded by the input lead, thrust is near-balanced by friction at skating

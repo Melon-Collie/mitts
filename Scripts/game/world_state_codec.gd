@@ -15,8 +15,10 @@ extends RefCounted
 #      u8 num_goalies, [goalie_bytes(142)] × num_goalies
 #      u8 score0, u8 score1, u8 phase, u8 period, u16 time_remaining
 #
-#    Total for 6 players + 2 goalies: 689 bytes (10 players: 941) — stays in a
-#    single packet, well under Steam's ~1200-byte unreliable cap. This matters: Steam (unlike ENet)
+#    Total for 6 players + 2 goalies: 689 bytes (10 players: 941), plus
+#    NetworkManager's trailing carrier-event block (1 B idle, +17 B per event in
+#    the last second, up to 16) — stays in a single packet under Steam's
+#    ~1200-byte unreliable cap except at 10 players with a full event block. This matters: Steam (unlike ENet)
 #    does NOT fragment unreliable messages, so an oversized snapshot would be
 #    dropped at send rather than split across datagrams.
 #
@@ -25,7 +27,7 @@ extends RefCounted
 #                      blade 3×s16@1cm, top_hand 3×s16@1cm,
 #                      facing u16 (0–TAU→0–65535), upper_body_rot s16 (−π–π→−32767–32767),
 #                      facing_angular_velocity s16@PI*10 rad/s, upper_body_angular_velocity s16@PI*10 rad/s,
-#                      last_processed_ts f32,
+#                      last_processed_ts u32@0.1ms,
 #                      flags u8 (shot_state[2:0]+elevation_level[4:3]+ghost[5]+blade_up[6]+stick_tied[7] v71),
 #                      shot_charge u8, stagger_timer u8@0.01s,
 #                      knockdown_timer u8@0.01s,
@@ -122,12 +124,12 @@ var _peers_scratch: Array[int] = []
 # index space carrier_idx resolves against. Same reuse argument — it is consumed
 # entirely within decode_world_state and never escapes.
 var _decoded_peers_scratch: Array[int] = []
-
-
 # The local skater's block, held until the rest of the packet is buffered.
 var _local_controller: LocalController = null
 var _local_state: SkaterNetworkState = null
 var _local_depth: int = 0
+
+
 # The packet is sized ONCE and written at offsets — one allocation per
 # broadcast. Assembling it by appending a block at a time (header, per-skater id
 # and state, puck, per-goalie, game state) is ~26 throwaway PackedByteArrays per
@@ -268,15 +270,15 @@ func decode_world_state(data: PackedByteArray) -> void:
 	for gi: int in mini(num_goalies, goalie_controllers.size()):
 		if o + GOALIE_BLOCK_SIZE > data.size():
 			push_warning("WorldStateCodec: truncated goalie block %d" % gi)
+			_reconcile_local()
 			return
 		if not skip_actors:
-			_reconcile_local()
 			goalie_controllers[gi].apply_state(_decode_goalie_quantized(data, o), host_ts)
 		o += GOALIE_BLOCK_SIZE
 	o += maxi(0, num_goalies - goalie_controllers.size()) * GOALIE_BLOCK_SIZE
+	_reconcile_local()
 	# Game state
 	if data.size() < o + GAME_STATE_BLOCK_SIZE:
-	_reconcile_local()
 		return
 	var score0: int = data.decode_u8(o)
 	var score1: int = data.decode_u8(o + 1)
@@ -286,8 +288,6 @@ func decode_world_state(data: PackedByteArray) -> void:
 	_apply_game_state(score0, score1, new_phase, period, t_remaining)
 
 
-func _apply_game_state(score0: int, score1: int, new_phase: GamePhase.Phase,
-		period: int, t_remaining: float) -> void:
 # The local reconcile runs once every remote, the puck and the goalies of this
 # packet are buffered: its replay samples remotes (contacts, the press) out of
 # their buffers, and a remote decoded after the local block would otherwise be
@@ -304,6 +304,8 @@ func _reconcile_local() -> void:
 		queue_depth_feedback.emit(_local_depth)
 
 
+func _apply_game_state(score0: int, score1: int, new_phase: GamePhase.Phase,
+		period: int, t_remaining: float) -> void:
 	var phase_changed_this_tick: bool = _state_machine.apply_remote_state(
 			score0, score1, new_phase, period, t_remaining)
 	if phase_changed_this_tick:
@@ -562,7 +564,7 @@ static func _write_skater_quantized(b: PackedByteArray, o: int, s: SkaterNetwork
 
 
 # Allocating wrapper: the standalone round-trip API the codec tests drive. The
-# broadcast path uses _write_skater_quantized directly (see _encode_buf).
+# broadcast path writes in place through _write_skater_quantized (encode_world_state).
 static func _encode_skater_quantized(s: SkaterNetworkState) -> PackedByteArray:
 	var b := PackedByteArray()
 	b.resize(SKATER_STATE_BYTES)

@@ -413,7 +413,7 @@ var _connect_timer: float = -1.0
 var input_delta: float = 1.0 / Constants.INPUT_RATE
 var state_delta: float = 1.0 / Constants.STATE_RATE
 # Number of physics ticks between broadcasts. PHYSICS_TICK / STATE_RATE
-# (120/60 = 2 — every other tick). Recomputed by `set_broadcast_rate`, a runtime
+# (90/45 = 2 — every other tick). Recomputed by `set_broadcast_rate`, a runtime
 # knob with no callers today, kept for future congestion response; the cadence
 # must not be downshifted per phase, since the client jitter window assumes
 # STATE_RATE packet spacing. Stall resilience: on a host main-thread freeze
@@ -1035,8 +1035,8 @@ func _process(delta: float) -> void:
 	if not is_host and _input_batch_provider.is_valid():
 		_input_timer += capped_delta
 		if _input_timer >= input_delta:
-			# One batch per _process call, so below 120 fps the remainder can only
-			# grow — cap it at one interval or a long sub-120 fps stretch banks
+			# One batch per _process call, so below INPUT_RATE fps the remainder can
+			# only grow — cap it at one interval or a long low-fps stretch banks
 			# minutes of "owed" sends and the client double-sends (one per render
 			# frame) long after the frame rate recovers. The 12/24-frame batch
 			# redundancy already covers the low-fps cadence itself.
@@ -1046,7 +1046,7 @@ func _process(delta: float) -> void:
 			_input_batch_provider.call(batch, batch_frames)
 			# Pre-sized once and written at offsets, rather than append_array-ing a
 			# fresh PackedByteArray per input (a throwaway buffer per input per
-			# batch, plus a realloc per append, 120x/s).
+			# batch, plus a realloc per append, INPUT_RATE times a second).
 			var buf: PackedByteArray = _input_batch_buf
 			buf.resize(3 + batch.size() * InputState.BYTES_SIZE)
 			# u16 client-measured downstream loss in basis points (0..10000 = 0..100%),
@@ -1128,9 +1128,8 @@ func _broadcast_state() -> void:
 	if is_offline_mode:
 		return
 	# Redundant carrier events ride the tail of every snapshot (SnapshotEventLog).
-	# PackedByteArray is copy-on-write, so this append can't mutate the replay
-	# recorder/file-writer copies taken inside get_world_state — replay frames
-	# stay event-free and decode_for_replay never sees the block.
+	# The replay recorder and file writer copy the frame inside get_world_state
+	# (`duplicate()`, `append_array`), so this append never reaches their frames.
 	_event_log.append_block(state, local_time())
 	NetworkTelemetry.record_world_state_sent()
 	for peer_id in connected_peer_ids():
@@ -1389,9 +1388,9 @@ func apply_local_attributes(attrs: PlayerAttributes) -> void:
 	local_attributes_changed.emit(attrs)
 
 
-# Cap on inputs per RPC. Matches the host queue depth in RemoteController so a
-# malicious peer can't force the loop into hundreds of failed decode iterations
-# by claiming count=255 with a short payload.
+# Cap on inputs per RPC, well above the 24-frame redundant window a client
+# sends, so a malicious peer can't force the loop into hundreds of failed decode
+# iterations by claiming count=255 with a short payload.
 const _MAX_INPUTS_PER_BATCH: int = 120
 
 @rpc("any_peer", "unreliable_ordered")
@@ -1423,8 +1422,8 @@ func _apply_input_batch(d: PackedByteArray, sid: int) -> void:
 		push_warning("oversized input batch from peer %d: count=%d" % [sid, count])
 		return
 	# Clients ship a redundant trailing window (12-24 frames) so a lost packet is
-	# covered by the next one — at 120 batches/s that makes ~119 of every 120
-	# records a duplicate the consumer's dedupe throws away. Peek each record's
+	# covered by the next one — with one new frame per batch, all but one of the
+	# 12-24 records is a duplicate the consumer's dedupe throws away. Peek each record's
 	# host_timestamp (u32 at offset 0 of the record) against the watermark the
 	# consumer reported and skip the decode entirely for stamps it already knows,
 	# instead of allocating an InputState per record and discarding it one call
@@ -1604,8 +1603,8 @@ func notify_pickup_claim_rejected() -> void:
 # StateBufferManager world-snapshot reconstructions and every input batch a
 # decode loop, so a modified client spamming them is a CPU lever. Caps sit
 # well above legitimate maxima (claims: client floors allow ~20/s per type →
-# 60/s combined headroom; input batches: ≤120/s by the send-timer clamp →
-# 200/s headroom) and drop silently beyond — a legit client can never hit them.
+# 60/s combined headroom; input batches: ≤INPUT_RATE (90/s) by the send-timer
+# clamp → 200/s headroom) and drop silently beyond — a legit client can never hit them.
 const _CLAIM_RATE_CAP_PER_S: int = 60
 const _INPUT_BATCH_RATE_CAP_PER_S: int = 200
 var _claim_rate_window_start: Dictionary[int, float] = {}

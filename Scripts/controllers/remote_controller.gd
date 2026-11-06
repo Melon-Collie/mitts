@@ -55,7 +55,7 @@ func one_timer_window_lag_grace() -> float:
 @export var position_smooth_time: float = 0.05
 
 var _input_queue: Array[InputState] = []
-# Stamp set for the input dedupe, hoisted out of receive_input_batch (120 batches/s
+# Stamp set for the input dedupe, hoisted out of receive_input_batch (90 batches/s
 # per client). Built lazily — see there — and never escapes the call.
 var _input_dedupe_scratch: Dictionary = {}
 var _fallback_input: InputState = InputState.new()
@@ -171,7 +171,7 @@ static func _input_ts_less(a: InputState, b: InputState) -> bool:
 
 # Returns this queue's DEDUPE WATERMARK: the newest stamp already known here,
 # whether processed or still queued. The host's decoder skips records at or below
-# it, so it never pays InputState.from_bytes for the ~119-in-120 redundant frames
+# it, so it never pays InputState.from_bytes for the redundant frames
 # a batch carries for loss resilience. Reported by the caller, which owns the
 # peer id (GameManager._on_input_batch_received).
 func receive_input_batch(batch: Array[InputState]) -> float:
@@ -180,7 +180,7 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 	# anything wildly outside is either a malicious peer or a desynced clock and
 	# would otherwise sit in the queue indefinitely (future) or fail the gate
 	# forever (past). The queue cap below already truncates older stragglers.
-	const FUTURE_SLACK_S: float = 0.1   # INPUT_LEAD_SEC (~25ms) + slack for jitter / clock convergence
+	const FUTURE_SLACK_S: float = 0.1   # INPUT_LEAD_SEC (~28 ms) + slack for jitter / clock convergence
 	const PAST_SLACK_S: float = 2.0     # generous: queue cap is ~0.5 s, this is 4x
 	var now: float = NetworkManager.estimated_host_time()
 	# The queue is kept sorted below, so its last entry is the newest stamp in it.
@@ -240,12 +240,10 @@ func receive_input_batch(batch: Array[InputState]) -> float:
 # the dropped span — the honest cost of inputs the network delivered too late —
 # instead of a session of staleness.
 #
-# SIZING (measured, 3-peer 5v5 host row + the host_input_queue_depth metric):
-# the queue runs 9-10 deep — that IS the stamp-lead cushion working — while the
-# front pops ~12 ms overdue in steady state. That 12 ms is not lateness: the
-# host renders ~100-110 fps against a 120 Hz tick (as measured), so physics ticks bunch two
-# to a frame and a pop lands up to a frame after its due instant. Ordinary
-# hitches add ~15-25 ms on top.
+# SIZING (measured on a 3-peer 5v5 host): the front pops ~12 ms overdue in
+# steady state on a healthy queue. That is not lateness: when the host renders
+# below the tick rate, physics ticks bunch two to a frame and a pop lands up to a
+# frame after its due instant. Ordinary hitches add ~15-25 ms on top.
 #
 # A trigger inside that band fires 4-12/s on a perfectly healthy deep queue, and
 # every fire discards real inputs the client already predicted with — one visible

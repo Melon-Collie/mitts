@@ -177,19 +177,19 @@ diagnosable: a queue is only "too deep" relative to the lead that filled it.
 
 | Key | Unit | Healthy | Meaning |
 |---|---|---|---|
-| `input_queue_depth` | frames | ≈ the margin in ticks: `INPUT_LEAD_SEC × PHYSICS_TICK` — ~3 at any RTT, because the lead pays the one-way trip on top | The host's measurement of **this** client's pending-input queue, put in the client's own skater block on the wire and folded here as a median. `NetworkManager.on_queue_depth_received` early-returns on the host, so **host rows fold 0** — the host's view of the same quantity is `host_input_queue_depth` below. 0 = starving. A link past `MAX_ONE_WAY_S` (rtt 200 ms) is no longer covered and runs it toward 0. |
+| `input_queue_depth` | frames | ≈ the margin in ticks: `INPUT_LEAD_SEC × PHYSICS_TICK` — ~2.5 at any RTT, because the lead pays the one-way trip on top | The host's measurement of **this** client's pending-input queue, put in the client's own skater block on the wire and folded here as a median. `NetworkManager.on_queue_depth_received` early-returns on the host, so **host rows fold 0** — the host's view of the same quantity is `host_input_queue_depth` below. 0 = starving. A link past `MAX_ONE_WAY_S` (rtt 200 ms) is no longer covered and runs it toward 0. |
 | `input_lead_extra_ms` (max/avg) | ms | ≈ rtt/2 | The stamp lead above the fixed `INPUT_LEAD_SEC` margin — the one-way share, `rtt/2` bounded by `ClockSync.MAX_ONE_WAY_S` (100 ms). It is open-loop, so it tracks `rtt_ms` and nothing else; a gap between the two is the slew still catching up a changed RTT. |
 
 ## Host frame / input health (host rows only; clients omit or fold 0)
 
 | Key | Unit | Healthy | Meaning |
 |---|---|---|---|
-| `sim_rate_hz` | Hz | ≥97% of 120 | Effective physics tick rate. Below target = host overloaded, the sim dilates and **every client's** update rate sags with it. `_min` is the worst window. Omitted (not 0) on client rows. |
+| `sim_rate_hz` | Hz | ≥97% of 90 | Effective physics tick rate. Below target = host overloaded, the sim dilates and **every client's** update rate sags with it. `_min` is the worst window. Omitted (not 0) on client rows. |
 | `worst_stall_ms` | ms | <33 fine, >66 a hitch everyone felt | Longest gap between physics ticks in a window (the single worst hitch). |
 | `host_stalls_total` | count | 0 | Session sum of physics ticks whose gap exceeded 33 ms — how MANY noticeable hitches, vs `worst_stall_ms`'s single worst. Read with the `auto_markers` (below), whose `phase` / `actor_count` / `last_event` attribute them. Host only; TOTAL_KEY. |
 | `broadcast_interval_p95_ms` | ms | ≈ `1000 / STATE_RATE` = 22.2 ms; >1.4× target = sagging | p95 gap between world-state broadcasts. The target is the **broadcast** cadence (`Constants.STATE_RATE`, 45 Hz), not the 90 Hz physics tick the row above measures — the cadence is counted in ticks but fires every second one. Sustained high = host stalling or send path backed up. Omitted on client rows. |
 | `host_input_queue_depth` (max/avg) | frames | ≈ the margin in ticks (same band as `input_queue_depth` above) | Deepest pending remote-input queue the host saw in the window, maxed across **networked** peers only — bots are non-local too and their structural 0 would scale the number by the human share of the roster. **Read it WITH `input_drains_per_sec` — the discriminator for drain-driven reconcile churn:** drains firing while depth is **deep** (well past the stamp lead) means the drain is eating the cushion the margin deliberately builds (raise the drain trigger); drains while depth is **shallow** (0–1) means inputs genuinely arrive late and the lead/clock is the problem. |
-| `input_lead_ms` | ms | ~0–10 | How late client inputs were when the host popped them (`estimated_host_time() − stamp`), measured at pop time on the host. |
+| `input_lead_ms` | ms | ~0–10 | How late client inputs were when the host popped them (`sim_time() − stamp`), measured at pop time on the host. |
 | `input_starvations_per_sec` | /s | <0.5 | Host ticks that had no fresh client input and reused the last one. Two causes: genuine **client→host** loss (the client's own `packet_loss_pct` can't see this outbound direction), and — more often — the **catch-up drain after a host stall** (a hitch, then a burst of physics ticks consumes the tiny input queue). A starvation spike sharing a window with a `host_stall`/`worst_stall_ms` spike is the latter; correlate before blaming the uplink. |
 
 ## Markers: `felt_lag_markers` and `auto_markers`

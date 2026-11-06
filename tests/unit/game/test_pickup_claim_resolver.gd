@@ -140,10 +140,10 @@ func test_present_grab_compares_reach_instants_not_raw_stamps() -> void:
 	# input lead), not the raw claim stamp. Both sides of this comparison are
 	# instants at which a blade REACHED the puck; the raw stamp is a full lead
 	# earlier than that, so feeding it inflates the gap and flips a genuine 50/50
-	# into an outright award. At the servo's lead cap the inflation exceeds the
-	# whole contest window, which made CONTESTED unreachable.
+	# into an outright award. At a high-RTT client's lead the inflation exceeds
+	# the whole contest window, which would make CONTESTED unreachable.
 	var stamp: float = 10.0
-	var lead_ms: float = (NetworkManager.INPUT_LEAD_SEC + 0.05) * 1000.0  # servo pinned at cap
+	var lead_ms: float = (NetworkManager.INPUT_LEAD_SEC + 0.05) * 1000.0  # a 100 ms RTT's lead
 	var view: float = LagCompRewind.self_view_time(stamp, lead_ms)
 	var now: float = view + 0.01  # the live blade reached 10 ms after the claimant
 	assert_eq(
@@ -157,12 +157,12 @@ func test_present_grab_compares_reach_instants_not_raw_stamps() -> void:
 
 
 func test_present_grab_verdict_holds_across_differing_leads() -> void:
-	# The lead is per-client and servo-driven, so two claimants with identical raw
-	# stamps can have reached up to MAX_LEAD_EXTRA_S apart. Comparing view times
-	# keeps the verdict a function of when each actually reached.
+	# The lead follows each client's RTT (rtt/2 + INPUT_LEAD_SEC), so two claimants
+	# with identical raw stamps can have reached tens of ms apart. Comparing view
+	# times keeps the verdict a function of when each actually reached.
 	var stamp: float = 10.0
 	var slow: float = LagCompRewind.self_view_time(stamp,
 			(NetworkManager.INPUT_LEAD_SEC + 0.05) * 1000.0)
 	var fast: float = LagCompRewind.self_view_time(stamp, NetworkManager.INPUT_LEAD_SEC * 1000.0)
 	assert_almost_eq(slow - fast, 0.05, 1e-6,
-			"identical stamps, reaches a full servo range apart")
+			"identical stamps, reaches 50 ms of lead apart")

@@ -133,7 +133,7 @@ func get_current_input() -> InputState:
 
 # Fills `out` with the newest `frames` inputs, oldest first — the redundant
 # trailing window the batch send ships for loss resilience. Fills a caller-owned
-# Array rather than returning `_input_history.slice(start)`: this runs 120x/s and
+# Array rather than returning `_input_history.slice(start)`: this runs 90x/s and
 # the slice was a fresh Array every batch.
 func fill_input_batch(out: Array[InputState], frames: int = 12) -> void:
 	out.clear()
@@ -441,7 +441,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# through the 0.1ms wire grid while local stamps are full-precision f64,
 	# so without it the exact acked input could survive the trim (grid value
 	# a hair below the local stamp) and be double-applied on replay. Epsilon
-	# (1ms) is far below the 4.17ms input spacing, so it can never trim an
+	# (1ms) is far below the 11.1 ms input spacing, so it can never trim an
 	# unacked input. find_at below uses the pure ack (its own epsilon match
 	# handles the grid error symmetrically).
 	var ack_ts: float = server_state.last_processed_host_timestamp

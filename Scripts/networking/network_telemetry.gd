@@ -185,7 +185,7 @@ var world_state_hz: float = 0.0          # world-state packets RECEIVED per seco
 # the host never receives its own state, and a client never sends one, so each
 # side folds a structural 0 on the other's field.
 var world_state_sent_hz: float = 0.0
-var input_hz: float = 0.0                # ~120/s — input batch send rate (Constants.INPUT_RATE)
+var input_hz: float = 0.0                # ~90/s — input batch send rate (Constants.INPUT_RATE)
 var reconcile_per_sec: float = 0.0
 # Subset of reconcile_per_sec whose matched prediction was replay-re-recorded.
 var recon_replayed_entry_per_sec: float = 0.0
@@ -566,7 +566,7 @@ static func note_host_event(name: String) -> void:
 	instance._last_host_event_sec = float(instance.session.seconds)
 
 # Wall-clock microseconds between consecutive `_broadcast_state()` calls on the
-# host. Tracks the physics-driven broadcast cadence (~16.7 ms at STATE_RATE 60).
+# host. Tracks the physics-driven broadcast cadence (~22.2 ms at STATE_RATE 45).
 static func record_broadcast_interval_us(us: int) -> void:
 	if instance == null:
 		return
