@@ -494,3 +494,41 @@ scatter. Bias is live minus measured.
 - **The set read reproduces the set keeper on the grid** (0.069 against
   0.069), as the truth table says it should.
 
+
+### Step 5 on the integration branch
+
+`claude/shot-field-integration` (the floor, the shot field's live read fixed:
+the pick's own odds, each read naming the play its keeper saw, carried wraps,
+dense feeds, #896's keeper) against `main` (d93cbf2b), the same instruments,
+both with the native kernels, run back to back on one machine.
+
+| measure | main | integration | integration, shot read forced CARRIED |
+|---|---|---|---|
+| entries carried in (30) | 25, 2.99 s | 22, 2.72 s | |
+| … dumped in, won back | 2, 1 | 6, 3 | |
+| breakout exits (20) | 19, 1.91 s | 18, 2.01 s | |
+| stacked line: carried / dumped / turnover (12) | 9 / 2 / 1 | 8 / 4 / 0 | |
+| low O-zone possessions ending in a shot (48) | 37, at 1.6 s | 34, at 1.2 s | 28, at 1.9 s |
+| … from the slot / elsewhere | 7 / 30 | 2 / 32 | 7 / 21 |
+| … passes | 28 | 34 | 48 |
+| slot holds: count, median | 10, 0.16 s | 9, 0.32 s | 10, 0.36 s |
+
+Point shots priced at nothing change none of these, on either branch.
+
+- **As built, the integration branch fires sooner low in their zone, not
+  later**, and from the slot less. The cause is the carrier's FED read: it
+  reads every possession's first `goalie_reset_s` as off a feed, so its shot is
+  priced against the feed and decoy cells, which concede more than a keeper
+  who watched the carry. In this drill the carrier starts with the puck and the
+  keeper settled on him: the keeper saw a carry, and the age of the possession
+  says nothing about that.
+- **With the read the keeper actually had (CARRIED), the floor does what the
+  plan meant it to**: fewer shots, later, a quarter of them from the slot
+  against one in seventeen, and the puck moved 48 times against 28 on `main`.
+  So the floor is not refuted; the FED rule is wrong. What a feed is has to come
+  from how the puck arrived (a pass caught, `self_settle_s` and the pickup's
+  feed vector already carry it), not from the possession's age.
+- **Host cost, AI µs per game-second, mean of two runs**: ozone-cycle 3v3
+  193k → 212k, 5v5 214k → 275k; nz-rush 3v3 130k → 196k, 5v5 148k → 353k;
+  loose-neutral 3v3 115k → 238k, 5v5 220k → 338k. Tick p95 1.4–3×. Most of it is
+  the floor's (§6), the rest the shot blend and the denser feed field.

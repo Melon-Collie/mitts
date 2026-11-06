@@ -171,7 +171,20 @@ Each is measured with the instrument before and after, and
    A bot cannot place a feed to half a metre, so a feed is priced at what feeds
    like it concede: the generator samples feeds at 1.5, 2.5, 3.5, 4.5 and 6 m
    and 12, 16 and 20 m/s, for the kernel to average over, and the instrument
-   measures each feed staging over a ±0.5 m × ±2 m/s jitter.
+   measures each feed staging over a ±0.5 m × ±2 m/s jitter. Regenerated so
+   (9166 cells, 155 minutes): the truth table's mean error 0.104 → 0.084,
+   concordance 0.943 → 0.962, pick share 0.757 → 0.807. Against the jittered
+   targets, one-timers on the grid read −0.093 at 3 m (was −0.153) and −0.011 at
+   6 m (−0.091); between the grid's points the 3 m one-timer is still −0.20 and
+   the caught 3 m feed −0.18, which is spot density, not feed density. A
+   one-timer read costs 57.9 µs (28.7), a native shot-now read 11.1 µs (8.1).
+
+   **The carried wraps leave no sealed-keeper cells.** Carried round the post,
+   the keeper is out of the post seal by every release, so the field has no cell
+   with him sealed, and a caught pass-out from behind the net read against a
+   keeper still on the post matches nothing (`test_shot_odds`'s seal property
+   fails). The teleported wrap was that pass-out's limit; staging the pass-out
+   itself needs a cell with its passer behind the goal line.
 
 Done when every staging's bias is within ±0.05 on and between the grid, the
 pick scores what the value says, and `test_ozone_possession.gd` no longer shows
