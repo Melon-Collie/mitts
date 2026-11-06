@@ -1016,3 +1016,35 @@ func test_shots_on_goal_changed_signal_fires() -> void:
 	tracker.on_shot_started(10)
 	tracker.on_goalie_touch(1)
 	assert_signal_emitted_with_parameters(tracker, "shots_on_goal_changed", [1, 0])
+
+
+# ── The play the keeper saw (the xG stat's history) ──────────────────────────
+
+func test_a_shot_off_a_fresh_pickup_reads_as_fed_then_carried() -> void:
+	_add_player(10, 0)
+	var reset: float = AIGoalieModel.goalie_reset_s()
+	tracker.on_pickup(10)
+	tracker.tick(reset * 0.5)
+	tracker.on_shot_started(10)
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED,
+			"the keeper is still set on the play before")
+	tracker.on_pickup(10)
+	tracker.tick(reset + 0.1)
+	tracker.on_shot_started(10)
+	assert_eq(tracker.release_history(), AIShotOdds.History.CARRIED,
+			"held past the keeper's reset, he has tracked the carry")
+
+
+func test_one_timers_and_tips_read_as_fed() -> void:
+	_add_player(10, 0)
+	_add_player(11, 0)
+	tracker.on_pickup(10)
+	tracker.tick(5.0)
+	tracker.on_shot_started(11, true)
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED, "a one-timer off a feed")
+	tracker.on_pickup(10)
+	tracker.tick(5.0)
+	tracker.on_shot_started(10)
+	tracker.on_deflection(11)
+	assert_eq(tracker.release_history(), AIShotOdds.History.FED,
+			"a tip comes off a keeper set on the shot")

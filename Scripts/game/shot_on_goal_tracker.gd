@@ -101,6 +101,13 @@ var _pending_ctx: Array = []
 # One-Timer achievement's goal-flavor tag. Set by on_shot_started, cleared with
 # the rest of the pending state.
 var _pending_one_timer: bool = false
+# The pending shot has been redirected since its release: the keeper set on the
+# shot, not on the man it came off last (release_history).
+var _pending_tipped: bool = false
+# The current carrier since his pickup and how long (s) he has had it, the play
+# the keeper saw before a release (release_history). -1: nobody has picked it up.
+var _holder_peer_id: int = -1
+var _held_s: float = 0.0
 # The ShotEvent already emitted for the LIVE pending shot, held so a later goal
 # can re-label it (a shot the goalie got a piece of resolves as SAVED first —
 # see on_goal_confirmed). Listeners keep the same object, so the re-label reaches
@@ -125,6 +132,8 @@ func on_pickup(peer_id: int) -> void:
 	# reads the picker's team, so it must see it before the clear.
 	_resolve_pending_miss(peer_id)
 	clear_pending()
+	_holder_peer_id = peer_id
+	_held_s = 0.0
 	# A pickup alone is only a touch — a momentary attach in a scramble must
 	# not break the opposing assist chain. on_possession_established upgrades.
 	_record_toucher(peer_id, false)
@@ -145,6 +154,8 @@ func on_possession_established(peer_id: int) -> void:
 func on_deflection(peer_id: int) -> void:
 	if peer_id == -1:
 		return
+	if _pending_remaining >= 0.0:
+		_pending_tipped = true
 	# Rebound re-shot: the pending shot was already SAVED and counted, and now an
 	# ATTACKING player redirects the loose puck. That's a fresh shot attempt — the
 	# prior save's SOG already landed, so re-arm a new pending shot (this player as
@@ -213,6 +224,7 @@ func on_shot_started(shooter_peer_id: int, is_one_timer: bool = false) -> void:
 	_block_window_remaining = BLOCK_WINDOW
 	_shot_on_goal_counted = false
 	_pending_one_timer = is_one_timer
+	_pending_tipped = false
 	# Assume on net until the caller's ballistic read (note_trajectory, run
 	# right after the authoritative release) says otherwise — a missed read
 	# should over-credit, not swallow saves.
@@ -446,6 +458,7 @@ func credit_assists(scorer_peer_id: int) -> Array[String]:
 
 
 func tick(delta: float) -> void:
+	_held_s += delta
 	if _block_window_remaining > 0.0:
 		_block_window_remaining -= delta
 	if _pending_remaining < 0.0:
@@ -473,6 +486,16 @@ func has_pending_shot() -> bool:
 
 
 # Whether the live pending shot was a one-timer. False without a pending shot.
+# The play the defending keeper saw before the pending shot (AIShotOdds.History):
+# FED off a one-timer, a redirect, or a puck its shooter has had for less than the
+# keeper takes to set on him (AIGoalieModel.goalie_reset_s); CARRIED after that.
+func release_history() -> int:
+	if _pending_one_timer or _pending_tipped or _shooter_peer_id != _holder_peer_id \
+			or _held_s < AIGoalieModel.goalie_reset_s():
+		return AIShotOdds.History.FED
+	return AIShotOdds.History.CARRIED
+
+
 func pending_is_one_timer() -> bool:
 	return _shooter_peer_id != -1 and _pending_one_timer
 
@@ -491,6 +514,7 @@ func clear_pending() -> void:
 	_pending_origin = Vector3.ZERO
 	_pending_ctx = []
 	_pending_one_timer = false
+	_pending_tipped = false
 	_pending_event = null
 
 
@@ -498,6 +522,7 @@ func clear_pending() -> void:
 func on_play_stopped() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
+	_holder_peer_id = -1
 
 
 # Called on full game reset. Clears carrier history plus pending state, and
@@ -505,6 +530,7 @@ func on_play_stopped() -> void:
 func reset_all() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
+	_holder_peer_id = -1
 	clear_pending()
 	if _state_machine != null:
 		_state_machine.team_shots[0] = 0
@@ -516,6 +542,7 @@ func reset_all() -> void:
 func clear_state() -> void:
 	_recent_carriers.clear()
 	_recent_carrier_possession.clear()
+	_holder_peer_id = -1
 	clear_pending()
 
 

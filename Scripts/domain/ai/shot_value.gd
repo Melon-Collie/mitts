@@ -37,12 +37,13 @@ static func now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 # the shot's context spread rather than the reference. Once per shot.
 static func now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, spread_rad: float,
-		keeper_yaw: float = NAN, query: AIShotOdds.Query = null) -> float:
+		keeper_yaw: float = NAN, query: AIShotOdds.Query = null,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if Vector2(keeper_pos.x - goal.x, keeper_pos.z - goal.z).length() \
 			> AIGoalieModel.GOALIE_HOME_M:
 		return AIShotOdds.empty_net(release, goal, spread_rad)
 	return AIShotOdds.shot_now_at_spread(release, goal, keeper_pos, keeper_vel_x, stance,
-			spread_rad, keeper_yaw, query)
+			spread_rad, keeper_yaw, query, history)
 
 
 static func set_keeper(release: Vector3, goal: Vector3) -> float:

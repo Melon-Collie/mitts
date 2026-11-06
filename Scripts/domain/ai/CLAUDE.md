@@ -880,7 +880,10 @@ reaches back into what remains.
     who look alike in position and stance concede differently by how the play
     got there; the history is the bot's perception of it, never a gate, so a
     history no matching cell shares reads every cell
-    (`docs/shot-field-live-read-plan.md`).
+    (`docs/shot-field-live-read-plan.md`). Every reader names the play it
+    knows, the xG stat too (`ShotOnGoalTracker.release_history`): read
+    history-blind, a deep keeper matches the in-tight decoy cells and a set
+    keeper's shot reads as a near-certain goal.
 
 - **Carry safety** (`reach_clearance` / `best_evade_point`) — a reachable-set
   pursuit-evasion model. Each skater is a bounded-accel body: over a short

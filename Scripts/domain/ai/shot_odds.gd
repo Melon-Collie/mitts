@@ -240,9 +240,10 @@ static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 # read (the xG stat), never a per-tick one.
 static func shot_now_at_spread(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, spread_rad: float,
-		keeper_yaw: float = NAN, query: Query = null) -> float:
+		keeper_yaw: float = NAN, query: Query = null, history: int = History.ANY) -> float:
 	var q: Query = _query(query)
-	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			history):
 		return 0.0
 	var sigma_m: float = spread_rad \
 			* maxf(Vector2(release.x - goal.x, release.z - goal.z).length(), 0.5)

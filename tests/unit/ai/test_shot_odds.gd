@@ -209,7 +209,7 @@ func test_a_query_of_its_own_leaves_the_workers_untouched() -> void:
 # The xG stat reads the field on the main thread at a release while the AI worker
 # reads it too: the main-thread game code reaches it only through its own query.
 func test_the_main_thread_reads_the_field_through_its_own_query() -> void:
-	var allowed: Array[String] = ["AIShotOdds.Query", "AIShotOdds.Stance",
+	var allowed: Array[String] = ["AIShotOdds.Query", "AIShotOdds.Stance", "AIShotOdds.History",
 			"AIShotOdds.prepare", "AIShotOdds.native_factory", "AIShotOdds.attach_native"]
 	var checked: int = 0
 	for f: String in DirAccess.get_files_at("res://Scripts/game"):
