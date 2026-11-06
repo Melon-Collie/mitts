@@ -1614,6 +1614,10 @@ func _wire_subsystems() -> void:
 		# NHL and ARCADE whistle a defensive-zone faceoff; OFF lets the
 		# controller's own hold-and-release play it out.
 		gc.puck_covered.connect(_on_goalie_covered_puck)
+		# A client draws each goalie predicted on the render clock, against its
+		# own world (#903, Scripts/networking/CLAUDE.md).
+		if not NetworkManager.is_host and puck_controller != null and gc is KeeperController:
+			(gc as KeeperController).predict_in(GameKeeperWorld.new(puck_controller, _registry))
 	_roster_announcer = RosterAnnouncer.new(_registry.player_added, _registry.player_removed, is_spectator_peer)
 	_roster_announcer.announced.connect(roster_announced.emit)
 	_registry.player_added.connect(_on_registry_player_added)

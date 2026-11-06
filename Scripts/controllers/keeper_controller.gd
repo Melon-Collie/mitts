@@ -118,6 +118,7 @@ var seat_places_only: bool = false
 # A client's keeper of its own, re-seeded from the host's blobs and stepped to
 # the render instant; null where none is predicted (host, replays, a warm-up).
 var _predictor: KeeperPredictor = null
+var _world_source: KeeperWorldSource = null
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -150,18 +151,19 @@ func apply_skill_profile(profile: GoalieSkillProfile) -> void:
 
 
 # Client: draws him predicted on the render clock (KeeperPredictor) against
-# `source`, this client's world, once a blob has seeded it.
+# `source`, this client's world, from the first blob a snapshot brings.
 func predict_in(source: KeeperWorldSource) -> void:
-	if is_server or _predictor != null:
-		return
-	_predictor = KeeperPredictor.new()
-	_predictor.name = "Predictor"
-	add_child(_predictor)
-	_predictor.setup(_goal_line_z, team_id, _profile, source)
+	if not is_server:
+		_world_source = source
 
 
 func receive_wire_state(blob: PackedByteArray, host_ts: float, seq: int) -> void:
 	super.receive_wire_state(blob, host_ts, seq)
+	if _predictor == null and _world_source != null:
+		_predictor = KeeperPredictor.new()
+		_predictor.name = "Predictor"
+		add_child(_predictor)
+		_predictor.setup(_goal_line_z, team_id, _profile, _world_source)
 	if _predictor != null:
 		_predictor.offer(blob, host_ts, seq)
 
@@ -170,12 +172,17 @@ func receive_wire_state(blob: PackedByteArray, host_ts: float, seq: int) -> void
 # (PuckController._render_instant's); false where it has nothing to draw, and
 # he is drawn interpolated instead.
 func _draw_predicted() -> bool:
-	if _predictor == null or not NetworkManager.is_clock_ready():
+	if _predictor == null:
+		return false
+	if not NetworkManager.is_clock_ready():
+		NetworkTelemetry.record_keeper_predict_fallback()
 		return false
 	var render_t: float = NetworkManager.estimated_host_time() \
 			+ LagCompRewind.clamped_lead_s(NetworkManager.get_input_lead_ms())
 	if not _predictor.advance(render_t):
+		NetworkTelemetry.record_keeper_predict_fallback()
 		return false
+	NetworkTelemetry.record_keeper_predict_us(_predictor.last_frame_us)
 	_apply_interpolated(_predictor.drawn)
 	return true
 
@@ -754,6 +761,11 @@ func wire(w: KeeperWire) -> void:
 	_poking = w.bit(_poking)
 	_clearing = w.bit(_clearing)
 	_blade_was = w.v3_32(_blade_was, KeeperWire.MM)
+	# His tier, which no field above carries: a keeper rebuilt from the blob
+	# plays the host's.
+	var tier: int = w.s8(_profile.tier)
+	if w.reading and tier >= 0 and tier != _profile.tier:
+		apply_skill_profile(GoalieSkillProfile.for_difficulty(tier))
 
 
 # His state onto the end of `out` as one blob, his own snapped to what it

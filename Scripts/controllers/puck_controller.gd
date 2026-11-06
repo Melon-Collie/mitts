@@ -115,6 +115,7 @@ var _goalie_provider: Callable = Callable()
 # ── Phase-3/4b loose-puck prediction scratch (client only; see _predict_loose) ──
 var _predict_frame_scratch: PuckGeometryCollision.Result = null
 var _predict_tick_result: PuckAuthorityRules.TickResult = null
+var _whole_tick := PuckAuthorityRules.TickResult.new()
 var _predict_obstacle_scratch: SweptDiscOBB.Result = null
 var _predict_obstacle_result: PuckObstacleCollision.Result = null
 # NativePuckStep (null = extension absent, GDScript step). Same factory as the
@@ -1281,8 +1282,7 @@ func _predict_loose(delta: float) -> bool:
 		return false
 	# A dead puck at rest in the air is the faceoff puck in the linesman's hand,
 	# not a ballistic one — predicting it would drop it between every snapshot.
-	var held: bool = puck.pickup_locked and source.state.velocity.is_zero_approx() \
-			and source.state.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
+	var held: bool = is_held_for_faceoff(source.state)
 	_run_prediction(source.state.position, source.state.velocity,
 			0.0 if held else maxf(render_t - source.timestamp, 0.0))
 	is_extrapolating = false  # prediction is the mode, not a buffer underrun
@@ -1379,42 +1379,11 @@ func _run_prediction(start_pos: Vector3, start_vel: Vector3, age: float) -> void
 	for _t in ticks:
 		var tick_prev: Vector3 = pos
 		var tick_vel_in: Vector3 = vel
-		var tick_post: bool = false
-		var tick_net: bool = false
-		if _native_step != null:
-			# The whole sub-stepped tick crosses the boundary once — the shape
-			# the per-frame re-predict multiplies (age ticks x up to 16 substeps).
-			_native_step.clear_touched()
-			_native_step.step_tick(pos, vel, dt, radius,
-					puck.max_speed, puck.ice_height, puck.max_height)
-			pos = _native_step.get_position()
-			vel = _native_step.get_velocity()
-			tick_post = _native_step.get_touched_post()
-			tick_net = _native_step.get_touched_net()
-		else:
-			var substeps: int = PuckAuthorityRules.frame_substeps(pos.z, vel.length(), dt)
-			var sub_dt: float = dt / float(substeps)
-			for _sub in substeps:
-				_predict_tick_result.touched_post = false
-				_predict_tick_result.touched_net = false
-				PuckAuthorityRules.step_frame_substep(pos, vel, sub_dt, radius,
-						puck.max_speed, puck.ice_height, puck.max_height,
-						_predict_frame_scratch, _predict_tick_result)
-				pos = _predict_tick_result.position
-				vel = _predict_tick_result.velocity
-				if _predict_tick_result.touched_post:
-					tick_post = true
-				if _predict_tick_result.touched_net:
-					tick_net = true
-		# Drill obstacles, over the whole tick segment. At TICK granularity rather
-		# than the GDScript branch's sub-steps because the native branch above
-		# resolves the entire tick inside C++ and leaves no sub-step seam to hook
-		# — and the test is swept either way, so a hard shot can't tunnel. The
-		# host interleaves the same resolve per sub-step (Puck._drive_analytic);
-		# the two agree on any single-contact segment, which is every drill case.
-		_resolve_predicted_obstacles(tick_prev, pos, vel)
-		pos = _predict_obstacle_result.position
-		vel = _predict_obstacle_result.velocity
+		_step_whole_tick(pos, vel, dt, _whole_tick)
+		pos = _whole_tick.position
+		vel = _whole_tick.velocity
+		var tick_post: bool = _whole_tick.touched_post
+		var tick_net: bool = _whole_tick.touched_net
 		if tick_post and not span_post:
 			span_post = true
 			if not _pred_cue_post_prev:
@@ -1510,6 +1479,87 @@ func _run_prediction(start_pos: Vector3, start_vel: Vector3, age: float) -> void
 	_sim_pos = pos
 	_sim_vel = vel
 	_sim_stopped = stopped
+
+
+# One whole host tick of a loose puck from (`pos`, `vel`) on the shared solver,
+# drill obstacles included, into `out` (its touched flags this tick's). No
+# goalie and no cues: the caller holds the goalie stop and fires the cues.
+func _step_whole_tick(pos: Vector3, vel: Vector3, dt: float, out: PuckAuthorityRules.TickResult) -> void:
+	var tick_prev: Vector3 = pos
+	var radius: float = GameRules.PUCK_COLLISION_RADIUS
+	out.touched_post = false
+	out.touched_net = false
+	if _native_step != null:
+		# The whole sub-stepped tick crosses the boundary once — the shape
+		# the per-frame re-predict multiplies (age ticks x up to 16 substeps).
+		_native_step.clear_touched()
+		_native_step.step_tick(pos, vel, dt, radius,
+				puck.max_speed, puck.ice_height, puck.max_height)
+		pos = _native_step.get_position()
+		vel = _native_step.get_velocity()
+		out.touched_post = _native_step.get_touched_post()
+		out.touched_net = _native_step.get_touched_net()
+	else:
+		var substeps: int = PuckAuthorityRules.frame_substeps(pos.z, vel.length(), dt)
+		var sub_dt: float = dt / float(substeps)
+		for _sub in substeps:
+			_predict_tick_result.touched_post = false
+			_predict_tick_result.touched_net = false
+			PuckAuthorityRules.step_frame_substep(pos, vel, sub_dt, radius,
+					puck.max_speed, puck.ice_height, puck.max_height,
+					_predict_frame_scratch, _predict_tick_result)
+			pos = _predict_tick_result.position
+			vel = _predict_tick_result.velocity
+			if _predict_tick_result.touched_post:
+				out.touched_post = true
+			if _predict_tick_result.touched_net:
+				out.touched_net = true
+	# Drill obstacles, over the whole tick segment. At TICK granularity rather
+	# than the GDScript branch's sub-steps because the native branch above
+	# resolves the entire tick inside C++ and leaves no sub-step seam to hook
+	# — and the test is swept either way, so a hard shot can't tunnel. The
+	# host interleaves the same resolve per sub-step (Puck._drive_analytic);
+	# the two agree on any single-contact segment, which is every drill case.
+	_resolve_predicted_obstacles(tick_prev, pos, vel)
+	out.position = _predict_obstacle_result.position
+	out.velocity = _predict_obstacle_result.velocity
+
+
+# A client's loose puck as a predicted keeper's shadow world steps it
+# (GameKeeperWorld): one whole host tick from (`pos`, `vel`) into `out`, as the
+# re-predict steps it.
+func step_loose_tick(pos: Vector3, vel: Vector3, out: PuckAuthorityRules.TickResult) -> void:
+	_step_whole_tick(pos, vel, Constants.TICK_DURATION, out)
+
+
+# Where a client last knew the puck loose, for a predicted keeper's shadow world
+# at host time `at`: this client's own release seed once `at` reaches its
+# instant, else the newest snapshot, into `out` (position, velocity, and
+# carrier_peer_id -1 for a seed). Returns that origin's host time, -INF with
+# none, INF while `at` is before this client's own release seed's instant (the
+# shooter still carries it).
+func loose_origin(at: float, out: PuckNetworkState) -> float:
+	if _release_seed_active:
+		if at < _release_seed_stamp:
+			return INF
+		out.position = _release_seed_pos
+		out.velocity = _release_seed_vel
+		out.carrier_peer_id = -1
+		return _release_seed_stamp
+	if _state_buffer.is_empty():
+		return -INF
+	var newest: BufferedPuckState = _state_buffer.back()
+	out.position = newest.state.position
+	out.velocity = newest.state.velocity
+	out.carrier_peer_id = newest.state.carrier_peer_id
+	return newest.timestamp
+
+
+# Whether the puck is dead in the linesman's hand: a faceoff puck held in the
+# air, which no step drops.
+func is_held_for_faceoff(state: PuckNetworkState) -> bool:
+	return puck.pickup_locked and state.velocity.is_zero_approx() \
+			and state.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
 
 
 # Prediction-quality metric: the pre-damp error the smoother is about to

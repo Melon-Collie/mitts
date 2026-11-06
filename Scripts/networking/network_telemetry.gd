@@ -97,6 +97,19 @@ var _puck_predict_residual_sum: float = 0.0
 var _puck_predict_residual_n: int = 0
 var _puck_predict_residual_max: float = 0.0
 var _puck_predict_fallback_count: int = 0
+# The predicted goalie (client, KeeperPredictor): snapshots that confirmed his
+# predicted state and ones that re-stepped him, the box gap at a re-step's
+# snapshot where a state was held for it, frames drawn interpolated for want of
+# a prediction, and each physics frame's predictor time for both goalies (us).
+var _keeper_confirm_count: int = 0
+var _keeper_restep_count: int = 0
+var _keeper_gap_sum: float = 0.0
+var _keeper_gap_n: int = 0
+var _keeper_gap_max: float = 0.0
+var _keeper_fallback_count: int = 0
+var _keeper_frame_us := PackedInt32Array()
+var _keeper_frame_at: int = -1
+var _keeper_frame_accum: int = 0
 # Remote-skater forward-prediction quality (client): the same pre-damp residual
 # on remote bodies, once per tick.
 var _remote_correction_sum: float = 0.0
@@ -245,6 +258,12 @@ var puck_predict_residual_avg_m: float = 0.0
 var puck_predict_residual_max_m: float = 0.0
 var remote_correction_avg_m: float = 0.0
 var remote_correction_max_m: float = 0.0
+var keeper_resteps_per_sec: float = 0.0
+var keeper_confirm_pct: float = 100.0
+var keeper_restep_gap_avg_m: float = 0.0
+var keeper_restep_gap_max_m: float = 0.0
+var keeper_predict_us_avg: float = 0.0
+var keeper_predict_us_p95: float = 0.0
 var _queue_depth_window: Array[int] = []
 var _host_queue_depth_window_max: int = 0
 var _host_queue_depth_window_samples: int = 0
@@ -485,6 +504,40 @@ static func record_puck_predict_residual(meters: float) -> void:
 static func record_puck_predict_fallback() -> void:
 	if instance: instance._puck_predict_fallback_count += 1
 
+# keeper_snapshot: a snapshot's blob met a predicted goalie — `confirmed` his own
+# state at its tick, else re-stepped, `gap_m` the box gap there (< 0: he held
+# no state for that tick).
+static func record_keeper_snapshot(confirmed: bool, gap_m: float) -> void:
+	if not instance: return
+	if confirmed:
+		instance._keeper_confirm_count += 1
+		return
+	instance._keeper_restep_count += 1
+	if gap_m >= 0.0:
+		instance._keeper_gap_sum += gap_m
+		instance._keeper_gap_n += 1
+		instance._keeper_gap_max = maxf(instance._keeper_gap_max, gap_m)
+
+
+# keeper_predict_us: one goalie's predictor time this physics frame; a frame's
+# goalies are summed into one sample.
+static func record_keeper_predict_us(us: int) -> void:
+	if not instance: return
+	var frame: int = Engine.get_physics_frames()
+	if frame != instance._keeper_frame_at:
+		if instance._keeper_frame_at >= 0:
+			instance._keeper_frame_us.append(instance._keeper_frame_accum)
+		instance._keeper_frame_at = frame
+		instance._keeper_frame_accum = 0
+	instance._keeper_frame_accum += us
+
+
+# keeper_predict_fallback: a goalie with a predictor drawn interpolated this
+# frame (no snapshot yet, the newest too stale, the clock not ready).
+static func record_keeper_predict_fallback() -> void:
+	if instance: instance._keeper_fallback_count += 1
+
+
 # remote_correction: per-tick pre-damp error on a remote skater body.
 static func record_remote_correction(meters: float) -> void:
 	if not instance: return
@@ -655,6 +708,7 @@ func tick(delta: float) -> void:
 	remote_correction_avg_m = (_remote_correction_sum / _remote_correction_n) \
 			if _remote_correction_n > 0 else 0.0
 	remote_correction_max_m = _remote_correction_max
+	_publish_keeper_prediction()
 	host_input_queue_depth_max = _host_queue_depth_window_max
 	host_input_queue_depth_samples = _host_queue_depth_window_samples
 	if not _queue_depth_window.is_empty():
@@ -744,6 +798,13 @@ func tick(delta: float) -> void:
 	_remote_correction_sum = 0.0
 	_remote_correction_n = 0
 	_remote_correction_max = 0.0
+	_keeper_confirm_count = 0
+	_keeper_restep_count = 0
+	_keeper_gap_sum = 0.0
+	_keeper_gap_n = 0
+	_keeper_gap_max = 0.0
+	_keeper_fallback_count = 0
+	_keeper_frame_us.clear()
 	_delay_clamp_count = 0
 	_delay_clamp_excess_max_ms = 0.0
 	_host_stall_count = 0
@@ -770,6 +831,28 @@ func tick(delta: float) -> void:
 	_provisional_timeout_count = 0
 	_provisional_stolen_count = 0
 	_window_timer = 0.0
+
+# The predicted goalie's window: re-steps a second, the share of snapshots
+# confirmed (100 with none), the gap at a re-step, and the per-frame cost of
+# both goalies' predictors, mean and p95 (us).
+func _publish_keeper_prediction() -> void:
+	var snapshots: int = _keeper_confirm_count + _keeper_restep_count
+	keeper_resteps_per_sec = _keeper_restep_count / _window_timer
+	keeper_confirm_pct = (100.0 * _keeper_confirm_count / snapshots) if snapshots > 0 else 100.0
+	keeper_restep_gap_avg_m = (_keeper_gap_sum / _keeper_gap_n) if _keeper_gap_n > 0 else 0.0
+	keeper_restep_gap_max_m = _keeper_gap_max
+	keeper_predict_us_avg = 0.0
+	keeper_predict_us_p95 = 0.0
+	var n: int = _keeper_frame_us.size()
+	if n == 0:
+		return
+	var total: int = 0
+	for us: int in _keeper_frame_us:
+		total += us
+	_keeper_frame_us.sort()
+	keeper_predict_us_avg = float(total) / n
+	keeper_predict_us_p95 = float(_keeper_frame_us[mini(n - 1, int(n * 0.95))])
+
 
 # Fold this window's published metrics into the session summary. Keys here are
 # the column prefixes the network_sessions table expects (see
@@ -813,6 +896,14 @@ func _fold_session_sample() -> void:
 		"puck_predict_residual_peak_m": puck_predict_residual_max_m,
 		"remote_correction_m": remote_correction_avg_m,
 		"remote_correction_peak_m": remote_correction_max_m,
+		# The predicted goalie; client only, hosts fold 0s (and 100% confirmed).
+		"keeper_resteps_per_sec": keeper_resteps_per_sec,
+		"keeper_confirm_pct": keeper_confirm_pct,
+		"keeper_restep_gap_m": keeper_restep_gap_avg_m,
+		"keeper_restep_gap_peak_m": keeper_restep_gap_max_m,
+		"keeper_predict_us": keeper_predict_us_avg,
+		"keeper_predict_p95_us": keeper_predict_us_p95,
+		"keeper_predict_fallbacks": float(_keeper_fallback_count),
 		# TOTAL_KEYS event counters.
 		"puck_predict_fallbacks": float(_puck_predict_fallback_count),
 		"delay_clamps": float(_delay_clamp_count),

@@ -574,6 +574,13 @@ func _render_client(t: NetworkTelemetry) -> void:
 	_metric(_band(t.remote_correction_avg_m * 100.0, 10.0, 30.0), "Remote predict err",
 		"%.1f cm avg · %.0f cm peak" % [t.remote_correction_avg_m * 100.0, t.remote_correction_max_m * 100.0],
 		"same pre-damp error on remote skater bodies; steady growth = intent decay / hard cuts outrunning the prediction")
+	_metric(_band(100.0 - t.keeper_confirm_pct, 50.0, 90.0), "Goalie predict",
+		"%.0f%% confirmed · %.1f re-steps/s · gap %.0f cm avg, %.0f peak" % [t.keeper_confirm_pct,
+			t.keeper_resteps_per_sec, t.keeper_restep_gap_avg_m * 100.0, t.keeper_restep_gap_max_m * 100.0],
+		"snapshots whose goalie state the predictor already had (confirmed) vs ones that re-seeded and re-stepped him; gap = how far his gear was off the host's at that snapshot. Re-steps follow hidden releases, saves and any world the client predicts off the host's")
+	_metric(_band(t.keeper_predict_us_p95, 4000.0, 8000.0), "Goalie predict cost",
+		"%.0f us/frame avg · %.0f p95" % [t.keeper_predict_us_avg, t.keeper_predict_us_p95],
+		"main-thread time stepping both predicted goalies per physics frame; p95 is the re-step frames")
 
 	_section("Smoothing buffers")
 	_info("Interp depth", "skater %d · puck %d · goalie %d" % [t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie],

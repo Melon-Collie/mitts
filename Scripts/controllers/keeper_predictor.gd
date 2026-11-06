@@ -181,16 +181,19 @@ func _resolve_pending() -> void:
 	var held: bool = k <= _tick and _hist_tick[slot] == k
 	if held and _hist_blob[slot] == _pending_blob:
 		confirmed += 1
+		NetworkTelemetry.record_keeper_snapshot(true, 0.0)
 		return
 	resteps += 1
 	if held:
 		_mismatch.copy_from(_hist_state[slot])
 	_reseed(k)
+	var gap: float = -1.0
 	if held and _seeded:
-		var gap: float = _box_gap(_mismatch, _cur)
+		gap = _box_gap(_mismatch, _cur)
 		gaps += 1
 		gap_sum_m += gap
 		gap_max_m = maxf(gap_max_m, gap)
+	NetworkTelemetry.record_keeper_snapshot(false, gap)
 
 
 # Him rebuilt from the pending blob at tick `k`, and that blob kept as his own

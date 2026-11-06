@@ -146,6 +146,24 @@ func fill_input_batch(out: Array[InputState], frames: int = 12) -> void:
 # Used by WorldStateCodec during goal replay to reposition the local skater the
 # same way RemoteController does, bypassing reconcile which is a no-op during
 # dead-puck phases anyway. Mirrors RemoteController._apply_state_to_skater.
+# This skater as predicted for the input stamped at or last before host time
+# `at` (the instant the host applies it), null before the history's start; the
+# newest past its end. Read, never kept: the entry is the history's own.
+func predicted_at(at: float) -> PredictedState:
+	var n: int = _prediction_history.size()
+	if n == 0 or _prediction_history[0].host_timestamp > at + PredictedState.TS_MATCH_EPSILON:
+		return null
+	var lo: int = 0
+	var hi: int = n - 1
+	while lo < hi:
+		var mid: int = (lo + hi + 1) >> 1
+		if _prediction_history[mid].host_timestamp <= at + PredictedState.TS_MATCH_EPSILON:
+			lo = mid
+		else:
+			hi = mid - 1
+	return _prediction_history[lo]
+
+
 func apply_network_state(state: SkaterNetworkState, _host_ts: float) -> void:
 	if skater == null:
 		return

@@ -7,7 +7,10 @@ extends KeeperWorldSource
 # the TRUTH feed; with `hidden_from` set to a release's tick, the release and
 # what follows it are withheld until a snapshot from that tick on has reached
 # the client (`known_through`), the shooter and the puck held on his blade as
-# they were the tick before (HIDDEN). Also keeps the host's blob on each
+# they were the tick before (HIDDEN). With `quantized`, every place and
+# velocity it hands over is rounded to the snapshot's grid (1 cm, 0.02 m/s:
+# WorldStateCodec's), the nearest a client's own world comes to the host's.
+# Also keeps the host's blob on each
 # broadcast tick and his save boxes on every tick, for a test to hold the
 # predictor against.
 
@@ -42,6 +45,7 @@ var frames: Array[Frame] = []
 var blobs: Dictionary[int, PackedByteArray] = {}
 var boxes: Array[Array] = []
 var hidden_from: int = -1
+var quantized: bool = false
 var known_through: int = -1
 var stage_calls: int = 0
 var _radius: float = 0.0
@@ -117,8 +121,8 @@ func stage(host_t: float, puck: KeeperShadowPuck, skaters: Array[KeeperShadowSka
 	var hide: bool = _hidden(k)
 	var f: Frame = frames[hidden_from - 1] if hide else frames[k]
 	var s: KeeperShadowSkater = skaters[0]
-	s.global_position = f.shooter_at
-	s.velocity = f.shooter_velocity
+	s.global_position = _at(f.shooter_at)
+	s.velocity = _vel(f.shooter_velocity)
 	s.current_shot_state = f.shooter_state
 	s.shadow_team = -1
 	s.shadow_blade = f.blade
@@ -159,10 +163,18 @@ func _fill(at: PuckAt) -> void:
 
 func _place(puck: KeeperShadowPuck, at: PuckAt, carrier: Skater) -> void:
 	puck.carrier = carrier if at.carried else null
-	puck.global_position = at.position
-	puck.linear_velocity = at.velocity
+	puck.global_position = _at(at.position)
+	puck.linear_velocity = _vel(at.velocity)
 	puck.pickup_locked = at.pickup_locked
 	puck.motion_pinned = at.motion_pinned
+
+
+func _at(v: Vector3) -> Vector3:
+	return v.snappedf(0.01) if quantized else v
+
+
+func _vel(v: Vector3) -> Vector3:
+	return v.snappedf(0.02) if quantized else v
 
 
 func _emit(puck: KeeperShadowPuck, events: PackedInt32Array, goalie: Goalie) -> void:
