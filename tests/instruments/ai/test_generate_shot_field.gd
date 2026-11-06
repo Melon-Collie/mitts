@@ -12,8 +12,8 @@ extends GutTest
 # each one-timed (O) and caught-then-charged (K); and DECOY, the keeper set on a
 # carrier elsewhere — across, in tight, far out — before a charged release from
 # the spot: out of position laterally or in depth; and, in close, WRAP, the
-# keeper sealed in the RVH on a carrier behind the net on either side before a
-# charged release from the spot. Every cell records the
+# keeper sealed in the RVH on a carrier behind the net who carries it round the
+# post on his side to the spot before a charged release. Every cell records the
 # keeper's read before the feed left and at decision time, and the open set
 # (FLAT / LOW / HIGH × the stager's aims, then each loft's goal intervals with
 # their edges bisected). Reads are stored raw; AIShotOdds
@@ -50,7 +50,9 @@ const DECOY_ACROSS_M: Array[float] = [-12.0, -9.0, -6.0, -3.0, 3.0, 6.0, 9.0, 12
 const DECOY_RANGES_M: Array[float] = [2.0, 15.0]
 const DECOY_MIN_SHIFT_M: float = 1.5
 # Wraps: spots this close in, the carrier behind the net this far across and
-# this far behind the goal line, where he seals the post on his side.
+# this far behind the goal line, where he seals the post on his side; from the
+# side of the spot, or either side for a spot between the posts (round one post
+# to past the other is a carry across the crease, which the SET cells hold).
 const WRAP_MAX_FWD_M: float = 3.5
 const WRAP_BEHIND_X_M: float = 1.2
 const WRAP_BEHIND_M: float = 1.6
@@ -104,7 +106,8 @@ func _cells() -> Array:
 					out.append([x, fwd, "DECOY", "C", at.x, at.y])
 			if fwd <= WRAP_MAX_FWD_M:
 				for side: float in [-1.0, 1.0]:
-					out.append([x, fwd, "WRAP", "C", side * WRAP_BEHIND_X_M, -WRAP_BEHIND_M])
+					if side * x > -GameRules.NET_HALF_WIDTH:
+						out.append([x, fwd, "WRAP", "C", side * WRAP_BEHIND_X_M, -WRAP_BEHIND_M])
 	return out
 
 

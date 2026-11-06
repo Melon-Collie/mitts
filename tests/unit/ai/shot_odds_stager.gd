@@ -23,8 +23,12 @@ const DEKE_FORWARD_M_S: float = 3.0
 # Every staged carrier skated in: from this far straight out, at this pace.
 const APPROACH_M: float = 4.0
 const APPROACH_M_S: float = 4.0
-# A wrap's carrier comes along the end boards from this far across.
+# A wrap's carrier comes along the end boards from this far across, then carries
+# it round the post on his side, this far across and out in front, at this pace.
 const WRAP_FROM_X_M: float = 5.0
+const WRAP_CORNER_X_M: float = 1.6
+const WRAP_CORNER_OUT_M: float = 0.6
+const WRAP_CARRY_M_S: float = 4.0
 
 var goal := Vector3(0.0, 0.0, GOAL_Z)
 # The keeper as he stood square on the passer, just before the last feed left.
@@ -81,16 +85,33 @@ func stage_decoy(spot: Vector3, decoy: Vector3) -> Vector3:
 
 
 # Sealed in the RVH on a carrier behind the net at `behind`, skated in along
-# the end boards, then the puck is at `spot` with no flight between: the limit
-# of a wrap out front, the keeper still on the post. Returns the release point.
+# the end boards, who then carries it round the post on his side and out to
+# `spot`, the keeper tracking him the whole way. Never a jump from behind the
+# net to the spot: what the keeper does then depends on where it jumped from,
+# which no read of him shows. Returns the release point.
 func stage_wrap(spot: Vector3, behind: Vector3) -> Vector3:
-	_h.approach_and_settle(behind, Vector3(signf(behind.x) * WRAP_FROM_X_M, 0.0, behind.z),
-			APPROACH_M_S)
-	_shooter.global_position = spot
+	var side: float = signf(behind.x)
+	_h.approach_and_settle(behind, Vector3(side * WRAP_FROM_X_M, 0.0, behind.z), APPROACH_M_S)
+	var corner := Vector3(side * WRAP_CORNER_X_M, 0.0,
+			GOAL_Z - signf(GOAL_Z) * WRAP_CORNER_OUT_M)
+	_carry(behind, corner)
+	_carry(corner, spot)
 	_shooter.velocity = Vector3.ZERO
-	_puck.global_position = spot
-	_puck.linear_velocity = Vector3.ZERO
 	return spot
+
+
+# The carrier skates the puck on his blade from `from` to `to` at WRAP_CARRY_M_S,
+# the keeper reading him every tick.
+func _carry(from: Vector3, to: Vector3) -> void:
+	var ticks: int = maxi(int(from.distance_to(to) / WRAP_CARRY_M_S / DT), 1)
+	var vel: Vector3 = (to - from) / (float(ticks) * DT)
+	for i: int in ticks:
+		var at: Vector3 = from.lerp(to, float(i + 1) / float(ticks))
+		_shooter.global_position = at
+		_shooter.velocity = vel
+		_puck.global_position = at
+		_puck.linear_velocity = Vector3.ZERO
+		_ctrl._physics_process(DT)
 
 
 # Settled on the carrier `across` metres to the side of `spot` (and a stride
