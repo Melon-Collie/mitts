@@ -213,6 +213,9 @@ var extrapolation_pct: float = 0.0       # 0..100
 # Effective client render rate (frames observed / window) — the framerate that
 # otherwise silently confounds every per-frame-sampled rate here.
 var client_fps: float = 0.0
+# The SHALLOWEST buffer of each kind this frame (shallowest_depth): running dry
+# is the bad direction, which is why the session folds the skater and puck
+# depths as minima.
 var buffer_depth_skater: int = 0
 var buffer_depth_puck: int = 0
 var buffer_depth_goalie: int = 0
@@ -248,9 +251,13 @@ var puck_mode: String = "—"
 # 1 s window. The SHAPE is the signal: a bimodal spread (mass in the shortest
 # AND the longest buckets, little at the broadcast interval) is relay clumping,
 # which no_nagle flattens; a spread centred on the broadcast interval is path
-# jitter that only a deeper interpolation buffer absorbs.
-const WS_GAP_EDGES_MS: Array[float] = [4.0, 8.0, 12.0, 16.0, 24.0]
-const WS_GAP_LABELS: Array[String] = ["<4", "4-8", "8-12", "12-16", "16-24", "24+"]
+# jitter that only a deeper interpolation buffer absorbs. The edges are laid
+# round the 45 Hz broadcast's ~22 ms: clumped, early, on time, late, one
+# broadcast missed, a longer gap (test_ws_gap_buckets.gd holds the interval in
+# the on-time bucket).
+const WS_GAP_EDGES_MS: Array[float] = [6.0, 16.0, 28.0, 40.0, 64.0]
+const WS_GAP_LABELS: Array[String] = ["<6", "6-16", "16-28", "28-40", "40-64", "64+"]
+const WS_GAP_ON_TIME_BUCKET: int = 2
 var _ws_gap_counts: Array[int] = [0, 0, 0, 0, 0, 0]
 var ws_gap_histogram: String = "—"
 
@@ -318,12 +325,14 @@ static func record_jitter_p95(ms: float) -> void:
 static func record_ws_arrival_gap(gap_ms: float) -> void:
 	if instance == null:
 		return
-	var idx: int = WS_GAP_EDGES_MS.size()  # overflow (last) bucket
+	instance._ws_gap_counts[ws_gap_bucket(gap_ms)] += 1
+
+
+static func ws_gap_bucket(gap_ms: float) -> int:
 	for i: int in WS_GAP_EDGES_MS.size():
 		if gap_ms < WS_GAP_EDGES_MS[i]:
-			idx = i
-			break
-	instance._ws_gap_counts[idx] += 1
+			return i
+	return WS_GAP_EDGES_MS.size()  # overflow (last) bucket
 
 # A reconcile whose MATCHED prediction was a replay-re-recorded entry (see
 # PredictedState.was_replay_rerecorded).
@@ -589,10 +598,16 @@ static func percentile_index(n: int, p: float) -> int:
 	return clampi(int(ceil(n * p)) - 1, 0, n - 1)
 
 
+# Folds one actor's buffer depth into the shallowest seen so far; start from -1
+# (none seen), which reads back as 0.
+static func shallowest_depth(shallowest: int, depth: int) -> int:
+	return depth if shallowest < 0 else mini(shallowest, depth)
+
+
 func observe_actors(skater_buf: int, puck_buf: int, goalie_buf: int, extrapolating: bool) -> void:
-	buffer_depth_skater = skater_buf
+	buffer_depth_skater = maxi(skater_buf, 0)
 	buffer_depth_puck = puck_buf
-	buffer_depth_goalie = goalie_buf
+	buffer_depth_goalie = maxi(goalie_buf, 0)
 	_frame_count += 1
 	if extrapolating:
 		_extrapolation_count += 1

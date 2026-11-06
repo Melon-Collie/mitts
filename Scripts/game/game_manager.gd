@@ -4163,7 +4163,7 @@ func _on_clock_updated_externally(t: float) -> void:
 
 
 func _observe_telemetry() -> void:
-	var skater_buf: int = 0
+	var skater_buf: int = -1
 	var extrapolating: bool = false
 	if _registry != null:
 		for peer_id: int in _registry.all():
@@ -4175,12 +4175,12 @@ func _observe_telemetry() -> void:
 				continue
 			var rc := r.controller as RemoteController
 			if rc != null:
-				skater_buf = rc.get_buffer_depth()
+				skater_buf = NetworkTelemetry.shallowest_depth(skater_buf, rc.get_buffer_depth())
 				extrapolating = extrapolating or rc.is_extrapolating
 	var puck_buf: int = puck_controller.get_buffer_depth() if puck_controller != null else 0
-	var goalie_buf: int = 0
+	var goalie_buf: int = -1
 	for gc: GoalieController in goalie_controllers:
-		goalie_buf = gc.get_buffer_depth()
+		goalie_buf = NetworkTelemetry.shallowest_depth(goalie_buf, gc.get_buffer_depth())
 		extrapolating = extrapolating or gc.is_extrapolating
 	if puck_controller != null:
 		extrapolating = extrapolating or puck_controller.is_extrapolating

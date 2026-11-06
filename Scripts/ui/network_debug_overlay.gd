@@ -560,6 +560,8 @@ func _render_client(t: NetworkTelemetry) -> void:
 	if t.reconcile_per_sec > 0.5:
 		_info("Reconcile cause", "pos %.0f · vel %.0f · rot %.0f /s · off %+.1ft · resid %.0fcm" % [t.recon_pos_per_sec, t.recon_vel_per_sec, t.recon_ubody_per_sec, t.pos_offset_ticks_avg, t.post_replay_residual_avg * 100.0],
 			"resid = distance from server AFTER the snap+replay. At rest it should be ~0; if resid stays ~9cm the replay isn't converging (offset rebuilds), vs ~0 = rebuild is in normal physics")
+		_info("Reconcile size", "blade %.0fcm · lead %.0fcm" % [t.blade_reconcile_mag_avg * 100.0, t.prediction_divergence_avg * 100.0],
+			"blade = how far a correction moved your blade; lead = your prediction's distance ahead of the server's last position when one fired, which grows with ping × speed by design (not a fault)")
 	_metric(_band(t.extrapolation_pct, NetworkTelemetry.EXTRAPOLATION_WARN_PCT,
 			NetworkTelemetry.EXTRAPOLATION_BAD_PCT), "Guessing ahead", "%.0f%% of frames (%.0f fps)" % [t.extrapolation_pct, t.client_fps],
 		"share of rendered frames dead-reckoning a remote past the buffer (framerate-independent). If high on a clumpy link, the jitter cushion is too thin — see Smoothing delay")
@@ -573,12 +575,12 @@ func _render_client(t: NetworkTelemetry) -> void:
 
 	_section("Smoothing buffers")
 	_info("Interp depth", "skater %d · puck %d · goalie %d" % [t.buffer_depth_skater, t.buffer_depth_puck, t.buffer_depth_goalie],
-		"frames queued to smooth motion; ~2-4 healthy, 0-1 risks stutter")
+		"frames queued to smooth motion, the shallowest remote of each kind; ~2-4 healthy, 0-1 risks stutter")
 	_info("Smoothing delay", "%.0f ms" % (NetworkManager.get_target_interpolation_delay() * 1000.0),
 		"intentional delay to hide jitter; sized off Delay spread (de-clumped path jitter), grows with RTT. If Guessing ahead climbs, this is under-cushioning")
 	if t.ws_gap_histogram != "—":
 		_info("Packet spacing", t.ws_gap_histogram,
-			"% of updates by gap (ms); steady ~8ms is smooth, split low+high = clumping")
+			"% of updates by gap (ms); steady ~22ms is smooth, split low+high = clumping")
 
 	_info("Bandwidth", "%.1f KB/s down" % (t.bytes_received_per_sec / 1024.0),
 		"game data received per second (payload only, excludes Steam framing)")
