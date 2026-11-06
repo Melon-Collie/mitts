@@ -49,6 +49,16 @@ var best_rim_pace: float = 0.0
 # The straight feed's pace, as its AIPuckLane.PASS_PACE_FRACS step on the pace
 # scale (1.0 for a rim or no feed): what the commit fires it at.
 var best_pace_frac: float = 1.0
+# The completion read of the search's highest-EV pass, for instruments (nothing
+# decides on it): the odds it reaches the receiver and he keeps it, and each loss
+# mode's survival (not poked at the release, the lane, no execution miss, kept on
+# reception). -1 when no pass was priced.
+var debug_kept: float = -1.0
+var debug_release_clean: float = -1.0
+var debug_lane: float = -1.0
+var debug_miss: float = -1.0
+var debug_reception: float = -1.0
+var _debug_best_ev: float = -INF
 
 
 # ── Scratch ──────────────────────────────────────────────────────────────────
@@ -97,6 +107,8 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 		teammate_ids: Array[int]) -> void:
 	var snapshot: WorldSnapshot = ctx.snapshot
 	var self_pos: Vector3 = ctx.self_pos
+	_debug_best_ev = -INF
+	debug_kept = -1.0
 	var best_pass_peer: int = 0
 	var best_pass_score: float = 0.0
 	var best_pass_saucer: bool = false
@@ -655,6 +667,13 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 				self_pos, our_goalie)
 	cost += _field.counter_exposure_cost(ctx, receiver_spot,
 			clean_lane * (1.0 - reception_kept), self_pos, our_goalie)
+	if benefit - cost > _debug_best_ev:
+		_debug_best_ev = benefit - cost
+		debug_kept = release_clean * clean_lane * reception_kept
+		debug_release_clean = release_clean
+		debug_lane = lane
+		debug_miss = miss_prob
+		debug_reception = reception_kept
 	return benefit - cost
 
 

@@ -537,6 +537,12 @@ func step() -> void:
 				rec["pass_peer"] = c.agent._carrier.debug_pass_peer_id
 				rec["pass_score"] = c.agent._carrier.debug_pass_score
 				rec["carry_score"] = c.agent._carrier.debug_carry_score
+				var pass_read: AICarrierPassSearch = c.agent._carrier._pass
+				rec["pass_kept"] = pass_read.debug_kept
+				rec["pass_release_clean"] = pass_read.debug_release_clean
+				rec["pass_lane"] = pass_read.debug_lane
+				rec["pass_miss"] = pass_read.debug_miss
+				rec["pass_reception"] = pass_read.debug_reception
 			releases.append(rec)
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
 			_release(c)
