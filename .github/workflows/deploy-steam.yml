@@ -45,8 +45,8 @@ jobs:
     name: Build and upload to Steam
     needs: test
     runs-on: ubuntu-latest
-    # A healthy run takes ~4 min. Without a cap, a hung apt mirror or steamcmd
-    # login sits out GitHub's 6-hour default.
+    # A healthy run takes ~4 min. Without a cap, a stalled apt mirror or
+    # steamcmd login sits out GitHub's 6-hour default.
     timeout-minutes: 30
 
     steps:
@@ -93,27 +93,37 @@ jobs:
           restore-keys: |
             scons-release-${{ runner.os }}-${{ steps.gdcpp.outputs.sha }}-
 
+      # mingw and wine come out of this cache offline, so a slow Ubuntu mirror
+      # only costs the run that has to refill it. A save is keyed by run, so
+      # restoring by prefix picks the newest snapshot; it is saved again only
+      # when the install had to reach the mirror (apt-install-cached.sh).
+      - name: Resolve apt cache key
+        id: aptkey
+        run: echo "prefix=apt-${ImageOS:-${{ runner.os }}}-${{ hashFiles('.github/scripts/apt-install-cached.sh') }}-" >> "$GITHUB_OUTPUT"
+
+      - name: Restore apt cache
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/apt-cache
+          key: ${{ steps.aptkey.outputs.prefix }}
+          restore-keys: ${{ steps.aptkey.outputs.prefix }}
+
+      - name: Install mingw-w64
+        id: apt-mingw
+        timeout-minutes: 15
+        run: bash .github/scripts/apt-install-cached.sh ~/apt-cache --no-install-recommends g++-mingw-w64-x86-64
+
       # Same native-extension build as deploy.yml — the binaries are
       # gitignored, so the export bundles the kernels only if CI builds them
       # first. One build per exported preset: the Windows DLL (mingw cross)
       # and the Linux .so (host g++). Godot's export *fails* on a missing
       # library it's told to copy, so both are required, not optional
       # (see native/README.md).
-      #
-      # This step owns the job's one `apt-get update` and runs before the
-      # rcedit step: that one is continue-on-error, so it can't be what
-      # refreshes the package lists a required install depends on. The
-      # retry/timeout config makes a stalled mirror connection fail and retry
-      # instead of hanging, and applies to every later apt call in the job.
       - name: Build native GDExtension (Windows + Linux release)
-        timeout-minutes: 15
+        timeout-minutes: 10
         env:
           SCONS_CACHE: ${{ github.workspace }}/.scons-cache
         run: |
-          printf 'Acquire::Retries "3";\nAcquire::http::Timeout "30";\nAcquire::https::Timeout "30";\n' \
-            | sudo tee /etc/apt/apt.conf.d/80-ci-network > /dev/null
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq --no-install-recommends g++-mingw-w64-x86-64
           cd native
           scons platform=windows arch=x86_64 target=template_release use_mingw=yes \
                 build_profile=build_profile.json -j"$(nproc)"
@@ -122,10 +132,11 @@ jobs:
           ls -la bin/
 
       - name: Set up rcedit for Windows exe branding
+        id: rcedit
         continue-on-error: true
         timeout-minutes: 10
         run: |
-          sudo apt-get install -y -qq wine64
+          bash .github/scripts/apt-install-cached.sh ~/apt-cache wine64
           WINE_BIN=$(command -v wine64 || command -v wine)
           curl -fsSL -o /usr/local/bin/rcedit.exe \
             https://github.com/electron/rcedit/releases/download/v2.0.0/rcedit-x64.exe
@@ -138,6 +149,13 @@ jobs:
           export/windows/wine = "${WINE_BIN}"
           EOF
           echo "rcedit configured (wine: ${WINE_BIN})"
+
+      - name: Save apt cache
+        if: steps.apt-mingw.outputs.refreshed == 'true' || steps.rcedit.outputs.refreshed == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ~/apt-cache
+          key: ${{ steps.aptkey.outputs.prefix }}${{ github.run_id }}-${{ github.run_attempt }}
 
       - name: Export with Godot
         uses: firebelley/godot-export@v5.2.1
