@@ -43,11 +43,27 @@ extends GutTest
 # Run: bash .claude/hooks/run-gut.sh -gselect=test_keeper_prediction
 #      -gdir=res://tests/instruments. Asserts nothing. KEEPER_PREDICTION_TIERS
 # (e.g. "HARD,EASY") picks the tiers; HARD alone by default.
-# KEEPER_PREDICTION_QUICK=1 runs only TRUTH and WIRE at one one-way: the check
-# of NOT_ON_WIRE; KEEPER_PREDICTION_SKIP (Class.field, comma separated) leaves
+# KEEPER_PREDICTION_QUICK=1 runs only TRUTH and WIRE at one one-way
+# (KEEPER_PREDICTION_AT, an index into ONE_WAYS_MS): the check of NOT_ON_WIRE;
+# KEEPER_PREDICTION_SKIP (Class.field, comma separated) leaves
 # more off it, to try one.
+#
+# KEEPER_PREDICTION_BYTES=1 measures the wire set as bytes instead
+# (keeper_wire_codec.gd): TRUTH, and the copy rebuilt from the decoded bytes at
+# each precision, with the play read's history sent or rebuilt from the
+# client's own snapshots of the world (`_rebuild_history`); per snapshot, what
+# the blob weighs whole, under zstd, and XORed against the blob one and three
+# snapshots back then zstd (SnapshotDelta's treatment), beside today's goalie
+# block under the same. KEEPER_PREDICTION_SEARCH=Q16 (or F32) adds a copy per
+# class with only that class's fields at that precision, the rest exact, and
+# F32:KeeperGlide,KeeperSlide one per field of those classes;
+# KEEPER_PREDICTION_HOST_SNAPS=1 has the keeper set his own wire set to its
+# Q16 value on every snapshot tick (every 2nd), the host's in both passes and
+# the client's copy on the same ticks as it steps, so quantizing is part of
+# his tick on both sides.
 
 const Cloner := preload("res://tests/instruments/keeper/keeper_state_cloner.gd")
+const Codec := preload("res://tests/instruments/keeper/keeper_wire_codec.gd")
 const ClockSync := preload("res://Scripts/networking/clock_sync.gd")
 const DT: float = preload("res://Scripts/game/constants.gd").TICK_DURATION
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
@@ -87,7 +103,7 @@ const SWEEP_TAIL_TICKS: int = 70
 # A sweep window opens this long before the release: past the longest span, so
 # every span sees the release hidden.
 const SWEEP_LEAD_IN_TICKS: int = 26
-# The one-way the wire set is checked at.
+# The one-way the wire set is checked at, unless KEEPER_PREDICTION_AT moves it.
 const WIRE_AT: int = 2
 # Fields the wire need not carry, by Class.field: the tier's tuning (the
 # client has it), each collaborator's scratch (written before it is read on
@@ -153,6 +169,11 @@ class Frame:
 	var pre: Array = []
 	var post: Array = []
 	var shot: bool = false
+	# The puck after the host's whole tick, as a snapshot on this tick holds
+	# it; and whether a body hid it from him on his tick.
+	var snap_puck_pos := Vector3.ZERO
+	var snap_puck_vel := Vector3.ZERO
+	var hidden: bool = false
 
 
 # The keeper after one tick, as the comparison reads him.
@@ -174,6 +195,84 @@ class World:
 		for n: Node in [ctrl, goalie, puck, skaters[0], skaters[1]]:
 			if is_instance_valid(n):
 				n.free()
+
+
+# What each blob weighs per snapshot (bytes): whole, under zstd, XORed against
+# the same blob one and three snapshots back and then zstd (SnapshotDelta's
+# treatment; a blob whose length changed is sent whole, as SnapshotDelta sends
+# a snapshot whose length changed), and an all-zero blob of its length under
+# zstd (the frame and the run-length floor: what a blob that did not change
+# costs).
+class WireSizes:
+	var rows: Array[String] = []
+	var whole: Dictionary = {}
+	var zstd: Dictionary = {}
+	var back_1: Dictionary = {}
+	var back_3: Dictionary = {}
+	var floor_b: Dictionary = {}
+	var resized: Dictionary = {}
+	var _prev: Dictionary = {}
+	var _zero: Dictionary = {}
+
+	func new_play() -> void:
+		_prev.clear()
+
+	func add(row: String, b: PackedByteArray) -> void:
+		if not whole.has(row):
+			rows.append(row)
+			for d: Dictionary in [whole, zstd, back_1, back_3, floor_b]:
+				d[row] = PackedFloat64Array()
+			resized[row] = 0
+		var hist: Array = _prev.get(row, [])
+		whole[row].append(float(b.size()))
+		zstd[row].append(float(_z(b)))
+		floor_b[row].append(float(_zeros(b.size())))
+		for back: int in [1, 3]:
+			if hist.size() < back:
+				continue
+			var base: PackedByteArray = hist[hist.size() - back]
+			var into: PackedFloat64Array = back_1[row] if back == 1 else back_3[row]
+			if base.size() != b.size():
+				if back == 1:
+					resized[row] += 1
+				into.append(float(_z(b)))
+			else:
+				into.append(float(_z(SnapshotDelta.xor_words(SnapshotDelta.words_of(b), SnapshotDelta.words_of(base),
+						b.size()))))
+		hist.append(b)
+		if hist.size() > 3:
+			hist.pop_front()
+		_prev[row] = hist
+
+	static func _z(b: PackedByteArray) -> int:
+		return b.compress(FileAccess.COMPRESSION_ZSTD).size()
+
+	func _zeros(n: int) -> int:
+		if not _zero.has(n):
+			var z := PackedByteArray()
+			z.resize(n)
+			_zero[n] = _z(z)
+		return _zero[n]
+
+	func report(tier: String) -> String:
+		var lines: PackedStringArray = ["", "### Bytes per keeper per snapshot, %s (45 Hz, mean / p95 / max)" % tier, "",
+				"| blob | snapshots | whole | zstd | XOR 1 back, zstd | XOR 3 back, zstd | an unchanged blob that long, zstd | resized against the last |",
+				"|---|---|---|---|---|---|---|---|"]
+		for row: String in rows:
+			lines.append("| %s | %d | %s | %s | %s | %s | %s | %d |" % [row, whole[row].size(), _three(whole[row]),
+					_three(zstd[row]), _three(back_1[row]), _three(back_3[row]), _three(floor_b[row]), resized[row]])
+		return "\n".join(lines)
+
+	static func _three(a: PackedFloat64Array) -> String:
+		if a.is_empty():
+			return "-"
+		var sum: float = 0.0
+		for x: float in a:
+			sum += x
+		var sorted: PackedFloat64Array = a.duplicate()
+		sorted.sort()
+		return "%.0f / %.0f / %.0f" % [sum / float(a.size()), sorted[int(ceil(0.95 * float(a.size()))) - 1],
+				sorted[a.size() - 1]]
 
 
 class Stats:
@@ -237,6 +336,30 @@ var _host_us := PackedFloat64Array()
 var _host_choose_us := PackedFloat64Array()
 var _drift: int = 0
 var _uncopied: Dictionary = {}
+# Every feed by name, the four above first; per feed the codec it is rebuilt
+# from (null: the reflective copy), whether it rebuilds the play read's history,
+# and at which one-ways it runs (empty: all).
+var _names: Array[String] = VARIANT_NAMES.duplicate()
+var _codecs: Array = [null, null, null, null]
+var _rebuilds: Array[bool] = [false, false, false, false]
+var _only_at: Array[int] = [-1, -1, -1, -1]
+var _bytes: bool = false
+var _wire_at: int = WIRE_AT
+var _snapper: RefCounted = null
+# The feeds the scenario and shot tables show.
+var _shown: Array[int] = [Variant.TRUTH, Variant.HIDDEN, Variant.DR]
+var _blobs: Dictionary = {}
+var _encode_us: Dictionary = {}
+var _sizes: WireSizes = null
+var _fields_us: Dictionary = {}
+var _v_exact: int = -1
+var _v_q16: int = -1
+var _v_exact_hist: int = -1
+var _v_f32_mixed: int = -1
+var _v_q16_hist: int = -1
+# Encoded for their size alone: the wire set without the pose today's goalie
+# block already carries, to be sent after that block.
+var _size_only: Array = []
 
 
 func before_all() -> void:
@@ -269,10 +392,21 @@ func test_report_keeper_prediction() -> void:
 	_quick = OS.get_environment("KEEPER_PREDICTION_QUICK") == "1"
 	for f: String in OS.get_environment("KEEPER_PREDICTION_SKIP").split(",", false):
 		_not_on_wire[f.strip_edges()] = true
+	_bytes = OS.get_environment("KEEPER_PREDICTION_BYTES") == "1"
+	if OS.get_environment("KEEPER_PREDICTION_AT") != "":
+		_wire_at = int(OS.get_environment("KEEPER_PREDICTION_AT"))
+	_only_at[Variant.WIRE] = _wire_at
+	if OS.get_environment("KEEPER_PREDICTION_HOST_SNAPS") == "1":
+		_snapper = Codec.new(Codec.Precision.Q16, _not_on_wire)
+	if _bytes:
+		_add_codec_feeds()
 	var out: PackedStringArray = []
 	out.append(_span_table())
 	for tier: int in tiers:
 		out.append(_run_tier(tier))
+		if _bytes:
+			out.append(_sizes.report(GoalieSkillProfile.Difficulty.keys()[tier]))
+			out.append(_codec_report())
 	out.append(_size_report())
 	gut.p("\n" + "\n".join(out))
 	assert_true(true)
@@ -297,7 +431,7 @@ func _run_tier(tier: int) -> String:
 	for oi: int in ONE_WAYS_MS.size():
 		var per_v: Array = []
 		var st: Array = []
-		for v: int in Variant.size():
+		for v: int in _names.size():
 			per_v.append({})
 			st.append(Stats.new())
 		_client_seen.append(per_v)
@@ -307,11 +441,18 @@ func _run_tier(tier: int) -> String:
 	_drift = 0
 	var profile: GoalieSkillProfile = GoalieSkillProfile.for_difficulty(tier)
 	var sc_lines: PackedStringArray = []
+	if _bytes:
+		_sizes = WireSizes.new()
+		_encode_us.clear()
+		_fields_us.clear()
+		for v: int in _names.size():
+			if _codecs[v] != null:
+				(_codecs[v] as Codec).overflow.clear()
 	for g: int in SC_NAMES.size():
 		var sc_st: Array = []
 		for oi: int in ONE_WAYS_MS.size():
 			var row: Array = []
-			for v: int in Variant.size():
+			for v: int in _names.size():
 				row.append(Stats.new())
 			sc_st.append(row)
 		_sc_stats.append(sc_st)
@@ -338,6 +479,8 @@ func _play_scenario(sc: int, profile: GoalieSkillProfile) -> void:
 	_seen.clear()
 	_client = _make_world(profile)
 	_decoy = _make_world(profile)
+	if _sizes != null:
+		_sizes.new_play()
 	for pass_no: int in 2:
 		_rec = pass_no == 0
 		_host = _make_world(profile)
@@ -419,6 +562,11 @@ func _host_tick(t: int) -> void:
 		_host.goalie.get_collision_part_velocities()
 		_host.puck._physics_process(DT)
 		_host.puck.drain_contact_events()
+	if _snapper != null and t % 2 == 0:
+		_snapper.decode(_snapper.encode(c), c)
+	_cur.snap_puck_pos = _host.puck.global_position
+	_cur.snap_puck_vel = _host.puck.linear_velocity
+	_cur.hidden = c.play._hidden[c.play._head] == 1
 	if _rec:
 		_frames.append(_cur)
 
@@ -491,20 +639,28 @@ func _snapshot(s: int) -> void:
 	var src: KeeperController = _host.ctrl
 	var dst: KeeperController = _client.ctrl
 	_capture_size(src)
+	if _bytes:
+		_encode_blobs(src)
 	for oi: int in ONE_WAYS_MS.size():
 		var n0: int = _span[oi]
-		for v: int in Variant.size():
-			if v == Variant.WIRE and oi != WIRE_AT:
+		for v: int in _names.size():
+			if not _runs(v, oi):
 				continue
-			if _quick and (oi != WIRE_AT or (v != Variant.TRUTH and v != Variant.WIRE)):
-				continue
-			if v == Variant.WIRE and s % 4 == 0:
+			if (v == Variant.WIRE or _codecs[v] != null) and s % 4 == 0:
 				_cloner.copy(_decoy.ctrl, dst)
 			var st: Stats = _stats[oi][v]
 			var t0: int = Time.get_ticks_usec()
-			_cloner.copy(src, dst, _not_on_wire if v == Variant.WIRE else {})
+			if _codecs[v] != null:
+				(_codecs[v] as Codec).decode(_blobs[v], dst)
+				var fus: PackedFloat64Array = _fields_us.get(v, PackedFloat64Array())
+				fus.append((_codecs[v] as Codec).fields_us)
+				_fields_us[v] = fus
+			else:
+				_cloner.copy(src, dst, _not_on_wire if v == Variant.WIRE else {})
 			var clone_us: float = float(Time.get_ticks_usec() - t0)
 			st.clone_us.append(clone_us)
+			if _rebuilds[v]:
+				_rebuild_history(dst, s)
 			var catch_us: float = clone_us
 			var snap_us: float = clone_us
 			var hidden_from: int = 1 << 30
@@ -535,6 +691,8 @@ func _snapshot(s: int) -> void:
 					_replay(_frames[t].post)
 				if k == n0 or k == n0 + 1:
 					(_client_seen[oi][v] as Dictionary)[t] = _see(dst)
+				if _snapper != null and t % 2 == 0:
+					_snapper.decode(_snapper.encode(dst), dst)
 			st.catch_us.append(catch_us)
 			st.snap_us.append(snap_us)
 			st.steps_us.append(snap_us - clone_us)
@@ -554,6 +712,241 @@ func _time_body(st: Stats, c: KeeperController) -> void:
 		c.goalie.seat_save_box(part, KeeperGear.box(c._keeper.skeleton, part))
 	st.solve_us.append(float(t1 - t0))
 	st.seat_us.append(float(Time.get_ticks_usec() - t1))
+
+
+# ── The wire set as bytes ─────────────────────────────────────────────────────
+
+# The scalars a 32-bit float does not carry exactly enough (KEEPER_PREDICTION_
+# SEARCH=F32 and F32:<class> over these plays): the rest of the wire set at f32
+# steps as the host does.
+const F32_NOT_ENOUGH: Array[String] = ["KeeperGlide.x", "KeeperGlide.z", "KeeperGlide._drive",
+		"KeeperShotRead.age", "KeeperMotor.x", "KeeperSlide._clock"]
+const LOSSY_CLASSES: Array[String] = ["KeeperController", "KeeperMotor", "KeeperMotor._Ask", "KeeperFootwork",
+		"KeeperGlide", "KeeperDrop", "KeeperSlide", "KeeperPost", "KeeperRoute", "KeeperSaveMove", "KeeperLowReady",
+		"KeeperShotRead", "KeeperPlayRead", "KeeperSave", "KeeperLook", "KeeperPositioning", "KeeperClear",
+		"KeeperPose"]
+
+
+func _add_codec_feeds() -> void:
+	var hist: Dictionary = _not_on_wire.duplicate()
+	for f: String in PLAY_HISTORY:
+		if f != "_head" and f != "_count":
+			hist["KeeperPlayRead." + f] = true
+	_v_exact = _feed("EXACT", Codec.new(Codec.Precision.EXACT, _not_on_wire), false, _wire_at)
+	_feed("F32", Codec.new(Codec.Precision.F32, _not_on_wire), false, _wire_at)
+	_v_f32_mixed = _feed("F32, %s f64" % ", ".join(F32_NOT_ENOUGH), Codec.new(Codec.Precision.F32, _not_on_wire, [],
+			F32_NOT_ENOUGH), false, -1)
+	_v_q16 = _feed("Q16", Codec.new(Codec.Precision.Q16, _not_on_wire), false, -1)
+	_v_exact_hist = _feed("EXACT, history rebuilt", Codec.new(Codec.Precision.EXACT, hist), true, -1)
+	_v_q16_hist = _feed("Q16, history rebuilt", Codec.new(Codec.Precision.Q16, hist), true, -1)
+	(_codecs[_v_q16] as Codec).audit = true
+	_shown = [_v_q16, _v_exact_hist, _v_q16_hist]
+	# "Q16" or "F32": a feed per class; "Q16:KeeperGlide,KeeperMotor": one per
+	# field of those classes.
+	var search: PackedStringArray = OS.get_environment("KEEPER_PREDICTION_SEARCH").split(":")
+	if search[0] == "Q16" or search[0] == "F32":
+		var keys: Array[String] = LOSSY_CLASSES.duplicate()
+		if search.size() > 1:
+			keys.clear()
+			var probe: World = _make_world(GoalieSkillProfile.for_difficulty(GoalieSkillProfile.Difficulty.HARD))
+			var listing: Dictionary = {}
+			_cloner.account(probe.ctrl, _not_on_wire, FIRST, listing)
+			probe.free_all()
+			for cls: String in search[1].split(","):
+				for f: String in listing.get(cls, PackedStringArray()):
+					keys.append(cls + "." + f)
+		for k: String in keys:
+			_feed("%s only %s" % [search[0], k], Codec.new(Codec.Precision[search[0]], _not_on_wire, [k]), false,
+					_wire_at)
+	var no_pose: Dictionary = _not_on_wire.duplicate()
+	no_pose["KeeperController._keeper_pose"] = true
+	var no_pose_hist: Dictionary = hist.duplicate()
+	no_pose_hist["KeeperController._keeper_pose"] = true
+	_size_only = [["today's block, then the Q16 wire set less its pose", Codec.new(Codec.Precision.Q16, no_pose)],
+			["today's block, then the Q16 wire set less its pose and the history",
+			Codec.new(Codec.Precision.Q16, no_pose_hist)]]
+
+
+func _feed(n: String, codec: Codec, rebuild: bool, at: int) -> int:
+	_names.append(n)
+	_codecs.append(codec)
+	_rebuilds.append(rebuild)
+	_only_at.append(at)
+	return _names.size() - 1
+
+
+func _runs(v: int, oi: int) -> bool:
+	if _only_at[v] >= 0 and oi != _only_at[v]:
+		return false
+	if _quick and oi != _wire_at:
+		return false
+	if _bytes:
+		return v == Variant.TRUTH or _codecs[v] != null
+	return not _quick or v == Variant.TRUTH or v == Variant.WIRE
+
+
+# This snapshot's blobs, each codec's encode timed (the host's cost), and their
+# sizes beside today's goalie block.
+func _encode_blobs(src: KeeperController) -> void:
+	_blobs.clear()
+	for v: int in _names.size():
+		if _codecs[v] == null:
+			continue
+		var t0: int = Time.get_ticks_usec()
+		_blobs[v] = (_codecs[v] as Codec).encode(src)
+		var enc: PackedFloat64Array = _encode_us.get(v, PackedFloat64Array())
+		enc.append(float(Time.get_ticks_usec() - t0))
+		_encode_us[v] = enc
+	var gs := GoalieNetworkState.new()
+	src.fill_state(gs)
+	var block: PackedByteArray = WorldStateCodec._encode_goalie_quantized(gs)
+	_sizes.add("today's goalie block (root + pose)", block)
+	_sizes.add("Q16 wire set", _blobs[_v_q16])
+	_sizes.add("Q16 wire set less the history", _blobs[_v_q16_hist])
+	_sizes.add("EXACT wire set", _blobs[_v_exact])
+	_sizes.add("EXACT wire set less the history", _blobs[_v_exact_hist])
+	_sizes.add("F32 wire set, six scalars f64", _blobs[_v_f32_mixed])
+	for row: Array in _size_only:
+		var b: PackedByteArray = block.duplicate()
+		b.append_array((row[1] as Codec).encode(src))
+		_sizes.add(row[0], b)
+
+
+# The play read's history on `c` (its head and count as decoded) rebuilt from
+# what a client holds at snapshot `s`: the snapshots up to it, every 2nd tick,
+# quantized as WorldStateCodec quantizes them (positions at a centimetre,
+# velocities at 0.02 m/s). A snapshot holds the skaters as he read them on its
+# tick and the puck after the puck's own tick, which is what he reads on the
+# next one; a tick between snapshots is the two either side of it lerped, its
+# carrier, shot state and screen the earlier one's. Whether a body hid the
+# puck is the host's own reading on the snapshot's tick (the client would
+# compute it from the snapshot).
+func _rebuild_history(c: KeeperController, s: int) -> void:
+	var p: KeeperPlayRead = c.play
+	var size: int = p._at.size()
+	var at: PackedVector2Array = p._at.duplicate()
+	var moving: PackedVector2Array = p._moving.duplicate()
+	var bodies: PackedVector2Array = p._bodies.duplicate()
+	var winding: PackedByteArray = p._winding.duplicate()
+	var loose: PackedByteArray = p._loose.duplicate()
+	var theirs: PackedByteArray = p._theirs.duplicate()
+	var hidden: PackedByteArray = p._hidden.duplicate()
+	var inv: Transform3D = c._net.affine_inverse()
+	var turn: Basis = c._net.basis.inverse()
+	for k: int in mini(p._count, size):
+		var u: int = s - k
+		var i: int = posmod(p._head - k, size)
+		var w: Array = _snap_world(u)
+		var carrier: int = w[3]
+		var puck: Vector3 = w[4]
+		var pv: Vector3 = w[5]
+		if carrier < 0:
+			var before: Array = _snap_world(u - 1)
+			puck = before[4]
+			pv = before[5]
+		var in_net: Vector3 = inv * puck
+		at[i] = Vector2(in_net.x, in_net.z)
+		var mv: Vector3 = turn * ((w[1] as PackedVector3Array)[carrier] if carrier >= 0 else pv)
+		moving[i] = Vector2(mv.x, mv.z)
+		var is_theirs: bool = false
+		if carrier >= 0:
+			var body: Vector3 = inv * (w[0] as PackedVector3Array)[carrier]
+			bodies[i] = Vector2(body.x, body.z)
+			is_theirs = c.team_id == -1 or _client.skaters[carrier].get_team_id() != c.team_id
+		else:
+			bodies[i] = KeeperPlayRead.NO_CARRIER
+		winding[i] = 1 if is_theirs and SkaterStateMachine.state_pins_puck((w[2] as PackedInt32Array)[carrier]) else 0
+		loose[i] = 1 if carrier < 0 else 0
+		theirs[i] = 1 if is_theirs else 0
+		hidden[i] = 1 if bool(w[6]) else 0
+	p._at = at
+	p._moving = moving
+	p._bodies = bodies
+	p._winding = winding
+	p._loose = loose
+	p._theirs = theirs
+	p._hidden = hidden
+
+
+# The world a client's snapshots give for tick `x`: [skater positions, their
+# velocities, their shot states, the carrier (-1 loose), the puck's position
+# and velocity, hidden].
+func _snap_world(x: int) -> Array:
+	if x % 2 == 0:
+		var f: Frame = _frames[x]
+		var pos := PackedVector3Array()
+		var vel := PackedVector3Array()
+		for i: int in f.sk_pos.size():
+			pos.append(_quantized(f.sk_pos[i], 0.01))
+			vel.append(_quantized(f.sk_vel[i], 0.02))
+		return [pos, vel, f.sk_state, f.carrier, _quantized(f.snap_puck_pos, 0.01),
+				_quantized(f.snap_puck_vel, 0.02), f.hidden]
+	var a: Array = _snap_world(x - 1)
+	var b: Array = _snap_world(x + 1)
+	var lp := PackedVector3Array()
+	var lv := PackedVector3Array()
+	for i: int in (a[0] as PackedVector3Array).size():
+		lp.append((a[0][i] as Vector3).lerp(b[0][i], 0.5))
+		lv.append((a[1][i] as Vector3).lerp(b[1][i], 0.5))
+	return [lp, lv, a[2], a[3], (a[4] as Vector3).lerp(b[4], 0.5), (a[5] as Vector3).lerp(b[5], 0.5), a[6]]
+
+
+static func _quantized(v: Vector3, step: float) -> Vector3:
+	return Vector3(roundf(v.x / step) * step, roundf(v.y / step) * step, roundf(v.z / step) * step)
+
+
+func _codec_report() -> String:
+	var copy := PackedFloat64Array()
+	for oi: int in ONE_WAYS_MS.size():
+		copy.append_array((_stats[oi][Variant.TRUTH] as Stats).clone_us)
+	var lines: PackedStringArray = ["", "### The codecs: host encode, client decode (µs on this machine)", "",
+			"The reflective copy of his whole state (TRUTH): p50 %.0f, p95 %.0f." % [_pct(copy, 0.5), _pct(copy, 0.95)],
+			"", "| feed | blob B (first / last) | encode p50 / p95 | decode p50 / p95 / max | of the decode, his fields alone p50 / p95 | clamped (Class.field: values) |",
+			"|---|---|---|---|---|---|"]
+	for v: int in _names.size():
+		var codec: Codec = _codecs[v]
+		if codec == null:
+			continue
+		var dec := PackedFloat64Array()
+		for oi: int in ONE_WAYS_MS.size():
+			dec.append_array((_stats[oi][v] as Stats).clone_us)
+		var enc: PackedFloat64Array = _encode_us.get(v, PackedFloat64Array())
+		var fields: PackedFloat64Array = _fields_us.get(v, PackedFloat64Array())
+		lines.append("| %s | %d | %.0f / %.0f | %.0f / %.0f / %.0f | %.0f / %.0f | %s |" % [_names[v],
+				(_blobs.get(v, PackedByteArray()) as PackedByteArray).size(), _pct(enc, 0.5), _pct(enc, 0.95),
+				_pct(dec, 0.5), _pct(dec, 0.95), _pct(dec, 1.0), _pct(fields, 0.5), _pct(fields, 0.95),
+				str(codec.overflow) if not codec.overflow.is_empty() else "none"])
+		if not codec.unsupported.is_empty():
+			lines.append("  unsupported: %s" % str(codec.unsupported))
+	var q: Codec = _codecs[_v_q16]
+	var near: PackedStringArray = []
+	for key: String in q.largest:
+		var steps: float = float(q.largest[key]) / q.scale_of(key)
+		if steps > 8000.0:
+			near.append("%s %.3f (%.0f steps)" % [key, q.largest[key], steps])
+	lines.append_array(["", "Q16 fields using over a quarter of their s16 range (largest magnitude, steps): %s"
+			% (", ".join(near) if not near.is_empty() else "none"), "", _set_cost()])
+	return "\n".join(lines)
+
+
+# What the codec's per-field write costs against a hand-written decoder's:
+# Object.set by name against a member assignment, and a float read off the
+# buffer, per call.
+static func _set_cost() -> String:
+	var o := KeeperSave.new()
+	var b := PackedByteArray()
+	b.resize(16)
+	var n: int = 20000
+	var f: StringName = &"impact_s"
+	var t0: int = Time.get_ticks_usec()
+	for i: int in n:
+		o.set(f, b.decode_double(0))
+	var t1: int = Time.get_ticks_usec()
+	for i: int in n:
+		o.impact_s = b.decode_double(0)
+	var t2: int = Time.get_ticks_usec()
+	return "A field written by name (Object.set) and read off the buffer: %.2f µs; by a member assignment: %.2f µs." % [
+			float(t1 - t0) / float(n), float(t2 - t1) / float(n)]
 
 
 static func _has_release(f: Frame) -> bool:
@@ -903,7 +1296,7 @@ func _play_name() -> String:
 # a line per shot: the host's verdict and the client's at each one-way, by feed.
 func _score_scenario(sc: int) -> PackedStringArray:
 	for oi: int in ONE_WAYS_MS.size():
-		for v: int in Variant.size():
+		for v: int in _names.size():
 			var seen: Dictionary = _client_seen[oi][v]
 			for t: int in seen:
 				for st: Stats in [_stats[oi][v], _sc_stats[sc][oi][v]]:
@@ -920,7 +1313,7 @@ func _score_scenario(sc: int) -> PackedStringArray:
 				_real_outcome(r)]
 		for oi: int in ONE_WAYS_MS.size():
 			var cell: String = ""
-			for v: int in [Variant.TRUTH, Variant.HIDDEN, Variant.DR]:
+			for v: int in _shown:
 				var client: Array = _verdict(r, _client_seen[oi][v])
 				cell += _score_shot([_stats[oi][v], _sc_stats[sc][oi][v]], host, client, _client_seen[oi][v]) + " "
 			row += " %s |" % cell.strip_edges()
@@ -1046,15 +1439,16 @@ func _tier_tables(tier: int, shot_lines: PackedStringArray) -> String:
 			"| one-way | feed | ticks | box gap p50 / p95 / max cm | root p95 cm | ticks box > 1 cm | save state differs | shots | X | ~ | save chosen differs at the verdict | box gap at the verdict p95 / max cm | parts furthest off (ticks > 1 cm) |",
 			"|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
 	for oi: int in ONE_WAYS_MS.size():
-		for v: int in Variant.size():
+		for v: int in _names.size():
 			var st: Stats = _stats[oi][v]
 			if st.ticks == 0:
 				continue
 			lines.append("| %.0f | %s | %d | %s | %.1f | %.1f%% | %d / %d | %d | %d | %d | %d | %s | %s |" % [
-					ONE_WAYS_MS[oi], VARIANT_NAMES[v], st.ticks, _cm3(st.box), 100.0 * _pct(st.root, 0.95),
+					ONE_WAYS_MS[oi], _names[v], st.ticks, _cm3(st.box), 100.0 * _pct(st.root, 0.95),
 					100.0 * float(st.box_off) / float(st.ticks), st.save_off, st.save_ticks, st.shots,
 					st.verdict_off, st.part_off, st.choice_off, _cm2(st.shot_box), _top(st.worst)])
-	lines.append_array(["", "### Box gap by scenario, HIDDEN / DR (p95 / max cm)", ""])
+	lines.append_array(["", "### Box gap by scenario, %s / %s (p95 / max cm)" % [_names[_shown[1]],
+			_names[_shown[2]]], ""])
 	var head: String = "| scenario |"
 	var rule: String = "|---|"
 	for ow: float in ONE_WAYS_MS:
@@ -1064,17 +1458,18 @@ func _tier_tables(tier: int, shot_lines: PackedStringArray) -> String:
 	for sc: int in SC_NAMES.size():
 		var row: String = "| %s |" % SC_NAMES[sc]
 		for oi: int in ONE_WAYS_MS.size():
-			var h: Stats = _sc_stats[sc][oi][Variant.HIDDEN]
-			var d: Stats = _sc_stats[sc][oi][Variant.DR]
+			var h: Stats = _sc_stats[sc][oi][_shown[1]]
+			var d: Stats = _sc_stats[sc][oi][_shown[2]]
 			row += " %s / %s |" % [_cm2(h.box), _cm2(d.box)]
 		lines.append(row)
 	var shot_head: String = "| shot | release to verdict | host (free flight against his boxes) | real puck |"
 	var shot_rule: String = "|---|---|---|---|"
 	for ow: float in ONE_WAYS_MS:
-		shot_head += " %.0f ms T H D |" % ow
+		shot_head += " %.0f ms |" % ow
 		shot_rule += "---|"
 	lines.append_array(["", "### Shots: the client's verdict (= same, ~ other part or tick, X save against goal, ? past the window)",
-			"", shot_head, shot_rule])
+			"", "Each cell, in order: %s." % ", ".join(_shown.map(func(v: int) -> String: return _names[v])), "",
+			shot_head, shot_rule])
 	lines.append_array(shot_lines)
 	lines.append_array(_cost_table())
 	return "\n".join(lines)
@@ -1104,11 +1499,11 @@ func _cost_table() -> PackedStringArray:
 				_mean(st.steps_us), _pct(st.steps_us, 1.0), 2.0 * 45.0 * _mean(st.steps_us) / 60.0 / 1000.0,
 				2.0 * 45.0 * _mean(st.snap_us) / 60.0 / 1000.0,
 				2.0 * _pct(st.catch_us, 0.95) / 1000.0, 2.0 * _pct(st.catch_us, 1.0) / 1000.0])
-	var w: Stats = _stats[WIRE_AT][Variant.WIRE]
+	var w: Stats = _stats[_wire_at][Variant.WIRE]
 	lines.append("")
-	var t: Stats = _stats[WIRE_AT][Variant.TRUTH]
+	var t: Stats = _stats[_wire_at][Variant.TRUTH]
 	lines.append("Copying only the wire set (WIRE, at %.0f ms): copy p50 %.0f µs. Of a step, on the pose he has: the skeleton solved p50 %.0f µs, his 22 save boxes seated on their nodes p50 %.0f µs." % [
-			ONE_WAYS_MS[WIRE_AT], _pct(w.clone_us, 0.5), _pct(t.solve_us, 0.5), _pct(t.seat_us, 0.5)])
+			ONE_WAYS_MS[_wire_at], _pct(w.clone_us, 0.5), _pct(t.solve_us, 0.5), _pct(t.seat_us, 0.5)])
 	return lines
 
 

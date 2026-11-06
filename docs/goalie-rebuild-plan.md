@@ -617,7 +617,8 @@ The option is to predict him as the loose puck is predicted:
   - how often, and how far, a predicted save disagrees with the host's. The
     client's puck stops at a predicted save, so a disagreement snaps the puck.
 
-  Both measured: `docs/goalie-prediction-measurements.md`
+  Both measured, and what his wire state weighs over the delta channel:
+  `docs/goalie-prediction-measurements.md`
   (`tests/instruments/keeper/test_keeper_prediction.gd`).
 
 **After:** tune on the new goalie, offline and online, against the scoreboard

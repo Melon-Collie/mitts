@@ -214,8 +214,8 @@ frame**.
   100 ms, steps alone.
 - **The reflective copy is the instrument's, not a design's.** It costs ~4.1 ms
   a keeper (1.3 ms for the wire set alone), most of the per-frame figure with
-  it; a hand-written copy or decode of ~2 KB of fields would be far cheaper,
-  and is not measured here. The steps-only column is the one that carries.
+  it; decoding the fields from bytes is measured below (*Over the delta
+  channel*: ~1.25 ms with a generic decoder). The steps-only column is the one that carries.
 - **The snapshot's frame spikes.** The catch-up (copy plus the span's steps)
   lands in the frame the snapshot arrives in: 17–28 ms for two keepers at p95
   here (about 8 ms of it the reflective copy), 41–60 ms at the worst. Of a
@@ -260,7 +260,8 @@ held cover played out) could need more.
 
 Against today's 142 B a goalie a snapshot, the wire set adds ~1.74 KB, or
 ~1.05 KB if the play read's history is rebuilt from the client's own snapshot
-buffer as the plan suggests (not tried here). For two goalies at 45 Hz that is
+buffer as the plan suggests (tried below, *Over the delta channel*, along with
+what it all costs delta'd). For two goalies at 45 Hz that is
 ~157 KB/s a client, or ~95 KB/s, against ~43 KB/s for the whole 5v5 snapshot
 now. The estimate is a flat per-field encoding: nothing is gated on which move
 is under way, though at any instant most movers are idle.
@@ -288,3 +289,233 @@ is under way, though at any instant most movers are idle.
   snapshot's frame that a save choice makes worse.
 - **The wire state is about thirteen times today's goalie block.** ~1.9 KB a
   keeper as a flat encoding, ~1.05 KB without the play read's history.
+
+## Over the delta channel
+
+Since the measurement above, the world-state snapshot goes out as a delta:
+each client gets the raw snapshot XOR the newest one it acked, then zstd
+(`SnapshotDelta`, `WirePacking`; ~344 B a 10-skater snapshot, two goalies
+included, measured with 10% loss and acks three broadcasts late,
+`docs/performance-findings.md`). This section asks what the keeper's wire set
+costs riding that channel, whether it can be quantized and stay exact, whether
+the play read's history can be rebuilt instead of sent, and what decoding it
+costs a client.
+
+```
+KEEPER_PREDICTION_BYTES=1 KEEPER_PREDICTION_TIERS=HARD,EASY bash .claude/hooks/run-gut.sh \
+    -gselect=test_keeper_prediction -gdir=res://tests/instruments      # ~17 min
+  + KEEPER_PREDICTION_HOST_SNAPS=1    # the keeper snaps his wire set to Q16 every snapshot tick
+  + KEEPER_PREDICTION_SEARCH=F32      # a feed per class with only it lossy (or Q16, or F32:<Class,...> per field)
+  + KEEPER_PREDICTION_QUICK=1 [KEEPER_PREDICTION_AT=<one-way index>]   # one one-way only
+```
+
+The codec is `tests/instruments/keeper/keeper_wire_codec.gd`: the wire set
+above (the fields the WIRE feed copies), walked in the cloner's order and
+written to a flat buffer, and a keeper rebuilt by reading that buffer back onto
+the client's own objects (its node placed from his motor, his body posed from
+the decoded pose, his boxes seated). Every client feed below starts from the
+decoded bytes, never from the live objects, on the same plays and shots as
+above, with the TRUTH world. Every other snapshot the client's keeper is first
+reset to a never-played one, so nothing left off the wire survives in it.
+
+### The layout
+
+A u16 header, the values in walk order, then every bool as one bit at the end.
+The layout is fixed: no snapshot of either tier changed the blob's length
+(SnapshotDelta sends a resized snapshot whole).
+
+| | EXACT | F32 | Q16 |
+|---|---|---|---|
+| scalar (GDScript's float is a double) | f64 | f32 | s16 at its field's scale |
+| vector component (the engine's own f32) | f32 | f32 | s16 |
+| int | s32 | s32 | s8 (none overflowed) |
+| bool, the history's flag bytes | a bit, a byte | a bit, a byte | a bit, a bit |
+| KeeperPose (5 of them) | its fields | its fields | `KeeperPoseCodec`, 130 B |
+| object (alias, null or here) | a byte | a byte | a byte |
+| `_ticks` (read only modulo 3) | a byte | a byte | a byte |
+| **the blob** | 4,967 B | 4,435 B | **1,917 B** (1,223 B less the history) |
+
+Q16 scales: angles at π/32767 (every one stayed inside ±π), clocks at 1 ms,
+shares and fractions of 0..1 at 1e-4, velocities at 2.5 mm/s (±82 m/s: a
+spot's velocity reached 70 m/s), positions and the rest at 1 mm; NaN and ±INF
+have codes of their own. Nothing was clamped. The Q16 blob is the earlier flat
+estimate (1.87 KB) plus a byte per object and the residue, so that estimate
+holds.
+
+### Does it stay exact?
+
+Box gap (cm, p95 / max) of the client rebuilt from the bytes against the host,
+TRUTH world, Hard at 50 ms one-way; the full run's other one-ways and Easy
+agree in shape:
+
+| feed | box gap | ticks > 1 cm | save state differs |
+|---|---|---|---|
+| EXACT | 0.0 / 0.0 | 0 | 0 / 886 |
+| F32 | 0.0 / 13.5 | 0.8% | 1 |
+| F32, the scalars below kept f64 | 0.0 / 0.0 | 0 | 0 |
+| Q16 | 0.4 / 73.0 | 3.6% | 35 |
+| Q16, **the keeper snapping his wire set to Q16 on every snapshot tick** | 0.0 / 0.0 | 0 | 0 |
+
+- **EXACT bytes reproduce the reflective copy exactly**, 0.0 cm on every
+  compared tick at every one-way, both tiers: the layout carries everything the
+  WIRE feed showed he needs.
+- **Any rounding breaks bit-exactness, but at f32 only six scalars.**
+  Searched class by class and then field by field (Hard at 50 ms, Easy at 75
+  and 100 ms): `KeeperGlide.x`, `.z` and `._drive`, `KeeperShotRead.age` and
+  `KeeperSlide._clock` move his boxes (up to 67 cm), `KeeperMotor.x` by
+  0.1 cm; they accumulate or are compared against thresholds. With those six
+  at f64 and the rest at f32 the copy is exact at every one-way on Hard and on
+  Easy (the full run held five of them, which left a tick or two parting on
+  Easy at 75 and 100 ms, max 16 cm, until `KeeperSlide._clock` was found;
+  the six were then checked at those two). The search covers these plays
+  only.
+- **At Q16 the misses are in the movers and the reads.** Quantizing one class
+  at a time, the rest exact: `KeeperPlayRead` (max 73 cm, 3.1% of ticks),
+  `KeeperMotor` (15 cm, 36 save-state ticks), `KeeperGlide` (25 cm),
+  `KeeperRoute` (17 cm), `KeeperShotRead` (15 cm, 6 save-state ticks); the
+  poses, `KeeperSave` and `KeeperSaveMove` under 2 cm; the other eleven classes
+  0.1 cm or nothing. No class can be named "the" field to keep: the misses are
+  spread over every class that integrates something.
+- **Quantizing on both sides is exact.** If the keeper's tick sets his own wire
+  set to its Q16 value on every snapshot tick (every 2nd tick) — the host's
+  keeper in both passes, the client's copy on the same ticks as it steps the
+  span — the client rebuilt from the Q16 bytes is the host's to the bit:
+  0.0 cm at 50 ms one-way on both tiers, as TRUTH and EXACT are. It costs the
+  host's play nothing measurable here: on all 97 shots, both tiers, the host's
+  verdict (the part and the tick of first contact) and the real puck's outcome
+  are the same with the snap as without it.
+
+Q16 disagreement without the snap, by one-way (box gap p95 / max cm, save-state
+ticks differing; no shot verdict differed on either tier at any one-way):
+
+| | 15 ms | 30 ms | 50 ms | 75 ms | 100 ms |
+|---|---|---|---|---|---|
+| Hard | 0.4 / 16.6, 16 | 0.4 / 32.1, 23 | 0.4 / 73.0, 35 | 0.7 / 82.6, 45 | 1.3 / 82.6, 49 |
+| Easy | 0.4 / 37.4, 12 | 0.4 / 46.0, 16 | 0.4 / 45.5, 26 | 0.8 / 73.0, 33 | 2.9 / 82.6, 44 |
+
+### What it costs on the wire
+
+Bytes per keeper per snapshot, 45 Hz, Hard (Easy within a few bytes of each);
+mean / p95 / max over 2,130 snapshots. "XOR n back" is the blob XORed against
+its own value n snapshots earlier, then zstd: what SnapshotDelta ships for it
+with the client's ack 1 or 3 broadcasts old.
+
+| blob | whole | zstd | XOR 1 back, zstd | XOR 3 back, zstd |
+|---|---|---|---|---|
+| today's goalie block (root + pose) | 142 | 126 / 138 / 146 | 49 / 104 / 119 | 56 / 112 / 123 |
+| **today's block, then the Q16 wire set less its pose** | 1,928 | 729 / 961 / 1,076 | **139 / 250 / 478** | **199 / 424 / 552** |
+| the same less the play read's history | 1,234 | 456 / 598 / 663 | 103 / 203 / 429 | 132 / 339 / 451 |
+| Q16 wire set alone | 1,917 | 721 / 951 / 1,070 | 135 / 235 / 465 | 195 / 417 / 545 |
+| EXACT wire set | 4,967 | 1,236 / 1,763 / 1,919 | 230 / 446 / 946 | 342 / 778 / 1,078 |
+| F32 wire set, five scalars f64 (six: +4 B) | 4,455 | 1,162 / 1,660 / 1,787 | 215 / 412 / 859 | 321 / 722 / 999 |
+
+Each blob here is compressed on its own, so each carries zstd's frame and the
+run-length floor: an all-zero blob of the same length compresses to 18–19 B.
+Inside the real snapshot those are shared with the rest of the packet, so a
+blob's marginal cost is about its figure less ~18 B; the differences between
+rows stand as they are.
+
+- **Delta'd, the wire set is ~3.5× today's goalie block, not ~13×.** Most of
+  it does not change between snapshots: the movers not under way, the flags,
+  the far end of the history ring. With acks three back, the goalie block
+  becomes ~199 B a snapshot on average instead of ~56 B: **+~143 B a keeper**,
+  ~424 B at p95 against ~112 B. With acks one back, +~90 B.
+- **Two keepers on the 344 B snapshot:** +~286 B mean, ~630 B a snapshot, about
+  1.8× today (~16 → ~28 KB/s a client at 45 Hz). Both keepers are costed as
+  the one facing every shot here; the far keeper, standing in his crease, will
+  change less, and that is not measured. The plays are dense with action (each
+  is measured from shortly before the release through its tail), so the mean
+  leans toward a busy keeper.
+- **Lossless adds about twice what Q16 does.** EXACT is +~286 B a keeper (XOR
+  3), F32 with the f64 scalars +~265 B. Q16 with the keeper's own snap is
+  the cheapest exact option measured.
+- **The history is ~67 B a keeper a snapshot delta'd** (199 against 132, XOR
+  3), not the 690 B it weighs flat: each snapshot shifts two new entries into
+  the ring.
+
+### Rebuilding the play read's history from the client's snapshots
+
+The client's copy took everything from the bytes except the history's seven
+arrays (its head and count still sent), and refilled them from what a client
+holds: the snapshots up to S, every 2nd tick, positions at 1 cm and velocities
+at 0.02 m/s as `WorldStateCodec` sends them. A snapshot holds the skaters as he
+read them on its tick and the puck after the puck's own tick, which is what he
+reads on the next; a tick between two snapshots is them lerped, with the
+earlier one's carrier and shot state. Whether a body hid the puck is taken
+from the host's own reading on the snapshot tick (a client would compute it
+from the snapshot). A release's exact tick, which `SnapshotEventLog` could
+give, is not used.
+
+| | one-way | box gap p50 / p95 / max cm | ticks > 1 cm | save state differs | shot verdicts differing |
+|---|---|---|---|---|---|
+| Hard, EXACT, history rebuilt | 15 ms | 0.0 / 0.3 / 43.8 | 3.4% | 4 / 886 | 0 of 49 |
+| | 50 ms | 0.0 / 1.2 / 82.6 | 5.1% | 11 | 0 |
+| | 100 ms | 0.0 / 0.7 / 82.6 | 4.6% | 12 | 0 |
+| Easy, EXACT, history rebuilt | 15 ms | 0.0 / 1.7 / 38.4 | 6.5% | 0 / 1066 | 0 of 48 |
+| | 50 ms | 0.0 / 9.5 / 71.5 | 9.9% | 1 | 0 |
+| | 100 ms | 0.0 / 13.0 / 71.5 | 14.2% | 1 | 0 |
+
+- **It is not exact, at any one-way.** The history holds the world as he read
+  it to the bit; the client has it at a centimetre and at every 2nd tick. The
+  errors land in the plays where the history decides a move: on Hard the point
+  slapper (p95 32 cm at 50 ms one-way, 78 cm at 100 ms), the one-timer (23–30
+  cm from 50 ms), the carry across and the sharp angle (3–18 cm and 10–13 cm
+  at p95 at every one-way), and the sweep's shots at their worst tick (44–83 cm max); on Easy
+  his glove, most of the ticks over a centimetre.
+- **It is on the order of a hidden release.** The earlier HIDDEN feed (a
+  release the client has not seen) ran 0.3–56 cm at p95 on Hard; the rebuilt
+  history runs 0.3–1.2 cm at p95 on Hard and 1.7–13 cm on Easy, with maxima as
+  large as HIDDEN's, and like HIDDEN it is there at the shortest span.
+- **It saves ~67 B a keeper a snapshot.** Sending the history keeps the copy
+  exact for about a third of the wire set's delta'd cost.
+
+### What decoding costs a client
+
+Per keeper per snapshot, this machine (a shared 4-core container; part of the
+run overlapped another job's load, so read the ratios): µs.
+
+| | p50 | p95 |
+|---|---|---|
+| the reflective copy (TRUTH, the earlier instrument's) | 4,381 | 6,868 |
+| decode the Q16 bytes, pose him and seat his boxes | 1,251 | 1,993 |
+| of which his fields | 1,041 | 1,616 |
+| decode the EXACT bytes | 1,270 | 1,976 |
+| the host's encode of the Q16 bytes | 1,321 | 2,132 |
+
+- **Decoding the bytes is ~3.5× cheaper than the reflective copy** and the
+  realistic path; it lands the catch-up the earlier report measured (copy plus
+  the span's steps) at ~1.25 ms plus the steps, not ~4.4 ms plus them.
+- **The decoder here is generic.** It walks each class's script variables and
+  dispatches on each value's type; naming the field costs little (a field
+  written by name 0.05 µs against 0.03 µs by a member assignment, measured in
+  the same run), so nearly all of the ~1 ms is the walker's per-value dispatch
+  in GDScript. A hand-written decode and encode of these ~800 values would be
+  well under that; it is not written or measured here.
+- **The encode is the host's per snapshot**, ~1.3 ms a keeper with this codec:
+  ~0.12 s a second for two keepers at 45 Hz, which a hand-written encoder must
+  bring down before this ships. With the keeper's own Q16 snap, each snap is
+  an encode and a decode on the host every 2nd tick, and the client's replay
+  of the span snaps on the same ticks; here that is the codec again, while in
+  the game it would be the quantize applied to his fields in place, not
+  measured.
+
+### What this says about the plan
+
+- **The feature lands at ~200 B a keeper a snapshot delta'd** (p95 ~420 B,
+  acks three back): +~145 B a keeper over today's goalie block, the whole
+  10-skater snapshot ~344 → ~630 B for two keepers on average. That is the Q16
+  wire set, the history sent, riding after today's block.
+- **Exactness then needs the keeper to quantize himself.** Q16 bytes alone
+  disagree (up to 83 cm, no verdict changed in these plays); with his wire set
+  snapped to its Q16 value at every snapshot tick on both sides, the client is
+  exact (checked at 50 ms one-way, both tiers), and the host's play here was
+  unchanged by it. The snap is part of
+  the keeper's own tick, so it would move the shot field and the shot odds
+  truth, which are regenerated from his play.
+- **Without the snap, lossless is twice the bytes** (~320–340 B a keeper),
+  and f32 alone is not enough: six scalars need f64.
+- **Rebuilding the history is not worth its error.** It saves ~67 B a keeper
+  and breaks exactness at every one-way, by as much as a hidden release.
+- **Decoding is ~1.25 ms a keeper with a generic decoder**, against ~4.4 ms for
+  the reflective copy; the host's encode at the same cost is the number a real
+  codec has to cut.
