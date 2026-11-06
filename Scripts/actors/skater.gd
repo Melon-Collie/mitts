@@ -1133,10 +1133,7 @@ func _physics_process(delta: float) -> void:
 	clamp_body_to_net()
 	clamp_body_to_goalies()
 	_update_blade_elevation(delta)
-	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
-	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
-	_update_blade_lift(delta)
-	_update_commit_stance(delta)
+	step_tick_state(delta)
 	_update_carry_contact(delta)
 	_latch_press_read()
 	# Position + velocity are now fully settled for this tick (integration,
@@ -1936,6 +1933,35 @@ func grip_choke() -> float:
 # Forcibly pop this skater's blade up for `duration` seconds (opponent stick
 # lift). Takes the max with any in-flight timer so a fresh hook never shortens
 # an existing one. Host-side only; clients receive the resolved blade_up.
+# The per-tick state this skater steps itself that its controller's next tick
+# reads: the stick-check timers (a forced lift decides stick_taken) and the
+# blade-lift and check-commit eases (the check lead moves the loaded blade, and
+# the twist follows it). LocalController's reconcile replay steps it too, from
+# the values its prediction history recorded at the ack (adopt_tick_state).
+func step_tick_state(delta: float) -> void:
+	_forced_lift_timer = maxf(_forced_lift_timer - delta, 0.0)
+	_stick_check_cooldown = maxf(_stick_check_cooldown - delta, 0.0)
+	_update_blade_lift(delta)
+	_update_commit_stance(delta)
+
+
+func forced_lift_remaining() -> float:
+	return _forced_lift_timer
+
+
+func stick_check_cooldown_remaining() -> float:
+	return _stick_check_cooldown
+
+
+func adopt_tick_state(forced_lift_s: float, stick_check_cooldown_s: float,
+		blade_lift_blend: float, commit_lift_blend: float, check_lead: float) -> void:
+	_forced_lift_timer = forced_lift_s
+	_stick_check_cooldown = stick_check_cooldown_s
+	_blade_lift_blend = blade_lift_blend
+	_commit_lift_blend = commit_lift_blend
+	_check_lead = check_lead
+
+
 func force_blade_lift(duration: float) -> void:
 	_forced_lift_timer = maxf(_forced_lift_timer, duration)
 

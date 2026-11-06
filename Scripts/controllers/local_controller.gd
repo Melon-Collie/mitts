@@ -223,8 +223,7 @@ func _step_tick(delta: float) -> void:
 			prep_input.stick_lift_held = false
 			_current_input = prep_input
 			_input_history.append(_current_input)
-			var prep_rtt_cap: int = clampi(int(NetworkManager.get_latest_rtt_ms() / 1000.0 * float(Constants.PHYSICS_TICK)) * 2, Constants.PHYSICS_TICK / 5, Constants.PHYSICS_TICK * 2)
-			if _input_history.size() > prep_rtt_cap:
+			if _input_history.size() > input_history_cap(NetworkManager.get_latest_rtt_ms()):
 				_input_history.pop_front()
 			apply_blade_aim_only(_current_input, delta)
 			# Snapshot the frozen prep frame too, so a broadcast that acks a
@@ -256,10 +255,7 @@ func _step_tick(delta: float) -> void:
 	_shuffle_steps.shape(input, skater.velocity, shuffle_step_distance, stop_decel)
 	_current_input = input
 	_input_history.append(_current_input)
-	# Cap scales with RTT so sustained high-loss can't grow the buffer unboundedly:
-	# 2× RTT worth of frames (min 0.2 s, max 2 s of ticks) covers the in-flight window.
-	var rtt_cap: int = clampi(int(NetworkManager.get_latest_rtt_ms() / 1000.0 * float(Constants.PHYSICS_TICK)) * 2, Constants.PHYSICS_TICK / 5, Constants.PHYSICS_TICK * 2)
-	if _input_history.size() > rtt_cap:
+	if _input_history.size() > input_history_cap(NetworkManager.get_latest_rtt_ms()):
 		_input_history.pop_front()
 	_process_input(_current_input, _current_input.delta)
 	# Snapshot is deferred to skater.post_move_integrated (post integration) so
@@ -391,6 +387,17 @@ func _step_tick(delta: float) -> void:
 			_was_in_pickup_range = false
 			_was_in_poke_range = false
 
+# Inputs kept for replay. The unacked window is the round trip plus the stamp's
+# margin, the wait for the next broadcast and the host queue's slip before a
+# drain (~rtt + 0.12 s at worst); an input that falls off the front is silently
+# missing from the replay, which then lands short and reconciles again. Capped
+# so a link that stops acking can't grow it without bound.
+static func input_history_cap(rtt_ms: float) -> int:
+	var window_s: float = 2.0 * maxf(rtt_ms, 0.0) / 1000.0 + 0.2
+	return clampi(ceili(window_s * float(Constants.PHYSICS_TICK)),
+			Constants.PHYSICS_TICK / 5, Constants.PHYSICS_TICK * 2)
+
+
 func _append_prediction_snapshot() -> void:
 	# Appended on every gathered input — including frozen
 	# FACEOFF_PREP frames (position locked, velocity zero) — so a broadcast that
@@ -403,6 +410,7 @@ func _append_prediction_snapshot() -> void:
 	snap.facing = _pose.facing
 	snap.shot_state = _sm.get_state() as int
 	_pose.record_twist(snap)
+	snap.record_tick_state(skater)
 	_prediction_history.append(snap)
 	if _prediction_history.size() > _PREDICTION_HISTORY_CAP:
 		_prediction_history.pop_front()
@@ -633,6 +641,11 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 	# the live state is restored below and server authority is then applied
 	# through the in-flight guards, exactly as before.
 	_sm.set_state(server_state.shot_state as SkaterStateMachine.State)
+	# The stick-check timers and the blade eases as they stood after the acked
+	# input; the replay steps them forward from there. Without a match they keep
+	# their live values and are not stepped, which would advance them twice.
+	if predicted != null:
+		predicted.adopt_tick_state(skater)
 	is_replaying = true
 	# Walk the (already ack-trimmed, chronological) prediction history alongside
 	# the replayed inputs so each entry can be RE-RECORDED from the corrected
@@ -662,6 +675,8 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 		skater.clamp_body_to_net()
 		# And the goalie footprint, for the same reason.
 		skater.clamp_body_to_goalies()
+		if predicted != null:
+			skater.step_tick_state(input.delta)
 		# Re-record this input's prediction from the corrected trajectory: the
 		# pre-correction snapshots sit on the trajectory the replay just
 		# abandoned, so leaving them re-trips the threshold on every subsequent
@@ -682,6 +697,7 @@ func reconcile(server_state: SkaterNetworkState) -> void:
 			replay_snap.facing = _pose.facing
 			replay_snap.shot_state = _sm.get_state() as int
 			_pose.record_twist(replay_snap)
+			replay_snap.record_tick_state(skater)
 			replay_snap.was_replay_rerecorded = true
 			replay_hist_i += 1
 	is_replaying = false

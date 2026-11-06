@@ -33,6 +33,26 @@ var upper_body_rotation_y: float
 var twist_whip: float
 var twist_follow: float
 var twist_follow_vel: float
+# Skater.step_tick_state's state after this input: the replay adopts the ack's
+# and steps it forward rather than reading the live, end-of-window values.
+var forced_lift_s: float
+var stick_check_cooldown_s: float
+var blade_lift_blend: float
+var commit_lift_blend: float
+var check_lead: float
+
+
+func record_tick_state(skater: Skater) -> void:
+	forced_lift_s = skater.forced_lift_remaining()
+	stick_check_cooldown_s = skater.stick_check_cooldown_remaining()
+	blade_lift_blend = skater.get_blade_lift_blend()
+	commit_lift_blend = skater.get_commit_lift_blend()
+	check_lead = skater.get_check_lead()
+
+
+func adopt_tick_state(skater: Skater) -> void:
+	skater.adopt_tick_state(forced_lift_s, stick_check_cooldown_s,
+			blade_lift_blend, commit_lift_blend, check_lead)
 
 
 # Binary search for the snapshot at exactly target_ts. Returns null when the

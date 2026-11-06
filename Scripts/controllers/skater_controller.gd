@@ -2867,8 +2867,9 @@ func _transition_to_skating() -> void:
 	# carry it to the new targets: zeroing it here snaps the shoulders square and
 	# the trunk upright in one tick (a lost puck threw the head ~0.2 m). Out of
 	# the follow-through the blade smoother is also seeded from the finish, which
-	# choreographed the blade directly.
-	if prev_state == State.FOLLOW_THROUGH and not is_replaying:
+	# choreographed the blade directly. Replayed too: the next tick's blade reads
+	# the seed.
+	if prev_state == State.FOLLOW_THROUGH:
 		_ik.seed_blade_smoothing(skater.upper_body_to_global(skater.get_blade_position()))
 	skater.exit_slapshot_pinning()
 	_hide_slapshot_hud()
