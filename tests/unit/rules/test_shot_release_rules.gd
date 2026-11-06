@@ -5,32 +5,6 @@ extends GutTest
 # itself is not (only the one-timer contact test refuses one outright).
 
 
-# ── clamp_rtt_ms ──────────────────────────────────────────────────────────────
-
-func test_rtt_legit_value_passes_through() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(80.0, 75.0), 80.0, 0.001,
-			"claim within measured*1.5+slack is untouched")
-
-func test_rtt_forged_value_clamped_to_measured_ceiling() -> void:
-	var clamped: float = ShotReleaseRules.clamp_rtt_ms(3000.0, 60.0)
-	assert_almost_eq(clamped, 60.0 * ShotReleaseRules.RTT_MEASURED_HEADROOM
-			+ ShotReleaseRules.RTT_MEASURED_SLACK_MS, 0.001,
-			"forged rtt collapses to host-measured ceiling")
-
-func test_rtt_hard_ceiling_when_no_measurement() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(3000.0, 0.0),
-			ShotReleaseRules.MAX_RTT_MS, 0.001,
-			"no ping sample yet → hard ceiling only")
-
-func test_rtt_high_measured_ping_still_capped_at_max() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(1000.0, 500.0),
-			ShotReleaseRules.MAX_RTT_MS, 0.001)
-
-func test_rtt_negative_and_nan_zeroed() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(-50.0, 80.0), 0.0, 0.001)
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(NAN, 80.0), 0.0, 0.001)
-
-
 # ── clamp_back_date ───────────────────────────────────────────────────────────
 
 func test_back_date_fresh_stamp_returns_elapsed() -> void:

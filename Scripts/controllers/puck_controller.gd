@@ -1182,7 +1182,8 @@ func apply_state(state: PuckNetworkState, host_ts: float) -> void:
 	# refill freeze), and a live release seed watches the buffer for the host's
 	# confirming loose snapshot (the seed → snapshot handover in _predict_loose),
 	# so buffering during the seed is what makes the handover possible.
-	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
+	if BufferedStateInterpolator.intake(_state_buffer, host_ts, state) \
+			!= BufferedStateInterpolator.Intake.APPEND:
 		return
 	# Once the buffer is full, the evicted front entry becomes the new back one
 	# rather than being dropped for a fresh allocation — so the wrapper churn
@@ -1266,18 +1267,24 @@ func _predict_loose(delta: float) -> bool:
 	if _state_buffer.is_empty():
 		return false
 	var source: BufferedPuckState = _state_buffer.back()
-	# Staleness is measured against host-present, not the render instant.
+	# Staleness is measured against host-present, not the render instant. A
+	# snapshot newer than host-present is fresh, not bad data: whenever the
+	# clock's error exceeds the one-way trip (a LAN or same-machine session) it
+	# lands "from the future", and the fallback would draw the puck a whole
+	# interpolation delay back for that packet. Only a clock still warming up
+	# makes a negative age meaningless.
 	var age: float = NetworkManager.estimated_host_time() - source.timestamp
-	if age < 0.0 or age > Constants.PUCK_PREDICT_MAX_S:
-		if age > Constants.PUCK_PREDICT_MAX_S:
-			NetworkTelemetry.record_puck_predict_fallback()
+	if age < 0.0 and not NetworkManager.is_clock_ready():
+		return false
+	if age > Constants.PUCK_PREDICT_MAX_S:
+		NetworkTelemetry.record_puck_predict_fallback()
 		return false
 	# A dead puck at rest in the air is the faceoff puck in the linesman's hand,
 	# not a ballistic one — predicting it would drop it between every snapshot.
 	var held: bool = puck.pickup_locked and source.state.velocity.is_zero_approx() \
 			and source.state.position.y > puck.ice_height + GameRules.PUCK_AIRBORNE_HEIGHT_M
 	_run_prediction(source.state.position, source.state.velocity,
-			0.0 if held else render_t - source.timestamp)
+			0.0 if held else maxf(render_t - source.timestamp, 0.0))
 	is_extrapolating = false  # prediction is the mode, not a buffer underrun
 	if NetworkTelemetry.instance:
 		NetworkTelemetry.instance.puck_mode = "predicted_hold" if _sim_stopped else "predicted"

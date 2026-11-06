@@ -10,7 +10,7 @@ class_name ShotReleaseRules
 # eligibility is gated on server-visible puck state.
 #
 # Design rule: lag compensation is a privilege, the shot itself is not. A
-# stale or forged timestamp earns zero back-date / zero RTT advance rather
+# stale or forged timestamp earns zero back-date rather
 # than rejecting the shot — a legit client during NTP warmup stamps 0 and must
 # still be able to shoot. Only the one-timer contact test can refuse a shot
 # outright, because firing one requires the swing to actually have met the puck.
@@ -27,33 +27,11 @@ const MAX_CLAIM_AGE_S: float = 0.2
 # the 200 ms window. Applied to both age comparisons so they agree at the edge.
 const _AGE_EPSILON_S: float = 0.000001
 
-# Hard ceiling on the claimed RTT used for the release-point forward advance.
-# Without it, a forged rtt_ms teleports the puck (direction * power * rtt/2)
-# arbitrarily far downfield on every shot.
-const MAX_RTT_MS: float = 300.0
-# The claimed RTT may exceed the host's own measurement of that peer by this
-# factor plus slack (the client's latest unaveraged sample legitimately spikes
-# above the smoothed host-side ping).
-const RTT_MEASURED_HEADROOM: float = 1.5
-const RTT_MEASURED_SLACK_MS: float = 30.0
-
 # Legit lofted shots cap the pre-normalization Y/XZ ratio at
 # ShotMechanics.MAX_LOFT_RATIO (1.0 = 45°), i.e. a normalized direction y of
 # ~0.707. 0.75 leaves headroom for float noise while still blocking
 # near-vertical forged directions.
 const MAX_DIRECTION_Y: float = 0.75
-
-
-# Clamp a client-claimed RTT against the host's own measurement of that peer.
-# `host_measured_ms <= 0` means no sample yet (just connected) — fall back to
-# the hard ceiling only.
-static func clamp_rtt_ms(claimed_ms: float, host_measured_ms: float) -> float:
-	if not is_finite(claimed_ms):
-		return 0.0
-	var ceiling: float = MAX_RTT_MS
-	if host_measured_ms > 0.0:
-		ceiling = minf(host_measured_ms * RTT_MEASURED_HEADROOM + RTT_MEASURED_SLACK_MS, MAX_RTT_MS)
-	return clampf(claimed_ms, 0.0, ceiling)
 
 
 # Goalie-reaction back-date for a release stamped `host_timestamp`, evaluated

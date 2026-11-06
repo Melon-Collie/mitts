@@ -421,9 +421,10 @@ var state_delta: float = 1.0 / Constants.STATE_RATE
 # must not be downshifted per phase, since the client jitter window assumes
 # STATE_RATE packet spacing. Stall resilience: on a host main-thread freeze
 # Godot's physics catch-up fires several back-to-back ticks, the counter
-# increments for each, and try_broadcast() fires per tick — so clients get the
-# multiple distinct host_timestamps they need to interpolate through the gap
-# instead of one snap.
+# increments for each, and try_broadcast() fires per tick — so clients get one
+# snapshot per eligible tick instead of one snap. Their millisecond labels can
+# coincide inside one frame; the skater and puck buffers keep the later of a
+# tie (BufferedStateInterpolator.intake).
 var _state_tick_divisor: int = Constants.PHYSICS_TICK / Constants.STATE_RATE
 const CONNECT_TIMEOUT: float = 10.0
 
@@ -835,10 +836,11 @@ func _close() -> void:
 	if is_instance_valid(SteamManager):
 		SteamManager.leave_lobby()
 
+# The host's ping to each peer is a property of the link, not the match, so it
+# survives here (reset() and a disconnect clear it): cleared, every reader saw
+# "no sample" until the next ping two seconds into the new match.
 func prepare_for_new_game() -> void:
 	_input_batch_provider = Callable()
-	_peer_ping_ms.clear()
-	_peer_rtt_ema_ms.clear()
 	_peer_loss_rates.clear()
 	_peer_input_watermarks.clear()
 	_claim_rate_window_start.clear()
@@ -1105,7 +1107,7 @@ func is_broadcast_due() -> bool:
 # Invoked end-of-tick by GameManager._capture_and_broadcast_post_physics, right
 # after StateBufferManager.capture(). The cadence counter advances in
 # `_physics_process` whether or not this runs, so a host stall's physics catch-up
-# still emits one broadcast per eligible tick with distinct host_timestamps.
+# still emits one broadcast per eligible tick.
 func try_broadcast() -> void:
 	if not is_host:
 		return

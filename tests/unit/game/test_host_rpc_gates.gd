@@ -49,3 +49,14 @@ func test_a_rematch_vote_outside_game_over_is_not_counted() -> void:
 	NetworkManager.request_rematch_vote(RematchVoteRules.Choice.REMATCH)
 	assert_signal_emitted(NetworkManager, "rematch_vote_requested")
 	assert_signal_not_emitted(NetworkManager, "rematch_vote_changed")
+
+
+func test_a_new_match_keeps_the_hosts_ping() -> void:
+	# The ping is the link's, not the match's. Cleared, every reader of it saw
+	# "no sample" for the first two seconds of a rematch.
+	var peer: int = 424242
+	NetworkManager._record_host_measured_rtt(peer, 40.0)
+	NetworkManager.prepare_for_new_game()
+	assert_eq(NetworkManager.get_peer_ping_ms(peer), 40)
+	NetworkManager._peer_ping_ms.erase(peer)
+	NetworkManager._peer_rtt_ema_ms.erase(peer)

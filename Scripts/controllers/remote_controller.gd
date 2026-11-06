@@ -364,9 +364,12 @@ func _drive_from_input(delta: float) -> void:
 func apply_network_state(state: SkaterNetworkState, host_ts: float) -> void:
 	if _is_host:
 		return
-	if not _state_buffer.is_empty() and host_ts < _state_buffer.back().timestamp:
-		NetworkTelemetry.record_ooo_drop()
-		return
+	match BufferedStateInterpolator.intake(_state_buffer, host_ts, state):
+		BufferedStateInterpolator.Intake.OUT_OF_ORDER:
+			NetworkTelemetry.record_ooo_drop()
+			return
+		BufferedStateInterpolator.Intake.REPLACED:
+			return
 	# Recycle the evicted front entry as the new back one instead of allocating a
 	# fresh wrapper per packet (see PuckController.apply_state). Safe because the
 	# interpolation bracket is re-derived from the buffer every tick before use,

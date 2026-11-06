@@ -3724,15 +3724,15 @@ func _host_release_one_timer(direction: Vector3, power: float, skater: Skater,
 
 # Fires a remote human's authoritative shot on the host. Called only from
 # _on_remote_derived_release (the input-stream release) — there is no shot RPC.
-# Every parameter is host-derived; rtt/interp_delay drive the goalie lag-comp
-# rewind. The carrier guard and the sanitize/clamp calls stay as defense-in-depth
+# Every parameter is host-derived; interp_delay drives the goalie lag-comp
+# rewind, and is 0 only for a shooter whose sim is the host's own. The carrier guard and the sanitize/clamp calls stay as defense-in-depth
 # even though nothing here is client-supplied.
 #
 # The fire POINT is not a parameter: puck.release() seats the puck itself, and it
 # is the only code that knows a slapper's puck sits on its ice pin rather than at
 # the blade lifted over the shoulder. Never reposition the puck after release() —
 # see the note there.
-func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, rtt_ms: float, interp_delay_ms: float) -> void:
+func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shooter_peer_id: int, host_timestamp: float, interp_delay_ms: float) -> void:
 	# Sender must be the current carrier on the host.
 	# A `puck.carrier == null` here means a different code path already released the
 	# puck; ignore the duplicate. The shot sound stays below the validation.
@@ -3746,7 +3746,7 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 	# Defense in depth — nothing here is client-supplied, but every parameter is
 	# bounded before it touches the sim (ShotReleaseRules): direction normalized
 	# and elevation-capped, power capped to the shooter's attribute-scaled
-	# maximum, rtt capped against the host's own ping measurement.
+	# maximum.
 	if NetworkManager.is_host:
 		direction = ShotReleaseRules.sanitize_direction(direction)
 		if direction == Vector3.ZERO:
@@ -3761,8 +3761,6 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 				max_power = ShotReleaseRules.release_power_bound(max_power,
 						shooter.skater.velocity)
 			power = ShotReleaseRules.clamp_power(power, max_power)
-		rtt_ms = ShotReleaseRules.clamp_rtt_ms(
-				rtt_ms, float(NetworkManager.get_peer_ping_ms(shooter_peer_id)))
 	var sound: SoundManager.Sound = SoundManager.Sound.SHOT_SLAPPER if is_slapper else SoundManager.Sound.SHOT_WRISTER
 	var shot_pos: Vector3 = puck.get_puck_position() if puck != null else Vector3.ZERO
 	SoundManager.play_world(sound, shot_pos, SoundManagerScript.shot_volume_db(power), 0.04)
@@ -3785,7 +3783,7 @@ func _fire_remote_shot(direction: Vector3, power: float, is_slapper: bool, shoot
 			gc.set_pending_reaction_back_date(release_back_date)
 		var saved_goalie_positions: Array[Vector3] = []
 		var saved_goalie_rotations: Array[float] = []
-		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and rtt_ms > 0.0 \
+		if _state_buffer_manager != null and _state_buffer_manager.is_ready() and NetworkManager.is_real_peer(shooter_peer_id) and interp_delay_ms > 0.0 \
 				and ShotReleaseRules.is_timestamp_fresh(NetworkManager.estimated_host_time(), host_timestamp):
 			# Goalie is REMOTE-view from the shooter — the shooter saw the goalie at
 			# host_time - interp_delay (the buffered render path); rewound to that
@@ -3846,7 +3844,7 @@ func _on_remote_derived_release(direction: Vector3, power: float, is_slapper: bo
 	var interp_delay_ms: float = clampf(
 			rtt_ms * 0.5 + 1000.0 / float(Constants.STATE_RATE), 16.0, 200.0)
 	_fire_remote_shot(
-			direction, power, is_slapper, shooter_peer_id, release_ts, rtt_ms, interp_delay_ms)
+			direction, power, is_slapper, shooter_peer_id, release_ts, interp_delay_ms)
 
 
 func _start_pending_shot_from_carrier() -> void:
