@@ -9,7 +9,8 @@ extends GutTest
 #
 # Per cell: the live read after the play the staging stands for, the same read
 # blind to the play (History.ANY), the field's own SET read, the measured best
-# aim at the field's reference scatter (the quantity the live read estimates),
+# aim at the field's reference scatter (the quantity the live read estimates;
+# for a feed, averaged over feeds like it: FEED_JITTER_M),
 # and for the shots a carrier fires himself what the aim the field picks
 # actually does. Rebounds and screens are out, as in the truth table.
 
@@ -19,6 +20,11 @@ const PuckScene: PackedScene = preload("res://Scenes/Puck.tscn")
 const SkaterScene: PackedScene = preload("res://Scenes/Skater.tscn")
 const GOAL_Z: float = -GameRules.GOAL_LINE_Z
 const FEED_SPEED_M_S: float = 16.0
+# A feed's measured best is averaged over these changes to its length and pace:
+# at a sharp angle what the keeper concedes jumps with a metre of feed or a few
+# m/s, and a bot prices a feed like the one it makes, not that one exactly.
+const FEED_JITTER_M: Array[float] = [-0.5, 0.0, 0.5]
+const FEED_JITTER_M_S: Array[float] = [-2.0, 0.0, 2.0]
 const DEKE_ACROSS_M: float = 2.0
 # Wraps only from in close: the release a carrier coming round the post makes.
 const WRAP_MAX_OUT_M: float = 3.5
@@ -148,10 +154,32 @@ func _cell(spot: Vector3, scenario: String) -> Dictionary:
 				pi = i
 		at_pick = AIShotOdds.interval_odds(intervals[maxi(AIShotOdds.LOFTS.find(pick.loft), 0)],
 				AIShotOdds.aim_x(pi), sigma)
+	var best: float = AIShotOdds.best_odds(intervals, sigma)
+	if _feed_m(scenario) > 0.0:
+		best = _jittered_best(spot, scenario, one_timer, caught, sigma)
 	return {"live": live, "blind": blind, "set": AIShotValue.set_keeper(release, _goal),
-			"best": AIShotOdds.best_odds(intervals, sigma), "pick": at_pick, "goals": goals,
+			"best": best, "pick": at_pick, "goals": goals,
 			"stance": stance, "seal": AIGoalieModel.in_post_seal_zone(release, _goal),
 			"matched": matched}
+
+
+# A feed staging's measured best aim, averaged over FEED_JITTER_M ×
+# FEED_JITTER_M_S around its own length and pace.
+func _jittered_best(spot: Vector3, scenario: String, one_timer: bool, caught: bool,
+		sigma: float) -> float:
+	var total: float = 0.0
+	for dm: float in FEED_JITTER_M:
+		for dv: float in FEED_JITTER_M_S:
+			var passer := Vector3(spot.x + _inward(spot) * (_feed_m(scenario) + dm), 0.0, spot.z)
+			var speed: float = FEED_SPEED_M_S + dv
+			var stage: Callable = func() -> Vector3: return _s.stage_feed(spot, passer, speed)
+			var patterns: PackedStringArray = _s.open_set(stage, one_timer, caught)
+			var intervals: Array[PackedFloat32Array] = []
+			for li: int in AIShotOdds.LOFTS.size():
+				intervals.append(AIShotOdds.decode_intervals(
+						patterns[AIShotOdds.LOFTS.size() + li]))
+			total += AIShotOdds.best_odds(intervals, sigma)
+	return total / float(FEED_JITTER_M.size() * FEED_JITTER_M_S.size())
 
 
 static func _concordance(model: Array[float], truth: Array[float]) -> float:
