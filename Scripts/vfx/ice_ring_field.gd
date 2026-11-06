@@ -138,7 +138,7 @@ func _process(delta: float) -> void:
 		# chevrons, reticle — moves as one body.
 		var pos: Vector3 = skater.render_transform().origin
 		var inner_r: float = SkaterHUDCoordinator.RING_INNER_R
-		if skater == carrier:
+		if skater == carrier and PlayerPrefs.carrier_ring_cue_enabled:
 			inner_r = lerpf(inner_r, PuckFollowCues.CARRIER_RING_INNER_R,
 					_cues.carrier_weight)
 		_positions[count] = Vector4(pos.x, pos.z,
@@ -166,9 +166,11 @@ func on_phase_changed(phase: GamePhase.Phase) -> void:
 
 
 # Steps the cue model from the puck as this peer draws it, and returns the
-# skater whose ring it thickens (null while loose or with the cues off).
+# skater drawn carrying (null while loose or with every cue off). The model runs
+# whole while any one cue is on — each toggle only gates its own output — so a
+# cue switched back on mid-play picks up the possession history already built.
 func _step_cues(delta: float) -> Skater:
-	if not PlayerPrefs.puck_cues_enabled or not _find_puck():
+	if not _any_cue_enabled() or not _find_puck():
 		_cues.reset()
 		return null
 	_puck_at = _puck.get_global_transform_interpolated().origin
@@ -181,6 +183,11 @@ func _step_cues(delta: float) -> Skater:
 	_cues.step(delta, PuckFollowCues.NO_CARRIER, PuckFollowCues.NO_TEAM,
 			Vector2.ZERO, Color(), _puck_on_ice() and not _faceoff_countdown)
 	return null
+
+
+static func _any_cue_enabled() -> bool:
+	return PlayerPrefs.carrier_ring_cue_enabled or PlayerPrefs.possession_pulse_enabled \
+			or PlayerPrefs.loose_puck_halo_enabled
 
 
 func _find_puck() -> bool:
@@ -204,13 +211,13 @@ func _push_cues(rings_shown: bool) -> void:
 	if not rings_shown:
 		_cues.reset()
 	else:
-		if _cues.pulse_active:
+		if _cues.pulse_active and PlayerPrefs.possession_pulse_enabled:
 			_cue_positions[n] = Vector4(_cues.pulse_center.x, _cues.pulse_center.y,
 					_cues.pulse_outer_r, _cues.pulse_inner_r)
 			_cue_colors[n] = _linear_rgba(_cues.pulse_color,
 					_cues.pulse_color.a * MenuStyle.HUD_OPACITY)
 			n += 1
-		if _cues.loose_weight > 0.0:
+		if _cues.loose_weight > 0.0 and PlayerPrefs.loose_puck_halo_enabled:
 			_cue_positions[n] = Vector4(_puck_at.x, _puck_at.z,
 					PuckFollowCues.LOOSE_HALO_OUTER_R, PuckFollowCues.LOOSE_HALO_INNER_R)
 			_cue_colors[n] = _linear_rgba(MenuStyle.HUD_ICE,
