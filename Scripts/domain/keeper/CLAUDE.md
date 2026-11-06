@@ -76,8 +76,9 @@ standing his whole height that slides along it too (`GoalieGearCollision`,
 
 He plays on the host only. His whole sim state goes on the wire behind each
 online snapshot (`KeeperController.wire`, every collaborator that steps and his
-own flags and clocks; the tier's tuning, his world and the scratch a tick
-writes before it reads stay off), and writing it snaps him to it, so a keeper
+own flags and clocks, and which tier he is, `GoalieSkillProfile.tier`; the
+tier's tuning, his world and the scratch a tick writes before it reads stay
+off), and writing it snaps him to it, so a keeper
 rebuilt from the bytes steps exactly as his does
 (`tests/unit/controllers/test_keeper_wire_set.gd` holds the set against what
 the prediction instrument found a client needs,

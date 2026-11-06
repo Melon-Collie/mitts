@@ -72,33 +72,69 @@ the host's keeper from the host's state, not an AI of the client's own.
    host's first contact and its outcome the same with the snap as without.
    `tests/unit/controllers/test_keeper_wire_set.gd` holds the wire set against
    the instrument's: every reachable field not on its `NOT_ON_WIRE` round-trips.
-2. **The client predicts.** A predictor keeper per goalie on clients, re-seeded
-   on each snapshot, stepped to the render instant every frame against a
-   shadow world: a shadow puck placed from the client's own puck prediction at
-   each stepped instant (never the real puck node — the keeper writes to the
-   puck it holds), and skaters at the instant from the remote buffers' forward
-   prediction and the local prediction history. Its pose and save boxes become
-   the drawn goalie's, so the local skater's clamps and the predicted puck's
-   goalie stop read him on the render clock. The interpolated path stays as the
-   fallback (clock warm-up, no state yet, deep loss).
-   **Re-step only on a mismatch.** The predictor is exact (deterministic
-   keeper, snapped host), so when a snapshot for tick S arrives the client has
-   usually already predicted S to the bit. It keeps its own state from tick S
-   (the same wire encoding), compares it with the snapshot's, and re-seeds and
-   re-steps the span only when they differ — a release it could not see, a
-   contact it did not predict. Otherwise it keeps running, one step per tick
-   like the host. Re-stepping the span on every snapshot is what made the
-   measured cost 3.8–9.9× the host's; this is the rollback netcode pattern.
-   Intermediate steps skip seating his 22 save boxes on their nodes (~80 µs of
-   a ~200 µs step) unless the keeper's own logic reads them mid-step; only the
-   render instant is drawn and tested. A native port of the save choice (~2 ms a
-   choosing tick) comes after, only if the measured per-frame cost on a release
-   build / Steam Deck still asks for it — the keeper is still being tuned, and a
-   port freezes it behind parity tests.
-3. **Measure and tune.** F3: predicted-vs-host disagreement at the snapshot
-   (the host state the client predicted, compared when it arrives) and the
-   per-frame step cost. Networking `CLAUDE.md` rewritten for the goalie on the
-   render clock.
+2. **The client predicts. Done (protocol v97).** `KeeperPredictor`
+   (`Scripts/controllers/keeper_predictor.gd`) is a client's own keeper per
+   goalie — its own `KeeperController` on a shadow `Goalie`, a
+   `KeeperShadowPuck` and `KeeperShadowSkater`s, hidden, never processed, in
+   no group — re-seeded from a snapshot's blob at that snapshot's tick (ticks
+   counted from the world state's sequence, which now rides with the blob) and
+   stepped by `KeeperController.step_sim`, the host's own tick, to
+   `estimated_host_time() + clamped lead`, snapping on the broadcast ticks. Its
+   world is `GameKeeperWorld`: remote skaters from `sample_state_at`, the local
+   one from `LocalController.predicted_at`, the puck on its drawn carrier or
+   loose and stepped by the re-predict's own whole-tick step from where the
+   client last knew it loose (`PuckController.loose_origin`,
+   `step_loose_tick`), a carried→loose change heard as a release. The host
+   keeper's reads are untouched: the seam is the keeper's own nodes (his
+   goalie, his puck, his skater getter), which the predictor hands shadow ones;
+   the offline keeper is bit-identical to Phase 1's (a digest of every box and
+   the puck through both harness plays). The drawn goalie is the two stepped
+   ticks around the render instant blended into a `GoalieNetworkState` and
+   posed by `_apply_interpolated`, so his boxes are seated where he is drawn; a
+   shadow keeper seats only the boxes that place a part body (his own reads go
+   through the glove, the mask and the blocker). The fallback is the
+   interpolated path (no blob, the clock not ready, the newest snapshot past
+   `PUCK_PREDICT_MAX_S`, replays). The blob also carries his tier
+   (`GoalieSkillProfile.tier`): a client never learned the host's goalie
+   difficulty, and the tier's tuning is off the wire.
+   **Re-step only on a mismatch** is built as planned (the predictor's blob at
+   each broadcast tick, compared byte for byte), and measured
+   (`benchmarks/test_keeper_predictor_benchmark.gd`, two predicted goalies per
+   60 fps frame, the facing keeper twice, this container's debug build):
+
+   | world fed | one-way | snapshots confirmed | steady frame mean / p95 | re-step frame mean / p95 |
+   |---|---|---|---|---|
+   | the host's, exact | 15 / 50 / 100 ms | 100% | 1.1 / 1.7, 1.2 / 1.8, 1.2 / 1.5 ms | — |
+   | on the snapshot's grid (1 cm, 0.02 m/s) | 15 / 50 / 100 ms | **0%** | 0.6 / 0.6, 1.6 / 4.0, 1.3 / 1.7 ms | 5.2 / 6.9, 9.2 / 13.3, 14.2 / 20.9 ms |
+
+   **The plan's premise for it does not hold in play.** Bit-equality needs the
+   client's world to be the host's to the bit on every tick he read, and his
+   play read records the puck and the skaters at a millimetre: a client's world
+   is built from centimetre snapshots and its own predictions, so in the
+   measurement no snapshot confirmed and every one re-stepped the span — the
+   3.8–9.9× cost of the measurements doc, ~45 re-steps a second a goalie. The
+   F3 *Goalie predict* row and `keeper_confirm_pct` will show the live share;
+   what to do about it (accept the cost, a native save choice, confirm within a
+   tolerance and let the predictor run on a state that is not the host's to the
+   bit, or re-seed every snapshot and drop the comparison) is open.
+   Exact end to end (`tests/slow/controllers/test_keeper_predictor_is_exact.gd`):
+   fed the host's recorded world, a predictor offered each blob a 50 ms one-way
+   late and drawn 8 ticks ahead of the host is the host's keeper at every drawn
+   instant (6 µm, the float32 root), every snapshot confirmed; a release
+   withheld until its snapshot re-steps once and is exact from that snapshot.
+   **The release lag comp:** a shooter's client draws the goalie at its release
+   input's stamp and the host replays the input on that tick, so the host's
+   goalie there is the one the shooter saw; the release paths' goalie rewind
+   and reaction back-date are gone (they put the host's keeper off the
+   shooter's screen, and the same test shows a back-dated read parting by up to
+   47 cm). Against a remote shooter he now reads a shot a lead later than
+   before, as against the host's own player.
+3. **Measure and tune.** Started: F3 *Goalie predict* (snapshots confirmed,
+   re-steps a second, the box gap at a re-step's snapshot) and *Goalie predict
+   cost* (both predictors' time a physics frame, mean and p95), in the session
+   row as `keeper_*` (`docs/telemetry_dictionary.md`); networking `CLAUDE.md`
+   rewritten for the goalie on the render clock. Left: the playtest's numbers
+   on a release build and a Steam Deck, and the rollback decision above.
 4. **Shot field.** The keeper sources change, so `test_shot_field_is_current`
    needs a regeneration — on the user's machine: this container does not
    reproduce the committed field (199 rows move with or without the snap).

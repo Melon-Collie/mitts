@@ -34,13 +34,14 @@ Each per-second metric `<key>` appears as:
 - `<key>_max` — worst single 1 s window. One GC hiccup can own this number;
   read it with `_avg` for context.
 - `<key>_min` — only for metrics where **lower is worse** (`sim_rate_hz`,
-  `reconcile_match_pct`, `client_fps`, `buffer_depth_*`).
+  `reconcile_match_pct`, `client_fps`, `buffer_depth_*`, `keeper_confirm_pct`).
 - `<key>_total` — only for **rare-event / event counters** (`puck_hard_snaps`,
   `blade_jumps`, the host-side lag-comp claim counters `pickup_claims` /
   `pickup_claim_misses` / `pickup_claim_deflects` / `poke_claims` /
   `poke_claim_misses` / `stick_lift_claims` / `stick_lift_claim_misses` /
   `stick_tie_claims` / `stick_tie_claim_misses`, the
-  client-side `provisional_*`, and the host-side `host_stalls`): the session sum.
+  client-side `provisional_*` and `keeper_predict_fallbacks`, and the host-side
+  `host_stalls`): the session sum.
   These are events-per-game, not rates — 3 hard snaps in a 10-minute game matters
   and would average to ~0/s.
 
@@ -154,6 +155,22 @@ across the carried input lead, so its error grows with lead depth — and the le
 grows with RTT (`input_lead_extra_ms` ≈ rtt/2). A high-ping session reconstructs
 across a longer span and will inflate divergence, clamps, and therefore misses.
 Compare miss rates across sessions at similar `input_lead_extra_ms`.
+
+## Predicted goalie (client rows only)
+
+A client draws each goalie as a keeper of its own predicts him at the render
+instant (`KeeperPredictor`, `Scripts/networking/CLAUDE.md` → the goalie
+invariant): re-seeded from a snapshot's state, stepped to the render instant,
+and re-stepped from a snapshot whose state differs from the one it predicted
+for that snapshot's tick. Host rows fold 0 (and 100% confirmed).
+
+| Key | Unit | Healthy | Meaning |
+|---|---|---|---|
+| `keeper_confirm_pct` | % of snapshots | high is cheap, not a verdict | Snapshots (both goalies) whose keeper state the predictor had already reached bit for bit, so it stepped on without re-stepping. Equality is to the bit, so anything he read that the client has differently — a release or contact it had not heard of, a skater or the puck a centimetre off — re-steps; measured on a world fed at the snapshot's grid it is ~0%. `_min` is the worst window. F3 *Goalie predict*. |
+| `keeper_resteps_per_sec` | /s | ≤ 2 × 45 | Snapshots that re-seeded a goalie and re-stepped the span to the render instant. At most one a goalie a snapshot. |
+| `keeper_restep_gap_m` / `keeper_restep_gap_peak_m` | m | small, spikes at shots | At a re-step's snapshot, how far the predicted keeper's gear sat from the host's (the farthest corner of any of his 22 save boxes), mean and peak. The size of the correction the drawn goalie takes: ~0 where only a millimetre of the world differed, tens of centimetres where a hidden release or a save moved him. |
+| `keeper_predict_us` / `keeper_predict_p95_us` | µs per physics frame | release build and Deck numbers are the ones to read | Main-thread time both predictors took a physics frame (stepping, re-seeding, re-stepping), mean and p95; the p95 is the re-step frames. F3 *Goalie predict cost* (amber 4 ms, red 8 ms at p95). |
+| `keeper_predict_fallbacks_total` | frames | ~0 after warm-up | Frames a goalie with a predictor was drawn interpolated at `H − d` instead: no snapshot yet, the clock not ready, the newest snapshot past `PUCK_PREDICT_MAX_S`. Non-zero sessions correlate with `packet_loss_pct`. |
 
 ## Optimistic-pickup outcomes (client rows only)
 
