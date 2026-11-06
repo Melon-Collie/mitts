@@ -1032,7 +1032,12 @@ func _shaft_clearance(hand_local: Vector3, blade_local: Vector3, delta: float) -
 			hand = blade + (hand - blade).normalized() * length
 	var target: Vector3 = (ub.affine_inverse() * hand - ub.affine_inverse() * start) \
 			.limit_length(_CLEAR_MAX_M)
-	if delta < 0.0:
+	# The spring carries its state frame to frame, so one non-finite input would
+	# hold the drawn stick and both arms at NaN, undrawn, for the rest of the
+	# match. Such a frame holds the last offset; a state already poisoned lands.
+	if not target.is_finite():
+		return _clear_offset if _clear_offset.is_finite() else Vector3.ZERO
+	if delta < 0.0 or not (_clear_offset.is_finite() and _clear_vel.is_finite()):
 		_clear_offset = target
 		_clear_vel = Vector3.ZERO
 	elif delta > 0.0:
