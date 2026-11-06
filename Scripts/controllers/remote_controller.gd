@@ -300,12 +300,7 @@ func _drain_backlog(now: float) -> void:
 		# current truth, which is the point of the drain. Presses older than the
 		# stale-solo bound are phase artifacts and are dropped with their frame.
 		if overdue <= _DRAIN_STALE_SOLO_S:
-			var next: InputState = _input_queue.front()
-			next.shoot_pressed = next.shoot_pressed or stale.shoot_pressed
-			next.slap_pressed = next.slap_pressed or stale.slap_pressed
-			next.stick_lift_pressed = next.stick_lift_pressed or stale.stick_lift_pressed
-			next.quick_pass_pressed = next.quick_pass_pressed or stale.quick_pass_pressed
-			next.stick_check_pressed = next.stick_check_pressed or stale.stick_check_pressed
+			(_input_queue.front() as InputState).fold_edges_from(stale)
 		if overdue <= _DRAIN_TELEMETRY_MAX_S:
 			NetworkTelemetry.record_input_drain()
 
@@ -354,12 +349,10 @@ func _drive_from_input(delta: float) -> void:
 			# run, so body/shot inputs stay suppressed.
 			if _game_state.allows_blade_aim_during_lock():
 				apply_blade_aim_only(input, delta)
-		# Clear just_pressed flags before saving as fallback so they don't
-		# re-fire on subsequent ticks while the queue is empty. elevation_level
-		# stays — it's an absolute mode, and holding the last known level
-		# through an input gap is exactly right.
-		input.shoot_pressed = false
-		input.slap_pressed = false
+		# The fallback replays through a queue gap: its presses must not re-fire
+		# every tick. Held and absolute state (elevation_level) stays — holding
+		# the last known level through a gap is exactly right.
+		input.clear_edges()
 		_fallback_input = input
 	else:
 		if _game_state.is_movement_locked():
