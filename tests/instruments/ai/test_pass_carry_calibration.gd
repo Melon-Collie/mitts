@@ -5,9 +5,9 @@ extends GutTest
 # the real keeper), the neutral-zone entry drill's and the breakout drill's. Every pass a bot of either side releases is logged with the
 # completion its search priced (AICarrierPassSearch.debug_kept: not poked at the
 # release × the lane × no execution miss × kept on reception) and what happened:
-# kept (his side holds it RECEPTION_HOLD_S after first touching it), lost (their
-# man first, or theirs within the hold), or loose (nobody has it within
-# LOOSE_AFTER_S: left out). Every CARRY_SAMPLE_S a carrier skating a carry is
+# kept (his side holds it RECEPTION_HOLD_S after first touching it, or the man
+# who took it released it on inside that hold), lost (their man first, or theirs
+# within the hold), or loose (nobody has it within LOOSE_AFTER_S: left out). Every CARRY_SAMPLE_S a carrier skating a carry is
 # logged with AICarrySpace.carry_safety from the puck to his chosen carry spot
 # over his time to it (the carry search's own read, escape gate on), and whether
 # he still had it then: kept, lost, or released (he passed or shot first: left
@@ -331,7 +331,8 @@ func _exec_row(duel: Object, rec: Dictionary, commit: Array) -> Dictionary:
 		"scatter": rad_to_deg(absf(s.agent._committed_aim_error_rad)),
 		"pace_priced": float(commit[8]), "pace_thrown": thrown.length(),
 		"saucer": bool(commit[10]), "rim": bool(commit[11]), "kept": float(rec["pass_kept"]),
-		"commit_s": (int(rec["tick"]) - int(commit[0])) * Duel.DT}
+		"commit_s": (int(rec["tick"]) - int(commit[0])) * Duel.DT,
+		"reception": float(rec["pass_reception"]), "lane": float(rec["pass_lane"])}
 
 
 # How far `p` (relative to the line's start) sits off the line along `dir`.
@@ -351,7 +352,7 @@ func _log_exec(row: Dictionary, how: String) -> void:
 # execution term.
 func _report_exec() -> void:
 	gut.p("  execution, per outcome (medians):")
-	gut.p("     outcome              n   priced  len   origin  aim turn  throw turn  miss aimed  miss thrown  scatter  pace priced/thrown  commit (s)")
+	gut.p("     outcome              n   priced  len   origin  aim turn  throw turn  miss aimed  miss thrown  scatter  pace priced/thrown  commit (s)  lane  reception")
 	var outcomes: Array = ["kept", "kept, another mate", "lost on the catch", "intercepted", "loose"]
 	var keys: Array[String] = []
 	for how: String in outcomes:
@@ -368,13 +369,13 @@ func _report_exec() -> void:
 		var kept: float = 0.0
 		for r: Dictionary in rows:
 			kept += r["kept"]
-		gut.p("     %-18s %4d   %4.2f   %4.1f  %4.2f    %5.1f     %5.1f       %4.2f        %4.2f       %4.1f    %4.1f / %4.1f        %4.2f" % [
+		gut.p("     %-18s %4d   %4.2f   %4.1f  %4.2f    %5.1f     %5.1f       %4.2f        %4.2f       %4.1f    %4.1f / %4.1f        %4.2f        %4.2f  %4.2f" % [
 				key, rows.size(), kept / rows.size(), _median(rows, "len"),
 				_median(rows, "origin_off"), _median(rows, "aim_turn"),
 				_median(rows, "throw_turn"), _median(rows, "miss_aimed"),
 				_median(rows, "miss_thrown"), _median(rows, "scatter"),
 				_median(rows, "pace_priced"), _median(rows, "pace_thrown"),
-				_median(rows, "commit_s")])
+				_median(rows, "commit_s"), _median(rows, "lane"), _median(rows, "reception")])
 	gut.p("  every pass missing its priced spot by over a metre as thrown:")
 	gut.p("     outcome              len   aim turn  throw turn  miss aimed  miss thrown  scatter  pace priced/thrown  saucer")
 	for r: Dictionary in _exec:
@@ -505,6 +506,17 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 					_log_exec(op[8], "loose")
 			elif op[3] >= 0 and i - op[3] == int(RECEPTION_HOLD_S / Duel.DT):
 				var kept: bool = op[4] == op[2] and c_team == op[2]
+				# Released on by the man who took it (a one-timer, a quick shot or
+				# pass) before the hold is up: he had it.
+				if not kept and op[4] == op[2] and c == -1:
+					for k: int in range(duel.releases.size() - 1, -1, -1):
+						var later: Dictionary = duel.releases[k]
+						if int(later["tick"]) < duel.ticks - (i - op[3]):
+							break
+						if int(later["peer"]) == op[5]:
+							kept = true
+							_how["moved on in the hold"] = int(_how.get("moved on in the hold", 0)) + 1
+							break
 				_passes.append([float(op[0]["pass_kept"]), 1 if kept else 0, op[2], op[0]])
 				var how: String = "kept" if kept else ("intercepted" if op[4] != op[2]
 						else "lost on the catch")
