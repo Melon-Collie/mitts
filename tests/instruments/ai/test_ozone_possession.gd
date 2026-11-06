@@ -9,7 +9,8 @@ extends GutTest
 # Team 0 attacks -Z, at the real keeper (KeeperController, fed the puck as a
 # carried one, as test_advantage_scenarios.gd does): a keeper who does not
 # square to the puck turns every sharp angle into an open net. Not modelled:
-# offside, real boards; a possession ends at its first shot (no rebounds).
+# offside, a lofted puck's bounce off the glass; a possession ends at its first
+# shot (no rebounds).
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const PointOff := preload("res://tests/instruments/ai/point_odds_off.gd")

@@ -7,8 +7,8 @@ extends GutTest
 # stands and with point shots worth nothing (point_odds_off.gd): the regression
 # docs/possession-floor-plan.md started from, bots that stop entering the zone
 # once nothing from the point scores. Team 0 attacks -Z;
-# their blue line is z = -BLUE_LINE_Z. Not modelled: offside, real boards, a
-# live goalie.
+# their blue line is z = -BLUE_LINE_Z. Not modelled: offside, a lofted puck's
+# bounce off the glass, a live goalie.
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const PointOff := preload("res://tests/instruments/ai/point_odds_off.gd")

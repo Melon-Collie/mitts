@@ -281,8 +281,8 @@ var _carrier_belief := CarrierBelief.new()
 var _reaction_delay_s: float = -1.0
 # Each net's keeper x last tick, for the velocity a live keeper publishes.
 var _keeper_x: Dictionary = {}
-# Loose-puck board bounce restitution (the harness's coarse boards — flight
-# fidelity is still not the point; containment is).
+# An airborne puck's bounce off the glass (coarse: it drops there, and only
+# containment is the point). A sliding puck runs the host's own step.
 const BOARD_RESTITUTION: float = 0.5
 
 # ── Outcome telemetry (scenario assertions read these) ──────────────────────
@@ -643,24 +643,13 @@ func step() -> void:
 			puck_vel *= _airborne_keep
 			_airborne_keep = LANDING_SPEED_KEEP
 	else:
-		var speed: float = Vector2(puck_vel.x, puck_vel.z).length()
-		if speed > 0.0:
-			var drop: float = GameRules.PUCK_ICE_DECEL_M_S2 * DT
-			var scale: float = maxf(speed - drop, 0.0) / speed
-			puck_vel *= scale
-		puck_pos += puck_vel * DT
-		# Boards: clamp to the rink and reflect the outward component (the
-		# same analytic backstop the real Puck runs). Without this a dumped
-		# or rimmed puck sailed out of the world and every loose-puck
-		# scenario beyond a few metres was unwinnable by construction —
-		# and rims can't wrap corners a harness doesn't have.
-		var clamped: Vector2 = GameRules.clamp_to_rink_inner(
-				Vector2(puck_pos.x, puck_pos.z))
-		if clamped.x != puck_pos.x or clamped.y != puck_pos.z:
-			var outward := Vector2(puck_pos.x - clamped.x, puck_pos.z - clamped.y)
-			puck_vel = PuckCollisionRules.board_rescue_velocity(
-					puck_vel, outward, BOARD_RESTITUTION)
-			puck_pos = Vector3(clamped.x, puck_pos.y, clamped.y)
+		# The sliding puck's step the host drives the real one with
+		# (PuckAuthorityRules): ice friction, and the boards' rigid-wall
+		# restitution and friction round the rounded corners, so a rim runs
+		# the path the rim search and the chase election walk.
+		var stepped: Transform3D = AITrajectory.step_puck(puck_pos, puck_vel, DT)
+		puck_pos = stepped.origin
+		puck_vel = stepped.basis.x
 		for s: SimSkater in skaters:
 			if not _can_play(s) or not PuckInteractionRules.check_pickup(
 					prev_puck, puck_pos, s.prev_blade, s.blade, PICKUP_RADIUS):

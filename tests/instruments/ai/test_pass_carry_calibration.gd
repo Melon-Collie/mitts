@@ -11,8 +11,11 @@ extends GutTest
 # logged with AICarrySpace.carry_safety from the puck to his chosen carry spot
 # over his time to it (the carry search's own read, escape gate on), and whether
 # he still had it then: kept, lost, or released (he passed or shot first: left
-# out). Prints reliability tables: priced against realised, per band, and each
-# interception against the pass as it left (_intercept_row).
+# out). A dump-in releases through the pass press with no receiver and is left
+# out. Prints reliability tables: priced against realised, per band; each
+# interception against the pass as it left (_intercept_row); each pass's line as
+# priced, as aimed and as thrown, per outcome (_exec_row); and each rim against
+# the path walk it was priced on (_trace_rims).
 
 const Duel := preload("res://tests/unit/ai/duel_harness.gd")
 const Ozone := preload("res://tests/instruments/ai/test_ozone_possession.gd")
@@ -49,6 +52,15 @@ var _searched: Dictionary = {}
 # Per saucer: [priced pace, thrown pace, priced over-the-blades from, to (m),
 # flown in the harness (m), pass length (m), tick].
 var _saucers: Array = []
+# Per pass with a seen commit, its _exec_row and how it went.
+var _exec: Array = []
+# Per rim in flight: [receiver, predicted puck (AITrajectory's walk), its
+# velocity, ticks flown, gaps to the walk at 0.5/1.0/1.5 s, closest the receiver's
+# blade came, outcome, launch pace, the rim's priced pace, the latch's pace, the
+# receiver as logged / searched / the agent's, ticks he spent chasing it]; done
+# rims move to _rim_done.
+var _rims: Array = []
+var _rim_done: Array = []
 
 
 func before_all() -> void:
@@ -206,7 +218,8 @@ func _watch_commit(duel: Object, c: int, tick: int) -> void:
 			carrier._pass.debug_spot, carrier._pass.debug_completion.y,
 			Vector3(carrier._pass.debug_origin_pace.x, 0.0, carrier._pass.debug_origin_pace.z),
 			carrier._pass.debug_origin_pace.w, _searched.get(c, [[], -1, []]),
-			carrier._pass.best_is_saucer]
+			carrier._pass.best_is_saucer, s.agent._dump_target.is_finite(),
+			carrier._pass.best_rim_pace, carrier._pass.best_peer, s.agent._pass_target_peer_id]
 
 
 # An interception against the passer's own view at his commit: his priced lane,
@@ -294,6 +307,131 @@ func _commit_row(view: Dictionary, commit: Array, interceptor: int, release_tick
 			if commit[10] else "flat"]
 
 
+# A pass as it left, against what was priced at the commit: the priced line
+# (commit origin to spot) and pace, the line the agent locked at the release (its
+# lead re-solved through the windup, the committed scatter, from the blade) and
+# the puck's flight, the lateral miss of each at the priced spot's distance.
+func _exec_row(duel: Object, rec: Dictionary, commit: Array) -> Dictionary:
+	if commit.is_empty():
+		return {}
+	var s: Object = _sim(duel, int(rec["peer"]))
+	var puck: Vector3 = rec["pass_puck"]
+	var spot: Vector3 = commit[5]
+	var origin: Vector3 = commit[7]
+	var priced: Vector3 = Vector3(spot.x - origin.x, 0.0, spot.z - origin.z)
+	var aimed: Vector3 = s.agent._pass_aim_dir_locked
+	var thrown: Vector3 = Vector3(duel.puck_vel.x, 0.0, duel.puck_vel.z)
+	var dist: float = priced.length()
+	var from_puck: Vector3 = Vector3(spot.x - puck.x, 0.0, spot.z - puck.z)
+	return {"len": dist, "origin_off": Vector2(puck.x - origin.x, puck.z - origin.z).length(),
+		"aim_turn": rad_to_deg(priced.angle_to(aimed)),
+		"throw_turn": rad_to_deg(aimed.angle_to(thrown)),
+		"miss_aimed": _off_line(from_puck, aimed),
+		"miss_thrown": _off_line(from_puck, thrown),
+		"scatter": rad_to_deg(absf(s.agent._committed_aim_error_rad)),
+		"pace_priced": float(commit[8]), "pace_thrown": thrown.length(),
+		"saucer": bool(commit[10]), "rim": bool(commit[11]), "kept": float(rec["pass_kept"]),
+		"commit_s": (int(rec["tick"]) - int(commit[0])) * Duel.DT}
+
+
+# How far `p` (relative to the line's start) sits off the line along `dir`.
+static func _off_line(p: Vector3, dir: Vector3) -> float:
+	var d: Vector3 = dir.normalized() if dir.length() > 0.001 else Vector3.FORWARD
+	return absf(p.x * d.z - p.z * d.x)
+
+
+func _log_exec(row: Dictionary, how: String) -> void:
+	if row.is_empty():
+		return
+	row["how"] = how
+	_exec.append(row)
+
+
+# Per outcome: the passes, their mean priced completion, and the medians of each
+# execution term.
+func _report_exec() -> void:
+	gut.p("  execution, per outcome (medians):")
+	gut.p("     outcome              n   priced  len   origin  aim turn  throw turn  miss aimed  miss thrown  scatter  pace priced/thrown  commit (s)")
+	var outcomes: Array = ["kept", "kept, another mate", "lost on the catch", "intercepted", "loose"]
+	var keys: Array[String] = []
+	for how: String in outcomes:
+		keys.append(how)
+	for how: String in outcomes:
+		keys.append("rim: " + how)
+	for key: String in keys:
+		var rim: bool = key.begins_with("rim: ")
+		var how: String = key.trim_prefix("rim: ")
+		var rows: Array = _exec.filter(func(r: Dictionary) -> bool:
+				return r["how"] == how and r["rim"] == rim)
+		if rows.is_empty():
+			continue
+		var kept: float = 0.0
+		for r: Dictionary in rows:
+			kept += r["kept"]
+		gut.p("     %-18s %4d   %4.2f   %4.1f  %4.2f    %5.1f     %5.1f       %4.2f        %4.2f       %4.1f    %4.1f / %4.1f        %4.2f" % [
+				key, rows.size(), kept / rows.size(), _median(rows, "len"),
+				_median(rows, "origin_off"), _median(rows, "aim_turn"),
+				_median(rows, "throw_turn"), _median(rows, "miss_aimed"),
+				_median(rows, "miss_thrown"), _median(rows, "scatter"),
+				_median(rows, "pace_priced"), _median(rows, "pace_thrown"),
+				_median(rows, "commit_s")])
+	gut.p("  every pass missing its priced spot by over a metre as thrown:")
+	gut.p("     outcome              len   aim turn  throw turn  miss aimed  miss thrown  scatter  pace priced/thrown  saucer")
+	for r: Dictionary in _exec:
+		if r["miss_thrown"] > 1.0:
+			gut.p("     %-18s %4.1f  %5.1f     %5.1f       %4.2f        %4.2f       %4.1f    %4.1f / %4.1f        %s" % [
+					r["how"], r["len"], r["aim_turn"], r["throw_turn"], r["miss_aimed"],
+					r["miss_thrown"], r["scatter"], r["pace_priced"], r["pace_thrown"],
+					"rim" if r["rim"] else ("yes" if r["saucer"] else "")])
+
+
+static func _median(rows: Array, key: String) -> float:
+	var v: Array[float] = []
+	for r: Dictionary in rows:
+		v.append(float(r[key]))
+	v.sort()
+	return v[v.size() / 2]
+
+
+# Each rim in flight a tick on: the walk the rim search priced it on, stepped
+# alongside the harness puck, and the receiver's blade against it, until somebody
+# plays it or it has slid LOOSE_AFTER_S.
+func _trace_rims(duel: Object, c: int, c_team: int) -> void:
+	for r: Array in _rims:
+		var stepped: Transform3D = AITrajectory.step_puck(r[1], r[2], Duel.DT)
+		r[1] = stepped.origin
+		r[2] = stepped.basis.x
+		r[3] += 1
+		var gap: float = Vector2(duel.puck_pos.x - r[1].x, duel.puck_pos.z - r[1].z).length()
+		for k: int in 3:
+			if r[3] == int((k + 1) * 0.5 / Duel.DT):
+				r[4][k] = gap
+		var receiver: Object = _sim(duel, int(r[0]))
+		if receiver != null:
+			r[5] = minf(r[5], Vector2(duel.puck_pos.x - receiver.blade.x,
+					duel.puck_pos.z - receiver.blade.z).length())
+			if receiver.agent != null \
+					and receiver.agent._state == SkaterAgentStateMachine.State.CHASE_PUCK:
+				r[11] += 1
+		if c != -1:
+			r[6] = ("receiver" if c == r[0] else ("mate" if c_team == _team_of(duel, r[0])
+					else "theirs")) + " at %.2f s" % (r[3] * Duel.DT)
+		elif r[3] > int(LOOSE_AFTER_S / Duel.DT):
+			r[6] = "loose, at %.1f m/s" % Vector2(duel.puck_vel.x, duel.puck_vel.z).length()
+	for r: Array in _rims:
+		if r[6] != "":
+			_rim_done.append(r)
+	_rims = _rims.filter(func(r: Array) -> bool: return r[6] == "")
+
+
+func _report_rims() -> void:
+	gut.p("  rims: %d" % _rim_done.size())
+	gut.p("     pace (thrown / rim priced / latch)  off the priced walk at 0.5 / 1.0 / 1.5 s (m)   receiver's blade closest (m)   he chased (s)   receiver (logged/search/agent)   first played")
+	for r: Array in _rim_done:
+		gut.p("     %4.1f / %4.1f / %4.1f                %5.2f / %5.2f / %5.2f                        %5.2f                          %4.2f            %-16s   %s"
+				% [r[7], r[8], r[9], r[4][0], r[4][1], r[4][2], r[5], r[11] * Duel.DT, r[10], r[6]])
+
+
 # A saucer as it left: the airborne stretch the harness flies (its launch
 # loft, from the load-capped pace), against the one lane_clear_saucer priced
 # from the priced pace (over the blades from t_over to t_down).
@@ -324,21 +462,31 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 		if duel.releases.size() > before:
 			var rec: Dictionary = duel.releases[-1]
 			var decision: String = str(rec.get("decision", ""))
-			# A pass: to a mate of his, on a release that is not a shot or a dump (the
-			# release log's decision label is cleared for a pass by then).
+			# A pass: to a mate of his, on a release that is not a shot. A dump-in
+			# releases through the pass press too, with no receiver in the agent: it
+			# is a race, not a pass, and is left out.
 			var to: int = int(rec.get("pass_peer", -1))
-			if not (decision in ["SHOOT", "ONE_TIMER"] or decision.begins_with("DUMP")) \
+			var commit: Array = _commit.get(int(rec["peer"]), [])
+			var dump_in: bool = commit.size() > 14 and int(commit[14]) == -1
+			if dump_in:
+				_how["dump-in, left out"] = int(_how.get("dump-in, left out", 0)) + 1
+			if not dump_in and not decision in ["SHOOT", "ONE_TIMER"] \
 					and to > 0 and _team_of(duel, to) == int(rec["team"]) \
 					and float(rec.get("pass_kept", -1.0)) >= 0.0:
-				var commit: Array = _commit.get(int(rec["peer"]), [])
+				if commit.size() > 11 and commit[11]:
+					_rims.append([to, Vector3(rec["pass_puck"].x, 0.0, rec["pass_puck"].z),
+							Vector3(duel.puck_vel.x, 0.0, duel.puck_vel.z), 0, [-1.0, -1.0, -1.0], INF,
+							"", Vector2(duel.puck_vel.x, duel.puck_vel.z).length(), commit[12],
+							commit[8], "%d/%d/%d" % [to, commit[13], commit[14]], 0])
 				open_passes.append([rec, i, int(rec["team"]), -1, -1, -1,
-						_release_view(duel, rec), commit])
+						_release_view(duel, rec), commit, _exec_row(duel, rec, commit)])
 				if commit.size() > 10 and commit[10]:
 					_saucer_flight(duel, commit, i)
 			# A carrier who released leaves his open carry samples.
 			for oc: Array in open_carries:
 				if oc[2] == int(rec["peer"]):
 					oc[3] = -1
+		_trace_rims(duel, c, c_team)
 		# Passes: the first side to touch it, then whether it holds through the catch.
 		for op: Array in open_passes:
 			if op[3] == -1:
@@ -354,6 +502,7 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 				elif i - op[1] > int(LOOSE_AFTER_S / Duel.DT):
 					op[3] = -2   # loose: left out
 					_how["loose"] = int(_how.get("loose", 0)) + 1
+					_log_exec(op[8], "loose")
 			elif op[3] >= 0 and i - op[3] == int(RECEPTION_HOLD_S / Duel.DT):
 				var kept: bool = op[4] == op[2] and c_team == op[2]
 				_passes.append([float(op[0]["pass_kept"]), 1 if kept else 0, op[2], op[0]])
@@ -362,6 +511,7 @@ func _run(duel: Object, zone_ends: bool = true, secs: float = SECS) -> void:
 				if kept and op[5] != int(op[0]["pass_peer"]):
 					how = "kept, another mate"
 				_how[how] = int(_how.get(how, 0)) + 1
+				_log_exec(op[8], how)
 				op[3] = -3
 		open_passes = open_passes.filter(func(op: Array) -> bool: return op[3] > -2)
 		# Carries: sample, then score at the window's end.
@@ -450,6 +600,8 @@ func test_report_pass_and_carry_calibration() -> void:
 	_table("passes, the flight alone (release × lane × no miss)", mode_rows)
 	_table("carries, both sides", _carries)
 	_report_intercepts()
+	_report_exec()
+	_report_rims()
 	gut.p("  saucers: %d" % _saucers.size())
 	gut.p("     priced m/s  thrown m/s  priced over the blades (m)  flown (m)  pass (m)")
 	for r: Array in _saucers:
