@@ -161,6 +161,11 @@ Three consequences:
   the route may COMMAND is a different thing — the stand stays where it is and
   the frame still closes on him — and that is where the retreat floor and the
   advance cap live (below).
+- **The incumbent rides too.** The argmax's switch-hysteresis incumbent is the
+  last stand carried on at its velocity since (`RoleContext.prev_role_target`).
+  Left where it was picked, it falls a metre behind a carrier every tenth of a
+  second, and with the switch margin on it the defender keeps re-picking a
+  spot the carrier has skated away from, his route pulling him back to it.
 - **A ride velocity is a commitment with no terminating condition.** A stand only
   gets one when the role really produced a stand. A degenerate "hold where you
   are" fallback that also rides a man matches his velocity forever — out through
@@ -560,11 +565,15 @@ Three things have to be true together, and each is load-bearing:
   a feed-forward, so leading as well double-counts his motion and inflates the
   frame-relative gap by `pace × lookahead` — a defender walked to his own goal
   line by a player who simply skates at him.
-- **The ladder is a FLOOR on the gap, not just where the ring is centred.** The
-  score is "how much does my body deflate his options", which improves
-  monotonically as you close, so an unconstrained argmax collapses onto the man.
-  Clamp candidates out onto the gap ring rather than filtering them, or the set
-  empties exactly when it has closed and the bot falls through to standing still.
+- **The ladder sets the gap, not just where the ring is centred.** The score is
+  "how much does my body deflate his options". Closer than the gap it improves as
+  you close, so an unconstrained argmax collapses onto the man; wider, a body on
+  his inside takes as much off his possession at three sticks as at one (he can
+  always step out of one man's reach), so an argmax left free there never closes
+  and keeps whatever offset its incumbent was picked at. So PRESSURE clamps every
+  candidate onto the gap ring, out or in, rather than filtering them (the set
+  would empty exactly when it has closed): the distance is the ladder's, the
+  argmax picks the bearing.
 - **No last-man approach bound for a live carrier**, for PRESSURE or BACK_STRONG. It
   names a stand at wherever the body already is, so a pressurer being walked
   backwards is forbidden from closing on the man walking him. A loose puck keeps

@@ -331,7 +331,8 @@ static func carrier_option_bases(poss: AIPossessionValue, carrier_pos: Vector3,
 #
 # `set_in_s`: the defender is set at `candidate` that long from now, and until
 # then the carrier skates on. His own option is read from where his skating has
-# him by then, against the defence carried on to then (the candidate with it,
+# him by then, the boards stopping him as they stop the defence (predict_at),
+# against the defence carried on to then (the candidate with it,
 # at `candidate_vel`); always evaluated, since its bound was read where he is
 # now. His feeds are read as now.
 static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
@@ -342,7 +343,8 @@ static func carrier_best_option(poss: AIPossessionValue, candidate: Vector3,
 	var best: float = 0.0
 	var used: int = 0
 	if set_in_s > 0.0:
-		best = poss.threat_of_carrier(carrier_pos + carrier_vel * set_in_s, carrier_vel, our_goalie_pos,
+		best = poss.threat_of_carrier(AITrajectory.predict_at(carrier_pos, carrier_vel, set_in_s),
+				carrier_vel, our_goalie_pos,
 				set_in_s)
 		used = 1
 	while true:

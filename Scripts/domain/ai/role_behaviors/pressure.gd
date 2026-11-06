@@ -5,8 +5,8 @@ class_name AIRolePressure
 #
 # INVERSE SCORING: each candidate is scored by how much our body there deflates
 # the carrier's best option (AIDefensiveVerbs.carrier_best_option). The argmax
-# takes carrier_stand as the ring's centre and the gap and inside shade as
-# floors, then picks the bearing.
+# takes carrier_stand as the ring's centre, the gap as its radius and the inside
+# shade as a floor, then picks the bearing.
 
 # Engaged/closing boundary: inside it the argmax runs the full polar ring,
 # outside it only the calculated closing stands. 1.5 search steps.
@@ -144,9 +144,11 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 	var best_pos: Vector3 = ctx.self_pos
 	var best_score: float = -INF
 	var found: bool = false
-	# The ladder is a FLOOR on the gap: the score improves monotonically as you
-	# close, so a free argmax collapses onto him.
-	var min_gap_sq: float = gap * gap
+	# The ladder sets the gap, both ways: closer, the score improves as you
+	# close, so a free argmax collapses onto him; wider, a body on his inside
+	# takes as much off him at three sticks as at one, so it never closes, and
+	# the incumbent holds whatever offset it was picked at.
+	var gap_sq: float = gap * gap
 	for raw: Vector3 in candidates:
 		# A clamp, not a filter: filtering empties the set exactly when the ring
 		# has closed onto the man. The distance is doctrine; the argmax picks the
@@ -155,7 +157,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 		var gx: float = raw.x - carrier_pos.x
 		var gz: float = raw.z - carrier_pos.z
 		var gd_sq: float = gx * gx + gz * gz
-		if gd_sq < min_gap_sq:
+		if gd_sq < gap_sq or (ap.dir_net != Vector3.ZERO and gd_sq > gap_sq):
 			if gd_sq > 0.0001:
 				var k: float = gap / sqrt(gd_sq)
 				c = Vector3(carrier_pos.x + gx * k, 0.0, carrier_pos.z + gz * k)
@@ -185,7 +187,7 @@ static func decide(ctx: RoleContext, cover_priced: bool = false) -> RoleDecision
 				poss, c, ride, ctx.caps_by_peer.get(ctx.peer_id), carrier_pos,
 				carrier_velocity, our_goalie_pos, opp_teammates, bases,
 				_set_in(ctx, ap, c, ride)) \
-				+ AIStationSearch.incumbent_bonus(ctx, c)
+				+ AIStationSearch.incumbent_bonus(ctx, raw)
 		if pressure_score > best_score:
 			best_score = pressure_score
 			best_pos = c

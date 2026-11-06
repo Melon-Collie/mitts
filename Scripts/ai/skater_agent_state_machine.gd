@@ -286,8 +286,12 @@ var _inert_rush_read := AIRushRead.new()
 # The slot + target this bot's role chose on the previous role dispatch —
 # feeds RoleContext.prev_role_target for argmax switch-hysteresis (INF is
 # stamped across a slot change so no role inherits another role's target).
+# A stand that rides a man is a moving frame, so the incumbent is where it
+# has ridden to since: its target_velocity over the seconds since it was chosen.
 var _prev_role_slot: int = AIRoleSlots.Slot.NONE
 var _prev_role_target: Vector3 = Vector3.INF
+var _prev_role_target_vel: Vector3 = Vector3.ZERO
+var _prev_role_target_age_s: float = 0.0
 # The man this skater's role is covering, from the last role dispatch
 # (RoleDecision.locked_man_pid) — reset on slot change, and cleared on
 # leaving OFF_PUCK: a skater chasing or carrying
@@ -955,6 +959,7 @@ func dispatch(input: InputState, snapshot: WorldSnapshot) -> void:
 	_current_self_state = self_state
 	_current_snapshot = snapshot
 	_current_delta = input.delta
+	_prev_role_target_age_s += input.delta
 	# EVERY dispatch-path brain read must go through this, so dispatch can run
 	# off-thread.
 	_current_strategy = _strategy()
@@ -1375,7 +1380,8 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 	# Target switch-hysteresis input: the target this bot's role chose last
 	# dispatch — INF across a slot change so no role inherits another's
 	# target (see RoleContext.prev_role_target).
-	ctx.prev_role_target = _prev_role_target if slot == _prev_role_slot else Vector3.INF
+	ctx.prev_role_target = _prev_role_target + _prev_role_target_vel * _prev_role_target_age_s \
+			if slot == _prev_role_slot and _prev_role_target.is_finite() else Vector3.INF
 	# Pinch-read hysteresis incumbent, same reset-across-slot-change contract.
 	ctx.prev_held_forward_stand = _prev_held_forward_stand \
 			if slot == _prev_role_slot else false
@@ -1456,6 +1462,8 @@ func _dispatch_role_decision(ctx: RoleContext) -> RoleDecision:
 			decision.target_position = ctx.self_pos
 	_prev_role_slot = slot
 	_prev_role_target = decision.target_position
+	_prev_role_target_vel = decision.target_velocity
+	_prev_role_target_age_s = 0.0
 	_prev_locked_man_pid = decision.locked_man_pid
 	_prev_held_forward_stand = decision.held_forward_stand
 	return decision
