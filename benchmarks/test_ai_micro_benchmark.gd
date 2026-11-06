@@ -28,6 +28,7 @@ func _uninstall_native_ai() -> void:
 	AIShotOdds.native_factory = Callable()
 	AIShotOdds.attach_native()
 	AICarryRollout.native_factory = Callable()
+	AIEvadeRead.native = null
 
 
 func _make_ctx(self_pos: Vector3, carrier_pid: int = 100) -> RoleContext:
@@ -169,9 +170,10 @@ func test_evaluator_costs() -> void:
 				open_carrier._field.teammate_ids))
 	_bench("open ice: best carry (candidates)", func() -> void:
 		open_carrier._carry.search(open_ctx, 0.1))
-	# The shipped game's path: the field read and the rollout both native.
+	# The shipped game's path: the field read, the rollout and the evade read native.
 	NativeShotOddsFactory.install()
 	NativeCarryRolloutFactory.install()
+	NativeEvadeReadFactory.install()
 	var native_open := AIRoleCarrier.new()
 	native_open._field.fill(open_ctx)
 	_bench("open ice: best carry (candidates, native kernels)", func() -> void:
@@ -364,6 +366,20 @@ func test_evaluator_costs() -> void:
 		poss.threat_of_feed(from, Vector3(-4, 0, -19), Vector3.ZERO, goalie))
 	_bench("threat_of_carrier (5 def)", func() -> void:
 		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+	# The keep read every possession read pays (AIPossessionValue.base_at).
+	_bench("evade_safety (5 def)", func() -> void:
+		AIEvadeRead.evade_safety_reference(from, Vector3(0, 0, -6), opps, opp_vels,
+				AIBotMechanics.EVADE_CARRY_HANDLE_M, opp_caps))
+	var native_evade: RefCounted = NativeEvadeReadFactory.make()
+	if native_evade != null:
+		_bench("evade_safety (5 def, native)", func() -> void:
+			native_evade.evade_safety(from, Vector3(0, 0, -6), opps, opp_vels,
+					AIBotMechanics.EVADE_CARRY_HANDLE_M, AIEvadeRead._pack_caps(opp_caps, 5)))
+	NativeShotOddsFactory.install()
+	NativeEvadeReadFactory.install()
+	_bench("threat_of_carrier (5 def, native kernels)", func() -> void:
+		poss.threat_of_carrier(from, Vector3(0, 0, -6), goalie))
+	_uninstall_native_ai()
 	# PRESSURE's per-candidate unit: the carrier's whole best-option argmax,
 	# re-run with us standing at the candidate. This is the inner loop of the
 	# outer 18-candidate argmax.
