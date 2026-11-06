@@ -343,6 +343,12 @@ var _sim_started: bool = false
 # connections and their seq watermarks alive, and restarting the seq would make
 # them silently drop every event of the next match.
 var _event_log: SnapshotEventLog = SnapshotEventLog.new()
+# Snapshot deltas (SnapshotDelta): the host's ring and each peer's newest acked
+# snapshot, the client's ring. Connection-scoped like the event log: reset()
+# replaces them, prepare_for_new_game() does not.
+var _delta_sender := SnapshotDelta.Sender.new()
+var _delta_receiver := SnapshotDelta.Receiver.new()
+var _peer_snapshot_acks: Dictionary = {}
 # Stored once so the client receive path doesn't allocate a bound
 # Callable per packet.
 var _snapshot_event_dispatch: Callable = _dispatch_snapshot_event
@@ -758,6 +764,7 @@ func _on_peer_disconnected(id: int) -> void:
 	_peer_rtt_ema_ms.erase(id)
 	_peer_loss_rates.erase(id)
 	_peer_input_watermarks.erase(id)
+	_peer_snapshot_acks.erase(id)
 	_claim_rate_window_start.erase(id)
 	_claim_rate_count.erase(id)
 	_input_rate_window_start.erase(id)
@@ -955,6 +962,9 @@ func reset() -> void:
 	_pdv_dev = 0.0
 	_interp_delay = Constants.NETWORK_INTERPOLATION_DELAY
 	_event_log = SnapshotEventLog.new()
+	_delta_sender.reset()
+	_delta_receiver.reset()
+	_peer_snapshot_acks.clear()
 	NetworkSimManager.clear_pending()
 
 # ── Process ───────────────────────────────────────────────────────────────────
@@ -1054,15 +1064,18 @@ func _process(delta: float) -> void:
 			# fresh PackedByteArray per input (a throwaway buffer per input per
 			# batch, plus a realloc per append, INPUT_RATE times a second).
 			var buf: PackedByteArray = _input_batch_buf
-			buf.resize(3 + batch.size() * InputState.BYTES_SIZE)
+			buf.resize(INPUT_BATCH_HEADER + batch.size() * InputState.BYTES_SIZE)
 			# u16 client-measured downstream loss in basis points (0..10000 = 0..100%),
 			# u8 count. The client's own WS-seq-gap loss is authoritative for the
 			# host->client link, so the host stores it directly instead of re-deriving
 			# loss from an undersampled seq echo (see _peer_loss_rates).
 			buf.encode_u16(0, clampi(roundi(packet_loss_pct * 100.0), 0, 65535))
 			buf.encode_u8(2, batch.size())
+			# The newest snapshot this client rebuilt: the host's delta baseline.
+			buf.encode_u8(3, 1 if _delta_receiver.newest_seq >= 0 else 0)
+			buf.encode_u16(4, maxi(_delta_receiver.newest_seq, 0))
 			for i: int in batch.size():
-				batch[i].write_bytes(buf, 3 + i * InputState.BYTES_SIZE)
+				batch[i].write_bytes(buf, INPUT_BATCH_HEADER + i * InputState.BYTES_SIZE)
 			NetworkTelemetry.record_input_sent()
 			receive_input_batch.rpc_id(1, WirePacking.pack(buf, WirePacking.INPUT_MODE))
 
@@ -1131,13 +1144,20 @@ func _broadcast_state() -> void:
 		return
 	if is_offline_mode:
 		return
-	# Redundant carrier events ride the tail of every snapshot (SnapshotEventLog).
-	# The replay recorder and file writer copy the frame inside get_world_state
-	# (`duplicate()`, `append_array`), so this append never reaches their frames.
-	_event_log.append_block(state, local_time())
-	var packed: PackedByteArray = WirePacking.pack(state, WirePacking.SNAPSHOT_MODE)
+	# Redundant carrier events ride the tail of every snapshot (SnapshotEventLog),
+	# after the delta body: they change every packet and never take part in it.
+	var events := PackedByteArray()
+	_event_log.append_block(events, local_time())
+	_delta_sender.begin(state)
 	NetworkTelemetry.record_world_state_sent()
+	# Peers acked to the same snapshot get the same packet.
+	var packed_by_ack: Dictionary = {}
 	for peer_id in connected_peer_ids():
+		var ack: int = _peer_snapshot_acks.get(peer_id, -1)
+		if not packed_by_ack.has(ack):
+			packed_by_ack[ack] = WirePacking.pack(
+					_delta_sender.packet_for(ack, events), WirePacking.SNAPSHOT_MODE)
+		var packed: PackedByteArray = packed_by_ack[ack]
 		receive_world_state.rpc_id(peer_id, packed)
 		NetworkTelemetry.record_bytes_sent(packed.size())
 
@@ -1393,6 +1413,10 @@ func apply_local_attributes(attrs: PlayerAttributes) -> void:
 	local_attributes_changed.emit(attrs)
 
 
+# u16 downstream loss, u8 count, u8 has-ack, u16 newest rebuilt snapshot; then
+# the inputs.
+const INPUT_BATCH_HEADER: int = 6
+
 # Cap on inputs per RPC, well above the 24-frame redundant window a client
 # sends, so a malicious peer can't force the loop into hundreds of failed decode
 # iterations by claiming count=255 with a short payload.
@@ -1421,11 +1445,13 @@ func receive_input_batch(data: PackedByteArray) -> void:
 func _apply_input_batch(packed: PackedByteArray, sid: int) -> void:
 	var d: PackedByteArray = WirePacking.unpack(packed, WirePacking.INPUT_MAX_RAW,
 			WirePacking.INPUT_MODE)
-	if d.size() < 3:
+	if d.size() < INPUT_BATCH_HEADER:
 		return
 	# Client-reported downstream loss (basis points) — stored verbatim as
 	# this peer's link loss (see _peer_loss_rates).
 	_peer_loss_rates[sid] = float(d.decode_u16(0)) / 100.0
+	if d.decode_u8(3) == 1:
+		_note_snapshot_ack(sid, d.decode_u16(4))
 	var count: int = d.decode_u8(2)
 	if count > _MAX_INPUTS_PER_BATCH:
 		push_warning("oversized input batch from peer %d: count=%d" % [sid, count])
@@ -1441,13 +1467,21 @@ func _apply_input_batch(packed: PackedByteArray, sid: int) -> void:
 	var watermark: int = _peer_input_watermarks.get(sid, -1)
 	var inputs: Array[InputState] = []
 	for i: int in count:
-		var off: int = 3 + i * InputState.BYTES_SIZE
+		var off: int = INPUT_BATCH_HEADER + i * InputState.BYTES_SIZE
 		if off + InputState.BYTES_SIZE > d.size():
 			break
 		if d.decode_u32(off) <= watermark:
 			continue
 		inputs.append(InputState.from_bytes(d, off))
 	input_batch_received.emit(sid, inputs)
+
+
+# A peer's newest rebuilt snapshot, from its input batch. Kept only if newer:
+# batches arrive unordered and an older ack would only shrink the baseline age.
+func _note_snapshot_ack(peer_id: int, seq: int) -> void:
+	var prev: int = _peer_snapshot_acks.get(peer_id, -1)
+	if prev < 0 or SnapshotDelta.seq_ahead(seq, prev) > 0:
+		_peer_snapshot_acks[peer_id] = seq
 
 
 # The newest input stamp a peer's RemoteController has already processed or
@@ -1474,8 +1508,8 @@ func receive_world_state(data: PackedByteArray) -> void:
 
 
 func _apply_world_state(packed: PackedByteArray) -> void:
-	var s: PackedByteArray = WirePacking.unpack(packed, WirePacking.SNAPSHOT_MAX_RAW,
-			WirePacking.SNAPSHOT_MODE)
+	var s: PackedByteArray = _delta_receiver.read(WirePacking.unpack(
+			packed, WirePacking.SNAPSHOT_MAX_RAW, WirePacking.SNAPSHOT_MODE))
 	if s.is_empty():
 		return
 	var now: float = local_time()

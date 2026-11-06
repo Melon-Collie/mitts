@@ -454,3 +454,8 @@ here whenever you bump, in the same format.
 #      boundary (WirePacking: a u16 raw size and a zstd / deflate body). A v92
 #      peer would decode the packed bytes as a raw layout, so mixed builds must
 #      be refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
+# v94: snapshots go as deltas against the newest one each client acked
+#      (SnapshotDelta: a u8 kind, a u16 connection-scoped seq and, for a delta,
+#      the u16 baseline seq, before the body), and the input batch header grows
+#      to 6 B to carry that ack (u8 has-ack, u16 seq). Mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.

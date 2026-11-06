@@ -23,7 +23,7 @@ func test_a_snapshot_round_trips() -> void:
 
 
 func test_an_input_batch_round_trips() -> void:
-	var raw := PackedByteArray([0, 0, 2])
+	var raw := PackedByteArray([0, 0, 2, 0, 0, 0])
 	for i: int in 2:
 		var input := InputState.new()
 		input.host_timestamp = 10.0 + float(i) / 90.0
@@ -54,3 +54,8 @@ func test_a_raw_layout_is_not_mistaken_for_a_packed_one() -> void:
 	var raw := PackedByteArray([0, 0, 1])
 	raw.append_array(InputState.new().to_bytes())
 	assert_true(WirePacking.unpack(raw, WirePacking.INPUT_MAX_RAW, WirePacking.INPUT_MODE).is_empty())
+
+
+func test_the_input_bound_holds_the_largest_batch() -> void:
+	assert_eq(WirePacking.INPUT_MAX_RAW,
+			NetworkManager.INPUT_BATCH_HEADER + NetworkManager._MAX_INPUTS_PER_BATCH * InputState.BYTES_SIZE)
