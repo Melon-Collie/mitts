@@ -293,3 +293,17 @@ static func swing_leg(leg: KeeperPose.Leg, up: KeeperPose.Leg, up_knee: Vector3,
 	leg.toe = up.toe.rotated(Vector3.UP, turn * t)
 	leg.flex = low.flex
 	leg.along_shin = t
+
+
+# His state on the wire (KeeperWire); the stances are built once.
+func wire(w: KeeperWire) -> void:
+	fall = w.s16(fall, KeeperWire.FRACTION)
+	state = w.s8(state)
+	down = w.s16(down, KeeperWire.MM)
+	_from = w.s16(_from, KeeperWire.MM)
+	_clock = w.s32(_clock, KeeperWire.MS)
+	_toward = w.s16(_toward, KeeperWire.MM)
+	w.pose(_start)
+	for i: int in 2:
+		_start_knees[i] = w.v3_16(_start_knees[i], KeeperWire.MM)
+	_from_start = w.bit(_from_start)

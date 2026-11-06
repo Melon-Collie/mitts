@@ -110,6 +110,7 @@ var _smothered_at := Vector3.INF
 var _poking: bool = false
 var _clearing: bool = false
 var _blade_was := Vector3.INF
+var _wire := KeeperWire.new()
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -585,6 +586,12 @@ func _place_body() -> void:
 	save.step(dt, read.legs_read(), _keeper_pose)
 	save.overlay(_keeper_pose)
 	look.step(dt, _keeper_pose, _in_his_space(puck.global_position))
+	_place_on_motor()
+
+
+# The node where his motor has him, his body posed from his pose and his boxes
+# on it.
+func _place_on_motor() -> void:
 	goalie.global_transform = _net * Transform3D(Basis(Vector3.UP, motor.yaw), Vector3(motor.x, 0.0, motor.z))
 	_report_state()
 	_seat(_keeper_pose)
@@ -665,6 +672,56 @@ func fill_state(s: GoalieNetworkState) -> void:
 	super.fill_state(s)
 	s.state_enum = _stance() as int
 	s.pose.copy_from(_keeper_pose)
+
+
+# His whole sim state on the wire (KeeperWire): every collaborator that steps,
+# then his own flags and clocks. What is left off is the tier's, his world, and
+# the scratch a tick writes before it reads (test_keeper_wire_set.gd holds the set).
+func wire(w: KeeperWire) -> void:
+	motor.wire(w)
+	brain.wire(w)
+	play.wire(w)
+	read.wire(w)
+	save.wire(w)
+	look.wire(w)
+	clear.wire(w)
+	w.pose(_keeper_pose)
+	_ticks = w.s8(_ticks % PLANNER_EVERY)
+	_holding = w.s32(_holding, KeeperWire.MS)
+	_chosen = w.bit(_chosen)
+	_covering = w.bit(_covering)
+	_fetching = w.bit(_fetching)
+	_at_feet = w.bit(_at_feet)
+	_out_of_reach_s = w.s32(_out_of_reach_s, KeeperWire.MS)
+	_squaring = w.bit(_squaring)
+	_chosen_at = w.s32(_chosen_at, KeeperWire.MS)
+	_over_at = w.s32(_over_at, KeeperWire.MS)
+	_felt = w.bit(_felt)
+	_chest_held = w.v3_16(_chest_held, KeeperWire.MM)
+	_smothered_at = w.v3_32(_smothered_at, KeeperWire.MM)
+	_poking = w.bit(_poking)
+	_clearing = w.bit(_clearing)
+	_blade_was = w.v3_32(_blade_was, KeeperWire.MM)
+
+
+# His state onto the end of `out` as one blob, his own snapped to what it
+# decodes to, and the node and his boxes placed on that.
+func append_wire_state(out: PackedByteArray) -> void:
+	_wire.begin_write(out)
+	wire(_wire)
+	_wire.finish_write()
+	_place_on_motor()
+
+
+# Him rebuilt from a blob `append_wire_state` wrote, placed on it; false when
+# it is not one (and him then part-written).
+func apply_wire_state(blob: PackedByteArray) -> bool:
+	if not _wire.begin_read(blob):
+		return false
+	wire(_wire)
+	var whole: bool = _wire.finish_read()
+	_place_on_motor()
+	return whole
 
 
 # His rest as the wire's stances, for the bots' read of him: down in a low

@@ -8,6 +8,8 @@ old one's place.
 |---|---|
 | `keeper_anatomy.gd` | his 6'4" frame from stature ratios, and gear at the NHL limits |
 | `keeper_pose.gd` | a pose as targets: pelvis and trunk angles, knees, ankles, hands, the stick's blade |
+| `keeper_pose_codec.gd` | a pose on the wire: every target the skeleton solves from, quantized (positions at a millimetre, angles at π/32767, directions at a hundredth a component), and `same`, whether two poses write the same bytes |
+| `keeper_wire.gd` | his whole sim state as bytes and back (`KeeperWire`): one writer-or-reader every keeper class hands its own fields to in a fixed order (each class's `wire`), at the Q16 scales, 32 bits where a field's range needs them; writing snaps, every value stored back as a reader decodes it; a writer copies the bytes of a pose or a run of the history that has not changed since its last blob |
 | `keeper_skeleton.gd` | the bones, solved from a pose (legs and arms by two-bone IK, the stick by its lie) |
 | `keeper_gear.gd` | one save box per piece of gear, on its bone, the pads settled on the ice and their toes flexed off it where a stance would sink them; the contact test's packed layout |
 | `keeper_poses.gd` | the taught stances, each written as where the body goes; the low ready among them, the ready stance sat down into a deep A for a shot he may not have time to read |
@@ -72,7 +74,16 @@ standing his whole height that slides along it too (`GoalieGearCollision`,
 `tests/unit/rules/test_goalie_gear_collision.gd`,
 `tests/unit/controllers/test_skater_meets_the_goalie.gd`).
 
-He plays on the host only. His pose goes on the wire with his root
+He plays on the host only. His whole sim state goes on the wire behind each
+online snapshot (`KeeperController.wire`, every collaborator that steps and his
+own flags and clocks; the tier's tuning, his world and the scratch a tick
+writes before it reads stay off), and writing it snaps him to it, so a keeper
+rebuilt from the bytes steps exactly as his does
+(`tests/unit/controllers/test_keeper_wire_set.gd` holds the set against what
+the prediction instrument found a client needs,
+`tests/slow/controllers/test_keeper_wire_is_exact.gd` the exactness). A new
+field on a keeper class goes into its class's `wire`, or onto the
+instrument's `NOT_ON_WIRE` once it is shown a client does without it. His pose goes on the wire with his root
 (`fill_state`, `KeeperPoseCodec`: every target his skeleton solves from), so a
 client buffers the snapshots and draws him at the interpolated past
 (`GoalieController._interpolate_and_apply`), root and pose

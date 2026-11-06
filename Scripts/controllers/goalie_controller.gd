@@ -52,6 +52,10 @@ var is_extrapolating: bool = false
 var _rejoin_blend_elapsed: float = -1.0
 var _rejoin_blend_from_x: float = 0.0
 var _rejoin_blend_from_z: float = 0.0
+# A client's newest blob of his whole sim state (`append_wire_state`, beside
+# the snapshot), and the host's capture time of the snapshot it rode.
+var wire_state := PackedByteArray()
+var wire_state_time: float = -INF
 
 
 # `_profile` (null: Hard) is the tier of whoever plays him.
@@ -185,6 +189,21 @@ func fill_state(s: GoalieNetworkState) -> void:
 	s.five_hole_openness = 0.0
 	s.velocity_x = _velocity_x
 	s.velocity_z = _velocity_z
+
+
+# Host, on a broadcast: his whole sim state appended to `out` as one blob;
+# nothing for a seat no keeper plays.
+func append_wire_state(_out: PackedByteArray) -> void:
+	pass
+
+
+# Client: the blob a snapshot captured at `host_ts` carried, kept if it is the
+# newest.
+func receive_wire_state(blob: PackedByteArray, host_ts: float) -> void:
+	if host_ts < wire_state_time:
+		return
+	wire_state = blob
+	wire_state_time = host_ts
 
 
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
