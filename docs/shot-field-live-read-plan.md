@@ -160,11 +160,18 @@ Each is measured with the instrument before and after, and
    either side between the posts). Read history-blind, the wrap still reads
    +0.11 to +0.12: the WRAPPED read is what prices it.
 
-   The 3 m one-timer: the feed kernel weighs the keeper's lateral travel and the
-   flight time only, and at a sharp angle a feed in from the slot and one along
-   the goal line from the boards move him about as far (at (−6, 2.5), +0.21
-   against −0.09 to −0.25), so the read blends feeds that concede 0 to 0.35 into
-   one that concedes 0.65. To be confirmed against the live keeper.
+   The 3 m one-timer reads low at sharp angles only ((−6, 2.5), (−8, 1.5),
+   (−5, 3), (5, 2), (6, 3.5)); from the slot it reads true. There what the keeper
+   concedes jumps with half a metre of feed or 2 m/s of pace, as whether his push
+   beats the shot turns on when he commits. At (−6, 2.5), the 2.5 m feed concedes
+   0.66 at 14 m/s and 0.00 at 22; the 4.5 m one 0.00 at 10 and 0.51 at 14. The
+   field sampled feeds at 1.5 and 3.5 m and at 12 and 20 m/s, which there all
+   land low (0.13–0.47) beside a 3 m, 16 m/s feed at 0.65. (Feeds from the boards
+   side blending in through the travel axis is a smaller part: −0.176 → −0.150.)
+   A bot cannot place a feed to half a metre, so a feed is priced at what feeds
+   like it concede: the generator samples feeds at 1.5, 2.5, 3.5, 4.5 and 6 m
+   and 12, 16 and 20 m/s, for the kernel to average over, and the instrument
+   measures each feed staging over a ±0.5 m × ±2 m/s jitter.
 
 Done when every staging's bias is within ±0.05 on and between the grid, the
 pick scores what the value says, and `test_ozone_possession.gd` no longer shows
