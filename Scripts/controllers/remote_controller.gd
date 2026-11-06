@@ -447,17 +447,23 @@ func sample_state_at(host_time: float) -> SkaterNetworkState:
 		_sample_scratch.position = BufferedStateInterpolator.hermite(
 				f.position, f.velocity, to.position, to.velocity, bracket.t, bracket.bracket_dt)
 		_sample_scratch.velocity = f.velocity.lerp(to.velocity, bracket.t)
-		# Brace at/before host_time — a discrete flag, so take the earlier sample.
-		_sample_scratch.brake_intent = f.brake_intent
-		_sample_scratch.hit_committed = f.hit_committed
-		_sample_scratch.shot_state = f.shot_state
-		# Discrete like brake_intent — the at/before-host_time sample, so a
-		# mid-window ghost transition replays the way the host resolved it.
-		_sample_scratch.is_ghost = f.is_ghost
-		_sample_scratch.facing = f.facing
-		_sample_scratch.move_intent = f.move_intent
-		_sample_scratch.stance_active = f.stance_active
-		_sample_scratch.stagger_timer = f.stagger_timer
+		# Discrete fields from the newer endpoint and the facing on its hermite,
+		# exactly as the host's rewind (StateBufferManager._interpolate_skater)
+		# and this client's render take them: the three resolve one contact, and
+		# an older endpoint here replayed a brace, a ghost or a stance the other
+		# two had already moved past.
+		_sample_scratch.brake_intent = to.brake_intent
+		_sample_scratch.hit_committed = to.hit_committed
+		_sample_scratch.shot_state = to.shot_state
+		_sample_scratch.is_ghost = to.is_ghost
+		var fa: float = BufferedStateInterpolator.hermite_angle(
+				atan2(f.facing.x, f.facing.y), f.facing_angular_velocity,
+				atan2(to.facing.x, to.facing.y), to.facing_angular_velocity,
+				bracket.t, bracket.bracket_dt)
+		_sample_scratch.facing = Vector2(sin(fa), cos(fa))
+		_sample_scratch.move_intent = to.move_intent
+		_sample_scratch.stance_active = to.stance_active
+		_sample_scratch.stagger_timer = to.stagger_timer
 	return _sample_scratch
 
 
