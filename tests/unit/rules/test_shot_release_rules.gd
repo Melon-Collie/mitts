@@ -170,12 +170,13 @@ func test_window_grace_covers_the_round_trip_offset() -> void:
 			0.05 + LEAD_S + BROADCAST_S, 0.0001,
 			"the host holds its deadline open by exactly the arming offset")
 
-func test_window_grace_is_zero_without_a_ping_sample() -> void:
-	# No sample (host player, bot, or a peer measured at 0) — nothing to cover,
-	# and the honest window is already the right one.
-	assert_almost_eq(ShotReleaseRules.one_timer_window_grace(0.0, LEAD_S, BROADCAST_S), 0.0, 0.0001)
-	assert_almost_eq(ShotReleaseRules.one_timer_window_grace(-5.0, LEAD_S, BROADCAST_S), 0.0, 0.0001)
-	assert_almost_eq(ShotReleaseRules.one_timer_window_grace(NAN, LEAD_S, BROADCAST_S), 0.0, 0.0001)
+func test_window_grace_keeps_the_lead_without_a_ping_sample() -> void:
+	# A remote whose ping reads 0 — no sample yet, or a sub-millisecond LAN link —
+	# still releases a lead later and learns of the grant a broadcast late: only
+	# the trip is unknown. Returning 0 there ate the tail of every honest window.
+	for rtt: float in [0.0, -5.0, NAN]:
+		assert_almost_eq(ShotReleaseRules.one_timer_window_grace(rtt, LEAD_S, BROADCAST_S),
+				LEAD_S + BROADCAST_S, 0.0001)
 
 func test_window_grace_is_capped() -> void:
 	# A garbage ping reading must not hold a wind-up open indefinitely.

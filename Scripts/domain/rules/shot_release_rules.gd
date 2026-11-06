@@ -148,14 +148,16 @@ static func one_timer_claim_is_stale(claim_host_timestamp: float, puck_last_play
 # broadcast interval is slack against ping-estimate error, and it is deliberately
 # one-sided: too little grace eats shots, too much only leaves the host briefly
 # still holding a wind-up the client dropped, which the next broadcast settles.
-# Clamped so a garbage ping reading can't hold a wind-up open indefinitely.
+# Clamped so a garbage ping reading can't hold a wind-up open indefinitely. Only
+# a remote carrier takes a grace at all (RemoteController), so a ping reading 0 —
+# no sample yet, or a sub-millisecond LAN link — still leaves the lead and the
+# broadcast slack to cover: the trip is what is unknown, not the offset.
 const ONE_TIMER_WINDOW_GRACE_MAX_S: float = 0.30
 
 static func one_timer_window_grace(peer_rtt_ms: float, input_lead_s: float,
 		broadcast_interval_s: float) -> float:
-	if not is_finite(peer_rtt_ms) or peer_rtt_ms <= 0.0:
-		return 0.0
-	return clampf(peer_rtt_ms / 2000.0 + input_lead_s + broadcast_interval_s,
+	var rtt_ms: float = maxf(peer_rtt_ms, 0.0) if is_finite(peer_rtt_ms) else 0.0
+	return clampf(rtt_ms / 2000.0 + input_lead_s + broadcast_interval_s,
 			0.0, ONE_TIMER_WINDOW_GRACE_MAX_S)
 
 
