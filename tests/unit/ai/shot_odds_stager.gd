@@ -57,6 +57,21 @@ func stage_set(spot: Vector3) -> Vector3:
 # receiver waiting at `spot` at `speed`. Returns the release point.
 func stage_feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
 	_settle_on(passer)
+	return _feed(spot, passer, speed)
+
+
+# Sealed in the RVH on a carrier behind the net at `passer`, skated in along the
+# end boards as a wrap's is, who passes it out to the receiver waiting at `spot`
+# at `speed`. Returns the release point.
+func stage_pass_out(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
+	_h.approach_and_settle(passer, Vector3(signf(passer.x) * WRAP_FROM_X_M, 0.0, passer.z),
+			APPROACH_M_S)
+	return _feed(spot, passer, speed)
+
+
+# The feed from `passer` to the receiver waiting at `spot` at `speed`, the keeper
+# read as he stood before it left and then every tick of its flight.
+func _feed(spot: Vector3, passer: Vector3, speed: float) -> Vector3:
 	_ctrl.fill_state(pre_feed_read)
 	_shooter.global_position = spot
 	_shooter.velocity = Vector3.ZERO

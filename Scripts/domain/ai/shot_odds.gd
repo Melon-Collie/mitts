@@ -16,7 +16,8 @@ extends RefCounted
 #
 # Two kinds of situation:
 #   shot now — the keeper as he stands: shooting off the carry, or what a carry
-#     arrives at. Samples: settled, after a deke, as feeds left him on arrival,
+#     arrives at. Samples: settled, after a deke, as feeds left him on arrival
+#     (passes across, and out from behind the net with him sealed on the post),
 #     and drawn out of position by a decoy carrier. His stance is matched exactly
 #     (Stance): a keeper sealed on his post and one sprawled after a feed are
 #     both "down", and nothing alike. A sealed one is matched on whether the
@@ -89,6 +90,10 @@ const _HISTORY_KINDS: Array[int] = [
 # net (m): a puck inside it is on neither side, and a pass into or out of it
 # crosses.
 const ROYAL_ROAD_HALF_M: float = 0.5
+# A field row of kind PASSOUT is a feed from behind the net, the keeper sealed in
+# the RVH on its passer: the passer stands this far out from the goal line
+# (behind it), at the row's passer x.
+const PASS_OUT_PASSER_FWD_M: float = -0.8
 
 # The field's lofts, in the order its outcome strings are stored.
 const LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
@@ -292,7 +297,7 @@ static func _royal_road_side(x: float) -> int:
 # decoy carrier) at `from_x` and the release spot at `spot_x` straddle the road.
 static func _cell_kind(kind: String, from_x: float, spot_x: float) -> int:
 	match kind:
-		"FEED":
+		"FEED", "PASSOUT":
 			return CellKind.FEED_ACROSS if crosses_royal_road(from_x, spot_x) \
 					else CellKind.FEED_SAME
 		"DECOY":
@@ -591,11 +596,12 @@ static func _build() -> void:
 		var release := Vector3(float(t[7]), 0.0, _FIELD_GOAL.z + float(t[8]))
 		var pre := Vector3(float(t[9]), 0.0, float(t[10]))
 		var now := Vector3(float(t[16]), 0.0, float(t[17]))
-		_is_feed[c] = 1 if kind == "FEED" else 0
+		var fed: bool = kind == "FEED" or kind == "PASSOUT"
+		_is_feed[c] = 1 if fed else 0
 		_kind[c] = _cell_kind(kind, float(t[5]), float(t[1]))
 		_one_timer[c] = 1 if mode == "O" else 0
 		# A feed caught and charged is also the keeper as the receiver finds him.
-		_is_shot_sample[c] = 1 if kind != "FEED" or mode == "K" else 0
+		_is_shot_sample[c] = 1 if not fed or mode == "K" else 0
 		var probe := GoalieNetworkState.new()
 		probe.state_enum = int(float(t[19]))
 		_stance[c] = stance_of(probe, _FIELD_GOAL)
@@ -607,7 +613,8 @@ static func _build() -> void:
 		if kind == "SET":
 			_set_cell[spot] = c
 		var receiver := Vector3(float(t[1]), 0.0, _FIELD_GOAL.z + float(t[2]))
-		var passer := Vector3(float(t[5]), 0.0, receiver.z)
+		var passer := Vector3(float(t[5]), 0.0, receiver.z if kind != "PASSOUT"
+				else _FIELD_GOAL.z + PASS_OUT_PASSER_FWD_M)
 		_travel[c] = AIGoalieModel.goalie_arc_match_x(pre, _FIELD_GOAL, receiver) - pre.x
 		_flight[c] = passer.distance_to(receiver) / maxf(float(t[6]), 0.1)
 		var sigma_m: float = REFERENCE_SPREAD_RAD \

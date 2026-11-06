@@ -841,10 +841,12 @@ reaches back into what remains.
     his facing averages in those decoy and feed keepers, who in tight read far
     more open than the keeper the carry meets. Out-of-position keepers are
     measured, not extrapolated: DECOY cells set him on a carrier
-    elsewhere, then shoot from the spot, and WRAP cells seal him in the RVH on
-    a carrier behind the net, then shoot from a spot in close: the field's
-    only keeper on the post, since in front of the goal line he stands on its
-    overlap and reads as upright. A keeper on the post is read by whether the
+    elsewhere, then shoot from the spot; WRAP cells seal him in the RVH on
+    a carrier behind the net, who carries it round the post to a spot in
+    close; and PASSOUT cells seal him the same way on a passer beside the net,
+    who feeds a man in front of the dots: the field's only keepers on the post,
+    since in front of the goal line he stands on its overlap and reads as
+    upright. A keeper on the post is read by whether the
     release is inside his seal zone (`AIGoalieModel.in_post_seal_zone`):
     inside it he is set there, outside it the puck has been pulled off the
     line and he is leaving, and blending the two priced a shot into a set seal

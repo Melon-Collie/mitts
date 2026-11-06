@@ -13,7 +13,9 @@ extends GutTest
 # carrier elsewhere — across, in tight, far out — before a charged release from
 # the spot: out of position laterally or in depth; and, in close, WRAP, the
 # keeper sealed in the RVH on a carrier behind the net who carries it round the
-# post on his side to the spot before a charged release. Every cell records the
+# post on his side to the spot before a charged release; and, in front of the
+# dots, PASSOUT, the keeper sealed in the RVH on a carrier behind the net beside
+# it who passes it out to the spot, one-timed and caught. Every cell records the
 # keeper's read before the feed left and at decision time, and the open set
 # (FLAT / LOW / HIGH × the stager's aims, then each loft's goal intervals with
 # their edges bisected). Reads are stored raw; AIShotOdds
@@ -60,6 +62,11 @@ const DECOY_MIN_SHIFT_M: float = 1.5
 const WRAP_MAX_FWD_M: float = 3.5
 const WRAP_BEHIND_X_M: float = 1.2
 const WRAP_BEHIND_M: float = 1.6
+# Pass-outs: spots this close in, the passer behind the goal line beside the net
+# this far across (AIShotOdds.PASS_OUT_PASSER_FWD_M out), on either side, at the
+# feeds' paces; a lane through the cage is no pass.
+const PASS_OUT_MAX_FWD_M: float = 6.0
+const PASS_OUT_X_M: float = 2.5
 
 var _s: RefCounted = null
 var _body_radius: float = 0.0
@@ -79,7 +86,7 @@ func before_each() -> void:
 
 
 # Every cell, in a fixed order: [spot_x, spot_fwd, kind, mode, passer_x,
-# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP; mode C (charged), O
+# feed_speed]. kind is SET / DEKE / FEED / DECOY / WRAP / PASSOUT; mode C (charged), O
 # (one-timer) or K (caught, then charged); passer_x is the deke's start for a
 # deke and the decoy's or the wrap carrier's x for those, whose metres out ride
 # in feed_speed's column (a wrap's negative: behind the goal line).
@@ -112,6 +119,15 @@ func _cells() -> Array:
 				for side: float in [-1.0, 1.0]:
 					if side * x > -GameRules.NET_HALF_WIDTH:
 						out.append([x, fwd, "WRAP", "C", side * WRAP_BEHIND_X_M, -WRAP_BEHIND_M])
+			if fwd <= PASS_OUT_MAX_FWD_M:
+				for side: float in [-1.0, 1.0]:
+					var passer := Vector3(side * PASS_OUT_X_M, 0.0,
+							GOAL_Z + AIShotOdds.PASS_OUT_PASSER_FWD_M)
+					if AINetObstacle.pass_lane_blocked_by_net(passer, Vector3(x, 0.0, GOAL_Z + fwd)):
+						continue
+					for speed: float in FEED_SPEEDS_M_S:
+						for mode: String in ["O", "K"]:
+							out.append([x, fwd, "PASSOUT", mode, passer.x, speed])
 	return out
 
 
@@ -138,6 +154,10 @@ func _stage_for(cell: Array) -> Callable:
 		"WRAP":
 			var behind := Vector3(cell[4], 0.0, GOAL_Z + float(cell[5]))
 			return func() -> Vector3: return _s.stage_wrap(spot, behind)
+		"PASSOUT":
+			var from := Vector3(cell[4], 0.0, GOAL_Z + AIShotOdds.PASS_OUT_PASSER_FWD_M)
+			var pace: float = cell[5]
+			return func() -> Vector3: return _s.stage_pass_out(spot, from, pace)
 	return func() -> Vector3: return _s.stage_set(spot)
 
 
@@ -145,7 +165,8 @@ func _row(index: int, cell: Array) -> String:
 	var stage: Callable = _stage_for(cell)
 	var release: Vector3 = stage.call()
 	var decision: GoalieNetworkState = _s.read()
-	var pre: GoalieNetworkState = _s.pre_feed_read if cell[2] == "FEED" else decision
+	var pre: GoalieNetworkState = _s.pre_feed_read if cell[2] in ["FEED", "PASSOUT"] \
+			else decision
 	var pre_fields: String = Stager.read_fields(pre)
 	var decision_fields: String = Stager.read_fields(decision)
 	var patterns: PackedStringArray = _s.open_set(stage, cell[3] == "O", cell[3] == "K")
@@ -193,7 +214,8 @@ func test_merge_the_shards() -> void:
 		"# .claude/hooks/generate-shot-field.sh — never hand-edit. The live goalie's",
 		"# open set per cell, read by AIShotOdds. Row columns: index, spot x, spot",
 		"# metres out, kind, mode, passer x (a deke's start, a decoy's or a wrap's",
-		"# x), feed pace (a decoy's or a wrap's metres out), release x, release",
+		"# x; a pass-out's passer stands AIShotOdds.PASS_OUT_PASSER_FWD_M out), feed",
+		"# pace (a decoy's or a wrap's metres out), release x, release",
 		"# metres out, the 7-field read before the feed, the 7-field read at decision",
 		"# (shot_odds_stager.gd read_fields), then FLAT / LOW / HIGH outcomes at",
 		"# AIM_POINTS aims post to post, then FLAT / LOW / HIGH goal intervals",
