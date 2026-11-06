@@ -59,6 +59,20 @@ the host's keeper from the host's state, not an AI of the client's own.
    the drawn goalie's, so the local skater's clamps and the predicted puck's
    goalie stop read him on the render clock. The interpolated path stays as the
    fallback (clock warm-up, no state yet, deep loss).
+   **Re-step only on a mismatch.** The predictor is exact (deterministic
+   keeper, snapped host), so when a snapshot for tick S arrives the client has
+   usually already predicted S to the bit. It keeps its own state from tick S
+   (the same wire encoding), compares it with the snapshot's, and re-seeds and
+   re-steps the span only when they differ — a release it could not see, a
+   contact it did not predict. Otherwise it keeps running, one step per tick
+   like the host. Re-stepping the span on every snapshot is what made the
+   measured cost 3.8–9.9× the host's; this is the rollback netcode pattern.
+   Intermediate steps skip seating his 22 save boxes on their nodes (~80 µs of
+   a ~200 µs step) unless the keeper's own logic reads them mid-step; only the
+   render instant is drawn and tested. A native port of the save choice (~2 ms a
+   choosing tick) comes after, only if the measured per-frame cost on a release
+   build / Steam Deck still asks for it — the keeper is still being tuned, and a
+   port freezes it behind parity tests.
 3. **Measure and tune.** F3: predicted-vs-host disagreement at the snapshot
    (the host state the client predicted, compared when it arrives) and the
    per-frame step cost. Networking `CLAUDE.md` rewritten for the goalie on the
