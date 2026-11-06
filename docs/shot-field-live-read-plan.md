@@ -1,6 +1,7 @@
 # Shot field: price the shot that is fired, against the keeper it is fired at
 
-Status: **proposed; steps 1–2 being designed in the instrument.** Follows from the possession floor's step 5
+Status: **steps 1–3 built on `claude/shot-field-integration`** (with the
+resolution branch and #896's keeper fix); step 4 open. Follows from the possession floor's step 5
 (`docs/possession-floor-plan.md` §7): the bots fire sharp-angle shots because the
 field's live read prices them far above what the keeper concedes, so keeping the
 puck never gets to compete.
@@ -105,7 +106,18 @@ Each is measured with the instrument before and after, and
 
    It fixes the grid's edges and leaves the live read's own errors as they were,
    and steps 1–2 work on it as on the old field. So this plan builds on that
-   branch once it is on `main`.
+   branch.
+
+   **As built.** `AIShotOdds.shot_now` returns `_blend_best` (in
+   `NativeShotOdds.blend_best` where the kernel ran the query); the history is
+   `AIShotOdds.History` (ANY, CARRIED, FED, WRAPPED), a mask over each cell's
+   kind, threaded through `AIShotValue.now`, `score_shoot_value` and
+   `AICarrierField.value_at`. A history no matching cell shares falls back to
+   every cell. The carrier reads FED until the keeper has had
+   `AIGoalieModel.goalie_reset_s` (his read plus a push the width of the mouth)
+   since it took the puck, CARRIED after; a carry's arrival is CARRIED. Nothing
+   yet tells the bot it came round the net, so WRAPPED is the instrument's until
+   step 4.
 3. **Far decoys, and density.** The resolution branch measures the zone to the
    boards; what it leaves is the keeper pulled further than 6 m across (decoys
    are still sampled at ±3 and ±6 m: a cross-ice play reads 0.00 where most shots

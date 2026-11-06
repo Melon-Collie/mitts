@@ -199,7 +199,8 @@ static func with_rebound(p: float) -> float:
 # `precomputed_quality` (>= 0) hands in the shot_quality a caller already has
 # for these arguments. `rebound`: the odds of reaching the net carry their
 # rebound (with_rebound) — the carrier's compete, weighing the shot against
-# keeping the puck.
+# keeping the puck. `history`: the play the shooter saw (AIShotOdds.History),
+# for a keeper read where he stands.
 static func score_shoot_value(
 		shooter: Vector3,
 		attacking_goal: Vector3,
@@ -211,7 +212,8 @@ static func score_shoot_value(
 		opponent_caps: Array = [],
 		precomputed_quality: float = -1.0,
 		keeper_yaw: float = NAN,
-		rebound: bool = false) -> float:
+		rebound: bool = false,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if (shooter.z - attacking_goal.z) * -signf(attacking_goal.z) < 0.001:
 		return 0.0
 	var quality: float = precomputed_quality
@@ -220,7 +222,7 @@ static func score_shoot_value(
 		shooter = AIGoalieModel.release_ahead_of_goalie(shooter, attacking_goal, keeper)
 		if quality < 0.0:
 			quality = AIShotValue.now(shooter, attacking_goal, keeper, keeper_vel_x, stance,
-					keeper_yaw)
+					keeper_yaw, history)
 	else:
 		if quality < 0.0:
 			quality = AIShotValue.set_keeper(shooter, attacking_goal)

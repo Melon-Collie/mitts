@@ -26,10 +26,10 @@ extends RefCounted
 #   feed     — a pass, read at the passer's decision with the keeper square on the
 #     passer; what he manages over the flight is the goalie's own answer.
 #
-# The value queries average the cells' best odds; the pick blends the cells'
-# per-aim odds and takes the best aim, so it costs more and runs once a shot is
-# committed. Where neighbouring cells disagree on the aim, the average of their
-# bests reads a little above the best of the blend.
+# A shot now is priced, and picked, at the best aim of the cells' blended per-aim
+# odds: the shot that is fired. The other value queries average the cells' best
+# odds, which reads above the blend's best where neighbouring cells disagree on
+# the aim.
 #
 # Where the application layer installs `native_factory` (the extension is built),
 # the weighing runs in NativeShotOdds, held to this file by
@@ -61,6 +61,22 @@ const FLIGHT_BANDWIDTH_S: float = 0.1
 const _MIN_WEIGHT: float = 1e-4
 # How the keeper stands, matched exactly within a spot.
 enum Stance { UPRIGHT, DOWN, POST_SEAL }
+# The play the shooter saw before he shot, which the keeper's read alone does
+# not tell apart: he carried the puck in, so the keeper tracked him (the SET and
+# DEKE cells); he has just taken it from a pass, so the keeper was set on
+# someone else (the caught feeds, and the decoys, a feed's limit); he came out
+# from behind the net (WRAP). ANY: not known, every cell. A shot now weighs only
+# the cells of its history: keepers who look alike and conceded differently,
+# because of how the play got there, are not one keeper.
+enum History { ANY, CARRIED, FED, WRAPPED }
+# Each cell's kind (_kind) and each History's kinds as a mask over them.
+enum CellKind { SET, DEKE, FEED, DECOY, WRAP }
+const _HISTORY_KINDS: Array[int] = [
+	0b11111,
+	(1 << CellKind.SET) | (1 << CellKind.DEKE),
+	(1 << CellKind.FEED) | (1 << CellKind.DECOY),
+	1 << CellKind.WRAP,
+]
 
 # The field's lofts, in the order its outcome strings are stored.
 const LOFTS: Array[int] = [ShotMechanics.ELEVATION_FLAT, ShotMechanics.ELEVATION_LOW,
@@ -111,6 +127,7 @@ static var _is_shot_sample := PackedByteArray()
 static var _is_feed := PackedByteArray()
 static var _one_timer := PackedByteArray()
 static var _stance := PackedByteArray()
+static var _kind := PackedByteArray()
 static var _in_seal_zone := PackedByteArray()
 static var _offset := PackedFloat32Array()
 static var _velocity := PackedFloat32Array()
@@ -133,14 +150,17 @@ const _INTERVAL_COLUMN: int = 26
 # The odds of a shot from `release` at the net at `goal`, against the keeper at
 # `keeper_pos` moving laterally at `keeper_vel_x` (world) in `stance` (Stance;
 # stance_of reads it off a replicated goalie), facing `keeper_yaw` (his
-# rotation_y; NAN when not read, and then his facing does not count).
+# rotation_y; NAN when not read, and then his facing does not count), after the
+# play `history` (History). The odds of the shot that is fired: the best aim of
+# the matched cells' blended open sets, which is pick_shot_now's.
 static func shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN,
-		query: Query = null) -> float:
+		query: Query = null, history: int = History.ANY) -> float:
 	var q: Query = _query(query)
-	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			history):
 		return 0.0
-	return q.odds
+	return _blend_best(q)
 
 
 # The odds of a shot from `release` against a keeper square, still and upright on
@@ -194,12 +214,13 @@ static func feed_unaimed(passer: Vector3, receiver: Vector3, speed: float, goal:
 # `out`. `out.aim` is INF when there is no shot from here.
 static func pick_shot_now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
 		keeper_vel_x: float, stance: int, out: Pick, keeper_yaw: float = NAN,
-		query: Query = null) -> void:
+		query: Query = null, history: int = History.ANY) -> void:
 	out.odds = 0.0
 	out.aim = Vector3.INF
 	out.loft = ShotMechanics.ELEVATION_FLAT
 	var q: Query = _query(query)
-	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw):
+	if not _weigh_shot_now(q, release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			history):
 		return
 	_blend_aims(q)
 	var best: int = 0
@@ -268,7 +289,8 @@ static func aim_x(i: int) -> float:
 
 
 static func _weigh_shot_now(q: Query, release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int, keeper_yaw: float) -> bool:
+		keeper_vel_x: float, stance: int, keeper_yaw: float,
+		history: int = History.ANY) -> bool:
 	var local: Vector2 = _local(release, goal)
 	if local.y <= 0.0:
 		return false
@@ -277,9 +299,14 @@ static func _weigh_shot_now(q: Query, release: Vector3, goal: Vector3, keeper_po
 	var k := Vector3(keeper_pos.x, 0.0, keeper_pos.z)
 	var offset: float = (k.x - AIGoalieModel.goalie_arc_match_x(k, goal, release)) * mirror
 	var square: float = NAN if is_nan(keeper_yaw) else squareness(k, keeper_yaw, release)
+	var seal: int = 1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0
 	_weigh(q, local, false, false, stance, offset, keeper_vel_x * mirror,
-			_depth_of(k, goal), square, false,
-			1 if AIGoalieModel.in_post_seal_zone(release, goal) else 0)
+			_depth_of(k, goal), square, false, seal, _HISTORY_KINDS[history])
+	# A history no measured keeper like this one shares reads every cell: what
+	# was seen of the play narrows the evidence, and never empties it.
+	if q.count == 0 and history != History.ANY:
+		_weigh(q, local, false, false, stance, offset, keeper_vel_x * mirror,
+				_depth_of(k, goal), square, false, seal)
 	return q.count > 0
 
 
@@ -328,6 +355,20 @@ static func _sync_cells(q: Query) -> void:
 	q.synced = true
 
 
+# The best aim's odds of the matched cells' blended open sets: the value of the
+# shot pick_shot_now fires. From the kernel when it ran the query.
+static func _blend_best(q: Query) -> float:
+	if q.odds <= 0.0:
+		return 0.0   # the blend's best never exceeds the average of the cells' bests
+	if q.native != null and not q.synced:
+		return q.native.blend_best()
+	_blend_aims(q)
+	var best: float = 0.0
+	for v: float in q.blend:
+		best = maxf(best, v)
+	return minf(best, 1.0)
+
+
 static func _blend_aims(q: Query) -> void:
 	_sync_cells(q)
 	q.blend.resize(_aims_per_cell)
@@ -343,17 +384,18 @@ static func _blend_aims(q: Query) -> void:
 # bilinear over the four spots around `local`, a kernel over the keeper state
 # within each. A feed's state is (a, b) = (travel, flight); a shot's is (a, b) =
 # (offset, velocity) plus `depth` and `square`, each left out of the kernel when
-# NAN, and a sealed keeper's `in_seal_zone` (0 / 1). `set_query`: each spot's SET
-# cell alone.
+# NAN, and a sealed keeper's `in_seal_zone` (0 / 1), among the cells of `kinds`
+# (a mask over CellKind). `set_query`: each spot's SET cell alone.
 static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, stance: int,
 		a: float, b: float, depth: float = NAN, square: float = NAN,
-		set_query: bool = false, in_seal_zone: int = 0) -> void:
+		set_query: bool = false, in_seal_zone: int = 0,
+		kinds: int = _HISTORY_KINDS[History.ANY]) -> void:
 	if q.native_epoch != _native_epoch:
 		q.native_epoch = _native_epoch
 		q.native = _new_native() if q.use_native else null
 	if q.native != null:
 		q.odds = q.native.weigh(local.x, local.y, is_feed, one_timer, stance, a, b, depth,
-				square, set_query, in_seal_zone)
+				square, set_query, in_seal_zone, kinds)
 		q.count = q.native.get_count()
 		q.synced = false
 		return
@@ -380,7 +422,7 @@ static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, sta
 				total += w
 		else:
 			total += _weigh_spot(q, spot, w, is_feed, one_timer, stance, a, b, depth, square,
-					in_seal_zone)
+					in_seal_zone, kinds)
 	if total <= 0.0:
 		q.cells.clear()
 		q.weights.clear()
@@ -402,7 +444,8 @@ static func _weigh(q: Query, local: Vector2, is_feed: bool, one_timer: bool, sta
 # share. 0 when the spot has no matching cell.
 static func _weigh_spot(q: Query, spot: int, spot_weight: float, is_feed: bool,
 		one_timer: bool, stance: int, a: float, b: float, depth: float = NAN,
-		square: float = NAN, in_seal_zone: int = 0) -> float:
+		square: float = NAN, in_seal_zone: int = 0,
+		kinds: int = _HISTORY_KINDS[History.ANY]) -> float:
 	var ha: float = TRAVEL_BANDWIDTH_M if is_feed else OFFSET_BANDWIDTH_M
 	var hb: float = FLIGHT_BANDWIDTH_S if is_feed else VELOCITY_BANDWIDTH_M_S
 	var first: int = q.cells.size()
@@ -418,7 +461,7 @@ static func _weigh_spot(q: Query, spot: int, spot_weight: float, is_feed: bool,
 			ca = _travel[c]
 			cb = _flight[c]
 		else:
-			if _is_shot_sample[c] == 0 or _stance[c] != stance:
+			if _is_shot_sample[c] == 0 or _stance[c] != stance or (kinds >> _kind[c]) & 1 == 0:
 				continue
 			if stance == Stance.POST_SEAL and _in_seal_zone[c] != in_seal_zone:
 				continue
@@ -485,6 +528,7 @@ static func _build() -> void:
 	_flight.resize(n)
 	_is_shot_sample.resize(n)
 	_is_feed.resize(n)
+	_kind.resize(n)
 	_one_timer.resize(n)
 	_stance.resize(n)
 	_in_seal_zone.resize(n)
@@ -505,6 +549,7 @@ static func _build() -> void:
 		var pre := Vector3(float(t[9]), 0.0, float(t[10]))
 		var now := Vector3(float(t[16]), 0.0, float(t[17]))
 		_is_feed[c] = 1 if kind == "FEED" else 0
+		_kind[c] = CellKind.get(kind, CellKind.SET)
 		_one_timer[c] = 1 if mode == "O" else 0
 		# A feed caught and charged is also the keeper as the receiver finds him.
 		_is_shot_sample[c] = 1 if kind != "FEED" or mode == "K" else 0
@@ -561,6 +606,7 @@ static func _new_native() -> RefCounted:
 			PackedFloat64Array(AIShotFieldData.SPOT_FWD), _spot_first, _spot_count, _set_cell)
 	native.set_cells(_odds, _is_shot_sample, _is_feed, _one_timer, _stance, _in_seal_zone,
 			_offset, _velocity, _depth, _square, _travel, _flight)
+	native.set_aims(_aim_odds, _aims_per_cell, _kind)
 	native.set_bandwidths(OFFSET_BANDWIDTH_M, VELOCITY_BANDWIDTH_M_S, DEPTH_BANDWIDTH_M,
 			SQUARE_BANDWIDTH_RAD, TRAVEL_BANDWIDTH_M, FLIGHT_BANDWIDTH_S, _MIN_WEIGHT,
 			Stance.POST_SEAL)

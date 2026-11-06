@@ -62,6 +62,15 @@ func _settle_penalty(ctx: RoleContext) -> float:
 			-_settle_elapsed_s / maxf(ctx.settle_penalty_tau_s, 0.001))
 
 
+# The play this shooter's keeper last saw (AIShotOdds.History): a puck just
+# taken leaves him set on the play before, until he has had time to set on the
+# new shooter (AIGoalieModel.goalie_reset_s); held longer, he has tracked the
+# carry.
+func _shot_history() -> int:
+	return AIShotOdds.History.FED if _settle_elapsed_s < AIGoalieModel.goalie_reset_s() \
+			else AIShotOdds.History.CARRIED
+
+
 # Move `value` away from being chosen by `penalty` of its own magnitude: a
 # positive score shrinks toward zero, a negative one deepens. Higher is better
 # everywhere this is read, so the one form handicaps both signs.
@@ -535,7 +544,7 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		keeper_yaw = opp_keeper.rotation_y
 		if not shot_unavailable:
 			AIShotOdds.pick_shot_now(wrister_base_release, attacking_goal, keeper_now,
-					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw)
+					keeper_vel_x, keeper_stance, _shot_pick, keeper_yaw, null, _shot_history())
 	var shot_target: Vector3 = _shot_pick.aim if _shot_pick.aim.is_finite() else attacking_goal
 	var shot_dir: Vector3 = shot_target - wrister_base_release
 	shot_dir.y = 0.0
@@ -570,7 +579,8 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var s: float = AIActionScoring.score_shoot_value(
 				release, attacking_goal, keeper_now, _field.opponents_release,
 				keeper_vel_x, keeper_stance, sample_speed,
-				_field.opponent_caps, -1.0, keeper_yaw, true) * _field.holds.keep[k]
+				_field.opponent_caps, -1.0, keeper_yaw, true, _shot_history()) \
+				* _field.holds.keep[k]
 		if s > _phase_shoot_score:
 			_phase_shoot_score = s
 			_shot_sample_share = share

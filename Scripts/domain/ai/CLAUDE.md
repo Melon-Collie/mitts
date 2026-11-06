@@ -870,7 +870,17 @@ reaches back into what remains.
     `test_shot_odds_vs_truth.gd`, whose error, concordance and pick-share
     bounds are ratchets.
   - The committed shot fires the field's own pick (`AIShotOdds.pick_shot_now`:
-    the aim and loft with the best odds), so the price and the shot are one.
+    the aim and loft with the best odds of the matched cells' blended open
+    sets), and a shot now is priced at that same blend's best, so the price and
+    the shot are one. Never price it at the mean of each cell's own best aim:
+    cells with their holes in different places then promise a shot no aim
+    makes.
+  - **A shot now is read against the play the shooter saw** (`AIShotOdds.History`:
+    carried in, fed, round the net), weighing only cells of that history. Keepers
+    who look alike in position and stance concede differently by how the play
+    got there; the history is the bot's perception of it, never a gate, so a
+    history no matching cell shares reads every cell
+    (`docs/shot-field-live-read-plan.md`).
 
 - **Carry safety** (`reach_clearance` / `best_evade_point`) — a reachable-set
   pursuit-evasion model. Each skater is a bounded-accel body: over a short

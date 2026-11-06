@@ -735,7 +735,7 @@ func _arrival_value(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3,
 			_scratch_opponents_path, tracked_goalie, keeper_vel_x, cand_keep,
 			_field.keeper_stance_at(local_time + cand_windup),
 			atan2(tracked_goalie.x - cand_release.x, tracked_goalie.z - cand_release.z),
-			local_time, arrive_vel)
+			local_time, arrive_vel, AIShotOdds.History.CARRIED)
 	# ENTRY CONTINUATION: from outside the zone an in-zone candidate is worth what
 	# a carrier there does next — the drive-in from it, priced in the in-zone
 	# regime and starting when we arrive — which its own shot xG badly

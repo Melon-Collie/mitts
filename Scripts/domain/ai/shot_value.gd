@@ -21,13 +21,16 @@ class_name AIShotValue
 #                picked.
 
 
-# `stance` is an AIShotOdds.Stance; `keeper_yaw` his rotation_y, NAN when not read.
+# `stance` is an AIShotOdds.Stance; `keeper_yaw` his rotation_y, NAN when not read;
+# `history` the play the shooter saw before he shot (AIShotOdds.History).
 static func now(release: Vector3, goal: Vector3, keeper_pos: Vector3,
-		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN) -> float:
+		keeper_vel_x: float, stance: int, keeper_yaw: float = NAN,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if Vector2(keeper_pos.x - goal.x, keeper_pos.z - goal.z).length() \
 			> AIGoalieModel.GOALIE_HOME_M:
 		return AIShotOdds.empty_net(release, goal)
-	return AIShotOdds.shot_now(release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw)
+	return AIShotOdds.shot_now(release, goal, keeper_pos, keeper_vel_x, stance, keeper_yaw,
+			null, history)
 
 
 # `now` with the crossing scattering by `spread_rad`: what the xG stat reads, at

@@ -390,18 +390,21 @@ func arrival_hold_wait(ctx: RoleContext, candidate: Vector3, arrive_vel: Vector3
 # `arrive_vel`, which is when and how he starts for the zone from it
 # (horizon_value). It takes no aim spread: the seam prices
 # the chance, not the shooter. `shot_keep` is the odds the shooter still has the
-# puck at the press; it discounts the shot, never the position value.
+# puck at the press; it discounts the shot, never the position value. `history`
+# is the play the keeper saw (AIShotOdds.History): a carry he tracked there
+# arrives CARRIED.
 func value_at(ctx: RoleContext, pos: Vector3, from_pos: Vector3,
 		opps: Array[Vector3], keeper_pos: Vector3 = Vector3.INF,
 		keeper_vel_x: float = 0.0, shot_keep: float = 1.0,
 		stance: int = AIShotOdds.Stance.UPRIGHT, keeper_yaw: float = NAN,
-		arrive_s: float = 0.0, arrive_vel: Vector3 = Vector3.ZERO) -> float:
+		arrive_s: float = 0.0, arrive_vel: Vector3 = Vector3.ZERO,
+		history: int = AIShotOdds.History.ANY) -> float:
 	if _shot_is_dead_from_here(ctx, pos, from_pos, keeper_vel_x, keeper_pos):
 		return horizon_value(pos, arrive_s, arrive_vel)
 	var shoot_s: float = AIActionScoring.score_shoot_value(
 			pos, ctx.attacking_goal_pos, keeper_pos, opps, keeper_vel_x,
 			stance, AIBotMechanics.WRISTER_SHOT_SPEED_M_S,
-			opponent_caps, -1.0, keeper_yaw, true) * shot_keep
+			opponent_caps, -1.0, keeper_yaw, true, history) * shot_keep
 	return _regime_value(ctx, pos, from_pos, shoot_s, arrive_s, arrive_vel)
 
 
