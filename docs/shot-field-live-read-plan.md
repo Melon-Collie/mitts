@@ -117,8 +117,34 @@ Each is measured with the instrument before and after, and
    `AIGoalieModel.goalie_reset_s` (his read plus a push the width of the mouth)
    since it took the puck, CARRIED after; a carry's arrival is CARRIED. Nothing
    yet tells the bot it came round the net, so WRAPPED is the instrument's until
-   step 4.
-3. **Far decoys, and density.** The resolution branch measures the zone to the
+   step 4. The other bot readers name their play too: the counter-rush threat
+   and the defence's `threat_of_carrier` read CARRIED, the dump search's support
+   shots FED. History-blind, a deep keeper matches the in-tight range decoys (a
+   keeper set on a carrier 2 m out, then beaten from the spot): a slot shot
+   against our squared keeper read 0.98 where CARRIED reads 0.30 and the SET
+   cell 0.32.
+
+   **Readings on the regenerated field** (#896's keeper, the resolution grid,
+   decoys to 12 m across; `test_shot_field_live_read.gd`, bias against the
+   measured best aim; on the grid / between / beyond):
+
+   | staging | bias | what its pick scores, on the grid |
+   |---|---|---|
+   | set | +0.027 / −0.048 / +0.003 | 0.017, the measured best |
+   | caught feed 3 m | −0.032 / **−0.220** / −0.003 | 0.482 |
+   | caught feed 6 m | +0.015 / −0.037 / −0.037 | 0.276 |
+   | one-timer 3 m | **−0.153 / −0.203** / +0.013 | |
+   | one-timer 6 m | −0.091 / −0.003 / +0.033 | |
+   | decoy | −0.065 / −0.055 / −0.141 | 0.935 |
+   | deke | −0.027 / **−0.146** / −0.005 | 0.193 |
+   | wrap | **+0.214 / +0.170 / +0.205** | 0.000 |
+
+   The truth table: mean error 0.104 (was 0.112), concordance 0.943 (0.919), the
+   pick keeps 0.757 of the best odds (0.744). Cost, native kernel: a shot-now
+   read 4.6 → 8.1 µs (the blend over 72 aims); host AI per game-second 1.06–1.11×
+   in every scenario but the 5v5 O-zone cycle, 1.30×, where shot reads are
+   densest (`benchmarks/test_ai_perf_benchmark.gd`, two runs each).
+3. **Far decoys, and density.** *Far decoys done (above); density open.* The resolution branch measures the zone to the
    boards; what it leaves is the keeper pulled further than 6 m across (decoys
    are still sampled at ±3 and ±6 m: a cross-ice play reads 0.00 where most shots
    score) and the interpolation between spots. Decoys out to 12 m across, then a
