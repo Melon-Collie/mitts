@@ -18,6 +18,14 @@ enum Choice {
 }
 
 
+# Whether the host takes a vote a remote peer cast. Only at GAME_OVER, only from
+# a seated player (a spectator is not in the pool `resolve` counts against), and
+# only a Choice: the pool counts anything but NONE as cast, so an out-of-range
+# value would read as REMATCH.
+static func accepts_remote_vote(vote: int, is_game_over: bool, is_spectator: bool) -> bool:
+	return is_game_over and not is_spectator and vote >= Choice.NONE and vote <= Choice.LOBBY
+
+
 # Number of live (non-NONE) votes in the pool — the tally the HUD displays.
 static func count_voted(votes: Dictionary[int, int]) -> int:
 	var count: int = 0

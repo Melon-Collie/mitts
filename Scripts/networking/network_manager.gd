@@ -97,6 +97,8 @@ signal player_ready_changed(peer_id: int, is_ready: bool)
 signal bot_slot_changed(slot_key: int, is_bot: bool)
 signal bot_slots_synced(bot_slots: Dictionary)
 signal rematch_vote_changed(peer_id: int, vote: int)
+# Host: a remote peer's vote, before GameManager decides whether it counts.
+signal rematch_vote_requested(peer_id: int, vote: int)
 signal rematch_voters_changed(total: int)
 signal clock_ready
 signal pickup_claim_received(peer_id: int, host_timestamp: float, interp_delay_ms: float, input_lead_ms: float, blade_curr: Vector3, blade_prev: Vector3)
@@ -1397,11 +1399,13 @@ const _MAX_INPUTS_PER_BATCH: int = 120
 
 @rpc("any_peer", "unreliable_ordered")
 func receive_input_batch(data: PackedByteArray) -> void:
+	if not is_host:
+		return
 	var sender_id: int = multiplayer.get_remote_sender_id()
 	# Liveness: stamp actual receipt time (before any NetworkSimManager delay).
-	if is_host and _peer_last_seen.has(sender_id):
+	if _peer_last_seen.has(sender_id):
 		_peer_last_seen[sender_id] = local_time()
-	if is_host and not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
+	if not _rate_ok(sender_id, _INPUT_BATCH_RATE_CAP_PER_S,
 			_input_rate_window_start, _input_rate_count):
 		return
 	# Branch rather than hand NetworkSimManager a closure: with the sim disabled
@@ -2298,7 +2302,11 @@ func send_player_ready(is_ready: bool) -> void:
 func request_rematch_vote(vote: int) -> void:
 	if not is_host:
 		return
-	var peer_id: int = multiplayer.get_remote_sender_id()
+	rematch_vote_requested.emit(multiplayer.get_remote_sender_id(), vote)
+
+# Host: puts a vote in every peer's pool. A remote's vote reaches here only
+# through GameManager's gate on rematch_vote_requested.
+func relay_rematch_vote(peer_id: int, vote: int) -> void:
 	for remote_id: int in connected_peer_ids():
 		notify_rematch_vote.rpc_id(remote_id, peer_id, vote)
 	rematch_vote_changed.emit(peer_id, vote)
@@ -2309,10 +2317,7 @@ func notify_rematch_vote(peer_id: int, vote: int) -> void:
 
 func send_rematch_vote(vote: int) -> void:
 	if is_host:
-		var peer_id: int = local_peer_id()
-		for remote_id: int in connected_peer_ids():
-			notify_rematch_vote.rpc_id(remote_id, peer_id, vote)
-		rematch_vote_changed.emit(peer_id, vote)
+		relay_rematch_vote(local_peer_id(), vote)
 	else:
 		request_rematch_vote.rpc_id(1, vote)
 

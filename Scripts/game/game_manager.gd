@@ -571,6 +571,7 @@ func _wire_network_signals() -> void:
 	NetworkManager.input_batch_received.connect(_on_input_batch_received)
 	NetworkManager.spectator_demoted_received.connect(_on_spectator_demoted_received)
 	NetworkManager.skip_replay_request_received.connect(_on_remote_skip_replay_request)
+	NetworkManager.rematch_vote_requested.connect(_on_rematch_vote_requested)
 	NetworkManager.skip_replay_vote_updated.connect(_on_remote_skip_replay_vote)
 	NetworkManager.replay_event_received.connect(_on_replay_event_received)
 	NetworkManager.replay_mode_changed.connect(_on_remote_replay_mode_changed)
@@ -2635,6 +2636,12 @@ func can_export_goal_clip() -> bool:
 
 func _on_remote_skip_replay_request(peer_id: int) -> void:
 	_register_skip_vote(peer_id)
+
+
+func _on_rematch_vote_requested(peer_id: int, vote: int) -> void:
+	if RematchVoteRules.accepts_remote_vote(vote,
+			_live_phase() == GamePhase.Phase.GAME_OVER, is_spectator_peer(peer_id)):
+		NetworkManager.relay_rematch_vote(peer_id, vote)
 
 
 # Host-only: add the vote to the window tally, broadcast it, and end the
