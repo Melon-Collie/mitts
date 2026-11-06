@@ -17,8 +17,8 @@ extends RefCounted
 #
 #    Total for 6 players + 2 goalies: 689 bytes (10 players: 941), plus
 #    NetworkManager's trailing carrier-event block (1 B idle, +17 B per event in
-#    the last second, up to 16) — stays in a single packet under Steam's
-#    ~1200-byte unreliable cap except at 10 players with a full event block. This matters: Steam (unlike ENet)
+#    the last second, up to 16). That is the raw layout every reader sees;
+#    NetworkManager compresses it for the wire (WirePacking, ~656 B at 10). This matters: Steam (unlike ENet)
 #    does NOT fragment unreliable messages, so an oversized snapshot would be
 #    dropped at send rather than split across datagrams.
 #

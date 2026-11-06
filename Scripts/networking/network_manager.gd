@@ -1064,9 +1064,7 @@ func _process(delta: float) -> void:
 			for i: int in batch.size():
 				batch[i].write_bytes(buf, 3 + i * InputState.BYTES_SIZE)
 			NetworkTelemetry.record_input_sent()
-			# rpc_id encodes the buffer into the packet synchronously, so reusing
-			# it on the next send is safe.
-			receive_input_batch.rpc_id(1, buf)
+			receive_input_batch.rpc_id(1, WirePacking.pack(buf, WirePacking.INPUT_MODE))
 
 	if not is_host:
 		_ws_loss_window_timer += capped_delta
@@ -1137,10 +1135,11 @@ func _broadcast_state() -> void:
 	# The replay recorder and file writer copy the frame inside get_world_state
 	# (`duplicate()`, `append_array`), so this append never reaches their frames.
 	_event_log.append_block(state, local_time())
+	var packed: PackedByteArray = WirePacking.pack(state, WirePacking.SNAPSHOT_MODE)
 	NetworkTelemetry.record_world_state_sent()
 	for peer_id in connected_peer_ids():
-		receive_world_state.rpc_id(peer_id, state)
-		NetworkTelemetry.record_bytes_sent(state.size())
+		receive_world_state.rpc_id(peer_id, packed)
+		NetworkTelemetry.record_bytes_sent(packed.size())
 
 # ── RPCs ──────────────────────────────────────────────────────────────────────
 @rpc("any_peer", "reliable")
@@ -1419,7 +1418,9 @@ func receive_input_batch(data: PackedByteArray) -> void:
 		_apply_input_batch(data, sender_id)
 
 
-func _apply_input_batch(d: PackedByteArray, sid: int) -> void:
+func _apply_input_batch(packed: PackedByteArray, sid: int) -> void:
+	var d: PackedByteArray = WirePacking.unpack(packed, WirePacking.INPUT_MAX_RAW,
+			WirePacking.INPUT_MODE)
 	if d.size() < 3:
 		return
 	# Client-reported downstream loss (basis points) — stored verbatim as
@@ -1472,7 +1473,11 @@ func receive_world_state(data: PackedByteArray) -> void:
 		_apply_world_state(data)
 
 
-func _apply_world_state(s: PackedByteArray) -> void:
+func _apply_world_state(packed: PackedByteArray) -> void:
+	var s: PackedByteArray = WirePacking.unpack(packed, WirePacking.SNAPSHOT_MAX_RAW,
+			WirePacking.SNAPSHOT_MODE)
+	if s.is_empty():
+		return
 	var now: float = local_time()
 	if _last_ws_arrival_time > 0.0:
 		var expected_interval: float = 1.0 / Constants.STATE_RATE
@@ -1511,7 +1516,7 @@ func _apply_world_state(s: PackedByteArray) -> void:
 	# guarantee than the reliable-RPC-vs-unreliable-snapshot race).
 	_event_log.apply_block(s, multiplayer.get_unique_id(), _snapshot_event_dispatch)
 	NetworkTelemetry.record_world_state()
-	NetworkTelemetry.record_bytes_received(s.size())
+	NetworkTelemetry.record_bytes_received(packed.size())
 	world_state_received.emit(s)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────

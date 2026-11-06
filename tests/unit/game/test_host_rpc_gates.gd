@@ -24,7 +24,7 @@ func _one_input_batch() -> PackedByteArray:
 	b.encode_u16(0, 0)
 	b.encode_u8(2, 1)
 	b.append_array(input.to_bytes())
-	return b
+	return WirePacking.pack(b, WirePacking.INPUT_MODE)
 
 
 func test_a_client_ignores_an_input_batch() -> void:

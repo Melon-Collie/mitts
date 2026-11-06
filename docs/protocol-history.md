@@ -450,3 +450,7 @@ here whenever you bump, in the same format.
 #      puck's path (PuckReceptionRules.path_offset), which never read the shaft.
 #      The RPC's argument count changed, so mixed builds must be refused.
 #      Replay FORMAT_VERSION unchanged: claims are not recorded.
+# v93: the world-state snapshot and the input batch are compressed at the RPC
+#      boundary (WirePacking: a u16 raw size and a zstd / deflate body). A v92
+#      peer would decode the packed bytes as a raw layout, so mixed builds must
+#      be refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.

@@ -20,8 +20,8 @@ The Rocket League freeplay ceiling is a guiding star: the stickhandling-to-shot 
 
 | Channel | Rate | Transport |
 |---------|------|-----------|
-| Input (client → host) | 90 Hz (every tick) | Unreliable, last 12 frames per packet (24 above 10% loss) |
-| World state (host → clients) | 45 Hz | Unreliable, 689 bytes at 6 players + 2 goalies, 941 at 10 (docs/performance-findings.md → Network bytes by broadcast rate) (single flat PackedByteArray + 1-byte carrier-event block when idle, +17 B per carrier event of the last second; under Steam's ~1200-byte unreliable message except at 10 players with a full event block, #909) |
+| Input (client → host) | 90 Hz (every tick) | Unreliable, last 12 frames per packet (24 above 10% loss), deflate-compressed (`WirePacking`; ~119 B of a raw 291) |
+| World state (host → clients) | 45 Hz | Unreliable, zstd-compressed at the RPC boundary (`WirePacking`; ~656 B on the wire at 10, #912); raw 689 bytes at 6 players + 2 goalies, 941 at 10 (docs/performance-findings.md → Network bytes by broadcast rate) (single flat PackedByteArray + 1-byte carrier-event block when idle, +17 B per carrier event of the last second; under Steam's ~1200-byte unreliable message except at 10 players with a full event block, #909) |
 | Events (spawn, goal, goalie transitions) | On event | Reliable |
 | Carrier events (pickup grant, carrier change, steal, drop) | On event | Reliable backstop **+** redundant copy in every world-state packet for ~1 s (`SnapshotEventLog` trailing block; seq-deduped) |
 | Stats sync | On change | Reliable |
