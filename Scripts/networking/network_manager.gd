@@ -372,8 +372,9 @@ var _last_ws_arrival_time: float = -1.0
 # vs the synced host clock, NOT the raw inter-arrival gap, so relay clumping
 # barely moves it. This de-clumped spread is the jitter cushion fed into the
 # interp-delay target (_compute_target_interpolation_delay) as well as the F3
-# "Delay spread" readout.
-var _pdv_floor: float = -1.0
+# "Delay spread" readout. The floor starts unset (INF), never at a sentinel a
+# measured delay can reach: clock-sync error makes a LAN delay negative.
+var _pdv_floor: float = INF
 var _pdv_mean: float = 0.0
 var _pdv_dev: float = 0.0
 # get_target_interpolation_delay() per-physics-frame cache (see that function).
@@ -854,7 +855,7 @@ func prepare_for_new_game() -> void:
 	packet_loss_pct = 0.0
 	_jitter_samples.clear()
 	_last_ws_arrival_time = -1.0
-	_pdv_floor = -1.0
+	_pdv_floor = INF
 	_pdv_mean = 0.0
 	_pdv_dev = 0.0
 	_interp_delay = Constants.NETWORK_INTERPOLATION_DELAY
@@ -945,7 +946,7 @@ func reset() -> void:
 	_input_rate_count.clear()
 	_jitter_samples.clear()
 	_last_ws_arrival_time = -1.0
-	_pdv_floor = -1.0
+	_pdv_floor = INF
 	_pdv_mean = 0.0
 	_pdv_dev = 0.0
 	_interp_delay = Constants.NETWORK_INTERPOLATION_DELAY
@@ -957,8 +958,9 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_WM_WINDOW_FOCUS_IN:
 		if is_host:
 			# Immediately resync clients — they've been without world state for the
-			# duration of the OS freeze.
-			_broadcast_state()
+			# duration of the OS freeze. Not during a replay: the host sends none.
+			if not _replay_mode:
+				_broadcast_state()
 		else:
 			# Reset the input timer so we don't burst-send stale inputs.
 			_input_timer = 0.0
@@ -1484,8 +1486,10 @@ func _apply_world_state(s: PackedByteArray) -> void:
 		NetworkTelemetry.record_ws_arrival_gap(gap * 1000.0)
 	_last_ws_arrival_time = now
 	# PDV delay vs the synced host clock, off the world-state header's
-	# host_capture_time. Clumping barely moves this, unlike the gap above.
-	if is_clock_ready() and s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
+	# host_capture_time. Clumping barely moves this, unlike the gap above. Not in
+	# replay: estimated_host_time() is the clip's clock there, seconds in the past.
+	if is_clock_ready() and not _replay_mode \
+			and s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
 		_record_packet_delay(estimated_host_time()
 				- float(s.decode_u32(WorldStateCodec.WS_HOST_TIME_OFFSET))
 				/ Constants.TIME_WIRE_SCALE)
@@ -2574,7 +2578,7 @@ func get_jitter_p95() -> float:
 func _record_packet_delay(d: float) -> void:
 	const GAIN: float = 0.125       # Jacobson 1/8: ~8-sample memory, spike decays geometrically
 	const FLOOR_RISE: float = 0.01
-	if _pdv_floor < 0.0 or d < _pdv_floor:
+	if d < _pdv_floor:
 		_pdv_floor = d
 	else:
 		_pdv_floor += (d - _pdv_floor) * FLOOR_RISE
@@ -2588,7 +2592,7 @@ func get_packet_delay_spread_ms() -> float:
 	return (_pdv_mean + 4.0 * _pdv_dev) * 1000.0
 
 func get_packet_delay_floor_ms() -> float:
-	return maxf(_pdv_floor, 0.0) * 1000.0
+	return maxf(_pdv_floor, 0.0) * 1000.0 if is_finite(_pdv_floor) else 0.0
 
 func get_target_interpolation_delay() -> float:
 	# Cached once per physics frame: get_jitter_p95() duplicates + sorts the sample
