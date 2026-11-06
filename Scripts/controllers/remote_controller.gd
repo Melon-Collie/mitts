@@ -263,7 +263,10 @@ const _DRAIN_STALE_SOLO_S: float = 0.25
 const _DRAIN_TELEMETRY_MAX_S: float = 1.0
 
 
-func _drain_backlog(now: float) -> void:
+# `live` is false while movement is locked: the drain still runs there, but
+# like the pop below it records nothing, since a locked phase's cadence says
+# nothing about the link.
+func _drain_backlog(now: float, live: bool = true) -> void:
 	if _input_queue.is_empty():
 		return
 	# Lone-stale drop (see _DRAIN_STALE_SOLO_S).
@@ -285,7 +288,7 @@ func _drain_backlog(now: float) -> void:
 		# survivorship-biased — its max bounded by _DRAIN_TARGET_S, which reads as
 		# mutually impossible next to a session draining several times a second.
 		# Phase-resume artifacts stay out.
-		if overdue <= _DRAIN_STALE_SOLO_S:
+		if live and overdue <= _DRAIN_STALE_SOLO_S:
 			NetworkTelemetry.record_input_lead(overdue)
 		# Presses are edges the player committed — dropping the frame that carried
 		# one must not eat the action. Held/absolute state (move vector, brake,
@@ -294,7 +297,7 @@ func _drain_backlog(now: float) -> void:
 		# stale-solo bound are phase artifacts and are dropped with their frame.
 		if overdue <= _DRAIN_STALE_SOLO_S:
 			(_input_queue.front() as InputState).fold_edges_from(stale)
-		if overdue <= _DRAIN_TELEMETRY_MAX_S:
+		if live and overdue <= _DRAIN_TELEMETRY_MAX_S:
 			NetworkTelemetry.record_input_drain()
 
 
@@ -313,7 +316,7 @@ func _drive_from_input(delta: float) -> void:
 	# every gap. Fall through when clock isn't ready to preserve behaviour during
 	# NTP warmup.
 	if NetworkManager.is_clock_ready():
-		_drain_backlog(NetworkManager.sim_time())
+		_drain_backlog(NetworkManager.sim_time(), not _game_state.is_movement_locked())
 	var input_due: bool = _input_queue.size() > 0 and (
 			not NetworkManager.is_clock_ready() or
 			_input_queue.front().host_timestamp <= NetworkManager.sim_time())
@@ -356,8 +359,9 @@ func _drive_from_input(delta: float) -> void:
 					# but better than freezing mid-swing while the input queue gaps.
 					apply_blade_aim_only(_fallback_input, delta)
 			return
-		if _input_queue.is_empty():
-			NetworkTelemetry.record_input_starvation()
+		# Empty, or the front not due yet: either way no input for this tick, the
+		# fallback runs, and the client may pay a reconcile for it.
+		NetworkTelemetry.record_input_starvation()
 		_process_input(_fallback_input, delta)
 
 

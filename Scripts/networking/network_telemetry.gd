@@ -446,8 +446,8 @@ static func record_input_lead(lead_sec: float) -> void:
 	instance._input_lead_sum += lead_sec
 	instance._input_lead_n += 1
 
-# input_starvation: the input queue was empty so the host fell back to the
-# last known input for this physics tick.
+# input_starvation: no input was due this live physics tick (the queue empty,
+# or its front stamped later), so the host fell back to the last known input.
 static func record_input_starvation() -> void:
 	if instance: instance._starvation_count += 1
 
