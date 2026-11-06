@@ -43,6 +43,8 @@ class Frame:
 var frames: Array[Frame] = []
 # Per broadcast tick, the host's blob; per tick, his 22 save boxes after it.
 var blobs: Dictionary[int, PackedByteArray] = {}
+# The host's drawn goalie at each broadcast tick: a snapshot's goalie block.
+var hosts: Dictionary[int, GoalieNetworkState] = {}
 var boxes: Array[Array] = []
 var hidden_from: int = -1
 var quantized: bool = false
@@ -91,6 +93,9 @@ func record(play: int, t: int) -> void:
 		var blob := PackedByteArray()
 		_host.ctrl.append_wire_state(blob)
 		blobs[t] = blob
+		var drawn := GoalieNetworkState.new()
+		_host.ctrl.fill_state(drawn)
+		hosts[t] = drawn
 	var at: Array[Transform3D] = []
 	for part: int in KeeperGear.PART_COUNT:
 		at.append(_host.goalie._save_boxes[part].global_transform)

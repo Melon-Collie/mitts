@@ -87,6 +87,7 @@ func test_report_two_predicted_goalies_per_frame() -> void:
 							world.known_through = offered
 							for p: KeeperPredictor in preds:
 								p.offer(world.blobs[offered], float(offered) * Harness.DT, offered / 2)
+								p.note_host_state(world.hosts[offered], float(offered) * Harness.DT)
 					var was: int = preds[0].resteps + preds[1].resteps
 					var t0: int = Time.get_ticks_usec()
 					for p: KeeperPredictor in preds:

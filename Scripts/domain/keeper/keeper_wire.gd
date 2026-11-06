@@ -11,7 +11,8 @@ extends RefCounted
 #
 # Blob: a u16 count of the bytes that follow it before the bit section, those
 # bytes in the order the fields were handed over, then every bool as one bit
-# (a run of flags, `flags`, packs its bits into bytes where it lies). Its
+# (a run of flags, `flags`, packs its bits into bytes where it lies), then a u32
+# digest of his discrete state (`discrete_digest`). Its
 # length depends on nothing but the code, so a keeper's blob is the same length
 # every snapshot.
 #
@@ -36,6 +37,9 @@ const SPEED: float = 0.0025
 const FRACTION: float = 1e-4
 
 const _HEADER: int = 2
+const _DIGEST: int = 4
+const _FNV_OFFSET: int = 2166136261
+const _FNV_PRIME: int = 16777619
 # The most a blob's byte section and its bits take: room the writer reserves
 # once, so no value has to check for it.
 const _MOST_BYTES: int = 4096
@@ -60,6 +64,7 @@ var _bits := PackedByteArray()
 var _bit: int = 0
 var _bit_from: int = 0
 var _bit_end: int = 0
+var _digest: int = 0
 var _poses: Array[KeeperPose] = []
 var _pose_bytes: Array[PackedByteArray] = []
 var _pose_n: int = 0
@@ -82,19 +87,22 @@ func begin_write(out: PackedByteArray) -> void:
 	_b.resize(_o + _MOST_BYTES)
 	_bits.fill(0)
 	_bit = 0
+	_digest = _FNV_OFFSET
 	_pose_n = 0
 	_run_n = 0
 
 
-# The blob's header and bit section in place, `out` cut to the blob's end; its
-# length.
+# The blob's header, bit section and digest in place, `out` cut to the blob's
+# end; its length.
 func finish_write() -> int:
 	_b.encode_u16(_start, _o - _start - _HEADER)
 	var bit_bytes: int = (_bit + 7) >> 3
 	for i: int in bit_bytes:
 		_b[_o + i] = _bits[i]
-	_b.resize(_o + bit_bytes)
-	var length: int = _o + bit_bytes - _start
+		_fold(_bits[i])
+	_b.resize(_o + bit_bytes + _DIGEST)
+	_b.encode_u32(_o + bit_bytes, _digest)
+	var length: int = _o + bit_bytes + _DIGEST - _start
 	_b = PackedByteArray()
 	return length
 
@@ -105,18 +113,30 @@ func begin_read(blob: PackedByteArray, from: int = 0, size: int = -1) -> bool:
 	reading = true
 	if size < 0:
 		size = blob.size() - from
-	if size < _HEADER or from + size > blob.size():
+	if size < _HEADER + _DIGEST or from + size > blob.size():
 		return false
 	var byte_len: int = blob.decode_u16(from)
-	if _HEADER + byte_len > size:
+	if _HEADER + byte_len + _DIGEST > size:
 		return false
 	_b = blob
 	_start = from
 	_o = from + _HEADER
 	_bit_from = (_o + byte_len) * 8
 	_bit = 0
-	_bit_end = (from + size) * 8
+	_bit_end = (from + size - _DIGEST) * 8
 	return true
+
+
+# FNV-1a over every int (`s8`) and bool (`bit`) the writer was handed — his
+# moves, phases, the save chosen and the read under way, the state no distance
+# between two poses measures — for the blob of `size` bytes at `from`. The
+# bools packed in a run (`flags`) are the play read's history of the world and
+# stay out: two keepers that read the same play from slightly different worlds
+# hold different runs and the same decisions.
+static func discrete_digest(blob: PackedByteArray, from: int = 0, size: int = -1) -> int:
+	if size < 0:
+		size = blob.size() - from
+	return blob.decode_u32(from + size - _DIGEST) if size >= _HEADER + _DIGEST else -1
 
 
 # Whether the read took exactly the blob's bytes and no more bits than it has.
@@ -210,8 +230,13 @@ func s8(v: int) -> int:
 			overflow += 1
 			v = clampi(v, -128, 127)
 		_b.encode_s8(_o, v)
+		_fold(v & 0xFF)
 	_o += 1
 	return v
+
+
+func _fold(byte: int) -> void:
+	_digest = ((_digest ^ byte) * _FNV_PRIME) & 0xFFFFFFFF
 
 
 func bit(v: bool) -> bool:

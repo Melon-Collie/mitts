@@ -21,6 +21,9 @@ const LEAD: int = 8
 # host's node is placed from his net's frame, so the same pose lands a few
 # microns apart in float32: this is "the same", m.
 const SAME_M: float = 1e-4
+# Above the snapshot grid's own noise in his drawn boxes (~5 mm): drawn apart
+# from the host, m.
+const DRIFT_M: float = 0.02
 
 
 class Run:
@@ -31,6 +34,8 @@ class Run:
 	var worst_gap_before_release: float = 0.0
 	var confirmed: int = 0
 	var resteps: int = 0
+	var longest_drift: int = 0
+	var drift: int = 0
 
 
 func _host(play: int, back_date: float = 0.0) -> TruthWorld:
@@ -68,6 +73,7 @@ func _client(world: TruthWorld, release_tick: int, from: int, half_ticks: bool =
 		if n % 2 == 0:
 			world.known_through = n
 			pred.offer(world.blobs[n], float(n) * Harness.DT, n / 2)
+			pred.note_host_state(world.hosts[n], float(n) * Harness.DT)
 		var r: int = m + LEAD
 		var render_t: float = (float(r) + (0.5 if half_ticks else 0.0)) * Harness.DT
 		if not pred.advance(render_t):
@@ -81,6 +87,8 @@ func _client(world: TruthWorld, release_tick: int, from: int, half_ticks: bool =
 			continue
 		var gap: float = world.box_gap(drawn.goalie, r)
 		run.worst_gap = maxf(run.worst_gap, gap)
+		run.drift = run.drift + 1 if gap > DRIFT_M else 0
+		run.longest_drift = maxi(run.longest_drift, run.drift)
 		if gap > SAME_M:
 			run.off_ticks += 1
 		elif release_tick >= 0 and n >= release_tick and run.first_exact_after_release < 0:
@@ -157,3 +165,22 @@ func test_the_shooter_draws_the_keeper_only_a_read_from_the_release_tick_gives()
 	assert_eq(exact.resteps, 0)
 	assert_gt(back_dated.off_ticks, 0, "back-dated, the host's keeper is not the one the shooter drew")
 	assert_gte(back_dated.resteps, 1, "and the release's snapshot re-steps the shooter's")
+
+
+# A client's world is its own prediction on the snapshot's centimetre grid, so
+# his bytes never equal the host's; confirmed against the host's drawn goalie
+# within CONFIRM_GAP_M he still steps on nearly every snapshot instead of
+# re-stepping the span. The grid can tip a decision the host makes inside the
+# span the other way; the snapshot from that tick re-steps him, so he is drawn
+# apart from the host for at most the span and a broadcast.
+func test_on_the_snapshot_grid_he_confirms_within_the_tolerance() -> void:
+	for play: int in [Harness.Play.SLOT_SHOT, Harness.Play.CARRY_ACROSS]:
+		var world: TruthWorld = _host(play)
+		world.quantized = true
+		var run: Run = _client(world, -1, Harness.SETTLE_TICKS - 40)
+		gut.p("%s on the grid: %d confirmed, %d re-stepped, worst box gap %.4f m, longest drift %d ticks" % [
+				Harness.Play.keys()[play], run.confirmed, run.resteps, run.worst_gap, run.longest_drift])
+		assert_gt(float(run.confirmed) / maxf(float(run.confirmed + run.resteps), 1.0), 0.9,
+				"nearly every snapshot confirms him")
+		assert_lte(run.longest_drift, ONE_WAY + LEAD + 2,
+				"drawn apart from the host no longer than the span and a broadcast, ticks")

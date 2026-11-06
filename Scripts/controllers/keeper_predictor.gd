@@ -10,11 +10,18 @@ extends Node3D
 # Nothing it does reaches the real puck, the skaters or the game: its goalie,
 # puck and skaters are its own nodes, hidden, never processed, in no group.
 #
-# Rollback: it keeps its own blob at each recent broadcast tick (writing it is
-# the snap the host makes there, so it steps as the host does). A snapshot
-# whose blob equals the one it kept for that tick confirms it and it steps on,
-# one tick a tick; one that differs, or one for a tick it holds no blob for,
-# re-seeds it there and it re-steps to the render instant. It never steps past
+# Rollback: it keeps its own blob and drawn state at each recent broadcast tick
+# (writing the blob is the snap the host makes there, so it steps as the host
+# does). A snapshot confirms him, and he steps on one tick a tick, when its blob
+# equals the one he kept for that tick, or when the host's drawn goalie in the
+# same snapshot sits within CONFIRM_GAP_M of his, stands in the same stance and
+# his blob's discrete digest (KeeperWire.discrete_digest: his moves, phases, the
+# save chosen, the read under way) equals the host's.
+# The second is the one a client meets: his world is this client's prediction
+# on the snapshot's centimetre grid, and his play read keeps millimetres, so his
+# bytes never equal the host's although he is drawn where the host's goalie is.
+# One that disagrees, or one for a tick he holds no state for, re-seeds him there
+# and he re-steps to the render instant. It never steps past
 # the render instant, nor further than MAX_SPAN_S from the newest snapshot.
 
 const _Constants: GDScript = preload("res://Scripts/game/constants.gd")
@@ -32,6 +39,10 @@ const HISTORY: int = 32
 # A render instant this near a tick is that tick's: host times are wall labels
 # in 0.1 ms, and a tick's instant summed from them carries float error.
 const TICK_EPSILON: float = 1e-3
+# How far his save boxes may sit from the host's at a snapshot's tick and still
+# confirm him: under the goalie block's own quantization noise plus the centimetre
+# a client's world is predicted on, far under a puck's radius.
+const CONFIRM_GAP_M: float = 0.01
 const _GOALIE_SCENE: PackedScene = preload("res://Scenes/Goalie.tscn")
 
 var keeper: KeeperController = null
@@ -75,6 +86,8 @@ var _hist_state: Array[GoalieNetworkState] = []
 var _prev := GoalieNetworkState.new()
 var _cur := GoalieNetworkState.new()
 var _mismatch := GoalieNetworkState.new()
+var _pending_host := GoalieNetworkState.new()
+var _pending_host_set: bool = false
 var _gap_a := KeeperSkeleton.new()
 var _gap_b := KeeperSkeleton.new()
 
@@ -129,9 +142,18 @@ func offer(blob: PackedByteArray, host_ts: float, seq: int) -> void:
 			_seq_count += jump
 	_last_seq = seq
 	_has_pending = true
+	_pending_host_set = false
 	_pending_blob = blob
 	_pending_tick = _seq_count * BROADCAST_EVERY
 	_pending_time = host_ts
+
+
+# The host's drawn goalie from the same snapshot (its goalie block), which a
+# blob he cannot match byte for byte is confirmed against.
+func note_host_state(state: GoalieNetworkState, host_ts: float) -> void:
+	if _has_pending and is_equal_approx(host_ts, _pending_time):
+		_pending_host.copy_from(state)
+		_pending_host_set = true
 
 
 # Forget every snapshot: the next one seeds him afresh.
@@ -179,7 +201,7 @@ func _resolve_pending() -> void:
 		return
 	var slot: int = _slot(k)
 	var held: bool = k <= _tick and _hist_tick[slot] == k
-	if held and _hist_blob[slot] == _pending_blob:
+	if held and (_hist_blob[slot] == _pending_blob or _agrees(slot)):
 		confirmed += 1
 		NetworkTelemetry.record_keeper_snapshot(true, 0.0)
 		return
@@ -265,6 +287,12 @@ func _blend(a: GoalieNetworkState, b: GoalieNetworkState, t: float) -> void:
 	drawn.velocity_x = lerpf(a.velocity_x, b.velocity_x, t)
 	drawn.velocity_z = lerpf(a.velocity_z, b.velocity_z, t)
 	drawn.pose.blend(a.pose, b.pose, t)
+
+
+func _agrees(slot: int) -> bool:
+	return _pending_host_set and _hist_state[slot].state_enum == _pending_host.state_enum \
+			and KeeperWire.discrete_digest(_hist_blob[slot]) == KeeperWire.discrete_digest(_pending_blob) \
+			and _box_gap(_hist_state[slot], _pending_host) <= CONFIRM_GAP_M
 
 
 # The farthest any corner of any of his save boxes sits in `a` from its place

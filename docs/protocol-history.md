@@ -468,3 +468,12 @@ here whenever you bump, in the same format.
 #      can re-seed a keeper of its own from it (#903). A v95 peer would read the
 #      blobs as world state, so mixed builds must be refused. Replay
 #      FORMAT_VERSION unchanged: the recorders' frames never hold the blobs.
+# v97: the keeper's blob carries his tier (GoalieSkillProfile.tier), which a
+#      client never learned, so a client's predicted keeper (KeeperPredictor)
+#      plays the host's. One byte more in the blob, so mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged.
+# v98: the keeper's blob ends in a u32 digest of his discrete state
+#      (KeeperWire.discrete_digest), which a client's predictor compares
+#      before confirming a snapshot within the box tolerance. A v97 peer would
+#      read the digest as bits past the blob's end, so mixed builds must be
+#      refused. Replay FORMAT_VERSION unchanged.

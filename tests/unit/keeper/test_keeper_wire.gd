@@ -102,7 +102,7 @@ func test_bools_go_as_bits_after_the_bytes() -> void:
 		w.bit(f)
 	w.s8(5)
 	var length: int = w.finish_write()
-	assert_eq(length, 2 + 3 + 2, "header, three bytes, thirteen bits in two")
+	assert_eq(length, 2 + 3 + 2 + 4, "header, three bytes, thirteen bits in two, the digest")
 	assert_eq(out.decode_u16(0), 3)
 	var r := KeeperWire.new()
 	r.begin_read(out)
@@ -111,6 +111,29 @@ func test_bools_go_as_bits_after_the_bytes() -> void:
 		assert_eq(r.bit(not f), f)
 	assert_eq(r.s8(0), 5)
 	assert_true(r.finish_read())
+
+
+func _digest_of(place: float, run: PackedByteArray, count: int, on: bool) -> int:
+	var out := PackedByteArray()
+	var w := KeeperWire.new()
+	w.begin_write(out)
+	w.s16(place, KeeperWire.MM)
+	w.flags(run)
+	w.s8(count)
+	w.bit(on)
+	w.finish_write()
+	return KeeperWire.discrete_digest(out)
+
+
+# Two keepers at different places, reading different histories, are the same
+# keeper to the digest until an int or a bool of theirs differs.
+func test_the_digest_holds_his_ints_and_bools_only() -> void:
+	var run := PackedByteArray([1, 0, 1])
+	var base: int = _digest_of(1.0, run, 3, true)
+	assert_eq(_digest_of(1.25, run, 3, true), base, "a place is not discrete state")
+	assert_eq(_digest_of(1.0, PackedByteArray([0, 1, 1]), 3, true), base, "nor the read's history")
+	assert_ne(_digest_of(1.0, run, 4, true), base, "an int is")
+	assert_ne(_digest_of(1.0, run, 3, false), base, "a bool is")
 
 
 func test_packed_history_and_its_flags_round_trip_in_place() -> void:

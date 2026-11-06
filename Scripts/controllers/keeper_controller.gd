@@ -168,6 +168,14 @@ func receive_wire_state(blob: PackedByteArray, host_ts: float, seq: int) -> void
 		_predictor.offer(blob, host_ts, seq)
 
 
+# The host's drawn goalie in the same snapshot: buffered for the interpolated
+# fallback, and what the predictor confirms its own state against.
+func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
+	super.apply_state(network_state, host_ts)
+	if _predictor != null:
+		_predictor.note_host_state(network_state, host_ts)
+
+
 # Him drawn from his predictor at the render instant
 # (PuckController._render_instant's); false where it has nothing to draw, and
 # he is drawn interpolated instead.

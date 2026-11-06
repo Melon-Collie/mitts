@@ -59,7 +59,8 @@ the host's keeper from the host's state, not an AI of the client's own.
    so replay FORMAT_VERSION is unchanged; `SNAPSHOT_MAX_RAW` 4096 → 8192.
    Measured (`benchmarks/test_keeper_wire_benchmark.gd`, the keeper facing a
    slot wrister and a carry across and a shot, this container's debug binary):
-   **2,452 B raw a keeper**, fixed; zstd alone 565 B mean; **XOR against the
+   **2,452 B raw a keeper**, fixed (2,457 since Phase 2's tier byte and
+   discrete digest); zstd alone 565 B mean; **XOR against the
    blob 1 / 3 broadcasts back then zstd: 114 / 142 B mean, 200 / 268 B p95**,
    each with ~19 B of zstd frame a real snapshot shares. Host, per keeper per
    broadcast: the write ~220 µs p50 (~305 p95), the write and the re-placing
@@ -97,38 +98,36 @@ the host's keeper from the host's state, not an AI of the client's own.
    `PUCK_PREDICT_MAX_S`, replays). The blob also carries his tier
    (`GoalieSkillProfile.tier`): a client never learned the host's goalie
    difficulty, and the tier's tuning is off the wire.
-   **Re-step only on a mismatch** is built as planned (the predictor's blob at
-   each broadcast tick, compared byte for byte), and measured
+   **Re-step only on a mismatch.** The predictor keeps its own blob and drawn
+   state at each broadcast tick. A snapshot confirms him when its blob equals
+   his byte for byte, or when the host's drawn goalie in the same snapshot (its
+   goalie block) sits within `KeeperPredictor.CONFIRM_GAP_M` (1 cm) of his,
+   stands in the same stance and the two blobs' discrete digests agree (a u32
+   FNV over every int and bool he wrote, the play read's flag runs left out,
+   `KeeperWire.discrete_digest`); otherwise he re-seeds there and re-steps the
+   span. Without the digest, a carry across confirmed a keeper a millimetre from
+   the host's who had not committed to the move the host's had, and he was
+   drawn 43 cm off until it showed in the boxes; the shot hidden from him was
+   corrected a snapshot late.
+   Bit-equality alone never confirmed in play — his play read keeps millimetres
+   and a client's world is centimetre snapshots and its own predictions — so it
+   re-stepped every snapshot, ~45 a second a goalie. Within the tolerance he
+   runs on a state that is not the host's to the bit, and the next snapshot
+   that parts by more re-seeds him. Measured
    (`benchmarks/test_keeper_predictor_benchmark.gd`, two predicted goalies per
    60 fps frame, the facing keeper twice, this container's debug build):
 
-   | world fed | one-way | snapshots confirmed | steady frame mean / p95 | re-step frame mean / p95 |
-   |---|---|---|---|---|
-   | the host's, exact | 15 / 50 / 100 ms | 100% | 1.1 / 1.7, 1.2 / 1.8, 1.2 / 1.5 ms | — |
-   | on the snapshot's grid (1 cm, 0.02 m/s) | 15 / 50 / 100 ms | **0%** | 0.6 / 0.6, 1.6 / 4.0, 1.3 / 1.7 ms | 5.2 / 6.9, 9.2 / 13.3, 14.2 / 20.9 ms |
+   | world fed | one-way | snapshots confirmed | re-steps a second (two goalies) | steady frame mean / p95 | re-step frame mean / p95 |
+   |---|---|---|---|---|---|
+   | the host's, exact | 15 / 50 / 100 ms | 100% | 0 | 1.1 / 1.7, 1.1 / 1.5, 1.2 / 1.5 ms | — |
+   | on the snapshot's grid (1 cm, 0.02 m/s), byte equality only | 15 / 50 / 100 ms | 0% | ~90 | 0.6 / 0.6, 1.6 / 4.0, 1.3 / 1.7 ms | 5.2 / 6.9, 9.2 / 13.3, 14.2 / 20.9 ms |
+   | on the snapshot's grid, the 1 cm tolerance only | 15 / 50 / 100 ms | 99% | 0.8–0.9 | 1.4 / 2.1, 1.4 / 2.0, 1.5 / 2.3 ms | 5.6 / 6.0, 9.7 / 11.1, 17.0 / 17.0 ms |
+   | on the snapshot's grid, the tolerance and the digest | 15 / 50 / 100 ms | **97%** | **2.5–2.6** | 1.5 / 2.5, 1.7 / 3.7, 1.5 / 1.9 ms | 5.1 / 6.5, 11.3 / 15.2, 16.4 / 20.5 ms |
 
-   **The plan's premise for it does not hold in play.** Bit-equality needs the
-   client's world to be the host's to the bit on every tick he read, and his
-   play read records the puck and the skaters at a millimetre: a client's world
-   is built from centimetre snapshots and its own predictions, so in the
-   measurement no snapshot confirmed and every one re-stepped the span — the
-   3.8–9.9× cost of the measurements doc, ~45 re-steps a second a goalie. The
-   F3 *Goalie predict* row and `keeper_confirm_pct` will show the live share;
-   what to do about it (accept the cost, a native save choice, confirm within a
-   tolerance and let the predictor run on a state that is not the host's to the
-   bit, or re-seed every snapshot and drop the comparison) is open.
-   Exact end to end (`tests/slow/controllers/test_keeper_predictor_is_exact.gd`):
-   fed the host's recorded world, a predictor offered each blob a 50 ms one-way
-   late and drawn 8 ticks ahead of the host is the host's keeper at every drawn
-   instant (6 µm, the float32 root), every snapshot confirmed; a release
-   withheld until its snapshot re-steps once and is exact from that snapshot.
-   **The release lag comp:** a shooter's client draws the goalie at its release
-   input's stamp and the host replays the input on that tick, so the host's
-   goalie there is the one the shooter saw; the release paths' goalie rewind
-   and reaction back-date are gone (they put the host's keeper off the
-   shooter's screen, and the same test shows a back-dated read parting by up to
-   47 cm). Against a remote shooter he now reads a shot a lead later than
-   before, as against the host's own player.
+   The host's own two keepers cost 0.77 ms a frame on the same machine. A
+   re-step frame still spikes by the span (a release the client could not see,
+   a decision the grid tipped the other way), a few times a second a goalie; porting the save choice to native code is the
+   lever for that spike if the playtest's release-build numbers ask for it.
 3. **Measure and tune.** Started: F3 *Goalie predict* (snapshots confirmed,
    re-steps a second, the box gap at a re-step's snapshot) and *Goalie predict
    cost* (both predictors' time a physics frame, mean and p95), in the session
