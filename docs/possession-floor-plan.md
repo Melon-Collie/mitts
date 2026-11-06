@@ -402,16 +402,19 @@ never park at the blue line waiting.
 - **The keep odds are the seam's own safety**, read by `AIEvadeRead.evade_safety`
   under exact bounds (~45 µs a read in traffic against ~190 µs for the full
   sweep), and held to `best_evade_point` by `test_evade_safety.gd`.
-- **Host AI cost is up.** `benchmarks/` (GDScript fallback, this container),
-  AI µs per second of play, before → after: ozone-cycle 3v3 322k → 347k, 5v5
-  299k → 457k; nz-rush 3v3 200k → 367k, 5v5 206k → 488k; loose-neutral 3v3
-  185k → 346k, 5v5 365k → 497k. Per call, the possession read is 1.5–3×: every
-  read adds a keep read, and an entry a defender stands on is no longer pruned
-  on its dead live worth, since it still carries the zone's floor. The options
-  are a decision, not an implementation detail: read each entry's and each
-  drive's end continuation as kept (their race and keep odds already price
-  getting there with the puck), memoize the keep read across the defence's
-  candidate pushes, or port the sweep to `native/`.
+- **Host AI cost is up.** Every read adds a keep read, an entry a defender
+  stands on is no longer pruned on its dead live worth (it still carries the
+  zone's floor), and bots that hold the puck in the zone keep the defence in
+  its costliest search (`cover_man_target`) for longer: the branch makes 2.5–4×
+  main's possession reads in the neutral-zone scenarios. With the shipped
+  kernels (`benchmarks/test_ai_perf_benchmark.gd` installs them; until
+  `e4bb2c33` it measured GDScript only), after the keep and carry reads went
+  native (`NativeCarrySpace`) and the cover search reads a feed's possession
+  only when its bound cannot settle it, AI µs per game-second against `main`:
+  nz-rush 5v5 1.83× (267k), loose-neutral 3v3 1.62×, 5v5 1.14×, nz-rush 3v3
+  1.08×, the O-zone cycle 0.80–0.95×. The rest of the possession read
+  (`AIPossessionValue.at`: entries, drives, the shot terms) is the next
+  candidate for the native kernels once the floor stops changing.
 
 ## 7. Step 5, first readings
 
