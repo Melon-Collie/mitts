@@ -1096,9 +1096,10 @@ func _apply_ghost_state(delta: float) -> void:
 			# A skater who ghosts (icing, etc.) while carrying must lose the puck —
 			# set_ghost only severs collision/interaction layers, so without this a
 			# ghosted carrier would keep the puck pinned to their blade and skate it
-			# around untouchable. Drop it loose so play continues.
+			# around untouchable. Drop it loose so play continues, and tell a human
+			# carrier: CARRIER_CHANGED(-1) alone leaves his own client's local pin.
 			if new_ghost and puck.carrier == r.skater:
-				puck.drop()
+				_drop_puck_if_carried()
 			if new_ghost != _last_ghost_state.get(peer_id, false):
 				_last_ghost_state[peer_id] = new_ghost
 				NetworkManager.send_ghost_state_to_all(peer_id, new_ghost)
