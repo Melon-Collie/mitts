@@ -526,12 +526,14 @@ func _ready() -> void:
 
 func _wire_network_signals() -> void:
 	NetworkManager.set_world_state_provider(get_world_state)
+	NetworkManager.set_keeper_wire_provider(_append_keeper_wire)
 	NetworkManager.host_ready.connect(on_host_started)
 	NetworkManager.client_connected.connect(on_connected_to_server)
 	NetworkManager.disconnected_from_server.connect(on_scene_exit)
 	NetworkManager.peer_joined.connect(on_player_connected)
 	NetworkManager.peer_disconnected.connect(on_player_disconnected)
 	NetworkManager.world_state_received.connect(_on_world_state_received)
+	NetworkManager.keeper_wire_received.connect(_on_keeper_wire_received)
 	NetworkManager.slot_assigned.connect(on_slot_assigned)
 	NetworkManager.remote_skater_spawn_requested.connect(spawn_remote_skater)
 	NetworkManager.existing_players_synced.connect(sync_existing_players)
@@ -4114,6 +4116,14 @@ func _on_input_batch_received(peer_id: int, inputs: Array[InputState]) -> void:
 
 
 # ── World state & stats RPC forwarding ───────────────────────────────────────
+func _append_keeper_wire(body: PackedByteArray) -> void:
+	KeeperWireTail.append(body, goalie_controllers)
+
+
+func _on_keeper_wire_received(tail: PackedByteArray, host_ts: float) -> void:
+	KeeperWireTail.dispatch(tail, goalie_controllers, host_ts)
+
+
 func _on_world_state_received(data: PackedByteArray) -> void:
 	if _codec != null:
 		_codec.decode_world_state(data)  # updates _state_machine.current_phase

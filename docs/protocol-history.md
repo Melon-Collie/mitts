@@ -461,3 +461,10 @@ here whenever you bump, in the same format.
 #      refused. Replay FORMAT_VERSION unchanged: recorders keep raw frames.
 # v95: receive_snapshot_ack RPC added — a spectator's delta ack, since it sends
 #      no input batches. The RPC set changed, so mixed builds must be refused.
+# v96: the goalies' whole sim states ride every snapshot (KeeperWireTail, a
+#      KeeperWire blob per goalie: KeeperController.wire at the Q16 scales,
+#      the host snapping his own state to it), appended after the world-state
+#      body inside the delta and ahead of the carrier-event block, so a client
+#      can re-seed a keeper of its own from it (#903). A v95 peer would read the
+#      blobs as world state, so mixed builds must be refused. Replay
+#      FORMAT_VERSION unchanged: the recorders' frames never hold the blobs.

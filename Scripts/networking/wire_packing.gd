@@ -17,9 +17,10 @@ const SNAPSHOT_MODE: int = FileAccess.COMPRESSION_ZSTD
 const INPUT_MODE: int = FileAccess.COMPRESSION_DEFLATE
 # Bounds on the raw size a receiver will inflate to, so a malformed header can't
 # ask for an arbitrary allocation: a 10-skater snapshot with a full event block
-# is ~1.2 KB plus the delta header; an input batch is at most its header and
+# is ~1.2 KB plus the delta header, and the goalies' sim states behind it
+# (KeeperWireTail) ~2.5 KB each; an input batch is at most its header and
 # 120 × 24 B.
-const SNAPSHOT_MAX_RAW: int = 4096
+const SNAPSHOT_MAX_RAW: int = 8192
 const INPUT_MAX_RAW: int = 6 + 120 * InputState.BYTES_SIZE
 const _HEADER: int = 2
 

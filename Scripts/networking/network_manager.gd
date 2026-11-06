@@ -57,6 +57,9 @@ signal join_rejected(reason: String)
 signal peer_joined(peer_id: int)
 signal peer_disconnected(peer_id: int)
 signal world_state_received(data: PackedByteArray)
+# Client: the goalies' whole sim states a snapshot carried (KeeperWireTail),
+# with its host capture time; emitted just before world_state_received.
+signal keeper_wire_received(tail: PackedByteArray, host_ts: float)
 signal slot_assigned(team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color)
 signal remote_skater_spawn_requested(peer_id: int, team_slot: int, team_id: int, jersey_color: Color, helmet_color: Color, pants_color: Color, is_left_handed: bool, player_name: String, jersey_number: int, attributes: PlayerAttributes, from_spectator: bool)
 signal existing_players_synced(player_data: Array)
@@ -322,6 +325,9 @@ const _PEER_LOAD_GRACE_S: float = 30.0
 # Callable () -> Array. Set by GameManager at startup so the broadcast loop
 # can pull world state without reaching up into the application layer.
 var _world_state_provider: Callable = Callable()
+# Callable (body: PackedByteArray) -> void, set by GameManager: appends the
+# goalies' sim states to an outgoing snapshot body (KeeperWireTail.append).
+var _keeper_wire_provider: Callable = Callable()
 # Callable (batch_frames: int) -> Array[InputState]. Set by GameManager when the
 # local player spawns; the input-tick poll uses it to gather a batch without
 # holding a controller reference.
@@ -1163,11 +1169,23 @@ func _broadcast_state() -> void:
 		return
 	if is_offline_mode:
 		return
+	# The goalies' sim states ride behind the recorded snapshot, inside the delta
+	# body (KeeperWireTail). Each keeper snaps his own state to his blob as it is
+	# written, so this runs only here, online: offline play never meets the wire.
+	# It runs at the end of the tick the snapshot captures (PostPhysicsNetHook,
+	# after every actor and the puck), the instant a client re-seeds from, so the
+	# host goes on from exactly the state the client rebuilds.
+	var body: PackedByteArray = state.duplicate()
+	if _keeper_wire_provider.is_valid():
+		_keeper_wire_provider.call(body)
+	else:
+		var no_goalies: Array[GoalieController] = []
+		KeeperWireTail.append(body, no_goalies)
 	# Redundant carrier events ride the tail of every snapshot (SnapshotEventLog),
 	# after the delta body: they change every packet and never take part in it.
 	var events := PackedByteArray()
 	_event_log.append_block(events, local_time())
-	_delta_sender.begin(state)
+	_delta_sender.begin(body)
 	NetworkTelemetry.record_world_state_sent()
 	# Peers acked to the same snapshot get the same packet.
 	var packed_by_ack: Dictionary = {}
@@ -1542,6 +1560,11 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 			packed, WirePacking.SNAPSHOT_MAX_RAW, WirePacking.SNAPSHOT_MODE))
 	if s.is_empty():
 		return
+	var keepers_at: Vector2i = KeeperWireTail.bounds(s)
+	if keepers_at.x < 0:
+		return
+	var keepers: PackedByteArray = s.slice(keepers_at.x, keepers_at.y)
+	s = KeeperWireTail.without(s, keepers_at)
 	var now: float = local_time()
 	if _last_ws_arrival_time > 0.0:
 		var expected_interval: float = 1.0 / Constants.STATE_RATE
@@ -1581,6 +1604,9 @@ func _apply_world_state(packed: PackedByteArray) -> void:
 	_event_log.apply_block(s, multiplayer.get_unique_id(), _snapshot_event_dispatch)
 	NetworkTelemetry.record_world_state()
 	NetworkTelemetry.record_bytes_received(packed.size())
+	if s.size() >= WorldStateCodec.WS_HOST_TIME_OFFSET + 4:
+		keeper_wire_received.emit(keepers, float(s.decode_u32(WorldStateCodec.WS_HOST_TIME_OFFSET))
+				/ Constants.TIME_WIRE_SCALE)
 	world_state_received.emit(s)
 
 # ── Clock Sync ────────────────────────────────────────────────────────────────
@@ -2776,6 +2802,9 @@ func _on_ws_sequence_received(seq: int) -> void:
 # ── Registration ──────────────────────────────────────────────────────────────
 func set_world_state_provider(provider: Callable) -> void:
 	_world_state_provider = provider
+
+func set_keeper_wire_provider(provider: Callable) -> void:
+	_keeper_wire_provider = provider
 
 func set_input_batch_provider(provider: Callable) -> void:
 	_input_batch_provider = provider
