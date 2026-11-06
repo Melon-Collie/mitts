@@ -134,6 +134,8 @@ the host's keeper from the host's state, not an AI of the client's own.
    row as `keeper_*` (`docs/telemetry_dictionary.md`); networking `CLAUDE.md`
    rewritten for the goalie on the render clock. Left: the playtest's numbers
    on a release build and a Steam Deck, and the rollback decision above.
-4. **Shot field.** The keeper sources change, so `test_shot_field_is_current`
-   needs a regeneration — on the user's machine: this container does not
-   reproduce the committed field (199 rows move with or without the snap).
+4. **Shot field. Done.** The keeper sources changed, so the field was
+   regenerated (`.claude/hooks/generate-shot-field.sh`). The snap runs only
+   online, so the offline keeper the field measures is unchanged: 199 of 2,744
+   cells moved, the same count a regeneration of the unchanged code moved on
+   this container, 926 of ~198k outcomes flipped, symmetric (+27 goals net).
