@@ -544,6 +544,9 @@ func step() -> void:
 				rec["pass_lane"] = read.y
 				rec["pass_miss"] = read.z
 				rec["pass_reception"] = read.w
+				rec["pass_spot"] = c.agent._carrier._pass.debug_spot
+				rec["pass_puck"] = puck_pos
+				rec["since_pick_ticks"] = c.agent._carrier._ticks_since_pick
 			releases.append(rec)
 			_release_grace[c.peer_id] = ticks + RELEASE_GRACE_TICKS
 			_release(c)

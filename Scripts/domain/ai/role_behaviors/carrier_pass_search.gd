@@ -51,8 +51,10 @@ var best_rim_pace: float = 0.0
 var best_pace_frac: float = 1.0
 # The completion read of the search's highest-EV pass, for instruments (nothing
 # decides on it): not poked at the release, the lane, the execution miss, kept on
-# reception (kept = x · y · (1 − z) · w). x < 0: no pass was priced.
+# reception (kept = x · y · (1 − z) · w; x < 0: none priced), its origin, spot and pace.
 var debug_completion := Vector4(-1.0, 0.0, 0.0, 0.0)
+var debug_spot: Vector3 = Vector3.INF
+var debug_origin_pace := Vector4.ZERO
 var _debug_best_ev: float = -INF
 
 
@@ -92,7 +94,6 @@ func _init(field: AICarrierField) -> void:
 # paying SAUCER_EXTRA_MISS_PROB for its landing. Rim
 # launches are ranked per receiver too, and only the eval's single best rim is
 # priced through the full _pass_ev, after the loop.
-#
 # Filtered here: out-of-play receivers, and, for an OZ carrier, receivers
 # outside the zone. The lead-dependent filters live in _pass_variant_ev, the
 # lane hard-zeros in _pass_ev. Behind-the-back receivers are NOT skipped: only
@@ -231,8 +232,6 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 				use_saucer = true
 		# Like the saucer, the rim competes only when the flat feed is contested:
 		# with the lane clear there is nothing for the boards to carry it past.
-		# Its candidate is only RANKED here (see _rim_launch_for); the one best
-		# rim of the eval is priced after the loop.
 		if rim_count != 0 \
 				and _last_flat_variant_lane < AIPuckLane.SAUCER_SKIP_WHEN_LANE_CLEAR:
 			if rim_count < 0:
@@ -288,6 +287,7 @@ func search(ctx: RoleContext, self_facing_xz: Vector2,
 	best_rim_dir = best_pass_rim_dir
 	best_rim_pace = best_pass_rim_pace
 	best_pace_frac = best_pass_frac
+	_debug_best_ev = INF   # the latch is this search's: a developing feed's read never moves it
 
 
 # How surely and soon a RIM reaches `receiver_state` (completion × the delay
@@ -484,7 +484,7 @@ func _pass_variant_ev(ctx: RoleContext, receiver_state: SkaterNetworkState,
 			return 0.0
 		lane = AIPuckLane.lane_clear_saucer(
 				pass_origin, receiver, _field.opponents_release, pass_speed,
-				_field.opponent_vels, _field.opponent_caps)
+				_field.opponent_vels, _field.opponent_caps, _field.opponent_blades_release)
 		if lane <= lane_flat:
 			return 0.0
 		miss_prob += AIPuckLane.SAUCER_EXTRA_MISS_PROB
@@ -656,6 +656,8 @@ func _pass_ev(ctx: RoleContext, receiver_spot: Vector3, pass_speed: float,
 	if benefit - cost > _debug_best_ev:
 		_debug_best_ev = benefit - cost
 		debug_completion = Vector4(release_clean, lane, miss_prob, reception_kept)
+		debug_spot = receiver_spot
+		debug_origin_pace = Vector4(origin.x, origin.y, origin.z, pass_speed)
 	return benefit - cost
 
 
@@ -695,9 +697,7 @@ func _facing_rotation_time(self_facing_xz: Vector2, self_pos: Vector3,
 #     for the weak from-the-top shot.
 #
 #   - Breakout OUTLET (BREAKOUT_STRONG / OUTLET / BREAKOUT_D2): an outlet
-#     skating its route toward open ice — see _developing_outlet_feed. This is
-#     why a pressured own-zone carrier protects the puck and skates instead of
-#     forcing a low-value backpass.
+#     skating its route toward open ice — see _developing_outlet_feed.
 func developing_feed_value(ctx: RoleContext) -> float:
 	if not ctx.holds_for_developing_feeds:
 		return 0.0

@@ -424,11 +424,13 @@ static func _friction_traverse_time(dist: float, v0: float) -> float:
 # One defender's blade on an `accurate` lane, as AILaneReach reads his body:
 # (block, lane arc-coord of the pick) for the blade (bx, bz), where his body could
 # hold the stick there — within `hold_reach` (AISkaterCaps.max_blade_reach) of it
-# as it closes (see LANE_BLADE_CATCH_M).
+# as it closes (see LANE_BLADE_CATCH_M). `blade_delay` and `body_delay` are when
+# his hands and his body start closing, from the moment the puck is at (fx, fz).
 static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 		line_len: float, eff_speed: float, bx: float, bz: float, px: float, pz: float,
 		vx: float, vz: float, hold_reach: float, close_speed: float,
-		blade_speed: float) -> Vector2:
+		blade_speed: float, blade_delay: float = LANE_WINDUP_READ_DELAY_S,
+		body_delay: float = LANE_REACTION_DELAY_S) -> Vector2:
 	var pvx: float = dirx * eff_speed
 	var pvz: float = dirz * eff_speed
 	var best := Vector2.ZERO
@@ -436,14 +438,14 @@ static func _blade_block(fx: float, fz: float, dirx: float, dirz: float,
 	if t_raw <= line_len / eff_speed:
 		var t: float = maxf(t_raw, 0.0)
 		var block: float = lane_block_at(fx, fz, pvx, pvz, t, bx, bz, vx, vz,
-				LANE_BLADE_CATCH_M, blade_speed, LANE_WINDUP_READ_DELAY_S)
+				LANE_BLADE_CATCH_M, blade_speed, blade_delay)
 		if block > 0.0 and lane_block_at(fx, fz, pvx, pvz, t, px, pz, vx, vz,
-				hold_reach, close_speed) > 0.0:
+				hold_reach, close_speed, body_delay) > 0.0:
 			best = Vector2(block, eff_speed * t)
 	var guided: Vector2 = _lane_brake_block(fx, fz, dirx, dirz, line_len, eff_speed,
-			bx, bz, LANE_BLADE_CATCH_M, blade_speed, LANE_WINDUP_READ_DELAY_S)
+			bx, bz, LANE_BLADE_CATCH_M, blade_speed, blade_delay)
 	if guided.x > best.x and lane_block_at(fx, fz, pvx, pvz, guided.y / eff_speed,
-			px, pz, vx, vz, hold_reach, close_speed) > 0.0:
+			px, pz, vx, vz, hold_reach, close_speed, body_delay) > 0.0:
 		best = guided
 	return best
 
@@ -549,10 +551,11 @@ static func lane_clear(from: Vector3, to: Vector3, opponents: Array[Vector3],
 # Lane-clear for a SAUCER (LOW-loft) pass fired at `puck_speed_m_s`: in the air
 # (the over window, see the saucer doc-block) a defender blocks with his BODY
 # radius, on the release with his stick, and from the touch-down on the rest of
-# the lane is the accurate flat lane_clear's. Every defender must be beaten.
+# the lane is the accurate flat lane_clear's, his stick where he holds it
+# (`opponent_blades`, index-matched) included. Every defender must be beaten.
 static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vector3],
 		puck_speed_m_s: float, opponent_vels: Array[Vector3] = [],
-		opponent_caps: Array = []) -> float:
+		opponent_caps: Array = [], opponent_blades: Array[Vector3] = []) -> float:
 	var dx: float = to.x - from.x
 	var dz: float = to.z - from.z
 	var line_len_sq: float = dx * dx + dz * dz
@@ -578,6 +581,8 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 	var landed_len: float = line_len - flown
 	var landed_speed: float = landed_len / _friction_traverse_time(landed_len, speed) \
 			if landed_len > 0.01 else speed
+	var landed_read: float = line_len - LANE_RECEIVER_REACH_M - flown
+	var has_blades: bool = opponent_blades.size() == opponents.size()
 	var survival: float = 1.0
 	for i: int in opponents.size():
 		var p: Vector3 = opponents[i]
@@ -612,6 +617,19 @@ static func lane_clear_saucer(from: Vector3, to: Vector3, opponents: Array[Vecto
 					caps_i.max_speed if caps_i != null else GameRules.DEFAULT_SKATER_MAX_SPEED_M_S,
 					caps_i.max_accel if caps_i != null else GameRules.DEFAULT_SKATER_THRUST_M_S2,
 					LANE_WINDUP_READ_DELAY_S, flown, t_down).x)
+			# His stick on the landed run, read from the touch-down: the puck from
+			# where it lands, him and his blade carried on to then, his reads started
+			# that much before it.
+			if has_blades and landed_read > 0.0:
+				var b: Vector3 = opponent_blades[i]
+				block = maxf(block, _blade_block(from.x + dirx * flown, from.z + dirz * flown,
+						dirx, dirz, landed_read, landed_speed, b.x + v.x * t_down,
+						b.z + v.z * t_down, p.x + v.x * t_down, p.z + v.z * t_down, v.x, v.z,
+						caps_i.max_blade_reach if caps_i != null
+								else AISkaterCaps.LEAGUE_MAX_BLADE_REACH_M,
+						close_speed,
+						caps_i.blade_speed if caps_i != null else AISkaterCaps.LEAGUE_BLADE_SPEED_M_S,
+						LANE_WINDUP_READ_DELAY_S - t_down, LANE_REACTION_DELAY_S - t_down).x)
 		survival *= 1.0 - block
 		if survival <= 0.0:
 			return 0.0
