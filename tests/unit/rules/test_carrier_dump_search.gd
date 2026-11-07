@@ -130,8 +130,7 @@ func test_an_iced_dump_their_side_wins_is_a_loss() -> void:
 
 func test_the_launch_scratch_holds_every_launch() -> void:
 	assert_eq(AICarrierDumpSearch._MAX_LAUNCHES,
-			AICarrierDumpSearch.AIM_POINTS.size() * AICarrierDumpSearch.PACE_FRACS.size()
-			* AICarrierDumpSearch.LOFTED.size())
+			AICarrierDumpSearch.AIM_POINTS.size() * AICarrierDumpSearch.PACE_FRACS.size())
 
 
 # Three across their line a stride in front of a carrier at speed, a winger
@@ -163,21 +162,32 @@ func test_against_a_stand_up_line_the_carrier_dumps_it_in() -> void:
 	assert_true(c.dump_target.is_finite())
 
 
-func test_a_stand_up_line_is_chipped_over() -> void:
-	# Three sticks across the line a stride ahead play any flat dump on their
-	# blades, so what goes in goes in over them.
-	var ctx: RoleContext = _stand_up_line(true)
+func test_a_dump_in_is_chipped_and_a_rim_is_not() -> void:
 	var c := AIRoleCarrier.new()
-	c.decide(ctx)
-	assert_true(c.dump_lofted, "the dump is chipped")
-	var field := AICarrierField.new()
-	field.fill(ctx)
-	field.fill_receivers(ctx, ctx.self_pos)
-	var dump := AICarrierDumpSearch.new(field)
-	dump.search(ctx)
-	for k: int in dump._count:
-		if not dump._lofted[k] and not dump._skip[k]:
-			assert_lt(dump._p[k], 0.5, "a flat dump %d into the line is theirs" % k)
+	c.decide(_stand_up_line(true))
+	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP)
+	assert_true(c.dump_lofted, "the dump-in goes in over the sticks")
+	assert_false(AIRoleCarrier.new().dump_lofted, "nothing is chipped by default")
+
+
+func test_the_chip_flies_over_a_stick_and_into_a_body() -> void:
+	# Fired at their corner at 20 m/s: a man standing 3 m along it and a metre to
+	# the side has it over his stick, one standing on its line stops it.
+	var dump := AICarrierDumpSearch.new(AICarrierField.new())
+	var origin := Vector3(0.0, 0.0, -2.0)
+	var dir := Vector3(0.4, 0.0, -1.0).normalized()
+	var side := Vector3(-dir.z, 0.0, dir.x)
+	var vel: Vector3 = AICarrierDumpSearch.launch_vel(dir, 20.0)
+	var from: Vector3 = AICarrierDumpSearch.launch_pos(origin)
+	assert_true(dump._walk(origin, vel), "a path clear of the nets")
+	var t_air: float = AILoosePuckChase.race_playable_time(from, vel)
+	assert_gt(t_air, 0.2, "the chip is in the air for a stretch")
+	var beside: float = dump._meet_time(from, vel, origin + dir * 3.0 + side, Vector3.ZERO, null,
+			0.0, true)
+	assert_gt(beside, t_air, "a stick beside its path plays it only once it is down")
+	var on_line: float = dump._meet_time(from, vel, origin + dir * 3.0, Vector3.ZERO, null,
+			0.0, true)
+	assert_lt(on_line, t_air, "a body on its line stops it in the air")
 
 
 # A 2-on-1 a few strides short of their line: the carrier up the left lane with

@@ -209,7 +209,7 @@ var carry_brake: bool = false
 var dump_target: Vector3 = Vector3.INF
 # Launch pace (m/s) the rim fires at: its searched pace.
 var dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
-# Whether the dump is chipped over the sticks (a dump-in's chip; a rim never is).
+# Whether the dump is chipped over the sticks: every dump-in is, a rim never.
 var dump_lofted: bool = false
 
 # ── Puck-protect mirror (read by the state machine's carry blade aim) ────────
@@ -277,7 +277,6 @@ var _phase_best_pass_rim_pace: float = 0.0
 var _phase_dump_score: float = -INF
 var _phase_dump_dir: Vector3 = Vector3.ZERO
 var _phase_dump_pace: float = 0.0
-var _phase_dump_lofted: bool = false
 # The field's shot from this eval's base release (_pick_fire_phase): the holds
 # are solved toward its aim, and a committed SHOOT fires it.
 var _shot_pick := AIShotOdds.Pick.new()
@@ -654,13 +653,11 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_phase_dump_score = -INF
 		_phase_dump_dir = Vector3.ZERO
 		_phase_dump_pace = 0.0
-		_phase_dump_lofted = false
 	else:
 		_dump.search(ctx)
 		_phase_dump_score = _dump.best_score
 		_phase_dump_dir = _dump.best_dir
 		_phase_dump_pace = _dump.best_pace
-		_phase_dump_lofted = _dump.best_lofted
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, and the
@@ -829,7 +826,7 @@ func _pick_commit_phase(ctx: RoleContext, rebuild_lists: bool) -> void:
 			pass_target_peer_id = -1
 			dump_target = puck_now + _phase_dump_dir * RIM_AIM_STANDOFF_M
 			dump_launch_speed = _phase_dump_pace
-			dump_lofted = _phase_dump_lofted
+			dump_lofted = true
 		elif new_intent == INTENT_PASS and best_pass_rim_dir != Vector3.ZERO:
 			# The rim: chosen as a pass, released as a FLAT charged dump along
 			# its bearing at its searched pace (the aim is the boards, not the

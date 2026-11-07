@@ -6,8 +6,7 @@ extends "res://tests/instruments/ai/test_nz_entry_drill.gd"
 # priced at the commit (its debug latch: the odds we play it first, each side's
 # time to it, where each side meets it) against what happened: the puck's path
 # against the walk it was priced on, who touched it first, where and when, and
-# how near our priced retriever and their soonest man came. A chipped dump's
-# start is marked ^.
+# how near our priced retriever and their soonest man came.
 
 const DumpIn := preload("res://tests/instruments/ai/test_dump_in_drill.gd")
 const FOLLOW_S: float = 6.0
@@ -60,7 +59,7 @@ func _follow(duel: Object, label: String) -> void:
 				if commit.is_empty():
 					var dump: AICarrierDumpSearch = sm._carrier._dump
 					commit = [dump.debug_race, dump.best_meet, dump.debug_meet_theirs,
-							dump.best_dir, dump.best_pace, dump.debug_origin, dump.best_lofted]
+							dump.best_dir, dump.best_pace, dump.debug_origin]
 			else:
 				commit = []
 		if duel.releases.size() > before and not commit.is_empty() \
@@ -73,8 +72,8 @@ func _follow(duel: Object, label: String) -> void:
 
 func _track(duel: Object, label: String, commit: Array) -> void:
 	var race: Vector4 = commit[0]
-	var walk_p: Vector3 = AICarrierDumpSearch._launch_pos(commit[5], commit[6])
-	var walk_v: Vector3 = AICarrierDumpSearch._launch_vel(commit[3], float(commit[4]), commit[6])
+	var walk_p: Vector3 = AICarrierDumpSearch.launch_pos(commit[5])
+	var walk_v: Vector3 = AICarrierDumpSearch.launch_vel(commit[3], float(commit[4]))
 	var thrown: float = Vector2(duel.puck_vel.x, duel.puck_vel.z).length()
 	var off_1s: float = -1.0
 	var played: String = "nobody in %.0f s" % FOLLOW_S
@@ -92,7 +91,7 @@ func _track(duel: Object, label: String, commit: Array) -> void:
 			break
 	var mo: Vector3 = commit[1]
 	var mt: Vector3 = commit[2]
-	_rows.append([label + ("^" if commit[6] else ""), race.x, race.y, race.z, race.w,
+	_rows.append([label, race.x, race.y, race.z, race.w,
 			mo.x if mo.is_finite() else 0.0, mo.z if mo.is_finite() else 0.0,
 			mt.x if mt.is_finite() else 0.0, mt.z if mt.is_finite() else 0.0,
 			float(commit[4]), thrown, off_1s, played])

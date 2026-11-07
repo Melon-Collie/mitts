@@ -5,16 +5,17 @@ extends RefCounted
 # priced as the race for where it is played. See Scripts/domain/ai/CLAUDE.md →
 # "A dump-in is a race for where it is played".
 #
-# Searched as releases — an aim point in their zone × a pace × flat or chipped —
-# each walked on the puck's path (AITrajectory.step_puck_3d, the host's own step,
-# at the chase election's resolution)
+# Searched as releases — an aim point in their zone × a pace, chipped — each
+# walked on the puck's path (AITrajectory.step_puck_3d, the host's own step, at
+# the chase election's resolution)
 # and raced by the soonest body of each side on that path, by the election's own
 # rule: the body that can settle it first, or the one whose stick the path comes
-# to (a man standing in the dump's way plays it there). A chip (the charged LOW
-# release, the shot ladder's set angle) flies over every stick while it is above
-# the blade plane, where only a body in its way stops it, and is raced from where
-# it lands, as the election races a puck in the air. The side that meets it first
-# plays it there:
+# to (a man standing in the dump's way plays it there). Every dump is a chip (the
+# charged LOW release, the shot ladder's set angle): over every stick while it is
+# above the blade plane, where only a body in its way stops it, and raced from
+# where it lands, as the election races a puck in the air. Priced flat as well,
+# it never measured worse (test_dump_in_race.gd: by 0.0005 at most) and lost to
+# any stick in its way. The side that meets it first plays it there:
 #
 #   value = p · ours(meet) − (1 − p) · theirs(meet)
 #
@@ -44,8 +45,6 @@ const AIM_POINTS: Array[Vector2] = [
 # Paces, as shares of the carrier's wrister max: a soft dump that dies in the
 # zone, and a hard rim round the boards.
 const PACE_FRACS: Array[float] = [0.6, 1.0]
-# Each launch flat along the ice, and chipped over the sticks.
-const LOFTED: Array[bool] = [false, true]
 # Puck.release seats a lofted release this far above where it rests on the ice.
 const LOFT_SEAT_M: float = 0.1
 
@@ -58,15 +57,13 @@ const STEP_DT: float = AILoosePuckChase.RACE_LOOKAHEAD_S / float(AILoosePuckChas
 # never win while their possession never pays us (see _race), or one we would
 # play before it is in their zone — a chip to ourselves is a carry's business,
 # not a dump-in.
-const _MAX_LAUNCHES: int = 20   # AIM_POINTS × PACE_FRACS × LOFTED (test_carrier_dump_search.gd)
+const _MAX_LAUNCHES: int = 10   # AIM_POINTS × PACE_FRACS (test_carrier_dump_search.gd)
 
 # ── Results (valid after search) ─────────────────────────────────────────────
 # The best release's value, −INF when there is none to make.
 var best_score: float = -INF
 var best_dir: Vector3 = Vector3.ZERO
 var best_pace: float = 0.0
-# Whether the best release is the chip (released at ShotMechanics.ELEVATION_LOW).
-var best_lofted: bool = false
 # Where and when our side plays the best release, on our win.
 var best_meet: Vector3 = Vector3.INF
 var best_meet_s: float = INF
@@ -101,7 +98,6 @@ var _retriever: Array[int] = []
 var _count: int = 0
 var _dir: Array[Vector3] = []
 var _pace: Array[float] = []
-var _lofted: Array[bool] = []
 var _p: Array[float] = []
 var _meet_ours: Array[Vector3] = []
 var _meet_theirs: Array[Vector3] = []
@@ -118,7 +114,6 @@ func _init(field: AICarrierField) -> void:
 	_path.resize(STEPS)
 	_dir.resize(_MAX_LAUNCHES)
 	_pace.resize(_MAX_LAUNCHES)
-	_lofted.resize(_MAX_LAUNCHES)
 	_p.resize(_MAX_LAUNCHES)
 	_meet_ours.resize(_MAX_LAUNCHES)
 	_meet_theirs.resize(_MAX_LAUNCHES)
@@ -143,7 +138,6 @@ func search(ctx: RoleContext) -> void:
 	best_score = -INF
 	best_dir = Vector3.ZERO
 	best_pace = 0.0
-	best_lofted = false
 	best_meet = Vector3.INF
 	best_meet_s = INF
 	debug_race = Vector4(-1.0, INF, INF, INF)
@@ -163,12 +157,11 @@ func search(ctx: RoleContext) -> void:
 		if to_aim.length_squared() < 1.0:
 			continue
 		var dir: Vector3 = to_aim.normalized()
-		for lofted: bool in LOFTED:
-			for frac: float in PACE_FRACS:
-				var pace: float = ctx.self_wrister_shot_speed * frac
-				if not _walk(origin, _launch_vel(dir, pace, lofted), lofted):
-					break   # a leg through a net here is one at every harder pace
-				_race(ctx, origin, dir, pace, lofted)
+		for frac: float in PACE_FRACS:
+			var pace: float = ctx.self_wrister_shot_speed * frac
+			if not _walk(origin, launch_vel(dir, pace)):
+				break   # a leg through a net here is one at every harder pace
+			_race(ctx, origin, dir, pace)
 
 	var iced_value: float = INF
 	var support_filled: bool = false
@@ -189,7 +182,6 @@ func search(ctx: RoleContext) -> void:
 			best_score = v
 			best_dir = _dir[k]
 			best_pace = _pace[k]
-			best_lofted = _lofted[k]
 			best_meet = _meet_ours[k]
 			best_meet_s = _t_ours[k]
 			debug_race = Vector4(_p[k], _t_ours[k], _t_theirs[k], _t_keeper[k])
@@ -200,15 +192,14 @@ func search(ctx: RoleContext) -> void:
 # Races the release just walked and records it (see the per-launch arrays). Our
 # side first: a launch we would play short of their line is a chip to ourselves
 # (see _MAX_LAUNCHES), and theirs is not raced for it.
-func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float,
-		lofted: bool) -> void:
+func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void:
 	var margin: float = AILoosePuckChase.setup_margin(dir * pace)
 	var walk_s: float = float(STEPS) * STEP_DT
 	var t_ours: float = INF
 	var ours_vel := Vector3.ZERO
 	var retriever: int = -1
-	var from: Vector3 = _launch_pos(origin, lofted)
-	var vel: Vector3 = _launch_vel(dir, pace, lofted)
+	var from: Vector3 = launch_pos(origin)
+	var vel: Vector3 = launch_vel(dir, pace)
 	for i: int in _our_pos.size():
 		var t: float = _meet_time(from, vel, _our_pos[i], _our_vel[i], _our_caps[i], margin,
 				i != _self_index)
@@ -223,7 +214,6 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float,
 	_count += 1
 	_dir[k] = dir
 	_pace[k] = pace
-	_lofted[k] = lofted
 	_retriever[k] = retriever
 	_skip[k] = not AIActionScoring.in_offensive_zone(meet_ours, ctx.attacking_goal_pos)
 	if _skip[k]:
@@ -302,17 +292,15 @@ func _body_block_time(from: Vector3, pos: Vector3, body_vel: Vector3, t_air: flo
 	return INF
 
 
-# Where a release leaves the blade: on the ice, or a chip seated above it.
-static func _launch_pos(origin: Vector3, lofted: bool) -> Vector3:
-	return Vector3(origin.x, AITrajectory.PUCK_REST_HEIGHT_M + (LOFT_SEAT_M if lofted else 0.0),
-			origin.z)
+# Where the chip leaves the blade: seated above the ice.
+static func launch_pos(origin: Vector3) -> Vector3:
+	return Vector3(origin.x, AITrajectory.PUCK_REST_HEIGHT_M + LOFT_SEAT_M, origin.z)
 
 
-# A release at `pace` along the ice: flat, or chipped at the charged LOW release's
-# set angle, whose rise scales with the pace (ReleaseMomentum's shot rule).
-static func _launch_vel(dir: Vector3, pace: float, lofted: bool) -> Vector3:
-	return Vector3(dir.x * pace, pace * GameRules.DEFAULT_LOFT_TAN_LOW if lofted else 0.0,
-			dir.z * pace)
+# The chip at `pace` along the ice: the charged LOW release's set angle, whose rise
+# scales with the pace (ReleaseMomentum's shot rule).
+static func launch_vel(dir: Vector3, pace: float) -> Vector3:
+	return Vector3(dir.x * pace, pace * GameRules.DEFAULT_LOFT_TAN_LOW, dir.z * pace)
 
 
 # Launch `k`'s value (see the header).
@@ -448,10 +436,10 @@ func _fill_ours(ctx: RoleContext) -> void:
 		_our_caps.append(ctx.caps_by_peer.get(pid))
 
 
-# The puck's path from `origin` at `vel` (a chip from where it is seated), into
-# _path. False when a leg runs through a net, which the walk itself does not model.
-func _walk(origin: Vector3, vel: Vector3, lofted: bool) -> bool:
-	var p: Vector3 = _launch_pos(origin, lofted)
+# The chip's path from `origin` at `vel`, into _path. False when a leg runs
+# through a net, which the walk itself does not model.
+func _walk(origin: Vector3, vel: Vector3) -> bool:
+	var p: Vector3 = launch_pos(origin)
 	var v: Vector3 = vel
 	for i: int in STEPS:
 		var stepped: Transform3D = AITrajectory.step_puck_3d(p, v, STEP_DT)
