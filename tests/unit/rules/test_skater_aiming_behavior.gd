@@ -73,6 +73,13 @@ func test_reset_wrister_pins_origin_and_skater_pos() -> void:
 	assert_eq(ab.wrister_origin_skater_pos, Vector3(0.5, 0.0, 1.5),
 			"skater pin position captured for the wrister load")
 
+func test_the_wrister_origin_rides_with_the_body() -> void:
+	ab.reset_wrister(Vector3.ZERO, Vector3(1.0, 0.0, 2.0), Vector3(0.5, 0.0, 1.5))
+	assert_eq(ab.wrister_origin_at(Vector3(0.5, 0.9, 1.5)), Vector3(1.0, 0.0, 2.0),
+			"unmoved, the origin is the pin")
+	assert_eq(ab.wrister_origin_at(Vector3(-2.5, 0.9, 0.5)), Vector3(-2.0, 0.0, 1.0),
+			"skated 3 m left and 1 m up the ice, the puck went with the body")
+
 func test_tick_slapper_increments_timer() -> void:
 	ab.tick_slapper(0.016)
 	assert_almost_eq(ab.slapper_charge_timer, 0.016, 0.001)

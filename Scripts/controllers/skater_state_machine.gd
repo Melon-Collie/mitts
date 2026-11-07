@@ -338,7 +338,7 @@ func _enter_wrister_aim(skater: Skater, input: InputState) -> void:
 	# Pin the aim ORIGIN at stroke start (the puck's on-blade contact point, where
 	# the shot will fire from) for the positional-aim wrister — see
 	# SkaterAimingBehavior.wrister_origin_world. Anchoring here, before the blade
-	# sweeps, is what keeps origin→cursor stable through the stroke.
+	# addresses and the torso coils, keeps origin→cursor off the swinging blade.
 	var origin_world: Vector3 = skater.get_blade_contact_global()
 	# Skater position at the pin (XZ): what the frozen puck rides along from
 	# (WristerLoad).
