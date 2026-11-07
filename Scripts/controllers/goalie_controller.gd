@@ -208,10 +208,12 @@ func receive_wire_state(blob: PackedByteArray, host_ts: float, _seq: int) -> voi
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
-	# Out of order: the buffer must stay sorted for the bracket search.
-	if not _state_buffer.is_empty() and host_ts <= _state_buffer.back().timestamp:
-		NetworkTelemetry.record_ooo_drop()
-		return
+	match BufferedStateInterpolator.intake(_state_buffer, host_ts, network_state):
+		BufferedStateInterpolator.Intake.OUT_OF_ORDER:
+			NetworkTelemetry.record_ooo_drop()
+			return
+		BufferedStateInterpolator.Intake.REPLACED:
+			return
 	# The evicted front entry is recycled as the new back one (see
 	# PuckController.apply_state): the bracket search re-reads the buffer every
 	# render, so no consumer holds a wrapper across frames.
