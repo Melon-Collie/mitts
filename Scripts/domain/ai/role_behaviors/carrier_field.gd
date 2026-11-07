@@ -288,23 +288,29 @@ static func slot_anchor(own_goal_dir: float) -> Vector3:
 # read too (opponents_release). Measured from the chest instead, the ~1 m origin
 # error is a systematic over-lead on a close feed; from where he stands at the
 # decision, a carrier at speed prices a lane a metre behind the one he throws.
-static func pass_origin(ctx: RoleContext) -> Vector3:
+# `pull_s` / `hold_shift`: the press first pulls the puck `hold_shift` (XZ, off
+# where it is) to its hold over `pull_s`, the carrier braking through the pull
+# and the windup alike, as a pass pre-aim does.
+static func pass_origin(ctx: RoleContext, pull_s: float = 0.0,
+		hold_shift: Vector2 = Vector2.ZERO) -> Vector3:
 	var at: Vector3 = ctx.self_pos
 	if ctx.snapshot.puck_state != null:
 		at = Vector3(ctx.snapshot.puck_state.position.x, 0.0,
 				ctx.snapshot.puck_state.position.z)
+	at.x += hold_shift.x
+	at.z += hold_shift.y
 	var v: Vector3 = ctx.self_velocity
 	var speed: float = sqrt(v.x * v.x + v.z * v.z)
-	if speed < 0.01:
-		return at
-	var t: float = AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-	var b: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
-	var travel: float = speed * t - 0.5 * b * t * t if speed > b * t \
-			else speed * speed / (2.0 * b)
+	var travel: float = 0.0
+	if speed >= 0.01:
+		var t: float = pull_s + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+		var b: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
+		travel = speed * t - 0.5 * b * t * t if speed > b * t \
+				else speed * speed / (2.0 * b)
 	# The boards stop him as they stop the puck: a carrier skating into the end
 	# boards releases at them, not behind them.
-	var ice: Vector2 = GameRules.clamp_to_rink_inner(Vector2(at.x + v.x / speed * travel,
-			at.z + v.z / speed * travel), GameRules.PUCK_COLLISION_RADIUS)
+	var ice: Vector2 = GameRules.clamp_to_rink_inner(Vector2(at.x + v.x / maxf(speed, 0.01) * travel,
+			at.z + v.z / maxf(speed, 0.01) * travel), GameRules.PUCK_COLLISION_RADIUS)
 	return Vector3(ice.x, 0.0, ice.y)
 
 
@@ -474,9 +480,16 @@ func continuation_at(pos: Vector3, arrive_s: float = 0.0,
 
 # Our possession of `pos` for a man who reaches it `arrive_s` from now moving at
 # `arrive_vel` (AIPossessionValue.at), discounted for the wait — the worth of a
-# loose puck we win there.
-func possession_at(pos: Vector3, arrive_s: float, arrive_vel: Vector3) -> float:
-	return _ours.at(pos, arrive_s, arrive_vel)
+# loose puck we win there. `rival` (finite): the man we beat to it, standing
+# where the race has him when ours gets there, on top of the defence carried on.
+func possession_at(pos: Vector3, arrive_s: float, arrive_vel: Vector3,
+		rival: Vector3 = Vector3.INF, rival_caps: AISkaterCaps = null) -> float:
+	if not rival.is_finite():
+		return _ours.at(pos, arrive_s, arrive_vel)
+	_ours.push_defender(rival, Vector3.ZERO, rival_caps)
+	var v: float = _ours.at(pos, arrive_s, arrive_vel)
+	_ours.pop_defender()
+	return v
 
 
 # The best zone entry for our man at `pos` `start_s` from now, moving at `vel`

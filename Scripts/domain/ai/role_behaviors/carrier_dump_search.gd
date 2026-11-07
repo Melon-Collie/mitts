@@ -98,6 +98,9 @@ var _retriever: Array[int] = []
 var _count: int = 0
 var _dir: Array[Vector3] = []
 var _pace: Array[float] = []
+var _origin: Array[Vector3] = []
+var _rival: Array[Vector3] = []
+var _rival_caps: Array[AISkaterCaps] = []
 var _p: Array[float] = []
 var _meet_ours: Array[Vector3] = []
 var _meet_theirs: Array[Vector3] = []
@@ -114,6 +117,9 @@ func _init(field: AICarrierField) -> void:
 	_path.resize(STEPS)
 	_dir.resize(_MAX_LAUNCHES)
 	_pace.resize(_MAX_LAUNCHES)
+	_origin.resize(_MAX_LAUNCHES)
+	_rival.resize(_MAX_LAUNCHES)
+	_rival_caps.resize(_MAX_LAUNCHES)
 	_p.resize(_MAX_LAUNCHES)
 	_meet_ours.resize(_MAX_LAUNCHES)
 	_meet_theirs.resize(_MAX_LAUNCHES)
@@ -148,6 +154,16 @@ func search(ctx: RoleContext) -> void:
 	if not is_on(ctx, origin):
 		return
 	_fill_ours(ctx)
+	# Each dump leaves from its own release: the press first pulls the puck to
+	# the hold its pace needs (AIShotHolds.solve_pass, as the agent's press
+	# locks it), braking, so a carrier at speed a stride short of their line
+	# releases inside it, where there is no dump-in to make.
+	var holds: AIShotHolds = _field.holds
+	holds.configure_from(ctx)
+	var self_state: SkaterNetworkState = ctx.snapshot.skater_states[ctx.peer_id]
+	var body_vel := Vector2(ctx.self_velocity.x, ctx.self_velocity.z)
+	var puck_off := Vector2(ctx.snapshot.puck_state.position.x - ctx.self_pos.x,
+			ctx.snapshot.puck_state.position.z - ctx.self_pos.z)
 	var attack_z: float = signf(ctx.attacking_goal_pos.z)
 	var half: float = GameRules.INNER_HALF_WIDTH - GameRules.PUCK_COLLISION_RADIUS
 	for aim2: Vector2 in AIM_POINTS:
@@ -159,20 +175,25 @@ func search(ctx: RoleContext) -> void:
 		var dir: Vector3 = to_aim.normalized()
 		for frac: float in PACE_FRACS:
 			var pace: float = ctx.self_wrister_shot_speed * frac
-			if not _walk(origin, launch_vel(dir, pace)):
+			holds.solve_pass(Vector2(dir.x, dir.z), puck_off, body_vel, self_state.facing,
+					pace / maxf(ctx.self_wrister_shot_speed, 0.001))
+			var pull_s: float = 0.0 if holds.pass_offset == puck_off \
+					else holds.pull_time(puck_off, holds.pass_offset, self_state.facing, body_vel)
+			var release: Vector3 = AICarrierField.pass_origin(ctx, pull_s,
+					holds.pass_offset - puck_off)
+			if not is_on(ctx, release):
+				continue
+			if not _walk(release, launch_vel(dir, pace)):
 				break   # a leg through a net here is one at every harder pace
-			_race(ctx, origin, dir, pace)
+			_race(ctx, release, dir, pace, pull_s)
 
-	var iced_value: float = INF
 	var support_filled: bool = false
 	for k: int in _count:
 		if _skip[k]:
 			continue
 		var v: float
 		if _iced[k]:
-			if iced_value == INF:
-				iced_value = _icing_value(ctx, origin)
-			v = iced_value
+			v = _icing_value(ctx, _origin[k])
 		else:
 			if not support_filled:
 				_fill_support(ctx)
@@ -186,13 +207,14 @@ func search(ctx: RoleContext) -> void:
 			best_meet_s = _t_ours[k]
 			debug_race = Vector4(_p[k], _t_ours[k], _t_theirs[k], _t_keeper[k])
 			debug_meet_theirs = _meet_theirs[k]
-			debug_origin = origin
+			debug_origin = _origin[k]
 
 
 # Races the release just walked and records it (see the per-launch arrays). Our
 # side first: a launch we would play short of their line is a chip to ourselves
 # (see _MAX_LAUNCHES), and theirs is not raced for it.
-func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void:
+# `lead_s`: the pull before the windup, over which everybody skates on.
+func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float, lead_s: float) -> void:
 	var margin: float = AILoosePuckChase.setup_margin(dir * pace)
 	var walk_s: float = float(STEPS) * STEP_DT
 	var t_ours: float = INF
@@ -201,8 +223,8 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void
 	var from: Vector3 = launch_pos(origin)
 	var vel: Vector3 = launch_vel(dir, pace)
 	for i: int in _our_pos.size():
-		var t: float = _meet_time(from, vel, _our_pos[i], _our_vel[i], _our_caps[i], margin,
-				i != _self_index)
+		var t: float = _meet_time(from, vel, _our_pos[i] + _our_vel[i] * lead_s, _our_vel[i],
+				_our_caps[i], margin, i != _self_index)
 		if t < t_ours:
 			t_ours = t
 			ours_vel = _our_vel[i]
@@ -214,14 +236,20 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void
 	_count += 1
 	_dir[k] = dir
 	_pace[k] = pace
+	_origin[k] = origin
 	_retriever[k] = retriever
 	_skip[k] = not AIActionScoring.in_offensive_zone(meet_ours, ctx.attacking_goal_pos)
 	if _skip[k]:
 		return
 	var t_theirs: float = INF
+	var racer: int = -1
 	for i: int in _field.opponents_release.size():
-		t_theirs = minf(t_theirs, _meet_time(from, vel, _field.opponents_release[i],
-				_field.opponent_vels[i], _field.opponent_caps[i], margin, true))
+		var t: float = _meet_time(from, vel,
+				_field.opponents_release[i] + _field.opponent_vels[i] * lead_s,
+				_field.opponent_vels[i], _field.opponent_caps[i], margin, true)
+		if t < t_theirs:
+			t_theirs = t
+			racer = i
 	var keeper_t: float = _keeper_time(ctx)
 	t_theirs = minf(t_theirs, keeper_t)
 	var meet_theirs: Vector3 = _path[STEPS - 1]
@@ -244,6 +272,16 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float) -> void
 	_t_ours[k] = t_ours
 	_t_theirs[k] = t_theirs
 	_t_keeper[k] = keeper_t
+	# Whoever races us for it, their keeper too, where he is when ours gets
+	# there: on his way to the meet, that share of his trip in.
+	_rival[k] = Vector3.INF
+	_rival_caps[k] = null
+	if is_finite(t_theirs):
+		var at: Vector3 = AICarrierField.goalie_now(ctx)
+		if keeper_t > t_theirs and racer != -1:
+			at = _field.opponents_release[racer] + _field.opponent_vels[racer] * lead_s
+			_rival_caps[k] = _field.opponent_caps[racer]
+		_rival[k] = at.lerp(meet_theirs, clampf(t_ours / maxf(t_theirs, 0.001), 0.0, 1.0))
 	_ours_vel[k] = ours_vel
 	_iced[k] = ctx.icing_enforced and _ices(ctx, origin, minf(t_ours, t_theirs))
 	# A launch we never win is worth only what their puck at the meet pays us,
@@ -306,7 +344,8 @@ static func launch_vel(dir: Vector3, pace: float) -> Vector3:
 # Launch `k`'s value (see the header).
 func _value(ctx: RoleContext, k: int) -> float:
 	var lost: float = 1.0 - _p[k]
-	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k]),
+	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k],
+			_rival[k], _rival_caps[k]),
 			_support_from(ctx, _meet_ours[k], _retriever[k], _t_ours[k]) \
 					* AIActionScoring.delay_discount(_t_ours[k]))
 	return _p[k] * ours \
