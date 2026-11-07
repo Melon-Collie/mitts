@@ -130,7 +130,8 @@ func test_an_iced_dump_their_side_wins_is_a_loss() -> void:
 
 func test_the_launch_scratch_holds_every_launch() -> void:
 	assert_eq(AICarrierDumpSearch._MAX_LAUNCHES,
-			AICarrierDumpSearch.AIM_POINTS.size() * AICarrierDumpSearch.PACE_FRACS.size())
+			AICarrierDumpSearch.AIM_POINTS.size() * AICarrierDumpSearch.PACE_FRACS.size()
+			* AICarrierDumpSearch.LOFTED.size())
 
 
 # Three across their line a stride in front of a carrier at speed, a winger
@@ -160,6 +161,23 @@ func test_against_a_stand_up_line_the_carrier_dumps_it_in() -> void:
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP, "walled off at the line, he dumps it")
 	assert_eq(c.pass_target_peer_id, -1, "to the ice, not to a receiver")
 	assert_true(c.dump_target.is_finite())
+
+
+func test_a_stand_up_line_is_chipped_over() -> void:
+	# Three sticks across the line a stride ahead play any flat dump on their
+	# blades, so what goes in goes in over them.
+	var ctx: RoleContext = _stand_up_line(true)
+	var c := AIRoleCarrier.new()
+	c.decide(ctx)
+	assert_true(c.dump_lofted, "the dump is chipped")
+	var field := AICarrierField.new()
+	field.fill(ctx)
+	field.fill_receivers(ctx, ctx.self_pos)
+	var dump := AICarrierDumpSearch.new(field)
+	dump.search(ctx)
+	for k: int in dump._count:
+		if not dump._lofted[k] and not dump._skip[k]:
+			assert_lt(dump._p[k], 0.5, "a flat dump %d into the line is theirs" % k)
 
 
 # A 2-on-1 a few strides short of their line: the carrier up the left lane with

@@ -367,10 +367,12 @@ var _holds := AIShotHolds.new()
 # (_state_from_carrier_intent); this sentinel tells that state to aim at a
 # LOCATION and skip the receiver-close bail.
 #
-# The dump is the rim pass (AIRimPass): it fires FLAT on the charged wrister at
-# `_dump_launch_speed`, because how far round the boards it carries IS its pace.
+# The dump fires on the charged wrister at `_dump_launch_speed` along the ice,
+# because how far round the boards it carries IS its pace: FLAT, or chipped at
+# the LOW rung when `_dump_lofted` (a dump-in over the sticks).
 var _dump_target: Vector3 = Vector3.INF
 var _dump_launch_speed: float = AIPuckLane.PASS_SPEED_M_S
+var _dump_lofted: bool = false
 
 # Multi-tick wrister charge: shoot_held for BOT_WRISTER_CHARGE_TICKS while the
 # cursor sweeps, so SkaterStateMachine fires a real wrister at release (direction
@@ -1711,6 +1713,7 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		if _carrier.intended_action == AIRoleCarrier.INTENT_DUMP:
 			_dump_target = _carrier.dump_target
 			_dump_launch_speed = _carrier.dump_launch_speed
+			_dump_lofted = _carrier.dump_lofted
 		else:
 			_dump_target = Vector3.INF
 	debug_shoot_score = _carrier.debug_shoot_score
@@ -2265,11 +2268,14 @@ func _state_pass_pressed(input: InputState, snapshot: WorldSnapshot, self_pos: V
 	if is_dump:
 		_pass_should_saucer = false
 		_pass_target_peer_id = -1
-		# FLAT is load-bearing on the charged path: release_wrister normalizes
-		# (dir.x, tan, dir.z) at `power`, so any loft spends pace going up and the
-		# ground speed stops being the pace the landing search solved.
-		input.elevation_level = ShotMechanics.ELEVATION_FLAT
-		_pass_target_speed = _dump_launch_speed
+		# release_wrister normalizes (dir.x, tan, dir.z) at `power`, so a chip
+		# asks for the pace over its loft's cosine: the ground pace is what the
+		# landing search solved.
+		input.elevation_level = ShotMechanics.ELEVATION_LOW if _dump_lofted \
+				else ShotMechanics.ELEVATION_FLAT
+		_pass_target_speed = _dump_launch_speed * sqrt(1.0
+				+ GameRules.DEFAULT_LOFT_TAN_LOW * GameRules.DEFAULT_LOFT_TAN_LOW) \
+				if _dump_lofted else _dump_launch_speed
 
 	_apply_brake_steering(input, snapshot, self_pos)
 	# Saucer: LOW loft over a contested mid-lane stick. Set every tick (the level

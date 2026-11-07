@@ -1084,10 +1084,15 @@ reaches back into what remains.
 - **A dump-in is a race for where it is played** (`AICarrierDumpSearch`). From
   the neutral zone the carrier may release the puck into their zone with nobody's
   tape to aim at: aim points in their zone (the corners, a rim round the end
-  boards, a chip off either wall at the circle tops) × a soft and a hard pace,
-  each walked on the puck's path at the chase election's resolution and raced by
-  the soonest body of each side — their keeper too, for path in front of his
-  goal line he can push and reach to. The side that meets it first plays it
+  boards, a chip off either wall at the circle tops) × a soft and a hard pace ×
+  flat or chipped, each walked on the puck's path at the chase election's
+  resolution and raced by the soonest body of each side by the election's own
+  rule — settled on it, or the path coming to his stick — and their keeper too,
+  for path in front of his goal line he can push and reach to. A man standing in
+  a flat dump's way plays it there, so through a stand-up line the dump goes in
+  as the chip: the charged LOW release, over every stick while it is above the
+  blade plane (only a body in its way stops it), raced from where it lands as
+  the election races a puck in the air. The side that meets it first plays it
   there: `p · ours(meet) − (1 − p) · theirs(meet)`, p the arrival race in
   `arrival_race`'s contest band, widened by the clock's error over the trip
   unless their keeper decides it (he is no skate mis-timed seconds out), theirs
