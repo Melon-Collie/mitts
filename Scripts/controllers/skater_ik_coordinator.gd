@@ -1006,12 +1006,13 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 # over the sphere the stick allows round the blade by the least that holds it,
 # the shaft near the blade's lie and the hand under the chest
 # (SkaterHoldModel.project, against fill_hold_body's body), or the marker itself
-# with held hands off, while a shot or the block has the stick, which pose
-# their own hands, and while he is down or diving, a body the model's upright
-# trunk is not. A function of tick state, solved once per state.
+# with held hands off, while a shot, the block or the celebration has the
+# stick, which pose their own hands, and while he is down or diving, a body the
+# model's upright trunk is not. A function of tick state, solved once per state.
 func held_top_hand() -> Vector3:
 	var marker: Vector3 = _skater.top_hand.position
 	if not held_hands or _skater.is_knocked_down or _skater.is_diving \
+			or _controller.is_celebrating() \
 			or SkaterPoseBridge.owner_of(_controller.get_shot_state() as State) \
 			!= SkaterPoseBridge.Owner.TRACKED:
 		return marker

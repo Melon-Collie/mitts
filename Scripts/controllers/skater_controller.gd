@@ -460,7 +460,7 @@ var carry_reach_fold_m: float = 0.15
 # round the forehand, fading over carry_front_floor_band_deg beyond each.
 var carry_front_floor_m: float = 0.07
 var carry_front_fold_floor_m: float = 0.10
-var carry_front_floor_deg := Vector2(-50.0, 80.0)
+var carry_front_floor_deg := Vector2(-50.0, 90.0)
 var carry_front_floor_band_deg: float = 15.0
 var lower_body_pitch_follow: float = 0.35
 
