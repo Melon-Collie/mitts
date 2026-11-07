@@ -27,10 +27,12 @@ extends RefCounted
 # of him he plays down: on his spot on his feet he drops there, and down he
 # pushes with the carrier on the puck's line (`_stay_down`).
 #
-# In the zone he sinks into the low ready once a shot could reach him sooner
-# than his legs could answer it from the ready stance (`_cannot_react`): the
-# low ready covers more of the net than the ready stance, nothing off its gear
-# goes on in, and its drop is the shorter fall.
+# In the zone and on the post at a sharp angle, he sinks into the low ready
+# once a shot could reach him sooner than his legs could answer it from the
+# ready stance (`_cannot_react`): the low ready covers more of the net than the
+# ready stance, nothing off its gear goes on in, and its drop is the shorter
+# fall. Standing tall on the post, his body and glove ride over the band behind
+# his near pad that a shot along the goal line comes in through.
 #
 # In the zone, a body on his sightline to the puck from his spot he looks
 # round (KeeperScreen): a step across off his angle line, no further than half
@@ -143,7 +145,8 @@ func decide(puck: Vector2, velocity: Vector2, motor: KeeperMotor) -> void:
 		return
 	if zone != Zone.BELOW and not _racing:
 		post_side = 0.0
-	motor.low_ready.asked = zone == Zone.FRONT and _cannot_react(puck, meeting, motor)
+	motor.low_ready.asked = (zone == Zone.FRONT or zone == Zone.SHARP) \
+			and _cannot_react(puck, meeting, motor)
 	if zone == Zone.BELOW or _racing:
 		var side: float = post_side if _racing else _post_below(puck, velocity, motor)
 		var post := Vector2(side * GameRules.NET_HALF_WIDTH, 0.0)
