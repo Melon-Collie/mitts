@@ -451,16 +451,13 @@ func _keeper_time(ctx: RoleContext) -> float:
 
 
 # A puck their keeper covers, the cover whistled (ctx.covers_whistled): the
-# faceoff in his zone at the dot on its side (GameRules.icing_faceoff_dot), a
-# coin flip (AIIcingRead.FACEOFF_LOSS_SHARE) between our possession there and
-# theirs, each read as the continuation (AIPossessionFloor) against the
-# lineup's set defence. One he saves stays live, priced as their puck there.
+# faceoff in his zone at the dot on its side (GameRules.icing_faceoff_dot),
+# priced as an icing's is: the coin flip (AIIcingRead.FACEOFF_LOSS_SHARE) for
+# their possession of the dot, and nothing for ours — no faceoff is credited to
+# the side that wins it.
 func _cover_value(ctx: RoleContext, at: Vector3) -> float:
 	var dot2: Vector2 = GameRules.icing_faceoff_dot(1 - ctx.team_id, at.x)
-	var dot := Vector3(dot2.x, 0.0, dot2.y)
-	var lose: float = AIIcingRead.FACEOFF_LOSS_SHARE
-	return (1.0 - lose) * AIPossessionFloor.continuation(dot, ctx.attacking_goal_pos) \
-			- lose * AIPossessionFloor.continuation(dot, ctx.defending_goal_pos)
+	return -_field.turnover_cost(Vector3(dot2.x, 0.0, dot2.y), AIIcingRead.FACEOFF_LOSS_SHARE)
 
 
 # Whether the release just walked ices (AIIcingRead), first played at

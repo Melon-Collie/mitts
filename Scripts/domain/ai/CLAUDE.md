@@ -1134,8 +1134,9 @@ reaches back into what remains.
   puck at the net, and out-scores an open carrier on an empty rink. He plays
   no puck out, though: one slowing at his feet he covers, one going by he
   saves and it stays live, so where a cover is whistled (`RoleContext.covers_whistled`, NHL and Arcade) it is the
-  faceoff in his zone, a coin flip between each side's continuation at the dot
-  (`_cover_value`), never their skater's puck. There is
+  faceoff in his zone, priced as an icing's: the coin flip for their
+  possession of the dot, nothing for ours (`_cover_value`), never their
+  skater's puck where he stopped it. There is
   still no defensive-zone clear — a carrier in our own end with nothing worth
   keeping the puck for keeps it, protects, takes the hit, or moves it with a
   qualified pass, the rim included, and the next re-eval looks
