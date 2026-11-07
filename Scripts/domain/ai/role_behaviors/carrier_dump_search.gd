@@ -25,6 +25,7 @@ extends RefCounted
 # and reach out to), ours the
 # possession of the spot on arrival (AIPossessionValue) or the feed it opens to
 # the support arriving with the dump, its reception raced (_support_from),
+# their keeper's cover a faceoff in his zone when it is whistled (_cover_value),
 # theirs a turnover there when their collector's first play is away, with the
 # dumper where his skate has him then (AICarrierField.turnover_cost + the 5v5
 # counter exposure), less the share our forechecker wins back off him before
@@ -114,6 +115,9 @@ var _meet_theirs: Array[Vector3] = []
 var _t_ours: Array[float] = []
 var _t_theirs: Array[float] = []
 var _t_keeper: Array[float] = []
+# Whether their keeper, first to it, can cover it there (AIGoalieModel
+# .COVER_STOPS_M_S): slow enough under his glove, rather than a save.
+var _keeper_covers: Array[bool] = []
 # Lost: when their man's first play is away (AIForecheckRead's clock; their
 # keeper's: when he has it), the odds we win it back before then (_regain_odds),
 # and the dumper where his skate has him then (INF: no dumper on the ice).
@@ -140,6 +144,7 @@ func _init(field: AICarrierField) -> void:
 	_t_ours.resize(_MAX_LAUNCHES)
 	_t_theirs.resize(_MAX_LAUNCHES)
 	_t_keeper.resize(_MAX_LAUNCHES)
+	_keeper_covers.resize(_MAX_LAUNCHES)
 	_away.resize(_MAX_LAUNCHES)
 	_regain.resize(_MAX_LAUNCHES)
 	_dumper_then.resize(_MAX_LAUNCHES)
@@ -289,6 +294,11 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float, lead_s:
 	_t_ours[k] = t_ours
 	_t_theirs[k] = t_theirs
 	_t_keeper[k] = keeper_t
+	_keeper_covers[k] = false
+	if keeper_t <= t_theirs and is_finite(keeper_t):
+		var after: Vector3 = AILoosePuckChase.path_intercept_point(_path, STEP_DT, origin,
+				keeper_t + STEP_DT)
+		_keeper_covers[k] = meet_theirs.distance_to(after) / STEP_DT <= AIGoalieModel.COVER_STOPS_M_S
 	# Whoever races us for it, their keeper too, where he is when ours gets
 	# there: on his way to the meet, that share of his trip in.
 	_rival[k] = Vector3.INF
@@ -378,13 +388,15 @@ static func launch_vel(dir: Vector3, pace: float) -> Vector3:
 # Launch `k`'s value (see the header).
 func _value(ctx: RoleContext, k: int) -> float:
 	var lost: float = 1.0 - _p[k]
-	var won_back: float = lost * _regain[k]
-	var kept: float = lost - won_back
 	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k],
 			_rival[k], _rival_caps[k]),
 			_support_from(ctx, k) \
 					* AIActionScoring.delay_discount(_t_ours[k]))
 	var v: float = _p[k] * ours
+	if _keeper_covers[k] and ctx.covers_whistled:
+		return v + lost * _cover_value(ctx, _meet_theirs[k])
+	var won_back: float = lost * _regain[k]
+	var kept: float = lost - won_back
 	if won_back > 0.0:
 		# Won back off their man where he played it, him still on it.
 		v += won_back * _field.possession_at(_meet_theirs[k], _away[k], Vector3.ZERO,
@@ -415,9 +427,11 @@ func _regain_odds(meet: Vector3, away_s: float, lead_s: float) -> float:
 	return BATTLE_SHARE * clampf(0.5 + (away_s - on_s) / (2.0 * band), 0.0, 1.0)
 
 
-# When their keeper first gets a stick on the path just walked: a point in front
+# When their keeper first gets a piece of the path just walked: a point in front
 # of his goal line inside what his push and his stick reach by then (INF: none).
-# Unreplicated, he is home on his crease. He plays no puck behind his net.
+# One slowing at his feet he covers (_keeper_covers), one going by he saves;
+# he skates out to play neither, and nothing behind his net. Unreplicated, he is home on his
+# crease.
 func _keeper_time(ctx: RoleContext) -> float:
 	var goal: Vector3 = ctx.attacking_goal_pos
 	var attack_z: float = signf(goal.z)
@@ -434,6 +448,19 @@ func _keeper_time(ctx: RoleContext) -> float:
 				+ AIBotMechanics.BLADE_REACH_M:
 			return t
 	return INF
+
+
+# A puck their keeper covers, the cover whistled (ctx.covers_whistled): the
+# faceoff in his zone at the dot on its side (GameRules.icing_faceoff_dot), a
+# coin flip (AIIcingRead.FACEOFF_LOSS_SHARE) between our possession there and
+# theirs, each read as the continuation (AIPossessionFloor) against the
+# lineup's set defence. One he saves stays live, priced as their puck there.
+func _cover_value(ctx: RoleContext, at: Vector3) -> float:
+	var dot2: Vector2 = GameRules.icing_faceoff_dot(1 - ctx.team_id, at.x)
+	var dot := Vector3(dot2.x, 0.0, dot2.y)
+	var lose: float = AIIcingRead.FACEOFF_LOSS_SHARE
+	return (1.0 - lose) * AIPossessionFloor.continuation(dot, ctx.attacking_goal_pos) \
+			- lose * AIPossessionFloor.continuation(dot, ctx.defending_goal_pos)
 
 
 # Whether the release just walked ices (AIIcingRead), first played at

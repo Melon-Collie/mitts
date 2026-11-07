@@ -138,6 +138,10 @@ static func goalie_reset_s() -> float:
 # than this from now still finds him in the stance he is in.
 const GOALIE_RECOVERY_S: float = 0.35
 
+# The fastest a loose puck can be going for him to cover it (KeeperCover): one
+# slowing at his feet he covers, one going by he saves, and it stays live.
+const COVER_STOPS_M_S: float = KeeperCover.STOPS_M_S
+
 
 # ── Predicted post-seal ─────────────────────────────────────────────────────
 # The shoot-now eval reads the LIVE goalie's seal state

@@ -164,6 +164,10 @@ var zone_entry_blocked: bool = false
 # untouched is priced as one (AICarrierDumpSearch).
 var icing_enforced: bool = false
 
+# Their keeper's cover of a loose puck is whistled for a faceoff in his zone
+# (GameRules.whistles_a_cover): a dump he covers is priced as one.
+var covers_whistled: bool = false
+
 # We have the numbers on their defence (TeamStrategyView.numbers_up): the
 # carrier does not dump it in.
 var numbers_up: bool = false

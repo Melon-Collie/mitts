@@ -178,6 +178,35 @@ func test_a_dump_in_is_chipped_and_a_rim_is_not() -> void:
 	assert_false(AIRoleCarrier.new().dump_lofted, "nothing is chipped by default")
 
 
+func test_a_dump_their_keeper_covers_is_a_faceoff_in_his_zone() -> void:
+	# Their keeper plays no puck out: one slowing at his feet he covers, and where
+	# a cover is whistled the faceoff in his zone is what losing it to him is
+	# worth. One he saves stays live, whistle or not.
+	var ctx: RoleContext = _ctx(Vector3(-1.0, 0.0, 2.0), Vector3(0.0, 0.0, -7.5), [
+		[201, 1, Vector3(-1.0, 0.0, -5.5), Vector3(0.0, 0.0, -2.0)]])
+	var field := AICarrierField.new()
+	field.fill(ctx)
+	field.fill_receivers(ctx, ctx.self_pos)
+	var dump := AICarrierDumpSearch.new(field)
+	dump.search(ctx)
+	var covered: int = 0
+	for k: int in dump._count:
+		if dump._skip[k]:
+			continue
+		ctx.covers_whistled = false
+		var play_on: float = dump._value(ctx, k)
+		ctx.covers_whistled = true
+		var whistled: float = dump._value(ctx, k)
+		if dump._keeper_covers[k]:
+			covered += 1
+			assert_ne(whistled, play_on, "launch %d: his cover is a faceoff" % k)
+		else:
+			assert_eq(whistled, play_on, "launch %d: a puck he does not cover plays on" % k)
+	assert_gt(covered, 0, "the fixture has a dump that dies at his feet")
+	assert_gt(dump._cover_value(ctx, Vector3(-3.0, 0.0, -26.0)), 0.0,
+			"a faceoff in their zone is ours half the time, theirs deep in their own end")
+
+
 func test_the_chip_flies_over_a_stick_and_into_a_body() -> void:
 	# Fired at their corner at 20 m/s: a man standing 3 m along it and a metre to
 	# the side has it over his stick, one standing on its line stops it.

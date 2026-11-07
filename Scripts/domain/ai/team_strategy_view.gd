@@ -52,6 +52,10 @@ func get_team_size() -> int:
 func icing_enforced() -> bool:
 	return false
 
+# Whether a keeper's cover is whistled for a faceoff (GameRules.whistles_a_cover).
+func covers_whistled() -> bool:
+	return false
+
 # Whether we have the numbers on their defence: their own rush read of our
 # attack (AIRushRead from their side) has them short.
 func numbers_up() -> bool:

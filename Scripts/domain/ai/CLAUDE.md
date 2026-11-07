@@ -1131,7 +1131,11 @@ reaches back into what remains.
   an aim point it passes through at speed, never price a chip we would play
   short of their line as one (that is the carry's), and never leave their keeper
   out of the race: a rim that dies in his crease otherwise reads as our man's
-  puck at the net, and out-scores an open carrier on an empty rink. There is
+  puck at the net, and out-scores an open carrier on an empty rink. He plays
+  no puck out, though: one slowing at his feet he covers, one going by he
+  saves and it stays live, so where a cover is whistled (`RoleContext.covers_whistled`, NHL and Arcade) it is the
+  faceoff in his zone, a coin flip between each side's continuation at the dot
+  (`_cover_value`), never their skater's puck. There is
   still no defensive-zone clear — a carrier in our own end with nothing worth
   keeping the puck for keeps it, protects, takes the hit, or moves it with a
   qualified pass, the rim included, and the next re-eval looks
