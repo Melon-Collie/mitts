@@ -1098,10 +1098,12 @@ reaches back into what remains.
   unless their keeper decides it (he is no skate mis-timed seconds out), theirs
   the turnover there plus the 5v5 counter exposure. A race lost to their man is
   read when his first play is away, by the forecheck's own clock
-  (`AIForecheckRead`: the pickup's settle, his read, the release), with our
-  soonest forechecker where he is by then on his way in: a dump starts the
-  forecheck, so its loss is their possession against the man chasing it, the
-  dumper included, never against the ice he left. Ours is our possession of
+  (`AIForecheckRead`: the pickup's settle, his read, the release): a dump starts
+  the forecheck, so our soonest forechecker's stick on him before then (that
+  race in the contest band, widened by the clock's error) wins a battle for it,
+  a 50/50, and the puck back where he played it with him still on it; the rest
+  is their possession with the dumper where his skate has him by then, never
+  against the ice he left. Ours is our possession of
   the spot on arrival or the feed it opens to our support dead-reckoned to the
   race's horizon (each man's shot there × the lane against the defence then ×
   the race for its reception, as the pass search races a catch: their first

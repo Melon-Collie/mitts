@@ -10,8 +10,10 @@ extends RefCounted
 #                 entry, as outside it
 #   outside it    the best zone entry
 #
-# A drive is the odds of keeping the puck to where it ends × the shot there. An
-# entry is the better of its shot and the drive in from it, × the skate there —
+# Every read is made from a puck he has to keep at the spot first, so each is
+# taken at the odds he does (base_at's keep): a shot off it, a drive, an entry.
+# A drive is then the odds of keeping the puck to where it ends × the shot there.
+# An entry is the better of its shot and the drive in from it, × the skate there —
 # the odds he keeps the puck on it (_skate_keep) — × the race to it: the side's
 # man from the spot against the defence's first arrival (AIActionScoring
 # .arrival_race, its band widened by the arrival clock's error). A read that
@@ -92,6 +94,8 @@ var _projected: Array[Vector3] = []
 var _shot_defence: Array[Vector3] = []
 var _skate_defence: Array[Vector3] = []
 var _base_defence: Array[Vector3] = []
+# The last base_at's keep odds.
+var _base_keep: float = 1.0
 # The last _drive: where it ends, when and how fast he gets there, the odds he
 # keeps the puck that far, and the shot there (0 kept: no drive).
 var _drive_end: Vector3 = Vector3.ZERO
@@ -162,23 +166,26 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 # and moving at `vel` (his skate to an entry or down the drive starts from it).
 func at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> float:
 	var base: float = base_at(pos, start_s, vel)
+	var keep: float = _base_keep
 	var best: float = base
 	if AIActionScoring.in_offensive_zone(pos, _goal):
-		best = maxf(best, _toward(base, _shot(pos), start_s))
+		best = maxf(best, _taken(base, keep, _toward(base, _shot(pos), start_s)))
 		_drive(pos, start_s, vel)
-		if _drive_keep > 0.0 and _taken(base, _drive_keep,
+		var odds: float = keep * _drive_keep
+		if odds > 0.0 and _taken(base, odds,
 				_toward(base_ceiling(_drive_end), _drive_shot, _drive_end_s)) > best:
-			best = maxf(best, _taken(base, _drive_keep, _toward(
+			best = maxf(best, _taken(base, odds, _toward(
 					base_at(_drive_end, _drive_end_s, _drive_end_vel), _drive_shot, _drive_end_s)))
-	return entry_at(pos, start_s, vel, best, base)
+	return entry_at(pos, start_s, vel, best, base, keep)
 
 
 # The best zone entry for the man at `pos` (as at() reads him), or `known` when
 # none is worth more: a value already known prunes the entries it beats. `base`
-# is his continuation there (base_at; NAN: read it here). An entry's own
-# continuation is only bounded (_entry_base_max) until it could win.
+# and `keep` are his continuation there and the odds he keeps the puck there
+# (base_at; NAN: read them here). An entry's own continuation is only bounded
+# (_entry_base_max) until it could win.
 func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
-		base: float = NAN) -> float:
+		base: float = NAN, keep: float = NAN) -> float:
 	var best: float = known
 	for i: int in _entry_spots.size():
 		var skate_s: float = AIArrival.time_to_arrive(pos, _entry_spots[i], vel)
@@ -190,9 +197,10 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 		var timed: float = _toward(base_max, worth, t)
 		if timed <= best:
 			continue
-		if is_nan(base):
+		if is_nan(base) or is_nan(keep):
 			base = base_at(pos, start_s, vel)
-		var race: float = AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
+			keep = _base_keep
+		var race: float = keep * AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
 				_defender_vels, true)
 		if _taken(base, race, timed) <= best:
 			continue
@@ -234,6 +242,7 @@ func base_at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) ->
 		defence = _base_defence
 	var keep: float = AIEvadeRead.evade_safety(pos, vel, defence, _defender_vels,
 			AIBotMechanics.EVADE_CARRY_HANDLE_M, _defender_caps)
+	_base_keep = keep
 	return keep * c - (1.0 - keep) * c_opp
 
 

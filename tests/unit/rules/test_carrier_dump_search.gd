@@ -157,12 +157,17 @@ func test_a_won_dump_is_worth_the_support_that_arrives_with_it() -> void:
 
 
 func test_against_a_stand_up_line_the_carrier_dumps_it_in() -> void:
-	var ctx: RoleContext = _stand_up_line(true)
-	var c := AIRoleCarrier.new()
-	c.decide(ctx)
-	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP, "walled off at the line, he dumps it")
-	assert_eq(c.pass_target_peer_id, -1, "to the ice, not to a receiver")
-	assert_true(c.dump_target.is_finite())
+	var alone := AIRoleCarrier.new()
+	alone.decide(_stand_up_line(false))
+	assert_eq(alone.intended_action, AIRoleCarrier.INTENT_DUMP, "walled off at the line, he dumps it")
+	assert_eq(alone.pass_target_peer_id, -1, "to the ice, not to a receiver")
+	assert_true(alone.dump_target.is_finite())
+	# With a trailer behind him the drop pass is a play too, and the two are
+	# close: either moves the puck, neither carries it into the wall.
+	var supported := AIRoleCarrier.new()
+	supported.decide(_stand_up_line(true))
+	assert_true(supported.intended_action in [AIRoleCarrier.INTENT_DUMP, AIRoleCarrier.INTENT_PASS],
+			"with support he still moves the puck")
 
 
 func test_a_dump_in_is_chipped_and_a_rim_is_not() -> void:

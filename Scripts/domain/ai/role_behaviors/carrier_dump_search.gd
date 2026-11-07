@@ -25,9 +25,10 @@ extends RefCounted
 # and reach out to), ours the
 # possession of the spot on arrival (AIPossessionValue) or the feed it opens to
 # the support arriving with the dump, its reception raced (_support_from),
-# theirs a turnover there when their collector's first play is away, against our
-# forechecker on his way in (_fill_check; AICarrierField.turnover_cost + the 5v5
-# counter exposure). An iced puck (NHL,
+# theirs a turnover there when their collector's first play is away, with the
+# dumper where his skate has him then (AICarrierField.turnover_cost + the 5v5
+# counter exposure), less the share our forechecker wins back off him before
+# then (_regain_odds), ours there with him still on it. An iced puck (NHL,
 # released from our half, untouched past their goal line) whose dot race their
 # side wins is a faceoff at our end, a coin flip there.
 #
@@ -46,6 +47,9 @@ const AIM_POINTS: Array[Vector2] = [
 # Paces, as shares of the carrier's wrister max: a soft dump that dies in the
 # zone, and a hard rim round the boards.
 const PACE_FRACS: Array[float] = [0.6, 1.0]
+# A stick on their man before his first play is away contests the puck, not
+# wins it: a tie for it, as the forecheck read counts one (AIForecheckRead).
+const BATTLE_SHARE: float = 0.5
 # Puck.release seats a lofted release this far above where it rests on the ice.
 const LOFT_SEAT_M: float = 0.1
 
@@ -93,8 +97,6 @@ var _our_then_val: Array[float] = []
 var _opp_then: Array[Vector3] = []
 # Which of _our_pos meets each raced launch first (its retriever).
 var _retriever: Array[int] = []
-# _chaser's answer.
-var _chase_pos: Vector3 = Vector3.ZERO
 # Per raced launch (index-matched, _count of them): its bearing and pace, the
 # odds our side plays it first, who meets it where and when, whether it ices,
 # and whether it goes unpriced (see _MAX_LAUNCHES).
@@ -112,12 +114,12 @@ var _meet_theirs: Array[Vector3] = []
 var _t_ours: Array[float] = []
 var _t_theirs: Array[float] = []
 var _t_keeper: Array[float] = []
-# Lost to their man: when his first play is away (AIForecheckRead's clock), and
-# our soonest forechecker where he is then, at his caps (INF: none, or their
-# keeper has it).
+# Lost: when their man's first play is away (AIForecheckRead's clock; their
+# keeper's: when he has it), the odds we win it back before then (_regain_odds),
+# and the dumper where his skate has him then (INF: no dumper on the ice).
 var _away: Array[float] = []
-var _check: Array[Vector3] = []
-var _check_caps: Array[AISkaterCaps] = []
+var _regain: Array[float] = []
+var _dumper_then: Array[Vector3] = []
 var _ours_vel: Array[Vector3] = []
 var _iced: Array[bool] = []
 var _skip: Array[bool] = []
@@ -139,8 +141,8 @@ func _init(field: AICarrierField) -> void:
 	_t_theirs.resize(_MAX_LAUNCHES)
 	_t_keeper.resize(_MAX_LAUNCHES)
 	_away.resize(_MAX_LAUNCHES)
-	_check.resize(_MAX_LAUNCHES)
-	_check_caps.resize(_MAX_LAUNCHES)
+	_regain.resize(_MAX_LAUNCHES)
+	_dumper_then.resize(_MAX_LAUNCHES)
 	_ours_vel.resize(_MAX_LAUNCHES)
 	_iced.resize(_MAX_LAUNCHES)
 	_skip.resize(_MAX_LAUNCHES)
@@ -300,15 +302,20 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float, lead_s:
 			_racer[k] = racer
 		_rival[k] = at.lerp(meet_theirs, clampf(t_ours / maxf(t_theirs, 0.001), 0.0, 1.0))
 	_away[k] = t_theirs
-	_check[k] = Vector3.INF
-	_check_caps[k] = null
+	_regain[k] = 0.0
 	if is_finite(t_theirs) and keeper_t > t_theirs:
 		var next: Vector3 = AILoosePuckChase.path_intercept_point(_path, STEP_DT, origin,
 				t_theirs + STEP_DT)
 		_away[k] = t_theirs + AIFeedReception.receiver_settle_s(
 				meet_theirs.distance_to(next) / STEP_DT) \
 				+ AIForecheckRead.CARRIER_READ_S + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
-		_fill_check(k, meet_theirs, lead_s)
+		_regain[k] = _regain_odds(meet_theirs, _away[k], lead_s)
+	_dumper_then[k] = Vector3.INF
+	if _self_index != -1 and is_finite(_away[k]):
+		var d: Vector3 = _our_pos[_self_index] + _our_vel[_self_index] * (lead_s + _away[k])
+		var on_ice: Vector2 = GameRules.clamp_to_rink_inner(Vector2(d.x, d.z),
+				AIStationSearch.RINK_INSET_M)
+		_dumper_then[k] = Vector3(on_ice.x, 0.0, on_ice.y)
 	_ours_vel[k] = ours_vel
 	_iced[k] = ctx.icing_enforced and _ices(ctx, origin, minf(t_ours, t_theirs))
 	# A launch we never win is worth only what their puck at the meet pays us,
@@ -371,52 +378,41 @@ static func launch_vel(dir: Vector3, pace: float) -> Vector3:
 # Launch `k`'s value (see the header).
 func _value(ctx: RoleContext, k: int) -> float:
 	var lost: float = 1.0 - _p[k]
+	var won_back: float = lost * _regain[k]
+	var kept: float = lost - won_back
 	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k],
 			_rival[k], _rival_caps[k]),
 			_support_from(ctx, k) \
 					* AIActionScoring.delay_discount(_t_ours[k]))
-	return _p[k] * ours \
-			- _field.turnover_cost(_meet_theirs[k], lost, _away[k], _check[k], _check_caps[k]) \
-			- _field.counter_exposure_cost(ctx, _meet_theirs[k], lost, ctx.self_pos,
+	var v: float = _p[k] * ours
+	if won_back > 0.0:
+		# Won back off their man where he played it, him still on it.
+		v += won_back * _field.possession_at(_meet_theirs[k], _away[k], Vector3.ZERO,
+				_meet_theirs[k], _rival_caps[k])
+	var self_caps: AISkaterCaps = _our_caps[_self_index] if _self_index != -1 else null
+	return v - _field.turnover_cost(_meet_theirs[k], kept, _away[k], _dumper_then[k], self_caps) \
+			- _field.counter_exposure_cost(ctx, _meet_theirs[k], kept, ctx.self_pos,
 					AIRoleReads.resolve_our_goalie_pos(ctx))
 
 
-# Launch `k` lost to their man at `meet`: our soonest forechecker by the
-# forecheck read's clock (AILoosePuckChase.reach_eta, from where the windup's
-# `lead_s` has him), where he is when that man's first play is away (_chaser).
-func _fill_check(k: int, meet: Vector3, lead_s: float) -> void:
-	var best_t: float = INF
-	var best: int = -1
+# The odds we win back a dump their man plays at `meet`, his first play away at
+# `away_s`: our soonest forechecker's stick on him before then, by the forecheck
+# read's clock (AILoosePuckChase.reach_eta, from where the windup's `lead_s` has
+# him), in arrival_race's contest band widened by the clock's error over the
+# trip; then a battle for it (BATTLE_SHARE).
+func _regain_odds(meet: Vector3, away_s: float, lead_s: float) -> float:
+	var on_s: float = INF
 	for i: int in _our_pos.size():
 		var c: AISkaterCaps = _our_caps[i]
-		var t: float = AILoosePuckChase.reach_eta(_our_pos[i] + _our_vel[i] * lead_s, meet,
+		on_s = minf(on_s, AILoosePuckChase.reach_eta(_our_pos[i] + _our_vel[i] * lead_s, meet,
 				_our_vel[i], AILoosePuckChase.race_vmax(c),
 				c.max_accel if c != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2,
-				c.max_blade_reach if c != null else AIBotMechanics.BLADE_REACH_M)
-		if t < best_t:
-			best_t = t
-			best = i
-	if best == -1 or not is_finite(best_t):
-		return
-	_chaser(_our_pos[best] + _our_vel[best] * lead_s, meet, best_t, _away[k], _our_caps[best])
-	_check[k] = _chase_pos
-	_check_caps[k] = _our_caps[best]
-
-
-# A body at `from` whose stick reaches `meet` `reach_s` from now, where he is
-# `at_s` from now, into _chase_pos: on his way in, that share of his trip, and a
-# blade off it at most. Read standing there: a man who has lost a race turns
-# onto its winner, never past him.
-func _chaser(from: Vector3, meet: Vector3, reach_s: float, at_s: float,
-		caps: AISkaterCaps) -> void:
-	var reach: float = caps.max_blade_reach if caps != null else AIBotMechanics.BLADE_REACH_M
-	var to_meet := Vector3(meet.x - from.x, 0.0, meet.z - from.z)
-	var d: float = to_meet.length()
-	if d <= reach or reach_s <= 0.0:
-		_chase_pos = from
-		return
-	var stand: Vector3 = from + to_meet * ((d - reach) / d)
-	_chase_pos = from.lerp(stand, clampf(at_s / reach_s, 0.0, 1.0))
+				c.max_blade_reach if c != null else AIBotMechanics.BLADE_REACH_M))
+	if not is_finite(on_s):
+		return 0.0
+	var band: float = AIActionScoring.CHASE_CONTEST_MARGIN_S \
+			+ AIArrival.ERROR_FRAC * maxf(on_s, away_s)
+	return BATTLE_SHARE * clampf(0.5 + (away_s - on_s) / (2.0 * band), 0.0, 1.0)
 
 
 # When their keeper first gets a stick on the path just walked: a point in front
