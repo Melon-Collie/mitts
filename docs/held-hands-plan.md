@@ -1,6 +1,6 @@
 # Held hands — gameplay hands a body can hold, drawn as checked
 
-Status: PHASE 2 BUILT BEHIND A SWITCH (off). Waiting on decisions in §12 and a playtest.
+Status: PHASE 2 BUILT BEHIND A SWITCH (off), with the reach changes of §13. Not yet playable on the backhand in tight (§14).
 
 One line: **the blade stays where gameplay puts it today; the hand that holds
 the stick is moved, by the least that makes it holdable, by one pure body
@@ -415,3 +415,55 @@ Proposed, waiting on the user:
   unchanged but for a few centimetres in front.
 - **Skating, the carry** stops short of the forehand side behind the hip,
   where no hold exists.
+
+## 14. The reach changes, built behind the switch
+
+Taken, with the user's go-ahead on §13's proposal:
+
+- **The held hand** holds the shaft within 22° of the blade's own lie and
+  the top hand under the chest (`SkaterHoldModel.project`, `lie`,
+  `HAND_BELOW_SHOULDER_M`).
+- **The carry floor** grows across the front
+  (`SkaterController.carry_front_floor_*`): 7 cm standing, 17 cm at the full
+  skating fold, from 50° round the backhand to 90° round the forehand, faded
+  over 15°.
+- **The celebration** keeps the marker, as shots do.
+
+Not taken: stopping the skating carry behind the forehand. §13's "no hold
+there" was the instruments' doing. They aimed a skating cursor off the facing
+every tick, so a cursor behind the skater ran round with him and he spun
+after it. Aimed across the ice off up-ice, those blades sit 0.81–0.85 m out
+at +107° to +113° and are held. (`test_carry_clipping.gd`, not part of this
+work, aims the same way and was left.)
+
+### Measured with the switch on
+
+- **Tight room** (`test_tight_room.gd`, ±22°): today's floor against the
+  holdable floor under the corrected aim needs +7 cm standing in front and
+  +12–22 cm skating in front, the latter set by the height rule. With the new
+  floor, room lost to a holdable pose averages 1 cm standing and 2 cm skating.
+- **Hold map, scored on the drawn trunk:** median 0 mm standing and 1 mm
+  skating, but the tail is long (standing 90th percentile 120 mm, max 201).
+  That tail is the backhand in tight: the blade parked at the backhand stop
+  (−67°, 0.68 m), where the only held hand is on the far side of the stick's
+  circle, across the body at the top of the lie window. The projection steps
+  from today's hand on the near side, the bottom elbow's push carries it round
+  the near way, and it stalls with the bottom arm 115 mm short; the drawn
+  bottom hand then lets go of the stick. In front, the residual left on the
+  drawn body (13–14 mm) is the trunk's height under the chest fold (§12).
+- **Smoothness** (`test_body_stays_smooth.gd`): over its gates with the
+  switch on in five scenarios — the flipped-cursor pivot (top arm 17%, stick
+  7%), the skating wrister's hand-off (14%), pickup/drop (7%), backward to
+  forward (bottom arm 7%) — the held hand travelling further than the marker
+  does. All pass with the switch off.
+
+### What comes next
+
+- **The far side.** A local projection cannot reach a held hand across the
+  circle. It needs a second start there (the nearest held point of a coarse
+  ring, `search_lie`'s), kept by hysteresis so it does not flip between the
+  two each tick, and eased across when it does change.
+- **The native port** (§8 phase 4) before that: a second start multiplies a
+  cost that is already ~2.7 ms a skater a tick in GDScript.
+- **A playtest** in free play to judge the look in front and at the sides;
+  the backhand in tight will look worse than today until the far side is in.
