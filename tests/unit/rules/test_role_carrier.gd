@@ -2862,3 +2862,31 @@ func test_the_keeper_read_names_the_play_he_saw() -> void:
 	out.dispatch_period_ticks = reset_ticks
 	c.decide(out)
 	assert_eq(c._shot_history(), AIShotOdds.History.CARRIED, "the wrap long over")
+
+
+func test_a_shot_released_outside_the_zone_or_behind_the_line_is_none() -> void:
+	# Where the shot leaves the blade decides it, not where the shooter stands.
+	var goal := Vector3(0.0, 0.0, OPP_NET_Z)
+	var home := Vector3(0.0, 0.0, OPP_NET_Z + 0.8)
+	var line: float = -GameRules.BLUE_LINE_Z
+	assert_true(AIRoleCarrier._shootable_from(Vector3(0.0, 0.0, line - 0.5), goal, home),
+			"inside the line")
+	assert_false(AIRoleCarrier._shootable_from(Vector3(0.0, 0.0, line + 0.5), goal, home),
+			"released over the line, the keeper home")
+	assert_true(AIRoleCarrier._shootable_from(Vector3(0.0, 0.0, line + 0.5), goal,
+			Vector3(0.0, 0.0, OPP_NET_Z + 10.0)), "over the line at an empty net")
+	assert_false(AIRoleCarrier._shootable_from(Vector3(2.0, 0.0, OPP_NET_Z - 0.3), goal, home),
+			"released behind the goal line")
+
+
+func test_a_point_man_backing_over_the_line_prices_no_shot() -> void:
+	# Just inside their line, skating out of the zone: his pull and wind-up carry
+	# the release over it, so the shot he would fire is no shot.
+	var at := Vector3(0.0, 0.0, -GameRules.BLUE_LINE_Z - 0.3)
+	var ctx: RoleContext = _set_keeper(_make_ctx(at))
+	ctx.snapshot.skater_states[1].velocity = Vector3(0.0, 0.0, 4.0)
+	ctx.self_velocity = Vector3(0.0, 0.0, 4.0)
+	assert_lte(_decided(ctx)._phase_shoot_score, 0.0, "backing out, no shot")
+	var still: RoleContext = _set_keeper(_make_ctx(at))
+	assert_gt(_decided(still)._phase_shoot_score, 0.0, "standing there, he has one")
+

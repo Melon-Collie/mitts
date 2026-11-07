@@ -1743,9 +1743,11 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 		_intended_action = new_intent
 
 	# Steering by latched intent. CARRY drifts to the carry destination. A SHOOT
-	# pre-aim steers to the projected release position — no braking, so the shot
-	# fires before the goalie can reset. A PASS brakes: pass leads aim from a held
-	# spot.
+	# pre-aim glides: the release was priced at the body's velocity now, so it
+	# neither brakes (the shot fires before the goalie can reset) nor pushes on
+	# (steered at a point re-projected ahead each tick, a shooter drifting away
+	# from the net built speed away from it, and his blade lagged the hold the
+	# load was priced from). A PASS brakes: pass leads aim from a held spot.
 	if _intended_action == State.CARRY:
 		if _carrier.carry_move >= 0:
 			# The rolled move the carrier priced is the input it skates, the stance
@@ -1761,11 +1763,8 @@ func _state_carry(input: InputState, snapshot: WorldSnapshot, self_pos: Vector3,
 			_apply_steering(input, snapshot, self_pos, _last_carry_anchor,
 					false, _self_max_speed)
 	elif _intended_action == State.SHOOT_PRESSED:
-		var hv: Vector3 = Vector3.ZERO
-		if self_state != null:
-			hv = Vector3(self_state.velocity.x, 0.0, self_state.velocity.z)
-		_apply_steering(input, snapshot, self_pos,
-				self_pos + hv * AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S)
+		input.move_vector = Vector2.ZERO
+		input.brake = false
 	else:
 		_apply_brake_steering(input, snapshot, self_pos)
 

@@ -593,9 +593,11 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var share: float = _field.holds.share[k]
 		var pull_s: float = _field.holds.pull_s[k]
 		var sample_speed: float = ctx.self_wrister_shot_speed * share
-		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-				self_pos + hold + horizontal_velocity
-						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s),
+		var released_at: Vector3 = self_pos + hold + horizontal_velocity \
+				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + pull_s)
+		if not _shootable_from(released_at, attacking_goal, goalie_now):
+			continue
+		var release: Vector3 = AIGoalieModel.release_ahead_of_goalie(released_at,
 				attacking_goal, goalie_now)
 		# Priced through the seam like the carry and pass legs, against the
 		# keeper as he reads now: the field prices what he does over the wind-up
@@ -622,12 +624,14 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		var tip_hold := Vector3(_field.holds.offset[tip_k].x, 0.0, _field.holds.offset[tip_k].y)
 		var tip_share: float = _field.holds.share[tip_k]
 		var tip_pull_s: float = _field.holds.pull_s[tip_k]
-		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(
-				self_pos + tip_hold + horizontal_velocity
-						* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s),
+		var tip_released_at: Vector3 = self_pos + tip_hold + horizontal_velocity \
+				* (AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S + tip_pull_s)
+		var tip_release: Vector3 = AIGoalieModel.release_ahead_of_goalie(tip_released_at,
 				attacking_goal, goalie_now)
 		var tip_speed: float = ctx.self_wrister_shot_speed * tip_share
-		for tip_man: Vector3 in _field.receiver_pos:
+		for tip_man: Vector3 in _field.receiver_pos \
+				if _shootable_from(tip_released_at, attacking_goal, goalie_now) \
+				else AIActionScoring.EMPTY_VEC3:
 			var tip_s: float = AIActionScoring.tip_ev(
 					tip_release, tip_man, attacking_goal, goalie_now,
 					_field.opponents_release,
@@ -658,6 +662,19 @@ func _pick_fire_phase(ctx: RoleContext) -> void:
 		_phase_dump_score = _dump.best_score
 		_phase_dump_dir = _dump.best_dir
 		_phase_dump_pace = _dump.best_pace
+
+
+# Whether a shot released at `released_at` can score at all, by the proofs the
+# fire phase gates the puck where it is on: in front of the goal line, and inside
+# the zone unless their keeper has left his net. The release is where the shot
+# leaves from, so a point man backing over the line or a carrier skating behind
+# the goal line through his pull and wind-up has no shot to price.
+static func _shootable_from(released_at: Vector3, attacking_goal: Vector3,
+		goalie_now: Vector3) -> bool:
+	if (released_at.z - attacking_goal.z) * -signf(attacking_goal.z) <= SHOT_MIN_FORWARD_OF_LINE_M:
+		return false
+	return AIActionScoring.in_offensive_zone(released_at, attacking_goal) \
+			or goalie_now.distance_to(attacking_goal) >= AIActionScoring.THREAT_GOALIE_HOME_M
 
 
 # COMMIT phase of the compete: the CARRY candidate argmax, and the
