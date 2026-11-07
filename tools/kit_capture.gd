@@ -28,9 +28,11 @@ const _PX_PER_M: float = 420.0
 # would bend the texture across that trapezoid.
 const _TUBE_COLUMNS: int = 12
 const _SLEEVE_DROP_DEG: float = 40.0
-# Sleeve root: in from the edge of the torso's shoulder line (its widest ring
-# within _SHOULDER_LINE_SPAN_M of the collar), where the armhole's seam runs.
-const _SLEEVE_INSET_M: float = 0.03
+# Sleeve root: out past the edge of the torso's shoulder line (its widest ring
+# within _SHOULDER_LINE_SPAN_M of the collar). The torso is drawn over the
+# sleeve, and the shoulder number runs across the sleeve toward the armpit, so a
+# root at or inside the edge tucks the number under the body.
+const _SLEEVE_OUTSET_M: float = 0.03
 const _SHOULDER_LINE_SPAN_M: float = 0.10
 # The neck opening cut into the collar station, trimmed in the collar color
 # (the torso's top cap) — a flat-lay convention, not a measured part.
@@ -366,7 +368,7 @@ func _draw_jersey(c: Node2D, top_center: Vector2, kit: Dictionary, side: int,
 	var line: Vector3 = _shoulder_line()
 	var roots: Array[Vector2] = []
 	for dir: float in [-1.0, 1.0]:
-		roots.append(top_center + Vector2(dir * (line.y * 0.5 - _SLEEVE_INSET_M),
+		roots.append(top_center + Vector2(dir * (line.y * 0.5 + _SLEEVE_OUTSET_M),
 				line.x) * _PX_PER_M)
 	for i: int in 2:
 		_draw_sleeve(c, roots[i], -1.0 if i == 0 else 1.0, side)
