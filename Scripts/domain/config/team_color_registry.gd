@@ -174,6 +174,56 @@ static func get_score_stripe_pair(home_slot: int, away_slot: int) -> Dictionary:
 	}
 
 
+# A team colour used as INK — text, lines, dots and bars drawn straight onto a
+# surface — must read on it; as a FILL (a stripe or swatch beside white
+# lettering) it stays the true primary, which is what get_score_stripe_pair is.
+# WCAG AA for small text: the analytics labels and card rosters are 11–16 px.
+const INK_MIN_CONTRAST: float = 4.5
+# Below this HSV saturation the lifted ink is a grey, which reads as the UI's own
+# neutral text rather than as a team (Blackberry's near-black primary).
+const _INK_MIN_SATURATION: float = 0.2
+
+
+# Each team's ink on `surface`. Returns { home, away } as Colors.
+static func get_score_ink_pair(home_slot: int, away_slot: int, surface: Color) -> Dictionary:
+	return {
+		"home": _ink_for(get_preset(home_slot), surface),
+		"away": _ink_for(get_preset(away_slot), surface),
+	}
+
+
+# The primary lifted to read on `surface`, unless that lift is a hueless grey and
+# the secondary's is not.
+static func _ink_for(preset: Dictionary, surface: Color) -> Color:
+	var primary: Color = readable_on(preset.primary, surface)
+	if primary.s >= _INK_MIN_SATURATION:
+		return primary
+	var secondary: Color = readable_on(preset.secondary, surface)
+	return secondary if secondary.s > primary.s else primary
+
+
+# `ink` unchanged if it already reaches `min_contrast` on `surface`; otherwise
+# the nearest OKHSL lightness, hue and saturation held, that does. Lightens on a
+# dark surface, darkens on a light one; the far end (white or black) is returned
+# when even it falls short.
+static func readable_on(ink: Color, surface: Color,
+		min_contrast: float = INK_MIN_CONTRAST) -> Color:
+	if contrast_ratio(ink, surface) >= min_contrast:
+		return ink
+	var h: float = ink.ok_hsl_h
+	var s: float = ink.ok_hsl_s
+	var fails: float = ink.ok_hsl_l
+	var passes: float = 1.0 \
+			if contrast_ratio(Color.WHITE, surface) >= contrast_ratio(Color.BLACK, surface) else 0.0
+	for _i: int in 16:
+		var mid: float = (fails + passes) * 0.5
+		if contrast_ratio(Color.from_ok_hsl(h, s, mid, ink.a), surface) >= min_contrast:
+			passes = mid
+		else:
+			fails = mid
+	return Color.from_ok_hsl(h, s, passes, ink.a)
+
+
 static func get_all_slots() -> Array[int]:
 	ensure_loaded()
 	var result: Array[int] = []
