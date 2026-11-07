@@ -2890,3 +2890,18 @@ func test_a_point_man_backing_over_the_line_prices_no_shot() -> void:
 	var still: RoleContext = _set_keeper(_make_ctx(at))
 	assert_gt(_decided(still)._phase_shoot_score, 0.0, "standing there, he has one")
 
+
+
+func test_a_pass_leaves_from_the_ice_not_through_the_boards() -> void:
+	# Skating into the end boards behind our own net at 7.8 m/s: the windup's
+	# travel ends at the boards, so the release is priced from there.
+	var at := Vector3(3.6, 0.0, 29.1)
+	var ctx: RoleContext = _make_ctx(at)
+	ctx.self_velocity = Vector3(0.3, 0.0, 7.8)
+	var origin: Vector3 = AICarrierField.pass_origin(ctx)
+	var ice: Vector2 = GameRules.clamp_to_rink_inner(Vector2(origin.x, origin.z),
+			GameRules.PUCK_COLLISION_RADIUS)
+	assert_almost_eq(Vector2(origin.x, origin.z), ice, Vector2.ONE * 0.001, "on the ice")
+	assert_gt(origin.z, at.z, "carried on toward the boards up to them")
+	ctx.self_velocity = Vector3(0.0, 0.0, -4.0)
+	assert_lt(AICarrierField.pass_origin(ctx).z, at.z, "skating away, carried on as before")

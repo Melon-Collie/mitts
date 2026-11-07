@@ -301,7 +301,11 @@ static func pass_origin(ctx: RoleContext) -> Vector3:
 	var b: float = GameRules.DEFAULT_SKATER_STOP_DECEL_M_S2
 	var travel: float = speed * t - 0.5 * b * t * t if speed > b * t \
 			else speed * speed / (2.0 * b)
-	return Vector3(at.x + v.x / speed * travel, 0.0, at.z + v.z / speed * travel)
+	# The boards stop him as they stop the puck: a carrier skating into the end
+	# boards releases at them, not behind them.
+	var ice: Vector2 = GameRules.clamp_to_rink_inner(Vector2(at.x + v.x / speed * travel,
+			at.z + v.z / speed * travel), GameRules.PUCK_COLLISION_RADIUS)
+	return Vector3(ice.x, 0.0, ice.y)
 
 
 # The keeper's stance at a shot `t` s from now: the one he is in for a shot
