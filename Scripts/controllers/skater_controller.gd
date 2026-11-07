@@ -452,6 +452,16 @@ var carry_reach_min_m: float = 0.8
 # hands, and held as close as standing, the top hand rises level with it, the
 # elbow hangs below the fist and the shaft leaves it past the little finger.
 var carry_reach_fold_m: float = 0.15
+# With held hands (SkaterIKCoordinator.held_hands), this much further out in
+# front of him, standing, and this much more with his chest folded over his
+# skating: a top hand held under the chest on a stick at its lie holds no
+# nearer (tests/instruments/actors/test_tight_room.gd, docs/held-hands-plan.md
+# §13). Across the front from carry_front_floor_deg.x round the backhand to .y
+# round the forehand, fading over carry_front_floor_band_deg beyond each.
+var carry_front_floor_m: float = 0.07
+var carry_front_fold_floor_m: float = 0.10
+var carry_front_floor_deg := Vector2(-50.0, 80.0)
+var carry_front_floor_band_deg: float = 15.0
 var lower_body_pitch_follow: float = 0.35
 
 # ── Lower Body Lag Tuning ─────────────────────────────────────────────────────
@@ -1343,6 +1353,8 @@ var _base_hand_rest_y:                  float = 0.0
 var _base_hand_y_max:                   float = 0.0
 var _base_carry_reach_min_m:            float = 0.0
 var _base_carry_reach_fold_m:           float = 0.0
+var _base_carry_front_floor_m:          float = 0.0
+var _base_carry_front_fold_floor_m:     float = 0.0
 
 
 # Snapshot this body's attribute-scaled capabilities as the bot AI models them —
@@ -1515,6 +1527,8 @@ func apply_attributes(attrs: PlayerAttributes) -> void:
 	hand_y_max  = _base_hand_y_max  * m_height
 	carry_reach_min_m = _base_carry_reach_min_m * m_height
 	carry_reach_fold_m = _base_carry_reach_fold_m * m_height
+	carry_front_floor_m = _base_carry_front_floor_m * m_height
+	carry_front_fold_floor_m = _base_carry_front_fold_floor_m * m_height
 	# The gait's crouch drop rides the same leg scale the appearance pass
 	# applies to the leg pivot chain, so flexed knees sink a tall build
 	# proportionally deeper.
@@ -1599,6 +1613,8 @@ func _capture_attribute_bases() -> void:
 	_base_hand_y_max                   = hand_y_max
 	_base_carry_reach_min_m            = carry_reach_min_m
 	_base_carry_reach_fold_m           = carry_reach_fold_m
+	_base_carry_front_floor_m          = carry_front_floor_m
+	_base_carry_front_fold_floor_m     = carry_front_fold_floor_m
 	_base_skater_upper_arm_length      = skater.upper_arm_length
 	_base_skater_forearm_length        = skater.forearm_length
 	_base_skater_shoulder_reach_m      = skater.shoulder_reach_m

@@ -16,8 +16,9 @@ extends GutTest
 #   best    the least any hand on the sphere reaches (mm)
 #   move    how far the nearest hand the body holds outright lies from the
 #           anchor (cm), "--" where none does within the search
-#   prj     the held hand SkaterHoldModel.project finds on the tick's trunk,
-#           scored on the drawn one (mm), and how far it moved (cm)
+#   prj     the held hand SkaterHoldModel.project finds on the tick's trunk
+#           (the blade's lie, the hand under the chest), scored on the drawn
+#           one without the height rule (mm), and how far it moved (cm)
 # Then the cursor swept round at a carry's pace, sampled every third tick.
 #
 # Asserts nothing: run it when the question is "can the hands be held".
@@ -121,7 +122,10 @@ func _cell() -> Dictionary:
 	SkaterHoldModel.evaluate(_drawn, hand, blade, _report)
 	var cell: Dictionary = {"anchor": _report.total(), "bind": _report.binding(),
 			"tick": tick_total, "best": 0.0, "move": 0.0}
-	var held: Vector3 = SkaterHoldModel.project(_tick, hand, blade, _scratch)
+	var lie: float = deg_to_rad(_skater.blade_lie_deg)
+	_tick.hand_below_shoulder = SkaterHoldModel.HAND_BELOW_SHOULDER_M
+	var held: Vector3 = SkaterHoldModel.project(_tick, hand, blade, lie, _scratch)
+	_tick.hand_below_shoulder = INF
 	SkaterHoldModel.evaluate(_drawn, held, blade, _scratch)
 	cell["prj"] = _scratch.total()
 	cell["prj_move"] = held.distance_to(hand)
@@ -177,7 +181,10 @@ func _sweep(r: float, skating: bool) -> String:
 		# Every tick: how far the held hand steps against the anchor's step.
 		_controller._ik.fill_hold_body(_tick)
 		var anchor: Vector3 = _skater.top_hand.position
-		var held: Vector3 = SkaterHoldModel.project(_tick, anchor, _skater.blade.position, _scratch)
+		_tick.hand_below_shoulder = SkaterHoldModel.HAND_BELOW_SHOULDER_M
+		var held: Vector3 = SkaterHoldModel.project(_tick, anchor, _skater.blade.position,
+				deg_to_rad(_skater.blade_lie_deg), _scratch)
+		_tick.hand_below_shoulder = INF
 		if prev_held != Vector3.INF:
 			var step: float = held.distance_to(prev_held)
 			worst_step = maxf(worst_step, step)
@@ -252,7 +259,10 @@ func _step(input: InputState, aim: Vector3, skating: bool) -> void:
 		_skater.velocity = Vector3.ZERO
 		_controller._pose.facing = Vector2(0.0, -1.0)
 		_skater.set_facing(_controller._pose.facing)
-	input.mouse_world_pos = _skater.global_position + _skater.global_transform.basis * aim
+	# The cursor stays where it was put across the ice, off up-ice (the facing
+	# held standing, the travel skating): aimed off the facing as it turns, a
+	# cursor behind him runs round with him and he spins after it.
+	input.mouse_world_pos = _skater.global_position + aim
 	input.mouse_world_pos.y = 0.0
 	_skater.capture_prev_blade_contact()
 	_controller._process_input(input, DT)

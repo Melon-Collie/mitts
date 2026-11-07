@@ -176,7 +176,10 @@ func _step(input: InputState, aim: Vector3, skating: bool) -> void:
 		_skater.velocity = Vector3.ZERO
 		_controller._pose.facing = Vector2(0.0, -1.0)
 		_skater.set_facing(_controller._pose.facing)
-	input.mouse_world_pos = _skater.global_position + _skater.global_transform.basis * aim
+	# The cursor stays where it was put across the ice, off up-ice (the facing
+	# held standing, the travel skating): aimed off the facing as it turns, a
+	# cursor behind him runs round with him and he spins after it.
+	input.mouse_world_pos = _skater.global_position + aim
 	input.mouse_world_pos.y = 0.0
 	_skater.capture_prev_blade_contact()
 	_controller._process_input(input, DT)

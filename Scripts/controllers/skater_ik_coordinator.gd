@@ -640,7 +640,7 @@ func _native_blade_toward(target_world: Vector3, delta: float, hold_blade: bool,
 	s[PassS.HAS_NET_ANCHOR] = 1.0 if _has_net_side_anchor else 0.0
 	s[PassS.REACH_PURPOSE] = reach_purpose
 	s[PassS.CHEST_FOLD] = chest_fold()
-	s[PassS.CARRY_FLOOR] = carry_reach_floor() if has_puck else 0.0
+	s[PassS.CARRY_FLOOR] = carry_reach_floor(target_world) if has_puck else 0.0
 	s[PassS.HAND_FORWARD] = _hand_forward()
 	var v: PackedVector3Array = _pass_vectors
 	v[PassV.TARGET] = target_world
@@ -722,18 +722,38 @@ func _held_out(cursor_world: Vector3) -> Vector3:
 	var facing: Transform3D = _skater.global_transform
 	var local: Vector3 = facing.affine_inverse() * cursor_world
 	var held: Vector2 = CarryPostureRules.held_out(Vector2(local.x, local.z),
-			carry_reach_floor())
+			carry_reach_floor(cursor_world))
 	var world: Vector3 = facing * Vector3(held.x, local.y, held.y)
 	world.y = 0.0
 	return world
 
 
-# How close in a carried puck comes (m off his centre), from his skating fold:
+# How close in a carried puck comes (m off his centre), from his skating fold
+# and, with held hands, the cursor's bearing (`cursor_world`; INF for none):
 # tick state on every peer, so the floor needs no wire field.
-func carry_reach_floor() -> float:
+func carry_reach_floor(cursor_world: Vector3 = Vector3.INF) -> float:
 	var folded: float = clampf(-_skater.trunk_fold()
 			/ deg_to_rad(_controller.velocity_lean_forward_max_deg), 0.0, 1.0)
-	return _controller.carry_reach_min_m + _controller.carry_reach_fold_m * folded
+	var floor_m: float = _controller.carry_reach_min_m + _controller.carry_reach_fold_m * folded
+	if held_hands and cursor_world.is_finite():
+		floor_m += (_controller.carry_front_floor_m + _controller.carry_front_fold_floor_m * folded) \
+				* _front_share(cursor_world)
+	return floor_m
+
+
+# How far `cursor_world` lies inside the front the held hand's floor grows
+# across (SkaterController.carry_front_floor_deg), 0 to 1, by its bearing off
+# the facing from the body's centre, + round the forehand.
+func _front_share(cursor_world: Vector3) -> float:
+	var local: Vector3 = _skater.global_transform.affine_inverse() * cursor_world
+	if Vector2(local.x, local.z).length_squared() < 0.000001:
+		return 1.0
+	var forehand: float = signf(_skater.bottom_shoulder.position.x)
+	var bearing: float = rad_to_deg(atan2(local.x * forehand, -local.z))
+	var edges: Vector2 = _controller.carry_front_floor_deg
+	var band: float = _controller.carry_front_floor_band_deg
+	return smoothstep(edges.x - band, edges.x, bearing) \
+			* (1.0 - smoothstep(edges.y, edges.y + band, bearing))
 
 
 # The solve places the Blade marker, the heel, but the blade plays the puck at
@@ -983,7 +1003,8 @@ func update_bottom_hand(delta: float = -1.0) -> void:
 	_skater.set_bottom_hand_position(bh)
 
 # The top hand a body holds the stick with, UpperBody-local: the marker moved
-# over the sphere the stick allows round the blade by the least that holds it
+# over the sphere the stick allows round the blade by the least that holds it,
+# the shaft near the blade's lie and the hand under the chest
 # (SkaterHoldModel.project, against fill_hold_body's body), or the marker itself
 # with held hands off, while a shot or the block has the stick, which pose
 # their own hands, and while he is down or diving, a body the model's upright
@@ -1003,7 +1024,9 @@ func held_top_hand() -> Vector3:
 	_held_key = key
 	_held_fold = fold
 	fill_hold_body(_hold_body)
-	_held_hand = SkaterHoldModel.project(_hold_body, marker, _skater.blade.position, _hold_report)
+	_hold_body.hand_below_shoulder = SkaterHoldModel.HAND_BELOW_SHOULDER_M
+	_held_hand = SkaterHoldModel.project(_hold_body, marker, _skater.blade.position,
+			deg_to_rad(_skater.blade_lie_deg), _hold_report)
 	return _held_hand
 
 

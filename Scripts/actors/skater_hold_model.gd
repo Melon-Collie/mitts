@@ -37,7 +37,8 @@ class Body:
 	var grip: float = 0.25
 	# How far under its own shoulder the top hand must ride (m); INF for no such
 	# limit. A body can hold the stick higher, but a player carrying the puck
-	# does not (docs/arm-anatomy-plan.md §4, docs/held-hands-plan.md §13).
+	# does not (docs/arm-anatomy-plan.md §4, docs/held-hands-plan.md §13):
+	# HAND_BELOW_SHOULDER_M for a carry.
 	var hand_below_shoulder: float = INF
 
 
@@ -91,6 +92,7 @@ const SHAFT_SAMPLES: int = 8
 const SHAFT_FROM: float = 0.12
 const SHAFT_TO: float = 0.6
 const SHAFT_RADIUS_M: float = 0.015
+const HAND_BELOW_SHOULDER_M: float = 0.2
 
 
 static func evaluate(body: Body, hand: Vector3, blade: Vector3, out: Report) -> void:
@@ -154,12 +156,16 @@ static func _clearance(p: Vector3, to_torso: Transform3D, unit: float) -> float:
 
 
 # The held hand: `anchor` moved over the sphere the rigid stick allows round
-# `blade` by the least that holds it, in a fixed number of steps from the
-# anchor, so it is a function of its inputs alone. Each step moves the hand by
+# `blade` by the least that holds it, the shaft rising within PROJECT_LIE_DEG of
+# `lie` (the blade's own lie, radians) so the blade rides its heel or toe no
+# further than that — the anchor itself laid into that window first, since a
+# tight carry stands the stick up past it — in steps from there, so it is a
+# function of its inputs alone. Each step moves the hand by
 # every limit it breaks, each along the way out of it, as far as it is past —
 # the fist, the knob and a point of the shaft out of the jersey along its
 # normal (a shaft point moving 1/(1−t) of the hand, the blade the pivot), the
-# hand off its own shoulder or toward it for the top arm's fold and reach, the
+# hand off its own shoulder or toward it for the top arm's fold and reach, down
+# for its height, the
 # hand out of the jersey with the elbow sunk in it, and the shaft toward the
 # bottom shoulder with the bottom arm short or sunk — and back onto the
 # sphere, its lie held within PROJECT_LIE_DEG of the anchor's. A move is as
@@ -171,25 +177,26 @@ static func _clearance(p: Vector3, to_torso: Transform3D, unit: float) -> float:
 # differs tick to tick, where the settled one moves with its inputs.
 const PROJECT_STEPS: int = 24
 const PROJECT_SETTLED_M: float = 0.0005
-const PROJECT_LIE_DEG: float = 15.0
+const PROJECT_LIE_DEG: float = 22.0
 const _NORMAL_STEP_M: float = 0.01
 
 
-static func project(body: Body, anchor: Vector3, blade: Vector3, scratch: Report) -> Vector3:
-	var span: Vector3 = anchor - blade
-	var length: float = span.length()
+static func project(body: Body, anchor: Vector3, blade: Vector3, lie: float,
+		scratch: Report) -> Vector3:
+	var length: float = anchor.distance_to(blade)
 	if length < 0.0001:
 		return anchor
-	var lie0: float = asin(clampf(span.y / length, -1.0, 1.0))
 	var to_torso: Transform3D = body.torso.affine_inverse()
 	var unit: float = body.torso.basis.get_scale().x
-	var hand: Vector3 = anchor
+	var hand: Vector3 = _on_sphere(blade, anchor, length, lie)
+	if not hand.is_finite():
+		return anchor
 	for _i: int in PROJECT_STEPS:
 		evaluate(body, hand, blade, scratch)
 		if scratch.total() <= 0.0:
 			break
 		var push: Vector3 = _push(body, hand, blade, scratch, to_torso, unit)
-		var next: Vector3 = _on_sphere(blade, hand + push, length, lie0)
+		var next: Vector3 = _on_sphere(blade, hand + push, length, lie)
 		if not next.is_finite():
 			return anchor
 		var moved: float = next.distance_to(hand)
@@ -221,6 +228,7 @@ static func _push(body: Body, hand: Vector3, blade: Vector3, held: Report,
 		push += _out_of_jersey(hand + span * at, to_torso, unit) * (worst / (1.0 - at))
 	var off_shoulder: Vector3 = (hand - body.shoulders[0]).normalized()
 	push += off_shoulder * (held.fold - held.top.reach_past)
+	push += Vector3.DOWN * held.high
 	if held.top.sleeve > 0.0:
 		push += _out_of_jersey(held.top.elbow, to_torso, unit) * held.top.sleeve
 	var lever: float = maxf(1.0 - held.bottom_grip, 0.2)
