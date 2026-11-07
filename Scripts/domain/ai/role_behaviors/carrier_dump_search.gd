@@ -25,8 +25,9 @@ extends RefCounted
 # and reach out to), ours the
 # possession of the spot on arrival (AIPossessionValue) or the feed it opens to
 # the support arriving with the dump, its reception raced (_support_from),
-# theirs a turnover there
-# (AICarrierField.turnover_cost + the 5v5 counter exposure). An iced puck (NHL,
+# theirs a turnover there when their collector's first play is away, against our
+# forechecker on his way in (_fill_check; AICarrierField.turnover_cost + the 5v5
+# counter exposure). An iced puck (NHL,
 # released from our half, untouched past their goal line) whose dot race their
 # side wins is a faceoff at our end, a coin flip there.
 #
@@ -92,6 +93,8 @@ var _our_then_val: Array[float] = []
 var _opp_then: Array[Vector3] = []
 # Which of _our_pos meets each raced launch first (its retriever).
 var _retriever: Array[int] = []
+# _chaser's answer.
+var _chase_pos: Vector3 = Vector3.ZERO
 # Per raced launch (index-matched, _count of them): its bearing and pace, the
 # odds our side plays it first, who meets it where and when, whether it ices,
 # and whether it goes unpriced (see _MAX_LAUNCHES).
@@ -101,12 +104,20 @@ var _pace: Array[float] = []
 var _origin: Array[Vector3] = []
 var _rival: Array[Vector3] = []
 var _rival_caps: Array[AISkaterCaps] = []
+# Which of the opponents is the rival (-1: their keeper, or nobody).
+var _racer: Array[int] = []
 var _p: Array[float] = []
 var _meet_ours: Array[Vector3] = []
 var _meet_theirs: Array[Vector3] = []
 var _t_ours: Array[float] = []
 var _t_theirs: Array[float] = []
 var _t_keeper: Array[float] = []
+# Lost to their man: when his first play is away (AIForecheckRead's clock), and
+# our soonest forechecker where he is then, at his caps (INF: none, or their
+# keeper has it).
+var _away: Array[float] = []
+var _check: Array[Vector3] = []
+var _check_caps: Array[AISkaterCaps] = []
 var _ours_vel: Array[Vector3] = []
 var _iced: Array[bool] = []
 var _skip: Array[bool] = []
@@ -120,12 +131,16 @@ func _init(field: AICarrierField) -> void:
 	_origin.resize(_MAX_LAUNCHES)
 	_rival.resize(_MAX_LAUNCHES)
 	_rival_caps.resize(_MAX_LAUNCHES)
+	_racer.resize(_MAX_LAUNCHES)
 	_p.resize(_MAX_LAUNCHES)
 	_meet_ours.resize(_MAX_LAUNCHES)
 	_meet_theirs.resize(_MAX_LAUNCHES)
 	_t_ours.resize(_MAX_LAUNCHES)
 	_t_theirs.resize(_MAX_LAUNCHES)
 	_t_keeper.resize(_MAX_LAUNCHES)
+	_away.resize(_MAX_LAUNCHES)
+	_check.resize(_MAX_LAUNCHES)
+	_check_caps.resize(_MAX_LAUNCHES)
 	_ours_vel.resize(_MAX_LAUNCHES)
 	_iced.resize(_MAX_LAUNCHES)
 	_skip.resize(_MAX_LAUNCHES)
@@ -276,12 +291,24 @@ func _race(ctx: RoleContext, origin: Vector3, dir: Vector3, pace: float, lead_s:
 	# there: on his way to the meet, that share of his trip in.
 	_rival[k] = Vector3.INF
 	_rival_caps[k] = null
+	_racer[k] = -1
 	if is_finite(t_theirs):
 		var at: Vector3 = AICarrierField.goalie_now(ctx)
 		if keeper_t > t_theirs and racer != -1:
 			at = _field.opponents_release[racer] + _field.opponent_vels[racer] * lead_s
 			_rival_caps[k] = _field.opponent_caps[racer]
+			_racer[k] = racer
 		_rival[k] = at.lerp(meet_theirs, clampf(t_ours / maxf(t_theirs, 0.001), 0.0, 1.0))
+	_away[k] = t_theirs
+	_check[k] = Vector3.INF
+	_check_caps[k] = null
+	if is_finite(t_theirs) and keeper_t > t_theirs:
+		var next: Vector3 = AILoosePuckChase.path_intercept_point(_path, STEP_DT, origin,
+				t_theirs + STEP_DT)
+		_away[k] = t_theirs + AIFeedReception.receiver_settle_s(
+				meet_theirs.distance_to(next) / STEP_DT) \
+				+ AIForecheckRead.CARRIER_READ_S + AIBotMechanics.BOT_WRISTER_LOOKAHEAD_S
+		_fill_check(k, meet_theirs, lead_s)
 	_ours_vel[k] = ours_vel
 	_iced[k] = ctx.icing_enforced and _ices(ctx, origin, minf(t_ours, t_theirs))
 	# A launch we never win is worth only what their puck at the meet pays us,
@@ -346,12 +373,50 @@ func _value(ctx: RoleContext, k: int) -> float:
 	var lost: float = 1.0 - _p[k]
 	var ours: float = maxf(_field.possession_at(_meet_ours[k], _t_ours[k], _ours_vel[k],
 			_rival[k], _rival_caps[k]),
-			_support_from(ctx, _meet_ours[k], _retriever[k], _t_ours[k]) \
+			_support_from(ctx, k) \
 					* AIActionScoring.delay_discount(_t_ours[k]))
 	return _p[k] * ours \
-			- _field.turnover_cost(_meet_theirs[k], lost) \
+			- _field.turnover_cost(_meet_theirs[k], lost, _away[k], _check[k], _check_caps[k]) \
 			- _field.counter_exposure_cost(ctx, _meet_theirs[k], lost, ctx.self_pos,
 					AIRoleReads.resolve_our_goalie_pos(ctx))
+
+
+# Launch `k` lost to their man at `meet`: our soonest forechecker by the
+# forecheck read's clock (AILoosePuckChase.reach_eta, from where the windup's
+# `lead_s` has him), where he is when that man's first play is away (_chaser).
+func _fill_check(k: int, meet: Vector3, lead_s: float) -> void:
+	var best_t: float = INF
+	var best: int = -1
+	for i: int in _our_pos.size():
+		var c: AISkaterCaps = _our_caps[i]
+		var t: float = AILoosePuckChase.reach_eta(_our_pos[i] + _our_vel[i] * lead_s, meet,
+				_our_vel[i], AILoosePuckChase.race_vmax(c),
+				c.max_accel if c != null else AIArrival.SHED_ACCEL_DEFAULT_M_S2,
+				c.max_blade_reach if c != null else AIBotMechanics.BLADE_REACH_M)
+		if t < best_t:
+			best_t = t
+			best = i
+	if best == -1 or not is_finite(best_t):
+		return
+	_chaser(_our_pos[best] + _our_vel[best] * lead_s, meet, best_t, _away[k], _our_caps[best])
+	_check[k] = _chase_pos
+	_check_caps[k] = _our_caps[best]
+
+
+# A body at `from` whose stick reaches `meet` `reach_s` from now, where he is
+# `at_s` from now, into _chase_pos: on his way in, that share of his trip, and a
+# blade off it at most. Read standing there: a man who has lost a race turns
+# onto its winner, never past him.
+func _chaser(from: Vector3, meet: Vector3, reach_s: float, at_s: float,
+		caps: AISkaterCaps) -> void:
+	var reach: float = caps.max_blade_reach if caps != null else AIBotMechanics.BLADE_REACH_M
+	var to_meet := Vector3(meet.x - from.x, 0.0, meet.z - from.z)
+	var d: float = to_meet.length()
+	if d <= reach or reach_s <= 0.0:
+		_chase_pos = from
+		return
+	var stand: Vector3 = from + to_meet * ((d - reach) / d)
+	_chase_pos = from.lerp(stand, clampf(at_s / reach_s, 0.0, 1.0))
 
 
 # When their keeper first gets a stick on the path just walked: a point in front
@@ -402,7 +467,12 @@ func _icing_value(ctx: RoleContext, origin: Vector3) -> float:
 # zone's floor.
 func _fill_support(ctx: RoleContext) -> void:
 	var horizon: float = float(STEPS) * STEP_DT
-	_field.project_opponents(horizon, _opp_then)
+	# The defence goes back for the puck once it is in: each man on at his
+	# momentum, not held on the line as a carry holds him (project_opponents).
+	_opp_then.clear()
+	for i: int in _field.opponents.size():
+		_opp_then.append(AITrajectory.predict_at(_field.opponents[i], _field.opponent_vels[i],
+				horizon))
 	_our_then.clear()
 	_our_then_val.clear()
 	var keeper: Vector3 = AICarrierField.goalie_now(ctx)
@@ -421,16 +491,24 @@ func _fill_support(ctx: RoleContext) -> void:
 				if AIActionScoring.in_offensive_zone(p, ctx.attacking_goal_pos) else 0.0)
 
 
-# The best feed the retriever (`retriever`, an index into _our_pos) has from
-# `meet`, played `meet_s` from now, to the support (_fill_support): its shot ×
-# the lane against the defence then × the pass landing × the flight × the race
-# for the reception, as a future action (AICarrierField.PASS_OPTION_DISCOUNT,
-# the carry's pass option). The reception's race is their first body from the
-# release against the feed arriving with our man there.
-func _support_from(ctx: RoleContext, meet: Vector3, retriever: int, meet_s: float) -> float:
+# The best feed launch `k`'s retriever has from where he plays it, to the
+# support (_fill_support): its shot × the lane against the defence then × the
+# pass landing × the flight × the race for the reception, as a future action
+# (AICarrierField.PASS_OPTION_DISCOUNT, the carry's pass option). The reception's
+# race is their first body from the release against the feed arriving with our
+# man there; the man who raced us for the puck is where we won it from him, and
+# starts from there.
+func _support_from(ctx: RoleContext, k: int) -> float:
+	var meet: Vector3 = _meet_ours[k]
+	var meet_s: float = _t_ours[k]
+	var racer: int = _racer[k]
+	var racer_then: Vector3 = Vector3.INF
+	if racer != -1:
+		racer_then = _opp_then[racer]
+		_opp_then[racer] = _rival[k]
 	var best: float = 0.0
 	for i: int in _our_then.size():
-		if i == retriever or _our_then_val[i] * AICarrierField.PASS_OPTION_DISCOUNT <= best:
+		if i == _retriever[k] or _our_then_val[i] * AICarrierField.PASS_OPTION_DISCOUNT <= best:
 			continue
 		var to: Vector3 = _our_then[i]
 		if AINetObstacle.pass_lane_blocked_by_net(meet, to):
@@ -448,10 +526,30 @@ func _support_from(ctx: RoleContext, meet: Vector3, retriever: int, meet_s: floa
 				* AICarrierField.PASS_OPTION_DISCOUNT
 		if option <= best:
 			continue
-		option *= AIActionScoring.arrival_race(to, received_s, _field.opponents_release,
-				_field.opponent_vels, true)
+		option *= _reception_race(to, received_s, racer, _rival[k], meet_s)
 		best = maxf(best, option)
+	if racer != -1:
+		_opp_then[racer] = racer_then
 	return best
+
+
+# AIActionScoring.arrival_race for our man at `to` at `our_t`, their bodies from
+# the release but the racer (index `racer`, -1: none), who sets off from `rival`
+# at `rival_s`.
+func _reception_race(to: Vector3, our_t: float, racer: int, rival: Vector3,
+		rival_s: float) -> float:
+	var opp_t: float = INF
+	for j: int in _field.opponents_release.size():
+		if j == racer:
+			opp_t = minf(opp_t, rival_s + AIArrival.time_to_arrive(rival, to, Vector3.ZERO))
+		else:
+			opp_t = minf(opp_t, AIArrival.time_to_arrive(_field.opponents_release[j], to,
+					_field.opponent_vels[j]))
+	if not is_finite(opp_t):
+		return 1.0
+	var band: float = AIActionScoring.CHASE_CONTEST_MARGIN_S \
+			+ AIArrival.ERROR_FRAC * minf(maxf(our_t, opp_t), 1e6)
+	return clampf(0.5 + (opp_t - our_t) / (2.0 * band), 0.0, 1.0)
 
 
 # Our side at the release: the teammates who may play the puck, read where their

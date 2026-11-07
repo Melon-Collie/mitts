@@ -211,11 +211,19 @@ func _backing_off_ahead(pos: Vector3, vel: Vector3) -> bool:
 
 # The cost of losing the puck at `loss_point` with probability `loss_prob`: the
 # opponent's possession there (AIPossessionValue), in the odds the carrier's
-# gains are priced in.
-func turnover_cost(loss_point: Vector3, loss_prob: float) -> float:
+# gains are priced in. Their man there `arrive_s` from now, against our side
+# carried on to then; `rival` (finite), a man of ours standing there then, on
+# top of them, at his caps.
+func turnover_cost(loss_point: Vector3, loss_prob: float, arrive_s: float = 0.0,
+		rival: Vector3 = Vector3.INF, rival_caps: AISkaterCaps = null) -> float:
 	if not loss_point.is_finite() or loss_prob <= 0.0:
 		return 0.0
-	return loss_prob * _theirs.at(loss_point)
+	if not rival.is_finite():
+		return loss_prob * _theirs.at(loss_point, arrive_s)
+	_theirs.push_defender(rival, Vector3.ZERO, rival_caps)
+	var v: float = _theirs.at(loss_point, arrive_s)
+	_theirs.pop_defender()
+	return loss_prob * v
 
 
 # The most `gain × keep − the turnover the rest costs` can be worth when its gain

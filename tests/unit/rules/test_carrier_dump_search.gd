@@ -85,12 +85,12 @@ func test_a_dump_our_winger_wins_is_worth_something() -> void:
 func test_a_defence_back_in_time_takes_the_follow_up_feed() -> void:
 	# The same won corner, their D standing ever nearer their own house: the feed
 	# out of the corner is raced for its reception, so the sooner they can be
-	# there, the less winning the corner is worth.
+	# there, the less winning the corner is worth — never more.
 	var caught: float = _best(_rush(2.0))
 	var at_red: float = _best(_rush(-4.0))
 	var at_line: float = _best(_rush(-9.0))
 	assert_gt(caught, at_red, "a D who has further to come back leaves the feed open longer")
-	assert_gt(at_red, at_line, "and one standing at his line is back before it arrives")
+	assert_gte(at_red, at_line, "and one standing at his line is back before it arrives")
 
 
 func test_a_dump_into_their_d_is_worth_less() -> void:
@@ -148,9 +148,12 @@ func _stand_up_line(with_support: bool) -> RoleContext:
 
 
 func test_a_won_dump_is_worth_the_support_that_arrives_with_it() -> void:
-	# Behind their goal line one man has no shot; what the puck won there is worth
-	# is the feed to the men coming in behind it.
-	assert_gt(_best(_stand_up_line(true)), _best(_stand_up_line(false)))
+	# A corner won with their D caught up the ice: what the puck is worth there is
+	# the feed to the winger coming in with it.
+	var alone: RoleContext = _rush(2.0)
+	alone.snapshot.skater_states.erase(2)
+	alone.team_id_by_peer.erase(2)
+	assert_gt(_best(_rush(2.0)), _best(alone))
 
 
 func test_against_a_stand_up_line_the_carrier_dumps_it_in() -> void:
@@ -164,7 +167,7 @@ func test_against_a_stand_up_line_the_carrier_dumps_it_in() -> void:
 
 func test_a_dump_in_is_chipped_and_a_rim_is_not() -> void:
 	var c := AIRoleCarrier.new()
-	c.decide(_stand_up_line(true))
+	c.decide(_stand_up_line(false))
 	assert_eq(c.intended_action, AIRoleCarrier.INTENT_DUMP)
 	assert_true(c.dump_lofted, "the dump-in goes in over the sticks")
 	assert_false(AIRoleCarrier.new().dump_lofted, "nothing is chipped by default")

@@ -1096,13 +1096,21 @@ reaches back into what remains.
   there: `p · ours(meet) − (1 − p) · theirs(meet)`, p the arrival race in
   `arrival_race`'s contest band, widened by the clock's error over the trip
   unless their keeper decides it (he is no skate mis-timed seconds out), theirs
-  the turnover there plus the 5v5 counter exposure. Ours is our possession of
+  the turnover there plus the 5v5 counter exposure. A race lost to their man is
+  read when his first play is away, by the forecheck's own clock
+  (`AIForecheckRead`: the pickup's settle, his read, the release), with our
+  soonest forechecker where he is by then on his way in: a dump starts the
+  forecheck, so its loss is their possession against the man chasing it, the
+  dumper included, never against the ice he left. Ours is our possession of
   the spot on arrival or the feed it opens to our support dead-reckoned to the
   race's horizon (each man's shot there × the lane against the defence then ×
   the race for its reception, as the pass search races a catch: their first
-  body from the release against the feed arriving with our man there):
+  body from the release against the feed arriving with our man there, the man
+  who raced us for the puck setting off from where we won it):
   the continuation prices a won corner at the zone's floor, and the support
-  is the live, defence-aware half on top of it. Never leave that reception
+  is the live, defence-aware half on top of it. The defence there goes back
+  for the puck at its momentum; it is not held on its line as a carry holds
+  it. Never leave that reception
   unraced: the dump's seconds of flight are when a lone D gets back to his
   house, and a feed priced to a man alone at the post dumps away every 2-on-1.
   **With the numbers there is no dump-in at all** (`RoleContext.numbers_up`):
