@@ -97,7 +97,9 @@ func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	var stick_mesh: MeshInstance3D = _skater.stick_mesh
 	var stick_origin: Vector3 = _skater.drawn_top_hand()
 	var to_tip: Vector3 = _hosel_tip_upper_body(blade_mesh) - stick_origin
-	if to_tip.length_squared() < 0.0001:
+	# A non-finite frame holds the last pose too: written, the shaft is undrawn
+	# and both gloves, which take their axis from it (grip_axis), with it.
+	if to_tip.length_squared() < 0.0001 or not to_tip.is_finite():
 		return
 	var dir: Vector3 = to_tip.normalized()
 	_flex_axis = _solve_flex_axis(dir)
@@ -115,10 +117,9 @@ func update_mesh(blade_mesh: MeshInstance3D) -> void:
 	# a convenience fallback: world UP pulled into upper-body space, or through a
 	# slapshot the up the swing has carried (Skater.shaft_roll_up), where any
 	# other choice would spin the wrap.
-	# Z scale is the only component this owns; x/y are the shaft thickness the
-	# sizing seams set, so they are read back rather than overwritten.
-	var shaft_scale: Vector3 = stick_mesh.scale
-	shaft_scale.z = shaft_len
+	# The shaft's section is its BoxMesh's; the node scales only its length. Never
+	# read the scale back off the transform: one bad write would then keep it.
+	var shaft_scale := Vector3(1.0, 1.0, shaft_len)
 	var up_local: Vector3 = _skater.shaft_roll_up(dir)
 	stick_mesh.transform = Transform3D(
 			Basis.looking_at(dir, up_local).scaled_local(shaft_scale),

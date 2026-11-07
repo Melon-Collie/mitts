@@ -3093,8 +3093,8 @@ var _slapper_setup_still_s: float = 0.0
 
 
 func _wrister_aim_dir(input: InputState) -> Vector3:
-	return ShotMechanics.wrister_aim_dir(
-			input.bot_wrister_aim_dir, input.mouse_world_pos, _aiming.wrister_origin_world)
+	return ShotMechanics.wrister_aim_dir(input.bot_wrister_aim_dir, input.mouse_world_pos,
+			_aiming.wrister_origin_at(skater.global_position))
 
 # Blade update for the WRISTER_AIM state: HOLD the blade at the shot origin — the
 # puck sits still where the shot fires from while the torso coils toward the
