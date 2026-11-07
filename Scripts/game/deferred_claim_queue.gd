@@ -22,7 +22,7 @@ extends RefCounted
 # never when it arrives), and what Overwatch gets by buffering command frames to
 # their referenced tick. Mitts' own shot release already works this way — the
 # host replays the release input instead of taking an RPC — so this brings the
-# four claim paths onto that footing.
+# claim paths onto that footing.
 #
 # Release is gated on the BUFFER's newest capture, not on wall time: capture
 # runs end-of-tick (`PostPhysicsNetHook`), so wall-now is always a tick ahead of
@@ -84,8 +84,9 @@ func drain(newest_ts: float) -> void:
 			entry.resolver.callv(entry.args)
 
 
-# Dropped wholesale on reset / rematch / dead-puck phases. A claim parked across
-# a faceoff describes a world that no longer exists, and unlike the arm-and-wait
+# Dropped wholesale on rematch. A claim parked across a faceoff is not dropped:
+# it describes a world that no longer exists, and the resolvers' own lock,
+# ghost and carrier gates refuse it at release. Unlike the arm-and-wait
 # inside PickupClaimResolver there is no partial state to unwind — every
 # resolver's reject list is evaluated at RELEASE, not at submit, so dropping is
 # always safe and never leaves a half-applied effect.

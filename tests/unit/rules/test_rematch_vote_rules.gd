@@ -64,3 +64,24 @@ func test_resolve_extra_votes_beyond_total_still_resolve() -> void:
 	# (count > total) still resolves rather than deadlocking.
 	var votes := _votes({1: REMATCH, 2: REMATCH, 3: REMATCH})
 	assert_eq(RematchVoteRules.resolve(votes, 2), REMATCH)
+
+
+# ── accepts_remote_vote ──────────────────────────────────────────────────────
+
+func test_a_seated_player_votes_at_game_over() -> void:
+	for vote: int in [NONE, REMATCH, LOBBY]:
+		assert_true(RematchVoteRules.accepts_remote_vote(vote, true, false))
+
+func test_no_vote_is_taken_before_game_over() -> void:
+	# Taken mid-match, a vote sits in the pool and a full pool resets the game.
+	assert_false(RematchVoteRules.accepts_remote_vote(REMATCH, false, false))
+
+func test_a_spectator_has_no_vote() -> void:
+	# The pool's total excludes spectators, so a spectator's vote filled it for
+	# a player who had not voted.
+	assert_false(RematchVoteRules.accepts_remote_vote(REMATCH, true, true))
+
+func test_an_out_of_range_vote_is_refused() -> void:
+	# count_voted counts anything but NONE, so these read as cast votes.
+	assert_false(RematchVoteRules.accepts_remote_vote(LOBBY + 1, true, false))
+	assert_false(RematchVoteRules.accepts_remote_vote(-1, true, false))

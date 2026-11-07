@@ -110,6 +110,15 @@ var _smothered_at := Vector3.INF
 var _poking: bool = false
 var _clearing: bool = false
 var _blade_was := Vector3.INF
+var _wire := KeeperWire.new()
+# Seat only the boxes that place a part body: a predictor's shadow keeper
+# (KeeperPredictor), whose own reads of his gear go through the glove, the mask
+# and the blocker's places and whose boxes nothing else meets.
+var seat_places_only: bool = false
+# A client's keeper of its own, re-seeded from the host's blobs and stepped to
+# the render instant; null where none is predicted (host, replays, a warm-up).
+var _predictor: KeeperPredictor = null
+var _world_source: KeeperWorldSource = null
 
 
 func setup(assigned_goalie: Goalie, assigned_puck: Puck, assigned_goal_line_z: float, assigned_is_server: bool,
@@ -137,6 +146,53 @@ func apply_skill_profile(profile: GoalieSkillProfile) -> void:
 	if profile != null:
 		_profile = profile
 		_tier()
+		if _predictor != null:
+			_predictor.apply_skill_profile(profile)
+
+
+# Client: draws him predicted on the render clock (KeeperPredictor) against
+# `source`, this client's world, from the first blob a snapshot brings.
+func predict_in(source: KeeperWorldSource) -> void:
+	if not is_server:
+		_world_source = source
+
+
+func receive_wire_state(blob: PackedByteArray, host_ts: float, seq: int) -> void:
+	super.receive_wire_state(blob, host_ts, seq)
+	if _predictor == null and _world_source != null:
+		_predictor = KeeperPredictor.new()
+		_predictor.name = "Predictor"
+		add_child(_predictor)
+		_predictor.setup(_goal_line_z, team_id, _profile, _world_source)
+	if _predictor != null:
+		_predictor.offer(blob, host_ts, seq)
+
+
+# The host's drawn goalie in the same snapshot: buffered for the interpolated
+# fallback, and what the predictor confirms its own state against.
+func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
+	super.apply_state(network_state, host_ts)
+	if _predictor != null:
+		_predictor.note_host_state(network_state, host_ts)
+
+
+# Him drawn from his predictor at the render instant
+# (PuckController._render_instant's); false where it has nothing to draw, and
+# he is drawn interpolated instead.
+func _draw_predicted() -> bool:
+	if _predictor == null:
+		return false
+	if not NetworkManager.is_clock_ready():
+		NetworkTelemetry.record_keeper_predict_fallback()
+		return false
+	var render_t: float = NetworkManager.estimated_host_time() \
+			+ LagCompRewind.clamped_lead_s(NetworkManager.get_input_lead_ms())
+	if not _predictor.advance(render_t):
+		NetworkTelemetry.record_keeper_predict_fallback()
+		return false
+	NetworkTelemetry.record_keeper_predict_us(_predictor.last_frame_us)
+	_apply_interpolated(_predictor.drawn)
+	return true
 
 
 # The tier's reads and speeds onto the read, the save and the motor's save.
@@ -192,20 +248,27 @@ func _place_in_crease() -> void:
 func _physics_process(delta: float) -> void:
 	if goalie == null or puck == null:
 		return
-	# A back-date is for the release it was set before, never a later one.
-	_pending_reaction_back_date = 0.0
-	var was: Vector3 = goalie.global_position
 	var t0: int = Time.get_ticks_usec()
 	if is_server:
-		_play(delta)
+		step_sim(delta)
 	else:
-		if _rejoin_blend_elapsed >= 0.0:
-			_rejoin_blend_elapsed += delta
-		_interpolate_and_apply()
-	_measure_motion(was, delta)
-	if is_server and _holding >= 0.0:
-		_hold_catch(delta)
+		var was: Vector3 = goalie.global_position
+		if not _draw_predicted():
+			if _rejoin_blend_elapsed >= 0.0:
+				_rejoin_blend_elapsed += delta
+			_interpolate_and_apply()
+		_measure_motion(was, delta)
 	HostCostProbe.record(HostCostProbe.Section.GOALIE_PHYS, Time.get_ticks_usec() - t0)
+
+
+# One tick of him where he plays: the host's, and a client's predictor
+# (KeeperPredictor) stepping its own keeper in its shadow world.
+func step_sim(delta: float) -> void:
+	var was: Vector3 = goalie.global_position
+	_play(delta)
+	_measure_motion(was, delta)
+	if _holding >= 0.0:
+		_hold_catch(delta)
 
 
 # His tick on the host: what he reads of the play and the shot, the save and
@@ -585,6 +648,12 @@ func _place_body() -> void:
 	save.step(dt, read.legs_read(), _keeper_pose)
 	save.overlay(_keeper_pose)
 	look.step(dt, _keeper_pose, _in_his_space(puck.global_position))
+	_place_on_motor()
+
+
+# The node where his motor has him, his body posed from his pose and his boxes
+# on it.
+func _place_on_motor() -> void:
 	goalie.global_transform = _net * Transform3D(Basis(Vector3.UP, motor.yaw), Vector3(motor.x, 0.0, motor.z))
 	_report_state()
 	_seat(_keeper_pose)
@@ -604,6 +673,8 @@ func _seat(p: KeeperPose) -> void:
 	if not _keeper.apply_pose(p):
 		return
 	for part: int in KeeperGear.PART_COUNT:
+		if seat_places_only and not goalie.places_save_box(part):
+			continue
 		goalie.seat_save_box(part, KeeperGear.box(_keeper.skeleton, part))
 
 
@@ -667,6 +738,61 @@ func fill_state(s: GoalieNetworkState) -> void:
 	s.pose.copy_from(_keeper_pose)
 
 
+# His whole sim state on the wire (KeeperWire): every collaborator that steps,
+# then his own flags and clocks. What is left off is the tier's, his world, and
+# the scratch a tick writes before it reads (test_keeper_wire_set.gd holds the set).
+func wire(w: KeeperWire) -> void:
+	motor.wire(w)
+	brain.wire(w)
+	play.wire(w)
+	read.wire(w)
+	save.wire(w)
+	look.wire(w)
+	clear.wire(w)
+	w.pose(_keeper_pose)
+	_ticks = w.s8(_ticks % PLANNER_EVERY)
+	_holding = w.s32(_holding, KeeperWire.MS)
+	_chosen = w.bit(_chosen)
+	_covering = w.bit(_covering)
+	_fetching = w.bit(_fetching)
+	_at_feet = w.bit(_at_feet)
+	_out_of_reach_s = w.s32(_out_of_reach_s, KeeperWire.MS)
+	_squaring = w.bit(_squaring)
+	_chosen_at = w.s32(_chosen_at, KeeperWire.MS)
+	_over_at = w.s32(_over_at, KeeperWire.MS)
+	_felt = w.bit(_felt)
+	_chest_held = w.v3_16(_chest_held, KeeperWire.MM)
+	_smothered_at = w.v3_32(_smothered_at, KeeperWire.MM)
+	_poking = w.bit(_poking)
+	_clearing = w.bit(_clearing)
+	_blade_was = w.v3_32(_blade_was, KeeperWire.MM)
+	# His tier, which no field above carries: a keeper rebuilt from the blob
+	# plays the host's.
+	var tier: int = w.s8(_profile.tier)
+	if w.reading and tier >= 0 and tier != _profile.tier:
+		apply_skill_profile(GoalieSkillProfile.for_difficulty(tier))
+
+
+# His state onto the end of `out` as one blob, his own snapped to what it
+# decodes to, and the node and his boxes placed on that.
+func append_wire_state(out: PackedByteArray) -> void:
+	_wire.begin_write(out)
+	wire(_wire)
+	_wire.finish_write()
+	_place_on_motor()
+
+
+# Him rebuilt from a blob `append_wire_state` wrote, placed on it; false when
+# it is not one (and him then part-written).
+func apply_wire_state(blob: PackedByteArray) -> bool:
+	if not _wire.begin_read(blob):
+		return false
+	wire(_wire)
+	var whole: bool = _wire.finish_read()
+	_place_on_motor()
+	return whole
+
+
 # His rest as the wire's stances, for the bots' read of him: down in a low
 # save that rests him there as in the butterfly.
 func _stance() -> GoalieStateMachine.State:
@@ -681,12 +807,12 @@ func _stance() -> GoalieStateMachine.State:
 	return GoalieStateMachine.State.READY
 
 
-# A remote shooter's release is read from when he saw it leave, the back-date
-# GameManager sets just before it (Scripts/networking/CLAUDE.md, shot lag comp).
+# A release is read from the tick it is fired on, a remote shooter's too: that
+# tick is the one his own client drew it on (Scripts/networking/CLAUDE.md, shot
+# lag compensation).
 func _on_puck_released() -> void:
 	_end_save()
-	read.start(play.primed(), _pending_reaction_back_date, screen_delay_for(puck.get_release_velocity()))
-	_pending_reaction_back_date = 0.0
+	read.start(play.primed(), 0.0, screen_delay_for(puck.get_release_velocity()))
 
 
 # A tip or a deflection: a new shot to read from the start.

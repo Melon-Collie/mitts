@@ -195,3 +195,21 @@ func _blend(p: KeeperPose, t: float) -> void:
 			leg.knee_pole = from.knee_pole.lerp(to.knee_pole, t).normalized()
 			leg.shin_front = from.shin_front.lerp(to.shin_front, t).normalized()
 			leg.toe = from.toe.lerp(to.toe, t).normalized()
+
+
+# His state on the wire (KeeperWire); the tier's numbers are pushed at setup.
+func wire(w: KeeperWire) -> void:
+	fall = w.s16(fall, KeeperWire.FRACTION)
+	edges = w.bit(edges)
+	state = w.s8(state)
+	low = w.s8(low)
+	side = w.s16(side, KeeperWire.MM)
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	velocity = w.v2_16(velocity, KeeperWire.SPEED)
+	_clock = w.s32(_clock, KeeperWire.MS)
+	w.pose(_from)
+	w.pose(_to)
+	for i: int in 2:
+		_knees[i] = w.v3_16(_knees[i], KeeperWire.MM)
+		_to_knees[i] = w.v3_16(_to_knees[i], KeeperWire.MM)

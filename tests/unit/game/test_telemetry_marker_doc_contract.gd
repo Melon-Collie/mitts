@@ -124,10 +124,10 @@ func test_documented_queue_depth_band_tracks_the_margin() -> void:
 	assert_true(row.contains("INPUT_LEAD_SEC") and row.contains("PHYSICS_TICK"),
 			"the band must name the constants it derives from — a fixed frame " +
 			"count is what went stale here: %s" % row)
-	# "~3 at any RTT": the lead pays the trip, so only the margin queues.
+	# "~2.5 at any RTT": the lead pays the trip, so only the margin queues.
 	assert_almost_eq(_number_in(row, "~([0-9]+(?:\\.[0-9]+)?)\\s+at any RTT",
 					KEY, "a settled depth"),
-			_ClockSyncScript.INPUT_LEAD_SEC * tick, 0.51,
+			_ClockSyncScript.INPUT_LEAD_SEC * tick, 0.05,
 			"the settled depth must be INPUT_LEAD_SEC in ticks")
 
 

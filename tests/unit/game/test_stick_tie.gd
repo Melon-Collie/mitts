@@ -189,6 +189,20 @@ func test_a_stoppage_unties_everyone() -> void:
 	assert_false(_defender.stick_tied)
 
 
+# The host releases deferred claims after the stoppage clears every tie in a
+# locked tick; a claim landing there must not link one that holds till the next.
+func test_a_claim_released_during_a_stoppage_ties_nothing() -> void:
+	_defender.stick_check_phase = Phase.TIE
+	_defender.stick_check_held = true
+	_sticks_apart(StickCheckRules.TIE_CONTACT_M * 0.5)
+	_ties.tick(false)
+	assert_false(_ties.try_engage(_defender, _receiver))
+	assert_false(_receiver.stick_tied)
+	_ties.tick(true)
+	_ties.clear()
+	assert_true(_ties.try_engage(_defender, _receiver), "and live play takes it again")
+
+
 # The goal replay stamps its recorded frames onto the live actors, so it can end
 # on a tie the tracker has already broken (or never held).
 func test_a_stoppage_unties_a_tie_the_tracker_does_not_hold() -> void:

@@ -18,6 +18,9 @@ extends RefCounted
 var _registry: PlayerRegistry = null
 var _carrier_getter: Callable = Callable()   # () -> Skater (null when loose)
 var _partner: Dictionary = {}                # Skater -> Skater, both directions
+# The last tick's liveness. A claim the deferred queue releases later in a
+# locked tick must not link a tie the stoppage has just cleared.
+var _live: bool = true
 
 
 func setup(registry: PlayerRegistry, carrier_getter: Callable) -> void:
@@ -26,6 +29,7 @@ func setup(registry: PlayerRegistry, carrier_getter: Callable) -> void:
 
 
 func tick(live: bool) -> void:
+	_live = live
 	if _registry == null:
 		return
 	if not live:
@@ -43,7 +47,7 @@ func tick(live: bool) -> void:
 # The claim path's entry. Re-checks the present: the initiator still reaching in
 # TIE and free, the victim tieable — the rewound geometry is the resolver's.
 func try_engage(initiator: Skater, victim: Skater) -> bool:
-	if not _can_initiate(initiator) or not _tieable(initiator, victim):
+	if not _live or not _can_initiate(initiator) or not _tieable(initiator, victim):
 		return false
 	_link(initiator, victim)
 	return true

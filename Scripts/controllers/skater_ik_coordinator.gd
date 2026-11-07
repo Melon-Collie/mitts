@@ -243,15 +243,21 @@ func reset_blade_smoothing() -> void:
 # choreographed the blade directly, so without re-seeding the blade would snap
 # back to that stale spot and dangle forward again. Seeding it to the FT's final
 # blade lets the normal dangle continue from where the finish left it.
-func seed_blade_smoothing(world_pos: Vector3) -> void:
+# `velocity`: the dangle's own, for a seed taken mid-dangle (a reconcile's, from
+# the ack); a follow-through's finish choreographed the blade directly, so the
+# dangle resumes from rest there.
+func seed_blade_smoothing(world_pos: Vector3, velocity: Vector3 = Vector3.ZERO) -> void:
 	_smoothed_blade_world = Vector3(world_pos.x, 0.0, world_pos.z)
 	_prev_skater_pos = Vector3(_skater.global_position.x, 0.0, _skater.global_position.z)
 	_smoothed_blade_initialized = true
-	# The follow-through choreographed the blade directly; the dangle resumes
-	# from rest at the seeded position.
-	_blade_dangle_vel = Vector3.ZERO
+	_blade_dangle_vel = velocity
 	if _native_dangle != null:
-		_native_dangle.seed(world_pos, _skater.global_position)
+		_native_dangle.seed_moving(world_pos, _skater.global_position, velocity)
+
+
+# The dangle's velocity after the last solve — what a reconcile seeds back from.
+func blade_dangle_velocity() -> Vector3:
+	return _native_dangle.get_dangle_velocity() if _native_dangle != null else _blade_dangle_vel
 
 # ── Blade From Mouse (Top-Hand IK) ────────────────────────────────────────────
 # Input is treated as a desired blade position. The top hand is solved as a

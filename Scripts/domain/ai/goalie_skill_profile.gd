@@ -40,6 +40,10 @@ var reaction_delay_s: float
 var prearmed_reaction_delay_s: float
 # Pads-to-floor time (s) once the butterfly commits.
 var butterfly_drop_s: float
+# The tier this profile is (Difficulty), -1 for one built to other values: what
+# the keeper's wire set carries, so a client's predicted keeper plays the
+# host's tier.
+var tier: int = -1
 
 
 func _init(p_glove_react_max_speed_mps: float, p_blocker_react_max_speed_mps: float,
@@ -52,7 +56,8 @@ func _init(p_glove_react_max_speed_mps: float, p_blocker_react_max_speed_mps: fl
 
 
 static func hard() -> GoalieSkillProfile:
-	return GoalieSkillProfile.new(5.0, 5.0, GameRules.DEFAULT_GOALIE_REACTION_DELAY_S, 0.07, 0.20)
+	return _tiered(GoalieSkillProfile.new(5.0, 5.0, GameRules.DEFAULT_GOALIE_REACTION_DELAY_S, 0.07, 0.20),
+			Difficulty.HARD)
 
 
 # Normal is the middle tier: enough goalie to punish a lazy shot, soft enough
@@ -61,7 +66,7 @@ static func hard() -> GoalieSkillProfile:
 # so the anticipation edge Hard keeps is gone), and arms that get most — not
 # all — of the way to the corner.
 static func normal() -> GoalieSkillProfile:
-	return GoalieSkillProfile.new(3.8, 3.8, 0.18, 0.10, 0.25)
+	return _tiered(GoalieSkillProfile.new(3.8, 3.8, 0.18, 0.10, 0.25), Difficulty.NORMAL)
 
 
 # Easy is the newcomer floor, tuned so any decently-aimed shot scores: the leg
@@ -69,7 +74,12 @@ static func normal() -> GoalieSkillProfile:
 # the slot, the arms crawl (top corners open), and the primed
 # read barely beats the cold one (telegraphed beginner windups still score).
 static func easy() -> GoalieSkillProfile:
-	return GoalieSkillProfile.new(2.4, 2.4, 0.30, 0.16, 0.32)
+	return _tiered(GoalieSkillProfile.new(2.4, 2.4, 0.30, 0.16, 0.32), Difficulty.EASY)
+
+
+static func _tiered(profile: GoalieSkillProfile, which: int) -> GoalieSkillProfile:
+	profile.tier = which
+	return profile
 
 
 static func for_difficulty(difficulty: int) -> GoalieSkillProfile:

@@ -536,3 +536,32 @@ func _bend_for_depth(p: KeeperPose, stop: float) -> void:
 		p.legs[leg].shin_front = p.legs[leg].shin_front.rotated(Vector3.FORWARD,
 				-sx * STOP_EDGE_RAD * dug)
 	p.lumbar_rot.x += _side * (C_CUT_LEAN_RAD * _drive - STOP_LEAN_RAD * stop)
+
+
+# His state on the wire (KeeperWire); the speeds are the tier's.
+func wire(w: KeeperWire) -> void:
+	x = w.s16(x, KeeperWire.MM)
+	z = w.s16(z, KeeperWire.MM)
+	speed = w.s16(speed, KeeperWire.SPEED)
+	phase = w.s8(phase)
+	move = w.s8(move)
+	_target_x = w.s16(_target_x, KeeperWire.MM)
+	_target_z = w.s16(_target_z, KeeperWire.MM)
+	_start_x = w.s16(_start_x, KeeperWire.MM)
+	_start_z = w.s16(_start_z, KeeperWire.MM)
+	_dir = w.v2_16(_dir, KeeperWire.MM)
+	_along = w.s16(_along, KeeperWire.MM)
+	_to = w.s16(_to, KeeperWire.MM)
+	_side = w.s16(_side, KeeperWire.MM)
+	_travel = w.s16(_travel, KeeperWire.MM)
+	_plant_reach = w.s16(_plant_reach, KeeperWire.MM)
+	_push_from = w.s16(_push_from, KeeperWire.MM)
+	_leg = w.s8(_leg)
+	_from = w.v3_16(_from, KeeperWire.MM)
+	_heel_from = w.s16(_heel_from, KeeperWire.MM)
+	_recover = w.s16(_recover, KeeperWire.MM)
+	_turn = w.s16(_turn, KeeperWire.ANGLE)
+	_turn_from = w.s16(_turn_from, KeeperWire.ANGLE)
+	_drive = w.s16(_drive, KeeperWire.MM)
+	_stop = w.s16(_stop, KeeperWire.MM)
+	_stop_from_speed = w.s16(_stop_from_speed, KeeperWire.SPEED)

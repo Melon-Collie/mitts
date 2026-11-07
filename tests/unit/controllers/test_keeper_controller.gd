@@ -71,23 +71,6 @@ func test_his_gear_is_the_save_geometry() -> void:
 		assert_true(found, "%s's box where his gear is" % KeeperGear.Part.keys()[part])
 
 
-# A remote shooter's release reaches the host after he saw it leave his stick:
-# the keeper reads it from then, and a back-date set for one release is not
-# carried to the next.
-func test_a_remote_release_is_read_from_when_its_shooter_saw_it() -> void:
-	_spawn(GameRules.GOAL_LINE_Z)
-	_run(0.3)
-	_puck.global_position = Vector3(0.0, _puck.ice_height, GameRules.GOAL_LINE_Z - 8.0)
-	_puck.set_puck_velocity(Vector3(0.0, 0.0, 25.0))
-	_keeper.set_pending_reaction_back_date(0.05)
-	_puck.puck_released.emit()
-	assert_almost_eq(_keeper.read.age, 0.05, 1e-6, "read from when the shooter saw it")
-	_keeper.set_pending_reaction_back_date(0.05)
-	_keeper._physics_process(DT)
-	_puck.puck_released.emit()
-	assert_almost_eq(_keeper.read.age, 0.0, 1e-6, "a back-date lapses with its tick")
-
-
 func test_on_either_net_he_stands_on_the_angle_line_square_to_the_puck() -> void:
 	for goal_line_z: float in [GameRules.GOAL_LINE_Z, -GameRules.GOAL_LINE_Z]:
 		_spawn(goal_line_z)

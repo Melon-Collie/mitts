@@ -16,8 +16,9 @@ const OFFSET_EMA_ALPHA: float = 0.3  # after is_ready; ~3 pings to reach 66% of 
 #   out). Derived from Constants.INPUT_RATE, never hardcoded — a send-rate change
 #   must not silently strand the lead at the old rate's value.
 # BUFFER_TICKS: jitter cushion — the host queue depth left once the trip is paid.
-#   Jitter is a time, so this holds the cushion at 16.7 ms whatever the tick:
-#   NetTimingHarness's lateness under 10–30 ms jitter matches 2 ticks at 120 Hz.
+#   1.5 ticks is 16.7 ms at the 90 Hz tick, sized from NetTimingHarness's
+#   lateness under 10–30 ms jitter. Jitter is a time and this is counted in
+#   ticks, so a tick-rate change must re-derive it to keep the cushion.
 const _PhysicsConstants: GDScript = preload("res://Scripts/game/constants.gd")
 const BATCH_INTERVAL: float = 1.0 / _PhysicsConstants.INPUT_RATE
 const BUFFER_TICKS: float = 1.5

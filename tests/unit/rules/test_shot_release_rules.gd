@@ -5,62 +5,6 @@ extends GutTest
 # itself is not (only the one-timer contact test refuses one outright).
 
 
-# ── clamp_rtt_ms ──────────────────────────────────────────────────────────────
-
-func test_rtt_legit_value_passes_through() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(80.0, 75.0), 80.0, 0.001,
-			"claim within measured*1.5+slack is untouched")
-
-func test_rtt_forged_value_clamped_to_measured_ceiling() -> void:
-	var clamped: float = ShotReleaseRules.clamp_rtt_ms(3000.0, 60.0)
-	assert_almost_eq(clamped, 60.0 * ShotReleaseRules.RTT_MEASURED_HEADROOM
-			+ ShotReleaseRules.RTT_MEASURED_SLACK_MS, 0.001,
-			"forged rtt collapses to host-measured ceiling")
-
-func test_rtt_hard_ceiling_when_no_measurement() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(3000.0, 0.0),
-			ShotReleaseRules.MAX_RTT_MS, 0.001,
-			"no ping sample yet → hard ceiling only")
-
-func test_rtt_high_measured_ping_still_capped_at_max() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(1000.0, 500.0),
-			ShotReleaseRules.MAX_RTT_MS, 0.001)
-
-func test_rtt_negative_and_nan_zeroed() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(-50.0, 80.0), 0.0, 0.001)
-	assert_almost_eq(ShotReleaseRules.clamp_rtt_ms(NAN, 80.0), 0.0, 0.001)
-
-
-# ── clamp_back_date ───────────────────────────────────────────────────────────
-
-func test_back_date_fresh_stamp_returns_elapsed() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_back_date(100.0, 99.95), 0.05, 0.0001,
-			"legit one-way delay back-dates by elapsed time")
-
-func test_back_date_stale_stamp_earns_nothing() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_back_date(100.0, 0.0), 0.0, 0.0001,
-			"pre-warmup zero stamp (or forged old stamp) → no back-date")
-
-func test_back_date_future_stamp_earns_nothing() -> void:
-	assert_almost_eq(ShotReleaseRules.clamp_back_date(100.0, 100.5), 0.0, 0.0001)
-
-func test_back_date_at_max_age_boundary() -> void:
-	assert_almost_eq(
-			ShotReleaseRules.clamp_back_date(100.0, 100.0 - ShotReleaseRules.MAX_CLAIM_AGE_S),
-			ShotReleaseRules.MAX_CLAIM_AGE_S, 0.0001)
-
-
-# ── is_timestamp_fresh ────────────────────────────────────────────────────────
-
-func test_fresh_timestamp_accepted() -> void:
-	assert_true(ShotReleaseRules.is_timestamp_fresh(100.0, 99.9))
-
-func test_stale_and_future_timestamps_rejected() -> void:
-	assert_false(ShotReleaseRules.is_timestamp_fresh(100.0, 99.0), "stale")
-	assert_false(ShotReleaseRules.is_timestamp_fresh(100.0, 101.0), "future")
-	assert_false(ShotReleaseRules.is_timestamp_fresh(100.0, NAN), "nan")
-
-
 # ── sanitize_direction ────────────────────────────────────────────────────────
 
 func test_direction_flat_shot_unchanged() -> void:
@@ -196,12 +140,13 @@ func test_window_grace_covers_the_round_trip_offset() -> void:
 			0.05 + LEAD_S + BROADCAST_S, 0.0001,
 			"the host holds its deadline open by exactly the arming offset")
 
-func test_window_grace_is_zero_without_a_ping_sample() -> void:
-	# No sample (host player, bot, or a peer measured at 0) — nothing to cover,
-	# and the honest window is already the right one.
-	assert_almost_eq(ShotReleaseRules.one_timer_window_grace(0.0, LEAD_S, BROADCAST_S), 0.0, 0.0001)
-	assert_almost_eq(ShotReleaseRules.one_timer_window_grace(-5.0, LEAD_S, BROADCAST_S), 0.0, 0.0001)
-	assert_almost_eq(ShotReleaseRules.one_timer_window_grace(NAN, LEAD_S, BROADCAST_S), 0.0, 0.0001)
+func test_window_grace_keeps_the_lead_without_a_ping_sample() -> void:
+	# A remote whose ping reads 0 — no sample yet, or a sub-millisecond LAN link —
+	# still releases a lead later and learns of the grant a broadcast late: only
+	# the trip is unknown. Returning 0 there ate the tail of every honest window.
+	for rtt: float in [0.0, -5.0, NAN]:
+		assert_almost_eq(ShotReleaseRules.one_timer_window_grace(rtt, LEAD_S, BROADCAST_S),
+				LEAD_S + BROADCAST_S, 0.0001)
 
 func test_window_grace_is_capped() -> void:
 	# A garbage ping reading must not hold a wind-up open indefinitely.

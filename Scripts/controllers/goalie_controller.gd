@@ -33,7 +33,6 @@ var _current_depth: float = 0.0
 var _velocity_x: float = 0.0
 var _velocity_z: float = 0.0
 var _last_save_time: float = -1.0
-var _pending_reaction_back_date: float = 0.0
 
 # The longest a screen hides a shot from him, for the shot log's read; and the
 # speed he counts as fully on the move, for its unset share.
@@ -52,6 +51,10 @@ var is_extrapolating: bool = false
 var _rejoin_blend_elapsed: float = -1.0
 var _rejoin_blend_from_x: float = 0.0
 var _rejoin_blend_from_z: float = 0.0
+# A client's newest blob of his whole sim state (`append_wire_state`, beside
+# the snapshot), and the host's capture time of the snapshot it rode.
+var wire_state := PackedByteArray()
+var wire_state_time: float = -INF
 
 
 # `_profile` (null: Hard) is the tier of whoever plays him.
@@ -88,18 +91,18 @@ func set_skater_getter(getter: Callable) -> void:
 	_skater_getter = getter
 
 
-# The back-date for the next puck_released, set just before the release so its
-# synchronous handler takes it.
-func set_pending_reaction_back_date(seconds: float) -> void:
-	_pending_reaction_back_date = maxf(seconds, 0.0)
-
-
 func _ensure_view() -> void:
 	if not _skater_getter.is_valid():
 		_view.invalidate()
 		return
 	_view.ensure(Engine.get_physics_frames(), _skater_getter.call(),
 			team_id, puck.global_position, puck.get_carrier())
+
+
+# The skaters read afresh on the next read of them, whatever the frame: a
+# predictor steps several ticks inside one.
+func invalidate_world_view() -> void:
+	_view.invalidate()
 
 
 func get_buffer_depth() -> int:
@@ -187,13 +190,30 @@ func fill_state(s: GoalieNetworkState) -> void:
 	s.velocity_z = _velocity_z
 
 
+# Host, on a broadcast: his whole sim state appended to `out` as one blob;
+# nothing for a seat no keeper plays.
+func append_wire_state(_out: PackedByteArray) -> void:
+	pass
+
+
+# Client: the blob a snapshot captured at `host_ts` carried (its world state's
+# sequence `seq`), kept if it is the newest.
+func receive_wire_state(blob: PackedByteArray, host_ts: float, _seq: int) -> void:
+	if host_ts < wire_state_time:
+		return
+	wire_state = blob
+	wire_state_time = host_ts
+
+
 func apply_state(network_state: GoalieNetworkState, host_ts: float) -> void:
 	if is_server:
 		return
-	# Out of order: the buffer must stay sorted for the bracket search.
-	if not _state_buffer.is_empty() and host_ts <= _state_buffer.back().timestamp:
-		NetworkTelemetry.record_ooo_drop()
-		return
+	match BufferedStateInterpolator.intake(_state_buffer, host_ts, network_state):
+		BufferedStateInterpolator.Intake.OUT_OF_ORDER:
+			NetworkTelemetry.record_ooo_drop()
+			return
+		BufferedStateInterpolator.Intake.REPLACED:
+			return
 	# The evicted front entry is recycled as the new back one (see
 	# PuckController.apply_state): the bracket search re-reads the buffer every
 	# render, so no consumer holds a wrapper across frames.

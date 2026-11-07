@@ -2867,8 +2867,9 @@ func _transition_to_skating() -> void:
 	# carry it to the new targets: zeroing it here snaps the shoulders square and
 	# the trunk upright in one tick (a lost puck threw the head ~0.2 m). Out of
 	# the follow-through the blade smoother is also seeded from the finish, which
-	# choreographed the blade directly.
-	if prev_state == State.FOLLOW_THROUGH and not is_replaying:
+	# choreographed the blade directly. Replayed too: the next tick's blade reads
+	# the seed.
+	if prev_state == State.FOLLOW_THROUGH:
 		_ik.seed_blade_smoothing(skater.upper_body_to_global(skater.get_blade_position()))
 	skater.exit_slapshot_pinning()
 	_hide_slapshot_hud()
@@ -3446,9 +3447,8 @@ var _live_puck_view := PuckView.new()
 
 # Live puck: for a local player and for a bot, the sim and the puck view share
 # one clock, so "what the shooter saw" is simply the puck. RemoteController
-# overrides this — on the host a remote shooter's sim runs one input lead behind
-# the puck they aimed at, and judging the swing against the host's live puck
-# would slide their timing window by that lead.
+# reads the same instant out of the host's buffer, since a remote's input can be
+# applied a frame or more after its stamp.
 func sample_shooter_puck_view(_input: InputState, out: PuckView) -> void:
 	_sample_live_puck_view(out)
 

@@ -529,3 +529,16 @@ static func _local(v: Vector2, turn: float) -> Vector2:
 
 static func _world(v: Vector2, turn: float) -> Vector2:
 	return Vector2(v.x * cos(turn) + v.y * sin(turn), -v.x * sin(turn) + v.y * cos(turn))
+
+
+# Where he is asked to be and the way's first move, on the wire (KeeperWire);
+# the movers are the motor's, the rest the plan's scratch.
+func wire(w: KeeperWire) -> void:
+	rest = w.s8(rest)
+	spot = w.v2_16(spot, KeeperWire.MM)
+	facing = w.s32(facing, KeeperWire.ANGLE)
+	iron = w.v2_16(iron, KeeperWire.MM)
+	side = w.s16(side, KeeperWire.MM)
+	first = w.s8(first)
+	first_spot = w.v2_16(first_spot, KeeperWire.MM)
+	first_side = w.s16(first_side, KeeperWire.MM)
