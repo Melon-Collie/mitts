@@ -188,6 +188,10 @@ class SimSkater:
 	# (see step()).
 	var wrister_hold: Vector3 = Vector3.ZERO
 	var wrister_active: bool = false
+	# The blade's contact off the body as the charge starts: the pin the release
+	# loads from (SkaterController._solve_wrister_load's wrister_origin, latched
+	# on entering WRISTER_AIM), never the blade the hold walks after it.
+	var wrister_pin: Vector3 = Vector3.ZERO
 	# ≥ 0 marks a scripted puppet container (no agent); the gap it holds.
 	var puppet_hold_gap: float = -1.0
 	var puppet_depth_floor_z: float = 0.0
@@ -861,6 +865,7 @@ func _place_blade(s: SimSkater) -> void:
 	if in_charge and not s.wrister_active:
 		s.wrister_active = true
 		s.wrister_hold = s.arm.heel - s.pos
+		s.wrister_pin = s.blade - s.pos
 	var held: bool = s.wrister_active
 	s.wrister_active = in_charge
 	var cursor: Vector3 = s.input.mouse_world_pos
@@ -1219,7 +1224,7 @@ func _release(c: SimSkater) -> void:
 		var aim: Vector3 = ShotMechanics.wrister_aim_dir(c.input.bot_wrister_aim_dir,
 				c.input.mouse_world_pos, c.pos)
 		var to_local: Basis = Basis(Vector3.UP, atan2(-c.facing.x, -c.facing.y)).inverse()
-		var pin: Vector3 = c.blade - c.pos
+		var pin: Vector3 = c.wrister_pin
 		WristerLoad.solve(_load, to_local * Vector3(pin.x, 0.0, pin.z), to_local * aim,
 				lefty, kit.wrister_load)
 		result = ShotMechanics.release_wrister(c.pos, c.input.mouse_world_pos, c.blade,
