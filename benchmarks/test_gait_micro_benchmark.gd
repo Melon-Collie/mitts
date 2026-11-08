@@ -132,7 +132,6 @@ func _print_results() -> void:
 # _render_pose_update is exactly the three calls below it.
 func test_render_pose_costs() -> void:
 	var delta: float = 1.0 / 120.0
-	var aim: Vector3 = _skater.global_position + Vector3(1.2, 0.0, -3.0)
 	_skate_forward()
 
 	_bench("_render_pose_update (WHOLE)", func() -> void:
@@ -142,7 +141,7 @@ func test_render_pose_costs() -> void:
 		_controller._skating.apply(delta))
 
 	_bench("  head tracking", func() -> void:
-		_controller._pose.apply_head_tracking_aim(aim, delta))
+		_controller._pose.apply_head_tracking(delta))
 
 	_bench("  bottom-hand IK", func() -> void:
 		_controller._ik.update_bottom_hand())
