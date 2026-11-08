@@ -548,10 +548,14 @@ body leaves a puck carried on the far side out of reach. Once a carrier coming
 at our net at pace draws within a stick of level in our zone
 (`AIRolePressure.is_level`), the ladder has nothing left to hold and the
 inside is lost or about to be: the last man may check, and otherwise steps into
-his path at contact (still in front), or, behind him, skates to the first ice
-on the carrier's line to our net his stick gets to before the carrier does
-(`AIDefensiveVerbs.cut_off`, both on the arrival clock; the crease's top when he wins none
-short of it), so the body or the reach-in meets him on his way to the slot.
+his path at contact while still in front with the carrier's line to our net
+inside his stick; wider of that line, or behind him, he takes the first ice
+on it his stick gets to before the carrier does (`AIDefensiveVerbs.cut_off`,
+both on the arrival clock; the crease's top when he wins none short of it),
+facing the man while in front and skated to behind, so the body or the
+reach-in meets him on his way to the slot. Never step out onto a man whose
+line he is wide of: level inside a carrier on the wall, that walks him out
+while the carrier cuts in across his front.
 Letting him go wide is fine; letting him into the slot is not. Never chase the
 hip: a carrier any faster than the defender is never caught there, and cuts in
 across the slot in front of him. A carrier who is not coming gets the
@@ -587,7 +591,10 @@ inside it only walks him into his own net; draped on the carrier, all the way to
 the crease (`RETREAT_FINISH_M`), riding him. "Draped" is within a stick, or close
 enough that building to the carrier's pace from where he stands ends with him
 there (the ramp cushion, below), so he is at speed when they meet rather than
-reached flat-footed. It caps only the route's speed toward our net (lateral ride
+reached flat-footed. The gate holds him by stopping him, so once its brake has
+him the drape is read from a standstill there (`standing_cushion_m`): a man who
+would be draped once stopped is draped now and rides on, rather than braking to
+a stop that drapes him and rebuilding his retreat from rest. It caps only the route's speed toward our net (lateral ride
 untouched), and level or beaten it lifts and he chases.
 
 **A carrier gaining on him buys no step-up.** While a carrier coming at pace
