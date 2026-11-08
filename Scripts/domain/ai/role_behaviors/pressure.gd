@@ -239,20 +239,27 @@ static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
 	return _depth_on(ctx, ap) <= AIRoleRushD.stick_m(ctx)
 
 
-# The angle's finish, the level pressurer's last play: the first ice on his line
-# to our net I get to before he does (AIDefensiveVerbs.cut_off_share), riding it
-# as he moves, so whichever way he goes to the net — down the wall and in, or
-# straight across — he meets the body or the reach-in there. Still in front of
-# him that is his path a stick off me, taken facing him so he skates through
-# the body; behind him, it is skated to (not backpedalled). Never step out onto
-# the man himself: level inside a carrier on the wall, that walks me out to him
-# while he cuts in across my front to the net. Chasing his hip instead, a
-# carrier any faster than me is never caught, and cuts in front.
+# The angle's finish, the level pressurer's last play. Still in front of him with
+# his line to our net inside my stick, step into his path at contact, facing
+# him, so he skates through the body. Otherwise — wider of his line than that,
+# or behind him — the first ice on that line I get to before he does
+# (AIDefensiveVerbs.cut_off_share), riding it as he moves, so whichever way he
+# goes to the net, down the wall and in or straight across, he meets the body
+# or the reach-in there: in front, taken facing him; behind, skated to (not
+# backpedalled). Never step out onto a man whose line I am wide of: level
+# inside a carrier on the wall, that walks me out to him while he cuts in
+# across my front to the net. Chasing his hip instead, a carrier any faster
+# than me is never caught, and cuts in front.
 static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> RoleDecision:
-	d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
-	if _depth_on(ctx, ap) > 0.0:
-		d.face_travel = false
+	var depth: float = _depth_on(ctx, ap)
+	if depth > 0.0 and _off_his_line(ctx, ap, depth) <= AIRoleRushD.stick_m(ctx):
+		d.target_position = ap.carrier_pos + ap.dir_net * (2.0 * GameRules.OFFSIDE_LINE_SLACK)
+		d.target_velocity = ap.carrier_vel
+	else:
+		d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
+		if depth > 0.0:
+			d.face_travel = false
 	d.arrive_at_speed = true
 	d.pressures_puck = true
 	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
@@ -277,6 +284,12 @@ static func _set_in(ctx: RoleContext, ap: AICarrierApproach, stand: Vector3, rid
 static func _depth_on(ctx: RoleContext, ap: AICarrierApproach) -> float:
 	return (ctx.self_pos.x - ap.carrier_pos.x) * ap.dir_net.x \
 			+ (ctx.self_pos.z - ap.carrier_pos.z) * ap.dir_net.z
+
+
+# How far across from the carrier's line to our net I stand, `depth` down it.
+static func _off_his_line(ctx: RoleContext, ap: AICarrierApproach, depth: float) -> float:
+	var on_line: Vector3 = ap.carrier_pos + ap.dir_net * depth
+	return Vector2(ctx.self_pos.x - on_line.x, ctx.self_pos.z - on_line.z).length()
 
 
 # True if `c` is on our net's side of the carrier — never lose inside position.
