@@ -468,8 +468,8 @@ func _end_worth(ctx: RoleContext, end: Vector3, end_vel: Vector3, t_end: float,
 # each rolled move again, from the end's position, pace and facing, against the
 # defence projected a first move's horizon on, priced as a first move is —
 # its end's worth × the decay of the step × its keep odds − its strip cost.
-# Returns `floor_value` when no second move beats it (exact: a move whose kept_ceiling
-# cannot clear it is not read for safety, nor costed when it cannot at its keep odds).
+# Returns `floor_value` when no second move beats it (exact: a move whose kept_ceiling,
+# a strip on its own path, cannot clear it is not read for safety, nor costed).
 func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		caps: AISkaterCaps, floor_value: float = -INF) -> float:
 	var t1: float = AICarryRollout.HORIZON_S
@@ -504,11 +504,11 @@ func _carry_on_value(ctx: RoleContext, m1: int, our_goalie: Vector3,
 		var worth: float = _end_worth(ctx, _rollout2.reach_pos(m, reach),
 				_rollout2.reach_vel(m, reach, start), t1 + t2, caps, dest_arrival) \
 				* AIActionScoring.delay_discount(t2)
-		if AICarrierField.kept_ceiling(worth) <= best:
+		var lost: float = _rollout2.lost_ceiling(m, start, reach, ctx.attacking_goal_pos)
+		if AICarrierField.kept_ceiling(worth, -1.0, lost) <= best:
 			continue
-		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2,
-				reach)
-		if AICarrierField.kept_ceiling(worth, safety) <= best:
+		var safety: float = _rolled_safety(ctx, _rollout2, m, start, _scratch_opponents_ply2, reach)
+		if AICarrierField.kept_ceiling(worth, safety, lost) <= best:
 			continue
 		var move_value: float = worth * safety
 		if safety < 1.0 and _strip_point.is_finite():

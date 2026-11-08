@@ -26,7 +26,11 @@ static var _ref_mouth: float = 2.0 * atan(GameRules.NET_HALF_WIDTH / SLOT_REF_M)
 
 # The floor at `pos` for the side attacking `goal`.
 static func floor_at(pos: Vector3, goal: Vector3) -> float:
-	var a: float = pos.z * signf(goal.z)   # metres toward the attacking goal
+	return _floor_up(pos.z * signf(goal.z))
+
+
+# The floor `a` metres toward the attacking goal from centre ice.
+static func _floor_up(a: float) -> float:
 	var g: float = GameRules.GOAL_LINE_Z
 	var b: float = GameRules.BLUE_LINE_Z
 	if a <= -g:
@@ -64,3 +68,18 @@ static func slot_bonus(pos: Vector3, goal: Vector3) -> float:
 # the rest of the possession, kept.
 static func continuation(pos: Vector3, goal: Vector3) -> float:
 	return floor_at(pos, goal) + slot_bonus(pos, goal)
+
+
+# The most a turnover can pay the side attacking a goal that loses the puck
+# anywhere no further toward that goal than `up_ice_m` (floor_at's measure) and no
+# nearer its centre than `net_dist_m`: the most max(C, −C_opp) reads there
+# (AIPossessionValue.base_ceiling), which a search's exact prunes bound a loss by.
+# Outside their zone the floor rises toward their line and the other side's
+# continuation is at least its floor at our line; inside it, the slot bonus is
+# at most what the mouth subtends from `net_dist_m` straight out.
+static func most_lost(up_ice_m: float, net_dist_m: float) -> float:
+	if up_ice_m <= GameRules.BLUE_LINE_Z:
+		return maxf(_floor_up(up_ice_m), -FLOOR_OWN_BLUE_LINE)
+	var h: float = GameRules.NET_HALF_WIDTH
+	var mouth: float = PI if net_dist_m <= h else 2.0 * atan(h / net_dist_m)
+	return FLOOR_THEIR_BLUE_LINE + SLOT_BONUS * minf(1.0, mouth / _ref_mouth)

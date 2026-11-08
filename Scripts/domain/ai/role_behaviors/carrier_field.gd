@@ -227,11 +227,12 @@ func turnover_cost(loss_point: Vector3, loss_prob: float, arrive_s: float = 0.0,
 
 
 # The most `gain × keep − the turnover the rest costs` can be worth when its gain
-# is at most `gain`: a turnover pays the loser at most the opponent's least
-# possession (AIPossessionValue.LEAST_VALUE). The exact ceiling the searches
-# prune by. `keep` < 0: not read yet, so whichever end of [0, 1] is larger.
-static func kept_ceiling(gain: float, keep: float = -1.0) -> float:
-	var paid: float = -AIPossessionValue.LEAST_VALUE
+# is at most `gain`: a turnover pays the loser at most `paid`, the opponent's
+# least possession where it can happen (AIPossessionFloor.most_lost; anywhere,
+# AIPossessionValue.LEAST_VALUE). The exact ceiling the searches prune by.
+# `keep` < 0: not read yet, so whichever end of [0, 1] is larger.
+static func kept_ceiling(gain: float, keep: float = -1.0,
+		paid: float = -AIPossessionValue.LEAST_VALUE) -> float:
 	if keep < 0.0:
 		return maxf(gain, paid)
 	return gain * keep + (1.0 - keep) * paid

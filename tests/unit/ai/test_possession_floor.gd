@@ -129,3 +129,34 @@ func test_no_spot_reads_above_the_most_continuation() -> void:
 			assert_lte(AIPossessionFloor.continuation(p, GOAL), most + 1e-9, "%s" % p)
 			assert_gte(AIPossessionFloor.continuation(p, GOAL),
 					AIPossessionFloor.FLOOR_OWN_GOAL_LINE - 1e-9, "%s" % p)
+
+
+# What losing the puck at `p` can pay the side attacking GOAL: the most
+# max(C, −C_opp) reads there (AIPossessionValue.base_ceiling).
+func _lost_ceiling(p: Vector3) -> float:
+	return maxf(AIPossessionFloor.continuation(p, GOAL),
+			-AIPossessionFloor.continuation(p, -GOAL))
+
+
+func test_most_lost_bounds_every_spot_it_covers() -> void:
+	for zi: int in 121:
+		for xi: int in 49:
+			var p := Vector3(-12.0 + 0.5 * xi, 0.0, -30.0 + 0.5 * zi)
+			var up: float = p.z * signf(GOAL.z)
+			var near: float = Vector2(p.x - GOAL.x, p.z - GOAL.z).length()
+			assert_lte(_lost_ceiling(p), AIPossessionFloor.most_lost(up, near) + 1e-9,
+					"%s" % p)
+
+
+func test_most_lost_grows_up_the_ice_and_toward_the_net() -> void:
+	for ui: int in 61:
+		var up: float = -30.0 + ui
+		for ni: int in 40:
+			var near: float = 0.5 * ni
+			var v: float = AIPossessionFloor.most_lost(up, near)
+			assert_lte(v, AIPossessionFloor.most_lost(up + 1.0, near) + 1e-12,
+					"up %.1f near %.1f: further up" % [up, near])
+			assert_lte(AIPossessionFloor.most_lost(up, near + 0.5), v + 1e-12,
+					"up %.1f near %.1f: further off" % [up, near])
+			assert_lte(v, AIPossessionFloor.MOST_CONTINUATION + 1e-12,
+					"up %.1f near %.1f: never past the most anywhere" % [up, near])

@@ -44,6 +44,11 @@ const GOALIE_MEMO_CAP: int = 32
 # the same entries against the same defence in one AI batch. Round-robin past
 # this many defences.
 const SHARED_ENTRY_SLOTS: int = 4
+# Defences carried on to a time, memoized per defence (_defence_at): one read
+# carries the same defence to the same time for its continuation, its drive and
+# its entries. Round-robin past this many times; a read holds at most one while
+# making four more.
+const PROJECTION_MEMO: int = 8
 # The least at() returns, for either side: losing the puck where the other side's
 # continuation is at its most. A turnover hands the other side its possession,
 # so this is the most a turnover can ever pay the side that loses the puck: the
@@ -90,10 +95,20 @@ var _entry_worth: Array[float] = []   # < 0 until priced (_worth)
 # The most each entry's continuation can read (base_ceiling), its bound until
 # the read is made.
 var _entry_base_max: Array[float] = []
-var _projected: Array[Vector3] = []
 var _shot_defence: Array[Vector3] = []
-var _skate_defence: Array[Vector3] = []
-var _base_defence: Array[Vector3] = []
+# Moves whenever the defence does (fill, push_defender, pop_defender, and
+# _price_open's empty ice): the key of every memo of it.
+var _defence_gen: int = 0
+# _defence_at's memo: the defence carried on to `_proj_t[i]`, read at
+# `_proj_gen[i]`.
+var _proj: Array = []
+var _proj_t: Array[float] = []
+var _proj_gen: Array[int] = []
+var _proj_next: int = 0
+# Each entry's first opposing arrival (AIActionScoring.first_arrival), read at
+# `_entry_opp_gen[i]`: the defence's half of every race to it.
+var _entry_opp_t: Array[float] = []
+var _entry_opp_gen: Array[int] = []
 # The last base_at's keep odds.
 var _base_keep: float = 1.0
 # The last _drive: where it ends, when and how fast he gets there, the odds he
@@ -140,6 +155,7 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_defender_vels = defender_vels
 	_defender_caps = defender_caps
 	_pushed = 0
+	_defence_gen += 1
 	_memo_from.clear()
 	_memo_to.clear()
 	_memo_keeper.clear()
@@ -148,6 +164,8 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 	_entry_spots.clear()
 	_entry_worth.clear()
 	_entry_base_max.clear()
+	_entry_opp_t.clear()
+	_entry_opp_gen.clear()
 	_slot = null
 	if in_zone_only:
 		return
@@ -158,6 +176,8 @@ func fill(goal: Vector3, defenders: Array[Vector3], defender_vels: Array[Vector3
 		_entry_spots.append(spot)
 		_entry_worth.append(-1.0)
 		_entry_base_max.append(base_ceiling(spot))
+		_entry_opp_t.append(INF)
+		_entry_opp_gen.append(-1)
 	if goal != _open_goal:
 		_price_open()
 
@@ -200,18 +220,10 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 		if is_nan(base) or is_nan(keep):
 			base = base_at(pos, start_s, vel)
 			keep = _base_keep
-		var race: float = keep * AIActionScoring.arrival_race(_entry_spots[i], t, _defenders,
-				_defender_vels, true)
+		var race: float = keep * _entry_race(i, t)
 		if _taken(base, race, timed) <= best:
 			continue
-		var defence: Array[Vector3] = _defenders
-		if start_s > 0.0:
-			_skate_defence.clear()
-			for k: int in _defenders.size():
-				_skate_defence.append(AITrajectory.predict_at(_defenders[k],
-						_defender_vels[k], start_s))
-			defence = _skate_defence
-		var kept: float = race * _skate_keep(pos, _entry_spots[i], vel, defence)
+		var kept: float = race * _skate_keep(pos, _entry_spots[i], vel, _defence_at(start_s))
 		if _taken(base, kept, timed) <= best:
 			continue
 		if _pushed > 0:
@@ -233,14 +245,7 @@ func entry_at(pos: Vector3, start_s: float, vel: Vector3, known: float,
 func base_at(pos: Vector3, start_s: float = 0.0, vel: Vector3 = Vector3.ZERO) -> float:
 	var c: float = AIPossessionFloor.continuation(pos, _goal)
 	var c_opp: float = AIPossessionFloor.continuation(pos, _opp_goal)
-	var defence: Array[Vector3] = _defenders
-	if start_s > 0.0:
-		_base_defence.clear()
-		for k: int in _defenders.size():
-			_base_defence.append(AITrajectory.predict_at(_defenders[k], _defender_vels[k],
-					start_s))
-		defence = _base_defence
-	var keep: float = AIEvadeRead.evade_safety(pos, vel, defence, _defender_vels,
+	var keep: float = AIEvadeRead.evade_safety(pos, vel, _defence_at(start_s), _defender_vels,
 			AIBotMechanics.EVADE_CARRY_HANDLE_M, _defender_caps)
 	_base_keep = keep
 	return keep * c - (1.0 - keep) * c_opp
@@ -289,6 +294,45 @@ func _skate_keep(from: Vector3, entry: Vector3, vel: Vector3,
 	var t: float = AIArrival.time_to_arrive(from, from + leg, vel)
 	return AICarrySpace.carry_safety(from, from + leg, t, defence, _defender_vels,
 			_defender_caps, true)
+
+
+# The defence carried on to `t` from now (AITrajectory.predict_at), fill()'s as
+# it stands unless `t` > 0. The array is the memo's: read it before the next
+# PROJECTION_MEMO projections, and never write it.
+func _defence_at(t: float) -> Array[Vector3]:
+	if not t > 0.0:
+		return _defenders
+	for i: int in _proj_t.size():
+		if _proj_t[i] == t and _proj_gen[i] == _defence_gen:
+			return _proj[i]
+	var slot: int = _proj_next
+	if _proj.size() < PROJECTION_MEMO:
+		slot = _proj.size()
+		var fresh: Array[Vector3] = []
+		_proj.append(fresh)
+		_proj_t.append(t)
+		_proj_gen.append(_defence_gen)
+	else:
+		_proj_next = (_proj_next + 1) % PROJECTION_MEMO
+	var out: Array[Vector3] = _proj[slot]
+	out.clear()
+	for k: int in _defenders.size():
+		out.append(AITrajectory.predict_at(_defenders[k], _defender_vels[k], t))
+	_proj_t[slot] = t
+	_proj_gen[slot] = _defence_gen
+	return out
+
+
+# The race to entry `i` for our man there at `t`, against the defence as it
+# stands (AIActionScoring.arrival_race, its band widened by the clock's error).
+func _entry_race(i: int, t: float) -> float:
+	if _defenders.is_empty():
+		return 1.0
+	if _entry_opp_gen[i] != _defence_gen:
+		_entry_opp_t[i] = AIActionScoring.first_arrival(_entry_spots[i], _defenders,
+				_defender_vels)
+		_entry_opp_gen[i] = _defence_gen
+	return AIActionScoring.race_against(_entry_opp_t[i], t, true)
 
 
 # Entry `i`'s worth against fill()'s defence, priced on first use with any body
@@ -343,12 +387,14 @@ func _price_open() -> void:
 	_defenders = _no_one
 	_defender_vels = _no_one
 	_defender_caps = _no_caps
+	_defence_gen += 1
 	_open_worth.clear()
 	for spot: Vector3 in _entry_spots:
 		_open_worth.append(_price_entry(spot))
 	_defenders = defenders
 	_defender_vels = vels
 	_defender_caps = caps
+	_defence_gen += 1
 
 
 func _price_entry(spot: Vector3) -> float:
@@ -402,12 +448,7 @@ func _drive(from: Vector3, start_s: float, vel: Vector3 = Vector3.ZERO) -> float
 	var target: Vector3 = from + to_net * (minf(DRIVE_MAX_M, d - DRIVE_MIN_NET_DIST_M) / d)
 	if AINetObstacle.carry_path_blocked_by_net(from, target):
 		return 0.0
-	var defence: Array[Vector3] = _defenders
-	if start_s > 0.0:
-		_projected.clear()
-		for i: int in _defenders.size():
-			_projected.append(AITrajectory.predict_at(_defenders[i], _defender_vels[i], start_s))
-		defence = _projected
+	var defence: Array[Vector3] = _defence_at(start_s)
 	var t: float = AIArrival.time_to_arrive(from, target, vel)
 	var keep: float = AICarrySpace.carry_safety(from, target, t, defence, _defender_vels,
 			_defender_caps, true)
@@ -493,10 +534,12 @@ func push_defender(pos: Vector3, vel: Vector3, caps: AISkaterCaps) -> void:
 	_defenders.push_back(pos)
 	_defender_vels.push_back(vel)
 	_pushed += 1
+	_defence_gen += 1
 
 
 func pop_defender() -> void:
 	_pushed -= 1
+	_defence_gen += 1
 	_defenders.pop_back()
 	_defender_vels.pop_back()
 	if _defender_caps.size() > _defenders.size():

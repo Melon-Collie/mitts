@@ -350,7 +350,13 @@ static func arrival_race(target: Vector3, our_t: float, opp_chasers: Array[Vecto
 		opp_vels: Array[Vector3] = EMPTY_VEC3, clock_error: bool = false) -> float:
 	if opp_chasers.is_empty():
 		return 1.0
-	var opp_t: float = first_arrival(target, opp_chasers, opp_vels)
+	return race_against(first_arrival(target, opp_chasers, opp_vels), our_t, clock_error)
+
+
+# arrival_race against a first opposing arrival already read: their first body
+# there at `opp_t`. A caller racing many of our times to one spot against one
+# defence reads first_arrival once.
+static func race_against(opp_t: float, our_t: float, clock_error: bool = false) -> float:
 	var band: float = CHASE_CONTEST_MARGIN_S
 	if clock_error:
 		band += AIArrival.ERROR_FRAC * minf(maxf(our_t, opp_t), 1e6)
