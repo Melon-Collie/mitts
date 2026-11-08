@@ -239,22 +239,20 @@ static func is_level(ctx: RoleContext, ap: AICarrierApproach) -> bool:
 	return _depth_on(ctx, ap) <= AIRoleRushD.stick_m(ctx)
 
 
-# The angle's finish, the level pressurer's last play: still in front of him,
-# step into his path at contact, facing him, so he skates through the body.
-# Behind him, the slot is what is left to deny: skate (not backpedal) to the
-# first ice on his line to our net I get to before he does
-# (AIDefensiveVerbs.cut_off_share), riding
-# it as he moves, so whichever way he goes to the net — down the wall and in, or
-# straight across — he meets the body or the reach-in there. Chasing his hip
-# instead, a carrier any faster than me is never caught, and cuts in front.
+# The angle's finish, the level pressurer's last play: the first ice on his line
+# to our net I get to before he does (AIDefensiveVerbs.cut_off_share), riding it
+# as he moves, so whichever way he goes to the net — down the wall and in, or
+# straight across — he meets the body or the reach-in there. Still in front of
+# him that is his path a stick off me, taken facing him so he skates through
+# the body; behind him, it is skated to (not backpedalled). Never step out onto
+# the man himself: level inside a carrier on the wall, that walks me out to him
+# while he cuts in across my front to the net. Chasing his hip instead, a
+# carrier any faster than me is never caught, and cuts in front.
 static func _close_on_him(ctx: RoleContext, ap: AICarrierApproach,
 		d: RoleDecision) -> RoleDecision:
-	var contact_m: float = 2.0 * GameRules.OFFSIDE_LINE_SLACK
+	d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
 	if _depth_on(ctx, ap) > 0.0:
-		d.target_position = ap.carrier_pos + ap.dir_net * contact_m
-		d.target_velocity = ap.carrier_vel
-	else:
-		d.target_position = AIDefensiveVerbs.cut_off(ctx, ap, d)
+		d.face_travel = false
 	d.arrive_at_speed = true
 	d.pressures_puck = true
 	d.engaged_peer_id = ctx.snapshot.puck_state.carrier_peer_id
