@@ -110,6 +110,10 @@ var _smothered_at := Vector3.INF
 var _poking: bool = false
 var _clearing: bool = false
 var _blade_was := Vector3.INF
+# A release's launch (the rink), until his next tick reads it: the skaters
+# release before he ticks and the puck launches only after him, so on that tick
+# the puck's own velocity is still the carried puck's. INF, none.
+var _launch := Vector3.INF
 var _wire := KeeperWire.new()
 # Seat only the boxes that place a part body: a predictor's shadow keeper
 # (KeeperPredictor), whose own reads of his gear go through the glove, the mask
@@ -232,6 +236,7 @@ func _place_in_crease() -> void:
 	_poking = false
 	_clearing = false
 	_blade_was = Vector3.INF
+	_launch = Vector3.INF
 	_tier()
 	motor.z = -KeeperPositioning.crease_edge(Vector2(0.0, -1.0))
 	_holding = -1.0
@@ -275,8 +280,10 @@ func step_sim(delta: float) -> void:
 # the cover, the brain at the planner's rate, and the motor moving him.
 func _play(delta: float) -> void:
 	var in_net: Vector3 = _net.affine_inverse() * puck.global_position
-	_read_play(delta, in_net)
-	read.step(delta, in_net, _net.basis.inverse() * puck.get_puck_velocity())
+	var flight: Vector3 = _net.basis.inverse() * (_launch if _launch.is_finite() else puck.get_puck_velocity())
+	_launch = Vector3.INF
+	_read_play(delta, in_net, flight)
+	read.step(delta, in_net, flight)
 	_save_the_shot()
 	_cover_the_puck(delta, in_net)
 	if _ticks % PLANNER_EVERY == 0 and _holding < 0.0 and not _chosen and not _covering and not _squaring:
@@ -392,10 +399,10 @@ func _measure_motion(was: Vector3, delta: float) -> void:
 # His look at the play: the carrier's body moving it, or the loose puck's own
 # motion, and whether a body hides it from his eyes. A shot's flight reaches
 # the brain no sooner than his legs read it, and by then the brain is resting
-# on the save.
-func _read_play(delta: float, in_net: Vector3) -> void:
+# on the save. `flight` is the loose puck's velocity in the net's frame.
+func _read_play(delta: float, in_net: Vector3, flight: Vector3) -> void:
 	var carrier: Skater = puck.get_carrier()
-	var moving: Vector3 = _net.basis.inverse() * (carrier.velocity if carrier != null else puck.get_puck_velocity())
+	var moving: Vector3 = _net.basis.inverse() * carrier.velocity if carrier != null else flight
 	var holder: Vector2 = KeeperPlayRead.NO_CARRIER
 	if carrier != null:
 		var body: Vector3 = _net.affine_inverse() * carrier.global_position
@@ -811,8 +818,9 @@ func _stance() -> GoalieStateMachine.State:
 # tick is the one his own client drew it on (Scripts/networking/CLAUDE.md, shot
 # lag compensation).
 func _on_puck_released() -> void:
+	_launch = puck.get_release_velocity()
 	_end_save()
-	read.start(play.primed(), 0.0, screen_delay_for(puck.get_release_velocity()))
+	read.start(play.primed(), 0.0, screen_delay_for(_launch))
 
 
 # A tip or a deflection: a new shot to read from the start.

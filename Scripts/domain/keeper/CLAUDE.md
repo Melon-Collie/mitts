@@ -103,7 +103,14 @@ the shooter's own client drew it on (the networking doc's shot lag comp).
 
 A shot is read from its release, the puck's own flight only: no aim before it
 (the shooter's drawn body shows that a shot is wound up, not yet where it
-goes). A release a body hides from his eyes, where his mask is, he reads only
+goes). Its first look is the launch the release queued
+(`Puck.get_release_velocity`, kept until his next tick as `_launch`): the
+skater controllers release before he ticks and the puck launches only after
+him, so on that tick `linear_velocity` is still the carried puck's, and a read
+begun from it rewinds a shot from a standing carrier to a puck going nowhere
+and lets it in. An instrument that sets the puck's velocity before emitting the
+release never sees that order; `test_keeper_controller.gd` fires through
+`Puck.release` for it. A release a body hides from his eyes, where his mask is, he reads only
 once it comes out of the body's shadow (`GoalieController.screen_delay_for`,
 `GoalieScreenRules.screen_occlusion_delay`, the delay the shot log prices),
 his read after that; a tip the same from where it was tipped. A puck a body
