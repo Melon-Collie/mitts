@@ -11,7 +11,7 @@ stick 1.6 m ahead on the presented puck: offset behind the body	0.7794
 defender abreast 2.2 m off the hip: protect gain	0.4546
 tight-wall pinch, open man wide: intent	PASS
 tight-wall pinch, open man wide: pass target	2
-dead slot over the 8.5 m band, set keeper: shoot-now ratio	11.3280
+dead slot over the 8.5 m band, set keeper: shoot-now ratio	8.8265
 spun-off carrier, cut-in over standing still: move-score margin	0.0759
 tight-wall pinch, open man wide: carry anchor	(0.0, -22.1)
 spun-off carrier, beaten man behind: pick	CARRY to (1.4, -24.0)
@@ -46,14 +46,14 @@ head-on drive at 6 m/s, keeper 1 m out, from 5 m: pick	CARRY to (0.7, -23.6)
 head-on drive at 6 m/s, keeper 1 m out, from 4 m: pick	CARRY to (0.0, -23.6)
 head-on drive at 6 m/s, keeper 1 m out, from 3 m: pick	SHOOT
 1v1 cutting across 3 m out, keeper squared 0.9 m out: pick	SHOOT
-1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.6803
+1v1 cutting across 3 m out, keeper squared 0.9 m out: shoot-now value	0.7352
 1v1 mid-cut, keeper lagging the arc: intent	CARRY
-1v1 mid-cut, keeper lagging the arc: shoot-now value	0.4303
+1v1 mid-cut, keeper lagging the arc: shoot-now value	0.3417
 1v1 flat-footed 3 m out, keeper squared 0.9 m out: carry anchor	(0.0, -23.6)
-standing 3 m out, keeper squared 1.3 m out: intent	SHOOT
+standing 3 m out, keeper squared 1.3 m out: intent	CARRY
 standing 9 m out, keeper squared 1.3 m out: pick	CARRY to (0.0, -23.6)
-standing 3 m out, keeper displaced to the backhand side: winning hold	(0.0, 0.0)
-standing 3 m out, keeper displaced to the backhand side: hold load share	0.6000
+standing 3 m out, keeper displaced to the backhand side: winning hold	(0.9, -0.9)
+standing 3 m out, keeper displaced to the backhand side: hold load share	0.8667
 dead-sharp beside the net, keeper on the near post: winning hold	(-0.3, 0.9)
 69 deg off the normal, keeper squared 1.2 m out: intent	CARRY
 69 deg off the normal, keeper squared 1.2 m out: shoot-now value	0.0063

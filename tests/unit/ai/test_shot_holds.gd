@@ -14,22 +14,82 @@ var _h := AIShotHolds.new()
 # AHEAD): BladeRoute to a hold in front of the body, the swing round to one
 # behind, or the blade's travel if that is longer.
 func _blade_s(k: int) -> float:
-	var travel: float = _h.offset[k].distance_to(_h.offset[0]) / _h.blade_speed
+	var travel: float = _h.offset[k].distance_to(_h.origin) / _h.blade_speed
 	if _h.offset[k].dot(AHEAD) < 0.0:
-		return maxf(absf(_h.offset[0].angle_to(_h.offset[k])) / _h.arc_rate, travel)
-	return BladeRoute.length(_h.offset[0], _h.offset[k], AHEAD) / _h.blade_speed
+		return maxf(absf(_h.origin.angle_to(_h.offset[k])) / _h.arc_rate, travel)
+	return BladeRoute.length(_h.origin, _h.offset[k], AHEAD) / _h.blade_speed
 
 
-func test_the_puck_where_it_is_comes_first_at_its_own_share() -> void:
+func test_no_hold_is_the_puck_where_the_carry_left_it() -> void:
+	# Carried out front, shifted by the stickhandle: a spot no release is taken
+	# from. Every hold is a listed one, each a pull away.
+	var carried := Vector2(0.3, -1.3)
+	_h.solve_shot(AHEAD, carried, Vector2.ZERO, AHEAD)
+	assert_eq(_h.origin, carried, "the pulls start where the puck is")
+	assert_gt(_h.count, 0)
+	for k: int in _h.count:
+		assert_gt(_h.offset[k].distance_to(carried), 0.1, "hold %d" % k)
+		assert_gt(_h.pull_s[k], 0.0, "hold %d costs its pull" % k)
+
+
+func test_the_pocket_comes_first() -> void:
 	_h.solve_shot(AHEAD, RIGHT * 0.9, Vector2.ZERO, AHEAD)
-	assert_eq(_h.offset[0], RIGHT * 0.9)
-	assert_almost_eq(_h.share[0], 1.0, 0.001, "beside the stick hip a shot ahead is loaded")
-	assert_eq(_h.pull_s[0], 0.0)
+	assert_almost_eq(_h.offset[0], _h.pocket_offset(), Vector2.ONE * 0.0001)
+	assert_almost_eq(_h.share[0], _h.pocket_result.power_share, 0.001)
 
 
-func test_a_puck_at_the_body_has_no_bearing_and_carries_the_unloaded_share() -> void:
-	_h.solve_shot(AHEAD, Vector2.ZERO, Vector2.ZERO, AHEAD)
-	assert_almost_eq(_h.share[0], _h.unloaded_share, 0.001)
+func test_a_puck_already_in_a_hold_pulls_there_in_no_time() -> void:
+	# Skating, so the hips stay on the travel and nothing waits for a turn.
+	_h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD)
+	var pocket: Vector2 = _h.offset[0]
+	_h.solve_shot(AHEAD, pocket, AHEAD * 6.0, AHEAD)
+	assert_almost_eq(_h.pull_s[0], 0.0, 0.0001)
+
+
+# The listed hold at the carry's presented reach: the snapshot.
+func _snap(h: AIShotHolds) -> int:
+	for k: int in h.count:
+		if absf(h.offset[k].length() - AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M) < 0.001:
+			return k
+	return -1
+
+
+func test_the_snapshot_is_out_in_front_on_the_forehand() -> void:
+	for left: bool in [false, true]:
+		var h := AIShotHolds.new()
+		h.is_left_handed = left
+		h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD)
+		var k: int = _snap(h)
+		assert_gte(k, 0, "lefty %s: listed" % left)
+		assert_almost_eq(h.offset[k].normalized().angle_to(AHEAD),
+				AIShotHolds.SNAP_FOREHAND_RAD * (1.0 if left else -1.0), 0.0001,
+				"lefty %s: a third of the way round toward the stick side" % left)
+		# The stick side: −X for a lefty facing up-ice, +X for a righty.
+		assert_true(h.offset[k].x < 0.0 if left else h.offset[k].x > 0.0,
+				"lefty %s: on his forehand" % left)
+
+
+func test_the_snapshot_rides_the_shot_line_not_the_body() -> void:
+	# The cursor resting on it turns the body: a spot that turned with the body
+	# would walk the carrier round in a circle.
+	_h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD)
+	var before: Vector2 = _h.offset[_snap(_h)]
+	_h.solve_shot(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD.rotated(deg_to_rad(-25.0)))
+	var k: int = _snap(_h)
+	assert_gte(k, 0)
+	assert_almost_eq(_h.offset[k], before, Vector2.ONE * 0.0001)
+
+
+func test_a_puck_presented_out_front_shoots_in_stride_without_a_pull() -> void:
+	# Skating with the puck where the carry presents it, a shot ahead leaves from
+	# there at the share its load gives: no pull to a pocket first.
+	var presented: Vector2 = _h.snap_dir(AHEAD) * AIBotMechanics.CARRY_BLADE_AIM_FORWARD_M
+	_h.solve_shot(AHEAD, presented, AHEAD * 6.0, AHEAD)
+	var k: int = _snap(_h)
+	assert_gte(k, 0)
+	assert_almost_eq(_h.pull_s[k], 0.0, 0.0001)
+	assert_gt(_h.share[k], _h.unloaded_share, "the forehand diagonal loads it past the arms")
+	assert_lt(_h.share[k], 1.0, "but less than the pocket's full load")
 
 
 func test_a_forehand_pulled_beside_the_hip_waits_only_for_the_blade() -> void:
@@ -49,7 +109,7 @@ func test_a_pull_waits_for_the_turn_only_when_the_turn_loads_it() -> void:
 		var aim: Vector2 = AHEAD.rotated(deg_to_rad(a))
 		for v: Vector2 in [Vector2.ZERO, AHEAD * 6.0]:
 			_h.solve_shot(aim, AHEAD * 0.9, v, AHEAD)
-			for k: int in range(1, _h.count):
+			for k: int in _h.count:
 				assert_gte(_h.pull_s[k], _blade_s(k) - 0.0001)
 				if _h.pull_s[k] > _blade_s(k) + 0.0001:
 					assert_gt(_h.share[k], _h.share_at(_h.offset[k], aim, AHEAD),
@@ -63,12 +123,13 @@ func test_a_hold_behind_the_body_waits_for_the_swing_round() -> void:
 	h.arc_rate = 2.0
 	h.solve_shot(AHEAD.rotated(deg_to_rad(60.0)), RIGHT * 0.9, Vector2.ZERO, AHEAD)
 	var behind: int = -1
-	for k: int in range(1, h.count):
-		if h.offset[k].dot(AHEAD) < 0.0:
+	for k: int in h.count:
+		# A side reach (the snapshot sits at the carry's reach, not the handling one).
+		if h.offset[k].dot(AHEAD) < 0.0 and absf(h.offset[k].length() - h.handle_reach) < 0.001:
 			behind = k
-	assert_gt(behind, 0)
-	var swing: float = absf(h.offset[0].angle_to(h.offset[behind])) / h.arc_rate
-	assert_gt(swing, h.offset[0].distance_to(h.offset[behind]) / h.blade_speed)
+	assert_gte(behind, 0)
+	var swing: float = absf(h.origin.angle_to(h.offset[behind])) / h.arc_rate
+	assert_gt(swing, h.origin.distance_to(h.offset[behind]) / h.blade_speed)
 	assert_gte(h.pull_s[behind], swing - 0.0001)
 
 
@@ -80,7 +141,9 @@ func test_the_swing_rate_defaults_to_the_state_machine_s() -> void:
 func test_the_pocket_beside_the_hip_is_not_listed_twice() -> void:
 	# Skating a shot ahead, the pocket IS a quarter-turn off the aim.
 	_h.solve_shot(AHEAD, AHEAD * 0.9, AHEAD * 6.0, AHEAD)
-	assert_eq(_h.count, 3)
+	for a: int in _h.count:
+		for b: int in range(a + 1, _h.count):
+			assert_gt(_h.offset[a].distance_to(_h.offset[b]), 0.01, "holds %d and %d" % [a, b])
 
 
 func _carry_holds() -> AIShotHolds:
@@ -99,7 +162,7 @@ func test_a_skating_carrier_lists_no_hold_past_its_backhand_stop() -> void:
 	for deg: int in range(-150, 151, 30):
 		var aim: Vector2 = AHEAD.rotated(deg_to_rad(deg))
 		h.solve_shot(aim, RIGHT * 0.9, AHEAD * 8.0, AHEAD)
-		for k: int in range(1, h.count):
+		for k: int in h.count:
 			FacingRules.solve(fr, AHEAD, h.offset[k].normalized(), AHEAD * 8.0, false, false,
 					h.is_left_handed, h.facing_cfg)
 			assert_false(fr.pivoting, "aim %d°, hold %d" % [deg, k])
@@ -111,16 +174,20 @@ func test_standing_still_keeps_the_reach_to_either_side() -> void:
 	h.solve_shot(AHEAD, AHEAD * 0.9, Vector2.ZERO, AHEAD)
 	var left_side: bool = false
 	var right_side: bool = false
-	for k: int in range(1, h.count):
+	for k: int in h.count:
 		left_side = left_side or h.offset[k].x < -0.5
 		right_side = right_side or h.offset[k].x > 0.5
 	assert_true(left_side and right_side)
 
 
-func test_a_pass_the_puck_can_carry_is_fired_from_where_it_is() -> void:
-	_h.solve_pass(AHEAD, RIGHT * 0.9, AHEAD * 6.0, AHEAD, 0.9)
-	assert_eq(_h.pass_offset, RIGHT * 0.9)
-	assert_almost_eq(_h.pass_share, 0.9, 0.001)
+func test_a_pass_goes_from_the_pocket_even_where_the_puck_would_carry_it() -> void:
+	# Beside the stick hip a feed ahead is loaded, but it is still released from
+	# the pocket, at the blade's pull there.
+	_h.solve_pass(AHEAD, RIGHT * 1.3, AHEAD * 6.0, AHEAD, 0.9)
+	assert_almost_eq(_h.pass_offset, _h.pocket_offset(), Vector2.ONE * 0.0001)
+	assert_almost_eq(_h.pass_share, 0.9, 0.001, "capped at what the feed needs")
+	assert_almost_eq(_h.pass_pull_s,
+			_h.pull_time(RIGHT * 1.3, _h.pass_offset, AHEAD, AHEAD * 6.0), 0.0001)
 
 
 func test_a_pass_the_puck_cannot_carry_goes_to_the_pocket() -> void:
@@ -129,6 +196,19 @@ func test_a_pass_the_puck_cannot_carry_goes_to_the_pocket() -> void:
 	assert_ne(_h.pass_offset, AHEAD * 0.9)
 	assert_almost_eq(_h.pass_offset.length(), _h.handle_reach, 0.001)
 	assert_almost_eq(_h.pass_share, 0.9, 0.001, "capped at what the feed needs")
+
+
+func test_a_pass_waits_for_the_turn_only_when_the_turn_loads_it() -> void:
+	for a: float in [0.0, 45.0, 90.0, 135.0, 180.0, -45.0, -90.0, -135.0]:
+		var aim: Vector2 = AHEAD.rotated(deg_to_rad(a))
+		_h.solve_pass(aim, AHEAD * 0.9, Vector2.ZERO, AHEAD, 1.0)
+		var blade: float = _h.pull_time(AHEAD * 0.9, _h.pass_offset, AHEAD, Vector2.ZERO)
+		assert_almost_eq(_h.pass_wait(0.0), blade, 0.0001, "aim %.0f°: a feed nothing loads" % a)
+		var full: float = _h.pass_wait(1.0)
+		assert_gte(full, blade - 0.0001)
+		if full > blade + 0.0001:
+			assert_lt(_h.share_at(_h.pass_offset, aim, AHEAD), _h.pass_share,
+					"aim %.0f°: the turn is only waited for when it buys load" % a)
 
 
 # ── price_keep: the odds the puck is still on the blade at the press ─────────
@@ -144,7 +224,7 @@ func _keep_with(man: Vector3, puck_offset: Vector2) -> void:
 
 
 func _hold_toward(x_sign: float) -> int:
-	for k: int in range(1, _h.count):
+	for k: int in _h.count:
 		if _h.offset[k].x * x_sign > 0.5:
 			return k
 	return -1
@@ -162,8 +242,8 @@ func test_a_hold_beside_a_trailing_checker_keeps_less_than_the_far_side() -> voi
 	_keep_with(Vector3(1.0, 0.0, 2.0), AHEAD * 0.9)
 	var near: int = _hold_toward(1.0)
 	var far: int = _hold_toward(-1.0)
-	assert_gt(near, 0)
-	assert_gt(far, 0)
+	assert_gte(near, 0)
+	assert_gte(far, 0)
 	assert_lt(_h.keep[near], _h.keep[far], "his stick reaches the hold on his side")
 
 
@@ -181,17 +261,26 @@ func _quick_pull_across(man: Vector3) -> AIShotHolds:
 
 
 func _across(h: AIShotHolds) -> int:
-	for k: int in range(1, h.count):
+	for k: int in h.count:
 		if h.offset[k].x < -0.5:
 			return k
 	return -1
 
 
+# keep_for of a puck left where it is (no pull), the shared men.
+func _keep_where_it_is(h: AIShotHolds, man: Vector3) -> float:
+	var men: Array[Vector3] = [man]
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	return h.keep_for(h.origin, 0.0, Vector3.ZERO, Vector2.ZERO, AHEAD.rotated(-0.2), 0.0,
+			men, vels, _NO_CAPS)
+
+
 func test_a_pull_round_the_front_spares_a_checker_behind() -> void:
-	var h: AIShotHolds = _quick_pull_across(Vector3(0.0, 0.0, 2.0))
+	var man := Vector3(0.0, 0.0, 2.0)
+	var h: AIShotHolds = _quick_pull_across(man)
 	var across: int = _across(h)
-	assert_gt(across, 0)
-	assert_almost_eq(h.keep[across], h.keep[0], 0.001,
+	assert_gte(across, 0)
+	assert_almost_eq(h.keep[across], _keep_where_it_is(h, man), 0.001,
 			"the far side sits as far off him as the near one, and the route stays clear")
 
 
@@ -200,10 +289,27 @@ func test_a_pull_round_the_front_past_a_checker_ahead_reads_as_the_puck_parked_t
 	# worth no more than the puck sitting where it passes him closest: in front
 	# of the skates, inside his reach.
 	var ahead: float = 2.0
-	var h: AIShotHolds = _quick_pull_across(Vector3(0.0, 0.0, -ahead))
+	var man := Vector3(0.0, 0.0, -ahead)
+	var h: AIShotHolds = _quick_pull_across(man)
 	var across: int = _across(h)
-	assert_gt(across, 0)
+	assert_gte(across, 0)
 	var parked: float = AICarrySpace.clearance_to_safety(
 			ahead - BladeRoute.CLEAR_M - AICarrySpace.EVADE_STICK_REACH_M)
-	assert_gt(h.keep[0], parked + 0.1, "both ends sit further off him")
+	assert_gt(_keep_where_it_is(h, man), parked + 0.1, "both ends sit further off him")
 	assert_lte(h.keep[across], parked + 0.05)
+
+
+func test_keep_for_reads_a_hold_as_price_keep_does() -> void:
+	_keep_with(Vector3(1.0, 0.0, 2.0), AHEAD * 0.9)
+	var men: Array[Vector3] = [Vector3(1.0, 0.0, 2.0)]
+	var vels: Array[Vector3] = [Vector3.ZERO]
+	for k: int in _h.count:
+		assert_almost_eq(_h.keep_for(_h.offset[k], _h.pull_s[k], Vector3.ZERO, Vector2.ZERO,
+				AHEAD, 0.135, men, vels, _NO_CAPS), _h.keep[k], 0.0001, "hold %d" % k)
+
+
+func test_the_best_hold_is_the_best_share_kept() -> void:
+	_keep_with(Vector3(1.0, 0.0, 2.0), AHEAD * 0.9)
+	var best: int = _h.best_hold()
+	for k: int in _h.count:
+		assert_gte(_h.share[best] * _h.keep[best], _h.share[k] * _h.keep[k] - 0.0001)

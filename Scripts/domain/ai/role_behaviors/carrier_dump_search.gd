@@ -177,8 +177,8 @@ func search(ctx: RoleContext) -> void:
 		return
 	_fill_ours(ctx)
 	# Each dump leaves from its own release: the press first pulls the puck to
-	# the hold its pace needs (AIShotHolds.solve_pass, as the agent's press
-	# locks it), braking, so a carrier at speed a stride short of their line
+	# the hold its pace needs (AIShotHolds.solve_pass, as the carrier locks it
+	# for the press), braking, so a carrier at speed a stride short of their line
 	# releases inside it, where there is no dump-in to make.
 	var holds: AIShotHolds = _field.holds
 	holds.configure_from(ctx)
@@ -199,8 +199,7 @@ func search(ctx: RoleContext) -> void:
 			var pace: float = ctx.self_wrister_shot_speed * frac
 			holds.solve_pass(Vector2(dir.x, dir.z), puck_off, body_vel, self_state.facing,
 					pace / maxf(ctx.self_wrister_shot_speed, 0.001))
-			var pull_s: float = 0.0 if holds.pass_offset == puck_off \
-					else holds.pull_time(puck_off, holds.pass_offset, self_state.facing, body_vel)
+			var pull_s: float = holds.pass_pull_s
 			var release: Vector3 = AICarrierField.pass_origin(ctx, pull_s,
 					holds.pass_offset - puck_off)
 			if not is_on(ctx, release):
