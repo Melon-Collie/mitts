@@ -107,13 +107,15 @@ const SWEEP_LEAD_IN_TICKS: int = 26
 const WIRE_AT: int = 2
 # Fields the wire need not carry, by Class.field: the tier's tuning (the
 # client has it), each collaborator's scratch (written before it is read on
-# every tick), and what the pose already on the wire derives (the skeleton).
+# every tick), a release's launch (cleared by the tick that follows it, by when
+# a client's puck has launched), and what the pose already on the wire derives
+# (the skeleton).
 # The WIRE variant copies everything else and is held against TRUTH.
 const NOT_ON_WIRE: Array[String] = [
 	"Keeper.skeleton",
 	"KeeperController._attackers", "KeeperController._opponents", "KeeperController._defenders",
 	"KeeperController._screen_cfg", "KeeperController._last_save_time", "KeeperController._sm",
-	"KeeperController._current_x", "KeeperController._current_depth",
+	"KeeperController._current_x", "KeeperController._current_depth", "KeeperController._launch",
 	"KeeperShotRead.leg_delay_s", "KeeperShotRead.primed_delay_s",
 	"KeeperPlayRead.delay_s", "KeeperPlayRead.primed_delay_s", "KeeperPlayRead._reception",
 	"KeeperPlayRead._sticks",
